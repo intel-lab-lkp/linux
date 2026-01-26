@@ -257,7 +257,6 @@ static void define_event_symbols(struct tep_event *event,
 }
 
 static SV *perl_process_callchain(struct perf_sample *sample,
-				  struct evsel *evsel,
 				  struct addr_location *al)
 {
 	struct callchain_cursor *cursor;
@@ -272,8 +271,9 @@ static SV *perl_process_callchain(struct perf_sample *sample,
 
 	cursor = get_tls_callchain_cursor();
 
-	if (thread__resolve_callchain(al->thread, cursor, evsel,
-				      sample, NULL, NULL, scripting_max_stack) != 0) {
+	if (thread__resolve_callchain(al->thread, cursor, sample,
+				      /*parent=*/NULL, /*root_al=*/NULL,
+				      scripting_max_stack) != 0) {
 		pr_err("Failed to resolve callchain. Skipping\n");
 		goto exit;
 	}
@@ -340,9 +340,9 @@ exit:
 }
 
 static void perl_process_tracepoint(struct perf_sample *sample,
-				    struct evsel *evsel,
 				    struct addr_location *al)
 {
+	struct evsel *evsel = sample->evsel;
 	struct thread *thread = al->thread;
 	struct tep_event *event;
 	struct tep_format_field *field;
@@ -389,7 +389,7 @@ static void perl_process_tracepoint(struct perf_sample *sample,
 	XPUSHs(sv_2mortal(newSVuv(ns)));
 	XPUSHs(sv_2mortal(newSViv(pid)));
 	XPUSHs(sv_2mortal(newSVpv(comm, 0)));
-	XPUSHs(sv_2mortal(perl_process_callchain(sample, evsel, al)));
+	XPUSHs(sv_2mortal(perl_process_callchain(sample, al)));
 
 	/* common fields other than pid can be accessed via xsub fns */
 
@@ -426,7 +426,7 @@ static void perl_process_tracepoint(struct perf_sample *sample,
 		XPUSHs(sv_2mortal(newSVuv(nsecs)));
 		XPUSHs(sv_2mortal(newSViv(pid)));
 		XPUSHs(sv_2mortal(newSVpv(comm, 0)));
-		XPUSHs(sv_2mortal(perl_process_callchain(sample, evsel, al)));
+		XPUSHs(sv_2mortal(perl_process_callchain(sample, al)));
 		call_pv("main::trace_unhandled", G_SCALAR);
 	}
 	SPAGAIN;
@@ -436,9 +436,9 @@ static void perl_process_tracepoint(struct perf_sample *sample,
 }
 
 static void perl_process_event_generic(union perf_event *event,
-				       struct perf_sample *sample,
-				       struct evsel *evsel)
+				       struct perf_sample *sample)
 {
+	struct evsel *evsel = sample->evsel;
 	dSP;
 
 	if (!get_cv("process_event", 0))
@@ -461,13 +461,12 @@ static void perl_process_event_generic(union perf_event *event,
 
 static void perl_process_event(union perf_event *event,
 			       struct perf_sample *sample,
-			       struct evsel *evsel,
 			       struct addr_location *al,
 			       struct addr_location *addr_al)
 {
-	scripting_context__update(scripting_context, event, sample, evsel, al, addr_al);
-	perl_process_tracepoint(sample, evsel, al);
-	perl_process_event_generic(event, sample, evsel);
+	scripting_context__update(scripting_context, event, sample, al, addr_al);
+	perl_process_tracepoint(sample, al);
+	perl_process_event_generic(event, sample);
 }
 
 static void run_start_sub(void)

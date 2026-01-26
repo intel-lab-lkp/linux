@@ -390,7 +390,6 @@ static unsigned long get_offset(struct symbol *sym, struct addr_location *al)
 }
 
 static PyObject *python_process_callchain(struct perf_sample *sample,
-					 struct evsel *evsel,
 					 struct addr_location *al)
 {
 	PyObject *pylist;
@@ -404,7 +403,7 @@ static PyObject *python_process_callchain(struct perf_sample *sample,
 		goto exit;
 
 	cursor = get_tls_callchain_cursor();
-	if (thread__resolve_callchain(al->thread, cursor, evsel,
+	if (thread__resolve_callchain(al->thread, cursor,
 				      sample, NULL, NULL,
 				      scripting_max_stack) != 0) {
 		pr_err("Failed to resolve callchain. Skipping\n");
@@ -829,11 +828,11 @@ static void python_process_sample_flags(struct perf_sample *sample, PyObject *di
 }
 
 static PyObject *get_perf_sample_dict(struct perf_sample *sample,
-					 struct evsel *evsel,
 					 struct addr_location *al,
 					 struct addr_location *addr_al,
 					 PyObject *callchain)
 {
+	struct evsel *evsel = sample->evsel;
 	PyObject *dict, *dict_sample, *brstack, *brstacksym;
 	struct machine *machine;
 	uint16_t e_machine = EM_HOST;
@@ -935,10 +934,10 @@ static PyObject *get_perf_sample_dict(struct perf_sample *sample,
 
 #ifdef HAVE_LIBTRACEEVENT
 static void python_process_tracepoint(struct perf_sample *sample,
-				      struct evsel *evsel,
 				      struct addr_location *al,
 				      struct addr_location *addr_al)
 {
+	struct evsel *evsel = sample->evsel;
 	struct tep_event *event;
 	PyObject *handler, *context, *t, *obj = NULL, *callchain;
 	PyObject *dict = NULL, *all_entries_dict = NULL;
@@ -994,7 +993,7 @@ static void python_process_tracepoint(struct perf_sample *sample,
 	PyTuple_SetItem(t, n++, context);
 
 	/* ip unwinding */
-	callchain = python_process_callchain(sample, evsel, al);
+	callchain = python_process_callchain(sample, al);
 	/* Need an additional reference for the perf_sample dict */
 	Py_INCREF(callchain);
 
@@ -1050,7 +1049,7 @@ static void python_process_tracepoint(struct perf_sample *sample,
 		PyTuple_SetItem(t, n++, dict);
 
 	if (get_argument_count(handler) == (int) n + 1) {
-		all_entries_dict = get_perf_sample_dict(sample, evsel, al, addr_al,
+		all_entries_dict = get_perf_sample_dict(sample, al, addr_al,
 			callchain);
 		PyTuple_SetItem(t, n++,	all_entries_dict);
 	} else {
@@ -1069,7 +1068,6 @@ static void python_process_tracepoint(struct perf_sample *sample,
 }
 #else
 static void python_process_tracepoint(struct perf_sample *sample __maybe_unused,
-				      struct evsel *evsel __maybe_unused,
 				      struct addr_location *al __maybe_unused,
 				      struct addr_location *addr_al __maybe_unused)
 {
@@ -1311,7 +1309,7 @@ static void python_export_sample_table(struct db_export *dbe,
 	t = tuple_new(28);
 
 	tuple_set_d64(t, 0, es->db_id);
-	tuple_set_d64(t, 1, es->evsel->db_id);
+	tuple_set_d64(t, 1, es->sample->evsel->db_id);
 	tuple_set_d64(t, 2, maps__machine(thread__maps(es->al->thread))->db_id);
 	tuple_set_d64(t, 3, thread__db_id(es->al->thread));
 	tuple_set_d64(t, 4, es->comm_db_id);
@@ -1352,7 +1350,7 @@ static void python_export_synth(struct db_export *dbe, struct export_sample *es)
 	t = tuple_new(3);
 
 	tuple_set_d64(t, 0, es->db_id);
-	tuple_set_d64(t, 1, es->evsel->core.attr.config);
+	tuple_set_d64(t, 1, es->sample->evsel->core.attr.config);
 	tuple_set_bytes(t, 2, es->sample->raw_data, es->sample->raw_size);
 
 	call_object(tables->synth_handler, t, "synth_data");
@@ -1367,7 +1365,7 @@ static int python_export_sample(struct db_export *dbe,
 
 	python_export_sample_table(dbe, es);
 
-	if (es->evsel->core.attr.type == PERF_TYPE_SYNTH && tables->synth_handler)
+	if (es->sample->evsel->core.attr.type == PERF_TYPE_SYNTH && tables->synth_handler)
 		python_export_synth(dbe, es);
 
 	return 0;
@@ -1464,7 +1462,6 @@ static int python_process_call_return(struct call_return *cr, u64 *parent_db_id,
 }
 
 static void python_process_general_event(struct perf_sample *sample,
-					 struct evsel *evsel,
 					 struct addr_location *al,
 					 struct addr_location *addr_al)
 {
@@ -1487,8 +1484,8 @@ static void python_process_general_event(struct perf_sample *sample,
 		Py_FatalError("couldn't create Python tuple");
 
 	/* ip unwinding */
-	callchain = python_process_callchain(sample, evsel, al);
-	dict = get_perf_sample_dict(sample, evsel, al, addr_al, callchain);
+	callchain = python_process_callchain(sample, al);
+	dict = get_perf_sample_dict(sample, al, addr_al, callchain);
 
 	PyTuple_SetItem(t, n++, dict);
 	if (_PyTuple_Resize(&t, n) == -1)
@@ -1501,24 +1498,23 @@ static void python_process_general_event(struct perf_sample *sample,
 
 static void python_process_event(union perf_event *event,
 				 struct perf_sample *sample,
-				 struct evsel *evsel,
 				 struct addr_location *al,
 				 struct addr_location *addr_al)
 {
 	struct tables *tables = &tables_global;
 
-	scripting_context__update(scripting_context, event, sample, evsel, al, addr_al);
+	scripting_context__update(scripting_context, event, sample, al, addr_al);
 
-	switch (evsel->core.attr.type) {
+	switch (sample->evsel->core.attr.type) {
 	case PERF_TYPE_TRACEPOINT:
-		python_process_tracepoint(sample, evsel, al, addr_al);
+		python_process_tracepoint(sample, al, addr_al);
 		break;
 	/* Reserve for future process_hw/sw/raw APIs */
 	default:
 		if (tables->db_export_mode)
-			db_export__sample(&tables->dbe, event, sample, evsel, al, addr_al);
+			db_export__sample(&tables->dbe, event, sample, al, addr_al);
 		else
-			python_process_general_event(sample, evsel, al, addr_al);
+			python_process_general_event(sample, al, addr_al);
 	}
 }
 

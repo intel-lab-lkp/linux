@@ -3421,12 +3421,11 @@ static int intel_pt_process_switch(struct intel_pt *pt,
 {
 	pid_t tid;
 	int cpu, ret;
-	struct evsel *evsel = evlist__id2evsel(pt->session->evlist, sample->id);
 
-	if (evsel != pt->switch_evsel)
+	if (sample->evsel != pt->switch_evsel)
 		return 0;
 
-	tid = evsel__intval(evsel, sample, "next_pid");
+	tid = evsel__intval(sample, "next_pid");
 	cpu = sample->cpu;
 
 	intel_pt_log("sched_switch: cpu %d tid %d time %"PRIu64" tsc %#"PRIx64"\n",

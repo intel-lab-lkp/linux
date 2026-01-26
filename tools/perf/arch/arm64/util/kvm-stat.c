@@ -21,12 +21,11 @@ const char *kvm_events_tp[] = {
 	NULL,
 };
 
-static void event_get_key(struct evsel *evsel,
-			  struct perf_sample *sample,
+static void event_get_key(struct perf_sample *sample,
 			  struct event_key *key)
 {
 	key->info = 0;
-	key->key = evsel__intval(evsel, sample, kvm_exit_reason);
+	key->key = evsel__intval(sample, kvm_exit_reason);
 	key->exit_reasons = arm64_exit_reasons;
 
 	/*
@@ -35,24 +34,20 @@ static void event_get_key(struct evsel *evsel,
 	 * properly decode event's est_ec.
 	 */
 	if (key->key == ARM_EXCEPTION_TRAP) {
-		key->key = evsel__intval(evsel, sample, kvm_trap_exit_reason);
+		key->key = evsel__intval(sample, kvm_trap_exit_reason);
 		key->exit_reasons = arm64_trap_exit_reasons;
 	}
 }
 
-static bool event_begin(struct evsel *evsel,
-			struct perf_sample *sample __maybe_unused,
-			struct event_key *key __maybe_unused)
+static bool event_begin(struct perf_sample *sample, struct event_key *key __maybe_unused)
 {
-	return evsel__name_is(evsel, kvm_entry_trace);
+	return evsel__name_is(sample->evsel, kvm_entry_trace);
 }
 
-static bool event_end(struct evsel *evsel,
-		      struct perf_sample *sample,
-		      struct event_key *key)
+static bool event_end(struct perf_sample *sample, struct event_key *key)
 {
-	if (evsel__name_is(evsel, kvm_exit_trace)) {
-		event_get_key(evsel, sample, key);
+	if (evsel__name_is(sample->evsel, kvm_exit_trace)) {
+		event_get_key(sample, key);
 		return true;
 	}
 	return false;

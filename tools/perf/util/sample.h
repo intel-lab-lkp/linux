@@ -79,6 +79,7 @@ struct simd_flags {
 #define SIMD_OP_FLAGS_PRED_EMPTY	0x02	/* empty predicate */
 
 struct perf_sample {
+	struct evsel *evsel;
 	u64 ip;
 	u32 pid, tid;
 	u64 time;

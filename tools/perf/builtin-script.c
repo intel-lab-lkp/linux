@@ -809,9 +809,9 @@ static int perf_sample__fprintf_uregs(struct perf_sample *sample,
 static int perf_sample__fprintf_start(struct perf_script *script,
 				      struct perf_sample *sample,
 				      struct thread *thread,
-				      struct evsel *evsel,
 				      u32 type, FILE *fp)
 {
+	struct evsel *evsel = sample->evsel;
 	unsigned long secs;
 	unsigned long long nsecs;
 	int printed = 0;
@@ -1531,7 +1531,6 @@ out:
 }
 
 static const char *resolve_branch_sym(struct perf_sample *sample,
-				      struct evsel *evsel,
 				      struct thread *thread,
 				      struct addr_location *al,
 				      struct addr_location *addr_al,
@@ -1540,7 +1539,7 @@ static const char *resolve_branch_sym(struct perf_sample *sample,
 	const char *name = NULL;
 
 	if (sample->flags & (PERF_IP_FLAG_CALL | PERF_IP_FLAG_TRACE_BEGIN)) {
-		if (sample_addr_correlates_sym(&evsel->core.attr)) {
+		if (sample_addr_correlates_sym(&sample->evsel->core.attr)) {
 			if (!addr_al->thread)
 				thread__resolve(thread, addr_al, sample);
 			if (addr_al->sym)
@@ -1580,7 +1579,7 @@ static int perf_sample__fprintf_callindent(struct perf_sample *sample,
 	if (thread__ts(thread) && sample->flags & PERF_IP_FLAG_RETURN)
 		depth += 1;
 
-	name = resolve_branch_sym(sample, evsel, thread, al, addr_al, &ip);
+	name = resolve_branch_sym(sample, thread, al, addr_al, &ip);
 
 	if (PRINT_FIELD(DSO) && !(PRINT_FIELD(IP) || PRINT_FIELD(ADDR))) {
 		dlen += fprintf(fp, "(");
@@ -1672,8 +1671,8 @@ static int perf_sample__fprintf_bts(struct perf_sample *sample,
 
 		if (symbol_conf.use_callchain && sample->callchain) {
 			cursor = get_tls_callchain_cursor();
-			if (thread__resolve_callchain(al->thread, cursor, evsel,
-						      sample, NULL, NULL,
+			if (thread__resolve_callchain(al->thread, cursor, sample,
+						      /*parent=*/NULL, /*root_al=*/NULL,
 						      scripting_max_stack))
 				cursor = NULL;
 		}
@@ -2084,7 +2083,6 @@ static int data_src__fprintf(u64 data_src, FILE *fp)
 struct metric_ctx {
 	struct perf_sample	*sample;
 	struct thread		*thread;
-	struct evsel	*evsel;
 	FILE 			*fp;
 };
 
@@ -2097,7 +2095,7 @@ static void script_print_metric(struct perf_stat_config *config __maybe_unused,
 
 	if (!fmt)
 		return;
-	perf_sample__fprintf_start(NULL, mctx->sample, mctx->thread, mctx->evsel,
+	perf_sample__fprintf_start(NULL, mctx->sample, mctx->thread,
 				   PERF_RECORD_SAMPLE, mctx->fp);
 	fputs("\tmetric: ", mctx->fp);
 	if (color)
@@ -2112,7 +2110,7 @@ static void script_new_line(struct perf_stat_config *config __maybe_unused,
 {
 	struct metric_ctx *mctx = ctx;
 
-	perf_sample__fprintf_start(NULL, mctx->sample, mctx->thread, mctx->evsel,
+	perf_sample__fprintf_start(NULL, mctx->sample, mctx->thread,
 				   PERF_RECORD_SAMPLE, mctx->fp);
 	fputs("\tmetric: ", mctx->fp);
 }
@@ -2278,7 +2276,6 @@ static void perf_sample__fprint_metric(struct thread *thread,
 		.ctx = &(struct metric_ctx) {
 				.sample = sample,
 				.thread = thread,
-				.evsel  = evsel,
 				.fp     = fp,
 			 },
 		.force_header = false,
@@ -2365,7 +2362,6 @@ static void perf_sample__fprint_metric(struct thread *thread,
 }
 
 static bool show_event(struct perf_sample *sample,
-		       struct evsel *evsel,
 		       struct thread *thread,
 		       struct addr_location *al,
 		       struct addr_location *addr_al)
@@ -2384,7 +2380,7 @@ static bool show_event(struct perf_sample *sample,
 	} else {
 		const char *s = symbol_conf.graph_function;
 		u64 ip;
-		const char *name = resolve_branch_sym(sample, evsel, thread, al, addr_al,
+		const char *name = resolve_branch_sym(sample, thread, al, addr_al,
 				&ip);
 		unsigned nlen;
 
@@ -2407,12 +2403,13 @@ static bool show_event(struct perf_sample *sample,
 }
 
 static void process_event(struct perf_script *script,
-			  struct perf_sample *sample, struct evsel *evsel,
+			  struct perf_sample *sample,
 			  struct addr_location *al,
 			  struct addr_location *addr_al,
 			  struct machine *machine)
 {
 	struct thread *thread = al->thread;
+	struct evsel *evsel = sample->evsel;
 	struct perf_event_attr *attr = &evsel->core.attr;
 	unsigned int type = evsel__output_type(evsel);
 	struct evsel_script *es = evsel->priv;
@@ -2424,7 +2421,7 @@ static void process_event(struct perf_script *script,
 
 	++es->samples;
 
-	perf_sample__fprintf_start(script, sample, thread, evsel,
+	perf_sample__fprintf_start(script, sample, thread,
 				   PERF_RECORD_SAMPLE, fp);
 
 	if (PRINT_FIELD(PERIOD))
@@ -2494,8 +2491,8 @@ static void process_event(struct perf_script *script,
 
 		if (symbol_conf.use_callchain && sample->callchain) {
 			cursor = get_tls_callchain_cursor();
-			if (thread__resolve_callchain(al->thread, cursor, evsel,
-						      sample, NULL, NULL,
+			if (thread__resolve_callchain(al->thread, cursor, sample,
+						      /*parent=*/NULL, /*root_al=*/NULL,
 						      scripting_max_stack))
 				cursor = NULL;
 		}
@@ -2624,12 +2621,12 @@ static bool filter_cpu(struct perf_sample *sample)
 static int process_sample_event(const struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
-				struct evsel *evsel,
 				struct machine *machine)
 {
 	struct perf_script *scr = container_of(tool, struct perf_script, tool);
 	struct addr_location al;
 	struct addr_location addr_al;
+	struct evsel *evsel = sample->evsel;
 	int ret = 0;
 
 	/* Set thread to NULL to indicate addr_al and al are not initialized */
@@ -2672,7 +2669,7 @@ static int process_sample_event(const struct perf_tool *tool,
 	if (al.filtered)
 		goto out_put;
 
-	if (!show_event(sample, evsel, al.thread, &al, &addr_al))
+	if (!show_event(sample, al.thread, &al, &addr_al))
 		goto out_put;
 
 	if (evswitch__discard(&scr->evswitch, evsel))
@@ -2694,9 +2691,9 @@ static int process_sample_event(const struct perf_tool *tool,
 				thread__resolve(al.thread, &addr_al, sample);
 			addr_al_ptr = &addr_al;
 		}
-		scripting_ops->process_event(event, sample, evsel, &al, addr_al_ptr);
+		scripting_ops->process_event(event, sample, &al, addr_al_ptr);
 	} else {
-		process_event(scr, sample, evsel, &al, &addr_al, machine);
+		process_event(scr, sample, &al, &addr_al, machine);
 	}
 
 out_put:
@@ -2708,10 +2705,10 @@ out_put:
 static int process_deferred_sample_event(const struct perf_tool *tool,
 					 union perf_event *event,
 					 struct perf_sample *sample,
-					 struct evsel *evsel,
 					 struct machine *machine)
 {
 	struct perf_script *scr = container_of(tool, struct perf_script, tool);
+	struct evsel *evsel = sample->evsel;
 	struct perf_event_attr *attr = &evsel->core.attr;
 	struct evsel_script *es = evsel->priv;
 	unsigned int type = output_type(attr->type);
@@ -2754,13 +2751,13 @@ static int process_deferred_sample_event(const struct perf_tool *tool,
 	if (al.filtered)
 		goto out_put;
 
-	if (!show_event(sample, evsel, al.thread, &al, NULL))
+	if (!show_event(sample, al.thread, &al, NULL))
 		goto out_put;
 
 	if (evswitch__discard(&scr->evswitch, evsel))
 		goto out_put;
 
-	perf_sample__fprintf_start(scr, sample, al.thread, evsel,
+	perf_sample__fprintf_start(scr, sample, al.thread,
 				   PERF_RECORD_CALLCHAIN_DEFERRED, fp);
 	fprintf(fp, "DEFERRED CALLCHAIN [cookie: %llx]",
 		(unsigned long long)event->callchain_deferred.cookie);
@@ -2770,8 +2767,8 @@ static int process_deferred_sample_event(const struct perf_tool *tool,
 
 		if (symbol_conf.use_callchain && sample->callchain) {
 			cursor = get_tls_callchain_cursor();
-			if (thread__resolve_callchain(al.thread, cursor, evsel,
-						      sample, NULL, NULL,
+			if (thread__resolve_callchain(al.thread, cursor, sample,
+						      /*parent=*/NULL, /*root_al=*/NULL,
 						      scripting_max_stack)) {
 				pr_info("cannot resolve deferred callchains\n");
 				cursor = NULL;
@@ -2887,8 +2884,12 @@ static int print_event_with_time(const struct perf_tool *tool,
 		thread = machine__findnew_thread(machine, pid, tid);
 
 	if (evsel) {
-		perf_sample__fprintf_start(script, sample, thread, evsel,
+		struct evsel *saved_evsel = sample->evsel;
+
+		sample->evsel = evsel;
+		perf_sample__fprintf_start(script, sample, thread,
 					   event->header.type, stdout);
+		sample->evsel = saved_evsel;
 	}
 
 	perf_event__fprintf(event, machine, stdout);
