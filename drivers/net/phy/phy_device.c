@@ -1768,12 +1768,21 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 
 	/**
 	 * If the external phy used by current mac interface is managed by
-	 * another mac interface, so we should create a device link between
-	 * phy dev and mac dev.
+	 * another MDIO controller, which means that the MAC and MDIO are
+	 * separated devices, then we should create a device link between
+	 * the MAC device and the MDIO device.
 	 */
-	if (dev && phydev->mdio.bus->parent && dev->dev.parent != phydev->mdio.bus->parent)
-		phydev->devlink = device_link_add(dev->dev.parent, &phydev->mdio.dev,
-						  DL_FLAG_PM_RUNTIME | DL_FLAG_STATELESS);
+	if (dev && phydev->mdio.bus->parent &&
+	    dev->dev.parent != phydev->mdio.bus->parent) {
+		if (!device_link_add(dev->dev.parent, phydev->mdio.bus->parent,
+				     DL_FLAG_PM_RUNTIME |
+				     DL_FLAG_AUTOREMOVE_SUPPLIER)) {
+			phydev_err(phydev,
+				   "Failed to add devlink between MAC and MDIO\n");
+			err = -EINVAL;
+			goto error;
+		}
+	}
 
 	return err;
 
@@ -1844,11 +1853,6 @@ void phy_detach(struct phy_device *phydev)
 	struct net_device *dev = phydev->attached_dev;
 	struct module *ndev_owner = NULL;
 	struct mii_bus *bus;
-
-	if (phydev->devlink) {
-		device_link_del(phydev->devlink);
-		phydev->devlink = NULL;
-	}
 
 	if (phydev->sysfs_links) {
 		if (dev)
