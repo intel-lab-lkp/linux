@@ -9,6 +9,7 @@ Compute Accelerators
 
    introduction
    amdxdna/index
+   amd_vpci/index
    qaic/index
    rocket/index
 
