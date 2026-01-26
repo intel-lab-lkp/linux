@@ -26,7 +26,7 @@ use super::FalconHal;
 fn select_core_ga102<E: FalconEngine>(bar: &Bar0) -> Result {
     let bcr_ctrl = regs::NV_PRISCV_RISCV_BCR_CTRL::read(bar, &E::ID);
     if bcr_ctrl.core_select() != PeregrineCoreSelect::Falcon {
-        regs::NV_PRISCV_RISCV_BCR_CTRL::default()
+        regs::NV_PRISCV_RISCV_BCR_CTRL::zeroed()
             .set_core_select(PeregrineCoreSelect::Falcon)
             .write(bar, &E::ID);
 
@@ -59,7 +59,7 @@ fn signature_reg_fuse_version_ga102(
 
     // `ucode_idx` is guaranteed to be in the range [0..15], making the `read` calls provable valid
     // at build-time.
-    let reg_fuse_version = if engine_id_mask & 0x0001 != 0 {
+    let reg_fuse_version: u16 = if engine_id_mask & 0x0001 != 0 {
         regs::NV_FUSE_OPT_FPF_SEC2_UCODE1_VERSION::read(bar, ucode_idx).data()
     } else if engine_id_mask & 0x0004 != 0 {
         regs::NV_FUSE_OPT_FPF_NVDEC_UCODE1_VERSION::read(bar, ucode_idx).data()
@@ -68,23 +68,24 @@ fn signature_reg_fuse_version_ga102(
     } else {
         dev_err!(dev, "unexpected engine_id_mask {:#x}", engine_id_mask);
         return Err(EINVAL);
-    };
+    }
+    .into();
 
     // TODO[NUMM]: replace with `last_set_bit` once it lands.
     Ok(u16::BITS - reg_fuse_version.leading_zeros())
 }
 
 fn program_brom_ga102<E: FalconEngine>(bar: &Bar0, params: &FalconBromParams) -> Result {
-    regs::NV_PFALCON2_FALCON_BROM_PARAADDR::default()
+    regs::NV_PFALCON2_FALCON_BROM_PARAADDR::zeroed()
         .set_value(params.pkc_data_offset)
         .write(bar, &E::ID, 0);
-    regs::NV_PFALCON2_FALCON_BROM_ENGIDMASK::default()
+    regs::NV_PFALCON2_FALCON_BROM_ENGIDMASK::zeroed()
         .set_value(u32::from(params.engine_id_mask))
         .write(bar, &E::ID);
-    regs::NV_PFALCON2_FALCON_BROM_CURR_UCODE_ID::default()
+    regs::NV_PFALCON2_FALCON_BROM_CURR_UCODE_ID::zeroed()
         .set_ucode_id(params.ucode_id)
         .write(bar, &E::ID);
-    regs::NV_PFALCON2_FALCON_MOD_SEL::default()
+    regs::NV_PFALCON2_FALCON_MOD_SEL::zeroed()
         .set_algo(FalconModSelAlgo::Rsa3k)
         .write(bar, &E::ID);
 
