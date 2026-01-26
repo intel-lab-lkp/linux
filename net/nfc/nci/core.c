@@ -1303,6 +1303,8 @@ void nci_unregister_device(struct nci_dev *ndev)
 {
 	struct nci_conn_info *conn_info, *n;
 
+	nfc_unregister_device(ndev->nfc_dev);
+
 	/* This set_bit is not protected with specialized barrier,
 	 * However, it is fine because the mutex_lock(&ndev->req_lock);
 	 * in nci_close_device() will help to emit one.
@@ -1319,8 +1321,6 @@ void nci_unregister_device(struct nci_dev *ndev)
 		list_del(&conn_info->list);
 		/* conn_info is allocated with devm_kzalloc */
 	}
-
-	nfc_unregister_device(ndev->nfc_dev);
 }
 EXPORT_SYMBOL(nci_unregister_device);
 
