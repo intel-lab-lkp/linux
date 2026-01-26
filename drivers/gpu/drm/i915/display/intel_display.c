@@ -5855,9 +5855,14 @@ static bool intel_cpu_transcoders_need_modeset(struct intel_atomic_state *state,
 {
 	const struct intel_crtc_state *new_crtc_state;
 	struct intel_crtc *crtc;
+	struct drm_device *drm;
 	int i;
 
+	drm = to_intel_display(state)->drm;
+
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
+		if (drm_WARN_ON(drm, new_crtc_state->cpu_transcoder == INVALID_TRANSCODER))
+			continue;
 		if (new_crtc_state->hw.enable &&
 		    transcoders & BIT(new_crtc_state->cpu_transcoder) &&
 		    intel_crtc_needs_modeset(new_crtc_state))

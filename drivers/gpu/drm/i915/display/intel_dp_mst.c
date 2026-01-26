@@ -741,6 +741,9 @@ intel_dp_mst_transcoder_mask(struct intel_atomic_state *state,
 		if (!crtc_state->hw.active)
 			continue;
 
+		if (drm_WARN_ON(display->drm, crtc_state->cpu_transcoder == INVALID_TRANSCODER))
+			continue;
+
 		transcoders |= BIT(crtc_state->cpu_transcoder);
 	}
 
