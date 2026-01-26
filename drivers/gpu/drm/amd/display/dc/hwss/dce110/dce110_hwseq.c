@@ -660,6 +660,17 @@ void dce110_update_info_frame(struct pipe_ctx *pipe_ctx)
 	}
 }
 
+static bool
+dce110_dac_load_detect(struct dc_link *link)
+{
+	struct dc_bios *bios = link->ctx->dc_bios;
+	struct link_encoder *link_enc = link->link_enc;
+	enum bp_result bp_result;
+
+	bp_result = bios->funcs->dac_load_detection(bios, link_enc->analog_engine);
+	return bp_result == BP_RESULT_OK;
+}
+
 void dce110_enable_stream(struct pipe_ctx *pipe_ctx)
 {
 	enum dc_lane_count lane_count =
@@ -3409,6 +3420,7 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.enable_dp_link_output = dce110_enable_dp_link_output,
 	.enable_analog_link_output = dce110_enable_analog_link_output,
 	.disable_link_output = dce110_disable_link_output,
+	.dac_load_detect = dce110_dac_load_detect,
 };
 
 static const struct hwseq_private_funcs dce110_private_funcs = {
