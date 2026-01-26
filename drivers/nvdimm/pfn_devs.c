@@ -635,6 +635,10 @@ int nd_pfn_probe(struct device *dev, struct nd_namespace_common *ndns)
 	if (!pfn_dev)
 		return -ENOMEM;
 	pfn_sb = devm_kmalloc(dev, sizeof(*pfn_sb), GFP_KERNEL);
+	if (!pfn_sb) {
+		put_device(pfn_dev);
+		return -ENOMEM;
+	}
 	nd_pfn = to_nd_pfn(pfn_dev);
 	nd_pfn->pfn_sb = pfn_sb;
 	rc = nd_pfn_validate(nd_pfn, PFN_SIG);

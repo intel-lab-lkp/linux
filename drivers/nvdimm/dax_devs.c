@@ -111,6 +111,10 @@ int nd_dax_probe(struct device *dev, struct nd_namespace_common *ndns)
 			return -ENOMEM;
 	}
 	pfn_sb = devm_kmalloc(dev, sizeof(*pfn_sb), GFP_KERNEL);
+	if (!pfn_sb) {
+		put_device(dax_dev);
+		return -ENOMEM;
+	}
 	nd_pfn = &nd_dax->nd_pfn;
 	nd_pfn->pfn_sb = pfn_sb;
 	rc = nd_pfn_validate(nd_pfn, DAX_SIG);
