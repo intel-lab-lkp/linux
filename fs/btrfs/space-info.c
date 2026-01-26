@@ -250,6 +250,7 @@ static void init_space_info(struct btrfs_fs_info *info,
 	space_info->clamp = 1;
 	btrfs_update_space_info_chunk_size(space_info, calc_chunk_size(info, flags));
 	space_info->subgroup_id = BTRFS_SUB_GROUP_PRIMARY;
+	space_info->periodic_reclaim_ready = true;
 
 	if (btrfs_is_zoned(info))
 		space_info->bg_reclaim_threshold = BTRFS_DEFAULT_ZONED_RECLAIM_THRESH;
