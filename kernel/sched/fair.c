@@ -2130,6 +2130,17 @@ static inline int numa_idle_core(int idle_core, int cpu)
  * borrows code and logic from update_sg_lb_stats but sharing a
  * common implementation is impractical.
  */
+struct numa_stats_cache {
+	unsigned long load;
+	unsigned long runnable;
+	unsigned long util;
+	unsigned long nr_running;
+	unsigned long capacity;
+	unsigned long last_update;
+};
+
+static struct numa_stats_cache node_stats_cache[MAX_NUMNODES];
+
 static void update_numa_stats(struct task_numa_env *env,
 			      struct numa_stats *ns, int nid,
 			      bool find_idle)
@@ -2140,6 +2151,24 @@ static void update_numa_stats(struct task_numa_env *env,
 	ns->idle_cpu = -1;
 
 	rcu_read_lock();
+	/*
+	 * Algorithmic Optimization: Avoid O(N) scan by using cached stats.
+	 * Only applicable for the source node where we don't need to find
+	 * an idle CPU.
+	 */
+	if (!find_idle && nid == env->src_nid) {
+		struct numa_stats_cache *cache = &node_stats_cache[nid];
+
+		if (time_before(jiffies, cache->last_update + msecs_to_jiffies(10))) {
+			ns->load = READ_ONCE(cache->load);
+			ns->runnable = READ_ONCE(cache->runnable);
+			ns->util = READ_ONCE(cache->util);
+			ns->nr_running = READ_ONCE(cache->nr_running);
+			ns->compute_capacity = READ_ONCE(cache->capacity);
+			goto skip_scan;
+		}
+	}
+
 	for_each_cpu(cpu, cpumask_of_node(nid)) {
 		struct rq *rq = cpu_rq(cpu);
 
@@ -2160,6 +2189,8 @@ static void update_numa_stats(struct task_numa_env *env,
 			idle_core = numa_idle_core(idle_core, cpu);
 		}
 	}
+
+skip_scan:
 	rcu_read_unlock();
 
 	ns->weight = cpumask_weight(cpumask_of_node(nid));
@@ -10486,6 +10517,19 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 	if (sgs->group_type == group_overloaded)
 		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
 				sgs->group_capacity;
+
+	/* Algorithmic Optimization: Cache node stats for O(1) NUMA lookups */
+	if (env->sd->flags & SD_NUMA) {
+		int nid = cpu_to_node(cpumask_first(sched_group_span(group)));
+		struct numa_stats_cache *cache = &node_stats_cache[nid];
+
+		WRITE_ONCE(cache->nr_running, sgs->sum_h_nr_running);
+		WRITE_ONCE(cache->load, sgs->group_load);
+		WRITE_ONCE(cache->util, sgs->group_util);
+		WRITE_ONCE(cache->runnable, sgs->group_runnable);
+		WRITE_ONCE(cache->capacity, sgs->group_capacity);
+		WRITE_ONCE(cache->last_update, jiffies);
+	}
 }
 
 /**
