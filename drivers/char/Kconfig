@@ -31,6 +31,19 @@ config TTY_PRINTK_LEVEL
 	help
 	  Printk log level to use for ttyprintk messages.
 
+config TTY_DEV_RUST_PRINTK
+	tristate "Rust TTY driver to output user messages via printk"
+	depends on RUST && TTY
+	default n
+	help
+	  If you say Y here, the support for writing user messages (i.e.
+	  console messages) via printk is available, implemented in Rust.
+
+	  This is the Rust implementation of the ttyprintk driver,
+	  demonstrating rkernel domain isolation for kernel modules.
+
+	  If unsure, say N.
+
 config PRINTER
 	tristate "Parallel printer support"
 	depends on PARPORT
