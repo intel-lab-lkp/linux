@@ -131,6 +131,27 @@ struct dw_edma_chip {
 #if IS_REACHABLE(CONFIG_DW_EDMA)
 int dw_edma_probe(struct dw_edma_chip *chip);
 int dw_edma_remove(struct dw_edma_chip *chip);
+
+/**
+ * dw_edma_chan_register_notify - register completion notification callback
+ * @chan: DMA channel obtained from dma_request_channel()
+ * @cb:   callback invoked when a completion is detected on @chan (NULL to
+ *        unregister)
+ * @data: opaque pointer passed back to @cb
+ *
+ * This is a lightweight notification mechanism intended for channels whose
+ * descriptors are managed externally (e.g. remote eDMA). When enabled, the
+ * local dw-edma instance does not perform cookie accounting for completions,
+ * because the corresponding descriptor is not tracked locally.
+ *
+ * The callback may be invoked from atomic context and must not sleep.
+ *
+ * Return: 0 on success, -ENODEV if @chan is not a dw-edma channel,
+ *         -EBUSY if the channel is active or has queued descriptors.
+ */
+int dw_edma_chan_register_notify(struct dma_chan *chan,
+				 void (*cb)(struct dma_chan *chan, void *data),
+				 void *data);
 #else
 static inline int dw_edma_probe(struct dw_edma_chip *chip)
 {
@@ -140,6 +161,14 @@ static inline int dw_edma_probe(struct dw_edma_chip *chip)
 static inline int dw_edma_remove(struct dw_edma_chip *chip)
 {
 	return 0;
+}
+
+static inline int dw_edma_chan_register_notify(struct dma_chan *chan,
+					       void (*cb)(struct dma_chan *chan,
+							  void *data),
+					       void *data)
+{
+	return -ENODEV;
 }
 #endif /* CONFIG_DW_EDMA */
 
