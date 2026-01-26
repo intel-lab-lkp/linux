@@ -1269,8 +1269,10 @@ static int gss_proxy_save_rsc(struct cache_detail *cd,
 						ud->out_handle.len,
 						gm, &rsci.mechctx,
 						&expiry, GFP_KERNEL);
-		if (status)
+		if (status) {
+			gss_mech_put(gm);
 			goto out;
+		}
 
 		getboottime64(&boot);
 		expiry -= boot.tv_sec;
