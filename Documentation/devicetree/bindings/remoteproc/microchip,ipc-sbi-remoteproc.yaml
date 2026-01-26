@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/microchip,ipc-sbi-remoteproc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip IPC Remote Processor
+
+description:
+  Microchip RISC-V SoCs typically contain one or more clusters. Clusters can
+  operate in Asymmetric Multi-Processing (AMP) mode, where individual cores
+  or groups of cores run as independent software contexts.
+
+  The configuration is flexible, as the set of cores or clusters that can be
+  controlled as remote processors may vary, and memory regions used for
+  firmware as well as mailbox assignments depend on the system design.
+
+  Communication with remote cores or clusters is abstracted using ecalls
+  to the platform's Supervisor Binary Interface (SBI) firmware, through
+  which the state of remote cores or clusters are controlled. This binding
+  documents that firmware interface.
+
+maintainers:
+  - Valentina Fernandez <valentina.fernandezalanis@microchip.com>
+
+properties:
+  compatible:
+    const: microchip,ipc-sbi-remoteproc
+
+  cpu:
+    description:
+      phandles to the CPUs comprising the remote cluster
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+
+  mboxes:
+    description:
+      Microchip IPC mailbox specifier. Used for communication with
+      a remote cluster. For HSS versions prior to v2026.04, it is also
+      used for controlling the life cycle of a remote cluster. The
+      specifier format is as per the bindings in
+      Documentation/devicetree/bindings/mailbox/microchip,sbi-ipc.yaml
+    maxItems: 1
+
+  memory-region:
+    minItems: 1
+    maxItems: 5
+    description:
+      List of phandles to the reserved memory regions associated wih the
+      remoteproc device. This is variable and describes the memories shared
+      with the remote cluster (e.g. firmware, resource table, rpmsg vrings)
+    items:
+      anyOf:
+        - description: resource table when firmware is started by the bootloader
+        - description: remote cluster firmware image section
+        - description: virtio device (vdev) buffer
+        - description: vring0
+        - description: vring1
+
+  memory-region-names:
+    minItems: 1
+    maxItems: 5
+    items:
+      anyOf:
+        - const: rsc-table
+        - const: firmware
+        - const: buffer
+        - const: vring0
+        - const: vring1
+
+required:
+  - compatible
+
+# Remote Cluster ID is derived either from the CPU phandle or
+# from the mailbox specifier prior to HSS v2026.04
+anyOf:
+  - required:
+      - cpu
+  - required:
+      - mboxes
+
+allOf:
+  - if:
+      properties:
+        memory-region-names:
+          contains:
+            enum:
+              - vring0
+              - vring1
+    then:
+      properties:
+        memory-region-names:
+          contains:
+            const: buffer
+
+additionalProperties: false
+
+examples:
+  - |
+    // Early boot mode example - firmware started by bootloader
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        remoteproc {
+            compatible = "microchip,ipc-sbi-remoteproc";
+            cpu = <&cpu4>;
+            mboxes= <&ihc 8>;
+            memory-region = <&rsctable>, <&vdev0buffer>,
+                            <&vdev0vring0>, <&vdev0vring1>;
+            memory-region-names = "rsc-table", "buffer",
+                                  "vring0", "vring1";
+        };
+    };
+
+  - |
+    // Late boot mode example - firmware started by Linux (remoteproc)
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        remoteproc {
+            compatible = "microchip,ipc-sbi-remoteproc";
+            cpu = <&cpu4>;
+            mboxes= <&ihc 8>;
+            memory-region = <&cluster_firmware>, <&vdev0buffer>,
+                            <&vdev0vring0>, <&vdev0vring1>;
+            memory-region-names = "firmware", "buffer",
+                                  "vring0", "vring1";
+        };
+    };
+...
