@@ -5278,6 +5278,7 @@ int ath12k_mac_op_get_txpower(struct ieee80211_hw *hw,
 					struct ath12k_fw_stats_pdev, list);
 	if (!pdev) {
 		spin_unlock_bh(&ar->data_lock);
+		ath12k_fw_stats_reset(ar);
 		goto err_fallback;
 	}
 
