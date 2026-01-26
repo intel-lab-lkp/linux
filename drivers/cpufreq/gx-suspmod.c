@@ -397,7 +397,7 @@ static int cpufreq_gx_target(struct cpufreq_policy *policy,
 
 static int cpufreq_gx_cpu_init(struct cpufreq_policy *policy)
 {
-	unsigned int maxfreq;
+	unsigned int minfreq, maxfreq;
 
 	if (!policy || policy->cpu != 0)
 		return -ENODEV;
@@ -418,11 +418,10 @@ static int cpufreq_gx_cpu_init(struct cpufreq_policy *policy)
 	policy->cpu = 0;
 
 	if (max_duration < POLICY_MIN_DIV)
-		policy->min = maxfreq / max_duration;
+		minfreq = maxfreq / max_duration;
 	else
-		policy->min = maxfreq / POLICY_MIN_DIV;
-	policy->max = maxfreq;
-	policy->cpuinfo.min_freq = maxfreq / max_duration;
+		minfreq = maxfreq / POLICY_MIN_DIV;
+	policy->cpuinfo.min_freq = minfreq;
 	policy->cpuinfo.max_freq = maxfreq;
 
 	return 0;
