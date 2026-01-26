@@ -1012,7 +1012,7 @@ impl<T: Driver> Registration<T> {
         } else {
             None
         },
-        ..pin_init::zeroed()
+        ..ffi::zeroed()
     };
 
     const fn copy_name(name: &'static CStr) -> [c_char; CPUFREQ_NAME_LEN] {
