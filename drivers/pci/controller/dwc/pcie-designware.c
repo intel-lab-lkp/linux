@@ -1369,3 +1369,48 @@ int dwc_pcie_edma_get_reg_window(struct pci_epc *epc, phys_addr_t *phys,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dwc_pcie_edma_get_reg_window);
+
+int dwc_pcie_edma_get_ll_region(struct pci_epc *epc,
+				enum dma_transfer_direction dir, int hw_id,
+				struct dw_edma_region *region)
+{
+	struct dw_edma_chip *chip;
+	struct dw_pcie_ep *ep;
+	struct dw_pcie *pci;
+	bool dir_read;
+
+	if (!epc || !region)
+		return -EINVAL;
+	if (dir != DMA_DEV_TO_MEM && dir != DMA_MEM_TO_DEV)
+		return -EINVAL;
+	if (hw_id < 0)
+		return -EINVAL;
+
+	ep = epc_get_drvdata(epc);
+	if (!ep)
+		return -ENODEV;
+
+	pci = to_dw_pcie_from_ep(ep);
+	chip = &pci->edma;
+
+	if (!chip->dev)
+		return -ENODEV;
+
+	if (chip->flags & DW_EDMA_CHIP_LOCAL)
+		dir_read = (dir == DMA_DEV_TO_MEM);
+	else
+		dir_read = (dir == DMA_MEM_TO_DEV);
+
+	if (dir_read) {
+		if (hw_id >= chip->ll_rd_cnt)
+			return -EINVAL;
+		*region = chip->ll_region_rd[hw_id];
+	} else {
+		if (hw_id >= chip->ll_wr_cnt)
+			return -EINVAL;
+		*region = chip->ll_region_wr[hw_id];
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dwc_pcie_edma_get_ll_region);
