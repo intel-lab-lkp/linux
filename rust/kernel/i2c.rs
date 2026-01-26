@@ -46,7 +46,7 @@ impl DeviceId {
     pub const fn new(id: &'static CStr) -> Self {
         let src = id.to_bytes_with_nul();
         build_assert!(src.len() <= Self::I2C_NAME_SIZE, "ID exceeds 20 bytes");
-        let mut i2c: bindings::i2c_device_id = pin_init::zeroed();
+        let mut i2c: bindings::i2c_device_id = ffi::zeroed();
         let mut i = 0;
         while i < src.len() {
             i2c.name[i] = src[i];
@@ -433,7 +433,7 @@ impl I2cBoardInfo {
     pub const fn new(type_: &'static CStr, addr: u16) -> Self {
         let src = type_.to_bytes_with_nul();
         build_assert!(src.len() <= Self::I2C_TYPE_SIZE, "Type exceeds 20 bytes");
-        let mut i2c_board_info: bindings::i2c_board_info = pin_init::zeroed();
+        let mut i2c_board_info: bindings::i2c_board_info = ffi::zeroed();
         let mut i: usize = 0;
         while i < src.len() {
             i2c_board_info.type_[i] = src[i];
