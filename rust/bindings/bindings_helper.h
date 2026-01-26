@@ -81,6 +81,9 @@
 #include <linux/security.h>
 #include <linux/slab.h>
 #include <linux/task_work.h>
+#include <linux/tty.h>
+#include <linux/tty_driver.h>
+#include <linux/tty_port.h>
 #include <linux/tracepoint.h>
 #include <linux/usb.h>
 #include <linux/wait.h>
