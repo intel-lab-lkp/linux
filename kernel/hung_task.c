@@ -17,6 +17,7 @@
 #include <linux/export.h>
 #include <linux/panic_notifier.h>
 #include <linux/sysctl.h>
+#include <linux/sched/loadavg.h>
 #include <linux/suspend.h>
 #include <linux/utsname.h>
 #include <linux/sched/signal.h>
@@ -503,6 +504,7 @@ static int watchdog(void *dummy)
 	for ( ; ; ) {
 		unsigned long timeout = sysctl_hung_task_timeout_secs;
 		unsigned long interval = sysctl_hung_task_check_interval_secs;
+		unsigned long load[3];
 		long t;
 
 		if (interval == 0)
@@ -511,8 +513,12 @@ static int watchdog(void *dummy)
 		t = hung_timeout_jiffies(hung_last_checked, interval);
 		if (t <= 0) {
 			if (!atomic_xchg(&reset_hung_task, 0) &&
-			    !hung_detector_suspended)
-				check_hung_uninterruptible_tasks(timeout);
+			    !hung_detector_suspended) {
+				/* Check 1-min load to detect idle system */
+				get_avenrun(load, 0, 0);
+				if (load[0] > 0)
+					check_hung_uninterruptible_tasks(timeout);
+			}
 			hung_last_checked = jiffies;
 			continue;
 		}
