@@ -624,9 +624,10 @@ void net_ns_get_ownership(const struct net *net, kuid_t *uid, kgid_t *gid)
 }
 EXPORT_SYMBOL_GPL(net_ns_get_ownership);
 
-static void unhash_nsid(struct net *net, struct net *last)
+static void unhash_nsid(struct net *last)
 {
 	struct net *tmp;
+
 	/* This function is only called from cleanup_net() work,
 	 * and this work is the only process, that may delete
 	 * a net from net_namespace_list. So, when the below
@@ -636,20 +637,34 @@ static void unhash_nsid(struct net *net, struct net *last)
 	for_each_net(tmp) {
 		int id;
 
-		spin_lock(&tmp->nsid_lock);
-		id = __peernet2id(tmp, net);
-		if (id >= 0)
-			idr_remove(&tmp->netns_ids, id);
-		spin_unlock(&tmp->nsid_lock);
-		if (id >= 0)
-			rtnl_net_notifyid(tmp, RTM_DELNSID, id, 0, NULL,
-					  GFP_KERNEL);
+		for (id = 0; ; id++) {
+			struct net *peer;
+			bool dying;
+
+			rcu_read_lock();
+			peer = idr_get_next(&tmp->netns_ids, &id);
+			dying = peer && peer->is_dying;
+			rcu_read_unlock();
+
+			if (!peer)
+				break;
+			if (!dying)
+				continue;
+
+			spin_lock(&tmp->nsid_lock);
+			if (idr_find(&tmp->netns_ids, id) == peer)
+				idr_remove(&tmp->netns_ids, id);
+			else
+				peer = NULL;
+			spin_unlock(&tmp->nsid_lock);
+
+			if (peer)
+				rtnl_net_notifyid(tmp, RTM_DELNSID, id, 0,
+						  NULL, GFP_KERNEL);
+		}
 		if (tmp == last)
 			break;
 	}
-	spin_lock(&net->nsid_lock);
-	idr_destroy(&net->netns_ids);
-	spin_unlock(&net->nsid_lock);
 }
 
 static LLIST_HEAD(cleanup_list);
@@ -688,8 +703,12 @@ static void cleanup_net(struct work_struct *work)
 	last = list_last_entry(&net_namespace_list, struct net, list);
 	up_write(&net_rwsem);
 
+	unhash_nsid(last);
+
 	llist_for_each_entry(net, net_kill_list, cleanup_list) {
-		unhash_nsid(net, last);
+		spin_lock(&net->nsid_lock);
+		idr_destroy(&net->netns_ids);
+		spin_unlock(&net->nsid_lock);
 		list_add_tail(&net->exit_list, &net_exit_list);
 	}
 
@@ -739,6 +758,7 @@ static DECLARE_WORK(net_cleanup_work, cleanup_net);
 void __put_net(struct net *net)
 {
 	ref_tracker_dir_exit(&net->refcnt_tracker);
+	net->is_dying = true;
 	/* Cleanup the network namespace in process context */
 	if (llist_add(&net->cleanup_list, &cleanup_list))
 		queue_work(netns_wq, &net_cleanup_work);
