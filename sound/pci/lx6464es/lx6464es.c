@@ -113,6 +113,7 @@ static int lx_hardware_open(struct lx6464es *chip,
 	if (err < 0) {
 		dev_err(chip->card->dev, "setting granularity to %ld failed\n",
 			   period_size);
+		lx_pipe_release(chip, 0, is_capture);
 		return err;
 	}
 
