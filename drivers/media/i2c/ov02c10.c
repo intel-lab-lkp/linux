@@ -634,7 +634,7 @@ static int ov02c10_enable_streams(struct v4l2_subdev *sd,
 	ret = cci_write(ov02c10->regmap, OV02C10_REG_STREAM_CONTROL, 1, NULL);
 out:
 	if (ret)
-		pm_runtime_put(ov02c10->dev);
+		pm_runtime_put_autosuspend(ov02c10->dev);
 
 	return ret;
 }
@@ -646,7 +646,7 @@ static int ov02c10_disable_streams(struct v4l2_subdev *sd,
 	struct ov02c10 *ov02c10 = to_ov02c10(sd);
 
 	cci_write(ov02c10->regmap, OV02C10_REG_STREAM_CONTROL, 0, NULL);
-	pm_runtime_put(ov02c10->dev);
+	pm_runtime_put_autosuspend(ov02c10->dev);
 
 	return 0;
 }
@@ -906,6 +906,7 @@ static void ov02c10_remove(struct i2c_client *client)
 
 	v4l2_async_unregister_subdev(sd);
 	pm_runtime_disable(ov02c10->dev);
+	pm_runtime_dont_use_autosuspend(ov02c10->dev);
 	if (!pm_runtime_status_suspended(ov02c10->dev)) {
 		ov02c10_power_off(ov02c10->dev);
 		pm_runtime_set_suspended(ov02c10->dev);
@@ -989,6 +990,8 @@ static int ov02c10_probe(struct i2c_client *client)
 		goto probe_error_media_entity_cleanup;
 	}
 
+	pm_runtime_set_autosuspend_delay(ov02c10->dev, 1000);
+	pm_runtime_use_autosuspend(ov02c10->dev);
 	pm_runtime_set_active(ov02c10->dev);
 	pm_runtime_enable(ov02c10->dev);
 
