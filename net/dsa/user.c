@@ -1497,8 +1497,11 @@ dsa_user_add_cls_matchall_police(struct net_device *dev,
 	mall_tc_entry->cookie = cls->cookie;
 	mall_tc_entry->type = DSA_PORT_MALL_POLICER;
 	policer = &mall_tc_entry->policer;
-	policer->rate_bytes_per_sec = act->police.rate_bytes_ps;
-	policer->burst = act->police.burst;
+	/* so sad, flow_offload.h did not export the type of act->police, and
+	 * it's a nightmare to copy it field by field
+	 */
+	static_assert(sizeof(act->police) == sizeof(*policer));
+	memcpy(policer, &act->police, sizeof(*policer));
 
 	err = ds->ops->port_policer_add(ds, dp->index, policer);
 	if (err) {
