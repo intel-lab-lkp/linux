@@ -1797,6 +1797,27 @@ config FB_SIMPLE
 	  Configuration re: surface address, size, and format must be provided
 	  through device tree, or plain old platform data.
 
+config FB_SIMPLE_RUST
+	tristate "Simple framebuffer support (Rust) [TEST ONLY]"
+	depends on FB && RUST
+	depends on !DRM_SIMPLEDRM
+	depends on !FB_SIMPLE
+	select APERTURE_HELPERS
+	select FB_IOMEM_HELPERS
+	help
+	  WARNING: This driver is for testing purposes only and should not be
+	  used in production systems.
+
+	  This is a test driver for the Rust framebuffer framework abstraction.
+	  It is used to validate and test the Rust framebuffer API implementation.
+	  The driver has incomplete functionality and is not suitable for real-world
+	  use. For production use, please use FB_SIMPLE instead.
+
+	  This driver assumes that the display hardware has been initialized before
+	  the kernel boots, and the kernel will simply render to the pre-allocated
+	  frame buffer surface. Configuration re: surface address, size, and format
+	  must be provided through device tree, or plain old platform data.
+
 config FB_SSD1307
 	tristate "Solomon SSD1307 framebuffer support"
 	depends on FB && I2C
