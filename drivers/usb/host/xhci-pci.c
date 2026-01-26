@@ -150,6 +150,8 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	int ret;
+	unsigned int irqs_num;
+	int i;
 	struct xhci_irq_ctx *ctx;
 
 	/*
@@ -173,7 +175,7 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 
 	/* TODO: Check with MSI Soc for sysdev */
 	xhci->nvecs = pci_alloc_irq_vectors(pdev, 1, xhci->nvecs,
-					    PCI_IRQ_MSIX | PCI_IRQ_MSI);
+					    PCI_IRQ_MSIX | PCI_IRQ_MSI | PCI_IRQ_AFFINITY);
 	if (xhci->nvecs < 0) {
 		xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			       "failed to allocate IRQ vectors");
@@ -183,14 +185,30 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	memset(xhci->irq_ctx, 0, sizeof(xhci->irq_ctx));
 	xhci->irqs_enabled = 0;
 
-	ctx = &xhci->irq_ctx[0];
-	ctx->hcd = hcd;
-	ctx->intr_num = 0;
-	ret = request_irq(pci_irq_vector(pdev, 0), xhci_msi_irq, 0, "xhci_hcd", ctx);
-	if (ret)
-		goto free_irq_vectors;
+	/*
+	 * Request up to 1 + secondary_irqs_alloc vectors (vector 0 + secondary),
+	 * limited by what PCI core actually allocated.
+	 */
+	irqs_num = min_t(unsigned int,
+		     (unsigned int)xhci->nvecs,
+		     (unsigned int)(1 + xhci->secondary_irqs_alloc));
 
-	xhci->irqs_enabled = 1;
+	for (i = 0; i < irqs_num; i++) {
+		ctx = &xhci->irq_ctx[i];
+		ctx->hcd = hcd;
+		ctx->intr_num = i;
+		ret = request_irq(pci_irq_vector(pdev, i), xhci_msi_irq, 0,
+				  "xhci_hcd", ctx);
+		if (ret) {
+			while (--i >= 0)
+				free_irq(pci_irq_vector(pdev, i), &xhci->irq_ctx[i]);
+			xhci->irqs_enabled = 0;
+			memset(xhci->irq_ctx, 0, sizeof(xhci->irq_ctx));
+			goto free_irq_vectors;
+		}
+		xhci->irqs_enabled++;
+	}
+
 	hcd->msi_enabled = 1;
 	hcd->msix_enabled = pdev->msix_enabled;
 	return 0;
@@ -198,7 +216,6 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 free_irq_vectors:
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "disable %s interrupt",
 		       pdev->msix_enabled ? "MSI-X" : "MSI");
-	xhci->irqs_enabled = 0;
 	pci_free_irq_vectors(pdev);
 
 legacy_irq:
