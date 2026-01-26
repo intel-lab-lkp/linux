@@ -147,6 +147,8 @@ pub mod task;
 pub mod time;
 pub mod tracepoint;
 pub mod transmute;
+#[cfg(CONFIG_TTY)]
+pub mod tty;
 pub mod types;
 pub mod uaccess;
 #[cfg(CONFIG_USB = "y")]
