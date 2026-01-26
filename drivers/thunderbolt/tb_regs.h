@@ -473,9 +473,24 @@ struct tb_regs_port_header {
 
 /* PCIe adapter registers */
 #define ADP_PCIE_CS_0				0x00
+#define ADP_PCIE_CS_0_LTSSM_MASK		GENMASK(28, 25)
 #define ADP_PCIE_CS_0_PE			BIT(31)
 #define ADP_PCIE_CS_1				0x01
 #define ADP_PCIE_CS_1_EE			BIT(0)
+
+enum tb_pcie_ltssm_state {
+	TB_PCIE_LTSSM_DETECT		= 0x0,
+	TB_PCIE_LTSSM_POLLING		= 0x1,
+	TB_PCIE_LTSSM_CONFIG		= 0x2,
+	TB_PCIE_LTSSM_CONFIG_IDLE	= 0x3,
+	TB_PCIE_LTSSM_RECOVERY		= 0x4,
+	TB_PCIE_LTSSM_RECOVERY_IDLE	= 0x5,
+	TB_PCIE_LTSSM_L0		= 0x6,
+	TB_PCIE_LTSSM_L1		= 0x7,
+	TB_PCIE_LTSSM_L2		= 0x8,
+	TB_PCIE_LTSSM_DISABLED		= 0x9,
+	TB_PCIE_LTSSM_HOT_RESET		= 0xa,
+};
 
 /* USB adapter registers */
 #define ADP_USB3_CS_0				0x00

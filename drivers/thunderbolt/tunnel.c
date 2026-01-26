@@ -296,6 +296,22 @@ static inline void tb_tunnel_changed(struct tb_tunnel *tunnel)
 			tunnel->src_port, tunnel->dst_port);
 }
 
+static int tb_pci_pre_activate(struct tb_tunnel *tunnel)
+{
+	struct tb_port *down = tunnel->src_port;
+	struct tb_port *up = tunnel->dst_port;
+	int ret;
+
+	if (!tb_switch_is_usb4(down->sw) || !tb_switch_is_usb4(up->sw))
+		return 0;
+
+	ret = usb4_pci_port_check_ltssm_state(down, TB_PCIE_LTSSM_DETECT);
+	if (ret)
+		return ret;
+
+	return usb4_pci_port_check_ltssm_state(up, TB_PCIE_LTSSM_DETECT);
+}
+
 static int tb_pci_set_ext_encapsulation(struct tb_tunnel *tunnel, bool enable)
 {
 	struct tb_port *port = tb_upstream_port(tunnel->dst_port->sw);
@@ -511,6 +527,7 @@ struct tb_tunnel *tb_tunnel_alloc_pci(struct tb *tb, struct tb_port *up,
 	if (!tunnel)
 		return NULL;
 
+	tunnel->pre_activate = tb_pci_pre_activate;
 	tunnel->activate = tb_pci_activate;
 	tunnel->src_port = down;
 	tunnel->dst_port = up;

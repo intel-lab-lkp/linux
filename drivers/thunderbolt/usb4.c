@@ -3145,3 +3145,26 @@ int usb4_pci_port_set_ext_encapsulation(struct tb_port *port, bool enable)
 	return tb_port_write(port, &val, TB_CFG_PORT,
 			     port->cap_adap + ADP_PCIE_CS_1, 1);
 }
+
+/**
+ * usb4_pci_port_check_ltssm_state() - Checks the LTSSM state of PCIe adapter
+ * @port: PCIe adapter
+ * @ltssm: PCIe adapter LTSSM state as encoded in &enum tb_pcie_ltssm_state
+ *
+ * Return:
+ * * %0 - If LTSSM state of @port is as expected @state.
+ * * %-ETIMEDOUT - The @ltssm state was not reached within the given timeout.
+ * * Negative errno - Other failure occurred.
+ */
+int usb4_pci_port_check_ltssm_state(struct tb_port *port,
+				    enum tb_pcie_ltssm_state ltssm)
+{
+	u32 val = FIELD_PREP(ADP_PCIE_CS_0_LTSSM_MASK, ltssm);
+
+	if (!tb_port_is_pcie_down(port) && !tb_port_is_pcie_up(port))
+		return -EINVAL;
+
+	return usb4_port_wait_for_bit(port, port->cap_adap + ADP_PCIE_CS_0,
+				      ADP_PCIE_CS_0_LTSSM_MASK, val, 500,
+				      USB4_PORT_DELAY);
+}

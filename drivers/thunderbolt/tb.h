@@ -1478,6 +1478,8 @@ int usb4_dp_port_allocate_bandwidth(struct tb_port *port, int bw);
 int usb4_dp_port_requested_bandwidth(struct tb_port *port);
 
 int usb4_pci_port_set_ext_encapsulation(struct tb_port *port, bool enable);
+int usb4_pci_port_check_ltssm_state(struct tb_port *port,
+				    enum tb_pcie_ltssm_state ltssm);
 
 static inline bool tb_is_usb4_port_device(const struct device *dev)
 {
