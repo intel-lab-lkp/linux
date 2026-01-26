@@ -1089,9 +1089,8 @@ void usbnet_get_drvinfo(struct net_device *net, struct ethtool_drvinfo *info)
 {
 	struct usbnet *dev = netdev_priv(net);
 
-	strscpy(info->driver, dev->driver_name, sizeof(info->driver));
-	strscpy(info->fw_version, dev->driver_info->description,
-		sizeof(info->fw_version));
+	strscpy(info->driver, dev->driver_name);
+	strscpy(info->fw_version, dev->driver_info->description);
 	usb_make_path(dev->udev, info->bus_info, sizeof(info->bus_info));
 }
 EXPORT_SYMBOL_GPL(usbnet_get_drvinfo);
@@ -1783,7 +1782,7 @@ usbnet_probe(struct usb_interface *udev, const struct usb_device_id *prod)
 	dev->interrupt_count = 0;
 
 	dev->net = net;
-	strscpy(net->name, "usb%d", sizeof(net->name));
+	strscpy(net->name, "usb%d");
 
 	/* rx and tx sides can use different message sizes;
 	 * bind() should set rx_urb_size in that case.
@@ -1809,13 +1808,13 @@ usbnet_probe(struct usb_interface *udev, const struct usb_device_id *prod)
 		 */
 		if ((dev->driver_info->flags & FLAG_ETHER) != 0 &&
 		    !usbnet_needs_usb_name_format(dev, net))
-			strscpy(net->name, "eth%d", sizeof(net->name));
+			strscpy(net->name, "eth%d");
 		/* WLAN devices should always be named "wlan%d" */
 		if ((dev->driver_info->flags & FLAG_WLAN) != 0)
-			strscpy(net->name, "wlan%d", sizeof(net->name));
+			strscpy(net->name, "wlan%d");
 		/* WWAN devices should always be named "wwan%d" */
 		if ((dev->driver_info->flags & FLAG_WWAN) != 0)
-			strscpy(net->name, "wwan%d", sizeof(net->name));
+			strscpy(net->name, "wwan%d");
 
 		/* devices that cannot do ARP */
 		if ((dev->driver_info->flags & FLAG_NOARP) != 0)

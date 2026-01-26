@@ -5256,7 +5256,7 @@ post_fw:
 		rtl_fw->post_fw(tp);
 
 	rtl_reset_ocp_base(tp);
-	strscpy(rtl_fw->version, fw_hdr->version, RTL_VER_SIZE);
+	strscpy(rtl_fw->version, fw_hdr->version);
 	dev_dbg(&tp->intf->dev, "load %s successfully\n", rtl_fw->version);
 }
 
@@ -8755,12 +8755,11 @@ static void rtl8152_get_drvinfo(struct net_device *netdev,
 {
 	struct r8152 *tp = netdev_priv(netdev);
 
-	strscpy(info->driver, MODULENAME, sizeof(info->driver));
-	strscpy(info->version, DRIVER_VERSION, sizeof(info->version));
+	strscpy(info->driver, MODULENAME);
+	strscpy(info->version, DRIVER_VERSION);
 	usb_make_path(tp->udev, info->bus_info, sizeof(info->bus_info));
 	if (!IS_ERR_OR_NULL(tp->rtl_fw.fw))
-		strscpy(info->fw_version, tp->rtl_fw.version,
-			sizeof(info->fw_version));
+		strscpy(info->fw_version, tp->rtl_fw.version);
 }
 
 static

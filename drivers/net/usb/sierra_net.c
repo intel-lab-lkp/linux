@@ -612,8 +612,8 @@ static void sierra_net_get_drvinfo(struct net_device *net,
 {
 	/* Inherit standard device info */
 	usbnet_get_drvinfo(net, info);
-	strscpy(info->driver, driver_name, sizeof(info->driver));
-	strscpy(info->version, DRIVER_VERSION, sizeof(info->version));
+	strscpy(info->driver, driver_name);
+	strscpy(info->version, DRIVER_VERSION);
 }
 
 static u32 sierra_net_get_link(struct net_device *net)
