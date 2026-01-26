@@ -60,6 +60,7 @@
 #include "intel_frontbuffer.h"
 #include "intel_parent.h"
 #include "intel_step.h"
+#include "skl_universal_plane_regs.h"
 
 #define for_each_fbc_id(__display, __fbc_id) \
 	for ((__fbc_id) = INTEL_FBC_A; (__fbc_id) < I915_MAX_FBCS; (__fbc_id)++) \
@@ -1215,13 +1216,21 @@ static bool xe3p_lpd_fbc_pixel_format_is_valid(const struct intel_plane_state *p
 	}
 }
 
-bool
-intel_fbc_is_enable_pixel_normalizer(const struct intel_plane_state *plane_state)
+unsigned int
+intel_fbc_normalization_factor(const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane_state);
 
-	return DISPLAY_VER(display) >= 35 &&
-	       xe3p_lpd_fbc_fp16_format_is_valid(plane_state);
+	/*
+	 * In order to have FBC for fp16 formats pixel normalizer block must be
+	 * active. For FP16 formats, use normalization factor as 1.0 and enable
+	 * the block.
+	 */
+	if (HAS_FBC_FP16_FORMATS(display) &&
+	    xe3p_lpd_fbc_fp16_format_is_valid(plane_state))
+		return PLANE_PIXEL_NORMALIZE_NORM_FACTOR_1_0;
+
+	return 0;
 }
 
 static bool pixel_format_is_valid(const struct intel_plane_state *plane_state)

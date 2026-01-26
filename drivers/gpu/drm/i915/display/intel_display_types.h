@@ -685,6 +685,14 @@ struct intel_plane_state {
 	unsigned long flags;
 #define PLANE_HAS_FENCE BIT(0)
 
+	/* xe3p_lpd+ */
+	struct {
+		/* 0x3c00 (1.0) for fp16 formats and else disable (0) */
+		unsigned int factor;
+		/* update is needed if factor differs between old and new plane states */
+		bool needs_update;
+	} pixel_normalizer;
+
 	struct intel_fb_view view;
 
 	/* for legacy cursor fb unpin */
