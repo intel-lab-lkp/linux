@@ -454,7 +454,7 @@ static int wcnss_init_regulators(struct qcom_wcnss *wcnss,
 	 * reserve extra space to manage them through the regulator interface.
 	 */
 	if (wcnss->num_pds) {
-		info += wcnss->num_pds;
+		info += num_pd_vregs;
 		/* Handle single power domain case */
 		if (wcnss->num_pds < num_pd_vregs)
 			num_vregs += num_pd_vregs - wcnss->num_pds;
