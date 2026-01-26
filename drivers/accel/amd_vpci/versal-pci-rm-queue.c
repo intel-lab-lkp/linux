@@ -23,37 +23,35 @@ static inline struct rm_device *to_rdev_msg_timer(struct timer_list *t)
 
 static inline u32 rm_io_read(struct rm_device *rdev, u32 offset)
 {
-	/* TODO */
-	return 0;
+	return rm_reg_read(rdev, RM_PCI_IO_BAR_OFF + offset);
 }
 
 static inline int rm_io_write(struct rm_device *rdev, u32 offset, u32 value)
 {
-	/* TODO */
+	rm_reg_write(rdev, RM_PCI_IO_BAR_OFF + offset, value);
 	return 0;
 }
 
 static inline u32 rm_queue_read(struct rm_device *rdev, u32 offset)
 {
-	/* TODO */
-	return 0;
+	return rm_reg_read(rdev, RM_PCI_SHMEM_BAR_OFF + rdev->queue_base + offset);
 }
 
 static inline void rm_queue_write(struct rm_device *rdev, u32 offset, u32 value)
 {
-	/* TODO */
+	rm_reg_write(rdev, RM_PCI_SHMEM_BAR_OFF + rdev->queue_base + offset, value);
 }
 
 static inline void rm_queue_bulk_read(struct rm_device *rdev, u32 offset,
 				      u32 *value, u32 size)
 {
-	/* TODO */
+	rm_bulk_reg_read(rdev, RM_PCI_SHMEM_BAR_OFF + rdev->queue_base + offset, value, size);
 }
 
 static inline void rm_queue_bulk_write(struct rm_device *rdev, u32 offset,
 				       u32 *value, u32 size)
 {
-	/* TODO */
+	rm_bulk_reg_write(rdev, RM_PCI_SHMEM_BAR_OFF + rdev->queue_base + offset, value, size);
 }
 
 static inline u32 rm_queue_get_cidx(struct rm_device *rdev, enum rm_queue_type type)
