@@ -28,6 +28,7 @@
 #include <net/rps.h>
 
 #include "dev.h"
+#include "net-sysfs.h"
 
 static int int_3600 = 3600;
 static int min_sndbuf = SOCK_MIN_SNDBUF;
@@ -96,50 +97,40 @@ free_buf:
 
 #ifdef CONFIG_RPS
 
-static struct cpumask *rps_default_mask_cow_alloc(struct net *net)
-{
-	struct cpumask *rps_default_mask;
-
-	if (net->core.rps_default_mask)
-		return net->core.rps_default_mask;
-
-	rps_default_mask = kzalloc(cpumask_size(), GFP_KERNEL);
-	if (!rps_default_mask)
-		return NULL;
-
-	/* pairs with READ_ONCE in rx_queue_default_mask() */
-	WRITE_ONCE(net->core.rps_default_mask, rps_default_mask);
-	return rps_default_mask;
-}
+DEFINE_MUTEX(rps_default_mask_mutex);
 
 static int rps_default_mask_sysctl(const struct ctl_table *table, int write,
 				   void *buffer, size_t *lenp, loff_t *ppos)
 {
 	struct net *net = (struct net *)table->data;
+	struct cpumask *mask;
 	int err = 0;
 
-	rtnl_lock();
+	mutex_lock(&rps_default_mask_mutex);
+	mask = net->core.rps_default_mask;
 	if (write) {
-		struct cpumask *rps_default_mask = rps_default_mask_cow_alloc(net);
-
+		if (!mask) {
+			mask = kzalloc(cpumask_size(), GFP_KERNEL);
+			net->core.rps_default_mask = mask;
+		}
 		err = -ENOMEM;
-		if (!rps_default_mask)
+		if (!mask)
 			goto done;
 
-		err = cpumask_parse(buffer, rps_default_mask);
+		err = cpumask_parse(buffer, mask);
 		if (err)
 			goto done;
 
-		err = rps_cpumask_housekeeping(rps_default_mask);
+		err = rps_cpumask_housekeeping(mask);
 		if (err)
 			goto done;
 	} else {
 		err = dump_cpumask(buffer, lenp, ppos,
-				   net->core.rps_default_mask ? : cpu_none_mask);
+				   mask ?: cpu_none_mask);
 	}
 
 done:
-	rtnl_unlock();
+	mutex_unlock(&rps_default_mask_mutex);
 	return err;
 }
 
@@ -677,8 +668,24 @@ static struct ctl_table netns_core_table[] = {
 		.proc_handler	= proc_dou8vec_minmax,
 	},
 	{
+		.procname	= "txq_reselection_ms",
+		.data		= &init_net.core.sysctl_txq_reselection,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_ms_jiffies,
+	},
+	{
 		.procname	= "tstamp_allow_data",
 		.data		= &init_net.core.sysctl_tstamp_allow_data,
+		.maxlen		= sizeof(u8),
+		.mode		= 0644,
+		.proc_handler	= proc_dou8vec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE
+	},
+	{
+		.procname	= "bypass_prot_mem",
+		.data		= &init_net.core.sysctl_bypass_prot_mem,
 		.maxlen		= sizeof(u8),
 		.mode		= 0644,
 		.proc_handler	= proc_dou8vec_minmax,

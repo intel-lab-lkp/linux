@@ -787,10 +787,8 @@ static int ccs_set_ctrl(struct v4l2_ctrl *ctrl)
 		rval = -EINVAL;
 	}
 
-	if (pm_status > 0) {
-		pm_runtime_mark_last_busy(&client->dev);
+	if (pm_status > 0)
 		pm_runtime_put_autosuspend(&client->dev);
-	}
 
 	return rval;
 }
@@ -1914,7 +1912,6 @@ static int ccs_set_stream(struct v4l2_subdev *subdev, int enable)
 	if (!enable) {
 		ccs_stop_streaming(sensor);
 		sensor->streaming = false;
-		pm_runtime_mark_last_busy(&client->dev);
 		pm_runtime_put_autosuspend(&client->dev);
 
 		return 0;
@@ -1929,7 +1926,6 @@ static int ccs_set_stream(struct v4l2_subdev *subdev, int enable)
 	rval = ccs_start_streaming(sensor);
 	if (rval < 0) {
 		sensor->streaming = false;
-		pm_runtime_mark_last_busy(&client->dev);
 		pm_runtime_put_autosuspend(&client->dev);
 	}
 
@@ -2677,7 +2673,6 @@ nvm_show(struct device *dev, struct device_attribute *attr, char *buf)
 		return -ENODEV;
 	}
 
-	pm_runtime_mark_last_busy(&client->dev);
 	pm_runtime_put_autosuspend(&client->dev);
 
 	/*
@@ -3242,8 +3237,8 @@ static int ccs_probe(struct i2c_client *client)
 		dev_info(&client->dev, "no clock defined, continuing...\n");
 		sensor->ext_clk = NULL;
 	} else if (IS_ERR(sensor->ext_clk)) {
-		dev_err(&client->dev, "could not get clock (%ld)\n",
-			PTR_ERR(sensor->ext_clk));
+		dev_err(&client->dev, "could not get clock (%pe)\n",
+			sensor->ext_clk);
 		return -EPROBE_DEFER;
 	}
 
@@ -3299,8 +3294,8 @@ static int ccs_probe(struct i2c_client *client)
 
 	sensor->regmap = devm_cci_regmap_init_i2c(client, 16);
 	if (IS_ERR(sensor->regmap)) {
-		dev_err(&client->dev, "can't initialise CCI (%ld)\n",
-			PTR_ERR(sensor->regmap));
+		dev_err(&client->dev, "can't initialise CCI (%pe)\n",
+			sensor->regmap);
 		return PTR_ERR(sensor->regmap);
 	}
 

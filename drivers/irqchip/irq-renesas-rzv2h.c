@@ -11,18 +11,15 @@
 
 #include <linux/bitfield.h>
 #include <linux/cleanup.h>
-#include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/irqchip.h>
 #include <linux/irqchip/irq-renesas-rzv2h.h>
 #include <linux/irqdomain.h>
-#include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
 #include <linux/spinlock.h>
-#include <linux/syscore_ops.h>
 
 /* DT "interrupts" indexes */
 #define ICU_IRQ_START				1
@@ -427,7 +424,9 @@ static const struct irq_chip rzv2h_icu_chip = {
 	.irq_retrigger		= irq_chip_retrigger_hierarchy,
 	.irq_set_type		= rzv2h_icu_set_type,
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
-	.flags			= IRQCHIP_SET_TYPE_MASKED,
+	.flags			= IRQCHIP_MASK_ON_SUSPEND |
+				  IRQCHIP_SET_TYPE_MASKED |
+				  IRQCHIP_SKIP_SET_WAKE,
 };
 
 static int rzv2h_icu_alloc(struct irq_domain *domain, unsigned int virq, unsigned int nr_irqs,
@@ -491,28 +490,14 @@ static int rzv2h_icu_parse_interrupts(struct rzv2h_icu_priv *priv, struct device
 	return 0;
 }
 
-static void rzv2h_icu_put_device(void *data)
-{
-	put_device(data);
-}
-
-static int rzv2h_icu_init_common(struct device_node *node, struct device_node *parent,
-				 const struct rzv2h_hw_info *hw_info)
+static int rzv2h_icu_probe_common(struct platform_device *pdev, struct device_node *parent,
+				  const struct rzv2h_hw_info *hw_info)
 {
 	struct irq_domain *irq_domain, *parent_domain;
+	struct device_node *node = pdev->dev.of_node;
 	struct rzv2h_icu_priv *rzv2h_icu_data;
-	struct platform_device *pdev;
 	struct reset_control *resetn;
 	int ret;
-
-	pdev = of_find_device_by_node(node);
-	if (!pdev)
-		return -ENODEV;
-
-	ret = devm_add_action_or_reset(&pdev->dev, rzv2h_icu_put_device,
-				       &pdev->dev);
-	if (ret < 0)
-		return ret;
 
 	parent_domain = irq_find_host(parent);
 	if (!parent_domain) {
@@ -558,7 +543,7 @@ static int rzv2h_icu_init_common(struct device_node *node, struct device_node *p
 	raw_spin_lock_init(&rzv2h_icu_data->lock);
 
 	irq_domain = irq_domain_create_hierarchy(parent_domain, 0, ICU_NUM_IRQ,
-						 of_fwnode_handle(node), &rzv2h_icu_domain_ops,
+						 dev_fwnode(&pdev->dev), &rzv2h_icu_domain_ops,
 						 rzv2h_icu_data);
 	if (!irq_domain) {
 		dev_err(&pdev->dev, "failed to add irq domain\n");
@@ -619,19 +604,19 @@ static const struct rzv2h_hw_info rzv2h_hw_params = {
 	.field_width	= 8,
 };
 
-static int rzg3e_icu_init(struct device_node *node, struct device_node *parent)
+static int rzg3e_icu_probe(struct platform_device *pdev, struct device_node *parent)
 {
-	return rzv2h_icu_init_common(node, parent, &rzg3e_hw_params);
+	return rzv2h_icu_probe_common(pdev, parent, &rzg3e_hw_params);
 }
 
-static int rzv2h_icu_init(struct device_node *node, struct device_node *parent)
+static int rzv2h_icu_probe(struct platform_device *pdev, struct device_node *parent)
 {
-	return rzv2h_icu_init_common(node, parent, &rzv2h_hw_params);
+	return rzv2h_icu_probe_common(pdev, parent, &rzv2h_hw_params);
 }
 
 IRQCHIP_PLATFORM_DRIVER_BEGIN(rzv2h_icu)
-IRQCHIP_MATCH("renesas,r9a09g047-icu", rzg3e_icu_init)
-IRQCHIP_MATCH("renesas,r9a09g057-icu", rzv2h_icu_init)
+IRQCHIP_MATCH("renesas,r9a09g047-icu", rzg3e_icu_probe)
+IRQCHIP_MATCH("renesas,r9a09g057-icu", rzv2h_icu_probe)
 IRQCHIP_PLATFORM_DRIVER_END(rzv2h_icu)
 MODULE_AUTHOR("Fabrizio Castro <fabrizio.castro.jz@renesas.com>");
 MODULE_DESCRIPTION("Renesas RZ/V2H(P) ICU Driver");

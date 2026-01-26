@@ -576,6 +576,7 @@ static int atrtr_create(struct rtentry *r, struct net_device *devhint)
 
 	/* Fill in the routing entry */
 	rt->target  = ta->sat_addr;
+	dev_put(rt->dev); /* Release old device */
 	dev_hold(devhint);
 	rt->dev     = devhint;
 	rt->flags   = r->rt_flags;
@@ -1148,7 +1149,7 @@ out:
 }
 
 /* Set the address 'our end' of the connection */
-static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
+static int atalk_bind(struct socket *sock, struct sockaddr_unsized *uaddr, int addr_len)
 {
 	struct sockaddr_at *addr = (struct sockaddr_at *)uaddr;
 	struct sock *sk = sock->sk;
@@ -1203,7 +1204,7 @@ out:
 }
 
 /* Set the address we talk to */
-static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
+static int atalk_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
 			 int addr_len, int flags)
 {
 	struct sock *sk = sock->sk;

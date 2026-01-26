@@ -27,9 +27,6 @@
 
 #define AT803X_LED_CONTROL			0x18
 
-#define AT803X_PHY_MMD3_WOL_CTRL		0x8012
-#define AT803X_WOL_EN				BIT(5)
-
 #define AT803X_REG_CHIP_CONFIG			0x1f
 #define AT803X_BT_BX_REG_SEL			0x8000
 
@@ -774,10 +771,10 @@ static int at8031_register_regulators(struct phy_device *phydev)
 
 static int at8031_sfp_insert(void *upstream, const struct sfp_eeprom_id *id)
 {
-	struct phy_device *phydev = upstream;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_support);
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(sfp_support);
-	DECLARE_PHY_INTERFACE_MASK(interfaces);
+	struct phy_device *phydev = upstream;
+	const struct sfp_module_caps *caps;
 	phy_interface_t iface;
 
 	linkmode_zero(phy_support);
@@ -787,12 +784,11 @@ static int at8031_sfp_insert(void *upstream, const struct sfp_eeprom_id *id)
 	phylink_set(phy_support, Pause);
 	phylink_set(phy_support, Asym_Pause);
 
-	linkmode_zero(sfp_support);
-	sfp_parse_support(phydev->sfp_bus, id, sfp_support, interfaces);
+	caps = sfp_get_module_caps(phydev->sfp_bus);
 	/* Some modules support 10G modes as well as others we support.
 	 * Mask out non-supported modes so the correct interface is picked.
 	 */
-	linkmode_and(sfp_support, phy_support, sfp_support);
+	linkmode_and(sfp_support, phy_support, caps->link_modes);
 
 	if (linkmode_empty(sfp_support)) {
 		dev_err(&phydev->mdio.dev, "incompatible SFP module inserted\n");
@@ -914,30 +910,6 @@ static int at8031_config_init(struct phy_device *phydev)
 		return ret;
 
 	return at803x_config_init(phydev);
-}
-
-static int at8031_set_wol(struct phy_device *phydev,
-			  struct ethtool_wolinfo *wol)
-{
-	int ret;
-
-	/* First setup MAC address and enable WOL interrupt */
-	ret = at803x_set_wol(phydev, wol);
-	if (ret)
-		return ret;
-
-	if (wol->wolopts & WAKE_MAGIC)
-		/* Enable WOL function for 1588 */
-		ret = phy_modify_mmd(phydev, MDIO_MMD_PCS,
-				     AT803X_PHY_MMD3_WOL_CTRL,
-				     0, AT803X_WOL_EN);
-	else
-		/* Disable WoL function for 1588 */
-		ret = phy_modify_mmd(phydev, MDIO_MMD_PCS,
-				     AT803X_PHY_MMD3_WOL_CTRL,
-				     AT803X_WOL_EN, 0);
-
-	return ret;
 }
 
 static int at8031_config_intr(struct phy_device *phydev)

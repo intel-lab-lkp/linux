@@ -1,4 +1,5 @@
 # coding=utf-8
+# SPDX-License-Identifier: MIT
 #
 # Copyright © 2016 Intel Corporation
 #
@@ -24,8 +25,6 @@
 # Authors:
 #    Jani Nikula <jani.nikula@intel.com>
 #
-# Please make sure this works on both python2 and python3.
-#
 
 import codecs
 import os
@@ -43,10 +42,10 @@ from sphinx.util import logging
 from pprint import pformat
 
 srctree = os.path.abspath(os.environ["srctree"])
-sys.path.insert(0, os.path.join(srctree, "scripts/lib/kdoc"))
+sys.path.insert(0, os.path.join(srctree, "tools/lib/python"))
 
-from kdoc_files import KernelFiles
-from kdoc_output import RestFormat
+from kdoc.kdoc_files import KernelFiles
+from kdoc.kdoc_output import RestFormat
 
 __version__  = '1.0'
 kfiles = None

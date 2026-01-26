@@ -2033,7 +2033,7 @@ void __init acpi_ec_ecdt_probe(void)
 		goto out;
 	}
 
-	if (!strstarts(ecdt_ptr->id, "\\")) {
+	if (!strlen(ecdt_ptr->id)) {
 		/*
 		 * The ECDT table on some MSI notebooks contains invalid data, together
 		 * with an empty ID string ("").
@@ -2042,9 +2042,13 @@ void __init acpi_ec_ecdt_probe(void)
 		 * a "fully qualified reference to the (...) embedded controller device",
 		 * so this string always has to start with a backslash.
 		 *
-		 * By verifying this we can avoid such faulty ECDT tables in a safe way.
+		 * However some ThinkBook machines have a ECDT table with a valid EC
+		 * description but an invalid ID string ("_SB.PC00.LPCB.EC0").
+		 *
+		 * Because of this we only check if the ID string is empty in order to
+		 * avoid the obvious cases.
 		 */
-		pr_err(FW_BUG "Ignoring ECDT due to invalid ID string \"%s\"\n", ecdt_ptr->id);
+		pr_err(FW_BUG "Ignoring ECDT due to empty ID string\n");
 		goto out;
 	}
 
@@ -2290,7 +2294,8 @@ static int acpi_ec_init_workqueues(void)
 		ec_wq = alloc_ordered_workqueue("kec", 0);
 
 	if (!ec_query_wq)
-		ec_query_wq = alloc_workqueue("kec_query", 0, ec_max_queries);
+		ec_query_wq = alloc_workqueue("kec_query", WQ_PERCPU,
+					      ec_max_queries);
 
 	if (!ec_wq || !ec_query_wq) {
 		acpi_ec_destroy_workqueues();
