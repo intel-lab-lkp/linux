@@ -35,6 +35,7 @@ extern int show_absolute_relocs;
 extern int show_reloc_info;
 extern int as_text;
 extern int use_real_mode;
+extern int keep_relocs;
 
 void process_32(FILE *fp);
 void process_64(FILE *fp);

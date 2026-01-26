@@ -735,6 +735,17 @@ static void walk_relocs(int (*process)(struct section *sec, Elf_Rel *rel,
 	}
 }
 
+static struct section *sec_lookup(const char *name)
+{
+	int i;
+
+	for (i = 0; i < shnum; i++)
+		if (!strcmp(sec_name(i), name))
+			return &secs[i];
+
+	return NULL;
+}
+
 #if ELF_BITS == 64
 
 static int do_reloc64(struct section *sec, Elf_Rel *rel, ElfW(Sym) *sym,
@@ -950,7 +961,7 @@ static int write32_as_text(uint32_t v, FILE *f)
 	return fprintf(f, "\t.long 0x%08"PRIx32"\n", v) > 0 ? 0 : -1;
 }
 
-static void emit_relocs(void)
+static void emit_relocs(FILE *f)
 {
 	int i;
 	int (*write_reloc)(uint32_t, FILE *) = write32;
@@ -1001,21 +1012,54 @@ static void emit_relocs(void)
 		for (i = 0; i < relocs32.count; i++)
 			write_reloc(relocs32.offset[i], stdout);
 	} else {
+		FILE *outf = stdout;
+
+		if (keep_relocs) {
+			struct section *sec_reloc;
+			uint32_t size_needed;
+			unsigned long offset;
+
+			sec_reloc = sec_lookup(".data.reloc");
+			if (!sec_reloc)
+				die("Could not find relocation data section\n");
+
+			size_needed = (1 + relocs32.count) * sizeof(uint32_t);
+#if ELF_BITS == 64
+			size_needed += (1 + relocs64.count) * sizeof(uint32_t);
+#endif
+			if (size_needed > sec_reloc->shdr.sh_size)
+				die("Relocations overflow available space!\n" \
+				    "Please adjust CONFIG_RELOCATION_TABLE_SIZE " \
+				    "to at least 0x%08x\n", (size_needed + 0x1000) & ~0xFFF);
+
+			/*
+			 * Place the relocations at the end of section to ensure
+			 * compatibility with backward traversal during handling
+			 * relocations.
+			 */
+			offset = sec_reloc->shdr.sh_offset + sec_reloc->shdr.sh_size -
+				 size_needed;
+			if (fseek(f, offset, SEEK_SET) < 0)
+				die("Seek to %ld failed: %s\n", offset, strerror(errno));
+
+			outf = f;
+		}
+
 #if ELF_BITS == 64
 		/* Print a stop */
-		write_reloc(0, stdout);
+		write_reloc(0, outf);
 
 		/* Now print each relocation */
 		for (i = 0; i < relocs64.count; i++)
-			write_reloc(relocs64.offset[i], stdout);
+			write_reloc(relocs64.offset[i], outf);
 #endif
 
 		/* Print a stop */
-		write_reloc(0, stdout);
+		write_reloc(0, outf);
 
 		/* Now print each relocation */
 		for (i = 0; i < relocs32.count; i++)
-			write_reloc(relocs32.offset[i], stdout);
+			write_reloc(relocs32.offset[i], outf);
 	}
 }
 
@@ -1073,5 +1117,5 @@ void process(FILE *fp)
 		return;
 	}
 
-	emit_relocs();
+	emit_relocs(fp);
 }

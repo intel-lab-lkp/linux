@@ -2,7 +2,7 @@
 #include "relocs.h"
 
 int show_absolute_syms, show_absolute_relocs, show_reloc_info;
-int as_text, use_real_mode;
+int as_text, use_real_mode, keep_relocs;
 
 void die(char *fmt, ...)
 {
@@ -15,7 +15,7 @@ void die(char *fmt, ...)
 
 static void usage(void)
 {
-	die("relocs [--abs-syms|--abs-relocs|--reloc-info|--text|--realmode]" \
+	die("relocs [--abs-syms|--abs-relocs|--reloc-info|--text|--realmode|--keep]" \
 	    " vmlinux\n");
 }
 
@@ -55,6 +55,10 @@ int main(int argc, char **argv)
 				use_real_mode = 1;
 				continue;
 			}
+			if (strcmp(arg, "--keep") == 0) {
+				keep_relocs = 1;
+				continue;
+			}
 		}
 		else if (!fname) {
 			fname = arg;
@@ -65,7 +69,10 @@ int main(int argc, char **argv)
 	if (!fname) {
 		usage();
 	}
-	fp = fopen(fname, "r");
+	if (keep_relocs)
+		fp = fopen(fname, "r+");
+	else
+		fp = fopen(fname, "r");
 	if (!fp) {
 		die("Cannot open %s: %s\n", fname, strerror(errno));
 	}
