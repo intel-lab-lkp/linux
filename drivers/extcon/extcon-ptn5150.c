@@ -57,7 +57,6 @@ struct ptn5150_info {
 	struct gpio_desc *vbus_gpiod;
 	int irq;
 	struct work_struct irq_work;
-	struct mutex mutex;
 	struct typec_switch *orient_sw;
 	struct usb_role_switch *role_sw;
 };
@@ -144,16 +143,10 @@ static void ptn5150_irq_work(struct work_struct *work)
 	int ret = 0;
 	unsigned int int_status;
 
-	if (!info->edev)
-		return;
-
-	mutex_lock(&info->mutex);
-
 	/* Clear interrupt. Read would clear the register */
 	ret = regmap_read(info->regmap, PTN5150_REG_INT_STATUS, &int_status);
 	if (ret) {
 		dev_err(info->dev, "failed to read INT STATUS %d\n", ret);
-		mutex_unlock(&info->mutex);
 		return;
 	}
 
@@ -188,14 +181,9 @@ static void ptn5150_irq_work(struct work_struct *work)
 	/* Clear interrupt. Read would clear the register */
 	ret = regmap_read(info->regmap, PTN5150_REG_INT_REG_STATUS,
 			&int_status);
-	if (ret) {
+	if (ret)
 		dev_err(info->dev,
 			"failed to read INT REG STATUS %d\n", ret);
-		mutex_unlock(&info->mutex);
-		return;
-	}
-
-	mutex_unlock(&info->mutex);
 }
 
 
@@ -281,8 +269,6 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 		}
 	}
 
-	mutex_init(&info->mutex);
-
 	INIT_WORK(&info->irq_work, ptn5150_irq_work);
 
 	info->regmap = devm_regmap_init_i2c(i2c, &ptn5150_regmap_config);
@@ -305,16 +291,6 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 			dev_err(dev, "failed to get INTB IRQ\n");
 			return info->irq;
 		}
-	}
-
-	ret = devm_request_threaded_irq(dev, info->irq, NULL,
-					ptn5150_irq_handler,
-					IRQF_TRIGGER_FALLING |
-					IRQF_ONESHOT,
-					i2c->name, info);
-	if (ret < 0) {
-		dev_err(dev, "failed to request handler for INTB IRQ\n");
-		return ret;
 	}
 
 	/* Allocate extcon device */
@@ -366,9 +342,17 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 	 * Update current extcon state if for example OTG connection was there
 	 * before the probe
 	 */
-	mutex_lock(&info->mutex);
 	ptn5150_check_state(info);
-	mutex_unlock(&info->mutex);
+
+	ret = devm_request_threaded_irq(dev, info->irq, NULL,
+					ptn5150_irq_handler,
+					IRQF_TRIGGER_FALLING |
+					IRQF_ONESHOT,
+					i2c->name, info);
+	if (ret < 0) {
+		dev_err(dev, "failed to request handler for INTB IRQ\n");
+		return ret;
+	}
 
 	return 0;
 }
