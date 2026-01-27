@@ -37,6 +37,8 @@ int sfp_module_insert(struct sfp_bus *bus, const struct sfp_eeprom_id *id,
 void sfp_module_remove(struct sfp_bus *bus);
 int sfp_module_start(struct sfp_bus *bus);
 void sfp_module_stop(struct sfp_bus *bus);
+int sfp_module_connect_nophy(struct sfp_bus *bus);
+void sfp_module_disconnect_nophy(struct sfp_bus *bus);
 struct sfp_bus *sfp_register_socket(struct device *dev, struct sfp *sfp,
 				    const struct sfp_socket_ops *ops);
 void sfp_unregister_socket(struct sfp_bus *bus);
