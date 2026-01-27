@@ -3076,15 +3076,21 @@ static int ksz_setup(struct dsa_switch *ds)
 		if (ret)
 			return ret;
 
-		dsa_switch_for_each_user_port(dp, dev->ds) {
-			ret = ksz_pirq_setup(dev, dp->index);
+		if (ksz_is_ksz8463(dev)) {
+			ret = ksz8463_ptp_irq_setup(ds);
 			if (ret)
-				goto port_release;
-
-			if (dev->info->ptp_capable) {
-				ret = ksz_ptp_irq_setup(ds, dp->index);
+				goto girq_release;
+		} else {
+			dsa_switch_for_each_user_port(dp, dev->ds) {
+				ret = ksz_pirq_setup(dev, dp->index);
 				if (ret)
-					goto pirq_release;
+					goto port_release;
+
+				if (dev->info->ptp_capable) {
+					ret = ksz_ptp_irq_setup(ds, dp->index);
+					if (ret)
+						goto pirq_release;
+				}
 			}
 		}
 	}
@@ -3119,14 +3125,20 @@ out_ptp_clock_unregister:
 		ksz_ptp_clock_unregister(ds);
 port_release:
 	if (dev->irq > 0) {
-		dsa_switch_for_each_user_port_continue_reverse(dp, dev->ds) {
-			if (dev->info->ptp_capable)
-				ksz_ptp_irq_free(ds, dp->index);
+		if (ksz_is_ksz8463(dev)) {
+			ksz8463_ptp_irq_free(ds);
+		} else {
+			dsa_switch_for_each_user_port_continue_reverse(dp, dev->ds) {
+				if (dev->info->ptp_capable)
+					ksz_ptp_irq_free(ds, dp->index);
 pirq_release:
-			ksz_irq_free(&dev->ports[dp->index].pirq);
+				ksz_irq_free(&dev->ports[dp->index].pirq);
+			}
 		}
-		ksz_irq_free(&dev->girq);
 	}
+girq_release:
+	if (dev->irq > 0)
+		ksz_irq_free(&dev->girq);
 
 	return ret;
 }
@@ -3140,11 +3152,14 @@ static void ksz_teardown(struct dsa_switch *ds)
 		ksz_ptp_clock_unregister(ds);
 
 	if (dev->irq > 0) {
-		dsa_switch_for_each_user_port(dp, dev->ds) {
-			if (dev->info->ptp_capable)
-				ksz_ptp_irq_free(ds, dp->index);
-
-			ksz_irq_free(&dev->ports[dp->index].pirq);
+		if (ksz_is_ksz8463(dev)) {
+			ksz8463_ptp_irq_free(ds);
+		} else {
+			dsa_switch_for_each_user_port(dp, dev->ds) {
+				if (dev->info->ptp_capable)
+					ksz_ptp_irq_free(ds, dp->index);
+				ksz_irq_free(&dev->ports[dp->index].pirq);
+			}
 		}
 
 		ksz_irq_free(&dev->girq);
