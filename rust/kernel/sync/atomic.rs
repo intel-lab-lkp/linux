@@ -591,6 +591,26 @@ impl AtomicFlag {
         self.0.store(b.into(), o)
     }
 
+    /// Returns a mutable reference to the underlying flag as a `bool`.
+    ///
+    /// This is safe because the mutable reference of the atomic flag guarantees exclusive access.
+    pub fn get_mut(&mut self) -> &mut bool {
+        let byte_ptr = {
+            let ptr = self.0.as_ptr().cast::<u8>();
+            let offset = if cfg!(target_endian = "big") {
+                core::mem::size_of::<Flag>() - 1
+            } else {
+                0
+            };
+
+            // SAFETY: `ptr` is valid for `size_of::<Flag>()` bytes; `offset` selects the LSB.
+            unsafe { ptr.add(offset) }
+        };
+
+        // SAFETY: The LSB holds `0`/`1` for `Flag::Clear/Set`, and `bool` is `i8`-sized/aligned.
+        unsafe { &mut *byte_ptr.cast::<bool>() }
+    }
+
     /// Stores a value to the atomic flag and returns the previous value.
     #[inline(always)]
     pub fn xchg<Ordering: ordering::Ordering>(&self, b: bool, o: Ordering) -> bool {
