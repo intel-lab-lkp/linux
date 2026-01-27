@@ -151,8 +151,9 @@ static int ds4424_read_raw(struct iio_dev *indio_dev,
 		ret = regmap_read(data->regmap, DS4424_DAC_ADDR(chan->channel),
 				  &regval);
 		if (ret < 0) {
-			pr_err("%s : regmap_read returned %d\n",
-						__func__, ret);
+			dev_err_ratelimited(&indio_dev->dev,
+					    "Failed to read channel %d:  %pe\n",
+					    chan->channel, ERR_PTR(ret));
 			return ret;
 		}
 
