@@ -6,6 +6,7 @@
  * Author: Gustavo Pimentel <gustavo.pimentel@synopsys.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
@@ -312,24 +313,9 @@ static int dw_edma_device_terminate_all(struct dma_chan *dchan)
 		chan->request = EDMA_REQ_STOP;
 	}
 
+	cancel_delayed_work_sync(&chan->poll_work);
+
 	return err;
-}
-
-static void dw_edma_device_issue_pending(struct dma_chan *dchan)
-{
-	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
-	unsigned long flags;
-
-	if (!chan->configured)
-		return;
-
-	spin_lock_irqsave(&chan->vc.lock, flags);
-	if (vchan_issue_pending(&chan->vc) && chan->request == EDMA_REQ_NONE &&
-	    chan->status == EDMA_ST_IDLE) {
-		chan->status = EDMA_ST_BUSY;
-		dw_edma_start_transfer(chan);
-	}
-	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
 
 static enum dma_status
@@ -712,6 +698,70 @@ static irqreturn_t dw_edma_interrupt_common(int irq, void *data)
 	return ret;
 }
 
+static void dw_edma_done_arm(struct dw_edma_chan *chan)
+{
+	if (!dw_edma_core_ch_ignore_irq(chan))
+		/* Local side handles IRQs so polling is not needed */
+		return;
+
+	queue_delayed_work(system_wq, &chan->poll_work, 1);
+}
+
+static void dw_edma_chan_poll_done(struct dma_chan *dchan)
+{
+	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
+	enum dma_status st;
+
+	if (!dw_edma_core_ch_ignore_irq(chan))
+		/* Local side handles IRQs so polling is not needed */
+		return;
+
+	guard(spinlock_irqsave)(&chan->poll_lock);
+
+	if (chan->status != EDMA_ST_BUSY)
+		return;
+
+	st = dw_edma_core_ch_status(chan);
+
+	switch (st) {
+	case DMA_COMPLETE:
+		dw_edma_done_interrupt(chan);
+		if (chan->status == EDMA_ST_BUSY)
+			dw_edma_done_arm(chan);
+		break;
+	case DMA_IN_PROGRESS:
+		dw_edma_done_arm(chan);
+		break;
+	case DMA_ERROR:
+		dw_edma_abort_interrupt(chan);
+		break;
+	default:
+		break;
+	}
+}
+
+static void dw_edma_device_issue_pending(struct dma_chan *dchan)
+{
+	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
+	unsigned long flags;
+
+	if (!chan->configured)
+		return;
+
+	dw_edma_chan_poll_done(dchan);
+
+	spin_lock_irqsave(&chan->vc.lock, flags);
+	if (vchan_issue_pending(&chan->vc) && chan->request == EDMA_REQ_NONE &&
+	    chan->status == EDMA_ST_IDLE) {
+		chan->status = EDMA_ST_BUSY;
+		dw_edma_start_transfer(chan);
+	}
+
+	dw_edma_done_arm(chan);
+
+	spin_unlock_irqrestore(&chan->vc.lock, flags);
+}
+
 static int dw_edma_alloc_chan_resources(struct dma_chan *dchan)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
@@ -737,6 +787,19 @@ static void dw_edma_free_chan_resources(struct dma_chan *dchan)
 
 		cpu_relax();
 	}
+}
+
+static void dw_edma_poll_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct dw_edma_chan *chan =
+		container_of(dwork, struct dw_edma_chan, poll_work);
+	struct dma_chan *dchan = &chan->vc.chan;
+
+	if (!chan->configured)
+		return;
+
+	dw_edma_chan_poll_done(dchan);
 }
 
 static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
@@ -771,6 +834,9 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->request = EDMA_REQ_NONE;
 		chan->status = EDMA_ST_IDLE;
 		chan->irq_mode = DW_EDMA_CH_IRQ_DEFAULT;
+
+		spin_lock_init(&chan->poll_lock);
+		INIT_DELAYED_WORK(&chan->poll_work, dw_edma_poll_work);
 
 		if (chan->dir == EDMA_DIR_WRITE)
 			chan->ll_max = (chip->ll_region_wr[chan->id].sz / EDMA_LL_SZ);
@@ -1025,6 +1091,10 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	/* Skip removal if no private data found */
 	if (!dw)
 		return -ENODEV;
+
+	/* Poll work can re-arm itself. Disable and drain. */
+	list_for_each_entry(chan, &dw->dma.channels, vc.chan.device_node)
+		disable_delayed_work_sync(&chan->poll_work);
 
 	/* Disable eDMA */
 	dw_edma_core_off(dw);
