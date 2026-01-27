@@ -736,9 +736,10 @@ static bool virtqueue_kick_prepare_split(struct virtqueue *_vq)
 	LAST_ADD_TIME_INVALID(vq);
 
 	if (vq->event) {
-		needs_kick = vring_need_event(virtio16_to_cpu(_vq->vdev,
-					vring_avail_event(&vq->split.vring)),
-					      new, old);
+		needs_kick = vring_need_event(
+			virtio16_to_cpu(_vq->vdev, data_race(vring_avail_event(
+							   &vq->split.vring))),
+			new, old);
 	} else {
 		needs_kick = !(vq->split.vring.used->flags &
 					cpu_to_virtio16(_vq->vdev,
