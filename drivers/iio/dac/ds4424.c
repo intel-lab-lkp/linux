@@ -20,9 +20,10 @@
 #define DS4422_MAX_DAC_CHANNELS		2
 #define DS4424_MAX_DAC_CHANNELS		4
 
+#define DS4424_DAC_MASK			GENMASK(6, 0)
+#define DS4424_DAC_SOURCE		BIT(7)
+
 #define DS4424_DAC_ADDR(chan)   ((chan) + 0xf8)
-#define DS4424_SOURCE_I		1
-#define DS4424_SINK_I		0
 
 #define DS4424_CHANNEL(chan) { \
 	.type = IIO_CURRENT, \
@@ -31,22 +32,6 @@
 	.channel = chan, \
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW), \
 }
-
-/*
- * DS4424 DAC control register 8 bits
- * [7]		0: to sink; 1: to source
- * [6:0]	steps to sink/source
- * bit[7] looks like a sign bit, but the value of the register is
- * not a two's complement code considering the bit[6:0] is a absolute
- * distance from the zero point.
- */
-union ds4424_raw_data {
-	struct {
-		u8 dx:7;
-		u8 source_bit:1;
-	};
-	u8 bits;
-};
 
 enum ds4424_device_ids {
 	ID_DS4402,
@@ -127,7 +112,6 @@ static int ds4424_read_raw(struct iio_dev *indio_dev,
 			   int *val, int *val2, long mask)
 {
 	struct ds4424_data *data = iio_priv(indio_dev);
-	union ds4424_raw_data raw;
 	unsigned int regval;
 	int ret;
 
@@ -140,10 +124,11 @@ static int ds4424_read_raw(struct iio_dev *indio_dev,
 						__func__, ret);
 			return ret;
 		}
-		raw.bits = regval;
-		*val = raw.dx;
-		if (raw.source_bit == DS4424_SINK_I)
+
+		*val = regval & DS4424_DAC_MASK;
+		if (!(regval & DS4424_DAC_SOURCE))
 			*val = -*val;
+
 		return IIO_VAL_INT;
 
 	default:
@@ -156,26 +141,27 @@ static int ds4424_write_raw(struct iio_dev *indio_dev,
 			     int val, int val2, long mask)
 {
 	struct ds4424_data *data = iio_priv(indio_dev);
-	union ds4424_raw_data raw;
+	unsigned int abs_val;
 
 	if (val2 != 0)
 		return -EINVAL;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		if (val < S8_MIN || val > S8_MAX)
+		abs_val = abs(val);
+
+		if (abs_val > DS4424_DAC_MASK)
 			return -EINVAL;
 
-		if (val > 0) {
-			raw.source_bit = DS4424_SOURCE_I;
-			raw.dx = val;
-		} else {
-			raw.source_bit = DS4424_SINK_I;
-			raw.dx = -val;
-		}
+		/*
+		 * Currents exiting the IC (Source) are positive.
+		 * Canonicalize 0 to sink; datasheet treats sign as don't-care.
+		 */
+		if (val > 0)
+			abs_val |= DS4424_DAC_SOURCE;
 
 		return regmap_write(data->regmap, DS4424_DAC_ADDR(chan->channel),
-				    raw.bits);
+				    abs_val);
 
 	default:
 		return -EINVAL;
