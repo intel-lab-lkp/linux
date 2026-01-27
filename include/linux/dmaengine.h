@@ -507,6 +507,7 @@ enum dma_residue_granularity {
  * @residue_granularity: granularity of the reported transfer residue
  * @descriptor_reuse: if a descriptor can be reused by client and
  * resubmitted multiple times
+ * @hw_id: provider-specific hardware channel identifier (-1 if unknown)
  */
 struct dma_slave_caps {
 	u32 src_addr_widths;
@@ -520,6 +521,7 @@ struct dma_slave_caps {
 	bool cmd_terminate;
 	enum dma_residue_granularity residue_granularity;
 	bool descriptor_reuse;
+	int hw_id;
 };
 
 static inline const char *dma_chan_name(struct dma_chan *chan)
