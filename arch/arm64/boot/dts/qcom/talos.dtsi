@@ -4527,6 +4527,8 @@
 			#size-cells = <2>;
 			ranges;
 
+			wakeup-source;
+
 			status = "disabled";
 
 			usb_1_dwc3: usb@a600000 {
@@ -4590,6 +4592,8 @@
 			#address-cells = <2>;
 			#size-cells = <2>;
 			ranges;
+
+			wakeup-source;
 
 			status = "disabled";
 
