@@ -1420,24 +1420,27 @@ static bool match_var_offset(Dwarf_Die *die_mem, struct find_var_data *data,
 			     s64 addr_offset, s64 addr_type, bool is_pointer)
 {
 	Dwarf_Word size;
+	Dwarf_Die ptr_die;
+	Dwarf_Die *ptr_type;
 	s64 offset = addr_offset - addr_type;
+
+	if (offset < 0)
+		return false;
+
+	if (__die_get_real_type(die_mem, &data->type) == NULL)
+		return false;
+
+	ptr_type = die_get_pointer_type(&data->type, &ptr_die);
+	if (is_pointer && ptr_type) {
+		/* Get the target type of the pointer */
+		if (__die_get_real_type(ptr_type, &data->type) == NULL)
+			return false;
+	}
 
 	if (offset == 0) {
 		/* Update offset relative to the start of the variable */
 		data->offset = 0;
 		return true;
-	}
-
-	if (offset < 0)
-		return false;
-
-	if (die_get_real_type(die_mem, &data->type) == NULL)
-		return false;
-
-	if (is_pointer && dwarf_tag(&data->type) == DW_TAG_pointer_type) {
-		/* Get the target type of the pointer */
-		if (die_get_real_type(&data->type, &data->type) == NULL)
-			return false;
 	}
 
 	if (dwarf_aggregate_size(&data->type, &size) < 0)
