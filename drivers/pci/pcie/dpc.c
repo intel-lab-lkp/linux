@@ -275,6 +275,7 @@ void dpc_process_error(struct pci_dev *pdev)
 			 status);
 		if (dpc_get_aer_uncorrect_severity(pdev, &info) &&
 		    aer_get_device_error_info(&info, 0)) {
+			aer_ratelimit_print_init(pdev, &info, 0);
 			aer_print_error(&info, 0);
 			pci_aer_clear_nonfatal_status(pdev);
 			pci_aer_clear_fatal_status(pdev);
