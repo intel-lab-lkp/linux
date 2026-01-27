@@ -95,7 +95,7 @@ void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 
 	uh->len = htons(skb->len);
 
-	skb_dst_set(skb, dst);
+	skb_dst_set_noref(skb, dst);
 
 	udp6_set_csum(nocheck, skb, saddr, daddr, skb->len);
 
