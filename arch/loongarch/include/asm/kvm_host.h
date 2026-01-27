@@ -37,6 +37,7 @@
 #define KVM_REQ_TLB_FLUSH_GPA		KVM_ARCH_REQ(0)
 #define KVM_REQ_STEAL_UPDATE		KVM_ARCH_REQ(1)
 #define KVM_REQ_PMU			KVM_ARCH_REQ(2)
+#define KVM_REQ_FPU_LOAD		KVM_ARCH_REQ(3)
 
 #define KVM_GUESTDBG_SW_BP_MASK		\
 	(KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP)
@@ -234,6 +235,7 @@ struct kvm_vcpu_arch {
 	u64 vpid;
 	gpa_t flush_gpa;
 
+	int fpu_load_type;
 	/* Frequency of stable timer in Hz */
 	u64 timer_mhz;
 	ktime_t expire;

@@ -232,6 +232,27 @@ static void kvm_late_check_requests(struct kvm_vcpu *vcpu)
 			kvm_flush_tlb_gpa(vcpu, vcpu->arch.flush_gpa);
 			vcpu->arch.flush_gpa = INVALID_GPA;
 		}
+
+	if (kvm_check_request(KVM_REQ_FPU_LOAD, vcpu)) {
+		switch (vcpu->arch.fpu_load_type) {
+		case KVM_LARCH_FPU:
+			kvm_own_fpu(vcpu);
+			break;
+
+		case KVM_LARCH_LSX:
+			kvm_own_lsx(vcpu);
+			break;
+
+		case KVM_LARCH_LASX:
+			kvm_own_lasx(vcpu);
+			break;
+
+		default:
+			break;
+		}
+
+		vcpu->arch.fpu_load_type = 0;
+	}
 }
 
 /*
@@ -1338,8 +1359,6 @@ static inline void kvm_check_fcsr_alive(struct kvm_vcpu *vcpu) { }
 /* Enable FPU and restore context */
 void kvm_own_fpu(struct kvm_vcpu *vcpu)
 {
-	preempt_disable();
-
 	/*
 	 * Enable FPU for guest
 	 * Set FR and FRE according to guest context
@@ -1350,16 +1369,12 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu)
 	kvm_restore_fpu(&vcpu->arch.fpu);
 	vcpu->arch.aux_inuse |= KVM_LARCH_FPU;
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_FPU);
-
-	preempt_enable();
 }
 
 #ifdef CONFIG_CPU_HAS_LSX
 /* Enable LSX and restore context */
 int kvm_own_lsx(struct kvm_vcpu *vcpu)
 {
-	preempt_disable();
-
 	/* Enable LSX for guest */
 	kvm_check_fcsr(vcpu, vcpu->arch.fpu.fcsr);
 	set_csr_euen(CSR_EUEN_LSXEN | CSR_EUEN_FPEN);
@@ -1381,8 +1396,6 @@ int kvm_own_lsx(struct kvm_vcpu *vcpu)
 
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LSX);
 	vcpu->arch.aux_inuse |= KVM_LARCH_LSX | KVM_LARCH_FPU;
-	preempt_enable();
-
 	return 0;
 }
 #endif
@@ -1391,8 +1404,6 @@ int kvm_own_lsx(struct kvm_vcpu *vcpu)
 /* Enable LASX and restore context */
 int kvm_own_lasx(struct kvm_vcpu *vcpu)
 {
-	preempt_disable();
-
 	kvm_check_fcsr(vcpu, vcpu->arch.fpu.fcsr);
 	set_csr_euen(CSR_EUEN_FPEN | CSR_EUEN_LSXEN | CSR_EUEN_LASXEN);
 	switch (vcpu->arch.aux_inuse & (KVM_LARCH_FPU | KVM_LARCH_LSX)) {
@@ -1414,8 +1425,6 @@ int kvm_own_lasx(struct kvm_vcpu *vcpu)
 
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LASX);
 	vcpu->arch.aux_inuse |= KVM_LARCH_LASX | KVM_LARCH_LSX | KVM_LARCH_FPU;
-	preempt_enable();
-
 	return 0;
 }
 #endif
