@@ -3521,6 +3521,9 @@ static int ext4_mb_init_backend(struct super_block *sb)
 	sbi->s_buddy_cache->i_ino = EXT4_BAD_INO;
 	EXT4_I(sbi->s_buddy_cache)->i_disksize = 0;
 	ext4_set_inode_mapping_order(sbi->s_buddy_cache);
+#if (BITS_PER_LONG < 64)
+	ext4_clear_state_flags(EXT4_I(sbi->s_buddy_cache));
+#endif
 
 	for (i = 0; i < ngroups; i++) {
 		cond_resched();
