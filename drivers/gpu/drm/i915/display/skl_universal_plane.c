@@ -891,20 +891,49 @@ static void icl_plane_disable_sel_fetch_arm(struct intel_dsb *dsb,
 	intel_de_write_dsb(display, dsb, SEL_FETCH_PLANE_CTL(pipe, plane->id), 0);
 }
 
-static void x3p_lpd_plane_update_pixel_normalizer(struct intel_dsb *dsb,
-						  struct intel_plane *plane,
-						  bool enable)
+static void xe3p_lpd_plane_disable_pixel_normalizer(struct intel_dsb *dsb,
+						    struct intel_plane *plane)
 {
 	struct intel_display *display = to_intel_display(plane);
 	enum intel_fbc_id fbc_id = skl_fbc_id_for_pipe(plane->pipe);
-	u32 val;
+	const struct intel_plane_state *plane_state =
+		to_intel_plane_state(plane->base.state);
 
-	/* Only HDR planes have pixel normalizer and don't matter if no FBC */
+	if (!HAS_FBC_FP16_FORMATS(display))
+		return;
+
 	if (!skl_plane_has_fbc(display, fbc_id, plane->id))
 		return;
 
-	val = enable ? PLANE_PIXEL_NORMALIZE_NORM_FACTOR(PLANE_PIXEL_NORMALIZE_NORM_FACTOR_1_0) |
-		       PLANE_PIXEL_NORMALIZE_ENABLE : 0;
+	if (!plane_state->pixel_normalizer.factor)
+		return;
+
+	intel_de_write_dsb(display, dsb,
+			   PLANE_PIXEL_NORMALIZE(plane->pipe, plane->id), 0);
+}
+
+static void xe3p_lpd_plane_update_pixel_normalizer(struct intel_dsb *dsb,
+						   struct intel_plane *plane)
+{
+	struct intel_display *display = to_intel_display(plane);
+	enum intel_fbc_id fbc_id = skl_fbc_id_for_pipe(plane->pipe);
+	const struct intel_plane_state *plane_state =
+		to_intel_plane_state(plane->base.state);
+	u32 val = 0;
+
+	if (!HAS_FBC_FP16_FORMATS(display))
+		return;
+
+	/* Only HDR planes have pixel normalizer and don't matter if FBC is fused off */
+	if (!skl_plane_has_fbc(display, fbc_id, plane->id))
+		return;
+
+	if (!plane_state->pixel_normalizer.needs_update)
+		return;
+
+	if (plane_state->pixel_normalizer.factor)
+		val = PLANE_PIXEL_NORMALIZE_NORM_FACTOR(plane_state->pixel_normalizer.factor) |
+		      PLANE_PIXEL_NORMALIZE_ENABLE;
 
 	intel_de_write_dsb(display, dsb,
 			   PLANE_PIXEL_NORMALIZE(plane->pipe, plane->id), val);
@@ -926,8 +955,7 @@ icl_plane_disable_arm(struct intel_dsb *dsb,
 
 	icl_plane_disable_sel_fetch_arm(dsb, plane, crtc_state);
 
-	if (DISPLAY_VER(display) >= 35)
-		x3p_lpd_plane_update_pixel_normalizer(dsb, plane, false);
+	xe3p_lpd_plane_disable_pixel_normalizer(dsb, plane);
 
 	intel_de_write_dsb(display, dsb, PLANE_CTL(pipe, plane_id), 0);
 	intel_de_write_dsb(display, dsb, PLANE_SURF(pipe, plane_id), 0);
@@ -1674,13 +1702,7 @@ icl_plane_update_arm(struct intel_dsb *dsb,
 
 	intel_color_plane_commit_arm(dsb, plane_state);
 
-	/*
-	 * In order to have FBC for fp16 formats pixel normalizer block must be
-	 * active. Check if pixel normalizer block need to be enabled for FBC.
-	 * If needed, use normalization factor as 1.0 and enable the block.
-	 */
-	if (intel_fbc_is_enable_pixel_normalizer(plane_state))
-		x3p_lpd_plane_update_pixel_normalizer(dsb, plane, true);
+	xe3p_lpd_plane_update_pixel_normalizer(dsb, plane);
 
 	/*
 	 * The control register self-arms if the plane was previously
@@ -2350,6 +2372,32 @@ static void clip_damage(struct intel_plane_state *plane_state)
 	drm_rect_intersect(damage, &src);
 }
 
+static void check_pixel_normalizer(struct intel_plane_state *plane_state)
+{
+	struct intel_display *display = to_intel_display(plane_state);
+	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
+	struct intel_atomic_state *state =
+		to_intel_atomic_state(plane_state->uapi.state);
+	const struct intel_plane_state *old_plane_state =
+		intel_atomic_get_old_plane_state(state, plane);
+
+	if (!HAS_FBC_FP16_FORMATS(display))
+		return;
+
+	plane_state->pixel_normalizer.factor =
+		intel_fbc_normalization_factor(plane_state);
+
+	/*
+	 * In case of no old state to compare, better to force update the pixel
+	 * normalizer settings.
+	 */
+	plane_state->pixel_normalizer.needs_update = true;
+	if (old_plane_state && old_plane_state->hw.fb)
+		plane_state->pixel_normalizer.needs_update =
+			plane_state->pixel_normalizer.factor !=
+			intel_fbc_normalization_factor(old_plane_state);
+}
+
 static int skl_plane_check(struct intel_crtc_state *crtc_state,
 			   struct intel_plane_state *plane_state)
 {
@@ -2399,6 +2447,8 @@ static int skl_plane_check(struct intel_crtc_state *crtc_state,
 		return ret;
 
 	check_protection(plane_state);
+
+	check_pixel_normalizer(plane_state);
 
 	/* HW only has 8 bits pixel precision, disable plane if invisible */
 	if (!(plane_state->hw.alpha >> 8)) {

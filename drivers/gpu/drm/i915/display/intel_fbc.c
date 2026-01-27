@@ -71,6 +71,9 @@
 
 #define FBC_SYS_CACHE_ID_NONE	I915_MAX_FBCS
 
+/* Pixel normalization factor 1.0 in half-precision floating-point format */
+#define NORM_FACTOR_1_0_IN_HALF_PRECISION_FP		0x3c00
+
 struct intel_fbc_funcs {
 	void (*activate)(struct intel_fbc *fbc);
 	void (*deactivate)(struct intel_fbc *fbc);
@@ -1215,13 +1218,21 @@ static bool xe3p_lpd_fbc_pixel_format_is_valid(const struct intel_plane_state *p
 	}
 }
 
-bool
-intel_fbc_is_enable_pixel_normalizer(const struct intel_plane_state *plane_state)
+unsigned int
+intel_fbc_normalization_factor(const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane_state);
 
-	return DISPLAY_VER(display) >= 35 &&
-	       xe3p_lpd_fbc_fp16_format_is_valid(plane_state);
+	/*
+	 * In order to have FBC for fp16 formats pixel normalizer block must be
+	 * active. For FP16 formats, use normalization factor as 1.0 and enable
+	 * the block.
+	 */
+	if (HAS_FBC_FP16_FORMATS(display) &&
+	    xe3p_lpd_fbc_fp16_format_is_valid(plane_state))
+		return NORM_FACTOR_1_0_IN_HALF_PRECISION_FP;
+
+	return 0;
 }
 
 static bool pixel_format_is_valid(const struct intel_plane_state *plane_state)
