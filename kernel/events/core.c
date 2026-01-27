@@ -10340,7 +10340,7 @@ static inline int perf_event_set_bpf_handler(struct perf_event *event,
 		return -EPROTO;
 	}
 
-	event->prog = prog;
+	WRITE_ONCE(event->prog, prog);
 	event->bpf_cookie = bpf_cookie;
 	return 0;
 }
@@ -10398,7 +10398,9 @@ static int __perf_event_overflow(struct perf_event *event,
 	if (event->attr.aux_pause)
 		perf_event_aux_pause(event->aux_event, true);
 
-	if (event->prog && event->prog->type == BPF_PROG_TYPE_PERF_EVENT &&
+	struct bpf_prog *prog = READ_ONCE(event->prog);
+
+	if (prog && prog->type == BPF_PROG_TYPE_PERF_EVENT &&
 	    !bpf_overflow_handler(event, data, regs))
 		goto out;
 
