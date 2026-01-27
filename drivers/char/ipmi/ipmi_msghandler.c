@@ -4816,6 +4816,7 @@ static void smi_work(struct work_struct *t)
 	int run_to_completion = READ_ONCE(intf->run_to_completion);
 	struct ipmi_smi_msg *newmsg = NULL;
 	struct ipmi_recv_msg *msg, *msg2;
+	bool send_failed = false;
 	int cc;
 
 	/*
@@ -4828,6 +4829,16 @@ static void smi_work(struct work_struct *t)
 restart:
 	if (!run_to_completion)
 		spin_lock_irqsave(&intf->xmit_msgs_lock, flags);
+	if (send_failed) {
+		/*
+		 * Sender failed, clear curr_msg so we can pull a new
+		 * message. Do not clear it unconditionally as a message
+		 * may be in flight from a previous run.
+		 */
+		intf->curr_msg = NULL;
+		send_failed = false;
+	}
+	newmsg = NULL;
 	if (intf->curr_msg == NULL && !intf->in_shutdown) {
 		struct list_head *entry = NULL;
 
@@ -4852,8 +4863,14 @@ restart:
 			if (newmsg->recv_msg)
 				deliver_err_response(intf,
 						     newmsg->recv_msg, cc);
-			else
-				ipmi_free_smi_msg(newmsg);
+			/*
+			 * Sender returned error, the lower layer did not
+			 * take ownership of the message. The transaction
+			 * is abandoned - the user has been notified via
+			 * deliver_err_response() above.
+			 */
+			ipmi_free_smi_msg(newmsg);
+			send_failed = true;
 			goto restart;
 		}
 	}
