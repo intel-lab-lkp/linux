@@ -126,4 +126,11 @@ config RTASE
 	  To compile this driver as a module, choose M here: the module
 	  will be called rtase. This is recommended.
 
+config R816E
+	tristate "Realtek RTL8116AF power management support"
+	depends on PCI
+	help
+	  Say Y here and it will be complied to ensure the device enters correct
+	  power state if you have Realtek PCIe nic RTL8116AF.
+
 endif # NET_VENDOR_REALTEK
