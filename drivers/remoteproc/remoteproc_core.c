@@ -2461,6 +2461,8 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 			  const char *firmware, int len)
 {
 	struct rproc *rproc;
+	int index = -ENODEV;
+	int first_dynamic;
 
 	if (!dev || !name || !ops)
 		return NULL;
@@ -2481,8 +2483,27 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 	rproc->dev.driver_data = rproc;
 	idr_init(&rproc->notifyids);
 
-	/* Assign a unique device index and name */
-	rproc->index = ida_alloc(&rproc_dev_index, GFP_KERNEL);
+	/*
+	 * Assign a unique device index and name
+	 * Look for a static index coming from the "remoteproc" DT alias
+	 * (e.g. "remoteproc0"). If none is found, start allocating
+	 * dynamic IDs after the highest alias in use.
+	 */
+	if (dev->of_node)
+		index = of_alias_get_id(dev->of_node, "remoteproc");
+	if (index < 0) {
+		first_dynamic = of_alias_get_highest_id("remoteproc");
+		if (first_dynamic < 0)
+			first_dynamic = 0;
+		else
+			first_dynamic++;
+		rproc->index = ida_alloc_range(&rproc_dev_index, first_dynamic,
+					       ~0, GFP_KERNEL);
+	} else {
+		rproc->index = ida_alloc_range(&rproc_dev_index, index,
+					       index, GFP_KERNEL);
+	}
+
 	if (rproc->index < 0) {
 		dev_err(dev, "ida_alloc failed: %d\n", rproc->index);
 		goto put_device;
