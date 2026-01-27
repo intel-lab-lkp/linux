@@ -751,6 +751,8 @@
 			    <&lt9611_rst_pin>;
 		pinctrl-names = "default";
 
+		lontium,dsi-port-b;
+
 		ports {
 			#address-cells = <1>;
 			#size-cells = <0>;
