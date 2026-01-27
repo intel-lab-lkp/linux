@@ -102,6 +102,14 @@ struct extent_buffer {
 	/* >= 0 if eb belongs to a log tree, -1 otherwise */
 	s8 log_index;
 	u8 folio_shift;
+
+	/*
+	 * Active btrfs_search_slot() operations blocking writeback.
+	 * Prevents COW amplification when searches restart under memory
+	 * pressure. Checked under eb->lock in lock_extent_buffer_for_io().
+	 */
+	atomic_t writeback_blockers;
+
 	struct rcu_head rcu_head;
 
 	struct rw_semaphore lock;

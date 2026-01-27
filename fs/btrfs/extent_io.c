@@ -1939,7 +1939,8 @@ static noinline_for_stack bool lock_extent_buffer_for_io(struct extent_buffer *e
 	 * of time.
 	 */
 	spin_lock(&eb->refs_lock);
-	if (test_and_clear_bit(EXTENT_BUFFER_DIRTY, &eb->bflags)) {
+	if (!atomic_read(&eb->writeback_blockers) &&
+	    test_and_clear_bit(EXTENT_BUFFER_DIRTY, &eb->bflags)) {
 		XA_STATE(xas, &fs_info->buffer_tree, eb->start >> fs_info->nodesize_bits);
 		unsigned long flags;
 
@@ -3008,6 +3009,7 @@ static struct extent_buffer *__alloc_extent_buffer(struct btrfs_fs_info *fs_info
 	eb->len = fs_info->nodesize;
 	eb->fs_info = fs_info;
 	init_rwsem(&eb->lock);
+	atomic_set(&eb->writeback_blockers, 0);
 
 	btrfs_leak_debug_add_eb(eb);
 

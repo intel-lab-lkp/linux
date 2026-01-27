@@ -1973,6 +1973,40 @@ static int search_leaf(struct btrfs_trans_handle *trans,
 }
 
 /*
+ * Track an extent buffer that was COW'd during btrfs_search_slot.
+ * Prevents the flusher from writing this buffer until the search completes.
+ * This avoids COW amplification where a restart would force an unnecessary
+ * re-COW of the same block.
+ */
+static inline int btrfs_search_slot_track_cow(struct xarray *cowed_buffers,
+					       struct extent_buffer *eb)
+{
+	u32 tmp;
+	int ret = 0;
+
+	lockdep_assert_held_write(&eb->lock);
+
+	ret = xa_alloc(cowed_buffers, &tmp, eb, xa_limit_32b, GFP_NOFS);
+	if (!ret)
+		atomic_inc(&eb->writeback_blockers);
+	return ret;
+}
+
+/*
+ * Clear COW protection from all extent buffers tracked during this search.
+ * Called at the end of btrfs_search_slot to allow normal writeback behavior.
+ */
+static inline void btrfs_search_slot_clear_cow_protection(struct xarray *cowed_buffers)
+{
+	struct extent_buffer *eb;
+	unsigned long index;
+
+	xa_for_each(cowed_buffers, index, eb)
+		atomic_dec(&eb->writeback_blockers);
+	xa_destroy(cowed_buffers);
+}
+
+/*
  * Look for a key in a tree and perform necessary modifications to preserve
  * tree invariants.
  *
@@ -2009,6 +2043,7 @@ int btrfs_search_slot(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 {
 	struct btrfs_fs_info *fs_info;
 	struct extent_buffer *b;
+	DEFINE_XARRAY_ALLOC(cowed_buffers);
 	int slot;
 	int ret;
 	int level;
@@ -2117,6 +2152,11 @@ again:
 						       p->nodes[level + 1],
 						       p->slots[level + 1], &b,
 						       BTRFS_NESTING_COW);
+			if (ret2) {
+				ret = ret2;
+				goto done;
+			}
+			ret2 = btrfs_search_slot_track_cow(&cowed_buffers, b);
 			if (ret2) {
 				ret = ret2;
 				goto done;
@@ -2241,6 +2281,8 @@ done:
 		if (ret2)
 			ret = ret2;
 	}
+
+	btrfs_search_slot_clear_cow_protection(&cowed_buffers);
 
 	return ret;
 }
