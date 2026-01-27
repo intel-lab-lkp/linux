@@ -2567,6 +2567,17 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u32 rate,
 		rinfo->eht_gi = STA_STATS_GET(EHT_GI, rate);
 		rinfo->eht_ru_alloc = STA_STATS_GET(EHT_RU, rate);
 		break;
+	case STA_STATS_RATE_TYPE_UHR:
+		rinfo->flags = RATE_INFO_FLAGS_UHR_MCS;
+		rinfo->mcs = STA_STATS_GET(UHR_MCS, rate);
+		rinfo->nss = STA_STATS_GET(UHR_NSS, rate);
+		rinfo->eht_gi = STA_STATS_GET(UHR_GI, rate);
+		rinfo->eht_ru_alloc = STA_STATS_GET(UHR_RU, rate);
+		if (STA_STATS_GET(UHR_ELR, rate))
+			rinfo->flags |= RATE_INFO_FLAGS_UHR_ELR_MCS;
+		if (STA_STATS_GET(UHR_IM, rate))
+			rinfo->flags |= RATE_INFO_FLAGS_UHR_IM;
+		break;
 	}
 }
 
