@@ -3597,7 +3597,17 @@ esw_vfs_changed_event_handler(struct mlx5_eswitch *esw, const u32 *out)
 		return;
 
 	devlink = priv_to_devlink(esw->dev);
-	devl_lock(devlink);
+	/* Repeatedly try to grab the lock with a delay while this work is
+	 * still relevant.
+	 * This allows a concurrent mlx5_eswitch_event_handler_unregister
+	 * (holding the devlink lock) to flush the wq without deadlocking.
+	 */
+	while (!devl_trylock(devlink)) {
+		if (!esw->esw_funcs.notifier_enabled)
+			return;
+		schedule_timeout_interruptible(msecs_to_jiffies(10));
+	}
+
 	/* Number of VFs can only change from "0 to x" or "x to 0". */
 	if (esw->esw_funcs.num_vfs > 0) {
 		mlx5_eswitch_unload_vf_vports(esw, esw->esw_funcs.num_vfs);
