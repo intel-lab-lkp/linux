@@ -421,6 +421,7 @@ ethnl_default_requests[__ETHTOOL_MSG_USER_CNT] = {
 	[ETHTOOL_MSG_TSCONFIG_SET]	= &ethnl_tsconfig_request_ops,
 	[ETHTOOL_MSG_PHY_GET]		= &ethnl_phy_request_ops,
 	[ETHTOOL_MSG_MSE_GET]		= &ethnl_mse_request_ops,
+	[ETHTOOL_MSG_PORT_GET]		= &ethnl_port_request_ops,
 };
 
 static struct ethnl_dump_ctx *ethnl_dump_context(struct netlink_callback *cb)
@@ -1544,6 +1545,16 @@ static const struct genl_ops ethtool_genl_ops[] = {
 		.policy = ethnl_mse_get_policy,
 		.maxattr = ARRAY_SIZE(ethnl_mse_get_policy) - 1,
 	},
+	{
+		.cmd	= ETHTOOL_MSG_PORT_GET,
+		.doit	= ethnl_default_doit,
+		.start	= ethnl_port_dump_start,
+		.dumpit	= ethnl_port_dumpit,
+		.done	= ethnl_port_dump_done,
+		.policy = ethnl_port_get_policy,
+		.maxattr = ARRAY_SIZE(ethnl_port_get_policy) - 1,
+	},
+
 };
 
 static const struct genl_multicast_group ethtool_nl_mcgrps[] = {
