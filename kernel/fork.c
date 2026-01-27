@@ -1566,9 +1566,10 @@ static int copy_mm(u64 clone_flags, struct task_struct *tsk)
 	tsk->active_mm = NULL;
 
 	/*
-	 * Are we cloning a kernel thread?
+	 * Kernel threads have no 'mm' of their own as they borrow the
+	 * 'active_mm' from the previous process at context_switch().
 	 *
-	 * We need to steal a active VM for that..
+	 * Return 0 directly to skip the copy_mm process.
 	 */
 	oldmm = current->mm;
 	if (!oldmm)
