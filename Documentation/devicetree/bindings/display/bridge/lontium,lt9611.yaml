@@ -37,6 +37,12 @@ properties:
   vcc-supply:
     description: Regulator for 3.3V IO power.
 
+  lontium,dsi-port-b:
+    type: boolean
+    description:
+      Use DSI Port B as the input source instead of Port A or Port A + B.
+      Required when the DSI is physically connected to Port B.
+
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
