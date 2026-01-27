@@ -14,6 +14,7 @@
 #include <linux/iio/machine.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 
 #define DS4422_MAX_DAC_CHANNELS		2
@@ -55,11 +56,8 @@ enum ds4424_device_ids {
 };
 
 struct ds4424_data {
-	struct i2c_client *client;
-	struct mutex lock;
-	uint8_t save[DS4424_MAX_DAC_CHANNELS];
+	struct regmap *regmap;
 	struct regulator *vcc_reg;
-	uint8_t raw[DS4424_MAX_DAC_CHANNELS];
 };
 
 static const struct iio_chan_spec ds4424_channels[] = {
@@ -69,59 +67,80 @@ static const struct iio_chan_spec ds4424_channels[] = {
 	DS4424_CHANNEL(3),
 };
 
-static int ds4424_get_value(struct iio_dev *indio_dev,
-			     int *val, int channel)
+static const struct regmap_range ds44x2_ranges[] = {
+	regmap_reg_range(DS4424_DAC_ADDR(0), DS4424_DAC_ADDR(1)),
+};
+
+static const struct regmap_range ds44x4_ranges[] = {
+	regmap_reg_range(DS4424_DAC_ADDR(0), DS4424_DAC_ADDR(3)),
+};
+
+static const struct regmap_access_table ds44x2_table = {
+	.yes_ranges = ds44x2_ranges,
+	.n_yes_ranges = ARRAY_SIZE(ds44x2_ranges),
+};
+
+static const struct regmap_access_table ds44x4_table = {
+	.yes_ranges = ds44x4_ranges,
+	.n_yes_ranges = ARRAY_SIZE(ds44x4_ranges),
+};
+
+static const struct regmap_config ds44x2_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.cache_type = REGCACHE_FLAT,
+	.max_register = DS4424_DAC_ADDR(1),
+	.rd_table = &ds44x2_table,
+	.wr_table = &ds44x2_table,
+};
+
+static const struct regmap_config ds44x4_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.cache_type = REGCACHE_FLAT,
+	.max_register = DS4424_DAC_ADDR(3),
+	.rd_table = &ds44x4_table,
+	.wr_table = &ds44x4_table,
+};
+
+static int ds4424_init_regmap(struct i2c_client *client,
+			      struct iio_dev *indio_dev)
 {
 	struct ds4424_data *data = iio_priv(indio_dev);
-	int ret;
+	const struct regmap_config *regmap_config;
 
-	mutex_lock(&data->lock);
-	ret = i2c_smbus_read_byte_data(data->client, DS4424_DAC_ADDR(channel));
-	if (ret < 0)
-		goto fail;
+	if (indio_dev->num_channels == DS4424_MAX_DAC_CHANNELS)
+		regmap_config = &ds44x4_regmap_config;
+	else
+		regmap_config = &ds44x2_regmap_config;
 
-	*val = ret;
+	data->regmap = devm_regmap_init_i2c(client, regmap_config);
+	if (IS_ERR(data->regmap))
+		return dev_err_probe(&client->dev, PTR_ERR(data->regmap),
+				     "Failed to init regmap.\n");
 
-fail:
-	mutex_unlock(&data->lock);
-	return ret;
-}
-
-static int ds4424_set_value(struct iio_dev *indio_dev,
-			     int val, struct iio_chan_spec const *chan)
-{
-	struct ds4424_data *data = iio_priv(indio_dev);
-	int ret;
-
-	mutex_lock(&data->lock);
-	ret = i2c_smbus_write_byte_data(data->client,
-			DS4424_DAC_ADDR(chan->channel), val);
-	if (ret < 0)
-		goto fail;
-
-	data->raw[chan->channel] = val;
-
-fail:
-	mutex_unlock(&data->lock);
-	return ret;
+	return 0;
 }
 
 static int ds4424_read_raw(struct iio_dev *indio_dev,
 			   struct iio_chan_spec const *chan,
 			   int *val, int *val2, long mask)
 {
+	struct ds4424_data *data = iio_priv(indio_dev);
 	union ds4424_raw_data raw;
+	unsigned int regval;
 	int ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		ret = ds4424_get_value(indio_dev, val, chan->channel);
+		ret = regmap_read(data->regmap, DS4424_DAC_ADDR(chan->channel),
+				  &regval);
 		if (ret < 0) {
-			pr_err("%s : ds4424_get_value returned %d\n",
-							__func__, ret);
+			pr_err("%s : regmap_read returned %d\n",
+						__func__, ret);
 			return ret;
 		}
-		raw.bits = *val;
+		raw.bits = regval;
 		*val = raw.dx;
 		if (raw.source_bit == DS4424_SINK_I)
 			*val = -*val;
@@ -136,6 +155,7 @@ static int ds4424_write_raw(struct iio_dev *indio_dev,
 			     struct iio_chan_spec const *chan,
 			     int val, int val2, long mask)
 {
+	struct ds4424_data *data = iio_priv(indio_dev);
 	union ds4424_raw_data raw;
 
 	if (val2 != 0)
@@ -154,7 +174,8 @@ static int ds4424_write_raw(struct iio_dev *indio_dev,
 			raw.dx = -val;
 		}
 
-		return ds4424_set_value(indio_dev, raw.bits, chan);
+		return regmap_write(data->regmap, DS4424_DAC_ADDR(chan->channel),
+				    raw.bits);
 
 	default:
 		return -EINVAL;
@@ -163,49 +184,52 @@ static int ds4424_write_raw(struct iio_dev *indio_dev,
 
 static int ds4424_verify_chip(struct iio_dev *indio_dev)
 {
-	int ret, val;
+	struct ds4424_data *data = iio_priv(indio_dev);
+	u8 raw_values[DS4424_MAX_DAC_CHANNELS];
+	int ret;
 
-	ret = ds4424_get_value(indio_dev, &val, 0);
-	if (ret < 0)
-		dev_err(&indio_dev->dev,
-				"%s failed. ret: %d\n", __func__, ret);
+	/* Bulk read all channels starting at 0xf8.
+	 * This populates the regmap cache with current HW values.
+	 */
+	ret = regmap_bulk_read(data->regmap, DS4424_DAC_ADDR(0),
+			       raw_values, indio_dev->num_channels);
+	if (ret)
+		return dev_err_probe(&indio_dev->dev, ret, "Failed to seed cache\n");
 
-	return ret;
+	return 0;
 }
 
 static int ds4424_suspend(struct device *dev)
 {
-	struct i2c_client *client = to_i2c_client(dev);
-	struct iio_dev *indio_dev = i2c_get_clientdata(client);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct ds4424_data *data = iio_priv(indio_dev);
-	int ret = 0;
-	int i;
+	int ret;
 
-	for (i = 0; i < indio_dev->num_channels; i++) {
-		data->save[i] = data->raw[i];
-		ret = ds4424_set_value(indio_dev, 0,
-				&indio_dev->channels[i]);
-		if (ret < 0)
+	/* Disable all outputs, bypass cache so the '0' isn't saved */
+	regcache_cache_bypass(data->regmap, true);
+	for (unsigned int i = 0; i < indio_dev->num_channels; i++) {
+		ret = regmap_write(data->regmap, DS4424_DAC_ADDR(i), 0);
+		if (ret) {
+			dev_err(dev, "Failed to zero channel %d: %d\n", i, ret);
+			regcache_cache_bypass(data->regmap, false);
 			return ret;
+		}
 	}
-	return ret;
+	regcache_cache_bypass(data->regmap, false);
+
+	regcache_cache_only(data->regmap, true);
+	regcache_mark_dirty(data->regmap);
+
+	return 0;
 }
 
 static int ds4424_resume(struct device *dev)
 {
-	struct i2c_client *client = to_i2c_client(dev);
-	struct iio_dev *indio_dev = i2c_get_clientdata(client);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct ds4424_data *data = iio_priv(indio_dev);
-	int ret = 0;
-	int i;
 
-	for (i = 0; i < indio_dev->num_channels; i++) {
-		ret = ds4424_set_value(indio_dev, data->save[i],
-				&indio_dev->channels[i]);
-		if (ret < 0)
-			return ret;
-	}
-	return ret;
+	regcache_cache_only(data->regmap, false);
+	return regcache_sync(data->regmap);
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(ds4424_pm_ops, ds4424_suspend, ds4424_resume);
@@ -228,7 +252,6 @@ static int ds4424_probe(struct i2c_client *client)
 
 	data = iio_priv(indio_dev);
 	i2c_set_clientdata(client, indio_dev);
-	data->client = client;
 	indio_dev->name = id->name;
 
 	data->vcc_reg = devm_regulator_get(&client->dev, "vcc");
@@ -236,7 +259,6 @@ static int ds4424_probe(struct i2c_client *client)
 		return dev_err_probe(&client->dev, PTR_ERR(data->vcc_reg),
 				     "Failed to get vcc-supply regulator.\n");
 
-	mutex_init(&data->lock);
 	ret = regulator_enable(data->vcc_reg);
 	if (ret < 0) {
 		dev_err(&client->dev,
@@ -245,9 +267,6 @@ static int ds4424_probe(struct i2c_client *client)
 	}
 
 	usleep_range(1000, 1200);
-	ret = ds4424_verify_chip(indio_dev);
-	if (ret < 0)
-		goto fail;
 
 	switch (id->driver_data) {
 	case ID_DS4402:
@@ -268,6 +287,14 @@ static int ds4424_probe(struct i2c_client *client)
 		ret = -ENXIO;
 		goto fail;
 	}
+
+	ret = ds4424_init_regmap(client, indio_dev);
+	if (ret < 0)
+		goto fail;
+
+	ret = ds4424_verify_chip(indio_dev);
+	if (ret < 0)
+		goto fail;
 
 	indio_dev->channels = ds4424_channels;
 	indio_dev->modes = INDIO_DIRECT_MODE;
