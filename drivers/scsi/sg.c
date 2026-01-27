@@ -925,6 +925,17 @@ sg_ioctl_common(struct file *filp, Sg_device *sdp, Sg_fd *sfp,
 
 	switch (cmd_in) {
 	case SG_IO:
+		/*
+		 * WARNING:
+		 *
+		 * This ioctl() uses an interruptible wait for I/O completion.
+		 * As a result, if it is interrupted by a signal (e.g. SIGSTOP)
+		 * the result will be discarded and the syscall will be retried.
+		 * Caution should be used with issuing commands that are not
+		 * idempotent (e.g. COMPARE AND WRITE, or commands to a sequential
+		 * media device such as a tape device) as this will likely not
+		 * have the desired behavior.  Data corruption could occur.
+		 */
 		if (atomic_read(&sdp->detaching))
 			return -ENODEV;
 		if (!scsi_block_when_processing_errors(sdp->device))
