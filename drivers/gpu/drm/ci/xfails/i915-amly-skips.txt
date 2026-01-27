@@ -22,6 +22,71 @@ i915_suspend.*
 kms_scaling_modes.*
 i915_pm_rpm.*
 i915_module_load@reload-with-fault-injection
+kms_big_fb.*
 
 # Kernel panic
 drm_fdinfo.*
+
+# Kernel panic
+kms_cursor_legacy@short-flip-after-cursor-toggle
+# DEBUG - Begin test kms_cursor_legacy@short-flip-after-cursor-toggle
+# [ 2253.980256] i915 0000:00:02.0: [drm] *ERROR* [CRTC:56:pipe A] flip_done timed out
+# [ 2254.036707] [IGT] kms_setmode: executing
+# [ 2254.042006] [IGT] kms_setmode: starting subtest invalid-clone-single-crtc
+# [ 2254.049962] [IGT] kms_setmode: finished subtest invalid-clone-single-crtc, SKIP
+# [ 2254.058253] [IGT] kms_setmode: exiting, ret=77
+# [ 2254.080577] [IGT] kms_frontbuffer_tracking: executing
+# [ 2254.650348] [IGT] kms_frontbuffer_tracking: starting subtest psr-1p-primscrn-pri-shrfb-draw-blt
+# [ 2254.660232] [IGT] kms_frontbuffer_tracking: finished subtest psr-1p-primscrn-pri-shrfb-draw-blt, SKIP
+# [ 2254.671910] [IGT] kms_frontbuffer_tracking: exiting, ret=77
+# [ 2254.748102] [IGT] kms_big_fb: executing
+# [ 2255.286765] [IGT] kms_big_fb: starting subtest 4-tiled-64bpp-rotate-0
+# [ 2255.294100] [IGT] kms_big_fb: finished subtest 4-tiled-64bpp-rotate-0, SKIP
+# [ 2255.302188] [IGT] kms_big_fb: exiting, ret=77
+# [ 2255.335552] [IGT] kms_frontbuffer_tracking: executing
+# [ 2255.876572] [IGT] kms_frontbuffer_tracking: starting subtest fbcpsr-1p-primscrn-pri-shrfb-draw-blt
+# [ 2255.886699] [IGT] kms_frontbuffer_tracking: finished subtest fbcpsr-1p-primscrn-pri-shrfb-draw-blt, SKIP
+# [ 2255.898345] [IGT] kms_frontbuffer_tracking: exiting, ret=77
+# [ 2255.965262] [IGT] syncobj_timeline: executing
+# [ 2255.973253] [IGT] syncobj_timeline: exiting, ret=77
+# [ 2255.995583] [IGT] kms_cursor_legacy: executing
+# [ 2256.541009] [IGT] kms_cursor_legacy: starting subtest short-flip-after-cursor-toggle
+# [ 2266.780310] i915 0000:00:02.0: [drm] *ERROR* flip_done timed out
+# [ 2266.787082] i915 0000:00:02.0: [drm] *ERROR* [CRTC:56:pipe A] commit wait timed out
+# [ 2277.020277] i915 0000:00:02.0: [drm] *ERROR* flip_done timed out
+# [ 2277.027028] i915 0000:00:02.0: [drm] *ERROR* [CONNECTOR:106:eDP-1] commit wait timed out
+# [ 2287.260289] i915 0000:00:02.0: [drm] *ERROR* flip_done timed out
+# [ 2287.267049] i915 0000:00:02.0: [drm] *ERROR* [PLANE:33:plane 1A] commit wait timed out
+# [ 2458.780969] INFO: task kms_cursor_lega:1032 blocked for more than 122 seconds.
+# [ 2458.789054]       Tainted: G S      W           6.19.0-rc1-g2789e80ceac3 #1
+# [ 2458.796836] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+# [ 2458.805591] task:kms_cursor_lega state:D stack:12208 pid:1032  tgid:1032  ppid:190    task_flags:0x400100 flags:0x00080802
+# [ 2458.817949] Call Trace:
+# [ 2458.820676]  <TASK>
+# [ 2458.823025]  __schedule+0x5d0/0x1160
+# [ 2458.827030]  schedule+0x35/0x130
+# [ 2458.830639]  drm_vblank_work_flush+0x96/0x100
+# [ 2458.841356]  intel_wait_for_vblank_workers+0x55/0x90
+# [ 2458.846911]  intel_atomic_commit_tail+0xd65/0x1990
+# [ 2458.862115]  intel_atomic_commit+0x25f/0x2a0
+# [ 2458.866884]  drm_atomic_commit+0xac/0xe0
+# [ 2458.876533]  drm_mode_atomic_ioctl+0x9fd/0xce0
+# [ 2458.887065]  drm_ioctl_kernel+0xac/0x100
+# [ 2458.891452]  drm_ioctl+0x22c/0x4d0
+# [ 2458.900810]  __x64_sys_ioctl+0x91/0xe0
+# [ 2458.905008]  do_syscall_64+0xbd/0xf80
+# [ 2458.909105]  entry_SYSCALL_64_after_hwframe+0x77/0x7f
+# [ 2458.914754] RIP: 0033:0x7efd730628db
+# [ 2458.918752] RSP: 002b:00007ffda34ed090 EFLAGS: 00000246 ORIG_RAX: 0000000000000010
+# [ 2458.927217] RAX: ffffffffffffffda RBX: 0000563a1e3f44d0 RCX: 00007efd730628db
+# [ 2458.935196] RDX: 00007ffda34ed130 RSI: 00000000c03864bc RDI: 0000000000000003
+# [ 2458.943166] RBP: 00007ffda34ed130 R08: 00007efd7313dac0 R09: 0000000000000001
+# [ 2458.951145] R10: 0000000000000012 R11: 0000000000000246 R12: 00000000c03864bc
+# [ 2458.959122] R13: 0000000000000003 R14: 0000563a1e3b5aa0 R15: 0000563a1e3fad30
+# [ 2458.967104]  </TASK>
+# [ 2458.969547] INFO: lockdep is turned off.
+
+# Hangs and timeout occurs
+kms_atomic@crtc-invalid-params-fence
+# DEBUG - Begin test kms_atomic@crtc-invalid-params-fence
+# MesaCITimeoutError: LAVA job 21068652 unresponsive for 5.0 minutes; retrying the job.

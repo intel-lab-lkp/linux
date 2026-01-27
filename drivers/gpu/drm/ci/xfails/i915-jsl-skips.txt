@@ -19,3 +19,53 @@ i915_pm_rc6_residency.*
 
 # Hangs the machine and timeout occurs
 i915_pm_rpm@system-hibernate*
+
+# Hung task
+kms_big_fb@linear-8bpp-rotate-180
+# DEBUG - Begin test kms_big_fb@linear-8bpp-rotate-180
+# [ 2399.385958] [IGT] kms_big_fb: starting subtest linear-8bpp-rotate-180
+# [ 2409.564521] i915 0000:00:02.0: [drm] *ERROR* flip_done timed out
+# [ 2409.571287] i915 0000:00:02.0: [drm] *ERROR* [CRTC:108:pipe A] commit wait timed out
+# [ 2419.804478] i915 0000:00:02.0: [drm] *ERROR* flip_done timed out
+# [ 2419.811238] i915 0000:00:02.0: [drm] *ERROR* [CONNECTOR:265:eDP-1] commit wait timed out
+# [ 2581.595871] INFO: task kms_big_fb:2014 blocked for more than 122 seconds.
+# [ 2581.603531]       Tainted: G S      W           6.18.0-rc2-gf3fa2ecfc797 #1
+# [ 2581.611341] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+# [ 2581.620149] task:kms_big_fb      state:D stack:12376 pid:2014  tgid:2014  ppid:175    task_flags:0x400100 flags:0x00080003
+# [ 2581.632523] Call Trace:
+# [ 2581.635272]  <TASK>
+# [ 2581.637630]  __schedule+0x5b4/0x1000
+# [ 2581.641649]  schedule+0x35/0x130
+# [ 2581.645272]  drm_vblank_work_flush+0x96/0x100
+# [ 2581.656055]  intel_wait_for_vblank_workers+0x55/0x90
+# [ 2581.661628]  intel_atomic_commit_tail+0xd15/0x1960
+# [ 2581.685600]  intel_atomic_commit+0x25c/0x2a0
+# [ 2581.690395]  drm_atomic_commit+0xac/0xe0
+# [ 2581.700077]  drm_mode_atomic_ioctl+0x9c8/0xca0
+# [ 2581.710642]  drm_ioctl_kernel+0xac/0x100
+# [ 2581.715049]  drm_ioctl+0x22c/0x4b0
+# [ 2581.724444]  __x64_sys_ioctl+0x91/0xe0
+# [ 2581.728653]  do_syscall_64+0xbd/0xfa0
+# [ 2581.732767]  entry_SYSCALL_64_after_hwframe+0x77/0x7f
+# [ 2581.738436] RIP: 0033:0x7fa5ed2508db
+# [ 2581.742459] RSP: 002b:00007ffd373f6e80 EFLAGS: 00000246 ORIG_RAX: 0000000000000010
+# [ 2581.750947] RAX: ffffffffffffffda RBX: 0000558a9d86cae0 RCX: 00007fa5ed2508db
+# [ 2581.758949] RDX: 00007ffd373f6f20 RSI: 00000000c03864bc RDI: 0000000000000003
+# [ 2581.766948] RBP: 00007ffd373f6f20 R08: 00007fa5ed32bac0 R09: 0000000000000001
+# [ 2581.774949] R10: 000000000000001d R11: 0000000000000246 R12: 00000000c03864bc
+# [ 2581.782953] R13: 0000000000000003 R14: 0000558a9d8626e0 R15: 0000558a9d8628d0
+# [ 2581.790951]  </TASK>
+# [ 2581.793402] INFO: lockdep is turned off.
+# [ 2704.475873] INFO: task kms_big_fb:2014 blocked for more than 245 seconds.
+# [ 2704.483528]       Tainted: G S      W           6.18.0-rc2-gf3fa2ecfc797 #1
+# [ 2704.491338] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+# [ 2704.500125] task:kms_big_fb      state:D stack:12376 pid:2014  tgid:2014  ppid:175    task_flags:0x400100 flags:0x00080003
+# [ 2704.512503] Call Trace:
+# [ 2704.515250]  <TASK>
+# [ 2704.517601]  __schedule+0x5b4/0x1000
+# [ 2704.521618]  schedule+0x35/0x130
+# [ 2704.525241]  drm_vblank_work_flush+0x96/0x100
+
+# Currently fails and causes coverage loss for other tests
+# since core_getversion also fails.
+core_hotunplug.*

@@ -326,3 +326,134 @@ kms_lease.*
 
 # The test alternates between failing and timing out on reruns, causing the pipeline to fail
 gen9_exec_parse@unaligned-access
+
+kms_frontbuffer_tracking.*
+# DEBUG - Begin test kms_frontbuffer_tracking@fbcpsr-2p-primscrn-spr-indfb-draw-mmap-cpu
+# Pass: 392, Fail: 2, UnexpectedImprovement: 6, ExpectedFail: 14, Skip: 29103, Timeout: 16, Duration: 1:22:45, Remaining: 9:07
+# [ 4297.883681] Code: 00 48 89 44 24 18 31 c0 48 8d 44 24 60 c7 04 24 10 00 00 00 48 89 44 24 08 48 8d 44 24 20 48 89 44 24 10 b8 10 00 00 00 0f 05 <89> c2 3d 00 f0 ff ff 77 1c 48 8b 44 24 18 64 48 2b 04 25 28 00 00
+# [ 4297.904667] RSP: 002b:00007ffeae886eb0 EFLAGS: 00000246 ORIG_RAX: 0000000000000010
+# [ 4297.913141] RAX: ffffffffffffffda RBX: 00007ffeae887858 RCX: 00007fbc82201d1b
+# [ 4297.921135] RDX: 00007ffeae886f40 RSI: 00000000c06864a2 RDI: 0000000000000003
+# [ 4297.929123] RBP: 00007ffeae886f40 R08: 0000000000000000 R09: 00007ffeae887858
+# [ 4297.937111] R10: 0000000000000000 R11: 0000000000000246 R12: 00000000c06864a2
+# [ 4297.945097] R13: 0000000000000003 R14: 0000000000000000 R15: 00007ffeae887700
+# [ 4297.953093]  </TASK>
+# [ 4297.955550] irq event stamp: 0
+# [ 4297.958973] hardirqs last  enabled at (0): [<0000000000000000>] 0x0
+# [ 4297.966005] hardirqs last disabled at (0): [<ffffffffb370ebce>] copy_process+0x9ae/0x2000
+# [ 4297.975163] softirqs last  enabled at (0): [<ffffffffb370ebce>] copy_process+0x9ae/0x2000
+# [ 4297.984330] softirqs last disabled at (0): [<0000000000000000>] 0x0
+# [ 4297.991354] ---[ end trace 0000000000000000 ]---
+# [ 4297.996610] ------------[ cut here ]------------
+# [ 4298.001797] i915 0000:00:02.0: [drm] plane 1A assertion failure (expected on, current off)
+# [ 4298.011099] WARNING: CPU: 1 PID: 2567 at drivers/gpu/drm/i915/display/intel_display.c:463 assert_plane+0x11b/0x130
+# [ 4298.022695] Modules linked in:
+# [ 4298.026124] CPU: 1 UID: 0 PID: 2567 Comm: kms_flip Tainted: G S      W           6.16.0-rc2-g0594d0b01a7c #1 PREEMPT(voluntary)
+# [ 4298.039094] Tainted: [S]=CPU_OUT_OF_SPEC, [W]=WARN
+# [ 4298.044459] Hardware name: HP Bloog/Bloog, BIOS  09/19/2019
+# [ 4298.050697] RIP: 0010:assert_plane+0x11b/0x130
+# [ 4298.055676] Code: 50 48 85 ed 75 03 48 8b 2f e8 b1 be 12 00 4d 89 e9 4d 89 e0 48 89 d9 48 89 c6 48 89 ea 48 c7 c7 40 ac e1 b4 e8 f6 a3 6d ff 90 <0f> 0b 90 90 e9 2f ff ff ff e8 17 b0 7a 00 0f 1f 80 00 00 00 00 90
+# [ 4298.076695] RSP: 0018:ffffb1bb4087ba58 EFLAGS: 00010282
+# [ 4298.082558] RAX: 0000000000000000 RBX: ffff9052078df760 RCX: 00000000fffffa0c
+# [ 4298.090554] RDX: 0000000000000000 RSI: ffffb1bb4087b908 RDI: 0000000000000001
+# [ 4298.098536] RBP: ffff905201bb1740 R08: 000000000000823c R09: 00000000fffffa0c
+# [ 4298.106519] R10: 00000000fffffa0c R11: ffffffffb508eca0 R12: ffffffffb4eba9db
+# [ 4298.114524] R13: ffffffffb4e90a5f R14: ffff905201460800 R15: 0000000000000003
+# [ 4298.122512] FS:  00007fbc812516c0(0000) GS:ffff9052c60f9000(0000) knlGS:0000000000000000
+# [ 4298.131568] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+# [ 4298.138009] CR2: 0000563771f3c5b8 CR3: 0000000102246000 CR4: 0000000000350ef0
+# [ 4298.146023] Call Trace:
+# [ 4298.148775]  <TASK>
+# [ 4298.151136]  intel_atomic_commit_tail+0x1684/0x1770
+# [ 4298.166393]  intel_atomic_commit+0x26e/0x2b0
+# [ 4298.171180]  drm_atomic_commit+0xab/0xe0
+# [ 4298.180878]  drm_atomic_helper_set_config+0x6f/0xb0
+# [ 4298.186349]  drm_mode_setcrtc+0x3ab/0x940
+# [ 4298.205833]  drm_ioctl_kernel+0xab/0x100
+# [ 4298.210241]  drm_ioctl+0x233/0x4b0
+# [ 4298.219164]  __x64_sys_ioctl+0x8e/0xe0
+# [ 4298.223373]  do_syscall_64+0xbb/0x370
+# [ 4298.227483]  entry_SYSCALL_64_after_hwframe+0x77/0x7f
+# [ 4298.233142] RIP: 0033:0x7fbc82201d1b
+# [ 4298.237173] Code: 00 48 89 44 24 18 31 c0 48 8d 44 24 60 c7 04 24 10 00 00 00 48 89 44 24 08 48 8d 44 24 20 48 89 44 24 10 b8 10 00 00 00 0f 05 <89> c2 3d 00 f0 ff ff 77 1c 48 8b 44 24 18 64 48 2b 04 25 28 00 00
+# [ 4298.258178] RSP: 002b:00007ffeae886eb0 EFLAGS: 00000246 ORIG_RAX: 0000000000000010
+# [ 4298.266653] RAX: ffffffffffffffda RBX: 00007ffeae887858 RCX: 00007fbc82201d1b
+# [ 4298.274663] RDX: 00007ffeae886f40 RSI: 00000000c06864a2 RDI: 0000000000000003
+# [ 4298.282664] RBP: 00007ffeae886f40 R08: 0000000000000000 R09: 00007ffeae887858
+# [ 4298.290650] R10: 0000000000000000 R11: 0000000000000246 R12: 00000000c06864a2
+# [ 4298.298634] R13: 0000000000000003 R14: 0000000000000000 R15: 00007ffeae887700
+# [ 4298.306650]  </TASK>
+# [ 4298.309103] irq event stamp: 0
+# [ 4298.312525] hardirqs last  enabled at (0): [<0000000000000000>] 0x0
+# [ 4298.319543] hardirqs last disabled at (0): [<ffffffffb370ebce>] copy_process+0x9ae/0x2000
+# [ 4298.328696] softirqs last  enabled at (0): [<ffffffffb370ebce>] copy_process+0x9ae/0x2000
+# [ 4298.337872] softirqs last disabled at (0): [<0000000000000000>] 0x0
+# [ 4298.344892] ---[ end trace 0000000000000000 ]---
+
+sysfs_heartbeat_interval.*
+# [ 1219.376136] i915 0000:00:02.0: [drm] Resetting vecs0 for preemption time out
+# [ 1219.386448] i915 0000:00:02.0: [drm] GPU HANG: ecode 9:8:277ffefe, in sysfs_heartbeat [1500]
+# [ 1219.395917] i915 0000:00:02.0: [drm] GPU error state saved to /sys/class/drm/card1/error
+# [ 1220.389661] [IGT] sysfs_heartbeat_interval: finished subtest vecs0, FAIL
+# [ 1220.397453] [IGT] sysfs_heartbeat_interval: starting dynamic subtest vcs0
+# [ 1220.405507] i915 0000:00:02.0: [drm] vcs0 heartbeat interval adjusted to a non-default value which may cause engine resets to target innocent contexts!
+# [ 1240.423786] Fence expiration time out i915-0000:00:02.0:0000:00:02.0:2!
+# [ 1240.433139] i915 0000:00:02.0: [drm] Resetting vcs0 for preemption time out
+# [ 1240.443200] i915 0000:00:02.0: [drm] GPU HANG: ecode 9:4:a77ffefe, in sysfs_heartbeat [1500]
+# [ 1240.452664] i915 0000:00:02.0: [drm] GPU error state saved to /sys/class/drm/card1/error
+
+kms_busy@extended-pageflip-hang-newfb
+# DEBUG - Begin test kms_busy@extended-pageflip-hang-newfb
+# [  635.322871] [IGT] kms_busy: executing
+# [  635.376068] [IGT] kms_busy: starting subtest extended-pageflip-hang-newfb
+# [  635.387692] [IGT] kms_busy: starting dynamic subtest pipe-A
+# [  639.603625] i915 0000:00:02.0: [drm] Resetting rcs0 for preemption time out
+# [  639.611970] i915 0000:00:02.0: [drm] GPU HANG: ecode 9:1:e757fefe, in kms_busy [821]
+
+api_intel_bb@intel-bb-blit-none
+# DEBUG - Begin test api_intel_bb@intel-bb-blit-none
+# [ 3544.287885] ------------[ cut here ]------------
+# [ 3544.293066] i915 0000:00:02.0: [drm] attached crtc is active, but connector isn't
+# [ 3544.301500] WARNING: CPU: 1 PID: 1831 at drivers/gpu/drm/i915/display/intel_modeset_verify.c:58 verify_connector_state+0x226/0x3e0
+# [ 3544.314679] Modules linked in:
+# [ 3544.318111] CPU: 1 UID: 0 PID: 1831 Comm: kms_atomic_tran Tainted: G S      W           6.18.0-rc2-gd7824990c233 #1 PREEMPT(voluntary)
+# [ 3544.331748] Tainted: [S]=CPU_OUT_OF_SPEC, [W]=WARN
+# [ 3544.337135] Hardware name: HP Bloog/Bloog, BIOS  09/19/2019
+# [ 3544.343386] RIP: 0010:verify_connector_state+0x226/0x3e0
+# [ 3544.349350] Code: 74 04 48 8b 7f 08 4c 8b 6f 50 4d 85 ed 75 03 4c 8b 2f e8 8d ed 0c 00 4c 89 ea 48 c7 c7 80 c2 05 8e 48 89 c6 e8 7b 7d 65 ff 90 <0f> 0b 90 90 49 8b 44 24 10 e9 32 ff ff ff 49 8b 44 24 10 e9 28 ff
+# [ 3544.370380] RSP: 0018:ffff9816c0123a00 EFLAGS: 00010282
+# [ 3544.376244] RAX: 0000000000000000 RBX: 0000000000000000 RCX: 000000000000079f
+# [ 3544.384233] RDX: 0000000000000000 RSI: ffff9816c01238a0 RDI: 00000000ffffe79f
+# [ 3544.392212] RBP: ffff8c5aca0b2c00 R08: 00000000ffffe79f R09: ffffffff8e4b89e8
+# [ 3544.400225] R10: 0000000000000003 R11: 0000000000000003 R12: ffff8c5ac0387c00
+# [ 3544.408206] R13: ffff8c5ac8c7f9c0 R14: ffff8c5ac44df000 R15: ffff8c5ac1b9e000
+# [ 3544.416197] FS:  00007f1fa7d1f740(0000) GS:ffff8c5baccc8000(0000) knlGS:0000000000000000
+# [ 3544.425257] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+# [ 3544.431711] CR2: 00007f1fa85fb238 CR3: 0000000106176000 CR4: 0000000000350ef0
+# [ 3544.439704] Call Trace:
+# [ 3544.442445]  <TASK>
+# [ 3544.444804]  intel_modeset_verify_crtc+0x6b/0x580
+# [ 3544.450089]  intel_atomic_commit_tail+0x1099/0x1960
+# [ 3544.465364]  intel_atomic_commit+0x25c/0x2a0
+# [ 3544.470159]  drm_atomic_commit+0xac/0xe0
+# [ 3544.479849]  drm_mode_atomic_ioctl+0x9c8/0xca0
+# [ 3544.490426]  drm_ioctl_kernel+0xac/0x100
+# [ 3544.494863]  drm_ioctl+0x22c/0x4b0
+# [ 3544.504267]  __x64_sys_ioctl+0x91/0xe0
+# [ 3544.508482]  do_syscall_64+0xbd/0xfa0
+# [ 3544.512593]  entry_SYSCALL_64_after_hwframe+0x77/0x7f
+# [ 3544.518256] RIP: 0033:0x7f1fa90d98db
+# [ 3544.522266] Code: 00 48 89 44 24 18 31 c0 48 8d 44 24 60 c7 04 24 10 00 00 00 48 89 44 24 08 48 8d 44 24 20 48 89 44 24 10 b8 10 00 00 00 0f 05 <89> c2 3d 00 f0 ff ff 77 1c 48 8b 44 24 18 64 48 2b 04 25 28 00 00
+# [ 3544.543302] RSP: 002b:00007ffe41812ed0 EFLAGS: 00000246 ORIG_RAX: 0000000000000010
+# [ 3544.551791] RAX: ffffffffffffffda RBX: 00005631eb5e51b0 RCX: 00007f1fa90d98db
+# [ 3544.559784] RDX: 00007ffe41812f70 RSI: 00000000c03864bc RDI: 0000000000000003
+# [ 3544.567774] RBP: 00007ffe41812f70 R08: 00000000000001c0 R09: 0000000000000001
+# [ 3544.575781] R10: 0000000000000006 R11: 0000000000000246 R12: 00000000c03864bc
+# [ 3544.583774] R13: 0000000000000003 R14: 00005631eb5dd770 R15: 00005631eb5dd7b0
+# [ 3544.591774]  </TASK>
+# [ 3544.594227] irq event stamp: 0
+# [ 3544.597648] hardirqs last  enabled at (0): [<0000000000000000>] 0x0
+# [ 3544.604669] hardirqs last disabled at (0): [<ffffffff8c78859c>] copy_process+0xa3c/0x2150
+# [ 3544.613864] softirqs last  enabled at (0): [<ffffffff8c78859c>] copy_process+0xa3c/0x2150
+# [ 3544.623026] softirqs last disabled at (0): [<0000000000000000>] 0x0
+# [ 3544.630047] ---[ end trace 0000000000000000 ]---

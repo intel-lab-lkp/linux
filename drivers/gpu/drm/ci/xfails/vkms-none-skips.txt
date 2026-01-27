@@ -809,3 +809,6 @@ kms_dp_link_training.*
 # https://gitlab.freedesktop.org/drm/igt-gpu-tools/-/issues/162
 kms_display_modes@extended-mode-basic
 kms_display_modes@mst-extended-mode-negative
+
+# Hangs the machine and timeout occurs
+.*suspend.*

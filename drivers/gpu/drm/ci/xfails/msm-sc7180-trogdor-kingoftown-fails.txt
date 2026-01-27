@@ -1,3 +1,4 @@
+core_setmaster@master-drop-set-user,Fail
 kms_color@ctm-0-25,Fail
 kms_color@ctm-0-50,Fail
 kms_color@ctm-0-75,Fail

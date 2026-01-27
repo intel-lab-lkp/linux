@@ -1,4 +1,5 @@
 kms_3d,Fail
+kms_3d@basic,Fail
 kms_cursor_legacy@forked-bo,Fail
 kms_cursor_legacy@forked-move,Fail
 kms_cursor_legacy@single-bo,Fail
