@@ -12,6 +12,8 @@
 #define SM750LE_REVISION_ID ((unsigned char)0xfe)
 #endif
 
+#define SM750_MAX_LOOP 0x10000000
+
 enum sm750_pnltype {
 	sm750_24TFT = 0,	/* 24bit tft */
 	sm750_dualTFT = 2,	/* dual 18 bit tft */
