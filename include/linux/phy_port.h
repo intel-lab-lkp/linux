@@ -51,6 +51,8 @@ struct phy_port_ops {
  * @is_mii: Indicates if this port is MII (Media Independent Interface),
  *          or MDI (Media Dependent Interface).
  * @is_sfp: Indicates if this port drives an SFP cage.
+ * @occupied: Indicates if this port feeds into an another component that has
+ *	      a front-facing interface.
  */
 struct phy_port {
 	u32 id;
@@ -71,6 +73,7 @@ struct phy_port {
 	unsigned int active:1;
 	unsigned int is_mii:1;
 	unsigned int is_sfp:1;
+	unsigned int occupied:1;
 };
 
 struct phy_port *phy_port_alloc(void);
