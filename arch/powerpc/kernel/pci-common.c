@@ -1446,10 +1446,11 @@ void __init pcibios_resource_survey(void)
  * rest of the code later, for now, keep it as-is as our main
  * resource allocation function doesn't deal with sub-trees yet.
  */
-void pcibios_claim_one_bus(struct pci_bus *bus)
+int pcibios_claim_one_bus(struct pci_bus *bus)
 {
 	struct pci_dev *dev;
 	struct pci_bus *child_bus;
+	int ret = 0;
 
 	list_for_each_entry(dev, &bus->devices, bus_list) {
 		struct resource *r;
@@ -1462,15 +1463,20 @@ void pcibios_claim_one_bus(struct pci_bus *bus)
 			pr_debug("PCI: Claiming %s: Resource %d: %pR\n",
 				 pci_name(dev), i, r);
 
-			if (pci_claim_resource(dev, i) == 0)
+			ret = pci_claim_resource(dev, i);
+			if (ret == 0)
 				continue;
+			else
+				return ret;
 
 			pci_claim_bridge_resource(dev, i);
 		}
 	}
 
 	list_for_each_entry(child_bus, &bus->children, node)
-		pcibios_claim_one_bus(child_bus);
+		ret = pcibios_claim_one_bus(child_bus);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(pcibios_claim_one_bus);
 
@@ -1481,14 +1487,19 @@ EXPORT_SYMBOL_GPL(pcibios_claim_one_bus);
  * added to a bus, this include calling it for a PHB that is just
  * being added
  */
-void pcibios_finish_adding_to_bus(struct pci_bus *bus)
+int pcibios_finish_adding_to_bus(struct pci_bus *bus)
 {
+	int ret = 0;
+
 	pr_debug("PCI: Finishing adding to hotplug bus %04x:%02x\n",
 		 pci_domain_nr(bus), bus->number);
 
 	/* Allocate bus and devices resources */
 	pcibios_allocate_bus_resources(bus);
-	pcibios_claim_one_bus(bus);
+	ret = pcibios_claim_one_bus(bus);
+	if (ret)
+		return ret;
+
 	if (!pci_has_flag(PCI_PROBE_ONLY)) {
 		if (bus->self)
 			pci_assign_unassigned_bridge_resources(bus->self);
@@ -1498,6 +1509,8 @@ void pcibios_finish_adding_to_bus(struct pci_bus *bus)
 
 	/* Add new devices to global lists.  Register in proc, sysfs. */
 	pci_bus_add_devices(bus);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(pcibios_finish_adding_to_bus);
 

@@ -86,9 +86,9 @@ extern void pci_adjust_legacy_attr(struct pci_bus *bus,
 				   enum pci_mmap_state mmap_type);
 #define HAVE_PCI_LEGACY	1
 
-extern void pcibios_claim_one_bus(struct pci_bus *b);
+extern int pcibios_claim_one_bus(struct pci_bus *b);
 
-extern void pcibios_finish_adding_to_bus(struct pci_bus *bus);
+extern int pcibios_finish_adding_to_bus(struct pci_bus *bus);
 
 extern void pcibios_resource_survey(void);
 

@@ -58,7 +58,8 @@ struct pci_controller *init_phb_dynamic(struct device_node *dn)
 		pseries_eeh_init_edev_recursive(PCI_DN(dn));
 
 	pcibios_scan_phb(phb);
-	pcibios_finish_adding_to_bus(phb->bus);
+	if (pcibios_finish_adding_to_bus(phb->bus))
+		return NULL;
 
 	return phb;
 }
