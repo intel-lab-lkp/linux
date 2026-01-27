@@ -926,7 +926,7 @@
 		cdns,tshsl-ns = <60>;
 		cdns,tsd2d-ns = <60>;
 		cdns,tchsh-ns = <60>;
-		cdns,tslch-ns = <60>;
+		cdns,tslch-ns = <120>;
 		cdns,read-delay = <3>;
 		vcc-supply = <&vcc_1p8_s0>;
 		bootph-all;
