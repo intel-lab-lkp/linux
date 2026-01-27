@@ -131,6 +131,8 @@ properties:
     $ref: regulator.yaml#
     unevaluatedProperties: false
     description: BOB regulator node.
+    properties:
+      regulator-off-on-delay-us: true
     dependencies:
       regulator-allow-set-load: [ regulator-allowed-modes ]
 
@@ -140,6 +142,8 @@ patternProperties:
     $ref: regulator.yaml#
     unevaluatedProperties: false
     description: smps/ldo regulator nodes(s).
+    properties:
+      regulator-off-on-delay-us: true
     dependencies:
       regulator-allow-set-load: [ regulator-allowed-modes ]
 
