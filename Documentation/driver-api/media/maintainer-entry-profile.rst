@@ -176,6 +176,17 @@ the subsystem's maintainers. The nominated maintainer must have earned a trust
 relationship with all Media Subsystem Maintainers, as, by being granted
 Patchwork access, you will take over part of their maintenance tasks.
 
+Media Committers
+----------------
+
+Experienced and trusted Media Maintainers may be granted commit rights
+which allow them to directly push patches to the media development tree instead
+of posting a Pull Request for the Media Subsystem Maintainers. This helps
+offloading some of the work of the Media Subsystem Maintainers.
+
+More details about Media Committers' roles and responsibilities can be
+found here: :ref:`Media Committers`.
+
 Media development sites
 -----------------------
 
@@ -356,8 +367,18 @@ at some moment. See: :ref:`kernel_org_trust_repository`.
 
 With the Pull Request workflow, Pull Requests shall use PGP-signed tags.
 
+With the committers' workflow, this is ensured at the time merge request
+rights will be granted to the gitlab instance used by the media-committers.git
+tree, after receiving the e-mail documented in
+:ref:`media-committer-agreement`.
+
 For more details about PGP signing, please read
 Documentation/process/maintainer-pgp-guide.rst.
+
+Maintaining media maintainer status
+-----------------------------------
+
+See :ref:`Maintain Media Status`.
 
 List of Media Maintainers
 -------------------------
