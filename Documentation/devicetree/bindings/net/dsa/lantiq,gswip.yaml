@@ -105,6 +105,7 @@ patternProperties:
     patternProperties:
       "^(ethernet-)?port@[0-6]$":
         $ref: dsa-port.yaml#
+        $ref: /schemas/phy/phy-common-props.yaml#
         unevaluatedProperties: false
 
         properties:
