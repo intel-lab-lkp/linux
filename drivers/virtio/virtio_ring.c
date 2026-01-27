@@ -829,7 +829,7 @@ static void *virtqueue_get_buf_ctx_split(struct virtqueue *_vq,
 		return NULL;
 	}
 
-	if (!more_used_split(vq)) {
+	if (data_race(!more_used_split(vq))) {
 		pr_debug("No more buffers in queue\n");
 		END_USE(vq);
 		return NULL;
