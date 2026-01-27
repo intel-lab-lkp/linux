@@ -116,6 +116,12 @@ int intel_casf_compute_config(struct intel_crtc_state *crtc_state)
 		return 0;
 	}
 
+	/* CASF with joiner not supported in hardware */
+	if (crtc_state->joiner_pipes) {
+		drm_dbg_kms(display->drm, "CASF not supported with joiner\n");
+		return -EINVAL;
+	}
+
 	crtc_state->hw.casf_params.casf_enable = true;
 
 	/*
