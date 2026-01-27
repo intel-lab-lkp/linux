@@ -47,6 +47,7 @@ struct lt9611 {
 	struct mipi_dsi_device *dsi1;
 
 	bool ac_mode;
+	bool dsi_port_b;
 
 	struct gpio_desc *reset_gpio;
 	struct gpio_desc *enable_gpio;
@@ -116,12 +117,23 @@ static int lt9611_mipi_input_digital(struct lt9611 *lt9611,
 		{ 0x830a, 0x00 },
 		{ 0x824f, 0x80 },
 		{ 0x8250, 0x10 },
+		{ 0x8303, 0x00 },
 		{ 0x8302, 0x0a },
 		{ 0x8306, 0x0a },
 	};
 
 	if (lt9611->dsi1_node)
 		reg_cfg[1].def = 0x03;
+
+	/*
+	 * Select DSI input port:
+	 * - 0x8303 bit 6: port swap (0=PortA, 1=PortB)
+	 * - 0x8250 bit 3:2: byte_clk source (00=PortA, 01=PortB)
+	 */
+	if (lt9611->dsi_port_b) {
+		reg_cfg[3].def = 0x14;
+		reg_cfg[4].def = 0x40;
+	}
 
 	return regmap_multi_reg_write(lt9611->regmap, reg_cfg, ARRAY_SIZE(reg_cfg));
 }
@@ -1023,6 +1035,8 @@ static int lt9611_parse_dt(struct device *dev,
 	lt9611->dsi1_node = of_graph_get_remote_node(dev->of_node, 1, -1);
 
 	lt9611->ac_mode = of_property_read_bool(dev->of_node, "lt,ac-mode");
+
+	lt9611->dsi_port_b = of_property_read_bool(dev->of_node, "lontium,dsi-port-b");
 
 	return drm_of_find_panel_or_bridge(dev->of_node, 2, -1, NULL, &lt9611->next_bridge);
 }
