@@ -523,19 +523,32 @@ int hw_sm750le_de_wait(void)
 
 int hw_sm750_de_wait(void)
 {
-	int i = 0x10000000;
+	/* Wait for 1 second (HZ) */
+	unsigned long timeout = jiffies + HZ;
 	unsigned int mask = SYSTEM_CTRL_DE_STATUS_BUSY |
 			    SYSTEM_CTRL_DE_FIFO_EMPTY |
 			    SYSTEM_CTRL_DE_MEM_FIFO_EMPTY;
+	unsigned int val;
 
-	while (i--) {
-		unsigned int val = peek32(SYSTEM_CTRL);
+	/* Run while Current Time is BEFORE the Deadline */
+	while (time_before(jiffies, timeout)) {
+		val = peek32(SYSTEM_CTRL);
 
+		/* If Not Busy (0) AND Buffers Empty (1), we are good */
 		if ((val & mask) ==
 		    (SYSTEM_CTRL_DE_FIFO_EMPTY | SYSTEM_CTRL_DE_MEM_FIFO_EMPTY))
 			return 0;
+
+		/* Polite pause to save power */
+		cpu_relax();
 	}
-	/* timeout error */
+
+	/* Final check in case we succeeded at the last millisecond */
+	val = peek32(SYSTEM_CTRL);
+	if ((val & mask) ==
+	    (SYSTEM_CTRL_DE_FIFO_EMPTY | SYSTEM_CTRL_DE_MEM_FIFO_EMPTY))
+		return 0;
+
 	return -1;
 }
 
