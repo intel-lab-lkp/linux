@@ -547,10 +547,8 @@ int amdgpu_dm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name)
 	struct drm_crtc_commit *commit;
 	struct dm_crtc_state *crtc_state;
 	struct drm_device *drm_dev = crtc->dev;
-#if defined(CONFIG_DRM_AMD_SECURE_DISPLAY)
 	struct amdgpu_device *adev = drm_to_adev(drm_dev);
 	struct amdgpu_display_manager *dm = &adev->dm;
-#endif
 	struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
 	struct drm_dp_aux *aux = NULL;
 	bool enable = false;
@@ -656,7 +654,11 @@ int amdgpu_dm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name)
 	 */
 	enabled = amdgpu_dm_is_valid_crc_source(cur_crc_src);
 	if (!enabled && enable) {
-		ret = drm_crtc_vblank_get(crtc);
+		scoped_guard(mutex, &dm->dc_lock) {
+			dc_exit_ips_for_hw_access(dm->dc);
+			ret = drm_crtc_vblank_get(crtc);
+		}
+
 		if (ret)
 			goto cleanup;
 	}
