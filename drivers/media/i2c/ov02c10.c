@@ -682,6 +682,12 @@ static int ov02c10_power_on(struct device *dev)
 	struct ov02c10 *ov02c10 = to_ov02c10(sd);
 	int ret;
 
+	/* Assert reset for 5ms to ensure sensor is in reset state */
+	if (ov02c10->reset) {
+		gpiod_set_value_cansleep(ov02c10->reset, 1);
+		usleep_range(5000, 6000);
+	}
+
 	ret = clk_prepare_enable(ov02c10->img_clk);
 	if (ret < 0) {
 		dev_err(dev, "failed to enable imaging clock: %d", ret);
@@ -697,10 +703,8 @@ static int ov02c10_power_on(struct device *dev)
 	}
 
 	if (ov02c10->reset) {
-		/* Assert reset for at least 2ms on back to back off-on */
-		usleep_range(2000, 2200);
 		gpiod_set_value_cansleep(ov02c10->reset, 0);
-		usleep_range(5000, 5100);
+		usleep_range(5000, 5500);
 	}
 
 	return 0;
