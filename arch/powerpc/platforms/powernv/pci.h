@@ -300,7 +300,7 @@ extern void pe_level_printk(const struct pnv_ioda_pe *pe, const char *level,
 
 extern int pnv_tce_build(struct iommu_table *tbl, long index, long npages,
 		unsigned long uaddr, enum dma_data_direction direction,
-		unsigned long attrs);
+		unsigned long attrs, bool is_phys);
 extern void pnv_tce_free(struct iommu_table *tbl, long index, long npages);
 extern int pnv_tce_xchg(struct iommu_table *tbl, long index,
 		unsigned long *hpa, enum dma_data_direction *direction);

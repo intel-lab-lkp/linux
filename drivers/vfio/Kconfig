@@ -4,7 +4,7 @@ menuconfig VFIO
 	select IOMMU_API
 	depends on IOMMUFD || !IOMMUFD
 	select INTERVAL_TREE
-	select VFIO_GROUP if SPAPR_TCE_IOMMU || IOMMUFD=n
+	select VFIO_GROUP if IOMMUFD=n
 	select VFIO_DEVICE_CDEV if !VFIO_GROUP
 	select VFIO_CONTAINER if IOMMUFD=n
 	help
@@ -16,7 +16,7 @@ menuconfig VFIO
 if VFIO
 config VFIO_DEVICE_CDEV
 	bool "Support for the VFIO cdev /dev/vfio/devices/vfioX"
-	depends on IOMMUFD && !SPAPR_TCE_IOMMU
+	depends on IOMMUFD
 	default !VFIO_GROUP
 	help
 	  The VFIO device cdev is another way for userspace to get device

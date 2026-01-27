@@ -1241,10 +1241,10 @@ static void pnv_pci_ioda2_tce_invalidate(struct iommu_table *tbl,
 static int pnv_ioda2_tce_build(struct iommu_table *tbl, long index,
 		long npages, unsigned long uaddr,
 		enum dma_data_direction direction,
-		unsigned long attrs)
+		unsigned long attrs, bool is_phys)
 {
 	int ret = pnv_tce_build(tbl, index, npages, uaddr, direction,
-			attrs);
+			attrs, is_phys);
 
 	if (!ret)
 		pnv_pci_ioda2_tce_invalidate(tbl, index, npages);

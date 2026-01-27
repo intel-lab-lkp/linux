@@ -123,10 +123,10 @@ static __be64 *pnv_tce(struct iommu_table *tbl, bool user, long idx, bool alloc)
 
 int pnv_tce_build(struct iommu_table *tbl, long index, long npages,
 		unsigned long uaddr, enum dma_data_direction direction,
-		unsigned long attrs)
+		unsigned long attrs, bool is_phys)
 {
 	u64 proto_tce = iommu_direction_to_tce_perm(direction);
-	u64 rpn = __pa(uaddr) >> tbl->it_page_shift;
+	u64 rpn = !is_phys ? __pa(uaddr) >> tbl->it_page_shift : uaddr >> tbl->it_page_shift;
 	long i;
 
 	if (proto_tce & TCE_PCI_WRITE)

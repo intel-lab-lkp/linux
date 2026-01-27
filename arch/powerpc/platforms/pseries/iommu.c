@@ -122,7 +122,7 @@ static void iommu_pseries_free_group(struct iommu_table_group *table_group,
 static int tce_build_pSeries(struct iommu_table *tbl, long index,
 			      long npages, unsigned long uaddr,
 			      enum dma_data_direction direction,
-			      unsigned long attrs)
+			      unsigned long attrs, bool false)
 {
 	u64 proto_tce;
 	__be64 *tcep;
@@ -250,7 +250,7 @@ static DEFINE_PER_CPU(__be64 *, tce_page);
 static int tce_buildmulti_pSeriesLP(struct iommu_table *tbl, long tcenum,
 				     long npages, unsigned long uaddr,
 				     enum dma_data_direction direction,
-				     unsigned long attrs)
+				     unsigned long attrs, bool is_phys)
 {
 	u64 rc = 0;
 	u64 proto_tce;
@@ -287,7 +287,7 @@ static int tce_buildmulti_pSeriesLP(struct iommu_table *tbl, long tcenum,
 		__this_cpu_write(tce_page, tcep);
 	}
 
-	rpn = __pa(uaddr) >> tceshift;
+	rpn = !is_phys ? __pa(uaddr) >> tceshift : uaddr >> tceshift;
 	proto_tce = TCE_PCI_READ;
 	if (direction != DMA_TO_DEVICE)
 		proto_tce |= TCE_PCI_WRITE;

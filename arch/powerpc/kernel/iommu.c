@@ -365,7 +365,7 @@ static dma_addr_t iommu_alloc(struct device *dev, struct iommu_table *tbl,
 	/* Put the TCEs in the HW table */
 	build_fail = tbl->it_ops->set(tbl, entry, npages,
 				      (unsigned long)page &
-				      IOMMU_PAGE_MASK(tbl), direction, attrs);
+				      IOMMU_PAGE_MASK(tbl), direction, attrs, false);
 
 	/* tbl->it_ops->set() only returns non-zero for transient errors.
 	 * Clean up the table bitmap in this case and return
@@ -539,7 +539,7 @@ int ppc_iommu_map_sg(struct device *dev, struct iommu_table *tbl,
 		/* Insert into HW table */
 		build_fail = tbl->it_ops->set(tbl, entry, npages,
 					      vaddr & IOMMU_PAGE_MASK(tbl),
-					      direction, attrs);
+					      direction, attrs, false);
 		if(unlikely(build_fail))
 			goto failure;
 
@@ -1201,7 +1201,15 @@ spapr_tce_blocked_iommu_attach_dev(struct iommu_domain *platform_domain,
 	 * also sets the dma_api ops
 	 */
 	table_group = iommu_group_get_iommudata(grp);
+
+	if (old && old->type == IOMMU_DOMAIN_DMA) {
+		ret = table_group->ops->unset_window(table_group, 0);
+		if (ret)
+			goto exit;
+	}
+
 	ret = table_group->ops->take_ownership(table_group, dev);
+exit:
 	iommu_group_put(grp);
 
 	return ret;
@@ -1260,6 +1268,167 @@ static struct iommu_group *spapr_tce_iommu_device_group(struct device *dev)
 	return hose->controller_ops.device_group(hose, pdev);
 }
 
+struct ppc64_domain {
+	struct iommu_domain  domain;
+	struct device        *device; /* Make it a list */
+	struct iommu_table   *table;
+	spinlock_t           list_lock;
+	struct rcu_head      rcu;
+};
+
+static struct ppc64_domain *to_ppc64_domain(struct iommu_domain *dom)
+{
+	return container_of(dom, struct ppc64_domain, domain);
+}
+
+static void spapr_tce_domain_free(struct iommu_domain *domain)
+{
+	struct ppc64_domain *ppc64_domain = to_ppc64_domain(domain);
+
+	kfree(ppc64_domain);
+}
+
+static const struct iommu_ops spapr_tce_iommu_ops;
+static struct iommu_domain *spapr_tce_domain_alloc_paging(struct device *dev)
+{
+	struct iommu_group *grp = iommu_group_get(dev);
+	struct iommu_table_group *table_group;
+	struct ppc64_domain *ppc64_domain;
+	struct iommu_table *ptbl;
+	int ret = -1;
+
+	table_group = iommu_group_get_iommudata(grp);
+	ppc64_domain = kzalloc(sizeof(*ppc64_domain), GFP_KERNEL);
+	if (!ppc64_domain)
+		return NULL;
+
+	/* Just the default window hardcode for now */
+	ret = table_group->ops->create_table(table_group, 0, 0xc, 0x40000000, 1, &ptbl);
+	iommu_tce_table_get(ptbl);
+	ppc64_domain->table = ptbl; /* REVISIT: Single device for now */
+	if (!ppc64_domain->table) {
+		kfree(ppc64_domain);
+		iommu_tce_table_put(ptbl);
+		iommu_group_put(grp);
+		return NULL;
+	}
+
+	table_group->ops->set_window(table_group, 0, ptbl);
+	iommu_group_put(grp);
+
+	ppc64_domain->domain.pgsize_bitmap = SZ_4K;
+	ppc64_domain->domain.geometry.force_aperture = true;
+	ppc64_domain->domain.geometry.aperture_start = 0;
+	ppc64_domain->domain.geometry.aperture_end = 0x40000000; /*default window */
+	ppc64_domain->domain.ops = spapr_tce_iommu_ops.default_domain_ops;
+
+	spin_lock_init(&ppc64_domain->list_lock);
+
+	return &ppc64_domain->domain;
+}
+
+static size_t spapr_tce_iommu_unmap_pages(struct iommu_domain *domain,
+				unsigned long iova,
+				size_t pgsize, size_t pgcount,
+				struct iommu_iotlb_gather *gather)
+{
+	struct ppc64_domain *ppc64_domain = to_ppc64_domain(domain);
+	struct iommu_table *tbl = ppc64_domain->table;
+	unsigned long pgshift = __ffs(pgsize);
+	size_t size = pgcount << pgshift;
+	size_t mapped = 0;
+	unsigned int tcenum;
+	int  mask;
+
+	if (pgsize != SZ_4K)
+		return -EINVAL;
+
+	size = PAGE_ALIGN(size);
+
+	mask = IOMMU_PAGE_MASK(tbl);
+	tcenum = iova >> tbl->it_page_shift;
+
+	tbl->it_ops->clear(tbl, tcenum, pgcount);
+
+	mapped = pgsize * pgcount;
+
+	return mapped;
+}
+
+static phys_addr_t spapr_tce_iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
+{
+	struct ppc64_domain *ppc64_domain = to_ppc64_domain(domain);
+	struct iommu_table *tbl = ppc64_domain->table;
+	phys_addr_t paddr, rpn, tceval;
+	unsigned int tcenum;
+
+	tcenum = iova >> tbl->it_page_shift;
+	tceval = tbl->it_ops->get(tbl, tcenum);
+
+	/* Ignore the direction bits */
+	rpn = tceval >> tbl->it_page_shift;
+	paddr = rpn << tbl->it_page_shift;
+
+	return paddr;
+}
+
+static int spapr_tce_iommu_map_pages(struct iommu_domain *domain,
+				unsigned long iova, phys_addr_t paddr,
+				size_t pgsize, size_t pgcount,
+				int prot, gfp_t gfp, size_t *mapped)
+{
+	struct ppc64_domain *ppc64_domain = to_ppc64_domain(domain);
+	enum dma_data_direction direction = DMA_BIDIRECTIONAL;
+	struct iommu_table *tbl = ppc64_domain->table;
+	unsigned long pgshift = __ffs(pgsize);
+	size_t size = pgcount << pgshift;
+	unsigned int tcenum;
+	int ret;
+
+	if (pgsize != SZ_4K)
+		return -EINVAL;
+
+	if (iova < ppc64_domain->domain.geometry.aperture_start ||
+	    (iova + size - 1) > ppc64_domain->domain.geometry.aperture_end)
+		return -EINVAL;
+
+	if (!IS_ALIGNED(iova | paddr, pgsize))
+		return -EINVAL;
+
+	if (!(prot & IOMMU_WRITE))
+		direction = DMA_FROM_DEVICE;
+
+	if (!(prot & IOMMU_READ))
+		direction = DMA_TO_DEVICE;
+
+	size = PAGE_ALIGN(size);
+	tcenum = iova >> tbl->it_page_shift;
+
+	/* Put the TCEs in the HW table */
+	ret = tbl->it_ops->set(tbl, tcenum, pgcount,
+				paddr, direction, 0, true);
+	if (!ret && mapped)
+		*mapped = pgsize;
+
+	return 0;
+}
+
+static int spapr_tce_iommu_attach_device(struct iommu_domain *domain,
+				    struct device *dev, struct iommu_domain *old)
+{
+	struct ppc64_domain *ppc64_domain = to_ppc64_domain(domain);
+
+	/* REVISIT */
+	if (!domain)
+		return 0;
+
+	/* REVISIT: Check table group, list handling */
+	ppc64_domain->device = dev;
+
+	return 0;
+}
+
+
 static const struct iommu_ops spapr_tce_iommu_ops = {
 	.default_domain = &spapr_tce_platform_domain,
 	.blocked_domain = &spapr_tce_blocked_domain,
@@ -1267,6 +1436,14 @@ static const struct iommu_ops spapr_tce_iommu_ops = {
 	.probe_device = spapr_tce_iommu_probe_device,
 	.release_device = spapr_tce_iommu_release_device,
 	.device_group = spapr_tce_iommu_device_group,
+	.domain_alloc_paging = spapr_tce_domain_alloc_paging,
+	.default_domain_ops = &(const struct iommu_domain_ops) {
+		.attach_dev     = spapr_tce_iommu_attach_device,
+		.map_pages      = spapr_tce_iommu_map_pages,
+		.unmap_pages    = spapr_tce_iommu_unmap_pages,
+		.iova_to_phys   = spapr_tce_iommu_iova_to_phys,
+		.free           = spapr_tce_domain_free,
+	}
 };
 
 static struct attribute *spapr_tce_iommu_attrs[] = {
