@@ -2338,11 +2338,6 @@ long vhost_dev_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp)
 	if (ioctl == VHOST_GET_FORK_FROM_OWNER) {
 		u8 fork_owner_val = d->fork_owner;
 
-		if (fork_owner_val != VHOST_FORK_OWNER_TASK &&
-		    fork_owner_val != VHOST_FORK_OWNER_KTHREAD) {
-			r = -EINVAL;
-			goto done;
-		}
 		if (put_user(fork_owner_val, (u8 __user *)argp)) {
 			r = -EFAULT;
 			goto done;
