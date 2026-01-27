@@ -808,8 +808,8 @@ static void detach_buf_split(struct vring_virtqueue *vq, unsigned int head,
 
 static bool more_used_split(const struct vring_virtqueue *vq)
 {
-	return vq->last_used_idx != virtio16_to_cpu(vq->vq.vdev,
-			vq->split.vring.used->idx);
+	return data_race(vq->last_used_idx != virtio16_to_cpu(vq->vq.vdev,
+				vq->split.vring.used->idx));
 }
 
 static void *virtqueue_get_buf_ctx_split(struct virtqueue *_vq,
