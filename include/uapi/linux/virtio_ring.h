@@ -194,7 +194,7 @@ struct vring {
 /* We publish the used event index at the end of the available ring, and vice
  * versa. They are at the end for backwards compatibility. */
 #define vring_used_event(vr) ((vr)->avail->ring[(vr)->num])
-#define vring_avail_event(vr) (*(__virtio16 *)&(vr)->used->ring[(vr)->num])
+#define vring_avail_event(vr) (data_race(*(__virtio16 *)&(vr)->used->ring[(vr)->num]))
 
 static inline void vring_init(struct vring *vr, unsigned int num, void *p,
 			      unsigned long align)
