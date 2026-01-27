@@ -317,6 +317,7 @@ static int qcom_adreno_smmu_init_context(struct arm_smmu_domain *smmu_domain,
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	struct qcom_smmu *qsmmu = to_qcom_smmu(smmu);
 	const struct of_device_id *client_match;
+	const struct arm_smmu_impl *impl = qsmmu->data->impl;
 	int cbndx = smmu_domain->cfg.cbndx;
 	struct adreno_smmu_priv *priv;
 
@@ -350,9 +351,11 @@ static int qcom_adreno_smmu_init_context(struct arm_smmu_domain *smmu_domain,
 	priv->get_ttbr1_cfg = qcom_adreno_smmu_get_ttbr1_cfg;
 	priv->set_ttbr0_cfg = qcom_adreno_smmu_set_ttbr0_cfg;
 	priv->get_fault_info = qcom_adreno_smmu_get_fault_info;
-	priv->set_stall = qcom_adreno_smmu_set_stall;
 	priv->set_prr_bit = NULL;
 	priv->set_prr_addr = NULL;
+
+	if (impl->context_fault_needs_threaded_irq)
+		priv->set_stall = qcom_adreno_smmu_set_stall;
 
 	if (of_device_is_compatible(np, "qcom,smmu-500") &&
 	    !of_device_is_compatible(np, "qcom,sm8250-smmu-500") &&
