@@ -113,10 +113,18 @@ int drm_vblank_work_schedule(struct drm_vblank_work *work,
 {
 	struct drm_vblank_crtc *vblank = work->vblank;
 	struct drm_device *dev = vblank->dev;
+	struct drm_crtc *crtc;
 	u64 cur_vbl;
 	unsigned long irqflags;
 	bool passed, inmodeset, rescheduling = false, wake = false;
 	int ret = 0;
+
+	crtc = drm_crtc_from_index(dev, vblank->pipe);
+	if (crtc) {
+		ret = drm_crtc_vblank_prepare(crtc);
+		if (ret)
+			return ret;
+	}
 
 	spin_lock_irqsave(&dev->event_lock, irqflags);
 	if (work->cancelling)

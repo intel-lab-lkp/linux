@@ -35,6 +35,7 @@
 #include <drm/drm_vblank.h>
 
 #include "drm_crtc_internal.h"
+#include "drm_internal.h"
 
 /**
  * DOC: overview
@@ -1420,6 +1421,10 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 	if (crtc->funcs->page_flip_target) {
 		u32 current_vblank;
 		int r;
+
+		r = drm_crtc_vblank_prepare(crtc);
+		if (r)
+			return r;
 
 		r = drm_crtc_vblank_get(crtc);
 		if (r)

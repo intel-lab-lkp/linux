@@ -8,6 +8,8 @@
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_helper.h>
 
+#include "drm_internal.h"
+
 /**
  * DOC: overview
  *
@@ -61,7 +63,8 @@ void drm_crtc_vblank_atomic_flush(struct drm_crtc *crtc,
 	crtc_state->event = NULL;
 
 	if (event) {
-		if (drm_crtc_vblank_get(crtc) == 0)
+		if (drm_crtc_vblank_prepare(crtc) == 0 &&
+		    drm_crtc_vblank_get(crtc) == 0)
 			drm_crtc_arm_vblank_event(crtc, event);
 		else
 			drm_crtc_send_vblank_event(crtc, event);

@@ -1325,6 +1325,10 @@ int drm_client_modeset_wait_for_vblank(struct drm_client_dev *client, unsigned i
 	 * Only wait for a vblank event if the CRTC is enabled, otherwise
 	 * just don't do anything, not even report an error.
 	 */
+	ret = drm_crtc_vblank_prepare(crtc);
+	if (ret)
+		return ret;
+
 	ret = drm_crtc_vblank_get(crtc);
 	if (!ret) {
 		drm_crtc_wait_one_vblank(crtc);
