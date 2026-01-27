@@ -616,6 +616,13 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 	struct virt_dma_desc *vd;
 	unsigned long flags;
 
+	if (chan->notify_only) {
+		if (chan->notify_cb)
+			chan->notify_cb(&chan->vc.chan, chan->notify_cb_param);
+		/* no cookie on this side, just return */
+		return;
+	}
+
 	spin_lock_irqsave(&chan->vc.lock, flags);
 	vd = vchan_next_desc(&chan->vc);
 	if (vd) {
@@ -834,6 +841,9 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->request = EDMA_REQ_NONE;
 		chan->status = EDMA_ST_IDLE;
 		chan->irq_mode = DW_EDMA_CH_IRQ_DEFAULT;
+		chan->notify_cb = NULL;
+		chan->notify_cb_param = NULL;
+		chan->notify_only = false;
 
 		spin_lock_init(&chan->poll_lock);
 		INIT_DELAYED_WORK(&chan->poll_work, dw_edma_poll_work);
@@ -1114,6 +1124,37 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dw_edma_remove);
+
+int dw_edma_chan_register_notify(struct dma_chan *dchan,
+				 void (*cb)(struct dma_chan *chan, void *data),
+				 void *data)
+{
+	struct dw_edma_chan *chan;
+
+	if (!dchan || !dchan->device ||
+	    dchan->device->device_config != dw_edma_device_config)
+		return -ENODEV;
+
+	chan = dchan2dw_edma_chan(dchan);
+
+	/*
+	 * Reject the operation while the channel is active or has queued
+	 * descriptors.
+	 */
+	scoped_guard(spinlock_irqsave, &chan->vc.lock) {
+		if (chan->request != EDMA_REQ_NONE ||
+		    chan->status != EDMA_ST_IDLE ||
+		    !list_empty(&chan->vc.desc_submitted) ||
+		    !list_empty(&chan->vc.desc_issued))
+			return -EBUSY;
+	}
+
+	chan->notify_cb = cb;
+	chan->notify_cb_param = data;
+	chan->notify_only = !!cb;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dw_edma_chan_register_notify);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Synopsys DesignWare eDMA controller core driver");

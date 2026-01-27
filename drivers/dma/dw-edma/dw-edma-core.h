@@ -84,6 +84,10 @@ struct dw_edma_chan {
 
 	enum dw_edma_ch_irq_mode	irq_mode;
 
+	void (*notify_cb)(struct dma_chan *chan, void *data);
+	void *notify_cb_param;
+	bool notify_only;
+
 	struct delayed_work		poll_work;
 	spinlock_t			poll_lock;
 
