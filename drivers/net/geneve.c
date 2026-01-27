@@ -1227,7 +1227,8 @@ static void geneve_put_gro_hint_opt(struct genevehdr *gnvh, int opt_size,
 	memcpy(gro_opt + 1, hint, sizeof(*hint));
 }
 
-static int geneve_build_skb(struct dst_entry *dst, struct sk_buff *skb,
+static int geneve_build_skb(struct dst_entry *dst, bool noref,
+			    struct sk_buff *skb,
 			    const struct ip_tunnel_info *info,
 			    const struct geneve_dev *geneve, int ip_hdr_len)
 {
@@ -1268,7 +1269,8 @@ static int geneve_build_skb(struct dst_entry *dst, struct sk_buff *skb,
 	return 0;
 
 free_dst:
-	dst_release(dst);
+	if (!noref)
+		dst_release(dst);
 	return err;
 }
 
@@ -1300,6 +1302,7 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 	__be16 df = 0;
 	__be32 saddr;
 	__be16 sport;
+	bool noref;
 	int err;
 
 	if (skb_vlan_inet_prepare(skb, geneve->cfg.inner_proto_inherit))
@@ -1318,7 +1321,8 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 				   &info->key,
 				   sport, geneve->cfg.info.key.tp_dst, tos,
 				   use_cache ?
-				   (struct dst_cache *)&info->dst_cache : NULL);
+				   (struct dst_cache *)&info->dst_cache : NULL,
+				   &noref);
 	if (IS_ERR(rt))
 		return PTR_ERR(rt);
 
@@ -1327,7 +1331,8 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 				    geneve_build_gro_hint_opt(geneve, skb),
 				    netif_is_any_bridge_port(dev));
 	if (err < 0) {
-		dst_release(&rt->dst);
+		if (!noref)
+			dst_release(&rt->dst);
 		return err;
 	} else if (err) {
 		struct ip_tunnel_info *info;
@@ -1338,7 +1343,8 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 
 			unclone = skb_tunnel_info_unclone(skb);
 			if (unlikely(!unclone)) {
-				dst_release(&rt->dst);
+				if (!noref)
+					dst_release(&rt->dst);
 				return -ENOMEM;
 			}
 
@@ -1347,13 +1353,15 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 		}
 
 		if (!pskb_may_pull(skb, ETH_HLEN)) {
-			dst_release(&rt->dst);
+			if (!noref)
+				dst_release(&rt->dst);
 			return -EINVAL;
 		}
 
 		skb->protocol = eth_type_trans(skb, geneve->dev);
 		__netif_rx(skb);
-		dst_release(&rt->dst);
+		if (!noref)
+			dst_release(&rt->dst);
 		return -EMSGSIZE;
 	}
 
@@ -1386,7 +1394,7 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 		}
 	}
 
-	err = geneve_build_skb(&rt->dst, skb, info, geneve,
+	err = geneve_build_skb(&rt->dst, noref, skb, info, geneve,
 			       sizeof(struct iphdr));
 	if (unlikely(err))
 		return err;
@@ -1396,7 +1404,8 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 			    !net_eq(geneve->net, dev_net(geneve->dev)),
 			    !test_bit(IP_TUNNEL_CSUM_BIT, info->key.tun_flags),
 			    0);
-	ip_rt_put(rt);
+	if (!noref)
+		ip_rt_put(rt);
 	return 0;
 }
 
@@ -1412,6 +1421,7 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 	bool use_cache;
 	__u8 prio, ttl;
 	__be16 sport;
+	bool noref;
 	int err;
 
 	if (skb_vlan_inet_prepare(skb, geneve->cfg.inner_proto_inherit))
@@ -1430,7 +1440,8 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 				     &saddr, key, sport,
 				     geneve->cfg.info.key.tp_dst, prio,
 				     use_cache ?
-				     (struct dst_cache *)&info->dst_cache : NULL);
+				     (struct dst_cache *)&info->dst_cache : NULL,
+				     &noref);
 	if (IS_ERR(dst))
 		return PTR_ERR(dst);
 
@@ -1439,7 +1450,8 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 				    geneve_build_gro_hint_opt(geneve, skb),
 				    netif_is_any_bridge_port(dev));
 	if (err < 0) {
-		dst_release(dst);
+		if (!noref)
+			dst_release(dst);
 		return err;
 	} else if (err) {
 		struct ip_tunnel_info *info = skb_tunnel_info(skb);
@@ -1449,7 +1461,8 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 
 			unclone = skb_tunnel_info_unclone(skb);
 			if (unlikely(!unclone)) {
-				dst_release(dst);
+				if (!noref)
+					dst_release(dst);
 				return -ENOMEM;
 			}
 
@@ -1458,13 +1471,15 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 		}
 
 		if (!pskb_may_pull(skb, ETH_HLEN)) {
-			dst_release(dst);
+			if (!noref)
+				dst_release(dst);
 			return -EINVAL;
 		}
 
 		skb->protocol = eth_type_trans(skb, geneve->dev);
 		__netif_rx(skb);
-		dst_release(dst);
+		if (!noref)
+			dst_release(dst);
 		return -EMSGSIZE;
 	}
 
@@ -1478,7 +1493,7 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 			ttl = key->ttl;
 		ttl = ttl ? : ip6_dst_hoplimit(dst);
 	}
-	err = geneve_build_skb(dst, skb, info, geneve, sizeof(struct ipv6hdr));
+	err = geneve_build_skb(dst, noref, skb, info, geneve, sizeof(struct ipv6hdr));
 	if (unlikely(err))
 		return err;
 
@@ -1488,7 +1503,8 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 			     !test_bit(IP_TUNNEL_CSUM_BIT,
 				       info->key.tun_flags),
 			     0);
-	dst_release(dst);
+	if (!noref)
+		dst_release(dst);
 	return 0;
 }
 #endif
@@ -1551,6 +1567,7 @@ static int geneve_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 	struct ip_tunnel_info *info = skb_tunnel_info(skb);
 	struct geneve_dev *geneve = netdev_priv(dev);
 	__be16 sport;
+	bool noref;
 
 	if (ip_tunnel_info_af(info) == AF_INET) {
 		struct rtable *rt;
@@ -1572,11 +1589,13 @@ static int geneve_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 					   &info->key,
 					   sport, geneve->cfg.info.key.tp_dst,
 					   tos,
-					   use_cache ? &info->dst_cache : NULL);
+					   use_cache ? &info->dst_cache : NULL,
+					   &noref);
 		if (IS_ERR(rt))
 			return PTR_ERR(rt);
 
-		ip_rt_put(rt);
+		if (!noref)
+			ip_rt_put(rt);
 		info->key.u.ipv4.src = saddr;
 #if IS_ENABLED(CONFIG_IPV6)
 	} else if (ip_tunnel_info_af(info) == AF_INET6) {
@@ -1598,11 +1617,13 @@ static int geneve_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 		dst = udp_tunnel6_dst_lookup(skb, dev, geneve->net, gs6->sock, 0,
 					     &saddr, &info->key, sport,
 					     geneve->cfg.info.key.tp_dst, prio,
-					     use_cache ? &info->dst_cache : NULL);
+					     use_cache ? &info->dst_cache : NULL,
+					     &noref);
 		if (IS_ERR(dst))
 			return PTR_ERR(dst);
 
-		dst_release(dst);
+		if (!noref)
+			dst_release(dst);
 		info->key.u.ipv6.src = saddr;
 #endif
 	} else {
