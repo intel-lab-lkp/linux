@@ -116,35 +116,6 @@ zram_load()
 	echo "all zram devices (/dev/zram0~$dev_end) successfully created"
 }
 
-zram_max_streams()
-{
-	echo "set max_comp_streams to zram device(s)"
-
-	kernel_gte 4.7
-	if [ $? -eq 0 ]; then
-		echo "The device attribute max_comp_streams was"\
-		               "deprecated in 4.7"
-		return 0
-	fi
-
-	local i=$dev_start
-	for max_s in $zram_max_streams; do
-		local sys_path="/sys/block/zram${i}/max_comp_streams"
-		echo $max_s > $sys_path || \
-			echo "FAIL failed to set '$max_s' to $sys_path"
-		sleep 1
-		local max_streams=$(cat $sys_path)
-
-		[ "$max_s" -ne "$max_streams" ] && \
-			echo "FAIL can't set max_streams '$max_s', get $max_stream"
-
-		i=$(($i + 1))
-		echo "$sys_path = '$max_streams'"
-	done
-
-	echo "zram max streams: OK"
-}
-
 zram_compress_alg()
 {
 	echo "test that we can set compression algorithm"
