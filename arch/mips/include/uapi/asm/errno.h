@@ -126,6 +126,8 @@
 
 #define EHWPOISON	168	/* Memory page has hardware error */
 
+#define ENOTREG		169	/* Not a regular file */
+
 #define EDQUOT		1133	/* Quota exceeded */
 
 

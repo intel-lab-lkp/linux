@@ -127,4 +127,6 @@
 
 #define EHWPOISON	139	/* Memory page has hardware error */
 
+#define ENOTREG		140	/* Not a regular file */
+
 #endif
