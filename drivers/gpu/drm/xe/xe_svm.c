@@ -1077,15 +1077,26 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 			block->private = vr;
 
 		xe_bo_get(bo);
+		/* Guard against eviction */
+		ttm_bo_pin(&bo->ttm);
 
 		/* Ensure the device has a pm ref while there are device pages active. */
 		xe_pm_runtime_get_noresume(xe);
-		/* Consumes the devmem allocation ref. */
-		err = drm_pagemap_migrate_to_devmem(&bo->devmem_allocation, mm,
-						    start, end, &mdetails);
 		xe_bo_unlock(bo);
-		xe_bo_put(bo);
+
 	}
+
+	/* Consumes the devmem allocation ref. */
+	err = drm_pagemap_migrate_to_devmem(&bo->devmem_allocation, mm,
+					    start, end, &mdetails);
+
+	xe_bo_lock(bo, false);
+	ttm_bo_unpin(&bo->ttm);
+	ttm_bo_move_to_lru_tail_unlocked(&bo->ttm);
+	xe_bo_unlock(bo);
+
+	xe_bo_put(bo);
+
 	xe_pm_runtime_put(xe);
 	drm_dev_exit(idx);
 
