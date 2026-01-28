@@ -1726,6 +1726,15 @@ static int __init set_tracing_thresh(char *str)
 }
 __setup("tracing_thresh=", set_tracing_thresh);
 
+bool trace_async_init __initdata;
+
+static int __init setup_trace_async_init(char *str)
+{
+	trace_async_init = true;
+	return 1;
+}
+__setup("trace_async_init", setup_trace_async_init);
+
 unsigned long nsecs_to_usecs(unsigned long nsecs)
 {
 	return nsecs / 1000;

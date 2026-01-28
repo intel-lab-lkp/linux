@@ -7724,6 +7724,14 @@ Kernel parameters
 			This option can also be set at run time via the sysctl
 			option:  kernel/traceoff_on_warning
 
+	trace_async_init
+			[FTRACE] Enable this option when faster boot time is the
+			priority. It is beneficial in scenarios where users either
+			do not require a strict initialization order for certain
+			tracing features during boot, or do not use tracing at all
+			in the early boot phase. This can lead to measurable
+			improvements in kernel startup speed.
+
 	transparent_hugepage=
 			[KNL]
 			Format: [always|madvise|never]
