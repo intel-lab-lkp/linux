@@ -2031,6 +2031,13 @@ static __init int init_kprobe_trace_early(void)
 }
 core_initcall(init_kprobe_trace_early);
 
+static struct work_struct kprobe_trace_work __initdata;
+
+static void __init kprobe_trace_works_func(struct work_struct *work)
+{
+	setup_boot_kprobe_events();
+}
+
 /* Make a tracefs interface for controlling probe points */
 static __init int init_kprobe_trace(void)
 {
@@ -2052,7 +2059,12 @@ static __init int init_kprobe_trace(void)
 	if (kprobe_boot_events_buf[0] == '\0')
 		return 0;
 
-	setup_boot_kprobe_events();
+	if (trace_init_wq && trace_async_init) {
+		INIT_WORK(&kprobe_trace_work, kprobe_trace_works_func);
+		queue_work(trace_init_wq, &kprobe_trace_work);
+	} else {
+		setup_boot_kprobe_events();
+	}
 
 	return 0;
 }
