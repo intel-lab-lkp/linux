@@ -1636,6 +1636,8 @@ static int phy_sfp_connect_nophy(void *upstream)
 		}
 	}
 
+	phydev->sfp_bus_port->occupied = true;
+
 	/* we don't use phy_add_port() here as the module port isn't a direct
 	 * interface from the PHY, but rather an extension to the sfp-bus, that
 	 * is already represented by its own phy_port
@@ -1648,6 +1650,8 @@ static int phy_sfp_connect_nophy(void *upstream)
 static void phy_sfp_disconnect_nophy(void *upstream)
 {
 	struct phy_device *phydev = upstream;
+
+	phydev->sfp_bus_port->occupied = false;
 
 	if (phydev->attached_dev)
 		phy_link_topo_del_port(phydev->attached_dev, phydev->mod_port);

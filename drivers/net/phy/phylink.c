@@ -4047,6 +4047,8 @@ static int phylink_sfp_connect_nophy(void *upstream)
 		}
 	}
 
+	pl->sfp_bus_port->occupied = true;
+
 	pl->mod_port = port;
 
 	return 0;
@@ -4055,6 +4057,8 @@ static int phylink_sfp_connect_nophy(void *upstream)
 static void phylink_sfp_disconnect_nophy(void *upstream)
 {
 	struct phylink *pl = upstream;
+
+	pl->sfp_bus_port->occupied = false;
 
 	if (pl->netdev)
 		phy_link_topo_del_port(pl->netdev, pl->mod_port);
