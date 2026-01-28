@@ -231,7 +231,7 @@ static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	pt = v;
 	nxt = pt->list.next;
 	if (pt->dev) {
-		if (nxt != &pt->dev->ptype_all)
+		if (!list_empty(nxt) && nxt != &pt->dev->ptype_all)
 			goto found;
 
 		dev = pt->dev;
@@ -247,7 +247,7 @@ static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 
 	if (pt->af_packet_net) {
 net_ptype_all:
-		if (nxt != &net->ptype_all && nxt != &net->ptype_specific)
+		if (!list_empty(nxt) && nxt != &net->ptype_all && nxt != &net->ptype_specific)
 			goto found;
 
 		if (nxt == &net->ptype_all) {
@@ -267,6 +267,9 @@ net_ptype_all:
 			return NULL;
 		nxt = ptype_base[hash].next;
 	}
+
+	if (list_empty(nxt))
+		return NULL;
 found:
 	return list_entry(nxt, struct packet_type, list);
 }
