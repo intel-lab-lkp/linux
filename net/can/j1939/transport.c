@@ -9,6 +9,7 @@
 //                         Oleksij Rempel <kernel@pengutronix.de>
 
 #include <linux/can/skb.h>
+#include <net/can.h>
 
 #include "j1939-priv.h"
 
@@ -591,12 +592,19 @@ sk_buff *j1939_tp_tx_dat_new(struct j1939_priv *priv,
 			     bool swap_src_dst)
 {
 	struct sk_buff *skb;
+	struct can_skb_ext *csx;
 	struct j1939_sk_buff_cb *skcb;
 
 	skb = alloc_skb(sizeof(struct can_frame) + sizeof(struct can_skb_priv),
 			GFP_ATOMIC);
 	if (unlikely(!skb))
 		return ERR_PTR(-ENOMEM);
+
+	csx = can_skb_ext_add(skb);
+	if (!csx) {
+		kfree_skb(skb);
+		return ERR_PTR(-ENOMEM);
+	}
 
 	skb->dev = priv->ndev;
 	can_skb_reserve(skb);
@@ -1525,12 +1533,19 @@ j1939_session *j1939_session_fresh_new(struct j1939_priv *priv,
 				       const struct j1939_sk_buff_cb *rel_skcb)
 {
 	struct sk_buff *skb;
+	struct can_skb_ext *csx;
 	struct j1939_sk_buff_cb *skcb;
 	struct j1939_session *session;
 
 	skb = alloc_skb(size + sizeof(struct can_skb_priv), GFP_ATOMIC);
 	if (unlikely(!skb))
 		return NULL;
+
+	csx = can_skb_ext_add(skb);
+	if (!csx) {
+		kfree_skb(skb);
+		return NULL;
+	}
 
 	skb->dev = priv->ndev;
 	can_skb_reserve(skb);
