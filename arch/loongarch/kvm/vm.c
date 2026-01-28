@@ -40,6 +40,21 @@ static void kvm_vm_init_features(struct kvm *kvm)
 		kvm->arch.pv_features |= BIT(KVM_FEATURE_STEAL_TIME);
 		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PV_STEALTIME);
 	}
+
+	if (cpu_has_lsx)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_LSX);
+	if (cpu_has_lasx)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_LASX);
+	if (cpu_has_lbt_x86)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_X86BT);
+	if (cpu_has_lbt_arm)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_ARMBT);
+	if (cpu_has_lbt_mips)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_MIPSBT);
+	if (cpu_has_ptw)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PTW);
+	if (cpu_has_msgint)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_MSGINT);
 }
 
 int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
@@ -131,33 +146,12 @@ static int kvm_vm_feature_has_attr(struct kvm *kvm, struct kvm_device_attr *attr
 {
 	switch (attr->attr) {
 	case KVM_LOONGARCH_VM_FEAT_LSX:
-		if (cpu_has_lsx)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_LASX:
-		if (cpu_has_lasx)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_X86BT:
-		if (cpu_has_lbt_x86)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_ARMBT:
-		if (cpu_has_lbt_arm)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_MIPSBT:
-		if (cpu_has_lbt_mips)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_PTW:
-		if (cpu_has_ptw)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_MSGINT:
-		if (cpu_has_msgint)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_PMU:
 	case KVM_LOONGARCH_VM_FEAT_PV_IPI:
 	case KVM_LOONGARCH_VM_FEAT_PV_STEALTIME:
