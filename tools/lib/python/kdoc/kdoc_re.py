@@ -52,7 +52,10 @@ class KernRe:
         return self.regex.pattern
 
     def __repr__(self):
-        return f're.compile("{self.regex.pattern}")'
+        if self.regex.flags:
+            return f'KernRe("{self.regex.pattern}", {self.regex.flags})'
+        else:
+            return f'KernRe("{self.regex.pattern}")'
 
     def __add__(self, other):
         """
