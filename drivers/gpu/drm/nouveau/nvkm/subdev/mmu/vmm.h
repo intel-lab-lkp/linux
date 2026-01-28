@@ -44,10 +44,11 @@ struct nvkm_vmm_pt {
 	 *
 	 * This information is used to manage LPTE state transitions.
 	 */
-#define NVKM_VMM_PTE_SPARSE 0x80
-#define NVKM_VMM_PTE_VALID  0x40
-#define NVKM_VMM_PTE_SPTES  0x3f
-	u8 pte[];
+#define NVKM_VMM_PTE_SPARSE    0x80000000
+#define NVKM_VMM_PTE_VALID     0x40000000
+#define NVKM_VMM_PTE_BIG_VALID 0x20000000
+#define NVKM_VMM_PTE_SPTES     0x1fffffff
+	u32 pte[];
 };
 
 typedef void (*nvkm_vmm_pxe_func)(struct nvkm_vmm *,
