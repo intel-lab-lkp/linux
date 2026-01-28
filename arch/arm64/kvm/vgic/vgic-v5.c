@@ -221,8 +221,8 @@ static u32 vgic_v5_get_effective_priority_mask(struct kvm_vcpu *vcpu)
  * need the PPIs to be queued on a per-VCPU AP list. Therefore, sanity check the
  * state, unlock, and return.
  */
-static bool vgic_v5_ppi_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
-					 unsigned long flags)
+bool vgic_v5_ppi_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+				  unsigned long flags)
 	__releases(&irq->irq_lock)
 {
 	struct kvm_vcpu *vcpu;
