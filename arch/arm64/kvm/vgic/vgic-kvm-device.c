@@ -720,6 +720,25 @@ struct kvm_device_ops kvm_arm_vgic_v3_ops = {
 	.has_attr = vgic_v3_has_attr,
 };
 
+static int vgic_v5_get_userspace_ppis(struct kvm_device *dev,
+				      struct kvm_device_attr *attr)
+{
+	u64 __user *uaddr = (u64 __user *)(long)attr->addr;
+	struct gicv5_vm *gicv5_vm = &dev->kvm->arch.vgic.gicv5_vm;
+	int ret;
+
+	guard(mutex)(&dev->kvm->arch.config_lock);
+
+	for (int i = 0; i < 2; i++) {
+		ret = put_user(gicv5_vm->userspace_ppis[i], uaddr);
+		if (ret)
+			return ret;
+		uaddr++;
+	}
+
+	return 0;
+}
+
 static int vgic_v5_set_attr(struct kvm_device *dev,
 			    struct kvm_device_attr *attr)
 {
@@ -732,6 +751,7 @@ static int vgic_v5_set_attr(struct kvm_device *dev,
 		switch (attr->attr) {
 		case KVM_DEV_ARM_VGIC_CTRL_INIT:
 			return vgic_set_common_attr(dev, attr);
+		case KVM_DEV_ARM_VGIC_USERSPACE_PPIS:
 		default:
 			return -ENXIO;
 		}
@@ -753,6 +773,8 @@ static int vgic_v5_get_attr(struct kvm_device *dev,
 		switch (attr->attr) {
 		case KVM_DEV_ARM_VGIC_CTRL_INIT:
 			return vgic_get_common_attr(dev, attr);
+		case KVM_DEV_ARM_VGIC_USERSPACE_PPIS:
+			return vgic_v5_get_userspace_ppis(dev, attr);
 		default:
 			return -ENXIO;
 		}
@@ -772,6 +794,8 @@ static int vgic_v5_has_attr(struct kvm_device *dev,
 	case KVM_DEV_ARM_VGIC_GRP_CTRL:
 		switch (attr->attr) {
 		case KVM_DEV_ARM_VGIC_CTRL_INIT:
+			return 0;
+		case KVM_DEV_ARM_VGIC_USERSPACE_PPIS:
 			return 0;
 		default:
 			return -ENXIO;

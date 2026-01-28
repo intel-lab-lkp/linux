@@ -381,6 +381,9 @@ struct gicv5_vm {
 	 */
 	u64			vgic_ppi_mask[2];
 
+	/* A mask of the PPIs that are exposed for userspace to drive */
+	u64			userspace_ppis[2];
+
 	/*
 	 * The HMR itself is handled by the hardware, but we still need to have
 	 * a mask that we can use when merging in pending state (only the state

@@ -122,6 +122,11 @@ int vgic_v5_init(struct kvm *kvm)
 		}
 	}
 
+	/* We only allow userspace to drive the SW_PPI, if it is implemented. */
+	kvm->arch.vgic.gicv5_vm.userspace_ppis[0] = BIT_ULL(GICV5_ARCH_PPI_SW_PPI);
+	kvm->arch.vgic.gicv5_vm.userspace_ppis[0] &= ppi_caps->impl_ppi_mask[0];
+	kvm->arch.vgic.gicv5_vm.userspace_ppis[1] = 0;
+
 	return 0;
 }
 
