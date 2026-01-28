@@ -8,21 +8,7 @@
 Helper class to better display unittest results.
 
 Those help functions provide a nice colored output summary of each
-executed test and, when a test fails, it shows the different in diff
-format when running in verbose mode, like::
-
-    $ tools/unittests/nested_match.py -v
-    ...
-    Traceback (most recent call last):
-    File "/new_devel/docs/tools/unittests/nested_match.py", line 69, in test_count_limit
-        self.assertEqual(replaced, "bar(a); bar(b); foo(c)")
-        ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    AssertionError: 'bar(a) foo(b); foo(c)' != 'bar(a); bar(b); foo(c)'
-    - bar(a) foo(b); foo(c)
-    ?       ^^^^
-    + bar(a); bar(b); foo(c)
-    ?       ^^^^^
-    ...
+executed test.
 
 It also allows filtering what tests will be executed via ``-k`` parameter.
 
