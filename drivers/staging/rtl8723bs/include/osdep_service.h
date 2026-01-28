@@ -54,12 +54,16 @@
 
 extern int RTW_STATUS_CODE(int error_code);
 
+void *_rtw_zmalloc(u32 sz);
+void *_rtw_malloc(u32 sz);
 void _kfree(u8 *pbuf, u32 sz);
 
 struct sk_buff *_rtw_skb_alloc(u32 sz);
 struct sk_buff *_rtw_skb_copy(const struct sk_buff *skb);
 int _rtw_netif_rx(struct net_device *ndev, struct sk_buff *skb);
 
+#define rtw_malloc(sz)                 _rtw_malloc((sz))
+#define rtw_zmalloc(sz)                        _rtw_zmalloc((sz))
 #define rtw_skb_alloc(size) _rtw_skb_alloc((size))
 #define rtw_skb_alloc_f(size, mstat_f)	_rtw_skb_alloc((size))
 #define rtw_skb_copy(skb)	_rtw_skb_copy((skb))
