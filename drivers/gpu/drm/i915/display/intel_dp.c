@@ -1449,6 +1449,18 @@ bool intel_dp_can_join(struct intel_display *display,
 	}
 }
 
+bool intel_dp_dotclk_valid(struct intel_display *display,
+			   int target_clock,
+			   int num_joined_pipes)
+{
+	int max_dotclk = display->cdclk.max_dotclk_freq;
+	int effective_dotclk_limit;
+
+	effective_dotclk_limit = max_dotclk * num_joined_pipes;
+
+	return target_clock <= effective_dotclk_limit;
+}
+
 static enum drm_mode_status
 intel_dp_mode_valid(struct drm_connector *_connector,
 		    const struct drm_display_mode *mode)
@@ -1511,7 +1523,6 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	 * over candidate pipe counts and evaluate each combination.
 	 */
 	for (num_pipes = 0; num_pipes < I915_MAX_PIPES; num_pipes++) {
-		int max_dotclk = display->cdclk.max_dotclk_freq;
 
 		status = MODE_CLOCK_HIGH;
 
@@ -1582,9 +1593,9 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		if (status != MODE_OK)
 			continue;
 
-		max_dotclk *= num_joined_pipes;
-
-		if (target_clock <= max_dotclk) {
+		if (intel_dp_dotclk_valid(display,
+					  target_clock,
+					  num_joined_pipes)) {
 			status = MODE_OK;
 			break;
 		}
@@ -2870,7 +2881,9 @@ intel_dp_compute_link_for_joined_pipes(struct intel_encoder *encoder,
 
 	max_dotclk *= num_joined_pipes;
 
-	if (adjusted_mode->crtc_clock > max_dotclk)
+	if (!intel_dp_dotclk_valid(display,
+				   adjusted_mode->crtc_clock,
+				   num_joined_pipes))
 		return -EINVAL;
 
 	drm_dbg_kms(display->drm,
