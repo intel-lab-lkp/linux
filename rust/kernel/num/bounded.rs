@@ -388,6 +388,22 @@ where
         *self.deref()
     }
 
+    /// Returns the wrapped value as the backing type.
+    ///
+    /// This is a const-friendly variant of [`Self::get`] that can be used in const contexts.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::num::Bounded;
+    ///
+    /// const V: u32 = Bounded::<u32, 4>::new::<7>().into_inner();
+    /// assert_eq!(V, 7u32);
+    /// ```
+    pub const fn into_inner(self) -> T {
+        self.0
+    }
+
     /// Increases the number of bits usable for `self`.
     ///
     /// This operation cannot fail.
