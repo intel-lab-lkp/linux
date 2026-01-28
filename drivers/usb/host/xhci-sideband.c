@@ -352,6 +352,7 @@ xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
 	ret = usb_offload_get(udev);
 
 	sb->ir->ip_autoclear = ip_autoclear;
+	sb->ir->type = INTR_NOOP;
 
 	return ret;
 }

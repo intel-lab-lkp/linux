@@ -314,6 +314,9 @@ int xhci_enable_interrupter(struct xhci_interrupter *ir)
 {
 	u32 iman;
 
+	if (ir->type == INTR_NOOP)
+		return 0;
+
 	if (!ir || !ir->ir_set)
 		return -EINVAL;
 
@@ -330,6 +333,9 @@ int xhci_enable_interrupter(struct xhci_interrupter *ir)
 int xhci_disable_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir)
 {
 	u32 iman;
+
+	if (ir->type == INTR_NOOP)
+		return 0;
 
 	if (!ir || !ir->ir_set)
 		return -EINVAL;
