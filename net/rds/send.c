@@ -1339,6 +1339,24 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 		cpath = &conn->c_path[0];
 	}
 
+	/* Check to see if we have talked to this peer before.
+	 * If not, this means conn->c_npaths will be zero,
+	 * and we should initiate a connection request to the
+	 * peer right away.
+	 */
+	if (conn->c_trans->t_mp_capable &&
+	    !rds_conn_path_up(&conn->c_path[0])) {
+		/* Ensures that only one request is queued.  And
+		 * rds_send_ping() ensures that only one ping is
+		 * outstanding.
+		 */
+		if (!test_and_set_bit(RDS_RECONNECT_PENDING,
+				      &conn->c_path[0].cp_flags))
+			queue_delayed_work(conn->c_path[0].cp_wq,
+					   &conn->c_path[0].cp_conn_w, 0);
+		rds_send_ping(conn, 0);
+	}
+
 	rm->m_conn_path = cpath;
 
 	/* Parse any control messages the user may have included. */
