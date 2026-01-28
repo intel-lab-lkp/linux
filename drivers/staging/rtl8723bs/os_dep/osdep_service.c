@@ -14,16 +14,6 @@ inline int RTW_STATUS_CODE(int error_code)
 	return _FAIL;
 }
 
-void *_rtw_zmalloc(u32 sz)
-{
-	void *pbuf = kmalloc(sz, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
-
-	if (pbuf)
-		memset(pbuf, 0, sz);
-
-	return pbuf;
-}
-
 inline struct sk_buff *_rtw_skb_alloc(u32 sz)
 {
 	return __dev_alloc_skb(sz, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);

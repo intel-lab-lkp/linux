@@ -159,7 +159,7 @@ static void rtl8723bs_c2h_packet_handler(struct adapter *padapter,
 	if (length == 0)
 		return;
 
-	tmp = rtw_zmalloc(length);
+	tmp = kzalloc(length, GFP_ATOMIC);
 	if (!tmp)
 		return;
 
@@ -382,7 +382,7 @@ s32 rtl8723bs_init_recv_priv(struct adapter *padapter)
 	spin_lock_init(&precvpriv->recv_buf_pending_queue.lock);
 
 	n = NR_RECVBUFF * sizeof(struct recv_buf) + 4;
-	precvpriv->pallocated_recv_buf = rtw_zmalloc(n);
+	precvpriv->pallocated_recv_buf = kzalloc(n, GFP_KERNEL);
 	if (!precvpriv->pallocated_recv_buf) {
 		res = _FAIL;
 		goto exit;

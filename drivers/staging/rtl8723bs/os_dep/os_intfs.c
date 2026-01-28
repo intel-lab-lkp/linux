@@ -556,7 +556,7 @@ struct dvobj_priv *devobj_init(void)
 {
 	struct dvobj_priv *pdvobj = NULL;
 
-	pdvobj = rtw_zmalloc(sizeof(*pdvobj));
+	pdvobj = kzalloc(sizeof(*pdvobj), GFP_KERNEL);
 	if (!pdvobj)
 		return NULL;
 
