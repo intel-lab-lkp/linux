@@ -305,7 +305,8 @@ drm_pagemap_migrate_map_system_pages(struct device *dev,
 				     struct dma_iova_state *state)
 {
 	struct page *dummy_page = NULL;
-	unsigned long i, psize;
+	unsigned long i, j, psize;
+	phys_addr_t phys = -1;
 	bool try_alloc = false;
 
 	for (i = 0; i < npages;) {
@@ -339,26 +340,50 @@ drm_pagemap_migrate_map_system_pages(struct device *dev,
 
 		if (dma_use_iova(state)) {
 			bool found_dummy = page && !dummy_page;
+			bool phys_match;
 			int err;
 
-			if (found_dummy) {
-				unsigned long j;
+			if (found_dummy && i) {
+				err = dma_iova_link(dev, state,
+						    page_to_phys(page),
+						    0, i * PAGE_SIZE,
+						    dir, 0);
+				if (err)
+					return err;
+			}
 
-				for (j = 0; j < i; ++j) {
+			if (phys == -1) {
+				phys = page_to_phys(page);
+				j = i;
+				phys_match = true;
+			} else {
+				phys_match = phys + (i - j) * PAGE_SIZE ==
+					page_to_phys(page);
+			}
+
+			if (psize != PAGE_SIZE || !phys_match ||
+			    (i + 1) == npages) {
+				err = dma_iova_link(dev, state, phys,
+						    j * PAGE_SIZE,
+						    psize * ((i - j) +
+						    phys_match),
+						    dir, 0);
+				if (err)
+					return err;
+
+				if (!phys_match && (i + 1) == npages) {
 					err = dma_iova_link(dev, state,
 							    page_to_phys(page),
-							    j * PAGE_SIZE,
-							    PAGE_SIZE, dir, 0);
+							    i * PAGE_SIZE,
+							    psize,
+							    dir, 0);
 					if (err)
 						return err;
 				}
-			}
 
-			err = dma_iova_link(dev, state, page_to_phys(page),
-					    i * PAGE_SIZE, psize,
-					    dir, 0);
-			if (err)
-				return err;
+				phys = page_to_phys(page);
+				j = i;
+			}
 
 			if (page != dummy_page)
 				dma_addr = state->addr + i * PAGE_SIZE;
