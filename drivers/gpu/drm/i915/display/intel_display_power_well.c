@@ -14,10 +14,13 @@
 #include "intel_crt.h"
 #include "intel_de.h"
 #include "intel_display_irq.h"
+#include "intel_display_limits.h"
 #include "intel_display_power_well.h"
 #include "intel_display_regs.h"
 #include "intel_display_rpm.h"
 #include "intel_display_types.h"
+#include "intel_display_utils.h"
+#include "intel_display_wa.h"
 #include "intel_dkl_phy.h"
 #include "intel_dkl_phy_regs.h"
 #include "intel_dmc.h"
@@ -194,6 +197,69 @@ int intel_power_well_refcount(struct i915_power_well *power_well)
 	return power_well->count;
 }
 
+static void clock_gating_dss_enable_disable(struct intel_display *display,
+					    u8 irq_pipe_mask,
+					    bool disable)
+{
+	struct drm_printer p;
+	enum pipe pipe;
+
+	switch (irq_pipe_mask) {
+	case BIT(PIPE_A):
+		pipe = PIPE_A;
+
+		if (disable)
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     0, DSS_PIPE_A_GATING_DISABLED);
+		else
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     DSS_PIPE_A_GATING_DISABLED, 0);
+		break;
+	case BIT(PIPE_B):
+		pipe = PIPE_B;
+
+		if (disable)
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     0, DSS_PIPE_B_GATING_DISABLED);
+		else
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     DSS_PIPE_B_GATING_DISABLED, 0);
+		break;
+	case BIT(PIPE_C):
+		pipe = PIPE_C;
+
+		if (disable)
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     0, DSS_PIPE_C_GATING_DISABLED);
+		else
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     DSS_PIPE_C_GATING_DISABLED, 0);
+		break;
+	case BIT(PIPE_D):
+		pipe = PIPE_D;
+
+		if (disable)
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     0, DSS_PIPE_D_GATING_DISABLED);
+		else
+			intel_de_rmw(display, CLKGATE_DIS_DSSDSC,
+				     DSS_PIPE_D_GATING_DISABLED, 0);
+		break;
+	default:
+		MISSING_CASE(irq_pipe_mask);
+		break;
+	}
+
+	if (!drm_debug_enabled(DRM_UT_KMS))
+		return;
+
+	p = drm_dbg_printer(display->drm, DRM_UT_KMS, NULL);
+
+	drm_printf(&p, "dss clock gating %sd on pipe %c (0x%.8x)\n",
+		   str_enable_disable(!disable), pipe_name(pipe),
+		   intel_de_read(display, CLKGATE_DIS_DSSDSC));
+}
+
 /*
  * Starting with Haswell, we have a "Power Down Well" that can be turned off
  * when not needed anymore. We have 4 registers that can request the power well
@@ -203,15 +269,23 @@ int intel_power_well_refcount(struct i915_power_well *power_well)
 static void hsw_power_well_post_enable(struct intel_display *display,
 				       u8 irq_pipe_mask)
 {
-	if (irq_pipe_mask)
+	if (irq_pipe_mask) {
 		gen8_irq_power_well_post_enable(display, irq_pipe_mask);
+
+		if (intel_display_wa(display, 22021048059))
+			clock_gating_dss_enable_disable(display, irq_pipe_mask, false);
+	}
 }
 
 static void hsw_power_well_pre_disable(struct intel_display *display,
 				       u8 irq_pipe_mask)
 {
-	if (irq_pipe_mask)
+	if (irq_pipe_mask) {
+		if (intel_display_wa(display, 22021048059))
+			clock_gating_dss_enable_disable(display, irq_pipe_mask, true);
+
 		gen8_irq_power_well_pre_disable(display, irq_pipe_mask);
+	}
 }
 
 #define ICL_AUX_PW_TO_PHY(pw_idx)	\
