@@ -378,7 +378,7 @@ static int keystone_rproc_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	dsp_id = of_alias_get_id(np, "rproc");
+	dsp_id = of_alias_get_id(np, RPROC_ALIAS);
 	if (dsp_id < 0) {
 		dev_warn(dev, "device does not have an alias id\n");
 		return dsp_id;
