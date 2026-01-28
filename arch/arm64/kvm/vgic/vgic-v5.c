@@ -136,6 +136,29 @@ void vgic_v5_get_implemented_ppis(void)
 		ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_PMUIRQ);
 }
 
+static u32 vgic_v5_get_effective_priority_mask(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+	u32 highest_ap, priority_mask;
+
+	/*
+	 * Counting the number of trailing zeros gives the current active
+	 * priority. Explicitly use the 32-bit version here as we have 32
+	 * priorities. 32 then means that there are no active priorities.
+	 */
+	highest_ap = cpu_if->vgic_apr ? __builtin_ctz(cpu_if->vgic_apr) : 32;
+
+	/*
+	 * An interrupt is of sufficient priority if it is equal to or
+	 * greater than the priority mask. Add 1 to the priority mask
+	 * (i.e., lower priority) to match the APR logic before taking
+	 * the min. This gives us the lowest priority that is masked.
+	 */
+	priority_mask = FIELD_GET(FEAT_GCIE_ICH_VMCR_EL2_VPMR, cpu_if->vgic_vmcr);
+
+	return min(highest_ap, priority_mask + 1);
+}
+
 /*
  * For GICv5, the PPIs are mostly directly managed by the hardware. We (the
  * hypervisor) handle the pending, active, enable state save/restore, but don't
@@ -184,6 +207,97 @@ void vgic_v5_set_ppi_ops(struct vgic_irq *irq)
 
 	if (!WARN_ON(irq->ops))
 		irq->ops = &vgic_v5_ppi_irq_ops;
+}
+
+/*
+ * Sync back the PPI priorities to the vgic_irq shadow state for any interrupts
+ * exposed to the guest (skipping all others).
+ */
+static void vgic_v5_sync_ppi_priorities(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+	u64 priorityr;
+
+	/*
+	 * We have 16 PPI Priority regs, but only have a few interrupts that the
+	 * guest is allowed to use. Limit our sync of PPI priorities to those
+	 * actually exposed to the guest by first iterating over the mask of
+	 * exposed PPIs.
+	 */
+	for (int mask_reg = 0; mask_reg < 2; mask_reg++) {
+		u64 mask = vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_mask[mask_reg];
+		unsigned long bm_p = 0;
+		int i;
+
+		bitmap_from_arr64(&bm_p, &mask, 64);
+
+		for_each_set_bit(i, &bm_p, 64) {
+			struct vgic_irq *irq;
+			int pri_idx, pri_reg;
+			u32 intid;
+			u8 priority;
+
+			pri_reg = (mask_reg * 64 + i) / 8;
+			pri_idx = (mask_reg * 64 + i) % 8;
+
+			priorityr = cpu_if->vgic_ppi_priorityr[pri_reg];
+			priority = (priorityr >> (pri_idx * 8)) & GENMASK(4, 0);
+
+			intid = FIELD_PREP(GICV5_HWIRQ_TYPE, GICV5_HWIRQ_TYPE_PPI);
+			intid |= FIELD_PREP(GICV5_HWIRQ_ID, mask_reg * 64 + i);
+
+			irq = vgic_get_vcpu_irq(vcpu, intid);
+
+			scoped_guard(raw_spinlock_irqsave, &irq->irq_lock)
+				irq->priority = priority;
+
+			vgic_put_irq(vcpu->kvm, irq);
+		}
+	}
+}
+
+bool vgic_v5_has_pending_ppi(struct kvm_vcpu *vcpu)
+{
+	unsigned int priority_mask;
+
+	priority_mask = vgic_v5_get_effective_priority_mask(vcpu);
+
+	/* If the combined priority mask is 0, nothing can be signalled! */
+	if (!priority_mask)
+		return false;
+
+	for (int reg = 0; reg < 2; reg++) {
+		u64 mask = vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_mask[reg];
+		unsigned long bm_p = 0;
+		int i;
+
+		/* Only iterate over the PPIs exposed to the guest */
+		bitmap_from_arr64(&bm_p, &mask, 64);
+
+		for_each_set_bit(i, &bm_p, 64) {
+			bool has_pending = false;
+			struct vgic_irq *irq;
+			u32 intid;
+
+			intid = FIELD_PREP(GICV5_HWIRQ_TYPE, GICV5_HWIRQ_TYPE_PPI);
+			intid |= FIELD_PREP(GICV5_HWIRQ_ID, reg * 64 + i);
+
+			irq = vgic_get_vcpu_irq(vcpu, intid);
+
+			scoped_guard(raw_spinlock_irqsave, &irq->irq_lock) {
+				if (irq->enabled && irq_is_pending(irq) &&
+				    irq->priority <= priority_mask)
+					has_pending = true;
+			}
+
+			vgic_put_irq(vcpu->kvm, irq);
+
+			if (has_pending)
+				return true;
+		}
+	}
+
+	return false;
 }
 
 /*
@@ -345,6 +459,10 @@ void vgic_v5_put(struct kvm_vcpu *vcpu)
 	kvm_call_hyp(__vgic_v5_save_apr, cpu_if);
 
 	WRITE_ONCE(cpu_if->gicv5_vpe.resident, false);
+
+	/* The shadow priority is only updated on entering WFI */
+	if (vcpu_get_flag(vcpu, IN_WFI))
+		vgic_v5_sync_ppi_priorities(vcpu);
 }
 
 void vgic_v5_get_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcrp)
