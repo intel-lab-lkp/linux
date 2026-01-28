@@ -578,6 +578,7 @@ static int xhci_init(struct usb_hcd *hcd)
 
 	/* Initialize the Primary interrupter */
 	xhci_add_interrupter(xhci, 0);
+	xhci_set_interrupter_moderation(xhci->interrupters[0], xhci->imod_interval);
 	xhci->interrupters[0]->isoc_bei_interval = AVOID_BEI_INTERVAL_MAX;
 
 	/* Initializing Compliance Mode Recovery Data If Needed */
@@ -663,8 +664,6 @@ int xhci_run(struct usb_hcd *hcd)
 	temp_64 &= ERST_PTR_MASK;
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			"ERST deq = 64'h%0lx", (long unsigned int) temp_64);
-
-	xhci_set_interrupter_moderation(ir, xhci->imod_interval);
 
 	if (xhci->quirks & XHCI_NEC_HOST) {
 		struct xhci_command *command;
