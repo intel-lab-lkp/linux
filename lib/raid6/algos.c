@@ -12,6 +12,7 @@
  */
 
 #include <linux/raid/pq.h>
+#include <linux/workqueue.h>
 #ifndef __KERNEL__
 #include <sys/mman.h>
 #include <stdio.h>
@@ -168,7 +169,7 @@ static inline const struct raid6_calls *raid6_choose_gen_fast(void)
 
 	if (best) {
 		raid6_call = *best;
-		pr_info("raid6: skipped pq benchmark and selected %s\n",
+		pr_info("raid6: fast selected %s, async benchmark pending\n",
 			best->name);
 	} else {
 		pr_err("raid6: No valid algorithm found even for fast selection!\n");
@@ -177,7 +178,7 @@ static inline const struct raid6_calls *raid6_choose_gen_fast(void)
 	return best;
 }
 
-static inline const struct raid6_calls *raid6_gen_benchmark(
+static inline void raid6_gen_benchmark(
 		void *(*const dptrs)[RAID6_TEST_DISKS], const int disks)
 {
 	unsigned long perf, bestgenperf, j0, j1;
@@ -214,12 +215,11 @@ static inline const struct raid6_calls *raid6_gen_benchmark(
 	}
 
 	if (!best) {
-		pr_err("raid6: Yikes! No algorithm found!\n");
-		goto out;
+		pr_err("raid6: async benchmark failed to find any algorithm\n");
+		return;
 	}
 
 	raid6_call = *best;
-
 	pr_info("raid6: using algorithm %s gen() %ld MB/s\n",
 		best->name,
 		(bestgenperf * HZ * (disks - 2)) >>
@@ -244,14 +244,11 @@ static inline const struct raid6_calls *raid6_gen_benchmark(
 			(perf * HZ * (disks - 2)) >>
 			(20 - PAGE_SHIFT + RAID6_TIME_JIFFIES_LG2 + 1));
 	}
-
-out:
-	return best;
 }
 
 /* Try to pick the best algorithm */
 /* This code uses the gfmul table as convenient data set to abuse */
-static int raid6_choose_gen_benmark(const struct raid6_calls **gen_best)
+static int raid6_choose_gen_benmark(void)
 {
 	const int disks = RAID6_TEST_DISKS;
 	char *disk_ptr, *p;
@@ -278,32 +275,39 @@ static int raid6_choose_gen_benmark(const struct raid6_calls **gen_best)
 	if ((disks - 2) * PAGE_SIZE % 65536)
 		memcpy(p, raid6_gfmul, (disks - 2) * PAGE_SIZE % 65536);
 
-	*gen_best = raid6_gen_benchmark(&dptrs, disks);
+	raid6_gen_benchmark(&dptrs, disks);
 
 	free_pages((unsigned long)disk_ptr, RAID6_TEST_DISKS_ORDER);
 
 	return 0;
 }
 
+static struct work_struct raid6_benchmark_work __initdata;
+
+static __init void benchmark_work_func(struct work_struct *work)
+{
+	raid6_choose_gen_benmark();
+}
+
 int __init raid6_select_algo(void)
 {
-	int ret;
 	const struct raid6_calls *gen_best = NULL;
 	const struct raid6_recov_calls *rec_best = NULL;
 
-	/* select raid gen_syndrome functions */
-	if (!IS_ENABLED(CONFIG_RAID6_PQ_BENCHMARK))
-		gen_best = raid6_choose_gen_fast();
-	else {
-		ret = raid6_choose_gen_benmark(&gen_best);
-		if (ret < 0)
-			return ret;
-	}
+	/* phase 1: synchronous fast selection generation algorithm */
+	gen_best = raid6_choose_gen_fast();
 
 	/* select raid recover functions */
 	rec_best = raid6_choose_recov();
 
-	return gen_best && rec_best ? 0 : -EINVAL;
+	if (!gen_best || !rec_best)
+		return -EINVAL;
+
+	/* phase 2: asynchronous performance benchmarking */
+	INIT_WORK(&raid6_benchmark_work, benchmark_work_func);
+	schedule_work(&raid6_benchmark_work);
+
+	return 0;
 }
 
 static void raid6_exit(void)
