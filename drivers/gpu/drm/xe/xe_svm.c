@@ -1649,6 +1649,14 @@ int xe_svm_alloc_vram(struct xe_svm_range *range, const struct drm_gpusvm_ctx *c
 	return err;
 }
 
+static void *xe_drm_pagemap_device_iova_alloc(struct drm_pagemap *dpagemap,
+					      struct device *dev, size_t length,
+					      enum dma_data_direction dir)
+{
+	/* NIY */
+	return NULL;
+}
+
 static struct drm_pagemap_addr
 xe_drm_pagemap_device_map(struct drm_pagemap *dpagemap,
 			  struct device *dev,
@@ -1720,6 +1728,7 @@ static void xe_pagemap_destroy(struct drm_pagemap *dpagemap, bool from_atomic_or
 }
 
 static const struct drm_pagemap_ops xe_drm_pagemap_ops = {
+	.device_iova_alloc = xe_drm_pagemap_device_iova_alloc,
 	.device_map = xe_drm_pagemap_device_map,
 	.device_unmap = xe_drm_pagemap_device_unmap,
 	.populate_mm = xe_drm_pagemap_populate_mm,
