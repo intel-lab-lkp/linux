@@ -73,6 +73,93 @@ drm_pagemap_addr_encode(dma_addr_t addr,
  */
 struct drm_pagemap_ops {
 	/**
+	 * @device_iova_alloc: Allocate a IOVA for device access (required)
+	 *
+	 * @dpagemap: The struct drm_pagemap for the IOVA.
+	 * @dev: The device mapper.
+	 * @length: Length of IOVA.
+	 * @dir: The transfer direction.
+	 *
+	 * Context: Reclaim unsafe, maybe take dma-resv locks.
+	 *
+	 * Return: Cookie to IOVA which is passed to other vfuncs, NULL if no
+	 * IOVA could be allocated or not needed, ERR_PTR if an IOVA is required
+	 * but allocation failed.
+	 */
+	void *(*device_iova_alloc)(struct drm_pagemap *dpagemap,
+				   struct device *dev, size_t length,
+				   enum dma_data_direction dir);
+
+	/**
+	 * @device_iova_free: Free a IOVA from device access (optional, required
+	 * if @device_iova_alloc returns a valid cookie)
+	 *
+	 * @dpagemap: The struct drm_pagemap for the IOVA.
+	 * @dev: The device mapper.
+	 * @length: Length of IOVA.
+	 * @cookie: Cookie for IOVA.
+	 *
+	 * Context: Reclaim unsafe, maybe take dma-resv locks.
+	 */
+	void (*device_iova_free)(struct drm_pagemap *dpagemap,
+				 struct device *dev, size_t length,
+				 void *cookie);
+
+	/**
+	 * @device_iova_link: Link IOVA in device (optional, required if
+	 * @device_iova_alloc returns a valid cookie)
+	 *
+	 * @dpagemap: The struct drm_pagemap for the IOVA.
+	 * @dev: The device mapper.
+	 * @length: Length of mapping.
+	 * @offset: Offset in IOVA of mapping.
+	 * @cookie: Cookie for IOVA.
+	 * @dir: The transfer direction.
+	 *
+	 * Context: Reclaim safe.
+	 */
+	struct drm_pagemap_addr (*device_iova_link)(struct drm_pagemap *dpagemap,
+						    struct device *dev,
+						    struct page *page,
+						    size_t length,
+						    size_t offset,
+						    void *cookie,
+						    enum dma_data_direction dir);
+
+	/**
+	 * @device_iova_sync: Sync IOVA in device (optional, required if
+	 * @device_iova_alloc returns a valid cookie)
+	 *
+	 * @dpagemap: The struct drm_pagemap for the IOVA.
+	 * @dev: The device mapper.
+	 * @length: Length of IOVA.
+	 * @cookie: Cookie for IOVA.
+	 *
+	 * Context: Reclaim safe.
+	 *
+	 * Return: Zero on success, negative error code on failure.
+	 */
+	int (*device_iova_sync)(struct drm_pagemap *dpagemap,
+				struct device *dev, size_t length,
+				void *cookie);
+
+	/**
+	 * @device_iova_unlink: Unlink IOVA from device (optional, required if
+	 * @device_iova_alloc returns a valid cookie)
+	 *
+	 * @dpagemap: The struct drm_pagemap for the IOVA.
+	 * @dev: The device mapper.
+	 * @length: Length of IOVA.
+	 * @cookie: Cookie for IOVA.
+	 * @dir: The transfer direction.
+	 *
+	 * Context: Reclaim safe.
+	 */
+	void (*device_iova_unlink)(struct drm_pagemap *dpagemap,
+				   struct device *dev, size_t length,
+				   void *cookie, enum dma_data_direction dir);
+
+	/**
 	 * @device_map: Map for device access or provide a virtual address suitable for
 	 *
 	 * @dpagemap: The struct drm_pagemap for the page.
