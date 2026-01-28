@@ -1798,10 +1798,13 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 			skb = to_drop;
 			to_drop = skb->next;
 			skb_mark_not_on_list(skb);
-			/* TODO: update SNMP values. */
 			sk_skb_reason_drop(sk, skb, SKB_DROP_REASON_PROTO_MEM);
 		}
 		numa_drop_add(&udp_sk(sk)->drop_counters, nb);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, (sk->sk_family == PF_INET)),
+			       UDP_MIB_MEMERRORS, nb);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, (sk->sk_family == PF_INET)),
+			       UDP_MIB_INERRORS, nb);
 	}
 
 	atomic_sub(total_size, &udp_prod_queue->rmem_alloc);
