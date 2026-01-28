@@ -65,6 +65,12 @@ properties:
     description:
       Indicates if the PME pin polarity is active-high.
 
+  microchip,single-led-mode:
+    type: boolean
+    description:
+      Enable single LED mode for all non-CPU ports. In this mode, a single LED
+      indicates both link and activity.
+
   microchip,io-drive-strength-microamp:
     description:
       IO Pad Drive Strength
