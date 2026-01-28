@@ -1515,8 +1515,12 @@ static int ad74115_setup_adc_conv2_range(struct ad74115_state *st)
 	};
 	struct device *dev = &st->spi->dev;
 	unsigned int i;
+	int ret;
 
-	device_property_read_u32_array(dev, prop_name, vals, 2);
+	ret = device_property_read_u32_array(dev, prop_name, vals, 2);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to read %s prop\n",
+				     prop_name);
 
 	for (i = 0; i < tbl_len; i++)
 		if (vals[0] == ad74115_adc_range_tbl[i][0] &&
