@@ -33,6 +33,9 @@
 #define RIO_SPx_L2_Gn_ENTRYy_CSR(x, n, y) \
 				(0x51000 + (x)*0x2000 + (n)*0x400 + (y)*0x4)
 
+#define ACKID_REALIGN_DELAY_MS   20
+#define LINK_STABLE_DELAY_MS   100
+
 static int
 idtg3_route_add_entry(struct rio_mport *mport, u16 destid, u8 hopcount,
 		       u16 table, u16 route_destid, u8 route_port)
@@ -223,36 +226,148 @@ idtg3_em_init(struct rio_dev *rdev)
  * This way the port is synchronized with freshly inserted device (assuming it
  * was reset/powered-up on insertion).
  *
+
  * TODO: This is not sufficient in a situation when a link between two devices
  * was down and up again (e.g. cable disconnect). For that situation full ackID
  * realignment process has to be implemented.
  */
+ static int 
+ idtg3_ackid_realign(struct rio_dev *rdev, u8 pnum)
+ {
+	 u32 ctl;
+	 u32 err;
+	 int retries = 3;
+ 
+	 pr_debug("RIO: ackID realign start %s port %d\n",
+		  rio_name(rdev), pnum);
+ 
+	 /* 1. Disable PW generation to stop storms */
+	 rio_write_config_32(rdev, RIO_PLM_SPx_PW_EN(pnum), 0);
+ 
+	 /* 2. Clear port error status */
+	 rio_read_config_32(rdev,
+		 RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum), &err);
+ 
+	 rio_write_config_32(rdev,
+		 RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum), err);
+ 
+	 /*
+	  * 3. Perform port soft reset
+	  * This clears inbound & outbound ackIDs locally
+	  */
+	 rio_read_config_32(rdev,
+		 RIO_PLM_SPx_IMP_SPEC_CTL(pnum), &ctl);
+ 
+	 rio_write_config_32(rdev,
+		 RIO_PLM_SPx_IMP_SPEC_CTL(pnum),
+		 ctl | RIO_PLM_SPx_IMP_SPEC_CTL_SOFT_RST);
+ 
+	 msleep(ACKID_REALIGN_DELAY_MS);
+ 
+	 rio_write_config_32(rdev,
+		 RIO_PLM_SPx_IMP_SPEC_CTL(pnum), ctl);
+ 
+	 /*
+	  * 4. Wait for link to stabilize
+	  * Required to avoid immediate ES re-trigger
+	  */
+	 msleep(LINK_STABLE_DELAY_MS);
+ 
+	 /*
+	  * 5. Verify error state
+	  * Retry reset if remote side still mismatched
+	  */
+	 while (retries--) {
+		 rio_read_config_32(rdev,
+			 RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum), &err);
+ 
+		 if (!(err & (RIO_PORT_N_ERR_STS_OUT_ES |
+				  RIO_PORT_N_ERR_STS_INP_ES)))
+			 break;
+ 
+		 pr_debug("RIO: ackID retry %s port %d\n",
+			  rio_name(rdev), pnum);
+ 
+		 rio_write_config_32(rdev,
+			 RIO_PLM_SPx_IMP_SPEC_CTL(pnum),
+			 ctl | RIO_PLM_SPx_IMP_SPEC_CTL_SOFT_RST);
+ 
+		 msleep(ACKID_REALIGN_DELAY_MS);
+ 
+		 rio_write_config_32(rdev,
+			 RIO_PLM_SPx_IMP_SPEC_CTL(pnum), ctl);
+ 
+		 msleep(LINK_STABLE_DELAY_MS);
+	 }
+ 
+	 if (err & (RIO_PORT_N_ERR_STS_OUT_ES |
+			RIO_PORT_N_ERR_STS_INP_ES)) {
+		 pr_err("RIO: ackID realign FAILED %s port %d\n",
+				rio_name(rdev), pnum);
+		 return -EIO;
+	 }
+ 
+	 pr_debug("RIO: ackID realign OK %s port %d\n",
+		  rio_name(rdev), pnum);
+ 
+	 return 0;
+ }
+
+static int
+unpluged_handler(struct rio_dev *rdev, u8 pnum)
+ {
+	 u32 rval;
+ 
+	 pr_debug("RIO: port unplug %s port %d\n",
+		  rio_name(rdev), pnum);
+ 
+	 /* Disable PW immediately */
+	 rio_write_config_32(rdev, RIO_PLM_SPx_PW_EN(pnum), 0);
+ 
+	 /* Clear error state */
+	 rio_read_config_32(rdev,
+		 RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum), &rval);
+ 
+	 rio_write_config_32(rdev,
+		 RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum), rval);
+ 
+	 /*
+	  * Routing cleanup is handled by fabric re-enumeration.
+	  * Do NOT soft reset here — link is down.
+	  */
+	 return 0;
+ }
+ 
 static int
 idtg3_em_handler(struct rio_dev *rdev, u8 pnum)
 {
 	u32 err_status;
-	u32 rval;
 
 	rio_read_config_32(rdev,
-			RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum),
-			&err_status);
+		RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum),
+		&err_status);
 
-	/* Do nothing for device/link removal */
-	if (err_status & RIO_PORT_N_ERR_STS_PORT_UNINIT)
-		return 0;
+	/* Link removal */
+	if (err_status & RIO_PORT_N_ERR_STS_PORT_UNINIT) {
+		pr_debug("RIO: PORT_UNINIT %s port %d\n",
+			 rio_name(rdev), pnum);
+		return unpluged_handler(rdev, pnum);
+	}
 
-	/* When link is OK we have a device insertion.
-	 * Request port soft reset to clear errors if they present.
-	 * Inbound and outbound ackIDs will be 0 after reset.
-	 */
+	/* Link up but protocol errors present */
 	if (err_status & (RIO_PORT_N_ERR_STS_OUT_ES |
-				RIO_PORT_N_ERR_STS_INP_ES)) {
-		rio_read_config_32(rdev, RIO_PLM_SPx_IMP_SPEC_CTL(pnum), &rval);
-		rio_write_config_32(rdev, RIO_PLM_SPx_IMP_SPEC_CTL(pnum),
-				    rval | RIO_PLM_SPx_IMP_SPEC_CTL_SOFT_RST);
-		udelay(10);
-		rio_write_config_32(rdev, RIO_PLM_SPx_IMP_SPEC_CTL(pnum), rval);
-		msleep(500);
+			  RIO_PORT_N_ERR_STS_INP_ES)) {
+
+		pr_debug("RIO: ES detected %s port %d\n",
+			 rio_name(rdev), pnum);
+
+		if (idtg3_ackid_realign(rdev, pnum))
+			return -EIO;
+
+		/* Re-enable PW only after clean state */
+		rio_write_config_32(rdev, RIO_PLM_SPx_PW_EN(pnum),
+			RIO_PLM_SPx_PW_EN_OK2U |
+			RIO_PLM_SPx_PW_EN_LINIT);
 	}
 
 	return 0;
