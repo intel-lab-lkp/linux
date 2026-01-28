@@ -2,6 +2,7 @@
 #ifndef SELFTESTS_VFIO_LIB_INCLUDE_LIBVFIO_ASSERT_H
 #define SELFTESTS_VFIO_LIB_INCLUDE_LIBVFIO_ASSERT_H
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -23,7 +24,7 @@
 										\
 	fprintf(stderr, "%s:%u: Assertion Failure\n\n", __FILE__, __LINE__);	\
 	fprintf(stderr, "  Expression: " #_lhs " " #_op " " #_rhs "\n");	\
-	fprintf(stderr, "  Observed: %#lx %s %#lx\n",				\
+	fprintf(stderr, "  Observed: %#" PRIx64 " %s %#" PRIx64 "\n",		\
 			(u64)__lhs, #_op, (u64)__rhs);				\
 	fprintf(stderr, "  [errno: %d - %s]\n", errno, strerror(errno));	\
 	VFIO_LOG_AND_EXIT(__VA_ARGS__);						\
