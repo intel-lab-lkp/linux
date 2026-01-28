@@ -171,7 +171,7 @@ static unsigned int matrix_find_best_cpu_managed(struct irq_matrix *m,
 		if (!cm->online)
 			continue;
 
-		if (cm->managed_allocated <= allocated) {
+		if (cm->managed_allocated < allocated) {
 			best_cpu = cpu;
 			allocated = cm->managed_allocated;
 		}
