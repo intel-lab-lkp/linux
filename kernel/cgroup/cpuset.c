@@ -84,6 +84,10 @@ static cpumask_var_t	isolated_cpus;
  */
 static bool isolated_cpus_updating;
 
+/* Both cpuset_mutex and cpus_read_locked acquired */
+static bool cpuset_full_locked;
+static bool isolation_task_work_queued;
+
 /*
  * A flag to force sched domain rebuild at the end of an operation.
  * It can be set in
@@ -285,10 +289,12 @@ void cpuset_full_lock(void)
 {
 	cpus_read_lock();
 	mutex_lock(&cpuset_mutex);
+	cpuset_full_locked = true;
 }
 
 void cpuset_full_unlock(void)
 {
+	cpuset_full_locked = false;
 	mutex_unlock(&cpuset_mutex);
 	cpus_read_unlock();
 }
@@ -1284,23 +1290,62 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 	return false;
 }
 
+static void __update_isolation_cpumasks(bool twork);
+static void isolation_task_work_fn(struct callback_head *cb)
+{
+	cpuset_full_lock();
+	__update_isolation_cpumasks(true);
+	cpuset_full_lock();
+}
+
 /*
- * update_isolation_cpumasks - Update external isolation related CPU masks
+ * __update_isolation_cpumasks - Update external isolation related CPU masks
+ * @twork - set if call from isolation_task_work_fn()
  *
  * The following external CPU masks will be updated if necessary:
  * - workqueue unbound cpumask
  */
-static void update_isolation_cpumasks(void)
+static void __update_isolation_cpumasks(bool twork)
 {
 	int ret;
 
+	if (twork)
+		isolation_task_work_queued = false;
+
 	if (!isolated_cpus_updating)
 		return;
+
+	/*
+	 * This function can be reached either directly from regular cpuset
+	 * control file write (cpuset_full_locked) or via hotplug
+	 * (cpus_write_lock && cpuset_mutex held). In the later case, we
+	 * defer the housekeeping_update() call to a task_work to avoid
+	 * the possibility of deadlock. The task_work will be run right
+	 * before exiting back to userspace.
+	 */
+	if (!cpuset_full_locked) {
+		static struct callback_head twork_cb;
+
+		if (!isolation_task_work_queued) {
+			init_task_work(&twork_cb, isolation_task_work_fn);
+			if (!task_work_add(current, &twork_cb, TWA_RESUME))
+				isolation_task_work_queued = true;
+			else
+				/* Current task shouldn't be exiting */
+				WARN_ON_ONCE(1);
+		}
+		return;
+	}
 
 	ret = housekeeping_update(isolated_cpus);
 	WARN_ON_ONCE(ret < 0);
 
 	isolated_cpus_updating = false;
+}
+
+static inline void update_isolation_cpumasks(void)
+{
+	__update_isolation_cpumasks(false);
 }
 
 /**
