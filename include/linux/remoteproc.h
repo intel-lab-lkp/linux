@@ -503,6 +503,9 @@ enum rproc_features {
 	RPROC_MAX_FEATURES,
 };
 
+ /* device tree remoteproc Alias stem */
+ #define RPROC_ALIAS "rproc"
+
 /**
  * struct rproc - represents a physical remote processor device
  * @node: list node of this rproc object
