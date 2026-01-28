@@ -213,6 +213,7 @@ static void drm_pagemap_get_devmem_page(struct page *page,
  * @npages: Number of system pages or peer pages to map.
  * @dir: Direction of data transfer (e.g., DMA_BIDIRECTIONAL)
  * @mdetails: Details governing the migration behaviour.
+ * @cookie: IOVA cookie for mapping.
  *
  * This function maps pages of memory for migration usage in GPU SVM. It
  * iterates over each page frame number provided in @migrate_pfn, maps the
@@ -228,23 +229,31 @@ drm_pagemap_migrate_map_device_pages(struct device *dev,
 				     unsigned long *migrate_pfn,
 				     unsigned long npages,
 				     enum dma_data_direction dir,
-				     const struct drm_pagemap_migrate_details *mdetails)
+				     const struct drm_pagemap_migrate_details *mdetails,
+				     void **cookie)
 {
-	unsigned long num_peer_pages = 0, num_local_pages = 0, i;
+	unsigned long num_peer_pages = 0, num_local_pages = 0, i, j;
+	struct page *dummy_page = NULL;
+	struct drm_pagemap *dpagemap;
+	bool try_alloc = false;
 
 	for (i = 0; i < npages;) {
 		struct page *page = migrate_pfn_to_page(migrate_pfn[i]);
 		struct drm_pagemap_zdd *zdd;
-		struct drm_pagemap *dpagemap;
 		struct drm_pagemap_addr addr;
-		struct folio *folio;
 		unsigned int order = 0;
 
-		if (!page)
-			goto next;
+		if (!page) {
+			if (!dummy_page)
+				goto next;
 
-		folio = page_folio(page);
-		order = folio_order(folio);
+			page = dummy_page;
+		} else {
+			struct folio *folio;
+
+			folio = page_folio(page);
+			order = folio_order(folio);
+		}
 
 		WARN_ON_ONCE(!is_device_private_page(page));
 
@@ -260,14 +269,55 @@ drm_pagemap_migrate_map_device_pages(struct device *dev,
 			num_peer_pages += NR_PAGES(order);
 		}
 
-		addr = dpagemap->ops->device_map(dpagemap, dev, page, order, dir);
+		if (!try_alloc) {
+			*cookie = dpagemap->ops->device_iova_alloc(dpagemap,
+								   dev, npages *
+								   PAGE_SIZE,
+								   dir);
+			if (IS_ERR(*cookie))
+				return PTR_ERR(*cookie);
+
+			try_alloc = true;
+		}
+
+		if (page && !dummy_page && *cookie) {
+			for (j = 0; j < i; ++j) {
+				addr = dpagemap->ops->device_iova_link(dpagemap, dev,
+								       page,
+								       PAGE_SIZE,
+								       j * PAGE_SIZE,
+								       *cookie, dir);
+				if (dma_mapping_error(dev, addr.addr))
+					return -EFAULT;
+			}
+		}
+
+		if (*cookie)
+			addr = dpagemap->ops->device_iova_link(dpagemap, dev,
+							       page,
+							       PAGE_SHIFT << order,
+							       i * PAGE_SIZE,
+							       *cookie, dir);
+		else
+			addr = dpagemap->ops->device_map(dpagemap, dev, page,
+							 order, dir);
 		if (dma_mapping_error(dev, addr.addr))
 			return -EFAULT;
 
-		pagemap_addr[i] = addr;
+		if (page != dummy_page)
+			pagemap_addr[i] = addr;
+		dummy_page = page;
 
 next:
 		i += NR_PAGES(order);
+	}
+
+	if (*cookie) {
+		int err = dpagemap->ops->device_iova_sync(dpagemap, dev,
+							  npages * PAGE_SIZE,
+							  *cookie);
+		if (err)
+			return err;
 	}
 
 	if (num_peer_pages)
@@ -424,6 +474,7 @@ next:
  * @npages: Number of pages to unmap
  * @dir: Direction of data transfer (e.g., DMA_BIDIRECTIONAL)
  * @state: DMA IOVA state for mapping.
+ * @cookie: IOVA cookie for mapping.
  *
  * This function unmaps previously mapped pages of memory for GPU Shared Virtual
  * Memory (SVM). It iterates over each DMA address provided in @dma_addr, checks
@@ -434,7 +485,8 @@ static void drm_pagemap_migrate_unmap_pages(struct device *dev,
 					    unsigned long *migrate_pfn,
 					    unsigned long npages,
 					    enum dma_data_direction dir,
-					    struct dma_iova_state *state)
+					    struct dma_iova_state *state,
+					    void *cookie)
 {
 	unsigned long i;
 
@@ -453,7 +505,20 @@ static void drm_pagemap_migrate_unmap_pages(struct device *dev,
 			struct drm_pagemap_zdd *zdd = drm_pagemap_page_zone_device_data(page);
 			struct drm_pagemap *dpagemap = zdd->dpagemap;
 
-			dpagemap->ops->device_unmap(dpagemap, dev, pagemap_addr[i]);
+			if (cookie) {
+				dpagemap->ops->device_iova_unlink(dpagemap, dev,
+								  npages *
+								  PAGE_SIZE,
+								  cookie, dir);
+				dpagemap->ops->device_iova_free(dpagemap, dev,
+								npages *
+								PAGE_SIZE,
+								cookie);
+				return;
+			} else {
+				dpagemap->ops->device_unmap(dpagemap, dev,
+							    pagemap_addr[i]);
+			}
 		} else {
 			dma_unmap_page(dev, pagemap_addr[i].addr,
 				       PAGE_SIZE << pagemap_addr[i].order, dir);
@@ -483,11 +548,12 @@ drm_pagemap_migrate_remote_to_local(struct drm_pagemap_devmem *devmem,
 				    struct dma_iova_state *state)
 
 {
+	void *cookie = NULL;
 	int err = drm_pagemap_migrate_map_device_pages(remote_device,
 						       remote_dpagemap,
 						       pagemap_addr, local_pfns,
 						       npages, DMA_FROM_DEVICE,
-						       mdetails);
+						       mdetails, &cookie);
 	if (err)
 		goto out;
 
@@ -495,7 +561,7 @@ drm_pagemap_migrate_remote_to_local(struct drm_pagemap_devmem *devmem,
 			       devmem->pre_migrate_fence);
 out:
 	drm_pagemap_migrate_unmap_pages(remote_device, pagemap_addr, local_pfns,
-					npages, DMA_FROM_DEVICE, state);
+					npages, DMA_FROM_DEVICE, state, cookie);
 	return err;
 }
 
@@ -520,7 +586,7 @@ drm_pagemap_migrate_sys_to_dev(struct drm_pagemap_devmem *devmem,
 				  devmem->pre_migrate_fence);
 out:
 	drm_pagemap_migrate_unmap_pages(devmem->dev, pagemap_addr, sys_pfns, npages,
-					DMA_TO_DEVICE, state);
+					DMA_TO_DEVICE, state, NULL);
 	return err;
 }
 
@@ -1153,7 +1219,7 @@ err_finalize:
 	migrate_device_pages(src, dst, npages);
 	migrate_device_finalize(src, dst, npages);
 	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr, dst, npages,
-					DMA_FROM_DEVICE, &state);
+					DMA_FROM_DEVICE, &state, NULL);
 
 err_free:
 	kvfree(buf);
@@ -1276,7 +1342,7 @@ err_finalize:
 	if (dev)
 		drm_pagemap_migrate_unmap_pages(dev, pagemap_addr, migrate.dst,
 						npages, DMA_FROM_DEVICE,
-						&state);
+						&state, NULL);
 err_free:
 	kvfree(buf);
 err_out:
