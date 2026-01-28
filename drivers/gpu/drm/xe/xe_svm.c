@@ -1660,12 +1660,123 @@ int xe_svm_alloc_vram(struct xe_svm_range *range, const struct drm_gpusvm_ctx *c
 	return err;
 }
 
+static void xe_drm_pagemap_device_iova_prove_locking(bool *locking_proved)
+{
+	struct ww_acquire_ctx ctx;
+	struct dma_resv obj;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_PROVE_LOCKING))
+		return;
+
+	if (*locking_proved)
+		return;
+
+	might_alloc(GFP_KERNEL);
+
+	dma_resv_init(&obj);
+	ww_acquire_init(&ctx, &reservation_ww_class);
+	ret = dma_resv_lock(&obj, &ctx);
+	if (ret == -EDEADLK)
+		dma_resv_lock_slow(&obj, &ctx);
+	ww_mutex_unlock(&obj.lock);
+	ww_acquire_fini(&ctx);
+
+	*locking_proved = true;
+}
+
+struct xe_svm_iova_cookie {
+	struct dma_iova_state state;
+};
+
 static void *xe_drm_pagemap_device_iova_alloc(struct drm_pagemap *dpagemap,
 					      struct device *dev, size_t length,
 					      enum dma_data_direction dir)
 {
-	/* NIY */
+	struct device *pgmap_dev = dpagemap->drm->dev;
+	struct xe_svm_iova_cookie *cookie;
+	static bool locking_proved = false;
+
+	xe_drm_pagemap_device_iova_prove_locking(&locking_proved);
+
+	if (pgmap_dev == dev)
+		return NULL;
+
+	cookie = kzalloc(sizeof(*cookie), GFP_KERNEL);
+	if (!cookie)
+		return NULL;
+
+	dma_iova_try_alloc(dev, &cookie->state, length >= SZ_2M ? SZ_2M : 0,
+			   length);
+	if (dma_use_iova(&cookie->state))
+		return cookie;
+
+	kfree(cookie);
 	return NULL;
+}
+
+static void xe_drm_pagemap_device_iova_free(struct drm_pagemap *dpagemap,
+					    struct device *dev, size_t length,
+					    void *cookie)
+{
+	struct xe_svm_iova_cookie *__cookie = cookie;
+	struct xe_device *xe = to_xe_device(dpagemap->drm);
+	static bool locking_proved = false;
+
+	xe_assert(xe, dma_use_iova(&__cookie->state));
+	xe_drm_pagemap_device_iova_prove_locking(&locking_proved);
+
+	dma_iova_free(dev, &__cookie->state);
+	kfree(cookie);
+}
+
+static struct drm_pagemap_addr
+xe_drm_pagemap_device_iova_link(struct drm_pagemap *dpagemap,
+				struct device *dev, struct page *page,
+				size_t length, size_t offset, void *cookie,
+				enum dma_data_direction dir)
+{
+	struct xe_svm_iova_cookie *__cookie = cookie;
+	struct xe_device *xe = to_xe_device(dpagemap->drm);
+	dma_addr_t addr = __cookie->state.addr + offset;
+	int err;
+
+	xe_assert(xe, dma_use_iova(&__cookie->state));
+
+	err = dma_iova_link(dev, &__cookie->state, xe_page_to_pcie(page),
+			    offset, length, dir, DMA_ATTR_SKIP_CPU_SYNC |
+			    DMA_ATTR_MMIO);
+	if (err)
+		addr = DMA_MAPPING_ERROR;
+
+	return drm_pagemap_addr_encode(addr, XE_INTERCONNECT_P2P, ilog2(length),
+				       dir);
+}
+
+static int
+xe_drm_pagemap_device_iova_sync(struct drm_pagemap *dpagemap,
+				struct device *dev, size_t length, void *cookie)
+{
+	struct xe_svm_iova_cookie *__cookie = cookie;
+	struct xe_device *xe = to_xe_device(dpagemap->drm);
+
+	xe_assert(xe, dma_use_iova(&__cookie->state));
+
+	return dma_iova_sync(dev, &__cookie->state, 0, length);
+}
+
+static void
+xe_drm_pagemap_device_iova_unlink(struct drm_pagemap *dpagemap,
+				  struct device *dev, size_t length,
+				  void *cookie, enum dma_data_direction dir)
+{
+	struct xe_svm_iova_cookie *__cookie = cookie;
+	struct xe_device *xe = to_xe_device(dpagemap->drm);
+
+	xe_assert(xe, dma_use_iova(&__cookie->state));
+
+	dma_iova_unlink(dev, &__cookie->state, 0, length, dir,
+			DMA_ATTR_SKIP_CPU_SYNC | DMA_ATTR_MMIO);
 }
 
 static struct drm_pagemap_addr
@@ -1740,6 +1851,10 @@ static void xe_pagemap_destroy(struct drm_pagemap *dpagemap, bool from_atomic_or
 
 static const struct drm_pagemap_ops xe_drm_pagemap_ops = {
 	.device_iova_alloc = xe_drm_pagemap_device_iova_alloc,
+	.device_iova_free = xe_drm_pagemap_device_iova_free,
+	.device_iova_link = xe_drm_pagemap_device_iova_link,
+	.device_iova_sync = xe_drm_pagemap_device_iova_sync,
+	.device_iova_unlink = xe_drm_pagemap_device_iova_unlink,
 	.device_map = xe_drm_pagemap_device_map,
 	.device_unmap = xe_drm_pagemap_device_unmap,
 	.populate_mm = xe_drm_pagemap_populate_mm,
