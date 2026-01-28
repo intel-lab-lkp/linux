@@ -454,6 +454,10 @@ struct clk_hw *__imx8m_clk_hw_composite(const char *name,
 	_imx8m_clk_hw_composite(name, parent_names, reg, \
 			IMX_COMPOSITE_CORE, IMX_COMPOSITE_CLK_FLAGS_DEFAULT)
 
+#define imx8m_clk_hw_composite_core_critical(name, parent_names, reg)	\
+	_imx8m_clk_hw_composite(name, parent_names, reg, \
+			IMX_COMPOSITE_CORE, IMX_COMPOSITE_CLK_FLAGS_CRITICAL)
+
 #define imx8m_clk_hw_fw_managed_composite(name, parent_names, reg) \
 	_imx8m_clk_hw_composite(name, parent_names, reg, \
 			IMX_COMPOSITE_FW_MANAGED, \
