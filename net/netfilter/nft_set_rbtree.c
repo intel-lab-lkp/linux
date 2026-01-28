@@ -309,9 +309,20 @@ static void nft_rbtree_set_start_cookie(struct nft_rbtree *priv,
 	priv->start_rbe_cookie = (unsigned long)rbe;
 }
 
+static void nft_rbtree_set_start_cookie_open(struct nft_rbtree *priv,
+					     const struct nft_rbtree_elem *rbe,
+					     unsigned long open_interval)
+{
+	priv->start_rbe_cookie = (unsigned long)rbe | open_interval;
+}
+
+#define NFT_RBTREE_OPEN_INTERVAL	1UL
+
 static bool nft_rbtree_cmp_start_cookie(struct nft_rbtree *priv,
 					const struct nft_rbtree_elem *rbe)
 {
+	return (priv->start_rbe_cookie & ~NFT_RBTREE_OPEN_INTERVAL) == (unsigned long)rbe;
+
 	return priv->start_rbe_cookie == (unsigned long)rbe;
 }
 
@@ -342,7 +353,7 @@ static bool nft_rbtree_insert_same_interval(const struct net *net,
 
 static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 			       struct nft_rbtree_elem *new,
-			       struct nft_elem_priv **elem_priv)
+			       struct nft_elem_priv **elem_priv, bool last)
 {
 	struct nft_rbtree_elem *rbe, *rbe_le = NULL, *rbe_ge = NULL, *rbe_prev;
 	struct rb_node *node, *next, *parent, **p, *first = NULL;
@@ -350,6 +361,7 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 	u8 cur_genmask = nft_genmask_cur(net);
 	u8 genmask = nft_genmask_next(net);
 	u64 tstamp = nft_net_tstamp(net);
+	unsigned long open_interval = 0;
 	int d;
 
 	/* Descend the tree to search for an existing element greater than the
@@ -455,10 +467,18 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 		}
 	}
 
-	if (nft_rbtree_interval_null(set, new))
+	if (nft_rbtree_interval_null(set, new)) {
 		priv->start_rbe_cookie = 0;
-	else if (nft_rbtree_interval_start(new) && priv->start_rbe_cookie)
-		priv->start_rbe_cookie = 0;
+	} else if (nft_rbtree_interval_start(new) && priv->start_rbe_cookie) {
+		if (nft_set_is_anonymous(set)) {
+			priv->start_rbe_cookie = 0;
+		} else if (priv->start_rbe_cookie & NFT_RBTREE_OPEN_INTERVAL) {
+			/* Previous element is an open interval that partially
+			 * overlaps with an existing non-open interval.
+			 */
+			return -ENOTEMPTY;
+		}
+	}
 
 	/* - new start element matching existing start element: full overlap
 	 *   reported as -EEXIST, cleared by caller if NLM_F_EXCL is not given.
@@ -466,7 +486,26 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 	if (rbe_ge && !nft_rbtree_cmp(set, new, rbe_ge) &&
 	    nft_rbtree_interval_start(rbe_ge) == nft_rbtree_interval_start(new)) {
 		*elem_priv = &rbe_ge->priv;
-		nft_rbtree_set_start_cookie(priv, rbe_ge);
+
+		/* - Corner case: new start element of open interval (which
+		 *   comes as last element in the batch) overlaps the start of
+		 *   an existing interval with an end element: partial overlap.
+		 */
+		node = rb_first(&priv->root);
+		rbe = __nft_rbtree_next_active(node, genmask);
+		if (nft_rbtree_interval_end(rbe)) {
+			rbe = nft_rbtree_next_active(rbe, genmask);
+			if (nft_rbtree_interval_start(rbe) &&
+			    !nft_rbtree_cmp(set, new, rbe)) {
+				if (last)
+					return -ENOTEMPTY;
+
+				/* Maybe open interval? */
+				open_interval = 1UL;
+			}
+		}
+		nft_rbtree_set_start_cookie_open(priv, rbe_ge, open_interval);
+
 		return -EEXIST;
 	}
 
@@ -519,6 +558,12 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 	 */
 	if (rbe_ge &&
 	    nft_rbtree_interval_end(rbe_ge) && nft_rbtree_interval_end(new))
+		return -ENOTEMPTY;
+
+	/* - start element overlaps an open interval but end element is new:
+	 *   partial overlap, reported as -ENOEMPTY.
+	 */
+	if (!rbe_ge && priv->start_rbe_cookie && nft_rbtree_interval_end(new))
 		return -ENOTEMPTY;
 
 	/* Accepted element: pick insertion point depending on key value */
@@ -630,6 +675,7 @@ static int nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 			     struct nft_elem_priv **elem_priv)
 {
 	struct nft_rbtree_elem *rbe = nft_elem_priv_cast(elem->priv);
+	bool last = !!(elem->flags & NFT_SET_ELEM_INTERNAL_LAST);
 	struct nft_rbtree *priv = nft_set_priv(set);
 	int err;
 
@@ -643,8 +689,12 @@ static int nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 		cond_resched();
 
 		write_lock_bh(&priv->lock);
-		err = __nft_rbtree_insert(net, set, rbe, elem_priv);
+		err = __nft_rbtree_insert(net, set, rbe, elem_priv, last);
 		write_unlock_bh(&priv->lock);
+
+		if (nft_rbtree_interval_end(rbe))
+			priv->start_rbe_cookie = 0;
+
 	} while (err == -EAGAIN);
 
 	return err;
@@ -732,6 +782,7 @@ nft_rbtree_deactivate(const struct net *net, const struct nft_set *set,
 		      const struct nft_set_elem *elem)
 {
 	struct nft_rbtree_elem *rbe, *this = nft_elem_priv_cast(elem->priv);
+	bool last = !!(elem->flags & NFT_SET_ELEM_INTERNAL_LAST);
 	struct nft_rbtree *priv = nft_set_priv(set);
 	const struct rb_node *parent = priv->root.rb_node;
 	u8 genmask = nft_genmask_next(net);
@@ -770,9 +821,10 @@ nft_rbtree_deactivate(const struct net *net, const struct nft_set *set,
 				continue;
 			}
 
-			if (nft_rbtree_interval_start(rbe))
-				nft_rbtree_set_start_cookie(priv, rbe);
-			else if (!nft_rbtree_deactivate_same_interval(net, priv, rbe))
+			if (nft_rbtree_interval_start(rbe)) {
+				if (!last)
+					nft_rbtree_set_start_cookie(priv, rbe);
+			} else if (!nft_rbtree_deactivate_same_interval(net, priv, rbe))
 				return NULL;
 
 			nft_rbtree_flush(net, set, &rbe->priv);
