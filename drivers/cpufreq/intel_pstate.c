@@ -1142,8 +1142,11 @@ static void hybrid_refresh_cpu_capacity_scaling(void)
 
 static void hybrid_init_cpu_capacity_scaling(bool refresh)
 {
-	/* Bail out if enabling capacity-aware scheduling is prohibited. */
-	if (no_cas)
+	/*
+	 * Bail out if capacity-aware scheduling is prohibited, or if SMT is
+	 * possible, as the capacity of SMT threads cannot be determined reliably.
+	 */
+	if (no_cas || cpu_smt_possible())
 		return;
 
 	/*
@@ -1156,12 +1159,8 @@ static void hybrid_init_cpu_capacity_scaling(bool refresh)
 		return;
 	}
 
-	/*
-	 * On hybrid systems, use asym capacity instead of ITMT, but because
-	 * the capacity of SMT threads is not deterministic even approximately,
-	 * do not do that when SMT is in use.
-	 */
-	if (hwp_is_hybrid && !sched_smt_active() && arch_enable_hybrid_capacity_scale()) {
+	/* On hybrid systems, use asym capacity instead of ITMT */
+	if (hwp_is_hybrid && arch_enable_hybrid_capacity_scale()) {
 		hybrid_refresh_cpu_capacity_scaling();
 		/*
 		 * Disabling ITMT causes sched domains to be rebuilt to disable asym
