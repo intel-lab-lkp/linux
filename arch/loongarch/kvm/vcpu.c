@@ -1666,6 +1666,7 @@ static int _kvm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_ISR1);
 		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_ISR2);
 		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_ISR3);
+		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_IPR);
 	}
 
 	/* Restore Root.GINTC from unused Guest.GINTC register */
@@ -1761,6 +1762,7 @@ static int _kvm_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_ISR1);
 		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_ISR2);
 		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_ISR3);
+		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_IPR);
 	}
 
 	vcpu->arch.aux_inuse |= KVM_LARCH_SWCSR_LATEST;
