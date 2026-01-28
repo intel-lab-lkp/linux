@@ -138,6 +138,7 @@ struct drm_gpusvm_pages_flags {
  * @dpagemap: The struct drm_pagemap of the device pages we're dma-mapping.
  *            Note this is assuming only one drm_pagemap per range is allowed.
  * @state: DMA IOVA state for mapping.
+ * @iova_cookie: IOVA cookie for mapping.
  * @notifier_seq: Notifier sequence number of the range's pages
  * @flags: Flags for range
  * @flags.migrate_devmem: Flag indicating whether the range can be migrated to device memory
@@ -150,6 +151,7 @@ struct drm_gpusvm_pages {
 	struct drm_pagemap_addr *dma_addr;
 	struct drm_pagemap *dpagemap;
 	struct dma_iova_state state;
+	void *iova_cookie;
 	unsigned long notifier_seq;
 	struct drm_gpusvm_pages_flags flags;
 };

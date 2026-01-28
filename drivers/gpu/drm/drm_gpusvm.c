@@ -1142,9 +1142,19 @@ static void __drm_gpusvm_unmap_pages(struct drm_gpusvm *gpusvm,
 		struct dma_iova_state __state = {};
 
 		if (dma_use_iova(&svm_pages->state)) {
+			drm_WARN_ON(gpusvm->drm, svm_pages->iova_cookie);
+
 			dma_iova_destroy(dev, &svm_pages->state,
 					 npages * PAGE_SIZE,
 					 svm_pages->dma_addr[0].dir, 0);
+		} else if (svm_pages->iova_cookie) {
+			struct drm_pagemap_addr *addr = &svm_pages->dma_addr[0];
+
+			dpagemap->ops->device_iova_unlink(dpagemap, dev,
+							  npages *
+							  PAGE_SIZE,
+							  svm_pages->iova_cookie,
+							  addr->dir);
 		} else {
 			for (i = 0, j = 0; i < npages; j++) {
 				struct drm_pagemap_addr *addr = &svm_pages->dma_addr[j];
@@ -1166,8 +1176,10 @@ static void __drm_gpusvm_unmap_pages(struct drm_gpusvm *gpusvm,
 		flags.has_dma_mapping = false;
 		WRITE_ONCE(svm_pages->flags.__flags, flags.__flags);
 
-		drm_pagemap_put(svm_pages->dpagemap);
-		svm_pages->dpagemap = NULL;
+		if (!svm_pages->iova_cookie) {
+			drm_pagemap_put(svm_pages->dpagemap);
+			svm_pages->dpagemap = NULL;
+		}
 		svm_pages->state = __state;
 	}
 }
@@ -1191,6 +1203,28 @@ static void __drm_gpusvm_free_pages(struct drm_gpusvm *gpusvm,
 }
 
 /**
+ * drm_gpusvm_pages_iova_free() - Free IOVA associated with GPU SVM pages
+ * @gpusvm: Pointer to the GPU SVM structure
+ * @svm_pages: Pointer to the GPU SVM pages structure
+ * @size: Size of IOVA to free
+ *
+ * This function frees the IOVA associated with a GPU SVM range.
+ */
+static void drm_gpusvm_pages_iova_free(struct drm_gpusvm *gpusvm,
+				       struct drm_gpusvm_pages *svm_pages,
+				       size_t size)
+{
+	if (svm_pages->iova_cookie) {
+		struct drm_pagemap *dpagemap = svm_pages->dpagemap;
+
+		dpagemap->ops->device_iova_free(dpagemap, gpusvm->drm->dev,
+						size, svm_pages->iova_cookie);
+		drm_pagemap_put(dpagemap);
+		svm_pages->dpagemap = NULL;
+	}
+}
+
+/**
  * drm_gpusvm_free_pages() - Free dma-mapping associated with GPU SVM pages
  * struct
  * @gpusvm: Pointer to the GPU SVM structure
@@ -1208,6 +1242,8 @@ void drm_gpusvm_free_pages(struct drm_gpusvm *gpusvm,
 	__drm_gpusvm_unmap_pages(gpusvm, svm_pages, npages);
 	__drm_gpusvm_free_pages(gpusvm, svm_pages);
 	drm_gpusvm_notifier_unlock(gpusvm);
+
+	drm_gpusvm_pages_iova_free(gpusvm, svm_pages, npages * PAGE_SIZE);
 }
 EXPORT_SYMBOL_GPL(drm_gpusvm_free_pages);
 
@@ -1241,6 +1277,8 @@ void drm_gpusvm_range_remove(struct drm_gpusvm *gpusvm,
 	__drm_gpusvm_range_remove(notifier, range);
 	drm_gpusvm_notifier_unlock(gpusvm);
 
+	drm_gpusvm_pages_iova_free(gpusvm, &range->pages,
+				   drm_gpusvm_range_size(range));
 	drm_gpusvm_range_put(range);
 
 	if (RB_EMPTY_ROOT(&notifier->root.rb_root)) {
@@ -1418,6 +1456,7 @@ int drm_gpusvm_get_pages(struct drm_gpusvm *gpusvm,
 	enum dma_data_direction dma_dir = ctx->read_only ? DMA_TO_DEVICE :
 							   DMA_BIDIRECTIONAL;
 	struct dma_iova_state *state = &svm_pages->state;
+	bool try_alloc;
 
 retry:
 	if (time_after(jiffies, timeout))
@@ -1426,6 +1465,9 @@ retry:
 	hmm_range.notifier_seq = mmu_interval_read_begin(notifier);
 	if (drm_gpusvm_pages_valid_unlocked(gpusvm, svm_pages))
 		goto set_seqno;
+
+	drm_gpusvm_pages_iova_free(gpusvm, svm_pages, npages * PAGE_SIZE);
+	try_alloc = false;
 
 	pfns = kvmalloc_array(npages, sizeof(*pfns), GFP_KERNEL);
 	if (!pfns)
@@ -1535,12 +1577,47 @@ map_pages:
 					err = -EAGAIN;
 					goto err_unmap;
 				}
+
+				if (!try_alloc) {
+					void *iova_cookie;
+
+					/* Unlock and restart mapping to allocate IOVA. */
+					drm_gpusvm_notifier_unlock(gpusvm);
+
+					drm_WARN_ON(gpusvm->drm,
+						    svm_pages->iova_cookie);
+
+					iova_cookie =
+						dpagemap->ops->device_iova_alloc(dpagemap,
+										 gpusvm->drm->dev,
+										 npages * PAGE_SIZE,
+										 dma_dir);
+					if (IS_ERR(iova_cookie)) {
+						err = PTR_ERR(iova_cookie);
+						goto err_unmap;
+					}
+
+					svm_pages->iova_cookie = iova_cookie;
+					try_alloc = true;
+					goto map_pages;
+				}
 			}
-			svm_pages->dma_addr[j] =
-				dpagemap->ops->device_map(dpagemap,
-							  gpusvm->drm->dev,
-							  page, order,
-							  dma_dir);
+
+			if (svm_pages->iova_cookie)
+				svm_pages->dma_addr[j] =
+					dpagemap->ops->device_iova_link(dpagemap,
+									gpusvm->drm->dev,
+									page,
+									PAGE_SHIFT << order,
+									j * PAGE_SIZE,
+									svm_pages->iova_cookie,
+									dma_dir);
+			else
+				svm_pages->dma_addr[j] =
+					dpagemap->ops->device_map(dpagemap,
+								  gpusvm->drm->dev,
+								  page, order,
+								  dma_dir);
 			if (dma_mapping_error(gpusvm->drm->dev,
 					      svm_pages->dma_addr[j].addr)) {
 				err = -EFAULT;
@@ -1600,8 +1677,17 @@ map_pages:
 	}
 
 	if (dma_use_iova(state)) {
+		drm_WARN_ON(gpusvm->drm, svm_pages->iova_cookie);
+
 		err = dma_iova_sync(gpusvm->drm->dev, state, 0,
 				    npages * PAGE_SIZE);
+		if (err)
+			goto err_unmap;
+	} else if (svm_pages->iova_cookie) {
+		err = dpagemap->ops->device_iova_sync(dpagemap,
+						      gpusvm->drm->dev,
+						      npages * PAGE_SIZE,
+						      svm_pages->iova_cookie);
 		if (err)
 			goto err_unmap;
 	}
