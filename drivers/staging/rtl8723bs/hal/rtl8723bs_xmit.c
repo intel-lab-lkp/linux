@@ -205,7 +205,7 @@ static s32 xmit_xmitframes(struct adapter *padapter, struct xmit_priv *pxmitpriv
 			(padapter->mlmepriv.LinkDetectInfo.bHigherBusyTxTraffic)
 		) {
 			if ((phwxmit->accnt > 0) && (phwxmit->accnt < 5)) {
-				err = -2;
+				err = -EBUSY;
 				break;
 			}
 		}
@@ -260,7 +260,7 @@ static s32 xmit_xmitframes(struct adapter *padapter, struct xmit_priv *pxmitpriv
 							   "%s: xmit_buf is not enough!\n",
 							   __func__);
 #endif
-						err = -2;
+						err = -ENOBUFS;
 						complete(&(pxmitpriv->xmit_comp));
 						break;
 					}
@@ -380,7 +380,7 @@ next:
 	/*  dequeue frame and write to hardware */
 
 	ret = xmit_xmitframes(padapter, pxmitpriv);
-	if (ret == -2) {
+	if (ret == -EBUSY || ret == -ENOBUFS) {
 		/* here sleep 1ms will cause big TP loss of TX */
 		/* from 50+ to 40+ */
 		if (padapter->registrypriv.wifi_spec)
