@@ -1353,10 +1353,12 @@ static int bnxt_add_ntuple_cls_rule(struct bnxt *bp,
 	if (!bp->vnic_info)
 		return -EAGAIN;
 
-	vf = ethtool_get_flow_spec_ring_vf(fs->ring_cookie);
-	ring = ethtool_get_flow_spec_ring(fs->ring_cookie);
-	if ((fs->flow_type & (FLOW_MAC_EXT | FLOW_EXT)) || vf)
-		return -EOPNOTSUPP;
+	if (fs->ring_cookie != RX_CLS_FLOW_DISC) {
+		vf = ethtool_get_flow_spec_ring_vf(fs->ring_cookie);
+		ring = ethtool_get_flow_spec_ring(fs->ring_cookie);
+		if ((fs->flow_type & (FLOW_MAC_EXT | FLOW_EXT)) || vf)
+			return -EOPNOTSUPP;
+	}
 
 	if (flow_type == IP_USER_FLOW) {
 		if (!bnxt_verify_ntuple_ip4_flow(&fs->h_u.usr_ip4_spec,
