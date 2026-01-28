@@ -844,11 +844,15 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 {
 	struct dw_edma_chip *chip = dw->chip;
 	struct device *dev = dw->chip->dev;
+	struct msi_desc *msi_desc;
 	u32 wr_mask = 1;
 	u32 rd_mask = 1;
 	int i, err = 0;
 	u32 ch_cnt;
 	int irq;
+	u16 msi_base_data = 0;
+	bool msi_base_valid = false;
+	bool is_msix = false;
 
 	ch_cnt = dw->wr_ch_cnt + dw->rd_ch_cnt;
 
@@ -869,8 +873,15 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 			return err;
 		}
 
-		if (irq_get_msi_desc(irq))
+		if (irq_get_msi_desc(irq)) {
 			get_cached_msi_msg(irq, &dw->irq[0].msi);
+			msi_desc = irq_get_msi_desc(irq);
+			is_msix = msi_desc && msi_desc->pci.msi_attrib.is_msix;
+			if (!is_msix) {
+				msi_base_data = dw->irq[0].msi.data;
+				msi_base_valid = true;
+			}
+		}
 
 		dw->nr_irqs = 1;
 	} else {
@@ -896,8 +907,18 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 			if (err)
 				goto err_irq_free;
 
-			if (irq_get_msi_desc(irq))
+			if (irq_get_msi_desc(irq)) {
 				get_cached_msi_msg(irq, &dw->irq[i].msi);
+				msi_desc = irq_get_msi_desc(irq);
+				is_msix = msi_desc && msi_desc->pci.msi_attrib.is_msix;
+				if (!is_msix) {
+					if (!msi_base_valid) {
+						msi_base_data = dw->irq[i].msi.data;
+						msi_base_valid = true;
+					}
+					dw->irq[i].msi.data = (u16)(msi_base_data + i);
+				}
+			}
 		}
 
 		dw->nr_irqs = i;
