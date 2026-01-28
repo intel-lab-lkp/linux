@@ -169,16 +169,11 @@ int vkms_create(struct vkms_config *config)
 	if (!fdev)
 		return -ENODEV;
 
-	if (!devres_open_group(&fdev->dev, NULL, GFP_KERNEL)) {
-		ret = -ENOMEM;
-		goto out_unregister;
-	}
-
 	vkms_device = devm_drm_dev_alloc(&fdev->dev, &vkms_driver,
 					 struct vkms_device, drm);
 	if (IS_ERR(vkms_device)) {
 		ret = PTR_ERR(vkms_device);
-		goto out_devres;
+		goto out;
 	}
 	vkms_device->faux_dev = fdev;
 	vkms_device->config = config;
@@ -189,33 +184,31 @@ int vkms_create(struct vkms_config *config)
 
 	if (ret) {
 		DRM_ERROR("Could not initialize DMA support\n");
-		goto out_devres;
+		goto out;
 	}
 
 	ret = drm_vblank_init(&vkms_device->drm,
 			      vkms_config_get_num_crtcs(config));
 	if (ret) {
 		DRM_ERROR("Failed to vblank\n");
-		goto out_devres;
+		goto out;
 	}
 
 	ret = vkms_modeset_init(vkms_device);
 	if (ret)
-		goto out_devres;
+		goto out;
 
 	vkms_config_register_debugfs(vkms_device);
 
 	ret = drm_dev_register(&vkms_device->drm, 0);
 	if (ret)
-		goto out_devres;
+		goto out;
 
 	drm_client_setup(&vkms_device->drm, NULL);
 
 	return 0;
 
-out_devres:
-	devres_release_group(&fdev->dev, NULL);
-out_unregister:
+out:
 	faux_device_destroy(fdev);
 	return ret;
 }
@@ -262,7 +255,6 @@ void vkms_destroy(struct vkms_config *config)
 	drm_colorop_pipeline_destroy(&config->dev->drm);
 	drm_dev_unregister(&config->dev->drm);
 	drm_atomic_helper_shutdown(&config->dev->drm);
-	devres_release_group(&fdev->dev, NULL);
 	faux_device_destroy(fdev);
 
 	config->dev = NULL;
