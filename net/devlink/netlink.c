@@ -218,7 +218,7 @@ devlink_get_parent_from_attrs_lock(struct net *net, struct nlattr **attrs)
 
 	err = nla_parse_nested(tb, DEVLINK_ATTR_DEV_NAME,
 			       attrs[DEVLINK_ATTR_PARENT_DEV],
-			       NULL, NULL);
+			       devlink_dl_parent_dev_nl_policy, NULL);
 	if (err)
 		return ERR_PTR(err);
 
@@ -301,6 +301,14 @@ int devlink_nl_pre_doit_port_optional(const struct genl_split_ops *ops,
 	return __devlink_nl_pre_doit(skb, info, DEVLINK_NL_FLAG_NEED_DEVLINK_OR_PORT);
 }
 
+int devlink_nl_pre_doit_parent_dev_optional(const struct genl_split_ops *ops,
+					    struct sk_buff *skb,
+					    struct genl_info *info)
+{
+	return __devlink_nl_pre_doit(skb, info,
+				     DEVLINK_NL_FLAG_OPTIONAL_PARENT_DEV);
+}
+
 static void __devlink_nl_post_doit(struct sk_buff *skb, struct genl_info *info,
 				   u8 flags)
 {
@@ -328,6 +336,14 @@ devlink_nl_post_doit_dev_lock(const struct genl_split_ops *ops,
 			      struct sk_buff *skb, struct genl_info *info)
 {
 	__devlink_nl_post_doit(skb, info, DEVLINK_NL_FLAG_NEED_DEV_LOCK);
+}
+
+void
+devlink_nl_post_doit_parent_dev_optional(const struct genl_split_ops *ops,
+					 struct sk_buff *skb,
+					 struct genl_info *info)
+{
+	__devlink_nl_post_doit(skb, info, DEVLINK_NL_FLAG_OPTIONAL_PARENT_DEV);
 }
 
 static int devlink_nl_inst_single_dumpit(struct sk_buff *msg,
