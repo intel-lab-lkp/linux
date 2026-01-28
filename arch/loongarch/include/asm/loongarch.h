@@ -688,8 +688,8 @@
 #define LOONGARCH_CSR_ISR1		0xa1
 #define LOONGARCH_CSR_ISR2		0xa2
 #define LOONGARCH_CSR_ISR3		0xa3
-
 #define LOONGARCH_CSR_IRR		0xa4
+#define LOONGARCH_CSR_IPR		0xa5
 
 #define LOONGARCH_CSR_PRID		0xc0
 
