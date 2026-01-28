@@ -871,7 +871,10 @@ static int vf610_adc_probe(struct platform_device *pdev)
 
 	info->vref_uv = regulator_get_voltage(info->vref);
 
-	device_property_read_u32_array(dev, "fsl,adck-max-frequency", info->max_adck_rate, 3);
+	ret = device_property_read_u32_array(dev, "fsl,adck-max-frequency",
+					     info->max_adck_rate, 3);
+	if (ret)
+		return ret;
 
 	info->adc_feature.default_sample_time = DEFAULT_SAMPLE_TIME;
 	device_property_read_u32(dev, "min-sample-time", &info->adc_feature.default_sample_time);
