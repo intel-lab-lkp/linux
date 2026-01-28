@@ -609,8 +609,11 @@ static int pwm_fan_probe(struct platform_device *pdev)
 		for (i = 0; i < ctx->tach_count; i++)
 			ctx->pulses_per_revolution[i] = 2;
 
-		device_property_read_u32_array(dev, "pulses-per-revolution",
-					       ctx->pulses_per_revolution, ctx->tach_count);
+		ret = device_property_read_u32_array(dev, "pulses-per-revolution",
+						     ctx->pulses_per_revolution, ctx->tach_count);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to read pulses-per-revolution\n");
 	}
 
 	channels = devm_kcalloc(dev, channel_count + 1,
