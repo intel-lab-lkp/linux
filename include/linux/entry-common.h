@@ -125,14 +125,14 @@ void syscall_exit_work(struct pt_regs *regs, unsigned long work);
  * syscall_exit_to_user_mode_work - Handle work before returning to user mode
  * @regs:	Pointer to currents pt_regs
  *
- * Same as step 1 and 2 of syscall_exit_to_user_mode() but without calling
+ * Same as step 1 of syscall_exit_to_user_mode() but without calling
+ * local_irq_disable(), syscall_exit_to_user_mode_prepare() and
  * exit_to_user_mode() to perform the final transition to user mode.
  *
- * Calling convention is the same as for syscall_exit_to_user_mode() and it
- * returns with all work handled and interrupts disabled. The caller must
- * invoke exit_to_user_mode() before actually switching to user mode to
- * make the final state transitions. Interrupts must stay disabled between
- * return from this function and the invocation of exit_to_user_mode().
+ * Calling convention is the same as for syscall_exit_to_user_mode(). The
+ * caller must invoke local_irq_disable(), __exit_to_user_mode_prepare() and
+ * exit_to_user_mode() before actually switching to user mode to
+ * make the final state transitions.
  */
 static __always_inline void syscall_exit_to_user_mode_work(struct pt_regs *regs)
 {
@@ -155,8 +155,6 @@ static __always_inline void syscall_exit_to_user_mode_work(struct pt_regs *regs)
 	 */
 	if (unlikely(work & SYSCALL_WORK_EXIT))
 		syscall_exit_work(regs, work);
-	local_irq_disable_exit_to_user();
-	syscall_exit_to_user_mode_prepare(regs);
 }
 
 /**
@@ -192,6 +190,8 @@ static __always_inline void syscall_exit_to_user_mode(struct pt_regs *regs)
 {
 	instrumentation_begin();
 	syscall_exit_to_user_mode_work(regs);
+	local_irq_disable_exit_to_user();
+	syscall_exit_to_user_mode_prepare(regs);
 	instrumentation_end();
 	exit_to_user_mode();
 }
