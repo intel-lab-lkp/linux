@@ -8006,8 +8006,14 @@ int intel_max_uncompressed_dotclock(struct intel_display *display)
 	int max_dotclock = display->cdclk.max_dotclk_freq;
 	int limit = max_dotclock;
 
-	if (DISPLAY_VER(display) >= 30)
+	if (DISPLAY_VERx100(display) == 3002)
+		limit = 937500;
+	else if (DISPLAY_VER(display) >= 30)
 		limit = 1350000;
+	else if (DISPLAY_VER(display) >= 13)
+		limit = 1200000;
+	else
+		limit = 1100000;
 
 	return min(max_dotclock, limit);
 }
