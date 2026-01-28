@@ -1451,12 +1451,20 @@ bool intel_dp_can_join(struct intel_display *display,
 
 bool intel_dp_dotclk_valid(struct intel_display *display,
 			   int target_clock,
+			   int htotal,
+			   int dsc_slice_count,
 			   int num_joined_pipes)
 {
 	int max_dotclk = display->cdclk.max_dotclk_freq;
 	int effective_dotclk_limit;
 
 	effective_dotclk_limit = max_dotclk * num_joined_pipes;
+
+	if (dsc_slice_count)
+		target_clock = intel_dsc_get_pixel_rate_with_dsc_bubbles(display,
+									 target_clock,
+									 htotal,
+									 dsc_slice_count);
 
 	return target_clock <= effective_dotclk_limit;
 }
@@ -1592,8 +1600,13 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		if (status != MODE_OK)
 			continue;
 
+		if (!dsc)
+			dsc_slice_count = 0;
+
 		if (intel_dp_dotclk_valid(display,
 					  target_clock,
+					  mode->htotal,
+					  dsc_slice_count,
 					  num_joined_pipes)) {
 			status = MODE_OK;
 			break;
@@ -2827,6 +2840,7 @@ intel_dp_compute_link_for_joined_pipes(struct intel_encoder *encoder,
 	int max_dotclk = display->cdclk.max_dotclk_freq;
 	struct link_config_limits limits;
 	bool dsc_needed, joiner_needs_dsc;
+	int dsc_slice_count = 0;
 	int ret = 0;
 
 	joiner_needs_dsc = intel_dp_joiner_needs_dsc(display, num_joined_pipes);
@@ -2878,10 +2892,15 @@ intel_dp_compute_link_for_joined_pipes(struct intel_encoder *encoder,
 			return ret;
 	}
 
+	if (pipe_config->dsc.compression_enable)
+		dsc_slice_count = intel_dsc_line_slice_count(&pipe_config->dsc.slice_config);
+
 	max_dotclk *= num_joined_pipes;
 
 	if (!intel_dp_dotclk_valid(display,
 				   adjusted_mode->crtc_clock,
+				   adjusted_mode->crtc_htotal,
+				   dsc_slice_count,
 				   num_joined_pipes))
 		return -EINVAL;
 
