@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/cleanup.h>
+
 #include "fbtft.h"
 #include "internal.h"
 
@@ -95,14 +97,13 @@ sprintf_gamma(struct fbtft_par *par, u32 *curves, char *buf)
 	ssize_t len = 0;
 	unsigned int i, j;
 
-	mutex_lock(&par->gamma.lock);
+	guard(mutex)(&par->gamma.lock);
 	for (i = 0; i < par->gamma.num_curves; i++) {
 		for (j = 0; j < par->gamma.num_values; j++)
 			len += scnprintf(&buf[len], PAGE_SIZE,
 			     "%04x ", curves[i * par->gamma.num_values + j]);
 		buf[len - 1] = '\n';
 	}
-	mutex_unlock(&par->gamma.lock);
 
 	return len;
 }
@@ -124,11 +125,10 @@ static ssize_t store_gamma_curve(struct device *device,
 	if (ret)
 		return ret;
 
-	mutex_lock(&par->gamma.lock);
+	guard(mutex)(&par->gamma.lock);
 	memcpy(par->gamma.curves, tmp_curves,
 	       par->gamma.num_curves * par->gamma.num_values *
 	       sizeof(tmp_curves[0]));
-	mutex_unlock(&par->gamma.lock);
 
 	return count;
 }

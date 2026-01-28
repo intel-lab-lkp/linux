@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/gpio/consumer.h>
 #include <linux/delay.h>
+#include <linux/cleanup.h>
 
 #include "fbtft.h"
 
@@ -35,12 +36,11 @@ static int init_display(struct fbtft_par *par)
 	par->fbtftops.reset(par);
 
 	if (par->gamma.curves[0] == 0) {
-		mutex_lock(&par->gamma.lock);
+		guard(mutex)(&par->gamma.lock);
 		if (par->info->var.yres == 64)
 			par->gamma.curves[0] = 0xCF;
 		else
 			par->gamma.curves[0] = 0x8F;
-		mutex_unlock(&par->gamma.lock);
 	}
 
 	/* Set Display OFF */
