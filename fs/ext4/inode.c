@@ -2788,6 +2788,17 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 		goto out_writepages;
 
 	/*
+	 * For data=journal, if the filesystem was remounted read-only,
+	 * the writeback thread may still write dirty pages to it.
+	 * Return early to avoid starting a journal transaction on a
+	 * read-only filesystem.
+	 */
+	if (ext4_should_journal_data(inode) && sb_rdonly(inode->i_sb)) {
+		ret = -EROFS;
+		goto out_writepages;
+	}
+
+	/*
 	 * If we have inline data and arrive here, it means that
 	 * we will soon create the block for the 1st page, so
 	 * we'd better clear the inline data here.
