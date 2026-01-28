@@ -56,11 +56,13 @@
 static struct {
 	unsigned long            hashmask;
 	unsigned int		 hashshift;
-	struct futex_hash_bucket *queues[MAX_NUMNODES];
+	unsigned int		 nr_queues;
+	struct futex_hash_bucket **queues;
 } __futex_data __read_mostly __aligned(2*sizeof(long));
 
 #define futex_hashmask	(__futex_data.hashmask)
 #define futex_hashshift	(__futex_data.hashshift)
+#define nr_futex_queues	(__futex_data.nr_queues)
 #define futex_queues	(__futex_data.queues)
 
 struct futex_private_hash {
@@ -439,10 +441,10 @@ __futex_hash(union futex_key *key, struct futex_private_hash *fph)
 		 * NOTE: this isn't perfectly uniform, but it is fast and
 		 * handles sparse node masks.
 		 */
-		node = (hash >> futex_hashshift) % nr_node_ids;
+		node = (hash >> futex_hashshift) % nr_futex_queues;
 		if (!node_possible(node)) {
 			node = find_next_bit_wrap(node_possible_map.bits,
-						  nr_node_ids, node);
+						  nr_futex_queues, node);
 		}
 	}
 
@@ -1986,6 +1988,10 @@ static int __init futex_init(void)
 	futex_hashshift = ilog2(hashsize);
 	size = sizeof(struct futex_hash_bucket) * hashsize;
 	order = get_order(size);
+
+	nr_futex_queues = nr_node_ids;
+	futex_queues = kcalloc(nr_futex_queues, sizeof(*futex_queues), GFP_KERNEL);
+	BUG_ON(!futex_queues);
 
 	for_each_node(n) {
 		struct futex_hash_bucket *table;
