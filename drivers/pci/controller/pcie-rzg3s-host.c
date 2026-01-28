@@ -111,6 +111,16 @@
 #define RZG3S_PCI_PERM_CFG_HWINIT_EN		BIT(2)
 #define RZG3S_PCI_PERM_PIPE_PHY_REG_EN		BIT(1)
 
+/* RZ/G3E specific registers */
+#define RZG3E_PCI_RESET				0x310
+#define RZG3E_PCI_RESET_RST_OUT_B		BIT(6)
+#define RZG3E_PCI_RESET_RST_PS_B		BIT(5)
+#define RZG3E_PCI_RESET_RST_LOAD_B		BIT(4)
+#define RZG3E_PCI_RESET_RST_CFG_B		BIT(3)
+#define RZG3E_PCI_RESET_RST_RSM_B		BIT(2)
+#define RZG3E_PCI_RESET_RST_GP_B		BIT(1)
+#define RZG3E_PCI_RESET_RST_B			BIT(0)
+
 #define RZG3S_PCI_MSIRE(id)			(0x600 + (id) * 0x10)
 #define RZG3S_PCI_MSIRE_ENA			BIT(0)
 
@@ -183,9 +193,13 @@ struct rzg3s_sysc_function {
 /**
  * struct rzg3s_sysc_info - RZ/G3S System Controller function info
  * @rst_rsm_b: Reset RSM_B function descriptor
+ * @l1_allow: L1 power state management function descriptor
+ * @mode: Mode configuration function descriptor
  */
 struct rzg3s_sysc_info {
 	struct rzg3s_sysc_function rst_rsm_b;
+	struct rzg3s_sysc_function l1_allow;
+	struct rzg3s_sysc_function mode;
 };
 
 /**
@@ -1124,6 +1138,49 @@ static int rzg3s_config_deinit(struct rzg3s_pcie_host *host)
 					 host->cfg_resets);
 }
 
+/* RZ/G3E SoC-specific config implementations */
+static void rzg3e_pcie_config_pre_init(struct rzg3s_pcie_host *host)
+{
+	/*
+	 * De-assert LOAD_B and CFG_B during configuration phase.
+	 * These are part of the RZ/G3E reset register, not reset framework.
+	 * Other reset bits remain asserted until config_post_init.
+	 */
+	rzg3s_pcie_update_bits(host->axi, RZG3E_PCI_RESET,
+			       RZG3E_PCI_RESET_RST_LOAD_B | RZG3E_PCI_RESET_RST_CFG_B,
+			       RZG3E_PCI_RESET_RST_LOAD_B | RZG3E_PCI_RESET_RST_CFG_B);
+}
+
+static int rzg3e_config_deinit(struct rzg3s_pcie_host *host)
+{
+	writel_relaxed(0, host->axi + RZG3E_PCI_RESET);
+	return 0;
+}
+
+static int rzg3e_config_post_init(struct rzg3s_pcie_host *host)
+{
+	/* De-assert PS_B, GP_B, RST_B */
+	rzg3s_pcie_update_bits(host->axi, RZG3E_PCI_RESET,
+			       RZG3E_PCI_RESET_RST_PS_B | RZG3E_PCI_RESET_RST_GP_B |
+			       RZG3E_PCI_RESET_RST_B,
+			       RZG3E_PCI_RESET_RST_PS_B | RZG3E_PCI_RESET_RST_GP_B |
+			       RZG3E_PCI_RESET_RST_B);
+
+	/*
+	 * According to the RZ/G3E HW manual (Rev.1.15, Table 6.6-130
+	 * Initialization Procedure (RC)), hardware requires >= 500us delay
+	 * before final reset deassert.
+	 */
+	fsleep(500);
+
+	/* De-assert OUT_B and RSM_B to complete reset sequence */
+	rzg3s_pcie_update_bits(host->axi, RZG3E_PCI_RESET,
+			       RZG3E_PCI_RESET_RST_OUT_B | RZG3E_PCI_RESET_RST_RSM_B,
+			       RZG3E_PCI_RESET_RST_OUT_B | RZG3E_PCI_RESET_RST_RSM_B);
+
+	return 0;
+}
+
 static void rzg3s_pcie_irq_init(struct rzg3s_pcie_host *host)
 {
 	/*
@@ -1268,6 +1325,7 @@ refclk_disable:
 
 static int rzg3s_pcie_host_init(struct rzg3s_pcie_host *host)
 {
+	const struct rzg3s_sysc_info *sysc_info = host->sysc->info;
 	u32 val;
 	int ret;
 
@@ -1283,6 +1341,16 @@ static int rzg3s_pcie_host_init(struct rzg3s_pcie_host *host)
 	ret = rzg3s_pcie_host_init_port(host);
 	if (ret)
 		goto config_deinit;
+
+	/* Enable ASPM L1 transition for SoCs that use it */
+	if (sysc_info->l1_allow.mask) {
+		ret = regmap_update_bits(host->sysc->regmap,
+					 sysc_info->l1_allow.offset,
+					 sysc_info->l1_allow.mask,
+					 field_prep(sysc_info->l1_allow.mask, 1));
+		if (ret)
+			goto config_deinit;
+	}
 
 	/* Initialize the interrupts */
 	rzg3s_pcie_irq_init(host);
@@ -1636,11 +1704,25 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 		goto port_refclk_put;
 	}
 
-	ret = regmap_update_bits(sysc->regmap, sysc->info->rst_rsm_b.offset,
-				 sysc->info->rst_rsm_b.mask,
-				 field_prep(sysc->info->rst_rsm_b.mask, 1));
-	if (ret)
-		goto port_refclk_put;
+	/*
+	 * Put controller in RC (Root Complex) mode for SoCs that
+	 * support it. These can operate in either EP or RC mode.
+	 */
+	if (sysc->info->mode.mask) {
+		ret = regmap_write(sysc->regmap, sysc->info->mode.offset,
+				   sysc->info->mode.mask);
+		if (ret)
+			goto port_refclk_put;
+	}
+
+	if (sysc->info->rst_rsm_b.mask) {
+		ret = regmap_update_bits(sysc->regmap,
+					 sysc->info->rst_rsm_b.offset,
+					 sysc->info->rst_rsm_b.mask,
+					 field_prep(sysc->info->rst_rsm_b.mask, 1));
+		if (ret)
+			goto port_refclk_put;
+	}
 
 	ret = rzg3s_pcie_resets_prepare_and_get(host);
 	if (ret)
@@ -1690,9 +1772,12 @@ sysc_signal_restore:
 	 * SYSC RST_RSM_B signal need to be asserted before turning off the
 	 * power to the PHY.
 	 */
-	regmap_update_bits(sysc->regmap, sysc->info->rst_rsm_b.offset,
-			   sysc->info->rst_rsm_b.mask,
-			   field_prep(sysc->info->rst_rsm_b.mask, 0));
+	if (sysc->info->rst_rsm_b.mask) {
+		regmap_update_bits(sysc->regmap,
+				   sysc->info->rst_rsm_b.offset,
+				   sysc->info->rst_rsm_b.mask,
+				   field_prep(sysc->info->rst_rsm_b.mask, 0));
+	}
 port_refclk_put:
 	clk_put(host->port.refclk);
 
@@ -1723,11 +1808,14 @@ static int rzg3s_pcie_suspend_noirq(struct device *dev)
 	if (ret)
 		goto config_reinit;
 
-	ret = regmap_update_bits(sysc->regmap, sysc->info->rst_rsm_b.offset,
-				 sysc->info->rst_rsm_b.mask,
-				 field_prep(sysc->info->rst_rsm_b.mask, 0));
-	if (ret)
-		goto power_resets_restore;
+	if (sysc->info->rst_rsm_b.mask) {
+		ret = regmap_update_bits(sysc->regmap,
+					 sysc->info->rst_rsm_b.offset,
+					 sysc->info->rst_rsm_b.mask,
+					 field_prep(sysc->info->rst_rsm_b.mask, 0));
+		if (ret)
+			goto power_resets_restore;
+	}
 
 	return 0;
 
@@ -1750,11 +1838,21 @@ static int rzg3s_pcie_resume_noirq(struct device *dev)
 	struct rzg3s_sysc *sysc = host->sysc;
 	int ret;
 
-	ret = regmap_update_bits(sysc->regmap, sysc->info->rst_rsm_b.offset,
-				 sysc->info->rst_rsm_b.mask,
-				 field_prep(sysc->info->rst_rsm_b.mask, 1));
-	if (ret)
-		return ret;
+	if (sysc->info->mode.mask) {
+		ret = regmap_write(sysc->regmap, sysc->info->mode.offset,
+				   sysc->info->mode.mask);
+		if (ret)
+			return ret;
+	}
+
+	if (sysc->info->rst_rsm_b.mask) {
+		ret = regmap_update_bits(sysc->regmap,
+					 sysc->info->rst_rsm_b.offset,
+					 sysc->info->rst_rsm_b.mask,
+					 field_prep(sysc->info->rst_rsm_b.mask, 1));
+		if (ret)
+			return ret;
+	}
 
 	ret = rzg3s_pcie_power_resets_deassert(host);
 	if (ret)
@@ -1781,9 +1879,12 @@ assert_power_resets:
 	reset_control_bulk_assert(data->num_power_resets,
 				  host->power_resets);
 assert_rst_rsm_b:
-	regmap_update_bits(sysc->regmap, sysc->info->rst_rsm_b.offset,
-			   sysc->info->rst_rsm_b.mask,
-			   field_prep(sysc->info->rst_rsm_b.mask, 0));
+	if (sysc->info->rst_rsm_b.mask) {
+		regmap_update_bits(sysc->regmap,
+				   sysc->info->rst_rsm_b.offset,
+				   sysc->info->rst_rsm_b.mask,
+				   field_prep(sysc->info->rst_rsm_b.mask, 0));
+	}
 	return ret;
 }
 
@@ -1816,10 +1917,34 @@ static const struct rzg3s_pcie_soc_data rzg3s_soc_data = {
 	},
 };
 
+static const char * const rzg3e_soc_power_resets[] = { "aresetn" };
+
+static const struct rzg3s_pcie_soc_data rzg3e_soc_data = {
+	.power_resets = rzg3e_soc_power_resets,
+	.num_power_resets = ARRAY_SIZE(rzg3e_soc_power_resets),
+	.config_pre_init = rzg3e_pcie_config_pre_init,
+	.config_post_init = rzg3e_config_post_init,
+	.config_deinit = rzg3e_config_deinit,
+	.sysc_info = {
+		.l1_allow = {
+			.offset = 0x1020,
+			.mask = BIT(0),
+		},
+		.mode = {
+			.offset = 0x1024,
+			.mask = BIT(0),
+		},
+	},
+};
+
 static const struct of_device_id rzg3s_pcie_of_match[] = {
 	{
 		.compatible = "renesas,r9a08g045-pcie",
 		.data = &rzg3s_soc_data,
+	},
+	{
+		.compatible = "renesas,r9a09g047-pcie",
+		.data = &rzg3e_soc_data,
 	},
 	{}
 };
