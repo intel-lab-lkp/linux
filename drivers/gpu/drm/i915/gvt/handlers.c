@@ -558,7 +558,7 @@ static u32 bxt_vgpu_get_dp_bitrate(struct intel_vgpu *vgpu, enum port port)
 	int refclk = 100000;
 	enum dpio_phy phy = DPIO_PHY0;
 	enum dpio_channel ch = DPIO_CH0;
-	struct dpll clock = {};
+	int m1, m2, n, p1, p2, m, p, vco, dot;
 	u32 temp;
 
 	/* Port to PHY mapping is fixed, see bxt_ddi_phy_info{} */
@@ -587,30 +587,25 @@ static u32 bxt_vgpu_get_dp_bitrate(struct intel_vgpu *vgpu, enum port port)
 		goto out;
 	}
 
-	clock.m1 = 2;
-	clock.m2 = REG_FIELD_GET(PORT_PLL_M2_INT_MASK,
-				 vgpu_vreg_t(vgpu, BXT_PORT_PLL(phy, ch, 0))) << 22;
+	m1 = 2;
+	m2 = REG_FIELD_GET(PORT_PLL_M2_INT_MASK, vgpu_vreg_t(vgpu, BXT_PORT_PLL(phy, ch, 0))) << 22;
 	if (vgpu_vreg_t(vgpu, BXT_PORT_PLL(phy, ch, 3)) & PORT_PLL_M2_FRAC_ENABLE)
-		clock.m2 |= REG_FIELD_GET(PORT_PLL_M2_FRAC_MASK,
-					  vgpu_vreg_t(vgpu, BXT_PORT_PLL(phy, ch, 2)));
-	clock.n = REG_FIELD_GET(PORT_PLL_N_MASK,
-				vgpu_vreg_t(vgpu, BXT_PORT_PLL(phy, ch, 1)));
-	clock.p1 = REG_FIELD_GET(PORT_PLL_P1_MASK,
-				 vgpu_vreg_t(vgpu, BXT_PORT_PLL_EBB_0(phy, ch)));
-	clock.p2 = REG_FIELD_GET(PORT_PLL_P2_MASK,
-				 vgpu_vreg_t(vgpu, BXT_PORT_PLL_EBB_0(phy, ch)));
-	clock.m = clock.m1 * clock.m2;
-	clock.p = clock.p1 * clock.p2 * 5;
+		m2 |= REG_FIELD_GET(PORT_PLL_M2_FRAC_MASK, vgpu_vreg_t(vgpu, BXT_PORT_PLL(phy, ch, 2)));
+	n = REG_FIELD_GET(PORT_PLL_N_MASK, vgpu_vreg_t(vgpu, BXT_PORT_PLL(phy, ch, 1)));
+	p1 = REG_FIELD_GET(PORT_PLL_P1_MASK, vgpu_vreg_t(vgpu, BXT_PORT_PLL_EBB_0(phy, ch)));
+	p2 = REG_FIELD_GET(PORT_PLL_P2_MASK, vgpu_vreg_t(vgpu, BXT_PORT_PLL_EBB_0(phy, ch)));
+	m = m1 * m2;
+	p = p1 * p2 * 5;
 
-	if (clock.n == 0 || clock.p == 0) {
+	if (n == 0 || p == 0) {
 		gvt_dbg_dpy("vgpu-%d PORT_%c PLL has invalid divider\n", vgpu->id, port_name(port));
 		goto out;
 	}
 
-	clock.vco = DIV_ROUND_CLOSEST_ULL(mul_u32_u32(refclk, clock.m), clock.n << 22);
-	clock.dot = DIV_ROUND_CLOSEST(clock.vco, clock.p);
+	vco = DIV_ROUND_CLOSEST_ULL(mul_u32_u32(refclk, m), n << 22);
+	dot = DIV_ROUND_CLOSEST(vco, p);
 
-	dp_br = clock.dot;
+	dp_br = dot;
 
 out:
 	return dp_br;
