@@ -14,7 +14,12 @@ use crate::{
 };
 
 // Called from `vsprintf` with format specifier `%pA`.
-#[expect(clippy::missing_safety_doc)]
+///
+/// # Safety
+///
+/// - `buf` must be valid for writes until `end`.
+/// - `ptr` must point to a valid `fmt::Arguments` instance.
+/// - The `fmt::Arguments` must remain valid for the duration of the call.
 #[export]
 unsafe extern "C" fn rust_fmt_argument(
     buf: *mut c_char,
@@ -22,9 +27,12 @@ unsafe extern "C" fn rust_fmt_argument(
     ptr: *const c_void,
 ) -> *mut c_char {
     use fmt::Write;
-    // SAFETY: The C contract guarantees that `buf` is valid if it's less than `end`.
+    // SAFETY: The safety requirements of this function (see above)
+    // guarantee that `buf` and `end` define a valid range.
     let mut w = unsafe { RawFormatter::from_ptrs(buf.cast(), end.cast()) };
-    // SAFETY: TODO.
+
+    // SAFETY: The safety requirements of this function guarantee that `ptr`
+    // points to a valid `fmt::Arguments`.
     let _ = w.write_fmt(unsafe { *ptr.cast::<fmt::Arguments<'_>>() });
     w.pos().cast()
 }
