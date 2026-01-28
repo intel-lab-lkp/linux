@@ -25,6 +25,14 @@ typedef int (*nvmem_cell_post_process_t)(void *priv, const char *id, int index,
 					 unsigned int offset, void *buf,
 					 size_t bytes);
 
+/**
+ * The possible types for a nvmem provider.
+ * @NVMEM_TYPE_UNKNOWN: The type of memory is unknown.
+ * @NVMEM_TYPE_EEPROM: Electrically erasable programmable ROM.
+ * @NVMEM_TYPE_OTP: One-time programmable memory.
+ * @NVMEM_TYPE_BATTERY_BACKED: This memory is backed by a battery.
+ * @NVMEM_TYPE_FRAM: Ferroelectric RAM.
+ */
 enum nvmem_type {
 	NVMEM_TYPE_UNKNOWN = 0,
 	NVMEM_TYPE_EEPROM,
