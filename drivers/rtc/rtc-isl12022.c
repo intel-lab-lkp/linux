@@ -517,8 +517,10 @@ static void isl12022_set_trip_levels(struct device *dev)
 	int ret, i, j, x[2];
 	u8 val, mask;
 
-	device_property_read_u32_array(dev, "isil,battery-trip-levels-microvolt",
-				       levels, 2);
+	ret = device_property_read_u32_array(dev, "isil,battery-trip-levels-microvolt",
+					     levels, 2);
+	if (ret)
+		dev_warn(dev, "failed to read battery-trip-levels-microvolt: %d\n", ret);
 
 	for (i = 0; i < 2; i++) {
 		for (j = 0; j < ARRAY_SIZE(trip_levels[i]) - 1; j++) {
