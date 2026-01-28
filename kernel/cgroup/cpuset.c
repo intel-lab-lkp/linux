@@ -78,7 +78,7 @@ static cpumask_var_t	subpartitions_cpus;
 static cpumask_var_t	isolated_cpus;
 
 /*
- * isolated_cpus updating flag (protected by cpuset_mutex)
+ * isolated_cpus updating flag (protected by isolcpus_update_mutex)
  * Set if isolated_cpus is going to be updated in the current
  * cpuset_mutex crtical section.
  */
@@ -223,29 +223,46 @@ struct cpuset top_cpuset = {
 };
 
 /*
- * There are two global locks guarding cpuset structures - cpuset_mutex and
- * callback_lock. The cpuset code uses only cpuset_mutex. Other kernel
- * subsystems can use cpuset_lock()/cpuset_unlock() to prevent change to cpuset
- * structures. Note that cpuset_mutex needs to be a mutex as it is used in
- * paths that rely on priority inheritance (e.g. scheduler - on RT) for
- * correctness.
+ * CPUSET Locking Convention
+ * -------------------------
  *
- * A task must hold both locks to modify cpusets.  If a task holds
- * cpuset_mutex, it blocks others, ensuring that it is the only task able to
- * also acquire callback_lock and be able to modify cpusets.  It can perform
- * various checks on the cpuset structure first, knowing nothing will change.
- * It can also allocate memory while just holding cpuset_mutex.  While it is
- * performing these checks, various callback routines can briefly acquire
- * callback_lock to query cpusets.  Once it is ready to make the changes, it
- * takes callback_lock, blocking everyone else.
+ * Below are the three global locks guarding cpuset structures in lock
+ * acquisition order:
+ *  - isolcpus_update_mutex (optional)
+ *  - cpu_hotplug_lock (cpus_read_lock/cpus_write_lock)
+ *  - cpuset_mutex
+ *  - callback_lock (raw spinlock)
  *
- * Calls to the kernel memory allocator can not be made while holding
- * callback_lock, as that would risk double tripping on callback_lock
- * from one of the callbacks into the cpuset code from within
- * __alloc_pages().
+ * The first isolcpus_update_mutex should only be held if the existing set of
+ * isolated CPUs (in isolated partition) or any of the partition states may be
+ * changed when some cpuset control files are being written into. Otherwise,
+ * it can be skipped. Holding isolcpus_update_mutex/cpus_read_lock or
+ * cpus_write_lock will ensure mutual exclusion of isolated_cpus update.
  *
- * If a task is only holding callback_lock, then it has read-only
- * access to cpusets.
+ * As cpuset will now indirectly flush a number of different workqueues in
+ * housekeeping_update() when the set of isolated CPUs is going to be changed,
+ * it may not be safe from the circular locking perspective to hold the
+ * cpus_read_lock. So cpuset_full_lock() will be released before calling
+ * housekeeping_update() and re-acquired afterward.
+ *
+ * A task must hold all the remaining three locks to modify externally visible
+ * or used fields of cpusets, though some of the internally used cpuset fields
+ * can be modified by holding cpu_hotplug_lock and cpuset_mutex only. If only
+ * reliable read access of the externally used fields are needed, a task can
+ * hold either cpuset_mutex or callback_lock.
+ *
+ * If a task holds cpu_hotplug_lock and cpuset_mutex, it blocks others,
+ * ensuring that it is the only task able to also acquire callback_lock and
+ * be able to modify cpusets.  It can perform various checks on the cpuset
+ * structure first, knowing nothing will change. It can also allocate memory
+ * without holding callback_lock. While it is performing these checks, various
+ * callback routines can briefly acquire callback_lock to query cpusets.  Once
+ * it is ready to make the changes, it takes callback_lock, blocking everyone
+ * else.
+ *
+ * Calls to the kernel memory allocator cannot be made while holding
+ * callback_lock which is a spinlock, as the memory allocator may sleep or
+ * call back into cpuset code and acquire callback_lock.
  *
  * Now, the task_struct fields mems_allowed and mempolicy may be changed
  * by other task, we use alloc_lock in the task_struct fields to protect
@@ -256,6 +273,7 @@ struct cpuset top_cpuset = {
  * cpumasks and nodemasks.
  */
 
+static DEFINE_MUTEX(isolcpus_update_mutex);
 static DEFINE_MUTEX(cpuset_mutex);
 
 /**
@@ -302,7 +320,7 @@ void cpuset_full_unlock(void)
 #ifdef CONFIG_LOCKDEP
 bool lockdep_is_cpuset_held(void)
 {
-	return lockdep_is_held(&cpuset_mutex);
+	return lockdep_is_held(&isolcpus_update_mutex);
 }
 #endif
 
@@ -1293,9 +1311,8 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 static void __update_isolation_cpumasks(bool twork);
 static void isolation_task_work_fn(struct callback_head *cb)
 {
-	cpuset_full_lock();
+	guard(mutex)(&isolcpus_update_mutex);
 	__update_isolation_cpumasks(true);
-	cpuset_full_lock();
 }
 
 /*
@@ -1337,8 +1354,18 @@ static void __update_isolation_cpumasks(bool twork)
 		return;
 	}
 
+	lockdep_assert_held(&isolcpus_update_mutex);
+	/*
+	 * Release cpus_read_lock & cpuset_mutex before calling
+	 * housekeeping_update() and re-acquiring them afterward if not
+	 * calling from task_work.
+	 */
+	if (!twork)
+		cpuset_full_unlock();
 	ret = housekeeping_update(isolated_cpus);
 	WARN_ON_ONCE(ret < 0);
+	if (!twork)
+		cpuset_full_lock();
 
 	isolated_cpus_updating = false;
 }
@@ -3195,6 +3222,7 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 		return -EACCES;
 
 	buf = strstrip(buf);
+	mutex_lock(&isolcpus_update_mutex);
 	cpuset_full_lock();
 	if (!is_cpuset_online(cs))
 		goto out_unlock;
@@ -3225,6 +3253,7 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 		rebuild_sched_domains_locked();
 out_unlock:
 	cpuset_full_unlock();
+	mutex_unlock(&isolcpus_update_mutex);
 	if (of_cft(of)->private == FILE_MEMLIST)
 		schedule_flush_migrate_mm();
 	return retval ?: nbytes;
@@ -3328,6 +3357,7 @@ static ssize_t cpuset_partition_write(struct kernfs_open_file *of, char *buf,
 	else
 		return -EINVAL;
 
+	guard(mutex)(&isolcpus_update_mutex);
 	cpuset_full_lock();
 	if (is_cpuset_online(cs))
 		retval = update_prstate(cs, val);
@@ -3501,6 +3531,7 @@ static void cpuset_css_killed(struct cgroup_subsys_state *css)
 {
 	struct cpuset *cs = css_cs(css);
 
+	guard(mutex)(&isolcpus_update_mutex);
 	cpuset_full_lock();
 	/* Reset valid partition back to member */
 	if (is_partition_valid(cs))
