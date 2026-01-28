@@ -37,3 +37,12 @@ config RESCTRL_RMID_DEPENDS_ON_CLOSID
 	  Enabled by the architecture when the RMID values depend on the CLOSID.
 	  This causes the CLOSID allocator to search for CLOSID with clean
 	  RMID.
+
+config RESCTRL_ASSIGN_FIXED
+	bool
+	depends on RESCTRL_FS
+	help
+	  Enabled by the architecture when the counter assignment mode is not
+	  configurable. This ensures that counter assignment mode is not
+	  advertised as configurable and attempts to change counter assignment
+	  mode fail.
