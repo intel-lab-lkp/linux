@@ -5262,9 +5262,12 @@ void intel_ddi_init(struct intel_display *display,
 	encoder = &dig_port->base;
 	encoder->devdata = devdata;
 
-	drm_encoder_init(display->drm, &encoder->base, &intel_ddi_funcs,
-			 DRM_MODE_ENCODER_TMDS, "%s",
-			 intel_ddi_encoder_name(display, port, phy, &encoder_name));
+	if (drm_encoder_init(display->drm, &encoder->base, &intel_ddi_funcs,
+			     DRM_MODE_ENCODER_TMDS, "%s",
+			     intel_ddi_encoder_name(display, port, phy, &encoder_name))) {
+		kfree(dig_port);
+		return;
+	}
 
 	intel_encoder_link_check_init(encoder, intel_ddi_link_check);
 
