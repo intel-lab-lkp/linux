@@ -520,7 +520,7 @@ static int raw_bind(struct socket *sock, struct sockaddr_unsized *uaddr, int len
 
 out_put_dev:
 	/* remove potential reference from dev_get_by_index() */
-	dev_put(dev);
+	netdev_put(dev);
 out:
 	release_sock(sk);
 	rtnl_unlock();
@@ -991,7 +991,7 @@ static int raw_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 
 	err = can_send(skb, ro->loopback);
 
-	dev_put(dev);
+	netdev_put(dev);
 
 	if (err)
 		goto send_failed;
@@ -1001,7 +1001,7 @@ static int raw_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 free_skb:
 	kfree_skb(skb);
 put_dev:
-	dev_put(dev);
+	netdev_put(dev);
 send_failed:
 	return err;
 }

@@ -341,7 +341,7 @@ static void bcm_can_tx(struct bcm_op *op)
 
 	spin_unlock_bh(&op->bcm_tx_lock);
 out:
-	dev_put(dev);
+	netdev_put(dev);
 }
 
 /*
@@ -854,7 +854,7 @@ static int bcm_delete_rx_op(struct list_head *ops, struct bcm_msg_head *mh,
 							       op->ifindex);
 					if (dev) {
 						bcm_rx_unreg(dev, op);
-						dev_put(dev);
+						netdev_put(dev);
 					}
 				}
 			} else
@@ -1292,7 +1292,7 @@ static int bcm_rx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 						      "bcm", sk);
 
 				op->rx_reg_dev = dev;
-				dev_put(dev);
+				netdev_put(dev);
 			}
 
 		} else
@@ -1346,7 +1346,7 @@ static int bcm_tx_send(struct msghdr *msg, int ifindex, struct sock *sk,
 	skb->dev = dev;
 	can_skb_set_owner(skb, sk);
 	err = can_send(skb, 1); /* send with loopback */
-	dev_put(dev);
+	netdev_put(dev);
 
 	if (err)
 		return err;
@@ -1405,11 +1405,11 @@ static int bcm_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 				return -ENODEV;
 
 			if (dev->type != ARPHRD_CAN) {
-				dev_put(dev);
+				netdev_put(dev);
 				return -ENODEV;
 			}
 
-			dev_put(dev);
+			netdev_put(dev);
 		}
 	}
 
@@ -1624,7 +1624,7 @@ static int bcm_release(struct socket *sock)
 				dev = dev_get_by_index(net, op->ifindex);
 				if (dev) {
 					bcm_rx_unreg(dev, op);
-					dev_put(dev);
+					netdev_put(dev);
 				}
 			}
 		} else
@@ -1684,13 +1684,13 @@ static int bcm_connect(struct socket *sock, struct sockaddr_unsized *uaddr, int 
 			goto fail;
 		}
 		if (dev->type != ARPHRD_CAN) {
-			dev_put(dev);
+			netdev_put(dev);
 			ret = -ENODEV;
 			goto fail;
 		}
 
 		bo->ifindex = dev->ifindex;
-		dev_put(dev);
+		netdev_put(dev);
 
 	} else {
 		/* no interface reference for ifindex = 0 ('any' CAN device) */

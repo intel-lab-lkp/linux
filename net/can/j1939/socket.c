@@ -483,26 +483,26 @@ static int j1939_sk_bind(struct socket *sock, struct sockaddr_unsized *uaddr, in
 		}
 
 		if (ndev->reg_state != NETREG_REGISTERED) {
-			dev_put(ndev);
+			netdev_put(ndev);
 			ret = -ENODEV;
 			goto out_release_sock;
 		}
 
 		can_ml = can_get_ml_priv(ndev);
 		if (!can_ml) {
-			dev_put(ndev);
+			netdev_put(ndev);
 			ret = -ENODEV;
 			goto out_release_sock;
 		}
 
 		if (!(ndev->flags & IFF_UP)) {
-			dev_put(ndev);
+			netdev_put(ndev);
 			ret = -ENETDOWN;
 			goto out_release_sock;
 		}
 
 		priv = j1939_netdev_start(ndev);
-		dev_put(ndev);
+		netdev_put(ndev);
 		if (IS_ERR(priv)) {
 			ret = PTR_ERR(priv);
 			goto out_release_sock;

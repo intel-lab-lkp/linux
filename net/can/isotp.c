@@ -260,7 +260,7 @@ static int isotp_send_fc(struct sock *sk, int ae, u8 flowstatus)
 		pr_notice_once("can-isotp: %s: can_send_ret %pe\n",
 			       __func__, ERR_PTR(can_send_ret));
 
-	dev_put(dev);
+	netdev_put(dev);
 
 	/* reset blocksize counter */
 	so->rx.bs = 0;
@@ -773,7 +773,7 @@ static void isotp_send_cframe(struct isotp_sock *so)
 
 	skb = alloc_skb(so->ll.mtu + sizeof(struct can_skb_priv), GFP_ATOMIC);
 	if (!skb) {
-		dev_put(dev);
+		netdev_put(dev);
 		return;
 	}
 
@@ -811,7 +811,7 @@ static void isotp_send_cframe(struct isotp_sock *so)
 		if (can_send_ret == -ENOBUFS)
 			pr_notice_once("can-isotp: tx queue is full\n");
 	}
-	dev_put(dev);
+	netdev_put(dev);
 }
 
 static void isotp_create_fframe(struct canfd_frame *cf, struct isotp_sock *so,
@@ -1001,7 +1001,7 @@ static int isotp_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	skb = sock_alloc_send_skb(sk, so->ll.mtu + sizeof(struct can_skb_priv),
 				  msg->msg_flags & MSG_DONTWAIT, &err);
 	if (!skb) {
-		dev_put(dev);
+		netdev_put(dev);
 		goto err_out_drop;
 	}
 
@@ -1083,7 +1083,7 @@ static int isotp_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	skb->dev = dev;
 	skb->sk = sk;
 	err = can_send(skb, 1);
-	dev_put(dev);
+	netdev_put(dev);
 	if (err) {
 		pr_notice_once("can-isotp: %s: can_send_ret %pe\n",
 			       __func__, ERR_PTR(err));
@@ -1214,7 +1214,7 @@ static int isotp_release(struct socket *sock)
 				can_rx_unregister(net, dev, so->txid,
 						  SINGLE_MASK(so->txid),
 						  isotp_rcv_echo, sk);
-				dev_put(dev);
+				netdev_put(dev);
 				synchronize_rcu();
 			}
 		}
@@ -1306,12 +1306,12 @@ static int isotp_bind(struct socket *sock, struct sockaddr_unsized *uaddr, int l
 		goto out;
 	}
 	if (dev->type != ARPHRD_CAN) {
-		dev_put(dev);
+		netdev_put(dev);
 		err = -ENODEV;
 		goto out;
 	}
 	if (READ_ONCE(dev->mtu) < so->ll.mtu) {
-		dev_put(dev);
+		netdev_put(dev);
 		err = -EINVAL;
 		goto out;
 	}
@@ -1331,7 +1331,7 @@ static int isotp_bind(struct socket *sock, struct sockaddr_unsized *uaddr, int l
 	can_rx_register(net, dev, tx_id, SINGLE_MASK(tx_id),
 			isotp_rcv_echo, sk, "isotpe", sk);
 
-	dev_put(dev);
+	netdev_put(dev);
 
 	/* switch to new settings */
 	so->ifindex = ifindex;
