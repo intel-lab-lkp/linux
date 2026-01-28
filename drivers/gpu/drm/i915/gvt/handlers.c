@@ -46,10 +46,10 @@
 #include "display/intel_crt_regs.h"
 #include "display/intel_cursor_regs.h"
 #include "display/intel_display_regs.h"
-#include "display/intel_display_types.h"
 #include "display/intel_dmc_regs.h"
 #include "display/intel_dp_aux_regs.h"
 #include "display/intel_dpio_phy.h"
+#include "display/intel_dpll_mgr.h"
 #include "display/intel_fbc.h"
 #include "display/intel_fdi_regs.h"
 #include "display/intel_pps_regs.h"
@@ -78,6 +78,9 @@
 #define PCH_PP_ON_DELAYS _MMIO(0xc7208)
 #define PCH_PP_OFF_DELAYS _MMIO(0xc720c)
 #define PCH_PP_DIVISOR _MMIO(0xc7210)
+
+#define pipe_name(p) ((p) + 'A')
+#define port_name(p) ((p) + 'A')
 
 unsigned long intel_gvt_get_device_type(struct intel_gvt *gvt)
 {
