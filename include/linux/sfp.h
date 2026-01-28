@@ -561,6 +561,9 @@ struct sfp_module_caps {
  *   on the module.
  * @disconnect_phy: called when a module with an I2C accessible PHY has
  *   been removed.
+ * @connect_nophy: called when it was established that the connected module
+ *		   doesn't have an I2C PHY accessible.
+ * @disconnect_nophy: called when the PHY-less module has been removed.
  */
 struct sfp_upstream_ops {
 	void (*attach)(void *priv, struct sfp_bus *bus);
@@ -573,6 +576,8 @@ struct sfp_upstream_ops {
 	void (*link_up)(void *priv);
 	int (*connect_phy)(void *priv, struct phy_device *);
 	void (*disconnect_phy)(void *priv, struct phy_device *);
+	int (*connect_nophy)(void *priv);
+	void (*disconnect_nophy)(void *priv);
 };
 
 #if IS_ENABLED(CONFIG_SFP)

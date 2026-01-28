@@ -1918,6 +1918,11 @@ static int sfp_sm_probe_phy(struct sfp *sfp, int addr, bool is_c45)
 	return 0;
 }
 
+static int sfp_sm_connect_nophy(struct sfp *sfp)
+{
+	return sfp_module_connect_nophy(sfp->sfp_bus);
+}
+
 static void sfp_sm_link_up(struct sfp *sfp)
 {
 	sfp_link_up(sfp->sfp_bus);
@@ -2646,6 +2651,8 @@ static void sfp_sm_main(struct sfp *sfp, unsigned int event)
 			sfp_module_stop(sfp->sfp_bus);
 		if (sfp->mod_phy)
 			sfp_sm_phy_detach(sfp);
+		else
+			sfp_module_disconnect_nophy(sfp->sfp_bus);
 		if (sfp->i2c_mii)
 			sfp_i2c_mdiobus_destroy(sfp);
 		sfp_module_tx_disable(sfp);
@@ -2748,6 +2755,13 @@ static void sfp_sm_main(struct sfp *sfp, unsigned int event)
 		} else if (ret) {
 			sfp_sm_next(sfp, SFP_S_FAIL, 0);
 			break;
+		}
+		if (!sfp->mod_phy) {
+			ret = sfp_sm_connect_nophy(sfp);
+			if (ret) {
+				sfp_sm_next(sfp, SFP_S_FAIL, 0);
+				break;
+			}
 		}
 		if (sfp_module_start(sfp->sfp_bus)) {
 			sfp_sm_next(sfp, SFP_S_FAIL, 0);

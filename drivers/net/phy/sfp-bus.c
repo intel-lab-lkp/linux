@@ -753,6 +753,26 @@ void sfp_remove_phy(struct sfp_bus *bus)
 }
 EXPORT_SYMBOL_GPL(sfp_remove_phy);
 
+int sfp_module_connect_nophy(struct sfp_bus *bus)
+{
+	const struct sfp_upstream_ops *ops = sfp_get_upstream_ops(bus);
+
+	if (ops && ops->connect_nophy)
+		return ops->connect_nophy(bus->upstream);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sfp_module_connect_nophy);
+
+void sfp_module_disconnect_nophy(struct sfp_bus *bus)
+{
+	const struct sfp_upstream_ops *ops = sfp_get_upstream_ops(bus);
+
+	if (ops && ops->disconnect_nophy)
+		ops->disconnect_nophy(bus->upstream);
+}
+EXPORT_SYMBOL_GPL(sfp_module_disconnect_nophy);
+
 void sfp_link_up(struct sfp_bus *bus)
 {
 	const struct sfp_upstream_ops *ops = sfp_get_upstream_ops(bus);
