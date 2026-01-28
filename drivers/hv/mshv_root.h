@@ -242,8 +242,8 @@ int mshv_register_doorbell(u64 partition_id, doorbell_cb_t doorbell_cb,
 void mshv_unregister_doorbell(u64 partition_id, int doorbell_portid);
 
 void mshv_isr(void);
-int mshv_synic_init(unsigned int cpu);
-int mshv_synic_cleanup(unsigned int cpu);
+int mshv_synic_cpu_init(unsigned int cpu);
+int mshv_synic_cpu_exit(unsigned int cpu);
 
 static inline bool mshv_partition_encrypted(struct mshv_partition *partition)
 {

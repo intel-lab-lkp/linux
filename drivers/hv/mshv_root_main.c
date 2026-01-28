@@ -2284,8 +2284,8 @@ static int __init mshv_parent_partition_init(void)
 	}
 
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "mshv_synic",
-				mshv_synic_init,
-				mshv_synic_cleanup);
+				mshv_synic_cpu_init,
+				mshv_synic_cpu_exit);
 	if (ret < 0) {
 		dev_err(dev, "Failed to setup cpu hotplug state: %i\n", ret);
 		goto free_synic_pages;
