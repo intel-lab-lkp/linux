@@ -170,6 +170,8 @@ properties:
               - cirrus,ep7209-syscon1
               - cirrus,ep7209-syscon2
               - cirrus,ep7209-syscon3
+              - cix,sky1-system-controller
+              - cix,sky1-s5-system-controller
               - cnxt,cx92755-uc
               - freecom,fsg-cs2-system-controller
               - fsl,imx93-aonmix-ns-syscfg
@@ -253,6 +255,11 @@ properties:
       - items:
           - const: microchip,pic64gx-sysreg-scb
           - const: microchip,mpfs-sysreg-scb
+          - const: syscon
+      - items:
+          - enum:
+              - cix,sky1-system-controller
+              - cix,sky1-s5-system-controller
           - const: syscon
 
   reg:
