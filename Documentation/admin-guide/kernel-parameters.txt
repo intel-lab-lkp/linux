@@ -2238,6 +2238,29 @@ Kernel parameters
 	icn=		[HW,ISDN]
 			Format: <io>[,<membase>[,<icn_id>[,<icn_id2>]]]
 
+	pm_qos_resume_latency_us=	[KNL,EARLY]
+			Format: <cpu-list>:<value>[,<cpu-list>:<value>...]
+
+			Establish per-CPU resume latency constraints. These constraints
+			are applied immediately upon CPU registration and persist
+			across CPU hotplug events.
+
+			For example:
+				"pm_qos_resume_latency_us=0:0,1-15:20"
+
+			This restricts CPU 0 to a 0us resume latency (effectively
+			forcing polling) and limits CPUs 1-15 to C-states with a
+			maximum exit latency of 20us. All other CPUs remain
+			unconstrained by this parameter.
+
+			Unlike the sysfs interface, which accepts the string "n/a" to
+			remove a constraint, this boot parameter strictly requires
+			integer values. To specify a 0us latency constraint (polling),
+			the integer 0 must be used.
+
+			NOTE: The parsing logic enforces a "First Match Wins" policy.
+			If a CPU is included in multiple specified ranges, the latency
+			value from the first matching entry takes precedence.
 
 	idle=		[X86,EARLY]
 			Format: idle=poll, idle=halt, idle=nomwait
