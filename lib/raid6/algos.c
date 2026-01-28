@@ -134,7 +134,7 @@ const struct raid6_recov_calls *const raid6_recov_algos[] = {
 static inline const struct raid6_recov_calls *raid6_choose_recov(void)
 {
 	const struct raid6_recov_calls *const *algo;
-	const struct raid6_recov_calls *best;
+	const struct raid6_recov_calls *best = NULL;
 
 	for (best = NULL, algo = raid6_recov_algos; *algo; algo++)
 		if (!best || (*algo)->priority > best->priority)
@@ -152,23 +152,43 @@ static inline const struct raid6_recov_calls *raid6_choose_recov(void)
 	return best;
 }
 
-static inline const struct raid6_calls *raid6_choose_gen(
-	void *(*const dptrs)[RAID6_TEST_DISKS], const int disks)
+/* Quick selection: selects the first valid algorithm. */
+static inline const struct raid6_calls *raid6_choose_gen_fast(void)
+{
+	const struct raid6_calls *const *algo;
+	const struct raid6_calls *best = NULL;
+
+	for (algo = raid6_algos; *algo; algo++) {
+		if ((*algo)->valid && !(*algo)->valid())
+			continue;
+
+		best = *algo;
+		break;
+	}
+
+	if (best) {
+		raid6_call = *best;
+		pr_info("raid6: skipped pq benchmark and selected %s\n",
+			best->name);
+	} else {
+		pr_err("raid6: No valid algorithm found even for fast selection!\n");
+	}
+
+	return best;
+}
+
+static inline const struct raid6_calls *raid6_gen_benchmark(
+		void *(*const dptrs)[RAID6_TEST_DISKS], const int disks)
 {
 	unsigned long perf, bestgenperf, j0, j1;
 	int start = (disks>>1)-1, stop = disks-3;	/* work on the second half of the disks */
 	const struct raid6_calls *const *algo;
-	const struct raid6_calls *best;
+	const struct raid6_calls *best = NULL;
 
 	for (bestgenperf = 0, best = NULL, algo = raid6_algos; *algo; algo++) {
 		if (!best || (*algo)->priority >= best->priority) {
 			if ((*algo)->valid && !(*algo)->valid())
 				continue;
-
-			if (!IS_ENABLED(CONFIG_RAID6_PQ_BENCHMARK)) {
-				best = *algo;
-				break;
-			}
 
 			perf = 0;
 
@@ -200,12 +220,6 @@ static inline const struct raid6_calls *raid6_choose_gen(
 
 	raid6_call = *best;
 
-	if (!IS_ENABLED(CONFIG_RAID6_PQ_BENCHMARK)) {
-		pr_info("raid6: skipped pq benchmark and selected %s\n",
-			best->name);
-		goto out;
-	}
-
 	pr_info("raid6: using algorithm %s gen() %ld MB/s\n",
 		best->name,
 		(bestgenperf * HZ * (disks - 2)) >>
@@ -235,16 +249,11 @@ out:
 	return best;
 }
 
-
 /* Try to pick the best algorithm */
 /* This code uses the gfmul table as convenient data set to abuse */
-
-int __init raid6_select_algo(void)
+static int raid6_choose_gen_benmark(const struct raid6_calls **gen_best)
 {
 	const int disks = RAID6_TEST_DISKS;
-
-	const struct raid6_calls *gen_best;
-	const struct raid6_recov_calls *rec_best;
 	char *disk_ptr, *p;
 	void *dptrs[RAID6_TEST_DISKS];
 	int i, cycle;
@@ -269,13 +278,30 @@ int __init raid6_select_algo(void)
 	if ((disks - 2) * PAGE_SIZE % 65536)
 		memcpy(p, raid6_gfmul, (disks - 2) * PAGE_SIZE % 65536);
 
-	/* select raid gen_syndrome function */
-	gen_best = raid6_choose_gen(&dptrs, disks);
+	*gen_best = raid6_gen_benchmark(&dptrs, disks);
+
+	free_pages((unsigned long)disk_ptr, RAID6_TEST_DISKS_ORDER);
+
+	return 0;
+}
+
+int __init raid6_select_algo(void)
+{
+	int ret;
+	const struct raid6_calls *gen_best = NULL;
+	const struct raid6_recov_calls *rec_best = NULL;
+
+	/* select raid gen_syndrome functions */
+	if (!IS_ENABLED(CONFIG_RAID6_PQ_BENCHMARK))
+		gen_best = raid6_choose_gen_fast();
+	else {
+		ret = raid6_choose_gen_benmark(&gen_best);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* select raid recover functions */
 	rec_best = raid6_choose_recov();
-
-	free_pages((unsigned long)disk_ptr, RAID6_TEST_DISKS_ORDER);
 
 	return gen_best && rec_best ? 0 : -EINVAL;
 }
