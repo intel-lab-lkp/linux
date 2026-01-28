@@ -676,8 +676,10 @@ static int tmp51x_read_properties(struct device *dev, struct tmp51x_data *data)
 	if (ret < 0)
 		return ret;
 
-	device_property_read_u32_array(dev, "ti,nfactor", data->nfactor,
-				       data->max_channels - 1);
+	ret = device_property_read_u32_array(dev, "ti,nfactor", data->nfactor,
+					     data->max_channels - 1);
+	if (ret)
+		return ret;
 
 	// Check if shunt value is compatible with pga-gain
 	if (data->shunt_uohms > data->pga_gain * 40 * MICRO) {
