@@ -6407,6 +6407,9 @@ static int intel_modeset_affected_transcoders(struct intel_atomic_state *state, 
 		if (!crtc_state->hw.enable)
 			continue;
 
+		if (drm_WARN_ON(display->drm, crtc_state->cpu_transcoder == INVALID_TRANSCODER))
+			continue;
+
 		if (!(transcoders & BIT(crtc_state->cpu_transcoder)))
 			continue;
 
