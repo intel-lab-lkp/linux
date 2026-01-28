@@ -121,6 +121,7 @@ i915_l3_write(struct file *filp, struct kobject *kobj,
 	}
 
 	count = round_down(count, sizeof(u32));
+	count = min_t(size_t, GEN7_L3LOG_SIZE - offset, count);
 	memcpy(remap_info + offset / sizeof(u32), buf, count);
 
 	/* NB: We defer the remapping until we switch to the context */
