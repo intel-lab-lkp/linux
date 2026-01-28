@@ -1630,9 +1630,11 @@ static int stm32_mdma_probe(struct platform_device *pdev)
 
 	dmadev->nr_channels = nr_channels;
 	dmadev->nr_requests = nr_requests;
-	device_property_read_u32_array(&pdev->dev, "st,ahb-addr-masks",
-				       dmadev->ahb_addr_masks,
-				       count);
+	ret = device_property_read_u32_array(&pdev->dev, "st,ahb-addr-masks",
+					     dmadev->ahb_addr_masks,
+					     count);
+	if (ret)
+		return ret;
 
 	dmadev->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(dmadev->base))
