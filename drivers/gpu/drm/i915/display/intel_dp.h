@@ -234,4 +234,35 @@ bool intel_dp_dotclk_valid(struct intel_display *display,
 			   int dsc_slice_count,
 			   int num_joined_pipes);
 
+#define for_each_joiner_candidate(__num_pipes) \
+	for ((__num_pipes) = 0; (__num_pipes) < (I915_MAX_PIPES); (__num_pipes)++)
+
+static inline bool intel_dp_pick_joiner_candidate(int num_pipes,
+						  int force_joined_pipes,
+						  int *num_joined_pipes)
+{
+	if (num_pipes == 0) {
+		if (!force_joined_pipes)
+			return false;
+		*num_joined_pipes = force_joined_pipes;
+	} else {
+		*num_joined_pipes = num_pipes;
+	}
+
+	return true;
+}
+
+static inline bool intel_dp_joiner_candidate_valid(struct intel_display *display,
+						   int hdisplay,
+						   int num_joined_pipes)
+{
+	if (!intel_dp_can_join(display, num_joined_pipes))
+		return false;
+
+	if (hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
+		return false;
+
+	return true;
+}
+
 #endif /* __INTEL_DP_H__ */

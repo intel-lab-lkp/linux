@@ -701,24 +701,19 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->has_pch_encoder = false;
 
-	for (num_pipes = 0; num_pipes < I915_MAX_PIPES; num_pipes++) {
+	for_each_joiner_candidate(num_pipes) {
 		int dsc_slice_count = 0;
 
 		ret = -EINVAL;
 
-		if (num_pipes == 0) {
-			if (!connector->force_joined_pipes)
-				continue;
-			num_joined_pipes = connector->force_joined_pipes;
-		} else {
-			num_joined_pipes = num_pipes;
-		}
-
-		if (!intel_dp_can_join(display, num_joined_pipes))
+		if (!intel_dp_pick_joiner_candidate(num_pipes,
+						    connector->force_joined_pipes,
+						    &num_joined_pipes))
 			continue;
 
-		if (adjusted_mode->hdisplay >
-		    num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
+		if (!intel_dp_joiner_candidate_valid(display,
+						     adjusted_mode->hdisplay,
+						     num_joined_pipes))
 			continue;
 
 		if (num_joined_pipes > 1)
@@ -1535,23 +1530,19 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		return 0;
 	}
 
-	for (num_pipes = 0; num_pipes < I915_MAX_PIPES; num_pipes++) {
+	for_each_joiner_candidate(num_pipes) {
 		int dsc_slice_count = 0;
 
 		*status = MODE_CLOCK_HIGH;
 
-		if (num_pipes == 0) {
-			if (!connector->force_joined_pipes)
-				continue;
-			num_joined_pipes = connector->force_joined_pipes;
-		} else {
-			num_joined_pipes = num_pipes;
-		}
-
-		if (!intel_dp_can_join(display, num_joined_pipes))
+		if (!intel_dp_pick_joiner_candidate(num_pipes,
+						    connector->force_joined_pipes,
+						    &num_joined_pipes))
 			continue;
 
-		if (mode->hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
+		if (!intel_dp_joiner_candidate_valid(display,
+						     mode->hdisplay,
+						     num_joined_pipes))
 			continue;
 
 		if (intel_dp_has_dsc(connector) &&
