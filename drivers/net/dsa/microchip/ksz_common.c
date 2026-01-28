@@ -815,6 +815,9 @@ static const u16 ksz9477_regs[] = {
 	[PTP_RTC_SEC]			= 0x0508,
 	[PTP_SUBNANOSEC_RATE]		= 0x050C,
 	[PTP_MSG_CONF1]			= 0x0514,
+	[P_PHY_MMD_SETUP]		= 0x011A,
+	[P_PHY_MMD_DATA]		= 0x011C,
+	[P_PHY_DIGITAL_DEBUG_3]		= 0x013C,
 };
 
 static const u32 ksz9477_masks[] = {
@@ -3241,6 +3244,14 @@ static u32 ksz_get_phy_flags(struct dsa_switch *ds, int port)
 		if (!port)
 			return MICREL_KSZ8_P1_ERRATA;
 		break;
+	case KSZ9477_CHIP_ID:
+		/* KSZ9477S Errata DS80000754F
+		 *
+		 * Module 19: Single-LED Mode Setting Requires Two Register Writes
+		 *   The PHY Port LEDx_0 pin does not go low in the presence of link
+		 *   activity when Single-LED Mode is selected in the MMD LED Mode Register.
+		 */
+		return MICREL_KSZ9_LED_ERRATA;
 	}
 
 	return 0;
@@ -3909,6 +3920,24 @@ static void ksz_set_gbit(struct ksz_device *dev, int port, bool gbit)
 	ksz_pwrite8(dev, port, regs[P_XMII_CTRL_1], data8);
 }
 
+static void ksz_enable_single_led_mode(struct ksz_device *dev, int port, struct phy_device *phydev)
+{
+	const u16 *regs = dev->info->regs;
+
+	ksz_pwrite16(dev, port, regs[P_PHY_MMD_SETUP], 0x0002); /* Set up register address for MMD */
+	ksz_pwrite16(dev, port,  regs[P_PHY_MMD_DATA], 0x0000); /* Select Register 00h of MMD */
+	ksz_pwrite16(dev, port, regs[P_PHY_MMD_SETUP], 0x4002); /* Select register data for MMD */
+	ksz_pwrite16(dev, port,  regs[P_PHY_MMD_DATA], 0x0011); /* Write value 0011h to MMD */
+
+	/* According to KSZ9477S Errata DS80000754F (Module 19) 0xfa00 has to
+	 * be written to the Debug Register 3 to enable Single-LED Mode.
+	 */
+	if (phydev->dev_flags & MICREL_KSZ9_LED_ERRATA)
+		ksz_pwrite16(dev, port, regs[P_PHY_DIGITAL_DEBUG_3], 0xfa00);
+
+	dev_info(dev->dev, "port-%d: single-led mode enabled.\n", port);
+}
+
 static void ksz_set_100_10mbit(struct ksz_device *dev, int port, int speed)
 {
 	const u8 *bitval = dev->info->xmii_ctrl0;
@@ -3976,6 +4005,9 @@ static void ksz9477_phylink_mac_link_up(struct phylink_config *config,
 	struct ksz_device *dev = dp->ds->priv;
 	int port = dp->index;
 	struct ksz_port *p;
+
+	if (dev->single_led_mode && port != dev->cpu_port)
+		ksz_enable_single_led_mode(dev, port, phydev);
 
 	p = &dev->ports[port];
 
@@ -5526,6 +5558,8 @@ int ksz_switch_register(struct ksz_device *dev)
 							   "wakeup-source");
 		dev->pme_active_high = of_property_read_bool(dev->dev->of_node,
 							     "microchip,pme-active-high");
+		dev->single_led_mode = of_property_read_bool(dev->dev->of_node,
+							     "microchip,single-led-mode");
 	}
 
 	ret = dsa_register_switch(dev->ds);
