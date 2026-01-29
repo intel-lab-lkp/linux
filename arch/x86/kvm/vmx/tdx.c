@@ -55,6 +55,8 @@
 
 bool enable_tdx __ro_after_init;
 module_param_named(tdx, enable_tdx, bool, 0444);
+static bool __read_mostly enable_tdx_huge_page = true;
+module_param_named(tdx_huge_page, enable_tdx_huge_page, bool, 0444);
 
 #define TDX_SHARED_BIT_PWL_5 gpa_to_gfn(BIT_ULL(51))
 #define TDX_SHARED_BIT_PWL_4 gpa_to_gfn(BIT_ULL(47))
@@ -1703,8 +1705,9 @@ static int tdx_sept_map_leaf_spte(struct kvm *kvm, gfn_t gfn, u64 new_spte,
 	kvm_pfn_t pfn = spte_to_pfn(new_spte);
 	int ret;
 
-	/* TODO: handle large pages. */
-	if (KVM_BUG_ON(level != PG_LEVEL_4K, kvm))
+	/* TODO: Support hugepages when building the initial TD image. */
+	if (KVM_BUG_ON(level != PG_LEVEL_4K &&
+		       to_kvm_tdx(kvm)->state != TD_STATE_RUNNABLE, kvm))
 		return -EIO;
 
 	if (KVM_BUG_ON(!vcpu, kvm))
@@ -1883,10 +1886,6 @@ static int tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 	 * there can't be anything populated in the private EPT.
 	 */
 	if (KVM_BUG_ON(!is_hkid_assigned(to_kvm_tdx(kvm)), kvm))
-		return -EIO;
-
-	/* TODO: handle large pages. */
-	if (KVM_BUG_ON(level != PG_LEVEL_4K, kvm))
 		return -EIO;
 
 	err = tdh_do_no_vcpus(tdh_mem_range_block, kvm, &kvm_tdx->td, gpa,
@@ -3474,12 +3473,34 @@ int tdx_vcpu_ioctl(struct kvm_vcpu *vcpu, void __user *argp)
 	return ret;
 }
 
+/*
+ * For private pages:
+ *
+ * Force KVM to map at 4KB level when !enable_tdx_huge_page (e.g., due to
+ * incompatible TDX module) or before TD state is RUNNABLE.
+ *
+ * Always allow KVM to map at 2MB level in other cases, though KVM may still map
+ * the page at 4KB (i.e., passing in PG_LEVEL_4K to AUG) due to
+ * (1) the backend folio is 4KB,
+ * (2) disallow_lpage restrictions:
+ *     - mixed private/shared pages in the 2MB range
+ *     - level misalignment due to slot base_gfn, slot size, and ugfn
+ *     - guest_inhibit bit set due to guest's 4KB accept level
+ * (3) page merging is disallowed (e.g., when part of a 2MB range has been
+ *     mapped at 4KB level during TD build time).
+ */
 int tdx_gmem_max_mapping_level(struct kvm *kvm, kvm_pfn_t pfn, bool is_private)
 {
 	if (!is_private)
 		return 0;
 
-	return PG_LEVEL_4K;
+	if (!enable_tdx_huge_page)
+		return PG_LEVEL_4K;
+
+	if (unlikely(to_kvm_tdx(kvm)->state != TD_STATE_RUNNABLE))
+		return PG_LEVEL_4K;
+
+	return PG_LEVEL_2M;
 }
 
 static int tdx_online_cpu(unsigned int cpu)
@@ -3665,6 +3686,8 @@ static int __init __tdx_bringup(void)
 	if (misc_cg_set_capacity(MISC_CG_RES_TDX, tdx_get_nr_guest_keyids()))
 		goto get_sysinfo_err;
 
+	if (enable_tdx_huge_page && !tdx_supports_demote_nointerrupt(tdx_sysinfo))
+		enable_tdx_huge_page = false;
 	/*
 	 * Leave hardware virtualization enabled after TDX is enabled
 	 * successfully.  TDX CPU hotplug depends on this.
