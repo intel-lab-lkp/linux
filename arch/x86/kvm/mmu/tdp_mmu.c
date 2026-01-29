@@ -614,8 +614,8 @@ static inline int __must_check __tdp_mmu_set_spte_atomic(struct kvm *kvm,
 		 * the desired value.  On failure, restore the old SPTE so that
 		 * the SPTE isn't frozen in perpetuity.
 		 */
-		ret = kvm_x86_call(set_external_spte)(kvm, iter->gfn,
-						      iter->level, new_spte);
+		ret = kvm_x86_call(set_external_spte)(kvm, iter->gfn, iter->old_spte,
+						      new_spte, iter->level);
 		if (ret)
 			__kvm_tdp_mmu_write_spte(iter->sptep, iter->old_spte);
 		else

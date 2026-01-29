@@ -1857,8 +1857,8 @@ struct kvm_x86_ops {
 	 */
 	unsigned long (*alloc_external_sp)(gfp_t gfp);
 	void (*free_external_sp)(unsigned long addr);
-	int (*set_external_spte)(struct kvm *kvm, gfn_t gfn, enum pg_level level,
-				 u64 mirror_spte);
+	int (*set_external_spte)(struct kvm *kvm, gfn_t gfn, u64 old_spte,
+				 u64 new_spte, enum pg_level level);
 	void (*reclaim_external_sp)(struct kvm *kvm, gfn_t gfn,
 				    struct kvm_mmu_page *sp);
 	void (*remove_external_spte)(struct kvm *kvm, gfn_t gfn, enum pg_level level,
