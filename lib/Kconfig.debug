@@ -2880,6 +2880,15 @@ config MEMCPY_KUNIT_TEST
 
 	  If unsure, say N.
 
+config MEMCPY_KUNIT_BENCHMARK
+	bool "Benchmark string functions"
+	depends on MEMCPY_KUNIT_TEST
+	help
+	  A benchmark for memcpy() and memmove() functions,
+	  with both aligned and unaligned buffers.
+
+	  If unsure, say N.
+
 config IS_SIGNED_TYPE_KUNIT_TEST
 	tristate "Test is_signed_type() macro" if !KUNIT_ALL_TESTS
 	depends on KUNIT
