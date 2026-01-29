@@ -572,7 +572,7 @@ static void handle_changed_spte(struct kvm *kvm, int as_id, tdp_ptep_t sptep,
 	if (was_present && !was_leaf &&
 	    (is_leaf || !is_present || WARN_ON_ONCE(pfn_changed)))
 		handle_removed_pt(kvm, spte_to_child_pt(old_spte, level), shared);
-	else if (was_leaf && is_mirror_sptep(sptep) && !is_leaf)
+	else if (was_leaf && is_mirror_sptep(sptep))
 		KVM_BUG_ON(kvm_x86_call(set_external_spte)(kvm, gfn, old_spte,
 							   new_spte, level), kvm);
 }
@@ -703,13 +703,6 @@ static u64 tdp_mmu_set_spte(struct kvm *kvm, int as_id, tdp_ptep_t sptep,
 	old_spte = kvm_tdp_mmu_write_spte(sptep, old_spte, new_spte, level);
 
 	handle_changed_spte(kvm, as_id, sptep, gfn, old_spte, new_spte, level, false);
-
-	/*
-	 * Users that do non-atomic setting of PTEs don't operate on mirror
-	 * roots.  Bug the VM as this path doesn't propagate such writes to the
-	 * external page tables.
-	 */
-	KVM_BUG_ON(is_mirror_sptep(sptep) && is_shadow_present_pte(new_spte), kvm);
 
 	return old_spte;
 }
