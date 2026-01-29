@@ -1563,6 +1563,12 @@ struct kvm_arch {
 	 * the code to do so.
 	 */
 	spinlock_t tdp_mmu_pages_lock;
+
+	/*
+	 * Protect the per-VM cache of pre-allocate pages used to populate the
+	 * Dynamic PAMT when splitting S-EPT huge pages without a vCPU.
+	 */
+	struct mutex tdp_mmu_external_cache_lock;
 #endif /* CONFIG_X86_64 */
 
 	/*
@@ -1861,7 +1867,7 @@ struct kvm_x86_ops {
 				 u64 new_spte, enum pg_level level);
 	void (*reclaim_external_sp)(struct kvm *kvm, gfn_t gfn,
 				    struct kvm_mmu_page *sp);
-	int (*topup_external_cache)(struct kvm_vcpu *vcpu, int min);
+	int (*topup_external_cache)(struct kvm *kvm, struct kvm_vcpu *vcpu, int min);
 
 
 	bool (*has_wbinvd_exit)(void);

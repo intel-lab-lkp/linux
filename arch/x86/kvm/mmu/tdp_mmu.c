@@ -1447,7 +1447,8 @@ bool kvm_tdp_mmu_wrprot_slot(struct kvm *kvm,
 	return spte_set;
 }
 
-static struct kvm_mmu_page *tdp_mmu_alloc_sp_for_split(struct tdp_iter *iter)
+static struct kvm_mmu_page *tdp_mmu_alloc_sp_for_split(struct kvm *kvm,
+						       struct tdp_iter *iter)
 {
 	struct kvm_mmu_page *sp;
 
@@ -1464,7 +1465,7 @@ static struct kvm_mmu_page *tdp_mmu_alloc_sp_for_split(struct tdp_iter *iter)
 		if (!sp->external_spt)
 			goto err_external_spt;
 
-		if (kvm_x86_call(topup_external_cache)(kvm_get_running_vcpu(), 1))
+		if (kvm_x86_call(topup_external_cache)(kvm, kvm_get_running_vcpu(), 1))
 			goto err_external_split;
 	}
 
@@ -1556,7 +1557,7 @@ retry:
 			else
 				write_unlock(&kvm->mmu_lock);
 
-			sp = tdp_mmu_alloc_sp_for_split(&iter);
+			sp = tdp_mmu_alloc_sp_for_split(kvm, &iter);
 
 			if (shared)
 				read_lock(&kvm->mmu_lock);
@@ -1631,9 +1632,74 @@ int kvm_tdp_mmu_split_huge_pages(struct kvm_vcpu *vcpu, gfn_t start, gfn_t end,
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_tdp_mmu_split_huge_pages);
 
 #ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT
+static int __tdp_mmu_split_mirror_huge_pages(struct kvm *kvm,
+					     struct kvm_mmu_page *root,
+					     gfn_t gfn, int target_level)
+{
+	gfn_t end = gfn + KVM_PAGES_PER_HPAGE(target_level + 1);
+
+	return tdp_mmu_split_huge_pages_root(kvm, root, gfn, end, target_level, false);
+}
+
+static int tdp_mmu_split_mirror_huge_pages(struct kvm *kvm,
+					    struct kvm_mmu_page *root,
+					    gfn_t start, gfn_t end, int level)
+{
+
+	gfn_t head = gfn_round_for_level(start, level + 1);
+	gfn_t tail = gfn_round_for_level(end, level + 1);
+	int r;
+
+	if (head != start) {
+		r = __tdp_mmu_split_mirror_huge_pages(kvm, root, head, level);
+		if (r)
+			return r;
+	}
+
+	if (tail != end && (head != tail || head == start)) {
+		r = __tdp_mmu_split_mirror_huge_pages(kvm, root, tail, level);
+		if (r)
+			return r;
+	}
+
+	return 0;
+}
+
 int kvm_arch_gmem_convert(struct kvm *kvm, gfn_t start, gfn_t end,
 			  bool to_private)
 {
+	struct kvm_mmu_page *root;
+	int r;
+
+	/*
+	 * When converting from private=>shared, KVM must first split potential
+	 * hugepages, as KVM mustn't overzap private mappings for TDX guests,
+	 * i.e. must zap _exactly_ [start, end).  Split potential hugepages at
+	 * the head and tail of the to-be-converted (and thus zapped) range so
+	 * that KVM doesn't overzap due to dropping a hugepage that doesn't
+	 * fall wholly inside the range.
+	 */
+	if (to_private || !kvm_has_mirrored_tdp(kvm))
+		return 0;
+
+	/*
+	 * Acquire the external cache lock, a.k.a. the Dynamic PAMT lock, to
+	 * protect the per-VM cache of pre-allocate pages used to populate the
+	 * Dynamic PAMT when splitting S-EPT huge pages.
+	 */
+	guard(mutex)(&kvm->arch.tdp_mmu_external_cache_lock);
+
+	guard(write_lock)(&kvm->mmu_lock);
+
+	/*
+	 * TODO: Also split from PG_LEVEL_1G => PG_LEVEL_2M when KVM supports
+	 *       1GiB S-EPT pages.
+	 */
+	__for_each_tdp_mmu_root_yield_safe(kvm, root, 0, KVM_MIRROR_ROOTS) {
+		r = tdp_mmu_split_mirror_huge_pages(kvm, root, start, end, PG_LEVEL_4K);
+		if (r)
+			return r;
+	}
 	return 0;
 }
 #endif /* CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT */
