@@ -157,17 +157,6 @@ static inline bool is_mirror_sp(const struct kvm_mmu_page *sp)
 	return sp->role.is_mirror;
 }
 
-static inline void kvm_mmu_alloc_external_spt(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp)
-{
-	/*
-	 * external_spt is allocated for TDX module to hold private EPT mappings,
-	 * TDX module will initialize the page by itself.
-	 * Therefore, KVM does not need to initialize or access external_spt.
-	 * KVM only interacts with sp->spt for private EPT operations.
-	 */
-	sp->external_spt = kvm_mmu_memory_cache_alloc(&vcpu->arch.mmu_external_spt_cache);
-}
-
 static inline gfn_t kvm_gfn_root_bits(const struct kvm *kvm, const struct kvm_mmu_page *root)
 {
 	/*

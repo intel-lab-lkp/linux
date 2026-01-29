@@ -867,10 +867,7 @@ struct kvm_vcpu_arch {
 	struct kvm_mmu_memory_cache mmu_shadow_page_cache;
 	struct kvm_mmu_memory_cache mmu_shadowed_info_cache;
 	struct kvm_mmu_memory_cache mmu_page_header_cache;
-	/*
-	 * This cache is to allocate external page table. E.g. private EPT used
-	 * by the TDX module.
-	 */
+	/* Used to allocate S-EPT pages (gifted to the TDX-Module). */
 	struct kvm_mmu_memory_cache mmu_external_spt_cache;
 
 	/*
@@ -1853,17 +1850,20 @@ struct kvm_x86_ops {
 	void (*load_mmu_pgd)(struct kvm_vcpu *vcpu, hpa_t root_hpa,
 			     int root_level);
 
-	/* Update the external page table from spte getting set. */
+	/*
+	 * Callbacks to allocate and free external page tables, a.k.a. S-EPT,
+	 * and to propagate changes in mirror page tables to the external page
+	 * tables.
+	 */
+	unsigned long (*alloc_external_sp)(gfp_t gfp);
+	void (*free_external_sp)(unsigned long addr);
 	int (*set_external_spte)(struct kvm *kvm, gfn_t gfn, enum pg_level level,
 				 u64 mirror_spte);
-
-	/* Update external page tables for page table about to be freed. */
 	void (*reclaim_external_sp)(struct kvm *kvm, gfn_t gfn,
 				    struct kvm_mmu_page *sp);
-
-	/* Update external page table from spte getting removed, and flush TLB. */
 	void (*remove_external_spte)(struct kvm *kvm, gfn_t gfn, enum pg_level level,
 				     u64 mirror_spte);
+
 
 	bool (*has_wbinvd_exit)(void);
 

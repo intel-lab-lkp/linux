@@ -1790,7 +1790,9 @@ static void tdx_sept_reclaim_private_sp(struct kvm *kvm, gfn_t gfn,
 	 * TD's hkid is freed, when the TD is being torn down.
 	 *
 	 * If the S-EPT PTE can't be removed for any reason, intentionally leak
-	 * the page to prevent the kernel from accessing the encrypted page.
+	 * the page to prevent the kernel from accessing the encrypted page,
+	 * and if Dynamic PAMT is enabled, to avoid inducing a failure on
+	 * removal of the still-used PAMT entry.
 	 */
 	if (KVM_BUG_ON(is_hkid_assigned(to_kvm_tdx(kvm)), kvm) ||
 	    tdx_reclaim_page(virt_to_page(sp->external_spt)))
@@ -3599,6 +3601,15 @@ void __init tdx_hardware_setup(void)
 	 * disabled but KVM will continue loading (see tdx_bringup()).
 	 */
 	vt_x86_ops.vm_size = max_t(unsigned int, vt_x86_ops.vm_size, sizeof(struct kvm_tdx));
+
+	/*
+	 * TDX uses the external_spt cache to allocate S-EPT page table pages,
+	 * which (a) don't need to be initialized by KVM as the TDX-Module will
+	 * initialize the page (using the guest's encryption key), and (b) need
+	 * to use a custom allocator to be compatible with Dynamic PAMT.
+	 */
+	vt_x86_ops.alloc_external_sp = tdx_alloc_control_page;
+	vt_x86_ops.free_external_sp = tdx_free_control_page;
 
 	vt_x86_ops.set_external_spte = tdx_sept_set_private_spte;
 	vt_x86_ops.reclaim_external_sp = tdx_sept_reclaim_private_sp;
