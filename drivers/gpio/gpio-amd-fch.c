@@ -125,7 +125,7 @@ static int amd_fch_gpio_get(struct gpio_chip *gc,
 	void __iomem *ptr = amd_fch_gpio_addr(priv, offset);
 
 	spin_lock_irqsave(&priv->lock, flags);
-	ret = (readl_relaxed(ptr) & AMD_FCH_GPIO_FLAG_READ);
+	ret = FIELD_GET(AMD_FCH_GPIO_FLAG_READ, readl_relaxed(ptr));
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	return ret;
