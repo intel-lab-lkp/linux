@@ -1670,6 +1670,52 @@ static int tdx_mem_page_aug(struct kvm *kvm, gfn_t gfn,
 	return 0;
 }
 
+/*
+ * Ensure shared and private EPTs to be flushed on all vCPUs.
+ * tdh_mem_track() is the only caller that increases TD epoch. An increase in
+ * the TD epoch (e.g., to value "N + 1") is successful only if no vCPUs are
+ * running in guest mode with the value "N - 1".
+ *
+ * A successful execution of tdh_mem_track() ensures that vCPUs can only run in
+ * guest mode with TD epoch value "N" if no TD exit occurs after the TD epoch
+ * being increased to "N + 1".
+ *
+ * Kicking off all vCPUs after that further results in no vCPUs can run in guest
+ * mode with TD epoch value "N", which unblocks the next tdh_mem_track() (e.g.
+ * to increase TD epoch to "N + 2").
+ *
+ * TDX module will flush EPT on the next TD enter and make vCPUs to run in
+ * guest mode with TD epoch value "N + 1".
+ *
+ * kvm_make_all_cpus_request() guarantees all vCPUs are out of guest mode by
+ * waiting empty IPI handler ack_kick().
+ *
+ * No action is required to the vCPUs being kicked off since the kicking off
+ * occurs certainly after TD epoch increment and before the next
+ * tdh_mem_track().
+ */
+static void tdx_track(struct kvm *kvm)
+{
+	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
+	u64 err;
+
+	/* If TD isn't finalized, it's before any vcpu running. */
+	if (unlikely(kvm_tdx->state != TD_STATE_RUNNABLE))
+		return;
+
+	/*
+	 * The full sequence of TDH.MEM.TRACK and forcing vCPUs out of guest
+	 * mode must be serialized, as TDH.MEM.TRACK will fail if the previous
+	 * tracking epoch hasn't completed.
+	 */
+	lockdep_assert_held_write(&kvm->mmu_lock);
+
+	err = tdh_do_no_vcpus(tdh_mem_track, kvm, &kvm_tdx->td);
+	TDX_BUG_ON(err, TDH_MEM_TRACK, kvm);
+
+	kvm_make_all_cpus_request(kvm, KVM_REQ_OUTSIDE_GUEST_MODE);
+}
+
 static struct page *tdx_spte_to_external_spt(struct kvm *kvm, gfn_t gfn,
 					     u64 new_spte, enum pg_level level)
 {
@@ -1703,6 +1749,57 @@ static int tdx_sept_link_private_spt(struct kvm *kvm, gfn_t gfn,
 		return -EIO;
 
 	return 0;
+}
+
+static void tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
+					 enum pg_level level, u64 mirror_spte)
+{
+	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
+	kvm_pfn_t pfn = spte_to_pfn(mirror_spte);
+	gpa_t gpa = gfn_to_gpa(gfn);
+	u64 err, entry, level_state;
+
+	lockdep_assert_held_write(&kvm->mmu_lock);
+
+	/*
+	 * HKID is released after all private pages have been removed, and set
+	 * before any might be populated. Warn if zapping is attempted when
+	 * there can't be anything populated in the private EPT.
+	 */
+	if (KVM_BUG_ON(!is_hkid_assigned(to_kvm_tdx(kvm)), kvm))
+		return;
+
+	/* TODO: handle large pages. */
+	if (KVM_BUG_ON(level != PG_LEVEL_4K, kvm))
+		return;
+
+	err = tdh_do_no_vcpus(tdh_mem_range_block, kvm, &kvm_tdx->td, gpa,
+			      level, &entry, &level_state);
+	if (TDX_BUG_ON_2(err, TDH_MEM_RANGE_BLOCK, entry, level_state, kvm))
+		return;
+
+	/*
+	 * TDX requires TLB tracking before dropping private page.  Do
+	 * it here, although it is also done later.
+	 */
+	tdx_track(kvm);
+
+	/*
+	 * When zapping private page, write lock is held. So no race condition
+	 * with other vcpu sept operation.
+	 * Race with TDH.VP.ENTER due to (0-step mitigation) and Guest TDCALLs.
+	 */
+	err = tdh_do_no_vcpus(tdh_mem_page_remove, kvm, &kvm_tdx->td, gpa,
+			      level, &entry, &level_state);
+	if (TDX_BUG_ON_2(err, TDH_MEM_PAGE_REMOVE, entry, level_state, kvm))
+		return;
+
+	err = tdh_phymem_page_wbinvd_hkid((u16)kvm_tdx->hkid, pfn, level);
+	if (TDX_BUG_ON(err, TDH_PHYMEM_PAGE_WBINVD, kvm))
+		return;
+
+	__tdx_quirk_reset_page(pfn, level);
+	tdx_pamt_put(pfn, level);
 }
 
 static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn, u64 old_spte,
@@ -1756,52 +1853,6 @@ static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn, u64 old_spte,
 	return ret;
 }
 
-/*
- * Ensure shared and private EPTs to be flushed on all vCPUs.
- * tdh_mem_track() is the only caller that increases TD epoch. An increase in
- * the TD epoch (e.g., to value "N + 1") is successful only if no vCPUs are
- * running in guest mode with the value "N - 1".
- *
- * A successful execution of tdh_mem_track() ensures that vCPUs can only run in
- * guest mode with TD epoch value "N" if no TD exit occurs after the TD epoch
- * being increased to "N + 1".
- *
- * Kicking off all vCPUs after that further results in no vCPUs can run in guest
- * mode with TD epoch value "N", which unblocks the next tdh_mem_track() (e.g.
- * to increase TD epoch to "N + 2").
- *
- * TDX module will flush EPT on the next TD enter and make vCPUs to run in
- * guest mode with TD epoch value "N + 1".
- *
- * kvm_make_all_cpus_request() guarantees all vCPUs are out of guest mode by
- * waiting empty IPI handler ack_kick().
- *
- * No action is required to the vCPUs being kicked off since the kicking off
- * occurs certainly after TD epoch increment and before the next
- * tdh_mem_track().
- */
-static void tdx_track(struct kvm *kvm)
-{
-	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
-	u64 err;
-
-	/* If TD isn't finalized, it's before any vcpu running. */
-	if (unlikely(kvm_tdx->state != TD_STATE_RUNNABLE))
-		return;
-
-	/*
-	 * The full sequence of TDH.MEM.TRACK and forcing vCPUs out of guest
-	 * mode must be serialized, as TDH.MEM.TRACK will fail if the previous
-	 * tracking epoch hasn't completed.
-	 */
-	lockdep_assert_held_write(&kvm->mmu_lock);
-
-	err = tdh_do_no_vcpus(tdh_mem_track, kvm, &kvm_tdx->td);
-	TDX_BUG_ON(err, TDH_MEM_TRACK, kvm);
-
-	kvm_make_all_cpus_request(kvm, KVM_REQ_OUTSIDE_GUEST_MODE);
-}
-
 static void tdx_sept_reclaim_private_sp(struct kvm *kvm, gfn_t gfn,
 					struct kvm_mmu_page *sp)
 {
@@ -1822,57 +1873,6 @@ static void tdx_sept_reclaim_private_sp(struct kvm *kvm, gfn_t gfn,
 	if (KVM_BUG_ON(is_hkid_assigned(to_kvm_tdx(kvm)), kvm) ||
 	    tdx_reclaim_page(virt_to_page(sp->external_spt)))
 		sp->external_spt = NULL;
-}
-
-static void tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
-					 enum pg_level level, u64 mirror_spte)
-{
-	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
-	kvm_pfn_t pfn = spte_to_pfn(mirror_spte);
-	gpa_t gpa = gfn_to_gpa(gfn);
-	u64 err, entry, level_state;
-
-	lockdep_assert_held_write(&kvm->mmu_lock);
-
-	/*
-	 * HKID is released after all private pages have been removed, and set
-	 * before any might be populated. Warn if zapping is attempted when
-	 * there can't be anything populated in the private EPT.
-	 */
-	if (KVM_BUG_ON(!is_hkid_assigned(to_kvm_tdx(kvm)), kvm))
-		return;
-
-	/* TODO: handle large pages. */
-	if (KVM_BUG_ON(level != PG_LEVEL_4K, kvm))
-		return;
-
-	err = tdh_do_no_vcpus(tdh_mem_range_block, kvm, &kvm_tdx->td, gpa,
-			      level, &entry, &level_state);
-	if (TDX_BUG_ON_2(err, TDH_MEM_RANGE_BLOCK, entry, level_state, kvm))
-		return;
-
-	/*
-	 * TDX requires TLB tracking before dropping private page.  Do
-	 * it here, although it is also done later.
-	 */
-	tdx_track(kvm);
-
-	/*
-	 * When zapping private page, write lock is held. So no race condition
-	 * with other vcpu sept operation.
-	 * Race with TDH.VP.ENTER due to (0-step mitigation) and Guest TDCALLs.
-	 */
-	err = tdh_do_no_vcpus(tdh_mem_page_remove, kvm, &kvm_tdx->td, gpa,
-			      level, &entry, &level_state);
-	if (TDX_BUG_ON_2(err, TDH_MEM_PAGE_REMOVE, entry, level_state, kvm))
-		return;
-
-	err = tdh_phymem_page_wbinvd_hkid((u16)kvm_tdx->hkid, pfn, level);
-	if (TDX_BUG_ON(err, TDH_PHYMEM_PAGE_WBINVD, kvm))
-		return;
-
-	__tdx_quirk_reset_page(pfn, level);
-	tdx_pamt_put(pfn, level);
 }
 
 void tdx_deliver_interrupt(struct kvm_lapic *apic, int delivery_mode,
