@@ -1756,9 +1756,13 @@ u64 tdh_mem_page_aug(struct tdx_td *td, u64 gpa, enum pg_level level, u64 pfn,
 		.rdx = tdx_tdr_pa(td),
 		.r8 = PFN_PHYS(pfn),
 	};
+	unsigned long npages = page_level_size(level) / PAGE_SIZE;
+	unsigned long i;
 	u64 ret;
 
-	tdx_clflush_pfn(pfn);
+	for (i = 0; i < npages; i++)
+		tdx_clflush_pfn(pfn + i);
+
 	ret = seamcall_ret(TDH_MEM_PAGE_AUG, &args);
 
 	*ext_err1 = args.rcx;
