@@ -44,13 +44,19 @@ static void sas_resume_port(struct asd_sas_phy *phy)
 	 * 1/ presume every device came back
 	 * 2/ force the next revalidation to check all expander phys
 	 */
+	spin_lock_irq(&port->dev_list_lock);
 	list_for_each_entry_safe(dev, n, &port->dev_list, dev_list_node) {
 		int i, rc;
+
+		kref_get(&dev->kref);
+		spin_unlock_irq(&port->dev_list_lock);
 
 		rc = sas_notify_lldd_dev_found(dev);
 		if (rc) {
 			sas_unregister_dev(port, dev);
 			sas_destruct_devices(port);
+			sas_put_device(dev);
+			spin_lock_irq(&port->dev_list_lock);
 			continue;
 		}
 
@@ -62,7 +68,11 @@ static void sas_resume_port(struct asd_sas_phy *phy)
 				phy->phy_change_count = -1;
 			}
 		}
+
+		sas_put_device(dev);
+		spin_lock_irq(&port->dev_list_lock);
 	}
+	spin_unlock_irq(&port->dev_list_lock);
 
 	sas_discover_event(port, DISCE_RESUME);
 }

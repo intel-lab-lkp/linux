@@ -643,14 +643,21 @@ static int sas_dev_present_in_domain(struct asd_sas_port *port,
 					    u8 *sas_addr)
 {
 	struct domain_device *dev;
+	int found = 0;
 
 	if (SAS_ADDR(port->sas_addr) == SAS_ADDR(sas_addr))
 		return 1;
+
+	spin_lock_irq(&port->dev_list_lock);
 	list_for_each_entry(dev, &port->dev_list, dev_list_node) {
-		if (SAS_ADDR(dev->sas_addr) == SAS_ADDR(sas_addr))
-			return 1;
+		if (SAS_ADDR(dev->sas_addr) == SAS_ADDR(sas_addr)) {
+			found = 1;
+			break;
+		}
 	}
-	return 0;
+	spin_unlock_irq(&port->dev_list_lock);
+
+	return found;
 }
 
 #define RPEL_REQ_SIZE	16
@@ -1579,20 +1586,31 @@ out_err:
 static int sas_ex_level_discovery(struct asd_sas_port *port, const int level)
 {
 	int res = 0;
-	struct domain_device *dev;
+	struct domain_device *dev, *n;
 
-	list_for_each_entry(dev, &port->dev_list, dev_list_node) {
+	spin_lock_irq(&port->dev_list_lock);
+	list_for_each_entry_safe(dev, n, &port->dev_list, dev_list_node) {
 		if (dev_is_expander(dev->dev_type)) {
 			struct sas_expander_device *ex =
 				rphy_to_expander_device(dev->rphy);
 
-			if (level == ex->level)
+			if (level == ex->level) {
+				kref_get(&dev->kref);
+				spin_unlock_irq(&port->dev_list_lock);
 				res = sas_ex_discover_devices(dev, -1);
-			else if (level > 0)
+				sas_put_device(dev);
+				spin_lock_irq(&port->dev_list_lock);
+			} else if (level > 0) {
+				kref_get(&port->port_dev->kref);
+				spin_unlock_irq(&port->dev_list_lock);
 				res = sas_ex_discover_devices(port->port_dev, -1);
+				sas_put_device(port->port_dev);
+				spin_lock_irq(&port->dev_list_lock);
+			}
 
 		}
 	}
+	spin_unlock_irq(&port->dev_list_lock);
 
 	return res;
 }

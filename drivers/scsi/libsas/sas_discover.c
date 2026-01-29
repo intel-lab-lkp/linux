@@ -245,8 +245,10 @@ static void sas_suspend_devices(struct work_struct *work)
 	 * suspension, we force the issue here to keep the reference
 	 * counts aligned
 	 */
+	spin_lock_irq(&port->dev_list_lock);
 	list_for_each_entry(dev, &port->dev_list, dev_list_node)
 		sas_notify_lldd_dev_gone(dev);
+	spin_unlock_irq(&port->dev_list_lock);
 
 	/* we are suspending, so we know events are disabled and
 	 * phy_list is not being mutated
@@ -410,11 +412,23 @@ void sas_unregister_domain_devices(struct asd_sas_port *port, bool gone)
 {
 	struct domain_device *dev, *n;
 
+	/* Lock while iterating to prevent concurrent modifications.
+	 * We need to unlock before calling sas_unregister_dev() as it
+	 * may sleep, but we hold a reference to prevent device removal.
+	 */
+	spin_lock_irq(&port->dev_list_lock);
 	list_for_each_entry_safe_reverse(dev, n, &port->dev_list, dev_list_node) {
 		if (gone)
 			set_bit(SAS_DEV_GONE, &dev->state);
+		kref_get(&dev->kref);
+		spin_unlock_irq(&port->dev_list_lock);
+
 		sas_unregister_dev(port, dev);
+		sas_put_device(dev);
+
+		spin_lock_irq(&port->dev_list_lock);
 	}
+	spin_unlock_irq(&port->dev_list_lock);
 
 	list_for_each_entry_safe(dev, n, &port->disco_list, disco_list_node)
 		sas_unregister_dev(port, dev);
