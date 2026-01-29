@@ -318,11 +318,11 @@ static inline void tdx_disassociate_vp(struct kvm_vcpu *vcpu)
 })
 
 /* TDH.PHYMEM.PAGE.RECLAIM is allowed only when destroying the TD. */
-static int __tdx_reclaim_page(struct page *page)
+static int __tdx_reclaim_page(kvm_pfn_t pfn)
 {
 	u64 err, rcx, rdx, r8;
 
-	err = tdh_phymem_page_reclaim(page, &rcx, &rdx, &r8);
+	err = tdh_phymem_page_reclaim(pfn, &rcx, &rdx, &r8);
 
 	/*
 	 * No need to check for TDX_OPERAND_BUSY; all TD pages are freed
@@ -337,11 +337,12 @@ static int __tdx_reclaim_page(struct page *page)
 
 static int tdx_reclaim_page(struct page *page)
 {
+	kvm_pfn_t pfn = page_to_pfn(page);
 	int r;
 
-	r = __tdx_reclaim_page(page);
+	r = __tdx_reclaim_page(pfn);
 	if (!r)
-		tdx_quirk_reset_page(page);
+		tdx_quirk_reset_page(pfn);
 	return r;
 }
 
@@ -583,7 +584,7 @@ static void tdx_reclaim_td_control_pages(struct kvm *kvm)
 	if (!kvm_tdx->td.tdr_page)
 		return;
 
-	if (__tdx_reclaim_page(kvm_tdx->td.tdr_page))
+	if (__tdx_reclaim_page(page_to_pfn(kvm_tdx->td.tdr_page)))
 		return;
 
 	/*
@@ -595,7 +596,7 @@ static void tdx_reclaim_td_control_pages(struct kvm *kvm)
 	if (TDX_BUG_ON(err, TDH_PHYMEM_PAGE_WBINVD, kvm))
 		return;
 
-	tdx_quirk_reset_page(kvm_tdx->td.tdr_page);
+	tdx_quirk_reset_page(page_to_pfn(kvm_tdx->td.tdr_page));
 
 	__tdx_free_control_page(kvm_tdx->td.tdr_page);
 	kvm_tdx->td.tdr_page = NULL;
@@ -1640,8 +1641,8 @@ static int tdx_mem_page_add(struct kvm *kvm, gfn_t gfn, enum pg_level level,
 	    KVM_BUG_ON(!kvm_tdx->page_add_src, kvm))
 		return -EIO;
 
-	err = tdh_mem_page_add(&kvm_tdx->td, gpa, pfn_to_page(pfn),
-			       kvm_tdx->page_add_src, &entry, &level_state);
+	err = tdh_mem_page_add(&kvm_tdx->td, gpa, pfn, kvm_tdx->page_add_src,
+			       &entry, &level_state);
 	if (unlikely(IS_TDX_OPERAND_BUSY(err)))
 		return -EBUSY;
 
@@ -1655,12 +1656,11 @@ static int tdx_mem_page_aug(struct kvm *kvm, gfn_t gfn,
 			    enum pg_level level, kvm_pfn_t pfn)
 {
 	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
-	struct page *page = pfn_to_page(pfn);
 	gpa_t gpa = gfn_to_gpa(gfn);
 	u64 entry, level_state;
 	u64 err;
 
-	err = tdh_mem_page_aug(&kvm_tdx->td, gpa, level, page, &entry, &level_state);
+	err = tdh_mem_page_aug(&kvm_tdx->td, gpa, level, pfn, &entry, &level_state);
 	if (unlikely(IS_TDX_OPERAND_BUSY(err)))
 		return -EBUSY;
 
@@ -1712,7 +1712,6 @@ static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn,
 	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
 	kvm_pfn_t pfn = spte_to_pfn(mirror_spte);
 	struct vcpu_tdx *tdx = to_tdx(vcpu);
-	struct page *page = pfn_to_page(pfn);
 	int ret;
 
 	if (KVM_BUG_ON(!vcpu, kvm))
@@ -1730,7 +1729,7 @@ static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn,
 
 	WARN_ON_ONCE((mirror_spte & VMX_EPT_RWX_MASK) != VMX_EPT_RWX_MASK);
 
-	ret = tdx_pamt_get(page, &tdx->pamt_cache);
+	ret = tdx_pamt_get(pfn, &tdx->pamt_cache);
 	if (ret)
 		return ret;
 
@@ -1752,7 +1751,7 @@ static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn,
 		ret = tdx_mem_page_add(kvm, gfn, level, pfn);
 
 	if (ret)
-		tdx_pamt_put(page);
+		tdx_pamt_put(pfn);
 
 	return ret;
 }
@@ -1828,8 +1827,8 @@ static void tdx_sept_reclaim_private_sp(struct kvm *kvm, gfn_t gfn,
 static void tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 					 enum pg_level level, u64 mirror_spte)
 {
-	struct page *page = pfn_to_page(spte_to_pfn(mirror_spte));
 	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
+	kvm_pfn_t pfn = spte_to_pfn(mirror_spte);
 	gpa_t gpa = gfn_to_gpa(gfn);
 	u64 err, entry, level_state;
 
@@ -1868,12 +1867,12 @@ static void tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 	if (TDX_BUG_ON_2(err, TDH_MEM_PAGE_REMOVE, entry, level_state, kvm))
 		return;
 
-	err = tdh_phymem_page_wbinvd_hkid((u16)kvm_tdx->hkid, page);
+	err = tdh_phymem_page_wbinvd_hkid((u16)kvm_tdx->hkid, pfn);
 	if (TDX_BUG_ON(err, TDH_PHYMEM_PAGE_WBINVD, kvm))
 		return;
 
-	tdx_quirk_reset_page(page);
-	tdx_pamt_put(page);
+	tdx_quirk_reset_page(pfn);
+	tdx_pamt_put(pfn);
 }
 
 void tdx_deliver_interrupt(struct kvm_lapic *apic, int delivery_mode,

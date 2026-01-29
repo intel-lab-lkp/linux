@@ -799,9 +799,9 @@ static void tdx_quirk_reset_paddr(unsigned long base, unsigned long size)
 	mb();
 }
 
-void tdx_quirk_reset_page(struct page *page)
+void tdx_quirk_reset_page(u64 pfn)
 {
-	tdx_quirk_reset_paddr(page_to_phys(page), PAGE_SIZE);
+	tdx_quirk_reset_paddr(PFN_PHYS(pfn), PAGE_SIZE);
 }
 EXPORT_SYMBOL_FOR_KVM(tdx_quirk_reset_page);
 
@@ -1665,6 +1665,11 @@ static void tdx_clflush_page(struct page *page)
 	clflush_cache_range(page_to_virt(page), PAGE_SIZE);
 }
 
+static void tdx_clflush_pfn(u64 pfn)
+{
+	clflush_cache_range(__va(PFN_PHYS(pfn)), PAGE_SIZE);
+}
+
 static int pg_level_to_tdx_sept_level(enum pg_level level)
 {
 	WARN_ON_ONCE(level == PG_LEVEL_NONE);
@@ -1691,17 +1696,17 @@ u64 tdh_mng_addcx(struct tdx_td *td, struct page *tdcs_page)
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_mng_addcx);
 
-u64 tdh_mem_page_add(struct tdx_td *td, u64 gpa, struct page *page, struct page *source, u64 *ext_err1, u64 *ext_err2)
+u64 tdh_mem_page_add(struct tdx_td *td, u64 gpa, u64 pfn, struct page *source, u64 *ext_err1, u64 *ext_err2)
 {
 	struct tdx_module_args args = {
 		.rcx = gpa,
 		.rdx = tdx_tdr_pa(td),
-		.r8 = page_to_phys(page),
+		.r8 = PFN_PHYS(pfn),
 		.r9 = page_to_phys(source),
 	};
 	u64 ret;
 
-	tdx_clflush_page(page);
+	tdx_clflush_pfn(pfn);
 	ret = seamcall_ret(TDH_MEM_PAGE_ADD, &args);
 
 	*ext_err1 = args.rcx;
@@ -1743,17 +1748,17 @@ u64 tdh_vp_addcx(struct tdx_vp *vp, struct page *tdcx_page)
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_vp_addcx);
 
-u64 tdh_mem_page_aug(struct tdx_td *td, u64 gpa, enum pg_level level,
-		     struct page *page, u64 *ext_err1, u64 *ext_err2)
+u64 tdh_mem_page_aug(struct tdx_td *td, u64 gpa, enum pg_level level, u64 pfn,
+		     u64 *ext_err1, u64 *ext_err2)
 {
 	struct tdx_module_args args = {
 		.rcx = gpa | pg_level_to_tdx_sept_level(level),
 		.rdx = tdx_tdr_pa(td),
-		.r8 = page_to_phys(page),
+		.r8 = PFN_PHYS(pfn),
 	};
 	u64 ret;
 
-	tdx_clflush_page(page);
+	tdx_clflush_pfn(pfn);
 	ret = seamcall_ret(TDH_MEM_PAGE_AUG, &args);
 
 	*ext_err1 = args.rcx;
@@ -1997,10 +2002,10 @@ EXPORT_SYMBOL_FOR_KVM(tdh_vp_init);
  * So despite the names, they must be interpted specially as described by the spec. Return
  * them only for error reporting purposes.
  */
-u64 tdh_phymem_page_reclaim(struct page *page, u64 *tdx_pt, u64 *tdx_owner, u64 *tdx_size)
+u64 tdh_phymem_page_reclaim(u64 pfn, u64 *tdx_pt, u64 *tdx_owner, u64 *tdx_size)
 {
 	struct tdx_module_args args = {
-		.rcx = page_to_phys(page),
+		.rcx = PFN_PHYS(pfn),
 	};
 	u64 ret;
 
@@ -2056,17 +2061,17 @@ u64 tdh_phymem_page_wbinvd_tdr(struct tdx_td *td)
 {
 	struct tdx_module_args args = {};
 
-	args.rcx = mk_keyed_paddr(tdx_global_keyid, td->tdr_page);
+	args.rcx = mk_keyed_paddr(tdx_global_keyid, page_to_pfn(td->tdr_page));
 
 	return seamcall(TDH_PHYMEM_PAGE_WBINVD, &args);
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_phymem_page_wbinvd_tdr);
 
-u64 tdh_phymem_page_wbinvd_hkid(u64 hkid, struct page *page)
+u64 tdh_phymem_page_wbinvd_hkid(u64 hkid, u64 pfn)
 {
 	struct tdx_module_args args = {};
 
-	args.rcx = mk_keyed_paddr(hkid, page);
+	args.rcx = mk_keyed_paddr(hkid, pfn);
 
 	return seamcall(TDH_PHYMEM_PAGE_WBINVD, &args);
 }
@@ -2136,11 +2141,9 @@ static void free_pamt_array(u64 *pa_array)
  * Calculate the arg needed for operating on the DPAMT backing for
  * a given 4KB page.
  */
-static u64 pamt_2mb_arg(struct page *page)
+static u64 pamt_2mb_arg(u64 pfn)
 {
-	unsigned long hpa_2mb = ALIGN_DOWN(page_to_phys(page), PMD_SIZE);
-
-	return hpa_2mb | TDX_PS_2M;
+	return ALIGN_DOWN(PFN_PHYS(pfn), PMD_SIZE) | TDX_PS_2M;
 }
 
 /*
@@ -2149,10 +2152,10 @@ static u64 pamt_2mb_arg(struct page *page)
  * error. In the case of TDX module error, the return code is stored
  * in tdx_err.
  */
-static u64 tdh_phymem_pamt_add(struct page *page, u64 *pamt_pa_array)
+static u64 tdh_phymem_pamt_add(u64 pfn, u64 *pamt_pa_array)
 {
 	struct tdx_module_args args = {
-		.rcx = pamt_2mb_arg(page)
+		.rcx = pamt_2mb_arg(pfn)
 	};
 
 	dpamt_copy_to_regs(&args, rdx, pamt_pa_array);
@@ -2161,10 +2164,10 @@ static u64 tdh_phymem_pamt_add(struct page *page, u64 *pamt_pa_array)
 }
 
 /* Remove PAMT backing for the given page. */
-static u64 tdh_phymem_pamt_remove(struct page *page, u64 *pamt_pa_array)
+static u64 tdh_phymem_pamt_remove(u64 pfn, u64 *pamt_pa_array)
 {
 	struct tdx_module_args args = {
-		.rcx = pamt_2mb_arg(page),
+		.rcx = pamt_2mb_arg(pfn),
 	};
 	u64 ret;
 
@@ -2180,7 +2183,7 @@ static u64 tdh_phymem_pamt_remove(struct page *page, u64 *pamt_pa_array)
 static DEFINE_SPINLOCK(pamt_lock);
 
 /* Bump PAMT refcount for the given page and allocate PAMT memory if needed */
-int tdx_pamt_get(struct page *page, struct tdx_pamt_cache *cache)
+int tdx_pamt_get(u64 pfn, struct tdx_pamt_cache *cache)
 {
 	u64 pamt_pa_array[MAX_NR_DPAMT_ARGS];
 	atomic_t *pamt_refcount;
@@ -2190,7 +2193,7 @@ int tdx_pamt_get(struct page *page, struct tdx_pamt_cache *cache)
 	if (!tdx_supports_dynamic_pamt(&tdx_sysinfo))
 		return 0;
 
-	pamt_refcount = tdx_find_pamt_refcount(page_to_pfn(page));
+	pamt_refcount = tdx_find_pamt_refcount(pfn);
 
 	/*
 	 * If the pamt page is already added (i.e. refcount >= 1),
@@ -2214,7 +2217,7 @@ int tdx_pamt_get(struct page *page, struct tdx_pamt_cache *cache)
 		}
 
 		/* Try to add the pamt page and take the refcount 0->1. */
-		tdx_status = tdh_phymem_pamt_add(page, pamt_pa_array);
+		tdx_status = tdh_phymem_pamt_add(pfn, pamt_pa_array);
 		if (IS_TDX_SUCCESS(tdx_status)) {
 			/*
 			 * The refcount is zero, and this locked path is the only way to
@@ -2257,7 +2260,7 @@ EXPORT_SYMBOL_FOR_KVM(tdx_pamt_get);
  * Drop PAMT refcount for the given page and free PAMT memory if it is no
  * longer needed.
  */
-void tdx_pamt_put(struct page *page)
+void tdx_pamt_put(u64 pfn)
 {
 	u64 pamt_pa_array[MAX_NR_DPAMT_ARGS];
 	atomic_t *pamt_refcount;
@@ -2266,7 +2269,7 @@ void tdx_pamt_put(struct page *page)
 	if (!tdx_supports_dynamic_pamt(&tdx_sysinfo))
 		return;
 
-	pamt_refcount = tdx_find_pamt_refcount(page_to_pfn(page));
+	pamt_refcount = tdx_find_pamt_refcount(pfn);
 
 	/*
 	 * If the there are more than 1 references on the pamt page,
@@ -2285,7 +2288,7 @@ void tdx_pamt_put(struct page *page)
 			return;
 
 		/* Try to remove the pamt page and take the refcount 1->0. */
-		tdx_status = tdh_phymem_pamt_remove(page, pamt_pa_array);
+		tdx_status = tdh_phymem_pamt_remove(pfn, pamt_pa_array);
 
 		/*
 		 * Don't free pamt_pa_array as it could hold garbage when
@@ -2357,7 +2360,7 @@ struct page *__tdx_alloc_control_page(gfp_t gfp)
 	if (!page)
 		return NULL;
 
-	if (tdx_pamt_get(page, NULL)) {
+	if (tdx_pamt_get(page_to_pfn(page), NULL)) {
 		__free_page(page);
 		return NULL;
 	}
@@ -2375,7 +2378,7 @@ void __tdx_free_control_page(struct page *page)
 	if (!page)
 		return;
 
-	tdx_pamt_put(page);
+	tdx_pamt_put(page_to_pfn(page));
 	__free_page(page);
 }
 EXPORT_SYMBOL_FOR_KVM(__tdx_free_control_page);
