@@ -2071,13 +2071,21 @@ u64 tdh_phymem_page_wbinvd_tdr(struct tdx_td *td)
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_phymem_page_wbinvd_tdr);
 
-u64 tdh_phymem_page_wbinvd_hkid(u64 hkid, u64 pfn)
+u64 tdh_phymem_page_wbinvd_hkid(u64 hkid, u64 pfn, enum pg_level level)
 {
-	struct tdx_module_args args = {};
+	unsigned long npages = page_level_size(level) / PAGE_SIZE;
+	u64 err;
 
-	args.rcx = mk_keyed_paddr(hkid, pfn);
+	for (unsigned long i = 0; i < npages; i++) {
+		struct tdx_module_args args = {
+			.rcx = mk_keyed_paddr(hkid, pfn + i),
+		};
 
-	return seamcall(TDH_PHYMEM_PAGE_WBINVD, &args);
+		err = seamcall(TDH_PHYMEM_PAGE_WBINVD, &args);
+		if (err)
+			break;
+	}
+	return err;
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_phymem_page_wbinvd_hkid);
 
