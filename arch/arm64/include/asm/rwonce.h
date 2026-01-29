@@ -19,6 +19,23 @@
 		"ldapr"	#sfx "\t" #regs,				\
 	ARM64_HAS_LDAPR)
 
+#ifdef USE_TYPEOF_UNQUAL
+#define __rwonce_typeof_unqual(x) TYPEOF_UNQUAL(x)
+#else
+/*
+ * Fallback for older compilers to infer an unqualified type.
+ *
+ * Uses the fact that auto is supposed to drop qualifiers. Unlike
+ * typeof_unqual(), the type must be complete (defines an unevaluated local
+ * variable); this must trivially hold because __READ_ONCE() returns a value.
+ *
+ * Another caveat is that because of array-to-pointer decay, an array is
+ * inferred as a pointer type; this is fine for __READ_ONCE usage, but is
+ * unsuitable as a general fallback implementation for TYPEOF_UNQUAL.
+ */
+#define __rwonce_typeof_unqual(x) typeof(({ auto ____t = (x); ____t; }))
+#endif
+
 /*
  * When building with LTO, there is an increased risk of the compiler
  * converting an address dependency headed by a READ_ONCE() invocation
@@ -32,8 +49,7 @@
 #define __READ_ONCE(x)							\
 ({									\
 	typeof(&(x)) __x = &(x);					\
-	int atomic = 1;							\
-	union { __unqual_scalar_typeof(*__x) __val; char __c[1]; } __u;	\
+	union { __rwonce_typeof_unqual(*__x) __val; char __c[1]; } __u;	\
 	switch (sizeof(x)) {						\
 	case 1:								\
 		asm volatile(__LOAD_RCPC(b, %w0, %1)			\
@@ -56,9 +72,9 @@
 			: "Q" (*__x) : "memory");			\
 		break;							\
 	default:							\
-		atomic = 0;						\
+		__u.__val = *(volatile typeof(*__x) *)__x;		\
 	}								\
-	atomic ? (typeof(*__x))__u.__val : (*(volatile typeof(*__x) *)__x);\
+	__u.__val;							\
 })
 
 #endif	/* !BUILD_VDSO */
