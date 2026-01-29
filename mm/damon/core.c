@@ -12,6 +12,7 @@
 #include <linux/kthread.h>
 #include <linux/memcontrol.h>
 #include <linux/mm.h>
+#include <linux/mmzone.h>
 #include <linux/psi.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -2119,8 +2120,52 @@ static unsigned long damos_get_node_memcg_used_bp(
 }
 #endif
 
+static unsigned long damos_get_node_target_mem_bp(
+		struct damon_ctx *ctx, struct damos *scheme,
+		struct damos_quota_goal *goal)
+{
+	int nid = goal->nid;
+	unsigned long node_capacity, scheme_node_bytes = 0;
+	unsigned long addr_unit = ctx->addr_unit;
+	struct damon_target *t;
+	struct damon_region *r;
+	unsigned long start_pfn, end_pfn, pfn;
 
-static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal)
+	/* Only supported for physical address space monitoring */
+	if (ctx->ops.id != DAMON_OPS_PADDR)
+		return 0;
+
+	if (nid < 0 || nid >= MAX_NUMNODES || !node_online(nid))
+		return 0;
+
+	node_capacity = NODE_DATA(nid)->node_spanned_pages << PAGE_SHIFT;
+	if (!node_capacity)
+		return 0;
+
+	damon_for_each_target(t, ctx) {
+		damon_for_each_region(r, t) {
+			if (!__damos_valid_target(r, scheme))
+				continue;
+
+			start_pfn = (phys_addr_t)r->ar.start *
+					addr_unit >> PAGE_SHIFT;
+			end_pfn = (phys_addr_t)r->ar.end *
+					addr_unit >> PAGE_SHIFT;
+
+			for (pfn = start_pfn; pfn < end_pfn; pfn++) {
+				if (pfn_valid(pfn) &&
+				    page_to_nid(pfn_to_page(pfn)) == nid)
+					scheme_node_bytes += PAGE_SIZE;
+			}
+		}
+	}
+
+	return mult_frac(scheme_node_bytes, 10000, node_capacity);
+}
+
+static void damos_set_quota_goal_current_value(
+		struct damon_ctx *ctx, struct damos *scheme,
+		struct damos_quota_goal *goal)
 {
 	u64 now_psi_total;
 
@@ -2141,19 +2186,25 @@ static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal)
 	case DAMOS_QUOTA_NODE_MEMCG_FREE_BP:
 		goal->current_value = damos_get_node_memcg_used_bp(goal);
 		break;
+	case DAMOS_QUOTA_NODE_TARGET_MEM_BP:
+		goal->current_value = damos_get_node_target_mem_bp(
+				ctx, scheme, goal);
+		break;
 	default:
 		break;
 	}
 }
 
 /* Return the highest score since it makes schemes least aggressive */
-static unsigned long damos_quota_score(struct damos_quota *quota)
+static unsigned long damos_quota_score(
+		struct damon_ctx *ctx, struct damos *scheme,
+		struct damos_quota *quota)
 {
 	struct damos_quota_goal *goal;
 	unsigned long highest_score = 0;
 
 	damos_for_each_quota_goal(goal, quota) {
-		damos_set_quota_goal_current_value(goal);
+		damos_set_quota_goal_current_value(ctx, scheme, goal);
 		highest_score = max(highest_score,
 				goal->current_value * 10000 /
 				goal->target_value);
@@ -2165,7 +2216,8 @@ static unsigned long damos_quota_score(struct damos_quota *quota)
 /*
  * Called only if quota->ms, or quota->sz are set, or quota->goals is not empty
  */
-static void damos_set_effective_quota(struct damos_quota *quota)
+static void damos_set_effective_quota(struct damon_ctx *ctx,
+		struct damos *scheme, struct damos_quota *quota)
 {
 	unsigned long throughput;
 	unsigned long esz = ULONG_MAX;
@@ -2176,7 +2228,7 @@ static void damos_set_effective_quota(struct damos_quota *quota)
 	}
 
 	if (!list_empty(&quota->goals)) {
-		unsigned long score = damos_quota_score(quota);
+		unsigned long score = damos_quota_score(ctx, scheme, quota);
 
 		quota->esz_bp = damon_feed_loop_next_input(
 				max(quota->esz_bp, 10000UL),
@@ -2227,7 +2279,7 @@ static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
 	/* First charge window */
 	if (!quota->total_charged_sz && !quota->charged_from) {
 		quota->charged_from = jiffies;
-		damos_set_effective_quota(quota);
+		damos_set_effective_quota(c, s, quota);
 	}
 
 	/* New charge window starts */
@@ -2240,7 +2292,7 @@ static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
 		quota->charged_sz = 0;
 		if (trace_damos_esz_enabled())
 			cached_esz = quota->esz;
-		damos_set_effective_quota(quota);
+		damos_set_effective_quota(c, s, quota);
 		if (trace_damos_esz_enabled() && quota->esz != cached_esz)
 			damos_trace_esz(c, s, quota);
 	}
