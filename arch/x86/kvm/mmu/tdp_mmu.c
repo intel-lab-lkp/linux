@@ -559,20 +559,22 @@ static void handle_changed_spte(struct kvm *kvm, int as_id, tdp_ptep_t sptep,
 	 * SPTE being converted to a hugepage (leaf) or being zapped.  Shadow
 	 * pages are kernel allocations and should never be migrated.
 	 *
-	 * When removing leaf entries from a mirror, immediately propagate the
-	 * changes to the external page tables.  Note, non-leaf mirror entries
-	 * are handled by handle_removed_pt(), as TDX requires that all leaf
-	 * entries are removed before the owning page table.  Note #2, writes
-	 * to make mirror PTEs shadow-present are propagated to external page
-	 * tables by __tdp_mmu_set_spte_atomic(), as KVM needs to ensure the
-	 * external page table was successfully updated before marking the
-	 * mirror SPTE present.
+	 * When modifying leaf entries in mirrored page tables, propagate the
+	 * changes to the external SPTE.  Bug the VM on failure, as callers
+	 * aren't prepared to handle errors, e.g. due to lock contention in the
+	 * TDX-Module.  Note, changes to non-leaf mirror SPTEs are handled by
+	 * handle_removed_pt() (the TDX-Module requires that child entries are
+	 * removed before the parent SPTE), and changes to non-present mirror
+	 * SPTEs are handled by __tdp_mmu_set_spte_atomic() (KVM needs to set
+	 * the external SPTE while the mirror SPTE is frozen so that installing
+	 * a new SPTE is effectively an atomic operation).
 	 */
 	if (was_present && !was_leaf &&
 	    (is_leaf || !is_present || WARN_ON_ONCE(pfn_changed)))
 		handle_removed_pt(kvm, spte_to_child_pt(old_spte, level), shared);
 	else if (was_leaf && is_mirror_sptep(sptep) && !is_leaf)
-		kvm_x86_call(remove_external_spte)(kvm, gfn, level, old_spte);
+		KVM_BUG_ON(kvm_x86_call(set_external_spte)(kvm, gfn, old_spte,
+							   new_spte, level), kvm);
 }
 
 static inline int __must_check __tdp_mmu_set_spte_atomic(struct kvm *kvm,
