@@ -1824,6 +1824,50 @@ u64 tdh_mng_rd(struct tdx_td *td, u64 field, u64 *data)
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_mng_rd);
 
+/* Number PAMT pages to be provided to TDX module per 2M region of PA */
+static int tdx_dpamt_entry_pages(void)
+{
+	if (!tdx_supports_dynamic_pamt(&tdx_sysinfo))
+		return 0;
+
+	return tdx_sysinfo.tdmr.pamt_4k_entry_size * PTRS_PER_PTE / PAGE_SIZE;
+}
+
+/*
+ * For SEAMCALLs that pass a bundle of pages, the TDX spec treats the registers
+ * like an array, as they are ordered in the struct.  The effective array size
+ * is (obviously) limited by the number or registers, relative to the starting
+ * register.  Fill the register array at a given starting register, with sanity
+ * checks to avoid overflowing the args structure.
+ */
+static void dpamt_copy_regs_array(struct tdx_module_args *args, void *reg,
+				  u64 *pamt_pa_array, bool copy_to_regs)
+{
+	int size = tdx_dpamt_entry_pages() * sizeof(*pamt_pa_array);
+
+	if (WARN_ON_ONCE(reg + size > (void *)args) + sizeof(*args))
+		return;
+
+	/* Copy PAMT page PA's to/from the struct per the TDX ABI. */
+	if (copy_to_regs)
+		memcpy(reg, pamt_pa_array, size);
+	else
+		memcpy(pamt_pa_array, reg, size);
+}
+
+#define dpamt_copy_from_regs(dst, args, reg)	\
+	dpamt_copy_regs_array(args, &(args)->reg, dst, false)
+
+#define dpamt_copy_to_regs(args, reg, src)	\
+	dpamt_copy_regs_array(args, &(args)->reg, src, true)
+
+/*
+ * When declaring PAMT arrays on the stack, use the maximum theoretical number
+ * of entries that can be squeezed into a SEAMCALL, as stack allocations are
+ * practically free, i.e. any wasted space is a non-issue.
+ */
+#define MAX_NR_DPAMT_ARGS (sizeof(struct tdx_module_args) / sizeof(u64))
+
 u64 tdh_mr_extend(struct tdx_td *td, u64 gpa, u64 *ext_err1, u64 *ext_err2)
 {
 	struct tdx_module_args args = {
@@ -2019,6 +2063,226 @@ u64 tdh_phymem_page_wbinvd_hkid(u64 hkid, struct page *page)
 	return seamcall(TDH_PHYMEM_PAGE_WBINVD, &args);
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_phymem_page_wbinvd_hkid);
+
+static int alloc_pamt_array(u64 *pa_array)
+{
+	struct page *page;
+	int i;
+
+	for (i = 0; i < tdx_dpamt_entry_pages(); i++) {
+		page = alloc_page(GFP_KERNEL_ACCOUNT);
+		if (!page)
+			goto err;
+		pa_array[i] = page_to_phys(page);
+	}
+
+	return 0;
+err:
+	/*
+	 * Zero the rest of the array to help with
+	 * freeing in error paths.
+	 */
+	for (; i < tdx_dpamt_entry_pages(); i++)
+		pa_array[i] = 0;
+	return -ENOMEM;
+}
+
+static void free_pamt_array(u64 *pa_array)
+{
+	for (int i = 0; i < tdx_dpamt_entry_pages(); i++) {
+		if (!pa_array[i])
+			break;
+
+		/*
+		 * Reset pages unconditionally to cover cases
+		 * where they were passed to the TDX module.
+		 */
+		tdx_quirk_reset_paddr(pa_array[i], PAGE_SIZE);
+
+		__free_page(phys_to_page(pa_array[i]));
+	}
+}
+
+/*
+ * Calculate the arg needed for operating on the DPAMT backing for
+ * a given 4KB page.
+ */
+static u64 pamt_2mb_arg(struct page *page)
+{
+	unsigned long hpa_2mb = ALIGN_DOWN(page_to_phys(page), PMD_SIZE);
+
+	return hpa_2mb | TDX_PS_2M;
+}
+
+/*
+ * Add PAMT backing for the given page. Return's negative error code
+ * for kernel side error conditions (-ENOMEM) and 1 for TDX Module
+ * error. In the case of TDX module error, the return code is stored
+ * in tdx_err.
+ */
+static u64 tdh_phymem_pamt_add(struct page *page, u64 *pamt_pa_array)
+{
+	struct tdx_module_args args = {
+		.rcx = pamt_2mb_arg(page)
+	};
+
+	dpamt_copy_to_regs(&args, rdx, pamt_pa_array);
+
+	return seamcall(TDH_PHYMEM_PAMT_ADD, &args);
+}
+
+/* Remove PAMT backing for the given page. */
+static u64 tdh_phymem_pamt_remove(struct page *page, u64 *pamt_pa_array)
+{
+	struct tdx_module_args args = {
+		.rcx = pamt_2mb_arg(page),
+	};
+	u64 ret;
+
+	ret = seamcall_ret(TDH_PHYMEM_PAMT_REMOVE, &args);
+	if (ret)
+		return ret;
+
+	dpamt_copy_from_regs(pamt_pa_array, &args, rdx);
+	return 0;
+}
+
+/* Serializes adding/removing PAMT memory */
+static DEFINE_SPINLOCK(pamt_lock);
+
+/* Bump PAMT refcount for the given page and allocate PAMT memory if needed */
+static int tdx_pamt_get(struct page *page)
+{
+	u64 pamt_pa_array[MAX_NR_DPAMT_ARGS];
+	atomic_t *pamt_refcount;
+	u64 tdx_status;
+	int ret;
+
+	if (!tdx_supports_dynamic_pamt(&tdx_sysinfo))
+		return 0;
+
+	ret = alloc_pamt_array(pamt_pa_array);
+	if (ret)
+		goto out_free;
+
+	pamt_refcount = tdx_find_pamt_refcount(page_to_pfn(page));
+
+	scoped_guard(spinlock, &pamt_lock) {
+		/*
+		 * If the pamt page is already added (i.e. refcount >= 1),
+		 * then just increment the refcount.
+		 */
+		if (atomic_read(pamt_refcount)) {
+			atomic_inc(pamt_refcount);
+			goto out_free;
+		}
+
+		/* Try to add the pamt page and take the refcount 0->1. */
+		tdx_status = tdh_phymem_pamt_add(page, pamt_pa_array);
+		if (WARN_ON_ONCE(!IS_TDX_SUCCESS(tdx_status))) {
+			ret = -EIO;
+			goto out_free;
+		}
+
+		atomic_inc(pamt_refcount);
+	}
+
+	return 0;
+
+out_free:
+	/*
+	 * pamt_pa_array is populated or zeroed up to tdx_dpamt_entry_pages()
+	 * above. free_pamt_array() can handle either case.
+	 */
+	free_pamt_array(pamt_pa_array);
+	return ret;
+}
+
+/*
+ * Drop PAMT refcount for the given page and free PAMT memory if it is no
+ * longer needed.
+ */
+static void tdx_pamt_put(struct page *page)
+{
+	u64 pamt_pa_array[MAX_NR_DPAMT_ARGS];
+	atomic_t *pamt_refcount;
+	u64 tdx_status;
+
+	if (!tdx_supports_dynamic_pamt(&tdx_sysinfo))
+		return;
+
+	pamt_refcount = tdx_find_pamt_refcount(page_to_pfn(page));
+
+	scoped_guard(spinlock, &pamt_lock) {
+		/*
+		 * If the there are more than 1 references on the pamt page,
+		 * don't remove it yet. Just decrement the refcount.
+		 */
+		if (atomic_read(pamt_refcount) > 1) {
+			atomic_dec(pamt_refcount);
+			return;
+		}
+
+		/* Try to remove the pamt page and take the refcount 1->0. */
+		tdx_status = tdh_phymem_pamt_remove(page, pamt_pa_array);
+
+		/*
+		 * Don't free pamt_pa_array as it could hold garbage when
+		 * tdh_phymem_pamt_remove() fails.  Don't panic/BUG_ON(), as
+		 * there is no risk of data corruption, but do yell loudly as
+		 * failure indicates a kernel bug, memory is being leaked, and
+		 * the dangling PAMT entry may cause future operations to fail.
+		 */
+		if (WARN_ON_ONCE(!IS_TDX_SUCCESS(tdx_status)))
+			return;
+
+		atomic_dec(pamt_refcount);
+	}
+
+	/*
+	 * pamt_pa_array is populated up to tdx_dpamt_entry_pages() by the TDX
+	 * module with pages, or remains zero inited. free_pamt_array() can
+	 * handle either case. Just pass it unconditionally.
+	 */
+	free_pamt_array(pamt_pa_array);
+}
+
+/*
+ * Return a page that can be gifted to the TDX-Module for use as a "control"
+ * page, i.e. pages that are used for control and S-EPT structures for a given
+ * TDX guest, and bound to said guest's HKID and thus obtain TDX protections,
+ * including PAMT tracking.
+ */
+struct page *__tdx_alloc_control_page(gfp_t gfp)
+{
+	struct page *page;
+
+	page = alloc_page(gfp);
+	if (!page)
+		return NULL;
+
+	if (tdx_pamt_get(page)) {
+		__free_page(page);
+		return NULL;
+	}
+
+	return page;
+}
+EXPORT_SYMBOL_FOR_KVM(__tdx_alloc_control_page);
+
+/*
+ * Free a page that was gifted to the TDX-Module for use as a control/S-EPT
+ * page. After this, the page is no longer protected by TDX.
+ */
+void __tdx_free_control_page(struct page *page)
+{
+	if (!page)
+		return;
+
+	tdx_pamt_put(page);
+	__free_page(page);
+}
+EXPORT_SYMBOL_FOR_KVM(__tdx_free_control_page);
 
 #ifdef CONFIG_KEXEC_CORE
 void tdx_cpu_flush_cache_for_kexec(void)

@@ -16,6 +16,7 @@
 
 #include <uapi/asm/mce.h>
 #include <asm/tdx_global_metadata.h>
+#include <linux/mm.h>
 #include <linux/pgtable.h>
 
 /*
@@ -135,11 +136,32 @@ static inline bool tdx_supports_dynamic_pamt(const struct tdx_sys_info *sysinfo)
 	return false; /* To be enabled when kernel is ready */
 }
 
+void tdx_quirk_reset_page(struct page *page);
+
 int tdx_guest_keyid_alloc(void);
 u32 tdx_get_nr_guest_keyids(void);
 void tdx_guest_keyid_free(unsigned int keyid);
 
-void tdx_quirk_reset_page(struct page *page);
+struct page *__tdx_alloc_control_page(gfp_t gfp);
+void __tdx_free_control_page(struct page *page);
+
+static inline unsigned long tdx_alloc_control_page(gfp_t gfp)
+{
+	struct page *page = __tdx_alloc_control_page(gfp);
+
+	if (!page)
+		return 0;
+
+	return (unsigned long)page_address(page);
+}
+
+static inline void tdx_free_control_page(unsigned long addr)
+{
+	if (!addr)
+		return;
+
+	__tdx_free_control_page(virt_to_page(addr));
+}
 
 struct tdx_td {
 	/* TD root structure: */
