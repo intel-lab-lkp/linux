@@ -63,3 +63,12 @@ unsafe impl Send for PidNamespace {}
 // SAFETY: It's OK to access `PidNamespace` through shared references from other threads because
 // we're either accessing properties that don't change or that are properly synchronised by C code.
 unsafe impl Sync for PidNamespace {}
+
+/// Returns a reference to the init PID namespace.
+///
+/// This is the root PID namespace that exists throughout the lifetime of the kernel.
+#[inline]
+pub fn init_pid_ns() -> &'static PidNamespace {
+    // SAFETY: `init_pid_ns` is a global static that is valid for the lifetime of the kernel.
+    unsafe { PidNamespace::from_ptr(core::ptr::addr_of!(bindings::init_pid_ns)) }
+}
