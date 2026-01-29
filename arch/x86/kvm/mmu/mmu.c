@@ -2325,6 +2325,9 @@ static struct kvm_mmu_page *kvm_mmu_find_shadow_page(struct kvm *kvm,
 out:
 	kvm_mmu_commit_zap_page(kvm, &invalid_list);
 
+	if (sp && !list_is_head(&sp->link, &kvm->arch.active_mmu_pages))
+		list_move(&sp->link, &kvm->arch.active_mmu_pages);
+
 	if (collisions > kvm->stat.max_mmu_page_hash_collisions)
 		kvm->stat.max_mmu_page_hash_collisions = collisions;
 	return sp;
