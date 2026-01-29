@@ -5136,6 +5136,14 @@
 			};
 		};
 
+		qcom_tzlog: tz-log@146aa720 {
+			compatible = "qcom,tz-log";
+			reg = <0 0x146aa720 0 0x3000>;
+			qcom,hyplog-enabled;
+			hyplog-address-offset = <0x410>;
+			hyplog-size-offset = <0x414>;
+		};
+
 		apps_smmu: iommu@15000000 {
 			compatible = "qcom,sm8550-smmu-500", "qcom,smmu-500", "arm,mmu-500";
 			reg = <0 0x15000000 0 0x100000>;
