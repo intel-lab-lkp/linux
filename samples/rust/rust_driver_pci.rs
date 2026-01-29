@@ -70,24 +70,37 @@ impl SampleDriver {
     fn config_space(pdev: &pci::Device<Bound>) {
         let config = pdev.config_space();
 
-        // TODO: use the register!() macro for defining PCI configuration space registers once it
-        // has been move out of nova-core.
+        // Some PCI configuration space registers.
+        ::kernel::register! {
+            VENDOR_ID(u16) @ 0x0 {
+                15:0 vendor_id;
+            }
+
+            REVISION_ID(u8) @ 0x8 {
+                7:0 revision_id;
+            }
+
+            BAR(u32)[6] @ 0x10 {
+                31:0 value;
+            }
+        }
+
         dev_info!(
             pdev.as_ref(),
             "pci-testdev config space read8 rev ID: {:x}\n",
-            config.read8(0x8)
+            REVISION_ID::read(&&config).revision_id()
         );
 
         dev_info!(
             pdev.as_ref(),
             "pci-testdev config space read16 vendor ID: {:x}\n",
-            config.read16(0)
+            VENDOR_ID::read(&&config).vendor_id()
         );
 
         dev_info!(
             pdev.as_ref(),
             "pci-testdev config space read32 BAR 0: {:x}\n",
-            config.read32(0x10)
+            BAR::read(&&config, 0).value()
         );
     }
 }
