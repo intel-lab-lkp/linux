@@ -5,6 +5,8 @@
 struct io_issue_def {
 	/* needs req->file assigned */
 	unsigned		needs_file : 1;
+	/* Optional req->file assigned, if available. */
+	unsigned		opt_file : 1;
 	/* should block plug */
 	unsigned		plug : 1;
 	/* supports ioprio */

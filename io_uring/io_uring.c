@@ -1756,10 +1756,17 @@ static __cold void io_drain_req(struct io_kiocb *req)
 		ctx->drain_active = false;
 }
 
+static inline bool op_wants_file(const struct io_issue_def *def,
+				    struct io_kiocb *req)
+{
+	return (def->needs_file ||
+		(def->opt_file && req->cqe.fd != -1));
+}
+
 static bool io_assign_file(struct io_kiocb *req, const struct io_issue_def *def,
 			   unsigned int issue_flags)
 {
-	if (req->file || !def->needs_file)
+	if (req->file || !op_wants_file(def, req))
 		return true;
 
 	if (req->flags & REQ_F_FIXED_FILE)
@@ -2200,11 +2207,9 @@ static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
 	if (!def->iopoll && (ctx->flags & IORING_SETUP_IOPOLL))
 		return io_init_fail_req(req, -EINVAL);
 
-	if (def->needs_file) {
+	req->cqe.fd = READ_ONCE(sqe->fd);
+	if (op_wants_file(def, req)) {
 		struct io_submit_state *state = &ctx->submit_state;
-
-		req->cqe.fd = READ_ONCE(sqe->fd);
-
 		/*
 		 * Plug now if we have more than 2 IO left after this, and the
 		 * target is potentially a read/write to block based storage.
