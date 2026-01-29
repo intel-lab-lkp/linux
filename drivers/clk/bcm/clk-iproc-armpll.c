@@ -180,7 +180,7 @@ static unsigned int __get_ndiv(struct iproc_arm_pll *pll)
  *   mdiv = ARM PLL post divider
  *
  * The frequency is calculated by:
- *   ((ndiv * parent clock rate) / pdiv) / mdiv
+ *   (ndiv * parent clock rate) / (pdiv * mdiv)
  */
 static unsigned long iproc_arm_pll_recalc_rate(struct clk_hw *hw,
 		unsigned long parent_rate)
@@ -189,6 +189,7 @@ static unsigned long iproc_arm_pll_recalc_rate(struct clk_hw *hw,
 	u32 val;
 	int mdiv;
 	u64 ndiv;
+	u64 rate;
 	unsigned int pdiv;
 
 	/* in bypass mode, use parent rate */
@@ -216,8 +217,9 @@ static unsigned long iproc_arm_pll_recalc_rate(struct clk_hw *hw,
 		pll->rate = 0;
 		return 0;
 	}
-	pll->rate = (ndiv * parent_rate) >> 20;
-	pll->rate = (pll->rate / pdiv) / mdiv;
+	rate = (ndiv * parent_rate) >> 20;
+	do_div(rate, pdiv * mdiv);
+	pll->rate = rate;
 
 	pr_debug("%s: ARM PLL rate: %lu. parent rate: %lu\n", __func__,
 		 pll->rate, parent_rate);
