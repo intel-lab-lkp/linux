@@ -8,6 +8,7 @@
  */
 
 #include <crypto/internal/aead.h>
+#include <crypto/rfc4106.h>
 #include <linux/cryptouser.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -46,6 +47,7 @@ int crypto_aead_setkey(struct crypto_aead *tfm,
 {
 	unsigned long alignmask = crypto_aead_alignmask(tfm);
 	int err;
+	const char *name;
 
 	if ((unsigned long)key & alignmask)
 		err = setkey_unaligned(tfm, key, keylen);
@@ -58,6 +60,12 @@ int crypto_aead_setkey(struct crypto_aead *tfm,
 	}
 
 	crypto_aead_clear_flags(tfm, CRYPTO_TFM_NEED_KEY);
+	name = crypto_tfm_alg_name(&tfm->base);
+	if (name && rfc4106_keysize_ok(keylen) &&
+		(!strcmp(name, "rfc4106(gcm(aes))") ||
+		!strcmp(name, "seqiv(gcm(aes))")))
+		crypto_aead_set_flags(tfm, CRYPTO_TFM_FIPS_COMPLIANCE);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(crypto_aead_setkey);
@@ -156,13 +164,13 @@ static void __maybe_unused crypto_aead_show(struct seq_file *m,
 {
 	struct aead_alg *aead = container_of(alg, struct aead_alg, base);
 
-	seq_printf(m, "type         : aead\n");
+	seq_puts(m, "type         : aead\n");
 	seq_printf(m, "async        : %s\n",
 		   str_yes_no(alg->cra_flags & CRYPTO_ALG_ASYNC));
 	seq_printf(m, "blocksize    : %u\n", alg->cra_blocksize);
 	seq_printf(m, "ivsize       : %u\n", aead->ivsize);
 	seq_printf(m, "maxauthsize  : %u\n", aead->maxauthsize);
-	seq_printf(m, "geniv        : <none>\n");
+	seq_puts(m, "geniv        : <none>\n");
 }
 
 static void crypto_aead_free_instance(struct crypto_instance *inst)
