@@ -14,3 +14,16 @@ config NOVA_CORE
 	  This driver is work in progress and may not be functional.
 
 	  If M is selected, the module will be called nova_core.
+
+config NOVA_CORE_DEBUGFS
+	bool "Nova Core debugfs support"
+	depends on NOVA_CORE
+	depends on DEBUG_FS
+	default y
+	help
+	  Enable debugfs support for the Nova Core driver. This exposes
+	  debugging information and log buffers via the debugfs filesystem.
+
+	  Each GPU will have an entry under /sys/kernel/debug/nova_core.
+
+	  If unsure, say Y.
