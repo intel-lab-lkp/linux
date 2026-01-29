@@ -2065,23 +2065,29 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 	}
 
 	if (vnet_hdr_sz) {
-		struct virtio_net_hdr_v1_hash_tunnel hdr;
-		struct virtio_net_hdr *gso;
+		struct virtio_net_hdr_v1_hash_tunnel_ts hdr;
+
+		memset(&hdr, 0, sizeof(hdr));
 
 		ret = tun_vnet_hdr_tnl_from_skb(tun->flags, tun->dev, skb,
-						&hdr);
+						(struct virtio_net_hdr_v1_hash_tunnel *)&hdr);
 		if (ret)
 			return ret;
 
-		/*
-		 * Drop the packet if the configured header size is too small
-		 * WRT the enabled offloads.
-		 */
-		gso = (struct virtio_net_hdr *)&hdr;
-		ret = __tun_vnet_hdr_put(vnet_hdr_sz, tun->dev->features,
-					 iter, gso);
-		if (ret)
-			return ret;
+		if (vnet_hdr_sz >= sizeof(struct virtio_net_hdr_v1_hash_tunnel_ts)) {
+			__le64 tstamp = cpu_to_le64(ktime_get_ns());
+
+			hdr.tstamp_0 = (tstamp & 0x000000000000ffffULL) >> 0;
+			hdr.tstamp_1 = (tstamp & 0x00000000ffff0000ULL) >> 16;
+			hdr.tstamp_2 = (tstamp & 0x0000ffff00000000ULL) >> 32;
+			hdr.tstamp_3 = (tstamp & 0xffff000000000000ULL) >> 48;
+		}
+
+		if (unlikely(iov_iter_count(iter) < vnet_hdr_sz))
+			return -EINVAL;
+
+		if (unlikely(copy_to_iter(&hdr, vnet_hdr_sz, iter) != vnet_hdr_sz))
+			return -EFAULT;
 	}
 
 	if (vlan_hlen) {
