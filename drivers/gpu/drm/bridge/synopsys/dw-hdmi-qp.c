@@ -11,6 +11,7 @@
 #include <linux/export.h>
 #include <linux/i2c.h>
 #include <linux/irq.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
@@ -969,9 +970,9 @@ static int dw_hdmi_qp_bridge_clear_avi_infoframe(struct drm_bridge *bridge)
 
 static int dw_hdmi_qp_bridge_clear_hdmi_infoframe(struct drm_bridge *bridge)
 {
-	/* FIXME: add support for this InfoFrame */
+	struct dw_hdmi_qp *hdmi = bridge->driver_private;
 
-	drm_warn_once(bridge->encoder->dev, "HDMI VSI not supported\n");
+	dw_hdmi_qp_mod(hdmi, 0, PKTSCHED_VSI_TX_EN, PKTSCHED_PKT_EN);
 
 	return 0;
 }
@@ -998,6 +999,32 @@ static int dw_hdmi_qp_bridge_clear_audio_infoframe(struct drm_bridge *bridge)
 	return 0;
 }
 
+static void dw_hdmi_qp_write_pkt(struct dw_hdmi_qp *hdmi, const u8 *buffer,
+				 size_t start, size_t len, unsigned int reg)
+{
+	u32 val = 0;
+	size_t i;
+
+	for (i = start; i < start + len; i++)
+		val |= buffer[i] << ((i % 4) * BITS_PER_BYTE);
+
+	dw_hdmi_qp_write(hdmi, val, reg);
+}
+
+static void dw_hdmi_qp_write_infoframe(struct dw_hdmi_qp *hdmi, const u8 *buffer,
+				       size_t len, unsigned int reg)
+{
+	size_t i;
+
+	/* InfoFrame packet header */
+	dw_hdmi_qp_write_pkt(hdmi, buffer, 1, 2, reg);
+
+	/* InfoFrame packet body */
+	for (i = 0; i < len - 3; i += 4)
+		dw_hdmi_qp_write_pkt(hdmi, buffer + 3, i, min(len - i - 3, 4),
+				     reg + i + 4);
+}
+
 static int dw_hdmi_qp_bridge_write_avi_infoframe(struct drm_bridge *bridge,
 						 const u8 *buffer, size_t len)
 {
@@ -1011,9 +1038,15 @@ static int dw_hdmi_qp_bridge_write_avi_infoframe(struct drm_bridge *bridge,
 static int dw_hdmi_qp_bridge_write_hdmi_infoframe(struct drm_bridge *bridge,
 						  const u8 *buffer, size_t len)
 {
+	struct dw_hdmi_qp *hdmi = bridge->driver_private;
+
 	dw_hdmi_qp_bridge_clear_hdmi_infoframe(bridge);
 
-	/* FIXME: add support for the HDMI VSI */
+	dw_hdmi_qp_write_infoframe(hdmi, buffer, len, PKT_VSI_CONTENTS0);
+
+	dw_hdmi_qp_mod(hdmi, 0, PKTSCHED_VSI_FIELDRATE, PKTSCHED_PKT_CONFIG1);
+	dw_hdmi_qp_mod(hdmi, PKTSCHED_VSI_TX_EN, PKTSCHED_VSI_TX_EN,
+		       PKTSCHED_PKT_EN);
 
 	return 0;
 }
