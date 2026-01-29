@@ -154,8 +154,20 @@ static inline void tdx_init_pamt_cache(struct tdx_pamt_cache *cache)
 
 void tdx_free_pamt_cache(struct tdx_pamt_cache *cache);
 int tdx_topup_pamt_cache(struct tdx_pamt_cache *cache, unsigned long npages);
-int tdx_pamt_get(u64 pfn, struct tdx_pamt_cache *cache);
-void tdx_pamt_put(u64 pfn);
+int __tdx_pamt_get(u64 pfn, struct tdx_pamt_cache *cache);
+void __tdx_pamt_put(u64 pfn);
+
+static inline int tdx_pamt_get(u64 pfn, enum pg_level level,
+			       struct tdx_pamt_cache *cache)
+{
+	return level == PG_LEVEL_4K ? __tdx_pamt_get(pfn, cache) : 0;
+}
+
+static inline void tdx_pamt_put(u64 pfn, enum pg_level level)
+{
+	if (level == PG_LEVEL_4K)
+		__tdx_pamt_put(pfn);
+}
 
 void __tdx_quirk_reset_page(u64 pfn, enum pg_level level);
 

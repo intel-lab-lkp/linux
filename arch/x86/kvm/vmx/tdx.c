@@ -1729,7 +1729,7 @@ static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn,
 
 	WARN_ON_ONCE((mirror_spte & VMX_EPT_RWX_MASK) != VMX_EPT_RWX_MASK);
 
-	ret = tdx_pamt_get(pfn, &tdx->pamt_cache);
+	ret = tdx_pamt_get(pfn, level, &tdx->pamt_cache);
 	if (ret)
 		return ret;
 
@@ -1751,7 +1751,7 @@ static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn,
 		ret = tdx_mem_page_add(kvm, gfn, level, pfn);
 
 	if (ret)
-		tdx_pamt_put(pfn);
+		tdx_pamt_put(pfn, level);
 
 	return ret;
 }
@@ -1872,7 +1872,7 @@ static void tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 		return;
 
 	__tdx_quirk_reset_page(pfn, level);
-	tdx_pamt_put(pfn);
+	tdx_pamt_put(pfn, level);
 }
 
 void tdx_deliver_interrupt(struct kvm_lapic *apic, int delivery_mode,

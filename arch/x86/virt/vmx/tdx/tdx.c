@@ -2195,7 +2195,7 @@ static u64 tdh_phymem_pamt_remove(u64 pfn, u64 *pamt_pa_array)
 static DEFINE_SPINLOCK(pamt_lock);
 
 /* Bump PAMT refcount for the given page and allocate PAMT memory if needed */
-int tdx_pamt_get(u64 pfn, struct tdx_pamt_cache *cache)
+int __tdx_pamt_get(u64 pfn, struct tdx_pamt_cache *cache)
 {
 	u64 pamt_pa_array[MAX_NR_DPAMT_ARGS];
 	atomic_t *pamt_refcount;
@@ -2266,13 +2266,13 @@ out_free:
 	free_pamt_array(pamt_pa_array);
 	return ret;
 }
-EXPORT_SYMBOL_FOR_KVM(tdx_pamt_get);
+EXPORT_SYMBOL_FOR_KVM(__tdx_pamt_get);
 
 /*
  * Drop PAMT refcount for the given page and free PAMT memory if it is no
  * longer needed.
  */
-void tdx_pamt_put(u64 pfn)
+void __tdx_pamt_put(u64 pfn)
 {
 	u64 pamt_pa_array[MAX_NR_DPAMT_ARGS];
 	atomic_t *pamt_refcount;
@@ -2326,7 +2326,7 @@ void tdx_pamt_put(u64 pfn)
 	 */
 	free_pamt_array(pamt_pa_array);
 }
-EXPORT_SYMBOL_FOR_KVM(tdx_pamt_put);
+EXPORT_SYMBOL_FOR_KVM(__tdx_pamt_put);
 
 void tdx_free_pamt_cache(struct tdx_pamt_cache *cache)
 {
@@ -2372,7 +2372,7 @@ struct page *__tdx_alloc_control_page(gfp_t gfp)
 	if (!page)
 		return NULL;
 
-	if (tdx_pamt_get(page_to_pfn(page), NULL)) {
+	if (__tdx_pamt_get(page_to_pfn(page), NULL)) {
 		__free_page(page);
 		return NULL;
 	}
@@ -2390,7 +2390,7 @@ void __tdx_free_control_page(struct page *page)
 	if (!page)
 		return;
 
-	tdx_pamt_put(page_to_pfn(page));
+	__tdx_pamt_put(page_to_pfn(page));
 	__free_page(page);
 }
 EXPORT_SYMBOL_FOR_KVM(__tdx_free_control_page);
