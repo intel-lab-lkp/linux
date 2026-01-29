@@ -2161,16 +2161,23 @@ static int tdx_pamt_get(struct page *page)
 	if (!tdx_supports_dynamic_pamt(&tdx_sysinfo))
 		return 0;
 
+	pamt_refcount = tdx_find_pamt_refcount(page_to_pfn(page));
+
+	/*
+	 * If the pamt page is already added (i.e. refcount >= 1),
+	 * then just increment the refcount.
+	 */
+	if (atomic_inc_not_zero(pamt_refcount))
+		return 0;
+
 	ret = alloc_pamt_array(pamt_pa_array);
 	if (ret)
 		goto out_free;
 
-	pamt_refcount = tdx_find_pamt_refcount(page_to_pfn(page));
-
 	scoped_guard(spinlock, &pamt_lock) {
 		/*
-		 * If the pamt page is already added (i.e. refcount >= 1),
-		 * then just increment the refcount.
+		 * Lost race to other tdx_pamt_add(). Other task has already allocated
+		 * PAMT memory for the HPA.
 		 */
 		if (atomic_read(pamt_refcount)) {
 			atomic_inc(pamt_refcount);
@@ -2179,12 +2186,30 @@ static int tdx_pamt_get(struct page *page)
 
 		/* Try to add the pamt page and take the refcount 0->1. */
 		tdx_status = tdh_phymem_pamt_add(page, pamt_pa_array);
-		if (WARN_ON_ONCE(!IS_TDX_SUCCESS(tdx_status))) {
+		if (IS_TDX_SUCCESS(tdx_status)) {
+			/*
+			 * The refcount is zero, and this locked path is the only way to
+			 * increase it from 0-1. If the PAMT.ADD was successful, set it
+			 * to 1 (obviously).
+			 */
+			atomic_set(pamt_refcount, 1);
+		} else if (IS_TDX_HPA_RANGE_NOT_FREE(tdx_status)) {
+			/*
+			 * Less obviously, another CPU's call to tdx_pamt_put() could have
+			 * decremented the refcount before entering its lock section.
+			 * In this case, the PAMT is not actually removed yet. Luckily
+			 * TDX module tells about this case, so increment the refcount
+			 * 0-1, so tdx_pamt_put() skips its pending PAMT.REMOVE.
+			 *
+			 * The call didn't need the pages though, so free them.
+			 */
+			atomic_set(pamt_refcount, 1);
+			goto out_free;
+		} else {
+			WARN_ON_ONCE(1);
 			ret = -EIO;
 			goto out_free;
 		}
-
-		atomic_inc(pamt_refcount);
 	}
 
 	return 0;
@@ -2213,15 +2238,21 @@ static void tdx_pamt_put(struct page *page)
 
 	pamt_refcount = tdx_find_pamt_refcount(page_to_pfn(page));
 
+	/*
+	 * If the there are more than 1 references on the pamt page,
+	 * don't remove it yet. Just decrement the refcount.
+	 *
+	 * Unlike the paired call in tdx_pamt_get(), decrement the refcount
+	 * outside the lock even if it's the special 0<->1 transition. See
+	 * special logic around HPA_RANGE_NOT_FREE in tdx_pamt_get().
+	 */
+	if (!atomic_dec_and_test(pamt_refcount))
+		return;
+
 	scoped_guard(spinlock, &pamt_lock) {
-		/*
-		 * If the there are more than 1 references on the pamt page,
-		 * don't remove it yet. Just decrement the refcount.
-		 */
-		if (atomic_read(pamt_refcount) > 1) {
-			atomic_dec(pamt_refcount);
+		/* Lost race with tdx_pamt_get(). */
+		if (atomic_read(pamt_refcount))
 			return;
-		}
 
 		/* Try to remove the pamt page and take the refcount 1->0. */
 		tdx_status = tdh_phymem_pamt_remove(page, pamt_pa_array);
@@ -2233,10 +2264,14 @@ static void tdx_pamt_put(struct page *page)
 		 * failure indicates a kernel bug, memory is being leaked, and
 		 * the dangling PAMT entry may cause future operations to fail.
 		 */
-		if (WARN_ON_ONCE(!IS_TDX_SUCCESS(tdx_status)))
+		if (WARN_ON_ONCE(!IS_TDX_SUCCESS(tdx_status))) {
+			/*
+			 * Since the refcount was optimistically decremented above
+			 * outside the lock, revert it if there is a failure.
+			 */
+			atomic_inc(pamt_refcount);
 			return;
-
-		atomic_dec(pamt_refcount);
+		}
 	}
 
 	/*
