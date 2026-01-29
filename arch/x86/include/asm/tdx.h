@@ -157,7 +157,12 @@ int tdx_topup_pamt_cache(struct tdx_pamt_cache *cache, unsigned long npages);
 int tdx_pamt_get(u64 pfn, struct tdx_pamt_cache *cache);
 void tdx_pamt_put(u64 pfn);
 
-void tdx_quirk_reset_page(u64 pfn);
+void __tdx_quirk_reset_page(u64 pfn, enum pg_level level);
+
+static inline void tdx_quirk_reset_page(u64 pfn)
+{
+	__tdx_quirk_reset_page(pfn, PG_LEVEL_4K);
+}
 
 int tdx_guest_keyid_alloc(void);
 u32 tdx_get_nr_guest_keyids(void);

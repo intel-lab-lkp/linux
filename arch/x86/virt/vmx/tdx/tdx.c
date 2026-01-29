@@ -799,11 +799,11 @@ static void tdx_quirk_reset_paddr(unsigned long base, unsigned long size)
 	mb();
 }
 
-void tdx_quirk_reset_page(u64 pfn)
+void __tdx_quirk_reset_page(u64 pfn, enum pg_level level)
 {
-	tdx_quirk_reset_paddr(PFN_PHYS(pfn), PAGE_SIZE);
+	tdx_quirk_reset_paddr(PFN_PHYS(pfn), page_level_size(level));
 }
-EXPORT_SYMBOL_FOR_KVM(tdx_quirk_reset_page);
+EXPORT_SYMBOL_FOR_KVM(__tdx_quirk_reset_page);
 
 static void tdmr_quirk_reset_pamt(struct tdmr_info *tdmr)
 {

@@ -1871,7 +1871,7 @@ static void tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 	if (TDX_BUG_ON(err, TDH_PHYMEM_PAGE_WBINVD, kvm))
 		return;
 
-	tdx_quirk_reset_page(pfn);
+	__tdx_quirk_reset_page(pfn, level);
 	tdx_pamt_put(pfn);
 }
 
