@@ -1776,6 +1776,52 @@ static struct page *tdx_spte_to_external_spt(struct kvm *kvm, gfn_t gfn,
 	return virt_to_page(sp->external_spt);
 }
 
+/*
+ * Split a huge mapping into the target level.  Currently only supports 2MiB
+ * mappings (KVM doesn't yet support 1GiB mappings for TDX guests).
+ *
+ * Invoke "BLOCK + TRACK + kick off vCPUs (inside tdx_track())" since DEMOTE
+ * now does not support yet the NON-BLOCKING-RESIZE feature. No UNBLOCK is
+ * needed after a successful DEMOTE.
+ *
+ * Under write mmu_lock, kick off all vCPUs (inside tdh_do_no_vcpus()) to ensure
+ * DEMOTE will succeed on the second invocation if the first invocation returns
+ * BUSY.
+ */
+static int tdx_sept_split_private_spte(struct kvm *kvm, gfn_t gfn, u64 old_spte,
+				       u64 new_spte, enum pg_level level)
+{
+	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
+	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
+	gpa_t gpa = gfn_to_gpa(gfn);
+	u64 err, entry, level_state;
+	struct page *external_spt;
+
+	lockdep_assert_held_write(&kvm->mmu_lock);
+
+	external_spt = tdx_spte_to_external_spt(kvm, gfn, new_spte, level);
+	if (!external_spt)
+		return -EIO;
+
+	if (KVM_BUG_ON(!vcpu || vcpu->kvm != kvm, kvm))
+		return -EIO;
+
+	err = tdh_do_no_vcpus(tdh_mem_range_block, kvm, &kvm_tdx->td, gpa,
+			      level, &entry, &level_state);
+	if (TDX_BUG_ON_2(err, TDH_MEM_RANGE_BLOCK, entry, level_state, kvm))
+		return -EIO;
+
+	tdx_track(kvm);
+
+	err = tdh_do_no_vcpus(tdh_mem_page_demote, kvm, &kvm_tdx->td, gpa,
+			      level, spte_to_pfn(old_spte), external_spt,
+			      &to_tdx(vcpu)->pamt_cache, &entry, &level_state);
+	if (TDX_BUG_ON_2(err, TDH_MEM_PAGE_DEMOTE, entry, level_state, kvm))
+		return -EIO;
+
+	return 0;
+}
+
 static int tdx_sept_link_private_spt(struct kvm *kvm, gfn_t gfn, u64 new_spte,
 				     enum pg_level level)
 {
@@ -1853,9 +1899,8 @@ static int tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn, u64 old_spte,
 				     u64 new_spte, enum pg_level level)
 {
-	/* TODO: Support replacing huge SPTE with non-leaf SPTE. (a.k.a. demotion). */
-	if (KVM_BUG_ON(is_shadow_present_pte(old_spte) && is_shadow_present_pte(new_spte), kvm))
-		return -EIO;
+	if (is_shadow_present_pte(old_spte) && is_shadow_present_pte(new_spte))
+		return tdx_sept_split_private_spte(kvm, gfn, old_spte, new_spte, level);
 	else if (is_shadow_present_pte(old_spte))
 		return tdx_sept_remove_private_spte(kvm, gfn, old_spte, level);
 
