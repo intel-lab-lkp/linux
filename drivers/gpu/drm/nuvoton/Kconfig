@@ -1,0 +1,21 @@
+config DRM_MA35
+	tristate "Nuvoton MA35D1 LCD Display Controller"
+	default ARCH_MA35
+	depends on DRM
+	depends on OF && (ARCH_MA35 || COMPILE_TEST)
+	select DRM_KMS_HELPER
+	select DRM_KMS_DMA_HELPER
+	select DRM_GEM_DMA_HELPER
+	select DRM_BRIDGE
+	select DRM_PANEL_BRIDGE
+	select VIDEOMODE_HELPERS
+	select REGMAP_MMIO
+	help
+	  Choose this option to enable support for the Display Controller Unit (DCU)
+	  found in Nuvoton MA35D1 SoCs.
+
+	  This driver supports the DRM/KMS API for the MA35 display subsystem,
+	  handling display output via hardware composition layers.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ma35-drm.
