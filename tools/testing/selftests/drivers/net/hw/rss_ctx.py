@@ -809,6 +809,119 @@ def test_rss_default_context_rule(cfg):
                           'noise' : (0, 1) })
 
 
+def test_rss_context_persist_ifupdown(cfg):
+    """
+    Check that RSS contexts persist across an interface down/up cycle.
+    """
+
+    require_context_cnt(cfg, 10)
+
+    # Create 10 RSS contexts and store their IDs and configurations
+    ctx_ids = []
+    ctx_configs_before = {}
+    try:
+        for i in range(10):
+            ctx_id = ethtool_create(cfg, "-X", "context new")
+            ctx_ids.append(ctx_id)
+            defer(ethtool, f"-X {cfg.ifname} context {ctx_id} delete")
+    except CmdExitFailure:
+        raise KsftSkipEx(f"Could only create {len(ctx_ids)} contexts, test requires 10")
+
+    # Bring interface down
+    ip(f"link set dev {cfg.ifname} down")
+
+    # Bring interface back up
+    ip(f"link set dev {cfg.ifname} up")
+
+    # Wait for interface to be fully up
+    cfg.wait_hw_stats_settle()
+
+    # Verify all 10 contexts still exist after ifup
+    missing_contexts = []
+    persisted_contexts = []
+
+    for ctx_id in ctx_ids:
+        try:
+            data = get_rss(cfg, context=ctx_id)
+            _rss_key_check(cfg, data=data, context=ctx_id)
+            persisted_contexts.append(ctx_id)
+        except CmdExitFailure:
+            missing_contexts.append(ctx_id)
+            ksft_pr(f"Context {ctx_id} is missing after ifup")
+
+
+def test_rss_context_ntuple_persist_ifupdown(cfg):
+    """
+    Test that RSS contexts and their associated ntuple filters persist across
+    an interface down/up cycle.
+    """
+
+    require_ntuple(cfg)
+    require_context_cnt(cfg, 10)
+
+    # Create 10 RSS contexts with ntuple filters
+    ctx_ids = []
+    ntuple_ids = []
+    ports = []
+
+    try:
+        for i in range(10):
+            # Create RSS context
+            ctx_id = ethtool_create(cfg, "-X", "context new")
+            ctx_ids.append(ctx_id)
+            defer(ethtool, f"-X {cfg.ifname} context {ctx_id} delete")
+
+            # Create ntuple filter for this context
+            port = rand_port()
+            ports.append(port)
+            flow = f"flow-type tcp{cfg.addr_ipver} dst-ip {cfg.addr} dst-port {port} context {ctx_id}"
+            ntuple_id = ethtool_create(cfg, "-N", flow)
+            ntuple_ids.append(ntuple_id)
+            defer(ethtool, f"-N {cfg.ifname} delete {ntuple_id}")
+
+    except CmdExitFailure:
+        raise KsftSkipEx(f"Could only create {len(ctx_ids)} contexts with ntuple filters, test requires 10")
+
+    # Bring interface down
+    ip(f"link set dev {cfg.ifname} down")
+
+    # Bring interface back up
+    ip(f"link set dev {cfg.ifname} up")
+
+    # Wait for interface to be fully up
+    cfg.wait_hw_stats_settle()
+
+    # Verify all contexts and ntuple rules still exist after ifup
+    missing_contexts = []
+    persisted_contexts = []
+    missing_ntuple_rules = []
+    persisted_ntuple_rules = []
+    broken_associations = []
+
+    for i, ctx_id in enumerate(ctx_ids):
+        # Check if context persists
+        try:
+            data = get_rss(cfg, context=ctx_id)
+            _rss_key_check(cfg, data=data, context=ctx_id)
+            persisted_contexts.append(ctx_id)
+        except CmdExitFailure:
+            missing_contexts.append(ctx_id)
+            ksft_pr(f"Context {ctx_id} is missing after ifup")
+            continue
+
+        # Check if ntuple rule persists
+        ntuple_id = ntuple_ids[i]
+        try:
+            _ntuple_rule_check(cfg, ntuple_id, ctx_id)
+            persisted_ntuple_rules.append(ntuple_id)
+        except CmdExitFailure:
+            missing_ntuple_rules.append(ntuple_id)
+            ksft_pr(f"Ntuple rule {ntuple_id} is missing after ifup")
+        except Exception as e:
+            broken_associations.append((ntuple_id, ctx_id))
+            ksft_pr(f"Ntuple rule {ntuple_id} exists but is not properly associated with context {ctx_id}: {e}")
+
+
 def main() -> None:
     with NetDrvEpEnv(__file__, nsim_test=False) as cfg:
         cfg.context_cnt = None
@@ -823,7 +936,9 @@ def main() -> None:
                   test_rss_context_out_of_order, test_rss_context4_create_with_cfg,
                   test_flow_add_context_missing,
                   test_delete_rss_context_busy, test_rss_ntuple_addition,
-                  test_rss_default_context_rule],
+                  test_rss_default_context_rule,
+                  test_rss_context_persist_ifupdown,
+                  test_rss_context_ntuple_persist_ifupdown],
                  args=(cfg, ))
     ksft_exit()
 
