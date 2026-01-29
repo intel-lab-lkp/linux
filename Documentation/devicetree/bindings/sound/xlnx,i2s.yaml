@@ -29,6 +29,7 @@ properties:
     enum:
       - 16
       - 24
+    deprecated: true
     description: |
       Sample data width.
 
@@ -36,14 +37,13 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     minimum: 1
     maximum: 4
+    deprecated: true
     description: |
       Number of I2S streams.
 
 required:
   - compatible
   - reg
-  - xlnx,dwidth
-  - xlnx,num-channels
 
 additionalProperties: false
 
@@ -52,14 +52,10 @@ examples:
     i2s@a0080000 {
       compatible = "xlnx,i2s-receiver-1.0";
       reg = <0xa0080000 0x10000>;
-      xlnx,dwidth = <0x18>;
-      xlnx,num-channels = <1>;
     };
     i2s@a0090000 {
       compatible = "xlnx,i2s-transmitter-1.0";
       reg = <0xa0090000 0x10000>;
-      xlnx,dwidth = <0x18>;
-      xlnx,num-channels = <1>;
     };
 
 ...
