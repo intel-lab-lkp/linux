@@ -1178,6 +1178,8 @@ struct dwc3_glue_ops {
  * @wakeup_pending_funcs: Indicates whether any interface has requested for
  *			 function wakeup in bitmap format where bit position
  *			 represents interface_id.
+ * @vbus_draw_work: Workqueue used for scheduling vbus draw work
+ * @vbus_draw_current: How much current to draw from vbus, in milliAmperes.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1413,6 +1415,8 @@ struct dwc3 {
 	struct dentry		*debug_root;
 	u32			gsbuscfg0_reqinfo;
 	u32			wakeup_pending_funcs;
+	struct work_struct	vbus_draw_work;
+	unsigned int		vbus_draw_current;
 };
 
 #define INCRX_BURST_MODE 0
