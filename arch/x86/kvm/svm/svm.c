@@ -244,6 +244,8 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 			if (svm_gp_erratum_intercept && !sev_guest(vcpu->kvm))
 				set_exception_intercept(svm, GP_VECTOR);
 		}
+
+		amd_pmu_refresh_host_guest_eventsel_hw(vcpu);
 	}
 
 	svm->vmcb->save.efer = efer | EFER_SVME;

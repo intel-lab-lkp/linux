@@ -757,7 +757,7 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 	nested_svm_transition_tlb_flush(vcpu);
 
 	/* Enter Guest-Mode */
-	enter_guest_mode(vcpu);
+	svm_enter_guest_mode(vcpu);
 
 	/*
 	 * Filled at exit: exit_code, exit_info_1, exit_info_2, exit_int_info,
@@ -1136,7 +1136,7 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 	vmcb12 = map.hva;
 
 	/* Exit Guest-Mode */
-	leave_guest_mode(vcpu);
+	svm_leave_guest_mode(vcpu);
 	svm->nested.vmcb12_gpa = 0;
 	WARN_ON_ONCE(svm->nested.nested_run_pending);
 
@@ -1402,7 +1402,7 @@ void svm_leave_nested(struct kvm_vcpu *vcpu)
 		svm->nested.nested_run_pending = 0;
 		svm->nested.vmcb12_gpa = INVALID_GPA;
 
-		leave_guest_mode(vcpu);
+		svm_leave_guest_mode(vcpu);
 
 		svm_switch_vmcb(svm, &svm->vmcb01);
 
