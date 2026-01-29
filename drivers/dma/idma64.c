@@ -671,7 +671,7 @@ static void idma64_platform_remove(struct platform_device *pdev)
 	idma64_remove(chip);
 }
 
-static int __maybe_unused idma64_pm_suspend(struct device *dev)
+static int idma64_pm_suspend(struct device *dev)
 {
 	struct idma64_chip *chip = dev_get_drvdata(dev);
 
@@ -679,7 +679,7 @@ static int __maybe_unused idma64_pm_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused idma64_pm_resume(struct device *dev)
+static int idma64_pm_resume(struct device *dev)
 {
 	struct idma64_chip *chip = dev_get_drvdata(dev);
 
@@ -687,16 +687,14 @@ static int __maybe_unused idma64_pm_resume(struct device *dev)
 	return 0;
 }
 
-static const struct dev_pm_ops idma64_dev_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(idma64_pm_suspend, idma64_pm_resume)
-};
+static DEFINE_SIMPLE_DEV_PM_OPS(idma64_pm_suspend, idma64_pm_resume);
 
 static struct platform_driver idma64_platform_driver = {
 	.probe		= idma64_platform_probe,
 	.remove		= idma64_platform_remove,
 	.driver = {
 		.name	= LPSS_IDMA64_DRIVER_NAME,
-		.pm	= &idma64_dev_pm_ops,
+		.pm	= pm_sleep_ptr(&idma64_dev_pm_ops),
 	},
 };
 
