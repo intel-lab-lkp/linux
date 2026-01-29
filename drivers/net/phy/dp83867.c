@@ -516,13 +516,22 @@ static int dp83867_of_init_io_impedance(struct phy_device *phydev)
 			return phydev_err_probe(phydev, ret,
 						"failed to get nvmem cell io_impedance_ctrl\n");
 
-		/* If no nvmem cell, check for the boolean properties. */
-		if (of_property_read_bool(of_node, "ti,max-output-impedance"))
+		/* If no nvmem cell, check for the device tree entries */
+		ret = of_property_read_u32(of_node, "ti,output-impedance",
+					   (u32 *)&dp83867->io_impedance);
+		if (!ret) {
+			if (dp83867->io_impedance > DP83867_IO_MUX_CFG_IO_IMPEDANCE_MASK) {
+				phydev_err(phydev, "'ti,output-impedance' value %u out of range\n",
+					   dp83867->io_impedance);
+				return -EINVAL;
+			}
+		} else if (of_property_read_bool(of_node, "ti,max-output-impedance")) {
 			dp83867->io_impedance = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX;
-		else if (of_property_read_bool(of_node, "ti,min-output-impedance"))
+		} else if (of_property_read_bool(of_node, "ti,min-output-impedance")) {
 			dp83867->io_impedance = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN;
-		else
+		} else {
 			dp83867->io_impedance = -1; /* leave at default */
+		};
 
 		return 0;
 	}
