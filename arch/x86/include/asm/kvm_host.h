@@ -1863,6 +1863,7 @@ struct kvm_x86_ops {
 				    struct kvm_mmu_page *sp);
 	void (*remove_external_spte)(struct kvm *kvm, gfn_t gfn, enum pg_level level,
 				     u64 mirror_spte);
+	int (*topup_external_cache)(struct kvm_vcpu *vcpu, int min);
 
 
 	bool (*has_wbinvd_exit)(void);
