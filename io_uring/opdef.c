@@ -29,6 +29,7 @@
 #include "epoll.h"
 #include "statx.h"
 #include "net.h"
+#include "mmap.h"
 #include "msg_ring.h"
 #include "timeout.h"
 #include "poll.h"
@@ -593,6 +594,11 @@ const struct io_issue_def io_issue_defs[] = {
 		.prep			= io_uring_cmd_prep,
 		.issue			= io_uring_cmd,
 	},
+	[IORING_OP_MMAP] = {
+		.prep			= io_mmap_prep,
+		.issue			= io_mmap,
+		.opt_file		= 1,
+	}
 };
 
 const struct io_cold_def io_cold_defs[] = {
@@ -850,6 +856,9 @@ const struct io_cold_def io_cold_defs[] = {
 		.name			= "URING_CMD128",
 		.sqe_copy		= io_uring_cmd_sqe_copy,
 		.cleanup		= io_uring_cmd_cleanup,
+	},
+	[IORING_OP_MMAP] = {
+		.name			= "MMAP",
 	},
 };
 

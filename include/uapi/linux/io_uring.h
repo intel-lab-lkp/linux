@@ -74,6 +74,7 @@ struct io_uring_sqe {
 		__u32		install_fd_flags;
 		__u32		nop_flags;
 		__u32		pipe_flags;
+		__u32		mmap_flags;
 	};
 	__u64	user_data;	/* data to be passed back at completion time */
 	/* pack this to avoid bogus arm OABI complaints */
@@ -303,6 +304,7 @@ enum io_uring_op {
 	IORING_OP_PIPE,
 	IORING_OP_NOP128,
 	IORING_OP_URING_CMD128,
+	IORING_OP_MMAP,
 
 	/* this goes last, obviously */
 	IORING_OP_LAST,
@@ -1111,6 +1113,14 @@ struct zcrx_ctrl {
 		struct zcrx_ctrl_export		zc_export;
 		struct zcrx_ctrl_flush_rq	zc_flush;
 	};
+};
+
+struct io_uring_mmap_desc {
+	void __user *addr;
+	unsigned long len;
+	unsigned long pgoff;
+	unsigned int prot;
+	unsigned int flags;
 };
 
 #ifdef __cplusplus
