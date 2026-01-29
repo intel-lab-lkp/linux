@@ -41,6 +41,9 @@
 #define _HW_STATE_STATION_	0x02
 #define _HW_STATE_AP_			0x03
 
+#define BSS_COEX_MAX_CLASSES	8
+#define BSS_COEX_MAX_CHANNELS	15
+#define BSS_COEX_MAX_INFO_LEN	16
 
 #define		_1M_RATE_	0
 #define		_2M_RATE_	1

@@ -3587,8 +3587,9 @@ static void issue_action_BSSCoexistPacket(struct adapter *padapter)
 	struct mlme_ext_priv *pmlmeext = &(padapter->mlmeextpriv);
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
 	struct __queue		*queue	= &(pmlmepriv->scanned_queue);
-	u8 InfoContent[16] = {0};
-	u8 ICS[8][15];
+	u8 InfoContent[BSS_COEX_MAX_INFO_LEN] = {};
+	bool class_active[BSS_COEX_MAX_CLASSES] = {};
+	bool ch_present[BSS_COEX_MAX_CLASSES][BSS_COEX_MAX_CHANNELS] = {};
 
 	if ((pmlmepriv->num_FortyMHzIntolerant == 0) || (pmlmepriv->num_sta_no_ht == 0))
 		return;
@@ -3642,7 +3643,6 @@ static void issue_action_BSSCoexistPacket(struct adapter *padapter)
 
 
 	/*  */
-	memset(ICS, 0, sizeof(ICS));
 	if (pmlmepriv->num_sta_no_ht > 0) {
 		int i;
 
@@ -3667,46 +3667,35 @@ static void issue_action_BSSCoexistPacket(struct adapter *padapter)
 
 			p = rtw_get_ie(pbss_network->ies + _FIXED_IE_LENGTH_, WLAN_EID_HT_CAPABILITY, &len, pbss_network->ie_length - _FIXED_IE_LENGTH_);
 			if (!p || len == 0) {/* non-HT */
+				u8 ch = pbss_network->configuration.ds_config;
 
-				if (pbss_network->configuration.ds_config <= 0)
-					continue;
-
-				ICS[0][pbss_network->configuration.ds_config] = 1;
-
-				if (ICS[0][0] == 0)
-					ICS[0][0] = 1;
+				if (ch > 0 && ch < BSS_COEX_MAX_CHANNELS) {
+					ch_present[0][ch] = true;
+					class_active[0] = true;
+				}
 			}
 
 		}
 
 		spin_unlock_bh(&(pmlmepriv->scanned_queue.lock));
 
-
-		for (i = 0; i < 8; i++) {
+		for (i = 0; i < BSS_COEX_MAX_CLASSES; i++) {
 			int j, k = 0;
 
-			if (ICS[i][0] != 1)
+			if (!class_active[i])
 				continue;
 
-			InfoContent[k] = i;
+			InfoContent[k++] = i;
 			/* SET_BSS_INTOLERANT_ELE_REG_CLASS(InfoContent, i); */
-			k++;
 
-			for (j = 1; j <= 14; j++) {
-				if (ICS[i][j] != 1)
-					continue;
-
-				if (k < 16) {
-					InfoContent[k] = j; /* channel number */
-					/* SET_BSS_INTOLERANT_ELE_CHANNEL(InfoContent+k, j); */
-					k++;
+			for (j = 0; j < BSS_COEX_MAX_CHANNELS; j++) {
+				if (ch_present[i][j]) {
+					if (k < BSS_COEX_MAX_INFO_LEN)
+						InfoContent[k++] = j; /* channel number */
 				}
 			}
-
 			pframe = rtw_set_ie(pframe, WLAN_EID_BSS_INTOLERANT_CHL_REPORT, k, InfoContent, &(pattrib->pktlen));
-
 		}
-
 	}
 
 
