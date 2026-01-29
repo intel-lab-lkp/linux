@@ -6,16 +6,6 @@
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-/dts-v1/;
-
-#include <dt-bindings/gpio/gpio.h>
-#include "ipq9574-rdp-common.dtsi"
-
-/ {
-	model = "Qualcomm Technologies, Inc. IPQ9574/AP-AL02-C7";
-	compatible = "qcom,ipq9574-ap-al02-c7", "qcom,ipq9574";
-};
-
 &pcie1_phy {
 	status = "okay";
 };
