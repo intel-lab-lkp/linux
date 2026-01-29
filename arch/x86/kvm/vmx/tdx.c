@@ -1625,6 +1625,9 @@ static int tdx_topup_external_pamt_cache(struct kvm_vcpu *vcpu, int min)
 	if (!tdx_supports_dynamic_pamt(tdx_sysinfo))
 		return 0;
 
+	if (WARN_ON_ONCE(!vcpu))
+		return -EIO;
+
 	return tdx_topup_pamt_cache(&to_tdx(vcpu)->pamt_cache, min);
 }
 
