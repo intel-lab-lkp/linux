@@ -13,6 +13,7 @@
 #include "tdx.h"
 #include "vmx.h"
 #include "mmu/spte.h"
+#include "mmu/tdp_mmu.h"
 #include "common.h"
 #include "posted_intr.h"
 #include "irq.h"
@@ -1958,6 +1959,77 @@ static inline bool tdx_is_sept_violation_unexpected_pending(struct kvm_vcpu *vcp
 	return !(eq & EPT_VIOLATION_PROT_MASK) && !(eq & EPT_VIOLATION_EXEC_FOR_RING3_LIN);
 }
 
+static bool tdx_is_mismatched_accepted(struct kvm_vcpu *vcpu)
+{
+	return (to_tdx(vcpu)->ext_exit_qualification & TDX_EXT_EXIT_QUAL_TYPE_MASK) ==
+	       TDX_EXT_EXIT_QUAL_TYPE_ACCEPT;
+}
+
+static int tdx_get_ept_violation_level(struct kvm_vcpu *vcpu)
+{
+	u64 ext_exit_qual = to_tdx(vcpu)->ext_exit_qualification;
+
+	return (((ext_exit_qual & TDX_EXT_EXIT_QUAL_INFO_MASK) >>
+		 TDX_EXT_EXIT_QUAL_INFO_SHIFT) & GENMASK(2, 0)) + 1;
+}
+
+/*
+ * An EPT violation can be either due to the guest's ACCEPT operation or
+ * due to the guest's access of memory before the guest accepts the
+ * memory.
+ *
+ * Type TDX_EXT_EXIT_QUAL_TYPE_ACCEPT in the extended exit qualification
+ * identifies the former case, which must also contain a valid guest
+ * accept level.
+ *
+ * For the former case, honor guest's accept level by setting guest inhibit bit
+ * on levels above the guest accept level and split the existing mapping for the
+ * faulting GFN if it's with a higher level than the guest accept level.
+ *
+ * Do nothing if the EPT violation is due to the latter case. KVM will map the
+ * GFN without considering the guest's accept level (unless the guest inhibit
+ * bit is already set).
+ */
+static int tdx_handle_mismatched_accept(struct kvm_vcpu *vcpu, gfn_t gfn)
+{
+	struct kvm_memory_slot *slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
+	struct kvm *kvm = vcpu->kvm;
+	gfn_t start, end;
+	int level, r;
+
+	if (!slot || !tdx_is_mismatched_accepted(vcpu))
+		return 0;
+
+	if (WARN_ON_ONCE(!VALID_PAGE(vcpu->arch.mmu->root.hpa)))
+		return 0;
+
+	level = tdx_get_ept_violation_level(vcpu);
+	if (level > PG_LEVEL_2M)
+		return 0;
+
+	if (hugepage_test_guest_inhibit(slot, gfn, level + 1))
+		return 0;
+
+	guard(write_lock)(&kvm->mmu_lock);
+
+	start = gfn_round_for_level(gfn, level);
+	end = start + KVM_PAGES_PER_HPAGE(level);
+
+	r = kvm_tdp_mmu_split_huge_pages(vcpu, start, end, level);
+	if (r)
+		return r;
+
+	/*
+	 * No TLB flush is required, as the "BLOCK + TRACK + kick off vCPUs"
+	 * sequence required by the TDX-Module includes a TLB flush.
+	 */
+	hugepage_set_guest_inhibit(slot, gfn, level + 1);
+	if (level == PG_LEVEL_4K)
+		hugepage_set_guest_inhibit(slot, gfn, level + 2);
+
+	return 0;
+}
+
 static int tdx_handle_ept_violation(struct kvm_vcpu *vcpu)
 {
 	unsigned long exit_qual;
@@ -1982,6 +2054,10 @@ static int tdx_handle_ept_violation(struct kvm_vcpu *vcpu)
 		 * due to aliasing a single HPA to multiple GPAs.
 		 */
 		exit_qual = EPT_VIOLATION_ACC_WRITE;
+
+		ret = tdx_handle_mismatched_accept(vcpu, gpa_to_gfn(gpa));
+		if (ret)
+			return ret;
 
 		/* Only private GPA triggers zero-step mitigation */
 		local_retry = true;
