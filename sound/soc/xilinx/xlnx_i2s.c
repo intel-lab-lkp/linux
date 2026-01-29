@@ -17,6 +17,9 @@
 
 #define DRV_NAME "xlnx_i2s"
 
+#define I2S_CORE_CFG			0x04
+#define I2S_CORE_CFG_DATA_24BIT		BIT(16)
+#define I2S_CORE_CFG_CHANNELS		GENMASK(11, 8)
 #define I2S_CORE_CTRL_OFFSET		0x08
 #define I2S_CORE_CTRL_32BIT_LRCLK	BIT(3)
 #define I2S_CORE_CTRL_ENABLE		BIT(0)
@@ -172,7 +175,7 @@ static int xlnx_i2s_probe(struct platform_device *pdev)
 {
 	struct xlnx_i2s_drv_data *drv_data;
 	int ret;
-	u32 format;
+	u32 format, cfg;
 	struct device *dev = &pdev->dev;
 	struct device_node *node = dev->of_node;
 
@@ -184,27 +187,14 @@ static int xlnx_i2s_probe(struct platform_device *pdev)
 	if (IS_ERR(drv_data->base))
 		return PTR_ERR(drv_data->base);
 
-	ret = of_property_read_u32(node, "xlnx,num-channels", &drv_data->channels);
-	if (ret < 0) {
-		dev_err(dev, "cannot get supported channels\n");
-		return ret;
-	}
-	drv_data->channels *= 2;
-
-	ret = of_property_read_u32(node, "xlnx,dwidth", &drv_data->data_width);
-	if (ret < 0) {
-		dev_err(dev, "cannot get data width\n");
-		return ret;
-	}
-	switch (drv_data->data_width) {
-	case 16:
-		format = SNDRV_PCM_FMTBIT_S16_LE;
-		break;
-	case 24:
+	cfg = readl(drv_data->base + I2S_CORE_CFG);
+	drv_data->channels = FIELD_GET(I2S_CORE_CFG_CHANNELS, cfg);
+	if (cfg & I2S_CORE_CFG_DATA_24BIT) {
+		drv_data->data_width = 24;
 		format = SNDRV_PCM_FMTBIT_S24_LE;
-		break;
-	default:
-		return -EINVAL;
+	} else {
+		drv_data->data_width = 16;
+		format = SNDRV_PCM_FMTBIT_S16_LE;
 	}
 
 	if (of_device_is_compatible(node, "xlnx,i2s-transmitter-1.0")) {
