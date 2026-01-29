@@ -1841,6 +1841,9 @@ u64 tdh_mng_rd(struct tdx_td *td, u64 field, u64 *data)
 }
 EXPORT_SYMBOL_FOR_KVM(tdh_mng_rd);
 
+static int alloc_pamt_array(u64 *pa_array, struct tdx_pamt_cache *cache);
+static void free_pamt_array(u64 *pa_array);
+
 /* Number PAMT pages to be provided to TDX module per 2M region of PA */
 static int tdx_dpamt_entry_pages(void)
 {
@@ -1884,6 +1887,57 @@ static void dpamt_copy_regs_array(struct tdx_module_args *args, void *reg,
  * practically free, i.e. any wasted space is a non-issue.
  */
 #define MAX_NR_DPAMT_ARGS (sizeof(struct tdx_module_args) / sizeof(u64))
+
+u64 tdh_mem_page_demote(struct tdx_td *td, u64 gpa, enum pg_level level, u64 pfn,
+			struct page *new_sp, struct tdx_pamt_cache *pamt_cache,
+			u64 *ext_err1, u64 *ext_err2)
+{
+	bool dpamt = tdx_supports_dynamic_pamt(&tdx_sysinfo) && level == PG_LEVEL_2M;
+	u64 pamt_pa_array[MAX_NR_DPAMT_ARGS];
+	struct tdx_module_args args = {
+		.rcx = gpa | pg_level_to_tdx_sept_level(level),
+		.rdx = tdx_tdr_pa(td),
+		.r8 = page_to_phys(new_sp),
+	};
+	u64 ret;
+
+	if (!tdx_supports_demote_nointerrupt(&tdx_sysinfo))
+		return TDX_SW_ERROR;
+
+	if (dpamt) {
+		if (alloc_pamt_array(pamt_pa_array, pamt_cache))
+			return TDX_SW_ERROR;
+
+		dpamt_copy_to_regs(&args, r12, pamt_pa_array);
+	}
+
+	/* Flush the new S-EPT page to be added */
+	tdx_clflush_page(new_sp);
+
+	ret = seamcall_saved_ret(TDH_MEM_PAGE_DEMOTE, &args);
+
+	*ext_err1 = args.rcx;
+	*ext_err2 = args.rdx;
+
+	if (dpamt) {
+		if (ret) {
+			free_pamt_array(pamt_pa_array);
+		} else {
+			/*
+			 * Set the PAMT refcount for the guest private memory,
+			 * i.e. for the hugepage that was just demoted to 512
+			 * smaller pages.
+			 */
+			atomic_t *pamt_refcount;
+
+			pamt_refcount = tdx_find_pamt_refcount(pfn);
+			WARN_ON_ONCE(atomic_cmpxchg_release(pamt_refcount, 0,
+							    PTRS_PER_PMD));
+		}
+	}
+	return ret;
+}
+EXPORT_SYMBOL_FOR_KVM(tdh_mem_page_demote);
 
 u64 tdh_mr_extend(struct tdx_td *td, u64 gpa, u64 *ext_err1, u64 *ext_err2)
 {
