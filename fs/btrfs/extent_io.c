@@ -928,8 +928,10 @@ void clear_folio_extent_mapped(struct folio *folio)
 		return;
 
 	fs_info = folio_to_fs_info(folio);
-	if (btrfs_is_subpage(fs_info, folio))
-		return btrfs_detach_folio_state(fs_info, folio, BTRFS_SUBPAGE_DATA);
+	if (btrfs_is_subpage(fs_info, folio)) {
+		/* freeing of private subpage data is deferred to btrfs_free_folio */
+		return;
+	}
 
 	folio_detach_private(folio);
 }

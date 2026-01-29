@@ -7565,6 +7565,23 @@ static bool btrfs_release_folio(struct folio *folio, gfp_t gfp_flags)
 	return __btrfs_release_folio(folio, gfp_flags);
 }
 
+/* frees subpage private data if present */
+static void btrfs_free_folio(struct folio *folio)
+{
+	struct btrfs_folio_state *bfs;
+
+	if (!folio_test_private(folio))
+		return;
+
+	bfs = folio_detach_private(folio);
+	if (bfs == (void *)EXTENT_FOLIO_PRIVATE) {
+		/* extent map flag is detached in btrfs_folio_release */
+		return;
+	}
+
+	btrfs_free_folio_state(bfs);
+}
+
 #ifdef CONFIG_MIGRATION
 static int btrfs_migrate_folio(struct address_space *mapping,
 			     struct folio *dst, struct folio *src,
@@ -10651,6 +10668,7 @@ static const struct address_space_operations btrfs_aops = {
 	.invalidate_folio = btrfs_invalidate_folio,
 	.launder_folio	= btrfs_launder_folio,
 	.release_folio	= btrfs_release_folio,
+	.free_folio = btrfs_free_folio,
 	.migrate_folio	= btrfs_migrate_folio,
 	.dirty_folio	= filemap_dirty_folio,
 	.error_remove_folio = generic_error_remove_folio,
