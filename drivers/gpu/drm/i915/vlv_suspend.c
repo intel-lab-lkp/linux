@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 
 #include <drm/drm_print.h>
+#include <drm/intel/intel_gmd_interrupt.h>
 
 #include "gt/intel_gt_regs.h"
 

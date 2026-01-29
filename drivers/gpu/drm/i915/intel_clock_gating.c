@@ -26,6 +26,7 @@
  */
 
 #include <drm/drm_print.h>
+#include <drm/intel/intel_gmd_interrupt.h>
 
 #include "display/i9xx_plane_regs.h"
 #include "display/intel_display.h"
