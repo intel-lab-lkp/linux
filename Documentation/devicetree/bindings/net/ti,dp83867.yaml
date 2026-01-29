@@ -52,11 +52,20 @@ properties:
     description: |
       MAC Interface Impedance control to set the programmable output impedance
       to a maximum value (70 ohms).
-      Note: Specifying an io_impedance_ctrl nvmem cell or one of the
-        ti,min-output-impedance, ti,max-output-impedance properties
-        are mutually exclusive. If more than one is present, an nvmem
-        cell takes precedence over ti,max-output-impedance, which in
-        turn takes precedence over ti,min-output-impedance.
+      Note: Specifying an io_impedance_ctrl nvmem cell, ti,output-impedance
+        or one of the boolean ti,min-output-impedance and ti,max-output-impedance
+        properties is mutually exclusive.
+        If more than one is present the priority order is nvmem cell,
+        ti,output-impedance, ti,max-output-impedance and last
+        ti,min-output-impedance.
+
+  ti,output-impedance:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      MAC Interface Impedance control to set the raw register value from 0x0
+      (approx. 70 ohms) to 0x1f (approx. 35 ohms).
+    minimum: 0
+    maximum: 31
 
   tx-fifo-depth:
     $ref: /schemas/types.yaml#/definitions/uint32
