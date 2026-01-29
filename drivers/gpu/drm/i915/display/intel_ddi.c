@@ -83,6 +83,7 @@
 #include "intel_snps_phy.h"
 #include "intel_step.h"
 #include "intel_tc.h"
+#include "intel_vblank.h"
 #include "intel_vdsc.h"
 #include "intel_vdsc_regs.h"
 #include "intel_vrr.h"
@@ -3562,6 +3563,16 @@ static void intel_ddi_enable(struct intel_atomic_state *state,
 		intel_ddi_enable_hdmi(state, encoder, crtc_state, conn_state);
 	else
 		intel_ddi_enable_dp(state, encoder, crtc_state, conn_state);
+	/*
+	 * Somtimes when pipe starts PIPEDSL/PIPE_SCANLINE reads will return a
+	 * stale value, this is because it may take 1 vblank for TRANSCONF
+	 * register to enable the pipe, which causes an apparent vblank
+	 * timestamp and scaline jump  jump when PIPEDSL/PIPE_SCANLINE
+	 * resets to its proper value. That also messes up the frame count
+	 * when it's derived from the timestamps. So let's wait for the
+	 * pipe to start properly, So lets wait before we proceed with modeset.
+	 */
+	intel_wait_for_pipe_scanline_moving(to_intel_crtc(crtc_state->uapi.crtc));
 
 	intel_hdcp_enable(state, encoder, crtc_state, conn_state);
 
