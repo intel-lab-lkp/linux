@@ -48,6 +48,7 @@
 #include <linux/psi.h>
 #include <linux/ratelimit.h>
 #include <linux/task_work.h>
+#include <linux/seqlock.h>
 #include <linux/rbtree_augmented.h>
 
 #include <asm/switch_to.h>
@@ -2140,6 +2141,43 @@ static void update_numa_stats(struct task_numa_env *env,
 	ns->idle_cpu = -1;
 
 	rcu_read_lock();
+	/*
+	 * Algorithmic Optimization: Avoid O(N) scan by using cached stats.
+	 * Only applicable for the source node where we don't need to find
+	 * an idle CPU. This skip is safe because we only need the totals
+	 * for the source node's load, util, and nr_running to check for
+	 * relative imbalance.
+	 */
+	if (!find_idle && nid == env->src_nid) {
+		struct root_domain *rd = rcu_dereference(cpu_rq(env->src_cpu)->rd);
+		struct numa_stats_cache *cache;
+		unsigned int seq;
+
+		if (rd && rd->node_stats_cache) {
+			cache = &rd->node_stats_cache[nid];
+			do {
+				seq = read_seqcount_begin(&cache->seq);
+				if (!time_before(jiffies, cache->last_update + msecs_to_jiffies(10))) {
+					ns->compute_capacity = 0;
+					break;
+				}
+
+				ns->load = cache->load;
+				ns->runnable = cache->runnable;
+				ns->util = cache->util;
+				ns->nr_running = cache->nr_running;
+				ns->compute_capacity = cache->capacity;
+			} while (read_seqcount_retry(&cache->seq, seq));
+
+			if (ns->compute_capacity)
+				goto skip_scan;
+
+			/* Reset stats before O(N) scan if cache was stale or torn */
+			memset(ns, 0, sizeof(*ns));
+			ns->idle_cpu = -1;
+		}
+	}
+
 	for_each_cpu(cpu, cpumask_of_node(nid)) {
 		struct rq *rq = cpu_rq(cpu);
 
@@ -2160,6 +2198,8 @@ static void update_numa_stats(struct task_numa_env *env,
 			idle_core = numa_idle_core(idle_core, cpu);
 		}
 	}
+
+skip_scan:
 	rcu_read_unlock();
 
 	ns->weight = cpumask_weight(cpumask_of_node(nid));
@@ -10486,6 +10526,30 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 	if (sgs->group_type == group_overloaded)
 		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
 				sgs->group_capacity;
+
+	/* Algorithmic Optimization: Cache node stats for O(1) NUMA lookups */
+#ifdef CONFIG_NUMA
+	if (env->sd->flags & SD_NUMA) {
+		int nid = cpu_to_node(cpumask_first(sched_group_span(group)));
+		struct root_domain *rd = env->dst_rq->rd;
+		struct numa_stats_cache *cache;
+
+		if (rd && rd->node_stats_cache) {
+			cache = &rd->node_stats_cache[nid];
+
+			spin_lock(&cache->lock);
+			write_seqcount_begin(&cache->seq);
+			cache->nr_running = sgs->sum_h_nr_running;
+			cache->load = sgs->group_load;
+			cache->util = sgs->group_util;
+			cache->runnable = sgs->group_runnable;
+			cache->capacity = sgs->group_capacity;
+			cache->last_update = jiffies;
+			write_seqcount_end(&cache->seq);
+			spin_unlock(&cache->lock);
+		}
+	}
+#endif
 }
 
 /**

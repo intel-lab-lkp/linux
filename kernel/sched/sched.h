@@ -972,6 +972,19 @@ struct perf_domain {
 	struct rcu_head rcu;
 };
 
+#ifdef CONFIG_NUMA
+struct numa_stats_cache {
+	spinlock_t lock;
+	seqcount_t seq;
+	unsigned long load;
+	unsigned long runnable;
+	unsigned long util;
+	unsigned long capacity;
+	unsigned int nr_running;
+	unsigned long last_update;
+} ____cacheline_aligned;
+#endif
+
 /*
  * We add the notion of a root-domain which will be used to define per-domain
  * variables. Each exclusive cpuset essentially defines an island domain by
@@ -1040,6 +1053,10 @@ struct root_domain {
 	 * CPUs of the rd. Protected by RCU.
 	 */
 	struct perf_domain __rcu *pd;
+
+#ifdef CONFIG_NUMA
+	struct numa_stats_cache *node_stats_cache;
+#endif
 };
 
 extern void init_defrootdomain(void);

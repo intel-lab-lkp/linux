@@ -5,6 +5,7 @@
 
 #include <linux/sched/isolation.h>
 #include <linux/bsearch.h>
+#include <linux/slab.h>
 #include "sched.h"
 
 DEFINE_MUTEX(sched_domains_mutex);
@@ -466,6 +467,9 @@ static void free_rootdomain(struct rcu_head *rcu)
 	free_cpumask_var(rd->online);
 	free_cpumask_var(rd->span);
 	free_pd(rd->pd);
+#ifdef CONFIG_NUMA
+	kfree(rd->node_stats_cache);
+#endif
 	kfree(rd);
 }
 
@@ -551,8 +555,24 @@ static int init_rootdomain(struct root_domain *rd)
 
 	if (cpupri_init(&rd->cpupri) != 0)
 		goto free_cpudl;
+
+#ifdef CONFIG_NUMA
+	rd->node_stats_cache = kcalloc(nr_node_ids, sizeof(struct numa_stats_cache),
+				      GFP_KERNEL);
+	if (!rd->node_stats_cache)
+		goto free_cpupri;
+
+	int i;
+	for (i = 0; i < nr_node_ids; i++) {
+		spin_lock_init(&rd->node_stats_cache[i].lock);
+		seqcount_init(&rd->node_stats_cache[i].seq);
+	}
+#endif
+
 	return 0;
 
+free_cpupri:
+	cpupri_cleanup(&rd->cpupri);
 free_cpudl:
 	cpudl_cleanup(&rd->cpudl);
 free_rto_mask:
