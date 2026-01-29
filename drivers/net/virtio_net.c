@@ -429,6 +429,9 @@ struct virtnet_info {
 	struct virtio_net_rss_config_trailer rss_trailer;
 	u8 rss_hash_key_data[VIRTIO_NET_RSS_MAX_KEY_SIZE];
 
+	/* Device passes time stamps from the driver */
+	bool has_tstamp;
+
 	/* Has control virtqueue */
 	bool has_cvq;
 
@@ -475,6 +478,8 @@ struct virtnet_info {
 
 	struct control_buf *ctrl;
 
+	struct kernel_hwtstamp_config tstamp_config;
+
 	/* Ethtool settings */
 	u8 duplex;
 	u32 speed;
@@ -511,6 +516,7 @@ struct virtio_net_common_hdr {
 		struct virtio_net_hdr_mrg_rxbuf	mrg_hdr;
 		struct virtio_net_hdr_v1_hash hash_v1_hdr;
 		struct virtio_net_hdr_v1_hash_tunnel tnl_hdr;
+		struct virtio_net_hdr_v1_hash_tunnel_ts ts_hdr;
 	};
 };
 
@@ -680,6 +686,13 @@ static inline struct virtio_net_common_hdr *
 skb_vnet_common_hdr(struct sk_buff *skb)
 {
 	return (struct virtio_net_common_hdr *)skb->cb;
+}
+
+static inline struct virtio_net_hdr_v1_hash_tunnel_ts *skb_vnet_hdr_ts(struct sk_buff *skb)
+{
+	BUILD_BUG_ON(sizeof(struct virtio_net_hdr_v1_hash_tunnel_ts) > sizeof(skb->cb));
+
+	return (void *)skb->cb;
 }
 
 /*
@@ -2560,6 +2573,15 @@ virtio_net_hash_value(const struct virtio_net_hdr_v1_hash *hdr_hash)
 		(__le16_to_cpu(hdr_hash->hash_value_hi) << 16);
 }
 
+static inline u64
+virtio_net_tstamp_value(const struct virtio_net_hdr_v1_hash_tunnel_ts *hdr_hash_ts)
+{
+	return  (u64)__le16_to_cpu(hdr_hash_ts->tstamp_0) |
+	       ((u64)__le16_to_cpu(hdr_hash_ts->tstamp_1) << 16) |
+	       ((u64)__le16_to_cpu(hdr_hash_ts->tstamp_2) << 32) |
+	       ((u64)__le16_to_cpu(hdr_hash_ts->tstamp_3) << 48);
+}
+
 static void virtio_skb_set_hash(const struct virtio_net_hdr_v1_hash *hdr_hash,
 				struct sk_buff *skb)
 {
@@ -2587,6 +2609,18 @@ static void virtio_skb_set_hash(const struct virtio_net_hdr_v1_hash *hdr_hash,
 		rss_hash_type = PKT_HASH_TYPE_NONE;
 	}
 	skb_set_hash(skb, virtio_net_hash_value(hdr_hash), rss_hash_type);
+}
+
+static inline void virtnet_record_rx_tstamp(const struct virtnet_info *vi,
+					    struct sk_buff *skb)
+{
+	struct skb_shared_hwtstamps *shhwtstamps = skb_hwtstamps(skb);
+	const struct virtio_net_hdr_v1_hash_tunnel_ts *h = skb_vnet_hdr_ts(skb);
+	u64 ts;
+
+	ts = virtio_net_tstamp_value(h);
+	memset(shhwtstamps, 0, sizeof(struct skb_shared_hwtstamps));
+	shhwtstamps->hwtstamp = ns_to_ktime(ts);
 }
 
 static void virtnet_receive_done(struct virtnet_info *vi, struct receive_queue *rq,
@@ -2617,6 +2651,8 @@ static void virtnet_receive_done(struct virtnet_info *vi, struct receive_queue *
 		goto frame_err;
 	}
 
+	if (vi->has_tstamp && vi->tstamp_config.rx_filter != HWTSTAMP_FILTER_NONE)
+		virtnet_record_rx_tstamp(vi, skb);
 	skb_record_rx_queue(skb, vq2rxq(rq->vq));
 	skb->protocol = eth_type_trans(skb, dev);
 	pr_debug("Receiving skb proto 0x%04x len %i type %i\n",
@@ -3321,7 +3357,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb, bool orphan)
 {
 	const unsigned char *dest = ((struct ethhdr *)skb->data)->h_dest;
 	struct virtnet_info *vi = sq->vq->vdev->priv;
-	struct virtio_net_hdr_v1_hash_tunnel *hdr;
+	struct virtio_net_hdr_v1_hash_tunnel_ts *hdr;
 	int num_sg;
 	unsigned hdr_len = vi->hdr_len;
 	bool can_push;
@@ -3329,8 +3365,8 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb, bool orphan)
 	pr_debug("%s: xmit %p %pM\n", vi->dev->name, skb, dest);
 
 	/* Make sure it's safe to cast between formats */
-	BUILD_BUG_ON(__alignof__(*hdr) != __alignof__(hdr->hash_hdr));
-	BUILD_BUG_ON(__alignof__(*hdr) != __alignof__(hdr->hash_hdr.hdr));
+	BUILD_BUG_ON(__alignof__(*hdr) != __alignof__(hdr->tnl.hash_hdr));
+	BUILD_BUG_ON(__alignof__(*hdr) != __alignof__(hdr->tnl.hash_hdr.hdr));
 
 	can_push = vi->any_header_sg &&
 		!((unsigned long)skb->data & (__alignof__(*hdr) - 1)) &&
@@ -3338,18 +3374,18 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb, bool orphan)
 	/* Even if we can, don't push here yet as this would skew
 	 * csum_start offset below. */
 	if (can_push)
-		hdr = (struct virtio_net_hdr_v1_hash_tunnel *)(skb->data -
-							       hdr_len);
+		hdr = (struct virtio_net_hdr_v1_hash_tunnel_ts *)(skb->data -
+								  hdr_len);
 	else
-		hdr = &skb_vnet_common_hdr(skb)->tnl_hdr;
+		hdr = &skb_vnet_common_hdr(skb)->ts_hdr;
 
-	if (virtio_net_hdr_tnl_from_skb(skb, hdr, vi->tx_tnl,
+	if (virtio_net_hdr_tnl_from_skb(skb, &hdr->tnl, vi->tx_tnl,
 					virtio_is_little_endian(vi->vdev), 0,
 					false))
 		return -EPROTO;
 
 	if (vi->mergeable_rx_bufs)
-		hdr->hash_hdr.hdr.num_buffers = 0;
+		hdr->tnl.hash_hdr.hdr.num_buffers = 0;
 
 	sg_init_table(sq->sg, skb_shinfo(skb)->nr_frags + (can_push ? 1 : 2));
 	if (can_push) {
@@ -5563,6 +5599,22 @@ static int virtnet_get_per_queue_coalesce(struct net_device *dev,
 	return 0;
 }
 
+static int virtnet_get_ts_info(struct net_device *dev,
+			       struct kernel_ethtool_ts_info *info)
+{
+	/* setup default software timestamp */
+	ethtool_op_get_ts_info(dev, info);
+
+	info->rx_filters = (BIT(HWTSTAMP_FILTER_NONE) |
+			    BIT(HWTSTAMP_FILTER_PTP_V1_L4_SYNC) |
+			    BIT(HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ) |
+			    BIT(HWTSTAMP_FILTER_ALL));
+
+	info->tx_types = HWTSTAMP_TX_OFF;
+
+	return 0;
+}
+
 static void virtnet_init_settings(struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
@@ -5658,7 +5710,7 @@ static const struct ethtool_ops virtnet_ethtool_ops = {
 	.get_ethtool_stats = virtnet_get_ethtool_stats,
 	.set_channels = virtnet_set_channels,
 	.get_channels = virtnet_get_channels,
-	.get_ts_info = ethtool_op_get_ts_info,
+	.get_ts_info = virtnet_get_ts_info,
 	.get_link_ksettings = virtnet_get_link_ksettings,
 	.set_link_ksettings = virtnet_set_link_ksettings,
 	.set_coalesce = virtnet_set_coalesce,
@@ -6242,6 +6294,58 @@ static void virtnet_tx_timeout(struct net_device *dev, unsigned int txqueue)
 		   jiffies_to_usecs(jiffies - READ_ONCE(txq->trans_start)));
 }
 
+static int virtnet_hwtstamp_get(struct net_device *dev,
+				struct kernel_hwtstamp_config *tstamp_config)
+{
+	struct virtnet_info *vi = netdev_priv(dev);
+
+	if (!netif_running(dev))
+		return -EINVAL;
+
+	*tstamp_config = vi->tstamp_config;
+
+	return 0;
+}
+
+static int virtnet_hwtstamp_set(struct net_device *dev,
+				struct kernel_hwtstamp_config *tstamp_config,
+				struct netlink_ext_ack *extack)
+{
+	struct virtnet_info *vi = netdev_priv(dev);
+
+	if (!netif_running(dev))
+		return -EINVAL;
+
+	switch (tstamp_config->rx_filter) {
+	case HWTSTAMP_FILTER_PTP_V1_L4_SYNC:
+	case HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ:
+		break;
+	case HWTSTAMP_FILTER_PTP_V2_EVENT:
+	case HWTSTAMP_FILTER_PTP_V2_L2_EVENT:
+	case HWTSTAMP_FILTER_PTP_V2_L4_EVENT:
+	case HWTSTAMP_FILTER_PTP_V2_SYNC:
+	case HWTSTAMP_FILTER_PTP_V2_L2_SYNC:
+	case HWTSTAMP_FILTER_PTP_V2_L4_SYNC:
+	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
+	case HWTSTAMP_FILTER_PTP_V2_L2_DELAY_REQ:
+	case HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ:
+		tstamp_config->rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
+		break;
+	case HWTSTAMP_FILTER_NONE:
+		break;
+	case HWTSTAMP_FILTER_ALL:
+		tstamp_config->rx_filter = HWTSTAMP_FILTER_ALL;
+		break;
+	default:
+		tstamp_config->rx_filter = HWTSTAMP_FILTER_ALL;
+		return -ERANGE;
+	}
+
+	vi->tstamp_config = *tstamp_config;
+
+	return 0;
+}
+
 static int virtnet_init_irq_moder(struct virtnet_info *vi)
 {
 	u8 profile_flags = 0, coal_flags = 0;
@@ -6289,6 +6393,8 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_get_phys_port_name	= virtnet_get_phys_port_name,
 	.ndo_set_features	= virtnet_set_features,
 	.ndo_tx_timeout		= virtnet_tx_timeout,
+	.ndo_hwtstamp_set	= virtnet_hwtstamp_set,
+	.ndo_hwtstamp_get	= virtnet_hwtstamp_get,
 };
 
 static void virtnet_config_changed_work(struct work_struct *work)
@@ -6911,6 +7017,9 @@ static int virtnet_probe(struct virtio_device *vdev)
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_HASH_REPORT))
 		vi->has_rss_hash_report = true;
 
+	if (virtio_has_feature(vdev, VIRTIO_NET_F_TSTAMP))
+		vi->has_tstamp = true;
+
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_RSS)) {
 		vi->has_rss = true;
 
@@ -6945,8 +7054,10 @@ static int virtnet_probe(struct virtio_device *vdev)
 		dev->xdp_metadata_ops = &virtnet_xdp_metadata_ops;
 	}
 
-	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) ||
-	    virtio_has_feature(vdev, VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO))
+	if (vi->has_tstamp)
+		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash_tunnel_ts);
+	else if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) ||
+		 virtio_has_feature(vdev, VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO))
 		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash_tunnel);
 	else if (vi->has_rss_hash_report)
 		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash);
@@ -7269,7 +7380,8 @@ static struct virtio_device_id id_table[] = {
 	VIRTIO_NET_F_SPEED_DUPLEX, VIRTIO_NET_F_STANDBY, \
 	VIRTIO_NET_F_RSS, VIRTIO_NET_F_HASH_REPORT, VIRTIO_NET_F_NOTF_COAL, \
 	VIRTIO_NET_F_VQ_NOTF_COAL, \
-	VIRTIO_NET_F_GUEST_HDRLEN, VIRTIO_NET_F_DEVICE_STATS
+	VIRTIO_NET_F_GUEST_HDRLEN, VIRTIO_NET_F_DEVICE_STATS, \
+	VIRTIO_NET_F_TSTAMP
 
 static unsigned int features[] = {
 	VIRTNET_FEATURES,
