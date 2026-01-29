@@ -66,7 +66,7 @@
 #define BMSR_10FULL		0x1000	/* Can do 10mbps, full-duplex  */
 #define BMSR_100HALF		0x2000	/* Can do 100mbps, half-duplex */
 #define BMSR_100FULL		0x4000	/* Can do 100mbps, full-duplex */
-#define BMSR_100BASE4		0x8000	/* Can do 100mbps, 4k packets  */
+#define BMSR_100BASE4		0x8000	/* Can do 100BASE-T4           */
 
 /* Advertisement control register. */
 #define ADVERTISE_SLCT		0x001f	/* Selector bits               */
@@ -79,7 +79,7 @@
 #define ADVERTISE_1000XPAUSE	0x0080	/* Try for 1000BASE-X pause    */
 #define ADVERTISE_100FULL	0x0100	/* Try for 100mbps full-duplex */
 #define ADVERTISE_1000XPSE_ASYM	0x0100	/* Try for 1000BASE-X asym pause */
-#define ADVERTISE_100BASE4	0x0200	/* Try for 100mbps 4k packets  */
+#define ADVERTISE_100BASE4	0x0200	/* Try for 100BASE-T4          */
 #define ADVERTISE_PAUSE_CAP	0x0400	/* Try for pause               */
 #define ADVERTISE_PAUSE_ASYM	0x0800	/* Try for asymetric pause     */
 #define ADVERTISE_RESV		0x1000	/* Unused...                   */
@@ -102,7 +102,7 @@
 #define LPA_1000XPAUSE		0x0080	/* Can do 1000BASE-X pause     */
 #define LPA_100FULL		0x0100	/* Can do 100mbps full-duplex  */
 #define LPA_1000XPAUSE_ASYM	0x0100	/* Can do 1000BASE-X pause asym*/
-#define LPA_100BASE4		0x0200	/* Can do 100mbps 4k packets   */
+#define LPA_100BASE4		0x0200	/* Can do 100BASE-T4           */
 #define LPA_PAUSE_CAP		0x0400	/* Can pause                   */
 #define LPA_PAUSE_ASYM		0x0800	/* Can pause asymetrically     */
 #define LPA_RESV		0x1000	/* Unused...                   */
