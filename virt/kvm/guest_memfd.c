@@ -164,6 +164,46 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 	return folio;
 }
 
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT
+static int __kvm_gmem_convert(struct gmem_file *f, pgoff_t start, pgoff_t end,
+			      bool to_private)
+{
+	struct kvm_memory_slot *slot;
+	unsigned long index;
+	int r;
+
+	xa_for_each_range(&f->bindings, index, slot, start, end - 1) {
+		r = kvm_arch_gmem_convert(f->kvm,
+					  kvm_gmem_get_start_gfn(slot, start),
+					  kvm_gmem_get_end_gfn(slot, end),
+					  to_private);
+		if (r)
+			return r;
+	}
+	return 0;
+}
+
+static int kvm_gmem_convert(struct inode *inode, pgoff_t start, pgoff_t end,
+			    bool to_private)
+{
+	struct gmem_file *f;
+	int r;
+
+	kvm_gmem_for_each_file(f, inode->i_mapping) {
+		r = __kvm_gmem_convert(f, start, end, to_private);
+		if (r)
+			return r;
+	}
+	return 0;
+}
+#else
+static int kvm_gmem_convert(struct inode *inode, pgoff_t start, pgoff_t end,
+			    bool to_private)
+{
+	return 0;
+}
+#endif
+
 static enum kvm_gfn_range_filter kvm_gmem_get_invalidate_filter(struct inode *inode)
 {
 	if (GMEM_I(inode)->flags & GUEST_MEMFD_FLAG_INIT_SHARED)
@@ -244,6 +284,7 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 {
 	pgoff_t start = offset >> PAGE_SHIFT;
 	pgoff_t end = (offset + len) >> PAGE_SHIFT;
+	int r;
 
 	/*
 	 * Bindings must be stable across invalidation to ensure the start+end
@@ -253,13 +294,18 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 
 	kvm_gmem_invalidate_begin(inode, start, end);
 
-	truncate_inode_pages_range(inode->i_mapping, offset, offset + len - 1);
+	/*
+	 * For demonstration purposes, pretend this is a private=>shared conversion.
+	 */
+	r = kvm_gmem_convert(inode, start, end, false);
+	if (!r)
+		truncate_inode_pages_range(inode->i_mapping, offset, offset + len - 1);
 
 	kvm_gmem_invalidate_end(inode, start, end);
 
 	filemap_invalidate_unlock(inode->i_mapping);
 
-	return 0;
+	return r;
 }
 
 static long kvm_gmem_allocate(struct inode *inode, loff_t offset, loff_t len)
