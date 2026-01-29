@@ -121,7 +121,8 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_update_nr_running_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_compute_energy_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_entry_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_exit_tp);
-EXPORT_TRACEPOINT_SYMBOL_GPL(sched_set_need_resched_tp);
+/* This needs non-GPL-only. It's called from other non-GPL-only exports (e.g. wake_up_process()) */
+EXPORT_TRACEPOINT_SYMBOL(sched_set_need_resched_tp);
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 DEFINE_PER_CPU(struct rnd_state, sched_rnd_state);
@@ -1139,7 +1140,8 @@ void __trace_set_need_resched(struct task_struct *curr, int tif)
 {
 	trace_sched_set_need_resched_tp(curr, smp_processor_id(), tif);
 }
-EXPORT_SYMBOL_GPL(__trace_set_need_resched);
+/* This needs non-GPL-only. It's called from other non-GPL-only exports (e.g. wake_up_process()) */
+EXPORT_SYMBOL(__trace_set_need_resched);
 
 void resched_curr(struct rq *rq)
 {
