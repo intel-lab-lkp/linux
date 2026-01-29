@@ -53,7 +53,7 @@ nvkm_vmm_pt_new(const struct nvkm_vmm_desc *desc, bool sparse,
 		}
 	}
 
-	if (!(pgt = kzalloc(sizeof(*pgt) + lpte, GFP_KERNEL)))
+	if (!(pgt = kzalloc(sizeof(*pgt) + (sizeof(pgt->pte[0]) * lpte), GFP_KERNEL)))
 		return NULL;
 	pgt->page = page ? page->shift : 0;
 	pgt->sparse = sparse;
@@ -242,14 +242,17 @@ nvkm_vmm_unref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 		if (pgt->pte[pteb] & NVKM_VMM_PTE_SPARSE) {
 			TRA(it, "LPTE %05x: U -> S %d PTEs", pteb, ptes);
 			pair->func->sparse(vmm, pgt->pt[0], pteb, ptes);
-		} else
-		if (pair->func->invalid) {
-			/* If the MMU supports it, restore the LPTE to the
-			 * INVALID state to tell the MMU there is no point
-			 * trying to fetch the corresponding SPTEs.
-			 */
-			TRA(it, "LPTE %05x: U -> I %d PTEs", pteb, ptes);
-			pair->func->invalid(vmm, pgt->pt[0], pteb, ptes);
+		} else if (!(pgt->pte[pteb] & NVKM_VMM_PTE_BIG_VALID)) {
+			if (pair->func->invalid) {
+				/* If the MMU supports it, restore the LPTE to the
+				 * INVALID state to tell the MMU there is no point
+				 * trying to fetch the corresponding SPTEs.
+				 */
+				TRA(it, "LPTE %05x: U -> I %d PTEs", pteb, ptes);
+				pair->func->invalid(vmm, pgt->pt[0], pteb, ptes);
+			}
+		} else {
+			TRA(it, "LPTE %05x: V %d PTEs", pteb, ptes);
 		}
 	}
 }
@@ -279,6 +282,13 @@ nvkm_vmm_unref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 ptes)
 	/* Dual-PTs need special handling, unless PDE becoming invalid. */
 	if (desc->type == SPT && (pgt->refs[0] || pgt->refs[1]))
 		nvkm_vmm_unref_sptes(it, pgt, desc, ptei, ptes);
+
+	if (desc->type == LPT && (pgt->refs[0] || pgt->refs[1])) {
+		for (u32 lpti = ptei; ptes; lpti++) {
+			pgt->pte[lpti] &= ~NVKM_VMM_PTE_BIG_VALID;
+			ptes--;
+		}
+	}
 
 	/* PT no longer needed? Destroy it. */
 	if (!pgt->refs[type]) {
@@ -332,10 +342,12 @@ nvkm_vmm_ref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 		 * Determine how many LPTEs need to transition state.
 		 */
 		pgt->pte[ptei] |= NVKM_VMM_PTE_VALID;
+		pgt->pte[ptei] &= ~NVKM_VMM_PTE_BIG_VALID;
 		for (ptes = 1, ptei++; ptei < lpti; ptes++, ptei++) {
 			if (pgt->pte[ptei] & NVKM_VMM_PTE_VALID)
 				break;
 			pgt->pte[ptei] |= NVKM_VMM_PTE_VALID;
+			pgt->pte[ptei] &= ~NVKM_VMM_PTE_BIG_VALID;
 		}
 
 		if (pgt->pte[pteb] & NVKM_VMM_PTE_SPARSE) {
@@ -374,6 +386,14 @@ nvkm_vmm_ref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 ptes)
 	if (desc->type == SPT)
 		nvkm_vmm_ref_sptes(it, pgt, desc, ptei, ptes);
 
+	if (desc->type == LPT) {
+		for (u32 lpti = ptei; ptes; lpti++) {
+			pgt->pte[lpti] &= ~NVKM_VMM_PTE_VALID;
+			pgt->pte[lpti] |= NVKM_VMM_PTE_BIG_VALID;
+			ptes--;
+		}
+	}
+
 	return true;
 }
 
@@ -386,7 +406,7 @@ nvkm_vmm_sparse_ptes(const struct nvkm_vmm_desc *desc,
 			pgt->pde[ptei++] = NVKM_VMM_PDE_SPARSE;
 	} else
 	if (desc->type == LPT) {
-		memset(&pgt->pte[ptei], NVKM_VMM_PTE_SPARSE, ptes);
+		memset32(&pgt->pte[ptei], NVKM_VMM_PTE_SPARSE, ptes);
 	}
 }
 
@@ -398,7 +418,7 @@ nvkm_vmm_sparse_unref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 pte
 		memset(&pt->pde[ptei], 0x00, sizeof(pt->pde[0]) * ptes);
 	else
 	if (it->desc->type == LPT)
-		memset(&pt->pte[ptei], 0x00, sizeof(pt->pte[0]) * ptes);
+		memset32(&pt->pte[ptei], 0x00, ptes);
 	return nvkm_vmm_unref_ptes(it, pfn, ptei, ptes);
 }
 
@@ -457,7 +477,7 @@ nvkm_vmm_ref_hwpt(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgd, u32 pdei)
 					desc->func->sparse(vmm, pt, pteb, ptes);
 				else
 					desc->func->invalid(vmm, pt, pteb, ptes);
-				memset(&pgt->pte[pteb], 0x00, ptes);
+				memset32(&pgt->pte[pteb], 0x00, ptes);
 			} else {
 				desc->func->unmap(vmm, pt, pteb, ptes);
 				while (ptes--)
