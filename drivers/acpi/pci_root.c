@@ -760,6 +760,18 @@ static int acpi_pci_root_add(struct acpi_device *device,
 	pci_lock_rescan_remove();
 	pci_bus_add_devices(root->bus);
 	pci_unlock_rescan_remove();
+	/*
+	 * On RISC-V platforms with ACPI, PCIe host bridge dependencies may be
+	 * explicitly defined via the _DEP method in the DSDT.
+	 *
+	 * The firmware uses _DEP to enforce initialization ordering: if host bridge B
+	 * depends on host bridge A, ACPI will delay B's enumeration until A is ready.
+	 *
+	 * Once this host bridge is fully initialized, we clear its _DEP entries to
+	 * release dependent bridges (like B) for enumeration.
+	 */
+	if (IS_ENABLED(CONFIG_RISCV))
+		acpi_dev_clear_dependencies(device);
 	return 1;
 
 remove_dmar:
