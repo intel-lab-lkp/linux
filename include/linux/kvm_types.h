@@ -112,6 +112,8 @@ struct kvm_mmu_memory_cache {
 	gfp_t gfp_custom;
 	u64 init_value;
 	struct kmem_cache *kmem_cache;
+	unsigned long (*page_get)(gfp_t gfp);
+	void (*page_free)(unsigned long addr);
 	int capacity;
 	int nobjs;
 	void **objects;

@@ -356,7 +356,10 @@ static inline void *mmu_memory_cache_alloc_obj(struct kvm_mmu_memory_cache *mc,
 	if (mc->kmem_cache)
 		return kmem_cache_alloc(mc->kmem_cache, gfp_flags);
 
-	page = (void *)__get_free_page(gfp_flags);
+	if (mc->page_get)
+		page = (void *)mc->page_get(gfp_flags);
+	else
+		page = (void *)__get_free_page(gfp_flags);
 	if (page && mc->init_value)
 		memset64(page, mc->init_value, PAGE_SIZE / sizeof(u64));
 	return page;
@@ -416,6 +419,8 @@ void kvm_mmu_free_memory_cache(struct kvm_mmu_memory_cache *mc)
 	while (mc->nobjs) {
 		if (mc->kmem_cache)
 			kmem_cache_free(mc->kmem_cache, mc->objects[--mc->nobjs]);
+		else if (mc->page_free)
+			mc->page_free((unsigned long)mc->objects[--mc->nobjs]);
 		else
 			free_page((unsigned long)mc->objects[--mc->nobjs]);
 	}
