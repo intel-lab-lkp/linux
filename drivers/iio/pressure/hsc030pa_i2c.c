@@ -35,7 +35,7 @@ static int hsc_i2c_recv(struct hsc_data *data)
 
 	ret = i2c_transfer(client->adapter, &msg, 1);
 
-	return (ret == 2) ? 0 : ret;
+	return (ret == 1) ? 0 : ret;
 }
 
 static int hsc_i2c_probe(struct i2c_client *client)
