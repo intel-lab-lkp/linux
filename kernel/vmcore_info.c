@@ -6,6 +6,8 @@
 
 #include <linux/buildid.h>
 #include <linux/init.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
 #include <linux/utsname.h>
 #include <linux/vmalloc.h>
 #include <linux/sizes.h>
@@ -135,6 +137,31 @@ void hwerr_log_error_type(enum hwerr_error_type src)
 }
 EXPORT_SYMBOL_GPL(hwerr_log_error_type);
 
+/* sysfs interface for hardware error recovery statistics */
+static ssize_t vmcore_stats_show(struct kobject *kobj,
+				 struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf,
+			  "Recovered hardware errors:\n"
+			  "  cpu: %d (%lld)\n"
+			  "  memory: %d (%lld)\n"
+			  "  pci: %d (%lld)\n"
+			  "  cxl: %d (%lld)\n"
+			  "  other: %d (%lld)\n",
+			  atomic_read(&hwerr_data[HWERR_RECOV_CPU].count),
+			  (long long)READ_ONCE(hwerr_data[HWERR_RECOV_CPU].timestamp),
+			  atomic_read(&hwerr_data[HWERR_RECOV_MEMORY].count),
+			  (long long)READ_ONCE(hwerr_data[HWERR_RECOV_MEMORY].timestamp),
+			  atomic_read(&hwerr_data[HWERR_RECOV_PCI].count),
+			  (long long)READ_ONCE(hwerr_data[HWERR_RECOV_PCI].timestamp),
+			  atomic_read(&hwerr_data[HWERR_RECOV_CXL].count),
+			  (long long)READ_ONCE(hwerr_data[HWERR_RECOV_CXL].timestamp),
+			  atomic_read(&hwerr_data[HWERR_RECOV_OTHERS].count),
+			  (long long)READ_ONCE(hwerr_data[HWERR_RECOV_OTHERS].timestamp));
+}
+
+static struct kobj_attribute vmcore_stats_attr = __ATTR_RO(vmcore_stats);
+
 static int __init crash_save_vmcoreinfo_init(void)
 {
 	vmcoreinfo_data = (unsigned char *)get_zeroed_page(GFP_KERNEL);
@@ -243,6 +270,10 @@ static int __init crash_save_vmcoreinfo_init(void)
 
 	arch_crash_save_vmcoreinfo();
 	update_vmcoreinfo_note();
+
+	/* Create /sys/kernel/vmcore_stats */
+	if (sysfs_create_file(kernel_kobj, &vmcore_stats_attr.attr))
+		pr_warn("Failed to create vmcore_stats sysfs file\n");
 
 	return 0;
 }

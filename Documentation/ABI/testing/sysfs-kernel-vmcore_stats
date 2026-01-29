@@ -1,0 +1,23 @@
+What:		/sys/kernel/vmcore_stats
+Date:		January 2026
+KernelVersion:	6.20
+Contact:	Breno Leitao <leitao@debian.org>
+Description:
+		Shows statistics related to vmcore functionality. Currently
+		includes hardware error recovery statistics.
+
+		Format:
+		  Recovered hardware errors:
+		    metric: count (timestamp)
+
+		Statistics about recoverable hardware errors that the kernel
+		has handled since boot. Each metric shows the count and
+		timestamp (seconds since epoch) of the last error in
+		parentheses (0 if no errors have occurred).
+
+		Metrics:
+		    - cpu: CPU-related errors (MCE, ARM processor errors)
+		    - memory: Memory-related errors
+		    - pci: PCI/PCIe AER non-fatal errors
+		    - cxl: CXL (Compute Express Link) errors
+		    - other: Other hardware errors
