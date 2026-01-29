@@ -24,6 +24,8 @@
 
 struct folio_batch;
 
+extern struct vfsmount *shm_mnt __ro_after_init;
+
 /*
  * Maintains state across a page table move. The operation assumes both source
  * and destination VMAs already exist and are specified by the user.

@@ -38,6 +38,9 @@
 #include "pnode.h"
 #include "internal.h"
 
+/* For checking memfd bind-mounts via shm_mnt */
+#include "../mm/internal.h"
+
 /* Maximum number of mounts in a mount namespace */
 static unsigned int sysctl_mount_max __read_mostly = 100000;
 
@@ -2898,6 +2901,8 @@ static int do_change_type(const struct path *path, int ms_flags)
  * (3) The caller tries to copy a pidfs mount referring to a pidfd.
  * (4) The caller is trying to copy a mount tree that belongs to an
  *     anonymous mount namespace.
+ * (5) The caller is trying to copy a mount tree belonging to shm_mnt
+ *     (e.g. bind-mounting a file descriptor obtained from memfd_create)
  *
  *     For that to be safe, this helper enforces that the origin mount
  *     namespace the anonymous mount namespace was created from is the
@@ -2938,6 +2943,9 @@ static inline bool may_copy_tree(const struct path *path)
 		return true;
 
 	if (d_op == &pidfs_dentry_operations)
+		return true;
+
+	if (path->mnt == shm_mnt)
 		return true;
 
 	if (!is_mounted(path->mnt))

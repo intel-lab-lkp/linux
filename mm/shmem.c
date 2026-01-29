@@ -43,7 +43,7 @@
 #include <linux/unicode.h>
 #include "swap.h"
 
-static struct vfsmount *shm_mnt __ro_after_init;
+struct vfsmount *shm_mnt __ro_after_init;
 
 #ifdef CONFIG_SHMEM
 /*
