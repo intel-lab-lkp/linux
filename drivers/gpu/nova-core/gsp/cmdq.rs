@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
 use core::{
-    cmp,
     mem,
     sync::atomic::{
         fence,
@@ -265,13 +264,19 @@ impl DmaGspMem {
         // - We will only access the driver-owned part of the shared memory.
         // - Per the safety statement of the function, no concurrent access will be performed.
         let gsp_mem = &unsafe { self.0.as_slice(0, 1) }.unwrap()[0];
-        // PANIC: per the invariant of `cpu_read_ptr`, `rx` is `< MSGQ_NUM_PAGES`.
-        let (before_rx, after_rx) = gsp_mem.gspq.msgq.data.split_at(rx);
+        let data = &gsp_mem.gspq.msgq.data;
 
-        match tx.cmp(&rx) {
-            cmp::Ordering::Equal => (&[], &[]),
-            cmp::Ordering::Greater => (&after_rx[..tx], &[]),
-            cmp::Ordering::Less => (after_rx, &before_rx[..tx]),
+        // The area starting at `rx` and ending at `tx - 1` modulo MSGQ_NUM_PAGES, inclusive,
+        // belongs to the driver for reading.
+        // PANIC:
+        // - per the invariant of `cpu_read_ptr`, `rx < MSGQ_NUM_PAGES`
+        // - per the invariant of `gsp_write_ptr`, `tx < MSGQ_NUM_PAGES`
+        if rx <= tx {
+            // The area is contiguous.
+            (&data[rx..tx], &[])
+        } else {
+            // The area is discontiguous.
+            (&data[rx..], &data[..tx])
         }
     }
 
