@@ -19,6 +19,7 @@
 
 struct mux_gpio {
 	struct gpio_descs *gpios;
+	struct gpio_desc *enable;
 };
 
 static int mux_gpio_set(struct mux_control *mux, int state)
@@ -26,12 +27,30 @@ static int mux_gpio_set(struct mux_control *mux, int state)
 	struct mux_gpio *mux_gpio = mux_chip_priv(mux->chip);
 	DECLARE_BITMAP(values, BITS_PER_TYPE(state));
 	u32 value = state;
+	int ret;
+
+	if (state == MUX_IDLE_DISCONNECT)
+		return gpiod_set_value_cansleep(mux_gpio->enable, 0);
+
+	/*
+	 * Disable the mux before changing address lines to prevent
+	 * glitches where an unintended channel could be briefly
+	 * activated during the transition. When disabled, all mux
+	 * outputs enter high-impedance (high-Z) state. For analog
+	 * signals, downstream capacitance typically maintains the
+	 * signal level during this brief disconnection.
+	 */
+	ret = gpiod_set_value_cansleep(mux_gpio->enable, 0);
+	if (ret)
+		return ret;
 
 	bitmap_from_arr32(values, &value, BITS_PER_TYPE(value));
 
-	gpiod_multi_set_value_cansleep(mux_gpio->gpios, values);
+	ret = gpiod_multi_set_value_cansleep(mux_gpio->gpios, values);
+	if (ret)
+		return ret;
 
-	return 0;
+	return gpiod_set_value_cansleep(mux_gpio->enable, 1);
 }
 
 static const struct mux_control_ops mux_gpio_ops = {
@@ -73,12 +92,24 @@ static int mux_gpio_probe(struct platform_device *pdev)
 
 	ret = device_property_read_u32(dev, "idle-state", (u32 *)&idle_state);
 	if (ret >= 0 && idle_state != MUX_IDLE_AS_IS) {
-		if (idle_state < 0 || idle_state >= mux_chip->mux->states) {
+		if (idle_state == MUX_IDLE_DISCONNECT) {
+			mux_gpio->enable = devm_gpiod_get(dev, "enable",
+							  GPIOD_OUT_LOW);
+			if (IS_ERR(mux_gpio->enable))
+				return dev_err_probe(dev, PTR_ERR(mux_gpio->enable),
+						     "MUX_IDLE_DISCONNECT requires enable-gpios\n");
+		} else if (idle_state < 0 || idle_state >= mux_chip->mux->states) {
 			dev_err(dev, "invalid idle-state %u\n", idle_state);
 			return -EINVAL;
 		}
 
 		mux_chip->mux->idle_state = idle_state;
+	} else {
+		mux_gpio->enable = devm_gpiod_get_optional(dev, "enable",
+							   GPIOD_OUT_LOW);
+		if (IS_ERR(mux_gpio->enable))
+			return dev_err_probe(dev, PTR_ERR(mux_gpio->enable),
+					     "failed to get enable gpio\n");
 	}
 
 	ret = devm_regulator_get_enable_optional(dev, "mux");
