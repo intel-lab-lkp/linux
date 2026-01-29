@@ -1,0 +1,7 @@
+What:		/sys/bus/i2c/devices/i2c-<bus-id>/i2c_freq
+Date:		January 2026
+KernelVersion:	6.20
+Contact:	Francesco Lavra <flavra@baylibre.com>
+Description:	(RW) I2C bus clock frequency, expressed in Hz.
+		Accepted values range from 100000 (standard mode) to 3400000
+		(high-speed mode).

@@ -1444,6 +1444,17 @@ config I2C_TINY_USB
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-tiny-usb.
 
+config I2C_FT4222
+	tristate "FTDI FT4222 USB to I2C interface"
+	depends on USB
+	help
+	  Include support for interfacing with I2C devices via an FTDI
+	  FT4222H USB device that acts as I2C master.
+	  The I2C interface is available when the chip is set up (via the
+	  DCNF0 and DCNF1 pins) in configuration mode 0 or 3.
+
+	  If built as a module, this driver creates a module called i2c-ft4222.
+
 config I2C_VIPERBOARD
 	tristate "Viperboard I2C master support"
 	depends on MFD_VIPERBOARD && USB
