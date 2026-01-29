@@ -416,6 +416,23 @@ config SL28CPLD_WATCHDOG
 	  To compile this driver as a module, choose M here: the
 	  module will be called sl28cpld_wdt.
 
+config SONY_CRONOS_WATCHDOG
+	tristate "Sony Cronos CPLD Watchdog"
+	depends on ARCH_ASPEED || COMPILE_TEST
+	depends on I2C
+	select WATCHDOG_CORE
+	help
+	  Say Y here to include support for the watchdog timer
+	  for the Sony Cronos control CPLD.
+
+	  All known Cronos systems use the ASpeed AST2600 SoC,
+	  therefore the configuration option is gated on
+	  ARCH_ASPEED selection.  If this changes, add the new
+	  SoCs to the selection list.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called sony-cronos-wdt.
+
 # ALPHA Architecture
 
 # ARM Architecture
