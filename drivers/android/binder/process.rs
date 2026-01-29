@@ -22,6 +22,8 @@ use kernel::{
     id_pool::IdPool,
     list::{List, ListArc, ListArcField, ListLinks},
     mm,
+    pid::Pid,
+    pid_namespace::init_pid_ns,
     prelude::*,
     rbtree::{self, RBTree, RBTreeNode, RBTreeNodeReservation},
     seq_file::SeqFile,
@@ -29,7 +31,7 @@ use kernel::{
     sync::poll::PollTable,
     sync::{
         lock::{spinlock::SpinLockBackend, Guard},
-        Arc, ArcBorrow, CondVar, CondVarTimeoutResult, Mutex, SpinLock, UniqueArc,
+        Arc, ArcBorrow, CondVar, CondVarTimeoutResult, Mutex, rcu, SpinLock, UniqueArc,
     },
     task::Task,
     types::ARef,
@@ -1498,17 +1500,47 @@ impl Process {
     }
 }
 
+/// Convert a PID from the current namespace to the global (init) namespace.
+fn convert_to_init_ns_tgid(pid: u32) -> Result<i32> {
+    let current = kernel::current!();
+    let init_ns = init_pid_ns();
+
+    if current.active_pid_ns().map(|ns| ns.as_ptr()) == Some(init_ns.as_ptr()) {
+        // Already in init namespace.
+        return Ok(pid as i32);
+    }
+
+    if pid == 0 {
+        return Err(EINVAL);
+    }
+
+    let rcu_guard = rcu::read_lock();
+
+    let pid_struct = Pid::find_vpid_with_guard(pid as i32, &rcu_guard).ok_or(ESRCH)?;
+    let task = pid_struct.pid_task_with_guard(&rcu_guard).ok_or(ESRCH)?;
+    let init_ns_pid = task.tgid_nr_ns(Some(init_ns));
+
+    if init_ns_pid == 0 {
+        return Err(ESRCH);
+    }
+
+    Ok(init_ns_pid)
+}
+
 fn get_frozen_status(data: UserSlice) -> Result {
     let (mut reader, mut writer) = data.reader_writer();
 
     let mut info = reader.read::<BinderFrozenStatusInfo>()?;
+
+    let init_ns_pid = convert_to_init_ns_tgid(info.pid)?;
+
     info.sync_recv = 0;
     info.async_recv = 0;
     let mut found = false;
 
     for ctx in crate::context::get_all_contexts()? {
         ctx.for_each_proc(|proc| {
-            if proc.task.pid() == info.pid as _ {
+            if proc.task.pid() == init_ns_pid as _ {
                 found = true;
                 let inner = proc.inner.lock();
                 let txns_pending = inner.txns_pending_locked();
@@ -1530,13 +1562,15 @@ fn get_frozen_status(data: UserSlice) -> Result {
 fn ioctl_freeze(reader: &mut UserSliceReader) -> Result {
     let info = reader.read::<BinderFreezeInfo>()?;
 
+    let init_ns_pid = convert_to_init_ns_tgid(info.pid)?;
+
     // Very unlikely for there to be more than 3, since a process normally uses at most binder and
     // hwbinder.
     let mut procs = KVec::with_capacity(3, GFP_KERNEL)?;
 
     let ctxs = crate::context::get_all_contexts()?;
     for ctx in ctxs {
-        for proc in ctx.get_procs_with_pid(info.pid as i32)? {
+        for proc in ctx.get_procs_with_pid(init_ns_pid)? {
             procs.push(proc, GFP_KERNEL)?;
         }
     }
