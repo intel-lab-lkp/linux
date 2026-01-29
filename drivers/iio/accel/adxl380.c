@@ -206,7 +206,6 @@ struct adxl380_state {
 	struct mutex lock;
 	enum adxl380_axis tap_axis_en;
 	u8 range;
-	u8 odr;
 	u8 fifo_set_size;
 	u8 transf_buf[3];
 	u16 watermark;
