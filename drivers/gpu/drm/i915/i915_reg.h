@@ -428,9 +428,6 @@
 #define   MI_ARB_LOW_PRIORITY_GRACE_4KB		(0 << 4)	/* default */
 #define   MI_ARB_LOW_PRIORITY_GRACE_8KB		(1 << 4)
 
-/* Disable display A/B trickle feed */
-#define   MI_ARB_DISPLAY_TRICKLE_FEED_DISABLE	(1 << 2)
-
 /* Set display plane priority */
 #define   MI_ARB_DISPLAY_PRIORITY_A_B		(0 << 0)	/* display A > display B */
 #define   MI_ARB_DISPLAY_PRIORITY_B_A		(1 << 0)	/* display B > display A */
