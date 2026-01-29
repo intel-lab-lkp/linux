@@ -325,6 +325,22 @@ static void early_init_intel(struct cpuinfo_x86 *c)
 		setup_clear_cpu_cap(X86_FEATURE_PGE);
 	}
 
+	/*
+	 * Goldmont and Tremont-D support RFDS mitigation via VERW,
+	 * but do not enumerate it in MSRs. Explicitly set the capability
+	 * based on the microcode revision. (Tremont-D requires stepping 7).
+	 */
+	switch (c->x86_vfm) {
+	case INTEL_ATOM_GOLDMONT:
+		if (c->microcode >= 0x28)
+			set_cpu_cap(c, X86_FEATURE_RFDS_CLEAR);
+		break;
+	case INTEL_ATOM_TREMONT_D:
+		if (c->x86_stepping == 7 && c->microcode >= 0x4c000026)
+			set_cpu_cap(c, X86_FEATURE_RFDS_CLEAR);
+		break;
+	}
+
 	check_memory_type_self_snoop_errata(c);
 
 	/*

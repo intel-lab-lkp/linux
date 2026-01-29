@@ -650,7 +650,8 @@ static const char * const rfds_strings[] = {
 
 static inline bool __init verw_clears_cpu_reg_file(void)
 {
-	return (x86_arch_cap_msr & ARCH_CAP_RFDS_CLEAR);
+	/* Check the synthetic flag for CPUs not reporting RFDS_CLEAR via MSR. */
+	return (x86_arch_cap_msr & ARCH_CAP_RFDS_CLEAR) || boot_cpu_has(X86_FEATURE_RFDS_CLEAR);
 }
 
 static void __init rfds_select_mitigation(void)
