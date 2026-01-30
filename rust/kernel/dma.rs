@@ -423,6 +423,9 @@ pub type CoherentSlice<T> = CoherentAllocation<T, RuntimeSize>;
 /// A coherent DMA allocation for an array of `N` elements.
 pub type CoherentArray<T, const N: usize> = CoherentAllocation<T, StaticSize<N>>;
 
+/// A coherent DMA allocation for a single object.
+pub type CoherentObject<T> = CoherentAllocation<T, StaticSize<1>>;
+
 impl<T: AsBytes + FromBytes, Size: AllocationSize> CoherentAllocation<T, Size> {
     /// Returns the number of elements `T` in this allocation.
     ///
