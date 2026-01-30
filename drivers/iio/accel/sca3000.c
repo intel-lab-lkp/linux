@@ -1435,6 +1435,34 @@ static const struct iio_info sca3000_info = {
 	.write_event_config = &sca3000_write_event_config,
 };
 
+static int sca3000_stop_all_interrupts(struct sca3000_state *st)
+{
+	int ret;
+
+	mutex_lock(&st->lock);
+	ret = sca3000_read_data_short(st, SCA3000_REG_INT_MASK_ADDR, 1);
+	if (ret)
+		goto error_ret;
+	ret = sca3000_write_reg(st, SCA3000_REG_INT_MASK_ADDR,
+				(st->rx[0] &
+				 ~(SCA3000_REG_INT_MASK_RING_THREE_QUARTER |
+				   SCA3000_REG_INT_MASK_RING_HALF |
+				   SCA3000_REG_INT_MASK_ALL_INTS)));
+error_ret:
+	mutex_unlock(&st->lock);
+	return ret;
+}
+
+static void sca3000_disable_interrupts(void *data)
+{
+	struct iio_dev *indio_dev = data;
+	struct sca3000_state *st = iio_priv(indio_dev);
+
+	/* Must ensure no interrupts can be generated after this! */
+	sca3000_stop_all_interrupts(st);
+}
+
+
 static int sca3000_probe(struct spi_device *spi)
 {
 	const struct spi_device_id *id = spi_get_device_id(spi);
@@ -1479,6 +1507,7 @@ static int sca3000_probe(struct spi_device *spi)
 		if (ret)
 			return ret;
 	}
+
 	ret = sca3000_clean_setup(st);
 	if (ret)
 		return ret;
@@ -1487,34 +1516,12 @@ static int sca3000_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	return devm_iio_device_register(dev, indio_dev);
-}
-
-static int sca3000_stop_all_interrupts(struct sca3000_state *st)
-{
-	int ret;
-
-	mutex_lock(&st->lock);
-	ret = sca3000_read_data_short(st, SCA3000_REG_INT_MASK_ADDR, 1);
+	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
-		goto error_ret;
-	ret = sca3000_write_reg(st, SCA3000_REG_INT_MASK_ADDR,
-				(st->rx[0] &
-				 ~(SCA3000_REG_INT_MASK_RING_THREE_QUARTER |
-				   SCA3000_REG_INT_MASK_RING_HALF |
-				   SCA3000_REG_INT_MASK_ALL_INTS)));
-error_ret:
-	mutex_unlock(&st->lock);
-	return ret;
-}
+		return ret;
 
-static void sca3000_remove(struct spi_device *spi)
-{
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct sca3000_state *st = iio_priv(indio_dev);
+	return devm_add_action_or_reset(dev, sca3000_disable_interrupts, indio_dev);
 
-	/* Must ensure no interrupts can be generated after this! */
-	sca3000_stop_all_interrupts(st);
 }
 
 static const struct spi_device_id sca3000_id[] = {
@@ -1531,7 +1538,6 @@ static struct spi_driver sca3000_driver = {
 		.name = "sca3000",
 	},
 	.probe = sca3000_probe,
-	.remove = sca3000_remove,
 	.id_table = sca3000_id,
 };
 module_spi_driver(sca3000_driver);
