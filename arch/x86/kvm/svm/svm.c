@@ -200,11 +200,49 @@ static int get_npt_level(void)
 #endif
 }
 
+static int svm_set_efer_svme(struct kvm_vcpu *vcpu, u64 old_efer, u64 new_efer)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	int r;
+
+	if ((old_efer & EFER_SVME) == (new_efer & EFER_SVME))
+		return 0;
+
+	if (new_efer & EFER_SVME) {
+		r = svm_allocate_nested(svm);
+		if (r)
+			return r;
+
+		/*
+		 * Never intercept #GP for SEV guests, KVM can't decrypt guest
+		 * memory to workaround the erratum.
+		 */
+		if (svm_gp_erratum_intercept && !sev_guest(vcpu->kvm))
+			set_exception_intercept(svm, GP_VECTOR);
+	} else {
+
+		svm_leave_nested(vcpu);
+		/* #GP intercept is still needed for vmware backdoor */
+		if (!enable_vmware_backdoor)
+			clr_exception_intercept(svm, GP_VECTOR);
+
+		/*
+		 * Free the nested guest state, unless we are in SMM.  In this
+		 * case we will return to the nested guest as soon as we leave
+		 * SMM.
+		 */
+		if (!is_smm(vcpu))
+			svm_free_nested(svm);
+	}
+	return 0;
+}
+
 int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	u64 old_efer = vcpu->arch.efer;
 	vcpu->arch.efer = efer;
+	int r;
 
 	if (!npt_enabled) {
 		/* Shadow paging assumes NX to be available.  */
@@ -214,36 +252,10 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 			efer &= ~EFER_LME;
 	}
 
-	if ((old_efer & EFER_SVME) != (efer & EFER_SVME)) {
-		if (!(efer & EFER_SVME)) {
-			svm_leave_nested(vcpu);
-			/* #GP intercept is still needed for vmware backdoor */
-			if (!enable_vmware_backdoor)
-				clr_exception_intercept(svm, GP_VECTOR);
-
-			/*
-			 * Free the nested guest state, unless we are in SMM.
-			 * In this case we will return to the nested guest
-			 * as soon as we leave SMM.
-			 */
-			if (!is_smm(vcpu))
-				svm_free_nested(svm);
-
-		} else {
-			int ret = svm_allocate_nested(svm);
-
-			if (ret) {
-				vcpu->arch.efer = old_efer;
-				return ret;
-			}
-
-			/*
-			 * Never intercept #GP for SEV guests, KVM can't
-			 * decrypt guest memory to workaround the erratum.
-			 */
-			if (svm_gp_erratum_intercept && !sev_guest(vcpu->kvm))
-				set_exception_intercept(svm, GP_VECTOR);
-		}
+	r = svm_set_efer_svme(vcpu, old_efer, efer);
+	if (r) {
+		vcpu->arch.efer = old_efer;
+		return r;
 	}
 
 	svm->vmcb->save.efer = efer | EFER_SVME;
