@@ -515,6 +515,7 @@ int luo_session_deserialize(void)
 	struct luo_session_header *sh = &luo_session_global.incoming;
 	static bool is_deserialized;
 	static int err;
+	u64 count;
 
 	/* If has been deserialized, always return the same error code */
 	if (is_deserialized)
@@ -523,6 +524,13 @@ int luo_session_deserialize(void)
 	is_deserialized = true;
 	if (!sh->active)
 		return 0;
+
+	count = sh->header_ser->count;
+	if (count > LUO_SESSION_MAX) {
+		pr_warn("incoming session count %llu exceeds max %lu\n",
+			count, LUO_SESSION_MAX);
+		count = LUO_SESSION_MAX;
+	}
 
 	/*
 	 * Note on error handling:
@@ -539,7 +547,7 @@ int luo_session_deserialize(void)
 	 * userspace to detect the failure and trigger a reboot, which will
 	 * reliably reset devices and reclaim memory.
 	 */
-	for (int i = 0; i < sh->header_ser->count; i++) {
+	for (u64 i = 0; i < count; i++) {
 		struct luo_session *session;
 
 		session = luo_session_alloc(sh->ser[i].name);
