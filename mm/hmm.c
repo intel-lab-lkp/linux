@@ -675,6 +675,13 @@ int hmm_range_fault(struct hmm_range *range)
 		ret = walk_page_range(mm, hmm_vma_walk.last, range->end,
 				      &hmm_walk_ops, &hmm_vma_walk);
 		/*
+		 * Conditionally reschedule to let other work items get
+		 * a chance to unlock device-private pages whose locks
+		 * we're spinning on.
+		 */
+		cond_resched();
+
+		/*
 		 * When -EBUSY is returned the loop restarts with
 		 * hmm_vma_walk.last set to an address that has not been stored
 		 * in pfns. All entries < last in the pfn array are set to their
