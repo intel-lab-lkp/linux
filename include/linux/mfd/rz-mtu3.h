@@ -10,6 +10,8 @@
 #include <linux/mutex.h>
 
 /* 8-bit shared register offsets macros */
+#define RZ_MTU3_TOERA	0x00A /* Timer output master enable register A */
+#define RZ_MTU3_TOERB	0x80A /* Timer output master enable register B */
 #define RZ_MTU3_TSTRA	0x080 /* Timer start register A */
 #define RZ_MTU3_TSTRB	0x880 /* Timer start register B */
 
