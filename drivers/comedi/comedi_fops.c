@@ -118,7 +118,6 @@ static void comedi_dev_kref_release(struct kref *kref)
 
 	mutex_destroy(&dev->mutex);
 	put_device(dev->class_dev);
-	kfree(dev);
 }
 
 /**
