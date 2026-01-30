@@ -1968,6 +1968,35 @@ static int cxl_region_sort_targets(struct cxl_region *cxlr)
 	return rc;
 }
 
+static void unregister_region(void *dev);
+
+#define CXL_REGION_EP_WAIT_MS (30 * 1000) /* 30 seconds */
+
+static void cxl_region_endpoint_wait_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct cxl_region *cxlr =
+		container_of(dwork, struct cxl_region, endpoint_wait_work);
+	struct cxl_region_params *p = &cxlr->params;
+	bool timeout_expired;
+
+	scoped_guard(rwsem_read, &cxl_rwsem.region)
+	{
+		timeout_expired = (p->nr_targets < p->interleave_ways);
+	}
+
+	if (timeout_expired) {
+		struct cxl_root_decoder *cxlrd =
+			to_cxl_root_decoder(cxlr->dev.parent);
+		struct cxl_port *port = cxlrd_to_port(cxlrd);
+
+		dev_err(&cxlr->dev,
+			"timeout waiting for endpoints: %d of %d arrived, unregistering region\n",
+			p->nr_targets, p->interleave_ways);
+		devm_release_action(port->uport_dev, unregister_region, cxlr);
+	}
+}
+
 static int cxl_region_attach(struct cxl_region *cxlr,
 			     struct cxl_endpoint_decoder *cxled, int pos)
 {
@@ -2059,8 +2088,23 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 			return rc;
 
 		/* await more targets to arrive... */
-		if (p->nr_targets < p->interleave_ways)
+		if (p->nr_targets < p->interleave_ways) {
+			if (cxlr->endpoint_wait_armed)
+				return 0;
+
+			INIT_DELAYED_WORK(&cxlr->endpoint_wait_work,
+					  cxl_region_endpoint_wait_work);
+			schedule_delayed_work(
+				&cxlr->endpoint_wait_work,
+				msecs_to_jiffies(CXL_REGION_EP_WAIT_MS));
+			cxlr->endpoint_wait_armed = true;
+			dev_dbg(&cxlr->dev,
+				"waiting %d ms for %d more endpoints\n",
+				CXL_REGION_EP_WAIT_MS,
+				p->interleave_ways - p->nr_targets);
+
 			return 0;
+		}
 
 		/*
 		 * All targets are here, which implies all PCI enumeration that
@@ -2443,6 +2487,11 @@ static void unregister_region(void *_cxlr)
 	struct cxl_region *cxlr = _cxlr;
 	struct cxl_region_params *p = &cxlr->params;
 	int i;
+
+	if (cxlr->endpoint_wait_armed) {
+		cancel_delayed_work_sync(&cxlr->endpoint_wait_work);
+		cxlr->endpoint_wait_armed = false;
+	}
 
 	device_del(&cxlr->dev);
 
