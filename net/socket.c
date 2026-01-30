@@ -77,6 +77,7 @@
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
 #include <linux/security.h>
+#include <linux/uio.h>
 #include <linux/syscalls.h>
 #include <linux/compat.h>
 #include <linux/kmod.h>
@@ -2356,6 +2357,38 @@ SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
 INDIRECT_CALLABLE_DECLARE(bool tcp_bpf_bypass_getsockopt(int level,
 							 int optname));
 
+static int do_sock_getsockopt_iter(struct socket *sock,
+				   const struct proto_ops *ops, int level,
+				   int optname, sockptr_t optval,
+				   sockptr_t optlen)
+{
+	struct kvec kvec;
+	sockopt_t opt;
+	int koptlen;
+	int err;
+
+	if (copy_from_sockptr(&koptlen, optlen, sizeof(int)))
+		return -EFAULT;
+
+	if (optval.is_kernel) {
+		kvec.iov_base = optval.kernel;
+		kvec.iov_len = koptlen;
+		iov_iter_kvec(&opt.iter, ITER_DEST, &kvec, 1, koptlen);
+	} else {
+		iov_iter_ubuf(&opt.iter, ITER_DEST, optval.user, koptlen);
+	}
+	opt.optlen = koptlen;
+
+	err = ops->getsockopt_iter(sock, level, optname, &opt);
+	if (err)
+		return err;
+
+	if (copy_to_sockptr(optlen, &opt.optlen, sizeof(int)))
+		return -EFAULT;
+
+	return 0;
+}
+
 int do_sock_getsockopt(struct socket *sock, bool compat, int level,
 		       int optname, sockptr_t optval, sockptr_t optlen)
 {
@@ -2373,15 +2406,18 @@ int do_sock_getsockopt(struct socket *sock, bool compat, int level,
 	ops = READ_ONCE(sock->ops);
 	if (level == SOL_SOCKET) {
 		err = sk_getsockopt(sock->sk, level, optname, optval, optlen);
-	} else if (unlikely(!ops->getsockopt)) {
-		err = -EOPNOTSUPP;
-	} else {
+	} else if (ops->getsockopt_iter) {
+		err = do_sock_getsockopt_iter(sock, ops, level, optname,
+					      optval, optlen);
+	} else if (ops->getsockopt) {
 		if (WARN_ONCE(optval.is_kernel || optlen.is_kernel,
 			      "Invalid argument type"))
 			return -EOPNOTSUPP;
 
 		err = ops->getsockopt(sock, level, optname, optval.user,
 				      optlen.user);
+	} else {
+		err = -EOPNOTSUPP;
 	}
 
 	if (!compat)
