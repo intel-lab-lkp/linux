@@ -7897,9 +7897,9 @@ enum nl80211_peer_measurement_ftm_capa {
  *	channel specified in %NL80211_PMSR_PEER_ATTR_CHAN until it receives the
  *	FTM request from the peer or the timeout specified by
  *	%NL80211_ATTR_TIMEOUT has expired.
- *	Only valid if %NL80211_PMSR_FTM_REQ_ATTR_LMR_FEEDBACK is set (so the
+ *	set %NL80211_PMSR_FTM_REQ_ATTR_LMR_FEEDBACK so the
  *	RSTA will have the measurement results to report back in the FTM
- *	response).
+ *	response.
  *
  * @NUM_NL80211_PMSR_FTM_REQ_ATTR: internal
  * @NL80211_PMSR_FTM_REQ_ATTR_MAX: highest attribute number
