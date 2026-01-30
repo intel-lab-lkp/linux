@@ -563,7 +563,7 @@ static int __init __xbc_parse_value(char **__v, char **__n)
 	char *p, *v = *__v;
 	int c, quotes = 0;
 
-	v = skip_spaces(v);
+	v = skip_spaces_until_newline(v);
 	while (*v == '#') {
 		v = skip_comment(v);
 		v = skip_spaces(v);

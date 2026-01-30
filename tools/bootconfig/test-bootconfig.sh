@@ -171,6 +171,24 @@ $BOOTCONF $INITRD > $OUTFILE
 xfail grep -q 'val[[:space:]]' $OUTFILE
 xpass grep -q 'val2[[:space:]]' $OUTFILE
 
+echo "Empty value with ="
+cat > $TEMPCONF << EOF
+foo =
+bar
+EOF
+$BOOTCONF $TEMPCONF > $OUTFILE
+xfail grep 'foo[[:space:]]=[[:space:]]"bar"' $OUTFILE
+xpass grep 'foo[[:space:]]=[[:space:]]"";' $OUTFILE
+
+echo "Continue value after comment"
+cat > $TEMPCONF << EOF
+foo = # comment
+bar
+EOF
+$BOOTCONF $TEMPCONF > $OUTFILE
+xpass grep 'foo[[:space:]]=[[:space:]]"bar"' $OUTFILE
+xfail grep 'foo[[:space:]]=[[:space:]]"";' $OUTFILE
+
 echo "=== expected failure cases ==="
 for i in samples/bad-* ; do
   xfail $BOOTCONF -a $i $INITRD
