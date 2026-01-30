@@ -951,11 +951,16 @@ static inline unsigned long page_vma_walk_flags(const struct folio *folio,
 
 static inline unsigned long folio_page_vma_walk_pfn(const struct folio *folio)
 {
+	if (folio_is_device_private(folio))
+		return device_private_folio_to_offset(folio);
+
 	return folio_pfn(folio);
 }
 
 static inline struct folio *page_vma_walk_pfn_to_folio(struct page_vma_mapped_walk *pvmw)
 {
+	if (pvmw->flags & PVMW_DEVICE_PRIVATE)
+		return page_folio(device_private_offset_to_page(pvmw->pfn));
 	return pfn_folio(pvmw->pfn);
 }
 
