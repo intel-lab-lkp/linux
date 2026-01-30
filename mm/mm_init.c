@@ -1102,7 +1102,7 @@ static void __ref memmap_init_compound(struct page *head,
 		prep_compound_tail(head, pfn - head_pfn);
 		set_page_count(page, 0);
 	}
-	prep_compound_head(head, order);
+	set_compound_order(head, order);
 }
 
 void __ref memmap_init_zone_device(struct zone *zone,

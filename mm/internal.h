@@ -854,30 +854,38 @@ static inline struct folio *page_rmappable_folio(struct page *page)
 {
 	struct folio *folio = (struct folio *)page;
 
-	if (folio && folio_test_large(folio))
+	if (folio && folio_test_large(folio)) {
+		unsigned int order = compound_order(page);
+
+#ifdef NR_PAGES_IN_LARGE_FOLIO
+		folio->_nr_pages = 1U << order;
+#endif
+		atomic_set(&folio->_large_mapcount, -1);
+		if (IS_ENABLED(CONFIG_PAGE_MAPCOUNT))
+			atomic_set(&folio->_nr_pages_mapped, 0);
+		if (IS_ENABLED(CONFIG_MM_ID)) {
+			folio->_mm_ids = 0;
+			folio->_mm_id_mapcount[0] = -1;
+			folio->_mm_id_mapcount[1] = -1;
+		}
+		if (IS_ENABLED(CONFIG_64BIT) || order > 1) {
+			atomic_set(&folio->_pincount, 0);
+			atomic_set(&folio->_entire_mapcount, -1);
+		}
+		if (order > 1)
+			INIT_LIST_HEAD(&folio->_deferred_list);
 		folio_set_large_rmappable(folio);
+	}
 	return folio;
 }
 
-static inline void prep_compound_head(struct page *page, unsigned int order)
+static inline void set_compound_order(struct page *page, unsigned int order)
 {
-	struct folio *folio = (struct folio *)page;
+	if (WARN_ON_ONCE(!order || !PageHead(page)))
+		return;
+	VM_WARN_ON_ONCE(order > MAX_FOLIO_ORDER);
 
-	folio_set_order(folio, order);
-	atomic_set(&folio->_large_mapcount, -1);
-	if (IS_ENABLED(CONFIG_PAGE_MAPCOUNT))
-		atomic_set(&folio->_nr_pages_mapped, 0);
-	if (IS_ENABLED(CONFIG_MM_ID)) {
-		folio->_mm_ids = 0;
-		folio->_mm_id_mapcount[0] = -1;
-		folio->_mm_id_mapcount[1] = -1;
-	}
-	if (IS_ENABLED(CONFIG_64BIT) || order > 1) {
-		atomic_set(&folio->_pincount, 0);
-		atomic_set(&folio->_entire_mapcount, -1);
-	}
-	if (order > 1)
-		INIT_LIST_HEAD(&folio->_deferred_list);
+	page[1].flags.f = (page[1].flags.f & ~0xffUL) | order;
 }
 
 static inline void prep_compound_tail(struct page *head, int tail_idx)

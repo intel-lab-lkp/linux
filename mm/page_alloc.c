@@ -746,7 +746,7 @@ void prep_compound_page(struct page *page, unsigned int order)
 	for (i = 1; i < nr_pages; i++)
 		prep_compound_tail(page, i);
 
-	prep_compound_head(page, order);
+	set_compound_order(page, order);
 }
 
 static inline void set_buddy_order(struct page *page, unsigned int order)
@@ -1126,7 +1126,8 @@ static inline bool is_check_pages_enabled(void)
 	return static_branch_unlikely(&check_pages_enabled);
 }
 
-static int free_tail_page_prepare(struct page *head_page, struct page *page)
+static int free_tail_page_prepare(struct page *head_page, struct page *page,
+		bool large_rmappable)
 {
 	struct folio *folio = (struct folio *)head_page;
 	int ret = 1;
@@ -1140,6 +1141,13 @@ static int free_tail_page_prepare(struct page *head_page, struct page *page)
 	if (!is_check_pages_enabled()) {
 		ret = 0;
 		goto out;
+	}
+	if (!large_rmappable) {
+		if (page->mapping != TAIL_MAPPING) {
+			bad_page(page, "corrupted mapping in compound page's tail page");
+			goto out;
+		}
+		goto skip_rmappable_checks;
 	}
 	switch (page - head_page) {
 	case 1:
@@ -1198,11 +1206,12 @@ static int free_tail_page_prepare(struct page *head_page, struct page *page)
 		fallthrough;
 	default:
 		if (page->mapping != TAIL_MAPPING) {
-			bad_page(page, "corrupted mapping in tail page");
+			bad_page(page, "corrupted mapping in folio's tail page");
 			goto out;
 		}
 		break;
 	}
+skip_rmappable_checks:
 	if (unlikely(!PageTail(page))) {
 		bad_page(page, "PageTail not set");
 		goto out;
@@ -1392,17 +1401,21 @@ __always_inline bool free_pages_prepare(struct page *page,
 	 * avoid checking PageCompound for order-0 pages.
 	 */
 	if (unlikely(order)) {
+		bool large_rmappable = false;
 		int i;
 
 		if (compound) {
+			large_rmappable = folio_test_large_rmappable(folio);
+			/* clear compound order */
 			page[1].flags.f &= ~PAGE_FLAGS_SECOND;
 #ifdef NR_PAGES_IN_LARGE_FOLIO
-			folio->_nr_pages = 0;
+			if (large_rmappable)
+				folio->_nr_pages = 0;
 #endif
 		}
 		for (i = 1; i < (1 << order); i++) {
 			if (compound)
-				bad += free_tail_page_prepare(page, page + i);
+				bad += free_tail_page_prepare(page, page + i, large_rmappable);
 			if (is_check_pages_enabled()) {
 				if (free_page_is_bad(page + i)) {
 					bad++;
