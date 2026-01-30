@@ -5,13 +5,15 @@ mod boot;
 use kernel::{
     device,
     dma::{
-        CoherentAllocation,
+        CoherentArray,
+        CoherentObject,
+        CoherentSlice,
         DmaAddress, //
     },
+    dma_write,
     pci,
     prelude::*,
-    transmute::AsBytes,
-    try_dma_write, //
+    transmute::AsBytes, //
 };
 
 pub(crate) mod cmdq;
@@ -74,14 +76,14 @@ impl<const NUM_PAGES: usize> PteArray<NUM_PAGES> {
 /// then pp points to index into the buffer where the next logging entry will
 /// be written. Therefore, the logging data is valid if:
 ///   1 <= pp < sizeof(buffer)/sizeof(u64)
-struct LogBuffer(CoherentAllocation<u8>);
+struct LogBuffer(CoherentSlice<u8>);
 
 impl LogBuffer {
     /// Creates a new `LogBuffer` mapped on `dev`.
     fn new(dev: &device::Device<device::Bound>) -> Result<Self> {
         const NUM_PAGES: usize = RM_LOG_BUFFER_NUM_PAGES;
 
-        let mut obj = Self(CoherentAllocation::<u8>::alloc_coherent(
+        let mut obj = Self(CoherentSlice::<u8>::alloc_coherent(
             dev,
             NUM_PAGES * GSP_PAGE_SIZE,
             GFP_KERNEL | __GFP_ZERO,
@@ -100,11 +102,14 @@ impl LogBuffer {
     }
 }
 
+/// Number of `LibosMemoryRegionInitArgument` entries that fit in a GSP page.
+const LIBOS_REGION_SIZE: usize = GSP_PAGE_SIZE / size_of::<LibosMemoryRegionInitArgument>();
+
 /// GSP runtime data.
 #[pin_data]
 pub(crate) struct Gsp {
     /// Libos arguments.
-    pub(crate) libos: CoherentAllocation<LibosMemoryRegionInitArgument>,
+    pub(crate) libos: CoherentArray<LibosMemoryRegionInitArgument, LIBOS_REGION_SIZE>,
     /// Init log buffer.
     loginit: LogBuffer,
     /// Interrupts log buffer.
@@ -114,40 +119,37 @@ pub(crate) struct Gsp {
     /// Command queue.
     pub(crate) cmdq: Cmdq,
     /// RM arguments.
-    rmargs: CoherentAllocation<GspArgumentsCached>,
+    rmargs: CoherentObject<GspArgumentsCached>,
 }
 
 impl Gsp {
     // Creates an in-place initializer for a `Gsp` manager for `pdev`.
     pub(crate) fn new(pdev: &pci::Device<device::Bound>) -> Result<impl PinInit<Self, Error>> {
         let dev = pdev.as_ref();
-        let libos = CoherentAllocation::<LibosMemoryRegionInitArgument>::alloc_coherent(
-            dev,
-            GSP_PAGE_SIZE / size_of::<LibosMemoryRegionInitArgument>(),
-            GFP_KERNEL | __GFP_ZERO,
-        )?;
+        let libos =
+            CoherentArray::<LibosMemoryRegionInitArgument, LIBOS_REGION_SIZE>::alloc_coherent(
+                dev,
+                GFP_KERNEL | __GFP_ZERO,
+            )?;
 
         // Initialise the logging structures. The OpenRM equivalents are in:
         // _kgspInitLibosLoggingStructures (allocates memory for buffers)
         // kgspSetupLibosInitArgs_IMPL (creates pLibosInitArgs[] array)
         let loginit = LogBuffer::new(dev)?;
-        try_dma_write!(libos[0] = LibosMemoryRegionInitArgument::new("LOGINIT", &loginit.0))?;
+        dma_write!(libos[0] = LibosMemoryRegionInitArgument::new("LOGINIT", &loginit.0));
 
         let logintr = LogBuffer::new(dev)?;
-        try_dma_write!(libos[1] = LibosMemoryRegionInitArgument::new("LOGINTR", &logintr.0))?;
+        dma_write!(libos[1] = LibosMemoryRegionInitArgument::new("LOGINTR", &logintr.0));
 
         let logrm = LogBuffer::new(dev)?;
-        try_dma_write!(libos[2] = LibosMemoryRegionInitArgument::new("LOGRM", &logrm.0))?;
+        dma_write!(libos[2] = LibosMemoryRegionInitArgument::new("LOGRM", &logrm.0));
 
         let cmdq = Cmdq::new(dev)?;
 
-        let rmargs = CoherentAllocation::<GspArgumentsCached>::alloc_coherent(
-            dev,
-            1,
-            GFP_KERNEL | __GFP_ZERO,
-        )?;
-        try_dma_write!(rmargs[0] = fw::GspArgumentsCached::new(&cmdq))?;
-        try_dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", &rmargs))?;
+        let rmargs =
+            CoherentObject::<GspArgumentsCached>::alloc_coherent(dev, GFP_KERNEL | __GFP_ZERO)?;
+        dma_write!(rmargs[0] = fw::GspArgumentsCached::new(&cmdq));
+        dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", &rmargs));
 
         Ok(try_pin_init!(Self {
             libos,

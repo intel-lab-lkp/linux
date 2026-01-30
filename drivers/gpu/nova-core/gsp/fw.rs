@@ -9,17 +9,14 @@ use r570_144 as bindings;
 use core::ops::Range;
 
 use kernel::{
-    dma::CoherentAllocation,
+    dma::CoherentSlice,
     fmt,
     prelude::*,
     ptr::{
         Alignable,
         Alignment, //
     },
-    sizes::{
-        SZ_128K,
-        SZ_1M, //
-    },
+    sizes::{SZ_128K, SZ_1M},
     transmute::{
         AsBytes,
         FromBytes, //
@@ -652,10 +649,7 @@ unsafe impl AsBytes for LibosMemoryRegionInitArgument {}
 unsafe impl FromBytes for LibosMemoryRegionInitArgument {}
 
 impl LibosMemoryRegionInitArgument {
-    pub(crate) fn new<A: AsBytes + FromBytes>(
-        name: &'static str,
-        obj: &CoherentAllocation<A>,
-    ) -> Self {
+    pub(crate) fn new<A: AsBytes + FromBytes>(name: &'static str, obj: &CoherentSlice<A>) -> Self {
         /// Generates the `ID8` identifier required for some GSP objects.
         fn id8(name: &str) -> u64 {
             let mut bytes = [0u8; core::mem::size_of::<u64>()];

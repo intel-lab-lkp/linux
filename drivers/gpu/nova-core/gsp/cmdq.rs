@@ -12,9 +12,10 @@ use core::{
 use kernel::{
     device,
     dma::{
-        CoherentAllocation,
+        CoherentObject,
         DmaAddress, //
     },
+    dma_write,
     io::poll::read_poll_timeout,
     prelude::*,
     sync::aref::ARef,
@@ -22,8 +23,7 @@ use kernel::{
     transmute::{
         AsBytes,
         FromBytes, //
-    },
-    try_dma_write, //
+    }, //
 };
 
 use crate::{
@@ -191,7 +191,7 @@ unsafe impl FromBytes for GspMem {}
 ///   pointer and the GSP read pointer. This region is returned by [`Self::driver_write_area`].
 /// * The driver owns (i.e. can read from) the part of the GSP message queue between the CPU read
 ///   pointer and the GSP write pointer. This region is returned by [`Self::driver_read_area`].
-struct DmaGspMem(CoherentAllocation<GspMem>);
+struct DmaGspMem(CoherentObject<GspMem>);
 
 impl DmaGspMem {
     /// Allocate a new instance and map it for `dev`.
@@ -199,13 +199,11 @@ impl DmaGspMem {
         const MSGQ_SIZE: u32 = num::usize_into_u32::<{ size_of::<Msgq>() }>();
         const RX_HDR_OFF: u32 = num::usize_into_u32::<{ mem::offset_of!(Msgq, rx) }>();
 
-        let gsp_mem =
-            CoherentAllocation::<GspMem>::alloc_coherent(dev, 1, GFP_KERNEL | __GFP_ZERO)?;
-        try_dma_write!(gsp_mem[0].ptes = PteArray::new(gsp_mem.dma_handle())?)?;
-        try_dma_write!(
-            gsp_mem[0].cpuq.tx = MsgqTxHeader::new(MSGQ_SIZE, RX_HDR_OFF, MSGQ_NUM_PAGES)
-        )?;
-        try_dma_write!(gsp_mem[0].cpuq.rx = MsgqRxHeader::new())?;
+        let gsp_mem = CoherentObject::<GspMem>::alloc_coherent(dev, GFP_KERNEL | __GFP_ZERO)?;
+        let ptes = PteArray::new(gsp_mem.dma_handle())?;
+        dma_write!(gsp_mem[0].ptes = ptes);
+        dma_write!(gsp_mem[0].cpuq.tx = MsgqTxHeader::new(MSGQ_SIZE, RX_HDR_OFF, MSGQ_NUM_PAGES));
+        dma_write!(gsp_mem[0].cpuq.rx = MsgqRxHeader::new());
 
         Ok(Self(gsp_mem))
     }
@@ -223,7 +221,7 @@ impl DmaGspMem {
         // - The `CoherentAllocation` contains exactly one object.
         // - We will only access the driver-owned part of the shared memory.
         // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = &mut unsafe { self.0.try_as_slice_mut(0, 1) }.unwrap()[0];
+        let gsp_mem = &mut unsafe { self.0.as_slice_mut::<0, 1>() }[0];
         // PANIC: per the invariant of `cpu_write_ptr`, `tx` is `<= MSGQ_NUM_PAGES`.
         let (before_tx, after_tx) = gsp_mem.cpuq.msgq.data.split_at_mut(tx);
 
@@ -258,7 +256,7 @@ impl DmaGspMem {
         // - The `CoherentAllocation` contains exactly one object.
         // - We will only access the driver-owned part of the shared memory.
         // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = &unsafe { self.0.try_as_slice(0, 1) }.unwrap()[0];
+        let gsp_mem = &unsafe { self.0.as_slice::<0, 1>() }[0];
         // PANIC: per the invariant of `cpu_read_ptr`, `xx` is `<= MSGQ_NUM_PAGES`.
         let (before_rx, after_rx) = gsp_mem.gspq.msgq.data.split_at(rx);
 
