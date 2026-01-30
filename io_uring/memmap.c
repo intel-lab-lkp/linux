@@ -15,10 +15,10 @@
 #include "rsrc.h"
 #include "zcrx.h"
 
-static bool io_mem_alloc_compound(struct page **pages, int nr_pages,
+static bool io_mem_alloc_folio(struct page **pages, int nr_pages,
 				  size_t size, gfp_t gfp)
 {
-	struct page *page;
+	struct folio *folio;
 	int i, order;
 
 	order = get_order(size);
@@ -27,12 +27,12 @@ static bool io_mem_alloc_compound(struct page **pages, int nr_pages,
 	else if (order)
 		gfp |= __GFP_COMP;
 
-	page = alloc_pages(gfp, order);
-	if (!page)
+	folio = folio_alloc(gfp, order);
+	if (!folio)
 		return false;
 
 	for (i = 0; i < nr_pages; i++)
-		pages[i] = page + i;
+		pages[i] = folio_page(folio, i);
 
 	return true;
 }
@@ -162,7 +162,7 @@ static int io_region_allocate_pages(struct io_mapped_region *mr,
 	if (!pages)
 		return -ENOMEM;
 
-	if (io_mem_alloc_compound(pages, mr->nr_pages, size, gfp)) {
+	if (io_mem_alloc_folio(pages, mr->nr_pages, size, gfp)) {
 		mr->flags |= IO_REGION_F_SINGLE_REF;
 		goto done;
 	}
