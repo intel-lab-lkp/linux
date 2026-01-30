@@ -62,7 +62,7 @@ struct imx_tpm_pwm_chip {
 	void __iomem *base;
 	struct mutex lock;
 	u32 user_count;
-	u32 enable_count;
+	u32 enabled_channels;
 	u32 real_period;
 };
 
@@ -166,6 +166,10 @@ static int pwm_imx_tpm_get_state(struct pwm_chip *chip,
 
 	/* get channel status */
 	state->enabled = FIELD_GET(PWM_IMX_TPM_CnSC_ELS, val) ? true : false;
+	if (state->enabled)
+		tpm->enabled_channels |= BIT(pwm->hwpwm);
+	else
+		tpm->enabled_channels &= ~BIT(pwm->hwpwm);
 
 	return 0;
 }
@@ -282,15 +286,19 @@ static int pwm_imx_tpm_apply_hw(struct pwm_chip *chip,
 	}
 	writel(val, tpm->base + PWM_IMX_TPM_CnSC(pwm->hwpwm));
 
-	/* control the counter status */
+	/* control the channel state */
 	if (state->enabled != c.enabled) {
 		val = readl(tpm->base + PWM_IMX_TPM_SC);
 		if (state->enabled) {
-			if (++tpm->enable_count == 1)
+			if (tpm->enabled_channels == 0) {
 				val |= PWM_IMX_TPM_SC_CMOD_INC_EVERY_CLK;
+			}
+			tpm->enabled_channels |= BIT(pwm->hwpwm);
 		} else {
-			if (--tpm->enable_count == 0)
+			tpm->enabled_channels &= ~BIT(pwm->hwpwm);
+			if (tpm->enabled_channels == 0) {
 				val &= ~PWM_IMX_TPM_SC_CMOD;
+			}
 		}
 		writel(val, tpm->base + PWM_IMX_TPM_SC);
 	}
@@ -394,7 +402,7 @@ static int pwm_imx_tpm_suspend(struct device *dev)
 	struct imx_tpm_pwm_chip *tpm = dev_get_drvdata(dev);
 	int ret;
 
-	if (tpm->enable_count > 0)
+	if (tpm->enabled_channels > 0)
 		return -EBUSY;
 
 	/*
