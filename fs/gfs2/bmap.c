@@ -887,6 +887,8 @@ static int __gfs2_iomap_get(struct inode *inode, loff_t pos, loff_t length,
 			      sizeof(struct gfs2_dinode);
 		iomap->type = IOMAP_INLINE;
 		iomap->inline_data = dibh->b_data + sizeof(struct gfs2_dinode);
+		iomap->private = dibh;
+		get_bh(dibh);
 		goto out;
 	}
 
@@ -1143,6 +1145,9 @@ static int gfs2_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_sbd *sdp = GFS2_SB(inode);
+
+	if (iomap->private)
+		brelse(iomap->private);
 
 	switch (flags & (IOMAP_WRITE | IOMAP_ZERO)) {
 	case IOMAP_WRITE:
@@ -1419,6 +1424,8 @@ int gfs2_iomap_get(struct inode *inode, loff_t pos, loff_t length,
 
 	ret = __gfs2_iomap_get(inode, pos, length, 0, iomap, &mp);
 	release_metapath(&mp);
+	if (iomap->private)
+		brelse(iomap->private);
 	return ret;
 }
 
@@ -1432,6 +1439,8 @@ int gfs2_iomap_alloc(struct inode *inode, loff_t pos, loff_t length,
 	if (!ret && iomap->type == IOMAP_HOLE)
 		ret = __gfs2_iomap_alloc(inode, iomap, &mp);
 	release_metapath(&mp);
+	if (iomap->private)
+		brelse(iomap->private);
 	return ret;
 }
 
