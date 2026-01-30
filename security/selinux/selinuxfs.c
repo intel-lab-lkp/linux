@@ -214,10 +214,30 @@ static const struct file_operations sel_handle_unknown_ops = {
 	.llseek		= generic_file_llseek,
 };
 
+static int sel_setattr_handle_status(struct mnt_idmap *idmap,
+				     struct dentry *dentry,
+				     struct iattr *iattr)
+{
+	/* Prevent truncation to avoid raising SIGBUS */
+	if (iattr->ia_valid & ATTR_SIZE)
+		return -EINVAL;
+
+	return simple_setattr(idmap, dentry, iattr);
+}
+
+static const struct inode_operations sel_handle_status_iops = {
+	.setattr	= sel_setattr_handle_status,
+};
+
 static int sel_open_handle_status(struct inode *inode, struct file *filp)
 {
-	struct page    *status = selinux_kernel_status_page();
+	struct page *status;
 
+	/* Prevent truncation to avoid raising SIGBUS */
+	if (filp->f_flags & O_TRUNC)
+		return -EINVAL;
+
+	status = selinux_kernel_status_page();
 	if (!status)
 		return -ENOMEM;
 
@@ -1980,7 +2000,6 @@ static int sel_fill_super(struct super_block *sb, struct fs_context *fc)
 		[SEL_CHECKREQPROT] = {"checkreqprot", &sel_checkreqprot_ops, S_IRUGO|S_IWUSR},
 		[SEL_REJECT_UNKNOWN] = {"reject_unknown", &sel_handle_unknown_ops, S_IRUGO},
 		[SEL_DENY_UNKNOWN] = {"deny_unknown", &sel_handle_unknown_ops, S_IRUGO},
-		[SEL_STATUS] = {"status", &sel_handle_status_ops, S_IRUGO},
 		[SEL_POLICY] = {"policy", &sel_policy_ops, S_IRUGO},
 		[SEL_VALIDATE_TRANS] = {"validatetrans", &sel_transition_ops,
 					S_IWUGO},
@@ -1994,6 +2013,26 @@ static int sel_fill_super(struct super_block *sb, struct fs_context *fc)
 	ret = simple_fill_super(sb, SELINUX_MAGIC, selinux_files);
 	if (ret)
 		goto err;
+
+	/* Create "status" separately to assign a custom inode_operations */
+	{
+		ret = -ENOMEM;
+
+		dentry = d_alloc_name(sb->s_root, "status");
+		if (!dentry)
+			goto err;
+		inode = new_inode(sb);
+		if (!inode) {
+			dput(dentry);
+			goto err;
+		}
+		inode->i_mode = S_IFREG | 0444;
+		simple_inode_init_ts(inode);
+		inode->i_fop = &sel_handle_status_ops;
+		inode->i_op = &sel_handle_status_iops;
+		inode->i_ino = SEL_STATUS;
+		d_add(dentry, inode);
+	}
 
 	fsi = sb->s_fs_info;
 	fsi->bool_dir = sel_make_dir(sb->s_root, BOOL_DIR_NAME, &fsi->last_ino);
