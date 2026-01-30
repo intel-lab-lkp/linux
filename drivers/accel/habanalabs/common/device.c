@@ -698,7 +698,7 @@ static const struct file_operations hl_ctrl_ops = {
 
 static void device_release_func(struct device *dev)
 {
-	kfree(dev);
+	put_device(dev);
 }
 
 /*
