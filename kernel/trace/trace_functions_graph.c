@@ -317,6 +317,8 @@ __trace_graph_function(struct trace_array *tr,
 	struct ftrace_graph_ret ret = {
 		.func     = ip,
 		.depth    = 0,
+		.calltime = time,
+		.rettime = time,
 	};
 
 	__trace_graph_entry(tr, &ent, trace_ctx);
@@ -346,8 +348,8 @@ void __trace_graph_return(struct trace_array *tr,
 		return;
 	entry	= ring_buffer_event_data(event);
 	entry->ret				= *trace;
-	entry->calltime				= calltime;
-	entry->rettime				= rettime;
+	entry->ret.calltime				= calltime;
+	entry->ret.rettime				= rettime;
 	trace_buffer_unlock_commit_nostack(buffer, event);
 }
 
@@ -372,10 +374,9 @@ void trace_graph_return(struct ftrace_graph_ret *trace,
 	struct trace_array *tr = gops->private;
 	struct fgraph_times *ftimes;
 	unsigned int trace_ctx;
-	u64 calltime, rettime;
 	int size;
 
-	rettime = trace_clock_local();
+	trace->rettime = trace_clock_local();
 
 	ftrace_graph_addr_finish(gops, trace);
 
@@ -390,10 +391,10 @@ void trace_graph_return(struct ftrace_graph_ret *trace,
 
 	handle_nosleeptime(tr, trace, ftimes, size);
 
-	calltime = ftimes->calltime;
+	trace->calltime = ftimes->calltime;
 
 	trace_ctx = tracing_gen_ctx();
-	__trace_graph_return(tr, trace, trace_ctx, calltime, rettime);
+	__trace_graph_return(tr, trace, trace_ctx, trace->calltime, trace->rettime);
 }
 
 static void trace_graph_thresh_return(struct ftrace_graph_ret *trace,
@@ -956,7 +957,7 @@ print_graph_entry_leaf(struct trace_iterator *iter,
 
 	graph_ret = &ret_entry->ret;
 	call = &entry->graph_ent;
-	duration = ret_entry->rettime - ret_entry->calltime;
+	duration = graph_ret->rettime - graph_ret->calltime;
 
 	if (data) {
 		struct fgraph_cpu_data *cpu_data;
@@ -1280,9 +1281,7 @@ print_graph_return(struct ftrace_graph_ret_entry *retentry, struct trace_seq *s,
 		   u32 flags)
 {
 	struct ftrace_graph_ret *trace = &retentry->ret;
-	u64 calltime = retentry->calltime;
-	u64 rettime = retentry->rettime;
-	unsigned long long duration = rettime - calltime;
+	unsigned long long duration = trace->rettime - trace->calltime;
 	struct fgraph_data *data = iter->private;
 	struct trace_array *tr = iter->tr;
 	unsigned long func;
