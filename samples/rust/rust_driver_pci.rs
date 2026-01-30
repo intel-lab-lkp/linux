@@ -68,11 +68,15 @@ impl pci::Driver for SampleDriver {
     fn probe(pdev: &pci::Device<Core>, info: &Self::IdInfo) -> impl PinInit<Self, Error> {
         pin_init::pin_init_scope(move || {
             let vendor = pdev.vendor_id();
+            let vendor_cfg = pdev.read_config_u16(0x00)?;
+            let device_cfg = pdev.read_config_u16(0x02)?;
             dev_dbg!(
                 pdev.as_ref(),
-                "Probe Rust PCI driver sample (PCI ID: {}, 0x{:x}).\n",
+                "Probe Rust PCI driver sample (PCI ID: {}, 0x{:x}; cfg: 0x{:04x}:0x{:04x}).\n",
                 vendor,
-                pdev.device_id()
+                pdev.device_id(),
+                vendor_cfg,
+                device_cfg,
             );
 
             pdev.enable_device_mem()?;
