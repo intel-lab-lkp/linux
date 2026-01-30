@@ -12,6 +12,11 @@
  * including the notrigger feature. Otherwise the test will be skipped.
  * The under-test platform's APEI should be unable to claim SEA. Otherwise
  * the test will also be skipped.
+ *
+ * The VM backing memory is tied to HugeTLB 1G hugepage so far. Make sure
+ * there are more than 4 1G hugepage on the system. They can be allocated
+ * at runtime by:
+ *   echo 4 > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
  */
 
 #include <signal.h>
@@ -98,11 +103,15 @@ static void write_einj_entry(const char *einj_path, uint64_t val)
 
 static void inject_uer(uint64_t paddr)
 {
-	if (access("/sys/firmware/acpi/tables/EINJ", R_OK) == -1)
-		ksft_test_result_skip("EINJ table no available in firmware");
+	if (access("/sys/firmware/acpi/tables/EINJ", R_OK) == -1) {
+		ksft_test_result_skip("EINJ table not available in firmware\n");
+		exit(KSFT_SKIP);
+	}
 
-	if (access(EINJ_ETYPE, R_OK | W_OK) == -1)
-		ksft_test_result_skip("EINJ module probably not loaded?");
+	if (access(EINJ_ETYPE, R_OK | W_OK) == -1) {
+		ksft_test_result_skip("EINJ module probably not loaded?\n");
+		exit(KSFT_SKIP);
+	}
 
 	write_einj_entry(EINJ_ETYPE, ERROR_TYPE_MEMORY_UER);
 	write_einj_entry(EINJ_FLAGS, MASK_MEMORY_UER);
@@ -123,12 +132,13 @@ static void sigbus_signal_handler(int sig, siginfo_t *si, void *v)
 	ksft_print_msg("SIGBUS (%d) received, dumping siginfo...\n", sig);
 	ksft_print_msg("si_signo=%d, si_errno=%d, si_code=%d, si_addr=%p\n",
 		       si->si_signo, si->si_errno, si->si_code, si->si_addr);
-	if (si->si_code == BUS_MCEERR_AR)
+	if (si->si_code == BUS_MCEERR_AR) {
 		ksft_test_result_skip("SEA is claimed by host APEI\n");
-	else
+		exit(KSFT_SKIP);
+	} else {
 		ksft_test_result_fail("Exit with signal unhandled\n");
-
-	exit(0);
+		exit(KSFT_FAIL);
+	}
 }
 
 static void setup_sigbus_handler(void)
@@ -158,7 +168,6 @@ static void expect_sea_handler(struct ex_regs *regs)
 {
 	u64 esr = read_sysreg(esr_el1);
 	u64 far = read_sysreg(far_el1);
-	bool expect_far_invalid = far_invalid;
 
 	GUEST_PRINTF("Handling Guest SEA\n");
 	GUEST_PRINTF("ESR_EL1=%#lx, FAR_EL1=%#lx\n", esr, far);
@@ -166,7 +175,7 @@ static void expect_sea_handler(struct ex_regs *regs)
 	GUEST_ASSERT_EQ(ESR_ELx_EC(esr), ESR_ELx_EC_DABT_CUR);
 	GUEST_ASSERT_EQ(esr & ESR_ELx_FSC_TYPE, ESR_ELx_FSC_EXTABT);
 
-	if (expect_far_invalid) {
+	if (far_invalid) {
 		GUEST_ASSERT_EQ(esr & ESR_ELx_FnV, ESR_ELx_FnV);
 		GUEST_PRINTF("Guest observed garbage value in FAR\n");
 	} else {
@@ -185,24 +194,18 @@ static void vcpu_inject_sea(struct kvm_vcpu *vcpu)
 	vcpu_events_set(vcpu, &events);
 }
 
-static void run_vm(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
+static void validate_kvm_exit_arm_sea(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
 {
-	struct ucall uc;
-	bool guest_done = false;
 	struct kvm_run *run = vcpu->run;
 	u64 esr;
 
-	/* Resume the vCPU after error injection to consume the error. */
-	vcpu_run(vcpu);
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_ARM_SEA);
 
-	ksft_print_msg("Dump kvm_run info about KVM_EXIT_%s\n",
-		       exit_reason_str(run->exit_reason));
+	ksft_print_msg("Dumping kvm_run as arm_sea:\n");
 	ksft_print_msg("kvm_run.arm_sea: esr=%#llx, flags=%#llx\n",
 		       run->arm_sea.esr, run->arm_sea.flags);
 	ksft_print_msg("kvm_run.arm_sea: gva=%#llx, gpa=%#llx\n",
 		       run->arm_sea.gva, run->arm_sea.gpa);
-
-	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_ARM_SEA);
 
 	esr = run->arm_sea.esr;
 	TEST_ASSERT_EQ(ESR_ELx_EC(esr), ESR_ELx_EC_DABT_LOW);
@@ -211,39 +214,48 @@ static void run_vm(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
 	TEST_ASSERT_EQ((esr & ESR_ELx_INST_SYNDROME), 0);
 	TEST_ASSERT_EQ(esr & ESR_ELx_VNCR, 0);
 
-	if (!(esr & ESR_ELx_FnV)) {
-		ksft_print_msg("Expect gva to match given FnV bit is 0\n");
+	far_invalid = esr & ESR_ELx_FnV;
+	sync_global_to_guest(vm, far_invalid);
+
+	if (!far_invalid) {
+		ksft_print_msg("Expect gva to match\n");
 		TEST_ASSERT_EQ(run->arm_sea.gva, EINJ_GVA);
 	}
 
 	if (run->arm_sea.flags & KVM_EXIT_ARM_SEA_FLAG_GPA_VALID) {
-		ksft_print_msg("Expect gpa to match given KVM_EXIT_ARM_SEA_FLAG_GPA_VALID is set\n");
+		ksft_print_msg("Expect gpa to match\n");
 		TEST_ASSERT_EQ(run->arm_sea.gpa, einj_gpa & PAGE_ADDR_MASK);
 	}
+}
 
-	far_invalid = esr & ESR_ELx_FnV;
-
-	/* Inject a SEA into guest and expect handled in SEA handler. */
-	vcpu_inject_sea(vcpu);
+static void run_vm(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
+{
+	struct ucall uc;
+	bool guest_done = false;
 
 	/* Expect the guest to reach GUEST_DONE gracefully. */
 	do {
 		vcpu_run(vcpu);
-		switch (get_ucall(vcpu, &uc)) {
-		case UCALL_PRINTF:
-			ksft_print_msg("From guest: %s", uc.buffer);
-			break;
-		case UCALL_DONE:
-			ksft_print_msg("Guest done gracefully!\n");
-			guest_done = 1;
-			break;
-		case UCALL_ABORT:
-			ksft_print_msg("Guest aborted!\n");
-			guest_done = 1;
-			REPORT_GUEST_ASSERT(uc);
-			break;
-		default:
-			TEST_FAIL("Unexpected ucall: %lu\n", uc.cmd);
+		if (vcpu->run->exit_reason == KVM_EXIT_ARM_SEA) {
+			validate_kvm_exit_arm_sea(vm, vcpu);
+			vcpu_inject_sea(vcpu);
+		} else {
+			switch (get_ucall(vcpu, &uc)) {
+			case UCALL_PRINTF:
+				ksft_print_msg("From guest: %s", uc.buffer);
+				break;
+			case UCALL_DONE:
+				ksft_print_msg("Guest done gracefully!\n");
+				guest_done = 1;
+				break;
+			case UCALL_ABORT:
+				ksft_print_msg("Guest aborted!\n");
+				guest_done = 1;
+				REPORT_GUEST_ASSERT(uc);
+				break;
+			default:
+				TEST_FAIL("Unexpected ucall: %lu\n", uc.cmd);
+			}
 		}
 	} while (!guest_done);
 }
