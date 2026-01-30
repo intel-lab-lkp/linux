@@ -709,6 +709,10 @@ struct ov13b10 {
 
 	struct clk *img_clk;
 	struct regulator *avdd;
+	struct regulator *vio;
+	struct regulator *core;
+	struct gpio_desc *enable;
+
 	struct gpio_desc *reset;
 
 	/* V4L2 Controls */
@@ -1475,12 +1479,19 @@ static int ov13b10_get_pm_resources(struct ov13b10 *ov13b)
 	unsigned long freq;
 	int ret;
 
-	ov13b->reset = devm_gpiod_get_optional(ov13b->dev, "reset", GPIOD_OUT_LOW);
+	if (strstr(dev_name(ov13b->dev), "OVTI13B1:01"))
+		ov13b->reset = devm_gpiod_get_optional(ov13b->dev, "s_resetn", GPIOD_OUT_LOW);
+	else
+		ov13b->reset = devm_gpiod_get_optional(ov13b->dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ov13b->reset))
 		return dev_err_probe(ov13b->dev, PTR_ERR(ov13b->reset),
 				     "failed to get reset gpio\n");
 
-	ov13b->img_clk = devm_v4l2_sensor_clk_get(ov13b->dev, NULL);
+	if (strstr(dev_name(ov13b->dev), "OVTI13B1:01"))
+		ov13b->img_clk = devm_v4l2_sensor_clk_get(ov13b->dev, "tps68470-clk");
+	else
+		ov13b->img_clk = devm_v4l2_sensor_clk_get(ov13b->dev, NULL);
+
 	if (IS_ERR(ov13b->img_clk))
 		return dev_err_probe(ov13b->dev, PTR_ERR(ov13b->img_clk),
 				     "failed to get imaging clock\n");
@@ -1490,14 +1501,35 @@ static int ov13b10_get_pm_resources(struct ov13b10 *ov13b)
 		return dev_err_probe(ov13b->dev, -EINVAL,
 				     "external clock %lu is not supported\n",
 				     freq);
+	if (strstr(dev_name(ov13b->dev), "OVTI13B1:01"))
+		ov13b->avdd = devm_regulator_get_optional(ov13b->dev, "ana");
+	else
+		ov13b->avdd = devm_regulator_get_optional(ov13b->dev, "avdd");
 
-	ov13b->avdd = devm_regulator_get_optional(ov13b->dev, "avdd");
 	if (IS_ERR(ov13b->avdd)) {
 		ret = PTR_ERR(ov13b->avdd);
 		ov13b->avdd = NULL;
 		if (ret != -ENODEV)
 			return dev_err_probe(ov13b->dev, ret,
 					     "failed to get avdd regulator\n");
+	}
+	if (strstr(dev_name(ov13b->dev), "OVTI13B1:01")){
+		ov13b->avdd = devm_regulator_get_optional(ov13b->dev, "dovdd");
+		if (IS_ERR(ov13b->avdd)) {
+			ret = PTR_ERR(ov13b->avdd);
+			ov13b->avdd = NULL;
+			if (ret != -ENODEV)
+				return dev_err_probe(ov13b->dev, ret,
+			               "failed to get avdd regulator\n");
+		}
+		ov13b->avdd = devm_regulator_get_optional(ov13b->dev, "dvdd");
+		if (IS_ERR(ov13b->avdd)) {
+			ret = PTR_ERR(ov13b->avdd);
+			ov13b->avdd = NULL;
+			if (ret != -ENODEV)
+				return dev_err_probe(ov13b->dev, ret,
+					"failed to get avdd regulator\n");
+		}
 	}
 
 	return 0;
