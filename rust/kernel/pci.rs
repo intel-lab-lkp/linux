@@ -47,6 +47,26 @@ pub use self::irq::{
     IrqVector, //
 };
 
+// Mirrors `pcibios_err_to_errno()` in `include/linux/pci.h`.
+//
+// That helper is a C `static inline` and thus not directly callable from Rust.
+// We keep the mapping local to this module so the `Device` API stays focused.
+fn pcibios_err_to_errno(err: c_int) -> c_int {
+    if err <= 0 {
+        return err;
+    }
+
+    match err as u32 {
+        bindings::PCIBIOS_FUNC_NOT_SUPPORTED => -(bindings::ENOENT as c_int),
+        bindings::PCIBIOS_BAD_VENDOR_ID => -(bindings::ENOTTY as c_int),
+        bindings::PCIBIOS_DEVICE_NOT_FOUND => -(bindings::ENODEV as c_int),
+        bindings::PCIBIOS_BAD_REGISTER_NUMBER => -(bindings::EFAULT as c_int),
+        bindings::PCIBIOS_SET_FAILED => -(bindings::EIO as c_int),
+        bindings::PCIBIOS_BUFFER_TOO_SMALL => -(bindings::ENOSPC as c_int),
+        _ => -(bindings::ERANGE as c_int),
+    }
+}
+
 /// An adapter for the registration of PCI drivers.
 pub struct Adapter<T: Driver>(T);
 
@@ -426,6 +446,72 @@ impl Device {
     pub fn pci_class(&self) -> Class {
         // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
         Class::from_raw(unsafe { (*self.as_raw()).class })
+    }
+
+    /// Reads a byte from PCI config space.
+    ///
+    /// `offset` is the config-space offset. For PCIe devices this may cover the extended config
+    /// space.
+    pub fn read_config_u8(&self, offset: u16) -> Result<u8> {
+        let offset = c_int::from(offset);
+        let mut val = 0u8;
+
+        // SAFETY: `self.as_raw()` points to a valid `struct pci_dev` and `val` is a valid out
+        // pointer.
+        let err = unsafe { bindings::pci_read_config_byte(self.as_raw(), offset, &mut val) };
+        to_result(pcibios_err_to_errno(err))?;
+        Ok(val)
+    }
+
+    /// Reads a 16-bit word from PCI config space.
+    pub fn read_config_u16(&self, offset: u16) -> Result<u16> {
+        let offset = c_int::from(offset);
+        let mut val = 0u16;
+
+        // SAFETY: `self.as_raw()` points to a valid `struct pci_dev` and `val` is a valid out
+        // pointer.
+        let err = unsafe { bindings::pci_read_config_word(self.as_raw(), offset, &mut val) };
+        to_result(pcibios_err_to_errno(err))?;
+        Ok(val)
+    }
+
+    /// Reads a 32-bit dword from PCI config space.
+    pub fn read_config_u32(&self, offset: u16) -> Result<u32> {
+        let offset = c_int::from(offset);
+        let mut val = 0u32;
+
+        // SAFETY: `self.as_raw()` points to a valid `struct pci_dev` and `val` is a valid out
+        // pointer.
+        let err = unsafe { bindings::pci_read_config_dword(self.as_raw(), offset, &mut val) };
+        to_result(pcibios_err_to_errno(err))?;
+        Ok(val)
+    }
+
+    /// Writes a byte to PCI config space.
+    pub fn write_config_u8(&self, offset: u16, val: u8) -> Result {
+        let offset = c_int::from(offset);
+
+        // SAFETY: `self.as_raw()` points to a valid `struct pci_dev`.
+        let err = unsafe { bindings::pci_write_config_byte(self.as_raw(), offset, val) };
+        to_result(pcibios_err_to_errno(err))
+    }
+
+    /// Writes a 16-bit word to PCI config space.
+    pub fn write_config_u16(&self, offset: u16, val: u16) -> Result {
+        let offset = c_int::from(offset);
+
+        // SAFETY: `self.as_raw()` points to a valid `struct pci_dev`.
+        let err = unsafe { bindings::pci_write_config_word(self.as_raw(), offset, val) };
+        to_result(pcibios_err_to_errno(err))
+    }
+
+    /// Writes a 32-bit dword to PCI config space.
+    pub fn write_config_u32(&self, offset: u16, val: u32) -> Result {
+        let offset = c_int::from(offset);
+
+        // SAFETY: `self.as_raw()` points to a valid `struct pci_dev`.
+        let err = unsafe { bindings::pci_write_config_dword(self.as_raw(), offset, val) };
+        to_result(pcibios_err_to_errno(err))
     }
 }
 
