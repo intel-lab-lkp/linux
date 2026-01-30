@@ -499,7 +499,7 @@ unsigned int quiet;
 unsigned int shown;
 unsigned int sums_need_wide_columns;
 unsigned int rapl_joules;
-unsigned int valid_rapl_msrs;
+int valid_rapl_msrs;
 unsigned int summary_only;
 unsigned int list_header_only;
 unsigned int dump_only;
@@ -2191,10 +2191,18 @@ struct msr_sum_array *per_cpu_msr_sum;
 off_t idx_to_offset(int idx)
 {
 	off_t offset;
+	int rapl_msrs;
+
+	/*
+	 * Use valid_rapl_msrs if available (non-zero), otherwise fall back
+	 * to platform->plat_rapl_msrs. This allows probe_rapl_msrs() to call
+	 * this function before valid_rapl_msrs has been set.
+	 */
+	rapl_msrs = valid_rapl_msrs ? valid_rapl_msrs : platform->plat_rapl_msrs;
 
 	switch (idx) {
 	case IDX_PKG_ENERGY:
-		if (valid_rapl_msrs & RAPL_AMD_F17H)
+		if (rapl_msrs & RAPL_AMD_F17H)
 			offset = MSR_PKG_ENERGY_STAT;
 		else
 			offset = MSR_PKG_ENERGY_STATUS;
