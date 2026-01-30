@@ -193,8 +193,7 @@ void trace_hwlat_callback(bool enter)
  * get_sample - sample the CPU TSC and look for likely hardware latencies
  *
  * Used to repeatedly capture the CPU TSC (or similar), looking for potential
- * hardware-induced latency. Called with interrupts disabled and with
- * hwlat_data.lock held.
+ * hardware-induced latency. Disables interrupts during measurement.
  */
 static int get_sample(void)
 {
@@ -204,12 +203,19 @@ static int get_sample(void)
 	time_type start, t1, t2, last_t2;
 	s64 diff, outer_diff, total, last_total = 0;
 	u64 sample = 0;
+	u64 sample_width;
 	u64 thresh = tracing_thresh;
 	u64 outer_sample = 0;
 	int ret = -1;
 	unsigned int count = 0;
 
 	do_div(thresh, NSEC_PER_USEC); /* modifies interval value */
+
+	mutex_lock(&hwlat_data.lock);
+	sample_width = hwlat_data.sample_width;
+	mutex_unlock(&hwlat_data.lock);
+
+	local_irq_disable();
 
 	kdata->nmi_total_ts = 0;
 	kdata->nmi_count = 0;
@@ -267,11 +273,13 @@ static int get_sample(void)
 		if (diff > sample)
 			sample = diff; /* only want highest value */
 
-	} while (total <= hwlat_data.sample_width);
+	} while (total <= sample_width);
 
 	barrier(); /* finish the above in the view for NMIs */
 	trace_hwlat_callback_enabled = false;
 	barrier(); /* Make sure nmi_total_ts is no longer updated */
+
+	local_irq_enable();
 
 	ret = 0;
 
@@ -285,8 +293,11 @@ static int get_sample(void)
 		if (kdata->nmi_total_ts)
 			do_div(kdata->nmi_total_ts, NSEC_PER_USEC);
 
+		mutex_lock(&hwlat_data.lock);
 		hwlat_data.count++;
 		s.seqnum = hwlat_data.count;
+		mutex_unlock(&hwlat_data.lock);
+
 		s.duration = sample;
 		s.outer_duration = outer_sample;
 		s.nmi_total_ts = kdata->nmi_total_ts;
@@ -303,7 +314,10 @@ static int get_sample(void)
 		}
 	}
 
+	return ret;
+
 out:
+	local_irq_enable();
 	return ret;
 }
 
@@ -361,9 +375,7 @@ static int kthread_fn(void *data)
 		if (hwlat_data.thread_mode == MODE_ROUND_ROBIN)
 			move_to_next_cpu();
 
-		local_irq_disable();
 		get_sample();
-		local_irq_enable();
 
 		mutex_lock(&hwlat_data.lock);
 		interval = hwlat_data.sample_window - hwlat_data.sample_width;
