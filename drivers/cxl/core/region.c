@@ -3714,6 +3714,8 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	return cxlr;
 }
 
+static void unregister_region(void *dev);
+
 static struct cxl_region *
 cxl_find_region_by_range(struct cxl_root_decoder *cxlrd, struct range *hpa)
 {
@@ -3754,7 +3756,17 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 	if (rc)
 		return rc;
 
-	attach_target(cxlr, cxled, -1, TASK_UNINTERRUPTIBLE);
+	rc = attach_target(cxlr, cxled, -1, TASK_UNINTERRUPTIBLE);
+	if (rc) {
+		struct cxl_port *root_port = cxlrd_to_port(cxlrd);
+
+		/* Messages at the point of failure offer more detail */
+		dev_err(&cxlr->dev,
+			"assembly failed %d, unregistering region\n", rc);
+		devm_release_action(root_port->uport_dev, unregister_region,
+				    cxlr);
+		return rc;
+	}
 
 	scoped_guard(rwsem_read, &cxl_rwsem.region) {
 		p = &cxlr->params;
