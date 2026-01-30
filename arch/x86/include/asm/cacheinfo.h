@@ -7,8 +7,6 @@ extern unsigned int memory_caching_control;
 #define CACHE_MTRR 0x01
 #define CACHE_PAT  0x02
 
-void cache_disable(void);
-void cache_enable(void);
 void set_cache_aps_delayed_init(bool val);
 bool get_cache_aps_delayed_init(void);
 void cache_bp_init(void);
