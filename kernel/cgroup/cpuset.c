@@ -78,13 +78,13 @@ static cpumask_var_t	subpartitions_cpus;
 static cpumask_var_t	isolated_cpus;
 
 /*
- * isolated_cpus updating flag (protected by cpuset_mutex)
+ * isolated_cpus updating flag (protected by cpuset_top_mutex)
  * Set if isolated_cpus is going to be updated in the current
  * cpuset_mutex crtical section.
  */
 static bool isolated_cpus_updating;
 
-/* Both cpuset_mutex and cpus_read_locked acquired */
+/* cpuset_top_mutex acquired */
 static bool cpuset_locked;
 
 /*
@@ -222,29 +222,44 @@ struct cpuset top_cpuset = {
 };
 
 /*
- * There are two global locks guarding cpuset structures - cpuset_mutex and
- * callback_lock. The cpuset code uses only cpuset_mutex. Other kernel
- * subsystems can use cpuset_lock()/cpuset_unlock() to prevent change to cpuset
- * structures. Note that cpuset_mutex needs to be a mutex as it is used in
- * paths that rely on priority inheritance (e.g. scheduler - on RT) for
- * correctness.
+ * CPUSET Locking Convention
+ * -------------------------
  *
- * A task must hold both locks to modify cpusets.  If a task holds
- * cpuset_mutex, it blocks others, ensuring that it is the only task able to
- * also acquire callback_lock and be able to modify cpusets.  It can perform
- * various checks on the cpuset structure first, knowing nothing will change.
- * It can also allocate memory while just holding cpuset_mutex.  While it is
- * performing these checks, various callback routines can briefly acquire
- * callback_lock to query cpusets.  Once it is ready to make the changes, it
- * takes callback_lock, blocking everyone else.
+ * Below are the four global locks guarding cpuset structures in lock
+ * acquisition order:
+ *  - cpuset_top_mutex
+ *  - cpu_hotplug_lock (cpus_read_lock/cpus_write_lock)
+ *  - cpuset_mutex
+ *  - callback_lock (raw spinlock)
  *
- * Calls to the kernel memory allocator can not be made while holding
- * callback_lock, as that would risk double tripping on callback_lock
- * from one of the callbacks into the cpuset code from within
- * __alloc_pages().
+ * The first cpuset_top_mutex will be held except when calling into
+ * cpuset_handle_hotplug() from the CPU hotplug code where cpus_write_lock
+ * and cpuset_mutex will be held instead.
  *
- * If a task is only holding callback_lock, then it has read-only
- * access to cpusets.
+ * As cpuset will now indirectly flush a number of different workqueues in
+ * housekeeping_update() when the set of isolated CPUs is going to be changed,
+ * it may not be safe from the circular locking perspective to hold the
+ * cpus_read_lock. So cpus_read_lock and cpuset_mutex will be released before
+ * calling housekeeping_update() and re-acquired afterward.
+ *
+ * A task must hold all the remaining three locks to modify externally visible
+ * or used fields of cpusets, though some of the internally used cpuset fields
+ * can be modified without holding callback_lock. If only reliable read access
+ * of the externally used fields are needed, a task can hold either
+ * cpuset_mutex or callback_lock which are exposed to other subsystems.
+ *
+ * If a task holds cpu_hotplug_lock and cpuset_mutex, it blocks others,
+ * ensuring that it is the only task able to also acquire callback_lock and
+ * be able to modify cpusets.  It can perform various checks on the cpuset
+ * structure first, knowing nothing will change. It can also allocate memory
+ * without holding callback_lock. While it is performing these checks, various
+ * callback routines can briefly acquire callback_lock to query cpusets.  Once
+ * it is ready to make the changes, it takes callback_lock, blocking everyone
+ * else.
+ *
+ * Calls to the kernel memory allocator cannot be made while holding
+ * callback_lock which is a spinlock, as the memory allocator may sleep or
+ * call back into cpuset code and acquire callback_lock.
  *
  * Now, the task_struct fields mems_allowed and mempolicy may be changed
  * by other task, we use alloc_lock in the task_struct fields to protect
@@ -255,6 +270,7 @@ struct cpuset top_cpuset = {
  * cpumasks and nodemasks.
  */
 
+static DEFINE_MUTEX(cpuset_top_mutex);
 static DEFINE_MUTEX(cpuset_mutex);
 
 /**
@@ -278,6 +294,18 @@ void lockdep_assert_cpuset_lock_held(void)
 	lockdep_assert_held(&cpuset_mutex);
 }
 
+static void cpuset_partial_lock(void)
+{
+	cpus_read_lock();
+	mutex_lock(&cpuset_mutex);
+}
+
+static void cpuset_partial_unlock(void)
+{
+	mutex_unlock(&cpuset_mutex);
+	cpus_read_unlock();
+}
+
 /**
  * cpuset_full_lock - Acquire full protection for cpuset modification
  *
@@ -286,22 +314,22 @@ void lockdep_assert_cpuset_lock_held(void)
  */
 void cpuset_full_lock(void)
 {
-	cpus_read_lock();
-	mutex_lock(&cpuset_mutex);
+	mutex_lock(&cpuset_top_mutex);
+	cpuset_partial_lock();
 	cpuset_locked = true;
 }
 
 void cpuset_full_unlock(void)
 {
 	cpuset_locked = false;
-	mutex_unlock(&cpuset_mutex);
-	cpus_read_unlock();
+	cpuset_partial_unlock();
+	mutex_unlock(&cpuset_top_mutex);
 }
 
 #ifdef CONFIG_LOCKDEP
 bool lockdep_is_cpuset_held(void)
 {
-	return lockdep_is_held(&cpuset_mutex);
+	return lockdep_is_held(&cpuset_top_mutex);
 }
 #endif
 
@@ -1291,12 +1319,12 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 
 static void isolcpus_workfn(struct work_struct *work)
 {
-	cpuset_full_lock();
-	if (isolated_cpus_updating) {
-		WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
-		isolated_cpus_updating = false;
-	}
-	cpuset_full_unlock();
+	guard(mutex)(&cpuset_top_mutex);
+	if (!isolated_cpus_updating)
+		return;
+
+	WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
+	isolated_cpus_updating = false;
 }
 
 /*
@@ -1330,8 +1358,15 @@ static void update_isolation_cpumasks(void)
 		return;
 	}
 
+	lockdep_assert_held(&cpuset_top_mutex);
+	/*
+	 * Release cpus_read_lock & cpuset_mutex before calling
+	 * housekeeping_update() and re-acquiring them afterward.
+	 */
+	cpuset_partial_unlock();
 	WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
 	isolated_cpus_updating = false;
+	cpuset_partial_lock();
 }
 
 /**
