@@ -110,6 +110,34 @@ intercepts during the execution process, this mechanism needs the interpreter
 to take the initiative, and existing interpreters won't be automatically
 supported unless the signal call is added.
 
+.. WARNING::
+
+   There is a known TOCTOU (time-of-check to time-of-use) issue with
+   ``AT_EXECVE_CHECK`` when interpreters use ``read()`` to obtain script
+   contents after the check [#atacexecvecheck_toctou]_. The ``AT_EXECVE_CHECK``
+   protection (via ``deny_write_access()``) is only held during the syscall.
+   After it returns, the file can be modified before the interpreter reads it.
+
+   In typical IPE deployments, this is not a concern because files protected
+   by dm-verity or fs-verity are effectively read-only and cannot be modified.
+   However, OverlayFS presents a special case: when the lower layer is
+   dm-verity protected (read-only) but the upper layer is writable, an
+   attacker with write access can trigger a copy-up operation after the
+   ``AT_EXECVE_CHECK`` returns, causing subsequent ``read()`` calls to return
+   content from the unprotected upper layer instead of the verified lower layer.
+
+   To mitigate this issue on OverlayFS:
+
+   -  Mount the overlay as read-only, or restrict write access to the upper
+      layer.
+   -  Interpreters may use ``mmap()`` instead of ``read()`` to obtain script
+      contents. Currently, OverlayFS fixes the underlying real file reference
+      at ``open()`` time for mmap operations, so mmap will continue to access
+      the original lower layer file even after a copy-up. However, this
+      behavior is an implementation detail of OverlayFS and is not guaranteed
+      to remain stable across kernel versions. Do not rely on this as a
+      security guarantee.
+
 Threat Model
 ------------
 
@@ -833,3 +861,7 @@ A:
                      kernel's fsverity support; IPE does not impose any
                      restrictions on the digest algorithm itself;
                      thus, this list may be out of date.
+
+.. [#atacexecvecheck_toctou] See the O_DENY_WRITE RFC discussion for details on
+                             this TOCTOU issue:
+                             https://lore.kernel.org/all/20250822170800.2116980-1-mic@digikod.net/
