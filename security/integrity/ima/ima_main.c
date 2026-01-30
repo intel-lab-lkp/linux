@@ -201,8 +201,8 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 		    vfs_getattr_nosec(&file->f_path, &stat,
 				      STATX_CHANGE_COOKIE,
 				      AT_STATX_SYNC_AS_STAT) ||
-		    !(stat.result_mask & STATX_CHANGE_COOKIE) ||
-		    stat.change_cookie != iint->real_inode.version) {
+		    integrity_inode_attrs_stat_changed(&iint->real_inode,
+						       &stat)) {
 			iint->flags &= ~(IMA_DONE_MASK | IMA_NEW_FILE);
 			iint->measured_pcrs = 0;
 			if (update)

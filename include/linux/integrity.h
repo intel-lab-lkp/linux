@@ -49,6 +49,17 @@ integrity_inode_attrs_store(struct integrity_inode_attributes *attrs,
 	attrs->ino = inode->i_ino;
 }
 
+/* Compares stat attributes for change detection. */
+static inline bool
+integrity_inode_attrs_stat_changed
+(const struct integrity_inode_attributes *attrs, const struct kstat *stat)
+{
+	if (stat->result_mask & STATX_CHANGE_COOKIE)
+		return stat->change_cookie != attrs->version;
+
+	return true;
+}
+
 /*
  * On stacked filesystems detect whether the inode or its content has changed.
  */
