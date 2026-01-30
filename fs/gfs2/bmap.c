@@ -887,6 +887,8 @@ static int __gfs2_iomap_get(struct inode *inode, loff_t pos, loff_t length,
 			      sizeof(struct gfs2_dinode);
 		iomap->type = IOMAP_INLINE;
 		iomap->inline_data = dibh->b_data + sizeof(struct gfs2_dinode);
+		iomap->private = dibh;
+		get_bh(dibh);
 		goto out;
 	}
 
@@ -1143,6 +1145,12 @@ static int gfs2_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_sbd *sdp = GFS2_SB(inode);
+
+	/* Release buffer head for inline data */
+	if (iomap->type == IOMAP_INLINE && iomap->private) {
+		brelse(iomap->private);
+		iomap->private = NULL;
+	}
 
 	switch (flags & (IOMAP_WRITE | IOMAP_ZERO)) {
 	case IOMAP_WRITE:
