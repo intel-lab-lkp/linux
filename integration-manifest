@@ -1,0 +1,36 @@
+drm drm-fixes 3a390a21ff0bc53800433441045c00b51de9d439
+	Merge tag 'drm-misc-fixes-2026-01-29' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-fixes
+drm-misc drm-misc-fixes e535c23513c63f02f67e3e09e0787907029efeaf
+	drm/imx/tve: fix probe device leak
+drm-rust drm-rust-fixes 0f61b1860cc3f52aef9036d7235ed1f017632193
+	Linux 6.19-rc5
+drm-intel drm-intel-fixes 63804fed149a6750ffd28610c5c1c98cce6bd377
+	Linux 6.19-rc7
+drm-xe drm-xe-fixes 8a44241b0b83a6047c5448da1fff03fcc29496b5
+	drm/xe/nvm: Fix double-free on aux add failure
+drm drm-next 502d2d8e01c8930afd42363d543ed11298cbe34a
+	Merge tag 'drm-xe-next-fixes-2026-01-29' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next-fixes 84dd57fb0359500092f1101409ca32091731490d
+	accel/amdxdna: Fix memory leak in amdxdna_ubuf_map
+drm-intel drm-intel-next-fixes ad3ebcc2d06875738cd463fb5424cda70cd94a34
+	drm/i915/display: Prevent u64 underflow in intel_fbc_stolen_end
+drm-xe drm-xe-next-fixes 96c2c72b817d70e8d110e78b0162e044a0c41f9f
+	drm/xe: Unregister drm device on probe error
+drm-misc drm-misc-next 3d65e4c276b32c03450261d114e495fda03c8e97
+	drm/panel-edp: Add CMN N116BCL-EAK (C2)
+drm-rust drm-rust-next cea7b66a80412e2a5b74627b89ae25f1d0110a4b
+	Documentation: nova: update pending tasks
+drm-intel drm-intel-next ecb21d61562e8fcb9a7275a935e4547480b97418
+	drm/i915: move intel_gvt_init() level higher
+drm-intel drm-intel-gt-next 8103ecc1999eefc54b740d8d99f264ced1d9c54d
+	drm/i915/selftests: Keep mock file open during unfaultable migrate with fill
+drm-xe drm-xe-next b47239bc30ef85e70b93e357ce76b205baac3b77
+	drm/xe/pf: Fix typo in function kernel-doc
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 912b9b537ae6e75c352d42f7ac40b50f9aa3d2ce
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
