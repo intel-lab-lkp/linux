@@ -15,7 +15,6 @@ use kernel::{
         CoherentAllocation,
         DmaAddress, //
     },
-    dma_write,
     io::poll::read_poll_timeout,
     prelude::*,
     sync::aref::ARef,
@@ -24,6 +23,7 @@ use kernel::{
         AsBytes,
         FromBytes, //
     },
+    try_dma_write, //
 };
 
 use crate::{
@@ -201,9 +201,11 @@ impl DmaGspMem {
 
         let gsp_mem =
             CoherentAllocation::<GspMem>::alloc_coherent(dev, 1, GFP_KERNEL | __GFP_ZERO)?;
-        dma_write!(gsp_mem[0].ptes = PteArray::new(gsp_mem.dma_handle())?)?;
-        dma_write!(gsp_mem[0].cpuq.tx = MsgqTxHeader::new(MSGQ_SIZE, RX_HDR_OFF, MSGQ_NUM_PAGES))?;
-        dma_write!(gsp_mem[0].cpuq.rx = MsgqRxHeader::new())?;
+        try_dma_write!(gsp_mem[0].ptes = PteArray::new(gsp_mem.dma_handle())?)?;
+        try_dma_write!(
+            gsp_mem[0].cpuq.tx = MsgqTxHeader::new(MSGQ_SIZE, RX_HDR_OFF, MSGQ_NUM_PAGES)
+        )?;
+        try_dma_write!(gsp_mem[0].cpuq.rx = MsgqRxHeader::new())?;
 
         Ok(Self(gsp_mem))
     }
@@ -221,7 +223,7 @@ impl DmaGspMem {
         // - The `CoherentAllocation` contains exactly one object.
         // - We will only access the driver-owned part of the shared memory.
         // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = &mut unsafe { self.0.as_slice_mut(0, 1) }.unwrap()[0];
+        let gsp_mem = &mut unsafe { self.0.try_as_slice_mut(0, 1) }.unwrap()[0];
         // PANIC: per the invariant of `cpu_write_ptr`, `tx` is `<= MSGQ_NUM_PAGES`.
         let (before_tx, after_tx) = gsp_mem.cpuq.msgq.data.split_at_mut(tx);
 
@@ -256,7 +258,7 @@ impl DmaGspMem {
         // - The `CoherentAllocation` contains exactly one object.
         // - We will only access the driver-owned part of the shared memory.
         // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = &unsafe { self.0.as_slice(0, 1) }.unwrap()[0];
+        let gsp_mem = &unsafe { self.0.try_as_slice(0, 1) }.unwrap()[0];
         // PANIC: per the invariant of `cpu_read_ptr`, `xx` is `<= MSGQ_NUM_PAGES`.
         let (before_rx, after_rx) = gsp_mem.gspq.msgq.data.split_at(rx);
 

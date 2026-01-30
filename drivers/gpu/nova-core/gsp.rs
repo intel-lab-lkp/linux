@@ -8,10 +8,10 @@ use kernel::{
         CoherentAllocation,
         DmaAddress, //
     },
-    dma_write,
     pci,
     prelude::*,
-    transmute::AsBytes, //
+    transmute::AsBytes,
+    try_dma_write, //
 };
 
 pub(crate) mod cmdq;
@@ -92,7 +92,7 @@ impl LogBuffer {
         unsafe {
             // Copy the self-mapping PTE at the expected location.
             obj.0
-                .as_slice_mut(size_of::<u64>(), size_of_val(&ptes))?
+                .try_as_slice_mut(size_of::<u64>(), size_of_val(&ptes))?
                 .copy_from_slice(ptes.as_bytes())
         };
 
@@ -131,13 +131,13 @@ impl Gsp {
         // _kgspInitLibosLoggingStructures (allocates memory for buffers)
         // kgspSetupLibosInitArgs_IMPL (creates pLibosInitArgs[] array)
         let loginit = LogBuffer::new(dev)?;
-        dma_write!(libos[0] = LibosMemoryRegionInitArgument::new("LOGINIT", &loginit.0))?;
+        try_dma_write!(libos[0] = LibosMemoryRegionInitArgument::new("LOGINIT", &loginit.0))?;
 
         let logintr = LogBuffer::new(dev)?;
-        dma_write!(libos[1] = LibosMemoryRegionInitArgument::new("LOGINTR", &logintr.0))?;
+        try_dma_write!(libos[1] = LibosMemoryRegionInitArgument::new("LOGINTR", &logintr.0))?;
 
         let logrm = LogBuffer::new(dev)?;
-        dma_write!(libos[2] = LibosMemoryRegionInitArgument::new("LOGRM", &logrm.0))?;
+        try_dma_write!(libos[2] = LibosMemoryRegionInitArgument::new("LOGRM", &logrm.0))?;
 
         let cmdq = Cmdq::new(dev)?;
 
@@ -146,8 +146,8 @@ impl Gsp {
             1,
             GFP_KERNEL | __GFP_ZERO,
         )?;
-        dma_write!(rmargs[0] = fw::GspArgumentsCached::new(&cmdq))?;
-        dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", &rmargs))?;
+        try_dma_write!(rmargs[0] = fw::GspArgumentsCached::new(&cmdq))?;
+        try_dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", &rmargs))?;
 
         Ok(try_pin_init!(Self {
             libos,

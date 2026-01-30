@@ -191,7 +191,7 @@ unsafe fn transmute<T: Sized + FromBytes>(fw: &DmaObject, offset: usize) -> Resu
     // SAFETY: The safety requirements of the function guarantee the device won't read
     // or write to memory while the reference is alive and that this call won't race
     // with writes to the same memory region.
-    T::from_bytes(unsafe { fw.as_slice(offset, size_of::<T>())? }).ok_or(EINVAL)
+    T::from_bytes(unsafe { fw.try_as_slice(offset, size_of::<T>())? }).ok_or(EINVAL)
 }
 
 /// Reinterpret the area starting from `offset` in `fw` as a mutable instance of `T` (which must
@@ -210,7 +210,7 @@ unsafe fn transmute_mut<T: Sized + FromBytes + AsBytes>(
     // SAFETY: The safety requirements of the function guarantee the device won't read
     // or write to memory while the reference is alive and that this call won't race
     // with writes or reads to the same memory region.
-    T::from_bytes_mut(unsafe { fw.as_slice_mut(offset, size_of::<T>())? }).ok_or(EINVAL)
+    T::from_bytes_mut(unsafe { fw.try_as_slice_mut(offset, size_of::<T>())? }).ok_or(EINVAL)
 }
 
 /// The FWSEC microcode, extracted from the BIOS and to be run on the GSP falcon.

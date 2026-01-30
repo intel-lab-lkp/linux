@@ -33,7 +33,7 @@ impl DmaObject {
         Self::new(dev, data.len()).and_then(|mut dma_obj| {
             // SAFETY: We have just allocated the DMA memory, we are the only users and
             // we haven't made the device aware of the handle yet.
-            unsafe { dma_obj.write(data, 0)? }
+            unsafe { dma_obj.try_write(data, 0)? }
             Ok(dma_obj)
         })
     }

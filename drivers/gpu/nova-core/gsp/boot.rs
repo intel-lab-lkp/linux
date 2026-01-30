@@ -3,11 +3,11 @@
 use kernel::{
     device,
     dma::CoherentAllocation,
-    dma_write,
     io::poll::read_poll_timeout,
     pci,
     prelude::*,
-    time::Delta, //
+    time::Delta,
+    try_dma_write, //
 };
 
 use crate::{
@@ -160,7 +160,7 @@ impl super::Gsp {
 
         let wpr_meta =
             CoherentAllocation::<GspFwWprMeta>::alloc_coherent(dev, 1, GFP_KERNEL | __GFP_ZERO)?;
-        dma_write!(wpr_meta[0] = GspFwWprMeta::new(&gsp_fw, &fb_layout))?;
+        try_dma_write!(wpr_meta[0] = GspFwWprMeta::new(&gsp_fw, &fb_layout))?;
 
         self.cmdq
             .send_command(bar, commands::SetSystemInfo::new(pdev))?;
