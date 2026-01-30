@@ -13,6 +13,43 @@
 #include "usb.h"
 
 /**
+ * __usb_offload_get - increment the offload_usage of a USB device
+ * @udev: the USB device to increment its offload_usage
+ *
+ * This is the lockless version of usb_offload_get. The caller must hold
+ * @udev's device lock.
+ *
+ * Return: 0 on success. A negative error code otherwise.
+ */
+int __usb_offload_get(struct usb_device *udev)
+{
+	int ret;
+
+	device_lock_assert(&udev->dev);
+
+	if (udev->state == USB_STATE_NOTATTACHED)
+		return -ENODEV;
+
+	if (udev->state == USB_STATE_SUSPENDED ||
+	    udev->offload_at_suspend)
+		return -EBUSY;
+
+	/*
+	 * offload_usage could only be modified when the device is active, since
+	 * it will alter the suspend flow of the device.
+	 */
+	ret = usb_autoresume_device(udev);
+	if (ret < 0)
+		return ret;
+
+	udev->offload_usage++;
+	usb_autosuspend_device(udev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(__usb_offload_get);
+
+/**
  * usb_offload_get - increment the offload_usage of a USB device
  * @udev: the USB device to increment its offload_usage
  *
@@ -28,34 +65,51 @@ int usb_offload_get(struct usb_device *udev)
 	int ret;
 
 	usb_lock_device(udev);
-	if (udev->state == USB_STATE_NOTATTACHED) {
-		usb_unlock_device(udev);
+	ret = __usb_offload_get(udev);
+	usb_unlock_device(udev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(usb_offload_get);
+
+/**
+ * __usb_offload_put - drop the offload_usage of a USB device
+ * @udev: the USB device to drop its offload_usage
+ *
+ * This is the lockless version of usb_offload_put. The caller must hold
+ * @udev's device lock.
+ *
+ * Return: 0 on success. A negative error code otherwise.
+ */
+int __usb_offload_put(struct usb_device *udev)
+{
+	int ret;
+
+	device_lock_assert(&udev->dev);
+
+	if (udev->state == USB_STATE_NOTATTACHED)
 		return -ENODEV;
-	}
 
 	if (udev->state == USB_STATE_SUSPENDED ||
-		   udev->offload_at_suspend) {
-		usb_unlock_device(udev);
+	    udev->offload_at_suspend)
 		return -EBUSY;
-	}
 
 	/*
 	 * offload_usage could only be modified when the device is active, since
 	 * it will alter the suspend flow of the device.
 	 */
 	ret = usb_autoresume_device(udev);
-	if (ret < 0) {
-		usb_unlock_device(udev);
+	if (ret < 0)
 		return ret;
-	}
 
-	udev->offload_usage++;
+	/* Drop the count when it wasn't 0, ignore the operation otherwise. */
+	if (udev->offload_usage)
+		udev->offload_usage--;
 	usb_autosuspend_device(udev);
-	usb_unlock_device(udev);
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(usb_offload_get);
+EXPORT_SYMBOL_GPL(__usb_offload_put);
 
 /**
  * usb_offload_put - drop the offload_usage of a USB device
@@ -72,31 +126,7 @@ int usb_offload_put(struct usb_device *udev)
 	int ret;
 
 	usb_lock_device(udev);
-	if (udev->state == USB_STATE_NOTATTACHED) {
-		usb_unlock_device(udev);
-		return -ENODEV;
-	}
-
-	if (udev->state == USB_STATE_SUSPENDED ||
-		   udev->offload_at_suspend) {
-		usb_unlock_device(udev);
-		return -EBUSY;
-	}
-
-	/*
-	 * offload_usage could only be modified when the device is active, since
-	 * it will alter the suspend flow of the device.
-	 */
-	ret = usb_autoresume_device(udev);
-	if (ret < 0) {
-		usb_unlock_device(udev);
-		return ret;
-	}
-
-	/* Drop the count when it wasn't 0, ignore the operation otherwise. */
-	if (udev->offload_usage)
-		udev->offload_usage--;
-	usb_autosuspend_device(udev);
+	ret = __usb_offload_put(udev);
 	usb_unlock_device(udev);
 
 	return ret;

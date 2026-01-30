@@ -89,7 +89,7 @@ __xhci_sideband_remove_endpoint(struct xhci_sideband *sb, struct xhci_virt_ep *e
 	sb->eps[ep->ep_index] = NULL;
 }
 
-/* Caller must hold sb->mutex */
+/* Caller must hold sb->mutex and udev device lock */
 static void
 __xhci_sideband_remove_interrupter(struct xhci_sideband *sb)
 {
@@ -102,10 +102,10 @@ __xhci_sideband_remove_interrupter(struct xhci_sideband *sb)
 
 	xhci_remove_secondary_interrupter(xhci_to_hcd(sb->xhci), sb->ir);
 	sb->ir = NULL;
-	udev = sb->vdev->udev;
 
-	if (udev->state != USB_STATE_NOTATTACHED)
-		usb_offload_put(udev);
+	udev = interface_to_usbdev(sb->intf);
+	device_lock_assert(&udev->dev);
+	__usb_offload_put(udev);
 }
 
 /* sideband api functions */
@@ -334,24 +334,35 @@ xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
 	if (!sb || !sb->xhci)
 		return -ENODEV;
 
-	guard(mutex)(&sb->mutex);
+	udev = interface_to_usbdev(sb->intf);
+	usb_lock_device(udev);
+	mutex_lock(&sb->mutex);
 
-	if (!sb->vdev)
-		return -ENODEV;
+	if (!sb->vdev) {
+		ret = -ENODEV;
+		goto unlock;
+	}
 
-	if (sb->ir)
-		return -EBUSY;
+	if (sb->ir) {
+		ret = -EBUSY;
+		goto unlock;
+	}
 
 	sb->ir = xhci_create_secondary_interrupter(xhci_to_hcd(sb->xhci),
 						   num_seg, imod_interval,
 						   intr_num);
-	if (!sb->ir)
-		return -ENOMEM;
+	if (!sb->ir) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
 
-	udev = sb->vdev->udev;
-	ret = usb_offload_get(udev);
+	ret = __usb_offload_get(udev);
 
 	sb->ir->ip_autoclear = ip_autoclear;
+
+unlock:
+	mutex_unlock(&sb->mutex);
+	usb_unlock_device(udev);
 
 	return ret;
 }
@@ -367,12 +378,19 @@ EXPORT_SYMBOL_GPL(xhci_sideband_create_interrupter);
 void
 xhci_sideband_remove_interrupter(struct xhci_sideband *sb)
 {
-	if (!sb)
+	struct usb_device *udev;
+
+	if (!sb || !sb->vdev)
 		return;
 
-	guard(mutex)(&sb->mutex);
+	udev = interface_to_usbdev(sb->intf);
+	usb_lock_device(udev);
+	mutex_lock(&sb->mutex);
 
 	__xhci_sideband_remove_interrupter(sb);
+
+	mutex_unlock(&sb->mutex);
+	usb_unlock_device(udev);
 }
 EXPORT_SYMBOL_GPL(xhci_sideband_remove_interrupter);
 

@@ -846,11 +846,17 @@ static inline void usb_mark_last_busy(struct usb_device *udev)
 #endif
 
 #if IS_ENABLED(CONFIG_USB_XHCI_SIDEBAND)
+int __usb_offload_get(struct usb_device *udev);
+int __usb_offload_put(struct usb_device *udev);
 int usb_offload_get(struct usb_device *udev);
 int usb_offload_put(struct usb_device *udev);
 bool usb_offload_check(struct usb_device *udev);
 #else
 
+static inline int __usb_offload_get(struct usb_device *udev)
+{ return 0; }
+static inline int __usb_offload_put(struct usb_device *udev)
+{ return 0; }
 static inline int usb_offload_get(struct usb_device *udev)
 { return 0; }
 static inline int usb_offload_put(struct usb_device *udev)
