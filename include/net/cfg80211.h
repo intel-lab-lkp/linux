@@ -800,6 +800,8 @@ struct key_params {
 	u16 vlan_id;
 	u32 cipher;
 	enum nl80211_key_mode mode;
+	const u8 *ltf_keyseed;
+	int ltf_keyseed_len;
 };
 
 /**

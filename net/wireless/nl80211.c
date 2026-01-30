@@ -968,6 +968,8 @@ static const struct nla_policy nl80211_key_policy[NL80211_KEY_MAX + 1] = {
 	[NL80211_KEY_TYPE] = NLA_POLICY_MAX(NLA_U32, NUM_NL80211_KEYTYPES - 1),
 	[NL80211_KEY_DEFAULT_TYPES] = { .type = NLA_NESTED },
 	[NL80211_KEY_MODE] = NLA_POLICY_RANGE(NLA_U8, 0, NL80211_KEY_SET_TX),
+	[NL80211_ATTR_LTF_KEYSEED] = { .type = NLA_BINARY,
+				       .len = WLAN_MAX_KEY_LEN },
 };
 
 /* policy for the key default flags */
@@ -1490,6 +1492,11 @@ static int nl80211_parse_key_new(struct genl_info *info, struct nlattr *key,
 
 	if (tb[NL80211_KEY_MODE])
 		k->p.mode = nla_get_u8(tb[NL80211_KEY_MODE]);
+
+	if (tb[NL80211_ATTR_LTF_KEYSEED]) {
+		k->p.ltf_keyseed = nla_data(tb[NL80211_ATTR_LTF_KEYSEED]);
+		k->p.ltf_keyseed_len = nla_len(tb[NL80211_ATTR_LTF_KEYSEED]);
+	}
 
 	return 0;
 }
