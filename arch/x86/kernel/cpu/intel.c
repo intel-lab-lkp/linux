@@ -533,6 +533,16 @@ static const struct x86_cpu_id zmm_exclusion_list[] = {
 	{},
 };
 
+/*
+ * These CPUs mitigate RFDS via VERW but do not enumerate the RFDS_CLEAR bit
+ * in IA32_ARCH_CAPABILITIES MSR.
+ */
+static const struct x86_cpu_id implicit_rfds_list[] = {
+	X86_MATCH_VFM(INTEL_ATOM_GOLDMONT,		0),
+	X86_MATCH_VFM_STEPS(INTEL_ATOM_TREMONT_D, 7, 7,	0),
+	{},
+};
+
 static void init_intel(struct cpuinfo_x86 *c)
 {
 	early_init_intel(c);
@@ -613,6 +623,10 @@ static void init_intel(struct cpuinfo_x86 *c)
 
 	if (x86_match_cpu(zmm_exclusion_list))
 		set_cpu_cap(c, X86_FEATURE_PREFER_YMM);
+
+	if (x86_match_cpu(implicit_rfds_list) &&
+	    !boot_cpu_has_bug(X86_BUG_OLD_MICROCODE))
+		setup_force_cpu_cap(X86_FEATURE_RFDS_CLEAR);
 
 	/* Work around errata */
 	srat_detect_node(c);
