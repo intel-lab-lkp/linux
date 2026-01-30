@@ -152,6 +152,8 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	int ret;
 	struct xhci_irq_ctx *ctx;
+	unsigned int irqs_num;
+	int i;
 
 	/*
 	 * Some Fresco Logic host controllers advertise MSI, but fail to
@@ -174,7 +176,7 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 
 	/* TODO: Check with MSI Soc for sysdev */
 	xhci->nvecs = pci_alloc_irq_vectors(pdev, 1, xhci->nvecs,
-					    PCI_IRQ_MSIX | PCI_IRQ_MSI);
+					    PCI_IRQ_MSIX | PCI_IRQ_MSI | PCI_IRQ_AFFINITY);
 	if (xhci->nvecs < 0) {
 		xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			       "failed to allocate IRQ vectors");
@@ -192,8 +194,43 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 		goto free_irq_vectors;
 
 	xhci->irqs_enabled = 1;
+
+	/*
+	 * Vector 0 IRQ handler is requested above.
+	 * Request IRQ handlers for up to secondary_irqs_alloc additional vectors
+	 * (vectors 1..), limited by what PCI core actually allocated.
+	 */
+	irqs_num = min_t(unsigned int,
+			(unsigned int)xhci->nvecs,
+			(unsigned int)(1 + xhci->secondary_irqs_alloc));
+
+	/* Vector 0 requested above; request up to sec_num secondary vectors (1..). */
+	for (i = 1; i < irqs_num; i++) {
+		ctx = &xhci->irq_ctx[i];
+		ctx->hcd = hcd;
+		ctx->intr_num = i;
+		ret = request_irq(pci_irq_vector(pdev, i), xhci_msi_irq, 0,
+				"xhci_hcd", ctx);
+		if (ret) {
+			xhci_dbg_trace(xhci, trace_xhci_dbg_init,
+					"failed to request irq vector %d", i);
+			while (--i >= 1) {
+				free_irq(pci_irq_vector(pdev, i),
+						&xhci->irq_ctx[i]);
+				memset(&xhci->irq_ctx[i], 0,
+						sizeof(xhci->irq_ctx[i]));
+			}
+			xhci->irqs_enabled = 1;
+			break;
+		}
+		xhci->irqs_enabled++;
+	}
+
 	hcd->msi_enabled = 1;
 	hcd->msix_enabled = pdev->msix_enabled;
+
+	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "enabled %u %s interrupters",
+			xhci->irqs_enabled, pdev->msix_enabled ? "MSI-X" : "MSI");
 	return 0;
 
 free_irq_vectors:

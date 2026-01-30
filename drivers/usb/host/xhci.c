@@ -577,9 +577,6 @@ static int xhci_init(struct usb_hcd *hcd)
 	/* Set USB 3.0 device notifications for function remote wake */
 	xhci_set_dev_notifications(xhci);
 
-	/* Since only the main interrupt is used, secondary_irqs_alloc is set to 0. */
-	xhci->secondary_irqs_alloc = 0;
-
 	/*
 	 * Initialize all allocated interrupters here.
 	 * Use allocated count as loop bound to avoid touching non-allocated
@@ -4236,6 +4233,7 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	unsigned long flags;
 	int ret, slot_id;
 	struct xhci_command *command;
+	unsigned int sec_irqs, intr_num;
 
 	command = xhci_alloc_command(xhci, true, GFP_KERNEL);
 	if (!command)
@@ -4291,6 +4289,18 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	trace_xhci_alloc_dev(slot_ctx);
 
 	udev->slot_id = slot_id;
+
+	/*
+	 * Spread devices across IRQ-backed secondary interrupters [1..].
+	 * If only vector 0 is enabled, default to interrupter 0.
+	 */
+	sec_irqs = (xhci->irqs_enabled > 1) ? (xhci->irqs_enabled - 1) : 0;
+	if (sec_irqs) {
+		intr_num = slot_id % sec_irqs;
+		vdev->interrupter = xhci->interrupters[intr_num + 1];
+	} else {
+		vdev->interrupter = xhci->interrupters[0];
+	}
 
 	xhci_debugfs_create_slot(xhci, slot_id);
 
