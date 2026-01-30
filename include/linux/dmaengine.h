@@ -1249,6 +1249,22 @@ static inline dma_cookie_t dmaengine_submit(struct dma_async_tx_descriptor *desc
 	return desc->tx_submit(desc);
 }
 
+#define dmaengine_prep_submit(chan, cb, cb_param, func, ...)	\
+({	struct dma_async_tx_descriptor *tx =			\
+		dmaengine_prep_##func(chan, __VA_ARGS__);	\
+	dma_cookie_t cookie = -ENOMEM;				\
+								\
+	if (tx) {						\
+		tx->callback = cb;				\
+		tx->callback_param = cb_param;			\
+		cookie = dmaengine_submit(tx);			\
+								\
+		if (dma_submit_error(cookie))			\
+			dmaengine_desc_free(tx);		\
+	}							\
+	cookie;							\
+})
+
 static inline bool dmaengine_check_align(enum dmaengine_alignment align,
 					 size_t off1, size_t off2, size_t len)
 {
