@@ -376,6 +376,7 @@ int nl80211_pmsr_start(struct sk_buff *skb, struct genl_info *info)
 	struct cfg80211_pmsr_request *req;
 	struct nlattr *peers, *peer;
 	int count, rem, err, idx, pd_count, max_pd_peers;
+	u8 use_random_mac = 0;
 
 	capa = rdev->wiphy.pmsr_capa;
 
@@ -422,6 +423,7 @@ int nl80211_pmsr_start(struct sk_buff *skb, struct genl_info *info)
 					       req->mac_addr_mask);
 		if (err)
 			goto out_err;
+		use_random_mac = 1;
 	} else {
 		memcpy(req->mac_addr, wdev_address(wdev), ETH_ALEN);
 		eth_broadcast_addr(req->mac_addr_mask);
@@ -450,6 +452,14 @@ int nl80211_pmsr_start(struct sk_buff *skb, struct genl_info *info)
 				if (pd_count > max_pd_peers) {
 					NL_SET_ERR_MSG(info->extack,
 						       "Too many PD peers used");
+					err = -EINVAL;
+					goto out_err;
+				}
+
+				if (use_random_mac &&
+				    !capa->pd_randomize_mac_addr) {
+					NL_SET_ERR_MSG(info->extack,
+						       "PD mac randomization not supported");
 					err = -EINVAL;
 					goto out_err;
 				}
