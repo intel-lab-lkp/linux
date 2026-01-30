@@ -1640,6 +1640,7 @@ int mt76_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct mt76_phy *phy = hw->priv;
 	struct mt76_dev *dev = phy->dev;
 	enum mt76_sta_event ev;
+	int ret;
 
 	phy = mt76_vif_phy(hw, vif);
 	if (!phy)
@@ -1668,7 +1669,11 @@ int mt76_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	else
 		return 0;
 
-	return dev->drv->sta_event(dev, vif, sta, ev);
+	mutex_lock(&dev->mutex);
+	ret = dev->drv->sta_event(dev, vif, sta, ev);
+	mutex_unlock(&dev->mutex);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mt76_sta_state);
 
