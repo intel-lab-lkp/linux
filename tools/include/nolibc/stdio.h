@@ -250,7 +250,7 @@ typedef int (*__nolibc_printf_cb)(intptr_t state, const char *buf, size_t size);
 static __attribute__((unused, format(printf, 4, 0)))
 int __nolibc_printf(__nolibc_printf_cb cb, intptr_t state, size_t n, const char *fmt, va_list args)
 {
-	char escape, lpref, c;
+	char escape, lpref, padc, c;
 	unsigned long long v;
 	unsigned int written, width;
 	size_t len, ofs, w;
@@ -261,10 +261,16 @@ int __nolibc_printf(__nolibc_printf_cb cb, intptr_t state, size_t n, const char 
 	while (1) {
 		c = fmt[ofs++];
 		width = 0;
+		padc = ' ';
 
 		if (escape) {
 			/* we're in an escape sequence, ofs == 1 */
 			escape = 0;
+
+			if (c == '-') {
+				padc = c;
+				c = fmt[ofs++];
+			}
 
 			/* width */
 			while (c >= '0' && c <= '9') {
@@ -358,12 +364,15 @@ int __nolibc_printf(__nolibc_printf_cb cb, intptr_t state, size_t n, const char 
 			if (n) {
 				w = len < n ? len : n;
 				n -= w;
-				while (width-- > w) {
+				if (padc == '-' && cb(state, outstr, w) != 0)
+					return -1;
+				while (width > w) {
+					written++;
 					if (cb(state, " ", 1) != 0)
 						return -1;
-					written += 1;
+					width--;
 				}
-				if (cb(state, outstr, w) != 0)
+				if (padc != '-' && cb(state, outstr, w) != 0)
 					return -1;
 			}
 
