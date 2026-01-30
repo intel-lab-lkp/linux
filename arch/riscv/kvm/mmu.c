@@ -131,7 +131,9 @@ void kvm_arch_memslots_updated(struct kvm *kvm, u64 gen)
 
 void kvm_arch_flush_shadow_all(struct kvm *kvm)
 {
+	spin_lock(&kvm->mmu_lock);
 	kvm_riscv_mmu_free_pgd(kvm);
+	spin_unlock(&kvm->mmu_lock);
 }
 
 void kvm_arch_flush_shadow_memslot(struct kvm *kvm,
@@ -253,9 +255,11 @@ bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range)
 	gstage.flags = 0;
 	gstage.vmid = READ_ONCE(kvm->arch.vmid.vmid);
 	gstage.pgd = kvm->arch.pgd;
+	spin_lock(&kvm->mmu_lock);
 	kvm_riscv_gstage_unmap_range(&gstage, range->start << PAGE_SHIFT,
 				     (range->end - range->start) << PAGE_SHIFT,
 				     range->may_block);
+	spin_unlock(&kvm->mmu_lock);
 	return false;
 }
 
