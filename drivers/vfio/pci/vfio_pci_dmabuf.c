@@ -22,16 +22,6 @@ struct vfio_pci_dma_buf {
 	u8 revoked : 1;
 };
 
-static int vfio_pci_dma_buf_pin(struct dma_buf_attachment *attachment)
-{
-	return -EOPNOTSUPP;
-}
-
-static void vfio_pci_dma_buf_unpin(struct dma_buf_attachment *attachment)
-{
-	/* Do nothing */
-}
-
 static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
 				   struct dma_buf_attachment *attachment)
 {
@@ -42,6 +32,9 @@ static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
 
 	if (priv->revoked)
 		return -ENODEV;
+
+	if (!dma_buf_attach_revocable(attachment))
+		return -EOPNOTSUPP;
 
 	return 0;
 }
@@ -107,8 +100,6 @@ static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 }
 
 static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
-	.pin = vfio_pci_dma_buf_pin,
-	.unpin = vfio_pci_dma_buf_unpin,
 	.attach = vfio_pci_dma_buf_attach,
 	.map_dma_buf = vfio_pci_dma_buf_map,
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
@@ -357,7 +348,8 @@ void vfio_pci_dma_buf_move(struct vfio_pci_core_device *vdev, bool revoked)
 
 		if (priv->revoked != revoked) {
 			dma_resv_lock(priv->dmabuf->resv, NULL);
-			priv->revoked = revoked;
+			if (revoked)
+				priv->revoked = true;
 			dma_buf_invalidate_mappings(priv->dmabuf);
 			dma_resv_wait_timeout(priv->dmabuf->resv,
 					      DMA_RESV_USAGE_BOOKKEEP, false,
@@ -365,17 +357,7 @@ void vfio_pci_dma_buf_move(struct vfio_pci_core_device *vdev, bool revoked)
 			dma_resv_unlock(priv->dmabuf->resv);
 			if (revoked) {
 				kref_put(&priv->kref, vfio_pci_dma_buf_done);
-				/* Let's wait till all DMA unmap are completed. */
-				wait = wait_for_completion_timeout(
-					&priv->comp, secs_to_jiffies(1));
-				/*
-				 * If you see this WARN_ON, it means that
-				 * importer didn't call unmap in response to
-				 * dma_buf_invalidate_mappings() which is not
-				 * allowed.
-				 */
-				WARN(!wait,
-				     "Timed out waiting for DMABUF unmap, importer has a broken invalidate_mapping()");
+				wait_for_completion(&priv->comp);
 			} else {
 				/*
 				 * Kref is initialize again, because when revoke
@@ -389,6 +371,9 @@ void vfio_pci_dma_buf_move(struct vfio_pci_core_device *vdev, bool revoked)
 				 * priv->revoked == true.
 				 */
 				reinit_completion(&priv->comp);
+				dma_resv_lock(priv->dmabuf->resv, NULL);
+				priv->revoked = false;
+				dma_resv_unlock(priv->dmabuf->resv);
 			}
 		}
 		fput(priv->dmabuf->file);
@@ -417,9 +402,7 @@ void vfio_pci_dma_buf_cleanup(struct vfio_pci_core_device *vdev)
 				      MAX_SCHEDULE_TIMEOUT);
 		dma_resv_unlock(priv->dmabuf->resv);
 		kref_put(&priv->kref, vfio_pci_dma_buf_done);
-		wait = wait_for_completion_timeout(&priv->comp,
-						   secs_to_jiffies(1));
-		WARN_ON(!wait);
+		wait_for_completion(&priv->comp);
 		vfio_device_put_registration(&vdev->vdev);
 		fput(priv->dmabuf->file);
 	}
