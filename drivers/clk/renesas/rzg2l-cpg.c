@@ -86,6 +86,12 @@
 #define PLL5_HSCLK_MIN		10000000
 #define PLL5_HSCLK_MAX		187500000
 
+/* Critical clk/resets to route serial IRQ to CPU by default */
+#define CPG_CLKON_DMAC_REG	0x52c
+#define CPG_RST_DMAC		0x82c
+#define CPG_CLKON_DMAC_REG_ACLK_ON	((BIT(0) << 16) | BIT(0))
+#define CPG_RST_DMAC_DEASSERTED_ALL	((GENMASK(1, 0) << 16) | GENMASK(1, 0))
+
 /**
  * struct clk_hw_data - clock hardware data
  * @hw: clock hw
@@ -2051,7 +2057,26 @@ static int __init rzg2l_cpg_probe(struct platform_device *pdev)
 	if (error)
 		return error;
 
+	/*
+	 * Deassert DMA resets to route the serial IRQ to CPU for serial
+	 * console during boot. DMA clk is critical clk and it will be
+	 * turned on forever.
+	 */
+	writel(CPG_RST_DMAC_DEASSERTED_ALL, priv->base + CPG_RST_DMAC);
+
 	debugfs_create_file("mstop", 0444, NULL, priv, &rzg2l_mod_clock_mstop_fops);
+	return 0;
+}
+
+static int rzg2l_cpg_suspend(struct device *dev)
+{
+	struct rzg2l_cpg_priv *priv = dev_get_drvdata(dev);
+
+	/*
+	 * Deassert DMA resets to route the serial IRQ to CPU for making
+	 * serial IRQ available as wakeup source for s2idle.
+	 */
+	writel(CPG_RST_DMAC_DEASSERTED_ALL, priv->base + CPG_RST_DMAC);
 	return 0;
 }
 
@@ -2061,11 +2086,19 @@ static int rzg2l_cpg_resume(struct device *dev)
 
 	rzg2l_mod_clock_init_mstop(priv);
 
+	/*
+	 * Deassert DMA resets and enable clk to route serial IRQ to CPU for
+	 * serial console during wakeup from s2ram as the SoC is in DDR
+	 * retention mode.
+	 */
+	writel(CPG_CLKON_DMAC_REG_ACLK_ON, priv->base + CPG_CLKON_DMAC_REG);
+	writel(CPG_RST_DMAC_DEASSERTED_ALL, priv->base + CPG_RST_DMAC);
+
 	return 0;
 }
 
 static const struct dev_pm_ops rzg2l_cpg_pm_ops = {
-	NOIRQ_SYSTEM_SLEEP_PM_OPS(NULL, rzg2l_cpg_resume)
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(rzg2l_cpg_suspend, rzg2l_cpg_resume)
 };
 
 static const struct of_device_id rzg2l_cpg_match[] = {
