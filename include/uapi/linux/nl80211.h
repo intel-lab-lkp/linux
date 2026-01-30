@@ -7995,6 +7995,14 @@ enum nl80211_peer_measurement_ftm_capa {
  *	(units mm, u64)
  * @NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT: Negotiate Range report in case of
  *	EDCA based ranging.
+ * @NL80211_PMSR_FTM_REQ_ATTR_PD_REPORT_RESULT: flag to enable receiving results
+ *	for PD requests. if this flag is disabled then ranging result will not
+ *	reported regardless of ranging role or the type or ranging. Only valid
+ *	if %NL80211_PMSR_PEER_ATTR_PD_REQUEST is set. in case
+ *	%NL80211_PMSR_FTM_REQ_ATTR_RSTA is set, either
+ *	%NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT or
+ *	%NL80211_PMSR_FTM_REQ_ATTR_LMR_FEEDBACK should be set inorder for
+ *	request to be valid.
  *
  * @NUM_NL80211_PMSR_FTM_REQ_ATTR: internal
  * @NL80211_PMSR_FTM_REQ_ATTR_MAX: highest attribute number
@@ -8024,6 +8032,7 @@ enum nl80211_peer_measurement_ftm_req {
 	NL80211_PMSR_FTM_REQ_ATTR_INGRESS,
 	NL80211_PMSR_FTM_REQ_ATTR_EGRESS,
 	NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT,
+	NL80211_PMSR_FTM_REQ_ATTR_PD_REPORT_RESULT,
 
 	/* keep last */
 	NUM_NL80211_PMSR_FTM_REQ_ATTR,

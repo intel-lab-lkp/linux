@@ -4394,6 +4394,11 @@ struct cfg80211_pmsr_result {
  *	in this case.
  * @range_report: negotiate for FTM range report. Only valid for
  *		 EDCA based ranging.
+ * @pd_require_range_results: flag to enable receiving results
+ *	for PD requests. if this flag is disabled then ranging result will not
+ *	be reported regardless of ranging role or the type or ranging. Only
+ *	valid if @pd_request is set. in case @rsta is set, either @range_report
+ *	or @lmr_feedback should be set inorder for the request to be valid.
  * See also nl80211 for the respective attribute documentation.
  */
 struct cfg80211_pmsr_ftm_request_peer {
@@ -4419,7 +4424,8 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u8 measurements_per_aw;
 	u64 ingress_distancemm;
 	u64 egress_distancemm;
-	u8 range_report:1;
+	u8 range_report:1,
+	   pd_require_range_results:1;
 };
 
 /**
