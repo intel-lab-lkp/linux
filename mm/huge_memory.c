@@ -3558,10 +3558,9 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 		 * which needs correct compound_head().
 		 */
 		clear_compound_head(new_head);
-		if (new_order) {
+		if (new_order)
 			prep_compound_page(new_head, new_order);
-			folio_set_large_rmappable(new_folio);
-		}
+		page_rmappable_folio(new_head);
 
 		if (folio_test_young(folio))
 			folio_set_young(new_folio);
