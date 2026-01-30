@@ -142,6 +142,14 @@ rz_mtu3_get_channel(struct rz_mtu3_pwm_chip *rz_mtu3_pwm, u32 hwpwm)
 	return priv;
 }
 
+static u32 rz_mtu3_sibling_hwpwm(u32 hwpwm, bool is_primary)
+{
+	if (is_primary)
+		return hwpwm + 1;
+	else
+		return hwpwm - 1;
+}
+
 static bool rz_mtu3_pwm_is_ch_enabled(struct rz_mtu3_pwm_chip *rz_mtu3_pwm,
 				      u32 hwpwm)
 {
@@ -322,6 +330,7 @@ static int rz_mtu3_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	struct rz_mtu3_pwm_channel *priv;
 	u64 period_cycles;
 	u64 duty_cycles;
+	bool is_primary;
 	u8 prescale;
 	u16 pv, dc;
 	u8 val;
@@ -329,6 +338,7 @@ static int rz_mtu3_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 
 	priv = rz_mtu3_get_channel(rz_mtu3_pwm, pwm->hwpwm);
 	ch = priv - rz_mtu3_pwm->channel_data;
+	is_primary = priv->map->base_pwm_number == pwm->hwpwm;
 
 	period_cycles = mul_u64_u32_div(state->period, rz_mtu3_pwm->rate,
 					NSEC_PER_SEC);
@@ -340,11 +350,15 @@ static int rz_mtu3_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	 * different settings. Modify prescalar if other PWM is off or handle
 	 * it, if current prescale value is less than the one we want to set.
 	 */
-	if (rz_mtu3_pwm->enable_count[ch] > 1) {
-		if (rz_mtu3_pwm->prescale[ch] > prescale)
-			return -EBUSY;
+	if (rz_mtu3_pwm->user_count[ch] > 1) {
+		u32 sibling_hwpwm = rz_mtu3_sibling_hwpwm(pwm->hwpwm, is_primary);
 
-		prescale = rz_mtu3_pwm->prescale[ch];
+		if (rz_mtu3_pwm_is_ch_enabled(rz_mtu3_pwm, sibling_hwpwm)) {
+			if (rz_mtu3_pwm->prescale[ch] > prescale)
+				return -EBUSY;
+
+			prescale = rz_mtu3_pwm->prescale[ch];
+		}
 	}
 
 	pv = rz_mtu3_pwm_calculate_pv_or_dc(period_cycles, prescale);
@@ -371,7 +385,7 @@ static int rz_mtu3_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	if (rz_mtu3_pwm->prescale[ch] != prescale && rz_mtu3_pwm->enable_count[ch])
 		rz_mtu3_disable(priv->mtu);
 
-	if (priv->map->base_pwm_number == pwm->hwpwm) {
+	if (is_primary) {
 		rz_mtu3_8bit_ch_write(priv->mtu, RZ_MTU3_TCR,
 				      RZ_MTU3_TCR_CCLR_TGRA | val);
 		rz_mtu3_pwm_write_tgr_registers(priv, RZ_MTU3_TGRA, pv,
