@@ -2723,7 +2723,7 @@ exit_xfs_fs(void)
 	xfs_mru_cache_uninit();
 	xfs_destroy_workqueues();
 	xfs_destroy_caches();
-	xfs_uuid_table_free();
+	xfs_uuid_table_destroy();
 }
 
 module_init(init_xfs_fs);
