@@ -720,7 +720,6 @@ static void lpi2c_dma_callback(void *data)
 
 static int lpi2c_dma_rx_cmd_submit(struct lpi2c_imx_struct *lpi2c_imx)
 {
-	struct dma_async_tx_descriptor *rx_cmd_desc;
 	struct lpi2c_imx_dma *dma = lpi2c_imx->dma;
 	struct dma_chan *txchan = dma->chan_tx;
 	dma_cookie_t cookie;
@@ -733,15 +732,10 @@ static int lpi2c_dma_rx_cmd_submit(struct lpi2c_imx_struct *lpi2c_imx)
 		return -EINVAL;
 	}
 
-	rx_cmd_desc = dmaengine_prep_slave_single(txchan, dma->dma_tx_addr,
-						  dma->rx_cmd_buf_len, DMA_MEM_TO_DEV,
-						  DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
-	if (!rx_cmd_desc) {
-		dev_err(&lpi2c_imx->adapter.dev, "DMA prep slave sg failed, use pio\n");
-		goto desc_prepare_err_exit;
-	}
-
-	cookie = dmaengine_submit(rx_cmd_desc);
+	cookie = dmaengine_prep_submit(txchan, NULL, NULL, slave_single,
+				       dma->dma_tx_addr,
+				       dma->rx_cmd_buf_len, DMA_MEM_TO_DEV,
+				       DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 	if (dma_submit_error(cookie)) {
 		dev_err(&lpi2c_imx->adapter.dev, "submitting DMA failed, use pio\n");
 		goto submit_err_exit;
@@ -751,15 +745,9 @@ static int lpi2c_dma_rx_cmd_submit(struct lpi2c_imx_struct *lpi2c_imx)
 
 	return 0;
 
-desc_prepare_err_exit:
-	dma_unmap_single(txchan->device->dev, dma->dma_tx_addr,
-			 dma->rx_cmd_buf_len, DMA_TO_DEVICE);
-	return -EINVAL;
-
 submit_err_exit:
 	dma_unmap_single(txchan->device->dev, dma->dma_tx_addr,
 			 dma->rx_cmd_buf_len, DMA_TO_DEVICE);
-	dmaengine_desc_free(rx_cmd_desc);
 	return -EINVAL;
 }
 
