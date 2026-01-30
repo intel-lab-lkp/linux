@@ -12,7 +12,11 @@ use crate::{
     sync::aref::ARef,
     transmute::{AsBytes, FromBytes},
 };
-use core::{marker::PhantomData, ptr::NonNull};
+use core::{
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    ptr::NonNull, //
+};
 
 /// DMA address type.
 ///
@@ -389,7 +393,8 @@ impl<const N: usize> AllocationSize for StaticSize<N> {}
 /// # Allocation size
 ///
 /// [`CoherentAllocation`] is generic over an [`AllocationSize`], which lets it record a compile
-/// time known size (in number of elements of `T`).
+/// time known size (in number of elements of `T`). A statically sized [`CoherentAllocation`] can
+/// decay to a runtime sized one via deref coercion.
 // TODO
 //
 // DMA allocations potentially carry device resources (e.g.IOMMU mappings), hence for soundness
@@ -402,6 +407,7 @@ impl<const N: usize> AllocationSize for StaticSize<N> {}
 //
 // Hence, find a way to revoke the device resources of a `CoherentAllocation`, but not the
 // entire `CoherentAllocation` including the allocated memory itself.
+#[repr(C)]
 pub struct CoherentAllocation<T: AsBytes + FromBytes, Size: AllocationSize = RuntimeSize> {
     dev: ARef<device::Device>,
     dma_handle: DmaAddress,
@@ -855,6 +861,44 @@ impl<T: AsBytes + FromBytes, Size: AllocationSize> Drop for CoherentAllocation<T
 unsafe impl<T: AsBytes + FromBytes + Send, Size: AllocationSize> Send
     for CoherentAllocation<T, Size>
 {
+}
+
+impl<T: AsBytes + FromBytes, const N: usize> Deref for CoherentArray<T, N> {
+    type Target = CoherentSlice<T>;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: `CoherentArray<T, N>` and `CoherentSlice<T>` are both `CoherentAllocation<T, S>`
+        // with different `S: AllocationSize` marker types. Since `AllocationSize` is only stored as
+        // `PhantomData<S>` (a ZST) and CoherentAllocation<T, S> is `repr(C)`, both types have
+        // identical memory layouts.
+        unsafe { &*core::ptr::from_ref(self).cast::<CoherentSlice<T>>() }
+    }
+}
+
+impl<T: AsBytes + FromBytes, const N: usize> DerefMut for CoherentArray<T, N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: Same as `Deref::deref`.
+        unsafe { &mut *core::ptr::from_mut(self).cast::<CoherentSlice<T>>() }
+    }
+}
+
+impl<T: AsBytes + FromBytes, const N: usize> AsRef<CoherentSlice<T>> for CoherentArray<T, N> {
+    fn as_ref(&self) -> &CoherentSlice<T> {
+        self
+    }
+}
+
+impl<T: AsBytes + FromBytes, const N: usize> AsMut<CoherentSlice<T>> for CoherentArray<T, N> {
+    fn as_mut(&mut self) -> &mut CoherentSlice<T> {
+        self
+    }
+}
+
+impl<T: AsBytes + FromBytes, const N: usize> From<CoherentArray<T, N>> for CoherentSlice<T> {
+    fn from(array: CoherentArray<T, N>) -> Self {
+        // SAFETY: Same as `Deref::deref`.
+        unsafe { core::mem::transmute(array) }
+    }
 }
 
 /// Reads a field of an item from an allocated region of structs.
