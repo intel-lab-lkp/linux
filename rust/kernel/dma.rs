@@ -12,7 +12,7 @@ use crate::{
     sync::aref::ARef,
     transmute::{AsBytes, FromBytes},
 };
-use core::ptr::NonNull;
+use core::{marker::PhantomData, ptr::NonNull};
 
 /// DMA address type.
 ///
@@ -344,6 +344,29 @@ impl From<DataDirection> for bindings::dma_data_direction {
     }
 }
 
+/// Marker trait for the size parameter of a [`CoherentAllocation`].
+///
+/// [`AllocationSize`] is a marker trait for the size parameter of a [`CoherentAllocation`].
+///
+/// The specific types of size are `RuntimeSize` and `StaticSize<N>`.
+pub trait AllocationSize: private::Sealed {}
+
+/// Marker type for a [`CoherentAllocation`] with a runtime-determined size.
+pub struct RuntimeSize;
+
+/// Marker type for a [`CoherentAllocation`] with a compile-time-known size of `N` elements.
+pub struct StaticSize<const N: usize>;
+
+mod private {
+    pub trait Sealed {}
+
+    impl Sealed for super::RuntimeSize {}
+    impl<const N: usize> Sealed for super::StaticSize<N> {}
+}
+
+impl AllocationSize for RuntimeSize {}
+impl<const N: usize> AllocationSize for StaticSize<N> {}
+
 /// An abstraction of the `dma_alloc_coherent` API.
 ///
 /// This is an abstraction around the `dma_alloc_coherent` API which is used to allocate and map
@@ -361,6 +384,12 @@ impl From<DataDirection> for bindings::dma_data_direction {
 ///   region.
 /// - The size in bytes of the allocation is equal to `size_of::<T> * count`.
 /// - `size_of::<T> * count` fits into a `usize`.
+/// - If parameterized by `StaticSize<N>`, then `count == N`.
+///
+/// # Allocation size
+///
+/// [`CoherentAllocation`] is generic over an [`AllocationSize`], which lets it record a compile
+/// time known size (in number of elements of `T`).
 // TODO
 //
 // DMA allocations potentially carry device resources (e.g.IOMMU mappings), hence for soundness
@@ -373,79 +402,19 @@ impl From<DataDirection> for bindings::dma_data_direction {
 //
 // Hence, find a way to revoke the device resources of a `CoherentAllocation`, but not the
 // entire `CoherentAllocation` including the allocated memory itself.
-pub struct CoherentAllocation<T: AsBytes + FromBytes> {
+pub struct CoherentAllocation<T: AsBytes + FromBytes, Size: AllocationSize = RuntimeSize> {
     dev: ARef<device::Device>,
     dma_handle: DmaAddress,
     count: usize,
     cpu_addr: NonNull<T>,
     dma_attrs: Attrs,
+    _size: PhantomData<Size>,
 }
 
-impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
-    /// Allocates a region of `size_of::<T> * count` of coherent memory.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use kernel::device::{Bound, Device};
-    /// use kernel::dma::{attrs::*, CoherentAllocation};
-    ///
-    /// # fn test(dev: &Device<Bound>) -> Result {
-    /// let c: CoherentAllocation<u64> =
-    ///     CoherentAllocation::alloc_attrs(dev, 4, GFP_KERNEL, DMA_ATTR_NO_WARN)?;
-    /// # Ok::<(), Error>(()) }
-    /// ```
-    pub fn alloc_attrs(
-        dev: &device::Device<Bound>,
-        count: usize,
-        gfp_flags: kernel::alloc::Flags,
-        dma_attrs: Attrs,
-    ) -> Result<CoherentAllocation<T>> {
-        build_assert!(
-            core::mem::size_of::<T>() > 0,
-            "It doesn't make sense for the allocated type to be a ZST"
-        );
+/// A coherent DMA allocation with a runtime-determined size.
+pub type CoherentSlice<T> = CoherentAllocation<T, RuntimeSize>;
 
-        let size = count
-            .checked_mul(core::mem::size_of::<T>())
-            .ok_or(EOVERFLOW)?;
-        let mut dma_handle = 0;
-        // SAFETY: Device pointer is guaranteed as valid by the type invariant on `Device`.
-        let addr = unsafe {
-            bindings::dma_alloc_attrs(
-                dev.as_raw(),
-                size,
-                &mut dma_handle,
-                gfp_flags.as_raw(),
-                dma_attrs.as_raw(),
-            )
-        };
-        let addr = NonNull::new(addr).ok_or(ENOMEM)?;
-        // INVARIANT:
-        // - We just successfully allocated a coherent region which is accessible for
-        //   `count` elements, hence the cpu address is valid. We also hold a refcounted reference
-        //   to the device.
-        // - The allocated `size` is equal to `size_of::<T> * count`.
-        // - The allocated `size` fits into a `usize`.
-        Ok(Self {
-            dev: dev.into(),
-            dma_handle,
-            count,
-            cpu_addr: addr.cast(),
-            dma_attrs,
-        })
-    }
-
-    /// Performs the same functionality as [`CoherentAllocation::alloc_attrs`], except the
-    /// `dma_attrs` is 0 by default.
-    pub fn alloc_coherent(
-        dev: &device::Device<Bound>,
-        count: usize,
-        gfp_flags: kernel::alloc::Flags,
-    ) -> Result<CoherentAllocation<T>> {
-        CoherentAllocation::alloc_attrs(dev, count, gfp_flags, Attrs(0))
-    }
-
+impl<T: AsBytes + FromBytes, Size: AllocationSize> CoherentAllocation<T, Size> {
     /// Returns the number of elements `T` in this allocation.
     ///
     /// Note that this is not the size of the allocation in bytes, which is provided by
@@ -644,10 +613,87 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
         // the UB caused by racing between two kernel functions nor do they provide atomicity.
         unsafe { field.write_volatile(val) }
     }
+
+    // Allocates a region of `size_of::<T> * count` of coherent memory.
+    fn alloc_impl(
+        dev: &device::Device<Bound>,
+        count: usize,
+        gfp_flags: kernel::alloc::Flags,
+        dma_attrs: Attrs,
+    ) -> Result<Self> {
+        build_assert!(
+            core::mem::size_of::<T>() > 0,
+            "It doesn't make sense for the allocated type to be a ZST"
+        );
+
+        let size = count
+            .checked_mul(core::mem::size_of::<T>())
+            .ok_or(EOVERFLOW)?;
+        let mut dma_handle = 0;
+        // SAFETY: Device pointer is guaranteed as valid by the type invariant on `Device`.
+        let addr = unsafe {
+            bindings::dma_alloc_attrs(
+                dev.as_raw(),
+                size,
+                &mut dma_handle,
+                gfp_flags.as_raw(),
+                dma_attrs.as_raw(),
+            )
+        };
+        let addr = NonNull::new(addr).ok_or(ENOMEM)?;
+        // INVARIANT:
+        // - We just successfully allocated a coherent region which is accessible for
+        //   `count` elements, hence the cpu address is valid. We also hold a refcounted reference
+        //   to the device.
+        // - The allocated `size` is equal to `size_of::<T> * count`.
+        // - The allocated `size` fits into a `usize`.
+        Ok(Self {
+            dev: dev.into(),
+            dma_handle,
+            count,
+            cpu_addr: addr.cast(),
+            dma_attrs,
+            _size: PhantomData,
+        })
+    }
+}
+
+impl<T: AsBytes + FromBytes> CoherentSlice<T> {
+    /// Allocates a region of `size_of::<T> * count` of coherent memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::device::{Bound, Device};
+    /// use kernel::dma::{attrs::*, CoherentSlice};
+    ///
+    /// # fn test(dev: &Device<Bound>) -> Result {
+    /// let c: CoherentSlice<u64> =
+    ///     CoherentSlice::alloc_attrs(dev, 4, GFP_KERNEL, DMA_ATTR_NO_WARN)?;
+    /// # Ok::<(), Error>(()) }
+    /// ```
+    pub fn alloc_attrs(
+        dev: &device::Device<Bound>,
+        count: usize,
+        gfp_flags: kernel::alloc::Flags,
+        dma_attrs: Attrs,
+    ) -> Result<Self> {
+        Self::alloc_impl(dev, count, gfp_flags, dma_attrs)
+    }
+
+    /// Performs the same functionality as [`CoherentSlice::alloc_attrs`], except the
+    /// `dma_attrs` is 0 by default.
+    pub fn alloc_coherent(
+        dev: &device::Device<Bound>,
+        count: usize,
+        gfp_flags: kernel::alloc::Flags,
+    ) -> Result<Self> {
+        Self::alloc_attrs(dev, count, gfp_flags, Attrs(0))
+    }
 }
 
 /// Note that the device configured to do DMA must be halted before this object is dropped.
-impl<T: AsBytes + FromBytes> Drop for CoherentAllocation<T> {
+impl<T: AsBytes + FromBytes, Size: AllocationSize> Drop for CoherentAllocation<T, Size> {
     fn drop(&mut self) {
         let size = self.count * core::mem::size_of::<T>();
         // SAFETY: Device pointer is guaranteed as valid by the type invariant on `Device`.
@@ -667,7 +713,10 @@ impl<T: AsBytes + FromBytes> Drop for CoherentAllocation<T> {
 
 // SAFETY: It is safe to send a `CoherentAllocation` to another thread if `T`
 // can be sent to another thread.
-unsafe impl<T: AsBytes + FromBytes + Send> Send for CoherentAllocation<T> {}
+unsafe impl<T: AsBytes + FromBytes + Send, Size: AllocationSize> Send
+    for CoherentAllocation<T, Size>
+{
+}
 
 /// Reads a field of an item from an allocated region of structs.
 ///
