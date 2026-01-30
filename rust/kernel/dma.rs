@@ -875,9 +875,6 @@ macro_rules! try_dma_read {
             }
         })()
     }};
-    ($dma:ident [ $idx:expr ] $($field:tt)* ) => {
-        $crate::try_dma_read!($dma, $idx, $($field)*)
-    };
     ($($dma:ident).* [ $idx:expr ] $($field:tt)* ) => {
         $crate::try_dma_read!($($dma).*, $idx, $($field)*)
     };
@@ -905,13 +902,7 @@ macro_rules! try_dma_read {
 /// ```
 #[macro_export]
 macro_rules! try_dma_write {
-    ($dma:ident [ $idx:expr ] $($field:tt)*) => {{
-        $crate::try_dma_write!($dma, $idx, $($field)*)
-    }};
-    ($($dma:ident).* [ $idx:expr ] $($field:tt)* ) => {{
-        $crate::try_dma_write!($($dma).*, $idx, $($field)*)
-    }};
-    ($dma:expr, $idx: expr, = $val:expr) => {
+    ($dma:expr, $idx:expr, = $val:expr) => {
         (|| -> ::core::result::Result<_, $crate::error::Error> {
             let item = $crate::dma::CoherentAllocation::try_item_from_index(&$dma, $idx)?;
             // SAFETY: `try_item_from_index` ensures that `item` is always a valid item.
@@ -919,7 +910,7 @@ macro_rules! try_dma_write {
             ::core::result::Result::Ok(())
         })()
     };
-    ($dma:expr, $idx: expr, $(.$field:ident)* = $val:expr) => {
+    ($dma:expr, $idx:expr, $(.$field:ident)* = $val:expr) => {
         (|| -> ::core::result::Result<_, $crate::error::Error> {
             let item = $crate::dma::CoherentAllocation::try_item_from_index(&$dma, $idx)?;
             // SAFETY: `try_item_from_index` ensures that `item` is always a valid pointer
@@ -932,4 +923,7 @@ macro_rules! try_dma_write {
             ::core::result::Result::Ok(())
         })()
     };
+    ($($dma:ident).* [ $idx:expr ] $($field:tt)* ) => {{
+        $crate::try_dma_write!($($dma).*, $idx, $($field)*)
+    }};
 }
