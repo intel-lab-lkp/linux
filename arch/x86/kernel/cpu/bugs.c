@@ -649,11 +649,6 @@ static const char * const rfds_strings[] = {
 	[RFDS_MITIGATION_UCODE_NEEDED]		= "Vulnerable: No microcode",
 };
 
-static inline bool __init verw_clears_cpu_reg_file(void)
-{
-	return (x86_arch_cap_msr & ARCH_CAP_RFDS_CLEAR);
-}
-
 static void __init rfds_select_mitigation(void)
 {
 	if (!boot_cpu_has_bug(X86_BUG_RFDS)) {
@@ -671,7 +666,10 @@ static void __init rfds_select_mitigation(void)
 	if (rfds_mitigation == RFDS_MITIGATION_OFF)
 		return;
 
-	if (verw_clears_cpu_reg_file())
+	if (x86_arch_cap_msr & ARCH_CAP_RFDS_CLEAR)
+		setup_force_cpu_cap(X86_FEATURE_RFDS_CLEAR);
+
+	if (boot_cpu_has(X86_FEATURE_RFDS_CLEAR))
 		verw_clear_cpu_buf_mitigation_selected = true;
 }
 
@@ -684,7 +682,7 @@ static void __init rfds_update_mitigation(void)
 		rfds_mitigation = RFDS_MITIGATION_VERW;
 
 	if (rfds_mitigation == RFDS_MITIGATION_VERW) {
-		if (!verw_clears_cpu_reg_file())
+		if (!boot_cpu_has(X86_FEATURE_RFDS_CLEAR))
 			rfds_mitigation = RFDS_MITIGATION_UCODE_NEEDED;
 	}
 
