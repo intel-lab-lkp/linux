@@ -371,6 +371,8 @@ nl80211_pmsr_ftm_req_attr_policy[NL80211_PMSR_FTM_REQ_ATTR_MAX + 1] = {
 	[NL80211_PMSR_FTM_REQ_ATTR_NOMINAL_TIME] = { .type = NLA_U32 },
 	[NL80211_PMSR_FTM_REQ_ATTR_AW_DURATION] = { .type = NLA_U8 },
 	[NL80211_PMSR_FTM_REQ_ATTR_MEAS_PER_AW] = { .type = NLA_U8 },
+	[NL80211_PMSR_FTM_REQ_ATTR_INGRESS] = { .type = NLA_U64 },
+	[NL80211_PMSR_FTM_REQ_ATTR_EGRESS] = { .type = NLA_U64 },
 };
 
 static const struct nla_policy
