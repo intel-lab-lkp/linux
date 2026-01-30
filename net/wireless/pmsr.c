@@ -718,6 +718,40 @@ void cfg80211_pmsr_wdev_down(struct wireless_dev *wdev)
 	WARN_ON(!list_empty(&wdev->pmsr_list));
 }
 
+int nl80211_pmsr_abort(struct sk_buff *skb, struct genl_info *info)
+{
+	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+	struct wireless_dev *wdev = info->user_ptr[1];
+	struct cfg80211_pmsr_request *req;
+	u64 cookie;
+
+	if (!rdev->wiphy.pmsr_capa)
+		return -EOPNOTSUPP;
+
+	if (!info->attrs[NL80211_ATTR_COOKIE])
+		return -EINVAL;
+
+	cookie = nla_get_u64(info->attrs[NL80211_ATTR_COOKIE]);
+
+	spin_lock_bh(&wdev->pmsr_lock);
+	list_for_each_entry(req, &wdev->pmsr_list, list) {
+		if (req->cookie == cookie) {
+			/* Verify the request belongs to this netlink port */
+			if (req->nl_portid != info->snd_portid) {
+				spin_unlock_bh(&wdev->pmsr_lock);
+				return -EACCES;
+			}
+			req->nl_portid = 0; /* Mark for abortion */
+			schedule_work(&wdev->pmsr_free_wk);
+			spin_unlock_bh(&wdev->pmsr_lock);
+			return 0;
+		}
+	}
+	spin_unlock_bh(&wdev->pmsr_lock);
+
+	return -ENOENT; /* Request not found */
+}
+
 void cfg80211_release_pmsr(struct wireless_dev *wdev, u32 portid)
 {
 	struct cfg80211_pmsr_request *req;

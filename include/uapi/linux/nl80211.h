@@ -1361,6 +1361,9 @@
  *	user space that the NAN new cluster has been joined. The cluster ID is
  *	indicated by %NL80211_ATTR_MAC.
  *
+ * @NL80211_CMD_PEER_MEASUREMENT_ABORT: Abort an ongoing peer measurement,
+ *     identified by %NL80211_ATTR_COOKIE.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1623,6 +1626,8 @@ enum nl80211_commands {
 
 	NL80211_CMD_NAN_NEXT_DW_NOTIFICATION,
 	NL80211_CMD_NAN_CLUSTER_JOINED,
+
+	NL80211_CMD_PEER_MEASUREMENT_ABORT,
 
 	/* add new commands above here */
 
