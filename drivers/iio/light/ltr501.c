@@ -754,7 +754,7 @@ static int ltr501_get_gain_index(const struct ltr501_gain *gain, int size,
 		if (val == gain[i].scale && val2 == gain[i].uscale)
 			return i;
 
-	return -1;
+	return -EINVAL;
 }
 
 static int __ltr501_write_raw(struct iio_dev *indio_dev,
