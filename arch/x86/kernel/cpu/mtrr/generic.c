@@ -905,18 +905,21 @@ static bool set_mtrr_var_ranges(unsigned int index, struct mtrr_var_range *vr)
 	return changed;
 }
 
-static u32 deftype_lo, deftype_hi;
+struct mtrr_work_state {
+	unsigned long cr4;
+	u32 lo;
+	u32 hi;
+};
 
 /**
  * set_mtrr_state - Set the MTRR state for this CPU.
  *
- * NOTE: The CPU must already be in a safe state for MTRR changes, including
- *       measures that only a single CPU can be active in set_mtrr_state() in
- *       order to not be subject to races for usage of deftype_lo. This is
- *       accomplished by taking cache_disable_lock.
+ * NOTE: The CPU must already be in a safe state for MTRR changes.
+ *
+ * @state: pointer to mtrr_work_state
  * RETURNS: 0 if no changes made, else a mask indicating what was changed.
  */
-static unsigned long set_mtrr_state(void)
+static unsigned long set_mtrr_state(struct mtrr_work_state *state)
 {
 	unsigned long change_mask = 0;
 	unsigned int i;
@@ -933,10 +936,10 @@ static unsigned long set_mtrr_state(void)
 	 * Set_mtrr_restore restores the old value of MTRRdefType,
 	 * so to set it we fiddle with the saved value:
 	 */
-	if ((deftype_lo & MTRR_DEF_TYPE_TYPE) != mtrr_state.def_type ||
-	    ((deftype_lo & MTRR_DEF_TYPE_ENABLE) >> MTRR_STATE_SHIFT) != mtrr_state.enabled) {
+	if ((state->lo & MTRR_DEF_TYPE_TYPE) != mtrr_state.def_type ||
+	    ((state->lo & MTRR_DEF_TYPE_ENABLE) >> MTRR_STATE_SHIFT) != mtrr_state.enabled) {
 
-		deftype_lo = (deftype_lo & MTRR_DEF_TYPE_DISABLE) |
+		state->lo = (state->lo & MTRR_DEF_TYPE_DISABLE) |
 			     mtrr_state.def_type |
 			     (mtrr_state.enabled << MTRR_STATE_SHIFT);
 		change_mask |= MTRR_CHANGE_MASK_DEFTYPE;
@@ -945,19 +948,19 @@ static unsigned long set_mtrr_state(void)
 	return change_mask;
 }
 
-static void mtrr_disable(void)
+static void mtrr_disable(struct mtrr_work_state *state)
 {
 	/* Save MTRR state */
-	rdmsr(MSR_MTRRdefType, deftype_lo, deftype_hi);
+	rdmsr(MSR_MTRRdefType, state->lo, state->hi);
 
 	/* Disable MTRRs, and set the default type to uncached */
-	mtrr_wrmsr(MSR_MTRRdefType, deftype_lo & MTRR_DEF_TYPE_DISABLE, deftype_hi);
+	mtrr_wrmsr(MSR_MTRRdefType, state->lo & MTRR_DEF_TYPE_DISABLE, state->hi);
 }
 
-static void mtrr_enable(void)
+static void mtrr_enable(struct mtrr_work_state *state)
 {
 	/* Intel (P6) standard MTRRs */
-	mtrr_wrmsr(MSR_MTRRdefType, deftype_lo, deftype_hi);
+	mtrr_wrmsr(MSR_MTRRdefType, state->lo, state->hi);
 }
 
 /*
@@ -969,7 +972,6 @@ static void mtrr_enable(void)
  * The caller must ensure that local interrupts are disabled and
  * are reenabled after cache_enable() has been called.
  */
-static unsigned long saved_cr4;
 static DEFINE_RAW_SPINLOCK(cache_disable_lock);
 
 /*
@@ -983,7 +985,8 @@ static void maybe_flush_caches(void)
 		wbinvd();
 }
 
-static void cache_disable(void) __acquires(cache_disable_lock)
+static void cache_disable(struct mtrr_work_state *state)
+	__acquires(cache_disable_lock)
 {
 	unsigned long cr0;
 
@@ -1002,8 +1005,8 @@ static void cache_disable(void) __acquires(cache_disable_lock)
 
 	/* Save value of CR4 and clear Page Global Enable (bit 7) */
 	if (cpu_feature_enabled(X86_FEATURE_PGE)) {
-		saved_cr4 = __read_cr4();
-		__write_cr4(saved_cr4 & ~X86_CR4_PGE);
+		state->cr4 = __read_cr4();
+		__write_cr4(state->cr4 & ~X86_CR4_PGE);
 	}
 
 	/* Flush all TLBs via a mov %cr3, %reg; mov %reg, %cr3 */
@@ -1011,26 +1014,27 @@ static void cache_disable(void) __acquires(cache_disable_lock)
 	flush_tlb_local();
 
 	if (cpu_feature_enabled(X86_FEATURE_MTRR))
-		mtrr_disable();
+		mtrr_disable(state);
 
 	maybe_flush_caches();
 }
 
-static void cache_enable(void) __releases(cache_disable_lock)
+static void cache_enable(struct mtrr_work_state *state)
+	__releases(cache_disable_lock)
 {
 	/* Flush TLBs (no need to flush caches - they are disabled) */
 	count_vm_tlb_event(NR_TLB_LOCAL_FLUSH_ALL);
 	flush_tlb_local();
 
 	if (cpu_feature_enabled(X86_FEATURE_MTRR))
-		mtrr_enable();
+		mtrr_enable(state);
 
 	/* Enable caches */
 	write_cr0(read_cr0() & ~X86_CR0_CD);
 
 	/* Restore value of CR4 */
 	if (cpu_feature_enabled(X86_FEATURE_PGE))
-		__write_cr4(saved_cr4);
+		__write_cr4(state->cr4);
 
 	raw_spin_unlock(&cache_disable_lock);
 }
@@ -1038,11 +1042,12 @@ static void cache_enable(void) __releases(cache_disable_lock)
 void mtrr_generic_set_state(void)
 {
 	unsigned long mask, count;
+	struct mtrr_work_state state;
 
-	cache_disable();
+	cache_disable(&state);
 
 	/* Actually set the state */
-	mask = set_mtrr_state();
+	mask = set_mtrr_state(&state);
 
 	/* Use the atomic bitops to update the global mask */
 	for (count = 0; count < sizeof(mask) * 8; ++count) {
@@ -1051,7 +1056,7 @@ void mtrr_generic_set_state(void)
 		mask >>= 1;
 	}
 
-	cache_enable();
+	cache_enable(&state);
 }
 
 /**
@@ -1069,11 +1074,12 @@ static void generic_set_mtrr(unsigned int reg, unsigned long base,
 {
 	unsigned long flags;
 	struct mtrr_var_range *vr;
+	struct mtrr_work_state state;
 
 	vr = &mtrr_state.var_ranges[reg];
 
 	local_irq_save(flags);
-	cache_disable();
+	cache_disable(&state);
 
 	if (size == 0) {
 		/*
@@ -1092,7 +1098,7 @@ static void generic_set_mtrr(unsigned int reg, unsigned long base,
 		mtrr_wrmsr(MTRRphysMask_MSR(reg), vr->mask_lo, vr->mask_hi);
 	}
 
-	cache_enable();
+	cache_enable(&state);
 	local_irq_restore(flags);
 }
 
