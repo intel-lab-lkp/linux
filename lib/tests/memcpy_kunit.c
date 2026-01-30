@@ -493,6 +493,108 @@ static void memmove_overlap_test(struct kunit *test)
 	}
 }
 
+#ifdef CONFIG_MEMCPY_KUNIT_BENCHMARK
+
+#define COPY_SIZE	(PAGE_SIZE << MAX_PAGE_ORDER)
+#define COPIES_NUM	100
+
+static int memcpy_bench_align(struct kunit *test, bool unalign)
+{
+	u64 start, end, total_ns = 0;
+	char *buf1;
+	char *buf2;
+	int ret = 0;
+
+	buf1 = kzalloc(COPY_SIZE, GFP_KERNEL);
+	if (!buf1)
+		return -ENOMEM;
+
+	buf2 = kzalloc(COPY_SIZE, GFP_KERNEL);
+	if (!buf2) {
+		ret = -ENOMEM;
+		goto out_free;
+	}
+
+	for (int i = 0; i < COPIES_NUM; i++) {
+		local_irq_disable();
+		start = ktime_get_ns();
+		memcpy(buf1 + unalign, buf2, COPY_SIZE - unalign);
+		end = ktime_get_ns();
+		local_irq_enable();
+		total_ns += end - start;
+	}
+
+	/* Avoid division by zero */
+	if (!total_ns)
+		total_ns = 1;
+
+	kunit_info(test, "memcpy: %saligned copy of %lu MBytes in %lld msecs (%lld MB/s)\n",
+		   unalign ? "un" : "",
+		   (unsigned long)(COPIES_NUM * COPY_SIZE) / (1024 * 1024),
+		   total_ns / 1000000,
+		   (COPIES_NUM * COPY_SIZE * 1000000000ULL / total_ns) / (1024 * 1024));
+
+	kfree(buf2);
+
+out_free:
+	kfree(buf1);
+
+	return ret;
+}
+
+static void memcpy_bench_test(struct kunit *test)
+{
+	KUNIT_ASSERT_EQ_MSG(test, memcpy_bench_align(test, false), 0,
+			   "aligned memcpy benchmark failed");
+	KUNIT_ASSERT_EQ_MSG(test, memcpy_bench_align(test, true), 0,
+			   "unaligned memcpy benchmark failed");
+}
+
+#define POS_SHIFT (2 * PAGE_SIZE)
+
+static int memmove_bench_align(struct kunit *test, bool unalign)
+{
+	u64 start, end, total_ns = 0;
+	char *buf;
+	int ret = 0;
+
+	buf = kzalloc(COPY_SIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	for (int i = 0; i < COPIES_NUM; i++) {
+		local_irq_disable();
+		start = ktime_get_ns();
+		memmove(buf + POS_SHIFT + unalign, buf, COPY_SIZE - POS_SHIFT - unalign);
+		end = ktime_get_ns();
+		local_irq_enable();
+		total_ns += end - start;
+	}
+
+	if (!total_ns)
+		total_ns = 1;
+
+	kunit_info(test, "memmove: %saligned move of %lu MBytes in %lld msecs (%lld MB/s)\n",
+		   unalign ? "un" : "",
+		   (unsigned long)(COPIES_NUM * (COPY_SIZE - POS_SHIFT)) / (1024 * 1024),
+		   total_ns / 1000000,
+		   (COPIES_NUM * (COPY_SIZE - POS_SHIFT) * 1000000000ULL / total_ns) /
+			(1024 * 1024));
+
+	kfree(buf);
+
+	return ret;
+}
+
+static void memmove_bench_test(struct kunit *test)
+{
+	KUNIT_ASSERT_EQ_MSG(test, memmove_bench_align(test, false), 0,
+			   "aligned memmove benchmark failed");
+	KUNIT_ASSERT_EQ_MSG(test, memmove_bench_align(test, true), 0,
+			   "unaligned memmove benchmark failed");
+}
+#endif
+
 static struct kunit_case memcpy_test_cases[] = {
 	KUNIT_CASE(memset_test),
 	KUNIT_CASE(memcpy_test),
@@ -500,6 +602,10 @@ static struct kunit_case memcpy_test_cases[] = {
 	KUNIT_CASE_SLOW(memmove_test),
 	KUNIT_CASE_SLOW(memmove_large_test),
 	KUNIT_CASE_SLOW(memmove_overlap_test),
+#ifdef CONFIG_MEMCPY_KUNIT_BENCHMARK
+	KUNIT_CASE_SLOW(memcpy_bench_test),
+	KUNIT_CASE_SLOW(memmove_bench_test),
+#endif
 	{}
 };
 
