@@ -431,9 +431,8 @@ int intel_pasid_replace_first_level(struct intel_iommu *iommu,
 		return -EINVAL;
 	}
 
-	pasid_pte_config_first_level(iommu, &new_pte, fsptptr, did, flags);
-
 	spin_lock(&iommu->lock);
+	pasid_pte_config_first_level(iommu, &new_pte, fsptptr, did, flags);
 	pte = intel_pasid_get_entry(dev, pasid);
 	if (!pte) {
 		spin_unlock(&iommu->lock);
@@ -542,9 +541,8 @@ int intel_pasid_replace_second_level(struct intel_iommu *iommu,
 
 	did = domain_id_iommu(domain, iommu);
 
-	pasid_pte_config_second_level(iommu, &new_pte, domain, did);
-
 	spin_lock(&iommu->lock);
+	pasid_pte_config_second_level(iommu, &new_pte, domain, did);
 	pte = intel_pasid_get_entry(dev, pasid);
 	if (!pte) {
 		spin_unlock(&iommu->lock);
@@ -686,9 +684,8 @@ int intel_pasid_replace_pass_through(struct intel_iommu *iommu,
 	struct pasid_entry *pte, new_pte;
 	u16 did = FLPT_DEFAULT_DID;
 
-	pasid_pte_config_pass_through(iommu, &new_pte, did);
-
 	spin_lock(&iommu->lock);
+	pasid_pte_config_pass_through(iommu, &new_pte, did);
 	pte = intel_pasid_get_entry(dev, pasid);
 	if (!pte) {
 		spin_unlock(&iommu->lock);
@@ -882,9 +879,8 @@ int intel_pasid_replace_nested(struct intel_iommu *iommu,
 		return -EINVAL;
 	}
 
-	pasid_pte_config_nestd(iommu, &new_pte, s1_cfg, s2_domain, did);
-
 	spin_lock(&iommu->lock);
+	pasid_pte_config_nestd(iommu, &new_pte, s1_cfg, s2_domain, did);
 	pte = intel_pasid_get_entry(dev, pasid);
 	if (!pte) {
 		spin_unlock(&iommu->lock);
