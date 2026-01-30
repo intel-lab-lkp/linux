@@ -721,6 +721,25 @@ static void mt7921_bss_info_changed(struct ieee80211_hw *hw,
 	if (changed & BSS_CHANGED_CQM)
 		mt7921_mcu_set_rssimonitor(dev, vif);
 
+	if (changed & BSS_CHANGED_TXPOWER) {
+		int tx_power = info->txpower;
+
+		/*
+		 * Workaround for kernel 6.18+: bss_conf.txpower may not be
+		 * populated (INT_MIN) even when BSS_CHANGED_TXPOWER is set.
+		 * In this case, use the channel's max regulatory power.
+		 */
+		if (tx_power == INT_MIN || tx_power <= 0) {
+			struct ieee80211_channel *chan = phy->mt76->chandef.chan;
+			if (chan)
+				tx_power = chan->max_reg_power;
+		}
+
+		/* txpower is in dBm, txpower_cur is in 0.5dBm units */
+		if (tx_power > 0 && tx_power < 127)
+			phy->mt76->txpower_cur = tx_power * 2;
+	}
+
 	if (changed & BSS_CHANGED_ASSOC) {
 		mt7921_mcu_sta_update(dev, NULL, vif, true,
 				      MT76_STA_INFO_STATE_ASSOC);
