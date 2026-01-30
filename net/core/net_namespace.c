@@ -624,9 +624,29 @@ void net_ns_get_ownership(const struct net *net, kuid_t *uid, kgid_t *gid)
 }
 EXPORT_SYMBOL_GPL(net_ns_get_ownership);
 
-static void unhash_nsid(struct net *net, struct net *last)
+static int unhash_nsid_callback(int id, void *p, void *data)
+{
+	struct net *tmp = data;
+	struct net *peer = p;
+
+	if (peer->is_dying) {
+		spin_lock(&tmp->nsid_lock);
+		if (idr_find(&tmp->netns_ids, id) == peer)
+			idr_remove(&tmp->netns_ids, id);
+		else
+			peer = NULL;
+		spin_unlock(&tmp->nsid_lock);
+
+		if (peer)
+			rtnl_net_notifyid(tmp, RTM_DELNSID, id, 0, NULL, GFP_KERNEL);
+	}
+	return 0;
+}
+
+static void unhash_nsid(struct net *last)
 {
 	struct net *tmp;
+
 	/* This function is only called from cleanup_net() work,
 	 * and this work is the only process, that may delete
 	 * a net from net_namespace_list. So, when the below
@@ -634,22 +654,10 @@ static void unhash_nsid(struct net *net, struct net *last)
 	 * use for_each_net_rcu() or net_rwsem.
 	 */
 	for_each_net(tmp) {
-		int id;
-
-		spin_lock(&tmp->nsid_lock);
-		id = __peernet2id(tmp, net);
-		if (id >= 0)
-			idr_remove(&tmp->netns_ids, id);
-		spin_unlock(&tmp->nsid_lock);
-		if (id >= 0)
-			rtnl_net_notifyid(tmp, RTM_DELNSID, id, 0, NULL,
-					  GFP_KERNEL);
+		idr_for_each(&tmp->netns_ids, unhash_nsid_callback, tmp);
 		if (tmp == last)
 			break;
 	}
-	spin_lock(&net->nsid_lock);
-	idr_destroy(&net->netns_ids);
-	spin_unlock(&net->nsid_lock);
 }
 
 static LLIST_HEAD(cleanup_list);
@@ -674,6 +682,7 @@ static void cleanup_net(struct work_struct *work)
 	llist_for_each_entry(net, net_kill_list, cleanup_list) {
 		ns_tree_remove(net);
 		list_del_rcu(&net->list);
+		net->is_dying = true;
 	}
 	/* Cache last net. After we unlock rtnl, no one new net
 	 * added to net_namespace_list can assign nsid pointer
@@ -688,8 +697,10 @@ static void cleanup_net(struct work_struct *work)
 	last = list_last_entry(&net_namespace_list, struct net, list);
 	up_write(&net_rwsem);
 
+	unhash_nsid(last);
+
 	llist_for_each_entry(net, net_kill_list, cleanup_list) {
-		unhash_nsid(net, last);
+		idr_destroy(&net->netns_ids);
 		list_add_tail(&net->exit_list, &net_exit_list);
 	}
 
