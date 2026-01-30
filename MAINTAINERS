@@ -17643,6 +17643,9 @@ M:	Christian Gromm <christian.gromm@microchip.com>
 S:	Maintained
 F:	Documentation/ABI/testing/configfs-most
 F:	Documentation/ABI/testing/sysfs-bus-most
+F:	Documentation/devicetree/bindings/media/fsl,imx6q-mlb150.yaml
+F:	Documentation/devicetree/bindings/media/renesas,mlp.yaml
+F:	Documentation/devicetree/bindings/media/xilinx/xlnx,axi4-os62420.yaml
 F:	drivers/most/
 F:	drivers/staging/most/
 F:	include/linux/most.h
