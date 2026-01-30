@@ -175,6 +175,9 @@ static void set_mtrr(unsigned int reg, unsigned long base, unsigned long size,
 				      .smp_type = type
 				    };
 
+	if (mtrr_if->prepare_set)
+		mtrr_if->prepare_set(reg, base, size, type);
+
 	stop_machine_cpuslocked(mtrr_rendezvous_handler, &data, cpu_online_mask);
 
 	generic_rebuild_map();

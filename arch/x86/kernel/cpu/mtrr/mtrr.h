@@ -17,6 +17,8 @@ extern unsigned int mtrr_usage_table[MTRR_MAX_VAR_RANGES];
 
 struct mtrr_ops {
 	u32	var_regs;
+	void	(*prepare_set)(unsigned int reg, unsigned long base,
+			       unsigned long size, mtrr_type type);
 	void	(*set)(unsigned int reg, unsigned long base,
 		       unsigned long size, mtrr_type type);
 	void	(*get)(unsigned int reg, unsigned long *base,
