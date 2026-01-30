@@ -593,14 +593,12 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
     pub unsafe fn field_read<F: FromBytes>(&self, field: *const F) -> F {
         // SAFETY:
         // - By the safety requirements field is valid.
-        // - Using read_volatile() here is not sound as per the usual rules, the usage here is
-        // a special exception with the following notes in place. When dealing with a potential
-        // race from a hardware or code outside kernel (e.g. user-space program), we need that
-        // read on a valid memory is not UB. Currently read_volatile() is used for this, and the
-        // rationale behind is that it should generate the same code as READ_ONCE() which the
-        // kernel already relies on to avoid UB on data races. Note that the usage of
-        // read_volatile() is limited to this particular case, it cannot be used to prevent
-        // the UB caused by racing between two kernel functions nor do they provide atomicity.
+        // - `field` points to memory outside any Rust allocation.
+        // - As `field` points to readable memory:
+        //   - Reading `field` will not trap.
+        //   - Reading `field` will not change any memory inside a Rust allocation.
+        // - As `F: FromBytes` any bit pattern is valid for `F` and the read
+        //   will produce a properly initialized F.
         unsafe { field.read_volatile() }
     }
 
@@ -616,14 +614,9 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
     pub unsafe fn field_write<F: AsBytes>(&self, field: *mut F, val: F) {
         // SAFETY:
         // - By the safety requirements field is valid.
-        // - Using write_volatile() here is not sound as per the usual rules, the usage here is
-        // a special exception with the following notes in place. When dealing with a potential
-        // race from a hardware or code outside kernel (e.g. user-space program), we need that
-        // write on a valid memory is not UB. Currently write_volatile() is used for this, and the
-        // rationale behind is that it should generate the same code as WRITE_ONCE() which the
-        // kernel already relies on to avoid UB on data races. Note that the usage of
-        // write_volatile() is limited to this particular case, it cannot be used to prevent
-        // the UB caused by racing between two kernel functions nor do they provide atomicity.
+        // - As `field` points to readable memory:
+        //   - Reading `field` will not trap.
+        //   - Reading `field` will not change any memory inside a Rust allocation.
         unsafe { field.write_volatile(val) }
     }
 }
