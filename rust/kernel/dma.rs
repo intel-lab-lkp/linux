@@ -559,7 +559,7 @@ impl<T: AsBytes + FromBytes, Size: AllocationSize> CoherentAllocation<T, Size> {
     /// Public but hidden since it should only be used from [`try_dma_read`] and [`try_dma_write`]
     /// macros.
     #[doc(hidden)]
-    pub fn try_item_from_index(&self, offset: usize) -> Result<*mut T> {
+    pub fn try_ptr_at(&self, offset: usize) -> Result<*mut T> {
         if offset >= self.count {
             return Err(EINVAL);
         }
@@ -863,12 +863,12 @@ unsafe impl<T: AsBytes + FromBytes + Send, Size: AllocationSize> Send
 macro_rules! try_dma_read {
     ($dma:expr, $idx:expr, $($field:tt)*) => {{
         (|| -> ::core::result::Result<_, $crate::error::Error> {
-            let item = $crate::dma::CoherentAllocation::try_item_from_index(&$dma, $idx)?;
-            // SAFETY: `try_item_from_index` ensures that `item` is always a valid pointer
-            // and can be dereferenced. The compiler also further validates the expression
-            // on whether `field` is a member of `item` when expanded by the macro.
+            let ptr = $crate::dma::CoherentAllocation::try_ptr_at(&$dma, $idx)?;
+            // SAFETY: `try_ptr_at` ensures that `ptr` is always a valid pointer and can be
+            // dereferenced. The compiler also further validates the expression on whether `field`
+            // is a member of `ptr` when expanded by the macro.
             unsafe {
-                let ptr_field = ::core::ptr::addr_of!((*item) $($field)*);
+                let ptr_field = ::core::ptr::addr_of!((*ptr) $($field)*);
                 ::core::result::Result::Ok(
                     $crate::dma::CoherentAllocation::field_read(&$dma, ptr_field)
                 )
@@ -904,20 +904,20 @@ macro_rules! try_dma_read {
 macro_rules! try_dma_write {
     ($dma:expr, $idx:expr, = $val:expr) => {
         (|| -> ::core::result::Result<_, $crate::error::Error> {
-            let item = $crate::dma::CoherentAllocation::try_item_from_index(&$dma, $idx)?;
-            // SAFETY: `try_item_from_index` ensures that `item` is always a valid item.
-            unsafe { $crate::dma::CoherentAllocation::field_write(&$dma, item, $val) }
+            let ptr = $crate::dma::CoherentAllocation::try_ptr_at(&$dma, $idx)?;
+            // SAFETY: `try_ptr_at` ensures that `ptr` is always a valid ptr.
+            unsafe { $crate::dma::CoherentAllocation::field_write(&$dma, ptr, $val) }
             ::core::result::Result::Ok(())
         })()
     };
     ($dma:expr, $idx:expr, $(.$field:ident)* = $val:expr) => {
         (|| -> ::core::result::Result<_, $crate::error::Error> {
-            let item = $crate::dma::CoherentAllocation::try_item_from_index(&$dma, $idx)?;
-            // SAFETY: `try_item_from_index` ensures that `item` is always a valid pointer
-            // and can be dereferenced. The compiler also further validates the expression
-            // on whether `field` is a member of `item` when expanded by the macro.
+            let ptr = $crate::dma::CoherentAllocation::try_ptr_at(&$dma, $idx)?;
+            // SAFETY: `try_ptr_at` ensures that `ptr` is always a valid pointer and can be
+            // dereferenced. The compiler also further validates the expression on whether `field`
+            // is a member of `ptr` when expanded by the macro.
             unsafe {
-                let ptr_field = ::core::ptr::addr_of_mut!((*item) $(.$field)*);
+                let ptr_field = ::core::ptr::addr_of_mut!((*ptr) $(.$field)*);
                 $crate::dma::CoherentAllocation::field_write(&$dma, ptr_field, $val)
             }
             ::core::result::Result::Ok(())
