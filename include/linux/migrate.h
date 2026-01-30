@@ -133,6 +133,10 @@ static inline struct page *migrate_pfn_to_page(unsigned long mpfn)
 {
 	if (!(mpfn & MIGRATE_PFN_VALID))
 		return NULL;
+
+	if (mpfn & MIGRATE_PFN_DEVICE_PRIVATE)
+		return device_private_offset_to_page(mpfn >> MIGRATE_PFN_SHIFT);
+
 	return pfn_to_page(mpfn >> MIGRATE_PFN_SHIFT);
 }
 
@@ -144,7 +148,7 @@ static inline unsigned long migrate_pfn(unsigned long pfn)
 static inline unsigned long migrate_pfn_from_page(struct page *page)
 {
 	if (is_device_private_page(page))
-		return migrate_pfn(page_to_pfn(page)) |
+		return migrate_pfn(device_private_page_to_offset(page)) |
 		       MIGRATE_PFN_DEVICE_PRIVATE;
 	return migrate_pfn(page_to_pfn(page));
 }
