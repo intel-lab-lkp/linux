@@ -811,6 +811,24 @@ impl<T: AsBytes + FromBytes, const N: usize> CoherentArray<T, N> {
             )
         };
     }
+
+    /// Returns a pointer to an element from the region with bounds checking. `OFFSET` is in
+    /// units of `T`, not the number of bytes.
+    ///
+    /// Public but hidden since it should only be used from [`dma_read`] and [`dma_write`] macros.
+    #[doc(hidden)]
+    pub fn ptr_at<const OFFSET: usize>(&self) -> *mut T {
+        build_assert!(
+            OFFSET < N,
+            "Index out of bounds when accessing CoherentArray"
+        );
+        // SAFETY:
+        // - The pointer is valid due to type invariant on `CoherentAllocation`
+        // and we've just checked that the range and index is within bounds.
+        // - `OFFSET` can't overflow since it is smaller than `N` and we've checked
+        // that `N` won't overflow early in the constructor.
+        unsafe { self.cpu_addr.as_ptr().add(OFFSET) }
+    }
 }
 
 /// Note that the device configured to do DMA must be halted before this object is dropped.
@@ -925,5 +943,90 @@ macro_rules! try_dma_write {
     };
     ($($dma:ident).* [ $idx:expr ] $($field:tt)* ) => {{
         $crate::try_dma_write!($($dma).*, $idx, $($field)*)
+    }};
+}
+
+/// Reads a field of an item from a [`CoherentArray`] with compile-time bounds checking.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::device::Device;
+/// use kernel::dma::{attrs::*, CoherentArray};
+///
+/// struct MyStruct { field: u32, }
+///
+/// // SAFETY: All bit patterns are acceptable values for `MyStruct`.
+/// unsafe impl kernel::transmute::FromBytes for MyStruct{};
+/// // SAFETY: Instances of `MyStruct` have no uninitialized portions.
+/// unsafe impl kernel::transmute::AsBytes for MyStruct{};
+///
+/// # fn test(alloc: &kernel::dma::CoherentArray<MyStruct, 3>) {
+/// let whole = kernel::dma_read!(alloc[2]);
+/// let field = kernel::dma_read!(alloc[1].field);
+/// # }
+/// ```
+#[macro_export]
+macro_rules! dma_read {
+    ($dma:expr, $idx:expr, $($field:tt)*) => {{
+        (|| {
+            let ptr = $crate::dma::CoherentArray::ptr_at::<$idx>(&$dma);
+            // SAFETY: `ptr_at` ensures that `ptr` is always a valid pointer and can be
+            // dereferenced. The compiler also further validates the expression on whether `field`
+            // is a member of `ptr` when expanded by the macro.
+            unsafe {
+                let ptr_field = ::core::ptr::addr_of!((*ptr) $($field)*);
+                $crate::dma::CoherentAllocation::field_read(&$dma, ptr_field)
+            }
+        })()
+    }};
+    ($($dma:ident).* [ $idx:expr ] $($field:tt)* ) => {
+        $crate::dma_read!($($dma).*, $idx, $($field)*)
+    };
+}
+
+/// Writes to a field of an item in a [`CoherentArray`] with compile-time bounds checking.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::device::Device;
+/// use kernel::dma::{attrs::*, CoherentArray};
+///
+/// struct MyStruct { member: u32, }
+///
+/// // SAFETY: All bit patterns are acceptable values for `MyStruct`.
+/// unsafe impl kernel::transmute::FromBytes for MyStruct{};
+/// // SAFETY: Instances of `MyStruct` have no uninitialized portions.
+/// unsafe impl kernel::transmute::AsBytes for MyStruct{};
+///
+/// # fn test(alloc: &kernel::dma::CoherentArray<MyStruct, 3>) {
+/// kernel::dma_write!(alloc[2].member = 0xf);
+/// kernel::dma_write!(alloc[1] = MyStruct { member: 0xf });
+/// # }
+/// ```
+#[macro_export]
+macro_rules! dma_write {
+    ($dma:expr, $idx:expr, = $val:expr) => {
+        (|| {
+            let ptr = $crate::dma::CoherentArray::ptr_at::<$idx>(&$dma);
+            // SAFETY: `ptr_at` ensures that `ptr` is always a valid ptr.
+            unsafe { $crate::dma::CoherentAllocation::field_write(&$dma, ptr, $val) }
+        })()
+    };
+    ($dma:expr, $idx:expr, $(.$field:ident)* = $val:expr) => {
+        (|| {
+            let ptr = $crate::dma::CoherentArray::ptr_at::<$idx>(&$dma);
+            // SAFETY: `ptr_at` ensures that `ptr` is always a valid pointer and can be
+            // dereferenced. The compiler also further validates the expression on whether `field`
+            // is a member of `ptr` when expanded by the macro.
+            unsafe {
+                let ptr_field = ::core::ptr::addr_of_mut!((*ptr) $(.$field)*);
+                $crate::dma::CoherentAllocation::field_write(&$dma, ptr_field, $val)
+            }
+        })()
+    };
+    ($($dma:ident).* [ $idx:expr ] $($field:tt)* ) => {{
+        $crate::dma_write!($($dma).*, $idx, $($field)*)
     }};
 }
