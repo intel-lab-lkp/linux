@@ -84,6 +84,9 @@ static cpumask_var_t	isolated_cpus;
  */
 static bool isolated_cpus_updating;
 
+/* Both cpuset_mutex and cpus_read_locked acquired */
+static bool cpuset_locked;
+
 /*
  * A flag to force sched domain rebuild at the end of an operation.
  * It can be set in
@@ -285,10 +288,12 @@ void cpuset_full_lock(void)
 {
 	cpus_read_lock();
 	mutex_lock(&cpuset_mutex);
+	cpuset_locked = true;
 }
 
 void cpuset_full_unlock(void)
 {
+	cpuset_locked = false;
 	mutex_unlock(&cpuset_mutex);
 	cpus_read_unlock();
 }
@@ -1284,6 +1289,16 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 	return false;
 }
 
+static void isolcpus_workfn(struct work_struct *work)
+{
+	cpuset_full_lock();
+	if (isolated_cpus_updating) {
+		WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
+		isolated_cpus_updating = false;
+	}
+	cpuset_full_unlock();
+}
+
 /*
  * update_isolation_cpumasks - Update external isolation related CPU masks
  *
@@ -1292,14 +1307,30 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
  */
 static void update_isolation_cpumasks(void)
 {
-	int ret;
+	static DECLARE_WORK(isolcpus_work, isolcpus_workfn);
 
 	if (!isolated_cpus_updating)
 		return;
 
-	ret = housekeeping_update(isolated_cpus);
-	WARN_ON_ONCE(ret < 0);
+	/*
+	 * This function can be reached either directly from regular cpuset
+	 * control file write (cpuset_locked) or via hotplug (cpus_write_lock
+	 * && cpuset_mutex held). In the later case, we defer the
+	 * housekeeping_update() call to the system_unbound_wq to avoid the
+	 * possibility of deadlock. This also means that there will be a short
+	 * period of time where HK_TYPE_DOMAIN housekeeping cpumask will lag
+	 * behind isolated_cpus.
+	 */
+	if (!cpuset_locked) {
+		/*
+		 * We rely on WORK_STRUCT_PENDING_BIT to not requeue a work
+		 * item that is still pending.
+		 */
+		queue_work(system_unbound_wq, &isolcpus_work);
+		return;
+	}
 
+	WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
 	isolated_cpus_updating = false;
 }
 
