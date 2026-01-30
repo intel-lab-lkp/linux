@@ -187,6 +187,11 @@ struct tegra_mc_regs {
 	unsigned int err_route_add;
 };
 
+struct tegra_mc_intmask {
+	u32 reg;
+	u32 mask;
+};
+
 struct tegra_mc_soc {
 	const struct tegra_mc_client *clients;
 	unsigned int num_clients;
@@ -204,7 +209,6 @@ struct tegra_mc_soc {
 
 	const struct tegra_smmu_soc *smmu;
 
-	u32 intmask;
 	u32 ch_intmask;
 	u32 global_intstatus_channel_shift;
 	bool has_addr_hi_reg;
@@ -216,6 +220,10 @@ struct tegra_mc_soc {
 	const struct tegra_mc_icc_ops *icc_ops;
 	const struct tegra_mc_ops *ops;
 	const struct tegra_mc_regs *regs;
+	unsigned int mc_addr_hi_mask;
+	unsigned int mc_err_status_type_mask;
+	const struct tegra_mc_intmask *intmasks;
+	const unsigned int num_intmasks;
 };
 
 struct tegra_mc {

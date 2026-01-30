@@ -597,16 +597,16 @@ irqreturn_t tegra30_mc_handle_irq(int irq, void *data)
 		}
 
 		/* mask all interrupts to avoid flooding */
-		status = mc_ch_readl(mc, channel, MC_INTSTATUS) & mc->soc->intmask;
+		status = mc_ch_readl(mc, channel, MC_INTSTATUS) & mc->soc->intmasks[0].mask;
 	} else {
-		status = mc_readl(mc, MC_INTSTATUS) & mc->soc->intmask;
+		status = mc_readl(mc, MC_INTSTATUS) & mc->soc->intmasks[0].mask;
 	}
 
 	if (!status)
 		return IRQ_NONE;
 
 	for_each_set_bit(bit, &status, 32) {
-		const char *error = tegra_mc_status_names[bit] ?: "unknown";
+		const char *error = tegra20_mc_status_names[bit] ?: "unknown";
 		const char *client = "unknown", *desc;
 		const char *direction, *secure;
 		u32 status_reg, addr_reg;
@@ -669,9 +669,11 @@ irqreturn_t tegra30_mc_handle_irq(int irq, void *data)
 					addr = mc_ch_readl(mc, channel, addr_hi_reg);
 				else
 					addr = mc_readl(mc, addr_hi_reg);
-			} else {
+			} else if (mc->soc->mc_addr_hi_mask) {
 				addr = ((value >> MC_ERR_STATUS_ADR_HI_SHIFT) &
-					MC_ERR_STATUS_ADR_HI_MASK);
+					mc->soc->mc_addr_hi_mask);
+			} else {
+				WARN_ON(1);
 			}
 			addr <<= 32;
 		}
@@ -696,11 +698,11 @@ irqreturn_t tegra30_mc_handle_irq(int irq, void *data)
 			}
 		}
 
-		type = (value & MC_ERR_STATUS_TYPE_MASK) >>
+		type = (value & mc->soc->mc_err_status_type_mask) >>
 		       MC_ERR_STATUS_TYPE_SHIFT;
-		desc = tegra_mc_error_names[type];
+		desc = tegra20_mc_error_names[type];
 
-		switch (value & MC_ERR_STATUS_TYPE_MASK) {
+		switch (value & mc->soc->mc_err_status_type_mask) {
 		case MC_ERR_STATUS_TYPE_INVALID_SMMU_PAGE:
 			perm[0] = ' ';
 			perm[1] = '[';
@@ -753,7 +755,7 @@ irqreturn_t tegra30_mc_handle_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-const char *const tegra_mc_status_names[32] = {
+const char *const tegra20_mc_status_names[32] = {
 	[ 1] = "External interrupt",
 	[ 6] = "EMEM address decode error",
 	[ 7] = "GART page fault",
@@ -766,9 +768,10 @@ const char *const tegra_mc_status_names[32] = {
 	[16] = "MTS carveout violation",
 	[17] = "Generalized carveout violation",
 	[20] = "Route Sanity error",
+	[21] = "GIC_MSI error",
 };
 
-const char *const tegra_mc_error_names[8] = {
+const char *const tegra20_mc_error_names[8] = {
 	[2] = "EMEM decode error",
 	[3] = "TrustZone violation",
 	[4] = "Carveout violation",
@@ -977,11 +980,13 @@ static int tegra_mc_probe(struct platform_device *pdev)
 			}
 		}
 
-		if (mc->soc->num_channels)
-			mc_ch_writel(mc, MC_BROADCAST_CHANNEL, mc->soc->intmask,
-				     MC_INTMASK);
-		else
-			mc_writel(mc, mc->soc->intmask, MC_INTMASK);
+		for (i = 0; i < mc->soc->num_intmasks; i++) {
+			if (mc->soc->num_channels)
+				mc_ch_writel(mc, MC_BROADCAST_CHANNEL, mc->soc->intmasks[i].mask,
+					mc->soc->intmasks[i].reg);
+			else
+				mc_writel(mc, mc->soc->intmasks[i].mask, mc->soc->intmasks[i].reg);
+		}
 	}
 
 	if (mc->soc->reset_ops) {
