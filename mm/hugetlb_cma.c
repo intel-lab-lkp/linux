@@ -51,7 +51,7 @@ struct folio *hugetlb_cma_alloc_frozen_folio(int order, gfp_t gfp_mask,
 	if (!page)
 		return NULL;
 
-	folio = page_folio(page);
+	folio = page_rmappable_folio(page);
 	folio_set_hugetlb_cma(folio);
 	return folio;
 }

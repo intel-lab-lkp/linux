@@ -835,7 +835,8 @@ static inline void folio_set_order(struct folio *folio, unsigned int order)
 bool __folio_unqueue_deferred_split(struct folio *folio);
 static inline bool folio_unqueue_deferred_split(struct folio *folio)
 {
-	if (folio_order(folio) <= 1 || !folio_test_large_rmappable(folio))
+	if (folio_order(folio) <= 1 || !folio_test_large_rmappable(folio) ||
+	    folio_test_hugetlb(folio))
 		return false;
 
 	/*

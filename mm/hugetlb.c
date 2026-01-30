@@ -1422,8 +1422,8 @@ static struct folio *alloc_gigantic_frozen_folio(int order, gfp_t gfp_mask,
 	if (hugetlb_cma_exclusive_alloc())
 		return NULL;
 
-	folio = (struct folio *)alloc_contig_frozen_pages(1 << order, gfp_mask,
-							  nid, nodemask);
+	folio = page_rmappable_folio(alloc_contig_frozen_pages(1 << order, gfp_mask,
+							  nid, nodemask));
 	return folio;
 }
 #else /* !CONFIG_ARCH_HAS_GIGANTIC_PAGE || !CONFIG_CONTIG_ALLOC */
@@ -1859,7 +1859,7 @@ static struct folio *alloc_buddy_frozen_folio(int order, gfp_t gfp_mask,
 	if (alloc_try_hard)
 		gfp_mask |= __GFP_RETRY_MAYFAIL;
 
-	folio = (struct folio *)__alloc_frozen_pages(gfp_mask, order, nid, nmask);
+	folio = page_rmappable_folio(__alloc_frozen_pages(gfp_mask, order, nid, nmask));
 
 	/*
 	 * If we did not specify __GFP_RETRY_MAYFAIL, but still got a
