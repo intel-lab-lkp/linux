@@ -27,6 +27,7 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/cgroup_dmem.h>
 
 #define DEFAULT_CMA_NAME "default_cma_region"
 
@@ -46,7 +47,9 @@ int __init dma_heap_cma_register_heap(struct cma *cma)
 struct cma_heap {
 	struct dma_heap *heap;
 	struct cma *cma;
+	struct dmem_cgroup_region *cg;
 };
+static struct dmem_cgroup_region *default_cma_cg;
 
 struct cma_heap_buffer {
 	struct cma_heap *heap;
@@ -58,6 +61,7 @@ struct cma_heap_buffer {
 	pgoff_t pagecount;
 	int vmap_cnt;
 	void *vaddr;
+	struct dmem_cgroup_pool_state *pool;
 };
 
 struct dma_heap_attachment {
@@ -276,6 +280,7 @@ static void cma_heap_dma_buf_release(struct dma_buf *dmabuf)
 	kfree(buffer->pages);
 	/* release memory */
 	cma_release(cma_heap->cma, buffer->cma_pages, buffer->pagecount);
+	dmem_cgroup_uncharge(buffer->pool, buffer->len);
 	kfree(buffer);
 }
 
@@ -319,9 +324,16 @@ static struct dma_buf *cma_heap_allocate(struct dma_heap *heap,
 	if (align > CONFIG_CMA_ALIGNMENT)
 		align = CONFIG_CMA_ALIGNMENT;
 
+	if (mem_accounting) {
+		ret = dmem_cgroup_try_charge(cma_heap->cg, size,
+					     &buffer->pool, NULL);
+		if (ret)
+			goto free_buffer;
+	}
+
 	cma_pages = cma_alloc(cma_heap->cma, pagecount, align, false);
 	if (!cma_pages)
-		goto free_buffer;
+		goto uncharge_cgroup;
 
 	/* Clear the cma pages */
 	if (PageHighMem(cma_pages)) {
@@ -376,6 +388,8 @@ free_pages:
 	kfree(buffer->pages);
 free_cma:
 	cma_release(cma_heap->cma, cma_pages, pagecount);
+uncharge_cgroup:
+	dmem_cgroup_uncharge(buffer->pool, size);
 free_buffer:
 	kfree(buffer);
 
@@ -390,11 +404,28 @@ static int __init __add_cma_heap(struct cma *cma, const char *name)
 {
 	struct dma_heap_export_info exp_info;
 	struct cma_heap *cma_heap;
+	struct dmem_cgroup_region *region;
+	int ret;
 
 	cma_heap = kzalloc(sizeof(*cma_heap), GFP_KERNEL);
 	if (!cma_heap)
 		return -ENOMEM;
 	cma_heap->cma = cma;
+
+	/*
+	 * If two heaps are created for the default cma region, use the same
+	 * dmem for them. They both use the same memory pool.
+	 */
+	if (dev_get_cma_area(NULL) == cma && default_cma_cg)
+		region = default_cma_cg;
+	else {
+		region = dmem_cgroup_register_region(cma_get_size(cma), "cma/%s", name);
+		if (IS_ERR(region)) {
+			ret = PTR_ERR(region);
+			goto free_cma_heap;
+		}
+	}
+	cma_heap->cg = region;
 
 	exp_info.name = name;
 	exp_info.ops = &cma_heap_ops;
@@ -402,13 +433,23 @@ static int __init __add_cma_heap(struct cma *cma, const char *name)
 
 	cma_heap->heap = dma_heap_add(&exp_info);
 	if (IS_ERR(cma_heap->heap)) {
-		int ret = PTR_ERR(cma_heap->heap);
-
-		kfree(cma_heap);
-		return ret;
+		ret = PTR_ERR(cma_heap->heap);
+		goto cg_unregister;
 	}
 
+	if (dev_get_cma_area(NULL) == cma && !default_cma_cg)
+		default_cma_cg = region;
+
 	return 0;
+
+cg_unregister:
+	/* default_cma_cg == cma_heap->cg only for the duplicate heap. */
+	if (default_cma_cg != cma_heap->cg)
+		dmem_cgroup_unregister_region(cma_heap->cg);
+free_cma_heap:
+	kfree(cma_heap);
+
+	return ret;
 }
 
 static int __init add_cma_heaps(void)
