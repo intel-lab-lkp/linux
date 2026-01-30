@@ -354,11 +354,19 @@ static int asus_wmi_send_event(struct asus_drvdata *drvdata, u8 code)
 static int asus_event(struct hid_device *hdev, struct hid_field *field,
 		      struct hid_usage *usage, __s32 value)
 {
+	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+
 	if ((usage->hid & HID_USAGE_PAGE) == HID_USAGE_PAGE_VENDOR &&
 	    (usage->hid & HID_USAGE) != 0x00 &&
 	    (usage->hid & HID_USAGE) != 0xff && !usage->type) {
 		hid_warn(hdev, "Unmapped Asus vendor usagepage code 0x%02x\n",
 			 usage->hid & HID_USAGE);
+	}
+
+	if (drvdata->quirks & QUIRK_HID_FN_LOCK &&
+		usage->type == EV_KEY && usage->code == KEY_FN_ESC && value == 1) {
+		drvdata->fn_lock = !drvdata->fn_lock;
+		schedule_work(&drvdata->fn_lock_sync_work);
 	}
 
 	if (usage->type == EV_KEY && value) {
