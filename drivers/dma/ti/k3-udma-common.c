@@ -95,32 +95,6 @@ void udma_free_hwdesc(struct udma_chan *uc, struct udma_desc *d)
 	}
 }
 
-void udma_purge_desc_work(struct work_struct *work)
-{
-	struct udma_dev *ud = container_of(work, typeof(*ud), purge_work);
-	struct virt_dma_desc *vd, *_vd;
-	unsigned long flags;
-	LIST_HEAD(head);
-
-	spin_lock_irqsave(&ud->lock, flags);
-	list_splice_tail_init(&ud->desc_to_purge, &head);
-	spin_unlock_irqrestore(&ud->lock, flags);
-
-	list_for_each_entry_safe(vd, _vd, &head, node) {
-		struct udma_chan *uc = to_udma_chan(vd->tx.chan);
-		struct udma_desc *d = to_udma_desc(&vd->tx);
-
-		udma_free_hwdesc(uc, d);
-		list_del(&vd->node);
-		kfree(d);
-	}
-
-	/* If more to purge, schedule the work again */
-	if (!list_empty(&ud->desc_to_purge))
-		schedule_work(&ud->purge_work);
-}
-EXPORT_SYMBOL_GPL(udma_purge_desc_work);
-
 void udma_desc_free(struct virt_dma_desc *vd)
 {
 	struct udma_dev *ud = to_udma_dev(vd->tx.chan->device);
@@ -131,17 +105,9 @@ void udma_desc_free(struct virt_dma_desc *vd)
 	if (uc->terminated_desc == d)
 		uc->terminated_desc = NULL;
 
-	if (uc->use_dma_pool) {
-		udma_free_hwdesc(uc, d);
-		kfree(d);
-		return;
-	}
-
-	spin_lock_irqsave(&ud->lock, flags);
-	list_add_tail(&vd->node, &ud->desc_to_purge);
-	spin_unlock_irqrestore(&ud->lock, flags);
-
-	schedule_work(&ud->purge_work);
+	udma_free_hwdesc(uc, d);
+	kfree(d);
+	return;
 }
 EXPORT_SYMBOL_GPL(udma_desc_free);
 

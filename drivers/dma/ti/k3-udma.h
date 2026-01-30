@@ -353,8 +353,6 @@ struct udma_dev {
 
 	struct k3_ringacc *ringacc;
 
-	struct work_struct purge_work;
-	struct list_head desc_to_purge;
 	spinlock_t lock;
 
 	struct udma_rx_flush rx_flush;
@@ -596,7 +594,6 @@ static inline void udma_fetch_epib(struct udma_chan *uc, struct udma_desc *d)
 struct udma_desc *udma_udma_desc_from_paddr(struct udma_chan *uc,
 					    dma_addr_t paddr);
 void udma_free_hwdesc(struct udma_chan *uc, struct udma_desc *d);
-void udma_purge_desc_work(struct work_struct *work);
 void udma_desc_free(struct virt_dma_desc *vd);
 bool udma_desc_is_rx_flush(struct udma_chan *uc, dma_addr_t addr);
 bool udma_is_desc_really_done(struct udma_chan *uc, struct udma_desc *d);

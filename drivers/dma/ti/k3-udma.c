@@ -2704,14 +2704,12 @@ static int udma_probe(struct platform_device *pdev)
 	ud->psil_base = ud->match_data->psil_base;
 
 	INIT_LIST_HEAD(&ud->ddev.channels);
-	INIT_LIST_HEAD(&ud->desc_to_purge);
 
 	ch_count = setup_resources(ud);
 	if (ch_count <= 0)
 		return ch_count;
 
 	spin_lock_init(&ud->lock);
-	INIT_WORK(&ud->purge_work, udma_purge_desc_work);
 
 	ud->desc_align = 64;
 	if (ud->desc_align < dma_get_cache_alignment())
