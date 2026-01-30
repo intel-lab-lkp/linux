@@ -208,6 +208,13 @@ static int svm_set_efer_svme(struct kvm_vcpu *vcpu, u64 old_efer, u64 new_efer)
 	if ((old_efer & EFER_SVME) == (new_efer & EFER_SVME))
 		return 0;
 
+	/*
+	 * An L2 guest setting or clearing EFER_SVME does not change whether or
+	 * not the vCPU can use nested from KVM's perspective.
+	 */
+	if (is_guest_mode(vcpu))
+		return 0;
+
 	if (new_efer & EFER_SVME) {
 		r = svm_allocate_nested(svm);
 		if (r)
