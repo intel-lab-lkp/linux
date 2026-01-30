@@ -1428,11 +1428,9 @@ static inline unsigned long folio_large_nr_pages(const struct folio *folio)
  */
 static inline unsigned int compound_order(const struct page *page)
 {
-	const struct folio *folio = (struct folio *)page;
-
-	if (!test_bit(PG_head, &folio->flags.f))
+	if (!test_bit(PG_head, &page->flags.f))
 		return 0;
-	return folio_large_order(folio);
+	return page[1].flags.f & 0xffUL;
 }
 
 /**
@@ -2514,11 +2512,9 @@ static inline unsigned long folio_nr_pages(const struct folio *folio)
  */
 static inline unsigned long compound_nr(const struct page *page)
 {
-	const struct folio *folio = (struct folio *)page;
-
-	if (!test_bit(PG_head, &folio->flags.f))
+	if (!test_bit(PG_head, &page->flags.f))
 		return 1;
-	return folio_large_nr_pages(folio);
+	return 1 << compound_order(page);
 }
 
 /**
