@@ -194,12 +194,12 @@ impl DmaMask {
 ///
 /// ```
 /// # use kernel::device::{Bound, Device};
-/// use kernel::dma::{attrs::*, CoherentAllocation};
+/// use kernel::dma::{attrs::*, CoherentArray};
 ///
 /// # fn test(dev: &Device<Bound>) -> Result {
 /// let attribs = DMA_ATTR_FORCE_CONTIGUOUS | DMA_ATTR_NO_WARN;
-/// let c: CoherentAllocation<u64> =
-///     CoherentAllocation::alloc_attrs(dev, 4, GFP_KERNEL, attribs)?;
+/// let c: CoherentArray<u64, 4> =
+///     CoherentArray::alloc_attrs(dev, GFP_KERNEL, attribs)?;
 /// # Ok::<(), Error>(()) }
 /// ```
 #[derive(Clone, Copy, PartialEq)]
@@ -413,6 +413,9 @@ pub struct CoherentAllocation<T: AsBytes + FromBytes, Size: AllocationSize = Run
 
 /// A coherent DMA allocation with a runtime-determined size.
 pub type CoherentSlice<T> = CoherentAllocation<T, RuntimeSize>;
+
+/// A coherent DMA allocation for an array of `N` elements.
+pub type CoherentArray<T, const N: usize> = CoherentAllocation<T, StaticSize<N>>;
 
 impl<T: AsBytes + FromBytes, Size: AllocationSize> CoherentAllocation<T, Size> {
     /// Returns the number of elements `T` in this allocation.
@@ -689,6 +692,124 @@ impl<T: AsBytes + FromBytes> CoherentSlice<T> {
         gfp_flags: kernel::alloc::Flags,
     ) -> Result<Self> {
         Self::alloc_attrs(dev, count, gfp_flags, Attrs(0))
+    }
+}
+
+impl<T: AsBytes + FromBytes, const N: usize> CoherentArray<T, N> {
+    /// Allocates a region of `size_of::<T> * N` of coherent memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::device::{Bound, Device};
+    /// use kernel::dma::{attrs::*, CoherentArray};
+    ///
+    /// # fn test(dev: &Device<Bound>) -> Result {
+    /// let c: CoherentArray<u64, 4> =
+    ///     CoherentArray::alloc_attrs(dev, GFP_KERNEL, DMA_ATTR_NO_WARN)?;
+    /// # Ok::<(), Error>(()) }
+    /// ```
+    pub fn alloc_attrs(
+        dev: &device::Device<Bound>,
+        gfp_flags: kernel::alloc::Flags,
+        dma_attrs: Attrs,
+    ) -> Result<Self> {
+        Self::alloc_impl(dev, N, gfp_flags, dma_attrs)
+    }
+
+    /// Performs the same functionality as [`CoherentArray::alloc_attrs`], except the
+    /// `dma_attrs` is 0 by default.
+    pub fn alloc_coherent(
+        dev: &device::Device<Bound>,
+        gfp_flags: kernel::alloc::Flags,
+    ) -> Result<Self> {
+        Self::alloc_attrs(dev, gfp_flags, Attrs(0))
+    }
+
+    /// Returns a DMA handle starting at `OFFSET` (in units of `T`) which may be given to the
+    /// device as the DMA address base of the region.
+    pub fn dma_handle_with_offset<const OFFSET: usize>(&self) -> DmaAddress {
+        build_assert!(OFFSET < N, "Offset is out of bounds for the allocation.");
+
+        // INVARIANT: The type invariant of `Self` guarantees that `size_of::<T> * N` fits
+        // into a `usize`, and `OFFSET` is inferior to `N`.
+        self.dma_handle + (OFFSET * core::mem::size_of::<T>()) as DmaAddress
+    }
+
+    /// Returns the data from the region starting from `OFFSET` as a slice.
+    /// `OFFSET` and `COUNT` are in units of `T`, not the number of bytes.
+    ///
+    /// For ringbuffer type of r/w access or use-cases where the pointer to the live data is needed,
+    /// [`CoherentAllocation::start_ptr`] or [`CoherentAllocation::start_ptr_mut`] could be used
+    /// instead.
+    ///
+    /// # Safety
+    ///
+    /// * Callers must ensure that the device does not read/write to/from memory while the returned
+    ///   slice is live.
+    /// * Callers must ensure that this call does not race with a write to the same region while
+    ///   the returned slice is live.
+    pub unsafe fn as_slice<const OFFSET: usize, const COUNT: usize>(&self) -> &[T] {
+        build_assert!(
+            OFFSET + COUNT <= N,
+            "Range is out of bounds for the allocation."
+        );
+        // SAFETY:
+        // - The pointer is valid due to type invariant on `CoherentAllocation`,
+        //   we've just checked that the range and index is within bounds. The immutability of the
+        //   data is also guaranteed by the safety requirements of the function.
+        // - `OFFSET + COUNT` can't overflow since it is smaller than `N` and we've checked
+        //   that `N` won't overflow early in the constructor.
+        unsafe { core::slice::from_raw_parts(self.start_ptr().add(OFFSET), COUNT) }
+    }
+
+    /// Performs the same functionality as [`CoherentArray::as_slice`], except that a mutable
+    /// slice is returned.
+    ///
+    /// # Safety
+    ///
+    /// * Callers must ensure that the device does not read/write to/from memory while the returned
+    ///   slice is live.
+    /// * Callers must ensure that this call does not race with a read or write to the same region
+    ///   while the returned slice is live.
+    pub unsafe fn as_slice_mut<const OFFSET: usize, const COUNT: usize>(&mut self) -> &mut [T] {
+        build_assert!(
+            OFFSET + COUNT <= N,
+            "Range is out of bounds for the allocation."
+        );
+        // SAFETY:
+        // - The pointer is valid due to type invariant on `CoherentAllocation`,
+        //   we've just checked that the range and index is within bounds. The immutability of the
+        //   data is also guaranteed by the safety requirements of the function.
+        // - `OFFSET + COUNT` can't overflow since it is smaller than `N` and we've checked
+        //   that `N` won't overflow early in the constructor.
+        unsafe { core::slice::from_raw_parts_mut(self.start_ptr_mut().add(OFFSET), COUNT) }
+    }
+
+    /// Writes data to the region starting from `OFFSET`. `OFFSET` is in units of `T`, not the
+    /// number of bytes.
+    ///
+    /// # Safety
+    ///
+    /// * Callers must ensure that this call does not race with a read or write to the same region
+    ///   that overlaps with this write.
+    pub unsafe fn write<const OFFSET: usize, const SIZE: usize>(&mut self, src: &[T; SIZE]) {
+        build_assert!(
+            OFFSET + SIZE <= N,
+            "Range is out of bounds for the allocation."
+        );
+        // SAFETY:
+        // - The pointer is valid due to type invariant on `CoherentAllocation`
+        //   and we've just checked that the range and index is within bounds.
+        // - `OFFSET + SIZE` can't overflow since it is smaller than `N` and we've checked
+        //   that `N` won't overflow early in the constructor.
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                src.as_ptr(),
+                self.start_ptr_mut().add(OFFSET),
+                src.len(),
+            )
+        };
     }
 }
 

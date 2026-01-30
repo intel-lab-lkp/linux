@@ -9,13 +9,13 @@ use core::ops::{
 
 use kernel::{
     device,
-    dma::CoherentAllocation,
+    dma::CoherentSlice,
     page::PAGE_SIZE,
     prelude::*, //
 };
 
 pub(crate) struct DmaObject {
-    dma: CoherentAllocation<u8>,
+    dma: CoherentSlice<u8>,
 }
 
 impl DmaObject {
@@ -24,7 +24,7 @@ impl DmaObject {
             .map_err(|_| EINVAL)?
             .pad_to_align()
             .size();
-        let dma = CoherentAllocation::alloc_coherent(dev, len, GFP_KERNEL | __GFP_ZERO)?;
+        let dma = CoherentSlice::alloc_coherent(dev, len, GFP_KERNEL | __GFP_ZERO)?;
 
         Ok(Self { dma })
     }
@@ -40,7 +40,7 @@ impl DmaObject {
 }
 
 impl Deref for DmaObject {
-    type Target = CoherentAllocation<u8>;
+    type Target = CoherentSlice<u8>;
 
     fn deref(&self) -> &Self::Target {
         &self.dma
