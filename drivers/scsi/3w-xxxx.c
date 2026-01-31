@@ -2411,20 +2411,4 @@ static struct pci_driver tw_driver = {
 	.shutdown	= tw_shutdown,
 };
 
-/* This function is called on driver initialization */
-static int __init tw_init(void)
-{
-	printk(KERN_WARNING "3ware Storage Controller device driver for Linux v%s.\n", TW_DRIVER_VERSION);
-
-	return pci_register_driver(&tw_driver);
-} /* End tw_init() */
-
-/* This function is called on driver exit */
-static void __exit tw_exit(void)
-{
-	pci_unregister_driver(&tw_driver);
-} /* End tw_exit() */
-
-module_init(tw_init);
-module_exit(tw_exit);
-
+module_pci_driver(tw_driver);

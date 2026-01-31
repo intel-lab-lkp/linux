@@ -1680,20 +1680,7 @@ static struct pci_driver hptiop_pci_driver = {
 	.shutdown   = hptiop_shutdown,
 };
 
-static int __init hptiop_module_init(void)
-{
-	printk(KERN_INFO "%s %s\n", driver_name_long, driver_ver);
-	return pci_register_driver(&hptiop_pci_driver);
-}
-
-static void __exit hptiop_module_exit(void)
-{
-	pci_unregister_driver(&hptiop_pci_driver);
-}
-
-
-module_init(hptiop_module_init);
-module_exit(hptiop_module_exit);
+module_pci_driver(hptiop_pci_driver);
 
 MODULE_LICENSE("GPL");
 
