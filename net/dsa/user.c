@@ -1497,8 +1497,19 @@ dsa_user_add_cls_matchall_police(struct net_device *dev,
 	mall_tc_entry->cookie = cls->cookie;
 	mall_tc_entry->type = DSA_PORT_MALL_POLICER;
 	policer = &mall_tc_entry->policer;
+	/* until they export the type of act->police in flow_offload.h ... */
 	policer->rate_bytes_per_sec = act->police.rate_bytes_ps;
 	policer->burst = act->police.burst;
+	policer->peakrate_bytes_ps = act->police.peakrate_bytes_ps;
+	policer->avrate = act->police.avrate;
+	policer->overhead = act->police.overhead;
+	policer->burst_pkt = act->police.burst_pkt;
+	policer->rate_pkt_ps = act->police.rate_pkt_ps;
+	policer->mtu = act->police.mtu;
+	policer->exceed.act_id = act->police.exceed.act_id;
+	policer->exceed.extval = act->police.exceed.extval;
+	policer->notexceed.act_id = act->police.notexceed.act_id;
+	policer->notexceed.extval = act->police.notexceed.extval;
 
 	err = ds->ops->port_policer_add(ds, dp->index, policer);
 	if (err) {

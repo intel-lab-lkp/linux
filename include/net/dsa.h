@@ -21,6 +21,7 @@
 #include <linux/phylink.h>
 #include <net/devlink.h>
 #include <net/switchdev.h>
+#include <net/flow_offload.h>
 
 struct dsa_8021q_context;
 struct tc_action;
@@ -220,6 +221,16 @@ struct dsa_mall_mirror_tc_entry {
 struct dsa_mall_policer_tc_entry {
 	u32 burst;
 	u64 rate_bytes_per_sec;
+	u64 peakrate_bytes_ps;
+	u32 avrate;
+	u16 overhead;
+	u64 burst_pkt;
+	u64 rate_pkt_ps;
+	u32 mtu;
+	struct {
+		enum flow_action_id act_id;
+		u32 extval;
+	} exceed, notexceed;
 };
 
 /* TC matchall entry */
