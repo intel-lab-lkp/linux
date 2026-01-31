@@ -559,15 +559,22 @@ static netdev_tx_t ocelot_port_xmit(struct sk_buff *skb, struct net_device *dev)
 	int port = priv->port.index;
 	u32 rew_op = 0;
 
-	if (!static_branch_unlikely(&ocelot_fdma_enabled) &&
-	    !ocelot_can_inject(ocelot, 0))
-		return NETDEV_TX_BUSY;
+	if (!static_branch_unlikely(&ocelot_fdma_enabled)) {
+		ocelot_lock_inj_grp(ocelot, 0);
+
+		if (!ocelot_can_inject(ocelot, 0)) {
+			ocelot_unlock_inj_grp(ocelot, 0);
+			return NETDEV_TX_BUSY;
+		}
+	}
 
 	/* Check if timestamping is needed */
 	if (ocelot->ptp && (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
 		struct sk_buff *clone = NULL;
 
 		if (ocelot_port_txtstamp_request(ocelot, port, skb, &clone)) {
+			if (!static_branch_unlikely(&ocelot_fdma_enabled))
+				ocelot_unlock_inj_grp(ocelot, 0);
 			kfree_skb(skb);
 			return NETDEV_TX_OK;
 		}
@@ -582,6 +589,7 @@ static netdev_tx_t ocelot_port_xmit(struct sk_buff *skb, struct net_device *dev)
 		ocelot_fdma_inject_frame(ocelot, port, rew_op, skb, dev);
 	} else {
 		ocelot_port_inject_frame(ocelot, port, 0, rew_op, skb);
+		ocelot_unlock_inj_grp(ocelot, 0);
 
 		consume_skb(skb);
 	}
