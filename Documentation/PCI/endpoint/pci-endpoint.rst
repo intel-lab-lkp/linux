@@ -119,6 +119,28 @@ by the PCI endpoint function driver.
    BAR register or BAR decode on the endpoint while the host still expects
    the assigned BAR address to remain valid.
 
+   The struct pci_epf_bar passed to pci_epc_set_bar() (and the optional
+   pci_epf_bar.submap array) is owned by the PCI endpoint function driver.
+   An EPC driver may keep a reference to these objects after
+   pci_epc_set_bar() returns. Therefore the EPF driver must ensure that:
+
+     * Ownership of the pci_epf_bar object passed to pci_epc_set_bar()
+       remains with the caller (the EPF driver). The caller is responsible
+       for ensuring it remains valid (and freeing it when dynamically
+       allocated).
+
+     * After pci_epc_set_bar() succeeds, the caller must not modify the
+       contents of the pci_epf_bar object (or its submap array) until a
+       later successful pci_epc_set_bar() for the same BAR replaces it, or
+       until pci_epc_clear_bar() succeeds. Otherwise, it could potentially
+       lead to use-after-free or undefined behavior.
+
+     * If the caller needs to update the mapping for a BAR and calls
+       pci_epc_set_bar() again, it should use a new pci_epf_bar instance
+       (and a new submap array, if used). If the call succeeds, the old
+       instance can then be freed by the caller. If the call fails, the old
+       instance must remain valid.
+
 * pci_epc_clear_bar()
 
    The PCI endpoint function driver should use pci_epc_clear_bar() to reset
