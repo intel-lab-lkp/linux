@@ -253,7 +253,6 @@ enum {
   * throughput.
   */
 struct percpu_cluster {
-	local_lock_t lock; /* Protect the percpu_cluster above */
 	unsigned int next[SWAP_NR_ORDERS]; /* Likely next allocation offset */
 };
 
