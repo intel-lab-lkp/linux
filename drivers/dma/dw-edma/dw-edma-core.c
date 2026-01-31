@@ -844,11 +844,13 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 {
 	struct dw_edma_chip *chip = dw->chip;
 	struct device *dev = dw->chip->dev;
+	struct msi_desc *msi_desc;
 	u32 wr_mask = 1;
 	u32 rd_mask = 1;
 	int i, err = 0;
 	u32 ch_cnt;
 	int irq;
+	bool is_msix = false;
 
 	ch_cnt = dw->wr_ch_cnt + dw->rd_ch_cnt;
 
@@ -895,9 +897,13 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 					  &dw->irq[i]);
 			if (err)
 				goto err_irq_free;
-
-			if (irq_get_msi_desc(irq))
+			msi_desc = irq_get_msi_desc(irq);
+			if (msi_desc) {
 				get_cached_msi_msg(irq, &dw->irq[i].msi);
+				is_msix = msi_desc && msi_desc->pci.msi_attrib.is_msix;
+				if (!is_msix && i > 0)
+					dw->irq[i].msi.data = dw->irq[0].msi.data + i;
+			}
 		}
 
 		dw->nr_irqs = i;
