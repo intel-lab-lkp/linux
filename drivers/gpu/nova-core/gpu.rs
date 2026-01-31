@@ -124,6 +124,18 @@ impl Chipset {
             | Self::GB207 => Architecture::Blackwell,
         }
     }
+
+    /// Returns the FSP Chain of Trust (COT) protocol version for this chipset.
+    ///
+    /// Hopper (GH100) uses version 1, Blackwell uses version 2.
+    pub(crate) const fn fsp_cot_version(&self) -> u16 {
+        match self.arch() {
+            Architecture::Hopper => 1,
+            Architecture::Blackwell => 2,
+            // Other architectures don't use FSP COT
+            _ => 0,
+        }
+    }
 }
 
 // TODO
