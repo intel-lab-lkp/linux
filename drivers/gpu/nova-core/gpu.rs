@@ -304,10 +304,19 @@ impl Gpu {
         let chipset = spec.chipset();
 
         try_pin_init!(Self {
-            // We must wait for GFW_BOOT completion before doing any significant setup on the GPU.
+            // Turing, Ampere, Ada: we must wait for GFW_BOOT completion before doing any
+            // significant setup on the GPU.
+            //
+            // Hopper/Blackwell: skip GFW_BOOT completion waiting entirely, and use the simpler FSP
+            // Chain of Trust boot path (elsewhere) instead.
             _: {
-                gfw::wait_gfw_boot_completion(bar)
-                    .inspect_err(|_| dev_err!(pdev.as_ref(), "GFW boot did not complete\n"))?;
+                if matches!(
+                    chipset.arch(),
+                    Architecture::Turing | Architecture::Ampere | Architecture::Ada
+                ) {
+                    gfw::wait_gfw_boot_completion(bar)
+                        .inspect_err(|_| dev_err!(pdev.as_ref(), "GFW boot did not complete\n"))?;
+                }
             },
 
             sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, chipset)?,
