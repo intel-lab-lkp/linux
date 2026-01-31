@@ -180,7 +180,7 @@ int tegra_xusb_pad_init(struct tegra_xusb_pad *pad,
 	return 0;
 
 unregister:
-	device_unregister(&pad->dev);
+	put_device(&pad->dev);
 	return err;
 }
 
