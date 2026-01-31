@@ -25,6 +25,7 @@
 #include "internal.h"
 #include "swap_table.h"
 #include "swap.h"
+#include "swap_tier.h"
 
 /*
  * swapper_space is a fiction, retained to simplify the path through
@@ -947,8 +948,77 @@ static ssize_t vma_ra_enabled_store(struct kobject *kobj,
 }
 static struct kobj_attribute vma_ra_enabled_attr = __ATTR_RW(vma_ra_enabled);
 
+static ssize_t tiers_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return swap_tiers_sysfs_show(buf);
+}
+
+static ssize_t tiers_store(struct kobject *kobj,
+			struct kobj_attribute *attr,
+			const char *buf, size_t count)
+{
+	char *p, *token, *name, *tmp;
+	int ret = 0;
+	short prio;
+	DEFINE_SWAP_TIER_SAVE_CTX(ctx);
+
+	tmp = kstrdup(buf, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	spin_lock(&swap_lock);
+	spin_lock(&swap_tier_lock);
+
+	p = tmp;
+	swap_tiers_save(ctx);
+
+	while (!ret && (token = strsep(&p, ", \t\n")) != NULL) {
+		if (!*token)
+			continue;
+
+		if (token[0] == '-') {
+			ret = swap_tiers_remove(token + 1);
+		} else {
+
+			name = strsep(&token, ":");
+			if (!token || kstrtos16(token, 10, &prio)) {
+				ret = -EINVAL;
+				goto out;
+			}
+
+			if (name[0] == '+')
+				ret = swap_tiers_add(name + 1, prio);
+			else
+				ret = swap_tiers_modify(name, prio);
+		}
+
+		if (ret)
+			goto restore;
+	}
+
+	if (!swap_tiers_validate()) {
+		ret = -EINVAL;
+		goto restore;
+	}
+
+out:
+	spin_unlock(&swap_tier_lock);
+	spin_unlock(&swap_lock);
+
+	kfree(tmp);
+	return ret ? ret : count;
+
+restore:
+	swap_tiers_restore(ctx);
+	goto out;
+}
+
+static struct kobj_attribute tier_attr = __ATTR_RW(tiers);
+
 static struct attribute *swap_attrs[] = {
 	&vma_ra_enabled_attr.attr,
+	&tier_attr.attr,
 	NULL,
 };
 
