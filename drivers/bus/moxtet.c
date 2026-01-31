@@ -179,9 +179,11 @@ static int moxtet_add_device(struct moxtet_device *dev)
 		goto done;
 
 	ret = device_add(&dev->dev);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(dev->moxtet->dev, "can't add %s, status %d\n",
 			dev_name(dev->moxtet->dev), ret);
+		put_device(&dev->dev);
+	}
 
 done:
 	mutex_unlock(&add_mutex);
