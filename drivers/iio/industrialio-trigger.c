@@ -597,7 +597,7 @@ struct iio_trigger *viio_trigger_alloc(struct device *parent,
 free_descs:
 	irq_free_descs(trig->subirq_base, CONFIG_IIO_CONSUMERS_PER_TRIGGER);
 free_trig:
-	kfree(trig);
+	put_device(&trig->dev);
 	return NULL;
 }
 
