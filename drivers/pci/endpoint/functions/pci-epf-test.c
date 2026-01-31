@@ -86,6 +86,7 @@ struct pci_epf_test {
 	bool			dma_private;
 	const struct pci_epc_features *epc_features;
 	struct pci_epf_bar	db_bar;
+	struct pci_epf_bar	subrange_bar[PCI_STD_NUM_BARS];
 	size_t			bar_size[PCI_STD_NUM_BARS];
 };
 
@@ -827,11 +828,11 @@ static u8 pci_epf_test_subrange_sig_byte(enum pci_barno barno,
 static void pci_epf_test_bar_subrange_setup(struct pci_epf_test *epf_test,
 					    struct pci_epf_test_reg *reg)
 {
-	struct pci_epf_bar_submap *submap, *old_submap;
+	struct pci_epf_bar_submap *submap;
 	struct pci_epf *epf = epf_test->epf;
 	struct pci_epc *epc = epf->epc;
 	struct pci_epf_bar *bar;
-	unsigned int nsub = PCI_EPF_TEST_BAR_SUBRANGE_NSUB, old_nsub;
+	unsigned int nsub = PCI_EPF_TEST_BAR_SUBRANGE_NSUB;
 	/* reg->size carries BAR number for BAR_SUBRANGE_* commands. */
 	enum pci_barno barno = le32_to_cpu(reg->size);
 	u32 status = le32_to_cpu(reg->status);
@@ -857,7 +858,8 @@ static void pci_epf_test_bar_subrange_setup(struct pci_epf_test *epf_test,
 		goto err;
 	}
 
-	bar = &epf->bar[barno];
+	bar = &epf_test->subrange_bar[barno];
+	*bar = epf->bar[barno];
 	if (!bar->size || !bar->addr) {
 		dev_err(&epf->dev, "bar size/addr (%zu/%p) is invalid\n",
 			bar->size, bar->addr);
@@ -883,21 +885,17 @@ static void pci_epf_test_bar_subrange_setup(struct pci_epf_test *epf_test,
 		submap[i].size = sub_size;
 	}
 
-	old_submap = bar->submap;
-	old_nsub = bar->num_submap;
-
 	bar->submap = submap;
 	bar->num_submap = nsub;
 
 	ret = pci_epc_set_bar(epc, epf->func_no, epf->vfunc_no, bar);
 	if (ret) {
 		dev_err(&epf->dev, "pci_epc_set_bar() failed: %d\n", ret);
-		bar->submap = old_submap;
-		bar->num_submap = old_nsub;
+		bar->submap = NULL;
+		bar->num_submap = 0;
 		kfree(submap);
 		goto err;
 	}
-	kfree(old_submap);
 
 	/*
 	 * Fill deterministic signatures into the physical regions that
@@ -925,13 +923,11 @@ static void pci_epf_test_bar_subrange_clear(struct pci_epf_test *epf_test,
 					    struct pci_epf_test_reg *reg)
 {
 	struct pci_epf *epf = epf_test->epf;
-	struct pci_epf_bar_submap *submap;
 	struct pci_epc *epc = epf->epc;
 	/* reg->size carries BAR number for BAR_SUBRANGE_* commands. */
 	enum pci_barno barno = le32_to_cpu(reg->size);
 	u32 status = le32_to_cpu(reg->status);
 	struct pci_epf_bar *bar;
-	unsigned int nsub;
 	int ret;
 
 	if (barno >= PCI_STD_NUM_BARS) {
@@ -940,23 +936,15 @@ static void pci_epf_test_bar_subrange_clear(struct pci_epf_test *epf_test,
 	}
 
 	bar = &epf->bar[barno];
-	submap = bar->submap;
-	nsub = bar->num_submap;
-
-	if (!submap || !nsub)
-		goto err;
-
-	bar->submap = NULL;
-	bar->num_submap = 0;
 
 	ret = pci_epc_set_bar(epc, epf->func_no, epf->vfunc_no, bar);
 	if (ret) {
-		bar->submap = submap;
-		bar->num_submap = nsub;
 		dev_err(&epf->dev, "pci_epc_set_bar() failed: %d\n", ret);
 		goto err;
 	}
-	kfree(submap);
+	kfree(epf_test->subrange_bar[barno].submap);
+	epf_test->subrange_bar[barno].submap = NULL;
+	epf_test->subrange_bar[barno].num_submap = 0;
 
 	status |= STATUS_BAR_SUBRANGE_CLEAR_SUCCESS;
 	reg->status = cpu_to_le32(status);
