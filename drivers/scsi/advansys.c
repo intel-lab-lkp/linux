@@ -51,7 +51,7 @@
  *
  *  1. Use scsi_transport_spi
  *  2. advansys_info is not safe against multiple simultaneous callers
- *  3. Add module_param to override ISA/VLB ioport array
+ *  3. Add module_param to override ISA ioport array
  */
 
 /* Enable driver /proc statistics. */
@@ -87,15 +87,10 @@ typedef unsigned char uchar;
 #define ASC_IS_EISA         (0x0002)
 #define ASC_IS_PCI          (0x0004)
 #define ASC_IS_PCI_ULTRA    (0x0104)
-#define ASC_IS_PCMCIA       (0x0008)
-#define ASC_IS_MCA          (0x0020)
-#define ASC_IS_VL           (0x0040)
 #define ASC_IS_WIDESCSI_16  (0x0100)
 #define ASC_IS_WIDESCSI_32  (0x0200)
 #define ASC_IS_BIG_ENDIAN   (0x8000)
 
-#define ASC_CHIP_MIN_VER_VL      (0x01)
-#define ASC_CHIP_MAX_VER_VL      (0x07)
 #define ASC_CHIP_MIN_VER_PCI     (0x09)
 #define ASC_CHIP_MAX_VER_PCI     (0x0F)
 #define ASC_CHIP_VER_PCI_BIT     (0x08)
@@ -107,7 +102,7 @@ typedef unsigned char uchar;
 #define ASC_CHIP_MAX_VER_EISA (0x47)
 #define ASC_CHIP_VER_EISA_BIT (0x40)
 #define ASC_CHIP_LATEST_VER_EISA   ((ASC_CHIP_MIN_VER_EISA - 1) + 3)
-#define ASC_MAX_VL_DMA_COUNT    (0x07FFFFFFL)
+#define ASC_MAX_EISA_DMA_COUNT    (0x07FFFFFFL)
 #define ASC_MAX_PCI_DMA_COUNT   (0xFFFFFFFFL)
 
 #define ASC_SCSI_ID_BITS  3
@@ -554,8 +549,6 @@ typedef struct asc_cap_info_array {
 #define ASC_CNTL_SCSI_PARITY       (ushort)0x1000
 #define ASC_CNTL_BURST_MODE        (ushort)0x2000
 #define ASC_CNTL_SDTR_ENABLE_ULTRA (ushort)0x4000
-#define ASC_EEP_DVC_CFG_BEG_VL    2
-#define ASC_EEP_MAX_DVC_ADDR_VL   15
 #define ASC_EEP_DVC_CFG_BEG      32
 #define ASC_EEP_MAX_DVC_ADDR     45
 #define ASC_EEP_MAX_RETRY        20
@@ -2627,9 +2620,7 @@ static const char *advansys_info(struct Scsi_Host *shost)
 		asc_dvc_varp = &boardp->dvc_var.asc_dvc_var;
 		ASC_DBG(1, "begin\n");
 
-		if (asc_dvc_varp->bus_type & ASC_IS_VL) {
-			busname = "VL";
-		} else if (asc_dvc_varp->bus_type & ASC_IS_EISA) {
+		if (asc_dvc_varp->bus_type & ASC_IS_EISA) {
 			busname = "EISA";
 		} else if (asc_dvc_varp->bus_type & ASC_IS_PCI) {
 			if ((asc_dvc_varp->bus_type & ASC_IS_PCI_ULTRA)
@@ -6954,7 +6945,7 @@ static int AscISR(ASC_DVC_VAR *asc_dvc)
 				       CC_SINGLE_STEP | CC_DIAG | CC_TEST));
 	chipstat = AscGetChipStatus(iop_base);
 	if (chipstat & CSW_SCSI_RESET_LATCH) {
-		if (!(asc_dvc->bus_type & (ASC_IS_VL | ASC_IS_EISA))) {
+		if (!(asc_dvc->bus_type & ASC_IS_EISA)) {
 			int i = 10;
 			int_pending = ASC_TRUE;
 			asc_dvc->sdtr_done = 0;
@@ -8583,8 +8574,8 @@ static int AscStopQueueExe(PortAddr iop_base)
 
 static unsigned int AscGetMaxDmaCount(ushort bus_type)
 {
-	if (bus_type & (ASC_IS_EISA | ASC_IS_VL))
-		return ASC_MAX_VL_DMA_COUNT;
+	if (bus_type & ASC_IS_EISA)
+		return ASC_MAX_EISA_DMA_COUNT;
 	return ASC_MAX_PCI_DMA_COUNT;
 }
 
@@ -8597,7 +8588,7 @@ static void AscInitAscDvcVar(ASC_DVC_VAR *asc_dvc)
 	iop_base = asc_dvc->iop_base;
 	asc_dvc->err_code = 0;
 	if ((asc_dvc->bus_type &
-	     (ASC_IS_PCI | ASC_IS_EISA | ASC_IS_VL)) == 0) {
+	     (ASC_IS_PCI | ASC_IS_EISA)) == 0) {
 		asc_dvc->err_code |= ASC_IERR_NO_BUS_TYPE;
 	}
 	AscSetChipControl(iop_base, CC_HALT);
@@ -8702,8 +8693,8 @@ static ushort AscGetEEPConfig(PortAddr iop_base, ASCEEP_CONFIG *cfg_buf,
 	ushort wval;
 	ushort sum;
 	ushort *wbuf;
-	int cfg_beg;
-	int cfg_end;
+	int cfg_beg = ASC_EEP_DVC_CFG_BEG;
+	int cfg_end = ASC_EEP_MAX_DVC_ADDR;
 	int uchar_end_in_config = ASC_EEP_MAX_DVC_ADDR - 2;
 	int s_addr;
 
@@ -8713,13 +8704,6 @@ static ushort AscGetEEPConfig(PortAddr iop_base, ASCEEP_CONFIG *cfg_buf,
 	for (s_addr = 0; s_addr < 2; s_addr++, wbuf++) {
 		*wbuf = AscReadEEPWord(iop_base, (uchar)s_addr);
 		sum += *wbuf;
-	}
-	if (bus_type & ASC_IS_VL) {
-		cfg_beg = ASC_EEP_DVC_CFG_BEG_VL;
-		cfg_end = ASC_EEP_MAX_DVC_ADDR_VL;
-	} else {
-		cfg_beg = ASC_EEP_DVC_CFG_BEG;
-		cfg_end = ASC_EEP_MAX_DVC_ADDR;
 	}
 	for (s_addr = cfg_beg; s_addr <= (cfg_end - 1); s_addr++, wbuf++) {
 		wval = AscReadEEPWord(iop_base, (uchar)s_addr);
@@ -8817,8 +8801,8 @@ static int AscSetEEPConfigOnce(PortAddr iop_base, ASCEEP_CONFIG *cfg_buf,
 	ushort word;
 	ushort sum;
 	int s_addr;
-	int cfg_beg;
-	int cfg_end;
+	int cfg_beg = ASC_EEP_DVC_CFG_BEG;
+	int cfg_end = ASC_EEP_MAX_DVC_ADDR;
 	int uchar_end_in_config = ASC_EEP_MAX_DVC_ADDR - 2;
 
 	wbuf = (ushort *)cfg_buf;
@@ -8830,13 +8814,6 @@ static int AscSetEEPConfigOnce(PortAddr iop_base, ASCEEP_CONFIG *cfg_buf,
 		if (*wbuf != AscWriteEEPWord(iop_base, (uchar)s_addr, *wbuf)) {
 			n_error++;
 		}
-	}
-	if (bus_type & ASC_IS_VL) {
-		cfg_beg = ASC_EEP_DVC_CFG_BEG_VL;
-		cfg_end = ASC_EEP_MAX_DVC_ADDR_VL;
-	} else {
-		cfg_beg = ASC_EEP_DVC_CFG_BEG;
-		cfg_end = ASC_EEP_MAX_DVC_ADDR;
 	}
 	for (s_addr = cfg_beg; s_addr <= (cfg_end - 1); s_addr++, wbuf++) {
 		if (s_addr <= uchar_end_in_config) {
@@ -8873,13 +8850,6 @@ static int AscSetEEPConfigOnce(PortAddr iop_base, ASCEEP_CONFIG *cfg_buf,
 		if (*wbuf != AscReadEEPWord(iop_base, (uchar)s_addr)) {
 			n_error++;
 		}
-	}
-	if (bus_type & ASC_IS_VL) {
-		cfg_beg = ASC_EEP_DVC_CFG_BEG_VL;
-		cfg_end = ASC_EEP_MAX_DVC_ADDR_VL;
-	} else {
-		cfg_beg = ASC_EEP_DVC_CFG_BEG;
-		cfg_end = ASC_EEP_MAX_DVC_ADDR;
 	}
 	for (s_addr = cfg_beg; s_addr <= (cfg_end - 1); s_addr++, wbuf++) {
 		if (s_addr <= uchar_end_in_config) {
@@ -10779,9 +10749,6 @@ static int advansys_board_found(struct Scsi_Host *shost, unsigned int iop,
 		 */
 		switch (asc_dvc_varp->bus_type) {
 #ifdef CONFIG_ISA
-		case ASC_IS_VL:
-			share_irq = 0;
-			break;
 		case ASC_IS_EISA:
 			share_irq = IRQF_SHARED;
 			break;
@@ -11180,95 +11147,6 @@ static int advansys_release(struct Scsi_Host *shost)
 	return 0;
 }
 
-#define ASC_IOADR_TABLE_MAX_IX  11
-
-static PortAddr _asc_def_iop_base[ASC_IOADR_TABLE_MAX_IX] = {
-	0x100, 0x0110, 0x120, 0x0130, 0x140, 0x0150, 0x0190,
-	0x0210, 0x0230, 0x0250, 0x0330
-};
-
-static void advansys_vlb_remove(struct device *dev, unsigned int id)
-{
-	int ioport = _asc_def_iop_base[id];
-	advansys_release(dev_get_drvdata(dev));
-	release_region(ioport, ASC_IOADR_GAP);
-}
-
-/*
- * The VLB IRQ number is found in bits 2 to 4 of the CfgLsw.  It decodes as:
- * 000: invalid
- * 001: 10
- * 010: 11
- * 011: 12
- * 100: invalid
- * 101: 14
- * 110: 15
- * 111: invalid
- */
-static unsigned int advansys_vlb_irq_no(PortAddr iop_base)
-{
-	unsigned short cfg_lsw = AscGetChipCfgLsw(iop_base);
-	unsigned int chip_irq = ((cfg_lsw >> 2) & 0x07) + 9;
-	if ((chip_irq < 10) || (chip_irq == 13) || (chip_irq > 15))
-		return 0;
-	return chip_irq;
-}
-
-static int advansys_vlb_probe(struct device *dev, unsigned int id)
-{
-	int err = -ENODEV;
-	PortAddr iop_base = _asc_def_iop_base[id];
-	struct Scsi_Host *shost;
-	struct asc_board *board;
-
-	if (!request_region(iop_base, ASC_IOADR_GAP, DRV_NAME)) {
-		ASC_DBG(1, "I/O port 0x%x busy\n", iop_base);
-		return -ENODEV;
-	}
-	ASC_DBG(1, "probing I/O port 0x%x\n", iop_base);
-	if (!AscFindSignature(iop_base))
-		goto release_region;
-	/*
-	 * I don't think this condition can actually happen, but the old
-	 * driver did it, and the chances of finding a VLB setup in 2007
-	 * to do testing with is slight to none.
-	 */
-	if (AscGetChipVersion(iop_base, ASC_IS_VL) > ASC_CHIP_MAX_VER_VL)
-		goto release_region;
-
-	err = -ENOMEM;
-	shost = scsi_host_alloc(&advansys_template, sizeof(*board));
-	if (!shost)
-		goto release_region;
-
-	board = shost_priv(shost);
-	board->irq = advansys_vlb_irq_no(iop_base);
-	board->dev = dev;
-	board->shost = shost;
-
-	err = advansys_board_found(shost, iop_base, ASC_IS_VL);
-	if (err)
-		goto free_host;
-
-	dev_set_drvdata(dev, shost);
-	return 0;
-
- free_host:
-	scsi_host_put(shost);
- release_region:
-	release_region(iop_base, ASC_IOADR_GAP);
-	return -ENODEV;
-}
-
-static struct isa_driver advansys_vlb_driver = {
-	.probe		= advansys_vlb_probe,
-	.remove		= advansys_vlb_remove,
-	.driver = {
-		.owner	= THIS_MODULE,
-		.name	= "advansys_vlb",
-	},
-};
-
 static struct eisa_device_id advansys_eisa_table[] = {
 	{ "ABP7401" },
 	{ "ABP7501" },
@@ -11510,16 +11388,9 @@ static struct pci_driver advansys_pci_driver = {
 
 static int __init advansys_init(void)
 {
-	int error;
-
-	error = isa_register_driver(&advansys_vlb_driver,
-				    ASC_IOADR_TABLE_MAX_IX);
+	int error = eisa_driver_register(&advansys_eisa_driver);
 	if (error)
 		goto fail;
-
-	error = eisa_driver_register(&advansys_eisa_driver);
-	if (error)
-		goto unregister_vlb;
 
 	error = pci_register_driver(&advansys_pci_driver);
 	if (error)
@@ -11529,8 +11400,6 @@ static int __init advansys_init(void)
 
  unregister_eisa:
 	eisa_driver_unregister(&advansys_eisa_driver);
- unregister_vlb:
-	isa_unregister_driver(&advansys_vlb_driver);
  fail:
 	return error;
 }
@@ -11539,7 +11408,6 @@ static void __exit advansys_exit(void)
 {
 	pci_unregister_driver(&advansys_pci_driver);
 	eisa_driver_unregister(&advansys_eisa_driver);
-	isa_unregister_driver(&advansys_vlb_driver);
 }
 
 module_init(advansys_init);
