@@ -456,12 +456,8 @@ struct dma_buf_attach_ops {
 	 * called with this lock held as well. This makes sure that no mapping
 	 * is created concurrently with an ongoing move operation.
 	 *
-	 * Mappings stay valid and are not directly affected by this callback.
-	 * But the DMA-buf can now be in a different physical location, so all
-	 * mappings should be destroyed and re-created as soon as possible.
-	 *
-	 * New mappings can be created after this callback returns, and will
-	 * point to the new location of the DMA-buf.
+	 * See the kdoc for dma_buf_invalidate_mappings() for details on the
+	 * required behavior.
 	 */
 	void (*invalidate_mappings)(struct dma_buf_attachment *attach);
 };
@@ -579,6 +575,7 @@ struct sg_table *dma_buf_map_attachment(struct dma_buf_attachment *,
 void dma_buf_unmap_attachment(struct dma_buf_attachment *, struct sg_table *,
 				enum dma_data_direction);
 void dma_buf_invalidate_mappings(struct dma_buf *dma_buf);
+bool dma_buf_attach_revocable(struct dma_buf_attachment *attach);
 int dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
 			     enum dma_data_direction dir);
 int dma_buf_end_cpu_access(struct dma_buf *dma_buf,
