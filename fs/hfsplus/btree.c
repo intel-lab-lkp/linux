@@ -135,9 +135,12 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 	struct hfs_btree *tree;
 	struct hfs_btree_header_rec *head;
 	struct address_space *mapping;
+	struct hfs_bnode *node;
+	u16 len, bitmap_off;
 	struct inode *inode;
 	struct page *page;
 	unsigned int size;
+	u8 bitmap_byte;
 
 	tree = kzalloc(sizeof(*tree), GFP_KERNEL);
 	if (!tree)
@@ -242,6 +245,30 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 
 	kunmap_local(head);
 	put_page(page);
+
+	/*
+	 * Validate bitmap: node 0 (header node) must be marked allocated.
+	 */
+
+	node = hfs_bnode_find(tree, 0);
+	if (IS_ERR(node))
+		goto free_inode;
+
+	len = hfs_brec_lenoff(node,
+			HFSPLUS_BTREE_HDR_MAP_REC, &bitmap_off);
+
+	if (len != 0 && bitmap_off >= sizeof(struct hfs_bnode_desc)) {
+		hfs_bnode_read(node, &bitmap_byte, bitmap_off, 1);
+		if (!(bitmap_byte & HFSPLUS_BTREE_NODE0_BIT)) {
+			pr_warn("(%s): Btree 0x%x bitmap corruption detected, forcing read-only.\n",
+					sb->s_id, id);
+			pr_warn("Run fsck.hfsplus to repair.\n");
+			sb->s_flags |= SB_RDONLY;
+		}
+	}
+
+	hfs_bnode_put(node);
+
 	return tree;
 
  fail_page:
