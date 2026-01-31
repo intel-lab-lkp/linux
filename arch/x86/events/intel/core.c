@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/export.h>
 #include <linux/nmi.h>
 #include <linux/kvm_host.h>
@@ -8077,7 +8078,7 @@ __init int intel_pmu_init(void)
 		}
 	}
 
-	snprintf(pmu_name_str, sizeof(pmu_name_str), "%s", name);
+	strscpy(pmu_name_str, name);
 
 	if (!is_hybrid()) {
 		group_events_td.attrs  = td_attr;
