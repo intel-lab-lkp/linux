@@ -371,7 +371,7 @@ int __init dove_init_pmu_legacy(const struct dove_pmu_initdata *initdata)
  */
 int __init dove_init_pmu(void)
 {
-	struct device_node *np_pmu, *domains_node;
+	struct device_node *np_pmu;
 	struct pmu_data *pmu;
 	int ret, parent_irq;
 
@@ -380,15 +380,19 @@ int __init dove_init_pmu(void)
 	if (!np_pmu)
 		return 0;
 
-	domains_node = of_get_child_by_name(np_pmu, "domains");
+	struct device_node *domains_node __free(device_node) =
+		of_get_child_by_name(np_pmu, "domains");
 	if (!domains_node) {
 		pr_err("%pOFn: failed to find domains sub-node\n", np_pmu);
+		of_node_put(np_pmu);
 		return 0;
 	}
 
 	pmu = kzalloc(sizeof(*pmu), GFP_KERNEL);
-	if (!pmu)
+	if (!pmu) {
+		of_node_put(np_pmu);
 		return -ENOMEM;
+	}
 
 	spin_lock_init(&pmu->lock);
 	pmu->of_node = np_pmu;
@@ -399,6 +403,7 @@ int __init dove_init_pmu(void)
 		iounmap(pmu->pmu_base);
 		iounmap(pmu->pmc_base);
 		kfree(pmu);
+		of_node_put(np_pmu);
 		return -ENOMEM;
 	}
 
