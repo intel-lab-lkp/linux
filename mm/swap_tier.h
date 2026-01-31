@@ -14,6 +14,9 @@
 #define MAX_SWAPTIER		8
 #endif
 
+/* Forward declarations */
+struct swap_info_struct;
+
 extern spinlock_t swap_tier_lock;
 
 struct swap_tier_save_ctx {
@@ -23,6 +26,10 @@ struct swap_tier_save_ctx {
 
 #define DEFINE_SWAP_TIER_SAVE_CTX(_name) \
 	struct swap_tier_save_ctx _name[MAX_SWAPTIER] = {0}
+
+#define TIER_ALL_MASK		(~0)
+#define TIER_DEFAULT_IDX	(31)
+#define TIER_DEFAULT_MASK	(1 << TIER_DEFAULT_IDX)
 
 /* Initialization and application */
 void swap_tiers_init(void);
@@ -34,5 +41,9 @@ int swap_tiers_modify(const char *name, int prio);
 
 void swap_tiers_save(struct swap_tier_save_ctx ctx[]);
 void swap_tiers_restore(struct swap_tier_save_ctx ctx[]);
-bool swap_tiers_validate(void);
+bool swap_tiers_update(void);
+
+/* Tier assignment */
+void swap_tiers_assign_dev(struct swap_info_struct *swp);
+
 #endif /* _SWAP_TIER_H */
