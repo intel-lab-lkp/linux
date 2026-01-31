@@ -198,10 +198,15 @@ static void wb_queue_work(struct bdi_writeback *wb,
 
 static bool wb_wait_for_completion_cb(struct wb_completion *done)
 {
+#ifndef CONFIG_DETECT_HUNG_TASK
+	unsigned long hung_secs = 120;
+#else
+	unsigned long hung_secs = sysctl_hung_task_timeout_secs;
+#endif
 	unsigned long waited_secs = (jiffies - done->wait_start) / HZ;
 
 	done->progress_stamp = jiffies;
-	if (waited_secs > sysctl_hung_task_timeout_secs)
+	if (waited_secs > hung_secs)
 		pr_info("INFO: The task %s:%d has been waiting for writeback "
 			"completion for more than %lu seconds.",
 			current->comm, current->pid, waited_secs);
@@ -1958,6 +1963,11 @@ static long writeback_sb_inodes(struct super_block *sb,
 	long write_chunk;
 	long total_wrote = 0;  /* count both pages and inodes */
 	unsigned long dirtied_before = jiffies;
+#ifndef CONFIG_DETECT_HUNG_TASK
+	unsigned long hung_secs = 120;
+#else
+	unsigned long hung_secs = sysctl_hung_task_timeout_secs;
+#endif
 
 	if (work->for_kupdate)
 		dirtied_before = jiffies -
@@ -2042,8 +2052,7 @@ static long writeback_sb_inodes(struct super_block *sb,
 
 		/* Report progress to inform the hung task detector of the progress. */
 		if (work->done && work->done->progress_stamp &&
-		   (jiffies - work->done->progress_stamp) > HZ *
-		   sysctl_hung_task_timeout_secs / 2)
+		   (jiffies - work->done->progress_stamp) > HZ * hung_secs / 2)
 			wake_up_all(work->done->waitq);
 
 		wbc_detach_inode(&wbc);
