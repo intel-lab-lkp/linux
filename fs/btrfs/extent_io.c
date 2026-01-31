@@ -332,6 +332,18 @@ static noinline int lock_delalloc_folios(struct inode *inode,
 				folio_unlock(folio);
 				goto out;
 			}
+
+			/*
+			 * release_folio() could have cleared the folio private data
+			 * while we were not holding the lock.
+			 * Reset the mapping if needed so subpage operations can access
+			 * a valid private folio state.
+			 */
+			if (set_folio_extent_mapped(folio)) {
+				folio_unlock(folio);
+				goto out;
+			}
+
 			range_start = max_t(u64, folio_pos(folio), start);
 			range_len = min_t(u64, folio_next_pos(folio), end + 1) - range_start;
 			btrfs_folio_set_lock(fs_info, folio, range_start, range_len);
