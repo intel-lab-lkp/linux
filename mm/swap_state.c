@@ -961,6 +961,8 @@ static ssize_t tiers_store(struct kobject *kobj,
 	char *p, *token, *name, *tmp;
 	int ret = 0;
 	short prio;
+	int mask = 0;
+
 	DEFINE_SWAP_TIER_SAVE_CTX(ctx);
 
 	tmp = kstrdup(buf, GFP_KERNEL);
@@ -978,7 +980,7 @@ static ssize_t tiers_store(struct kobject *kobj,
 			continue;
 
 		if (token[0] == '-') {
-			ret = swap_tiers_remove(token + 1);
+			ret = swap_tiers_remove(token + 1, &mask);
 		} else {
 
 			name = strsep(&token, ":");
@@ -997,7 +999,7 @@ static ssize_t tiers_store(struct kobject *kobj,
 			goto restore;
 	}
 
-	if (!swap_tiers_update()) {
+	if (!swap_tiers_update(mask)) {
 		ret = -EINVAL;
 		goto restore;
 	}
