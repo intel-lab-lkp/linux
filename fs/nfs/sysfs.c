@@ -59,7 +59,7 @@ int nfs_sysfs_init(void)
 
 	ret = kset_register(nfs_kset);
 	if (ret) {
-		kfree(nfs_kset);
+		kset_put(nfs_kset);
 		return ret;
 	}
 
