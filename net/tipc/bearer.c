@@ -456,7 +456,7 @@ int tipc_enable_l2_media(struct net *net, struct tipc_bearer *b,
 
 	/* Associate TIPC bearer with L2 bearer */
 	rcu_assign_pointer(b->media_ptr, dev);
-	b->pt.dev = dev;
+	RCU_INIT_POINTER(b->pt.dev, dev);
 	b->pt.type = htons(ETH_P_TIPC);
 	b->pt.func = tipc_l2_rcv_msg;
 	dev_add_pack(&b->pt);
@@ -665,7 +665,7 @@ static int tipc_l2_rcv_msg(struct sk_buff *skb, struct net_device *dev,
 		   (skb->pkt_type <= PACKET_MULTICAST))) {
 		skb_mark_not_on_list(skb);
 		TIPC_SKB_CB(skb)->flags = 0;
-		tipc_rcv(dev_net(b->pt.dev), skb, b);
+		tipc_rcv(dev_net(rcu_dereference(b->pt.dev)), skb, b);
 		rcu_read_unlock();
 		return NET_RX_SUCCESS;
 	}
@@ -804,7 +804,7 @@ int tipc_attach_loopback(struct net *net)
 		return -ENODEV;
 
 	netdev_hold(dev, &tn->loopback_pt.dev_tracker, GFP_KERNEL);
-	tn->loopback_pt.dev = dev;
+	RCU_INIT_POINTER(tn->loopback_pt.dev, dev);
 	tn->loopback_pt.type = htons(ETH_P_TIPC);
 	tn->loopback_pt.func = tipc_loopback_rcv_pkt;
 	dev_add_pack(&tn->loopback_pt);

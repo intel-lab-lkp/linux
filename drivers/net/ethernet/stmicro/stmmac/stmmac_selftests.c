@@ -333,7 +333,7 @@ static int __stmmac_test_loopback(struct stmmac_priv *priv,
 
 	tpriv->pt.type = htons(ETH_P_IP);
 	tpriv->pt.func = stmmac_test_loopback_validate;
-	tpriv->pt.dev = priv->dev;
+	RCU_INIT_POINTER(tpriv->pt.dev, priv->dev);
 	tpriv->pt.af_packet_priv = tpriv;
 	tpriv->packet = attr;
 
@@ -752,7 +752,7 @@ static int stmmac_test_flowctrl(struct stmmac_priv *priv)
 	init_completion(&tpriv->comp);
 	tpriv->pt.type = htons(ETH_P_PAUSE);
 	tpriv->pt.func = stmmac_test_flowctrl_validate;
-	tpriv->pt.dev = priv->dev;
+	RCU_INIT_POINTER(tpriv->pt.dev, priv->dev);
 	tpriv->pt.af_packet_priv = tpriv;
 	dev_add_pack(&tpriv->pt);
 
@@ -907,7 +907,7 @@ static int __stmmac_test_vlanfilt(struct stmmac_priv *priv)
 
 	tpriv->pt.type = htons(ETH_P_IP);
 	tpriv->pt.func = stmmac_test_vlan_validate;
-	tpriv->pt.dev = priv->dev;
+	RCU_INIT_POINTER(tpriv->pt.dev, priv->dev);
 	tpriv->pt.af_packet_priv = tpriv;
 	tpriv->packet = &attr;
 
@@ -1001,7 +1001,7 @@ static int __stmmac_test_dvlanfilt(struct stmmac_priv *priv)
 
 	tpriv->pt.type = htons(ETH_P_8021Q);
 	tpriv->pt.func = stmmac_test_vlan_validate;
-	tpriv->pt.dev = priv->dev;
+	RCU_INIT_POINTER(tpriv->pt.dev, priv->dev);
 	tpriv->pt.af_packet_priv = tpriv;
 	tpriv->packet = &attr;
 
@@ -1278,7 +1278,7 @@ static int stmmac_test_vlanoff_common(struct stmmac_priv *priv, bool svlan)
 
 	tpriv->pt.type = svlan ? htons(ETH_P_8021Q) : htons(ETH_P_IP);
 	tpriv->pt.func = stmmac_test_vlan_validate;
-	tpriv->pt.dev = priv->dev;
+	RCU_INIT_POINTER(tpriv->pt.dev, priv->dev);
 	tpriv->pt.af_packet_priv = tpriv;
 	tpriv->packet = &attr;
 	tpriv->vlan_id = 0x123;
@@ -1637,7 +1637,7 @@ static int stmmac_test_arpoffload(struct stmmac_priv *priv)
 
 	tpriv->pt.type = htons(ETH_P_ARP);
 	tpriv->pt.func = stmmac_test_arp_validate;
-	tpriv->pt.dev = priv->dev;
+	RCU_INIT_POINTER(tpriv->pt.dev, priv->dev);
 	tpriv->pt.af_packet_priv = tpriv;
 	tpriv->packet = &attr;
 	dev_add_pack(&tpriv->pt);

@@ -121,7 +121,7 @@ static int __xgbe_test_loopback(struct xgbe_prv_data *pdata,
 
 	tdata->pt.type = htons(ETH_P_IP);
 	tdata->pt.func = xgbe_test_loopback_validate;
-	tdata->pt.dev = pdata->netdev;
+	RCU_INIT_POINTER(tdata->pt.dev, pdata->netdev);
 	tdata->pt.af_packet_priv = tdata;
 	tdata->packet = attr;
 

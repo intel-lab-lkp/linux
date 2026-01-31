@@ -352,18 +352,18 @@ static int fcoe_interface_setup(struct fcoe_interface *fcoe,
 	 */
 	fcoe->fcoe_packet_type.func = fcoe_rcv;
 	fcoe->fcoe_packet_type.type = htons(ETH_P_FCOE);
-	fcoe->fcoe_packet_type.dev = netdev;
+	RCU_INIT_POINTER(fcoe->fcoe_packet_type.dev, netdev);
 	dev_add_pack(&fcoe->fcoe_packet_type);
 
 	fcoe->fip_packet_type.func = fcoe_fip_recv;
 	fcoe->fip_packet_type.type = htons(ETH_P_FIP);
-	fcoe->fip_packet_type.dev = netdev;
+	RCU_INIT_POINTER(fcoe->fip_packet_type.dev, netdev);
 	dev_add_pack(&fcoe->fip_packet_type);
 
 	if (netdev != real_dev) {
 		fcoe->fip_vlan_packet_type.func = fcoe_fip_vlan_recv;
 		fcoe->fip_vlan_packet_type.type = htons(ETH_P_FIP);
-		fcoe->fip_vlan_packet_type.dev = real_dev;
+		RCU_INIT_POINTER(fcoe->fip_vlan_packet_type.dev, real_dev);
 		dev_add_pack(&fcoe->fip_vlan_packet_type);
 	}
 	return 0;

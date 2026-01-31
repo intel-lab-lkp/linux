@@ -587,16 +587,19 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
 
 static inline struct list_head *ptype_head(const struct packet_type *pt)
 {
+	struct net_device *dev;
+
+	dev = rcu_dereference_protected(pt->dev, lockdep_is_held(&ptype_lock));
+
 	if (pt->type == htons(ETH_P_ALL)) {
-		if (!pt->af_packet_net && !pt->dev)
+		if (!pt->af_packet_net && !dev)
 			return NULL;
 
-		return pt->dev ? &pt->dev->ptype_all :
-				 &pt->af_packet_net->ptype_all;
+		return dev ? &dev->ptype_all : &pt->af_packet_net->ptype_all;
 	}
 
-	if (pt->dev)
-		return &pt->dev->ptype_specific;
+	if (dev)
+		return &dev->ptype_specific;
 
 	return pt->af_packet_net ? &pt->af_packet_net->ptype_specific :
 				 &ptype_base[ntohs(pt->type) & PTYPE_HASH_MASK];
@@ -617,13 +620,12 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 
 void dev_add_pack(struct packet_type *pt)
 {
-	struct list_head *head = ptype_head(pt);
-
-	if (WARN_ON_ONCE(!head))
-		return;
+	struct list_head *head;
 
 	spin_lock(&ptype_lock);
-	list_add_rcu(&pt->list, head);
+	head = ptype_head(pt);
+	if (!WARN_ON_ONCE(!head))
+		list_add_rcu(&pt->list, head);
 	spin_unlock(&ptype_lock);
 }
 EXPORT_SYMBOL(dev_add_pack);
@@ -643,13 +645,15 @@ EXPORT_SYMBOL(dev_add_pack);
  */
 void __dev_remove_pack(struct packet_type *pt)
 {
-	struct list_head *head = ptype_head(pt);
 	struct packet_type *pt1;
-
-	if (!head)
-		return;
+	struct list_head *head;
 
 	spin_lock(&ptype_lock);
+
+	head = ptype_head(pt);
+	if (!head)
+		goto out;
+
 
 	list_for_each_entry(pt1, head, list) {
 		if (pt == pt1) {
