@@ -178,18 +178,6 @@ const struct rsi_mod_ops rsi_bt_ops = {
 };
 EXPORT_SYMBOL(rsi_bt_ops);
 
-static int rsi_91x_bt_module_init(void)
-{
-	return 0;
-}
-
-static void rsi_91x_bt_module_exit(void)
-{
-	return;
-}
-
-module_init(rsi_91x_bt_module_init);
-module_exit(rsi_91x_bt_module_exit);
 MODULE_AUTHOR("Redpine Signals Inc");
 MODULE_DESCRIPTION("RSI BT driver");
 MODULE_LICENSE("Dual BSD/GPL");
