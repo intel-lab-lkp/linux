@@ -29,11 +29,11 @@
 #define ADT7316_INT_STAT1		0x0
 #define ADT7316_INT_STAT2		0x1
 #define ADT7316_LSB_IN_TEMP_VDD		0x3
-#define ADT7316_LSB_IN_TEMP_MASK	0x3
-#define ADT7316_LSB_VDD_MASK		0xC
+#define ADT7316_LSB_IN_TEMP_MASK	GENMASK(1, 0)
+#define ADT7316_LSB_VDD_MASK		GENMASK(3, 2)
 #define ADT7316_LSB_VDD_OFFSET		2
 #define ADT7316_LSB_EX_TEMP_AIN		0x4
-#define ADT7316_LSB_EX_TEMP_MASK	0x3
+#define ADT7316_LSB_EX_TEMP_MASK	GENMASK(1, 0)
 #define ADT7516_LSB_AIN_SHIFT		2
 #define ADT7316_AD_MSB_DATA_BASE        0x6
 #define ADT7316_AD_MSB_DATA_REGS        3
@@ -88,19 +88,19 @@
 /*
  * ADT7316 config1
  */
-#define ADT7316_EN			0x1
-#define ADT7516_SEL_EX_TEMP		0x4
-#define ADT7516_SEL_AIN1_2_EX_TEMP_MASK	0x6
-#define ADT7516_SEL_AIN3		0x8
-#define ADT7316_INT_EN			0x20
-#define ADT7316_INT_POLARITY		0x40
-#define ADT7316_PD			0x80
+#define ADT7316_EN			BIT(0)
+#define ADT7516_SEL_EX_TEMP		BIT(2)
+#define ADT7516_SEL_AIN1_2_EX_TEMP_MASK	GENMASK(2, 1)
+#define ADT7516_SEL_AIN3		BIT(3)
+#define ADT7316_INT_EN			BIT(5)
+#define ADT7316_INT_POLARITY		BIT(6)
+#define ADT7316_PD			BIT(7)
 
 /*
  * ADT7316 config2
  */
-#define ADT7316_AD_SINGLE_CH_MASK	0x3
-#define ADT7516_AD_SINGLE_CH_MASK	0x7
+#define ADT7316_AD_SINGLE_CH_MASK	GENMASK(1, 0)
+#define ADT7516_AD_SINGLE_CH_MASK	GENMASK(2, 0)
 #define ADT7316_AD_SINGLE_CH_VDD	0
 #define ADT7316_AD_SINGLE_CH_IN		1
 #define ADT7316_AD_SINGLE_CH_EX		2
@@ -108,54 +108,54 @@
 #define ADT7516_AD_SINGLE_CH_AIN2	3
 #define ADT7516_AD_SINGLE_CH_AIN3	4
 #define ADT7516_AD_SINGLE_CH_AIN4	5
-#define ADT7316_AD_SINGLE_CH_MODE	0x10
-#define ADT7316_DISABLE_AVERAGING	0x20
-#define ADT7316_EN_SMBUS_TIMEOUT	0x40
+#define ADT7316_AD_SINGLE_CH_MODE	BIT(4)
+#define ADT7316_DISABLE_AVERAGING	BIT(5)
+#define ADT7316_EN_SMBUS_TIMEOUT	BIT(6)
 
 /*
  * ADT7316 config3
  */
-#define ADT7316_ADCLK_22_5		0x1
-#define ADT7316_DA_HIGH_RESOLUTION	0x2
-#define ADT7316_DA_EN_VIA_DAC_LDAC	0x8
-#define ADT7516_AIN_IN_VREF		0x10
-#define ADT7316_EN_IN_TEMP_PROP_DACA	0x20
-#define ADT7316_EN_EX_TEMP_PROP_DACB	0x40
+#define ADT7316_ADCLK_22_5		BIT(0)
+#define ADT7316_DA_HIGH_RESOLUTION	BIT(1)
+#define ADT7316_DA_EN_VIA_DAC_LDAC	BIT(3)
+#define ADT7516_AIN_IN_VREF		BIT(4)
+#define ADT7316_EN_IN_TEMP_PROP_DACA	BIT(5)
+#define ADT7316_EN_EX_TEMP_PROP_DACB	BIT(6)
 
 /*
  * ADT7316 DAC config
  */
-#define ADT7316_DA_2VREF_CH_MASK	0xF
-#define ADT7316_DA_EN_MODE_MASK		0x30
+#define ADT7316_DA_2VREF_CH_MASK	GENMASK(3, 0)
+#define ADT7316_DA_EN_MODE_MASK		GENMASK(5, 4)
 #define ADT7316_DA_EN_MODE_SHIFT	4
 #define ADT7316_DA_EN_MODE_SINGLE	0x00
 #define ADT7316_DA_EN_MODE_AB_CD	0x10
 #define ADT7316_DA_EN_MODE_ABCD		0x20
 #define ADT7316_DA_EN_MODE_LDAC		0x30
-#define ADT7316_VREF_BYPASS_DAC_AB	0x40
-#define ADT7316_VREF_BYPASS_DAC_CD	0x80
+#define ADT7316_VREF_BYPASS_DAC_AB	BIT(6)
+#define ADT7316_VREF_BYPASS_DAC_CD	BIT(7)
 
 /*
  * ADT7316 LDAC config
  */
-#define ADT7316_LDAC_EN_DA_MASK		0xF
-#define ADT7316_DAC_IN_VREF		0x10
-#define ADT7516_DAC_AB_IN_VREF		0x10
-#define ADT7516_DAC_CD_IN_VREF		0x20
+#define ADT7316_LDAC_EN_DA_MASK		GENMASK(3, 0)
+#define ADT7316_DAC_IN_VREF		BIT(4)
+#define ADT7516_DAC_AB_IN_VREF		BIT(4)
+#define ADT7516_DAC_CD_IN_VREF		BIT(5)
 #define ADT7516_DAC_IN_VREF_OFFSET	4
-#define ADT7516_DAC_IN_VREF_MASK	0x30
+#define ADT7516_DAC_IN_VREF_MASK	GENMASK(5, 4)
 
 /*
  * ADT7316 INT_MASK2
  */
-#define ADT7316_INT_MASK2_VDD		0x10
+#define ADT7316_INT_MASK2_VDD		BIT(4)
 
 /*
  * ADT7316 value masks
  */
-#define ADT7316_T_VALUE_SIGN		0x400
+#define ADT7316_T_VALUE_SIGN		BIT(10)
 #define ADT7316_T_VALUE_FLOAT_OFFSET	2
-#define ADT7316_T_VALUE_FLOAT_MASK	0x2
+#define ADT7316_T_VALUE_FLOAT_MASK	BIT(1)
 
 /*
  * Chip ID
@@ -167,7 +167,7 @@
 #define ID_ADT7517		0x12
 #define ID_ADT7519		0x14
 
-#define ID_FAMILY_MASK		0xF0
+#define ID_FAMILY_MASK		GENMASK(7, 4)
 #define ID_ADT73XX		0x0
 #define ID_ADT75XX		0x10
 
@@ -192,9 +192,9 @@ struct adt7316_chip_info {
  * Logic interrupt mask for user application to enable
  * interrupts.
  */
-#define ADT7316_VDD_INT_MASK		0x100
-#define ADT7316_TEMP_INT_MASK		0x1F
-#define ADT7516_AIN_INT_MASK		0xE0
+#define ADT7316_VDD_INT_MASK		BIT(8)
+#define ADT7316_TEMP_INT_MASK		GENMASK(4, 0)
+#define ADT7516_AIN_INT_MASK		GENMASK(7, 5)
 #define ADT7316_TEMP_AIN_INT_MASK	\
 	(ADT7316_TEMP_INT_MASK)
 
@@ -783,7 +783,7 @@ static ssize_t adt7316_show_DAC_2Vref_ch_mask(struct device *dev,
 	struct iio_dev *dev_info = dev_to_iio_dev(dev);
 	struct adt7316_chip_info *chip = iio_priv(dev_info);
 
-	return sysfs_emit(buf, "0x%x\n",
+	return sysfs_emit(buf, "0x%lx\n",
 		chip->dac_config & ADT7316_DA_2VREF_CH_MASK);
 }
 
@@ -1023,7 +1023,7 @@ static ssize_t adt7316_show_DAC_internal_Vref(struct device *dev,
 	struct adt7316_chip_info *chip = iio_priv(dev_info);
 
 	if ((chip->id & ID_FAMILY_MASK) == ID_ADT75XX)
-		return sysfs_emit(buf, "0x%x\n",
+		return sysfs_emit(buf, "0x%lx\n",
 			(chip->ldac_config & ADT7516_DAC_IN_VREF_MASK) >>
 			ADT7516_DAC_IN_VREF_OFFSET);
 	return sysfs_emit(buf, "%d\n",
@@ -1146,7 +1146,7 @@ static ssize_t adt7316_show_ad(struct adt7316_chip_info *chip,
 		sign = '-';
 	}
 
-	return sysfs_emit(buf, "%c%d.%.2d\n", sign,
+	return sysfs_emit(buf, "%c%d.%.2ld\n", sign,
 		(data >> ADT7316_T_VALUE_FLOAT_OFFSET),
 		(data & ADT7316_T_VALUE_FLOAT_MASK) * 25);
 }
