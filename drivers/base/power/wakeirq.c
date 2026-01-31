@@ -30,7 +30,7 @@ static int dev_pm_attach_wake_irq(struct device *dev, struct wake_irq *wirq)
 		return -EEXIST;
 	}
 
-	dev->power.wakeirq = wirq;
+	WRITE_ONCE(dev->power.wakeirq, wirq);
 	device_wakeup_attach_irq(dev, wirq);
 
 	spin_unlock_irqrestore(&dev->power.lock, flags);
@@ -83,15 +83,21 @@ EXPORT_SYMBOL_GPL(dev_pm_set_wake_irq);
  */
 void dev_pm_clear_wake_irq(struct device *dev)
 {
-	struct wake_irq *wirq = dev->power.wakeirq;
+	struct wake_irq *wirq = READ_ONCE(dev->power.wakeirq);
 	unsigned long flags;
 
 	if (!wirq)
 		return;
 
 	spin_lock_irqsave(&dev->power.lock, flags);
+	wirq = dev->power.wakeirq;
+	if (!wirq) {
+		spin_unlock_irqrestore(&dev->power.lock, flags);
+		return;
+	}
+
 	device_wakeup_detach_irq(dev);
-	dev->power.wakeirq = NULL;
+	WRITE_ONCE(dev->power.wakeirq, NULL);
 	spin_unlock_irqrestore(&dev->power.lock, flags);
 
 	if (wirq->status & WAKE_IRQ_DEDICATED_ALLOCATED) {
