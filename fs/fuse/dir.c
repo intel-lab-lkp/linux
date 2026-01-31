@@ -2113,6 +2113,26 @@ int fuse_flush_times(struct inode *inode, struct fuse_file *ff)
 }
 
 /*
+ * Flush inode->i_atime to the server
+ */
+int fuse_flush_atime(struct inode *inode)
+{
+	struct fuse_mount *fm = get_fuse_mount(inode);
+	FUSE_ARGS(args);
+	struct fuse_setattr_in inarg;
+	struct fuse_attr_out outarg;
+
+	memset(&inarg, 0, sizeof(inarg));
+	memset(&outarg, 0, sizeof(outarg));
+
+	inarg.valid = FATTR_ATIME | FATTR_ATIME_NOW;
+
+	fuse_setattr_fill(fm->fc, &args, inode, &inarg, &outarg);
+
+	return fuse_simple_request(fm, &args);
+}
+
+/*
  * Set attributes, and at the same time refresh them.
  *
  * Truncation is slightly complicated, because the 'truncate' request

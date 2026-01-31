@@ -688,7 +688,9 @@ ssize_t fuse_dax_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	ret = dax_iomap_rw(iocb, to, &fuse_iomap_ops);
 	inode_unlock_shared(inode);
 
-	/* TODO file_accessed(iocb->f_filp) */
+	file_accessed(iocb->ki_filp);
+	fuse_flush_atime(inode);
+	fuse_invalidate_atime(inode);
 	return ret;
 }
 

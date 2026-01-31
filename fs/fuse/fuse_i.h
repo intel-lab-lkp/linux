@@ -1467,6 +1467,7 @@ int fuse_dev_release(struct inode *inode, struct file *file);
 bool fuse_write_update_attr(struct inode *inode, loff_t pos, ssize_t written);
 
 int fuse_flush_times(struct inode *inode, struct fuse_file *ff);
+int fuse_flush_atime(struct inode *inode);
 int fuse_write_inode(struct inode *inode, struct writeback_control *wbc);
 
 int fuse_do_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
