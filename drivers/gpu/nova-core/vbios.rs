@@ -784,22 +784,31 @@ impl PciAtBiosImage {
     fn falcon_data_ptr(&self) -> Result<u32> {
         let token = self.get_bit_token(BIT_TOKEN_ID_FALCON_DATA)?;
 
-        // Make sure we don't go out of bounds
-        if usize::from(token.data_offset) + 4 > self.base.data.len() {
-            return Err(EINVAL);
-        }
-
-        // read the 4 bytes at the offset specified in the token
         let offset = usize::from(token.data_offset);
-        let bytes: [u8; 4] = self.base.data[offset..offset + 4].try_into().map_err(|_| {
-            dev_err!(self.base.dev, "Failed to convert data slice to array\n");
-            EINVAL
-        })?;
+        let end = offset.checked_add(4).ok_or(EINVAL)?;
+
+        // Read the 4 bytes at the offset specified in the token.
+        let bytes: [u8; 4] = self
+            .base
+            .data
+            .get(offset..end)
+            .ok_or(EINVAL)?
+            .try_into()
+            .map_err(|_| {
+                dev_err!(self.base.dev, "Failed to convert data slice to array\n");
+                EINVAL
+            })?;
 
         let data_ptr = u32::from_le_bytes(bytes);
 
-        if (usize::from_safe_cast(data_ptr)) < self.base.data.len() {
-            dev_err!(self.base.dev, "Falcon data pointer out of bounds\n");
+        // The BIT Falcon data pointer is expected to point outside the PciAt image (into a later
+        // image in the ROM chain). Reject pointers that still fall within this PciAt image, since
+        // downstream code will subtract `self.base.data.len()` from this offset.
+        if usize::from_safe_cast(data_ptr) < self.base.data.len() {
+            dev_err!(
+                self.base.dev,
+                "Falcon data pointer points inside PciAt image\n"
+            );
             return Err(EINVAL);
         }
 
@@ -920,14 +929,17 @@ impl FwSecBiosBuilder {
         pci_at_image: &PciAtBiosImage,
         first_fwsec: &FwSecBiosBuilder,
     ) -> Result {
-        let mut offset = usize::from_safe_cast(pci_at_image.falcon_data_ptr()?);
+        let data_ptr = pci_at_image.falcon_data_ptr()?;
+        let mut offset = usize::from_safe_cast(data_ptr);
         let mut pmu_in_first_fwsec = false;
 
         // The falcon data pointer assumes that the PciAt and FWSEC images
         // are contiguous in memory. However, testing shows the EFI image sits in
         // between them. So calculate the offset from the end of the PciAt image
         // rather than the start of it. Compensate.
-        offset -= pci_at_image.base.data.len();
+        offset = offset
+            .checked_sub(pci_at_image.base.data.len())
+            .ok_or(EINVAL)?;
 
         // The offset is now from the start of the first Fwsec image, however
         // the offset points to a location in the second Fwsec image. Since
@@ -937,7 +949,9 @@ impl FwSecBiosBuilder {
         if offset < first_fwsec.base.data.len() {
             pmu_in_first_fwsec = true;
         } else {
-            offset -= first_fwsec.base.data.len();
+            offset = offset
+                .checked_sub(first_fwsec.base.data.len())
+                .ok_or(EINVAL)?;
         }
 
         self.falcon_data_offset = Some(offset);
@@ -945,12 +959,16 @@ impl FwSecBiosBuilder {
         if pmu_in_first_fwsec {
             self.pmu_lookup_table = Some(PmuLookupTable::new(
                 &self.base.dev,
-                &first_fwsec.base.data[offset..],
+                first_fwsec.base.data.get(offset..).ok_or(EINVAL)?,
             )?);
         } else {
+            if offset >= self.base.data.len() {
+                dev_err!(self.base.dev, "Falcon data pointer out of bounds\n");
+                return Err(EINVAL);
+            }
             self.pmu_lookup_table = Some(PmuLookupTable::new(
                 &self.base.dev,
-                &self.base.data[offset..],
+                self.base.data.get(offset..).ok_or(EINVAL)?,
             )?);
         }
 
@@ -962,12 +980,20 @@ impl FwSecBiosBuilder {
         {
             Ok(entry) => {
                 let mut ucode_offset = usize::from_safe_cast(entry.data);
-                ucode_offset -= pci_at_image.base.data.len();
+                ucode_offset = ucode_offset
+                    .checked_sub(pci_at_image.base.data.len())
+                    .ok_or(EINVAL)?;
                 if ucode_offset < first_fwsec.base.data.len() {
                     dev_err!(self.base.dev, "Falcon Ucode offset not in second Fwsec.\n");
                     return Err(EINVAL);
                 }
-                ucode_offset -= first_fwsec.base.data.len();
+                ucode_offset = ucode_offset
+                    .checked_sub(first_fwsec.base.data.len())
+                    .ok_or(EINVAL)?;
+                if ucode_offset >= self.base.data.len() {
+                    dev_err!(self.base.dev, "Falcon Ucode offset out of bounds.\n");
+                    return Err(EINVAL);
+                }
                 self.falcon_ucode_offset = Some(ucode_offset);
             }
             Err(e) => {
@@ -1006,7 +1032,11 @@ impl FwSecBiosImage {
         let falcon_ucode_offset = self.falcon_ucode_offset;
 
         // Read the first 4 bytes to get the version.
-        let hdr_bytes: [u8; 4] = self.base.data[falcon_ucode_offset..falcon_ucode_offset + 4]
+        let hdr_bytes: [u8; 4] = self
+            .base
+            .data
+            .get(falcon_ucode_offset..falcon_ucode_offset.checked_add(4).ok_or(EINVAL)?)
+            .ok_or(EINVAL)?
             .try_into()
             .map_err(|_| EINVAL)?;
         let hdr = u32::from_le_bytes(hdr_bytes);
@@ -1038,13 +1068,18 @@ impl FwSecBiosImage {
         let falcon_ucode_offset = self.falcon_ucode_offset;
 
         // The ucode data follows the descriptor.
-        let ucode_data_offset = falcon_ucode_offset + desc.size();
-        let size = usize::from_safe_cast(desc.imem_load_size() + desc.dmem_load_size());
+        let ucode_data_offset = falcon_ucode_offset.checked_add(desc.size()).ok_or(ERANGE)?;
+        let size_u32 = desc
+            .imem_load_size()
+            .checked_add(desc.dmem_load_size())
+            .ok_or(ERANGE)?;
+        let size = usize::from_safe_cast(size_u32);
+        let ucode_data_end = ucode_data_offset.checked_add(size).ok_or(ERANGE)?;
 
         // Get the data slice, checking bounds in a single operation.
         self.base
             .data
-            .get(ucode_data_offset..ucode_data_offset + size)
+            .get(ucode_data_offset..ucode_data_end)
             .ok_or(ERANGE)
             .inspect_err(|_| {
                 dev_err!(
@@ -1061,12 +1096,18 @@ impl FwSecBiosImage {
             FalconUCodeDesc::V3(_v3) => core::mem::size_of::<FalconUCodeDescV3>(),
         };
         // The signatures data follows the descriptor.
-        let sigs_data_offset = self.falcon_ucode_offset + hdr_size;
+        let sigs_data_offset = self
+            .falcon_ucode_offset
+            .checked_add(hdr_size)
+            .ok_or(ERANGE)?;
         let sigs_count = usize::from(desc.signature_count());
-        let sigs_size = sigs_count * core::mem::size_of::<Bcrt30Rsa3kSignature>();
+        let sigs_size = sigs_count
+            .checked_mul(core::mem::size_of::<Bcrt30Rsa3kSignature>())
+            .ok_or(ERANGE)?;
 
         // Make sure the data is within bounds.
-        if sigs_data_offset + sigs_size > self.base.data.len() {
+        let end = sigs_data_offset.checked_add(sigs_size).ok_or(ERANGE)?;
+        if end > self.base.data.len() {
             dev_err!(
                 self.base.dev,
                 "fwsec signatures data not contained within BIOS bounds\n"
