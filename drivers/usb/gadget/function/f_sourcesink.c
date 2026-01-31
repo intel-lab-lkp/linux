@@ -900,7 +900,7 @@ static ssize_t f_ss_opts_pattern_show(struct config_item *item, char *page)
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->pattern);
+	result = sysfs_emit(page, "%u\n", opts->pattern);
 	mutex_unlock(&opts->lock);
 
 	return result;
@@ -943,7 +943,7 @@ static ssize_t f_ss_opts_isoc_interval_show(struct config_item *item, char *page
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->isoc_interval);
+	result = sysfs_emit(page, "%u\n", opts->isoc_interval);
 	mutex_unlock(&opts->lock);
 
 	return result;
@@ -986,7 +986,7 @@ static ssize_t f_ss_opts_isoc_maxpacket_show(struct config_item *item, char *pag
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->isoc_maxpacket);
+	result = sysfs_emit(page, "%u\n", opts->isoc_maxpacket);
 	mutex_unlock(&opts->lock);
 
 	return result;
@@ -1029,7 +1029,7 @@ static ssize_t f_ss_opts_isoc_mult_show(struct config_item *item, char *page)
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->isoc_mult);
+	result = sysfs_emit(page, "%u\n", opts->isoc_mult);
 	mutex_unlock(&opts->lock);
 
 	return result;
@@ -1072,7 +1072,7 @@ static ssize_t f_ss_opts_isoc_maxburst_show(struct config_item *item, char *page
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->isoc_maxburst);
+	result = sysfs_emit(page, "%u\n", opts->isoc_maxburst);
 	mutex_unlock(&opts->lock);
 
 	return result;
@@ -1158,7 +1158,7 @@ static ssize_t f_ss_opts_bulk_buflen_show(struct config_item *item, char *page)
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->bulk_buflen);
+	result = sysfs_emit(page, "%u\n", opts->bulk_buflen);
 	mutex_unlock(&opts->lock);
 
 	return result;
@@ -1196,7 +1196,7 @@ static ssize_t f_ss_opts_bulk_qlen_show(struct config_item *item, char *page)
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->bulk_qlen);
+	result = sysfs_emit(page, "%u\n", opts->bulk_qlen);
 	mutex_unlock(&opts->lock);
 
 	return result;
@@ -1234,7 +1234,7 @@ static ssize_t f_ss_opts_iso_qlen_show(struct config_item *item, char *page)
 	int result;
 
 	mutex_lock(&opts->lock);
-	result = sprintf(page, "%u\n", opts->iso_qlen);
+	result = sysfs_emit(page, "%u\n", opts->iso_qlen);
 	mutex_unlock(&opts->lock);
 
 	return result;
