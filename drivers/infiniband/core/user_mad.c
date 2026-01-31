@@ -588,7 +588,15 @@ static ssize_t ib_umad_write(struct file *filp, const char __user *buf,
 	}
 
 	base_version = ((struct ib_mad_hdr *)&packet->mad.data)->base_version;
+	if (count < hdr_size(file) + hdr_len) {
+		ret = -EINVAL;
+		goto err_ah;
+	}
 	data_len = count - hdr_size(file) - hdr_len;
+	if (data_len < 0) {
+		ret = -EINVAL;
+		goto err_ah;
+	}
 	packet->msg = ib_create_send_mad(agent,
 					 be32_to_cpu(packet->mad.hdr.qpn),
 					 packet->mad.hdr.pkey_index, rmpp_active,
