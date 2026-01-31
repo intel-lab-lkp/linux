@@ -4149,6 +4149,7 @@ cifs_umount(struct cifs_sb_info *cifs_sb)
 	if (cifs_sb->master_tlink) {
 		tcon = cifs_sb->master_tlink->tl_tcon;
 		if (tcon) {
+			cifs_close_all_deferred_files(tcon);
 			spin_lock(&tcon->sb_list_lock);
 			list_del_init(&cifs_sb->tcon_sb_link);
 			spin_unlock(&tcon->sb_list_lock);
@@ -4163,6 +4164,7 @@ cifs_umount(struct cifs_sb_info *cifs_sb)
 		rb_erase(node, root);
 
 		spin_unlock(&cifs_sb->tlink_tree_lock);
+		cifs_close_all_deferred_files(tlink->tl_tcon);
 		cifs_put_tlink(tlink);
 		spin_lock(&cifs_sb->tlink_tree_lock);
 	}
