@@ -5,6 +5,7 @@
 //! To make this driver probe, QEMU must be run with `-device pci-testdev`.
 
 use kernel::{
+    bindings,
     device::Bound,
     device::Core,
     devres::Devres,
@@ -89,6 +90,102 @@ impl SampleDriver {
             "pci-testdev config space read32 BAR 0: {:x}\n",
             config.read32(0x10)
         );
+
+        for (name, id) in [
+            ("PM", bindings::PCI_CAP_ID_PM as u8),
+            ("MSI", bindings::PCI_CAP_ID_MSI as u8),
+            ("PCIe", bindings::PCI_CAP_ID_EXP as u8),
+        ] {
+            if let Some(pos) = pdev.find_capability(id) {
+                dev_info!(pdev.as_ref(), "pci-testdev {name} cap @ 0x{:02x}\n", pos);
+            } else {
+                dev_info!(pdev.as_ref(), "pci-testdev has no {name} capability\n");
+            }
+        }
+
+        // Best-effort self-check to exercise the `Some(offset)` path:
+        // If the device advertises a standard capability list, read the first capability ID
+        // directly from config space and verify that `find_capability()` returns an offset.
+        let status = config.read16(bindings::PCI_STATUS as usize);
+        if (status & bindings::PCI_STATUS_CAP_LIST as u16) != 0 {
+            let pos = config.read8(bindings::PCI_CAPABILITY_LIST as usize);
+            if pos != 0 {
+                let id = config.read8(pos as usize + bindings::PCI_CAP_LIST_ID as usize);
+                match pdev.find_capability(id) {
+                    Some(found) => dev_info!(
+                        pdev.as_ref(),
+                        "pci-testdev selfcheck: cap id 0x{:02x} @ 0x{:02x} (find -> 0x{:02x})\n",
+                        id,
+                        pos,
+                        found
+                    ),
+                    None => dev_info!(
+                        pdev.as_ref(),
+                        "pci-testdev selfcheck: cap id 0x{:02x} @ 0x{:02x} (find -> none)\n",
+                        id,
+                        pos
+                    ),
+                }
+            } else {
+                dev_info!(pdev.as_ref(), "pci-testdev selfcheck: empty cap list\n");
+            }
+        } else {
+            dev_info!(pdev.as_ref(), "pci-testdev selfcheck: no cap list\n");
+        }
+
+        for (name, id) in [
+            ("DSN", bindings::PCI_EXT_CAP_ID_DSN as u16),
+            ("SR-IOV", bindings::PCI_EXT_CAP_ID_SRIOV as u16),
+        ] {
+            if let Some(pos) = pdev.find_ext_capability(id) {
+                dev_info!(
+                    pdev.as_ref(),
+                    "pci-testdev {name} ext cap @ 0x{:04x}\n",
+                    pos
+                );
+            } else {
+                dev_info!(pdev.as_ref(), "pci-testdev has no {name} ext capability\n");
+            }
+        }
+
+        // Best-effort self-check for extended capabilities.
+        //
+        // If the device has PCIe extended configuration space, verify that
+        // `find_ext_capability()` can find the ID from the first extended
+        // capability header (which is located right after the 256-byte legacy
+        // configuration space).
+        if let Ok(config_ext) = pdev.config_space_extended() {
+            let hdr = config_ext.read32(bindings::PCI_CFG_SPACE_SIZE as usize);
+            if hdr != 0 && hdr != u32::MAX {
+                let id = (hdr & 0xffff) as u16;
+                match pdev.find_ext_capability(id) {
+                    Some(found) => dev_info!(
+                        pdev.as_ref(),
+                        "pci-testdev selfcheck: ext cap id 0x{:04x} @ 0x{:04x} (find -> 0x{:04x})\n",
+                        id,
+                        bindings::PCI_CFG_SPACE_SIZE,
+                        found
+                    ),
+                    None => dev_info!(
+                        pdev.as_ref(),
+                        "pci-testdev selfcheck: ext cap id 0x{:04x} @ 0x{:04x} (find -> none)\n",
+                        id,
+                        bindings::PCI_CFG_SPACE_SIZE
+                    ),
+                }
+            } else {
+                dev_info!(
+                    pdev.as_ref(),
+                    "pci-testdev selfcheck: no ext cap header @ 0x{:04x}\n",
+                    bindings::PCI_CFG_SPACE_SIZE
+                );
+            }
+        } else {
+            dev_info!(
+                pdev.as_ref(),
+                "pci-testdev selfcheck: no ext config space\n"
+            );
+        }
     }
 }
 
