@@ -24,6 +24,7 @@
 
 #define CREATE_TRACE_POINTS
 #include "trace_arm.h"
+#include "hyp_trace.h"
 
 #include <linux/uaccess.h>
 #include <asm/ptrace.h>
@@ -2360,6 +2361,10 @@ static int __init init_subsystems(void)
 		goto out;
 
 	kvm_register_perf_callbacks(NULL);
+
+	err = kvm_hyp_trace_init();
+	if (err)
+		kvm_err("Failed to initialize Hyp tracing\n");
 
 out:
 	if (err)
