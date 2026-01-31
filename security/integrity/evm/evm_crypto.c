@@ -139,8 +139,8 @@ alloc:
  * (Additional directory/file metadata needs to be added for more complete
  * protection.)
  */
-static void hmac_add_misc(struct shash_desc *desc, struct inode *inode,
-			  char type, char *digest)
+static int hmac_add_misc(struct shash_desc *desc, struct inode *inode,
+			 char type, char *digest)
 {
 	struct h_misc {
 		unsigned long ino;
@@ -149,6 +149,7 @@ static void hmac_add_misc(struct shash_desc *desc, struct inode *inode,
 		gid_t gid;
 		umode_t mode;
 	} hmac_misc;
+	int ret;
 
 	memset(&hmac_misc, 0, sizeof(hmac_misc));
 	/* Don't include the inode or generation number in portable
@@ -169,14 +170,20 @@ static void hmac_add_misc(struct shash_desc *desc, struct inode *inode,
 	hmac_misc.uid = from_kuid(&init_user_ns, inode->i_uid);
 	hmac_misc.gid = from_kgid(&init_user_ns, inode->i_gid);
 	hmac_misc.mode = inode->i_mode;
-	crypto_shash_update(desc, (const u8 *)&hmac_misc, sizeof(hmac_misc));
+	ret = crypto_shash_update(desc, (const u8 *)&hmac_misc, sizeof(hmac_misc));
+	if (ret)
+		return ret;
 	if ((evm_hmac_attrs & EVM_ATTR_FSUUID) &&
-	    type != EVM_XATTR_PORTABLE_DIGSIG)
-		crypto_shash_update(desc, (u8 *)&inode->i_sb->s_uuid, UUID_SIZE);
-	crypto_shash_final(desc, digest);
+	    type != EVM_XATTR_PORTABLE_DIGSIG) {
+		ret = crypto_shash_update(desc, (u8 *)&inode->i_sb->s_uuid, UUID_SIZE);
+		if (ret)
+			return ret;
+	}
+	ret = crypto_shash_final(desc, digest);
 
 	pr_debug("hmac_misc: (%zu) [%*phN]\n", sizeof(struct h_misc),
 		 (int)sizeof(struct h_misc), &hmac_misc);
+	return ret;
 }
 
 /*
@@ -260,9 +267,10 @@ static int evm_calc_hmac_or_hash(struct dentry *dentry,
 
 		if ((req_xattr_name && req_xattr_value)
 		    && !strcmp(xattr->name, req_xattr_name)) {
-			error = 0;
-			crypto_shash_update(desc, (const u8 *)req_xattr_value,
-					     req_xattr_value_len);
+			error = crypto_shash_update(desc, (const u8 *)req_xattr_value,
+						    req_xattr_value_len);
+			if (error)
+				goto out;
 			if (is_ima)
 				ima_present = true;
 
@@ -286,15 +294,18 @@ static int evm_calc_hmac_or_hash(struct dentry *dentry,
 			pr_debug("file %s: xattr %s size mismatch (kernel: %d, user: %d)\n",
 				 dentry->d_name.name, xattr->name, size,
 				 user_space_size);
-		error = 0;
 		xattr_size = size;
-		crypto_shash_update(desc, (const u8 *)xattr_value, xattr_size);
+		error = crypto_shash_update(desc, (const u8 *)xattr_value, xattr_size);
+		if (error)
+			goto out;
 		if (is_ima)
 			ima_present = true;
 
 		dump_security_xattr(xattr->name, xattr_value, xattr_size);
 	}
-	hmac_add_misc(desc, inode, type, data->digest);
+	error = hmac_add_misc(desc, inode, type, data->digest);
+	if (error)
+		goto out;
 
 	if (inode != d_backing_inode(dentry) && iint) {
 		if (IS_I_VERSION(inode))
@@ -401,6 +412,7 @@ int evm_init_hmac(struct inode *inode, const struct xattr *xattrs,
 {
 	struct shash_desc *desc;
 	const struct xattr *xattr;
+	int ret;
 
 	desc = init_desc(EVM_XATTR_HMAC, HASH_ALGO_SHA1);
 	if (IS_ERR(desc)) {
@@ -412,12 +424,15 @@ int evm_init_hmac(struct inode *inode, const struct xattr *xattrs,
 		if (!evm_protected_xattr(xattr->name))
 			continue;
 
-		crypto_shash_update(desc, xattr->value, xattr->value_len);
+		ret = crypto_shash_update(desc, xattr->value, xattr->value_len);
+		if (ret)
+			goto out;
 	}
 
-	hmac_add_misc(desc, inode, EVM_XATTR_HMAC, hmac_val);
+	ret = hmac_add_misc(desc, inode, EVM_XATTR_HMAC, hmac_val);
+out:
 	kfree(desc);
-	return 0;
+	return ret;
 }
 
 /*
