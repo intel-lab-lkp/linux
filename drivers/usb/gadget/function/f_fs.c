@@ -3981,7 +3981,7 @@ static ssize_t f_fs_opts_ready_show(struct config_item *item, char *page)
 	ready = opts->dev->desc_ready;
 	ffs_dev_unlock();
 
-	return sprintf(page, "%d\n", ready);
+	return sysfs_emit(page, "%d\n", ready);
 }
 
 CONFIGFS_ATTR_RO(f_fs_opts_, ready);
