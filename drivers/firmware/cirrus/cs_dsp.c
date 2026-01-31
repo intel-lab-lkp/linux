@@ -972,6 +972,8 @@ static void cs_dsp_signal_event_controls(struct cs_dsp *dsp,
 	struct cs_dsp_coeff_ctl *ctl;
 	int ret;
 
+	mutex_lock(&dsp->pwr_lock);
+
 	list_for_each_entry(ctl, &dsp->ctl_list, list) {
 		if (ctl->type != WMFW_CTL_TYPE_HOSTEVENT)
 			continue;
@@ -985,6 +987,8 @@ static void cs_dsp_signal_event_controls(struct cs_dsp *dsp,
 				    "Failed to send 0x%x event to alg 0x%x (%d)\n",
 				    event, ctl->alg_region.alg, ret);
 	}
+
+	mutex_unlock(&dsp->pwr_lock);
 }
 
 static void cs_dsp_free_ctl_blk(struct cs_dsp_coeff_ctl *ctl)
