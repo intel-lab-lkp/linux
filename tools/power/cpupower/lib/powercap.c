@@ -100,7 +100,7 @@ int powercap_get_driver(char *driver, int buflen)
 		driver = "";
 		return -1;
 	} else if (buflen > 10) {
-		strcpy(driver, "intel-rapl");
+		snprintf(driver, buflen, "intel-rapl");
 		return 0;
 	} else
 		return -1;
@@ -125,13 +125,12 @@ static int sysfs_powercap_get64_val(struct powercap_zone *zone,
 				      enum powercap_get64 which,
 				      uint64_t *val)
 {
-	char file[SYSFS_PATH_MAX] = PATH_TO_POWERCAP "/";
+	char file[SYSFS_PATH_MAX];
 	int ret;
 	char buf[MAX_LINE_LEN];
 
-	strcat(file, zone->sys_name);
-	strcat(file, "/");
-	strcat(file, powercap_get64_files[which]);
+	snprintf(file, sizeof(file), "%s/%s/%s",
+		 PATH_TO_POWERCAP, zone->sys_name, powercap_get64_files[which]);
 
 	ret = sysfs_read_file(file, buf, MAX_LINE_LEN);
 	if (ret < 0)
@@ -165,15 +164,13 @@ int powercap_get_power_uw(struct powercap_zone *zone, uint64_t *val)
 
 int powercap_zone_get_enabled(struct powercap_zone *zone, int *mode)
 {
-	char path[SYSFS_PATH_MAX] = PATH_TO_POWERCAP;
+	char path[SYSFS_PATH_MAX];
+	int ret;
 
-	if ((strlen(PATH_TO_POWERCAP) + strlen(zone->sys_name)) +
-	    strlen("/enabled") + 1 >= SYSFS_PATH_MAX)
+	ret = snprintf(path, sizeof(path), "%s/%s/enabled",
+		       PATH_TO_POWERCAP, zone->sys_name);
+	if (ret >= sizeof(path))
 		return -1;
-
-	strcat(path, "/");
-	strcat(path, zone->sys_name);
-	strcat(path, "/enabled");
 
 	return sysfs_get_enabled(path, mode);
 }
@@ -189,22 +186,21 @@ int powercap_read_zone(struct powercap_zone *zone)
 {
 	struct dirent *dent;
 	DIR *zone_dir;
-	char sysfs_dir[SYSFS_PATH_MAX] = PATH_TO_POWERCAP;
+	char sysfs_dir[SYSFS_PATH_MAX];
 	struct powercap_zone *child_zone;
-	char file[SYSFS_PATH_MAX] = PATH_TO_POWERCAP;
+	char file[SYSFS_PATH_MAX];
 	int i, ret = 0;
 	uint64_t val = 0;
 
-	strcat(sysfs_dir, "/");
-	strcat(sysfs_dir, zone->sys_name);
+	snprintf(sysfs_dir, sizeof(sysfs_dir), "%s/%s",
+		 PATH_TO_POWERCAP, zone->sys_name);
 
 	zone_dir = opendir(sysfs_dir);
 	if (zone_dir == NULL)
 		return -1;
 
-	strcat(file, "/");
-	strcat(file, zone->sys_name);
-	strcat(file, "/name");
+	snprintf(file, sizeof(file), "%s/%s/name",
+		 PATH_TO_POWERCAP, zone->sys_name);
 	sysfs_read_file(file, zone->name, MAX_LINE_LEN);
 	if (zone->parent)
 		zone->tree_depth = zone->parent->tree_depth + 1;
@@ -243,9 +239,8 @@ int powercap_read_zone(struct powercap_zone *zone)
 				return -1;
 			}
 		}
-		strcpy(child_zone->sys_name, zone->sys_name);
-		strcat(child_zone->sys_name, "/");
-		strcat(child_zone->sys_name, dent->d_name);
+		snprintf(child_zone->sys_name, sizeof(child_zone->sys_name),
+			 "%s/%s", zone->sys_name, dent->d_name);
 		child_zone->parent = zone;
 		if (zone->tree_depth >= POWERCAP_MAX_TREE_DEPTH) {
 			fprintf(stderr, "Maximum zone hierarchy depth[%d] reached\n",
@@ -278,7 +273,8 @@ struct powercap_zone *powercap_init_zones(void)
 	if (!root_zone)
 		return NULL;
 
-	strcpy(root_zone->sys_name, "intel-rapl/intel-rapl:0");
+	snprintf(root_zone->sys_name, sizeof(root_zone->sys_name),
+		 "intel-rapl/intel-rapl:0");
 
 	powercap_read_zone(root_zone);
 
