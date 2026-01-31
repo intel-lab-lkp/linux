@@ -21,6 +21,7 @@
 #include <linux/can/vxcan.h>
 #include <linux/can/can-ml.h>
 #include <linux/slab.h>
+#include <net/can.h>
 #include <net/rtnetlink.h>
 
 #define DRV_NAME "vxcan"
@@ -39,6 +40,7 @@ static netdev_tx_t vxcan_xmit(struct sk_buff *oskb, struct net_device *dev)
 	struct vxcan_priv *priv = netdev_priv(dev);
 	struct net_device *peer;
 	struct net_device_stats *peerstats, *srcstats = &dev->stats;
+	struct can_skb_ext *csx;
 	struct sk_buff *skb;
 	unsigned int len;
 
@@ -59,6 +61,18 @@ static netdev_tx_t vxcan_xmit(struct sk_buff *oskb, struct net_device *dev)
 	if (skb) {
 		consume_skb(oskb);
 	} else {
+		kfree_skb(oskb);
+		goto out_unlock;
+	}
+
+	/* the cloned skb points to the skb extension of the original oskb
+	 * with an increased refcount. skb_ext_add() creates a copy to
+	 * separate the skb extension data which is needed to start with a
+	 * fresh can_gw_hops counter in the other namespace.
+	 */
+	csx = skb_ext_add(skb, SKB_EXT_CAN);
+	if (!csx) {
+		kfree_skb(skb);
 		kfree_skb(oskb);
 		goto out_unlock;
 	}
