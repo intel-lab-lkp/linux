@@ -700,6 +700,11 @@ static ssize_t dmemcg_limit_write(struct kernfs_open_file *of,
 		if (!region_name[0])
 			continue;
 
+		if (!options || !*options) {
+			err = -EINVAL;
+			goto out_put;
+		}
+
 		rcu_read_lock();
 		region = dmemcg_get_region_by_name(region_name);
 		rcu_read_unlock();
