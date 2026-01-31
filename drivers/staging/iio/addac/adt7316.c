@@ -111,7 +111,6 @@
 #define ADT7316_AD_SINGLE_CH_MODE	0x10
 #define ADT7316_DISABLE_AVERAGING	0x20
 #define ADT7316_EN_SMBUS_TIMEOUT	0x40
-#define ADT7316_RESET			0x80
 
 /*
  * ADT7316 config3
@@ -154,7 +153,6 @@
 /*
  * ADT7316 value masks
  */
-#define ADT7316_VALUE_MASK		0xfff
 #define ADT7316_T_VALUE_SIGN		0x400
 #define ADT7316_T_VALUE_FLOAT_OFFSET	2
 #define ADT7316_T_VALUE_FLOAT_MASK	0x2
@@ -194,15 +192,6 @@ struct adt7316_chip_info {
  * Logic interrupt mask for user application to enable
  * interrupts.
  */
-#define ADT7316_IN_TEMP_HIGH_INT_MASK	0x1
-#define ADT7316_IN_TEMP_LOW_INT_MASK	0x2
-#define ADT7316_EX_TEMP_HIGH_INT_MASK	0x4
-#define ADT7316_EX_TEMP_LOW_INT_MASK	0x8
-#define ADT7316_EX_TEMP_FAULT_INT_MASK	0x10
-#define ADT7516_AIN1_INT_MASK		0x4
-#define ADT7516_AIN2_INT_MASK		0x20
-#define ADT7516_AIN3_INT_MASK		0x40
-#define ADT7516_AIN4_INT_MASK		0x80
 #define ADT7316_VDD_INT_MASK		0x100
 #define ADT7316_TEMP_INT_MASK		0x1F
 #define ADT7516_AIN_INT_MASK		0xE0
