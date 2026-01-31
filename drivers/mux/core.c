@@ -173,14 +173,19 @@ int mux_chip_register(struct mux_chip *mux_chip)
 		ret = mux_control_set(mux, mux->idle_state);
 		if (ret < 0) {
 			dev_err(&mux_chip->dev, "unable to set idle state\n");
-			return ret;
+			goto err_put_device;
 		}
 	}
 
 	ret = device_add(&mux_chip->dev);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(&mux_chip->dev,
 			"device_add failed in %s: %d\n", __func__, ret);
+		goto err_put_device;
+	}
+
+err_put_device:
+	put_device(&mux_chip->dev);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mux_chip_register);
