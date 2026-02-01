@@ -18,8 +18,6 @@ int ia_css_configure_iterator(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -40,8 +38,6 @@ int ia_css_configure_copy_output(const struct ia_css_binary *binary,
 {
 	unsigned int offset = 0;
 	unsigned int size   = 0;
-
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
 
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
@@ -66,8 +62,6 @@ int ia_css_configure_crop(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -89,8 +83,6 @@ int ia_css_configure_fpn(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -111,8 +103,6 @@ int ia_css_configure_dvs(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -132,8 +122,6 @@ int ia_css_configure_qplane(const struct ia_css_binary *binary,
 {
 	unsigned int offset = 0;
 	unsigned int size   = 0;
-
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
 
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
@@ -156,8 +144,6 @@ int ia_css_configure_output0(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -178,8 +164,6 @@ int ia_css_configure_output1(const struct ia_css_binary *binary,
 {
 	unsigned int offset = 0;
 	unsigned int size   = 0;
-
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
 
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
@@ -202,8 +186,6 @@ int ia_css_configure_output(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -224,8 +206,6 @@ int ia_css_configure_raw(const struct ia_css_binary *binary,
 {
 	unsigned int offset = 0;
 	unsigned int size   = 0;
-
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
 
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
@@ -248,8 +228,6 @@ int ia_css_configure_tnr(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -271,8 +249,6 @@ int ia_css_configure_ref(const struct ia_css_binary *binary,
 	unsigned int offset = 0;
 	unsigned int size   = 0;
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
-
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
 
@@ -293,8 +269,6 @@ int ia_css_configure_vf(const struct ia_css_binary *binary,
 {
 	unsigned int offset = 0;
 	unsigned int size   = 0;
-
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s:\n", __func__);
 
 	if (!binary->info->mem_offsets.offsets.config)
 		return 0;
