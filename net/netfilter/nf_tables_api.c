@@ -3859,6 +3859,9 @@ static int nf_tables_dump_rules(struct sk_buff *skb,
 	nft_net = nft_pernet(net);
 	cb->seq = nft_base_seq(net);
 
+	if (ctx->reset)
+		spin_lock(&nft_net->reset_lock);
+
 	list_for_each_entry_rcu(table, &nft_net->tables, list) {
 		if (family != NFPROTO_UNSPEC && family != table->family)
 			continue;
@@ -3894,6 +3897,9 @@ static int nf_tables_dump_rules(struct sk_buff *skb,
 			break;
 	}
 done:
+	if (ctx->reset)
+		spin_unlock(&nft_net->reset_lock);
+
 	rcu_read_unlock();
 
 	ctx->s_idx = idx;
@@ -4007,7 +4013,12 @@ static int nf_tables_getrule(struct sk_buff *skb, const struct nfnl_info *info,
 	if (NFNL_MSG_TYPE(info->nlh->nlmsg_type) == NFT_MSG_GETRULE_RESET)
 		reset = true;
 
+	if (reset)
+		spin_lock(&nft_net->reset_lock);
 	skb2 = nf_tables_getrule_single(portid, info, nla, reset);
+	if (reset)
+		spin_unlock(&nft_net->reset_lock);
+
 	if (IS_ERR(skb2))
 		return PTR_ERR(skb2);
 
@@ -6264,11 +6275,18 @@ static int nf_tables_dump_set(struct sk_buff *skb, struct netlink_callback *cb)
 	if (nest == NULL)
 		goto nla_put_failure;
 
+	if (dump_ctx->reset)
+		spin_lock(&nft_net->reset_lock);
+
 	set->ops->walk(&dump_ctx->ctx, set, &args.iter);
 
 	if (!args.iter.err && args.iter.count == cb->args[0])
 		args.iter.err = nft_set_catchall_dump(net, skb, set,
 						      dump_ctx->reset, cb->seq);
+
+	if (dump_ctx->reset)
+		spin_unlock(&nft_net->reset_lock);
+
 	nla_nest_end(skb, nest);
 	nlmsg_end(skb, nlh);
 
@@ -6532,10 +6550,10 @@ static int nf_tables_getsetelem(struct sk_buff *skb,
 				const struct nfnl_info *info,
 				const struct nlattr * const nla[])
 {
+	struct nftables_pernet *nft_net = nft_pernet(info->net);
 	struct netlink_ext_ack *extack = info->extack;
 	struct nft_set_dump_ctx dump_ctx;
 	int rem, err = 0, nelems = 0;
-	struct net *net = info->net;
 	struct nlattr *attr;
 	bool reset = false;
 
@@ -6565,6 +6583,9 @@ static int nf_tables_getsetelem(struct sk_buff *skb,
 	if (err)
 		return err;
 
+	if (reset)
+		spin_lock(&nft_net->reset_lock);
+
 	nla_for_each_nested(attr, nla[NFTA_SET_ELEM_LIST_ELEMENTS], rem) {
 		err = nft_get_set_elem(&dump_ctx.ctx, dump_ctx.set, attr, reset);
 		if (err < 0) {
@@ -6573,9 +6594,12 @@ static int nf_tables_getsetelem(struct sk_buff *skb,
 		}
 		nelems++;
 	}
-	if (reset)
+
+	if (reset) {
+		spin_unlock(&nft_net->reset_lock);
 		audit_log_nft_set_reset(dump_ctx.ctx.table, nft_base_seq(info->net),
 					nelems);
+	}
 
 	return err;
 }
@@ -8386,6 +8410,9 @@ static int nf_tables_dump_obj(struct sk_buff *skb, struct netlink_callback *cb)
 	nft_net = nft_pernet(net);
 	cb->seq = nft_base_seq(net);
 
+	if (ctx->reset)
+		spin_lock(&nft_net->reset_lock);
+
 	list_for_each_entry_rcu(table, &nft_net->tables, list) {
 		if (family != NFPROTO_UNSPEC && family != table->family)
 			continue;
@@ -8422,6 +8449,10 @@ cont:
 		if (rc < 0)
 			break;
 	}
+
+	if (ctx->reset)
+		spin_unlock(&nft_net->reset_lock);
+
 	rcu_read_unlock();
 
 	ctx->s_idx = idx;
@@ -8531,7 +8562,12 @@ static int nf_tables_getobj(struct sk_buff *skb, const struct nfnl_info *info,
 	if (NFNL_MSG_TYPE(info->nlh->nlmsg_type) == NFT_MSG_GETOBJ_RESET)
 		reset = true;
 
+	if (reset)
+		spin_lock(&nft_net->reset_lock);
 	skb2 = nf_tables_getobj_single(portid, info, nla, reset);
+	if (reset)
+		spin_unlock(&nft_net->reset_lock);
+
 	if (IS_ERR(skb2))
 		return PTR_ERR(skb2);
 
@@ -12023,6 +12059,7 @@ static int __net_init nf_tables_init_net(struct net *net)
 	INIT_LIST_HEAD(&nft_net->module_list);
 	INIT_LIST_HEAD(&nft_net->notify_list);
 	mutex_init(&nft_net->commit_mutex);
+	spin_lock_init(&nft_net->reset_lock);
 	net->nft.base_seq = 1;
 	nft_net->gc_seq = 0;
 	nft_net->validate_state = NFT_VALIDATE_SKIP;
