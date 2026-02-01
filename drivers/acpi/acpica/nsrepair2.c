@@ -9,6 +9,7 @@
  *****************************************************************************/
 
 #include <acpi/acpi.h>
+#include <linux/sort.h>
 #include "accommon.h"
 #include "acnamesp.h"
 
@@ -83,6 +84,14 @@ acpi_ns_check_sorted_list(struct acpi_evaluate_info *info,
 
 static void
 acpi_ns_remove_element(union acpi_operand_object *obj_desc, u32 index);
+
+/* Context structure for sort comparison function */
+struct acpi_sort_context {
+	u32 sort_index;
+	u8 sort_direction;
+};
+
+static int acpi_ns_sort_cmp(const void *a, const void *b, const void *priv);
 
 static void
 acpi_ns_sort_list(union acpi_operand_object **elements,
@@ -853,6 +862,52 @@ acpi_ns_check_sorted_list(struct acpi_evaluate_info *info,
 
 /******************************************************************************
  *
+ * FUNCTION:    acpi_ns_sort_cmp
+ *
+ * PARAMETERS:  a               - First element to compare
+ *              b               - Second element to compare
+ *              priv            - Pointer to sort context (acpi_sort_context)
+ *
+ * RETURN:      -1, 0, or 1 depending on sort order
+ *
+ * DESCRIPTION: Comparison function for sort_r() API. Compares the integer
+ *              values at the specified index within package elements.
+ *
+ *****************************************************************************/
+
+static int acpi_ns_sort_cmp(const void *a, const void *b, const void *priv)
+{
+	union acpi_operand_object *obj_a = *(union acpi_operand_object **)a;
+	union acpi_operand_object *obj_b = *(union acpi_operand_object **)b;
+	const struct acpi_sort_context *ctx = priv;
+	union acpi_operand_object *value_a;
+	union acpi_operand_object *value_b;
+	u64 a_val;
+	u64 b_val;
+
+	value_a = obj_a->package.elements[ctx->sort_index];
+	value_b = obj_b->package.elements[ctx->sort_index];
+
+	a_val = value_a->integer.value;
+	b_val = value_b->integer.value;
+
+	if (ctx->sort_direction == ACPI_SORT_ASCENDING) {
+		if (a_val < b_val)
+			return -1;
+		if (a_val > b_val)
+			return 1;
+	} else {
+		if (a_val > b_val)
+			return -1;
+		if (a_val < b_val)
+			return 1;
+	}
+
+	return 0;
+}
+
+/******************************************************************************
+ *
  * FUNCTION:    acpi_ns_sort_list
  *
  * PARAMETERS:  elements            - Package object element list
@@ -873,31 +928,13 @@ static void
 acpi_ns_sort_list(union acpi_operand_object **elements,
 		  u32 count, u32 index, u8 sort_direction)
 {
-	union acpi_operand_object *obj_desc1;
-	union acpi_operand_object *obj_desc2;
-	union acpi_operand_object *temp_obj;
-	u32 i;
-	u32 j;
+	struct acpi_sort_context ctx;
 
-	/* Simple bubble sort */
+	ctx.sort_index = index;
+	ctx.sort_direction = sort_direction;
 
-	for (i = 1; i < count; i++) {
-		for (j = (count - 1); j >= i; j--) {
-			obj_desc1 = elements[j - 1]->package.elements[index];
-			obj_desc2 = elements[j]->package.elements[index];
-
-			if (((sort_direction == ACPI_SORT_ASCENDING) &&
-			     (obj_desc1->integer.value >
-			      obj_desc2->integer.value))
-			    || ((sort_direction == ACPI_SORT_DESCENDING)
-				&& (obj_desc1->integer.value <
-				    obj_desc2->integer.value))) {
-				temp_obj = elements[j - 1];
-				elements[j - 1] = elements[j];
-				elements[j] = temp_obj;
-			}
-		}
-	}
+	sort_r(elements, count, sizeof(union acpi_operand_object *),
+	       acpi_ns_sort_cmp, NULL, &ctx);
 }
 
 /******************************************************************************
