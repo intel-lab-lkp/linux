@@ -730,9 +730,13 @@ pixel_read_line_t get_pixel_read_line_function(u32 format)
 	case DRM_FORMAT_P012:
 	case DRM_FORMAT_P016:
 		return &YUV161616_semiplanar_read_line;
+	case DRM_FORMAT_YUV410:
+	case DRM_FORMAT_YUV411:
 	case DRM_FORMAT_YUV420:
 	case DRM_FORMAT_YUV422:
 	case DRM_FORMAT_YUV444:
+	case DRM_FORMAT_YVU410:
+	case DRM_FORMAT_YVU411:
 	case DRM_FORMAT_YVU420:
 	case DRM_FORMAT_YVU422:
 	case DRM_FORMAT_YVU444:
@@ -921,6 +925,8 @@ void get_conversion_matrix_to_argb_u16(u32 format,
 	memcpy(matrix, matrix_to_copy, sizeof(*matrix_to_copy));
 
 	switch (format) {
+	case DRM_FORMAT_YVU410:
+	case DRM_FORMAT_YVU411:
 	case DRM_FORMAT_YVU420:
 	case DRM_FORMAT_YVU422:
 	case DRM_FORMAT_YVU444:
