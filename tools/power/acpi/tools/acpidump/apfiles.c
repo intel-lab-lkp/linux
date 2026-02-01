@@ -131,10 +131,12 @@ int ap_write_to_binary_file(struct acpi_table_header *table, u32 instance)
 
 	if (instance > 0) {
 		snprintf(instance_str, sizeof(instance_str), "%u", instance);
-		strcat(filename, instance_str);
+		strncat(filename, instance_str,
+			sizeof(filename) - strlen(filename) - 1);
 	}
 
-	strcat(filename, FILE_SUFFIX_BINARY_TABLE);
+	strncat(filename, FILE_SUFFIX_BINARY_TABLE,
+		sizeof(filename) - strlen(filename) - 1);
 
 	if (gbl_verbose_mode) {
 		fprintf(stderr,
