@@ -26,8 +26,31 @@ class page_ops():
             raise gdb.GdbError('Only support CONFIG_SPARSEMEM_VMEMMAP now')
         if constants.LX_CONFIG_ARM64 and utils.is_target_arch('aarch64'):
             self.ops = aarch64_page_ops()
+        elif utils.is_target_arch('x86_64') or utils.is_target_arch('x86-64'):
+            self.ops = x86_page_ops()
         else:
-            raise gdb.GdbError('Only support aarch64 now')
+            raise gdb.GdbError('Only support aarch64 and x86_64 now')
+
+class x86_page_ops():
+    def __init__(self):
+        self.MAX_NUMNODES = 1 << constants.LX_CONFIG_NODES_SHIFT
+        self.struct_page_size = utils.get_page_type().sizeof
+        self.PAGE_SHIFT = constants.LX_CONFIG_PAGE_SHIFT
+        self.PAGE_SIZE = 1 << self.PAGE_SHIFT
+        self.PAGE_OFFSET = int(gdb.parse_and_eval("page_offset_base"))
+        self.VMEMMAP_START = int(gdb.parse_and_eval("vmemmap_base"))
+
+    def page_to_virt(self, page):
+        page_ptr = page.cast(utils.get_page_type().pointer())
+        vmemmap_ptr = gdb.Value(self.VMEMMAP_START).cast(utils.get_page_type().pointer())
+        idx = int(page_ptr - vmemmap_ptr)
+        return self.PAGE_OFFSET + (idx * self.PAGE_SIZE)
+
+    def page_address(self, page):
+        return self.page_to_virt(page)
+
+    def folio_address(self, folio):
+        return self.page_address(folio['page'].address)
 
 class aarch64_page_ops():
     def __init__(self):
