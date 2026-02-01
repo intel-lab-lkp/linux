@@ -1690,6 +1690,11 @@ int get_tree_bdev_flags(struct fs_context *fc,
 		}
 	} else {
 		error = setup_bdev_super(s, fc->sb_flags, fc);
+		if (error) {
+			fc->s_fs_info = s->s_fs_info;
+			s->s_fs_info = NULL;
+		}
+
 		if (!error)
 			error = fill_super(s, fc);
 		if (error) {
