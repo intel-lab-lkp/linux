@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/atmel,at91rm9200-ohci.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Atmel AT91RM9200 / AT91SAM9 style OHCI USB Host Controller
+
+maintainers:
+  - Nicolas Ferre <nicolas.ferre@microchip.com>
+  - Alexandre Belloni <alexandre.belloni@bootlin.com>
+
+description:
+  The Atmel AT91RM9200 / AT91SAM9 OHCI USB Host Controller implements a
+  USB 1.1 Open Host Controller Interface (OHCI) compliant host interface.
+  It provides low-speed and full-speed USB host functionality and is
+  integrated into Atmel AT91RM9200 and AT91SAM9 family SoCs.
+
+allOf:
+  - $ref: /schemas/usb/usb.yaml#
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: atmel,at91rm9200-ohci
+          - const: usb-ohci
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    minItems: 3
+    maxItems: 3
+
+  clock-names:
+    items:
+      - const: ohci_clk
+      - const: hclk
+      - const: uhpck
+
+  num-ports:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Number of downstream ports supported by this OHCI controller
+    minimum: 1
+    maximum: 15
+
+  atmel,vbus-gpio:
+    description: GPIO used to control or sense the USB VBUS power.
+    minItems: 1
+    maxItems: 3
+
+  atmel,oc-gpio:
+    description: GPIO used to signal USB overcurrent condition.
+    minItems: 1
+    maxItems: 3
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/at91.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+    usb@500000 {
+        compatible = "atmel,at91rm9200-ohci", "usb-ohci";
+        reg = <0x500000 0x100000>;
+        interrupts = <20 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&uhphs_clk>, <&uhphs_clk>, <&uhpck>;
+        clock-names = "ohci_clk", "hclk", "uhpck";
+        atmel,vbus-gpio = <&pioA 18 GPIO_ACTIVE_HIGH>;
+        atmel,oc-gpio   = <&pioB 10 GPIO_ACTIVE_LOW>;
+        num-ports = <2>;
+    };
+...
