@@ -1652,10 +1652,9 @@ void rtw_dynamic_check_timer_handler(struct adapter *adapter)
 	if (adapter->net_closed)
 		return;
 
-	if ((adapter_to_pwrctl(adapter)->fw_current_in_ps_mode)
-		&& !(hal_btcoex_IsBtControlLps(adapter))
-		) {
-		u8 should_enter_ps;
+	if (adapter_to_pwrctl(adapter)->fw_current_in_ps_mode &&
+	    !hal_btcoex_IsBtControlLps(adapter)) {
+		bool should_enter_ps;
 
 		linked_status_chk(adapter);
 

@@ -1128,18 +1128,18 @@ static void collect_traffic_statistics(struct adapter *padapter)
 	pdvobjpriv->traffic_stat.cur_rx_tp = (u32)(pdvobjpriv->traffic_stat.cur_rx_bytes * 8 / 2 / 1024 / 1024);
 }
 
-u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
+bool traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 {
-	u8 should_enter_ps = false;
+	bool should_enter_ps = false;
 	u16 busy_threshold_high = 25;
 	u16 busy_threshold_low = 10;
 	u16 busy_threshold = busy_threshold_high;
-	u8 busy_traffic = false;
-	u8 tx_busy_traffic = false;
-	u8 rx_busy_traffic = false;
-	u8 higher_busy_traffic = false;
-	u8 higher_busy_rx_traffic = false;
-	u8 higher_busy_tx_traffic = false;
+	bool busy_traffic = false;
+	bool tx_busy_traffic = false;
+	bool rx_busy_traffic = false;
+	bool higher_busy_traffic = false;
+	bool higher_busy_rx_traffic = false;
+	bool higher_busy_tx_traffic = false;
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	collect_traffic_statistics(padapter);
