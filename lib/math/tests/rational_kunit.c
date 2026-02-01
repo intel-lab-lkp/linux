@@ -14,10 +14,10 @@ struct rational_test_param {
 
 static const struct rational_test_param test_parameters[] = {
 	{ 1230,	10,	100, 20,	100, 1,    "Exceeds bounds, semi-convergent term > 1/2 last term" },
-	{ 34567,100, 	120, 20,	120, 1,    "Exceeds bounds, semi-convergent term < 1/2 last term" },
+	{ 34567, 100,	120, 20,	120, 1,    "Exceeds bounds, semi-convergent term < 1/2 last term" },
 	{ 1, 30,	100, 10,	0, 1,	   "Closest to zero" },
 	{ 1, 19,	100, 10,	1, 10,     "Closest to smallest non-zero" },
-	{ 27,32,	16, 16,		11, 13,    "Use convergent" },
+	{ 27, 32,	16, 16,		11, 13,    "Use convergent" },
 	{ 1155, 7735,	255, 255,	33, 221,   "Exact answer" },
 	{ 87, 32,	70, 32,		68, 25,    "Semiconvergent, numerator limit" },
 	{ 14533, 4626,	15000, 2400,	7433, 2366, "Semiconvergent, denominator limit" },
@@ -33,7 +33,7 @@ KUNIT_ARRAY_PARAM(rational, test_parameters, get_desc);
 
 static void rational_test(struct kunit *test)
 {
-	const struct rational_test_param *param = (const struct rational_test_param *)test->param_value;
+	const struct rational_test_param *param = test->param_value;
 	unsigned long n = 0, d = 0;
 
 	rational_best_approximation(param->num, param->den, param->max_num, param->max_den, &n, &d);
