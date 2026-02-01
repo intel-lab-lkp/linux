@@ -41,6 +41,119 @@ pub use self::id::{
     Vendor, //
 };
 pub use self::io::Bar;
+
+/// A standard PCI capability ID.
+///
+/// This is a thin wrapper around the underlying numeric capability ID.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CapabilityId(u8);
+
+impl CapabilityId {
+    /// Creates a [`CapabilityId`] from a raw value.
+    #[inline]
+    pub const fn from_raw(id: u8) -> Self {
+        Self(id)
+    }
+
+    /// Returns the raw value.
+    #[inline]
+    pub const fn as_raw(self) -> u8 {
+        self.0
+    }
+
+    /// Power Management.
+    pub const PM: Self = Self(bindings::PCI_CAP_ID_PM as _);
+    /// Accelerated Graphics Port.
+    pub const AGP: Self = Self(bindings::PCI_CAP_ID_AGP as _);
+    /// Vital Product Data.
+    pub const VPD: Self = Self(bindings::PCI_CAP_ID_VPD as _);
+    /// Slot Identification.
+    pub const SLOTID: Self = Self(bindings::PCI_CAP_ID_SLOTID as _);
+    /// Message Signalled Interrupts.
+    pub const MSI: Self = Self(bindings::PCI_CAP_ID_MSI as _);
+    /// CompactPCI HotSwap.
+    pub const CHSWP: Self = Self(bindings::PCI_CAP_ID_CHSWP as _);
+    /// PCI-X.
+    pub const PCIX: Self = Self(bindings::PCI_CAP_ID_PCIX as _);
+    /// HyperTransport.
+    pub const HT: Self = Self(bindings::PCI_CAP_ID_HT as _);
+    /// Vendor-Specific.
+    pub const VNDR: Self = Self(bindings::PCI_CAP_ID_VNDR as _);
+    /// Debug port.
+    pub const DBG: Self = Self(bindings::PCI_CAP_ID_DBG as _);
+    /// CompactPCI Central Resource Control.
+    pub const CCRC: Self = Self(bindings::PCI_CAP_ID_CCRC as _);
+    /// PCI Standard Hot-Plug Controller.
+    pub const SHPC: Self = Self(bindings::PCI_CAP_ID_SHPC as _);
+    /// Bridge subsystem vendor/device ID.
+    pub const SSVID: Self = Self(bindings::PCI_CAP_ID_SSVID as _);
+    /// AGP 8x.
+    pub const AGP3: Self = Self(bindings::PCI_CAP_ID_AGP3 as _);
+    /// Secure Device.
+    pub const SECDEV: Self = Self(bindings::PCI_CAP_ID_SECDEV as _);
+    /// PCI Express.
+    pub const EXP: Self = Self(bindings::PCI_CAP_ID_EXP as _);
+    /// MSI-X.
+    pub const MSIX: Self = Self(bindings::PCI_CAP_ID_MSIX as _);
+    /// Serial ATA Data/Index Configuration.
+    pub const SATA: Self = Self(bindings::PCI_CAP_ID_SATA as _);
+    /// PCI Advanced Features.
+    pub const AF: Self = Self(bindings::PCI_CAP_ID_AF as _);
+    /// PCI Enhanced Allocation.
+    pub const EA: Self = Self(bindings::PCI_CAP_ID_EA as _);
+}
+
+/// A PCIe extended capability ID.
+///
+/// This is a thin wrapper around the underlying numeric capability ID.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExtendedCapabilityId(u16);
+
+impl ExtendedCapabilityId {
+    /// Creates an [`ExtendedCapabilityId`] from a raw value.
+    #[inline]
+    pub const fn from_raw(id: u16) -> Self {
+        Self(id)
+    }
+
+    /// Returns the raw value.
+    #[inline]
+    pub const fn as_raw(self) -> u16 {
+        self.0
+    }
+
+    /// Advanced Error Reporting.
+    pub const ERR: Self = Self(bindings::PCI_EXT_CAP_ID_ERR as _);
+    /// Virtual Channel.
+    pub const VC: Self = Self(bindings::PCI_EXT_CAP_ID_VC as _);
+    /// Device Serial Number.
+    pub const DSN: Self = Self(bindings::PCI_EXT_CAP_ID_DSN as _);
+    /// Vendor-Specific Extended Capability.
+    pub const VNDR: Self = Self(bindings::PCI_EXT_CAP_ID_VNDR as _);
+    /// Access Control Services.
+    pub const ACS: Self = Self(bindings::PCI_EXT_CAP_ID_ACS as _);
+    /// Alternate Routing-ID Interpretation.
+    pub const ARI: Self = Self(bindings::PCI_EXT_CAP_ID_ARI as _);
+    /// Address Translation Services.
+    pub const ATS: Self = Self(bindings::PCI_EXT_CAP_ID_ATS as _);
+    /// Single Root I/O Virtualization.
+    pub const SRIOV: Self = Self(bindings::PCI_EXT_CAP_ID_SRIOV as _);
+    /// Resizable BAR.
+    pub const REBAR: Self = Self(bindings::PCI_EXT_CAP_ID_REBAR as _);
+    /// Latency Tolerance Reporting.
+    pub const LTR: Self = Self(bindings::PCI_EXT_CAP_ID_LTR as _);
+    /// Downstream Port Containment.
+    pub const DPC: Self = Self(bindings::PCI_EXT_CAP_ID_DPC as _);
+    /// L1 PM Substates.
+    pub const L1SS: Self = Self(bindings::PCI_EXT_CAP_ID_L1SS as _);
+    /// Precision Time Measurement.
+    pub const PTM: Self = Self(bindings::PCI_EXT_CAP_ID_PTM as _);
+    /// Designated Vendor-Specific Extended Capability.
+    pub const DVSEC: Self = Self(bindings::PCI_EXT_CAP_ID_DVSEC as _);
+}
+
 pub use self::irq::{
     IrqType,
     IrqTypes,
@@ -426,6 +539,43 @@ impl Device {
     pub fn pci_class(&self) -> Class {
         // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
         Class::from_raw(unsafe { (*self.as_raw()).class })
+    }
+
+    /// Finds a PCI capability by ID and returns its config-space offset.
+    ///
+    /// Returns `None` if the capability is not present.
+    ///
+    /// This is a thin wrapper around `pci_find_capability()`.
+    #[inline]
+    pub fn find_capability(&self, id: CapabilityId) -> Option<u8> {
+        // SAFETY: By its type invariant `self.as_raw` is always a valid pointer to a
+        // `struct pci_dev`.
+        let offset = unsafe { bindings::pci_find_capability(self.as_raw(), id.as_raw().into()) };
+
+        if offset == 0 {
+            return None;
+        }
+
+        Some(offset)
+    }
+
+    /// Finds an extended capability by ID and returns its config-space offset.
+    ///
+    /// Returns `None` if the capability is not present.
+    ///
+    /// This is a thin wrapper around `pci_find_ext_capability()`.
+    #[inline]
+    pub fn find_ext_capability(&self, id: ExtendedCapabilityId) -> Option<u16> {
+        // SAFETY: By its type invariant `self.as_raw` is always a valid pointer to a
+        // `struct pci_dev`.
+        let offset =
+            unsafe { bindings::pci_find_ext_capability(self.as_raw(), id.as_raw().into()) };
+
+        if offset == 0 {
+            return None;
+        }
+
+        Some(offset)
     }
 }
 
