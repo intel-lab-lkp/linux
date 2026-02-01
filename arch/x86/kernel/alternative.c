@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #define pr_fmt(fmt) "SMP alternatives: " fmt
 
+#include <linux/kernel.h>
 #include <linux/mmu_context.h>
 #include <linux/perf_event.h>
 #include <linux/vmalloc.h>
@@ -49,12 +50,6 @@ static int __init setup_noreplace_smp(char *str)
 	return 1;
 }
 __setup("noreplace-smp", setup_noreplace_smp);
-
-#define DPRINTK(type, fmt, args...)					\
-do {									\
-	if (debug_alternative & DA_##type)				\
-		printk(KERN_DEBUG pr_fmt(fmt) "\n", ##args);		\
-} while (0)
 
 #define DUMP_BYTES(type, buf, len, fmt, args...)			\
 do {									\
@@ -603,7 +598,7 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	u8 *instr, *replacement;
 	struct alt_instr *a, *b;
 
-	DPRINTK(ALT, "alt table %px, -> %px", start, end);
+	pr_debug("alt table %px, -> %px", start, end);
 
 	/*
 	 * KASAN_SHADOW_START is defined using
@@ -656,7 +651,7 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 			continue;
 		}
 
-		DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
+		pr_debug("feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
 			a->cpuid >> 5,
 			a->cpuid & 0x1f,
 			instr, instr, a->instrlen,
@@ -974,7 +969,7 @@ void __init_or_module noinline apply_retpolines(s32 *start, s32 *end)
 			continue;
 		}
 
-		DPRINTK(RETPOLINE, "retpoline at: %pS (%px) len: %d to: %pS",
+		pr_debug("retpoline at: %pS (%px) len: %d to: %pS",
 			addr, addr, insn.length,
 			addr + insn.length + insn.immediate.value);
 
@@ -1062,7 +1057,7 @@ void __init_or_module noinline apply_returns(s32 *start, s32 *end)
 			      addr, dest, 5, addr))
 			continue;
 
-		DPRINTK(RET, "return thunk at: %pS (%px) len: %d to: %pS",
+		pr_debug("return thunk at: %pS (%px) len: %d to: %pS",
 			addr, addr, insn.length,
 			addr + insn.length + insn.immediate.value);
 
@@ -1122,7 +1117,7 @@ static void __init_or_module poison_endbr(void *addr)
 	if (WARN_ON_ONCE(!is_endbr(addr)))
 		return;
 
-	DPRINTK(ENDBR, "ENDBR at: %pS (%px)", addr, addr);
+	pr_debug("ENDBR at: %pS (%px)", addr, addr);
 
 	/*
 	 * When we have IBT, the lack of ENDBR will trigger #CP
@@ -2136,7 +2131,7 @@ void __init_or_module alternatives_smp_module_add(struct module *mod,
 	smp->locks_end	= locks_end;
 	smp->text	= text;
 	smp->text_end	= text_end;
-	DPRINTK(SMP, "locks %p -> %p, text %p -> %p, name %s\n",
+	pr_debug("locks %p -> %p, text %p -> %p, name %s\n",
 		smp->locks, smp->locks_end,
 		smp->text, smp->text_end, smp->name);
 
