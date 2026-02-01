@@ -298,6 +298,14 @@ void persistent_ram_save_old(struct persistent_ram_zone *prz)
 	if (!size)
 		return;
 
+	/*
+	 * If the existing buffer is too small, free it so a new one is
+	 * allocated. This can happen when persistent_ram_save_old() is
+	 * called multiple times with different buffer sizes.
+	 */
+	if (prz->old_log && prz->old_log_size < size)
+		persistent_ram_free_old(prz);
+
 	if (!prz->old_log) {
 		persistent_ram_ecc_old(prz);
 		prz->old_log = kvzalloc(size, GFP_KERNEL);
