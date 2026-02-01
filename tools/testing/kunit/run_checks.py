@@ -5,7 +5,7 @@
 # It is only of interest if you're making changes to KUnit itself.
 #
 # Copyright (C) 2021, Google LLC.
-# Author: Daniel Latypov <dlatypov@google.com.com>
+# Author: Daniel Latypov <dlatypov@google.com>
 
 from concurrent import futures
 import datetime
