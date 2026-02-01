@@ -675,7 +675,7 @@ static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
 	cxlmd->id = rc;
 	cxlmd->depth = -1;
 	cxlmd->attach = attach;
-	cxlmd->endpoint = ERR_PTR(-ENXIO);
+	cxlmd->endpoint = NULL;
 
 	dev = &cxlmd->dev;
 	device_initialize(dev);
