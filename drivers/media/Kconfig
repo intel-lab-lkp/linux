@@ -239,6 +239,19 @@ source "drivers/media/firewire/Kconfig"
 # Common driver options
 source "drivers/media/common/Kconfig"
 
+config VCAM
+	tristate "V4L2 virtual camera"
+	depends on VIDEO_DEV
+	default m
+	select VIDEOBUF2_VMALLOC
+	help
+	  Say Y here to enable a DMA-BUF backed virtual camera driver capable
+	  of creating video capture devices to which data can be streamed
+	  through /dev/vcam after calling VCAM_IOC_CREATE. Frames are pushed
+	  with VCAM_IOC_QUEUE and recycled with VCAM_IOC_DEQUEUE.
+
+	  When in doubt, say N.
+
 endmenu
 
 #

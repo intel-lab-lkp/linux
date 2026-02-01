@@ -27517,6 +27517,14 @@ S:	Maintained
 F:	drivers/media/common/videobuf2/*
 F:	include/media/videobuf2-*
 
+VCAM V4L2 DRIVER
+M:	Jarkko Sakkinen <jarkko@kernel.org>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jarkko/linux-tpmdd.git
+F:	drivers/media/vcam.c
+F:	include/uapi/linux/vcam.h
+
 VIDTV VIRTUAL DIGITAL TV DRIVER
 M:	Daniel W. S. Almeida <dwlsalmeida@gmail.com>
 L:	linux-media@vger.kernel.org
