@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/atmel,at91sam9g45-ehci.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Atmel AT91SAM9G45 EHCI USB Host Controller
+
+maintainers:
+  - Nicolas Ferre <nicolas.ferre@microchip.com>
+  - Alexandre Belloni <alexandre.belloni@bootlin.com>
+
+description:
+  The Atmel AT91SAM9G45 EHCI controller is a high-speed USB 2.0 host
+  controller compliant with the EHCI specification. It provides USB host
+  functionality when operating in host mode and requires a peripheral clock
+  and a UTMI clock for operation. The controller may support multiple USB
+  ports, with the PHY interface type selectable via the phy_type property.
+
+allOf:
+  - $ref: /schemas/usb/usb.yaml#
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: atmel,at91sam9g45-ehci
+          - const: usb-ehci
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    minItems: 2
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: ehci_clk
+      - const: usb_clk
+
+  phy_type:
+    enum:
+      - utmi
+      - hsic
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/at91.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    usb@500000 {
+        compatible = "atmel,at91sam9g45-ehci", "usb-ehci";
+        reg = <0x00500000 0x100000>;
+        interrupts = <41 IRQ_TYPE_LEVEL_HIGH 2>;
+        clocks = <&pmc PMC_TYPE_CORE PMC_UTMI>, <&pmc PMC_TYPE_PERIPHERAL 41>;
+        clock-names = "usb_clk", "ehci_clk";
+        phy_type = "hsic";
+    };
+...
