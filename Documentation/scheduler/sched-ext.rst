@@ -252,6 +252,80 @@ The following briefly shows how a waking task is scheduled and executed.
 
    * Queue the task on the BPF side.
 
+   **Task State Tracking and ops.dequeue() Semantics**
+
+   Once ``ops.select_cpu()`` or ``ops.enqueue()`` is called, the task may
+   enter the "BPF scheduler's custody" depending on where it's dispatched:
+
+   * **Direct dispatch to local DSQs** (``SCX_DSQ_LOCAL`` or
+     ``SCX_DSQ_LOCAL_ON | cpu``): The task bypasses the BPF scheduler
+     entirely and goes straight to the CPU's local run queue. The task
+     never enters BPF custody, and ``ops.dequeue()`` will not be called.
+
+   * **Dispatch to non-local DSQs** (``SCX_DSQ_GLOBAL`` or custom DSQs):
+     the task enters the BPF scheduler's custody. When the task later
+     leaves BPF custody (dispatched to a local DSQ, picked by core-sched,
+     or dequeued for sleep/property changes), ``ops.dequeue()`` will be
+     called exactly once.
+
+   * **Queued on BPF side**: The task is in BPF data structures and in BPF
+     custody, ``ops.dequeue()`` will be called when it leaves.
+
+   The key principle: **ops.dequeue() is called when a task leaves the BPF
+   scheduler's custody**. A task is in BPF custody if it's on a non-local
+   DSQ or in BPF data structures. Once dispatched to a local DSQ or after
+   ops.dequeue() is called, the task is out of BPF custody and the BPF
+   scheduler no longer needs to track it.
+
+   This works correctly with the ``ops.select_cpu()`` direct dispatch
+   optimization: even though it skips ``ops.enqueue()`` invocation, if the
+   task is dispatched to a non-local DSQ, it enters BPF custody and will
+   get ``ops.dequeue()`` when it leaves. This provides the performance
+   benefit of avoiding the ``ops.enqueue()`` roundtrip while maintaining
+   correct state tracking.
+
+   The dequeue can happen for different reasons, distinguished by flags:
+
+   1. **Regular dispatch workflow**: when the task is dispatched from a
+      non-local DSQ to a local DSQ (leaving BPF custody for execution),
+      ``ops.dequeue()`` is triggered without any special flags.
+
+   2. **Core scheduling pick**: when ``CONFIG_SCHED_CORE`` is enabled and
+      core scheduling picks a task for execution while it's still in BPF
+      custody, ``ops.dequeue()`` is called with the
+      ``SCX_DEQ_CORE_SCHED_EXEC`` flag.
+
+   3. **Scheduling property change**: when a task property changes (via
+      operations like ``sched_setaffinity()``, ``sched_setscheduler()``,
+      priority changes, CPU migrations, etc.) while the task is still in
+      BPF custody, ``ops.dequeue()`` is called with the
+      ``SCX_DEQ_SCHED_CHANGE`` flag set in ``deq_flags``.
+
+   **Important**: Once a task has left BPF custody (dispatched to local
+   DSQ), property changes will not trigger ``ops.dequeue()``, since the
+   task is no longer being managed by the BPF scheduler.
+
+   **Property Change Notifications for Running Tasks**:
+
+   For tasks that have left BPF custody (running or on local DSQs),
+   property changes can be intercepted through the dedicated callbacks:
+
+   * ``ops.set_cpumask()``: Called when a task's CPU affinity changes
+     (e.g., via ``sched_setaffinity()``). This callback is invoked for
+     all tasks regardless of their state or BPF custody.
+
+   * ``ops.set_weight()``: Called when a task's scheduling weight/priority
+     changes (e.g., via ``sched_setscheduler()`` or ``set_user_nice()``).
+     This callback is also invoked for all tasks.
+
+   These callbacks provide complete coverage for property changes,
+   complementing ``ops.dequeue()`` which only applies to tasks in BPF
+   custody.
+
+   BPF schedulers can choose not to implement ``ops.dequeue()`` if they
+   don't need to track these transitions. The sched_ext core will safely
+   handle all dequeue operations regardless.
+
 3. When a CPU is ready to schedule, it first looks at its local DSQ. If
    empty, it then looks at the global DSQ. If there still isn't a task to
    run, ``ops.dispatch()`` is invoked which can use the following two
@@ -319,6 +393,8 @@ by a sched_ext scheduler:
                 /* Any usable CPU becomes available */
 
                 ops.dispatch(); /* Task is moved to a local DSQ */
+
+                ops.dequeue(); /* Exiting BPF scheduler */
             }
             ops.running();      /* Task starts running on its assigned CPU */
             while (task->scx.slice > 0 && task is runnable)
