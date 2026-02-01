@@ -308,15 +308,17 @@ int ap_dump_table_by_name(char *signature)
 
 	/* Table signatures are expected to be uppercase */
 
-	strcpy(local_signature, signature);
+	snprintf(local_signature, sizeof(local_signature), "%s", signature);
 	acpi_ut_strupr(local_signature);
 
 	/* To be friendly, handle tables whose signatures do not match the name */
 
 	if (ACPI_COMPARE_NAMESEG(local_signature, "FADT")) {
-		strcpy(local_signature, ACPI_SIG_FADT);
+		snprintf(local_signature, sizeof(local_signature), "%s",
+			 ACPI_SIG_FADT);
 	} else if (ACPI_COMPARE_NAMESEG(local_signature, "MADT")) {
-		strcpy(local_signature, ACPI_SIG_MADT);
+		snprintf(local_signature, sizeof(local_signature), "%s",
+			 ACPI_SIG_MADT);
 	}
 
 	/* Dump all instances of this signature (to handle multiple SSDTs) */
