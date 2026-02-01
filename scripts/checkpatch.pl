@@ -3834,6 +3834,17 @@ sub process {
 # check we are in a valid source file if not then ignore this hunk
 		next if ($realfile !~ /\.(h|c|rs|s|S|sh|dtsi|dts)$/);
 
+# check for Rust unwrap/expect
+		if ($realfile =~ /\.rs$/ && $line =~ /^\+/) {
+			if ($line =~ /\b(unwrap|expect)\s*\(/ &&
+				$rawline !~ /\/\/\s*PANIC/ &&
+				$line !~ /^\+\s*\/\// &&
+				$line !~ /^\+\s*assert/) {
+				WARN("RUST_UNWRAP",
+					"Avoid unwrap() or expect() in Rust code; use proper error handling (Result) or justify with a '// PANIC: ...' comment.\n" . $herecurr);
+			}
+		}
+
 # check for using SPDX-License-Identifier on the wrong line number
 		if ($realline != $checklicenseline &&
 		    $rawline =~ /\bSPDX-License-Identifier:/ &&
