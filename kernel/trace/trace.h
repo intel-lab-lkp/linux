@@ -455,6 +455,7 @@ enum {
 	TRACE_ARRAY_FL_MOD_INIT		= BIT(3),
 	TRACE_ARRAY_FL_MEMMAP		= BIT(4),
 	TRACE_ARRAY_FL_VMALLOC		= BIT(5),
+	TRACE_ARRAY_FL_RDONLY		= BIT(6),
 };
 
 #ifdef CONFIG_MODULES
@@ -482,6 +483,12 @@ extern int tracing_set_clock(struct trace_array *tr, const char *clockstr);
 extern bool trace_clock_in_ns(struct trace_array *tr);
 
 extern unsigned long trace_adjust_address(struct trace_array *tr, unsigned long addr);
+
+static inline bool trace_array_is_readonly(struct trace_array *tr)
+{
+	/* backup instance is read only. */
+	return tr->flags & TRACE_ARRAY_FL_RDONLY;
+}
 
 /*
  * The global tracer (top) should be the first trace array added,
