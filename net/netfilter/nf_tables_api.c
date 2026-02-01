@@ -3906,13 +3906,9 @@ static int nf_tables_dumpreset_rules(struct sk_buff *skb,
 	struct nftables_pernet *nft_net = nft_pernet(sock_net(skb->sk));
 	int ret;
 
-	/* Mutex is held is to prevent that two concurrent dump-and-reset calls
-	 * do not underrun counters and quotas. The commit_mutex is used for
-	 * the lack a better lock, this is not transaction path.
-	 */
-	mutex_lock(&nft_net->commit_mutex);
+	spin_lock(&nft_net->reset_lock);
 	ret = nf_tables_dump_rules(skb, cb);
-	mutex_unlock(&nft_net->commit_mutex);
+	spin_unlock(&nft_net->reset_lock);
 
 	return ret;
 }
@@ -4053,14 +4049,9 @@ static int nf_tables_getrule_reset(struct sk_buff *skb,
 		return nft_netlink_dump_start_rcu(info->sk, skb, info->nlh, &c);
 	}
 
-	if (!try_module_get(THIS_MODULE))
-		return -EINVAL;
-	rcu_read_unlock();
-	mutex_lock(&nft_net->commit_mutex);
+	spin_lock(&nft_net->reset_lock);
 	skb2 = nf_tables_getrule_single(portid, info, nla, true);
-	mutex_unlock(&nft_net->commit_mutex);
-	rcu_read_lock();
-	module_put(THIS_MODULE);
+	spin_unlock(&nft_net->reset_lock);
 
 	if (IS_ERR(skb2))
 		return PTR_ERR(skb2);
@@ -6345,15 +6336,13 @@ static int nf_tables_dumpreset_set(struct sk_buff *skb,
 	struct nft_set_dump_ctx *dump_ctx = cb->data;
 	int ret, skip = cb->args[0];
 
-	mutex_lock(&nft_net->commit_mutex);
-
+	spin_lock(&nft_net->reset_lock);
 	ret = nf_tables_dump_set(skb, cb);
+	spin_unlock(&nft_net->reset_lock);
 
 	if (cb->args[0] > skip)
 		audit_log_nft_set_reset(dump_ctx->ctx.table, cb->seq,
 					cb->args[0] - skip);
-
-	mutex_unlock(&nft_net->commit_mutex);
 
 	return ret;
 }
@@ -6667,16 +6656,11 @@ static int nf_tables_getsetelem_reset(struct sk_buff *skb,
 	if (!nla[NFTA_SET_ELEM_LIST_ELEMENTS])
 		return -EINVAL;
 
-	if (!try_module_get(THIS_MODULE))
-		return -EINVAL;
-	rcu_read_unlock();
-	mutex_lock(&nft_net->commit_mutex);
-	rcu_read_lock();
-
 	err = nft_set_dump_ctx_init(&dump_ctx, skb, info, nla, true);
 	if (err)
-		goto out_unlock;
+		return err;
 
+	spin_lock(&nft_net->reset_lock);
 	nla_for_each_nested(attr, nla[NFTA_SET_ELEM_LIST_ELEMENTS], rem) {
 		err = nft_get_set_elem(&dump_ctx.ctx, dump_ctx.set, attr, true);
 		if (err < 0) {
@@ -6685,13 +6669,9 @@ static int nf_tables_getsetelem_reset(struct sk_buff *skb,
 		}
 		nelems++;
 	}
-	audit_log_nft_set_reset(dump_ctx.ctx.table, nft_base_seq(info->net), nelems);
+	spin_unlock(&nft_net->reset_lock);
 
-out_unlock:
-	rcu_read_unlock();
-	mutex_unlock(&nft_net->commit_mutex);
-	rcu_read_lock();
-	module_put(THIS_MODULE);
+	audit_log_nft_set_reset(dump_ctx.ctx.table, nft_base_seq(info->net), nelems);
 
 	return err;
 }
@@ -8550,9 +8530,9 @@ static int nf_tables_dumpreset_obj(struct sk_buff *skb,
 	struct nftables_pernet *nft_net = nft_pernet(sock_net(skb->sk));
 	int ret;
 
-	mutex_lock(&nft_net->commit_mutex);
+	spin_lock(&nft_net->reset_lock);
 	ret = nf_tables_dump_obj(skb, cb);
-	mutex_unlock(&nft_net->commit_mutex);
+	spin_unlock(&nft_net->reset_lock);
 
 	return ret;
 }
@@ -8688,14 +8668,9 @@ static int nf_tables_getobj_reset(struct sk_buff *skb,
 		return nft_netlink_dump_start_rcu(info->sk, skb, info->nlh, &c);
 	}
 
-	if (!try_module_get(THIS_MODULE))
-		return -EINVAL;
-	rcu_read_unlock();
-	mutex_lock(&nft_net->commit_mutex);
+	spin_lock(&nft_net->reset_lock);
 	skb2 = nf_tables_getobj_single(portid, info, nla, true);
-	mutex_unlock(&nft_net->commit_mutex);
-	rcu_read_lock();
-	module_put(THIS_MODULE);
+	spin_unlock(&nft_net->reset_lock);
 
 	if (IS_ERR(skb2))
 		return PTR_ERR(skb2);
@@ -12185,6 +12160,7 @@ static int __net_init nf_tables_init_net(struct net *net)
 	INIT_LIST_HEAD(&nft_net->module_list);
 	INIT_LIST_HEAD(&nft_net->notify_list);
 	mutex_init(&nft_net->commit_mutex);
+	spin_lock_init(&nft_net->reset_lock);
 	net->nft.base_seq = 1;
 	nft_net->gc_seq = 0;
 	nft_net->validate_state = NFT_VALIDATE_SKIP;
