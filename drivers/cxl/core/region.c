@@ -2438,9 +2438,8 @@ static struct cxl_region *to_cxl_region(struct device *dev)
 	return container_of(dev, struct cxl_region, dev);
 }
 
-static void unregister_region(void *_cxlr)
+void cxl_unregister_region(struct cxl_region *cxlr)
 {
-	struct cxl_region *cxlr = _cxlr;
 	struct cxl_region_params *p = &cxlr->params;
 	int i;
 
@@ -2456,6 +2455,14 @@ static void unregister_region(void *_cxlr)
 
 	cxl_region_iomem_release(cxlr);
 	put_device(&cxlr->dev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_unregister_region, "CXL");
+
+static void __unregister_region(void *_cxlr)
+{
+	struct cxl_region *cxlr = _cxlr;
+
+	return cxl_unregister_region(cxlr);
 }
 
 static struct lock_class_key cxl_region_key;
@@ -2608,7 +2615,7 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 	if (rc)
 		goto err;
 
-	rc = devm_add_action_or_reset(port->uport_dev, unregister_region, cxlr);
+	rc = devm_add_action_or_reset(port->uport_dev, __unregister_region, cxlr);
 	if (rc)
 		return ERR_PTR(rc);
 
@@ -2762,7 +2769,7 @@ static ssize_t delete_region_store(struct device *dev,
 	if (IS_ERR(cxlr))
 		return PTR_ERR(cxlr);
 
-	devm_release_action(port->uport_dev, unregister_region, cxlr);
+	devm_release_action(port->uport_dev, __unregister_region, cxlr);
 	put_device(&cxlr->dev);
 
 	return len;
@@ -3878,7 +3885,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	rc = __construct_region(cxlr, cxlrd, cxled);
 	if (rc) {
-		devm_release_action(port->uport_dev, unregister_region, cxlr);
+		devm_release_action(port->uport_dev, __unregister_region, cxlr);
 		return ERR_PTR(rc);
 	}
 
