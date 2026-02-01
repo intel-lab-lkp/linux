@@ -113,9 +113,8 @@ char *acpi_os_get_next_filename(void *dir_handle)
 				return (NULL);
 			}
 
-			strcpy(temp_str, external_info->dir_pathname);
-			strcat(temp_str, "/");
-			strcat(temp_str, dir_entry->d_name);
+			snprintf(temp_str, str_len, "%s/%s",
+				 external_info->dir_pathname, dir_entry->d_name);
 
 			err = stat(temp_str, &temp_stat);
 			if (err == -1) {
@@ -137,8 +136,9 @@ char *acpi_os_get_next_filename(void *dir_handle)
 
 				/* copy to a temp buffer because dir_entry struct is on the stack */
 
-				strcpy(external_info->temp_buffer,
-				       dir_entry->d_name);
+				snprintf(external_info->temp_buffer,
+					 sizeof(external_info->temp_buffer),
+					 "%s", dir_entry->d_name);
 				return (external_info->temp_buffer);
 			}
 		}
