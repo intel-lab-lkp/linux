@@ -1817,8 +1817,12 @@ retry:
 			/*
 			 * RP port enumerated by cxl_acpi without dport will
 			 * have the dport added here.
+			 *
+			 * Hold the parent port lock here to in case that the
+			 * port can be observed but has not been attached yet.
 			 */
-			scoped_guard(device, &port->dev) {
+			scoped_guard(device, &parent_port_of(port)->dev) {
+				guard(device)(&port->dev);
 				dport = find_or_add_dport(port, dport_dev);
 				if (IS_ERR(dport)) {
 					if (PTR_ERR(dport) == -EAGAIN)
