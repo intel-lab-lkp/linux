@@ -631,6 +631,7 @@ is_uncached_acl(struct posix_acl *acl)
 #define IOP_MGTIME		0x0020
 #define IOP_CACHED_LINK		0x0040
 #define IOP_FASTPERM_MAY_EXEC	0x0080
+#define IOP_FLCTX		0x0100
 
 /*
  * Inode state bits.  Protected by inode->i_lock
@@ -2845,12 +2846,22 @@ u64 vfsmount_to_propagation_flags(struct vfsmount *mnt);
 
 extern char *file_path(struct file *, char *, int);
 
+static inline bool name_is_dot(const char *name, size_t len)
+{
+	return unlikely(len == 1 && name[0] == '.');
+}
+
+static inline bool name_is_dotdot(const char *name, size_t len)
+{
+	return unlikely(len == 2 && name[0] == '.' && name[1] == '.');
+}
+
 /**
- * is_dot_dotdot - returns true only if @name is "." or ".."
+ * name_is_dot_dotdot - returns true only if @name is "." or ".."
  * @name: file name to check
  * @len: length of file name, in bytes
  */
-static inline bool is_dot_dotdot(const char *name, size_t len)
+static inline bool name_is_dot_dotdot(const char *name, size_t len)
 {
 	return len && unlikely(name[0] == '.') &&
 		(len == 1 || (len == 2 && name[1] == '.'));
