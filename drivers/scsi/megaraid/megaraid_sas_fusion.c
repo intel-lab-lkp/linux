@@ -1871,9 +1871,6 @@ megasas_init_adapter_fusion(struct megasas_instance *instance)
 				MEGASAS_FUSION_IOCTL_CMDS);
 	sema_init(&instance->ioctl_sem, MEGASAS_FUSION_IOCTL_CMDS);
 
-	for (i = 0; i < MAX_MSIX_QUEUES_FUSION; i++)
-		atomic_set(&fusion->busy_mq_poll[i], 0);
-
 	if (megasas_alloc_ioc_init_frame(instance))
 		return 1;
 
@@ -3731,6 +3728,7 @@ int megasas_blk_mq_poll(struct Scsi_Host *shost, unsigned int queue_num)
 	struct megasas_instance *instance;
 	int num_entries = 0;
 	struct fusion_context *fusion;
+	struct megasas_irq_context *irq_context;
 
 	instance = (struct megasas_instance *)shost->hostdata;
 
@@ -3738,11 +3736,8 @@ int megasas_blk_mq_poll(struct Scsi_Host *shost, unsigned int queue_num)
 
 	queue_num = queue_num + instance->low_latency_index_start;
 
-	if (!atomic_add_unless(&fusion->busy_mq_poll[queue_num], 1, 1))
-		return 0;
-
-	num_entries = complete_cmd_fusion(instance, queue_num, NULL);
-	atomic_dec(&fusion->busy_mq_poll[queue_num]);
+	irq_context = &instance->irq_context[queue_num];
+	num_entries = complete_cmd_fusion(instance, queue_num, irq_context);
 
 	return num_entries;
 }
