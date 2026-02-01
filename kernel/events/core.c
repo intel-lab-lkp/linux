@@ -7175,7 +7175,6 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 			ret = perf_mmap_aux(vma, event, nr_pages);
 		if (ret)
 			return ret;
-	}
 
 	/*
 	 * Since pinned accounting is per vm we cannot allow fork() to copy our
@@ -7197,6 +7196,7 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 	ret = map_range(event->rb, vma);
 	if (ret)
 		perf_mmap_close(vma);
+	}
 
 	return ret;
 }
