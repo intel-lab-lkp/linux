@@ -596,3 +596,15 @@ config SERIAL_OF_PLATFORM
 	  are probed through devicetree, including Open Firmware based
 	  PowerPC systems and embedded systems on architectures using the
 	  flattened device tree format.
+
+config SERIAL_8250_PROBE_BAUD
+	bool "Probe baud rate if console options are missing"
+	depends on SERIAL_8250
+	help
+	  If the "console=" command line parameter is missing options (e.g.,
+	  "console=ttyS0" instead of "console=ttyS0,115200n8"), this option
+	  allows the kernel to probe the baud rate from hardware instead of
+	  defaulting to 9600.
+
+	  If a baud rate is explicitly provided in the options, that value
+	  is always respected.
