@@ -117,12 +117,6 @@ void phy_port_update_supported(struct phy_port *port)
 	unsigned long mode;
 	int i;
 
-	for_each_set_bit(i, &port->mediums, __ETHTOOL_LINK_MEDIUM_LAST) {
-		linkmode_zero(supported);
-		phy_caps_medium_get_supported(supported, i, port->pairs);
-		linkmode_or(port->supported, port->supported, supported);
-	}
-
 	/* If there's no pairs specified, we grab the default number of
 	 * pairs as the max of the default pairs for each linkmode
 	 */
@@ -131,6 +125,19 @@ void phy_port_update_supported(struct phy_port *port)
 				 __ETHTOOL_LINK_MODE_MASK_NBITS)
 			port->pairs = max_t(int, port->pairs,
 					    ethtool_linkmode_n_pairs(mode));
+
+	if (linkmode_empty(port->supported)) {
+		for_each_set_bit(i, &port->mediums,
+				 __ETHTOOL_LINK_MEDIUM_LAST) {
+			__ETHTOOL_DECLARE_LINK_MODE_MASK(med_supported) = {0};
+
+			phy_caps_medium_get_supported(med_supported, i,
+						      port->pairs);
+			linkmode_or(supported, supported, med_supported);
+		}
+
+		linkmode_and(port->supported, port->supported, supported);
+	}
 
 	/* Serdes ports supported through SFP may not have any medium set,
 	 * as they will output PHY_INTERFACE_MODE_XXX modes. In that case, derive
