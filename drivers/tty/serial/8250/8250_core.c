@@ -427,7 +427,7 @@ static int univ8250_console_setup(struct console *co, char *options)
 	/* link port to console */
 	uart_port_set_cons(port, co);
 
-	retval = serial8250_console_setup(port, options, false);
+	retval = serial8250_console_setup(port, options, IS_ENABLED(CONFIG_SERIAL_8250_PROBE_BAUD));
 	if (retval != 0)
 		uart_port_set_cons(port, NULL);
 	return retval;
