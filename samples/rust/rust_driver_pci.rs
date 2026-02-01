@@ -58,6 +58,35 @@ impl SampleDriver {
 
         Ok(bar.read32(Regs::COUNT))
     }
+
+    fn log_capabilities(pdev: &pci::Device<Core>) {
+        for (name, id) in [
+            ("PM", pci::CapabilityId::PM),
+            ("MSI", pci::CapabilityId::MSI),
+            ("PCIe", pci::CapabilityId::EXP),
+        ] {
+            if let Some(pos) = pdev.find_capability(id) {
+                dev_info!(pdev.as_ref(), "pci-testdev {name} cap @ 0x{:02x}\n", pos);
+            } else {
+                dev_info!(pdev.as_ref(), "pci-testdev has no {name} capability\n");
+            }
+        }
+
+        for (name, id) in [
+            ("DSN", pci::ExtendedCapabilityId::DSN),
+            ("SR-IOV", pci::ExtendedCapabilityId::SRIOV),
+        ] {
+            if let Some(pos) = pdev.find_ext_capability(id) {
+                dev_info!(
+                    pdev.as_ref(),
+                    "pci-testdev {name} ext cap @ 0x{:04x}\n",
+                    pos
+                );
+            } else {
+                dev_info!(pdev.as_ref(), "pci-testdev has no {name} ext capability\n");
+            }
+        }
+    }
 }
 
 impl pci::Driver for SampleDriver {
@@ -89,6 +118,8 @@ impl pci::Driver for SampleDriver {
                         "pci-testdev data-match count: {}\n",
                         Self::testdev(info, bar)?
                     );
+
+                    Self::log_capabilities(pdev);
                 },
                 pdev: pdev.into(),
             }))
