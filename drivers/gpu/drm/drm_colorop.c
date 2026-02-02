@@ -179,6 +179,21 @@ void drm_colorop_cleanup(struct drm_colorop *colorop)
 EXPORT_SYMBOL(drm_colorop_cleanup);
 
 /**
+ * drm_colorop_destroy - destroy colorop
+ * @colorop: drm colorop
+ *
+ * Destroys @colorop by performing common DRM cleanup and freeing the
+ * colorop object. This can be used by drivers if they do not
+ * require any driver-specific teardown.
+ */
+void drm_colorop_destroy(struct drm_colorop *colorop)
+{
+	drm_colorop_cleanup(colorop);
+	kfree(colorop);
+}
+EXPORT_SYMBOL(drm_colorop_destroy);
+
+/**
  * drm_colorop_pipeline_destroy - Helper for color pipeline destruction
  *
  * @dev: - The drm_device containing the drm_planes with the color_pipelines
