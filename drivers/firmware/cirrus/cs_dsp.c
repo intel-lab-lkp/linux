@@ -2864,6 +2864,8 @@ EXPORT_SYMBOL_NS_GPL(cs_dsp_run, "FW_CS_DSP");
  */
 void cs_dsp_stop(struct cs_dsp *dsp)
 {
+	mutex_lock(&dsp->pwr_lock);
+
 	/* Tell the firmware to cleanup */
 	cs_dsp_signal_event_controls(dsp, CS_DSP_FW_EVENT_SHUTDOWN);
 
@@ -2874,7 +2876,6 @@ void cs_dsp_stop(struct cs_dsp *dsp)
 	if (dsp->ops->show_fw_status)
 		dsp->ops->show_fw_status(dsp);
 
-	mutex_lock(&dsp->pwr_lock);
 
 	if (dsp->client_ops->pre_stop)
 		dsp->client_ops->pre_stop(dsp);
