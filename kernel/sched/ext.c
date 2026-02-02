@@ -2619,6 +2619,9 @@ static void set_cpus_allowed_scx(struct task_struct *p,
 
 	set_cpus_allowed_common(p, ac);
 
+	if (unlikely(!sch))
+		return;
+
 	/*
 	 * The effective cpumask is stored in @p->cpus_ptr which may temporarily
 	 * differ from the configured one in @p->cpus_mask. Always tell the bpf
@@ -2920,7 +2923,18 @@ static void scx_disable_task(struct task_struct *p)
 	struct rq *rq = task_rq(p);
 
 	lockdep_assert_rq_held(rq);
-	WARN_ON_ONCE(scx_get_task_state(p) != SCX_TASK_ENABLED);
+
+	/*
+	 * During disabling, tasks can be in various states due to
+	 * concurrent operations, only warn about unexpected state during
+	 * normal operation.
+	 */
+	if (likely(scx_enable_state() != SCX_DISABLING))
+		WARN_ON_ONCE(scx_get_task_state(p) != SCX_TASK_ENABLED);
+
+	/* If task is not enabled, skip disable */
+	if (scx_get_task_state(p) != SCX_TASK_ENABLED)
+		return;
 
 	if (SCX_HAS_OP(sch, disable))
 		SCX_CALL_OP_TASK(sch, SCX_KF_REST, disable, rq, p);
@@ -3063,6 +3077,9 @@ static void reweight_task_scx(struct rq *rq, struct task_struct *p,
 
 	lockdep_assert_rq_held(task_rq(p));
 
+	if (unlikely(!sch))
+		return;
+
 	p->scx.weight = sched_weight_to_cgroup(scale_load_down(lw->weight));
 	if (SCX_HAS_OP(sch, set_weight))
 		SCX_CALL_OP_TASK(sch, SCX_KF_REST, set_weight, rq,
@@ -3077,6 +3094,21 @@ static void switching_to_scx(struct rq *rq, struct task_struct *p)
 {
 	struct scx_sched *sch = scx_root;
 
+	/*
+	 * We may race with a concurrent disable, skip enabling if scx_root
+	 * is NULL or the task is in a transitional state.
+	 */
+	if (unlikely(!sch || scx_enable_state() == SCX_DISABLING))
+		return;
+
+	/*
+	 * Task might not be properly initialized if it's being switched to
+	 * SCX after scx_init_task_enabled was set. Initialize to READY state
+	 * first if needed.
+	 */
+	if (scx_get_task_state(p) == SCX_TASK_NONE)
+		scx_set_task_state(p, SCX_TASK_READY);
+
 	scx_enable_task(p);
 
 	/*
@@ -3090,7 +3122,13 @@ static void switching_to_scx(struct rq *rq, struct task_struct *p)
 
 static void switched_from_scx(struct rq *rq, struct task_struct *p)
 {
-	scx_disable_task(p);
+	/*
+	 * Only disable if the task is actually enabled. During scheduler
+	 * disabling, tasks might already be in READY state if they've been
+	 * disabled by concurrent operations.
+	 */
+	if (scx_get_task_state(p) == SCX_TASK_ENABLED)
+		scx_disable_task(p);
 }
 
 static void wakeup_preempt_scx(struct rq *rq, struct task_struct *p,int wake_flags) {}
