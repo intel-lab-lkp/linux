@@ -243,6 +243,8 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout,
 	if (sysctl_hung_task_panic && total_hung_task >= sysctl_hung_task_panic) {
 		console_verbose();
 		hung_task_call_panic = true;
+	} else {
+		add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
 	}
 
 	/*
