@@ -1204,5 +1204,5 @@ int avc_has_perm(u32 ssid, u32 tsid, u16 tclass,
 
 u32 avc_policy_seqno(void)
 {
-	return selinux_avc.avc_cache.latest_notif;
+	return data_race(READ_ONCE(selinux_avc.avc_cache.latest_notif));
 }
