@@ -1921,8 +1921,6 @@ static int ag71xx_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	platform_set_drvdata(pdev, ndev);
-
 	err = ag71xx_phylink_setup(ag);
 	if (err)
 		return dev_err_probe(&pdev->dev, err,
@@ -1931,25 +1929,29 @@ static int ag71xx_probe(struct platform_device *pdev)
 	err = register_netdev(ndev);
 	if (err) {
 		netif_err(ag, probe, ndev, "unable to register net device\n");
-		platform_set_drvdata(pdev, NULL);
-		return err;
+		goto err_phylink;
 	}
+
+	platform_set_drvdata(pdev, ndev);
 
 	netif_info(ag, probe, ndev, "Atheros AG71xx at 0x%08lx, irq %d, mode:%s\n",
 		   (unsigned long)ag->mac_base, ndev->irq,
 		   phy_modes(ag->phy_if_mode));
 
 	return 0;
+
+err_phylink:
+	phylink_destroy(ag->phylink);
+	return err;
 }
 
 static void ag71xx_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
-
-	if (!ndev)
-		return;
+	struct ag71xx *ag = netdev_priv(ndev);
 
 	unregister_netdev(ndev);
+	phylink_destroy(ag->phylink);
 	platform_set_drvdata(pdev, NULL);
 }
 
