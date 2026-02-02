@@ -240,6 +240,21 @@ static inline void tlb_remove_table(struct mmu_gather *tlb, void *table)
 }
 #endif /* CONFIG_MMU_GATHER_TABLE_FREE */
 
+/*
+ * Architectures can override this to indicate whether TLB flush operations
+ * send IPIs that are sufficient to synchronize with lockless page table
+ * walkers (e.g., GUP-fast). If true, tlb_remove_table_sync_mm() becomes
+ * a no-op as the TLB flush already provided the necessary IPI.
+ *
+ * Default is false, meaning we need explicit IPIs via tlb_remove_table_sync_mm().
+ */
+#ifndef tlb_table_flush_implies_ipi_broadcast
+static inline bool tlb_table_flush_implies_ipi_broadcast(void)
+{
+	return false;
+}
+#endif
+
 #ifdef CONFIG_MMU_GATHER_RCU_TABLE_FREE
 /*
  * This allows an architecture that does not use the linux page-tables for

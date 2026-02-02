@@ -60,6 +60,23 @@ void __init native_pv_lock_init(void)
 		static_branch_enable(&virt_spin_lock_key);
 }
 
+void __init native_pv_tlb_init(void)
+{
+	/*
+	 * Check if we're still using native TLB flush (not overridden by
+	 * a PV backend) and don't have INVLPGB support.
+	 *
+	 * In this case, native IPI-based TLB flush provides sufficient
+	 * synchronization for GUP-fast.
+	 *
+	 * PV backends (KVM, Xen, HyperV) should set this property in their
+	 * own initialization code if their flush implementation sends IPIs.
+	 */
+	if (pv_ops.mmu.flush_tlb_multi == native_flush_tlb_multi &&
+	    !cpu_feature_enabled(X86_FEATURE_INVLPGB))
+		pv_ops.mmu.flush_tlb_multi_implies_ipi_broadcast = true;
+}
+
 struct static_key paravirt_steal_enabled;
 struct static_key paravirt_steal_rq_enabled;
 
@@ -173,6 +190,7 @@ struct paravirt_patch_template pv_ops = {
 	.mmu.flush_tlb_kernel	= native_flush_tlb_global,
 	.mmu.flush_tlb_one_user	= native_flush_tlb_one_user,
 	.mmu.flush_tlb_multi	= native_flush_tlb_multi,
+	.mmu.flush_tlb_multi_implies_ipi_broadcast = false,
 
 	.mmu.exit_mmap		= paravirt_nop,
 	.mmu.notify_page_enc_status_changed	= paravirt_nop,

@@ -303,6 +303,13 @@ void tlb_remove_table_sync_mm(struct mm_struct *mm)
 	bool found_any = false;
 	int cpu;
 
+	/*
+	 * If the architecture's TLB flush already sent IPIs that are sufficient
+	 * for synchronization, we don't need to send additional IPIs.
+	 */
+	if (tlb_table_flush_implies_ipi_broadcast())
+		return;
+
 	if (WARN_ONCE(!mm, "NULL mm in %s\n", __func__)) {
 		tlb_remove_table_sync_one();
 		return;

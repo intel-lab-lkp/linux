@@ -243,4 +243,9 @@ void hyperv_setup_mmu_ops(void)
 
 	pr_info("Using hypercall for remote TLB flush\n");
 	pv_ops.mmu.flush_tlb_multi = hyperv_flush_tlb_multi;
+	/*
+	 * Hyper-V uses hypercalls for TLB flush, not real IPIs.
+	 * Keep the property as false.
+	 */
+	pv_ops.mmu.flush_tlb_multi_implies_ipi_broadcast = false;
 }

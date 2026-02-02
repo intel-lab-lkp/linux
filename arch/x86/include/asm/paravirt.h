@@ -698,6 +698,7 @@ static __always_inline unsigned long arch_local_irq_save(void)
 
 extern void default_banner(void);
 void native_pv_lock_init(void) __init;
+void native_pv_tlb_init(void) __init;
 
 #else  /* __ASSEMBLER__ */
 
@@ -725,6 +726,10 @@ void native_pv_lock_init(void) __init;
 
 #ifndef __ASSEMBLER__
 static inline void native_pv_lock_init(void)
+{
+}
+
+static inline void native_pv_tlb_init(void)
 {
 }
 #endif
