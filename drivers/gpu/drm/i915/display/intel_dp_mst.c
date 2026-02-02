@@ -606,12 +606,10 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 		&pipe_config->hw.adjusted_mode;
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
-	int max_dotclk = display->cdclk.max_dotclk_freq;
 	struct link_config_limits limits;
 	bool dsc_needed, joiner_needs_dsc;
 	int ret = 0;
 
-	max_dotclk *= num_joined_pipes;
 	joiner_needs_dsc = intel_dp_joiner_needs_dsc(display, num_joined_pipes);
 
 	dsc_needed = joiner_needs_dsc || intel_dp->force_dsc_en ||
@@ -625,7 +623,10 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 		if (ret == -EDEADLK)
 			return ret;
 
-		if (ret || adjusted_mode->clock > max_dotclk)
+		if (ret ||
+		    !intel_dp_dotclk_valid(display,
+					   adjusted_mode->clock,
+					   num_joined_pipes))
 			dsc_needed = true;
 	}
 
@@ -669,7 +670,9 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 		if (ret)
 			return ret;
 
-		if (adjusted_mode->clock > max_dotclk)
+		if (!intel_dp_dotclk_valid(display,
+					   adjusted_mode->clock,
+					   num_joined_pipes))
 			return -EINVAL;
 	}
 
@@ -1525,8 +1528,6 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 
 	*status = MODE_CLOCK_HIGH;
 	for (num_joined_pipes = 1; num_joined_pipes <= I915_MAX_PIPES; num_joined_pipes++) {
-		int max_dotclk = display->cdclk.max_dotclk_freq;
-
 		if (connector->force_joined_pipes &&
 		    num_joined_pipes != connector->force_joined_pipes)
 			continue;
@@ -1571,9 +1572,9 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		if (*status != MODE_OK)
 			continue;
 
-		max_dotclk *= num_joined_pipes;
-
-		if (mode->clock > max_dotclk) {
+		if (!intel_dp_dotclk_valid(display,
+					   mode->clock,
+					   num_joined_pipes)) {
 			*status = MODE_CLOCK_HIGH;
 			continue;
 		}
