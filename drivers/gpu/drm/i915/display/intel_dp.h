@@ -226,6 +226,8 @@ bool intel_dp_can_join(struct intel_display *display,
 		       int num_joined_pipes);
 bool intel_dp_dotclk_valid(struct intel_display *display,
 			   int target_clock,
+			   int htotal,
+			   int dsc_slice_count,
 			   int num_joined_pipes);
 
 #endif /* __INTEL_DP_H__ */
