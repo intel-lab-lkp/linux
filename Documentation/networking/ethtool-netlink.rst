@@ -96,7 +96,7 @@ For short bitmaps of (reasonably) fixed length, standard ``NLA_BITFIELD32``
 type is used. For arbitrary length bitmaps, ethtool netlink uses a nested
 attribute with contents of one of two forms: compact (two binary bitmaps
 representing bit values and mask of affected bits) and bit-by-bit (list of
-bits identified by either index or name).
+bits identified by index or name).
 
 Verbose (bit-by-bit) bitsets allow sending symbolic names for bits together
 with their values which saves a round trip (when the bitset is passed in a
@@ -156,17 +156,24 @@ Bit-by-bit form: nested (bitset) attribute contents:
  | | | ``ETHTOOL_A_BITSET_BIT_VALUE`` | flag   | present if bit is set       |
  +-+-+--------------------------------+--------+-----------------------------+
 
-Bit size is optional for bit-by-bit form. ``ETHTOOL_A_BITSET_BITS`` nest can
-only contain ``ETHTOOL_A_BITSET_BITS_BIT`` attributes but there can be an
-arbitrary number of them.  A bit may be identified by its index or by its
-name. When used in requests, listed bits are set to 0 or 1 according to
-``ETHTOOL_A_BITSET_BIT_VALUE``, the rest is preserved. A request fails if
-index exceeds kernel bit length or if name is not recognized.
+For bit-by-bit form, ``ETHTOOL_A_BITSET_BITS`` attribute is mandatory, and
+``ETHTOOL_A_BITSET_SIZE`` is optional. ``ETHTOOL_A_BITSET_BITS`` contains
+zero or more ``ETHTOOL_A_BITSET_BITS_BIT``, which must contain
+``ETHTOOL_A_BITSET_BIT_INDEX`` and/or ``ETHTOOL_A_BITSET_BIT_NAME``.
+``ETHTOOL_A_BITSET_BIT_VALUE`` is optional, and ignored if
+``ETHTOOL_A_BITSET_NOMASK`` is present.
 
-When ``ETHTOOL_A_BITSET_NOMASK`` flag is present, bitset is interpreted as
-a simple bitmap. ``ETHTOOL_A_BITSET_BIT_VALUE`` attributes are not used in
-such case. Such bitset represents a bitmap with listed bits set and the rest
-zero.
+``ETHTOOL_A_BITSET_NOMASK`` specifies the semantics of the bitset. If
+``ETHTOOL_A_BITSET_NOMASK`` is present, the bitset represents a list of the
+enabled bits (e.g. all bits are unset if ``ETHTOOL_A_BITSET_BITS`` is empty).
+On the other hand, if ``ETHTOOL_A_BITSET_NOMASK`` is not present, the bitset
+represents a list of the masked (valid) bits, and
+``ETHTOOL_A_BITSET_BIT_VALUE`` is present iff the bit is set.
+
+``ETHTOOL_A_BITSET_BIT_INDEX`` and ``ETHTOOL_A_BITSET_BIT_NAME`` identify
+the bit in the bitset. If both are set, the index and the name must point
+to the same bit. A request fails if the index exceeds kernel bit length or
+the name is not recognized.
 
 In requests, application can use either form. Form used by kernel in reply is
 determined by ``ETHTOOL_FLAG_COMPACT_BITSETS`` flag in flags field of request
