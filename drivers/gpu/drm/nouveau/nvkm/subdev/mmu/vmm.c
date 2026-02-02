@@ -53,7 +53,7 @@ nvkm_vmm_pt_new(const struct nvkm_vmm_desc *desc, bool sparse,
 		}
 	}
 
-	if (!(pgt = kzalloc(sizeof(*pgt) + lpte, GFP_KERNEL)))
+	if (!(pgt = kzalloc(sizeof(*pgt) + (sizeof(pgt->pte[0]) * lpte), GFP_KERNEL)))
 		return NULL;
 	pgt->page = page ? page->shift : 0;
 	pgt->sparse = sparse;
@@ -208,7 +208,7 @@ nvkm_vmm_unref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 	 */
 	for (lpti = ptei >> sptb; ptes; spti = 0, lpti++) {
 		const u32 pten = min(sptn - spti, ptes);
-		pgt->pte[lpti] -= pten;
+		pgt->pte[lpti].spte_count -= pten;
 		ptes -= pten;
 	}
 
@@ -218,9 +218,9 @@ nvkm_vmm_unref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 
 	for (ptei = pteb = ptei >> sptb; ptei < lpti; pteb = ptei) {
 		/* Skip over any LPTEs that still have valid SPTEs. */
-		if (pgt->pte[pteb] & NVKM_VMM_PTE_SPTES) {
+		if (pgt->pte[pteb].spte_count) {
 			for (ptes = 1, ptei++; ptei < lpti; ptes++, ptei++) {
-				if (!(pgt->pte[ptei] & NVKM_VMM_PTE_SPTES))
+				if (!pgt->pte[ptei].spte_count)
 					break;
 			}
 			continue;
@@ -232,24 +232,27 @@ nvkm_vmm_unref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 		 *
 		 * Determine how many LPTEs need to transition state.
 		 */
-		pgt->pte[ptei] &= ~NVKM_VMM_PTE_VALID;
+		pgt->pte[ptei].spte_valid = false;
 		for (ptes = 1, ptei++; ptei < lpti; ptes++, ptei++) {
-			if (pgt->pte[ptei] & NVKM_VMM_PTE_SPTES)
+			if (pgt->pte[ptei].spte_count)
 				break;
-			pgt->pte[ptei] &= ~NVKM_VMM_PTE_VALID;
+			pgt->pte[ptei].spte_valid = false;
 		}
 
-		if (pgt->pte[pteb] & NVKM_VMM_PTE_SPARSE) {
+		if (pgt->pte[pteb].sparse) {
 			TRA(it, "LPTE %05x: U -> S %d PTEs", pteb, ptes);
 			pair->func->sparse(vmm, pgt->pt[0], pteb, ptes);
-		} else
-		if (pair->func->invalid) {
-			/* If the MMU supports it, restore the LPTE to the
-			 * INVALID state to tell the MMU there is no point
-			 * trying to fetch the corresponding SPTEs.
-			 */
-			TRA(it, "LPTE %05x: U -> I %d PTEs", pteb, ptes);
-			pair->func->invalid(vmm, pgt->pt[0], pteb, ptes);
+		} else if (!pgt->pte[pteb].lpte_valid) {
+			if (pair->func->invalid) {
+				/* If the MMU supports it, restore the LPTE to the
+				 * INVALID state to tell the MMU there is no point
+				 * trying to fetch the corresponding SPTEs.
+				 */
+				TRA(it, "LPTE %05x: U -> I %d PTEs", pteb, ptes);
+				pair->func->invalid(vmm, pgt->pt[0], pteb, ptes);
+			}
+		} else {
+			TRA(it, "LPTE %05x: V %d PTEs", pteb, ptes);
 		}
 	}
 }
@@ -280,6 +283,13 @@ nvkm_vmm_unref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 ptes)
 	if (desc->type == SPT && (pgt->refs[0] || pgt->refs[1]))
 		nvkm_vmm_unref_sptes(it, pgt, desc, ptei, ptes);
 
+	if (desc->type == LPT && (pgt->refs[0] || pgt->refs[1])) {
+		for (u32 lpti = ptei; ptes; lpti++) {
+			pgt->pte[lpti].lpte_count--;
+			ptes--;
+		}
+	}
+
 	/* PT no longer needed? Destroy it. */
 	if (!pgt->refs[type]) {
 		it->lvl++;
@@ -307,7 +317,7 @@ nvkm_vmm_ref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 	 */
 	for (lpti = ptei >> sptb; ptes; spti = 0, lpti++) {
 		const u32 pten = min(sptn - spti, ptes);
-		pgt->pte[lpti] += pten;
+		pgt->pte[lpti].spte_count += pten;
 		ptes -= pten;
 	}
 
@@ -317,9 +327,9 @@ nvkm_vmm_ref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 
 	for (ptei = pteb = ptei >> sptb; ptei < lpti; pteb = ptei) {
 		/* Skip over any LPTEs that already have valid SPTEs. */
-		if (pgt->pte[pteb] & NVKM_VMM_PTE_VALID) {
+		if (pgt->pte[pteb].spte_valid) {
 			for (ptes = 1, ptei++; ptei < lpti; ptes++, ptei++) {
-				if (!(pgt->pte[ptei] & NVKM_VMM_PTE_VALID))
+				if (!pgt->pte[ptei].spte_valid)
 					break;
 			}
 			continue;
@@ -331,14 +341,16 @@ nvkm_vmm_ref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 		 *
 		 * Determine how many LPTEs need to transition state.
 		 */
-		pgt->pte[ptei] |= NVKM_VMM_PTE_VALID;
+		pgt->pte[ptei].spte_valid = true;
+		pgt->pte[ptei].lpte_valid = false;
 		for (ptes = 1, ptei++; ptei < lpti; ptes++, ptei++) {
-			if (pgt->pte[ptei] & NVKM_VMM_PTE_VALID)
+			if (pgt->pte[ptei].spte_valid)
 				break;
-			pgt->pte[ptei] |= NVKM_VMM_PTE_VALID;
+			pgt->pte[ptei].spte_valid = true;
+			pgt->pte[ptei].lpte_valid = false;
 		}
 
-		if (pgt->pte[pteb] & NVKM_VMM_PTE_SPARSE) {
+		if (pgt->pte[pteb].sparse) {
 			const u32 spti = pteb * sptn;
 			const u32 sptc = ptes * sptn;
 			/* The entire LPTE is marked as sparse, we need
@@ -374,6 +386,15 @@ nvkm_vmm_ref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 ptes)
 	if (desc->type == SPT)
 		nvkm_vmm_ref_sptes(it, pgt, desc, ptei, ptes);
 
+	if (desc->type == LPT) {
+		for (u32 lpti = ptei; ptes; lpti++) {
+			pgt->pte[lpti].spte_valid = false;
+			pgt->pte[lpti].lpte_valid = true;
+			pgt->pte[lpti].lpte_count++;
+			ptes--;
+		}
+	}
+
 	return true;
 }
 
@@ -386,7 +407,8 @@ nvkm_vmm_sparse_ptes(const struct nvkm_vmm_desc *desc,
 			pgt->pde[ptei++] = NVKM_VMM_PDE_SPARSE;
 	} else
 	if (desc->type == LPT) {
-		memset(&pgt->pte[ptei], NVKM_VMM_PTE_SPARSE, ptes);
+		struct pt_tracker sparse = { .sparse = 1 };
+		memset32((u32 *)&pgt->pte[ptei], *(u32 *)&sparse, ptes);
 	}
 }
 
@@ -398,7 +420,7 @@ nvkm_vmm_sparse_unref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 pte
 		memset(&pt->pde[ptei], 0x00, sizeof(pt->pde[0]) * ptes);
 	else
 	if (it->desc->type == LPT)
-		memset(&pt->pte[ptei], 0x00, sizeof(pt->pte[0]) * ptes);
+		memset32((u32 *)&pt->pte[ptei], 0x00, ptes);
 	return nvkm_vmm_unref_ptes(it, pfn, ptei, ptes);
 }
 
@@ -445,9 +467,9 @@ nvkm_vmm_ref_hwpt(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgd, u32 pdei)
 		 * the SPTEs on some GPUs.
 		 */
 		for (ptei = pteb = 0; ptei < pten; pteb = ptei) {
-			bool spte = pgt->pte[ptei] & NVKM_VMM_PTE_SPTES;
+			bool spte = !!pgt->pte[ptei].spte_count;
 			for (ptes = 1, ptei++; ptei < pten; ptes++, ptei++) {
-				bool next = pgt->pte[ptei] & NVKM_VMM_PTE_SPTES;
+				bool next = !!pgt->pte[ptei].spte_count;
 				if (spte != next)
 					break;
 			}
@@ -457,11 +479,11 @@ nvkm_vmm_ref_hwpt(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgd, u32 pdei)
 					desc->func->sparse(vmm, pt, pteb, ptes);
 				else
 					desc->func->invalid(vmm, pt, pteb, ptes);
-				memset(&pgt->pte[pteb], 0x00, ptes);
+				memset32((u32 *)&pgt->pte[pteb], 0x00, ptes);
 			} else {
 				desc->func->unmap(vmm, pt, pteb, ptes);
 				while (ptes--)
-					pgt->pte[pteb++] |= NVKM_VMM_PTE_VALID;
+					pgt->pte[pteb++].spte_valid = true;
 			}
 		}
 	} else {
