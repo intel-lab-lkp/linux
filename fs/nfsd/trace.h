@@ -2240,6 +2240,31 @@ TRACE_EVENT(nfsd_end_grace,
 	)
 );
 
+TRACE_EVENT(nfsd_ctl_fh_key_set,
+	TP_PROTO(
+		const char *key,
+		int result
+	),
+	TP_ARGS(key, result),
+	TP_STRUCT__entry(
+		__array(unsigned char, key, 16)
+		__field(unsigned long, result)
+		__field(bool, key_set)
+	),
+	TP_fast_assign(
+		__entry->key_set = true;
+		if (!key)
+			__entry->key_set = false;
+		else
+			memcpy(__entry->key, key, 16);
+		__entry->result = result;
+	),
+	TP_printk("key=%s result=%ld",
+		__entry->key_set ? __print_hex_str(__entry->key, 16) : "(null)",
+		__entry->result
+	)
+);
+
 DECLARE_EVENT_CLASS(nfsd_copy_class,
 	TP_PROTO(
 		const struct nfsd4_copy *copy
