@@ -5,6 +5,7 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_exec.h>
+#include <drm/drm_file.h>
 #include <drm/drm_gpuvm.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
@@ -1083,8 +1084,7 @@ static void panthor_vm_bo_free(struct drm_gpuvm_bo *vm_bo)
 {
 	struct panthor_gem_object *bo = to_panthor_bo(vm_bo->obj);
 
-	if (!drm_gem_is_imported(&bo->base.base))
-		drm_gem_shmem_unpin(&bo->base);
+	panthor_gem_unpin(bo);
 	kfree(vm_bo);
 }
 
@@ -1206,7 +1206,7 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 		return -EINVAL;
 
 	/* Make sure the VA and size are in-bounds. */
-	if (size > bo->base.base.size || offset > bo->base.base.size - size)
+	if (size > bo->base.size || offset > bo->base.size - size)
 		return -EINVAL;
 
 	/* If the BO has an exclusive VM attached, it can't be mapped to other VMs. */
@@ -1223,33 +1223,25 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 	if (ret)
 		goto err_cleanup;
 
-	if (!drm_gem_is_imported(&bo->base.base)) {
-		/* Pre-reserve the BO pages, so the map operation doesn't have to
-		 * allocate. This pin is dropped in panthor_vm_bo_free(), so
-		 * once we have successfully called drm_gpuvm_bo_create(),
-		 * GPUVM will take care of dropping the pin for us.
-		 */
-		ret = drm_gem_shmem_pin(&bo->base);
-		if (ret)
-			goto err_cleanup;
-	}
+	/* Pre-reserve the BO pages, so the map operation doesn't have to
+	 * allocate.
+	 */
+	ret = panthor_gem_pin(bo);
+	if (ret)
+		goto err_cleanup;
 
-	sgt = drm_gem_shmem_get_pages_sgt(&bo->base);
+	sgt = panthor_gem_get_dev_sgt(bo);
 	if (IS_ERR(sgt)) {
-		if (!drm_gem_is_imported(&bo->base.base))
-			drm_gem_shmem_unpin(&bo->base);
-
+		panthor_gem_unpin(bo);
 		ret = PTR_ERR(sgt);
 		goto err_cleanup;
 	}
 
 	op_ctx->map.sgt = sgt;
 
-	preallocated_vm_bo = drm_gpuvm_bo_create(&vm->base, &bo->base.base);
+	preallocated_vm_bo = drm_gpuvm_bo_create(&vm->base, &bo->base);
 	if (!preallocated_vm_bo) {
-		if (!drm_gem_is_imported(&bo->base.base))
-			drm_gem_shmem_unpin(&bo->base);
-
+		panthor_gem_unpin(bo);
 		ret = -ENOMEM;
 		goto err_cleanup;
 	}
@@ -1261,9 +1253,9 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 	 * calling this function.
 	 */
 	dma_resv_lock(panthor_vm_resv(vm), NULL);
-	mutex_lock(&bo->base.base.gpuva.lock);
+	mutex_lock(&bo->base.gpuva.lock);
 	op_ctx->map.vm_bo = drm_gpuvm_bo_obtain_prealloc(preallocated_vm_bo);
-	mutex_unlock(&bo->base.base.gpuva.lock);
+	mutex_unlock(&bo->base.gpuva.lock);
 	dma_resv_unlock(panthor_vm_resv(vm));
 
 	op_ctx->map.bo_offset = offset;
@@ -2064,9 +2056,9 @@ static void panthor_vma_link(struct panthor_vm *vm,
 {
 	struct panthor_gem_object *bo = to_panthor_bo(vma->base.gem.obj);
 
-	mutex_lock(&bo->base.base.gpuva.lock);
+	mutex_lock(&bo->base.gpuva.lock);
 	drm_gpuva_link(&vma->base, vm_bo);
-	mutex_unlock(&bo->base.base.gpuva.lock);
+	mutex_unlock(&bo->base.gpuva.lock);
 }
 
 static void panthor_vma_unlink(struct panthor_vma *vma)
@@ -2118,11 +2110,12 @@ static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 static bool
 iova_mapped_as_huge_page(struct drm_gpuva_op_map *op, u64 addr)
 {
+	struct panthor_gem_object *bo = to_panthor_bo(op->gem.obj);
 	const struct page *pg;
 	pgoff_t bo_offset;
 
 	bo_offset = addr - op->va.addr + op->gem.offset;
-	pg = to_panthor_bo(op->gem.obj)->base.pages[bo_offset >> PAGE_SHIFT];
+	pg = bo->backing.pages[bo_offset >> PAGE_SHIFT];
 
 	return folio_size(page_folio(pg)) >= SZ_2M;
 }
@@ -2191,7 +2184,7 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 		u64 size = op->remap.prev->va.addr + op->remap.prev->va.range - unmap_start;
 
 		ret = panthor_vm_map_pages(vm, unmap_start, flags_to_prot(unmap_vma->flags),
-					   bo->base.sgt, offset, size);
+					   bo->dmap.sgt, offset, size);
 		if (ret)
 			return ret;
 
@@ -2205,7 +2198,7 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 		u64 size = unmap_start + unmap_range - op->remap.next->va.addr;
 
 		ret = panthor_vm_map_pages(vm, addr, flags_to_prot(unmap_vma->flags),
-					   bo->base.sgt, op->remap.next->gem.offset, size);
+					   bo->dmap.sgt, op->remap.next->gem.offset, size);
 		if (ret)
 			return ret;
 
