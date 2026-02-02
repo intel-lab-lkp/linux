@@ -1,0 +1,47 @@
+What:		/sys/kernel/hwerr_recovery_stats/
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Breno Leitao <leitao@debian.org>
+Description:
+		Directory containing hardware error recovery statistics.
+		These statistics track recoverable hardware errors that the
+		kernel has handled since boot.
+
+		Each file contains a single integer representing the count
+		of recovered errors for that subsystem.
+
+What:		/sys/kernel/hwerr_recovery_stats/cpu
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Breno Leitao <leitao@debian.org>
+Description:
+		Count of CPU-related recovered errors (MCE, ARM processor
+		errors).
+
+What:		/sys/kernel/hwerr_recovery_stats/memory
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Breno Leitao <leitao@debian.org>
+Description:
+		Count of memory-related recovered errors.
+
+What:		/sys/kernel/hwerr_recovery_stats/pci
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Breno Leitao <leitao@debian.org>
+Description:
+		Count of PCI/PCIe AER non-fatal recovered errors.
+
+What:		/sys/kernel/hwerr_recovery_stats/cxl
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Breno Leitao <leitao@debian.org>
+Description:
+		Count of CXL (Compute Express Link) recovered errors.
+
+What:		/sys/kernel/hwerr_recovery_stats/others
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Breno Leitao <leitao@debian.org>
+Description:
+		Count of other hardware recovered errors.

@@ -36,7 +36,8 @@ Data Exposure and Consumption
   types like CPU, memory, PCI, CXL, and others.
 - It is exposed via vmcoreinfo crash dump notes and can be read using tools
   like `crash`, `drgn`, or other kernel crash analysis utilities.
-- There is no other way to read these data other than from crash dumps.
+- It is also exposed via sysfs at ``/sys/kernel/hwerr_recovery_stats/`` for runtime
+  monitoring without requiring a crash dump.
 - These errors are divided by area, which includes CPU, Memory, PCI, CXL and
   others.
 
