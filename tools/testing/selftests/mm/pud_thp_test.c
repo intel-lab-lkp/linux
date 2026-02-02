@@ -256,4 +256,30 @@ TEST_F(pud_thp, partial_munmap)
 	       self->split_before, split_after);
 }
 
+/*
+ * Test: mprotect triggers split
+ * Verifies that changing protection on part of a PUD THP splits it
+ */
+TEST_F(pud_thp, mprotect_split)
+{
+	volatile unsigned char *p = (unsigned char *)self->aligned;
+	unsigned long split_after;
+	int ret;
+
+	/* Touch memory to allocate PUD THP */
+	memset(self->aligned, 0xEE, PUD_SIZE);
+
+	/* Change protection on a 2MB region - should trigger PUD split */
+	ret = mprotect((char *)self->aligned + PMD_SIZE, PMD_SIZE, PROT_READ);
+	ASSERT_EQ(ret, 0);
+
+	split_after = read_vmstat("thp_split_pud");
+
+	/* Verify memory still readable */
+	ASSERT_EQ(*p, 0xEE);
+
+	TH_LOG("mprotect split completed (thp_split_pud: %lu -> %lu)",
+	       self->split_before, split_after);
+}
+
 TEST_HARNESS_MAIN
