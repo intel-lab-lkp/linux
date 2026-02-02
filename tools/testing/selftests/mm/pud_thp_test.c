@@ -225,4 +225,35 @@ TEST_F(pud_thp, fork_cow)
 	       self->split_before, split_after);
 }
 
+/*
+ * Test: Partial munmap triggers split
+ * Verifies that unmapping part of a PUD THP splits it correctly
+ */
+TEST_F(pud_thp, partial_munmap)
+{
+	unsigned long *ptr = (unsigned long *)self->aligned;
+	unsigned long *after_hole;
+	unsigned long split_after;
+	int ret;
+
+	/* Touch memory to allocate PUD THP */
+	memset(self->aligned, 0xDD, PUD_SIZE);
+
+	/* Unmap a 2MB region in the middle - should trigger PUD split */
+	ret = munmap((char *)self->aligned + PUD_SIZE / 2, PMD_SIZE);
+	ASSERT_EQ(ret, 0);
+
+	split_after = read_vmstat("thp_split_pud");
+
+	/* Verify memory before the hole is still accessible and correct */
+	ASSERT_EQ(ptr[0], 0xDDDDDDDDDDDDDDDDUL);
+
+	/* Verify memory after the hole is still accessible and correct */
+	after_hole = (unsigned long *)((char *)self->aligned + PUD_SIZE / 2 + PMD_SIZE);
+	ASSERT_EQ(*after_hole, 0xDDDDDDDDDDDDDDDDUL);
+
+	TH_LOG("Partial munmap completed (thp_split_pud: %lu -> %lu)",
+	       self->split_before, split_after);
+}
+
 TEST_HARNESS_MAIN
