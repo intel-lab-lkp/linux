@@ -181,4 +181,48 @@ TEST_F(pud_thp, read_write_access)
 	ASSERT_EQ(errors, 0);
 }
 
+/*
+ * Test: Fork and copy-on-write
+ * Verifies that COW correctly splits the PUD THP and isolates parent/child
+ */
+TEST_F(pud_thp, fork_cow)
+{
+	unsigned long *ptr = (unsigned long *)self->aligned;
+	unsigned char *bytes = (unsigned char *)self->aligned;
+	pid_t pid;
+	int status;
+	unsigned long split_after;
+
+	/* Initialize memory with known pattern */
+	memset(self->aligned, 0xCC, PUD_SIZE);
+
+	pid = fork();
+	ASSERT_GE(pid, 0);
+
+	if (pid == 0) {
+		/* Child: write to trigger COW */
+		ptr[0] = 0x12345678UL;
+
+		/* Verify write succeeded and rest of memory unchanged */
+		if (ptr[0] != 0x12345678UL)
+			_exit(1);
+		if (bytes[PAGE_SIZE] != 0xCC)
+			_exit(2);
+
+		_exit(0);
+	}
+
+	/* Parent: wait for child */
+	waitpid(pid, &status, 0);
+	ASSERT_TRUE(WIFEXITED(status));
+	ASSERT_EQ(WEXITSTATUS(status), 0);
+
+	/* Verify parent memory unchanged (COW should have given child a copy) */
+	ASSERT_EQ(bytes[0], 0xCC);
+
+	split_after = read_vmstat("thp_split_pud");
+	TH_LOG("Fork COW completed (thp_split_pud: %lu -> %lu)",
+	       self->split_before, split_after);
+}
+
 TEST_HARNESS_MAIN
