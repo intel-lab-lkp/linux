@@ -645,6 +645,8 @@ mt76_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
 		.skb = skb,
 	};
 	struct mt76_dev *dev = phy->dev;
+	struct ieee80211_tx_info *info;
+	struct ieee80211_hdr *hdr;
 	struct ieee80211_hw *hw;
 	int len, n = 0, ret = -ENOMEM;
 	struct mt76_txwi_cache *t;
@@ -733,9 +735,16 @@ free:
 free_skb:
 	status.skb = tx_info.skb;
 	hw = mt76_tx_status_get_hw(dev, tx_info.skb);
-	spin_lock_bh(&dev->rx_lock);
-	ieee80211_tx_status_ext(hw, &status);
-	spin_unlock_bh(&dev->rx_lock);
+	hdr = (struct ieee80211_hdr *)tx_info.skb->data;
+	info = IEEE80211_SKB_CB(tx_info.skb);
+	if ((info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) ||
+	    ieee80211_is_data(hdr->frame_control)) {
+		spin_lock_bh(&dev->rx_lock);
+		ieee80211_tx_status_ext(hw, &status);
+		spin_unlock_bh(&dev->rx_lock);
+	} else {
+		ieee80211_free_txskb(hw, tx_info.skb);
+	}
 
 	return ret;
 }
