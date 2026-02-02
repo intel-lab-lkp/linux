@@ -2045,11 +2045,14 @@ Kernel parameters
 
 	hpet=		[X86-32,HPET] option to control HPET usage
 			Format: { enable (default) | disable | force |
-				verbose }
+				verbose | watchdog }
 			disable: disable HPET and use PIT instead
 			force: allow force enabled of undocumented chips (ICH4,
 				VIA, nVidia)
 			verbose: show contents of HPET registers during setup
+			watchdog: use HPET timer as NMI watchdog source instead
+				of performance counters. Use nmi_watchdog=1 to enable
+				or nmi_watchdog=panic to panic on hard lockup detection.
 
 	hpet_mmap=	[X86, HPET_MMAP] Allow userspace to mmap HPET
 			registers.  Default set by CONFIG_HPET_MMAP_DEFAULT.

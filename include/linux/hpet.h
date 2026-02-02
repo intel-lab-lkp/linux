@@ -108,4 +108,18 @@ static inline void hpet_reserve_timer(struct hpet_data *hd, int timer)
 
 int hpet_alloc(struct hpet_data *);
 
+#ifdef CONFIG_HARDLOCKUP_DETECTOR_HPET
+extern bool hpet_watchdog_initialized;
+
+static inline bool hpet_is_watchdog(void)
+{
+	return hpet_watchdog_initialized;
+}
+#else
+static inline bool hpet_is_watchdog(void)
+{
+	return false;
+}
+#endif
+
 #endif				/* !__HPET__ */

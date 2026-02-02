@@ -948,6 +948,25 @@ config HPET_EMULATE_RTC
 	def_bool y
 	depends on HPET_TIMER && (RTC_DRV_CMOS=m || RTC_DRV_CMOS=y)
 
+config HARDLOCKUP_DETECTOR_HPET
+	bool "Use HPET for NMI watchdog"
+	depends on HPET_TIMER
+	select HAVE_HARDLOCKUP_DETECTOR_ARCH
+	select HARDLOCKUP_DETECTOR_COUNTS_HRTIMER
+	help
+	  Use HPET timer as NMI source instead of performance counters.
+	  This frees up a performance counter for profiling.
+	  Enable with hpet=watchdog kernel parameter.
+
+config HARDLOCKUP_DETECTOR_HPET_DEFAULT
+	bool "Enable HPET watchdog by default"
+	depends on HARDLOCKUP_DETECTOR_HPET
+	help
+	  Say Y here to enable HPET-based NMI watchdog by default without
+	  requiring the hpet=watchdog kernel parameter.
+
+	  If unsure, say N.
+
 # Mark as expert because too many people got it wrong.
 # The code disables itself when not needed.
 config DMI

@@ -6,9 +6,12 @@
 #include <linux/hpet.h>
 #include <linux/cpu.h>
 #include <linux/irq.h>
+#include <linux/nmi.h>
+#include <linux/syscore_ops.h>
 
 #include <asm/cpuid/api.h>
 #include <asm/irq_remapping.h>
+#include <asm/io_apic.h>
 #include <asm/hpet.h>
 #include <asm/time.h>
 #include <asm/mwait.h>
@@ -100,6 +103,8 @@ static inline void hpet_clear_mapping(void)
 /*
  * HPET command line enable / disable
  */
+static bool hpet_watchdog_mode = IS_ENABLED(CONFIG_HARDLOCKUP_DETECTOR_HPET_DEFAULT);
+
 static int __init hpet_setup(char *str)
 {
 	while (str) {
@@ -113,6 +118,8 @@ static int __init hpet_setup(char *str)
 			hpet_force_user = true;
 		if (!strncmp("verbose", str, 7))
 			hpet_verbose = true;
+		if (!strncmp("watchdog", str, 8))
+			hpet_watchdog_mode = true;
 		str = next;
 	}
 	return 1;
@@ -985,6 +992,200 @@ static bool __init hpet_is_pc10_damaged(void)
 	return true;
 }
 
+#ifdef CONFIG_HARDLOCKUP_DETECTOR_HPET
+/*
+ * HPET watchdog uses timer 0 routed to GSI 2 (legacy PIT IRQ line).
+ * When using HPET as watchdog, we repurpose this line for NMI delivery.
+ */
+#define HPET_WD_TIMER	0
+#define HPET_WD_GSI	2
+
+bool hpet_watchdog_initialized;
+static bool hpet_watchdog_ioapic_configured;
+static DEFINE_PER_CPU(u32, hpet_watchdog_next_tick);
+
+static int hpet_nmi_handler(unsigned int cmd, struct pt_regs *regs)
+{
+	u32 now, next, delta;
+
+	if (panic_in_progress())
+		return NMI_HANDLED;
+
+	/* Check if this NMI is from our HPET timer by comparing counter value */
+	now = hpet_readl(HPET_COUNTER);
+	next = __this_cpu_read(hpet_watchdog_next_tick);
+	delta = hpet_freq * watchdog_thresh;
+
+	/*
+	 * If we have a next tick set and counter hasn't reached it yet,
+	 * this NMI is not from our timer. Allow some tolerance for timing.
+	 */
+	if (next && (s32)(now - next) < -(s32)(delta / 4))
+		return NMI_DONE;
+
+	/* Update next expected tick */
+	__this_cpu_write(hpet_watchdog_next_tick, now + delta);
+
+	watchdog_hardlockup_check(smp_processor_id(), regs);
+
+	return NMI_HANDLED;
+}
+
+/*
+ * On suspend, clear the configured flag so that the first CPU to come
+ * online after resume will reconfigure the HPET timer and IO-APIC.
+ *
+ * We don't need to explicitly disable the watchdog here because:
+ * 1. The HPET registers are reset by the hibernation/suspend process anyway
+ * 2. The IO-APIC state is saved/restored by ioapic_syscore_ops, but we
+ *    need to reconfigure it for NMI delivery after resume
+ * 3. Secondary CPUs are offlined before suspend, so we can't broadcast
+ *    NMIs until they're back online - the enable callback handles this
+ */
+static int hpet_watchdog_suspend(void *data)
+{
+	hpet_watchdog_ioapic_configured = false;
+	return 0;
+}
+
+static const struct syscore_ops hpet_watchdog_syscore_ops = {
+	.suspend = hpet_watchdog_suspend,
+};
+
+static struct syscore hpet_watchdog_syscore = {
+	.ops = &hpet_watchdog_syscore_ops,
+};
+
+static int __init hpet_watchdog_init(u32 channels)
+{
+	u32 cfg, i, route_cap;
+
+	if (channels <= HPET_WD_TIMER)
+		return 0;
+
+	/* Verify GSI 2 is available in the route capability bitmap */
+	route_cap = hpet_readl(HPET_Tn_CFG(HPET_WD_TIMER) + 4);
+	if (!(route_cap & (1 << HPET_WD_GSI))) {
+		pr_info("HPET timer 0 cannot route to GSI %d\n", HPET_WD_GSI);
+		return 0;
+	}
+
+	/* Deactivate all timers */
+	for (i = 0; i < channels; i++) {
+		cfg = hpet_readl(HPET_Tn_CFG(i));
+		cfg &= ~(HPET_TN_ENABLE | HPET_TN_LEVEL | HPET_TN_FSB);
+		hpet_writel(cfg, HPET_Tn_CFG(i));
+	}
+
+	/* Configure HPET timer for periodic mode */
+	cfg = hpet_readl(HPET_Tn_CFG(HPET_WD_TIMER));
+	cfg &= ~(HPET_TN_ENABLE | HPET_TN_FSB);
+	cfg |= HPET_TN_PERIODIC | HPET_TN_32BIT | HPET_TN_SETVAL | HPET_TN_LEVEL;
+	hpet_writel(cfg, HPET_Tn_CFG(HPET_WD_TIMER));
+
+	/* Route HPET timer to the GSI */
+	cfg = hpet_readl(HPET_Tn_CFG(HPET_WD_TIMER));
+	cfg &= ~(Tn_INT_ROUTE_CNF_MASK | HPET_CFG_ENABLE);
+	cfg |= (HPET_WD_GSI << Tn_INT_ROUTE_CNF_SHIFT) & Tn_INT_ROUTE_CNF_MASK;
+	hpet_writel(cfg, HPET_Tn_CFG(HPET_WD_TIMER));
+
+	if (register_nmi_handler(NMI_LOCAL, hpet_nmi_handler, 0, "hpet_watchdog")) {
+		pr_err("Failed to register NMI_LOCAL handler\n");
+		return 0;
+	}
+	if (register_nmi_handler(NMI_UNKNOWN, hpet_nmi_handler, 0, "hpet_watchdog")) {
+		unregister_nmi_handler(NMI_LOCAL, "hpet_watchdog");
+		pr_err("Failed to register NMI_UNKNOWN handler\n");
+		return 0;
+	}
+
+	hpet_start_counter();
+
+	hpet_watchdog_initialized = true;
+
+	register_syscore(&hpet_watchdog_syscore);
+
+	pr_info("HPET watchdog initialized on timer %d, GSI %d", HPET_WD_TIMER, HPET_WD_GSI);
+
+	return 0;
+}
+
+void watchdog_hardlockup_stop(void)
+{
+	u32 cfg;
+
+	if (!hpet_watchdog_initialized)
+		return;
+
+	cfg = hpet_readl(HPET_Tn_CFG(HPET_WD_TIMER));
+	cfg &= ~HPET_TN_ENABLE;
+	hpet_writel(cfg, HPET_Tn_CFG(HPET_WD_TIMER));
+}
+
+void watchdog_hardlockup_start(void)
+{
+	u32 cfg, delta;
+
+	if (!hpet_watchdog_initialized)
+		return;
+
+	if (!hpet_watchdog_ioapic_configured) {
+		if (ioapic_set_nmi(HPET_WD_GSI, false)) {
+			pr_err("Unable to configure IO-APIC for NMI\n");
+			return;
+		}
+		hpet_watchdog_ioapic_configured = true;
+	}
+
+	delta = hpet_freq * watchdog_thresh;
+
+	cfg = hpet_readl(HPET_Tn_CFG(HPET_WD_TIMER));
+	cfg &= ~(HPET_TN_ENABLE | HPET_TN_FSB | HPET_TN_LEVEL);
+	cfg |= HPET_TN_PERIODIC | HPET_TN_32BIT | HPET_TN_SETVAL;
+	hpet_writel(cfg, HPET_Tn_CFG(HPET_WD_TIMER));
+
+	/* Write twice for AMD 81xx with buggy HPET */
+	hpet_writel(delta, HPET_Tn_CMP(HPET_WD_TIMER));
+	hpet_writel(delta, HPET_Tn_CMP(HPET_WD_TIMER));
+
+	cfg |= HPET_TN_ENABLE;
+	hpet_writel(cfg, HPET_Tn_CFG(HPET_WD_TIMER));
+}
+
+void watchdog_hardlockup_enable(unsigned int cpu)
+{
+	if (!hpet_watchdog_ioapic_configured) {
+		/*
+		 * First CPU online after resume - reconfigure HPET timer.
+		 * This also sets hpet_watchdog_ioapic_configured = true.
+		 */
+		watchdog_hardlockup_start();
+	}
+
+	if (num_online_cpus() == num_present_cpus()) {
+		ioapic_set_nmi(HPET_WD_GSI, true);
+		pr_info("switched to broadcast mode (all %d CPUs online)\n",
+			num_online_cpus());
+	}
+}
+
+void watchdog_hardlockup_disable(unsigned int cpu)
+{
+	if (num_online_cpus() < num_present_cpus()) {
+		ioapic_set_nmi(HPET_WD_GSI, false);
+		pr_info("switched to CPU 0 only (%d CPUs online)\n",
+			num_online_cpus() - 1);
+	}
+}
+
+int __init watchdog_hardlockup_probe(void)
+{
+	return hpet_watchdog_mode ? 0 : -ENODEV;
+}
+#else
+static inline int hpet_watchdog_init(u32 channels) { return 0; }
+#endif /* CONFIG_HARDLOCKUP_DETECTOR_HPET */
+
 /**
  * hpet_enable - Try to setup the HPET timer. Returns 1 on success.
  */
@@ -1030,6 +1231,10 @@ int __init hpet_enable(void)
 
 	/* This is the HPET channel number which is zero based */
 	channels = ((id & HPET_ID_NUMBER) >> HPET_ID_NUMBER_SHIFT) + 1;
+
+	/* If watchdog mode, hand off to watchdog driver */
+	if (hpet_watchdog_mode)
+		return hpet_watchdog_init(channels);
 
 	/*
 	 * The legacy routing mode needs at least two channels, tick timer
@@ -1121,6 +1326,9 @@ out_nohpet:
 static __init int hpet_late_init(void)
 {
 	int ret;
+
+	if (hpet_is_watchdog())
+		return -ENODEV;
 
 	if (!hpet_address) {
 		if (!force_hpet_address)

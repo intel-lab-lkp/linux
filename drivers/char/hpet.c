@@ -977,6 +977,9 @@ static int hpet_acpi_add(struct acpi_device *device)
 	acpi_status result;
 	struct hpet_data data;
 
+	if (hpet_is_watchdog())
+		return -ENODEV;
+
 	memset(&data, 0, sizeof(data));
 
 	result =

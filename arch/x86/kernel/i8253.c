@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/timex.h>
 #include <linux/i8253.h>
+#include <linux/hpet.h>
 
 #include <asm/hypervisor.h>
 #include <asm/apic.h>
@@ -31,6 +32,14 @@ struct clock_event_device *global_clock_event;
  */
 static bool __init use_pit(void)
 {
+	if (hpet_is_watchdog()) {
+		/*
+		 * The PIT overlaps the HPET IRQ line which we configure to
+		 * NMI in watchdog mode, rendering the PIT non functional.
+		 */
+		return false;
+	}
+
 	if (!IS_ENABLED(CONFIG_X86_TSC) || !boot_cpu_has(X86_FEATURE_TSC))
 		return true;
 
