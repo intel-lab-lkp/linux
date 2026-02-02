@@ -28,6 +28,10 @@
 
 #define TEST_REGION_SIZE	(2 * PUD_SIZE)	/* 2GB to ensure PUD alignment */
 
+#ifndef MADV_PAGEOUT
+#define MADV_PAGEOUT	21
+#endif
+
 /* Get PUD-aligned address within a region */
 static inline void *pud_align(void *addr)
 {
@@ -279,6 +283,35 @@ TEST_F(pud_thp, mprotect_split)
 	ASSERT_EQ(*p, 0xEE);
 
 	TH_LOG("mprotect split completed (thp_split_pud: %lu -> %lu)",
+	       self->split_before, split_after);
+}
+
+/*
+ * Test: Reclaim via MADV_PAGEOUT
+ * Verifies that reclaim path correctly handles PUD THPs
+ */
+TEST_F(pud_thp, reclaim_pageout)
+{
+	volatile unsigned char *p;
+	unsigned long split_after;
+	int ret;
+
+	/* Touch memory to allocate PUD THP */
+	memset(self->aligned, 0xAA, PUD_SIZE);
+
+	/* Try to reclaim the pages */
+	ret = madvise(self->aligned, PUD_SIZE, MADV_PAGEOUT);
+	if (ret < 0 && errno == EINVAL)
+		SKIP(return, "MADV_PAGEOUT not supported");
+	ASSERT_EQ(ret, 0);
+
+	split_after = read_vmstat("thp_split_pud");
+
+	/* Touch memory again to verify it's still accessible */
+	p = (unsigned char *)self->aligned;
+	(void)*p;  /* Read to bring pages back if swapped */
+
+	TH_LOG("Reclaim completed (thp_split_pud: %lu -> %lu)",
 	       self->split_before, split_after);
 }
 
