@@ -2951,6 +2951,38 @@ int mp_irqdomain_ioapic_idx(struct irq_domain *domain)
 	return (int)(long)domain->host_data;
 }
 
+/**
+ * ioapic_set_nmi - Configure an IOAPIC pin for NMI delivery
+ * @gsi: Global System Interrupt number
+ * @broadcast: true to broadcast to all CPUs, false to send to CPU 0 only
+ *
+ * Configures the specified GSI for NMI delivery mode.
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+int ioapic_set_nmi(u32 gsi, bool broadcast)
+{
+	struct IO_APIC_route_entry entry = { };
+	int ioapic_idx, pin;
+
+	ioapic_idx = mp_find_ioapic(gsi);
+	if (ioapic_idx < 0)
+		return -ENODEV;
+
+	pin = mp_find_ioapic_pin(ioapic_idx, gsi);
+	if (pin < 0)
+		return -ENODEV;
+
+	entry.delivery_mode = APIC_DELIVERY_MODE_NMI;
+	entry.destid_0_7 = broadcast ? 0xFF : boot_cpu_physical_apicid;
+	entry.dest_mode_logical = 0;
+	entry.masked = 0;
+
+	ioapic_write_entry(ioapic_idx, pin, entry);
+
+	return 0;
+}
+
 const struct irq_domain_ops mp_ioapic_irqdomain_ops = {
 	.alloc		= mp_irqdomain_alloc,
 	.free		= mp_irqdomain_free,
