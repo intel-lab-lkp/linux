@@ -1294,6 +1294,70 @@ static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 	return folio;
 }
 
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+static struct folio *vma_alloc_anon_folio_pud(struct vm_area_struct *vma,
+		unsigned long addr)
+{
+	gfp_t gfp = vma_thp_gfp_mask(vma);
+	const int order = HPAGE_PUD_ORDER;
+	struct folio *folio = NULL;
+	/*
+	 * Contiguous allocation via alloc_contig_range() migrates existing
+	 * pages out of the target range. __GFP_NOMEMALLOC would allow using
+	 * memory reserves for migration destination pages, but THP is an
+	 * optional performance optimization and should not deplete reserves
+	 * that may be needed for critical allocations. Remove it.
+	 * alloc_contig_range_noprof (__alloc_contig_verify_gfp_mask) will
+	 * cause this to fail without it.
+	 */
+	gfp_t contig_gfp = gfp & ~__GFP_NOMEMALLOC;
+
+	folio = folio_alloc_gigantic(order, contig_gfp, numa_node_id(), NULL);
+
+	if (unlikely(!folio)) {
+		count_vm_event(THP_FAULT_FALLBACK);
+		count_mthp_stat(order, MTHP_STAT_ANON_FAULT_FALLBACK);
+		return NULL;
+	}
+
+	VM_BUG_ON_FOLIO(!folio_test_large(folio), folio);
+	if (mem_cgroup_charge(folio, vma->vm_mm, gfp)) {
+		folio_put(folio);
+		count_vm_event(THP_FAULT_FALLBACK);
+		count_vm_event(THP_FAULT_FALLBACK_CHARGE);
+		count_mthp_stat(order, MTHP_STAT_ANON_FAULT_FALLBACK);
+		count_mthp_stat(order, MTHP_STAT_ANON_FAULT_FALLBACK_CHARGE);
+		return NULL;
+	}
+	folio_throttle_swaprate(folio, gfp);
+
+	/*
+	 * When a folio is not zeroed during allocation (__GFP_ZERO not used)
+	 * or user folios require special handling, folio_zero_user() is used to
+	 * make sure that the page corresponding to the faulting address will be
+	 * hot in the cache after zeroing.
+	 */
+	if (user_alloc_needs_zeroing())
+		folio_zero_user(folio, addr);
+	/*
+	 * The memory barrier inside __folio_mark_uptodate makes sure that
+	 * folio_zero_user writes become visible before the set_pud_at()
+	 * write.
+	 */
+	__folio_mark_uptodate(folio);
+
+	/*
+	 * Set the large_rmappable flag so that the folio can be properly
+	 * removed from the deferred_split list when freed.
+	 * folio_alloc_gigantic() doesn't set this flag (unlike __folio_alloc),
+	 * so we must set it explicitly.
+	 */
+	folio_set_large_rmappable(folio);
+
+	return folio;
+}
+#endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
+
 void map_anon_folio_pmd_nopf(struct folio *folio, pmd_t *pmd,
 		struct vm_area_struct *vma, unsigned long haddr)
 {
@@ -1317,6 +1381,40 @@ static void map_anon_folio_pmd_pf(struct folio *folio, pmd_t *pmd,
 	count_mthp_stat(HPAGE_PMD_ORDER, MTHP_STAT_ANON_FAULT_ALLOC);
 	count_memcg_event_mm(vma->vm_mm, THP_FAULT_ALLOC);
 }
+
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+static pud_t maybe_pud_mkwrite(pud_t pud, struct vm_area_struct *vma)
+{
+	if (likely(vma->vm_flags & VM_WRITE))
+		pud = pud_mkwrite(pud);
+	return pud;
+}
+
+static void map_anon_folio_pud_nopf(struct folio *folio, pud_t *pud,
+		struct vm_area_struct *vma, unsigned long haddr)
+{
+	pud_t entry;
+
+	entry = folio_mk_pud(folio, vma->vm_page_prot);
+	entry = maybe_pud_mkwrite(pud_mkdirty(entry), vma);
+	folio_add_new_anon_rmap(folio, vma, haddr, RMAP_EXCLUSIVE);
+	folio_add_lru_vma(folio, vma);
+	set_pud_at(vma->vm_mm, haddr, pud, entry);
+	update_mmu_cache_pud(vma, haddr, pud);
+	deferred_split_folio(folio, false);
+}
+
+
+static void map_anon_folio_pud_pf(struct folio *folio, pud_t *pud,
+		struct vm_area_struct *vma, unsigned long haddr)
+{
+	map_anon_folio_pud_nopf(folio, pud, vma, haddr);
+	add_mm_counter(vma->vm_mm, MM_ANONPAGES, HPAGE_PUD_NR);
+	count_vm_event(THP_FAULT_ALLOC);
+	count_mthp_stat(HPAGE_PUD_ORDER, MTHP_STAT_ANON_FAULT_ALLOC);
+	count_memcg_event_mm(vma->vm_mm, THP_FAULT_ALLOC);
+}
+#endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
 
 static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 {
@@ -1513,6 +1611,161 @@ vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 	return __do_huge_pmd_anonymous_page(vmf);
 }
 
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+/* Number of PTE tables needed for PUD THP split: 512 */
+#define NR_PTE_TABLES_FOR_PUD (HPAGE_PUD_NR / HPAGE_PMD_NR)
+
+/*
+ * Allocate page tables for PUD THP pre-deposit.
+ */
+static bool alloc_pud_predeposit_ptables(struct mm_struct *mm,
+					 unsigned long haddr,
+					 pmd_t **pmd_table_out,
+					 int *nr_pte_deposited)
+{
+	pmd_t *pmd_table;
+	pgtable_t pte_table;
+	struct ptdesc *pmd_ptdesc;
+	int i;
+
+	*pmd_table_out = NULL;
+	*nr_pte_deposited = 0;
+
+	pmd_table = pmd_alloc_one(mm, haddr);
+	if (!pmd_table)
+		return false;
+
+	/* Initialize the pmd_huge_pte field for PTE table storage */
+	pmd_ptdesc = virt_to_ptdesc(pmd_table);
+	pmd_ptdesc->pmd_huge_pte = NULL;
+
+	/* Allocate and deposit 512 PTE tables into the PMD table */
+	for (i = 0; i < NR_PTE_TABLES_FOR_PUD; i++) {
+		pte_table = pte_alloc_one(mm);
+		if (!pte_table)
+			goto fail;
+		pud_deposit_pte(pmd_table, pte_table);
+		(*nr_pte_deposited)++;
+	}
+
+	*pmd_table_out = pmd_table;
+	return true;
+
+fail:
+	/* Free any PTE tables we deposited */
+	while ((pte_table = pud_withdraw_pte(pmd_table)) != NULL)
+		pte_free(mm, pte_table);
+	pmd_free(mm, pmd_table);
+	return false;
+}
+
+/*
+ * Free pre-allocated page tables if the PUD THP fault fails.
+ */
+static void free_pud_predeposit_ptables(struct mm_struct *mm,
+					pmd_t *pmd_table)
+{
+	pgtable_t pte_table;
+
+	if (!pmd_table)
+		return;
+
+	while ((pte_table = pud_withdraw_pte(pmd_table)) != NULL)
+		pte_free(mm, pte_table);
+	pmd_free(mm, pmd_table);
+}
+
+vm_fault_t do_huge_pud_anonymous_page(struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	unsigned long haddr = vmf->address & HPAGE_PUD_MASK;
+	struct folio *folio;
+	pmd_t *pmd_table = NULL;
+	int nr_pte_deposited = 0;
+	vm_fault_t ret = 0;
+	int i;
+
+	/* Check VMA bounds and alignment */
+	if (!thp_vma_suitable_order(vma, haddr, PUD_ORDER))
+		return VM_FAULT_FALLBACK;
+
+	ret = vmf_anon_prepare(vmf);
+	if (ret)
+		return ret;
+
+	folio = vma_alloc_anon_folio_pud(vma, vmf->address);
+	if (unlikely(!folio))
+		return VM_FAULT_FALLBACK;
+
+	/*
+	 * Pre-allocate page tables for future PUD split.
+	 * We need 1 PMD table and 512 PTE tables.
+	 */
+	if (!alloc_pud_predeposit_ptables(vma->vm_mm, haddr,
+					  &pmd_table, &nr_pte_deposited)) {
+		folio_put(folio);
+		return VM_FAULT_FALLBACK;
+	}
+
+	vmf->ptl = pud_lock(vma->vm_mm, vmf->pud);
+	if (unlikely(!pud_none(*vmf->pud)))
+		goto release;
+
+	ret = check_stable_address_space(vma->vm_mm);
+	if (ret)
+		goto release;
+
+	/* Deliver the page fault to userland */
+	if (userfaultfd_missing(vma)) {
+		spin_unlock(vmf->ptl);
+		folio_put(folio);
+		free_pud_predeposit_ptables(vma->vm_mm, pmd_table);
+		ret = handle_userfault(vmf, VM_UFFD_MISSING);
+		VM_BUG_ON(ret & VM_FAULT_FALLBACK);
+		return ret;
+	}
+
+	/* Deposit page tables for future PUD split */
+	pgtable_trans_huge_pud_deposit(vma->vm_mm, vmf->pud, pmd_table);
+	map_anon_folio_pud_pf(folio, vmf->pud, vma, haddr);
+	mm_inc_nr_pmds(vma->vm_mm);
+	for (i = 0; i < nr_pte_deposited; i++)
+		mm_inc_nr_ptes(vma->vm_mm);
+	spin_unlock(vmf->ptl);
+
+	return 0;
+release:
+	spin_unlock(vmf->ptl);
+	folio_put(folio);
+	free_pud_predeposit_ptables(vma->vm_mm, pmd_table);
+	return ret;
+}
+#else
+vm_fault_t do_huge_pud_anonymous_page(struct vm_fault *vmf)
+{
+	return VM_FAULT_FALLBACK;
+}
+#endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
+
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+vm_fault_t do_huge_pud_wp_page(struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+
+	/*
+	 * For now, split PUD to PTE level on write fault.
+	 * This is the simplest approach for COW handling.
+	 */
+	__split_huge_pud(vma, vmf->pud, vmf->address);
+	return VM_FAULT_FALLBACK;
+}
+#else
+vm_fault_t do_huge_pud_wp_page(struct vm_fault *vmf)
+{
+	return VM_FAULT_FALLBACK;
+}
+#endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
+
 struct folio_or_pfn {
 	union {
 		struct folio *folio;
@@ -1646,13 +1899,6 @@ vm_fault_t vmf_insert_folio_pmd(struct vm_fault *vmf, struct folio *folio,
 EXPORT_SYMBOL_GPL(vmf_insert_folio_pmd);
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
-static pud_t maybe_pud_mkwrite(pud_t pud, struct vm_area_struct *vma)
-{
-	if (likely(vma->vm_flags & VM_WRITE))
-		pud = pud_mkwrite(pud);
-	return pud;
-}
-
 static vm_fault_t insert_pud(struct vm_area_struct *vma, unsigned long addr,
 		pud_t *pud, struct folio_or_pfn fop, pgprot_t prot, bool write)
 {

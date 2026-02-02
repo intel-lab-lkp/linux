@@ -6184,9 +6184,9 @@ static vm_fault_t create_huge_pud(struct vm_fault *vmf)
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) &&			\
 	defined(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD)
 	struct vm_area_struct *vma = vmf->vma;
-	/* No support for anonymous transparent PUD pages yet */
+
 	if (vma_is_anonymous(vma))
-		return VM_FAULT_FALLBACK;
+		return do_huge_pud_anonymous_page(vmf);
 	if (vma->vm_ops->huge_fault)
 		return vma->vm_ops->huge_fault(vmf, PUD_ORDER);
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
@@ -6200,9 +6200,8 @@ static vm_fault_t wp_huge_pud(struct vm_fault *vmf, pud_t orig_pud)
 	struct vm_area_struct *vma = vmf->vma;
 	vm_fault_t ret;
 
-	/* No support for anonymous transparent PUD pages yet */
 	if (vma_is_anonymous(vma))
-		goto split;
+		return do_huge_pud_wp_page(vmf);
 	if (vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) {
 		if (vma->vm_ops->huge_fault) {
 			ret = vma->vm_ops->huge_fault(vmf, PUD_ORDER);
@@ -6210,7 +6209,6 @@ static vm_fault_t wp_huge_pud(struct vm_fault *vmf, pud_t orig_pud)
 				return ret;
 		}
 	}
-split:
 	/* COW or write-notify not handled on PUD level: split pud.*/
 	__split_huge_pud(vma, vmf->pud, vmf->address);
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE && CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
