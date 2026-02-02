@@ -577,8 +577,10 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 		goto out_put_forget;
 
 	err = -EIO;
-	if (fuse_invalid_attr(&outarg->attr))
+	if (fuse_invalid_attr(&outarg->attr)) {
+		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
 		goto out_put_forget;
+	}
 	if (outarg->nodeid == FUSE_ROOT_ID && outarg->generation != 0) {
 		pr_warn_once("root generation should be zero\n");
 		outarg->generation = 0;
@@ -878,9 +880,13 @@ static int fuse_create_open(struct mnt_idmap *idmap, struct inode *dir,
 		goto out_free_ff;
 
 	err = -EIO;
-	if (!S_ISREG(outentry.attr.mode) || invalid_nodeid(outentry.nodeid) ||
-	    fuse_invalid_attr(&outentry.attr))
+	if (invalid_nodeid(outentry.nodeid))
 		goto out_free_ff;
+
+	if (!S_ISREG(outentry.attr.mode) || fuse_invalid_attr(&outentry.attr)) {
+		fuse_queue_forget(fm->fc, forget, outentry.nodeid, 1);
+		goto out_free_ff;
+	}
 
 	ff->fh = outopenp->fh;
 	ff->nodeid = outentry.nodeid;
@@ -1006,11 +1012,13 @@ static struct dentry *create_new_entry(struct mnt_idmap *idmap, struct fuse_moun
 		goto out_put_forget_req;
 
 	err = -EIO;
-	if (invalid_nodeid(outarg.nodeid) || fuse_invalid_attr(&outarg.attr))
+	if (invalid_nodeid(outarg.nodeid))
 		goto out_put_forget_req;
 
-	if ((outarg.attr.mode ^ mode) & S_IFMT)
+	if (fuse_invalid_attr(&outarg.attr) || ((outarg.attr.mode ^ mode) & S_IFMT)) {
+		fuse_queue_forget(fm->fc, forget, outarg.nodeid, 1);
 		goto out_put_forget_req;
+	}
 
 	inode = fuse_iget(dir->i_sb, outarg.nodeid, outarg.generation,
 			  &outarg.attr, ATTR_TIMEOUT(&outarg), 0, 0);
