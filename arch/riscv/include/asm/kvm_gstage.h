@@ -29,16 +29,22 @@ struct kvm_gstage_mapping {
 #define kvm_riscv_gstage_index_bits	10
 #endif
 
-extern unsigned long kvm_riscv_gstage_mode;
-extern unsigned long kvm_riscv_gstage_pgd_levels;
+extern unsigned long kvm_riscv_gstage_max_pgd_levels;
 
 #define kvm_riscv_gstage_pgd_xbits	2
 #define kvm_riscv_gstage_pgd_size	(1UL << (HGATP_PAGE_SHIFT + kvm_riscv_gstage_pgd_xbits))
-#define kvm_riscv_gstage_gpa_bits	(HGATP_PAGE_SHIFT + \
-					 (kvm_riscv_gstage_pgd_levels * \
-					  kvm_riscv_gstage_index_bits) + \
-					 kvm_riscv_gstage_pgd_xbits)
-#define kvm_riscv_gstage_gpa_size	((gpa_t)(1ULL << kvm_riscv_gstage_gpa_bits))
+
+static inline unsigned long kvm_riscv_gstage_gpa_bits(struct kvm_arch *ka)
+{
+	return (HGATP_PAGE_SHIFT +
+		ka->kvm_riscv_gstage_pgd_levels * kvm_riscv_gstage_index_bits +
+		kvm_riscv_gstage_pgd_xbits);
+}
+
+static inline gpa_t kvm_riscv_gstage_gpa_size(struct kvm_arch *ka)
+{
+	return BIT_ULL(kvm_riscv_gstage_gpa_bits(ka));
+}
 
 bool kvm_riscv_gstage_get_leaf(struct kvm_gstage *gstage, gpa_t addr,
 			       pte_t **ptepp, u32 *ptep_level);

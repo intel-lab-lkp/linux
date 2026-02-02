@@ -200,7 +200,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		r = KVM_USER_MEM_SLOTS;
 		break;
 	case KVM_CAP_VM_GPA_BITS:
-		r = kvm_riscv_gstage_gpa_bits;
+		r = kvm_riscv_gstage_gpa_bits(&kvm->arch);
 		break;
 	default:
 		r = 0;
