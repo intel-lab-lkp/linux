@@ -598,11 +598,12 @@ static unsigned long sum_mthp_stat(int order, enum mthp_stat_item item)
 {
 	unsigned long sum = 0;
 	int cpu;
+	int index = mthp_stat_order_to_index(order);
 
 	for_each_possible_cpu(cpu) {
 		struct mthp_stat *this = &per_cpu(mthp_stats, cpu);
 
-		sum += this->stats[order][item];
+		sum += this->stats[index][item];
 	}
 
 	return sum;

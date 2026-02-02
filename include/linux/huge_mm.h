@@ -76,7 +76,13 @@ extern struct kobj_attribute thpsize_shmem_enabled_attr;
  * and including PMD_ORDER, except order-0 (which is not "huge") and order-1
  * (which is a limitation of the THP implementation).
  */
-#define THP_ORDERS_ALL_ANON	((BIT(PMD_ORDER + 1) - 1) & ~(BIT(0) | BIT(1)))
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+#define THP_ORDERS_ALL_ANON_PUD		BIT(PUD_ORDER)
+#else
+#define THP_ORDERS_ALL_ANON_PUD		0
+#endif
+#define THP_ORDERS_ALL_ANON	(((BIT(PMD_ORDER + 1) - 1) & ~(BIT(0) | BIT(1))) | \
+				 THP_ORDERS_ALL_ANON_PUD)
 
 /*
  * Mask of all large folio orders supported for file THP. Folios in a DAX
@@ -146,18 +152,46 @@ enum mthp_stat_item {
 };
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && defined(CONFIG_SYSFS)
+
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+#define MTHP_STAT_COUNT		(PMD_ORDER + 2)
+#define MTHP_STAT_PUD_INDEX	(PMD_ORDER + 1)  /* PUD uses last index */
+#else
+#define MTHP_STAT_COUNT		(PMD_ORDER + 1)
+#endif
+
 struct mthp_stat {
-	unsigned long stats[ilog2(MAX_PTRS_PER_PTE) + 1][__MTHP_STAT_COUNT];
+	unsigned long stats[MTHP_STAT_COUNT][__MTHP_STAT_COUNT];
 };
 
 DECLARE_PER_CPU(struct mthp_stat, mthp_stats);
 
+static inline int mthp_stat_order_to_index(int order)
+{
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+	if (order == PUD_ORDER)
+		return MTHP_STAT_PUD_INDEX;
+#endif
+	return order;
+}
+
 static inline void mod_mthp_stat(int order, enum mthp_stat_item item, int delta)
 {
-	if (order <= 0 || order > PMD_ORDER)
+	int index;
+
+	if (order <= 0)
 		return;
 
-	this_cpu_add(mthp_stats.stats[order][item], delta);
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+	if (order != PUD_ORDER && order > PMD_ORDER)
+		return;
+#else
+	if (order > PMD_ORDER)
+		return;
+#endif
+
+	index = mthp_stat_order_to_index(order);
+	this_cpu_add(mthp_stats.stats[index][item], delta);
 }
 
 static inline void count_mthp_stat(int order, enum mthp_stat_item item)
