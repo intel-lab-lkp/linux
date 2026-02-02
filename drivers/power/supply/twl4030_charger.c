@@ -466,11 +466,24 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 			}
 			/* forcing the field BCIAUTOUSB (BOOT_BCI[1]) to 1 */
 			ret = twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOUSB);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to set BCIAUTOUSB: %d\n",
+					ret);
+				return ret;
+			}
+
 		}
 
 		/* forcing USBFASTMCHG(BCIMFSTS4[2]) to 1 */
 		ret = twl4030_clear_set(TWL_MODULE_MAIN_CHARGE, 0,
 			TWL4030_USBFASTMCHG, TWL4030_BCIMFSTS4);
+		if (ret < 0) {
+			dev_err(bci->dev,
+				"failed to set USBFASTMCHG: %d\n",
+				ret);
+			return ret;
+		}
 		if (bci->usb_mode == CHARGE_LINEAR) {
 			/* Enable interrupts now. */
 			reg = ~(u32)(TWL4030_ICHGLOW | TWL4030_TBATOR2 |
@@ -483,22 +496,58 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 					ret);
 				return ret;
 			}
-			twl4030_clear_set_boot_bci(TWL4030_BCIAUTOAC|TWL4030_CVENAC, 0);
+			ret = twl4030_clear_set_boot_bci(TWL4030_BCIAUTOAC|TWL4030_CVENAC, 0);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to clear AC flags: %d\n",
+					ret);
+				return ret;
+			}
 			/* Watch dog key: WOVF acknowledge */
 			ret = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0x33,
 					       TWL4030_BCIWDKEY);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to write BCIWDKEY (0x33): %d\n",
+					ret);
+				return ret;
+			}
 			/* 0x24 + EKEY6: off mode */
 			ret = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0x2a,
 					       TWL4030_BCIMDKEY);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to write BCIMDKEY (0x2a): %d\n",
+					ret);
+				return ret;
+			}
 			/* EKEY2: Linear charge: USB path */
 			ret = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0x26,
 					       TWL4030_BCIMDKEY);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to write BCIMDKEY (0x26): %d\n",
+					ret);
+				return ret;
+			}
 			/* WDKEY5: stop watchdog count */
 			ret = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0xf3,
 					       TWL4030_BCIWDKEY);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to write BCIWDKEY (0xf3): %d\n",
+					ret);
+				return ret;
+			}
 			/* enable MFEN3 access */
 			ret = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0x9c,
 					       TWL4030_BCIMFKEY);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to write BCIMFKEY: %d\n",
+					ret);
+				return ret;
+			}
 			 /* ICHGEOCEN - end-of-charge monitor (current < 80mA)
 			  *                      (charging continues)
 			  * ICHGLOWEN - current level monitor (charge continues)
@@ -506,11 +555,29 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 			  */
 			ret = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0xf0,
 					       TWL4030_BCIMFEN3);
+			if (ret < 0) {
+				dev_err(bci->dev,
+					"failed to write BCIMFEN3: %d\n",
+					ret);
+				return ret;
+			}
 		}
 	} else {
 		ret = twl4030_clear_set_boot_bci(TWL4030_BCIAUTOUSB, 0);
+		if (ret < 0) {
+			dev_err(bci->dev,
+				"failed to clear BCIAUTOUSB: %d\n",
+				ret);
+			return ret;
+		}
 		ret |= twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0x2a,
 					TWL4030_BCIMDKEY);
+		if (ret < 0) {
+			dev_err(bci->dev,
+				"failed to write BCIMDKEY: %d\n",
+				ret);
+			return ret;
+		}
 		if (bci->usb_enabled) {
 			pm_runtime_put_autosuspend(bci->transceiver->dev);
 			bci->usb_enabled = 0;
