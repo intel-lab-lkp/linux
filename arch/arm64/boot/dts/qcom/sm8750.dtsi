@@ -2727,7 +2727,7 @@
 			compatible = "qcom,sm8750-m31-eusb2-phy";
 			reg = <0x0 0x88e3000 0x0 0x29c>;
 
-			clocks = <&tcsrcc TCSR_USB2_CLKREF_EN>;
+			clocks = <&tlmm TCSR_USB2_CLKREF_EN>;
 			clock-names = "ref";
 
 			resets = <&gcc GCC_QUSB2PHY_PRIM_BCR>;
@@ -2742,7 +2742,7 @@
 			reg = <0x0 0x088e8000 0x0 0x4000>;
 
 			clocks = <&gcc GCC_USB3_PRIM_PHY_AUX_CLK>,
-				 <&tcsrcc TCSR_USB3_CLKREF_EN>,
+				 <&tlmm TCSR_USB3_CLKREF_EN>,
 				 <&gcc GCC_USB3_PRIM_PHY_COM_AUX_CLK>,
 				 <&gcc GCC_USB3_PRIM_PHY_PIPE_CLK>;
 			clock-names = "aux",
@@ -3063,6 +3063,8 @@
 			compatible = "qcom,sm8750-tlmm";
 			reg = <0x0 0x0f100000 0x0 0x102000>;
 
+			clocks = <&rpmhcc RPMH_CXO_CLK>;
+
 			interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
 
 			gpio-controller;
@@ -3073,6 +3075,8 @@
 
 			gpio-ranges = <&tlmm 0 0 216>;
 			wakeup-parent = <&pdc>;
+
+			#clock-cells = <1>;
 
 			hub_i2c0_data_clk: hub-i2c0-data-clk-state {
 				/* SDA, SCL */
@@ -3562,16 +3566,6 @@
 					bias-pull-up;
 				};
 			};
-		};
-
-		tcsrcc: clock-controller@f204008 {
-			compatible = "qcom,sm8750-tcsr", "syscon";
-			reg = <0x0 0x0f204008 0x0 0x3004>;
-
-			clocks = <&rpmhcc RPMH_CXO_CLK>;
-
-			#clock-cells = <1>;
-			#reset-cells = <1>;
 		};
 
 		stm@10002000 {
@@ -4818,7 +4812,7 @@
 
 			clocks = <&gcc GCC_PCIE_0_AUX_CLK>,
 				 <&gcc GCC_PCIE_0_CFG_AHB_CLK>,
-				 <&tcsrcc TCSR_PCIE_0_CLKREF_EN>,
+				 <&tlmm TCSR_PCIE_0_CLKREF_EN>,
 				 <&gcc GCC_PCIE_0_PHY_RCHNG_CLK>,
 				 <&gcc GCC_PCIE_0_PIPE_CLK>;
 			clock-names = "aux",
@@ -4849,7 +4843,7 @@
 
 			clocks = <&rpmhcc RPMH_CXO_CLK>,
 				 <&gcc GCC_UFS_PHY_PHY_AUX_CLK>,
-				 <&tcsrcc TCSR_UFS_CLKREF_EN>;
+				 <&tlmm TCSR_UFS_CLKREF_EN>;
 
 			clock-names = "ref",
 				      "ref_aux",
