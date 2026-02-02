@@ -226,8 +226,6 @@ macro_rules! define_read {
         }
     };
 }
-pub(crate) use define_read;
-
 macro_rules! define_write {
     (infallible, $(#[$attr:meta])* $vis:vis $name:ident, $call_macro:ident($c_fn:ident) <-
      $type_name:ty) => {
@@ -259,7 +257,6 @@ macro_rules! define_write {
         }
     };
 }
-pub(crate) use define_write;
 
 /// Checks whether an access of type `U` at the given `offset`
 /// is valid within this region.
