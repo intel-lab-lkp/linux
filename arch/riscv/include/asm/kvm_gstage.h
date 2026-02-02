@@ -30,6 +30,7 @@ struct kvm_gstage_mapping {
 #endif
 
 extern unsigned long kvm_riscv_gstage_max_pgd_levels;
+extern u32 kvm_riscv_gstage_mode_mask;
 
 #define kvm_riscv_gstage_pgd_xbits	2
 #define kvm_riscv_gstage_pgd_size	(1UL << (HGATP_PAGE_SHIFT + kvm_riscv_gstage_pgd_xbits))
@@ -74,5 +75,41 @@ void kvm_riscv_gstage_unmap_range(struct kvm_gstage *gstage,
 void kvm_riscv_gstage_wp_range(struct kvm_gstage *gstage, gpa_t start, gpa_t end);
 
 void kvm_riscv_gstage_mode_detect(void);
+
+enum kvm_riscv_hgatp_mode_bit {
+	HGATP_MODE_SV39X4_BIT = 0,
+	HGATP_MODE_SV48X4_BIT = 1,
+	HGATP_MODE_SV57X4_BIT = 2,
+};
+
+static inline u32 kvm_riscv_get_hgatp_mode_mask(void)
+{
+	return kvm_riscv_gstage_mode_mask;
+}
+
+static inline bool kvm_riscv_hgatp_mode_is_valid(unsigned long mode)
+{
+#ifdef CONFIG_64BIT
+	u32 bit;
+
+	switch (mode) {
+	case HGATP_MODE_SV39X4:
+		bit = HGATP_MODE_SV39X4_BIT;
+		break;
+	case HGATP_MODE_SV48X4:
+		bit = HGATP_MODE_SV48X4_BIT;
+		break;
+	case HGATP_MODE_SV57X4:
+		bit = HGATP_MODE_SV57X4_BIT;
+		break;
+	default:
+		return false;
+	}
+
+	return kvm_riscv_gstage_mode_mask & BIT(bit);
+#else
+	return false;
+#endif
+}
 
 #endif
