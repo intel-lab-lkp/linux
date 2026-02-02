@@ -556,9 +556,15 @@ pub trait IoKnownSize: Io {
 
 /// Implements [`IoCapable`] on `$mmio` for `$ty` using `$read_fn` and `$write_fn`.
 macro_rules! impl_mmio_io_capable {
-    ($mmio:ident, $(#[$attr:meta])* $ty:ty, $read_fn:ident, $write_fn:ident) => {
+    (
+        $mmio:ident $(< $($generics:tt),+ >)*,
+        $(#[$attr:meta])* $ty:ty,
+        $read_fn:ident, $write_fn:ident
+    ) => {
         $(#[$attr])*
-        impl<const SIZE: usize> IoCapable<$ty> for $mmio<SIZE> {
+        impl<$($($generics),+,)* const SIZE: usize> IoCapable<$ty>
+            for $mmio<$($($generics),+,)* SIZE>
+        {
             unsafe fn io_read(&self, address: usize) -> $ty {
                 // SAFETY: By the trait invariant `address` is a valid address for MMIO operations.
                 unsafe { bindings::$read_fn(address as *const c_void) }
@@ -695,3 +701,59 @@ impl<const SIZE: usize> Mmio<SIZE> {
         call_mmio_write(writeq_relaxed) <- u64
     );
 }
+
+/// [`Mmio`] wrapper using relaxed accessors.
+///
+/// This provides an implementation of [`Io`] that uses relaxed I/O MMIO operands instead of the
+/// regular ones.
+///
+/// # Examples
+///
+/// ```no_run
+/// use kernel::io::{Io, Mmio, RelaxedMmio};
+///
+/// fn do_io(io: &Mmio<0x100>) {
+///     let relaxed_io = RelaxedMmio::from(io);
+///
+///     // The access is performed using `readl_relaxed` instead of `readl`.
+///     let v = relaxed_io.read32(0x10);
+/// }
+///
+/// ```
+#[repr(transparent)]
+pub struct RelaxedMmio<'a, const SIZE: usize = 0>(&'a Mmio<SIZE>);
+
+impl<'a, const SIZE: usize> From<&'a Mmio<SIZE>> for RelaxedMmio<'a, SIZE> {
+    fn from(value: &'a Mmio<SIZE>) -> Self {
+        Self(value)
+    }
+}
+
+impl<'a, const SIZE: usize> Io for RelaxedMmio<'a, SIZE> {
+    #[inline]
+    fn addr(&self) -> usize {
+        self.0.addr()
+    }
+
+    #[inline]
+    fn maxsize(&self) -> usize {
+        self.0.maxsize()
+    }
+}
+
+impl<'a, const SIZE: usize> IoKnownSize for RelaxedMmio<'a, SIZE> {
+    const MIN_SIZE: usize = SIZE;
+}
+
+// MMIO regions support 8, 16, and 32-bit accesses.
+impl_mmio_io_capable!(RelaxedMmio<'a>, u8, readb_relaxed, writeb_relaxed);
+impl_mmio_io_capable!(RelaxedMmio<'a>, u16, readw_relaxed, writew_relaxed);
+impl_mmio_io_capable!(RelaxedMmio<'a>, u32, readl_relaxed, writel_relaxed);
+// MMIO regions on 64-bit systems also support 64-bit accesses.
+impl_mmio_io_capable!(
+    RelaxedMmio<'a>,
+    #[cfg(CONFIG_64BIT)]
+    u64,
+    readq_relaxed,
+    writeq_relaxed
+);
