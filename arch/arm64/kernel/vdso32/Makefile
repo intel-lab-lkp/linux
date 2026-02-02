@@ -5,6 +5,9 @@
 
 include $(srctree)/lib/vdso/Makefile.include
 
+# Fallback for standalone builds, normally inherited from top-level Makefile
+KBUILD_BUILD_ID ?= sha1
+
 # Same as cc-*option, but using CC_COMPAT instead of CC
 ifeq ($(CONFIG_CC_IS_CLANG), y)
 CC_COMPAT ?= $(CC)
@@ -87,7 +90,7 @@ VDSO_AFLAGS += -D__ASSEMBLY__
 # From arm vDSO Makefile
 VDSO_LDFLAGS += -Bsymbolic --no-undefined -soname=linux-vdso.so.1
 VDSO_LDFLAGS += -z max-page-size=4096 -z common-page-size=4096
-VDSO_LDFLAGS += -shared --build-id=sha1
+VDSO_LDFLAGS += -shared --build-id=$(KBUILD_BUILD_ID)
 VDSO_LDFLAGS += --orphan-handling=$(CONFIG_LD_ORPHAN_WARN_LEVEL)
 
 
