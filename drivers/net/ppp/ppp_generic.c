@@ -142,7 +142,6 @@ struct ppp {
 	unsigned long	last_xmit;	/* jiffies when last pkt sent 9c */
 	unsigned long	last_recv;	/* jiffies when last pkt rcvd a0 */
 	struct net_device *dev;		/* network interface device a4 */
-	int		closing;	/* is device closing down? a8 */
 #ifdef CONFIG_PPP_MULTILINK
 	int		nxchan;		/* next channel to send something on */
 	u32		nxseq;		/* next sequence number to send */
@@ -1566,10 +1565,6 @@ static void ppp_dev_uninit(struct net_device *dev)
 	struct ppp *ppp = netdev_priv(dev);
 	struct ppp_net *pn = ppp_pernet(ppp->ppp_net);
 
-	ppp_lock(ppp);
-	ppp->closing = 1;
-	ppp_unlock(ppp);
-
 	mutex_lock(&pn->all_ppp_mutex);
 	unit_put(&pn->units_idr, ppp->file.index);
 	mutex_unlock(&pn->all_ppp_mutex);
@@ -1652,23 +1647,19 @@ static void ppp_setup(struct net_device *dev)
 static void __ppp_xmit_process(struct ppp *ppp, struct sk_buff *skb)
 {
 	ppp_xmit_lock(ppp);
-	if (!ppp->closing) {
-		ppp_push(ppp);
+	ppp_push(ppp);
 
-		if (skb)
-			skb_queue_tail(&ppp->file.xq, skb);
-		while (!ppp->xmit_pending &&
-		       (skb = skb_dequeue(&ppp->file.xq)))
-			ppp_send_frame(ppp, skb);
-		/* If there's no work left to do, tell the core net
-		   code that we can accept some more. */
-		if (!ppp->xmit_pending && !skb_peek(&ppp->file.xq))
-			netif_wake_queue(ppp->dev);
-		else
-			netif_stop_queue(ppp->dev);
-	} else {
-		kfree_skb(skb);
-	}
+	if (skb)
+		skb_queue_tail(&ppp->file.xq, skb);
+	while (!ppp->xmit_pending &&
+	       (skb = skb_dequeue(&ppp->file.xq)))
+		ppp_send_frame(ppp, skb);
+	/* If there's no work left to do, tell the core net
+	   code that we can accept some more. */
+	if (!ppp->xmit_pending && !skb_peek(&ppp->file.xq))
+		netif_wake_queue(ppp->dev);
+	else
+		netif_stop_queue(ppp->dev);
 	ppp_xmit_unlock(ppp);
 }
 
@@ -2218,10 +2209,7 @@ static inline void
 ppp_do_recv(struct ppp *ppp, struct sk_buff *skb, struct channel *pch)
 {
 	ppp_recv_lock(ppp);
-	if (!ppp->closing)
-		ppp_receive_frame(ppp, skb, pch);
-	else
-		kfree_skb(skb);
+	ppp_receive_frame(ppp, skb, pch);
 	ppp_recv_unlock(ppp);
 }
 
