@@ -92,6 +92,12 @@ struct smc_rdma_wr {				/* work requests per message
 	struct ib_rdma_wr	wr_tx_rdma[SMC_MAX_RDMA_WRITES];
 };
 
+struct smc_ib_recv_wr {
+	struct ib_cqe		cqe;
+	struct ib_recv_wr	wr;
+	int index;
+};
+
 #define SMC_LGR_ID_SIZE		4
 
 struct smc_link {
@@ -100,6 +106,8 @@ struct smc_link {
 	struct ib_pd		*roce_pd;	/* IB protection domain,
 						 * unique for every RoCE QP
 						 */
+	int			nr_cqe;
+	struct ib_cq		*ib_cq;
 	struct ib_qp		*roce_qp;	/* IB queue pair */
 	struct ib_qp_attr	qp_attr;	/* IB queue pair attributes */
 
@@ -107,6 +115,7 @@ struct smc_link {
 	struct ib_send_wr	*wr_tx_ibs;	/* WR send meta data */
 	struct ib_sge		*wr_tx_sges;	/* WR send gather meta data */
 	struct smc_rdma_sges	*wr_tx_rdma_sges;/*RDMA WRITE gather meta data*/
+	struct ib_cqe		tx_rdma_cqe;	/* CQE RDMA WRITE */
 	struct smc_rdma_wr	*wr_tx_rdmas;	/* WR RDMA WRITE */
 	struct smc_wr_tx_pend	*wr_tx_pends;	/* WR send waiting for CQE */
 	struct completion	*wr_tx_compl;	/* WR send CQE completion */
@@ -116,7 +125,6 @@ struct smc_link {
 	struct smc_wr_tx_pend	*wr_tx_v2_pend;	/* WR send v2 waiting for CQE */
 	dma_addr_t		wr_tx_dma_addr;	/* DMA address of wr_tx_bufs */
 	dma_addr_t		wr_tx_v2_dma_addr; /* DMA address of v2 tx buf*/
-	atomic_long_t		wr_tx_id;	/* seq # of last sent WR */
 	unsigned long		*wr_tx_mask;	/* bit mask of used indexes */
 	u32			wr_tx_cnt;	/* number of WR send buffers */
 	wait_queue_head_t	wr_tx_wait;	/* wait for free WR send buf */
@@ -126,7 +134,7 @@ struct smc_link {
 	struct completion	tx_ref_comp;
 
 	u8			*wr_rx_bufs;	/* WR recv payload buffers */
-	struct ib_recv_wr	*wr_rx_ibs;	/* WR recv meta data */
+	struct smc_ib_recv_wr	*wr_rx_ibs;	/* WR recv meta data */
 	struct ib_sge		*wr_rx_sges;	/* WR recv scatter meta data */
 	/* above three vectors have wr_rx_cnt elements and use the same index */
 	int			wr_rx_sge_cnt; /* rx sge, V1 is 1, V2 is either 2 or 1 */
@@ -135,13 +143,11 @@ struct smc_link {
 						 */
 	dma_addr_t		wr_rx_dma_addr;	/* DMA address of wr_rx_bufs */
 	dma_addr_t		wr_rx_v2_dma_addr; /* DMA address of v2 rx buf*/
-	u64			wr_rx_id;	/* seq # of last recv WR */
-	u64			wr_rx_id_compl; /* seq # of last completed WR */
 	u32			wr_rx_cnt;	/* number of WR recv buffers */
 	unsigned long		wr_rx_tstamp;	/* jiffies when last buf rx */
-	wait_queue_head_t       wr_rx_empty_wait; /* wait for RQ empty */
 
 	struct ib_reg_wr	wr_reg;		/* WR register memory region */
+	struct ib_cqe		wr_reg_cqe;
 	wait_queue_head_t	wr_reg_wait;	/* wait for wr_reg result */
 	struct {
 		struct percpu_ref	wr_reg_refs;
