@@ -1326,7 +1326,6 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 {
 	int ret;
 	struct coresight_device *csdev;
-	bool registered = false;
 
 	csdev = kzalloc(sizeof(*csdev), GFP_KERNEL);
 	if (!csdev) {
@@ -1380,7 +1379,8 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 		 * All resources are free'd explicitly via
 		 * coresight_device_release(), triggered from put_device().
 		 */
-		goto out_unlock;
+		mutex_unlock(&coresight_mutex);
+		goto err_out;
 	}
 
 	ret = etm_perf_add_symlink_sink(csdev);
@@ -1390,12 +1390,8 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 	 * coresight_device_release() triggered from put_device(), which is in
 	 * turn called from function device_unregister().
 	 */
-	if (ret && ret != -EOPNOTSUPP) {
-		device_unregister(&csdev->dev);
+	if (ret && ret != -EOPNOTSUPP)
 		goto out_unlock;
-	}
-	/* Device is now registered */
-	registered = true;
 
 	ret = coresight_create_conns_sysfs_group(csdev);
 	if (ret)
@@ -1415,11 +1411,8 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 out_unlock:
 	mutex_unlock(&coresight_mutex);
 
-	/* Unregister the device if needed */
-	if (registered) {
-		coresight_unregister(csdev);
-		return ERR_PTR(ret);
-	}
+	coresight_unregister(csdev);
+	return ERR_PTR(ret);
 
 err_out:
 	coresight_release_platform_data(desc->dev, desc->pdata);
