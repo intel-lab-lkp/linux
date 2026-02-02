@@ -1926,7 +1926,7 @@ static int ag71xx_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, err,
 				     "failed to setup phylink");
 
-	err = devm_register_netdev(&pdev->dev, ndev);
+	err = register_netdev(ndev);
 	if (err) {
 		netif_err(ag, probe, ndev, "unable to register net device\n");
 		return err;
@@ -1937,6 +1937,17 @@ static int ag71xx_probe(struct platform_device *pdev)
 		   phy_modes(ag->phy_if_mode));
 
 	return 0;
+}
+
+static void ag71xx_remove(struct platform_device *pdev)
+{
+	struct net_device *ndev = platform_get_drvdata(pdev);
+
+	if (!ndev)
+		return;
+
+	unregister_netdev(ndev);
+	platform_set_drvdata(pdev, NULL);
 }
 
 static const u32 ar71xx_fifo_ar7100[] = {
@@ -2024,6 +2035,7 @@ MODULE_DEVICE_TABLE(of, ag71xx_match);
 
 static struct platform_driver ag71xx_driver = {
 	.probe		= ag71xx_probe,
+	.remove_new	= ag71xx_remove,
 	.driver = {
 		.name	= "ag71xx",
 		.of_match_table = ag71xx_match,
