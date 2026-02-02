@@ -622,6 +622,9 @@ int user_proactive_reclaim(char *buf,
  * in mm/rmap.c:
  */
 pmd_t *mm_find_pmd(struct mm_struct *mm, unsigned long address);
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+pud_t *mm_find_pud(struct mm_struct *mm, unsigned long address);
+#endif
 
 /*
  * in mm/page_alloc.c

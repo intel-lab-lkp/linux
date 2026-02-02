@@ -195,6 +195,89 @@ pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
 }
 #endif
 
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+/*
+ * Deposit page tables for PUD THP.
+ * Called with PUD lock held. Stores PMD tables in a singly-linked stack
+ * via pud_huge_pmd, using only pmd_page->lru.next as the link pointer.
+ *
+ * IMPORTANT: We use only lru.next (offset 8) for linking, NOT the full
+ * list_head. This is because lru.prev (offset 16) overlaps with
+ * ptdesc->pmd_huge_pte, which stores the PMD table's deposited PTE tables.
+ * Using list_del() would corrupt pmd_huge_pte with LIST_POISON2.
+ *
+ * PTE tables should be deposited into the PMD using pud_deposit_pte().
+ */
+void pgtable_trans_huge_pud_deposit(struct mm_struct *mm, pud_t *pudp,
+				    pmd_t *pmd_table)
+{
+	pgtable_t pmd_page = virt_to_page(pmd_table);
+
+	assert_spin_locked(pud_lockptr(mm, pudp));
+
+	/* Push onto stack using only lru.next as the link */
+	pmd_page->lru.next = (struct list_head *)pud_huge_pmd(pudp);
+	pud_huge_pmd(pudp) = pmd_page;
+}
+
+/*
+ * Withdraw the deposited PMD table for PUD THP split or zap.
+ * Called with PUD lock held.
+ * Returns NULL if no more PMD tables are deposited.
+ */
+pmd_t *pgtable_trans_huge_pud_withdraw(struct mm_struct *mm, pud_t *pudp)
+{
+	pgtable_t pmd_page;
+
+	assert_spin_locked(pud_lockptr(mm, pudp));
+
+	pmd_page = pud_huge_pmd(pudp);
+	if (!pmd_page)
+		return NULL;
+
+	/* Pop from stack - lru.next points to next PMD page (or NULL) */
+	pud_huge_pmd(pudp) = (pgtable_t)pmd_page->lru.next;
+
+	return page_address(pmd_page);
+}
+
+/*
+ * Deposit a PTE table into a standalone PMD table (not yet in page table hierarchy).
+ * Used for PUD THP pre-deposit. The PMD table's pmd_huge_pte stores a linked list.
+ * No lock assertion since the PMD isn't visible yet.
+ */
+void pud_deposit_pte(pmd_t *pmd_table, pgtable_t pgtable)
+{
+	struct ptdesc *ptdesc = virt_to_ptdesc(pmd_table);
+
+	/* FIFO - add to front of list */
+	if (!ptdesc->pmd_huge_pte)
+		INIT_LIST_HEAD(&pgtable->lru);
+	else
+		list_add(&pgtable->lru, &ptdesc->pmd_huge_pte->lru);
+	ptdesc->pmd_huge_pte = pgtable;
+}
+
+/*
+ * Withdraw a PTE table from a standalone PMD table.
+ * Returns NULL if no more PTE tables are deposited.
+ */
+pgtable_t pud_withdraw_pte(pmd_t *pmd_table)
+{
+	struct ptdesc *ptdesc = virt_to_ptdesc(pmd_table);
+	pgtable_t pgtable;
+
+	pgtable = ptdesc->pmd_huge_pte;
+	if (!pgtable)
+		return NULL;
+	ptdesc->pmd_huge_pte = list_first_entry_or_null(&pgtable->lru,
+							struct page, lru);
+	if (ptdesc->pmd_huge_pte)
+		list_del(&pgtable->lru);
+	return pgtable;
+}
+#endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
+
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE
 pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
 		     pmd_t *pmdp)

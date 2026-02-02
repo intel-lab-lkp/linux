@@ -1180,6 +1180,14 @@ extern pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp);
 #define arch_needs_pgtable_deposit() (false)
 #endif
 
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+extern void pgtable_trans_huge_pud_deposit(struct mm_struct *mm, pud_t *pudp,
+					   pmd_t *pmd_table);
+extern pmd_t *pgtable_trans_huge_pud_withdraw(struct mm_struct *mm, pud_t *pudp);
+extern void pud_deposit_pte(pmd_t *pmd_table, pgtable_t pgtable);
+extern pgtable_t pud_withdraw_pte(pmd_t *pmd_table);
+#endif
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 /*
  * This is an implementation of pmdp_establish() that is only suitable for an

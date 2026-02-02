@@ -3670,6 +3670,22 @@ static inline bool pagetable_pmd_ctor(struct mm_struct *mm,
  * considered ready to switch to split PUD locks yet; there may be places
  * which need to be converted from page_table_lock.
  */
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+static inline struct page *pud_pgtable_page(pud_t *pud)
+{
+	unsigned long mask = ~(PTRS_PER_PUD * sizeof(pud_t) - 1);
+
+	return virt_to_page((void *)((unsigned long)pud & mask));
+}
+
+static inline struct ptdesc *pud_ptdesc(pud_t *pud)
+{
+	return page_ptdesc(pud_pgtable_page(pud));
+}
+
+#define pud_huge_pmd(pud) (pud_ptdesc(pud)->pud_huge_pmd)
+#endif
+
 static inline spinlock_t *pud_lockptr(struct mm_struct *mm, pud_t *pud)
 {
 	return &mm->page_table_lock;
@@ -3686,6 +3702,9 @@ static inline spinlock_t *pud_lock(struct mm_struct *mm, pud_t *pud)
 static inline void pagetable_pud_ctor(struct ptdesc *ptdesc)
 {
 	__pagetable_ctor(ptdesc);
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+	ptdesc->pud_huge_pmd = NULL;
+#endif
 }
 
 static inline void pagetable_p4d_ctor(struct ptdesc *ptdesc)

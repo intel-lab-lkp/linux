@@ -577,7 +577,10 @@ struct ptdesc {
 		struct list_head pt_list;
 		struct {
 			unsigned long _pt_pad_1;
-			pgtable_t pmd_huge_pte;
+			union {
+				pgtable_t pmd_huge_pte;  /* For PMD tables: deposited PTE */
+				pgtable_t pud_huge_pmd;  /* For PUD tables: deposited PMD list */
+			};
 		};
 	};
 	unsigned long __page_mapping;

@@ -463,10 +463,15 @@ void __split_huge_pud(struct vm_area_struct *vma, pud_t *pud,
 		unsigned long address);
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+void split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
+			   unsigned long address);
 int change_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		    pud_t *pudp, unsigned long addr, pgprot_t newprot,
 		    unsigned long cp_flags);
 #else
+static inline void
+split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
+		      unsigned long address) {}
 static inline int
 change_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		pud_t *pudp, unsigned long addr, pgprot_t newprot,

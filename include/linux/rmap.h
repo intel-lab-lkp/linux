@@ -102,6 +102,7 @@ enum ttu_flags {
 					 * do a final flush if necessary */
 	TTU_RMAP_LOCKED		= 0x80,	/* do not grab rmap lock:
 					 * caller holds it */
+	TTU_SPLIT_HUGE_PUD	= 0x100, /* split huge PUD if any */
 };
 
 #ifdef CONFIG_MMU
@@ -406,6 +407,8 @@ void folio_add_anon_rmap_ptes(struct folio *, struct page *, int nr_pages,
 #define folio_add_anon_rmap_pte(folio, page, vma, address, flags) \
 	folio_add_anon_rmap_ptes(folio, page, 1, vma, address, flags)
 void folio_add_anon_rmap_pmd(struct folio *, struct page *,
+		struct vm_area_struct *, unsigned long address, rmap_t flags);
+void folio_add_anon_rmap_pud(struct folio *, struct page *,
 		struct vm_area_struct *, unsigned long address, rmap_t flags);
 void folio_add_new_anon_rmap(struct folio *, struct vm_area_struct *,
 		unsigned long address, rmap_t flags);
@@ -867,6 +870,7 @@ struct page_vma_mapped_walk {
 	pgoff_t pgoff;
 	struct vm_area_struct *vma;
 	unsigned long address;
+	pud_t *pud;
 	pmd_t *pmd;
 	pte_t *pte;
 	spinlock_t *ptl;
@@ -904,7 +908,7 @@ static inline void page_vma_mapped_walk_done(struct page_vma_mapped_walk *pvmw)
 static inline void
 page_vma_mapped_walk_restart(struct page_vma_mapped_walk *pvmw)
 {
-	WARN_ON_ONCE(!pvmw->pmd && !pvmw->pte);
+	WARN_ON_ONCE(!pvmw->pud && !pvmw->pmd && !pvmw->pte);
 
 	if (likely(pvmw->ptl))
 		spin_unlock(pvmw->ptl);
@@ -912,6 +916,7 @@ page_vma_mapped_walk_restart(struct page_vma_mapped_walk *pvmw)
 		WARN_ON_ONCE(1);
 
 	pvmw->ptl = NULL;
+	pvmw->pud = NULL;
 	pvmw->pmd = NULL;
 	pvmw->pte = NULL;
 }

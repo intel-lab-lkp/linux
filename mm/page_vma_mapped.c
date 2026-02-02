@@ -146,6 +146,18 @@ static bool check_pmd(unsigned long pfn, struct page_vma_mapped_walk *pvmw)
 	return true;
 }
 
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+/* Returns true if the two ranges overlap.  Careful to not overflow. */
+static bool check_pud(unsigned long pfn, struct page_vma_mapped_walk *pvmw)
+{
+	if ((pfn + HPAGE_PUD_NR - 1) < pvmw->pfn)
+		return false;
+	if (pfn > pvmw->pfn + pvmw->nr_pages - 1)
+		return false;
+	return true;
+}
+#endif
+
 static void step_forward(struct page_vma_mapped_walk *pvmw, unsigned long size)
 {
 	pvmw->address = (pvmw->address + size) & ~(size - 1);
@@ -187,6 +199,10 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t pmde;
+
+	/* The only possible pud mapping has been handled on last iteration */
+	if (pvmw->pud && !pvmw->pmd)
+		return not_found(pvmw);
 
 	/* The only possible pmd mapping has been handled on last iteration */
 	if (pvmw->pmd && !pvmw->pte)
@@ -233,6 +249,25 @@ restart:
 			step_forward(pvmw, PUD_SIZE);
 			continue;
 		}
+
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+		/* Check for PUD-mapped THP */
+		if (pud_trans_huge(*pud)) {
+			pvmw->pud = pud;
+			pvmw->ptl = pud_lock(mm, pud);
+			if (likely(pud_trans_huge(*pud))) {
+				if (pvmw->flags & PVMW_MIGRATION)
+					return not_found(pvmw);
+				if (!check_pud(pud_pfn(*pud), pvmw))
+					return not_found(pvmw);
+				return true;
+			}
+			/* PUD was split under us, retry at PMD level */
+			spin_unlock(pvmw->ptl);
+			pvmw->ptl = NULL;
+			pvmw->pud = NULL;
+		}
+#endif
 
 		pvmw->pmd = pmd_offset(pud, pvmw->address);
 		/*

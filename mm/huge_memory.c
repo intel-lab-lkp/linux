@@ -2933,6 +2933,14 @@ out:
 	spin_unlock(ptl);
 	mmu_notifier_invalidate_range_end(&range);
 }
+
+void split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
+			   unsigned long address)
+{
+	VM_WARN_ON_ONCE(!IS_ALIGNED(address, HPAGE_PUD_SIZE));
+	if (pud_trans_huge(*pud))
+		__split_huge_pud_locked(vma, pud, address);
+}
 #else
 void __split_huge_pud(struct vm_area_struct *vma, pud_t *pud,
 		unsigned long address)

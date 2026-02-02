@@ -897,6 +897,32 @@ out:
 	return pmd;
 }
 
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+/*
+ * Returns the actual pud_t* where we expect 'address' to be mapped from, or
+ * NULL if it doesn't exist.  No guarantees / checks on what the pud_t*
+ * represents.
+ */
+pud_t *mm_find_pud(struct mm_struct *mm, unsigned long address)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud = NULL;
+
+	pgd = pgd_offset(mm, address);
+	if (!pgd_present(*pgd))
+		goto out;
+
+	p4d = p4d_offset(pgd, address);
+	if (!p4d_present(*p4d))
+		goto out;
+
+	pud = pud_offset(p4d, address);
+out:
+	return pud;
+}
+#endif
+
 struct folio_referenced_arg {
 	int mapcount;
 	int referenced;
@@ -1526,11 +1552,7 @@ static __always_inline void __folio_add_anon_rmap(struct folio *folio,
 			SetPageAnonExclusive(page);
 			break;
 		case PGTABLE_LEVEL_PUD:
-			/*
-			 * Keep the compiler happy, we don't support anonymous
-			 * PUD mappings.
-			 */
-			WARN_ON_ONCE(1);
+			SetPageAnonExclusive(page);
 			break;
 		default:
 			BUILD_BUG();
@@ -1609,6 +1631,31 @@ void folio_add_anon_rmap_pmd(struct folio *folio, struct page *page,
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	__folio_add_anon_rmap(folio, page, HPAGE_PMD_NR, vma, address, flags,
 			      PGTABLE_LEVEL_PMD);
+#else
+	WARN_ON_ONCE(true);
+#endif
+}
+
+/**
+ * folio_add_anon_rmap_pud - add a PUD mapping to a page range of an anon folio
+ * @folio:	The folio to add the mapping to
+ * @page:	The first page to add
+ * @vma:	The vm area in which the mapping is added
+ * @address:	The user virtual address of the first page to map
+ * @flags:	The rmap flags
+ *
+ * The page range of folio is defined by [first_page, first_page + HPAGE_PUD_NR)
+ *
+ * The caller needs to hold the page table lock, and the page must be locked in
+ * the anon_vma case: to serialize mapping,index checking after setting.
+ */
+void folio_add_anon_rmap_pud(struct folio *folio, struct page *page,
+		struct vm_area_struct *vma, unsigned long address, rmap_t flags)
+{
+#if defined(CONFIG_TRANSPARENT_HUGEPAGE) && \
+	defined(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD)
+	__folio_add_anon_rmap(folio, page, HPAGE_PUD_NR, vma, address, flags,
+			      PGTABLE_LEVEL_PUD);
 #else
 	WARN_ON_ONCE(true);
 #endif
@@ -2049,6 +2096,20 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		}
 
 		if (!pvmw.pte) {
+			/*
+			 * Check for PUD-mapped THP first.
+			 * If we have a PUD mapping and TTU_SPLIT_HUGE_PUD is set,
+			 * split the PUD to PMD level and restart the walk.
+			 */
+			if (pvmw.pud && pud_trans_huge(*pvmw.pud)) {
+				if (flags & TTU_SPLIT_HUGE_PUD) {
+					split_huge_pud_locked(vma, pvmw.pud, pvmw.address);
+					flags &= ~TTU_SPLIT_HUGE_PUD;
+					page_vma_mapped_walk_restart(&pvmw);
+					continue;
+				}
+			}
+
 			if (folio_test_anon(folio) && !folio_test_swapbacked(folio)) {
 				if (unmap_huge_pmd_locked(vma, pvmw.address, pvmw.pmd, folio))
 					goto walk_done;
@@ -2440,6 +2501,27 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	mmu_notifier_invalidate_range_start(&range);
 
 	while (page_vma_mapped_walk(&pvmw)) {
+		/* Handle PUD-mapped THP first */
+		if (!pvmw.pte && !pvmw.pmd) {
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+			/*
+			 * PUD-mapped THP: skip migration to preserve the huge
+			 * page. Splitting would defeat the purpose of PUD THPs.
+			 * Return false to indicate migration failure, which
+			 * will cause alloc_contig_range() to try a different
+			 * memory region.
+			 */
+			if (pvmw.pud && pud_trans_huge(*pvmw.pud)) {
+				page_vma_mapped_walk_done(&pvmw);
+				ret = false;
+				break;
+			}
+#endif
+			/* Unexpected state: !pte && !pmd but not a PUD THP */
+			page_vma_mapped_walk_done(&pvmw);
+			break;
+		}
+
 		/* PMD-mapped THP migration entry */
 		if (!pvmw.pte) {
 			__maybe_unused unsigned long pfn;
@@ -2722,10 +2804,10 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 
 	/*
 	 * Migration always ignores mlock and only supports TTU_RMAP_LOCKED and
-	 * TTU_SPLIT_HUGE_PMD, TTU_SYNC, and TTU_BATCH_FLUSH flags.
+	 * TTU_SPLIT_HUGE_PMD, TTU_SPLIT_HUGE_PUD, TTU_SYNC, and TTU_BATCH_FLUSH flags.
 	 */
 	if (WARN_ON_ONCE(flags & ~(TTU_RMAP_LOCKED | TTU_SPLIT_HUGE_PMD |
-					TTU_SYNC | TTU_BATCH_FLUSH)))
+					TTU_SPLIT_HUGE_PUD | TTU_SYNC | TTU_BATCH_FLUSH)))
 		return;
 
 	if (folio_is_zone_device(folio) &&
