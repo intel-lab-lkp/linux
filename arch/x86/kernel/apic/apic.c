@@ -2457,6 +2457,12 @@ static void lapic_resume(void *data)
 		__x2apic_enable();
 	} else {
 		/*
+		 * x2apic may have been re-enabled by the
+		 * firmware on resuming from s2ram
+		 */
+		__x2apic_disable();
+
+		/*
 		 * Make sure the APICBASE points to the right address
 		 *
 		 * FIXME! This will be wrong if we ever support suspend on
