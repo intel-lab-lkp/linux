@@ -524,8 +524,15 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 static void cyapa_enable_irq_for_cmd(struct cyapa *cyapa)
 {
 	struct input_dev *input = cyapa->input;
+	bool input_enabled = false;
 
-	if (!input || !input_device_enabled(input)) {
+	if (input) {
+		mutex_lock(&input->mutex);
+		input_enabled = input_device_enabled(input);
+		mutex_unlock(&input->mutex);
+	}
+
+	if (!input || !input_enabled) {
 		/*
 		 * When input is NULL, TP must be in deep sleep mode.
 		 * In this mode, later non-power I2C command will always failed
@@ -544,8 +551,15 @@ static void cyapa_enable_irq_for_cmd(struct cyapa *cyapa)
 static void cyapa_disable_irq_for_cmd(struct cyapa *cyapa)
 {
 	struct input_dev *input = cyapa->input;
+	bool input_enabled = false;
 
-	if (!input || !input_device_enabled(input)) {
+	if (input) {
+		mutex_lock(&input->mutex);
+		input_enabled = input_device_enabled(input);
+		mutex_unlock(&input->mutex);
+	}
+
+	if (!input || !input_enabled) {
 		if (cyapa->gen >= CYAPA_GEN5)
 			disable_irq(cyapa->client->irq);
 		if (!input || cyapa->operational)
@@ -627,6 +641,7 @@ static int cyapa_reinitialize(struct cyapa *cyapa)
 {
 	struct device *dev = &cyapa->client->dev;
 	struct input_dev *input = cyapa->input;
+	bool input_enabled = false;
 	int error;
 
 	if (pm_runtime_enabled(dev))
@@ -651,7 +666,13 @@ static int cyapa_reinitialize(struct cyapa *cyapa)
 	}
 
 out:
-	if (!input || !input_device_enabled(input)) {
+	if (input) {
+		mutex_lock(&input->mutex);
+		input_enabled = input_device_enabled(input);
+		mutex_unlock(&input->mutex);
+	}
+
+	if (!input || !input_enabled) {
 		/* Reset to power OFF state to save power when no user open. */
 		if (cyapa->operational)
 			cyapa->ops->set_power_mode(cyapa,
