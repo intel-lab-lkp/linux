@@ -307,6 +307,9 @@ bool dmem_cgroup_state_evict_valuable(struct dmem_cgroup_pool_state *limit_pool,
 	struct page_counter *ctest;
 	u64 used, min, low;
 
+	if (WARN_ON_ONCE(!test_pool))
+		return false;
+
 	/* Can always evict from current pool, despite limits */
 	if (limit_pool == test_pool)
 		return true;
@@ -343,7 +346,8 @@ bool dmem_cgroup_state_evict_valuable(struct dmem_cgroup_pool_state *limit_pool,
 		low = READ_ONCE(ctest->elow);
 		if (used > low)
 			return true;
-
+		if (WARN_ON_ONCE(!ret_hit_low))
+			return false;
 		*ret_hit_low = true;
 		return false;
 	}
@@ -512,7 +516,7 @@ struct dmem_cgroup_region *dmem_cgroup_register_region(u64 size, const char *fmt
 	char *region_name;
 	va_list ap;
 
-	if (!size)
+	if (WARN_ON_ONCE(!size || !fmt))
 		return NULL;
 
 	va_start(ap, fmt);
@@ -520,6 +524,10 @@ struct dmem_cgroup_region *dmem_cgroup_register_region(u64 size, const char *fmt
 	va_end(ap);
 	if (!region_name)
 		return ERR_PTR(-ENOMEM);
+	if (WARN_ON_ONCE(!region_name[0])) {
+		kfree(region_name);
+		return ERR_PTR(-EINVAL);
+	}
 
 	ret = kzalloc(sizeof(*ret), GFP_KERNEL);
 	if (!ret) {
@@ -656,6 +664,9 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 	struct dmem_cgroup_pool_state *pool;
 	struct page_counter *fail;
 	int ret;
+
+	if (WARN_ON_ONCE(!region || !ret_pool))
+		return -EINVAL;
 
 	*ret_pool = NULL;
 	if (ret_limit_pool)
