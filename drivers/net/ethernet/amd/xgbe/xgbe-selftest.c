@@ -9,8 +9,10 @@
 #include <linux/crc32.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
+#include <linux/if_arp.h>
 #include <net/tcp.h>
 #include <net/udp.h>
+#include <net/arp.h>
 #include <net/checksum.h>
 #include <net/selftests.h>
 
@@ -152,6 +154,117 @@ cleanup:
 	return ret;
 }
 
+static int xgbe_test_arp_validate(struct sk_buff *skb,
+				  struct net_device *ndev,
+				  struct packet_type *pt,
+				  struct net_device *orig_ndev)
+{
+	struct net_test_priv *tdata = pt->af_packet_priv;
+	struct ethhdr *eth_hdr;
+	struct arphdr *ah;
+
+	skb = skb_unshare(skb, GFP_ATOMIC);
+	if (!skb)
+		goto out;
+	if (skb_linearize(skb))
+		goto out;
+
+	eth_hdr = (struct ethhdr *)skb_mac_header(skb);
+
+	/* Verify the reply is destined to our test source MAC */
+	if (!ether_addr_equal_unaligned(eth_hdr->h_dest, tdata->packet->src))
+		goto out;
+
+	/* Verify this is an ARP packet */
+	if (eth_hdr->h_proto != htons(ETH_P_ARP))
+		goto out;
+
+	ah = arp_hdr(skb);
+
+	/* Verify this is an ARP reply */
+	if (ah->ar_op != htons(ARPOP_REPLY))
+		goto out;
+
+	tdata->ok = true;
+	complete(&tdata->comp);
+out:
+	kfree_skb(skb);
+	return 0;
+}
+
+static int xgbe_test_arpoffload(struct xgbe_prv_data *pdata)
+{
+	unsigned char src[ETH_ALEN] = {0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+	unsigned char bcast[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	struct net_packet_attrs attr = {};
+	struct net_test_priv *tdata;
+	struct sk_buff *skb = NULL;
+	u32 dst_ip = 0xabcdefab;
+	u32 src_ip = 0xefdcbaef;
+	int ret;
+
+	/* Check if ARP offload is supported */
+	if (!pdata->hw_feat.aoe)
+		return -EOPNOTSUPP;
+
+	tdata = kzalloc(sizeof(*tdata), GFP_KERNEL);
+	if (!tdata)
+		return -ENOMEM;
+
+	tdata->ok = false;
+	init_completion(&tdata->comp);
+
+	tdata->pt.type = htons(ETH_P_ARP);
+	tdata->pt.func = xgbe_test_arp_validate;
+	tdata->pt.dev = pdata->netdev;
+	tdata->pt.af_packet_priv = tdata;
+	tdata->packet = &attr;
+	dev_add_pack(&tdata->pt);
+
+	attr.src = src;
+	attr.ip_src = src_ip;
+	attr.dst = bcast;
+	attr.ip_dst = dst_ip;
+
+	/* Create ARP request packet */
+	skb = arp_create(ARPOP_REQUEST, ETH_P_ARP, htonl(dst_ip),
+			 pdata->netdev,	htonl(src_ip), NULL, src, bcast);
+	if (!skb) {
+		ret = -ENOMEM;
+		goto free;
+	}
+
+	skb->pkt_type = PACKET_HOST;
+	skb->dev = pdata->netdev;
+	skb->protocol = htons(ETH_P_ARP);
+
+	/* Enable ARP offload */
+	xgbe_enable_arp_offload(pdata, dst_ip);
+
+	ret = dev_set_promiscuity(pdata->netdev, 1);
+	if (ret) {
+		kfree_skb(skb);
+		goto cleanup;
+	}
+
+	ret = dev_direct_xmit(skb, 0);
+	if (ret)
+		goto cleanup_promisc;
+
+	/* Wait for ARP reply */
+	wait_for_completion_timeout(&tdata->comp, NET_LB_TIMEOUT);
+	ret = tdata->ok ? 0 : -ETIMEDOUT;
+
+cleanup_promisc:
+	dev_set_promiscuity(pdata->netdev, -1);
+cleanup:
+	xgbe_disable_arp_offload(pdata);
+	dev_remove_pack(&tdata->pt);
+free:
+	kfree(tdata);
+	return ret;
+}
+
 static int xgbe_test_mac_loopback(struct xgbe_prv_data *pdata)
 {
 	struct net_packet_attrs attr = {};
@@ -251,6 +364,10 @@ static const struct xgbe_test xgbe_selftests[] = {
 		.name = "Jumbo Frame    ",
 		.lb = XGBE_LOOPBACK_PHY,
 		.fn = xgbe_test_jumbo,
+	}, {
+		.name = "ARP Offload    ",
+		.lb = XGBE_LOOPBACK_PHY,
+		.fn = xgbe_test_arpoffload,
 	},
 };
 
