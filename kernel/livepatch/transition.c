@@ -10,6 +10,7 @@
 #include <linux/cpu.h>
 #include <linux/stacktrace.h>
 #include <linux/static_call.h>
+#include <linux/stop_machine.h>
 #include "core.h"
 #include "patch.h"
 #include "transition.h"
@@ -297,6 +298,61 @@ static int klp_check_and_switch_task(struct task_struct *task, void *arg)
 	return 0;
 }
 
+enum klp_stop_work_bit {
+	KLP_STOP_WORK_PENDING_BIT,
+};
+
+struct klp_stop_work_info {
+	struct task_struct *task;
+	unsigned long flag;
+};
+
+static DEFINE_PER_CPU(struct cpu_stop_work, klp_transition_stop_work);
+static DEFINE_PER_CPU(struct klp_stop_work_info, klp_stop_work_info);
+
+static int klp_check_task(struct task_struct *task, void *old_name)
+{
+	if (task == current)
+		return klp_check_and_switch_task(current, old_name);
+	else
+		return task_call_func(task, klp_check_and_switch_task, old_name);
+}
+
+static int klp_transition_stop_work_fn(void *arg)
+{
+	struct klp_stop_work_info *info = (struct klp_stop_work_info *)arg;
+	struct task_struct *task = info->task;
+	const char *old_name;
+
+	clear_bit(KLP_STOP_WORK_PENDING_BIT, &info->flag);
+
+	if (likely(klp_patch_pending(task)))
+		klp_check_task(task, &old_name);
+
+	put_task_struct(task);
+
+	return 0;
+}
+
+static void klp_try_transition_running_task(struct task_struct *task)
+{
+	int cpu = task_cpu(task);
+
+	if (klp_signals_cnt && !(klp_signals_cnt % SIGNALS_TIMEOUT)) {
+		struct klp_stop_work_info *info =
+			per_cpu_ptr(&klp_stop_work_info, cpu);
+
+		if (test_and_set_bit(KLP_STOP_WORK_PENDING_BIT, &info->flag))
+			return;
+
+		info->task = get_task_struct(task);
+		if (!stop_one_cpu_nowait(cpu, klp_transition_stop_work_fn, info,
+					 per_cpu_ptr(&klp_transition_stop_work,
+					 cpu)))
+			put_task_struct(task);
+	}
+}
+
 /*
  * Try to safely switch a task to the target patch state.  If it's currently
  * running, or it's sleeping on a to-be-patched or to-be-unpatched function, or
@@ -323,10 +379,7 @@ static bool klp_try_switch_task(struct task_struct *task)
 	 * functions.  If all goes well, switch the task to the target patch
 	 * state.
 	 */
-	if (task == current)
-		ret = klp_check_and_switch_task(current, &old_name);
-	else
-		ret = task_call_func(task, klp_check_and_switch_task, &old_name);
+	ret = klp_check_task(task, &old_name);
 
 	switch (ret) {
 	case 0:		/* success */
@@ -335,6 +388,7 @@ static bool klp_try_switch_task(struct task_struct *task)
 	case -EBUSY:	/* klp_check_and_switch_task() */
 		pr_debug("%s: %s:%d is running\n",
 			 __func__, task->comm, task->pid);
+		klp_try_transition_running_task(task);
 		break;
 	case -EINVAL:	/* klp_check_and_switch_task() */
 		pr_debug("%s: %s:%d has an unreliable stack\n",
