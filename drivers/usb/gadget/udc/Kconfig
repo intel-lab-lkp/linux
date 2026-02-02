@@ -417,6 +417,21 @@ config USB_ASPEED_UDC
 	  dynamically linked module called "aspeed_udc" and force all
 	  gadget drivers to also be dynamically linked.
 
+config USB_CRG_UDC
+	tristate "AXIADO CORIGINE-based AX3000 Device Controller"
+	depends on ARCH_AXIADO || COMPILE_TEST
+	depends on USB_GADGET
+	help
+	  Enables AX3000 USB device controller driver for Axiado
+	  SoCs and evaluation boards.
+
+	  Based on the Corigine USB IP core driver with Axiado specific
+	  enhancements. Supports USB 2.0 (High-Speed) and USB 3.0
+	  (SuperSpeed), including control, bulk, interrupt, and
+	  isochronous transfers.
+
+	  Say "y" to build statically, or "m" to build as a module.
+
 source "drivers/usb/gadget/udc/aspeed-vhub/Kconfig"
 
 source "drivers/usb/gadget/udc/cdns2/Kconfig"
