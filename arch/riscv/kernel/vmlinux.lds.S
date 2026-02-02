@@ -7,10 +7,6 @@
 #define RO_EXCEPTION_TABLE_ALIGN	4
 #define RUNTIME_DISCARD_EXIT
 
-#ifdef CONFIG_XIP_KERNEL
-#include "vmlinux-xip.lds.S"
-#else
-
 #include <asm/pgtable.h>
 #define LOAD_OFFSET KERNEL_LINK_ADDR
 
@@ -175,4 +171,3 @@ SECTIONS
 
 	DISCARDS
 }
-#endif /* CONFIG_XIP_KERNEL */
