@@ -3154,7 +3154,9 @@ static unsigned long gup_fast(unsigned long start, unsigned long end,
 	 * that come from callers of tlb_remove_table_sync_one().
 	 */
 	local_irq_save(flags);
+	pt_walk_lockless_start(current->mm);
 	gup_fast_pgd_range(start, end, gup_flags, pages, &nr_pinned);
+	pt_walk_lockless_end();
 	local_irq_restore(flags);
 
 	/*

@@ -285,6 +285,56 @@ void tlb_remove_table_sync_one(void)
 	smp_call_function(tlb_remove_table_smp_sync, NULL, 1);
 }
 
+DEFINE_PER_CPU(struct mm_struct *, active_lockless_pt_walk_mm);
+EXPORT_PER_CPU_SYMBOL_GPL(active_lockless_pt_walk_mm);
+
+/**
+ * tlb_remove_table_sync_mm - send IPIs to CPUs doing lockless page table
+ * walk for @mm
+ *
+ * @mm: target mm; only CPUs walking this mm get an IPI.
+ *
+ * Like tlb_remove_table_sync_one() but only targets CPUs in
+ * active_lockless_pt_walk_mm.
+ */
+void tlb_remove_table_sync_mm(struct mm_struct *mm)
+{
+	cpumask_var_t target_cpus;
+	bool found_any = false;
+	int cpu;
+
+	if (WARN_ONCE(!mm, "NULL mm in %s\n", __func__)) {
+		tlb_remove_table_sync_one();
+		return;
+	}
+
+	/* If we can't, fall back to broadcast. */
+	if (!alloc_cpumask_var(&target_cpus, GFP_ATOMIC)) {
+		tlb_remove_table_sync_one();
+		return;
+	}
+
+	cpumask_clear(target_cpus);
+
+	/* Pairs with smp_mb() in pt_walk_lockless_start(). */
+	smp_rmb();
+
+	/* Find CPUs doing lockless page table walks for this mm */
+	for_each_online_cpu(cpu) {
+		if (per_cpu(active_lockless_pt_walk_mm, cpu) == mm) {
+			cpumask_set_cpu(cpu, target_cpus);
+			found_any = true;
+		}
+	}
+
+	/* Only send IPIs to CPUs actually doing lockless walks */
+	if (found_any)
+		smp_call_function_many(target_cpus, tlb_remove_table_smp_sync,
+				       NULL, 1);
+
+	free_cpumask_var(target_cpus);
+}
+
 static void tlb_remove_table_rcu(struct rcu_head *head)
 {
 	__tlb_remove_table_free(container_of(head, struct mmu_table_batch, rcu));

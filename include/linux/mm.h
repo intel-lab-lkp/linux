@@ -2995,6 +2995,40 @@ long memfd_pin_folios(struct file *memfd, loff_t start, loff_t end,
 		      pgoff_t *offset);
 int folio_add_pins(struct folio *folio, unsigned int pins);
 
+/*
+ * Track CPUs doing lockless page table walks to avoid broadcast IPIs
+ * during TLB flushes.
+ */
+DECLARE_PER_CPU(struct mm_struct *, active_lockless_pt_walk_mm);
+
+static inline void pt_walk_lockless_start(struct mm_struct *mm)
+{
+	lockdep_assert_irqs_disabled();
+
+	/*
+	 * Tell other CPUs we're doing lockless page table walk.
+	 *
+	 * Full barrier needed to prevent page table reads from being
+	 * reordered before this write.
+	 *
+	 * Pairs with smp_rmb() in tlb_remove_table_sync_mm().
+	 */
+	this_cpu_write(active_lockless_pt_walk_mm, mm);
+	smp_mb();
+}
+
+static inline void pt_walk_lockless_end(void)
+{
+	lockdep_assert_irqs_disabled();
+
+	/*
+	 * Clear the pointer so other CPUs no longer see this CPU as walking
+	 * the mm. Use smp_store_release to ensure page table reads complete
+	 * before the clear is visible to other CPUs.
+	 */
+	smp_store_release(this_cpu_ptr(&active_lockless_pt_walk_mm), NULL);
+}
+
 int get_user_pages_fast(unsigned long start, int nr_pages,
 			unsigned int gup_flags, struct page **pages);
 int pin_user_pages_fast(unsigned long start, int nr_pages,

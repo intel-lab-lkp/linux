@@ -8190,7 +8190,9 @@ static u64 perf_get_page_size(unsigned long addr)
 		mm = &init_mm;
 	}
 
+	pt_walk_lockless_start(mm);
 	size = perf_get_pgtable_size(mm, addr);
+	pt_walk_lockless_end();
 
 	local_irq_restore(flags);
 
