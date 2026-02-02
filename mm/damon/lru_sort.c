@@ -287,7 +287,8 @@ static int damon_lru_sort_apply_parameters(void)
 	unsigned int hot_thres, cold_thres;
 	int err;
 
-	err = damon_modules_new_paddr_ctx_target(&param_ctx, &param_target);
+	err = damon_modules_new_ctx_target(&param_ctx, &param_target,
+				DAMON_OPS_PADDR);
 	if (err)
 		return err;
 
@@ -479,7 +480,8 @@ static int __init damon_lru_sort_init(void)
 		err = -ENOMEM;
 		goto out;
 	}
-	err = damon_modules_new_paddr_ctx_target(&ctx, &target);
+	err = damon_modules_new_ctx_target(&ctx, &target,
+				DAMON_OPS_PADDR);
 	if (err)
 		goto out;
 
