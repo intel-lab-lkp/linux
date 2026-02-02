@@ -86,6 +86,9 @@ static const struct key_entry dell_wmi_keymap_type_0000[] = {
 	/* Meta key unlock */
 	{ KE_IGNORE, 0xe001, { KEY_RIGHTMETA } },
 
+	{ KE_KEY,    0x0109, { KEY_MUTE } },
+	{ KE_KEY,    0x0150, { KEY_MICMUTE } },
+
 	/* Key code is followed by brightness level */
 	{ KE_KEY,    0xe005, { KEY_BRIGHTNESSDOWN } },
 	{ KE_KEY,    0xe006, { KEY_BRIGHTNESSUP } },
