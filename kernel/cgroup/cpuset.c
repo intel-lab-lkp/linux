@@ -1301,6 +1301,17 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 	return false;
 }
 
+static void isolcpus_workfn(struct work_struct *work)
+{
+	cpuset_full_lock();
+	if (isolated_cpus_updating) {
+		isolated_cpus_updating = false;
+		WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
+		rebuild_sched_domains_locked();
+	}
+	cpuset_full_unlock();
+}
+
 /*
  * update_isolation_cpumasks - Update external isolation related CPU masks
  *
@@ -1309,14 +1320,34 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
  */
 static void update_isolation_cpumasks(void)
 {
-	int ret;
+	static DECLARE_WORK(isolcpus_work, isolcpus_workfn);
 
 	if (!isolated_cpus_updating)
 		return;
 
-	ret = housekeeping_update(isolated_cpus);
-	WARN_ON_ONCE(ret < 0);
+	/*
+	 * This function can be reached either directly from regular cpuset
+	 * control file write or via CPU hotplug. In the latter case, it is
+	 * the per-cpu kthread that calls cpuset_handle_hotplug() on behalf
+	 * of the task that initiates CPU shutdown or bringup.
+	 *
+	 * To have better flexibility and prevent the possibility of deadlock
+	 * when calling from CPU hotplug, we defer the housekeeping_update()
+	 * call to after the current cpuset critical section has finished.
+	 * This is done via workqueue.
+	 */
+	if (current->flags & PF_KTHREAD) {
+		/*
+		 * We rely on WORK_STRUCT_PENDING_BIT to not requeue a work
+		 * item that is still pending.
+		 */
+		queue_work(system_unbound_wq, &isolcpus_work);
+		/* Also defer sched domains regeneration to the work function */
+		force_sd_rebuild = false;
+		return;
+	}
 
+	WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
 	isolated_cpus_updating = false;
 }
 
