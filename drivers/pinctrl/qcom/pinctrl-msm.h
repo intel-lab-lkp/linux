@@ -5,6 +5,7 @@
 #ifndef __PINCTRL_MSM_H__
 #define __PINCTRL_MSM_H__
 
+#include <linux/clk-provider.h>
 #include <linux/pm.h>
 #include <linux/types.h>
 
@@ -129,6 +130,17 @@ struct msm_gpio_wakeirq_map {
 	unsigned int wakeirq;
 };
 
+struct ref_clk_init_data {
+	const char * const name;
+	u32 offset;
+};
+
+struct ref_clk {
+	struct clk_hw hw;
+	struct regmap *regmap;
+	struct ref_clk_init_data init;
+};
+
 /**
  * struct msm_pinctrl_soc_data - Qualcomm pin controller driver configuration
  * @pins:	    An array describing all pins the pin controller affects.
@@ -170,6 +182,8 @@ struct msm_pinctrl_soc_data {
 	bool wakeirq_dual_edge_errata;
 	unsigned int gpio_func;
 	unsigned int egpio_func;
+	const struct ref_clk_init_data **ref_clks;
+	unsigned int num_ref_clks;
 };
 
 extern const struct dev_pm_ops msm_pinctrl_dev_pm_ops;

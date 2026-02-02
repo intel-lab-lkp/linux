@@ -4,6 +4,7 @@
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/clk-provider.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
@@ -16,6 +17,7 @@
 #include <linux/pm.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/reboot.h>
+#include <linux/regmap.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -80,6 +82,7 @@ struct msm_pinctrl {
 	const struct msm_pinctrl_soc_data *soc;
 	void __iomem *regs[MAX_NR_TILES];
 	u32 phys_base[MAX_NR_TILES];
+	struct ref_clk ref_clks[];
 };
 
 #define MSM_ACCESSOR(name) \
@@ -1525,9 +1528,69 @@ SIMPLE_DEV_PM_OPS(msm_pinctrl_dev_pm_ops, msm_pinctrl_suspend,
 
 EXPORT_SYMBOL(msm_pinctrl_dev_pm_ops);
 
+static int clkref_enable(struct clk_hw *hw)
+{
+	struct ref_clk *rclk = container_of(hw, struct ref_clk, hw);
+	u32 val;
+
+	regmap_write(rclk->regmap, rclk->init.offset, BIT(0));
+	udelay(10);
+
+	regmap_read(rclk->regmap, rclk->init.offset, &val);
+
+	return (val & BIT(0)) ? 0 : -EINVAL;
+}
+
+static void clkref_disable(struct clk_hw *hw)
+{
+	struct ref_clk *rclk = container_of(hw, struct ref_clk, hw);
+
+	regmap_write(rclk->regmap, rclk->init.offset, 0);
+
+	udelay(10);
+}
+
+static int clkref_is_enabled(struct clk_hw *hw)
+{
+	struct ref_clk *rclk = container_of(hw, struct ref_clk, hw);
+	u32 val;
+
+	regmap_read(rclk->regmap, rclk->init.offset, &val);
+
+	return !!val;
+}
+
+static const struct clk_ops clkref_ops = {
+	.enable = clkref_enable,
+	.disable = clkref_disable,
+	.is_enabled = clkref_is_enabled,
+};
+
+static struct clk_hw *msm_pinctrl_clk_get(struct of_phandle_args *clkspec, void *data)
+{
+	struct msm_pinctrl *pctrl = data;
+	u32 idx = clkspec->args[0];
+
+	if (idx >= pctrl->soc->num_ref_clks)
+		return ERR_PTR(-EINVAL);
+
+	return &pctrl->ref_clks[idx].hw;
+}
+
+static const struct clk_parent_data clkref_parent_data = {
+	.index = 0, /* RPM(h) XO clock */
+};
+
+static const struct regmap_config clkref_regmap_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+};
+
 int msm_pinctrl_probe(struct platform_device *pdev,
 		      const struct msm_pinctrl_soc_data *soc_data)
 {
+	struct device *dev = &pdev->dev;
 	const struct pinfunction *func;
 	struct msm_pinctrl *pctrl;
 	struct resource *res;
@@ -1594,6 +1657,35 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	ret = msm_gpio_init(pctrl);
 	if (ret)
 		return ret;
+
+	if (soc_data->num_ref_clks) {
+		struct regmap *regmap = devm_regmap_init_mmio(dev, pctrl->regs[0],
+							      &clkref_regmap_config);
+		if (IS_ERR(regmap))
+			return PTR_ERR(regmap);
+
+		for (int i = 0; i < soc_data->num_ref_clks; i++) {
+			struct clk_hw *hw = &pctrl->ref_clks[i].hw;
+			struct clk_init_data init = { };
+
+			init.name = pctrl->soc->ref_clks[i]->name;
+			init.parent_data = &clkref_parent_data;
+			init.num_parents = 1;
+			init.ops = &clkref_ops;
+			hw->init = &init;
+
+			ret = devm_clk_hw_register(dev, hw);
+			if (ret)
+				return dev_err_probe(dev, ret, "Couldn't register clock %s\n",
+						     init.name);
+
+			pctrl->ref_clks[i].regmap = regmap;
+		}
+
+		ret = devm_of_clk_add_hw_provider(dev, msm_pinctrl_clk_get, pctrl);
+		if (ret)
+			return dev_err_probe(dev, ret, "Couldn't register clk provider\n");
+	}
 
 	platform_set_drvdata(pdev, pctrl);
 
