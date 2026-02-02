@@ -1836,8 +1836,8 @@ static __init void try_to_enable_x2apic(int remap_mode)
 		 * Using X2APIC without IR is not architecturally supported
 		 * on bare metal but may be supported in guests.
 		 */
-		if (!x86_init.hyper.x2apic_available()) {
-			pr_info("x2apic: IRQ remapping doesn't support X2APIC mode\n");
+		if (!x86_init.hyper.x2apic_without_ir_available()) {
+			pr_info("x2apic: Not supported without IRQ remapping\n");
 			x2apic_disable();
 			return;
 		}

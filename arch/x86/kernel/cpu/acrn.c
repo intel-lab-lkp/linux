@@ -77,5 +77,5 @@ const __initconst struct hypervisor_x86 x86_hyper_acrn = {
 	.detect                 = acrn_detect,
 	.type			= X86_HYPER_ACRN,
 	.init.init_platform     = acrn_init_platform,
-	.init.x2apic_available  = acrn_x2apic_available,
+	.init.x2apic_without_ir_available = acrn_x2apic_available,
 };

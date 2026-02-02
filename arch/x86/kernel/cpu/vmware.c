@@ -585,7 +585,7 @@ const __initconst struct hypervisor_x86 x86_hyper_vmware = {
 	.detect				= vmware_platform,
 	.type				= X86_HYPER_VMWARE,
 	.init.init_platform		= vmware_platform_setup,
-	.init.x2apic_available		= vmware_legacy_x2apic_available,
+	.init.x2apic_without_ir_available = vmware_legacy_x2apic_available,
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 	.runtime.sev_es_hcall_prepare	= vmware_sev_es_hcall_prepare,
 	.runtime.sev_es_hcall_finish	= vmware_sev_es_hcall_finish,

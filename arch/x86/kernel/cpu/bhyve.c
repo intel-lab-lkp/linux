@@ -61,6 +61,6 @@ const struct hypervisor_x86 x86_hyper_bhyve __refconst = {
 	.name			= "Bhyve",
 	.detect			= bhyve_detect,
 	.init.init_platform	= x86_init_noop,
-	.init.x2apic_available	= bhyve_x2apic_available,
+	.init.x2apic_without_ir_available = bhyve_x2apic_available,
 	.init.msi_ext_dest_id	= bhyve_ext_dest_id,
 };

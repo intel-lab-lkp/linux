@@ -1042,7 +1042,7 @@ const __initconst struct hypervisor_x86 x86_hyper_kvm = {
 	.detect				= kvm_detect,
 	.type				= X86_HYPER_KVM,
 	.init.guest_late_init		= kvm_guest_init,
-	.init.x2apic_available		= kvm_para_available,
+	.init.x2apic_without_ir_available = kvm_para_available,
 	.init.msi_ext_dest_id		= kvm_msi_ext_dest_id,
 	.init.init_platform		= kvm_init_platform,
 #if defined(CONFIG_AMD_MEM_ENCRYPT)

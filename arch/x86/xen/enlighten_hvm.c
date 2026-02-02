@@ -311,7 +311,7 @@ static uint32_t __init xen_platform_hvm(void)
 		 * detect PVH and panic there.
 		 */
 		h->init_platform = x86_init_noop;
-		h->x2apic_available = bool_x86_init_noop;
+		h->x2apic_without_ir_available = bool_x86_init_noop;
 		h->init_mem_mapping = x86_init_noop;
 		h->init_after_bootmem = x86_init_noop;
 		h->guest_late_init = xen_hvm_guest_late_init;
@@ -325,7 +325,7 @@ struct hypervisor_x86 x86_hyper_xen_hvm __initdata = {
 	.detect                 = xen_platform_hvm,
 	.type			= X86_HYPER_XEN_HVM,
 	.init.init_platform     = xen_hvm_guest_init,
-	.init.x2apic_available  = xen_x2apic_available,
+	.init.x2apic_without_ir_available = xen_x2apic_available,
 	.init.init_mem_mapping	= xen_hvm_init_mem_mapping,
 	.init.guest_late_init	= xen_hvm_guest_late_init,
 	.init.msi_ext_dest_id   = msi_ext_dest_id,
