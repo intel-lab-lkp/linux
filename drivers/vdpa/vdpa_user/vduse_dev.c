@@ -1341,6 +1341,37 @@ out:
 	return r;
 }
 
+#if defined(CONFIG_X86_64) && defined(CONFIG_COMPAT)
+/*
+ * i386 has different alignment constraints than x86_64,
+ * so there are only 3 bytes of padding instead of 7.
+ */
+struct compat_vduse_iotlb_entry {
+	compat_u64 offset;
+	compat_u64 start;
+	compat_u64 last;
+	__u8 perm;
+	__u8 padding[__alignof__(compat_u64) - 1];
+};
+#define COMPAT_VDUSE_IOTLB_GET_FD	_IOWR(VDUSE_BASE, 0x10, struct compat_vduse_iotlb_entry)
+
+struct compat_vduse_vq_info {
+	__u32 index;
+	__u32 num;
+	compat_u64 desc_addr;
+	compat_u64 driver_addr;
+	compat_u64 device_addr;
+	union {
+		struct vduse_vq_state_split split;
+		struct vduse_vq_state_packed packed;
+	};
+	__u8 ready;
+	__u8 padding[__alignof__(compat_u64) - 1];
+} __uapi_arch_align;
+#define COMPAT_VDUSE_VQ_GET_INFO	_IOWR(VDUSE_BASE, 0x15, struct compat_vduse_vq_info)
+
+#endif
+
 static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 			    unsigned long arg)
 {
@@ -1352,6 +1383,9 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 		return -EPERM;
 
 	switch (cmd) {
+#if defined(CONFIG_X86_64) && defined(CONFIG_COMPAT)
+	case COMPAT_VDUSE_IOTLB_GET_FD:
+#endif
 	case VDUSE_IOTLB_GET_FD:
 	case VDUSE_IOTLB_GET_FD2: {
 		struct vduse_iotlb_entry_v2 entry = {0};
@@ -1455,13 +1489,16 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 		ret = 0;
 		break;
 	}
+#if defined(CONFIG_X86_64) && defined(CONFIG_COMPAT)
+	case COMPAT_VDUSE_VQ_GET_INFO:
+#endif
 	case VDUSE_VQ_GET_INFO: {
-		struct vduse_vq_info vq_info;
+		struct vduse_vq_info vq_info = {};
 		struct vduse_virtqueue *vq;
 		u32 index;
 
 		ret = -EFAULT;
-		if (copy_from_user(&vq_info, argp, sizeof(vq_info)))
+		if (copy_from_user(&vq_info, argp, _IOC_SIZE(cmd)))
 			break;
 
 		ret = -EINVAL;
@@ -1491,7 +1528,7 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 		vq_info.ready = vq->ready;
 
 		ret = -EFAULT;
-		if (copy_to_user(argp, &vq_info, sizeof(vq_info)))
+		if (copy_to_user(argp, &vq_info, _IOC_SIZE(cmd)))
 			break;
 
 		ret = 0;
