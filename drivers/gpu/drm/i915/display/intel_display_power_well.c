@@ -18,6 +18,7 @@
 #include "intel_display_regs.h"
 #include "intel_display_rpm.h"
 #include "intel_display_types.h"
+#include "intel_display_wa.h"
 #include "intel_dkl_phy.h"
 #include "intel_dkl_phy_regs.h"
 #include "intel_dmc.h"
@@ -194,6 +195,48 @@ int intel_power_well_refcount(struct i915_power_well *power_well)
 	return power_well->count;
 }
 
+static u32 dss_pipe_gating_bits(u8 irq_pipe_mask)
+{
+	u32 bits = 0;
+
+	if (irq_pipe_mask & BIT(PIPE_A))
+		bits |= DSS_PIPE_A_GATING_DISABLED;
+	if (irq_pipe_mask & BIT(PIPE_B))
+		bits |= DSS_PIPE_B_GATING_DISABLED;
+	if (irq_pipe_mask & BIT(PIPE_C))
+		bits |= DSS_PIPE_C_GATING_DISABLED;
+	if (irq_pipe_mask & BIT(PIPE_D))
+		bits |= DSS_PIPE_D_GATING_DISABLED;
+
+	return bits;
+}
+
+static void dss_pipe_gating_enable_disable(struct intel_display *display,
+					   u8 irq_pipe_mask,
+					   bool disable)
+{
+	u32 bits = dss_pipe_gating_bits(irq_pipe_mask);
+	u32 clear, set;
+
+	if (!bits)
+		return;
+
+	/*
+	 * Single intel_de_rmw() for both enable/disable:
+	 *  - disable == true, set bits (disable clock gating)
+	 *  - disable == false, clear bits (re-enable clock gating)
+	 */
+	set = disable ? bits : 0;
+	clear = disable ? 0 : bits;
+
+	intel_de_rmw(display, CLKGATE_DIS_DSSDSC, clear, set);
+
+	drm_dbg_kms(display->drm,
+		    "DSS clock gating %sd for pipe_mask=0x%x (CLKGATE_DIS_DSSDSC=0x%08x)\n",
+		    str_enable_disable(!disable), irq_pipe_mask,
+		    intel_de_read(display, CLKGATE_DIS_DSSDSC));
+}
+
 /*
  * Starting with Haswell, we have a "Power Down Well" that can be turned off
  * when not needed anymore. We have 4 registers that can request the power well
@@ -203,15 +246,23 @@ int intel_power_well_refcount(struct i915_power_well *power_well)
 static void hsw_power_well_post_enable(struct intel_display *display,
 				       u8 irq_pipe_mask)
 {
-	if (irq_pipe_mask)
+	if (irq_pipe_mask) {
 		gen8_irq_power_well_post_enable(display, irq_pipe_mask);
+
+		if (intel_display_wa(display, 22021048059))
+			dss_pipe_gating_enable_disable(display, irq_pipe_mask, false);
+	}
 }
 
 static void hsw_power_well_pre_disable(struct intel_display *display,
 				       u8 irq_pipe_mask)
 {
-	if (irq_pipe_mask)
+	if (irq_pipe_mask) {
+		if (intel_display_wa(display, 22021048059))
+			dss_pipe_gating_enable_disable(display, irq_pipe_mask, true);
+
 		gen8_irq_power_well_pre_disable(display, irq_pipe_mask);
+	}
 }
 
 #define ICL_AUX_PW_TO_PHY(pw_idx)	\
