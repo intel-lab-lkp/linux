@@ -452,7 +452,7 @@ static u64 xe_page_to_dpa(struct page *page)
 	struct xe_pagemap *xpagemap = xe_page_to_pagemap(page);
 	struct xe_vram_region *vr = xe_pagemap_to_vr(xpagemap);
 	u64 hpa_base = xpagemap->hpa_base;
-	u64 pfn = page_to_pfn(page);
+	u64 pfn = device_private_page_to_offset(page);
 	u64 offset;
 	u64 dpa;
 
@@ -1699,9 +1699,7 @@ static void xe_pagemap_destroy_work(struct work_struct *work)
 	 * will do shortly.
 	 */
 	if (drm_dev_enter(drm, &idx)) {
-		devm_memunmap_pages(drm->dev, pagemap);
-		devm_release_mem_region(drm->dev, pagemap->range.start,
-					pagemap->range.end - pagemap->range.start + 1);
+		devm_memunmap_device_private_pagemap(drm->dev, pagemap);
 		drm_dev_exit(idx);
 	}
 
@@ -1745,8 +1743,6 @@ static struct xe_pagemap *xe_pagemap_create(struct xe_device *xe, struct xe_vram
 	struct xe_pagemap *xpagemap;
 	struct dev_pagemap *pagemap;
 	struct drm_pagemap *dpagemap;
-	struct resource *res;
-	void *addr;
 	int err;
 
 	xpagemap = kzalloc(sizeof(*xpagemap), GFP_KERNEL);
@@ -1763,36 +1759,24 @@ static struct xe_pagemap *xe_pagemap_create(struct xe_device *xe, struct xe_vram
 	if (err)
 		goto out_no_dpagemap;
 
-	res = devm_request_free_mem_region(dev, &iomem_resource,
-					   vr->usable_size);
-	if (IS_ERR(res)) {
-		err = PTR_ERR(res);
-		goto out_err;
-	}
-
 	err = drm_pagemap_acquire_owner(&xpagemap->peer, &xe_owner_list,
 					xe_has_interconnect);
 	if (err)
-		goto out_no_owner;
+		goto out_err;
 
 	pagemap->type = MEMORY_DEVICE_PRIVATE;
-	pagemap->range.start = res->start;
-	pagemap->range.end = res->end;
 	pagemap->nr_range = 1;
+	pagemap->nr_pages = DIV_ROUND_UP(vr->usable_size, PAGE_SIZE);
 	pagemap->owner = xpagemap->peer.owner;
 	pagemap->ops = drm_pagemap_pagemap_ops_get();
-	addr = devm_memremap_pages(dev, pagemap);
-	if (IS_ERR(addr)) {
-		err = PTR_ERR(addr);
+	err = devm_memremap_device_private_pagemap(dev, pagemap);
+	if (err)
 		goto out_no_pages;
-	}
-	xpagemap->hpa_base = res->start;
+	xpagemap->hpa_base = pagemap->range.start;
 	return xpagemap;
 
 out_no_pages:
 	drm_pagemap_release_owner(&xpagemap->peer);
-out_no_owner:
-	devm_release_mem_region(dev, res->start, res->end - res->start + 1);
 out_err:
 	drm_pagemap_put(dpagemap);
 	return ERR_PTR(err);
