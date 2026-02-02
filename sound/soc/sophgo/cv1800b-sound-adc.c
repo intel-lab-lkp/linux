@@ -100,7 +100,7 @@ static int cv1800b_adc_setbclk_div(struct cv1800b_priv *priv, unsigned int rate)
 {
 	u32 val;
 	u32 bclk_div;
-	u64 tmp;
+	u32 tmp;
 
 	if (!priv->mclk_rate || !rate)
 		return -EINVAL;
@@ -117,7 +117,7 @@ static int cv1800b_adc_setbclk_div(struct cv1800b_priv *priv, unsigned int rate)
 	}
 
 	if (tmp > 256) {
-		dev_err(priv->dev, "BCLK divider %llu out of range\n", tmp);
+		dev_err(priv->dev, "BCLK divider %u out of range\n", tmp);
 		return -EINVAL;
 	}
 
