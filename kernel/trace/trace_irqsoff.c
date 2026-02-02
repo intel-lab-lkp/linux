@@ -229,11 +229,12 @@ static void irqsoff_graph_return(struct ftrace_graph_ret *trace,
 	if (!func_prolog_dec(tr, &data, &flags))
 		return;
 
-	rettime = trace_clock_local();
+	trace->rettime = trace_clock_local();
 	calltime = fgraph_retrieve_data(gops->idx, &size);
 	if (calltime) {
+		trace->calltime = *calltime;
 		trace_ctx = tracing_gen_ctx_flags(flags);
-		__trace_graph_return(tr, trace, trace_ctx, *calltime, rettime);
+		__trace_graph_return(tr, trace, trace_ctx);
 	}
 	local_dec(&data->disabled);
 }

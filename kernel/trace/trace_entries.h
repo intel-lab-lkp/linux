@@ -127,8 +127,8 @@ FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 		__field_packed(	unsigned long,	ret,		retval	)
 		__field_packed(	unsigned int,	ret,		depth	)
 		__field_packed(	unsigned int,	ret,		overrun	)
-		__field(unsigned long long,	calltime		)
-		__field(unsigned long long,	rettime			)
+		__field_packed(unsigned long long,	ret,	calltime)
+		__field_packed(unsigned long long,	ret,	rettime)
 	),
 
 	F_printk("<-- %ps (%u) (start: %llx  end: %llx) over: %u retval: %lx",
@@ -149,8 +149,8 @@ FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 		__field_packed(	unsigned long,	ret,		func	)
 		__field_packed(	unsigned int,	ret,		depth	)
 		__field_packed(	unsigned int,	ret,		overrun	)
-		__field(unsigned long long,	calltime		)
-		__field(unsigned long long,	rettime			)
+		__field_packed(unsigned long long,	ret,	calltime)
+		__field_packed(unsigned long long,	ret,	rettime)
 	),
 
 	F_printk("<-- %ps (%u) (start: %llx  end: %llx) over: %u",
