@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/axiado,ax3000-udc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Axiado AX3000 USB Device Controller (Corigine-based)
+
+maintainers:
+  - Krutik Shah <krutikshah@axiado.com>
+  - Prasad Bolisetty <pbolisetty@axiado.com>
+  - Vladimir Moravcevic <vmoravcevic@axiado.com>
+
+description: |
+  Axiado AX3000 USB Device Controller (UDC) is used on
+  AX3000 SoCs and evaluation boards. This controller is based on a
+  Corigine USB IP core and provides SuperSpeed (5 Gb/s), High-Speed
+  (480 Mb/s). It supports control, bulk, interrupt, and isochronous
+  transfer types across multiple configurable endpoints. The node
+  describes the memory-mapped register region, interrupt line, and
+  other required properties for the UDC hardware.
+
+properties:
+  compatible:
+    enum:
+      - axiado,ax3000-udc         # AX3000 UDC (USB 2.0/High-Speed)
+      - axiado,ax3000-udc-gen3    # AX3000 UDC (USB 3.0/SuperSpeed)
+
+  reg:
+    maxItems: 1
+    description: Base address and size of the UDC register space.
+
+  interrupts:
+    maxItems: 1
+    description: Interrupt line for the UDC.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        usb@81200000 {
+            compatible = "axiado,ax3000-udc";
+            reg = <0x0 0x81200000 0x0 0x00100000>;
+            interrupt-parent = <&gic500>;
+            interrupts = <GIC_SPI 21 IRQ_TYPE_LEVEL_HIGH>;
+        };
+    };
