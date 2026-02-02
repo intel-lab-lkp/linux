@@ -285,6 +285,8 @@ static int s32g_pcie_parse_ports(struct device *dev, struct s32g_pcie *s32g_pp)
 			goto err_port;
 	}
 
+	return 0;
+
 err_port:
 	list_for_each_entry_safe(port, tmp, &s32g_pp->ports, list)
 		list_del(&port->list);
