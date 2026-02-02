@@ -20,7 +20,7 @@ struct gb_raw {
 
 	struct list_head list;
 	int list_data;
-	struct mutex list_lock;
+	struct mutex list_lock; /* protects gb_raw->list and gb_raw->list_data */
 	dev_t dev;
 	struct cdev cdev;
 	struct device *device;
