@@ -1,0 +1,36 @@
+drm drm-fixes 18f7fcd5e69a04df57b563360b88be72471d6b62
+	Linux 6.19-rc8
+drm-misc drm-misc-fixes 78f1421dc3ac2588fb59b55e2b4c2c55a442913e
+	Revert "drm/gma500: use drm_crtc_vblank_crtc()"
+drm-rust drm-rust-fixes 0f61b1860cc3f52aef9036d7235ed1f017632193
+	Linux 6.19-rc5
+drm-intel drm-intel-fixes 63804fed149a6750ffd28610c5c1c98cce6bd377
+	Linux 6.19-rc7
+drm-xe drm-xe-fixes 8a44241b0b83a6047c5448da1fff03fcc29496b5
+	drm/xe/nvm: Fix double-free on aux add failure
+drm drm-next 3cc9398a9ea69b77de01b370463b706c354e52fb
+	Merge tag 'exynos-drm-next-for-v6.20' of git://git.kernel.org/pub/scm/linux/kernel/git/daeinki/drm-exynos into drm-next
+drm-misc drm-misc-next-fixes 84dd57fb0359500092f1101409ca32091731490d
+	accel/amdxdna: Fix memory leak in amdxdna_ubuf_map
+drm-intel drm-intel-next-fixes 3e28a67a85f9b569066f6dfcddadb39294c0c9d4
+	drm/i915/display: fix the pixel normalization handling for xe3p_lpd
+drm-xe drm-xe-next-fixes 96c2c72b817d70e8d110e78b0162e044a0c41f9f
+	drm/xe: Unregister drm device on probe error
+drm-misc drm-misc-next b1cc4172cc60b1039235c9dfc08c3c1ffa4fb863
+	drm/vc4: Replace IDR with XArray for perfmon tracking
+drm-rust drm-rust-next cea7b66a80412e2a5b74627b89ae25f1d0110a4b
+	Documentation: nova: update pending tasks
+drm-intel drm-intel-next c0dc68f4e2aa7eddb9ec6d95931f9576d8fe7334
+	drm/i915/display: fix the pixel normalization handling for xe3p_lpd
+drm-intel drm-intel-gt-next 8103ecc1999eefc54b740d8d99f264ced1d9c54d
+	drm/i915/selftests: Keep mock file open during unfaultable migrate with fill
+drm-xe drm-xe-next de96c43a69b1caf3190609a6509f22433a118782
+	drm/xe: Apply WA_16028005424 to Media
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 912b9b537ae6e75c352d42f7ac40b50f9aa3d2ce
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
