@@ -804,11 +804,19 @@ static int imx8mp_blk_ctrl_suspend(struct device *dev)
 
 	for (i = 0; i < bc->onecell_data.num_domains; i++) {
 		struct imx8mp_blk_ctrl_domain *domain = &bc->domains[i];
+		struct pm_domain_data *pdd;
 
 		ret = pm_runtime_get_sync(domain->power_dev);
 		if (ret < 0) {
 			pm_runtime_put_noidle(domain->power_dev);
 			goto out_fail;
+		}
+
+		list_for_each_entry(pdd, &domain->genpd.dev_list, list_node) {
+			if (device_awake_path(pdd->dev)) {
+				device_set_awake_path(domain->power_dev);
+				break;
+			}
 		}
 	}
 
