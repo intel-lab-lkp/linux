@@ -559,7 +559,7 @@ static struct qcom_ice *qcom_ice_create(struct device *dev,
 
 	if (!qcom_scm_ice_available()) {
 		dev_warn(dev, "ICE SCM interface not found\n");
-		return NULL;
+		return ERR_PTR(-EOPNOTSUPP);
 	}
 
 	engine = devm_kzalloc(dev, sizeof(*engine), GFP_KERNEL);
@@ -648,11 +648,14 @@ static struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	}
 
 	ice = platform_get_drvdata(pdev);
-	if (!ice) {
+	if (IS_ERR_OR_NULL(ice)) {
 		dev_err(dev, "Cannot get ice instance from %s\n",
 			dev_name(&pdev->dev));
 		platform_device_put(pdev);
-		return ERR_PTR(-EPROBE_DEFER);
+		if (PTR_ERR(ice) == -EOPNOTSUPP)
+			return NULL;
+		else
+			return ERR_PTR(-EPROBE_DEFER);
 	}
 
 	link = device_link_add(dev, &pdev->dev, DL_FLAG_AUTOREMOVE_SUPPLIER);
@@ -726,7 +729,7 @@ static int qcom_ice_probe(struct platform_device *pdev)
 	}
 
 	engine = qcom_ice_create(&pdev->dev, base);
-	if (IS_ERR(engine))
+	if (IS_ERR(engine) && PTR_ERR(engine) != -EOPNOTSUPP)
 		return PTR_ERR(engine);
 
 	platform_set_drvdata(pdev, engine);
