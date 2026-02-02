@@ -19,6 +19,10 @@ properties:
   compatible:
     const: qcom,sm8750-tlmm
 
+  clocks:
+    items:
+      - description: RPMh XO clock
+
   reg:
     maxItems: 1
 
@@ -31,6 +35,9 @@ properties:
 
   gpio-line-names:
     maxItems: 215
+
+  '#clock-cells':
+    const: 1
 
 patternProperties:
   "-state$":
@@ -100,6 +107,8 @@ $defs:
 required:
   - compatible
   - reg
+  - clocks
+  - '#clock-cells'
 
 unevaluatedProperties: false
 
@@ -109,12 +118,15 @@ examples:
     tlmm: pinctrl@f100000 {
         compatible = "qcom,sm8750-tlmm";
         reg = <0x0f100000 0x300000>;
+        clocks = <&rpmhcc_xo>;
         gpio-controller;
         #gpio-cells = <2>;
         gpio-ranges = <&tlmm 0 0 216>;
         interrupt-controller;
         #interrupt-cells = <2>;
         interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
+
+        #clock-cells = <1>;
 
         gpio-wo-state {
             pins = "gpio1";
