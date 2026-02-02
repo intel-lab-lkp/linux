@@ -14,6 +14,9 @@
 
 #include "trace_output.h"
 
+/* The alignment of a type when in a structure */
+#define ALIGN_STRUCTFIELD(type) ((int)(__alignof__(struct {type b;})))
+
 /* Stub function for events with triggers */
 static int ftrace_event_register(struct trace_event_call *call,
 				 enum trace_reg type, void *data)
@@ -88,7 +91,7 @@ static void __always_unused ____ftrace_check_##name(void)		\
 #undef __field_ext
 #define __field_ext(_type, _item, _filter_type) {			\
 	.type = #_type, .name = #_item,					\
-	.size = sizeof(_type), .align = __alignof__(_type),		\
+	.size = sizeof(_type), .align = ALIGN_STRUCTFIELD(_type),	\
 	is_signed_type(_type), .filter_type = _filter_type },
 
 
