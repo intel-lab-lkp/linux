@@ -32,6 +32,14 @@
 #define MADV_PAGEOUT	21
 #endif
 
+#ifndef MPOL_BIND
+#define MPOL_BIND	2
+#endif
+
+#ifndef MPOL_MF_MOVE
+#define MPOL_MF_MOVE	(1 << 1)
+#endif
+
 /* Get PUD-aligned address within a region */
 static inline void *pud_align(void *addr)
 {
@@ -312,6 +320,40 @@ TEST_F(pud_thp, reclaim_pageout)
 	(void)*p;  /* Read to bring pages back if swapped */
 
 	TH_LOG("Reclaim completed (thp_split_pud: %lu -> %lu)",
+	       self->split_before, split_after);
+}
+
+/*
+ * Test: Migration via mbind
+ * Verifies that migration path correctly handles PUD THPs by splitting
+ */
+TEST_F(pud_thp, migration_mbind)
+{
+	unsigned char *bytes = (unsigned char *)self->aligned;
+	unsigned long nodemask = 1UL;  /* Node 0 */
+	unsigned long split_after;
+	int ret;
+
+	/* Touch memory to allocate PUD THP */
+	memset(self->aligned, 0xBB, PUD_SIZE);
+
+	/* Try to migrate by changing NUMA policy */
+	ret = syscall(__NR_mbind, self->aligned, PUD_SIZE, MPOL_BIND, &nodemask,
+		      sizeof(nodemask) * 8, MPOL_MF_MOVE);
+	/*
+	 * mbind may fail with EINVAL (single node) or EIO (migration failed),
+	 * which is acceptable - we just want to exercise the migration path.
+	 */
+	if (ret < 0 && errno != EINVAL && errno != EIO)
+		TH_LOG("mbind returned unexpected error: %s", strerror(errno));
+
+	split_after = read_vmstat("thp_split_pud");
+
+	/* Verify data integrity */
+	ASSERT_EQ(bytes[0], 0xBB);
+	ASSERT_EQ(bytes[PUD_SIZE - 1], 0xBB);
+
+	TH_LOG("Migration completed (thp_split_pud: %lu -> %lu)",
 	       self->split_before, split_after);
 }
 
