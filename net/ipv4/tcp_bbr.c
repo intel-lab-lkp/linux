@@ -1011,6 +1011,13 @@ static void bbr_update_gains(struct sock *sk)
 		WARN_ONCE(1, "BBR bad mode: %u\n", bbr->mode);
 		break;
 	}
+        // overwrite pacing gain in case the sender fails to put enough data inflight
+        struct tcp_sock *tp = tcp_sk(sk);
+        u64 real_inflight = tp->bytes_sent - tp->bytes_acked;
+        u32 target_inflight = bbr_inflight(sk, bbr_bw(sk), BBR_UNIT) * tp->mss_cache;
+        if (real_inflight < target_inflight) {
+                bbr->pacing_gain = bbr_high_gain;
+        }
 }
 
 static void bbr_update_model(struct sock *sk, const struct rate_sample *rs)
