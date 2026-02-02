@@ -2064,6 +2064,129 @@ void arch_remove_memory(u64 start, u64 size, struct vmem_altmap *altmap)
 	__remove_pgd_mapping(swapper_pg_dir, __phys_to_virt(start), size);
 }
 
+
+static bool split_kernel_leaf_boundary(unsigned long addr)
+{
+	pgd_t *pgdp, pgd;
+	p4d_t *p4dp, p4d;
+	pud_t *pudp, pud;
+	pmd_t *pmdp, pmd;
+	pte_t *ptep, pte;
+
+	/*
+	 * PGD: If addr is PGD aligned then addr already
+	 * describes a leaf boundary.
+	 */
+	if (ALIGN_DOWN(addr, PGDIR_SIZE) == addr)
+		return false;
+
+	pgdp = pgd_offset_k(addr);
+	pgd = pgdp_get(pgdp);
+	if (!pgd_present(pgd))
+		return false;
+
+	/*
+	 * P4D: If addr is P4D aligned then addr already
+	 * describes a leaf boundary.
+	 */
+	if (ALIGN_DOWN(addr, P4D_SIZE) == addr)
+		return false;
+
+	p4dp = p4d_offset(pgdp, addr);
+	p4d = p4dp_get(p4dp);
+	if (!p4d_present(p4d))
+		return false;
+
+	/*
+	 * PUD: If addr is PUD aligned then addr already
+	 * describes a leaf boundary.
+	 */
+	if (ALIGN_DOWN(addr, PUD_SIZE) == addr)
+		return false;
+
+	pudp = pud_offset(p4dp, addr);
+	pud = pudp_get(pudp);
+	if (!pud_present(pud))
+		return false;
+
+	if (pud_leaf(pud))
+		return true;
+
+	/*
+	 * CONT_PMD: If addr is CONT_PMD aligned then
+	 * addr already describes a leaf boundary.
+	 */
+	if (ALIGN_DOWN(addr, CONT_PMD_SIZE) == addr)
+		return false;
+
+	pmdp = pmd_offset(pudp, addr);
+	pmd = pmdp_get(pmdp);
+	if (!pmd_present(pmd))
+		return false;
+
+	if (pmd_leaf(pmd) && pmd_cont(pmd))
+		return true;
+
+	/*
+	 * PMD: If addr is PMD aligned then addr already
+	 * describes a leaf boundary.
+	 */
+	if (ALIGN_DOWN(addr, PMD_SIZE) == addr)
+		return false;
+
+	if (pmd_leaf(pmd))
+		return true;
+
+	/*
+	 * CONT_PTE: If addr is CONT_PTE aligned then addr
+	 * already describes a leaf boundary.
+	 */
+	if (ALIGN_DOWN(addr, CONT_PTE_SIZE) == addr)
+		return false;
+
+	ptep = pte_offset_kernel(pmdp, addr);
+	pte = __ptep_get(ptep);
+	if (!pte_present(pte))
+		return false;
+
+	if (pte_valid(pte) && pte_cont(pte))
+		return true;
+
+	if (ALIGN_DOWN(addr, PAGE_SIZE) == addr)
+		return false;
+	return true;
+}
+
+static bool can_unmap_without_split(unsigned long pfn, unsigned long nr_pages)
+{
+	unsigned long linear_start, linear_end, phys_start, phys_end;
+	unsigned long vmemmap_size, vmemmap_start, vmemmap_end;
+
+	/* Assert linear map edges do not split a leaf entry */
+	phys_start = PFN_PHYS(pfn);
+	phys_end = phys_start + nr_pages * PAGE_SIZE;
+	linear_start = __phys_to_virt(phys_start);
+	linear_end =  __phys_to_virt(phys_end);
+	if (split_kernel_leaf_boundary(linear_start) ||
+	    split_kernel_leaf_boundary(linear_end)) {
+		pr_warn("[%lx %lx] splits a leaf entry in linear map\n",
+			phys_start, phys_end);
+		return false;
+	}
+
+	/* Assert vmemmap edges do not split a leaf entry */
+	vmemmap_size = nr_pages * sizeof(struct page);
+	vmemmap_start = (unsigned long) pfn_to_page(pfn);
+	vmemmap_end = vmemmap_start + vmemmap_size;
+	if (split_kernel_leaf_boundary(vmemmap_start) ||
+	    split_kernel_leaf_boundary(vmemmap_end)) {
+		pr_warn("[%lx %lx] splits a leaf entry in vmemmap\n",
+			phys_start, phys_end);
+		return false;
+	}
+	return true;
+}
+
 /*
  * This memory hotplug notifier helps prevent boot memory from being
  * inadvertently removed as it blocks pfn range offlining process in
@@ -2083,6 +2206,9 @@ static int prevent_bootmem_remove_notifier(struct notifier_block *nb,
 
 	if ((action != MEM_GOING_OFFLINE) && (action != MEM_OFFLINE))
 		return NOTIFY_OK;
+
+	if (!can_unmap_without_split(pfn, arg->nr_pages))
+		return NOTIFY_BAD;
 
 	for (; pfn < end_pfn; pfn += PAGES_PER_SECTION) {
 		unsigned long start = PFN_PHYS(pfn);
