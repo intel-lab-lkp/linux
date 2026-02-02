@@ -189,13 +189,22 @@ static bool iavf_is_reset_in_progress(struct iavf_adapter *adapter)
  * iavf_wait_for_reset - Wait for reset to finish.
  * @adapter: board private structure
  *
+ * The iavf driver selects NET_SHAPER, so callbacks that trigger reset are
+ * always called with netdev instance lock held, while reset_task also needs
+ * this lock. Release the lock while waiting to avoid deadlock.
+ *
  * Returns 0 if reset finished successfully, negative on timeout or interrupt.
  */
 int iavf_wait_for_reset(struct iavf_adapter *adapter)
 {
-	int ret = wait_event_interruptible_timeout(adapter->reset_waitqueue,
-					!iavf_is_reset_in_progress(adapter),
-					msecs_to_jiffies(5000));
+	struct net_device *netdev = adapter->netdev;
+	int ret;
+
+	netdev_unlock(netdev);
+	ret = wait_event_interruptible_timeout(adapter->reset_waitqueue,
+					       !iavf_is_reset_in_progress(adapter),
+					       msecs_to_jiffies(5000));
+	netdev_lock(netdev);
 
 	/* If ret < 0 then it means wait was interrupted.
 	 * If ret == 0 then it means we got a timeout while waiting
