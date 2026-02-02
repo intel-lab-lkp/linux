@@ -626,6 +626,8 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 		if (ret ||
 		    !intel_dp_dotclk_valid(display,
 					   adjusted_mode->clock,
+					   adjusted_mode->htotal,
+					   0,
 					   num_joined_pipes))
 			dsc_needed = true;
 	}
@@ -637,6 +639,8 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 
 	/* enable compression if the mode doesn't fit available BW */
 	if (dsc_needed) {
+		int dsc_slice_count;
+
 		drm_dbg_kms(display->drm, "Try DSC (fallback=%s, joiner=%s, force=%s)\n",
 			    str_yes_no(ret), str_yes_no(joiner_needs_dsc),
 			    str_yes_no(intel_dp->force_dsc_en));
@@ -670,8 +674,12 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 		if (ret)
 			return ret;
 
+		dsc_slice_count = intel_dp_mst_dsc_get_slice_count(connector, pipe_config);
+
 		if (!intel_dp_dotclk_valid(display,
 					   adjusted_mode->clock,
+					   adjusted_mode->htotal,
+					   dsc_slice_count,
 					   num_joined_pipes))
 			return -EINVAL;
 	}
@@ -1528,6 +1536,8 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 
 	*status = MODE_CLOCK_HIGH;
 	for (num_joined_pipes = 1; num_joined_pipes <= I915_MAX_PIPES; num_joined_pipes++) {
+		int dsc_slice_count = 0;
+
 		if (connector->force_joined_pipes &&
 		    num_joined_pipes != connector->force_joined_pipes)
 			continue;
@@ -1545,6 +1555,11 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 			 * for now U8_MAX so that max BPC on that platform would be picked
 			 */
 			int pipe_bpp = intel_dp_dsc_compute_max_bpp(connector, U8_MAX);
+
+			dsc_slice_count = intel_dp_dsc_get_slice_count(connector,
+								       mode->clock,
+								       mode->hdisplay,
+								       num_joined_pipes);
 
 			if (!drm_dp_is_uhbr_rate(max_link_clock))
 				bw_overhead_flags |= DRM_DP_BW_OVERHEAD_FEC;
@@ -1572,8 +1587,13 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		if (*status != MODE_OK)
 			continue;
 
+		if (!dsc)
+			dsc_slice_count = 0;
+
 		if (!intel_dp_dotclk_valid(display,
 					   mode->clock,
+					   mode->htotal,
+					   dsc_slice_count,
 					   num_joined_pipes)) {
 			*status = MODE_CLOCK_HIGH;
 			continue;
