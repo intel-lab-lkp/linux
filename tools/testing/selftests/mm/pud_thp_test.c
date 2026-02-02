@@ -158,4 +158,27 @@ TEST_F(pud_thp, basic_allocation)
 	       self->mthp_alloc_before, mthp_alloc_after);
 }
 
+/*
+ * Test: Read/write access patterns
+ * Verifies data integrity across the entire 1GB region
+ */
+TEST_F(pud_thp, read_write_access)
+{
+	unsigned long *ptr = (unsigned long *)self->aligned;
+	size_t i;
+	int errors = 0;
+
+	/* Write pattern - sample every page to reduce test time */
+	for (i = 0; i < PUD_SIZE / sizeof(unsigned long); i += PAGE_SIZE / sizeof(unsigned long))
+		ptr[i] = i ^ 0xDEADBEEFUL;
+
+	/* Verify pattern */
+	for (i = 0; i < PUD_SIZE / sizeof(unsigned long); i += PAGE_SIZE / sizeof(unsigned long)) {
+		if (ptr[i] != (i ^ 0xDEADBEEFUL))
+			errors++;
+	}
+
+	ASSERT_EQ(errors, 0);
+}
+
 TEST_HARNESS_MAIN
