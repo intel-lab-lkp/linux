@@ -1355,6 +1355,8 @@ retry:
 			enum ttu_flags flags = TTU_BATCH_FLUSH;
 			bool was_swapbacked = folio_test_swapbacked(folio);
 
+			if (folio_test_pud_mappable(folio))
+				flags |= TTU_SPLIT_HUGE_PUD;
 			if (folio_test_pmd_mappable(folio))
 				flags |= TTU_SPLIT_HUGE_PMD;
 			/*

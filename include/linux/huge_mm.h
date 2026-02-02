@@ -559,6 +559,17 @@ static inline bool folio_test_pmd_mappable(struct folio *folio)
 	return folio_order(folio) >= HPAGE_PMD_ORDER;
 }
 
+/**
+ * folio_test_pud_mappable - Can we map this folio with a PUD?
+ * @folio: The folio to test
+ *
+ * Return: true - @folio can be PUD-mapped, false - @folio cannot be PUD-mapped.
+ */
+static inline bool folio_test_pud_mappable(struct folio *folio)
+{
+	return folio_order(folio) >= HPAGE_PUD_ORDER;
+}
+
 vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf);
 
 vm_fault_t do_huge_pmd_device_private(struct vm_fault *vmf);

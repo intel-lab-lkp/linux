@@ -1859,6 +1859,23 @@ static int migrate_pages_batch(struct list_head *from,
 			 * we will migrate them after the rest of the
 			 * list is processed.
 			 */
+			/*
+			 * PUD-sized folios cannot be migrated directly,
+			 * but can be split. Try to split them first and
+			 * migrate the resulting smaller folios.
+			 */
+			if (folio_test_pud_mappable(folio)) {
+				nr_failed++;
+				stats->nr_thp_failed++;
+				if (!try_split_folio(folio, split_folios, mode)) {
+					stats->nr_thp_split++;
+					stats->nr_split++;
+					continue;
+				}
+				stats->nr_failed_pages += nr_pages;
+				list_move_tail(&folio->lru, ret_folios);
+				continue;
+			}
 			if (!thp_migration_supported() && is_thp) {
 				nr_failed++;
 				stats->nr_thp_failed++;

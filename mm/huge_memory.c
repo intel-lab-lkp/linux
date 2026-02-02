@@ -2228,9 +2228,17 @@ int copy_huge_pud(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		goto out_unlock;
 
 	/*
-	 * TODO: once we support anonymous pages, use
-	 * folio_try_dup_anon_rmap_*() and split if duplicating fails.
+	 * For anonymous pages, split to PTE level.
+	 * This simplifies fork handling - we don't need to duplicate
+	 * the complex anon rmap at PUD level.
 	 */
+	if (vma_is_anonymous(vma)) {
+		spin_unlock(src_ptl);
+		spin_unlock(dst_ptl);
+		__split_huge_pud(vma, src_pud, addr);
+		return -EAGAIN;
+	}
+
 	if (is_cow_mapping(vma->vm_flags) && pud_write(pud)) {
 		pudp_set_wrprotect(src_mm, addr, src_pud);
 		pud = pud_wrprotect(pud);
@@ -3099,10 +3107,28 @@ int zap_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 {
 	spinlock_t *ptl;
 	pud_t orig_pud;
+	pmd_t *pmd_table;
+	pgtable_t pte_table;
+	int nr_pte_tables = 0;
 
 	ptl = __pud_trans_huge_lock(pud, vma);
 	if (!ptl)
 		return 0;
+
+	/*
+	 * Withdraw any deposited page tables before clearing the PUD.
+	 * These need to be freed and their counters decremented.
+	 */
+	pmd_table = pgtable_trans_huge_pud_withdraw(tlb->mm, pud);
+	if (pmd_table) {
+		while ((pte_table = pud_withdraw_pte(pmd_table)) != NULL) {
+			pte_free(tlb->mm, pte_table);
+			mm_dec_nr_ptes(tlb->mm);
+			nr_pte_tables++;
+		}
+		pmd_free(tlb->mm, pmd_table);
+		mm_dec_nr_pmds(tlb->mm);
+	}
 
 	orig_pud = pudp_huge_get_and_clear_full(vma, addr, pud, tlb->fullmm);
 	arch_check_zapped_pud(vma, orig_pud);
@@ -3114,14 +3140,15 @@ int zap_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		struct page *page = NULL;
 		struct folio *folio;
 
-		/* No support for anonymous PUD pages or migration yet */
-		VM_WARN_ON_ONCE(vma_is_anonymous(vma) ||
-				!pud_present(orig_pud));
+		VM_WARN_ON_ONCE(!pud_present(orig_pud));
 
 		page = pud_page(orig_pud);
 		folio = page_folio(page);
 		folio_remove_rmap_pud(folio, page, vma);
-		add_mm_counter(tlb->mm, mm_counter_file(folio), -HPAGE_PUD_NR);
+		if (vma_is_anonymous(vma))
+			add_mm_counter(tlb->mm, MM_ANONPAGES, -HPAGE_PUD_NR);
+		else
+			add_mm_counter(tlb->mm, mm_counter_file(folio), -HPAGE_PUD_NR);
 
 		spin_unlock(ptl);
 		tlb_remove_page_size(tlb, page, HPAGE_PUD_SIZE);
@@ -3729,15 +3756,53 @@ static inline void split_huge_pmd_if_needed(struct vm_area_struct *vma, unsigned
 		split_huge_pmd_address(vma, address, false);
 }
 
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+static void split_huge_pud_address(struct vm_area_struct *vma, unsigned long address)
+{
+	pud_t *pud = mm_find_pud(vma->vm_mm, address);
+
+	if (!pud)
+		return;
+
+	__split_huge_pud(vma, pud, address);
+}
+
+static inline void split_huge_pud_if_needed(struct vm_area_struct *vma, unsigned long address)
+{
+	/*
+	 * If the new address isn't PUD-aligned and it could previously
+	 * contain a PUD huge page: check if we need to split it.
+	 */
+	if (!IS_ALIGNED(address, HPAGE_PUD_SIZE) &&
+	    range_in_vma(vma, ALIGN_DOWN(address, HPAGE_PUD_SIZE),
+			 ALIGN(address, HPAGE_PUD_SIZE)))
+		split_huge_pud_address(vma, address);
+}
+#else
+static inline void split_huge_pud_if_needed(struct vm_area_struct *vma, unsigned long address)
+{
+}
+#endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
+
 void vma_adjust_trans_huge(struct vm_area_struct *vma,
 			   unsigned long start,
 			   unsigned long end,
 			   struct vm_area_struct *next)
 {
-	/* Check if we need to split start first. */
+	/* Check if we need to split PUD THP at start first. */
+	split_huge_pud_if_needed(vma, start);
+
+	/* Check if we need to split PUD THP at end. */
+	split_huge_pud_if_needed(vma, end);
+
+	/* If we're incrementing next->vm_start, we might need to split it. */
+	if (next)
+		split_huge_pud_if_needed(next, end);
+
+	/* Check if we need to split PMD THP at start. */
 	split_huge_pmd_if_needed(vma, start);
 
-	/* Check if we need to split end next. */
+	/* Check if we need to split PMD THP at end. */
 	split_huge_pmd_if_needed(vma, end);
 
 	/* If we're incrementing next->vm_start, we might need to split it. */
@@ -3752,6 +3817,8 @@ static void unmap_folio(struct folio *folio)
 
 	VM_BUG_ON_FOLIO(!folio_test_large(folio), folio);
 
+	if (folio_test_pud_mappable(folio))
+		ttu_flags |= TTU_SPLIT_HUGE_PUD;
 	if (folio_test_pmd_mappable(folio))
 		ttu_flags |= TTU_SPLIT_HUGE_PMD;
 
