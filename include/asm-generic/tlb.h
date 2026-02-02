@@ -831,17 +831,18 @@ static inline void tlb_flush_unshared_tables(struct mmu_gather *tlb)
 	/*
 	 * Similarly, we must make sure that concurrent GUP-fast will not
 	 * walk previously-shared page tables that are getting modified+reused
-	 * elsewhere. So broadcast an IPI to wait for any concurrent GUP-fast.
+	 * elsewhere. So send an IPI to wait for any concurrent GUP-fast.
 	 *
-	 * We only perform this when we are the last sharer of a page table,
-	 * as the IPI will reach all CPUs: any GUP-fast.
+	 * We only perform this when we are the last sharer of a page table.
+	 * Use targeted IPI to CPUs actively walking this mm instead of
+	 * broadcast.
 	 *
-	 * Note that on configs where tlb_remove_table_sync_one() is a NOP,
+	 * Note that on configs where tlb_remove_table_sync_mm() is a NOP,
 	 * the expectation is that the tlb_flush_mmu_tlbonly() would have issued
 	 * required IPIs already for us.
 	 */
 	if (tlb->fully_unshared_tables) {
-		tlb_remove_table_sync_one();
+		tlb_remove_table_sync_mm(tlb->mm);
 		tlb->fully_unshared_tables = false;
 	}
 }

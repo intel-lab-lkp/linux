@@ -378,7 +378,7 @@ static inline void __tlb_remove_table_one_rcu(struct rcu_head *head)
 	__tlb_remove_table(ptdesc);
 }
 
-static inline void __tlb_remove_table_one(void *table)
+static inline void __tlb_remove_table_one(struct mmu_gather *tlb, void *table)
 {
 	struct ptdesc *ptdesc;
 
@@ -386,16 +386,16 @@ static inline void __tlb_remove_table_one(void *table)
 	call_rcu(&ptdesc->pt_rcu_head, __tlb_remove_table_one_rcu);
 }
 #else
-static inline void __tlb_remove_table_one(void *table)
+static inline void __tlb_remove_table_one(struct mmu_gather *tlb, void *table)
 {
-	tlb_remove_table_sync_one();
+	tlb_remove_table_sync_mm(tlb->mm);
 	__tlb_remove_table(table);
 }
 #endif /* CONFIG_PT_RECLAIM */
 
-static void tlb_remove_table_one(void *table)
+static void tlb_remove_table_one(struct mmu_gather *tlb, void *table)
 {
-	__tlb_remove_table_one(table);
+	__tlb_remove_table_one(tlb, table);
 }
 
 static void tlb_table_flush(struct mmu_gather *tlb)
@@ -417,7 +417,7 @@ void tlb_remove_table(struct mmu_gather *tlb, void *table)
 		*batch = (struct mmu_table_batch *)__get_free_page(GFP_NOWAIT);
 		if (*batch == NULL) {
 			tlb_table_invalidate(tlb);
-			tlb_remove_table_one(table);
+			tlb_remove_table_one(tlb, table);
 			return;
 		}
 		(*batch)->nr = 0;
