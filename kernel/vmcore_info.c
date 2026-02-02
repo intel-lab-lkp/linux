@@ -6,6 +6,8 @@
 
 #include <linux/buildid.h>
 #include <linux/init.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
 #include <linux/utsname.h>
 #include <linux/vmalloc.h>
 #include <linux/sizes.h>
@@ -139,6 +141,56 @@ void hwerr_log_error_type(enum hwerr_error_type src)
 }
 EXPORT_SYMBOL_GPL(hwerr_log_error_type);
 
+/* sysfs interface for hardware error recovery statistics */
+#define HWERR_ATTR_RO(_name, _type)					\
+static ssize_t _name##_show(struct kobject *kobj,			\
+			    struct kobj_attribute *attr, char *buf)	\
+{									\
+	return sysfs_emit(buf, "%d\n",					\
+			  atomic_read(&hwerr_data[_type].count));	\
+}									\
+static struct kobj_attribute hwerr_##_name##_attr = __ATTR_RO(_name)
+
+HWERR_ATTR_RO(cpu, HWERR_RECOV_CPU);
+HWERR_ATTR_RO(memory, HWERR_RECOV_MEMORY);
+HWERR_ATTR_RO(pci, HWERR_RECOV_PCI);
+HWERR_ATTR_RO(cxl, HWERR_RECOV_CXL);
+HWERR_ATTR_RO(others, HWERR_RECOV_OTHERS);
+
+static struct attribute *hwerr_recovery_stats_attrs[] = {
+	&hwerr_cpu_attr.attr,
+	&hwerr_memory_attr.attr,
+	&hwerr_pci_attr.attr,
+	&hwerr_cxl_attr.attr,
+	&hwerr_others_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group hwerr_recovery_stats_group = {
+	.attrs = hwerr_recovery_stats_attrs,
+};
+
+static struct kobject *hwerr_recovery_stats_kobj;
+
+static int __init hwerr_recovery_stats_init(void)
+{
+	hwerr_recovery_stats_kobj = kobject_create_and_add("hwerr_recovery_stats",
+							   kernel_kobj);
+	if (!hwerr_recovery_stats_kobj) {
+		pr_warn("Failed to create hwerr_recovery_stats kobject\n");
+		return -ENOMEM;
+	}
+
+	if (sysfs_create_group(hwerr_recovery_stats_kobj,
+			       &hwerr_recovery_stats_group)) {
+		kobject_put(hwerr_recovery_stats_kobj);
+		pr_warn("Failed to create hwerr_recovery_stats sysfs group\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
 static int __init crash_save_vmcoreinfo_init(void)
 {
 	vmcoreinfo_data = (unsigned char *)get_zeroed_page(GFP_KERNEL);
@@ -247,6 +299,9 @@ static int __init crash_save_vmcoreinfo_init(void)
 
 	arch_crash_save_vmcoreinfo();
 	update_vmcoreinfo_note();
+
+	/* Create /sys/kernel/hwerr_recovery_stats/ directory */
+	hwerr_recovery_stats_init();
 
 	return 0;
 }
