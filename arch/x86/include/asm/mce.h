@@ -370,13 +370,24 @@ enum smca_bank_types {
 	SMCA_NBIO,	/* Northbridge IO Unit */
 	SMCA_PCIE,	/* PCI Express Unit */
 	SMCA_PCIE_V2,
+	SMCA_MPRAS,	/* MP for RAS */
 	SMCA_XGMI_PCS,	/* xGMI PCS Unit */
+	SMCA_SSBDCI,	/* Die to Die Interconnect */
 	SMCA_NBIF,	/* NBIF Unit */
 	SMCA_SHUB,	/* System HUB Unit */
 	SMCA_SATA,	/* SATA Unit */
 	SMCA_USB,	/* USB Unit */
+	SMCA_MPDACC,	/* MP for Data Acceleration */
+	SMCA_MPM,	/* Microprocessor Manageability Core */
+	SMCA_MPASP,	/* AMD Secure Processor */
+	SMCA_MPASP_V2,
+	SMCA_MPART,	/* AMD Root of Trust Microprocessor */
+	SMCA_DACC_FE,	/* Data Acceleration Front-end */
+	SMCA_DACC_BE,	/* Data Acceleration Back-end */
 	SMCA_USR_DP,	/* Ultra Short Reach Data Plane Controller */
 	SMCA_USR_CP,	/* Ultra Short Reach Control Plane Controller */
+	SMCA_EDDR5CMN,	/* eDDR5 CMN */
+	SMCA_PCIE_PL,	/* PCIe Link */
 	SMCA_GMI_PCS,	/* GMI PCS Unit */
 	SMCA_XGMI_PHY,	/* xGMI PHY Unit */
 	SMCA_WAFL_PHY,	/* WAFL PHY Unit */
