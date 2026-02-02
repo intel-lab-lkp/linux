@@ -3129,12 +3129,82 @@ int zap_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	return 1;
 }
 
+/*
+ * Structure to hold page tables for PUD split.
+ * Tables are withdrawn from the pre-deposit made at fault time.
+ */
+struct pud_split_ptables {
+	pmd_t *pmd_table;
+	pgtable_t *pte_tables;  /* Array of 512 PTE tables */
+	int nr_pte_tables;      /* Number of PTE tables in array */
+};
+
+/*
+ * Withdraw pre-deposited page tables from PUD THP.
+ * Tables are always deposited at fault time in do_huge_pud_anonymous_page().
+ * Returns true if successful, false if no tables deposited.
+ */
+static bool withdraw_pud_split_ptables(struct mm_struct *mm, pud_t *pud,
+				       struct pud_split_ptables *tables)
+{
+	pmd_t *pmd_table;
+	pgtable_t pte_table;
+	int i;
+
+	tables->pmd_table = NULL;
+	tables->pte_tables = NULL;
+	tables->nr_pte_tables = 0;
+
+	/* Try to withdraw the deposited PMD table */
+	pmd_table = pgtable_trans_huge_pud_withdraw(mm, pud);
+	if (!pmd_table)
+		return false;
+
+	tables->pmd_table = pmd_table;
+
+	/* Allocate array to hold PTE table pointers */
+	tables->pte_tables = kmalloc_array(NR_PTE_TABLES_FOR_PUD,
+					   sizeof(pgtable_t), GFP_ATOMIC);
+	if (!tables->pte_tables)
+		goto fail;
+
+	/* Withdraw PTE tables from the PMD table */
+	for (i = 0; i < NR_PTE_TABLES_FOR_PUD; i++) {
+		pte_table = pud_withdraw_pte(pmd_table);
+		if (!pte_table)
+			goto fail;
+		tables->pte_tables[i] = pte_table;
+		tables->nr_pte_tables++;
+	}
+
+	return true;
+
+fail:
+	/* Put back any tables we withdrew */
+	for (i = 0; i < tables->nr_pte_tables; i++)
+		pud_deposit_pte(pmd_table, tables->pte_tables[i]);
+	kfree(tables->pte_tables);
+	pgtable_trans_huge_pud_deposit(mm, pud, pmd_table);
+	tables->pmd_table = NULL;
+	tables->pte_tables = NULL;
+	tables->nr_pte_tables = 0;
+	return false;
+}
+
 static void __split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
 		unsigned long haddr)
 {
+	bool dirty = false, young = false, write = false;
+	struct pud_split_ptables tables = { 0 };
+	struct mm_struct *mm = vma->vm_mm;
+	rmap_t rmap_flags = RMAP_NONE;
+	bool anon_exclusive = false;
+	bool soft_dirty = false;
 	struct folio *folio;
+	unsigned long addr;
 	struct page *page;
 	pud_t old_pud;
+	int i, j;
 
 	VM_BUG_ON(haddr & ~HPAGE_PUD_MASK);
 	VM_BUG_ON_VMA(vma->vm_start > haddr, vma);
@@ -3145,20 +3215,115 @@ static void __split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
 
 	old_pud = pudp_huge_clear_flush(vma, haddr, pud);
 
-	if (!vma_is_dax(vma))
+	if (!vma_is_anonymous(vma)) {
+		if (!vma_is_dax(vma))
+			return;
+
+		page = pud_page(old_pud);
+		folio = page_folio(page);
+
+		if (!folio_test_dirty(folio) && pud_dirty(old_pud))
+			folio_mark_dirty(folio);
+		if (!folio_test_referenced(folio) && pud_young(old_pud))
+			folio_set_referenced(folio);
+		folio_remove_rmap_pud(folio, page, vma);
+		folio_put(folio);
+		add_mm_counter(mm, mm_counter_file(folio), -HPAGE_PUD_NR);
 		return;
+	}
+
+	/*
+	 * Anonymous PUD split: split directly to PTE level.
+	 *
+	 * We cannot create PMD huge entries pointing to portions of a larger
+	 * folio because the kernel's rmap infrastructure assumes PMD mappings
+	 * are for PMD-sized folios only (see __folio_rmap_sanity_checks).
+	 * Instead, we create a PMD table with 512 entries, each pointing to
+	 * a PTE table with 512 PTEs.
+	 *
+	 * Tables are always deposited at fault time in do_huge_pud_anonymous_page().
+	 */
+	if (!withdraw_pud_split_ptables(mm, pud, &tables)) {
+		WARN_ON_ONCE(1);
+		return;
+	}
 
 	page = pud_page(old_pud);
 	folio = page_folio(page);
 
-	if (!folio_test_dirty(folio) && pud_dirty(old_pud))
-		folio_mark_dirty(folio);
-	if (!folio_test_referenced(folio) && pud_young(old_pud))
-		folio_set_referenced(folio);
+	dirty = pud_dirty(old_pud);
+	write = pud_write(old_pud);
+	young = pud_young(old_pud);
+	soft_dirty = pud_soft_dirty(old_pud);
+	anon_exclusive = PageAnonExclusive(page);
+
+	if (dirty)
+		folio_set_dirty(folio);
+
+	/*
+	 * Add references for each page that will have its own PTE.
+	 * Original folio has 1 reference. After split, each of 262144 PTEs
+	 * will eventually be unmapped, each calling folio_put().
+	 */
+	folio_ref_add(folio, HPAGE_PUD_NR - 1);
+
+	/*
+	 * Add PTE-level rmap for all pages at once.
+	 */
+	if (anon_exclusive)
+		rmap_flags |= RMAP_EXCLUSIVE;
+	folio_add_anon_rmap_ptes(folio, page, HPAGE_PUD_NR,
+				 vma, haddr, rmap_flags);
+
+	/* Remove PUD-level rmap */
 	folio_remove_rmap_pud(folio, page, vma);
-	folio_put(folio);
-	add_mm_counter(vma->vm_mm, mm_counter_file(folio),
-		-HPAGE_PUD_NR);
+
+	/*
+	 * Create 512 PMD entries, each pointing to a PTE table.
+	 * Each PTE table has 512 PTEs pointing to individual pages.
+	 */
+	addr = haddr;
+	for (i = 0; i < (HPAGE_PUD_NR / HPAGE_PMD_NR); i++) {
+		pmd_t *pmd_entry = tables.pmd_table + i;
+		pgtable_t pte_table = tables.pte_tables[i];
+		pte_t *pte;
+		struct page *subpage_base = page + i * HPAGE_PMD_NR;
+
+		/* Populate the PTE table */
+		pte = page_address(pte_table);
+		for (j = 0; j < HPAGE_PMD_NR; j++) {
+			struct page *subpage = subpage_base + j;
+			pte_t entry;
+
+			entry = mk_pte(subpage, vma->vm_page_prot);
+			if (write)
+				entry = pte_mkwrite(entry, vma);
+			if (dirty)
+				entry = pte_mkdirty(entry);
+			if (young)
+				entry = pte_mkyoung(entry);
+			if (soft_dirty)
+				entry = pte_mksoft_dirty(entry);
+
+			set_pte_at(mm, addr + j * PAGE_SIZE, pte + j, entry);
+		}
+
+		/* Set PMD to point to PTE table */
+		pmd_populate(mm, pmd_entry, pte_table);
+		addr += HPAGE_PMD_SIZE;
+	}
+
+	/*
+	 * Memory barrier ensures all PMD entries are visible before
+	 * installing the PMD table in the PUD.
+	 */
+	smp_wmb();
+
+	/* Install the PMD table in the PUD */
+	pud_populate(mm, pud, tables.pmd_table);
+
+	/* Free the temporary array holding PTE table pointers */
+	kfree(tables.pte_tables);
 }
 
 void __split_huge_pud(struct vm_area_struct *vma, pud_t *pud,
