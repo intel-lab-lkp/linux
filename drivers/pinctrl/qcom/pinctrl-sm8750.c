@@ -9,6 +9,8 @@
 
 #include "pinctrl-msm.h"
 
+#include <dt-bindings/clock/qcom,sm8750-tcsr.h>
+
 #define REG_SIZE 0x1000
 
 #define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11)	\
@@ -1682,6 +1684,33 @@ static const struct msm_gpio_wakeirq_map sm8750_pdc_map[] = {
 	{ 204, 158 }, { 205, 107 }, { 209, 159 },
 };
 
+static const struct ref_clk_init_data pcie_0_refclk = {
+	.name = "pcie_0_clkref",
+	.offset = 0x104008,
+};
+
+static const struct ref_clk_init_data ufs_refclk = {
+	.name = "ufs_clkref",
+	.offset = 0x105008,
+};
+
+static const struct ref_clk_init_data usb2_refclk = {
+	.name = "usb2_clkref",
+	.offset = 0x106008,
+};
+
+static const struct ref_clk_init_data usb3_refclk = {
+	.name = "usb3_clkref",
+	.offset = 0x107008,
+};
+
+static const struct ref_clk_init_data *sm8750_ref_clks[] = {
+	[TCSR_PCIE_0_CLKREF_EN] = &pcie_0_refclk,
+	[TCSR_UFS_CLKREF_EN] = &ufs_refclk,
+	[TCSR_USB2_CLKREF_EN] = &usb2_refclk,
+	[TCSR_USB3_CLKREF_EN] = &usb3_refclk,
+};
+
 static const struct msm_pinctrl_soc_data sm8750_tlmm = {
 	.pins = sm8750_pins,
 	.npins = ARRAY_SIZE(sm8750_pins),
@@ -1693,6 +1722,8 @@ static const struct msm_pinctrl_soc_data sm8750_tlmm = {
 	.wakeirq_map = sm8750_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sm8750_pdc_map),
 	.egpio_func = 11,
+	.ref_clks = sm8750_ref_clks,
+	.num_ref_clks = ARRAY_SIZE(sm8750_ref_clks),
 };
 
 static int sm8750_tlmm_probe(struct platform_device *pdev)
