@@ -2314,6 +2314,9 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 			goto err_exit_debugfs;
 	}
 
+	if (data->core_may_lose_power)
+		dwc->may_lose_power = true;
+
 	pm_runtime_put(dev);
 
 	dma_set_max_seg_size(dev, UINT_MAX);
@@ -2462,7 +2465,8 @@ static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 		dwc3_core_exit(dwc);
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
-		if (!PMSG_IS_AUTO(msg) && !device_may_wakeup(dwc->dev)) {
+		if (!PMSG_IS_AUTO(msg) &&
+		    (!device_may_wakeup(dwc->dev) || dwc->may_lose_power)) {
 			dwc3_core_exit(dwc);
 			break;
 		}
@@ -2525,7 +2529,8 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		dwc3_gadget_resume(dwc);
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
-		if (!PMSG_IS_AUTO(msg) && !device_may_wakeup(dwc->dev)) {
+		if (!PMSG_IS_AUTO(msg) &&
+		    (!device_may_wakeup(dwc->dev) || dwc->may_lose_power)) {
 			ret = dwc3_core_init_for_resume(dwc);
 			if (ret)
 				return ret;
