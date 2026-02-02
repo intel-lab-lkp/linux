@@ -223,7 +223,7 @@ static int mlx5e_test_loopback_setup(struct mlx5e_priv *priv,
 
 	lbtp->pt.type = htons(ETH_P_IP);
 	lbtp->pt.func = mlx5e_test_loopback_validate;
-	lbtp->pt.dev = priv->netdev;
+	RCU_INIT_POINTER(lbtp->pt.dev, priv->netdev);
 	lbtp->pt.af_packet_priv = lbtp;
 	dev_add_pack(&lbtp->pt);
 

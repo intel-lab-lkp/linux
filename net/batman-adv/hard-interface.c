@@ -740,7 +740,7 @@ int batadv_hardif_enable_interface(struct batadv_hard_iface *hard_iface,
 	kref_get(&hard_iface->refcount);
 	hard_iface->batman_adv_ptype.type = ethertype;
 	hard_iface->batman_adv_ptype.func = batadv_batman_skb_recv;
-	hard_iface->batman_adv_ptype.dev = hard_iface->net_dev;
+	RCU_INIT_POINTER(hard_iface->batman_adv_ptype.dev, hard_iface->net_dev);
 	dev_add_pack(&hard_iface->batman_adv_ptype);
 
 	batadv_info(hard_iface->mesh_iface, "Adding interface: %s\n",

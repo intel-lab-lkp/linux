@@ -246,7 +246,7 @@ static int __net_test_loopback(struct net_device *ndev,
 
 	tpriv->pt.type = htons(ETH_P_IP);
 	tpriv->pt.func = net_test_loopback_validate;
-	tpriv->pt.dev = ndev;
+	rcu_assign_pointer(tpriv->pt.dev, ndev);
 	tpriv->pt.af_packet_priv = tpriv;
 	tpriv->packet = attr;
 	dev_add_pack(&tpriv->pt);

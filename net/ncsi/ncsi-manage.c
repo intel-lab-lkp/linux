@@ -1799,7 +1799,7 @@ struct ncsi_dev *ncsi_register_dev(struct net_device *dev,
 	/* Register NCSI packet Rx handler */
 	ndp->ptype.type = cpu_to_be16(ETH_P_NCSI);
 	ndp->ptype.func = ncsi_rcv_rsp;
-	ndp->ptype.dev = dev;
+	RCU_INIT_POINTER(ndp->ptype.dev, dev);
 	dev_add_pack(&ndp->ptype);
 
 	pdev = to_platform_device(dev->dev.parent);
