@@ -11258,6 +11258,9 @@ static int do_aquire_global_lock(struct drm_device *dev,
 				  crtc->base.id, crtc->name);
 
 		drm_crtc_commit_put(commit);
+
+		if (ret == 0)
+			return -ETIMEDOUT;
 	}
 
 	return ret < 0 ? ret : 0;
