@@ -1271,7 +1271,7 @@ static void qi_dump_fault(struct intel_iommu *iommu, u32 fault)
 static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index)
 {
 	u32 fault;
-	int head, tail;
+	int head;
 	struct device *dev;
 	u64 iqe_err, ite_sid;
 	struct q_inval *qi = iommu->qi;
@@ -1312,12 +1312,6 @@ static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index)
 	 * No new descriptors are fetched until the ITE is cleared.
 	 */
 	if (fault & DMA_FSTS_ITE) {
-		head = readl(iommu->reg + DMAR_IQH_REG);
-		head = ((head >> shift) - 1 + QI_LENGTH) % QI_LENGTH;
-		head |= 1;
-		tail = readl(iommu->reg + DMAR_IQT_REG);
-		tail = ((tail >> shift) - 1 + QI_LENGTH) % QI_LENGTH;
-
 		/*
 		 * SID field is valid only when the ITE field is Set in FSTS_REG
 		 * see Intel VT-d spec r4.1, section 11.4.9.9
@@ -1327,12 +1321,6 @@ static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index)
 
 		writel(DMA_FSTS_ITE, iommu->reg + DMAR_FSTS_REG);
 		pr_info("Invalidation Time-out Error (ITE) cleared\n");
-
-		do {
-			if (qi->desc_status[head] == QI_IN_USE)
-				qi->desc_status[head] = QI_ABORT;
-			head = (head - 2 + QI_LENGTH) % QI_LENGTH;
-		} while (head != tail);
 
 		/*
 		 * If device was released or isn't present, no need to retry
@@ -1347,8 +1335,8 @@ static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index)
 			    !pci_device_is_present(to_pci_dev(dev)))
 				return -ETIMEDOUT;
 		}
-		if (qi->desc_status[wait_index] == QI_ABORT)
-			return -EAGAIN;
+
+		return -EAGAIN;
 	}
 
 	if (fault & DMA_FSTS_ICE) {
