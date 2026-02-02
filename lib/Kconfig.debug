@@ -2817,6 +2817,18 @@ config CMDLINE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config ARGV_SPLIT_KUNIT
+	tristate "KUnit test for argv_split" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the argv_split unit tests.
+
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config BASE64_KUNIT
 	tristate "KUnit test for base64 decoding and encoding" if !KUNIT_ALL_TESTS
 	depends on KUNIT
