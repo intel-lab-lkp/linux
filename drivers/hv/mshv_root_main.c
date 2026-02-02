@@ -1389,6 +1389,20 @@ mshv_partition_ioctl_set_memory(struct mshv_partition *partition,
 	if (mem.flags & BIT(MSHV_SET_MEM_BIT_UNMAP))
 		return mshv_unmap_user_memory(partition, mem);
 
+	/*
+	 * If the userspace_addr and the guest physical address (as derived
+	 * from the guest_pfn) have the same alignment modulo PMD huge page
+	 * size, the MSHV driver can map any PMD huge pages to the guest
+	 * physical address space as PMD huge pages. If the alignments do
+	 * not match, PMD huge pages must be mapped as single pages in the
+	 * guest physical address space. The MSHV driver does not enforce
+	 * that the alignments match, and it invokes the hypervisor to set
+	 * up correct functional mappings either way. See mshv_chunk_stride().
+	 * The caller of the ioctl is responsible for providing userspace_addr
+	 * and guest_pfn values with matching alignments if it wants the guest
+	 * to get the performance benefits of PMD huge page mappings of its
+	 * physical address space to real system memory.
+	 */
 	return mshv_map_user_memory(partition, mem);
 }
 
