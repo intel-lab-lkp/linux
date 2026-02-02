@@ -900,11 +900,15 @@ static int pmu_sbi_get_ctrinfo(int nctr, unsigned long *mask)
 static inline void pmu_sbi_stop_all(struct riscv_pmu *pmu)
 {
 	/*
-	 * No need to check the error because we are disabling all the counters
-	 * which may include counters that are not enabled yet.
+	 * No need to check the error because we are disabling all available
+	 * counters (except the cycle counter) which may include counters
+	 * that are not enabled yet.
+	 *
+	 * Cycle counter is excluded because it might be accessed by user
+	 * mode via rdcycle.
 	 */
 	sbi_ecall(SBI_EXT_PMU, SBI_EXT_PMU_COUNTER_STOP,
-		  0, pmu->cmask, SBI_PMU_STOP_FLAG_RESET, 0, 0, 0);
+		  0, pmu->cmask & ~BIT(0), SBI_PMU_STOP_FLAG_RESET, 0, 0, 0);
 }
 
 static inline void pmu_sbi_stop_hw_ctrs(struct riscv_pmu *pmu)
