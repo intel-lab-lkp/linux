@@ -62,6 +62,33 @@ properties:
               - mediatek,mt8183-mfgcfg
               - mediatek,mt8183-vdecsys
               - mediatek,mt8183-vencsys
+              - mediatek,mt8189-camsys-main
+              - mediatek,mt8189-camsys-rawa
+              - mediatek,mt8189-camsys-rawb
+              - mediatek,mt8189-dbg-ao
+              - mediatek,mt8189-dem
+              - mediatek,mt8189-dispsys
+              - mediatek,mt8189-dvfsrc-top
+              - mediatek,mt8189-gce-d
+              - mediatek,mt8189-gce-m
+              - mediatek,mt8189-iic-wrap-e
+              - mediatek,mt8189-iic-wrap-en
+              - mediatek,mt8189-iic-wrap-s
+              - mediatek,mt8189-iic-wrap-ws
+              - mediatek,mt8189-imgsys1
+              - mediatek,mt8189-imgsys2
+              - mediatek,mt8189-ipesys
+              - mediatek,mt8189-mdpsys
+              - mediatek,mt8189-mfgcfg
+              - mediatek,mt8189-mm-infra
+              - mediatek,mt8189-scp-clk
+              - mediatek,mt8189-scp-i2c-clk
+              - mediatek,mt8189-ufscfg-ao
+              - mediatek,mt8189-ufscfg-pdn
+              - mediatek,mt8189-vdec-core
+              - mediatek,mt8189-venc
+              - mediatek,mt8189-vlp-ao
+              - mediatek,mt8189-vlpcfg-ao
           - const: syscon
       - items:
           - const: mediatek,mt7623-bdpsys

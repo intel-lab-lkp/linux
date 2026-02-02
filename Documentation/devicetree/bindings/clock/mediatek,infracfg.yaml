@@ -37,6 +37,7 @@ properties:
               - mediatek,mt8167-infracfg
               - mediatek,mt8173-infracfg
               - mediatek,mt8183-infracfg
+              - mediatek,mt8189-infra-ao
               - mediatek,mt8516-infracfg
           - const: syscon
       - items:
