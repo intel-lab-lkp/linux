@@ -1771,9 +1771,17 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	 * another mac interface, so we should create a device link between
 	 * phy dev and mac dev.
 	 */
-	if (dev && phydev->mdio.bus->parent && dev->dev.parent != phydev->mdio.bus->parent)
-		phydev->devlink = device_link_add(dev->dev.parent, &phydev->mdio.dev,
-						  DL_FLAG_PM_RUNTIME | DL_FLAG_STATELESS);
+	if (dev && bus->parent && dev->dev.parent != bus->parent) {
+		if (phy_on_sfp(phydev))
+			phydev->devlink = device_link_add(dev->dev.parent,
+							  &phydev->mdio.dev,
+							  DL_FLAG_PM_RUNTIME |
+							  DL_FLAG_STATELESS);
+		else
+			device_link_add(dev->dev.parent, &phydev->mdio.dev,
+					DL_FLAG_PM_RUNTIME |
+					DL_FLAG_AUTOREMOVE_SUPPLIER);
+	}
 
 	return err;
 
