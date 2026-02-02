@@ -58,6 +58,7 @@ my @ignore = ();
 my $help = 0;
 my $configuration_file = ".checkpatch.conf";
 my $def_configuration_dirs = ".:$ENV{HOME}:.scripts";
+my $configuration_dir = "";
 my $max_line_length = 100;
 my $ignore_perl_version = 0;
 my $minimum_perl_version = 5.10.0;
@@ -144,12 +145,14 @@ Options:
                              is a terminal ('auto'). Default is 'auto'.
   --kconfig-prefix=WORD      use WORD as a prefix for Kconfig symbols (default
                              ${CONFIG_})
+  --conf-dir=DIR             directory with $configuration_file configuration file
+                             (default:$def_configuration_dirs)
   -h, --help, --version      display this help and exit
 
 When FILE is - read standard input.
 
 Script searches for a configuration file $configuration_file in path:
-$def_configuration_dirs
+$def_configuration_dirs (can be overwritten by --conf-dir)
 EOM
 
 	exit($exitcode);
@@ -241,7 +244,31 @@ sub list_types {
 	exit($exitcode);
 }
 
-my $conf = which_conf($configuration_file, $def_configuration_dirs);
+# parse --conf-dir before the other options
+my @argv;
+while (@ARGV) {
+	my $arg = shift @ARGV;
+	if ($arg eq '--conf-dir') {
+		$configuration_dir = shift @ARGV;
+		die "--conf-dir requires value" unless ($configuration_dir);
+	} elsif ($arg =~ /^--conf-dir=(.+)$/) {
+		$configuration_dir = $1;
+		die "--conf-dir requires value" unless ($configuration_dir);
+	} else {
+		push @argv, $arg;
+	}
+}
+@ARGV = @argv;
+
+my $conf;
+if ($configuration_dir) {
+	die "Dir. $configuration_dir does not exist" unless (-d $configuration_dir);
+	$conf = "$configuration_dir/$configuration_file";
+	die "File $conf does not exist" unless (-f $conf);
+} else {
+	$conf = which_conf($configuration_file, $def_configuration_dirs);
+}
+
 if (-f $conf) {
 	my @conf_args;
 	open(my $conffile, '<', "$conf")
