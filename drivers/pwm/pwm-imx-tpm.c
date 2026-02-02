@@ -62,7 +62,7 @@ struct imx_tpm_pwm_chip {
 	void __iomem *base;
 	struct mutex lock;
 	u32 user_count;
-	u32 enable_count;
+	u32 enabled_channels;
 	u32 real_period;
 };
 
@@ -282,14 +282,16 @@ static int pwm_imx_tpm_apply_hw(struct pwm_chip *chip,
 	}
 	writel(val, tpm->base + PWM_IMX_TPM_CnSC(pwm->hwpwm));
 
-	/* control the counter status */
+	/* control the channel state */
 	if (state->enabled != c.enabled) {
 		val = readl(tpm->base + PWM_IMX_TPM_SC);
 		if (state->enabled) {
-			if (++tpm->enable_count == 1)
+			if (tpm->enabled_channels == 0)
 				val |= PWM_IMX_TPM_SC_CMOD_INC_EVERY_CLK;
+			tpm->enabled_channels |= BIT(pwm->hwpwm);
 		} else {
-			if (--tpm->enable_count == 0)
+			tpm->enabled_channels &= ~BIT(pwm->hwpwm);
+			if (tpm->enabled_channels == 0)
 				val &= ~PWM_IMX_TPM_SC_CMOD;
 		}
 		writel(val, tpm->base + PWM_IMX_TPM_SC);
@@ -353,7 +355,7 @@ static int pwm_imx_tpm_probe(struct platform_device *pdev)
 	void __iomem *base;
 	int ret;
 	unsigned int npwm;
-	u32 val;
+	u32 val, i;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -382,6 +384,13 @@ static int pwm_imx_tpm_probe(struct platform_device *pdev)
 
 	mutex_init(&tpm->lock);
 
+	/* get enabled state for each channel */
+	for (i = 0; i < npwm; i++) {
+		val = readl(base + PWM_IMX_TPM_CnSC(i));
+		if (FIELD_GET(PWM_IMX_TPM_CnSC_ELS, val))
+			tpm->enabled_channels |= BIT(i);
+	}
+
 	ret = devm_pwmchip_add(&pdev->dev, chip);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "failed to add PWM chip\n");
@@ -394,7 +403,7 @@ static int pwm_imx_tpm_suspend(struct device *dev)
 	struct imx_tpm_pwm_chip *tpm = dev_get_drvdata(dev);
 	int ret;
 
-	if (tpm->enable_count > 0)
+	if (tpm->enabled_channels > 0)
 		return -EBUSY;
 
 	/*
