@@ -1420,7 +1420,7 @@ static bool try_to_free_pmd_page(pmd_t *pmd)
 		if (!pmd_none(pmd[i]))
 			return false;
 
-	free_page((unsigned long)pmd);
+	pagetable_free(virt_to_ptdesc((void *)pmd));
 	return true;
 }
 
@@ -1550,12 +1550,15 @@ static int alloc_pte_ptdesc(pmd_t *pmd)
 	return 0;
 }
 
-static int alloc_pmd_page(pud_t *pud)
+static int alloc_pmd_ptdesc(pud_t *pud)
 {
-	pmd_t *pmd = (pmd_t *)get_zeroed_page(GFP_KERNEL);
-	if (!pmd)
+	pmd_t *pmd;
+	struct ptdesc *ptdesc = pagetable_alloc(GFP_KERNEL | __GFP_ZERO, 0);
+
+	if (!ptdesc)
 		return -1;
 
+	pmd = (pmd_t *) ptdesc_address(ptdesc);
 	set_pud(pud, __pud(__pa(pmd) | _KERNPG_TABLE));
 	return 0;
 }
@@ -1625,7 +1628,7 @@ static long populate_pmd(struct cpa_data *cpa,
 		 * We cannot use a 1G page so allocate a PMD page if needed.
 		 */
 		if (pud_none(*pud))
-			if (alloc_pmd_page(pud))
+			if (alloc_pmd_ptdesc(pud))
 				return -1;
 
 		pmd = pmd_offset(pud, start);
@@ -1681,7 +1684,7 @@ static int populate_pud(struct cpa_data *cpa, unsigned long start, p4d_t *p4d,
 		 * Need a PMD page?
 		 */
 		if (pud_none(*pud))
-			if (alloc_pmd_page(pud))
+			if (alloc_pmd_ptdesc(pud))
 				return -1;
 
 		cur_pages = populate_pmd(cpa, start, pre_end, cur_pages,
@@ -1718,7 +1721,7 @@ static int populate_pud(struct cpa_data *cpa, unsigned long start, p4d_t *p4d,
 
 		pud = pud_offset(p4d, start);
 		if (pud_none(*pud))
-			if (alloc_pmd_page(pud))
+			if (alloc_pmd_ptdesc(pud))
 				return -1;
 
 		tmp = populate_pmd(cpa, start, end, cpa->numpages - cur_pages,
@@ -1742,14 +1745,16 @@ static int populate_pgd(struct cpa_data *cpa, unsigned long addr)
 	p4d_t *p4d;
 	pgd_t *pgd_entry;
 	long ret;
+	struct ptdesc *ptdesc;
 
 	pgd_entry = cpa->pgd + pgd_index(addr);
 
 	if (pgd_none(*pgd_entry)) {
-		p4d = (p4d_t *)get_zeroed_page(GFP_KERNEL);
-		if (!p4d)
+		ptdesc = pagetable_alloc(GFP_KERNEL | __GFP_ZERO, 0);
+		if (!ptdesc)
 			return -1;
 
+		p4d = (p4d_t *) ptdesc_address(ptdesc);
 		set_pgd(pgd_entry, __pgd(__pa(p4d) | _KERNPG_TABLE));
 	}
 
@@ -1758,10 +1763,11 @@ static int populate_pgd(struct cpa_data *cpa, unsigned long addr)
 	 */
 	p4d = p4d_offset(pgd_entry, addr);
 	if (p4d_none(*p4d)) {
-		pud = (pud_t *)get_zeroed_page(GFP_KERNEL);
-		if (!pud)
+		ptdesc = pagetable_alloc(GFP_KERNEL | __GFP_ZERO, 0);
+		if (!ptdesc)
 			return -1;
 
+		pud = (pud_t *) ptdesc_address(ptdesc);
 		set_p4d(p4d, __p4d(__pa(pud) | _KERNPG_TABLE));
 	}
 
