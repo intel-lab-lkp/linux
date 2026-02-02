@@ -129,18 +129,20 @@ panthor_gem_backing_cleanup_locked(struct panthor_gem_object *bo)
 static int
 panthor_gem_backing_get_pages_locked(struct panthor_gem_object *bo)
 {
+	struct page **pages;
+
 	dma_resv_assert_held(bo->base.resv);
 
 	if (bo->backing.pages)
 		return 0;
 
-	bo->backing.pages = drm_gem_get_pages(&bo->base);
-	if (IS_ERR(bo->backing.pages)) {
-		drm_dbg_kms(bo->base.dev, "Failed to get pages (%pe)\n",
-			    bo->backing.pages);
-		return PTR_ERR(bo->backing.pages);
+	pages = drm_gem_get_pages(&bo->base);
+	if (IS_ERR(pages)) {
+		drm_dbg_kms(bo->base.dev, "Failed to get pages (%pe)\n", pages);
+		return PTR_ERR(pages);
 	}
 
+	bo->backing.pages = pages;
 	return 0;
 }
 
@@ -601,15 +603,6 @@ static int panthor_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *v
 	if (is_cow_mapping(vma->vm_flags))
 		return -EINVAL;
 
-	dma_resv_lock(obj->resv, NULL);
-	ret = panthor_gem_backing_get_pages_locked(bo);
-	if (!ret)
-		ret = panthor_gem_prep_for_cpu_map_locked(bo);
-	dma_resv_unlock(obj->resv);
-
-	if (ret)
-		return ret;
-
 	vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP);
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 	if (should_map_wc(bo))
@@ -629,82 +622,116 @@ static enum drm_gem_object_status panthor_gem_status(struct drm_gem_object *obj)
 	return res;
 }
 
-static bool try_map_pmd(struct vm_fault *vmf, unsigned long addr, struct page *page)
+static vm_fault_t insert_page(struct vm_fault *vmf, struct page *page)
 {
+	struct vm_area_struct *vma = vmf->vma;
+
 #ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
 	unsigned long pfn = page_to_pfn(page);
 	unsigned long paddr = pfn << PAGE_SHIFT;
-	bool aligned = (addr & ~PMD_MASK) == (paddr & ~PMD_MASK);
+	bool aligned = (vmf->address & ~PMD_MASK) == (paddr & ~PMD_MASK);
 
 	if (aligned &&
 	    pmd_none(*vmf->pmd) &&
 	    folio_test_pmd_mappable(page_folio(page))) {
 		pfn &= PMD_MASK >> PAGE_SHIFT;
 		if (vmf_insert_pfn_pmd(vmf, pfn, false) == VM_FAULT_NOPAGE)
-			return true;
+			return VM_FAULT_NOPAGE;
 	}
 #endif
 
-	return false;
+	return vmf_insert_pfn(vma, vmf->address, page_to_pfn(page));
 }
 
-static vm_fault_t panthor_gem_fault(struct vm_fault *vmf)
+static vm_fault_t nonblocking_page_setup(struct vm_fault *vmf, pgoff_t page_offset)
 {
 	struct vm_area_struct *vma = vmf->vma;
-	struct drm_gem_object *obj = vma->vm_private_data;
 	struct panthor_gem_object *bo = to_panthor_bo(vma->vm_private_data);
-	loff_t num_pages = obj->size >> PAGE_SHIFT;
 	vm_fault_t ret;
-	pgoff_t page_offset;
-	unsigned long pfn;
 
-	/* Offset to faulty address in the VMA. */
-	page_offset = vmf->pgoff - vma->vm_pgoff;
+	if (!dma_resv_trylock(bo->base.resv))
+		return VM_FAULT_RETRY;
 
-	dma_resv_lock(bo->base.resv, NULL);
+	if (bo->backing.pages)
+		ret = insert_page(vmf, bo->backing.pages[page_offset]);
+	else
+		ret = VM_FAULT_RETRY;
 
-	if (page_offset >= num_pages ||
-	    drm_WARN_ON_ONCE(obj->dev, !bo->backing.pages)) {
-		ret = VM_FAULT_SIGBUS;
-		goto out;
+	dma_resv_unlock(bo->base.resv);
+	return ret;
+}
+
+static vm_fault_t blocking_page_setup(struct vm_fault *vmf,
+				      struct panthor_gem_object *bo,
+				      pgoff_t page_offset, bool mmap_lock_held)
+{
+	vm_fault_t ret;
+	int err;
+
+	err = dma_resv_lock_interruptible(bo->base.resv, NULL);
+	if (err)
+		return mmap_lock_held ? VM_FAULT_NOPAGE : VM_FAULT_RETRY;
+
+	err = panthor_gem_backing_get_pages_locked(bo);
+	if (!err)
+		err = panthor_gem_prep_for_cpu_map_locked(bo);
+
+	if (err) {
+		ret = mmap_lock_held ? VM_FAULT_SIGBUS : VM_FAULT_RETRY;
+	} else {
+		struct page *page = bo->backing.pages[page_offset];
+
+		if (mmap_lock_held)
+			ret = insert_page(vmf, page);
+		else
+			ret = VM_FAULT_RETRY;
 	}
 
-	if (try_map_pmd(vmf, vmf->address, bo->backing.pages[page_offset])) {
-		ret = VM_FAULT_NOPAGE;
-		goto out;
-	}
-
-	pfn = page_to_pfn(bo->backing.pages[page_offset]);
-	ret = vmf_insert_pfn(vma, vmf->address, pfn);
-
- out:
 	dma_resv_unlock(bo->base.resv);
 
 	return ret;
 }
 
-static void panthor_gem_vm_open(struct vm_area_struct *vma)
+static vm_fault_t panthor_gem_fault(struct vm_fault *vmf)
 {
+	struct vm_area_struct *vma = vmf->vma;
 	struct panthor_gem_object *bo = to_panthor_bo(vma->vm_private_data);
+	loff_t num_pages = bo->base.size >> PAGE_SHIFT;
+	pgoff_t page_offset;
+	vm_fault_t ret;
 
-	drm_WARN_ON(bo->base.dev, drm_gem_is_imported(&bo->base));
+	/* Offset to faulty address in the VMA. */
+	page_offset = vmf->pgoff - vma->vm_pgoff;
+	if (page_offset >= num_pages)
+		return VM_FAULT_SIGBUS;
 
-	dma_resv_lock(bo->base.resv, NULL);
+	ret = nonblocking_page_setup(vmf, page_offset);
+	if (ret != VM_FAULT_RETRY)
+		return ret;
 
-	/* We should have already pinned the pages when the buffer was first
-	 * mmap'd, vm_open() just grabs an additional reference for the new
-	 * mm the vma is getting copied into (ie. on fork()).
-	 */
-	drm_WARN_ON_ONCE(bo->base.dev, !bo->backing.pages);
+	/* Check if we're allowed to retry. */
+	if (fault_flag_allow_retry_first(vmf->flags)) {
+		/* If we're allowed to retry but not wait here, return
+		 * immediately, the wait will be done when the fault
+		 * handler is called again, with the mmap_lock held.
+		 */
+		if (vmf->flags & FAULT_FLAG_RETRY_NOWAIT)
+			return VM_FAULT_RETRY;
 
-	dma_resv_unlock(bo->base.resv);
+		/* Wait with the mmap lock released, if we're allowed to. */
+		drm_gem_object_get(&bo->base);
+		mmap_read_unlock(vmf->vma->vm_mm);
+		ret = blocking_page_setup(vmf, bo, page_offset, false);
+		drm_gem_object_put(&bo->base);
+		return ret;
+	}
 
-	drm_gem_vm_open(vma);
+	return blocking_page_setup(vmf, bo, page_offset, true);
 }
 
 const struct vm_operations_struct panthor_gem_vm_ops = {
 	.fault = panthor_gem_fault,
-	.open = panthor_gem_vm_open,
+	.open = drm_gem_vm_open,
 	.close = drm_gem_vm_close,
 };
 
