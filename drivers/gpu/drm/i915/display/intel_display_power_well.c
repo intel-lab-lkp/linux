@@ -27,7 +27,6 @@
 #include "intel_dpll.h"
 #include "intel_hotplug.h"
 #include "intel_parent.h"
-#include "intel_pcode.h"
 #include "intel_pps.h"
 #include "intel_psr.h"
 #include "intel_tc.h"
@@ -202,11 +201,8 @@ int intel_power_well_refcount(struct i915_power_well *power_well)
  * requesting it to be enabled.
  */
 static void hsw_power_well_post_enable(struct intel_display *display,
-				       u8 irq_pipe_mask, bool has_vga)
+				       u8 irq_pipe_mask)
 {
-	if (has_vga)
-		intel_vga_reset_io_mem(display);
-
 	if (irq_pipe_mask)
 		gen8_irq_power_well_post_enable(display, irq_pipe_mask);
 }
@@ -418,8 +414,7 @@ static void hsw_power_well_enable(struct intel_display *display,
 	}
 
 	hsw_power_well_post_enable(display,
-				   power_well->desc->irq_pipe_mask,
-				   power_well->desc->has_vga);
+				   power_well->desc->irq_pipe_mask);
 }
 
 static void hsw_power_well_disable(struct intel_display *display,
@@ -522,7 +517,7 @@ static void icl_tc_cold_exit(struct intel_display *display)
 	int ret, tries = 0;
 
 	while (1) {
-		ret = intel_pcode_write(display->drm, ICL_PCODE_EXIT_TCCOLD, 0);
+		ret = intel_parent_pcode_write(display, ICL_PCODE_EXIT_TCCOLD, 0);
 		if (ret != -EAGAIN || ++tries == 3)
 			break;
 		msleep(1);
@@ -1795,7 +1790,7 @@ tgl_tc_cold_request(struct intel_display *display, bool block)
 		 * Spec states that we should timeout the request after 200us
 		 * but the function below will timeout after 500us
 		 */
-		ret = intel_pcode_read(display->drm, TGL_PCODE_TCCOLD, &low_val, &high_val);
+		ret = intel_parent_pcode_read(display, TGL_PCODE_TCCOLD, &low_val, &high_val);
 		if (ret == 0) {
 			if (block &&
 			    (low_val & TGL_PCODE_EXIT_TCCOLD_DATA_L_EXIT_FAILED))
