@@ -17,6 +17,7 @@
 #include <linux/linkage.h>
 #include <linux/rbtree_types.h>
 #include <linux/spinlock_types_raw.h>
+#include <linux/cleanup.h>
 
 extern int max_lock_depth;
 
@@ -128,5 +129,9 @@ extern int rt_mutex_lock_killable(struct rt_mutex *lock);
 extern int rt_mutex_trylock(struct rt_mutex *lock);
 
 extern void rt_mutex_unlock(struct rt_mutex *lock);
+
+DEFINE_GUARD(rt_mutex, struct rt_mutex *, rt_mutex_lock(_T), rt_mutex_unlock(_T))
+DEFINE_GUARD_COND(rt_mutex, _try, rt_mutex_trylock(_T))
+DEFINE_GUARD_COND(rt_mutex, _intr, rt_mutex_lock_interruptible(_T), _RET == 0)
 
 #endif
