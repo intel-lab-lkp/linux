@@ -393,6 +393,9 @@ struct kvm_riscv_sbi_fwft {
 /* One single KVM irqchip, ie. the AIA */
 #define KVM_NR_IRQCHIPS			1
 
+#define KVM_RISCV_HGATP_MODE_SV39X4_BIT  0
+#define KVM_RISCV_HGATP_MODE_SV48X4_BIT  1
+#define KVM_RISCV_HGATP_MODE_SV57X4_BIT  2
 #endif
 
 #endif /* __LINUX_KVM_RISCV_H */
