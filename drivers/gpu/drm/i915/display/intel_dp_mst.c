@@ -720,18 +720,7 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->has_pch_encoder = false;
 
-	for (num_joined_pipes = 1; num_joined_pipes <= I915_MAX_PIPES; num_joined_pipes++) {
-		if (connector->force_joined_pipes &&
-		    num_joined_pipes != connector->force_joined_pipes)
-			continue;
-
-		if (!intel_dp_can_join(display, num_joined_pipes))
-			continue;
-
-		if (adjusted_mode->hdisplay >
-		    num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
-			continue;
-
+	for_each_joiner_candidate(connector, adjusted_mode, num_joined_pipes) {
 		if (num_joined_pipes > 1)
 			pipe_config->joiner_pipes = GENMASK(crtc->pipe + num_joined_pipes - 1,
 							    crtc->pipe);
@@ -1535,18 +1524,8 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	}
 
 	*status = MODE_CLOCK_HIGH;
-	for (num_joined_pipes = 1; num_joined_pipes <= I915_MAX_PIPES; num_joined_pipes++) {
+	for_each_joiner_candidate(connector, mode, num_joined_pipes) {
 		int dsc_slice_count = 0;
-
-		if (connector->force_joined_pipes &&
-		    num_joined_pipes != connector->force_joined_pipes)
-			continue;
-
-		if (!intel_dp_can_join(display, num_joined_pipes))
-			continue;
-
-		if (mode->hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
-			continue;
 
 		if (intel_dp_has_dsc(connector) &&
 		    drm_dp_sink_supports_fec(connector->dp.fec_capability)) {

@@ -1492,18 +1492,8 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	 * over candidate pipe counts and evaluate each combination.
 	 */
 	status = MODE_CLOCK_HIGH;
-	for (num_joined_pipes = 1; num_joined_pipes <= I915_MAX_PIPES; num_joined_pipes++) {
+	for_each_joiner_candidate(connector, mode, num_joined_pipes) {
 		int dsc_slice_count = 0;
-
-		if (connector->force_joined_pipes &&
-		    num_joined_pipes != connector->force_joined_pipes)
-			continue;
-
-		if (!intel_dp_can_join(display, num_joined_pipes))
-			continue;
-
-		if (mode->hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
-			continue;
 
 		status = intel_pfit_mode_valid(display, mode, output_format, num_joined_pipes);
 		if (status != MODE_OK)
@@ -2888,7 +2878,6 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 			     struct drm_connector_state *conn_state,
 			     bool respect_downstream_limits)
 {
-	struct intel_display *display = to_intel_display(encoder);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
@@ -2902,18 +2891,7 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 	    !intel_dp_supports_fec(intel_dp, connector, crtc_state))
 		return -EINVAL;
 
-	for (num_joined_pipes = 1; num_joined_pipes <= I915_MAX_PIPES; num_joined_pipes++) {
-		if (connector->force_joined_pipes &&
-		    num_joined_pipes != connector->force_joined_pipes)
-			continue;
-
-		if (!intel_dp_can_join(display, num_joined_pipes))
-			continue;
-
-		if (adjusted_mode->hdisplay >
-		    num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
-			continue;
-
+	for_each_joiner_candidate(connector, adjusted_mode, num_joined_pipes) {
 		/*
 		 * NOTE:
 		 * The crtc_state->joiner_pipes should have been set at the end
@@ -7229,4 +7207,22 @@ int intel_dp_sdp_min_guardband(const struct intel_crtc_state *crtc_state,
 				    intel_dp_get_lines_for_sdp(crtc_state, DP_SDP_ADAPTIVE_SYNC));
 
 	return sdp_guardband;
+}
+
+bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
+				     int hdisplay,
+				     int num_joined_pipes)
+{
+	struct intel_display *display = to_intel_display(connector);
+
+	if (!intel_dp_can_join(display, num_joined_pipes))
+		return false;
+
+	if (hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
+		return false;
+
+	if (connector->force_joined_pipes && connector->force_joined_pipes != num_joined_pipes)
+		return false;
+
+	return true;
 }
