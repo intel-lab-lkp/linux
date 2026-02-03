@@ -394,7 +394,9 @@ int mpam_get_cpumask_from_cache_id(unsigned long cache_id, u32 cache_level,
  * Component Specification.
  * https://developer.arm.com/documentation/ihi0099/aa/
  */
-#define MPAM_ARCHITECTURE_V1    0x10
+#define MPAM_ARCHITECTURE_V0_1  0x01
+#define MPAM_ARCHITECTURE_V1_0  0x10
+#define MPAM_ARCHITECTURE_V1_1  0x11
 
 /* Memory mapped control pages */
 /* ID Register offsets in the memory mapped page */
@@ -518,6 +520,7 @@ int mpam_get_cpumask_from_cache_id(unsigned long cache_id, u32 cache_level,
 /* MPAMF_AIDR - MPAM architecture ID register */
 #define MPAMF_AIDR_ARCH_MINOR_REV	GENMASK(3, 0)
 #define MPAMF_AIDR_ARCH_MAJOR_REV	GENMASK(7, 4)
+#define MPAMF_AIDR_ARCH_REV		(MPAMF_AIDR_ARCH_MAJOR_REV | MPAMF_AIDR_ARCH_MINOR_REV)
 
 /* MPAMCFG_PART_SEL - MPAM partition configuration selection register */
 #define MPAMCFG_PART_SEL_PARTID_SEL	GENMASK(15, 0)

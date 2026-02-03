@@ -202,6 +202,17 @@ static inline void _mpam_write_monsel_reg(struct mpam_msc *msc, u16 reg, u32 val
 
 #define mpam_write_monsel_reg(msc, reg, val)   _mpam_write_monsel_reg(msc, MSMON_##reg, val)
 
+static bool mpam_msc_check_aidr(struct mpam_msc *msc)
+{
+	u32 rev;
+
+	rev = __mpam_read_reg(msc, MPAMF_AIDR) & MPAMF_AIDR_ARCH_REV;
+
+	return rev == MPAM_ARCHITECTURE_V0_1 ||
+	       rev == MPAM_ARCHITECTURE_V1_0 ||
+	       rev == MPAM_ARCHITECTURE_V1_1;
+}
+
 static u64 mpam_msc_read_idr(struct mpam_msc *msc)
 {
 	u64 idr_high = 0, idr_low;
@@ -842,9 +853,8 @@ static int mpam_msc_hw_probe(struct mpam_msc *msc)
 
 	lockdep_assert_held(&msc->probe_lock);
 
-	idr = __mpam_read_reg(msc, MPAMF_AIDR);
-	if ((idr & MPAMF_AIDR_ARCH_MAJOR_REV) != MPAM_ARCHITECTURE_V1) {
-		dev_err_once(dev, "MSC does not match MPAM architecture v1.x\n");
+	if (!mpam_msc_check_aidr(msc)) {
+		dev_err_once(dev, "MSC does not match MPAM architecture\n");
 		return -EIO;
 	}
 
