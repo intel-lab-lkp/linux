@@ -32,6 +32,7 @@
 
 #include <rdma/rdma_user_ioctl.h>
 #include <rdma/uverbs_ioctl.h>
+#include <rdma/ib_umem.h>
 #include "rdma_core.h"
 #include "uverbs.h"
 
@@ -847,3 +848,70 @@ void uverbs_finalize_uobj_create(const struct uverbs_attr_bundle *bundle,
 		  pbundle->uobj_hw_obj_valid);
 }
 EXPORT_SYMBOL(uverbs_finalize_uobj_create);
+
+int uverbs_get_buffer_umem(struct ib_device *ib_dev,
+			   struct uverbs_attr_bundle *attrs,
+			   u16 va_attr, u16 len_attr,
+			   u16 fd_attr, u16 offset_attr,
+			   bool has_umem_support,
+			   int access, struct ib_umem **umem)
+{
+	struct ib_umem_dmabuf *umem_dmabuf;
+	u64 buffer_va, buffer_length, buffer_offset;
+	int buffer_fd;
+	int ret;
+
+	*umem = NULL;
+
+	if (uverbs_attr_is_valid(attrs, va_attr)) {
+		ret = uverbs_copy_from(&buffer_va, attrs, va_attr);
+		if (ret)
+			return ret;
+
+		ret = uverbs_copy_from(&buffer_length, attrs, len_attr);
+		if (ret)
+			return ret;
+
+		if (uverbs_attr_is_valid(attrs, fd_attr) ||
+		    uverbs_attr_is_valid(attrs, offset_attr) ||
+		    !has_umem_support)
+			return -EINVAL;
+
+		*umem = ib_umem_get(ib_dev, buffer_va, buffer_length, access);
+		if (IS_ERR(*umem)) {
+			ret = PTR_ERR(*umem);
+			*umem = NULL;
+			return ret;
+		}
+	} else if (uverbs_attr_is_valid(attrs, fd_attr)) {
+		ret = uverbs_get_raw_fd(&buffer_fd, attrs, fd_attr);
+		if (ret)
+			return ret;
+
+		ret = uverbs_copy_from(&buffer_offset, attrs, offset_attr);
+		if (ret)
+			return ret;
+
+		ret = uverbs_copy_from(&buffer_length, attrs, len_attr);
+		if (ret)
+			return ret;
+
+		if (uverbs_attr_is_valid(attrs, va_attr) ||
+		    !has_umem_support)
+			return -EINVAL;
+
+		umem_dmabuf = ib_umem_dmabuf_get_pinned(ib_dev, buffer_offset,
+						       buffer_length, buffer_fd,
+						       access);
+		if (IS_ERR(umem_dmabuf))
+			return PTR_ERR(umem_dmabuf);
+
+		*umem = &umem_dmabuf->umem;
+	} else if (uverbs_attr_is_valid(attrs, len_attr) ||
+		   uverbs_attr_is_valid(attrs, offset_attr)) {
+		/* Length or offset without VA/FD is invalid */
+		return -EINVAL;
+	}
+
+	return 0;
+}

@@ -861,6 +861,13 @@ int uverbs_get_flags32(u32 *to, const struct uverbs_attr_bundle *attrs_bundle,
 		       size_t idx, u64 allowed_bits);
 int uverbs_copy_to(const struct uverbs_attr_bundle *attrs_bundle, size_t idx,
 		   const void *from, size_t size);
+struct ib_umem;
+int uverbs_get_buffer_umem(struct ib_device *ib_dev,
+			   struct uverbs_attr_bundle *attrs,
+			   u16 va_attr, u16 len_attr,
+			   u16 fd_attr, u16 offset_attr,
+			   bool has_umem_support,
+			   int access, struct ib_umem **umem);
 __malloc void *_uverbs_alloc(struct uverbs_attr_bundle *bundle, size_t size,
 			     gfp_t flags);
 
