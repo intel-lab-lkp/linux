@@ -1649,6 +1649,22 @@ TRACE_EVENT(kvm_hv_timer_state,
 			__entry->hv_timer_in_use)
 );
 
+TRACE_EVENT(kvm_apic_virt_timer_state,
+		TP_PROTO(unsigned int vcpu_id, unsigned int apic_virt_timer_in_use),
+		TP_ARGS(vcpu_id, apic_virt_timer_in_use),
+		TP_STRUCT__entry(
+			__field(unsigned int, vcpu_id)
+			__field(unsigned int, apic_virt_timer_in_use)
+			),
+		TP_fast_assign(
+			__entry->vcpu_id = vcpu_id;
+			__entry->apic_virt_timer_in_use = apic_virt_timer_in_use;
+			),
+		TP_printk("vcpu_id %x apic_virt_timer %x",
+			__entry->vcpu_id,
+			__entry->apic_virt_timer_in_use)
+);
+
 /*
  * Tracepoint for kvm_hv_flush_tlb.
  */
