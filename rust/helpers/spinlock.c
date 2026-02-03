@@ -16,6 +16,11 @@ void rust_helper___spin_lock_init(spinlock_t *lock, const char *name,
 #endif /* CONFIG_DEBUG_SPINLOCK */
 }
 
+void rust_helper_spin_lock_init(spinlock_t *lock)
+{
+	spin_lock_init(lock);
+}
+
 void rust_helper_spin_lock(spinlock_t *lock)
 {
 	spin_lock(lock);

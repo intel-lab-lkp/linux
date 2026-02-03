@@ -14,6 +14,7 @@ pub mod aref;
 pub mod atomic;
 pub mod barrier;
 pub mod completion;
+pub mod dma_fence;
 mod condvar;
 pub mod lock;
 mod locked_by;
@@ -24,6 +25,7 @@ mod set_once;
 
 pub use arc::{Arc, ArcBorrow, UniqueArc};
 pub use completion::Completion;
+pub use dma_fence::{DmaFence, DmaFenceCtx, DmaFenceCb, DmaFenceCbFunc};
 pub use condvar::{new_condvar, CondVar, CondVarTimeoutResult};
 pub use lock::global::{global_lock, GlobalGuard, GlobalLock, GlobalLockBackend, GlobalLockedBy};
 pub use lock::mutex::{new_mutex, Mutex, MutexGuard};
