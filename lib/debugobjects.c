@@ -1195,7 +1195,7 @@ struct self_test {
 
 static __initconst const struct debug_obj_descr descr_type_test;
 
-static bool __init is_static_object(void *addr)
+static bool is_static_object(void *addr)
 {
 	struct self_test *obj = addr;
 
