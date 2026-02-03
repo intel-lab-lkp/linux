@@ -62,6 +62,7 @@
 #include "intel_casf.h"
 #include "intel_cdclk.h"
 #include "intel_clock_gating.h"
+#include "intel_cmtg.h"
 #include "intel_color.h"
 #include "intel_crt.h"
 #include "intel_crtc.h"
@@ -1722,6 +1723,9 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 			intel_crtc_wait_for_next_vblank(wa_crtc);
 		}
 	}
+
+	if (crtc->cmtg.enable)
+		intel_cmtg_enable(new_crtc_state);
 }
 
 static void ilk_crtc_disable(struct intel_atomic_state *state,
@@ -2654,6 +2658,8 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	u32 crtc_vdisplay, crtc_vtotal, crtc_vblank_start, crtc_vblank_end;
 	int vsyncshift = 0;
+	u32 trans_htotal_val, trans_hblank_val, trans_hsync_val;
+	u32 trans_vtotal_val, trans_vblank_val, trans_vsync_val;
 
 	drm_WARN_ON(display->drm, transcoder_is_dsi(cpu_transcoder));
 
@@ -2702,15 +2708,15 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 			       TRANS_VSYNCSHIFT(display, cpu_transcoder),
 			       vsyncshift);
 
-	intel_de_write(display, TRANS_HTOTAL(display, cpu_transcoder),
-		       HACTIVE(adjusted_mode->crtc_hdisplay - 1) |
-		       HTOTAL(adjusted_mode->crtc_htotal - 1));
-	intel_de_write(display, TRANS_HBLANK(display, cpu_transcoder),
-		       HBLANK_START(adjusted_mode->crtc_hblank_start - 1) |
-		       HBLANK_END(adjusted_mode->crtc_hblank_end - 1));
-	intel_de_write(display, TRANS_HSYNC(display, cpu_transcoder),
-		       HSYNC_START(adjusted_mode->crtc_hsync_start - 1) |
-		       HSYNC_END(adjusted_mode->crtc_hsync_end - 1));
+	trans_htotal_val = HACTIVE(adjusted_mode->crtc_hdisplay - 1) |
+			   HTOTAL(adjusted_mode->crtc_htotal - 1);
+	trans_hblank_val = HBLANK_START(adjusted_mode->crtc_hblank_start - 1) |
+			   HBLANK_END(adjusted_mode->crtc_hblank_end - 1);
+	trans_hsync_val = HSYNC_START(adjusted_mode->crtc_hsync_start - 1) |
+			  HSYNC_END(adjusted_mode->crtc_hsync_end - 1);
+	intel_de_write(display, TRANS_HTOTAL(display, cpu_transcoder), trans_htotal_val);
+	intel_de_write(display, TRANS_HBLANK(display, cpu_transcoder), trans_hblank_val);
+	intel_de_write(display, TRANS_HSYNC(display, cpu_transcoder), trans_hsync_val);
 
 	/*
 	 * For platforms that always use VRR Timing Generator, the VTOTAL.Vtotal
@@ -2721,15 +2727,15 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 	if (intel_vrr_always_use_vrr_tg(display))
 		crtc_vtotal = 1;
 
-	intel_de_write(display, TRANS_VTOTAL(display, cpu_transcoder),
-		       VACTIVE(crtc_vdisplay - 1) |
-		       VTOTAL(crtc_vtotal - 1));
-	intel_de_write(display, TRANS_VBLANK(display, cpu_transcoder),
-		       VBLANK_START(crtc_vblank_start - 1) |
-		       VBLANK_END(crtc_vblank_end - 1));
-	intel_de_write(display, TRANS_VSYNC(display, cpu_transcoder),
-		       VSYNC_START(adjusted_mode->crtc_vsync_start - 1) |
-		       VSYNC_END(adjusted_mode->crtc_vsync_end - 1));
+	trans_vtotal_val = VACTIVE(crtc_vdisplay - 1) |
+			   VTOTAL(crtc_vtotal - 1);
+	trans_vblank_val = VBLANK_START(crtc_vblank_start - 1) |
+			   VBLANK_END(crtc_vblank_end - 1);
+	trans_vsync_val = VSYNC_START(adjusted_mode->crtc_vsync_start - 1) |
+			  VSYNC_END(adjusted_mode->crtc_vsync_end - 1);
+	intel_de_write(display, TRANS_VTOTAL(display, cpu_transcoder), trans_vtotal_val);
+	intel_de_write(display, TRANS_VBLANK(display, cpu_transcoder), trans_vblank_val);
+	intel_de_write(display, TRANS_VSYNC(display, cpu_transcoder), trans_vsync_val);
 
 	/* Workaround: when the EDP input selection is B, the VTOTAL_B must be
 	 * programmed with the VTOTAL_EDP value. Same for VTOTAL_C. This is
@@ -2752,6 +2758,15 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 		 */
 		intel_de_write(display, DP_MIN_HBLANK_CTL(cpu_transcoder),
 			       crtc_state->min_hblank);
+	}
+
+	if (crtc->cmtg.enable) {
+		crtc->cmtg.htotal = trans_htotal_val;
+		crtc->cmtg.hblank = trans_hblank_val;
+		crtc->cmtg.hsync = trans_hsync_val;
+		crtc->cmtg.vtotal = trans_vtotal_val;
+		crtc->cmtg.vblank = trans_vblank_val;
+		crtc->cmtg.vsync = trans_vsync_val;
 	}
 }
 

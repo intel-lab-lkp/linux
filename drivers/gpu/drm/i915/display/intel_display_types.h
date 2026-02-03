@@ -1572,6 +1572,8 @@ struct intel_crtc {
 
 	struct {
 		bool enable;
+		u32 htotal, hblank, hsync;
+		u32 vtotal, vblank, vsync;
 	} cmtg;
 };
 

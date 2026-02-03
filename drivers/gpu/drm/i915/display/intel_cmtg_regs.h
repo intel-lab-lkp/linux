@@ -20,4 +20,11 @@
 #define TRANS_CMTG_CTL_B		_MMIO(0x6fb88)
 #define  CMTG_ENABLE			REG_BIT(31)
 
+#define TRANS_HTOTAL_CMTG(id)		_MMIO(0x6F000 + (id) * 0x100)
+#define TRANS_HBLANK_CMTG(id)		_MMIO(0x6F004 + (id) * 0x100)
+#define TRANS_HSYNC_CMTG(id)		_MMIO(0x6F008 + (id) * 0x100)
+#define TRANS_VTOTAL_CMTG(id)		_MMIO(0x6F00C + (id) * 0x100)
+#define TRANS_VBLANK_CMTG(id)		_MMIO(0x6F010 + (id) * 0x100)
+#define TRANS_VSYNC_CMTG(id)		_MMIO(0x6F014 + (id) * 0x100)
+
 #endif /* __INTEL_CMTG_REGS_H__ */
