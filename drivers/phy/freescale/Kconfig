@@ -61,3 +61,12 @@ config PHY_FSL_LYNX_28G
 	  found on NXP's Layerscape platforms such as LX2160A.
 	  Used to change the protocol running on SerDes lanes at runtime.
 	  Only useful for a restricted set of Ethernet protocols.
+
+config PHY_S32G_SERDES
+	tristate "NXP S32G SERDES support"
+	depends on ARCH_S32 || COMPILE_TEST
+	select GENERIC_PHY
+	help
+	  This option enables support for S23G SerDes PHY used for
+	  PCIe & Ethernet
+
