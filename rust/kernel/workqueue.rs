@@ -135,7 +135,7 @@
 //!
 //! ```
 //! use kernel::sync::Arc;
-//! use kernel::workqueue::{self, impl_has_delayed_work, new_delayed_work, DelayedWork, WorkItem};
+//! use kernel::workqueue::{self, impl_has_delayed_work, new_delayed_work, DelayedWork, WorkItem, WorkHandle};
 //!
 //! #[pin_data]
 //! struct MyStruct {
@@ -179,8 +179,22 @@
 //! fn print_now(val: Arc<MyStruct>) {
 //!     let _ = workqueue::system().enqueue(val);
 //! }
+//!
+//! /// The returned WorkHandle can be used to cancel the work item before it gets executed.
+//! fn print_never(val: Arc<MyStruct>) {
+//!     let result = workqueue::system_bh().enqueue_delayed(val, 1000);
+//!
+//!     match result {
+//!         Ok(handle) => {
+//!             handle.cancel(true);
+//!         },
+//!         Err(_) => (),
+//!     }
+//! }
+//!
 //! # print_later(MyStruct::new(42).unwrap());
 //! # print_now(MyStruct::new(42).unwrap());
+//! # print_never(MyStruct::new(42).unwrap());
 //! ```
 //!
 //! C header: [`include/linux/workqueue.h`](srctree/include/linux/workqueue.h)
@@ -297,7 +311,7 @@ impl Queue {
     /// This may fail if the work item is already enqueued in a workqueue.
     ///
     /// The work item will be submitted using `WORK_CPU_UNBOUND`.
-    pub fn enqueue_delayed<W, const ID: u64>(&self, w: W, delay: Jiffies) -> W::EnqueueOutput
+    pub fn enqueue_delayed<W, const ID: u64>(&self, w: W, delay: Jiffies) -> W::EnqueueDelayedOutput
     where
         W: RawDelayedWorkItem<ID> + Send + 'static,
     {
@@ -317,7 +331,7 @@ impl Queue {
         // promises that the raw pointer will stay valid until we call the function pointer in the
         // `work_struct`, so the access is ok.
         unsafe {
-            w.__enqueue(move |work_ptr| {
+            w.__enqueue_delayed(move |work_ptr| {
                 bindings::queue_delayed_work_on(
                     bindings::wq_misc_consts_WORK_CPU_UNBOUND as ffi::c_int,
                     queue_ptr,
@@ -421,7 +435,15 @@ pub unsafe trait RawWorkItem<const ID: u64> {
 /// provided pointer must point at the `work` field of a valid `delayed_work`, and the guarantees
 /// that `__enqueue` provides about accessing the `work_struct` must also apply to the rest of the
 /// `delayed_work` struct.
-pub unsafe trait RawDelayedWorkItem<const ID: u64>: RawWorkItem<ID> {}
+pub unsafe trait RawDelayedWorkItem<const ID: u64>: RawWorkItem<ID> {
+    /// The return type of [`Queue::enqueue_delayed`].
+    type EnqueueDelayedOutput;
+
+    /// See [`RawWorkItem::__enqueue`], this method only differs in return type.
+    unsafe fn __enqueue_delayed<F>(self, queue_work_on: F) -> Self::EnqueueDelayedOutput
+    where
+        F: FnOnce(*mut bindings::work_struct) -> bool;
+}
 
 /// Defines the method that should be called directly when a work item is executed.
 ///
@@ -530,6 +552,66 @@ impl<T: ?Sized, const ID: u64> Work<T, ID> {
         // the compiler does not complain that the `work` field is unused.
         unsafe { Opaque::cast_into(core::ptr::addr_of!((*ptr).work)) }
     }
+
+    /// Enable the current work item
+    #[inline]
+    pub unsafe fn raw_enable(this: *const Self) -> bool {
+        unsafe { bindings::enable_work(Self::raw_get(this)) }
+    }
+
+    /// Disable and cancel the current work item
+    #[inline]
+    pub unsafe fn raw_disable(this: *const Self) -> bool {
+        unsafe { bindings::disable_work(Self::raw_get(this)) }
+    }
+
+    #[inline]
+    unsafe fn raw_get_delayed(this: *const Self) -> *mut bindings::delayed_work {
+        let work_ptr = unsafe { Self::raw_get(this) };
+        unsafe { container_of!(work_ptr, bindings::delayed_work, work) }
+    }
+
+    /// Disable and cancel the current delayed work item
+    #[inline]
+    pub unsafe fn raw_disable_delayed(this: *const Self) -> bool {
+        unsafe { bindings::disable_delayed_work(Self::raw_get_delayed(this)) }
+    }
+
+    /// Disable and cancel the current work item and block until it's done
+    #[inline]
+    pub unsafe fn raw_disable_sync(this: *const Self) -> bool {
+        unsafe { bindings::disable_work_sync(Self::raw_get(this)) }
+    }
+
+    /// Disable and cancel the current delayed work item and block until it's done
+    #[inline]
+    pub unsafe fn raw_disable_delayed_sync(this: *const Self) -> bool {
+        unsafe { bindings::disable_delayed_work_sync(Self::raw_get_delayed(this)) }
+    }
+
+    /// Kill off the current work item
+    #[inline]
+    pub unsafe fn raw_cancel(this: *const Self) -> bool {
+        unsafe { bindings::cancel_work(Self::raw_get(this)) }
+    }
+
+    /// Kill off the current delayed work item
+    #[inline]
+    pub unsafe fn raw_cancel_delayed(this: *const Self) -> bool {
+        unsafe { bindings::cancel_delayed_work(Self::raw_get_delayed(this)) }
+    }
+
+    /// Kill off the current work item and block until it's done
+    #[inline]
+    pub unsafe fn raw_cancel_sync(this: *const Self) -> bool {
+        unsafe { bindings::cancel_work_sync(Self::raw_get(this)) }
+    }
+
+    /// Kill off the current delayed work item and block until it's done
+    #[inline]
+    pub unsafe fn raw_cancel_delayed_sync(this: *const Self) -> bool {
+        unsafe { bindings::cancel_delayed_work_sync(Self::raw_get_delayed(this)) }
+    }
 }
 
 /// Declares that a type contains a [`Work<T, ID>`].
@@ -576,6 +658,122 @@ pub unsafe trait HasWork<T, const ID: u64 = 0> {
     ///
     /// The pointer must point at a [`Work<T, ID>`] field in a struct of type `Self`.
     unsafe fn work_container_of(ptr: *mut Work<T, ID>) -> *mut Self;
+}
+
+/// A handle representing a potentially running work item.
+pub unsafe trait WorkHandle {
+    /// Enable a work item
+    ///
+    /// SAFETY: can be called from any context.
+    ///
+    /// Returns `true` only if the disable count reached 0.
+    fn enable(self) -> bool;
+
+    /// Disable and cancel a work item
+    ///
+    /// SAFETY: Can be called from any context if `sync` is set to `false`.
+    ///
+    /// If `sync` is set to true this method will block until the work item
+    /// has been cancelled.
+    ///
+    /// Returns `true` if the work item was pending.
+    fn disable(self, sync: bool) -> bool;
+
+    /// Cancel a work item
+    ///
+    /// SAFETY: Can be called from any context if `sync` is set to `false`.
+    ///
+    /// If `sync` is set to true this method will block until the work item
+    /// has been cancelled.
+    ///
+    /// Returns `true` if the work item was pending.
+    fn cancel(self, sync: bool) -> bool;
+}
+
+/// A handle for an `Arc<HasWork<T>>` returned by a call to
+/// [`RawWorkItem::__enqueue`]
+pub struct ArcWorkHandle<T, const ID: u64 = 0>
+where
+    T: HasWork<T, ID>,
+{
+    inner: Arc<T>,
+}
+
+unsafe impl<T, const ID: u64> WorkHandle for ArcWorkHandle<T, ID>
+where
+    T: HasWork<T, ID>,
+{
+    fn enable(self) -> bool {
+        let self_ptr = Arc::as_ptr(&self.inner) as *mut T;
+        let work_ptr = unsafe { <T as HasWork<T, ID>>::raw_get_work(self_ptr) };
+
+        unsafe { Work::<T, ID>::raw_enable(work_ptr) }
+    }
+
+    fn disable(self, sync: bool) -> bool {
+        let self_ptr = Arc::as_ptr(&self.inner) as *mut T;
+        let work_ptr = unsafe { <T as HasWork<T, ID>>::raw_get_work(self_ptr) };
+
+        if sync {
+            unsafe { Work::<T, ID>::raw_disable_sync(work_ptr) }
+        } else {
+            unsafe { Work::<T, ID>::raw_disable(work_ptr) }
+        }
+    }
+
+    fn cancel(self, sync: bool) -> bool {
+        let self_ptr = Arc::as_ptr(&self.inner) as *mut T;
+        let work_ptr = unsafe { <T as HasWork<T, ID>>::raw_get_work(self_ptr) };
+
+        if sync {
+            unsafe { Work::<T, ID>::raw_cancel_sync(work_ptr) }
+        } else {
+            unsafe { Work::<T, ID>::raw_cancel(work_ptr) }
+        }
+    }
+}
+
+/// A handle for an `Arc<HasDelayedWork<T>>` returned by a call to
+/// [`RawWorkItem::__enqueue_delayed`]
+pub struct ArcDelayedWorkHandle<T, const ID: u64 = 0>
+where
+    T: HasDelayedWork<T, ID>,
+{
+    inner: Arc<T>,
+}
+
+unsafe impl<T, const ID: u64> WorkHandle for ArcDelayedWorkHandle<T, ID>
+where
+    T: HasDelayedWork<T, ID>,
+{
+    fn enable(self) -> bool {
+        let self_ptr = Arc::as_ptr(&self.inner) as *mut T;
+        let work_ptr = unsafe { <T as HasWork<T, ID>>::raw_get_work(self_ptr) };
+
+        unsafe { Work::<T, ID>::raw_enable(work_ptr) }
+    }
+
+    fn disable(self, sync: bool) -> bool {
+        let self_ptr = Arc::as_ptr(&self.inner) as *mut T;
+        let work_ptr = unsafe { <T as HasWork<T, ID>>::raw_get_work(self_ptr) };
+
+        if sync {
+            unsafe { Work::<T, ID>::raw_disable_delayed_sync(work_ptr) }
+        } else {
+            unsafe { Work::<T, ID>::raw_disable_delayed(work_ptr) }
+        }
+    }
+
+    fn cancel(self, sync: bool) -> bool {
+        let self_ptr = Arc::as_ptr(&self.inner) as *mut T;
+        let work_ptr = unsafe { <T as HasWork<T, ID>>::raw_get_work(self_ptr) };
+
+        if sync {
+            unsafe { Work::<T, ID>::raw_cancel_delayed_sync(work_ptr) }
+        } else {
+            unsafe { Work::<T, ID>::raw_cancel_delayed(work_ptr) }
+        }
+    }
 }
 
 /// Used to safely implement the [`HasWork<T, ID>`] trait.
@@ -841,7 +1039,7 @@ where
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
-    type EnqueueOutput = Result<(), Self>;
+    type EnqueueOutput = Result<ArcWorkHandle<T, ID>, Self>;
 
     unsafe fn __enqueue<F>(self, queue_work_on: F) -> Self::EnqueueOutput
     where
@@ -856,7 +1054,7 @@ where
         let work_ptr = unsafe { Work::raw_get(work_ptr) };
 
         if queue_work_on(work_ptr) {
-            Ok(())
+            Ok(ArcWorkHandle { inner: unsafe { Arc::from_raw(ptr) } })
         } else {
             // SAFETY: The work queue has not taken ownership of the pointer.
             Err(unsafe { Arc::from_raw(ptr) })
@@ -872,6 +1070,27 @@ where
     T: WorkItem<ID, Pointer = Self>,
     T: HasDelayedWork<T, ID>,
 {
+    type EnqueueDelayedOutput = Result<ArcDelayedWorkHandle<T, ID>, Self>;
+
+    unsafe fn __enqueue_delayed<F>(self, queue_work_on: F) -> Self::EnqueueDelayedOutput
+    where
+        F: FnOnce(*mut bindings::work_struct) -> bool,
+    {
+        // Casting between const and mut is not a problem as long as the pointer is a raw pointer.
+        let ptr = Arc::into_raw(self).cast_mut();
+
+        // SAFETY: Pointers into an `Arc` point at a valid value.
+        let work_ptr = unsafe { T::raw_get_work(ptr) };
+        // SAFETY: `raw_get_work` returns a pointer to a valid value.
+        let work_ptr = unsafe { Work::raw_get(work_ptr) };
+
+        if queue_work_on(work_ptr) {
+            Ok(ArcDelayedWorkHandle { inner: unsafe { Arc::from_raw(ptr) } })
+        } else {
+            // SAFETY: The work queue has not taken ownership of the pointer.
+            Err(unsafe { Arc::from_raw(ptr) })
+        }
+    }
 }
 
 // SAFETY: TODO.
@@ -932,6 +1151,14 @@ where
     T: WorkItem<ID, Pointer = Self>,
     T: HasDelayedWork<T, ID>,
 {
+    type EnqueueDelayedOutput = ();
+
+    unsafe fn __enqueue_delayed<F>(self, queue_work_on: F) -> Self::EnqueueDelayedOutput
+    where
+        F: FnOnce(*mut bindings::work_struct) -> bool,
+    {
+        unsafe { self.__enqueue(queue_work_on) }
+    }
 }
 
 /// Returns the system work queue (`system_wq`).
