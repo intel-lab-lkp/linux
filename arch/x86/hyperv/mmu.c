@@ -65,6 +65,8 @@ static void hyperv_flush_tlb_multi(const struct cpumask *cpus,
 	unsigned long flags;
 	bool do_lazy = !info->freed_tables;
 
+	guard(preempt)();
+
 	trace_hyperv_mmu_flush_tlb_multi(cpus, info);
 
 	if (!hv_hypercall_pg)

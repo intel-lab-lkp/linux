@@ -1398,20 +1398,22 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 				unsigned long end, unsigned int stride_shift,
 				bool freed_tables)
 {
-	int cpu = get_cpu();
-
 	struct flush_tlb_info info = {
 		.mm = mm,
 		.stride_shift = stride_shift,
 		.freed_tables = freed_tables,
-		.trim_cpumask = 0,
-		.initiating_cpu = cpu
+		.trim_cpumask = 0
 	};
+	int cpu;
 
 	if ((end - start) >> stride_shift > tlb_single_page_flush_ceiling) {
 		start = 0;
 		end = TLB_FLUSH_ALL;
 	}
+
+	migrate_disable();
+
+	cpu = info.initiating_cpu = smp_processor_id();
 
 	/* This is also a barrier that synchronizes with switch_mm(). */
 	info.new_tlb_gen = inc_mm_tlb_gen(mm);
@@ -1425,6 +1427,7 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	 * flush_tlb_func_local() directly in this case.
 	 */
 	if (mm_global_asid(mm)) {
+		guard(preempt)();
 		broadcast_tlb_flush(&info);
 	} else if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids) {
 		info.trim_cpumask = should_trim_cpumask(mm);
@@ -1437,7 +1440,7 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 		local_irq_enable();
 	}
 
-	put_cpu();
+	migrate_enable();
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, start, end);
 }
 
@@ -1696,8 +1699,6 @@ EXPORT_SYMBOL_FOR_KVM(__flush_tlb_all);
 
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 {
-	int cpu = get_cpu();
-
 	struct flush_tlb_info info = {
 		.start = 0,
 		.end = TLB_FLUSH_ALL,
@@ -1705,9 +1706,13 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 		.stride_shift = 0,
 		.freed_tables = false,
 		.new_tlb_gen = TLB_GENERATION_INVALID,
-		.initiating_cpu = cpu,
 		.trim_cpumask = 0,
 	};
+	int cpu;
+
+	guard(migrate)();
+
+	info.initiating_cpu = cpu = smp_processor_id();
 
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
@@ -1727,8 +1732,6 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	}
 
 	cpumask_clear(&batch->cpumask);
-
-	put_cpu();
 }
 
 /*
