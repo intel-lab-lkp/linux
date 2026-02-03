@@ -204,7 +204,7 @@ static const struct iio_chan_spec ad8366_channels[] = {
 
 static int ad8366_probe(struct spi_device *spi)
 {
-	struct gpio_desc *reset_gpio;
+	struct gpio_desc *reset_gpio, *enable_gpio;
 	struct iio_dev *indio_dev;
 	struct ad8366_state *st;
 	int ret;
@@ -226,10 +226,21 @@ static int ad8366_probe(struct spi_device *spi)
 	st->spi = spi;
 	st->info = spi_get_device_match_data(spi);
 
+	/*
+	 * Previously, this driver considered the reset gpio for some devices
+	 * that don't actually have a reset pin, which could have been wired
+	 * up to the enable pin instead, so some users might be relying on this
+	 * to turn the chip on rather than reset it.
+	 */
 	reset_gpio = devm_gpiod_get_optional(&spi->dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(reset_gpio))
 		return dev_err_probe(&spi->dev, PTR_ERR(reset_gpio),
 				     "Failed to get reset GPIO\n");
+
+	enable_gpio = devm_gpiod_get_optional(&spi->dev, "enable", GPIOD_OUT_HIGH);
+	if (IS_ERR(enable_gpio))
+		return dev_err_probe(&spi->dev, PTR_ERR(enable_gpio),
+				     "Failed to get enable GPIO\n");
 
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->info = &ad8366_info;
