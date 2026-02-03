@@ -18,6 +18,10 @@
 	 */
 SYM_FUNC_START(wakeup_long64)
 	ANNOTATE_NOENDBR
+
+	/* pop return address to common_startup_64() */
+	addq	$8, %rsp
+
 	movq	saved_magic(%rip), %rax
 	movq	$0x123456789abcdef0, %rdx
 	cmpq	%rdx, %rax
@@ -28,8 +32,6 @@ SYM_FUNC_START(wakeup_long64)
 1:
 	jmp 1b
 2:
-	movq	saved_rsp(%rip), %rsp
-
 	movq	saved_rbx(%rip), %rbx
 	movq	saved_rdi(%rip), %rdi
 	movq	saved_rsi(%rip), %rsi
@@ -41,12 +43,10 @@ STACK_FRAME_NON_STANDARD wakeup_long64
 
 SYM_FUNC_START(do_suspend_lowlevel)
 	FRAME_BEGIN
-	subq	$8, %rsp
 	xorl	%eax, %eax
 	call	save_processor_state
 
 	movq	$saved_context, %rax
-	movq	%rsp, pt_regs_sp(%rax)
 	movq	%rbp, pt_regs_bp(%rax)
 	movq	%rsi, pt_regs_si(%rax)
 	movq	%rdi, pt_regs_di(%rax)
@@ -64,13 +64,14 @@ SYM_FUNC_START(do_suspend_lowlevel)
 	pushfq
 	popq	pt_regs_flags(%rax)
 
-	movq	%rsp, saved_rsp(%rip)
+	movq	PER_CPU_VAR(current_task), %rax
+	movq	%rsp, TASK_threadsp(%rax)
+
 	movq	%rbp, saved_rbp(%rip)
 	movq	%rbx, saved_rbx(%rip)
 	movq	%rdi, saved_rdi(%rip)
 	movq	%rsi, saved_rsi(%rip)
 
-	addq	$8, %rsp
 	movl	$3, %edi
 	xorl	%eax, %eax
 	call	x86_acpi_enter_sleep_state
@@ -89,7 +90,6 @@ SYM_FUNC_START(do_suspend_lowlevel)
 	movq	%rbx, %cr0
 	pushq	pt_regs_flags(%rax)
 	popfq
-	movq	pt_regs_sp(%rax), %rsp
 	movq	pt_regs_bp(%rax), %rbp
 	movq	pt_regs_si(%rax), %rsi
 	movq	pt_regs_di(%rax), %rdi
@@ -115,18 +115,14 @@ SYM_FUNC_START(do_suspend_lowlevel)
 #endif
 
 	xorl	%eax, %eax
-	addq	$8, %rsp
 	FRAME_END
 	jmp	restore_processor_state
 SYM_FUNC_END(do_suspend_lowlevel)
-STACK_FRAME_NON_STANDARD do_suspend_lowlevel
 
 .data
 saved_rbp:		.quad	0
 saved_rsi:		.quad	0
 saved_rdi:		.quad	0
 saved_rbx:		.quad	0
-
-saved_rsp:		.quad	0
 
 SYM_DATA(saved_magic,	.quad	0)
