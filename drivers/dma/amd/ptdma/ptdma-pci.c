@@ -23,6 +23,8 @@
 
 #include "ptdma.h"
 
+#define DRIVER_NAME ptdma
+
 struct pt_msix {
 	int msix_count;
 	struct msix_entry msix_entry;
@@ -123,9 +125,9 @@ static int pt_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct pt_device *pt;
 	struct pt_msix *pt_msix;
 	struct device *dev = &pdev->dev;
-	void __iomem * const *iomap_table;
-	int bar_mask;
+	unsigned long bar_mask;
 	int ret = -ENOMEM;
+	int bar;
 
 	pt = pt_alloc_struct(dev);
 	if (!pt)
@@ -150,20 +152,15 @@ static int pt_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	bar_mask = pci_select_bars(pdev, IORESOURCE_MEM);
-	ret = pcim_iomap_regions(pdev, bar_mask, "ptdma");
-	if (ret) {
-		dev_err(dev, "pcim_iomap_regions failed (%d)\n", ret);
-		goto e_err;
+	for_each_set_bit(bar, &bar_mask, sizeof(bar_mask)) {
+		ret = pcim_request_region(pdev, bar, DRIVER_NAME);
+		if (ret) {
+			dev_err(dev, "pcim_iomap_regions failed (%d)\n", ret);
+			goto e_err;
+		}
 	}
 
-	iomap_table = pcim_iomap_table(pdev);
-	if (!iomap_table) {
-		dev_err(dev, "pcim_iomap_table failed\n");
-		ret = -ENOMEM;
-		goto e_err;
-	}
-
-	pt->io_regs = iomap_table[pt->dev_vdata->bar];
+	pt->io_regs = pcim_iomap(pdev, pt->dev_vdata->bar, 0);
 	if (!pt->io_regs) {
 		dev_err(dev, "ioremap failed\n");
 		ret = -ENOMEM;
@@ -230,7 +227,7 @@ static const struct pci_device_id pt_pci_table[] = {
 MODULE_DEVICE_TABLE(pci, pt_pci_table);
 
 static struct pci_driver pt_pci_driver = {
-	.name = "ptdma",
+	.name = DRIVER_NAME,
 	.id_table = pt_pci_table,
 	.probe = pt_pci_probe,
 	.remove = pt_pci_remove,

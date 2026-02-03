@@ -10,6 +10,8 @@
 
 #include "ae4dma.h"
 
+#define DRIVER_NAME "ae4dma"
+
 static int ae4_get_irqs(struct ae4_device *ae4)
 {
 	struct ae4_msix *ae4_msix = ae4->ae4_msix;
@@ -75,9 +77,10 @@ static int ae4_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct device *dev = &pdev->dev;
 	struct ae4_device *ae4;
+	unsigned long bar_mask
 	struct pt_device *pt;
-	int bar_mask;
 	int ret = 0;
+	int bar;
 
 	ae4 = devm_kzalloc(dev, sizeof(*ae4), GFP_KERNEL);
 	if (!ae4)
@@ -92,15 +95,17 @@ static int ae4_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto ae4_error;
 
 	bar_mask = pci_select_bars(pdev, IORESOURCE_MEM);
-	ret = pcim_iomap_regions(pdev, bar_mask, "ae4dma");
-	if (ret)
-		goto ae4_error;
+	for_each_set_bit(bar, &bar_mask, sizeof(bar_mask)) {
+		ret = pcim_request_region(pdev, bar, DRIVER_NAME);
+		if (ret)
+			goto ae4_error;
+	}
 
 	pt = &ae4->pt;
 	pt->dev = dev;
 	pt->ver = AE4_DMA_VERSION;
 
-	pt->io_regs = pcim_iomap_table(pdev)[0];
+	pt->io_regs = pcim_iomap(pdev, 0, 0);
 	if (!pt->io_regs) {
 		ret = -ENOMEM;
 		goto ae4_error;
@@ -144,7 +149,7 @@ static const struct pci_device_id ae4_pci_table[] = {
 MODULE_DEVICE_TABLE(pci, ae4_pci_table);
 
 static struct pci_driver ae4_pci_driver = {
-	.name = "ae4dma",
+	.name = DRIVER_NAME,
 	.id_table = ae4_pci_table,
 	.probe = ae4_pci_probe,
 	.remove = ae4_pci_remove,
