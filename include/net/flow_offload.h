@@ -275,7 +275,7 @@ struct flow_action_entry {
 			u32			trunc_size;
 			bool			truncate;
 		} sample;
-		struct {				/* FLOW_ACTION_POLICE */
+		struct flow_action_police {		/* FLOW_ACTION_POLICE */
 			u32			burst;
 			u64			rate_bytes_ps;
 			u64			peakrate_bytes_ps;
