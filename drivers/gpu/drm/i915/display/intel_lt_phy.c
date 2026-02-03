@@ -6,6 +6,7 @@
 #include <drm/drm_print.h>
 
 #include "i915_reg.h"
+#include "intel_cmtg.h"
 #include "intel_cx0_phy.h"
 #include "intel_cx0_phy_regs.h"
 #include "intel_ddi.h"
@@ -2246,11 +2247,15 @@ void intel_xe3plpd_pll_enable(struct intel_encoder *encoder,
 			      const struct intel_crtc_state *crtc_state)
 {
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
-	if (intel_tc_port_in_tbt_alt_mode(dig_port))
+	if (intel_tc_port_in_tbt_alt_mode(dig_port)) {
 		intel_mtl_tbt_pll_enable_clock(encoder, crtc_state->port_clock);
-	else
+	} else {
 		intel_lt_phy_pll_enable(encoder, crtc_state);
+		if (crtc->cmtg.enable)
+			intel_cmtg_set_clk_select(crtc_state);
+	}
 }
 
 void intel_xe3plpd_pll_disable(struct intel_encoder *encoder)
