@@ -22,6 +22,7 @@
 #include <linux/pci-ecam.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+#include <linux/reset.h>
 #include <linux/irqchip/chained_irq.h>
 
 #include "../pci.h"
@@ -133,6 +134,54 @@
 #define CFG_DMA_REG_BAR			GENMASK(2, 0)
 #define CFG_PCIE_CACHE			GENMASK(7, 0)
 
+#define PCIE_ATTR2_AER_CAP_PERMIT_ROOTERR_UPDATE	BIT(0)
+
+#define PCIE_ATTR25_CPL_TIMEOUT_DISABLE_SUPPORTED	BIT(9)
+#define PCIE_ATTR25_INTX_IMPLEMENTED			BIT(8)
+#define PCIE_ATTR25_CLASS_CODE				GENMASK(7, 0)
+
+#define PCIE_ATTR27_DEV_CAP_ENDPOINT_L1_LATENCY		GENMASK(5, 3)
+
+#define PCIE_ATTR34_HEADER_TYPE				GENMASK(7, 0)
+
+#define PCIE_ATTR35_LINK_CAP_DLL_ACTIVE_REPORTING	BIT(15)
+
+#define PCIE_ATTR37_LINK_CAP_MAX_LINK_SPEED		GENMASK(13, 10)
+#define PCIE_ATTR37_LINK_CAP_MAX_LINK_SPEED_2_5		1
+#define PCIE_ATTR37_LINK_CAP_MAX_LINK_SPEED_5_0		2
+#define PCIE_ATTR37_LINK_CAP_BANDWIDTH_NOTIFICATION	BIT(9)
+
+#define PCIE_ATTR50_CAP_DEVICE_PORT_TYPE		GENMASK(7, 4)
+#define PCIE_ATTR50_CAP_NEXTPTR				GENMASK(15, 8)
+
+#define PCIE_ATTR53_CAP_NEXTPTR				GENMASK(7, 0)
+
+#define PCIE_ATTR93_LL_REPLAY_TIMEOUT_EN		BIT(15)
+
+#define PCIE_ATTR97_LTSSM_MAX_LINK_WIDTH		GENMASK(11, 6)
+#define PCIE_ATTR97_LINK_CAP_MAX_LINK_WIDTH		GENMASK(5, 0)
+
+#define PCIE_ATTR100_UPSTREAM_FACING			BIT(6)
+
+#define PCIE_ATTR101_EN_MSG_ROUTE			GENMASK(15, 5)
+#define PCIE_ATTR101_EN_MSG_ROUTE_PME_TURN_OFF		BIT(15)
+#define PCIE_ATTR101_EN_MSG_ROUTE_UNLOCK		BIT(14)
+#define PCIE_ATTR101_EN_MSG_ROUTE_PME_TO_ACK		BIT(13)
+#define PCIE_ATTR101_EN_MSG_ROUTE_PM_PME		BIT(12)
+#define PCIE_ATTR101_EN_MSG_ROUTE_INTD			BIT(11)
+#define PCIE_ATTR101_EN_MSG_ROUTE_INTC			BIT(10)
+#define PCIE_ATTR101_EN_MSG_ROUTE_INTB			BIT(9)
+#define PCIE_ATTR101_EN_MSG_ROUTE_INTA			BIT(8)
+#define PCIE_ATTR101_EN_MSG_ROUTE_ERR_FATAL		BIT(7)
+#define PCIE_ATTR101_EN_MSG_ROUTE_ERR_NONFATAL		BIT(6)
+#define PCIE_ATTR101_EN_MSG_ROUTE_ERR_COR		BIT(5)
+#define PCIE_ATTR101_DISABLE_BAR_FILTERING		BIT(1)
+
+#define PCIE_ATTR106_VC0_TOTAL_CREDITS_NPH		GENMASK(13, 7)
+#define PCIE_ATTR106_VC0_TOTAL_CREDITS_CH		GENMASK(6, 0)
+
+#define PCIE_ATTR109_VC0_TOTAL_CREDITS_PH		GENMASK(6, 0)
+
 #define INT_PCI_MSI_NR			(2 * 32)
 
 /* Readin the PS_LINKUP */
@@ -159,6 +208,7 @@ struct nwl_pcie {
 	void __iomem *pcireg_base;
 	void __iomem *ecam_base;
 	struct phy *phy[4];
+	struct reset_control *ctrl_reset;
 	phys_addr_t phys_breg_base;	/* Physical Bridge Register Base */
 	phys_addr_t phys_pcie_reg_base;	/* Physical PCIe Controller Base */
 	phys_addr_t phys_ecam_base;	/* Physical Configuration Base */
@@ -172,6 +222,115 @@ struct nwl_pcie {
 	struct clk *clk;
 	raw_spinlock_t leg_mask_lock;
 };
+
+static void nwl_pcie_write_attr(struct nwl_pcie *pcie, u32 attr, u16 val)
+{
+	writel(val, pcie->pcireg_base + attr * 4);
+}
+
+static void nwl_pcie_modify_attr(struct nwl_pcie *pcie, u32 attr, u16 clear,
+				u16 set)
+{
+	u32 val = readl(pcie->pcireg_base + attr * 4);
+
+	nwl_pcie_write_attr(pcie, attr, (val & ~clear) | set);
+}
+
+static void nwl_pcie_attr_init(struct nwl_pcie *pcie)
+{
+	unsigned int width;
+
+	for (width = ARRAY_SIZE(pcie->phy); width; width--)
+		if (pcie->phy[width - 1])
+			break;
+
+	/* Set TLP header to type-1 */
+	nwl_pcie_modify_attr(pcie, 34, PCIE_ATTR34_HEADER_TYPE, PCI_HEADER_TYPE_BRIDGE);
+	nwl_pcie_modify_attr(pcie, 100, PCIE_ATTR100_UPSTREAM_FACING, 0);
+
+	/* Disable BAR0/1 */
+	nwl_pcie_write_attr(pcie, 7, 0);
+	nwl_pcie_write_attr(pcie, 8, 0);
+	nwl_pcie_write_attr(pcie, 9, 0);
+	nwl_pcie_write_attr(pcie, 10, 0);
+	/* Enable primary/secondary/subordinate busses, disable latency timer */
+	nwl_pcie_write_attr(pcie, 11, 0xffff);
+	nwl_pcie_write_attr(pcie, 12, 0x00ff);
+	nwl_pcie_write_attr(pcie, 13, 0x0000); /* Disable I/O window */
+	nwl_pcie_write_attr(pcie, 14, 0x0000); /* Enable secondary status */
+	/* Enable memory window */
+	nwl_pcie_write_attr(pcie, 15, (u16)PCI_MEMORY_RANGE_MASK);
+	nwl_pcie_write_attr(pcie, 16, (u16)PCI_MEMORY_RANGE_MASK);
+	/* Enable 64-bit prefetchable window */
+	nwl_pcie_write_attr(pcie, 17,
+			    (u16)PCI_PREF_RANGE_MASK | PCI_PREF_RANGE_TYPE_64);
+	nwl_pcie_write_attr(pcie, 18,
+			    (u16)PCI_PREF_RANGE_MASK | PCI_PREF_RANGE_TYPE_64);
+	nwl_pcie_modify_attr(pcie, 101, 0, PCIE_ATTR101_DISABLE_BAR_FILTERING);
+
+	/* Set class code to PCI_CLASS_BRIDGE_PCI_NORMAL */
+	nwl_pcie_write_attr(pcie, 24, PCI_CLASS_BRIDGE_PCI_NORMAL & 0xffff);
+	nwl_pcie_modify_attr(pcie, 25, PCIE_ATTR25_CLASS_CODE,
+			     PCIE_ATTR25_CPL_TIMEOUT_DISABLE_SUPPORTED |
+			     PCI_BASE_CLASS_BRIDGE);
+
+	/* Enable PCIe capability */
+	nwl_pcie_modify_attr(pcie, 53, PCIE_ATTR53_CAP_NEXTPTR, 0x60);
+	nwl_pcie_modify_attr(pcie, 50,
+			     PCIE_ATTR50_CAP_NEXTPTR |
+			     PCIE_ATTR50_CAP_DEVICE_PORT_TYPE,
+			     FIELD_PREP(PCIE_ATTR50_CAP_DEVICE_PORT_TYPE,
+					PCI_EXP_TYPE_ROOT_PORT));
+
+	/* Disable MSI(-X) capability */
+	nwl_pcie_write_attr(pcie, 41, 0);
+	nwl_pcie_write_attr(pcie, 43, 0);
+	nwl_pcie_write_attr(pcie, 44, 0);
+	nwl_pcie_write_attr(pcie, 45, 0);
+	nwl_pcie_write_attr(pcie, 46, 0);
+	nwl_pcie_write_attr(pcie, 48, 0);
+
+	/* Disable DSN capability */
+	nwl_pcie_write_attr(pcie, 31, 0);
+	nwl_pcie_write_attr(pcie, 82, PCI_CFG_SPACE_SIZE);
+
+	/* Enable AER */
+	nwl_pcie_modify_attr(pcie, 2, 0,
+			     PCIE_ATTR2_AER_CAP_PERMIT_ROOTERR_UPDATE);
+
+	/* Disable L1 latency for root port */
+	nwl_pcie_modify_attr(pcie, 27,
+			     PCIE_ATTR27_DEV_CAP_ENDPOINT_L1_LATENCY, 0);
+
+	/* Enable bandwidth notification */
+	nwl_pcie_modify_attr(pcie, 37, 0,
+			     PCIE_ATTR37_LINK_CAP_BANDWIDTH_NOTIFICATION);
+
+	/* Set max link width */
+	nwl_pcie_write_attr(pcie, 97,
+			    FIELD_PREP(PCIE_ATTR97_LTSSM_MAX_LINK_WIDTH, width) |
+			    FIELD_PREP(PCIE_ATTR97_LINK_CAP_MAX_LINK_WIDTH, width));
+
+	/* Route misc. TLPs to controller */
+	nwl_pcie_modify_attr(pcie, 101, PCIE_ATTR101_EN_MSG_ROUTE,
+			     PCIE_ATTR101_EN_MSG_ROUTE_INTA |
+			     PCIE_ATTR101_EN_MSG_ROUTE_INTB |
+			     PCIE_ATTR101_EN_MSG_ROUTE_INTC |
+			     PCIE_ATTR101_EN_MSG_ROUTE_INTD |
+			     PCIE_ATTR101_EN_MSG_ROUTE_PM_PME |
+			     PCIE_ATTR101_EN_MSG_ROUTE_PME_TO_ACK |
+			     PCIE_ATTR101_EN_MSG_ROUTE_UNLOCK |
+			     PCIE_ATTR101_EN_MSG_ROUTE_PME_TURN_OFF);
+
+	/* Initialize completion credits */
+	nwl_pcie_write_attr(pcie, 105, 205); /* CD */
+	nwl_pcie_write_attr(pcie, 106,
+			    FIELD_PREP(PCIE_ATTR106_VC0_TOTAL_CREDITS_NPH, 12) |
+			    FIELD_PREP(PCIE_ATTR106_VC0_TOTAL_CREDITS_CH, 36));
+	nwl_pcie_write_attr(pcie, 107, 24); /* NPD */
+	nwl_pcie_write_attr(pcie, 108, 181); /* PD */
+	nwl_pcie_modify_attr(pcie, 109, PCIE_ATTR109_VC0_TOTAL_CREDITS_PH, 32);
+}
 
 static inline u32 nwl_bridge_readl(struct nwl_pcie *pcie, u32 off)
 {
@@ -806,6 +965,9 @@ static int nwl_pcie_parse_dt(struct nwl_pcie *pcie,
 	irq_set_chained_handler_and_data(pcie->irq_intx,
 					 nwl_pcie_leg_handler, pcie);
 
+	pcie->ctrl_reset = devm_reset_control_get_optional(dev, "ctrl");
+	if (IS_ERR(pcie->ctrl_reset))
+		return PTR_ERR(pcie->ctrl_reset);
 
 	for (i = 0; i < ARRAY_SIZE(pcie->phy); i++) {
 		pcie->phy[i] = devm_of_phy_get_by_index(dev, dev->of_node, i);
@@ -852,6 +1014,12 @@ static int nwl_pcie_probe(struct platform_device *pdev)
 	if (IS_ERR(pcie->clk))
 		return PTR_ERR(pcie->clk);
 
+	err = reset_control_assert(pcie->ctrl_reset);
+	if (err) {
+		dev_err(dev, "could not enter reset\n");
+		return err;
+	}
+
 	err = clk_prepare_enable(pcie->clk);
 	if (err) {
 		dev_err(dev, "can't enable PCIe ref clock\n");
@@ -862,6 +1030,15 @@ static int nwl_pcie_probe(struct platform_device *pdev)
 	if (err) {
 		dev_err(dev, "could not init PHYs\n");
 		goto err_clk;
+	}
+
+	if (pcie->ctrl_reset)
+		nwl_pcie_attr_init(pcie);
+
+	err = reset_control_deassert(pcie->ctrl_reset);
+	if (err) {
+		dev_err(dev, "could not release from reset\n");
+		goto err_phy_init;
 	}
 
 	err = nwl_pcie_phy_power_on(pcie);
