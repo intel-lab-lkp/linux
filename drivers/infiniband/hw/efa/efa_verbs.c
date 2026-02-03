@@ -1225,6 +1225,7 @@ int efa_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 			goto err_out;
 		}
 
+		ib_umem_get_ref(umem);
 		cq->cpu_addr = NULL;
 		cq->dma_addr = ib_umem_start_dma_addr(umem);
 		cq->umem = umem;
@@ -1300,7 +1301,9 @@ err_remove_mmap:
 err_destroy_cq:
 	efa_destroy_cq_idx(dev, cq->cq_idx);
 err_free_mapped:
-	if (!umem)
+	if (umem)
+		ib_umem_release(umem);
+	else
 		efa_free_mapped(dev, cq->cpu_addr, cq->dma_addr, cq->size,
 				DMA_FROM_DEVICE);
 err_out:
