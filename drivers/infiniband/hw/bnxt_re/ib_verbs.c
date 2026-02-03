@@ -3241,7 +3241,7 @@ int bnxt_re_post_recv(struct ib_qp *ib_qp, const struct ib_recv_wr *wr,
 	return rc;
 }
 
-static struct bnxt_qplib_nq *bnxt_re_get_nq(struct bnxt_re_dev *rdev)
+struct bnxt_qplib_nq *bnxt_re_get_nq(struct bnxt_re_dev *rdev)
 {
 	int min, indx;
 
@@ -3256,7 +3256,7 @@ static struct bnxt_qplib_nq *bnxt_re_get_nq(struct bnxt_re_dev *rdev)
 	return &rdev->nqr->nq[min];
 }
 
-static void bnxt_re_put_nq(struct bnxt_re_dev *rdev, struct bnxt_qplib_nq *nq)
+void bnxt_re_put_nq(struct bnxt_re_dev *rdev, struct bnxt_qplib_nq *nq)
 {
 	mutex_lock(&rdev->nqr->load_lock);
 	nq->load--;
@@ -3293,13 +3293,24 @@ int bnxt_re_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		      struct uverbs_attr_bundle *attrs)
 {
+	return bnxt_re_create_cq_umem(ibcq, attr, NULL, attrs);
+}
+
+static u64 bnxt_re_cq_cmask_supported = (BNXT_RE_CQ_TOGGLE_PAGE_SUPPORT |
+					 BNXT_RE_CQ_DV_CQ_ENABLE);
+
+int bnxt_re_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
+			   struct ib_umem *umem, struct uverbs_attr_bundle *attrs)
+{
 	struct bnxt_re_cq *cq = container_of(ibcq, struct bnxt_re_cq, ib_cq);
 	struct bnxt_re_dev *rdev = to_bnxt_re_dev(ibcq->device, ibdev);
 	struct ib_udata *udata = &attrs->driver_udata;
 	struct bnxt_re_ucontext *uctx =
 		rdma_udata_to_drv_context(udata, struct bnxt_re_ucontext, ib_uctx);
 	struct bnxt_qplib_dev_attr *dev_attr = rdev->dev_attr;
+	struct bnxt_re_cq_resp resp = {};
 	struct bnxt_qplib_chip_ctx *cctx;
+	struct bnxt_re_cq_req req = {};
 	int cqe = attr->cqe;
 	int rc, entries;
 	u32 active_cqs;
@@ -3317,6 +3328,22 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	cctx = rdev->chip_ctx;
 	cq->qplib_cq.cq_handle = (u64)(unsigned long)(&cq->qplib_cq);
 
+	if (udata) {
+		if (ib_copy_from_udata(&req, udata, min(sizeof(req), udata->inlen)))
+			return -EFAULT;
+		if (req.comp_mask & ~bnxt_re_cq_cmask_supported) {
+			ibdev_dbg(&rdev->ibdev,
+				  "Invalid CQ comp_mask: 0x%llx supported: 0x%llx\n",
+				  req.comp_mask, bnxt_re_cq_cmask_supported);
+			return -EOPNOTSUPP;
+		}
+		if (req.comp_mask & BNXT_RE_CQ_DV_CQ_ENABLE) {
+			if (!umem)
+				return -EINVAL;
+			return bnxt_re_dv_create_cq(rdev, udata, cq, &req, umem);
+		}
+	}
+
 	entries = bnxt_re_init_depth(cqe + 1, uctx);
 	if (entries > dev_attr->max_cq_wqes + 1)
 		entries = dev_attr->max_cq_wqes + 1;
@@ -3324,18 +3351,16 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	cq->qplib_cq.sg_info.pgsize = PAGE_SIZE;
 	cq->qplib_cq.sg_info.pgshft = PAGE_SHIFT;
 	if (udata) {
-		struct bnxt_re_cq_req req;
-		if (ib_copy_from_udata(&req, udata, sizeof(req))) {
-			rc = -EFAULT;
-			goto fail;
-		}
-
-		cq->umem = ib_umem_get(&rdev->ibdev, req.cq_va,
-				       entries * sizeof(struct cq_base),
-				       IB_ACCESS_LOCAL_WRITE);
-		if (IS_ERR(cq->umem)) {
-			rc = PTR_ERR(cq->umem);
-			goto fail;
+		if (umem) {
+			cq->umem = umem;
+		} else {
+			cq->umem = ib_umem_get(&rdev->ibdev, req.cq_va,
+					       entries * sizeof(struct cq_base),
+					       IB_ACCESS_LOCAL_WRITE);
+			if (IS_ERR(cq->umem)) {
+				rc = PTR_ERR(cq->umem);
+				goto fail;
+			}
 		}
 		cq->qplib_cq.sg_info.umem = cq->umem;
 		cq->qplib_cq.dpi = &uctx->dpi;
@@ -3370,8 +3395,6 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	spin_lock_init(&cq->cq_lock);
 
 	if (udata) {
-		struct bnxt_re_cq_resp resp = {};
-
 		if (cctx->modes.toggle_bits & BNXT_QPLIB_CQ_TOGGLE_BIT) {
 			hash_add(rdev->cq_hash, &cq->hash_entry, cq->qplib_cq.id);
 			/* Allocate a page */
@@ -3399,7 +3422,8 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 free_mem:
 	free_page((unsigned long)cq->uctx_cq_page);
 c2fail:
-	ib_umem_release(cq->umem);
+	if (cq->umem && !umem)
+		ib_umem_release(cq->umem);
 fail:
 	kfree(cq->cql);
 	return rc;
@@ -4574,6 +4598,8 @@ int bnxt_re_alloc_ucontext(struct ib_ucontext *ctx, struct ib_udata *udata)
 			if (resp.mode == BNXT_QPLIB_WQE_MODE_VARIABLE)
 				uctx->cmask |= BNXT_RE_UCNTX_CAP_VAR_WQE_ENABLED;
 		}
+		resp.comp_mask |= BNXT_RE_UCNTX_CMASK_DV_CQ_SUPPORTED;
+		uctx->cmask |= BNXT_RE_UCNTX_CAP_DV_CQ_SUPPORTED;
 	}
 
 	rc = ib_copy_to_udata(udata, &resp, min(udata->outlen, sizeof(resp)));
