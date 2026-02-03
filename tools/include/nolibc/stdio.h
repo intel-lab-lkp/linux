@@ -291,20 +291,20 @@ int fseek(FILE *stream, long offset, int whence)
 }
 
 
-/* minimal printf(). It supports the following formats:
- *  - %[l*]{d,u,c,x,p}
- *  - %s
- *  - unknown modifiers are ignored.
+/* simple printf(). It supports the following formats:
+ *  - %[-][width][{l,t,z,ll,L,j,q}]{d,u,c,x,p,s,m}
+ *  - %%
+ *  - invalid formats are copied to the output buffer
  */
 typedef int (*__nolibc_printf_cb)(void *state, const char *buf, size_t size);
 
+#define __PF_FLAG(c) (1u << ((c) & 0x1f))
 static __attribute__((unused, format(printf, 3, 0)))
 int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list args)
 {
-	char lpref, c;
-	unsigned long long v;
-	unsigned int written, width;
-	size_t len;
+	char c;
+	int len, written, width;
+	unsigned int flags;
 	char tmpbuf[21];
 	const char *outstr;
 
@@ -316,6 +316,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			break;
 
 		width = 0;
+		flags = 0;
 		if (c != '%') {
 			while (*fmt && *fmt != '%')
 				fmt++;
@@ -325,6 +326,13 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 			c = *fmt++;
 
+			/* Flag characters */
+			for (; c >= 0x20 && c <= 0x3f; c = *fmt++) {
+				if ((__PF_FLAG(c) & (__PF_FLAG('-'))) == 0)
+					break;
+				flags |= __PF_FLAG(c);
+			}
+
 			/* width */
 			while (c >= '0' && c <= '9') {
 				width *= 10;
@@ -333,41 +341,34 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 				c = *fmt++;
 			}
 
-			/* Length modifiers */
-			if (c == 'l') {
-				lpref = 1;
-				c = *fmt++;
-				if (c == 'l') {
-					lpref = 2;
+			/* Length modifiers are lower case except 'L' which is the same a 'q' */
+			if ((c >= 'a' && c <= 'z') || (c == 'L' && (c = 'q'))) {
+				if (__PF_FLAG(c) & (__PF_FLAG('l') | __PF_FLAG('t') | __PF_FLAG('z') |
+						    __PF_FLAG('j') | __PF_FLAG('q'))) {
+					if (c == 'l' && fmt[0] == 'l') {
+						fmt++;
+						c = 'q';
+					}
+					/* These all miss "# -0+" */
+					flags |= __PF_FLAG(c);
 					c = *fmt++;
 				}
-			} else if (c == 'j') {
-				/* intmax_t is long long */
-				lpref = 2;
-				c = *fmt++;
-			} else {
-				lpref = 0;
 			}
 
 			if (c == 'c' || c == 'd' || c == 'u' || c == 'x' || c == 'p') {
+				unsigned long long v;
+				long long signed_v;
 				char *out = tmpbuf;
 
-				if (c == 'p')
+				if ((c == 'p') || (flags & (__PF_FLAG('l') | __PF_FLAG('t') | __PF_FLAG('z')))) {
 					v = va_arg(args, unsigned long);
-				else if (lpref) {
-					if (lpref > 1)
-						v = va_arg(args, unsigned long long);
-					else
-						v = va_arg(args, unsigned long);
-				} else
+					signed_v = (long)v;
+				} else if (flags & (__PF_FLAG('j') | __PF_FLAG('q'))) {
+					v = va_arg(args, unsigned long long);
+					signed_v = v;
+				} else {
 					v = va_arg(args, unsigned int);
-
-				if (c == 'd') {
-					/* sign-extend the value */
-					if (lpref == 0)
-						v = (long long)(int)v;
-					else if (lpref == 1)
-						v = (long long)(long)v;
+					signed_v = (int)v;
 				}
 
 				switch (c) {
@@ -376,7 +377,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 					out[1] = 0;
 					break;
 				case 'd':
-					i64toa_r(v, out);
+					i64toa_r(signed_v, out);
 					break;
 				case 'u':
 					u64toa_r(v, out);
@@ -417,14 +418,24 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 		written += len;
 
-		while (width > len) {
-			unsigned int pad_len = ((width - len - 1) & 15) + 1;
+                /* An OPTIMIZER_HIDE_VAR() seems to stop gcc back-merging this
+                 * code into one of the conditionals above.
+		 */
+                __asm__ volatile("" : "=r"(len) : "0"(len));
+
+		/* Output 'left pad', 'value' then 'right pad'. */
+		flags &= __PF_FLAG('-');
+		width -= len;
+		if (flags && cb(state, outstr, len) != 0)
+			return -1;
+		while (width > 0) {
+			int pad_len = ((width - 1) & 15) + 1;
 			width -= pad_len;
 			written += pad_len;
 			if (cb(state, "                ", pad_len) != 0)
 				return -1;
 		}
-		if (cb(state, outstr, len) != 0)
+		if (!flags && cb(state, outstr, len) != 0)
 			return -1;
 	}
 
@@ -433,6 +444,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 	return written;
 }
+#undef _PF_FLAG
 
 struct __nolibc_fprintf_cb_state {
 	FILE *stream;
