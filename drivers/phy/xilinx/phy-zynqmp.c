@@ -502,6 +502,17 @@ static void xpsgtr_lane_set_protocol(struct xpsgtr_phy *gtr_phy)
 	}
 }
 
+/* Set the bus width */
+static void xpsgtr_phy_init_bus_width(struct xpsgtr_phy *gtr_phy, u32 width)
+{
+	struct xpsgtr_dev *gtr_dev = gtr_phy->dev;
+	u32 mask = PROT_BUS_WIDTH_MASK(gtr_phy->lane);
+	u32 val = width << PROT_BUS_WIDTH_SHIFT(gtr_phy->lane);
+
+	xpsgtr_clr_set(gtr_dev, TX_PROT_BUS_WIDTH, mask, val);
+	xpsgtr_clr_set(gtr_dev, RX_PROT_BUS_WIDTH, mask, val);
+}
+
 /* Bypass (de)scrambler and 8b/10b decoder and encoder. */
 static void xpsgtr_bypass_scrambler_8b10b(struct xpsgtr_phy *gtr_phy)
 {
@@ -535,14 +546,7 @@ static void xpsgtr_phy_init_sata(struct xpsgtr_phy *gtr_phy)
 /* SGMII-specific initialization. */
 static void xpsgtr_phy_init_sgmii(struct xpsgtr_phy *gtr_phy)
 {
-	struct xpsgtr_dev *gtr_dev = gtr_phy->dev;
-	u32 mask = PROT_BUS_WIDTH_MASK(gtr_phy->lane);
-	u32 val = PROT_BUS_WIDTH_10 << PROT_BUS_WIDTH_SHIFT(gtr_phy->lane);
-
-	/* Set SGMII protocol TX and RX bus width to 10 bits. */
-	xpsgtr_clr_set(gtr_dev, TX_PROT_BUS_WIDTH, mask, val);
-	xpsgtr_clr_set(gtr_dev, RX_PROT_BUS_WIDTH, mask, val);
-
+	xpsgtr_phy_init_bus_width(gtr_phy, PROT_BUS_WIDTH_10);
 	xpsgtr_bypass_scrambler_8b10b(gtr_phy);
 }
 
