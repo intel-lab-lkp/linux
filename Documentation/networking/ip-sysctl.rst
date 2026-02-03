@@ -2485,8 +2485,8 @@ max_dst_opts_number - INTEGER
         Default: 2
 
 max_hbh_opts_number - INTEGER
-	Maximum number of non-padding TLVs allowed in a Hop-by-Hop
-	options extension header. If this value is zero then receive
+        Maximum number of non-padding TLVs allowed in a Hop-by-Hop
+        options extension header. If this value is zero then receive
         Hop-by-Hop Options processing is disabled in which case packets
         with the Hop-by-Hop Options extension header are dropped.
         If this value is less than zero then unknown options are disallowed
@@ -2580,6 +2580,36 @@ ioam6_id_wide - LONG INTEGER
         - Max: 0xFFFFFFFFFFFFFF
 
         Default: 0xFFFFFFFFFFFFFF
+
+enforce_ext_hdr_order - BOOLEAN
+	Enforce recommended Extension Header ordering in RFC8200.
+	If the sysctl is set to 1 then the ordering is enforced in
+	received packets and each Extension Header may be present
+	at most once per packet (except for Destination Options that
+	may occur twice). If the sysctl is set to 0 then ordering is
+	not enforced and Extension Headers may be present in any
+	order and have any number of occurrences per packet (except
+	for Hop-by-Hop Options that must always be the first Extension
+	Header and occur at most once in a packet)).
+
+	The Extension Header order is:
+
+	    IPv6 header
+	    Hop-by-Hop Options header
+	    Destination Options before the Routing header
+	    Routing header
+	    Fragment header
+	    Authentication header
+	    Encapsulating Security Payload header
+	    Destination Options header
+	    Upper-Layer header
+
+	Possible values:
+
+	- 0 (disabled)
+	- 1 (enabled)
+
+	Default: 1 (enabled)
 
 IPv6 Fragmentation:
 
