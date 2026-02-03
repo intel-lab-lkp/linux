@@ -4107,6 +4107,50 @@ static int ext4_iomap_buffered_da_write_end(struct inode *inode, loff_t offset,
 	return 0;
 }
 
+static int ext4_iomap_zero_begin(struct inode *inode,
+		loff_t offset, loff_t length, unsigned int flags,
+		struct iomap *iomap, struct iomap *srcmap)
+{
+	struct iomap_iter *iter = container_of(iomap, struct iomap_iter, iomap);
+	struct ext4_map_blocks map;
+	u8 blkbits = inode->i_blkbits;
+	unsigned int iomap_flags = 0;
+	int ret;
+
+	ret = ext4_emergency_state(inode->i_sb);
+	if (unlikely(ret))
+		return ret;
+
+	if (WARN_ON_ONCE(!(flags & IOMAP_ZERO)))
+		return -EINVAL;
+
+	ret = ext4_iomap_map_blocks(inode, offset, length, NULL, &map);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * Look up dirty folios for unwritten mappings within EOF. Providing
+	 * this bypasses the flush iomap uses to trigger extent conversion
+	 * when unwritten mappings have dirty pagecache in need of zeroing.
+	 */
+	if (map.m_flags & EXT4_MAP_UNWRITTEN) {
+		loff_t offset = ((loff_t)map.m_lblk) << blkbits;
+		loff_t end = ((loff_t)map.m_lblk + map.m_len) << blkbits;
+
+		iomap_fill_dirty_folios(iter, &offset, end, &iomap_flags);
+		if ((offset >> blkbits) < map.m_lblk + map.m_len)
+			map.m_len = (offset >> blkbits) - map.m_lblk;
+	}
+
+	ext4_set_iomap(inode, iomap, &map, offset, length, flags);
+	iomap->flags |= iomap_flags;
+
+	return 0;
+}
+
+const struct iomap_ops ext4_iomap_zero_ops = {
+	.iomap_begin = ext4_iomap_zero_begin,
+};
 
 const struct iomap_ops ext4_iomap_buffered_write_ops = {
 	.iomap_begin = ext4_iomap_buffered_write_begin,
@@ -4622,6 +4666,32 @@ out_handle:
 	return err;
 }
 
+static int ext4_iomap_block_zero_range(struct inode *inode, loff_t from,
+				       loff_t length, bool *did_zero)
+{
+	/*
+	 * Zeroing out under an active handle can cause deadlock since
+	 * the order of acquiring the folio lock and starting a handle is
+	 * inconsistent with the iomap writeback procedure.
+	 */
+	if (WARN_ON_ONCE(ext4_handle_valid(journal_current_handle())))
+		return -EINVAL;
+
+	/* The zeroing scope should not extend across a block. */
+	if (WARN_ON_ONCE((from >> inode->i_blkbits) !=
+			 ((from + length - 1) >> inode->i_blkbits)))
+		return -EINVAL;
+
+	if (!(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_ORPHAN_FS) &&
+	    !(inode_state_read_once(inode) & (I_NEW | I_FREEING)))
+		WARN_ON_ONCE(!inode_is_locked(inode) &&
+			!rwsem_is_locked(&inode->i_mapping->invalidate_lock));
+
+	return iomap_zero_range(inode, from, length, did_zero,
+				&ext4_iomap_zero_ops,
+				&ext4_iomap_write_ops, NULL);
+}
+
 /*
  * ext4_block_zero_page_range() zeros out a mapping of length 'length'
  * starting from file offset 'from'.  The range to be zero'd must
@@ -4650,6 +4720,9 @@ static int ext4_block_zero_page_range(struct address_space *mapping,
 	} else if (ext4_should_journal_data(inode)) {
 		return ext4_journalled_block_zero_range(inode, from,
 							length, did_zero);
+	} else if (ext4_inode_buffered_iomap(inode)) {
+		return ext4_iomap_block_zero_range(inode, from, length,
+						   did_zero);
 	}
 	return ext4_block_zero_range(inode, from, length, did_zero);
 }
@@ -5062,6 +5135,18 @@ int ext4_truncate(struct inode *inode)
 		if (zero_len < 0) {
 			err = zero_len;
 			goto out_trace;
+		}
+		/*
+		 * inodes using the iomap buffered I/O path do not use the
+		 * ordered data mode, it is necessary to write out zeroed data
+		 * before the updating i_disksize transaction is committed.
+		 */
+		if (zero_len > 0 && ext4_inode_buffered_iomap(inode)) {
+			err = filemap_write_and_wait_range(mapping,
+					inode->i_size,
+					inode->i_size + zero_len - 1);
+			if (err)
+				return err;
 		}
 	}
 
