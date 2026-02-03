@@ -143,13 +143,29 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 	folio = __filemap_get_folio(inode->i_mapping, index,
 				    FGP_LOCK | FGP_ACCESSED, 0);
 	if (!IS_ERR(folio))
-		return folio;
+		goto check_folio;
 
 	policy = mpol_shared_policy_lookup(&GMEM_I(inode)->policy, index);
 	folio = __filemap_get_folio_mpol(inode->i_mapping, index,
 					 FGP_LOCK | FGP_ACCESSED | FGP_CREAT,
 					 mapping_gfp_mask(inode->i_mapping), policy);
 	mpol_cond_put(policy);
+	if (IS_ERR(folio))
+		return folio;
+check_folio:
+	/*
+	 * Large folios are not supported yet. This can still happen
+	 * despite mapping_set_folio_order_range() if userspace uses
+	 * madvise(MADV_HUGEPAGE) which can override the folio order
+	 * restrictions. Reject the large folio and remove it from
+	 * the page cache so the next fault can allocate a order-0
+	 * page instead.
+	 */
+	if (folio_test_large(folio)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		return ERR_PTR(-E2BIG);
+	}
 
 	return folio;
 }
@@ -596,6 +612,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	inode->i_mode |= S_IFREG;
 	inode->i_size = size;
 	mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
+	mapping_set_folio_order_range(inode->i_mapping, 0, 0);
 	mapping_set_inaccessible(inode->i_mapping);
 	/* Unmovable mappings are supposed to be marked unevictable as well. */
 	WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
