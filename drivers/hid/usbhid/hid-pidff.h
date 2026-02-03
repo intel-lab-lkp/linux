@@ -21,6 +21,9 @@
 /* Force all periodic effects to be uploaded as SINE */
 #define HID_PIDFF_QUIRK_PERIODIC_SINE_ONLY	BIT(4)
 
+/* Allow devices with missing negative coefficient in the set condition usage */
+#define HID_PIDFF_QUIRK_MISSING_NEG_COEFFICIENT	BIT(5)
+
 #ifdef CONFIG_HID_PID
 int hid_pidff_init(struct hid_device *hid);
 int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks);
