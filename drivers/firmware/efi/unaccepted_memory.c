@@ -209,6 +209,53 @@ bool range_contains_unaccepted_memory(phys_addr_t start, unsigned long size)
 	return ret;
 }
 
+/*
+ * Unaccepted memory bitmap only covers initial boot memory and not the
+ * hotpluggable range that is part of SRAT parsing. However, some initial memory
+ * with the attribute EFI_MEMORY_HOT_PLUGGABLE can indicate boot time memory
+ * that can be hot-removed. Hence post acceptance, only for that range update
+ * the unaccepted bitmap to reflect this change.
+ */
+void accept_hotplug_memory(phys_addr_t start, unsigned long size)
+{
+	struct efi_unaccepted_memory *unaccepted;
+	unsigned long range_start, range_len;
+	phys_addr_t end = start + size;
+	u64 phys_base, unit_size;
+	unsigned long flags;
+
+	unaccepted = efi_get_unaccepted_table();
+	if (!unaccepted)
+		return;
+
+	/* Accept hotplug range unconditionally */
+	arch_accept_memory(start, end);
+
+	phys_base = unaccepted->phys_base;
+	unit_size = unaccepted->unit_size;
+
+	/* Only update bitmap for the region that is represented by it */
+	if (start >= phys_base + unaccepted->size * unit_size * BITS_PER_BYTE)
+		return;
+
+	start = max(start, phys_base);
+	if (end < phys_base)
+		return;
+
+	start -= phys_base;
+	end -= phys_base;
+
+	/* Make sure not to overrun the bitmap */
+	end = min(end, unaccepted->size * unit_size * BITS_PER_BYTE);
+
+	range_start = start / unit_size;
+	range_len = DIV_ROUND_UP(end, unit_size) - range_start;
+
+	spin_lock_irqsave(&unaccepted_memory_lock, flags);
+	bitmap_clear(unaccepted->bitmap, range_start, range_len);
+	spin_unlock_irqrestore(&unaccepted_memory_lock, flags);
+}
+
 #ifdef CONFIG_PROC_VMCORE
 static bool unaccepted_memory_vmcore_pfn_is_ram(struct vmcore_cb *cb,
 						unsigned long pfn)
