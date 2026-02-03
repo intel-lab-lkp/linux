@@ -4106,19 +4106,10 @@ static int __ext4_block_zero_page_range(handle_t *handle,
 	folio_zero_range(folio, offset, length);
 	BUFFER_TRACE(bh, "zeroed end of block");
 
-	if (ext4_should_journal_data(inode)) {
+	if (ext4_should_journal_data(inode))
 		err = ext4_dirty_journalled_data(handle, bh);
-	} else {
+	else
 		mark_buffer_dirty(bh);
-		/*
-		 * Only the written block requires ordered data to prevent
-		 * exposing stale data.
-		 */
-		if (!buffer_unwritten(bh) && !buffer_delay(bh) &&
-		    ext4_should_order_data(inode))
-			err = ext4_jbd2_inode_add_write(handle, inode, from,
-					length);
-	}
 	if (!err && did_zero)
 		*did_zero = true;
 
@@ -4578,8 +4569,23 @@ int ext4_truncate(struct inode *inode)
 		goto out_trace;
 	}
 
-	if (inode->i_size & (inode->i_sb->s_blocksize - 1))
-		ext4_block_truncate_page(handle, mapping, inode->i_size);
+	if (inode->i_size & (inode->i_sb->s_blocksize - 1)) {
+		unsigned int zero_len;
+
+		zero_len = ext4_block_truncate_page(handle, mapping,
+						    inode->i_size);
+		if (zero_len < 0) {
+			err = zero_len;
+			goto out_stop;
+		}
+		if (zero_len && !IS_DAX(inode) &&
+		    ext4_should_order_data(inode)) {
+			err = ext4_jbd2_inode_add_write(handle, inode,
+					inode->i_size, zero_len);
+			if (err)
+				goto out_stop;
+		}
+	}
 
 	/*
 	 * We add the inode to the orphan list, so that if this
