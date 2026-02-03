@@ -3399,6 +3399,7 @@ int mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 
 int mlx5_ib_create_qp_umem(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 			   struct ib_umem *sq_umem, struct ib_umem *rq_umem,
+			   struct ib_umem *sq_dbr_umem, struct ib_umem *rq_dbr_umem,
 			   struct ib_udata *udata)
 {
 	return __mlx5_ib_create_qp(ibqp, attr, udata, sq_umem, rq_umem);

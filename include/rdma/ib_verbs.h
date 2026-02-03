@@ -2524,6 +2524,8 @@ struct ib_device_ops {
 	int (*create_qp_umem)(struct ib_qp *qp,
 			      struct ib_qp_init_attr *qp_init_attr,
 			      struct ib_umem *sq_umem, struct ib_umem *rq_umem,
+			      struct ib_umem *sq_dbr_umem,
+			      struct ib_umem *rq_dbr_umem,
 			      struct ib_udata *udata);
 	int (*modify_qp)(struct ib_qp *qp, struct ib_qp_attr *qp_attr,
 			 int qp_attr_mask, struct ib_udata *udata);

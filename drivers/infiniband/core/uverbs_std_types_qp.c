@@ -96,7 +96,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 	struct ib_xrcd *xrcd = NULL;
 	struct ib_uobject *xrcd_uobj = NULL;
 	struct ib_device *device;
-	struct ib_umem *sq_umem, *rq_umem;
+	struct ib_umem *sq_umem, *rq_umem, *sq_dbr_umem, *rq_dbr_umem;
 	u64 user_handle;
 	int ret;
 
@@ -271,14 +271,37 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 	if (ret)
 		goto err_release_sq_umem;
 
+	/* Get SQ DBR umem (from VA or dmabuf FD) */
+	ret = uverbs_get_buffer_umem(device, attrs,
+				 UVERBS_ATTR_CREATE_QP_SQ_DBR_VA,
+				 UVERBS_ATTR_CREATE_QP_SQ_DBR_LENGTH,
+				 UVERBS_ATTR_CREATE_QP_SQ_DBR_FD,
+				 UVERBS_ATTR_CREATE_QP_SQ_DBR_OFFSET,
+				 device->ops.create_qp_umem, 0, &sq_dbr_umem);
+	if (ret)
+		goto err_release_rq_umem;
+
+	/* Get RQ DBR umem (from VA or dmabuf FD) */
+	ret = uverbs_get_buffer_umem(device, attrs,
+				 UVERBS_ATTR_CREATE_QP_RQ_DBR_VA,
+				 UVERBS_ATTR_CREATE_QP_RQ_DBR_LENGTH,
+				 UVERBS_ATTR_CREATE_QP_RQ_DBR_FD,
+				 UVERBS_ATTR_CREATE_QP_RQ_DBR_OFFSET,
+				 device->ops.create_qp_umem, 0, &rq_dbr_umem);
+	if (ret)
+		goto err_release_sq_dbr_umem;
+
 	qp = ib_create_qp_user_umem(device, pd, &attr, sq_umem, rq_umem,
+				    sq_dbr_umem, rq_dbr_umem,
 				    &attrs->driver_udata, obj, KBUILD_MODNAME);
 	if (IS_ERR(qp)) {
 		ret = PTR_ERR(qp);
-		goto err_release_rq_umem;
+		goto err_release_rq_dbr_umem;
 	}
 
 	/* Driver took a reference, release ours */
+	ib_umem_release(rq_dbr_umem);
+	ib_umem_release(sq_dbr_umem);
 	ib_umem_release(rq_umem);
 	ib_umem_release(sq_umem);
 
@@ -306,6 +329,10 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 
 	return ret;
 
+err_release_rq_dbr_umem:
+	ib_umem_release(rq_dbr_umem);
+err_release_sq_dbr_umem:
+	ib_umem_release(sq_dbr_umem);
 err_release_rq_umem:
 	ib_umem_release(rq_umem);
 err_release_sq_umem:
@@ -395,6 +422,30 @@ DECLARE_UVERBS_NAMED_METHOD(
 	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_QP_RQ_BUFFER_FD,
 			   UA_OPTIONAL),
 	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_RQ_BUFFER_OFFSET,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	/* SQ DBR attributes - use VA or FD, not both */
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_SQ_DBR_VA,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_SQ_DBR_LENGTH,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_QP_SQ_DBR_FD,
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_SQ_DBR_OFFSET,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	/* RQ DBR attributes - use VA or FD, not both */
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_RQ_DBR_VA,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_RQ_DBR_LENGTH,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_QP_RQ_DBR_FD,
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_RQ_DBR_OFFSET,
 			   UVERBS_ATTR_TYPE(u64),
 			   UA_OPTIONAL),
 	UVERBS_ATTR_UHW());

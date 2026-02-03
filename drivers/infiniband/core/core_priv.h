@@ -324,6 +324,8 @@ struct ib_qp *ib_create_qp_user_umem(struct ib_device *dev, struct ib_pd *pd,
 				     struct ib_qp_init_attr *attr,
 				     struct ib_umem *sq_umem,
 				     struct ib_umem *rq_umem,
+				     struct ib_umem *sq_dbr_umem,
+				     struct ib_umem *rq_dbr_umem,
 				     struct ib_udata *udata,
 				     struct ib_uqp_object *uobj,
 				     const char *caller);

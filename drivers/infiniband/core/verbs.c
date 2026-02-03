@@ -1265,6 +1265,8 @@ static struct ib_qp *create_xrc_qp_user(struct ib_qp *qp,
 static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 			       struct ib_qp_init_attr *attr,
 			       struct ib_umem *sq_umem, struct ib_umem *rq_umem,
+			       struct ib_umem *sq_dbr_umem,
+			       struct ib_umem *rq_dbr_umem,
 			       struct ib_udata *udata,
 			       struct ib_uqp_object *uobj, const char *caller)
 {
@@ -1272,7 +1274,7 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	struct ib_qp *qp;
 	int ret;
 
-	if (sq_umem || rq_umem) {
+	if (sq_umem || rq_umem || sq_dbr_umem || rq_dbr_umem) {
 		if (!dev->ops.create_qp_umem)
 			return ERR_PTR(-EOPNOTSUPP);
 	} else {
@@ -1309,9 +1311,9 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	WARN_ONCE(!udata && !caller, "Missing kernel QP owner");
 	rdma_restrack_set_name(&qp->res, udata ? NULL : caller);
 
-	if (sq_umem || rq_umem)
+	if (sq_umem || rq_umem || sq_dbr_umem || rq_dbr_umem)
 		ret = dev->ops.create_qp_umem(qp, attr, sq_umem, rq_umem,
-					      udata);
+					      sq_dbr_umem, rq_dbr_umem, udata);
 	else
 		ret = dev->ops.create_qp(qp, attr, udata);
 	if (ret)
@@ -1349,6 +1351,8 @@ err_create:
  *   the actual capabilities of the created QP.
  * @sq_umem: SQ buffer umem (optional)
  * @rq_umem: RQ buffer umem (optional)
+ * @sq_dbr_umem: SQ doorbell record umem (optional)
+ * @rq_dbr_umem: RQ doorbell record umem (optional)
  * @udata: User data
  * @uobj: uverbs object
  * @caller: caller's build-time module name
@@ -1357,6 +1361,8 @@ struct ib_qp *ib_create_qp_user_umem(struct ib_device *dev, struct ib_pd *pd,
 				     struct ib_qp_init_attr *attr,
 				     struct ib_umem *sq_umem,
 				     struct ib_umem *rq_umem,
+				     struct ib_umem *sq_dbr_umem,
+				     struct ib_umem *rq_dbr_umem,
 				     struct ib_udata *udata,
 				     struct ib_uqp_object *uobj,
 				     const char *caller)
@@ -1364,10 +1370,11 @@ struct ib_qp *ib_create_qp_user_umem(struct ib_device *dev, struct ib_pd *pd,
 	struct ib_qp *qp, *xrc_qp;
 
 	if (attr->qp_type == IB_QPT_XRC_TGT)
-		qp = create_qp(dev, pd, attr, sq_umem, rq_umem, NULL, NULL, caller);
+		qp = create_qp(dev, pd, attr, NULL, NULL, NULL, NULL, NULL,
+			       NULL, caller);
 	else
-		qp = create_qp(dev, pd, attr, sq_umem, rq_umem, udata, uobj,
-			       NULL);
+		qp = create_qp(dev, pd, attr, sq_umem, rq_umem, sq_dbr_umem,
+			       rq_dbr_umem, udata, uobj, NULL);
 	if (attr->qp_type != IB_QPT_XRC_TGT || IS_ERR(qp))
 		return qp;
 
@@ -1399,8 +1406,8 @@ struct ib_qp *ib_create_qp_user(struct ib_device *dev, struct ib_pd *pd,
 				struct ib_udata *udata,
 				struct ib_uqp_object *uobj, const char *caller)
 {
-	return ib_create_qp_user_umem(dev, pd, attr, NULL, NULL, udata, uobj,
-				      caller);
+	return ib_create_qp_user_umem(dev, pd, attr, NULL, NULL, NULL, NULL,
+				      udata, uobj, caller);
 }
 EXPORT_SYMBOL(ib_create_qp_user);
 
@@ -1452,7 +1459,7 @@ struct ib_qp *ib_create_qp_kernel(struct ib_pd *pd,
 		rdma_rw_init_qp(device, qp_init_attr);
 
 	qp = create_qp(device, pd, qp_init_attr, NULL, NULL, NULL, NULL,
-		       caller);
+		       NULL, NULL, caller);
 	if (IS_ERR(qp))
 		return qp;
 
