@@ -718,6 +718,7 @@ static int mini_cqe_res_format_to_hw(struct mlx5_ib_dev *dev, u8 format)
 static int create_cq_user(struct mlx5_ib_dev *dev, struct ib_udata *udata,
 			  struct mlx5_ib_cq *cq, int entries, u32 **cqb,
 			  int *cqe_size, int *index, int *inlen,
+			  struct ib_umem *ext_umem,
 			  struct uverbs_attr_bundle *attrs)
 {
 	struct mlx5_ib_create_cq ucmd = {};
@@ -749,12 +750,21 @@ static int create_cq_user(struct mlx5_ib_dev *dev, struct ib_udata *udata,
 
 	*cqe_size = ucmd.cqe_size;
 
-	cq->buf.umem =
-		ib_umem_get(&dev->ib_dev, ucmd.buf_addr,
-			    entries * ucmd.cqe_size, IB_ACCESS_LOCAL_WRITE);
-	if (IS_ERR(cq->buf.umem)) {
-		err = PTR_ERR(cq->buf.umem);
-		return err;
+	if (ext_umem) {
+		if (ext_umem->length < entries * ucmd.cqe_size) {
+			mlx5_ib_dbg(dev, "External umem too small for CQ\n");
+			return -EINVAL;
+		}
+		ib_umem_get_ref(ext_umem);
+		cq->buf.umem = ext_umem;
+	} else {
+		cq->buf.umem =
+			ib_umem_get(&dev->ib_dev, ucmd.buf_addr,
+				    entries * ucmd.cqe_size, IB_ACCESS_LOCAL_WRITE);
+		if (IS_ERR(cq->buf.umem)) {
+			err = PTR_ERR(cq->buf.umem);
+			return err;
+		}
 	}
 
 	page_size = mlx5_umem_find_best_cq_quantized_pgoff(
@@ -949,8 +959,10 @@ static void notify_soft_wc_handler(struct work_struct *work)
 	cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
 }
 
-int mlx5_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
-		      struct uverbs_attr_bundle *attrs)
+static int __mlx5_ib_create_cq(struct ib_cq *ibcq,
+			       const struct ib_cq_init_attr *attr,
+			       struct ib_umem *ext_umem,
+			       struct uverbs_attr_bundle *attrs)
 {
 	struct ib_udata *udata = &attrs->driver_udata;
 	struct ib_device *ibdev = ibcq->device;
@@ -989,7 +1001,7 @@ int mlx5_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 
 	if (udata) {
 		err = create_cq_user(dev, udata, cq, entries, &cqb, &cqe_size,
-				     &index, &inlen, attrs);
+				     &index, &inlen, ext_umem, attrs);
 		if (err)
 			return err;
 	} else {
@@ -1056,6 +1068,18 @@ err_cqb:
 	else
 		destroy_cq_kernel(dev, cq);
 	return err;
+}
+
+int mlx5_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
+		      struct uverbs_attr_bundle *attrs)
+{
+	return __mlx5_ib_create_cq(ibcq, attr, NULL, attrs);
+}
+
+int mlx5_ib_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
+			   struct ib_umem *umem, struct uverbs_attr_bundle *attrs)
+{
+	return __mlx5_ib_create_cq(ibcq, attr, umem, attrs);
 }
 
 int mlx5_ib_pre_destroy_cq(struct ib_cq *cq)
