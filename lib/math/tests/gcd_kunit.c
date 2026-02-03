@@ -34,7 +34,7 @@ KUNIT_ARRAY_PARAM(gcd, params, get_desc);
 
 static void gcd_test(struct kunit *test)
 {
-	const struct test_case_params *tc = (const struct test_case_params *)test->param_value;
+	const struct test_case_params *tc = test->param_value;
 
 	KUNIT_EXPECT_EQ(test, tc->expected_result, gcd(tc->val1, tc->val2));
 }
