@@ -943,7 +943,8 @@ static int _create_user_qp(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 			   struct ib_qp_init_attr *attr, u32 **in,
 			   struct mlx5_ib_create_qp_resp *resp, int *inlen,
 			   struct mlx5_ib_qp_base *base,
-			   struct mlx5_ib_create_qp *ucmd)
+			   struct mlx5_ib_create_qp *ucmd,
+			   struct ib_umem *ext_umem)
 {
 	struct mlx5_ib_ucontext *context;
 	struct mlx5_ib_ubuffer *ubuffer = &base->ubuffer;
@@ -998,7 +999,26 @@ static int _create_user_qp(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 	if (err)
 		goto err_bfreg;
 
-	if (ucmd->buf_addr && ubuffer->buf_size) {
+	if (ext_umem) {
+		if (ext_umem->length < ubuffer->buf_size) {
+			mlx5_ib_dbg(dev, "External umem too small for QP\n");
+			err = -EINVAL;
+			goto err_bfreg;
+		}
+		ib_umem_get_ref(ext_umem);
+		ubuffer->umem = ext_umem;
+		ubuffer->buf_size = ext_umem->length;
+		ubuffer->buf_addr = ext_umem->address;
+		page_size = mlx5_umem_find_best_quantized_pgoff(
+			ubuffer->umem, qpc, log_page_size,
+			MLX5_ADAPTER_PAGE_SHIFT, page_offset, 64,
+			&page_offset_quantized);
+		if (!page_size) {
+			err = -EINVAL;
+			goto err_umem;
+		}
+		ncont = ib_umem_num_dma_blocks(ubuffer->umem, page_size);
+	} else if (ucmd->buf_addr && ubuffer->buf_size) {
 		ubuffer->buf_addr = ucmd->buf_addr;
 		ubuffer->umem = ib_umem_get(&dev->ib_dev, ubuffer->buf_addr,
 					    ubuffer->buf_size, 0);
@@ -1335,7 +1355,8 @@ static int get_qp_ts_format(struct mlx5_ib_dev *dev, struct mlx5_ib_cq *send_cq,
 static int create_raw_packet_qp_sq(struct mlx5_ib_dev *dev,
 				   struct ib_udata *udata,
 				   struct mlx5_ib_sq *sq, void *qpin,
-				   struct ib_pd *pd, struct mlx5_ib_cq *cq)
+				   struct ib_pd *pd, struct mlx5_ib_cq *cq,
+				   struct ib_umem *sq_ext_umem)
 {
 	struct mlx5_ib_ubuffer *ubuffer = &sq->ubuffer;
 	__be64 *pas;
@@ -1353,10 +1374,21 @@ static int create_raw_packet_qp_sq(struct mlx5_ib_dev *dev,
 	if (ts_format < 0)
 		return ts_format;
 
-	sq->ubuffer.umem = ib_umem_get(&dev->ib_dev, ubuffer->buf_addr,
-				       ubuffer->buf_size, 0);
-	if (IS_ERR(sq->ubuffer.umem))
-		return PTR_ERR(sq->ubuffer.umem);
+	if (sq_ext_umem) {
+		if (sq_ext_umem->length < ubuffer->buf_size) {
+			mlx5_ib_dbg(dev, "External umem too small for SQ\n");
+			return -EINVAL;
+		}
+		ib_umem_get_ref(sq_ext_umem);
+		sq->ubuffer.umem = sq_ext_umem;
+		sq->ubuffer.buf_size = sq_ext_umem->length;
+		sq->ubuffer.buf_addr = sq_ext_umem->address;
+	} else {
+		sq->ubuffer.umem = ib_umem_get(&dev->ib_dev, ubuffer->buf_addr,
+					       ubuffer->buf_size, 0);
+		if (IS_ERR(sq->ubuffer.umem))
+			return PTR_ERR(sq->ubuffer.umem);
+	}
 	page_size = mlx5_umem_find_best_quantized_pgoff(
 		ubuffer->umem, wq, log_wq_pg_sz, MLX5_ADAPTER_PAGE_SHIFT,
 		page_offset, 64, &page_offset_quantized);
@@ -1568,7 +1600,8 @@ static int create_raw_packet_qp(struct mlx5_ib_dev *dev, struct mlx5_ib_qp *qp,
 				u32 *in, size_t inlen, struct ib_pd *pd,
 				struct ib_udata *udata,
 				struct mlx5_ib_create_qp_resp *resp,
-				struct ib_qp_init_attr *init_attr)
+				struct ib_qp_init_attr *init_attr,
+				struct ib_umem *sq_ext_umem)
 {
 	struct mlx5_ib_raw_packet_qp *raw_packet_qp = &qp->raw_packet_qp;
 	struct mlx5_ib_sq *sq = &raw_packet_qp->sq;
@@ -1588,7 +1621,8 @@ static int create_raw_packet_qp(struct mlx5_ib_dev *dev, struct mlx5_ib_qp *qp,
 			return err;
 
 		err = create_raw_packet_qp_sq(dev, udata, sq, in, pd,
-					      to_mcq(init_attr->send_cq));
+					      to_mcq(init_attr->send_cq),
+					      sq_ext_umem);
 		if (err)
 			goto err_destroy_tis;
 
@@ -1708,6 +1742,8 @@ struct mlx5_create_qp_params {
 	struct ib_qp_init_attr *attr;
 	u32 uidx;
 	struct mlx5_ib_create_qp_resp resp;
+	struct ib_umem *sq_ext_umem;
+	struct ib_umem *rq_ext_umem;
 };
 
 static int create_rss_raw_qp_tir(struct mlx5_ib_dev *dev, struct ib_pd *pd,
@@ -2122,7 +2158,7 @@ static int create_dci(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 		return ts_format;
 
 	err = _create_user_qp(dev, pd, qp, udata, init_attr, &in, &params->resp,
-			      &inlen, base, ucmd);
+			      &inlen, base, ucmd, NULL);
 	if (err)
 		return err;
 
@@ -2290,7 +2326,7 @@ static int create_user_qp(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 	}
 
 	err = _create_user_qp(dev, pd, qp, udata, init_attr, &in, &params->resp,
-			      &inlen, base, ucmd);
+			      &inlen, base, ucmd, params->rq_ext_umem);
 	if (err)
 		return err;
 
@@ -2394,7 +2430,8 @@ static int create_user_qp(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 		qp->raw_packet_qp.sq.ubuffer.buf_addr = ucmd->sq_buf_addr;
 		raw_packet_qp_copy_info(qp, &qp->raw_packet_qp);
 		err = create_raw_packet_qp(dev, qp, in, inlen, pd, udata,
-					   &params->resp, init_attr);
+					   &params->resp, init_attr,
+					   params->sq_ext_umem);
 	} else
 		err = mlx5_qpc_create_qp(dev, &base->mqp, in, inlen, out);
 
@@ -3251,8 +3288,9 @@ static int check_ucmd_data(struct mlx5_ib_dev *dev,
 	return ret ? 0 : -EINVAL;
 }
 
-int mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
-		      struct ib_udata *udata)
+static int __mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
+			       struct ib_udata *udata,
+			       struct ib_umem *sq_umem, struct ib_umem *rq_umem)
 {
 	struct mlx5_create_qp_params params = {};
 	struct mlx5_ib_dev *dev = to_mdev(ibqp->device);
@@ -3277,6 +3315,8 @@ int mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	params.uidx = MLX5_IB_DEFAULT_UIDX;
 	params.attr = attr;
 	params.is_rss_raw = !!attr->rwq_ind_tbl;
+	params.sq_ext_umem = sq_umem;
+	params.rq_ext_umem = rq_umem;
 
 	if (udata) {
 		err = process_udata_size(dev, &params);
@@ -3349,6 +3389,19 @@ destroy_qp:
 free_ucmd:
 	kfree(params.ucmd);
 	return err;
+}
+
+int mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
+		      struct ib_udata *udata)
+{
+	return __mlx5_ib_create_qp(ibqp, attr, udata, NULL, NULL);
+}
+
+int mlx5_ib_create_qp_umem(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
+			   struct ib_umem *sq_umem, struct ib_umem *rq_umem,
+			   struct ib_udata *udata)
+{
+	return __mlx5_ib_create_qp(ibqp, attr, udata, sq_umem, rq_umem);
 }
 
 int mlx5_ib_destroy_qp(struct ib_qp *qp, struct ib_udata *udata)
