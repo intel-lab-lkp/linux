@@ -858,6 +858,13 @@ static void kvm_multiple_exception(struct kvm_vcpu *vcpu, unsigned int nr,
 		vcpu->arch.exception.error_code = error_code;
 		vcpu->arch.exception.has_payload = has_payload;
 		vcpu->arch.exception.payload = payload;
+		/*
+		 * Only injected exceptions are propagated to L1 in
+		 * vmcb12/vmcs12 on nested #VMEXIT. Hence, do not deliver the
+		 * exception payload for L2 until the exception is injected.
+		 * Otherwise, L1 would perceive the updated payload without a
+		 * corresponding exception.
+		 */
 		if (!is_guest_mode(vcpu))
 			kvm_deliver_exception_payload(vcpu,
 						      &vcpu->arch.exception);
