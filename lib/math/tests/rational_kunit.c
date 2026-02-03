@@ -33,7 +33,7 @@ KUNIT_ARRAY_PARAM(rational, test_parameters, get_desc);
 
 static void rational_test(struct kunit *test)
 {
-	const struct rational_test_param *param = (const struct rational_test_param *)test->param_value;
+	const struct rational_test_param *param = test->param_value;
 	unsigned long n = 0, d = 0;
 
 	rational_best_approximation(param->num, param->den, param->max_num, param->max_den, &n, &d);
