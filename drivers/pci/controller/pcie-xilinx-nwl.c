@@ -517,56 +517,55 @@ static int nwl_pcie_init_msi_irq_domain(struct nwl_pcie *pcie)
 
 static void nwl_pcie_phy_power_off(struct nwl_pcie *pcie, int i)
 {
-	int err = phy_power_off(pcie->phy[i]);
+	while (i--) {
+		int err = phy_power_off(pcie->phy[i]);
 
-	if (err)
-		dev_err(pcie->dev, "could not power off phy %d (err=%d)\n", i,
-			err);
+		if (err)
+			dev_err(pcie->dev,
+				"could not power off phy %d (err=%d)\n", i,
+				err);
+	}
 }
 
 static void nwl_pcie_phy_exit(struct nwl_pcie *pcie, int i)
 {
-	int err = phy_exit(pcie->phy[i]);
+	while (i--) {
+		int err = phy_exit(pcie->phy[i]);
 
-	if (err)
-		dev_err(pcie->dev, "could not exit phy %d (err=%d)\n", i, err);
+		if (err)
+			dev_err(pcie->dev, "could not exit phy %d (err=%d)\n",
+				i, err);
+	}
 }
 
-static int nwl_pcie_phy_enable(struct nwl_pcie *pcie)
+static int nwl_pcie_phy_init(struct nwl_pcie *pcie)
 {
 	int i, ret;
 
-	for (i = 0; i < ARRAY_SIZE(pcie->phy); i++) {
+	for (i = ARRAY_SIZE(pcie->phy) - 1; i >= 0; i--) {
 		ret = phy_init(pcie->phy[i]);
-		if (ret)
-			goto err;
-
-		ret = phy_power_on(pcie->phy[i]);
 		if (ret) {
 			nwl_pcie_phy_exit(pcie, i);
-			goto err;
+			return ret;
 		}
 	}
 
 	return 0;
-
-err:
-	while (i--) {
-		nwl_pcie_phy_power_off(pcie, i);
-		nwl_pcie_phy_exit(pcie, i);
-	}
-
-	return ret;
 }
 
-static void nwl_pcie_phy_disable(struct nwl_pcie *pcie)
+static int nwl_pcie_phy_power_on(struct nwl_pcie *pcie)
 {
-	int i;
+	int i, ret;
 
-	for (i = ARRAY_SIZE(pcie->phy); i--;) {
-		nwl_pcie_phy_power_off(pcie, i);
-		nwl_pcie_phy_exit(pcie, i);
+	for (i = ARRAY_SIZE(pcie->phy) - 1; i >= 0; i--) {
+		ret = phy_power_on(pcie->phy[i]);
+		if (ret) {
+			nwl_pcie_phy_power_off(pcie, i);
+			return ret;
+		}
 	}
+
+	return 0;
 }
 
 static int nwl_pcie_init_irq_domain(struct nwl_pcie *pcie)
@@ -859,22 +858,28 @@ static int nwl_pcie_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	err = nwl_pcie_phy_enable(pcie);
+	err = nwl_pcie_phy_init(pcie);
 	if (err) {
-		dev_err(dev, "could not enable PHYs\n");
+		dev_err(dev, "could not init PHYs\n");
 		goto err_clk;
+	}
+
+	err = nwl_pcie_phy_power_on(pcie);
+	if (err) {
+		dev_err(dev, "could not power on PHYs\n");
+		goto err_phy_init;
 	}
 
 	err = nwl_pcie_bridge_init(pcie);
 	if (err) {
 		dev_err(dev, "HW Initialization failed\n");
-		goto err_phy;
+		goto err_phy_power;
 	}
 
 	err = nwl_pcie_init_irq_domain(pcie);
 	if (err) {
 		dev_err(dev, "Failed creating IRQ Domain\n");
-		goto err_phy;
+		goto err_phy_power;
 	}
 
 	bridge->sysdata = pcie;
@@ -884,7 +889,7 @@ static int nwl_pcie_probe(struct platform_device *pdev)
 		err = nwl_pcie_enable_msi(pcie);
 		if (err < 0) {
 			dev_err(dev, "failed to enable MSI support: %d\n", err);
-			goto err_phy;
+			goto err_phy_power;
 		}
 	}
 
@@ -892,8 +897,10 @@ static int nwl_pcie_probe(struct platform_device *pdev)
 	if (!err)
 		return 0;
 
-err_phy:
-	nwl_pcie_phy_disable(pcie);
+err_phy_power:
+	nwl_pcie_phy_power_off(pcie, ARRAY_SIZE(pcie->phy));
+err_phy_init:
+	nwl_pcie_phy_exit(pcie, ARRAY_SIZE(pcie->phy));
 err_clk:
 	clk_disable_unprepare(pcie->clk);
 	return err;
@@ -903,7 +910,8 @@ static void nwl_pcie_remove(struct platform_device *pdev)
 {
 	struct nwl_pcie *pcie = platform_get_drvdata(pdev);
 
-	nwl_pcie_phy_disable(pcie);
+	nwl_pcie_phy_power_off(pcie, ARRAY_SIZE(pcie->phy));
+	nwl_pcie_phy_exit(pcie, ARRAY_SIZE(pcie->phy));
 	clk_disable_unprepare(pcie->clk);
 }
 
