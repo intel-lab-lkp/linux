@@ -969,6 +969,10 @@
 					<0x0 0x0 0x0 0x4 &pcie_intc 0x4>;
 			/* iommus = <&smmu 0x4d0>; */
 			power-domains = <&zynqmp_firmware PD_PCIE>;
+			resets = <&zynqmp_reset ZYNQMP_RESET_PCIE_CFG>,
+				 <&zynqmp_reset ZYNQMP_RESET_PCIE_BRIDGE>,
+				 <&zynqmp_reset ZYNQMP_RESET_PCIE_CTRL>;
+			reset-names = "cfg", "bridge", "ctrl";
 			pcie_intc: legacy-interrupt-controller {
 				interrupt-controller;
 				#address-cells = <0>;
