@@ -327,8 +327,7 @@ int rq_qos_add(struct rq_qos *rqos, struct gendisk *disk, enum rq_qos_id id,
 {
 	struct request_queue *q = disk->queue;
 	unsigned int memflags;
-
-	lockdep_assert_held(&q->rq_qos_mutex);
+	int ret = 0;
 
 	rqos->disk = disk;
 	rqos->id = id;
@@ -337,20 +336,24 @@ int rq_qos_add(struct rq_qos *rqos, struct gendisk *disk, enum rq_qos_id id,
 	/*
 	 * No IO can be in-flight when adding rqos, so freeze queue, which
 	 * is fine since we only support rq_qos for blk-mq queue.
+	 *
+	 * Acquire rq_qos_mutex after freezing the queue to ensure proper
+	 * locking order.
 	 */
 	memflags = blk_mq_freeze_queue(q);
+	mutex_lock(&q->rq_qos_mutex);
 
-	if (rq_qos_id(q, rqos->id))
-		goto ebusy;
-	rqos->next = q->rq_qos;
-	q->rq_qos = rqos;
-	blk_queue_flag_set(QUEUE_FLAG_QOS_ENABLED, q);
+	if (rq_qos_id(q, rqos->id)) {
+		ret = -EBUSY;
+	} else {
+		rqos->next = q->rq_qos;
+		q->rq_qos = rqos;
+		blk_queue_flag_set(QUEUE_FLAG_QOS_ENABLED, q);
+	}
 
+	mutex_unlock(&q->rq_qos_mutex);
 	blk_mq_unfreeze_queue(q, memflags);
-	return 0;
-ebusy:
-	blk_mq_unfreeze_queue(q, memflags);
-	return -EBUSY;
+	return ret;
 }
 
 void rq_qos_del(struct rq_qos *rqos)
@@ -359,9 +362,9 @@ void rq_qos_del(struct rq_qos *rqos)
 	struct rq_qos **cur;
 	unsigned int memflags;
 
-	lockdep_assert_held(&q->rq_qos_mutex);
-
 	memflags = blk_mq_freeze_queue(q);
+	mutex_lock(&q->rq_qos_mutex);
+
 	for (cur = &q->rq_qos; *cur; cur = &(*cur)->next) {
 		if (*cur == rqos) {
 			*cur = rqos->next;
@@ -370,5 +373,7 @@ void rq_qos_del(struct rq_qos *rqos)
 	}
 	if (!q->rq_qos)
 		blk_queue_flag_clear(QUEUE_FLAG_QOS_ENABLED, q);
+
+	mutex_unlock(&q->rq_qos_mutex);
 	blk_mq_unfreeze_queue(q, memflags);
 }
