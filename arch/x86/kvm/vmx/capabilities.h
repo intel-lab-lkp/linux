@@ -47,6 +47,7 @@ struct nested_vmx_msrs {
 	u64 cr4_fixed1;
 	u64 vmcs_enum;
 	u64 vmfunc_controls;
+	u64 tertiary_ctls;
 };
 
 struct vmcs_config {
