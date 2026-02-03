@@ -12,5 +12,6 @@ extern unsigned int (*nf_nat_amanda_hook)(struct sk_buff *skb,
 					  unsigned int protoff,
 					  unsigned int matchoff,
 					  unsigned int matchlen,
-					  struct nf_conntrack_expect *exp);
+					  struct nf_conntrack_expect *exp)
+					  __rcu __read_mostly;
 #endif /* _NF_CONNTRACK_AMANDA_H */
