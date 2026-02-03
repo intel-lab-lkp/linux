@@ -198,13 +198,15 @@ static void wb_queue_work(struct bdi_writeback *wb,
 
 static bool wb_wait_for_completion_cb(struct wb_completion *done)
 {
+#ifdef CONFIG_DETECT_HUNG_TASK
 	unsigned long waited_secs = (jiffies - done->wait_start) / HZ;
 
-	done->progress_stamp = jiffies;
 	if (waited_secs > sysctl_hung_task_timeout_secs)
 		pr_info("INFO: The task %s:%d has been waiting for writeback "
 			"completion for more than %lu seconds.",
 			current->comm, current->pid, waited_secs);
+#endif
+	done->progress_stamp = jiffies;
 
 	return !atomic_read(&done->cnt);
 }
@@ -2040,11 +2042,13 @@ static long writeback_sb_inodes(struct super_block *sb,
 		 */
 		__writeback_single_inode(inode, &wbc);
 
+#ifdef CONFIG_DETECT_HUNG_TASK
 		/* Report progress to inform the hung task detector of the progress. */
 		if (work->done && work->done->progress_stamp &&
 		   (jiffies - work->done->progress_stamp) > HZ *
 		   sysctl_hung_task_timeout_secs / 2)
 			wake_up_all(work->done->waitq);
+#endif
 
 		wbc_detach_inode(&wbc);
 		work->nr_pages -= write_chunk - wbc.nr_to_write;
