@@ -1862,6 +1862,35 @@ static void apic_cancel_apic_virt_timer(struct kvm_lapic *apic)
 	start_apic_timer(apic);
 }
 
+void kvm_sync_apic_virt_timer(struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic *apic = vcpu->arch.apic;
+
+	WARN_ON_ONCE(is_guest_mode(vcpu));
+
+	if (!apic->lapic_timer.apic_virt_timer_in_use)
+		return;
+
+	apic->lapic_timer.tscdeadline = kvm_x86_call(get_guest_tsc_deadline_virt)(vcpu);
+}
+EXPORT_SYMBOL_GPL(kvm_sync_apic_virt_timer);
+
+void kvm_cancel_apic_virt_timer(struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic *apic = vcpu->arch.apic;
+
+	WARN_ON_ONCE(!is_guest_mode(vcpu));
+
+	if (!apic->lapic_timer.apic_virt_timer_in_use)
+		return;
+
+	apic->lapic_timer.apic_virt_timer_in_use = false;
+	trace_kvm_apic_virt_timer_state(vcpu->vcpu_id, false);
+
+	start_apic_timer(apic);
+}
+EXPORT_SYMBOL_GPL(kvm_cancel_apic_virt_timer);
+
 static void apic_set_apic_virt_timer(struct kvm_lapic *apic)
 {
 	struct kvm_timer *ktimer = &apic->lapic_timer;

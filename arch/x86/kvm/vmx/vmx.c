@@ -8277,6 +8277,9 @@ bool vmx_can_use_apic_virt_timer(struct kvm_vcpu *vcpu)
 	if (vcpu->kvm->arch.vm_type != KVM_X86_DEFAULT_VM)
 		return false;
 
+	if (is_guest_mode(vcpu))
+		return false;
+
 	return cpu_has_vmx_apic_timer_virt() &&
 		/* VMX guest virtual timer supports only TSC deadline mode. */
 		kvm_lapic_lvtt_timer_mode(vcpu) == APIC_LVT_TIMER_TSCDEADLINE &&
@@ -8288,6 +8291,8 @@ bool vmx_can_use_apic_virt_timer(struct kvm_vcpu *vcpu)
 
 void vmx_set_apic_virt_timer(struct kvm_vcpu *vcpu, u16 vector)
 {
+	WARN_ON_ONCE(is_guest_mode(vcpu));
+
 	vmcs_write16(GUEST_APIC_TIMER_VECTOR, vector);
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_TSC_DEADLINE, MSR_TYPE_RW);
 	tertiary_exec_controls_setbit(to_vmx(vcpu), TERTIARY_EXEC_GUEST_APIC_TIMER);
