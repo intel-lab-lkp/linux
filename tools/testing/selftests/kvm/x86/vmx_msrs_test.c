@@ -48,6 +48,11 @@ static void vmx_fixed0and1_msr_test(struct kvm_vcpu *vcpu, uint32_t msr_index)
 
 static void vmx_save_restore_msrs_test(struct kvm_vcpu *vcpu)
 {
+	union vmx_ctrl_msr ctls;
+	const struct kvm_msr_list *feature_list;
+	bool ctl3_found = false;
+	int i;
+
 	vcpu_set_msr(vcpu, MSR_IA32_VMX_VMCS_ENUM, 0);
 	vcpu_set_msr(vcpu, MSR_IA32_VMX_VMCS_ENUM, -1ull);
 
@@ -65,6 +70,54 @@ static void vmx_save_restore_msrs_test(struct kvm_vcpu *vcpu)
 	vmx_fixed0and1_msr_test(vcpu, MSR_IA32_VMX_TRUE_EXIT_CTLS);
 	vmx_fixed0and1_msr_test(vcpu, MSR_IA32_VMX_TRUE_ENTRY_CTLS);
 	vmx_fixed1_msr_test(vcpu, MSR_IA32_VMX_VMFUNC, -1ull);
+
+	ctls.val = kvm_get_feature_msr(MSR_IA32_VMX_PROCBASED_CTLS);
+	TEST_ASSERT(!(ctls.set & CPU_BASED_ACTIVATE_TERTIARY_CONTROLS),
+		    "CPU_BASED_ACTIVATE_TERTIARY_CONTROLS should be cleared.");
+
+	feature_list = kvm_get_feature_msr_index_list();
+	for (i = 0; i < feature_list->nmsrs; i++) {
+		if (feature_list->indices[i] == MSR_IA32_VMX_PROCBASED_CTLS3) {
+			ctl3_found = true;
+			break;
+		}
+	}
+
+	if (ctls.clr & CPU_BASED_ACTIVATE_TERTIARY_CONTROLS) {
+		uint64_t kvm_ctls3, ctls3;
+
+		TEST_ASSERT(ctl3_found,
+			    "MSR_IA32_VMX_PROCBASED_CTLS3 was not in feature msr index list.");
+
+		kvm_ctls3 = kvm_get_feature_msr(MSR_IA32_VMX_PROCBASED_CTLS3);
+		ctls3 = vcpu_get_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3);
+		TEST_ASSERT(kvm_ctls3 == ctls3,
+			    "msr values for kvm and vcpu must match.");
+
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, 0);
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, ctls3);
+		vmx_fixed1_msr_test(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, ctls3);
+
+		/*
+		 * The kvm host should be able to get/set
+		 * MSR_IA32_VMX_PROCBASED_CTLS3 irrespective to the bit
+		 * CPU_BASED_ACTIVATE_TERTIARY_CONTROLS of
+		 * MSR_IA32_VMX_TRUE_PROCBASED_CTLS.
+		 */
+		ctls.val = vcpu_get_msr(vcpu, MSR_IA32_VMX_TRUE_PROCBASED_CTLS);
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_TRUE_PROCBASED_CTLS,
+			     ctls.set & ~CPU_BASED_ACTIVATE_TERTIARY_CONTROLS);
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, 0);
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, ctls3);
+		vmx_fixed1_msr_test(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, ctls3);
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_TRUE_PROCBASED_CTLS, ctls.val);
+	} else {
+		TEST_ASSERT(!ctl3_found,
+			    "MSR_IA32_VMX_PROCBASED_CTLS3 was in feature msr index list.");
+
+		TEST_ASSERT(!_vcpu_set_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, 0),
+			    "setting MSR_IA32_VMX_PROCBASED_CTLS3 didn't fail.");
+	}
 }
 
 static void __ia32_feature_control_msr_test(struct kvm_vcpu *vcpu,
