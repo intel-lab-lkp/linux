@@ -17643,6 +17643,7 @@ M:	Christian Gromm <christian.gromm@microchip.com>
 S:	Maintained
 F:	Documentation/ABI/testing/configfs-most
 F:	Documentation/ABI/testing/sysfs-bus-most
+F:	Documentation/devicetree/bindings/media/microchip,dim2.yaml
 F:	drivers/most/
 F:	drivers/staging/most/
 F:	include/linux/most.h
