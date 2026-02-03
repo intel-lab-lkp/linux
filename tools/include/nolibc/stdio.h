@@ -292,7 +292,7 @@ int fseek(FILE *stream, long offset, int whence)
 
 
 /* simple printf(). It supports the following formats:
- *  - %[-][width][{l,t,z,ll,L,j,q}]{d,u,c,x,p,s,m}
+ *  - %[-+ ][width][{l,t,z,ll,L,j,q}]{d,u,c,x,p,s,m}
  *  - %%
  *  - invalid formats are copied to the output buffer
  */
@@ -305,7 +305,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 	char c;
 	int len, written, width;
 	unsigned int flags;
-	char tmpbuf[21];
+	char tmpbuf[64];
 	const char *outstr;
 
 	written = 0;
@@ -328,7 +328,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 			/* Flag characters */
 			for (; c >= 0x20 && c <= 0x3f; c = *fmt++) {
-				if ((__PF_FLAG(c) & (__PF_FLAG('-'))) == 0)
+				if ((__PF_FLAG(c) & (__PF_FLAG('-') | __PF_FLAG(' ') | __PF_FLAG('+'))) == 0)
 					break;
 				flags |= __PF_FLAG(c);
 			}
@@ -358,7 +358,8 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			if (c == 'c' || c == 'd' || c == 'u' || c == 'x' || c == 'p') {
 				unsigned long long v;
 				long long signed_v;
-				char *out = tmpbuf;
+				char *out = tmpbuf + 32;
+				int sign = 0;
 
 				if ((c == 'p') || (flags & (__PF_FLAG('l') | __PF_FLAG('t') | __PF_FLAG('z')))) {
 					v = va_arg(args, unsigned long);
@@ -373,24 +374,35 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 				switch (c) {
 				case 'c':
-					out[0] = v;
-					out[1] = 0;
-					break;
+					tmpbuf[0] = v;
+					len = 1;
+					outstr = tmpbuf;
+					goto do_output;
 				case 'd':
-					i64toa_r(signed_v, out);
-					break;
+					if (signed_v < 0) {
+						sign = '-';
+						v = -(signed_v + 1);
+						v++;
+					} else if (flags & __PF_FLAG('+')) {
+						sign = '+';
+					} else if (flags & __PF_FLAG(' ')) {
+						sign = ' ';
+					}
+					__nolibc_fallthrough;
 				case 'u':
 					u64toa_r(v, out);
 					break;
 				case 'p':
-					*(out++) = '0';
-					*(out++) = 'x';
+					sign = 'x' | '0' << 8;
 					__nolibc_fallthrough;
 				default: /* 'x' and 'p' above */
 					u64toh_r(v, out);
 					break;
 				}
-				outstr = tmpbuf;
+				for (; sign; sign >>= 8) {
+					*--out = sign;
+				}
+				outstr = out;
 			}
 			else if (c == 's') {
 				outstr = va_arg(args, char *);
@@ -416,6 +428,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			len = strlen(outstr);
 		}
 
+do_output:
 		written += len;
 
                 /* An OPTIMIZER_HIDE_VAR() seems to stop gcc back-merging this
