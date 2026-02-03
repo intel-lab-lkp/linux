@@ -654,8 +654,13 @@ static void build_vtem_infopacket_data(const struct dc_stream_state *stream,
 	bool vrr_active = false;
 	bool rb = false;
 
-	vrr_active = vrr->state == VRR_STATE_ACTIVE_VARIABLE ||
-		     vrr->state == VRR_STATE_ACTIVE_FIXED;
+	if (amdgpu_hdmi_vrr_desktop_mode) {
+		vrr_active = vrr->state != VRR_STATE_UNSUPPORTED &&
+			     vrr->state != VRR_STATE_DISABLED;
+	} else {
+		vrr_active = vrr->state == VRR_STATE_ACTIVE_VARIABLE ||
+			     vrr->state == VRR_STATE_ACTIVE_FIXED;
+	}
 
 	infopacket->sb[VTEM_MD0] = VTEM_M_CONST << VTEM_M_CONST_BIT;
 	infopacket->sb[VTEM_MD0] |= VTEM_FVA_FACTOR << VTEM_FVA_BIT;

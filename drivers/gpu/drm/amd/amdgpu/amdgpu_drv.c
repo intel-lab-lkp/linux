@@ -249,6 +249,7 @@ int amdgpu_rebar = -1; /* auto */
 int amdgpu_user_queue = -1;
 uint amdgpu_hdmi_hpd_debounce_delay_ms;
 uint amdgpu_allm_mode = 1;
+bool amdgpu_hdmi_vrr_desktop_mode = true;
 
 DECLARE_DYNDBG_CLASSMAP(drm_debug_classes, DD_CLASS_TYPE_DISJOINT_BITS, 0,
 			"DRM_UT_CORE",
@@ -1145,6 +1146,18 @@ module_param_named(hdmi_hpd_debounce_delay_ms, amdgpu_hdmi_hpd_debounce_delay_ms
  */
 MODULE_PARM_DESC(allm_mode, "Changes ALLM trigger mode (0 = disable, 1 = enable (default), 2 = force enable)");
 module_param_named(allm_mode, amdgpu_allm_mode, uint, 0644);
+
+/**
+ * DOC: hdmi_vrr_on_dekstop (bool)
+ * Enables FreeSync behavior mimicking by keeping HDMI VRR signalling active in
+ * fixed refresh rate conditions like normal desktop work/web browsing.
+ * Possible values:
+ *
+ * - false = HDMI VRR is only enabled if refresh rate is truly variable
+ * - true  = Mimics FreeSync behavior and keeps HDMI VRR always active
+ */
+MODULE_PARM_DESC(hdmi_vrr_desktop_mode, "Changes HDMI VRR desktop mode (false = disable, true = enable (default))");
+module_param_named(hdmi_vrr_desktop_mode, amdgpu_hdmi_vrr_desktop_mode, bool, 0644);
 
 /* These devices are not supported by amdgpu.
  * They are supported by the mach64, r128, radeon drivers
