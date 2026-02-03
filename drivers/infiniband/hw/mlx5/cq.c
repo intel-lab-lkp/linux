@@ -1077,7 +1077,8 @@ int mlx5_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 }
 
 int mlx5_ib_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
-			   struct ib_umem *umem, struct uverbs_attr_bundle *attrs)
+			   struct ib_umem *umem, struct ib_umem *dbr_umem,
+			   struct uverbs_attr_bundle *attrs)
 {
 	return __mlx5_ib_create_cq(ibcq, attr, umem, attrs);
 }

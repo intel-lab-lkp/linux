@@ -68,7 +68,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	struct ib_device *ib_dev = attrs->context->device;
 	struct ib_cq_init_attr attr = {};
 	struct ib_uobject *ev_file_uobj;
-	struct ib_umem *umem;
+	struct ib_umem *umem, *dbr_umem;
 	struct ib_cq *cq;
 	u64 user_handle;
 	int ret;
@@ -123,17 +123,25 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	if (ret)
 		goto err_event_file;
 
+	ret = uverbs_get_buffer_umem(ib_dev, attrs,
+				     UVERBS_ATTR_CREATE_CQ_DBR_VA,
+				     UVERBS_ATTR_CREATE_CQ_DBR_LENGTH,
+				     UVERBS_ATTR_CREATE_CQ_DBR_FD,
+				     UVERBS_ATTR_CREATE_CQ_DBR_OFFSET,
+				     ib_dev->ops.create_cq_umem, 0, &dbr_umem);
+	if (ret)
+		goto err_umem;
+
 	/* If no external buffer provided, require create_cq op */
-	if (!umem && !ib_dev->ops.create_cq) {
+	if (!umem && !dbr_umem && !ib_dev->ops.create_cq) {
 		ret = -EINVAL;
-		goto err_event_file;
+		goto err_dbr_umem;
 	}
 
 	cq = rdma_zalloc_drv_obj(ib_dev, ib_cq);
 	if (!cq) {
 		ret = -ENOMEM;
-		ib_umem_release(umem);
-		goto err_event_file;
+		goto err_dbr_umem;
 	}
 
 	cq->device        = ib_dev;
@@ -146,12 +154,14 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
 	rdma_restrack_set_name(&cq->res, NULL);
 
-	ret = umem ? ib_dev->ops.create_cq_umem(cq, &attr, umem, attrs) :
+	ret = (umem || dbr_umem) ?
+		ib_dev->ops.create_cq_umem(cq, &attr, umem, dbr_umem, attrs) :
 		ib_dev->ops.create_cq(cq, &attr, attrs);
 	if (ret)
 		goto err_free;
 
 	/* Driver took a reference, release ours */
+	ib_umem_release(dbr_umem);
 	ib_umem_release(umem);
 
 	obj->uevent.uobject.object = cq;
@@ -164,9 +174,12 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	return ret;
 
 err_free:
-	ib_umem_release(umem);
 	rdma_restrack_put(&cq->res);
 	kfree(cq);
+err_dbr_umem:
+	ib_umem_release(dbr_umem);
+err_umem:
+	ib_umem_release(umem);
 err_event_file:
 	if (obj->uevent.event_file)
 		uverbs_uobject_put(&obj->uevent.event_file->uobj);
@@ -212,6 +225,17 @@ DECLARE_UVERBS_NAMED_METHOD(
 	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_CQ_BUFFER_FD,
 			   UA_OPTIONAL),
 	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_CQ_BUFFER_OFFSET,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_CQ_DBR_VA,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_CQ_DBR_LENGTH,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_CQ_DBR_FD,
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_CQ_DBR_OFFSET,
 			   UVERBS_ATTR_TYPE(u64),
 			   UA_OPTIONAL),
 	UVERBS_ATTR_UHW());

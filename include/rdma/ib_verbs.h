@@ -2535,6 +2535,7 @@ struct ib_device_ops {
 	int (*create_cq_umem)(struct ib_cq *cq,
 			      const struct ib_cq_init_attr *attr,
 			      struct ib_umem *umem,
+			      struct ib_umem *dbr_umem,
 			      struct uverbs_attr_bundle *attrs);
 	int (*modify_cq)(struct ib_cq *cq, u16 cq_count, u16 cq_period);
 	int (*destroy_cq)(struct ib_cq *cq, struct ib_udata *udata);
