@@ -292,7 +292,7 @@ int fseek(FILE *stream, long offset, int whence)
 
 
 /* printf(). Supports most of the normal integer and string formats.
- *  - %[#0-+ ][width|*[.precision|*]][{l,t,z,ll,L,j,q}]{d,i,u,c,x,X,p,s,m}
+ *  - %[#0-+ ][width|*[.precision|*]][{l,t,z,ll,L,j,q}]{d,i,u,c,x,X,p,s,m,%}
  *  - %% generates a single %
  *  - %m outputs strerror(errno).
  *  - # only affects %x and prepends 0x to non-zero values.
@@ -309,7 +309,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 {
 	char c;
 	int len, written, width, precision;
-	unsigned int flags;
+	unsigned int flags, c_flag;
 	char tmpbuf[32 + 24];
 	const char *outstr;
 
@@ -377,8 +377,12 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			if (!((c >= 'a' && c <= 'z') || (c == 'X' && (c = 'x'))))
 				goto bad_conversion_specifier;
 
-			/* Numeric and pointer conversion specifiers */
-			if (__PF_FLAG(c) & (__PF_FLAG('c') | __PF_FLAG('d') | __PF_FLAG('i') | __PF_FLAG('u') |
+			/* Numeric and pointer conversion specifiers.
+			 * We need to check for "%p" or "%#x" later, merging here gives better code.
+			 * But '#' collides with 'c' so shift right.
+			 */
+			c_flag = __PF_FLAG(c) | (flags & __PF_FLAG('#')) >> 1;
+			if (c_flag & (__PF_FLAG('c') | __PF_FLAG('d') | __PF_FLAG('i') | __PF_FLAG('u') |
 					    __PF_FLAG('x') | __PF_FLAG('p') | __PF_FLAG('s'))) {
 				unsigned long long v;
 				long long signed_v;
@@ -386,7 +390,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 				int sign = 0;
 
 				/* Annoying 'p' === '0' so mask from flags */
-				if ((__PF_FLAG(c) | (flags & ~__PF_FLAG('p'))) &
+				if ((c_flag | (flags & ~__PF_FLAG('p'))) &
 				    (__PF_FLAG('p') | __PF_FLAG('s') | __PF_FLAG('l') | __PF_FLAG('t') | __PF_FLAG('z'))) {
 					v = va_arg(args, unsigned long);
 					signed_v = (long)v;
@@ -398,13 +402,14 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 					signed_v = (int)v;
 				}
 
-				switch (c) {
-				case 'c':
+				if (c_flag & __PF_FLAG('c')) {
 					tmpbuf[0] = v;
 					len = 1;
 					outstr = tmpbuf;
 					goto do_output;
-				case 's':
+				}
+
+				if (c_flag & __PF_FLAG('s')) {
 					if (!v) {
 						outstr = "(null)";
 						/* Match glibc, nothing output if precision too small */
@@ -415,8 +420,9 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 do_strnlen_output:
 					len = strnlen(outstr, precision);
 					goto do_output;
-				case 'd':
-				case 'i':
+				}
+
+				if (c_flag & (__PF_FLAG('d') | __PF_FLAG('i'))) {
 					if (signed_v < 0) {
 						sign = '-';
 						v = -(signed_v + 1);
@@ -426,12 +432,11 @@ do_strnlen_output:
 					} else if (flags & __PF_FLAG(' ')) {
 						sign = ' ';
 					}
-					c = 'u';
 				}
 
 				if (v == 0) {
 					/* There are special rules for zero. */
-					if (c == 'p') {
+					if (c_flag & __PF_FLAG('p')) {
 						/* match glibc, precision is ignored */
 						outstr = "(nil)";
 						len = 5;
@@ -446,11 +451,11 @@ do_strnlen_output:
 					*out = '0';
 					len = 1;
 				} else {
-					if (c == 'u') {
+					if (c_flag & (__PF_FLAG('d') | __PF_FLAG('i') | __PF_FLAG('u'))) {
 						len = u64toa_r(v, out);
 					} else {
 						len = u64toh_r(v, out);
-						if (c == 'p' || (flags & __PF_FLAG('#')))
+						if (c_flag & (__PF_FLAG('p') | __PF_FLAG('#' - 1)))
 							sign = 'x' | '0' << 8;
 					}
 				}
