@@ -292,7 +292,7 @@ int fseek(FILE *stream, long offset, int whence)
 
 
 /* simple printf(). It supports the following formats:
- *  - %[-+ ][width][{l,t,z,ll,L,j,q}]{d,u,c,x,p,s,m}
+ *  - %[-+ ][width][{l,t,z,ll,L,j,q}]{d,i,u,c,x,X,p,s,m}
  *  - %%
  *  - invalid formats are copied to the output buffer
  */
@@ -305,7 +305,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 	char c;
 	int len, written, width;
 	unsigned int flags;
-	char tmpbuf[64];
+	char tmpbuf[32 + 24];
 	const char *outstr;
 
 	written = 0;
@@ -355,13 +355,21 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 				}
 			}
 
-			if (c == 'c' || c == 'd' || c == 'u' || c == 'x' || c == 'p') {
+			/* Conversion specifiers are lower case except 'X' treated as 'x' */
+			if (!((c >= 'a' && c <= 'z') || (c == 'X' && (c = 'x'))))
+				goto bad_conversion_specifier;
+
+			/* Conversion specifiers */
+			if (__PF_FLAG(c) & (__PF_FLAG('c') | __PF_FLAG('d') | __PF_FLAG('i') | __PF_FLAG('u') |
+					    __PF_FLAG('x') | __PF_FLAG('p') | __PF_FLAG('s'))) {
 				unsigned long long v;
 				long long signed_v;
 				char *out = tmpbuf + 32;
 				int sign = 0;
 
-				if ((c == 'p') || (flags & (__PF_FLAG('l') | __PF_FLAG('t') | __PF_FLAG('z')))) {
+				/* Annoying 'p' === '0' so mask from flags */
+				if ((__PF_FLAG(c) | (flags & ~__PF_FLAG('p'))) &
+				    (__PF_FLAG('p') | __PF_FLAG('s') | __PF_FLAG('l') | __PF_FLAG('t') | __PF_FLAG('z'))) {
 					v = va_arg(args, unsigned long);
 					signed_v = (long)v;
 				} else if (flags & (__PF_FLAG('j') | __PF_FLAG('q'))) {
@@ -378,7 +386,18 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 					len = 1;
 					outstr = tmpbuf;
 					goto do_output;
+				case 's':
+					if (!v) {
+						outstr = "(null)";
+						len = 6;
+						goto do_output;
+					}
+					outstr = (void *)v;
+do_strnlen_output:
+					len = strnlen(outstr, INT_MAX);
+					goto do_output;
 				case 'd':
+				case 'i':
 					if (signed_v < 0) {
 						sign = '-';
 						v = -(signed_v + 1);
@@ -390,42 +409,41 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 					}
 					__nolibc_fallthrough;
 				case 'u':
-					u64toa_r(v, out);
+					len = u64toa_r(v, out);
 					break;
 				case 'p':
 					sign = 'x' | '0' << 8;
 					__nolibc_fallthrough;
 				default: /* 'x' and 'p' above */
-					u64toh_r(v, out);
+					len = u64toh_r(v, out);
 					break;
 				}
 				for (; sign; sign >>= 8) {
+					len++;
 					*--out = sign;
 				}
 				outstr = out;
 			}
-			else if (c == 's') {
-				outstr = va_arg(args, char *);
-				if (!outstr)
-					outstr="(null)";
-			}
 			else if (c == 'm') {
 #ifdef NOLIBC_IGNORE_ERRNO
 				outstr = "unknown error";
+				len = __builtin_strlen(outstr);
 #else
 				outstr = strerror(errno);
+				goto do_strnlen_output;
 #endif /* NOLIBC_IGNORE_ERRNO */
 			} else {
+bad_conversion_specifier:
 				if (c != '%')
 					/* Invalid format, output the format string */
 					fmt = outstr + 1;
 				/* %% is documented as a 'conversion specifier'.
 				 * Any flags, precision or length modifier are ignored.
 				 */
+				outstr = fmt - 1;
+				len = 1;
 				width = 0;
-				outstr = "%";
 			}
-			len = strlen(outstr);
 		}
 
 do_output:
