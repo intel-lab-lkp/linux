@@ -772,13 +772,18 @@ int smp_call_function_any(const struct cpumask *mask,
 	unsigned int cpu;
 	int ret;
 
+	/*
+	 * Prevent migration to another CPU after selecting the current CPU
+	 * as the target.
+	 */
+	guard(migrate)();
+
 	/* Try for same CPU (cheapest) */
-	cpu = get_cpu();
+	cpu = smp_processor_id();
 	if (!cpumask_test_cpu(cpu, mask))
 		cpu = sched_numa_find_nth_cpu(mask, 0, cpu_to_node(cpu));
 
 	ret = smp_call_function_single(cpu, func, info, wait);
-	put_cpu();
 	return ret;
 }
 EXPORT_SYMBOL_GPL(smp_call_function_any);
