@@ -718,7 +718,7 @@ static int mini_cqe_res_format_to_hw(struct mlx5_ib_dev *dev, u8 format)
 static int create_cq_user(struct mlx5_ib_dev *dev, struct ib_udata *udata,
 			  struct mlx5_ib_cq *cq, int entries, u32 **cqb,
 			  int *cqe_size, int *index, int *inlen,
-			  struct ib_umem *ext_umem,
+			  struct ib_umem *ext_umem, struct ib_umem *ext_dbr_umem,
 			  struct uverbs_attr_bundle *attrs)
 {
 	struct mlx5_ib_create_cq ucmd = {};
@@ -775,7 +775,7 @@ static int create_cq_user(struct mlx5_ib_dev *dev, struct ib_udata *udata,
 		goto err_umem;
 	}
 
-	err = mlx5_ib_db_map_user(context, ucmd.db_addr, &cq->db);
+	err = mlx5_ib_db_map_user(context, ucmd.db_addr, ext_dbr_umem, &cq->db);
 	if (err)
 		goto err_umem;
 
@@ -962,6 +962,7 @@ static void notify_soft_wc_handler(struct work_struct *work)
 static int __mlx5_ib_create_cq(struct ib_cq *ibcq,
 			       const struct ib_cq_init_attr *attr,
 			       struct ib_umem *ext_umem,
+			       struct ib_umem *ext_dbr_umem,
 			       struct uverbs_attr_bundle *attrs)
 {
 	struct ib_udata *udata = &attrs->driver_udata;
@@ -1001,7 +1002,8 @@ static int __mlx5_ib_create_cq(struct ib_cq *ibcq,
 
 	if (udata) {
 		err = create_cq_user(dev, udata, cq, entries, &cqb, &cqe_size,
-				     &index, &inlen, ext_umem, attrs);
+				     &index, &inlen, ext_umem, ext_dbr_umem,
+				     attrs);
 		if (err)
 			return err;
 	} else {
@@ -1073,14 +1075,14 @@ err_cqb:
 int mlx5_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		      struct uverbs_attr_bundle *attrs)
 {
-	return __mlx5_ib_create_cq(ibcq, attr, NULL, attrs);
+	return __mlx5_ib_create_cq(ibcq, attr, NULL, NULL, attrs);
 }
 
 int mlx5_ib_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 			   struct ib_umem *umem, struct ib_umem *dbr_umem,
 			   struct uverbs_attr_bundle *attrs)
 {
-	return __mlx5_ib_create_cq(ibcq, attr, umem, attrs);
+	return __mlx5_ib_create_cq(ibcq, attr, umem, dbr_umem, attrs);
 }
 
 int mlx5_ib_pre_destroy_cq(struct ib_cq *cq)

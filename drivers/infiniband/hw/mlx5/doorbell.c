@@ -46,13 +46,31 @@ struct mlx5_ib_user_db_page {
 };
 
 int mlx5_ib_db_map_user(struct mlx5_ib_ucontext *context, unsigned long virt,
-			struct mlx5_db *db)
+			struct ib_umem *ext_umem, struct mlx5_db *db)
 {
+	unsigned long dma_offset;
 	struct mlx5_ib_user_db_page *page;
 	int err = 0;
 
 	mutex_lock(&context->db_page_mutex);
 
+	if (ext_umem) {
+		/* External umem path - no page sharing */
+		page = kzalloc(sizeof(*page), GFP_KERNEL);
+		if (!page) {
+			err = -ENOMEM;
+			goto out;
+		}
+
+		ib_umem_get_ref(ext_umem);
+		page->umem = ext_umem;
+		dma_offset = ib_umem_offset(ext_umem);
+		goto add_page;
+	}
+
+	dma_offset = virt & ~PAGE_MASK;
+
+	/* Standard path - lookup existing or create new page */
 	list_for_each_entry(page, &context->db_page_list, list)
 		if ((current->mm == page->mm) &&
 		    (page->user_virt == (virt & PAGE_MASK)))
@@ -76,11 +94,11 @@ int mlx5_ib_db_map_user(struct mlx5_ib_ucontext *context, unsigned long virt,
 	mmgrab(current->mm);
 	page->mm = current->mm;
 
+add_page:
 	list_add(&page->list, &context->db_page_list);
 
 found:
-	db->dma = sg_dma_address(page->umem->sgt_append.sgt.sgl) +
-		  (virt & ~PAGE_MASK);
+	db->dma = sg_dma_address(page->umem->sgt_append.sgt.sgl) + dma_offset;
 	db->u.user_page = page;
 	++page->refcnt;
 
@@ -96,7 +114,8 @@ void mlx5_ib_db_unmap_user(struct mlx5_ib_ucontext *context, struct mlx5_db *db)
 
 	if (!--db->u.user_page->refcnt) {
 		list_del(&db->u.user_page->list);
-		mmdrop(db->u.user_page->mm);
+		if (db->u.user_page->mm)
+			mmdrop(db->u.user_page->mm);
 		ib_umem_release(db->u.user_page->umem);
 		kfree(db->u.user_page);
 	}
