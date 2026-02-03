@@ -197,11 +197,10 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 			goto end_unlock;
 		}
 	} else {
-		/* opened in blocking mode
-		 * wait for a packet available interrupt (or timeout)
-		 * if nothing is currently available
+		/*
+		 * Opened in blocking mode. Wait for a packet available
+		 * interrupt (or timeout) before acquiring the lock.
 		 */
-		mutex_lock(&fifo->read_lock);
 		ret = wait_event_interruptible_timeout(fifo->read_queue,
 						       ioread32(fifo->base_addr + XLLF_RDFO_OFFSET),
 						       read_timeout);
@@ -214,8 +213,10 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 					ret);
 			}
 
-			goto end_unlock;
+			return ret;
 		}
+
+		mutex_lock(&fifo->read_lock);
 	}
 
 	bytes_available = ioread32(fifo->base_addr + XLLF_RLR_OFFSET);
@@ -340,27 +341,26 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 			goto end_unlock;
 		}
 	} else {
-		/* opened in blocking mode */
-
-		/* wait for an interrupt (or timeout) if there isn't
-		 * currently enough room in the fifo
+		/*
+		 * Opened in blocking mode. Wait for enough room in the FIFO
+		 * (or timeout) before acquiring the lock.
 		 */
-		mutex_lock(&fifo->write_lock);
 		ret = wait_event_interruptible_timeout(fifo->write_queue,
 						       ioread32(fifo->base_addr + XLLF_TDFV_OFFSET)
-								>= words_to_write,
+						       >= words_to_write,
 						       write_timeout);
 
 		if (ret <= 0) {
-			if (ret == 0) {
+			if (ret == 0)
 				ret = -EAGAIN;
-			} else if (ret != -ERESTARTSYS) {
+			else if (ret != -ERESTARTSYS)
 				dev_err(fifo->dt_device, "wait_event_interruptible_timeout() error in write (ret=%i)\n",
 					ret);
-			}
 
-			goto end_unlock;
+			return ret;
 		}
+
+		mutex_lock(&fifo->write_lock);
 	}
 
 	txbuf = vmemdup_user(buf, len);
