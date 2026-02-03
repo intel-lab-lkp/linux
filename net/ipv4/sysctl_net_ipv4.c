@@ -823,6 +823,13 @@ static struct ctl_table ipv4_net_table[] = {
 		.proc_handler	= ipv4_local_port_range,
 	},
 	{
+		.procname	= "ip_retry_random_port",
+		.maxlen		= sizeof(u8),
+		.data		= &init_net.ipv4.sysctl_ip_retry_random_port,
+		.mode		= 0644,
+		.proc_handler	= proc_dou8vec_minmax,
+	},
+	{
 		.procname	= "ip_local_reserved_ports",
 		.data		= &init_net.ipv4.sysctl_local_reserved_ports,
 		.maxlen		= 65536,

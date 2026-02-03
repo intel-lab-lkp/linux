@@ -1088,8 +1088,13 @@ other_parity_scan:
 	for (i = 0; i < remaining; i += step, port += step) {
 		if (unlikely(port >= high))
 			port -= remaining;
-		if (inet_is_local_reserved_port(net, port))
+		if (inet_is_local_reserved_port(net, port)) {
+			if (net->ipv4.sysctl_ip_retry_random_port) {
+				port = low + get_random_u32_below(remaining);
+				port = ((port & 1) == step) ? port : (port - 1);
+			}
 			continue;
+		}
 		head = &hinfo->bhash[inet_bhashfn(net, port,
 						  hinfo->bhash_size)];
 		rcu_read_lock();
