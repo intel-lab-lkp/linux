@@ -805,10 +805,16 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 	int cpu, last_cpu, this_cpu = smp_processor_id();
 	struct call_function_data *cfd;
 	bool wait = scf_flags & SCF_WAIT;
+	bool preemptible_wait = true;
+	cpumask_var_t cpumask_stack;
+	struct cpumask *cpumask;
 	int nr_cpus = 0;
 	bool run_remote = false;
 
 	lockdep_assert_preemption_disabled();
+
+	if (!alloc_cpumask_var(&cpumask_stack, GFP_ATOMIC))
+		preemptible_wait = false;
 
 	/*
 	 * Can deadlock when called with interrupts disabled.
@@ -831,15 +837,18 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 	/* Check if we need remote execution, i.e., any CPU excluding this one. */
 	if (cpumask_any_and_but(mask, cpu_online_mask, this_cpu) < nr_cpu_ids) {
 		cfd = this_cpu_ptr(&cfd_data);
-		cpumask_and(cfd->cpumask, mask, cpu_online_mask);
-		__cpumask_clear_cpu(this_cpu, cfd->cpumask);
+
+		cpumask = preemptible_wait ? cpumask_stack : cfd->cpumask;
+
+		cpumask_and(cpumask, mask, cpu_online_mask);
+		__cpumask_clear_cpu(this_cpu, cpumask);
 
 		cpumask_clear(cfd->cpumask_ipi);
-		for_each_cpu(cpu, cfd->cpumask) {
+		for_each_cpu(cpu, cpumask) {
 			call_single_data_t *csd = per_cpu_ptr(cfd->csd, cpu);
 
 			if (cond_func && !cond_func(cpu, info)) {
-				__cpumask_clear_cpu(cpu, cfd->cpumask);
+				__cpumask_clear_cpu(cpu, cpumask);
 				continue;
 			}
 
@@ -890,13 +899,16 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 	}
 
 	if (run_remote && wait) {
-		for_each_cpu(cpu, cfd->cpumask) {
+		for_each_cpu(cpu, cpumask) {
 			call_single_data_t *csd;
 
 			csd = per_cpu_ptr(cfd->csd, cpu);
 			csd_lock_wait(csd);
 		}
 	}
+
+	if (preemptible_wait)
+		free_cpumask_var(cpumask_stack);
 }
 
 /**
