@@ -2261,8 +2261,13 @@ __alloc_tagging_slab_alloc_hook(struct kmem_cache *s, void *object, gfp_t flags)
 	 * If other users appear then mem_alloc_profiling_enabled()
 	 * check should be added before alloc_tag_add().
 	 */
-	if (likely(obj_exts))
+	if (likely(obj_exts)) {
+
+		while (!READ_ONCE(obj_exts->ref.ct))
+			cpu_relax();
+
 		alloc_tag_add(&obj_exts->ref, current->alloc_tag, s->size);
+	}
 	else
 		alloc_tag_set_inaccurate(current->alloc_tag);
 }
