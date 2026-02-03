@@ -40,6 +40,17 @@ static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd)
 	read_sequnlock_excl(&fs->seq);
 }
 
+/* Return true if fs->pwd matches the given pwd */
+static inline bool fs_pwd_equal(struct fs_struct *fs, struct path *pwd)
+{
+	bool match;
+
+	read_seqlock_excl(&fs->seq);
+	match = (fs->pwd.dentry == pwd->dentry) && (fs->pwd.mnt == pwd->mnt);
+	read_sequnlock_excl(&fs->seq);
+	return match;
+}
+
 extern bool current_chrooted(void);
 
 static inline int current_umask(void)

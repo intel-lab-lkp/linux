@@ -123,6 +123,11 @@ struct audit_nfcfgop_tab {
 	const char		*s;
 };
 
+struct audit_pwd_put {
+	struct work_struct	work;
+	struct path		pwd;
+};
+
 static const struct audit_nfcfgop_tab audit_nfcfgs[] = {
 	{ AUDIT_XT_OP_REGISTER,			"xt_register"		   },
 	{ AUDIT_XT_OP_REPLACE,			"xt_replace"		   },
@@ -931,6 +936,9 @@ static inline void audit_free_names(struct audit_context *context)
 {
 	struct audit_names *n, *next;
 
+	if (list_empty(&context->names_list))
+		return;	/* audit_alloc_name() has not been called */
+
 	list_for_each_entry_safe(n, next, &context->names_list, list) {
 		list_del(&n->list);
 		if (n->name)
@@ -939,9 +947,7 @@ static inline void audit_free_names(struct audit_context *context)
 			kfree(n);
 	}
 	context->name_count = 0;
-	path_put(&context->pwd);
-	context->pwd.dentry = NULL;
-	context->pwd.mnt = NULL;
+	context->pwd_reset = true;
 }
 
 static inline void audit_free_aux(struct audit_context *context)
@@ -1088,6 +1094,8 @@ static inline void audit_free_context(struct audit_context *context)
 	audit_reset_context(context);
 	audit_proctitle_free(context);
 	free_tree_refs(context);
+	if (context->pwd_reset)
+		path_put(&context->pwd);
 	kfree(context->filterkey);
 	kfree(context);
 }
@@ -1519,7 +1527,8 @@ static void audit_log_name(struct audit_context *context, struct audit_names *n,
 			/* name was specified as a relative path and the
 			 * directory component is the cwd
 			 */
-			if (context->pwd.dentry && context->pwd.mnt)
+			if (context->pwd.dentry && context->pwd.mnt &&
+			    !context->pwd_reset)
 				audit_log_d_path(ab, " name=", &context->pwd);
 			else
 				audit_log_format(ab, " name=(null)");
@@ -1767,7 +1776,7 @@ static void audit_log_exit(void)
 				  context->target_comm))
 		call_panic = 1;
 
-	if (context->pwd.dentry && context->pwd.mnt) {
+	if (context->pwd.dentry && context->pwd.mnt && !context->pwd_reset) {
 		ab = audit_log_start(context, GFP_KERNEL, AUDIT_CWD);
 		if (ab) {
 			audit_log_d_path(ab, "cwd=", &context->pwd);
@@ -2144,6 +2153,19 @@ retry:
 	rcu_read_unlock();
 }
 
+static void audit_pwd_put_workfn(struct work_struct *work)
+{
+	struct audit_pwd_put *pp = container_of(work, struct audit_pwd_put, work);
+
+	path_put(&pp->pwd);
+	/*
+	 * The audit_pwd_put structure can be safely freed here without UAF
+	 * as all the workqueue related data have been copied out and processed
+	 * before this function is called.
+	 */
+	kfree(pp);
+}
+
 static struct audit_names *audit_alloc_name(struct audit_context *context,
 						unsigned char type)
 {
@@ -2164,6 +2186,30 @@ static struct audit_names *audit_alloc_name(struct audit_context *context,
 	list_add_tail(&aname->list, &context->names_list);
 
 	context->name_count++;
+	if (context->pwd_reset) {
+		struct audit_pwd_put *pp;
+
+		context->pwd_reset = false;
+		if (likely(fs_pwd_equal(current->fs, &context->pwd)))
+			return aname;
+
+		/*
+		 * Defer the path_put() call of the old pwd to workqueue as
+		 * we may be in an atomic context that cannot call path_put()
+		 * directly because of might_sleep().
+		 */
+		pp = kmalloc(sizeof(*pp), GFP_NOFS);
+		if (!pp) {
+			if (aname->should_free)
+				kfree(aname);
+			return NULL;
+		}
+		INIT_WORK(&pp->work, audit_pwd_put_workfn);
+		pp->pwd = context->pwd;
+		schedule_work(&pp->work);
+		context->pwd.dentry = NULL;
+		context->pwd.mnt = NULL;
+	}
 	if (!context->pwd.dentry)
 		get_fs_pwd(current->fs, &context->pwd);
 	return aname;
