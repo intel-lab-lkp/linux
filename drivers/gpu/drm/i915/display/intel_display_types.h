@@ -1569,6 +1569,10 @@ struct intel_crtc {
 #endif
 
 	bool vblank_psr_notify;
+
+	struct {
+		bool enable;
+	} cmtg;
 };
 
 struct intel_plane_error {

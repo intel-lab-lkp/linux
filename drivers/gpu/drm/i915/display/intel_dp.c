@@ -3445,6 +3445,7 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	const struct drm_display_mode *fixed_mode;
 	struct intel_connector *connector = intel_dp->attached_connector;
+	struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
 	int ret = 0, link_bpp_x16;
 
 	fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode);
@@ -3548,6 +3549,9 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	intel_dp_drrs_compute_config(connector, pipe_config, link_bpp_x16);
 	intel_dp_compute_vsc_sdp(intel_dp, pipe_config, conn_state);
 	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state);
+
+	if (DISPLAY_VER(display) >= 15 && intel_dp_is_edp(intel_dp))
+		crtc->cmtg.enable = true;
 
 	return intel_dp_tunnel_atomic_compute_stream_bw(state, intel_dp, connector,
 							pipe_config);
