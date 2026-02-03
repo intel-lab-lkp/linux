@@ -8,6 +8,7 @@ Supported chips:
   * MPS MPM3695 family
   * MPS MPM82504
   * MPS MPQ8785
+  * MPS MPQ8786
 
     Prefix: 'mpq8785'
 
@@ -37,6 +38,12 @@ buck converter. The MPQ8785 offers a very compact solution that achieves up to
 40A output current per phase, with excellent load and line regulation over a
 wide input supply range. The MPQ8785 operates at high efficiency over a wide
 output current load range.
+
+The MPQ8786 is a fully integrated, PMBus-compatible, high-frequency, synchronous
+buck converter. The device shares the same PMBus interface and register behavior
+as the MPQ8785, but provides a lower output current capability of up to 25A per
+phase. It offers excellent load and line regulation over a wide input supply
+range and operates at high efficiency over a wide output current load range.
 
 The PMBus interface provides converter configurations and key parameters
 monitoring.
