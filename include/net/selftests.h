@@ -19,6 +19,7 @@ struct net_packet_attrs {
 	u8 id;
 	u16 queue_mapping;
 	bool bad_csum;
+	u32 exp_hash;
 };
 
 struct net_test_priv {
