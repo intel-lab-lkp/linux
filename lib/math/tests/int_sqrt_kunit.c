@@ -45,7 +45,7 @@ KUNIT_ARRAY_PARAM(int_sqrt, params, get_desc);
 
 static void int_sqrt_test(struct kunit *test)
 {
-	const struct test_case_params *tc = (const struct test_case_params *)test->param_value;
+	const struct test_case_params *tc = test->param_value;
 
 	KUNIT_EXPECT_EQ(test, tc->expected_result, int_sqrt(tc->x));
 }
