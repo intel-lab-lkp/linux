@@ -426,7 +426,6 @@ static void pci_read_bridge_io(struct pci_dev *dev, struct resource *res,
 		if (log)
 			pci_info(dev, "  bridge window %pR\n", res);
 	} else {
-		resource_set_range(res, 0, 0);
 		res->flags |= IORESOURCE_UNSET | IORESOURCE_DISABLED;
 	}
 }
@@ -452,7 +451,6 @@ static void pci_read_bridge_mmio(struct pci_dev *dev, struct resource *res,
 		if (log)
 			pci_info(dev, "  bridge window %pR\n", res);
 	} else {
-		resource_set_range(res, 0, 0);
 		res->flags |= IORESOURCE_UNSET | IORESOURCE_DISABLED;
 	}
 }
@@ -508,7 +506,6 @@ static void pci_read_bridge_mmio_pref(struct pci_dev *dev, struct resource *res,
 		if (log)
 			pci_info(dev, "  bridge window %pR\n", res);
 	} else {
-		resource_set_range(res, 0, 0);
 		res->flags |= IORESOURCE_UNSET | IORESOURCE_DISABLED;
 	}
 }
