@@ -5043,12 +5043,19 @@ static struct ibm_struct video_driver_data = {
 static enum led_brightness kbdlight_brightness;
 static DEFINE_MUTEX(kbdlight_mutex);
 
+/* Maximum level supported by hardware, will be updated in init */
+static int kbdlight_max_level = 2;
+
 static int kbdlight_set_level(int level)
 {
 	int ret = 0;
 
 	if (!hkey_handle)
 		return -ENXIO;
+
+	/* Validate against detected max level */
+	if (level < 0 || level > kbdlight_max_level)
+		return -EINVAL;
 
 	mutex_lock(&kbdlight_mutex);
 
@@ -5075,6 +5082,7 @@ static int kbdlight_get_level(void)
 	if (status < 0)
 		return status;
 
+	/* Status can be 0, 1, 2, or 3 (Auto) */
 	return status & 0x3;
 }
 
@@ -5143,7 +5151,7 @@ static enum led_brightness kbdlight_sysfs_get(struct led_classdev *led_cdev)
 static struct tpacpi_led_classdev tpacpi_led_kbdlight = {
 	.led_classdev = {
 		.name		= "tpacpi::kbd_backlight",
-		.max_brightness	= 2,
+		.max_brightness	= 2,	/*Initial value, will be updated in init*/
 		.flags		= LED_BRIGHT_HW_CHANGED,
 		.brightness_set_blocking = &kbdlight_sysfs_set,
 		.brightness_get	= &kbdlight_sysfs_get,
@@ -5166,6 +5174,17 @@ static int __init kbdlight_init(struct ibm_init_struct *iibm)
 
 	kbdlight_brightness = kbdlight_sysfs_get(NULL);
 	tp_features.kbdlight = 1;
+
+	/* Detect hardware capabilities and set max_brightness */
+	if (acpi_evalf(hkey_handle, NULL, "MLCS", "dd", 3)) {
+		/* MLCS accepts level 3 - new ThinkPad with Auto mode */
+		kbdlight_max_level = 3;
+		tpacpi_led_kbdlight.led_classdev.max_brightness = 3;
+	} else {
+		/* MLCS rejects level 3 - old ThinkPad */
+		kbdlight_max_level = 2;
+		tpacpi_led_kbdlight.led_classdev.max_brightness = 2;
+	}
 
 	rc = led_classdev_register(&tpacpi_pdev->dev,
 				   &tpacpi_led_kbdlight.led_classdev);
@@ -5201,6 +5220,7 @@ static int kbdlight_set_level_and_update(int level)
 static int kbdlight_read(struct seq_file *m)
 {
 	int level;
+	int i;
 
 	if (!tp_features.kbdlight) {
 		seq_printf(m, "status:\t\tnot supported\n");
@@ -5210,9 +5230,13 @@ static int kbdlight_read(struct seq_file *m)
 			seq_printf(m, "status:\t\terror %d\n", level);
 		else
 			seq_printf(m, "status:\t\t%d\n", level);
-		seq_printf(m, "commands:\t0, 1, 2\n");
-	}
 
+		/* Show available commands based on hardware */
+		seq_puts(m, "commands:\t0");
+		for (i = 1; i <= tpacpi_led_kbdlight.led_classdev.max_brightness; i++)
+			seq_printf(m, ", %d", i);
+		seq_puts(m, "\n");
+	}
 	return 0;
 }
 
@@ -5230,7 +5254,8 @@ static int kbdlight_write(char *buf)
 			return res;
 	}
 
-	if (level >= 3 || level < 0)
+	/* Validate against max level */
+	if (level < 0 || level > tpacpi_led_kbdlight.led_classdev.max_brightness)
 		return -EINVAL;
 
 	return kbdlight_set_level_and_update(level);
