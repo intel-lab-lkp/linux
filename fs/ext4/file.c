@@ -271,6 +271,9 @@ static ssize_t ext4_generic_write_checks(struct kiocb *iocb,
 
 static ssize_t ext4_write_checks(struct kiocb *iocb, struct iov_iter *from)
 {
+	struct inode *inode = file_inode(iocb->ki_filp);
+	unsigned int blocksize = i_blocksize(inode);
+	loff_t old_size = i_size_read(inode);
 	ssize_t ret, count;
 
 	count = ext4_generic_write_checks(iocb, from);
@@ -280,6 +283,23 @@ static ssize_t ext4_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	ret = file_modified(iocb->ki_filp);
 	if (ret)
 		return ret;
+
+	/*
+	 * If the position is beyond the EOF, it is necessary to zero out the
+	 * partial block that beyond the existing EOF, as it may contains
+	 * stale data written through mmap.
+	 */
+	if (iocb->ki_pos > old_size && (old_size & (blocksize - 1))) {
+		loff_t end = round_up(old_size, blocksize);
+
+		if (iocb->ki_pos < end)
+			end = iocb->ki_pos;
+
+		ret = ext4_zero_partial_blocks(inode, old_size, end - old_size);
+		if (ret)
+			return ret;
+	}
+
 	return count;
 }
 
