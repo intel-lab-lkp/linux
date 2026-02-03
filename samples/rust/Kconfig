@@ -168,4 +168,15 @@ config SAMPLE_RUST_HOSTPROGS
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_JOBQUEUE_TESTER
+	tristate "Jobqueue Tester"
+	select JOBQUEUE_TESTER
+	help
+	  This option builds the Rust Jobqueue Tester.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_jobqueue_tester.
+
+	  If unsure, say N.
+
 endif # SAMPLES_RUST
