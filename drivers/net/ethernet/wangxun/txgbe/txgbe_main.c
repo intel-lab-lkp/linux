@@ -182,6 +182,8 @@ static void txgbe_up_complete(struct wx *wx)
 	netif_tx_start_all_queues(netdev);
 	mod_timer(&wx->service_timer, jiffies);
 
+	wx_set_pci_lan_up(wx, true);
+
 	/* Set PF Reset Done bit so PF/VF Mail Ops can work */
 	wr32m(wx, WX_CFG_PORT_CTL, WX_CFG_PORT_CTL_PFRSTD,
 	      WX_CFG_PORT_CTL_PFRSTD);
@@ -231,11 +233,7 @@ static void txgbe_disable_device(struct wx *wx)
 
 	timer_delete_sync(&wx->service_timer);
 
-	if (wx->bus.func < 2)
-		wr32m(wx, TXGBE_MIS_PRB_CTL, TXGBE_MIS_PRB_CTL_LAN_UP(wx->bus.func), 0);
-	else
-		wx_err(wx, "%s: invalid bus lan id %d\n",
-		       __func__, wx->bus.func);
+	wx_set_pci_lan_up(wx, false);
 
 	if (wx->num_vfs) {
 		/* Clear EITR Select mapping */
@@ -886,6 +884,7 @@ static int txgbe_probe(struct pci_dev *pdev,
 		goto err_remove_phy;
 
 	pci_set_drvdata(pdev, wx);
+	pci_save_state(pdev);
 
 	netif_tx_stop_all_queues(netdev);
 
@@ -955,7 +954,8 @@ static void txgbe_remove(struct pci_dev *pdev)
 	kfree(wx->mac_table);
 	wx_clear_interrupt_scheme(wx);
 
-	pci_disable_device(pdev);
+	if (!test_and_set_bit(WX_STATE_DISABLED, wx->state))
+		pci_disable_device(pdev);
 }
 
 static struct pci_driver txgbe_driver = {
@@ -967,6 +967,7 @@ static struct pci_driver txgbe_driver = {
 	.resume   = wx_resume,
 	.shutdown = wx_shutdown,
 	.sriov_configure = wx_pci_sriov_configure,
+	.err_handler = &wx_err_handler,
 };
 
 module_pci_driver(txgbe_driver);

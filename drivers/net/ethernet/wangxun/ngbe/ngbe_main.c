@@ -234,6 +234,12 @@ static irqreturn_t __ngbe_msix_misc(struct wx *wx, u32 eicr)
 	if (eicr & NGBE_PX_MISC_IC_VF_MBOX)
 		wx_msg_task(wx);
 
+	if (eicr & NGBE_PX_MISC_PCIE_REQ_ERR) {
+		wx_warn(wx, "PCIe Request Error founded on Lan %d\n",
+			wx->bus.func);
+		wx_pcie_error_handler(wx);
+	}
+
 	if (unlikely(eicr & NGBE_PX_MISC_IC_TIMESYNC))
 		wx_ptp_check_pps_event(wx);
 
@@ -392,6 +398,7 @@ static void ngbe_disable_device(struct wx *wx)
 	netif_tx_stop_all_queues(netdev);
 	netif_tx_disable(netdev);
 	timer_delete_sync(&wx->service_timer);
+	wx_set_pci_lan_up(wx, false);
 	if (wx->gpio_ctrl)
 		ngbe_sfp_modules_txrx_powerctl(wx, false);
 	wx_irq_disable(wx);
@@ -438,6 +445,8 @@ static void ngbe_up_complete(struct wx *wx)
 	/* enable transmits */
 	netif_tx_start_all_queues(wx->netdev);
 	mod_timer(&wx->service_timer, jiffies);
+
+	wx_set_pci_lan_up(wx, true);
 
 	/* clear any pending interrupts, may auto mask */
 	rd32(wx, WX_PX_IC(0));
@@ -819,6 +828,7 @@ static int ngbe_probe(struct pci_dev *pdev,
 		goto err_register;
 
 	pci_set_drvdata(pdev, wx);
+	pci_save_state(pdev);
 
 	return 0;
 
@@ -868,7 +878,8 @@ static void ngbe_remove(struct pci_dev *pdev)
 	kfree(wx->mac_table);
 	wx_clear_interrupt_scheme(wx);
 
-	pci_disable_device(pdev);
+	if (!test_and_set_bit(WX_STATE_DISABLED, wx->state))
+		pci_disable_device(pdev);
 }
 
 static struct pci_driver ngbe_driver = {
@@ -880,6 +891,7 @@ static struct pci_driver ngbe_driver = {
 	.resume   = wx_resume,
 	.shutdown = wx_shutdown,
 	.sriov_configure = wx_pci_sriov_configure,
+	.err_handler = &wx_err_handler,
 };
 
 module_pci_driver(ngbe_driver);

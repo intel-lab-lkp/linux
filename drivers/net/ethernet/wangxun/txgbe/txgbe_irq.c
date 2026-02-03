@@ -6,6 +6,7 @@
 
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_lib.h"
+#include "../libwx/wx_err.h"
 #include "../libwx/wx_ptp.h"
 #include "../libwx/wx_hw.h"
 #include "../libwx/wx_sriov.h"
@@ -176,6 +177,12 @@ static irqreturn_t txgbe_misc_irq_thread_fn(int irq, void *data)
 	if (eicr & TXGBE_PX_MISC_GPIO) {
 		sub_irq = irq_find_mapping(txgbe->misc.domain, TXGBE_IRQ_GPIO);
 		handle_nested_irq(sub_irq);
+		nhandled++;
+	}
+	if (eicr & TXGBE_PX_MISC_PCIE_REQ_ERR) {
+		wx_warn(wx, "PCIe Request Error founded on Lan %d\n",
+			wx->bus.func);
+		wx_pcie_error_handler(wx);
 		nhandled++;
 	}
 	if (unlikely(eicr & TXGBE_PX_MISC_IC_TIMESYNC)) {

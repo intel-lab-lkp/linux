@@ -11,6 +11,7 @@
 #include <linux/if_vlan.h>
 #include <linux/phylink.h>
 #include <linux/dim.h>
+#include <linux/aer.h>
 #include <net/ip.h>
 
 #define WX_NCSI_SUP                             0x8000
@@ -30,9 +31,11 @@
 
 /* chip control Registers */
 #define WX_MIS_PWR                   0x10000
+#define WX_MIS_PF_SM                 0x10008
 #define WX_MIS_RST                   0x1000C
 #define WX_MIS_RST_LAN_RST(_i)       BIT((_i) + 1)
 #define WX_MIS_RST_SW_RST            BIT(0)
+#define WX_MIS_PRB_CTL               0x10010
 #define WX_MIS_ST                    0x10028
 #define WX_MIS_ST_MNG_INIT_DN        BIT(0)
 #define WX_MIS_SWSM                  0x1002C
@@ -308,6 +311,7 @@
 #define WX_TDM_VLAN_INS_VLANA_DEFAULT BIT(30) /* Always use default VLAN*/
 
 /****************************** TDB ******************************************/
+#define WX_TDB_TFCS                  0x1CE00
 #define WX_TDB_PB_SZ(_i)             (0x1CC00 + ((_i) * 4))
 #define WX_TXPKT_SIZE_MAX            0xA /* Max Tx Packet size */
 
@@ -1196,6 +1200,7 @@ enum wx_state {
 	WX_STATE_PTP_RUNNING,
 	WX_STATE_PTP_TX_IN_PROGRESS,
 	WX_STATE_SERVICE_SCHED,
+	WX_STATE_DISABLED,
 	WX_STATE_NBITS		/* must be last */
 };
 
@@ -1263,6 +1268,8 @@ enum wx_pf_flags {
 	WX_FLAG_RX_MERGE_ENABLED,
 	WX_FLAG_TXHEAD_WB_ENABLED,
 	WX_FLAG_NEED_PF_RESET,
+	WX_FLAG_ERROR_CHECK,
+	WX_FLAG_NEED_PCIE_RECOVER,
 	WX_PF_FLAGS_NBITS               /* must be last */
 };
 
@@ -1358,6 +1365,8 @@ struct wx {
 #define WX_RSS_KEY_SIZE     40  /* size of RSS Hash Key in bytes */
 	u32 *rss_key;
 	u32 wol;
+	bool io_err;
+	struct aer_capability_regs aer_info;
 
 	u16 bd_number;
 	bool default_up;
@@ -1414,6 +1423,8 @@ struct wx {
 
 #define WX_INTR_ALL (~0ULL)
 #define WX_INTR_Q(i) BIT((i))
+
+#define WX_FAILED_READ_CFG_WORD  0xffffU
 
 /* register operations */
 #define wr32(a, reg, value)	writel((value), ((a)->hw_addr + (reg)))

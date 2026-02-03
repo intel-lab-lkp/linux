@@ -54,8 +54,7 @@
 /* chip control Registers */
 #define TXGBE_MIS_RST                           0x1000C
 #define TXGBE_MIS_RST_MAC_RST(_i)               BIT(20 - (_i) * 3)
-#define TXGBE_MIS_PRB_CTL                       0x10010
-#define TXGBE_MIS_PRB_CTL_LAN_UP(_i)            BIT(1 - (_i))
+
 /* FMGR Registers */
 #define TXGBE_SPI_ILDR_STATUS                   0x10120
 #define TXGBE_SPI_ILDR_STATUS_PERST             BIT(0) /* PCIE_PERST is done */
@@ -89,10 +88,12 @@
 #define TXGBE_PX_MISC_INT_ERR                   BIT(20)
 #define TXGBE_PX_MISC_IC_VF_MBOX                BIT(23)
 #define TXGBE_PX_MISC_GPIO                      BIT(26)
+#define TXGBE_PX_MISC_PCIE_REQ_ERR              BIT(27)
 #define TXGBE_PX_MISC_IEN_MASK                            \
 	(TXGBE_PX_MISC_ETH_LKDN | TXGBE_PX_MISC_DEV_RST | \
 	 TXGBE_PX_MISC_ETH_EVENT | TXGBE_PX_MISC_ETH_LK | \
 	 TXGBE_PX_MISC_ETH_AN | TXGBE_PX_MISC_INT_ERR | \
+	 TXGBE_PX_MISC_PCIE_REQ_ERR | \
 	 TXGBE_PX_MISC_IC_VF_MBOX | TXGBE_PX_MISC_IC_TIMESYNC)
 
 /* Port cfg registers */

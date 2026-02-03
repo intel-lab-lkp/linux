@@ -59,5 +59,7 @@ int wx_vlan_rx_kill_vid(struct net_device *netdev, __be16 proto, u16 vid);
 int wx_fc_enable(struct wx *wx, bool tx_pause, bool rx_pause);
 void wx_update_stats(struct wx *wx);
 void wx_clear_hw_cntrs(struct wx *wx);
+void wx_set_pci_lan_up(struct wx *wx, bool up);
+bool wx_check_first_lan_up(struct wx *wx);
 
 #endif /* _WX_HW_H_ */

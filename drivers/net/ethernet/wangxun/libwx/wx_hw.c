@@ -10,6 +10,7 @@
 
 #include "wx_type.h"
 #include "wx_lib.h"
+#include "wx_err.h"
 #include "wx_sriov.h"
 #include "wx_vf.h"
 #include "wx_hw.h"
@@ -2308,8 +2309,11 @@ int wx_disable_pcie_master(struct wx *wx)
 	/* Poll for master request bit to clear */
 	status = read_poll_timeout(rd32, val, !val, 100, WX_PCI_MASTER_DISABLE_TIMEOUT,
 				   false, wx, WX_PX_TRANSACTION_PENDING);
-	if (status < 0)
+	if (status < 0) {
 		wx_err(wx, "PCIe transaction pending bit did not clear.\n");
+		if (!wx->io_err)
+			wx_pcie_error_handler(wx);
+	}
 
 	return status;
 }
@@ -2517,6 +2521,7 @@ int wx_sw_init(struct wx *wx)
 	bitmap_zero(wx->state, WX_STATE_NBITS);
 	bitmap_zero(wx->flags, WX_PF_FLAGS_NBITS);
 	wx->misc_irq_domain = false;
+	wx->io_err = false;
 
 	return 0;
 }
@@ -2973,5 +2978,54 @@ void wx_start_hw(struct wx *wx)
 	}
 }
 EXPORT_SYMBOL(wx_start_hw);
+
+void wx_set_pci_lan_up(struct wx *wx, bool up)
+{
+	u8 max_lan;
+	u32 reg;
+
+	if (wx->mac.type == wx_mac_em)
+		max_lan = 3;
+	else
+		max_lan = 1;
+
+	if (wx->bus.func > max_lan) {
+		wx_err(wx, "%s: invalid bus lan id %d\n",
+		       __func__, wx->bus.func);
+		return;
+	}
+
+	reg = rd32(wx, WX_MIS_PRB_CTL);
+	if (up)
+		reg |= BIT(max_lan - wx->bus.func);
+	else
+		reg &= ~BIT(max_lan - wx->bus.func);
+	wr32(wx, WX_MIS_PRB_CTL, reg);
+}
+EXPORT_SYMBOL(wx_set_pci_lan_up);
+
+bool wx_check_first_lan_up(struct wx *wx)
+{
+	u8 max_lan, i;
+	u32 reg;
+
+	if (wx->mac.type == wx_mac_em)
+		max_lan = 3;
+	else
+		max_lan = 1;
+
+	/* Check whether the current port is the first (smallest number)
+	 * among the ports up on this board.
+	 */
+	reg = rd32(wx, WX_MIS_PRB_CTL);
+	for (i = 0; i <= max_lan; i++) {
+		if (reg & BIT(max_lan - i))
+			break;
+	}
+	if (i == wx->bus.func)
+		return true;
+
+	return false;
+}
 
 MODULE_LICENSE("GPL");
