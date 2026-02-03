@@ -31,6 +31,8 @@ properties:
           - aspeed,ast2400-uart-routing
           - aspeed,ast2500-uart-routing
           - aspeed,ast2600-uart-routing
+          - aspeed,ast2700n0-uart-routing
+          - aspeed,ast2700n1-uart-routing
   reg:
     maxItems: 1
 
