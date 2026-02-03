@@ -1651,28 +1651,45 @@ int run_stdlib(int min, int max)
 
 static int expect_vfprintf(int llen, int c, const char *expected, const char *fmt, ...)
 {
+	unsigned int i;
 	char buf[100];
 	va_list args;
 	ssize_t w;
 	int ret;
 
+	for (i = 0; i < sizeof(buf); i++)
+		buf[i] = i;
 
 	va_start(args, fmt);
-	/* Only allow writing 21 bytes, to test truncation */
+	/* Only allow writing 20 bytes, to test truncation */
 	w = vsnprintf(buf, 21, fmt, args);
 	va_end(args);
 
+	llen += printf(" \"%s\"", buf);
+	ret = strcmp(expected, buf);
+	if (ret) {
+		llen += printf(" should be \"%s\"", expected);
+		result(llen, FAIL);
+		return 1;
+	}
+	if (!c)
+		c = strlen(expected);
 	if (w != c) {
 		llen += printf(" written(%d) != %d", (int)w, c);
 		result(llen, FAIL);
 		return 1;
 	}
 
-	llen += printf(" \"%s\" = \"%s\"", expected, buf);
-	ret = strncmp(expected, buf, c);
+	for (i = c + 1; i < sizeof(buf); i++) {
+		if (buf[i] - i) {
+			llen += printf(" overwrote buf[%d] with 0x%x", i, buf[i]);
+			result(llen, FAIL);
+			return 1;
+		}
+	}
 
-	result(llen, ret ? FAIL : OK);
-	return ret;
+	result(llen, OK);
+	return 0;
 }
 
 static int test_scanf(void)
