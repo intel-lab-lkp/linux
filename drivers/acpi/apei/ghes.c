@@ -237,7 +237,8 @@ err_pool_alloc:
  */
 void ghes_estatus_pool_region_free(unsigned long addr, u32 size)
 {
-	gen_pool_free(ghes_estatus_pool, addr, size);
+	if (ghes_estatus_pool)
+		gen_pool_free(ghes_estatus_pool, addr, size);
 }
 EXPORT_SYMBOL_GPL(ghes_estatus_pool_region_free);
 
