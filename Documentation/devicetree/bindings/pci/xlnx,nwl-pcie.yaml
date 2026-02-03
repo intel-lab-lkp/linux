@@ -69,6 +69,18 @@ properties:
   power-domains:
     maxItems: 1
 
+  resets:
+    maxItems: 3
+
+  reset-names:
+    items:
+      - description: APB register block reset
+        const: cfg
+      - description: AXI-PCIe bridge reset
+        const: bridge
+      - description: PCIe MAC reset
+        const: ctrl
+
   iommus:
     maxItems: 1
 
@@ -117,6 +129,7 @@ examples:
     #include <dt-bindings/interrupt-controller/irq.h>
     #include <dt-bindings/phy/phy.h>
     #include <dt-bindings/power/xlnx-zynqmp-power.h>
+    #include <dt-bindings/reset/xlnx-zynqmp-resets.h>
     soc {
         #address-cells = <2>;
         #size-cells = <2>;
@@ -146,6 +159,10 @@ examples:
             msi-parent = <&nwl_pcie>;
             phys = <&psgtr 0 PHY_TYPE_PCIE 0 0>;
             power-domains = <&zynqmp_firmware PD_PCIE>;
+            resets = <&zynqmp_reset ZYNQMP_RESET_PCIE_CFG>,
+                     <&zynqmp_reset ZYNQMP_RESET_PCIE_BRIDGE>,
+                     <&zynqmp_reset ZYNQMP_RESET_PCIE_CTRL>;
+            reset-names = "cfg", "bridge", "ctrl";
             iommus = <&smmu 0x4d0>;
             pcie_intc: legacy-interrupt-controller {
                 interrupt-controller;
