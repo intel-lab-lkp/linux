@@ -64,15 +64,15 @@ DEFINE_SDT_STAT(select_busy_cpu);
 static __u64 zero = 0;
 
 /*
- * XXX Hack to get the verifier to find the arena for sdt_exit_task.
- * As of 6.12-rc5, The verifier associates arenas with programs by
- * checking LD.IMM instruction operands for an arena and populating
- * the program state with the first instance it finds. This requires
- * accessing our global arena variable, but scx methods do not necessarily
- * do so while still using pointers from that arena. Insert a bpf_printk
- * statement that triggers at most once to generate an LD.IMM instruction
- * to access the arena and help the verifier.
+ * Helper to ensure BPF verifier can track arena usage.
+ * On older toolchains, the verifier may not automatically detect arena usage
+ * through indirect references, so we provide an explicit reference.
  */
+#if defined(__BPF_FEATURE_ADDR_SPACE_CAST)
+/* Modern toolchains don't need the workaround */
+#define scx_arena_subprog_init() do { } while (0)
+#else
+/* Older toolchains need explicit arena reference for verifier */
 static volatile bool scx_arena_verify_once;
 
 __hidden void scx_arena_subprog_init(void)
@@ -80,9 +80,15 @@ __hidden void scx_arena_subprog_init(void)
 	if (scx_arena_verify_once)
 		return;
 
-	bpf_printk("%s: arena pointer %p", __func__, &arena);
+	/*
+	 * Generate LD.IMM instruction to help BPF verifier track arena usage.
+	 * The volatile cast ensures the compiler doesn't optimize away the reference.
+	 */
+	(void)*(volatile void **)&arena;
+
 	scx_arena_verify_once = true;
 }
+#endif
 
 
 private(LOCK) struct bpf_spin_lock alloc_lock;
