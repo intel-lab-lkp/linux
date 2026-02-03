@@ -1031,19 +1031,23 @@ static int vc3_probe(struct i2c_client *client)
 	/* Register pfd muxes */
 	for (i = 0; i < ARRAY_SIZE(clk_pfd_mux); i++) {
 		clk_pfd_mux[i].regmap = regmap;
+		name = clk_pfd_mux[i].hw.init->name;
 		ret = devm_clk_hw_register(dev, &clk_pfd_mux[i].hw);
 		if (ret)
-			return dev_err_probe(dev, ret, "%s failed\n",
-					     clk_pfd_mux[i].hw.init->name);
+			return dev_err_probe(dev, ret,
+					     "failed to register clock %s\n",
+					     name);
 	}
 
 	/* Register pfd's */
 	for (i = 0; i < ARRAY_SIZE(clk_pfd); i++) {
 		clk_pfd[i].regmap = regmap;
+		name = clk_pfd[i].hw.init->name;
 		ret = devm_clk_hw_register(dev, &clk_pfd[i].hw);
 		if (ret)
-			return dev_err_probe(dev, ret, "%s failed\n",
-					     clk_pfd[i].hw.init->name);
+			return dev_err_probe(dev, ret,
+					     "failed to register clock %s\n",
+					     name);
 	}
 
 	data = i2c_get_match_data(client);
@@ -1056,28 +1060,34 @@ static int vc3_probe(struct i2c_client *client)
 
 			pll_data->vco = data->pll2_vco;
 		}
+		name = clk_pll[i].hw.init->name;
 		ret = devm_clk_hw_register(dev, &clk_pll[i].hw);
 		if (ret)
-			return dev_err_probe(dev, ret, "%s failed\n",
-					     clk_pll[i].hw.init->name);
+			return dev_err_probe(dev, ret,
+					     "failed to register clock %s\n",
+					     name);
 	}
 
 	/* Register divider muxes */
 	for (i = 0; i < ARRAY_SIZE(clk_div_mux); i++) {
 		clk_div_mux[i].regmap = regmap;
+		name = clk_div_mux[i].hw.init->name;
 		ret = devm_clk_hw_register(dev, &clk_div_mux[i].hw);
 		if (ret)
-			return dev_err_probe(dev, ret, "%s failed\n",
-					     clk_div_mux[i].hw.init->name);
+			return dev_err_probe(dev, ret,
+					     "failed to register clock %s\n",
+					     name);
 	}
 
 	/* Register dividers */
 	for (i = 0; i < ARRAY_SIZE(clk_div); i++) {
 		clk_div[i].regmap = regmap;
+		name = clk_div[i].hw.init->name;
 		ret = devm_clk_hw_register(dev, &clk_div[i].hw);
 		if (ret)
-			return dev_err_probe(dev, ret, "%s failed\n",
-					     clk_div[i].hw.init->name);
+			return dev_err_probe(dev, ret,
+					     "failed to register clock %s\n",
+					     name);
 	}
 
 	/* Register clk muxes */
@@ -1088,10 +1098,12 @@ static int vc3_probe(struct i2c_client *client)
 
 			clk_data->bitmsk = data->se2_clk_sel_msk;
 		}
+		name = clk_mux[i].hw.init->name;
 		ret = devm_clk_hw_register(dev, &clk_mux[i].hw);
 		if (ret)
-			return dev_err_probe(dev, ret, "%s failed\n",
-					     clk_mux[i].hw.init->name);
+			return dev_err_probe(dev, ret,
+					     "failed to register clock %s\n",
+					     name);
 	}
 
 	/* Register clk outputs */
