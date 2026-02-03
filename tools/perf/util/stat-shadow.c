@@ -57,7 +57,6 @@ static int prepare_metric(struct perf_stat_config *config,
 		bool is_tool_time =
 			tool_pmu__is_time_event(config, metric_events[i], &tool_aggr_idx);
 		struct perf_stat_evsel *ps = metric_events[i]->stats;
-		struct perf_stat_aggr *aggr;
 		char *n;
 		double val;
 
@@ -82,8 +81,7 @@ static int prepare_metric(struct perf_stat_config *config,
 			}
 		}
 		/* Time events are always on CPU0, the first aggregation index. */
-		aggr = &ps->aggr[is_tool_time ? tool_aggr_idx : aggr_idx];
-		if (!aggr || !metric_events[i]->supported) {
+		if (!ps || !metric_events[i]->supported) {
 			/*
 			 * Not supported events will have a count of 0, which
 			 * can be confusing in a metric. Explicitly set the
@@ -93,6 +91,9 @@ static int prepare_metric(struct perf_stat_config *config,
 			val = NAN;
 			source_count = 0;
 		} else {
+			struct perf_stat_aggr *aggr =
+				&ps->aggr[is_tool_time ? tool_aggr_idx : aggr_idx];
+
 			val = aggr->counts.val;
 			if (is_tool_time)
 				val *= 1e-9; /* Convert time event nanoseconds to seconds. */
