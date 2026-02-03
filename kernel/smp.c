@@ -685,10 +685,23 @@ int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
 
 	err = generic_exec_single(cpu, csd);
 
+	/*
+	 * We may block in csd_lock_wait() for a significant amount of time (e.g., if the
+	 * remote CPU has interrupts disabled). Disabling preemption throughout the entire
+	 * smp_call_function_single() impacts the scheduling latency and is unnecessary.
+	 *
+	 * - Preemption must be disabled before sending the IPI to ensure no new IPIs are
+	 * queued after smpcfd_dying_cpu() finishes.
+	 *
+	 * @csd is stack-allocated when @wait is true. No concurrent access except
+	 * from the IPI completion path, so we can re-enable preemption early
+	 * to reduce latency.
+	 *
+	 */
+	put_cpu();
+
 	if (wait)
 		csd_lock_wait(csd);
-
-	put_cpu();
 
 	return err;
 }
