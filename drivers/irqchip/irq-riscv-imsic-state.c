@@ -362,6 +362,10 @@ static bool imsic_vector_move_update(struct imsic_local_priv *lpriv,
 	/* Update enable and move details */
 	enabled = READ_ONCE(vec->enable);
 	WRITE_ONCE(vec->enable, new_enable);
+
+	if (!cpu_online(vec->cpu) && is_old_vec)
+		goto out;
+
 	if (is_old_vec)
 		WRITE_ONCE(vec->move_next, move_vec);
 	else
@@ -371,6 +375,7 @@ static bool imsic_vector_move_update(struct imsic_local_priv *lpriv,
 	bitmap_set(lpriv->dirty_bitmap, vec->local_id, 1);
 	__imsic_remote_sync(lpriv, vec->cpu);
 
+out:
 	raw_spin_unlock_irqrestore(&lpriv->lock, flags);
 
 	return enabled;

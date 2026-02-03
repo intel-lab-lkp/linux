@@ -93,9 +93,13 @@ static void imsic_irq_compose_msg(struct irq_data *d, struct msi_msg *msg)
 static void imsic_msi_update_msg(struct irq_data *d, struct imsic_vector *vec)
 {
 	struct msi_msg msg = { };
+	struct irq_chip *irq_chip = irq_data_get_irq_chip(d);
+
+	if (!irq_chip->irq_write_msi_msg)
+		return;
 
 	imsic_irq_compose_vector_msg(vec, &msg);
-	irq_data_get_irq_chip(d)->irq_write_msi_msg(d, &msg);
+	irq_chip->irq_write_msi_msg(d, &msg);
 }
 
 static int imsic_irq_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
@@ -173,7 +177,7 @@ static int imsic_irq_set_affinity(struct irq_data *d, const struct cpumask *mask
 	/* Move state of the old vector to the new vector */
 	imsic_vector_move(old_vec, new_vec);
 
-	return IRQ_SET_MASK_OK_DONE;
+	return IRQ_SET_MASK_OK;
 }
 
 static void imsic_irq_force_complete_move(struct irq_data *d)
