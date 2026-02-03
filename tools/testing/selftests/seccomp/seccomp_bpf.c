@@ -136,6 +136,8 @@ struct seccomp_data {
 #  define __NR_seccomp 354
 # elif defined(__x86_64__)
 #  define __NR_seccomp 317
+# elif defined(__alpha__)
+#  define __NR_seccomp 514
 # elif defined(__arm__)
 #  define __NR_seccomp 383
 # elif defined(__aarch64__)
@@ -1748,6 +1750,29 @@ TEST_F(TRACE_poke, getpid_runs_normally)
 # define ARCH_REGS		struct user_regs_struct
 # define SYSCALL_NUM(_regs)	(_regs).orig_eax
 # define SYSCALL_RET(_regs)	(_regs).eax
+#elif defined(__alpha__)
+#define ARCH_REGS struct pt_regs
+#define SYSCALL_NUM(_regs) ((_regs).r1)
+#define SYSCALL_NR_SET(_regs, _nr) \
+	((_regs).r1 = (unsigned long)(_nr))
+#define SYSCALL_RET(_regs)     ((_regs).r0)
+/*
+ * Alpha syscall ABI:
+ *  - r0 holds return value (or positive errno on failure)
+ *  - r19 (a3) is 0 on success, 1 on failure
+ */
+#define SYSCALL_RET_SET(_regs, _val)				\
+	do {							\
+		long __v = (long)(_val);			\
+		if (__v < 0) {					\
+			(_regs).r0  = (unsigned long)(-__v);	\
+			(_regs).r19 = 1;			\
+		} else {					\
+			(_regs).r0  = (unsigned long)__v;	\
+			(_regs).r19 = 0;			\
+		}						\
+	} while (0)
+
 #elif defined(__arm__)
 # define ARCH_REGS		struct pt_regs
 # define SYSCALL_NUM(_regs)	(_regs).ARM_r7
@@ -4643,6 +4668,10 @@ TEST(user_notification_wait_killable_pre_notification)
 	pid_t pid;
 	long ret;
 	char c;
+
+	#if defined(__alpha__)
+		SKIP(return, "/proc/<pid>/syscall not available on Alpha");
+	#endif
 	/* 100 ms */
 	struct timespec delay = { .tv_nsec = 100000000 };
 
