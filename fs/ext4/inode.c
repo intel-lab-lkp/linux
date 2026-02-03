@@ -4570,7 +4570,7 @@ int ext4_inode_attach_jinode(struct inode *inode)
 int ext4_truncate(struct inode *inode)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
-	unsigned int credits;
+	unsigned int credits, zero_len = 0;
 	int err = 0, err2;
 	handle_t *handle;
 	struct address_space *mapping = inode->i_mapping;
@@ -4603,6 +4603,12 @@ int ext4_truncate(struct inode *inode)
 		err = ext4_inode_attach_jinode(inode);
 		if (err)
 			goto out_trace;
+
+		zero_len = ext4_block_truncate_page(mapping, inode->i_size);
+		if (zero_len < 0) {
+			err = zero_len;
+			goto out_trace;
+		}
 	}
 
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
@@ -4616,21 +4622,12 @@ int ext4_truncate(struct inode *inode)
 		goto out_trace;
 	}
 
-	if (inode->i_size & (inode->i_sb->s_blocksize - 1)) {
-		unsigned int zero_len;
-
-		zero_len = ext4_block_truncate_page(mapping, inode->i_size);
-		if (zero_len < 0) {
-			err = zero_len;
+	/* Ordered zeroed data to prevent exposure of stale data. */
+	if (zero_len && !IS_DAX(inode) && ext4_should_order_data(inode)) {
+		err = ext4_jbd2_inode_add_write(handle, inode, inode->i_size,
+						zero_len);
+		if (err)
 			goto out_stop;
-		}
-		if (zero_len && !IS_DAX(inode) &&
-		    ext4_should_order_data(inode)) {
-			err = ext4_jbd2_inode_add_write(handle, inode,
-					inode->i_size, zero_len);
-			if (err)
-				goto out_stop;
-		}
 	}
 
 	/*
