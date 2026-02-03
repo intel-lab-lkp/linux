@@ -3605,3 +3605,27 @@ void xgbe_disable_mac_loopback(struct xgbe_prv_data *pdata)
 	/* Disable MAC loopback mode */
 	XGMAC_IOWRITE_BITS(pdata, MAC_RCR, LM, 0);
 }
+
+/**
+ * xgbe_enable_arp_offload - Enable hardware ARP offload
+ * @pdata: pointer to driver private data
+ * @ip_addr: IPv4 address (in host byte order) to respond to ARP requests
+ *
+ * Configures the MAC to automatically respond to ARP requests for the
+ * specified IP address without CPU intervention.
+ */
+void xgbe_enable_arp_offload(struct xgbe_prv_data *pdata, u32 ip_addr)
+{
+	XGMAC_IOWRITE(pdata, MAC_ARP_ADDR, ip_addr);
+	XGMAC_IOWRITE_BITS(pdata, MAC_RCR, ARPEN, 1);
+}
+
+/**
+ * xgbe_disable_arp_offload - Disable hardware ARP offload
+ * @pdata: pointer to driver private data
+ */
+void xgbe_disable_arp_offload(struct xgbe_prv_data *pdata)
+{
+	XGMAC_IOWRITE_BITS(pdata, MAC_RCR, ARPEN, 0);
+	XGMAC_IOWRITE(pdata, MAC_ARP_ADDR, 0);
+}
