@@ -28,12 +28,6 @@ SYM_FUNC_START(wakeup_long64)
 1:
 	jmp 1b
 2:
-	movw	$__KERNEL_DS, %ax
-	movw	%ax, %ss	
-	movw	%ax, %ds
-	movw	%ax, %es
-	movw	%ax, %fs
-	movw	%ax, %gs
 	movq	saved_rsp(%rip), %rsp
 
 	movq	saved_rbx(%rip), %rbx
