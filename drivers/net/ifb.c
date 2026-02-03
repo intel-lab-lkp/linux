@@ -115,7 +115,7 @@ static void ifb_ri_tasklet(struct tasklet_struct *t)
 		skb->dev = dev_get_by_index_rcu(dev_net(txp->dev), skb->skb_iif);
 		if (!skb->dev) {
 			rcu_read_unlock();
-			dev_kfree_skb(skb);
+			kfree_skb_reason(skb, SKB_DROP_REASON_NO_DEV);
 			txp->dev->stats.tx_dropped++;
 			if (skb_queue_len(&txp->tq) != 0)
 				goto resched;
