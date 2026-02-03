@@ -90,6 +90,12 @@ static inline bool cpu_has_vmx_preemption_timer(void)
 		PIN_BASED_VMX_PREEMPTION_TIMER;
 }
 
+static inline bool cpu_has_vmx_apic_timer_virt(void)
+{
+	return vmcs_config.cpu_based_3rd_exec_ctrl &
+		TERTIARY_EXEC_GUEST_APIC_TIMER;
+}
+
 static inline bool cpu_has_vmx_posted_intr(void)
 {
 	return vmcs_config.pin_based_exec_ctrl & PIN_BASED_POSTED_INTR;

@@ -117,6 +117,11 @@ void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu);
 int vmx_set_hv_timer(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc,
 		     bool *expired);
 void vmx_cancel_hv_timer(struct kvm_vcpu *vcpu);
+bool vmx_can_use_apic_virt_timer(struct kvm_vcpu *vcpu);
+void vmx_set_apic_virt_timer(struct kvm_vcpu *vcpu, u16 vector);
+void vmx_cancel_apic_virt_timer(struct kvm_vcpu *vcpu);
+void vmx_set_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc);
+u64 vmx_get_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu);
 #endif
 void vmx_setup_mce(struct kvm_vcpu *vcpu);
 
