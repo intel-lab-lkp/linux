@@ -303,15 +303,9 @@ static const struct efi_smbios_record *get_table_record(u8 type)
 
 static bool apple_match_product_name(void)
 {
-	static const char type1_product_matches[][15] = {
-		"MacBookPro11,3",
-		"MacBookPro11,5",
-		"MacBookPro13,3",
-		"MacBookPro14,3",
-		"MacBookPro15,1",
-		"MacBookPro15,3",
-		"MacBookPro16,1",
-		"MacBookPro16,4",
+	static const char disabled_product_matches[][14] = {
+		"MacBookPro6,2",
+		"MacBookPro7,2",
 	};
 	const struct efi_smbios_type1_record *record;
 	const u8 *product;
@@ -325,12 +319,12 @@ static bool apple_match_product_name(void)
 	if (!product)
 		return false;
 
-	for (int i = 0; i < ARRAY_SIZE(type1_product_matches); i++) {
-		if (!strcmp(product, type1_product_matches[i]))
-			return true;
+	for (int i = 0; i < ARRAY_SIZE(disabled_product_matches); i++) {
+		if (!strcmp(product, disabled_product_matches[i]))
+			return false;
 	}
 
-	return false;
+	return true;
 }
 
 static void apple_set_os(void)
