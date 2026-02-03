@@ -22,6 +22,7 @@
 #include <linux/pci.h>
 #include <linux/vga_switcheroo.h>
 #include <linux/debugfs.h>
+#include <linux/efi.h>
 #include <acpi/video.h>
 #include <asm/io.h>
 
@@ -106,6 +107,9 @@ struct apple_gmux_config {
 #define GMUX_MAX_BRIGHTNESS		GMUX_BRIGHTNESS_MASK
 
 # define MMIO_GMUX_MAX_BRIGHTNESS	0xffff
+
+#define EFI_BRIGHTNESS_NAME		L"backlight-level"
+#define EFI_BRIGHTNESS_GUID		EFI_GUID(0x7c436110, 0xab2a, 0x4bbb, 0xa8, 0x80, 0xfe, 0x41, 0x99, 0x5c, 0x9f, 0x82)
 
 static u8 gmux_pio_read8(struct apple_gmux_data *gmux_data, int port)
 {
@@ -1012,6 +1016,27 @@ static void gmux_remove(struct pnp_dev *pnp)
 	kfree(gmux_data);
 }
 
+static void gmux_shutdown(struct pnp_dev *pnp)
+{
+	struct apple_gmux_data *gmux_data = pnp_get_drvdata(pnp);
+	efi_status_t status = EFI_UNSUPPORTED;
+	u32 efi_attr;
+	u16 efi_data;
+
+	gmux_remove(pnp);
+
+	efi_data = (u16)gmux_get_brightness(gmux_data->bdev);
+	efi_attr = EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS |
+		EFI_VARIABLE_RUNTIME_ACCESS;
+
+	if (efi_rt_services_supported(EFI_RT_SUPPORTED_SET_VARIABLE))
+		status = efi.set_variable(EFI_BRIGHTNESS_NAME, &EFI_BRIGHTNESS_GUID,
+				efi_attr, sizeof(efi_data), &efi_data);
+
+	if (status != EFI_SUCCESS)
+		pr_warn("Unable to save brightness to EFI: 0x%lx\n", status);
+
+}
 static const struct pnp_device_id gmux_device_ids[] = {
 	{GMUX_ACPI_HID, 0},
 	{"", 0}
@@ -1026,6 +1051,7 @@ static struct pnp_driver gmux_pnp_driver = {
 	.name		= "apple-gmux",
 	.probe		= gmux_probe,
 	.remove		= gmux_remove,
+	.shutdown	= gmux_shutdown,
 	.id_table	= gmux_device_ids,
 	.driver		= {
 			.pm = &gmux_dev_pm_ops,
