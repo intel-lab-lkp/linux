@@ -1120,8 +1120,12 @@ static void dispatch_enqueue(struct scx_sched *sch, struct scx_dispatch_q *dsq,
 
 	if (is_local)
 		local_dsq_post_enq(dsq, p, enq_flags);
-	else
+	else {
+		/* Update cpumask to track union of all tasks' allowed CPUs */
+		if (dsq->cpus_allowed)
+			cpumask_or(dsq->cpus_allowed, dsq->cpus_allowed, p->cpus_ptr);
 		raw_spin_unlock(&dsq->lock);
+	}
 }
 
 static void task_unlink_from_dsq(struct task_struct *p,
@@ -1137,6 +1141,10 @@ static void task_unlink_from_dsq(struct task_struct *p,
 
 	list_del_init(&p->scx.dsq_list.node);
 	dsq_mod_nr(dsq, -1);
+
+	/* Clear cpumask when queue becomes empty to prevent saturation */
+	if (dsq->nr == 0 && dsq->cpus_allowed)
+		cpumask_clear(dsq->cpus_allowed);
 
 	if (!(dsq->id & SCX_DSQ_FLAG_BUILTIN) && dsq->first_task == p) {
 		struct task_struct *first_task;
@@ -1895,6 +1903,14 @@ retry:
 	 * @dsq->list without locking and skip if it seems empty.
 	 */
 	if (list_empty(&dsq->list))
+		return false;
+
+	/*
+	 * O(1) optimization: Check if any task in the queue can run on this CPU.
+	 * If the cpumask is allocated and this CPU is not in the allowed set,
+	 * we can skip the entire queue without scanning.
+	 */
+	if (dsq->cpus_allowed && !cpumask_test_cpu(cpu_of(rq), dsq->cpus_allowed))
 		return false;
 
 	raw_spin_lock(&dsq->lock);
@@ -3396,6 +3412,9 @@ static void init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id)
 	raw_spin_lock_init(&dsq->lock);
 	INIT_LIST_HEAD(&dsq->list);
 	dsq->id = dsq_id;
+	
+	/* Allocate cpumask for tracking allowed CPUs */
+	dsq->cpus_allowed = kzalloc(cpumask_size(), GFP_KERNEL);
 }
 
 static void free_dsq_irq_workfn(struct irq_work *irq_work)

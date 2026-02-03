@@ -79,6 +79,7 @@ struct scx_dispatch_q {
 	struct rhash_head	hash_node;
 	struct llist_node	free_node;
 	struct rcu_head		rcu;
+	struct cpumask		*cpus_allowed; /* union of all tasks' allowed cpus */
 };
 
 /* scx_entity.flags */
