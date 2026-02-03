@@ -1430,6 +1430,12 @@ static inline void cli(void)
 	asm volatile ("cli");
 }
 
+static inline void serialize(void)
+{
+	/* serialize instruction. binuutils >= 2.35 */
+	kvm_asm_safe(".byte 0x0f, 0x01, 0xe8");
+}
+
 void __vm_xsave_require_permission(uint64_t xfeature, const char *name);
 
 #define vm_xsave_require_permission(xfeature)	\
