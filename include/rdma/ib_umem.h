@@ -10,6 +10,7 @@
 #include <linux/list.h>
 #include <linux/scatterlist.h>
 #include <linux/workqueue.h>
+#include <linux/refcount.h>
 #include <rdma/ib_verbs.h>
 
 struct ib_ucontext;
@@ -19,6 +20,7 @@ struct dma_buf_attach_ops;
 struct ib_umem {
 	struct ib_device       *ibdev;
 	struct mm_struct       *owning_mm;
+	refcount_t		refcount;
 	u64 iova;
 	size_t			length;
 	unsigned long		address;
@@ -110,6 +112,12 @@ static inline bool __rdma_umem_block_iter_next(struct ib_block_iter *biter)
 
 struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 			    size_t size, int access);
+
+static inline void ib_umem_get_ref(struct ib_umem *umem)
+{
+	refcount_inc(&umem->refcount);
+}
+
 void ib_umem_release(struct ib_umem *umem);
 int ib_umem_copy_from(void *dst, struct ib_umem *umem, size_t offset,
 		      size_t length);
@@ -188,6 +196,7 @@ static inline struct ib_umem *ib_umem_get(struct ib_device *device,
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
+static inline void ib_umem_get_ref(struct ib_umem *umem) { }
 static inline void ib_umem_release(struct ib_umem *umem) { }
 static inline int ib_umem_copy_from(void *dst, struct ib_umem *umem, size_t offset,
 		      		    size_t length) {

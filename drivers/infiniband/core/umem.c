@@ -192,6 +192,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 	umem = kzalloc(sizeof(*umem), GFP_KERNEL);
 	if (!umem)
 		return ERR_PTR(-ENOMEM);
+	refcount_set(&umem->refcount, 1);
 	umem->ibdev      = device;
 	umem->length     = size;
 	umem->address    = addr;
@@ -280,10 +281,14 @@ EXPORT_SYMBOL(ib_umem_get);
 /**
  * ib_umem_release - release memory pinned with ib_umem_get
  * @umem: umem struct to release
+ *
+ * Decrement the reference count and free the umem when it reaches zero.
  */
 void ib_umem_release(struct ib_umem *umem)
 {
 	if (!umem)
+		return;
+	if (!refcount_dec_and_test(&umem->refcount))
 		return;
 	if (umem->is_dmabuf)
 		return ib_umem_dmabuf_release(to_ib_umem_dmabuf(umem));

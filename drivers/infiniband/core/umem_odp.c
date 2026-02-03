@@ -144,6 +144,7 @@ struct ib_umem_odp *ib_umem_odp_alloc_implicit(struct ib_device *device,
 	if (!umem_odp)
 		return ERR_PTR(-ENOMEM);
 	umem = &umem_odp->umem;
+	refcount_set(&umem->refcount, 1);
 	umem->ibdev = device;
 	umem->writable = ib_access_writable(access);
 	umem->owning_mm = current->mm;
@@ -185,6 +186,7 @@ ib_umem_odp_alloc_child(struct ib_umem_odp *root, unsigned long addr,
 	if (!odp_data)
 		return ERR_PTR(-ENOMEM);
 	umem = &odp_data->umem;
+	refcount_set(&umem->refcount, 1);
 	umem->ibdev = root->umem.ibdev;
 	umem->length     = size;
 	umem->address    = addr;
@@ -245,6 +247,7 @@ struct ib_umem_odp *ib_umem_odp_get(struct ib_device *device,
 	if (!umem_odp)
 		return ERR_PTR(-ENOMEM);
 
+	refcount_set(&umem_odp->umem.refcount, 1);
 	umem_odp->umem.ibdev = device;
 	umem_odp->umem.length = size;
 	umem_odp->umem.address = addr;

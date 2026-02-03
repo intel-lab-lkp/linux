@@ -143,6 +143,7 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 	}
 
 	umem = &umem_dmabuf->umem;
+	refcount_set(&umem->refcount, 1);
 	umem->ibdev = device;
 	umem->length = size;
 	umem->address = offset;
