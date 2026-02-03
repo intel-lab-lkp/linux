@@ -1407,8 +1407,11 @@ static void dpm_superior_set_must_resume(struct device *dev)
 	struct device_link *link;
 	int idx;
 
-	if (dev->parent)
+	if (dev->parent) {
+		mutex_lock(&dpm_list_mtx);
 		dev->parent->power.must_resume = true;
+		mutex_unlock(&dpm_list_mtx);
+	}
 
 	idx = device_links_read_lock();
 
