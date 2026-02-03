@@ -1264,6 +1264,7 @@ static struct ib_qp *create_xrc_qp_user(struct ib_qp *qp,
 
 static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 			       struct ib_qp_init_attr *attr,
+			       struct ib_umem *sq_umem, struct ib_umem *rq_umem,
 			       struct ib_udata *udata,
 			       struct ib_uqp_object *uobj, const char *caller)
 {
@@ -1271,8 +1272,13 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	struct ib_qp *qp;
 	int ret;
 
-	if (!dev->ops.create_qp)
-		return ERR_PTR(-EOPNOTSUPP);
+	if (sq_umem || rq_umem) {
+		if (!dev->ops.create_qp_umem)
+			return ERR_PTR(-EOPNOTSUPP);
+	} else {
+		if (!dev->ops.create_qp)
+			return ERR_PTR(-EOPNOTSUPP);
+	}
 
 	qp = rdma_zalloc_drv_obj_numa(dev, ib_qp);
 	if (!qp)
@@ -1302,7 +1308,12 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	rdma_restrack_new(&qp->res, RDMA_RESTRACK_QP);
 	WARN_ONCE(!udata && !caller, "Missing kernel QP owner");
 	rdma_restrack_set_name(&qp->res, udata ? NULL : caller);
-	ret = dev->ops.create_qp(qp, attr, udata);
+
+	if (sq_umem || rq_umem)
+		ret = dev->ops.create_qp_umem(qp, attr, sq_umem, rq_umem,
+					      udata);
+	else
+		ret = dev->ops.create_qp(qp, attr, udata);
 	if (ret)
 		goto err_create;
 
@@ -1330,6 +1341,48 @@ err_create:
 }
 
 /**
+ * ib_create_qp_user_umem - Creates a QP with optional umem buffers
+ * @dev: IB device
+ * @pd: The protection domain associated with the QP.
+ * @attr: A list of initial attributes required to create the
+ *   QP.  If QP creation succeeds, then the attributes are updated to
+ *   the actual capabilities of the created QP.
+ * @sq_umem: SQ buffer umem (optional)
+ * @rq_umem: RQ buffer umem (optional)
+ * @udata: User data
+ * @uobj: uverbs object
+ * @caller: caller's build-time module name
+ */
+struct ib_qp *ib_create_qp_user_umem(struct ib_device *dev, struct ib_pd *pd,
+				     struct ib_qp_init_attr *attr,
+				     struct ib_umem *sq_umem,
+				     struct ib_umem *rq_umem,
+				     struct ib_udata *udata,
+				     struct ib_uqp_object *uobj,
+				     const char *caller)
+{
+	struct ib_qp *qp, *xrc_qp;
+
+	if (attr->qp_type == IB_QPT_XRC_TGT)
+		qp = create_qp(dev, pd, attr, sq_umem, rq_umem, NULL, NULL, caller);
+	else
+		qp = create_qp(dev, pd, attr, sq_umem, rq_umem, udata, uobj,
+			       NULL);
+	if (attr->qp_type != IB_QPT_XRC_TGT || IS_ERR(qp))
+		return qp;
+
+	xrc_qp = create_xrc_qp_user(qp, attr);
+	if (IS_ERR(xrc_qp)) {
+		ib_destroy_qp(qp);
+		return xrc_qp;
+	}
+
+	xrc_qp->uobject = uobj;
+	return xrc_qp;
+}
+EXPORT_SYMBOL(ib_create_qp_user_umem);
+
+/**
  * ib_create_qp_user - Creates a QP associated with the specified protection
  *   domain.
  * @dev: IB device
@@ -1346,23 +1399,8 @@ struct ib_qp *ib_create_qp_user(struct ib_device *dev, struct ib_pd *pd,
 				struct ib_udata *udata,
 				struct ib_uqp_object *uobj, const char *caller)
 {
-	struct ib_qp *qp, *xrc_qp;
-
-	if (attr->qp_type == IB_QPT_XRC_TGT)
-		qp = create_qp(dev, pd, attr, NULL, NULL, caller);
-	else
-		qp = create_qp(dev, pd, attr, udata, uobj, NULL);
-	if (attr->qp_type != IB_QPT_XRC_TGT || IS_ERR(qp))
-		return qp;
-
-	xrc_qp = create_xrc_qp_user(qp, attr);
-	if (IS_ERR(xrc_qp)) {
-		ib_destroy_qp(qp);
-		return xrc_qp;
-	}
-
-	xrc_qp->uobject = uobj;
-	return xrc_qp;
+	return ib_create_qp_user_umem(dev, pd, attr, NULL, NULL, udata, uobj,
+				      caller);
 }
 EXPORT_SYMBOL(ib_create_qp_user);
 
@@ -1413,7 +1451,8 @@ struct ib_qp *ib_create_qp_kernel(struct ib_pd *pd,
 	if (qp_init_attr->cap.max_rdma_ctxs)
 		rdma_rw_init_qp(device, qp_init_attr);
 
-	qp = create_qp(device, pd, qp_init_attr, NULL, NULL, caller);
+	qp = create_qp(device, pd, qp_init_attr, NULL, NULL, NULL, NULL,
+		       caller);
 	if (IS_ERR(qp))
 		return qp;
 

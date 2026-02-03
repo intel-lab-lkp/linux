@@ -96,6 +96,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 	struct ib_xrcd *xrcd = NULL;
 	struct ib_uobject *xrcd_uobj = NULL;
 	struct ib_device *device;
+	struct ib_umem *sq_umem, *rq_umem;
 	u64 user_handle;
 	int ret;
 
@@ -248,12 +249,39 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 	set_caps(&attr, &cap, true);
 	mutex_init(&obj->mcast_lock);
 
-	qp = ib_create_qp_user(device, pd, &attr, &attrs->driver_udata, obj,
-			       KBUILD_MODNAME);
+	/* Get SQ buffer umem (from VA or dmabuf FD) */
+	ret = uverbs_get_buffer_umem(device, attrs,
+				     UVERBS_ATTR_CREATE_QP_SQ_BUFFER_VA,
+				     UVERBS_ATTR_CREATE_QP_SQ_BUFFER_LENGTH,
+				     UVERBS_ATTR_CREATE_QP_SQ_BUFFER_FD,
+				     UVERBS_ATTR_CREATE_QP_SQ_BUFFER_OFFSET,
+				     device->ops.create_qp_umem,
+				     IB_ACCESS_LOCAL_WRITE, &sq_umem);
+	if (ret)
+		goto err_put;
+
+	/* Get RQ buffer umem (from VA or dmabuf FD) */
+	ret = uverbs_get_buffer_umem(device, attrs,
+				     UVERBS_ATTR_CREATE_QP_RQ_BUFFER_VA,
+				     UVERBS_ATTR_CREATE_QP_RQ_BUFFER_LENGTH,
+				     UVERBS_ATTR_CREATE_QP_RQ_BUFFER_FD,
+				     UVERBS_ATTR_CREATE_QP_RQ_BUFFER_OFFSET,
+				     device->ops.create_qp_umem,
+				     IB_ACCESS_LOCAL_WRITE, &rq_umem);
+	if (ret)
+		goto err_release_sq_umem;
+
+	qp = ib_create_qp_user_umem(device, pd, &attr, sq_umem, rq_umem,
+				    &attrs->driver_udata, obj, KBUILD_MODNAME);
 	if (IS_ERR(qp)) {
 		ret = PTR_ERR(qp);
-		goto err_put;
+		goto err_release_rq_umem;
 	}
+
+	/* Driver took a reference, release ours */
+	ib_umem_release(rq_umem);
+	ib_umem_release(sq_umem);
+
 	ib_qp_usecnt_inc(qp);
 
 	if (attr.qp_type == IB_QPT_XRC_TGT) {
@@ -277,6 +305,11 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 			     sizeof(qp->qp_num));
 
 	return ret;
+
+err_release_rq_umem:
+	ib_umem_release(rq_umem);
+err_release_sq_umem:
+	ib_umem_release(sq_umem);
 err_put:
 	if (obj->uevent.event_file)
 		uverbs_uobject_put(&obj->uevent.event_file->uobj);
@@ -340,6 +373,30 @@ DECLARE_UVERBS_NAMED_METHOD(
 	UVERBS_ATTR_PTR_OUT(UVERBS_ATTR_CREATE_QP_RESP_QP_NUM,
 			   UVERBS_ATTR_TYPE(u32),
 			   UA_MANDATORY),
+	/* SQ buffer attributes - use VA or FD, not both */
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_SQ_BUFFER_VA,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_SQ_BUFFER_LENGTH,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_QP_SQ_BUFFER_FD,
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_SQ_BUFFER_OFFSET,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	/* RQ buffer attributes - use VA or FD, not both */
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_RQ_BUFFER_VA,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_RQ_BUFFER_LENGTH,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_QP_RQ_BUFFER_FD,
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_QP_RQ_BUFFER_OFFSET,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
 	UVERBS_ATTR_UHW());
 
 static int UVERBS_HANDLER(UVERBS_METHOD_QP_DESTROY)(
