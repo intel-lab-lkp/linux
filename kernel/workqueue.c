@@ -4803,6 +4803,39 @@ static void wqattrs_actualize_cpumask(struct workqueue_attrs *attrs,
 		cpumask_copy(attrs->cpumask, unbound_cpumask);
 }
 
+/*
+ * Determine the effective affinity scope. If the configured scope results
+ * in a single pod (e.g., WQ_AFFN_CACHE on a system with one shared LLC),
+ * fall back to a finer-grained scope to distribute pool lock contention.
+ *
+ * The search stops at WQ_AFFN_CPU, which always provides one pod per CPU
+ * and thus cannot degenerate further.
+ *
+ * Returns the scope to actually use, which may differ from the configured
+ * scope on systems where coarser scopes degenerate.
+ */
+static enum wq_affn_scope wq_effective_affn_scope(enum wq_affn_scope scope)
+{
+	struct wq_pod_type *pt;
+
+	/*
+	 * Walk from the requested scope toward finer granularity. Stop when
+	 * a scope provides more than one pod, or when CPU scope is reached.
+	 * CPU scope always provides nr_possible_cpus() pods.
+	 */
+	while (scope > WQ_AFFN_CPU) {
+		pt = &wq_pod_types[scope];
+
+		/* Multiple pods at this scope; no fallback needed */
+		if (pt->nr_pods > 1)
+			break;
+
+		scope--;
+	}
+
+	return scope;
+}
+
 /* find wq_pod_type to use for @attrs */
 static const struct wq_pod_type *
 wqattrs_pod_type(const struct workqueue_attrs *attrs)
@@ -4813,8 +4846,13 @@ wqattrs_pod_type(const struct workqueue_attrs *attrs)
 	/* to synchronize access to wq_affn_dfl */
 	lockdep_assert_held(&wq_pool_mutex);
 
+	/*
+	 * For default scope, apply automatic fallback for degenerate
+	 * topologies. Explicit scope selection via sysfs or per-workqueue
+	 * attributes bypasses fallback, preserving administrator intent.
+	 */
 	if (attrs->affn_scope == WQ_AFFN_DFL)
-		scope = wq_affn_dfl;
+		scope = wq_effective_affn_scope(wq_affn_dfl);
 	else
 		scope = attrs->affn_scope;
 
@@ -7269,16 +7307,26 @@ static ssize_t wq_affn_scope_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
+	enum wq_affn_scope scope, effective;
 	int written;
 
 	mutex_lock(&wq->mutex);
-	if (wq->unbound_attrs->affn_scope == WQ_AFFN_DFL)
-		written = scnprintf(buf, PAGE_SIZE, "%s (%s)\n",
-				    wq_affn_names[WQ_AFFN_DFL],
-				    wq_affn_names[wq_affn_dfl]);
-	else
+	if (wq->unbound_attrs->affn_scope == WQ_AFFN_DFL) {
+		scope = wq_affn_dfl;
+		effective = wq_effective_affn_scope(scope);
+		if (effective != scope)
+			written = scnprintf(buf, PAGE_SIZE, "%s (%s -> %s)\n",
+					    wq_affn_names[WQ_AFFN_DFL],
+					    wq_affn_names[scope],
+					    wq_affn_names[effective]);
+		else
+			written = scnprintf(buf, PAGE_SIZE, "%s (%s)\n",
+					    wq_affn_names[WQ_AFFN_DFL],
+					    wq_affn_names[scope]);
+	} else {
 		written = scnprintf(buf, PAGE_SIZE, "%s\n",
 				    wq_affn_names[wq->unbound_attrs->affn_scope]);
+	}
 	mutex_unlock(&wq->mutex);
 
 	return written;
