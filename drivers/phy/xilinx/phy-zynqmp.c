@@ -54,7 +54,13 @@
 /* PCS control parameters */
 #define L0_TM_ANA_BYP_4			0x1010
 #define L0_TM_ANA_BYP_7			0x1018
+#define L0_TM_ANA_BYP_12		0x102c
+#define L0_TM_ANA_BYP_12_FORCE_UPHY_PSO_HSRXDIG		BIT(6)
+#define L0_TM_ANA_BYP_15		0x1038
+#define L0_TM_ANA_BYP_15_FORCE_UPHY_ENABLE_LOW_LEAKAGE	BIT(6)
 #define L0_TM_DIG_6			0x106c
+#define L0_TM_DIG_8			0x1074
+#define L0_TM_DIG_8_EYESURF		BIT(4)
 #define L0_TM_DIG_22			0x10ac
 #define L0_TM_DIS_DESCRAMBLE_DECODER	0x0f
 #define L0_TX_DIG_61			0x00f4
@@ -82,7 +88,13 @@
 #define L0_TM_EQ1_EQ_STG2_PREAMP_MODE_VAL	BIT(2)
 #define L0_TM_E_ILL8			0x1940
 #define L0_TM_E_ILL9			0x1944
+#define L0_TM_EQ11			0x1978
+#define L0_TM_EQ11_FORCE_EQ_OFFS_OFF	BIT(4)
 #define L0_TM_ILL13			0x1994
+#define L0_TM_RST_DLY			0x19a4
+#define L0_TM_MISC3			0x19ac
+#define L0_TM_MISC3_CDR_EN_FPL		BIT(1)
+#define L0_TM_MISC3_CDR_EN_FFL		BIT(0)
 #define L0_TM_CDR5			0x1c14
 #define L0_TM_CDR5_FPHL_FSM_ACC_CYCLES	GENMASK(7, 5)
 #define L0_TM_CDR5_FFL_PH0_INT_GAIN	GENMASK(4, 0)
@@ -848,6 +860,18 @@ static int xpsgtr_common_init(struct xpsgtr_phy *gtr_phy)
 
 	/* Enable coarse code saturation limiting logic. */
 	xpsgtr_write_phy(gtr_phy, L0_TM_PLL_DIG_37, L0_TM_COARSE_CODE_LIMIT);
+
+	/* Miscellaneous chicken bits */
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_DIG_8, 0, L0_TM_DIG_8_EYESURF);
+	xpsgtr_write_phy(gtr_phy, L0_TM_ILL13, 7);
+	xpsgtr_write_phy(gtr_phy, L0_TM_RST_DLY, 255);
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_ANA_BYP_15, 0,
+			   L0_TM_ANA_BYP_15_FORCE_UPHY_ENABLE_LOW_LEAKAGE);
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_ANA_BYP_12, 0,
+			   L0_TM_ANA_BYP_12_FORCE_UPHY_PSO_HSRXDIG);
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_MISC3, L0_TM_MISC3_CDR_EN_FPL |
+						 L0_TM_MISC3_CDR_EN_FFL, 0);
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_EQ11, 0, L0_TM_EQ11_FORCE_EQ_OFFS_OFF);
 
 	ret = xpsgtr_configure_pll(gtr_phy);
 	if (ret)
