@@ -256,6 +256,65 @@ void accept_hotplug_memory(phys_addr_t start, unsigned long size)
 	spin_unlock_irqrestore(&unaccepted_memory_lock, flags);
 }
 
+/*
+ * Cold-plugged memory used with lazy acceptance may partially set pages to
+ * private. On removal, iterate through the bitmap to unaccept those ranges.
+ * For hotplug ranges beyond the bitmap, unaccept unconditionally.
+ */
+void unaccept_hotplug_memory(phys_addr_t start, unsigned long size)
+{
+	unsigned long range_start, range_end, bitrange_end;
+	phys_addr_t bitmap_end, end = start + size;
+	struct efi_unaccepted_memory *unaccepted;
+	u64 phys_base, unit_size;
+	unsigned long flags;
+
+	unaccepted = efi_get_unaccepted_table();
+	if (!unaccepted)
+		return;
+
+	phys_base = unaccepted->phys_base;
+	unit_size = unaccepted->unit_size;
+	bitmap_end = phys_base + unaccepted->size * unit_size * BITS_PER_BYTE;
+
+	/* Unaccept the entire hotplug range beyond the bitmap immediately */
+	if (start >= bitmap_end) {
+		arch_unaccept_memory(start, end);
+		return;
+	}
+
+	start = max(start, phys_base);
+	if (end < phys_base)
+		return;
+
+	/* Unaccept ranges when start is within the bitmap but end is beyond */
+	if (end > bitmap_end) {
+		arch_unaccept_memory(bitmap_end, end);
+		end = bitmap_end;
+	}
+
+	start -= phys_base;
+	end -= phys_base;
+
+	range_start = start / unit_size;
+	bitrange_end = DIV_ROUND_UP(end, unit_size);
+
+	/* Only unaccept memory that was previously accepted in the bitmap */
+	spin_lock_irqsave(&unaccepted_memory_lock, flags);
+	for_each_clear_bitrange_from(range_start, range_end, unaccepted->bitmap,
+				     bitrange_end) {
+		unsigned long phys_start, phys_end;
+		unsigned long len = range_end - range_start;
+
+		phys_start = range_start * unit_size + phys_base;
+		phys_end = range_end * unit_size + phys_base;
+
+		arch_unaccept_memory(phys_start, phys_end);
+		bitmap_set(unaccepted->bitmap, range_start, len);
+	}
+	spin_unlock_irqrestore(&unaccepted_memory_lock, flags);
+}
+
 #ifdef CONFIG_PROC_VMCORE
 static bool unaccepted_memory_vmcore_pfn_is_ram(struct vmcore_cb *cb,
 						unsigned long pfn)

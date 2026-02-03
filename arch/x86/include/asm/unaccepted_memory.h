@@ -18,6 +18,21 @@ static inline void arch_accept_memory(phys_addr_t start, phys_addr_t end)
 	}
 }
 
+static inline void arch_unaccept_memory(phys_addr_t start, phys_addr_t end)
+{
+	/*
+	 * TDX platforms do not require the guest to transition pages on remove
+	 * rather expect the VMM to remove the unplugged memory from SEPT
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST)) {
+		return;
+	} else if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP)) {
+		snp_unaccept_memory(start, end);
+	} else {
+		panic("Cannot unaccept memory: unknown platform\n");
+	}
+}
+
 static inline struct efi_unaccepted_memory *efi_get_unaccepted_table(void)
 {
 	if (efi.unaccepted == EFI_INVALID_TABLE_ADDR)
