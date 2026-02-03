@@ -520,6 +520,21 @@ static void xpsgtr_bypass_scrambler_8b10b(struct xpsgtr_phy *gtr_phy)
 	xpsgtr_write_phy(gtr_phy, L0_TX_DIG_61, L0_TM_DISABLE_SCRAMBLE_ENCODER);
 }
 
+static int xpsgtr_common_init(struct xpsgtr_phy *gtr_phy)
+{
+	int ret;
+
+	/* Enable coarse code saturation limiting logic. */
+	xpsgtr_write_phy(gtr_phy, L0_TM_PLL_DIG_37, L0_TM_COARSE_CODE_LIMIT);
+
+	ret = xpsgtr_configure_pll(gtr_phy);
+	if (ret)
+		return ret;
+
+	xpsgtr_lane_set_protocol(gtr_phy);
+	return 0;
+}
+
 /* DP-specific initialization. */
 static void xpsgtr_phy_init_dp(struct xpsgtr_phy *gtr_phy)
 {
@@ -682,18 +697,13 @@ static int xpsgtr_phy_init(struct phy *phy)
 		gtr_dev->tx_term_fix = false;
 	}
 
-	/* Enable coarse code saturation limiting logic. */
-	xpsgtr_write_phy(gtr_phy, L0_TM_PLL_DIG_37, L0_TM_COARSE_CODE_LIMIT);
-
 	/*
 	 * Configure the PLL, the lane protocol, and perform protocol-specific
 	 * initialization.
 	 */
-	ret = xpsgtr_configure_pll(gtr_phy);
+	ret = xpsgtr_common_init(gtr_phy);
 	if (ret)
 		goto out;
-
-	xpsgtr_lane_set_protocol(gtr_phy);
 
 	switch (gtr_phy->protocol) {
 	case ICM_PROTOCOL_DP:
