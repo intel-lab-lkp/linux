@@ -944,7 +944,8 @@ static int _create_user_qp(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 			   struct mlx5_ib_create_qp_resp *resp, int *inlen,
 			   struct mlx5_ib_qp_base *base,
 			   struct mlx5_ib_create_qp *ucmd,
-			   struct ib_umem *ext_umem)
+			   struct ib_umem *ext_umem,
+			   struct ib_umem *ext_dbr_umem)
 {
 	struct mlx5_ib_ucontext *context;
 	struct mlx5_ib_ubuffer *ubuffer = &base->ubuffer;
@@ -1064,7 +1065,7 @@ static int _create_user_qp(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 		resp->bfreg_index = MLX5_IB_INVALID_BFREG;
 	qp->bfregn = bfregn;
 
-	err = mlx5_ib_db_map_user(context, ucmd->db_addr, NULL, &qp->db);
+	err = mlx5_ib_db_map_user(context, ucmd->db_addr, ext_dbr_umem, &qp->db);
 	if (err) {
 		mlx5_ib_dbg(dev, "map failed\n");
 		goto err_free;
@@ -1744,6 +1745,7 @@ struct mlx5_create_qp_params {
 	struct mlx5_ib_create_qp_resp resp;
 	struct ib_umem *sq_ext_umem;
 	struct ib_umem *rq_ext_umem;
+	struct ib_umem *rq_dbr_ext_umem;
 };
 
 static int create_rss_raw_qp_tir(struct mlx5_ib_dev *dev, struct ib_pd *pd,
@@ -2158,7 +2160,7 @@ static int create_dci(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 		return ts_format;
 
 	err = _create_user_qp(dev, pd, qp, udata, init_attr, &in, &params->resp,
-			      &inlen, base, ucmd, NULL);
+			      &inlen, base, ucmd, NULL, NULL);
 	if (err)
 		return err;
 
@@ -2326,7 +2328,8 @@ static int create_user_qp(struct mlx5_ib_dev *dev, struct ib_pd *pd,
 	}
 
 	err = _create_user_qp(dev, pd, qp, udata, init_attr, &in, &params->resp,
-			      &inlen, base, ucmd, params->rq_ext_umem);
+			      &inlen, base, ucmd, params->rq_ext_umem,
+			      params->rq_dbr_ext_umem);
 	if (err)
 		return err;
 
@@ -3290,7 +3293,8 @@ static int check_ucmd_data(struct mlx5_ib_dev *dev,
 
 static int __mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 			       struct ib_udata *udata,
-			       struct ib_umem *sq_umem, struct ib_umem *rq_umem)
+			       struct ib_umem *sq_umem, struct ib_umem *rq_umem,
+			       struct ib_umem *rq_dbr_umem)
 {
 	struct mlx5_create_qp_params params = {};
 	struct mlx5_ib_dev *dev = to_mdev(ibqp->device);
@@ -3317,6 +3321,7 @@ static int __mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	params.is_rss_raw = !!attr->rwq_ind_tbl;
 	params.sq_ext_umem = sq_umem;
 	params.rq_ext_umem = rq_umem;
+	params.rq_dbr_ext_umem = rq_dbr_umem;
 
 	if (udata) {
 		err = process_udata_size(dev, &params);
@@ -3394,7 +3399,7 @@ free_ucmd:
 int mlx5_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 		      struct ib_udata *udata)
 {
-	return __mlx5_ib_create_qp(ibqp, attr, udata, NULL, NULL);
+	return __mlx5_ib_create_qp(ibqp, attr, udata, NULL, NULL, NULL);
 }
 
 int mlx5_ib_create_qp_umem(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
@@ -3402,7 +3407,9 @@ int mlx5_ib_create_qp_umem(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 			   struct ib_umem *sq_dbr_umem, struct ib_umem *rq_dbr_umem,
 			   struct ib_udata *udata)
 {
-	return __mlx5_ib_create_qp(ibqp, attr, udata, sq_umem, rq_umem);
+	/* Single DBR umem for both SQ and RQ. */
+	return __mlx5_ib_create_qp(ibqp, attr, udata, sq_umem, rq_umem,
+				   rq_dbr_umem);
 }
 
 int mlx5_ib_destroy_qp(struct ib_qp *qp, struct ib_udata *udata)
