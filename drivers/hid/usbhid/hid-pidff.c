@@ -82,7 +82,7 @@ static const u8 pidff_set_envelope[] = { 0x22, 0x5b, 0x5c, 0x5d, 0x5e };
 #define PID_NEG_COEFFICIENT	4
 #define PID_POS_SATURATION	5
 #define PID_NEG_SATURATION	6
-#define PID_DEAD_BAND		7
+#define PID_DEADBAND		7
 static const u8 pidff_set_condition[] = {
 	0x22, 0x23, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65
 };
@@ -632,8 +632,11 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 			pidff_set_signed(&pidff->set_condition[PID_NEG_SATURATION],
 					effect->u.condition[i].left_saturation);
 
-		pidff_set(&pidff->set_condition[PID_DEAD_BAND],
-			  effect->u.condition[i].deadband);
+		/* Omit Deadband field if missing */
+		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DEADBAND))
+			pidff_set(&pidff->set_condition[PID_DEADBAND],
+				effect->u.condition[i].deadband);
+
 		hid_hw_request(pidff->hid, pidff->reports[PID_SET_CONDITION],
 			       HID_REQ_SET_REPORT);
 	}
@@ -1102,6 +1105,9 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 
 		else if (table[i] == pidff_set_condition[PID_NEG_SATURATION])
 			PIDFF_MISSING_FIELD(NEG_SATURATION, quirks);
+
+		else if (table[i] == pidff_set_condition[PID_DEADBAND])
+			PIDFF_MISSING_FIELD(DEADBAND, quirks);
 
 		else if (strict) {
 			pr_debug("failed to locate %d\n", i);
