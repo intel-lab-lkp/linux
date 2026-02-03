@@ -25,19 +25,12 @@ SYM_FUNC_START(wakeup_long64)
 	movq	saved_magic(%rip), %rax
 	movq	$0x123456789abcdef0, %rdx
 	cmpq	%rdx, %rax
-	je	2f
+	je	.Lresume_point
 
 	/* stop here on a saved_magic mismatch */
 	movq $0xbad6d61676963, %rcx
 1:
 	jmp 1b
-2:
-	movq	saved_rbx(%rip), %rbx
-	movq	saved_rdi(%rip), %rdi
-	movq	saved_rsi(%rip), %rsi
-	movq	saved_rbp(%rip), %rbp
-
-	jmp	.Lresume_point
 SYM_FUNC_END(wakeup_long64)
 STACK_FRAME_NON_STANDARD wakeup_long64
 
@@ -66,11 +59,6 @@ SYM_FUNC_START(do_suspend_lowlevel)
 
 	movq	PER_CPU_VAR(current_task), %rax
 	movq	%rsp, TASK_threadsp(%rax)
-
-	movq	%rbp, saved_rbp(%rip)
-	movq	%rbx, saved_rbx(%rip)
-	movq	%rdi, saved_rdi(%rip)
-	movq	%rsi, saved_rsi(%rip)
 
 	movl	$3, %edi
 	xorl	%eax, %eax
@@ -120,9 +108,4 @@ SYM_FUNC_START(do_suspend_lowlevel)
 SYM_FUNC_END(do_suspend_lowlevel)
 
 .data
-saved_rbp:		.quad	0
-saved_rsi:		.quad	0
-saved_rdi:		.quad	0
-saved_rbx:		.quad	0
-
 SYM_DATA(saved_magic,	.quad	0)
