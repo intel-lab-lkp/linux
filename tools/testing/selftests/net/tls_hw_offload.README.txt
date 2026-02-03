@@ -1,0 +1,109 @@
+TLS Hardware Offload Two-Node Test
+===================================
+
+This test verifies kTLS hardware offload functionality between two physical
+nodes. It uses hardcoded keys (no TLS handshake) to isolate kTLS behavior
+from userspace TLS libraries.
+
+The test supports TLS 1.3 KeyUpdate (rekey) testing with proper handshake
+message exchange via sendmsg/recvmsg with TLS_SET_RECORD_TYPE/TLS_GET_RECORD_TYPE.
+
+REQUIREMENTS
+============
+
+- Two physical nodes with NICs that support TLS hardware offload
+- kTLS module loaded (modprobe tls)
+- TLS hardware offload enabled on both nodes:
+    ethtool -K <iface> tls-hw-tx-offload on tls-hw-rx-offload on
+
+Note: Loopback and veth pairs do NOT trigger hardware offload. Physical
+NICs with actual hardware TLS offload support are required.
+
+USAGE
+=====
+
+  Server: ./tls_hw_offload server [OPTIONS]
+  Client: ./tls_hw_offload client -s <server_ip> [OPTIONS]
+
+OPTIONS
+=======
+
+  -s <ip>       Server IP address (client only, required)
+  -p <port>     Port number (default: 4433)
+  -c <cipher>   Cipher: 128 or 256 (default: 128)
+  -v <version>  TLS version: 1.2 or 1.3 (default: 1.3)
+  -b <size>     Fixed buffer size in bytes (default: 16384)
+  -r <max>      Random buffer sizes from 1 to max bytes
+  --rekey[=N]   Enable rekey testing, N rekeys (default: 1, max: 4)
+  --help        Show usage information
+
+EXAMPLES
+========
+
+Basic test (TLS 1.3, AES-GCM-128, 16KB buffer):
+
+  Node A: ./tls_hw_offload server
+  Node B: ./tls_hw_offload client -s 192.168.20.2
+
+With custom port:
+
+  Node A: ./tls_hw_offload server -p 8443
+  Node B: ./tls_hw_offload client -s 192.168.20.2 -p 8443
+
+With AES-GCM-256 cipher:
+
+  Node A: ./tls_hw_offload server -c 256
+  Node B: ./tls_hw_offload client -s 192.168.20.2 -c 256
+
+With TLS 1.2 (no rekey support):
+
+  Node A: ./tls_hw_offload server -v 1.2
+  Node B: ./tls_hw_offload client -s 192.168.20.2 -v 1.2
+
+With rekey testing (TLS 1.3 only):
+
+  Node A: ./tls_hw_offload server --rekey=3
+  Node B: ./tls_hw_offload client -s 192.168.20.2 --rekey=3
+
+With random buffer sizes:
+
+  Node A: ./tls_hw_offload server -r 16384
+  Node B: ./tls_hw_offload client -s 192.168.20.2 -r 16384
+
+Full options example:
+
+  Node A: ./tls_hw_offload server -p 8443 -c 256 -r 16384 --rekey=4
+  Node B: ./tls_hw_offload client -s 192.168.20.2 -p 8443 -c 256 -r 16384 --rekey=4
+
+COUNTER VERIFICATION
+====================
+
+The test reads /proc/net/tls_stat before and after to verify:
+
+  TlsTxDevice/TlsRxDevice    - Hardware offload was used
+  TlsTxSw/TlsRxSw            - Software fallback was used
+  TlsTxRekeyOk/TlsRxRekeyOk  - Rekey operations succeeded
+  TlsRxRekeyReceived         - KeyUpdate messages received (server)
+  TlsDecryptError            - No decryption errors occurred
+
+The test passes if TLS was used (HW or SW path) and no errors occurred.
+Hardware offload is indicated when TlsTxDevice/TlsRxDevice counters increase.
+
+TROUBLESHOOTING
+===============
+
+1. "TCP_ULP failed: Protocol not available"
+   -> Load kTLS module: modprobe tls
+
+2. Hardware offload counters not increasing:
+   -> Check offload is enabled: ethtool -k <iface> | grep tls
+   -> Enable if needed: ethtool -K <iface> tls-hw-tx-offload on tls-hw-rx-offload on
+   -> Verify NIC supports TLS offload (check driver/firmware)
+
+3. "TLS 1.2 does not support rekey" warning:
+   -> KeyUpdate is TLS 1.3 only; --rekey is ignored with -v 1.2
+
+4. Connection refused:
+   -> Ensure server is started before client
+   -> Check firewall rules
+   -> Verify IP address and port match on both sides

@@ -180,6 +180,7 @@ TEST_GEN_PROGS := \
 	tap \
 	tcp_port_share \
 	tls \
+	tls_hw_offload \
 	tun \
 # end of TEST_GEN_PROGS
 
