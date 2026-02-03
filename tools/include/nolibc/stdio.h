@@ -291,10 +291,15 @@ int fseek(FILE *stream, long offset, int whence)
 }
 
 
-/* simple printf(). It supports the following formats:
- *  - %[-+ ][width][{l,t,z,ll,L,j,q}]{d,i,u,c,x,X,p,s,m}
- *  - %%
- *  - invalid formats are copied to the output buffer
+/* printf(). Supports most of the normal integer and string formats.
+ *  - %[#0-+ ][width|*[.precision|*]][{l,t,z,ll,L,j,q}]{d,i,u,c,x,X,p,s,m}
+ *  - %% generates a single %
+ *  - %m outputs strerror(errno).
+ *  - # only affects %x and prepends 0x to non-zero values.
+ *  - %o (octal) isn't supported.
+ *  - %X outputs a..f the same as %x.
+ *  - No support for wide characters.
+ *  - invalid formats are copied to the output buffer.
  */
 typedef int (*__nolibc_printf_cb)(void *state, const char *buf, size_t size);
 
@@ -303,7 +308,7 @@ static __attribute__((unused, format(printf, 3, 0)))
 int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list args)
 {
 	char c;
-	int len, written, width;
+	int len, written, width, precision;
 	unsigned int flags;
 	char tmpbuf[32 + 24];
 	const char *outstr;
@@ -328,17 +333,30 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 			/* Flag characters */
 			for (; c >= 0x20 && c <= 0x3f; c = *fmt++) {
-				if ((__PF_FLAG(c) & (__PF_FLAG('-') | __PF_FLAG(' ') | __PF_FLAG('+'))) == 0)
+				if ((__PF_FLAG(c) & (__PF_FLAG('-') | __PF_FLAG(' ') | __PF_FLAG('+') |
+						     __PF_FLAG('#') | __PF_FLAG('0'))) == 0)
 					break;
 				flags |= __PF_FLAG(c);
 			}
 
-			/* width */
-			while (c >= '0' && c <= '9') {
-				width *= 10;
-				width += c - '0';
-
-				c = *fmt++;
+			/* width and precision */
+			for (;; c = *fmt++) {
+				if (c == '*') {
+					precision = va_arg(args, unsigned int);
+					c = *fmt++;
+				} else {
+					for (precision = 0; c >= '0' && c <= '9'; c = *fmt++)
+						precision = precision * 10 + (c - '0');
+				}
+				if (flags & __PF_FLAG('.'))
+					break;
+				width = precision;
+				if (c != '.') {
+					/* Default precision for strings */
+					precision = INT_MAX;
+					break;
+				}
+				flags |= __PF_FLAG('.');
 			}
 
 			/* Length modifiers are lower case except 'L' which is the same a 'q' */
@@ -359,7 +377,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			if (!((c >= 'a' && c <= 'z') || (c == 'X' && (c = 'x'))))
 				goto bad_conversion_specifier;
 
-			/* Conversion specifiers */
+			/* Numeric and pointer conversion specifiers */
 			if (__PF_FLAG(c) & (__PF_FLAG('c') | __PF_FLAG('d') | __PF_FLAG('i') | __PF_FLAG('u') |
 					    __PF_FLAG('x') | __PF_FLAG('p') | __PF_FLAG('s'))) {
 				unsigned long long v;
@@ -389,12 +407,13 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 				case 's':
 					if (!v) {
 						outstr = "(null)";
-						len = 6;
+						/* Match glibc, nothing output if precision too small */
+						len = precision >= 6 ? 6 : 0;
 						goto do_output;
 					}
 					outstr = (void *)v;
 do_strnlen_output:
-					len = strnlen(outstr, INT_MAX);
+					len = strnlen(outstr, precision);
 					goto do_output;
 				case 'd':
 				case 'i':
@@ -407,17 +426,62 @@ do_strnlen_output:
 					} else if (flags & __PF_FLAG(' ')) {
 						sign = ' ';
 					}
-					__nolibc_fallthrough;
-				case 'u':
-					len = u64toa_r(v, out);
-					break;
-				case 'p':
-					sign = 'x' | '0' << 8;
-					__nolibc_fallthrough;
-				default: /* 'x' and 'p' above */
-					len = u64toh_r(v, out);
-					break;
+					c = 'u';
 				}
+
+				if (v == 0) {
+					/* There are special rules for zero. */
+					if (c == 'p') {
+						/* match glibc, precision is ignored */
+						outstr = "(nil)";
+						len = 5;
+						goto do_output;
+					}
+					if (!precision) {
+						/* Explicit %nn.0d, no digits output */
+						len = 0;
+						goto prepend_sign;
+					}
+					/* "#x" should output "0" not "0x0" */
+					*out = '0';
+					len = 1;
+				} else {
+					if (c == 'u') {
+						len = u64toa_r(v, out);
+					} else {
+						len = u64toh_r(v, out);
+						if (c == 'p' || (flags & __PF_FLAG('#')))
+							sign = 'x' | '0' << 8;
+					}
+				}
+
+				/* Add zero padding */
+				if (flags & (__PF_FLAG('0') | __PF_FLAG('.'))) {
+					if (!(flags & __PF_FLAG('.'))) {
+						if (flags & __PF_FLAG('-'))
+							/* Left justify overrides zero pad */
+							goto prepend_sign;
+						/* Zero pad to field width less sign */
+						precision = width;
+						if (sign) {
+							precision--;
+							if (sign >= 256)
+								precision--;
+						}
+					}
+					if (precision > 30)
+						/* Don't run off the start of tmpbuf[] */
+						precision = 30;
+					for (; len < precision; len++) {
+						/* Stop gcc generating horrid code and memset().
+						 * This is OPTIMIZER_HIDE_VAR() from compiler.h.
+						 */
+						__asm__ volatile("" : "=r"(len) : "0"(len));
+						*--out = '0';
+					}
+				}
+
+prepend_sign:
 				for (; sign; sign >>= 8) {
 					len++;
 					*--out = sign;
