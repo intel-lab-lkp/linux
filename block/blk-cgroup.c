@@ -160,6 +160,20 @@ static void blkg_free(struct blkcg_gq *blkg)
 	schedule_work(&blkg->free_work);
 }
 
+/*
+ * RCU callback to free blkg after an additional grace period.
+ * This ensures any concurrent __blkcg_rstat_flush() that might have
+ * removed our iostat entries via llist_del_all() has completed.
+ */
+static void __blkg_release_free_rcu(struct rcu_head *rcu)
+{
+	struct blkcg_gq *blkg = container_of(rcu, struct blkcg_gq, rcu_head);
+
+	/* release the blkcg and parent blkg refs this blkg has been holding */
+	css_put(&blkg->blkcg->css);
+	blkg_free(blkg);
+}
+
 static void __blkg_release(struct rcu_head *rcu)
 {
 	struct blkcg_gq *blkg = container_of(rcu, struct blkcg_gq, rcu_head);
@@ -178,9 +192,14 @@ static void __blkg_release(struct rcu_head *rcu)
 	for_each_possible_cpu(cpu)
 		__blkcg_rstat_flush(blkcg, cpu);
 
-	/* release the blkcg and parent blkg refs this blkg has been holding */
-	css_put(&blkg->blkcg->css);
-	blkg_free(blkg);
+	/*
+	 * Defer freeing via another call_rcu() to ensure any concurrent
+	 * __blkcg_rstat_flush() (under rcu_read_lock) that might have removed
+	 * our iostat entries via llist_del_all() has completed its iteration.
+	 * The second grace period guarantees those RCU read-side critical
+	 * sections have finished.
+	 */
+	call_rcu(&blkg->rcu_head, __blkg_release_free_rcu);
 }
 
 /*
