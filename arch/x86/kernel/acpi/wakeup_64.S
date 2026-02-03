@@ -41,10 +41,9 @@ SYM_FUNC_START(wakeup_long64)
 	movq	saved_rsi(%rip), %rsi
 	movq	saved_rbp(%rip), %rbp
 
-	movq	saved_rip(%rip), %rax
-	ANNOTATE_RETPOLINE_SAFE
-	jmp	*%rax
+	jmp	.Lresume_point
 SYM_FUNC_END(wakeup_long64)
+STACK_FRAME_NON_STANDARD wakeup_long64
 
 SYM_FUNC_START(do_suspend_lowlevel)
 	FRAME_BEGIN
@@ -71,8 +70,6 @@ SYM_FUNC_START(do_suspend_lowlevel)
 	pushfq
 	popq	pt_regs_flags(%rax)
 
-	movq	$.Lresume_point, saved_rip(%rip)
-
 	movq	%rsp, saved_rsp(%rip)
 	movq	%rbp, saved_rbp(%rip)
 	movq	%rbx, saved_rbx(%rip)
@@ -84,11 +81,8 @@ SYM_FUNC_START(do_suspend_lowlevel)
 	xorl	%eax, %eax
 	call	x86_acpi_enter_sleep_state
 	/* in case something went wrong, restore the machine status and go on */
-	jmp	.Lresume_point
 
-	.align 4
 .Lresume_point:
-	ANNOTATE_NOENDBR
 	/* We don't restore %rax, it must be 0 anyway */
 	movq	$saved_context, %rax
 	movq	saved_context_cr4(%rax), %rbx
@@ -139,7 +133,6 @@ saved_rsi:		.quad	0
 saved_rdi:		.quad	0
 saved_rbx:		.quad	0
 
-saved_rip:		.quad	0
 saved_rsp:		.quad	0
 
 SYM_DATA(saved_magic,	.quad	0)
