@@ -35,6 +35,7 @@
 #include <drm/drm_probe_helper.h>
 #include <video/vga.h>
 
+#include "intel_cmtg.h"
 #include "intel_connector.h"
 #include "intel_crt.h"
 #include "intel_crt_regs.h"
