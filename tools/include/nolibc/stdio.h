@@ -301,28 +301,52 @@ typedef int (*__nolibc_printf_cb)(void *state, const char *buf, size_t size);
 static __attribute__((unused, format(printf, 3, 0)))
 int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list args)
 {
-	char escape, lpref, c;
+	char lpref, c;
 	unsigned long long v;
 	unsigned int written, width;
-	size_t len, ofs;
+	size_t len;
 	char tmpbuf[21];
 	const char *outstr;
 
-	written = ofs = escape = lpref = 0;
+	written = 0;
 	while (1) {
-		c = fmt[ofs++];
-		width = 0;
+		outstr = fmt;
+		c = *fmt++;
+		if (!c)
+			break;
 
-		if (escape) {
-			/* we're in an escape sequence, ofs == 1 */
-			escape = 0;
+		width = 0;
+		if (c != '%') {
+			while (*fmt && *fmt != '%')
+				fmt++;
+			len = fmt - outstr;
+		} else {
+			/* we're in a format sequence */
+
+			c = *fmt++;
 
 			/* width */
 			while (c >= '0' && c <= '9') {
 				width *= 10;
 				width += c - '0';
 
-				c = fmt[ofs++];
+				c = *fmt++;
+			}
+
+			/* Length modifiers */
+			if (c == 'l') {
+				lpref = 1;
+				c = *fmt++;
+				if (c == 'l') {
+					lpref = 2;
+					c = *fmt++;
+				}
+			} else if (c == 'j') {
+				/* intmax_t is long long */
+				lpref = 2;
+				c = *fmt++;
+			} else {
+				lpref = 0;
 			}
 
 			if (c == 'c' || c == 'd' || c == 'u' || c == 'x' || c == 'p') {
@@ -378,54 +402,30 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 #else
 				outstr = strerror(errno);
 #endif /* NOLIBC_IGNORE_ERRNO */
-			}
-			else if (c == '%') {
-				/* queue it verbatim */
-				continue;
-			}
-			else {
-				/* modifiers or final 0 */
-				if (c == 'l') {
-					/* long format prefix, maintain the escape */
-					lpref++;
-				} else if (c == 'j') {
-					lpref = 2;
-				}
-				escape = 1;
-				goto do_escape;
+			} else {
+				if (c != '%')
+					/* Invalid format, output the format string */
+					fmt = outstr + 1;
+				/* %% is documented as a 'conversion specifier'.
+				 * Any flags, precision or length modifier are ignored.
+				 */
+				width = 0;
+				outstr = "%";
 			}
 			len = strlen(outstr);
-			goto flush_str;
 		}
 
-		/* not an escape sequence */
-		if (c == 0 || c == '%') {
-			/* flush pending data on escape or end */
-			escape = 1;
-			lpref = 0;
-			outstr = fmt;
-			len = ofs - 1;
-		flush_str:
-			while (width > len) {
-				unsigned int pad_len = ((width - len - 1) & 15) + 1;
-				width -= pad_len;
-				written += pad_len;
-				if (cb(state, "                ", pad_len) != 0)
-					return -1;
-			}
-			if (cb(state, outstr, len) != 0)
+		written += len;
+
+		while (width > len) {
+			unsigned int pad_len = ((width - len - 1) & 15) + 1;
+			width -= pad_len;
+			written += pad_len;
+			if (cb(state, "                ", pad_len) != 0)
 				return -1;
-
-			written += len;
-		do_escape:
-			if (c == 0)
-				break;
-			fmt += ofs;
-			ofs = 0;
-			continue;
 		}
-
-		/* literal char, just queue it */
+		if (cb(state, outstr, len) != 0)
+			return -1;
 	}
 
 	if (cb(state, NULL, 0) != 0)
