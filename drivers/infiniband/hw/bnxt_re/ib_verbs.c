@@ -967,7 +967,7 @@ static void bnxt_re_del_unique_gid(struct bnxt_re_dev *rdev)
 		dev_err(rdev_to_dev(rdev), "Failed to delete unique GID, rc: %d\n", rc);
 }
 
-static void bnxt_re_qp_free_umem(struct bnxt_re_qp *qp)
+void bnxt_re_qp_free_umem(struct bnxt_re_qp *qp)
 {
 	ib_umem_release(qp->rumem);
 	ib_umem_release(qp->sumem);
@@ -983,6 +983,9 @@ int bnxt_re_destroy_qp(struct ib_qp *ib_qp, struct ib_udata *udata)
 	struct bnxt_qplib_nq *rcq_nq = NULL;
 	unsigned int flags;
 	int rc;
+
+	if (qp->is_dv_qp)
+		return bnxt_re_dv_destroy_qp(qp);
 
 	bnxt_re_debug_rem_qpinfo(rdev, qp);
 
@@ -1029,7 +1032,7 @@ int bnxt_re_destroy_qp(struct ib_qp *ib_qp, struct ib_udata *udata)
 	return 0;
 }
 
-static u8 __from_ib_qp_type(enum ib_qp_type type)
+u8 __from_ib_qp_type(enum ib_qp_type type)
 {
 	switch (type) {
 	case IB_QPT_GSI:
@@ -1265,7 +1268,7 @@ free_orrq_hwq:
 	return rc;
 }
 
-static int bnxt_re_setup_qp_hwqs(struct bnxt_re_qp *qp)
+int bnxt_re_setup_qp_hwqs(struct bnxt_re_qp *qp, bool is_dv_qp)
 {
 	struct bnxt_qplib_res *res = &qp->rdev->qplib_res;
 	struct bnxt_qplib_qp *qplib_qp = &qp->qplib_qp;
@@ -1279,12 +1282,17 @@ static int bnxt_re_setup_qp_hwqs(struct bnxt_re_qp *qp)
 	hwq_attr.res = res;
 	hwq_attr.sginfo = &sq->sg_info;
 	hwq_attr.stride = bnxt_qplib_get_stride();
-	hwq_attr.depth = bnxt_qplib_get_depth(sq, wqe_mode, true);
 	hwq_attr.aux_stride = qplib_qp->psn_sz;
-	hwq_attr.aux_depth = (qplib_qp->psn_sz) ?
-		bnxt_qplib_set_sq_size(sq, wqe_mode) : 0;
-	if (qplib_qp->is_host_msn_tbl && qplib_qp->psn_sz)
+	if (!is_dv_qp) {
+		hwq_attr.depth = bnxt_qplib_get_depth(sq, wqe_mode, true);
+		hwq_attr.aux_depth = (qplib_qp->psn_sz) ?
+				bnxt_qplib_set_sq_size(sq, wqe_mode) : 0;
+		if (qplib_qp->is_host_msn_tbl && qplib_qp->psn_sz)
+			hwq_attr.aux_depth = qplib_qp->msn_tbl_sz;
+	} else {
+		hwq_attr.depth = sq->max_wqe;
 		hwq_attr.aux_depth = qplib_qp->msn_tbl_sz;
+	}
 	hwq_attr.type = HWQ_TYPE_QUEUE;
 	rc = bnxt_qplib_alloc_init_hwq(&sq->hwq, &hwq_attr);
 	if (rc)
@@ -1295,10 +1303,16 @@ static int bnxt_re_setup_qp_hwqs(struct bnxt_re_qp *qp)
 		      CMDQ_CREATE_QP_SQ_LVL_SFT);
 	sq->hwq.pg_sz_lvl = pg_sz_lvl;
 
+	if (qplib_qp->srq)
+		goto done;
+
 	hwq_attr.res = res;
 	hwq_attr.sginfo = &rq->sg_info;
 	hwq_attr.stride = bnxt_qplib_get_stride();
-	hwq_attr.depth = bnxt_qplib_get_depth(rq, qplib_qp->wqe_mode, false);
+	if (!is_dv_qp)
+		hwq_attr.depth = bnxt_qplib_get_depth(rq, qplib_qp->wqe_mode, false);
+	else
+		hwq_attr.depth = rq->max_wqe * 3;
 	hwq_attr.aux_stride = 0;
 	hwq_attr.aux_depth = 0;
 	hwq_attr.type = HWQ_TYPE_QUEUE;
@@ -1311,6 +1325,7 @@ static int bnxt_re_setup_qp_hwqs(struct bnxt_re_qp *qp)
 		      CMDQ_CREATE_QP_RQ_LVL_SFT);
 	rq->hwq.pg_sz_lvl = pg_sz_lvl;
 
+done:
 	if (qplib_qp->psn_sz) {
 		rc = bnxt_re_qp_alloc_init_xrrq(qp);
 		if (rc)
@@ -1379,7 +1394,7 @@ static struct bnxt_re_qp *bnxt_re_create_shadow_qp
 	qp->qplib_qp.rq_hdr_buf_size = BNXT_QPLIB_MAX_GRH_HDR_SIZE_IPV6;
 	qp->qplib_qp.dpi = &rdev->dpi_privileged;
 
-	rc = bnxt_re_setup_qp_hwqs(qp);
+	rc = bnxt_re_setup_qp_hwqs(qp, false);
 	if (rc)
 		goto fail;
 
@@ -1676,7 +1691,7 @@ static int bnxt_re_init_qp_attr(struct bnxt_re_qp *qp, struct bnxt_re_pd *pd,
 
 	bnxt_re_qp_calculate_msn_psn_size(qp);
 
-	rc = bnxt_re_setup_qp_hwqs(qp);
+	rc = bnxt_re_setup_qp_hwqs(qp, false);
 	if (rc)
 		goto free_umem;
 
@@ -1803,29 +1818,63 @@ static int bnxt_re_add_unique_gid(struct bnxt_re_dev *rdev)
 	return rc;
 }
 
-int bnxt_re_create_qp(struct ib_qp *ib_qp, struct ib_qp_init_attr *qp_init_attr,
-		      struct ib_udata *udata)
+static u64 bnxt_re_qp_cmask_supported = BNXT_RE_QP_REQ_MASK_DV_QP_ENABLE;
+
+int bnxt_re_create_qp_umem(struct ib_qp *ib_qp,
+			   struct ib_qp_init_attr *qp_init_attr,
+			   struct ib_umem *sq_umem, struct ib_umem *rq_umem,
+			   struct uverbs_attr_bundle *attrs)
 {
-	struct bnxt_qplib_dev_attr *dev_attr;
-	struct bnxt_re_ucontext *uctx;
-	struct bnxt_re_qp_req ureq;
-	struct bnxt_re_dev *rdev;
+	struct bnxt_re_qp *qp = container_of(ib_qp, struct bnxt_re_qp, ib_qp);
+	struct bnxt_re_dev *rdev = to_bnxt_re_dev(ib_qp->device, ibdev);
+	struct bnxt_qplib_dev_attr *dev_attr = rdev->dev_attr;
+	struct ib_udata *udata = &attrs->driver_udata;
+	struct bnxt_re_ucontext *uctx = NULL;
+	struct bnxt_re_qp_req req = {};
 	struct bnxt_re_pd *pd;
-	struct bnxt_re_qp *qp;
 	struct ib_pd *ib_pd;
 	u32 active_qps;
 	int rc;
+
+	/* Get ucontext only if attrs->context is valid (userspace path) */
+	if (attrs->context)
+		uctx = rdma_udata_to_drv_context(udata, struct bnxt_re_ucontext, ib_uctx);
 
 	ib_pd = ib_qp->pd;
 	pd = container_of(ib_pd, struct bnxt_re_pd, ib_pd);
 	rdev = pd->rdev;
 	dev_attr = rdev->dev_attr;
-	qp = container_of(ib_qp, struct bnxt_re_qp, ib_qp);
 
-	uctx = rdma_udata_to_drv_context(udata, struct bnxt_re_ucontext, ib_uctx);
-	if (udata)
-		if (ib_copy_from_udata(&ureq, udata,  min(udata->inlen, sizeof(ureq))))
+	/* At this point, udata (attrs->driver_udata) is always valid,
+	 * since even for the kernel path we would have initialized it in
+	 * bnxt_re_create_qp(). But in kernel path, udata->inlen will be 0,
+	 * so we skip userspace data handling.
+	 */
+	if (udata->inlen) {
+		if (ib_copy_from_udata(&req, udata, min(sizeof(req), udata->inlen)))
 			return -EFAULT;
+		if (req.comp_mask & ~bnxt_re_qp_cmask_supported) {
+			ibdev_dbg(&rdev->ibdev,
+				  "Invalid QP comp_mask: 0x%llx supported: 0x%llx\n",
+				  req.comp_mask, bnxt_re_qp_cmask_supported);
+			return -EOPNOTSUPP;
+		}
+		if (req.comp_mask & BNXT_RE_QP_REQ_MASK_DV_QP_ENABLE) {
+			/* DV QP creation requires umem */
+			if (!sq_umem)
+				return -EINVAL;
+			/* rq_umem is optional if SRQ is used */
+			if (!qp_init_attr->srq && !rq_umem)
+				return -EINVAL;
+
+			return bnxt_re_dv_create_qp(rdev, udata, qp_init_attr, qp, &req,
+						    sq_umem, rq_umem);
+		}
+	}
+
+	/* Standard QP (non-DV): use req.qpsva/qprva */
+	if (sq_umem || rq_umem)
+		return -EINVAL;
 
 	rc = bnxt_re_test_qp_limits(rdev, qp_init_attr, dev_attr);
 	if (!rc) {
@@ -1834,7 +1883,7 @@ int bnxt_re_create_qp(struct ib_qp *ib_qp, struct ib_qp_init_attr *qp_init_attr,
 	}
 
 	qp->rdev = rdev;
-	rc = bnxt_re_init_qp_attr(qp, pd, qp_init_attr, uctx, &ureq);
+	rc = bnxt_re_init_qp_attr(qp, pd, qp_init_attr, uctx, &req);
 	if (rc)
 		goto fail;
 
@@ -1852,7 +1901,7 @@ int bnxt_re_create_qp(struct ib_qp *ib_qp, struct ib_qp_init_attr *qp_init_attr,
 			goto free_hwq;
 		}
 
-		if (udata) {
+		if (udata->outlen) {
 			struct bnxt_re_qp_resp resp;
 
 			resp.qpid = qp->qplib_qp.id;
@@ -1907,6 +1956,22 @@ free_hwq:
 	bnxt_re_qp_free_umem(qp);
 fail:
 	return rc;
+}
+
+int bnxt_re_create_qp(struct ib_qp *ib_qp, struct ib_qp_init_attr *qp_init_attr,
+		      struct ib_udata *udata)
+{
+	struct uverbs_attr_bundle attrs_wrapper = {};
+	struct uverbs_attr_bundle *attrs;
+
+	if (udata) {
+		attrs = rdma_udata_to_uverbs_attr_bundle(udata);
+	} else {
+		/* Kernel path: use zero-initialized wrapper */
+		attrs = &attrs_wrapper;
+	}
+
+	return bnxt_re_create_qp_umem(ib_qp, qp_init_attr, NULL, NULL, attrs);
 }
 
 static u8 __from_ib_qp_state(enum ib_qp_state state)
@@ -2010,7 +2075,7 @@ static int bnxt_re_init_user_srq(struct bnxt_re_dev *rdev,
 				 struct bnxt_re_srq *srq,
 				 struct ib_udata *udata)
 {
-	struct bnxt_re_srq_req ureq;
+	struct bnxt_re_srq_req ureq = {};
 	struct bnxt_qplib_srq *qplib_srq = &srq->qplib_srq;
 	struct ib_umem *umem;
 	int bytes = 0;
@@ -3284,7 +3349,6 @@ int bnxt_re_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 
 	bnxt_re_put_nq(rdev, nq);
 	ib_umem_release(cq->umem);
-
 	atomic_dec(&rdev->stats.res.cq_count);
 	kfree(cq->cql);
 	return 0;
@@ -3450,7 +3514,7 @@ int bnxt_re_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	struct bnxt_qplib_dpi *orig_dpi = NULL;
 	struct bnxt_qplib_dev_attr *dev_attr;
 	struct bnxt_re_ucontext *uctx = NULL;
-	struct bnxt_re_resize_cq_req req;
+	struct bnxt_re_resize_cq_req req = {};
 	struct bnxt_re_dev *rdev;
 	struct bnxt_re_cq *cq;
 	int rc, entries;
@@ -4600,6 +4664,8 @@ int bnxt_re_alloc_ucontext(struct ib_ucontext *ctx, struct ib_udata *udata)
 		}
 		resp.comp_mask |= BNXT_RE_UCNTX_CMASK_DV_CQ_SUPPORTED;
 		uctx->cmask |= BNXT_RE_UCNTX_CAP_DV_CQ_SUPPORTED;
+		resp.comp_mask |= BNXT_RE_UCNTX_CMASK_DV_QP_SUPPORTED;
+		uctx->cmask |= BNXT_RE_UCNTX_CAP_DV_QP_SUPPORTED;
 	}
 
 	rc = ib_copy_to_udata(udata, &resp, min(udata->outlen, sizeof(resp)));

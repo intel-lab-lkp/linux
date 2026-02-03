@@ -1336,6 +1336,7 @@ static const struct ib_device_ops bnxt_re_dev_ops = {
 	.create_cq = bnxt_re_create_cq,
 	.create_cq_umem = bnxt_re_create_cq_umem,
 	.create_qp = bnxt_re_create_qp,
+	.create_qp_umem = bnxt_re_create_qp_umem,
 	.create_srq = bnxt_re_create_srq,
 	.create_user_ah = bnxt_re_create_ah,
 	.dealloc_pd = bnxt_re_dealloc_pd,
