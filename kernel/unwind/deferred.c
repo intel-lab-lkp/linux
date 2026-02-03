@@ -282,7 +282,7 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 		 * have also set pending and queued a callback.
 		 */
 		WARN_ON_ONCE(!(old_mask & UNWIND_PENDING));
-		return old_mask & bit_mask;
+		return !!(old_mask & bit_mask);
 	}
 
 	/* The work has been claimed, now schedule it. */
