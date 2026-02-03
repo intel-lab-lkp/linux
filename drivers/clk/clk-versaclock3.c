@@ -13,6 +13,14 @@
 
 #define NUM_CONFIG_REGISTERS		37
 
+#define VC3_PFD_MUX_NUM			2
+#define VC3_PFD_NUM			3
+#define VC3_PLL_NUM			3
+#define VC3_DIV_MUX_NUM			3
+#define VC3_DIV_NUM			5
+#define VC3_CLK_MUX_NUM			5
+#define VC3_CLK_OUT_NUM			6
+
 #define VC3_GENERAL_CTR			0x0
 #define VC3_GENERAL_CTR_DIV1_SRC_SEL	BIT(3)
 #define VC3_GENERAL_CTR_PLL3_REFIN_SEL	BIT(2)
@@ -200,6 +208,18 @@ struct vc3_hw_cfg {
 	u32 se2_clk_sel_msk;
 };
 
+struct vc3_device_data {
+	struct i2c_client *client;
+	struct regmap *regmap;
+	struct vc3_hw_data clk_pfd_mux[VC3_PFD_MUX_NUM];
+	struct vc3_hw_data clk_pfd[VC3_PFD_NUM];
+	struct vc3_hw_data clk_pll[VC3_PLL_NUM];
+	struct vc3_hw_data clk_div_mux[VC3_DIV_MUX_NUM];
+	struct vc3_hw_data clk_div[VC3_DIV_NUM];
+	struct vc3_hw_data clk_mux[VC3_CLK_MUX_NUM];
+	struct clk_hw *clk_out[VC3_CLK_OUT_NUM];
+};
+
 static const struct clk_div_table div1_divs[] = {
 	{ .val = 0, .div = 1, }, { .val = 1, .div = 4, },
 	{ .val = 2, .div = 5, }, { .val = 3, .div = 6, },
@@ -235,8 +255,6 @@ static const struct clk_div_table div3_divs[] = {
 	{ .val = 14, .div = 40, }, { .val = 15, .div = 80, },
 	{}
 };
-
-static struct clk_hw *clk_out[6];
 
 static u8 vc3_pfd_mux_get_parent(struct clk_hw *hw)
 {
@@ -1067,30 +1085,31 @@ static struct vc3_hw_data clk_mux[] = {
 	}
 };
 
-static struct clk_hw *vc3_clk_get_hw(const struct vc3_clk_parent *parent)
+static struct clk_hw *vc3_clk_get_hw(struct vc3_device_data *vc3,
+				     const struct vc3_clk_parent *parent)
 {
 	switch (parent->type) {
 	case VC3_CLK_EXT:
 		return NULL;
 	case VC3_CLK_PFD_MUX:
-		return &clk_pfd_mux[parent->idx].hw;
+		return &vc3->clk_pfd_mux[parent->idx].hw;
 	case VC3_CLK_PFD:
-		return &clk_pfd[parent->idx].hw;
+		return &vc3->clk_pfd[parent->idx].hw;
 	case VC3_CLK_PLL:
-		return &clk_pll[parent->idx].hw;
+		return &vc3->clk_pll[parent->idx].hw;
 	case VC3_CLK_DIV_MUX:
-		return &clk_div_mux[parent->idx].hw;
+		return &vc3->clk_div_mux[parent->idx].hw;
 	case VC3_CLK_DIV:
-		return &clk_div[parent->idx].hw;
+		return &vc3->clk_div[parent->idx].hw;
 	case VC3_CLK_CLK_MUX:
-		return &clk_mux[parent->idx].hw;
+		return &vc3->clk_mux[parent->idx].hw;
 	}
 
 	return NULL;
 }
 
 static struct clk_parent_data *
-vc3_setup_parent_data(struct vc3_hw_data *hw_data)
+vc3_setup_parent_data(struct vc3_device_data *vc3, struct vc3_hw_data *hw_data)
 {
 	const struct vc3_parent_info *pinfo = hw_data->parent_info;
 	struct clk_parent_data *pd;
@@ -1105,28 +1124,34 @@ vc3_setup_parent_data(struct vc3_hw_data *hw_data)
 		if (parent->type == VC3_CLK_EXT)
 			pd[i].index = parent->idx;
 		else
-			pd[i].hw = vc3_clk_get_hw(parent);
+			pd[i].hw = vc3_clk_get_hw(vc3, parent);
 	}
 
 	return pd;
 }
 
-static int vc3_register_clk(struct device *dev, struct vc3_hw_data *hw_data,
-			    struct regmap *regmap)
+static int vc3_register_clk(struct vc3_device_data *vc3,
+			    struct vc3_hw_data *hw_data,
+			    const struct vc3_hw_data *template)
 {
+	struct device *dev = &vc3->client->dev;
 	struct clk_parent_data *pd;
 	struct clk_init_data init;
 	int ret;
 
-	pd = vc3_setup_parent_data(hw_data);
+	if (!hw_data->data)
+		hw_data->data = template->data;
+	hw_data->parent_info = template->parent_info;
+
+	pd = vc3_setup_parent_data(vc3, hw_data);
 	if (!pd)
 		return -ENOMEM;
 
-	init = *hw_data->hw.init;
+	init = *template->hw.init;
 	init.parent_data = pd;
 	init.num_parents = hw_data->parent_info->num_parents;
 
-	hw_data->regmap = regmap;
+	hw_data->regmap = vc3->regmap;
 	hw_data->hw.init = &init;
 
 	ret = devm_clk_hw_register(dev, &hw_data->hw);
@@ -1142,7 +1167,7 @@ static struct clk_hw *vc3_of_clk_get(struct of_phandle_args *clkspec,
 	unsigned int idx = clkspec->args[0];
 	struct clk_hw **clkout_hw = data;
 
-	if (idx >= ARRAY_SIZE(clk_out)) {
+	if (idx >= VC3_CLK_OUT_NUM) {
 		pr_err("invalid clk index %u for provider %pOF\n", idx, clkspec->np);
 		return ERR_PTR(-EINVAL);
 	}
@@ -1155,13 +1180,18 @@ static int vc3_probe(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	u8 settings[NUM_CONFIG_REGISTERS];
 	const struct vc3_hw_cfg *data;
-	struct regmap *regmap;
+	struct vc3_device_data *vc3;
 	const char *name;
 	int ret, i;
 
-	regmap = devm_regmap_init_i2c(client, &vc3_regmap_config);
-	if (IS_ERR(regmap))
-		return dev_err_probe(dev, PTR_ERR(regmap),
+	vc3 = devm_kzalloc(dev, sizeof(*vc3), GFP_KERNEL);
+	if (!vc3)
+		return -ENOMEM;
+
+	vc3->client = client;
+	vc3->regmap = devm_regmap_init_i2c(client, &vc3_regmap_config);
+	if (IS_ERR(vc3->regmap))
+		return dev_err_probe(dev, PTR_ERR(vc3->regmap),
 				     "failed to allocate register map\n");
 
 	ret = of_property_read_u8_array(dev->of_node, "renesas,settings",
@@ -1172,7 +1202,7 @@ static int vc3_probe(struct i2c_client *client)
 		 * settings to the device immediately.
 		 */
 		for  (i = 0; i < NUM_CONFIG_REGISTERS; i++) {
-			ret = regmap_write(regmap, i, settings[i]);
+			ret = regmap_write(vc3->regmap, i, settings[i]);
 			if (ret) {
 				dev_err(dev, "error writing to chip (%i)\n", ret);
 				return ret;
@@ -1187,7 +1217,7 @@ static int vc3_probe(struct i2c_client *client)
 	/* Register pfd muxes */
 	for (i = 0; i < ARRAY_SIZE(clk_pfd_mux); i++) {
 		name = clk_pfd_mux[i].hw.init->name;
-		ret = vc3_register_clk(dev, &clk_pfd_mux[i], regmap);
+		ret = vc3_register_clk(vc3, &vc3->clk_pfd_mux[i], &clk_pfd_mux[i]);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "failed to register clock %s\n",
@@ -1197,7 +1227,7 @@ static int vc3_probe(struct i2c_client *client)
 	/* Register pfd's */
 	for (i = 0; i < ARRAY_SIZE(clk_pfd); i++) {
 		name = clk_pfd[i].hw.init->name;
-		ret = vc3_register_clk(dev, &clk_pfd[i], regmap);
+		ret = vc3_register_clk(vc3, &vc3->clk_pfd[i], &clk_pfd[i]);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "failed to register clock %s\n",
@@ -1209,12 +1239,17 @@ static int vc3_probe(struct i2c_client *client)
 	/* Register pll's */
 	for (i = 0; i < ARRAY_SIZE(clk_pll); i++) {
 		if (i == VC3_PLL2) {
-			struct vc3_pll_data *pll_data = clk_pll[i].data;
+			struct vc3_pll_data *pll_data;
 
+			pll_data = devm_kmemdup(dev, clk_pll[i].data,
+						sizeof(*pll_data), GFP_KERNEL);
+			if (!pll_data)
+				return -ENOMEM;
 			pll_data->vco = data->pll2_vco;
+			vc3->clk_pll[i].data = pll_data;
 		}
 		name = clk_pll[i].hw.init->name;
-		ret = vc3_register_clk(dev, &clk_pll[i], regmap);
+		ret = vc3_register_clk(vc3, &vc3->clk_pll[i], &clk_pll[i]);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "failed to register clock %s\n",
@@ -1224,7 +1259,7 @@ static int vc3_probe(struct i2c_client *client)
 	/* Register divider muxes */
 	for (i = 0; i < ARRAY_SIZE(clk_div_mux); i++) {
 		name = clk_div_mux[i].hw.init->name;
-		ret = vc3_register_clk(dev, &clk_div_mux[i], regmap);
+		ret = vc3_register_clk(vc3, &vc3->clk_div_mux[i], &clk_div_mux[i]);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "failed to register clock %s\n",
@@ -1234,7 +1269,7 @@ static int vc3_probe(struct i2c_client *client)
 	/* Register dividers */
 	for (i = 0; i < ARRAY_SIZE(clk_div); i++) {
 		name = clk_div[i].hw.init->name;
-		ret = vc3_register_clk(dev, &clk_div[i], regmap);
+		ret = vc3_register_clk(vc3, &vc3->clk_div[i], &clk_div[i]);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "failed to register clock %s\n",
@@ -1244,12 +1279,17 @@ static int vc3_probe(struct i2c_client *client)
 	/* Register clk muxes */
 	for (i = 0; i < ARRAY_SIZE(clk_mux); i++) {
 		if (i == VC3_SE2_MUX) {
-			struct vc3_clk_data *clk_data = clk_mux[i].data;
+			struct vc3_clk_data *clk_data;
 
+			clk_data = devm_kmemdup(dev, clk_mux[i].data,
+						sizeof(*clk_data), GFP_KERNEL);
+			if (!clk_data)
+				return -ENOMEM;
 			clk_data->bitmsk = data->se2_clk_sel_msk;
+			vc3->clk_mux[i].data = clk_data;
 		}
 		name = clk_mux[i].hw.init->name;
-		ret = vc3_register_clk(dev, &clk_mux[i], regmap);
+		ret = vc3_register_clk(vc3, &vc3->clk_mux[i], &clk_mux[i]);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "failed to register clock %s\n",
@@ -1257,7 +1297,7 @@ static int vc3_probe(struct i2c_client *client)
 	}
 
 	/* Register clk outputs */
-	for (i = 0; i < ARRAY_SIZE(clk_out); i++) {
+	for (i = 0; i < ARRAY_SIZE(vc3->clk_out); i++) {
 		switch (i) {
 		case VC3_DIFF2:
 			name = "diff2";
@@ -1282,17 +1322,17 @@ static int vc3_probe(struct i2c_client *client)
 		}
 
 		if (i == VC3_REF)
-			clk_out[i] = devm_clk_hw_register_fixed_factor_index(dev,
+			vc3->clk_out[i] = devm_clk_hw_register_fixed_factor_index(dev,
 				name, 0, CLK_SET_RATE_PARENT, 1, 1);
 		else
-			clk_out[i] = devm_clk_hw_register_fixed_factor_parent_hw(dev,
-				name, &clk_mux[i - 1].hw, CLK_SET_RATE_PARENT, 1, 1);
+			vc3->clk_out[i] = devm_clk_hw_register_fixed_factor_parent_hw(dev,
+				name, &vc3->clk_mux[i - 1].hw, CLK_SET_RATE_PARENT, 1, 1);
 
-		if (IS_ERR(clk_out[i]))
-			return PTR_ERR(clk_out[i]);
+		if (IS_ERR(vc3->clk_out[i]))
+			return PTR_ERR(vc3->clk_out[i]);
 	}
 
-	ret = devm_of_clk_add_hw_provider(dev, vc3_of_clk_get, clk_out);
+	ret = devm_of_clk_add_hw_provider(dev, vc3_of_clk_get, vc3->clk_out);
 	if (ret)
 		return dev_err_probe(dev, ret, "unable to add clk provider\n");
 
