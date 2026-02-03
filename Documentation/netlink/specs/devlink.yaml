@@ -2336,3 +2336,26 @@ operations:
             - bus-name
             - dev-name
             - port-index
+
+    -
+      name: port-resource-get
+      doc: Get port resources.
+      attribute-set: devlink
+      dont-validate: [strict]
+      do:
+        pre: devlink-nl-pre-doit-port
+        post: devlink-nl-post-doit
+        request:
+          value: 85
+          attributes: *port-id-attrs
+        reply: &port-resource-get-reply
+          value: 85
+          attributes:
+            - bus-name
+            - dev-name
+            - port-index
+            - resource-list
+      dump:
+        request:
+          attributes: *dev-id-attrs
+        reply: *port-resource-get-reply
