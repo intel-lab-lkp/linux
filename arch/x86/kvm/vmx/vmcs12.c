@@ -3,6 +3,8 @@
 
 #include "vmcs12.h"
 
+static_assert(sizeof(struct vmcs12) <= VMCS12_SIZE);
+
 #define VMCS12_OFFSET(x) offsetof(struct vmcs12, x)
 #define FIELD(number, name)	[ROL16(number, 6)] = VMCS12_OFFSET(name)
 #define FIELD64(number, name)						\
@@ -22,6 +24,7 @@ const unsigned short vmcs12_field_offsets[] = {
 	FIELD(GUEST_TR_SELECTOR, guest_tr_selector),
 	FIELD(GUEST_INTR_STATUS, guest_intr_status),
 	FIELD(GUEST_PML_INDEX, guest_pml_index),
+	FIELD(GUEST_APIC_TIMER_VECTOR, virtual_timer_vector),
 	FIELD(HOST_ES_SELECTOR, host_es_selector),
 	FIELD(HOST_CS_SELECTOR, host_cs_selector),
 	FIELD(HOST_SS_SELECTOR, host_ss_selector),

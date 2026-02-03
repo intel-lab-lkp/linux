@@ -86,6 +86,15 @@ static void init_vmcs_shadow_fields(void)
 			pr_err("Missing field from shadow_read_only_field %x\n",
 			       field + 1);
 
+		switch (field) {
+		case GUEST_APIC_TIMER_VECTOR:
+			if (!cpu_has_vmx_apic_timer_virt())
+				continue;
+			break;
+		default:
+			break;
+		}
+
 		clear_bit(field, vmx_vmread_bitmap);
 		if (field & 1)
 #ifdef CONFIG_X86_64
@@ -2539,7 +2548,8 @@ static void prepare_vmcs02_early(struct vcpu_vmx *vmx, struct loaded_vmcs *vmcs0
 	if (cpu_has_tertiary_exec_ctrls()) {
 		u64 ctls = 0;
 
-		/* guest apic timer virtualization will come */
+		if (nested_cpu_has_guest_apic_timer(vmcs12))
+			ctls |= TERTIARY_EXEC_GUEST_APIC_TIMER;
 
 		tertiary_exec_controls_set(vmx, ctls);
 	}
@@ -2732,6 +2742,9 @@ static void prepare_vmcs02_rare(struct vcpu_vmx *vmx, struct vmcs12 *vmcs12)
 		vmcs_write64(EOI_EXIT_BITMAP2, vmcs12->eoi_exit_bitmap2);
 		vmcs_write64(EOI_EXIT_BITMAP3, vmcs12->eoi_exit_bitmap3);
 	}
+
+	if (nested_cpu_has_guest_apic_timer(vmcs12))
+		vmcs_write16(GUEST_APIC_TIMER_VECTOR, vmcs12->virtual_timer_vector);
 
 	/*
 	 * Make sure the msr_autostore list is up to date before we set the
