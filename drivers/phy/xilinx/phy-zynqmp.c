@@ -12,6 +12,7 @@
  * PCIe should also work but that is experimental as of now.
  */
 
+#include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -31,6 +32,7 @@
  */
 
 /* TX De-emphasis parameters */
+#define L0_TX_ANA_TM_3			0x000c
 #define L0_TX_ANA_TM_18			0x0048
 #define L0_TX_ANA_TM_118		0x01d8
 #define L0_TX_ANA_TM_118_FORCE_17_0	BIT(0)
@@ -50,16 +52,49 @@
 #define L0_TXPMD_TM_45_ENABLE_DP_POST2	BIT(5)
 
 /* PCS control parameters */
+#define L0_TM_ANA_BYP_4			0x1010
+#define L0_TM_ANA_BYP_7			0x1018
 #define L0_TM_DIG_6			0x106c
+#define L0_TM_DIG_22			0x10ac
 #define L0_TM_DIS_DESCRAMBLE_DECODER	0x0f
 #define L0_TX_DIG_61			0x00f4
 #define L0_TM_DISABLE_SCRAMBLE_ENCODER	0x0f
+#define L0_TM_AUX_0			0x10cc
+#define L0_TM_MISC2			0x189c
+#define L0_TM_MISC2_ILL_CAL_BYPASS	BIT(7)
+#define L0_TM_IQ_ILL1			0x18f8
+#define L0_TM_IQ_ILL2			0x18fc
+#define L0_TM_ILL11			0x198c
+#define L0_TM_ILL12			0x1990
+#define L0_TM_E_ILL1			0x1924
+#define L0_TM_E_ILL2			0x1928
+#define L0_TM_IQ_ILL3			0x1900
+#define L0_TM_E_ILL3			0x192c
+#define L0_TM_IQ_ILL7			0x1910
+#define L0_TM_E_ILL7			0x193c
+#define L0_TM_ILL8			0x1980
+#define L0_TM_IQ_ILL8			0x1914
+#define L0_TM_IQ_ILL9			0x1918
+#define L0_TM_EQ0			0x194c
+#define L0_TM_EQ0_EQ_STG2_CTRL_BYP	BIT(5)
+#define L0_TM_EQ1			0x1950
+#define L0_TM_EQ1_EQ_STG2_RL_PROG	GENMASK(1, 0)
+#define L0_TM_EQ1_EQ_STG2_PREAMP_MODE_VAL	BIT(2)
+#define L0_TM_E_ILL8			0x1940
+#define L0_TM_E_ILL9			0x1944
+#define L0_TM_ILL13			0x1994
+#define L0_TM_CDR5			0x1c14
+#define L0_TM_CDR5_FPHL_FSM_ACC_CYCLES	GENMASK(7, 5)
+#define L0_TM_CDR5_FFL_PH0_INT_GAIN	GENMASK(4, 0)
+#define L0_TM_CDR16			0x1c40
 
 /* PLL Test Mode register parameters */
+#define L0_TM_PLL_DIG_33		0x2084
 #define L0_TM_PLL_DIG_37		0x2094
 #define L0_TM_COARSE_CODE_LIMIT		0x10
 
 /* PLL SSC step size offsets */
+#define L0_PLL_FBDIV_FRAC_3_MSB		0x2360
 #define L0_PLL_SS_STEPS_0_LSB		0x2368
 #define L0_PLL_SS_STEPS_1_MSB		0x236c
 #define L0_PLL_SS_STEP_SIZE_0_LSB	0x2370
@@ -69,6 +104,7 @@
 #define L0_PLL_STATUS_READ_1		0x23e4
 
 /* SSC step size parameters */
+#define TM_FORCE_EN_FRAC		BIT(6)
 #define STEP_SIZE_0_MASK		0xff
 #define STEP_SIZE_1_MASK		0xff
 #define STEP_SIZE_2_MASK		0xff
@@ -76,6 +112,7 @@
 #define STEP_SIZE_SHIFT			8
 #define FORCE_STEP_SIZE			0x10
 #define FORCE_STEPS			0x20
+#define TM_FORCE_EN			BIT(7)
 #define STEPS_0_MASK			0xff
 #define STEPS_1_MASK			0x07
 
@@ -83,6 +120,32 @@
 #define L0_Ln_REF_CLK_SEL(n)		(0x2860 + (n) * 4)
 #define L0_REF_CLK_LCL_SEL		BIT(7)
 #define L0_REF_CLK_SEL_MASK		0x9f
+
+/* Built-in self-test parameters */
+#define L0_BIST_CTRL_1			0x3004
+#define L0_BIST_CTRL_2			0x3008
+#define L0_BIST_RUN_LEN_L		0x300c
+#define L0_BIST_ERR_INJ_POINT_L		0x3010
+#define L0_BIST_RUNLEN_ERR_INJ_H	0x3014
+#define L0_BIST_IDLE_TIME		0x3018
+#define L0_BIST_MARKER_L		0x301c
+#define L0_BIST_IDLE_CHAR_L		0x3020
+#define L0_BIST_MARKER_IDLE_H		0x3024
+#define L0_BIST_LOW_PULSE_TIME		0x3028
+#define L0_BIST_TOTAL_PULSE_TIME	0x302c
+#define L0_BIST_TEST_PAT_1		0x3030
+#define L0_BIST_TEST_PAT_2		0x3034
+#define L0_BIST_TEST_PAT_3		0x3038
+#define L0_BIST_TEST_PAT_4		0x303c
+#define L0_BIST_TEST_PAT_MSBS		0x3040
+#define L0_BIST_PKT_NUM			0x3044
+#define L0_BIST_FRM_IDLE_TIME		0x3048
+#define L0_BIST_PKT_CTR_L		0x304c
+#define L0_BIST_PKT_CTR_H		0x3050
+#define L0_BIST_ERR_CTR_L		0x3054
+#define L0_BIST_ERR_CTR_H		0x3058
+#define L0_BIST_FILLER_OUT		0x3068
+#define L0_BIST_FORCE_MK_RST		0x306c
 
 /* Calibration digital logic parameters */
 #define L3_TM_CALIB_DIG19		0xec4c
@@ -139,6 +202,9 @@ static const char *const xpsgtr_icm_str[] = {
 #define TM_CMN_RST_SET			0x2
 #define TM_CMN_RST_MASK			0x3
 
+#define LPBK_CTRL0			0x10038
+#define LPBK_CTRL1			0x1003c
+
 /* Bus width parameters */
 #define TX_PROT_BUS_WIDTH		0x10040
 #define RX_PROT_BUS_WIDTH		0x10044
@@ -148,8 +214,12 @@ static const char *const xpsgtr_icm_str[] = {
 #define PROT_BUS_WIDTH_SHIFT(n)		((n) * 2)
 #define PROT_BUS_WIDTH_MASK(n)		GENMASK((n) * 2 + 1, (n) * 2)
 
+#define UPHY_SPARE0			0X10098
+
 /* Number of GT lanes */
 #define NUM_LANES			4
+
+#define SIOU_ECO_0			0x1c
 
 /* SIOU SATA control register */
 #define SATA_CONTROL_OFFSET		0x0100
@@ -338,6 +408,33 @@ static void xpsgtr_restore_lane_regs(struct xpsgtr_dev *gtr_dev)
 			     gtr_dev->saved_regs[i]);
 }
 
+static inline void xpsgtr_write_lanes(struct xpsgtr_dev *gtr_dev,
+				     unsigned long *lanes, u32 reg, u32 value)
+{
+	unsigned long lane;
+
+	for_each_set_bit(lane, lanes, NUM_LANES) {
+		void __iomem *addr = gtr_dev->serdes + lane * PHY_REG_OFFSET
+				     + reg;
+
+		writel(value, addr);
+	}
+}
+
+static inline void xpsgtr_clr_set_lanes(struct xpsgtr_dev *gtr_dev,
+				       unsigned long *lanes, u32 reg, u32 clr,
+				       u32 set)
+{
+	unsigned long lane;
+
+	for_each_set_bit(lane, lanes, NUM_LANES) {
+		void __iomem *addr = gtr_dev->serdes + lane * PHY_REG_OFFSET
+				     + reg;
+
+		writel((readl(addr) & ~clr) | set, addr);
+	}
+}
+
 /*
  * Hardware Configuration
  */
@@ -351,7 +448,7 @@ static int xpsgtr_wait_pll_lock(struct phy *phy)
 	u8 protocol = gtr_phy->protocol;
 	int ret;
 
-	dev_dbg(gtr_dev->dev, "Waiting for PLL lock\n");
+	dev_vdbg(gtr_dev->dev, "Waiting for PLL lock\n");
 
 	/*
 	 * For DP and PCIe, only the instance 0 PLL is used. Switch to that phy
@@ -520,6 +617,231 @@ static void xpsgtr_bypass_scrambler_8b10b(struct xpsgtr_phy *gtr_phy)
 	xpsgtr_write_phy(gtr_phy, L0_TX_DIG_61, L0_TM_DISABLE_SCRAMBLE_ENCODER);
 }
 
+/* Enable or disable loopback */
+static void xpsgtr_phy_set_loopback(struct xpsgtr_phy *gtr_phy, bool enabled)
+{
+	struct xpsgtr_dev *gtr_dev = gtr_phy->dev;
+	u32 reg = gtr_phy->lane >= 2 ? LPBK_CTRL1 : LPBK_CTRL0;
+	u32 shift = gtr_phy->lane & 1 ? 4 : 0;
+
+	xpsgtr_clr_set(gtr_dev, reg, 7 << shift, (u32)enabled << shift);
+}
+
+static void xpsgtr_phy_set_ill(struct xpsgtr_phy *gtr_phy, u32 ill, bool gen2)
+{
+	u32 val = 4 + ill * 8;
+
+	if (gen2) {
+		xpsgtr_write_phy(gtr_phy, L0_TM_E_ILL2, val & 0xff);
+		xpsgtr_clr_set_phy(gtr_phy, L0_TM_ILL12, 0x0f,
+				   1 << (val >> 8));
+	} else {
+		xpsgtr_write_phy(gtr_phy, L0_TM_E_ILL1, val & 0xff);
+		xpsgtr_clr_set_phy(gtr_phy, L0_TM_ILL12, 0xf0,
+				   (val >> 4) & 0x10);
+	}
+}
+
+static bool xpsgtr_ill_calibrated(struct xpsgtr_phy *gtr_phy)
+{
+	u32 ill1 = xpsgtr_read_phy(gtr_phy, L0_TM_E_ILL1);
+	u32 ill2 = xpsgtr_read_phy(gtr_phy, L0_TM_E_ILL2);
+	u32 ill12 = xpsgtr_read_phy(gtr_phy, L0_TM_ILL12);
+
+	dev_dbg(gtr_phy->dev->dev, "lane %u gen1 ILL was %u gen2 ILL was %u\n",
+		gtr_phy->lane, ill1 / 8 + (ill12 & 0x10 ? 32 : 0),
+		ill2 / 8 + (ill12 & 0x02 ? 32 : 0));
+	return ill1 || ill2 || ill12;
+}
+
+static void xpsgtr_init_ill(struct xpsgtr_phy *gtr_phy)
+{
+	struct xpsgtr_dev *gtr_dev = gtr_phy->dev;
+	struct clk *clk = gtr_dev->clk[gtr_phy->refclk];
+	u32 ill123 = DIV_ROUND_CLOSEST(clk_get_rate(clk), 1000000);
+
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_MISC2, 0, L0_TM_MISC2_ILL_CAL_BYPASS);
+	xpsgtr_write_phy(gtr_phy, L0_TM_IQ_ILL1, ill123);
+	xpsgtr_write_phy(gtr_phy, L0_TM_IQ_ILL2, ill123);
+	xpsgtr_write_phy(gtr_phy, L0_TM_IQ_ILL3, ill123);
+	xpsgtr_write_phy(gtr_phy, L0_TM_IQ_ILL7, 0xf3);
+	xpsgtr_write_phy(gtr_phy, L0_TM_E_ILL7, 0xf3);
+	xpsgtr_write_phy(gtr_phy, L0_TM_ILL8, 0xff);
+	xpsgtr_write_phy(gtr_phy, L0_TM_IQ_ILL8, 0xf3);
+	xpsgtr_write_phy(gtr_phy, L0_TM_E_ILL8, 0xf3);
+	xpsgtr_write_phy(gtr_phy, L0_TM_IQ_ILL9, 1);
+	xpsgtr_write_phy(gtr_phy, L0_TM_E_ILL9, 1);
+	xpsgtr_clr_set(gtr_dev, UPHY_SPARE0, BIT(5), 0);
+}
+
+static void xpsgtr_phy_illcalib(struct xpsgtr_dev *gtr_dev,
+				     unsigned long *lanes, bool gen2)
+{
+	bool last_ok[NUM_LANES] = { 0 };
+	int pass[NUM_LANES] = { 0 }, altpass[NUM_LANES] = { 0 };
+	int best[NUM_LANES] = { 0 }, altbest[NUM_LANES] = { 0 };
+	unsigned long lane;
+	int i;
+
+	/* Initialize the BIST */
+	xpsgtr_clr_set_lanes(gtr_dev, lanes, L0_BIST_CTRL_1, 0xe0, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_FILLER_OUT, 1);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_FORCE_MK_RST, 1);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_DIG_22, 0x20);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_CTRL_2, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_RUN_LEN_L, 0xf4);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_ERR_INJ_POINT_L, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_RUNLEN_ERR_INJ_H, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_IDLE_TIME, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_MARKER_L, 0xfb);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_IDLE_CHAR_L, 0xff);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_MARKER_IDLE_H, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_LOW_PULSE_TIME, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TOTAL_PULSE_TIME, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_1, 0x4a);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_2, 0x4a);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_3, 0x4a);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_4, 0x4a);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_MSBS, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_PKT_NUM, 0x14);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_FRM_IDLE_TIME, 2);
+	xpsgtr_clr_set_lanes(gtr_dev, lanes, L0_BIST_CTRL_1, 0xe0, 0);
+
+	for (i = 0; i < 64; i++) {
+		bool ok[NUM_LANES];
+
+		for_each_set_bit(lane, lanes, NUM_LANES)
+			xpsgtr_phy_set_ill(&gtr_dev->phys[lane], i, gen2);
+
+		/* Reset lanes */
+		xpsgtr_clr_set_lanes(gtr_dev, lanes, L0_TM_ANA_BYP_7, 0x20,
+				     0x10);
+		xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x00);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_ANA_BYP_4, 0x40);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_PLL_DIG_33, 0x80);
+		xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x04);
+		udelay(50);
+		if (gen2)
+			xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x0e);
+		xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x06);
+		if (gen2) {
+			xpsgtr_write_lanes(gtr_dev, lanes, L0_TX_ANA_TM_3, 0x04);
+			xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x07);
+			udelay(400);
+			xpsgtr_write_lanes(gtr_dev, lanes, L0_TX_ANA_TM_3, 0x0c);
+			udelay(15);
+			xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x0f);
+			udelay(100);
+		}
+
+		if (xpsgtr_wait_pll_lock(gtr_dev->phys[0].phy)) {
+			memset(last_ok, 0, sizeof(last_ok));
+			continue;
+		}
+
+		udelay(50);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_ANA_BYP_4, 0xc0);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_ANA_BYP_4, 0x80);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_PLL_DIG_33, 0xc0);
+		udelay(50);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_PLL_DIG_33, 0x80);
+		udelay(50);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_ANA_BYP_4, 0);
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_PLL_DIG_33, 0);
+		udelay(500);
+
+		/* Do the BIST */
+		for_each_set_bit(lane, lanes, NUM_LANES) {
+			struct xpsgtr_phy *gtr_phy = &gtr_dev->phys[lane];
+			u32 packets, errors;
+
+			xpsgtr_phy_init_bus_width(gtr_phy, PROT_BUS_WIDTH_10);
+			xpsgtr_phy_set_loopback(gtr_phy, true);
+			xpsgtr_write_phy(gtr_phy, L0_TM_DIG_22, 0x20);
+			xpsgtr_clr_set_phy(gtr_phy, L0_BIST_CTRL_1, 0, 1);
+
+			udelay(200);
+			xpsgtr_write_phy(gtr_phy, L0_BIST_CTRL_1, 0);
+			packets = xpsgtr_read_phy(gtr_phy, L0_BIST_PKT_CTR_L);
+			packets |= xpsgtr_read_phy(gtr_phy, L0_BIST_PKT_CTR_H) << 8;
+			errors = xpsgtr_read_phy(gtr_phy, L0_BIST_ERR_CTR_L);
+			errors |= xpsgtr_read_phy(gtr_phy, L0_BIST_ERR_CTR_H) << 8;
+			ok[lane] = packets && !errors;
+
+			dev_dbg(gtr_dev->dev,
+				"lane %lu ILL %d packets %10u errors %10u\n",
+				lane, i, packets, errors);
+		}
+
+		xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_CTRL_1, 0);
+		xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x00);
+		xpsgtr_write(gtr_dev, UPHY_SPARE0, 0x02);
+
+		for_each_set_bit(lane, lanes, NUM_LANES) {
+			pass[lane] += ok[lane] && last_ok[lane];
+			if (pass[lane] < 4) {
+				if (!ok[lane] && i > 2) {
+					if (altpass[lane] < pass[lane]) {
+						altpass[lane] = pass[lane];
+						altbest[lane] =
+							(i - 1) - (pass[lane] + 1) / 2;
+					}
+					pass[lane] = 0;
+				}
+			} else if (!best[lane] && (!ok[lane] || i == 63) &&
+				   last_ok[lane]) {
+				best[lane] = (i - 1) - (pass[lane] + 1) / 2;
+			}
+		}
+
+		memcpy(last_ok, ok, sizeof(ok));
+	}
+
+	for_each_set_bit(lane, lanes, NUM_LANES) {
+		dev_dbg(gtr_dev->dev, "lane %lu ILL best %d alt best %d\n",
+			lane, best[lane], altbest[lane]);
+
+		xpsgtr_phy_set_ill(&gtr_dev->phys[lane],
+				   best[lane] ?: altbest[lane], gen2);
+	}
+
+	/* Clean up */
+	xpsgtr_clr_set_lanes(gtr_dev, lanes, L0_TM_ANA_BYP_7, 0x30, 0);
+	xpsgtr_write(gtr_dev, UPHY_SPARE0, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_CTRL_1, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_CTRL_2, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_RUN_LEN_L, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_ERR_INJ_POINT_L, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_RUNLEN_ERR_INJ_H, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_IDLE_TIME, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_MARKER_L, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_IDLE_CHAR_L, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_MARKER_IDLE_H, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_LOW_PULSE_TIME, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TOTAL_PULSE_TIME, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_1, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_2, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_3, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_4, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_TEST_PAT_MSBS, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_PKT_NUM, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_FRM_IDLE_TIME, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_PKT_CTR_L, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_PKT_CTR_H, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_ERR_CTR_L, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_ERR_CTR_H, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_FILLER_OUT, 1);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_BIST_FORCE_MK_RST, 0);
+	xpsgtr_write_lanes(gtr_dev, lanes, L0_TM_DIG_22, 0);
+
+	for_each_set_bit(lane, lanes, NUM_LANES) {
+		struct xpsgtr_phy *gtr_phy = &gtr_dev->phys[lane];
+
+		xpsgtr_phy_init_bus_width(gtr_phy, PROT_BUS_WIDTH_20);
+		xpsgtr_phy_set_loopback(gtr_phy, false);
+	}
+}
+
 static int xpsgtr_common_init(struct xpsgtr_phy *gtr_phy)
 {
 	int ret;
@@ -553,6 +875,37 @@ static void xpsgtr_phy_init_sata(struct xpsgtr_phy *gtr_phy)
 {
 	struct xpsgtr_dev *gtr_dev = gtr_phy->dev;
 
+	if (!xpsgtr_ill_calibrated(gtr_phy)) {
+		DECLARE_BITMAP(lanes, NUM_LANES) = { 0 };
+
+		xpsgtr_init_ill(gtr_phy);
+		xpsgtr_write_phy(gtr_phy, L0_TM_E_ILL3, 100);
+		xpsgtr_clr_set_phy(gtr_phy, L0_TM_ILL11, 0xf0, 0x20);
+
+		__set_bit(gtr_phy->lane, lanes);
+		xpsgtr_phy_illcalib(gtr_dev, lanes, false);
+		xpsgtr_phy_set_ill(gtr_phy, 7, true);
+	}
+
+	/* Disable SSC */
+	xpsgtr_write_phy(gtr_phy, L0_PLL_FBDIV_FRAC_3_MSB, TM_FORCE_EN_FRAC);
+	xpsgtr_clr_set_phy(gtr_phy, L0_PLL_SS_STEP_SIZE_3_MSB, 0, TM_FORCE_EN);
+
+	/* Disable Tx deemphasis */
+	xpsgtr_write_phy(gtr_phy, L0_TM_CDR5,
+			 FIELD_PREP(L0_TM_CDR5_FPHL_FSM_ACC_CYCLES, 7) |
+			 FIELD_PREP(L0_TM_CDR5_FFL_PH0_INT_GAIN, 6));
+	xpsgtr_write_phy(gtr_phy, L0_TM_CDR16, 12);
+
+	/* Configure equalization */
+	xpsgtr_write_phy(gtr_phy, L0_TX_ANA_TM_118,
+			 L0_TX_ANA_TM_118_FORCE_17_0);
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_EQ0, 0, L0_TM_EQ0_EQ_STG2_CTRL_BYP);
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_EQ1, L0_TM_EQ1_EQ_STG2_RL_PROG,
+			   FIELD_PREP(L0_TM_EQ1_EQ_STG2_RL_PROG, 2) |
+			   L0_TM_EQ1_EQ_STG2_PREAMP_MODE_VAL);
+	xpsgtr_write_phy(gtr_phy, L0_TX_ANA_TM_18, 2); /* -3.5 dB deemphasis */
+
 	xpsgtr_bypass_scrambler_8b10b(gtr_phy);
 
 	writel(gtr_phy->lane, gtr_dev->siou + SATA_CONTROL_OFFSET);
@@ -563,6 +916,64 @@ static void xpsgtr_phy_init_sgmii(struct xpsgtr_phy *gtr_phy)
 {
 	xpsgtr_phy_init_bus_width(gtr_phy, PROT_BUS_WIDTH_10);
 	xpsgtr_bypass_scrambler_8b10b(gtr_phy);
+}
+
+/* PCIe-specific initialization. */
+static int xpsgtr_phy_init_pcie(struct xpsgtr_phy *gtr_phy)
+{
+	struct xpsgtr_dev *gtr_dev = gtr_phy->dev;
+	DECLARE_BITMAP(lanes, NUM_LANES) = { 0 };
+	unsigned long lane;
+	bool calibrated = false;
+
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_AUX_0, 0, 0x20);
+
+	for (lane = 0; lane < NUM_LANES; lane++) {
+		struct xpsgtr_phy *gtr_phy = &gtr_dev->phys[lane];
+
+		if (gtr_phy->protocol != ICM_PROTOCOL_PCIE)
+			continue;
+
+		__set_bit(lane, lanes);
+		calibrated = calibrated || xpsgtr_ill_calibrated(gtr_phy);
+	}
+
+	if (calibrated)
+		return 0;
+
+	/* Write default ILL config */
+	for_each_set_bit(lane, lanes, NUM_LANES) {
+		struct xpsgtr_phy *p = &gtr_dev->phys[lane];
+
+		if (lane != gtr_phy->lane) {
+			int ret = xpsgtr_common_init(p);
+
+			if (ret)
+				return ret;
+		}
+
+		xpsgtr_init_ill(p);
+		xpsgtr_write_phy(p, L0_TM_E_ILL3, 0);
+		xpsgtr_clr_set_phy(p, L0_TM_MISC2, 0,
+				   L0_TM_MISC2_ILL_CAL_BYPASS);
+	}
+
+	/* Perform the ILL calibration procedure */
+	xpsgtr_phy_illcalib(gtr_dev, lanes, false);
+	xpsgtr_phy_illcalib(gtr_dev, lanes, true);
+
+	/* Disable PCIe ECO */
+	writel(1, gtr_dev->siou + SIOU_ECO_0);
+	return 0;
+}
+
+/* USB-specific initialization. */
+static void xpsgtr_phy_init_usb(struct xpsgtr_phy *gtr_phy)
+{
+	xpsgtr_clr_set_phy(gtr_phy, L0_TM_AUX_0, 0, 0x20);
+	xpsgtr_write_phy(gtr_phy, L0_TM_IQ_ILL8, 0xf3);
+	xpsgtr_write_phy(gtr_phy, L0_TM_E_ILL8, 0xf3);
+	xpsgtr_phy_set_ill(gtr_phy, 7, false);
 }
 
 /* Configure TX de-emphasis and margining for DP. */
@@ -710,12 +1121,20 @@ static int xpsgtr_phy_init(struct phy *phy)
 		xpsgtr_phy_init_dp(gtr_phy);
 		break;
 
+	case ICM_PROTOCOL_PCIE:
+		ret = xpsgtr_phy_init_pcie(gtr_phy);
+		break;
+
 	case ICM_PROTOCOL_SATA:
 		xpsgtr_phy_init_sata(gtr_phy);
 		break;
 
 	case ICM_PROTOCOL_SGMII:
 		xpsgtr_phy_init_sgmii(gtr_phy);
+		break;
+
+	case ICM_PROTOCOL_USB:
+		xpsgtr_phy_init_usb(gtr_phy);
 		break;
 	}
 
