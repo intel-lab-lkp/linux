@@ -9,6 +9,8 @@
  * creates the handles for the trace points.
  */
 #define CREATE_TRACE_POINTS
+__diag_ignore(GCC, all, "-Wsuggest-attribute=format",
+             "trace_event_get_offsets_foo_bar can't easily be annotated as __printf");
 #include "trace-events-sample.h"
 
 static const char *random_strings[] = {
