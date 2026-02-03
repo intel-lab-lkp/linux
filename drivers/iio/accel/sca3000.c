@@ -7,6 +7,7 @@
  * See industrialio/accels/sca3000.h for comments.
  */
 
+#include <linux/cleanup.h>
 #include <linux/interrupt.h>
 #include <linux/fs.h>
 #include <linux/device.h>
@@ -1441,17 +1442,15 @@ static void sca3000_stop_all_interrupts(void *data)
 	struct sca3000_state *st = iio_priv(indio_dev);
 	int ret;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
+
 	ret = sca3000_read_data_short(st, SCA3000_REG_INT_MASK_ADDR, 1);
-	if (ret)
-		goto out_unlock;
-	sca3000_write_reg(st, SCA3000_REG_INT_MASK_ADDR,
-			  (st->rx[0] &
-			   ~(SCA3000_REG_INT_MASK_RING_THREE_QUARTER |
-			     SCA3000_REG_INT_MASK_RING_HALF |
-			     SCA3000_REG_INT_MASK_ALL_INTS)));
-out_unlock:
-	mutex_unlock(&st->lock);
+	if (!ret)
+		sca3000_write_reg(st, SCA3000_REG_INT_MASK_ADDR,
+				  (st->rx[0] &
+				   ~(SCA3000_REG_INT_MASK_RING_THREE_QUARTER |
+				     SCA3000_REG_INT_MASK_RING_HALF |
+				     SCA3000_REG_INT_MASK_ALL_INTS)));
 }
 
 static int sca3000_probe(struct spi_device *spi)
