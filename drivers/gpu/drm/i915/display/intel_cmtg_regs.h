@@ -32,4 +32,6 @@
 #define TRANS_VRR_VMIN_CMTG(id)		_MMIO(0x6F434 + (id) * 0x100)
 #define TRANS_VRR_FLIPLINE_CMTG(id)	_MMIO(0x6F438 + (id) * 0x100)
 
+#define TRANS_SET_CTX_LATENCY_CMTG(id) _MMIO(0x6F07C + (id) * 0x100)
+
 #endif /* __INTEL_CMTG_REGS_H__ */
