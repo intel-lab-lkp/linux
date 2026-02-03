@@ -230,10 +230,9 @@ void unwind_deferred_task_exit(struct task_struct *task)
 int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 {
 	struct unwind_task_info *info = &current->unwind_info;
+	unsigned long bit_mask, old_mask, new_mask;
 	int twa_mode = TWA_RESUME;
-	unsigned long old, bits;
-	unsigned long bit;
-	int ret;
+	int bit, ret;
 
 	*cookie = 0;
 
@@ -257,17 +256,16 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 	if (WARN_ON_ONCE(bit < 0))
 		return -EINVAL;
 
-	/* Only need the mask now */
-	bit = BIT(bit);
+	bit_mask = BIT(bit);
 
 	guard(irqsave)();
 
 	*cookie = get_cookie(info);
 
-	old = atomic_long_read(&info->unwind_mask);
+	old_mask = atomic_long_read(&info->unwind_mask);
 
 	/* Is this already queued or executed */
-	if (old & bit)
+	if (old_mask & bit_mask)
 		return 1;
 
 	/*
@@ -276,15 +274,15 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 	 * work's bit or PENDING was already set, then this is already queued
 	 * to have a callback.
 	 */
-	bits = UNWIND_PENDING | bit;
-	old = atomic_long_fetch_or(bits, &info->unwind_mask);
-	if (old & bits) {
+	new_mask = UNWIND_PENDING | bit_mask;
+	old_mask = atomic_long_fetch_or(new_mask, &info->unwind_mask);
+	if (old_mask & new_mask) {
 		/*
 		 * If the work's bit was set, whatever set it had better
 		 * have also set pending and queued a callback.
 		 */
-		WARN_ON_ONCE(!(old & UNWIND_PENDING));
-		return old & bit;
+		WARN_ON_ONCE(!(old_mask & UNWIND_PENDING));
+		return old_mask & bit_mask;
 	}
 
 	/* The work has been claimed, now schedule it. */
