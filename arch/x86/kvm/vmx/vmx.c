@@ -2789,6 +2789,9 @@ static int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 			adjust_vmx_controls64(KVM_OPTIONAL_VMX_TERTIARY_VM_EXEC_CONTROL,
 					      MSR_IA32_VMX_PROCBASED_CTLS3);
 
+	if (!(_cpu_based_2nd_exec_control & SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY))
+		_cpu_based_3rd_exec_control &= ~TERTIARY_EXEC_GUEST_APIC_TIMER;
+
 	if (adjust_vmx_controls(KVM_REQUIRED_VMX_VM_EXIT_CONTROLS,
 				KVM_OPTIONAL_VMX_VM_EXIT_CONTROLS,
 				MSR_IA32_VMX_EXIT_CTLS,
@@ -4615,6 +4618,13 @@ static u64 vmx_tertiary_exec_control(struct vcpu_vmx *vmx)
 	 */
 	if (!enable_ipiv || !kvm_vcpu_apicv_active(&vmx->vcpu))
 		exec_control &= ~TERTIARY_EXEC_IPI_VIRT;
+
+	/*
+	 * APIC timer virtualization is supported only for TSC deadline mode.
+	 * Disable for one-shot/periodic mode.  Dynamically set/clear the bit
+	 * on the guest timer mode change.  Disable on reset state.
+	 */
+	exec_control &= ~TERTIARY_EXEC_GUEST_APIC_TIMER;
 
 	return exec_control;
 }
