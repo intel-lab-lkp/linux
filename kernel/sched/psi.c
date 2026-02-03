@@ -387,6 +387,13 @@ static void collect_percpu_times(struct psi_group *group,
 		changed_states |= cpu_changed_states;
 
 		nonidle = nsecs_to_jiffies(times[PSI_NONIDLE]);
+		/*
+		 * A CPU with zero non-idle jiffies does not contribute to the
+		 * weighted per-CPU aggregation. There is no need to include it
+		 * in deltas or total accumulation.
+		 */
+		if (!nonidle)
+			continue;
 		nonidle_total += nonidle;
 
 		for (s = 0; s < PSI_NONIDLE; s++)
