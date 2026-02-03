@@ -258,4 +258,7 @@ void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 		       intel_de_read(display, TRANS_SET_CONTEXT_LATENCY(display, cpu_transcoder)));
 
 	intel_cpu_cmtg_transcoder_set_m_n(crtc_state);
+
+	/* Program Cmtg Sync to Port Sync, TRANS_CMTG_CTL */
+	intel_de_rmw(display, TRANS_CMTG_CTL(cpu_transcoder), CMTG_SYNC_TO_PORT, CMTG_SYNC_TO_PORT);
 }
