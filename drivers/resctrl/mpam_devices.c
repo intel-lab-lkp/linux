@@ -2135,10 +2135,12 @@ static void mpam_enable_init_class_features(struct mpam_class *class)
 	struct mpam_vmsc *vmsc;
 	struct mpam_component *comp;
 
-	comp = list_first_entry(&class->components,
-				struct mpam_component, class_list);
-	vmsc = list_first_entry(&comp->vmsc,
-				struct mpam_vmsc, comp_list);
+	list_for_each_entry(comp, &class->components, class_list) {
+		list_for_each_entry(vmsc, &comp->vmsc, comp_list) {
+			if (vmsc->msc->probed)
+				break;
+		}
+	}
 
 	class->props = vmsc->props;
 }
@@ -2150,6 +2152,9 @@ static void mpam_enable_merge_vmsc_features(struct mpam_component *comp)
 	struct mpam_class *class = comp->class;
 
 	list_for_each_entry(vmsc, &comp->vmsc, comp_list) {
+		if (!vmsc->msc->probed)
+			continue;
+
 		list_for_each_entry(ris, &vmsc->ris, vmsc_list) {
 			__vmsc_props_mismatch(vmsc, ris);
 			class->nrdy_usec = max(class->nrdy_usec,
@@ -2163,8 +2168,12 @@ static void mpam_enable_merge_class_features(struct mpam_component *comp)
 	struct mpam_vmsc *vmsc;
 	struct mpam_class *class = comp->class;
 
-	list_for_each_entry(vmsc, &comp->vmsc, comp_list)
+	list_for_each_entry(vmsc, &comp->vmsc, comp_list) {
+		if (!vmsc->msc->probed)
+			continue;
+
 		__class_props_mismatch(class, vmsc);
+	}
 }
 
 /*
@@ -2621,6 +2630,7 @@ void mpam_disable(struct work_struct *ignored)
  */
 void mpam_enable(struct work_struct *work)
 {
+	cpumask_t mask;
 	static atomic_t once;
 	struct mpam_msc *msc;
 	bool all_devices_probed = true;
@@ -2630,8 +2640,11 @@ void mpam_enable(struct work_struct *work)
 	list_for_each_entry_srcu(msc, &mpam_all_msc, all_msc_list,
 				 srcu_read_lock_held(&mpam_srcu)) {
 		mutex_lock(&msc->probe_lock);
-		if (!msc->probed)
-			all_devices_probed = false;
+		if (!msc->probed) {
+			cpumask_and(&mask, &msc->accessibility, cpu_online_mask);
+			if (!cpumask_empty(&mask))
+				all_devices_probed = false;
+		}
 		mutex_unlock(&msc->probe_lock);
 
 		if (!all_devices_probed)
