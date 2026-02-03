@@ -802,7 +802,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 					unsigned int scf_flags,
 					smp_cond_func_t cond_func)
 {
-	int cpu, last_cpu, this_cpu = smp_processor_id();
+	int cpu, last_cpu, this_cpu;
 	struct call_function_data *cfd;
 	bool wait = scf_flags & SCF_WAIT;
 	bool preemptible_wait = true;
@@ -811,10 +811,17 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 	int nr_cpus = 0;
 	bool run_remote = false;
 
-	lockdep_assert_preemption_disabled();
-
-	if (!alloc_cpumask_var(&cpumask_stack, GFP_ATOMIC))
+	if (!wait || !alloc_cpumask_var(&cpumask_stack, GFP_ATOMIC))
 		preemptible_wait = false;
+
+	/*
+	 * Prevent the current CPU from going offline.
+	 * Being migrated to another CPU and calling csd_lock_wait() may cause
+	 * UAF due to smpcfd_dead_cpu() during the current CPU offline process.
+	 */
+	migrate_disable();
+
+	this_cpu = get_cpu();
 
 	/*
 	 * Can deadlock when called with interrupts disabled.
@@ -898,6 +905,22 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 		local_irq_restore(flags);
 	}
 
+	/*
+	 * We may block in csd_lock_wait() for a significant amount of time, especially
+	 * when interrupts are disabled or with a large number of remote CPUs.
+	 * Try to enable preemption before csd_lock_wait().
+	 *
+	 * - If @wait is true, we try to use the cpumask_stack instead of cfd->cpumask to
+	 * avoid concurrency modification from tasks on the same cpu. If alloc_cpumask_var()
+	 * return false, fallback to the default logic.
+	 *
+	 * - If preemption occurs during csd_lock_wait, other concurrent
+	 * smp_call_function_many_cond() calls will simply block until the previous csd->func()
+	 * complete.
+	 */
+	if (preemptible_wait)
+		put_cpu();
+
 	if (run_remote && wait) {
 		for_each_cpu(cpu, cpumask) {
 			call_single_data_t *csd;
@@ -907,8 +930,12 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 		}
 	}
 
-	if (preemptible_wait)
+	if (!preemptible_wait)
+		put_cpu();
+	else
 		free_cpumask_var(cpumask_stack);
+
+	migrate_enable();
 }
 
 /**
