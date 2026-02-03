@@ -892,6 +892,7 @@ static void intel_vrr_tg_enable(const struct intel_crtc_state *crtc_state,
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	u32 vrr_ctl;
 
 	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
@@ -906,6 +907,9 @@ static void intel_vrr_tg_enable(const struct intel_crtc_state *crtc_state,
 	 */
 	if (cmrr_enable)
 		vrr_ctl |= VRR_CTL_CMRR_ENABLE;
+
+	if (crtc->cmtg.enable)
+		crtc->cmtg.vrr_ctl = vrr_ctl;
 
 	intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder), vrr_ctl);
 }

@@ -17,6 +17,7 @@
 #include "intel_display_power.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_vrr.h"
 
 /**
  * DOC: Common Primary Timing Generator (CMTG)
@@ -220,6 +221,17 @@ static void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state)
 	intel_de_write(display, TRANS_VTOTAL_CMTG(cpu_transcoder), crtc->cmtg.vtotal);
 	intel_de_write(display, TRANS_VBLANK_CMTG(cpu_transcoder), crtc->cmtg.vblank);
 	intel_de_write(display, TRANS_VSYNC_CMTG(cpu_transcoder), crtc->cmtg.vsync);
+
+	if (intel_vrr_possible(crtc_state) && intel_vrr_always_use_vrr_tg(display)) {
+		intel_de_write(display, TRANS_VRR_VMIN_CMTG(cpu_transcoder),
+			       crtc_state->vrr.vmin - 1);
+		intel_de_write(display, TRANS_VRR_VMAX_CMTG(cpu_transcoder),
+			       crtc_state->vrr.vmax - 1);
+		intel_de_write(display, TRANS_VRR_FLIPLINE_CMTG(cpu_transcoder),
+			       crtc_state->vrr.flipline - 1);
+		intel_de_write(display, TRANS_VRR_CTL_CMTG(cpu_transcoder),
+			       crtc->cmtg.vrr_ctl);
+	}
 }
 
 void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
