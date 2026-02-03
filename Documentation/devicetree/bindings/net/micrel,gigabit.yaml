@@ -17,15 +17,20 @@ description:
 
 properties:
   compatible:
-    enum:
-      - ethernet-phy-id0022.1610  # KSZ9021
-      - ethernet-phy-id0022.1611  # KSZ9021RLRN
-      - ethernet-phy-id0022.1620  # KSZ9031
-      - ethernet-phy-id0022.1631  # KSZ9477
-      - ethernet-phy-id0022.1640  # KSZ9131
-      - ethernet-phy-id0022.1650  # LAN8841
-      - ethernet-phy-id0022.1660  # LAN8814
-      - ethernet-phy-id0022.1670  # LAN8804
+    oneOf:
+      - items:
+          - const: ethernet-phy-id0022.1640
+          - const: ethernet-phy-ieee802.3-c22
+      - items:
+          - enum:
+              - ethernet-phy-id0022.1610  # KSZ9021
+              - ethernet-phy-id0022.1611  # KSZ9021RLRN
+              - ethernet-phy-id0022.1620  # KSZ9031
+              - ethernet-phy-id0022.1631  # KSZ9477
+              - ethernet-phy-id0022.1640  # KSZ9131
+              - ethernet-phy-id0022.1650  # LAN8841
+              - ethernet-phy-id0022.1660  # LAN8814
+              - ethernet-phy-id0022.1670  # LAN8804
 
   micrel,force-master:
     type: boolean
