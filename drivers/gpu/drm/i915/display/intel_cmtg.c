@@ -277,4 +277,18 @@ void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 
 	/* Program Enable Cmtg */
 	intel_cmtg_ctl_enable(crtc_state);
+
+	if (intel_de_wait_for_clear_ms(display, TRANS_CMTG_CTL(cpu_transcoder),
+				       CMTG_SYNC_TO_PORT, 50)) {
+		drm_WARN(display->drm, 1, "CMTG:%d enable timeout\n", cpu_transcoder);
+		return;
+	}
+
+	/*
+	 *  eDP transcoder registers as secondary to CMTG by setting
+	 *  TRANS_DDI_FUNC_CTL2[CMTG Secondary Mode].
+	 */
+	intel_de_rmw(display, TRANS_DDI_FUNC_CTL2(display, cpu_transcoder), 0, CMTG_SECONDARY_MODE);
+
+	drm_dbg_kms(display->drm, "CMTG:%d enabled\n", cpu_transcoder);
 }
