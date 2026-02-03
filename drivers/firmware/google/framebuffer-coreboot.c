@@ -76,22 +76,23 @@ static struct device *framebuffer_parent_dev(struct resource *res)
 	return NULL;
 }
 
-static const struct simplefb_format formats[] = SIMPLEFB_FORMATS;
-
 static int framebuffer_probe(struct coreboot_device *dev)
 {
-	int i;
 	struct lb_framebuffer *fb = &dev->framebuffer;
 	struct device *parent;
 	struct platform_device *pdev;
 	struct resource res;
 	int ret;
+#if !IS_ENABLED(CONFIG_DRM_COREBOOTDRM)
 	struct simplefb_platform_data pdata = {
 		.width = fb->x_resolution,
 		.height = fb->y_resolution,
 		.stride = fb->bytes_per_line,
 		.format = NULL,
 	};
+	int i;
+	static const struct simplefb_format formats[] = SIMPLEFB_FORMATS;
+#endif
 
 	/*
 	 * On coreboot systems, the advertised LB_TAG_FRAMEBUFFER entry
@@ -118,6 +119,20 @@ static int framebuffer_probe(struct coreboot_device *dev)
 	if (IS_ERR(parent))
 		return PTR_ERR(parent);
 
+#if IS_ENABLED(CONFIG_DRM_COREBOOTDRM)
+	pdev = platform_device_register_resndata(parent, "coreboot-framebuffer", 0,
+						 &res, 1, fb, fb->size);
+	if (IS_ERR(pdev)) {
+		pr_warn("coreboot: could not register framebuffer\n");
+		ret = PTR_ERR(pdev);
+		goto out_put_device_parent;
+	}
+#else
+	/*
+	 * FIXME: Coreboot systems should use a driver that binds to
+	 *        coreboot-framebuffer devices. Remove support for
+	 *        simple-framebuffer at some point.
+	 */
 	for (i = 0; i < ARRAY_SIZE(formats); ++i) {
 		if (fb->bits_per_pixel     == formats[i].bits_per_pixel &&
 		    fb->red_mask_pos       == formats[i].red.offset &&
@@ -142,6 +157,7 @@ static int framebuffer_probe(struct coreboot_device *dev)
 		pr_warn("coreboot: could not register framebuffer\n");
 		goto out_put_device_parent;
 	}
+#endif
 
 	ret = 0;
 
