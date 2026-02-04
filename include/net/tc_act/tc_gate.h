@@ -32,6 +32,7 @@ struct tcf_gate_params {
 	s32			tcfg_clockid;
 	size_t			num_entries;
 	struct list_head	entries;
+	struct rcu_head		rcu;
 };
 
 #define GATE_ACT_GATE_OPEN	BIT(0)
@@ -39,7 +40,7 @@ struct tcf_gate_params {
 
 struct tcf_gate {
 	struct tc_action	common;
-	struct tcf_gate_params	param;
+	struct tcf_gate_params __rcu *param;
 	u8			current_gate_status;
 	ktime_t			current_close_time;
 	u32			current_entry_octets;
@@ -51,47 +52,60 @@ struct tcf_gate {
 
 #define to_gate(a) ((struct tcf_gate *)a)
 
+static inline struct tcf_gate_params *tcf_gate_params_locked(const struct tc_action *a)
+{
+	struct tcf_gate *gact = to_gate(a);
+
+	return rcu_dereference_protected(gact->param,
+					 lockdep_is_held(&gact->tcf_lock));
+}
+
 static inline s32 tcf_gate_prio(const struct tc_action *a)
 {
+	struct tcf_gate_params *p = tcf_gate_params_locked(a);
 	s32 tcfg_prio;
 
-	tcfg_prio = to_gate(a)->param.tcfg_priority;
+	tcfg_prio = p->tcfg_priority;
 
 	return tcfg_prio;
 }
 
 static inline u64 tcf_gate_basetime(const struct tc_action *a)
 {
+	struct tcf_gate_params *p = tcf_gate_params_locked(a);
 	u64 tcfg_basetime;
 
-	tcfg_basetime = to_gate(a)->param.tcfg_basetime;
+	tcfg_basetime = p->tcfg_basetime;
 
 	return tcfg_basetime;
 }
 
 static inline u64 tcf_gate_cycletime(const struct tc_action *a)
 {
+	struct tcf_gate_params *p = tcf_gate_params_locked(a);
 	u64 tcfg_cycletime;
 
-	tcfg_cycletime = to_gate(a)->param.tcfg_cycletime;
+	tcfg_cycletime = p->tcfg_cycletime;
 
 	return tcfg_cycletime;
 }
 
 static inline u64 tcf_gate_cycletimeext(const struct tc_action *a)
 {
+	struct tcf_gate_params *p = tcf_gate_params_locked(a);
 	u64 tcfg_cycletimeext;
 
-	tcfg_cycletimeext = to_gate(a)->param.tcfg_cycletime_ext;
+	tcfg_cycletimeext = p->tcfg_cycletime_ext;
 
 	return tcfg_cycletimeext;
 }
 
 static inline u32 tcf_gate_num_entries(const struct tc_action *a)
 {
+	struct tcf_gate_params *p = tcf_gate_params_locked(a);
 	u32 num_entries;
 
-	num_entries = to_gate(a)->param.num_entries;
+	num_entries = p->num_entries;
 
 	return num_entries;
 }
@@ -100,12 +114,11 @@ static inline struct action_gate_entry
 			*tcf_gate_get_list(const struct tc_action *a)
 {
 	struct action_gate_entry *oe;
-	struct tcf_gate_params *p;
+	struct tcf_gate_params *p = tcf_gate_params_locked(a);
 	struct tcfg_gate_entry *entry;
 	u32 num_entries;
 	int i = 0;
 
-	p = &to_gate(a)->param;
 	num_entries = p->num_entries;
 
 	list_for_each_entry(entry, &p->entries, list)
