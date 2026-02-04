@@ -33,7 +33,7 @@ bool copy_from_kernel_nofault_allowed(const void *unsafe_src, size_t size)
 	if (!boot_cpu_data.x86_virt_bits)
 		return true;
 
-	return __is_canonical_address(vaddr, boot_cpu_data.x86_virt_bits);
+	return __is_canonical_address(__tag_reset(vaddr), boot_cpu_data.x86_virt_bits);
 }
 #else
 bool copy_from_kernel_nofault_allowed(const void *unsafe_src, size_t size)
