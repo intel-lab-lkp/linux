@@ -11,6 +11,7 @@ TEST_PROGS := \
 	amt.sh \
 	arp_ndisc_evict_nocarrier.sh \
 	arp_ndisc_untracked_subnets.sh \
+	arp_no_invalid_sha_poision.sh \
 	bareudp.sh \
 	big_tcp.sh \
 	bind_bhash.sh \
