@@ -1122,8 +1122,16 @@ static void dispatch_enqueue(struct scx_sched *sch, struct scx_dispatch_q *dsq,
 
 	if (is_local)
 		local_dsq_post_enq(dsq, p, enq_flags);
-	else
+	else {
+		/* Update cpumask to track union of all tasks' allowed CPUs */
+		if (dsq->cpus_allowed) {
+			if (dsq->nr == 1)
+				cpumask_copy(dsq->cpus_allowed, p->cpus_ptr);
+			else if (!cpumask_full(dsq->cpus_allowed))
+				cpumask_or(dsq->cpus_allowed, dsq->cpus_allowed, p->cpus_ptr);
+		}
 		raw_spin_unlock(&dsq->lock);
+	}
 }
 
 static void task_unlink_from_dsq(struct task_struct *p,
@@ -1139,6 +1147,10 @@ static void task_unlink_from_dsq(struct task_struct *p,
 
 	list_del_init(&p->scx.dsq_list.node);
 	dsq_mod_nr(dsq, -1);
+
+	/* Clear cpumask when queue becomes empty to prevent saturation */
+	if (dsq->nr == 0 && dsq->cpus_allowed)
+		cpumask_clear(dsq->cpus_allowed);
 
 	if (!(dsq->id & SCX_DSQ_FLAG_BUILTIN) && dsq->first_task == p) {
 		struct task_struct *first_task;
@@ -1903,6 +1915,14 @@ retry:
 	if (list_empty(&dsq->list))
 		return false;
 
+	/*
+	 * O(1) optimization: Check if any task in the queue can run on this CPU.
+	 * If the cpumask is allocated and this CPU is not in the allowed set,
+	 * we can skip the entire queue without scanning.
+	 */
+	if (dsq->cpus_allowed && !cpumask_test_cpu(cpu_of(rq), dsq->cpus_allowed))
+		return false;
+
 	raw_spin_lock(&dsq->lock);
 
 	nldsq_for_each_task(p, dsq) {
@@ -2649,8 +2669,24 @@ static void set_cpus_allowed_scx(struct task_struct *p,
 				 struct affinity_context *ac)
 {
 	struct scx_sched *sch = scx_root;
+	struct scx_dispatch_q *dsq;
 
 	set_cpus_allowed_common(p, ac);
+
+	/*
+	 * If the task is currently in a DSQ, update the DSQ's allowed mask.
+	 * As the task's affinity has changed, the DSQ's union mask must
+	 * be updated to reflect the new allowed CPUs.
+	 */
+	dsq = p->scx.dsq;
+	if (dsq && dsq->cpus_allowed) {
+		unsigned long flags;
+
+		raw_spin_lock_irqsave(&dsq->lock, flags);
+		if (p->scx.dsq == dsq)
+			cpumask_or(dsq->cpus_allowed, dsq->cpus_allowed, p->cpus_ptr);
+		raw_spin_unlock_irqrestore(&dsq->lock, flags);
+	}
 
 	/*
 	 * The effective cpumask is stored in @p->cpus_ptr which may temporarily
@@ -3422,13 +3458,29 @@ DEFINE_SCHED_CLASS(ext) = {
 #endif
 };
 
-static void init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id)
+static int init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id)
 {
 	memset(dsq, 0, sizeof(*dsq));
 
 	raw_spin_lock_init(&dsq->lock);
 	INIT_LIST_HEAD(&dsq->list);
 	dsq->id = dsq_id;
+
+	/* Allocate cpumask for tracking allowed CPUs only for user DSQs */
+	if (!(dsq_id & SCX_DSQ_FLAG_BUILTIN)) {
+		dsq->cpus_allowed = kzalloc(cpumask_size(), GFP_KERNEL);
+		if (!dsq->cpus_allowed)
+			return -ENOMEM;
+	}
+	return 0;
+}
+
+static void free_dsq_rcu_callback(struct rcu_head *rcu)
+{
+	struct scx_dispatch_q *dsq = container_of(rcu, struct scx_dispatch_q, rcu);
+
+	kfree(dsq->cpus_allowed);
+	kfree(dsq);
 }
 
 static void free_dsq_irq_workfn(struct irq_work *irq_work)
@@ -3437,7 +3489,7 @@ static void free_dsq_irq_workfn(struct irq_work *irq_work)
 	struct scx_dispatch_q *dsq, *tmp_dsq;
 
 	llist_for_each_entry_safe(dsq, tmp_dsq, to_free, free_node)
-		kfree_rcu(dsq, rcu);
+		call_rcu(&dsq->rcu, free_dsq_rcu_callback);
 }
 
 static DEFINE_IRQ_WORK(free_dsq_irq_work, free_dsq_irq_workfn);
@@ -6330,7 +6382,11 @@ __bpf_kfunc s32 scx_bpf_create_dsq(u64 dsq_id, s32 node)
 	if (!dsq)
 		return -ENOMEM;
 
-	init_dsq(dsq, dsq_id);
+	ret = init_dsq(dsq, dsq_id);
+	if (ret) {
+		kfree(dsq);
+		return ret;
+	}
 
 	rcu_read_lock();
 
@@ -6342,8 +6398,10 @@ __bpf_kfunc s32 scx_bpf_create_dsq(u64 dsq_id, s32 node)
 		ret = -ENODEV;
 
 	rcu_read_unlock();
-	if (ret)
+	if (ret) {
+		kfree(dsq->cpus_allowed);
 		kfree(dsq);
+	}
 	return ret;
 }
 
