@@ -1724,53 +1724,74 @@ static inline struct kvm_lapic *to_lapic(struct kvm_io_device *dev)
 	return container_of(dev, struct kvm_lapic, dev);
 }
 
-#define APIC_REG_MASK(reg)	(1ull << ((reg) >> 4))
-#define APIC_REGS_MASK(first, count) \
-	(APIC_REG_MASK(first) * ((1ull << (count)) - 1))
+/*
+ * Helper macros for APIC register bitmask handling
+ * 2 element array is being used to represent 128-bit mask, where:
+ * - mask[0] tracks standard APIC registers
+ * - mask[1] tracks extended APIC registers
+ */
 
-u64 kvm_lapic_readable_reg_mask(struct kvm_lapic *apic)
+#define APIC_REG_BITMAP_WORDS   2  /* 2 x 64-bit words = 128 bits */
+#define APIC_REG_BITMAP_BITS    (APIC_REG_BITMAP_WORDS * BITS_PER_LONG)
+
+#define APIC_REG_TO_BIT(reg)		(((reg) < 0x400) ? ((reg) >> 4) : \
+					 (64 + (((reg) - 0x400) >> 4)))
+
+#define APIC_REG_MASK(reg, mask) \
+	bitmap_set((unsigned long *)(mask), APIC_REG_TO_BIT(reg), 1)
+
+#define APIC_REGS_MASK(first, count, mask) \
+	bitmap_set((unsigned long *)(mask), APIC_REG_TO_BIT(first), (count))
+
+#define APIC_REG_TEST(reg, mask) \
+	test_bit(APIC_REG_TO_BIT(reg), (unsigned long *)(mask))
+
+#define APIC_LAST_REG_OFFSET		0x3f0
+
+void kvm_lapic_readable_reg_mask(struct kvm_lapic *apic, u64 mask[2])
 {
-	/* Leave bits '0' for reserved and write-only registers. */
-	u64 valid_reg_mask =
-		APIC_REG_MASK(APIC_ID) |
-		APIC_REG_MASK(APIC_LVR) |
-		APIC_REG_MASK(APIC_TASKPRI) |
-		APIC_REG_MASK(APIC_PROCPRI) |
-		APIC_REG_MASK(APIC_LDR) |
-		APIC_REG_MASK(APIC_SPIV) |
-		APIC_REGS_MASK(APIC_ISR, APIC_ISR_NR) |
-		APIC_REGS_MASK(APIC_TMR, APIC_ISR_NR) |
-		APIC_REGS_MASK(APIC_IRR, APIC_ISR_NR) |
-		APIC_REG_MASK(APIC_ESR) |
-		APIC_REG_MASK(APIC_ICR) |
-		APIC_REG_MASK(APIC_LVTT) |
-		APIC_REG_MASK(APIC_LVTTHMR) |
-		APIC_REG_MASK(APIC_LVTPC) |
-		APIC_REG_MASK(APIC_LVT0) |
-		APIC_REG_MASK(APIC_LVT1) |
-		APIC_REG_MASK(APIC_LVTERR) |
-		APIC_REG_MASK(APIC_TMICT) |
-		APIC_REG_MASK(APIC_TMCCT) |
-		APIC_REG_MASK(APIC_TDCR);
+	bitmap_zero((unsigned long *)(mask), APIC_REG_BITMAP_BITS);
+
+	APIC_REG_MASK(APIC_ID, mask);
+	APIC_REG_MASK(APIC_LVR, mask);
+	APIC_REG_MASK(APIC_TASKPRI, mask);
+	APIC_REG_MASK(APIC_PROCPRI, mask);
+	APIC_REG_MASK(APIC_LDR, mask);
+	APIC_REG_MASK(APIC_SPIV, mask);
+	APIC_REGS_MASK(APIC_ISR, APIC_ISR_NR, mask);
+	APIC_REGS_MASK(APIC_TMR, APIC_ISR_NR, mask);
+	APIC_REGS_MASK(APIC_IRR, APIC_ISR_NR, mask);
+	APIC_REG_MASK(APIC_ESR, mask);
+	APIC_REG_MASK(APIC_ICR, mask);
+	APIC_REG_MASK(APIC_LVTT, mask);
+	APIC_REG_MASK(APIC_LVTTHMR, mask);
+	APIC_REG_MASK(APIC_LVTPC, mask);
+	APIC_REG_MASK(APIC_LVT0, mask);
+	APIC_REG_MASK(APIC_LVT1, mask);
+	APIC_REG_MASK(APIC_LVTERR, mask);
+	APIC_REG_MASK(APIC_TMICT, mask);
+	APIC_REG_MASK(APIC_TMCCT, mask);
+	APIC_REG_MASK(APIC_TDCR, mask);
 
 	if (kvm_lapic_lvt_supported(apic, LVT_CMCI))
-		valid_reg_mask |= APIC_REG_MASK(APIC_LVTCMCI);
+		APIC_REG_MASK(APIC_LVTCMCI, mask);
 
 	/* ARBPRI, DFR, and ICR2 are not valid in x2APIC mode. */
-	if (!apic_x2apic_mode(apic))
-		valid_reg_mask |= APIC_REG_MASK(APIC_ARBPRI) |
-				  APIC_REG_MASK(APIC_DFR) |
-				  APIC_REG_MASK(APIC_ICR2);
-
-	return valid_reg_mask;
+	if (!apic_x2apic_mode(apic)) {
+		APIC_REG_MASK(APIC_ARBPRI, mask);
+		APIC_REG_MASK(APIC_DFR, mask);
+		APIC_REG_MASK(APIC_ICR2, mask);
+	}
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_lapic_readable_reg_mask);
 
 static int kvm_lapic_reg_read(struct kvm_lapic *apic, u32 offset, int len,
 			      void *data)
 {
+	unsigned int last_reg = APIC_LAST_REG_OFFSET;
 	unsigned char alignment = offset & 0xf;
 	u32 result;
+	u64 mask[2];
 
 	/*
 	 * WARN if KVM reads ICR in x2APIC mode, as it's an 8-byte register in
@@ -1781,8 +1802,9 @@ static int kvm_lapic_reg_read(struct kvm_lapic *apic, u32 offset, int len,
 	if (alignment + len > 4)
 		return 1;
 
-	if (offset > 0x3f0 ||
-	    !(kvm_lapic_readable_reg_mask(apic) & APIC_REG_MASK(offset)))
+	kvm_lapic_readable_reg_mask(apic, mask);
+
+	if (offset > last_reg || !APIC_REG_TEST(offset, mask))
 		return 1;
 
 	result = __apic_read(apic, offset & ~0xf);

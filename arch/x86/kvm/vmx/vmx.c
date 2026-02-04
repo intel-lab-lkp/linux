@@ -4246,10 +4246,14 @@ static void vmx_update_msr_bitmap_x2apic(struct kvm_vcpu *vcpu)
 	 * through reads for all valid registers by default in x2APIC+APICv
 	 * mode, only the current timer count needs on-demand emulation by KVM.
 	 */
-	if (mode & MSR_BITMAP_MODE_X2APIC_APICV)
-		msr_bitmap[read_idx] = ~kvm_lapic_readable_reg_mask(vcpu->arch.apic);
-	else
+	if (mode & MSR_BITMAP_MODE_X2APIC_APICV) {
+		u64 mask[2];
+
+		kvm_lapic_readable_reg_mask(vcpu->arch.apic, mask);
+		msr_bitmap[read_idx] = ~mask[0];
+	} else {
 		msr_bitmap[read_idx] = ~0ull;
+	}
 	msr_bitmap[write_idx] = ~0ull;
 
 	/*
