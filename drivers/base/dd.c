@@ -257,11 +257,7 @@ static int deferred_devs_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(deferred_devs);
 
-#ifdef CONFIG_MODULES
-static int driver_deferred_probe_timeout = 10;
-#else
-static int driver_deferred_probe_timeout;
-#endif
+static int driver_deferred_probe_timeout = CONFIG_DRIVER_DEFERRED_PROBE_TIMEOUT;
 
 static int __init deferred_probe_timeout_setup(char *str)
 {
@@ -323,6 +319,9 @@ static DECLARE_DELAYED_WORK(deferred_probe_timeout_work, deferred_probe_timeout_
 
 void deferred_probe_extend_timeout(void)
 {
+	if (driver_deferred_probe_timeout < 0)
+		return;
+
 	/*
 	 * If the work hasn't been queued yet or if the work expired, don't
 	 * start a new one.
