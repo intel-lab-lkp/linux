@@ -21,9 +21,9 @@ void psp_nl_notify_dev(struct psp_dev *psd, u32 cmd);
 struct psp_assoc *psp_assoc_create(struct psp_dev *psd);
 struct psp_dev *psp_dev_get_for_sock(struct sock *sk);
 void psp_dev_tx_key_del(struct psp_dev *psd, struct psp_assoc *pas);
-int psp_sock_assoc_set_rx(struct sock *sk, struct psp_assoc *pas,
-			  struct psp_key_parsed *key,
-			  struct netlink_ext_ack *extack);
+void psp_sock_assoc_set_rx(struct sock *sk, struct psp_assoc *pas,
+			   struct psp_key_parsed *key,
+			   struct netlink_ext_ack *extack);
 int psp_sock_assoc_set_tx(struct sock *sk, struct psp_dev *psd,
 			  u32 version, struct psp_key_parsed *key,
 			  struct netlink_ext_ack *extack);

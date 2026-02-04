@@ -446,11 +446,7 @@ int psp_nl_rx_assoc_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_free_pas;
 	}
 
-	err = psp_sock_assoc_set_rx(socket->sk, pas, &key, info->extack);
-	if (err) {
-		NL_SET_BAD_ATTR(info->extack, info->attrs[PSP_A_ASSOC_SOCK_FD]);
-		goto err_free_pas;
-	}
+	psp_sock_assoc_set_rx(socket->sk, pas, &key, info->extack);
 	psp_assoc_put(pas);
 
 	return psp_nl_reply_send(rsp, info);

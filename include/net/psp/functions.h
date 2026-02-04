@@ -103,6 +103,12 @@ __psp_sk_rx_policy_check(struct sk_buff *skb, struct psp_assoc *pas)
 		return 0;
 	}
 
+	if (pas->prev && psp_pse_matches_pas(pse, pas->prev)) {
+		pas->peer_tx = 1;
+		pas->prev->peer_tx = 1;
+		return 0;
+	}
+
 	if (!pse) {
 		if (!pas->tx.spi ||
 		    (!pas->peer_tx && psp_is_allowed_nondata(skb, pas)))

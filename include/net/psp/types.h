@@ -139,6 +139,9 @@ struct psp_assoc {
 
 	u32 upgrade_seq;
 
+	struct psp_assoc *prev;
+
+	bool tx_moved;
 	struct psp_key_parsed tx;
 	struct psp_key_parsed rx;
 

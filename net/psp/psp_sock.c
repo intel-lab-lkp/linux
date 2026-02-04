@@ -85,7 +85,7 @@ static int psp_dev_tx_key_add(struct psp_dev *psd, struct psp_assoc *pas,
 
 void psp_dev_tx_key_del(struct psp_dev *psd, struct psp_assoc *pas)
 {
-	if (pas->tx.spi)
+	if (pas->tx.spi && !pas->tx_moved)
 		psd->ops->tx_key_del(psd, pas);
 	list_del(&pas->assocs_list);
 }
@@ -99,6 +99,7 @@ static void psp_assoc_free(struct work_struct *work)
 	if (psd->ops)
 		psp_dev_tx_key_del(psd, pas);
 	mutex_unlock(&psd->lock);
+	psp_assoc_put(pas->prev);
 	psp_dev_put(psd);
 	kfree(pas);
 }
@@ -129,30 +130,42 @@ void psp_sk_assoc_free(struct sock *sk)
 	psp_assoc_put(pas);
 }
 
-int psp_sock_assoc_set_rx(struct sock *sk, struct psp_assoc *pas,
-			  struct psp_key_parsed *key,
-			  struct netlink_ext_ack *extack)
+static void psp_sock_rx_rekey(struct psp_assoc *pas, struct psp_assoc *prev)
 {
-	int err;
+	lockdep_assert_held(&pas->psd->lock);
+
+	pas->peer_tx = prev->peer_tx;
+	pas->upgrade_seq = prev->upgrade_seq;
+
+	/* steal refcount from sk->psp_assoc */
+	pas->prev = prev;
+
+	memcpy(&pas->tx, &prev->tx, sizeof(pas->tx));
+	memcpy(pas->drv_data, prev->drv_data, pas->psd->caps->assoc_drv_spc);
+	prev->tx_moved = true;
+
+	psp_assoc_put(prev->prev);
+	prev->prev = NULL;
+}
+
+void psp_sock_assoc_set_rx(struct sock *sk, struct psp_assoc *pas,
+			   struct psp_key_parsed *key,
+			   struct netlink_ext_ack *extack)
+{
+	struct psp_assoc *prev;
 
 	memcpy(&pas->rx, key, sizeof(*key));
 
 	lock_sock(sk);
 
-	if (psp_sk_assoc(sk)) {
-		NL_SET_ERR_MSG(extack, "Socket already has PSP state");
-		err = -EBUSY;
-		goto exit_unlock;
-	}
+	prev = psp_sk_assoc(sk);
+	if (prev)
+		psp_sock_rx_rekey(pas, prev);
 
 	refcount_inc(&pas->refcnt);
 	rcu_assign_pointer(sk->psp_assoc, pas);
-	err = 0;
 
-exit_unlock:
 	release_sock(sk);
-
-	return err;
 }
 
 static int psp_sock_recv_queue_check(struct sock *sk, struct psp_assoc *pas)
