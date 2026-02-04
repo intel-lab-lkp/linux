@@ -2432,7 +2432,7 @@ void SetHwReg8723B(struct adapter *padapter, u8 variable, u8 *val)
 			break;
 		case 2:
 			/*  sta add event callback */
-/* 				rtw_btcoex_MediaStatusNotify(padapter, RT_MEDIA_CONNECT); */
+/* 				rtw_btcoex_media_status_notify(padapter, RT_MEDIA_CONNECT); */
 			break;
 		}
 		break;
