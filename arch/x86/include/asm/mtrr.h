@@ -60,7 +60,7 @@ extern int mtrr_trim_uncached_memory(unsigned long end_pfn);
 extern int amd_special_default_mtrr(void);
 void mtrr_disable(void);
 void mtrr_enable(void);
-void mtrr_generic_set_state(void);
+bool mtrr_generic_set_state(void);
 #  else
 static inline void guest_force_mtrr_state(struct mtrr_var_range *var,
 					  unsigned int num_var,
@@ -105,7 +105,10 @@ static inline int mtrr_trim_uncached_memory(unsigned long end_pfn)
 #define mtrr_bp_init() do {} while (0)
 #define mtrr_disable() do {} while (0)
 #define mtrr_enable() do {} while (0)
-#define mtrr_generic_set_state() do {} while (0)
+static inline bool mtrr_generic_set_state(void)
+{
+	return false;
+}
 #  endif
 
 #ifdef CONFIG_COMPAT

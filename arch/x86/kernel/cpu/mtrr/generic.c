@@ -960,12 +960,14 @@ void mtrr_enable(void)
 	mtrr_wrmsr(MSR_MTRRdefType, deftype_lo, deftype_hi);
 }
 
-void mtrr_generic_set_state(void)
+bool mtrr_generic_set_state(void)
 {
 	unsigned long mask, count;
+	bool changed;
 
 	/* Actually set the state */
 	mask = set_mtrr_state();
+	changed = mask != 0;
 
 	/* Use the atomic bitops to update the global mask */
 	for (count = 0; count < sizeof(mask) * 8; ++count) {
@@ -973,6 +975,8 @@ void mtrr_generic_set_state(void)
 			set_bit(count, &smp_changes_mask);
 		mask >>= 1;
 	}
+
+	return changed;
 }
 
 /**

@@ -710,15 +710,16 @@ void cache_enable(void) __releases(cache_disable_lock)
 	raw_spin_unlock(&cache_disable_lock);
 }
 
-static void cache_cpu_init(void)
+static bool cache_cpu_init(void)
 {
 	unsigned long flags;
+	bool changed = false;
 
 	local_irq_save(flags);
 
 	if (memory_caching_control & CACHE_MTRR) {
 		cache_disable();
-		mtrr_generic_set_state();
+		changed = mtrr_generic_set_state();
 		cache_enable();
 	}
 
@@ -726,6 +727,8 @@ static void cache_cpu_init(void)
 		pat_cpu_init();
 
 	local_irq_restore(flags);
+
+	return changed;
 }
 
 static bool cache_aps_delayed_init = true;
@@ -743,7 +746,7 @@ bool get_cache_aps_delayed_init(void)
 static int cache_rendezvous_handler(void *unused)
 {
 	if (get_cache_aps_delayed_init() || !cpu_online(smp_processor_id()))
-		cache_cpu_init();
+		(void)cache_cpu_init();
 
 	return 0;
 }
@@ -754,20 +757,31 @@ void __init cache_bp_init(void)
 	pat_bp_init();
 
 	if (memory_caching_control)
-		cache_cpu_init();
+		(void)cache_cpu_init();
 }
+
+static bool cache_bp_changed_on_restore;
 
 void cache_bp_restore(void)
 {
 	if (memory_caching_control)
-		cache_cpu_init();
+		cache_bp_changed_on_restore = cache_cpu_init();
 }
 
 static int cache_ap_online(unsigned int cpu)
 {
 	cpumask_set_cpu(cpu, cpu_cacheinfo_mask);
 
-	if (!memory_caching_control || get_cache_aps_delayed_init())
+	if (!memory_caching_control)
+		return 0;
+
+	/*
+	 * Normally we delay MTRR (and PAT) init until cache_aps_init(), but if
+	 * the MTRRs had to be restored on the boot processor on resume, then
+	 * delaying any required MTTR restore on the APs can lead to very slow
+	 * CPU execution during the period when the MTRRs are inconsistent.
+	 */
+	if (get_cache_aps_delayed_init() && !cache_bp_changed_on_restore)
 		return 0;
 
 	/*
@@ -803,8 +817,13 @@ void cache_aps_init(void)
 	if (!memory_caching_control || !get_cache_aps_delayed_init())
 		return;
 
-	stop_machine(cache_rendezvous_handler, NULL, cpu_online_mask);
+	if (cache_bp_changed_on_restore)
+		pr_warn("mtrr: your CPUs had unexpected MTRR settings on resume\n");
+	else
+		stop_machine(cache_rendezvous_handler, NULL, cpu_online_mask);
+
 	set_cache_aps_delayed_init(false);
+	cache_bp_changed_on_restore = false;
 }
 
 static int __init cache_ap_register(void)
