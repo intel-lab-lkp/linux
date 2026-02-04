@@ -830,6 +830,14 @@ static enum skb_drop_reason ndisc_recv_ns(struct sk_buff *skb)
 			return reason;
 		}
 
+		/*
+		 * Broadcast/Multicast and zero MAC addresses should
+		 * never be announced and accepted as llsrc address (prevent
+		 * NDP B/MCAST MAC poisoning attack).
+		 */
+		if (dev->type == ARPHRD_ETHER && !is_valid_ether_addr(lladdr))
+			return reason;
+
 		/* RFC2461 7.1.1:
 		 *	If the IP source address is the unspecified address,
 		 *	there MUST NOT be source link-layer address option
@@ -1033,6 +1041,14 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 			net_dbg_ratelimited("NA: invalid link-layer address length\n");
 			return reason;
 		}
+
+		/*
+		 * Broadcast/Multicast and zero MAC addresses should
+		 * never be announced and accepted as lltgt address (prevent
+		 * NDP B/MCAST MAC poisoning attack).
+		 */
+		if (dev->type == ARPHRD_ETHER && !is_valid_ether_addr(lladdr))
+			return reason;
 	}
 	ifp = ipv6_get_ifaddr(dev_net(dev), &msg->target, dev, 1);
 	if (ifp) {
