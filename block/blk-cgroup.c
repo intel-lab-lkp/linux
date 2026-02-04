@@ -56,7 +56,7 @@ static struct blkcg_policy *blkcg_policy[BLKCG_MAX_POLS];
 
 static LIST_HEAD(all_blkcgs);		/* protected by blkcg_pol_mutex */
 
-bool blkcg_debug_stats = false;
+bool blkcg_debug_stats = IS_ENABLED(CONFIG_BLK_CGROUP_DEBUG_STATS);
 
 static DEFINE_RAW_SPINLOCK(blkg_stat_lock);
 

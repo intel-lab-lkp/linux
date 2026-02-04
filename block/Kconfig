@@ -170,6 +170,21 @@ config BLK_CGROUP_IOPRIO
 	scheduler and block devices process requests. Only some I/O schedulers
 	and some block devices support I/O priorities.
 
+config BLK_CGROUP_DEBUG_STATS
+	bool "Enable blkcg debug stats by default"
+	depends on BLK_CGROUP
+	default n
+	help
+	Enable blkcg debug stats by default. This provides additional
+	debugging information in the cgroup io.stat file, including
+	cost.wait, cost.indebt, cost.indelay for iocost and latency
+	statistics for iolatency.
+
+	This can also be enabled at runtime via the blkcg_debug_stats
+	module parameter.
+
+	If unsure, say N.
+
 config BLK_DEBUG_FS
 	bool "Block layer debugging information in debugfs"
 	default y
