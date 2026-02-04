@@ -73,13 +73,13 @@ class RVGenerator:
             return f"#include <monitors/{self.parent}/{self.parent}.h>\n"
         return ""
 
-    def fill_tracepoint_handlers_skel(self):
+    def fill_tracepoint_handlers_skel(self) -> str:
         return "NotImplemented"
 
-    def fill_tracepoint_attach_probe(self):
+    def fill_tracepoint_attach_probe(self) -> str:
         return "NotImplemented"
 
-    def fill_tracepoint_detach_helper(self):
+    def fill_tracepoint_detach_helper(self) -> str:
         return "NotImplemented"
 
     def fill_main_c(self):
@@ -100,19 +100,19 @@ class RVGenerator:
 
         return main_c
 
-    def fill_model_h(self):
+    def fill_model_h(self) -> str:
         return "NotImplemented"
 
-    def fill_monitor_class_type(self):
+    def fill_monitor_class_type(self) -> str:
         return "NotImplemented"
 
-    def fill_monitor_class(self):
+    def fill_monitor_class(self) -> str:
         return "NotImplemented"
 
-    def fill_tracepoint_args_skel(self, tp_type):
+    def fill_tracepoint_args_skel(self, tp_type) -> str:
         return "NotImplemented"
 
-    def fill_monitor_deps(self):
+    def fill_monitor_deps(self) -> str:
         buff = []
         buff.append("	# XXX: add dependencies if there")
         if self.parent:
