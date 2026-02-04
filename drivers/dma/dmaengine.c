@@ -603,6 +603,7 @@ int dma_get_slave_caps(struct dma_chan *chan, struct dma_slave_caps *caps)
 	caps->cmd_pause = !!device->device_pause;
 	caps->cmd_resume = !!device->device_resume;
 	caps->cmd_terminate = !!device->device_terminate_all;
+	caps->hw_id = -1;
 
 	/*
 	 * DMA engine device might be configured with non-uniformly
