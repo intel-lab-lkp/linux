@@ -219,21 +219,33 @@ struct dentry *ovl_create_real(struct ovl_fs *ofs, struct dentry *parent,
 		err = -EIO;
 	} else if (d_unhashed(newdentry)) {
 		struct dentry *d;
+		struct name_snapshot name;
 		/*
 		 * Some filesystems (i.e. casefolded) may return an unhashed
-		 * negative dentry from the ovl_lookup_upper() call before
+		 * negative dentry from the ovl_start_creating_upper() call before
 		 * ovl_create_real().
 		 * In that case, lookup again after making the newdentry
 		 * positive, so ovl_create_upper() always returns a hashed
 		 * positive dentry.
+		 * As we have to drop the lock before the lookup a race
+		 * could result in a lookup failure.  In that case we return
+		 * an error.
 		 */
-		d = ovl_lookup_upper(ofs, newdentry->d_name.name, parent,
-				     newdentry->d_name.len);
-		dput(newdentry);
-		if (IS_ERR_OR_NULL(d))
+		take_dentry_name_snapshot(&name, newdentry);
+		end_creating_keep(newdentry);
+		d = ovl_start_creating_upper(ofs, parent, &name.name);
+		release_dentry_name_snapshot(&name);
+
+		if (IS_ERR_OR_NULL(d)) {
 			err = d ? PTR_ERR(d) : -ENOENT;
-		else
+		} else if (d->d_inode != newdentry->d_inode) {
+			err = -EIO;
+			dput(newdentry);
+		} else {
+			dput(newdentry);
 			return d;
+		}
+		return ERR_PTR(err);
 	}
 out:
 	if (err) {
