@@ -106,7 +106,6 @@
 #include "intel_lvds_regs.h"
 #include "intel_modeset_setup.h"
 #include "intel_modeset_verify.h"
-#include "intel_overlay.h"
 #include "intel_panel.h"
 #include "intel_pch_display.h"
 #include "intel_pch_refclk.h"
@@ -772,16 +771,6 @@ intel_get_crtc_new_encoder(const struct intel_atomic_state *state,
 	return encoder;
 }
 
-static void intel_crtc_dpms_overlay_disable(struct intel_crtc *crtc)
-{
-	if (crtc->overlay)
-		(void) intel_overlay_switch_off(crtc->overlay);
-
-	/* Let userspace switch the overlay on again. In most cases userspace
-	 * has to recompute where to put it anyway.
-	 */
-}
-
 static bool needs_nv12_wa(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -1272,8 +1261,6 @@ static void intel_crtc_disable_planes(struct intel_atomic_state *state,
 	struct intel_plane *plane;
 	unsigned fb_bits = 0;
 	int i;
-
-	intel_crtc_dpms_overlay_disable(crtc);
 
 	for_each_old_intel_plane_in_state(state, plane, old_plane_state, i) {
 		if (crtc->pipe != plane->pipe ||

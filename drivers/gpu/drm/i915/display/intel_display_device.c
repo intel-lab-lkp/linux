@@ -229,9 +229,7 @@ static const struct intel_display_device_info no_display = {};
 	}
 
 #define I830_DISPLAY \
-	.has_overlay = 1, \
 	.cursor_needs_physical = 1, \
-	.overlay_needs_physical = 1, \
 	.has_gmch = 1, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
@@ -243,8 +241,6 @@ static const struct intel_display_device_info no_display = {};
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B)
 
 #define I845_DISPLAY \
-	.has_overlay = 1, \
-	.overlay_needs_physical = 1, \
 	.has_gmch = 1, \
 	I845_PIPE_OFFSETS, \
 	I845_CURSOR_OFFSETS, \
@@ -296,7 +292,6 @@ static const struct platform_desc i865g_desc = {
 
 #define GEN3_DISPLAY   \
 	.has_gmch = 1, \
-	.has_overlay = 1, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	\
@@ -312,7 +307,6 @@ static const struct platform_desc i915g_desc = {
 		GEN3_DISPLAY,
 		I845_COLORS,
 		.cursor_needs_physical = 1,
-		.overlay_needs_physical = 1,
 	},
 };
 
@@ -323,7 +317,6 @@ static const struct platform_desc i915gm_desc = {
 		GEN3_DISPLAY,
 		I9XX_COLORS,
 		.cursor_needs_physical = 1,
-		.overlay_needs_physical = 1,
 		.supports_tv = 1,
 
 		.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A),
@@ -337,7 +330,6 @@ static const struct platform_desc i945g_desc = {
 		I845_COLORS,
 		.has_hotplug = 1,
 		.cursor_needs_physical = 1,
-		.overlay_needs_physical = 1,
 	},
 };
 
@@ -349,7 +341,6 @@ static const struct platform_desc i945gm_desc = {
 		I9XX_COLORS,
 		.has_hotplug = 1,
 		.cursor_needs_physical = 1,
-		.overlay_needs_physical = 1,
 		.supports_tv = 1,
 
 		.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A),
@@ -398,7 +389,6 @@ static const struct platform_desc i965g_desc = {
 	PLATFORM(i965g),
 	.info = &(const struct intel_display_device_info) {
 		GEN4_DISPLAY,
-		.has_overlay = 1,
 
 		.__runtime_defaults.port_mask = BIT(PORT_B) | BIT(PORT_C), /* SDVO B/C */
 	},
@@ -409,7 +399,6 @@ static const struct platform_desc i965gm_desc = {
 	PLATFORM_GROUP(mobile),
 	.info = &(const struct intel_display_device_info) {
 		GEN4_DISPLAY,
-		.has_overlay = 1,
 		.supports_tv = 1,
 
 		.__runtime_defaults.port_mask = BIT(PORT_B) | BIT(PORT_C), /* SDVO B/C */

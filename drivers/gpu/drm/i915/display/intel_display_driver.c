@@ -56,7 +56,6 @@
 #include "intel_modeset_lock.h"
 #include "intel_modeset_setup.h"
 #include "intel_opregion.h"
-#include "intel_overlay.h"
 #include "intel_pmdemand.h"
 #include "intel_pps.h"
 #include "intel_psr.h"
@@ -536,8 +535,6 @@ int intel_display_driver_probe(struct intel_display *display)
 	if (ret)
 		drm_dbg_kms(display->drm, "Initial modeset failed, %d\n", ret);
 
-	intel_overlay_setup(display);
-
 	/* Only enable hotplug handling once the fbdev is fully set up. */
 	intel_hpd_init(display);
 
@@ -625,8 +622,6 @@ void intel_display_driver_remove_noirq(struct intel_display *display)
 	intel_mode_config_cleanup(display);
 
 	intel_dp_tunnel_mgr_cleanup(display);
-
-	intel_overlay_cleanup(display);
 
 	intel_gmbus_teardown(display);
 

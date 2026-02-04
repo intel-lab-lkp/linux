@@ -8,7 +8,6 @@
 #include <linux/string_helpers.h>
 
 #include "display/intel_display_reset.h"
-#include "display/intel_overlay.h"
 #include "gem/i915_gem_context.h"
 #include "gt/intel_gt_regs.h"
 #include "gt/uc/intel_gsc_fw.h"
@@ -1202,7 +1201,6 @@ void intel_gt_reset(struct intel_gt *gt,
 		    intel_engine_mask_t stalled_mask,
 		    const char *reason)
 {
-	struct intel_display *display = gt->i915->display;
 	intel_engine_mask_t awake;
 	int ret;
 
@@ -1247,8 +1245,6 @@ void intel_gt_reset(struct intel_gt *gt,
 
 	if (intel_gt_gpu_reset_clobbers_display(gt))
 		intel_irq_resume(gt->i915);
-
-	intel_overlay_reset(display);
 
 	/* sanitize uC after engine reset */
 	if (!intel_uc_uses_guc_submission(&gt->uc))

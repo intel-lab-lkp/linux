@@ -296,7 +296,6 @@ i915-y += \
 	display/intel_modeset_lock.o \
 	display/intel_modeset_setup.o \
 	display/intel_modeset_verify.o \
-	display/intel_overlay.o \
 	display/intel_parent.o \
 	display/intel_pch.o \
 	display/intel_pch_display.o \
