@@ -23,6 +23,7 @@
 #define PCITEST_BARS		_IO('P', 0xa)
 #define PCITEST_DOORBELL	_IO('P', 0xb)
 #define PCITEST_BAR_SUBRANGE	_IO('P', 0xc)
+#define PCITEST_EPC_API		_IO('P', 0xd)
 #define PCITEST_CLEAR_IRQ	_IO('P', 0x10)
 
 #define PCITEST_IRQ_TYPE_UNDEFINED	-1

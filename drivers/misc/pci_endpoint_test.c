@@ -41,6 +41,7 @@
 #define COMMAND_DISABLE_DOORBELL		BIT(7)
 #define COMMAND_BAR_SUBRANGE_SETUP		BIT(8)
 #define COMMAND_BAR_SUBRANGE_CLEAR		BIT(9)
+#define COMMAND_EPC_API				BIT(10)
 
 #define PCI_ENDPOINT_TEST_STATUS		0x8
 #define STATUS_READ_SUCCESS			BIT(0)
@@ -61,6 +62,8 @@
 #define STATUS_BAR_SUBRANGE_SETUP_FAIL		BIT(15)
 #define STATUS_BAR_SUBRANGE_CLEAR_SUCCESS	BIT(16)
 #define STATUS_BAR_SUBRANGE_CLEAR_FAIL		BIT(17)
+#define STATUS_EPC_API_SUCCESS			BIT(18)
+#define STATUS_EPC_API_FAIL			BIT(19)
 
 #define PCI_ENDPOINT_TEST_LOWER_SRC_ADDR	0x0c
 #define PCI_ENDPOINT_TEST_UPPER_SRC_ADDR	0x10
@@ -1117,6 +1120,49 @@ static int pci_endpoint_test_doorbell(struct pci_endpoint_test *test)
 	return 0;
 }
 
+static int pci_endpoint_test_epc_api(struct pci_endpoint_test *test)
+{
+	struct pci_dev *pdev = test->pdev;
+	struct device *dev = &pdev->dev;
+	int irq_type = test->irq_type;
+	u32 status;
+
+	if (irq_type < PCITEST_IRQ_TYPE_INTX ||
+	    irq_type > PCITEST_IRQ_TYPE_MSIX) {
+		dev_err(dev, "Invalid IRQ type\n");
+		return -EINVAL;
+	}
+
+	reinit_completion(&test->irq_raised);
+	/* EPC API smoke test is executed on the endpoint side. */
+	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_STATUS, 0);
+	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_IRQ_TYPE, irq_type);
+	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_IRQ_NUMBER, 1);
+	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_COMMAND,
+				 COMMAND_EPC_API);
+
+	if (!wait_for_completion_timeout(&test->irq_raised,
+					 msecs_to_jiffies(1000))) {
+		dev_err(dev, "Timed out waiting for EPC API test\n");
+		return -ETIMEDOUT;
+	}
+
+	status = pci_endpoint_test_readl(test, PCI_ENDPOINT_TEST_STATUS);
+	if (status & STATUS_EPC_API_FAIL) {
+		dev_err(dev, "EPC API test failed (status=%#x)\n", status);
+		return -EIO;
+	}
+
+	if (!(status & STATUS_EPC_API_SUCCESS)) {
+		dev_err(dev,
+			"EPC API test did not report success (status=%#x)\n",
+			status);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static long pci_endpoint_test_ioctl(struct file *file, unsigned int cmd,
 				    unsigned long arg)
 {
@@ -1174,6 +1220,9 @@ static long pci_endpoint_test_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case PCITEST_DOORBELL:
 		ret = pci_endpoint_test_doorbell(test);
+		break;
+	case PCITEST_EPC_API:
+		ret = pci_endpoint_test_epc_api(test);
 		break;
 	}
 
