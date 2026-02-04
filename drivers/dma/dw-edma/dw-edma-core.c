@@ -217,6 +217,7 @@ static void dw_edma_device_caps(struct dma_chan *dchan,
 		else
 			caps->directions = BIT(DMA_MEM_TO_DEV);
 	}
+	caps->hw_id = chan->id;
 }
 
 static int dw_edma_device_config(struct dma_chan *dchan,
