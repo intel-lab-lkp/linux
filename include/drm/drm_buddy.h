@@ -101,34 +101,10 @@ drm_buddy_block_order(struct drm_buddy_block *block)
 	return block->header & DRM_BUDDY_HEADER_ORDER;
 }
 
-static inline unsigned int
-drm_buddy_block_state(struct drm_buddy_block *block)
-{
-	return block->header & DRM_BUDDY_HEADER_STATE;
-}
-
-static inline bool
-drm_buddy_block_is_allocated(struct drm_buddy_block *block)
-{
-	return drm_buddy_block_state(block) == DRM_BUDDY_ALLOCATED;
-}
-
 static inline bool
 drm_buddy_block_is_clear(struct drm_buddy_block *block)
 {
 	return block->header & DRM_BUDDY_HEADER_CLEAR;
-}
-
-static inline bool
-drm_buddy_block_is_free(struct drm_buddy_block *block)
-{
-	return drm_buddy_block_state(block) == DRM_BUDDY_FREE;
-}
-
-static inline bool
-drm_buddy_block_is_split(struct drm_buddy_block *block)
-{
-	return drm_buddy_block_state(block) == DRM_BUDDY_SPLIT;
 }
 
 static inline u64
@@ -141,9 +117,6 @@ drm_buddy_block_size(struct drm_buddy *mm,
 int drm_buddy_init(struct drm_buddy *mm, u64 size, u64 chunk_size);
 
 void drm_buddy_fini(struct drm_buddy *mm);
-
-struct drm_buddy_block *
-drm_get_buddy(struct drm_buddy_block *block);
 
 int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 			   u64 start, u64 end, u64 size,

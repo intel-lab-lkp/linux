@@ -21,6 +21,30 @@ enum drm_buddy_free_tree {
 
 static struct kmem_cache *slab_blocks;
 
+static unsigned int
+drm_buddy_block_state(struct drm_buddy_block *block)
+{
+	return block->header & DRM_BUDDY_HEADER_STATE;
+}
+
+static bool
+drm_buddy_block_is_allocated(struct drm_buddy_block *block)
+{
+	return drm_buddy_block_state(block) == DRM_BUDDY_ALLOCATED;
+}
+
+static bool
+drm_buddy_block_is_free(struct drm_buddy_block *block)
+{
+	return drm_buddy_block_state(block) == DRM_BUDDY_FREE;
+}
+
+static bool
+drm_buddy_block_is_split(struct drm_buddy_block *block)
+{
+	return drm_buddy_block_state(block) == DRM_BUDDY_SPLIT;
+}
+
 #define for_each_free_tree(tree) \
 	for ((tree) = 0; (tree) < DRM_BUDDY_MAX_FREE_TREES; (tree)++)
 
@@ -458,23 +482,6 @@ static int split_block(struct drm_buddy *mm,
 
 	return 0;
 }
-
-/**
- * drm_get_buddy - get buddy address
- *
- * @block: DRM buddy block
- *
- * Returns the corresponding buddy block for @block, or NULL
- * if this is a root block and can't be merged further.
- * Requires some kind of locking to protect against
- * any concurrent allocate and free operations.
- */
-struct drm_buddy_block *
-drm_get_buddy(struct drm_buddy_block *block)
-{
-	return __get_buddy(block);
-}
-EXPORT_SYMBOL(drm_get_buddy);
 
 /**
  * drm_buddy_reset_clear - reset blocks clear state
