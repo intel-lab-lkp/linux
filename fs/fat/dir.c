@@ -18,6 +18,7 @@
 #include <linux/compat.h>
 #include <linux/uaccess.h>
 #include <linux/iversion.h>
+#include <linux/ctype.h>
 #include "fat.h"
 
 /*
@@ -32,11 +33,6 @@
  */
 #define FAT_MAX_UNI_CHARS	((MSDOS_SLOTS - 1) * 13 + 1)
 #define FAT_MAX_UNI_SIZE	(FAT_MAX_UNI_CHARS * sizeof(wchar_t))
-
-static inline unsigned char fat_tolower(unsigned char c)
-{
-	return ((c >= 'A') && (c <= 'Z')) ? c+32 : c;
-}
 
 static inline loff_t fat_make_i_pos(struct super_block *sb,
 				    struct buffer_head *bh,
@@ -396,7 +392,7 @@ static int fat_parse_short(struct super_block *sb,
 					de->lcase & CASE_LOWER_BASE);
 		if (chl <= 1) {
 			if (!isvfat)
-				ptname[i] = nocase ? c : fat_tolower(c);
+				ptname[i] = nocase ? c : tolower(c);
 			i++;
 			if (c != ' ') {
 				name_len = i;
@@ -433,7 +429,7 @@ static int fat_parse_short(struct super_block *sb,
 		if (chl <= 1) {
 			k++;
 			if (!isvfat)
-				ptname[i] = nocase ? c : fat_tolower(c);
+				ptname[i] = nocase ? c : tolower(c);
 			i++;
 			if (c != ' ') {
 				name_len = i;
