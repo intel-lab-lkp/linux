@@ -40,6 +40,23 @@ u64 rust_helper_readq(const void __iomem *addr)
 }
 #endif
 
+u16 rust_helper_ioread16be(const void __iomem *addr)
+{
+	return ioread16be(addr);
+}
+
+u32 rust_helper_ioread32be(const void __iomem *addr)
+{
+	return ioread32be(addr);
+}
+
+#ifdef CONFIG_64BIT
+u64 rust_helper_ioread64be(const void __iomem *addr)
+{
+	return ioread64be(addr);
+}
+#endif
+
 void rust_helper_writeb(u8 value, void __iomem *addr)
 {
 	writeb(value, addr);
@@ -59,6 +76,23 @@ void rust_helper_writel(u32 value, void __iomem *addr)
 void rust_helper_writeq(u64 value, void __iomem *addr)
 {
 	writeq(value, addr);
+}
+#endif
+
+void rust_helper_iowrite16be(u16 value, void __iomem *addr)
+{
+	iowrite16be(value, addr);
+}
+
+void rust_helper_iowrite32be(u32 value, void __iomem *addr)
+{
+	iowrite32be(value, addr);
+}
+
+#ifdef CONFIG_64BIT
+void rust_helper_iowrite64be(u64 value, void __iomem *addr)
+{
+	iowrite64be(value, addr);
 }
 #endif
 

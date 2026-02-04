@@ -256,6 +256,15 @@ impl<const SIZE: usize> Io<SIZE> {
         readq -> u64
     );
 
+    define_read!(read16be, try_read16be, ioread16be -> u16);
+    define_read!(read32be, try_read32be, ioread32be -> u32);
+    define_read!(
+        #[cfg(CONFIG_64BIT)]
+        read64be,
+        try_read64be,
+        ioread64be -> u64
+    );
+
     define_read!(read8_relaxed, try_read8_relaxed, readb_relaxed -> u8);
     define_read!(read16_relaxed, try_read16_relaxed, readw_relaxed -> u16);
     define_read!(read32_relaxed, try_read32_relaxed, readl_relaxed -> u32);
@@ -274,6 +283,15 @@ impl<const SIZE: usize> Io<SIZE> {
         write64,
         try_write64,
         writeq <- u64
+    );
+
+    define_write!(write16be, try_write16be, iowrite16be <- u16);
+    define_write!(write32be, try_write32be, iowrite32be <- u32);
+    define_write!(
+        #[cfg(CONFIG_64BIT)]
+        write64be,
+        try_write64be,
+        iowrite64be <- u64
     );
 
     define_write!(write8_relaxed, try_write8_relaxed, writeb_relaxed <- u8);
