@@ -925,6 +925,26 @@ static void touch_core_sched(struct rq *rq, struct task_struct *p)
 }
 
 /**
+ * is_terminal_dsq - Check if a DSQ is terminal for ops.dequeue() purposes
+ * @dsq_id: DSQ ID to check
+ *
+ * Returns true if @dsq_id is a terminal DSQ where the BPF scheduler is
+ * considered "done" with the task. Terminal DSQs include:
+ *  - Local DSQs (SCX_DSQ_LOCAL or SCX_DSQ_LOCAL_ON): per-CPU queues where
+ *    tasks go directly to execution
+ *  - Global DSQ (SCX_DSQ_GLOBAL): the built-in fallback queue
+ *
+ * Tasks dispatched to terminal DSQs exit BPF scheduler custody and do not
+ * trigger ops.dequeue() when they are later consumed.
+ */
+static inline bool is_terminal_dsq(u64 dsq_id)
+{
+	return dsq_id == SCX_DSQ_LOCAL ||
+	       (dsq_id & SCX_DSQ_LOCAL_ON) == SCX_DSQ_LOCAL_ON ||
+	       dsq_id == SCX_DSQ_GLOBAL;
+}
+
+/**
  * touch_core_sched_dispatch - Update core-sched timestamp on dispatch
  * @rq: rq to read clock from, must be locked
  * @p: task being dispatched
@@ -1105,6 +1125,18 @@ static void dispatch_enqueue(struct scx_sched *sch, struct scx_dispatch_q *dsq,
 	p->scx.dsq = dsq;
 
 	/*
+	 * Mark task as in BPF scheduler's custody if being queued to a
+	 * non-builtin (user) DSQ. Builtin DSQs (local, global, bypass) are
+	 * terminal: tasks on them have left BPF custody.
+	 *
+	 * Don't touch the flag if already set (e.g., by
+	 * mark_direct_dispatch() or direct_dispatch()/finish_dispatch()
+	 * for user DSQs).
+	 */
+	if (SCX_HAS_OP(sch, dequeue) && !(dsq->id & SCX_DSQ_FLAG_BUILTIN))
+		p->scx.flags |= SCX_TASK_OPS_ENQUEUED;
+
+	/*
 	 * scx.ddsp_dsq_id and scx.ddsp_enq_flags are only relevant on the
 	 * direct dispatch path, but we clear them here because the direct
 	 * dispatch verdict may be overridden on the enqueue path during e.g.
@@ -1276,6 +1308,24 @@ static void mark_direct_dispatch(struct scx_sched *sch,
 
 	p->scx.ddsp_dsq_id = dsq_id;
 	p->scx.ddsp_enq_flags = enq_flags;
+
+	/*
+	 * Mark the task as entering BPF scheduler's custody if it's being
+	 * dispatched to a non-terminal DSQ (i.e., custom user DSQs). This
+	 * handles the case where ops.select_cpu() directly dispatches - even
+	 * though ops.enqueue() won't be called, the task enters BPF custody
+	 * if dispatched to a user DSQ and should get ops.dequeue() when it
+	 * leaves.
+	 *
+	 * For terminal DSQs (local DSQs and SCX_DSQ_GLOBAL), ensure the flag
+	 * is clear since the BPF scheduler is done with the task.
+	 */
+	if (SCX_HAS_OP(sch, dequeue)) {
+		if (!is_terminal_dsq(dsq_id))
+			p->scx.flags |= SCX_TASK_OPS_ENQUEUED;
+		else
+			p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+	}
 }
 
 static void direct_dispatch(struct scx_sched *sch, struct task_struct *p,
@@ -1288,6 +1338,41 @@ static void direct_dispatch(struct scx_sched *sch, struct task_struct *p,
 	touch_core_sched_dispatch(rq, p);
 
 	p->scx.ddsp_enq_flags |= enq_flags;
+
+	/*
+	 * The task is about to be dispatched, handle ops.dequeue() based
+	 * on where the task is going.
+	 *
+	 * Key principle: ops.dequeue() is called when a task leaves the
+	 * BPF scheduler's custody. A task is in BPF custody if it's on a
+	 * user-created DSQ or in BPF data structures. Once dispatched to a
+	 * terminal DSQ (local DSQ or SCX_DSQ_GLOBAL), the BPF scheduler is
+	 * done with it.
+	 *
+	 * Direct dispatch to terminal DSQs: task never enters (or exits)
+	 * BPF scheduler's custody. If it was in custody, call ops.dequeue()
+	 * to notify the BPF scheduler. Clear the flag so future property
+	 * changes also won't trigger ops.dequeue().
+	 *
+	 * Direct dispatch to user DSQs: task enters BPF scheduler's custody.
+	 * Mark the task as in BPF custody so that when it's later dispatched
+	 * to a terminal DSQ or dequeued for property changes, ops.dequeue()
+	 * will be called.
+	 *
+	 * This also handles the ops.select_cpu() direct dispatch: the
+	 * shortcut skips ops.enqueue() but the task still enters BPF custody
+	 * if dispatched to a user DSQ, and thus needs ops.dequeue() when it
+	 * leaves.
+	 */
+	if (SCX_HAS_OP(sch, dequeue)) {
+		if (!is_terminal_dsq(dsq->id)) {
+			p->scx.flags |= SCX_TASK_OPS_ENQUEUED;
+		} else {
+			if (p->scx.flags & SCX_TASK_OPS_ENQUEUED)
+				SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq, p, 0);
+			p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+		}
+	}
 
 	/*
 	 * We are in the enqueue path with @rq locked and pinned, and thus can't
@@ -1529,6 +1614,31 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 
 	switch (opss & SCX_OPSS_STATE_MASK) {
 	case SCX_OPSS_NONE:
+		/*
+		 * Task is not in BPF data structures (either dispatched to
+		 * a DSQ or running). Only call ops.dequeue() if the task
+		 * is still in BPF scheduler's custody
+		 * (%SCX_TASK_OPS_ENQUEUED is set).
+		 *
+		 * If the task has already been dispatched to a terminal
+		 * DSQ (local DSQ or SCX_DSQ_GLOBAL), it has left the BPF
+		 * scheduler's custody and the flag will be clear, so we
+		 * skip ops.dequeue().
+		 *
+		 * If this is a property change (not sleep/core-sched) and
+		 * the task is still in BPF custody, set the
+		 * %SCX_DEQ_SCHED_CHANGE flag.
+		 */
+		if (SCX_HAS_OP(sch, dequeue) &&
+		    p->scx.flags & SCX_TASK_OPS_ENQUEUED) {
+			u64 flags = deq_flags;
+
+			if (!(deq_flags & (DEQUEUE_SLEEP | SCX_DEQ_CORE_SCHED_EXEC)))
+				flags |= SCX_DEQ_SCHED_CHANGE;
+
+			SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq, p, flags);
+			p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+		}
 		break;
 	case SCX_OPSS_QUEUEING:
 		/*
@@ -1537,9 +1647,24 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 		 */
 		BUG();
 	case SCX_OPSS_QUEUED:
-		if (SCX_HAS_OP(sch, dequeue))
-			SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq,
-					 p, deq_flags);
+		/*
+		 * Task is still on the BPF scheduler (not dispatched yet).
+		 * Call ops.dequeue() to notify. Add %SCX_DEQ_SCHED_CHANGE
+		 * only for property changes, not for core-sched picks or
+		 * sleep.
+		 *
+		 * Clear the flag after calling ops.dequeue(): the task is
+		 * leaving BPF scheduler's custody.
+		 */
+		if (SCX_HAS_OP(sch, dequeue)) {
+			u64 flags = deq_flags;
+
+			if (!(deq_flags & (DEQUEUE_SLEEP | SCX_DEQ_CORE_SCHED_EXEC)))
+				flags |= SCX_DEQ_SCHED_CHANGE;
+
+			SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq, p, flags);
+			p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+		}
 
 		if (atomic_long_try_cmpxchg(&p->scx.ops_state, &opss,
 					    SCX_OPSS_NONE))
@@ -1636,6 +1761,7 @@ static void move_local_task_to_local_dsq(struct task_struct *p, u64 enq_flags,
 					 struct scx_dispatch_q *src_dsq,
 					 struct rq *dst_rq)
 {
+	struct scx_sched *sch = scx_root;
 	struct scx_dispatch_q *dst_dsq = &dst_rq->scx.local_dsq;
 
 	/* @dsq is locked and @p is on @dst_rq */
@@ -1643,6 +1769,15 @@ static void move_local_task_to_local_dsq(struct task_struct *p, u64 enq_flags,
 	lockdep_assert_rq_held(dst_rq);
 
 	WARN_ON_ONCE(p->scx.holding_cpu >= 0);
+
+	/*
+	 * Task is moving from a non-local DSQ to a local DSQ. Call
+	 * ops.dequeue() if the task was in BPF custody.
+	 */
+	if (SCX_HAS_OP(sch, dequeue) && (p->scx.flags & SCX_TASK_OPS_ENQUEUED)) {
+		SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, dst_rq, p, 0);
+		p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+	}
 
 	if (enq_flags & (SCX_ENQ_HEAD | SCX_ENQ_PREEMPT))
 		list_add(&p->scx.dsq_list.node, &dst_dsq->list);
@@ -2112,6 +2247,36 @@ retry:
 	}
 
 	BUG_ON(!(p->scx.flags & SCX_TASK_QUEUED));
+
+	/*
+	 * Handle ops.dequeue() based on destination DSQ.
+	 *
+	 * Dispatch to terminal DSQs (local DSQs and SCX_DSQ_GLOBAL): the BPF
+	 * scheduler is done with the task. Call ops.dequeue() if it was in
+	 * BPF custody, then clear the %SCX_TASK_OPS_ENQUEUED flag.
+	 *
+	 * Dispatch to user DSQs: task is in BPF scheduler's custody.
+	 * Mark it so ops.dequeue() will be called when it leaves.
+	 */
+	if (SCX_HAS_OP(sch, dequeue)) {
+		if (!is_terminal_dsq(dsq_id)) {
+			p->scx.flags |= SCX_TASK_OPS_ENQUEUED;
+		} else {
+			/*
+			 * Locking: we're holding the @rq lock (the
+			 * dispatch CPU's rq), but not necessarily
+			 * task_rq(p), since @p may be from a remote CPU.
+			 *
+			 * This is safe because SCX_OPSS_DISPATCHING state
+			 * prevents racing dequeues, any concurrent
+			 * ops_dequeue() will wait for this state to clear.
+			 */
+			if (p->scx.flags & SCX_TASK_OPS_ENQUEUED)
+				SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq, p, 0);
+
+			p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+		}
+	}
 
 	dsq = find_dsq_for_dispatch(sch, this_rq(), dsq_id, p);
 
@@ -2928,6 +3093,14 @@ static void scx_enable_task(struct task_struct *p)
 	lockdep_assert_rq_held(rq);
 
 	/*
+	 * Clear enqueue/dequeue tracking flags when enabling the task.
+	 * This ensures a clean state when the task enters SCX. Only needed
+	 * if ops.dequeue() is implemented.
+	 */
+	if (SCX_HAS_OP(sch, dequeue))
+		p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+
+	/*
 	 * Set the weight before calling ops.enable() so that the scheduler
 	 * doesn't see a stale value if they inspect the task struct.
 	 */
@@ -2958,6 +3131,13 @@ static void scx_disable_task(struct task_struct *p)
 	if (SCX_HAS_OP(sch, disable))
 		SCX_CALL_OP_TASK(sch, SCX_KF_REST, disable, rq, p);
 	scx_set_task_state(p, SCX_TASK_READY);
+
+	/*
+	 * Clear enqueue/dequeue tracking flags when disabling the task.
+	 * Only needed if ops.dequeue() is implemented.
+	 */
+	if (SCX_HAS_OP(sch, dequeue))
+		p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
 }
 
 static void scx_exit_task(struct task_struct *p)
