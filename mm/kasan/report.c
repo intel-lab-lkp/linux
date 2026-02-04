@@ -642,10 +642,19 @@ void kasan_non_canonical_hook(unsigned long addr)
 	const char *bug_type;
 
 	/*
-	 * All addresses that came as a result of the memory-to-shadow mapping
-	 * (even for bogus pointers) must be >= KASAN_SHADOW_OFFSET.
+	 * For Generic KASAN, kasan_mem_to_shadow() uses the logical right shift
+	 * and never overflows with the chosen KASAN_SHADOW_OFFSET values. Thus,
+	 * the possible shadow addresses (even for bogus pointers) belong to a
+	 * single contiguous region that is the result of kasan_mem_to_shadow()
+	 * applied to the whole address space.
 	 */
-	if (addr < KASAN_SHADOW_OFFSET)
+	if (IS_ENABLED(CONFIG_KASAN_GENERIC)) {
+		if (addr < (unsigned long)kasan_mem_to_shadow((void *)(0ULL)) ||
+		    addr > (unsigned long)kasan_mem_to_shadow((void *)(~0ULL)))
+			return;
+	}
+
+	if (arch_kasan_non_canonical_hook(addr))
 		return;
 
 	orig_addr = (unsigned long)kasan_shadow_to_mem((void *)addr);
