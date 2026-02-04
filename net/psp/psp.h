@@ -15,6 +15,7 @@ extern struct mutex psp_devs_lock;
 
 void psp_dev_free(struct psp_dev *psd);
 int psp_dev_check_access(struct psp_dev *psd, struct net *net);
+void psp_tx_key_queue_del(struct psp_dev *psd, struct psp_assoc *pas);
 
 void psp_nl_notify_dev(struct psp_dev *psd, u32 cmd);
 

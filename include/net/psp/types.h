@@ -5,6 +5,7 @@
 
 #include <linux/mutex.h>
 #include <linux/refcount.h>
+#include <linux/workqueue.h>
 
 struct netlink_ext_ack;
 
@@ -58,6 +59,10 @@ struct psp_dev_config {
  * @prev_assocs:	associations which use old (but still usable)
  *			device key
  * @stale_assocs:	associations which use a rotated out key
+ * @tx_del_active:	TX keys to be deleted after the current grace period
+ * @tx_del_next:	TX keys queued for deletion during current grace period
+ * @tx_del_work:	workqueue for periodic grace period checking
+ * @tx_grace_active:	true if a grace period is in progress
  *
  * @stats:	statistics maintained by the core
  * @stats.rotations:	See stats attr key-rotations
@@ -84,6 +89,11 @@ struct psp_dev {
 	struct list_head active_assocs;
 	struct list_head prev_assocs;
 	struct list_head stale_assocs;
+
+	struct list_head tx_del_active;
+	struct list_head tx_del_next;
+	struct delayed_work tx_del_work;
+	bool tx_grace_active;
 
 	struct {
 		unsigned long rotations;
@@ -207,6 +217,28 @@ struct psp_dev_ops {
 	 * Remove an association from the device.
 	 */
 	void (*tx_key_del)(struct psp_dev *psd, struct psp_assoc *pas);
+
+	/**
+	 * @tx_grace_begin: begin TX grace period tracking
+	 * Begin a new TX grace period. Core will queue tx keys for deletion
+	 * and not delete them until the grace period has elapsed.
+	 *
+	 * Return: 0 on success, error code otherwise. If the operation fails,
+	 * core will try again later and a grace period is not activated.
+	 */
+	int (*tx_grace_begin)(struct psp_dev *psd);
+
+	/**
+	 * @tx_grace_end: check if TX grace period has ended
+	 * Check if the current TX grace period has ended.
+	 *
+	 * Return:
+	 *   0: grace period has ended, core will delete queued tx keys
+	 *   -EAGAIN: grace period has not ended, core will requery later
+	 *   other error: internal error (e.g., device reconfigured), core
+	 *                should return to the tx_grace_begin() phase
+	 */
+	int (*tx_grace_end)(struct psp_dev *psd);
 
 	/**
 	 * @get_stats: get statistics from the device

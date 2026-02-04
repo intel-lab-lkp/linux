@@ -14,6 +14,10 @@
 DEFINE_XARRAY_ALLOC1(psp_devs);
 struct mutex psp_devs_lock;
 
+#define PSP_TX_DEL_INTERVAL_MS  100
+
+static void psp_tx_del_work_fn(struct work_struct *work);
+
 /**
  * DOC: PSP locking
  *
@@ -64,6 +68,9 @@ psp_dev_create(struct net_device *netdev,
 		    !psd_ops->get_stats))
 		return ERR_PTR(-EINVAL);
 
+	if (WARN_ON(!!psd_ops->tx_grace_begin != !!psd_ops->tx_grace_end))
+		return ERR_PTR(-EINVAL);
+
 	psd = kzalloc(sizeof(*psd), GFP_KERNEL);
 	if (!psd)
 		return ERR_PTR(-ENOMEM);
@@ -77,6 +84,9 @@ psp_dev_create(struct net_device *netdev,
 	INIT_LIST_HEAD(&psd->active_assocs);
 	INIT_LIST_HEAD(&psd->prev_assocs);
 	INIT_LIST_HEAD(&psd->stale_assocs);
+	INIT_LIST_HEAD(&psd->tx_del_active);
+	INIT_LIST_HEAD(&psd->tx_del_next);
+	INIT_DELAYED_WORK(&psd->tx_del_work, psp_tx_del_work_fn);
 	refcount_set(&psd->refcnt, 1);
 
 	mutex_lock(&psp_devs_lock);
@@ -118,6 +128,8 @@ void psp_dev_unregister(struct psp_dev *psd)
 {
 	struct psp_assoc *pas, *next;
 
+	cancel_delayed_work_sync(&psd->tx_del_work);
+
 	mutex_lock(&psp_devs_lock);
 	mutex_lock(&psd->lock);
 
@@ -129,6 +141,15 @@ void psp_dev_unregister(struct psp_dev *psd)
 	 */
 	xa_store(&psp_devs, psd->id, NULL, GFP_KERNEL);
 	mutex_unlock(&psp_devs_lock);
+
+	list_splice_init(&psd->tx_del_active, &psd->tx_del_next);
+	list_for_each_entry_safe(pas, next, &psd->tx_del_next, assocs_list) {
+		list_del(&pas->assocs_list);
+		psp_dev_tx_key_del(psd, pas);
+		psp_assoc_put(pas->prev);
+		psp_dev_put(psd);
+		kfree(pas);
+	}
 
 	list_splice_init(&psd->active_assocs, &psd->prev_assocs);
 	list_splice_init(&psd->prev_assocs, &psd->stale_assocs);
@@ -148,6 +169,78 @@ void psp_dev_unregister(struct psp_dev *psd)
 	psp_dev_put(psd);
 }
 EXPORT_SYMBOL(psp_dev_unregister);
+
+void psp_tx_key_queue_del(struct psp_dev *psd, struct psp_assoc *pas)
+{
+	lockdep_assert_held(&psd->lock);
+
+	list_add_tail(&pas->assocs_list, &psd->tx_del_next);
+	if (!delayed_work_pending(&psd->tx_del_work))
+		schedule_delayed_work(&psd->tx_del_work,
+				      msecs_to_jiffies(PSP_TX_DEL_INTERVAL_MS));
+}
+
+static void psp_tx_del_work_fn(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct psp_dev *psd = container_of(dwork, struct psp_dev, tx_del_work);
+	struct psp_assoc *pas, *tmp;
+	bool need_reschedule = false;
+	LIST_HEAD(to_free);
+	int err;
+
+	mutex_lock(&psd->lock);
+
+	if (!psp_dev_is_registered(psd))
+		goto out_unlock;
+
+	if (psd->tx_grace_active) {
+		err = psd->ops->tx_grace_end(psd);
+		if (err == -EAGAIN) {
+			need_reschedule = true;
+			goto out_unlock;
+		}
+		if (err) {
+			/* Driver error, restart grace period */
+			psd->tx_grace_active = false;
+			list_splice_init(&psd->tx_del_active, &psd->tx_del_next);
+			goto start_grace;
+		}
+
+		list_for_each_entry_safe(pas, tmp, &psd->tx_del_active,
+					 assocs_list) {
+			list_del(&pas->assocs_list);
+			psp_dev_tx_key_del(psd, pas);
+			list_add_tail(&pas->assocs_list, &to_free);
+		}
+
+		psd->tx_grace_active = false;
+	}
+
+start_grace:
+	if (!list_empty(&psd->tx_del_next)) {
+		err = psd->ops->tx_grace_begin(psd);
+		if (!err) {
+			list_splice_init(&psd->tx_del_next, &psd->tx_del_active);
+			psd->tx_grace_active = true;
+		}
+		need_reschedule = true;
+	}
+
+out_unlock:
+	mutex_unlock(&psd->lock);
+
+	list_for_each_entry_safe(pas, tmp, &to_free, assocs_list) {
+		list_del(&pas->assocs_list);
+		psp_assoc_put(pas->prev);
+		psp_dev_put(psd);
+		kfree(pas);
+	}
+
+	if (need_reschedule)
+		schedule_delayed_work(&psd->tx_del_work,
+				      msecs_to_jiffies(PSP_TX_DEL_INTERVAL_MS));
+}
 
 unsigned int psp_key_size(u32 version)
 {

@@ -88,6 +88,11 @@ void psp_dev_tx_key_del(struct psp_dev *psd, struct psp_assoc *pas)
 	psd->ops->tx_key_del(psd, pas);
 }
 
+static bool psp_dev_needs_defer(struct psp_dev *psd)
+{
+	return !!psd->ops->tx_grace_begin;
+}
+
 static void psp_assoc_free(struct work_struct *work)
 {
 	struct psp_assoc *pas = container_of(work, struct psp_assoc, work);
@@ -96,8 +101,14 @@ static void psp_assoc_free(struct work_struct *work)
 	mutex_lock(&psd->lock);
 	if (psd->ops) {
 		list_del(&pas->assocs_list);
-		if (pas->tx.spi && !pas->tx_moved)
+		if (pas->tx.spi && !pas->tx_moved) {
+			if (psp_dev_needs_defer(psd)) {
+				psp_tx_key_queue_del(psd, pas);
+				mutex_unlock(&psd->lock);
+				return;
+			}
 			psp_dev_tx_key_del(psd, pas);
+		}
 	}
 	mutex_unlock(&psd->lock);
 	psp_assoc_put(pas->prev);
