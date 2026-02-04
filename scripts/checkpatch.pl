@@ -3794,6 +3794,11 @@ sub process {
 					WARN("SPDX_LICENSE_TAG",
 					     "Improper SPDX comment style for '$realfile', please use '$comment' instead\n" . $herecurr);
 				}
+				if ($comment eq '/*' &&
+				    $rawline !~ m@\*/@) {
+					WARN("SPDX_LICENSE_TAG",
+					     "Improper SPDX comment style for '$realfile', missing closing '*/'\n" . $herecurr);
+				}
 
 				if ($comment !~ /^$/ &&
 				    $rawline !~ m@^\+\Q$comment\E SPDX-License-Identifier: @) {
