@@ -553,16 +553,17 @@ EXPORT_SYMBOL_GPL(drm_gem_shmem_dumb_create);
 static vm_fault_t drm_gem_shmem_try_map_pmd(struct vm_fault *vmf, unsigned long addr,
 					    struct page *page)
 {
-#ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
-	unsigned long pfn = page_to_pfn(page);
-	unsigned long paddr = pfn << PAGE_SHIFT;
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	phys_addr_t paddr = page_to_phys(page);
 	bool aligned = (addr & ~PMD_MASK) == (paddr & ~PMD_MASK);
 
-	if (aligned &&
-	    pmd_none(*vmf->pmd) &&
-	    folio_test_pmd_mappable(page_folio(page))) {
-		pfn &= PMD_MASK >> PAGE_SHIFT;
-		return vmf_insert_pfn_pmd(vmf, pfn, false);
+	if (aligned && pmd_none(*vmf->pmd)) {
+		struct folio *folio = page_folio(page);
+
+		if (folio_test_pmd_mappable(folio)) {
+			/* Read-only mapping; split upon write fault */
+			return vmf_insert_folio_pmd(vmf, folio, false);
+		}
 	}
 #endif
 
@@ -575,13 +576,10 @@ static vm_fault_t drm_gem_shmem_fault(struct vm_fault *vmf)
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
 	loff_t num_pages = obj->size >> PAGE_SHIFT;
-	vm_fault_t ret;
 	struct page **pages = shmem->pages;
-	pgoff_t page_offset;
-	unsigned long pfn;
-
-	/* Offset to faulty address in the VMA. */
-	page_offset = vmf->pgoff - vma->vm_pgoff;
+	pgoff_t page_offset = vmf->pgoff - vma->vm_pgoff; /* page offset within VMA */
+	struct page *page;
+	vm_fault_t ret;
 
 	dma_resv_lock(shmem->base.resv, NULL);
 
@@ -592,14 +590,25 @@ static vm_fault_t drm_gem_shmem_fault(struct vm_fault *vmf)
 		goto out;
 	}
 
-	ret = drm_gem_shmem_try_map_pmd(vmf, vmf->address, pages[page_offset]);
-	if (ret == VM_FAULT_NOPAGE)
+	page = pages[page_offset];
+	if (!page) {
+		ret = VM_FAULT_SIGBUS;
 		goto out;
+	}
 
-	pfn = page_to_pfn(pages[page_offset]);
-	ret = vmf_insert_pfn(vma, vmf->address, pfn);
+	ret = drm_gem_shmem_try_map_pmd(vmf, vmf->address, page);
+	if (ret != VM_FAULT_NOPAGE) {
+		struct folio *folio = page_folio(page);
 
- out:
+		get_page(page);
+
+		folio_lock(folio);
+
+		vmf->page = page;
+		ret = VM_FAULT_LOCKED;
+	}
+
+out:
 	dma_resv_unlock(shmem->base.resv);
 
 	return ret;
@@ -689,7 +698,7 @@ int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct
 	if (ret)
 		return ret;
 
-	vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP);
+	vm_flags_mod(vma, VM_DONTEXPAND | VM_DONTDUMP, VM_PFNMAP);
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 	if (shmem->map_wc)
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
