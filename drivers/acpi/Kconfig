@@ -65,6 +65,17 @@ config ACPI_THERMAL_LIB
        depends on THERMAL
        bool
 
+config ACPI_POWEROFF_ON_FATAL
+	bool "Poweroff on fatal ACPI error"
+	default y
+	help
+	  The ACPI bytecode can signal that a fatal error has occurred using the Fatal()
+	  ASL operator, normaly causing the system to poweroff. Disabling this option causes
+	  such a condition to be treated like a ordinary ACPI error.
+
+	  This setting can also be overridden during boot using the acpi.poweroff_on_fatal
+	  kernel parameter.
+
 config ACPI_DEBUGGER
 	bool "AML debugger interface"
 	select ACPI_DEBUG
