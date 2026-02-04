@@ -253,6 +253,23 @@ int lapic_get_maxlvt(void)
 	return lapic_is_integrated() ? GET_APIC_MAXLVT(apic_read(APIC_LVR)) : 2;
 }
 
+/**
+ * lapic_get_max_extlvt - Get number of extended LVT entries
+ */
+int lapic_get_max_extlvt(void)
+{
+	u32 reg;
+
+	if (!boot_cpu_has(X86_FEATURE_EXTAPIC))
+		return 0;
+
+	reg = apic_read(APIC_EFEAT);
+
+	/* Extract extended LVT count from bits 16-23 */
+	return (reg >> 16) & 0xff;
+}
+EXPORT_SYMBOL_GPL(lapic_get_max_extlvt);
+
 /*
  * Local APIC timer
  */

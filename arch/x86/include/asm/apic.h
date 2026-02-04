@@ -124,6 +124,7 @@ static inline bool apic_is_x2apic_enabled(void)
 extern void enable_IR_x2apic(void);
 
 extern int lapic_get_maxlvt(void);
+extern int lapic_get_max_extlvt(void);
 extern void clear_local_APIC(void);
 extern void disconnect_bsp_APIC(int virt_wire_setup);
 extern void disable_local_APIC(void);
