@@ -2123,7 +2123,17 @@ int alloc_slab_obj_exts(struct slab *slab, struct kmem_cache *s,
 		vec = kcalloc_node(objects, sizeof(struct slabobj_ext), gfp,
 				   slab_nid(slab));
 	}
-	if (!vec) {
+	/*
+	 * Explicitly zero the obj_exts array to ensure KMSAN recognizes it
+	 * as initialized. Although kmalloc_nolock and kcalloc_node normally
+	 * zero memory, KMSAN may not track this initialization in all cases,
+	 * especially during early boot or with certain allocation paths.
+	 * This explicit memset ensures KMSAN sees the initialization and
+	 * prevents uninitialized value warnings when accessing objcg fields.
+	 */
+	if (vec)
+		memset(vec, 0, objects * sizeof(*vec));
+	else {
 		/*
 		 * Try to mark vectors which failed to allocate.
 		 * If this operation fails, there may be a racing process
