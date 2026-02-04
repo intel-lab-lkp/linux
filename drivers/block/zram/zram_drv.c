@@ -1966,6 +1966,7 @@ static int read_compressed_page(struct zram *zram, struct page *page, u32 index)
 	size = zram_get_obj_size(zram, index);
 	prio = zram_get_priority(zram, index);
 
+	/* Reads are treated as synchronous, see op_is_sync(). */
 	zstrm = zcomp_stream_get(zram->comps[prio], ZSTRM_DEFAULT);
 	src = zs_obj_read_begin(zram->mem_pool, handle, zstrm->local_copy);
 	dst = kmap_local_page(page);
@@ -2105,7 +2106,8 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 	return 0;
 }
 
-static int zram_write_page(struct zram *zram, struct page *page, u32 index)
+static int zram_write_page(struct zram *zram, struct page *page, u32 index,
+			   bool is_async)
 {
 	int ret = 0;
 	unsigned long handle;
@@ -2121,7 +2123,19 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	if (same_filled)
 		return write_same_filled_page(zram, element, index);
 
-	zstrm = zcomp_stream_get(zram->comps[ZRAM_PRIMARY_COMP], ZSTRM_DEFAULT);
+	/*
+	 * Using zcomp-managed stream and waiting for compress done makes
+	 * this appear synchronous.
+	 *
+	 * At this time, zram_bio_write handles pages one by one.
+	 * However, zcomp-managed streams allow threads to submit jobs
+	 * to zcomp without the lock contention in per-cpu streams.
+	 * This might give us better parallelism than the generic per-cpu
+	 * streams could, assuming zcomp uses efficient streams management
+	 * or utilizes the specialized implementations.
+	 */
+	zstrm = zcomp_stream_get(zram->comps[ZRAM_PRIMARY_COMP],
+				 is_async ? ZSTRM_PREFER_MGMT : ZSTRM_DEFAULT);
 	mem = kmap_local_page(page);
 	ret = zcomp_compress(zram->comps[ZRAM_PRIMARY_COMP], zstrm,
 			     mem, &comp_len);
@@ -2183,7 +2197,8 @@ static int zram_bvec_write_partial(struct zram *zram, struct bio_vec *bvec,
 	ret = zram_read_page(zram, page, index, bio);
 	if (!ret) {
 		memcpy_from_bvec(page_address(page) + offset, bvec);
-		ret = zram_write_page(zram, page, index);
+		ret = zram_write_page(zram, page, index,
+				      !op_is_sync(bio->bi_opf));
 	}
 	__free_page(page);
 	return ret;
@@ -2194,7 +2209,8 @@ static int zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 {
 	if (is_partial_io(bvec))
 		return zram_bvec_write_partial(zram, bvec, index, offset, bio);
-	return zram_write_page(zram, bvec->bv_page, index);
+	return zram_write_page(zram, bvec->bv_page, index,
+			       !op_is_sync(bio->bi_opf));
 }
 
 #ifdef CONFIG_ZRAM_MULTI_COMP
