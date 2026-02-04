@@ -22,8 +22,8 @@ architectures, but it has significant performance and memory overheads.
 
 Software Tag-Based KASAN or SW_TAGS KASAN, enabled with CONFIG_KASAN_SW_TAGS,
 can be used for both debugging and dogfood testing, similar to userspace HWASan.
-This mode is only supported for arm64, but its moderate memory overhead allows
-using it for testing on memory-restricted devices with real workloads.
+This mode is only supported for arm64 and x86, but its moderate memory overhead
+allows using it for testing on memory-restricted devices with real workloads.
 
 Hardware Tag-Based KASAN or HW_TAGS KASAN, enabled with CONFIG_KASAN_HW_TAGS,
 is the mode intended to be used as an in-field memory bug detector or as a
@@ -351,10 +351,12 @@ Software Tag-Based KASAN
 Software Tag-Based KASAN uses a software memory tagging approach to checking
 access validity. It is currently only implemented for the arm64 architecture.
 
-Software Tag-Based KASAN uses the Top Byte Ignore (TBI) feature of arm64 CPUs
-to store a pointer tag in the top byte of kernel pointers. It uses shadow memory
-to store memory tags associated with each 16-byte memory cell (therefore, it
-dedicates 1/16th of the kernel memory for shadow memory).
+Software Tag-Based KASAN uses the Top Byte Ignore (TBI) feature of arm64 CPUs to
+store a pointer tag in the top byte of kernel pointers. Analogously to TBI on
+x86 CPUs Linear Address Masking (LAM) feature is used and the pointer tag is
+stored in four bits of the kernel pointer's top byte. Software Tag-Based mode
+uses shadow memory to store memory tags associated with each 16-byte memory cell
+(therefore, it dedicates 1/16th of the kernel memory for shadow memory).
 
 On each memory allocation, Software Tag-Based KASAN generates a random tag, tags
 the allocated memory with this tag, and embeds the same tag into the returned
@@ -370,12 +372,14 @@ Software Tag-Based KASAN also has two instrumentation modes (outline, which
 emits callbacks to check memory accesses; and inline, which performs the shadow
 memory checks inline). With outline instrumentation mode, a bug report is
 printed from the function that performs the access check. With inline
-instrumentation, a ``brk`` instruction is emitted by the compiler, and a
-dedicated ``brk`` handler is used to print bug reports.
+instrumentation, arm64's implementation uses the ``brk`` instruction emitted by
+the compiler, and a dedicated ``brk`` handler is used to print bug reports. On
+x86 inline mode doesn't work yet due to missing compiler support.
 
-Software Tag-Based KASAN uses 0xFF as a match-all pointer tag (accesses through
-pointers with the 0xFF pointer tag are not checked). The value 0xFE is currently
-reserved to tag freed memory regions.
+For arm64 Software Tag-Based KASAN uses 0xFF as a match-all pointer tag
+(accesses through pointers with the 0xFF pointer tag are not checked). The value
+0xFE is currently reserved to tag freed memory regions. On x86 the same tags
+take on 0xF and 0xE respectively.
 
 Hardware Tag-Based KASAN
 ~~~~~~~~~~~~~~~~~~~~~~~~
