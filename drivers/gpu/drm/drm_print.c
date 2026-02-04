@@ -198,10 +198,10 @@ static void __drm_dev_vprintk(const struct device *dev, const char *level,
 				   prefix_pad, prefix, vaf);
 	} else {
 		if (origin)
-			printk("%s" "[" DRM_NAME ":%ps]%s%s %pV",
+			printk("%s [" DRM_NAME ":%ps]%s%s %pV",
 			       level, origin, prefix_pad, prefix, vaf);
 		else
-			printk("%s" "[" DRM_NAME "]%s%s %pV",
+			printk("%s [" DRM_NAME "]%s%s %pV",
 			       level, prefix_pad, prefix, vaf);
 	}
 }
