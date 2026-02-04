@@ -62,7 +62,7 @@ static int check_and_add_serial(struct mddev *mddev, struct r1bio *r1_bio,
 	unsigned long flags;
 	int ret = 0;
 	sector_t lo = r1_bio->sector;
-	sector_t hi = lo + r1_bio->sectors;
+	sector_t hi = lo + r1_bio->sectors - 1;
 	struct serial *serial = &mddev->serial[idx];
 
 	spin_lock_irqsave(&serial->serial_lock, flags);
@@ -100,7 +100,7 @@ static void remove_serial(struct r1bio *r1_bio)
 	int found = 0;
 	struct mddev *mddev = r1_bio->mddev;
 	sector_t lo = r1_bio->sector;
-	sector_t hi = r1_bio->sector + r1_bio->sectors;
+	sector_t hi = r1_bio->sector + r1_bio->sectors - 1;
 	int idx = sector_to_idx(lo);
 	struct serial *serial = &mddev->serial[idx];
 
