@@ -97,7 +97,10 @@ static int vexpress_osc_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
-	devm_of_clk_add_hw_provider(&pdev->dev, of_clk_hw_simple_get, &osc->hw);
+	ret = devm_of_clk_add_hw_provider(&pdev->dev, of_clk_hw_simple_get, &osc->hw);
+	if (ret)
+		return ret;
+
 	clk_hw_set_rate_range(&osc->hw, osc->rate_min, osc->rate_max);
 
 	dev_dbg(&pdev->dev, "Registered clock '%s'\n", init.name);
