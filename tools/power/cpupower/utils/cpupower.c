@@ -99,6 +99,9 @@ static int print_man_page(const char *subpage)
 
 	execlp("man", "man", page, NULL);
 
+	/* execlp failed */
+	free(page);
+
 	/* should not be reached */
 	return -EINVAL;
 }
