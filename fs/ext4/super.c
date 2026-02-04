@@ -1673,7 +1673,7 @@ enum {
 	Opt_nomblk_io_submit, Opt_block_validity, Opt_noblock_validity,
 	Opt_inode_readahead_blks, Opt_journal_ioprio,
 	Opt_dioread_nolock, Opt_dioread_lock,
-	Opt_discard, Opt_nodiscard, Opt_init_itable, Opt_noinit_itable,
+	Opt_discard, Opt_nodiscard, Opt_init_itable, Opt_noinit_itable, Opt_rotalloc,
 	Opt_max_dir_size_kb, Opt_nojournal_checksum, Opt_nombcache,
 	Opt_no_prefetch_block_bitmaps, Opt_mb_optimize_scan,
 	Opt_errors, Opt_data, Opt_data_err, Opt_jqfmt, Opt_dax_type,
@@ -1797,6 +1797,7 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_u32	("init_itable",		Opt_init_itable),
 	fsparam_flag	("init_itable",		Opt_init_itable),
 	fsparam_flag	("noinit_itable",	Opt_noinit_itable),
+	fsparam_flag	("rotalloc",	Opt_rotalloc),
 #ifdef CONFIG_EXT4_DEBUG
 	fsparam_flag	("fc_debug_force",	Opt_fc_debug_force),
 	fsparam_u32	("fc_debug_max_replay",	Opt_fc_debug_max_replay),
@@ -1878,6 +1879,7 @@ static const struct mount_opts {
 	{Opt_noauto_da_alloc, EXT4_MOUNT_NO_AUTO_DA_ALLOC, MOPT_SET},
 	{Opt_auto_da_alloc, EXT4_MOUNT_NO_AUTO_DA_ALLOC, MOPT_CLEAR},
 	{Opt_noinit_itable, EXT4_MOUNT_INIT_INODE_TABLE, MOPT_CLEAR},
+	{Opt_rotalloc, EXT4_MOUNT_ROTALLOC, MOPT_SET},
 	{Opt_dax_type, 0, MOPT_EXT4_ONLY},
 	{Opt_journal_dev, 0, MOPT_NO_EXT2},
 	{Opt_journal_path, 0, MOPT_NO_EXT2},
@@ -2263,6 +2265,9 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		if (param->type == fs_value_is_string)
 			ctx->s_li_wait_mult = result.uint_32;
 		ctx->spec |= EXT4_SPEC_s_li_wait_mult;
+		return 0;
+	case Opt_rotalloc:
+		ctx_set_mount_opt(ctx, EXT4_MOUNT_ROTALLOC);
 		return 0;
 	case Opt_max_dir_size_kb:
 		ctx->s_max_dir_size_kb = result.uint_32;
@@ -5515,6 +5520,17 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 			}
 		}
 	}
+
+	/*
+	 * Initialize rotalloc cursor, lock and
+	 * vector new_blocks to rotating^regular allocator
+	 */
+	sbi->s_rotalloc_cursor = 0;
+	spin_lock_init(&sbi->s_rotalloc_lock);
+	if (test_opt(sb, ROTALLOC))
+		sbi->s_mb_new_blocks = ext4_mb_rotating_allocator;
+	else
+		sbi->s_mb_new_blocks = ext4_mb_regular_allocator;
 
 	/*
 	 * Get the # of file system overhead blocks from the

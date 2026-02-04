@@ -229,6 +229,9 @@ struct ext4_allocation_request {
 	unsigned int flags;
 };
 
+/* expose rotalloc allocator argument pointer type */
+struct ext4_allocation_context;
+
 /*
  * Logical to physical block mapping, used by ext4_map_blocks()
  *
@@ -1221,6 +1224,7 @@ struct ext4_inode_info {
  * Mount flags set via mount options or defaults
  */
 #define EXT4_MOUNT_NO_MBCACHE		0x00001 /* Do not use mbcache */
+#define EXT4_MOUNT_ROTALLOC			0x00002 /* Use rotalloc policy/allocator */
 #define EXT4_MOUNT_GRPID		0x00004	/* Create files with directory's group */
 #define EXT4_MOUNT_DEBUG		0x00008	/* Some debugging messages */
 #define EXT4_MOUNT_ERRORS_CONT		0x00010	/* Continue on errors */
@@ -1550,6 +1554,10 @@ struct ext4_sb_info {
 	unsigned long s_mount_flags;
 	unsigned int s_def_mount_opt;
 	unsigned int s_def_mount_opt2;
+	/* Rotalloc cursor, lock & new_blocks allocator vector */
+	unsigned int s_rotalloc_cursor;
+	spinlock_t s_rotalloc_lock;
+	int (*s_mb_new_blocks)(struct ext4_allocation_context *ac);
 	ext4_fsblk_t s_sb_block;
 	atomic64_t s_resv_clusters;
 	kuid_t s_resuid;
