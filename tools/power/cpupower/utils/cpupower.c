@@ -172,6 +172,17 @@ static void handle_options(int *argc, const char ***argv)
 	*argv += new_argc;
 }
 
+static void cleanup_resources(void) {
+	if (cpus_chosen)
+		bitmask_free(cpus_chosen);
+	if (online_cpus)
+		bitmask_free(online_cpus);
+	if (offline_cpus)
+		bitmask_free(offline_cpus);
+	cpus_chosen = NULL;
+	online_cpus = NULL;
+	offline_cpus = NULL;
+}
 int main(int argc, const char *argv[])
 {
 	const char *cmd;
@@ -193,6 +204,7 @@ int main(int argc, const char *argv[])
 
 	if (argc < 1) {
 		print_help();
+		cleanup_resources();
 		return EXIT_FAILURE;
 	}
 
@@ -208,6 +220,7 @@ int main(int argc, const char *argv[])
 	base_cpu = sched_getcpu();
 	if (base_cpu < 0) {
 		fprintf(stderr, _("No valid cpus found.\n"));
+		cleanup_resources();
 		return EXIT_FAILURE;
 	}
 
@@ -230,17 +243,14 @@ int main(int argc, const char *argv[])
 		if (!run_as_root && p->needs_root) {
 			fprintf(stderr, _("Subcommand %s needs root "
 					  "privileges\n"), cmd);
+			cleanup_resources();
 			return EXIT_FAILURE;
 		}
 		ret = p->main(argc, argv);
-		if (cpus_chosen)
-			bitmask_free(cpus_chosen);
-		if (online_cpus)
-			bitmask_free(online_cpus);
-		if (offline_cpus)
-			bitmask_free(offline_cpus);
+		cleanup_resources();
 		return ret;
 	}
 	print_help();
+	cleanup_resources();
 	return EXIT_FAILURE;
 }
