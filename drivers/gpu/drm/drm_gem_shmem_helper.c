@@ -597,12 +597,17 @@ static vm_fault_t drm_gem_shmem_fault(struct vm_fault *vmf)
 	}
 
 	ret = drm_gem_shmem_try_map_pmd(vmf, vmf->address, page);
-	if (ret != VM_FAULT_NOPAGE) {
+	if (ret == VM_FAULT_NOPAGE) {
+		struct folio *folio = page_folio(page);
+
+		folio_mark_accessed(folio);
+	} else {
 		struct folio *folio = page_folio(page);
 
 		get_page(page);
 
 		folio_lock(folio);
+		folio_mark_accessed(folio);
 
 		vmf->page = page;
 		ret = VM_FAULT_LOCKED;
@@ -648,10 +653,23 @@ static void drm_gem_shmem_vm_close(struct vm_area_struct *vma)
 	drm_gem_vm_close(vma);
 }
 
+static vm_fault_t drm_gem_shmem_page_mkwrite(struct vm_fault *vmf)
+{
+	struct folio *folio = page_folio(vmf->page);
+
+	file_update_time(vmf->vma->vm_file);
+
+	folio_lock(folio);
+	folio_mark_dirty(folio);
+
+	return VM_FAULT_LOCKED;
+}
+
 const struct vm_operations_struct drm_gem_shmem_vm_ops = {
 	.fault = drm_gem_shmem_fault,
 	.open = drm_gem_shmem_vm_open,
 	.close = drm_gem_shmem_vm_close,
+	.page_mkwrite = drm_gem_shmem_page_mkwrite,
 };
 EXPORT_SYMBOL_GPL(drm_gem_shmem_vm_ops);
 
