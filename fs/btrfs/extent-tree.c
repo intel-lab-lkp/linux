@@ -3008,10 +3008,9 @@ int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans)
 		btrfs_put_block_group(block_group);
 
 		if (ret) {
-			const char *errstr = btrfs_decode_error(ret);
 			btrfs_warn(fs_info,
 			   "discard failed while removing blockgroup: errno=%d %s",
-				   ret, errstr);
+				   ret, btrfs_decode_error(ret));
 		}
 	}
 
