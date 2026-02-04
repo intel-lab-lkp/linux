@@ -1340,3 +1340,10 @@ The ->setlease() file_operation must now be explicitly set in order to provide
 support for leases. When set to NULL, the kernel will now return -EINVAL to
 attempts to set a lease. Filesystems that wish to use the kernel-internal lease
 implementation should set it to generic_setlease().
+
+---
+
+**mandatory**
+
+lookup_one_qstr_excl() is no longer exported - use start_creating() or
+similar.
