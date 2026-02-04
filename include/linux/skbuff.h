@@ -605,6 +605,7 @@ struct skb_shared_info {
 	};
 	unsigned int	gso_type;
 	u32		tskey;
+	u32		hsr_ptp;
 
 	/*
 	 * Warning : all fields before dataref are cleared in __alloc_skb()

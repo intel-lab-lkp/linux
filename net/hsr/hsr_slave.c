@@ -81,6 +81,22 @@ static rx_handler_result_t hsr_handle_frame(struct sk_buff **pskb)
 		hsr_forward_skb(skb, port);
 		spin_unlock_bh(&hsr->seqnr_lock);
 	} else {
+		struct hsr_ethhdr *hsr_ethhdr;
+		struct skb_shared_info *si;
+
+		hsr_ethhdr = (struct hsr_ethhdr *)skb_mac_header(skb);
+		if (hsr_ethhdr->hsr_tag.encap_proto == htons(ETH_P_1588)) {
+			/* PTP packages are not supposed to be forwarded via HSR
+			 * as-is. The latency introduced by forwarding renders
+			 * the time information useless.
+			 * Instead attach the port information on which it was
+			 * received, forward both copies to userland only and
+			 * let it deal with it.
+			 */
+			si = skb_shinfo(skb);
+			si->hsr_ptp = port->type;
+		}
+
 		hsr_forward_skb(skb, port);
 	}
 

@@ -17,6 +17,16 @@
 
 struct hsr_node;
 
+static unsigned int hsr_get_ptp_flags(struct sk_buff *skb)
+{
+	return skb_shinfo(skb)->hsr_ptp;
+}
+
+static unsigned int hsr_keep_header(struct sk_buff *skb)
+{
+	return (hsr_get_ptp_flags(skb) & 0xf0) == HSR_SKB_INCLUDES_HEADER;
+}
+
 /* The uses I can see for these HSR supervision frames are:
  * 1) Use the frames that are sent after node initialization ("HSR_TLV.Type =
  *    22") to reset any sequence_nr counters belonging to that node. Useful if
@@ -343,7 +353,10 @@ struct sk_buff *hsr_create_tagged_frame(struct hsr_frame_info *frame,
 		hsr_set_path_id(frame, hsr_ethhdr, port);
 		return skb_clone(frame->skb_hsr, GFP_ATOMIC);
 	} else if (port->dev->features & NETIF_F_HW_HSR_TAG_INS) {
-		return skb_clone(frame->skb_std, GFP_ATOMIC);
+		skb = skb_clone(frame->skb_std, GFP_ATOMIC);
+		if (skb_shinfo(frame->skb_std)->hsr_ptp && skb)
+			skb->sk = frame->skb_std->sk;
+		return skb;
 	}
 
 	/* Create the new skb with enough headroom to fit the HSR tag */
@@ -364,6 +377,16 @@ struct sk_buff *hsr_create_tagged_frame(struct hsr_frame_info *frame,
 	dst = skb_push(skb, HSR_HLEN);
 	memmove(dst, src, movelen);
 	skb_reset_mac_header(skb);
+
+	if (skb_shinfo(frame->skb_std)->hsr_ptp) {
+		/* Packets are bound to a port and the sender may expect time
+		 * information.
+		 */
+		skb_shinfo(skb)->hsr_ptp = skb_shinfo(frame->skb_std)->hsr_ptp;
+		skb_shinfo(skb)->tx_flags = skb_shinfo(frame->skb_std)->tx_flags;
+		skb_shinfo(skb)->tskey = skb_shinfo(frame->skb_std)->tskey;
+		skb->sk = frame->skb_std->sk;
+	}
 
 	/* skb_put_padto free skb on error and hsr_fill_tag returns NULL in
 	 * that case
@@ -420,7 +443,7 @@ static void hsr_deliver_master(struct sk_buff *skb, struct net_device *dev,
 static int hsr_xmit(struct sk_buff *skb, struct hsr_port *port,
 		    struct hsr_frame_info *frame)
 {
-	if (frame->port_rcv->type == HSR_PT_MASTER) {
+	if (frame->port_rcv->type == HSR_PT_MASTER && !hsr_keep_header(skb)) {
 		hsr_addr_subst_dest(frame->node_src, skb, port);
 
 		/* Address substitution (IEC62439-3 pp 26, 50): replace mac
@@ -504,6 +527,32 @@ bool hsr_drop_frame(struct hsr_frame_info *frame, struct hsr_port *port)
 	return false;
 }
 
+static void hsr_parse_req_master(struct hsr_frame_info *frame,
+				 unsigned int *req_port,
+				 bool *req_keep_header)
+{
+	struct skb_shared_info *si;
+	unsigned int val;
+
+	*req_port = HSR_PT_NONE;
+	*req_keep_header = false;
+
+	if (!frame->skb_std)
+		return;
+
+	si = skb_shinfo(frame->skb_std);
+	if (!si->hsr_ptp)
+		return;
+
+	val = si->hsr_ptp & 0xf;
+	if (val == HSR_PT_SLAVE_A || val == HSR_PT_SLAVE_B)
+		*req_port = val;
+
+	val = si->hsr_ptp & 0xf0;
+	if (val == HSR_SKB_INCLUDES_HEADER)
+		*req_keep_header = true;
+}
+
 /* Forward the frame through all devices except:
  * - Back through the receiving device
  * - If it's a HSR frame: through a device where it has passed before
@@ -521,6 +570,10 @@ static void hsr_forward_do(struct hsr_frame_info *frame)
 	struct hsr_port *port;
 	struct sk_buff *skb;
 	bool sent = false;
+	unsigned int req_port;
+	bool req_keep_header;
+
+	hsr_parse_req_master(frame, &req_port, &req_keep_header);
 
 	hsr_for_each_port(frame->port_rcv->hsr, port) {
 		struct hsr_priv *hsr = port->hsr;
@@ -542,6 +595,42 @@ static void hsr_forward_do(struct hsr_frame_info *frame)
 		if ((port->dev->features & NETIF_F_HW_HSR_DUP) && sent)
 			continue;
 
+		{
+			struct skb_shared_info *si = NULL;
+
+			if (frame->skb_hsr)
+				si = skb_shinfo(frame->skb_hsr);
+
+			/* Received over a slave interface */
+			if (si && si->hsr_ptp) {
+				/* No PTP forwarding */
+				if (port->type == HSR_PT_SLAVE_A ||
+				    port->type == HSR_PT_SLAVE_B)
+					continue;
+
+				if (port->type != HSR_PT_MASTER)
+					continue;
+
+				skb = skb_clone(frame->skb_hsr, GFP_ATOMIC);
+				/* Inject the PTP frame into the master
+				 * interface including HSR headers.
+				 */
+				goto inject_into_stack;
+			}
+
+			/* Outgoing port has been specified */
+			if ((req_port != HSR_PT_NONE) && (req_port != port->type))
+				continue;
+			if (req_keep_header) {
+				skb = skb_clone(frame->skb_std, GFP_ATOMIC);
+				/* Send the frame on the specific port without
+				 * addign HSR headers.
+				 */
+				if (skb)
+					skb->sk = frame->skb_std->sk;
+				goto inject_into_stack;
+			}
+		}
 		/* Don't send frame over port where it has been sent before.
 		 * Also for SAN, this shouldn't be done.
 		 */
@@ -569,6 +658,7 @@ static void hsr_forward_do(struct hsr_frame_info *frame)
 		else
 			skb = hsr->proto_ops->get_untagged_frame(frame, port);
 
+inject_into_stack:
 		if (!skb) {
 			frame->port_rcv->dev->stats.rx_dropped++;
 			continue;
@@ -633,6 +723,13 @@ int hsr_fill_frame_info(__be16 proto, struct sk_buff *skb,
 	struct hsr_port *port = frame->port_rcv;
 	struct hsr_priv *hsr = port->hsr;
 
+	if (hsr_keep_header(skb)) {
+		frame->skb_std = skb;
+
+		WARN_ON_ONCE(port->type != HSR_PT_MASTER);
+		WARN_ON_ONCE(skb->mac_len < sizeof(struct hsr_ethhdr));
+		return 0;
+	}
 	/* HSRv0 supervisory frames double as a tag so treat them as tagged. */
 	if ((!hsr->prot_version && proto == htons(ETH_P_PRP)) ||
 	    proto == htons(ETH_P_HSR)) {
@@ -697,10 +794,12 @@ static int fill_frame_info(struct hsr_frame_info *frame,
 	if (port->type == HSR_PT_INTERLINK)
 		n_db = &hsr->proxy_node_db;
 
-	frame->node_src = hsr_get_node(port, n_db, skb,
-				       frame->is_supervision, port->type);
-	if (!frame->node_src)
-		return -1; /* Unknown node and !is_supervision, or no mem */
+	if (!hsr_keep_header(skb)) {
+		frame->node_src = hsr_get_node(port, n_db, skb,
+					       frame->is_supervision, port->type);
+		if (!frame->node_src)
+			return -1; /* Unknown node and !is_supervision, or no mem */
+	}
 
 	ethhdr = (struct ethhdr *)skb_mac_header(skb);
 	frame->is_vlan = false;
@@ -739,7 +838,8 @@ void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
 	if (fill_frame_info(&frame, skb, port) < 0)
 		goto out_drop;
 
-	hsr_register_frame_in(frame.node_src, port, frame.sequence_nr);
+	if (!hsr_keep_header(skb))
+		hsr_register_frame_in(frame.node_src, port, frame.sequence_nr);
 	hsr_forward_do(&frame);
 	rcu_read_unlock();
 	/* Gets called for ingress frames as well as egress from master port.
