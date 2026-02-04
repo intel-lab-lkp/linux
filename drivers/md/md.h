@@ -117,15 +117,6 @@ enum sync_action {
 };
 
 /*
- * The struct embedded in rdev is used to serialize IO.
- */
-struct serial_in_rdev {
-	struct rb_root_cached serial_rb;
-	spinlock_t serial_lock;
-	wait_queue_head_t serial_io_wait;
-};
-
-/*
  * MD's 'extended' device
  */
 struct md_rdev {
@@ -203,8 +194,6 @@ struct md_rdev {
 					   * for reporting to userspace and storing
 					   * in superblock.
 					   */
-
-	struct serial_in_rdev *serial;  /* used for raid1 io serialization */
 
 	struct kernfs_node *sysfs_state; /* handle for 'state'
 					   * sysfs entry */
@@ -286,10 +275,6 @@ enum flag_bits {
 				 * it didn't fail, so don't use FailFast
 				 * any more for metadata
 				 */
-	CollisionCheck,		/*
-				 * check if there is collision between raid1
-				 * serial bios.
-				 */
 	Nonrot,			/* non-rotational device (SSD) */
 };
 
@@ -356,6 +341,7 @@ enum mddev_flags {
 	MD_BROKEN,
 	MD_DO_DELETE,
 	MD_DELETED,
+	MD_SERIAL,
 };
 
 enum mddev_sb_flags {
@@ -387,6 +373,15 @@ enum {
 	MD_RESYNC_DELAYED = 2,
 	/* Any value greater than or equal to this is in an active resync */
 	MD_RESYNC_ACTIVE = 3,
+};
+
+/*
+ * The struct embedded is used to serialize IO.
+ */
+struct serial {
+	struct rb_root_cached serial_rb;
+	spinlock_t serial_lock;
+	wait_queue_head_t serial_io_wait;
 };
 
 struct mddev {
@@ -607,7 +602,8 @@ struct mddev {
 	struct bio_set			io_clone_set;
 
 	struct work_struct event_work;	/* used by dm to report failure event */
-	mempool_t *serial_info_pool;
+	mempool_t				*serial_info_pool;
+	struct serial			*serial;  /* used for raid1 io serialization */
 	void (*sync_super)(struct mddev *mddev, struct md_rdev *rdev);
 	struct md_cluster_info		*cluster_info;
 	struct md_cluster_operations *cluster_ops;

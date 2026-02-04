@@ -56,14 +56,14 @@ static void raid1_free(struct mddev *mddev, void *priv);
 INTERVAL_TREE_DEFINE(struct serial_info, node, sector_t, _subtree_last,
 		     START, LAST, static inline, raid1_rb);
 
-static int check_and_add_serial(struct md_rdev *rdev, struct r1bio *r1_bio,
+static int check_and_add_serial(struct mddev *mddev, struct r1bio *r1_bio,
 				struct serial_info *si, int idx)
 {
 	unsigned long flags;
 	int ret = 0;
 	sector_t lo = r1_bio->sector;
 	sector_t hi = lo + r1_bio->sectors;
-	struct serial_in_rdev *serial = &rdev->serial[idx];
+	struct serial *serial = &mddev->serial[idx];
 
 	spin_lock_irqsave(&serial->serial_lock, flags);
 	/* collision happened */
@@ -79,28 +79,33 @@ static int check_and_add_serial(struct md_rdev *rdev, struct r1bio *r1_bio,
 	return ret;
 }
 
-static void wait_for_serialization(struct md_rdev *rdev, struct r1bio *r1_bio)
+static void wait_for_serialization(struct mddev *mddev, struct r1bio *r1_bio)
 {
-	struct mddev *mddev = rdev->mddev;
 	struct serial_info *si;
 	int idx = sector_to_idx(r1_bio->sector);
-	struct serial_in_rdev *serial = &rdev->serial[idx];
+	struct serial *serial = &mddev->serial[idx];
 
-	if (WARN_ON(!mddev->serial_info_pool))
+	if (!test_bit(MD_SERIAL, &mddev->flags))
 		return;
+
 	si = mempool_alloc(mddev->serial_info_pool, GFP_NOIO);
 	wait_event(serial->serial_io_wait,
-		   check_and_add_serial(rdev, r1_bio, si, idx) == 0);
+		   check_and_add_serial(mddev, r1_bio, si, idx) == 0);
 }
 
-static void remove_serial(struct md_rdev *rdev, sector_t lo, sector_t hi)
+static void remove_serial(struct r1bio *r1_bio)
 {
 	struct serial_info *si;
 	unsigned long flags;
 	int found = 0;
-	struct mddev *mddev = rdev->mddev;
+	struct mddev *mddev = r1_bio->mddev;
+	sector_t lo = r1_bio->sector;
+	sector_t hi = r1_bio->sector + r1_bio->sectors;
 	int idx = sector_to_idx(lo);
-	struct serial_in_rdev *serial = &rdev->serial[idx];
+	struct serial *serial = &mddev->serial[idx];
+
+	if (!test_bit(MD_SERIAL, &mddev->flags))
+		return;
 
 	spin_lock_irqsave(&serial->serial_lock, flags);
 	for (si = raid1_rb_iter_first(&serial->serial_rb, lo, hi);
@@ -433,6 +438,8 @@ static void r1_bio_write_done(struct r1bio *r1_bio)
 	if (!atomic_dec_and_test(&r1_bio->remaining))
 		return;
 
+	remove_serial(r1_bio);
+
 	if (test_bit(R1BIO_WriteError, &r1_bio->state))
 		reschedule_retry(r1_bio);
 	else {
@@ -452,8 +459,6 @@ static void raid1_end_write_request(struct bio *bio)
 	struct bio *to_put = NULL;
 	int mirror = find_bio_disk(r1_bio, bio);
 	struct md_rdev *rdev = conf->mirrors[mirror].rdev;
-	sector_t lo = r1_bio->sector;
-	sector_t hi = r1_bio->sector + r1_bio->sectors;
 	bool ignore_error = !raid1_should_handle_error(bio) ||
 		(bio->bi_status && bio_op(bio) == REQ_OP_DISCARD);
 
@@ -518,8 +523,6 @@ static void raid1_end_write_request(struct bio *bio)
 	}
 
 	if (behind) {
-		if (test_bit(CollisionCheck, &rdev->flags))
-			remove_serial(rdev, lo, hi);
 		if (test_bit(WriteMostly, &rdev->flags))
 			atomic_dec(&r1_bio->behind_remaining);
 
@@ -542,8 +545,8 @@ static void raid1_end_write_request(struct bio *bio)
 				call_bio_endio(r1_bio);
 			}
 		}
-	} else if (rdev->mddev->serialize_policy)
-		remove_serial(rdev, lo, hi);
+	}
+
 	if (r1_bio->bios[mirror] == NULL)
 		rdev_dec_pending(rdev, conf->mddev);
 
@@ -1620,6 +1623,8 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 
 	first_clone = 1;
 
+	wait_for_serialization(mddev, r1_bio);
+
 	for (i = 0; i < disks; i++) {
 		struct bio *mbio = NULL;
 		struct md_rdev *rdev = conf->mirrors[i].rdev;
@@ -1636,17 +1641,11 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 			mbio = bio_alloc_clone(rdev->bdev,
 					       r1_bio->behind_master_bio,
 					       GFP_NOIO, &mddev->bio_set);
-			if (test_bit(CollisionCheck, &rdev->flags))
-				wait_for_serialization(rdev, r1_bio);
 			if (test_bit(WriteMostly, &rdev->flags))
 				atomic_inc(&r1_bio->behind_remaining);
-		} else {
+		} else
 			mbio = bio_alloc_clone(rdev->bdev, bio, GFP_NOIO,
 					       &mddev->bio_set);
-
-			if (mddev->serialize_policy)
-				wait_for_serialization(rdev, r1_bio);
-		}
 
 		mbio->bi_opf &= ~REQ_NOWAIT;
 		r1_bio->bios[i] = mbio;

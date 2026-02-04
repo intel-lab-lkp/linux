@@ -152,67 +152,35 @@ static int sync_io_depth(struct mddev *mddev)
 		mddev->sync_io_depth : sysctl_sync_io_depth;
 }
 
-static void rdev_uninit_serial(struct md_rdev *rdev)
+static void mddev_uninit_serial(struct mddev *mddev)
 {
-	if (!test_and_clear_bit(CollisionCheck, &rdev->flags))
-		return;
-
-	kvfree(rdev->serial);
-	rdev->serial = NULL;
+	kvfree(mddev->serial);
+	mddev->serial = NULL;
 }
 
-static void rdevs_uninit_serial(struct mddev *mddev)
-{
-	struct md_rdev *rdev;
-
-	rdev_for_each(rdev, mddev)
-		rdev_uninit_serial(rdev);
-}
-
-static int rdev_init_serial(struct md_rdev *rdev)
+static int mddev_init_serial(struct mddev *mddev)
 {
 	/* serial_nums equals with BARRIER_BUCKETS_NR */
 	int i, serial_nums = 1 << ((PAGE_SHIFT - ilog2(sizeof(atomic_t))));
-	struct serial_in_rdev *serial = NULL;
+	struct serial *serial = NULL;
 
-	if (test_bit(CollisionCheck, &rdev->flags))
-		return 0;
-
-	serial = kvmalloc(sizeof(struct serial_in_rdev) * serial_nums,
+	serial = kvmalloc_array(serial_nums, sizeof(struct serial),
 			  GFP_KERNEL);
-	if (!serial)
+	if (!serial) {
+		pr_err("failed to alloc serial\n");
 		return -ENOMEM;
+	}
 
 	for (i = 0; i < serial_nums; i++) {
-		struct serial_in_rdev *serial_tmp = &serial[i];
+		struct serial *serial_tmp = &serial[i];
 
 		spin_lock_init(&serial_tmp->serial_lock);
 		serial_tmp->serial_rb = RB_ROOT_CACHED;
 		init_waitqueue_head(&serial_tmp->serial_io_wait);
 	}
 
-	rdev->serial = serial;
-	set_bit(CollisionCheck, &rdev->flags);
-
+	mddev->serial = serial;
 	return 0;
-}
-
-static int rdevs_init_serial(struct mddev *mddev)
-{
-	struct md_rdev *rdev;
-	int ret = 0;
-
-	rdev_for_each(rdev, mddev) {
-		ret = rdev_init_serial(rdev);
-		if (ret)
-			break;
-	}
-
-	/* Free all resources if pool is not existed */
-	if (ret && !mddev->serial_info_pool)
-		rdevs_uninit_serial(mddev);
-
-	return ret;
 }
 
 /*
@@ -236,72 +204,40 @@ int mddev_create_serial_pool(struct mddev *mddev, struct md_rdev *rdev)
 {
 	int ret = 0;
 
-	if (rdev && !rdev_need_serial(rdev) &&
-	    !test_bit(CollisionCheck, &rdev->flags))
+	if (mddev->serial_info_pool)
 		return ret;
 
-	if (!rdev)
-		ret = rdevs_init_serial(mddev);
-	else
-		ret = rdev_init_serial(rdev);
+	/* return success if rdev doesn't support serial */
+	if (rdev && !rdev_need_serial(rdev))
+		return ret;
+
+	ret = mddev_init_serial(mddev);
 	if (ret)
 		return ret;
-
-	if (mddev->serial_info_pool == NULL) {
-		/*
-		 * already in memalloc noio context by
-		 * mddev_suspend()
-		 */
-		mddev->serial_info_pool =
-			mempool_create_kmalloc_pool(NR_SERIAL_INFOS,
-						sizeof(struct serial_info));
-		if (!mddev->serial_info_pool) {
-			rdevs_uninit_serial(mddev);
-			pr_err("can't alloc memory pool for serialization\n");
-			ret = -ENOMEM;
-		}
+	/*
+	 * already in memalloc noio context by
+	 * mddev_suspend()
+	 */
+	mddev->serial_info_pool = mempool_create_kmalloc_pool(
+			NR_SERIAL_INFOS, sizeof(struct serial_info));
+	if (!mddev->serial_info_pool) {
+		mddev_uninit_serial(mddev);
+		pr_err("can't alloc memory pool for serialization\n");
+		ret = -ENOMEM;
 	}
 
+	set_bit(MD_SERIAL, &mddev->flags);
 	return ret;
 }
 
-/*
- * Free resource from rdev(s), and destroy serial_info_pool under conditions:
- * 1. rdev is the last device flaged with CollisionCheck.
- * 2. when bitmap is destroyed while policy is not enabled.
- * 3. for disable policy, the pool is destroyed only when no rdev needs it.
- */
 void mddev_destroy_serial_pool(struct mddev *mddev, struct md_rdev *rdev)
 {
-	if (rdev && !test_bit(CollisionCheck, &rdev->flags))
+	if (!mddev->serial_info_pool)
 		return;
-
-	if (mddev->serial_info_pool) {
-		struct md_rdev *temp;
-		int num = 0; /* used to track if other rdevs need the pool */
-
-		rdev_for_each(temp, mddev) {
-			if (!rdev) {
-				if (!mddev->serialize_policy ||
-				    !rdev_need_serial(temp))
-					rdev_uninit_serial(temp);
-				else
-					num++;
-			} else if (temp != rdev &&
-				   test_bit(CollisionCheck, &temp->flags))
-				num++;
-		}
-
-		if (rdev)
-			rdev_uninit_serial(rdev);
-
-		if (num)
-			pr_info("The mempool could be used by other devices\n");
-		else {
-			mempool_destroy(mddev->serial_info_pool);
-			mddev->serial_info_pool = NULL;
-		}
-	}
+	mddev_uninit_serial(mddev);
+	mempool_destroy(mddev->serial_info_pool);
+	mddev->serial_info_pool = NULL;
+	clear_bit(MD_SERIAL, &mddev->flags);
 }
 
 static struct ctl_table_header *raid_table_header;
@@ -6633,18 +6569,13 @@ int md_run(struct mddev *mddev)
 		bool create_pool = false;
 
 		rdev_for_each(rdev, mddev) {
-			if (test_bit(WriteMostly, &rdev->flags) &&
-			    rdev_init_serial(rdev))
+			if (test_bit(WriteMostly, &rdev->flags))
 				create_pool = true;
 		}
-		if (create_pool && mddev->serial_info_pool == NULL) {
-			mddev->serial_info_pool =
-				mempool_create_kmalloc_pool(NR_SERIAL_INFOS,
-						    sizeof(struct serial_info));
-			if (!mddev->serial_info_pool) {
-				err = -ENOMEM;
+		if (create_pool) {
+			err = mddev_create_serial_pool(mddev, NULL);
+			if (err)
 				goto bitmap_abort;
-			}
 		}
 	}
 
