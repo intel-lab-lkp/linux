@@ -140,6 +140,7 @@ void pci_hp_add_devices(struct pci_bus *bus)
 	struct pci_dev *dev;
 	struct pci_controller *phb;
 	struct device_node *dn = pci_bus_to_OF_node(bus);
+	int ret = 0;
 
 	if (!dn)
 		return;
@@ -176,6 +177,8 @@ void pci_hp_add_devices(struct pci_bus *bus)
 		for_each_pci_bridge(dev, bus)
 			max = pci_scan_bridge(bus, dev, max, 1);
 	}
-	pcibios_finish_adding_to_bus(bus);
+	ret = pcibios_finish_adding_to_bus(bus);
+	if (ret)
+		pr_err("Unable to add hotplug pci device!\n");
 }
 EXPORT_SYMBOL_GPL(pci_hp_add_devices);

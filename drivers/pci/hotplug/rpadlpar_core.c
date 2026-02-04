@@ -240,8 +240,10 @@ static int dlpar_add_phb(char *drc_name, struct device_node *dn)
 	}
 
 	phb = init_phb_dynamic(dn);
-	if (!phb)
+	if (!phb) {
+		pr_err("Unable to add hotplug slot %s\n", drc_name);
 		return -EIO;
+	}
 
 	if (rpaphp_add_slot(dn)) {
 		printk(KERN_ERR "%s: unable to add hotplug slot %s\n",
@@ -310,6 +312,9 @@ int dlpar_add_slot(char *drc_name)
 			break;
 	}
 	of_node_put(dn);
+
+	if (rc)
+		goto exit;
 
 	printk(KERN_INFO "%s: slot %s added\n", DLPAR_MODULE_NAME, drc_name);
 exit:
