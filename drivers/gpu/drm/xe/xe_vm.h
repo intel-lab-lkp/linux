@@ -220,6 +220,13 @@ static inline bool xe_vm_in_preempt_fence_mode(struct xe_vm *vm)
 	return xe_vm_in_lr_mode(vm) && !xe_vm_in_fault_mode(vm);
 }
 
+static inline bool xe_vm_allow_vm_eviction(struct xe_vm *vm)
+{
+	return !xe_vm_in_lr_mode(vm) ||
+		(xe_vm_in_fault_mode(vm) &&
+		 !(vm->flags & XE_VM_FLAG_NO_VM_OVERCOMMIT));
+}
+
 int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q);
 void xe_vm_remove_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q);
 
