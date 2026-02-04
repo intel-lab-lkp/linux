@@ -321,6 +321,10 @@ aie2_sched_job_run(struct drm_sched_job *sched_job)
 	kref_get(&job->refcnt);
 	fence = dma_fence_get(job->fence);
 
+	ret = amdxdna_pm_resume_get(hwctx->client->xdna);
+	if (ret)
+		goto out;
+
 	if (job->drv_cmd) {
 		switch (job->drv_cmd->opcode) {
 		case SYNC_DEBUG_BO:
@@ -347,6 +351,7 @@ aie2_sched_job_run(struct drm_sched_job *sched_job)
 
 out:
 	if (ret) {
+		amdxdna_pm_suspend_put(hwctx->client->xdna);
 		dma_fence_put(job->fence);
 		aie2_job_put(job);
 		mmput(job->mm);
@@ -1003,15 +1008,11 @@ int aie2_cmd_submit(struct amdxdna_hwctx *hwctx, struct amdxdna_sched_job *job, 
 		goto free_chain;
 	}
 
-	ret = amdxdna_pm_resume_get(xdna);
-	if (ret)
-		goto cleanup_job;
-
 retry:
 	ret = drm_gem_lock_reservations(job->bos, job->bo_cnt, &acquire_ctx);
 	if (ret) {
 		XDNA_WARN(xdna, "Failed to lock BOs, ret %d", ret);
-		goto suspend_put;
+		goto cleanup_job;
 	}
 
 	for (i = 0; i < job->bo_cnt; i++) {
@@ -1019,7 +1020,7 @@ retry:
 		if (ret) {
 			XDNA_WARN(xdna, "Failed to reserve fences %d", ret);
 			drm_gem_unlock_reservations(job->bos, job->bo_cnt, &acquire_ctx);
-			goto suspend_put;
+			goto cleanup_job;
 		}
 	}
 
@@ -1034,12 +1035,12 @@ retry:
 					msecs_to_jiffies(HMM_RANGE_DEFAULT_TIMEOUT);
 			} else if (time_after(jiffies, timeout)) {
 				ret = -ETIME;
-				goto suspend_put;
+				goto cleanup_job;
 			}
 
 			ret = aie2_populate_range(abo);
 			if (ret)
-				goto suspend_put;
+				goto cleanup_job;
 			goto retry;
 		}
 	}
@@ -1065,8 +1066,6 @@ retry:
 
 	return 0;
 
-suspend_put:
-	amdxdna_pm_suspend_put(xdna);
 cleanup_job:
 	drm_sched_job_cleanup(&job->base);
 free_chain:
