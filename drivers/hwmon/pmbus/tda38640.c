@@ -23,6 +23,30 @@ struct tda38640_data {
 	u32 en_pin_lvl;
 };
 
+static int tda38640_identify(struct i2c_client *client,
+			     struct pmbus_driver_info *info)
+{
+	int vout_mode;
+
+	vout_mode = pmbus_read_byte_data(client, 0, PMBUS_VOUT_MODE);
+	if (vout_mode < 0 || vout_mode == 0xff)
+		return vout_mode < 0 ? vout_mode : -ENODEV;
+	switch (vout_mode >> 5) {
+	case 0: /* Linear */
+		info->format[PSC_VOLTAGE_OUT] = linear;
+		break;
+	case 2: /* Direct */
+		info->format[PSC_VOLTAGE_OUT] = direct;
+		info->m[PSC_VOLTAGE_OUT] = 1;
+		info->b[PSC_VOLTAGE_OUT] = 0;
+		info->R[PSC_VOLTAGE_OUT] = 3;
+		break;
+	default:
+		return -ENODEV;
+	}
+	return 0;
+}
+
 #define to_tda38640_data(x)  container_of(x, struct tda38640_data, info)
 
 /*
@@ -142,7 +166,6 @@ static int svid_mode(struct i2c_client *client, struct tda38640_data *data)
 static struct pmbus_driver_info tda38640_info = {
 	.pages = 1,
 	.format[PSC_VOLTAGE_IN] = linear,
-	.format[PSC_VOLTAGE_OUT] = linear,
 	.format[PSC_CURRENT_OUT] = linear,
 	.format[PSC_CURRENT_IN] = linear,
 	.format[PSC_POWER] = linear,
@@ -153,6 +176,7 @@ static struct pmbus_driver_info tda38640_info = {
 	    | PMBUS_HAVE_VOUT | PMBUS_HAVE_STATUS_VOUT
 	    | PMBUS_HAVE_IOUT | PMBUS_HAVE_STATUS_IOUT
 	    | PMBUS_HAVE_POUT | PMBUS_HAVE_PIN,
+	.identify = tda38640_identify,
 #if IS_ENABLED(CONFIG_SENSORS_TDA38640_REGULATOR)
 	.num_regulators = 1,
 	.reg_desc = tda38640_reg_desc,
