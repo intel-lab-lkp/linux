@@ -278,4 +278,32 @@ TEST_F(pcie_ep_doorbell, DOORBELL_TEST)
 	pci_ep_ioctl(PCITEST_DOORBELL, 0);
 	EXPECT_FALSE(ret) TH_LOG("Test failed for Doorbell\n");
 }
+
+FIXTURE(pci_ep_api)
+{
+	int fd;
+};
+
+FIXTURE_SETUP(pci_ep_api)
+{
+	self->fd = open(test_device, O_RDWR);
+
+	ASSERT_NE(-1, self->fd) TH_LOG("Can't open PCI Endpoint Test device");
+}
+
+FIXTURE_TEARDOWN(pci_ep_api)
+{
+	close(self->fd);
+}
+
+TEST_F(pci_ep_api, EPC_API_TEST)
+{
+	int ret;
+
+	pci_ep_ioctl(PCITEST_SET_IRQTYPE, PCITEST_IRQ_TYPE_AUTO);
+	ASSERT_EQ(0, ret) TH_LOG("Can't set AUTO IRQ type");
+
+	pci_ep_ioctl(PCITEST_EPC_API, 0);
+	EXPECT_FALSE(ret) TH_LOG("EPC API test failed");
+}
 TEST_HARNESS_MAIN
