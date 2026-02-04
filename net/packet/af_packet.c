@@ -82,6 +82,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/mutex.h>
+#include <linux/if_hsr.h>
 #include <linux/if_vlan.h>
 #include <linux/virtio_net.h>
 #include <linux/errqueue.h>
@@ -1938,6 +1939,36 @@ static void packet_parse_headers(struct sk_buff *skb, struct socket *sock)
 	skb_probe_transport_header(skb);
 }
 
+static int packet_cmsg_send(struct msghdr *msg, struct packet_sock *po,
+			    unsigned int *hsr_setting)
+{
+	struct cmsghdr *cmsg;
+	int ret = -EINVAL;
+	u32 val;
+
+	for_each_cmsghdr(cmsg, msg) {
+		if (!CMSG_OK(msg, cmsg))
+			goto out;
+		if (cmsg->cmsg_level != SOL_PACKET)
+			continue;
+		if (cmsg->cmsg_type != PACKET_HSR_INFO)
+			continue;
+		if (cmsg->cmsg_len != CMSG_LEN(sizeof(u32)))
+			goto out;
+
+		val = *(u32 *)CMSG_DATA(cmsg);
+		if (val != PACKET_HSR_INFO_HAS_HDR)
+			goto out;
+		if (!po->hsr_bound_port)
+			goto out;
+
+		*hsr_setting = HSR_SKB_INCLUDES_HEADER;
+	}
+	ret = 0;
+out:
+	return ret;
+}
+
 /*
  *	Output a raw packet to a device layer. This bypasses all the other
  *	protocol layers and you must therefore supply it with a complete frame
@@ -1947,6 +1978,7 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg,
 			       size_t len)
 {
 	struct sock *sk = sock->sk;
+	struct packet_sock *po = pkt_sk(sk);
 	DECLARE_SOCKADDR(struct sockaddr_pkt *, saddr, msg->msg_name);
 	struct sk_buff *skb = NULL;
 	struct net_device *dev;
@@ -1954,6 +1986,7 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg,
 	__be16 proto = 0;
 	int err;
 	int extra_len = 0;
+	u32 hsr_setting = 0;
 
 	/*
 	 *	Get and verify the address.
@@ -2044,6 +2077,9 @@ retry:
 		err = sock_cmsg_send(sk, msg, &sockc);
 		if (unlikely(err))
 			goto out_unlock;
+		err = packet_cmsg_send(msg, po, &hsr_setting);
+		if (unlikely(err))
+			goto out_unlock;
 	}
 
 	skb->protocol = proto;
@@ -2052,6 +2088,7 @@ retry:
 	skb->mark = sockc.mark;
 	skb_set_delivery_type_by_clockid(skb, sockc.transmit_time, sk->sk_clockid);
 	skb_setup_tx_timestamp(skb, &sockc);
+	skb_shinfo(skb)->hsr_ptp = hsr_setting | po->hsr_bound_port;
 
 	if (unlikely(extra_len == 4))
 		skb->no_fcs = 1;
@@ -2130,6 +2167,13 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto drop;
+
+	if (po->hsr_bound_port) {
+		struct skb_shared_info *si = skb_shinfo(skb);
+
+		if (po->hsr_bound_port != si->hsr_ptp)
+			goto drop;
+	}
 
 	skb->dev = dev;
 
@@ -2259,6 +2303,13 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto drop;
+
+	if (po->hsr_bound_port) {
+		struct skb_shared_info *si = skb_shinfo(skb);
+
+		if (po->hsr_bound_port != si->hsr_ptp)
+			goto drop;
+	}
 
 	if (dev_has_header(dev)) {
 		if (sk->sk_type != SOCK_DGRAM)
@@ -2731,6 +2782,7 @@ static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 	int len_sum = 0;
 	int status = TP_STATUS_AVAILABLE;
 	int hlen, tlen, copylen = 0;
+	u32 hsr_setting = 0;
 	long timeo;
 
 	mutex_lock(&po->pg_vec_lock);
@@ -2773,6 +2825,10 @@ static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 	sockcm_init(&sockc, &po->sk);
 	if (msg->msg_controllen) {
 		err = sock_cmsg_send(&po->sk, msg, &sockc);
+		if (unlikely(err))
+			goto out_put;
+
+		err = packet_cmsg_send(msg, po, &hsr_setting);
 		if (unlikely(err))
 			goto out_put;
 	}
@@ -2863,6 +2919,7 @@ tpacket_error:
 				goto out_status;
 			}
 		}
+		skb_shinfo(skb)->hsr_ptp = hsr_setting | po->hsr_bound_port;
 
 		if (vnet_hdr_sz) {
 			if (virtio_net_hdr_to_skb(skb, vnet_hdr, vio_le())) {
@@ -2952,6 +3009,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	int vnet_hdr_sz = READ_ONCE(po->vnet_hdr_sz);
 	int hlen, tlen, linear;
 	int extra_len = 0;
+	u32 hsr_setting = 0;
 
 	/*
 	 *	Get and verify the address.
@@ -2986,6 +3044,10 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	sockcm_init(&sockc, sk);
 	if (msg->msg_controllen) {
 		err = sock_cmsg_send(sk, msg, &sockc);
+		if (unlikely(err))
+			goto out_unlock;
+
+		err = packet_cmsg_send(msg, po, &hsr_setting);
 		if (unlikely(err))
 			goto out_unlock;
 	}
@@ -3047,6 +3109,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	skb_setup_tx_timestamp(skb, &sockc);
+	skb_shinfo(skb)->hsr_ptp = hsr_setting | po->hsr_bound_port;
 
 	if (!vnet_hdr.gso_type && (len > dev->mtu + reserve + extra_len) &&
 	    !packet_extra_vlan_len_allowed(dev, skb)) {
@@ -4044,6 +4107,31 @@ packet_setsockopt(struct socket *sock, int level, int optname, sockptr_t optval,
 		packet_sock_flag_set(po, PACKET_SOCK_QDISC_BYPASS, val);
 		return 0;
 	}
+	case PACKET_HSR_BIND_PORT:
+	{
+		int val;
+
+		if (optlen != sizeof(val))
+			return -EINVAL;
+		if (copy_from_sockptr(&val, optval, sizeof(val)))
+			return -EFAULT;
+
+		switch (val) {
+		case 0:
+			po->hsr_bound_port = 0;
+			break;
+		case PACKET_HSR_BIND_PORT_A:
+			po->hsr_bound_port = HSR_PT_SLAVE_A;
+			break;
+		case PACKET_HSR_BIND_PORT_B:
+			po->hsr_bound_port = HSR_PT_SLAVE_B;
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		return 0;
+	}
 	default:
 		return -ENOPROTOOPT;
 	}
@@ -4163,6 +4251,21 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 		break;
 	case PACKET_QDISC_BYPASS:
 		val = packet_sock_flag(po, PACKET_SOCK_QDISC_BYPASS);
+		break;
+	case PACKET_HSR_BIND_PORT:
+		switch (po->hsr_bound_port) {
+		case 0:
+			val = 0;
+			break;
+		case HSR_PT_SLAVE_A:
+			val = PACKET_HSR_BIND_PORT_A;
+			break;
+		case HSR_PT_SLAVE_B:
+			val = PACKET_HSR_BIND_PORT_B;
+			break;
+		default:
+			return -EINVAL;
+		}
 		break;
 	default:
 		return -ENOPROTOOPT;
