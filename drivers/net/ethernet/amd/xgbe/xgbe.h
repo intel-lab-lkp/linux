@@ -1334,6 +1334,10 @@ int xgbe_selftest_get_count(struct xgbe_prv_data *pdata);
 int xgbe_enable_mac_loopback(struct xgbe_prv_data *pdata);
 void xgbe_disable_mac_loopback(struct xgbe_prv_data *pdata);
 
+/* ARP offload */
+void xgbe_enable_arp_offload(struct xgbe_prv_data *pdata, u32 ip_addr);
+void xgbe_disable_arp_offload(struct xgbe_prv_data *pdata);
+
 #ifdef CONFIG_DEBUG_FS
 void xgbe_debugfs_init(struct xgbe_prv_data *);
 void xgbe_debugfs_exit(struct xgbe_prv_data *);

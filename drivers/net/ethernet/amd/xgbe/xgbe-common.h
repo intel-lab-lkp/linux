@@ -210,6 +210,7 @@
 #define MAC_MACA0LR			0x0304
 #define MAC_MACA1HR			0x0308
 #define MAC_MACA1LR			0x030c
+#define MAC_ARP_ADDR			0x0c10
 #define MAC_RSSCR			0x0c80
 #define MAC_RSSAR			0x0c88
 #define MAC_RSSDR			0x0c8c
@@ -400,6 +401,8 @@
 #define MAC_RCR_RE_WIDTH		1
 #define MAC_RCR_GPSL_INDEX		16
 #define MAC_RCR_GPSL_WIDTH		14
+#define MAC_RCR_ARPEN_INDEX		31
+#define MAC_RCR_ARPEN_WIDTH		1
 #define MAC_RFCR_PFCE_INDEX		8
 #define MAC_RFCR_PFCE_WIDTH		1
 #define MAC_RFCR_RFE_INDEX		0
