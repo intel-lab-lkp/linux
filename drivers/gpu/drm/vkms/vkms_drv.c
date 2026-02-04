@@ -17,6 +17,7 @@
 #include <drm/drm_gem.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_color_mgmt.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_shmem.h>
 #include <drm/drm_file.h>
@@ -111,8 +112,7 @@ static int vkms_atomic_check(struct drm_device *dev, struct drm_atomic_state *st
 		if (!new_crtc_state->gamma_lut || !new_crtc_state->color_mgmt_changed)
 			continue;
 
-		if (new_crtc_state->gamma_lut->length / sizeof(struct drm_color_lut *)
-		    > VKMS_LUT_SIZE)
+		if (drm_color_lut_size(new_crtc_state->gamma_lut) > VKMS_LUT_SIZE)
 			return -EINVAL;
 	}
 
