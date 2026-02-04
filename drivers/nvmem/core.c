@@ -1709,7 +1709,7 @@ static void *nvmem_cell_prepare_write_buffer(struct nvmem_cell_entry *cell,
 {
 	struct nvmem_device *nvmem = cell->nvmem;
 	int i, rc, nbits, bit_offset = cell->bit_offset;
-	u8 v, *p, *buf, *b, pbyte, pbits;
+	u8 v, *p, *buf, *b, pbyte, pbits, mask;
 
 	nbits = cell->nbits;
 	buf = kzalloc(cell->bytes, GFP_KERNEL);
@@ -1747,8 +1747,10 @@ static void *nvmem_cell_prepare_write_buffer(struct nvmem_cell_entry *cell,
 				    cell->offset + cell->bytes - 1, &v, 1);
 		if (rc)
 			goto err;
-		*p |= GENMASK(7, (nbits + bit_offset) % BITS_PER_BYTE) & v;
 
+		mask = GENMASK(7, (nbits + bit_offset) % BITS_PER_BYTE);
+		*p &= ~mask;
+		*p |= v & mask;
 	}
 
 	return buf;
