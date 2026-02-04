@@ -24,8 +24,23 @@ struct rkisp1_rsz_yuv_mbus_info {
 
 static const struct rkisp1_rsz_yuv_mbus_info rkisp1_rsz_yuv_src_formats[] = {
 	{
+		.mbus_code	= MEDIA_BUS_FMT_UYVY8_2X8, /* YUV422 */
+		.hdiv		= 1,
+		.vdiv		= 1,
+	},
+	{
+		.mbus_code	= MEDIA_BUS_FMT_VYUY8_2X8, /* YUV422 */
+		.hdiv		= 1,
+		.vdiv		= 1,
+	},
+	{
 		.mbus_code	= MEDIA_BUS_FMT_YUYV8_2X8, /* YUV422 */
 		.hdiv		= 2,
+		.vdiv		= 1,
+	},
+	{
+		.mbus_code	= MEDIA_BUS_FMT_YVYU8_2X8, /* YUV422 */
+		.hdiv		= 1,
 		.vdiv		= 1,
 	},
 	{
