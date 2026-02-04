@@ -673,6 +673,15 @@ config NFT_SYNPROXY
 	  server. This allows to avoid conntrack and server resource usage
 	  during SYN-flood attacks.
 
+config NFT_MATH
+	tristate "Netfilter nf_tables math expression support"
+	depends on NETFILTER_ADVANCED
+	help
+	  This option enables support for the nftables math expression.
+	  It allows arithmetic operation to be performed on nft registers,
+	  such as incrementing or decrementing values. Math expressions
+	  can be used in nftables rules to modify packet fields.
+
 if NF_TABLES_NETDEV
 
 config NF_DUP_NETDEV
