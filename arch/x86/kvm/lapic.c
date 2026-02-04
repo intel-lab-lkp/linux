@@ -1747,6 +1747,7 @@ static inline struct kvm_lapic *to_lapic(struct kvm_io_device *dev)
 	test_bit(APIC_REG_TO_BIT(reg), (unsigned long *)(mask))
 
 #define APIC_LAST_REG_OFFSET		0x3f0
+#define APIC_EXT_LAST_REG_OFFSET(n)	APIC_EILVTn((n))
 
 void kvm_lapic_readable_reg_mask(struct kvm_lapic *apic, u64 mask[2])
 {
@@ -1782,6 +1783,12 @@ void kvm_lapic_readable_reg_mask(struct kvm_lapic *apic, u64 mask[2])
 		APIC_REG_MASK(APIC_DFR, mask);
 		APIC_REG_MASK(APIC_ICR2, mask);
 	}
+
+	if (guest_cpu_cap_has(apic->vcpu, X86_FEATURE_EXTAPIC)) {
+		APIC_REG_MASK(APIC_EFEAT, mask);
+		APIC_REG_MASK(APIC_ECTRL, mask);
+		APIC_REGS_MASK(APIC_EILVTn(0), apic->vcpu->kvm->arch.nr_extlvt, mask);
+	}
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_lapic_readable_reg_mask);
 
@@ -1798,6 +1805,13 @@ static int kvm_lapic_reg_read(struct kvm_lapic *apic, u32 offset, int len,
 	 * x2APIC and needs to be manually handled by the caller.
 	 */
 	WARN_ON_ONCE(apic_x2apic_mode(apic) && offset == APIC_ICR);
+
+	if (guest_cpu_cap_has(apic->vcpu, X86_FEATURE_EXTAPIC)) {
+		u8 nr_extlvt = apic->vcpu->kvm->arch.nr_extlvt;
+
+		if (nr_extlvt > 0)
+			last_reg = APIC_EXT_LAST_REG_OFFSET(nr_extlvt - 1);
+	}
 
 	if (alignment + len > 4)
 		return 1;
@@ -2560,7 +2574,15 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 		else
 			kvm_apic_send_ipi(apic, APIC_DEST_SELF | val, 0);
 		break;
+
 	default:
+		if (guest_cpu_cap_has(apic->vcpu, X86_FEATURE_EXTAPIC)) {
+			if (reg == APIC_ECTRL ||
+			    kvm_is_extlvt_offset(reg, apic->vcpu->kvm->arch.nr_extlvt)) {
+				kvm_lapic_set_reg(apic, reg, val);
+				break;
+			}
+		}
 		ret = 1;
 		break;
 	}
@@ -2926,6 +2948,26 @@ void kvm_inhibit_apic_access_page(struct kvm_vcpu *vcpu)
 	kvm_vcpu_srcu_read_lock(vcpu);
 }
 
+/*
+ * Initialize extended APIC registers to the default value when guest is
+ * started. The extended APIC registers should only be initialized when the
+ * EXTAPIC feature is enabled on the guest.
+ */
+void kvm_apic_init_extlvt_regs(struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic *apic = vcpu->arch.apic;
+	int i, max_extlvt;
+
+	max_extlvt = vcpu->kvm->arch.nr_extlvt;
+
+	if (guest_cpu_cap_has(vcpu, X86_FEATURE_EXTAPIC)) {
+		kvm_lapic_set_reg(apic, APIC_EFEAT, APIC_EFEAT_DEFAULT(max_extlvt));
+		kvm_lapic_set_reg(apic, APIC_ECTRL, APIC_ECTRL_DEFAULT);
+		for (i = 0; i < max_extlvt; i++)
+			kvm_lapic_set_reg(apic, APIC_EILVTn(i), APIC_EILVT_MASKED);
+	}
+}
+
 void kvm_lapic_reset(struct kvm_vcpu *vcpu, bool init_event)
 {
 	struct kvm_lapic *apic = vcpu->arch.apic;
@@ -2987,6 +3029,7 @@ void kvm_lapic_reset(struct kvm_vcpu *vcpu, bool init_event)
 		kvm_lapic_set_reg(apic, APIC_ISR + 0x10 * i, 0);
 		kvm_lapic_set_reg(apic, APIC_TMR + 0x10 * i, 0);
 	}
+	kvm_apic_init_extlvt_regs(vcpu);
 	kvm_apic_update_apicv(vcpu);
 	update_divide_count(apic);
 	atomic_set(&apic->lapic_timer.pending, 0);

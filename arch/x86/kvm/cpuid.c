@@ -438,6 +438,14 @@ void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 		kvm_apic_set_version(vcpu);
 	}
 
+	/*
+	 * Initialize extended APIC registers after CPUID is set.  The initial
+	 * reset occurs before userspace configures CPUID, so extended LVT
+	 * registers (which require X86_FEATURE_EXTAPIC) can't be initialized
+	 * until after KVM_SET_CPUID2.
+	 */
+	kvm_apic_init_extlvt_regs(vcpu);
+
 	vcpu->arch.guest_supported_xcr0 = cpuid_get_supported_xcr0(vcpu);
 	vcpu->arch.guest_supported_xss = cpuid_get_supported_xss(vcpu);
 
@@ -1098,7 +1106,7 @@ void kvm_initialize_cpu_caps(void)
 		F(LAHF_LM),
 		F(CMP_LEGACY),
 		VENDOR_F(SVM),
-		/* ExtApicSpace */
+		F(EXTAPIC),
 		F(CR8_LEGACY),
 		F(ABM),
 		F(SSE4A),

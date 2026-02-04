@@ -98,6 +98,7 @@ void kvm_apic_ack_interrupt(struct kvm_vcpu *vcpu, int vector);
 int kvm_apic_accept_pic_intr(struct kvm_vcpu *vcpu);
 int kvm_apic_accept_events(struct kvm_vcpu *vcpu);
 void kvm_lapic_reset(struct kvm_vcpu *vcpu, bool init_event);
+void kvm_apic_init_extlvt_regs(struct kvm_vcpu *vcpu);
 u64 kvm_lapic_get_cr8(struct kvm_vcpu *vcpu);
 void kvm_lapic_set_tpr(struct kvm_vcpu *vcpu, unsigned long cr8);
 void kvm_lapic_set_eoi(struct kvm_vcpu *vcpu);
@@ -266,6 +267,13 @@ static inline enum lapic_mode kvm_get_apic_mode(struct kvm_vcpu *vcpu)
 static inline u8 kvm_xapic_id(struct kvm_lapic *apic)
 {
 	return kvm_lapic_get_reg(apic, APIC_ID) >> 24;
+}
+
+static inline bool kvm_is_extlvt_offset(u32 offset, u8 nr_extlvt)
+{
+	if ((offset < APIC_EILVTn(0)) || (offset & 0xf))
+		return false;
+	return ((offset - APIC_EILVTn(0)) >> 4) < nr_extlvt;
 }
 
 #endif
