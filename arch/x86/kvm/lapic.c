@@ -3211,12 +3211,12 @@ void kvm_apic_ack_interrupt(struct kvm_vcpu *vcpu, int vector)
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_apic_ack_interrupt);
 
 static int kvm_apic_state_fixup(struct kvm_vcpu *vcpu,
-		struct kvm_lapic_state *s, bool set)
+		void *regs, bool set)
 {
 	if (apic_x2apic_mode(vcpu->arch.apic)) {
 		u32 x2apic_id = kvm_x2apic_id(vcpu->arch.apic);
-		u32 *id = (u32 *)(s->regs + APIC_ID);
-		u32 *ldr = (u32 *)(s->regs + APIC_LDR);
+		u32 *id = (u32 *)(regs + APIC_ID);
+		u32 *ldr = (u32 *)(regs + APIC_LDR);
 		u64 icr;
 
 		if (vcpu->kvm->arch.x2apic_format) {
@@ -3249,12 +3249,12 @@ static int kvm_apic_state_fixup(struct kvm_vcpu *vcpu,
 
 		if (!kvm_x86_ops.x2apic_icr_is_split) {
 			if (set) {
-				icr = apic_get_reg(s->regs, APIC_ICR) |
-				      (u64)apic_get_reg(s->regs, APIC_ICR2) << 32;
-				apic_set_reg64(s->regs, APIC_ICR, icr);
+				icr = apic_get_reg(regs, APIC_ICR) |
+				      (u64)apic_get_reg(regs, APIC_ICR2) << 32;
+				apic_set_reg64(regs, APIC_ICR, icr);
 			} else {
-				icr = apic_get_reg64(s->regs, APIC_ICR);
-				apic_set_reg(s->regs, APIC_ICR2, icr >> 32);
+				icr = apic_get_reg64(regs, APIC_ICR);
+				apic_set_reg(regs, APIC_ICR2, icr >> 32);
 			}
 		}
 	}
@@ -3262,20 +3262,20 @@ static int kvm_apic_state_fixup(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
-int kvm_apic_get_state(struct kvm_vcpu *vcpu, struct kvm_lapic_state *s)
+int kvm_apic_get_state(struct kvm_vcpu *vcpu, void *regs, unsigned int size)
 {
-	memcpy(s->regs, vcpu->arch.apic->regs, sizeof(*s));
+	memcpy(regs, vcpu->arch.apic->regs, size);
 
 	/*
 	 * Get calculated timer current count for remaining timer period (if
 	 * any) and store it in the returned register set.
 	 */
-	apic_set_reg(s->regs, APIC_TMCCT, __apic_read(vcpu->arch.apic, APIC_TMCCT));
+	apic_set_reg(regs, APIC_TMCCT, __apic_read(vcpu->arch.apic, APIC_TMCCT));
 
-	return kvm_apic_state_fixup(vcpu, s, false);
+	return kvm_apic_state_fixup(vcpu, regs, false);
 }
 
-int kvm_apic_set_state(struct kvm_vcpu *vcpu, struct kvm_lapic_state *s)
+int kvm_apic_set_state(struct kvm_vcpu *vcpu, void *regs, unsigned int size)
 {
 	struct kvm_lapic *apic = vcpu->arch.apic;
 	int r;
@@ -3283,14 +3283,14 @@ int kvm_apic_set_state(struct kvm_vcpu *vcpu, struct kvm_lapic_state *s)
 	kvm_x86_call(apicv_pre_state_restore)(vcpu);
 
 	/* set SPIV separately to get count of SW disabled APICs right */
-	apic_set_spiv(apic, *((u32 *)(s->regs + APIC_SPIV)));
+	apic_set_spiv(apic, *((u32 *)(regs + APIC_SPIV)));
 
-	r = kvm_apic_state_fixup(vcpu, s, true);
+	r = kvm_apic_state_fixup(vcpu, regs, true);
 	if (r) {
 		kvm_recalculate_apic_map(vcpu->kvm);
 		return r;
 	}
-	memcpy(vcpu->arch.apic->regs, s->regs, sizeof(*s));
+	memcpy(vcpu->arch.apic->regs, regs, size);
 
 	atomic_set_release(&apic->vcpu->kvm->arch.apic_map_dirty, DIRTY);
 	kvm_recalculate_apic_map(vcpu->kvm);

@@ -5332,7 +5332,7 @@ static int kvm_vcpu_ioctl_get_lapic(struct kvm_vcpu *vcpu,
 
 	kvm_x86_call(sync_pir_to_irr)(vcpu);
 
-	return kvm_apic_get_state(vcpu, s);
+	return kvm_apic_get_state(vcpu, s->regs, sizeof(*s));
 }
 
 static int kvm_vcpu_ioctl_set_lapic(struct kvm_vcpu *vcpu,
@@ -5343,7 +5343,7 @@ static int kvm_vcpu_ioctl_set_lapic(struct kvm_vcpu *vcpu,
 	if (vcpu->arch.apic->guest_apic_protected)
 		return -EINVAL;
 
-	r = kvm_apic_set_state(vcpu, s);
+	r = kvm_apic_set_state(vcpu, s->regs, sizeof(*s));
 	if (r)
 		return r;
 	update_cr8_intercept(vcpu);
