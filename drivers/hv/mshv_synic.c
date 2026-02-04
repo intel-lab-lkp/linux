@@ -10,17 +10,24 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/random.h>
 #include <linux/cpuhotplug.h>
 #include <linux/reboot.h>
 #include <asm/mshyperv.h>
+#include <linux/platform_device.h>
+#include <linux/acpi.h>
 
 #include "mshv_eventfd.h"
 #include "mshv.h"
 
 static int synic_cpuhp_online;
 static struct hv_synic_pages __percpu *synic_pages;
+static int mshv_sint_vector = -1; /* hwirq for the SynIC SINTs */
+#ifndef HYPERVISOR_CALLBACK_VECTOR
+static int mshv_sint_irq = -1; /* Linux IRQ for mshv_sint_vector */
+#endif
 
 static u32 synic_event_ring_get_queued_port(u32 sint_index)
 {
@@ -456,9 +463,7 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 	union hv_synic_simp simp;
 	union hv_synic_siefp siefp;
 	union hv_synic_sirbp sirbp;
-#ifdef HYPERVISOR_CALLBACK_VECTOR
 	union hv_synic_sint sint;
-#endif
 	union hv_synic_scontrol sctrl;
 	struct hv_synic_pages *spages = this_cpu_ptr(synic_pages);
 	struct hv_message_page **msg_page = &spages->hyp_synic_message_page;
@@ -501,10 +506,13 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 
 	hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
 
-#ifdef HYPERVISOR_CALLBACK_VECTOR
+#ifndef HYPERVISOR_CALLBACK_VECTOR
+	enable_percpu_irq(mshv_sint_irq, 0);
+#endif
+
 	/* Enable intercepts */
 	sint.as_uint64 = 0;
-	sint.vector = HYPERVISOR_CALLBACK_VECTOR;
+	sint.vector = mshv_sint_vector;
 	sint.masked = false;
 	sint.auto_eoi = hv_recommend_using_aeoi();
 	hv_set_non_nested_msr(HV_MSR_SINT0 + HV_SYNIC_INTERCEPTION_SINT_INDEX,
@@ -512,13 +520,12 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 
 	/* Doorbell SINT */
 	sint.as_uint64 = 0;
-	sint.vector = HYPERVISOR_CALLBACK_VECTOR;
+	sint.vector = mshv_sint_vector;
 	sint.masked = false;
 	sint.as_intercept = 1;
 	sint.auto_eoi = hv_recommend_using_aeoi();
 	hv_set_non_nested_msr(HV_MSR_SINT0 + HV_SYNIC_DOORBELL_SINT_INDEX,
 			      sint.as_uint64);
-#endif
 
 	/* Enable global synic bit */
 	sctrl.as_uint64 = hv_get_non_nested_msr(HV_MSR_SCONTROL);
@@ -572,6 +579,10 @@ static int mshv_synic_cpu_exit(unsigned int cpu)
 	sint.masked = true;
 	hv_set_non_nested_msr(HV_MSR_SINT0 + HV_SYNIC_DOORBELL_SINT_INDEX,
 			      sint.as_uint64);
+
+#ifndef HYPERVISOR_CALLBACK_VECTOR
+	disable_percpu_irq(mshv_sint_irq);
+#endif
 
 	/* Disable Synic's event ring page */
 	sirbp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIRBP);
@@ -683,14 +694,149 @@ static struct notifier_block mshv_synic_reboot_nb = {
 	.notifier_call = mshv_synic_reboot_notify,
 };
 
+#ifndef HYPERVISOR_CALLBACK_VECTOR
+#ifdef CONFIG_ACPI
+static long __percpu *mshv_evt;
+
+static acpi_status mshv_walk_resources(struct acpi_resource *res, void *ctx)
+{
+	struct resource r;
+
+	if (res->type == ACPI_RESOURCE_TYPE_EXTENDED_IRQ) {
+		if (!acpi_dev_resource_interrupt(res, 0, &r)) {
+			pr_err("Unable to parse MSHV ACPI interrupt\n");
+			return AE_ERROR;
+		}
+		/* ARM64 INTID */
+		mshv_sint_vector = res->data.extended_irq.interrupts[0];
+		/* Linux IRQ number */
+		mshv_sint_irq = r.start;
+	}
+
+	return AE_OK;
+}
+
+static irqreturn_t mshv_percpu_isr(int irq, void *dev_id)
+{
+	mshv_isr();
+	return IRQ_HANDLED;
+}
+
+static int mshv_sint_probe(struct platform_device *pdev)
+{
+	acpi_status result;
+	int ret;
+	struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
+
+	result = acpi_walk_resources(device->handle, METHOD_NAME__CRS,
+					mshv_walk_resources, NULL);
+	if (ACPI_FAILURE(result)) {
+		ret = -ENODEV;
+		goto out_fail;
+	}
+
+	mshv_evt = alloc_percpu(long);
+	if (!mshv_evt) {
+		ret = -ENOMEM;
+		goto out_fail;
+	}
+
+	ret = request_percpu_irq(mshv_sint_irq, mshv_percpu_isr, "MSHV",
+		mshv_evt);
+	if (ret)
+		goto free_evt;
+
+	return 0;
+
+free_evt:
+	free_percpu(mshv_evt);
+out_fail:
+	mshv_sint_vector = -1;
+	mshv_sint_irq = -1;
+	return ret;
+}
+
+static void mshv_sint_remove(struct platform_device *pdev)
+{
+	free_percpu_irq(mshv_sint_irq, mshv_evt);
+	free_percpu(mshv_evt);
+}
+#else
+static int mshv_sint_probe(struct platform_device *pdev)
+{
+	return -ENODEV;
+}
+
+static void mshv_sint_remove(struct platform_device *pdev)
+{
+}
+#endif
+
+static const __maybe_unused struct acpi_device_id mshv_sint_device_ids[] = {
+	{"MSFT1003", 0},
+	{"", 0},
+};
+
+static struct platform_driver mshv_sint_drv = {
+	.probe = mshv_sint_probe,
+	.remove = mshv_sint_remove,
+	.driver = {
+		.name = "mshv_sint",
+		.acpi_match_table = ACPI_PTR(mshv_sint_device_ids),
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
+	},
+};
+
+static int __init mshv_sint_vector_init(void)
+{
+	int ret;
+
+	if (acpi_disabled)
+		return -ENODEV;
+
+	ret = platform_driver_register(&mshv_sint_drv);
+	if (ret)
+		return ret;
+
+	if (mshv_sint_vector == -1 || mshv_sint_irq == -1) {
+		platform_driver_unregister(&mshv_sint_drv);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static void mshv_sint_vector_cleanup(void)
+{
+	platform_driver_unregister(&mshv_sint_drv);
+}
+#else /* HYPERVISOR_CALLBACK_VECTOR */
+static int __init mshv_sint_vector_init(void)
+{
+	mshv_sint_vector = HYPERVISOR_CALLBACK_VECTOR;
+	return 0;
+}
+
+static void mshv_sint_vector_cleanup(void)
+{
+}
+#endif /* HYPERVISOR_CALLBACK_VECTOR */
+
 int __init mshv_synic_init(struct device *dev)
 {
 	int ret = 0;
 
+	ret = mshv_sint_vector_init();
+	if (ret) {
+		dev_err(dev, "Failed to get MSHV SINT vector: %i\n", ret);
+		return ret;
+	}
+
 	synic_pages = alloc_percpu(struct hv_synic_pages);
 	if (!synic_pages) {
 		dev_err(dev, "Failed to allocate percpu synic page\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto sint_vector_cleanup;
 	}
 
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "mshv_synic",
@@ -713,6 +859,8 @@ remove_cpuhp_state:
 	cpuhp_remove_state(synic_cpuhp_online);
 free_synic_pages:
 	free_percpu(synic_pages);
+sint_vector_cleanup:
+	mshv_sint_vector_cleanup();
 	return ret;
 }
 
@@ -721,4 +869,5 @@ void mshv_synic_cleanup(void)
 	unregister_reboot_notifier(&mshv_synic_reboot_nb);
 	cpuhp_remove_state(synic_cpuhp_online);
 	free_percpu(synic_pages);
+	mshv_sint_vector_cleanup();
 }
