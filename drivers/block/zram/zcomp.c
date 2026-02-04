@@ -69,6 +69,7 @@ static int zcomp_strm_init_percpu(struct zcomp *comp, struct zcomp_strm *zstrm)
 		zcomp_strm_free_percpu(comp, zstrm);
 		return -ENOMEM;
 	}
+	zstrm->zcomp_managed = false;
 	return 0;
 }
 
@@ -107,8 +108,18 @@ ssize_t zcomp_available_show(const char *comp, char *buf, ssize_t at)
 	return at;
 }
 
-struct zcomp_strm *zcomp_stream_get(struct zcomp *comp)
+struct zcomp_strm *zcomp_stream_get(struct zcomp *comp, enum zstrm_pref pref)
 {
+	if (comp->params->zstrm_mgmt && pref == ZSTRM_PREFER_MGMT) {
+		struct zcomp_strm *zcomp_strm =
+			comp->ops->get_stream(comp->params);
+
+		if (zcomp_strm) {
+			zcomp_strm->comp = comp;
+			return zcomp_strm;
+		}
+	}
+
 	for (;;) {
 		struct zcomp_strm *zstrm = raw_cpu_ptr(comp->stream);
 
@@ -131,7 +142,11 @@ struct zcomp_strm *zcomp_stream_get(struct zcomp *comp)
 
 void zcomp_stream_put(struct zcomp_strm *zstrm)
 {
-	mutex_unlock(&zstrm->lock);
+	if (zstrm->zcomp_managed) {
+		zstrm->comp->ops->put_stream(zstrm->comp->params, zstrm);
+	} else {
+		mutex_unlock(&zstrm->lock);
+	}
 }
 
 int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
@@ -197,10 +212,18 @@ static int zcomp_init(struct zcomp *comp, struct zcomp_params *params)
 	if (!comp->stream)
 		return -ENOMEM;
 
+	params->zstrm_mgmt = false;
 	comp->params = params;
 	ret = comp->ops->setup_params(comp->params);
 	if (ret)
 		goto cleanup;
+
+	if (params->zstrm_mgmt &&
+	    !(comp->ops->get_stream && comp->ops->put_stream)) {
+		params->zstrm_mgmt = false;
+		pr_warn("Missing managed stream ops in %s, managed stream disabled\n",
+			comp->ops->name);
+	}
 
 	for_each_possible_cpu(cpu)
 		mutex_init(&per_cpu_ptr(comp->stream, cpu)->lock);
