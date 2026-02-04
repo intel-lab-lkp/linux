@@ -37,6 +37,77 @@ static struct {
 	unsigned char rx;
 } psp_vers;
 
+static int psp_ver_key_len(unsigned char version)
+{
+	switch (version) {
+	case PSP_VERSION_HDR0_AES_GCM_128:
+	case PSP_VERSION_HDR0_AES_GMAC_128:
+		return 16;
+	case PSP_VERSION_HDR0_AES_GCM_256:
+	case PSP_VERSION_HDR0_AES_GMAC_256:
+		return 32;
+	default:
+		fprintf(stderr, "ERROR: %s: bad version %d\n",
+			__func__, version);
+	}
+
+	return 0;
+}
+
+static int
+set_tx_spi(struct ynl_sock *ys, struct opts *opts, __u32 spi, char *key,
+	   int data_sock)
+{
+	struct psp_tx_assoc_rsp *tsp;
+	struct psp_tx_assoc_req *teq;
+	ssize_t sz;
+
+	teq = psp_tx_assoc_req_alloc();
+
+	psp_tx_assoc_req_set_sock_fd(teq, data_sock);
+	psp_tx_assoc_req_set_version(teq, psp_vers.tx);
+	psp_tx_assoc_req_set_tx_key_spi(teq, spi);
+	psp_tx_assoc_req_set_tx_key_key(teq, key, psp_ver_key_len(psp_vers.tx));
+
+	tsp = psp_tx_assoc(ys, teq);
+	psp_tx_assoc_req_free(teq);
+	if (!tsp) {
+		perror("ERROR: failed to Tx assoc");
+		return -1;
+	}
+	psp_tx_assoc_rsp_free(tsp);
+
+	return 0;
+}
+
+static int
+get_rx_spi(struct ynl_sock *ys, struct opts *opts, __u32 *spi, char *key,
+	   int data_sock)
+{
+	struct psp_rx_assoc_rsp *rsp;
+	struct psp_rx_assoc_req *req;
+
+	req = psp_rx_assoc_req_alloc();
+
+	psp_rx_assoc_req_set_sock_fd(req, data_sock);
+	psp_rx_assoc_req_set_version(req, psp_vers.rx);
+
+	rsp = psp_rx_assoc(ys, req);
+	psp_rx_assoc_req_free(req);
+
+	if (!rsp) {
+		perror("ERROR: failed to Rx assoc");
+		return -1;
+	}
+
+	memcpy(spi, &rsp->rx_key.spi, sizeof(*spi));
+	memcpy(key, rsp->rx_key.key, rsp->rx_key._len.key);
+
+	psp_rx_assoc_rsp_free(rsp);
+
+	return 0;
+}
+
 static int conn_setup_psp(struct ynl_sock *ys, struct opts *opts, int data_sock)
 {
 	struct psp_rx_assoc_rsp *rsp;
@@ -116,6 +187,52 @@ static void send_str(int sock, int value)
 
 	ret = snprintf(buf, sizeof(buf), "%d", value);
 	send(sock, buf, ret + 1, MSG_WAITALL);
+}
+
+static void
+handle_provide_spi(struct ynl_sock *ys, struct opts *opts, int data_sock,
+		   int comm_sock)
+{
+	char msg[sizeof(__u32) + psp_ver_key_len(psp_vers.tx)];
+	__u32 spi;
+
+	if (data_sock < 0) {
+		fprintf(stderr, "WARN: provide tx spi but no data sock\n");
+		send_err(comm_sock);
+		return;
+	}
+
+	if (get_rx_spi(ys, opts, &spi, &msg[sizeof(spi)], data_sock)) {
+		fprintf(stderr, "ERROR: get_rx_spi() failed\n");
+		send_err(comm_sock);
+		return;
+	}
+
+	send_ack(comm_sock);
+	memcpy(msg, &spi, sizeof(spi));
+	send(comm_sock, msg, sizeof(msg), MSG_WAITALL);
+}
+
+static void
+handle_use_spi(struct ynl_sock *ys, struct opts *opts, char *msg, int data_sock,
+	       int comm_sock)
+{
+	__u32 spi;
+
+	if (data_sock < 0) {
+		fprintf(stderr, "WARN: use tx spi but no data sock\n");
+		send_err(comm_sock);
+		return;
+	}
+
+	memcpy(&spi, msg, sizeof(spi));
+	if (set_tx_spi(ys, opts, spi, &msg[sizeof(spi)], data_sock)) {
+		fprintf(stderr, "ERROR: set_tx_spi() failed!\n");
+		send_err(comm_sock);
+		return;
+	}
+
+	send_ack(comm_sock);
 }
 
 static void
@@ -223,6 +340,20 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 					else
 						fprintf(stderr, "WARN: echo but no data sock\n");
 					send_ack(comm_sock);
+				}
+				if (cmd("provide spi"))
+					handle_provide_spi(ys, opts, data_sock, comm_sock);
+				if (cmd("use spi")) {
+					char msg[sizeof(__u32) + psp_ver_key_len(psp_vers.tx)];
+
+					if (off >= sizeof(msg)) {
+						memcpy(msg, buf, sizeof(msg));
+						__consume(sizeof(msg));
+						handle_use_spi(ys, opts, msg, data_sock, comm_sock);
+					} else {
+						fprintf(stderr, "WARN: short use spi command!\n");
+						send_err(comm_sock);
+					}
 				}
 				if (cmd("data close")) {
 					if (data_sock >= 0) {
