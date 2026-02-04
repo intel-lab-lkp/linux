@@ -786,6 +786,17 @@ struct dma_filter {
 };
 
 /**
+ * dma_selfirq_fn - callback for emulated/self IRQ events
+ * @dev: DMA device invoking the callback
+ * @data: opaque pointer provided at registration time
+ *
+ * Providers may invoke this callback from their interrupt handler when an
+ * emulated interrupt ("selfirq") might have occurred. The callback runs in
+ * hardirq context and must not sleep.
+ */
+typedef void (*dma_selfirq_fn)(struct dma_device *dev, void *data);
+
+/**
  * struct dma_device - info on the entity supplying DMA services
  * @ref: reference is taken and put every time a channel is allocated or freed
  * @chancnt: how many DMA channels are supported
@@ -853,6 +864,10 @@ struct dma_filter {
  *	or an error code
  * @device_synchronize: Synchronizes the termination of a transfers to the
  *  current context.
+ * @device_register_selfirq: optional callback registration for
+ *	emulated/self IRQ events
+ * @device_unregister_selfirq: unregister previously registered selfirq
+ *	callback
  * @device_tx_status: poll for transaction completion, the optional
  *	txstate parameter can be supplied with a pointer to get a
  *	struct with auxiliary transfer status information, otherwise the call
@@ -950,6 +965,11 @@ struct dma_device {
 	int (*device_resume)(struct dma_chan *chan);
 	int (*device_terminate_all)(struct dma_chan *chan);
 	void (*device_synchronize)(struct dma_chan *chan);
+
+	int (*device_register_selfirq)(struct dma_device *dev,
+				       dma_selfirq_fn fn, void *data);
+	void (*device_unregister_selfirq)(struct dma_device *dev,
+					  dma_selfirq_fn fn, void *data);
 
 	enum dma_status (*device_tx_status)(struct dma_chan *chan,
 					    dma_cookie_t cookie,
@@ -1195,6 +1215,56 @@ static inline void dmaengine_synchronize(struct dma_chan *chan)
 
 	if (chan->device->device_synchronize)
 		chan->device->device_synchronize(chan);
+}
+
+/**
+ * dmaengine_register_selfirq() - Register a callback for emulated/self IRQ
+ *                                events
+ * @dev: DMA device
+ * @fn: callback invoked from the provider's IRQ handler
+ * @data: opaque callback data
+ *
+ * Some DMA controllers can raise an interrupt by software writing to a
+ * register without updating normal status bits. Providers may call
+ * registered callbacks from their interrupt handler when such events may
+ * have occurred.
+ * Callbacks are invoked in hardirq context and must not sleep.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if unsupported, -EINVAL on bad args,
+ * or provider-specific -errno.
+ */
+static inline int dmaengine_register_selfirq(struct dma_device *dev,
+					     dma_selfirq_fn fn, void *data)
+{
+	if (!dev || !fn)
+		return -EINVAL;
+	if (!dev->device_register_selfirq)
+		return -EOPNOTSUPP;
+
+	return dev->device_register_selfirq(dev, fn, data);
+}
+
+/**
+ * dmaengine_unregister_selfirq() - Unregister a previously registered
+ *                                  selfirq callback
+ * @dev: DMA device
+ * @fn: callback pointer used at registration time
+ * @data: opaque pointer used at registration time
+ *
+ * Unregister a callback previously registered via
+ * dmaengine_register_selfirq(). Providers may synchronize against
+ * in-flight callbacks, therefore this function may sleep and must not be
+ * called from atomic context.
+ */
+static inline void dmaengine_unregister_selfirq(struct dma_device *dev,
+						dma_selfirq_fn fn, void *data)
+{
+	if (!dev || !fn)
+		return;
+	if (!dev->device_unregister_selfirq)
+		return;
+
+	dev->device_unregister_selfirq(dev, fn, data);
 }
 
 /**
