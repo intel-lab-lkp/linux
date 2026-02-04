@@ -30,14 +30,14 @@
  */
 
 /* common var for all device */
-static int g_hwcursor = 1;
-static int g_noaccel;
-static int g_nomtrr;
-static const char *g_fbmode[] = {NULL, NULL};
-static const char *g_def_fbmode = "1024x768-32@60";
-static char *g_settings;
-static int g_dualview;
-static char *g_option;
+static int sm750_hwcursor = 1;
+static int sm750_noaccel;
+static int sm750_nomtrr;
+static const char *sm750_fbmode[] = {NULL, NULL};
+static const char *sm750_def_fbmode = "1024x768-32@60";
+static char *sm750_settings;
+static int sm750_dualview;
+static char *sm750_option;
 
 static const struct fb_videomode lynx750_ext[] = {
 	/*	1024x600-60 VESA	[1.71:1] */
@@ -609,7 +609,7 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 		crtc->vidmem_size >>= 1;
 
 	/* setup crtc and output member */
-	sm750_dev->hw_cursor = g_hwcursor;
+	sm750_dev->hw_cursor = sm750_hwcursor;
 
 	crtc->line_pad = 16;
 	crtc->xpanstep = 8;
@@ -624,27 +624,27 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 		output->paths = sm750_pnc;
 		crtc->channel = sm750_primary;
 		crtc->o_screen = 0;
-		crtc->v_screen = sm750_dev->pvMem;
+		crtc->v_screen = sm750_dev->v_mem;
 		pr_info("use simul primary mode\n");
 		break;
 	case sm750_simul_sec:
 		output->paths = sm750_pnc;
 		crtc->channel = sm750_secondary;
 		crtc->o_screen = 0;
-		crtc->v_screen = sm750_dev->pvMem;
+		crtc->v_screen = sm750_dev->v_mem;
 		break;
 	case sm750_dual_normal:
 		if (par->index == 0) {
 			output->paths = sm750_panel;
 			crtc->channel = sm750_primary;
 			crtc->o_screen = 0;
-			crtc->v_screen = sm750_dev->pvMem;
+			crtc->v_screen = sm750_dev->v_mem;
 		} else {
 			output->paths = sm750_crt;
 			crtc->channel = sm750_secondary;
 			/* not consider of padding stuffs for o_screen,need fix */
 			crtc->o_screen = sm750_dev->vidmem_size >> 1;
-			crtc->v_screen = sm750_dev->pvMem + crtc->o_screen;
+			crtc->v_screen = sm750_dev->v_mem + crtc->o_screen;
 		}
 		break;
 	case sm750_dual_swap:
@@ -652,7 +652,7 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 			output->paths = sm750_panel;
 			crtc->channel = sm750_secondary;
 			crtc->o_screen = 0;
-			crtc->v_screen = sm750_dev->pvMem;
+			crtc->v_screen = sm750_dev->v_mem;
 		} else {
 			output->paths = sm750_crt;
 			crtc->channel = sm750_primary;
@@ -660,7 +660,7 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 			 * need fix
 			 */
 			crtc->o_screen = sm750_dev->vidmem_size >> 1;
-			crtc->v_screen = sm750_dev->pvMem + crtc->o_screen;
+			crtc->v_screen = sm750_dev->v_mem + crtc->o_screen;
 		}
 		break;
 	default:
@@ -764,51 +764,51 @@ static int lynxfb_set_fbinfo(struct fb_info *info, int index)
 	 * must be set after crtc member initialized
 	 */
 	crtc->cursor.offset = crtc->o_screen + crtc->vidmem_size - 1024;
-	crtc->cursor.mmio = sm750_dev->pvReg +
+	crtc->cursor.mmio = sm750_dev->v_reg +
 		0x800f0 + (int)crtc->channel * 0x140;
 
 	pr_info("crtc->cursor.mmio = %p\n", crtc->cursor.mmio);
 	crtc->cursor.max_h = 64;
 	crtc->cursor.max_w = 64;
 	crtc->cursor.size = crtc->cursor.max_h * crtc->cursor.max_w * 2 / 8;
-	crtc->cursor.vstart = sm750_dev->pvMem + crtc->cursor.offset;
+	crtc->cursor.vstart = sm750_dev->v_mem + crtc->cursor.offset;
 
 	memset_io(crtc->cursor.vstart, 0, crtc->cursor.size);
-	if (!g_hwcursor)
+	if (!sm750_hwcursor)
 		sm750_hw_cursor_disable(&crtc->cursor);
 
 	/* set info->fbops, must be set before fb_find_mode */
 	if (!sm750_dev->accel_off) {
 		/* use 2d acceleration */
-		if (!g_hwcursor)
+		if (!sm750_hwcursor)
 			info->fbops = &lynxfb_ops_accel;
 		else
 			info->fbops = &lynxfb_ops_accel_with_cursor;
 	} else {
-		if (!g_hwcursor)
+		if (!sm750_hwcursor)
 			info->fbops = &lynxfb_ops;
 		else
 			info->fbops = &lynxfb_ops_with_cursor;
 	}
 
-	if (!g_fbmode[index]) {
-		g_fbmode[index] = g_def_fbmode;
+	if (!sm750_fbmode[index]) {
+		sm750_fbmode[index] = sm750_def_fbmode;
 		if (index)
-			g_fbmode[index] = g_fbmode[0];
+			sm750_fbmode[index] = sm750_fbmode[0];
 	}
 
 	for (i = 0; i < 3; i++) {
-		ret = fb_find_mode(var, info, g_fbmode[index],
+		ret = fb_find_mode(var, info, sm750_fbmode[index],
 				   pdb[i], cdb[i], NULL, 8);
 
 		if (ret == 1) {
 			pr_info("success! use specified mode:%s in %s\n",
-				g_fbmode[index],
+				sm750_fbmode[index],
 				mdb_desc[i]);
 			break;
 		} else if (ret == 2) {
 			pr_warn("use specified mode:%s in %s,with an ignored refresh rate\n",
-				g_fbmode[index],
+				sm750_fbmode[index],
 				mdb_desc[i]);
 			break;
 		} else if (ret == 3) {
@@ -910,7 +910,7 @@ exit:
 	return ret;
 }
 
-/*	chip specific g_option configuration routine */
+/*	chip specific sm750_option configuration routine */
 static void sm750fb_setup(struct sm750_dev *sm750_dev, char *src)
 {
 	char *opt;
@@ -921,15 +921,15 @@ static void sm750fb_setup(struct sm750_dev *sm750_dev, char *src)
 	sm750_dev->init_parm.chip_clk = 0;
 	sm750_dev->init_parm.mem_clk = 0;
 	sm750_dev->init_parm.master_clk = 0;
-	sm750_dev->init_parm.powerMode = 0;
-	sm750_dev->init_parm.setAllEngOff = 0;
-	sm750_dev->init_parm.resetMemory = 1;
+	sm750_dev->init_parm.power_mode = 0;
+	sm750_dev->init_parm.set_all_eng_off = 0;
+	sm750_dev->init_parm.reset_memory = 1;
 
-	/* defaultly turn g_hwcursor on for both view */
-	g_hwcursor = 3;
+	/* defaultly turn sm750_hwcursor on for both view */
+	sm750_hwcursor = 3;
 
 	if (!src || !*src) {
-		dev_warn(&sm750_dev->pdev->dev, "no specific g_option.\n");
+		dev_warn(&sm750_dev->pdev->dev, "no specific sm750_option.\n");
 		goto NO_PARAM;
 	}
 
@@ -942,26 +942,26 @@ static void sm750fb_setup(struct sm750_dev *sm750_dev, char *src)
 		} else if (!strncmp(opt, "nocrt", strlen("nocrt"))) {
 			sm750_dev->nocrt = 1;
 		} else if (!strncmp(opt, "36bit", strlen("36bit"))) {
-			sm750_dev->pnltype = sm750_doubleTFT;
+			sm750_dev->pnltype = sm750_double_tft;
 		} else if (!strncmp(opt, "18bit", strlen("18bit"))) {
-			sm750_dev->pnltype = sm750_dualTFT;
+			sm750_dev->pnltype = sm750_dual_tft;
 		} else if (!strncmp(opt, "24bit", strlen("24bit"))) {
-			sm750_dev->pnltype = sm750_24TFT;
+			sm750_dev->pnltype = sm750_24_tft;
 		} else if (!strncmp(opt, "nohwc0", strlen("nohwc0"))) {
-			g_hwcursor &= ~0x1;
+			sm750_hwcursor &= ~0x1;
 		} else if (!strncmp(opt, "nohwc1", strlen("nohwc1"))) {
-			g_hwcursor &= ~0x2;
+			sm750_hwcursor &= ~0x2;
 		} else if (!strncmp(opt, "nohwc", strlen("nohwc"))) {
-			g_hwcursor = 0;
+			sm750_hwcursor = 0;
 		} else {
-			if (!g_fbmode[0]) {
-				g_fbmode[0] = opt;
+			if (!sm750_fbmode[0]) {
+				sm750_fbmode[0] = opt;
 				dev_info(&sm750_dev->pdev->dev,
-					 "find fbmode0 : %s\n", g_fbmode[0]);
-			} else if (!g_fbmode[1]) {
-				g_fbmode[1] = opt;
+					 "find fbmode0 : %s\n", sm750_fbmode[0]);
+			} else if (!sm750_fbmode[1]) {
+				sm750_fbmode[1] = opt;
 				dev_info(&sm750_dev->pdev->dev,
-					 "find fbmode1 : %s\n", g_fbmode[1]);
+					 "find fbmode1 : %s\n", sm750_fbmode[1]);
 			} else {
 				dev_warn(&sm750_dev->pdev->dev, "How many view you wann set?\n");
 			}
@@ -1060,9 +1060,9 @@ static int lynxfb_pci_probe(struct pci_dev *pdev,
 	sm750_dev->devid = pdev->device;
 	sm750_dev->revid = pdev->revision;
 	sm750_dev->pdev = pdev;
-	sm750_dev->mtrr_off = g_nomtrr;
+	sm750_dev->mtrr_off = sm750_nomtrr;
 	sm750_dev->mtrr.vram = 0;
-	sm750_dev->accel_off = g_noaccel;
+	sm750_dev->accel_off = sm750_noaccel;
 	spin_lock_init(&sm750_dev->slock);
 
 	if (!sm750_dev->accel_off) {
@@ -1079,7 +1079,7 @@ static int lynxfb_pci_probe(struct pci_dev *pdev,
 	}
 
 	/* call chip specific setup routine  */
-	sm750fb_setup(sm750_dev, g_settings);
+	sm750fb_setup(sm750_dev, sm750_settings);
 
 	/* call chip specific mmap routine */
 	err = hw_sm750_map(sm750_dev, pdev);
@@ -1090,15 +1090,15 @@ static int lynxfb_pci_probe(struct pci_dev *pdev,
 		sm750_dev->mtrr.vram = arch_phys_wc_add(sm750_dev->vidmem_start,
 							sm750_dev->vidmem_size);
 
-	memset_io(sm750_dev->pvMem, 0, sm750_dev->vidmem_size);
+	memset_io(sm750_dev->v_mem, 0, sm750_dev->vidmem_size);
 
 	pci_set_drvdata(pdev, sm750_dev);
 
 	/* call chipInit routine */
 	hw_sm750_inithw(sm750_dev, pdev);
 
-	/* allocate frame buffer info structures according to g_dualview */
-	max_fb = g_dualview ? 2 : 1;
+	/* allocate frame buffer info structures according to sm750_dualview */
+	max_fb = sm750_dualview ? 2 : 1;
 	for (fbidx = 0; fbidx < max_fb; fbidx++) {
 		err = sm750fb_framebuffer_alloc(sm750_dev, fbidx);
 		if (err)
@@ -1121,9 +1121,9 @@ static void lynxfb_pci_remove(struct pci_dev *pdev)
 	sm750fb_framebuffer_release(sm750_dev);
 	arch_phys_wc_del(sm750_dev->mtrr.vram);
 
-	iounmap(sm750_dev->pvReg);
-	iounmap(sm750_dev->pvMem);
-	kfree(g_settings);
+	iounmap(sm750_dev->v_reg);
+	iounmap(sm750_dev->v_mem);
+	kfree(sm750_settings);
 }
 
 static int __init lynxfb_setup(char *options)
@@ -1139,11 +1139,11 @@ static int __init lynxfb_setup(char *options)
 	pr_info("options:%s\n", options);
 
 	len = strlen(options) + 1;
-	g_settings = kzalloc(len, GFP_KERNEL);
-	if (!g_settings)
+	sm750_settings = kzalloc(len, GFP_KERNEL);
+	if (!sm750_settings)
 		return -ENOMEM;
 
-	tmp = g_settings;
+	tmp = sm750_settings;
 
 	/*
 	 * Notes:
@@ -1157,11 +1157,11 @@ static int __init lynxfb_setup(char *options)
 	while ((opt = strsep(&options, ":")) != NULL) {
 		/* options that mean for any lynx chips are configured here */
 		if (!strncmp(opt, "noaccel", strlen("noaccel"))) {
-			g_noaccel = 1;
+			sm750_noaccel = 1;
 		} else if (!strncmp(opt, "nomtrr", strlen("nomtrr"))) {
-			g_nomtrr = 1;
+			sm750_nomtrr = 1;
 		} else if (!strncmp(opt, "dual", strlen("dual"))) {
-			g_dualview = 1;
+			sm750_dualview = 1;
 		} else {
 			strcat(tmp, opt);
 			tmp += strlen(opt);
@@ -1172,8 +1172,8 @@ static int __init lynxfb_setup(char *options)
 		}
 	}
 
-	/* misc g_settings are transport to chip specific routines */
-	pr_info("parameter left for chip specific analysis:%s\n", g_settings);
+	/* misc sm750_settings are transport to chip specific routines */
+	pr_info("parameter left for chip specific analysis:%s\n", sm750_settings);
 	return 0;
 }
 
@@ -1202,7 +1202,7 @@ static int __init lynxfb_init(void)
 		return -ENODEV;
 
 #ifdef MODULE
-	option = g_option;
+	option = sm750_option;
 #else
 	if (fb_get_options("sm750fb", &option))
 		return -ENODEV;
@@ -1219,16 +1219,16 @@ static void __exit lynxfb_exit(void)
 }
 module_exit(lynxfb_exit);
 
-module_param(g_option, charp, 0444);
+module_param(sm750_option, charp, 0444);
 
-MODULE_PARM_DESC(g_option,
+MODULE_PARM_DESC(sm750_option,
 		 "\n\t\tCommon options:\n"
 		 "\t\tnoaccel:disable 2d capabilities\n"
 		 "\t\tnomtrr:disable MTRR attribute for video memory\n"
 		 "\t\tdualview:dual frame buffer feature enabled\n"
 		 "\t\tnohwc:disable hardware cursor\n"
 		 "\t\tUsual example:\n"
-		 "\t\tinsmod ./sm750fb.ko g_option=\"noaccel,nohwc,1280x1024-8@60\"\n"
+		 "\t\tinsmod ./sm750fb.ko sm750_option=\"noaccel,nohwc,1280x1024-8@60\"\n"
 		 );
 
 MODULE_AUTHOR("monk liu <monk.liu@siliconmotion.com>");
