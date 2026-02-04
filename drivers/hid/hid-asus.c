@@ -147,6 +147,7 @@ struct asus_drvdata {
 	unsigned long battery_next_query;
 	struct work_struct fn_lock_sync_work;
 	bool fn_lock;
+	struct mutex lock;
 };
 
 static int asus_report_battery(struct asus_drvdata *, u8 *, int);
@@ -960,8 +961,10 @@ static int asus_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	}
 
 	if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
-		drvdata->fn_lock = true;
+		mutex_lock(&drvdata->lock);
 		INIT_WORK(&drvdata->fn_lock_sync_work, asus_sync_fn_lock);
+		drvdata->fn_lock = true;
+		mutex_unlock(&drvdata->lock);
 		asus_kbd_set_fn_lock(hdev, true);
 	}
 
@@ -1258,6 +1261,7 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		hdev->quirks |= HID_QUIRK_NO_INIT_REPORTS;
 
 	drvdata->hdev = hdev;
+	mutex_init(&drvdata->lock);
 
 	if (drvdata->quirks & (QUIRK_T100CHI | QUIRK_T90CHI)) {
 		ret = asus_battery_probe(hdev);
@@ -1343,8 +1347,10 @@ static void asus_remove(struct hid_device *hdev)
 		cancel_work_sync(&drvdata->kbd_backlight->work);
 	}
 
-	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
+	mutex_lock(&drvdata->lock);
+	if ((drvdata->quirks & QUIRK_HID_FN_LOCK) && drvdata->fn_lock)
 		cancel_work_sync(&drvdata->fn_lock_sync_work);
+	mutex_unlock(&drvdata->lock);
 
 	hid_hw_stop(hdev);
 }
