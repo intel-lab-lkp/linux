@@ -25,6 +25,7 @@ class Automata:
     """
 
     invalid_state_str = "INVALID_STATE"
+    init_marker = "__init_"
 
     def __init__(self, file_path, model_name=None):
         self.__dot_path = file_path
@@ -96,8 +97,8 @@ class Automata:
 
             #  "enabled_fired"}; -> enabled_fired
             state = raw_state.replace('"', '').replace('};', '').replace(',', '_')
-            if state[0:7] == "__init_":
-                initial_state = state[7:]
+            if state.startswith(self.init_marker):
+                initial_state = state[len(self.init_marker):]
             else:
                 states.append(state)
                 if "doublecircle" in self.__dot_lines[cursor]:
