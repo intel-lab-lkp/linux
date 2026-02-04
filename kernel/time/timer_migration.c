@@ -1750,6 +1750,29 @@ static void tmigr_connect_child_parent(struct tmigr_group *child,
 	trace_tmigr_connect_child_parent(child);
 }
 
+/**
+ * tmigr_clean_groups - Clean up groups in the given level range and free memory
+ * @stack: The stack holding groups
+ * @start_lvl: The starting level to clean from
+ * @end_lvl: The ending level to clean up to
+ *
+ * This function iterates over the stack from start_lvl to end_lvl and removes the
+ * groups from the list and frees the allocated memory. It is used to clean up
+ * groups when an error occurs.
+ */
+static void tmigr_clean_groups(struct tmigr_group **stack,
+			       int start_lvl, int end_lvl)
+{
+	struct tmigr_group *group;
+	int i = end_lvl;
+
+	for (; i >= start_lvl; i--) {
+		group = stack[i];
+		list_del(&group->list);
+		kfree(group);
+	}
+}
+
 static int tmigr_setup_groups(unsigned int cpu, unsigned int node,
 			      struct tmigr_group *start, bool activate)
 {
@@ -1774,7 +1797,10 @@ static int tmigr_setup_groups(unsigned int cpu, unsigned int node,
 		if (IS_ERR(group)) {
 			err = PTR_ERR(group);
 			i--;
-			break;
+			/* Clean up already allocated groups. */
+			tmigr_clean_groups(stack, start_lvl, i);
+			/* Exit after cleanup. */
+			goto out;
 		}
 
 		top = i;
@@ -1803,12 +1829,6 @@ static int tmigr_setup_groups(unsigned int cpu, unsigned int node,
 	for (; i >= start_lvl; i--) {
 		group = stack[i];
 
-		if (err < 0) {
-			list_del(&group->list);
-			kfree(group);
-			continue;
-		}
-
 		WARN_ON_ONCE(i != group->level);
 
 		/*
@@ -1831,9 +1851,6 @@ static int tmigr_setup_groups(unsigned int cpu, unsigned int node,
 			tmigr_connect_child_parent(child, group, activate);
 		}
 	}
-
-	if (err < 0)
-		goto out;
 
 	if (activate) {
 		struct tmigr_walk data;
