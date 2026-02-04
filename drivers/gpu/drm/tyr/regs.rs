@@ -7,11 +7,15 @@
 // does.
 #![allow(dead_code)]
 
-use kernel::bits::bit_u32;
-use kernel::device::Bound;
-use kernel::device::Device;
-use kernel::devres::Devres;
-use kernel::prelude::*;
+use kernel::{
+    bits::bit_u32,
+    device::{
+        Bound,
+        Device, //
+    },
+    devres::Devres,
+    prelude::*, //
+};
 
 use crate::driver::IoMem;
 
