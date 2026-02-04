@@ -452,25 +452,14 @@ void intel_alpm_port_configure(struct intel_dp *intel_dp,
 	intel_de_write(display, PORT_ALPM_LFPS_CTL(port), lfps_ctl_val);
 }
 
-void intel_alpm_pre_plane_update(struct intel_atomic_state *state,
-				 struct intel_crtc *crtc)
+void intel_alpm_lobf_disable(const struct intel_crtc_state *new_crtc_state)
 {
-	struct intel_display *display = to_intel_display(state);
-	const struct intel_crtc_state *crtc_state =
-		intel_atomic_get_new_crtc_state(state, crtc);
-	const struct intel_crtc_state *old_crtc_state =
-		intel_atomic_get_old_crtc_state(state, crtc);
-	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	struct intel_display *display = to_intel_display(new_crtc_state);
+	enum transcoder cpu_transcoder = new_crtc_state->cpu_transcoder;
 	struct intel_encoder *encoder;
 
-	if (DISPLAY_VER(display) < 20)
-		return;
-
-	if (crtc_state->has_lobf || crtc_state->has_lobf == old_crtc_state->has_lobf)
-		return;
-
 	for_each_intel_encoder_mask(display->drm, encoder,
-				    crtc_state->uapi.encoder_mask) {
+				    new_crtc_state->uapi.encoder_mask) {
 		struct intel_dp *intel_dp;
 
 		if (!intel_encoder_is_dp(encoder))
@@ -481,12 +470,10 @@ void intel_alpm_pre_plane_update(struct intel_atomic_state *state,
 		if (!intel_dp_is_edp(intel_dp))
 			continue;
 
-		if (old_crtc_state->has_lobf) {
-			mutex_lock(&intel_dp->alpm.lock);
-			intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
-			drm_dbg_kms(display->drm, "Link off between frames (LOBF) disabled\n");
-			mutex_unlock(&intel_dp->alpm.lock);
-		}
+		mutex_lock(&intel_dp->alpm.lock);
+		intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
+		drm_dbg_kms(display->drm, "Link off between frames (LOBF) disabled\n");
+		mutex_unlock(&intel_dp->alpm.lock);
 	}
 }
 
@@ -507,22 +494,13 @@ void intel_alpm_enable_sink(struct intel_dp *intel_dp,
 	drm_dp_dpcd_writeb(&intel_dp->aux, DP_RECEIVER_ALPM_CONFIG, val);
 }
 
-void intel_alpm_post_plane_update(struct intel_atomic_state *state,
-				  struct intel_crtc *crtc)
+void intel_alpm_lobf_enable(const struct intel_crtc_state *new_crtc_state)
 {
-	struct intel_display *display = to_intel_display(state);
-	const struct intel_crtc_state *crtc_state =
-		intel_atomic_get_new_crtc_state(state, crtc);
-	const struct intel_crtc_state *old_crtc_state =
-		intel_atomic_get_old_crtc_state(state, crtc);
+	struct intel_display *display = to_intel_display(new_crtc_state);
 	struct intel_encoder *encoder;
 
-	if (crtc_state->has_psr || !crtc_state->has_lobf ||
-	    crtc_state->has_lobf == old_crtc_state->has_lobf)
-		return;
-
 	for_each_intel_encoder_mask(display->drm, encoder,
-				    crtc_state->uapi.encoder_mask) {
+				    new_crtc_state->uapi.encoder_mask) {
 		struct intel_dp *intel_dp;
 
 		if (!intel_encoder_is_dp(encoder))
@@ -531,8 +509,8 @@ void intel_alpm_post_plane_update(struct intel_atomic_state *state,
 		intel_dp = enc_to_intel_dp(encoder);
 
 		if (intel_dp_is_edp(intel_dp)) {
-			intel_alpm_enable_sink(intel_dp, crtc_state);
-			intel_alpm_configure(intel_dp, crtc_state);
+			intel_alpm_enable_sink(intel_dp, new_crtc_state);
+			intel_alpm_configure(intel_dp, new_crtc_state);
 		}
 	}
 }
