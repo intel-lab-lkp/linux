@@ -35,6 +35,7 @@
 #define COMMAND_DISABLE_DOORBELL	BIT(7)
 #define COMMAND_BAR_SUBRANGE_SETUP	BIT(8)
 #define COMMAND_BAR_SUBRANGE_CLEAR	BIT(9)
+#define COMMAND_EPC_API			BIT(10)
 
 #define STATUS_READ_SUCCESS		BIT(0)
 #define STATUS_READ_FAIL		BIT(1)
@@ -54,6 +55,8 @@
 #define STATUS_BAR_SUBRANGE_SETUP_FAIL		BIT(15)
 #define STATUS_BAR_SUBRANGE_CLEAR_SUCCESS	BIT(16)
 #define STATUS_BAR_SUBRANGE_CLEAR_FAIL		BIT(17)
+#define STATUS_EPC_API_SUCCESS		BIT(18)
+#define STATUS_EPC_API_FAIL		BIT(19)
 
 #define FLAG_USE_DMA			BIT(0)
 
@@ -967,6 +970,87 @@ err:
 	reg->status = cpu_to_le32(status);
 }
 
+static void pci_epf_test_epc_api(struct pci_epf_test *epf_test,
+				 struct pci_epf_test_reg *reg)
+{
+	struct pci_epc_remote_resource *resources = NULL;
+	u32 status = le32_to_cpu(reg->status);
+	struct pci_epf *epf = epf_test->epf;
+	struct device *dev = &epf->dev;
+	struct pci_epc *epc = epf->epc;
+	int num_resources;
+	int ret, i;
+
+	num_resources = pci_epc_get_remote_resources(epc, epf->func_no,
+						     epf->vfunc_no, NULL, 0);
+	if (num_resources == -EOPNOTSUPP || num_resources == 0)
+		goto out_success;
+	if (num_resources < 0)
+		goto err;
+
+	resources = kcalloc(num_resources, sizeof(*resources), GFP_KERNEL);
+	if (!resources)
+		goto err;
+
+	ret = pci_epc_get_remote_resources(epc, epf->func_no, epf->vfunc_no,
+					   resources, num_resources);
+	if (ret < 0) {
+		dev_err(dev, "EPC remote resource query failed: %d\n", ret);
+		goto err_free;
+	}
+	if (ret > num_resources) {
+		dev_err(dev, "EPC API returned %d resources (max %d)\n",
+			ret, num_resources);
+		goto err_free;
+	}
+
+	for (i = 0; i < ret; i++) {
+		struct pci_epc_remote_resource *res = &resources[i];
+
+		if (!res->phys_addr || !res->size) {
+			dev_err(dev,
+				"Invalid remote resource[%d] (type=%d phys=%pa size=%llu)\n",
+				i, res->type, &res->phys_addr, res->size);
+			goto err_free;
+		}
+
+		/* Guard against address overflow */
+		if (res->phys_addr + res->size < res->phys_addr) {
+			dev_err(dev,
+				"Remote resource[%d] overflow (phys=%pa size=%llu)\n",
+				i, &res->phys_addr, res->size);
+			goto err_free;
+		}
+
+		switch (res->type) {
+		case PCI_EPC_RR_DMA_CTRL_MMIO:
+			/* Generic checks above are sufficient. */
+			break;
+		case PCI_EPC_RR_DMA_CHAN_DESC:
+			/*
+			 * hw_chan_id and ep2rc are informational. No extra validation
+			 * beyond the generic checks above is needed.
+			 */
+			break;
+		default:
+			dev_err(dev, "Unknown remote resource type %d\n", res->type);
+			goto err_free;
+		}
+	}
+
+out_success:
+	kfree(resources);
+	status |= STATUS_EPC_API_SUCCESS;
+	reg->status = cpu_to_le32(status);
+	return;
+
+err_free:
+	kfree(resources);
+err:
+	status |= STATUS_EPC_API_FAIL;
+	reg->status = cpu_to_le32(status);
+}
+
 static void pci_epf_test_cmd_handler(struct work_struct *work)
 {
 	u32 command;
@@ -1028,6 +1112,10 @@ static void pci_epf_test_cmd_handler(struct work_struct *work)
 		break;
 	case COMMAND_BAR_SUBRANGE_CLEAR:
 		pci_epf_test_bar_subrange_clear(epf_test, reg);
+		pci_epf_test_raise_irq(epf_test, reg);
+		break;
+	case COMMAND_EPC_API:
+		pci_epf_test_epc_api(epf_test, reg);
 		pci_epf_test_raise_irq(epf_test, reg);
 		break;
 	default:
