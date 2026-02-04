@@ -4994,6 +4994,18 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_READONLY_MEM:
 		r = kvm ? kvm_arch_has_readonly_mem(kvm) : 1;
 		break;
+	case KVM_CAP_LAPIC2: {
+		u8 max_extlvt;
+
+		r = KVM_LAPIC2_DEFAULT;
+		if (!kvm_caps.has_extapic)
+			break;
+
+		max_extlvt = kvm_cpu_get_max_extlvt();
+		if (max_extlvt == KVM_X86_NR_EXTLVT_DEFAULT)
+			r |= KVM_LAPIC2_AMD_DEFAULT;
+		break;
+	}
 	default:
 		break;
 	}
@@ -6980,6 +6992,24 @@ disable_exits_unlock:
 			r = -EINVAL;
 		else
 			kvm->arch.apic_bus_cycle_ns = bus_cycle_ns;
+		mutex_unlock(&kvm->lock);
+		break;
+	}
+	case KVM_CAP_LAPIC2: {
+		r = -EINVAL;
+
+		mutex_lock(&kvm->lock);
+
+		kvm->arch.nr_extlvt = 0;
+
+		if (!kvm->created_vcpus) {
+			if (cap->args[0] & KVM_LAPIC2_DEFAULT) {
+				r = 0;
+				if (cap->args[0] & KVM_LAPIC2_AMD_DEFAULT)
+					kvm->arch.nr_extlvt = KVM_X86_NR_EXTLVT_DEFAULT;
+			}
+		}
+
 		mutex_unlock(&kvm->lock);
 		break;
 	}

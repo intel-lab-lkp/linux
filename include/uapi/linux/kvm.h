@@ -669,6 +669,10 @@ struct kvm_ioeventfd {
 #define KVM_X86_DISABLE_EXITS_CSTATE         (1 << 3)
 #define KVM_X86_DISABLE_EXITS_APERFMPERF     (1 << 4)
 
+#define KVM_X86_NR_EXTLVT_DEFAULT		4
+#define KVM_LAPIC2_DEFAULT			(1 << 0)
+#define KVM_LAPIC2_AMD_DEFAULT			(1 << 1)
+
 /* for KVM_ENABLE_CAP */
 struct kvm_enable_cap {
 	/* in */
@@ -988,6 +992,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_GUEST_MEMFD_FLAGS 244
 #define KVM_CAP_ARM_SEA_TO_USER 245
 #define KVM_CAP_S390_USER_OPEREXEC 246
+#define KVM_CAP_LAPIC2 247
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;

@@ -9388,6 +9388,37 @@ KVM exits with the register state of either the L1 or L2 guest
 depending on which executed at the time of an exit. Userspace must
 take care to differentiate between these cases.
 
+8.46 KVM_CAP_LAPIC2
+---------------------------
+
+:Architectures: x86
+:Target: VM
+:Parameters: args[0] is a bitmask of LAPIC2 capabilities
+:Returns: 0 on success, -EINVAL when arg[0] contains invalid bits
+
+This capability indicates that KVM supports extended APIC register space of the
+whole 4KB page.
+
+Calling KVM_CHECK_EXTENSION for this capability returns a bitmask of LAPIC2
+capabilities that can be enabled on a VM.
+
+The argument to KVM_ENABLE_CAP is also a bitmask that selects which LAPIC2
+capabilities to enable for the VM.  Userspace should enable the intersection
+of capabilities supported by KVM (from KVM_CHECK_EXTENSION) and capabilities
+supported by the VMM.  This must be called before creating any VCPUs.
+
+At this time, KVM_LAPIC2_DEFAULT and KVM_LAPIC2_AMD_DEFAULT are the supported
+capabilities:
+
+  - KVM_LAPIC2_DEFAULT: Full 4KB APIC page support
+  - KVM_LAPIC2_AMD_DEFAULT: Extended LVT registers are supported (they are part
+    of 4KB APIC page)
+
+KVM_LAPIC2_AMD_DEFAULT is available on AMD processors with ExtApicSpace feature
+(CPUID 8000_0001h.ECX[3]). Extended APIC registers start at APIC offset 400h.
+Currently 4 extended LVT registers are supported, used for features like
+Instruction Based Sampling (IBS), but future processors may support more.
+
 9. Known KVM API problems
 =========================
 
