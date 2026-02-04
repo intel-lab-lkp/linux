@@ -1014,7 +1014,9 @@ static bool intel_crtc_lobf_enabling(const struct intel_crtc_state *old_crtc_sta
 	if (!new_crtc_state->hw.active)
 		return false;
 
-	return is_enabling(has_lobf, old_crtc_state, new_crtc_state);
+	return is_enabling(has_lobf, old_crtc_state, new_crtc_state) ||
+	       (new_crtc_state->has_lobf &&
+		(new_crtc_state->update_lrr || new_crtc_state->update_m_n));
 }
 
 static bool intel_crtc_lobf_disabling(const struct intel_crtc_state *old_crtc_state,
@@ -1023,7 +1025,9 @@ static bool intel_crtc_lobf_disabling(const struct intel_crtc_state *old_crtc_st
 	if (!old_crtc_state->hw.active)
 		return false;
 
-	return is_disabling(has_lobf, old_crtc_state, new_crtc_state);
+	return is_disabling(has_lobf, old_crtc_state, new_crtc_state) ||
+		(old_crtc_state->has_lobf &&
+		 (new_crtc_state->update_lrr || new_crtc_state->update_m_n));
 }
 
 #undef is_disabling
