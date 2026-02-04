@@ -5356,6 +5356,9 @@ static __init void svm_set_cpu_caps(void)
 	if (cpu_feature_enabled(X86_FEATURE_BUS_LOCK_THRESHOLD))
 		kvm_caps.has_bus_lock_exit = true;
 
+	if (cpu_feature_enabled(X86_FEATURE_EXTAPIC))
+		kvm_caps.has_extapic = true;
+
 	/* CPUID 0x80000008 */
 	if (boot_cpu_has(X86_FEATURE_LS_CFG_SSBD) ||
 	    boot_cpu_has(X86_FEATURE_AMD_SSBD))

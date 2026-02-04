@@ -27,6 +27,8 @@ struct kvm_caps {
 	bool has_bus_lock_exit;
 	/* notify VM exit supported? */
 	bool has_notify_vmexit;
+	/* extapic supported */
+	bool has_extapic;
 	/* bit mask of VM types */
 	u32 supported_vm_types;
 
