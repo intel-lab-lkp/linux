@@ -8,11 +8,15 @@
 # For further information, see:
 #   Documentation/trace/rv/da_monitor_synthesis.rst
 
+from sys import stderr
+
+
 if __name__ == '__main__':
     from rvgen.dot2k import dot2k
     from rvgen.generator import Monitor
     from rvgen.container import Container
     from rvgen.ltl2k import ltl2k
+    from rvgen.automata import AutomataError
     import argparse
     import sys
 
@@ -51,9 +55,8 @@ if __name__ == '__main__':
                 sys.exit(1)
         else:
             monitor = Container(vars(params))
-    except Exception as e:
-        print('Error: '+ str(e))
-        print("Sorry : :-(")
+    except AutomataError as e:
+        print(f"There was an error processing {params.spec}: {e}", file=sys.stderr)
         sys.exit(1)
 
     print("Writing the monitor into the directory %s" % monitor.name)
