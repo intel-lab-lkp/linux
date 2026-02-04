@@ -5816,7 +5816,7 @@ static int nl80211_parse_tx_bitrate_mask(struct genl_info *info,
 		enum nl80211_band band = nla_type(tx_rates);
 		int err;
 
-		if (band < 0 || band >= NUM_NL80211_BANDS)
+		if (band >= NUM_NL80211_BANDS)
 			return -EINVAL;
 		sband = rdev->wiphy.bands[band];
 		if (sband == NULL)
@@ -10659,7 +10659,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 				    tmp) {
 			enum nl80211_band band = nla_type(attr);
 
-			if (band < 0 || band >= NUM_NL80211_BANDS) {
+			if (band >= NUM_NL80211_BANDS) {
 				err = -EINVAL;
 				goto out_free;
 			}
