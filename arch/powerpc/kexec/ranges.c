@@ -553,9 +553,7 @@ out:
 #endif /* CONFIG_KEXEC_FILE */
 
 #ifdef CONFIG_CRASH_DUMP
-static int crash_exclude_mem_range_guarded(struct crash_mem **mem_ranges,
-					   unsigned long long mstart,
-					   unsigned long long mend)
+static int crash_realloc_mem_range_guarded(struct crash_mem **mem_ranges)
 {
 	struct crash_mem *tmem = *mem_ranges;
 
@@ -566,7 +564,7 @@ static int crash_exclude_mem_range_guarded(struct crash_mem **mem_ranges,
 			return -ENOMEM;
 	}
 
-	return crash_exclude_mem_range(tmem, mstart, mend);
+	return 0;
 }
 
 /**
@@ -604,17 +602,9 @@ int get_crash_memory_ranges(struct crash_mem **mem_ranges)
 			sort_memory_ranges(*mem_ranges, true);
 	}
 
-	/* Exclude crashkernel region */
-	ret = crash_exclude_mem_range_guarded(mem_ranges, crashk_res.start, crashk_res.end);
+	ret = crash_realloc_mem_range_guarded(mem_ranges);
 	if (ret)
 		goto out;
-
-	for (i = 0; i < crashk_cma_cnt; ++i) {
-		ret = crash_exclude_mem_range_guarded(mem_ranges, crashk_cma_ranges[i].start,
-					      crashk_cma_ranges[i].end);
-		if (ret)
-			goto out;
-	}
 
 	/*
 	 * FIXME: For now, stay in parity with kexec-tools but if RTAS/OPAL
