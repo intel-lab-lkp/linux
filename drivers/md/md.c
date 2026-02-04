@@ -232,20 +232,20 @@ static int rdev_need_serial(struct md_rdev *rdev)
  * 1. rdev is the first device which return true from rdev_enable_serial.
  * 2. rdev is NULL, means we want to enable serialization for all rdevs.
  */
-void mddev_create_serial_pool(struct mddev *mddev, struct md_rdev *rdev)
+int mddev_create_serial_pool(struct mddev *mddev, struct md_rdev *rdev)
 {
 	int ret = 0;
 
 	if (rdev && !rdev_need_serial(rdev) &&
 	    !test_bit(CollisionCheck, &rdev->flags))
-		return;
+		return ret;
 
 	if (!rdev)
 		ret = rdevs_init_serial(mddev);
 	else
 		ret = rdev_init_serial(rdev);
 	if (ret)
-		return;
+		return ret;
 
 	if (mddev->serial_info_pool == NULL) {
 		/*
@@ -258,8 +258,11 @@ void mddev_create_serial_pool(struct mddev *mddev, struct md_rdev *rdev)
 		if (!mddev->serial_info_pool) {
 			rdevs_uninit_serial(mddev);
 			pr_err("can't alloc memory pool for serialization\n");
+			ret = -ENOMEM;
 		}
 	}
+
+	return ret;
 }
 
 /*
@@ -2600,8 +2603,13 @@ static int bind_rdev_to_array(struct md_rdev *rdev, struct mddev *mddev)
 	rdev->mddev = mddev;
 	pr_debug("md: bind<%s>\n", b);
 
-	if (mddev->raid_disks)
-		mddev_create_serial_pool(mddev, rdev);
+	if (mddev->raid_disks) {
+		err = mddev_create_serial_pool(mddev, rdev);
+		if (err) {
+			pr_err("failed to create serial pool\n");
+			return err;
+		}
+	}
 
 	if ((err = kobject_add(&rdev->kobj, &mddev->kobj, "dev-%s", b)))
 		goto fail;
@@ -3114,7 +3122,9 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len)
 		}
 	} else if (cmd_match(buf, "writemostly")) {
 		set_bit(WriteMostly, &rdev->flags);
-		mddev_create_serial_pool(rdev->mddev, rdev);
+		err = mddev_create_serial_pool(rdev->mddev, rdev);
+		if (err)
+			return err;
 		need_update_sb = true;
 		err = 0;
 	} else if (cmd_match(buf, "-writemostly")) {
@@ -5924,9 +5934,11 @@ serialize_policy_store(struct mddev *mddev, const char *buf, size_t len)
 		goto unlock;
 	}
 
-	if (value)
-		mddev_create_serial_pool(mddev, NULL);
-	else
+	if (value) {
+		err = mddev_create_serial_pool(mddev, NULL);
+		if (err)
+			goto unlock;
+	} else
 		mddev_destroy_serial_pool(mddev, NULL);
 	mddev->serialize_policy = value;
 unlock:

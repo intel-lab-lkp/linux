@@ -2213,8 +2213,11 @@ static int bitmap_load(struct mddev *mddev)
 	if (!bitmap)
 		goto out;
 
-	rdev_for_each(rdev, mddev)
-		mddev_create_serial_pool(mddev, rdev);
+	rdev_for_each(rdev, mddev) {
+		err = mddev_create_serial_pool(mddev, rdev);
+		if (err)
+			goto out;
+	}
 
 	if (mddev_is_clustered(mddev))
 		mddev->cluster_ops->load_bitmaps(mddev, mddev->bitmap_info.nodes);
@@ -2253,9 +2256,15 @@ static int bitmap_load(struct mddev *mddev)
 
 	bitmap_update_sb(bitmap);
 
-	if (test_bit(BITMAP_WRITE_ERROR, &bitmap->flags))
+	if (test_bit(BITMAP_WRITE_ERROR, &bitmap->flags)) {
 		err = -EIO;
+		goto out;
+	}
+
+	return err;
+
 out:
+	mddev_destroy_serial_pool(mddev, NULL);
 	return err;
 }
 
@@ -2806,19 +2815,26 @@ backlog_store(struct mddev *mddev, const char *buf, size_t len)
 		return -EINVAL;
 	}
 
-	mddev->bitmap_info.max_write_behind = backlog;
 	if (!backlog && mddev->serial_info_pool) {
 		/* serial_info_pool is not needed if backlog is zero */
 		if (!mddev->serialize_policy)
 			mddev_destroy_serial_pool(mddev, NULL);
 	} else if (backlog && !mddev->serial_info_pool) {
 		/* serial_info_pool is needed since backlog is not zero */
-		rdev_for_each(rdev, mddev)
-			mddev_create_serial_pool(mddev, rdev);
+		rdev_for_each(rdev, mddev) {
+			rv = mddev_create_serial_pool(mddev, rdev);
+			if (rv) {
+				mddev_destroy_serial_pool(mddev, NULL);
+				goto unlock;
+			}
+		}
 	}
+
+	mddev->bitmap_info.max_write_behind = backlog;
 	if (old_mwb != backlog)
 		bitmap_update_sb(mddev->bitmap);
 
+unlock:
 	mddev_unlock_and_resume(mddev);
 	return len;
 }

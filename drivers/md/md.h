@@ -956,7 +956,7 @@ extern void md_frozen_sync_thread(struct mddev *mddev);
 extern void md_unfrozen_sync_thread(struct mddev *mddev);
 
 extern void md_update_sb(struct mddev *mddev, int force);
-extern void mddev_create_serial_pool(struct mddev *mddev, struct md_rdev *rdev);
+extern int mddev_create_serial_pool(struct mddev *mddev, struct md_rdev *rdev);
 extern void mddev_destroy_serial_pool(struct mddev *mddev,
 				      struct md_rdev *rdev);
 struct md_rdev *md_find_rdev_nr_rcu(struct mddev *mddev, int nr);
