@@ -1163,8 +1163,15 @@ static int __init lynxfb_setup(char *options)
 		} else if (!strncmp(opt, "dual", strlen("dual"))) {
 			g_dualview = 1;
 		} else {
-			strcat(tmp, opt);
-			tmp += strlen(opt);
+			size_t opt_len = strlen(opt);
+			size_t remaining = len - (tmp - g_settings);
+
+			if (opt_len + 1 >= remaining) {
+				pr_warn("option string too long\n");
+				break;
+			}
+			memcpy(tmp, opt, opt_len);
+			tmp += opt_len;
 			if (options)
 				*tmp++ = ':';
 			else
