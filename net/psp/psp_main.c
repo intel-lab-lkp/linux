@@ -132,8 +132,11 @@ void psp_dev_unregister(struct psp_dev *psd)
 
 	list_splice_init(&psd->active_assocs, &psd->prev_assocs);
 	list_splice_init(&psd->prev_assocs, &psd->stale_assocs);
-	list_for_each_entry_safe(pas, next, &psd->stale_assocs, assocs_list)
-		psp_dev_tx_key_del(psd, pas);
+	list_for_each_entry_safe(pas, next, &psd->stale_assocs, assocs_list) {
+		list_del(&pas->assocs_list);
+		if (pas->tx.spi && !pas->tx_moved)
+			psp_dev_tx_key_del(psd, pas);
+	}
 
 	rcu_assign_pointer(psd->main_netdev->psp_dev, NULL);
 

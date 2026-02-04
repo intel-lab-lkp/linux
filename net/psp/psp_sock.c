@@ -85,9 +85,7 @@ static int psp_dev_tx_key_add(struct psp_dev *psd, struct psp_assoc *pas,
 
 void psp_dev_tx_key_del(struct psp_dev *psd, struct psp_assoc *pas)
 {
-	if (pas->tx.spi && !pas->tx_moved)
-		psd->ops->tx_key_del(psd, pas);
-	list_del(&pas->assocs_list);
+	psd->ops->tx_key_del(psd, pas);
 }
 
 static void psp_assoc_free(struct work_struct *work)
@@ -96,8 +94,11 @@ static void psp_assoc_free(struct work_struct *work)
 	struct psp_dev *psd = pas->psd;
 
 	mutex_lock(&psd->lock);
-	if (psd->ops)
-		psp_dev_tx_key_del(psd, pas);
+	if (psd->ops) {
+		list_del(&pas->assocs_list);
+		if (pas->tx.spi && !pas->tx_moved)
+			psp_dev_tx_key_del(psd, pas);
+	}
 	mutex_unlock(&psd->lock);
 	psp_assoc_put(pas->prev);
 	psp_dev_put(psd);
