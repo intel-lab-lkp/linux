@@ -5335,8 +5335,35 @@ static int kvm_vcpu_ioctl_get_lapic(struct kvm_vcpu *vcpu,
 	return kvm_apic_get_state(vcpu, s->regs, sizeof(*s));
 }
 
+static int kvm_vcpu_ioctl_get_lapic2(struct kvm_vcpu *vcpu,
+				    struct kvm_lapic_state2 *s)
+{
+	if (vcpu->arch.apic->guest_apic_protected)
+		return -EINVAL;
+
+	kvm_x86_call(sync_pir_to_irr)(vcpu);
+
+	return kvm_apic_get_state(vcpu, s->regs, sizeof(*s));
+}
+
 static int kvm_vcpu_ioctl_set_lapic(struct kvm_vcpu *vcpu,
 				    struct kvm_lapic_state *s)
+{
+	int r;
+
+	if (vcpu->arch.apic->guest_apic_protected)
+		return -EINVAL;
+
+	r = kvm_apic_set_state(vcpu, s->regs, sizeof(*s));
+	if (r)
+		return r;
+	update_cr8_intercept(vcpu);
+
+	return 0;
+}
+
+static int kvm_vcpu_ioctl_set_lapic2(struct kvm_vcpu *vcpu,
+				    struct kvm_lapic_state2 *s)
 {
 	int r;
 
@@ -6207,6 +6234,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 	union {
 		struct kvm_sregs2 *sregs2;
 		struct kvm_lapic_state *lapic;
+		struct kvm_lapic_state2 *lapic2;
 		struct kvm_xsave *xsave;
 		struct kvm_xcrs *xcrs;
 		void *buffer;
@@ -6245,6 +6273,37 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		}
 
 		r = kvm_vcpu_ioctl_set_lapic(vcpu, u.lapic);
+		break;
+	}
+	case KVM_GET_LAPIC2: {
+		r = -EINVAL;
+		if (!lapic_in_kernel(vcpu))
+			goto out;
+		u.lapic2 = kzalloc(sizeof(struct kvm_lapic_state2), GFP_KERNEL);
+
+		r = -ENOMEM;
+		if (!u.lapic2)
+			goto out;
+		r = kvm_vcpu_ioctl_get_lapic2(vcpu, u.lapic2);
+		if (r)
+			goto out;
+		r = -EFAULT;
+		if (copy_to_user(argp, u.lapic2, sizeof(struct kvm_lapic_state2)))
+			goto out;
+		r = 0;
+		break;
+	}
+	case KVM_SET_LAPIC2: {
+		r = -EINVAL;
+		if (!lapic_in_kernel(vcpu))
+			goto out;
+		u.lapic2 = memdup_user(argp, sizeof(*u.lapic2));
+		if (IS_ERR(u.lapic2)) {
+			r = PTR_ERR(u.lapic2);
+			goto out_nofree;
+		}
+
+		r = kvm_vcpu_ioctl_set_lapic2(vcpu, u.lapic2);
 		break;
 	}
 	case KVM_INTERRUPT: {
