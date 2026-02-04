@@ -215,6 +215,7 @@ static void psp_tx_del_work_fn(struct work_struct *work)
 		}
 
 		psd->tx_grace_active = false;
+		psd->stats.grace_periods++;
 	}
 
 start_grace:

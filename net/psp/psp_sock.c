@@ -80,12 +80,19 @@ static struct psp_assoc *psp_assoc_dummy(struct psp_assoc *pas)
 static int psp_dev_tx_key_add(struct psp_dev *psd, struct psp_assoc *pas,
 			      struct netlink_ext_ack *extack)
 {
-	return psd->ops->tx_key_add(psd, pas, extack);
+	int rc;
+
+	rc = psd->ops->tx_key_add(psd, pas, extack);
+	if (!rc)
+		psd->stats.tx_key_cnt++;
+
+	return rc;
 }
 
 void psp_dev_tx_key_del(struct psp_dev *psd, struct psp_assoc *pas)
 {
 	psd->ops->tx_key_del(psd, pas);
+	psd->stats.tx_key_cnt--;
 }
 
 static bool psp_dev_needs_defer(struct psp_dev *psd)

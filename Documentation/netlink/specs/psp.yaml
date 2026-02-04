@@ -153,6 +153,18 @@ attribute-sets:
         doc: |
           Number of PSP packets for transmission with errors.
           Device statistic (from the PSP spec).
+      -
+        name: tx-key-cnt
+        type: sint
+        doc: |
+          Current number of TX keys installed on the device.
+          Kernel statistic.
+      -
+        name: grace-periods
+        type: uint
+        doc: |
+          Number of TX key deletion grace periods completed.
+          Kernel statistic.
 
 operations:
   list:
@@ -267,6 +279,8 @@ operations:
             - dev-id
             - key-rotations
             - stale-events
+            - tx-key-cnt
+            - grace-periods
         pre: psp-device-get-locked
         post: psp-device-unlock
       dump:
