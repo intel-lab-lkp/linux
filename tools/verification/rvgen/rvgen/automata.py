@@ -95,7 +95,7 @@ class Automata:
             raw_state = line[-1]
 
             #  "enabled_fired"}; -> enabled_fired
-            state = raw_state.replace('"', '').replace('};', '').replace(',','_')
+            state = raw_state.replace('"', '').replace('};', '').replace(',', '_')
             if state[0:7] == "__init_":
                 initial_state = state[7:]
             else:
@@ -132,7 +132,7 @@ class Automata:
             #  ------------ event is here ------------^^^^^
             if self.__dot_lines[cursor].split()[1] == "->":
                 line = self.__dot_lines[cursor].split()
-                event = line[-2].replace('"','')
+                event = line[-2].replace('"', '')
 
                 # when a transition has more than one labels, they are like this
                 # "local_irq_enable\nhw_local_irq_enable_n"
@@ -162,7 +162,7 @@ class Automata:
             nr_state += 1
 
         # declare the matrix....
-        matrix = [[ self.invalid_state_str for x in range(nr_event)] for y in range(nr_state)]
+        matrix = [[self.invalid_state_str for x in range(nr_event)] for y in range(nr_state)]
 
         # and we are back! Let's fill the matrix
         cursor = self.__get_cursor_begin_events()
@@ -170,9 +170,9 @@ class Automata:
         while self.__dot_lines[cursor].lstrip()[0] == '"':
             if self.__dot_lines[cursor].split()[1] == "->":
                 line = self.__dot_lines[cursor].split()
-                origin_state = line[0].replace('"','').replace(',','_')
-                dest_state = line[2].replace('"','').replace(',','_')
-                possible_events = line[-2].replace('"','').replace("\\n", " ")
+                origin_state = line[0].replace('"', '').replace(',', '_')
+                dest_state = line[2].replace('"', '').replace(',', '_')
+                possible_events = line[-2].replace('"', '').replace("\\n", " ")
                 for event in possible_events.split():
                     matrix[states_dict[origin_state]][events_dict[event]] = dest_state
             cursor += 1
