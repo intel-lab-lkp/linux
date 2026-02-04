@@ -2751,8 +2751,13 @@ static void i3c_master_unregister_i3c_devs(struct i3c_master_controller *master)
  */
 void i3c_master_queue_ibi(struct i3c_dev_desc *dev, struct i3c_ibi_slot *slot)
 {
+	struct i3c_master_controller *master = i3c_dev_get_master(dev);
+
 	if (!dev->ibi || !slot)
 		return;
+
+	if (master->rpm_ibi_allowed)
+		pm_runtime_mark_last_busy(master->dev.parent);
 
 	atomic_inc(&dev->ibi->pending_ibis);
 	queue_work(dev->ibi->wq, &slot->work);
