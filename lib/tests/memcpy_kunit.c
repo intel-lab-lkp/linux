@@ -493,6 +493,109 @@ static void memmove_overlap_test(struct kunit *test)
 	}
 }
 
+#ifdef CONFIG_MEMCPY_KUNIT_BENCHMARK
+
+#define COPIES_NUM	100
+
+static void memcpy_bench_size_align(struct kunit *test, int size, bool unalign)
+{
+	u64 start, end, total_ns = 0;
+	char *dst, *src;
+	int ret = 0;
+
+	dst = kzalloc(size, GFP_KERNEL);
+	if (!dst) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	src = kzalloc(size, GFP_KERNEL);
+	if (!src) {
+		ret = -ENOMEM;
+		goto out_free;
+	}
+
+	for (int i = 0; i < COPIES_NUM; i++) {
+		local_irq_disable();
+		start = ktime_get_ns();
+		memcpy(dst + unalign, src, size - unalign);
+		end = ktime_get_ns();
+		local_irq_enable();
+		total_ns += end - start;
+	}
+
+	/* Avoid division by zero */
+	if (!total_ns)
+		total_ns = 1;
+
+	kunit_info(test, "memcpy: %saligned copy of len %d: %lld MB/s\n",
+		   unalign ? "un" : "", size,
+		   (COPIES_NUM * size * 1000000000ULL / total_ns) / (1024 * 1024));
+
+	kfree(src);
+
+out_free:
+	kfree(dst);
+
+out:
+	KUNIT_ASSERT_EQ(test, ret, 0);
+}
+
+static void memcpy_bench_size(struct kunit *test, int size)
+{
+	memcpy_bench_size_align(test, size, false);
+	memcpy_bench_size_align(test, size, true);
+}
+
+static void memcpy_bench_test(struct kunit *test)
+{
+	memcpy_bench_size(test, 2);
+	memcpy_bench_size(test, 64);
+	memcpy_bench_size(test, 256);
+	memcpy_bench_size(test, PAGE_SIZE << MAX_PAGE_ORDER);
+}
+
+static void memmove_bench_size_align(struct kunit *test, int size, bool unalign)
+{
+	u64 start, end, total_ns = 0;
+	char *buf;
+	const int shift = size / 10;
+
+	buf = kzalloc(size, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, buf);
+
+	for (int i = 0; i < COPIES_NUM; i++) {
+		local_irq_disable();
+		start = ktime_get_ns();
+		memmove(buf + shift + unalign, buf, size - shift - unalign);
+		end = ktime_get_ns();
+		local_irq_enable();
+		total_ns += end - start;
+	}
+
+	if (!total_ns)
+		total_ns = 1;
+
+	kunit_info(test, "memmove: %saligned move of len %d: %lld MB/s\n",
+		   unalign ? "un" : "", size,
+		   (COPIES_NUM * (size - shift) * 1000000000ULL / total_ns) / (1024 * 1024));
+	kfree(buf);
+}
+
+static void memmove_bench_size(struct kunit *test, int size)
+{
+	memmove_bench_size_align(test, size, false);
+	memmove_bench_size_align(test, size, true);
+}
+
+static void memmove_bench_test(struct kunit *test)
+{
+	memmove_bench_size(test, 64);
+	memmove_bench_size(test, 256);
+	memmove_bench_size(test, PAGE_SIZE << MAX_PAGE_ORDER);
+}
+#endif
+
 static struct kunit_case memcpy_test_cases[] = {
 	KUNIT_CASE(memset_test),
 	KUNIT_CASE(memcpy_test),
@@ -500,6 +603,10 @@ static struct kunit_case memcpy_test_cases[] = {
 	KUNIT_CASE_SLOW(memmove_test),
 	KUNIT_CASE_SLOW(memmove_large_test),
 	KUNIT_CASE_SLOW(memmove_overlap_test),
+#ifdef CONFIG_MEMCPY_KUNIT_BENCHMARK
+	KUNIT_CASE_SLOW(memcpy_bench_test),
+	KUNIT_CASE_SLOW(memmove_bench_test),
+#endif
 	{}
 };
 
