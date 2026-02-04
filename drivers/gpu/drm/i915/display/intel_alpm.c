@@ -270,6 +270,23 @@ int intel_alpm_lobf_min_guardband(struct intel_crtc_state *crtc_state)
 	return first_sdp_position + waketime_in_lines + crtc_state->set_context_latency;
 }
 
+static bool intel_alpm_lobf_is_window1_sufficient(struct intel_crtc_state *crtc_state)
+{
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int vblank = adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vdisplay;
+	int window1;
+
+	/*
+	 * LOBF must be disabled if the number of lines within Window 1 is not
+	 * greater than ALPM_CTL[ALPM Entry Check]
+	 */
+	window1 = vblank - min(vblank,
+			       crtc_state->vrr.guardband +
+			       crtc_state->set_context_latency);
+
+	return window1 > crtc_state->alpm_state.check_entry_lines;
+}
+
 void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 					 struct intel_crtc_state *crtc_state)
 {
@@ -278,6 +295,11 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 
 	if (!crtc_state->has_lobf)
 		return;
+
+	if (!intel_alpm_lobf_is_window1_sufficient(crtc_state)) {
+		crtc_state->has_lobf = false;
+		return;
+	}
 
 	/*
 	 * LOBF can only be enabled if the time from the start of the SCL+Guardband
