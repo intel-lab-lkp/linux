@@ -107,6 +107,7 @@ static bool next_vm_id_wrapped = 0;
 static DEFINE_SPINLOCK(svm_vm_data_hash_lock);
 static bool x2avic_enabled;
 static u32 x2avic_max_physical_id;
+static bool avic_extlvt_enabled;
 
 static void avic_set_x2apic_msr_interception(struct vcpu_svm *svm,
 					     bool intercept)
@@ -154,6 +155,12 @@ static void avic_set_x2apic_msr_interception(struct vcpu_svm *svm,
 	for (i = 0; i < ARRAY_SIZE(x2avic_passthrough_msrs); i++)
 		svm_set_intercept_for_msr(&svm->vcpu, x2avic_passthrough_msrs[i],
 					  MSR_TYPE_RW, intercept);
+
+	if (avic_extlvt_enabled) {
+		for (i = 0; i < svm->vcpu.kvm->arch.nr_extlvt; i++)
+			svm_set_intercept_for_msr(&svm->vcpu, X2APIC_MSR(APIC_EILVTn(i)),
+						  MSR_TYPE_RW, intercept);
+	}
 
 	svm->x2avic_msrs_intercepted = intercept;
 }
@@ -815,6 +822,10 @@ int avic_unaccelerated_access_interception(struct kvm_vcpu *vcpu)
 		     AVIC_UNACCEL_ACCESS_WRITE_MASK;
 	bool trap = is_avic_unaccelerated_access_trap(offset);
 
+	if (avic_extlvt_enabled &&
+	    kvm_is_extlvt_offset(offset, vcpu->kvm->arch.nr_extlvt))
+		trap = true;
+
 	trace_kvm_avic_unaccelerated_access(vcpu->vcpu_id, offset,
 					    trap, write, vector);
 	if (trap) {
@@ -1292,6 +1303,9 @@ bool __init avic_hardware_setup(void)
 	 * failing to see a software update to clear IsRunning.
 	 */
 	enable_ipiv = enable_ipiv && boot_cpu_data.x86 != 0x17;
+
+	avic_extlvt_enabled = (boot_cpu_has(X86_FEATURE_AVIC) &&
+		boot_cpu_has(X86_FEATURE_AVIC_EXTLVT));
 
 	amd_iommu_register_ga_log_notifier(&avic_ga_log_notifier);
 
