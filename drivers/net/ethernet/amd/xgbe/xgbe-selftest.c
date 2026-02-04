@@ -214,8 +214,13 @@ static int xgbe_test_loopback_validate(struct sk_buff *skb,
 	if (tdata->packet->id != hdr->id)
 		goto out;
 
+	/* Validate RSS hash if expected */
+	if (tdata->packet->exp_hash && !skb->hash)
+		goto out;
+
 	tdata->ok = true;
 	complete(&tdata->comp);
+
 out:
 	kfree_skb(skb);
 	return 0;
@@ -265,6 +270,29 @@ static int __xgbe_test_loopback(struct xgbe_prv_data *pdata,
 cleanup:
 	dev_remove_pack(&tdata->pt);
 	kfree(tdata);
+	return ret;
+}
+
+static int xgbe_test_rss(struct xgbe_prv_data *pdata)
+{
+	struct net_packet_attrs attr = {};
+	int ret;
+
+	/* Check for RSS hardware support */
+	if (!pdata->hw_feat.rss)
+		return -EOPNOTSUPP;
+
+	attr.dst = pdata->netdev->dev_addr;
+	/*
+	 * Use specific port values to generate a hash.
+	 * The asymmetric port values ensure the hash computation
+	 * produces a non-zero result for test validation.
+	 */
+	attr.sport = 0xabc;
+	attr.dport = 0xdef;
+	attr.exp_hash = true;
+	ret = __xgbe_test_loopback(pdata, &attr);
+
 	return ret;
 }
 
@@ -371,6 +399,10 @@ static const struct xgbe_test xgbe_selftests[] = {
 		.name = "ARP Offload    ",
 		.lb = XGBE_LOOPBACK_PHY,
 		.fn = xgbe_test_arpoffload,
+	}, {
+		.name = "RSS           ",
+		.lb = XGBE_LOOPBACK_PHY,
+		.fn = xgbe_test_rss,
 	}
 };
 
