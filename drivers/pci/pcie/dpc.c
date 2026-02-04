@@ -103,6 +103,7 @@ static bool dpc_completed(struct pci_dev *pdev)
 bool pci_dpc_recovered(struct pci_dev *pdev)
 {
 	struct pci_host_bridge *host;
+	u16 status;
 
 	if (!pdev->dpc_cap)
 		return false;
@@ -118,10 +119,22 @@ bool pci_dpc_recovered(struct pci_dev *pdev)
 	/*
 	 * Need a timeout in case DPC never completes due to failure of
 	 * dpc_wait_rp_inactive().  The spec doesn't mandate a time limit,
-	 * but reports indicate that DPC completes within 4 seconds.
+	 * but reports indicate that DPC completes within 16 seconds.
 	 */
 	wait_event_timeout(dpc_completed_waitqueue, dpc_completed(pdev),
-			   msecs_to_jiffies(4000));
+			   msecs_to_jiffies(16000));
+
+	/*
+	 * In some cases, the execution time of report_error_detected()
+	 * exceeded 16 seconds, and dpc_reset_link() was still waiting to
+	 * be executed. This situation should be treated as successful dpc
+	 * recovery.
+	 */
+	pci_read_config_word(pdev, pdev->dpc_cap + PCI_EXP_DPC_STATUS, &status);
+	if ((!PCI_POSSIBLE_ERROR(status)) && (status & PCI_EXP_DPC_STATUS_TRIGGER)) {
+		pci_warn(pdev, "DPC: error_detected() callback timed out\n");
+		return true;
+	}
 
 	return test_and_clear_bit(PCI_DPC_RECOVERED, &pdev->priv_flags);
 }
