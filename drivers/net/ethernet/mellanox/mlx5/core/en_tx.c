@@ -883,6 +883,7 @@ bool mlx5e_poll_tx_cq(struct mlx5e_cq *cq, int napi_budget)
 	wmb();
 
 	sq->dma_fifo_cc = dma_fifo_cc;
+	stats->wqes += (u16)(sqcc - sq->cc);
 	sq->cc = sqcc;
 
 	netdev_tx_completed_queue(sq->txq, npkts, nbytes);

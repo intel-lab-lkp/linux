@@ -445,6 +445,7 @@ struct mlx5e_sq_stats {
 	u64 cqes ____cacheline_aligned_in_smp;
 	u64 wake;
 	u64 cqe_err;
+	u64 wqes;
 };
 
 struct mlx5e_xdpsq_stats {

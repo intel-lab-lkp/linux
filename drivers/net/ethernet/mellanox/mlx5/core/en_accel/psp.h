@@ -22,10 +22,17 @@ struct mlx5e_psp_stats {
 	u64 psp_tx_bytes_drop;
 };
 
+struct mlx5e_psp_tx_snapshot {
+	int num_channels;
+	int num_tc;
+	u64 wqes[];
+};
+
 struct mlx5e_psp {
 	struct psp_dev *psp;
 	struct psp_dev_caps caps;
 	struct mlx5e_psp_fs *fs;
+	struct mlx5e_psp_tx_snapshot *tx_snapshot;
 	atomic_t tx_key_cnt;
 	atomic_t tx_drop;
 };

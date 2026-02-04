@@ -1059,13 +1059,102 @@ mlx5e_psp_get_stats(struct psp_dev *psd, struct psp_dev_stats *stats)
 	stats->tx_error = atomic_read(&priv->psp->tx_drop);
 }
 
+static int mlx5e_psp_tx_grace_begin(struct psp_dev *psd)
+{
+	struct mlx5e_priv *priv = netdev_priv(psd->main_netdev);
+	struct mlx5e_psp_tx_snapshot *snap;
+	int num_channels, num_tc, num_sqs;
+	int idx = 0, rc = 0;
+	int i, tc;
+
+	mutex_lock(&priv->state_lock);
+
+	num_channels = priv->channels.num;
+	num_tc = mlx5e_get_dcb_num_tc(&priv->channels.params);
+	num_sqs = num_channels * num_tc;
+
+	snap = kzalloc(struct_size(snap, wqes, num_sqs), GFP_KERNEL);
+	if (!snap) {
+		rc = -ENOMEM;
+		goto out_unlock;
+	}
+
+	snap->num_channels = num_channels;
+	snap->num_tc = num_tc;
+
+	for (i = 0; i < priv->channels.num; i++) {
+		struct mlx5e_channel *c = priv->channels.c[i];
+
+		for (tc = 0; tc < c->num_tc; tc++)
+			snap->wqes[idx++] = READ_ONCE(c->sq[tc].stats->wqes);
+	}
+
+	priv->psp->tx_snapshot = snap;
+
+out_unlock:
+	mutex_unlock(&priv->state_lock);
+	return rc;
+}
+
+static int mlx5e_psp_tx_grace_end(struct psp_dev *psd)
+{
+	struct mlx5e_priv *priv = netdev_priv(psd->main_netdev);
+	struct mlx5e_psp_tx_snapshot *snap;
+	int num_channels, num_tc;
+	int idx = 0, rc = 0;
+	int i, tc;
+
+	mutex_lock(&priv->state_lock);
+
+	snap = priv->psp->tx_snapshot;
+	num_channels = priv->channels.num;
+	num_tc = mlx5e_get_dcb_num_tc(&priv->channels.params);
+
+	/* If channels were reconfigured, tell core to restart grace period */
+	if (snap->num_channels != num_channels || snap->num_tc != num_tc) {
+		kfree(snap);
+		priv->psp->tx_snapshot = NULL;
+		rc = -ESTALE;
+		goto out_unlock;
+	}
+
+	for (i = 0; i < priv->channels.num; i++) {
+		struct mlx5e_channel *c = priv->channels.c[i];
+
+		for (tc = 0; tc < c->num_tc; tc++) {
+			struct mlx5e_txqsq *sq = &c->sq[tc];
+			u32 ring_size = mlx5_wq_cyc_get_size(&sq->wq);
+			u64 current_wqes = READ_ONCE(sq->stats->wqes);
+			u64 snapshot_wqes = snap->wqes[idx++];
+
+			/* If the ring has cycled, any key_id handles in tx
+			 * descriptors must have been consumed by hw and
+			 * cleaned by sw.
+			 */
+			if ((s64)(current_wqes - snapshot_wqes) < ring_size) {
+				rc = -EAGAIN;
+				goto out_unlock;
+			}
+		}
+	}
+
+	kfree(snap);
+	priv->psp->tx_snapshot = NULL;
+
+out_unlock:
+	mutex_unlock(&priv->state_lock);
+	return rc;
+}
+
 static struct psp_dev_ops mlx5_psp_ops = {
-	.set_config   = mlx5e_psp_set_config,
-	.rx_spi_alloc = mlx5e_psp_rx_spi_alloc,
-	.tx_key_add   = mlx5e_psp_assoc_add,
-	.tx_key_del   = mlx5e_psp_assoc_del,
-	.key_rotate   = mlx5e_psp_key_rotate,
-	.get_stats    = mlx5e_psp_get_stats,
+	.set_config     = mlx5e_psp_set_config,
+	.rx_spi_alloc   = mlx5e_psp_rx_spi_alloc,
+	.tx_key_add     = mlx5e_psp_assoc_add,
+	.tx_key_del     = mlx5e_psp_assoc_del,
+	.key_rotate     = mlx5e_psp_key_rotate,
+	.tx_grace_begin = mlx5e_psp_tx_grace_begin,
+	.tx_grace_end   = mlx5e_psp_tx_grace_end,
+	.get_stats      = mlx5e_psp_get_stats,
 };
 
 void mlx5e_psp_unregister(struct mlx5e_priv *priv)
