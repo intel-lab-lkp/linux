@@ -97,6 +97,12 @@ struct dw_edma_irq {
 	struct dw_edma			*dw;
 };
 
+struct dw_edma_selfirq {
+	struct list_head		node;
+	dma_selfirq_fn			fn;
+	void				*data;
+};
+
 struct dw_edma {
 	char				name[32];
 
@@ -115,6 +121,9 @@ struct dw_edma {
 	struct dw_edma_chip             *chip;
 
 	const struct dw_edma_core_ops	*core;
+
+	struct list_head		selfirq_handlers;
+	spinlock_t			selfirq_lock;
 };
 
 typedef void (*dw_edma_handler_t)(struct dw_edma_chan *);
@@ -128,6 +137,7 @@ struct dw_edma_core_ops {
 	void (*start)(struct dw_edma_chunk *chunk, bool first);
 	void (*ch_config)(struct dw_edma_chan *chan);
 	void (*debugfs_on)(struct dw_edma *dw);
+	void (*ack_selfirq)(struct dw_edma *dw);
 };
 
 struct dw_edma_sg {
@@ -206,6 +216,13 @@ static inline
 void dw_edma_core_debugfs_on(struct dw_edma *dw)
 {
 	dw->core->debugfs_on(dw);
+}
+
+static inline
+void dw_edma_core_ack_selfirq(struct dw_edma *dw)
+{
+	if (dw->core->ack_selfirq)
+		dw->core->ack_selfirq(dw);
 }
 
 static inline

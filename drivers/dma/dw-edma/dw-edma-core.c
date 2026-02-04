@@ -15,6 +15,7 @@
 #include <linux/irq.h>
 #include <linux/dma/edma.h>
 #include <linux/dma-mapping.h>
+#include <linux/rculist.h>
 #include <linux/string_choices.h>
 
 #include "dw-edma-core.h"
@@ -687,7 +688,30 @@ static void dw_edma_abort_interrupt(struct dw_edma_chan *chan)
 	chan->status = EDMA_ST_IDLE;
 }
 
-static inline irqreturn_t dw_edma_interrupt_write(int irq, void *data)
+static inline irqreturn_t dw_edma_interrupt_emulated(void *data)
+{
+	struct dw_edma_irq *dw_irq = data;
+	struct dw_edma *dw = dw_irq->dw;
+	struct dw_edma_selfirq *h;
+
+	/*
+	 * eDMA interrupt emulation does not set DONE/ABORT status bits, so
+	 * a shared IRQ handler cannot reliably tell whether or not the
+	 * emulated interrupt has been raised when the status bits are
+	 * non-zero. Invoke selfirq callbacks on every IRQ and always claim
+	 * the interrupt.
+	 */
+	dw_edma_core_ack_selfirq(dw);
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(h, &dw->selfirq_handlers, node)
+		h->fn(&dw->dma, h->data);
+	rcu_read_unlock();
+
+	return IRQ_HANDLED;
+}
+
+static inline irqreturn_t dw_edma_interrupt_write_inner(int irq, void *data)
 {
 	struct dw_edma_irq *dw_irq = data;
 
@@ -696,7 +720,7 @@ static inline irqreturn_t dw_edma_interrupt_write(int irq, void *data)
 				       dw_edma_abort_interrupt);
 }
 
-static inline irqreturn_t dw_edma_interrupt_read(int irq, void *data)
+static inline irqreturn_t dw_edma_interrupt_read_inner(int irq, void *data)
 {
 	struct dw_edma_irq *dw_irq = data;
 
@@ -705,12 +729,33 @@ static inline irqreturn_t dw_edma_interrupt_read(int irq, void *data)
 				       dw_edma_abort_interrupt);
 }
 
-static irqreturn_t dw_edma_interrupt_common(int irq, void *data)
+static inline irqreturn_t dw_edma_interrupt_write(int irq, void *data)
 {
 	irqreturn_t ret = IRQ_NONE;
 
-	ret |= dw_edma_interrupt_write(irq, data);
-	ret |= dw_edma_interrupt_read(irq, data);
+	ret |= dw_edma_interrupt_write_inner(irq, data);
+	ret |= dw_edma_interrupt_emulated(data);
+
+	return ret;
+}
+
+static inline irqreturn_t dw_edma_interrupt_read(int irq, void *data)
+{
+	irqreturn_t ret = IRQ_NONE;
+
+	ret |= dw_edma_interrupt_read_inner(irq, data);
+	ret |= dw_edma_interrupt_emulated(data);
+
+	return ret;
+}
+
+static inline irqreturn_t dw_edma_interrupt_common(int irq, void *data)
+{
+	irqreturn_t ret = IRQ_NONE;
+
+	ret |= dw_edma_interrupt_write_inner(irq, data);
+	ret |= dw_edma_interrupt_read_inner(irq, data);
+	ret |= dw_edma_interrupt_emulated(data);
 
 	return ret;
 }
@@ -740,6 +785,63 @@ static void dw_edma_free_chan_resources(struct dma_chan *dchan)
 
 		cpu_relax();
 	}
+}
+
+static inline struct dw_edma *to_dw_edma(struct dma_device *ddev)
+{
+	return container_of(ddev, struct dw_edma, dma);
+}
+
+static int dw_edma_register_selfirq(struct dma_device *ddev, dma_selfirq_fn fn,
+				    void *data)
+{
+	struct dw_edma *dw = to_dw_edma(ddev);
+	struct dw_edma_selfirq *h, *iter;
+	unsigned long flags;
+
+	if (!dw || !fn)
+		return -EINVAL;
+
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
+	if (!h)
+		return -ENOMEM;
+	h->fn = fn;
+	h->data = data;
+
+	spin_lock_irqsave(&dw->selfirq_lock, flags);
+	list_for_each_entry(iter, &dw->selfirq_handlers, node) {
+		if (iter->fn == fn && iter->data == data) {
+			spin_unlock_irqrestore(&dw->selfirq_lock, flags);
+			kfree(h);
+			return -EEXIST;
+		}
+	}
+	list_add_tail_rcu(&h->node, &dw->selfirq_handlers);
+	spin_unlock_irqrestore(&dw->selfirq_lock, flags);
+	return 0;
+}
+
+static void dw_edma_unregister_selfirq(struct dma_device *ddev, dma_selfirq_fn fn,
+				       void *data)
+{
+	struct dw_edma *dw = to_dw_edma(ddev);
+	struct dw_edma_selfirq *h;
+	unsigned long flags;
+
+	if (!dw || !fn)
+		return;
+
+	spin_lock_irqsave(&dw->selfirq_lock, flags);
+	list_for_each_entry(h, &dw->selfirq_handlers, node) {
+		if (h->fn == fn && h->data == data) {
+			list_del_rcu(&h->node);
+			spin_unlock_irqrestore(&dw->selfirq_lock, flags);
+			synchronize_rcu();
+			kfree(h);
+			return;
+		}
+	}
+	spin_unlock_irqrestore(&dw->selfirq_lock, flags);
 }
 
 static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
@@ -845,6 +947,10 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 	dma->device_prep_interleaved_dma = dw_edma_device_prep_interleaved_dma;
 
 	dma_set_max_seg_size(dma->dev, U32_MAX);
+
+	/* Set DMA device callbacks */
+	dma->device_register_selfirq = dw_edma_register_selfirq;
+	dma->device_unregister_selfirq = dw_edma_unregister_selfirq;
 
 	/* Register DMA device */
 	return dma_async_device_register(dma);
@@ -959,6 +1065,8 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 		return -ENOMEM;
 
 	dw->chip = chip;
+	INIT_LIST_HEAD(&dw->selfirq_handlers);
+	spin_lock_init(&dw->selfirq_lock);
 
 	if (dw->chip->mf == EDMA_MF_HDMA_NATIVE)
 		dw_hdma_v0_core_register(dw);
