@@ -480,6 +480,12 @@ static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
+	/*
+	 * Disable VMA merging - guest_memfd VMAs should be
+	 * static. This also stops khugepaged from operating on
+	 * guest_memfd VMAs and folios.
+	 */
+	vm_flags_set(vma, VM_DONTEXPAND);
 	vma->vm_ops = &kvm_gmem_vm_ops;
 
 	return 0;
