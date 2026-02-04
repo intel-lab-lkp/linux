@@ -177,9 +177,8 @@ static int ws_bridge_probe(struct i2c_client *i2c)
 
 	ws->bridge.type = DRM_MODE_CONNECTOR_DPI;
 	ws->bridge.of_node = dev->of_node;
-	devm_drm_bridge_add(dev, &ws->bridge);
 
-	return 0;
+	return devm_drm_bridge_add(dev, &ws->bridge);
 }
 
 static const struct of_device_id ws_bridge_of_ids[] = {
