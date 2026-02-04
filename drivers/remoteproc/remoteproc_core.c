@@ -2434,6 +2434,43 @@ static int rproc_alloc_ops(struct rproc *rproc, const struct rproc_ops *ops)
 }
 
 /**
+ * rproc_get_index - assign a unique device index for a remote processor
+ * @dev: device associated with the remote processor
+ *
+ * Look for a static index coming from the "rproc" DT alias
+ * (e.g. "rproc0"). If none is found, start allocating
+ * dynamic IDs after the highest alias in use.
+ *
+ * Return: a non-negative index on success, or a negative error code on failure.
+ */
+static int rproc_get_index(struct device *dev)
+{
+	int index;
+
+	/* No DT to deal with */
+	if (!dev->of_node)
+		goto legacy;
+
+	/* See if an alias has been assigned to this remoteproc */
+	index = of_alias_get_id(dev->of_node, RPROC_ALIAS);
+	if (index >= 0)
+		return ida_alloc_range(&rproc_dev_index, index, index,
+				       GFP_KERNEL);
+	/*
+	 * No alias has been assigned to this remoteproc device. See if any
+	 * "rproc" aliases have been assigned and start allocating after
+	 * the highest one if it is the case.
+	 */
+	index = of_alias_get_highest_id(RPROC_ALIAS);
+	if (index >= 0)
+		return ida_alloc_range(&rproc_dev_index, index + 1, ~0,
+				       GFP_KERNEL);
+
+legacy:
+	return ida_alloc(&rproc_dev_index, GFP_KERNEL);
+}
+
+/**
  * rproc_alloc() - allocate a remote processor handle
  * @dev: the underlying device
  * @name: name of this remote processor
@@ -2481,8 +2518,7 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 	rproc->dev.driver_data = rproc;
 	idr_init(&rproc->notifyids);
 
-	/* Assign a unique device index and name */
-	rproc->index = ida_alloc(&rproc_dev_index, GFP_KERNEL);
+	rproc->index = rproc_get_index(dev);
 	if (rproc->index < 0) {
 		dev_err(dev, "ida_alloc failed: %d\n", rproc->index);
 		goto put_device;
