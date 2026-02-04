@@ -3338,6 +3338,7 @@ process_rx:
 		rx_rings[i].cached_phctime = pf->ptp.cached_phc_time;
 		rx_rings[i].desc = NULL;
 		rx_rings[i].xdp_buf = NULL;
+		memset(&rx_rings[i].xdp_rxq, 0, sizeof(rx_rings[i].xdp_rxq));
 
 		/* this is to allow wr32 to have something to write to
 		 * during early allocation of Rx buffers
