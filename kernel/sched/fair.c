@@ -891,6 +891,16 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
 	return __node_2_se(left);
 }
 
+struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
+{
+	struct rb_node *last = rb_last(&cfs_rq->tasks_timeline.rb_root);
+
+	if (!last)
+		return NULL;
+
+	return __node_2_se(last);
+}
+
 /*
  * Set the vruntime up to which an entity can run before looking
  * for another entity to pick.
@@ -1025,16 +1035,6 @@ found:
 static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 {
 	return __pick_eevdf(cfs_rq, true);
-}
-
-struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
-{
-	struct rb_node *last = rb_last(&cfs_rq->tasks_timeline.rb_root);
-
-	if (!last)
-		return NULL;
-
-	return __node_2_se(last);
 }
 
 /**************************************************************
