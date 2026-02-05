@@ -40,4 +40,53 @@
 #define I915_ASLE_INTERRUPT				(1 << 0)
 #define I915_BSD_USER_INTERRUPT				(1 << 25)
 
+#define GEN8_MASTER_IRQ			_MMIO(0x44200)
+#define  GEN8_MASTER_IRQ_CONTROL	(1 << 31)
+#define  GEN8_PCU_IRQ			(1 << 30)
+#define  GEN8_DE_PCH_IRQ		(1 << 23)
+#define  GEN8_DE_MISC_IRQ		(1 << 22)
+#define  GEN8_DE_PORT_IRQ		(1 << 20)
+#define  GEN8_DE_PIPE_C_IRQ		(1 << 18)
+#define  GEN8_DE_PIPE_B_IRQ		(1 << 17)
+#define  GEN8_DE_PIPE_A_IRQ		(1 << 16)
+#define  GEN8_DE_PIPE_IRQ(pipe)		(1 << (16 + (pipe)))
+#define  GEN8_GT_VECS_IRQ		(1 << 6)
+#define  GEN8_GT_GUC_IRQ		(1 << 5)
+#define  GEN8_GT_PM_IRQ			(1 << 4)
+#define  GEN8_GT_VCS1_IRQ		(1 << 3) /* NB: VCS2 in bspec! */
+#define  GEN8_GT_VCS0_IRQ		(1 << 2) /* NB: VCS1 in bpsec! */
+#define  GEN8_GT_BCS_IRQ		(1 << 1)
+#define  GEN8_GT_RCS_IRQ		(1 << 0)
+
+#define GEN11_GU_MISC_ISR	_MMIO(0x444f0)
+#define GEN11_GU_MISC_IMR	_MMIO(0x444f4)
+#define GEN11_GU_MISC_IIR	_MMIO(0x444f8)
+#define GEN11_GU_MISC_IER	_MMIO(0x444fc)
+#define  GEN11_GU_MISC_GSE	(1 << 27)
+
+#define GEN11_GU_MISC_IRQ_REGS		I915_IRQ_REGS(GEN11_GU_MISC_IMR, \
+						      GEN11_GU_MISC_IER, \
+						      GEN11_GU_MISC_IIR)
+
+#define GEN11_GFX_MSTR_IRQ		_MMIO(0x190010)
+#define  GEN11_MASTER_IRQ		(1 << 31)
+#define  GEN11_PCU_IRQ			(1 << 30)
+#define  GEN11_GU_MISC_IRQ		(1 << 29)
+#define  GEN11_DISPLAY_IRQ		(1 << 16)
+#define  GEN11_GT_DW_IRQ(x)		(1 << (x))
+#define  GEN11_GT_DW1_IRQ		(1 << 1)
+#define  GEN11_GT_DW0_IRQ		(1 << 0)
+
+#define SCPD0		_MMIO(0x209c) /* 915+ only */
+#define  SCPD_FBC_IGNORE_3D			(1 << 6)
+#define  CSTATE_RENDER_CLOCK_GATE_DISABLE	(1 << 5)
+
+#define VLV_IIR_RW	_MMIO(VLV_DISPLAY_BASE + 0x2084)
+#define VLV_IER		_MMIO(VLV_DISPLAY_BASE + 0x20a0)
+#define VLV_IIR		_MMIO(VLV_DISPLAY_BASE + 0x20a4)
+#define VLV_IMR		_MMIO(VLV_DISPLAY_BASE + 0x20a8)
+#define VLV_ISR		_MMIO(VLV_DISPLAY_BASE + 0x20ac)
+#define VLV_PCBR	_MMIO(VLV_DISPLAY_BASE + 0x2120)
+#define VLV_PCBR_ADDR_SHIFT	12
+
 #endif
