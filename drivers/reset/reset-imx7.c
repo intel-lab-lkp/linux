@@ -364,6 +364,7 @@ static int imx7_reset_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct regmap_config config = { .name = "src" };
 	const struct imx7_src_variant *variant = of_device_get_match_data(dev);
+	int ret;
 
 	imx7src = devm_kzalloc(dev, sizeof(*imx7src), GFP_KERNEL);
 	if (!imx7src)
@@ -375,7 +376,9 @@ static int imx7_reset_probe(struct platform_device *pdev)
 		dev_err(dev, "Unable to get imx7-src regmap");
 		return PTR_ERR(imx7src->regmap);
 	}
-	regmap_attach_dev(dev, imx7src->regmap, &config);
+	ret = regmap_attach_dev(dev, imx7src->regmap, &config);
+	if (ret)
+		return dev_err_probe(dev, ret, "regmap attach failed\n");
 
 	imx7src->rcdev.owner     = THIS_MODULE;
 	imx7src->rcdev.nr_resets = variant->signals_num;
