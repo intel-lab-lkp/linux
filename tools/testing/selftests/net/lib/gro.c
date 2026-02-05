@@ -43,6 +43,10 @@
  *   - large_max: exceeding max size
  *   - large_rem: remainder handling
  *
+ * single, capacity:
+ *  Boring cases used to test coalescing machinery itself and stats
+ *  more than protocol behavior.
+ *
  * MSS is defined as 4096 - header because if it is too small
  * (i.e. 1500 MTU - header), it will result in many packets,
  * increasing the "large" test case's flakiness. This is because
@@ -126,6 +130,9 @@ static int total_hdr_len = -1;
 static int ethhdr_proto = -1;
 static bool ipip;
 static uint64_t txtime_ns;
+static int num_flows = 4;
+
+#define CAPACITY_PAYLOAD_LEN 200
 
 #define TXTIME_DELAY_MS 5
 
@@ -385,6 +392,45 @@ static void create_packet(void *buf, int seq_offset, int ack_offset,
 	}
 
 	fill_datalinklayer(buf);
+}
+
+static void create_capacity_packet(void *buf, int flow_id, int pkt_idx, int psh)
+{
+	int seq_offset = pkt_idx * CAPACITY_PAYLOAD_LEN;
+	struct tcphdr *tcph;
+
+	create_packet(buf, seq_offset, 0, CAPACITY_PAYLOAD_LEN, 0);
+
+	/* Customize for this flow id */
+	memset(buf + total_hdr_len, 'a' + flow_id, CAPACITY_PAYLOAD_LEN);
+
+	tcph = buf + tcp_offset;
+	tcph->source = htons(SPORT + flow_id);
+	tcph->psh = psh;
+	tcph->check = 0;
+	tcph->check = tcp_checksum(tcph, CAPACITY_PAYLOAD_LEN);
+}
+
+/* Send a capacity test, 2 packets per flow, all first packets then all second:
+ *  A1 B1 C1 D1 ... A2 B2 C2 D2 ...
+ */
+static void send_capacity(int fd, struct sockaddr_ll *daddr)
+{
+	static char buf[MAX_HDR_LEN + CAPACITY_PAYLOAD_LEN];
+	int pkt_size = total_hdr_len + CAPACITY_PAYLOAD_LEN;
+	int i;
+
+	/* Send first packet of each flow (no PSH) */
+	for (i = 0; i < num_flows; i++) {
+		create_capacity_packet(buf, i, 0, 0);
+		write_packet(fd, buf, pkt_size, daddr);
+	}
+
+	/* Send second packet of each flow (with PSH to flush) */
+	for (i = 0; i < num_flows; i++) {
+		create_capacity_packet(buf, i, 1, 1);
+		write_packet(fd, buf, pkt_size, daddr);
+	}
 }
 
 #ifndef TH_CWR
@@ -1083,6 +1129,93 @@ static void check_recv_pkts(int fd, int *correct_payload,
 	printf("Test succeeded\n\n");
 }
 
+static void check_capacity_pkts(int fd)
+{
+	static char buffer[IP_MAXPACKET + ETH_HLEN + 1];
+	struct iphdr *iph = (struct iphdr *)(buffer + ETH_HLEN);
+	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buffer + ETH_HLEN);
+	const char *fail_reason = NULL;
+	int flow_order[num_flows * 2];
+	int coalesced[num_flows];
+	struct tcphdr *tcph;
+	int ip_ext_len = 0;
+	int total_data = 0;
+	int pkt_size = -1;
+	int data_len = 0;
+	int num_pkt = 0;
+	int num_coal = 0;
+	int flow_id;
+	int sport;
+
+	memset(coalesced, 0, sizeof(coalesced));
+	memset(flow_order, -1, sizeof(flow_order));
+
+	while (total_data < num_flows * CAPACITY_PAYLOAD_LEN * 2) {
+		ip_ext_len = 0;
+		pkt_size = recv(fd, buffer, IP_MAXPACKET + ETH_HLEN + 1, 0);
+		if (pkt_size < 0)
+			recv_error(fd, errno);
+
+		if (iph->version == 4)
+			ip_ext_len = (iph->ihl - 5) * 4;
+		else if (ip6h->version == 6 && ip6h->nexthdr != IPPROTO_TCP)
+			ip_ext_len = MIN_EXTHDR_SIZE;
+
+		tcph = (struct tcphdr *)(buffer + tcp_offset + ip_ext_len);
+
+		/* FIN packet terminates reception */
+		if (tcph->fin)
+			break;
+
+		sport = ntohs(tcph->source);
+		flow_id = sport - SPORT;
+
+		if (flow_id < 0 || flow_id >= num_flows) {
+			vlog("Invalid flow_id %d from sport %d\n",
+			     flow_id, sport);
+			fail_reason = fail_reason ?: "invalid packet";
+			continue;
+		}
+
+		/* Calculate payload length */
+		if (pkt_size == ETH_ZLEN && iph->version == 4) {
+			data_len = ntohs(iph->tot_len)
+				- sizeof(struct tcphdr) - sizeof(struct iphdr);
+		} else {
+			data_len = pkt_size - total_hdr_len - ip_ext_len;
+		}
+
+		flow_order[num_pkt] = flow_id;
+		coalesced[flow_id] = data_len;
+
+		if (data_len == CAPACITY_PAYLOAD_LEN * 2) {
+			num_coal++;
+		} else {
+			vlog("Pkt %d: flow %d, sport %d, len %d (expected %d)\n",
+			     num_pkt, flow_id, sport, data_len,
+			     CAPACITY_PAYLOAD_LEN * 2);
+			fail_reason = fail_reason ?: "not coalesced";
+		}
+
+		num_pkt++;
+		total_data += data_len;
+	}
+
+	if (!fail_reason) {
+		vlog("All %d flows coalesced correctly\n", num_flows);
+		printf("Test succeeded\n\n");
+	} else {
+		printf("FAILED\n");
+	}
+
+	/* Always print stats for external validation */
+	printf("STATS: received=%d wire=%d coalesced=%d\n",
+	       num_pkt, num_pkt + num_coal, num_coal);
+
+	if (fail_reason)
+		error(1, 0, "capacity test failed %s", fail_reason);
+}
+
 static void gro_sender(void)
 {
 	struct sock_txtime so_txtime = { .clockid = CLOCK_MONOTONIC, };
@@ -1242,6 +1375,19 @@ static void gro_sender(void)
 
 		send_large(txfd, &daddr, remainder + 1);
 		write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
+
+	/* machinery sub-tests */
+	} else if (strcmp(testname, "single") == 0) {
+		static char buf[MAX_HDR_LEN + PAYLOAD_LEN];
+
+		create_packet(buf, 0, 0, PAYLOAD_LEN, 0);
+		write_packet(txfd, buf, total_hdr_len + PAYLOAD_LEN, &daddr);
+		write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
+	} else if (strcmp(testname, "capacity") == 0) {
+		send_capacity(txfd, &daddr);
+		usleep(fin_delay_us);
+		write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
+
 	} else {
 		error(1, 0, "Unknown testcase: %s", testname);
 	}
@@ -1437,6 +1583,15 @@ static void gro_receiver(void)
 		correct_payload[2] = remainder + 1;
 		printf("last segment sent individually: ");
 		check_recv_pkts(rxfd, correct_payload, 3);
+
+	/* machinery sub-tests */
+	} else if (strcmp(testname, "single") == 0) {
+		printf("single data packet: ");
+		correct_payload[0] = PAYLOAD_LEN;
+		check_recv_pkts(rxfd, correct_payload, 1);
+	} else if (strcmp(testname, "capacity") == 0) {
+		check_capacity_pkts(rxfd);
+
 	} else {
 		error(1, 0, "Test case error: unknown testname %s", testname);
 	}
@@ -1454,6 +1609,7 @@ static void parse_args(int argc, char **argv)
 		{ "ipv4", no_argument, NULL, '4' },
 		{ "ipv6", no_argument, NULL, '6' },
 		{ "ipip", no_argument, NULL, 'e' },
+		{ "num-flows", required_argument, NULL, 'n' },
 		{ "rx", no_argument, NULL, 'r' },
 		{ "saddr", required_argument, NULL, 's' },
 		{ "smac", required_argument, NULL, 'S' },
@@ -1463,7 +1619,7 @@ static void parse_args(int argc, char **argv)
 	};
 	int c;
 
-	while ((c = getopt_long(argc, argv, "46d:D:ei:rs:S:t:v", opts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "46d:D:ei:n:rs:S:t:v", opts, NULL)) != -1) {
 		switch (c) {
 		case '4':
 			proto = PF_INET;
@@ -1486,6 +1642,9 @@ static void parse_args(int argc, char **argv)
 			break;
 		case 'i':
 			ifname = optarg;
+			break;
+		case 'n':
+			num_flows = atoi(optarg);
 			break;
 		case 'r':
 			tx_socket = false;
