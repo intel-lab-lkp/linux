@@ -50,6 +50,7 @@
 #include <net/handshake.h>
 #include <linux/uaccess.h>
 #include <linux/highmem.h>
+#include <linux/mm.h>
 #include <asm/ioctls.h>
 #include <linux/key.h>
 
@@ -377,9 +378,12 @@ static ssize_t svc_tcp_read_msg(struct svc_rqst *rqstp, size_t buflen,
 }
 
 /*
- * Set socket snd and rcv buffer lengths
+ * Set socket snd and rcv buffer lengths for UDP sockets.
+ *
+ * UDP sockets need large buffers because pending requests remain
+ * in the receive buffer until processed by a worker thread.
  */
-static void svc_sock_setbufsize(struct svc_sock *svsk, unsigned int nreqs)
+static void svc_udp_setbufsize(struct svc_sock *svsk, unsigned int nreqs)
 {
 	unsigned int max_mesg = svsk->sk_xprt.xpt_server->sv_max_mesg;
 	struct socket *sock = svsk->sk_sock;
@@ -389,6 +393,45 @@ static void svc_sock_setbufsize(struct svc_sock *svsk, unsigned int nreqs)
 	lock_sock(sock->sk);
 	sock->sk->sk_sndbuf = nreqs * max_mesg * 2;
 	sock->sk->sk_rcvbuf = nreqs * max_mesg * 2;
+	sock->sk->sk_write_space(sock->sk);
+	release_sock(sock->sk);
+}
+
+/* Accommodate high bandwidth-delay product connections */
+#define SVC_TCP_SNDBUF_MAX	(16 * 1024 * 1024)
+#define SVC_TCP_RCVBUF_MAX	(16 * 1024 * 1024)
+
+/*
+ * Set socket snd and rcv buffer lengths for TCP data sockets.
+ *
+ * Buffers are sized to accommodate high-bandwidth data transfers on
+ * high-latency networks (large bandwidth-delay product). Automatic
+ * buffer tuning is disabled to allow control of server memory
+ * consumption.
+ */
+static void svc_tcp_setbufsize(struct svc_sock *svsk)
+{
+	struct svc_serv *serv = svsk->sk_xprt.xpt_server;
+	struct socket *sock = svsk->sk_sock;
+	unsigned long mem_cap, ideal;
+	unsigned int sndbuf, rcvbuf;
+
+	/* Buffer multiple in-flight RPC messages */
+	ideal = serv->sv_max_mesg * 4;
+
+	/* Memory-based cap: 1/1024 of physical RAM */
+	mem_cap = (totalram_pages() >> 10) << PAGE_SHIFT;
+
+	sndbuf = clamp_t(unsigned long, ideal,
+			 serv->sv_max_mesg, min(mem_cap, SVC_TCP_SNDBUF_MAX));
+	rcvbuf = clamp_t(unsigned long, ideal,
+			 serv->sv_max_mesg, min(mem_cap, SVC_TCP_RCVBUF_MAX));
+
+	lock_sock(sock->sk);
+	sock->sk->sk_sndbuf = sndbuf;
+	sock->sk->sk_rcvbuf = rcvbuf;
+	sock->sk->sk_userlocks |= SOCK_SNDBUF_LOCK;
+	sock->sk->sk_userlocks |= SOCK_RCVBUF_LOCK;
 	sock->sk->sk_write_space(sock->sk);
 	release_sock(sock->sk);
 }
@@ -656,7 +699,7 @@ static int svc_udp_recvfrom(struct svc_rqst *rqstp)
 	     * provides an upper bound on the number of threads
 	     * which will access the socket.
 	     */
-	    svc_sock_setbufsize(svsk, serv->sv_nrthreads + 3);
+	    svc_udp_setbufsize(svsk, serv->sv_nrthreads + 3);
 
 	clear_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 	err = kernel_recvmsg(svsk->sk_sock, &msg, NULL,
@@ -872,7 +915,7 @@ static void svc_udp_init(struct svc_sock *svsk, struct svc_serv *serv)
 	 * receive and respond to one request.
 	 * svc_udp_recvfrom will re-adjust if necessary
 	 */
-	svc_sock_setbufsize(svsk, 3);
+	svc_udp_setbufsize(svsk, 3);
 
 	/* data might have come in before data_ready set up */
 	set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
@@ -1986,6 +2029,7 @@ static void svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 		       svsk->sk_maxpages * sizeof(struct page *));
 
 		tcp_sock_set_nodelay(sk);
+		svc_tcp_setbufsize(svsk);
 
 		switch (sk->sk_state) {
 		case TCP_SYN_RECV:
