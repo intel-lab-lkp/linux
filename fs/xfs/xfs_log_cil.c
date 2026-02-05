@@ -941,6 +941,8 @@ xlog_cil_ail_insert(
 					LOG_ITEM_BATCH_SIZE, ctx->start_lsn);
 			i = 0;
 		}
+
+		cond_resched();
 	}
 
 	/* make sure we insert the remainder! */
@@ -1023,6 +1025,7 @@ xlog_cil_process_committed(
 			struct xfs_cil_ctx, iclog_entry))) {
 		list_del(&ctx->iclog_entry);
 		xlog_cil_committed(ctx);
+		cond_resched();
 	}
 }
 
