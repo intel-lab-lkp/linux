@@ -64,8 +64,9 @@ int psp_ring_platform_doorbell(int msg, u32 *result);
  * if platform features has initialized.
  *
  * Returns:
- * 0          platform features is ready
- * -%ENODEV   platform features is not ready or present
+ *  0:            platform features is ready
+ *  -%ENODEV:     platform_access is not supported by hardware
+ *  -%EPROBE_DEFER: PSP driver not ready or platform features not yet initialized
  */
 int psp_check_platform_access_status(void);
 

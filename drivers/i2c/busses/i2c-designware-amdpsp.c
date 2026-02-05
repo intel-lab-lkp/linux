@@ -269,6 +269,7 @@ static const struct i2c_lock_operations i2c_dw_psp_lock_ops = {
 int i2c_dw_amdpsp_probe_lock_support(struct dw_i2c_dev *dev)
 {
 	struct pci_dev *rdev;
+	int ret;
 
 	if (!IS_REACHABLE(CONFIG_CRYPTO_DEV_CCP_DD))
 		return -ENODEV;
@@ -291,8 +292,9 @@ int i2c_dw_amdpsp_probe_lock_support(struct dw_i2c_dev *dev)
 		_psp_send_i2c_req = psp_send_i2c_req_doorbell;
 	pci_dev_put(rdev);
 
-	if (psp_check_platform_access_status())
-		return -EPROBE_DEFER;
+	ret = psp_check_platform_access_status();
+	if (ret)
+		return ret;
 
 	psp_i2c_dev = dev->dev;
 
