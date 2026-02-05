@@ -1936,9 +1936,14 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 	if (ret)
 		goto out_free;
 
-	if (nested_npt_enabled(svm) &&
-	    (kvm_state->hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT))
-		svm_set_gpat(svm, kvm_state->hdr.svm.gpat);
+	if (nested_npt_enabled(svm)) {
+		if (kvm_state->hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT) {
+			svm_set_gpat(svm, kvm_state->hdr.svm.gpat);
+		} else {
+			svm_set_gpat(svm, vcpu->arch.pat);
+			svm->nested.legacy_gpat_semantics = true;
+		}
+	}
 
 	svm->nested.force_msr_bitmap_recalc = true;
 

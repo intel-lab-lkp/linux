@@ -221,6 +221,13 @@ struct svm_nested_state {
 	 * on its side.
 	 */
 	bool force_msr_bitmap_recalc;
+
+	/*
+	 * Indicates that a legacy nested state was restored (without a
+	 * valid gPAT). In this mode, updates to hPAT are also applied to
+	 * gPAT, preserving the old behavior where L2 shared L1's PAT.
+	 */
+	bool legacy_gpat_semantics;
 };
 
 struct vcpu_sev_es_state {
@@ -604,6 +611,8 @@ static inline void svm_set_hpat(struct vcpu_svm *svm, u64 data)
 		if (is_guest_mode(&svm->vcpu) && !nested_npt_enabled(svm))
 			svm_set_vmcb_gpat(svm->nested.vmcb02.ptr, data);
 	}
+	if (svm->nested.legacy_gpat_semantics)
+		svm_set_gpat(svm, data);
 }
 
 static inline bool nested_vnmi_enabled(struct vcpu_svm *svm)

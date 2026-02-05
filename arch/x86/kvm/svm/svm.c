@@ -4239,6 +4239,8 @@ static int svm_vcpu_pre_run(struct kvm_vcpu *vcpu)
 	if (to_kvm_sev_info(vcpu->kvm)->need_init)
 		return -EINVAL;
 
+	to_svm(vcpu)->nested.legacy_gpat_semantics = false;
+
 	return 1;
 }
 
