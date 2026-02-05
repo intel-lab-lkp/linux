@@ -137,7 +137,7 @@ static void netfs_read_unlock_folios(struct netfs_io_request *rreq,
 		rreq->front_folio_order = order;
 		fsize = PAGE_SIZE << order;
 		fpos = folio_pos(folio);
-		fend = umin(fpos + fsize, rreq->i_size);
+		fend = fpos + fsize;
 
 		trace_netfs_collect_folio(rreq, folio, fend, collected_to);
 
@@ -281,8 +281,10 @@ reassess:
 		} else if (test_bit(NETFS_RREQ_SHORT_TRANSFER, &rreq->flags)) {
 			notes |= MADE_PROGRESS;
 		} else {
-			if (!stream->failed)
+			if (!stream->failed) {
 				stream->transferred += transferred;
+				stream->transferred_valid = true;
+			}
 			if (front->transferred < front->len)
 				set_bit(NETFS_RREQ_SHORT_TRANSFER, &rreq->flags);
 			notes |= MADE_PROGRESS;

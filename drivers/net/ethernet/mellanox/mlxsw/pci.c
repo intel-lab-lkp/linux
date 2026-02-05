@@ -156,7 +156,7 @@ static int mlxsw_pci_napi_devs_init(struct mlxsw_pci *mlxsw_pci)
 	}
 	strscpy(mlxsw_pci->napi_dev_rx->name, "mlxsw_rx",
 		sizeof(mlxsw_pci->napi_dev_rx->name));
-	dev_set_threaded(mlxsw_pci->napi_dev_rx, true);
+	netif_threaded_enable(mlxsw_pci->napi_dev_rx);
 
 	return 0;
 
@@ -2541,18 +2541,6 @@ void mlxsw_pci_driver_unregister(struct pci_driver *pci_driver)
 	pci_unregister_driver(pci_driver);
 }
 EXPORT_SYMBOL(mlxsw_pci_driver_unregister);
-
-static int __init mlxsw_pci_module_init(void)
-{
-	return 0;
-}
-
-static void __exit mlxsw_pci_module_exit(void)
-{
-}
-
-module_init(mlxsw_pci_module_init);
-module_exit(mlxsw_pci_module_exit);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Jiri Pirko <jiri@mellanox.com>");

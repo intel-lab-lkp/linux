@@ -10,8 +10,7 @@
  *		Harald Freudenberger <freude@de.ibm.com>
  */
 
-#define KMSG_COMPONENT "paes_s390"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "paes_s390: " fmt
 
 #include <linux/atomic.h>
 #include <linux/cpufeature.h>
@@ -1633,7 +1632,7 @@ static int __init paes_s390_init(void)
 	/* with this pseudo devie alloc and start a crypto engine */
 	paes_crypto_engine =
 		crypto_engine_alloc_init_and_set(paes_dev.this_device,
-						 true, NULL, false, MAX_QLEN);
+						 true, false, MAX_QLEN);
 	if (!paes_crypto_engine) {
 		rc = -ENOMEM;
 		goto out_err;

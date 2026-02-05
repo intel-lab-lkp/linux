@@ -4,13 +4,18 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/iopoll.h>
+
+#include <drm/drm_print.h>
 
 #include "g4x_dp.h"
-#include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_de.h"
+#include "intel_display_jiffies.h"
 #include "intel_display_power_well.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_display_utils.h"
 #include "intel_dp.h"
 #include "intel_dpio_phy.h"
 #include "intel_dpll.h"
@@ -605,6 +610,8 @@ static void wait_panel_status(struct intel_dp *intel_dp,
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	i915_reg_t pp_stat_reg, pp_ctrl_reg;
+	int ret;
+	u32 val;
 
 	lockdep_assert_held(&display->pps.mutex);
 
@@ -621,13 +628,18 @@ static void wait_panel_status(struct intel_dp *intel_dp,
 		    intel_de_read(display, pp_stat_reg),
 		    intel_de_read(display, pp_ctrl_reg));
 
-	if (intel_de_wait(display, pp_stat_reg, mask, value, 5000))
+	ret = poll_timeout_us(val = intel_de_read(display, pp_stat_reg),
+			      (val & mask) == value,
+			      10 * 1000, 5000 * 1000, true);
+	if (ret) {
 		drm_err(display->drm,
 			"[ENCODER:%d:%s] %s panel status timeout: PP_STATUS: 0x%08x PP_CONTROL: 0x%08x\n",
 			dig_port->base.base.base.id, dig_port->base.base.name,
 			pps_name(intel_dp),
 			intel_de_read(display, pp_stat_reg),
 			intel_de_read(display, pp_ctrl_reg));
+		return;
+	}
 
 	drm_dbg_kms(display->drm, "Wait complete\n");
 }
@@ -891,7 +903,6 @@ static void edp_panel_vdd_work(struct work_struct *__work)
 static void edp_panel_vdd_schedule_off(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
-	struct drm_i915_private *i915 = to_i915(display->drm);
 	unsigned long delay;
 
 	/*
@@ -907,7 +918,7 @@ static void edp_panel_vdd_schedule_off(struct intel_dp *intel_dp)
 	 * operations.
 	 */
 	delay = msecs_to_jiffies(intel_dp->pps.panel_power_cycle_delay * 5);
-	queue_delayed_work(i915->unordered_wq,
+	queue_delayed_work(display->wq.unordered,
 			   &intel_dp->pps.panel_vdd_work, delay);
 }
 

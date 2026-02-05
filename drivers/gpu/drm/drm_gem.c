@@ -26,6 +26,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/export.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/iosys-map.h>
@@ -100,10 +101,8 @@ drm_gem_init(struct drm_device *dev)
 
 	vma_offset_manager = drmm_kzalloc(dev, sizeof(*vma_offset_manager),
 					  GFP_KERNEL);
-	if (!vma_offset_manager) {
-		DRM_ERROR("out of memory\n");
+	if (!vma_offset_manager)
 		return -ENOMEM;
-	}
 
 	dev->vma_offset_manager = vma_offset_manager;
 	drm_vma_offset_manager_init(vma_offset_manager,
@@ -186,6 +185,7 @@ void drm_gem_private_object_init(struct drm_device *dev,
 	kref_init(&obj->refcount);
 	obj->handle_count = 0;
 	obj->size = size;
+	mutex_init(&obj->gpuva.lock);
 	dma_resv_init(&obj->_resv);
 	if (!obj->resv)
 		obj->resv = &obj->_resv;
@@ -209,6 +209,7 @@ void drm_gem_private_object_fini(struct drm_gem_object *obj)
 	WARN_ON(obj->dma_buf);
 
 	dma_resv_fini(&obj->_resv);
+	mutex_destroy(&obj->gpuva.lock);
 }
 EXPORT_SYMBOL(drm_gem_private_object_fini);
 
@@ -223,23 +224,34 @@ static void drm_gem_object_handle_get(struct drm_gem_object *obj)
 }
 
 /**
- * drm_gem_object_handle_get_unlocked - acquire reference on user-space handles
+ * drm_gem_object_handle_get_if_exists_unlocked - acquire reference on user-space handle, if any
  * @obj: GEM object
  *
- * Acquires a reference on the GEM buffer object's handle. Required
- * to keep the GEM object alive. Call drm_gem_object_handle_put_unlocked()
- * to release the reference.
+ * Acquires a reference on the GEM buffer object's handle. Required to keep
+ * the GEM object alive. Call drm_gem_object_handle_put_if_exists_unlocked()
+ * to release the reference. Does nothing if the buffer object has no handle.
+ *
+ * Returns:
+ * True if a handle exists, or false otherwise
  */
-void drm_gem_object_handle_get_unlocked(struct drm_gem_object *obj)
+bool drm_gem_object_handle_get_if_exists_unlocked(struct drm_gem_object *obj)
 {
 	struct drm_device *dev = obj->dev;
 
 	guard(mutex)(&dev->object_name_lock);
 
-	drm_WARN_ON(dev, !obj->handle_count); /* first ref taken in create-tail helper */
+	/*
+	 * First ref taken during GEM object creation, if any. Some
+	 * drivers set up internal framebuffers with GEM objects that
+	 * do not have a GEM handle. Hence, this counter can be zero.
+	 */
+	if (!obj->handle_count)
+		return false;
+
 	drm_gem_object_handle_get(obj);
+
+	return true;
 }
-EXPORT_SYMBOL(drm_gem_object_handle_get_unlocked);
 
 /**
  * drm_gem_object_handle_free - release resources bound to userspace handles
@@ -272,7 +284,7 @@ static void drm_gem_object_exported_dma_buf_free(struct drm_gem_object *obj)
 }
 
 /**
- * drm_gem_object_handle_put_unlocked - releases reference on user-space handles
+ * drm_gem_object_handle_put_unlocked - releases reference on user-space handle
  * @obj: GEM object
  *
  * Releases a reference on the GEM buffer object's handle. Possibly releases
@@ -283,14 +295,14 @@ void drm_gem_object_handle_put_unlocked(struct drm_gem_object *obj)
 	struct drm_device *dev = obj->dev;
 	bool final = false;
 
-	if (WARN_ON(READ_ONCE(obj->handle_count) == 0))
+	if (drm_WARN_ON(dev, READ_ONCE(obj->handle_count) == 0))
 		return;
 
 	/*
-	* Must bump handle count first as this may be the last
-	* ref, in which case the object would disappear before we
-	* checked for a name
-	*/
+	 * Must bump handle count first as this may be the last
+	 * ref, in which case the object would disappear before
+	 * we checked for a name.
+	 */
 
 	mutex_lock(&dev->object_name_lock);
 	if (--obj->handle_count == 0) {
@@ -303,7 +315,6 @@ void drm_gem_object_handle_put_unlocked(struct drm_gem_object *obj)
 	if (final)
 		drm_gem_object_put(obj);
 }
-EXPORT_SYMBOL(drm_gem_object_handle_put_unlocked);
 
 /*
  * Called at device or object close to release the file's
@@ -315,10 +326,18 @@ drm_gem_object_release_handle(int id, void *ptr, void *data)
 	struct drm_file *file_priv = data;
 	struct drm_gem_object *obj = ptr;
 
+	if (drm_WARN_ON(obj->dev, !data))
+		return 0;
+
 	if (obj->funcs->close)
 		obj->funcs->close(obj, file_priv);
 
+	mutex_lock(&file_priv->prime.lock);
+
 	drm_prime_remove_buf_handle(&file_priv->prime, id);
+
+	mutex_unlock(&file_priv->prime.lock);
+
 	drm_vma_node_revoke(&obj->vma_node, file_priv);
 
 	drm_gem_object_handle_put_unlocked(obj);
@@ -435,7 +454,7 @@ drm_gem_handle_create_tail(struct drm_file *file_priv,
 	idr_preload(GFP_KERNEL);
 	spin_lock(&file_priv->table_lock);
 
-	ret = idr_alloc(&file_priv->object_idr, obj, 1, 0, GFP_NOWAIT);
+	ret = idr_alloc(&file_priv->object_idr, NULL, 1, 0, GFP_NOWAIT);
 
 	spin_unlock(&file_priv->table_lock);
 	idr_preload_end();
@@ -456,6 +475,11 @@ drm_gem_handle_create_tail(struct drm_file *file_priv,
 			goto err_revoke;
 	}
 
+	/* mirrors drm_gem_handle_delete to avoid races */
+	spin_lock(&file_priv->table_lock);
+	obj = idr_replace(&file_priv->object_idr, obj, handle);
+	WARN_ON(obj != NULL);
+	spin_unlock(&file_priv->table_lock);
 	*handlep = handle;
 	return 0;
 
@@ -602,7 +626,7 @@ struct page **drm_gem_get_pages(struct drm_gem_object *obj)
 	struct page **pages;
 	struct folio *folio;
 	struct folio_batch fbatch;
-	long i, j, npages;
+	unsigned long i, j, npages;
 
 	if (WARN_ON(!obj->filp))
 		return ERR_PTR(-EINVAL);
@@ -626,7 +650,7 @@ struct page **drm_gem_get_pages(struct drm_gem_object *obj)
 
 	i = 0;
 	while (i < npages) {
-		long nr;
+		unsigned long nr;
 		folio = shmem_read_folio_gfp(mapping, i,
 				mapping_gfp_mask(mapping));
 		if (IS_ERR(folio))
@@ -759,9 +783,9 @@ static int objects_lookup(struct drm_file *filp, u32 *handle, int count,
 int drm_gem_objects_lookup(struct drm_file *filp, void __user *bo_handles,
 			   int count, struct drm_gem_object ***objs_out)
 {
-	int ret;
-	u32 *handles;
 	struct drm_gem_object **objs;
+	u32 *handles;
+	int ret;
 
 	if (!count)
 		return 0;
@@ -773,20 +797,11 @@ int drm_gem_objects_lookup(struct drm_file *filp, void __user *bo_handles,
 
 	*objs_out = objs;
 
-	handles = kvmalloc_array(count, sizeof(u32), GFP_KERNEL);
-	if (!handles) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	if (copy_from_user(handles, bo_handles, count * sizeof(u32))) {
-		ret = -EFAULT;
-		DRM_DEBUG("Failed to copy in GEM handles\n");
-		goto out;
-	}
+	handles = vmemdup_array_user(bo_handles, count, sizeof(u32));
+	if (IS_ERR(handles))
+		return PTR_ERR(handles);
 
 	ret = objects_lookup(filp, handles, count, objs);
-out:
 	kvfree(handles);
 	return ret;
 
@@ -829,12 +844,13 @@ EXPORT_SYMBOL(drm_gem_object_lookup);
 long drm_gem_dma_resv_wait(struct drm_file *filep, u32 handle,
 				    bool wait_all, unsigned long timeout)
 {
-	long ret;
+	struct drm_device *dev = filep->minor->dev;
 	struct drm_gem_object *obj;
+	long ret;
 
 	obj = drm_gem_object_lookup(filep, handle);
 	if (!obj) {
-		DRM_DEBUG("Failed to look up GEM BO %d\n", handle);
+		drm_dbg_core(dev, "Failed to look up GEM BO %d\n", handle);
 		return -EINVAL;
 	}
 
@@ -851,14 +867,6 @@ long drm_gem_dma_resv_wait(struct drm_file *filep, u32 handle,
 }
 EXPORT_SYMBOL(drm_gem_dma_resv_wait);
 
-/**
- * drm_gem_close_ioctl - implementation of the GEM_CLOSE ioctl
- * @dev: drm_device
- * @data: ioctl data
- * @file_priv: drm file-private structure
- *
- * Releases the handle to an mm object.
- */
 int
 drm_gem_close_ioctl(struct drm_device *dev, void *data,
 		    struct drm_file *file_priv)
@@ -874,17 +882,6 @@ drm_gem_close_ioctl(struct drm_device *dev, void *data,
 	return ret;
 }
 
-/**
- * drm_gem_flink_ioctl - implementation of the GEM_FLINK ioctl
- * @dev: drm_device
- * @data: ioctl data
- * @file_priv: drm file-private structure
- *
- * Create a global name for an object, returning the name.
- *
- * Note that the name does not hold a reference; when the object
- * is freed, the name goes away.
- */
 int
 drm_gem_flink_ioctl(struct drm_device *dev, void *data,
 		    struct drm_file *file_priv)
@@ -924,17 +921,6 @@ err:
 	return ret;
 }
 
-/**
- * drm_gem_open_ioctl - implementation of the GEM_OPEN ioctl
- * @dev: drm_device
- * @data: ioctl data
- * @file_priv: drm file-private structure
- *
- * Open an object using the global name, returning a handle and the size.
- *
- * This handle (of course) holds a reference to the object, so the object
- * will not go away until the handle is deleted.
- */
 int
 drm_gem_open_ioctl(struct drm_device *dev, void *data,
 		   struct drm_file *file_priv)
@@ -966,6 +952,61 @@ drm_gem_open_ioctl(struct drm_device *dev, void *data,
 
 err:
 	drm_gem_object_put(obj);
+	return ret;
+}
+
+int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file_priv)
+{
+	struct drm_gem_change_handle *args = data;
+	struct drm_gem_object *obj;
+	int ret;
+
+	if (!drm_core_check_feature(dev, DRIVER_GEM))
+		return -EOPNOTSUPP;
+
+	obj = drm_gem_object_lookup(file_priv, args->handle);
+	if (!obj)
+		return -ENOENT;
+
+	if (args->handle == args->new_handle) {
+		ret = 0;
+		goto out;
+	}
+
+	mutex_lock(&file_priv->prime.lock);
+
+	spin_lock(&file_priv->table_lock);
+	ret = idr_alloc(&file_priv->object_idr, obj,
+		args->new_handle, args->new_handle + 1, GFP_NOWAIT);
+	spin_unlock(&file_priv->table_lock);
+
+	if (ret < 0)
+		goto out_unlock;
+
+	if (obj->dma_buf) {
+		ret = drm_prime_add_buf_handle(&file_priv->prime, obj->dma_buf, args->new_handle);
+		if (ret < 0) {
+			spin_lock(&file_priv->table_lock);
+			idr_remove(&file_priv->object_idr, args->new_handle);
+			spin_unlock(&file_priv->table_lock);
+			goto out_unlock;
+		}
+
+		drm_prime_remove_buf_handle(&file_priv->prime, args->handle);
+	}
+
+	ret = 0;
+
+	spin_lock(&file_priv->table_lock);
+	idr_remove(&file_priv->object_idr, args->handle);
+	spin_unlock(&file_priv->table_lock);
+
+out_unlock:
+	mutex_unlock(&file_priv->prime.lock);
+out:
+	drm_gem_object_put(obj);
+
 	return ret;
 }
 
@@ -1220,38 +1261,6 @@ void drm_gem_print_info(struct drm_printer *p, unsigned int indent,
 		obj->funcs->print_info(p, indent, obj);
 }
 
-int drm_gem_pin_locked(struct drm_gem_object *obj)
-{
-	if (obj->funcs->pin)
-		return obj->funcs->pin(obj);
-
-	return 0;
-}
-
-void drm_gem_unpin_locked(struct drm_gem_object *obj)
-{
-	if (obj->funcs->unpin)
-		obj->funcs->unpin(obj);
-}
-
-int drm_gem_pin(struct drm_gem_object *obj)
-{
-	int ret;
-
-	dma_resv_lock(obj->resv, NULL);
-	ret = drm_gem_pin_locked(obj);
-	dma_resv_unlock(obj->resv);
-
-	return ret;
-}
-
-void drm_gem_unpin(struct drm_gem_object *obj)
-{
-	dma_resv_lock(obj->resv, NULL);
-	drm_gem_unpin_locked(obj);
-	dma_resv_unlock(obj->resv);
-}
-
 int drm_gem_vmap_locked(struct drm_gem_object *obj, struct iosys_map *map)
 {
 	int ret;
@@ -1496,12 +1505,14 @@ EXPORT_SYMBOL(drm_gem_lru_move_tail);
  * @nr_to_scan: The number of pages to try to reclaim
  * @remaining: The number of pages left to reclaim, should be initialized by caller
  * @shrink: Callback to try to shrink/reclaim the object.
+ * @ticket: Optional ww_acquire_ctx context to use for locking
  */
 unsigned long
 drm_gem_lru_scan(struct drm_gem_lru *lru,
 		 unsigned int nr_to_scan,
 		 unsigned long *remaining,
-		 bool (*shrink)(struct drm_gem_object *obj))
+		 bool (*shrink)(struct drm_gem_object *obj, struct ww_acquire_ctx *ticket),
+		 struct ww_acquire_ctx *ticket)
 {
 	struct drm_gem_lru still_in_lru;
 	struct drm_gem_object *obj;
@@ -1534,17 +1545,20 @@ drm_gem_lru_scan(struct drm_gem_lru *lru,
 		 */
 		mutex_unlock(lru->lock);
 
+		if (ticket)
+			ww_acquire_init(ticket, &reservation_ww_class);
+
 		/*
 		 * Note that this still needs to be trylock, since we can
 		 * hit shrinker in response to trying to get backing pages
 		 * for this obj (ie. while it's lock is already held)
 		 */
-		if (!dma_resv_trylock(obj->resv)) {
+		if (!ww_mutex_trylock(&obj->resv->lock, ticket)) {
 			*remaining += obj->size >> PAGE_SHIFT;
 			goto tail;
 		}
 
-		if (shrink(obj)) {
+		if (shrink(obj, ticket)) {
 			freed += obj->size >> PAGE_SHIFT;
 
 			/*
@@ -1557,6 +1571,9 @@ drm_gem_lru_scan(struct drm_gem_lru *lru,
 		}
 
 		dma_resv_unlock(obj->resv);
+
+		if (ticket)
+			ww_acquire_fini(ticket);
 
 tail:
 		drm_gem_object_put(obj);

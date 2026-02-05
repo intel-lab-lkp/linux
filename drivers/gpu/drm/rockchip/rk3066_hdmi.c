@@ -10,6 +10,7 @@
 #include <drm/display/drm_hdmi_state_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
+#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
 
@@ -450,7 +451,7 @@ struct drm_encoder_helper_funcs rk3066_hdmi_encoder_helper_funcs = {
 };
 
 static enum drm_connector_status
-rk3066_hdmi_bridge_detect(struct drm_bridge *bridge)
+rk3066_hdmi_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector)
 {
 	struct rk3066_hdmi *hdmi = bridge_to_rk3066_hdmi(bridge);
 

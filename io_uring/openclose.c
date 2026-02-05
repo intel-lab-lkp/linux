@@ -14,6 +14,7 @@
 
 #include "../fs/internal.h"
 
+#include "filetable.h"
 #include "io_uring.h"
 #include "rsrc.h"
 #include "openclose.h"
@@ -72,13 +73,13 @@ static int __io_openat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe
 		open->filename = NULL;
 		return ret;
 	}
+	req->flags |= REQ_F_NEED_CLEANUP;
 
 	open->file_slot = READ_ONCE(sqe->file_index);
 	if (open->file_slot && (open->how.flags & O_CLOEXEC))
 		return -EINVAL;
 
 	open->nofile = rlimit(RLIMIT_NOFILE);
-	req->flags |= REQ_F_NEED_CLEANUP;
 	if (io_openat_force_async(open))
 		req->flags |= REQ_F_FORCE_ASYNC;
 	return 0;
@@ -416,8 +417,6 @@ int io_pipe(struct io_kiocb *req, unsigned int issue_flags)
 	ret = create_pipe_files(files, p->flags);
 	if (ret)
 		return ret;
-	files[0]->f_mode |= FMODE_NOWAIT;
-	files[1]->f_mode |= FMODE_NOWAIT;
 
 	if (!!p->file_slot)
 		ret = io_pipe_fixed(req, files, issue_flags);

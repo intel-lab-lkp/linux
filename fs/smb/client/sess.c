@@ -265,12 +265,16 @@ int cifs_try_adding_channels(struct cifs_ses *ses)
 }
 
 /*
- * called when multichannel is disabled by the server.
- * this always gets called from smb2_reconnect
- * and cannot get called in parallel threads.
+ * cifs_decrease_secondary_channels - Reduce the number of active secondary channels
+ * @ses: pointer to the CIFS session structure
+ * @disable_mchan: if true, reduce to a single channel; if false, reduce to chan_max
+ *
+ * This function disables and cleans up extra secondary channels for a CIFS session.
+ * If called during reconfiguration, it reduces the channel count to the new maximum (chan_max).
+ * Otherwise, it disables all but the primary channel.
  */
 void
-cifs_disable_secondary_channels(struct cifs_ses *ses)
+cifs_decrease_secondary_channels(struct cifs_ses *ses, bool disable_mchan)
 {
 	int i, chan_count;
 	struct TCP_Server_Info *server;
@@ -281,12 +285,16 @@ cifs_disable_secondary_channels(struct cifs_ses *ses)
 	if (chan_count == 1)
 		goto done;
 
-	ses->chan_count = 1;
+	/* Update the chan_count to the new maximum */
+	if (disable_mchan) {
+		cifs_dbg(FYI, "server does not support multichannel anymore.\n");
+		ses->chan_count = 1;
+	} else {
+		ses->chan_count = ses->chan_max;
+	}
 
-	/* for all secondary channels reset the need reconnect bit */
-	ses->chans_need_reconnect &= 1;
-
-	for (i = 1; i < chan_count; i++) {
+	/* Disable all secondary channels beyond the new chan_count */
+	for (i = ses->chan_count ; i < chan_count; i++) {
 		iface = ses->chans[i].iface;
 		server = ses->chans[i].server;
 
@@ -318,6 +326,15 @@ cifs_disable_secondary_channels(struct cifs_ses *ses)
 		spin_lock(&ses->chan_lock);
 	}
 
+	/* For extra secondary channels, reset the need reconnect bit */
+	if (ses->chan_count == 1) {
+		cifs_dbg(VFS, "Disable all secondary channels\n");
+		ses->chans_need_reconnect &= 1;
+	} else {
+		cifs_dbg(VFS, "Disable extra secondary channels\n");
+		ses->chans_need_reconnect &= ((1UL << ses->chan_max) - 1);
+	}
+
 done:
 	spin_unlock(&ses->chan_lock);
 }
@@ -332,6 +349,7 @@ cifs_chan_update_iface(struct cifs_ses *ses, struct TCP_Server_Info *server)
 	struct cifs_server_iface *old_iface = NULL;
 	struct cifs_server_iface *last_iface = NULL;
 	struct sockaddr_storage ss;
+	int retry = 0;
 
 	spin_lock(&ses->chan_lock);
 	chan_index = cifs_ses_get_chan_index(ses, server);
@@ -360,6 +378,7 @@ cifs_chan_update_iface(struct cifs_ses *ses, struct TCP_Server_Info *server)
 		return;
 	}
 
+try_again:
 	last_iface = list_last_entry(&ses->iface_list, struct cifs_server_iface,
 				     iface_head);
 	iface_min_speed = last_iface->speed;
@@ -397,6 +416,13 @@ cifs_chan_update_iface(struct cifs_ses *ses, struct TCP_Server_Info *server)
 	}
 
 	if (list_entry_is_head(iface, &ses->iface_list, iface_head)) {
+		list_for_each_entry(iface, &ses->iface_list, iface_head)
+			iface->weight_fulfilled = 0;
+
+		/* see if it can be satisfied in second attempt */
+		if (!retry++)
+			goto try_again;
+
 		iface = NULL;
 		cifs_dbg(FYI, "unable to find a suitable iface\n");
 	}
@@ -575,7 +601,7 @@ cifs_ses_add_channel(struct cifs_ses *ses,
 	 * to sign packets before we generate the channel signing key
 	 * (we sign with the session key)
 	 */
-	rc = smb311_crypto_shash_allocate(chan->server);
+	rc = smb3_crypto_shash_allocate(chan->server);
 	if (rc) {
 		cifs_dbg(VFS, "%s: crypto alloc failed\n", __func__);
 		mutex_unlock(&ses->session_mutex);
@@ -1304,6 +1330,7 @@ struct sess_data {
 	struct nls_table *nls_cp;
 	void (*func)(struct sess_data *);
 	int result;
+	unsigned int in_len;
 
 	/* we will send the SMB in three pieces:
 	 * a fixed length beginning part, an optional
@@ -1327,11 +1354,12 @@ sess_alloc_buffer(struct sess_data *sess_data, int wct)
 	rc = small_smb_init_no_tc(SMB_COM_SESSION_SETUP_ANDX, wct, ses,
 				  (void **)&smb_buf);
 
-	if (rc)
+	if (rc < 0)
 		return rc;
 
+	sess_data->in_len = rc;
 	sess_data->iov[0].iov_base = (char *)smb_buf;
-	sess_data->iov[0].iov_len = be32_to_cpu(smb_buf->smb_buf_length) + 4;
+	sess_data->iov[0].iov_len = sess_data->in_len;
 	/*
 	 * This variable will be used to clear the buffer
 	 * allocated above in case of any error in the calling function.
@@ -1409,7 +1437,7 @@ sess_sendreceive(struct sess_data *sess_data)
 	struct kvec rsp_iov = { NULL, 0 };
 
 	count = sess_data->iov[1].iov_len + sess_data->iov[2].iov_len;
-	be32_add_cpu(&smb_buf->smb_buf_length, count);
+	sess_data->in_len += count;
 	put_bcc(count, smb_buf);
 
 	rc = SendReceive2(sess_data->xid, sess_data->ses,
@@ -1492,7 +1520,7 @@ sess_auth_ntlmv2(struct sess_data *sess_data)
 	smb_buf = (struct smb_hdr *)sess_data->iov[0].iov_base;
 
 	if (smb_buf->WordCount != 3) {
-		rc = -EIO;
+		rc = smb_EIO1(smb_eio_trace_sess_nl2_wcc, smb_buf->WordCount);
 		cifs_dbg(VFS, "bad word count %d\n", smb_buf->WordCount);
 		goto out;
 	}
@@ -1618,7 +1646,7 @@ sess_auth_kerberos(struct sess_data *sess_data)
 	smb_buf = (struct smb_hdr *)sess_data->iov[0].iov_base;
 
 	if (smb_buf->WordCount != 4) {
-		rc = -EIO;
+		rc = smb_EIO1(smb_eio_trace_sess_krb_wcc, smb_buf->WordCount);
 		cifs_dbg(VFS, "bad word count %d\n", smb_buf->WordCount);
 		goto out_put_spnego_key;
 	}
@@ -1779,7 +1807,7 @@ sess_auth_rawntlmssp_negotiate(struct sess_data *sess_data)
 	cifs_dbg(FYI, "rawntlmssp session setup challenge phase\n");
 
 	if (smb_buf->WordCount != 4) {
-		rc = -EIO;
+		rc = smb_EIO1(smb_eio_trace_sess_rawnl_neg_wcc, smb_buf->WordCount);
 		cifs_dbg(VFS, "bad word count %d\n", smb_buf->WordCount);
 		goto out_free_ntlmsspblob;
 	}
@@ -1869,7 +1897,7 @@ sess_auth_rawntlmssp_authenticate(struct sess_data *sess_data)
 	pSMB = (SESSION_SETUP_ANDX *)sess_data->iov[0].iov_base;
 	smb_buf = (struct smb_hdr *)sess_data->iov[0].iov_base;
 	if (smb_buf->WordCount != 4) {
-		rc = -EIO;
+		rc = smb_EIO1(smb_eio_trace_sess_rawnl_auth_wcc, smb_buf->WordCount);
 		cifs_dbg(VFS, "bad word count %d\n", smb_buf->WordCount);
 		goto out_free_ntlmsspblob;
 	}

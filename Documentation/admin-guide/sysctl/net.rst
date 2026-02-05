@@ -212,6 +212,14 @@ mem_pcpu_rsv
 
 Per-cpu reserved forward alloc cache size in page units. Default 1MB per CPU.
 
+bypass_prot_mem
+---------------
+
+Skip charging socket buffers to the global per-protocol memory
+accounting controlled by net.ipv4.tcp_mem, net.ipv4.udp_mem, etc.
+
+Default: 0 (off)
+
 rmem_default
 ------------
 
@@ -221,6 +229,8 @@ rmem_max
 --------
 
 The maximum receive socket buffer size in bytes.
+
+Default: 4194304
 
 rps_default_mask
 ----------------
@@ -246,6 +256,8 @@ wmem_max
 --------
 
 The maximum send socket buffer size in bytes.
+
+Default: 4194304
 
 message_burst and message_cost
 ------------------------------
@@ -291,24 +303,33 @@ netdev_max_backlog
 Maximum number of packets, queued on the INPUT side, when the interface
 receives packets faster than kernel can process them.
 
+qdisc_max_burst
+------------------
+
+Maximum number of packets that can be temporarily stored before
+reaching qdisc.
+
+Default: 1000
+
 netdev_rss_key
 --------------
 
-RSS (Receive Side Scaling) enabled drivers use a 40 bytes host key that is
-randomly generated.
+RSS (Receive Side Scaling) enabled drivers use a host key that
+is randomly generated.
 Some user space might need to gather its content even if drivers do not
 provide ethtool -x support yet.
 
 ::
 
   myhost:~# cat /proc/sys/net/core/netdev_rss_key
-  84:50:f4:00:a8:15:d1:a7:e9:7f:1d:60:35:c7:47:25:42:97:74:ca:56:bb:b6:a1:d8: ... (52 bytes total)
+  84:50:f4:00:a8:15:d1:a7:e9:7f:1d:60:35:c7:47:25:42:97:74:ca:56:bb:b6:a1:d8: ... (256 bytes total)
 
-File contains nul bytes if no driver ever called netdev_rss_key_fill() function.
+File contains all nul bytes if no driver ever called netdev_rss_key_fill()
+function.
 
 Note:
-  /proc/sys/net/core/netdev_rss_key contains 52 bytes of key,
-  but most drivers only use 40 bytes of it.
+  /proc/sys/net/core/netdev_rss_key contains 256 bytes of key,
+  but many drivers only use 40 or 52 bytes of it.
 
 ::
 
@@ -343,9 +364,9 @@ skb_defer_max
 -------------
 
 Max size (in skbs) of the per-cpu list of skbs being freed
-by the cpu which allocated them. Used by TCP stack so far.
+by the cpu which allocated them.
 
-Default: 64
+Default: 128
 
 optmem_max
 ----------
@@ -401,6 +422,23 @@ to SOCK_TXREHASH_DEFAULT (i. e. not overridden by setsockopt).
 
 If set to 1 (default), hash rethink is performed on listening socket.
 If set to 0, hash rethink is not performed.
+
+txq_reselection_ms
+------------------
+
+Controls how often (in ms) a busy connected flow can select another tx queue.
+
+A resection is desirable when/if user thread has migrated and XPS
+would select a different queue. Same can occur without XPS
+if the flow hash has changed.
+
+But switching txq can introduce reorders, especially if the
+old queue is under high pressure. Modern TCP stacks deal
+well with reorders if they happen not too often.
+
+To disable this feature, set the value to 0.
+
+Default : 1000
 
 gro_normal_batch
 ----------------

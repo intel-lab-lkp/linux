@@ -231,6 +231,8 @@ eventually gets pushed out to disk.  This tunable is used to define when dirty
 inode is old enough to be eligible for writeback by the kernel flusher threads.
 And, it is also used as the interval to wakeup dirtytime_writeback thread.
 
+Setting this to zero disables periodic dirtytime writeback.
+
 
 dirty_writeback_centisecs
 =========================
@@ -465,8 +467,8 @@ The minimum value is 1 (1/1 -> 100%). The value less than 1 completely
 disables protection of the pages.
 
 
-max_map_count:
-==============
+max_map_count
+=============
 
 This file contains the maximum number of memory map areas a process
 may have. Memory map areas are used as a side-effect of calling
@@ -494,9 +496,13 @@ memory allocations.
 
 The default value depends on CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT.
 
+When CONFIG_MEM_ALLOC_PROFILING_DEBUG=y, this control is read-only to avoid
+warnings produced by allocations made while profiling is disabled and freed
+when it's enabled.
 
-memory_failure_early_kill:
-==========================
+
+memory_failure_early_kill
+=========================
 
 Control how to kill processes when uncorrected memory error (typically
 a 2bit error in a memory module) is detected in the background by hardware

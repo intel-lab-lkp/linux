@@ -445,15 +445,17 @@ struct fib6_dump_arg {
 static int fib6_rt_dump(struct fib6_info *rt, struct fib6_dump_arg *arg)
 {
 	enum fib_event_type fib_event = FIB_EVENT_ENTRY_REPLACE;
+	unsigned int nsiblings;
 	int err;
 
 	if (!rt || rt == arg->net->ipv6.fib6_null_entry)
 		return 0;
 
-	if (rt->fib6_nsiblings)
+	nsiblings = READ_ONCE(rt->fib6_nsiblings);
+	if (nsiblings)
 		err = call_fib6_multipath_entry_notifier(arg->nb, fib_event,
 							 rt,
-							 rt->fib6_nsiblings,
+							 nsiblings,
 							 arg->extack);
 	else
 		err = call_fib6_entry_notifier(arg->nb, fib_event, rt,
@@ -1126,7 +1128,7 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct fib6_info *rt,
 
 			if (rt6_duplicate_nexthop(iter, rt)) {
 				if (rt->fib6_nsiblings)
-					rt->fib6_nsiblings = 0;
+					WRITE_ONCE(rt->fib6_nsiblings, 0);
 				if (!(iter->fib6_flags & RTF_EXPIRES))
 					return -EEXIST;
 				if (!(rt->fib6_flags & RTF_EXPIRES)) {
@@ -1135,6 +1137,10 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct fib6_info *rt,
 				} else {
 					fib6_set_expires(iter, rt->expires);
 					fib6_add_gc_list(iter);
+				}
+				if (!(rt->fib6_flags & (RTF_ADDRCONF | RTF_PREFIX_RT))) {
+					iter->fib6_flags &= ~RTF_ADDRCONF;
+					iter->fib6_flags &= ~RTF_PREFIX_RT;
 				}
 
 				if (rt->fib6_pmtu)
@@ -1155,7 +1161,8 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct fib6_info *rt,
 			 */
 			if (rt_can_ecmp &&
 			    rt6_qualify_for_ecmp(iter))
-				rt->fib6_nsiblings++;
+				WRITE_ONCE(rt->fib6_nsiblings,
+					   rt->fib6_nsiblings + 1);
 		}
 
 		if (iter->fib6_metric > rt->fib6_metric)
@@ -1205,7 +1212,8 @@ next_iter:
 		fib6_nsiblings = 0;
 		list_for_each_entry_safe(sibling, temp_sibling,
 					 &rt->fib6_siblings, fib6_siblings) {
-			sibling->fib6_nsiblings++;
+			WRITE_ONCE(sibling->fib6_nsiblings,
+				   sibling->fib6_nsiblings + 1);
 			BUG_ON(sibling->fib6_nsiblings != rt->fib6_nsiblings);
 			fib6_nsiblings++;
 		}
@@ -1252,8 +1260,9 @@ add:
 				list_for_each_entry_safe(sibling, next_sibling,
 							 &rt->fib6_siblings,
 							 fib6_siblings)
-					sibling->fib6_nsiblings--;
-				rt->fib6_nsiblings = 0;
+					WRITE_ONCE(sibling->fib6_nsiblings,
+						   sibling->fib6_nsiblings - 1);
+				WRITE_ONCE(rt->fib6_nsiblings, 0);
 				list_del_rcu(&rt->fib6_siblings);
 				rcu_read_lock();
 				rt6_multipath_rebalance(next_sibling);
@@ -1365,14 +1374,14 @@ static void fib6_start_gc(struct net *net, struct fib6_info *rt)
 	if (!timer_pending(&net->ipv6.ip6_fib_timer) &&
 	    (rt->fib6_flags & RTF_EXPIRES))
 		mod_timer(&net->ipv6.ip6_fib_timer,
-			  jiffies + net->ipv6.sysctl.ip6_rt_gc_interval);
+			  jiffies + READ_ONCE(net->ipv6.sysctl.ip6_rt_gc_interval));
 }
 
 void fib6_force_start_gc(struct net *net)
 {
 	if (!timer_pending(&net->ipv6.ip6_fib_timer))
 		mod_timer(&net->ipv6.ip6_fib_timer,
-			  jiffies + net->ipv6.sysctl.ip6_rt_gc_interval);
+			  jiffies + READ_ONCE(net->ipv6.sysctl.ip6_rt_gc_interval));
 }
 
 static void __fib6_update_sernum_upto_root(struct fib6_info *rt,
@@ -2002,8 +2011,9 @@ static void fib6_del_route(struct fib6_table *table, struct fib6_node *fn,
 			notify_del = true;
 		list_for_each_entry_safe(sibling, next_sibling,
 					 &rt->fib6_siblings, fib6_siblings)
-			sibling->fib6_nsiblings--;
-		rt->fib6_nsiblings = 0;
+			WRITE_ONCE(sibling->fib6_nsiblings,
+				   sibling->fib6_nsiblings - 1);
+		WRITE_ONCE(rt->fib6_nsiblings, 0);
 		list_del_rcu(&rt->fib6_siblings);
 		rt6_multipath_rebalance(next_sibling);
 	}
@@ -2403,6 +2413,7 @@ static void fib6_gc_all(struct net *net, struct fib6_gc_args *gc_args)
 void fib6_run_gc(unsigned long expires, struct net *net, bool force)
 {
 	struct fib6_gc_args gc_args;
+	int ip6_rt_gc_interval;
 	unsigned long now;
 
 	if (force) {
@@ -2411,8 +2422,8 @@ void fib6_run_gc(unsigned long expires, struct net *net, bool force)
 		mod_timer(&net->ipv6.ip6_fib_timer, jiffies + HZ);
 		return;
 	}
-	gc_args.timeout = expires ? (int)expires :
-			  net->ipv6.sysctl.ip6_rt_gc_interval;
+	ip6_rt_gc_interval = READ_ONCE(net->ipv6.sysctl.ip6_rt_gc_interval);
+	gc_args.timeout = expires ? (int)expires : ip6_rt_gc_interval;
 	gc_args.more = 0;
 
 	fib6_gc_all(net, &gc_args);
@@ -2421,8 +2432,7 @@ void fib6_run_gc(unsigned long expires, struct net *net, bool force)
 
 	if (gc_args.more)
 		mod_timer(&net->ipv6.ip6_fib_timer,
-			  round_jiffies(now
-					+ net->ipv6.sysctl.ip6_rt_gc_interval));
+			  round_jiffies(now + ip6_rt_gc_interval));
 	else
 		timer_delete(&net->ipv6.ip6_fib_timer);
 	spin_unlock_bh(&net->ipv6.fib6_gc_lock);

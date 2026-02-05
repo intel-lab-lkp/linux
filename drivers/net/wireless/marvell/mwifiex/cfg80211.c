@@ -686,10 +686,9 @@ static void mwifiex_reg_notifier(struct wiphy *wiphy,
 		return;
 	}
 
-	/* Don't send world or same regdom info to firmware */
-	if (strncmp(request->alpha2, "00", 2) &&
-	    strncmp(request->alpha2, adapter->country_code,
-		    sizeof(request->alpha2))) {
+	/* Don't send same regdom info to firmware */
+	if (strncmp(request->alpha2, adapter->country_code,
+		    sizeof(request->alpha2)) != 0) {
 		memcpy(adapter->country_code, request->alpha2,
 		       sizeof(request->alpha2));
 		mwifiex_send_domain_info_cmd_fw(wiphy);
@@ -3148,10 +3147,14 @@ struct wireless_dev *mwifiex_add_virtual_intf(struct wiphy *wiphy,
 
 	SET_NETDEV_DEV(dev, adapter->dev);
 
-	priv->dfs_cac_workqueue = alloc_workqueue("MWIFIEX_DFS_CAC%s",
+	ret = dev_alloc_name(dev, name);
+	if (ret)
+		goto err_alloc_name;
+
+	priv->dfs_cac_workqueue = alloc_workqueue("MWIFIEX_DFS_CAC-%s",
 						  WQ_HIGHPRI |
 						  WQ_MEM_RECLAIM |
-						  WQ_UNBOUND, 0, name);
+						  WQ_UNBOUND, 0, dev->name);
 	if (!priv->dfs_cac_workqueue) {
 		mwifiex_dbg(adapter, ERROR, "cannot alloc DFS CAC queue\n");
 		ret = -ENOMEM;
@@ -3160,9 +3163,9 @@ struct wireless_dev *mwifiex_add_virtual_intf(struct wiphy *wiphy,
 
 	INIT_DELAYED_WORK(&priv->dfs_cac_work, mwifiex_dfs_cac_work_queue);
 
-	priv->dfs_chan_sw_workqueue = alloc_workqueue("MWIFIEX_DFS_CHSW%s",
+	priv->dfs_chan_sw_workqueue = alloc_workqueue("MWIFIEX_DFS_CHSW-%s",
 						      WQ_HIGHPRI | WQ_UNBOUND |
-						      WQ_MEM_RECLAIM, 0, name);
+						      WQ_MEM_RECLAIM, 0, dev->name);
 	if (!priv->dfs_chan_sw_workqueue) {
 		mwifiex_dbg(adapter, ERROR, "cannot alloc DFS channel sw queue\n");
 		ret = -ENOMEM;
@@ -3199,6 +3202,7 @@ err_alloc_chsw:
 	destroy_workqueue(priv->dfs_cac_workqueue);
 	priv->dfs_cac_workqueue = NULL;
 err_alloc_cac:
+err_alloc_name:
 	free_netdev(dev);
 	priv->netdev = NULL;
 err_sta_init:
@@ -4673,8 +4677,9 @@ int mwifiex_init_channel_scan_gap(struct mwifiex_adapter *adapter)
 	 * additional active scan request for hidden SSIDs on passive channels.
 	 */
 	adapter->num_in_chan_stats = 2 * (n_channels_bg + n_channels_a);
-	adapter->chan_stats = vmalloc(array_size(sizeof(*adapter->chan_stats),
-						 adapter->num_in_chan_stats));
+	adapter->chan_stats = kcalloc(adapter->num_in_chan_stats,
+				      sizeof(*adapter->chan_stats),
+				      GFP_KERNEL);
 
 	if (!adapter->chan_stats)
 		return -ENOMEM;
@@ -4783,10 +4788,9 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 		wiphy->iface_combinations = &mwifiex_iface_comb_ap_sta;
 	wiphy->n_iface_combinations = 1;
 
-	if (adapter->max_sta_conn > adapter->max_p2p_conn)
-		wiphy->max_ap_assoc_sta = adapter->max_sta_conn;
-	else
-		wiphy->max_ap_assoc_sta = adapter->max_p2p_conn;
+	wiphy->max_ap_assoc_sta = max_t(typeof(wiphy->max_ap_assoc_sta),
+					adapter->max_sta_conn,
+					adapter->max_p2p_conn);
 
 	/* Initialize cipher suits */
 	wiphy->cipher_suites = mwifiex_cipher_suites;

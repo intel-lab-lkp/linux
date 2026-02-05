@@ -278,7 +278,13 @@ static void rt721_sdca_jack_preset(struct rt721_sdca_priv *rt721)
 		RT721_ENT_FLOAT_CTL1, 0x4040);
 	rt_sdca_index_write(rt721->mbq_regmap, RT721_HDA_SDCA_FLOAT,
 		RT721_ENT_FLOAT_CTL4, 0x1201);
+	rt_sdca_index_write(rt721->mbq_regmap, RT721_BOOST_CTRL,
+		RT721_BST_4CH_TOP_GATING_CTRL1, 0x002a);
 	regmap_write(rt721->regmap, 0x2f58, 0x07);
+
+	regmap_write(rt721->regmap, 0x2f51, 0x00);
+	rt_sdca_index_write(rt721->mbq_regmap, RT721_HDA_SDCA_FLOAT,
+		RT721_MISC_CTL, 0x0004);
 }
 
 static void rt721_sdca_jack_init(struct rt721_sdca_priv *rt721)
@@ -327,7 +333,6 @@ static int rt721_sdca_set_jack_detect(struct snd_soc_component *component,
 
 	rt721_sdca_jack_init(rt721);
 
-	pm_runtime_mark_last_busy(component->dev);
 	pm_runtime_put_autosuspend(component->dev);
 
 	return 0;
@@ -741,8 +746,7 @@ static const struct snd_kcontrol_new rt721_sdca_controls[] = {
 static int rt721_sdca_adc_mux_get(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component =
-		snd_soc_dapm_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
 	struct rt721_sdca_priv *rt721 = snd_soc_component_get_drvdata(component);
 	unsigned int val = 0, mask_sft, mask;
 
@@ -781,10 +785,8 @@ static int rt721_sdca_adc_mux_get(struct snd_kcontrol *kcontrol,
 static int rt721_sdca_adc_mux_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component =
-		snd_soc_dapm_kcontrol_component(kcontrol);
-	struct snd_soc_dapm_context *dapm =
-		snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_to_dapm(kcontrol);
 	struct rt721_sdca_priv *rt721 = snd_soc_component_get_drvdata(component);
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
 	unsigned int *item = ucontrol->value.enumerated.item;
@@ -1548,7 +1550,6 @@ int rt721_sdca_io_init(struct device *dev, struct sdw_slave *slave)
 	/* Mark Slave initialization complete */
 	rt721->hw_init = true;
 
-	pm_runtime_mark_last_busy(&slave->dev);
 	pm_runtime_put_autosuspend(&slave->dev);
 
 	dev_dbg(&slave->dev, "%s hw_init complete\n", __func__);

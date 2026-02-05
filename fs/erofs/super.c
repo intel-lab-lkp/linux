@@ -141,7 +141,7 @@ static int erofs_init_device(struct erofs_buf *buf, struct super_block *sb,
 	struct erofs_deviceslot *dis;
 	struct file *file;
 
-	dis = erofs_read_metabuf(buf, sb, *pos, true);
+	dis = erofs_read_metabuf(buf, sb, *pos, false);
 	if (IS_ERR(dis))
 		return PTR_ERR(dis);
 
@@ -178,6 +178,11 @@ static int erofs_init_device(struct erofs_buf *buf, struct super_block *sb,
 			fput(file);
 			return -EINVAL;
 		}
+		if (!dif->dax_dev && test_opt(&sbi->opt, DAX_ALWAYS)) {
+			erofs_info(sb, "DAX unsupported by %s. Turning off DAX.",
+				   dif->path);
+			clear_opt(&sbi->opt, DAX_ALWAYS);
+		}
 		dif->file = file;
 	}
 
@@ -209,6 +214,11 @@ static int erofs_scan_devices(struct super_block *sb,
 		erofs_err(sb, "extra devices don't match (ondisk %u, given %u)",
 			  ondisk_extradevs, sbi->devs->extra_devices);
 		return -EINVAL;
+	}
+
+	if (test_opt(&sbi->opt, DAX_ALWAYS) && !sbi->dif0.dax_dev) {
+		erofs_info(sb, "DAX unsupported by block device. Turning off DAX.");
+		clear_opt(&sbi->opt, DAX_ALWAYS);
 	}
 	if (!ondisk_extradevs)
 		return 0;
@@ -258,7 +268,7 @@ static int erofs_read_superblock(struct super_block *sb)
 	void *data;
 	int ret;
 
-	data = erofs_read_metabuf(&buf, sb, 0, true);
+	data = erofs_read_metabuf(&buf, sb, 0, false);
 	if (IS_ERR(data)) {
 		erofs_err(sb, "cannot read erofs superblock");
 		return PTR_ERR(data);
@@ -313,28 +323,44 @@ static int erofs_read_superblock(struct super_block *sb)
 	sbi->islotbits = ilog2(sizeof(struct erofs_inode_compact));
 	if (erofs_sb_has_48bit(sbi) && dsb->rootnid_8b) {
 		sbi->root_nid = le64_to_cpu(dsb->rootnid_8b);
-		sbi->dif0.blocks = (sbi->dif0.blocks << 32) |
-				le16_to_cpu(dsb->rb.blocks_hi);
+		sbi->dif0.blocks = sbi->dif0.blocks |
+				((u64)le16_to_cpu(dsb->rb.blocks_hi) << 32);
 	} else {
 		sbi->root_nid = le16_to_cpu(dsb->rb.rootnid_2b);
 	}
 	sbi->packed_nid = le64_to_cpu(dsb->packed_nid);
+	if (erofs_sb_has_metabox(sbi)) {
+		if (sbi->sb_size <= offsetof(struct erofs_super_block,
+					     metabox_nid))
+			return -EFSCORRUPTED;
+		sbi->metabox_nid = le64_to_cpu(dsb->metabox_nid);
+		if (sbi->metabox_nid & BIT_ULL(EROFS_DIRENT_NID_METABOX_BIT))
+			return -EFSCORRUPTED;	/* self-loop detection */
+	}
 	sbi->inos = le64_to_cpu(dsb->inos);
 
 	sbi->epoch = (s64)le64_to_cpu(dsb->epoch);
 	sbi->fixed_nsec = le32_to_cpu(dsb->fixed_nsec);
 	super_set_uuid(sb, (void *)dsb->uuid, sizeof(dsb->uuid));
 
+	if (dsb->volume_name[0]) {
+		sbi->volume_name = kstrndup(dsb->volume_name,
+					    sizeof(dsb->volume_name), GFP_KERNEL);
+		if (!sbi->volume_name)
+			return -ENOMEM;
+	}
+
 	/* parse on-disk compression configurations */
 	ret = z_erofs_parse_cfgs(sb, dsb);
 	if (ret < 0)
 		goto out;
 
-	/* handle multiple devices */
 	ret = erofs_scan_devices(sb, dsb);
 
 	if (erofs_sb_has_48bit(sbi))
 		erofs_info(sb, "EXPERIMENTAL 48-bit layout support in use. Use at your own risk!");
+	if (erofs_sb_has_metabox(sbi))
+		erofs_info(sb, "EXPERIMENTAL metadata compression support in use. Use at your own risk!");
 	if (erofs_is_fscache_mode(sb))
 		erofs_info(sb, "[deprecated] fscache-based on-demand read feature in use. Use at your own risk!");
 out:
@@ -613,6 +639,29 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 
 	sbi->blkszbits = PAGE_SHIFT;
 	if (!sb->s_bdev) {
+		/*
+		 * (File-backed mounts) EROFS claims it's safe to nest other
+		 * fs contexts (including its own) due to self-controlled RO
+		 * accesses/contexts and no side-effect changes that need to
+		 * context save & restore so it can reuse the current thread
+		 * context.
+		 * However, we still need to prevent kernel stack overflow due
+		 * to filesystem nesting: just ensure that s_stack_depth is 0
+		 * to disallow mounting EROFS on stacked filesystems.
+		 * Note: s_stack_depth is not incremented here for now, since
+		 * EROFS is the only fs supporting file-backed mounts for now.
+		 * It MUST change if another fs plans to support them, which
+		 * may also require adjusting FILESYSTEM_MAX_STACK_DEPTH.
+		 */
+		if (erofs_is_fileio_mode(sbi)) {
+			inode = file_inode(sbi->dif0.file);
+			if ((inode->i_sb->s_op == &erofs_sops &&
+			     !inode->i_sb->s_bdev) ||
+			    inode->i_sb->s_stack_depth) {
+				erofs_err(sb, "file-backed mounts cannot be applied to stacked fses");
+				return -ENOTBLK;
+			}
+		}
 		sb->s_blocksize = PAGE_SIZE;
 		sb->s_blocksize_bits = PAGE_SHIFT;
 
@@ -661,14 +710,9 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 			return invalfc(fc, "cannot use fsoffset in fscache mode");
 	}
 
-	if (test_opt(&sbi->opt, DAX_ALWAYS)) {
-		if (!sbi->dif0.dax_dev) {
-			errorfc(fc, "DAX unsupported by block device. Turning off DAX.");
-			clear_opt(&sbi->opt, DAX_ALWAYS);
-		} else if (sbi->blkszbits != PAGE_SHIFT) {
-			errorfc(fc, "unsupported blocksize for DAX");
-			clear_opt(&sbi->opt, DAX_ALWAYS);
-		}
+	if (test_opt(&sbi->opt, DAX_ALWAYS) && sbi->blkszbits != PAGE_SHIFT) {
+		erofs_info(sb, "unsupported blocksize for DAX");
+		clear_opt(&sbi->opt, DAX_ALWAYS);
 	}
 
 	sb->s_time_gran = 1;
@@ -689,6 +733,12 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 		if (IS_ERR(inode))
 			return PTR_ERR(inode);
 		sbi->packed_inode = inode;
+	}
+	if (erofs_sb_has_metabox(sbi)) {
+		inode = erofs_iget(sb, sbi->metabox_nid);
+		if (IS_ERR(inode))
+			return PTR_ERR(inode);
+		sbi->metabox_inode = inode;
 	}
 
 	inode = erofs_iget(sb, sbi->root_nid);
@@ -715,6 +765,7 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (err)
 		return err;
 
+	sbi->dir_ra_bytes = EROFS_DIR_RA_BYTES;
 	erofs_info(sb, "mounted with root inode @ nid %llu.", sbi->root_nid);
 	return 0;
 }
@@ -801,6 +852,7 @@ static void erofs_sb_free(struct erofs_sb_info *sbi)
 	kfree(sbi->domain_id);
 	if (sbi->dif0.file)
 		fput(sbi->dif0.file);
+	kfree(sbi->volume_name);
 	kfree(sbi);
 }
 
@@ -845,6 +897,8 @@ static void erofs_drop_internal_inodes(struct erofs_sb_info *sbi)
 {
 	iput(sbi->packed_inode);
 	sbi->packed_inode = NULL;
+	iput(sbi->metabox_inode);
+	sbi->metabox_inode = NULL;
 #ifdef CONFIG_EROFS_FS_ZIP
 	iput(sbi->managed_cache);
 	sbi->managed_cache = NULL;
@@ -995,10 +1049,22 @@ static int erofs_show_options(struct seq_file *seq, struct dentry *root)
 	return 0;
 }
 
+static void erofs_evict_inode(struct inode *inode)
+{
+#ifdef CONFIG_FS_DAX
+	if (IS_DAX(inode))
+		dax_break_layout_final(inode);
+#endif
+
+	truncate_inode_pages_final(&inode->i_data);
+	clear_inode(inode);
+}
+
 const struct super_operations erofs_sops = {
 	.put_super = erofs_put_super,
 	.alloc_inode = erofs_alloc_inode,
 	.free_inode = erofs_free_inode,
+	.evict_inode = erofs_evict_inode,
 	.statfs = erofs_statfs,
 	.show_options = erofs_show_options,
 };
