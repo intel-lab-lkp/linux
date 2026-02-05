@@ -384,8 +384,8 @@ static ssize_t write_filehandle(struct file *file, char *buf, size_t size)
  *			size:		zero
  * Output:
  *	On success:	passed-in buffer filled with '\n'-terminated C
- *			string numeric value representing the number of
- *			running NFSD threads;
+ *			string numeric value representing the requested
+ *			maximum number of running NFSD threads;
  *			return code is the size in bytes of the string
  *	On error:	return code is zero
  *
@@ -1657,7 +1657,7 @@ out_unlock:
 }
 
 /**
- * nfsd_nl_threads_get_doit - get the number of running threads
+ * nfsd_nl_threads_get_doit - get the maximum number of running threads
  * @skb: reply buffer
  * @info: netlink metadata and command arguments
  *
@@ -1700,7 +1700,7 @@ int nfsd_nl_threads_get_doit(struct sk_buff *skb, struct genl_info *info)
 			struct svc_pool *sp = &nn->nfsd_serv->sv_pools[i];
 
 			err = nla_put_u32(skb, NFSD_A_SERVER_THREADS,
-					  sp->sp_nrthreads);
+					  sp->sp_nrthrmax);
 			if (err)
 				goto err_unlock;
 		}
