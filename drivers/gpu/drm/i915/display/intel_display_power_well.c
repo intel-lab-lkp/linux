@@ -8,7 +8,6 @@
 #include <drm/drm_print.h>
 #include <drm/intel/intel_pcode_regs.h>
 
-#include "i915_reg.h"
 #include "intel_backlight_regs.h"
 #include "intel_combo_phy.h"
 #include "intel_combo_phy_regs.h"
@@ -1277,7 +1276,7 @@ static void vlv_init_display_clock_gating(struct intel_display *display)
 	 * Disable trickle feed and enable pnd deadline calculation
 	 */
 	intel_de_write(display, MI_ARB_VLV,
-		       MI_ARB_DISPLAY_TRICKLE_FEED_DISABLE);
+		       MI_ARB_DISPLAY_TRICKLE_FEED_DISABLE_VLV);
 	intel_de_write(display, CBR1_VLV, 0);
 
 	drm_WARN_ON(display->drm, DISPLAY_RUNTIME_INFO(display)->rawclk_freq == 0);
