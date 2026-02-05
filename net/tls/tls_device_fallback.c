@@ -55,7 +55,7 @@ static int tls_enc_record(struct aead_request *aead_req,
 	cipher_desc = get_cipher_desc(prot->cipher_type);
 	DEBUG_NET_WARN_ON_ONCE(!cipher_desc || !cipher_desc->offloadable);
 
-	buf_size = TLS_HEADER_SIZE + cipher_desc->iv;
+	buf_size = prot->prepend_size;
 	len = min_t(int, *in_len, buf_size);
 
 	memcpy_from_scatterwalk(buf, in, len);
@@ -66,16 +66,24 @@ static int tls_enc_record(struct aead_request *aead_req,
 		return 0;
 
 	len = buf[4] | (buf[3] << 8);
-	len -= cipher_desc->iv;
+	if (prot->version != TLS_1_3_VERSION)
+		len -= cipher_desc->iv;
 
 	tls_make_aad(aad, len - cipher_desc->tag, (char *)&rcd_sn, buf[0], prot);
 
-	memcpy(iv + cipher_desc->salt, buf + TLS_HEADER_SIZE, cipher_desc->iv);
+	/* For TLS 1.2, copy explicit IV from record header.
+	 * For TLS 1.3, IV was already set up and we XOR with sequence number.
+	 */
+	if (prot->version == TLS_1_3_VERSION)
+		tls_xor_iv_with_seq(prot, iv, (char *)&rcd_sn);
+	else
+		memcpy(iv + cipher_desc->salt, buf + TLS_HEADER_SIZE,
+		       cipher_desc->iv);
 
 	sg_init_table(sg_in, ARRAY_SIZE(sg_in));
 	sg_init_table(sg_out, ARRAY_SIZE(sg_out));
-	sg_set_buf(sg_in, aad, TLS_AAD_SPACE_SIZE);
-	sg_set_buf(sg_out, aad, TLS_AAD_SPACE_SIZE);
+	sg_set_buf(sg_in, aad, prot->aad_size);
+	sg_set_buf(sg_out, aad, prot->aad_size);
 	scatterwalk_get_sglist(in, sg_in + 1);
 	scatterwalk_get_sglist(out, sg_out + 1);
 
@@ -112,7 +120,6 @@ static void tls_init_aead_request(struct aead_request *aead_req,
 				  struct crypto_aead *aead)
 {
 	aead_request_set_tfm(aead_req, aead);
-	aead_request_set_ad(aead_req, TLS_AAD_SPACE_SIZE);
 }
 
 static struct aead_request *tls_alloc_aead_request(struct crypto_aead *aead,
@@ -303,9 +310,9 @@ static struct sk_buff *tls_enc_skb(struct tls_context *tls_ctx,
 {
 	struct tls_offload_context_tx *ctx = tls_offload_ctx_tx(tls_ctx);
 	int tcp_payload_offset = skb_tcp_all_headers(skb);
+	void *buf, *iv, *aad, *dummy_buf, *salt, *iv_src;
 	int payload_len = skb->len - tcp_payload_offset;
 	const struct tls_cipher_desc *cipher_desc;
-	void *buf, *iv, *aad, *dummy_buf, *salt;
 	struct aead_request *aead_req;
 	struct sk_buff *nskb = NULL;
 	int buf_len;
@@ -317,7 +324,11 @@ static struct sk_buff *tls_enc_skb(struct tls_context *tls_ctx,
 	cipher_desc = get_cipher_desc(tls_ctx->crypto_send.info.cipher_type);
 	DEBUG_NET_WARN_ON_ONCE(!cipher_desc || !cipher_desc->offloadable);
 
-	buf_len = cipher_desc->salt + cipher_desc->iv + TLS_AAD_SPACE_SIZE +
+	/* Set AAD size based on TLS version */
+	aead_request_set_ad(aead_req, tls_ctx->prot_info.aad_size);
+
+	buf_len = cipher_desc->salt + cipher_desc->iv +
+		  tls_ctx->prot_info.aad_size +
 		  sync_size + cipher_desc->tag;
 	buf = kmalloc(buf_len, GFP_ATOMIC);
 	if (!buf)
@@ -325,9 +336,16 @@ static struct sk_buff *tls_enc_skb(struct tls_context *tls_ctx,
 
 	iv = buf;
 	salt = crypto_info_salt(&tls_ctx->crypto_send.info, cipher_desc);
+	iv_src = crypto_info_iv(&tls_ctx->crypto_send.info, cipher_desc);
 	memcpy(iv, salt, cipher_desc->salt);
 	aad = buf + cipher_desc->salt + cipher_desc->iv;
-	dummy_buf = aad + TLS_AAD_SPACE_SIZE;
+	dummy_buf = aad + tls_ctx->prot_info.aad_size;
+
+	/* For TLS 1.3, copy the full fixed IV (salt + iv portion).
+	 * For TLS 1.2, iv portion will be filled from record in tls_enc_record.
+	 */
+	if (tls_ctx->prot_info.version == TLS_1_3_VERSION)
+		memcpy(iv + cipher_desc->salt, iv_src, cipher_desc->iv);
 
 	nskb = alloc_skb(skb_headroom(skb) + skb->len, GFP_ATOMIC);
 	if (!nskb)
