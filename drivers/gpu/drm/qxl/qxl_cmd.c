@@ -423,7 +423,7 @@ int qxl_surface_id_alloc(struct qxl_device *qdev,
 	uint32_t handle;
 	int idr_ret;
 again:
-	idr_preload(GFP_ATOMIC);
+	idr_preload(GFP_KERNEL);
 	spin_lock(&qdev->surf_id_idr_lock);
 	idr_ret = idr_alloc(&qdev->surf_id_idr, NULL, 1, 0, GFP_NOWAIT);
 	spin_unlock(&qdev->surf_id_idr_lock);
