@@ -208,7 +208,7 @@ EXPORT_SYMBOL_GPL(alarm_expires_remaining);
 #ifdef CONFIG_RTC_CLASS
 /**
  * alarmtimer_suspend - Suspend time callback
- * @dev: unused
+ * @dev: the device that triggered the suspend, used for wake-up event
  *
  * When we are going into suspend, we look through the bases
  * to see which is the soonest timer to expire. We then
