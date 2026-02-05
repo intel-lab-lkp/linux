@@ -172,6 +172,7 @@ vc4_save_hang_state(struct drm_device *dev)
 	exec[1] = vc4_first_render_job(vc4);
 	if (!exec[0] && !exec[1]) {
 		spin_unlock_irqrestore(&vc4->job_lock, irqflags);
+		kfree(kernel_state);
 		return;
 	}
 
@@ -192,6 +193,7 @@ vc4_save_hang_state(struct drm_device *dev)
 
 	if (!kernel_state->bo) {
 		spin_unlock_irqrestore(&vc4->job_lock, irqflags);
+		kfree(kernel_state);
 		return;
 	}
 
