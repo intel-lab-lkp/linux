@@ -10,8 +10,8 @@ import glob
 import re
 
 from lib.py import ksft_run, ksft_exit, ksft_pr
-from lib.py import ksft_eq, ksft_ge, ksft_variants
-from lib.py import NetDrvEpEnv, NetdevFamily
+from lib.py import ksft_eq, ksft_ge, ksft_variants, KsftNamedVariant
+from lib.py import NetDrvEpEnv, NetdevFamily, EthtoolFamily
 from lib.py import KsftSkipEx
 from lib.py import bkg, cmd, defer, ethtool, ip
 
@@ -76,6 +76,19 @@ def _setup_isolated_queue(cfg):
     defer(ethtool, f"-N {cfg.ifname} delete {ntuple_id}")
 
     return test_queue
+
+
+def _setup_queue_count(cfg, num_queues):
+    """Configure the NIC to use a specific number of queues."""
+    channels = cfg.ethnl.channels_get({'header': {'dev-index': cfg.ifindex}})
+    ch_max = channels.get('combined-max', 0)
+    qcnt = channels['combined-count']
+
+    if ch_max < num_queues:
+        raise KsftSkipEx(f"Need at least {num_queues} queues, max={ch_max}")
+
+    defer(ethtool, f"-L {cfg.ifname} combined {qcnt}")
+    ethtool(f"-L {cfg.ifname} combined {num_queues}")
 
 
 def _run_gro_test(cfg, test_name, num_flows=None, ignore_fail=False,
@@ -279,14 +292,81 @@ def test_gro_order(cfg, num_flows):
     _run_gro_test(cfg, "capacity", num_flows=num_flows, order_check=True)
 
 
+@ksft_variants([
+    KsftNamedVariant("isolated", _setup_isolated_queue),
+    KsftNamedVariant("1q", lambda cfg: _setup_queue_count(cfg, 1)),
+    KsftNamedVariant("8q", lambda cfg: _setup_queue_count(cfg, 8)),
+])
+def test_gro_capacity(cfg, setup_func):
+    """
+    Probe HW GRO capacity.
+
+    Start with 8 flows and increase by 4x on each successful run.
+    Retry up to 3 times on failure.
+
+    Variants:
+      - isolated: Use a single queue isolated from RSS
+      - 1q: Configure NIC to use 1 queue
+      - 8q: Configure NIC to use 8 queues
+    """
+    max_retries = 3
+
+    _setup_hw_gro(cfg)
+    queue_id = setup_func(cfg)
+
+    num_flows = 8
+    while True:
+        success = False
+        for attempt in range(max_retries):
+            if queue_id is not None:
+                stats_before = _get_queue_stats(cfg, queue_id)
+
+            output = _run_gro_test(cfg, "capacity", num_flows=num_flows,
+                                   ignore_fail=True)
+
+            if queue_id is not None:
+                stats_after = _get_queue_stats(cfg, queue_id)
+                qstat_pkts = (stats_after.get('rx-packets', 0) -
+                              stats_before.get('rx-packets', 0))
+                qstat_str = f" qstat={qstat_pkts}"
+            else:
+                qstat_str = ""
+
+            # Parse and print STATS line
+            match = re.search(
+                r'STATS: received=(\d+) wire=(\d+) coalesced=(\d+)', output)
+            if match:
+                received = int(match.group(1))
+                wire = int(match.group(2))
+                coalesced = int(match.group(3))
+                status = "PASS" if received == num_flows else "FAIL"
+                ksft_pr(f"flows={num_flows} attempt={attempt + 1} "
+                        f"received={received} wire={wire} "
+                        f"coalesced={coalesced}{qstat_str} [{status}]")
+                if received == num_flows:
+                    success = True
+                    break
+            else:
+                ksft_pr(f"flows={num_flows} attempt={attempt + 1}"
+                        f"{qstat_str} [FAIL - can't parse stats]")
+
+        if not success:
+            ksft_pr(f"Stopped at {num_flows} flows")
+            break
+
+        num_flows *= 2
+
+
 def main() -> None:
     """ Ksft boiler plate main """
 
     with NetDrvEpEnv(__file__, nsim_test=False) as cfg:
+        cfg.ethnl = EthtoolFamily()
         cfg.netnl = NetdevFamily()
         ksft_run([test_gro_stats_single,
                   test_gro_stats_full,
-                  test_gro_order], args=(cfg,))
+                  test_gro_order,
+                  test_gro_capacity], args=(cfg,))
     ksft_exit()
 
 
