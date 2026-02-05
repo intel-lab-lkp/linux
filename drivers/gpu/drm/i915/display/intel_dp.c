@@ -1396,6 +1396,7 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 	return true;
 }
 
+static
 bool intel_dp_can_join(struct intel_display *display,
 		       int num_joined_pipes)
 {
