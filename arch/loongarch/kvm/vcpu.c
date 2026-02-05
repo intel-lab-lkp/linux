@@ -5,6 +5,7 @@
 
 #include <linux/kvm_host.h>
 #include <asm/fpu.h>
+#include <asm/kvm_host.h>
 #include <asm/lbt.h>
 #include <asm/loongarch.h>
 #include <asm/setup.h>
@@ -13,6 +14,8 @@
 
 #define CREATE_TRACE_POINTS
 #include "trace.h"
+
+#define NUM_LBT_REGS 6
 
 const struct _kvm_stats_desc kvm_vcpu_stats_desc[] = {
 	KVM_GENERIC_VCPU_STATS(),
@@ -1186,6 +1189,105 @@ static int kvm_loongarch_vcpu_set_attr(struct kvm_vcpu *vcpu,
 	return ret;
 }
 
+static int kvm_loongarch_walk_csrs(struct kvm_vcpu *vcpu, u64 __user *uindices)
+{
+	unsigned int i, count;
+	const unsigned int csrs_to_save[] = {
+		LOONGARCH_CSR_CRMD,	  LOONGARCH_CSR_PRMD,
+		LOONGARCH_CSR_EUEN,	  LOONGARCH_CSR_MISC,
+		LOONGARCH_CSR_ECFG,	  LOONGARCH_CSR_ESTAT,
+		LOONGARCH_CSR_ERA,	  LOONGARCH_CSR_BADV,
+		LOONGARCH_CSR_BADI,	  LOONGARCH_CSR_EENTRY,
+		LOONGARCH_CSR_TLBIDX,	  LOONGARCH_CSR_TLBEHI,
+		LOONGARCH_CSR_TLBELO0,	  LOONGARCH_CSR_TLBELO1,
+		LOONGARCH_CSR_ASID,	  LOONGARCH_CSR_PGDL,
+		LOONGARCH_CSR_PGDH,	  LOONGARCH_CSR_PGD,
+		LOONGARCH_CSR_PWCTL0,	  LOONGARCH_CSR_PWCTL1,
+		LOONGARCH_CSR_STLBPGSIZE, LOONGARCH_CSR_RVACFG,
+		LOONGARCH_CSR_CPUID,	  LOONGARCH_CSR_PRCFG1,
+		LOONGARCH_CSR_PRCFG2,	  LOONGARCH_CSR_PRCFG3,
+		LOONGARCH_CSR_KS0,	  LOONGARCH_CSR_KS1,
+		LOONGARCH_CSR_KS2,	  LOONGARCH_CSR_KS3,
+		LOONGARCH_CSR_KS4,	  LOONGARCH_CSR_KS5,
+		LOONGARCH_CSR_KS6,	  LOONGARCH_CSR_KS7,
+		LOONGARCH_CSR_TMID,	  LOONGARCH_CSR_CNTC,
+		LOONGARCH_CSR_TINTCLR,	  LOONGARCH_CSR_LLBCTL,
+		LOONGARCH_CSR_IMPCTL1,	  LOONGARCH_CSR_IMPCTL2,
+		LOONGARCH_CSR_TLBRENTRY,  LOONGARCH_CSR_TLBRBADV,
+		LOONGARCH_CSR_TLBRERA,	  LOONGARCH_CSR_TLBRSAVE,
+		LOONGARCH_CSR_TLBRELO0,	  LOONGARCH_CSR_TLBRELO1,
+		LOONGARCH_CSR_TLBREHI,	  LOONGARCH_CSR_TLBRPRMD,
+		LOONGARCH_CSR_DMWIN0,	  LOONGARCH_CSR_DMWIN1,
+		LOONGARCH_CSR_DMWIN2,	  LOONGARCH_CSR_DMWIN3,
+		LOONGARCH_CSR_TVAL,	  LOONGARCH_CSR_TCFG,
+	};
+
+	for (i = 0, count = 0;
+	     i < sizeof(csrs_to_save) / sizeof(csrs_to_save[0]); i++) {
+		const u64 reg = KVM_IOC_CSRID(i);
+		if (uindices && put_user(reg, uindices++))
+			return -EFAULT;
+		count++;
+	}
+
+	/* Skip PMU CSRs if not supported by the guest */
+	if (!kvm_guest_has_pmu(&vcpu->arch))
+		return count;
+	for (i = LOONGARCH_CSR_PERFCTRL0; i <= LOONGARCH_CSR_PERFCNTR3; i++) {
+		const u64 reg = KVM_IOC_CSRID(i);
+		if (uindices && put_user(reg, uindices++))
+			return -EFAULT;
+		count++;
+	}
+
+	return count;
+}
+
+static unsigned long kvm_loongarch_num_regs(struct kvm_vcpu *vcpu)
+{
+	/* +1 for the KVM_REG_LOONGARCH_COUNTER register */
+	unsigned long res =
+		kvm_loongarch_walk_csrs(vcpu, NULL) + KVM_MAX_CPUCFG_REGS + 1;
+
+	if (kvm_guest_has_lbt(&vcpu->arch))
+		res += NUM_LBT_REGS;
+
+	return res;
+}
+
+static int kvm_loongarch_copy_reg_indices(struct kvm_vcpu *vcpu,
+					  u64 __user *uindices)
+{
+	u64 reg;
+	unsigned int i;
+
+	i = kvm_loongarch_walk_csrs(vcpu, uindices);
+	if (i < 0)
+		return i;
+	uindices += i;
+
+	for (i = 0; i < KVM_MAX_CPUCFG_REGS; i++) {
+		reg = KVM_IOC_CPUCFG(i);
+		if (put_user(reg, uindices++))
+			return -EFAULT;
+	}
+
+	reg = KVM_REG_LOONGARCH_COUNTER;
+	if (put_user(reg, uindices++))
+		return -EFAULT;
+
+	if (!kvm_guest_has_lbt(&vcpu->arch))
+		return 0;
+
+	for (i = 1; i <= NUM_LBT_REGS; i++) {
+		reg = (KVM_REG_LOONGARCH_LBT | KVM_REG_SIZE_U64 | i);
+		if (put_user(reg, uindices++))
+			return -EFAULT;
+	}
+
+	return 0;
+}
+
 long kvm_arch_vcpu_ioctl(struct file *filp,
 			 unsigned int ioctl, unsigned long arg)
 {
@@ -1249,6 +1351,24 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		if (copy_from_user(&attr, argp, sizeof(attr)))
 			break;
 		r = kvm_loongarch_vcpu_set_attr(vcpu, &attr);
+		break;
+	}
+	case KVM_GET_REG_LIST: {
+		struct kvm_reg_list __user *user_list = argp;
+		struct kvm_reg_list reg_list;
+		unsigned n;
+
+		r = -EFAULT;
+		if (copy_from_user(&reg_list, user_list, sizeof(reg_list)))
+			break;
+		n = reg_list.n;
+		reg_list.n = kvm_loongarch_num_regs(vcpu);
+		if (copy_to_user(user_list, &reg_list, sizeof(reg_list)))
+			break;
+		r = -E2BIG;
+		if (n < reg_list.n)
+			break;
+		r = kvm_loongarch_copy_reg_indices(vcpu, user_list->reg);
 		break;
 	}
 	default:
