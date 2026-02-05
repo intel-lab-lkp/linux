@@ -6,6 +6,8 @@
 #include <drm/intel/intel_pcode_regs.h>
 #include <drm/intel/intel_gmd_misc_regs.h>
 
+#include <drm/intel/intel_gmd_interrupt_regs.h>
+
 #include "display/bxt_dpio_phy_regs.h"
 #include "display/i9xx_plane_regs.h"
 #include "display/i9xx_wm_regs.h"

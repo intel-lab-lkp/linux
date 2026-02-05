@@ -1470,6 +1470,11 @@
 #define DE_PIPEA_FIFO_UNDERRUN  (1 << 0)
 #define DE_PIPE_FIFO_UNDERRUN(pipe)  (1 << (8 * (pipe)))
 
+/* Display Internal Timeout Register */
+#define RM_TIMEOUT		_MMIO(0x42060)
+#define RM_TIMEOUT_REG_CAPTURE	_MMIO(0x420E0)
+#define  MMIO_TIMEOUT_US(us)	((us) << 0)
+
 #define GEN8_DE_MISC_ISR _MMIO(0x44460)
 #define GEN8_DE_MISC_IMR _MMIO(0x44464)
 #define GEN8_DE_MISC_IIR _MMIO(0x44468)
