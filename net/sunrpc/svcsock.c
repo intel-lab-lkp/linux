@@ -397,10 +397,37 @@ static void svc_sock_secure_port(struct svc_rqst *rqstp)
 		clear_bit(RQ_SECURE, &rqstp->rq_flags);
 }
 
-/*
- * INET callback when data has been received on the socket.
+/**
+ * svc_udp_data_ready - sk->sk_data_ready callback for UDP sockets
+ * @sk: socket whose receive buffer contains data
+ *
+ * This implementation does not yet support DTLS, so the
+ * XPT_HANDSHAKE check is not needed here.
  */
-static void svc_data_ready(struct sock *sk)
+static void svc_udp_data_ready(struct sock *sk)
+{
+	struct svc_sock	*svsk = (struct svc_sock *)sk->sk_user_data;
+
+	trace_sk_data_ready(sk);
+
+	if (svsk) {
+		/* Refer to svc_setup_socket() for details. */
+		rmb();
+		svsk->sk_odata(sk);
+		trace_svcsock_data_ready(&svsk->sk_xprt, 0);
+		if (!test_and_set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags))
+			svc_xprt_enqueue(&svsk->sk_xprt);
+	}
+}
+
+/**
+ * svc_tcp_data_ready - sk->sk_data_ready callback for TCP sockets
+ * @sk: socket whose receive buffer contains data
+ *
+ * Data ingest is skipped while a TLS handshake is in progress
+ * (XPT_HANDSHAKE).
+ */
+static void svc_tcp_data_ready(struct sock *sk)
 {
 	struct svc_sock	*svsk = (struct svc_sock *)sk->sk_user_data;
 
@@ -835,7 +862,7 @@ static void svc_udp_init(struct svc_sock *svsk, struct svc_serv *serv)
 	svc_xprt_init(sock_net(svsk->sk_sock->sk), &svc_udp_class,
 		      &svsk->sk_xprt, serv);
 	clear_bit(XPT_CACHE_AUTH, &svsk->sk_xprt.xpt_flags);
-	svsk->sk_sk->sk_data_ready = svc_data_ready;
+	svsk->sk_sk->sk_data_ready = svc_udp_data_ready;
 	svsk->sk_sk->sk_write_space = svc_write_space;
 
 	/* initialise setting must have enough space to
@@ -1368,7 +1395,7 @@ static void svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 		set_bit(XPT_CONN, &svsk->sk_xprt.xpt_flags);
 	} else {
 		sk->sk_state_change = svc_tcp_state_change;
-		sk->sk_data_ready = svc_data_ready;
+		sk->sk_data_ready = svc_tcp_data_ready;
 		sk->sk_write_space = svc_write_space;
 
 		svsk->sk_marker = xdr_zero;
