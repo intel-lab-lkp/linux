@@ -207,6 +207,11 @@ vc4_save_hang_state(struct drm_device *dev)
 
 	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 
+	if (vc4_v3d_pm_get(vc4)) {
+		vc4_free_hang_state(dev, kernel_state);
+		return;
+	}
+
 	state->ct0ca = V3D_READ(V3D_CTNCA(0));
 	state->ct0ea = V3D_READ(V3D_CTNEA(0));
 
@@ -232,6 +237,8 @@ vc4_save_hang_state(struct drm_device *dev)
 	state->fdbgr = V3D_READ(V3D_FDBGR);
 	state->fdbgs = V3D_READ(V3D_FDBGS);
 	state->errstat = V3D_READ(V3D_ERRSTAT);
+
+	vc4_v3d_pm_put(vc4);
 
 	/* We need to turn purgeable BOs into unpurgeable ones so that
 	 * userspace has a chance to dump the hang state before the kernel
