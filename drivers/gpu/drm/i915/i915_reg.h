@@ -922,10 +922,6 @@
 #define   MASK_WAKEMEM				REG_BIT(13)
 #define   DDI_CLOCK_REG_ACCESS			REG_BIT(7)
 
-#define   GMD_ID_ARCH_MASK			REG_GENMASK(31, 22)
-#define   GMD_ID_RELEASE_MASK			REG_GENMASK(21, 14)
-#define   GMD_ID_STEP				REG_GENMASK(5, 0)
-
 /* PCH */
 
 #define SDEISR  _MMIO(0xc4000)
