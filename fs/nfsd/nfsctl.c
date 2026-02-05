@@ -377,15 +377,15 @@ static ssize_t write_filehandle(struct file *file, char *buf, size_t size)
 }
 
 /*
- * write_threads - Start NFSD, or report the current number of running threads
+ * write_threads - Start NFSD, or report the configured number of threads
  *
  * Input:
  *			buf:		ignored
  *			size:		zero
  * Output:
  *	On success:	passed-in buffer filled with '\n'-terminated C
- *			string numeric value representing the number of
- *			running NFSD threads;
+ *			string numeric value representing the configured
+ *			number of NFSD threads;
  *			return code is the size in bytes of the string
  *	On error:	return code is zero
  *
@@ -399,8 +399,8 @@ static ssize_t write_filehandle(struct file *file, char *buf, size_t size)
  * Output:
  *	On success:	NFS service is started;
  *			passed-in buffer filled with '\n'-terminated C
- *			string numeric value representing the number of
- *			running NFSD threads;
+ *			string numeric value representing the configured
+ *			number of NFSD threads;
  *			return code is the size in bytes of the string
  *	On error:	return code is zero or a negative errno value
  */
@@ -430,7 +430,7 @@ static ssize_t write_threads(struct file *file, char *buf, size_t size)
 }
 
 /*
- * write_pool_threads - Set or report the current number of threads per pool
+ * write_pool_threads - Set or report the configured number of threads per pool
  *
  * Input:
  *			buf:		ignored
@@ -447,7 +447,7 @@ static ssize_t write_threads(struct file *file, char *buf, size_t size)
  * Output:
  *	On success:	passed-in buffer filled with '\n'-terminated C
  *			string containing integer values representing the
- *			number of NFSD threads in each pool;
+ *			configured number of NFSD threads in each pool;
  *			return code is the size in bytes of the string
  *	On error:	return code is zero or a negative errno value
  */
@@ -1657,7 +1657,7 @@ out_unlock:
 }
 
 /**
- * nfsd_nl_threads_get_doit - get the number of running threads
+ * nfsd_nl_threads_get_doit - get the maximum number of running threads
  * @skb: reply buffer
  * @info: netlink metadata and command arguments
  *
@@ -1700,7 +1700,7 @@ int nfsd_nl_threads_get_doit(struct sk_buff *skb, struct genl_info *info)
 			struct svc_pool *sp = &nn->nfsd_serv->sv_pools[i];
 
 			err = nla_put_u32(skb, NFSD_A_SERVER_THREADS,
-					  sp->sp_nrthreads);
+					  sp->sp_nrthrmax);
 			if (err)
 				goto err_unlock;
 		}
