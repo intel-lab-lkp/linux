@@ -49,7 +49,8 @@ void fortify_add_kunit_error(int write);
 #include <linux/vmalloc.h>
 
 /* Handle being built without CONFIG_FORTIFY_SOURCE */
-#ifndef __compiletime_strlen
+#if defined(__NO_FORTIFY) || !defined(__OPTIMIZE__) || !defined(CONFIG_FORTIFY_SOURCE)
+# undef __compiletime_strlen
 # define __compiletime_strlen __builtin_strlen
 #endif
 

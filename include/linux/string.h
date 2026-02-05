@@ -19,6 +19,21 @@ extern void *memdup_user(const void __user *, size_t) __realloc_size(2);
 extern void *vmemdup_user(const void __user *, size_t) __realloc_size(2);
 extern void *memdup_user_nul(const void __user *, size_t);
 
+#define __compiletime_strlen(p)					\
+({								\
+	char *__p = (char *)(p);				\
+	size_t __ret = SIZE_MAX;				\
+	const size_t __p_size = __member_size(p);		\
+	if (__p_size != SIZE_MAX &&				\
+	    __builtin_constant_p(*__p)) {			\
+		size_t __p_len = __p_size - 1;			\
+		if (__builtin_constant_p(__p[__p_len]) &&	\
+		    __p[__p_len] == '\0')			\
+			__ret = __builtin_strlen(__p);		\
+	}							\
+	__ret;							\
+})
+
 /**
  * memdup_array_user - duplicate array from user space
  * @src: source address in user space
