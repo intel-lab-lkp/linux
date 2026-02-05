@@ -124,6 +124,7 @@ relocate_enable_mmu:
 
 	ret
 #endif /* CONFIG_MMU */
+.align 2
 #ifdef CONFIG_SMP
 	.global secondary_start_sbi
 secondary_start_sbi:
