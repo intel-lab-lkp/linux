@@ -11216,20 +11216,18 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 			return;
 		}
 
-		if (busiest->group_weight == 1 || sds->prefer_sibling) {
+		env->migration_type = migrate_task;
+		if (busiest->group_weight == 1 || sds->prefer_sibling || !busiest->idle_cpus) {
 			/*
-			 * When prefer sibling, evenly spread running tasks on
-			 * groups.
+			 * When prefer sibling, or when busiest has no idle CPU,
+			 * evenly spread running tasks on groups.
 			 */
-			env->migration_type = migrate_task;
 			env->imbalance = sibling_imbalance(env, sds, busiest, local);
 		} else {
-
 			/*
 			 * If there is no overload, we just want to even the number of
 			 * idle CPUs.
 			 */
-			env->migration_type = migrate_task;
 			env->imbalance = local->idle_cpus;
 			lsub_positive(&env->imbalance, busiest->idle_cpus);
 		}
