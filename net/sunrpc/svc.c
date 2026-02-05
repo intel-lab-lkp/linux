@@ -418,6 +418,19 @@ struct svc_pool *svc_pool_for_cpu(struct svc_serv *serv)
 	return &serv->sv_pools[pidx % serv->sv_nrpools];
 }
 
+/**
+ * svc_pool_node - Return the NUMA node affinity of a service pool
+ * @pool: the service pool
+ *
+ * Return value:
+ *   The NUMA node the pool is associated with, or the local node
+ *   if no explicit mapping exists
+ */
+int svc_pool_node(struct svc_pool *pool)
+{
+	return svc_pool_map_get_node(pool->sp_id);
+}
+
 static int svc_rpcb_setup(struct svc_serv *serv, struct net *net)
 {
 	int err;

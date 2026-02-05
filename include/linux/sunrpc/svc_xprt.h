@@ -9,8 +9,32 @@
 #define SUNRPC_SVC_XPRT_H
 
 #include <linux/sunrpc/svc.h>
+#include <linux/llist.h>
 
 struct module;
+
+/**
+ * struct svc_page_pool - per-transport page recycling pool
+ * @pp_pages: lock-free list of recycled pages
+ * @pp_count: number of pages currently in pool
+ * @pp_numa_node: NUMA node for page allocations
+ * @pp_max: maximum pages to retain in pool
+ *
+ * Lock-free page recycling between producers (svc threads returning
+ * pages) and a single consumer (the thread allocating pages for
+ * receives). Uses llist for efficient producer-consumer handoff
+ * without spinlocks.
+ *
+ * Callers must serialize calls to svc_page_pool_get(); multiple
+ * concurrent consumers are not supported.
+ * Allocate with svc_page_pool_alloc(); free with svc_page_pool_free().
+ */
+struct svc_page_pool {
+	struct llist_head	pp_pages;
+	atomic_t		pp_count;
+	int			pp_numa_node;
+	unsigned int		pp_max;
+};
 
 struct svc_xprt_ops {
 	struct svc_xprt	*(*xpo_create)(struct svc_serv *,
@@ -186,6 +210,14 @@ int	svc_xprt_names(struct svc_serv *serv, char *buf, const int buflen);
 void	svc_add_new_perm_xprt(struct svc_serv *serv, struct svc_xprt *xprt);
 void	svc_age_temp_xprts_now(struct svc_serv *, struct sockaddr *);
 void	svc_xprt_deferred_close(struct svc_xprt *xprt);
+
+/* Page pool helpers */
+struct svc_page_pool *svc_page_pool_alloc(int numa_node, unsigned int max);
+void	svc_page_pool_free(struct svc_page_pool *pool);
+void	svc_page_pool_put(struct svc_page_pool *pool, struct page *page);
+void	svc_page_pool_put_bulk(struct svc_page_pool *pool,
+			       struct page **pages, unsigned int count);
+struct page *svc_page_pool_get(struct svc_page_pool *pool);
 
 static inline void svc_xprt_get(struct svc_xprt *xprt)
 {

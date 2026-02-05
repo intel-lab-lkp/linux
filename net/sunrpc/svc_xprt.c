@@ -1497,4 +1497,155 @@ int svc_pool_stats_open(struct svc_info *info, struct file *file)
 }
 EXPORT_SYMBOL(svc_pool_stats_open);
 
+static struct llist_node *svc_page_to_llist(struct page *page)
+{
+	return &page->pcp_llist;
+}
+
+static struct page *svc_llist_to_page(struct llist_node *node)
+{
+	return container_of(node, struct page, pcp_llist);
+}
+
+/**
+ * svc_page_pool_alloc - Allocate a page pool
+ * @numa_node: NUMA node for page allocations
+ * @max: maximum pages to retain in pool
+ *
+ * Pages in an svc_page_pool are linked via page->pcp_llist, which is
+ * safe since these pages are owned exclusively by the transport.
+ *
+ * The caller must free the pool with svc_page_pool_free() when
+ * the transport is destroyed.
+ *
+ * Returns a new page pool, or NULL on allocation failure.
+ */
+struct svc_page_pool *svc_page_pool_alloc(int numa_node, unsigned int max)
+{
+	struct svc_page_pool *pool;
+
+	pool = kmalloc_node(sizeof(*pool), GFP_KERNEL, numa_node);
+	if (!pool)
+		return NULL;
+
+	init_llist_head(&pool->pp_pages);
+	atomic_set(&pool->pp_count, 0);
+	pool->pp_numa_node = numa_node;
+	pool->pp_max = max;
+	return pool;
+}
+
+/**
+ * svc_page_pool_free - Free a page pool and all pages in it
+ * @pool: pool to free (may be NULL)
+ */
+void svc_page_pool_free(struct svc_page_pool *pool)
+{
+	struct llist_node *node;
+
+	if (!pool)
+		return;
+
+	while ((node = llist_del_first(&pool->pp_pages)) != NULL)
+		put_page(svc_llist_to_page(node));
+	kfree(pool);
+}
+
+/**
+ * svc_page_pool_put - Return a page to the pool
+ * @pool: pool to return page to (may be NULL)
+ * @page: page to return (may be NULL)
+ *
+ * Transfers ownership of @page to the pool. The caller's reference
+ * is consumed: either the pool retains the page, or put_page() is
+ * called if @pool is NULL or full.
+ */
+void svc_page_pool_put(struct svc_page_pool *pool, struct page *page)
+{
+	if (!page)
+		return;
+	if (!pool || atomic_read(&pool->pp_count) >= pool->pp_max) {
+		put_page(page);
+		return;
+	}
+	llist_add(svc_page_to_llist(page), &pool->pp_pages);
+	atomic_inc(&pool->pp_count);
+}
+
+/**
+ * svc_page_pool_put_bulk - Return multiple pages to the pool
+ * @pool: pool to return pages to (may be NULL)
+ * @pages: array of pages to return
+ * @count: number of pages in @pages array
+ *
+ * Batch version of svc_page_pool_put() that reduces atomic operations
+ * when returning many pages at once. Transfers ownership of all pages
+ * in @pages to the pool. Uses release_pages() for efficient bulk
+ * freeing when the pool is full.
+ *
+ * Unlike svc_page_pool_put(), this function does not handle NULL
+ * entries in @pages. All @count entries must be valid page pointers.
+ */
+void svc_page_pool_put_bulk(struct svc_page_pool *pool,
+			    struct page **pages, unsigned int count)
+{
+	struct llist_node *head, *last, *node;
+	unsigned int i, to_add, avail;
+
+	if (!count)
+		return;
+	if (!pool) {
+		release_pages(pages, count);
+		return;
+	}
+
+	avail = pool->pp_max - atomic_read(&pool->pp_count);
+	to_add = min_t(unsigned int, count, avail);
+	if (!to_add) {
+		release_pages(pages, count);
+		return;
+	}
+
+	head = NULL;
+	last = NULL;
+	for (i = 0; i < to_add; i++) {
+		node = svc_page_to_llist(pages[i]);
+		node->next = head;
+		head = node;
+		if (!last)
+			last = node;
+	}
+	llist_add_batch(head, last, &pool->pp_pages);
+	atomic_add(to_add, &pool->pp_count);
+
+	/* Free overflow pages that didn't fit in the pool */
+	if (to_add < count)
+		release_pages(pages + to_add, count - to_add);
+}
+EXPORT_SYMBOL_GPL(svc_page_pool_put_bulk);
+
+/**
+ * svc_page_pool_get - Get a page from the pool
+ * @pool: pool to take from (may be NULL)
+ *
+ * Returns a recycled page with one reference, or NULL if @pool is
+ * NULL or empty. The caller owns the returned page and must either
+ * return it via svc_page_pool_put() or release it with put_page().
+ *
+ * Caller must serialize; concurrent calls for the same pool are
+ * not supported.
+ */
+struct page *svc_page_pool_get(struct svc_page_pool *pool)
+{
+	struct llist_node *node;
+
+	if (!pool)
+		return NULL;
+	node = llist_del_first(&pool->pp_pages);
+	if (!node)
+		return NULL;
+	atomic_dec(&pool->pp_count);
+	return svc_llist_to_page(node);
+}
+
 /*----------------------------------------------------------------------------*/
