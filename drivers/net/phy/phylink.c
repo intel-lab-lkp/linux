@@ -4379,6 +4379,9 @@ void phylink_replay_link_begin(struct phylink *pl)
 {
 	ASSERT_RTNL();
 
+	if (!pl)
+		return;
+
 	phylink_run_resolve_and_disable(pl, PHYLINK_DISABLE_REPLAY);
 }
 EXPORT_SYMBOL_GPL(phylink_replay_link_begin);
@@ -4401,6 +4404,9 @@ EXPORT_SYMBOL_GPL(phylink_replay_link_begin);
 void phylink_replay_link_end(struct phylink *pl)
 {
 	ASSERT_RTNL();
+
+	if (!pl)
+		return;
 
 	if (WARN(!test_bit(PHYLINK_DISABLE_REPLAY,
 			   &pl->phylink_disable_state),
