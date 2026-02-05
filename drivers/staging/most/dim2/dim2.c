@@ -415,20 +415,16 @@ static irqreturn_t dim2_ahb_isr(int irq, void *_dev)
  */
 static void complete_all_mbos(struct list_head *head)
 {
+	struct mbo *mbo, *mbo_tmp;
 	unsigned long flags;
-	struct mbo *mbo;
+	LIST_HEAD(del_list);
 
-	for (;;) {
-		spin_lock_irqsave(&dim_lock, flags);
-		if (list_empty(head)) {
-			spin_unlock_irqrestore(&dim_lock, flags);
-			break;
-		}
+	spin_lock_irqsave(&dim_lock, flags);
+	list_replace_init(head, &del_list);
+	spin_unlock_irqrestore(&dim_lock, flags);
 
-		mbo = list_first_entry(head, struct mbo, list);
-		list_del(head->next);
-		spin_unlock_irqrestore(&dim_lock, flags);
-
+	list_for_each_entry_safe(mbo, mbo_tmp, &del_list, list) {
+		list_del(&mbo->list);
 		mbo->processed_length = 0;
 		mbo->status = MBO_E_CLOSE;
 		mbo->complete(mbo);
