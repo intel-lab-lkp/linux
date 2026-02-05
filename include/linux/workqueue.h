@@ -128,10 +128,16 @@ struct rcu_work {
 	struct workqueue_struct *wq;
 };
 
+/*
+ * Affinity scopes are ordered from finest to coarsest granularity. This
+ * ordering is used by the automatic fallback logic in wq_effective_affn_scope()
+ * which walks from coarse toward fine when a scope degenerates to a single pod.
+ */
 enum wq_affn_scope {
 	WQ_AFFN_DFL,			/* use system default */
 	WQ_AFFN_CPU,			/* one pod per CPU */
-	WQ_AFFN_SMT,			/* one pod poer SMT */
+	WQ_AFFN_SMT,			/* one pod per SMT */
+	WQ_AFFN_CLUSTER,		/* one pod per cluster */
 	WQ_AFFN_CACHE,			/* one pod per LLC */
 	WQ_AFFN_NUMA,			/* one pod per NUMA node */
 	WQ_AFFN_SYSTEM,			/* one pod across the whole system */
