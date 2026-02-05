@@ -518,27 +518,69 @@ static int avg_remote_numa_distance(void)
 {
 	int i, j;
 	int distance, nr_remote, total_distance;
+	int max_pkgs = topology_max_packages();
+	int cpu, pkg, pkg_avg_distance;
+	int *pkg_total_distance = NULL, *pkg_nr_remote = NULL;
 
 	if (sched_avg_remote_distance > 0)
 		return sched_avg_remote_distance;
 
+	sched_avg_remote_distance = REMOTE_DISTANCE;
+
 	nr_remote = 0;
 	total_distance = 0;
+
+	pkg_total_distance = kcalloc(max_pkgs, sizeof(int), GFP_KERNEL);
+	if (!pkg_total_distance)
+		goto cleanup;
+
+	pkg_nr_remote = kcalloc(max_pkgs, sizeof(int), GFP_KERNEL);
+	if (!pkg_nr_remote)
+		goto cleanup;
+
 	for_each_node_state(i, N_CPU) {
 		for_each_node_state(j, N_CPU) {
 			distance = node_distance(i, j);
 
-			if (distance >= REMOTE_DISTANCE) {
-				nr_remote++;
-				total_distance += distance;
-			}
+			if (distance < REMOTE_DISTANCE)
+				continue;
+
+			nr_remote++;
+			total_distance += distance;
+
+			cpu = cpumask_first(cpumask_of_node(j));
+			if (cpu >= nr_cpu_ids)
+				continue;
+
+			pkg = topology_physical_package_id(cpu);
+			pkg_total_distance[pkg] += distance;
+			pkg_nr_remote[pkg]++;
 		}
 	}
-	if (nr_remote)
-		sched_avg_remote_distance = total_distance / nr_remote;
-	else
-		sched_avg_remote_distance = REMOTE_DISTANCE;
 
+	if (!nr_remote)
+		goto cleanup;
+
+	sched_avg_remote_distance = total_distance / nr_remote;
+
+	/*
+	 * Single average remote distance won't be appropriate if different
+	 * packages have different distances to remote packages.
+	 */
+	for (i = 0; i < max_pkgs; i++) {
+		if (!pkg_nr_remote[i])
+			continue;
+
+		pkg_avg_distance = pkg_total_distance[i] / pkg_nr_remote[i];
+
+		pr_debug("sched: Avg. distance to remote package %d: %d\n", i, pkg_avg_distance);
+
+		if (pkg_avg_distance != sched_avg_remote_distance)
+			WARN_ONCE(1, "sched: Avg. distances to remote packages are different\n");
+	}
+cleanup:
+	kfree(pkg_nr_remote);
+	kfree(pkg_total_distance);
 	return sched_avg_remote_distance;
 }
 
@@ -564,18 +606,7 @@ int arch_sched_node_distance(int from, int to)
 		 * in the remote package in the same sched group.
 		 * Simplify NUMA domains and avoid extra NUMA levels including
 		 * different remote NUMA nodes and local nodes.
-		 *
-		 * GNR and CWF don't expect systems with more than 2 packages
-		 * and more than 2 hops between packages. Single average remote
-		 * distance won't be appropriate if there are more than 2
-		 * packages as average distance to different remote packages
-		 * could be different.
 		 */
-		WARN_ONCE(topology_max_packages() > 2,
-			  "sched: Expect only up to 2 packages for GNR or CWF, "
-			  "but saw %d packages when building sched domains.",
-			  topology_max_packages());
-
 		d = avg_remote_numa_distance();
 	}
 	return d;
