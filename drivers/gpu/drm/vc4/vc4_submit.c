@@ -203,6 +203,50 @@ fail:
 	return ret;
 }
 
+int
+vc4_wait_seqno_ioctl(struct drm_device *dev, void *data,
+		     struct drm_file *file_priv)
+{
+	struct vc4_file *vc4_priv = file_priv->driver_priv;
+	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	struct drm_vc4_wait_seqno *args = data;
+	unsigned long timeout_jiffies = nsecs_to_jiffies(args->timeout_ns);
+	unsigned long start = jiffies;
+	struct dma_fence *fence;
+	long ret;
+
+	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
+		return -ENODEV;
+
+	rcu_read_lock();
+	fence = xa_load(&vc4_priv->seqno_xa, args->seqno);
+	if (fence)
+		fence = dma_fence_get_rcu(fence);
+	rcu_read_unlock();
+
+	if (!fence)
+		return 0;
+
+	trace_vc4_wait_for_seqno_begin(dev, args->seqno, args->timeout_ns);
+	ret = dma_fence_wait_timeout(fence, true, timeout_jiffies);
+	trace_vc4_wait_for_seqno_end(dev, args->seqno);
+
+	dma_fence_put(fence);
+
+	if (ret == -ERESTARTSYS) {
+		u64 delta = jiffies_to_nsecs(jiffies - start);
+
+		if (args->timeout_ns >= delta)
+			args->timeout_ns -= delta;
+		else
+			args->timeout_ns = 0;
+
+		return ret;
+	}
+
+	return ret > 0 ? 0 : -ETIME;
+}
+
 static void
 vc4_job_free(struct kref *ref)
 {
@@ -261,6 +305,9 @@ vc4_render_job_free(struct kref *ref)
 	spin_lock_irqsave(&vc4->job_lock, irqflags);
 	vc4->bin_alloc_used &= ~job->bin_slots;
 	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
+
+	if (job->seqno)
+		xa_erase(&job->file->seqno_xa, job->seqno);
 
 	vc4_job_free(ref);
 }
@@ -433,6 +480,7 @@ vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
 		return ret;
 
 	exec.render = render;
+	render->file = vc4_priv;
 	INIT_LIST_HEAD(&render->unref_list);
 
 	ret = vc4_lookup_bos(dev, file_priv, render, args->bo_handles,
@@ -488,9 +536,21 @@ vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
 	vc4_push_job(&render->base);
 	mutex_unlock(&vc4->sched_lock);
 
+	ret = xa_alloc_cyclic(&vc4_priv->seqno_xa, &render->seqno,
+			      render->base.done_fence,
+			      xa_limit_32b, &vc4_priv->next_seqno, GFP_KERNEL);
+	if (ret < 0) {
+		/* Jobs are already queued, just skip seqno tracking */
+		drm_err(dev, "Seqno allocation failed\n");
+		render->seqno = 0;
+	}
+
 	vc4_attach_fences_and_unlock_reservation(file_priv, render,
 						 &exec_ctx, args->out_sync,
 						 render->base.done_fence);
+
+	/* Return the seqno for our job. */
+	args->seqno = render->seqno;
 
 	vc4_job_put((void *)bin);
 	vc4_job_put((void *)render);

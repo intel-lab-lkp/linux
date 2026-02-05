@@ -166,6 +166,7 @@ static int vc4_open(struct drm_device *dev, struct drm_file *file)
 				      1, NULL);
 	}
 
+	xa_init_flags(&vc4file->seqno_xa, XA_FLAGS_ALLOC1);
 	vc4_perfmon_open_file(vc4file);
 	file->driver_priv = vc4file;
 	return 0;
@@ -186,6 +187,7 @@ static void vc4_close(struct drm_device *dev, struct drm_file *file)
 	for (q = 0; q < VC4_MAX_QUEUES; q++)
 		drm_sched_entity_destroy(&vc4file->sched_entity[q]);
 
+	xa_destroy(&vc4file->seqno_xa);
 	vc4_perfmon_close_file(vc4file);
 	kfree(vc4file);
 }
