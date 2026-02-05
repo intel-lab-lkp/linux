@@ -676,10 +676,6 @@ static int inv_icm45600_enable_regulator_vddio(struct inv_icm45600_state *st)
 static void inv_icm45600_disable_vddio_reg(void *_data)
 {
 	struct inv_icm45600_state *st = _data;
-	struct device *dev = regmap_get_device(st->map);
-
-	if (pm_runtime_status_suspended(dev))
-		return;
 
 	regulator_disable(st->vddio_supply);
 }
@@ -780,6 +776,8 @@ int inv_icm45600_core_probe(struct regmap *regmap, const struct inv_icm45600_chi
 	if (ret)
 		return ret;
 
+	/* hand over vddio management to pm_runtime */
+	devm_remove_action(dev, inv_icm45600_disable_vddio_reg, st);
 	pm_runtime_get_noresume(dev);
 	pm_runtime_set_autosuspend_delay(dev, 2 * USEC_PER_MSEC);
 	pm_runtime_use_autosuspend(dev);
