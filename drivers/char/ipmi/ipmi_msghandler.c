@@ -4814,7 +4814,7 @@ static void smi_work(struct work_struct *t)
 	unsigned long flags = 0; /* keep us warning-free. */
 	struct ipmi_smi *intf = from_work(intf, t, smi_work);
 	int run_to_completion = READ_ONCE(intf->run_to_completion);
-	struct ipmi_smi_msg *newmsg = NULL;
+	struct ipmi_smi_msg *newmsg;
 	struct ipmi_recv_msg *msg, *msg2;
 	int cc;
 
@@ -4826,6 +4826,7 @@ static void smi_work(struct work_struct *t)
 	 * message delivery.
 	 */
 restart:
+	newmsg = NULL;
 	if (!run_to_completion)
 		spin_lock_irqsave(&intf->xmit_msgs_lock, flags);
 	if (intf->curr_msg == NULL && !intf->in_shutdown) {
@@ -4854,6 +4855,7 @@ restart:
 						     newmsg->recv_msg, cc);
 			else
 				ipmi_free_smi_msg(newmsg);
+			intf->curr_msg = NULL;
 			goto restart;
 		}
 	}
