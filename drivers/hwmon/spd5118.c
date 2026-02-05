@@ -525,6 +525,8 @@ static int spd5118_common_probe(struct device *dev, struct regmap *regmap,
 	unsigned int capability, revision, vendor, bank;
 	struct spd5118_data *data;
 	struct device *hwmon_dev;
+	struct i2c_client *client;
+	const struct i2c_adapter_quirks *quirks;
 	int err;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
@@ -551,6 +553,19 @@ static int spd5118_common_probe(struct device *dev, struct regmap *regmap,
 		return err;
 	if (!spd5118_vendor_valid(bank, vendor))
 		return -ENODEV;
+
+	/*
+	 * SPD5118 requires write access for correct operation
+	 * (page selection, configuration, and suspend/resume cache sync).
+	 * If the SPD writes are blocked by the SMBus controller, the
+	 * probe fails.
+	 */
+	client = to_i2c_client(dev);
+	quirks = client->adapter->quirks;
+	if (quirks && (quirks->flags & I2C_AQ_SPD_WRITE_DISABLED)) {
+		dev_err_probe(dev, -ENODEV, "SPD Write Disable is set on adapter; refusing probe\n");
+		return -ENODEV;
+	}
 
 	data->regmap = regmap;
 	mutex_init(&data->nvmem_lock);
