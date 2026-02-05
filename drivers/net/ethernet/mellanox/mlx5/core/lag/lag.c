@@ -1392,7 +1392,7 @@ static int __mlx5_lag_dev_add_mdev(struct mlx5_core_dev *dev)
 		ldev = mlx5_lag_dev_alloc(dev);
 		if (!ldev) {
 			mlx5_core_err(dev, "Failed to alloc lag dev\n");
-			return 0;
+			return -ENOMEM;
 		}
 		mlx5_ldev_add_mdev(ldev, dev);
 		return 0;
