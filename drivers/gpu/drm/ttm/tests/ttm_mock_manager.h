@@ -5,7 +5,7 @@
 #ifndef TTM_MOCK_MANAGER_H
 #define TTM_MOCK_MANAGER_H
 
-#include <drm/drm_buddy.h>
+#include <linux/gpu_buddy.h>
 
 struct ttm_mock_manager {
 	struct ttm_resource_manager man;

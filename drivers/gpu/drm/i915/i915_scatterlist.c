@@ -7,7 +7,7 @@
 #include "i915_scatterlist.h"
 #include "i915_ttm_buddy_manager.h"
 
-#include <drm/drm_buddy.h>
+#include <linux/gpu_buddy.h>
 #include <drm/drm_mm.h>
 
 #include <linux/slab.h>

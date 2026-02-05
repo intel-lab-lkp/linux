@@ -79,7 +79,6 @@ drm-$(CONFIG_DRM_CLIENT) += \
 	drm_client_event.o \
 	drm_client_modeset.o \
 	drm_client_sysrq.o
-drm-$(CONFIG_DRM_LIB_RANDOM) += lib/drm_random.o
 drm-$(CONFIG_COMPAT) += drm_ioc32.o
 drm-$(CONFIG_DRM_PANEL) += drm_panel.o
 drm-$(CONFIG_OF) += drm_of.o
@@ -115,7 +114,7 @@ drm_gpusvm_helper-$(CONFIG_ZONE_DEVICE) += \
 
 obj-$(CONFIG_DRM_GPUSVM) += drm_gpusvm_helper.o
 
-obj-$(CONFIG_DRM_BUDDY) += drm_buddy.o
+obj-$(CONFIG_DRM_BUDDY) += ../buddy.o
 
 drm_dma_helper-y := drm_gem_dma_helper.o
 drm_dma_helper-$(CONFIG_DRM_FBDEV_EMULATION) += drm_fbdev_dma.o
