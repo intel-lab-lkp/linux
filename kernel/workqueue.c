@@ -7097,6 +7097,13 @@ static ssize_t max_active_store(struct device *dev,
 	struct workqueue_struct *wq = dev_to_wq(dev);
 	int val;
 
+	/*
+	 * Adjusting max_active breaks ordering guarantee. Changing it has no
+	 * effect on BH worker.
+	 */
+	if (wq->flags & (WQ_BH | __WQ_ORDERED))
+		return -EACCES;
+
 	if (sscanf(buf, "%d", &val) != 1 || val <= 0)
 		return -EINVAL;
 
@@ -7412,13 +7419,6 @@ int workqueue_sysfs_register(struct workqueue_struct *wq)
 {
 	struct wq_device *wq_dev;
 	int ret;
-
-	/*
-	 * Adjusting max_active breaks ordering guarantee.  Disallow exposing
-	 * ordered workqueues.
-	 */
-	if (WARN_ON(wq->flags & __WQ_ORDERED))
-		return -EINVAL;
 
 	wq->wq_dev = wq_dev = kzalloc(sizeof(*wq_dev), GFP_KERNEL);
 	if (!wq_dev)
