@@ -3925,6 +3925,9 @@ static int phylink_sfp_module_insert(void *upstream,
 	pl->sfp_may_have_phy = caps->may_have_phy;
 	pl->sfp_port = caps->port;
 
+	if (pl->sfp_bus_port)
+		pl->sfp_bus_port->vacant = false;
+
 	/* If this module may have a PHY connecting later, defer until later */
 	if (pl->sfp_may_have_phy)
 		return 0;
@@ -3935,6 +3938,9 @@ static int phylink_sfp_module_insert(void *upstream,
 static void phylink_sfp_module_remove(void *upstream)
 {
 	struct phylink *pl = upstream;
+
+	if (pl->sfp_bus_port)
+		pl->sfp_bus_port->vacant = true;
 
 	phy_interface_zero(pl->sfp_interfaces);
 }
