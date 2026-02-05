@@ -85,13 +85,13 @@ int tms9914_write(struct gpib_board *board, struct tms9914_priv *priv, u8 *buffe
 		  size_t length, int send_eoi, size_t *bytes_written);
 int tms9914_command(struct gpib_board *board, struct tms9914_priv *priv, u8 *buffer,
 		    size_t length, size_t *bytes_written);
-int tms9914_take_control(struct gpib_board *board, struct tms9914_priv *priv, int syncronous);
+int tms9914_take_control(struct gpib_board *board, struct tms9914_priv *priv, int synchronous);
 /*
  * alternate version of tms9914_take_control which works around buggy tcs
  * implementation.
  */
 int tms9914_take_control_workaround(struct gpib_board *board, struct tms9914_priv *priv,
-				    int syncronous);
+				    int synchronous);
 int tms9914_go_to_standby(struct gpib_board *board, struct tms9914_priv *priv);
 int tms9914_request_system_control(struct gpib_board *board, struct tms9914_priv *priv,
 				   int request_control);
@@ -215,8 +215,8 @@ enum imr1_bits {
 /* ADSR   - Register bits */
 enum adsr_bits {
 	HR_ULPA = (1 << 0),   /* Store last address LSB       */
-	HR_TA = (1 << 1),     /* Talker Adressed              */
-	HR_LA = (1 << 2),     /* Listener adressed            */
+	HR_TA = (1 << 1),     /* Talker Addressed              */
+	HR_LA = (1 << 2),     /* Listener addressed            */
 	HR_TPAS = (1 << 3),   /* talker primary address state */
 	HR_LPAS = (1 << 4),   /* listener    "                */
 	HR_ATN = (1 << 5),    /* ATN active                   */

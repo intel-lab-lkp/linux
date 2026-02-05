@@ -133,7 +133,7 @@ static int hp_82341_accel_read(struct gpib_board *board, u8 *buffer, size_t leng
 	length -= i;
 	if (retval < 0)
 		return retval;
-	// read last byte if we havn't received an END yet
+	// read last byte if we haven't received an END yet
 	if (*end == 0) {
 		size_t num_bytes;
 		// try to make sure we holdoff after last byte read

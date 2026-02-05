@@ -271,14 +271,14 @@ u8 nec7210_read_data_in(struct gpib_board *board, struct nec7210_priv *priv, int
 }
 EXPORT_SYMBOL(nec7210_read_data_in);
 
-int nec7210_take_control(struct gpib_board *board, struct nec7210_priv *priv, int syncronous)
+int nec7210_take_control(struct gpib_board *board, struct nec7210_priv *priv, int synchronous)
 {
 	int i;
 	const int timeout = 100;
 	int retval = 0;
 	unsigned int adsr_bits = 0;
 
-	if (syncronous)
+	if (synchronous)
 		write_byte(priv, AUX_TCS, AUXMR);
 	else
 		write_byte(priv, AUX_TCA, AUXMR);
@@ -1028,7 +1028,7 @@ void nec7210_ioport_write_byte(struct nec7210_priv *priv, u8 data, unsigned int 
 {
 	if (register_num == AUXMR)
 		/*
-		 * locking makes absolutely sure noone accesses the
+		 * locking makes absolutely sure no one accesses the
 		 * AUXMR register faster than once per microsecond
 		 */
 		nec7210_locking_ioport_write_byte(priv, data, register_num);
@@ -1074,7 +1074,7 @@ void nec7210_iomem_write_byte(struct nec7210_priv *priv, u8 data, unsigned int r
 {
 	if (register_num == AUXMR)
 		/*
-		 * locking makes absolutely sure noone accesses the
+		 * locking makes absolutely sure no one accesses the
 		 * AUXMR register faster than once per microsecond
 		 */
 		nec7210_locking_iomem_write_byte(priv, data, register_num);

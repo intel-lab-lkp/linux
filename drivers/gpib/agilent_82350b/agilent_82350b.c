@@ -120,7 +120,7 @@ static int agilent_82350b_accel_read(struct gpib_board *board, u8 *buffer,
 	writeb(DIRECTION_GPIB_TO_HOST, a_priv->gpib_base + SRAM_ACCESS_CONTROL_REG);
 	if (retval < 0)
 		return retval;
-	/* read last bytes if we havn't received an END yet */
+	/* read last bytes if we haven't received an END yet */
 	if (*end == 0) {
 		size_t num_bytes;
 		/* try to make sure we holdoff after last byte read */

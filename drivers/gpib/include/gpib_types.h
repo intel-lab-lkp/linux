@@ -88,13 +88,13 @@ struct gpib_interface {
 	int (*command)(struct gpib_board *board, u8 *buffer, size_t length,
 		       size_t *bytes_written);
 	/*
-	 * Take control (assert ATN).  If 'asyncronous' is nonzero, take
-	 * control asyncronously (assert ATN immediately without waiting
+	 * Take control (assert ATN).  If 'asynchronous' is nonzero, take
+	 * control asynchronously (assert ATN immediately without waiting
 	 * for other processes to complete first).  Should not return
 	 * until board becomes controller in charge.  Returns zero no success,
 	 * nonzero on error.
 	 */
-	int (*take_control)(struct gpib_board *board, int asyncronous);
+	int (*take_control)(struct gpib_board *board, int asynchronous);
 	/*
 	 * De-assert ATN.  Returns zero on success, nonzer on error.
 	 */

@@ -286,7 +286,7 @@ static int wait_for_read(struct gpib_board *board)
  * in the case where the handshake is stuck in SGNS due to no byte being
  * available to the chip (and thus we can be confident a dma transfer will
  * result in at least one byte making it into the chip).  This matters
- * because we want to be confident before sending a "send eoi" auxilary
+ * because we want to be confident before sending a "send eoi" auxiliary
  * command that we will be able to also put the associated data byte
  * in the chip before any potential timeout.
  */
@@ -517,7 +517,7 @@ static int fluke_accel_write(struct gpib_board *board, u8 *buffer, size_t length
 		/*
 		 * wait until we are sure we will be able to write the data byte
 		 * into the chip before we send AUX_SEOI.  This prevents a timeout
-		 * scenerio where we send AUX_SEOI but then timeout without getting
+		 * scenario where we send AUX_SEOI but then timeout without getting
 		 * any bytes into the gpib chip.  This will result in the first byte
 		 * of the next write having a spurious EOI set on the first byte.
 		 */

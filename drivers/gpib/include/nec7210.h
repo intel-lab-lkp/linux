@@ -84,7 +84,7 @@ int nec7210_write(struct gpib_board *board, struct nec7210_priv *priv, u8 *buffe
 		  size_t length, int send_eoi, size_t *bytes_written);
 int nec7210_command(struct gpib_board *board, struct nec7210_priv *priv, u8 *buffer,
 		    size_t length, size_t *bytes_written);
-int nec7210_take_control(struct gpib_board *board, struct nec7210_priv *priv, int syncronous);
+int nec7210_take_control(struct gpib_board *board, struct nec7210_priv *priv, int synchronous);
 int nec7210_go_to_standby(struct gpib_board *board, struct nec7210_priv *priv);
 int nec7210_request_system_control(struct gpib_board *board,
 				   struct nec7210_priv *priv, int request_control);
