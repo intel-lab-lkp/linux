@@ -5,7 +5,7 @@ lib_dir=$(dirname $0)/../../../net/forwarding
 
 ALL_TESTS="fw_flash_test params_test  \
 	   params_default_test regions_test reload_test \
-	   netns_reload_test resource_test dev_info_test \
+	   netns_reload_test resource_test port_resource_test dev_info_test \
 	   empty_reporter_test dummy_reporter_test rate_test"
 NUM_NETIFS=0
 source $lib_dir/lib.sh
@@ -854,6 +854,41 @@ rate_test()
 	check_err $? "Failed to delete node $node1"
 
 	log_test "rate test"
+}
+
+port_resource_test()
+{
+	RET=0
+
+	if ! devlink port help 2>&1 | grep -q resource; then
+		echo "SKIP: missing devlink port resource support"
+		return
+	fi
+
+	local first_port="${DL_HANDLE}/0"
+	local name
+	local size
+
+	devlink port resource show "$first_port" > /dev/null 2>&1
+	check_err $? "Failed to show port resource for $first_port"
+
+	name=$(cmd_jq "devlink port resource show $first_port -j" \
+		      ".[][][].name")
+	[ "$name" == "max_sfs" ]
+	check_err $? "Unexpected resource name $name (expected max_sfs)"
+
+	size=$(cmd_jq "devlink port resource show $first_port -j" \
+		      ".[][][].size")
+	[ "$size" == "20" ]
+	check_err $? "Unexpected resource size $size (expected 20)"
+
+	devlink port resource show "$DL_HANDLE" > /dev/null 2>&1
+	check_err $? "Failed to show port resources for $DL_HANDLE"
+
+	devlink port resource show > /dev/null 2>&1
+	check_err $? "Failed to dump all port resources"
+
+	log_test "port resource test"
 }
 
 setup_prepare()
