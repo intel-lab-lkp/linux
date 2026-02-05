@@ -343,4 +343,6 @@ enum hwsim_rate_info_attributes {
 	HWSIM_RATE_INFO_ATTR_MAX = NUM_HWSIM_RATE_INFO_ATTRS - 1
 };
 
+/* no longer used - previously used for debugfs iterator */
+
 #endif /* __MAC80211_HWSIM_H */
