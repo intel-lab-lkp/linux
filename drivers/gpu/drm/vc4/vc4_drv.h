@@ -152,6 +152,10 @@ struct vc4_dev {
 	 */
 	uint64_t emit_seqno;
 
+	struct vc4_bin_job *bin_job;
+
+	struct vc4_render_job *render_job;
+
 	/* Sequence number for the last completed job on the GPU.
 	 * Starts at 0 (no jobs completed).
 	 */
@@ -668,8 +672,83 @@ struct vc4_crtc_state {
 
 #define VC4_REG32(reg) { .name = #reg, .offset = reg }
 
+struct vc4_job {
+	struct drm_sched_job base;
+
+	struct kref refcount;
+
+	struct vc4_dev *vc4;
+
+	/* v3d fence to be signaled by IRQ handler when the job is complete. */
+	struct dma_fence *irq_fence;
+
+	/* scheduler fence for when the job is considered complete and
+	 * the BO reservations can be released.
+	 */
+	struct dma_fence *done_fence;
+
+	/* Last current and return addresses the hardware was processing when
+	 * the job timedout.
+	 */
+	u32 timedout_ctca, timedout_ctra;
+
+	/* Pointer to a performance monitor object if the user requested it,
+	 * NULL otherwise.
+	 */
+	struct vc4_perfmon *perfmon;
+
+	/* Callback for the freeing of the job on refcount going to 0. */
+	void (*free)(struct kref *ref);
+};
+
+struct vc4_bin_job {
+	struct vc4_job base;
+
+	uint32_t ct0ca, ct0ea;
+
+	/* Corresponding render job, for attaching our overflow memory. */
+	struct vc4_render_job *render;
+
+	/* Whether the exec has taken a reference to the binner BO, which should
+	 * happen with a VC4_PACKET_TILE_BINNING_MODE_CONFIG packet.
+	 */
+	bool bin_bo_used;
+};
+
+struct vc4_render_job {
+	struct vc4_job base;
+
+	uint32_t ct1ca, ct1ea;
+
+	/* This is the array of BOs that were looked up at the start of submission.
+	 * Command validation will use indices into this array.
+	 */
+	struct drm_gem_object **bo;
+	u32 bo_count;
+
+	/* List of other BOs used in the job that need to be released
+	 * once the job is complete.
+	 */
+	struct list_head unref_list;
+
+	/* List of BOs that are being written by the RCL. Other than
+	 * the binner temporary storage, this is all the BOs written
+	 * by the job.
+	 */
+	struct drm_gem_dma_object *rcl_write_bo[4];
+	uint32_t rcl_write_bo_count;
+
+	/* Bitmask of which binner slots are freed when this job completes.
+	 * Must remain allocated until the render job completes.
+	 */
+	uint32_t bin_slots;
+};
+
 struct vc4_exec_info {
 	struct vc4_dev *dev;
+
+	struct vc4_bin_job *bin;
+	struct vc4_render_job *render;
 
 	/* Sequence number for this bin/render job. */
 	uint64_t seqno;
