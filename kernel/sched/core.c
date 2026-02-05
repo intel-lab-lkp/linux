@@ -2165,9 +2165,9 @@ static void block_task(struct rq *rq, struct task_struct *p, int flags)
  * task_curr - is this task currently executing on a CPU?
  * @p: the task in question.
  *
- * Return: 1 if the task is currently executing. 0 otherwise.
+ * Return: true if the task is currently executing, false otherwise.
  */
-inline int task_curr(const struct task_struct *p)
+inline bool task_curr(const struct task_struct *p)
 {
 	return cpu_curr(task_cpu(p)) == p;
 }
