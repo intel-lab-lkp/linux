@@ -208,6 +208,9 @@ struct svm_nested_state {
 	 */
 	struct vmcb_save_area_cached save;
 
+	/* Cached guest PAT from vmcb12.save.g_pat */
+	u64 gpat;
+
 	bool initialized;
 
 	/*
