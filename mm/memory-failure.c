@@ -2440,9 +2440,12 @@ try_again:
 
 	folio = page_folio(p);
 
-	/* filter pages that are protected from hwpoison test by users */
+	/*
+	 * filter pages that are protected from hwpoison test by users or
+	 * unsupported non folio compound ones
+	 */
 	folio_lock(folio);
-	if (hwpoison_filter(p)) {
+	if (hwpoison_filter(p) || PageNonFolioCompound(p)) {
 		ClearPageHWPoison(p);
 		folio_unlock(folio);
 		folio_put(folio);
@@ -2945,7 +2948,7 @@ retry:
 	ret = get_hwpoison_page(page, flags | MF_SOFT_OFFLINE);
 	put_online_mems();
 
-	if (hwpoison_filter(page)) {
+	if (hwpoison_filter(page) || PageNonFolioCompound(page)) {
 		if (ret > 0)
 			put_page(page);
 

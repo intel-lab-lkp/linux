@@ -1102,6 +1102,22 @@ static inline bool folio_contain_hwpoisoned_page(struct folio *folio)
 
 bool is_free_buddy_page(const struct page *page);
 
+static inline bool PageNonFolioCompound(const struct page *page)
+{
+	if (PageCompound(page)) {
+		const struct page *head = compound_head(page);
+
+		/*
+		 * Without CONFIG_TRANSPARENT_HUGEPAGE, PG_large_rmappable
+		 * should not be set/used.
+		 */
+		return !IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) ||
+		       !test_bit(PG_large_rmappable, &head[1].flags.f);
+	}
+
+	return false;
+}
+
 #ifdef CONFIG_MIGRATION
 /*
  * This page is migratable through movable_ops (for selected typed pages
