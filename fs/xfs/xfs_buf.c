@@ -2026,6 +2026,8 @@ xfs_buf_delwri_submit_nowait(
 		bp->b_flags |= XBF_ASYNC;
 		xfs_buf_list_del(bp);
 		xfs_buf_submit(bp);
+
+		cond_resched();
 	}
 	blk_finish_plug(&plug);
 
