@@ -20,6 +20,12 @@ my $D = dirname(abs_path($P));
 
 my $V = '0.32';
 
+my $rust_checkpatch_available = 0;
+if (-e "$D/rust_checkpatch.pl") {
+	require "$D/rust_checkpatch.pl";
+	$rust_checkpatch_available = 1;
+}
+
 use Getopt::Long qw(:config no_auto_abbrev);
 
 my $quiet = 0;
@@ -2946,6 +2952,14 @@ sub process {
 		my $hereprev = "$here\n$prevrawline\n$rawline\n";
 
 		$cnt_lines++ if ($realcnt != 0);
+
+# Check for Rust-specific lints
+		if ($rust_checkpatch_available && $realfile =~ /\.rs$/) {
+			my ($type, $msg) = process_rust($line, $rawline, $herecurr);
+			if ($type) {
+				WARN($type, $msg);
+			}
+		}
 
 # Verify the existence of a commit log if appropriate
 # 2 is used because a $signature is counted in $commit_log_lines
