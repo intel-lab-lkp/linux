@@ -797,6 +797,28 @@ static int igb_ptp_verify_pin(struct ptp_clock_info *ptp, unsigned int pin,
 }
 
 /**
+ * igb_ptp_tx_tstamp_event
+ * @adapter: pointer to igb adapter
+ *
+ * This function checks the TSYNCTXCTL valid bit and stores the Tx hardware
+ * timestamp at the current skb.
+ **/
+void igb_ptp_tx_tstamp_event(struct igb_adapter *adapter)
+{
+	struct e1000_hw *hw = &adapter->hw;
+	u32 tsynctxctl;
+
+	if (!adapter->ptp_tx_skb)
+		return;
+
+	tsynctxctl = rd32(E1000_TSYNCTXCTL);
+	if (WARN_ON_ONCE(!(tsynctxctl & E1000_TSYNCTXCTL_VALID)))
+		return;
+
+	igb_ptp_tx_hwtstamp(adapter);
+}
+
+/**
  * igb_ptp_tx_work
  * @work: pointer to work struct
  *

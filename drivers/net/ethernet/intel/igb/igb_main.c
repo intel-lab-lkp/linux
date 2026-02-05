@@ -7078,7 +7078,10 @@ static void igb_tsync_interrupt(struct igb_adapter *adapter)
 
 	if (tsicr & E1000_TSICR_TXTS) {
 		/* retrieve hardware timestamp */
-		schedule_work(&adapter->ptp_tx_work);
+		if (hw->mac.type == e1000_i210)
+			igb_ptp_tx_tstamp_event(adapter);
+		else
+			schedule_work(&adapter->ptp_tx_work);
 	}
 
 	if (tsicr & TSINTR_TT0)
