@@ -114,7 +114,7 @@ drm_gpusvm_helper-$(CONFIG_ZONE_DEVICE) += \
 
 obj-$(CONFIG_DRM_GPUSVM) += drm_gpusvm_helper.o
 
-obj-$(CONFIG_DRM_BUDDY) += ../buddy.o
+obj-$(CONFIG_DRM_BUDDY) += drm_buddy.o
 
 drm_dma_helper-y := drm_gem_dma_helper.o
 drm_dma_helper-$(CONFIG_DRM_FBDEV_EMULATION) += drm_fbdev_dma.o
