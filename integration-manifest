@@ -1,0 +1,36 @@
+drm drm-fixes 18f7fcd5e69a04df57b563360b88be72471d6b62
+	Linux 6.19-rc8
+drm-misc drm-misc-fixes 40b24d9cdd4141ef43eeaa7e57c3efc07a567473
+	drm/bridge: imx8mp-hdmi-pai: enable PM runtime
+drm-rust drm-rust-fixes 0f61b1860cc3f52aef9036d7235ed1f017632193
+	Linux 6.19-rc5
+drm-intel drm-intel-fixes 63804fed149a6750ffd28610c5c1c98cce6bd377
+	Linux 6.19-rc7
+drm-xe drm-xe-fixes 4cb1b327135dddf3d0ec2544ea36ed05ba2252bc
+	drm/xe/guc: Fix CFI violation in debugfs access.
+drm drm-next 3cc9398a9ea69b77de01b370463b706c354e52fb
+	Merge tag 'exynos-drm-next-for-v6.20' of git://git.kernel.org/pub/scm/linux/kernel/git/daeinki/drm-exynos into drm-next
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 3e28a67a85f9b569066f6dfcddadb39294c0c9d4
+	drm/i915/display: fix the pixel normalization handling for xe3p_lpd
+drm-xe drm-xe-next-fixes 3cc9398a9ea69b77de01b370463b706c354e52fb
+	Merge tag 'exynos-drm-next-for-v6.20' of git://git.kernel.org/pub/scm/linux/kernel/git/daeinki/drm-exynos into drm-next
+drm-misc drm-misc-next 2bcbc706dfa02ae50118173a6f6d8a12e735480c
+	dma-buf: add dma_fence_was_initialized function v2
+drm-rust drm-rust-next cea7b66a80412e2a5b74627b89ae25f1d0110a4b
+	Documentation: nova: update pending tasks
+drm-intel drm-intel-next fcb7a015464ddbb59001df46ea3f75a9501e131b
+	drm/i915/alpm: Disable LOBF around transitioning for LRR/seamless MN
+drm-intel drm-intel-gt-next 8103ecc1999eefc54b740d8d99f264ced1d9c54d
+	drm/i915/selftests: Keep mock file open during unfaultable migrate with fill
+drm-xe drm-xe-next ec49857ad181f2a68a3bea15422f2936ff366d47
+	drm/gpusvm: Allow device pages to be mapped in mixed mappings after system pages
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 9192109a0891a7fd9a40e366c74222adcd75577d
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
