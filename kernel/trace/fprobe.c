@@ -672,12 +672,38 @@ struct filter_match_data {
 	struct module **mods;
 };
 
+/*
+ * Check if @name matches any comma-separated glob pattern in @list.
+ * If @list contains no commas, this is equivalent to glob_match().
+ */
+static bool glob_match_comma_list(const char *list, const char *name)
+{
+	const char *cur = list;
+
+	while (*cur) {
+		const char *sep = strchr(cur, ',');
+		int len = sep ? sep - cur : strlen(cur);
+		char pat[KSYM_NAME_LEN];
+
+		if (len > 0 && len < KSYM_NAME_LEN) {
+			memcpy(pat, cur, len);
+			pat[len] = '\0';
+			if (glob_match(pat, name))
+				return true;
+		}
+		if (!sep)
+			break;
+		cur = sep + 1;
+	}
+	return false;
+}
+
 static int filter_match_callback(void *data, const char *name, unsigned long addr)
 {
 	struct filter_match_data *match = data;
 
-	if (!glob_match(match->filter, name) ||
-	    (match->notfilter && glob_match(match->notfilter, name)))
+	if (!glob_match_comma_list(match->filter, name) ||
+	    (match->notfilter && glob_match_comma_list(match->notfilter, name)))
 		return 0;
 
 	if (!ftrace_location(addr))
