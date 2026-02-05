@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_cache.h>
+#include <drm/intel/intel_gmd_interrupt_regs.h>
 
 #include "gem/i915_gem_internal.h"
 
