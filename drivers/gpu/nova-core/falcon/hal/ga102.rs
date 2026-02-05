@@ -75,7 +75,7 @@ fn signature_reg_fuse_version_ga102(
     Ok(u16::BITS - reg_fuse_version.leading_zeros())
 }
 
-fn program_brom_ga102<E: FalconEngine>(bar: &Bar0, params: &FalconBromParams) -> Result {
+fn program_brom_ga102<E: FalconEngine>(bar: &Bar0, params: &FalconBromParams) {
     regs::NV_PFALCON2_FALCON_BROM_PARAADDR::default()
         .set_value(params.pkc_data_offset)
         .write(bar, &E::ID, 0);
@@ -88,8 +88,6 @@ fn program_brom_ga102<E: FalconEngine>(bar: &Bar0, params: &FalconBromParams) ->
     regs::NV_PFALCON2_FALCON_MOD_SEL::default()
         .set_algo(FalconModSelAlgo::Rsa3k)
         .write(bar, &E::ID);
-
-    Ok(())
 }
 
 pub(super) struct Ga102<E: FalconEngine>(PhantomData<E>);
@@ -115,8 +113,8 @@ impl<E: FalconEngine> FalconHal<E> for Ga102<E> {
         signature_reg_fuse_version_ga102(&falcon.dev, bar, engine_id_mask, ucode_id)
     }
 
-    fn program_brom(&self, _falcon: &Falcon<E>, bar: &Bar0, params: &FalconBromParams) -> Result {
-        program_brom_ga102::<E>(bar, params)
+    fn program_brom(&self, _falcon: &Falcon<E>, bar: &Bar0, params: &FalconBromParams) {
+        program_brom_ga102::<E>(bar, params);
     }
 
     fn is_riscv_active(&self, bar: &Bar0) -> bool {

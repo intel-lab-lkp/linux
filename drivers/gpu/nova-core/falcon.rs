@@ -532,7 +532,7 @@ impl<E: FalconEngine + 'static> Falcon<E> {
         self.dma_wr(bar, fw, FalconMem::ImemSecure, fw.imem_sec_load_params())?;
         self.dma_wr(bar, fw, FalconMem::Dmem, fw.dmem_load_params())?;
 
-        self.hal.program_brom(self, bar, &fw.brom_params())?;
+        self.hal.program_brom(self, bar, &fw.brom_params());
 
         // Set `BootVec` to start of non-secure code.
         regs::NV_PFALCON_FALCON_BOOTVEC::default()
