@@ -1521,10 +1521,14 @@ static long atomisp_vidioc_default(struct file *file, void *fh,
 		break;
 
 	case ATOMISP_IOC_EXP_ID_UNLOCK:
+		mutex_lock(&asd->isp->mutex);
 		err = atomisp_exp_id_unlock(asd, arg);
+		mutex_unlock(&asd->isp->mutex);
 		break;
 	case ATOMISP_IOC_EXP_ID_CAPTURE:
+		mutex_lock(&asd->isp->mutex);
 		err = atomisp_exp_id_capture(asd, arg);
+		mutex_unlock(&asd->isp->mutex);
 		break;
 	case ATOMISP_IOC_S_ENABLE_DZ_CAPT_PIPE:
 		err = atomisp_enable_dz_capt_pipe(asd, arg);
@@ -1537,7 +1541,9 @@ static long atomisp_vidioc_default(struct file *file, void *fh,
 		err = atomisp_formats(asd, 1, arg);
 		break;
 	case ATOMISP_IOC_INJECT_A_FAKE_EVENT:
+		mutex_lock(&asd->isp->mutex);
 		err = atomisp_inject_a_fake_event(asd, arg);
+		mutex_unlock(&asd->isp->mutex);
 		break;
 	case ATOMISP_IOC_S_ARRAY_RESOLUTION:
 		err = atomisp_set_array_res(asd, arg);
