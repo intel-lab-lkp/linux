@@ -1128,6 +1128,8 @@ struct bnxt_rx_sw_stats {
 	u64			rx_buf_errors;
 	u64			rx_oom_discards;
 	u64			rx_netpoll_discards;
+	u64			rx_hw_gro_packets;
+	u64			rx_hw_gro_wire_packets;
 };
 
 struct bnxt_tx_sw_stats {
@@ -1151,6 +1153,8 @@ struct bnxt_total_ring_err_stats {
 	u64			rx_total_oom_discards;
 	u64			rx_total_netpoll_discards;
 	u64			rx_total_ring_discards;
+	u64			rx_total_hw_gro_packets;
+	u64			rx_total_hw_gro_wire_packets;
 	u64			tx_total_resets;
 	u64			tx_total_ring_discards;
 	u64			total_missed_irqs;
