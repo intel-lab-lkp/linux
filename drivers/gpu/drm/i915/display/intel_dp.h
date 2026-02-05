@@ -222,8 +222,6 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 int intel_dp_sdp_min_guardband(const struct intel_crtc_state *crtc_state,
 			       bool assume_all_enabled);
 int intel_dp_max_hdisplay_per_pipe(struct intel_display *display);
-bool intel_dp_can_join(struct intel_display *display,
-		       int num_joined_pipes);
 bool intel_dp_dotclk_valid(struct intel_display *display,
 			   int target_clock,
 			   int htotal,
