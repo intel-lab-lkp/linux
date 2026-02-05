@@ -2852,6 +2852,20 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_AMD64_DE_CFG:
 		msr_info->data = svm->msr_decfg;
 		break;
+	case MSR_IA32_CR_PAT:
+		/*
+		 * When nested NPT is enabled, L2 has a separate PAT from L1.
+		 * Guest accesses to IA32_PAT while running L2 target L2's gPAT;
+		 * host-initiated accesses always target L1's hPAT for backward
+		 * and forward KVM_GET_MSRS compatibility with older kernels.
+		 */
+		WARN_ON_ONCE(msr_info->host_initiated && vcpu->wants_to_run);
+		if (!msr_info->host_initiated && is_guest_mode(vcpu) &&
+		    nested_npt_enabled(svm))
+			msr_info->data = svm->nested.gpat;
+		else
+			msr_info->data = vcpu->arch.pat;
+		break;
 	default:
 		return kvm_get_msr_common(vcpu, msr_info);
 	}
@@ -2935,13 +2949,21 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 
 		break;
 	case MSR_IA32_CR_PAT:
-		ret = kvm_set_msr_common(vcpu, msr);
-		if (ret)
-			break;
+		if (!kvm_pat_valid(data))
+			return 1;
 
-		svm_set_vmcb_gpat(svm->vmcb01.ptr, data);
-		if (is_guest_mode(vcpu))
-			nested_vmcb02_compute_g_pat(svm);
+		/*
+		 * When nested NPT is enabled, L2 has a separate PAT from L1.
+		 * Guest accesses to IA32_PAT while running L2 target L2's gPAT;
+		 * host-initiated accesses always target L1's hPAT for backward
+		 * and forward KVM_SET_MSRS compatibility with older kernels.
+		 */
+		WARN_ON_ONCE(msr->host_initiated && vcpu->wants_to_run);
+		if (!msr->host_initiated && is_guest_mode(vcpu) &&
+		    nested_npt_enabled(svm))
+			svm_set_gpat(svm, data);
+		else
+			svm_set_hpat(svm, data);
 		break;
 	case MSR_IA32_SPEC_CTRL:
 		if (!msr->host_initiated &&

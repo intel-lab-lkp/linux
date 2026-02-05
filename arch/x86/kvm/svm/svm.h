@@ -590,6 +590,22 @@ static inline bool nested_npt_enabled(struct vcpu_svm *svm)
 	return svm->nested.ctl.nested_ctl & SVM_NESTED_CTL_NP_ENABLE;
 }
 
+static inline void svm_set_gpat(struct vcpu_svm *svm, u64 data)
+{
+	svm->nested.gpat = data;
+	svm_set_vmcb_gpat(svm->nested.vmcb02.ptr, data);
+}
+
+static inline void svm_set_hpat(struct vcpu_svm *svm, u64 data)
+{
+	svm->vcpu.arch.pat = data;
+	if (npt_enabled) {
+		svm_set_vmcb_gpat(svm->vmcb01.ptr, data);
+		if (is_guest_mode(&svm->vcpu) && !nested_npt_enabled(svm))
+			svm_set_vmcb_gpat(svm->nested.vmcb02.ptr, data);
+	}
+}
+
 static inline bool nested_vnmi_enabled(struct vcpu_svm *svm)
 {
 	return guest_cpu_cap_has(&svm->vcpu, X86_FEATURE_VNMI) &&
@@ -816,7 +832,6 @@ void nested_copy_vmcb_control_to_cache(struct vcpu_svm *svm,
 void nested_copy_vmcb_save_to_cache(struct vcpu_svm *svm,
 				    struct vmcb_save_area *save);
 void nested_sync_control_from_vmcb02(struct vcpu_svm *svm);
-void nested_vmcb02_compute_g_pat(struct vcpu_svm *svm);
 void svm_switch_vmcb(struct vcpu_svm *svm, struct kvm_vmcb_info *target_vmcb);
 
 extern struct kvm_x86_nested_ops svm_nested_ops;
