@@ -1667,13 +1667,13 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
  */
 struct svc_pending_send {
 	struct llist_node	node;
-	struct svc_rqst		*rqstp;
+	struct xdr_buf		*xdr;
 	rpc_fraghdr		marker;
 	struct completion	done;
 	int			result;
 };
 
-static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
+static int svc_tcp_sendmsg(struct svc_sock *svsk, struct xdr_buf *xdr,
 			   rpc_fraghdr marker, int msg_flags);
 
 /*
@@ -1734,6 +1734,8 @@ static void svc_tcp_combine_sends(struct svc_sock *svsk, struct svc_xprt *xprt)
 	start = ktime_get_ns();
 
 	for (node = pending; node; node = next) {
+		size_t expected;
+
 		next = node->next;
 		ps = container_of(node, struct svc_pending_send, node);
 
@@ -1748,17 +1750,30 @@ static void svc_tcp_combine_sends(struct svc_sock *svsk, struct svc_xprt *xprt)
 		 * Set MSG_MORE if there are more items queued, hinting
 		 * TCP to delay pushing until the batch completes.
 		 */
-		sent = svc_tcp_sendmsg(svsk, ps->rqstp, ps->marker,
+		sent = svc_tcp_sendmsg(svsk, ps->xdr, ps->marker,
 				       next ? MSG_MORE : 0);
 		trace_svcsock_tcp_send(xprt, sent);
 
-		if (sent == ps->rqstp->rq_res.len + sizeof(ps->marker)) {
+		expected = ps->xdr->len + sizeof(ps->marker);
+		if (sent == expected) {
 			ps->result = sent;
 		} else {
 			pr_notice("rpc-srv/tcp: %s: %s (%d of %zu bytes) - shutting down socket\n",
 				  xprt->xpt_server->sv_name,
-				  sent < 0 ? "send error" : "short send", sent,
-				  ps->rqstp->rq_res.len + sizeof(ps->marker));
+				  sent < 0 ? "send error" : "short send",
+				  sent, expected);
+			pr_notice("rpc-srv/tcp: %s: %s (%d of %zu bytes) - shutting down socket\n",
+				  xprt->xpt_server->sv_name,
+				  sent < 0 ? "send error" : "short send",
+				  sent, expected);
+			pr_notice("rpc-srv/tcp: %s: %s (%d of %zu bytes) - shutting down socket\n",
+				  xprt->xpt_server->sv_name,
+				  sent < 0 ? "send error" : "short send",
+				  sent, expected);
+			pr_notice("rpc-srv/tcp: %s: %s (%d of %zu bytes) - shutting down socket\n",
+				  xprt->xpt_server->sv_name,
+				  sent < 0 ? "send error" : "short send",
+				  sent, expected);
 			svc_xprt_deferred_close(xprt);
 			transport_dead = true;
 			ps->result = -EAGAIN;
@@ -1778,7 +1793,7 @@ static void svc_tcp_combine_sends(struct svc_sock *svsk, struct svc_xprt *xprt)
  * copy operations in this path. Therefore the caller must ensure
  * that the pages backing @xdr are unchanging.
  */
-static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
+static int svc_tcp_sendmsg(struct svc_sock *svsk, struct xdr_buf *xdr,
 			   rpc_fraghdr marker, int msg_flags)
 {
 	struct msghdr msg = {
@@ -1798,38 +1813,39 @@ static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
 	memcpy(buf, &marker, sizeof(marker));
 	bvec_set_virt(svsk->sk_bvec, buf, sizeof(marker));
 
-	count = xdr_buf_to_bvec(svsk->sk_bvec + 1, rqstp->rq_maxpages,
-				&rqstp->rq_res);
+	count = xdr_buf_to_bvec(svsk->sk_bvec + 1, svsk->sk_maxpages, xdr);
 
 	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, svsk->sk_bvec,
-		      1 + count, sizeof(marker) + rqstp->rq_res.len);
+		      1 + count, sizeof(marker) + xdr->len);
 	ret = sock_sendmsg(svsk->sk_sock, &msg);
 	page_frag_free(buf);
 	return ret;
 }
 
 /**
- * svc_tcp_sendto - Send out a reply on a TCP socket
- * @rqstp: completed svc_rqst
+ * svc_tcp_send - Send an XDR buffer on a TCP socket using flat combining
+ * @xprt: the transport to send on
+ * @xdr: the XDR buffer to send
+ * @marker: RPC record marker
  *
  * Uses flat combining to reduce mutex contention: threads enqueue their
  * send requests and one thread (the "combiner") processes the batch.
  * xpt_mutex ensures RPC-level serialization while the combiner holds it.
  *
+ * Can be used for both fore channel (NFS replies) and backchannel
+ * (NFSv4 callbacks) sends since both share the same TCP connection
+ * and xpt_mutex.
+ *
  * Returns the number of bytes sent, or a negative errno.
  */
-static int svc_tcp_sendto(struct svc_rqst *rqstp)
+int svc_tcp_send(struct svc_xprt *xprt, struct xdr_buf *xdr,
+		 rpc_fraghdr marker)
 {
-	struct svc_xprt *xprt = rqstp->rq_xprt;
 	struct svc_sock *svsk = container_of(xprt, struct svc_sock, sk_xprt);
-	struct xdr_buf *xdr = &rqstp->rq_res;
 	struct svc_pending_send ps = {
-		.rqstp = rqstp,
-		.marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT | (u32)xdr->len),
+		.xdr = xdr,
+		.marker = marker,
 	};
-
-	svc_tcp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
-	rqstp->rq_xprt_ctxt = NULL;
 
 	init_completion(&ps.done);
 
@@ -1874,6 +1890,26 @@ combine:
 	mutex_unlock(&xprt->xpt_mutex);
 
 	return ps.result;
+}
+EXPORT_SYMBOL_GPL(svc_tcp_send);
+
+/**
+ * svc_tcp_sendto - Send out a reply on a TCP socket
+ * @rqstp: completed svc_rqst
+ *
+ * Returns the number of bytes sent, or a negative errno.
+ */
+static int svc_tcp_sendto(struct svc_rqst *rqstp)
+{
+	struct svc_xprt *xprt = rqstp->rq_xprt;
+	struct xdr_buf *xdr = &rqstp->rq_res;
+	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
+					 (u32)xdr->len);
+
+	svc_tcp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
+	rqstp->rq_xprt_ctxt = NULL;
+
+	return svc_tcp_send(xprt, xdr, marker);
 }
 
 static struct svc_xprt *svc_tcp_create(struct svc_serv *serv,

@@ -2979,36 +2979,13 @@ static void bc_free(struct rpc_task *task)
 	free_page((unsigned long)buf);
 }
 
-static int bc_sendto(struct rpc_rqst *req)
-{
-	struct xdr_buf *xdr = &req->rq_snd_buf;
-	struct sock_xprt *transport =
-			container_of(req->rq_xprt, struct sock_xprt, xprt);
-	struct msghdr msg = {
-		.msg_flags	= 0,
-	};
-	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
-					 (u32)xdr->len);
-	unsigned int sent = 0;
-	int err;
-
-	req->rq_xtime = ktime_get();
-	err = xdr_alloc_bvec(xdr, rpc_task_gfp_mask());
-	if (err < 0)
-		return err;
-	err = xprt_sock_sendmsg(transport->sock, &msg, xdr, 0, marker, &sent);
-	xdr_free_bvec(xdr);
-	if (err < 0 || sent != (xdr->len + sizeof(marker)))
-		return -EAGAIN;
-	return sent;
-}
-
 /**
  * bc_send_request - Send a backchannel Call on a TCP socket
  * @req: rpc_rqst containing Call message to be sent
  *
- * xpt_mutex ensures @rqstp's whole message is written to the socket
- * without interruption.
+ * Uses flat combining via svc_tcp_send() to participate in batched
+ * sending with fore channel traffic, ensuring fair ordering and
+ * reduced lock contention.
  *
  * Return values:
  *   %0 if the message was sent successfully
@@ -3016,29 +2993,18 @@ static int bc_sendto(struct rpc_rqst *req)
  */
 static int bc_send_request(struct rpc_rqst *req)
 {
-	struct svc_xprt	*xprt;
-	int len;
+	struct xdr_buf *xdr = &req->rq_snd_buf;
+	struct svc_xprt *xprt = req->rq_xprt->bc_xprt;
+	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
+					 (u32)xdr->len);
+	int ret;
 
-	/*
-	 * Get the server socket associated with this callback xprt
-	 */
-	xprt = req->rq_xprt->bc_xprt;
+	req->rq_xtime = ktime_get();
+	ret = svc_tcp_send(xprt, xdr, marker);
 
-	/*
-	 * Grab the mutex to serialize data as the connection is shared
-	 * with the fore channel
-	 */
-	mutex_lock(&xprt->xpt_mutex);
-	if (test_bit(XPT_DEAD, &xprt->xpt_flags))
-		len = -ENOTCONN;
-	else
-		len = bc_sendto(req);
-	mutex_unlock(&xprt->xpt_mutex);
-
-	if (len > 0)
-		len = 0;
-
-	return len;
+	if (ret < 0)
+		return ret;
+	return 0;
 }
 
 static void bc_close(struct rpc_xprt *xprt)
