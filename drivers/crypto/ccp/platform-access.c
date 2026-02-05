@@ -46,7 +46,12 @@ int psp_check_platform_access_status(void)
 {
 	struct psp_device *psp = psp_get_master_device();
 
-	if (!psp || !psp->platform_access_data)
+	/* PSP driver not loaded yet, caller should defer */
+	if ((!psp) || (!psp->platform_access_data && psp->vdata->platform_access))
+		return -EPROBE_DEFER;
+
+	/* PSP loaded but platform_access not supported by hardware */
+	if (!psp->platform_access_data && !psp->vdata->platform_access)
 		return -ENODEV;
 
 	return 0;
