@@ -334,7 +334,7 @@ static int cxl_nvdimm_bridge_probe(struct device *dev)
 	struct cxl_nvdimm_bridge *cxl_nvb = to_cxl_nvdimm_bridge(dev);
 
 	cxl_nvb->nd_desc = (struct nvdimm_bus_descriptor) {
-		.provider_name = "CXL",
+		.provider_name = dev_name(dev->parent->parent),
 		.module = THIS_MODULE,
 		.ndctl = cxl_pmem_ctl,
 	};

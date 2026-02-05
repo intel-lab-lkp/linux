@@ -89,7 +89,7 @@ struct nvdimm_bus_descriptor {
 	unsigned long dimm_family_mask;
 	unsigned long bus_family_mask;
 	struct module *module;
-	char *provider_name;
+	const char *provider_name;
 	struct device_node *of_node;
 	ndctl_fn ndctl;
 	int (*flush_probe)(struct nvdimm_bus_descriptor *nd_desc);

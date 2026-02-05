@@ -148,21 +148,6 @@ struct acpi_pci_root *__wrap_acpi_pci_find_root(acpi_handle handle)
 }
 EXPORT_SYMBOL_GPL(__wrap_acpi_pci_find_root);
 
-struct nvdimm_bus *
-__wrap_nvdimm_bus_register(struct device *dev,
-			   struct nvdimm_bus_descriptor *nd_desc)
-{
-	int index;
-	struct cxl_mock_ops *ops = get_cxl_mock_ops(&index);
-
-	if (ops && ops->is_mock_dev(dev->parent->parent))
-		nd_desc->provider_name = "cxl_test";
-	put_cxl_mock_ops(index);
-
-	return nvdimm_bus_register(dev, nd_desc);
-}
-EXPORT_SYMBOL_GPL(__wrap_nvdimm_bus_register);
-
 int redirect_devm_cxl_switch_port_decoders_setup(struct cxl_port *port)
 {
 	int rc, index;
