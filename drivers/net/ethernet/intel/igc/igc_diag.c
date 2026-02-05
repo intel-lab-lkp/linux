@@ -158,7 +158,7 @@ bool igc_eeprom_test(struct igc_adapter *adapter, u64 *data)
 
 	*data = 0;
 
-	if (hw->nvm.ops.validate(hw) != IGC_SUCCESS) {
+	if (hw->nvm.ops.validate && hw->nvm.ops.validate(hw) != IGC_SUCCESS) {
 		*data = 1;
 		return false;
 	}
