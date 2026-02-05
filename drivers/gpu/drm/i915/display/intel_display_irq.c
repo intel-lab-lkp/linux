@@ -5,6 +5,7 @@
 
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
+#include <drm/intel/intel_gmd_interrupt_regs.h>
 
 #include "i915_reg.h"
 #include "icl_dsi_regs.h"
