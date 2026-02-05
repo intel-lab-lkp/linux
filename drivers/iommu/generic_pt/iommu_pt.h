@@ -372,6 +372,9 @@ static inline struct pt_table_p *_table_alloc(struct pt_common *common,
 
 	table_mem = iommu_alloc_pages_node_sz(iommu_table->nid, gfp,
 					      log2_to_int(lg2sz));
+	if (!table_mem)
+		return ERR_PTR(-ENOMEM);
+
 	if (pt_feature(common, PT_FEAT_DMA_INCOHERENT) &&
 	    mode == ALLOC_NORMAL) {
 		int ret = iommu_pages_start_incoherent(
@@ -642,7 +645,7 @@ static __always_inline int __do_map_single_page(struct pt_range *range,
 	struct pt_iommu_map_args *map = arg;
 
 	pts.type = pt_load_single_entry(&pts);
-	if (level == 0) {
+	if (pts.level == 0) {
 		if (pts.type != PT_ENTRY_EMPTY)
 			return -EADDRINUSE;
 		pt_install_leaf_entry(&pts, map->oa, PAGE_SHIFT,
