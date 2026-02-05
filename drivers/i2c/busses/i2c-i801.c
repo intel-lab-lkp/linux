@@ -1533,6 +1533,11 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int err, i, bar = SMBBAR;
 	struct i801_priv *priv;
+	struct i2c_adapter_quirks *quirks;
+
+	quirks = devm_kzalloc(&dev->dev, sizeof(*quirks), GFP_KERNEL);
+	if (!quirks)
+		return -ENOMEM;
 
 	priv = devm_kzalloc(&dev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -1600,8 +1605,17 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		/* Disable SMBus interrupt feature if SMBus using SMI# */
 		priv->features &= ~FEATURE_IRQ;
 	}
-	if (priv->original_hstcfg & SMBHSTCFG_SPD_WD)
+
+	/*
+	 * Detect the SPD Write Disabled status. Mark the adapter
+	 * as unable to perform SPD writes, which allows consuming
+	 * drivers to decide on safe operation.
+	 */
+	if (priv->original_hstcfg & SMBHSTCFG_SPD_WD) {
 		pci_info(dev, "SPD Write Disable is set\n");
+		quirks->flags |= I2C_AQ_SPD_WRITE_DISABLED;
+	}
+	priv->adapter.quirks = quirks;
 
 	/* Clear special mode bits */
 	if (priv->features & (FEATURE_SMBUS_PEC | FEATURE_BLOCK_BUFFER))

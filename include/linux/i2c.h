@@ -726,6 +726,9 @@ struct i2c_adapter_quirks {
 /* adapter cannot do repeated START */
 #define I2C_AQ_NO_REP_START		BIT(7)
 
+/* SPD writes are blocked by host controller */
+#define I2C_AQ_SPD_WRITE_DISABLED	BIT(8)
+
 /*
  * i2c_adapter is the structure used to identify a physical i2c bus along
  * with the access algorithms necessary to access it.
