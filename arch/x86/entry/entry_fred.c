@@ -208,6 +208,11 @@ static noinstr void fred_hwexc(struct pt_regs *regs, unsigned long error_code)
 #ifdef CONFIG_X86_CET
 	case X86_TRAP_CP: return exc_control_protection(regs, error_code);
 #endif
+	case X86_TRAP_VC:
+		if (user_mode(regs))
+			return user_exc_vmm_communication(regs, error_code);
+		else
+			return kernel_exc_vmm_communication(regs, error_code);
 	default: return fred_bad_type(regs, error_code);
 	}
 
