@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Renesas Ethernet Switch device driver
  *
- * Copyright (C) 2025 Renesas Electronics Corporation
+ * Copyright (C) 2025 - 2026 Renesas Electronics Corporation
  */
 
 #include <linux/err.h>
@@ -88,7 +88,8 @@ static void rswitch_update_l2_hw_forwarding(struct rswitch_private *priv)
 		    rdev->forwarding_requested &&
 		    !rdev->forwarding_offloaded) {
 			rswitch_change_l2_hw_offloading(rdev, true, false);
-		} else if (rdev->forwarding_offloaded) {
+		} else if (rdev->forwarding_offloaded &&
+			   !rdev->forwarding_requested) {
 			rswitch_change_l2_hw_offloading(rdev, false, false);
 		}
 	}
