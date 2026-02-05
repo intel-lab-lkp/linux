@@ -358,7 +358,12 @@ fore200e_shutdown(struct fore200e* fore200e)
     printk(FORE200E "removing device %s at 0x%lx, IRQ %s\n",
 	   fore200e->name, fore200e->phys_base, 
 	   fore200e_irq_itoa(fore200e->irq));
-    
+
+#ifdef FORE200E_USE_TASKLET
+	tasklet_kill(&fore200e->tx_tasklet);
+	tasklet_kill(&fore200e->rx_tasklet);
+#endif
+
     if (fore200e->state > FORE200E_STATE_RESET) {
 	/* first, reset the board to prevent further interrupts or data transfers */
 	fore200e_reset(fore200e, 0);
