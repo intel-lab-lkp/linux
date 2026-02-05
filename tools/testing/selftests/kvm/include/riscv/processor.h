@@ -62,6 +62,10 @@ static inline uint64_t __kvm_reg_id(uint64_t type, uint64_t subtype,
 						     KVM_REG_RISCV_SBI_SINGLE,		\
 						     idx, KVM_REG_SIZE_ULONG)
 
+#define RISCV_SBI_STA_REG(idx)	__kvm_reg_id(KVM_REG_RISCV_SBI_STATE,	\
+						     KVM_REG_RISCV_SBI_STA,			\
+						     idx, KVM_REG_SIZE_ULONG)
+
 bool __vcpu_has_ext(struct kvm_vcpu *vcpu, uint64_t ext);
 
 static inline bool __vcpu_has_isa_ext(struct kvm_vcpu *vcpu, uint64_t isa_ext)
