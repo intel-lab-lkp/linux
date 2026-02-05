@@ -12,6 +12,32 @@
 
 #include <linux/sunrpc/svc.h>
 #include <linux/sunrpc/svc_xprt.h>
+#include <linux/cache.h>
+#include <linux/llist.h>
+#include <linux/wait.h>
+#include <linux/completion.h>
+#include <linux/ktime.h>
+
+/* Maximum queued messages per TCP socket before backpressure */
+#define SVC_TCP_MSG_QUEUE_MAX	64
+
+/**
+ * struct svc_tcp_msg - queued RPC message ready for processing
+ * @tm_node: lock-free queue linkage
+ * @tm_len: total message length
+ * @tm_npages: number of pages holding message data
+ * @tm_pages: flexible array of pages containing the message
+ *
+ * The receiver thread allocates these to queue complete RPC messages
+ * for worker threads to process. Page ownership transfers from the
+ * receiver's rqstp to this structure, then to the worker's rqstp.
+ */
+struct svc_tcp_msg {
+	struct llist_node	tm_node;
+	size_t			tm_len;
+	unsigned int		tm_npages;
+	struct page		*tm_pages[];
+};
 
 /*
  * RPC server socket.
@@ -42,6 +68,16 @@ struct svc_sock {
 	struct page_frag_cache  sk_frag_cache;
 
 	struct completion	sk_handshake_done;
+
+	/* Dedicated receiver thread (TCP only) */
+	struct task_struct	*sk_receiver;
+	struct llist_head	sk_msg_queue;
+	wait_queue_head_t	sk_receiver_wq;
+	struct completion	sk_receiver_exit;
+	struct svc_page_pool	*sk_page_pool;
+	ktime_t			sk_partial_record_time;
+
+	atomic_t		sk_msg_count ____cacheline_aligned_in_smp;
 
 	/* received data */
 	unsigned long		sk_maxpages;
