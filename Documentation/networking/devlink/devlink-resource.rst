@@ -74,3 +74,39 @@ attribute, which represents the pending change in size. For example:
 
 Note that changes in resource size may require a device reload to properly
 take effect.
+
+Port-level Resources
+====================
+
+In addition to device-level resources, ``devlink`` also supports port-level
+resources. These resources are associated with a specific devlink port rather
+than the device as a whole.
+
+Currently, port-level resources only support the ``show`` command for viewing
+resource information.
+
+Port-level resources can be viewed for a specific port:
+
+.. code:: shell
+
+    $ devlink port resource show pci/0000:03:00.0/196608
+      pci/0000:03:00.0/196608:
+        name max_SFs size 20 unit entry
+
+Or for ports of a specific device:
+
+.. code:: shell
+
+    $ devlink port resource show pci/0000:03:00.0
+      pci/0000:03:00.0/196608:
+        name max_SFs size 20 unit entry
+
+Or for all ports across all devices:
+
+.. code:: shell
+
+    $ devlink port resource show
+      pci/0000:03:00.0/196608:
+        name max_SFs size 20 unit entry
+      pci/0000:03:00.1/262144:
+        name max_SFs size 20 unit entry
