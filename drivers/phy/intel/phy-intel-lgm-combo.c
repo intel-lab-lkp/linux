@@ -24,6 +24,9 @@
 
 #define PAD_DIS_CFG		0x174
 
+#define PCIE_PHY_SRAM_CSR	0x08
+#define PCIE_PHY_SRAM_LD_DONE	BIT(1)
+
 #define PCS_XF_ATE_OVRD_IN_2	0x3008
 #define ADAPT_REQ_MSK		GENMASK(5, 4)
 
@@ -344,6 +347,16 @@ static int intel_cbphy_init(struct phy *phy)
 	}
 
 	cbphy->init_cnt++;
+
+	combo_phy_w32_off_mask(cbphy->app_base, PCIE_PHY_SRAM_CSR,
+				PCIE_PHY_SRAM_LD_DONE,
+				FIELD_PREP(PCIE_PHY_SRAM_LD_DONE, 1));
+
+	mutex_unlock(&cbphy->lock);
+
+	/* 15ms is required for the FW to take effect after load */
+	mdelay(15);
+	return 0;
 
 err:
 	mutex_unlock(&cbphy->lock);
