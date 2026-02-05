@@ -227,6 +227,7 @@ static int devlink_resource_fill(struct genl_info *info,
 				 struct list_head *resource_list,
 				 enum devlink_command cmd, int flags)
 {
+	struct devlink_port *devlink_port = info->user_ptr[1];
 	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_resource *resource;
 	struct nlattr *resources_attr;
@@ -255,6 +256,10 @@ start_again:
 	}
 
 	if (devlink_nl_put_handle(skb, devlink))
+		goto nla_put_failure;
+
+	if (devlink_port && nla_put_u32(skb, DEVLINK_ATTR_PORT_INDEX,
+					devlink_port->index))
 		goto nla_put_failure;
 
 	resources_attr = nla_nest_start_noflag(skb,
@@ -576,3 +581,99 @@ void devl_port_resources_unregister(struct devlink_port *devlink_port)
 				    &devlink_port->resource_list);
 }
 EXPORT_SYMBOL_GPL(devl_port_resources_unregister);
+
+static int devlink_nl_port_resource_fill(struct sk_buff *msg,
+					 struct devlink_port *devlink_port,
+					 enum devlink_command cmd,
+					 u32 portid, u32 seq, int flags)
+{
+	struct devlink *devlink = devlink_port->devlink;
+	struct devlink_resource *resource;
+	struct nlattr *resources_attr;
+	void *hdr;
+
+	if (list_empty(&devlink_port->resource_list))
+		return 0;
+
+	hdr = genlmsg_put(msg, portid, seq, &devlink_nl_family, flags, cmd);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if (devlink_nl_put_handle(msg, devlink))
+		goto nla_put_failure;
+	if (nla_put_u32(msg, DEVLINK_ATTR_PORT_INDEX, devlink_port->index))
+		goto nla_put_failure;
+
+	resources_attr = nla_nest_start_noflag(msg, DEVLINK_ATTR_RESOURCE_LIST);
+	if (!resources_attr)
+		goto nla_put_failure;
+
+	list_for_each_entry(resource, &devlink_port->resource_list, list) {
+		if (devlink_resource_put(devlink, msg, resource)) {
+			nla_nest_cancel(msg, resources_attr);
+			goto nla_put_failure;
+		}
+	}
+	nla_nest_end(msg, resources_attr);
+	genlmsg_end(msg, hdr);
+	return 0;
+
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	return -EMSGSIZE;
+}
+
+int devlink_nl_port_resource_get_doit(struct sk_buff *skb,
+				      struct genl_info *info)
+{
+	struct devlink_port *devlink_port = info->user_ptr[1];
+	struct sk_buff *msg;
+	int err;
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	err = devlink_nl_port_resource_fill(msg, devlink_port,
+					    DEVLINK_CMD_PORT_RESOURCE_GET,
+					    info->snd_portid, info->snd_seq, 0);
+	if (err) {
+		nlmsg_free(msg);
+		return err;
+	}
+
+	return genlmsg_reply(msg, info);
+}
+
+static int
+devlink_nl_port_resource_get_dump_one(struct sk_buff *msg,
+				      struct devlink *devlink,
+				      struct netlink_callback *cb, int flags)
+{
+	enum devlink_command cmd = DEVLINK_CMD_PORT_RESOURCE_GET;
+	struct devlink_nl_dump_state *state = devlink_dump_state(cb);
+	struct devlink_port *devlink_port;
+	unsigned long port_index;
+	int err;
+
+	xa_for_each_start(&devlink->ports, port_index, devlink_port,
+			  state->idx) {
+		err = devlink_nl_port_resource_fill(msg, devlink_port,
+						    cmd,
+						    NETLINK_CB(cb->skb).portid,
+						    cb->nlh->nlmsg_seq, flags);
+		if (err) {
+			state->idx = port_index;
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+int devlink_nl_port_resource_get_dumpit(struct sk_buff *skb,
+					struct netlink_callback *cb)
+{
+	return devlink_nl_dumpit(skb, cb,
+				 devlink_nl_port_resource_get_dump_one);
+}
