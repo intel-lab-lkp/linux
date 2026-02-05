@@ -92,8 +92,10 @@ initial_plane_bo(struct xe_device *xe,
 		flags |= XE_BO_FLAG_STOLEN;
 
 		if (IS_ENABLED(CONFIG_FRAMEBUFFER_CONSOLE) &&
-		    !intel_fbdev_fb_prefer_stolen(xe->display, plane_config->size))
+		    !intel_fbdev_fb_prefer_stolen(xe->display, plane_config->size)) {
+			drm_info(&xe->drm, "Stolen memory is not preferred for the initial plane bo.\n");
 			return NULL;
+		}
 	}
 
 	size = round_up(plane_config->base + plane_config->size,
