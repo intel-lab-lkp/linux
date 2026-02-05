@@ -20,6 +20,7 @@ use kernel::{
         self,
         Device, //
     },
+    io_project,
     prelude::*,
     transmute::{
         AsBytes,
@@ -64,6 +65,8 @@ struct FalconAppifHdrV1 {
 }
 // SAFETY: Any byte sequence is valid for this struct.
 unsafe impl FromBytes for FalconAppifHdrV1 {}
+// SAFETY: This struct doesn't contain uninitialized bytes and doesn't have interior mutability.
+unsafe impl AsBytes for FalconAppifHdrV1 {}
 
 #[repr(C, packed)]
 #[derive(Debug)]
@@ -73,6 +76,8 @@ struct FalconAppifV1 {
 }
 // SAFETY: Any byte sequence is valid for this struct.
 unsafe impl FromBytes for FalconAppifV1 {}
+// SAFETY: This struct doesn't contain uninitialized bytes and doesn't have interior mutability.
+unsafe impl AsBytes for FalconAppifV1 {}
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -177,41 +182,6 @@ impl AsRef<[u8]> for Bcrt30Rsa3kSignature {
 
 impl FirmwareSignature<FwsecFirmware> for Bcrt30Rsa3kSignature {}
 
-/// Reinterpret the area starting from `offset` in `fw` as an instance of `T` (which must implement
-/// [`FromBytes`]) and return a reference to it.
-///
-/// # Safety
-///
-/// * Callers must ensure that the device does not read/write to/from memory while the returned
-///   reference is live.
-/// * Callers must ensure that this call does not race with a write to the same region while
-///   the returned reference is live.
-unsafe fn transmute<T: Sized + FromBytes>(fw: &DmaObject, offset: usize) -> Result<&T> {
-    // SAFETY: The safety requirements of the function guarantee the device won't read
-    // or write to memory while the reference is alive and that this call won't race
-    // with writes to the same memory region.
-    T::from_bytes(unsafe { fw.as_slice(offset, size_of::<T>())? }).ok_or(EINVAL)
-}
-
-/// Reinterpret the area starting from `offset` in `fw` as a mutable instance of `T` (which must
-/// implement [`FromBytes`]) and return a reference to it.
-///
-/// # Safety
-///
-/// * Callers must ensure that the device does not read/write to/from memory while the returned
-///   slice is live.
-/// * Callers must ensure that this call does not race with a read or write to the same region
-///   while the returned slice is live.
-unsafe fn transmute_mut<T: Sized + FromBytes + AsBytes>(
-    fw: &mut DmaObject,
-    offset: usize,
-) -> Result<&mut T> {
-    // SAFETY: The safety requirements of the function guarantee the device won't read
-    // or write to memory while the reference is alive and that this call won't race
-    // with writes or reads to the same memory region.
-    T::from_bytes_mut(unsafe { fw.as_slice_mut(offset, size_of::<T>())? }).ok_or(EINVAL)
-}
-
 /// The FWSEC microcode, extracted from the BIOS and to be run on the GSP falcon.
 ///
 /// It is responsible for e.g. carving out the WPR2 region as the first step of the GSP bootflow.
@@ -264,11 +234,12 @@ impl FirmwareDmaObject<FwsecFirmware, Unsigned> {
     fn new_fwsec(dev: &Device<device::Bound>, bios: &Vbios, cmd: FwsecCommand) -> Result<Self> {
         let desc = bios.fwsec_image().header()?;
         let ucode = bios.fwsec_image().ucode(&desc)?;
-        let mut dma_object = DmaObject::from_data(dev, ucode)?;
+        let dma_object = DmaObject::from_data(dev, ucode)?;
 
         let hdr_offset = usize::from_safe_cast(desc.imem_load_size() + desc.interface_offset());
+        let hdr_view = io_project!(dma_object, [hdr_offset..]?).try_cast::<FalconAppifHdrV1>()?;
         // SAFETY: we have exclusive access to `dma_object`.
-        let hdr: &FalconAppifHdrV1 = unsafe { transmute(&dma_object, hdr_offset) }?;
+        let hdr: &FalconAppifHdrV1 = unsafe { hdr_view.as_ref() };
 
         if hdr.version != 1 {
             return Err(EINVAL);
@@ -276,26 +247,27 @@ impl FirmwareDmaObject<FwsecFirmware, Unsigned> {
 
         // Find the DMEM mapper section in the firmware.
         for i in 0..usize::from(hdr.entry_count) {
+            let app_view = io_project!(
+                dma_object,
+                [hdr_offset + usize::from(hdr.header_size) + i * usize::from(hdr.entry_size)..]?
+            )
+            .try_cast::<FalconAppifV1>()?;
             // SAFETY: we have exclusive access to `dma_object`.
-            let app: &FalconAppifV1 = unsafe {
-                transmute(
-                    &dma_object,
-                    hdr_offset + usize::from(hdr.header_size) + i * usize::from(hdr.entry_size),
-                )
-            }?;
+            let app = unsafe { app_view.as_ref() };
 
             if app.id != NVFW_FALCON_APPIF_ID_DMEMMAPPER {
                 continue;
             }
             let dmem_base = app.dmem_base;
 
+            let dmem_mapper_view = io_project!(
+                dma_object,
+                [(desc.imem_load_size() + dmem_base).into_safe_cast()..]?
+            )
+            .try_cast::<FalconAppifDmemmapperV3>()?;
+
             // SAFETY: we have exclusive access to `dma_object`.
-            let dmem_mapper: &mut FalconAppifDmemmapperV3 = unsafe {
-                transmute_mut(
-                    &mut dma_object,
-                    (desc.imem_load_size() + dmem_base).into_safe_cast(),
-                )
-            }?;
+            let dmem_mapper: &mut FalconAppifDmemmapperV3 = unsafe { dmem_mapper_view.as_mut() };
 
             dmem_mapper.init_cmd = match cmd {
                 FwsecCommand::Frts { .. } => NVFW_FALCON_APPIF_DMEMMAPPER_CMD_FRTS,
@@ -303,13 +275,13 @@ impl FirmwareDmaObject<FwsecFirmware, Unsigned> {
             };
             let cmd_in_buffer_offset = dmem_mapper.cmd_in_buffer_offset;
 
+            let frts_cmd_view = io_project!(
+                dma_object,
+                [(desc.imem_load_size() + cmd_in_buffer_offset).into_safe_cast()..]?
+            )
+            .try_cast::<FrtsCmd>()?;
             // SAFETY: we have exclusive access to `dma_object`.
-            let frts_cmd: &mut FrtsCmd = unsafe {
-                transmute_mut(
-                    &mut dma_object,
-                    (desc.imem_load_size() + cmd_in_buffer_offset).into_safe_cast(),
-                )
-            }?;
+            let frts_cmd = unsafe { frts_cmd_view.as_mut() };
 
             frts_cmd.read_vbios = ReadVbios {
                 ver: 1,

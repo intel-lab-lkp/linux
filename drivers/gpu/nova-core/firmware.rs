@@ -310,7 +310,7 @@ trait FirmwareSignature<F: FalconFirmware>: AsRef<[u8]> {}
 impl<F: FalconFirmware> FirmwareDmaObject<F, Unsigned> {
     /// Patches the firmware at offset `sig_base_img` with `signature`.
     fn patch_signature<S: FirmwareSignature<F>>(
-        mut self,
+        self,
         signature: &S,
         sig_base_img: usize,
     ) -> Result<FirmwareDmaObject<F, Signed>> {
@@ -320,12 +320,8 @@ impl<F: FalconFirmware> FirmwareDmaObject<F, Unsigned> {
         }
 
         // SAFETY: We are the only user of this object, so there cannot be any race.
-        let dst = unsafe { self.0.start_ptr_mut().add(sig_base_img) };
-
-        // SAFETY: `signature` and `dst` are valid, properly aligned, and do not overlap.
-        unsafe {
-            core::ptr::copy_nonoverlapping(signature_bytes.as_ptr(), dst, signature_bytes.len())
-        };
+        let dst = unsafe { self.0.as_mut() };
+        dst[sig_base_img..][..signature_bytes.len()].copy_from_slice(signature_bytes);
 
         Ok(FirmwareDmaObject(self.0, PhantomData))
     }
