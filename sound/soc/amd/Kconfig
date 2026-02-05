@@ -132,6 +132,17 @@ config SND_SOC_AMD_RPL_ACP6x
           Say m if you have such a device.
           If unsure select "N".
 
+config SND_SOC_AMD_RPL_MACH
+	tristate "AMD RPL support for DMIC"
+	select SND_SOC_DMIC
+	depends on SND_SOC_AMD_ACP6x && ACPI
+	help
+	  This option enables machine driver for AMD RPL platform
+	  using dmic. ACP IP has PDM Decoder block with DMA controller.
+	  DMIC can be connected directly to ACP IP.
+	  Say m if you have such a device.
+	  If unsure select "N".
+
 config SND_SOC_AMD_ACP63_TOPLEVEL
 	tristate "support for AMD platforms with ACP version >= 6.3"
 	default SND_AMD_ACP_CONFIG
