@@ -228,8 +228,13 @@ static inline unsigned long ppc_kallsyms_lookup_name(const char *name)
 	/* check for dot variant */
 	char dot_name[1 + KSYM_NAME_LEN];
 	bool dot_appended = false;
+	size_t n_len = __compiletime_strlen(name);
+	const size_t n_size = __member_size(name);
 
-	if (strnlen(name, KSYM_NAME_LEN) >= KSYM_NAME_LEN)
+	if (n_len == SIZE_MAX || KSYM_NAME_LEN < n_size)
+		n_len = strnlen(name, KSYM_NAME_LEN);
+	
+	if (n_len >= KSYM_NAME_LEN)
 		return 0;
 
 	if (name[0] != '.') {
