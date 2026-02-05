@@ -7,6 +7,7 @@
 
 #include <drm/drm_blend.h>
 #include <drm/drm_print.h>
+#include <drm/intel/intel_pcode_regs.h>
 
 #include "i915_reg.h"
 #include "i9xx_wm.h"

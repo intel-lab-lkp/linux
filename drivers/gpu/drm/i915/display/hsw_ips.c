@@ -6,6 +6,7 @@
 #include <linux/debugfs.h>
 
 #include <drm/drm_print.h>
+#include <drm/intel/intel_pcode_regs.h>
 
 #include "hsw_ips.h"
 #include "i915_reg.h"

@@ -6,6 +6,7 @@
 #include <linux/iopoll.h>
 
 #include <drm/drm_print.h>
+#include <drm/intel/intel_pcode_regs.h>
 
 #include "i915_reg.h"
 #include "intel_backlight_regs.h"

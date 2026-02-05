@@ -48,6 +48,7 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/intel/display_member.h>
 #include <drm/intel/display_parent_interface.h>
+#include <drm/intel/intel_pcode_regs.h>
 
 #include "display/i9xx_display_sr.h"
 #include "display/intel_bw.h"

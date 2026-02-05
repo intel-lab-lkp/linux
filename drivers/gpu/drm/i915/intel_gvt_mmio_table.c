@@ -3,6 +3,8 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <drm/intel/intel_pcode_regs.h>
+
 #include "display/bxt_dpio_phy_regs.h"
 #include "display/i9xx_plane_regs.h"
 #include "display/i9xx_wm_regs.h"
