@@ -1397,9 +1397,14 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 }
 
 static
-bool intel_dp_can_join(struct intel_display *display,
+bool intel_dp_can_join(struct intel_dp *intel_dp,
 		       int num_joined_pipes)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (num_joined_pipes > 1 && !intel_dp_has_joiner(intel_dp))
+		return false;
+
 	switch (num_joined_pipes) {
 	case 1:
 		return true;
@@ -1496,7 +1501,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	 * over candidate pipe counts and evaluate each combination.
 	 */
 	status = MODE_CLOCK_HIGH;
-	for_each_joiner_candidate(connector, mode, num_joined_pipes) {
+	for_each_joiner_candidate(intel_dp, connector, mode, num_joined_pipes) {
 		int dsc_slice_count = 0;
 
 		status = intel_pfit_mode_valid(display, mode, output_format, num_joined_pipes);
@@ -2895,7 +2900,7 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 	    !intel_dp_supports_fec(intel_dp, connector, crtc_state))
 		return -EINVAL;
 
-	for_each_joiner_candidate(connector, adjusted_mode, num_joined_pipes) {
+	for_each_joiner_candidate(intel_dp, connector, adjusted_mode, num_joined_pipes) {
 		/*
 		 * NOTE:
 		 * The crtc_state->joiner_pipes should have been set at the end
@@ -7215,13 +7220,14 @@ int intel_dp_sdp_min_guardband(const struct intel_crtc_state *crtc_state,
 	return sdp_guardband;
 }
 
-bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
+bool intel_dp_joiner_candidate_valid(struct intel_dp *intel_dp,
+				     struct intel_connector *connector,
 				     int hdisplay,
 				     int num_joined_pipes)
 {
 	struct intel_display *display = to_intel_display(connector);
 
-	if (!intel_dp_can_join(display, num_joined_pipes))
+	if (!intel_dp_can_join(intel_dp, num_joined_pipes))
 		return false;
 
 	if (hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
