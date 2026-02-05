@@ -2799,7 +2799,7 @@ int format_counters(struct thread_data *t, struct core_data *c, struct pkg_data 
 
 	for (i = 0, ppmt = sys.pmt_tp; ppmt; i++, ppmt = ppmt->next) {
 		switch (ppmt->type) {
-		case PMT_TYPE_RAW:
+		case PMT_TYPE_RAW: {
 			if (pmt_counter_get_width(ppmt) <= 32)
 				outp += sprintf(outp, "%s0x%08x", (printed++ ? delim : ""),
 						(unsigned int)t->pmt_counter[i]);
@@ -2807,14 +2807,14 @@ int format_counters(struct thread_data *t, struct core_data *c, struct pkg_data 
 				outp += sprintf(outp, "%s0x%016llx", (printed++ ? delim : ""), t->pmt_counter[i]);
 
 			break;
-
-		case PMT_TYPE_XTAL_TIME:
+		}
+		case PMT_TYPE_XTAL_TIME: {
 			const unsigned long value_raw = t->pmt_counter[i];
 			const double value_converted = 100.0 * value_raw / crystal_hz / interval_float;
 
 			outp += sprintf(outp, "%s%.2f", (printed++ ? delim : ""), value_converted);
 			break;
-		}
+		}}
 	}
 
 	/* C1 */
@@ -2880,7 +2880,7 @@ int format_counters(struct thread_data *t, struct core_data *c, struct pkg_data 
 
 	for (i = 0, ppmt = sys.pmt_cp; ppmt; i++, ppmt = ppmt->next) {
 		switch (ppmt->type) {
-		case PMT_TYPE_RAW:
+		case PMT_TYPE_RAW: {
 			if (pmt_counter_get_width(ppmt) <= 32)
 				outp += sprintf(outp, "%s0x%08x", (printed++ ? delim : ""),
 						(unsigned int)c->pmt_counter[i]);
@@ -2888,14 +2888,14 @@ int format_counters(struct thread_data *t, struct core_data *c, struct pkg_data 
 				outp += sprintf(outp, "%s0x%016llx", (printed++ ? delim : ""), c->pmt_counter[i]);
 
 			break;
-
-		case PMT_TYPE_XTAL_TIME:
+		}
+		case PMT_TYPE_XTAL_TIME: {
 			const unsigned long value_raw = c->pmt_counter[i];
 			const double value_converted = 100.0 * value_raw / crystal_hz / interval_float;
 
 			outp += sprintf(outp, "%s%.2f", (printed++ ? delim : ""), value_converted);
 			break;
-		}
+		}}
 	}
 
 	fmt8 = "%s%.2f";
@@ -3079,7 +3079,7 @@ int format_counters(struct thread_data *t, struct core_data *c, struct pkg_data 
 
 	for (i = 0, ppmt = sys.pmt_pp; ppmt; i++, ppmt = ppmt->next) {
 		switch (ppmt->type) {
-		case PMT_TYPE_RAW:
+		case PMT_TYPE_RAW: {
 			if (pmt_counter_get_width(ppmt) <= 32)
 				outp += sprintf(outp, "%s0x%08x", (printed++ ? delim : ""),
 						(unsigned int)p->pmt_counter[i]);
@@ -3087,14 +3087,14 @@ int format_counters(struct thread_data *t, struct core_data *c, struct pkg_data 
 				outp += sprintf(outp, "%s0x%016llx", (printed++ ? delim : ""), p->pmt_counter[i]);
 
 			break;
-
-		case PMT_TYPE_XTAL_TIME:
+		}
+		case PMT_TYPE_XTAL_TIME: {
 			const unsigned long value_raw = p->pmt_counter[i];
 			const double value_converted = 100.0 * value_raw / crystal_hz / interval_float;
 
 			outp += sprintf(outp, "%s%.2f", (printed++ ? delim : ""), value_converted);
 			break;
-		}
+		}}
 	}
 
 done:
