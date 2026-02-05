@@ -1156,7 +1156,7 @@ struct xfrm_offload {
 #define CRYPTO_INVALID_PROTOCOL			128
 
 	/* Used to keep whole l2 header for transport mode GRO */
-	__u32			orig_mac_len;
+	__u16			orig_mac_len;
 
 	__u8			proto;
 	__u8			inner_ipproto;
@@ -1165,10 +1165,10 @@ struct xfrm_offload {
 struct sec_path {
 	int			len;
 	int			olen;
+	struct xfrm_offload	ovec[XFRM_MAX_OFFLOAD_DEPTH];
 	int			verified_cnt;
 
 	struct xfrm_state	*xvec[XFRM_MAX_DEPTH];
-	struct xfrm_offload	ovec[XFRM_MAX_OFFLOAD_DEPTH];
 };
 
 struct sec_path *secpath_set(struct sk_buff *skb);
