@@ -405,6 +405,7 @@ static const char *wq_affn_names[WQ_AFFN_NR_TYPES] = {
 	[WQ_AFFN_DFL]		= "default",
 	[WQ_AFFN_CPU]		= "cpu",
 	[WQ_AFFN_SMT]		= "smt",
+	[WQ_AFFN_CLUSTER]	= "cluster",
 	[WQ_AFFN_CACHE]		= "cache",
 	[WQ_AFFN_NUMA]		= "numa",
 	[WQ_AFFN_SYSTEM]	= "system",
@@ -4753,6 +4754,39 @@ static void wqattrs_actualize_cpumask(struct workqueue_attrs *attrs,
 		cpumask_copy(attrs->cpumask, unbound_cpumask);
 }
 
+/*
+ * Determine the effective affinity scope. If the configured scope results
+ * in a single pod (e.g., WQ_AFFN_CACHE on a system with one shared LLC),
+ * fall back to a finer-grained scope to distribute pool lock contention.
+ *
+ * The search stops at WQ_AFFN_CPU, which always provides one pod per CPU
+ * and thus cannot degenerate further.
+ *
+ * Returns the scope to actually use, which may differ from the configured
+ * scope on systems where coarser scopes degenerate.
+ */
+static enum wq_affn_scope wq_effective_affn_scope(enum wq_affn_scope scope)
+{
+	struct wq_pod_type *pt;
+
+	/*
+	 * Walk from the requested scope toward finer granularity. Stop
+	 * when a scope provides more than one pod, or when CPU scope is
+	 * reached. CPU scope always provides nr_possible_cpus() pods.
+	 */
+	while (scope > WQ_AFFN_CPU) {
+		pt = &wq_pod_types[scope];
+
+		/* Multiple pods at this scope; no fallback needed */
+		if (pt->nr_pods > 1)
+			break;
+
+		scope--;
+	}
+
+	return scope;
+}
+
 /* find wq_pod_type to use for @attrs */
 static const struct wq_pod_type *
 wqattrs_pod_type(const struct workqueue_attrs *attrs)
@@ -4763,8 +4797,13 @@ wqattrs_pod_type(const struct workqueue_attrs *attrs)
 	/* to synchronize access to wq_affn_dfl */
 	lockdep_assert_held(&wq_pool_mutex);
 
+	/*
+	 * For default scope, apply automatic fallback for degenerate
+	 * topologies. Explicit scope selection via sysfs or per-workqueue
+	 * attributes bypasses fallback, preserving administrator intent.
+	 */
 	if (attrs->affn_scope == WQ_AFFN_DFL)
-		scope = wq_affn_dfl;
+		scope = wq_effective_affn_scope(wq_affn_dfl);
 	else
 		scope = attrs->affn_scope;
 
@@ -7206,16 +7245,27 @@ static ssize_t wq_affn_scope_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
+	enum wq_affn_scope scope, effective;
 	int written;
 
 	mutex_lock(&wq->mutex);
-	if (wq->unbound_attrs->affn_scope == WQ_AFFN_DFL)
-		written = scnprintf(buf, PAGE_SIZE, "%s (%s)\n",
-				    wq_affn_names[WQ_AFFN_DFL],
-				    wq_affn_names[wq_affn_dfl]);
-	else
+	if (wq->unbound_attrs->affn_scope == WQ_AFFN_DFL) {
+		scope = wq_affn_dfl;
+		effective = wq_effective_affn_scope(scope);
+		if (wq_pod_types[effective].nr_pods >
+		    wq_pod_types[scope].nr_pods)
+			written = scnprintf(buf, PAGE_SIZE, "%s (%s -> %s)\n",
+					    wq_affn_names[WQ_AFFN_DFL],
+					    wq_affn_names[scope],
+					    wq_affn_names[effective]);
+		else
+			written = scnprintf(buf, PAGE_SIZE, "%s (%s)\n",
+					    wq_affn_names[WQ_AFFN_DFL],
+					    wq_affn_names[scope]);
+	} else {
 		written = scnprintf(buf, PAGE_SIZE, "%s\n",
 				    wq_affn_names[wq->unbound_attrs->affn_scope]);
+	}
 	mutex_unlock(&wq->mutex);
 
 	return written;
@@ -8023,6 +8073,11 @@ static bool __init cpus_share_smt(int cpu0, int cpu1)
 #endif
 }
 
+static bool __init cpus_share_cluster(int cpu0, int cpu1)
+{
+	return cpumask_test_cpu(cpu0, topology_cluster_cpumask(cpu1));
+}
+
 static bool __init cpus_share_numa(int cpu0, int cpu1)
 {
 	return cpu_to_node(cpu0) == cpu_to_node(cpu1);
@@ -8042,6 +8097,7 @@ void __init workqueue_init_topology(void)
 
 	init_pod_type(&wq_pod_types[WQ_AFFN_CPU], cpus_dont_share);
 	init_pod_type(&wq_pod_types[WQ_AFFN_SMT], cpus_share_smt);
+	init_pod_type(&wq_pod_types[WQ_AFFN_CLUSTER], cpus_share_cluster);
 	init_pod_type(&wq_pod_types[WQ_AFFN_CACHE], cpus_share_cache);
 	init_pod_type(&wq_pod_types[WQ_AFFN_NUMA], cpus_share_numa);
 
