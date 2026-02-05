@@ -720,7 +720,7 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->has_pch_encoder = false;
 
-	for_each_joiner_candidate(connector, adjusted_mode, num_joined_pipes) {
+	for_each_joiner_candidate(intel_dp, connector, adjusted_mode, num_joined_pipes) {
 		if (num_joined_pipes > 1)
 			pipe_config->joiner_pipes = GENMASK(crtc->pipe + num_joined_pipes - 1,
 							    crtc->pipe);
@@ -1524,7 +1524,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	}
 
 	*status = MODE_CLOCK_HIGH;
-	for_each_joiner_candidate(connector, mode, num_joined_pipes) {
+	for_each_joiner_candidate(intel_dp, connector, mode, num_joined_pipes) {
 		int dsc_slice_count = 0;
 
 		if (intel_dp_has_dsc(connector) &&
