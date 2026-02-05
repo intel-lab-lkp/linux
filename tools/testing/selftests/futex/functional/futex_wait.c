@@ -41,61 +41,39 @@ TEST(private_futex)
 	unsigned int flags = FUTEX_PRIVATE_FLAG;
 	u_int32_t f_private = 0;
 	pthread_t waiter;
-	int res;
 
 	futex = &f_private;
 
 	/* Testing a private futex */
-	ksft_print_dbg_msg("Calling private futex_wait on futex: %p\n", futex);
-	if (pthread_create(&waiter, NULL, waiterfn, (void *) &flags))
-		ksft_exit_fail_msg("pthread_create failed\n");
+	ASSERT_EQ(0, pthread_create(&waiter, NULL, waiterfn, (void *) &flags));
 
 	usleep(WAKE_WAIT_US);
 
-	ksft_print_dbg_msg("Calling private futex_wake on futex: %p\n", futex);
-	res = futex_wake(futex, 1, FUTEX_PRIVATE_FLAG);
-	if (res != 1) {
-		ksft_test_result_fail("futex_wake private returned: %d %s\n",
-				      errno, strerror(errno));
-	} else {
-		ksft_test_result_pass("futex_wake private succeeds\n");
-	}
+	EXPECT_EQ(1, futex_wake(futex, 1, FUTEX_PRIVATE_FLAG));
 }
 
 TEST(anon_page)
 {
 	u_int32_t *shared_data;
 	pthread_t waiter;
-	int res, shm_id;
+	int shm_id;
 
 	/* Testing an anon page shared memory */
 	shm_id = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0666);
-	if (shm_id < 0) {
-		if (errno == ENOSYS)
-			ksft_exit_skip("shmget syscall not supported\n");
-		perror("shmget");
-		exit(1);
-	}
+	if (shm_id < 0 && errno == ENOSYS)
+		SKIP(return, "shmget syscall not supported");
+	ASSERT_LE(0, shm_id);
 
 	shared_data = shmat(shm_id, NULL, 0);
 
 	*shared_data = 0;
 	futex = shared_data;
 
-	ksft_print_dbg_msg("Calling shared (page anon) futex_wait on futex: %p\n", futex);
-	if (pthread_create(&waiter, NULL, waiterfn, NULL))
-		ksft_exit_fail_msg("pthread_create failed\n");
+	ASSERT_EQ(0, pthread_create(&waiter, NULL, waiterfn, NULL));
 
 	usleep(WAKE_WAIT_US);
 
-	ksft_print_dbg_msg("Calling shared (page anon) futex_wake on futex: %p\n", futex);
-	res = futex_wake(futex, 1, 0);
-	if (res != 1) {
-		ksft_test_result_fail("futex_wake shared (page anon) returned: %d %s\n",
-				      errno, strerror(errno));
-	} else {
-		ksft_test_result_pass("futex_wake shared (page anon) succeeds\n");
-	}
+	EXPECT_EQ(1, futex_wake(futex, 1, 0));
 
 	shmdt(shared_data);
 }
@@ -104,39 +82,25 @@ TEST(file_backed)
 {
 	u_int32_t f_private = 0;
 	pthread_t waiter;
-	int res, fd;
+	int fd;
 	void *shm;
 
 	/* Testing a file backed shared memory */
-	fd = open(SHM_PATH, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-	if (fd < 0)
-		ksft_exit_fail_msg("open\n");
-
-	if (ftruncate(fd, sizeof(f_private)))
-		ksft_exit_fail_msg("ftruncate\n");
+	ASSERT_LE(0, (fd = open(SHM_PATH, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR)));
+	ASSERT_EQ(0, ftruncate(fd, sizeof(f_private)));
 
 	shm = mmap(NULL, sizeof(f_private), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (shm == MAP_FAILED)
-		ksft_exit_fail_msg("mmap\n");
+	ASSERT_NE(MAP_FAILED, shm);
 
 	memcpy(shm, &f_private, sizeof(f_private));
 
 	futex = shm;
 
-	ksft_print_dbg_msg("Calling shared (file backed) futex_wait on futex: %p\n", futex);
-	if (pthread_create(&waiter, NULL, waiterfn, NULL))
-		ksft_exit_fail_msg("pthread_create failed\n");
+	ASSERT_EQ(0, pthread_create(&waiter, NULL, waiterfn, NULL));
 
 	usleep(WAKE_WAIT_US);
 
-	ksft_print_dbg_msg("Calling shared (file backed) futex_wake on futex: %p\n", futex);
-	res = futex_wake(shm, 1, 0);
-	if (res != 1) {
-		ksft_test_result_fail("futex_wake shared (file backed) returned: %d %s\n",
-				      errno, strerror(errno));
-	} else {
-		ksft_test_result_pass("futex_wake shared (file backed) succeeds\n");
-	}
+	EXPECT_EQ(1, futex_wake(shm, 1, 0));
 
 	munmap(shm, sizeof(f_private));
 	remove(SHM_PATH);
