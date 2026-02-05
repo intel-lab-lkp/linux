@@ -54,6 +54,8 @@ struct svc_sock {
 
 	/* For sends (protected by xpt_mutex) */
 	struct bio_vec		*sk_bvec;
+	struct llist_head	sk_send_queue;	/* pending sends for combining */
+	u64			sk_drain_avg_ns; /* EMA of combiner drain time */
 
 	/* private TCP part */
 	/* On-the-wire fragment header: */

@@ -1662,15 +1662,127 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 }
 
 /*
+ * Pending send request for flat combining.
+ * Stack-allocated by each thread that wants to send on a TCP socket.
+ */
+struct svc_pending_send {
+	struct llist_node	node;
+	struct svc_rqst		*rqstp;
+	rpc_fraghdr		marker;
+	struct completion	done;
+	int			result;
+};
+
+static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
+			   rpc_fraghdr marker, int msg_flags);
+
+/*
+ * svc_tcp_wait_timeout - Compute adaptive timeout for flat combining wait
+ * @svsk: the socket with drain time statistics
+ *
+ * Waiting threads need a timeout that balances two concerns: too short
+ * causes premature wakeups and unnecessary mutex acquisitions; too long
+ * delays threads when the combiner has already finished.
+ *
+ * LAN environments with fast networks and consistent latencies work well
+ * with fixed timeouts. WAN links exhibit higher variance in send times
+ * due to congestion, packet loss, and bandwidth constraints. An adaptive
+ * timeout based on observed drain times accommodates both cases without
+ * manual tuning.
+ *
+ * The timeout targets 2x the recent average drain time, clamped to
+ * [1ms, 100ms]. The multiplier provides headroom for variance while the
+ * floor prevents excessive wakeups and the ceiling bounds worst-case
+ * latency when measurements are anomalous.
+ *
+ * Returns: timeout in jiffies
+ */
+static unsigned long svc_tcp_wait_timeout(struct svc_sock *svsk)
+{
+	u64 avg_ns = READ_ONCE(svsk->sk_drain_avg_ns);
+	unsigned long timeout;
+
+	/* Initial timeout before measurements are available */
+	if (!avg_ns)
+		return msecs_to_jiffies(10);
+
+	timeout = nsecs_to_jiffies(avg_ns * 2);
+	return clamp(timeout, msecs_to_jiffies(1), msecs_to_jiffies(100));
+}
+
+/*
+ * svc_tcp_combine_sends - Process batched send requests as combiner
+ * @svsk: the socket to send on
+ * @xprt: the transport (for dead check and close)
+ *
+ * Called with xpt_mutex held. Drains sk_send_queue and processes each
+ * pending send. All items are completed before returning, even on error.
+ */
+static void svc_tcp_combine_sends(struct svc_sock *svsk, struct svc_xprt *xprt)
+{
+	struct llist_node *pending, *node, *next;
+	struct svc_pending_send *ps;
+	bool transport_dead = false;
+	u64 start, elapsed, avg;
+	int sent;
+
+	/* Take a snapshot of queued items; new arrivals go to next combiner */
+	pending = llist_del_all(&svsk->sk_send_queue);
+	if (!pending)
+		return;
+
+	start = ktime_get_ns();
+
+	for (node = pending; node; node = next) {
+		next = node->next;
+		ps = container_of(node, struct svc_pending_send, node);
+
+		if (transport_dead || svc_xprt_is_dead(xprt)) {
+			transport_dead = true;
+			ps->result = -ENOTCONN;
+			complete(&ps->done);
+			continue;
+		}
+
+		/*
+		 * Set MSG_MORE if there are more items queued, hinting
+		 * TCP to delay pushing until the batch completes.
+		 */
+		sent = svc_tcp_sendmsg(svsk, ps->rqstp, ps->marker,
+				       next ? MSG_MORE : 0);
+		trace_svcsock_tcp_send(xprt, sent);
+
+		if (sent == ps->rqstp->rq_res.len + sizeof(ps->marker)) {
+			ps->result = sent;
+		} else {
+			pr_notice("rpc-srv/tcp: %s: %s (%d of %zu bytes) - shutting down socket\n",
+				  xprt->xpt_server->sv_name,
+				  sent < 0 ? "send error" : "short send", sent,
+				  ps->rqstp->rq_res.len + sizeof(ps->marker));
+			svc_xprt_deferred_close(xprt);
+			transport_dead = true;
+			ps->result = -EAGAIN;
+		}
+
+		complete(&ps->done);
+	}
+
+	/* Update drain time EMA: new = (7 * old + measured) / 8 */
+	elapsed = ktime_get_ns() - start;
+	avg = READ_ONCE(svsk->sk_drain_avg_ns);
+	WRITE_ONCE(svsk->sk_drain_avg_ns, avg ? (7 * avg + elapsed) / 8 : elapsed);
+}
+
+/*
  * MSG_SPLICE_PAGES is used exclusively to reduce the number of
  * copy operations in this path. Therefore the caller must ensure
  * that the pages backing @xdr are unchanging.
  */
 static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
-			   rpc_fraghdr marker)
+			   rpc_fraghdr marker, int msg_flags)
 {
 	struct msghdr msg = {
-		.msg_flags	= MSG_SPLICE_PAGES,
+		.msg_flags	= MSG_SPLICE_PAGES | msg_flags,
 	};
 	unsigned int count;
 	void *buf;
@@ -1700,44 +1812,68 @@ static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
  * svc_tcp_sendto - Send out a reply on a TCP socket
  * @rqstp: completed svc_rqst
  *
- * xpt_mutex ensures @rqstp's whole message is written to the socket
- * without interruption.
+ * Uses flat combining to reduce mutex contention: threads enqueue their
+ * send requests and one thread (the "combiner") processes the batch.
+ * xpt_mutex ensures RPC-level serialization while the combiner holds it.
  *
  * Returns the number of bytes sent, or a negative errno.
  */
 static int svc_tcp_sendto(struct svc_rqst *rqstp)
 {
 	struct svc_xprt *xprt = rqstp->rq_xprt;
-	struct svc_sock	*svsk = container_of(xprt, struct svc_sock, sk_xprt);
+	struct svc_sock *svsk = container_of(xprt, struct svc_sock, sk_xprt);
 	struct xdr_buf *xdr = &rqstp->rq_res;
-	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
-					 (u32)xdr->len);
-	int sent;
+	struct svc_pending_send ps = {
+		.rqstp = rqstp,
+		.marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT | (u32)xdr->len),
+	};
 
 	svc_tcp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
 	rqstp->rq_xprt_ctxt = NULL;
 
-	mutex_lock(&xprt->xpt_mutex);
-	if (svc_xprt_is_dead(xprt))
-		goto out_notconn;
-	sent = svc_tcp_sendmsg(svsk, rqstp, marker);
-	trace_svcsock_tcp_send(xprt, sent);
-	if (sent < 0 || sent != (xdr->len + sizeof(marker)))
-		goto out_close;
-	mutex_unlock(&xprt->xpt_mutex);
-	return sent;
+	init_completion(&ps.done);
 
-out_notconn:
+	/* Enqueue this send request; lock-free via llist */
+	llist_add(&ps.node, &svsk->sk_send_queue);
+
+	/*
+	 * Flat combining: threads compete for xpt_mutex; the winner becomes
+	 * the combiner and processes all queued requests. The mutex provides
+	 * RPC-level serialization while combining reduces lock handoff overhead.
+	 *
+	 * Use trylock first for the fast path. On contention, wait briefly
+	 * to see if the current combiner handles our request, then fall back
+	 * to blocking mutex_lock.
+	 */
+	if (mutex_trylock(&xprt->xpt_mutex))
+		goto combine;
+
+	/*
+	 * Combiner holds the lock. Wait for completion with a timeout;
+	 * the combiner may process our request while we wait.
+	 */
+	if (wait_for_completion_timeout(&ps.done, svc_tcp_wait_timeout(svsk))) {
+		/* Completed by the combiner */
+		return ps.result;
+	}
+
+	/*
+	 * Timed out waiting. Acquire mutex to either become the new combiner
+	 * or find that our request was completed in the meantime.
+	 */
+	mutex_lock(&xprt->xpt_mutex);
+	if (completion_done(&ps.done)) {
+		mutex_unlock(&xprt->xpt_mutex);
+		return ps.result;
+	}
+
+combine:
+	/* We are the combiner. Process until queue is empty. */
+	while (!llist_empty(&svsk->sk_send_queue))
+		svc_tcp_combine_sends(svsk, xprt);
 	mutex_unlock(&xprt->xpt_mutex);
-	return -ENOTCONN;
-out_close:
-	pr_notice("rpc-srv/tcp: %s: %s %d when sending %zu bytes - shutting down socket\n",
-		  xprt->xpt_server->sv_name,
-		  (sent < 0) ? "got error" : "sent",
-		  sent, xdr->len + sizeof(marker));
-	svc_xprt_deferred_close(xprt);
-	mutex_unlock(&xprt->xpt_mutex);
-	return -EAGAIN;
+
+	return ps.result;
 }
 
 static struct svc_xprt *svc_tcp_create(struct svc_serv *serv,
