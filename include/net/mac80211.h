@@ -7899,4 +7899,18 @@ int ieee80211_emulate_switch_vif_chanctx(struct ieee80211_hw *hw,
  * Return: %true iff the vif is a NAN interface and NAN is started
  */
 bool ieee80211_vif_nan_started(struct ieee80211_vif *vif);
+
+/**
+ * ieee80211_incumbent_signal_detected - inform that an incumbent signal
+ *	interference was detected
+ * @hw: pointer as obtained from ieee80211_alloc_hw()
+ * @chanctx_conf: Channel context on which the signal interference was detected.
+ *	Mandatory to pass a valid pointer for MLO. For non-MLO %NULL can be
+ *	passed
+ * @incumbt_sig_intf_bmap: Bitmap indicating where the incumbent signal was
+ *	detected.
+ */
+void ieee80211_incumbent_signal_detected(struct ieee80211_hw *hw,
+					 struct ieee80211_chanctx_conf *chanctx_conf,
+					 u32 incumbt_sig_intf_bmap);
 #endif /* MAC80211_H */
