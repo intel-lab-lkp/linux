@@ -393,24 +393,10 @@
 
 #define GEN2_ERROR_REGS		I915_ERROR_REGS(EMR, EIR)
 
-#define INSTPM	        _MMIO(0x20c0)
-#define   INSTPM_SELF_EN (1 << 12) /* 915GM only */
-#define   INSTPM_AGPBUSY_INT_EN (1 << 11) /* gen3: when disabled, pending interrupts
-					will not assert AGPBUSY# and will only
-					be delivered when out of C3. */
-#define   INSTPM_FORCE_ORDERING				(1 << 7) /* GEN6+ */
-#define   INSTPM_TLB_INVALIDATE	(1 << 9)
-#define   INSTPM_SYNC_FLUSH	(1 << 5)
 #define MEM_MODE	_MMIO(0x20cc)
 #define   MEM_DISPLAY_B_TRICKLE_FEED_DISABLE (1 << 3) /* 830 only */
 #define   MEM_DISPLAY_A_TRICKLE_FEED_DISABLE (1 << 2) /* 830/845 only */
 #define   MEM_DISPLAY_TRICKLE_FEED_DISABLE (1 << 2) /* 85x only */
-#define FW_BLC		_MMIO(0x20d8)
-#define FW_BLC2		_MMIO(0x20dc)
-#define FW_BLC_SELF	_MMIO(0x20e0) /* 915+ only */
-#define   FW_BLC_SELF_EN_MASK      REG_BIT(31)
-#define   FW_BLC_SELF_FIFO_MASK    REG_BIT(16) /* 945 only */
-#define   FW_BLC_SELF_EN           REG_BIT(15) /* 945 only */
 #define MM_BURST_LENGTH     0x00700000
 #define MM_FIFO_WATERMARK   0x0001F000
 #define LM_BURST_LENGTH     0x00000700
@@ -832,11 +818,6 @@
 #define CHICKEN_PAR2_1		_MMIO(0x42090)
 #define   KVM_CONFIG_CHANGE_NOTIFICATION_SELECT	REG_BIT(14)
 
-
-#define DISP_ARB_CTL	_MMIO(0x45000)
-#define   DISP_FBC_MEMORY_WAKE		REG_BIT(31)
-#define   DISP_TILE_SURFACE_SWIZZLING	REG_BIT(13)
-#define   DISP_FBC_WM_DIS		REG_BIT(15)
 
 #define GEN8_CHICKEN_DCPR_1			_MMIO(0x46430)
 #define   _LATENCY_REPORTING_REMOVED_PIPE_D	REG_BIT(31)
