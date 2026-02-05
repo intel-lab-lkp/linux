@@ -882,7 +882,7 @@ static ssize_t epf_ntb_##_name##_show(struct config_item *item,		\
 		return -EINVAL;						\
 									\
 	if (win_no <= 0 || win_no > ntb->num_mws) {			\
-		dev_err(dev, "Invalid num_nws: %d value\n", ntb->num_mws); \
+		dev_err(dev, "Invalid num_mws: %d value\n", ntb->num_mws); \
 		return -EINVAL;						\
 	}								\
 									\
@@ -908,7 +908,7 @@ static ssize_t epf_ntb_##_name##_store(struct config_item *item,	\
 		return -EINVAL;						\
 									\
 	if (win_no <= 0 || win_no > ntb->num_mws) {			\
-		dev_err(dev, "Invalid num_nws: %d value\n", ntb->num_mws); \
+		dev_err(dev, "Invalid num_mws: %d value\n", ntb->num_mws); \
 		return -EINVAL;						\
 	}								\
 									\
