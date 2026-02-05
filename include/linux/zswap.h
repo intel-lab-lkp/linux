@@ -7,6 +7,15 @@
 
 struct lruvec;
 
+/*
+ * Check if a zswap entry is stored in raw (uncompressed) form.
+ * This happens when compression doesn't reduce the size.
+ */
+static inline bool zswap_is_raw(size_t size)
+{
+	return size == PAGE_SIZE;
+}
+
 extern atomic_long_t zswap_stored_pages;
 
 #ifdef CONFIG_ZSWAP

@@ -723,7 +723,7 @@ static void zswap_entry_free(struct zswap_entry *entry)
 		obj_cgroup_uncharge_zswap(entry->objcg, entry->length);
 		obj_cgroup_put(entry->objcg);
 	}
-	if (entry->length == PAGE_SIZE)
+	if (zswap_is_raw(entry->length))
 		atomic_long_dec(&zswap_stored_incompressible_pages);
 	zswap_entry_cache_free(entry);
 	atomic_long_dec(&zswap_stored_pages);
@@ -941,7 +941,7 @@ static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 	zs_obj_read_sg_begin(pool->zs_pool, entry->handle, input, entry->length);
 
 	/* zswap entries of length PAGE_SIZE are not compressed. */
-	if (entry->length == PAGE_SIZE) {
+	if (zswap_is_raw(entry->length)) {
 		WARN_ON_ONCE(input->length != PAGE_SIZE);
 		memcpy_from_sglist(kmap_local_folio(folio, 0), input, 0, PAGE_SIZE);
 		dlen = PAGE_SIZE;
@@ -1448,7 +1448,7 @@ static bool zswap_store_page(struct page *page,
 		obj_cgroup_charge_zswap(objcg, entry->length);
 	}
 	atomic_long_inc(&zswap_stored_pages);
-	if (entry->length == PAGE_SIZE)
+	if (zswap_is_raw(entry->length))
 		atomic_long_inc(&zswap_stored_incompressible_pages);
 
 	/*
