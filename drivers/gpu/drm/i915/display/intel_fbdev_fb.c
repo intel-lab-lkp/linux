@@ -10,11 +10,29 @@
 #include "gem/i915_gem_lmem.h"
 
 #include "i915_drv.h"
+#include "intel_display_core.h"
 #include "intel_fbdev_fb.h"
 
 u32 intel_fbdev_fb_pitch_align(u32 stride)
 {
 	return ALIGN(stride, 64);
+}
+
+bool intel_fbdev_fb_prefer_stolen(struct intel_display *display,
+				  unsigned int size)
+{
+	struct drm_i915_private *i915 = to_i915(display->drm);
+
+	/* Skip stolen on MTL as Wa_22018444074 mitigation. */
+	if (IS_METEORLAKE(i915))
+		return false;
+
+	/*
+	 * If the FB is too big, just don't use it since fbdev is not very
+	 * important and we should probably use that space with FBC or other
+	 * features.
+	 */
+	return i915->dsm.usable_size >= size * 2;
 }
 
 struct drm_gem_object *intel_fbdev_fb_bo_create(struct drm_device *drm, int size)
@@ -28,14 +46,7 @@ struct drm_gem_object *intel_fbdev_fb_bo_create(struct drm_device *drm, int size
 						  I915_BO_ALLOC_CONTIGUOUS |
 						  I915_BO_ALLOC_USER);
 	} else {
-		/*
-		 * If the FB is too big, just don't use it since fbdev is not very
-		 * important and we should probably use that space with FBC or other
-		 * features.
-		 *
-		 * Also skip stolen on MTL as Wa_22018444074 mitigation.
-		 */
-		if (!IS_METEORLAKE(i915) && size * 2 < i915->dsm.usable_size)
+		if (intel_fbdev_fb_prefer_stolen(i915->display, size))
 			obj = i915_gem_object_create_stolen(i915, size);
 		if (IS_ERR(obj))
 			obj = i915_gem_object_create_shmem(i915, size);
