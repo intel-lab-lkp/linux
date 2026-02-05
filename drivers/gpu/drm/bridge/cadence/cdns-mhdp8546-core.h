@@ -412,6 +412,10 @@ struct cdns_mhdp_device {
 
 	struct cdns_mhdp_hdcp hdcp;
 	bool hdcp_supported;
+
+	/* Power domain status notifier */
+	struct notifier_block pd_nb;
+	bool powered_off;
 };
 
 #define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)

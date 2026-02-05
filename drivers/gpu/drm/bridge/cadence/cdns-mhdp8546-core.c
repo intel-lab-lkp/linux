@@ -32,6 +32,7 @@
 #include <linux/phy/phy.h>
 #include <linux/phy/phy-dp.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
 
@@ -2383,6 +2384,120 @@ static void cdns_mhdp_hpd_work(struct work_struct *work)
 	}
 }
 
+static int __maybe_unused cdns_mhdp_resume(struct device *dev)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+	unsigned long rate;
+	int ret;
+
+	ret = clk_prepare_enable(mhdp->clk);
+	if (ret)
+		return ret;
+
+	rate = clk_get_rate(mhdp->clk);
+	writel(rate % 1000000, mhdp->regs + CDNS_SW_CLK_L);
+	writel(rate / 1000000, mhdp->regs + CDNS_SW_CLK_H);
+	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
+
+	ret = phy_init(mhdp->phy);
+	if (ret) {
+		dev_err(mhdp->dev, "Failed to initialize PHY: %d\n", ret);
+		goto disable_clk;
+	}
+	ret = phy_power_on(mhdp->phy);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to power on PHY: %d\n", ret);
+		goto error;
+	}
+
+	if (mhdp->powered_off) {
+		ret = cdns_mhdp_load_firmware(mhdp);
+		if (ret)
+			goto phy_off;
+
+		ret = wait_event_timeout(mhdp->fw_load_wq,
+					mhdp->hw_state == MHDP_HW_READY,
+					msecs_to_jiffies(1000));
+		if (ret == 0) {
+			dev_err(mhdp->dev, "%s: Timeout waiting for fw loading\n",
+				__func__);
+			ret = -ETIMEDOUT;
+			goto phy_off;
+		}
+	} else {
+		ret = cdns_mhdp_set_firmware_active(mhdp, true);
+		if (ret) {
+			dev_err(mhdp->dev, "Failed to activate firmware (%pe)\n", ERR_PTR(ret));
+			goto phy_off;
+		}
+	}
+
+	return 0;
+
+phy_off:
+	phy_power_off(mhdp->phy);
+error:
+	phy_exit(mhdp->phy);
+disable_clk:
+	clk_disable_unprepare(mhdp->clk);
+
+	return ret;
+}
+
+static int __maybe_unused cdns_mhdp_suspend(struct device *dev)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+	unsigned long timeout = msecs_to_jiffies(100);
+	int ret = 0;
+
+	cancel_work_sync(&mhdp->hpd_work);
+	ret = wait_event_timeout(mhdp->fw_load_wq,
+				 mhdp->hw_state == MHDP_HW_READY,
+				 timeout);
+
+	spin_lock(&mhdp->start_lock);
+	if (mhdp->hw_state != MHDP_HW_READY) {
+		spin_unlock(&mhdp->start_lock);
+		return -EINVAL;
+	}
+	mhdp->hw_state = MHDP_HW_STOPPED;
+	spin_unlock(&mhdp->start_lock);
+
+	if (ret == 0) {
+		dev_err(mhdp->dev, "%s: Timeout waiting for fw loading\n", __func__);
+		ret = -ETIMEDOUT;
+		goto error;
+	} else {
+		ret = cdns_mhdp_set_firmware_active(mhdp, false);
+		if (ret) {
+			dev_err(mhdp->dev, "Failed to stop firmware (%pe)\n", ERR_PTR(ret));
+			goto error;
+		}
+	}
+
+	phy_power_off(mhdp->phy);
+	phy_exit(mhdp->phy);
+	clk_disable_unprepare(mhdp->clk);
+
+error:
+	return ret;
+}
+
+static int mhdp_pd_notifier_cb(struct notifier_block *nb,
+			unsigned long action, void *data)
+{
+	struct cdns_mhdp_device *mhdp = container_of(nb, struct cdns_mhdp_device, pd_nb);
+
+	if (action == GENPD_NOTIFY_OFF)
+		mhdp->powered_off = true;
+
+	return 0;
+}
+
+static const struct dev_pm_ops cdns_mhdp_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(cdns_mhdp_suspend, cdns_mhdp_resume)
+};
+
 static int cdns_mhdp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2494,6 +2609,11 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 		dev_err(mhdp->dev, "Failed to initialize PHY: %d\n", ret);
 		goto plat_fini;
 	}
+	ret = phy_power_on(mhdp->phy);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to power on PHY: %d\n", ret);
+		goto phy_exit;
+	}
 
 	/* Initialize the work for modeset in case of link train failure */
 	INIT_WORK(&mhdp->modeset_retry_work, cdns_mhdp_modeset_retry_fn);
@@ -2504,21 +2624,33 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 
 	ret = cdns_mhdp_load_firmware(mhdp);
 	if (ret)
-		goto phy_exit;
+		goto power_off;
 
 	if (mhdp->hdcp_supported)
 		cdns_mhdp_hdcp_init(mhdp);
 
 	drm_bridge_add(&mhdp->bridge);
 
+	mhdp->powered_off = false;
+	mhdp->pd_nb.notifier_call = mhdp_pd_notifier_cb;
+	ret = dev_pm_genpd_add_notifier(mhdp->dev, &mhdp->pd_nb);
+	if (ret) {
+		dev_err_probe(dev, ret, "failed to add power domain notifier\n");
+		dev_pm_genpd_remove_notifier(mhdp->dev);
+		goto power_off;
+	}
+
 	return 0;
 
+power_off:
+	phy_power_off(mhdp->phy);
 phy_exit:
 	phy_exit(mhdp->phy);
 plat_fini:
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->exit)
 		mhdp->info->ops->exit(mhdp);
 runtime_put:
+	mhdp->powered_off = true;
 	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);
 
@@ -2550,6 +2682,7 @@ static void cdns_mhdp_remove(struct platform_device *pdev)
 				ERR_PTR(ret));
 	}
 
+	phy_power_off(mhdp->phy);
 	phy_exit(mhdp->phy);
 
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->exit)
@@ -2581,6 +2714,7 @@ static struct platform_driver mhdp_driver = {
 	.driver	= {
 		.name		= "cdns-mhdp8546",
 		.of_match_table	= mhdp_ids,
+		.pm = &cdns_mhdp_pm_ops,
 	},
 	.probe	= cdns_mhdp_probe,
 	.remove = cdns_mhdp_remove,
