@@ -30,10 +30,10 @@
 #include <linux/dma-fence-array.h>
 
 #include <drm/drm_exec.h>
+#include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 #include <drm/drm_syncobj.h>
 
-#include "uapi/drm/vc4_drm.h"
 #include "vc4_drv.h"
 #include "vc4_regs.h"
 #include "vc4_trace.h"
@@ -150,7 +150,7 @@ err_free:
 	return ret;
 }
 
-static void
+void
 vc4_save_hang_state(struct drm_device *dev)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
@@ -1132,12 +1132,25 @@ int vc4_gem_init(struct drm_device *dev)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return -ENODEV;
 
+	for (int i = 0; i < VC4_MAX_QUEUES; i++) {
+		struct vc4_queue_state *queue = &vc4->queue[i];
+
+		queue->fence_context = dma_fence_context_alloc(1);
+		spin_lock_init(&queue->fence_lock);
+	}
+
 	vc4->dma_fence_context = dma_fence_context_alloc(1);
 
 	INIT_LIST_HEAD(&vc4->bin_job_list);
 	INIT_LIST_HEAD(&vc4->render_job_list);
 	INIT_LIST_HEAD(&vc4->job_done_list);
 	spin_lock_init(&vc4->job_lock);
+	ret = drmm_mutex_init(dev, &vc4->reset_lock);
+	if (ret)
+		return ret;
+	ret = drmm_mutex_init(dev, &vc4->sched_lock);
+	if (ret)
+		return ret;
 
 	INIT_WORK(&vc4->hangcheck.reset_work, vc4_reset_work);
 	timer_setup(&vc4->hangcheck.timer, vc4_hangcheck_elapsed, 0);
@@ -1151,6 +1164,10 @@ int vc4_gem_init(struct drm_device *dev)
 	INIT_LIST_HEAD(&vc4->purgeable.list);
 
 	ret = drmm_mutex_init(dev, &vc4->purgeable.lock);
+	if (ret)
+		return ret;
+
+	ret = vc4_sched_init(vc4);
 	if (ret)
 		return ret;
 
@@ -1176,6 +1193,8 @@ static void vc4_gem_destroy(struct drm_device *dev, void *unused)
 
 	if (vc4->hang_state)
 		vc4_free_hang_state(dev, vc4->hang_state);
+
+	vc4_sched_fini(vc4);
 }
 
 int vc4_gem_madvise_ioctl(struct drm_device *dev, void *data,

@@ -23,6 +23,23 @@
 
 #include "vc4_drv.h"
 
+struct dma_fence *vc4_fence_create(struct vc4_dev *vc4, enum vc4_queue queue)
+{
+	struct vc4_fence *fence;
+
+	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
+	if (!fence)
+		return ERR_PTR(-ENOMEM);
+
+	fence->dev = &vc4->base;
+	fence->queue = queue;
+	fence->seqno = ++vc4->queue[queue].emit_seqno;
+	dma_fence_init(&fence->base, &vc4_fence_ops, &vc4->queue[queue].fence_lock,
+		       vc4->queue[queue].fence_context, fence->seqno);
+
+	return &fence->base;
+}
+
 static const char *vc4_fence_get_driver_name(struct dma_fence *fence)
 {
 	return "vc4";
