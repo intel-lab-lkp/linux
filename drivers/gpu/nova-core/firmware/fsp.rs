@@ -3,6 +3,7 @@
 //! FSP is a hardware unit that runs FMC firmware.
 
 use kernel::{
+    alloc::KVec,
     device,
     prelude::*, //
 };
@@ -13,16 +14,16 @@ use crate::{
     gpu::Chipset, //
 };
 
-#[expect(unused)]
+#[expect(dead_code)]
 pub(crate) struct FspFirmware {
-    /// FMC firmware image data (only the .image section)
-    fmc_image: DmaObject,
-    /// Full FMC ELF data (for signature extraction)
-    fmc_full: DmaObject,
+    /// FMC firmware image data (only the .image section) - submitted to hardware
+    pub(crate) fmc_image: DmaObject,
+    /// Full FMC ELF data (for signature extraction) - CPU-only access
+    pub(crate) fmc_full: KVec<u8>,
 }
 
 impl FspFirmware {
-    #[expect(unused)]
+    #[expect(dead_code)]
     pub(crate) fn new(
         dev: &device::Device<device::Bound>,
         chipset: Chipset,
@@ -36,9 +37,13 @@ impl FspFirmware {
             EINVAL
         })?;
 
+        // Copy the full ELF into a kernel vector for CPU-side signature extraction
+        let mut fmc_full = KVec::with_capacity(fw.data().len(), GFP_KERNEL)?;
+        fmc_full.extend_from_slice(fw.data(), GFP_KERNEL)?;
+
         Ok(Self {
             fmc_image: DmaObject::from_data(dev, fmc_image_data)?,
-            fmc_full: DmaObject::from_data(dev, fw.data())?,
+            fmc_full,
         })
     }
 }
