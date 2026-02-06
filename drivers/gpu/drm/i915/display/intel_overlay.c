@@ -1358,12 +1358,11 @@ static int get_registers(struct intel_overlay *overlay, bool use_phys)
 {
 	struct intel_display *display = overlay->display;
 	struct drm_i915_private *i915 = to_i915(display->drm);
-	struct drm_i915_gem_object *obj = ERR_PTR(-ENODEV);
+	struct drm_i915_gem_object *obj;
 	struct i915_vma *vma;
 	int err;
 
-	if (!display->platform.meteorlake) /* Wa_22018444074 */
-		obj = i915_gem_object_create_stolen(i915, PAGE_SIZE);
+	obj = i915_gem_object_create_stolen(i915, PAGE_SIZE);
 	if (IS_ERR(obj))
 		obj = i915_gem_object_create_internal(i915, PAGE_SIZE);
 	if (IS_ERR(obj))
