@@ -313,6 +313,10 @@ static const char * const riscv_isa_base_names[] = {
 #else
 	[RISCV_ISA_BASE_IMA] = "rv64ima",
 #endif
+	[RISCV_ISA_BASE_RVA20U64] = "rva20u64",
+	[RISCV_ISA_BASE_RVA20S64] = "rva20s64",
+	[RISCV_ISA_BASE_RVA22U64] = "rva22u64",
+	[RISCV_ISA_BASE_RVA22S64] = "rva22s64",
 	[RISCV_ISA_BASE_RVA23U64] = "rva23u64",
 	[RISCV_ISA_BASE_RVA23S64] = "rva23s64",
 };

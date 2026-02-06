@@ -1282,33 +1282,74 @@ void riscv_set_isa_bases(unsigned long *bases, const unsigned long *isa_bitmap)
 
 	set_bit(RISCV_ISA_BASE_IMA, bases);
 
-	/* RVA23U64 */
-
-	/* Zic64b and Supm with PMLEN=7 */
-	if (riscv_cbom_block_size != 64 ||
-	    riscv_cbop_block_size != 64 ||
-	    riscv_cboz_block_size != 64 ||
-	    !riscv_have_user_pmlen_7)
-		return;
-
+	/* RVA20U64 */
 	set_bit(RISCV_ISA_EXT_F, ext_mask);
 	set_bit(RISCV_ISA_EXT_D, ext_mask);
 	set_bit(RISCV_ISA_EXT_C, ext_mask);
-	set_bit(RISCV_ISA_EXT_B, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICSR, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICNTR, ext_mask);
-	set_bit(RISCV_ISA_EXT_ZIHPM, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICCIF, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICCRSE, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICCAMOA, ext_mask);
-	set_bit(RISCV_ISA_EXT_ZICCLSM, ext_mask);
+	/* Spec says Za128rs, but Za64rs is compatible and mandated by later profiles */
 	set_bit(RISCV_ISA_EXT_ZA64RS, ext_mask);
+	set_bit(RISCV_ISA_EXT_ZICCLSM, ext_mask);
+
+	if (bitmap_andnot(tmp, ext_mask, isa, RISCV_ISA_EXT_MAX))
+		return;
+
+	set_bit(RISCV_ISA_BASE_RVA20U64, bases);
+
+	/* RVA20S64 */
+	set_bit(RISCV_ISA_EXT_ZIFENCEI, ext_mask);
+	/* TODO: Ss1p11 */
+	/* Svbare, Sv39 -- assumed */
+	set_bit(RISCV_ISA_EXT_SVADE, ext_mask);
+	/* TODO: Ssccptr, Sstvecd, Sstvala */
+
+	if (/*TODO*/ false && !bitmap_andnot(tmp, ext_mask, isa, RISCV_ISA_EXT_MAX))
+		set_bit(RISCV_ISA_BASE_RVA20S64, bases);
+
+	/* RVA22U64 */
+
+	/* Zic64b */
+	if (riscv_cbom_block_size != 64 ||
+	    riscv_cbop_block_size != 64 ||
+	    riscv_cboz_block_size != 64)
+		return;
+
+	set_bit(RISCV_ISA_EXT_B, ext_mask);
+	set_bit(RISCV_ISA_EXT_ZIHPM, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZIHINTPAUSE, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICBOM, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICBOP, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZICBOZ, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZFHMIN, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZKT, ext_mask);
+
+	if (bitmap_andnot(tmp, ext_mask, isa, RISCV_ISA_EXT_MAX))
+		return;
+
+	set_bit(RISCV_ISA_BASE_RVA22U64, bases);
+
+	/* RVA22S64 */
+	set_bit(RISCV_ISA_EXT_ZIFENCEI, ext_mask);
+	/* TODO: Ss1p12 */
+	/* Svbare, Sv39 -- assumed */
+	set_bit(RISCV_ISA_EXT_SVADE, ext_mask);
+	/* TODO: Ssccptr, Sstvecd, Sstvala, Sscounterenw */
+	set_bit(RISCV_ISA_EXT_SVPBMT, ext_mask);
+	set_bit(RISCV_ISA_EXT_SVINVAL, ext_mask);
+
+	if (/*TODO*/ false && !bitmap_andnot(tmp, ext_mask, isa, RISCV_ISA_EXT_MAX))
+		set_bit(RISCV_ISA_BASE_RVA22S64, bases);
+
+	/* RVA23U64 */
+
+	/* Supm with PMLEN=7 */
+	if (!riscv_have_user_pmlen_7)
+		return;
+
 	set_bit(RISCV_ISA_EXT_V, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZVFHMIN, ext_mask);
 	set_bit(RISCV_ISA_EXT_ZVBB, ext_mask);
