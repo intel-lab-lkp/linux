@@ -2485,6 +2485,13 @@ static int parse_apply_sb_mount_options(struct super_block *sb,
 	if (!sbi->s_es->s_mount_opts[0])
 		return 0;
 
+	if (strnlen(sbi->s_es->s_mount_opts, sizeof(sbi->s_es->s_mount_opts)) ==
+	    sizeof(sbi->s_es->s_mount_opts)) {
+		ext4_msg(sb, KERN_ERR,
+			 "Mount options in superblock are not NUL-terminated");
+		return -EINVAL;
+	}
+
 	if (strscpy_pad(s_mount_opts, sbi->s_es->s_mount_opts) < 0)
 		return -E2BIG;
 
