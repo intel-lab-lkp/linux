@@ -128,6 +128,7 @@ struct dw_edma_core_ops {
 	void (*start)(struct dw_edma_chunk *chunk, bool first);
 	void (*ch_config)(struct dw_edma_chan *chan);
 	void (*debugfs_on)(struct dw_edma *dw);
+	void (*ack_selfirq)(struct dw_edma *dw);
 };
 
 struct dw_edma_sg {
@@ -206,6 +207,16 @@ static inline
 void dw_edma_core_debugfs_on(struct dw_edma *dw)
 {
 	dw->core->debugfs_on(dw);
+}
+
+static inline
+int dw_edma_core_ack_selfirq(struct dw_edma *dw)
+{
+	if (!dw->core->ack_selfirq)
+		return -EOPNOTSUPP;
+
+	dw->core->ack_selfirq(dw);
+	return 0;
 }
 
 static inline
