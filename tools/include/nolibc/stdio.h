@@ -291,10 +291,16 @@ int fseek(FILE *stream, long offset, int whence)
 }
 
 
-/* simple printf(). It supports the following formats:
- *  - %[-][width][{l,t,z,ll,L,j,q}]{d,u,c,x,p,s,m,%}
- *  - %%
- *  - invalid formats are copied to the output buffer
+/* printf(). Supports most of the normal integer and string formats.
+ *  - %[#-+ ][width][{l,t,z,ll,L,j,q}]{d,i,u,c,x,X,p,s,m,%}
+ *  - %% generates a single %
+ *  - %m outputs strerror(errno).
+ *  - # only affects %x and prepends 0x to non-zero values.
+ *  - %o (octal) isn't supported.
+ *  - %X outputs a..f the same as %x.
+ *  - No support for zero padding, precision or variable widths.
+ *  - No support for wide characters.
+ *  - invalid formats are copied to the output buffer.
  */
 
 /* This code uses 'flag' variables that are indexed by the low 6 bits
@@ -330,7 +336,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 	unsigned int written, width;
 	unsigned int flags, ch_flag;
 	size_t len;
-	char tmpbuf[21];
+	char tmpbuf[32 + 24];
 	const char *outstr;
 
 	written = 0;
@@ -385,19 +391,32 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 			/* Conversion specifiers. */
 
-			/* Numeric conversion specifiers. */
-			ch_flag = _NOLIBC_PF_CHAR_IS_ONE_OF(ch, 'c', 'd', 'i', 'u', 'x', 'p');
-			if (ch_flag != 0) {
+			/* Numeric and pointer conversion specifiers.
+			 *
+			 * Use an explicit bound check (rather than _NOLIBC_PF_CHAR_IS_ONE_OF())
+			 * so that 'X' can be allowed through.
+			 * 'X' gets treated and 'x' because _NOLIBC_PF_FLAG() returns the same
+			 * value for both.
+			 */
+			if ((ch < 'a' || ch > 'z') && ch != 'X')
+				goto non_numeric_conversion;
+
+			/* We need to check for "%p" or "%#x" later, merging here gives better code.
+			 * But '#' collides with 'c' so shift right.
+			 */
+			ch_flag = _NOLIBC_PF_FLAG(ch) | (flags & _NOLIBC_PF_FLAG('#')) >> 1;
+			if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'c', 'd', 'i', 'u', 'x', 'p', 's')) {
 				unsigned long long v;
 				long long signed_v;
-				char *out = tmpbuf;
+				char *out = tmpbuf + 32;
+				int sign = 0;
 
 				/* 'long' is needed for pointer/string conversions and ltz lengths.
 				 * A single test can be used provided 'p' (the same bit as '0')
 				 * is masked from flags.
 				 */
 				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag | (flags & ~_NOLIBC_PF_FLAG('p')),
-							     'p', 'l', 't', 'z')) {
+							     'p', 's', 'l', 't', 'z')) {
 					v = va_arg(args, unsigned long);
 					signed_v = (long)v;
 				} else if (_NOLIBC_PF_FLAGS_CONTAIN(flags, 'j', 'q')) {
@@ -416,40 +435,62 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 					goto do_output;
 				}
 
+				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 's')) {
+					/* "%s" - character string. */
+					if (!v) {
+						outstr = "(null)";
+						len = 6;
+						goto do_output;
+					}
+					outstr = (void *)v;
+do_strnlen_output:
+					len = strnlen(outstr, INT_MAX);
+					goto do_output;
+				}
+
 				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'd', 'i')) {
 					/* "%d" and "%i" - signed decimal numbers. */
 					if (signed_v < 0) {
-						*out++ = '-';
+						sign = '-';
 						v = -(signed_v + 1);
 						v++;
+					} else if (_NOLIBC_PF_FLAGS_CONTAIN(flags, '+')) {
+						sign = '+';
+					} else if (_NOLIBC_PF_FLAGS_CONTAIN(flags, ' ')) {
+						sign = ' ';
 					}
 				}
 
 				/* Convert the number to ascii in the required base. */
 				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'd', 'i', 'u')) {
 					/* Base 10 */
-					u64toa_r(v, out);
+					len = u64toa_r(v, out);
 				} else {
 					/* Base 16 */
-					if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'p')) {
-						*(out++) = '0';
-						*(out++) = 'x';
+					if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'p', '#' - 1)) {
+						/* "%p" and "%#x" need "0x" prepending. */
+						sign = 'x' | '0' << 8;
 					}
-					u64toh_r(v, out);
+					len = u64toh_r(v, out);
 				}
 
-				outstr = tmpbuf;
+				/* Add 0, 1 or 2 ("0x") sign characters left of any zero padding */
+				for (; sign; sign >>= 8) {
+					len++;
+					*--out = sign;
+				}
+				outstr = out;
+				goto do_output;
 			}
-			else if (ch == 's') {
-				outstr = va_arg(args, char *);
-				if (!outstr)
-					outstr="(null)";
-			}
-			else if (ch == 'm') {
+
+non_numeric_conversion:
+			if (ch == 'm') {
 #ifdef NOLIBC_IGNORE_ERRNO
 				outstr = "unknown error";
+				len = __builtin_strlen(outstr);
 #else
 				outstr = strerror(errno);
+				goto do_strnlen_output;
 #endif /* NOLIBC_IGNORE_ERRNO */
 			} else {
 				if (ch != '%') {
@@ -460,10 +501,10 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 				/* %% is documented as a 'conversion specifier'.
 				 * Any flags, precision or length modifier are ignored.
 				 */
+				len = 1;
 				width = 0;
-				outstr = "%";
+				outstr = fmt - 1;
 			}
-			len = strlen(outstr);
 		}
 
 do_output:
@@ -474,6 +515,10 @@ do_output:
 		 */
 		__asm__ volatile("" : "=r"(len) : "0"(len));
 
+		/* Output 'left pad', 'value' then 'right pad'. */
+		flags = _NOLIBC_PF_FLAGS_CONTAIN(flags, '-');
+		if (flags && cb(state, outstr, len) != 0)
+			return -1;
 		while (width > len) {
 			unsigned int pad_len = ((width - len - 1) & 15) + 1;
 			width -= pad_len;
@@ -481,7 +526,7 @@ do_output:
 			if (cb(state, "                ", pad_len) != 0)
 				return -1;
 		}
-		if (cb(state, outstr, len) != 0)
+		if (!flags && cb(state, outstr, len) != 0)
 			return -1;
 	}
 
