@@ -633,7 +633,9 @@ static bool __dpm_async(struct device *dev, async_func_t func)
 	if (!is_async(dev))
 		return false;
 
+	spin_lock_irq(&dev->power.lock);
 	dev->power.work_in_progress = true;
+	spin_unlock_irq(&dev->power.lock);
 
 	get_device(dev);
 
@@ -656,8 +658,11 @@ static int dpm_async_with_cleanup(struct device *dev, void *fn)
 {
 	guard(mutex)(&async_wip_mtx);
 
-	if (!__dpm_async(dev, fn))
+	if (!__dpm_async(dev, fn)) {
+		spin_lock_irq(&dev->power.lock);
 		dev->power.work_in_progress = false;
+		spin_unlock_irq(&dev->power.lock);
+	}
 
 	return 0;
 }
@@ -698,7 +703,10 @@ static void dpm_async_resume_subordinate(struct device *dev, async_func_t func)
 static void dpm_clear_async_state(struct device *dev)
 {
 	reinit_completion(&dev->power.completion);
+
+	spin_lock_irq(&dev->power.lock);
 	dev->power.work_in_progress = false;
+	spin_unlock_irq(&dev->power.lock);
 }
 
 static bool dpm_root_device(struct device *dev)
@@ -1407,13 +1415,19 @@ static void dpm_superior_set_must_resume(struct device *dev)
 	struct device_link *link;
 	int idx;
 
-	if (dev->parent)
+	if (dev->parent) {
+		spin_lock_irq(&dev->parent->power.lock);
 		dev->parent->power.must_resume = true;
+		spin_unlock_irq(&dev->parent->power.lock);
+	}
 
 	idx = device_links_read_lock();
 
-	dev_for_each_link_to_supplier(link, dev)
+	dev_for_each_link_to_supplier(link, dev) {
+		spin_lock_irq(&link->supplier->power.lock);
 		link->supplier->power.must_resume = true;
+		spin_unlock_irq(&link->supplier->power.lock);
+	}
 
 	device_links_read_unlock(idx);
 }
