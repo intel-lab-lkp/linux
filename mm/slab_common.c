@@ -1675,7 +1675,7 @@ static void kfree_rcu_work(struct work_struct *work)
 		kvfree_rcu_list(head);
 }
 
-static bool kfree_rcu_sheaf(void *obj)
+static bool kfree_rcu_sheaf(void *obj, bool allow_spin)
 {
 	struct kmem_cache *s;
 	struct slab *slab;
@@ -1689,7 +1689,7 @@ static bool kfree_rcu_sheaf(void *obj)
 
 	s = slab->slab_cache;
 	if (likely(!IS_ENABLED(CONFIG_NUMA) || slab_nid(slab) == numa_mem_id()))
-		return __kfree_rcu_sheaf(s, obj);
+		return __kfree_rcu_sheaf(s, obj, allow_spin);
 
 	return false;
 }
@@ -2044,8 +2044,7 @@ void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr, bool allow_spin)
 				IS_ENABLED(CONFIG_DEBUG_KMEMLEAK)))
 		goto defer_free;
 
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT) &&
-			(allow_spin && kfree_rcu_sheaf(ptr)))
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && kfree_rcu_sheaf(ptr, allow_spin))
 		return;
 
 	// Queue the object but don't yet schedule the batch.
