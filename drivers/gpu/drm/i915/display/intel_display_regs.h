@@ -2211,6 +2211,13 @@
 #define   HSW_PWR_WELL_FORCE_ON			(1 << 19)
 #define HSW_PWR_WELL_CTL6			_MMIO(0x45414)
 
+/* clock gating DSS DSC disable register */
+#define CLKGATE_DIS_DSSDSC			_MMIO(0x46548)
+#define   DSS_PIPE_D_GATING_DISABLED		REG_BIT(31)
+#define   DSS_PIPE_C_GATING_DISABLED		REG_BIT(29)
+#define   DSS_PIPE_B_GATING_DISABLED		REG_BIT(27)
+#define   DSS_PIPE_A_GATING_DISABLED		REG_BIT(25)
+
 /* SKL Fuse Status */
 enum skl_power_gate {
 	SKL_PG0,
