@@ -406,10 +406,12 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			outstr = fmt;
 			len = ofs - 1;
 		flush_str:
-			while (width-- > len) {
-				if (cb(state, " ", 1) != 0)
+			while (width > len) {
+				unsigned int pad_len = ((width - len - 1) & 15) + 1;
+				width -= pad_len;
+				written += pad_len;
+				if (cb(state, "                ", pad_len) != 0)
 					return -1;
-				written += 1;
 			}
 			if (cb(state, outstr, len) != 0)
 				return -1;
