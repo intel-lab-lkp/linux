@@ -548,7 +548,7 @@ static enum skb_drop_reason cobalt_should_drop(struct cobalt_vars *vars,
 	if (next_due && vars->dropping) {
 		/* Use ECN mark if possible, otherwise drop */
 		if (!(vars->ecn_marked = INET_ECN_set_ce(skb)))
-			reason = SKB_DROP_REASON_QDISC_CONGESTED;
+			reason = QDISC_DROP_CONGESTED;
 
 		vars->count++;
 		if (!vars->count)
@@ -573,7 +573,7 @@ static enum skb_drop_reason cobalt_should_drop(struct cobalt_vars *vars,
 	/* Simple BLUE implementation.  Lack of ECN is deliberate. */
 	if (vars->p_drop && reason == SKB_NOT_DROPPED_YET &&
 	    get_random_u32() < vars->p_drop)
-		reason = SKB_DROP_REASON_CAKE_FLOOD;
+		reason = QDISC_DROP_CAKE_FLOOD;
 
 	/* Overload the drop_next field as an activity timeout */
 	if (!vars->count)
@@ -1604,7 +1604,7 @@ static unsigned int cake_drop(struct Qdisc *sch, struct sk_buff **to_free)
 	if (q->config->rate_flags & CAKE_FLAG_INGRESS)
 		cake_advance_shaper(q, b, skb, now, true);
 
-	qdisc_drop_reason(skb, sch, to_free, SKB_DROP_REASON_QDISC_OVERLIMIT);
+	qdisc_drop_reason(skb, sch, to_free, QDISC_DROP_OVERLIMIT);
 	sch->q.qlen--;
 
 	cake_heapify(q, 0);
