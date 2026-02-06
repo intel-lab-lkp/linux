@@ -291,19 +291,44 @@ int fseek(FILE *stream, long offset, int whence)
 }
 
 
-/* minimal printf(). It supports the following formats:
- *  - %[l*]{d,u,c,x,p}
- *  - %s
- *  - unknown modifiers are ignored.
+/* simple printf(). It supports the following formats:
+ *  - %[-][width][{l,t,z,ll,L,j,q}]{d,u,c,x,p,s,m,%}
+ *  - %%
+ *  - invalid formats are copied to the output buffer
  */
+
+/* This code uses 'flag' variables that are indexed by the low 6 bits
+ * of characters to optimise checks for multiple characters.
+ *
+ * _NOLIBC_PF_FLAGS_CONTAIN(flags, 'a', 'b'. ...)
+ * returns non-zero if the bit for any of the specified characters is set.
+ *
+ * _NOLIBC_PF_CHAR_IS_ONE_OF(ch, 'a', 'b'. ...)
+ * returns the flag bit for ch if it is one of the specified characters.
+ * All the characters must be in the same 32 character block (non-alphabetic,
+ * upper case, or lower case) of the ASCII character set.)
+ */
+#define _NOLIBC_PF_FLAG(ch) (1u << ((ch) & 0x1f))
+#define _NOLIBC_PF_FLAG_NZ(ch) ((ch) ? _NOLIBC_PF_FLAG(ch) : 0)
+#define _NOLIBC_PF_FLAG8(cmp_1, cmp_2, cmp_3, cmp_4, cmp_5, cmp_6, cmp_7, cmp_8, ...) \
+	(_NOLIBC_PF_FLAG_NZ(cmp_1) | _NOLIBC_PF_FLAG_NZ(cmp_2) | \
+	 _NOLIBC_PF_FLAG_NZ(cmp_3) | _NOLIBC_PF_FLAG_NZ(cmp_4) | \
+	 _NOLIBC_PF_FLAG_NZ(cmp_5) | _NOLIBC_PF_FLAG_NZ(cmp_6) | \
+	 _NOLIBC_PF_FLAG_NZ(cmp_7) | _NOLIBC_PF_FLAG_NZ(cmp_8))
+#define _NOLIBC_PF_FLAGS_CONTAIN(flags, ...) \
+	((flags) & _NOLIBC_PF_FLAG8(__VA_ARGS__, 0, 0, 0, 0, 0, 0, 0))
+#define _NOLIBC_PF_CHAR_IS_ONE_OF(ch, cmp_1, ...) \
+	(ch < (cmp_1 & ~0x1f) || ch > (cmp_1 | 0x1f) ? 0 : \
+		_NOLIBC_PF_FLAGS_CONTAIN(_NOLIBC_PF_FLAG(ch), cmp_1, __VA_ARGS__))
+
 typedef int (*__nolibc_printf_cb)(void *state, const char *buf, size_t size);
 
 static __attribute__((unused, format(printf, 3, 0)))
 int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list args)
 {
-	char lpref, ch;
-	unsigned long long v;
+	char ch;
 	unsigned int written, width;
+	unsigned int flags, ch_flag;
 	size_t len;
 	char tmpbuf[21];
 	const char *outstr;
@@ -316,6 +341,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			break;
 
 		width = 0;
+		flags = 0;
 		if (ch != '%') {
 			while (*fmt && *fmt != '%')
 				fmt++;
@@ -325,6 +351,14 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 
 			ch = *fmt++;
 
+			/* Conversion flag characters */
+			for (;; ch = *fmt++) {
+				ch_flag = _NOLIBC_PF_CHAR_IS_ONE_OF(ch, ' ', '#', '+', '-', '0');
+				if (!ch_flag)
+					break;
+				flags |= ch_flag;
+			}
+
 			/* width */
 			while (ch >= '0' && ch <= '9') {
 				width *= 10;
@@ -333,62 +367,77 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 				ch = *fmt++;
 			}
 
-			/* Length modifiers */
-			if (ch == 'l') {
-				lpref = 1;
-				ch = *fmt++;
-				if (ch == 'l') {
-					lpref = 2;
-					ch = *fmt++;
+			/* Length modifier.
+			 * They miss the conversion flags characters " #+-0" so can go into flags.
+			 * Change both L and ll to q.
+			 */
+			if (ch == 'L')
+				ch = 'q';
+			ch_flag = _NOLIBC_PF_CHAR_IS_ONE_OF(ch, 'l', 't', 'z', 'j', 'q');
+			if (ch_flag != 0) {
+				if (ch == 'l' && fmt[0] == 'l') {
+					fmt++;
+					ch_flag = _NOLIBC_PF_FLAG('q');
 				}
-			} else if (ch == 'j') {
-				/* intmax_t is long long */
-				lpref = 2;
+				flags |= ch_flag;
 				ch = *fmt++;
-			} else {
-				lpref = 0;
 			}
 
-			if (ch == 'c' || ch == 'd' || ch == 'u' || ch == 'x' || ch == 'p') {
+			/* Conversion specifiers. */
+
+			/* Numeric conversion specifiers. */
+			ch_flag = _NOLIBC_PF_CHAR_IS_ONE_OF(ch, 'c', 'd', 'i', 'u', 'x', 'p');
+			if (ch_flag != 0) {
+				unsigned long long v;
+				long long signed_v;
 				char *out = tmpbuf;
 
-				if (ch == 'p')
+				/* 'long' is needed for pointer/string conversions and ltz lengths.
+				 * A single test can be used provided 'p' (the same bit as '0')
+				 * is masked from flags.
+				 */
+				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag | (flags & ~_NOLIBC_PF_FLAG('p')),
+							     'p', 'l', 't', 'z')) {
 					v = va_arg(args, unsigned long);
-				else if (lpref) {
-					if (lpref > 1)
-						v = va_arg(args, unsigned long long);
-					else
-						v = va_arg(args, unsigned long);
-				} else
+					signed_v = (long)v;
+				} else if (_NOLIBC_PF_FLAGS_CONTAIN(flags, 'j', 'q')) {
+					v = va_arg(args, unsigned long long);
+					signed_v = v;
+				} else {
 					v = va_arg(args, unsigned int);
-
-				if (ch == 'd') {
-					/* sign-extend the value */
-					if (lpref == 0)
-						v = (long long)(int)v;
-					else if (lpref == 1)
-						v = (long long)(long)v;
+					signed_v = (int)v;
 				}
 
-				switch (ch) {
-				case 'c':
-					out[0] = v;
-					out[1] = 0;
-					break;
-				case 'd':
-					i64toa_r(v, out);
-					break;
-				case 'u':
+				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'c')) {
+					/* "%c" - single character. */
+					tmpbuf[0] = v;
+					len = 1;
+					outstr = tmpbuf;
+					goto do_output;
+				}
+
+				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'd', 'i')) {
+					/* "%d" and "%i" - signed decimal numbers. */
+					if (signed_v < 0) {
+						*out++ = '-';
+						v = -(signed_v + 1);
+						v++;
+					}
+				}
+
+				/* Convert the number to ascii in the required base. */
+				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'd', 'i', 'u')) {
+					/* Base 10 */
 					u64toa_r(v, out);
-					break;
-				case 'p':
-					*(out++) = '0';
-					*(out++) = 'x';
-					__nolibc_fallthrough;
-				default: /* 'x' and 'p' above */
+				} else {
+					/* Base 16 */
+					if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'p')) {
+						*(out++) = '0';
+						*(out++) = 'x';
+					}
 					u64toh_r(v, out);
-					break;
 				}
+
 				outstr = tmpbuf;
 			}
 			else if (ch == 's') {
@@ -417,7 +466,13 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 			len = strlen(outstr);
 		}
 
+do_output:
 		written += len;
+
+		/* An OPTIMIZER_HIDE_VAR() seems to stop gcc back-merging this
+		 * code into one of the conditionals above.
+		 */
+		__asm__ volatile("" : "=r"(len) : "0"(len));
 
 		while (width > len) {
 			unsigned int pad_len = ((width - len - 1) & 15) + 1;
