@@ -62,6 +62,44 @@ struct pci_epc_map {
 };
 
 /**
+ * enum pci_epc_remote_resource_type - remote resource type identifiers
+ * @PCI_EPC_RR_DMA_CTRL_MMIO: Integrated DMA controller register window (MMIO)
+ * @PCI_EPC_RR_DMA_CHAN_DESC: Per-channel DMA descriptor
+ *
+ * EPC backends may expose auxiliary blocks (e.g. DMA engines) by mapping their
+ * register windows and descriptor memories into BAR space. This enum
+ * identifies the type of each exposable resource.
+ */
+enum pci_epc_remote_resource_type {
+	PCI_EPC_RR_DMA_CTRL_MMIO,
+	PCI_EPC_RR_DMA_CHAN_DESC,
+};
+
+/**
+ * struct pci_epc_remote_resource - a physical resource that can be exposed
+ * @type:      resource type, see enum pci_epc_remote_resource_type
+ * @phys_addr: physical base address of the resource
+ * @size:      size of the resource in bytes
+ * @u:         type-specific metadata
+ *
+ * For @PCI_EPC_RR_DMA_CHAN_DESC, @u.dma_chan_desc provides per-channel
+ * information.
+ */
+struct pci_epc_remote_resource {
+	enum pci_epc_remote_resource_type type;
+	phys_addr_t phys_addr;
+	resource_size_t size;
+
+	union {
+		/* PCI_EPC_RR_DMA_CHAN_DESC */
+		struct {
+			int irq;
+			resource_size_t db_offset;
+		} dma_chan_desc;
+	} u;
+};
+
+/**
  * struct pci_epc_ops - set of function pointers for performing EPC operations
  * @write_header: ops to populate configuration space header
  * @set_bar: ops to configure the BAR
@@ -84,6 +122,8 @@ struct pci_epc_map {
  * @start: ops to start the PCI link
  * @stop: ops to stop the PCI link
  * @get_features: ops to get the features supported by the EPC
+ * @get_remote_resources: ops to retrieve controller-owned resources that can be
+ *			  exposed to the remote host (optional)
  * @owner: the module owner containing the ops
  */
 struct pci_epc_ops {
@@ -115,6 +155,9 @@ struct pci_epc_ops {
 	void	(*stop)(struct pci_epc *epc);
 	const struct pci_epc_features* (*get_features)(struct pci_epc *epc,
 						       u8 func_no, u8 vfunc_no);
+	int	(*get_remote_resources)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+					struct pci_epc_remote_resource *resources,
+					int num_resources);
 	struct module *owner;
 };
 
@@ -309,6 +352,9 @@ int pci_epc_start(struct pci_epc *epc);
 void pci_epc_stop(struct pci_epc *epc);
 const struct pci_epc_features *pci_epc_get_features(struct pci_epc *epc,
 						    u8 func_no, u8 vfunc_no);
+int pci_epc_get_remote_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+				 struct pci_epc_remote_resource *resources,
+				 int num_resources);
 enum pci_barno
 pci_epc_get_first_free_bar(const struct pci_epc_features *epc_features);
 enum pci_barno pci_epc_get_next_free_bar(const struct pci_epc_features
