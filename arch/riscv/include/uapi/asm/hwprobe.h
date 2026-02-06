@@ -115,6 +115,10 @@ struct riscv_hwprobe {
 #define RISCV_HWPROBE_KEY_VENDOR_EXT_MIPS_0	14
 #define RISCV_HWPROBE_KEY_ZICBOP_BLOCK_SIZE	15
 #define RISCV_HWPROBE_KEY_IMA_EXT_1		16
+#define		RISCV_HWPROBE_EXT_ZICCAMOA	(1 << 0)
+#define		RISCV_HWPROBE_EXT_ZICCIF	(1 << 1)
+#define		RISCV_HWPROBE_EXT_ZICCRSE	(1 << 2)
+#define		RISCV_HWPROBE_EXT_ZA64RS	(1 << 3)
 /* Increase RISCV_HWPROBE_MAX_KEY when adding items. */
 
 /* Flags */
