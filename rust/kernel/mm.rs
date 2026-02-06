@@ -18,6 +18,8 @@ use crate::{
 };
 use core::{ops::Deref, ptr::NonNull};
 
+#[cfg(not(any(CONFIG_SLUB_TINY, CONFIG_SLUB_DEBUG)))]
+pub mod sheaf;
 pub mod virt;
 use virt::VmaRef;
 
