@@ -1377,12 +1377,12 @@ BIT_ARG16(x)
 
 #define IPW_DEBUG(level, fmt, args...) \
 do { if (ipw_debug_level & (level)) \
-  printk(KERN_DEBUG DRV_NAME": %s " fmt, __func__ , ## args); } while (0)
+  pr_debug(DRV_NAME": %s " fmt, __func__ , ## args); } while (0)
 
 #ifdef CONFIG_IPW2200_DEBUG
 #define IPW_LL_DEBUG(level, fmt, args...) \
 do { if (ipw_debug_level & (level)) \
-  printk(KERN_DEBUG DRV_NAME": %s " fmt, __func__ , ## args); } while (0)
+  pr_debug(DRV_NAME": %s " fmt, __func__ , ## args); } while (0)
 #else
 #define IPW_LL_DEBUG(level, fmt, args...) do {} while (0)
 #endif				/* CONFIG_IPW2200_DEBUG */
@@ -1448,8 +1448,8 @@ do { if (ipw_debug_level & (level)) \
 #define IPW_DL_MERGE         (1<<30)
 #define IPW_DL_QOS           (1<<31)
 
-#define IPW_ERROR(f, a...) printk(KERN_ERR DRV_NAME ": " f, ## a)
-#define IPW_WARNING(f, a...) printk(KERN_WARNING DRV_NAME ": " f, ## a)
+#define IPW_ERROR(f, a...) pr_err(DRV_NAME ": " f, ## a)
+#define IPW_WARNING(f, a...) pr_warn(DRV_NAME ": " f, ## a)
 #define IPW_DEBUG_INFO(f, a...)    IPW_DEBUG(IPW_DL_INFO, f, ## a)
 
 #define IPW_DEBUG_WX(f, a...)     IPW_DEBUG(IPW_DL_WX, f, ## a)
