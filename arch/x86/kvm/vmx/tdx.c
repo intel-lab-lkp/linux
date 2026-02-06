@@ -1186,10 +1186,21 @@ static void __tdx_map_gpa(struct vcpu_tdx *tdx);
 
 static int tdx_complete_vmcall_map_gpa(struct kvm_vcpu *vcpu)
 {
+	u64 hypercall_ret = READ_ONCE(vcpu->run->hypercall.ret);
 	struct vcpu_tdx *tdx = to_tdx(vcpu);
 
-	if (vcpu->run->hypercall.ret) {
-		tdvmcall_set_return_code(vcpu, TDVMCALL_STATUS_INVALID_OPERAND);
+	if (hypercall_ret) {
+		if (hypercall_ret == EAGAIN) {
+			tdvmcall_set_return_code(vcpu, TDVMCALL_STATUS_RETRY);
+		} else if (vcpu->run->hypercall.ret == EINVAL) {
+			tdvmcall_set_return_code(
+				vcpu, TDVMCALL_STATUS_INVALID_OPERAND);
+		} else {
+			WARN_ON_ONCE(
+				kvm_is_valid_map_gpa_range_ret(hypercall_ret));
+			return -EINVAL;
+		}
+
 		tdx->vp_enter_args.r11 = tdx->map_gpa_next;
 		return 1;
 	}
