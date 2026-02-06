@@ -1397,9 +1397,14 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 }
 
 static
-bool intel_dp_can_join(struct intel_display *display,
+bool intel_dp_can_join(struct intel_dp *intel_dp,
 		       int num_joined_pipes)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (num_joined_pipes > 1 && !intel_dp_has_joiner(intel_dp))
+		return false;
+
 	switch (num_joined_pipes) {
 	case 1:
 		return true;
@@ -7220,8 +7225,9 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 				     int num_joined_pipes)
 {
 	struct intel_display *display = to_intel_display(connector);
+	struct intel_dp *intel_dp = intel_attached_dp(connector);
 
-	if (!intel_dp_can_join(display, num_joined_pipes))
+	if (!intel_dp_can_join(intel_dp, num_joined_pipes))
 		return false;
 
 	if (hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
