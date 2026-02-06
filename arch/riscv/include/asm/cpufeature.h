@@ -25,7 +25,15 @@ struct riscv_cpuinfo {
 	unsigned long mimpid;
 };
 
+enum {
+	RISCV_ISA_BASE_IMA,
+	RISCV_ISA_BASE_RVA23U64,
+	RISCV_ISA_BASE_RVA23S64,
+	RISCV_NR_ISA_BASES,
+};
+
 struct riscv_isainfo {
+	DECLARE_BITMAP(isa_bases, RISCV_NR_ISA_BASES);
 	DECLARE_BITMAP(isa, RISCV_ISA_EXT_MAX);
 };
 
@@ -151,5 +159,7 @@ static __always_inline bool riscv_cpu_has_extension_unlikely(int cpu, const unsi
 
 	return __riscv_isa_extension_available(hart_isa[cpu].isa, ext);
 }
+
+void riscv_set_isa_bases(unsigned long *isa_bases, const unsigned long *isa_bitmap);
 
 #endif
