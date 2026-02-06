@@ -11,7 +11,7 @@
 	FN(CONGESTED)			\
 	FN(FLOW_LIMIT)			\
 	FN(MAXFLOWS)			\
-	FN(CAKE_FLOOD)			\
+	FN(FLOOD_PROTECTION)		\
 	FN(FQ_BAND_LIMIT)		\
 	FN(FQ_HORIZON_LIMIT)		\
 	FNe(MAX)
@@ -75,11 +75,12 @@ enum qdisc_drop_reason {
 	 */
 	QDISC_DROP_MAXFLOWS,
 	/**
-	 * @QDISC_DROP_CAKE_FLOOD: CAKE qdisc dropped packet due to flood
-	 * protection mechanism (BLUE algorithm). This indicates potential
-	 * DoS/flood attack or unresponsive flow behavior.
+	 * @QDISC_DROP_FLOOD_PROTECTION: packet dropped by flood protection
+	 * mechanism detecting unresponsive flows (potential DoS/flood).
+	 * Used by qdiscs implementing probabilistic drop algorithms like
+	 * BLUE (e.g., CAKE's Cobalt AQM).
 	 */
-	QDISC_DROP_CAKE_FLOOD,
+	QDISC_DROP_FLOOD_PROTECTION,
 	/**
 	 * @QDISC_DROP_FQ_BAND_LIMIT: FQ (Fair Queue) dropped packet because
 	 * the priority band's packet limit was reached. Each priority band
