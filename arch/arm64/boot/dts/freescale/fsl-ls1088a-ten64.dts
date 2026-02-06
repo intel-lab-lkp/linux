@@ -68,6 +68,42 @@
 		};
 	};
 
+	thermal-zones {
+		soc-thermal {
+			trips {
+				fanlow0: fanlow0 {
+					temperature = <60000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+				fanmid0: fanmid0 {
+					temperature = <65000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+				fanmax0: fanmax0 {
+					temperature = <70000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+			};
+			cooling-maps {
+				map2 {
+					trip = <&fanlow0>;
+					cooling-device = <&casefan 0 3>;
+				};
+				map3 {
+					trip = <&fanmid0>;
+					cooling-device = <&casefan 4 7>;
+				};
+				map4 {
+					trip = <&fanmax0>;
+					cooling-device = <&casefan 8 THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+	};
+
 	sfp_xg0: dpmac2-sfp {
 		compatible = "sff,sfp";
 		i2c-bus = <&sfplower_i2c>;
@@ -251,6 +287,20 @@
 	usbhub: usb-hub@2d {
 		compatible = "microchip,usb5744";
 		reg = <0x2d>;
+	};
+
+	fan_controller: emc2301@2f {
+		compatible = "microchip,emc2305";
+		reg = <0x2f>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		#pwm-cells = <3>;
+
+		casefan: fan@0 {
+			reg = <0x0>;
+			pwms = <&fan_controller 26000 0 1>;
+			#cooling-cells = <2>;
+		};
 	};
 
 	uc: board-controller@7e {
