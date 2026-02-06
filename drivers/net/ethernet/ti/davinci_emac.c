@@ -329,7 +329,6 @@ struct emac_priv {
 	u32 mac_hash2;
 	u32 multicast_hash_cnt[EMAC_NUM_MULTICAST_BITS];
 	u32 rx_addr_type;
-	const char *phy_id;
 	struct device_node *phy_node;
 	spinlock_t lock;
 	/*platform specific members*/
@@ -1418,6 +1417,7 @@ static int emac_dev_open(struct net_device *ndev)
 	struct emac_priv *priv = netdev_priv(ndev);
 	struct phy_device *phydev = NULL;
 	struct device *phy = NULL;
+	const char *phy_id = NULL;
 
 	ret = pm_runtime_resume_and_get(&priv->pdev->dev);
 	if (ret < 0) {
@@ -1502,8 +1502,8 @@ static int emac_dev_open(struct net_device *ndev)
 		}
 	}
 
-	/* use the first phy on the bus if pdata did not give us a phy id */
-	if (!phydev && !priv->phy_id) {
+	/* use the first phy on the bus */
+	if (!phydev) {
 		/* NOTE: we can't use bus_find_device_by_name() here because
 		 * the device name is not guaranteed to be 'davinci_mdio'. On
 		 * some systems it can be 'davinci_mdio.0' so we need to use
@@ -1513,20 +1513,19 @@ static int emac_dev_open(struct net_device *ndev)
 		phy = bus_find_device(&mdio_bus_type, NULL, NULL,
 				      match_first_device);
 		if (phy) {
-			priv->phy_id = dev_name(phy);
-			if (!priv->phy_id || !*priv->phy_id)
+			phy_id = dev_name(phy);
+			if (!phy_id || !*phy_id)
 				put_device(phy);
 		}
 	}
 
-	if (!phydev && priv->phy_id && *priv->phy_id) {
-		phydev = phy_connect(ndev, priv->phy_id,
-				     &emac_adjust_link,
+	if (!phydev && phy_id && *phy_id) {
+		phydev = phy_connect(ndev, phy_id, &emac_adjust_link,
 				     PHY_INTERFACE_MODE_MII);
 		put_device(phy);	/* reference taken by bus_find_device */
 		if (IS_ERR(phydev)) {
 			dev_err(emac_dev, "could not connect to phy %s\n",
-				priv->phy_id);
+				phy_id);
 			ret = PTR_ERR(phydev);
 			goto err;
 		}
@@ -1761,10 +1760,8 @@ davinci_emac_of_get_pdata(struct platform_device *pdev, struct emac_priv *priv)
 	pdata->no_bd_ram = of_property_read_bool(np, "ti,davinci-no-bd-ram");
 
 	priv->phy_node = of_parse_phandle(np, "phy-handle", 0);
-	if (!priv->phy_node) {
-		if (!of_phy_is_fixed_link(np))
-			pdata->phy_id = NULL;
-		else if (of_phy_register_fixed_link(np) >= 0)
+	if (!priv->phy_node && of_phy_is_fixed_link(np)) {
+		if (!of_phy_register_fixed_link(np))
 			priv->phy_node = of_node_get(np);
 	}
 
@@ -1846,7 +1843,6 @@ static int davinci_emac_probe(struct platform_device *pdev)
 
 	/* MAC addr and PHY mask , RMII enable info from platform_data */
 	memcpy(priv->mac_addr, pdata->mac_addr, ETH_ALEN);
-	priv->phy_id = pdata->phy_id;
 	priv->rmii_en = pdata->rmii_en;
 	priv->version = pdata->version;
 	priv->int_enable = pdata->interrupt_enable;

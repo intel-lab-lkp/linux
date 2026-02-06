@@ -25,15 +25,6 @@ struct emac_platform_data {
 	u32 ctrl_ram_offset;
 	u32 hw_ram_addr;
 	u32 ctrl_ram_size;
-
-	/*
-	 * phy_id can be one of the following:
-	 *   - NULL		: use the first phy on the bus,
-	 *   - ""		: force to 100/full, no mdio control
-	 *   - "<bus>:<addr>"	: use the specified bus and phy
-	 */
-	const char *phy_id;
-
 	u8 rmii_en;
 	u8 version;
 	bool no_bd_ram;
