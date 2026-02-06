@@ -97,6 +97,26 @@ static inline struct page *page_pool_dev_alloc_pages(struct page_pool *pool)
 }
 
 /**
+ * page_pool_frag_offset_add() - advance fragment offset without allocation
+ * @pool: pool to update
+ * @bytes: number of bytes to skip
+ *
+ * Advance the fragment offset by @bytes without performing an allocation.
+ * This is useful when a driver extends a buffer to consume unused space
+ * at the end of a page fragment (to avoid internal fragmentation), and
+ * needs to ensure the next allocation doesn't overlap.
+ *
+ * Must be called in the same context as page_pool_alloc_frag() to avoid
+ * racing with fragment allocations.
+ *
+ */
+static inline void page_pool_frag_offset_add(struct page_pool *pool,
+					     unsigned int bytes)
+{
+	pool->frag_offset += bytes;
+}
+
+/**
  * page_pool_dev_alloc_frag() - allocate a page fragment.
  * @pool: pool from which to allocate
  * @offset: offset to the allocated page
