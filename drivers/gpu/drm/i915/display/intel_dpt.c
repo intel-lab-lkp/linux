@@ -57,8 +57,8 @@ void intel_dpt_suspend(struct intel_display *display)
 	drm_for_each_fb(drm_fb, display->drm) {
 		struct intel_framebuffer *fb = to_intel_framebuffer(drm_fb);
 
-		if (fb->dpt_vm)
-			intel_parent_dpt_suspend(display, fb->dpt_vm);
+		if (fb->dpt)
+			intel_parent_dpt_suspend(display, fb->dpt);
 	}
 
 	mutex_unlock(&display->drm->mode_config.fb_lock);
@@ -87,8 +87,8 @@ void intel_dpt_resume(struct intel_display *display)
 	drm_for_each_fb(drm_fb, display->drm) {
 		struct intel_framebuffer *fb = to_intel_framebuffer(drm_fb);
 
-		if (fb->dpt_vm)
-			intel_parent_dpt_resume(display, fb->dpt_vm);
+		if (fb->dpt)
+			intel_parent_dpt_resume(display, fb->dpt);
 	}
 	mutex_unlock(&display->drm->mode_config.fb_lock);
 }

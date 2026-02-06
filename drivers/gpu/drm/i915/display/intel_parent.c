@@ -24,9 +24,8 @@
 #include "intel_parent.h"
 
 /* dpt */
-struct i915_address_space *intel_parent_dpt_create(struct intel_display *display,
-						   struct drm_gem_object *obj,
-						   size_t size)
+struct intel_dpt *intel_parent_dpt_create(struct intel_display *display,
+					  struct drm_gem_object *obj, size_t size)
 {
 	if (display->parent->dpt)
 		return display->parent->dpt->create(obj, size);
@@ -34,22 +33,22 @@ struct i915_address_space *intel_parent_dpt_create(struct intel_display *display
 	return NULL;
 }
 
-void intel_parent_dpt_destroy(struct intel_display *display, struct i915_address_space *vm)
+void intel_parent_dpt_destroy(struct intel_display *display, struct intel_dpt *dpt)
 {
 	if (display->parent->dpt)
-		display->parent->dpt->destroy(vm);
+		display->parent->dpt->destroy(dpt);
 }
 
-void intel_parent_dpt_suspend(struct intel_display *display, struct i915_address_space *vm)
+void intel_parent_dpt_suspend(struct intel_display *display, struct intel_dpt *dpt)
 {
 	if (display->parent->dpt)
-		display->parent->dpt->suspend(vm);
+		display->parent->dpt->suspend(dpt);
 }
 
-void intel_parent_dpt_resume(struct intel_display *display, struct i915_address_space *vm)
+void intel_parent_dpt_resume(struct intel_display *display, struct intel_dpt *dpt)
 {
 	if (display->parent->dpt)
-		display->parent->dpt->resume(vm);
+		display->parent->dpt->resume(dpt);
 }
 
 /* hdcp */
