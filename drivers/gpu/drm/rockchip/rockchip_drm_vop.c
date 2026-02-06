@@ -924,7 +924,7 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 	struct drm_rect *dest = &new_state->dst;
 	struct drm_gem_object *obj, *uv_obj;
 	struct rockchip_gem_object *rk_obj, *rk_uv_obj;
-	unsigned long offset;
+	unsigned int offset;
 	dma_addr_t dma_addr;
 	uint32_t val;
 	bool rb_swap, uv_swap;
