@@ -2665,6 +2665,7 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 			       bool dsc,
 			       struct link_config_limits *limits)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
 	bool is_mst = intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST);
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
@@ -2677,8 +2678,7 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 	limits->min_lane_count = intel_dp_min_lane_count(intel_dp);
 	limits->max_lane_count = intel_dp_max_lane_count(intel_dp);
 
-	limits->pipe.min_bpp = intel_dp_in_hdr_mode(conn_state) ? 30 :
-				intel_dp_min_bpp(crtc_state->output_format);
+	limits->pipe.min_bpp = intel_dp_min_bpp(crtc_state->output_format);
 	if (is_mst) {
 		/*
 		 * FIXME: If all the streams can't fit into the link with their
@@ -2692,6 +2692,16 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 	} else {
 		limits->pipe.max_bpp = intel_dp_max_bpp(intel_dp, crtc_state,
 							respect_downstream_limits);
+	}
+
+	if (intel_dp_in_hdr_mode(conn_state)) {
+		if (limits->pipe.min_bpp <= 30 && limits->pipe.max_bpp >= 30)
+			limits->pipe.min_bpp = 30;
+		else
+			drm_dbg_kms(display->drm,
+				    "[CONNECTOR:%d:%s] HDR min 30 bpp outside of valid pipe bpp range (%d-%d)\n",
+				    connector->base.base.id, connector->base.name,
+				    limits->pipe.min_bpp, limits->pipe.max_bpp);
 	}
 
 	if (dsc && !intel_dp_dsc_compute_pipe_bpp_limits(connector, limits))
