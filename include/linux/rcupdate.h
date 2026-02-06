@@ -1090,8 +1090,9 @@ static inline void rcu_read_unlock_migrate(void)
  * The BUILD_BUG_ON check must not involve any function calls, hence the
  * checks are done in macros here.
  */
-#define kfree_rcu(ptr, rf) kvfree_rcu_arg_2(ptr, rf)
-#define kvfree_rcu(ptr, rf) kvfree_rcu_arg_2(ptr, rf)
+#define kfree_rcu(ptr, rf) kvfree_rcu_arg_2(ptr, rf, true)
+#define kfree_rcu_nolock(ptr, rf) kvfree_rcu_arg_2(ptr, rf, false)
+#define kvfree_rcu(ptr, rf) kvfree_rcu_arg_2(ptr, rf, true)
 
 /**
  * kfree_rcu_mightsleep() - kfree an object after a grace period.
@@ -1115,35 +1116,35 @@ static inline void rcu_read_unlock_migrate(void)
 
 
 #ifdef CONFIG_KVFREE_RCU_BATCHED
-void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr);
-#define kvfree_call_rcu(head, ptr) \
+void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr, bool allow_spin);
+#define kvfree_call_rcu(head, ptr, spin) \
 	_Generic((head), \
 		struct rcu_head *: kvfree_call_rcu_ptr,		\
 		struct rcu_ptr *: kvfree_call_rcu_ptr,		\
 		void *: kvfree_call_rcu_ptr			\
-	)((struct rcu_ptr *)(head), (ptr))
+	)((struct rcu_ptr *)(head), (ptr), spin)
 #else
-void kvfree_call_rcu_head(struct rcu_head *head, void *ptr);
+void kvfree_call_rcu_head(struct rcu_head *head, void *ptr, bool allow_spin);
 static_assert(sizeof(struct rcu_head) == sizeof(struct rcu_ptr));
-#define kvfree_call_rcu(head, ptr) \
+#define kvfree_call_rcu(head, ptr, spin) \
 	_Generic((head), \
 		struct rcu_head *: kvfree_call_rcu_head,	\
 		struct rcu_ptr *: kvfree_call_rcu_head,		\
 		void *: kvfree_call_rcu_head			\
-	)((struct rcu_head *)(head), (ptr))
+	)((struct rcu_head *)(head), (ptr), spin)
 #endif
 
 /*
  * The BUILD_BUG_ON() makes sure the rcu_head offset can be handled. See the
  * comment of kfree_rcu() for details.
  */
-#define kvfree_rcu_arg_2(ptr, rf)					\
+#define kvfree_rcu_arg_2(ptr, rf, spin)					\
 do {									\
 	typeof (ptr) ___p = (ptr);					\
 									\
 	if (___p) {							\
 		BUILD_BUG_ON(offsetof(typeof(*(ptr)), rf) >= 4096);	\
-		kvfree_call_rcu(&((___p)->rf), (void *) (___p));	\
+		kvfree_call_rcu(&((___p)->rf), (void *) (___p), spin);	\
 	}								\
 } while (0)
 
@@ -1152,7 +1153,7 @@ do {								\
 	typeof(ptr) ___p = (ptr);				\
 								\
 	if (___p)						\
-		kvfree_call_rcu(NULL, (void *) (___p));		\
+		kvfree_call_rcu(NULL, (void *) (___p), true);	\
 } while (0)
 
 /*

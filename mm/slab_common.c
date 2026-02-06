@@ -1311,6 +1311,12 @@ struct kfree_rcu_cpu_work {
  * the interactions with the slab allocators.
  */
 struct kfree_rcu_cpu {
+	// Objects queued on a lockless linked list, not protected by the lock.
+	// This allows freeing objects in NMI context, where trylock may fail.
+	struct llist_head llist_head;
+	struct irq_work irq_work;
+	struct irq_work sched_monitor_irq_work;
+
 	// Objects queued on a linked list
 	struct rcu_ptr *head;
 	unsigned long head_gp_snap;
@@ -1333,12 +1339,61 @@ struct kfree_rcu_cpu {
 	struct llist_head bkvcache;
 	int nr_bkv_objs;
 };
+#else
+struct kfree_rcu_cpu {
+	struct llist_head llist_head;
+	struct irq_work irq_work;
+};
 #endif
 
-#ifndef CONFIG_KVFREE_RCU_BATCHED
-
-void kvfree_call_rcu_head(struct rcu_head *head, void *ptr)
+/* Universial implementation regardless of CONFIG_KVFREE_RCU_BATCHED */
+static void defer_kfree_rcu(struct irq_work *work)
 {
+	struct kfree_rcu_cpu *krcp;
+	struct llist_head *head;
+	struct llist_node *llnode, *pos, *t;
+
+	krcp = container_of(work, struct kfree_rcu_cpu, irq_work);
+	head = &krcp->llist_head;
+
+	if (llist_empty(head))
+		return;
+
+	llnode = llist_del_all(head);
+	llist_for_each_safe(pos, t, llnode) {
+		struct slab *slab;
+		void *objp;
+		struct rcu_ptr *rcup = (struct rcu_ptr *)pos;
+
+		slab = virt_to_slab(pos);
+		if (is_vmalloc_addr(pos) || !slab)
+			objp = (void *)PAGE_ALIGN_DOWN((unsigned long)pos);
+		else
+			objp = nearest_obj(slab->slab_cache, slab, pos);
+
+		kvfree_call_rcu(rcup, objp, true);
+	}
+}
+
+#ifndef CONFIG_KVFREE_RCU_BATCHED
+static DEFINE_PER_CPU(struct kfree_rcu_cpu, krc) = {
+	.llist_head = LLIST_HEAD_INIT(llist_head),
+	.irq_work = IRQ_WORK_INIT(defer_kfree_rcu),
+};
+
+void kvfree_call_rcu_head(struct rcu_head *head, void *ptr, bool allow_spin)
+{
+	if (!allow_spin) {
+		struct kfree_rcu_cpu *krcp;
+
+		guard(preempt)();
+
+		krcp = this_cpu_ptr(&krc);
+		if (llist_add((struct llist_node *)head, &krcp->llist_head))
+			irq_work_queue(&krcp->irq_work);
+		return;
+	}
+
 	if (head) {
 		kasan_record_aux_stack(ptr);
 		call_rcu(head, kvfree_rcu_cb);
@@ -1405,8 +1460,21 @@ struct kvfree_rcu_bulk_data {
 #define KVFREE_BULK_MAX_ENTR \
 	((PAGE_SIZE - sizeof(struct kvfree_rcu_bulk_data)) / sizeof(void *))
 
+static void schedule_delayed_monitor_work(struct kfree_rcu_cpu *krcp);
+
+static void sched_monitor_irq_work(struct irq_work *work)
+{
+	struct kfree_rcu_cpu *krcp;
+
+	krcp = container_of(work, struct kfree_rcu_cpu, sched_monitor_irq_work);
+	schedule_delayed_monitor_work(krcp);
+}
+
 static DEFINE_PER_CPU(struct kfree_rcu_cpu, krc) = {
 	.lock = __RAW_SPIN_LOCK_UNLOCKED(krc.lock),
+	.irq_work = IRQ_WORK_INIT(defer_kfree_rcu),
+	.sched_monitor_irq_work =
+		IRQ_WORK_INIT_LAZY(sched_monitor_irq_work),
 };
 
 static __always_inline void
@@ -1421,13 +1489,18 @@ debug_rcu_bhead_unqueue(struct kvfree_rcu_bulk_data *bhead)
 }
 
 static inline struct kfree_rcu_cpu *
-krc_this_cpu_lock(unsigned long *flags)
+krc_this_cpu_lock(unsigned long *flags, bool allow_spin)
 {
 	struct kfree_rcu_cpu *krcp;
 
 	local_irq_save(*flags);	// For safely calling this_cpu_ptr().
 	krcp = this_cpu_ptr(&krc);
-	raw_spin_lock(&krcp->lock);
+	if (allow_spin) {
+		raw_spin_lock(&krcp->lock);
+	} else if (!raw_spin_trylock(&krcp->lock)) {
+		local_irq_restore(*flags);
+		return NULL;
+	}
 
 	return krcp;
 }
@@ -1841,25 +1914,27 @@ static void fill_page_cache_func(struct work_struct *work)
 // Returns true if ptr was successfully recorded, else the caller must
 // use a fallback.
 static inline bool
-add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
-	unsigned long *flags, void *ptr, bool can_alloc)
+add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu *krcp,
+	unsigned long *flags, void *ptr, bool can_alloc, bool allow_spin)
 {
 	struct kvfree_rcu_bulk_data *bnode;
 	int idx;
 
-	*krcp = krc_this_cpu_lock(flags);
-	if (unlikely(!(*krcp)->initialized))
+	if (unlikely(!krcp->initialized))
+		return false;
+
+	if (!allow_spin)
 		return false;
 
 	idx = !!is_vmalloc_addr(ptr);
-	bnode = list_first_entry_or_null(&(*krcp)->bulk_head[idx],
+	bnode = list_first_entry_or_null(&krcp->bulk_head[idx],
 		struct kvfree_rcu_bulk_data, list);
 
 	/* Check if a new block is required. */
 	if (!bnode || bnode->nr_records == KVFREE_BULK_MAX_ENTR) {
-		bnode = get_cached_bnode(*krcp);
+		bnode = get_cached_bnode(krcp);
 		if (!bnode && can_alloc) {
-			krc_this_cpu_unlock(*krcp, *flags);
+			krc_this_cpu_unlock(krcp, *flags);
 
 			// __GFP_NORETRY - allows a light-weight direct reclaim
 			// what is OK from minimizing of fallback hitting point of
@@ -1874,7 +1949,7 @@ add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
 			// scenarios.
 			bnode = (struct kvfree_rcu_bulk_data *)
 				__get_free_page(GFP_KERNEL | __GFP_NORETRY | __GFP_NOMEMALLOC | __GFP_NOWARN);
-			raw_spin_lock_irqsave(&(*krcp)->lock, *flags);
+			raw_spin_lock_irqsave(&krcp->lock, *flags);
 		}
 
 		if (!bnode)
@@ -1882,14 +1957,14 @@ add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
 
 		// Initialize the new block and attach it.
 		bnode->nr_records = 0;
-		list_add(&bnode->list, &(*krcp)->bulk_head[idx]);
+		list_add(&bnode->list, &krcp->bulk_head[idx]);
 	}
 
 	// Finally insert and update the GP for this page.
 	bnode->nr_records++;
 	bnode->records[bnode->nr_records - 1] = ptr;
 	get_state_synchronize_rcu_full(&bnode->gp_snap);
-	atomic_inc(&(*krcp)->bulk_count[idx]);
+	atomic_inc(&krcp->bulk_count[idx]);
 
 	return true;
 }
@@ -1949,7 +2024,7 @@ void __init kfree_rcu_scheduler_running(void)
  * be free'd in workqueue context. This allows us to: batch requests together to
  * reduce the number of grace periods during heavy kfree_rcu()/kvfree_rcu() load.
  */
-void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
+void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr, bool allow_spin)
 {
 	unsigned long flags;
 	struct kfree_rcu_cpu *krcp;
@@ -1965,7 +2040,12 @@ void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
 	if (!head)
 		might_sleep();
 
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && kfree_rcu_sheaf(ptr))
+	if (!allow_spin && (IS_ENABLED(CONFIG_DEBUG_OBJECTS_RCU_HEAD) ||
+				IS_ENABLED(CONFIG_DEBUG_KMEMLEAK)))
+		goto defer_free;
+
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT) &&
+			(allow_spin && kfree_rcu_sheaf(ptr)))
 		return;
 
 	// Queue the object but don't yet schedule the batch.
@@ -1979,9 +2059,15 @@ void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
 	}
 
 	kasan_record_aux_stack(ptr);
-	success = add_ptr_to_bulk_krc_lock(&krcp, &flags, ptr, !head);
+
+	krcp = krc_this_cpu_lock(&flags, allow_spin);
+	if (!krcp)
+		goto defer_free;
+
+	success = add_ptr_to_bulk_krc_lock(krcp, &flags, ptr, !head, allow_spin);
 	if (!success) {
-		run_page_cache_worker(krcp);
+		if (allow_spin)
+			run_page_cache_worker(krcp);
 
 		if (head == NULL)
 			// Inline if kvfree_rcu(one_arg) call.
@@ -2005,8 +2091,12 @@ void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
 	kmemleak_ignore(ptr);
 
 	// Set timer to drain after KFREE_DRAIN_JIFFIES.
-	if (rcu_scheduler_active == RCU_SCHEDULER_RUNNING)
-		__schedule_delayed_monitor_work(krcp);
+	if (rcu_scheduler_active == RCU_SCHEDULER_RUNNING) {
+		if (allow_spin)
+			__schedule_delayed_monitor_work(krcp);
+		else
+			irq_work_queue(&krcp->sched_monitor_irq_work);
+	}
 
 unlock_return:
 	krc_this_cpu_unlock(krcp, flags);
@@ -2017,10 +2107,22 @@ unlock_return:
 	 * CPU can pass the QS state.
 	 */
 	if (!success) {
+		VM_WARN_ON_ONCE(!allow_spin);
 		debug_rcu_head_unqueue((struct rcu_head *) ptr);
 		synchronize_rcu();
 		kvfree(ptr);
 	}
+	return;
+
+defer_free:
+	VM_WARN_ON_ONCE(allow_spin);
+	guard(preempt)();
+
+	krcp = this_cpu_ptr(&krc);
+	if (llist_add((struct llist_node *)head, &krcp->llist_head))
+		irq_work_queue(&krcp->irq_work);
+	return;
+
 }
 EXPORT_SYMBOL_GPL(kvfree_call_rcu_ptr);
 
