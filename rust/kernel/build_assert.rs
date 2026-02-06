@@ -41,6 +41,45 @@ macro_rules! static_assert {
     };
 }
 
+/// Assertion during constant evaluation.
+///
+/// This is a more powerful version of `static_assert` that can refer to generics inside functions
+/// or implementation blocks. However, it also have a limitation where it can only appear in places
+/// where statements can appear; for example, you cannot use it as an item in the module.
+///
+/// [`static_assert!`] should be preferred where possible.
+///
+/// # Examples
+///
+/// When the condition refers to generic parameters [`static_assert!`] cannot be used.
+/// Use `const_assert!` in this scenario.
+/// ```
+/// fn foo<const N: usize>() {
+///     // `static_assert!(N > 1);` is not allowed
+///     const_assert!(N > 1); // Compile-time check
+///     build_assert!(N > 1); // Build-time check
+///     assert!(N > 1); // Run-time check
+/// }
+/// ```
+///
+/// Note that `const_assert!` cannot be used when referring to function parameter, then
+/// `const_assert!` cannot be used even if the function is going to be called during const
+/// evaluation. Use `build_assert!` in this case.
+/// ```
+/// const fn foo(n: usize) {
+///     // `const_assert!(n > 1);` is not allowed
+///     build_assert!(n > 1);
+/// }
+///
+/// const _: () = foo(2); // Evaluate during const evaluation
+/// ```
+#[macro_export]
+macro_rules! const_assert {
+    ($condition:expr $(,$arg:literal)?) => {
+        const { ::core::assert!($condition $(,$arg)?) };
+    };
+}
+
 /// Fails the build if the code path calling `build_error!` can possibly be executed.
 ///
 /// If the macro is executed in const context, `build_error!` will panic.
@@ -74,7 +113,8 @@ macro_rules! build_error {
 /// will panic. If the compiler or optimizer cannot guarantee the condition will
 /// be evaluated to `true`, a build error will be triggered.
 ///
-/// [`static_assert!`] should be preferred to `build_assert!` whenever possible.
+/// [`static_assert!`] or [`const_assert!`] should be preferred to `build_assert!` whenever
+/// possible.
 ///
 /// # Examples
 ///
@@ -84,24 +124,27 @@ macro_rules! build_error {
 /// ```ignore
 /// fn foo() {
 ///     static_assert!(1 > 1); // Compile-time error
+///     const_assert!(1 > 1); // Compile-time error
 ///     build_assert!(1 > 1); // Build-time error
 ///     assert!(1 > 1); // Run-time error
 /// }
 /// ```
 ///
-/// When the condition refers to generic parameters or parameters of an inline function,
-/// [`static_assert!`] cannot be used. Use `build_assert!` in this scenario.
+/// When the condition refers to generic parameters [`static_assert!`] cannot be used.
+/// `build_assert!` is usable in this scenario, however you should prefer `const_assert!`.
 /// ```
 /// fn foo<const N: usize>() {
 ///     // `static_assert!(N > 1);` is not allowed
+///     const_assert!(N > 1); // Compile-time check
 ///     build_assert!(N > 1); // Build-time check
 ///     assert!(N > 1); // Run-time check
 /// }
 /// ```
 ///
-/// When a condition depends on a function argument, the function must be annotated with
-/// `#[inline(always)]`. Without this attribute, the compiler may choose to not inline the
-/// function, preventing it from optimizing out the error path.
+/// When the condition refers to parameters of an inline function, neither [`static_assert!`] or
+/// [`const_assert!`] can be used. You may use `build_assert!` in this scenario, however you must
+/// annotate the function `#[inline(always)]`. Without this attribute, the compiler may choose to
+/// not inline the function, preventing it from optimizing out the error path.
 /// ```
 /// #[inline(always)]
 /// fn bar(n: usize) {
