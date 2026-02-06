@@ -4,6 +4,7 @@
  */
 
 #include <linux/sched/isolation.h>
+#include <linux/cpuset.h>
 #include <linux/bsearch.h>
 #include "sched.h"
 
@@ -2940,3 +2941,28 @@ void partition_sched_domains(int ndoms_new, cpumask_var_t doms_new[],
 	partition_sched_domains_locked(ndoms_new, doms_new, dattr_new);
 	sched_domains_mutex_unlock();
 }
+
+static int sched_housekeeping_reconfigure(struct notifier_block *nb,
+					 unsigned long action, void *data)
+{
+	if (action == HK_UPDATE_MASK) {
+		unsigned int type = (unsigned long)data;
+
+		if (type == HK_TYPE_DOMAIN)
+			rebuild_sched_domains();
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block sched_housekeeping_nb = {
+	.notifier_call = sched_housekeeping_reconfigure,
+};
+
+static int __init sched_housekeeping_init(void)
+{
+	housekeeping_register_notifier(&sched_housekeeping_nb);
+	return 0;
+}
+core_initcall(sched_housekeeping_init);
+
