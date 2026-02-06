@@ -1210,4 +1210,8 @@ enum{
 	FBNIC_CSR_VERSION_V1_0_ASIC = 1,
 };
 
+struct fbnic_dev;
+
+int fbnic_csr_regs_test(struct fbnic_dev *fbd);
+
 #endif /* _FBNIC_CSR_H_ */
