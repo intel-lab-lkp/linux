@@ -120,7 +120,9 @@ u8 rtw_hal_get_def_var(struct adapter *padapter, enum hal_def_variable eVariable
 	return GetHalDefVar8723BSDIO(padapter, eVariable, pValue);
 }
 
-void rtw_hal_set_odm_var(struct adapter *padapter, enum hal_odm_variable eVariable, void *pValue1, bool bSet)
+void rtw_hal_set_odm_var(struct adapter *padapter,
+			 enum hal_odm_variable eVariable,
+			 void *pValue1, bool bSet)
 {
 	SetHalODMVar(padapter, eVariable, pValue1, bSet);
 }

@@ -792,10 +792,14 @@ void rtw_hal_check_rxfifo_full(struct adapter *adapter)
 	/* todo: other chips */
 
 	if (save_cnt) {
+		u16 last, curr;
+
 		/* rtw_write8(adapter, REG_RXERR_RPT+3, rtw_read8(adapter, REG_RXERR_RPT+3)|0xa0); */
-		pdbgpriv->dbg_rx_fifo_last_overflow = pdbgpriv->dbg_rx_fifo_curr_overflow;
-		pdbgpriv->dbg_rx_fifo_curr_overflow = rtw_read16(adapter, REG_RXERR_RPT);
-		pdbgpriv->dbg_rx_fifo_diff_overflow = pdbgpriv->dbg_rx_fifo_curr_overflow-pdbgpriv->dbg_rx_fifo_last_overflow;
+		last = pdbgpriv->dbg_rx_fifo_curr_overflow;
+		curr = rtw_read16(adapter, REG_RXERR_RPT);
+		pdbgpriv->dbg_rx_fifo_last_overflow = last;
+		pdbgpriv->dbg_rx_fifo_curr_overflow = curr;
+		pdbgpriv->dbg_rx_fifo_diff_overflow = curr - last;
 	}
 }
 

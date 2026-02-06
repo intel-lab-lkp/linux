@@ -446,7 +446,10 @@ s32 rtl8723bs_mgnt_xmit(
 	pxmitbuf->priv_data = NULL;
 
 	if (GetFrameSubType(pframe) == WIFI_BEACON) { /* dump beacon directly */
-		ret = rtw_write_port(padapter, pdvobjpriv->Queue2Pipe[pxmitbuf->ff_hwaddr], pxmitbuf->len, (u8 *)pxmitbuf);
+		u8 ff_addr = pxmitbuf->ff_hwaddr;
+
+		ret = rtw_write_port(padapter, pdvobjpriv->Queue2Pipe[ff_addr],
+				     pxmitbuf->len, (u8 *)pxmitbuf);
 		if (ret != _SUCCESS)
 			rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_WRITE_PORT_ERR);
 
