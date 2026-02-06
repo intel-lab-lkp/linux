@@ -5934,6 +5934,8 @@ static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 		 * This works because the crtcs are created in pipe order,
 		 * and the hardware requires primary pipe < secondary pipe as well.
 		 * Should that change we need to rethink the logic.
+		 *
+		 * FIXME: What about with reordered pipes?
 		 */
 		if (WARN_ON(drm_crtc_index(&primary_crtc->base) >
 			    drm_crtc_index(&secondary_crtc->base)))
