@@ -381,7 +381,8 @@ struct receive_queue {
 	struct xdp_buff **xsk_buffs;
 };
 
-#define VIRTIO_NET_RSS_MAX_KEY_SIZE     40
+#define VIRTIO_NET_RSS_MAX_KEY_SIZE     NETDEV_RSS_KEY_LEN
+#define VIRTIO_NET_RSS_MIN_KEY_SIZE     40
 
 /* Control VQ buffers: protected by the rtnl lock */
 struct control_buf {
@@ -6823,38 +6824,47 @@ static int virtnet_probe(struct virtio_device *vdev)
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_HASH_REPORT))
 		vi->has_rss_hash_report = true;
 
-	if (virtio_has_feature(vdev, VIRTIO_NET_F_RSS)) {
+	if (virtio_has_feature(vdev, VIRTIO_NET_F_RSS))
 		vi->has_rss = true;
-
-		vi->rss_indir_table_size =
-			virtio_cread16(vdev, offsetof(struct virtio_net_config,
-				rss_max_indirection_table_length));
-	}
-	vi->rss_hdr = devm_kzalloc(&vdev->dev, virtnet_rss_hdr_size(vi), GFP_KERNEL);
-	if (!vi->rss_hdr) {
-		err = -ENOMEM;
-		goto free;
-	}
 
 	if (vi->has_rss || vi->has_rss_hash_report) {
 		vi->rss_key_size =
 			virtio_cread8(vdev, offsetof(struct virtio_net_config, rss_max_key_size));
-		if (vi->rss_key_size > VIRTIO_NET_RSS_MAX_KEY_SIZE) {
-			dev_err(&vdev->dev, "rss_max_key_size=%u exceeds the limit %u.\n",
-				vi->rss_key_size, VIRTIO_NET_RSS_MAX_KEY_SIZE);
-			err = -EINVAL;
-			goto free;
+
+		/* Spec requires at least 40 bytes */
+		if (vi->rss_key_size < VIRTIO_NET_RSS_MIN_KEY_SIZE) {
+			dev_warn(&vdev->dev,
+				 "rss_max_key_size=%u is less than spec minimum %u, disabling RSS\n",
+				 vi->rss_key_size, VIRTIO_NET_RSS_MIN_KEY_SIZE);
+			vi->has_rss = false;
+			vi->has_rss_hash_report = false;
+		} else if (vi->rss_key_size > VIRTIO_NET_RSS_MAX_KEY_SIZE) {
+			dev_warn(&vdev->dev,
+				 "rss_max_key_size=%u exceeds driver limit %u, disabling RSS\n",
+				 vi->rss_key_size, VIRTIO_NET_RSS_MAX_KEY_SIZE);
+			vi->has_rss = false;
+			vi->has_rss_hash_report = false;
+		} else {
+			vi->rss_indir_table_size =
+				virtio_cread16(vdev, offsetof(struct virtio_net_config,
+							      rss_max_indirection_table_length));
+			vi->rss_hash_types_supported =
+			    virtio_cread32(vdev, offsetof(struct virtio_net_config,
+							  supported_hash_types));
+			vi->rss_hash_types_supported &=
+					~(VIRTIO_NET_RSS_HASH_TYPE_IP_EX |
+					  VIRTIO_NET_RSS_HASH_TYPE_TCP_EX |
+					  VIRTIO_NET_RSS_HASH_TYPE_UDP_EX);
+
+			dev->hw_features |= NETIF_F_RXHASH;
+			dev->xdp_metadata_ops = &virtnet_xdp_metadata_ops;
 		}
+	}
 
-		vi->rss_hash_types_supported =
-		    virtio_cread32(vdev, offsetof(struct virtio_net_config, supported_hash_types));
-		vi->rss_hash_types_supported &=
-				~(VIRTIO_NET_RSS_HASH_TYPE_IP_EX |
-				  VIRTIO_NET_RSS_HASH_TYPE_TCP_EX |
-				  VIRTIO_NET_RSS_HASH_TYPE_UDP_EX);
-
-		dev->hw_features |= NETIF_F_RXHASH;
-		dev->xdp_metadata_ops = &virtnet_xdp_metadata_ops;
+	vi->rss_hdr = devm_kzalloc(&vdev->dev, virtnet_rss_hdr_size(vi), GFP_KERNEL);
+	if (!vi->rss_hdr) {
+		err = -ENOMEM;
+		goto free;
 	}
 
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) ||
