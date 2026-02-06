@@ -19,7 +19,7 @@ struct shrinker_info_unit {
 };
 
 struct shrinker_info {
-	struct rcu_head rcu;
+	struct rcu_ptr rcu;
 	int map_nr_max;
 	struct shrinker_info_unit *unit[];
 };

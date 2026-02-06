@@ -2609,7 +2609,7 @@ struct vmap_block {
 	DECLARE_BITMAP(used_map, VMAP_BBMAP_BITS);
 	unsigned long dirty_min, dirty_max; /*< dirty range */
 	struct list_head free_list;
-	struct rcu_head rcu_head;
+	struct rcu_ptr rcu;
 	struct list_head purge;
 	unsigned int cpu;
 };
@@ -2778,7 +2778,7 @@ static void free_vmap_block(struct vmap_block *vb)
 	spin_unlock(&vn->busy.lock);
 
 	free_vmap_area_noflush(vb->va);
-	kfree_rcu(vb, rcu_head);
+	kfree_rcu(vb, rcu);
 }
 
 static bool purge_fragmented_block(struct vmap_block *vb,

@@ -37,7 +37,7 @@ struct list_lru_one {
 };
 
 struct list_lru_memcg {
-	struct rcu_head		rcu;
+	struct rcu_ptr		rcu;
 	/* array of per cgroup per node lists, indexed by node id */
 	struct list_lru_one	node[];
 };
