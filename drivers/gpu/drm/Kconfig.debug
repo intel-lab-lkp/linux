@@ -71,6 +71,7 @@ config DRM_KUNIT_TEST
 	select DRM_KUNIT_TEST_HELPERS
 	select DRM_LIB_RANDOM
 	select DRM_SYSFB_HELPER
+	select GPU_BUDDY
 	select PRIME_NUMBERS
 	default KUNIT_ALL_TESTS
 	help
@@ -88,10 +89,11 @@ config DRM_TTM_KUNIT_TEST
 	tristate "KUnit tests for TTM" if !KUNIT_ALL_TESTS
 	default n
 	depends on DRM && KUNIT && MMU && (UML || COMPILE_TEST)
-	select DRM_TTM
 	select DRM_BUDDY
+	select DRM_TTM
 	select DRM_EXPORT_FOR_TESTS if m
 	select DRM_KUNIT_TEST_HELPERS
+	select GPU_BUDDY
 	default KUNIT_ALL_TESTS
 	help
 	  Enables unit tests for TTM, a GPU memory manager subsystem used

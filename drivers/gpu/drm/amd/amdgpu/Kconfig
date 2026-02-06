@@ -23,6 +23,7 @@ config DRM_AMDGPU
 	select CRC16
 	select BACKLIGHT_CLASS_DEVICE
 	select INTERVAL_TREE
+	select GPU_BUDDY
 	select DRM_BUDDY
 	select DRM_SUBALLOC_HELPER
 	select DRM_EXEC

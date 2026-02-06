@@ -38,6 +38,7 @@ config DRM_I915
 	select CEC_CORE if CEC_NOTIFIER
 	select VMAP_PFN
 	select DRM_TTM
+	select GPU_BUDDY
 	select DRM_BUDDY
 	select AUXILIARY_BUS
 	help
