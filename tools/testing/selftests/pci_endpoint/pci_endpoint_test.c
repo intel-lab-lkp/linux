@@ -268,6 +268,21 @@ FIXTURE_TEARDOWN(pcie_ep_doorbell)
 	close(self->fd);
 };
 
+FIXTURE_VARIANT(pcie_ep_doorbell)
+{
+	bool use_embedded_db;
+};
+
+FIXTURE_VARIANT_ADD(pcie_ep_doorbell, msi)
+{
+	.use_embedded_db = false,
+};
+
+FIXTURE_VARIANT_ADD(pcie_ep_doorbell, embedded)
+{
+	.use_embedded_db = true,
+};
+
 TEST_F(pcie_ep_doorbell, DOORBELL_TEST)
 {
 	int ret;
@@ -275,7 +290,7 @@ TEST_F(pcie_ep_doorbell, DOORBELL_TEST)
 	pci_ep_ioctl(PCITEST_SET_IRQTYPE, PCITEST_IRQ_TYPE_AUTO);
 	ASSERT_EQ(0, ret) TH_LOG("Can't set AUTO IRQ type");
 
-	pci_ep_ioctl(PCITEST_DOORBELL, 0);
+	pci_ep_ioctl(PCITEST_DOORBELL, variant->use_embedded_db);
 	EXPECT_FALSE(ret) TH_LOG("Test failed for Doorbell\n");
 }
 TEST_HARNESS_MAIN
