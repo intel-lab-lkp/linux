@@ -65,14 +65,28 @@ static const char * const perr_strings[] = {
  * CPUSET Locking Convention
  * -------------------------
  *
- * Below are the three global locks guarding cpuset structures in lock
+ * Below are the four global/local locks guarding cpuset structures in lock
  * acquisition order:
+ *  - cpuset_top_mutex
  *  - cpu_hotplug_lock (cpus_read_lock/cpus_write_lock)
  *  - cpuset_mutex
  *  - callback_lock (raw spinlock)
  *
- * A task must hold all the three locks to modify externally visible or
- * used fields of cpusets, though some of the internally used cpuset fields
+ * As cpuset will now indirectly flush a number of different workqueues in
+ * housekeeping_update() to update housekeeping cpumasks when the set of
+ * isolated CPUs is going to be changed, it may be vulnerable to deadlock
+ * if we hold cpus_read_lock while calling into housekeeping_update().
+ *
+ * The first cpuset_top_mutex will be held except when calling into
+ * cpuset_handle_hotplug() from the CPU hotplug code where cpus_write_lock
+ * and cpuset_mutex will be held instead. The main purpose of this mutex
+ * is to prevent regular cpuset control file write actions from interfering
+ * with the call to housekeeping_update(), though CPU hotplug operation can
+ * still happen in parallel. This mutex also provides protection for some
+ * internal variables.
+ *
+ * A task must hold all the remaining three locks to modify externally visible
+ * or used fields of cpusets, though some of the internally used cpuset fields
  * and internal variables can be modified without holding callback_lock. If only
  * reliable read access of the externally used fields are needed, a task can
  * hold either cpuset_mutex or callback_lock which are exposed to other
@@ -100,6 +114,7 @@ static const char * const perr_strings[] = {
  * cpumasks and nodemasks.
  */
 
+static DEFINE_MUTEX(cpuset_top_mutex);
 static DEFINE_MUTEX(cpuset_mutex);
 
 /*
@@ -111,6 +126,8 @@ static DEFINE_MUTEX(cpuset_mutex);
  *
  * CSCB: Readable by holding either cpuset_mutex or callback_lock. Writable
  *	 by holding both cpuset_mutex and callback_lock.
+ *
+ * T:	 Read/write-able by holding the cpuset_top_mutex.
  */
 
 /*
@@ -134,6 +151,13 @@ static cpumask_var_t	isolated_cpus;		/* CSCB */
  * critical section.
  */
 static bool		isolated_cpus_updating;	/* RWCS */
+
+/*
+ * Copy of isolated_cpus to be processed by housekeeping_update()
+ */
+static cpumask_var_t	isolated_hk_cpus;	/* T */
+static bool		isolcpus_twork_queued;	/* T */
+
 
 /*
  * A flag to force sched domain rebuild at the end of an operation.
@@ -298,6 +322,7 @@ void lockdep_assert_cpuset_lock_held(void)
  */
 void cpuset_full_lock(void)
 {
+	mutex_lock(&cpuset_top_mutex);
 	cpus_read_lock();
 	mutex_lock(&cpuset_mutex);
 }
@@ -306,12 +331,14 @@ void cpuset_full_unlock(void)
 {
 	mutex_unlock(&cpuset_mutex);
 	cpus_read_unlock();
+	mutex_unlock(&cpuset_top_mutex);
 }
 
 #ifdef CONFIG_LOCKDEP
 bool lockdep_is_cpuset_held(void)
 {
-	return lockdep_is_held(&cpuset_mutex);
+	return lockdep_is_held(&cpuset_mutex) ||
+	       lockdep_is_held(&cpuset_top_mutex);
 }
 #endif
 
@@ -1301,30 +1328,53 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 	return false;
 }
 
+/*
+ * housekeeping_update() will only be called if isolated_cpus differs
+ * from isolated_hk_cpus. To be safe, rebuild_sched_domains() will always
+ * be called just in case there are still pending sched domains changes.
+ */
+static void do_housekeeping_update(bool *flag)
+{
+	bool update_hk = true;
+
+	guard(mutex)(&cpuset_top_mutex);
+	if (flag)
+		*flag = false;
+	scoped_guard(spinlock_irq, &callback_lock) {
+		if (cpumask_equal(isolated_hk_cpus, isolated_cpus))
+			update_hk = false;
+		else
+			cpumask_copy(isolated_hk_cpus, isolated_cpus);
+	}
+	if (update_hk)
+		WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus) < 0);
+	rebuild_sched_domains();
+}
+
 static void isolcpus_workfn(struct work_struct *work)
 {
-	cpuset_full_lock();
-	if (isolated_cpus_updating) {
-		isolated_cpus_updating = false;
-		WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
-		rebuild_sched_domains_locked();
-	}
-	cpuset_full_unlock();
+	do_housekeeping_update(NULL);
+}
+
+static void isolcpus_tworkfn(struct callback_head *cb)
+{
+	/* Clear isolcpus_twork_queued */
+	do_housekeeping_update(&isolcpus_twork_queued);
 }
 
 /*
  * update_isolation_cpumasks - Update external isolation related CPU masks
- *
- * The following external CPU masks will be updated if necessary:
- * - workqueue unbound cpumask
  */
 static void update_isolation_cpumasks(void)
 {
 	static DECLARE_WORK(isolcpus_work, isolcpus_workfn);
+	static struct callback_head twork_cb;
 
 	lockdep_assert_cpuset_lock_held();
 	if (!isolated_cpus_updating)
 		return;
+	else
+		isolated_cpus_updating = false;
 
 	/*
 	 * This function can be reached either directly from regular cpuset
@@ -1332,10 +1382,15 @@ static void update_isolation_cpumasks(void)
 	 * the per-cpu kthread that calls cpuset_handle_hotplug() on behalf
 	 * of the task that initiates CPU shutdown or bringup.
 	 *
-	 * To have better flexibility and prevent the possibility of deadlock
-	 * when calling from CPU hotplug, we defer the housekeeping_update()
-	 * call to after the current cpuset critical section has finished.
-	 * This is done via workqueue.
+	 * To have better flexibility and prevent the possibility of deadlock,
+	 * we defer the housekeeping_update() call to after the current
+	 * cpuset critical section has finished. This is done via task_work
+	 * for cpuset control file write and workqueue for CPU hotplug.
+	 *
+	 * When calling from CPU hotplug, cpuset_top_mutex is not held. So the
+	 * cpuset operation can run asynchronously with do_housekeeping_update().
+	 * This should not be a problem as another isolcpus_workfn() call will
+	 * be scheduled to make sure that housekeeping cpumasks will be updated.
 	 */
 	if (current->flags & PF_KTHREAD) {
 		/*
@@ -1351,8 +1406,19 @@ static void update_isolation_cpumasks(void)
 		return;
 	}
 
-	WARN_ON_ONCE(housekeeping_update(isolated_cpus) < 0);
-	isolated_cpus_updating = false;
+	/*
+	 * update_isolation_cpumasks() may be called more than once in the
+	 * same cpuset_mutex critical section.
+	 */
+	lockdep_assert_held(&cpuset_top_mutex);
+	if (isolcpus_twork_queued)
+		return;
+
+	init_task_work(&twork_cb, isolcpus_tworkfn);
+	if (!task_work_add(current, &twork_cb, TWA_RESUME))
+		isolcpus_twork_queued = true;
+	else
+		WARN_ON_ONCE(1);	/* Current task shouldn't be exiting */
 }
 
 /**
@@ -3660,6 +3726,7 @@ int __init cpuset_init(void)
 	BUG_ON(!alloc_cpumask_var(&top_cpuset.exclusive_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&subpartitions_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&isolated_cpus, GFP_KERNEL));
+	BUG_ON(!zalloc_cpumask_var(&isolated_hk_cpus, GFP_KERNEL));
 
 	cpumask_setall(top_cpuset.cpus_allowed);
 	nodes_setall(top_cpuset.mems_allowed);
