@@ -4614,8 +4614,15 @@ static int do_open(struct nameidata *nd,
 		if (unlikely(error))
 			return error;
 	}
-	if ((nd->flags & LOOKUP_DIRECTORY) && !d_can_lookup(nd->path.dentry))
+
+	if ((open_flag & OPENAT2_REGULAR) && (nd->flags & LOOKUP_DIRECTORY)) {
+		if (!d_is_reg(nd->path.dentry) && !d_can_lookup(nd->path.dentry))
+			return -EFTYPE;
+	} else if ((open_flag & OPENAT2_REGULAR) && !d_is_reg(nd->path.dentry)) {
+		return -EFTYPE;
+	} else if ((nd->flags & LOOKUP_DIRECTORY) && !d_can_lookup(nd->path.dentry)) {
 		return -ENOTDIR;
+	}
 
 	do_truncate = false;
 	acc_mode = op->acc_mode;

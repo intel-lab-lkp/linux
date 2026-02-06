@@ -473,6 +473,9 @@ cifs_atomic_open(struct inode *inode, struct dentry *direntry,
 	if (unlikely(cifs_forced_shutdown(CIFS_SB(inode->i_sb))))
 		return smb_EIO(smb_eio_trace_forced_shutdown);
 
+	if (oflags & OPENAT2_REGULAR)
+		return -EINVAL;
+
 	/*
 	 * Posix open is only called (at lookup time) for file create now. For
 	 * opens (rather than creates), because we do not know if it is a file
