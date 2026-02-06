@@ -18,23 +18,50 @@ static int hns_debugfs_seqfile_open(struct inode *inode, struct file *f)
 	return single_open(f, seqfile->read, seqfile->data);
 }
 
+static ssize_t hns_debugfs_seqfile_write(struct file *file,
+					 const char __user *buffer,
+					 size_t count, loff_t *ppos)
+{
+	struct hns_debugfs_seqfile *seqfile = file_inode(file)->i_private;
+	char buf[16] = {};
+
+	if (!seqfile->write)
+		return -EOPNOTSUPP;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+
+	return seqfile->write(buf, count, seqfile->data);
+}
+
 static const struct file_operations hns_debugfs_seqfile_fops = {
 	.owner = THIS_MODULE,
 	.open = hns_debugfs_seqfile_open,
 	.release = single_release,
 	.read = seq_read,
+	.write = hns_debugfs_seqfile_write,
 	.llseek = seq_lseek
+};
+
+struct hns_debugfs_rw_ops {
+	int (*read)(struct seq_file *seq, void *data);
+	ssize_t (*write)(char *buf, size_t count, void *data);
 };
 
 static void init_debugfs_seqfile(struct hns_debugfs_seqfile *seq,
 				 const char *name, struct dentry *parent,
-				 int (*read_fn)(struct seq_file *, void *),
+				 const struct hns_debugfs_rw_ops *ops,
 				 void *data)
 {
-	seq->read = read_fn;
+	seq->read = ops->read;
+	seq->write = ops->write;
 	seq->data = data;
 
-	debugfs_create_file(name, 0400, parent, seq, &hns_debugfs_seqfile_fops);
+	debugfs_create_file(name, ops->write ? 0600 : 0400, parent,
+			    seq, &hns_debugfs_seqfile_fops);
 }
 
 static const char * const sw_stat_info[] = {
@@ -75,11 +102,14 @@ static void create_sw_stat_debugfs(struct hns_roce_dev *hr_dev,
 				   struct dentry *parent)
 {
 	struct hns_sw_stat_debugfs *dbgfs = &hr_dev->dbgfs.sw_stat_root;
+	const struct hns_debugfs_rw_ops ops = {
+		.read = sw_stat_debugfs_show,
+	};
 
 	dbgfs->root = debugfs_create_dir("sw_stat", parent);
 
 	init_debugfs_seqfile(&dbgfs->sw_stat, "sw_stat", dbgfs->root,
-			     sw_stat_debugfs_show, hr_dev);
+			     &ops, hr_dev);
 }
 
 /* debugfs for device */
