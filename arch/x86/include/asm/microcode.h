@@ -2,6 +2,8 @@
 #ifndef _ASM_X86_MICROCODE_H
 #define _ASM_X86_MICROCODE_H
 
+#include <asm/cpu.h>
+#include <asm/intel-family.h>
 #include <asm/msr.h>
 
 struct cpu_signature {
@@ -74,6 +76,36 @@ static inline u32 intel_get_microcode_revision(void)
 	native_rdmsr(MSR_IA32_UCODE_REV, dummy, rev);
 
 	return rev;
+}
+
+/*
+ * Use CPUID to generate a "vfm" value. Useful
+ * before 'cpuinfo_x86' structures are populated.
+ */
+static inline u32 intel_cpuid_vfm(void)
+{
+	u32 eax   = cpuid_eax(1);
+	u32 fam   = x86_family(eax);
+	u32 model = x86_model(eax);
+
+	return IFM(fam, model);
+}
+
+static inline u32 intel_get_platform_id(void)
+{
+	unsigned int val[2];
+
+	/*
+	 * This can be called early. Use CPUID directly to
+	 * generate the VFM value for this CPU.
+	 */
+	if (intel_cpuid_vfm() < INTEL_PENTIUM_III_DESCHUTES)
+		return 0;
+
+	/* get processor flags from MSR 0x17 */
+	native_rdmsr(MSR_IA32_PLATFORM_ID, val[0], val[1]);
+
+	return (val[1] >> 18) & 7;
 }
 #endif /* !CONFIG_CPU_SUP_INTEL */
 

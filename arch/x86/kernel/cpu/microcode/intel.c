@@ -123,16 +123,8 @@ static inline unsigned int exttable_size(struct extended_sigtable *et)
 void intel_collect_cpu_info(struct cpu_signature *sig)
 {
 	sig->sig = cpuid_eax(1);
-	sig->pf = 0;
 	sig->rev = intel_get_microcode_revision();
-
-	if (IFM(x86_family(sig->sig), x86_model(sig->sig)) >= INTEL_PENTIUM_III_DESCHUTES) {
-		unsigned int val[2];
-
-		/* get processor flags from MSR 0x17 */
-		native_rdmsr(MSR_IA32_PLATFORM_ID, val[0], val[1]);
-		sig->pf = 1 << ((val[1] >> 18) & 7);
-	}
+	sig->pf  = 1 << intel_get_platform_id();
 }
 EXPORT_SYMBOL_GPL(intel_collect_cpu_info);
 
