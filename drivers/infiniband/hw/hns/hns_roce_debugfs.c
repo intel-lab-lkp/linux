@@ -31,10 +31,10 @@ static void init_debugfs_seqfile(struct hns_debugfs_seqfile *seq,
 				 int (*read_fn)(struct seq_file *, void *),
 				 void *data)
 {
-	debugfs_create_file(name, 0400, parent, seq, &hns_debugfs_seqfile_fops);
-
 	seq->read = read_fn;
 	seq->data = data;
+
+	debugfs_create_file(name, 0400, parent, seq, &hns_debugfs_seqfile_fops);
 }
 
 static const char * const sw_stat_info[] = {
