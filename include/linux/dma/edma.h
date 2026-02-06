@@ -129,10 +129,23 @@ struct dw_edma_chip {
 	struct dw_edma		*dw;
 };
 
+/**
+ * struct dw_edma_chan_info - DW eDMA channel metadata
+ * @irq:	Linux IRQ number used by this channel's interrupt vector
+ * @db_offset:	offset within the eDMA register window that can be used as
+ *		an interrupt-emulation doorbell for this channel
+ */
+struct dw_edma_chan_info {
+	int			irq;
+	resource_size_t		db_offset;
+};
+
 /* Export to the platform drivers */
 #if IS_REACHABLE(CONFIG_DW_EDMA)
 int dw_edma_probe(struct dw_edma_chip *chip);
 int dw_edma_remove(struct dw_edma_chip *chip);
+int dw_edma_chan_info(struct dw_edma_chip *chip, unsigned int ch_idx,
+		      struct dw_edma_chan_info *info);
 #else
 static inline int dw_edma_probe(struct dw_edma_chip *chip)
 {
@@ -142,6 +155,13 @@ static inline int dw_edma_probe(struct dw_edma_chip *chip)
 static inline int dw_edma_remove(struct dw_edma_chip *chip)
 {
 	return 0;
+}
+
+static inline int dw_edma_chan_info(struct dw_edma_chip *chip,
+				    unsigned int ch_idx,
+				    struct dw_edma_chan_info *info)
+{
+	return -ENODEV;
 }
 #endif /* CONFIG_DW_EDMA */
 

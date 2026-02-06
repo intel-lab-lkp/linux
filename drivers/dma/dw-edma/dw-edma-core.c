@@ -842,6 +842,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		else
 			pos = wr_alloc + chan->id % rd_alloc;
 
+		chan->irq_idx = pos;
 		irq = &dw->irq[pos];
 
 		if (chan->dir == EDMA_DIR_WRITE)
@@ -947,6 +948,7 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 		if (irq_get_msi_desc(irq))
 			get_cached_msi_msg(irq, &dw->irq[0].msi);
 
+		dw->irq[0].irq = irq;
 		dw->nr_irqs = 1;
 	} else {
 		/* Distribute IRQs equally among all channels */
@@ -973,6 +975,7 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 
 			if (irq_get_msi_desc(irq))
 				get_cached_msi_msg(irq, &dw->irq[i].msi);
+			dw->irq[i].irq = irq;
 		}
 
 		dw->nr_irqs = i;
@@ -1097,6 +1100,34 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dw_edma_remove);
+
+int dw_edma_chan_info(struct dw_edma_chip *chip, unsigned int ch_idx,
+		      struct dw_edma_chan_info *info)
+{
+	struct dw_edma *dw = chip->dw;
+	struct dw_edma_chan *chan;
+	struct dma_chan *dchan;
+	u32 ch_cnt;
+	int ret;
+
+	if (!chip || !info || !dw)
+		return -EINVAL;
+
+	ch_cnt = dw->wr_ch_cnt + dw->rd_ch_cnt;
+	if (ch_idx >= ch_cnt)
+		return -EINVAL;
+
+	chan = &dw->chan[ch_idx];
+	dchan = &chan->vc.chan;
+
+	ret = dw_edma_core_ch_info(dw, chan, info);
+	if (ret)
+		return ret;
+
+	info->irq = dw->irq[chan->irq_idx].irq;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dw_edma_chan_info);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Synopsys DesignWare eDMA controller core driver");

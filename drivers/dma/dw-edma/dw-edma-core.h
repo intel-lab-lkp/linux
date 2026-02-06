@@ -82,6 +82,7 @@ struct dw_edma_chan {
 	struct msi_msg			msi;
 
 	enum dw_edma_ch_irq_mode	irq_mode;
+	u32				irq_idx;
 
 	enum dw_edma_request		request;
 	enum dw_edma_status		status;
@@ -95,6 +96,7 @@ struct dw_edma_irq {
 	u32				wr_mask;
 	u32				rd_mask;
 	struct dw_edma			*dw;
+	int				irq;
 };
 
 struct dw_edma {
@@ -129,6 +131,7 @@ struct dw_edma_core_ops {
 	void (*ch_config)(struct dw_edma_chan *chan);
 	void (*debugfs_on)(struct dw_edma *dw);
 	void (*ack_selfirq)(struct dw_edma *dw);
+	void (*ch_info)(struct dw_edma_chan *chan, struct dw_edma_chan_info *info);
 };
 
 struct dw_edma_sg {
@@ -216,6 +219,17 @@ int dw_edma_core_ack_selfirq(struct dw_edma *dw)
 		return -EOPNOTSUPP;
 
 	dw->core->ack_selfirq(dw);
+	return 0;
+}
+
+static inline
+int dw_edma_core_ch_info(struct dw_edma *dw, struct dw_edma_chan *chan,
+			 struct dw_edma_chan_info *info)
+{
+	if (!dw->core->ch_info)
+		return -EOPNOTSUPP;
+
+	dw->core->ch_info(chan, info);
 	return 0;
 }
 

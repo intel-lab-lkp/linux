@@ -529,6 +529,12 @@ static void dw_edma_v0_core_ack_selfirq(struct dw_edma *dw)
 	SET_BOTH_32(dw, int_clear, 0);
 }
 
+static void dw_edma_v0_core_ch_info(struct dw_edma_chan *chan,
+				    struct dw_edma_chan_info *info)
+{
+	info->db_offset = offsetof(struct dw_edma_v0_regs, rd_int_status);
+}
+
 static const struct dw_edma_core_ops dw_edma_v0_core = {
 	.off = dw_edma_v0_core_off,
 	.ch_count = dw_edma_v0_core_ch_count,
@@ -538,6 +544,7 @@ static const struct dw_edma_core_ops dw_edma_v0_core = {
 	.ch_config = dw_edma_v0_core_ch_config,
 	.debugfs_on = dw_edma_v0_core_debugfs_on,
 	.ack_selfirq = dw_edma_v0_core_ack_selfirq,
+	.ch_info = dw_edma_v0_core_ch_info,
 };
 
 void dw_edma_v0_core_register(struct dw_edma *dw)
