@@ -239,20 +239,13 @@
  * ...
  * min = min_array(buff, nb_items);
  * --- 8< ---
- *
- * The first typeof(&(array)[0]) is needed in order to support arrays of both
- * 'int *buff' and 'int buff[N]' types.
- *
- * The array can be an array of const items.
- * typeof() keeps the const qualifier. Use __unqual_scalar_typeof() in order
- * to discard the const qualifier for the __element variable.
  */
-#define __minmax_array(op, array, len) ({				\
-	typeof(&(array)[0]) __array = (array);				\
-	typeof(len) __len = (len);					\
-	__unqual_scalar_typeof(__array[0]) __element = __array[--__len];\
-	while (__len--)							\
-		__element = op(__element, __array[__len]);		\
+#define __minmax_array(op, array, len) ({			\
+	auto __array = &(array)[0];				\
+	auto __len = len;					\
+	auto __element = __array[--__len] + 0;			\
+	while (__len--)						\
+		__element = op(__element, __array[__len]);	\
 	__element; })
 
 /**
