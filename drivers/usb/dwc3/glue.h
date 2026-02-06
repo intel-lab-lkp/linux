@@ -12,9 +12,12 @@
 /**
  * dwc3_properties: DWC3 core properties
  * @gsbuscfg0_reqinfo: Value to be programmed in the GSBUSCFG0.REQINFO field
+ * @core_may_lose_power: indicate the controller may not remain power during
+ *			 system pm
  */
 struct dwc3_properties {
 	u32 gsbuscfg0_reqinfo;
+	bool core_may_lose_power;
 };
 
 #define DWC3_DEFAULT_PROPERTIES ((struct dwc3_properties){		\
