@@ -19,6 +19,10 @@ properties:
   clocks:
     maxItems: 1
 
+  phy-supply:
+    description:
+      Phandle to a regulator that provides power to VBUS.
+
   "#phy-cells":
     const: 0
 
