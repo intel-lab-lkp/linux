@@ -57,19 +57,25 @@ INTERVAL_TREE_DEFINE(struct serial_info, node, sector_t, _subtree_last,
 		     START, LAST, static inline, raid1_rb);
 
 static int check_and_add_serial(struct md_rdev *rdev, struct r1bio *r1_bio,
-				struct serial_info *si, int idx)
+				struct serial_info *si)
 {
 	unsigned long flags;
 	int ret = 0;
 	sector_t lo = r1_bio->sector;
 	sector_t hi = lo + r1_bio->sectors - 1;
+	int idx = sector_to_idx(r1_bio->sector);
 	struct serial_in_rdev *serial = &rdev->serial[idx];
+	struct serial_info *head_si;
 
 	spin_lock_irqsave(&serial->serial_lock, flags);
 	/* collision happened */
-	if (raid1_rb_iter_first(&serial->serial_rb, lo, hi))
+	head_si = raid1_rb_iter_first(&serial->serial_rb, lo, hi);
+	if (head_si && head_si != si) {
+		si->start = lo;
+		si->last = hi;
+		list_add_tail(&si->list_node, &head_si->waiters);
 		ret = -EBUSY;
-	else {
+	} else if (!head_si) {
 		si->start = lo;
 		si->last = hi;
 		raid1_rb_insert(si, &serial->serial_rb);
@@ -83,19 +89,23 @@ static void wait_for_serialization(struct md_rdev *rdev, struct r1bio *r1_bio)
 {
 	struct mddev *mddev = rdev->mddev;
 	struct serial_info *si;
-	int idx = sector_to_idx(r1_bio->sector);
-	struct serial_in_rdev *serial = &rdev->serial[idx];
 
 	if (WARN_ON(!mddev->serial_info_pool))
 		return;
 	si = mempool_alloc(mddev->serial_info_pool, GFP_NOIO);
-	wait_event(serial->serial_io_wait,
-		   check_and_add_serial(rdev, r1_bio, si, idx) == 0);
+	INIT_LIST_HEAD(&si->waiters);
+	INIT_LIST_HEAD(&si->list_node);
+	init_completion(&si->ready);
+	while (check_and_add_serial(rdev, r1_bio, si)) {
+		wait_for_completion(&si->ready);
+		reinit_completion(&si->ready);
+	}
 }
 
 static void remove_serial(struct md_rdev *rdev, sector_t lo, sector_t hi)
 {
 	struct serial_info *si;
+	struct serial_info *first_si;
 	unsigned long flags;
 	int found = 0;
 	struct mddev *mddev = rdev->mddev;
@@ -106,16 +116,25 @@ static void remove_serial(struct md_rdev *rdev, sector_t lo, sector_t hi)
 	for (si = raid1_rb_iter_first(&serial->serial_rb, lo, hi);
 	     si; si = raid1_rb_iter_next(si, lo, hi)) {
 		if (si->start == lo && si->last == hi) {
-			raid1_rb_remove(si, &serial->serial_rb);
-			mempool_free(si, mddev->serial_info_pool);
 			found = 1;
 			break;
 		}
 	}
 	if (!found)
 		WARN(1, "The write IO is not recorded for serialization\n");
+	else {
+		raid1_rb_remove(si, &serial->serial_rb);
+		if (!list_empty(&si->waiters)) {
+			first_si = list_first_entry(&si->waiters,
+						struct serial_info, list_node);
+			list_del_init(&first_si->list_node);
+			list_splice_init(&si->waiters, &first_si->waiters);
+			raid1_rb_insert(first_si, &serial->serial_rb);
+			complete(&first_si->ready);
+		}
+		mempool_free(si, mddev->serial_info_pool);
+	}
 	spin_unlock_irqrestore(&serial->serial_lock, flags);
-	wake_up(&serial->serial_io_wait);
 }
 
 /*

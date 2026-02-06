@@ -122,7 +122,6 @@ enum sync_action {
 struct serial_in_rdev {
 	struct rb_root_cached serial_rb;
 	spinlock_t serial_lock;
-	wait_queue_head_t serial_io_wait;
 };
 
 /*
@@ -372,6 +371,9 @@ struct serial_info {
 	sector_t start;		/* start sector of rb node */
 	sector_t last;		/* end sector of rb node */
 	sector_t _subtree_last; /* highest sector in subtree of rb node */
+	struct list_head	list_node;
+	struct list_head	waiters;
+	struct completion	ready;
 };
 
 /*
