@@ -1873,4 +1873,7 @@ static inline int bio_split_rw_at(struct bio *bio,
 
 #define DEFINE_IO_COMP_BATCH(name)	struct io_comp_batch name = { }
 
+struct block_device *blkdev_get_no_open(dev_t dev, bool autoload);
+void blkdev_put_no_open(struct block_device *bdev);
+
 #endif /* _LINUX_BLKDEV_H */
