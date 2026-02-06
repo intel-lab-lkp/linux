@@ -29,6 +29,7 @@ extern bool pcie_ports_dpc_native;
 
 #ifdef CONFIG_PCIEAER
 int pcie_aer_init(void);
+extern bool aer_unrecoverable_fatal;
 #else
 static inline int pcie_aer_init(void) { return 0; }
 #endif

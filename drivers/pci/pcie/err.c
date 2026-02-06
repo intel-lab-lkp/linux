@@ -73,6 +73,9 @@ static int report_error_detected(struct pci_dev *dev,
 		if (dev->hdr_type != PCI_HEADER_TYPE_BRIDGE) {
 			vote = PCI_ERS_RESULT_NO_AER_DRIVER;
 			pci_info(dev, "can't recover (no error_detected callback)\n");
+			if (aer_unrecoverable_fatal)
+				panic("AER: %s: no error_detected callback\n",
+				      pci_name(dev));
 		} else {
 			vote = PCI_ERS_RESULT_NONE;
 		}

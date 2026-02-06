@@ -5240,6 +5240,15 @@ Kernel parameters
 		nomsi	Do not use MSI for native PCIe PME signaling (this makes
 			all PCIe root ports use INTx for all services).
 
+	pcieportdrv.aer_unrecoverable_fatal=
+			[PCIE] Panic on unrecoverable AER errors:
+		0	Log the error and leave the device in a disconnected
+			state (default).
+		1	Panic the kernel when a device cannot recover from an
+			AER error (no error_detected callback). Useful for
+			high-reliability systems where degraded hardware is
+			unacceptable.
+
 	pcmv=		[HW,PCMCIA] BadgePAD 4
 
 	pd_ignore_unused

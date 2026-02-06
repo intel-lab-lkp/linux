@@ -22,6 +22,13 @@
 #include "../pci.h"
 #include "portdrv.h"
 
+#ifdef CONFIG_PCIEAER
+bool aer_unrecoverable_fatal;
+module_param(aer_unrecoverable_fatal, bool, 0644);
+MODULE_PARM_DESC(aer_unrecoverable_fatal,
+		 "Panic if a device cannot recover from an AER error (default: false)");
+#endif
+
 /*
  * The PCIe Capability Interrupt Message Number (PCIe r3.1, sec 7.8.2) must
  * be one of the first 32 MSI-X entries.  Per PCI r3.0, sec 6.8.3.1, MSI
