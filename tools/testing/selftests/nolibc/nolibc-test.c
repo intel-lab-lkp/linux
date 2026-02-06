@@ -1811,20 +1811,45 @@ static int run_printf(int min, int max)
 		 */
 		switch (test + __LINE__ + 1) {
 		CASE_TEST(empty);        EXPECT_VFPRINTF(0, "", ""); break;
-		CASE_TEST(simple);       EXPECT_VFPRINTF(3, "foo", "foo"); break;
-		CASE_TEST(string);       EXPECT_VFPRINTF(3, "foo", "%s", "foo"); break;
-		CASE_TEST(number);       EXPECT_VFPRINTF(4, "1234", "%d", 1234); break;
-		CASE_TEST(negnumber);    EXPECT_VFPRINTF(5, "-1234", "%d", -1234); break;
-		CASE_TEST(unsigned);     EXPECT_VFPRINTF(5, "12345", "%u", 12345); break;
-		CASE_TEST(char);         EXPECT_VFPRINTF(1, "c", "%c", 'c'); break;
-		CASE_TEST(hex);          EXPECT_VFPRINTF(1, "f", "%x", 0xf); break;
-		CASE_TEST(pointer);      EXPECT_VFPRINTF(3, "0x1", "%p", (void *) 0x1); break;
-		CASE_TEST(uintmax_t);    EXPECT_VFPRINTF(20, "18446744073709551615", "%ju", 0xffffffffffffffffULL); break;
-		CASE_TEST(intmax_t);     EXPECT_VFPRINTF(20, "-9223372036854775807", "%jd", 0x8000000000000001LL); break;
+		CASE_TEST(simple);       EXPECT_VFPRINTF(0, "foo", "foo"); break;
+		CASE_TEST(string);       EXPECT_VFPRINTF(0, "foo", "%s", "foo"); break;
+		CASE_TEST(number);       EXPECT_VFPRINTF(0, "1234", "%d", 1234); break;
+		CASE_TEST(negnumber);    EXPECT_VFPRINTF(0, "-1234", "%d", -1234); break;
+		CASE_TEST(unsigned);     EXPECT_VFPRINTF(0, "12345", "%u", 12345); break;
+		CASE_TEST(signed_max);   EXPECT_VFPRINTF(0, "2147483647", "%i", ~0u >> 1); break;
+		CASE_TEST(signed_min);   EXPECT_VFPRINTF(0, "-2147483648", "%i", (~0u >> 1) + 1); break;
+		CASE_TEST(unsigned_max); EXPECT_VFPRINTF(0, "4294967295", "%u", ~0u); break;
+		CASE_TEST(char);         EXPECT_VFPRINTF(0, "|c|d|   e|", "|%c|%.0c|%4c|", 'c', 'd', 'e'); break;
+		CASE_TEST(hex);          EXPECT_VFPRINTF(0, "|f|d|", "|%x|%X|", 0xf, 0xd); break;
+		CASE_TEST(pointer);      EXPECT_VFPRINTF(0, "0x1", "%p", (void *) 0x1); break;
+		CASE_TEST(pointer_NULL); EXPECT_VFPRINTF(0, "|(nil)|(nil)|", "|%p|%.4p|", (void *)0, (void *)0); break;
+		CASE_TEST(string_NULL);  EXPECT_VFPRINTF(0, "|(null)||(null)|", "|%s|%.5s|%.6s|", (void *)0, (void *)0, (void *)0); break;
+		CASE_TEST(percent);      EXPECT_VFPRINTF(0, "a%d42%69%", "a%%d%d%%%d%%", 42, 69); break;
+		CASE_TEST(perc_qual);    EXPECT_VFPRINTF(0, "a%d2", "a%-14l%d%d", 2); break;
+		CASE_TEST(invalid);      EXPECT_VFPRINTF(0, "a%12yx3%y42%y", "a%12yx%d%y%d%y", 3, 42); break;
+		CASE_TEST(intmax_max);   EXPECT_VFPRINTF(0, "9223372036854775807", "%lld", ~0ULL >> 1); break;
+		CASE_TEST(intmax_min);   EXPECT_VFPRINTF(0, "-9223372036854775808", "%Li", (~0ULL >> 1) + 1); break;
+		CASE_TEST(uintmax_max);  EXPECT_VFPRINTF(0, "18446744073709551615", "%ju", ~0ULL); break;
 		CASE_TEST(truncation);   EXPECT_VFPRINTF(25, "01234567890123456789", "%s", "0123456789012345678901234"); break;
-		CASE_TEST(string_width); EXPECT_VFPRINTF(10, "         1", "%10s", "1"); break;
-		CASE_TEST(number_width); EXPECT_VFPRINTF(10, "         1", "%10d", 1); break;
+		CASE_TEST(string_width); EXPECT_VFPRINTF(0, "         1", "%10s", "1"); break;
+		CASE_TEST(string_trunc); EXPECT_VFPRINTF(0, "     12345", "%10.5s", "1234567890"); break;
+		CASE_TEST(number_width); EXPECT_VFPRINTF(0, "         1", "%10d", 1); break;
+		CASE_TEST(number_left);  EXPECT_VFPRINTF(0, "|-5      |", "|%-8d|", -5); break;
+		CASE_TEST(string_align); EXPECT_VFPRINTF(0, "|foo     |", "|%-8s|", "foo"); break;
 		CASE_TEST(width_trunc);  EXPECT_VFPRINTF(25, "                    ", "%25d", 1); break;
+		CASE_TEST(width_tr_lft); EXPECT_VFPRINTF(25, "1                   ", "%-25d", 1); break;
+		CASE_TEST(number_pad);   EXPECT_VFPRINTF(0, "0000000005", "%010d", 5); break;
+		CASE_TEST(number_pad);   EXPECT_VFPRINTF(0, "|0000000005|0x1234|", "|%010d|%#01x|", 5, 0x1234); break;
+		CASE_TEST(num_pad_neg);  EXPECT_VFPRINTF(0, "-000000005", "%010d", -5); break;
+		CASE_TEST(num_pad_hex);  EXPECT_VFPRINTF(0, "00fffffffb", "%010x", -5); break;
+		CASE_TEST(num_pad_trunc);EXPECT_VFPRINTF(40, "          0000000000", "%040d", 5); break;  /* max 30 '0' can be added */
+		CASE_TEST(number_prec);  EXPECT_VFPRINTF(0, "     00005", "%10.5d", 5); break;
+		CASE_TEST(num_prec_neg); EXPECT_VFPRINTF(0, "    -00005", "%10.5d", -5); break;
+		CASE_TEST(num_prec_var); EXPECT_VFPRINTF(0, "    -00005", "%*.*d", 10, 5, -5); break;
+		CASE_TEST(num_0_prec_0); EXPECT_VFPRINTF(0, "|| |+||||", "|%.0d|% .0d|%+.0d|%.0u|%.0x|%#.0x|", 0, 0, 0, 0, 0, 0); break;
+		CASE_TEST(hex_alt);      EXPECT_VFPRINTF(0, "|0x1|0x01| 0x02|", "|%#x|%#04x|%#5.2x|", 1, 1, 2); break;
+		CASE_TEST(hex_0_alt);    EXPECT_VFPRINTF(0, "|0|0000|   00|", "|%#x|%#04x|%#5.2x|", 0, 0, 0); break;
+		CASE_TEST(dec_alt);      EXPECT_VFPRINTF(0, "|1|0001|   02|", "|%#d|%#04d|%#5.2d|", 1, 1, 2); break; /* '#' is ignored */
 		CASE_TEST(scanf);        EXPECT_ZR(1, test_scanf()); break;
 		CASE_TEST(strerror);     EXPECT_ZR(1, test_strerror()); break;
 		CASE_TEST(printf_error); EXPECT_ZR(1, test_printf_error()); break;
