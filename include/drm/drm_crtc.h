@@ -610,6 +610,15 @@ struct drm_crtc_funcs {
 				struct drm_modeset_acquire_ctx *ctx);
 
 	/**
+	 * @page_flip_timeout:
+	 *
+	 * This optional hook is called if &drm_crtc_commit.flip_done times out,
+	 * and can be used by drivers to attempt to recover from a page flip
+	 * timeout.
+	 */
+	void (*page_flip_timeout)(struct drm_crtc *crtc);
+
+	/**
 	 * @set_property:
 	 *
 	 * This is the legacy entry point to update a property attached to the
