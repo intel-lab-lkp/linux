@@ -497,6 +497,7 @@ static int init_bios_attributes(int attr_type, const char *guid)
 		if (retval) {
 			pr_debug("failed to populate %s\n",
 				elements[ATTR_NAME].string.pointer);
+			kobject_put(attr_name_kobj);
 			goto err_attr_init;
 		}
 
