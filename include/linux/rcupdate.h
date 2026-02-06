@@ -1082,8 +1082,8 @@ static inline void rcu_read_unlock_migrate(void)
  * If this error is triggered, you can either fall back to use of call_rcu()
  * or rearrange the structure to position @rf into the first 4096 bytes.
  *
- * The object to be freed can be allocated either by kmalloc() or
- * kmem_cache_alloc().
+ * The object to be freed can be allocated either by kmalloc(),
+ * kmalloc_nolock(), or kmem_cache_alloc().
  *
  * Note that the allowable offset might decrease in the future.
  *

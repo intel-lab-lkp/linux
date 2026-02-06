@@ -837,13 +837,12 @@ static void delete_object_full(unsigned long ptr, unsigned int objflags)
 	struct kmemleak_object *object;
 
 	object = find_and_remove_object(ptr, 0, objflags);
-	if (!object) {
-#ifdef DEBUG
-		kmemleak_warn("Freeing unknown object at 0x%08lx\n",
-			      ptr);
-#endif
+	if (!object)
+		/*
+		 * kmalloc_nolock() -> kfree() calls kmemleak_free()
+		 * without kmemleak_alloc()
+		 */
 		return;
-	}
 	__delete_object(object);
 }
 
