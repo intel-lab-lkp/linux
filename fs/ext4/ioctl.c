@@ -1293,7 +1293,9 @@ static int ext4_ioctl_get_tune_sb(struct ext4_sb_info *sbi,
 	ret.raid_stripe_width = le32_to_cpu(es->s_raid_stripe_width);
 	ret.encoding = le16_to_cpu(es->s_encoding);
 	ret.encoding_flags = le16_to_cpu(es->s_encoding_flags);
-	strscpy_pad(ret.mount_opts, es->s_mount_opts);
+	memcpy_and_pad(ret.mount_opts, sizeof(ret.mount_opts),
+		       es->s_mount_opts,
+		       strnlen(es->s_mount_opts, sizeof(es->s_mount_opts)), 0);
 	ret.feature_compat = le32_to_cpu(es->s_feature_compat);
 	ret.feature_incompat = le32_to_cpu(es->s_feature_incompat);
 	ret.feature_ro_compat = le32_to_cpu(es->s_feature_ro_compat);
@@ -1354,7 +1356,9 @@ static void ext4_sb_setparams(struct ext4_sb_info *sbi,
 		es->s_encoding = cpu_to_le16(params->encoding);
 	if (params->set_flags & EXT4_TUNE_FL_ENCODING_FLAGS)
 		es->s_encoding_flags = cpu_to_le16(params->encoding_flags);
-	strscpy_pad(es->s_mount_opts, params->mount_opts);
+	memcpy_and_pad(es->s_mount_opts, sizeof(es->s_mount_opts),
+		       params->mount_opts,
+		       strnlen(params->mount_opts, sizeof(params->mount_opts)), 0);
 	if (params->set_flags & EXT4_TUNE_FL_EDIT_FEATURES) {
 		es->s_feature_compat |=
 			cpu_to_le32(params->set_feature_compat_mask);
@@ -1394,10 +1398,6 @@ static int ext4_ioctl_set_tune_sb(struct file *filp,
 
 	if (copy_from_user(&params, in, sizeof(params)))
 		return -EFAULT;
-
-	if (strnlen(params.mount_opts, sizeof(params.mount_opts)) ==
-	    sizeof(params.mount_opts))
-		return -E2BIG;
 
 	if ((params.set_flags & ~TUNE_OPS_SUPPORTED) != 0)
 		return -EOPNOTSUPP;
