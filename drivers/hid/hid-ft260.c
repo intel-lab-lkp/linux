@@ -707,6 +707,10 @@ static int ft260_smbus_xfer(struct i2c_adapter *adapter, u16 addr, u16 flags,
 		}
 		break;
 	case I2C_SMBUS_BLOCK_DATA:
+		if (data->block[0] > I2C_SMBUS_BLOCK_MAX + 1) {
+			ret = -EINVAL;
+			goto smbus_exit;
+		}
 		if (read_write == I2C_SMBUS_READ) {
 			ret = ft260_smbus_write(dev, addr, cmd, NULL, 0,
 						FT260_FLAG_START);
@@ -723,6 +727,10 @@ static int ft260_smbus_xfer(struct i2c_adapter *adapter, u16 addr, u16 flags,
 		}
 		break;
 	case I2C_SMBUS_I2C_BLOCK_DATA:
+		if (data->block[0] > I2C_SMBUS_BLOCK_MAX + 1) {
+			ret = -EINVAL;
+			goto smbus_exit;
+		}
 		if (read_write == I2C_SMBUS_READ) {
 			ret = ft260_smbus_write(dev, addr, cmd, NULL, 0,
 						FT260_FLAG_START);
