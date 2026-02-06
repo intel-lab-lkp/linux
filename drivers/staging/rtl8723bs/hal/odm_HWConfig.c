@@ -256,7 +256,7 @@ static void odm_Process_RSSIForDM(
 	u8 RSSI_max, RSSI_min, i;
 	u32 OFDM_pkt = 0;
 	u32 Weighting = 0;
-	PSTA_INFO_T pEntry;
+	struct sta_info *pEntry;
 
 
 	if (pPktinfo->station_id == 0xFF)

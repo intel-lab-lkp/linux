@@ -141,7 +141,7 @@ static void odm_CommonInfoSelfUpdate(struct dm_odm_t *pDM_Odm)
 {
 	u8 EntryCnt = 0;
 	u8 i;
-	PSTA_INFO_T	pEntry;
+	struct sta_info *pEntry;
 
 	if (*(pDM_Odm->pBandWidth) == ODM_BW40M) {
 		if (*(pDM_Odm->pSecChOffset) == 1)
@@ -194,7 +194,7 @@ u32 ODM_Get_Rate_Bitmap(
 	u8 rssi_level
 )
 {
-	PSTA_INFO_T	pEntry;
+	struct sta_info *pEntry;
 	u32 rate_bitmap = 0;
 	u8 WirelessMode;
 
@@ -264,7 +264,7 @@ static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
 		return;
 
 	for (i = 0; i < ODM_ASSOCIATE_ENTRY_NUM; i++) {
-		PSTA_INFO_T pstat = pDM_Odm->pODM_StaInfo[i];
+		struct sta_info *pstat = pDM_Odm->pODM_StaInfo[i];
 
 		if (IS_STA_VALID(pstat)) {
 			if (is_multicast_ether_addr(pstat->hwaddr))  /* if (psta->mac_id == 1) */
@@ -841,7 +841,7 @@ void ODM_CmnInfoHook(struct dm_odm_t *pDM_Odm, enum odm_cmninfo_e CmnInfo, void 
 	/* pDM_Odm->BTCoexist = (bool *)pValue; */
 
 	/* case ODM_CMNINFO_STA_STATUS: */
-	/* pDM_Odm->pODM_StaInfo[] = (PSTA_INFO_T)pValue; */
+	/* pDM_Odm->pODM_StaInfo[] = (struct sta_info *)pValue; */
 	/* break; */
 
 	/* case ODM_CMNINFO_PHY_STATUS: */
@@ -875,7 +875,7 @@ void ODM_CmnInfoPtrArrayHook(
 	/*  Dynamic call by reference pointer. */
 	/*  */
 	case ODM_CMNINFO_STA_STATUS:
-		pDM_Odm->pODM_StaInfo[Index] = (PSTA_INFO_T)pValue;
+		pDM_Odm->pODM_StaInfo[Index] = (struct sta_info *)pValue;
 		break;
 	/* To remove the compiler warning, must add an empty default statement to handle the other values. */
 	default:
