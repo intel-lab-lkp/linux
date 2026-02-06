@@ -5563,11 +5563,14 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 	bool is_cow = (vmf->flags & FAULT_FLAG_WRITE) &&
 		      !(vma->vm_flags & VM_SHARED);
 	int type, nr_pages;
-	unsigned long addr;
-	bool needs_fallback = false;
+	unsigned long start_addr;
+	bool single_page_fallback = false;
+	bool try_pmd_mapping = true;
+	pgoff_t file_end;
+	struct address_space *mapping = vma->vm_file ? vma->vm_file->f_mapping : NULL;
 
 fallback:
-	addr = vmf->address;
+	start_addr = vmf->address;
 
 	/* Did we COW the page? */
 	if (is_cow)
@@ -5586,25 +5589,22 @@ fallback:
 			return ret;
 	}
 
-	if (!needs_fallback && vma->vm_file) {
-		struct address_space *mapping = vma->vm_file->f_mapping;
-		pgoff_t file_end;
-
+	if (!single_page_fallback && mapping) {
 		file_end = DIV_ROUND_UP(i_size_read(mapping->host), PAGE_SIZE);
 
 		/*
-		 * Do not allow to map with PTEs beyond i_size and with PMD
-		 * across i_size to preserve SIGBUS semantics.
+		 * Do not allow to map with PMD across i_size to preserve
+		 * SIGBUS semantics.
 		 *
 		 * Make an exception for shmem/tmpfs that for long time
 		 * intentionally mapped with PMDs across i_size.
 		 */
-		needs_fallback = !shmem_mapping(mapping) &&
-			file_end < folio_next_index(folio);
+		try_pmd_mapping = shmem_mapping(mapping) ||
+			file_end >= folio_next_index(folio);
 	}
 
 	if (pmd_none(*vmf->pmd)) {
-		if (!needs_fallback && folio_test_pmd_mappable(folio)) {
+		if (try_pmd_mapping && folio_test_pmd_mappable(folio)) {
 			ret = do_set_pmd(vmf, folio, page);
 			if (ret != VM_FAULT_FALLBACK)
 				return ret;
@@ -5619,49 +5619,53 @@ fallback:
 	nr_pages = folio_nr_pages(folio);
 
 	/* Using per-page fault to maintain the uffd semantics */
-	if (unlikely(userfaultfd_armed(vma)) || unlikely(needs_fallback)) {
+	if (unlikely(userfaultfd_armed(vma)) || unlikely(single_page_fallback)) {
 		nr_pages = 1;
 	} else if (nr_pages > 1) {
-		pgoff_t idx = folio_page_idx(folio, page);
-		/* The page offset of vmf->address within the VMA. */
-		pgoff_t vma_off = vmf->pgoff - vmf->vma->vm_pgoff;
-		/* The index of the entry in the pagetable for fault page. */
-		pgoff_t pte_off = pte_index(vmf->address);
+
+		/* Ensure mapping stays within VMA and PMD boundaries */
+		unsigned long pmd_boundary_start = ALIGN_DOWN(vmf->address, PMD_SIZE);
+		unsigned long pmd_boundary_end = pmd_boundary_start + PMD_SIZE;
+		unsigned long va_of_folio_start = vmf->address - ((vmf->pgoff - folio->index) * PAGE_SIZE);
+		unsigned long va_of_folio_end = va_of_folio_start + nr_pages * PAGE_SIZE;
+		unsigned long end_addr;
+
+		start_addr = max3(vma->vm_start, pmd_boundary_start, va_of_folio_start);
+		end_addr = min3(vma->vm_end, pmd_boundary_end, va_of_folio_end);
 
 		/*
-		 * Fallback to per-page fault in case the folio size in page
-		 * cache beyond the VMA limits and PMD pagetable limits.
+		 * Do not allow to map with PTEs across i_size to preserve
+		 * SIGBUS semantics.
+		 *
+		 * Make an exception for shmem/tmpfs that for long time
+		 * intentionally mapped with PMDs across i_size.
 		 */
-		if (unlikely(vma_off < idx ||
-			    vma_off + (nr_pages - idx) > vma_pages(vma) ||
-			    pte_off < idx ||
-			    pte_off + (nr_pages - idx)  > PTRS_PER_PTE)) {
-			nr_pages = 1;
-		} else {
-			/* Now we can set mappings for the whole large folio. */
-			addr = vmf->address - idx * PAGE_SIZE;
-			page = &folio->page;
-		}
+		if (mapping && !shmem_mapping(mapping))
+			end_addr = min(end_addr, va_of_folio_start + (file_end - folio->index) * PAGE_SIZE);
+
+		nr_pages = (end_addr - start_addr) >> PAGE_SHIFT;
+		page = folio_page(folio, (start_addr - va_of_folio_start) >> PAGE_SHIFT);
 	}
 
 	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-				       addr, &vmf->ptl);
+				       start_addr, &vmf->ptl);
 	if (!vmf->pte)
 		return VM_FAULT_NOPAGE;
 
 	/* Re-check under ptl */
 	if (nr_pages == 1 && unlikely(vmf_pte_changed(vmf))) {
-		update_mmu_tlb(vma, addr, vmf->pte);
+		update_mmu_tlb(vma, start_addr, vmf->pte);
 		ret = VM_FAULT_NOPAGE;
 		goto unlock;
 	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
-		needs_fallback = true;
+		single_page_fallback = true;
+		try_pmd_mapping = false;
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 		goto fallback;
 	}
 
 	folio_ref_add(folio, nr_pages - 1);
-	set_pte_range(vmf, folio, page, nr_pages, addr);
+	set_pte_range(vmf, folio, page, nr_pages, start_addr);
 	type = is_cow ? MM_ANONPAGES : mm_counter_file(folio);
 	add_mm_counter(vma->vm_mm, type, nr_pages);
 	ret = 0;
