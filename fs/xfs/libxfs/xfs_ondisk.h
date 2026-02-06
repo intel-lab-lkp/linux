@@ -26,6 +26,9 @@
 static inline void __init
 xfs_check_ondisk_structs(void)
 {
+	/* direct I/O */
+	XFS_CHECK_STRUCT_SIZE(struct dioattr,			12);
+
 	/* file structures */
 	XFS_CHECK_STRUCT_SIZE(struct xfs_acl,			4);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_acl_entry,		12);
@@ -59,6 +62,8 @@ xfs_check_ondisk_structs(void)
 	XFS_CHECK_STRUCT_SIZE(xfs_refcount_ptr_t,		4);
 	XFS_CHECK_STRUCT_SIZE(xfs_rmap_ptr_t,			4);
 	XFS_CHECK_STRUCT_SIZE(xfs_bmdr_key_t,			8);
+	XFS_CHECK_STRUCT_SIZE(struct getbmap,			32);
+	XFS_CHECK_STRUCT_SIZE(struct getbmapx,			48);
 
 	/* dir/attr trees */
 	XFS_CHECK_STRUCT_SIZE(struct xfs_attr3_leaf_hdr,	80);
@@ -77,6 +82,12 @@ xfs_check_ondisk_structs(void)
 	XFS_CHECK_STRUCT_SIZE(struct xfs_attr_leaf_hdr,		32);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_attr_leaf_map,		4);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_attr_leaf_name_local,	4);
+	XFS_CHECK_STRUCT_SIZE(xfs_attrlist_cursor_t,		16);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_attrlist,		8);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_attrlist_ent,		4);
+
+	/* allocation groups */
+	XFS_CHECK_STRUCT_SIZE(struct xfs_ag_geometry,		128);
 
 	/* realtime structures */
 	XFS_CHECK_STRUCT_SIZE(struct xfs_rtsb,			56);
@@ -87,6 +98,7 @@ xfs_check_ondisk_structs(void)
 	XFS_CHECK_STRUCT_SIZE(struct xfs_rtrmap_root,		4);
 	XFS_CHECK_STRUCT_SIZE(xfs_rtrefcount_ptr_t,		8);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_rtrefcount_root,	4);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_rtgroup_geometry,	128);
 
 	/*
 	 * m68k has problems with struct xfs_attr_leaf_name_remote, but we pad
@@ -117,20 +129,11 @@ xfs_check_ondisk_structs(void)
 	XFS_CHECK_STRUCT_SIZE(struct xfs_da_node_entry,		8);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_da_node_hdr,		16);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_data_free,		4);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_data_hdr,		16);
 	XFS_CHECK_OFFSET(struct xfs_dir2_data_unused, freetag,	0);
 	XFS_CHECK_OFFSET(struct xfs_dir2_data_unused, length,	2);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_free_hdr,		16);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_free,		16);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_leaf_entry,	8);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_leaf_hdr,		16);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_leaf,		16);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_leaf_tail,	4);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_sf_entry,		3);
 	XFS_CHECK_OFFSET(struct xfs_dir2_sf_entry, namelen,	0);
 	XFS_CHECK_OFFSET(struct xfs_dir2_sf_entry, offset,	1);
 	XFS_CHECK_OFFSET(struct xfs_dir2_sf_entry, name,	3);
-	XFS_CHECK_STRUCT_SIZE(struct xfs_dir2_sf_hdr,		10);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_parent_rec,		12);
 
 	/* ondisk dir/attr structures from xfs/122 */
@@ -196,6 +199,9 @@ xfs_check_ondisk_structs(void)
 	XFS_CHECK_STRUCT_SIZE(struct xfs_getparents,		40);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_getparents_by_handle,	64);
 
+	/* error injection */
+	XFS_CHECK_STRUCT_SIZE(struct xfs_error_injection,	8);
+
 	/*
 	 * The v5 superblock format extended several v4 header structures with
 	 * additional data. While new fields are only accessible on v5
@@ -221,6 +227,28 @@ xfs_check_ondisk_structs(void)
 	XFS_CHECK_STRUCT_SIZE(struct xfs_inumbers,		24);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_bulkstat_req,		64);
 	XFS_CHECK_STRUCT_SIZE(struct xfs_inumbers_req,		64);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_flock64,		48);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_fsop_geom_v1,		112);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_fsop_geom_v4,		112);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_fsop_geom,		256);
+	XFS_CHECK_STRUCT_SIZE(xfs_fsop_counts_t,		32);
+	XFS_CHECK_STRUCT_SIZE(xfs_fsop_resblks_t,		16);
+	XFS_CHECK_STRUCT_SIZE(xfs_growfs_data_t,		16);
+	XFS_CHECK_STRUCT_SIZE(xfs_growfs_log_t,			8);
+	XFS_CHECK_STRUCT_SIZE(xfs_growfs_rt_t,			16);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_inogrp,		24);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_bulk_ireq,		64);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_fs_eofblocks,		128);
+	XFS_CHECK_STRUCT_SIZE(xfs_fsid_t,			8);
+	XFS_CHECK_STRUCT_SIZE(xfs_fid_t,			16);
+	XFS_CHECK_STRUCT_SIZE(xfs_handle_t,			24);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_exchange_range,	40);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_commit_range,		88);
+
+	/* scrub */
+	XFS_CHECK_STRUCT_SIZE(struct xfs_scrub_metadata,	64);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_scrub_vec,		16);
+	XFS_CHECK_STRUCT_SIZE(struct xfs_scrub_vec_head,	40);
 
 	/*
 	 * Make sure the incore inode timestamp range corresponds to hand
