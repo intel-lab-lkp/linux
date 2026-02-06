@@ -263,8 +263,7 @@ static int jffs2_link (struct dentry *old_dentry, struct inode *dir_i, struct de
 	if (d_is_dir(old_dentry))
 		return -EPERM;
 
-	/* XXX: This is ugly */
-	type = (d_inode(old_dentry)->i_mode & S_IFMT) >> 12;
+	type = fs_umode_to_dtype(d_inode(old_dentry)->i_mode);
 	if (!type) type = DT_REG;
 
 	now = JFFS2_NOW();
@@ -732,10 +731,7 @@ static int jffs2_mknod (struct mnt_idmap *idmap, struct inode *dir_i,
 	rd->ino = cpu_to_je32(inode->i_ino);
 	rd->mctime = cpu_to_je32(JFFS2_NOW());
 	rd->nsize = namelen;
-
-	/* XXX: This is ugly. */
-	rd->type = (mode & S_IFMT) >> 12;
-
+	rd->type = fs_umode_to_dtype(mode);
 	rd->node_crc = cpu_to_je32(crc32(0, rd, sizeof(*rd)-8));
 	rd->name_crc = cpu_to_je32(crc32(0, dentry->d_name.name, namelen));
 
@@ -813,8 +809,7 @@ static int jffs2_rename (struct mnt_idmap *idmap,
 
 	/* Make a hard link */
 
-	/* XXX: This is ugly */
-	type = (d_inode(old_dentry)->i_mode & S_IFMT) >> 12;
+	type = fs_umode_to_dtype(d_inode(old_dentry)->i_mode);
 	if (!type) type = DT_REG;
 
 	now = JFFS2_NOW();
