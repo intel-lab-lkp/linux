@@ -20,10 +20,13 @@
 
 #include "mailbox.h"
 
+#define MBOX_DATA_CANCELED ((void *)0x01)
+#define MBOX_IDX_NOT_DESIGNATED -1
+
 static LIST_HEAD(mbox_cons);
 static DEFINE_MUTEX(con_mutex);
 
-static int add_to_rbuf(struct mbox_chan *chan, void *mssg)
+static int add_to_rbuf(struct mbox_chan *chan, void *mssg, struct completion *tx_complete)
 {
 	int idx;
 
@@ -34,7 +37,8 @@ static int add_to_rbuf(struct mbox_chan *chan, void *mssg)
 		return -ENOBUFS;
 
 	idx = chan->msg_free;
-	chan->msg_data[idx] = mssg;
+	chan->msg_data[idx].data = mssg;
+	chan->msg_data[idx].tx_complete = tx_complete;
 	chan->msg_count++;
 
 	if (idx == MBOX_TX_QUEUE_LEN - 1)
@@ -52,24 +56,33 @@ static void msg_submit(struct mbox_chan *chan)
 	int err = -EBUSY;
 
 	scoped_guard(spinlock_irqsave, &chan->lock) {
-		if (!chan->msg_count || chan->active_req)
+		if (chan->active_req >= 0)
 			break;
 
-		count = chan->msg_count;
-		idx = chan->msg_free;
-		if (idx >= count)
-			idx -= count;
-		else
-			idx += MBOX_TX_QUEUE_LEN - count;
+		while (chan->msg_count > 0) {
+			count = chan->msg_count;
+			idx = chan->msg_free;
+			if (idx >= count)
+				idx -= count;
+			else
+				idx += MBOX_TX_QUEUE_LEN - count;
 
-		data = chan->msg_data[idx];
+			data = chan->msg_data[idx].data;
+			if (data != MBOX_DATA_CANCELED)
+				break;
+
+			chan->msg_count--;
+		}
+
+		if (!chan->msg_count)
+			break;
 
 		if (chan->cl->tx_prepare)
 			chan->cl->tx_prepare(chan->cl, data);
 		/* Try to submit a message to the MBOX controller */
 		err = chan->mbox->ops->send_data(chan, data);
 		if (!err) {
-			chan->active_req = data;
+			chan->active_req = idx;
 			chan->msg_count--;
 		}
 	}
@@ -81,27 +94,35 @@ static void msg_submit(struct mbox_chan *chan)
 	}
 }
 
-static void tx_tick(struct mbox_chan *chan, int r)
+static void tx_tick(struct mbox_chan *chan, int r, int idx)
 {
-	void *mssg;
+	struct mbox_message mssg = {NULL, NULL};
 
 	scoped_guard(spinlock_irqsave, &chan->lock) {
-		mssg = chan->active_req;
-		chan->active_req = NULL;
+		if (idx == MBOX_IDX_NOT_DESIGNATED || idx == chan->active_req) {
+			if (chan->active_req >= 0) {
+				mssg = chan->msg_data[chan->active_req];
+				chan->active_req = MBOX_IDX_NOT_DESIGNATED;
+			}
+		} else {
+			chan->msg_data[idx].data = MBOX_DATA_CANCELED;
+			chan->msg_data[idx].tx_complete = NULL;
+			return;
+		}
 	}
 
 	/* Submit next message */
 	msg_submit(chan);
 
-	if (!mssg)
+	if (!mssg.data)
 		return;
 
 	/* Notify the client */
 	if (chan->cl->tx_done)
-		chan->cl->tx_done(chan->cl, mssg, r);
+		chan->cl->tx_done(chan->cl, mssg.data, r);
 
 	if (r != -ETIME && chan->cl->tx_block)
-		complete(&chan->tx_complete);
+		complete(mssg.tx_complete);
 }
 
 static enum hrtimer_restart txdone_hrtimer(struct hrtimer *hrtimer)
@@ -114,10 +135,10 @@ static enum hrtimer_restart txdone_hrtimer(struct hrtimer *hrtimer)
 	for (i = 0; i < mbox->num_chans; i++) {
 		struct mbox_chan *chan = &mbox->chans[i];
 
-		if (chan->active_req && chan->cl) {
+		if (chan->active_req >= 0 && chan->cl) {
 			txdone = chan->mbox->ops->last_tx_done(chan);
 			if (txdone)
-				tx_tick(chan, 0);
+				tx_tick(chan, 0, MBOX_IDX_NOT_DESIGNATED);
 			else
 				resched = true;
 		}
@@ -170,7 +191,7 @@ void mbox_chan_txdone(struct mbox_chan *chan, int r)
 		return;
 	}
 
-	tx_tick(chan, r);
+	tx_tick(chan, r, MBOX_IDX_NOT_DESIGNATED);
 }
 EXPORT_SYMBOL_GPL(mbox_chan_txdone);
 
@@ -190,7 +211,7 @@ void mbox_client_txdone(struct mbox_chan *chan, int r)
 		return;
 	}
 
-	tx_tick(chan, r);
+	tx_tick(chan, r, MBOX_IDX_NOT_DESIGNATED);
 }
 EXPORT_SYMBOL_GPL(mbox_client_txdone);
 
@@ -245,11 +266,19 @@ EXPORT_SYMBOL_GPL(mbox_client_peek_data);
 int mbox_send_message(struct mbox_chan *chan, void *mssg)
 {
 	int t;
+	int idx;
+	struct completion tx_complete;
 
 	if (!chan || !chan->cl)
 		return -EINVAL;
 
-	t = add_to_rbuf(chan, mssg);
+	if (chan->cl->tx_block) {
+		init_completion(&tx_complete);
+		t = add_to_rbuf(chan, mssg, &tx_complete);
+	} else {
+		t = add_to_rbuf(chan, mssg, NULL);
+	}
+
 	if (t < 0) {
 		dev_err(chan->mbox->dev, "Try increasing MBOX_TX_QUEUE_LEN\n");
 		return t;
@@ -266,10 +295,11 @@ int mbox_send_message(struct mbox_chan *chan, void *mssg)
 		else
 			wait = msecs_to_jiffies(chan->cl->tx_tout);
 
-		ret = wait_for_completion_timeout(&chan->tx_complete, wait);
+		ret = wait_for_completion_timeout(&tx_complete, wait);
 		if (ret == 0) {
+			idx = t;
 			t = -ETIME;
-			tx_tick(chan, t);
+			tx_tick(chan, t, idx);
 		}
 	}
 
@@ -300,7 +330,7 @@ int mbox_flush(struct mbox_chan *chan, unsigned long timeout)
 
 	ret = chan->mbox->ops->flush(chan, timeout);
 	if (ret < 0)
-		tx_tick(chan, ret);
+		tx_tick(chan, ret, MBOX_IDX_NOT_DESIGNATED);
 
 	return ret;
 }
@@ -319,9 +349,8 @@ static int __mbox_bind_client(struct mbox_chan *chan, struct mbox_client *cl)
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		chan->msg_free = 0;
 		chan->msg_count = 0;
-		chan->active_req = NULL;
+		chan->active_req = MBOX_IDX_NOT_DESIGNATED;
 		chan->cl = cl;
-		init_completion(&chan->tx_complete);
 
 		if (chan->txdone_method	== TXDONE_BY_POLL && cl->knows_txdone)
 			chan->txdone_method = TXDONE_BY_ACK;
@@ -477,7 +506,7 @@ void mbox_free_channel(struct mbox_chan *chan)
 	/* The queued TX requests are simply aborted, no callbacks are made */
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		chan->cl = NULL;
-		chan->active_req = NULL;
+		chan->active_req = MBOX_IDX_NOT_DESIGNATED;
 		if (chan->txdone_method == TXDONE_BY_ACK)
 			chan->txdone_method = TXDONE_BY_POLL;
 	}
