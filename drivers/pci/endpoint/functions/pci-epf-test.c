@@ -6,6 +6,7 @@
  * Author: Kishon Vijay Abraham I <kishon@ti.com>
  */
 
+#include <linux/bitops.h>
 #include <linux/crc32.h>
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
@@ -56,6 +57,7 @@
 #define STATUS_BAR_SUBRANGE_CLEAR_FAIL		BIT(17)
 
 #define FLAG_USE_DMA			BIT(0)
+#define FLAG_DB_EMBEDDED		BIT(1)
 
 #define TIMER_RESOLUTION		1
 
@@ -68,6 +70,12 @@
 #define PCI_EPF_TEST_BAR_SUBRANGE_NSUB	2
 
 static struct workqueue_struct *kpcitest_workqueue;
+
+enum pci_epf_test_doorbell_variant {
+	PCI_EPF_TEST_DB_NONE = 0,
+	PCI_EPF_TEST_DB_MSI,
+	PCI_EPF_TEST_DB_EMBEDDED,
+};
 
 struct pci_epf_test {
 	void			*reg[PCI_STD_NUM_BARS];
@@ -85,7 +93,11 @@ struct pci_epf_test {
 	bool			dma_supported;
 	bool			dma_private;
 	const struct pci_epc_features *epc_features;
+	enum pci_epf_test_doorbell_variant db_variant;
 	struct pci_epf_bar	db_bar;
+	int			db_irq;
+	unsigned long		db_irq_pending;
+	struct work_struct	db_work;
 	size_t			bar_size[PCI_STD_NUM_BARS];
 };
 
@@ -696,7 +708,7 @@ static void pci_epf_test_raise_irq(struct pci_epf_test *epf_test,
 	}
 }
 
-static irqreturn_t pci_epf_test_doorbell_handler(int irq, void *data)
+static irqreturn_t pci_epf_test_doorbell_msi_handler(int irq, void *data)
 {
 	struct pci_epf_test *epf_test = data;
 	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
@@ -710,19 +722,58 @@ static irqreturn_t pci_epf_test_doorbell_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void pci_epf_test_doorbell_embedded_work(struct work_struct *work)
+{
+	struct pci_epf_test *epf_test =
+		container_of(work, struct pci_epf_test, db_work);
+	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
+	struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
+	u32 status = le32_to_cpu(reg->status);
+
+	status |= STATUS_DOORBELL_SUCCESS;
+	reg->status = cpu_to_le32(status);
+	pci_epf_test_raise_irq(epf_test, reg);
+
+	clear_bit(0, &epf_test->db_irq_pending);
+}
+
+static irqreturn_t pci_epf_test_doorbell_embedded_irq_handler(int irq, void *data)
+{
+	struct pci_epf_test *epf_test = data;
+
+	if (READ_ONCE(epf_test->db_variant) != PCI_EPF_TEST_DB_EMBEDDED)
+		return IRQ_NONE;
+
+	if (test_and_set_bit(0, &epf_test->db_irq_pending))
+		return IRQ_HANDLED;
+
+	queue_work(kpcitest_workqueue, &epf_test->db_work);
+	return IRQ_HANDLED;
+}
+
 static void pci_epf_test_doorbell_cleanup(struct pci_epf_test *epf_test)
 {
 	struct pci_epf_test_reg *reg = epf_test->reg[epf_test->test_reg_bar];
 	struct pci_epf *epf = epf_test->epf;
 
-	free_irq(epf->db_msg[0].virq, epf_test);
-	reg->doorbell_bar = cpu_to_le32(NO_BAR);
+	if (epf_test->db_irq) {
+		free_irq(epf_test->db_irq, epf_test);
+		epf_test->db_irq = 0;
+	}
 
-	pci_epf_free_doorbell(epf);
+	if (epf_test->db_variant == PCI_EPF_TEST_DB_EMBEDDED) {
+		cancel_work_sync(&epf_test->db_work);
+		clear_bit(0, &epf_test->db_irq_pending);
+	} else if (epf_test->db_variant == PCI_EPF_TEST_DB_MSI) {
+		pci_epf_free_doorbell(epf);
+	}
+
+	reg->doorbell_bar = cpu_to_le32(NO_BAR);
+	epf_test->db_variant = PCI_EPF_TEST_DB_NONE;
 }
 
-static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
-					 struct pci_epf_test_reg *reg)
+static void pci_epf_test_enable_doorbell_msi(struct pci_epf_test *epf_test,
+					     struct pci_epf_test_reg *reg)
 {
 	u32 status = le32_to_cpu(reg->status);
 	struct pci_epf *epf = epf_test->epf;
@@ -736,20 +787,23 @@ static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
 	if (ret)
 		goto set_status_err;
 
+	epf_test->db_variant = PCI_EPF_TEST_DB_MSI;
 	msg = &epf->db_msg[0].msg;
 	bar = pci_epc_get_next_free_bar(epf_test->epc_features, epf_test->test_reg_bar + 1);
 	if (bar < BAR_0)
 		goto err_doorbell_cleanup;
 
 	ret = request_threaded_irq(epf->db_msg[0].virq, NULL,
-				   pci_epf_test_doorbell_handler, IRQF_ONESHOT,
-				   "pci-ep-test-doorbell", epf_test);
+				   pci_epf_test_doorbell_msi_handler,
+				   IRQF_ONESHOT, "pci-ep-test-doorbell",
+				   epf_test);
 	if (ret) {
 		dev_err(&epf->dev,
 			"Failed to request doorbell IRQ: %d\n",
 			epf->db_msg[0].virq);
 		goto err_doorbell_cleanup;
 	}
+	epf_test->db_irq = epf->db_msg[0].virq;
 
 	reg->doorbell_data = cpu_to_le32(msg->data);
 	reg->doorbell_bar = cpu_to_le32(bar);
@@ -780,6 +834,125 @@ err_doorbell_cleanup:
 set_status_err:
 	status |= STATUS_DOORBELL_ENABLE_FAIL;
 	reg->status = cpu_to_le32(status);
+}
+
+static void pci_epf_test_enable_doorbell_embedded(struct pci_epf_test *epf_test,
+						  struct pci_epf_test_reg *reg)
+{
+	struct pci_epc_remote_resource *dma_ctrl = NULL, *chan0 = NULL;
+	const char *irq_name = "pci-ep-test-doorbell-embedded";
+	u32 status = le32_to_cpu(reg->status);
+	struct pci_epf *epf = epf_test->epf;
+	struct pci_epc *epc = epf->epc;
+	struct device *dev = &epf->dev;
+	enum pci_barno bar;
+	size_t align_off;
+	unsigned int i;
+	int cnt, ret;
+	u32 db_off;
+
+	cnt = pci_epc_get_remote_resources(epc, epf->func_no, epf->vfunc_no,
+					   NULL, 0);
+	if (cnt <= 0) {
+		dev_err(dev, "No remote resources available for embedded doorbell\n");
+		goto set_status_err;
+	}
+
+	struct pci_epc_remote_resource *resources __free(kfree) =
+				kcalloc(cnt, sizeof(*resources), GFP_KERNEL);
+	if (!resources)
+		goto set_status_err;
+
+	ret = pci_epc_get_remote_resources(epc, epf->func_no, epf->vfunc_no,
+					   resources, cnt);
+	if (ret < 0) {
+		dev_err(dev, "Failed to get remote resources: %d\n", ret);
+		goto set_status_err;
+	}
+	cnt = ret;
+
+	for (i = 0; i < cnt; i++) {
+		if (resources[i].type == PCI_EPC_RR_DMA_CTRL_MMIO)
+			dma_ctrl = &resources[i];
+		else if (resources[i].type == PCI_EPC_RR_DMA_CHAN_DESC &&
+			 !chan0)
+			chan0 = &resources[i];
+	}
+
+	if (!dma_ctrl || !chan0) {
+		dev_err(dev, "Missing DMA ctrl MMIO or channel #0 info\n");
+		goto set_status_err;
+	}
+
+	bar = pci_epc_get_next_free_bar(epf_test->epc_features,
+					epf_test->test_reg_bar + 1);
+	if (bar < BAR_0) {
+		dev_err(dev, "No free BAR for embedded doorbell\n");
+		goto set_status_err;
+	}
+
+	ret = pci_epf_align_inbound_addr(epf, bar, dma_ctrl->phys_addr,
+					 &epf_test->db_bar.phys_addr,
+					 &align_off);
+	if (ret)
+		goto set_status_err;
+
+	db_off = chan0->u.dma_chan_desc.db_offset;
+	if (db_off >= dma_ctrl->size ||
+	    align_off + db_off >= epf->bar[bar].size) {
+		dev_err(dev, "BAR%d too small for embedded doorbell (off %#zx + %#x)\n",
+			bar, align_off, db_off);
+		goto set_status_err;
+	}
+
+	epf_test->db_variant = PCI_EPF_TEST_DB_EMBEDDED;
+
+	ret = request_irq(chan0->u.dma_chan_desc.irq,
+			  pci_epf_test_doorbell_embedded_irq_handler,
+			  IRQF_SHARED, irq_name, epf_test);
+	if (ret) {
+		dev_err(dev, "Failed to request embedded doorbell IRQ: %d\n",
+			chan0->u.dma_chan_desc.irq);
+		goto err_cleanup;
+	}
+	epf_test->db_irq = chan0->u.dma_chan_desc.irq;
+
+	reg->doorbell_data = cpu_to_le32(0);
+	reg->doorbell_bar = cpu_to_le32(bar);
+	reg->doorbell_offset = cpu_to_le32(align_off + db_off);
+
+	epf_test->db_bar.barno = bar;
+	epf_test->db_bar.size = epf->bar[bar].size;
+	epf_test->db_bar.flags = epf->bar[bar].flags;
+
+	ret = pci_epc_set_bar(epc, epf->func_no, epf->vfunc_no, &epf_test->db_bar);
+	if (ret)
+		goto err_cleanup;
+
+	status |= STATUS_DOORBELL_ENABLE_SUCCESS;
+	reg->status = cpu_to_le32(status);
+	return;
+
+err_cleanup:
+	pci_epf_test_doorbell_cleanup(epf_test);
+set_status_err:
+	status |= STATUS_DOORBELL_ENABLE_FAIL;
+	reg->status = cpu_to_le32(status);
+}
+
+static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
+					 struct pci_epf_test_reg *reg)
+{
+	u32 flags = le32_to_cpu(reg->flags);
+
+	/* If already enabled, drop previous setup first. */
+	if (epf_test->db_variant != PCI_EPF_TEST_DB_NONE)
+		pci_epf_test_doorbell_cleanup(epf_test);
+
+	if (flags & FLAG_DB_EMBEDDED)
+		pci_epf_test_enable_doorbell_embedded(epf_test, reg);
+	else
+		pci_epf_test_enable_doorbell_msi(epf_test, reg);
 }
 
 static void pci_epf_test_disable_doorbell(struct pci_epf_test *epf_test,
@@ -1309,6 +1482,9 @@ static void pci_epf_test_unbind(struct pci_epf *epf)
 
 	cancel_delayed_work_sync(&epf_test->cmd_handler);
 	if (epc->init_complete) {
+		/* In case userspace never disabled doorbell explicitly. */
+		if (epf_test->db_variant != PCI_EPF_TEST_DB_NONE)
+			pci_epf_test_doorbell_cleanup(epf_test);
 		pci_epf_test_clean_dma_chan(epf_test);
 		pci_epf_test_clear_bar(epf);
 	}
@@ -1427,6 +1603,7 @@ static int pci_epf_test_probe(struct pci_epf *epf,
 		epf_test->bar_size[bar] = default_bar_size[bar];
 
 	INIT_DELAYED_WORK(&epf_test->cmd_handler, pci_epf_test_cmd_handler);
+	INIT_WORK(&epf_test->db_work, pci_epf_test_doorbell_embedded_work);
 
 	epf->event_ops = &pci_epf_test_event_ops;
 
