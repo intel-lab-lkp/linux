@@ -75,6 +75,7 @@ struct spacemit_usb2phy {
 	struct phy *phy;
 	struct clk *clk;
 	struct regmap *regmap_base;
+	struct regulator *regulator;
 };
 
 static const struct regmap_config phy_regmap_config = {
@@ -96,6 +97,12 @@ static int spacemit_usb2phy_init(struct phy *phy)
 		dev_err(&phy->dev, "failed to enable clock\n");
 		clk_disable(sphy->clk);
 		return ret;
+	}
+
+	if (sphy->regulator) {
+		ret = regulator_enable(sphy->regulator);
+		if (ret)
+			return ret;
 	}
 
 	/*
@@ -139,6 +146,9 @@ static int spacemit_usb2phy_exit(struct phy *phy)
 
 	clk_disable(sphy->clk);
 
+	if (sphy->regulator)
+		return regulator_disable(sphy->regulator);
+
 	return 0;
 }
 
@@ -170,6 +180,16 @@ static int spacemit_usb2phy_probe(struct platform_device *pdev)
 	sphy->regmap_base = devm_regmap_init_mmio(dev, base, &phy_regmap_config);
 	if (IS_ERR(sphy->regmap_base))
 		return dev_err_probe(dev, PTR_ERR(sphy->regmap_base), "Failed to init regmap\n");
+
+	sphy->regulator = devm_regulator_get_optional(dev, "phy");
+	if (IS_ERR(sphy->regulator)) {
+		int ret = PTR_ERR(sphy->regulator);
+
+		if (ret != -ENODEV)
+			return dev_err_probe(dev, ret, "Failed to get regulator\n");
+
+		sphy->regulator = NULL;
+	}
 
 	sphy->phy = devm_phy_create(dev, NULL, &spacemit_usb2phy_ops);
 	if (IS_ERR(sphy->phy))
