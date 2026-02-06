@@ -23,6 +23,7 @@
  * Authors: AMD
  *
  */
+#include <drm/drm_drv.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_atomic_helper.h>
 
@@ -567,12 +568,19 @@ amdgpu_dm_atomic_crtc_get_property(struct drm_crtc *crtc,
 }
 #endif
 
+static void amdgpu_dm_crtc_handle_timeout(struct drm_crtc *crtc)
+{
+	drm_dev_wedged_event(crtc->dev, DRM_WEDGE_RECOVERY_REBIND |
+			     DRM_WEDGE_RECOVERY_BUS_RESET, NULL);
+}
+
 /* Implemented only the options currently available for the driver */
 static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 	.reset = amdgpu_dm_crtc_reset_state,
 	.destroy = amdgpu_dm_crtc_destroy,
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
+	.page_flip_timeout = amdgpu_dm_crtc_handle_timeout,
 	.atomic_duplicate_state = amdgpu_dm_crtc_duplicate_state,
 	.atomic_destroy_state = amdgpu_dm_crtc_destroy_state,
 	.set_crc_source = amdgpu_dm_crtc_set_crc_source,
