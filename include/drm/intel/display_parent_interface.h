@@ -27,6 +27,8 @@ struct ref_tracker;
 struct intel_display_dpt_interface {
 	struct i915_address_space *(*create)(struct drm_gem_object *obj, size_t size);
 	void (*destroy)(struct i915_address_space *vm);
+	void (*suspend)(struct i915_address_space *vm);
+	void (*resume)(struct i915_address_space *vm);
 };
 
 struct intel_display_dsb_interface {
