@@ -39,8 +39,8 @@ struct firmware;
 /* Forward declaration from <linux/pwrseq/consumer.h> */
 struct pwrseq_desc;
 
-#define PVR_GPUID_STRING_MIN_LENGTH 7U
-#define PVR_GPUID_STRING_MAX_LENGTH 32U
+#define PVR_GPUID_STRING_MIN_LENGTH 7
+#define PVR_GPUID_STRING_MAX_LENGTH 32
 
 /**
  * struct pvr_gpu_id - Hardware GPU ID information for a PowerVR device
