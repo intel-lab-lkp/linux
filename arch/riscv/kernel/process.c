@@ -274,8 +274,8 @@ enum {
 	PMLEN_16 = 16,
 };
 
-static bool have_user_pmlen_7;
-static bool have_user_pmlen_16;
+bool riscv_have_user_pmlen_7;
+bool riscv_have_user_pmlen_16;
 
 /*
  * Control the relaxed ABI allowing tagged user addresses into the kernel.
@@ -306,10 +306,10 @@ long set_tagged_addr_ctrl(struct task_struct *task, unsigned long arg)
 	pmlen = FIELD_GET(PR_PMLEN_MASK, arg);
 	if (pmlen == PMLEN_0) {
 		pmm = ENVCFG_PMM_PMLEN_0;
-	} else if (pmlen <= PMLEN_7 && have_user_pmlen_7) {
+	} else if (pmlen <= PMLEN_7 && riscv_have_user_pmlen_7) {
 		pmlen = PMLEN_7;
 		pmm = ENVCFG_PMM_PMLEN_7;
-	} else if (pmlen <= PMLEN_16 && have_user_pmlen_16) {
+	} else if (pmlen <= PMLEN_16 && riscv_have_user_pmlen_16) {
 		pmlen = PMLEN_16;
 		pmm = ENVCFG_PMM_PMLEN_16;
 	} else {
@@ -407,8 +407,8 @@ static int __init tagged_addr_init(void)
 	 * Assume the supported PMLEN values are the same on all harts.
 	 */
 	csr_clear(CSR_ENVCFG, ENVCFG_PMM);
-	have_user_pmlen_7 = try_to_set_pmm(ENVCFG_PMM_PMLEN_7);
-	have_user_pmlen_16 = try_to_set_pmm(ENVCFG_PMM_PMLEN_16);
+	riscv_have_user_pmlen_7 = try_to_set_pmm(ENVCFG_PMM_PMLEN_7);
+	riscv_have_user_pmlen_16 = try_to_set_pmm(ENVCFG_PMM_PMLEN_16);
 
 	if (!register_sysctl("abi", tagged_addr_sysctl_table))
 		return -EINVAL;
