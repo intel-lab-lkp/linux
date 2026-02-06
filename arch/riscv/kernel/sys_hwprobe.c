@@ -23,6 +23,7 @@
 #include <asm/vendor_extensions/thead_hwprobe.h>
 #include <vdso/vsyscall.h>
 
+extern bool riscv_have_user_pmlen_7;
 
 #define EXT_KEY(isa_arg, ext, pv, missing)					\
 	do {										\
@@ -222,6 +223,75 @@ static bool hwprobe_ext0_has(const struct cpumask *cpus, u64 ext)
 	return (pair.value & ext);
 }
 
+#define HWPROBE_EXT0_RVA23U64 (					\
+	/* IMA is always supported */				\
+	RISCV_HWPROBE_IMA_FD				|	\
+	RISCV_HWPROBE_IMA_C				|	\
+	/* B is Zba, Zbb and Zbs */				\
+	RISCV_HWPROBE_EXT_ZBA				|	\
+	RISCV_HWPROBE_EXT_ZBB				|	\
+	RISCV_HWPROBE_EXT_ZBS				|	\
+	/* ZICSR is always supported */				\
+	RISCV_HWPROBE_EXT_ZICNTR			|	\
+	RISCV_HWPROBE_EXT_ZIHPM				|	\
+	/* ZICCIF is in EXT1 */					\
+	/* ZICCRSE is in EXT1 */				\
+	/* ZICCAMOA is in EXT1 */				\
+	RISCV_HWPROBE_EXT_ZICCLSM			|	\
+	/* ZA64RS is in EXT1 */					\
+	RISCV_HWPROBE_EXT_ZIHINTPAUSE			|	\
+	/* ZIC64B (check block sizes are 64b) */		\
+	RISCV_HWPROBE_EXT_ZICBOM			|	\
+	RISCV_HWPROBE_EXT_ZICBOP			|	\
+	RISCV_HWPROBE_EXT_ZICBOZ			|	\
+	RISCV_HWPROBE_EXT_ZFHMIN			|	\
+	RISCV_HWPROBE_EXT_ZKT				|	\
+	RISCV_HWPROBE_IMA_V				|	\
+	RISCV_HWPROBE_EXT_ZVFHMIN			|	\
+	RISCV_HWPROBE_EXT_ZVBB				|	\
+	RISCV_HWPROBE_EXT_ZVKT				|	\
+	RISCV_HWPROBE_EXT_ZIHINTNTL			|	\
+	RISCV_HWPROBE_EXT_ZICOND			|	\
+	RISCV_HWPROBE_EXT_ZIMOP				|	\
+	RISCV_HWPROBE_EXT_ZCMOP				|	\
+	RISCV_HWPROBE_EXT_ZCB				|	\
+	RISCV_HWPROBE_EXT_ZFA				|	\
+	RISCV_HWPROBE_EXT_ZAWRS				|	\
+	RISCV_HWPROBE_EXT_SUPM /* (check PMLEN=7 support) */	\
+)
+
+#define HWPROBE_EXT1_RVA23U64 (					\
+	RISCV_HWPROBE_EXT_ZICCIF			|	\
+	RISCV_HWPROBE_EXT_ZICCRSE			|	\
+	RISCV_HWPROBE_EXT_ZICCAMOA			|	\
+	RISCV_HWPROBE_EXT_ZA64RS				\
+)
+
+static bool hwprobe_has_rva23u64(const struct cpumask *cpus)
+{
+	struct riscv_hwprobe pair;
+
+	if (!IS_ENABLED(CONFIG_64BIT))
+		return false;
+
+	/* Additional mandates for Zic64b and Supm */
+	if (riscv_cbom_block_size != 64 ||
+	    riscv_cbop_block_size != 64 ||
+	    riscv_cboz_block_size != 64 ||
+	    !riscv_have_user_pmlen_7)
+		return false;
+
+	hwprobe_isa_ext0(&pair, cpus);
+	if ((pair.value & HWPROBE_EXT0_RVA23U64) != HWPROBE_EXT0_RVA23U64)
+		return false;
+
+	hwprobe_isa_ext1(&pair, cpus);
+	if ((pair.value & HWPROBE_EXT1_RVA23U64) != HWPROBE_EXT1_RVA23U64)
+		return false;
+
+	return true;
+}
+
 #if defined(CONFIG_RISCV_PROBE_UNALIGNED_ACCESS)
 static u64 hwprobe_misaligned(const struct cpumask *cpus)
 {
@@ -312,6 +382,8 @@ static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 	 */
 	case RISCV_HWPROBE_KEY_BASE_BEHAVIOR:
 		pair->value = RISCV_HWPROBE_BASE_BEHAVIOR_IMA;
+		if (hwprobe_has_rva23u64(cpus))
+			pair->value |= RISCV_HWPROBE_BASE_BEHAVIOR_RVA23U64;
 		break;
 
 	case RISCV_HWPROBE_KEY_IMA_EXT_0:
