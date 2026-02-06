@@ -77,6 +77,7 @@
 #define PCI_ENDPOINT_TEST_FLAGS			0x2c
 
 #define FLAG_USE_DMA				BIT(0)
+#define FLAG_DB_EMBEDDED			BIT(1)
 
 #define PCI_ENDPOINT_TEST_CAPS			0x30
 #define CAP_UNALIGNED_ACCESS			BIT(0)
@@ -1050,13 +1051,15 @@ static int pci_endpoint_test_set_irq(struct pci_endpoint_test *test,
 	return 0;
 }
 
-static int pci_endpoint_test_doorbell(struct pci_endpoint_test *test)
+static int pci_endpoint_test_doorbell(struct pci_endpoint_test *test,
+				      unsigned long arg)
 {
 	struct pci_dev *pdev = test->pdev;
 	struct device *dev = &pdev->dev;
 	int irq_type = test->irq_type;
 	enum pci_barno bar;
 	u32 data, status;
+	u32 flags = 0;
 	u32 addr;
 	int left;
 
@@ -1066,8 +1069,12 @@ static int pci_endpoint_test_doorbell(struct pci_endpoint_test *test)
 		return -EINVAL;
 	}
 
+	if (arg)
+		flags |= FLAG_DB_EMBEDDED;
+
 	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_IRQ_TYPE, irq_type);
 	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_IRQ_NUMBER, 1);
+	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_FLAGS, flags);
 	pci_endpoint_test_writel(test, PCI_ENDPOINT_TEST_COMMAND,
 				 COMMAND_ENABLE_DOORBELL);
 
@@ -1173,7 +1180,7 @@ static long pci_endpoint_test_ioctl(struct file *file, unsigned int cmd,
 		ret = pci_endpoint_test_clear_irq(test);
 		break;
 	case PCITEST_DOORBELL:
-		ret = pci_endpoint_test_doorbell(test);
+		ret = pci_endpoint_test_doorbell(test, arg);
 		break;
 	}
 
