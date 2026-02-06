@@ -174,10 +174,11 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 		return ERR_PTR(err);
 
 	err = wait_event_interruptible_timeout(hdev->req_wait_q,
-					       hdev->req_status != HCI_REQ_PEND,
+					       hdev->req_status != HCI_REQ_PEND ||
+					       hci_dev_test_flag(hdev, HCI_UNREGISTER),
 					       timeout);
 
-	if (err == -ERESTARTSYS)
+	if (err == -ERESTARTSYS || hci_dev_test_flag(hdev, HCI_UNREGISTER))
 		return ERR_PTR(-EINTR);
 
 	switch (hdev->req_status) {
@@ -6315,6 +6316,7 @@ static int hci_resume_scan_sync(struct hci_dev *hdev)
  */
 int hci_resume_sync(struct hci_dev *hdev)
 {
+	int err;
 	/* If not marked as suspended there nothing to do */
 	if (!hdev->suspended)
 		return 0;
@@ -6322,10 +6324,14 @@ int hci_resume_sync(struct hci_dev *hdev)
 	hdev->suspended = false;
 
 	/* Restore event mask */
-	hci_set_event_mask_sync(hdev);
+	err = hci_set_event_mask_sync(hdev);
+	if (err && hci_dev_test_flag(hdev, HCI_UNREGISTER))
+		return err;
 
 	/* Clear any event filters and restore scan state */
-	hci_clear_event_filter_sync(hdev);
+	err = hci_clear_event_filter_sync(hdev);
+	if (err && hci_dev_test_flag(hdev, HCI_UNREGISTER))
+		return err;
 
 	/* Resume scanning */
 	hci_resume_scan_sync(hdev);
@@ -6334,10 +6340,14 @@ int hci_resume_sync(struct hci_dev *hdev)
 	hci_resume_monitor_sync(hdev);
 
 	/* Resume other advertisements */
-	hci_resume_advertising_sync(hdev);
+	err = hci_resume_advertising_sync(hdev);
+	if (err && hci_dev_test_flag(hdev, HCI_UNREGISTER))
+		return err;
 
 	/* Resume discovery */
-	hci_resume_discovery_sync(hdev);
+	err = hci_resume_discovery_sync(hdev);
+	if (err && hci_dev_test_flag(hdev, HCI_UNREGISTER))
+		return err;
 
 	return 0;
 }
