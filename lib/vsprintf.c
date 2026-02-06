@@ -1088,7 +1088,7 @@ char *resource_string(char *buf, char *end, struct resource *res,
 		.base = 16,
 		.field_width = 2,
 		.precision = -1,
-		.flags = SMALL | ZEROPAD,
+		.flags = SPECIAL | SMALL | ZEROPAD,
 	};
 	static const struct printf_spec str_spec = {
 		.field_width = -1,
