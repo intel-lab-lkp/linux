@@ -1057,22 +1057,30 @@ static inline void rcu_read_unlock_migrate(void)
 /**
  * kfree_rcu() - kfree an object after a grace period.
  * @ptr: pointer to kfree for double-argument invocations.
- * @rhf: the name of the struct rcu_head within the type of @ptr.
+ * @rf: the name of the struct rcu_head or struct rcu_ptr within the type of @ptr.
  *
  * Many rcu callbacks functions just call kfree() on the base structure.
  * These functions are trivial, but their size adds up, and furthermore
  * when they are used in a kernel module, that module must invoke the
  * high-latency rcu_barrier() function at module-unload time.
+ * The kfree_rcu() function handles this issue by batching.
  *
- * The kfree_rcu() function handles this issue. In order to have a universal
- * callback function handling different offsets of rcu_head, the callback needs
- * to determine the starting address of the freed object, which can be a large
- * kmalloc or vmalloc allocation. To allow simply aligning the pointer down to
- * page boundary for those, only offsets up to 4095 bytes can be accommodated.
- * If the offset is larger than 4095 bytes, a compile-time error will
- * be generated in kvfree_rcu_arg_2(). If this error is triggered, you can
- * either fall back to use of call_rcu() or rearrange the structure to
- * position the rcu_head structure into the first 4096 bytes.
+ * Typically, struct rcu_head is used to process RCU callbacks, but it requires
+ * two pointers. However, since kfree_rcu() uses kfree() as the callback
+ * function, it can process callbacks with struct rcu_ptr, which is only
+ * one pointer in size (unless !CONFIG_KVFREE_RCU_BATCHED).
+ *
+ * The type of @rf can be either struct rcu_head or struct rcu_ptr, and when
+ * possible, it is recommended to use struct rcu_ptr due to its smaller size.
+ *
+ * In order to have a universal callback function handling different offsets
+ * of @rf, the callback needs to determine the starting address of the freed
+ * object, which can be a large kmalloc or vmalloc allocation. To allow simply
+ * aligning the pointer down to page boundary for those, only offsets up to
+ * 4095 bytes can be accommodated. If the offset is larger than 4095 bytes,
+ * a compile-time error will be generated in kvfree_rcu_arg_2().
+ * If this error is triggered, you can either fall back to use of call_rcu()
+ * or rearrange the structure to position @rf into the first 4096 bytes.
  *
  * The object to be freed can be allocated either by kmalloc() or
  * kmem_cache_alloc().
@@ -1082,8 +1090,8 @@ static inline void rcu_read_unlock_migrate(void)
  * The BUILD_BUG_ON check must not involve any function calls, hence the
  * checks are done in macros here.
  */
-#define kfree_rcu(ptr, rhf) kvfree_rcu_arg_2(ptr, rhf)
-#define kvfree_rcu(ptr, rhf) kvfree_rcu_arg_2(ptr, rhf)
+#define kfree_rcu(ptr, rf) kvfree_rcu_arg_2(ptr, rf)
+#define kvfree_rcu(ptr, rf) kvfree_rcu_arg_2(ptr, rf)
 
 /**
  * kfree_rcu_mightsleep() - kfree an object after a grace period.
@@ -1105,22 +1113,37 @@ static inline void rcu_read_unlock_migrate(void)
 #define kfree_rcu_mightsleep(ptr) kvfree_rcu_arg_1(ptr)
 #define kvfree_rcu_mightsleep(ptr) kvfree_rcu_arg_1(ptr)
 
-/*
- * In mm/slab_common.c, no suitable header to include here.
- */
-void kvfree_call_rcu(struct rcu_head *head, void *ptr);
+
+#ifdef CONFIG_KVFREE_RCU_BATCHED
+void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr);
+#define kvfree_call_rcu(head, ptr) \
+	_Generic((head), \
+		struct rcu_head *: kvfree_call_rcu_ptr,		\
+		struct rcu_ptr *: kvfree_call_rcu_ptr,		\
+		void *: kvfree_call_rcu_ptr			\
+	)((struct rcu_ptr *)(head), (ptr))
+#else
+void kvfree_call_rcu_head(struct rcu_head *head, void *ptr);
+static_assert(sizeof(struct rcu_head) == sizeof(struct rcu_ptr));
+#define kvfree_call_rcu(head, ptr) \
+	_Generic((head), \
+		struct rcu_head *: kvfree_call_rcu_head,	\
+		struct rcu_ptr *: kvfree_call_rcu_head,		\
+		void *: kvfree_call_rcu_head			\
+	)((struct rcu_head *)(head), (ptr))
+#endif
 
 /*
  * The BUILD_BUG_ON() makes sure the rcu_head offset can be handled. See the
  * comment of kfree_rcu() for details.
  */
-#define kvfree_rcu_arg_2(ptr, rhf)					\
+#define kvfree_rcu_arg_2(ptr, rf)					\
 do {									\
 	typeof (ptr) ___p = (ptr);					\
 									\
 	if (___p) {							\
-		BUILD_BUG_ON(offsetof(typeof(*(ptr)), rhf) >= 4096);	\
-		kvfree_call_rcu(&((___p)->rhf), (void *) (___p));	\
+		BUILD_BUG_ON(offsetof(typeof(*(ptr)), rf) >= 4096);	\
+		kvfree_call_rcu(&((___p)->rf), (void *) (___p));	\
 	}								\
 } while (0)
 

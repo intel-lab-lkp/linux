@@ -1265,7 +1265,7 @@ EXPORT_TRACEPOINT_SYMBOL(kmem_cache_free);
 
 #ifndef CONFIG_KVFREE_RCU_BATCHED
 
-void kvfree_call_rcu(struct rcu_head *head, void *ptr)
+void kvfree_call_rcu_head(struct rcu_head *head, void *ptr)
 {
 	if (head) {
 		kasan_record_aux_stack(ptr);
@@ -1278,7 +1278,7 @@ void kvfree_call_rcu(struct rcu_head *head, void *ptr)
 	synchronize_rcu();
 	kvfree(ptr);
 }
-EXPORT_SYMBOL_GPL(kvfree_call_rcu);
+EXPORT_SYMBOL_GPL(kvfree_call_rcu_head);
 
 void __init kvfree_rcu_init(void)
 {
@@ -1346,7 +1346,7 @@ struct kvfree_rcu_bulk_data {
 
 struct kfree_rcu_cpu_work {
 	struct rcu_work rcu_work;
-	struct rcu_head *head_free;
+	struct rcu_ptr *head_free;
 	struct rcu_gp_oldstate head_free_gp_snap;
 	struct list_head bulk_head_free[FREE_N_CHANNELS];
 	struct kfree_rcu_cpu *krcp;
@@ -1381,8 +1381,7 @@ struct kfree_rcu_cpu_work {
  */
 struct kfree_rcu_cpu {
 	// Objects queued on a linked list
-	// through their rcu_head structures.
-	struct rcu_head *head;
+	struct rcu_ptr *head;
 	unsigned long head_gp_snap;
 	atomic_t head_count;
 
@@ -1523,18 +1522,28 @@ kvfree_rcu_bulk(struct kfree_rcu_cpu *krcp,
 }
 
 static void
-kvfree_rcu_list(struct rcu_head *head)
+kvfree_rcu_list(struct rcu_ptr *head)
 {
-	struct rcu_head *next;
+	struct rcu_ptr *next;
 
 	for (; head; head = next) {
-		void *ptr = (void *) head->func;
-		unsigned long offset = (void *) head - ptr;
+		void *ptr;
+		unsigned long offset;
+		struct slab *slab;
+
+		slab = virt_to_slab(head);
+		if (is_vmalloc_addr(head) || !slab)
+			ptr = (void *)PAGE_ALIGN_DOWN((unsigned long)head);
+		else
+			ptr = nearest_obj(slab->slab_cache, slab, head);
+		offset = (void *)head - ptr;
 
 		next = head->next;
 		debug_rcu_head_unqueue((struct rcu_head *)ptr);
 		rcu_lock_acquire(&rcu_callback_map);
-		trace_rcu_invoke_kvfree_callback("slab", head, offset);
+		trace_rcu_invoke_kvfree_callback("slab",
+						(struct rcu_head *)head,
+						offset);
 
 		kvfree(ptr);
 
@@ -1552,7 +1561,7 @@ static void kfree_rcu_work(struct work_struct *work)
 	unsigned long flags;
 	struct kvfree_rcu_bulk_data *bnode, *n;
 	struct list_head bulk_head[FREE_N_CHANNELS];
-	struct rcu_head *head;
+	struct rcu_ptr *head;
 	struct kfree_rcu_cpu *krcp;
 	struct kfree_rcu_cpu_work *krwp;
 	struct rcu_gp_oldstate head_gp_snap;
@@ -1675,7 +1684,7 @@ kvfree_rcu_drain_ready(struct kfree_rcu_cpu *krcp)
 {
 	struct list_head bulk_ready[FREE_N_CHANNELS];
 	struct kvfree_rcu_bulk_data *bnode, *n;
-	struct rcu_head *head_ready = NULL;
+	struct rcu_ptr *head_ready = NULL;
 	unsigned long flags;
 	int i;
 
@@ -1938,7 +1947,7 @@ void __init kfree_rcu_scheduler_running(void)
  * be free'd in workqueue context. This allows us to: batch requests together to
  * reduce the number of grace periods during heavy kfree_rcu()/kvfree_rcu() load.
  */
-void kvfree_call_rcu(struct rcu_head *head, void *ptr)
+void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
 {
 	unsigned long flags;
 	struct kfree_rcu_cpu *krcp;
@@ -1960,7 +1969,7 @@ void kvfree_call_rcu(struct rcu_head *head, void *ptr)
 	// Queue the object but don't yet schedule the batch.
 	if (debug_rcu_head_queue(ptr)) {
 		// Probable double kfree_rcu(), just leak.
-		WARN_ONCE(1, "%s(): Double-freed call. rcu_head %p\n",
+		WARN_ONCE(1, "%s(): Double-freed call. rcu_ptr %p\n",
 			  __func__, head);
 
 		// Mark as success and leave.
@@ -1976,7 +1985,6 @@ void kvfree_call_rcu(struct rcu_head *head, void *ptr)
 			// Inline if kvfree_rcu(one_arg) call.
 			goto unlock_return;
 
-		head->func = ptr;
 		head->next = krcp->head;
 		WRITE_ONCE(krcp->head, head);
 		atomic_inc(&krcp->head_count);
@@ -2012,7 +2020,7 @@ unlock_return:
 		kvfree(ptr);
 	}
 }
-EXPORT_SYMBOL_GPL(kvfree_call_rcu);
+EXPORT_SYMBOL_GPL(kvfree_call_rcu_ptr);
 
 static inline void __kvfree_rcu_barrier(void)
 {
