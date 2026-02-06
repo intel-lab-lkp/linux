@@ -362,8 +362,8 @@ pvr_build_firmware_filename(struct pvr_device *pvr_dev, const char *base,
 {
 	struct pvr_gpu_id *gpu_id = &pvr_dev->gpu_id;
 
-	return kasprintf(GFP_KERNEL, "%s_%d.%d.%d.%d_v%d.fw", base, gpu_id->b,
-			 gpu_id->v, gpu_id->n, gpu_id->c, major);
+	return kasprintf(GFP_KERNEL, "%s_" PVR_GPU_ID_FMT "_v%d.fw", base,
+			 PVR_GPU_ID_FMT_ARGS(gpu_id), major);
 }
 
 static void
