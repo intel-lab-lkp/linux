@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/ti,omap3-smartreflex-core.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments SmartReflex module
+
+maintainers:
+  - Tony Lindgren <tony@atomide.com>
+
+description:
+  Texas Instruments SmartReflex is an on-chip adaptive power management
+  technology integrated into TI's OMAP and other SoCs. It dynamically
+  adjusts voltage and frequency for different chip domains in real time
+  to compensate for process, voltage, and temperature (PVT) variations.
+  Dedicated hardware sensors and control logic continuously monitor
+  conditions and apply the lowest safe voltage for the required performance
+  level.
+
+properties:
+  compatible:
+    enum:
+      - ti,omap3-smartreflex-core
+      - ti,omap3-smartreflex-mpu-iva
+      - ti,omap4-smartreflex-core
+      - ti,omap4-smartreflex-mpu
+      - ti,omap4-smartreflex-iva
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  ti,hwmods:
+    $ref: /schemas/types.yaml#/definitions/string
+    deprecated: true
+    description:
+      It was required by the OMAP interconnect/PRCM code to automatically
+      initialize hardware modules using TI's internal database.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    smartreflex@4a0db000 {
+        compatible = "ti,omap4-smartreflex-iva";
+        reg = <0x4a0db000 0x80>;
+        interrupts = <GIC_SPI 102 IRQ_TYPE_LEVEL_HIGH>;
+    };
+...
