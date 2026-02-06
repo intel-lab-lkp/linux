@@ -180,7 +180,6 @@ pub(crate) struct FbLayout {
     pub(crate) heap: FbRange,
     pub(crate) vf_partition_count: u8,
     /// Total reserved size (heap + PMU reserved), aligned to 2MB.
-    #[expect(unused)]
     pub(crate) total_reserved_size: u32,
 }
 
