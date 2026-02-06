@@ -241,6 +241,9 @@ static ssize_t housekeeping_store(struct kobject *kobject,
 	housekeeping.flags |= BIT(type);
 	static_branch_enable(&housekeeping_overridden);
 	
+	if (type == HK_TYPE_TICK || type == HK_TYPE_TIMER || type == HK_TYPE_RCU)
+		sched_tick_offload_init();
+
 	housekeeping_update_notify(type, new_mask);
 	
 	err = count;
