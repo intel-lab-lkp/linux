@@ -433,15 +433,41 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 	return written;
 }
 
-static int __nolibc_fprintf_cb(void *stream, const char *buf, size_t size)
+struct __nolibc_fprintf_cb_state {
+	FILE *stream;
+	unsigned int buf_offset;
+	char buf[128];
+};
+
+static int __nolibc_fprintf_cb(void *v_state, const char *buf, size_t size)
 {
-	return size ? _fwrite(buf, size, stream) : 0;
+	struct __nolibc_fprintf_cb_state *state = v_state;
+	unsigned int off = state->buf_offset;
+
+	if (off + size > sizeof(state->buf) || buf == NULL) {
+		state->buf_offset = 0;
+		if (off && _fwrite(state->buf, off, state->stream))
+			return -1;
+		if (size > sizeof(state->buf))
+			return _fwrite(buf, size, state->stream);
+		off = 0;
+	}
+
+	if (size) {
+		state->buf_offset = off + size;
+		memcpy(state->buf + off, buf, size);
+	}
+	return 0;
 }
 
 static __attribute__((unused, format(printf, 2, 0)))
 int vfprintf(FILE *stream, const char *fmt, va_list args)
 {
-	return __nolibc_printf(__nolibc_fprintf_cb, stream, fmt, args);
+	struct __nolibc_fprintf_cb_state state;
+
+	state.stream = stream;
+	state.buf_offset = 0;
+	return __nolibc_printf(__nolibc_fprintf_cb, &state, fmt, args);
 }
 
 static __attribute__((unused, format(printf, 1, 0)))
