@@ -365,6 +365,13 @@ static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 		goto copy_out;
 	}
 
+	/*
+	 * Do a filesystem cred ptrace check to verify access
+	 * to the task's info.
+	 */
+	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS))
+		return -EACCES;
+
 	c = get_task_cred(task);
 	if (!c)
 		return -ESRCH;
