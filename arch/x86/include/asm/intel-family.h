@@ -3,6 +3,13 @@
 #define _ASM_X86_INTEL_FAMILY_H
 
 /*
+ * Note: despite being in arch/x86, the PECI driver(s) use
+ * this header in arch-independent drivers. Do not use
+ * any x86-specific headers here:
+ */
+#include <asm-generic/x86-vfm.h>
+
+/*
  * "Big Core" Processors (Branded as Core, Xeon, etc...)
  *
  * While adding a new CPUID for a new microarchitecture, add a new
