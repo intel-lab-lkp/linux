@@ -501,15 +501,21 @@ int simple_util_hw_params(struct snd_pcm_substream *substream,
 				goto end;
 		}
 
-		for_each_rtd_codec_dais(rtd, i, sdai) {
-			pdai = simple_props_to_dai_codec(props, i);
+		/*
+		 * When mclk-fs is used, some CPU DAIs may change the
+		 * actual MCLK rate in set_sysclk() (e.g. via clk_set_rate()).
+		 * Configure CPU DAI first so codec clocking/FLL sees
+		 * the final MCLK rate.
+		 */
+		for_each_rtd_cpu_dais(rtd, i, sdai) {
+			pdai = simple_props_to_dai_cpu(props, i);
 			ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
 			if (ret && ret != -ENOTSUPP)
 				goto end;
 		}
 
-		for_each_rtd_cpu_dais(rtd, i, sdai) {
-			pdai = simple_props_to_dai_cpu(props, i);
+		for_each_rtd_codec_dais(rtd, i, sdai) {
+			pdai = simple_props_to_dai_codec(props, i);
 			ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
 			if (ret && ret != -ENOTSUPP)
 				goto end;
