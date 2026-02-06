@@ -6,6 +6,7 @@
 
 #include "drm.h"
 
+#include <linux/bits.h>
 #include <linux/const.h>
 #include <linux/types.h>
 
@@ -113,6 +114,11 @@ struct drm_pvr_obj_array {
  * DOC: PowerVR IOCTL DEV_QUERY interface
  */
 
+#define DRM_PVR_BVNC_B __GENMASK_ULL(63, 48)
+#define DRM_PVR_BVNC_V __GENMASK_ULL(47, 32)
+#define DRM_PVR_BVNC_N __GENMASK_ULL(31, 16)
+#define DRM_PVR_BVNC_C __GENMASK_ULL(15, 0)
+
 /**
  * struct drm_pvr_dev_query_gpu_info - Container used to fetch information about
  * the graphics processor.
@@ -125,13 +131,7 @@ struct drm_pvr_dev_query_gpu_info {
 	 * @gpu_id: GPU identifier.
 	 *
 	 * For all currently supported GPUs this is the BVNC encoded as a 64-bit
-	 * value as follows:
-	 *
-	 *    +--------+--------+--------+-------+
-	 *    | 63..48 | 47..32 | 31..16 | 15..0 |
-	 *    +========+========+========+=======+
-	 *    | B      | V      | N      | C     |
-	 *    +--------+--------+--------+-------+
+	 * value using the DRM_PVR_BVNC_* bitmasks.
 	 */
 	__u64 gpu_id;
 
