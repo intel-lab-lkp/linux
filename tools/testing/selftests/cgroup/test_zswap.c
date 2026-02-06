@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <signal.h>
+#include <fcntl.h>
 #include <sys/sysinfo.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -574,6 +575,100 @@ out:
 	return ret;
 }
 
+static int allocate_random_and_wait(const char *cgroup, void *arg)
+{
+	size_t size = (size_t)arg;
+	char *mem;
+	int fd;
+	ssize_t n;
+
+	mem = malloc(size);
+	if (!mem)
+		return -1;
+
+	/* Fill with random data from /dev/urandom - incompressible */
+	fd = open("/dev/urandom", O_RDONLY);
+	if (fd < 0) {
+		free(mem);
+		return -1;
+	}
+
+	for (size_t i = 0; i < size; ) {
+		n = read(fd, mem + i, size - i);
+		if (n <= 0)
+			break;
+		i += n;
+	}
+	close(fd);
+
+	/* Touch all pages to ensure they're faulted in */
+	for (size_t i = 0; i < size; i += 4096)
+		mem[i] = mem[i];
+
+	/* Keep memory alive for parent to reclaim and check stats */
+	pause();
+	free(mem);
+	return 0;
+}
+
+static long get_zswap_incomp(const char *cgroup)
+{
+	return cg_read_key_long(cgroup, "memory.stat", "zswap_incomp ");
+}
+
+/*
+ * Test that incompressible pages (random data) are tracked by zswap_incomp.
+ *
+ * Since incompressible pages stored in zswap are charged at full PAGE_SIZE
+ * (no memory savings), we cannot rely on memory.max pressure to push them
+ * into zswap. Instead, we allocate random data within memory.max, then use
+ * memory.reclaim to proactively push pages into zswap while checking the stat
+ * before the child exits (zswap_incomp is a gauge that decreases on free).
+ */
+static int test_zswap_incompressible(const char *root)
+{
+	int ret = KSFT_FAIL;
+	char *test_group;
+	long zswap_incomp;
+	pid_t child_pid;
+	int child_status;
+
+	test_group = cg_name(root, "zswap_incompressible_test");
+	if (!test_group)
+		goto out;
+	if (cg_create(test_group))
+		goto out;
+	if (cg_write(test_group, "memory.max", "32M"))
+		goto out;
+
+	child_pid = cg_run_nowait(test_group, allocate_random_and_wait,
+				  (void *)MB(4));
+	if (child_pid < 0)
+		goto out;
+
+	/* Wait for child to finish allocating */
+	usleep(500000);
+
+	/* Proactively reclaim to push random pages into zswap */
+	cg_write_numeric(test_group, "memory.reclaim", MB(4));
+
+	zswap_incomp = get_zswap_incomp(test_group);
+	if (zswap_incomp <= 0) {
+		ksft_print_msg("zswap_incomp not increased: %ld\n", zswap_incomp);
+		goto out_kill;
+	}
+
+	ret = KSFT_PASS;
+
+out_kill:
+	kill(child_pid, SIGTERM);
+	waitpid(child_pid, &child_status, 0);
+out:
+	cg_destroy(test_group);
+	free(test_group);
+	return ret;
+}
+
 #define T(x) { x, #x }
 struct zswap_test {
 	int (*fn)(const char *root);
@@ -586,6 +681,7 @@ struct zswap_test {
 	T(test_zswap_writeback_disabled),
 	T(test_no_kmem_bypass),
 	T(test_no_invasive_cgroup_shrink),
+	T(test_zswap_incompressible),
 };
 #undef T
 
