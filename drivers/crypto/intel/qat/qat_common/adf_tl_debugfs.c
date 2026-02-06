@@ -77,32 +77,24 @@ static int tl_collect_values_u64(struct adf_telemetry *telemetry,
  * @len: Number of elements.
  *
  * This algorithm computes average of an array without running into overflow.
+ * (Provided len is less than 2 << 31.)
  *
  * Return: average of values.
  */
-#define avg_array(array, len) (				\
-{							\
-	typeof(&(array)[0]) _array = (array);		\
-	__unqual_scalar_typeof(_array[0]) _x = 0;	\
-	__unqual_scalar_typeof(_array[0]) _y = 0;	\
-	__unqual_scalar_typeof(_array[0]) _a, _b;	\
-	typeof(len) _len = (len);			\
-	size_t _i;					\
-							\
-	for (_i = 0; _i < _len; _i++) {			\
-		_a = _array[_i];			\
-		_b = do_div(_a, _len);			\
-		_x += _a;				\
-		if (_y >= _len - _b) {			\
-			_x++;				\
-			_y -= _len - _b;		\
-		} else {				\
-			_y += _b;			\
-		}					\
-	}						\
-	do_div(_y, _len);				\
-	(_x + _y);					\
-})
+static u64 avg_array(const u64 *array, size_t len)
+{
+	u64 sum_hi = 0, sum_lo = 0;
+	size_t i;
+
+	for (i = 0; i < len; i++) {
+		sum_hi += array[i] >> 32;
+		sum_lo += (u32)array[i];
+	}
+
+	sum_lo += (u64)do_div(sum_hi, len) << 32;
+
+	return (sum_hi << 32) + div_u64(sum_lo, len);
+}
 
 /* Calculation function for simple counter. */
 static int tl_calc_count(struct adf_telemetry *telemetry,
