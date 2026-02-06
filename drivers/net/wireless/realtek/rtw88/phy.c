@@ -2210,8 +2210,8 @@ static s8 rtw_phy_get_tx_power_limit(struct rtw_dev *rtwdev, u8 band,
 	return power_limit;
 
 err:
-	WARN(1, "invalid arguments, band=%d, bw=%d, path=%d, rate=%d, ch=%d\n",
-	     band, bw, rf_path, rate, channel);
+	WARN_ONCE(1, "invalid arguments, band=%d, bw=%d, path=%d, rate=%d, ch=%d\n",
+		  band, bw, rf_path, rate, channel);
 	return (s8)rtwdev->chip->max_power_index;
 }
 
