@@ -231,16 +231,6 @@ int apb_ctrl_coldboot(struct device *dev)
 	return coldboot_seq(to_platform_device(dev));
 }
 
-int apb_ctrl_fw_flashing(struct device *dev)
-{
-	return fw_flashing_seq(to_platform_device(dev));
-}
-
-int apb_ctrl_standby_boot(struct device *dev)
-{
-	return standby_boot_seq(to_platform_device(dev));
-}
-
 void apb_ctrl_poweroff(struct device *dev)
 {
 	poweroff_seq(to_platform_device(dev));

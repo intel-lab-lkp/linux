@@ -21,8 +21,6 @@ void __exit arche_apb_exit(void);
 
 /* Operational states for the APB device */
 int apb_ctrl_coldboot(struct device *dev);
-int apb_ctrl_fw_flashing(struct device *dev);
-int apb_ctrl_standby_boot(struct device *dev);
 void apb_ctrl_poweroff(struct device *dev);
 
 #endif	/* __ARCHE_PLATFORM_H */
