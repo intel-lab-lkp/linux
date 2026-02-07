@@ -2206,7 +2206,7 @@ static int atcphy_map_resources(struct platform_device *pdev, struct apple_atcph
 	for (int i = 0; i < ARRAY_SIZE(resources); i++) {
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, resources[i].name);
 		*resources[i].addr = devm_ioremap_resource(&pdev->dev, res);
-		if (IS_ERR(resources[i].addr))
+		if (IS_ERR(*resources[i].addr))
 			return dev_err_probe(atcphy->dev, PTR_ERR(resources[i].addr),
 					     "Unable to map %s regs", resources[i].name);
 
