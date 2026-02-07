@@ -239,7 +239,7 @@ struct ppp_net {
 };
 
 /* Get the PPP protocol number from a skb */
-#define PPP_PROTO(skb)	get_unaligned_be16((skb)->data)
+#define PPP_PROTO(skb)	get_unaligned((__be16 *)(skb)->data)
 
 /* We limit the length of ppp->file.rq to this (arbitrary) value */
 #define PPP_MAX_RQLEN	32
@@ -312,7 +312,26 @@ static inline struct ppp_net *ppp_pernet(struct net *net)
 }
 
 /* Translates a PPP protocol number to a NP index (NP == network protocol) */
-static inline int proto_to_npindex(int proto)
+static __always_inline int proto_to_npindex(__be16 proto)
+{
+	switch (proto) {
+	case htons(PPP_IP):
+		return NP_IP;
+	case htons(PPP_IPV6):
+		return NP_IPV6;
+	case htons(PPP_IPX):
+		return NP_IPX;
+	case htons(PPP_AT):
+		return NP_AT;
+	case htons(PPP_MPLS_UC):
+		return NP_MPLS_UC;
+	case htons(PPP_MPLS_MC):
+		return NP_MPLS_MC;
+	}
+	return -EINVAL;
+}
+
+static __always_inline int proto_to_npindex_user(int proto)
 {
 	switch (proto) {
 	case PPP_IP:
@@ -332,44 +351,44 @@ static inline int proto_to_npindex(int proto)
 }
 
 /* Translates an NP index into a PPP protocol number */
-static const int npindex_to_proto[NUM_NP] = {
-	PPP_IP,
-	PPP_IPV6,
-	PPP_IPX,
-	PPP_AT,
-	PPP_MPLS_UC,
-	PPP_MPLS_MC,
+static const __be16 npindex_to_proto[NUM_NP] = {
+	htons(PPP_IP),
+	htons(PPP_IPV6),
+	htons(PPP_IPX),
+	htons(PPP_AT),
+	htons(PPP_MPLS_UC),
+	htons(PPP_MPLS_MC),
 };
 
 /* Translates an ethertype into an NP index */
-static inline int ethertype_to_npindex(int ethertype)
+static inline int ethertype_to_npindex(__be16 ethertype)
 {
 	switch (ethertype) {
-	case ETH_P_IP:
+	case htons(ETH_P_IP):
 		return NP_IP;
-	case ETH_P_IPV6:
+	case htons(ETH_P_IPV6):
 		return NP_IPV6;
-	case ETH_P_IPX:
+	case htons(ETH_P_IPX):
 		return NP_IPX;
-	case ETH_P_PPPTALK:
-	case ETH_P_ATALK:
+	case htons(ETH_P_PPPTALK):
+	case htons(ETH_P_ATALK):
 		return NP_AT;
-	case ETH_P_MPLS_UC:
+	case htons(ETH_P_MPLS_UC):
 		return NP_MPLS_UC;
-	case ETH_P_MPLS_MC:
+	case htons(ETH_P_MPLS_MC):
 		return NP_MPLS_MC;
 	}
 	return -1;
 }
 
 /* Translates an NP index into an ethertype */
-static const int npindex_to_ethertype[NUM_NP] = {
-	ETH_P_IP,
-	ETH_P_IPV6,
-	ETH_P_IPX,
-	ETH_P_PPPTALK,
-	ETH_P_MPLS_UC,
-	ETH_P_MPLS_MC,
+static const __be16 npindex_to_ethertype[NUM_NP] = {
+	htons(ETH_P_IP),
+	htons(ETH_P_IPV6),
+	htons(ETH_P_IPX),
+	htons(ETH_P_PPPTALK),
+	htons(ETH_P_MPLS_UC),
+	htons(ETH_P_MPLS_MC),
 };
 
 /*
@@ -504,7 +523,7 @@ static bool ppp_check_packet(struct sk_buff *skb, size_t count)
 	/* LCP packets must include LCP header which 4 bytes long:
 	 * 1-byte code, 1-byte identifier, and 2-byte length.
 	 */
-	return get_unaligned_be16(skb->data) != PPP_LCP ||
+	return PPP_PROTO(skb) != htons(PPP_LCP) ||
 		count >= PPP_PROTO_LEN + PPP_LCP_HDRLEN;
 }
 
@@ -914,7 +933,7 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case PPPIOCSNPMODE:
 		if (copy_from_user(&npi, argp, sizeof(npi)))
 			break;
-		err = proto_to_npindex(npi.protocol);
+		err = proto_to_npindex_user(npi.protocol);
 		if (err < 0)
 			break;
 		i = err;
@@ -1451,10 +1470,10 @@ static netdev_tx_t
 ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ppp *ppp = netdev_priv(dev);
-	int npi, proto;
-	unsigned char *pp;
+	__be16 *pp, proto;
+	int npi;
 
-	npi = ethertype_to_npindex(ntohs(skb->protocol));
+	npi = ethertype_to_npindex(skb->protocol);
 	if (npi < 0)
 		goto outf;
 
@@ -1478,7 +1497,7 @@ ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	pp = skb_push(skb, 2);
 	proto = npindex_to_proto[npi];
-	put_unaligned_be16(proto, pp);
+	put_unaligned(proto, pp);
 
 	skb_scrub_packet(skb, !net_eq(ppp->ppp_net, dev_net(dev)));
 	ppp_xmit_process(ppp, skb);
@@ -1764,14 +1783,14 @@ pad_compress_skb(struct ppp *ppp, struct sk_buff *skb)
 static void
 ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 {
-	int proto = PPP_PROTO(skb);
+	__be16 proto = PPP_PROTO(skb);
 	struct sk_buff *new_skb;
 	int len;
 	unsigned char *cp;
 
 	skb->dev = ppp->dev;
 
-	if (proto < 0x8000) {
+	if (!(proto & htons(0x8000))) {
 #ifdef CONFIG_PPP_FILTER
 		/* check if the packet passes the pass and active filters.
 		 * See comment for PPP_FILTER_OUTBOUND_TAG above.
@@ -2324,7 +2343,7 @@ ppp_input(struct ppp_channel *chan, struct sk_buff *skb)
 {
 	struct channel *pch = chan->ppp;
 	struct ppp *ppp;
-	int proto;
+	__be16 proto;
 
 	if (!pch) {
 		kfree_skb(skb);
@@ -2347,7 +2366,8 @@ ppp_input(struct ppp_channel *chan, struct sk_buff *skb)
 	}
 
 	proto = PPP_PROTO(skb);
-	if (!ppp || proto >= 0xc000 || proto == PPP_CCPFRAG) {
+	if (!ppp || (proto & htons(0xc000)) == htons(0xc000) ||
+	    proto == htons(PPP_CCPFRAG)) {
 		/* put it on the channel queue */
 		skb_queue_tail(&pch->file.rq, skb);
 		/* drop old frames if queue too long */
@@ -2399,7 +2419,7 @@ ppp_receive_frame(struct ppp *ppp, struct sk_buff *skb, struct channel *pch)
 		skb_checksum_complete_unset(skb);
 #ifdef CONFIG_PPP_MULTILINK
 		/* XXX do channel-level decompression here */
-		if (PPP_PROTO(skb) == PPP_MP)
+		if (PPP_PROTO(skb) == htons(PPP_MP))
 			ppp_receive_mp_frame(ppp, skb, pch);
 		else
 #endif /* CONFIG_PPP_MULTILINK */
@@ -2422,7 +2442,8 @@ static void
 ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 {
 	struct sk_buff *ns;
-	int proto, len, npi;
+	int len, npi;
+	__be16 proto;
 
 	/*
 	 * Decompress the frame, if compressed.
@@ -2441,7 +2462,7 @@ ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 	 */
 	proto = PPP_PROTO(skb);
 	switch (proto) {
-	case PPP_VJC_COMP:
+	case htons(PPP_VJC_COMP):
 		/* decompress VJ compressed packets */
 		if (!ppp->vj || (ppp->flags & SC_REJ_COMP_TCP))
 			goto err;
@@ -2473,10 +2494,10 @@ ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 			skb_put(skb, len - skb->len);
 		else if (len < skb->len)
 			skb_trim(skb, len);
-		proto = PPP_IP;
+		proto = htons(PPP_IP);
 		break;
 
-	case PPP_VJC_UNCOMP:
+	case htons(PPP_VJC_UNCOMP):
 		if (!ppp->vj || (ppp->flags & SC_REJ_COMP_TCP))
 			goto err;
 
@@ -2490,10 +2511,10 @@ ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 			netdev_err(ppp->dev, "PPP: VJ uncompressed error\n");
 			goto err;
 		}
-		proto = PPP_IP;
+		proto = htons(PPP_IP);
 		break;
 
-	case PPP_CCP:
+	case htons(PPP_CCP):
 		ppp_ccp_peek(ppp, skb, 1);
 		break;
 	}
@@ -2546,7 +2567,7 @@ ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 			/* chop off protocol */
 			skb_pull_rcsum(skb, 2);
 			skb->dev = ppp->dev;
-			skb->protocol = htons(npindex_to_ethertype[npi]);
+			skb->protocol = npindex_to_ethertype[npi];
 			skb_reset_mac_header(skb);
 			skb_scrub_packet(skb, !net_eq(ppp->ppp_net,
 						      dev_net(ppp->dev)));
@@ -2563,7 +2584,7 @@ ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 static struct sk_buff *
 ppp_decompress_frame(struct ppp *ppp, struct sk_buff *skb)
 {
-	int proto = PPP_PROTO(skb);
+	__be16 proto = PPP_PROTO(skb);
 	struct sk_buff *ns;
 	int len;
 
@@ -2573,7 +2594,7 @@ ppp_decompress_frame(struct ppp *ppp, struct sk_buff *skb)
 	if (!pskb_may_pull(skb, skb->len))
 		goto err;
 
-	if (proto == PPP_COMP) {
+	if (proto == htons(PPP_COMP)) {
 		int obuff_size;
 
 		switch(ppp->rcomp->compress_proto) {
