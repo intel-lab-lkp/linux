@@ -632,22 +632,8 @@ static struct device *to_port_host(struct cxl_port *port)
 static void unregister_port(void *_port)
 {
 	struct cxl_port *port = _port;
-	struct cxl_port *parent = parent_port_of(port);
-	struct device *lock_dev;
 
-	/*
-	 * CXL root port's and the first level of ports are unregistered
-	 * under the platform firmware device lock, all other ports are
-	 * unregistered while holding their parent port lock.
-	 */
-	if (!parent)
-		lock_dev = port->uport_dev;
-	else if (is_cxl_root(parent))
-		lock_dev = parent->uport_dev;
-	else
-		lock_dev = &parent->dev;
-
-	device_lock_assert(lock_dev);
+	device_lock_assert(to_port_host(port));
 	port->dead = true;
 	device_unregister(&port->dev);
 }
