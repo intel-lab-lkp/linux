@@ -612,6 +612,23 @@ struct cxl_port *parent_port_of(struct cxl_port *port)
 	return port->parent_dport->port;
 }
 
+static struct device *to_port_host(struct cxl_port *port)
+{
+	struct cxl_port *parent = parent_port_of(port);
+
+	/*
+	 * The host of CXL root port and the first level of ports is
+	 * the platform firmware device, the host of all other ports
+	 * is their parent port.
+	 */
+	if (!parent)
+		return port->uport_dev;
+	else if (is_cxl_root(parent))
+		return parent->uport_dev;
+	else
+		return &parent->dev;
+}
+
 static void unregister_port(void *_port)
 {
 	struct cxl_port *port = _port;
@@ -1790,7 +1807,16 @@ static struct cxl_dport *find_or_add_dport(struct cxl_port *port,
 {
 	struct cxl_dport *dport;
 
-	device_lock_assert(&port->dev);
+	/*
+	 * The port is already visible in CXL hierarchy, but it may still
+	 * be in the process of binding to the CXL port driver at this point.
+	 *
+	 * port creation and driver binding are protected by the port's host
+	 * lock, so acquire the host lock here to ensure the port has completed
+	 * driver binding before proceeding with dport addition.
+	 */
+	guard(device)(to_port_host(port));
+	guard(device)(&port->dev);
 	dport = cxl_find_dport_by_dev(port, dport_dev);
 	if (!dport) {
 		dport = probe_dport(port, dport_dev);
@@ -1857,13 +1883,11 @@ retry:
 			 * RP port enumerated by cxl_acpi without dport will
 			 * have the dport added here.
 			 */
-			scoped_guard(device, &port->dev) {
-				dport = find_or_add_dport(port, dport_dev);
-				if (IS_ERR(dport)) {
-					if (PTR_ERR(dport) == -EAGAIN)
-						goto retry;
-					return PTR_ERR(dport);
-				}
+			dport = find_or_add_dport(port, dport_dev);
+			if (IS_ERR(dport)) {
+				if (PTR_ERR(dport) == -EAGAIN)
+					goto retry;
+				return PTR_ERR(dport);
 			}
 
 			rc = cxl_add_ep(dport, &cxlmd->dev);
