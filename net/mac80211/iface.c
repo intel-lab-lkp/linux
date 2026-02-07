@@ -76,8 +76,9 @@ bool __ieee80211_recalc_txpower(struct ieee80211_link_data *link)
 void ieee80211_recalc_txpower(struct ieee80211_link_data *link,
 			      bool update_bss)
 {
-	if (__ieee80211_recalc_txpower(link) ||
-	    (update_bss && ieee80211_sdata_running(link->sdata)))
+	if (link->sdata->vif.type != NL80211_IFTYPE_MONITOR &&
+	    (__ieee80211_recalc_txpower(link) ||
+	     (update_bss && ieee80211_sdata_running(link->sdata))))
 		ieee80211_link_info_change_notify(link->sdata, link,
 						  BSS_CHANGED_TXPOWER);
 }
