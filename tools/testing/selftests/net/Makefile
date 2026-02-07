@@ -10,6 +10,7 @@ TEST_PROGS := \
 	altnames.sh \
 	amt.sh \
 	arp_ndisc_evict_nocarrier.sh \
+	arp_ndisc_no_invalid_sha_poison.sh \
 	arp_ndisc_untracked_subnets.sh \
 	arp_no_invalid_sha_poision.sh \
 	bareudp.sh \
@@ -171,6 +172,7 @@ TEST_GEN_PROGS := \
 	epoll_busy_poll \
 	icmp_rfc4884 \
 	ipv6_fragmentation \
+	ndisc_send \
 	proc_net_pktgen \
 	reuseaddr_conflict \
 	reuseport_bpf \

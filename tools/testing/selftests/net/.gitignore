@@ -18,6 +18,7 @@ ipv6_flowlabel_mgr
 ipv6_fragmentation
 log.txt
 msg_zerocopy
+ndisc_send
 netlink-dumps
 nettest
 proc_net_pktgen
