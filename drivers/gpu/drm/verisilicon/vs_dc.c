@@ -46,8 +46,8 @@ static int vs_dc_probe(struct platform_device *pdev)
 	struct vs_dc *dc;
 	void __iomem *regs;
 	unsigned int port_count, i;
-	/* pix0/pix1 */
-	char pixclk_name[5];
+	/* pix%u */
+	char pixclk_name[14];
 	int irq, ret;
 
 	if (!dev->of_node) {
