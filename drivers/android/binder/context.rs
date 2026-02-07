@@ -94,6 +94,16 @@ impl Context {
         }
         let mut manager = self.manager.lock();
         manager.all_procs.retain(|p| !Arc::ptr_eq(p, proc));
+
+        // Shrink the vector if it has significant unused capacity.
+        // Only shrink if capacity > 128 to avoid repeated reallocations for small vectors.
+        let len = manager.all_procs.len();
+        let cap = manager.all_procs.capacity();
+        if cap > 128 && len < cap / 2 {
+            // Shrink to current length. Ignore allocation failures since this is just an
+            // optimization; the vector remains valid even if shrinking fails.
+            let _ = manager.all_procs.shrink_to(len, GFP_KERNEL);
+        }
     }
 
     pub(crate) fn set_manager_node(&self, node_ref: NodeRef) -> Result {
