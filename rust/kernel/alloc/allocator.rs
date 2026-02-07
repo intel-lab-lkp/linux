@@ -251,6 +251,54 @@ unsafe impl Allocator for KVmalloc {
     }
 }
 
+/// Marker trait for allocators that support meaningful shrinking.
+///
+/// Shrinking is only meaningful for allocators that can actually reclaim memory. The slab
+/// allocator (`Kmalloc`) uses fixed-size buckets and cannot reclaim memory when shrinking,
+/// so it does not implement this trait.
+///
+/// For `Vmalloc`, shrinking always makes sense since it uses page-granularity allocations.
+/// For `KVmalloc`, shrinking only makes sense if the allocation is backed by vmalloc (checked
+/// at runtime via `is_vmalloc_addr`).
+///
+/// # Note
+///
+/// Currently, shrinking vmalloc allocations requires explicit alloc+copy+free because
+/// `vrealloc` does not support in-place shrinking (see TODO at `mm/vmalloc.c:4316`).
+/// Once `vrealloc` gains this capability, the shrink implementation can be simplified.
+///
+/// # Safety
+///
+/// Implementors must ensure that [`Shrinkable::is_shrinkable`] returns `true` only when
+/// shrinking the allocation would actually reclaim memory.
+pub unsafe trait Shrinkable: Allocator {
+    /// Returns whether shrinking an allocation at the given pointer would reclaim memory.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be a valid pointer to an allocation made by this allocator.
+    unsafe fn is_shrinkable(ptr: NonNull<u8>) -> bool;
+}
+
+// SAFETY: `Vmalloc` always uses vmalloc, which allocates at page granularity. Shrinking a
+// vmalloc allocation by at least one page will reclaim that memory.
+unsafe impl Shrinkable for Vmalloc {
+    #[inline]
+    unsafe fn is_shrinkable(_ptr: NonNull<u8>) -> bool {
+        true
+    }
+}
+
+// SAFETY: `KVmalloc` may use either kmalloc or vmalloc. We check at runtime using
+// `is_vmalloc_addr` to determine if shrinking would be meaningful.
+unsafe impl Shrinkable for KVmalloc {
+    #[inline]
+    unsafe fn is_shrinkable(ptr: NonNull<u8>) -> bool {
+        // SAFETY: `ptr` is a valid pointer by the safety requirements of this function.
+        unsafe { bindings::is_vmalloc_addr(ptr.as_ptr().cast()) }
+    }
+}
+
 #[macros::kunit_tests(rust_allocator)]
 mod tests {
     use super::*;
