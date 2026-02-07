@@ -227,6 +227,7 @@ static inline void enter_guest_mode(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.hflags |= HF_GUEST_MASK;
 	vcpu->stat.guest_mode = 1;
+	kvm_x86_call(nested_transition)(vcpu);
 }
 
 static inline void leave_guest_mode(struct kvm_vcpu *vcpu)
@@ -239,6 +240,7 @@ static inline void leave_guest_mode(struct kvm_vcpu *vcpu)
 	}
 
 	vcpu->stat.guest_mode = 0;
+	kvm_x86_call(nested_transition)(vcpu);
 }
 
 static inline bool is_guest_mode(struct kvm_vcpu *vcpu)

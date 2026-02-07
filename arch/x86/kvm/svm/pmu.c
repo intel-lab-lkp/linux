@@ -171,6 +171,18 @@ static void amd_pmu_set_eventsel_hw(struct kvm_pmc *pmc)
 	pmc->eventsel_hw &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
 }
 
+void amd_pmu_refresh_host_guest_eventsel_hw(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	int i;
+
+	if (pmu->reserved_bits & AMD64_EVENTSEL_HOST_GUEST_MASK)
+		return;
+
+	for (i = 0; i < pmu->nr_arch_gp_counters; i++)
+		amd_pmu_set_eventsel_hw(&pmu->gp_counters[i]);
+}
+
 static int amd_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
