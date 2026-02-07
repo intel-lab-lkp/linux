@@ -175,6 +175,137 @@ struct ctl_table {
 	void *extra2;
 } __randomize_layout;
 
+/* Special marker type to represent NULL data in sysctl entries */
+struct __sysctl_null_type { char __dummy; };
+extern const struct __sysctl_null_type __sysctl_null_marker;
+
+/* Use SYSCTL_NULL to indicate a sysctl entry without associated data */
+#define SYSCTL_NULL (__sysctl_null_marker)
+
+/* Validate NAME is a string literal and return it (fails on non-literals) */
+#define __SYSCTL_PROCNAME(NAME) \
+	("" NAME "")
+
+/* Generate data pointer: NULL for SYSCTL_NULL, &VAR for actual variables */
+#define __SYSCTL_DATA(VAR) \
+	_Generic((VAR), \
+		struct __sysctl_null_type : ((void *)NULL), \
+		default : \
+			((void *)&(VAR)) \
+		)
+
+/* Compute maxlen for NULL entries: use explicit MAXLEN if >0, else 0 */
+#define __SYSCTL_MAXLEN_NULL(MAXLEN) \
+	((MAXLEN) > 0 ? (size_t)(MAXLEN) : (size_t)0)
+
+/* Compute maxlen: use explicit MAXLEN if >0, else sizeof(VAR) */
+#define __SYSCTL_MAXLEN_VAR(VAR, MAXLEN) \
+	((MAXLEN) >= 0 ? (size_t)(MAXLEN) : (size_t)sizeof(VAR))
+
+/* Compute maxlen: auto-detect based on entry type (NULL vs variable) */
+#define __SYSCTL_MAXLEN(VAR, MAXLEN) \
+	_Generic((VAR), \
+		struct __sysctl_null_type : __SYSCTL_MAXLEN_NULL(MAXLEN), \
+		default : \
+			  __SYSCTL_MAXLEN_VAR(VAR, MAXLEN) \
+		)
+
+/* Validate MODE is compatible with umode_t and return it */
+#define __SYSCTL_MODE(MODE) \
+	(0 ? (umode_t)0 : (MODE))
+
+/* Validate HANDLER matches proc_handler signature and return it */
+#define __SYSCTL_PROC_HANDLER(HANDLER) \
+	(0 ? (proc_handler *)0 : (HANDLER))
+
+/* Auto-select appropriate proc_handler based on VAR's type */
+#define __SYSCTL_AUTO_HANDLER(VAR) \
+	_Generic((VAR), \
+		int : (proc_handler *)proc_dointvec, \
+		unsigned int : (proc_handler *)proc_douintvec, \
+		long : (proc_handler *)proc_dointvec, \
+		unsigned long : (proc_handler *)proc_douintvec, \
+		default : \
+			(proc_handler *)NULL \
+		)
+
+/* Auto-select range-checking proc_handler based on VAR's type */
+#define __SYSCTL_AUTO_HANDLER_MINMAX(VAR) \
+	_Generic((VAR), \
+		int : (proc_handler *)proc_dointvec_minmax, \
+		unsigned int : (proc_handler *)proc_douintvec_minmax, \
+		long : (proc_handler *)proc_doulongvec_minmax, \
+		unsigned long : (proc_handler *)proc_doulongvec_minmax, \
+		default : \
+			  (proc_handler *)NULL \
+		)
+
+/* Validate PTR is pointer-compatible and return it as void* */
+#define __SYSCTL_EXTRA(PTR) \
+	(0 ? (void *)0 : (PTR))
+
+/* Initialize a ctl_table entry with all parameters */
+#define __SYSCTL_TBL_ENTRY(NAME, VAR, MODE, HANDLER, MIN, MAX, MAXLEN) \
+	{ \
+		.procname     = __SYSCTL_PROCNAME(NAME), \
+		.data         = __SYSCTL_DATA(VAR), \
+		.maxlen       = __SYSCTL_MAXLEN(VAR, MAXLEN), \
+		.mode         = __SYSCTL_MODE(MODE), \
+		.proc_handler = __SYSCTL_PROC_HANDLER(HANDLER), \
+		.poll         = NULL, \
+		.extra1       = __SYSCTL_EXTRA(MIN), \
+		.extra2       = __SYSCTL_EXTRA(MAX), \
+	}
+
+/* Count the number of variadic arguments (supports 1-7 arguments) */
+#define __SYSCTL_NARG(...) \
+	__SYSCTL_NARG_(__VA_ARGS__, 7, 6, 5, 4, 3, 2, 1, 0)
+
+/* Helper for __SYSCTL_NARG - maps arguments to their count */
+#define __SYSCTL_NARG_(_1, _2, _3, _4, _5, _6, _7, N, ...) N
+
+/* Concatenate two tokens */
+#define __SYSCTL_CONCAT(A, B) A##B
+
+/* Select macro variant based on argument count */
+#define __SYSCTL_SELECT(NAME, N) __SYSCTL_CONCAT(NAME, N)
+
+/* SYSCTL_TBL_ENTRY(var) - use variable name as procname, readonly, auto handler */
+#define __SYSCTL_TBL_ENTRY_1(VAR) \
+	__SYSCTL_TBL_ENTRY(#VAR, VAR, 0444, \
+			   __SYSCTL_AUTO_HANDLER(VAR), NULL, NULL, -1)
+
+/* SYSCTL_TBL_ENTRY(name, var) - custom name, readonly, auto handler */
+#define __SYSCTL_TBL_ENTRY_2(NAME, VAR) \
+	__SYSCTL_TBL_ENTRY(NAME, VAR, 0444, \
+			   __SYSCTL_AUTO_HANDLER(VAR), NULL, NULL, -1)
+
+/* SYSCTL_TBL_ENTRY(name, var, mode) - custom name and mode, auto handler */
+#define __SYSCTL_TBL_ENTRY_3(NAME, VAR, MODE) \
+	__SYSCTL_TBL_ENTRY(NAME, VAR, MODE, \
+			   __SYSCTL_AUTO_HANDLER(VAR), NULL, NULL, -1)
+
+/* SYSCTL_TBL_ENTRY(name, var, mode, handler) - custom handler */
+#define __SYSCTL_TBL_ENTRY_4(NAME, VAR, MODE, HANDLER) \
+	__SYSCTL_TBL_ENTRY(NAME, VAR, MODE, HANDLER, NULL, NULL, -1)
+
+/* SYSCTL_TBL_ENTRY(name, var, mode, min, max) - auto range-checking handler */
+#define __SYSCTL_TBL_ENTRY_5(NAME, VAR, MODE, MIN, MAX) \
+	__SYSCTL_TBL_ENTRY(NAME, VAR, MODE, \
+			   __SYSCTL_AUTO_HANDLER_MINMAX(VAR), MIN, MAX, -1)
+
+/* SYSCTL_TBL_ENTRY(name, var, mode, handler, min, max) - custom handler with range */
+#define __SYSCTL_TBL_ENTRY_6(NAME, VAR, MODE, HANDLER, MIN, MAX) \
+	__SYSCTL_TBL_ENTRY(NAME, VAR, MODE, HANDLER, MIN, MAX, -1)
+
+/* SYSCTL_TBL_ENTRY(name, var, mode, handler, min, max, maxlen) - full control */
+#define __SYSCTL_TBL_ENTRY_7(NAME, VAR, MODE, HANDLER, MIN, MAX, MAXLEN) \
+	__SYSCTL_TBL_ENTRY(NAME, VAR, MODE, HANDLER, MIN, MAX, MAXLEN)
+
+/* Define a sysctl table entry with automatic type detection and parameter handling */
+#define SYSCTL_TBL_ENTRY(...) \
+	__SYSCTL_SELECT(__SYSCTL_TBL_ENTRY_, __SYSCTL_NARG(__VA_ARGS__))(__VA_ARGS__)
+
 struct ctl_node {
 	struct rb_node node;
 	struct ctl_table_header *header;
