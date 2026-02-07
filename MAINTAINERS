@@ -5880,6 +5880,12 @@ R:	Lukas Bulwahn <lukas.bulwahn@gmail.com>
 S:	Maintained
 F:	scripts/checkpatch.pl
 
+CHECKPATCH RUST LINTS
+M:	Jason Hall <jason.kei.hall@gmail.com>
+L:	rust-for-linux@vger.kernel.org
+S:	Maintained
+F:	scripts/rust_checkpatch.pl
+
 CHECKPATCH DOCUMENTATION
 M:	Dwaipayan Ray <dwaipayanray1@gmail.com>
 M:	Lukas Bulwahn <lukas.bulwahn@gmail.com>
