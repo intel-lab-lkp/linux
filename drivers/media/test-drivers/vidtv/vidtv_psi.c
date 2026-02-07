@@ -156,7 +156,13 @@ static void vidtv_psi_set_sec_len(struct vidtv_psi_table_header *h, u16 new_len)
  * add stuffing (i.e. padding bytes) after the CRC
  */
 static u32 vidtv_psi_ts_psi_write_into(struct psi_write_args *args)
-{
+{	
+	if (!args || !args->dest_buf || !args->from ||
+	    !args->continuity_counter) {
+		pr_warn_once("%s: invalid write arguments\n", __func__);
+		return 0;
+	}
+
 	struct vidtv_mpeg_ts ts_header = {
 		.sync_byte = TS_SYNC_BYTE,
 		.bitfield = cpu_to_be16((args->new_psi_section << 14) | args->pid),
