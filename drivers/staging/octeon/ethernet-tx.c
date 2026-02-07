@@ -450,7 +450,8 @@ skip_xmit:
 		__skb_queue_tail(&priv->tx_free_list[qos], skb);
 		break;
 	default:
-		BUG();
+		WARN_ON(1);
+		break;
 	}
 
 	while (skb_to_free > 0) {
