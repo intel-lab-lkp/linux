@@ -808,6 +808,11 @@ properties:
           - const: netxeon,r89
           - const: rockchip,rk3288
 
+      - description: Onion RV1103B Omega4 board
+        items:
+          - const: onion,rv1103b-omega4
+          - const: rockchip,rv1103b
+
       - description: OPEN AI LAB EAIDK-610
         items:
           - const: openailab,eaidk-610
