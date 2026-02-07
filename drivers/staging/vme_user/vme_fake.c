@@ -1029,9 +1029,9 @@ static int fake_crcsr_init(struct vme_bridge *fake_bridge)
 
 	/* Allocate mem for CR/CSR image */
 	bridge->crcsr_kernel = kzalloc(VME_CRCSR_BUF_SIZE, GFP_KERNEL);
-	bridge->crcsr_bus = fake_ptr_to_pci(bridge->crcsr_kernel);
 	if (!bridge->crcsr_kernel)
 		return -ENOMEM;
+	bridge->crcsr_bus = fake_ptr_to_pci(bridge->crcsr_kernel);
 
 	vstat = fake_slot_get(fake_bridge);
 
