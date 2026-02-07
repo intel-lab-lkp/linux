@@ -8,6 +8,7 @@
 #include <rtw_wifi_regd.h>
 #include <hal_btcoex.h>
 #include <linux/kernel.h>
+#include <linux/minmax.h>
 #include <linux/unaligned.h>
 
 static struct mlme_handler mlme_sta_tbl[] = {
@@ -933,7 +934,8 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	struct sta_info *pstat;
 	unsigned char *p, *pos, *wpa_ie;
 	unsigned char WMM_IE[] = {0x00, 0x50, 0xf2, 0x02, 0x00, 0x01};
-	int		i, ie_len, wpa_ie_len, left;
+	int		i, ie_len, left;
+	u8 wpa_ie_len;
 	unsigned char supportRate[16];
 	int					supportRateNum;
 	unsigned short		status = WLAN_STATUS_SUCCESS;
@@ -1154,7 +1156,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 			pstat->flags |= WLAN_STA_WPS;
 			copy_len = 0;
 		} else {
-			copy_len = ((wpa_ie_len+2) > sizeof(pstat->wpa_ie)) ? (sizeof(pstat->wpa_ie)):(wpa_ie_len+2);
+			copy_len = min(sizeof(pstat->wpa_ie), wpa_ie_len + 2u);
 		}
 
 
