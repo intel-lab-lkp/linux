@@ -4,6 +4,7 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include <kunit/test.h>
 #include <linux/delay.h>
 #include <linux/dma-fence.h>
 #include <linux/kernel.h>
@@ -11,8 +12,6 @@
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-
-#include "selftest.h"
 
 static struct kmem_cache *slab_fences;
 
@@ -94,57 +93,50 @@ static struct dma_fence *mock_fence(void)
 	return &f->base;
 }
 
-static int sanitycheck(void *arg)
+static void test_sanitycheck(struct kunit *test)
 {
 	struct dma_fence *f;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	dma_fence_enable_sw_signaling(f);
 
 	dma_fence_signal(f);
 	dma_fence_put(f);
-
-	return 0;
 }
 
-static int test_signaling(void *arg)
+static void test_signaling(struct kunit *test)
 {
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	dma_fence_enable_sw_signaling(f);
 
 	if (dma_fence_is_signaled(f)) {
-		pr_err("Fence unexpectedly signaled on creation\n");
+		KUNIT_FAIL(test, "Fence unexpectedly signaled on creation");
 		goto err_free;
 	}
 
 	if (dma_fence_signal(f)) {
-		pr_err("Fence reported being already signaled\n");
+		KUNIT_FAIL(test, "Fence reported being already signaled");
 		goto err_free;
 	}
 
 	if (!dma_fence_is_signaled(f)) {
-		pr_err("Fence not reporting signaled\n");
+		KUNIT_FAIL(test, "Fence not reporting signaled");
 		goto err_free;
 	}
 
 	if (!dma_fence_signal(f)) {
-		pr_err("Fence reported not being already signaled\n");
+		KUNIT_FAIL(test, "Fence reported not being already signaled");
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_put(f);
-	return err;
 }
 
 struct simple_cb {
@@ -157,215 +149,187 @@ static void simple_callback(struct dma_fence *f, struct dma_fence_cb *cb)
 	smp_store_mb(container_of(cb, struct simple_cb, cb)->seen, true);
 }
 
-static int test_add_callback(void *arg)
+static void test_add_callback(struct kunit *test)
 {
 	struct simple_cb cb = {};
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	if (dma_fence_add_callback(f, &cb.cb, simple_callback)) {
-		pr_err("Failed to add callback, fence already signaled!\n");
+		KUNIT_FAIL(test, "Failed to add callback, fence already signaled!");
 		goto err_free;
 	}
 
 	dma_fence_signal(f);
 	if (!cb.seen) {
-		pr_err("Callback failed!\n");
+		KUNIT_FAIL(test, "Callback failed!");
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_put(f);
-	return err;
 }
 
-static int test_late_add_callback(void *arg)
+static void test_late_add_callback(struct kunit *test)
 {
 	struct simple_cb cb = {};
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	dma_fence_enable_sw_signaling(f);
 
 	dma_fence_signal(f);
 
 	if (!dma_fence_add_callback(f, &cb.cb, simple_callback)) {
-		pr_err("Added callback, but fence was already signaled!\n");
+		KUNIT_FAIL(test, "Added callback, but fence was already signaled!");
 		goto err_free;
 	}
 
 	dma_fence_signal(f);
 	if (cb.seen) {
-		pr_err("Callback called after failed attachment !\n");
+		KUNIT_FAIL(test, "Callback called after failed attachment!");
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_put(f);
-	return err;
 }
 
-static int test_rm_callback(void *arg)
+static void test_rm_callback(struct kunit *test)
 {
 	struct simple_cb cb = {};
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	if (dma_fence_add_callback(f, &cb.cb, simple_callback)) {
-		pr_err("Failed to add callback, fence already signaled!\n");
+		KUNIT_FAIL(test, "Failed to add callback, fence already signaled!");
 		goto err_free;
 	}
 
 	if (!dma_fence_remove_callback(f, &cb.cb)) {
-		pr_err("Failed to remove callback!\n");
+		KUNIT_FAIL(test, "Failed to remove callback!");
 		goto err_free;
 	}
 
 	dma_fence_signal(f);
 	if (cb.seen) {
-		pr_err("Callback still signaled after removal!\n");
+		KUNIT_FAIL(test, "Callback still signaled after removal!");
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_put(f);
-	return err;
 }
 
-static int test_late_rm_callback(void *arg)
+static void test_late_rm_callback(struct kunit *test)
 {
 	struct simple_cb cb = {};
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	if (dma_fence_add_callback(f, &cb.cb, simple_callback)) {
-		pr_err("Failed to add callback, fence already signaled!\n");
+		KUNIT_FAIL(test, "Failed to add callback, fence already signaled!");
 		goto err_free;
 	}
 
 	dma_fence_signal(f);
 	if (!cb.seen) {
-		pr_err("Callback failed!\n");
+		KUNIT_FAIL(test, "Callback failed!");
 		goto err_free;
 	}
 
 	if (dma_fence_remove_callback(f, &cb.cb)) {
-		pr_err("Callback removal succeed after being executed!\n");
+		KUNIT_FAIL(test, "Callback removal succeeded after being executed!");
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_put(f);
-	return err;
 }
 
-static int test_status(void *arg)
+static void test_status(struct kunit *test)
 {
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	dma_fence_enable_sw_signaling(f);
 
 	if (dma_fence_get_status(f)) {
-		pr_err("Fence unexpectedly has signaled status on creation\n");
+		KUNIT_FAIL(test, "Fence unexpectedly has signaled status on creation");
 		goto err_free;
 	}
 
 	dma_fence_signal(f);
 	if (!dma_fence_get_status(f)) {
-		pr_err("Fence not reporting signaled status\n");
+		KUNIT_FAIL(test, "Fence not reporting signaled status");
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_put(f);
-	return err;
 }
 
-static int test_error(void *arg)
+static void test_error(struct kunit *test)
 {
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	dma_fence_enable_sw_signaling(f);
 
 	dma_fence_set_error(f, -EIO);
 
 	if (dma_fence_get_status(f)) {
-		pr_err("Fence unexpectedly has error status before signal\n");
+		KUNIT_FAIL(test, "Fence unexpectedly has error status before signal");
 		goto err_free;
 	}
 
 	dma_fence_signal(f);
 	if (dma_fence_get_status(f) != -EIO) {
-		pr_err("Fence not reporting error status, got %d\n",
-		       dma_fence_get_status(f));
+		KUNIT_FAIL(test, "Fence not reporting error status, got %d",
+			   dma_fence_get_status(f));
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_put(f);
-	return err;
 }
 
-static int test_wait(void *arg)
+static void test_wait(struct kunit *test)
 {
 	struct dma_fence *f;
-	int err = -EINVAL;
 
 	f = mock_fence();
-	if (!f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, f);
 
 	dma_fence_enable_sw_signaling(f);
 
 	if (dma_fence_wait_timeout(f, false, 0) != -ETIME) {
-		pr_err("Wait reported complete before being signaled\n");
+		KUNIT_FAIL(test, "Wait reported complete before being signaled");
 		goto err_free;
 	}
 
 	dma_fence_signal(f);
 
 	if (dma_fence_wait_timeout(f, false, 0) != 0) {
-		pr_err("Wait reported incomplete after being signaled\n");
+		KUNIT_FAIL(test, "Wait reported incomplete after being signaled");
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	dma_fence_signal(f);
 	dma_fence_put(f);
-	return err;
 }
 
 struct wait_timer {
@@ -380,21 +344,19 @@ static void wait_timer(struct timer_list *timer)
 	dma_fence_signal(wt->f);
 }
 
-static int test_wait_timeout(void *arg)
+static void test_wait_timeout(struct kunit *test)
 {
 	struct wait_timer wt;
-	int err = -EINVAL;
 
 	timer_setup_on_stack(&wt.timer, wait_timer, 0);
 
 	wt.f = mock_fence();
-	if (!wt.f)
-		return -ENOMEM;
+	KUNIT_ASSERT_NOT_NULL(test, wt.f);
 
 	dma_fence_enable_sw_signaling(wt.f);
 
 	if (dma_fence_wait_timeout(wt.f, false, 1) != -ETIME) {
-		pr_err("Wait reported complete before being signaled\n");
+		KUNIT_FAIL(test, "Wait reported complete before being signaled");
 		goto err_free;
 	}
 
@@ -402,42 +364,38 @@ static int test_wait_timeout(void *arg)
 
 	if (dma_fence_wait_timeout(wt.f, false, 2) == -ETIME) {
 		if (timer_pending(&wt.timer)) {
-			pr_notice("Timer did not fire within the jiffy!\n");
-			err = 0; /* not our fault! */
+			kunit_mark_skipped(
+				test, "Timer did not fire within the jiffy!\n");
 		} else {
-			pr_err("Wait reported incomplete after timeout\n");
+			KUNIT_FAIL(test,
+				   "Wait reported incomplete after timeout");
 		}
 		goto err_free;
 	}
 
-	err = 0;
 err_free:
 	timer_delete_sync(&wt.timer);
 	timer_destroy_on_stack(&wt.timer);
 	dma_fence_signal(wt.f);
 	dma_fence_put(wt.f);
-	return err;
 }
 
-static int test_stub(void *arg)
+static void test_stub(struct kunit *test)
 {
 	struct dma_fence *f[64];
-	int err = -EINVAL;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(f); i++) {
 		f[i] = dma_fence_get_stub();
 		if (!dma_fence_is_signaled(f[i])) {
-			pr_err("Obtained unsignaled stub fence!\n");
+			KUNIT_FAIL(test, "Obtained unsignaled stub fence!");
 			goto err;
 		}
 	}
 
-	err = 0;
 err:
 	while (i--)
 		dma_fence_put(f[i]);
-	return err;
 }
 
 /* Now off to the races! */
@@ -524,11 +482,18 @@ static int thread_signal_callback(void *arg)
 	return err;
 }
 
-static int race_signal_callback(void *arg)
+static void test_race_signal_callback(struct kunit *test)
 {
 	struct dma_fence __rcu *f[2] = {};
 	int ret = 0;
 	int pass;
+
+	/*
+	 * thread_signal_callback() spins under RCU and it cannot make forward
+	 * progress unless the threads are truly running concurrently.
+	 */
+	if (num_online_cpus() < 2)
+		kunit_skip(test, "requires at least 2 CPUs");
 
 	for (pass = 0; !ret && pass <= 1; pass++) {
 		struct race_thread t[2];
@@ -541,10 +506,10 @@ static int race_signal_callback(void *arg)
 			t[i].task = kthread_run(thread_signal_callback, &t[i],
 						"dma-fence:%d", i);
 			if (IS_ERR(t[i].task)) {
-				ret = PTR_ERR(t[i].task);
+				KUNIT_FAIL(test, "Failed to create kthread");
 				while (--i >= 0)
 					kthread_stop_put(t[i].task);
-				return ret;
+				return;
 			}
 			get_task_struct(t[i].task);
 		}
@@ -560,27 +525,11 @@ static int race_signal_callback(void *arg)
 		}
 	}
 
-	return ret;
+	KUNIT_EXPECT_EQ(test, ret, 0);
 }
 
-int dma_fence(void)
+static int dma_fence_suite_init(struct kunit_suite *suite)
 {
-	static const struct subtest tests[] = {
-		SUBTEST(sanitycheck),
-		SUBTEST(test_signaling),
-		SUBTEST(test_add_callback),
-		SUBTEST(test_late_add_callback),
-		SUBTEST(test_rm_callback),
-		SUBTEST(test_late_rm_callback),
-		SUBTEST(test_status),
-		SUBTEST(test_error),
-		SUBTEST(test_wait),
-		SUBTEST(test_wait_timeout),
-		SUBTEST(test_stub),
-		SUBTEST(race_signal_callback),
-	};
-	int ret;
-
 	pr_info("sizeof(dma_fence)=%zu\n", sizeof(struct dma_fence));
 
 	slab_fences = KMEM_CACHE(mock_fence,
@@ -588,10 +537,35 @@ int dma_fence(void)
 				 SLAB_HWCACHE_ALIGN);
 	if (!slab_fences)
 		return -ENOMEM;
-
-	ret = subtests(tests, NULL);
-
-	kmem_cache_destroy(slab_fences);
-
-	return ret;
+	return 0;
 }
+
+static void dma_fence_suite_exit(struct kunit_suite *suite)
+{
+	kmem_cache_destroy(slab_fences);
+}
+
+static struct kunit_case dma_fence_cases[] = {
+	KUNIT_CASE(test_sanitycheck),
+	KUNIT_CASE(test_signaling),
+	KUNIT_CASE(test_add_callback),
+	KUNIT_CASE(test_late_add_callback),
+	KUNIT_CASE(test_rm_callback),
+	KUNIT_CASE(test_late_rm_callback),
+	KUNIT_CASE(test_status),
+	KUNIT_CASE(test_error),
+	KUNIT_CASE(test_wait),
+	KUNIT_CASE(test_wait_timeout),
+	KUNIT_CASE(test_stub),
+	KUNIT_CASE(test_race_signal_callback),
+	{}
+};
+
+static struct kunit_suite dma_fence_test_suite = {
+	.name = "dma-buf-fence",
+	.suite_init = dma_fence_suite_init,
+	.suite_exit = dma_fence_suite_exit,
+	.test_cases = dma_fence_cases,
+};
+
+kunit_test_suite(dma_fence_test_suite);
