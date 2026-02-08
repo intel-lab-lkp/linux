@@ -96,6 +96,10 @@ struct inode *bfs_iget(struct super_block *sb, unsigned long ino)
 	i_uid_write(inode, le32_to_cpu(di->i_uid));
 	i_gid_write(inode,  le32_to_cpu(di->i_gid));
 	set_nlink(inode, le32_to_cpu(di->i_nlink));
+	if (!inode->i_nlink) {
+		brelse(bh);
+		goto error;
+	}
 	inode->i_size = BFS_FILESIZE(di);
 	inode->i_blocks = BFS_FILEBLOCKS(di);
 	inode_set_atime(inode, le32_to_cpu(di->i_atime), 0);
