@@ -2290,17 +2290,26 @@ static int check_caps_flush(struct ceph_mds_client *mdsc,
  *
  * returns true if we've flushed through want_flush_tid
  */
-static void wait_caps_flush(struct ceph_mds_client *mdsc,
-			    u64 want_flush_tid)
+static int wait_caps_flush(struct ceph_mds_client *mdsc,
+			   u64 want_flush_tid)
 {
 	struct ceph_client *cl = mdsc->fsc->client;
+	struct ceph_options *opts = mdsc->fsc->client->options;
+	long ret;
 
 	doutc(cl, "want %llu\n", want_flush_tid);
 
-	wait_event(mdsc->cap_flushing_wq,
-		   check_caps_flush(mdsc, want_flush_tid));
+	ret = wait_event_timeout(mdsc->cap_flushing_wq,
+				 check_caps_flush(mdsc, want_flush_tid),
+				 ceph_timeout_jiffies(opts->mount_timeout));
+	if (!ret) {
+		pr_warn_client(cl, "cap flush timeout waiting for tid %llu\n",
+			       want_flush_tid);
+		return -ETIMEDOUT;
+	}
 
 	doutc(cl, "ok, flushed thru %llu\n", want_flush_tid);
+	return 0;
 }
 
 /*
@@ -5866,13 +5875,15 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 /*
  * flush the mdlog and wait for all write mds requests to flush.
  */
-static void flush_mdlog_and_wait_mdsc_unsafe_requests(struct ceph_mds_client *mdsc,
-						 u64 want_tid)
+static int flush_mdlog_and_wait_mdsc_unsafe_requests(struct ceph_mds_client *mdsc,
+						      u64 want_tid)
 {
 	struct ceph_client *cl = mdsc->fsc->client;
+	struct ceph_options *opts = mdsc->fsc->client->options;
 	struct ceph_mds_request *req = NULL, *nextreq;
 	struct ceph_mds_session *last_session = NULL;
 	struct rb_node *n;
+	unsigned long left;
 
 	mutex_lock(&mdsc->mutex);
 	doutc(cl, "want %lld\n", want_tid);
@@ -5911,7 +5922,19 @@ restart:
 			}
 			doutc(cl, "wait on %llu (want %llu)\n",
 			      req->r_tid, want_tid);
-			wait_for_completion(&req->r_safe_completion);
+			left = wait_for_completion_timeout(
+					&req->r_safe_completion,
+					ceph_timeout_jiffies(opts->mount_timeout));
+			if (!left) {
+				pr_warn_client(cl,
+					       "flush mdlog request tid %llu timed out\n",
+					       req->r_tid);
+				ceph_mdsc_put_request(req);
+				if (nextreq)
+					ceph_mdsc_put_request(nextreq);
+				ceph_put_mds_session(last_session);
+				return -ETIMEDOUT;
+			}
 
 			mutex_lock(&mdsc->mutex);
 			ceph_mdsc_put_request(req);
@@ -5929,15 +5952,17 @@ restart:
 	mutex_unlock(&mdsc->mutex);
 	ceph_put_mds_session(last_session);
 	doutc(cl, "done\n");
+	return 0;
 }
 
-void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
+int ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 {
 	struct ceph_client *cl = mdsc->fsc->client;
 	u64 want_tid, want_flush;
+	int ret;
 
 	if (READ_ONCE(mdsc->fsc->mount_state) >= CEPH_MOUNT_SHUTDOWN)
-		return;
+		return -EIO;
 
 	doutc(cl, "sync\n");
 	mutex_lock(&mdsc->mutex);
@@ -5958,8 +5983,11 @@ void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 
 	doutc(cl, "sync want tid %lld flush_seq %lld\n", want_tid, want_flush);
 
-	flush_mdlog_and_wait_mdsc_unsafe_requests(mdsc, want_tid);
-	wait_caps_flush(mdsc, want_flush);
+	ret = flush_mdlog_and_wait_mdsc_unsafe_requests(mdsc, want_tid);
+	if (ret)
+		return ret;
+
+	return wait_caps_flush(mdsc, want_flush);
 }
 
 /*
