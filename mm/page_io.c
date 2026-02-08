@@ -364,7 +364,7 @@ static void sio_write_complete(struct kiocb *iocb, long ret)
 		 */
 		pr_err_ratelimited("Write error %ld on dio swapfile (%llu)\n",
 				   ret,
-				   swap_slot_pos(swp_entry_to_swp_slot(page_swap_entry(page))));
+				   swap_slot_dev_pos(swp_entry_to_swp_slot(page_swap_entry(page))));
 		for (p = 0; p < sio->pages; p++) {
 			page = sio->bvec[p].bv_page;
 			set_page_dirty(page);
@@ -384,7 +384,7 @@ static void swap_writepage_fs(struct folio *folio, struct swap_iocb **swap_plug)
 	swp_slot_t slot = swp_entry_to_swp_slot(folio->swap);
 	struct swap_info_struct *sis = __swap_slot_to_info(slot);
 	struct file *swap_file = sis->swap_file;
-	loff_t pos = swap_slot_pos(slot);
+	loff_t pos = swap_slot_dev_pos(slot);
 
 	count_swpout_vm_event(folio);
 	folio_start_writeback(folio);
@@ -549,7 +549,7 @@ static void swap_read_folio_fs(struct folio *folio, struct swap_iocb **plug)
 	swp_slot_t slot = swp_entry_to_swp_slot(folio->swap);
 	struct swap_info_struct *sis = __swap_slot_to_info(slot);
 	struct swap_iocb *sio = NULL;
-	loff_t pos = swap_slot_pos(slot);
+	loff_t pos = swap_slot_dev_pos(slot);
 
 	if (plug)
 		sio = *plug;
