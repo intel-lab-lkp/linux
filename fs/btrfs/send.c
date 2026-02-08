@@ -6320,7 +6320,7 @@ static int get_last_extent(struct send_ctx *sctx, u64 offset)
 	key.objectid = sctx->cur_ino;
 	key.type = BTRFS_EXTENT_DATA_KEY;
 	key.offset = offset;
-	ret = btrfs_search_slot_for_read(root, &key, path, 0, 1);
+	ret = btrfs_search_slot_for_read(root, &key, path, 0, 0);
 	if (ret < 0)
 		return ret;
 	ret = 0;
