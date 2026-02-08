@@ -84,11 +84,9 @@ static int tegra186_bpmp_ring_doorbell(struct tegra_bpmp *bpmp)
 	struct tegra186_bpmp *priv = bpmp->priv;
 	int err;
 
-	err = mbox_send_message(priv->mbox.channel, NULL);
+	err = mbox_ring_doorbell(priv->mbox.channel);
 	if (err < 0)
 		return err;
-
-	mbox_client_txdone(priv->mbox.channel, 0);
 
 	return 0;
 }
