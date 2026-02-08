@@ -3783,7 +3783,6 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 	/* Prevent deferred_split_scan() touching ->_refcount */
 	ds_queue = folio_split_queue_lock(folio);
 	if (folio_ref_freeze(folio, folio_cache_ref_count(folio) + 1)) {
-		struct swap_cluster_info *ci = NULL;
 		struct lruvec *lruvec;
 
 		if (old_order > 1) {
@@ -3826,7 +3825,7 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 				return -EINVAL;
 			}
 
-			ci = swap_cluster_get_and_lock(folio);
+			swap_cache_lock();
 		}
 
 		/* lock lru list/PageCompound, ref frozen by page_ref_freeze */
@@ -3862,8 +3861,8 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 			 * Anonymous folio with swap cache.
 			 * NOTE: shmem in swap cache is not supported yet.
 			 */
-			if (ci) {
-				__swap_cache_replace_folio(ci, folio, new_folio);
+			if (folio_test_swapcache(folio)) {
+				__swap_cache_replace_folio(folio, new_folio);
 				continue;
 			}
 
@@ -3901,8 +3900,8 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 		if (do_lru)
 			unlock_page_lruvec(lruvec);
 
-		if (ci)
-			swap_cluster_unlock(ci);
+		if (folio_test_swapcache(folio))
+			swap_cache_unlock();
 	} else {
 		split_queue_unlock(ds_queue);
 		return -EAGAIN;

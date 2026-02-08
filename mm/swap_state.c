@@ -22,8 +22,8 @@
 #include <linux/vmalloc.h>
 #include <linux/huge_mm.h>
 #include <linux/shmem_fs.h>
+#include <linux/xarray.h>
 #include "internal.h"
-#include "swap_table.h"
 #include "swap.h"
 
 /*
@@ -40,6 +40,28 @@ static const struct address_space_operations swap_aops = {
 struct address_space swap_space __read_mostly = {
 	.a_ops = &swap_aops,
 };
+
+static DEFINE_XARRAY(swap_cache);
+
+void swap_cache_lock_irq(void)
+{
+	xa_lock_irq(&swap_cache);
+}
+
+void swap_cache_unlock_irq(void)
+{
+	xa_unlock_irq(&swap_cache);
+}
+
+void swap_cache_lock(void)
+{
+	xa_lock(&swap_cache);
+}
+
+void swap_cache_unlock(void)
+{
+	xa_unlock(&swap_cache);
+}
 
 static bool enable_vma_readahead __read_mostly = true;
 
@@ -86,17 +108,22 @@ void show_swap_cache_info(void)
  */
 struct folio *swap_cache_get_folio(swp_entry_t entry)
 {
-	unsigned long swp_tb;
+	void *entry_val;
 	struct folio *folio;
 
 	for (;;) {
-		swp_tb = swap_table_get(__swap_entry_to_cluster(entry),
-					swp_cluster_offset(entry));
-		if (!swp_tb_is_folio(swp_tb))
+		rcu_read_lock();
+		entry_val = xa_load(&swap_cache, entry.val);
+		if (!entry_val || xa_is_value(entry_val)) {
+			rcu_read_unlock();
 			return NULL;
-		folio = swp_tb_to_folio(swp_tb);
-		if (likely(folio_try_get(folio)))
+		}
+		folio = entry_val;
+		if (likely(folio_try_get(folio))) {
+			rcu_read_unlock();
 			return folio;
+		}
+		rcu_read_unlock();
 	}
 
 	return NULL;
@@ -112,12 +139,14 @@ struct folio *swap_cache_get_folio(swp_entry_t entry)
  */
 void *swap_cache_get_shadow(swp_entry_t entry)
 {
-	unsigned long swp_tb;
+	void *entry_val;
 
-	swp_tb = swap_table_get(__swap_entry_to_cluster(entry),
-				swp_cluster_offset(entry));
-	if (swp_tb_is_shadow(swp_tb))
-		return swp_tb_to_shadow(swp_tb);
+	rcu_read_lock();
+	entry_val = xa_load(&swap_cache, entry.val);
+	rcu_read_unlock();
+
+	if (xa_is_value(entry_val))
+		return entry_val;
 	return NULL;
 }
 
@@ -132,46 +161,58 @@ void *swap_cache_get_shadow(swp_entry_t entry)
  * with reference count or locks.
  * The caller also needs to update the corresponding swap_map slots with
  * SWAP_HAS_CACHE bit to avoid race or conflict.
+ *
+ * Return: 0 on success, negative error code on failure.
  */
-void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadowp)
+int swap_cache_add_folio(struct folio *folio, swp_entry_t entry, gfp_t gfp, void **shadowp)
 {
-	void *shadow = NULL;
-	unsigned long old_tb, new_tb;
-	struct swap_cluster_info *ci;
-	unsigned int ci_start, ci_off, ci_end;
+	XA_STATE_ORDER(xas, &swap_cache, entry.val, folio_order(folio));
 	unsigned long nr_pages = folio_nr_pages(folio);
+	unsigned long i;
+	void *old;
 
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(folio_test_swapcache(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_swapbacked(folio), folio);
 
-	new_tb = folio_to_swp_tb(folio);
-	ci_start = swp_cluster_offset(entry);
-	ci_end = ci_start + nr_pages;
-	ci_off = ci_start;
-	ci = swap_cluster_lock(__swap_entry_to_info(entry), swp_offset(entry));
-	do {
-		old_tb = __swap_table_xchg(ci, ci_off, new_tb);
-		WARN_ON_ONCE(swp_tb_is_folio(old_tb));
-		if (swp_tb_is_shadow(old_tb))
-			shadow = swp_tb_to_shadow(old_tb);
-	} while (++ci_off < ci_end);
-
 	folio_ref_add(folio, nr_pages);
 	folio_set_swapcache(folio);
 	folio->swap = entry;
-	swap_cluster_unlock(ci);
 
-	node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
-	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
+	do {
+		xas_lock_irq(&xas);
+		xas_create_range(&xas);
+		if (xas_error(&xas))
+			goto unlock;
+		for (i = 0; i < nr_pages; i++) {
+			VM_BUG_ON_FOLIO(xas.xa_index != entry.val + i, folio);
+			old = xas_load(&xas);
+			if (old && !xa_is_value(old)) {
+				VM_WARN_ON_ONCE_FOLIO(1, folio);
+				xas_set_err(&xas, -EEXIST);
+				goto unlock;
+			}
+			if (shadowp && xa_is_value(old) && !*shadowp)
+				*shadowp = old;
+			xas_store(&xas, folio);
+			xas_next(&xas);
+		}
+		node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
+		lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
+unlock:
+		xas_unlock_irq(&xas);
+	} while (xas_nomem(&xas, gfp));
 
-	if (shadowp)
-		*shadowp = shadow;
+	if (!xas_error(&xas))
+		return 0;
+
+	folio_clear_swapcache(folio);
+	folio_ref_sub(folio, nr_pages);
+	return xas_error(&xas);
 }
 
 /**
  * __swap_cache_del_folio - Removes a folio from the swap cache.
- * @ci: The locked swap cluster.
  * @folio: The folio.
  * @entry: The first swap entry that the folio corresponds to.
  * @shadow: shadow value to be filled in the swap cache.
@@ -180,30 +221,23 @@ void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadowp
  * This won't put the folio's refcount. The caller has to do that.
  *
  * Context: Caller must ensure the folio is locked and in the swap cache
- * using the index of @entry, and lock the cluster that holds the entries.
+ * using the index of @entry, and lock the swap cache xarray.
  */
-void __swap_cache_del_folio(struct swap_cluster_info *ci, struct folio *folio,
-			    swp_entry_t entry, void *shadow)
+void __swap_cache_del_folio(struct folio *folio, swp_entry_t entry, void *shadow)
 {
-	unsigned long old_tb, new_tb;
-	unsigned int ci_start, ci_off, ci_end;
-	unsigned long nr_pages = folio_nr_pages(folio);
+	long nr_pages = folio_nr_pages(folio);
+	XA_STATE(xas, &swap_cache, entry.val);
+	int i;
 
-	VM_WARN_ON_ONCE(__swap_entry_to_cluster(entry) != ci);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_swapcache(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(folio_test_writeback(folio), folio);
 
-	new_tb = shadow_swp_to_tb(shadow);
-	ci_start = swp_cluster_offset(entry);
-	ci_end = ci_start + nr_pages;
-	ci_off = ci_start;
-	do {
-		/* If shadow is NULL, we sets an empty shadow */
-		old_tb = __swap_table_xchg(ci, ci_off, new_tb);
-		WARN_ON_ONCE(!swp_tb_is_folio(old_tb) ||
-			     swp_tb_to_folio(old_tb) != folio);
-	} while (++ci_off < ci_end);
+	for (i = 0; i < nr_pages; i++) {
+		void *old = xas_store(&xas, shadow);
+		VM_WARN_ON_FOLIO(old != folio, folio);
+		xas_next(&xas);
+	}
 
 	folio->swap.val = 0;
 	folio_clear_swapcache(folio);
@@ -223,12 +257,11 @@ void __swap_cache_del_folio(struct swap_cluster_info *ci, struct folio *folio,
  */
 void swap_cache_del_folio(struct folio *folio)
 {
-	struct swap_cluster_info *ci;
 	swp_entry_t entry = folio->swap;
 
-	ci = swap_cluster_lock(__swap_entry_to_info(entry), swp_offset(entry));
-	__swap_cache_del_folio(ci, folio, entry, NULL);
-	swap_cluster_unlock(ci);
+	xa_lock_irq(&swap_cache);
+	__swap_cache_del_folio(folio, entry, NULL);
+	xa_unlock_irq(&swap_cache);
 
 	put_swap_folio(folio, entry);
 	folio_ref_sub(folio, folio_nr_pages(folio));
@@ -236,7 +269,6 @@ void swap_cache_del_folio(struct folio *folio)
 
 /**
  * __swap_cache_replace_folio - Replace a folio in the swap cache.
- * @ci: The locked swap cluster.
  * @old: The old folio to be replaced.
  * @new: The new folio.
  *
@@ -246,39 +278,23 @@ void swap_cache_del_folio(struct folio *folio)
  * the starting offset to override all slots covered by the new folio.
  *
  * Context: Caller must ensure both folios are locked, and lock the
- * cluster that holds the old folio to be replaced.
+ * swap cache xarray.
  */
-void __swap_cache_replace_folio(struct swap_cluster_info *ci,
-				struct folio *old, struct folio *new)
+void __swap_cache_replace_folio(struct folio *old, struct folio *new)
 {
 	swp_entry_t entry = new->swap;
 	unsigned long nr_pages = folio_nr_pages(new);
-	unsigned int ci_off = swp_cluster_offset(entry);
-	unsigned int ci_end = ci_off + nr_pages;
-	unsigned long old_tb, new_tb;
+	XA_STATE(xas, &swap_cache, entry.val);
+	int i;
 
 	VM_WARN_ON_ONCE(!folio_test_swapcache(old) || !folio_test_swapcache(new));
 	VM_WARN_ON_ONCE(!folio_test_locked(old) || !folio_test_locked(new));
 	VM_WARN_ON_ONCE(!entry.val);
 
-	/* Swap cache still stores N entries instead of a high-order entry */
-	new_tb = folio_to_swp_tb(new);
-	do {
-		old_tb = __swap_table_xchg(ci, ci_off, new_tb);
-		WARN_ON_ONCE(!swp_tb_is_folio(old_tb) || swp_tb_to_folio(old_tb) != old);
-	} while (++ci_off < ci_end);
-
-	/*
-	 * If the old folio is partially replaced (e.g., splitting a large
-	 * folio, the old folio is shrunk, and new split sub folios replace
-	 * the shrunk part), ensure the new folio doesn't overlap it.
-	 */
-	if (IS_ENABLED(CONFIG_DEBUG_VM) &&
-	    folio_order(old) != folio_order(new)) {
-		ci_off = swp_cluster_offset(old->swap);
-		ci_end = ci_off + folio_nr_pages(old);
-		while (ci_off++ < ci_end)
-			WARN_ON_ONCE(swp_tb_to_folio(__swap_table_get(ci, ci_off)) != old);
+	for (i = 0; i < nr_pages; i++) {
+		void *old_entry = xas_store(&xas, new);
+		WARN_ON_ONCE(!old_entry || xa_is_value(old_entry) || old_entry != old);
+		xas_next(&xas);
 	}
 }
 
@@ -287,20 +303,20 @@ void __swap_cache_replace_folio(struct swap_cluster_info *ci,
  * @entry: The starting index entry.
  * @nr_ents: How many slots need to be cleared.
  *
- * Context: Caller must ensure the range is valid, all in one single cluster,
- * not occupied by any folio, and lock the cluster.
+ * Context: Caller must ensure the range is valid and all in one single cluster,
+ * not occupied by any folio.
  */
-void __swap_cache_clear_shadow(swp_entry_t entry, int nr_ents)
+void swap_cache_clear_shadow(swp_entry_t entry, int nr_ents)
 {
-	struct swap_cluster_info *ci = __swap_entry_to_cluster(entry);
-	unsigned int ci_off = swp_cluster_offset(entry), ci_end;
-	unsigned long old;
+	XA_STATE(xas, &swap_cache, entry.val);
+	int i;
 
-	ci_end = ci_off + nr_ents;
-	do {
-		old = __swap_table_xchg(ci, ci_off, null_to_swp_tb());
-		WARN_ON_ONCE(swp_tb_is_folio(old));
-	} while (++ci_off < ci_end);
+	xas_lock(&xas);
+	for (i = 0; i < nr_ents; i++) {
+		xas_store(&xas, NULL);
+		xas_next(&xas);
+	}
+	xas_unlock(&xas);
 }
 
 /*
@@ -480,7 +496,10 @@ struct folio *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	if (mem_cgroup_swapin_charge_folio(new_folio, NULL, gfp_mask, entry))
 		goto fail_unlock;
 
-	swap_cache_add_folio(new_folio, entry, &shadow);
+	/* May fail (-ENOMEM) if XArray node allocation failed. */
+	if (swap_cache_add_folio(new_folio, entry, gfp_mask & GFP_RECLAIM_MASK, &shadow))
+		goto fail_unlock;
+
 	memcg1_swapin(entry, 1);
 
 	if (shadow)
