@@ -324,7 +324,6 @@ static void mailbox_clear_channel(struct scmi_chan_info *cinfo)
 {
 	struct scmi_mailbox *smbox = cinfo->transport_info;
 	struct mbox_chan *intr_chan;
-	int ret;
 
 	core->shmem->clear_channel(smbox->shmem);
 
@@ -338,12 +337,7 @@ static void mailbox_clear_channel(struct scmi_chan_info *cinfo)
 	else
 		return;
 
-	ret = mbox_send_message(intr_chan, NULL);
-	/* mbox_send_message returns non-negative value on success, so reset */
-	if (ret > 0)
-		ret = 0;
-
-	mbox_client_txdone(intr_chan, ret);
+	mbox_ring_doorbell(intr_chan);
 }
 
 static bool
