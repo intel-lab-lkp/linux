@@ -144,7 +144,7 @@ static void ipi_receive_callback(struct mbox_client *cl, void *data)
 			   &zynqmp_pm_init_suspend_work->callback_work);
 
 		/* Send NULL message to mbox controller to ack the message */
-		ret = mbox_send_message(rx_chan, NULL);
+		ret = mbox_ring_doorbell(rx_chan);
 		if (ret)
 			pr_err("IPI ack failed. Error %d\n", ret);
 	}
