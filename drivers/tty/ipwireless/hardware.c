@@ -1725,6 +1725,7 @@ void ipwireless_stop_interrupts(struct ipw_hardware *hw)
 
 		/* Prevent the hardware from sending any more interrupts */
 		do_close_hardware(hw);
+		tasklet_kill(&hw->tasklet);
 	}
 }
 
