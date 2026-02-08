@@ -1234,7 +1234,7 @@ static int get_inode_path(struct btrfs_root *root,
 	key.type = BTRFS_INODE_REF_KEY;
 	key.offset = 0;
 
-	ret = btrfs_search_slot_for_read(root, &key, p, 1, 0);
+	ret = btrfs_search_slot_for_read(root, &key, p, true);
 	if (ret < 0)
 		return ret;
 	if (ret)
@@ -1979,7 +1979,7 @@ static int get_first_ref(struct btrfs_root *root, u64 ino,
 	key.type = BTRFS_INODE_REF_KEY;
 	key.offset = 0;
 
-	ret = btrfs_search_slot_for_read(root, &key, path, 1, 0);
+	ret = btrfs_search_slot_for_read(root, &key, path, true);
 	if (ret < 0)
 		return ret;
 	if (!ret)
@@ -2475,7 +2475,7 @@ static int send_subvol_begin(struct send_ctx *sctx)
 	key.offset = 0;
 
 	ret = btrfs_search_slot_for_read(send_root->fs_info->tree_root,
-				&key, path, 1, 0);
+				&key, path, true);
 	if (ret < 0)
 		return ret;
 	if (ret)
@@ -6195,7 +6195,7 @@ static int is_extent_unchanged(struct send_ctx *sctx,
 	key.objectid = ekey->objectid;
 	key.type = BTRFS_EXTENT_DATA_KEY;
 	key.offset = ekey->offset;
-	ret = btrfs_search_slot_for_read(sctx->parent_root, &key, path, 0, 0);
+	ret = btrfs_search_slot_for_read(sctx->parent_root, &key, path, false);
 	if (ret < 0)
 		return ret;
 	if (ret)
@@ -6320,7 +6320,7 @@ static int get_last_extent(struct send_ctx *sctx, u64 offset)
 	key.objectid = sctx->cur_ino;
 	key.type = BTRFS_EXTENT_DATA_KEY;
 	key.offset = offset;
-	ret = btrfs_search_slot_for_read(root, &key, path, 0, 0);
+	ret = btrfs_search_slot_for_read(root, &key, path, false);
 	if (ret < 0)
 		return ret;
 	ret = 0;
@@ -7282,7 +7282,7 @@ static int full_send_tree(struct send_ctx *sctx)
 	sctx->last_reloc_trans = fs_info->last_reloc_trans;
 	up_read(&fs_info->commit_root_sem);
 
-	ret = btrfs_search_slot_for_read(send_root, &key, path, 1, 0);
+	ret = btrfs_search_slot_for_read(send_root, &key, path, true);
 	if (ret < 0)
 		return ret;
 	if (ret)
