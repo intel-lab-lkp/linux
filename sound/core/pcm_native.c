@@ -1391,6 +1391,9 @@ static int snd_pcm_action(const struct action_ops *ops,
 	struct snd_pcm_group *group;
 	int res;
 
+	if (WARN_ON_ONCE(!substream->runtime))
+		return 0;
+	
 	group = snd_pcm_stream_group_ref(substream);
 	if (group)
 		res = snd_pcm_action_group(ops, substream, state, true);
