@@ -160,12 +160,12 @@ static void hid_io_error(struct hid_device *hid)
 
 	/* When an error occurs, retry at increasing intervals */
 	if (usbhid->retry_delay == 0) {
-		usbhid->retry_delay = 13;	/* Then 26, 52, 104, 104, ... */
+		usbhid->retry_delay = 1;	/* Then 5, 25, 125, 125, ... */
 		usbhid->stop_retry = jiffies + msecs_to_jiffies(1000);
 	} else if (usbhid->retry_delay < 100)
-		usbhid->retry_delay *= 2;
+		usbhid->retry_delay *= 5;
 
-	if (time_after(jiffies, usbhid->stop_retry)) {
+	if (time_after(jiffies, usbhid->stop_retry) && usbhid->retry_delay >= 100) {
 
 		/* Retries failed, so do a port reset unless we lack bandwidth*/
 		if (!test_bit(HID_NO_BANDWIDTH, &usbhid->iofl)
