@@ -65,7 +65,8 @@ void ODM_TXPowerTrackingCallback_ThermalMeter(struct adapter *Adapter)
 	u8 ThermalValue_AVG_count = 0;
 	u32 ThermalValue_AVG = 0;
 
-	u8 OFDM_min_index = 0;  /*  OFDM BB Swing should be less than +3.0dB, which is required by Arthur */
+	/* OFDM BB Swing should be less than +3.0dB, which is required by Arthur */
+	u8 OFDM_min_index = 0;
 	u8 Indexforchannel = 0; /*  GetRightChnlPlaceforIQK(pHalData->CurrentChannel) */
 
 	struct txpwrtrack_cfg c;
@@ -93,7 +94,9 @@ void ODM_TXPowerTrackingCallback_ThermalMeter(struct adapter *Adapter)
 	pDM_Odm->RFCalibrateInfo.TXPowerTrackingCallbackCnt++;
 	pDM_Odm->RFCalibrateInfo.bTXPowerTrackingInit = true;
 
-	ThermalValue = (u8)PHY_QueryRFReg(pDM_Odm->Adapter, RF_PATH_A, c.ThermalRegAddr, 0xfc00);	/* 0x42: RF Reg[15:10] 88E */
+	/* 0x42: RF Reg[15:10] 88E */
+	ThermalValue = (u8)PHY_QueryRFReg(pDM_Odm->Adapter, RF_PATH_A,
+					   c.ThermalRegAddr, 0xfc00);
 	if (
 		!pDM_Odm->RFCalibrateInfo.TxPowerTrackControl ||
 		pHalData->EEPROMThermalMeter == 0 ||
@@ -104,11 +107,15 @@ void ODM_TXPowerTrackingCallback_ThermalMeter(struct adapter *Adapter)
 	/* 4 3. Initialize ThermalValues of RFCalibrateInfo */
 
 	/* 4 4. Calculate average thermal meter */
+	{
+		struct odm_rf_cal_t *cal = &pDM_Odm->RFCalibrateInfo;
 
-	pDM_Odm->RFCalibrateInfo.ThermalValue_AVG[pDM_Odm->RFCalibrateInfo.ThermalValue_AVG_index] = ThermalValue;
-	pDM_Odm->RFCalibrateInfo.ThermalValue_AVG_index++;
-	if (pDM_Odm->RFCalibrateInfo.ThermalValue_AVG_index == c.AverageThermalNum)   /* Average times =  c.AverageThermalNum */
-		pDM_Odm->RFCalibrateInfo.ThermalValue_AVG_index = 0;
+		cal->ThermalValue_AVG[cal->ThermalValue_AVG_index] = ThermalValue;
+		cal->ThermalValue_AVG_index++;
+		/* Average times = c.AverageThermalNum */
+		if (cal->ThermalValue_AVG_index == c.AverageThermalNum)
+			cal->ThermalValue_AVG_index = 0;
+	}
 
 	for (i = 0; i < c.AverageThermalNum; i++) {
 		if (pDM_Odm->RFCalibrateInfo.ThermalValue_AVG[i]) {
@@ -200,10 +207,16 @@ void ODM_TXPowerTrackingCallback_ThermalMeter(struct adapter *Adapter)
 			if (
 				pDM_Odm->RFCalibrateInfo.DeltaPowerIndex[p] ==
 				pDM_Odm->RFCalibrateInfo.DeltaPowerIndexLast[p]
-			) /*  If Thermal value changes but lookup table value still the same */
+			) {
+				/* If Thermal value changes but lookup table value still the same */
 				pDM_Odm->RFCalibrateInfo.PowerIndexOffset[p] = 0;
-			else
-				pDM_Odm->RFCalibrateInfo.PowerIndexOffset[p] = pDM_Odm->RFCalibrateInfo.DeltaPowerIndex[p] - pDM_Odm->RFCalibrateInfo.DeltaPowerIndexLast[p];      /*  Power Index Diff between 2 times Power Tracking */
+			} else {
+				/* Power Index Diff between 2 times Power Tracking */
+				s8 delta_idx = pDM_Odm->RFCalibrateInfo.DeltaPowerIndex[p];
+				s8 last_idx = pDM_Odm->RFCalibrateInfo.DeltaPowerIndexLast[p];
+
+				pDM_Odm->RFCalibrateInfo.PowerIndexOffset[p] = delta_idx - last_idx;
+			}
 
 			pDM_Odm->RFCalibrateInfo.OFDM_index[p] =
 				pDM_Odm->BbSwingIdxOfdmBase[p] +
@@ -245,7 +258,8 @@ void ODM_TXPowerTrackingCallback_ThermalMeter(struct adapter *Adapter)
 	 ) {
 		/* 4 7.2 Configure the Swing Table to adjust Tx Power. */
 
-		pDM_Odm->RFCalibrateInfo.bTxPowerChanged = true; /*  Always true after Tx Power is adjusted by power tracking. */
+		/* Always true after Tx Power is adjusted by power tracking. */
+		pDM_Odm->RFCalibrateInfo.bTxPowerChanged = true;
 		/*  */
 		/*  2012/04/23 MH According to Luke's suggestion, we can not write BB digital */
 		/*  to increase TX power. Otherwise, EVM will be bad. */

@@ -372,13 +372,22 @@ static void odm_Process_RSSIForDM(
 				OFDM_pkt += (u8)(pEntry->rssi_stat.PacketMap>>i)&BIT0;
 
 			if (pEntry->rssi_stat.ValidBit == 64) {
+				u32 ofdm_weight, cck_weight;
+
 				Weighting = ((OFDM_pkt<<4) > 64)?64:(OFDM_pkt<<4);
-				UndecoratedSmoothedPWDB = (Weighting*UndecoratedSmoothedOFDM+(64-Weighting)*UndecoratedSmoothedCCK)>>6;
+				ofdm_weight = Weighting * UndecoratedSmoothedOFDM;
+				cck_weight = (64 - Weighting) * UndecoratedSmoothedCCK;
+				UndecoratedSmoothedPWDB = (ofdm_weight + cck_weight) >> 6;
 			} else {
-				if (pEntry->rssi_stat.ValidBit != 0)
-					UndecoratedSmoothedPWDB = (OFDM_pkt*UndecoratedSmoothedOFDM+(pEntry->rssi_stat.ValidBit-OFDM_pkt)*UndecoratedSmoothedCCK)/pEntry->rssi_stat.ValidBit;
-				else
+				if (pEntry->rssi_stat.ValidBit != 0) {
+					u8 valid = pEntry->rssi_stat.ValidBit;
+					u32 ofdm_sum = OFDM_pkt * UndecoratedSmoothedOFDM;
+					u32 cck_sum = (valid - OFDM_pkt) * UndecoratedSmoothedCCK;
+
+					UndecoratedSmoothedPWDB = (ofdm_sum + cck_sum) / valid;
+				} else {
 					UndecoratedSmoothedPWDB = 0;
+				}
 			}
 
 			pEntry->rssi_stat.UndecoratedSmoothedCCK = UndecoratedSmoothedCCK;
