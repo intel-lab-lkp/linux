@@ -331,7 +331,7 @@ exit:
 	return (ok && i == 0) ? count : -EINVAL;
 }
 
-static char const *seqname[] = {
+static const char * const seqname[] = {
 	"ERROR", "S5", "S3", "S0", "S5S3", "S3S0",
 	"S0S3", "S3S5", "STOP", "RUN", "KONAMI",
 	"TAP", "PROGRAM",
