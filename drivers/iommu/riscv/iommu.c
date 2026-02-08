@@ -933,7 +933,8 @@ static unsigned long range_encode(unsigned long start, unsigned long size)
 }
 static void riscv_iommu_iotlb_inval_range(struct riscv_iommu_domain *domain,
 					  struct riscv_iommu_device *iommu,
-					  unsigned long start, unsigned long end)
+					  unsigned long start, unsigned long end,
+					  bool non_leaf)
 {
 	struct riscv_iommu_command cmd;
 	unsigned long len = end - start + 1;
@@ -961,6 +962,16 @@ static void riscv_iommu_iotlb_inval_range(struct riscv_iommu_domain *domain,
 	page_start = start & PAGE_MASK;
 	limit = PAGE_ALIGN(end + 1);
 	cur = page_start;
+
+	if (non_leaf) {
+		if (!!(iommu->caps & RISCV_IOMMU_CAPABILITIES_NL)) {
+			riscv_iommu_cmd_inval_set_nonleaf(&cmd);
+		} else {
+			/* Falls back to whole address space invalidation */
+			riscv_iommu_cmd_send(iommu, &cmd);
+			return;
+		}
+	}
 
 	while (cur < limit) {
 		max_range = 0;
@@ -1004,7 +1015,8 @@ static void riscv_iommu_iotlb_inval_range(struct riscv_iommu_domain *domain,
 #define RISCV_IOMMU_IOTLB_INVAL_LIMIT	(2 << 20)
 
 static void riscv_iommu_iotlb_inval(struct riscv_iommu_domain *domain,
-				    unsigned long start, unsigned long end)
+				    unsigned long start, unsigned long end,
+				    bool non_leaf)
 {
 	struct riscv_iommu_bond *bond;
 	struct riscv_iommu_device *iommu, *prev;
@@ -1052,8 +1064,11 @@ static void riscv_iommu_iotlb_inval(struct riscv_iommu_domain *domain,
 			continue;
 
 		if (!!(iommu->caps & RISCV_IOMMU_CAPABILITIES_S)) {
-			riscv_iommu_iotlb_inval_range(domain, iommu, start, end);
+			riscv_iommu_iotlb_inval_range(domain, iommu, start, end, non_leaf);
 			continue;
+		} else if (non_leaf) {
+			/* Falls back to whole address space invalidation */
+			len = ULONG_MAX;
 		}
 
 		riscv_iommu_cmd_inval_vma(&cmd);
@@ -1155,7 +1170,7 @@ static void riscv_iommu_iotlb_flush_all(struct iommu_domain *iommu_domain)
 {
 	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
 
-	riscv_iommu_iotlb_inval(domain, 0, ULONG_MAX);
+	riscv_iommu_iotlb_inval(domain, 0, ULONG_MAX, false);
 }
 
 static void riscv_iommu_iotlb_sync(struct iommu_domain *iommu_domain,
@@ -1163,7 +1178,7 @@ static void riscv_iommu_iotlb_sync(struct iommu_domain *iommu_domain,
 {
 	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
 
-	riscv_iommu_iotlb_inval(domain, gather->start, gather->end);
+	riscv_iommu_iotlb_inval(domain, gather->start, gather->end, false);
 }
 
 #define PT_SHIFT (PAGE_SHIFT - ilog2(sizeof(pte_t)))
@@ -1284,6 +1299,7 @@ static int riscv_iommu_map_pages(struct iommu_domain *iommu_domain,
 	unsigned long pte, old, pte_prot;
 	int rc = 0;
 	struct iommu_pages_list freelist = IOMMU_PAGES_LIST_INIT(freelist);
+	unsigned long inval_start = iova;
 
 	if (!(prot & IOMMU_WRITE))
 		pte_prot = _PAGE_BASE | _PAGE_READ;
@@ -1322,7 +1338,8 @@ static int riscv_iommu_map_pages(struct iommu_domain *iommu_domain,
 		 * This will be updated with hardware support for
 		 * capability.NL (non-leaf) IOTINVAL command.
 		 */
-		riscv_iommu_iotlb_inval(domain, 0, ULONG_MAX);
+		riscv_iommu_iotlb_inval(domain, inval_start,
+					inval_start + size - 1, true);
 		iommu_put_pages_list(&freelist);
 	}
 
