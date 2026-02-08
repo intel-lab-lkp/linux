@@ -54,7 +54,6 @@ void rtw_btcoex_LPS_Enter(struct adapter *padapter)
 	struct pwrctrl_priv *pwrpriv;
 	u8 lps_val;
 
-
 	pwrpriv = adapter_to_pwrctl(padapter);
 
 	pwrpriv->bpower_saving = true;
@@ -65,7 +64,6 @@ void rtw_btcoex_LPS_Enter(struct adapter *padapter)
 void rtw_btcoex_LPS_Leave(struct adapter *padapter)
 {
 	struct pwrctrl_priv *pwrpriv;
-
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
