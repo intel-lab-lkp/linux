@@ -131,6 +131,7 @@ struct vhost_net_virtqueue {
 	struct vhost_net_buf rxq;
 	/* Batched XDP buffs */
 	struct xdp_buff *xdp;
+
 };
 
 struct vhost_net {
@@ -147,6 +148,15 @@ struct vhost_net {
 	bool tx_flush;
 	/* Private page frag cache */
 	struct page_frag_cache pf_cache;
+
+	/*
+	 * Optional vhost-net filter offload socket.
+	 * When configured, RX packets can be routed through a userspace
+	 * filter chain via a SOCK_SEQPACKET control socket. Access to
+	 * filter_sock is protected by filter_lock.
+	 */
+	struct socket *filter_sock;
+	spinlock_t filter_lock;
 };
 
 static unsigned vhost_net_zcopy_mask __read_mostly;
@@ -1128,6 +1138,95 @@ err:
 	return r;
 }
 
+/*
+ * Validate and acquire the filter socket from userspace.
+ *
+ * Returns:
+ *   - NULL when fd == -1 (explicitly disable filter)
+ *   - a ref-counted struct socket on success
+ *   - ERR_PTR(-errno) on validation failure
+ */
+static struct socket *get_filter_socket(int fd)
+{
+	int r;
+	struct socket *sock;
+
+	/* Special case: userspace asks to disable filter. */
+	if (fd == -1)
+		return NULL;
+
+	sock = sockfd_lookup(fd, &r);
+	if (!sock)
+		return ERR_PTR(-ENOTSOCK);
+
+	if (sock->sk->sk_family != AF_UNIX ||
+	    sock->sk->sk_type != SOCK_SEQPACKET) {
+		sockfd_put(sock);
+		return ERR_PTR(-EINVAL);
+	}
+
+	return sock;
+}
+
+/*
+ * Drop the currently configured filter socket, if any.
+ *
+ * Caller does not need to hold filter_lock; this function clears the pointer
+ * under the lock and releases the socket reference afterwards.
+ */
+static void vhost_net_filter_stop(struct vhost_net *n)
+{
+	struct socket *sock = n->filter_sock;
+
+	spin_lock(&n->filter_lock);
+	n->filter_sock = NULL;
+	spin_unlock(&n->filter_lock);
+
+	if (sock)
+		sockfd_put(sock);
+}
+
+/*
+ * Install or remove a filter socket for this vhost-net device.
+ *
+ * The ioctl passes an fd for a SOCK_SEQPACKET AF_UNIX socket created by
+ * userspace. We validate the socket type, replace any existing filter socket,
+ * and keep a reference so RX path can safely send filter requests.
+ */
+static long vhost_net_set_filter(struct vhost_net *n, int fd)
+{
+	struct socket *sock;
+	int r;
+
+	mutex_lock(&n->dev.mutex);
+	r = vhost_dev_check_owner(&n->dev);
+	if (r)
+		goto out;
+
+	sock = get_filter_socket(fd);
+	if (IS_ERR(sock)) {
+		r = PTR_ERR(sock);
+		goto out;
+	}
+
+	vhost_net_filter_stop(n);
+
+	if (!sock) {
+		r = 0;
+		goto out;
+	}
+
+	spin_lock(&n->filter_lock);
+	n->filter_sock = sock;
+	spin_unlock(&n->filter_lock);
+
+	r = 0;
+
+out:
+	mutex_unlock(&n->dev.mutex);
+	return r;
+}
+
 /* Expects to be always run from workqueue - which acts as
  * read-size critical section for our kind of RCU. */
 static void handle_rx(struct vhost_net *net)
@@ -1383,6 +1482,8 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 
 	f->private_data = n;
 	page_frag_cache_init(&n->pf_cache);
+	spin_lock_init(&n->filter_lock);
+	n->filter_sock = NULL;
 
 	return 0;
 }
@@ -1433,6 +1534,7 @@ static int vhost_net_release(struct inode *inode, struct file *f)
 	struct socket *tx_sock;
 	struct socket *rx_sock;
 
+	vhost_net_filter_stop(n);
 	vhost_net_stop(n, &tx_sock, &rx_sock);
 	vhost_net_flush(n);
 	vhost_dev_stop(&n->dev);
@@ -1637,6 +1739,8 @@ static long vhost_net_reset_owner(struct vhost_net *n)
 	err = vhost_dev_check_owner(&n->dev);
 	if (err)
 		goto done;
+
+	vhost_net_filter_stop(n);
 	umem = vhost_dev_reset_owner_prepare();
 	if (!umem) {
 		err = -ENOMEM;
@@ -1737,6 +1841,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 	void __user *argp = (void __user *)arg;
 	u64 __user *featurep = argp;
 	struct vhost_vring_file backend;
+	struct vhost_net_filter filter;
 	u64 features, count, copied;
 	int r, i;
 
@@ -1745,6 +1850,10 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 		if (copy_from_user(&backend, argp, sizeof backend))
 			return -EFAULT;
 		return vhost_net_set_backend(n, backend.index, backend.fd);
+	case VHOST_NET_SET_FILTER:
+		if (copy_from_user(&filter, argp, sizeof(filter)))
+			return -EFAULT;
+		return vhost_net_set_filter(n, filter.fd);
 	case VHOST_GET_FEATURES:
 		features = vhost_net_features[0];
 		if (copy_to_user(featurep, &features, sizeof features))
