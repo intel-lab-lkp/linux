@@ -190,7 +190,7 @@ static int dt2815_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 			outb(program, dev->iobase + DT2815_DATA);
 			dev_dbg(dev->class_dev, "program: 0x%x (@t=%d)\n",
 				program, i);
-			break;
+			return 0;
 		} else if (status != 0x00) {
 			dev_dbg(dev->class_dev,
 				"unexpected status 0x%x (@t=%d)\n",
@@ -200,7 +200,8 @@ static int dt2815_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 		}
 	}
 
-	return 0;
+	dev_err(dev->class_dev, "board not found\n");
+	return -EIO;
 }
 
 static struct comedi_driver dt2815_driver = {
