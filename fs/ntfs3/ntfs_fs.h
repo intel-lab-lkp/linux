@@ -192,9 +192,6 @@ struct ntfs_index {
 	/* read/write access to 'bitmap_run'/'alloc_run' while ntfs_readdir */
 	struct rw_semaphore run_lock;
 
-	/*TODO: Remove 'cmp'. */
-	NTFS_CMP_FUNC cmp;
-
 	u8 index_bits; // log2(root->index_block_size)
 	u8 idx2vbn_bits; // log2(root->index_block_clst)
 	u8 vbn2vbo_bits; // index_block_size < cluster? 9 : cluster_bits
@@ -378,7 +375,7 @@ struct ntfs_inode {
 	 */
 	u8 mi_loaded;
 
-	/* 
+	/*
 	 * Use this field to avoid any write(s).
 	 * If inode is bad during initialization - use make_bad_inode
 	 * If inode is bad during operations - use this field
