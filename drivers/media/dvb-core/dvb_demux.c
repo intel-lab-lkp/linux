@@ -670,18 +670,22 @@ out:
 	spin_unlock_irq(&feed->demux->lock);
 }
 
-static void dvb_demux_feed_del(struct dvb_demux_feed *feed)
+static int dvb_demux_feed_del(struct dvb_demux_feed *feed)
 {
+	int ret;
 	spin_lock_irq(&feed->demux->lock);
 	if (!(dvb_demux_feed_find(feed))) {
 		pr_err("%s: feed not in list (type=%x state=%x pid=%x)\n",
 		       __func__, feed->type, feed->state, feed->pid);
+		ret = -EINVAL;
 		goto out;
 	}
 
 	list_del(&feed->list_head);
+	ret = 0;
 out:
 	spin_unlock_irq(&feed->demux->lock);
+	return ret;
 }
 
 static int dmx_ts_feed_set(struct dmx_ts_feed *ts_feed, u16 pid, int ts_type,
@@ -840,6 +844,7 @@ static int dvbdmx_release_ts_feed(struct dmx_demux *dmx,
 {
 	struct dvb_demux *demux = (struct dvb_demux *)dmx;
 	struct dvb_demux_feed *feed = (struct dvb_demux_feed *)ts_feed;
+	int ret;
 
 	mutex_lock(&demux->mutex);
 
@@ -851,11 +856,12 @@ static int dvbdmx_release_ts_feed(struct dmx_demux *dmx,
 	feed->state = DMX_STATE_FREE;
 	feed->filter->state = DMX_STATE_FREE;
 
-	dvb_demux_feed_del(feed);
+	ret = dvb_demux_feed_del(feed);
 
 	feed->pid = 0xffff;
 
-	if (feed->ts_type & TS_DECODER && feed->pes_type < DMX_PES_OTHER)
+	if (!ret && feed->ts_type & TS_DECODER &&
+	    feed->pes_type < DMX_PES_OTHER)
 		demux->pesfilter[feed->pes_type] = NULL;
 
 	mutex_unlock(&demux->mutex);
