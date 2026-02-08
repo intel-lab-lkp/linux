@@ -1362,6 +1362,9 @@ static void kbd_rawcode(unsigned char data)
 {
 	struct vc_data *vc = vc_cons[fg_console].d;
 
+	if (!vc)
+		return;
+
 	kbd = &kbd_table[vc->vc_num];
 	if (kbd->kbdmode == VC_RAW)
 		put_queue(vc, data);
@@ -1377,6 +1380,9 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	int shift_final;
 	struct keyboard_notifier_param param = { .vc = vc, .value = keycode, .down = down };
 	int rc;
+
+	if (!vc)
+		return;
 
 	tty = vc->port.tty;
 
