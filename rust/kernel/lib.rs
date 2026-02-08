@@ -37,6 +37,15 @@
 #![feature(const_ptr_write)]
 #![feature(const_refs_to_cell)]
 //
+// `feature(cold_path)` is stable since Rust 1.95.0 and available since Rust 1.86.0. For Rust 1.84
+// and 1.85, use the intrinsic. For older versions, use a no-op.
+#![cfg_attr(CONFIG_RUSTC_HAS_COLD_PATH, feature(cold_path))]
+#![cfg_attr(
+    all(not(CONFIG_RUSTC_HAS_COLD_PATH), CONFIG_RUSTC_HAS_COLD_PATH_INTRINSIC),
+    allow(internal_features),
+    feature(core_intrinsics)
+)]
+//
 // Expected to become stable.
 #![feature(arbitrary_self_types)]
 //

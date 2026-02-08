@@ -98,6 +98,11 @@ pub use super::{
     pr_notice,
     pr_warn,
     static_assert,
+    std_vendor::{
+        cold_path,
+        likely,
+        unlikely, //
+    },
     str::{
         CStrExt as _, //
     },

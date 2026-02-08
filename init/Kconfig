@@ -169,6 +169,12 @@ config RUSTC_HAS_FILE_WITH_NUL
 config RUSTC_HAS_FILE_AS_C_STR
 	def_bool RUSTC_VERSION >= 109100
 
+config RUSTC_HAS_COLD_PATH_INTRINSIC
+	def_bool RUSTC_VERSION >= 108400
+
+config RUSTC_HAS_COLD_PATH
+	def_bool RUSTC_VERSION >= 108600
+
 config PAHOLE_VERSION
 	int
 	default $(shell,$(srctree)/scripts/pahole-version.sh $(PAHOLE))

@@ -162,3 +162,147 @@ macro_rules! dbg {
         ($($crate::dbg!($val)),+,)
     };
 }
+
+/// Hints to the compiler that a branch condition is likely to be true.
+/// Returns the value passed to it.
+///
+/// It can be used with `if` or boolean `match` expressions.
+///
+/// When used outside of a branch condition, it may still influence a nearby branch, but
+/// probably will not have any effect.
+///
+/// It can also be applied to parts of expressions, such as `likely(a) && unlikely(b)`, or to
+/// compound expressions, such as `likely(a && b)`. When applied to compound expressions, it has
+/// the following effect:
+/// ```text
+///     likely(!a) => !unlikely(a)
+///     likely(a && b) => likely(a) && likely(b)
+///     likely(a || b) => a || likely(b)
+/// ```
+///
+/// See also the function [`cold_path()`] which may be more appropriate for idiomatic Rust code.
+///
+/// # Examples
+///
+/// ```
+/// fn foo(x: i32) {
+///     if likely(x > 0) {
+///         pr_info!("this branch is likely to be taken\n");
+///     } else {
+///         pr_info!("this branch is unlikely to be taken\n");
+///     }
+///
+///     match likely(x > 0) {
+///         true => pr_info!("this branch is likely to be taken\n"),
+///         false => pr_info!("this branch is unlikely to be taken\n"),
+///     }
+///
+///     // Use outside of a branch condition may still influence a nearby branch
+///     let cond = likely(x != 0);
+///     if cond {
+///         pr_info!("this branch is likely to be taken\n");
+///     }
+/// }
+/// ```
+// This implementation is taken from `core::intrinsics::likely()`, not the `hint` wrapper.
+#[inline(always)]
+pub const fn likely(b: bool) -> bool {
+    if b {
+        true
+    } else {
+        cold_path();
+        false
+    }
+}
+
+/// Hints to the compiler that a branch condition is unlikely to be true.
+/// Returns the value passed to it.
+///
+/// It can be used with `if` or boolean `match` expressions.
+///
+/// When used outside of a branch condition, it may still influence a nearby branch, but
+/// probably will not have any effect.
+///
+/// It can also be applied to parts of expressions, such as `likely(a) && unlikely(b)`, or to
+/// compound expressions, such as `unlikely(a && b)`. When applied to compound expressions, it has
+/// the following effect:
+/// ```text
+///     unlikely(!a) => !likely(a)
+///     unlikely(a && b) => a && unlikely(b)
+///     unlikely(a || b) => unlikely(a) || unlikely(b)
+/// ```
+///
+/// See also the function [`cold_path()`] which may be more appropriate for idiomatic Rust code.
+///
+/// # Examples
+///
+/// ```
+/// fn foo(x: i32) {
+///     if unlikely(x > 0) {
+///         pr_info!("this branch is unlikely to be taken\n");
+///     } else {
+///         pr_info!("this branch is likely to be taken\n");
+///     }
+///
+///     match unlikely(x > 0) {
+///         true => pr_info!("this branch is unlikely to be taken\n"),
+///         false => pr_info!("this branch is likely to be taken\n"),
+///     }
+///
+///     // Use outside of a branch condition may still influence a nearby branch
+///     let cond = unlikely(x != 0);
+///     if cond {
+///         pr_info!("this branch is likely to be taken\n");
+///     }
+/// }
+/// ```
+// This implementation is taken from `core::intrinsics::unlikely()`, not the `hint` wrapper.
+#[inline(always)]
+pub const fn unlikely(b: bool) -> bool {
+    if b {
+        cold_path();
+        true
+    } else {
+        false
+    }
+}
+
+/// Hints to the compiler that given path is cold, i.e., unlikely to be taken. The compiler may
+/// choose to optimize paths that are not cold at the expense of paths that are cold.
+///
+/// Note that like all hints, the exact effect to codegen is not guaranteed. Using `cold_path`
+/// can actually *decrease* performance if the branch is called more than expected. It is advisable
+/// to perform benchmarks to tell if this function is useful.
+///
+/// # Examples
+///
+/// ```
+/// fn foo(x: &[i32]) {
+///     if let Some(first) = x.first() {
+///         // this is the fast path
+///     } else {
+///         // this path is unlikely
+///         cold_path();
+///     }
+/// }
+///
+/// fn bar(x: i32) -> i32 {
+///     match x {
+///         1 => 10,
+///         2 => 100,
+///         3 => { cold_path(); 1000 }, // this branch is unlikely
+///         _ => { cold_path(); 10000 }, // this is also unlikely
+///     }
+/// }
+/// ```
+///
+/// See also the [`likely()`] and [`unlikely()`] functions, which are similar to the C side macros.
+#[cfg(not(CONFIG_RUSTC_HAS_COLD_PATH))]
+#[inline(always)]
+pub const fn cold_path() {
+    #[cfg(CONFIG_RUSTC_HAS_COLD_PATH_INTRINSIC)]
+    core::intrinsics::cold_path()
+}
+
+#[cfg(CONFIG_RUSTC_HAS_COLD_PATH)]
+pub use core::hint::cold_path;
