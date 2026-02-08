@@ -182,14 +182,12 @@ static int smsm_update_bits(void *data, u32 mask, u32 value)
 		if (!(val & changes))
 			continue;
 
-		if (hostp->mbox_chan) {
-			mbox_send_message(hostp->mbox_chan, NULL);
-			mbox_client_txdone(hostp->mbox_chan, 0);
-		} else if (hostp->ipc_regmap) {
+		if (hostp->mbox_chan)
+			mbox_ring_doorbell(hostp->mbox_chan);
+		else if (hostp->ipc_regmap)
 			regmap_write(hostp->ipc_regmap,
 				     hostp->ipc_offset,
 				     BIT(hostp->ipc_bit));
-		}
 	}
 
 done:
