@@ -569,9 +569,13 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 		if (!evdev->exist || client->revoked)
 			return -ENODEV;
 
+		spin_lock_irq(&client->buffer_lock);
 		if (client->packet_head == client->tail &&
-		    (file->f_flags & O_NONBLOCK))
+		    (file->f_flags & O_NONBLOCK)) {
+			spin_unlock_irq(&client->buffer_lock);
 			return -EAGAIN;
+		}
+		spin_unlock_irq(&client->buffer_lock);
 
 		/*
 		 * count == 0 is special - no IO is done but we check
@@ -593,9 +597,12 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 			break;
 
 		if (!(file->f_flags & O_NONBLOCK)) {
-			error = wait_event_interruptible(client->wait,
+			spin_lock_irq(&client->buffer_lock);
+			error = wait_event_interruptible_lock_irq(client->wait,
 					client->packet_head != client->tail ||
-					!evdev->exist || client->revoked);
+					!evdev->exist || client->revoked,
+					client->buffer_lock);
+			spin_unlock_irq(&client->buffer_lock);
 			if (error)
 				return error;
 		}
@@ -610,6 +617,7 @@ static __poll_t evdev_poll(struct file *file, poll_table *wait)
 	struct evdev_client *client = file->private_data;
 	struct evdev *evdev = client->evdev;
 	__poll_t mask;
+	bool have_data;
 
 	poll_wait(file, &client->wait, wait);
 
@@ -618,7 +626,11 @@ static __poll_t evdev_poll(struct file *file, poll_table *wait)
 	else
 		mask = EPOLLHUP | EPOLLERR;
 
-	if (client->packet_head != client->tail)
+	spin_lock_irq(&client->buffer_lock);
+	have_data = client->packet_head != client->tail;
+	spin_unlock_irq(&client->buffer_lock);
+
+	if (have_data)
 		mask |= EPOLLIN | EPOLLRDNORM;
 
 	return mask;
