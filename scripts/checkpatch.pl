@@ -6636,7 +6636,7 @@ sub process {
 		if ($line =~ /\bmsleep\s*\((\d+)\);/) {
 			if ($1 < 20) {
 				WARN("MSLEEP",
-				     "msleep < 20ms can sleep for up to 20ms; see function description of msleep().\n" . $herecurr);
+				     "msleep < 20ms can sleep for up to 20ms; see function description of fsleep().\n" . $herecurr);
 			}
 		}
 
