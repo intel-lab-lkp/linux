@@ -1542,6 +1542,10 @@ static void snd_pcm_post_stop(struct snd_pcm_substream *substream,
 			      snd_pcm_state_t state)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
+
+	if (!runtime)
+		return;
+		
 	if (runtime->state != state) {
 		snd_pcm_trigger_tstamp(substream);
 		__snd_pcm_set_state(runtime, state);
