@@ -365,10 +365,11 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 {
 	if (memcg == NULL) {
 		/*
-		 * For non-memcg reclaim, is there
-		 * space in any swap device?
+		 * For non-memcg reclaim:
+		 *
+		 * Check if zswap is enabled or if there is space in any swap device?
 		 */
-		if (get_nr_swap_pages() > 0)
+		if (zswap_is_enabled() || get_nr_swap_pages() > 0)
 			return true;
 	} else {
 		/* Is the memcg below its swap limit? */
@@ -2640,12 +2641,12 @@ out:
 static bool can_age_anon_pages(struct lruvec *lruvec,
 			       struct scan_control *sc)
 {
-	/* Aging the anon LRU is valuable if swap is present: */
-	if (total_swap_pages > 0)
-		return true;
-
-	/* Also valuable if anon pages can be demoted: */
-	return can_demote(lruvec_pgdat(lruvec)->node_id, sc,
+	/*
+	 * Aging the anon LRU is valuable if zswap or physical swap is available or
+	 * anon pages can be demoted
+	 */
+	return zswap_is_enabled() || total_swap_pages > 0 ||
+			can_demote(lruvec_pgdat(lruvec)->node_id, sc,
 			  lruvec_memcg(lruvec));
 }
 

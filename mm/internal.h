@@ -327,19 +327,7 @@ static inline swp_entry_t swap_nth(swp_entry_t entry, long n)
 	return (swp_entry_t) { entry.val + n };
 }
 
-/* similar to swap_nth, but check the backing physical slots as well. */
-static inline swp_entry_t swap_move(swp_entry_t entry, long delta)
-{
-	swp_slot_t slot = swp_entry_to_swp_slot(entry), next_slot;
-	swp_entry_t next_entry = swap_nth(entry, delta);
-
-	next_slot = swp_entry_to_swp_slot(next_entry);
-	if (swp_slot_type(slot) != swp_slot_type(next_slot) ||
-			swp_slot_offset(slot) + delta != swp_slot_offset(next_slot))
-		next_entry.val = 0;
-
-	return next_entry;
-}
+swp_entry_t swap_move(swp_entry_t entry, long delta);
 
 /**
  * pte_move_swp_offset - Move the swap entry offset field of a swap pte
