@@ -4590,7 +4590,8 @@ static int __init megaraid_init(void)
 	error = pci_register_driver(&megaraid_pci_driver);
 	if (error) {
 #ifdef CONFIG_PROC_FS
-		remove_proc_entry("megaraid", NULL);
+		if (mega_proc_dir_entry)
+			remove_proc_entry("megaraid", NULL);
 #endif
 		return error;
 	}
@@ -4620,7 +4621,8 @@ static void __exit megaraid_exit(void)
 	pci_unregister_driver(&megaraid_pci_driver);
 
 #ifdef CONFIG_PROC_FS
-	remove_proc_entry("megaraid", NULL);
+	if (mega_proc_dir_entry)
+		remove_proc_entry("megaraid", NULL);
 #endif
 }
 
