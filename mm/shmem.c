@@ -2227,7 +2227,6 @@ static int shmem_split_large_entry(struct inode *inode, pgoff_t index,
 	XA_STATE_ORDER(xas, &mapping->i_pages, index, 0);
 	int split_order = 0;
 	int i;
-	swp_slot_t slot = swp_entry_to_swp_slot(swap);
 
 	/* Convert user data gfp flags to xarray node gfp flags */
 	gfp &= GFP_RECLAIM_MASK;
@@ -2268,13 +2267,7 @@ static int shmem_split_large_entry(struct inode *inode, pgoff_t index,
 			 */
 			for (i = 0; i < 1 << cur_order;
 			     i += (1 << split_order)) {
-				swp_entry_t tmp_entry;
-				swp_slot_t tmp_slot;
-
-				tmp_slot =
-					swp_slot(swp_slot_type(slot),
-						swp_slot_offset(slot) + swap_offset + i);
-				tmp_entry = swp_slot_to_swp_entry(tmp_slot);
+				swp_entry_t tmp_entry = swap_nth(swap, swap_offset + i);
 
 				__xa_store(&mapping->i_pages, aligned_index + i,
 					   swp_to_radix_entry(tmp_entry), 0);
