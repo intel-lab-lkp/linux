@@ -2442,7 +2442,7 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 
 	if (skip_swapcache) {
 		folio->swap.val = 0;
-		swapcache_clear(si, swap, nr_pages);
+		swapcache_clear(swap, nr_pages);
 	} else {
 		swap_cache_del_folio(folio);
 	}
@@ -2463,7 +2463,7 @@ unlock:
 		folio_unlock(folio);
 failed_nolock:
 	if (skip_swapcache)
-		swapcache_clear(si, folio->swap, folio_nr_pages(folio));
+		swapcache_clear(folio->swap, folio_nr_pages(folio));
 	if (folio)
 		folio_put(folio);
 	put_swap_entry(swap, si);
