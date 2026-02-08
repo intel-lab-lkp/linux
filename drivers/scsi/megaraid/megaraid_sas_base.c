@@ -3682,6 +3682,22 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 				       hdr->sense_len);
 			}
 
+			/*
+			 * MFI firmware does not report actual bytes
+			 * transferred, so we cannot compute residuals.
+			 * If data was expected and no CHECK_CONDITION,
+			 * retry via DID_SOFT_ERROR. The SCSI midlayer
+			 * retries up to cmd->allowed times (default 5).
+			 */
+			if (hdr->scsi_status != SAM_STAT_CHECK_CONDITION &&
+			    scsi_bufflen(cmd->scmd) > 0) {
+				cmd->scmd->result = DID_SOFT_ERROR << 16;
+				dev_warn(&instance->pdev->dev,
+					"megaraid_sas: DONE_WITH_ERROR (stat 0x%x) on cmd 0x%x to tgt %d, retrying\n",
+					hdr->cmd_status, hdr->cmd,
+					hdr->target_id);
+			}
+
 			break;
 
 		case MFI_STAT_LD_OFFLINE:

@@ -2066,7 +2066,19 @@ map_cmd_status(struct fusion_context *fusion,
 		resid = (scsi_bufflen(scmd) - data_length);
 		scsi_set_resid(scmd, resid);
 
-		if (resid &&
+		/*
+		 * If data was expected but zero bytes were transferred
+		 * and there is no CHECK_CONDITION sense data, retry via
+		 * DID_SOFT_ERROR. The SCSI midlayer retries up to
+		 * cmd->allowed times (default 5).
+		 */
+		if (data_length == 0 && scsi_bufflen(scmd) > 0 &&
+		    ext_status != SAM_STAT_CHECK_CONDITION) {
+			scmd->result = DID_SOFT_ERROR << 16;
+			scmd_printk(KERN_WARNING, scmd,
+				"megaraid_sas: zero data on DONE_WITH_ERROR (stat 0x%x, bufflen 0x%x), retrying\n",
+				status, scsi_bufflen(scmd));
+		} else if (resid &&
 			((cmd_type == READ_WRITE_LDIO) ||
 			(cmd_type == READ_WRITE_SYSPDIO)))
 			scmd_printk(KERN_INFO, scmd, "BRCM Debug mfi stat 0x%x, data len"
