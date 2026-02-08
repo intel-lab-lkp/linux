@@ -669,6 +669,8 @@ static inline bool mem_cgroup_swap_full(struct folio *folio)
 }
 #endif
 
+int vswap_init(void);
+
 /**
  * swp_entry_to_swp_slot - look up the physical swap slot corresponding to a
  *                         virtual swap slot.
