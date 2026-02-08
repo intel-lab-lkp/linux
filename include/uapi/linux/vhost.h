@@ -131,6 +131,26 @@
  * device.  This can be used to stop the ring (e.g. for migration). */
 #define VHOST_NET_SET_BACKEND _IOW(VHOST_VIRTIO, 0x30, struct vhost_vring_file)
 
+/* VHOST_NET filter offload (kernel vhost-net dataplane through QEMU netfilter) */
+struct vhost_net_filter {
+	__s32 fd;
+};
+
+enum {
+	VHOST_NET_FILTER_MSG_REQUEST = 1,
+};
+
+#define VHOST_NET_FILTER_DIRECTION_TX 1
+
+struct vhost_net_filter_msg {
+	__u16 type;
+	__u16 direction;
+	__u32 len;
+};
+
+
+#define VHOST_NET_SET_FILTER _IOW(VHOST_VIRTIO, 0x31, struct vhost_net_filter)
+
 /* VHOST_SCSI specific defines */
 
 #define VHOST_SCSI_SET_ENDPOINT _IOW(VHOST_VIRTIO, 0x40, struct vhost_scsi_target)
