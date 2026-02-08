@@ -913,7 +913,88 @@ static void riscv_iommu_bond_unlink(struct riscv_iommu_domain *domain,
 		riscv_iommu_cmd_sync(iommu, RISCV_IOMMU_IOTINVAL_TIMEOUT);
 	}
 }
+/*
+ * Encode a NAPOT range for IOTINVAL.{VMA,GVMA} when the S bit is set.
+ *
+ * Per RISC-V IOMMU Address Range Invalidation Extension:
+ *   - The ADDR operand is NAPOT encoded in 4KiB units.
+ *   - Scanning ADDR from bit 0 upwards, if the first 0 bit is at position X,
+ *     the invalidation range size is 2^(X+1) * 4KiB (X=0 => 8KiB).
+ *   - Thus, for a range of size = 4KiB * 2^k (k >= 1), the encoded ADDR has
+ *     its low (k-1) bits set to 1, and bit (k-1) cleared (by alignment).
+ *
+ */
+static unsigned long range_encode(unsigned long start, unsigned long size)
+{
+	unsigned long blocks = size >> PAGE_SHIFT;
+	unsigned long x = ilog2(blocks) - 1;
 
+	return (start >> PAGE_SHIFT) | ((1ULL << x) - 1);
+}
+static void riscv_iommu_iotlb_inval_range(struct riscv_iommu_domain *domain,
+					  struct riscv_iommu_device *iommu,
+					  unsigned long start, unsigned long end)
+{
+	struct riscv_iommu_command cmd;
+	unsigned long len = end - start + 1;
+	unsigned long page_start, limit, cur, max_range, size, range_addr;
+	int order;
+
+	riscv_iommu_cmd_inval_vma(&cmd);
+	riscv_iommu_cmd_inval_set_pscid(&cmd, domain->pscid);
+
+	/*
+	 * Using NAPOT range invalidations may still require multiple commands
+	 * to cover a large interval (e.g. when the range is poorly aligned and
+	 * needs to be split into many smaller NAPOT blocks).
+	 *
+	 * To keep the number of queued IOTINVAL commands bounded and avoid
+	 * excessive invalidation overhead, treat very large invalidation
+	 * requests as a global flush for the address space (AV=0, PSCV=1).
+	 *
+	 */
+	if (len > SZ_1G) {
+		riscv_iommu_cmd_send(iommu, &cmd);
+		return;
+	}
+
+	page_start = start & PAGE_MASK;
+	limit = PAGE_ALIGN(end + 1);
+	cur = page_start;
+
+	while (cur < limit) {
+		max_range = 0;
+
+		/*
+		 * We cap the maximum NAPOT range to 1GiB (order=18, i.e. 2^18 * 4KiB) and
+		 * fall back to a whole-address-space invalidation for larger ranges. This
+		 * keeps the command generation bounded and aligns with the existing policy
+		 * of treating very large invalidations as global flushes.
+		 */
+		for (order = 18; order >= 1; order--) {
+			/* 1GB, ... , 16KB, 8KB */
+			size = (1ULL << order) * SZ_4K;
+			if (cur + size <= limit && IS_ALIGNED(cur, size)) {
+				max_range = size;
+				break;
+			}
+		}
+
+		if (max_range) {
+			range_addr = range_encode(cur, max_range);
+
+			riscv_iommu_cmd_inval_set_range(&cmd, range_addr);
+			riscv_iommu_cmd_send(iommu, &cmd);
+			cur += max_range;
+			continue;
+		}
+
+		/* Fall back to single-page invalidation */
+		riscv_iommu_cmd_inval_set_addr(&cmd, cur);
+		riscv_iommu_cmd_send(iommu, &cmd);
+		cur += PAGE_SIZE;
+	}
+}
 /*
  * Send IOTLB.INVAL for whole address space for ranges larger than 2MB.
  * This limit will be replaced with range invalidations, if supported by
@@ -969,6 +1050,11 @@ static void riscv_iommu_iotlb_inval(struct riscv_iommu_domain *domain,
 		 */
 		if (iommu == prev)
 			continue;
+
+		if (!!(iommu->caps & RISCV_IOMMU_CAPABILITIES_S)) {
+			riscv_iommu_iotlb_inval_range(domain, iommu, start, end);
+			continue;
+		}
 
 		riscv_iommu_cmd_inval_vma(&cmd);
 		riscv_iommu_cmd_inval_set_pscid(&cmd, domain->pscid);
