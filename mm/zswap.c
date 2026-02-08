@@ -1212,6 +1212,14 @@ static unsigned long zswap_shrinker_count(struct shrinker *shrinker,
 		return 0;
 
 	/*
+	 * When swap is virtualized, we do not have any swap slots on swapfile
+	 * preallocated for zswap objects. If there is no slot available, we
+	 * cannot writeback and should just bail out here.
+	 */
+	if (!get_nr_swap_pages())
+		return 0;
+
+	/*
 	 * The shrinker resumes swap writeback, which will enter block
 	 * and may enter fs. XXX: Harmonize with vmscan.c __GFP_FS
 	 * rules (may_enter_fs()), which apply on a per-folio basis.
