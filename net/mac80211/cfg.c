@@ -885,7 +885,9 @@ static int ieee80211_get_key(struct wiphy *wiphy, struct net_device *dev,
 			     offsetof(typeof(kseq), gcmp));
 
 		if (key->flags & KEY_FLAG_UPLOADED_TO_HARDWARE &&
-		    !(key->conf.flags & IEEE80211_KEY_FLAG_GENERATE_IV)) {
+		    !(key->conf.flags & IEEE80211_KEY_FLAG_GENERATE_IV) &&
+		    !(key->conf.flags &
+		      IEEE80211_KEY_FLAG_MGMT_TX_ENC_OFFLOAD)) {
 			drv_get_key_seq(sdata->local, key, &kseq);
 			memcpy(seq, kseq.ccmp.pn, 6);
 		} else {

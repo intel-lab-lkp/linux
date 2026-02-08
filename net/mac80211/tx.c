@@ -632,6 +632,11 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 		case WLAN_CIPHER_SUITE_TKIP:
 			if (!ieee80211_is_data_present(hdr->frame_control))
 				tx->key = NULL;
+			else
+				skip_hw = ieee80211_require_sw_tx_enc(hdr->frame_control,
+								      tx->key->conf.flags,
+								      tx->sta,
+								      tx->skb);
 			break;
 		case WLAN_CIPHER_SUITE_CCMP:
 		case WLAN_CIPHER_SUITE_CCMP_256:
@@ -645,9 +650,13 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 							       tx->sta))
 				tx->key = NULL;
 			else
-				skip_hw = (tx->key->conf.flags &
-					   IEEE80211_KEY_FLAG_SW_MGMT_TX) &&
-					ieee80211_is_mgmt(hdr->frame_control);
+				skip_hw = ((tx->key->conf.flags &
+					    IEEE80211_KEY_FLAG_SW_MGMT_TX) &&
+					ieee80211_is_mgmt(hdr->frame_control)) ||
+					ieee80211_require_sw_tx_enc(hdr->frame_control,
+								    tx->key->conf.flags,
+								    tx->sta,
+								    tx->skb);
 			break;
 		case WLAN_CIPHER_SUITE_AES_CMAC:
 		case WLAN_CIPHER_SUITE_BIP_CMAC_256:
@@ -655,6 +664,11 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 		case WLAN_CIPHER_SUITE_BIP_GMAC_256:
 			if (!ieee80211_is_mgmt(hdr->frame_control))
 				tx->key = NULL;
+			else
+				skip_hw = ieee80211_require_sw_tx_enc(hdr->frame_control,
+								      tx->key->conf.flags,
+								      tx->sta,
+								      tx->skb);
 			break;
 		}
 
@@ -3205,6 +3219,13 @@ void ieee80211_check_fast_xmit(struct sta_info *sta)
 		if (!(build.key->flags & KEY_FLAG_UPLOADED_TO_HARDWARE))
 			goto out;
 
+		/* Only management frame encryption is offloaded to the driver,
+		 * So skip fast-xmit
+		 */
+		if (build.key->conf.flags &
+		    IEEE80211_KEY_FLAG_MGMT_TX_ENC_OFFLOAD)
+			goto out;
+
 		/* Key is being removed */
 		if (build.key->flags & KEY_FLAG_TAINTED)
 			goto out;
@@ -5299,6 +5320,7 @@ static int ieee80211_beacon_protect(struct sk_buff *skb,
 	}
 
 	if (!(tx.key->conf.flags & IEEE80211_KEY_FLAG_SW_MGMT_TX) &&
+	    !(tx.key->conf.flags & IEEE80211_KEY_FLAG_MGMT_TX_ENC_OFFLOAD) &&
 	    tx.key->flags & KEY_FLAG_UPLOADED_TO_HARDWARE)
 		IEEE80211_SKB_CB(skb)->control.hw_key = &tx.key->conf;
 
@@ -5315,6 +5337,38 @@ static int ieee80211_beacon_protect(struct sk_buff *skb,
 
 	return 0;
 }
+
+int ieee80211_encrypt_tx_skb(struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_sub_if_data *sdata;
+	struct sk_buff *check_skb;
+	struct ieee80211_tx_data tx;
+	ieee80211_tx_result res;
+
+	if (!info->control.hw_key)
+		return 0;
+
+	memset(&tx, 0, sizeof(tx));
+	tx.key = container_of(info->control.hw_key, struct ieee80211_key, conf);
+	/* NULL it out now so we do full SW crypto */
+	info->control.hw_key = NULL;
+	__skb_queue_head_init(&tx.skbs);
+	__skb_queue_tail(&tx.skbs, skb);
+
+	sdata = IEEE80211_DEV_TO_SUB_IF(skb->dev);
+	tx.sdata = sdata;
+	tx.local = sdata->local;
+	res = ieee80211_tx_h_encrypt(&tx);
+	check_skb = __skb_dequeue(&tx.skbs);
+	/* we may crash after this, but it'd be a bug in crypto */
+	WARN_ON(check_skb != skb);
+	if (WARN_ON_ONCE(res != TX_CONTINUE))
+		return -EINVAL;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ieee80211_encrypt_tx_skb);
 
 static void
 ieee80211_beacon_get_finish(struct ieee80211_hw *hw,

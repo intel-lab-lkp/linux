@@ -256,6 +256,8 @@ struct ieee80211_rx_data {
 			u8 pn[IEEE80211_CCMP_PN_LEN];
 		} ccm_gcm;
 	};
+
+	u8 link_addrs[3 * ETH_ALEN];
 };
 
 struct ieee80211_csa_settings {
@@ -2402,6 +2404,19 @@ static inline bool ieee80211_require_encrypted_assoc(__le16 fc,
 	return (sta && sta->sta.epp_peer &&
 		(ieee80211_is_assoc_req(fc) || ieee80211_is_reassoc_req(fc) ||
 		 ieee80211_is_assoc_resp(fc) || ieee80211_is_reassoc_resp(fc)));
+}
+
+static inline bool ieee80211_require_sw_tx_enc(__le16 fc, u16 flags,
+					       struct sta_info *sta,
+					       struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (void *)skb->data;
+	bool unicast_robust_mgmt = is_unicast_ether_addr(hdr->addr1) &&
+				   ieee80211_is_robust_mgmt_frame(skb);
+
+	return ((flags & IEEE80211_KEY_FLAG_MGMT_TX_ENC_OFFLOAD) &&
+		!unicast_robust_mgmt &&
+		!ieee80211_require_encrypted_assoc(fc, sta));
 }
 
 /* sta_out needs to be checked for ERR_PTR() before using */
