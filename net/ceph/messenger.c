@@ -467,8 +467,22 @@ int ceph_tcp_connect(struct ceph_connection *con)
 		     ceph_pr_addr(&con->peer_addr),
 		     sock->sk->sk_state);
 	} else if (ret < 0) {
-		pr_err("connect %s error %d\n",
-		       ceph_pr_addr(&con->peer_addr), ret);
+		if (ret == -EADDRNOTAVAIL) {
+			/*
+			 * Address not yet available - could be IPv6 DAD in
+			 * progress, address reconfiguration, or temporary
+			 * route issue. Use shorter delay.
+			 */
+			pr_warn_ratelimited("connect %s: address not available (DAD/route issue?), will retry\n",
+					    ceph_pr_addr(&con->peer_addr));
+			if (ceph_msgr2(from_msgr(con->msgr)))
+				con->v2.addr_notavail = true;
+			else
+				con->v1.addr_notavail = true;
+		} else {
+			pr_err("connect %s error %d\n",
+			       ceph_pr_addr(&con->peer_addr), ret);
+		}
 		sock_release(sock);
 		return ret;
 	}
@@ -477,6 +491,13 @@ int ceph_tcp_connect(struct ceph_connection *con)
 		tcp_sock_set_nodelay(sock->sk);
 
 	con->sock = sock;
+
+	/* Clear addr_notavail flag on successful connection */
+	if (ceph_msgr2(from_msgr(con->msgr)))
+		con->v2.addr_notavail = false;
+	else
+		con->v1.addr_notavail = false;
+
 	return 0;
 }
 
@@ -610,6 +631,13 @@ void ceph_con_open(struct ceph_connection *con,
 
 	memcpy(&con->peer_addr, addr, sizeof(*addr));
 	con->delay = 0;      /* reset backoff memory */
+
+	/* Clear addr_notavail flag when opening/reopening connection */
+	if (ceph_msgr2(from_msgr(con->msgr)))
+		con->v2.addr_notavail = false;
+	else
+		con->v1.addr_notavail = false;
+
 	mutex_unlock(&con->mutex);
 	queue_con(con);
 }
@@ -1614,12 +1642,27 @@ static void ceph_con_workfn(struct work_struct *work)
  */
 static void con_fault(struct ceph_connection *con)
 {
+	bool addr_issue = false;
+
 	dout("fault %p state %d to peer %s\n",
 	     con, con->state, ceph_pr_addr(&con->peer_addr));
 
 	pr_warn("%s%lld %s %s\n", ENTITY_NAME(con->peer_name),
 		ceph_pr_addr(&con->peer_addr), con->error_msg);
 	con->error_msg = NULL;
+
+	/* Check and reset addr_notavail flag if set */
+	if (ceph_msgr2(from_msgr(con->msgr))) {
+		if (con->v2.addr_notavail) {
+			addr_issue = true;
+			con->v2.addr_notavail = false;
+		}
+	} else {
+		if (con->v1.addr_notavail) {
+			addr_issue = true;
+			con->v1.addr_notavail = false;
+		}
+	}
 
 	WARN_ON(con->state == CEPH_CON_S_STANDBY ||
 		con->state == CEPH_CON_S_CLOSED);
@@ -1645,7 +1688,13 @@ static void con_fault(struct ceph_connection *con)
 	} else {
 		/* retry after a delay. */
 		con->state = CEPH_CON_S_PREOPEN;
-		if (!con->delay) {
+		if (addr_issue) {
+			/*
+			 * Address not available - use shorter delay as this
+			 * is often a transient condition.
+			 */
+			con->delay = ADDRNOTAVAIL_DELAY;
+		} else if (!con->delay) {
 			con->delay = BASE_DELAY_INTERVAL;
 		} else if (con->delay < MAX_DELAY_INTERVAL) {
 			con->delay *= 2;
