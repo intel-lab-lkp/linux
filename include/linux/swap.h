@@ -223,17 +223,9 @@ enum {
 #define SWAP_CLUSTER_MAX_SKIPPED (SWAP_CLUSTER_MAX << 10)
 #define COMPACT_CLUSTER_MAX SWAP_CLUSTER_MAX
 
-/* Bit flag in swap_map */
-#define SWAP_HAS_CACHE	0x40	/* Flag page is cached, in first swap_map */
-#define COUNT_CONTINUED	0x80	/* Flag swap_map continuation for full count */
-
-/* Special value in first swap_map */
-#define SWAP_MAP_MAX	0x3e	/* Max count */
-#define SWAP_MAP_BAD	0x3f	/* Note page is bad */
-#define SWAP_MAP_SHMEM	0xbf	/* Owned by shmem/tmpfs */
-
-/* Special value in each swap_map continuation */
-#define SWAP_CONT_MAX	0x7f	/* Max count */
+/* Swapfile's swap map state*/
+#define SWAP_MAP_ALLOCATED	0x01	/* Page is allocated */
+#define SWAP_MAP_BAD	0x02	/* Page is bad */
 
 /*
  * The first page in the swap file is the swap header, which is always marked
@@ -423,7 +415,7 @@ extern void __meminit kswapd_stop(int nid);
 
 #ifdef CONFIG_SWAP
 
-/* Lifecycle swap API (mm/swapfile.c) */
+/* Lifecycle swap API (mm/swapfile.c and mm/vswap.c) */
 int folio_alloc_swap(struct folio *folio);
 bool folio_free_swap(struct folio *folio);
 void put_swap_folio(struct folio *folio, swp_entry_t entry);
@@ -433,7 +425,7 @@ int swapcache_prepare(swp_entry_t entry, int nr);
 void swap_free_nr(swp_entry_t entry, int nr_pages);
 void free_swap_and_cache_nr(swp_entry_t entry, int nr);
 int __swap_count(swp_entry_t entry);
-bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t entry);
+bool swap_entry_swapped(swp_entry_t entry);
 int swp_swapcount(swp_entry_t entry);
 bool is_swap_cached(swp_entry_t entry);
 
@@ -473,7 +465,6 @@ static inline long get_nr_swap_pages(void)
 void si_swapinfo(struct sysinfo *);
 int swap_slot_alloc(swp_slot_t *slot, unsigned int order);
 swp_slot_t swap_slot_alloc_of_type(int);
-int add_swap_count_continuation(swp_entry_t, gfp_t);
 int swap_type_of(dev_t device, sector_t offset);
 int find_first_swap(dev_t *device);
 unsigned int count_swap_pages(int, int);
@@ -517,11 +508,6 @@ static inline void free_swap_cache(struct folio *folio)
 {
 }
 
-static inline int add_swap_count_continuation(swp_entry_t swp, gfp_t gfp_mask)
-{
-	return 0;
-}
-
 static inline void swap_shmem_alloc(swp_entry_t swp, int nr)
 {
 }
@@ -549,7 +535,7 @@ static inline int __swap_count(swp_entry_t entry)
 	return 0;
 }
 
-static inline bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t entry)
+static inline bool swap_entry_swapped(swp_entry_t entry)
 {
 	return false;
 }
@@ -672,11 +658,12 @@ static inline bool mem_cgroup_swap_full(struct folio *folio)
 
 int vswap_init(void);
 void vswap_exit(void);
-void vswap_free(swp_entry_t entry, struct swap_cluster_info *ci);
 swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry);
 swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot);
 bool tryget_swap_entry(swp_entry_t entry, struct swap_info_struct **si);
 void put_swap_entry(swp_entry_t entry, struct swap_info_struct *si);
+bool folio_swapped(struct folio *folio);
+bool vswap_only_has_cache(swp_entry_t entry, int nr);
 
 #endif /* __KERNEL__*/
 #endif /* _LINUX_SWAP_H */
