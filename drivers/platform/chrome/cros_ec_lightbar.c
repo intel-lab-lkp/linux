@@ -291,10 +291,10 @@ static ssize_t led_rgb_store(struct device *dev, struct device_attribute *attr,
 		if (!*buf)
 			break;
 
-		ret = sscanf(buf, "%i", &val[i++]);
+		ret = kstrtouint(buf, 0, &val[i]);
 		if (ret == 0)
 			goto exit;
-
+		i++;
 		if (i == 4) {
 			param = (struct ec_params_lightbar *)msg->data;
 			param->cmd = LIGHTBAR_CMD_SET_RGB;
