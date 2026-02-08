@@ -197,8 +197,7 @@ static void glink_smem_tx_kick(struct qcom_glink_pipe *glink_pipe)
 	struct glink_smem_pipe *pipe = to_smem_pipe(glink_pipe);
 	struct qcom_glink_smem *smem = pipe->smem;
 
-	mbox_send_message(smem->mbox_chan, NULL);
-	mbox_client_txdone(smem->mbox_chan, 0);
+	mbox_ring_doorbell(smem->mbox_chan);
 }
 
 static irqreturn_t qcom_glink_smem_intr(int irq, void *data)
