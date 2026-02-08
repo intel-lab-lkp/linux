@@ -30,7 +30,7 @@ int imx_dsp_ring_doorbell(struct imx_dsp_ipc *ipc, unsigned int idx)
 		return -EINVAL;
 
 	dsp_chan = &ipc->chans[idx];
-	ret = mbox_send_message(dsp_chan->ch, NULL);
+	ret = mbox_ring_doorbell(dsp_chan->ch);
 	if (ret < 0)
 		return ret;
 
