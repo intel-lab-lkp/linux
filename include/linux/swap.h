@@ -658,12 +658,26 @@ static inline bool mem_cgroup_swap_full(struct folio *folio)
 
 int vswap_init(void);
 void vswap_exit(void);
+bool vswap_alloc_swap_slot(struct folio *folio);
 swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry);
 swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot);
 bool tryget_swap_entry(swp_entry_t entry, struct swap_info_struct **si);
 void put_swap_entry(swp_entry_t entry, struct swap_info_struct *si);
 bool folio_swapped(struct folio *folio);
 bool vswap_only_has_cache(swp_entry_t entry, int nr);
+int non_swapcache_batch(swp_entry_t entry, int nr);
+bool vswap_swapfile_backed(swp_entry_t entry, int nr);
+bool vswap_folio_backed(swp_entry_t entry, int nr);
+void vswap_store_folio(swp_entry_t entry, struct folio *folio);
+void swap_zeromap_folio_set(struct folio *folio);
+void vswap_assoc_zswap(swp_entry_t entry, struct zswap_entry *zswap_entry);
+bool vswap_can_swapin_thp(swp_entry_t entry, int nr);
 
+static inline struct swap_info_struct *vswap_get_device(swp_entry_t entry)
+{
+	swp_slot_t slot = swp_entry_to_swp_slot(entry);
+
+	return slot.val ? swap_slot_tryget_swap_info(slot) : NULL;
+}
 #endif /* __KERNEL__*/
 #endif /* _LINUX_SWAP_H */
