@@ -169,12 +169,10 @@ static void qcom_smp2p_kick(struct qcom_smp2p *smp2p)
 	/* Make sure any updated data is written before the kick */
 	wmb();
 
-	if (smp2p->mbox_chan) {
-		mbox_send_message(smp2p->mbox_chan, NULL);
-		mbox_client_txdone(smp2p->mbox_chan, 0);
-	} else {
+	if (smp2p->mbox_chan)
+		mbox_ring_doorbell(smp2p->mbox_chan);
+	else
 		regmap_write(smp2p->ipc_regmap, smp2p->ipc_offset, BIT(smp2p->ipc_bit));
-	}
 }
 
 static bool qcom_smp2p_check_ssr(struct qcom_smp2p *smp2p)
