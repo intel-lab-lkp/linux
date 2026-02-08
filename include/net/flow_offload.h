@@ -673,6 +673,8 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 			       flow_setup_cb_t *cb,
 			       void *cb_ident, void *cb_priv, bool ingress_only);
 
+void flow_block_cb_remove_driver(struct flow_block_cb *block_cb);
+
 enum flow_cls_command {
 	FLOW_CLS_REPLACE,
 	FLOW_CLS_DESTROY,

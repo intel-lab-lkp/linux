@@ -334,6 +334,8 @@ bool flow_block_cb_is_busy(flow_setup_cb_t *cb, void *cb_ident,
 }
 EXPORT_SYMBOL(flow_block_cb_is_busy);
 
+static DEFINE_MUTEX(flow_block_cb_list_lock);
+
 int flow_block_cb_setup_simple(struct flow_block_offload *f,
 			       struct list_head *driver_block_list,
 			       flow_setup_cb_t *cb,
@@ -341,6 +343,7 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 			       bool ingress_only)
 {
 	struct flow_block_cb *block_cb;
+	int err = 0;
 
 	if (ingress_only &&
 	    f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
@@ -348,31 +351,51 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 
 	f->driver_block_list = driver_block_list;
 
+	mutex_lock(&flow_block_cb_list_lock);
+
 	switch (f->command) {
 	case FLOW_BLOCK_BIND:
-		if (flow_block_cb_is_busy(cb, cb_ident, driver_block_list))
-			return -EBUSY;
+		if (flow_block_cb_is_busy(cb, cb_ident, driver_block_list)) {
+			err = -EBUSY;
+			break;
+		}
 
 		block_cb = flow_block_cb_alloc(cb, cb_ident, cb_priv, NULL);
-		if (IS_ERR(block_cb))
-			return PTR_ERR(block_cb);
+		if (IS_ERR(block_cb)) {
+			err = PTR_ERR(block_cb);
+			break;
+		}
 
 		flow_block_cb_add(block_cb, f);
 		list_add_tail(&block_cb->driver_list, driver_block_list);
-		return 0;
+		break;
 	case FLOW_BLOCK_UNBIND:
 		block_cb = flow_block_cb_lookup(f->block, cb, cb_ident);
-		if (!block_cb)
-			return -ENOENT;
+		if (!block_cb) {
+			err = -ENOENT;
+			break;
+		}
 
 		flow_block_cb_remove(block_cb, f);
 		list_del(&block_cb->driver_list);
-		return 0;
+		break;
 	default:
-		return -EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+		break;
 	}
+
+	mutex_unlock(&flow_block_cb_list_lock);
+	return err;
 }
 EXPORT_SYMBOL(flow_block_cb_setup_simple);
+
+void flow_block_cb_remove_driver(struct flow_block_cb *block_cb)
+{
+	mutex_lock(&flow_block_cb_list_lock);
+	list_del(&block_cb->driver_list);
+	mutex_unlock(&flow_block_cb_list_lock);
+}
+EXPORT_SYMBOL(flow_block_cb_remove_driver);
 
 static DEFINE_MUTEX(flow_indr_block_lock);
 static LIST_HEAD(flow_block_indr_list);

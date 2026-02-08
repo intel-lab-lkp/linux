@@ -414,7 +414,7 @@ static void nft_indr_block_cleanup(struct flow_block_cb *block_cb)
 				    basechain, &extack);
 	nft_net = nft_pernet(net);
 	mutex_lock(&nft_net->commit_mutex);
-	list_del(&block_cb->driver_list);
+	flow_block_cb_remove_driver(block_cb);
 	list_move(&block_cb->list, &bo.cb_list);
 	nft_flow_offload_unbind(&bo, basechain);
 	mutex_unlock(&nft_net->commit_mutex);
