@@ -328,9 +328,9 @@ static int wkup_m3_ping(struct wkup_m3_ipc *m3_ipc)
 	 * the RX callback to avoid multiple interrupts being received
 	 * by the CM3.
 	 */
-	ret = mbox_send_message(m3_ipc->mbox, NULL);
+	ret = mbox_ring_doorbell(m3_ipc->mbox);
 	if (ret < 0) {
-		dev_err(dev, "%s: mbox_send_message() failed: %d\n",
+		dev_err(dev, "%s: mbox_ring_doorbell() failed: %d\n",
 			__func__, ret);
 		return ret;
 	}
@@ -343,7 +343,6 @@ static int wkup_m3_ping(struct wkup_m3_ipc *m3_ipc)
 		return -EIO;
 	}
 
-	mbox_client_txdone(m3_ipc->mbox, 0);
 	return 0;
 }
 
@@ -358,14 +357,13 @@ static int wkup_m3_ping_noirq(struct wkup_m3_ipc *m3_ipc)
 		return -EIO;
 	}
 
-	ret = mbox_send_message(m3_ipc->mbox, NULL);
+	ret = mbox_ring_doorbell(m3_ipc->mbox);
 	if (ret < 0) {
-		dev_err(dev, "%s: mbox_send_message() failed: %d\n",
+		dev_err(dev, "%s: mbox_ring_doorbell() failed: %d\n",
 			__func__, ret);
 		return ret;
 	}
 
-	mbox_client_txdone(m3_ipc->mbox, 0);
 	return 0;
 }
 
