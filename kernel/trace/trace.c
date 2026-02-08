@@ -1233,7 +1233,6 @@ EXPORT_SYMBOL_GPL(__trace_bputs);
 static void tracing_snapshot_instance_cond(struct trace_array *tr,
 					   void *cond_data)
 {
-	struct tracer *tracer = tr->current_trace;
 	unsigned long flags;
 
 	if (in_nmi()) {
@@ -1250,7 +1249,7 @@ static void tracing_snapshot_instance_cond(struct trace_array *tr,
 	}
 
 	/* Note, snapshot can not be used when the tracer uses it */
-	if (tracer->use_max_tr) {
+	if (tracer_uses_snapshot(tr->current_trace)) {
 		trace_array_puts(tr, "*** LATENCY TRACER ACTIVE ***\n");
 		trace_array_puts(tr, "*** Can not use snapshot (sorry) ***\n");
 		return;
@@ -1499,7 +1498,7 @@ int tracing_snapshot_cond_enable(struct trace_array *tr, void *cond_data,
 
 	guard(mutex)(&trace_types_lock);
 
-	if (tr->current_trace->use_max_tr)
+	if (tracer_uses_snapshot(tr->current_trace))
 		return -EBUSY;
 
 	/*
@@ -2214,7 +2213,7 @@ static int run_tracer_selftest(struct tracer *type)
 	tr->current_trace_flags = type->flags ? : type->default_flags;
 
 #ifdef CONFIG_TRACER_MAX_TRACE
-	if (type->use_max_tr) {
+	if (tracer_uses_snapshot(type)) {
 		/* If we expanded the buffers, make sure the max is expanded too */
 		if (tr->ring_buffer_expanded)
 			ring_buffer_resize(tr->snapshot_buffer.buffer, trace_buf_size,
@@ -2239,7 +2238,7 @@ static int run_tracer_selftest(struct tracer *type)
 	tracing_reset_online_cpus(&tr->array_buffer);
 
 #ifdef CONFIG_TRACER_MAX_TRACE
-	if (type->use_max_tr) {
+	if (tracer_uses_snapshot(type)) {
 		tr->allocated_snapshot = false;
 
 		/* Shrink the max buffer again */
@@ -3997,10 +3996,8 @@ static void *s_start(struct seq_file *m, loff_t *pos)
 	}
 	mutex_unlock(&trace_types_lock);
 
-#ifdef CONFIG_TRACER_MAX_TRACE
-	if (iter->snapshot && iter->trace->use_max_tr)
+	if (iter->snapshot && tracer_uses_snapshot(iter->trace))
 		return ERR_PTR(-EBUSY);
-#endif
 
 	if (*pos != iter->pos) {
 		iter->ent = NULL;
@@ -4039,10 +4036,8 @@ static void s_stop(struct seq_file *m, void *p)
 {
 	struct trace_iterator *iter = m->private;
 
-#ifdef CONFIG_TRACER_MAX_TRACE
-	if (iter->snapshot && iter->trace->use_max_tr)
+	if (iter->snapshot && tracer_uses_snapshot(iter->trace))
 		return;
-#endif
 
 	trace_access_unlock(iter->cpu_file);
 	trace_event_read_unlock();
@@ -4939,11 +4934,9 @@ static int tracing_open(struct inode *inode, struct file *file)
 static bool
 trace_ok_for_array(struct tracer *t, struct trace_array *tr)
 {
-#ifdef CONFIG_TRACER_SNAPSHOT
 	/* arrays with mapped buffer range do not have snapshots */
-	if (tr->range_addr_start && t->use_max_tr)
+	if (tr->range_addr_start && tracer_uses_snapshot(t))
 		return false;
-#endif
 	return (tr->flags & TRACE_ARRAY_FL_GLOBAL) || t->allow_instances;
 }
 
@@ -6338,8 +6331,7 @@ int tracing_set_tracer(struct trace_array *tr, const char *buf)
 	if (trace == tr->current_trace)
 		return 0;
 
-#ifdef CONFIG_TRACER_SNAPSHOT
-	if (trace->use_max_tr) {
+	if (tracer_uses_snapshot(trace)) {
 		local_irq_disable();
 		arch_spin_lock(&tr->max_lock);
 		ret = tr->cond_snapshot ? -EBUSY : 0;
@@ -6348,7 +6340,7 @@ int tracing_set_tracer(struct trace_array *tr, const char *buf)
 		if (ret)
 			return ret;
 	}
-#endif
+
 	/* Some tracers won't work on kernel command line */
 	if (system_state < SYSTEM_RUNNING && trace->noboot) {
 		pr_warn("Tracer '%s' is not allowed on command line, ignored\n",
@@ -6371,14 +6363,13 @@ int tracing_set_tracer(struct trace_array *tr, const char *buf)
 	if (tr->current_trace->reset)
 		tr->current_trace->reset(tr);
 
-#ifdef CONFIG_TRACER_MAX_TRACE
-	had_max_tr = tr->current_trace->use_max_tr;
+	had_max_tr = tracer_uses_snapshot(tr->current_trace);
 
 	/* Current trace needs to be nop_trace before synchronize_rcu */
 	tr->current_trace = &nop_trace;
 	tr->current_trace_flags = nop_trace.flags;
 
-	if (had_max_tr && !trace->use_max_tr) {
+	if (had_max_tr && !tracer_uses_snapshot(trace)) {
 		/*
 		 * We need to make sure that the update_max_tr sees that
 		 * current_trace changed to nop_trace to keep it from
@@ -6391,24 +6382,19 @@ int tracing_set_tracer(struct trace_array *tr, const char *buf)
 		tracing_disarm_snapshot(tr);
 	}
 
-	if (!had_max_tr && trace->use_max_tr) {
+	if (!had_max_tr && tracer_uses_snapshot(trace)) {
 		ret = tracing_arm_snapshot_locked(tr);
 		if (ret)
 			return ret;
 	}
-#else
-	tr->current_trace = &nop_trace;
-#endif
 
 	tr->current_trace_flags = t->flags ? : t->tracer->flags;
 
 	if (trace->init) {
 		ret = tracer_init(trace, tr);
 		if (ret) {
-#ifdef CONFIG_TRACER_MAX_TRACE
-			if (trace->use_max_tr)
+			if (tracer_uses_snapshot(trace))
 				tracing_disarm_snapshot(tr);
-#endif
 			tr->current_trace_flags = nop_trace.flags;
 			return ret;
 		}
@@ -7986,7 +7972,7 @@ tracing_snapshot_write(struct file *filp, const char __user *ubuf, size_t cnt,
 
 	guard(mutex)(&trace_types_lock);
 
-	if (tr->current_trace->use_max_tr)
+	if (tracer_uses_snapshot(tr->current_trace))
 		return -EBUSY;
 
 	local_irq_disable();
@@ -8085,7 +8071,7 @@ static int snapshot_raw_open(struct inode *inode, struct file *filp)
 
 	info = filp->private_data;
 
-	if (info->iter.trace->use_max_tr) {
+	if (tracer_uses_snapshot(info->iter.trace)) {
 		tracing_buffers_release(inode, filp);
 		return -EBUSY;
 	}
@@ -8641,10 +8627,8 @@ tracing_buffers_read(struct file *filp, char __user *ubuf,
 	if (!count)
 		return 0;
 
-#ifdef CONFIG_TRACER_MAX_TRACE
-	if (iter->snapshot && iter->tr->current_trace->use_max_tr)
+	if (iter->snapshot && tracer_uses_snapshot(iter->tr->current_trace))
 		return -EBUSY;
-#endif
 
 	page_size = ring_buffer_subbuf_size_get(iter->array_buffer->buffer);
 
@@ -8828,10 +8812,8 @@ tracing_buffers_splice_read(struct file *file, loff_t *ppos,
 	int entries, i;
 	ssize_t ret = 0;
 
-#ifdef CONFIG_TRACER_MAX_TRACE
-	if (iter->snapshot && iter->tr->current_trace->use_max_tr)
+	if (iter->snapshot && tracer_uses_snapshot(iter->tr->current_trace))
 		return -EBUSY;
-#endif
 
 	page_size = ring_buffer_subbuf_size_get(iter->array_buffer->buffer);
 	if (*ppos & (page_size - 1))
