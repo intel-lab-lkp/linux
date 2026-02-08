@@ -2822,9 +2822,11 @@ long sched_group_rt_period(struct task_group *tg)
 static int sched_rt_global_constraints(void)
 {
 	int ret = 0;
+	u64 period = global_rt_period();
+	u64 runtime = global_rt_runtime();
 
 	mutex_lock(&rt_constraints_mutex);
-	ret = __rt_schedulable(NULL, 0, 0);
+	ret = __rt_schedulable(&root_task_group, period, runtime);
 	mutex_unlock(&rt_constraints_mutex);
 
 	return ret;
@@ -2864,6 +2866,14 @@ static int sched_rt_global_validate(void)
 
 static void sched_rt_do_global(void)
 {
+#ifdef CONFIG_RT_GROUP_SCHED
+	if (!rt_group_sched_enabled())
+		return;
+
+	WARN_ON_ONCE(tg_set_rt_bandwidth(&root_task_group,
+					global_rt_period(),
+					global_rt_runtime()));
+#endif
 }
 
 static int sched_rt_handler(const struct ctl_table *table, int write, void *buffer,
