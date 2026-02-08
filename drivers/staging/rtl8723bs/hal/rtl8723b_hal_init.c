@@ -58,7 +58,10 @@ static int _BlockWrite(struct adapter *padapter, void *buffer, u32 buffSize)
 	remainSize_p1 = buffSize % blockSize_p1;
 
 	for (i = 0; i < blockCount_p1; i++) {
-		ret = rtw_write32(padapter, (FW_8723B_START_ADDRESS + i * blockSize_p1), *((u32 *)(bufferPtr + i * blockSize_p1)));
+		u32 addr = FW_8723B_START_ADDRESS + i * blockSize_p1;
+		u32 data = *((u32 *)(bufferPtr + i * blockSize_p1));
+
+		ret = rtw_write32(padapter, addr, data);
 		if (ret == _FAIL) {
 			netdev_dbg(padapter->pnetdev, "write failed at %s %d, block:%d\n",
 				   __func__, __LINE__, i);
@@ -261,27 +264,34 @@ void rtl8723b_FirmwareSelfReset(struct adapter *padapter)
 	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
 	u8 val;
 	u8 Delay = 100;
+	bool old_fw;
 
-	if (
-		!(IS_FW_81xxC(padapter) && ((pHalData->FirmwareVersion < 0x21) || (pHalData->FirmwareVersion == 0x21 && pHalData->FirmwareSubVersion < 0x01)))
-	) { /*  after 88C Fw v33.1 */
-		/* 0x1cf = 0x20. Inform 8051 to reset. 2009.12.25. tynli_test */
-		rtw_write8(padapter, REG_HMETFR+3, 0x20);
+	/* Check for old firmware version */
+	old_fw = IS_FW_81xxC(padapter) &&
+		 ((pHalData->FirmwareVersion < 0x21) ||
+		  (pHalData->FirmwareVersion == 0x21 &&
+		   pHalData->FirmwareSubVersion < 0x01));
 
+	if (old_fw)
+		return;
+
+	/* after 88C Fw v33.1 */
+	/* 0x1cf = 0x20. Inform 8051 to reset. 2009.12.25. tynli_test */
+	rtw_write8(padapter, REG_HMETFR + 3, 0x20);
+
+	val = rtw_read8(padapter, REG_SYS_FUNC_EN + 1);
+	while (val & BIT2) {
+		Delay--;
+		if (Delay == 0)
+			break;
+		udelay(50);
 		val = rtw_read8(padapter, REG_SYS_FUNC_EN + 1);
-		while (val & BIT2) {
-			Delay--;
-			if (Delay == 0)
-				break;
-			udelay(50);
-			val = rtw_read8(padapter, REG_SYS_FUNC_EN + 1);
-		}
+	}
 
-		if (Delay == 0) {
-			/* force firmware reset */
-			val = rtw_read8(padapter, REG_SYS_FUNC_EN + 1);
-			rtw_write8(padapter, REG_SYS_FUNC_EN + 1, val & (~BIT2));
-		}
+	if (Delay == 0) {
+		/* force firmware reset */
+		val = rtw_read8(padapter, REG_SYS_FUNC_EN + 1);
+		rtw_write8(padapter, REG_SYS_FUNC_EN + 1, val & (~BIT2));
 	}
 }
 
@@ -998,9 +1008,13 @@ void rtl8723b_SetBeaconRelatedRegisters(struct adapter *padapter)
 	rtw_write32(padapter, REG_TCR, value32);
 
 	/*  NOTE: Fix test chip's bug (about contention windows's randomness) */
-	if (check_fwstate(&padapter->mlmepriv, WIFI_ADHOC_STATE|WIFI_ADHOC_MASTER_STATE|WIFI_AP_STATE) == true) {
-		rtw_write8(padapter, REG_RXTSF_OFFSET_CCK, 0x50);
-		rtw_write8(padapter, REG_RXTSF_OFFSET_OFDM, 0x50);
+	{
+		u16 state_mask = WIFI_ADHOC_STATE | WIFI_ADHOC_MASTER_STATE | WIFI_AP_STATE;
+
+		if (check_fwstate(&padapter->mlmepriv, state_mask)) {
+			rtw_write8(padapter, REG_RXTSF_OFFSET_CCK, 0x50);
+			rtw_write8(padapter, REG_RXTSF_OFFSET_OFDM, 0x50);
+		}
 	}
 
 	_BeaconFunctionEnable(padapter, true, true);
@@ -1653,7 +1667,9 @@ static u8 fill_txdesc_sectype(struct pkt_attrib *pattrib)
 	return sectype;
 }
 
-static void fill_txdesc_vcs_8723b(struct adapter *padapter, struct pkt_attrib *pattrib, struct txdesc_8723b *ptxdesc)
+static void fill_txdesc_vcs_8723b(struct adapter *padapter,
+				  struct pkt_attrib *pattrib,
+				  struct txdesc_8723b *ptxdesc)
 {
 	if (pattrib->vcs_mode) {
 		switch (pattrib->vcs_mode) {
@@ -1684,7 +1700,9 @@ static void fill_txdesc_vcs_8723b(struct adapter *padapter, struct pkt_attrib *p
 	}
 }
 
-static void fill_txdesc_phy_8723b(struct adapter *padapter, struct pkt_attrib *pattrib, struct txdesc_8723b *ptxdesc)
+static void fill_txdesc_phy_8723b(struct adapter *padapter,
+				  struct pkt_attrib *pattrib,
+				  struct txdesc_8723b *ptxdesc)
 {
 	if (pattrib->ht_en) {
 		ptxdesc->data_bw = BWMapping_8723B(padapter, pattrib);
