@@ -212,7 +212,8 @@ static const struct iio_event_spec adxl345_events[] = {
 		.type = IIO_EV_TYPE_MAG,
 		.dir = IIO_EV_DIR_RISING,
 		.mask_shared_by_type =
-			BIT(IIO_EV_INFO_ENABLE) |
+			BIT(IIO_EV_INFO_ENABLE)	|
+			BIT(IIO_EV_INFO_SCALE)	|
 			BIT(IIO_EV_INFO_VALUE),
 	},
 	{
@@ -221,6 +222,7 @@ static const struct iio_event_spec adxl345_events[] = {
 		.dir = IIO_EV_DIR_RISING,
 		.mask_shared_by_type =
 			BIT(IIO_EV_INFO_ENABLE) |
+			BIT(IIO_EV_INFO_SCALE)	|
 			BIT(IIO_EV_INFO_VALUE),
 	},
 	{
@@ -228,15 +230,19 @@ static const struct iio_event_spec adxl345_events[] = {
 		.type = IIO_EV_TYPE_GESTURE,
 		.dir = IIO_EV_DIR_SINGLETAP,
 		.mask_separate = BIT(IIO_EV_INFO_ENABLE),
-		.mask_shared_by_type = BIT(IIO_EV_INFO_VALUE) |
+		.mask_shared_by_type =
+			BIT(IIO_EV_INFO_VALUE)	|
+			BIT(IIO_EV_INFO_SCALE)	|
 			BIT(IIO_EV_INFO_TIMEOUT),
 	},
 	{
 		/* double tap */
 		.type = IIO_EV_TYPE_GESTURE,
 		.dir = IIO_EV_DIR_DOUBLETAP,
-		.mask_shared_by_type = BIT(IIO_EV_INFO_ENABLE) |
-			BIT(IIO_EV_INFO_RESET_TIMEOUT) |
+		.mask_shared_by_type =
+			BIT(IIO_EV_INFO_ENABLE)		|
+			BIT(IIO_EV_INFO_RESET_TIMEOUT)	|
+			BIT(IIO_EV_INFO_SCALE)		|
 			BIT(IIO_EV_INFO_TAP2_MIN_DELAY),
 	},
 };
@@ -274,7 +280,8 @@ static const struct iio_event_spec adxl345_fake_chan_events[] = {
 		.dir = IIO_EV_DIR_FALLING,
 		.mask_separate = BIT(IIO_EV_INFO_ENABLE),
 		.mask_shared_by_type =
-			BIT(IIO_EV_INFO_VALUE) |
+			BIT(IIO_EV_INFO_VALUE)	|
+			BIT(IIO_EV_INFO_SCALE)	|
 			BIT(IIO_EV_INFO_PERIOD),
 	},
 	{
@@ -283,7 +290,8 @@ static const struct iio_event_spec adxl345_fake_chan_events[] = {
 		.dir = IIO_EV_DIR_FALLING,
 		.mask_separate = BIT(IIO_EV_INFO_ENABLE),
 		.mask_shared_by_type =
-			BIT(IIO_EV_INFO_VALUE) |
+			BIT(IIO_EV_INFO_VALUE)	|
+			BIT(IIO_EV_INFO_SCALE)	|
 			BIT(IIO_EV_INFO_PERIOD),
 	},
 };
@@ -1367,6 +1375,14 @@ static int adxl345_read_event_value(struct iio_dev *indio_dev,
 				return ret;
 			*val = sign_extend32(tap_threshold, 7);
 			return IIO_VAL_INT;
+		case IIO_EV_INFO_SCALE:
+			/*
+			 * The event threshold LSB is fixed at 62.5 mg/LSB
+			 * 0.0625 * 9.80665 = 0.612915625 m/s^2
+			 */
+			*val = 0;
+			*val2 = 612915;
+			return IIO_VAL_INT_PLUS_MICRO;
 		case IIO_EV_INFO_TIMEOUT:
 			*val = st->tap_duration_us;
 			*val2 = MICRO;
