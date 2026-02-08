@@ -1442,6 +1442,7 @@ static unsigned int shmem_find_swap_entries(struct address_space *mapping,
 	XA_STATE(xas, &mapping->i_pages, start);
 	struct folio *folio;
 	swp_entry_t entry;
+	swp_slot_t slot;
 
 	rcu_read_lock();
 	xas_for_each(&xas, folio, ULONG_MAX) {
@@ -1452,11 +1453,13 @@ static unsigned int shmem_find_swap_entries(struct address_space *mapping,
 			continue;
 
 		entry = radix_to_swp_entry(folio);
+		slot = swp_entry_to_swp_slot(entry);
+
 		/*
 		 * swapin error entries can be found in the mapping. But they're
 		 * deliberately ignored here as we've done everything we can do.
 		 */
-		if (swp_type(entry) != type)
+		if (swp_slot_type(slot) != type)
 			continue;
 
 		indices[folio_batch_count(fbatch)] = xas.xa_index;
@@ -2224,6 +2227,7 @@ static int shmem_split_large_entry(struct inode *inode, pgoff_t index,
 	XA_STATE_ORDER(xas, &mapping->i_pages, index, 0);
 	int split_order = 0;
 	int i;
+	swp_slot_t slot = swp_entry_to_swp_slot(swap);
 
 	/* Convert user data gfp flags to xarray node gfp flags */
 	gfp &= GFP_RECLAIM_MASK;
@@ -2264,13 +2268,16 @@ static int shmem_split_large_entry(struct inode *inode, pgoff_t index,
 			 */
 			for (i = 0; i < 1 << cur_order;
 			     i += (1 << split_order)) {
-				swp_entry_t tmp;
+				swp_entry_t tmp_entry;
+				swp_slot_t tmp_slot;
 
-				tmp = swp_entry(swp_type(swap),
-						swp_offset(swap) + swap_offset +
-							i);
+				tmp_slot =
+					swp_slot(swp_slot_type(slot),
+						swp_slot_offset(slot) + swap_offset + i);
+				tmp_entry = swp_slot_to_swp_entry(tmp_slot);
+
 				__xa_store(&mapping->i_pages, aligned_index + i,
-					   swp_to_radix_entry(tmp), 0);
+					   swp_to_radix_entry(tmp_entry), 0);
 			}
 			cur_order = split_order;
 			split_order = xas_try_split_min_order(split_order);
