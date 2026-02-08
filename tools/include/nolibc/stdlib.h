@@ -188,34 +188,68 @@ void *realloc(void *old_ptr, size_t new_size)
 	return ret;
 }
 
+/* Converts the unsigned 64bit integer <in> to base <base> ascii into
+ * buffer <buffer>, which must be long enough to store the number and the
+ * trailing zero. The buffer is filled from the first byte, and the number
+ * of characters emitted (not counting the trailing zero) is returned.
+ * The function uses 'multiply by reciprocal' for the divisions and
+ * requires the caller pass the correct reciprocal.
+ *
+ * Note that unlike __div64_const32() in asm-generic/div64.h the divisor
+ * is never large enough to need a bias added.
+ * The division is correct for all divisors up to at least 1G.
+ *
+ * __int128 isn't used for mips because gcc prior to 10.0 will call
+ * __multi3 for MIPS64r6.
+ */
+#define _NOLIBC_U64TOA_RECIP(base) ((~0ULL / (base)) + 1)
+static __attribute__((unused, noinline))
+int _nolibc_u64toa_base(uint64_t in, char *buffer, unsigned int base, uint64_t recip)
+{
+	unsigned int digits = 0;
+	unsigned int dig;
+	uint64_t q;
+	char *p;
+
+	/* Generate least significant digit first */
+	do {
+#if defined(__SIZEOF_INT128__) && !defined(__mips__)
+		q = ((unsigned __int128)in * recip) >> 64;
+#else
+		uint64_t p = ((uint64_t)(uint32_t)in * (uint32_t)recip) >> 32;
+		p += (uint32_t)in * (recip >> 32);
+		q = (in >> 32) * (recip >> 32) + (p >> 32);
+		p = (uint32_t)p + (in >> 32) * (uint32_t)recip;
+		q += p >> 32;
+#endif
+		dig = in - q * base;
+		if (dig > 9)
+			dig += 'a' - '0' - 10;
+		buffer[digits++] = '0' + dig;
+	} while ((in = q));
+
+	buffer[digits] = 0;
+
+	/* Order reverse to result */
+	for (p = buffer + digits - 1; p > buffer; buffer++, p--) {
+		dig = *buffer;
+		*buffer = *p;
+		*p = dig;
+	}
+
+	return digits;
+}
+
 /* Converts the unsigned long integer <in> to its hex representation into
  * buffer <buffer>, which must be long enough to store the number and the
  * trailing zero (17 bytes for "ffffffffffffffff" or 9 for "ffffffff"). The
  * buffer is filled from the first byte, and the number of characters emitted
- * (not counting the trailing zero) is returned. The function is constructed
- * in a way to optimize the code size and avoid any divide that could add a
- * dependency on large external functions.
+ * (not counting the trailing zero) is returned.
  */
-static __attribute__((unused))
+static __inline__ __attribute__((unused))
 int utoh_r(unsigned long in, char *buffer)
 {
-	signed char pos = (~0UL > 0xfffffffful) ? 60 : 28;
-	int digits = 0;
-	int dig;
-
-	do {
-		dig = in >> pos;
-		in -= (uint64_t)dig << pos;
-		pos -= 4;
-		if (dig || digits || pos < 0) {
-			if (dig > 9)
-				dig += 'a' - '0' - 10;
-			buffer[digits++] = '0' + dig;
-		}
-	} while (pos >= 0);
-
-	buffer[digits] = 0;
-	return digits;
+	return _nolibc_u64toa_base(in, buffer, 16, _NOLIBC_U64TOA_RECIP(16));
 }
 
 /* converts unsigned long <in> to an hex string using the static itoa_buffer
@@ -233,30 +267,11 @@ char *utoh(unsigned long in)
  * trailing zero (21 bytes for 18446744073709551615 in 64-bit, 11 for
  * 4294967295 in 32-bit). The buffer is filled from the first byte, and the
  * number of characters emitted (not counting the trailing zero) is returned.
- * The function is constructed in a way to optimize the code size and avoid
- * any divide that could add a dependency on large external functions.
  */
-static __attribute__((unused))
+static __inline__ __attribute__((unused))
 int utoa_r(unsigned long in, char *buffer)
 {
-	unsigned long lim;
-	int digits = 0;
-	int pos = (~0UL > 0xfffffffful) ? 19 : 9;
-	int dig;
-
-	do {
-		for (dig = 0, lim = 1; dig < pos; dig++)
-			lim *= 10;
-
-		if (digits || in >= lim || !pos) {
-			for (dig = 0; in >= lim; dig++)
-				in -= lim;
-			buffer[digits++] = '0' + dig;
-		}
-	} while (pos--);
-
-	buffer[digits] = 0;
-	return digits;
+	return _nolibc_u64toa_base(in, buffer, 10, _NOLIBC_U64TOA_RECIP(10));
 }
 
 /* Converts the signed long integer <in> to its string representation into
@@ -324,34 +339,12 @@ char *utoa(unsigned long in)
  * buffer <buffer>, which must be long enough to store the number and the
  * trailing zero (17 bytes for "ffffffffffffffff"). The buffer is filled from
  * the first byte, and the number of characters emitted (not counting the
- * trailing zero) is returned. The function is constructed in a way to optimize
- * the code size and avoid any divide that could add a dependency on large
- * external functions.
+ * trailing zero) is returned.
  */
-static __attribute__((unused))
+static __inline__ __attribute__((unused))
 int u64toh_r(uint64_t in, char *buffer)
 {
-	signed char pos = 60;
-	int digits = 0;
-	int dig;
-
-	do {
-		if (sizeof(long) >= 8) {
-			dig = (in >> pos) & 0xF;
-		} else {
-			/* 32-bit platforms: avoid a 64-bit shift */
-			uint32_t d = (pos >= 32) ? (in >> 32) : in;
-			dig = (d >> (pos & 31)) & 0xF;
-		}
-		if (dig > 9)
-			dig += 'a' - '0' - 10;
-		pos -= 4;
-		if (dig || digits || pos < 0)
-			buffer[digits++] = '0' + dig;
-	} while (pos >= 0);
-
-	buffer[digits] = 0;
-	return digits;
+	return _nolibc_u64toa_base(in, buffer, 16, _NOLIBC_U64TOA_RECIP(16));
 }
 
 /* converts uint64_t <in> to an hex string using the static itoa_buffer and
@@ -368,31 +361,12 @@ char *u64toh(uint64_t in)
  * buffer <buffer>, which must be long enough to store the number and the
  * trailing zero (21 bytes for 18446744073709551615). The buffer is filled from
  * the first byte, and the number of characters emitted (not counting the
- * trailing zero) is returned. The function is constructed in a way to optimize
- * the code size and avoid any divide that could add a dependency on large
- * external functions.
+ * trailing zero) is returned.
  */
-static __attribute__((unused))
+static __inline__ __attribute__((unused))
 int u64toa_r(uint64_t in, char *buffer)
 {
-	unsigned long long lim;
-	int digits = 0;
-	int pos = 19; /* start with the highest possible digit */
-	int dig;
-
-	do {
-		for (dig = 0, lim = 1; dig < pos; dig++)
-			lim *= 10;
-
-		if (digits || in >= lim || !pos) {
-			for (dig = 0; in >= lim; dig++)
-				in -= lim;
-			buffer[digits++] = '0' + dig;
-		}
-	} while (pos--);
-
-	buffer[digits] = 0;
-	return digits;
+	return _nolibc_u64toa_base(in, buffer, 10, _NOLIBC_U64TOA_RECIP(10));
 }
 
 /* Converts the signed 64-bit integer <in> to its string representation into
