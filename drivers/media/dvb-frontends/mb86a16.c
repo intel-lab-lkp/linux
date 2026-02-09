@@ -1157,6 +1157,10 @@ static int mb86a16_set_fe(struct mb86a16_state *state)
 		v = 0;
 
 		while (loop == 1) {
+			if (prev_freq_num >= ARRAY_SIZE(prev_swp_freq)) {
+				dprintk(verbose, MB86A16_ERROR, 1, "Signal detection retry attempts failed");
+				return -1;
+			}
 			swp_info_get(state, fOSC_start, state->srate,
 				     v, R, swp_ofs, &fOSC,
 				     &afcex_freq, &AFCEX_L, &AFCEX_H);
