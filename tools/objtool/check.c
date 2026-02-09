@@ -1594,9 +1594,11 @@ static int add_jump_destinations(struct objtool_file *file)
 			    dest_off == func->offset + func->len)
 				continue;
 
+
 			ERROR_INSN(insn, "can't find jump dest instruction at %s",
-				   offstr(dest_sec, dest_off));
+				offstr(dest_sec, dest_off));
 			return -1;
+
 		}
 
 		if (!dest_sym || is_sec_sym(dest_sym)) {
@@ -4965,6 +4967,31 @@ int check(struct objtool_file *file)
 
 	if (!nr_insns)
 		goto out;
+
+	if (opts.ftr_fixup) {
+		ret = process_alt_data(file);
+		if (ret < 0)
+			return ret;
+
+		ret = process_fixup_entries(file);
+		if (ret < 0)
+			return ret;
+
+		check_and_flatten_fixup_entries();
+
+		ret = process_exception_entries(file);
+		if (ret < 0)
+			return ret;
+
+		ret = process_bug_entries(file);
+		if (ret < 0)
+			return ret;
+
+		ret = process_alt_relocations(file);
+		if (ret < 0)
+			return ret;
+	}
+
 
 	if (opts.retpoline)
 		warnings += validate_retpoline(file);

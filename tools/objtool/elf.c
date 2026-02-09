@@ -1158,6 +1158,7 @@ struct elf *elf_open_read(const char *name, int flags)
 		cmd = ELF_C_WRITE;
 
 	elf->elf = elf_begin(elf->fd, cmd, NULL);
+
 	if (!elf->elf) {
 		ERROR_ELF("elf_begin");
 		goto err;
