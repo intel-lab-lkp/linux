@@ -11,6 +11,15 @@ config COMMON_CLK_AMLOGIC
 	  offering read and write interfaces for various clock control units.
 	  Select Y if your target SoC needs clock driver support.
 
+config COMMON_CLK_AMLOGIC_MISC
+	tristate "Amlogic Misc Clock Control Units"
+	depends on COMMON_CLK_AMLOGIC
+	help
+	  Supports non-standard module clock control units in Amlogic SoC clock
+	  trees, such as sc-ccu (for smart card controller) and ts-ccu (for
+	  temperature sensor). Select Y if the current SoC contains these module
+	  clock control units.
+
 config COMMON_CLK_AMLOGIC_MODEL
 	tristate "Amlogic Standardized Model Clock Control Units"
 	depends on COMMON_CLK_AMLOGIC
@@ -34,6 +43,7 @@ config COMMON_CLK_AMLOGIC_A9
 	tristate "Amlogic A9 Family Clock Controller"
 	depends on COMMON_CLK_AMLOGIC
 	default COMMON_CLK_AMLOGIC
+	select COMMON_CLK_AMLOGIC_MISC
 	select COMMON_CLK_AMLOGIC_MODEL
 	select COMMON_CLK_AMLOGIC_PLL
 	help
