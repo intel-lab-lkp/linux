@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR MIT)
+
+config COMMON_CLK_AMLOGIC
+	tristate "Amlogic Common Clock"
+	depends on ARCH_MESON || COMPILE_TEST
+	depends on OF
+	default ARCH_MESON
+	select REGMAP
+	help
+	  This driver provides the basic clock infrastructure for Amlogic SoCs,
+	  offering read and write interfaces for various clock control units.
+	  Select Y if your target SoC needs clock driver support.
