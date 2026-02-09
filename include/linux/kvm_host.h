@@ -797,7 +797,7 @@ struct kvm {
 	atomic_t nr_memslots_dirty_logging;
 
 	/* Used to wait for completion of MMU notifiers.  */
-	spinlock_t mn_invalidate_lock;
+	raw_spinlock_t mn_invalidate_lock;
 	unsigned long mn_active_invalidate_count;
 	struct rcuwait mn_memslots_update_rcuwait;
 
