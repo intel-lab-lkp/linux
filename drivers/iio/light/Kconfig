@@ -220,6 +220,17 @@ config CM36651
 	  To compile this driver as a module, choose M here:
 	  the module will be called cm36651.
 
+config CM36686
+	depends on I2C
+	tristate "CM36686 driver"
+	help
+	  Say Y here if you use cm36686.
+	  This option enables ambient light & proximity sensor using
+	  Capella cm36686 device driver.
+
+	  To compile this driver as a module, choose M here:
+	  the module will be called cm36686.
+
 config IIO_CROS_EC_LIGHT_PROX
 	tristate "ChromeOS EC Light and Proximity Sensors"
 	depends on IIO_CROS_EC_SENSORS_CORE
