@@ -1501,6 +1501,8 @@ struct vfio_region_dma_range {
 struct vfio_device_feature_dma_buf {
 	__u32	region_index;
 	__u32	open_flags;
+	__u16   steering_tag;
+	__u8    ph;
 	__u32   flags;
 	__u32   nr_ranges;
 	struct vfio_region_dma_range dma_ranges[] __counted_by(nr_ranges);
