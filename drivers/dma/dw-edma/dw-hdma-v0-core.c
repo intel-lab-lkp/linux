@@ -283,6 +283,13 @@ static void dw_hdma_v0_core_debugfs_on(struct dw_edma *dw)
 	dw_hdma_v0_debugfs_on(dw);
 }
 
+static void dw_hdma_v0_core_ch_info(struct dw_edma_chan *chan,
+				    struct dw_edma_ch_info *info)
+{
+	/* Implement once the correct offset is known. */
+	info->db_offset = ~0;
+}
+
 static const struct dw_edma_core_ops dw_hdma_v0_core = {
 	.off = dw_hdma_v0_core_off,
 	.ch_count = dw_hdma_v0_core_ch_count,
@@ -291,6 +298,7 @@ static const struct dw_edma_core_ops dw_hdma_v0_core = {
 	.start = dw_hdma_v0_core_start,
 	.ch_config = dw_hdma_v0_core_ch_config,
 	.debugfs_on = dw_hdma_v0_core_debugfs_on,
+	.ch_info = dw_hdma_v0_core_ch_info,
 };
 
 void dw_hdma_v0_core_register(struct dw_edma *dw)

@@ -61,6 +61,19 @@ enum dw_edma_chip_flags {
 };
 
 /**
+ * struct dw_edma_ch_info - DW eDMA channel metadata
+ * @irq:	Linux IRQ number used by this channel's interrupt vector
+ * @db_offset:	offset within the eDMA register window that can be used as
+ *		an interrupt-emulation doorbell for this channel
+ */
+struct dw_edma_ch_info {
+	int			irq;
+
+	/* Fields below are filled in by dw_edma_core_ops->ch_info() */
+	resource_size_t		db_offset;
+};
+
+/**
  * struct dw_edma_chip - representation of DesignWare eDMA controller hardware
  * @dev:		 struct device of the eDMA controller
  * @id:			 instance ID
@@ -95,6 +108,10 @@ struct dw_edma_chip {
 	/* data region */
 	struct dw_edma_region	dt_region_wr[EDMA_MAX_WR_CH];
 	struct dw_edma_region	dt_region_rd[EDMA_MAX_RD_CH];
+
+	/* cached channel info */
+	struct dw_edma_ch_info	ch_info_wr[EDMA_MAX_WR_CH];
+	struct dw_edma_ch_info	ch_info_rd[EDMA_MAX_RD_CH];
 
 	enum dw_edma_map_format	mf;
 

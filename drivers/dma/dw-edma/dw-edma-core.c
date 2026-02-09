@@ -760,6 +760,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 {
 	struct dw_edma_chip *chip = dw->chip;
 	struct device *dev = chip->dev;
+	struct dw_edma_ch_info *info;
 	struct dw_edma_chan *chan;
 	struct dw_edma_irq *irq;
 	struct dma_device *dma;
@@ -779,9 +780,11 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		if (i < dw->wr_ch_cnt) {
 			chan->id = i;
 			chan->dir = EDMA_DIR_WRITE;
+			info = &chip->ch_info_wr[chan->id];
 		} else {
 			chan->id = i - dw->wr_ch_cnt;
 			chan->dir = EDMA_DIR_READ;
+			info = &chip->ch_info_rd[chan->id];
 		}
 
 		chan->configured = false;
@@ -806,6 +809,10 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 			pos = wr_alloc + chan->id % rd_alloc;
 
 		irq = &dw->irq[pos];
+
+		/* cache channel-specific info */
+		dw_edma_core_ch_info(dw, chan, info);
+		info->irq = irq->irq;
 
 		if (chan->dir == EDMA_DIR_WRITE)
 			irq->wr_mask |= BIT(chan->id);
@@ -910,6 +917,7 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 		if (irq_get_msi_desc(irq))
 			get_cached_msi_msg(irq, &dw->irq[0].msi);
 
+		dw->irq[0].irq = irq;
 		dw->nr_irqs = 1;
 	} else {
 		/* Distribute IRQs equally among all channels */
@@ -936,6 +944,7 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 
 			if (irq_get_msi_desc(irq))
 				get_cached_msi_msg(irq, &dw->irq[i].msi);
+			dw->irq[i].irq = irq;
 		}
 
 		dw->nr_irqs = i;
