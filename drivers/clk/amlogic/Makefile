@@ -11,3 +11,7 @@ clk-amlogic-y += clk-pll.o
 ifneq ($(CONFIG_COMMON_CLK_AMLOGIC_MODEL),)
 clk-amlogic-y += a9-model-ccu.o
 endif
+
+ifneq ($(CONFIG_COMMON_CLK_AMLOGIC_PLL),)
+clk-amlogic-y += a9-pll.o
+endif

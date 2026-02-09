@@ -21,11 +21,21 @@ config COMMON_CLK_AMLOGIC_MODEL
 	  these models. Select Y if the current SoC contains these clock control
 	  unit models.
 
+config COMMON_CLK_AMLOGIC_PLL
+	tristate "Amlogic PLL Controller"
+	depends on COMMON_CLK_AMLOGIC
+	help
+	  Supports PLL controller used in Amlogic SoCs. The PLL supports dynamic
+	  configuration of output clock frequency, enabling flexible frequency
+	  settings to provide clocks for other modules. Select Y if the current
+	  SoC contains PLLs.
+
 config COMMON_CLK_AMLOGIC_A9
 	tristate "Amlogic A9 Family Clock Controller"
 	depends on COMMON_CLK_AMLOGIC
 	default COMMON_CLK_AMLOGIC
 	select COMMON_CLK_AMLOGIC_MODEL
+	select COMMON_CLK_AMLOGIC_PLL
 	help
 	  Support for the clock controller present on the Amlogic A9 family
 	  SoCs. Select Y if A9 family SoC needs to support clock controller.
