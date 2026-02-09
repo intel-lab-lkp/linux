@@ -370,6 +370,10 @@ out:
 /**
  * ufs_getfrag_block() - `get_block_t' function, interface between UFS and
  * read_folio, writepages and so on
+ * @inode: pointer to inode
+ * @fragment: fragment number to map
+ * @bh_result: buffer head to fill with mapping information
+ * @create: if non-zero, allocate new blocks/fragments if needed
  */
 
 static int ufs_getfrag_block(struct inode *inode, sector_t fragment, struct buffer_head *bh_result, int create)
