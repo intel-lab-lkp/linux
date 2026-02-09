@@ -93,6 +93,9 @@ static inline bool file_thp_enabled(struct vm_area_struct *vma)
 		return false;
 
 	inode = file_inode(vma->vm_file);
+	if (inode->i_sb->s_magic == GUEST_MEMFD_MAGIC ||
+	    inode->i_sb->s_magic == SECRETMEM_MAGIC)
+		return false;
 
 	return !inode_is_open_for_write(inode) && S_ISREG(inode->i_mode);
 }
