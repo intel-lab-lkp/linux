@@ -3540,18 +3540,33 @@ EXPORT_SYMBOL_GPL(pci_rescan_bus);
  * routines should always be executed under this mutex.
  */
 DEFINE_MUTEX(pci_rescan_remove_lock);
+static struct task_struct *pci_rescan_remove_owner;
 
 void pci_lock_rescan_remove(void)
 {
 	mutex_lock(&pci_rescan_remove_lock);
+	WRITE_ONCE(pci_rescan_remove_owner, current);
 }
 EXPORT_SYMBOL_GPL(pci_lock_rescan_remove);
 
 void pci_unlock_rescan_remove(void)
 {
+	WRITE_ONCE(pci_rescan_remove_owner, NULL);
 	mutex_unlock(&pci_rescan_remove_lock);
 }
 EXPORT_SYMBOL_GPL(pci_unlock_rescan_remove);
+
+/**
+ * pci_rescan_remove_locked - check if current thread holds the lock
+ *
+ * Returns true if the current thread already holds pci_rescan_remove_lock.
+ * This is used by PCI core functions that may be called both with and
+ * without the lock held, to avoid recursive locking deadlocks.
+ */
+bool pci_rescan_remove_locked(void)
+{
+	return READ_ONCE(pci_rescan_remove_owner) == current;
+}
 
 static int __init pci_sort_bf_cmp(const struct device *d_a,
 				  const struct device *d_b)

@@ -92,6 +92,7 @@ extern const unsigned char pcie_link_speed[];
 extern bool pci_early_dump;
 
 extern struct mutex pci_rescan_remove_lock;
+bool pci_rescan_remove_locked(void);
 
 bool pcie_cap_has_lnkctl(const struct pci_dev *dev);
 bool pcie_cap_has_lnkctl2(const struct pci_dev *dev);

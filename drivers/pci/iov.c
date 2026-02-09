@@ -763,12 +763,31 @@ err_pcibios:
 static void sriov_del_vfs(struct pci_dev *dev)
 {
 	struct pci_sriov *iov = dev->sriov;
+	bool do_unlock = false;
 	int i;
 
-	pci_lock_rescan_remove();
+	/*
+	 * If the current thread already holds pci_rescan_remove_lock (e.g.,
+	 * when pci_disable_sriov() is called from a driver's .remove() that
+	 * was invoked by pci_stop_and_remove_bus_device_locked()), skip
+	 * taking the lock to avoid a deadlock.  The lock is non-recursive
+	 * and on PREEMPT_RT, where mutexes are rtmutexes, the deadlock is
+	 * detected immediately and produces an alarming WARNING splat.  On
+	 * non-RT kernels the same recursive acquisition silently hangs.
+	 *
+	 * The VF removal below is still serialized correctly because the
+	 * caller already holds the lock.
+	 */
+	if (!pci_rescan_remove_locked()) {
+		pci_lock_rescan_remove();
+		do_unlock = true;
+	}
+
 	for (i = 0; i < iov->num_VFs; i++)
 		pci_iov_remove_virtfn(dev, i);
-	pci_unlock_rescan_remove();
+
+	if (do_unlock)
+		pci_unlock_rescan_remove();
 }
 
 static void sriov_disable(struct pci_dev *dev)
