@@ -130,6 +130,8 @@ int kvm_arm_set_default_pmu(struct kvm *kvm);
 u8 kvm_arm_pmu_get_max_counters(struct kvm *kvm);
 
 u64 kvm_vcpu_read_pmcr(struct kvm_vcpu *vcpu);
+u64 kvm_vcpu_read_pmselr(struct kvm_vcpu *vcpu);
+u64 kvm_vcpu_read_pmuserenr(struct kvm_vcpu *vcpu);
 bool kvm_pmu_counter_is_hyp(struct kvm_vcpu *vcpu, unsigned int idx);
 void kvm_pmu_nested_transition(struct kvm_vcpu *vcpu);
 #else
@@ -246,6 +248,16 @@ static inline u8 kvm_arm_pmu_get_max_counters(struct kvm *kvm)
 }
 
 static inline u64 kvm_vcpu_read_pmcr(struct kvm_vcpu *vcpu)
+{
+	return 0;
+}
+
+static inline u64 kvm_vcpu_read_pmselr(struct kvm_vcpu *vcpu)
+{
+	return 0;
+}
+
+static u64 kvm_vcpu_read_pmuserenr(struct kvm_vcpu *vcpu)
 {
 	return 0;
 }
