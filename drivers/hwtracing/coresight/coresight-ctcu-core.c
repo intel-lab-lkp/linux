@@ -19,8 +19,6 @@
 #include "coresight-ctcu.h"
 #include "coresight-priv.h"
 
-DEFINE_CORESIGHT_DEVLIST(ctcu_devs, "ctcu");
-
 #define ctcu_writel(drvdata, val, offset)	__raw_writel((val), drvdata->base + offset)
 #define ctcu_readl(drvdata, offset)		__raw_readl(drvdata->base + offset)
 
@@ -187,7 +185,7 @@ static int ctcu_probe(struct platform_device *pdev)
 	void __iomem *base;
 	int i, ret;
 
-	desc.name = coresight_alloc_device_name(&ctcu_devs, dev);
+	desc.name = coresight_alloc_device_name("ctcu", dev);
 	if (!desc.name)
 		return -ENOMEM;
 
