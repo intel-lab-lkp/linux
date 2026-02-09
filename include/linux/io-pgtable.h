@@ -17,6 +17,7 @@ enum io_pgtable_fmt {
 	ARM_MALI_LPAE,
 	APPLE_DART,
 	APPLE_DART2,
+	ARM_MALI_CSF,
 	IO_PGTABLE_NUM_FMTS,
 };
 
@@ -148,6 +149,8 @@ struct io_pgtable_cfg {
 				u32	tsz:6;
 			}	tcr;
 			u64	mair;
+			/* ToDo: remove this when switching to arm_mali_csf_cfg struct */
+			u64	pbha;
 		} arm_lpae_s1_cfg;
 
 		struct {
@@ -174,6 +177,20 @@ struct io_pgtable_cfg {
 			u64	transtab;
 			u64	memattr;
 		} arm_mali_lpae_cfg;
+
+		/* ToDo: switch to this structure for Mali CSF GPUs
+		  struct {
+			u64	transtab;
+			struct {
+				u32	pbha:4;
+				u32	ra:1;
+				u32	sh:2;
+				u32	memattr:2;
+				u32	mode:4;
+			} transcfg;
+			u64 memattr;
+		} arm_mali_csf_cfg;
+		*/
 
 		struct {
 			u64 ttbr[4];
@@ -320,6 +337,7 @@ extern struct io_pgtable_init_fns io_pgtable_arm_64_lpae_s1_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_arm_64_lpae_s2_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_arm_v7s_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_arm_mali_lpae_init_fns;
+extern struct io_pgtable_init_fns io_pgtable_arm_mali_csf_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_amd_iommu_v1_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_amd_iommu_v2_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_apple_dart_init_fns;
