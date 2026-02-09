@@ -1383,21 +1383,16 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 		goto out_unlock;
 	}
 
-	if ((csdev->type == CORESIGHT_DEV_TYPE_SINK ||
-	     csdev->type == CORESIGHT_DEV_TYPE_LINKSINK) &&
-	    sink_ops(csdev)->alloc_buffer) {
-		ret = etm_perf_add_symlink_sink(csdev);
+	ret = etm_perf_add_symlink_sink(csdev);
 
-		if (ret) {
-			device_unregister(&csdev->dev);
-			/*
-			 * As with the above, all resources are free'd
-			 * explicitly via coresight_device_release() triggered
-			 * from put_device(), which is in turn called from
-			 * function device_unregister().
-			 */
-			goto out_unlock;
-		}
+	/*
+	 * As with the above, all resources are free'd explicitly via
+	 * coresight_device_release() triggered from put_device(), which is in
+	 * turn called from function device_unregister().
+	 */
+	if (ret && ret != -EOPNOTSUPP) {
+		device_unregister(&csdev->dev);
+		goto out_unlock;
 	}
 	/* Device is now registered */
 	registered = true;
