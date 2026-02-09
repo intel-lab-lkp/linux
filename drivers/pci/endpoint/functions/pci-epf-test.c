@@ -711,6 +711,26 @@ static irqreturn_t pci_epf_test_doorbell_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/*
+ * Embedded doorbell fallback uses a platform IRQ which is already owned by a
+ * platform driver (e.g. dw-edma) and therefore must be requested IRQF_SHARED.
+ * We cannot add IRQF_ONESHOT here because shared IRQ handlers must agree on
+ * IRQF_ONESHOT.
+ *
+ * request_threaded_irq() with handler == NULL would be rejected for !ONESHOT
+ * because the default primary handler only wakes the thread and does not
+ * mask/ack the interrupt, which can livelock on level-triggered IRQs.
+ *
+ * In the embedded doorbell fallback, the IRQ owner is responsible for
+ * acknowledging/deasserting the interrupt source in hardirq context before the
+ * IRQ line is unmasked. Therefore this driver only needs a trivial primary
+ * handler to wake the threaded handler.
+ */
+static irqreturn_t pci_epf_test_doorbell_primary(int irq, void *data)
+{
+	return IRQ_WAKE_THREAD;
+}
+
 static void pci_epf_test_doorbell_cleanup(struct pci_epf_test *epf_test)
 {
 	struct pci_epf_test_reg *reg = epf_test->reg[epf_test->test_reg_bar];
@@ -731,6 +751,7 @@ static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
 	u32 status = le32_to_cpu(reg->status);
 	struct pci_epf *epf = epf_test->epf;
 	struct pci_epc *epc = epf->epc;
+	unsigned long irq_flags;
 	struct msi_msg *msg;
 	enum pci_barno bar;
 	size_t offset;
@@ -745,10 +766,14 @@ static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
 	if (bar < BAR_0)
 		goto err_doorbell_cleanup;
 
+	irq_flags = epf->db_msg[0].irq_flags;
+	if (!(irq_flags & IRQF_SHARED))
+		irq_flags |= IRQF_ONESHOT;
 	epf_test->db_irq_requested = false;
 
-	ret = request_threaded_irq(epf->db_msg[0].virq, NULL,
-				   pci_epf_test_doorbell_handler, IRQF_ONESHOT,
+	ret = request_threaded_irq(epf->db_msg[0].virq,
+				   pci_epf_test_doorbell_primary,
+				   pci_epf_test_doorbell_handler, irq_flags,
 				   "pci-ep-test-doorbell", epf_test);
 	if (ret) {
 		dev_err(&epf->dev,
