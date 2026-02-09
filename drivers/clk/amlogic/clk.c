@@ -11,6 +11,7 @@
 #include "clk.h"
 #include "clk-basic.h"
 #include "clk-composite.h"
+#include "clk-noglitch.h"
 
 static const struct {
 	unsigned int type;
@@ -21,6 +22,7 @@ static const struct {
 	ENTRY(AML_CLKTYPE_DIV),
 	ENTRY(AML_CLKTYPE_GATE),
 	ENTRY(AML_CLKTYPE_COMPOSITE),
+	ENTRY(AML_CLKTYPE_NOGLITCH),
 #undef ENTRY
 };
 
@@ -102,6 +104,9 @@ static int aml_clk_div_available_rates_show(struct seq_file *s, void *data)
 
 		div_val = (1 << composite->div_width) - 1;
 		div_width = composite->div_width;
+	} else if (clk->type == AML_CLKTYPE_NOGLITCH) {
+		div_val = (1 << CLK_NOGLITCH_DIV_WIDTH) - 1;
+		div_width = CLK_NOGLITCH_DIV_WIDTH;
 	} else {
 		pr_err("%s: Unsupported clock type\n", clk_hw_get_name(hw));
 		return -EINVAL;

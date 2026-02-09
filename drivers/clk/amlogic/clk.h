@@ -15,6 +15,7 @@ enum aml_clk_type {
 	AML_CLKTYPE_DIV		= 2,
 	AML_CLKTYPE_GATE	= 3,
 	AML_CLKTYPE_COMPOSITE	= 4,
+	AML_CLKTYPE_NOGLITCH	= 5,
 };
 
 struct aml_clk {
