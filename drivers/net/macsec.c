@@ -1141,6 +1141,13 @@ static rx_handler_result_t macsec_handle_frame(struct sk_buff **pskb)
 	bool pulled_sci;
 	int ret;
 
+	/* Loopback packets (e.g. from phonet) don't have L2 headers, so
+	 * attempting to interpret the mac header as Ethernet would read
+	 * uninitialized memory.  Let them pass through unmodified.
+	 */
+	if (unlikely(skb->pkt_type == PACKET_LOOPBACK))
+		return RX_HANDLER_PASS;
+
 	if (skb_headroom(skb) < ETH_HLEN)
 		goto drop_direct;
 
