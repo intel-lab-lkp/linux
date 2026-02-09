@@ -1438,7 +1438,9 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 			        struct io_comp_batch *iob)
 {
 	bool found = false;
+	u16 start, end;
 
+	start = nvmeq->cq_head;
 	while (nvme_cqe_pending(nvmeq)) {
 		found = true;
 		/*
@@ -1446,12 +1448,19 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 		 * the cqe requires a full read memory barrier
 		 */
 		dma_rmb();
-		nvme_handle_cqe(nvmeq, iob, nvmeq->cq_head);
 		nvme_update_cq_head(nvmeq);
 	}
+	end = nvmeq->cq_head;
 
-	if (found)
+	if (found) {
 		nvme_ring_cq_doorbell(nvmeq);
+		while (start != end) {
+			nvme_handle_cqe(nvmeq, iob, start);
+			if (++start == nvmeq->q_depth)
+				start = 0;
+		}
+	}
+
 	return found;
 }
 
