@@ -736,6 +736,7 @@ static ssize_t mdc800_device_read (struct file *file, char __user *buf, size_t l
 				mdc800->downloaded = 0;
 				if (mdc800->download_urb->status != 0)
 				{
+					usb_kill_urb(mdc800->download_urb);
 					dev_err(&mdc800->dev->dev,
 						"request download-bytes fails "
 						"(status=%i)\n",
