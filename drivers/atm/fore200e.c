@@ -363,7 +363,12 @@ fore200e_shutdown(struct fore200e* fore200e)
 	/* first, reset the board to prevent further interrupts or data transfers */
 	fore200e_reset(fore200e, 0);
     }
-    
+#ifdef FORE200E_USE_TASKLET
+	if (fore200e->state >= FORE200E_STATE_IRQ) {
+		tasklet_kill(&fore200e->tx_tasklet);
+		tasklet_kill(&fore200e->rx_tasklet);
+	}
+#endif
     /* then, release all allocated resources */
     switch(fore200e->state) {
 
