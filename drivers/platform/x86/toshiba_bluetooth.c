@@ -37,7 +37,7 @@ struct toshiba_bluetooth_dev {
 
 static int toshiba_bt_rfkill_add(struct acpi_device *device);
 static void toshiba_bt_rfkill_remove(struct acpi_device *device);
-static void toshiba_bt_rfkill_notify(struct acpi_device *device, u32 event);
+static void toshiba_bt_rfkill_notify(acpi_handle handle, u32 event, void *data);
 
 static const struct acpi_device_id bt_device_ids[] = {
 	{ "TOS6205", 0},
@@ -57,7 +57,6 @@ static struct acpi_driver toshiba_bt_rfkill_driver = {
 	.ops =		{
 				.add =		toshiba_bt_rfkill_add,
 				.remove =	toshiba_bt_rfkill_remove,
-				.notify =	toshiba_bt_rfkill_notify,
 			},
 	.drv.pm =	&toshiba_bt_pm,
 };
@@ -203,9 +202,9 @@ static const struct rfkill_ops rfk_ops = {
 };
 
 /* ACPI driver functions */
-static void toshiba_bt_rfkill_notify(struct acpi_device *device, u32 event)
+static void toshiba_bt_rfkill_notify(acpi_handle handle, u32 event, void *data)
 {
-	struct toshiba_bluetooth_dev *bt_dev = acpi_driver_data(device);
+	struct toshiba_bluetooth_dev *bt_dev = data;
 
 	if (toshiba_bluetooth_sync_status(bt_dev))
 		return;
@@ -273,6 +272,16 @@ static int toshiba_bt_rfkill_add(struct acpi_device *device)
 		pr_err("Unable to register rfkill device\n");
 		rfkill_destroy(bt_dev->rfk);
 		kfree(bt_dev);
+		return result;
+	}
+
+	result = acpi_dev_install_notify_handler(device, ACPI_DEVICE_NOTIFY,
+						 toshiba_bt_rfkill_notify, bt_dev);
+	if (result) {
+		pr_err("Unable to register ACPI notify handler\n");
+		rfkill_unregister(bt_dev->rfk);
+		rfkill_destroy(bt_dev->rfk);
+		kfree(bt_dev);
 	}
 
 	return result;
@@ -283,6 +292,9 @@ static void toshiba_bt_rfkill_remove(struct acpi_device *device)
 	struct toshiba_bluetooth_dev *bt_dev = acpi_driver_data(device);
 
 	/* clean up */
+	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY,
+				       toshiba_bt_rfkill_notify);
+
 	if (bt_dev->rfk) {
 		rfkill_unregister(bt_dev->rfk);
 		rfkill_destroy(bt_dev->rfk);
