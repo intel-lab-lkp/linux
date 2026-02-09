@@ -232,6 +232,16 @@ unsigned int arch_crash_get_elfcorehdr_size(void);
 #define crash_get_elfcorehdr_size arch_crash_get_elfcorehdr_size
 #endif
 
+#ifdef CONFIG_CRASH_DUMP
+struct crash_mem;
+
+int arch_get_system_nr_ranges(unsigned int *nr_ranges);
+#define arch_get_system_nr_ranges arch_get_system_nr_ranges
+
+int arch_prepare_elf64_ram_headers(struct crash_mem *cmem);
+#define arch_prepare_elf64_ram_headers arch_prepare_elf64_ram_headers
+#endif
+
 #endif /* __ASSEMBLER__ */
 
 #endif /* _ASM_X86_KEXEC_H */

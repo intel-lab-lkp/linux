@@ -123,6 +123,11 @@ static inline void kdump_cma_reserve(void) { }
 #endif
 
 #if defined(CONFIG_CRASH_DUMP)
+#include <asm/kexec_ranges.h>
+
+struct crash_mem;
+struct memory_notify;
+
 /*
  * This function is responsible for capturing register states if coming
  * via panic or invoking dump using sysrq-trigger.
@@ -146,6 +151,14 @@ int arch_crash_hotplug_support(struct kimage *image, unsigned long kexec_flags);
 unsigned int arch_crash_get_elfcorehdr_size(void);
 #define crash_get_elfcorehdr_size arch_crash_get_elfcorehdr_size
 #endif /* CONFIG_CRASH_HOTPLUG */
+
+int arch_crash_exclude_mem_range(struct crash_mem **mem, unsigned long long mstart,
+				 unsigned long long mend);
+#define arch_crash_exclude_mem_range arch_crash_exclude_mem_range
+
+int arch_get_crash_memory_ranges(struct crash_mem **cmem, unsigned long *nr_mem_ranges,
+				 struct kimage *image, struct memory_notify *mn);
+#define arch_get_crash_memory_ranges arch_get_crash_memory_ranges
 
 extern int crashing_cpu;
 extern void crash_send_ipi(void (*crash_ipi_callback)(struct pt_regs *));

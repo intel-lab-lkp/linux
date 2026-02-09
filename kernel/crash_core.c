@@ -18,6 +18,7 @@
 #include <linux/memblock.h>
 #include <linux/kmemleak.h>
 #include <linux/crash_core.h>
+#include <linux/crash_reserve.h>
 #include <linux/reboot.h>
 #include <linux/btf.h>
 #include <linux/objtool.h>
@@ -161,19 +162,66 @@ static inline resource_size_t crash_resource_size(const struct resource *res)
 	return !res->end ? 0 : resource_size(res);
 }
 
-
-
-
-int crash_prepare_elf64_headers(struct crash_mem *mem, int need_kernel_map,
-			  void **addr, unsigned long *sz)
+static int crash_exclude_mem_ranges(struct crash_mem *cmem,
+				    unsigned long *nr_mem_ranges)
 {
+	int ret, i;
+
+#if defined(CONFIG_X86_64) || defined(CONFIG_X86_32)
+	/* Exclude the low 1M because it is always reserved */
+	ret = crash_exclude_mem_range(cmem, 0, SZ_1M - 1);
+	if (ret)
+		return ret;
+#endif
+
+	/* Exclude crashkernel region */
+	ret = arch_crash_exclude_mem_range(&cmem, crashk_res.start, crashk_res.end);
+	if (ret)
+		return ret;
+
+	if (crashk_low_res.end) {
+		ret = arch_crash_exclude_mem_range(&cmem, crashk_low_res.start, crashk_low_res.end);
+		if (ret)
+			return ret;
+	}
+
+	for (i = 0; i < crashk_cma_cnt; ++i) {
+		ret = arch_crash_exclude_mem_range(&cmem, crashk_cma_ranges[i].start,
+						   crashk_cma_ranges[i].end);
+		if (ret)
+			return ret;
+	}
+
+	/* Return the computed number of memory ranges, for hotplug usage */
+	if (nr_mem_ranges)
+		*nr_mem_ranges = cmem->nr_ranges;
+
+	return 0;
+}
+
+int crash_prepare_elf64_headers(int need_kernel_map, void **addr,
+				unsigned long *sz, unsigned long *nr_mem_ranges,
+				struct kimage *image, struct memory_notify *mn)
+{
+	unsigned long nr_cpus = num_possible_cpus(), nr_phdr, elf_sz;
+	unsigned long long notes_addr;
+	struct crash_mem *mem = NULL;
+	unsigned long mstart, mend;
+	unsigned int cpu, i;
+	unsigned char *buf;
 	Elf64_Ehdr *ehdr;
 	Elf64_Phdr *phdr;
-	unsigned long nr_cpus = num_possible_cpus(), nr_phdr, elf_sz;
-	unsigned char *buf;
-	unsigned int cpu, i;
-	unsigned long long notes_addr;
-	unsigned long mstart, mend;
+	int ret = 0;
+
+	ret = arch_get_crash_memory_ranges(&mem, nr_mem_ranges, image, mn);
+	if (ret)
+		return ret;
+
+	if (mem) {
+		ret = crash_exclude_mem_ranges(mem, nr_mem_ranges);
+		if (ret)
+			goto out;
+	}
 
 	/* extra phdr for vmcoreinfo ELF note */
 	nr_phdr = nr_cpus + 1;
@@ -192,8 +240,10 @@ int crash_prepare_elf64_headers(struct crash_mem *mem, int need_kernel_map,
 	elf_sz = ALIGN(elf_sz, ELF_CORE_HEADER_ALIGN);
 
 	buf = vzalloc(elf_sz);
-	if (!buf)
-		return -ENOMEM;
+	if (!buf) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	ehdr = (Elf64_Ehdr *)buf;
 	phdr = (Elf64_Phdr *)(ehdr + 1);
@@ -262,7 +312,10 @@ int crash_prepare_elf64_headers(struct crash_mem *mem, int need_kernel_map,
 
 	*addr = buf;
 	*sz = elf_sz;
-	return 0;
+
+out:
+	kvfree(mem);
+	return ret;
 }
 
 /**

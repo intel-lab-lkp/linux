@@ -419,29 +419,20 @@ unsigned int arch_crash_get_elfcorehdr_size(void)
 	return sizeof(struct elfhdr) + (phdr_cnt * sizeof(Elf64_Phdr));
 }
 
-/**
- * update_crash_elfcorehdr() - Recreate the elfcorehdr and replace it with old
- *			       elfcorehdr in the kexec segment array.
- * @image: the active struct kimage
- * @mn: struct memory_notify data handler
- */
-static void update_crash_elfcorehdr(struct kimage *image, struct memory_notify *mn)
+int arch_get_crash_memory_ranges(struct crash_mem **cmem, unsigned long *nr_mem_ranges,
+				 struct kimage *image, struct memory_notify *mn)
 {
+	unsigned long base_addr, size;
 	int ret;
-	struct crash_mem *cmem = NULL;
-	struct kexec_segment *ksegment;
-	void *ptr, *mem, *elfbuf = NULL;
-	unsigned long elfsz, memsz, base_addr, size;
 
-	ksegment = &image->segment[image->elfcorehdr_index];
-	mem = (void *) ksegment->mem;
-	memsz = ksegment->memsz;
-
-	ret = get_crash_memory_ranges(&cmem);
+	ret = get_crash_memory_ranges(cmem);
 	if (ret) {
 		pr_err("Failed to get crash mem range\n");
-		return;
+		return ret;
 	}
+
+	if (!image || !mn)
+		return 0;
 
 	/*
 	 * The hot unplugged memory is part of crash memory ranges,
@@ -450,14 +441,34 @@ static void update_crash_elfcorehdr(struct kimage *image, struct memory_notify *
 	if (image->hp_action == KEXEC_CRASH_HP_REMOVE_MEMORY) {
 		base_addr = PFN_PHYS(mn->start_pfn);
 		size = mn->nr_pages * PAGE_SIZE;
-		ret = remove_mem_range(&cmem, base_addr, size);
+		ret = remove_mem_range(cmem, base_addr, size);
 		if (ret) {
 			pr_err("Failed to remove hot-unplugged memory from crash memory ranges\n");
-			goto out;
+			return ret;
 		}
 	}
 
-	ret = crash_prepare_elf64_headers(cmem, false, &elfbuf, &elfsz);
+	return 0;
+}
+
+/**
+ * update_crash_elfcorehdr() - Recreate the elfcorehdr and replace it with old
+ *			       elfcorehdr in the kexec segment array.
+ * @image: the active struct kimage
+ * @mn: struct memory_notify data handler
+ */
+static void update_crash_elfcorehdr(struct kimage *image, struct memory_notify *mn)
+{
+	void *ptr, *mem, *elfbuf = NULL;
+	struct kexec_segment *ksegment;
+	unsigned long elfsz, memsz;
+	int ret;
+
+	ksegment = &image->segment[image->elfcorehdr_index];
+	mem = (void *) ksegment->mem;
+	memsz = ksegment->memsz;
+
+	ret = crash_prepare_elf64_headers(false, &elfbuf, &elfsz, NULL, image, mn);
 	if (ret) {
 		pr_err("Failed to prepare elf header\n");
 		goto out;
@@ -486,7 +497,6 @@ static void update_crash_elfcorehdr(struct kimage *image, struct memory_notify *
 		xchg(&kexec_crash_image, image);
 	}
 out:
-	kvfree(cmem);
 	kvfree(elfbuf);
 }
 
