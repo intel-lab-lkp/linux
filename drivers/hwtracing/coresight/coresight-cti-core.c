@@ -48,15 +48,6 @@ static int nr_cti_cpu;
 /* quick lookup list for CPU bound CTIs when power handling */
 static struct cti_drvdata *cti_cpu_drvdata[NR_CPUS];
 
-/*
- * CTI naming. CTI bound to cores will have the name cti_cpu<N> where
- * N is the CPU ID. System CTIs will have the name cti_sys<I> where I
- * is an index allocated by order of discovery.
- *
- * CTI device name list - for CTI not bound to cores.
- */
-DEFINE_CORESIGHT_DEVLIST(cti_sys_devs, "cti_sys");
-
 /* write set of regs to hardware - call with spinlock claimed */
 void cti_write_all_hw_regs(struct cti_drvdata *drvdata)
 {
@@ -889,12 +880,18 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	/* default to powered - could change on PM notifications */
 	drvdata->config.hw_powered = true;
 
-	/* set up device name - will depend if cpu bound or otherwise */
+	/*
+	 * Set up device name - will depend if cpu bound or otherwise.
+	 *
+	 * CTI bound to cores will have the name cti_cpu<N> where N is th
+	 * eCPU ID. System CTIs will have the name cti_sys<I> where I is an
+	 * index allocated by order of discovery.
+	 */
 	if (drvdata->ctidev.cpu >= 0)
 		cti_desc.name = devm_kasprintf(dev, GFP_KERNEL, "cti_cpu%d",
 					       drvdata->ctidev.cpu);
 	else
-		cti_desc.name = coresight_alloc_device_name(&cti_sys_devs, dev);
+		cti_desc.name = coresight_alloc_device_name("cti_sys", dev);
 	if (!cti_desc.name)
 		return -ENOMEM;
 
