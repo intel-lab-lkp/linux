@@ -1036,6 +1036,7 @@ void start_kernel(void)
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
 	early_numa_node_init();
 	boot_cpu_hotplug_init();
+	init_arch_has_pmd_leaves();
 
 	print_kernel_cmdline(saved_command_line);
 	/* parameters may set static keys */

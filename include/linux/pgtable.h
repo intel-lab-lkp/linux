@@ -2017,6 +2017,13 @@ static inline const char *pgtable_level_to_str(enum pgtable_level level)
 	}
 }
 
+extern bool __arch_has_pmd_leaves;
+static inline bool pgtable_has_pmd_leaves(void)
+{
+	return __arch_has_pmd_leaves;
+}
+void __init init_arch_has_pmd_leaves(void);
+
 #endif /* !__ASSEMBLY__ */
 
 #if !defined(MAX_POSSIBLE_PHYSMEM_BITS) && !defined(CONFIG_64BIT)
