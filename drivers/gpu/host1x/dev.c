@@ -450,7 +450,7 @@ put_group:
 	iommu_group_put(host->group);
 	host->group = NULL;
 
-	return ERR_PTR(err);
+	return err ? ERR_PTR(err) : NULL;
 }
 
 static int host1x_iommu_init(struct host1x *host)
