@@ -1202,8 +1202,8 @@ static void apple_nvme_reset_work(struct work_struct *work)
 
 	nvme_unquiesce_io_queues(&anv->ctrl);
 	nvme_wait_freeze(&anv->ctrl);
-	blk_mq_update_nr_hw_queues(&anv->tagset, 1);
 	nvme_unfreeze(&anv->ctrl);
+	blk_mq_update_nr_hw_queues(&anv->tagset, 1);
 
 	if (!nvme_change_ctrl_state(&anv->ctrl, NVME_CTRL_LIVE)) {
 		dev_warn(anv->ctrl.device,
