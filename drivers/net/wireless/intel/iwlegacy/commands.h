@@ -1691,22 +1691,25 @@ struct agg_tx_status {
 } __packed;
 
 struct il4965_tx_resp {
-	u8 frame_count;		/* 1 no aggregation, >1 aggregation */
-	u8 bt_kill_count;	/* # blocked by bluetooth (unused for agg) */
-	u8 failure_rts;		/* # failures due to unsuccessful RTS */
-	u8 failure_frame;	/* # failures due to no ACK (unused for agg) */
+	/* New members MUST be added within the __struct_group() macro below. */
+	__struct_group(il4965_tx_resp_hdr, __hdr, __packed,
+		u8 frame_count;		/* 1 no aggregation, >1 aggregation */
+		u8 bt_kill_count;	/* # blocked by bluetooth (unused for agg) */
+		u8 failure_rts;		/* # failures due to unsuccessful RTS */
+		u8 failure_frame;	/* # failures due to no ACK (unused for agg) */
 
-	/* For non-agg:  Rate at which frame was successful.
-	 * For agg:  Rate at which all frames were transmitted. */
-	__le32 rate_n_flags;	/* RATE_MCS_*  */
+		/* For non-agg:  Rate at which frame was successful.
+		 * For agg:  Rate at which all frames were transmitted. */
+		__le32 rate_n_flags;	/* RATE_MCS_*  */
 
-	/* For non-agg:  RTS + CTS + frame tx attempts time + ACK.
-	 * For agg:  RTS + CTS + aggregation tx time + block-ack time. */
-	__le16 wireless_media_time;	/* uSecs */
+		/* For non-agg:  RTS + CTS + frame tx attempts time + ACK.
+		 * For agg:  RTS + CTS + aggregation tx time + block-ack time. */
+		__le16 wireless_media_time;	/* uSecs */
 
-	__le16 reserved;
-	__le32 pa_power1;	/* RF power amplifier measurement (not used) */
-	__le32 pa_power2;
+		__le16 reserved;
+		__le32 pa_power1;	/* RF power amplifier measurement (not used) */
+		__le32 pa_power2;
+	);
 
 	/*
 	 * For non-agg:  frame status TX_STATUS_*
@@ -1726,6 +1729,9 @@ struct il4965_tx_resp {
 		DECLARE_FLEX_ARRAY(struct agg_tx_status, agg_status);	/* for each agg frame */
 	} u;
 } __packed;
+static_assert(offsetof(struct il4965_tx_resp, u.agg_status) ==
+	      sizeof(struct il4965_tx_resp_hdr),
+	      "struct member likely outside of __struct_group()");
 
 /*
  * N_COMPRESSED_BA = 0xc5 (response only, not a command)
@@ -2664,7 +2670,8 @@ struct il3945_beacon_notif {
 } __packed;
 
 struct il4965_beacon_notif {
-	struct il4965_tx_resp beacon_notify_hdr;
+	struct il4965_tx_resp_hdr beacon_notify_hdr;
+	__le32 beacon_tx_status;
 	__le32 low_tsf;
 	__le32 high_tsf;
 	__le32 ibss_mgr_status;
