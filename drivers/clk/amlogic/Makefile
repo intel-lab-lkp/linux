@@ -7,3 +7,4 @@ clk-amlogic-y += clk-basic.o
 clk-amlogic-y += clk-composite.o
 clk-amlogic-y += clk-dualdiv.o
 clk-amlogic-y += clk-noglitch.o
+clk-amlogic-y += clk-pll.o
