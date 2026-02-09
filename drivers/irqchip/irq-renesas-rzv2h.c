@@ -12,6 +12,7 @@
 #include <linux/bitfield.h>
 #include <linux/cleanup.h>
 #include <linux/err.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irqchip.h>
 #include <linux/irqchip/irq-renesas-rzv2h.h>
@@ -29,7 +30,10 @@
 #define ICU_TINT_START				(ICU_IRQ_LAST + 1)
 #define ICU_TINT_COUNT				32
 #define ICU_TINT_LAST				(ICU_TINT_START + ICU_TINT_COUNT - 1)
-#define ICU_NUM_IRQ				(ICU_TINT_LAST + 1)
+#define ICU_CA55_INT_START                      (ICU_TINT_LAST + 1)
+#define ICU_CA55_INT_COUNT                      4
+#define ICU_CA55_INT_LAST                       (ICU_CA55_INT_START + ICU_CA55_INT_COUNT - 1)
+#define ICU_NUM_IRQ                             (ICU_CA55_INT_LAST + 1)
 
 /* Registers */
 #define ICU_NSCNT				0x00
@@ -42,6 +46,7 @@
 #define ICU_TSCLR				0x24
 #define ICU_TITSR(k)				(0x28 + (k) * 4)
 #define ICU_TSSR(k)				(0x30 + (k) * 4)
+#define ICU_SWINT				0x130
 #define ICU_DMkSELy(k, y)			(0x420 + (k) * 0x20 + (y) * 4)
 #define ICU_DMACKSELk(k)			(0x500 + (k) * 4)
 
@@ -248,6 +253,30 @@ static void rzv2h_icu_irq_enable(struct irq_data *d)
 	irq_chip_enable_parent(d);
 }
 
+static int rzv2h_icu_irq_set_irqchip_state(struct irq_data *d,
+					   enum irqchip_irq_state which,
+					   bool state)
+{
+	unsigned int hwirq = irqd_to_hwirq(d);
+	struct rzv2h_icu_priv *priv;
+	unsigned int bit;
+
+	if (hwirq < ICU_CA55_INT_START || hwirq > ICU_CA55_INT_LAST ||
+	    which != IRQCHIP_STATE_PENDING)
+		return irq_chip_set_parent_state(d, which, state);
+
+	if (!state)
+		return 0;
+
+	priv = irq_data_to_priv(d);
+	bit = BIT(hwirq - ICU_CA55_INT_START);
+
+	guard(raw_spinlock)(&priv->lock);
+	/* Trigger the software interrupt */
+	writel_relaxed(bit, priv->base + ICU_SWINT);
+	return 0;
+}
+
 static int rzv2h_nmi_set_type(struct irq_data *d, unsigned int type)
 {
 	struct rzv2h_icu_priv *priv = irq_data_to_priv(d);
@@ -429,6 +458,7 @@ static int rzv2h_tint_set_type(struct irq_data *d, unsigned int type)
 
 static int rzv2h_icu_set_type(struct irq_data *d, unsigned int type)
 {
+	unsigned int gic_type = IRQ_TYPE_LEVEL_HIGH;
 	unsigned int hw_irq = irqd_to_hwirq(d);
 	int ret;
 
@@ -445,6 +475,11 @@ static int rzv2h_icu_set_type(struct irq_data *d, unsigned int type)
 		/* TINT */
 		ret = rzv2h_tint_set_type(d, type);
 		break;
+	case ICU_CA55_INT_START ... ICU_CA55_INT_LAST:
+		/* CA55 Software Interrupts have EDGE_RISING type */
+		gic_type = IRQ_TYPE_EDGE_RISING;
+		ret = 0;
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -452,7 +487,7 @@ static int rzv2h_icu_set_type(struct irq_data *d, unsigned int type)
 	if (ret)
 		return ret;
 
-	return irq_chip_set_type_parent(d, IRQ_TYPE_LEVEL_HIGH);
+	return irq_chip_set_type_parent(d, gic_type);
 }
 
 static int rzv2h_irqc_irq_suspend(void *data)
@@ -501,7 +536,7 @@ static const struct irq_chip rzv2h_icu_chip = {
 	.irq_disable		= rzv2h_icu_irq_disable,
 	.irq_enable		= rzv2h_icu_irq_enable,
 	.irq_get_irqchip_state	= irq_chip_get_parent_state,
-	.irq_set_irqchip_state	= irq_chip_set_parent_state,
+	.irq_set_irqchip_state	= rzv2h_icu_irq_set_irqchip_state,
 	.irq_retrigger		= irq_chip_retrigger_hierarchy,
 	.irq_set_type		= rzv2h_icu_set_type,
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
@@ -570,6 +605,50 @@ static int rzv2h_icu_parse_interrupts(struct rzv2h_icu_priv *priv, struct device
 	return 0;
 }
 
+static irqreturn_t rzv2h_icu_swint_irq(int irq, void *data)
+{
+	u8 cpu = *(u8 *)data;
+
+	pr_info("SWINT interrupt for CA55 core %u\n", cpu);
+	return IRQ_HANDLED;
+}
+
+static int rzv2h_icu_setup_irqs(struct platform_device *pdev,
+				struct irq_domain *irq_domain)
+{
+	bool irq_inject = IS_ENABLED(CONFIG_GENERIC_IRQ_INJECTION);
+	static const char * const rzv2h_swint_names[] = {
+		"int-ca55-0", "int-ca55-1",
+		"int-ca55-2", "int-ca55-3",
+	};
+	static const u8 swint_idx[] = { 0, 1, 2, 3 };
+	struct device *dev = &pdev->dev;
+	struct irq_fwspec fwspec;
+	unsigned int virq;
+	unsigned int i;
+	int ret;
+
+	for (i = 0; i < ICU_CA55_INT_COUNT && irq_inject; i++) {
+		fwspec.fwnode = irq_domain->fwnode;
+		fwspec.param_count = 2;
+		fwspec.param[0] = ICU_CA55_INT_START + i;
+		fwspec.param[1] = IRQ_TYPE_EDGE_RISING;
+
+		virq = irq_create_fwspec_mapping(&fwspec);
+		if (!virq)
+			return dev_err_probe(dev, -EINVAL, "failed to create IRQ mapping for %s\n",
+					     rzv2h_swint_names[i]);
+
+		ret = devm_request_irq(dev, virq, rzv2h_icu_swint_irq, 0, dev_name(dev),
+				       (void *)&swint_idx[i]);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to request %s IRQ\n",
+					     rzv2h_swint_names[i]);
+	}
+
+	return 0;
+}
+
 static int rzv2h_icu_probe_common(struct platform_device *pdev, struct device_node *parent,
 				  const struct rzv2h_hw_info *hw_info)
 {
@@ -624,6 +703,10 @@ static int rzv2h_icu_probe_common(struct platform_device *pdev, struct device_no
 	rzv2h_icu_data->info = hw_info;
 
 	register_syscore(&rzv2h_irqc_syscore);
+
+	ret = rzv2h_icu_setup_irqs(pdev, irq_domain);
+	if (ret)
+		goto pm_put;
 
 	/*
 	 * coccicheck complains about a missing put_device call before returning, but it's a false
