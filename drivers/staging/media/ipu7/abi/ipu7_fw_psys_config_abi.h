@@ -3,8 +3,8 @@
  * Copyright (C) 2020 - 2025 Intel Corporation
  */
 
-#ifndef IPU7_PSYS_CONFIG_ABI_H_INCLUDED__
-#define IPU7_PSYS_CONFIG_ABI_H_INCLUDED__
+#ifndef IPU7_FW_PSYS_CONFIG_ABI_H
+#define IPU7_FW_PSYS_CONFIG_ABI_H
 
 #include <linux/types.h>
 

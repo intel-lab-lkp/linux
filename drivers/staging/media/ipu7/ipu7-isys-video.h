@@ -17,14 +17,16 @@
 
 #include "ipu7-isys-queue.h"
 
-#define IPU_INSYS_OUTPUT_PINS		11U
-#define IPU_ISYS_MAX_PARALLEL_SOF	2U
+#define IPU_INSYS_OUTPUT_PINS		11
+#define IPU_ISYS_MAX_PARALLEL_SOF	2
 
 struct file;
 struct ipu7_isys;
 struct ipu7_isys_csi2;
 struct ipu7_insys_stream_cfg;
 struct ipu7_isys_subdev;
+
+#define V4L2_META_FMT_IPU7_STATS v4l2_fourcc("I", "P", "7", "S")
 
 struct ipu7_isys_pixelformat {
 	u32 pixelformat;

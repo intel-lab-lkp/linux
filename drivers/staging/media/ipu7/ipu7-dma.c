@@ -79,14 +79,14 @@ static struct page **__alloc_buffer(size_t size, gfp_t gfp, unsigned long attrs)
 
 		if (order) {
 			split_page(pages[i], order);
-			j = 1U << order;
+			j = 1 << order;
 			while (j--)
 				pages[i + j] = pages[i] + j;
 		}
 
 		__clear_buffer(pages[i], PAGE_SIZE << order, attrs);
-		i += 1U << order;
-		count -= 1U << order;
+		i += 1 << order;
+		count -= 1 << order;
 	}
 
 	return pages;
@@ -405,7 +405,7 @@ int ipu7_dma_map_sg(struct ipu7_bus_device *sys, struct scatterlist *sglist,
 		unsigned long lo, hi;
 
 		lo = iova_pfn(&mmu->dmap->iovad, IPU_FW_CODE_REGION_START);
-		hi = iova_pfn(&mmu->dmap->iovad, IPU_FW_CODE_REGION_END) - 1U;
+		hi = iova_pfn(&mmu->dmap->iovad, IPU_FW_CODE_REGION_END) - 1;
 		iova = reserve_iova(&mmu->dmap->iovad, lo, hi);
 		if (!iova) {
 			dev_err(dev, "Reserve iova[%lx:%lx] failed.\n", lo, hi);

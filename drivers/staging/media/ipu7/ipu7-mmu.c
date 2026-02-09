@@ -33,16 +33,16 @@
 
 #define ISP_PAGE_SHIFT		12
 #define ISP_PAGE_SIZE		BIT(ISP_PAGE_SHIFT)
-#define ISP_PAGE_MASK		(~(ISP_PAGE_SIZE - 1U))
+#define ISP_PAGE_MASK		(~(ISP_PAGE_SIZE - 1))
 
 #define ISP_L1PT_SHIFT		22
-#define ISP_L1PT_MASK		(~((1U << ISP_L1PT_SHIFT) - 1))
+#define ISP_L1PT_MASK		(~((1 << ISP_L1PT_SHIFT) - 1))
 
 #define ISP_L2PT_SHIFT		12
 #define ISP_L2PT_MASK		(~(ISP_L1PT_MASK | (~(ISP_PAGE_MASK))))
 
-#define ISP_L1PT_PTES		1024U
-#define ISP_L2PT_PTES		1024U
+#define ISP_L1PT_PTES		1024
+#define ISP_L2PT_PTES		1024
 
 #define ISP_PADDR_SHIFT		12
 
@@ -60,8 +60,8 @@ static __maybe_unused void mmu_irq_handler(struct ipu7_mmu *mmu)
 
 	for (i = 0; i < mmu->nr_mmus; i++) {
 		irq_cause = readl(mmu->mmu_hw[i].base + MMU_REG_IRQ_CAUSE);
-		pr_info("mmu %s irq_cause = 0x%x", mmu->mmu_hw[i].name,
-			irq_cause);
+		dev_info(&mmu->adev->auxdev.dev, "mmu %s irq_cause = 0x%x", mmu->mmu_hw[i].name,
+			 irq_cause);
 		writel(0x1ffff, mmu->mmu_hw[i].base + MMU_REG_IRQ_CLEAR);
 	}
 }
@@ -80,12 +80,12 @@ static void tlb_invalidate(struct ipu7_mmu *mmu)
 	}
 
 	for (i = 0; i < mmu->nr_mmus; i++) {
-		writel(0xffffffffU, mmu->mmu_hw[i].base +
+		writel(0xffffffff, mmu->mmu_hw[i].base +
 		       MMU_REG_INVALIDATE_0);
 
 		/* Need check with HW, use l1streams or l2streams */
 		if (mmu->mmu_hw[i].nr_l2streams > 32)
-			writel(0xffffffffU, mmu->mmu_hw[i].base +
+			writel(0xffffffff, mmu->mmu_hw[i].base +
 			       MMU_REG_INVALIDATE_1);
 
 		/*
@@ -99,7 +99,7 @@ static void tlb_invalidate(struct ipu7_mmu *mmu)
 		/* wait invalidation done */
 		ret = readl_poll_timeout_atomic(mmu->mmu_hw[i].base +
 						MMU_REG_INVALIDATION_STATUS,
-						val, !(val & 0x1U), 500,
+						val, !(val & 0x1), 500,
 						MMU_TLB_INVALIDATE_TIMEOUT);
 		if (ret)
 			dev_err(mmu->dev, "MMU[%u] TLB invalidate failed\n", i);
@@ -248,7 +248,7 @@ static void l2_unmap(struct ipu7_mmu_info *mmu_info, unsigned long iova,
 
 	spin_lock_irqsave(&mmu_info->lock, flags);
 	for (l1_idx = iova >> ISP_L1PT_SHIFT;
-	     size > 0U && l1_idx < ISP_L1PT_PTES; l1_idx++) {
+	     size > 0 && l1_idx < ISP_L1PT_PTES; l1_idx++) {
 		dev_dbg(mmu_info->dev,
 			"unmapping l2 pgtable (l1 index %u (iova 0x%8.8lx))\n",
 			l1_idx, iova);
@@ -263,7 +263,7 @@ static void l2_unmap(struct ipu7_mmu_info *mmu_info, unsigned long iova,
 
 		l2_entries = 0;
 		for (l2_idx = (iova & ISP_L2PT_MASK) >> ISP_L2PT_SHIFT;
-		     size > 0U && l2_idx < ISP_L2PT_PTES; l2_idx++) {
+		     size > 0 && l2_idx < ISP_L2PT_PTES; l2_idx++) {
 			phys_addr_t pteval = TBL_PHYS_ADDR(l2_pt[l2_idx]);
 
 			dev_dbg(mmu_info->dev,
@@ -491,18 +491,18 @@ static void __mmu_at_init(struct ipu7_mmu *mmu)
 		/* Configure MMU TLB stream configuration for L1/L2 */
 		for (j = 0; j < mmu_hw->nr_l1streams; j++) {
 			writel(mmu_hw->l1_block_sz[j], mmu_hw->base +
-			       mmu_hw->l1_block + 4U * j);
+			       mmu_hw->l1_block + 4 * j);
 		}
 
 		for (j = 0; j < mmu_hw->nr_l2streams; j++) {
 			writel(mmu_hw->l2_block_sz[j], mmu_hw->base +
-			       mmu_hw->l2_block + 4U * j);
+			       mmu_hw->l2_block + 4 * j);
 		}
 
 		for (j = 0; j < mmu_hw->uao_p_num; j++) {
 			if (!mmu_hw->uao_p2tlb[j])
 				continue;
-			writel(mmu_hw->uao_p2tlb[j], mmu_hw->uao_base + 4U * j);
+			writel(mmu_hw->uao_p2tlb[j], mmu_hw->uao_base + 4 * j);
 		}
 	}
 }
@@ -522,7 +522,7 @@ static void __mmu_zlx_init(struct ipu7_mmu *mmu)
 			if (!mmu_hw->zlx_axi_pool[j])
 				continue;
 			writel(mmu_hw->zlx_axi_pool[j],
-			       mmu_hw->zlx_base + ZLX_REG_AXI_POOL + j * 0x4U);
+			       mmu_hw->zlx_base + ZLX_REG_AXI_POOL + j * 0x4);
 		}
 
 		for (j = 0; j < mmu_hw->zlx_nr; j++) {
@@ -530,7 +530,7 @@ static void __mmu_zlx_init(struct ipu7_mmu *mmu)
 				continue;
 
 			writel(mmu_hw->zlx_conf[j],
-			       mmu_hw->zlx_base + ZLX_REG_CONF + j * 0x8U);
+			       mmu_hw->zlx_base + ZLX_REG_CONF + j * 0x8);
 		}
 
 		for (j = 0; j < mmu_hw->zlx_nr; j++) {
@@ -538,7 +538,7 @@ static void __mmu_zlx_init(struct ipu7_mmu *mmu)
 				continue;
 
 			writel(mmu_hw->zlx_en[j],
-			       mmu_hw->zlx_base + ZLX_REG_EN + j * 0x8U);
+			       mmu_hw->zlx_base + ZLX_REG_EN + j * 0x8);
 		}
 	}
 }
@@ -701,7 +701,7 @@ void ipu7_mmu_unmap(struct ipu7_mmu_info *mmu_info, unsigned long iova,
 	dev_dbg(mmu_info->dev, "unmapping iova 0x%lx size 0x%zx\n", iova, size);
 
 	/* find out the minimum page size supported */
-	min_pagesz = 1U << __ffs(mmu_info->pgsize_bitmap);
+	min_pagesz = 1 << __ffs(mmu_info->pgsize_bitmap);
 
 	/*
 	 * The virtual address and the size of the mapping must be
@@ -727,7 +727,7 @@ int ipu7_mmu_map(struct ipu7_mmu_info *mmu_info, unsigned long iova,
 		return -ENODEV;
 
 	/* find out the minimum page size supported */
-	min_pagesz = 1U << __ffs(mmu_info->pgsize_bitmap);
+	min_pagesz = 1 << __ffs(mmu_info->pgsize_bitmap);
 
 	/*
 	 * both the virtual address and the physical one, as well as

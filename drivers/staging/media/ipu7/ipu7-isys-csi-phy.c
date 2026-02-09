@@ -23,12 +23,12 @@
 #include "ipu7-platform-regs.h"
 #include "ipu7-isys-csi-phy.h"
 
-#define PORT_A		0U
-#define PORT_B		1U
-#define PORT_C		2U
-#define PORT_D		3U
+#define PORT_A		0
+#define PORT_B		1
+#define PORT_C		2
+#define PORT_D		3
 
-#define N_DATA_IDS	8U
+#define N_DATA_IDS	8
 static DECLARE_BITMAP(data_ids, N_DATA_IDS);
 
 struct ddlcal_counter_ref_s {
@@ -36,6 +36,18 @@ struct ddlcal_counter_ref_s {
 	u16 max_mbps;
 
 	u16 ddlcal_counter_ref;
+};
+
+struct ipu7_isys_csi_phy_hw_variant {
+	u32 hw_ver;
+	u32 common_val;
+	u8 max_lanes;
+};
+
+static const struct ipu7_isys_csi_phy_hw_variant ipu7_variant = {
+	.hw_ver = 0x70,
+	.common_val = 0x155,
+	.max_lanes = 4,
 };
 
 struct ddlcal_params {
@@ -130,7 +142,7 @@ static const struct cdr_fbk_cap_prog_params table7[] = {
 static void dwc_phy_write(struct ipu7_isys *isys, u32 id, u32 addr, u16 data)
 {
 	void __iomem *isys_base = isys->pdata->base;
-	void __iomem *base = isys_base + IS_IO_CDPHY_BASE(id);
+	void __iomem *base = isys_base + IPU7_ISYS_IO_CDPHY_BASE(id);
 
 	dev_dbg(&isys->adev->auxdev.dev, "phy write: reg 0x%zx = data 0x%04x",
 		base + addr - isys_base, data);
@@ -140,7 +152,7 @@ static void dwc_phy_write(struct ipu7_isys *isys, u32 id, u32 addr, u16 data)
 static u16 dwc_phy_read(struct ipu7_isys *isys, u32 id, u32 addr)
 {
 	void __iomem *isys_base = isys->pdata->base;
-	void __iomem *base = isys_base + IS_IO_CDPHY_BASE(id);
+	void __iomem *base = isys_base + IPU7_ISYS_IO_CDPHY_BASE(id);
 	u16 data;
 
 	data = readw(base + addr);
@@ -198,7 +210,7 @@ static void dwc_phy_write_mask(struct ipu7_isys *isys, u32 id, u32 addr,
 	WARN_ON(lo > hi);
 	WARN_ON(hi > 15);
 
-	mask = ((~0U - (1U << lo) + 1U)) & (~0U >> (31 - hi));
+	mask = ((~0 - (1 << lo) + 1)) & (~0 >> (31 - hi));
 	temp = dwc_phy_read(isys, id, addr);
 	temp &= ~mask;
 	temp |= (val << lo) & mask;
@@ -212,7 +224,7 @@ static void dwc_csi_write_mask(struct ipu7_isys *isys, u32 id, u32 addr,
 
 	WARN_ON(lo > hi);
 
-	mask = ((~0U - (1U << lo) + 1U)) & (~0U >> (31 - hi));
+	mask = ((~0 - (1 << lo) + 1)) & (~0 >> (31 - hi));
 	temp = dwc_csi_read(isys, id, addr);
 	temp &= ~mask;
 	temp |= (val << lo) & mask;
@@ -339,7 +351,7 @@ static int ipu7_isys_csi_ctrl_dids_config(struct ipu7_isys_csi2 *csi2, u32 id)
 	return 0;
 }
 
-#define CDPHY_TIMEOUT 5000000U
+#define CDPHY_TIMEOUT 5000000
 static int ipu7_isys_phy_ready(struct ipu7_isys *isys, u32 id)
 {
 	void __iomem *isys_base = isys->pdata->base;
@@ -353,7 +365,7 @@ static int ipu7_isys_phy_ready(struct ipu7_isys *isys, u32 id)
 
 	dev_dbg(dev, "waiting phy ready...\n");
 	ret = readl_poll_timeout(gpreg + PHY_READY, phy_ready,
-				 phy_ready & BIT(0) && phy_ready != ~0U,
+				 phy_ready & BIT(0) && phy_ready != ~0,
 				 100, CDPHY_TIMEOUT);
 	dev_dbg(dev, "phy %u ready = 0x%08x\n", id, readl(gpreg + PHY_READY));
 	dev_dbg(dev, "csi %u PHY_RX = 0x%08x\n", id,
@@ -362,8 +374,8 @@ static int ipu7_isys_phy_ready(struct ipu7_isys *isys, u32 id)
 		dwc_csi_read(isys, id, PHY_STOPSTATE));
 	dev_dbg(dev, "csi %u PHY_CAL = 0x%08x\n", id,
 		dwc_csi_read(isys, id, PHY_CAL));
-	for (i = 0; i < 4U; i++) {
-		reg = CORE_DIG_DLANE_0_R_HS_RX_0 + (i * 0x400U);
+	for (i = 0; i < 4; i++) {
+		reg = CORE_DIG_DLANE_0_R_HS_RX_0 + (i * 0x400);
 		dev_dbg(dev, "phy %u DLANE%u skewcal = 0x%04x\n",
 			id, i, dwc_phy_read(isys, id, reg));
 	}
@@ -385,7 +397,7 @@ static int ipu7_isys_phy_ready(struct ipu7_isys *isys, u32 id)
 		}
 
 		rext = dwc_phy_read(isys, id,
-				    CORE_DIG_IOCTRL_R_AFE_CB_CTRL_2_15) & 0xfU;
+				    CORE_DIG_IOCTRL_R_AFE_CB_CTRL_2_15) & 0xf;
 		dev_dbg(dev, "phy %u rext value = %u\n", id, rext);
 		isys->phy_rext_cal = (rext ? rext : 5);
 
@@ -730,7 +742,7 @@ static void ipu7_isys_cphy_config(struct ipu7_isys *isys, u8 id, u8 lanes,
 	u16 deass_thresh;
 	u16 delay_thresh;
 	u16 reset_thresh;
-	u16 cap_prog = 6U;
+	u16 cap_prog = 6;
 	u16 reg;
 	u16 val;
 	u32 i;
@@ -753,7 +765,7 @@ static void ipu7_isys_cphy_config(struct ipu7_isys *isys, u8 id, u8 lanes,
 	for (i = 0; i < trios; i++)
 		dwc_phy_write_mask(isys, id, reg + (i * 0x400), 6, 8, 11);
 
-	val = (mbps > 900U) ? 1U : 0U;
+	val = (mbps > 900) ? 1 : 0;
 	for (i = 0; i < trios; i++) {
 		reg = CORE_DIG_CLANE_0_RW_HS_RX_0;
 		dwc_phy_write_mask(isys, id, reg + (i * 0x400), 1, 0, 0);
@@ -774,7 +786,7 @@ static void ipu7_isys_cphy_config(struct ipu7_isys *isys, u8 id, u8 lanes,
 	 * The formula is suitable for data rate 80-3500Msps.
 	 * Timebase (us) = 1, DIV = 32, TDDL (UI) = 0.5
 	 */
-	if (mbps >= 80U)
+	if (mbps >= 80)
 		coarse_target = DIV_ROUND_UP_ULL(mbps, 16) - 1;
 	else
 		coarse_target = 56;
@@ -807,7 +819,7 @@ static void ipu7_isys_cphy_config(struct ipu7_isys *isys, u8 id, u8 lanes,
 		dwc_phy_write_mask(isys, id, reg, 2, 0, 2);
 	}
 
-	deass_thresh = (u16)div64_u64_rem(7 * 1000 * 6, mbps * 5U, &r64) + 1;
+	deass_thresh = (u16)div64_u64_rem(7 * 1000 * 6, mbps * 5, &r64) + 1;
 	if (r64 != 0)
 		deass_thresh++;
 
@@ -816,7 +828,7 @@ static void ipu7_isys_cphy_config(struct ipu7_isys *isys, u8 id, u8 lanes,
 		dwc_phy_write_mask(isys, id, reg + 0x400 * i,
 				   deass_thresh, 0, 7);
 
-	delay_thresh = div64_u64((224U - (9U * 7U)) * 1000U, 5U * mbps) - 7u;
+	delay_thresh = div64_u64((224 - (9 * 7)) * 1000, 5 * mbps) - 7u;
 
 	if (delay_thresh < 1)
 		delay_thresh = 1;
@@ -826,7 +838,7 @@ static void ipu7_isys_cphy_config(struct ipu7_isys *isys, u8 id, u8 lanes,
 		dwc_phy_write_mask(isys, id, reg + 0x400 * i,
 				   delay_thresh, 0, 15);
 
-	reset_thresh = (u16)div_u64_rem(2U * 5U * mbps, 7U * 1000U, &r);
+	reset_thresh = (u16)div_u64_rem(2 * 5 * mbps, 7 * 1000, &r);
 	if (!r)
 		reset_thresh--;
 
@@ -859,8 +871,8 @@ static void ipu7_isys_cphy_config(struct ipu7_isys *isys, u8 id, u8 lanes,
 
 	for (i = 0; i < (lanes + 1); i++) {
 		reg = CORE_DIG_IOCTRL_RW_AFE_LANE0_CTRL_2_9 + 0x400 * i;
-		dwc_phy_write_mask(isys, id, reg, 4U, 0, 2);
-		dwc_phy_write_mask(isys, id, reg, 0U, 3, 4);
+		dwc_phy_write_mask(isys, id, reg, 4, 0, 2);
+		dwc_phy_write_mask(isys, id, reg, 0, 3, 4);
 
 		reg = CORE_DIG_IOCTRL_RW_AFE_LANE0_CTRL_2_7 + 0x400 * i;
 		dwc_phy_write_mask(isys, id, reg, cap_prog, 10, 12);
@@ -967,7 +979,7 @@ int ipu7_isys_csi_phy_powerup(struct ipu7_isys_csi2 *csi2)
 	ipu7_isys_csi_phy_reset(isys, id);
 	gpreg_write(isys, id, PHY_CLK_LANE_CONTROL, 0x1);
 	gpreg_write(isys, id, PHY_CLK_LANE_FORCE_CONTROL, 0x2);
-	gpreg_write(isys, id, PHY_LANE_CONTROL_EN, (1U << lanes) - 1U);
+	gpreg_write(isys, id, PHY_LANE_CONTROL_EN, (1 << lanes) - 1);
 	gpreg_write(isys, id, PHY_LANE_FORCE_CONTROL, 0xf);
 	gpreg_write(isys, id, PHY_MODE, csi2->phy_mode);
 
@@ -1029,6 +1041,6 @@ void ipu7_isys_csi_phy_powerdown(struct ipu7_isys_csi2 *csi2)
 
 	ipu7_isys_csi_phy_reset(isys, csi2->port);
 	if (!is_ipu7(isys->adev->isp->hw_ver) &&
-	    csi2->nlanes > 2U && csi2->port == PORT_A)
+	    csi2->nlanes > 2 && csi2->port == PORT_A)
 		ipu7_isys_csi_phy_reset(isys, PORT_B);
 }

@@ -56,7 +56,7 @@ static const struct ipu7_boot_context contexts[IPU_SUBSYS_NUM] = {
 static u32 get_fw_boot_reg_addr(const struct ipu7_bus_device *adev,
 				enum ia_gofo_buttress_reg_id reg)
 {
-	u32 base = (adev->subsys == IPU_IS) ? 0U : (u32)IA_GOFO_FW_BOOT_ID_MAX;
+	u32 base = (adev->subsys == IPU_IS) ? 0 : (u32)IA_GOFO_FW_BOOT_ID_MAX;
 
 	return BUTTRESS_FW_BOOT_PARAMS_ENTRY(base + (u32)reg);
 }
@@ -105,7 +105,7 @@ static int ipu7_boot_cell_reset(const struct ipu7_bus_device *adev)
 	writel(val, base + ucx_ctrl_status);
 
 	ret = readl_poll_timeout(base + ucx_ctrl_status, val2,
-				 (val2 & 0x3U) == (val & 0x3U), 100, timeout);
+				 (val2 & 0x3) == (val & 0x3), 100, timeout);
 	if (ret) {
 		dev_err(dev, "cell enter reset timeout. status: 0x%x\n", val2);
 		return -ETIMEDOUT;
@@ -122,7 +122,7 @@ static int ipu7_boot_cell_reset(const struct ipu7_bus_device *adev)
 	writel(val, base + ucx_ctrl_status);
 
 	ret = readl_poll_timeout(base + ucx_ctrl_status, val2,
-				 (val2 & 0x3U) == (val & 0x3U), 100, timeout);
+				 (val2 & 0x3) == (val & 0x3), 100, timeout);
 	if (ret) {
 		dev_err(dev, "cell exit reset timeout. status: 0x%x\n", val2);
 		return -ETIMEDOUT;
@@ -191,17 +191,17 @@ static void init_boot_config(struct ia_gofo_boot_config *boot_config,
 {
 	/* syscom version, new syscom2 version */
 	boot_config->length = length;
-	boot_config->config_version.major = 1U;
-	boot_config->config_version.minor = 0U;
-	boot_config->config_version.subminor = 0U;
-	boot_config->config_version.patch = 0U;
+	boot_config->config_version.major = 1;
+	boot_config->config_version.minor = 0;
+	boot_config->config_version.subminor = 0;
+	boot_config->config_version.patch = 0;
 
 	/* msg version for task interface */
-	boot_config->client_version_support.num_versions = 1U;
+	boot_config->client_version_support.num_versions = 1;
 	boot_config->client_version_support.versions[0].major = major;
-	boot_config->client_version_support.versions[0].minor = 0U;
-	boot_config->client_version_support.versions[0].subminor = 0U;
-	boot_config->client_version_support.versions[0].patch = 0U;
+	boot_config->client_version_support.versions[0].minor = 0;
+	boot_config->client_version_support.versions[0].subminor = 0;
+	boot_config->client_version_support.versions[0].patch = 0;
 }
 
 int ipu7_boot_init_boot_config(struct ipu7_bus_device *adev,
@@ -252,7 +252,7 @@ int ipu7_boot_init_boot_config(struct ipu7_bus_device *adev,
 		u32 queue_size = qconfigs[i].max_capacity *
 			qconfigs[i].token_size_in_bytes;
 
-		queue_size = ALIGN(queue_size, 64U);
+		queue_size = ALIGN(queue_size, 64);
 		total_queue_size_aligned += queue_size;
 		qconfigs[i].queue_size = queue_size;
 	}

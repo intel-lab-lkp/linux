@@ -296,7 +296,7 @@ static int isys_register_video_devices(struct ipu7_isys *isys)
 	return 0;
 
 fail:
-	i = i + 1U;
+	i = i + 1;
 	while (i--) {
 		while (j--)
 			ipu7_isys_video_cleanup(&isys->csi2[i].av[j]);
@@ -995,13 +995,13 @@ int isys_isr_one(struct ipu7_bus_device *adev)
 			ipu7_isys_csi2_sof_event_by_stream(stream);
 
 		stream->seq[stream->seq_index].sequence =
-			atomic_read(&stream->sequence) - 1U;
+			atomic_read(&stream->sequence) - 1;
 		stream->seq[stream->seq_index].timestamp = ts;
 		dev_dbg(dev,
 			"SOF: stream %u frame %u (index %u), ts 0x%16.16llx\n",
 			resp->stream_id, resp->frame_id,
 			stream->seq[stream->seq_index].sequence, ts);
-		stream->seq_index = (stream->seq_index + 1U)
+		stream->seq_index = (stream->seq_index + 1)
 			% IPU_ISYS_MAX_PARALLEL_SOF;
 		break;
 	case IPU_INSYS_RESP_TYPE_FRAME_EOF:
@@ -1054,16 +1054,16 @@ static void ipu7_isys_csi2_isr(struct ipu7_isys_csi2 *csi2)
 			continue;
 
 		if (!is_ipu7(isp->hw_ver)) {
-			if (sync & IPU7P5_CSI_RX_SYNC_FS_VC & (1U << vc))
+			if (sync & IPU7P5_CSI_RX_SYNC_FS_VC & (1 << vc))
 				ipu7_isys_csi2_sof_event_by_stream(s);
 
-			if (fe & IPU7P5_CSI_RX_SYNC_FE_VC & (1U << vc))
+			if (fe & IPU7P5_CSI_RX_SYNC_FE_VC & (1 << vc))
 				ipu7_isys_csi2_eof_event_by_stream(s);
 		} else {
-			if (sync & IPU7_CSI_RX_SYNC_FS_VC & (1U << (vc * 2)))
+			if (sync & IPU7_CSI_RX_SYNC_FS_VC & (1 << (vc * 2)))
 				ipu7_isys_csi2_sof_event_by_stream(s);
 
-			if (sync & IPU7_CSI_RX_SYNC_FE_VC & (2U << (vc * 2)))
+			if (sync & IPU7_CSI_RX_SYNC_FE_VC & (2 << (vc * 2)))
 				ipu7_isys_csi2_eof_event_by_stream(s);
 		}
 	}

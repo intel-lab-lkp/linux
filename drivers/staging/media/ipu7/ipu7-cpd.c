@@ -21,21 +21,21 @@
 #define MAX_MANIFEST_SIZE	(SZ_4K * sizeof(u32))
 
 #define CPD_MANIFEST_IDX	0
-#define CPD_BINARY_START_IDX	1U
-#define CPD_METADATA_START_IDX	2U
-#define CPD_BINARY_NUM		2U /* ISYS + PSYS */
+#define CPD_BINARY_START_IDX	1
+#define CPD_METADATA_START_IDX	2
+#define CPD_BINARY_NUM		2 /* ISYS + PSYS */
 /*
  * Entries include:
  * 1 manifest entry.
  * 1 metadata entry for each sub system(ISYS and PSYS).
  * 1 binary entry for each sub system(ISYS and PSYS).
  */
-#define CPD_ENTRY_NUM		(CPD_BINARY_NUM * 2U + 1U)
+#define CPD_ENTRY_NUM		(CPD_BINARY_NUM * 2 + 1)
 
 #define CPD_METADATA_ATTR	0xa
 #define CPD_METADATA_IPL	0x1c
-#define ONLINE_METADATA_SIZE	128U
-#define ONLINE_METADATA_LINES	6U
+#define ONLINE_METADATA_SIZE	128
+#define ONLINE_METADATA_LINES	6
 
 struct ipu7_cpd_hdr {
 	u32 hdr_mark;
@@ -228,7 +228,7 @@ int ipu7_cpd_validate_cpd_file(struct ipu7_device *isp, const void *cpd_file,
 		unsigned int l;
 
 		ent = ipu7_cpd_get_entry(cpd_file,
-					 CPD_BINARY_START_IDX + i * 2U);
+					 CPD_BINARY_START_IDX + i * 2);
 		memcpy(info, (u8 *)cpd_file + ent->offset + ent->len -
 		       ONLINE_METADATA_SIZE, ONLINE_METADATA_SIZE);
 		for (l = 0; l < ONLINE_METADATA_LINES; l++) {
@@ -259,7 +259,7 @@ int ipu7_cpd_copy_binary(const void *cpd, const char *name,
 
 	for (i = 0; i < CPD_BINARY_NUM; i++) {
 		const struct ipu7_cpd_ent *binary =
-			ipu7_cpd_get_entry(cpd, CPD_BINARY_START_IDX + i * 2U);
+			ipu7_cpd_get_entry(cpd, CPD_BINARY_START_IDX + i * 2);
 		const struct ipu7_cpd_metadata *metadata =
 			ipu7_cpd_get_metadata(cpd, i);
 

@@ -56,12 +56,16 @@ const struct ipu7_isys_pixelformat ipu7_isys_pfmts[] = {
 	 IPU_INSYS_FRAME_FORMAT_RAW16},
 	{V4L2_PIX_FMT_SBGGR8, 8, 8, MEDIA_BUS_FMT_SBGGR8_1X8,
 	 IPU_INSYS_FRAME_FORMAT_RAW8},
+	{V4L2_META_FMT_IPU7_STATS, 0, 0, 0, IPU_INSYS_FRAME_FORMAT_RAW8},
 	{V4L2_PIX_FMT_SGBRG8, 8, 8, MEDIA_BUS_FMT_SGBRG8_1X8,
 	 IPU_INSYS_FRAME_FORMAT_RAW8},
+	{V4L2_META_FMT_IPU7_STATS, 0, 0, 0, IPU_INSYS_FRAME_FORMAT_RAW8},
 	{V4L2_PIX_FMT_SGRBG8, 8, 8, MEDIA_BUS_FMT_SGRBG8_1X8,
 	 IPU_INSYS_FRAME_FORMAT_RAW8},
+	{V4L2_META_FMT_IPU7_STATS, 0, 0, 0, IPU_INSYS_FRAME_FORMAT_RAW8},
 	{V4L2_PIX_FMT_SRGGB8, 8, 8, MEDIA_BUS_FMT_SRGGB8_1X8,
 	 IPU_INSYS_FRAME_FORMAT_RAW8},
+	{V4L2_META_FMT_IPU7_STATS, 0, 0, 0, IPU_INSYS_FRAME_FORMAT_RAW8},
 	{V4L2_PIX_FMT_SBGGR12P, 12, 12, MEDIA_BUS_FMT_SBGGR12_1X12,
 	 IPU_INSYS_FRAME_FORMAT_RAW12},
 	{V4L2_PIX_FMT_SGBRG12P, 12, 12, MEDIA_BUS_FMT_SGBRG12_1X12,
@@ -119,7 +123,7 @@ static int ipu7_isys_vidioc_enum_fmt(struct file *file, void *fh,
 	unsigned int i, num_found;
 
 	for (i = 0, num_found = 0; i < ARRAY_SIZE(ipu7_isys_pfmts); i++) {
-		if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE && f->type != V4L2_BUF_TYPE_META_CAPTURE)
 			continue;
 
 		if (f->mbus_code && f->mbus_code != ipu7_isys_pfmts[i].code)
@@ -191,7 +195,7 @@ static void ipu7_isys_try_fmt_cap(struct ipu7_isys_video *av, u32 type,
 	else
 		*bytesperline = DIV_ROUND_UP(*width * pfmt->bpp, BITS_PER_BYTE);
 
-	*bytesperline = ALIGN(*bytesperline, 64U);
+	*bytesperline = ALIGN(*bytesperline, 64);
 
 	/*
 	 * (height + 1) * bytesperline due to a hardware issue: the DMA unit
@@ -658,7 +662,7 @@ void ipu7_isys_put_stream(struct ipu7_isys_stream *stream)
 	unsigned int i;
 
 	if (!stream) {
-		pr_err("ipu7-isys: no available stream\n");
+		dev_err(&isys->adev->auxdev.dev, " no available stream\n");
 		return;
 	}
 
@@ -1024,7 +1028,7 @@ int ipu7_isys_video_init(struct ipu7_isys_video *av)
 	int ret;
 
 	mutex_init(&av->mutex);
-	av->vdev.device_caps = V4L2_CAP_STREAMING | V4L2_CAP_IO_MC |
+	av->vdev.device_caps = V4L2_CAP_STREAMING | V4L2_CAP_IO_MC | | V4L2_CAP_META_CAPTURE
 		V4L2_CAP_VIDEO_CAPTURE;
 	av->vdev.vfl_dir = VFL_DIR_RX;
 

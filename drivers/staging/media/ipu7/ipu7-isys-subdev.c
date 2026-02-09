@@ -95,7 +95,7 @@ u32 ipu7_isys_convert_bayer_order(u32 code, int x, int y)
 	if (WARN_ON(i == ARRAY_SIZE(code_map)))
 		return code;
 
-	return code_map[i ^ ((((u32)y & 1U) << 1U) | ((u32)x & 1U))];
+	return code_map[i ^ ((((u32)y & 1) << 1) | ((u32)x & 1))];
 }
 
 int ipu7_isys_subdev_set_fmt(struct v4l2_subdev *sd,
@@ -295,7 +295,7 @@ int ipu7_isys_subdev_init(struct ipu7_isys_subdev *asd,
 
 	ret = media_entity_pads_init(&asd->sd.entity, num_pads, asd->pad);
 	if (ret) {
-		pr_err("isys subdev init failed %d.\n", ret);
+		dev_err(&isys->adev->auxdev.dev, "subdev init failed %d.\n", ret);
 		return ret;
 	}
 

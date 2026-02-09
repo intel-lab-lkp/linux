@@ -39,7 +39,7 @@ void *ipu7_syscom_get_token(struct ipu7_syscom_context *ctx, int q)
 				queue_params->token_size_in_bytes;
 	} else {
 		/* Input queue */
-		bool full = (read_index == ((write_index + 1U) %
+		bool full = (read_index == ((write_index + 1) %
 					    (u32)queue_params->max_capacity));
 
 		if (!full)
@@ -65,7 +65,7 @@ void ipu7_syscom_put_token(struct ipu7_syscom_context *ctx, int q)
 		offset = offsetof(struct syscom_queue_indices_s, write_index);
 
 	index = readl(queue_indices + offset);
-	writel((index + 1U) % queue_params->max_capacity,
+	writel((index + 1) % queue_params->max_capacity,
 	       queue_indices + offset);
 }
 EXPORT_SYMBOL_NS_GPL(ipu7_syscom_put_token, "INTEL_IPU7");

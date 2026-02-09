@@ -145,8 +145,8 @@ int ipu7_fw_isys_init(struct ipu7_isys *isys)
 	isys_config->logger_config.use_channels_enable_bitmask = 1;
 	isys_config->logger_config.channels_enable_bitmask =
 		LOGGER_CONFIG_CHANNEL_ENABLE_SYSCOM_BITMASK;
-	isys_config->logger_config.hw_printf_buffer_base_addr = 0U;
-	isys_config->logger_config.hw_printf_buffer_size_bytes = 0U;
+	isys_config->logger_config.hw_printf_buffer_base_addr = 0;
+	isys_config->logger_config.hw_printf_buffer_size_bytes = 0;
 	isys_config->wdt_config.wdt_timer1_us = 0;
 	isys_config->wdt_config.wdt_timer2_us = 0;
 	ret = ipu_buttress_get_isys_freq(adev->isp, &freq);
@@ -159,7 +159,7 @@ int ipu7_fw_isys_init(struct ipu7_isys *isys)
 	ipu7_dma_sync_single(adev, isys_config_dma_addr,
 			     sizeof(struct ipu7_insys_config));
 
-	major = is_ipu8(adev->isp->hw_ver) ? 2U : 1U;
+	major = is_ipu8(adev->isp->hw_ver) ? 2 : 1;
 	ret = ipu7_boot_init_boot_config(adev, queue_configs, num_queues,
 					 freq, isys_config_dma_addr, major);
 	if (ret)
