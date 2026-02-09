@@ -8,6 +8,7 @@
 
 #include <linux/device.h>
 #include <linux/export.h>
+#include <linux/interrupt.h>
 #include <linux/irqdomain.h>
 #include <linux/module.h>
 #include <linux/msi.h>
@@ -35,23 +36,95 @@ static void pci_epf_write_msi_msg(struct msi_desc *desc, struct msi_msg *msg)
 	pci_epc_put(epc);
 }
 
-int pci_epf_alloc_doorbell(struct pci_epf *epf, u16 num_db)
+static int pci_epf_alloc_doorbell_embedded(struct pci_epf *epf, u16 num_db)
 {
 	struct pci_epc *epc = epf->epc;
-	struct device *dev = &epf->dev;
-	struct irq_domain *domain;
-	void *msg;
-	int ret;
-	int i;
+	const struct pci_epc_aux_resource *dma_ctrl = NULL;
+	struct pci_epf_doorbell_msg *msg;
+	int count, ret, i, db;
 
-	/* TODO: Multi-EPF support */
-	if (list_first_entry_or_null(&epc->pci_epf, struct pci_epf, list) != epf) {
-		dev_err(dev, "MSI doorbell doesn't support multiple EPF\n");
-		return -EINVAL;
+	count = pci_epc_get_aux_resources(epc, epf->func_no, epf->vfunc_no,
+					  NULL, 0);
+	if (count == -EOPNOTSUPP || count == 0)
+		return -ENODEV;
+	if (count < 0)
+		return count;
+
+	struct pci_epc_aux_resource *res __free(kfree) =
+				kcalloc(count, sizeof(*res), GFP_KERNEL);
+	if (!res)
+		return -ENOMEM;
+
+	ret = pci_epc_get_aux_resources(epc, epf->func_no, epf->vfunc_no,
+					res, count);
+	if (ret == -EOPNOTSUPP || ret == 0) {
+		ret = -ENODEV;
+		goto out_free_res;
+	}
+	if (ret < 0)
+		goto out_free_res;
+
+	count = ret;
+
+	for (i = 0; i < count; i++) {
+		if (res[i].type == PCI_EPC_AUX_DMA_CTRL_MMIO) {
+			dma_ctrl = &res[i];
+			break;
+		}
+	}
+	if (!dma_ctrl) {
+		ret = -ENODEV;
+		goto out_free_res;
 	}
 
-	if (epf->db_msg)
-		return -EBUSY;
+	msg = kcalloc(num_db, sizeof(*msg), GFP_KERNEL);
+	if (!msg) {
+		ret = -ENOMEM;
+		goto out_free_res;
+	}
+
+	for (i = 0, db = 0; i < count && db < num_db; i++) {
+		u64 addr;
+
+		if (res[i].type != PCI_EPC_AUX_DMA_CHAN_DESC)
+			continue;
+
+		if (res[i].u.dma_chan_desc.db_offset >= dma_ctrl->size)
+			continue;
+
+		addr = (u64)dma_ctrl->phys_addr + res[i].u.dma_chan_desc.db_offset;
+
+		msg[db].msg.address_lo = (u32)addr;
+		msg[db].msg.address_hi = (u32)(addr >> 32);
+		msg[db].msg.data = 0;
+		msg[db].virq = res[i].u.dma_chan_desc.irq;
+		msg[db].irq_flags = IRQF_SHARED;
+		msg[db].type = PCI_EPF_DOORBELL_EMBEDDED;
+		db++;
+	}
+
+	if (db != num_db) {
+		ret = -ENOSPC;
+		kfree(msg);
+		goto out_free_res;
+	}
+
+	epf->num_db = num_db;
+	epf->db_msg = msg;
+	ret = 0;
+
+out_free_res:
+	kfree(res);
+	return ret;
+}
+
+static int pci_epf_alloc_doorbell_msi(struct pci_epf *epf, u16 num_db)
+{
+	struct pci_epf_doorbell_msg *msg;
+	struct device *dev = &epf->dev;
+	struct pci_epc *epc = epf->epc;
+	struct irq_domain *domain;
+	int ret, i;
 
 	domain = of_msi_map_get_device_domain(epc->dev.parent, 0,
 					      DOMAIN_BUS_PLATFORM_MSI);
@@ -74,6 +147,11 @@ int pci_epf_alloc_doorbell(struct pci_epf *epf, u16 num_db)
 	if (!msg)
 		return -ENOMEM;
 
+	for (i = 0; i < num_db; i++) {
+		msg[i].irq_flags = 0;
+		msg[i].type = PCI_EPF_DOORBELL_MSI;
+	}
+
 	epf->num_db = num_db;
 	epf->db_msg = msg;
 
@@ -90,13 +168,49 @@ int pci_epf_alloc_doorbell(struct pci_epf *epf, u16 num_db)
 	for (i = 0; i < num_db; i++)
 		epf->db_msg[i].virq = msi_get_virq(epc->dev.parent, i);
 
+	return 0;
+}
+
+int pci_epf_alloc_doorbell(struct pci_epf *epf, u16 num_db)
+{
+	struct pci_epc *epc = epf->epc;
+	struct device *dev = &epf->dev;
+	int ret;
+
+	/* TODO: Multi-EPF support */
+	if (list_first_entry_or_null(&epc->pci_epf, struct pci_epf, list) != epf) {
+		dev_err(dev, "Doorbell doesn't support multiple EPF\n");
+		return -EINVAL;
+	}
+
+	if (epf->db_msg)
+		return -EBUSY;
+
+	ret = pci_epf_alloc_doorbell_msi(epf, num_db);
+	if (!ret)
+		return 0;
+
+	if (ret != -ENODEV)
+		return ret;
+
+	ret = pci_epf_alloc_doorbell_embedded(epf, num_db);
+	if (!ret) {
+		dev_info(dev, "Using embedded (DMA) doorbell fallback\n");
+		return 0;
+	}
+
+	dev_err(dev, "Failed to allocate doorbell: %d\n", ret);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pci_epf_alloc_doorbell);
 
 void pci_epf_free_doorbell(struct pci_epf *epf)
 {
-	platform_device_msi_free_irqs_all(epf->epc->dev.parent);
+	if (!epf->db_msg)
+		return;
+
+	if (epf->db_msg[0].type == PCI_EPF_DOORBELL_MSI)
+		platform_device_msi_free_irqs_all(epf->epc->dev.parent);
 
 	kfree(epf->db_msg);
 	epf->db_msg = NULL;
