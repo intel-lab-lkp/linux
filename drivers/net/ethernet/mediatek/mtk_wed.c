@@ -879,7 +879,7 @@ mtk_wed_hwrro_free_buffer(struct mtk_wed_device *dev)
 		__free_page(page);
 	}
 
-	dma_free_coherent(dev->hw->dev, dev->hw_rro.size * sizeof(*desc),
+	dma_free_coherent(dev->hw->dev, dev->wlan.rx_nbuf * sizeof(*desc),
 			  desc, dev->hw_rro.desc_phys);
 
 free_pagelist:
