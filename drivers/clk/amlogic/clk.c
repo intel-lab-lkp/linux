@@ -10,6 +10,7 @@
 
 #include "clk.h"
 #include "clk-basic.h"
+#include "clk-composite.h"
 
 static const struct {
 	unsigned int type;
@@ -19,6 +20,7 @@ static const struct {
 	ENTRY(AML_CLKTYPE_MUX),
 	ENTRY(AML_CLKTYPE_DIV),
 	ENTRY(AML_CLKTYPE_GATE),
+	ENTRY(AML_CLKTYPE_COMPOSITE),
 #undef ENTRY
 };
 
@@ -95,6 +97,11 @@ static int aml_clk_div_available_rates_show(struct seq_file *s, void *data)
 			div_flags = div->flags;
 			div_width = div->width;
 		}
+	} else if (clk->type == AML_CLKTYPE_COMPOSITE) {
+		struct aml_clk_composite_data *composite = clk->data;
+
+		div_val = (1 << composite->div_width) - 1;
+		div_width = composite->div_width;
 	} else {
 		pr_err("%s: Unsupported clock type\n", clk_hw_get_name(hw));
 		return -EINVAL;
