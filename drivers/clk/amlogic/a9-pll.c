@@ -7,6 +7,7 @@
 #include <linux/module.h>
 
 #include "clk.h"
+#include "clk-module.h"
 #include "clk-pll.h"
 
 static const struct aml_pll_data a9_mclk_pll_data = {
@@ -138,7 +139,16 @@ static struct platform_driver of_aml_clk_pll_driver = {
 		.of_match_table = of_aml_clk_pll_match_table,
 	},
 };
-module_platform_driver(of_aml_clk_pll_driver);
+
+int __init aml_pll_driver_init(void)
+{
+	return platform_driver_register(&of_aml_clk_pll_driver);
+}
+
+void __exit aml_pll_driver_exit(void)
+{
+	platform_driver_unregister(&of_aml_clk_pll_driver);
+}
 
 MODULE_DESCRIPTION("Amlogic A9 PLL Controllers Driver");
 MODULE_AUTHOR("Chuan Liu <chuan.liu@amlogic.com>");

@@ -9,7 +9,7 @@ config COMMON_CLK_AMLOGIC
 	help
 	  This driver provides the basic clock infrastructure for Amlogic SoCs,
 	  offering read and write interfaces for various clock control units.
-	  Select Y if your target SoC needs clock driver support.
+	  Select M or Y if your target SoC needs clock driver support.
 
 config COMMON_CLK_AMLOGIC_MISC
 	tristate "Amlogic Misc Clock Control Units"
@@ -17,8 +17,8 @@ config COMMON_CLK_AMLOGIC_MISC
 	help
 	  Supports non-standard module clock control units in Amlogic SoC clock
 	  trees, such as sc-ccu (for smart card controller) and ts-ccu (for
-	  temperature sensor). Select Y if the current SoC contains these module
-	  clock control units.
+	  temperature sensor). Select M or Y if the current SoC contains these
+	  module clock control units.
 
 config COMMON_CLK_AMLOGIC_MODEL
 	tristate "Amlogic Standardized Model Clock Control Units"
@@ -27,8 +27,8 @@ config COMMON_CLK_AMLOGIC_MODEL
 	  Supports standardized model clock control units commonly used in Amlogic
 	  SoC clock trees, such as composite-ccu, noglitch-ccu, and sysbus-ccu.
 	  Most peripheral clock controllers in Amlogic SoCs are composed of
-	  these models. Select Y if the current SoC contains these clock control
-	  unit models.
+	  these models. Select M or Y if the current SoC contains these clock
+	  control unit models.
 
 config COMMON_CLK_AMLOGIC_PLL
 	tristate "Amlogic PLL Controller"
@@ -36,8 +36,8 @@ config COMMON_CLK_AMLOGIC_PLL
 	help
 	  Supports PLL controller used in Amlogic SoCs. The PLL supports dynamic
 	  configuration of output clock frequency, enabling flexible frequency
-	  settings to provide clocks for other modules. Select Y if the current
-	  SoC contains PLLs.
+	  settings to provide clocks for other modules. Select M or Y if the
+	  current SoC contains PLLs.
 
 config COMMON_CLK_AMLOGIC_A9
 	tristate "Amlogic A9 Family Clock Controller"
@@ -48,4 +48,5 @@ config COMMON_CLK_AMLOGIC_A9
 	select COMMON_CLK_AMLOGIC_PLL
 	help
 	  Support for the clock controller present on the Amlogic A9 family
-	  SoCs. Select Y if A9 family SoC needs to support clock controller.
+	  SoCs. Select M or Y if A9 family SoC needs to support clock
+	  controller.

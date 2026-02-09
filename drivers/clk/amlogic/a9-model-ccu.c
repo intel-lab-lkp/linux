@@ -9,6 +9,7 @@
 #include "clk.h"
 #include "clk-basic.h"
 #include "clk-composite.h"
+#include "clk-module.h"
 #include "clk-noglitch.h"
 
 /*
@@ -457,7 +458,16 @@ static struct platform_driver of_aml_clk_model_driver = {
 		.of_match_table = of_aml_clk_model_match_table,
 	},
 };
-module_platform_driver(of_aml_clk_model_driver);
+
+int __init aml_clk_model_driver_init(void)
+{
+	return platform_driver_register(&of_aml_clk_model_driver);
+}
+
+void __exit aml_clk_model_driver_exit(void)
+{
+	platform_driver_unregister(&of_aml_clk_model_driver);
+}
 
 MODULE_DESCRIPTION("Amlogic A9 Standardized Model Clock Control Units Driver");
 MODULE_AUTHOR("Chuan Liu <chuan.liu@amlogic.com>");

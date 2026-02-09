@@ -10,6 +10,7 @@
 #include "clk-basic.h"
 #include "clk-composite.h"
 #include "clk-dualdiv.h"
+#include "clk-module.h"
 #include "clk-noglitch.h"
 #include "clk-pll.h"
 
@@ -952,7 +953,16 @@ static struct platform_driver of_aml_clk_misc_driver = {
 		.of_match_table = of_aml_clk_misc_match_table,
 	},
 };
-module_platform_driver(of_aml_clk_misc_driver);
+
+int __init aml_clk_misc_driver_init(void)
+{
+	return platform_driver_register(&of_aml_clk_misc_driver);
+}
+
+void __exit aml_clk_misc_driver_exit(void)
+{
+	platform_driver_unregister(&of_aml_clk_misc_driver);
+}
 
 MODULE_DESCRIPTION("Amlogic A9 Misc Clock Control Units Driver");
 MODULE_AUTHOR("Chuan Liu <chuan.liu@amlogic.com>");

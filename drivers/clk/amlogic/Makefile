@@ -8,6 +8,7 @@ clk-amlogic-y += clk-composite.o
 clk-amlogic-y += clk-dualdiv.o
 clk-amlogic-y += clk-noglitch.o
 clk-amlogic-y += clk-pll.o
+clk-amlogic-y += clk-module.o
 
 ifneq ($(CONFIG_COMMON_CLK_AMLOGIC_MISC),)
 clk-amlogic-y += a9-misc-ccu.o
