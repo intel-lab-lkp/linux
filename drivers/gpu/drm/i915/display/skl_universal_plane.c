@@ -1670,7 +1670,7 @@ icl_plane_update_arm(struct intel_dsb *dsb,
 
 	icl_plane_update_sel_fetch_arm(dsb, plane, crtc_state, plane_state);
 
-	intel_color_plane_commit_arm(dsb, plane_state);
+	intel_color_plane_commit_arm(dsb, plane, plane_state);
 
 	/*
 	 * In order to have FBC for fp16 formats pixel normalizer block must be

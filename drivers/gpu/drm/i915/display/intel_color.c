@@ -4090,7 +4090,10 @@ static void glk_load_lut_3d(struct intel_dsb *dsb,
 	intel_de_write_dsb(display, dsb, LUT_3D_INDEX(pipe), 0);
 }
 
-static void glk_lut_3d_commit(struct intel_dsb *dsb, struct intel_crtc *crtc, bool enable)
+static void glk_lut_3d_commit(struct intel_dsb *dsb,
+		struct intel_crtc *crtc,
+		struct intel_plane *plane,
+		bool enable)
 {
 	struct intel_display *display = to_intel_display(crtc);
 	enum pipe pipe = crtc->pipe;
@@ -4102,8 +4105,25 @@ static void glk_lut_3d_commit(struct intel_dsb *dsb, struct intel_crtc *crtc, bo
 		return;
 	}
 
-	if (enable)
-		val = LUT_3D_ENABLE | LUT_3D_READY | LUT_3D_BIND_PLANE_1;
+	if (enable) {
+		val = LUT_3D_ENABLE | LUT_3D_READY;
+
+		switch (plane->id) {
+		case PLANE_1:
+			val |= LUT_3D_BIND_PLANE_1;
+			break;
+		case PLANE_2:
+			val |= LUT_3D_BIND_PLANE_2;
+			break;
+		case PLANE_3:
+			val |= LUT_3D_BIND_PLANE_3;
+			break;
+		default:
+			/* Attached the 3D LUT block to Pipe. */
+			val |= LUT_3D_BIND_PIPE;
+			break;
+		}
+	}
 
 	intel_de_write_dsb(display, dsb, LUT_3D_CTL(pipe), val);
 }
@@ -4238,13 +4258,14 @@ static const struct intel_color_funcs ilk_color_funcs = {
 };
 
 void intel_color_plane_commit_arm(struct intel_dsb *dsb,
+				  struct intel_plane *plane,
 				  const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane_state);
 	struct intel_crtc *crtc = to_intel_crtc(plane_state->uapi.crtc);
 
 	if (crtc && intel_color_crtc_has_3dlut(display, crtc->pipe))
-		glk_lut_3d_commit(dsb, crtc, !!plane_state->hw.lut_3d);
+		glk_lut_3d_commit(dsb, crtc, plane, !!plane_state->hw.lut_3d);
 }
 
 static void
