@@ -1,0 +1,11 @@
+config CIX_SOC_SYSCONS
+	bool "Cix SoC syscon drivers"
+	default y
+	depends on ARCH_CIX
+	select MFD_CORE
+	help
+	  The drivers add support for the syscons on Cix SoC. Without
+	  the drivers core parts of the kernel such as resets will not
+	  function correctly.
+
+	  If unsure, and on a Cix SoC, say y.
