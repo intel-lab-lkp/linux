@@ -2189,8 +2189,6 @@ int alloc_slab_obj_exts(struct slab *slab, struct kmem_cache *s,
 			virt_to_slab(vec)->slab_cache == s);
 
 	new_exts = (unsigned long)vec;
-	if (unlikely(!allow_spin))
-		new_exts |= OBJEXTS_NOSPIN_ALLOC;
 #ifdef CONFIG_MEMCG
 	new_exts |= MEMCG_DATA_OBJEXTS;
 #endif
@@ -2213,10 +2211,7 @@ retry:
 		 * objcg vector should be reused.
 		 */
 		mark_objexts_empty(vec);
-		if (unlikely(!allow_spin))
-			kfree_nolock(vec);
-		else
-			kfree(vec);
+		kfree(vec);
 		return 0;
 	} else if (cmpxchg(&slab->obj_exts, old_exts, new_exts) != old_exts) {
 		/* Retry if a racing thread changed slab->obj_exts from under us. */
@@ -2256,10 +2251,7 @@ static inline void free_slab_obj_exts(struct slab *slab)
 	 * the extension for obj_exts is expected to be NULL.
 	 */
 	mark_objexts_empty(obj_exts);
-	if (unlikely(READ_ONCE(slab->obj_exts) & OBJEXTS_NOSPIN_ALLOC))
-		kfree_nolock(obj_exts);
-	else
-		kfree(obj_exts);
+	kfree(obj_exts);
 	slab->obj_exts = 0;
 }
 
