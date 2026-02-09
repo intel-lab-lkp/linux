@@ -1383,19 +1383,12 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 		goto out_unlock;
 	}
 
-	ret = etm_perf_add_symlink_sink(csdev);
-
-	/*
-	 * As with the above, all resources are free'd explicitly via
-	 * coresight_device_release() triggered from put_device(), which is in
-	 * turn called from function device_unregister().
-	 */
-	if (ret && ret != -EOPNOTSUPP) {
-		device_unregister(&csdev->dev);
-		goto out_unlock;
-	}
 	/* Device is now registered */
 	registered = true;
+
+	ret = etm_perf_add_symlink_sink(csdev);
+	if (ret && ret != -EOPNOTSUPP)
+		goto out_unlock;
 
 	ret = coresight_create_conns_sysfs_group(csdev);
 	if (ret)
