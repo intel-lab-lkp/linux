@@ -524,6 +524,8 @@ static bool kvm_hyp_handle_pmu_regs(struct kvm_vcpu *vcpu)
 	val = vcpu_get_reg(vcpu, rt);
 	nr_cnt = vcpu->kvm->arch.nr_pmu_counters;
 
+	kvm_pmu_set_physical_access(vcpu);
+
 	switch (sysreg) {
 	case SYS_PMCR_EL0:
 		mask = ARMV8_PMU_PMCR_MASK;
