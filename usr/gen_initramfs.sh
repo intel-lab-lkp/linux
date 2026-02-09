@@ -103,7 +103,8 @@ parse() {
 
 	case "${ftype}" in
 		"file")
-			str="${ftype} ${name} ${location} ${str}"
+			printf "%s \"%s\" \"%s\" %s\n" \
+				"${ftype}" "${name}" "${location}" "${str}" >> $cpio_list
 			;;
 		"nod")
 			local dev="`LC_ALL=C ls -l "${location}"`"
@@ -113,18 +114,19 @@ parse() {
 
 			[ -b "${location}" ] && dev="b" || dev="c"
 
-			str="${ftype} ${name} ${str} ${dev} ${maj} ${min}"
+			printf "%s \"%s\" %s %s %s %s\n" \
+				"${ftype}" "${name}" "${str}" "${dev}" "${maj}" "${min}" >> $cpio_list
 			;;
 		"slink")
 			local target=`readlink "${location}"`
-			str="${ftype} ${name} ${target} ${str}"
+			printf "%s \"%s\" \"%s\" %s\n" \
+				"${ftype}" "${name}" "${target}" "${str}" >> $cpio_list
 			;;
 		*)
-			str="${ftype} ${name} ${str}"
+			printf "%s \"%s\" %s\n" \
+				"${ftype}" "${name}" "${str}" >> $cpio_list
 			;;
 	esac
-
-	echo "${str}" >> $cpio_list
 
 	return 0
 }
@@ -156,8 +158,17 @@ dir_filelist() {
 
 		echo "${dirlist}" | \
 		while read x; do
-			list_parse $x
-			parse $x
+			# Reverse progressive matching to handle path
+			# with space (last arg)
+			gid=${x##* }
+			x=${x% *}
+			uid=${x##* }
+			x=${x% *}
+			mode=${x##* }
+			path=${x% *}
+
+			list_parse "$path" "$mode" "$uid" "$gid"
+			parse "$path" "$mode" "$uid" "$gid"
 		done
 	fi
 }

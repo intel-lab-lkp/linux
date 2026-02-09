@@ -166,7 +166,7 @@ static int cpio_mkslink_line(const char *line)
 	int gid;
 	int rc = -1;
 
-	if (5 != sscanf(line, "%" str(PATH_MAX) "s %" str(PATH_MAX) "s %o %d %d", name, target, &mode, &uid, &gid)) {
+	if (5 != sscanf(line, "\"%" str(PATH_MAX) "[^\"]\" \"%" str(PATH_MAX) "[^\"]\" %o %d %d", name, target, &mode, &uid, &gid)) {
 		fprintf(stderr, "Unrecognized dir format '%s'", line);
 		goto fail;
 	}
@@ -244,7 +244,7 @@ static int cpio_mkgeneric_line(const char *line, enum generic_types gt)
 	int gid;
 	int rc = -1;
 
-	if (4 != sscanf(line, "%" str(PATH_MAX) "s %o %d %d", name, &mode, &uid, &gid)) {
+	if (4 != sscanf(line, "\"%" str(PATH_MAX) "[^\"]\" %o %d %d", name, &mode, &uid, &gid)) {
 		fprintf(stderr, "Unrecognized %s format '%s'",
 			line, generic_type_table[gt].type);
 		goto fail;
@@ -322,7 +322,7 @@ static int cpio_mknod_line(const char *line)
 	unsigned int min;
 	int rc = -1;
 
-	if (7 != sscanf(line, "%" str(PATH_MAX) "s %o %d %d %c %u %u",
+	if (7 != sscanf(line, "\"%" str(PATH_MAX) "[^\"]\" %o %d %d %c %u %u",
 			 name, &mode, &uid, &gid, &dev_type, &maj, &min)) {
 		fprintf(stderr, "Unrecognized nod format '%s'", line);
 		goto fail;
@@ -527,8 +527,8 @@ static int cpio_mkfile_line(const char *line)
 	int end = 0, dname_len = 0;
 	int rc = -1;
 
-	if (5 > sscanf(line, "%" str(PATH_MAX) "s %" str(PATH_MAX)
-				"s %o %d %d %n",
+	if (5 > sscanf(line, "\"%" str(PATH_MAX) "[^\"]\" \"%"
+				str(PATH_MAX) "[^\"]\" %o %d %d %n",
 				name, location, &mode, &uid, &gid, &end)) {
 		fprintf(stderr, "Unrecognized file format '%s'", line);
 		goto fail;
