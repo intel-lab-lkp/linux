@@ -1226,15 +1226,15 @@ void hci_conn_del(struct hci_conn *conn)
 	skb_queue_purge(&conn->data_q);
 	skb_queue_purge(&conn->tx_q.queue);
 
+	/* Dequeue callbacks using connection pointer as data */
+	hci_cmd_sync_dequeue(hdev, NULL, conn, NULL);
+
 	/* Remove the connection from the list and cleanup its remaining
 	 * state. This is a separate function since for some cases like
 	 * BT_CONNECT_SCAN we *only* want the cleanup part without the
 	 * rest of hci_conn_del.
 	 */
 	hci_conn_cleanup(conn);
-
-	/* Dequeue callbacks using connection pointer as data */
-	hci_cmd_sync_dequeue(hdev, NULL, conn, NULL);
 }
 
 struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
