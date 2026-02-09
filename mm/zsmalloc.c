@@ -704,7 +704,19 @@ static struct zspage *get_zspage(struct zpdesc *zpdesc)
 
 static struct zpdesc *get_next_zpdesc(struct zpdesc *zpdesc)
 {
-	struct zspage *zspage = get_zspage(zpdesc);
+	struct zspage *zspage = zpdesc->zspage;
+
+	/*
+	 * If the backpointer is NULL, this zpdesc was already freed via
+	 * reset_zpdesc() by a racing async_free_zspage() while isolated
+	 * for compaction. See the TODO comment in zs_page_migrate().
+	 */
+	if (unlikely(!zspage)) {
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
+	BUG_ON(zspage->magic != ZSPAGE_MAGIC);
 
 	if (unlikely(ZsHugePage(zspage)))
 		return NULL;
