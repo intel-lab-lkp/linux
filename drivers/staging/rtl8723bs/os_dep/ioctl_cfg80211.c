@@ -2749,11 +2749,6 @@ int rtw_wdev_alloc(struct adapter *padapter, struct device *dev)
 	pwdev_priv->scan_request = NULL;
 	spin_lock_init(&pwdev_priv->scan_req_lock);
 
-	pwdev_priv->p2p_enabled = false;
-	pwdev_priv->provdisc_req_issued = false;
-
-	pwdev_priv->bandroid_scan = false;
-
 	if (padapter->registrypriv.power_mgnt != PS_MODE_ACTIVE)
 		pwdev_priv->power_mgmt = true;
 	else

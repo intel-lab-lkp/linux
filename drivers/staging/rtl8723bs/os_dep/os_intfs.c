@@ -960,7 +960,6 @@ static int netdev_close(struct net_device *pnetdev)
 	}
 
 	rtw_scan_abort(padapter);
-	adapter_wdev_data(padapter)->bandroid_scan = false;
 
 	return 0;
 }

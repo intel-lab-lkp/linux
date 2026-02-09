@@ -18,11 +18,6 @@ struct rtw_wdev_priv {
 	struct net_device *pmon_ndev;/* for monitor interface */
 	char ifname_mon[IFNAMSIZ + 1]; /* interface name for monitor interface */
 
-	u8 p2p_enabled;
-
-	u8 provdisc_req_issued;
-
-	u8 bandroid_scan;
 	bool block;
 	bool power_mgmt;
 };
