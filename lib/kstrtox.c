@@ -39,25 +39,29 @@ const char *_parse_integer_fixup_radix(const char *s, unsigned int *base)
 	return s;
 }
 
-/*
- * Convert non-negative integer string representation in explicitly given radix
- * to an integer. A maximum of max_chars characters will be converted.
+/**
+ * _parse_integer_limit - Convert integer string representation to an integer
+ * @s: Integer string representation
+ * @base: Radix
+ * @p: Where to store result
+ * @max_chars: Maximum amount of characters to convert
  *
- * Return number of characters consumed maybe or-ed with overflow bit.
- * If overflow occurs, result integer (incorrect) is still returned.
+ * Convert non-negative integer string representation in explicitly given
+ * radix to an integer. If overflow occurs, value at @p is set to ULLONG_MAX.
  *
- * Don't you dare use this function.
+ * This function is the workhorse of other string conversion functions and it
+ * is discouraged to use it explicitly. Consider kstrto*() family instead.
+ *
+ * Return: Number of characters consumed, maybe ORed with overflow bit
  */
 noinline
 unsigned int _parse_integer_limit(const char *s, unsigned int base, unsigned long long *p,
 				  size_t max_chars)
 {
-	unsigned long long res;
+	unsigned long long res = 0;
 	unsigned int rv;
 
-	res = 0;
-	rv = 0;
-	while (max_chars--) {
+	for (rv = 0; max_chars--; rv++, s++) {
 		unsigned int c = *s;
 		unsigned int lc = _tolower(c);
 		unsigned int val;
@@ -72,16 +76,23 @@ unsigned int _parse_integer_limit(const char *s, unsigned int base, unsigned lon
 		if (val >= base)
 			break;
 		/*
-		 * Check for overflow only if we are within range of
-		 * it in the max base we support (16)
+		 * Accumulate result if no overflow detected.
+		 * Otherwise just consume valid characters.
 		 */
-		if (unlikely(res & (~0ull << 60))) {
-			if (res > div_u64(ULLONG_MAX - val, base))
-				rv |= KSTRTOX_OVERFLOW;
+		if (likely(res != ULLONG_MAX)) {
+			if (unlikely(res & (~0ull << 60))) {
+				/* We're close to possible overflow. */
+				unsigned long long tmp;
+
+				if (check_mul_overflow(res, base, &tmp) ||
+				    check_add_overflow(tmp, val, &res)) {
+					res = ULLONG_MAX;
+					rv |= KSTRTOX_OVERFLOW;
+				}
+			} else {
+				res = res * base + val;
+			}
 		}
-		res = res * base + val;
-		rv++;
-		s++;
 	}
 	*p = res;
 	return rv;
