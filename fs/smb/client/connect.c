@@ -965,7 +965,7 @@ dequeue_mid(struct TCP_Server_Info *server, struct mid_q_entry *mid, bool malfor
 	 * Trying to handle/dequeue a mid after the send_recv()
 	 * function has finished processing it is a bug.
 	 */
-	if (mid->deleted_from_q == true) {
+	if (mid->deleted_from_q) {
 		spin_unlock(&server->mid_queue_lock);
 		pr_warn_once("trying to dequeue a deleted mid\n");
 	} else {
@@ -3569,7 +3569,7 @@ int cifs_mount_get_session(struct cifs_mount_ctx *mnt_ctx)
 		goto out;
 	}
 
-	if ((ctx->persistent == true) && (!(ses->server->capabilities &
+	if (ctx->persistent && (!(ses->server->capabilities &
 					    SMB2_GLOBAL_CAP_PERSISTENT_HANDLES))) {
 		cifs_server_dbg(VFS, "persistent handles not supported by server\n");
 		rc = -EOPNOTSUPP;

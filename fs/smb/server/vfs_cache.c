@@ -863,7 +863,7 @@ void ksmbd_launch_ksmbd_durable_scavenger(void)
 		return;
 
 	mutex_lock(&durable_scavenger_lock);
-	if (durable_scavenger_running == true) {
+	if (durable_scavenger_running) {
 		mutex_unlock(&durable_scavenger_lock);
 		return;
 	}

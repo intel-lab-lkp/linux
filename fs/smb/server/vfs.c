@@ -877,7 +877,7 @@ int ksmbd_vfs_setxattr(struct mnt_idmap *idmap,
 {
 	int err;
 
-	if (get_write == true) {
+	if (get_write) {
 		err = mnt_want_write(path->mnt);
 		if (err)
 			return err;
@@ -891,7 +891,7 @@ int ksmbd_vfs_setxattr(struct mnt_idmap *idmap,
 			   flags);
 	if (err)
 		ksmbd_debug(VFS, "setxattr failed, err %d\n", err);
-	if (get_write == true)
+	if (get_write)
 		mnt_drop_write(path->mnt);
 	return err;
 }
@@ -1001,7 +1001,7 @@ int ksmbd_vfs_remove_xattr(struct mnt_idmap *idmap,
 {
 	int err;
 
-	if (get_write == true) {
+	if (get_write) {
 		err = mnt_want_write(path->mnt);
 		if (err)
 			return err;
@@ -1009,7 +1009,7 @@ int ksmbd_vfs_remove_xattr(struct mnt_idmap *idmap,
 
 	err = vfs_removexattr(idmap, path->dentry, attr_name);
 
-	if (get_write == true)
+	if (get_write)
 		mnt_drop_write(path->mnt);
 
 	return err;

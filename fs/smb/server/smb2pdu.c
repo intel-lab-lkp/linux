@@ -2601,7 +2601,7 @@ static int smb2_creat(struct ksmbd_work *work,
 		return -EBADF;
 
 	ksmbd_debug(SMB, "file does not exist, so creating\n");
-	if (is_dir == true) {
+	if (is_dir) {
 		ksmbd_debug(SMB, "creating directory\n");
 
 		mode = share_config_directory_mode(share, posix_mode);
@@ -2987,7 +2987,7 @@ int smb2_open(struct ksmbd_work *work)
 			goto err_out2;
 		}
 
-		if (dh_info.reconnected == true) {
+		if (dh_info.reconnected) {
 			rc = smb2_check_durable_oplock(conn, share, dh_info.fp, lc, name);
 			if (rc) {
 				ksmbd_put_durable_fd(dh_info.fp);
@@ -6222,7 +6222,7 @@ static int set_file_allocation_info(struct ksmbd_work *work,
 	if (!(fp->daccess & FILE_WRITE_DATA_LE))
 		return -EACCES;
 
-	if (ksmbd_stream_fd(fp) == true)
+	if (ksmbd_stream_fd(fp))
 		return 0;
 
 	rc = vfs_getattr(&fp->filp->f_path, &stat, STATX_BASIC_STATS,
@@ -6779,7 +6779,7 @@ int smb2_read(struct ksmbd_work *work)
 		}
 	}
 
-	if (is_rdma_channel == true) {
+	if (is_rdma_channel) {
 		unsigned int ch_offset = le16_to_cpu(req->ReadChannelInfoOffset);
 
 		if (ch_offset < offsetof(struct smb2_read_req, Buffer)) {
@@ -6849,7 +6849,7 @@ int smb2_read(struct ksmbd_work *work)
 	ksmbd_debug(SMB, "nbytes %zu, offset %lld mincount %zu\n",
 		    nbytes, offset, mincount);
 
-	if (is_rdma_channel == true) {
+	if (is_rdma_channel) {
 		/* write data to the client using rdma channel */
 		remain_bytes = smb2_read_rdma_channel(work, req,
 						      aux_payload_buf,
@@ -7043,7 +7043,7 @@ int smb2_write(struct ksmbd_work *work)
 		length = le32_to_cpu(req->RemainingBytes);
 	}
 
-	if (is_rdma_channel == true) {
+	if (is_rdma_channel) {
 		unsigned int ch_offset = le16_to_cpu(req->WriteChannelInfoOffset);
 
 		if (req->Length != 0 || req->DataOffset != 0 ||

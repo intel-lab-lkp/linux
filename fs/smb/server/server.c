@@ -235,7 +235,7 @@ static void __handle_ksmbd_work(struct ksmbd_work *work,
 		    (work->sess->sign || smb3_11_final_sess_setup_resp(work) ||
 		     conn->ops->is_sign_req(work, command)))
 			conn->ops->set_sign_rsp(work);
-	} while (is_chained == true);
+	} while (is_chained);
 
 send:
 	if (work->tcon)
