@@ -77,7 +77,8 @@ void cti_write_all_hw_regs(struct cti_drvdata *drvdata)
 
 	/* other regs */
 	writel_relaxed(config->ctigate, drvdata->base + CTIGATE);
-	writel_relaxed(config->asicctl, drvdata->base + ASICCTL);
+	if (config->asicctl_impl)
+		writel_relaxed(config->asicctl, drvdata->base + ASICCTL);
 	writel_relaxed(config->ctiappset, drvdata->base + CTIAPPSET);
 
 	/* re-enable CTI */
@@ -230,6 +231,8 @@ static void cti_set_default_config(struct device *dev,
 	config->trig_filter_enable = true;
 	config->ctigate = GENMASK(config->nr_ctm_channels - 1, 0);
 	config->enable_req_count = 0;
+
+	config->asicctl_impl = !!FIELD_GET(GENMASK(4, 0), devid);
 }
 
 /*
