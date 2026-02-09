@@ -4106,22 +4106,28 @@ static void glk_lut_3d_commit(struct intel_dsb *dsb,
 	}
 
 	if (enable) {
-		val = LUT_3D_ENABLE | LUT_3D_READY;
+		val = LUT_3D_ENABLE;
 
-		switch (plane->id) {
-		case PLANE_1:
-			val |= LUT_3D_BIND_PLANE_1;
-			break;
-		case PLANE_2:
-			val |= LUT_3D_BIND_PLANE_2;
-			break;
-		case PLANE_3:
-			val |= LUT_3D_BIND_PLANE_3;
-			break;
-		default:
-			/* Attached the 3D LUT block to Pipe. */
-			val |= LUT_3D_BIND_PIPE;
-			break;
+		if (DISPLAY_VER(display) >= 30) {
+			val |= LUT_3D_READY;
+
+			if (DISPLAY_VER(display) >= 35) {
+				switch (plane->id) {
+				case PLANE_1:
+					val |= LUT_3D_BIND_PLANE_1;
+					break;
+				case PLANE_2:
+					val |= LUT_3D_BIND_PLANE_2;
+					break;
+				case PLANE_3:
+					val |= LUT_3D_BIND_PLANE_3;
+					break;
+				default:
+					/* Attached the 3D LUT block to Pipe. */
+					val |= LUT_3D_BIND_PIPE;
+					break;
+				}
+			}
 		}
 	}
 

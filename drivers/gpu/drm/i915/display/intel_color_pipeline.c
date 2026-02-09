@@ -12,6 +12,7 @@
 #define MAX_COLOR_PIPELINES 1
 #define PLANE_DEGAMMA_SIZE 128
 #define PLANE_GAMMA_SIZE 32
+#define DIM_SIZE_3D_LUT 17
 
 static
 int _intel_color_pipeline_plane_init(struct drm_plane *plane, struct drm_prop_enum_list *list,
@@ -47,11 +48,10 @@ int _intel_color_pipeline_plane_init(struct drm_plane *plane, struct drm_prop_en
 	drm_colorop_set_next_property(prev_op, &colorop->base);
 	prev_op = &colorop->base;
 
-	if ((DISPLAY_VER(display) >= 15) && HAS_3D_LUT(display) &&
-			intel_color_crtc_has_3dlut(display, pipe)) {
+	if (HAS_3D_LUT(display) && intel_color_crtc_has_3dlut(display, pipe)) {
 		colorop = intel_colorop_create(INTEL_PLANE_CB_3DLUT);
 
-		ret = drm_plane_colorop_3dlut_init(dev, &colorop->base, plane, 17,
+		ret = drm_plane_colorop_3dlut_init(dev, &colorop->base, plane, DIM_SIZE_3D_LUT,
 						   DRM_COLOROP_LUT3D_INTERPOLATION_TETRAHEDRAL,
 						   true);
 		if (ret)
