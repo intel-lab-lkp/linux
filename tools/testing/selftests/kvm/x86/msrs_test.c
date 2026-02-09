@@ -77,11 +77,11 @@ static bool ignore_unsupported_msrs;
 static u64 fixup_rdmsr_val(u32 msr, u64 want)
 {
 	/*
-	 * AMD CPUs drop bits 63:32 on some MSRs that Intel CPUs support.  KVM
-	 * is supposed to emulate that behavior based on guest vendor model
+	 * AMD and Hygon CPUs drop bits 63:32 on some MSRs that Intel CPUs support.
+	 * KVM is supposed to emulate that behavior based on guest vendor model
 	 * (which is the same as the host vendor model for this test).
 	 */
-	if (!host_cpu_is_amd)
+	if (!host_cpu_is_amd && !host_cpu_is_hygon)
 		return want;
 
 	switch (msr) {
@@ -92,6 +92,17 @@ static u64 fixup_rdmsr_val(u32 msr, u64 want)
 	default:
 		return want;
 	}
+}
+
+/*
+ * On Hygon processors either RDTSCP or RDPID is supported in the host,
+ * MSR_TSC_AUX is able to be accessed.
+ */
+static bool is_hygon_msr_tsc_aux_supported(const struct kvm_msr *msr)
+{
+	return host_cpu_is_hygon &&
+			msr->index == MSR_TSC_AUX &&
+			(this_cpu_has(msr->feature) || this_cpu_has(msr->feature2));
 }
 
 static void __rdmsr(u32 msr, u64 want)
@@ -174,9 +185,14 @@ void guest_test_reserved_val(const struct kvm_msr *msr)
 	/*
 	 * If the CPU will truncate the written value (e.g. SYSENTER on AMD),
 	 * expect success and a truncated value, not #GP.
+	 *
+	 * On Hygon CPUs whether or not RDPID is supported in the host, once RDTSCP
+	 * is supported, MSR_TSC_AUX is able to be accessed.  So, for either RDTSCP
+	 * or RDPID is supported case and both are supported case, expect
+	 * success and a truncated value, not #GP.
 	 */
-	if (!this_cpu_has(msr->feature) ||
-	    msr->rsvd_val == fixup_rdmsr_val(msr->index, msr->rsvd_val)) {
+	if (!is_hygon_msr_tsc_aux_supported(msr) && (!this_cpu_has(msr->feature) ||
+	    msr->rsvd_val == fixup_rdmsr_val(msr->index, msr->rsvd_val))) {
 		u8 vec = wrmsr_safe(msr->index, msr->rsvd_val);
 
 		__GUEST_ASSERT(vec == GP_VECTOR,
