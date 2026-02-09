@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/light/capella,cm36686.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Capella cm36686 I2C Ambient Light and Proximity sensor
+
+maintainers:
+  - Erikas Bitovtas <xerikasxx@gmail.com>
+
+properties:
+  compatible:
+    oneOf:
+      - const: capella,cm36672p
+      - items:
+          - const: capella,cm36686
+          - const: capella,cm36672p
+
+  reg:
+    maxItems: 1
+    description: I2C address of the device. Must be 0x60 for both cm36686
+      and cm36672p sensors.
+
+  interrupts:
+    maxItems: 1
+
+  vdd-supply:
+    description:
+      Regulator that provides power to the sensor.
+
+  vddio-supply:
+    description:
+      Regulator used to power IO and I2C bus.
+
+  vled-supply:
+    description:
+      Regulator used to power proximity LED
+
+  proximity-near-level: true
+
+  capella,proximity-led-current-microamp:
+    description:
+      Current for proximity IR LED
+    enum: [50000, 75000, 100000, 120000, 140000, 160000, 180000, 200000]
+    default: 50000
+
+  capella,glass-factor:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Lux amplification factor to account for packaging - a number by which a
+      lux reading is multiplied.
+    default: 1
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          enum:
+            - capella,cm36672p
+    then:
+      properties:
+        capella,glass-factor: false
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - vdd-supply
+  - vddio-supply
+  - vled-supply
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      light-sensor@60 {
+        compatible = "capella,cm36686", "capella,cm36672p";
+        reg = <0x60>;
+
+        vdd-supply = <&pm8916_l8>;
+        vddio-supply = <&pm8916_l6>;
+        vled-supply = <&reg_prox_vled>;
+
+        interrupts-extended = <&tlmm 113 IRQ_TYPE_EDGE_FALLING>;
+
+        proximity-near-level = <30>;
+
+        capella,glass-factor = <16>;
+        capella,proximity-led-current-microamp = <100000>;
+      };
+    };
