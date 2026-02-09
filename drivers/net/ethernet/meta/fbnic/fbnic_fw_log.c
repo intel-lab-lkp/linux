@@ -59,16 +59,24 @@ int fbnic_fw_log_init(struct fbnic_dev *fbd)
 void fbnic_fw_log_free(struct fbnic_dev *fbd)
 {
 	struct fbnic_fw_log *log = &fbd->fw_log;
-
-	if (!fbnic_fw_log_ready(fbd))
-		return;
+	unsigned long flags;
+	void *data;
 
 	fbnic_fw_log_disable(fbd);
+
+	spin_lock_irqsave(&log->lock, flags);
+	if (!fbnic_fw_log_ready(fbd)) {
+		spin_unlock_irqrestore(&log->lock, flags);
+		return;
+	}
+	data = log->data_start;
 	INIT_LIST_HEAD(&log->entries);
 	log->size = 0;
-	vfree(log->data_start);
 	log->data_start = NULL;
 	log->data_end = NULL;
+	spin_unlock_irqrestore(&log->lock, flags);
+
+	vfree(data);
 }
 
 int fbnic_fw_log_write(struct fbnic_dev *fbd, u64 index, u32 timestamp,
@@ -80,12 +88,13 @@ int fbnic_fw_log_write(struct fbnic_dev *fbd, u64 index, u32 timestamp,
 	unsigned long flags;
 	void *entry_end;
 
+	spin_lock_irqsave(&log->lock, flags);
+
 	if (!fbnic_fw_log_ready(fbd)) {
+		spin_unlock_irqrestore(&log->lock, flags);
 		dev_err(fbd->dev, "Firmware sent log entry without being requested!\n");
 		return -ENOSPC;
 	}
-
-	spin_lock_irqsave(&log->lock, flags);
 
 	if (list_empty(&log->entries)) {
 		entry = log->data_start;

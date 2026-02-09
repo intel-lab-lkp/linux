@@ -176,10 +176,12 @@ static int fbnic_dbg_fw_log_show(struct seq_file *s, void *v)
 	struct fbnic_fw_log_entry *entry;
 	unsigned long flags;
 
-	if (!fbnic_fw_log_ready(fbd))
-		return -ENXIO;
-
 	spin_lock_irqsave(&fbd->fw_log.lock, flags);
+
+	if (!fbnic_fw_log_ready(fbd)) {
+		spin_unlock_irqrestore(&fbd->fw_log.lock, flags);
+		return -ENXIO;
+	}
 
 	list_for_each_entry_reverse(entry, &fbd->fw_log.entries, list) {
 		seq_printf(s, FBNIC_FW_LOG_FMT, entry->index,
