@@ -898,9 +898,9 @@ static int nvme_rdma_configure_io_queues(struct nvme_rdma_ctrl *ctrl, bool new)
 			nvme_unfreeze(&ctrl->ctrl);
 			goto out_wait_freeze_timed_out;
 		}
+		nvme_unfreeze(&ctrl->ctrl);
 		blk_mq_update_nr_hw_queues(ctrl->ctrl.tagset,
 			ctrl->ctrl.queue_count - 1);
-		nvme_unfreeze(&ctrl->ctrl);
 	}
 
 	/*
