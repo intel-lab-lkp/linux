@@ -3520,7 +3520,6 @@ ia_css_pipe_enqueue_buffer(struct ia_css_pipe *pipe,
 		ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
 				    "ia_css_pipe_enqueue_buffer() buf_type=%d, data(DDR address)=0x%x\n",
 				    buf_type, buffer->data.frame->data);
-
 	}
 
 	/* start of test for using rmgr for acq/rel memory */

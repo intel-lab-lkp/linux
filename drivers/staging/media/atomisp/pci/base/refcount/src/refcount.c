@@ -140,13 +140,14 @@ ia_css_ptr ia_css_refcount_increment(s32 id, ia_css_ptr ptr)
 		return mmgr_NULL;
 	}
 
-	if (entry->data == ptr)
+	if (entry->data == ptr) {
 		entry->count += 1;
-	else if (entry->data == mmgr_NULL) {
+	} else if (entry->data == mmgr_NULL) {
 		entry->data = ptr;
 		entry->count = 1;
-	} else
+	} else {
 		return mmgr_NULL;
+	}
 
 	return ptr;
 }

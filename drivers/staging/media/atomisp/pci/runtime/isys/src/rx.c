@@ -484,13 +484,15 @@ int ia_css_isys_convert_compressed_format(
 			default:
 				err = -EINVAL;
 			}
-		} else
+		} else {
 			err = -EINVAL;
+		}
 		cfg->csi_port_attr.comp_predictor =
 		    sh_css_csi2_compression_type_2_mipi_predictor(comp->type);
 		cfg->csi_port_attr.comp_enable = true;
-	} else /* No compression */
+	} else { /* No compression */
 		cfg->csi_port_attr.comp_enable = false;
+	}
 	return err;
 }
 

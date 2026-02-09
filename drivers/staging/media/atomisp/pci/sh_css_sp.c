@@ -1484,10 +1484,11 @@ sh_css_update_host2sp_cont_num_raw_frames(unsigned int num_frames,
 						      host2sp_cont_extra_num_raw_frames)
 			       / sizeof(int);
 		store_sp_array_uint(host_sp_com, offset_extra, extra_num_frames);
-	} else
+	} else {
 		offset = (unsigned int)offsetof(struct host_sp_communication,
 						host2sp_cont_target_num_raw_frames)
 			 / sizeof(int);
+	}
 
 	store_sp_array_uint(host_sp_com, offset, num_frames);
 }
