@@ -9,7 +9,6 @@
 #define _M68K_CONFIG_H
 
 extern int amiga_parse_bootinfo(const struct bi_record *record);
-extern int apollo_parse_bootinfo(const struct bi_record *record);
 extern int atari_parse_bootinfo(const struct bi_record *record);
 extern int bvme6000_parse_bootinfo(const struct bi_record *record);
 extern int hp300_parse_bootinfo(const struct bi_record *record);
@@ -20,7 +19,6 @@ extern int q40_parse_bootinfo(const struct bi_record *record);
 extern int virt_parse_bootinfo(const struct bi_record *record);
 
 extern void config_amiga(void);
-extern void config_apollo(void);
 extern void config_atari(void);
 extern void config_bvme6000(void);
 extern void config_hp300(void);

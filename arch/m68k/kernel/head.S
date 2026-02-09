@@ -449,7 +449,7 @@ func_define	mmu_get_ptr_table_entry,2
 func_define	mmu_get_page_table_entry,2
 func_define	mmu_print
 func_define	get_new_page
-#if defined(CONFIG_HP300) || defined(CONFIG_APOLLO)
+#ifdef CONFIG_HP300
 func_define	set_leds
 #endif
 
@@ -528,16 +528,9 @@ func_define	putn,1
 #define is_mvme16x(lab) cmpl &MACH_MVME16x,%pc@(m68k_machtype); jeq lab
 #define is_bvme6000(lab) cmpl &MACH_BVME6000,%pc@(m68k_machtype); jeq lab
 #define is_not_hp300(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); jne lab
-#define is_not_apollo(lab) cmpl &MACH_APOLLO,%pc@(m68k_machtype); jne lab
 #define is_not_q40(lab) cmpl &MACH_Q40,%pc@(m68k_machtype); jne lab
 #define is_not_sun3x(lab) cmpl &MACH_SUN3X,%pc@(m68k_machtype); jne lab
 #define is_not_virt(lab) cmpl &MACH_VIRT,%pc@(m68k_machtype); jne lab
-
-#define hasnt_leds(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); \
-			jeq 42f; \
-			cmpl &MACH_APOLLO,%pc@(m68k_machtype); \
-			jne lab ;\
-		42:\
 
 #define is_040_or_060(lab)	btst &CPUTYPE_0460,%pc@(L(cputype)+3); jne lab
 #define is_not_040_or_060(lab)	btst &CPUTYPE_0460,%pc@(L(cputype)+3); jeq lab
@@ -551,8 +544,8 @@ func_define	putn,1
    the console is running.  Writing a 1 bit turns the corresponding LED
    _off_ - on the 340 bit 7 is towards the back panel of the machine.  */
 .macro	leds	mask
-#if defined(CONFIG_HP300) || defined(CONFIG_APOLLO)
-	hasnt_leds(.Lled\@)
+#ifdef CONFIG_HP300
+	is_not_hp300(.Lled\@)
 	pea	\mask
 	func_call	set_leds
 	addql	#4,%sp
@@ -1250,16 +1243,6 @@ L(notsun3x):
 L(novirt):
 #endif
 
-#ifdef CONFIG_APOLLO
-	is_not_apollo(L(notapollo))
-
-	putc	'P'
-	mmu_map         #0x80000000,#0,#0x02000000,#_PAGE_NOCACHE030
-
-L(notapollo):
-	jbra	L(mmu_init_done)
-#endif
-
 L(mmu_init_done):
 
 	putc	'G'
@@ -1444,16 +1427,6 @@ L(mmu_fixup_done):
 
 	/* enable copro */
 	oriw	#0x4000,0x61000000
-1:
-#endif
-
-#ifdef CONFIG_APOLLO
-	is_not_apollo(1f)
-
-	/*
-	 * Fix up the iobase before printing
-	 */
-	movel	#0x80000000,L(iobase)
 1:
 #endif
 
@@ -2982,10 +2955,6 @@ L(serial_init_not_mac):
 L(serial_init_not_mvme16x):
 #endif
 
-#ifdef CONFIG_APOLLO
-/* We count on the PROM initializing SIO1 */
-#endif
-
 #ifdef CONFIG_HP300
 /* We count on the boot loader initialising the UART */
 #endif
@@ -3167,17 +3136,6 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 2:
 #endif
 
-#ifdef CONFIG_APOLLO
-	is_not_apollo(2f)
-	movl    %pc@(L(iobase)),%a1
-	moveb	%d0,%a1@(LTHRB0)
-1:      moveb   %a1@(LSRB0),%d0
-	andb	#0x4,%d0
-	beq	1b
-	jbra	L(serial_putc_done)
-2:
-#endif
-
 #ifdef CONFIG_HP300
 	is_not_hp300(3f)
 	movl    %pc@(L(iobase)),%a1
@@ -3293,23 +3251,14 @@ ENTRY(debug_cons_nputs)
 	rts
 #endif /* CONFIG_EARLY_PRINTK */
 
-#if defined(CONFIG_HP300) || defined(CONFIG_APOLLO)
+#ifdef CONFIG_HP300
 func_start	set_leds,%d0/%a0
 	movel	ARG1,%d0
-#ifdef CONFIG_HP300
 	is_not_hp300(1f)
 	movel	%pc@(L(iobase)),%a0
 	moveb	%d0,%a0@(0x1ffff)
-	jra	2f
-#endif
+	jra	1f
 1:
-#ifdef CONFIG_APOLLO
-	movel   %pc@(L(iobase)),%a0
-	lsll    #8,%d0
-	eorw    #0xff00,%d0
-	moveb	%d0,%a0@(LCPUCTRL)
-#endif
-2:
 func_return	set_leds
 #endif
 
@@ -3768,8 +3717,7 @@ __INITDATA
 m68k_init_mapped_size:
 	.long	0
 
-#if defined(CONFIG_ATARI) || defined(CONFIG_AMIGA) || \
-    defined(CONFIG_HP300) || defined(CONFIG_APOLLO)
+#if defined(CONFIG_ATARI) || defined(CONFIG_AMIGA) || defined(CONFIG_HP300)
 L(custom):
 L(iobase):
 	.long 0
@@ -3849,12 +3797,6 @@ L(mac_rowbytes):
 L(mac_sccbase):
 	.long	0
 #endif /* CONFIG_MAC */
-
-#if defined (CONFIG_APOLLO)
-LSRB0        = 0x10412
-LTHRB0       = 0x10416
-LCPUCTRL     = 0x10100
-#endif
 
 #if defined(CONFIG_HP300)
 DCADATA	     = 0x11

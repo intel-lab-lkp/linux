@@ -38,14 +38,6 @@ config MAC
 	  browse the documentation available at <http://www.mac.linux-m68k.org/>;
 	  otherwise say N.
 
-config APOLLO
-	bool "Apollo support"
-	depends on MMU
-	select LEGACY_TIMER_TICK
-	help
-	  Say Y here if you want to run Linux on an MC680x0-based Apollo
-	  Domain workstation such as the DN3500.
-
 config VME
 	bool "VME (Motorola and BVM) support"
 	depends on MMU

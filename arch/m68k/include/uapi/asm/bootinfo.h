@@ -80,7 +80,7 @@ struct mem_info {
 #define MACH_AMIGA		1
 #define MACH_ATARI		2
 #define MACH_MAC		3
-#define MACH_APOLLO		4
+/* 4 was MACH_APOLLO */
 #define MACH_SUN3		5
 #define MACH_MVME147		6
 #define MACH_MVME16x		7
@@ -134,7 +134,7 @@ struct mem_info {
 #define MMUB_68030		1	/* Internal MMU */
 #define MMUB_68040		2	/* Internal MMU */
 #define MMUB_68060		3	/* Internal MMU */
-#define MMUB_APOLLO		4	/* Custom Apollo */
+/* 4 was MMUB_APOLLO */
 #define MMUB_SUN3		5	/* Custom Sun-3 */
 #define MMUB_COLDFIRE		6	/* Internal MMU */
 
@@ -143,7 +143,6 @@ struct mem_info {
 #define MMU_68040		(1 << MMUB_68040)
 #define MMU_68060		(1 << MMUB_68060)
 #define MMU_SUN3		(1 << MMUB_SUN3)
-#define MMU_APOLLO		(1 << MMUB_APOLLO)
 #define MMU_COLDFIRE		(1 << MMUB_COLDFIRE)
 
 
