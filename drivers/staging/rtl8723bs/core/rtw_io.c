@@ -134,7 +134,8 @@ int rtw_init_io_priv(struct adapter *padapter,
 }
 
 /*
- * Increase and check if the continual_io_error of this @param dvobjprive is larger than MAX_CONTINUAL_IO_ERR
+ * Increase and check if the continual_io_error of this @param dvobjprive
+ * is larger than MAX_CONTINUAL_IO_ERR
  * @return true:
  * @return false:
  */
