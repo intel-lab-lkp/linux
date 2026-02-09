@@ -88,6 +88,10 @@ enum {
 	HDMIRX_NUM_RST,
 };
 
+#define WAIT_SIGNAL_LOCK_TIME		600
+#define NO_LOCK_CFG_RETRY_TIME		300
+#define WAIT_LOCK_STABLE_TIME		20
+
 static const char *const pix_fmt_str[] = {
 	"RGB888",
 	"YUV422",
@@ -622,6 +626,7 @@ static void hdmirx_plugout(struct snps_hdmirx_dev *hdmirx_dev)
 
 	hdmirx_update_bits(hdmirx_dev, SCDC_CONFIG, POWERPROVIDED, 0);
 	hdmirx_interrupts_setup(hdmirx_dev, false);
+	hdmirx_hpd_ctrl(hdmirx_dev, false);
 	hdmirx_update_bits(hdmirx_dev, DMA_CONFIG6, HDMIRX_DMA_EN, 0);
 	hdmirx_update_bits(hdmirx_dev, DMA_CONFIG4,
 			   LINE_FLAG_INT_EN |
@@ -682,15 +687,31 @@ static int hdmirx_set_edid(struct file *file, void *fh, struct v4l2_edid *edid)
 	 */
 	mutex_lock(&hdmirx_dev->work_lock);
 
+	/*
+	 * Some sources won't re-read EDID unless we avoid IRQ races and
+	 * force a full plugout/HPD low sequence. On several tested devices,
+	 * leaving IRQs enabled or skipping plugout kept the old EDID cached.
+	 */
+	disable_irq(hdmirx_dev->hdmi_irq);
+	disable_irq(hdmirx_dev->dma_irq);
+
+	if (tx_5v_power_present(hdmirx_dev))
+		hdmirx_plugout(hdmirx_dev);
+
 	hdmirx_hpd_ctrl(hdmirx_dev, false);
 
 	if (edid->blocks) {
 		hdmirx_write_edid(hdmirx_dev, edid);
-		hdmirx_hpd_ctrl(hdmirx_dev, true);
 	} else {
 		cec_phys_addr_invalidate(hdmirx_dev->cec->adap);
 		hdmirx_dev->edid_blocks_written = 0;
 	}
+
+	enable_irq(hdmirx_dev->dma_irq);
+	enable_irq(hdmirx_dev->hdmi_irq);
+
+	queue_delayed_work(system_unbound_wq, &hdmirx_dev->delayed_work_hotplug,
+			   msecs_to_jiffies(1000));
 
 	mutex_unlock(&hdmirx_dev->work_lock);
 
@@ -2130,9 +2151,9 @@ static int hdmirx_wait_signal_lock(struct snps_hdmirx_dev *hdmirx_dev)
 {
 	struct v4l2_device *v4l2_dev = &hdmirx_dev->v4l2_dev;
 	u32 mu_status, scdc_status, dma_st10, cmu_st;
-	u32 i;
+	u32 i, j = 0;
 
-	for (i = 0; i < 300; i++) {
+	for (i = 1; i < WAIT_SIGNAL_LOCK_TIME; i++) {
 		mu_status = hdmirx_readl(hdmirx_dev, MAINUNIT_STATUS);
 		scdc_status = hdmirx_readl(hdmirx_dev, SCDC_REGBANK_STATUS3);
 		dma_st10 = hdmirx_readl(hdmirx_dev, DMA_STATUS10);
@@ -2141,7 +2162,15 @@ static int hdmirx_wait_signal_lock(struct snps_hdmirx_dev *hdmirx_dev)
 		if ((mu_status & TMDSVALID_STABLE_ST) &&
 		    (dma_st10 & HDMIRX_LOCK) &&
 		    (cmu_st & TMDSQPCLK_LOCKED_ST))
+			j++;
+		else
+			j = 0;
+
+		if (j > WAIT_LOCK_STABLE_TIME)
 			break;
+
+		if (i % NO_LOCK_CFG_RETRY_TIME == 0)
+			hdmirx_phy_config(hdmirx_dev);
 
 		if (!tx_5v_power_present(hdmirx_dev)) {
 			v4l2_dbg(1, debug, v4l2_dev,
@@ -2152,7 +2181,7 @@ static int hdmirx_wait_signal_lock(struct snps_hdmirx_dev *hdmirx_dev)
 		hdmirx_tmds_clk_ratio_config(hdmirx_dev);
 	}
 
-	if (i == 300) {
+	if (i == WAIT_SIGNAL_LOCK_TIME) {
 		v4l2_err(v4l2_dev, "%s: signal not lock, tmds_clk_ratio:%d\n",
 			 __func__, hdmirx_dev->tmds_clk_ratio);
 		v4l2_err(v4l2_dev, "%s: mu_st:%#x, scdc_st:%#x, dma_st10:%#x\n",
@@ -2175,7 +2204,8 @@ static int hdmirx_wait_signal_lock(struct snps_hdmirx_dev *hdmirx_dev)
 				   PKTDEC_AVIIF_RCV_IRQ, 0);
 	}
 
-	msleep(50);
+	hdmirx_reset_dma(hdmirx_dev);
+	msleep(500);
 	hdmirx_format_change(hdmirx_dev);
 
 	return 0;
@@ -2189,6 +2219,7 @@ static void hdmirx_plugin(struct snps_hdmirx_dev *hdmirx_dev)
 	hdmirx_submodule_init(hdmirx_dev);
 	hdmirx_update_bits(hdmirx_dev, SCDC_CONFIG, POWERPROVIDED,
 			   POWERPROVIDED);
+	hdmirx_hpd_ctrl(hdmirx_dev, true);
 	hdmirx_phy_config(hdmirx_dev);
 	hdmirx_interrupts_setup(hdmirx_dev, true);
 
