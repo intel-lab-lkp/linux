@@ -199,7 +199,7 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 					    &iint->atomic_flags);
 		if ((iint->flags & IMA_NEW_FILE) ||
 		    vfs_getattr_nosec(&file->f_path, &stat,
-				      STATX_CHANGE_COOKIE,
+				      STATX_CHANGE_COOKIE | STATX_CTIME,
 				      AT_STATX_SYNC_AS_STAT) ||
 		    integrity_inode_attrs_stat_changed(&iint->real_inode,
 						       &stat)) {
