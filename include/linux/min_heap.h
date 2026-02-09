@@ -40,7 +40,7 @@ typedef DEFINE_MIN_HEAP(char, min_heap_char) min_heap_char;
 #define __minheap_obj_size(_heap)	sizeof((_heap)->data[0])
 
 /**
- * struct min_heap_callbacks - Data/functions to customise the min_heap.
+ * struct min_heap_callbacks - Data/functions to customize the min_heap.
  * @less: Partial order function for this heap.
  * @swp: Swap elements function.
  */
@@ -373,7 +373,7 @@ void __min_heap_pop_push_inline(min_heap_char *heap, const void *element, size_t
 	__min_heap_pop_push_inline(container_of(&(_heap)->nr, min_heap_char, nr), _element,	\
 				   __minheap_obj_size(_heap), _func, _args)
 
-/* Push an element on to the heap, O(log2(nr)). */
+/* Push an element onto the heap, O(log2(nr)). */
 static __always_inline
 bool __min_heap_push_inline(min_heap_char *heap, const void *element, size_t elem_size,
 			    const struct min_heap_callbacks *func, void *args)

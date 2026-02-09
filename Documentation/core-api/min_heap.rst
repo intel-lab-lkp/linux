@@ -75,7 +75,7 @@ elements in the heap and swapping them. It contains two function pointers:
 
 - **less** is the comparison function used to establish the order of elements.
 - **swp** is a function for swapping elements in the heap. If swp is set to
-  NULL, the default swap function will be used, which swaps the elements based on their size
+  NULL, the default swap function will be used, which swaps the elements based on their size.
 
 Macro Wrappers
 ==============
