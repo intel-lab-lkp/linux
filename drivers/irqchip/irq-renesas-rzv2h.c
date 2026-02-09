@@ -25,9 +25,11 @@
 /* DT "interrupts" indexes */
 #define ICU_IRQ_START				1
 #define ICU_IRQ_COUNT				16
-#define ICU_TINT_START				(ICU_IRQ_START + ICU_IRQ_COUNT)
+#define ICU_IRQ_LAST				(ICU_IRQ_START + ICU_IRQ_COUNT - 1)
+#define ICU_TINT_START				(ICU_IRQ_LAST + 1)
 #define ICU_TINT_COUNT				32
-#define ICU_NUM_IRQ				(ICU_TINT_START + ICU_TINT_COUNT)
+#define ICU_TINT_LAST				(ICU_TINT_START + ICU_TINT_COUNT - 1)
+#define ICU_NUM_IRQ				(ICU_TINT_LAST + 1)
 
 /* Registers */
 #define ICU_NSCNT				0x00
@@ -175,18 +177,27 @@ static void rzv2h_icu_eoi(struct irq_data *d)
 	u32 bit;
 
 	scoped_guard(raw_spinlock, &priv->lock) {
-		if (hw_irq >= ICU_TINT_START) {
-			tintirq_nr = hw_irq - ICU_TINT_START;
-			bit = BIT(tintirq_nr);
-			if (!irqd_is_level_type(d))
-				writel_relaxed(bit, priv->base + priv->info->t_offs + ICU_TSCLR);
-		} else if (hw_irq >= ICU_IRQ_START) {
+		switch (hw_irq) {
+		case 0:
+			/* Clear NMI */
+			writel_relaxed(ICU_NSCLR_NCLR, priv->base + ICU_NSCLR);
+			break;
+		case ICU_IRQ_START ... ICU_IRQ_LAST:
+			/* Clear IRQ */
 			tintirq_nr = hw_irq - ICU_IRQ_START;
 			bit = BIT(tintirq_nr);
 			if (!irqd_is_level_type(d))
 				writel_relaxed(bit, priv->base + ICU_ISCLR);
-		} else {
-			writel_relaxed(ICU_NSCLR_NCLR, priv->base + ICU_NSCLR);
+			break;
+		case ICU_TINT_START ... ICU_TINT_LAST:
+			/* Clear TINT */
+			tintirq_nr = hw_irq - ICU_TINT_START;
+			bit = BIT(tintirq_nr);
+			if (!irqd_is_level_type(d))
+				writel_relaxed(bit, priv->base + priv->info->t_offs + ICU_TSCLR);
+			break;
+		default:
+			break;
 		}
 	}
 
@@ -200,7 +211,7 @@ static void rzv2h_tint_irq_endisable(struct irq_data *d, bool enable)
 	u32 tint_nr, tssel_n, k, tssr;
 	u8 nr_tint;
 
-	if (hw_irq < ICU_TINT_START)
+	if (hw_irq < ICU_TINT_START || hw_irq > ICU_TINT_LAST)
 		return;
 
 	tint_nr = hw_irq - ICU_TINT_START;
@@ -421,12 +432,22 @@ static int rzv2h_icu_set_type(struct irq_data *d, unsigned int type)
 	unsigned int hw_irq = irqd_to_hwirq(d);
 	int ret;
 
-	if (hw_irq >= ICU_TINT_START)
-		ret = rzv2h_tint_set_type(d, type);
-	else if (hw_irq >= ICU_IRQ_START)
-		ret = rzv2h_irq_set_type(d, type);
-	else
+	switch (hw_irq) {
+	case 0:
+		/* NMI */
 		ret = rzv2h_nmi_set_type(d, type);
+		break;
+	case ICU_IRQ_START ... ICU_IRQ_LAST:
+		/* IRQ */
+		ret = rzv2h_irq_set_type(d, type);
+		break;
+	case ICU_TINT_START ... ICU_TINT_LAST:
+		/* TINT */
+		ret = rzv2h_tint_set_type(d, type);
+		break;
+	default:
+		ret = -EINVAL;
+	}
 
 	if (ret)
 		return ret;
@@ -508,11 +529,10 @@ static int rzv2h_icu_alloc(struct irq_domain *domain, unsigned int virq, unsigne
 	 * hwirq is embedded in bits 0-15.
 	 * TINT is embedded in bits 16-31.
 	 */
-	if (hwirq >= ICU_TINT_START) {
-		tint = ICU_TINT_EXTRACT_GPIOINT(hwirq);
+	tint = ICU_TINT_EXTRACT_GPIOINT(hwirq);
+	if (tint || (hwirq >= ICU_TINT_START && hwirq <= ICU_TINT_LAST)) {
 		hwirq = ICU_TINT_EXTRACT_HWIRQ(hwirq);
-
-		if (hwirq < ICU_TINT_START)
+		if (hwirq < ICU_TINT_START || hwirq > ICU_TINT_LAST)
 			return -EINVAL;
 	}
 
