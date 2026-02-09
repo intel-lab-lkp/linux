@@ -3399,8 +3399,11 @@ int serial8250_console_setup(struct uart_port *port, char *options, bool probe)
 
 	if (options)
 		uart_parse_options(options, &baud, &parity, &bits, &flow);
-	else if (probe)
+	else if (probe) {
 		baud = probe_baud(port);
+		pr_info("console [%s%d] probed baud rate: %d\n",
+			port->cons->name, port->cons->index, baud);
+	}
 
 	ret = uart_set_options(port, port->cons, baud, parity, bits, flow);
 	if (ret)
