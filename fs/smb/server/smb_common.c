@@ -415,7 +415,7 @@ int ksmbd_init_smb_server(struct ksmbd_conn *conn)
 	__le32 proto;
 
 	proto = *(__le32 *)rcv_hdr->Protocol;
-	if (conn->need_neg == false) {
+	if (!conn->need_neg) {
 		if (proto == SMB1_PROTO_NUMBER)
 			return -EINVAL;
 		return 0;

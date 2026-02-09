@@ -228,7 +228,7 @@ static int smb2_calc_size(void *buf, unsigned int *len)
 	if (hdr->Command == SMB2_LOCK)
 		*len -= sizeof(struct smb2_lock_element);
 
-	if (has_smb2_data_area[le16_to_cpu(hdr->Command)] == false)
+	if (!has_smb2_data_area[le16_to_cpu(hdr->Command)])
 		goto calc_size_exit;
 
 	ret = smb2_get_data_area_len(&offset, &data_length, hdr);

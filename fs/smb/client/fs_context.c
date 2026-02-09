@@ -850,7 +850,7 @@ static int smb3_fs_context_validate(struct fs_context *fc)
 	}
 #endif
 
-	if (ctx->got_version == false)
+	if (!ctx->got_version)
 		pr_warn_once("No dialect specified on mount. Default has changed to a more secure dialect, SMB2.1 or later (e.g. SMB3.1.1), from CIFS (SMB1). To use the less secure SMB1 dialect to access old servers which do not support SMB3.1.1 (or even SMB3 or SMB2.1) specify vers=1.0 on mount.\n");
 
 
@@ -976,7 +976,7 @@ static int smb3_verify_reconfigure_ctx(struct fs_context *fc,
 	}
 	if (new_ctx->password &&
 	    (!old_ctx->password || strcmp(new_ctx->password, old_ctx->password))) {
-		if (need_recon == false) {
+		if (!need_recon) {
 			cifs_errorf(fc,
 				    "can not change password of active session during remount\n");
 			return -EINVAL;
@@ -1099,7 +1099,7 @@ static int smb3_reconfigure(struct fs_context *fc)
 	STEAL_STRING(cifs_sb, ctx, source);
 	STEAL_STRING(cifs_sb, ctx, username);
 
-	if (need_recon == false)
+	if (!need_recon)
 		STEAL_STRING_SENSITIVE(cifs_sb, ctx, password);
 	else  {
 		if (ctx->password) {

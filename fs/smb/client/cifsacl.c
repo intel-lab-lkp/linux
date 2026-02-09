@@ -366,7 +366,7 @@ sid_to_id(struct cifs_sb_info *cifs_sb, struct smb_sid *psid,
 		else
 			is_group = false;
 
-		if (is_well_known_sid(psid, &unix_id, is_group) == false)
+		if (!is_well_known_sid(psid, &unix_id, is_group))
 			goto try_upcall_to_get_id;
 
 		if (is_group) {

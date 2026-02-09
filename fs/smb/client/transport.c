@@ -761,7 +761,7 @@ int cifs_sync_mid_result(struct mid_q_entry *mid, struct TCP_Server_Info *server
 		rc = mid->mid_rc;
 		break;
 	default:
-		if (mid->deleted_from_q == false) {
+		if (!mid->deleted_from_q) {
 			list_del_init(&mid->qhead);
 			mid->deleted_from_q = true;
 		}

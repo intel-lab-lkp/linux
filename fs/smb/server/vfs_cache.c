@@ -810,7 +810,7 @@ static int ksmbd_durable_scavenger(void *dummy)
 		found_fp_timeout = false;
 
 		remaining_jiffies = wait_event_timeout(dh_wq,
-				   ksmbd_durable_scavenger_alive() == false,
+				   !ksmbd_durable_scavenger_alive(),
 				   __msecs_to_jiffies(min_timeout));
 		if (remaining_jiffies)
 			min_timeout = jiffies_to_msecs(remaining_jiffies);
@@ -846,7 +846,7 @@ static int ksmbd_durable_scavenger(void *dummy)
 
 		ksmbd_scavenger_dispose_dh(&scavenger_list);
 
-		if (found_fp_timeout == false)
+		if (!found_fp_timeout)
 			break;
 	}
 

@@ -583,7 +583,7 @@ static int oplock_break_pending(struct oplock_info *opinfo, int req_op_level)
 		if (opinfo->op_state == OPLOCK_CLOSING)
 			return -ENOENT;
 		else if (opinfo->level <= req_op_level) {
-			if (opinfo->is_lease == false)
+			if (!opinfo->is_lease)
 				return 1;
 
 			if (opinfo->o_lease->state !=
@@ -594,7 +594,7 @@ static int oplock_break_pending(struct oplock_info *opinfo, int req_op_level)
 	}
 
 	if (opinfo->level <= req_op_level) {
-		if (opinfo->is_lease == false) {
+		if (!opinfo->is_lease) {
 			wake_up_oplock_break(opinfo);
 			return 1;
 		}
@@ -1816,7 +1816,7 @@ int smb2_check_durable_oplock(struct ksmbd_conn *conn,
 	if (!opinfo)
 		return 0;
 
-	if (opinfo->is_lease == false) {
+	if (!opinfo->is_lease) {
 		if (lctx) {
 			pr_err("create context include lease\n");
 			ret = -EBADF;

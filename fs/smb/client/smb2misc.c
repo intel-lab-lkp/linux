@@ -425,7 +425,7 @@ smb2_calc_size(void *buf)
 	 */
 	len += le16_to_cpu(pdu->StructureSize2);
 
-	if (has_smb2_data_area[le16_to_cpu(shdr->Command)] == false)
+	if (!has_smb2_data_area[le16_to_cpu(shdr->Command)])
 		goto calc_size_exit;
 
 	smb2_get_data_area_len(&offset, &data_length, shdr);
@@ -808,7 +808,7 @@ __smb2_handle_cancelled_cmd(struct cifs_tcon *tcon, __u16 cmd, __u64 mid,
 	cancelled->cmd = cmd;
 	cancelled->mid = mid;
 	INIT_WORK(&cancelled->work, smb2_cancelled_close_fid);
-	WARN_ON(queue_work(cifsiod_wq, &cancelled->work) == false);
+	WARN_ON(!queue_work(cifsiod_wq, &cancelled->work));
 
 	return 0;
 }

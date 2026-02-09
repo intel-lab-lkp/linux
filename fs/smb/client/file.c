@@ -1349,7 +1349,7 @@ retry_open:
 	 * not dirty locally we could do this.
 	 */
 	rc = server->ops->open(xid, &oparms, &oplock, NULL);
-	if (rc == -ENOENT && oparms.reconnect == false) {
+	if (rc == -ENOENT && !oparms.reconnect) {
 		/* durable handle timeout is expired - open the file again */
 		rc = server->ops->open(xid, &oparms, &oplock, NULL);
 		/* indicate that we need to relock the file */
@@ -1458,8 +1458,7 @@ int cifs_close(struct inode *inode, struct file *file)
 		cfile = file->private_data;
 		file->private_data = NULL;
 		dclose = kmalloc(sizeof(struct cifs_deferred_close), GFP_KERNEL);
-		if ((cfile->status_file_deleted == false) &&
-		    (smb2_can_defer_close(inode, dclose))) {
+		if (!cfile->status_file_deleted && smb2_can_defer_close(inode, dclose)) {
 			if (test_and_clear_bit(NETFS_ICTX_MODIFIED_ATTR, &cinode->netfs.flags)) {
 				inode_set_mtime_to_ts(inode,
 						      inode_set_ctime_current(inode));

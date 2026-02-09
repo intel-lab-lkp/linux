@@ -2785,7 +2785,7 @@ static bool ksmbd_find_rdma_capable_netdev(struct net_device *netdev)
 out:
 	read_unlock(&smb_direct_device_lock);
 
-	if (rdma_capable == false) {
+	if (!rdma_capable) {
 		struct ib_device *ibdev;
 
 		ibdev = ib_device_get_by_netdev(netdev, RDMA_DRIVER_UNKNOWN);

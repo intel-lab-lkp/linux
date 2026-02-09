@@ -1488,7 +1488,7 @@ static int ntlm_authenticate(struct ksmbd_work *work,
 		 * Reuse session if anonymous try to connect
 		 * on reauthetication.
 		 */
-		if (conn->binding == false && ksmbd_anonymous_user(user)) {
+		if (!conn->binding && ksmbd_anonymous_user(user)) {
 			ksmbd_free_user(user);
 			return 0;
 		}
@@ -1502,7 +1502,7 @@ static int ntlm_authenticate(struct ksmbd_work *work,
 		sess->user = user;
 	}
 
-	if (conn->binding == false && user_guest(sess->user)) {
+	if (!conn->binding && user_guest(sess->user)) {
 		rsp->SessionFlags = SMB2_SESSION_FLAG_IS_GUEST_LE;
 	} else {
 		struct authenticate_message *authblob;
@@ -2945,7 +2945,7 @@ int smb2_open(struct ksmbd_work *work)
 
 		ksmbd_debug(SMB, "converted name = %s\n", name);
 
-		if (posix_ctxt == false) {
+		if (!posix_ctxt) {
 			if (strchr(name, ':')) {
 				if (!test_share_config_flag(work->tcon->share_conf,
 							KSMBD_SHARE_FLAG_STREAMS)) {
@@ -3553,7 +3553,7 @@ int smb2_open(struct ksmbd_work *work)
 			query_disk_id = 1;
 		}
 
-		if (conn->is_aapl == false) {
+		if (!conn->is_aapl) {
 			context = smb2_find_context_vals(req, SMB2_CREATE_AAPL, 4);
 			if (IS_ERR(context)) {
 				rc = PTR_ERR(context);
@@ -4874,7 +4874,7 @@ static int get_file_standard_info(struct smb2_query_info_rsp *rsp,
 	sinfo = (struct smb2_file_standard_info *)rsp->Buffer;
 	delete_pending = ksmbd_inode_pending_delete(fp);
 
-	if (ksmbd_stream_fd(fp) == false) {
+	if (!ksmbd_stream_fd(fp)) {
 		sinfo->AllocationSize = cpu_to_le64(stat.blocks << 9);
 		sinfo->EndOfFile = S_ISDIR(stat.mode) ? 0 : cpu_to_le64(stat.size);
 	} else {
@@ -4945,7 +4945,7 @@ static int get_file_all_info(struct ksmbd_work *work,
 	file_info->ChangeTime = cpu_to_le64(time);
 	file_info->Attributes = fp->f_ci->m_fattr;
 	file_info->Pad1 = 0;
-	if (ksmbd_stream_fd(fp) == false) {
+	if (!ksmbd_stream_fd(fp)) {
 		file_info->AllocationSize =
 			cpu_to_le64(stat.blocks << 9);
 		file_info->EndOfFile = S_ISDIR(stat.mode) ? 0 : cpu_to_le64(stat.size);
@@ -4961,7 +4961,7 @@ static int get_file_all_info(struct ksmbd_work *work,
 	file_info->IndexNumber = cpu_to_le64(stat.ino);
 	file_info->EASize = 0;
 	file_info->AccessFlags = fp->daccess;
-	if (ksmbd_stream_fd(fp) == false)
+	if (!ksmbd_stream_fd(fp))
 		file_info->CurrentByteOffset = cpu_to_le64(fp->filp->f_pos);
 	else
 		file_info->CurrentByteOffset = cpu_to_le64(fp->stream.pos);
@@ -5152,7 +5152,7 @@ static int get_file_network_open_info(struct smb2_query_info_rsp *rsp,
 	time = ksmbd_UnixTimeToNT(stat.ctime);
 	file_info->ChangeTime = cpu_to_le64(time);
 	file_info->Attributes = fp->f_ci->m_fattr;
-	if (ksmbd_stream_fd(fp) == false) {
+	if (!ksmbd_stream_fd(fp)) {
 		file_info->AllocationSize = cpu_to_le64(stat.blocks << 9);
 		file_info->EndOfFile = S_ISDIR(stat.mode) ? 0 : cpu_to_le64(stat.size);
 	} else {
@@ -5181,7 +5181,7 @@ static void get_file_position_info(struct smb2_query_info_rsp *rsp,
 	struct smb2_file_pos_info *file_info;
 
 	file_info = (struct smb2_file_pos_info *)rsp->Buffer;
-	if (ksmbd_stream_fd(fp) == false)
+	if (!ksmbd_stream_fd(fp))
 		file_info->CurrentByteOffset = cpu_to_le64(fp->filp->f_pos);
 	else
 		file_info->CurrentByteOffset = cpu_to_le64(fp->stream.pos);
@@ -5274,7 +5274,7 @@ static int find_file_posix_info(struct smb2_query_info_rsp *rsp,
 	file_info->ChangeTime = cpu_to_le64(time);
 	file_info->DosAttributes = fp->f_ci->m_fattr;
 	file_info->Inode = cpu_to_le64(stat.ino);
-	if (ksmbd_stream_fd(fp) == false) {
+	if (!ksmbd_stream_fd(fp)) {
 		file_info->EndOfFile = cpu_to_le64(stat.size);
 		file_info->AllocationSize = cpu_to_le64(stat.blocks << 9);
 	} else {
@@ -6001,7 +6001,7 @@ static int smb2_rename(struct ksmbd_work *work,
 	if (IS_ERR(new_name))
 		return PTR_ERR(new_name);
 
-	if (fp->is_posix_ctxt == false && strchr(new_name, ':')) {
+	if (!fp->is_posix_ctxt && strchr(new_name, ':')) {
 		int s_type;
 		char *xattr_stream_name, *stream_name = NULL;
 		size_t xattr_stream_size;
@@ -6283,8 +6283,7 @@ static int set_end_of_file_info(struct ksmbd_work *work, struct ksmbd_file *fp,
 	 * truncate of some filesystem like FAT32 fill zero data in
 	 * truncated range.
 	 */
-	if (inode->i_sb->s_magic != MSDOS_SUPER_MAGIC &&
-	    ksmbd_stream_fd(fp) == false) {
+	if (inode->i_sb->s_magic != MSDOS_SUPER_MAGIC && !ksmbd_stream_fd(fp)) {
 		ksmbd_debug(SMB, "truncated to newsize %lld\n", newsize);
 		rc = ksmbd_vfs_truncate(work, fp, newsize);
 		if (rc) {
@@ -6357,7 +6356,7 @@ static int set_file_position_info(struct ksmbd_file *fp,
 		return -EINVAL;
 	}
 
-	if (ksmbd_stream_fd(fp) == false)
+	if (!ksmbd_stream_fd(fp))
 		fp->filp->f_pos = current_byte_offset;
 	else {
 		if (current_byte_offset > XATTR_SIZE_MAX)
@@ -7089,7 +7088,7 @@ int smb2_write(struct ksmbd_work *work)
 	if (le32_to_cpu(req->Flags) & SMB2_WRITEFLAG_WRITE_THROUGH)
 		writethrough = true;
 
-	if (is_rdma_channel == false) {
+	if (!is_rdma_channel) {
 		if (le16_to_cpu(req->DataOffset) <
 		    offsetof(struct smb2_write_req, Buffer)) {
 			err = -EINVAL;
@@ -8982,8 +8981,7 @@ void smb3_set_sign_rsp(struct ksmbd_work *work)
 
 	hdr = ksmbd_resp_buf_curr(work);
 
-	if (conn->binding == false &&
-	    le16_to_cpu(hdr->Command) == SMB2_SESSION_SETUP_HE) {
+	if (!conn->binding && le16_to_cpu(hdr->Command) == SMB2_SESSION_SETUP_HE) {
 		signing_key = work->sess->smb3signingkey;
 	} else {
 		chann = lookup_chann_list(work->sess, work->conn);

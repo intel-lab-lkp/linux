@@ -1636,7 +1636,7 @@ SMB2_sess_sendreceive(struct SMB2_sess_data *sess_data)
 	if (rc == 0)
 		sess_data->ses->expired_pwd = false;
 	else if ((rc == -EACCES) || (rc == -EKEYEXPIRED) || (rc == -EKEYREVOKED)) {
-		if (sess_data->ses->expired_pwd == false)
+		if (!sess_data->ses->expired_pwd)
 			trace_smb3_key_expired(sess_data->server->hostname,
 					       sess_data->ses->user_name,
 					       sess_data->server->conn_id,
