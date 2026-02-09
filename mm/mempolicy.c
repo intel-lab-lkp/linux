@@ -556,17 +556,25 @@ void mpol_rebind_task(struct task_struct *tsk, const nodemask_t *new)
  *
  * Call holding a reference to mm.  Takes mm->mmap_lock during call.
  */
-void mpol_rebind_mm(struct mm_struct *mm, nodemask_t *new)
+int mpol_rebind_mm(struct mm_struct *mm, nodemask_t *new)
 {
 	struct vm_area_struct *vma;
 	VMA_ITERATOR(vmi, mm, 0);
+	int ret = 0;
 
-	mmap_write_lock(mm);
+	if (mmap_write_lock_killable(mm))
+		return -EINTR;
+
 	for_each_vma(vmi, vma) {
-		vma_start_write(vma);
+		if (vma_start_write_killable(vma)) {
+			ret = -EINTR;
+			break;
+		}
 		mpol_rebind_policy(vma->vm_policy, new);
 	}
 	mmap_write_unlock(mm);
+
+	return ret;
 }
 
 static const struct mempolicy_operations mpol_ops[MPOL_MAX] = {
@@ -1785,7 +1793,8 @@ SYSCALL_DEFINE4(set_mempolicy_home_node, unsigned long, start, unsigned long, le
 		return -EINVAL;
 	if (end == start)
 		return 0;
-	mmap_write_lock(mm);
+	if (mmap_write_lock_killable(mm))
+		return -EINTR;
 	prev = vma_prev(&vmi);
 	for_each_vma_range(vmi, vma, end) {
 		/*
@@ -1808,7 +1817,11 @@ SYSCALL_DEFINE4(set_mempolicy_home_node, unsigned long, start, unsigned long, le
 			break;
 		}
 
-		vma_start_write(vma);
+		if (vma_start_write_killable(vma)) {
+			err = -EINTR;
+			break;
+		}
+
 		new->home_node = home_node;
 		err = mbind_range(&vmi, vma, &prev, start, end, new);
 		mpol_put(new);
