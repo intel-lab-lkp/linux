@@ -21,7 +21,7 @@ enum uei_sizes {
 };
 
 struct user_exit_info {
-	int		kind;
+	u64		kind;
 	s64		exit_code;
 	char		reason[UEI_REASON_LEN];
 	char		msg[UEI_MSG_LEN];
