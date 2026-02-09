@@ -3421,7 +3421,10 @@ static int intel_pt_process_switch(struct intel_pt *pt,
 {
 	pid_t tid;
 	int cpu, ret;
-	struct evsel *evsel = evlist__id2evsel(pt->session->evlist, sample->id);
+	struct evsel *evsel = sample->evsel;
+
+	if (!evsel)
+		evsel = evlist__id2evsel(pt->session->evlist, sample->id);
 
 	if (evsel != pt->switch_evsel)
 		return 0;
@@ -3611,10 +3614,11 @@ static int intel_pt_process_aux_output_hw_id(struct intel_pt *pt,
 	u64 hw_id = event->aux_output_hw_id.hw_id;
 	struct auxtrace_queue *queue;
 	struct intel_pt_queue *ptq;
-	struct evsel *evsel;
+	struct evsel *evsel = sample->evsel;
 
 	queue = auxtrace_queues__sample_queue(&pt->queues, sample, pt->session);
-	evsel = evlist__id2evsel_strict(pt->session->evlist, sample->id);
+	if (!evsel)
+		evsel = evlist__id2evsel_strict(pt->session->evlist, sample->id);
 	if (!queue || !queue->priv || !evsel || hw_id > INTEL_PT_MAX_PEBS) {
 		pr_err("Bad AUX output hardware ID\n");
 		return -EINVAL;
