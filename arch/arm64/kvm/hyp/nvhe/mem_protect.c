@@ -497,6 +497,7 @@ static int host_stage2_adjust_range(u64 addr, struct kvm_mem_range *range)
 	u64 granule;
 	s8 level;
 	int ret;
+	enum pkvm_page_state state;
 
 	hyp_assert_lock_held(&host_mmu.lock);
 	ret = kvm_pgtable_get_leaf(&host_mmu.pgt, addr, &pte, &level);
@@ -507,8 +508,9 @@ static int host_stage2_adjust_range(u64 addr, struct kvm_mem_range *range)
 		return -EAGAIN;
 
 	if (pte) {
+		state = get_host_state(hyp_phys_to_page(addr));
 		WARN_ON(addr_is_memory(addr) &&
-			get_host_state(hyp_phys_to_page(addr)) != PKVM_NOPAGE);
+			(state != PKVM_NOPAGE && state != (PKVM_NOPAGE | PKVM_MODULE_OWNED_PAGE)));
 		return -EPERM;
 	}
 
