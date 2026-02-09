@@ -1408,9 +1408,8 @@ static int igc_tx_map(struct igc_ring *tx_ring,
 	/* Make sure there is space in the ring for the next send. */
 	igc_maybe_stop_tx(tx_ring, DESC_NEEDED);
 
-	if (netif_xmit_stopped(txring_txq(tx_ring)) || !netdev_xmit_more()) {
+	if (netif_xmit_stopped(txring_txq(tx_ring)) || !netdev_xmit_more())
 		writel(i, tx_ring->tail);
-	}
 
 	return 0;
 dma_error:
@@ -1610,8 +1609,7 @@ static netdev_tx_t igc_xmit_frame_ring(struct sk_buff *skb,
 	 * otherwise try next time
 	 */
 	for (f = 0; f < skb_shinfo(skb)->nr_frags; f++)
-		count += TXD_USE_COUNT(skb_frag_size(
-						&skb_shinfo(skb)->frags[f]));
+		count += TXD_USE_COUNT(skb_frag_size(&skb_shinfo(skb)->frags[f]));
 
 	if (igc_maybe_stop_tx(tx_ring, count + 5)) {
 		/* this is a hard error */
@@ -2521,7 +2519,6 @@ static int __igc_xdp_run_prog(struct igc_adapter *adapter,
 		if (xdp_do_redirect(adapter->netdev, xdp, prog) < 0)
 			goto out_failure;
 		return IGC_XDP_REDIRECT;
-		break;
 	default:
 		bpf_warn_invalid_xdp_action(adapter->netdev, prog, act);
 		fallthrough;
@@ -2788,7 +2785,7 @@ static struct igc_xdp_buff *xsk_buff_to_igc_ctx(struct xdp_buff *xdp)
 	 * igc_xdp_buff shares its layout with xdp_buff_xsk and private
 	 * igc_xdp_buff fields fall into xdp_buff_xsk->cb
 	 */
-       return (struct igc_xdp_buff *)xdp;
+	return (struct igc_xdp_buff *)xdp;
 }
 
 static int igc_clean_rx_irq_zc(struct igc_q_vector *q_vector, const int budget)
@@ -3892,9 +3889,8 @@ static int igc_enable_nfc_rule(struct igc_adapter *adapter,
 {
 	int err;
 
-	if (rule->flex) {
+	if (rule->flex)
 		return igc_add_flex_filter(adapter, rule);
-	}
 
 	if (rule->filter.match_flags & IGC_FILTER_FLAG_ETHER_TYPE) {
 		err = igc_add_etype_filter(adapter, rule->filter.etype,
@@ -6998,11 +6994,112 @@ static const struct net_device_ops igc_netdev_ops = {
 	.ndo_hwtstamp_set	= igc_ptp_hwtstamp_set,
 };
 
+#define IGC_REGISTER_READ_RETRIES	3
+#define IGC_PCIE_RECOVERY_MAX_ATTEMPTS	10
+#define IGC_PCIE_RECOVERY_INTERVAL_MS	1000
+
+/**
+ * igc_pcie_link_recover - Attempt PCIe link recovery
+ * @adapter: board private structure
+ *
+ * Attempts to recover a failed PCIe link by triggering a link retrain.
+ * Rate-limited to 1 attempt per second, maximum 10 attempts.
+ *
+ * Returns true if recovery was successful, false otherwise.
+ */
+static bool igc_pcie_link_recover(struct igc_adapter *adapter)
+{
+	struct pci_dev *pdev = adapter->pdev;
+	unsigned long now = jiffies;
+	u16 lnksta, lnkctl;
+	int ret;
+	int i;
+
+	/* Rate limiting: no more than 1 attempt per second */
+	if (time_before(now, adapter->last_recovery_time +
+			msecs_to_jiffies(IGC_PCIE_RECOVERY_INTERVAL_MS)))
+		return false;
+
+	/* Maximum attempt limit */
+	if (adapter->pcie_recovery_attempts >= IGC_PCIE_RECOVERY_MAX_ATTEMPTS) {
+		netdev_err(adapter->netdev,
+			   "Exceeded maximum PCIe recovery attempts (%d)\n",
+			   IGC_PCIE_RECOVERY_MAX_ATTEMPTS);
+		return false;
+	}
+
+	adapter->last_recovery_time = now;
+	adapter->pcie_recovery_attempts++;
+
+	netdev_warn(adapter->netdev,
+		    "Attempting PCIe link recovery (attempt %d/%d)\n",
+		    adapter->pcie_recovery_attempts,
+		    IGC_PCIE_RECOVERY_MAX_ATTEMPTS);
+
+	/* Check if device is still present on the bus */
+	if (!pci_device_is_present(pdev)) {
+		netdev_err(adapter->netdev, "Device not present on PCIe bus\n");
+		return false;
+	}
+
+	/* Check link status */
+	ret = pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
+	if (ret) {
+		netdev_err(adapter->netdev, "Failed to read link status\n");
+		return false;
+	}
+
+	/* Trigger link retrain if link appears down */
+	if (!(lnksta & PCI_EXP_LNKSTA_DLLLA)) {
+		netdev_info(adapter->netdev,
+			    "Link down, attempting retrain\n");
+
+		/* Read link control register */
+		ret = pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &lnkctl);
+		if (ret == 0) {
+			/* Trigger retrain by setting RL bit */
+			pcie_capability_write_word(pdev, PCI_EXP_LNKCTL,
+						   lnkctl | PCI_EXP_LNKCTL_RL);
+
+			/* Wait for retrain to complete (up to 1 second) */
+			for (i = 0; i < 100; i++) {
+				usleep_range(10000, 20000);
+				ret = pcie_capability_read_word(pdev, PCI_EXP_LNKSTA,
+								&lnksta);
+				if (ret == 0 && (lnksta & PCI_EXP_LNKSTA_DLLLA) &&
+				    !(lnksta & PCI_EXP_LNKSTA_LT)) {
+					netdev_info(adapter->netdev,
+						    "PCIe link recovery successful\n");
+					return true;
+				}
+			}
+		}
+	}
+
+	/* Give the link some additional time to recover on its own */
+	msleep(100);
+
+	/* Check if device is responding now */
+	if (pci_device_is_present(pdev)) {
+		ret = pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
+		if (ret == 0 && (lnksta & PCI_EXP_LNKSTA_DLLLA)) {
+			netdev_info(adapter->netdev,
+				    "PCIe link recovered after delay\n");
+			return true;
+		}
+	}
+
+	netdev_warn(adapter->netdev, "PCIe link recovery failed\n");
+	return false;
+}
+
 u32 igc_rd32(struct igc_hw *hw, u32 reg)
 {
 	struct igc_adapter *igc = container_of(hw, struct igc_adapter, hw);
 	u8 __iomem *hw_addr = READ_ONCE(hw->hw_addr);
+	struct net_device *netdev = igc->netdev;
 	u32 value = 0;
+	int retry;
 
 	if (IGC_REMOVED(hw_addr))
 		return ~value;
@@ -7011,13 +7108,49 @@ u32 igc_rd32(struct igc_hw *hw, u32 reg)
 
 	/* reads should not return all F's */
 	if (!(~value) && (!reg || !(~readl(hw_addr)))) {
-		struct net_device *netdev = igc->netdev;
+		/* Layer 1: Immediate retries with short delays (100-200μs) */
+		for (retry = 0; retry < IGC_REGISTER_READ_RETRIES; retry++) {
+			usleep_range(100, 200);
+			value = readl(&hw_addr[reg]);
+
+			/* If we got a valid read, return immediately */
+			if (~value || (reg && ~readl(hw_addr))) {
+				netdev_dbg(netdev,
+					   "Register read recovered after %d retries\n",
+					   retry + 1);
+				return value;
+			}
+		}
+
+		/* Layer 2: Attempt full PCIe link recovery */
+		netdev_warn(netdev,
+			    "All immediate retries failed, attempting PCIe link recovery\n");
+
+		if (igc_pcie_link_recover(igc)) {
+			/* Recovery succeeded, re-read the register */
+			hw_addr = READ_ONCE(hw->hw_addr);
+			if (hw_addr && !IGC_REMOVED(hw_addr)) {
+				value = readl(&hw_addr[reg]);
+
+				/* Verify the read is valid */
+				if (~value || (reg && ~readl(hw_addr))) {
+					netdev_info(netdev,
+						    "Register read successful after link recovery\n");
+					return value;
+				}
+			}
+		}
+
+		/* Layer 3: All recovery attempts failed, detach device */
+		netdev_err(netdev,
+			   "PCIe link lost after %d retries and recovery attempts, device now detached\n",
+			   IGC_REGISTER_READ_RETRIES);
 
 		hw->hw_addr = NULL;
 		netif_device_detach(netdev);
-		netdev_err(netdev, "PCIe link lost, device now detached\n");
+
 		WARN(pci_device_is_present(igc->pdev),
-		     "igc: Failed to read reg 0x%x!\n", reg);
+		     "igc: Failed to read reg 0x%x after all recovery attempts!\n", reg);
 	}
 
 	return value;
