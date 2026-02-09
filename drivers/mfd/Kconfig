@@ -137,6 +137,21 @@ config MFD_AAT2870_CORE
 	  additional drivers must be enabled in order to use the
 	  functionality of the device.
 
+config MFD_ASUSEC
+	tristate "ASUS Transformer's embedded controller"
+	depends on I2C && OF
+	select SYSFS
+	select ASUS_DOCKRAM
+	help
+	  Support ECs found in ASUS Transformer's Pad and Mobile Dock.
+
+	  This provides shared glue for functional part drivers:
+	    asus-ec-kbc, asus-ec-keys, leds-asus-ec, asus-ec-battery
+	    and asus-ec-charger.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called asus-ec.
+
 config MFD_AT91_USART
 	tristate "AT91 USART Driver"
 	select MFD_CORE
