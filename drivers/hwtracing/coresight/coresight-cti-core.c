@@ -164,7 +164,7 @@ void cti_write_intack(struct device *dev, u32 ackval)
 	guard(raw_spinlock_irqsave)(&drvdata->spinlock);
 
 	/* write if enabled */
-	if (cti_active(config))
+	if (cti_is_active(config))
 		cti_write_single_reg(drvdata, CTIINTACK, ackval);
 }
 
@@ -351,7 +351,7 @@ int cti_channel_trig_op(struct device *dev, enum cti_chan_op op,
 		config->ctiouten[trigger_idx] = reg_value;
 
 	/* write through if enabled */
-	if (cti_active(config))
+	if (cti_is_active(config))
 		cti_write_single_reg(drvdata, reg_offset, reg_value);
 
 	return 0;
@@ -389,7 +389,7 @@ int cti_channel_gate_op(struct device *dev, enum cti_chan_gate_op op,
 	}
 	if (err == 0) {
 		config->ctigate = reg_value;
-		if (cti_active(config))
+		if (cti_is_active(config))
 			cti_write_single_reg(drvdata, CTIGATE, reg_value);
 	}
 
@@ -438,7 +438,7 @@ int cti_channel_setop(struct device *dev, enum cti_chan_set_op op,
 		break;
 	}
 
-	if ((err == 0) && cti_active(config))
+	if ((err == 0) && cti_is_active(config))
 		cti_write_single_reg(drvdata, reg_offset, reg_value);
 
 	return err;
