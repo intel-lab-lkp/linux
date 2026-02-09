@@ -184,14 +184,6 @@ config FB_CYBER2000_I2C
 	  Integraphics CyberPro 20x0 and 5000 VGA chips.  This is used
 	  on the Netwinder machines for the SAA7111 video capture.
 
-config FB_APOLLO
-	bool
-	depends on (FB = y) && APOLLO
-	default y
-	select FB_CFB_FILLRECT
-	select FB_CFB_IMAGEBLIT
-	select FB_IOMEM_FOPS
-
 config FB_Q40
 	bool
 	depends on (FB = y) && Q40

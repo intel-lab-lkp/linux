@@ -26,8 +26,6 @@
 #define NR_IRQS	43
 #elif defined(CONFIG_AMIGA) || !defined(CONFIG_MMU)
 #define NR_IRQS	32
-#elif defined(CONFIG_APOLLO)
-#define NR_IRQS	24
 #else /* CONFIG_HP300 etc. */
 #define NR_IRQS	8
 #endif

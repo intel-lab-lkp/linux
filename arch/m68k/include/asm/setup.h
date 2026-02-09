@@ -34,7 +34,7 @@ extern unsigned long m68k_machtype;
 
 #if !defined(CONFIG_AMIGA)
 #  define MACH_IS_AMIGA (0)
-#elif defined(CONFIG_ATARI) || defined(CONFIG_MAC) || defined(CONFIG_APOLLO) \
+#elif defined(CONFIG_ATARI) || defined(CONFIG_MAC)                           \
 	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)               \
 	|| defined(CONFIG_HP300) || defined(CONFIG_Q40)                      \
 	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME147)                  \
@@ -48,7 +48,7 @@ extern unsigned long m68k_machtype;
 
 #if !defined(CONFIG_ATARI)
 #  define MACH_IS_ATARI (0)
-#elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_APOLLO) \
+#elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC)                           \
 	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)               \
 	|| defined(CONFIG_HP300) || defined(CONFIG_Q40)                      \
 	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME147)                  \
@@ -62,7 +62,7 @@ extern unsigned long m68k_machtype;
 
 #if !defined(CONFIG_MAC)
 #  define MACH_IS_MAC (0)
-#elif defined(CONFIG_AMIGA) || defined(CONFIG_ATARI) || defined(CONFIG_APOLLO) \
+#elif defined(CONFIG_AMIGA) || defined(CONFIG_ATARI)                           \
 	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)                 \
 	|| defined(CONFIG_HP300) || defined(CONFIG_Q40)                        \
 	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME147)                    \
@@ -82,24 +82,10 @@ extern unsigned long m68k_machtype;
 #define MACH_IS_SUN3 (0)
 #endif
 
-#if !defined (CONFIG_APOLLO)
-#  define MACH_IS_APOLLO (0)
-#elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)              \
-	|| defined(CONFIG_HP300) || defined(CONFIG_Q40)                     \
-	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME147)                 \
-	|| defined(CONFIG_VIRT)
-#  define MACH_IS_APOLLO (m68k_machtype == MACH_APOLLO)
-#else
-#  define MACH_APOLLO_ONLY
-#  define MACH_IS_APOLLO (1)
-#  define MACH_TYPE (MACH_APOLLO)
-#endif
-
 #if !defined (CONFIG_MVME147)
 #  define MACH_IS_MVME147 (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_BVME6000)               \
+	|| defined(CONFIG_BVME6000)                                         \
 	|| defined(CONFIG_HP300) || defined(CONFIG_Q40)                     \
 	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME16x)                 \
 	|| defined(CONFIG_VIRT)
@@ -113,7 +99,7 @@ extern unsigned long m68k_machtype;
 #if !defined (CONFIG_MVME16x)
 #  define MACH_IS_MVME16x (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_BVME6000)               \
+	|| defined(CONFIG_BVME6000)                                         \
 	|| defined(CONFIG_HP300) || defined(CONFIG_Q40)                     \
 	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME147)                 \
 	|| defined(CONFIG_VIRT)
@@ -127,7 +113,7 @@ extern unsigned long m68k_machtype;
 #if !defined (CONFIG_BVME6000)
 #  define MACH_IS_BVME6000 (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x)                \
+	|| defined(CONFIG_MVME16x)                                          \
 	|| defined(CONFIG_HP300) || defined(CONFIG_Q40)                     \
 	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME147)                 \
 	|| defined(CONFIG_VIRT)
@@ -141,7 +127,7 @@ extern unsigned long m68k_machtype;
 #if !defined (CONFIG_HP300)
 #  define MACH_IS_HP300 (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x) \
+	|| defined(CONFIG_MVME16x) \
 	|| defined(CONFIG_BVME6000) || defined(CONFIG_Q40) \
 	|| defined(CONFIG_SUN3X) || defined(CONFIG_MVME147) \
 	|| defined(CONFIG_VIRT)
@@ -169,7 +155,7 @@ extern unsigned long m68k_machtype;
 #if !defined (CONFIG_SUN3X)
 #  define MACH_IS_SUN3X (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x)                \
+	|| defined(CONFIG_MVME16x)                                          \
 	|| defined(CONFIG_BVME6000) || defined(CONFIG_HP300)                \
 	|| defined(CONFIG_Q40) || defined(CONFIG_MVME147)                   \
 	|| defined(CONFIG_VIRT)
@@ -183,7 +169,7 @@ extern unsigned long m68k_machtype;
 #if !defined(CONFIG_VIRT)
 #  define MACH_IS_VIRT (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x)                \
+	|| defined(CONFIG_MVME16x)                                          \
 	|| defined(CONFIG_BVME6000) || defined(CONFIG_HP300)                \
 	|| defined(CONFIG_Q40) || defined(CONFIG_SUN3X)                     \
 	|| defined(CONFIG_MVME147)

@@ -5,7 +5,6 @@ obj-$(CONFIG_AMIGA)		+= amiga/
 obj-$(CONFIG_ATARI)		+= atari/
 obj-$(CONFIG_MAC)		+= mac/
 obj-$(CONFIG_HP300)		+= hp300/
-obj-$(CONFIG_APOLLO)		+= apollo/
 obj-$(CONFIG_MVME147)		+= mvme147/
 obj-$(CONFIG_MVME16x)		+= mvme16x/
 obj-$(CONFIG_BVME6000)		+= bvme6000/

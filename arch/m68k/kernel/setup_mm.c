@@ -178,8 +178,6 @@ static void __init m68k_parse_bootinfo(const struct bi_record *record)
 				unknown = mvme147_parse_bootinfo(record);
 			else if (MACH_IS_HP300)
 				unknown = hp300_parse_bootinfo(record);
-			else if (MACH_IS_APOLLO)
-				unknown = apollo_parse_bootinfo(record);
 			else if (MACH_IS_VIRT)
 				unknown = virt_parse_bootinfo(record);
 			else
@@ -273,11 +271,6 @@ void __init setup_arch(char **cmdline_p)
 #ifdef CONFIG_SUN3
 	case MACH_SUN3:
 		config_sun3();
-		break;
-#endif
-#ifdef CONFIG_APOLLO
-	case MACH_APOLLO:
-		config_apollo();
 		break;
 #endif
 #ifdef CONFIG_MVME147
@@ -433,8 +426,6 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		mmu = "68060";
 	else if (m68k_mmutype & MMU_SUN3)
 		mmu = "Sun-3";
-	else if (m68k_mmutype & MMU_APOLLO)
-		mmu = "Apollo";
 	else if (m68k_mmutype & MMU_COLDFIRE)
 		mmu = "ColdFire";
 	else
