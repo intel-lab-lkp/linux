@@ -93,6 +93,7 @@ struct dw_edma_irq {
 	u32				wr_mask;
 	u32				rd_mask;
 	struct dw_edma			*dw;
+	int				irq;
 };
 
 struct dw_edma {
@@ -127,6 +128,7 @@ struct dw_edma_core_ops {
 	void (*ch_config)(struct dw_edma_chan *chan);
 	void (*debugfs_on)(struct dw_edma *dw);
 	void (*ack_emulated_irq)(struct dw_edma *dw);
+	void (*ch_info)(struct dw_edma_chan *chan, struct dw_edma_ch_info *info);
 };
 
 struct dw_edma_sg {
@@ -214,6 +216,13 @@ static inline int dw_edma_core_ack_emulated_irq(struct dw_edma *dw)
 
 	dw->core->ack_emulated_irq(dw);
 	return 0;
+}
+
+static inline void
+dw_edma_core_ch_info(struct dw_edma *dw, struct dw_edma_chan *chan,
+		     struct dw_edma_ch_info *info)
+{
+	dw->core->ch_info(chan, info);
 }
 
 #endif /* _DW_EDMA_CORE_H */
