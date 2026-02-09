@@ -1063,11 +1063,13 @@ static void acpi_battery_refresh(struct acpi_battery *battery)
 static void acpi_battery_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct acpi_battery *battery = data;
-	struct acpi_device *device = battery->device;
+	struct acpi_device *device;
 	struct power_supply *old;
 
 	if (!battery)
 		return;
+
+	device = battery->device;
 
 	guard(mutex)(&battery->update_lock);
 
