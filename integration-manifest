@@ -1,0 +1,36 @@
+drm drm-fixes 05f7e89ab9731565d8a62e3b5d1ec206485eeb0b
+	Linux 6.19
+drm-misc drm-misc-fixes 5023ca80f9589295cb60735016e39fc5cc714243
+	drm/vmwgfx: Return the correct value in vmw_translate_ptr functions
+drm-rust drm-rust-fixes 0f61b1860cc3f52aef9036d7235ed1f017632193
+	Linux 6.19-rc5
+drm-intel drm-intel-fixes 63804fed149a6750ffd28610c5c1c98cce6bd377
+	Linux 6.19-rc7
+drm-xe drm-xe-fixes 4cb1b327135dddf3d0ec2544ea36ed05ba2252bc
+	drm/xe/guc: Fix CFI violation in debugfs access.
+drm drm-next 2f5db9b4002470ea19380326c5a390647c56e780
+	Merge tag 'drm-xe-next-fixes-2026-02-05' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 510e7261a7bcd6232e90f0b6b9f93303bdd29f8a
+	drm/i915/quirks: Fix device id for QUIRK_EDP_LIMIT_RATE_HBR2 entry
+drm-xe drm-xe-next-fixes 666c654a5ae4090a3402ac14f399283934ea8104
+	drm/xe/pm: Disable D3Cold for BMG only on specific platforms
+drm-misc drm-misc-next 310326bb7df4bba094a3fc60364c641c547fd923
+	nouveau: pci: quiesce GPU on shutdown
+drm-rust drm-rust-next cea7b66a80412e2a5b74627b89ae25f1d0110a4b
+	Documentation: nova: update pending tasks
+drm-intel drm-intel-next 20df14666adfe05156902bec0a54b1aba05ec4d4
+	drm/i915/dp: Restore the missing check for intel_dp_has_joiner
+drm-intel drm-intel-gt-next 8103ecc1999eefc54b740d8d99f264ced1d9c54d
+	drm/i915/selftests: Keep mock file open during unfaultable migrate with fill
+drm-xe drm-xe-next 4e2796c8280ad21f1a252c05204845261d988e2f
+	drm/xe/vf: Allow VF to initialize MCR tables
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 9192109a0891a7fd9a40e366c74222adcd75577d
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
