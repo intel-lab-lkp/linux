@@ -2903,7 +2903,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 		stbl = DT_GETSTBL(p);
 
 		for (i = index; i < p->header.nextindex; i++) {
-			if (stbl[i] < 0) {
+			if (stbl[i] < 0 || (bn == 0 && stbl[i] >= DTROOTMAXSLOT)) {
 				jfs_err("JFS: Invalid stbl[%d] = %d for inode %ld, block = %lld",
 					i, stbl[i], (long)ip->i_ino, (long long)bn);
 				free_page(dirent_buf);
@@ -2971,6 +2971,11 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 			/* copy name in the additional segment(s) */
 			next = d->next;
 			while (next >= 0) {
+				if (bn == 0 && next >= DTROOTMAXSLOT) {
+					jfs_err("JFS: Invalid next %d for inode %ld, block = %lld",
+						next, (long)ip->i_ino, (long long)bn);
+					goto skip_one;
+				}
 				t = (struct dtslot *) & p->slot[next];
 				name_ptr += outlen;
 				d_namleft -= len;
