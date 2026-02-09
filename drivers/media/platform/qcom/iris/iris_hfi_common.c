@@ -74,6 +74,12 @@ u32 iris_hfi_get_v4l2_matrix_coefficients(u32 hfi_coefficients)
 	}
 }
 
+void iris_init_hfi_ops(struct iris_core *core)
+{
+	core->iris_platform_data->init_hfi_command_ops(core);
+	core->iris_platform_data->init_hfi_response_ops(core);
+}
+
 int iris_hfi_core_init(struct iris_core *core)
 {
 	const struct iris_hfi_command_ops *hfi_ops = core->hfi_ops;
