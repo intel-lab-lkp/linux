@@ -166,15 +166,20 @@ static int xsk_rcv_zc(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 	u32 frags = xdp_buff_has_frags(xdp);
 	struct xdp_buff_xsk *pos, *tmp;
 	struct list_head *xskb_list;
+	u32 num_desc = 1;
 	u32 contd = 0;
-	int err;
 
-	if (frags)
+	if (frags) {
+		num_desc = xdp_get_shared_info_from_buff(xdp)->nr_frags + 1;
 		contd = XDP_PKT_CONTD;
+	}
 
-	err = __xsk_rcv_zc(xs, xskb, len, contd);
-	if (err)
-		goto err;
+	if (xskq_prod_nb_free(xs->rx, num_desc) < num_desc) {
+		xs->rx_queue_full++;
+		return -ENOBUFS;
+	}
+
+	__xsk_rcv_zc(xs, xskb, len, contd);
 	if (likely(!frags))
 		return 0;
 
@@ -183,16 +188,11 @@ static int xsk_rcv_zc(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 		if (list_is_singular(xskb_list))
 			contd = 0;
 		len = pos->xdp.data_end - pos->xdp.data;
-		err = __xsk_rcv_zc(xs, pos, len, contd);
-		if (err)
-			goto err;
+		__xsk_rcv_zc(xs, pos, len, contd);
 		list_del_init(&pos->list_node);
 	}
 
 	return 0;
-err:
-	xsk_buff_free(xdp);
-	return err;
 }
 
 static void *xsk_copy_xdp_start(struct xdp_buff *from)
