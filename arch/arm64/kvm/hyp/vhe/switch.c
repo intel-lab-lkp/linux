@@ -28,6 +28,8 @@
 #include <asm/thread_info.h>
 #include <asm/vectors.h>
 
+#include <../../sys_regs.h>
+
 /* VHE specific context */
 DEFINE_PER_CPU(struct kvm_host_data, kvm_host_data);
 DEFINE_PER_CPU(struct kvm_cpu_context, kvm_hyp_ctxt);
@@ -482,6 +484,239 @@ static bool kvm_hyp_handle_zcr_el2(struct kvm_vcpu *vcpu, u64 *exit_code)
 	return false;
 }
 
+/**
+ * kvm_hyp_handle_pmu_regs() - Fast handler for PMU registers
+ * @vcpu: Pointer to vcpu struct
+ *
+ * This handler immediately writes through certain PMU registers when
+ * we have a partitioned PMU (that is, MDCR_EL2.HPMN is set to reserve
+ * a range of counters for the guest) but the machine does not have
+ * FEAT_FGT to selectively untrap the registers we want.
+ *
+ * Return: True if the exception was successfully handled, false otherwise
+ */
+static bool kvm_hyp_handle_pmu_regs(struct kvm_vcpu *vcpu)
+{
+	struct sys_reg_params p;
+	u64 pmuser;
+	u64 pmselr;
+	u64 esr;
+	u64 val;
+	u64 mask;
+	u32 sysreg;
+	u8 nr_cnt;
+	u8 rt;
+	u8 idx;
+	bool ret;
+
+	if (!kvm_vcpu_pmu_is_partitioned(vcpu))
+		return false;
+
+	pmuser = kvm_vcpu_read_pmuserenr(vcpu);
+
+	if (!(pmuser & ARMV8_PMU_USERENR_EN))
+		return false;
+
+	esr = kvm_vcpu_get_esr(vcpu);
+	p = esr_sys64_to_params(esr);
+	sysreg = esr_sys64_to_sysreg(esr);
+	rt = kvm_vcpu_sys_get_rt(vcpu);
+	val = vcpu_get_reg(vcpu, rt);
+	nr_cnt = vcpu->kvm->arch.nr_pmu_counters;
+
+	switch (sysreg) {
+	case SYS_PMCR_EL0:
+		mask = ARMV8_PMU_PMCR_MASK;
+
+		if (p.is_write) {
+			write_sysreg(val & mask, pmcr_el0);
+		} else {
+			mask |= ARMV8_PMU_PMCR_N;
+			val = u64_replace_bits(
+				read_sysreg(pmcr_el0),
+				nr_cnt,
+				ARMV8_PMU_PMCR_N);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+
+		ret = true;
+		break;
+	case SYS_PMUSERENR_EL0:
+		mask = ARMV8_PMU_USERENR_MASK;
+
+		if (p.is_write) {
+			write_sysreg(val & mask, pmuserenr_el0);
+		} else {
+			val = read_sysreg(pmuserenr_el0);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+
+		ret = true;
+		break;
+	case SYS_PMSELR_EL0:
+		mask = PMSELR_EL0_SEL_MASK;
+		val &= mask;
+
+		if (p.is_write) {
+			write_sysreg(val & mask, pmselr_el0);
+		} else {
+			val = read_sysreg(pmselr_el0);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+		ret = true;
+		break;
+	case SYS_PMINTENCLR_EL1:
+		mask = kvm_pmu_accessible_counter_mask(vcpu);
+
+		if (p.is_write) {
+			write_sysreg(val & mask, pmintenclr_el1);
+		} else {
+			val = read_sysreg(pmintenclr_el1);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+		ret = true;
+
+		break;
+	case SYS_PMINTENSET_EL1:
+		mask = kvm_pmu_accessible_counter_mask(vcpu);
+
+		if (p.is_write) {
+			write_sysreg(val & mask, pmintenset_el1);
+		} else {
+			val = read_sysreg(pmintenset_el1);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+
+		ret = true;
+		break;
+	case SYS_PMCNTENCLR_EL0:
+		mask = kvm_pmu_accessible_counter_mask(vcpu);
+
+		if (p.is_write) {
+			write_sysreg(val & mask, pmcntenclr_el0);
+		} else {
+			val = read_sysreg(pmcntenclr_el0);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+
+		ret = true;
+		break;
+	case SYS_PMCNTENSET_EL0:
+		mask = kvm_pmu_accessible_counter_mask(vcpu);
+
+		if (p.is_write) {
+			write_sysreg(val & mask, pmcntenset_el0);
+		} else {
+			val = read_sysreg(pmcntenset_el0);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+
+		ret = true;
+		break;
+	case SYS_PMOVSCLR_EL0:
+		mask = kvm_pmu_accessible_counter_mask(vcpu);
+
+		if (p.is_write) {
+			__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, &=, ~(val & mask));
+		} else {
+			val = __vcpu_sys_reg(vcpu, PMOVSSET_EL0);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+
+		ret = true;
+		break;
+	case SYS_PMOVSSET_EL0:
+		mask = kvm_pmu_accessible_counter_mask(vcpu);
+
+		if (p.is_write) {
+			__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, |=, val & mask);
+		} else {
+			val = __vcpu_sys_reg(vcpu, PMOVSSET_EL0);
+			vcpu_set_reg(vcpu, rt, val & mask);
+		}
+
+		ret = true;
+		break;
+	case SYS_PMCCNTR_EL0:
+	case SYS_PMXEVCNTR_EL0:
+	case SYS_PMEVCNTRn_EL0(0) ... SYS_PMEVCNTRn_EL0(30):
+		if (sysreg == SYS_PMCCNTR_EL0)
+			idx = ARMV8_PMU_CYCLE_IDX;
+		else if (sysreg == SYS_PMXEVCNTR_EL0)
+			idx = FIELD_GET(PMSELR_EL0_SEL, kvm_vcpu_read_pmselr(vcpu));
+		else
+			idx = ((p.CRm & 3) << 3) | (p.Op2 & 7);
+
+		if (idx == ARMV8_PMU_CYCLE_IDX &&
+		    !(pmuser & ARMV8_PMU_USERENR_CR)) {
+			ret = false;
+			break;
+		} else if (!(pmuser & ARMV8_PMU_USERENR_ER)) {
+			ret = false;
+			break;
+		}
+
+		if (idx >= nr_cnt && idx < ARMV8_PMU_CYCLE_IDX) {
+			ret = false;
+			break;
+		}
+
+		pmselr = read_sysreg(pmselr_el0);
+		write_sysreg(idx, pmselr_el0);
+
+		if (p.is_write) {
+			write_sysreg(val, pmxevcntr_el0);
+		} else {
+			val = read_sysreg(pmxevcntr_el0);
+			vcpu_set_reg(vcpu, rt, val);
+		}
+
+		write_sysreg(pmselr, pmselr_el0);
+		ret = true;
+		break;
+	case SYS_PMCCFILTR_EL0:
+	case SYS_PMXEVTYPER_EL0:
+	case SYS_PMEVTYPERn_EL0(0) ... SYS_PMEVTYPERn_EL0(30):
+		if (sysreg == SYS_PMCCFILTR_EL0)
+			idx = ARMV8_PMU_CYCLE_IDX;
+		else if (sysreg == SYS_PMXEVTYPER_EL0)
+			idx = FIELD_GET(PMSELR_EL0_SEL, kvm_vcpu_read_pmselr(vcpu));
+		else
+			idx = ((p.CRm & 3) << 3) | (p.Op2 & 7);
+
+		if (idx == ARMV8_PMU_CYCLE_IDX &&
+		    !(pmuser & ARMV8_PMU_USERENR_CR)) {
+			ret = false;
+			break;
+		} else if (!(pmuser & ARMV8_PMU_USERENR_ER)) {
+			ret = false;
+			break;
+		}
+
+		if (idx >= nr_cnt && idx < ARMV8_PMU_CYCLE_IDX) {
+			ret = false;
+			break;
+		}
+
+		if (p.is_write) {
+			__vcpu_assign_sys_reg(vcpu, PMEVTYPER0_EL0 + idx, val);
+		} else {
+			val = __vcpu_sys_reg(vcpu, PMEVTYPER0_EL0 + idx);
+			vcpu_set_reg(vcpu, rt, val);
+		}
+
+		ret = true;
+		break;
+	default:
+		ret = false;
+	}
+
+	if (ret)
+		__kvm_skip_instr(vcpu);
+
+	return ret;
+}
+
 static bool kvm_hyp_handle_sysreg_vhe(struct kvm_vcpu *vcpu, u64 *exit_code)
 {
 	if (kvm_hyp_handle_tlbi_el2(vcpu, exit_code))
@@ -494,6 +729,9 @@ static bool kvm_hyp_handle_sysreg_vhe(struct kvm_vcpu *vcpu, u64 *exit_code)
 		return true;
 
 	if (kvm_hyp_handle_zcr_el2(vcpu, exit_code))
+		return true;
+
+	if (kvm_hyp_handle_pmu_regs(vcpu))
 		return true;
 
 	return kvm_hyp_handle_sysreg(vcpu, exit_code);
