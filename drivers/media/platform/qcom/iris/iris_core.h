@@ -121,5 +121,6 @@ struct iris_core {
 
 int iris_core_init(struct iris_core *core);
 void iris_core_deinit(struct iris_core *core);
+int iris_update_platform_data(struct iris_core *core);
 
 #endif

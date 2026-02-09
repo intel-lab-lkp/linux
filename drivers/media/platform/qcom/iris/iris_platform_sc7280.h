@@ -6,6 +6,21 @@
 #ifndef __IRIS_PLATFORM_SC7280_H__
 #define __IRIS_PLATFORM_SC7280_H__
 
+static struct iris_fmt platform_fmts_sc7280_dec[] = {
+	[IRIS_FMT_H264] = {
+		.pixfmt = V4L2_PIX_FMT_H264,
+		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
+	},
+	[IRIS_FMT_HEVC] = {
+		.pixfmt = V4L2_PIX_FMT_HEVC,
+		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
+	},
+	[IRIS_FMT_VP9] = {
+		.pixfmt = V4L2_PIX_FMT_VP9,
+		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
+	},
+};
+
 static const struct bw_info sc7280_bw_table_dec[] = {
 	{ ((3840 * 2160) / 256) * 60, 1896000, },
 	{ ((3840 * 2160) / 256) * 30,  968000, },

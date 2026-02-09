@@ -3,12 +3,38 @@
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/firmware.h>
 #include <linux/pm_runtime.h>
 
 #include "iris_core.h"
 #include "iris_firmware.h"
 #include "iris_state.h"
 #include "iris_vpu_common.h"
+
+int iris_update_platform_data(struct iris_core *core)
+{
+	const char *fwname = NULL;
+	const struct firmware *fw;
+	int ret;
+
+	if (of_device_is_compatible(core->dev->of_node, "qcom,sc7280-venus")) {
+		ret = of_property_read_string_index(core->dev->of_node, "firmware-name", 0,
+					    &fwname);
+		if (ret)
+			return 0;
+
+		if (strstr(fwname, "gen2")) {
+			ret = request_firmware(&fw, fwname, core->dev);
+			if (ret) {
+				dev_err(core->dev, "Specified firmware is not present\n");
+				return ret;
+			}
+			release_firmware(fw);
+			core->iris_platform_data = &sc7280_gen2_data;
+		}
+	}
+	return 0;
+}
 
 void iris_core_deinit(struct iris_core *core)
 {
@@ -64,6 +90,10 @@ int iris_core_init(struct iris_core *core)
 		goto error;
 
 	ret = iris_vpu_power_on(core);
+	if (ret)
+		goto error_queue_deinit;
+
+	ret = iris_update_platform_data(core);
 	if (ret)
 		goto error_queue_deinit;
 
