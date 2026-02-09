@@ -16,7 +16,7 @@ struct device;
 struct mux_control;
 struct mux_state;
 
-#ifdef CONFIG_MULTIPLEXER
+#if IS_ENABLED(CONFIG_MULTIPLEXER)
 
 unsigned int mux_control_states(struct mux_control *mux);
 int __must_check mux_control_select_delay(struct mux_control *mux,
