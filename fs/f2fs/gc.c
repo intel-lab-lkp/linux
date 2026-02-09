@@ -1231,7 +1231,7 @@ static int ra_data_block(struct inode *inode, pgoff_t index)
 		.encrypted_page = NULL,
 		.in_list = 0,
 	};
-	int err;
+	int err = 0;
 
 	folio = f2fs_grab_cache_folio(mapping, index, true);
 	if (IS_ERR(folio))
@@ -1281,6 +1281,9 @@ got_it:
 		err = PTR_ERR(efolio);
 		goto put_folio;
 	}
+
+	if (folio_test_uptodate(efolio))
+		goto put_encrypted_page;
 
 	fio.encrypted_page = &efolio->page;
 
