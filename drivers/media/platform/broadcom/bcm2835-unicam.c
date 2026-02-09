@@ -342,12 +342,12 @@ static const struct unicam_format_info unicam_image_formats[] = {
 		.csi_dt		= MIPI_CSI2_DT_RGB565,
 	}, {
 		.fourcc		= V4L2_PIX_FMT_RGB24, /* rgb */
-		.code		= MEDIA_BUS_FMT_RGB888_1X24,
+		.code		= MEDIA_BUS_FMT_BGR888_1X24,
 		.depth		= 24,
 		.csi_dt		= MIPI_CSI2_DT_RGB888,
 	}, {
 		.fourcc		= V4L2_PIX_FMT_BGR24, /* bgr */
-		.code		= MEDIA_BUS_FMT_BGR888_1X24,
+		.code		= MEDIA_BUS_FMT_RGB888_1X24,
 		.depth		= 24,
 		.csi_dt		= MIPI_CSI2_DT_RGB888,
 	}, {
@@ -2155,8 +2155,36 @@ static int unicam_video_link_validate(struct media_link *link)
 			goto out;
 		}
 
-		if (fmtinfo->code != format->code ||
-		    fmt->height != format->height ||
+		/*
+		 * Unicam initially associated BGR24 to BGR888_1X24 and
+		 * RGB24 to RGB888_1X24.
+		 *
+		 * In order to allow the applications using the old
+		 * behaviour to run, let's accept the old combination,
+		 * but warn about it.
+		 */
+		if (fmtinfo->code != format->code) {
+			if (fmtinfo->fourcc == V4L2_PIX_FMT_BGR24 &&
+			    format->code == MEDIA_BUS_FMT_BGR888_1X24) {
+				dev_warn_once(node->dev->dev,
+					      "MIPI-CSI media bus code for RGB88 is RGB888_1X24. The application must be fixed.");
+			} else if (fmtinfo->fourcc == V4L2_PIX_FMT_RGB24 &&
+				   format->code == MEDIA_BUS_FMT_RGB888_1X24) {
+				dev_warn_once(node->dev->dev,
+					      "MIPI-CSI media bus code for BGR888 is BGR888_1X24. The application must be fixed.");
+			} else {
+				dev_dbg(node->dev->dev,
+					"image: (%u x %u) 0x%08x %s != (%u x %u) 0x%08x %s\n",
+					fmt->width, fmt->height, fmtinfo->code,
+					v4l2_field_names[fmt->field],
+					format->width, format->height, format->code,
+					v4l2_field_names[format->field]);
+				ret = -EPIPE;
+				goto out;
+			}
+		}
+
+		if (fmt->height != format->height ||
 		    fmt->width != format->width ||
 		    fmt->field != format->field) {
 			dev_dbg(node->dev->dev,
