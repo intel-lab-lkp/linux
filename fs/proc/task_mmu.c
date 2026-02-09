@@ -1365,7 +1365,19 @@ static int show_smap(struct seq_file *m, void *v)
 
 	SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);
 	SEQ_PUT_DEC(" kB\nKernelPageSize: ", vma_kernel_pagesize(vma));
-	SEQ_PUT_DEC(" kB\nMMUPageSize:    ", vma_mmu_pagesize(vma));
+
+	/* Only THP? */
+	if (mss.shmem_thp + mss.file_thp + mss.anonymous_thp == mss.resident &&
+	    mss.resident > 0) {
+		SEQ_PUT_DEC(" kB\nMMUPageSize:    ", HPAGE_PMD_SIZE);
+	} else {
+		unsigned ps = vma_mmu_pagesize(vma);
+		/* Will need adjustments when more THP page sizes are added. */
+		SEQ_PUT_DEC(" kB\nMMUPageSize:    ", ps);
+		if (mss.shmem_thp + mss.file_thp + mss.anonymous_thp > 0 &&
+		    ps != HPAGE_PMD_SIZE)
+			SEQ_PUT_DEC(" kB\nMMUPageSize2:   ", HPAGE_PMD_SIZE);
+	}
 	seq_puts(m, " kB\n");
 
 	__show_smap(m, &mss, false);
