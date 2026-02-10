@@ -50,9 +50,6 @@ static int regcache_hw_init(struct regmap *map)
 	unsigned int reg, val;
 	void *tmp_buf;
 
-	if (!map->num_reg_defaults_raw)
-		return -EINVAL;
-
 	/* calculate the size of reg_defaults */
 	for (count = 0, i = 0; i < map->num_reg_defaults_raw; i++)
 		if (regmap_readable(map, i * map->reg_stride) &&
