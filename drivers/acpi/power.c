@@ -958,7 +958,6 @@ struct acpi_device *acpi_add_power_resource(acpi_handle handle)
 	strscpy(acpi_device_name(device), ACPI_POWER_DEVICE_NAME);
 	strscpy(acpi_device_class(device), ACPI_POWER_CLASS);
 	device->power.state = ACPI_STATE_UNKNOWN;
-	device->flags.match_driver = true;
 
 	/* Evaluate the object to get the system level and resource order. */
 	status = acpi_evaluate_object(handle, NULL, NULL, &buffer);
