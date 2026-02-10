@@ -13,6 +13,11 @@ use kernel::{
     device,
     io::poll::read_poll_timeout,
     prelude::*,
+    ptr::{
+        Alignable,
+        Alignment, //
+    },
+    sizes::{SZ_1M, SZ_2M},
     time::Delta,
     transmute::{
         AsBytes,
@@ -34,6 +39,16 @@ pub(crate) mod mctp {
     pub(super) const HEADER_EOM: u32 = 1; // End of Message
     pub(super) const HEADER_SEID: u32 = 0; // Source Endpoint ID
     pub(super) const HEADER_SEQ: u32 = 0; // Sequence number
+
+    // MCTP header bit positions
+    pub(super) const HEADER_SOM_SHIFT: u32 = 31;
+    pub(super) const HEADER_EOM_SHIFT: u32 = 30;
+    pub(super) const HEADER_SEQ_SHIFT: u32 = 28;
+    pub(super) const HEADER_SEID_SHIFT: u32 = 16;
+
+    // NVDM header bit positions
+    pub(super) const NVDM_VENDOR_ID_SHIFT: u32 = 8;
+    pub(super) const NVDM_TYPE_SHIFT: u32 = 24;
 
     pub(super) const MSG_TYPE_VENDOR_PCI: u32 = 0x7e;
     pub(super) const VENDOR_ID_NV: u32 = 0x10de;
@@ -203,6 +218,19 @@ struct FspResponse {
 // SAFETY: FspResponse is a packed C struct with only integral fields.
 unsafe impl FromBytes for FspResponse {}
 
+/// Trait implemented by types representing a message to send to FSP.
+///
+/// This provides [`Fsp::send_sync_fsp`] with the information it needs to send
+/// a given message, following the same pattern as GSP's `CommandToGsp`.
+pub(crate) trait MessageToFsp: AsBytes {
+    /// NVDM type identifying this message to FSP.
+    const NVDM_TYPE: u32;
+}
+
+impl MessageToFsp for FspMessage {
+    const NVDM_TYPE: u32 = mctp::NVDM_TYPE_COT;
+}
+
 /// FSP interface for Hopper/Blackwell GPUs.
 pub(crate) struct Fsp;
 
@@ -315,16 +343,138 @@ impl Fsp {
         Ok(signatures)
     }
 
+    /// Creates FMC boot parameters structure for FSP.
+    ///
+    /// This structure tells FSP how to boot GSP-RM with the correct memory layout.
+    pub(crate) fn create_fmc_boot_params(
+        dev: &device::Device<device::Bound>,
+        wpr_meta_addr: u64,
+        wpr_meta_size: u32,
+        libos_addr: u64,
+    ) -> Result<kernel::dma::CoherentAllocation<GspFmcBootParams>> {
+        use kernel::dma::CoherentAllocation;
+
+        const GSP_DMA_TARGET_COHERENT_SYSTEM: u32 = 1;
+        const GSP_DMA_TARGET_NONCOHERENT_SYSTEM: u32 = 2;
+
+        let fmc_boot_params = CoherentAllocation::<GspFmcBootParams>::alloc_coherent(
+            dev,
+            1,
+            GFP_KERNEL | __GFP_ZERO,
+        )?;
+
+        // Configure ACR boot parameters (WPR metadata location) using dma_write! macro
+        kernel::dma_write!(
+            fmc_boot_params[0].boot_gsp_rm_params.target = GSP_DMA_TARGET_COHERENT_SYSTEM
+        )?;
+        kernel::dma_write!(
+            fmc_boot_params[0].boot_gsp_rm_params.gsp_rm_desc_offset = wpr_meta_addr
+        )?;
+        kernel::dma_write!(fmc_boot_params[0].boot_gsp_rm_params.gsp_rm_desc_size = wpr_meta_size)?;
+
+        // Blackwell FSP expects wpr_carveout_offset and wpr_carveout_size to be zero;
+        // it obtains WPR info from other sources.
+        kernel::dma_write!(fmc_boot_params[0].boot_gsp_rm_params.b_is_gsp_rm_boot = 1)?;
+
+        // Configure RM parameters (libos location) using dma_write! macro
+        kernel::dma_write!(
+            fmc_boot_params[0].gsp_rm_params.target = GSP_DMA_TARGET_NONCOHERENT_SYSTEM
+        )?;
+        kernel::dma_write!(fmc_boot_params[0].gsp_rm_params.boot_args_offset = libos_addr)?;
+
+        Ok(fmc_boot_params)
+    }
+
+    /// Boot GSP FMC with pre-extracted signatures.
+    ///
+    /// This version takes pre-extracted signatures and FMC image data.
+    /// Used when signatures are extracted separately from the full ELF file.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn boot_gsp_fmc_with_signatures(
+        dev: &device::Device<device::Bound>,
+        bar: &crate::driver::Bar0,
+        chipset: crate::gpu::Chipset,
+        fmc_image_fw: &crate::dma::DmaObject, // Contains only the image section
+        fmc_boot_params: &kernel::dma::CoherentAllocation<GspFmcBootParams>,
+        total_reserved_size: u64,
+        resume: bool,
+        fsp_falcon: &crate::falcon::Falcon<crate::falcon::fsp::Fsp>,
+        signatures: &FmcSignatures,
+    ) -> Result<()> {
+        dev_dbg!(dev, "Starting FSP boot sequence for {}\n", chipset);
+
+        // Build FSP Chain of Trust message
+        let fmc_addr = fmc_image_fw.dma_handle(); // Now points to image data only
+        let fmc_boot_params_addr = fmc_boot_params.dma_handle();
+
+        // frts_offset is relative to FB end: FRTS_location = FB_END - frts_offset
+        let frts_offset = if !resume {
+            let mut frts_reserved_size =
+                if let Some(heap_size) = crate::fb::hal::fb_hal(chipset).non_wpr_heap_size() {
+                    u64::from(heap_size)
+                } else {
+                    total_reserved_size
+                };
+
+            // Add PMU reserved size
+            frts_reserved_size += u64::from(crate::fb::PMU_RESERVED_SIZE);
+
+            frts_reserved_size
+                .align_up(Alignment::new::<SZ_2M>())
+                .unwrap_or(frts_reserved_size)
+        } else {
+            0
+        };
+        let frts_size = if !resume { SZ_1M as u32 } else { 0 };
+
+        // Build the FSP message
+        let msg = KBox::new(
+            FspMessage {
+                mctp_header: (mctp::HEADER_SOM << mctp::HEADER_SOM_SHIFT)
+                    | (mctp::HEADER_EOM << mctp::HEADER_EOM_SHIFT)
+                    | (mctp::HEADER_SEID << mctp::HEADER_SEID_SHIFT)
+                    | (mctp::HEADER_SEQ << mctp::HEADER_SEQ_SHIFT),
+
+                nvdm_header: (mctp::MSG_TYPE_VENDOR_PCI)
+                    | (mctp::VENDOR_ID_NV << mctp::NVDM_VENDOR_ID_SHIFT)
+                    | (mctp::NVDM_TYPE_COT << mctp::NVDM_TYPE_SHIFT),
+
+                cot: NvdmPayloadCot {
+                    version: chipset.fsp_cot_version(),
+                    size: core::mem::size_of::<NvdmPayloadCot>() as u16,
+                    gsp_fmc_sysmem_offset: fmc_addr,
+                    frts_sysmem_offset: 0,
+                    frts_sysmem_size: 0,
+                    frts_vidmem_offset: frts_offset,
+                    frts_vidmem_size: frts_size,
+                    hash384: signatures.hash384,
+                    public_key: signatures.public_key,
+                    signature: signatures.signature,
+                    gsp_boot_args_sysmem_offset: fmc_boot_params_addr,
+                },
+            },
+            GFP_KERNEL,
+        )?;
+
+        // Send COT message to FSP and wait for response
+        Self::send_sync_fsp(dev, bar, fsp_falcon, &*msg)?;
+
+        dev_dbg!(dev, "FSP Chain of Trust completed successfully\n");
+        Ok(())
+    }
+
     /// Send message to FSP and wait for response.
-    fn send_sync_fsp(
+    fn send_sync_fsp<M>(
         dev: &device::Device<device::Bound>,
         bar: &crate::driver::Bar0,
         fsp_falcon: &crate::falcon::Falcon<crate::falcon::fsp::Fsp>,
-        nvdm_type: u32,
-        packet: &[u8],
-    ) -> Result<()> {
+        msg: &M,
+    ) -> Result<()>
+    where
+        M: MessageToFsp,
+    {
         // Send message
-        fsp_falcon.send_msg(bar, packet)?;
+        fsp_falcon.send_msg(bar, msg.as_bytes())?;
 
         // Wait for response
         let timeout = Delta::from_millis(FSP_MSG_TIMEOUT_MS);
@@ -389,11 +539,11 @@ impl Fsp {
         }
 
         // Check command type matches
-        if command_nvdm_type != nvdm_type {
+        if command_nvdm_type != M::NVDM_TYPE {
             dev_err!(
                 dev,
                 "Expected NVDM type {:#x} in reply, got {:#x}\n",
-                nvdm_type,
+                M::NVDM_TYPE,
                 command_nvdm_type
             );
             return Err(EIO);
@@ -404,7 +554,7 @@ impl Fsp {
             dev_err!(
                 dev,
                 "NVDM command {:#x} failed with error {:#x}\n",
-                nvdm_type,
+                M::NVDM_TYPE,
                 error_code
             );
             return Err(EIO);
