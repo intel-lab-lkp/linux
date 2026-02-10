@@ -3,6 +3,7 @@
 
 import argparse
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 import os
 from typing import Any
@@ -51,6 +52,9 @@ class KernelSbomConfig:
 
     write_output_on_error: bool
     """Whether to write output documents even if errors occur."""
+
+    created: datetime
+    """Datetime to use for the SPDX created property of the CreationInfo element."""
 
     spdxId_prefix: str
     """Prefix to use for all SPDX element IDs."""
@@ -151,6 +155,16 @@ def _parse_cli_arguments() -> dict[str, Any]:
     # SPDX specific options
     spdx_group = parser.add_argument_group("SPDX options", "Options for customizing SPDX document generation")
     spdx_group.add_argument(
+        "--created",
+        default=None,
+        help=(
+            "The SPDX created property to use for the CreationInfo element in "
+            "ISO format (YYYY-MM-DD [HH:MM:SS]).\n"
+            "If not provided the last modification time of the first root output "
+            "is used. (default: None)"
+        ),
+    )
+    spdx_group.add_argument(
         "--spdxId-prefix",
         default="urn:spdx.dev:",
         help="The prefix to use for all spdxId properties. (default: urn:spdx.dev:)",
@@ -195,6 +209,16 @@ def get_config() -> KernelSbomConfig:
     fail_on_unknown_build_command = not args["do_not_fail_on_unknown_build_command"]
     write_output_on_error = args["write_output_on_error"]
 
+    if args["created"] is None:
+        created = datetime.fromtimestamp(os.path.getmtime(os.path.join(obj_tree, root_paths[0])))
+    else:
+        try:
+            created = datetime.fromisoformat(args["created"])
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"Invalid date format for argument '--created': '{args['created']}'. "
+                "Expected ISO format (YYYY-MM-DD [HH:MM:SS])."
+            )
     spdxId_prefix = args["spdxId_prefix"]
     prettify_json = args["prettify_json"]
 
@@ -218,6 +242,7 @@ def get_config() -> KernelSbomConfig:
         debug=debug,
         fail_on_unknown_build_command=fail_on_unknown_build_command,
         write_output_on_error=write_output_on_error,
+        created=created,
         spdxId_prefix=spdxId_prefix,
         prettify_json=prettify_json,
     )
