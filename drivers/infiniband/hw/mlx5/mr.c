@@ -46,6 +46,8 @@
 #include "data_direct.h"
 #include "dmah.h"
 
+MODULE_IMPORT_NS("DMA_BUF");
+
 enum {
 	MAX_PENDING_REG_MR = 8,
 };
@@ -1623,6 +1625,32 @@ static struct dma_buf_attach_ops mlx5_ib_dmabuf_attach_ops = {
 	.move_notify = mlx5_ib_dmabuf_invalidate_cb,
 };
 
+static void get_tph_mr_dmabuf(struct mlx5_ib_dev *dev, int fd, u16 *st_index,
+							  u8 *ph)
+{
+	int ret;
+	struct dma_buf *dmabuf;
+
+	dmabuf = dma_buf_get(fd);
+	if (IS_ERR(dmabuf))
+		return;
+
+	if (!dmabuf->ops->get_tph)
+		goto end_dbuf_put;
+
+	ret = dmabuf->ops->get_tph(dmabuf, st_index, ph);
+
+	if (ret) {
+		*st_index = MLX5_MKC_PCIE_TPH_NO_STEERING_TAG_INDEX;
+		*ph = MLX5_IB_NO_PH;
+		mlx5_ib_dbg(dev, "get_tph failed (%d)\n", ret);
+		goto end_dbuf_put;
+	}
+
+end_dbuf_put:
+	dma_buf_put(dmabuf);
+};
+
 static struct ib_mr *
 reg_user_mr_dmabuf(struct ib_pd *pd, struct device *dma_device,
 		   u64 offset, u64 length, u64 virt_addr,
@@ -1662,6 +1690,8 @@ reg_user_mr_dmabuf(struct ib_pd *pd, struct device *dma_device,
 		ph = dmah->ph;
 		if (dmah->valid_fields & BIT(IB_DMAH_CPU_ID_EXISTS))
 			st_index = mdmah->st_index;
+	} else {
+		get_tph_mr_dmabuf(dev, fd, &st_index, &ph);
 	}
 
 	mr = alloc_cacheable_mr(pd, &umem_dmabuf->umem, virt_addr,
