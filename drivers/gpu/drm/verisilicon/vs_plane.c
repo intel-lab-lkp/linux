@@ -125,3 +125,43 @@ dma_addr_t vs_fb_get_dma_addr(struct drm_framebuffer *fb,
 
 	return dma_addr;
 }
+
+struct drm_plane_state *vs_plane_duplicate_state(struct drm_plane *plane)
+{
+	struct vs_plane_state *vs_state;
+
+	if (WARN_ON(!plane->state))
+		return NULL;
+
+	vs_state = kmemdup(plane->state, sizeof(*vs_state), GFP_KERNEL);
+	if (!vs_state)
+		return NULL;
+
+	__drm_atomic_helper_plane_duplicate_state(plane, &vs_state->base);
+
+	return &vs_state->base;
+}
+
+void vs_plane_destroy_state(struct drm_plane *plane,
+			    struct drm_plane_state *state)
+{
+	__drm_atomic_helper_plane_destroy_state(state);
+	kfree(state);
+}
+
+/* Called during init to allocate the plane's atomic state. */
+void vs_plane_reset(struct drm_plane *plane)
+{
+	struct vs_plane_state *vs_state;
+
+	if (plane->state)
+		__drm_atomic_helper_plane_destroy_state(plane->state);
+
+	kfree(plane->state);
+
+	vs_state = kzalloc(sizeof(*vs_state), GFP_KERNEL);
+	if (!vs_state)
+		return;
+
+	__drm_atomic_helper_plane_reset(plane, &vs_state->base);
+}
