@@ -74,23 +74,7 @@ static void slot_lock_init(struct zram *zram, u32 index)
  * 2) lock() function can sleep waiting for the lock
  *
  * 3) Lock owner can sleep
- *
- * 4) Use TRY lock variant when in atomic context
- *    - must check return value and handle locking failers
  */
-static __must_check bool slot_trylock(struct zram *zram, u32 index)
-{
-	unsigned long *lock = &zram->table[index].__lock;
-
-	if (!test_and_set_bit_lock(ZRAM_ENTRY_LOCK, lock)) {
-		mutex_acquire(slot_dep_map(zram, index), 0, 1, _RET_IP_);
-		lock_acquired(slot_dep_map(zram, index), _RET_IP_);
-		return true;
-	}
-
-	return false;
-}
-
 static void slot_lock(struct zram *zram, u32 index)
 {
 	unsigned long *lock = &zram->table[index].__lock;
@@ -1943,15 +1927,9 @@ static ssize_t debug_stat_show(struct device *dev,
 {
 	int version = 1;
 	struct zram *zram = dev_to_zram(dev);
-	ssize_t ret;
 
 	guard(rwsem_read)(&zram->dev_lock);
-	ret = sysfs_emit(buf,
-			"version: %d\n0 %8llu\n",
-			version,
-			(u64)atomic64_read(&zram->stats.miss_free));
-
-	return ret;
+	return sysfs_emit(buf, "version: %d\n0 0\n", version);
 }
 
 static void zram_meta_free(struct zram *zram, u64 disksize)
@@ -2814,16 +2792,10 @@ static void zram_submit_bio(struct bio *bio)
 static void zram_slot_free_notify(struct block_device *bdev,
 				unsigned long index)
 {
-	struct zram *zram;
-
-	zram = bdev->bd_disk->private_data;
+	struct zram *zram = bdev->bd_disk->private_data;
 
 	atomic64_inc(&zram->stats.notify_free);
-	if (!slot_trylock(zram, index)) {
-		atomic64_inc(&zram->stats.miss_free);
-		return;
-	}
-
+	slot_lock(zram, index);
 	slot_free(zram, index);
 	slot_unlock(zram, index);
 }
