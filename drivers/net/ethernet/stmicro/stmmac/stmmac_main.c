@@ -3739,6 +3739,8 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	enum request_irq_err irq_err;
 	int irq_idx = 0;
 	char *int_name;
+	int numa_node;
+	int cpu;
 	int ret;
 	int i;
 
@@ -3845,6 +3847,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	}
 
 	/* Request Rx MSI irq */
+	numa_node = dev_to_node(&priv->dev->dev);
 	for (i = 0; i < priv->plat->rx_queues_to_use; i++) {
 		if (i >= MTL_MAX_RX_QUEUES)
 			break;
@@ -3864,8 +3867,10 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			irq_idx = i;
 			goto irq_error;
 		}
-		irq_set_affinity_hint(priv->rx_irq[i],
-				      cpumask_of(i % num_online_cpus()));
+
+		cpu = cpumask_local_spread(i, numa_node);
+		cpumask_set_cpu(cpu, priv->rx_affinity[i]);
+		irq_set_affinity_hint(priv->rx_irq[i], priv->rx_affinity[i]);
 	}
 
 	/* Request Tx MSI irq */
@@ -3888,8 +3893,10 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			irq_idx = i;
 			goto irq_error;
 		}
-		irq_set_affinity_hint(priv->tx_irq[i],
-				      cpumask_of(i % num_online_cpus()));
+
+		cpu = cpumask_local_spread(i, numa_node);
+		cpumask_set_cpu(cpu, priv->tx_affinity[i]);
+		irq_set_affinity_hint(priv->tx_irq[i], priv->tx_affinity[i]);
 	}
 
 	return 0;
@@ -7653,6 +7660,14 @@ struct plat_stmmacenet_data *stmmac_plat_dat_alloc(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(stmmac_plat_dat_alloc);
 
+static void stmmac_free_affinity(cpumask_var_t *m, unsigned int n)
+{
+	unsigned int i;
+
+	for (i = 0; i < n; i++)
+		free_cpumask_var(m[i]);
+}
+
 static int __stmmac_dvr_probe(struct device *device,
 			      struct plat_stmmacenet_data *plat_dat,
 			      struct stmmac_resources *res)
@@ -7699,10 +7714,21 @@ static int __stmmac_dvr_probe(struct device *device,
 	priv->sfty_irq = res->sfty_irq;
 	priv->sfty_ce_irq = res->sfty_ce_irq;
 	priv->sfty_ue_irq = res->sfty_ue_irq;
-	for (i = 0; i < MTL_MAX_RX_QUEUES; i++)
+	for (i = 0; i < MTL_MAX_RX_QUEUES; i++) {
 		priv->rx_irq[i] = res->rx_irq[i];
-	for (i = 0; i < MTL_MAX_TX_QUEUES; i++)
+		if (!zalloc_cpumask_var(&priv->rx_affinity[i], GFP_KERNEL)) {
+			stmmac_free_affinity(priv->rx_affinity, i);
+			return -ENOMEM;
+		}
+	}
+	for (i = 0; i < MTL_MAX_TX_QUEUES; i++) {
 		priv->tx_irq[i] = res->tx_irq[i];
+		if (!zalloc_cpumask_var(&priv->tx_affinity[i], GFP_KERNEL)) {
+			stmmac_free_affinity(priv->rx_affinity, MTL_MAX_RX_QUEUES);
+			stmmac_free_affinity(priv->tx_affinity, i);
+			return -ENOMEM;
+		}
+	}
 
 	if (!is_zero_ether_addr(res->mac))
 		eth_hw_addr_set(priv->dev, res->mac);
@@ -8022,6 +8048,9 @@ void stmmac_dvr_remove(struct device *dev)
 
 	pm_runtime_disable(dev);
 	pm_runtime_put_noidle(dev);
+
+	stmmac_free_affinity(priv->rx_affinity, MTL_MAX_RX_QUEUES);
+	stmmac_free_affinity(priv->tx_affinity, MTL_MAX_TX_QUEUES);
 
 	if (priv->plat->exit)
 		priv->plat->exit(dev, priv->plat->bsp_priv);

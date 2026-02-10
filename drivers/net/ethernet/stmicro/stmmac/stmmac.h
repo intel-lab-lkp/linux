@@ -329,6 +329,8 @@ struct stmmac_priv {
 	int sfty_ue_irq;
 	int rx_irq[MTL_MAX_RX_QUEUES];
 	int tx_irq[MTL_MAX_TX_QUEUES];
+	cpumask_var_t rx_affinity[MTL_MAX_RX_QUEUES];
+	cpumask_var_t tx_affinity[MTL_MAX_TX_QUEUES];
 	/*irq name */
 	char int_name_mac[IFNAMSIZ + 9];
 	char int_name_wol[IFNAMSIZ + 9];
