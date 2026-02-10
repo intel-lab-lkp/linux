@@ -203,14 +203,6 @@ int regcache_init(struct regmap *map, const struct regmap_config *config)
 		count = regcache_count_cacheable_registers(map);
 		if (map->cache_bypass)
 			return 0;
-
-		/* Some devices such as PMICs don't have cache defaults,
-		 * we cope with this by reading back the HW registers and
-		 * crafting the cache defaults by hand.
-		 */
-		ret = regcache_hw_init(map, count);
-		if (ret < 0)
-			return ret;
 	}
 
 	if (!map->max_register_is_set && map->num_reg_defaults_raw) {
@@ -226,6 +218,17 @@ int regcache_init(struct regmap *map, const struct regmap_config *config)
 		map->unlock(map->lock_arg);
 		if (ret)
 			goto err_free;
+	}
+
+	if (count) {
+		/*
+		 * Some devices such as PMICs don't have cache defaults,
+		 * we cope with this by reading back the HW registers and
+		 * crafting the cache defaults by hand.
+		 */
+		ret = regcache_hw_init(map, count);
+		if (ret < 0)
+			goto err_exit;
 	}
 
 	if (map->num_reg_defaults && map->cache_ops->populate) {
