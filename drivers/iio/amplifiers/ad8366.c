@@ -14,6 +14,7 @@
 #include <linux/bitrev.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/regulator/consumer.h>
@@ -22,14 +23,6 @@
 #include <linux/unaligned.h>
 
 #include <linux/iio/iio.h>
-
-enum ad8366_type {
-	ID_AD8366,
-	ID_ADA4961,
-	ID_ADL5240,
-	ID_HMC792,
-	ID_HMC1119,
-};
 
 struct ad8366_state;
 
@@ -62,38 +55,40 @@ static size_t ad8366_pack_code(struct ad8366_state *st)
 	return sizeof(__be16);
 }
 
-static const struct ad8366_info ad8366_infos[] = {
-	[ID_AD8366] = {
-		.gain_min = 4500,
-		.gain_max = 20500,
-		.gain_step = 253,
-		.num_channels = 2,
-		.pack_code = ad8366_pack_code,
-	},
-	[ID_ADA4961] = {
-		.gain_min = -6000,
-		.gain_max = 15000,
-		.gain_step = -1000,
-		.num_channels = 1,
-	},
-	[ID_ADL5240] = {
-		.gain_min = -11500,
-		.gain_max = 20000,
-		.gain_step = 500,
-		.num_channels = 1,
-	},
-	[ID_HMC792] = {
-		.gain_min = -15750,
-		.gain_max = 0,
-		.gain_step = 250,
-		.num_channels = 1,
-	},
-	[ID_HMC1119] = {
-		.gain_min = -31750,
-		.gain_max = 0,
-		.gain_step = -250,
-		.num_channels = 1,
-	},
+static const struct ad8366_info ad8366_chip_info = {
+	.gain_min = 4500,
+	.gain_max = 20500,
+	.gain_step = 253,
+	.num_channels = 2,
+	.pack_code = ad8366_pack_code,
+};
+
+static const struct ad8366_info ada4961_chip_info = {
+	.gain_min = -6000,
+	.gain_max = 15000,
+	.gain_step = -1000,
+	.num_channels = 1,
+};
+
+static const struct ad8366_info adl5240_chip_info = {
+	.gain_min = -11500,
+	.gain_max = 20000,
+	.gain_step = 500,
+	.num_channels = 1,
+};
+
+static const struct ad8366_info hmc792_chip_info = {
+	.gain_min = -15750,
+	.gain_max = 0,
+	.gain_step = 250,
+	.num_channels = 1,
+};
+
+static const struct ad8366_info hmc1119_chip_info = {
+	.gain_min = -31750,
+	.gain_max = 0,
+	.gain_step = -250,
+	.num_channels = 1,
 };
 
 static int ad8366_write_code(struct ad8366_state *st)
@@ -229,7 +224,7 @@ static int ad8366_probe(struct spi_device *spi)
 		return dev_err_probe(dev, ret, "Failed to get regulator\n");
 
 	st->spi = spi;
-	st->info = &ad8366_infos[spi_get_device_id(spi)->driver_data];
+	st->info = spi_get_device_match_data(spi);
 
 	rstc = devm_reset_control_get_optional_exclusive_deasserted(dev, NULL);
 	if (IS_ERR(rstc))
@@ -250,18 +245,29 @@ static int ad8366_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id ad8366_id[] = {
-	{"ad8366",  ID_AD8366},
-	{"ada4961", ID_ADA4961},
-	{"adl5240", ID_ADL5240},
-	{"hmc792a", ID_HMC792},
-	{"hmc1119", ID_HMC1119},
+	{"ad8366", (kernel_ulong_t)&ad8366_chip_info},
+	{"ada4961", (kernel_ulong_t)&ada4961_chip_info},
+	{"adl5240", (kernel_ulong_t)&adl5240_chip_info},
+	{"hmc792a", (kernel_ulong_t)&hmc792_chip_info},
+	{"hmc1119", (kernel_ulong_t)&hmc1119_chip_info},
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad8366_id);
 
+static const struct of_device_id ad8366_of_match[] = {
+	{ .compatible = "adi,ad8366", .data = &ad8366_chip_info },
+	{ .compatible = "adi,ada4961", .data = &ada4961_chip_info },
+	{ .compatible = "adi,adl5240", .data = &adl5240_chip_info },
+	{ .compatible = "adi,hmc792a", .data = &hmc792_chip_info },
+	{ .compatible = "adi,hmc1119", .data = &hmc1119_chip_info },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, ad8366_of_match);
+
 static struct spi_driver ad8366_driver = {
 	.driver = {
-		.name	= KBUILD_MODNAME,
+		.name		= KBUILD_MODNAME,
+		.of_match_table	= ad8366_of_match,
 	},
 	.probe		= ad8366_probe,
 	.id_table	= ad8366_id,
