@@ -35,12 +35,12 @@ enum {
 };
 
 
-#ifndef Ndis802_11AuthModeWPA2
-#define Ndis802_11AuthModeWPA2 (Ndis802_11AuthModeWPANone + 1)
+#ifndef NDIS_802_11_AUTH_MODE_WPA_2
+#define NDIS_802_11_AUTH_MODE_WPA_2 (NDIS_802_11_AUTH_MODE_WPA_NONE + 1)
 #endif
 
-#ifndef Ndis802_11AuthModeWPA2PSK
-#define Ndis802_11AuthModeWPA2PSK (Ndis802_11AuthModeWPANone + 2)
+#ifndef NDIS_802_11_AUTH_MODE_WPA_2_PSK
+#define NDIS_802_11_AUTH_MODE_WPA_2_PSK (NDIS_802_11_AUTH_MODE_WPA_NONE + 2)
 #endif
 
 union pn48	{

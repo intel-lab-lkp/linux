@@ -2196,7 +2196,7 @@ static int recv_func(struct adapter *padapter, union recv_frame *rframe)
 		if (check_fwstate(mlmepriv, WIFI_STATION_STATE) &&
 			!is_multicast_ether_addr(prxattrib->ra) && prxattrib->encrypt > 0 &&
 			(prxattrib->bdecrypted == 0 || psecuritypriv->sw_decrypt == true) &&
-			psecuritypriv->ndisauthtype == Ndis802_11AuthModeWPAPSK &&
+			psecuritypriv->ndisauthtype == NDIS_802_11_AUTH_MODE_WPA_PSK &&
 			!psecuritypriv->busetkipkey) {
 			rtw_enqueue_recvframe(rframe, &padapter->recvpriv.uc_swdec_pending_queue);
 

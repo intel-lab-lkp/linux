@@ -245,19 +245,19 @@ static void ConstructNullFunctionData(
 		SetPwrMgt(fctrl);
 
 	switch (cur_network->network.infrastructure_mode) {
-	case Ndis802_11Infrastructure:
+	case NDIS_802_11_INFRASTRUCTURE:
 		SetToDs(fctrl);
 		ether_addr_copy(pwlanhdr->addr1, get_my_bssid(&(pmlmeinfo->network)));
 		ether_addr_copy(pwlanhdr->addr2, myid(&(padapter->eeprompriv)));
 		ether_addr_copy(pwlanhdr->addr3, StaAddr);
 		break;
-	case Ndis802_11APMode:
+	case NDIS_802_11_AP_MODE:
 		SetFrDs(fctrl);
 		ether_addr_copy(pwlanhdr->addr1, StaAddr);
 		ether_addr_copy(pwlanhdr->addr2, get_my_bssid(&(pmlmeinfo->network)));
 		ether_addr_copy(pwlanhdr->addr3, myid(&(padapter->eeprompriv)));
 		break;
-	case Ndis802_11IBSS:
+	case NDIS_802_11_IBSS:
 	default:
 		ether_addr_copy(pwlanhdr->addr1, StaAddr);
 		ether_addr_copy(pwlanhdr->addr2, myid(&(padapter->eeprompriv)));

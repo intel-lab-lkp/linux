@@ -380,9 +380,10 @@ void rtw_cfg80211_ibss_indicate_connect(struct adapter *padapter)
 				rtw_warn_on(1);
 				return;
 			}
-			if (!memcmp(&(scanned->network.ssid), &(pnetwork->ssid), sizeof(struct ndis_802_11_ssid))
-				&& !memcmp(scanned->network.mac_address, pnetwork->mac_address, sizeof(NDIS_802_11_MAC_ADDRESS))
-			)
+
+			if (!memcmp(&scanned->network.ssid, &pnetwork->ssid,
+				    sizeof(struct ndis_802_11_ssid)) &&
+			    !memcmp(scanned->network.mac_address, pnetwork->mac_address, ETH_ALEN))
 				rtw_cfg80211_inform_bss(padapter, scanned);
 			else
 				rtw_warn_on(1);
@@ -422,7 +423,7 @@ void rtw_cfg80211_indicate_connect(struct adapter *padapter)
 			goto check_bss;
 		}
 
-		if (!memcmp(scanned->network.mac_address, pnetwork->mac_address, sizeof(NDIS_802_11_MAC_ADDRESS))
+		if (!memcmp(scanned->network.mac_address, pnetwork->mac_address, ETH_ALEN)
 			&& !memcmp(&(scanned->network.ssid), &(pnetwork->ssid), sizeof(struct ndis_802_11_ssid))
 		)
 			rtw_cfg80211_inform_bss(padapter, scanned);
@@ -547,7 +548,7 @@ static int rtw_cfg80211_ap_set_encryption(struct net_device *dev, struct ieee_pa
 			/* wep default key has not been set, so use this key index as default key. */
 
 			psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_Auto;
-			psecuritypriv->ndisencryptstatus = Ndis802_11Encryption1Enabled;
+			psecuritypriv->ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 			psecuritypriv->dot11PrivacyAlgrthm = _WEP40_;
 			psecuritypriv->dot118021XGrpPrivacy = _WEP40_;
 
@@ -743,7 +744,7 @@ static int rtw_cfg80211_set_encryption(struct net_device *dev, struct ieee_param
 
 			wep_key_len = wep_key_len <= 5 ? 5 : 13;
 
-			psecuritypriv->ndisencryptstatus = Ndis802_11Encryption1Enabled;
+			psecuritypriv->ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 			psecuritypriv->dot11PrivacyAlgrthm = _WEP40_;
 			psecuritypriv->dot118021XGrpPrivacy = _WEP40_;
 
@@ -775,15 +776,19 @@ static int rtw_cfg80211_set_encryption(struct net_device *dev, struct ieee_param
 				if (strcmp(param->u.crypt.alg, "none") != 0)
 					psta->ieee8021x_blocked = false;
 
-				if ((padapter->securitypriv.ndisencryptstatus == Ndis802_11Encryption2Enabled) ||
-				    (padapter->securitypriv.ndisencryptstatus ==  Ndis802_11Encryption3Enabled)) {
+				if ((padapter->securitypriv.ndisencryptstatus ==
+				     NDIS_802_11_ENCRYPTION_2_ENABLED) ||
+				    (padapter->securitypriv.ndisencryptstatus ==
+				     NDIS_802_11_ENCRYPTION_3_ENABLED)) {
 					psta->dot118021XPrivacy = padapter->securitypriv.dot11PrivacyAlgrthm;
 				}
 
 				if (param->u.crypt.set_tx == 1) { /* pairwise key */
+					struct ieee_crypt_arg *crypt = &param->u.crypt;
+					u32 len = min(crypt->key_len, 16U);
 
-					memcpy(psta->dot118021x_UncstKey.skey, param->u.crypt.key, (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
-
+					memcpy(psta->dot118021x_UncstKey.skey,
+					       crypt->key, len);
 					if (strcmp(param->u.crypt.alg, "TKIP") == 0) { /* set mic key */
 						memcpy(psta->dot11tkiptxmickey.skey, &(param->u.crypt.key[16]), 8);
 						memcpy(psta->dot11tkiprxmickey.skey, &(param->u.crypt.key[24]), 8);
@@ -794,19 +799,30 @@ static int rtw_cfg80211_set_encryption(struct net_device *dev, struct ieee_param
 
 					rtw_setstakey_cmd(padapter, psta, true, true);
 				} else { /* group key */
-					if (strcmp(param->u.crypt.alg, "TKIP") == 0 || strcmp(param->u.crypt.alg, "CCMP") == 0) {
-						memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey, param->u.crypt.key, (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
-						memcpy(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[16]), 8);
-						memcpy(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[24]), 8);
-						padapter->securitypriv.binstallGrpkey = true;
+					struct security_priv *psec = &padapter->securitypriv;
+					struct ieee_crypt_arg *crypt = &param->u.crypt;
+					u32 len = min(crypt->key_len, 16U);
 
-						padapter->securitypriv.dot118021XGrpKeyid = param->u.crypt.idx;
-						rtw_set_key(padapter, &padapter->securitypriv, param->u.crypt.idx, 1, true);
-					} else if (strcmp(param->u.crypt.alg, "BIP") == 0) {
+					if (strcmp(crypt->alg, "TKIP") == 0 ||
+					    strcmp(crypt->alg, "CCMP") == 0) {
+						memcpy(psec->dot118021XGrpKey[crypt->idx].skey,
+						       crypt->key, len);
+
+						memcpy(psec->dot18021XGrptxmickey[crypt->idx].skey,
+						       &crypt->key[16], 8);
+
+						memcpy(psec->dot118021XGrprxmickey[crypt->idx].skey,
+						       &crypt->key[24], 8);
+
+						psec->binstallGrpkey = true;
+						psec->dot118021XGrpKeyid = crypt->idx;
+						rtw_set_key(padapter, psec, crypt->idx, 1, true);
+					} else if (strcmp(crypt->alg, "BIP") == 0) {
 						/* save the IGTK key, length 16 bytes */
-						memcpy(padapter->securitypriv.dot11wBIPKey[param->u.crypt.idx].skey, param->u.crypt.key, (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
-						padapter->securitypriv.dot11wBIPKeyid = param->u.crypt.idx;
-						padapter->securitypriv.binstallBIPkey = true;
+						memcpy(psec->dot11wBIPKey[crypt->idx].skey,
+						       crypt->key, len);
+						psec->dot11wBIPKeyid = crypt->idx;
+						psec->binstallBIPkey = true;
 					}
 				}
 			}
@@ -817,8 +833,10 @@ static int rtw_cfg80211_set_encryption(struct net_device *dev, struct ieee_param
 				if (strcmp(param->u.crypt.alg, "none") != 0)
 					pbcmc_sta->ieee8021x_blocked = false;
 
-				if ((padapter->securitypriv.ndisencryptstatus == Ndis802_11Encryption2Enabled) ||
-				    (padapter->securitypriv.ndisencryptstatus ==  Ndis802_11Encryption3Enabled)) {
+				if ((padapter->securitypriv.ndisencryptstatus ==
+				     NDIS_802_11_ENCRYPTION_2_ENABLED) ||
+				    (padapter->securitypriv.ndisencryptstatus ==
+				     NDIS_802_11_ENCRYPTION_3_ENABLED)) {
 					pbcmc_sta->dot118021XPrivacy = padapter->securitypriv.dot11PrivacyAlgrthm;
 				}
 			}
@@ -942,7 +960,7 @@ static int cfg80211_rtw_set_default_key(struct wiphy *wiphy,
 	struct security_priv *psecuritypriv = &padapter->securitypriv;
 
 	if ((key_index < WEP_KEYS) && ((psecuritypriv->dot11PrivacyAlgrthm == _WEP40_) || (psecuritypriv->dot11PrivacyAlgrthm == _WEP104_))) { /* set wep default key */
-		psecuritypriv->ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		psecuritypriv->ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 
 		psecuritypriv->dot11PrivacyKeyIndex = key_index;
 
@@ -1025,7 +1043,7 @@ static int cfg80211_rtw_change_iface(struct wiphy *wiphy,
 				     struct vif_params *params)
 {
 	enum nl80211_iftype old_type;
-	enum ndis_802_11_network_infrastructure networkType;
+	enum ndis_802_11_network_infrastructure network_type;
 	struct adapter *padapter = rtw_netdev_priv(ndev);
 	struct wireless_dev *rtw_wdev = padapter->rtw_wdev;
 	struct mlme_ext_priv *pmlmeext = &(padapter->mlmeextpriv);
@@ -1057,13 +1075,13 @@ static int cfg80211_rtw_change_iface(struct wiphy *wiphy,
 
 	switch (type) {
 	case NL80211_IFTYPE_ADHOC:
-		networkType = Ndis802_11IBSS;
+		network_type = NDIS_802_11_IBSS;
 		break;
 	case NL80211_IFTYPE_STATION:
-		networkType = Ndis802_11Infrastructure;
+		network_type = NDIS_802_11_INFRASTRUCTURE;
 		break;
 	case NL80211_IFTYPE_AP:
-		networkType = Ndis802_11APMode;
+		network_type = NDIS_802_11_AP_MODE;
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -1072,13 +1090,13 @@ static int cfg80211_rtw_change_iface(struct wiphy *wiphy,
 
 	rtw_wdev->iftype = type;
 
-	if (rtw_set_802_11_infrastructure_mode(padapter, networkType) == false) {
+	if (rtw_set_802_11_infrastructure_mode(padapter, network_type) == false) {
 		rtw_wdev->iftype = old_type;
 		ret = -EPERM;
 		goto exit;
 	}
 
-	rtw_setopmode_cmd(padapter, networkType, true);
+	rtw_setopmode_cmd(padapter, network_type, true);
 
 exit:
 
@@ -1307,12 +1325,12 @@ static int cfg80211_rtw_set_wiphy_params(struct wiphy *wiphy, int radio_idx,
 static int rtw_cfg80211_set_wpa_version(struct security_priv *psecuritypriv, u32 wpa_version)
 {
 	if (!wpa_version) {
-		psecuritypriv->ndisauthtype = Ndis802_11AuthModeOpen;
+		psecuritypriv->ndisauthtype = NDIS_802_11_AUTH_MODE_OPEN;
 		return 0;
 	}
 
 	if (wpa_version & (NL80211_WPA_VERSION_1 | NL80211_WPA_VERSION_2))
-		psecuritypriv->ndisauthtype = Ndis802_11AuthModeWPAPSK;
+		psecuritypriv->ndisauthtype = NDIS_802_11_AUTH_MODE_WPA_PSK;
 
 	return 0;
 }
@@ -1330,7 +1348,7 @@ static int rtw_cfg80211_set_auth_type(struct security_priv *psecuritypriv,
 
 		psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_Open;
 
-		if (psecuritypriv->ndisauthtype > Ndis802_11AuthModeWPA)
+		if (psecuritypriv->ndisauthtype > NDIS_802_11_AUTH_MODE_WPA)
 			psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_8021X;
 
 		break;
@@ -1338,7 +1356,7 @@ static int rtw_cfg80211_set_auth_type(struct security_priv *psecuritypriv,
 
 		psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_Shared;
 
-		psecuritypriv->ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		psecuritypriv->ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 
 		break;
 	default:
@@ -1351,7 +1369,7 @@ static int rtw_cfg80211_set_auth_type(struct security_priv *psecuritypriv,
 
 static int rtw_cfg80211_set_cipher(struct security_priv *psecuritypriv, u32 cipher, bool ucast)
 {
-	u32 ndisencryptstatus = Ndis802_11EncryptionDisabled;
+	u32 ndisencryptstatus = NDIS_802_11_ENCRYPTION_DISABLED;
 
 	u32 *profile_cipher = ucast ? &psecuritypriv->dot11PrivacyAlgrthm :
 		&psecuritypriv->dot118021XGrpPrivacy;
@@ -1365,23 +1383,23 @@ static int rtw_cfg80211_set_cipher(struct security_priv *psecuritypriv, u32 ciph
 	switch (cipher) {
 	case IW_AUTH_CIPHER_NONE:
 		*profile_cipher = _NO_PRIVACY_;
-		ndisencryptstatus = Ndis802_11EncryptionDisabled;
+		ndisencryptstatus = NDIS_802_11_ENCRYPTION_DISABLED;
 		break;
 	case WLAN_CIPHER_SUITE_WEP40:
 		*profile_cipher = _WEP40_;
-		ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 		break;
 	case WLAN_CIPHER_SUITE_WEP104:
 		*profile_cipher = _WEP104_;
-		ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 		break;
 	case WLAN_CIPHER_SUITE_TKIP:
 		*profile_cipher = _TKIP_;
-		ndisencryptstatus = Ndis802_11Encryption2Enabled;
+		ndisencryptstatus = NDIS_802_11_ENCRYPTION_2_ENABLED;
 		break;
 	case WLAN_CIPHER_SUITE_CCMP:
 		*profile_cipher = _AES_;
-		ndisencryptstatus = Ndis802_11Encryption3Enabled;
+		ndisencryptstatus = NDIS_802_11_ENCRYPTION_3_ENABLED;
 		break;
 	default:
 		return -ENOTSUPP;
@@ -1391,7 +1409,7 @@ static int rtw_cfg80211_set_cipher(struct security_priv *psecuritypriv, u32 ciph
 		psecuritypriv->ndisencryptstatus = ndisencryptstatus;
 
 		/* if (psecuritypriv->dot11PrivacyAlgrthm >= _AES_) */
-		/*	psecuritypriv->ndisauthtype = Ndis802_11AuthModeWPA2PSK; */
+		/*	psecuritypriv->ndisauthtype = NDIS_802_11_AUTH_MODE_WPA_2_PSK; */
 	}
 
 	return 0;
@@ -1447,7 +1465,7 @@ static int rtw_cfg80211_set_wpa_ie(struct adapter *padapter, u8 *pie, size_t iel
 	if (pwpa && wpa_ielen > 0) {
 		if (rtw_parse_wpa_ie(pwpa, wpa_ielen + 2, &group_cipher, &pairwise_cipher, NULL) == _SUCCESS) {
 			padapter->securitypriv.dot11AuthAlgrthm = dot11AuthAlgrthm_8021X;
-			padapter->securitypriv.ndisauthtype = Ndis802_11AuthModeWPAPSK;
+			padapter->securitypriv.ndisauthtype = NDIS_802_11_AUTH_MODE_WPA_PSK;
 			memcpy(padapter->securitypriv.supplicant_ie, &pwpa[0], wpa_ielen + 2);
 		}
 	}
@@ -1456,7 +1474,7 @@ static int rtw_cfg80211_set_wpa_ie(struct adapter *padapter, u8 *pie, size_t iel
 	if (pwpa2 && wpa2_ielen > 0) {
 		if (rtw_parse_wpa2_ie(pwpa2, wpa2_ielen + 2, &group_cipher, &pairwise_cipher, NULL) == _SUCCESS) {
 			padapter->securitypriv.dot11AuthAlgrthm = dot11AuthAlgrthm_8021X;
-			padapter->securitypriv.ndisauthtype = Ndis802_11AuthModeWPA2PSK;
+			padapter->securitypriv.ndisauthtype = NDIS_802_11_AUTH_MODE_WPA_2_PSK;
 			memcpy(padapter->securitypriv.supplicant_ie, &pwpa2[0], wpa2_ielen + 2);
 		}
 	}
@@ -1470,46 +1488,46 @@ static int rtw_cfg80211_set_wpa_ie(struct adapter *padapter, u8 *pie, size_t iel
 	switch (group_cipher) {
 	case WPA_CIPHER_NONE:
 		padapter->securitypriv.dot118021XGrpPrivacy = _NO_PRIVACY_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11EncryptionDisabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_DISABLED;
 		break;
 	case WPA_CIPHER_WEP40:
 		padapter->securitypriv.dot118021XGrpPrivacy = _WEP40_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 		break;
 	case WPA_CIPHER_TKIP:
 		padapter->securitypriv.dot118021XGrpPrivacy = _TKIP_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption2Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_2_ENABLED;
 		break;
 	case WPA_CIPHER_CCMP:
 		padapter->securitypriv.dot118021XGrpPrivacy = _AES_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption3Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_3_ENABLED;
 		break;
 	case WPA_CIPHER_WEP104:
 		padapter->securitypriv.dot118021XGrpPrivacy = _WEP104_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 		break;
 	}
 
 	switch (pairwise_cipher) {
 	case WPA_CIPHER_NONE:
 		padapter->securitypriv.dot11PrivacyAlgrthm = _NO_PRIVACY_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11EncryptionDisabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_DISABLED;
 		break;
 	case WPA_CIPHER_WEP40:
 		padapter->securitypriv.dot11PrivacyAlgrthm = _WEP40_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 		break;
 	case WPA_CIPHER_TKIP:
 		padapter->securitypriv.dot11PrivacyAlgrthm = _TKIP_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption2Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_2_ENABLED;
 		break;
 	case WPA_CIPHER_CCMP:
 		padapter->securitypriv.dot11PrivacyAlgrthm = _AES_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption3Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_3_ENABLED;
 		break;
 	case WPA_CIPHER_WEP104:
 		padapter->securitypriv.dot11PrivacyAlgrthm = _WEP104_;
-		padapter->securitypriv.ndisencryptstatus = Ndis802_11Encryption1Enabled;
+		padapter->securitypriv.ndisencryptstatus = NDIS_802_11_ENCRYPTION_ENABLED;
 		break;
 	}
 
@@ -1575,11 +1593,11 @@ static int cfg80211_rtw_join_ibss(struct wiphy *wiphy, struct net_device *ndev,
 	ndis_ssid.ssid_length = params->ssid_len;
 	memcpy(ndis_ssid.ssid, (u8 *)params->ssid, params->ssid_len);
 
-	psecuritypriv->ndisencryptstatus = Ndis802_11EncryptionDisabled;
+	psecuritypriv->ndisencryptstatus = NDIS_802_11_ENCRYPTION_DISABLED;
 	psecuritypriv->dot11PrivacyAlgrthm = _NO_PRIVACY_;
 	psecuritypriv->dot118021XGrpPrivacy = _NO_PRIVACY_;
 	psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_Open; /* open system */
-	psecuritypriv->ndisauthtype = Ndis802_11AuthModeOpen;
+	psecuritypriv->ndisauthtype = NDIS_802_11_AUTH_MODE_OPEN;
 
 	ret = rtw_cfg80211_set_auth_type(psecuritypriv, NL80211_AUTHTYPE_OPEN_SYSTEM);
 	rtw_set_802_11_authentication_mode(padapter, psecuritypriv->ndisauthtype);
@@ -1610,12 +1628,12 @@ static int cfg80211_rtw_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 
 		rtw_wdev->iftype = NL80211_IFTYPE_STATION;
 
-		if (rtw_set_802_11_infrastructure_mode(padapter, Ndis802_11Infrastructure) == false) {
+		if (!rtw_set_802_11_infrastructure_mode(padapter, NDIS_802_11_INFRASTRUCTURE)) {
 			rtw_wdev->iftype = old_type;
 			ret = -EPERM;
 			goto leave_ibss;
 		}
-		rtw_setopmode_cmd(padapter, Ndis802_11Infrastructure, true);
+		rtw_setopmode_cmd(padapter, NDIS_802_11_INFRASTRUCTURE, true);
 	}
 
 leave_ibss:
@@ -1671,11 +1689,11 @@ static int cfg80211_rtw_connect(struct wiphy *wiphy, struct net_device *ndev,
 	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY) == true)
 		rtw_scan_abort(padapter);
 
-	psecuritypriv->ndisencryptstatus = Ndis802_11EncryptionDisabled;
+	psecuritypriv->ndisencryptstatus = NDIS_802_11_ENCRYPTION_DISABLED;
 	psecuritypriv->dot11PrivacyAlgrthm = _NO_PRIVACY_;
 	psecuritypriv->dot118021XGrpPrivacy = _NO_PRIVACY_;
 	psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_Open; /* open system */
-	psecuritypriv->ndisauthtype = Ndis802_11AuthModeOpen;
+	psecuritypriv->ndisauthtype = NDIS_802_11_AUTH_MODE_OPEN;
 
 	ret = rtw_cfg80211_set_wpa_version(psecuritypriv, sme->crypto.wpa_versions);
 	if (ret < 0)

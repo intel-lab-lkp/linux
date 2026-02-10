@@ -40,22 +40,22 @@ void rtw_hal_dm_init(struct adapter *padapter)
 
 static void rtw_hal_init_opmode(struct adapter *padapter)
 {
-	enum ndis_802_11_network_infrastructure networkType = Ndis802_11InfrastructureMax;
+	enum ndis_802_11_network_infrastructure network_type = NDIS_802_11_INFRASTRUCTURE_MAX;
 	struct  mlme_priv *pmlmepriv = &(padapter->mlmepriv);
 	signed int fw_state;
 
 	fw_state = get_fwstate(pmlmepriv);
 
 	if (fw_state & WIFI_ADHOC_STATE)
-		networkType = Ndis802_11IBSS;
+		network_type = NDIS_802_11_IBSS;
 	else if (fw_state & WIFI_STATION_STATE)
-		networkType = Ndis802_11Infrastructure;
+		network_type = NDIS_802_11_INFRASTRUCTURE;
 	else if (fw_state & WIFI_AP_STATE)
-		networkType = Ndis802_11APMode;
+		network_type = NDIS_802_11_AP_MODE;
 	else
 		return;
 
-	rtw_setopmode_cmd(padapter, networkType, false);
+	rtw_setopmode_cmd(padapter, network_type, false);
 }
 
 uint rtw_hal_init(struct adapter *padapter)

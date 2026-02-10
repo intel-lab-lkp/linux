@@ -292,8 +292,8 @@ u8 rtw_set_802_11_infrastructure_mode(struct adapter *padapter,
 	enum ndis_802_11_network_infrastructure *pold_state = &(cur_network->network.infrastructure_mode);
 
 	if (*pold_state != networktype) {
-		if (*pold_state == Ndis802_11APMode) {
-			/* change to other mode from Ndis802_11APMode */
+		if (*pold_state == NDIS_802_11_AP_MODE) {
+			/* change to other mode from NDIS_802_11_AP_MODE */
 			cur_network->join_res = -1;
 
 			stop_ap_mode(padapter);
@@ -301,16 +301,21 @@ u8 rtw_set_802_11_infrastructure_mode(struct adapter *padapter,
 
 		spin_lock_bh(&pmlmepriv->lock);
 
-		if ((check_fwstate(pmlmepriv, _FW_LINKED) == true) || (*pold_state == Ndis802_11IBSS))
+		if ((check_fwstate(pmlmepriv, _FW_LINKED) == true) ||
+		    (*pold_state == NDIS_802_11_IBSS))
 			rtw_disassoc_cmd(padapter, 0, true);
 
 		if ((check_fwstate(pmlmepriv, _FW_LINKED) == true) ||
-			(check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == true))
+		    (check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == true))
 			rtw_free_assoc_resources(padapter, 1);
 
-		if ((*pold_state == Ndis802_11Infrastructure) || (*pold_state == Ndis802_11IBSS)) {
+		if ((*pold_state == NDIS_802_11_INFRASTRUCTURE) ||
+		    (*pold_state == NDIS_802_11_IBSS)) {
 			if (check_fwstate(pmlmepriv, _FW_LINKED) == true)
-				rtw_indicate_disconnect(padapter); /* will clr Linked_state; before this function, we must have checked whether issue dis-assoc_cmd or not */
+				/* will clr Linked_state; before this function
+				 * we must have checked whether issue dis-assoc_cmd or not
+				 */
+				rtw_indicate_disconnect(padapter);
 		}
 
 		*pold_state = networktype;
@@ -318,23 +323,23 @@ u8 rtw_set_802_11_infrastructure_mode(struct adapter *padapter,
 		_clr_fwstate_(pmlmepriv, ~WIFI_NULL_STATE);
 
 		switch (networktype) {
-		case Ndis802_11IBSS:
+		case NDIS_802_11_IBSS:
 			set_fwstate(pmlmepriv, WIFI_ADHOC_STATE);
 			break;
 
-		case Ndis802_11Infrastructure:
+		case NDIS_802_11_INFRASTRUCTURE:
 			set_fwstate(pmlmepriv, WIFI_STATION_STATE);
 			break;
 
-		case Ndis802_11APMode:
+		case NDIS_802_11_AP_MODE:
 			set_fwstate(pmlmepriv, WIFI_AP_STATE);
 			start_ap_mode(padapter);
 			/* rtw_indicate_connect(padapter); */
 
 			break;
 
-		case Ndis802_11AutoUnknown:
-		case Ndis802_11InfrastructureMax:
+		case NDIS_802_11_AUTO_UNKNOWN:
+		case NDIS_802_11_INFRASTRUCTURE_MAX:
 			break;
 		}
 

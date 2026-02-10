@@ -51,8 +51,12 @@ int	rtw_init_mlme_priv(struct adapter *padapter)
 
 	pmlmepriv->pscanned = NULL;
 	pmlmepriv->fw_state = WIFI_STATION_STATE; /*  Must sync with rtw_wdev_alloc() */
-	pmlmepriv->cur_network.network.infrastructure_mode = Ndis802_11AutoUnknown;
-	pmlmepriv->scan_mode = SCAN_ACTIVE;/*  1: active, 0: passive. Maybe someday we should rename this varable to "active_mode" (Jeff) */
+	pmlmepriv->cur_network.network.infrastructure_mode = NDIS_802_11_AUTO_UNKNOWN;
+	/*
+	 * SCAN_ACTIVE: 1=active, 0=passive. Maybe someday we
+	 * should rename this variable to "active_mode" (Jeff).
+	 */
+	pmlmepriv->scan_mode = SCAN_ACTIVE;
 
 	spin_lock_init(&pmlmepriv->lock);
 	INIT_LIST_HEAD(&pmlmepriv->free_bss_pool.queue);
@@ -267,7 +271,7 @@ signed int rtw_if_up(struct adapter *padapter)
 	signed int res;
 
 	if (padapter->bDriverStopped || padapter->bSurpriseRemoved ||
-		!check_fwstate(&padapter->mlmepriv, _FW_LINKED))
+	    !check_fwstate(&padapter->mlmepriv, _FW_LINKED))
 		res = false;
 	else
 		res =  true;
@@ -336,7 +340,7 @@ int rtw_is_same_ibss(struct adapter *adapter, struct wlan_network *pnetwork)
 	struct security_priv *psecuritypriv = &adapter->securitypriv;
 
 	if ((psecuritypriv->dot11PrivacyAlgrthm != _NO_PRIVACY_) &&
-		    (pnetwork->network.privacy == 0))
+	    (pnetwork->network.privacy == 0))
 		ret = false;
 	else if ((psecuritypriv->dot11PrivacyAlgrthm == _NO_PRIVACY_) &&
 		 (pnetwork->network.privacy == 1))
@@ -416,7 +420,7 @@ struct	wlan_network	*rtw_get_oldest_wlan_network(struct __queue *scanned_queue)
 }
 
 void update_network(struct wlan_bssid_ex *dst, struct wlan_bssid_ex *src,
-	struct adapter *padapter, bool update_ie)
+		    struct adapter *padapter, bool update_ie)
 {
 	long rssi_ori = dst->rssi;
 
@@ -465,14 +469,14 @@ static void update_current_network(struct adapter *adapter, struct wlan_bssid_ex
 	struct	mlme_priv *pmlmepriv = &adapter->mlmepriv;
 
 	rtw_bug_check(&pmlmepriv->cur_network.network,
-		&pmlmepriv->cur_network.network,
-		&pmlmepriv->cur_network.network,
-		&pmlmepriv->cur_network.network);
+		      &pmlmepriv->cur_network.network,
+		      &pmlmepriv->cur_network.network,
+		      &pmlmepriv->cur_network.network);
 
 	if (check_fwstate(pmlmepriv, _FW_LINKED) && (is_same_network(&pmlmepriv->cur_network.network, pnetwork, 0))) {
 		update_network(&pmlmepriv->cur_network.network, pnetwork, adapter, true);
 		rtw_update_protection(adapter, (pmlmepriv->cur_network.network.ies) + sizeof(struct ndis_802_11_fix_ie),
-								pmlmepriv->cur_network.network.ie_length);
+				      pmlmepriv->cur_network.network.ie_length);
 	}
 }
 
@@ -618,10 +622,10 @@ int rtw_is_desired_network(struct adapter *adapter, struct wlan_network *pnetwor
 		u8 *p = NULL;
 		uint ie_len = 0;
 
-		if ((desired_encmode == Ndis802_11EncryptionDisabled) && (privacy != 0))
+		if ((desired_encmode == NDIS_802_11_ENCRYPTION_DISABLED) && (privacy != 0))
 			bselected = false;
 
-		if (psecuritypriv->ndisauthtype == Ndis802_11AuthModeWPA2PSK) {
+		if (psecuritypriv->ndisauthtype == NDIS_802_11_AUTH_MODE_WPA_2_PSK) {
 			p = rtw_get_ie(pnetwork->network.ies + _BEACON_IE_OFFSET_, WLAN_EID_RSN, &ie_len, (pnetwork->network.ie_length - _BEACON_IE_OFFSET_));
 			if (p && ie_len > 0)
 				bselected = true;
@@ -630,7 +634,7 @@ int rtw_is_desired_network(struct adapter *adapter, struct wlan_network *pnetwor
 		}
 	}
 
-	if ((desired_encmode != Ndis802_11EncryptionDisabled) && (privacy == 0))
+	if ((desired_encmode != NDIS_802_11_ENCRYPTION_DISABLED) && (privacy == 0))
 		bselected = false;
 
 	if (check_fwstate(pmlmepriv, WIFI_ADHOC_STATE)) {
@@ -1065,7 +1069,7 @@ static void rtw_joinbss_update_network(struct adapter *padapter, struct wlan_net
 
 	/* update fw_state will clr _FW_UNDER_LINKING here indirectly */
 	switch (pnetwork->network.infrastructure_mode) {
-	case Ndis802_11Infrastructure:
+	case NDIS_802_11_INFRASTRUCTURE:
 
 			if (pmlmepriv->fw_state & WIFI_UNDER_WPS)
 				pmlmepriv->fw_state = WIFI_STATION_STATE | WIFI_UNDER_WPS;
@@ -1073,7 +1077,7 @@ static void rtw_joinbss_update_network(struct adapter *padapter, struct wlan_net
 				pmlmepriv->fw_state = WIFI_STATION_STATE;
 
 			break;
-	case Ndis802_11IBSS:
+	case NDIS_802_11_IBSS:
 			pmlmepriv->fw_state = WIFI_ADHOC_STATE;
 			break;
 	default:
@@ -1082,7 +1086,7 @@ static void rtw_joinbss_update_network(struct adapter *padapter, struct wlan_net
 	}
 
 	rtw_update_protection(padapter, (cur_network->network.ies) + sizeof(struct ndis_802_11_fix_ie),
-									(cur_network->network.ie_length));
+			      (cur_network->network.ie_length));
 
 	rtw_update_ht_cap(padapter, cur_network->network.ies, cur_network->network.ie_length, (u8) cur_network->network.configuration.ds_config);
 }
@@ -1123,8 +1127,8 @@ void rtw_reset_securitypriv(struct adapter *adapter)
 		adapter->securitypriv.btkip_countermeasure = backupTKIPCountermeasure;
 		adapter->securitypriv.btkip_countermeasure_time = backupTKIPcountermeasure_time;
 
-		adapter->securitypriv.ndisauthtype = Ndis802_11AuthModeOpen;
-		adapter->securitypriv.ndisencryptstatus = Ndis802_11WEPDisabled;
+		adapter->securitypriv.ndisauthtype = NDIS_802_11_AUTH_MODE_OPEN;
+		adapter->securitypriv.ndisencryptstatus = NDIS_802_11_WEP_DISABLED;
 
 	} else {
 		/* reset values in securitypriv */
@@ -1139,8 +1143,8 @@ void rtw_reset_securitypriv(struct adapter *adapter)
 		psec_priv->dot118021XGrpPrivacy = _NO_PRIVACY_;
 		psec_priv->dot118021XGrpKeyid = 1;
 
-		psec_priv->ndisauthtype = Ndis802_11AuthModeOpen;
-		psec_priv->ndisencryptstatus = Ndis802_11WEPDisabled;
+		psec_priv->ndisauthtype = NDIS_802_11_AUTH_MODE_OPEN;
+		psec_priv->ndisencryptstatus = NDIS_802_11_WEP_DISABLED;
 		/*  */
 	}
 	/*  add for CONFIG_IEEE80211W, none 11w also can use */
@@ -1469,7 +1473,7 @@ void rtw_stadel_event_callback(struct adapter *adapter, u8 *pbuf)
 	}
 
 	if (check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) ||
-	      check_fwstate(pmlmepriv, WIFI_ADHOC_STATE)) {
+	    check_fwstate(pmlmepriv, WIFI_ADHOC_STATE)) {
 		rtw_free_stainfo(adapter,  psta);
 
 		if (adapter->stapriv.asoc_sta_count == 1) {/* a sta + bc/mc_stainfo (not Ibss_stainfo) */
@@ -2023,7 +2027,7 @@ static int SecIsInPMKIDList(struct adapter *Adapter, u8 *bssid)
 
 	for (i = 0; i < NUM_PMKID_CACHE; i++)
 		if ((p->PMKIDList[i].bUsed) &&
-				(!memcmp(p->PMKIDList[i].Bssid, bssid, ETH_ALEN)))
+		    (!memcmp(p->PMKIDList[i].Bssid, bssid, ETH_ALEN)))
 			return i;
 	return -1;
 }
@@ -2099,9 +2103,11 @@ signed int rtw_restruct_sec_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, u
 	/* copy fixed ie only */
 	memcpy(out_ie, in_ie, 12);
 	ielength = 12;
-	if ((ndisauthmode == Ndis802_11AuthModeWPA) || (ndisauthmode == Ndis802_11AuthModeWPAPSK))
+	if ((ndisauthmode == NDIS_802_11_AUTH_MODE_WPA) ||
+	    (ndisauthmode == NDIS_802_11_AUTH_MODE_WPA_PSK))
 		authmode = WLAN_EID_VENDOR_SPECIFIC;
-	if ((ndisauthmode == Ndis802_11AuthModeWPA2) || (ndisauthmode == Ndis802_11AuthModeWPA2PSK))
+	if ((ndisauthmode == NDIS_802_11_AUTH_MODE_WPA_2) ||
+	    (ndisauthmode == NDIS_802_11_AUTH_MODE_WPA_2_PSK))
 		authmode = WLAN_EID_RSN;
 
 	if (check_fwstate(pmlmepriv, WIFI_UNDER_WPS)) {
@@ -2154,14 +2160,14 @@ void rtw_update_registrypriv_dev_network(struct adapter *adapter)
 
 	switch (pregistrypriv->wireless_mode) {
 	case WIRELESS_11B:
-		pdev_network->network_type_in_use = (Ndis802_11DS);
+		pdev_network->network_type_in_use = (NDIS_802_11_DS);
 		break;
 	case WIRELESS_11G:
 	case WIRELESS_11BG:
 	case WIRELESS_11_24N:
 	case WIRELESS_11G_24N:
 	case WIRELESS_11BG_24N:
-		pdev_network->network_type_in_use = (Ndis802_11OFDM24);
+		pdev_network->network_type_in_use = (NDIS_802_11_FDM24);
 		break;
 	default:
 		/*  TODO */
@@ -2170,7 +2176,7 @@ void rtw_update_registrypriv_dev_network(struct adapter *adapter)
 
 	pdev_network->configuration.ds_config = (pregistrypriv->channel);
 
-	if (cur_network->network.infrastructure_mode == Ndis802_11IBSS)
+	if (cur_network->network.infrastructure_mode == NDIS_802_11_IBSS)
 		pdev_network->configuration.atim_window = (0);
 
 	pdev_network->infrastructure_mode = (cur_network->network.infrastructure_mode);

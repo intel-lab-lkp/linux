@@ -697,17 +697,17 @@ u8 rtw_joinbss_cmd(struct adapter  *padapter, struct wlan_network *pnetwork)
 	/* for hidden ap to set fw_state here */
 	if (check_fwstate(pmlmepriv, WIFI_STATION_STATE | WIFI_ADHOC_STATE) != true) {
 		switch (ndis_network_mode) {
-		case Ndis802_11IBSS:
+		case NDIS_802_11_IBSS:
 			set_fwstate(pmlmepriv, WIFI_ADHOC_STATE);
 			break;
 
-		case Ndis802_11Infrastructure:
+		case NDIS_802_11_INFRASTRUCTURE:
 			set_fwstate(pmlmepriv, WIFI_STATION_STATE);
 			break;
 
-		case Ndis802_11APMode:
-		case Ndis802_11AutoUnknown:
-		case Ndis802_11InfrastructureMax:
+		case NDIS_802_11_AP_MODE:
+		case NDIS_802_11_AUTO_UNKNOWN:
+		case NDIS_802_11_INFRASTRUCTURE_MAX:
 			break;
 		}
 	}
