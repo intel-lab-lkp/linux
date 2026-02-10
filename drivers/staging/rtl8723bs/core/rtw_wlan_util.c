@@ -159,7 +159,7 @@ unsigned int ratetbl2rateset(struct adapter *padapter, unsigned char *rateset)
 	return len;
 }
 
-void get_rate_set(struct adapter *padapter, unsigned char *pbssrate, int *bssrate_len)
+void get_rate_set(struct adapter *padapter, unsigned char *pbssrate, u8 *bssrate_len)
 {
 	unsigned char supportedrates[NumRates];
 
