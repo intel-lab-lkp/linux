@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 
-// TODO: remove this once the code is fully functional
-#![expect(dead_code)]
-
 //! FSP (Firmware System Processor) interface for Hopper/Blackwell GPUs.
 //!
 //! Hopper/Blackwell use a simplified firmware boot sequence: FMC --> FSP --> GSP.
@@ -11,6 +8,7 @@
 
 use kernel::{
     device,
+    dma::CoherentAllocation,
     io::poll::read_poll_timeout,
     prelude::*,
     ptr::{
@@ -352,8 +350,6 @@ impl Fsp {
         wpr_meta_size: u32,
         libos_addr: u64,
     ) -> Result<kernel::dma::CoherentAllocation<GspFmcBootParams>> {
-        use kernel::dma::CoherentAllocation;
-
         const GSP_DMA_TARGET_COHERENT_SYSTEM: u32 = 1;
         const GSP_DMA_TARGET_NONCOHERENT_SYSTEM: u32 = 2;
 
