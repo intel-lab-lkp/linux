@@ -56,7 +56,7 @@ struct objpool_slot {
 	uint32_t            last;
 	uint32_t            mask;
 	void               *entries[];
-} __packed;
+};
 
 struct objpool_head;
 
