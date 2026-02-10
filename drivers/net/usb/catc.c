@@ -770,6 +770,13 @@ static int catc_probe(struct usb_interface *intf, const struct usb_device_id *id
 	struct net_device *netdev;
 	struct catc *catc;
 	u8 broadcast[ETH_ALEN];
+	static const u8 bulk_ep_addr[] = {
+		USB_DIR_OUT | 1,	/* EP 1 OUT (TX) */
+		USB_DIR_IN | 1,		/* EP 1 IN  (RX) */
+		0};
+	static const u8 int_ep_addr[] = {
+		USB_DIR_IN | 2,		/* EP 2 IN  (interrupt) */
+		0};
 	u8 *macbuf;
 	int pktsz, ret = -ENOMEM;
 
@@ -781,6 +788,14 @@ static int catc_probe(struct usb_interface *intf, const struct usb_device_id *id
 			intf->altsetting->desc.bInterfaceNumber, 1)) {
 		dev_err(dev, "Can't set altsetting 1.\n");
 		ret = -EIO;
+		goto fail_mem;
+	}
+
+	/* Verify that all required endpoints are present */
+	if (!usb_check_bulk_endpoints(intf, bulk_ep_addr) ||
+	    !usb_check_int_endpoints(intf, int_ep_addr)) {
+		dev_err(dev, "Missing or invalid endpoints\n");
+		ret = -ENODEV;
 		goto fail_mem;
 	}
 
