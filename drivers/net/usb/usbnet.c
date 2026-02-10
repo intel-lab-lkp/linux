@@ -1759,7 +1759,7 @@ usbnet_probe(struct usb_interface *udev, const struct usb_device_id *prod)
 	status = -ENOMEM;
 
 	// set up our own records
-	net = alloc_etherdev(sizeof(*dev));
+	net = alloc_etherdev(sizeof(*dev) + info->required_room);
 	if (!net)
 		goto out;
 

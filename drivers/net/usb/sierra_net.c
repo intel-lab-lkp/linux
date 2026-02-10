@@ -190,14 +190,7 @@ static const struct net_device_ops sierra_net_device_ops = {
 /* get private data associated with passed in usbnet device */
 static inline struct sierra_net_data *sierra_net_get_private(struct usbnet *dev)
 {
-	return (struct sierra_net_data *)dev->private[0];
-}
-
-/* set private data associated with passed in usbnet device */
-static inline void sierra_net_set_private(struct usbnet *dev,
-			struct sierra_net_data *priv)
-{
-	dev->private[0] = (unsigned long)priv;
+	return (struct sierra_net_data *)dev->private;
 }
 
 /* is packet IPv4/IPv6 */
@@ -653,7 +646,7 @@ static int sierra_net_bind(struct usbnet *dev, struct usb_interface *intf)
 	u8	numendpoints;
 	u16	fwattr = 0;
 	int	status;
-	struct sierra_net_data *priv;
+	struct sierra_net_data *priv = (struct sierra_net_data *)dev->private;
 	static const u8 sync_tmplate[sizeof(priv->sync_msg)] = {
 		0x00, 0x00, SIERRA_NET_HIP_MSYNC_ID, 0x00};
 	static const u8 shdwn_tmplate[sizeof(priv->shdwn_msg)] = {
@@ -682,11 +675,8 @@ static int sierra_net_bind(struct usbnet *dev, struct usb_interface *intf)
 		dev_err(&dev->udev->dev, "No status endpoint found");
 		return -ENODEV;
 	}
-	/* Initialize sierra private data */
-	priv = kzalloc(sizeof *priv, GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
 
+	/* Initialize sierra private data */
 	priv->usbnet = dev;
 	priv->ifnum = ifacenum;
 	dev->net->netdev_ops = &sierra_net_device_ops;
@@ -717,8 +707,6 @@ static int sierra_net_bind(struct usbnet *dev, struct usb_interface *intf)
 	dev->net->flags |= IFF_NOARP;
 	dev->net->ethtool_ops = &sierra_net_ethtool_ops;
 	netif_carrier_off(dev->net);
-
-	sierra_net_set_private(dev, priv);
 
 	priv->kevent_flags = 0;
 
@@ -764,7 +752,7 @@ static void sierra_net_unbind(struct usbnet *dev, struct usb_interface *intf)
 
 	usbnet_status_stop(dev);
 
-	sierra_net_set_private(dev, NULL);
+	memset(dev->private, 0, sizeof(struct sierra_net_data));
 	kfree(priv);
 }
 
@@ -905,6 +893,7 @@ static const struct driver_info sierra_net_info_direct_ip = {
 	.status = sierra_net_status,
 	.rx_fixup = sierra_net_rx_fixup,
 	.tx_fixup = sierra_net_tx_fixup,
+	.required_room = sizeof(struct sierra_net_data),
 };
 
 static int

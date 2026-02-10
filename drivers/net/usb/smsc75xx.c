@@ -1500,7 +1500,7 @@ cancel_work:
 	cancel_work_sync(&pdata->set_multicast);
 free_pdata:
 	kfree(pdata);
-	memset(dev->private, 0, sizeof(dev->private));
+	memset(dev->private, 0, sizeof(struct smsc75xx_priv *));
 	return ret;
 }
 
@@ -1511,7 +1511,7 @@ static void smsc75xx_unbind(struct usbnet *dev, struct usb_interface *intf)
 		cancel_work_sync(&pdata->set_multicast);
 		netif_dbg(dev, ifdown, dev->net, "free pdata\n");
 		kfree(pdata);
-		memset(dev->private, 0, sizeof(dev->private));
+		memset(dev->private, 0, sizeof(struct smsc75xx_priv *));
 	}
 }
 

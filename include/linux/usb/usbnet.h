@@ -96,7 +96,7 @@ struct usbnet {
  * that must be broken
  */
 #		define EVENT_UNPLUG		31
-	unsigned long		private[5];
+	DECLARE_FLEX_ARRAY(u8, private);
 };
 
 static inline bool usbnet_going_away(struct usbnet *ubn)
@@ -145,6 +145,9 @@ struct driver_info {
 #define FLAG_MULTI_PACKET	0x2000
 #define FLAG_RX_ASSEMBLE	0x4000	/* rx packets may span >1 frames */
 #define FLAG_NOARP		0x8000	/* device can't do ARP */
+
+	/* tells us how much private space is need in the descriptor */
+	unsigned int		required_room;
 
 	/* init device ... can sleep, or cause probe() failure */
 	int	(*bind)(struct usbnet *, struct usb_interface *);
