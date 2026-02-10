@@ -122,7 +122,7 @@ do_test_pedit_ip()
 	local mz_flags=$1; shift
 
 	tc filter add $pedit_locus handle 101 pref 1 \
-	   flower action pedit ex munge $pedit_action
+	   flower action pedit ex munge $pedit_action pipe action csum ip
 	tc filter add dev $h2 ingress handle 101 pref 1 prot $match_prot \
 	   flower skip_hw $match_flower action pass
 

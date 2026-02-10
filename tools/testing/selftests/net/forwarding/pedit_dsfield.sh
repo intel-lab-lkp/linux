@@ -156,7 +156,7 @@ do_test_pedit_dsfield()
 	local daddr=$1; shift
 
 	tc filter add $pedit_locus handle 101 pref 1 \
-	   flower action pedit ex munge $pedit_action
+	   flower action pedit ex munge $pedit_action pipe action csum ip
 	tc filter add dev $h2 ingress handle 101 pref 1 prot $match_prot \
 	   flower skip_hw $match_flower action pass
 
@@ -229,7 +229,8 @@ do_test_ip_dscp_ecn()
 
 	tc filter add $locus handle 101 pref 1				\
 	   flower action pedit ex munge ip dsfield set 124 retain 0xfc	\
-		  action pedit ex munge ip dsfield set 1 retain 0x03
+		  action pedit ex munge ip dsfield set 1 retain 0x03	\
+		  pipe action csum ip
 	tc filter add dev $h2 ingress handle 101 pref 1 prot ip		\
 	   flower skip_hw ip_tos 125 action pass
 
