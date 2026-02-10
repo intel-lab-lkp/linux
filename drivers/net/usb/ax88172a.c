@@ -30,7 +30,7 @@ static void ax88172a_adjust_link(struct net_device *netdev)
 {
 	struct phy_device *phydev = netdev->phydev;
 	struct usbnet *dev = netdev_priv(netdev);
-	struct ax88172a_private *priv = dev->driver_priv;
+	struct ax88172a_private *priv = (struct ax88172a_private *)dev->private;
 	u16 mode = 0;
 
 	if (phydev->link) {
@@ -60,7 +60,7 @@ static void ax88172a_status(struct usbnet *dev, struct urb *urb)
 /* use phylib infrastructure */
 static int ax88172a_init_mdio(struct usbnet *dev)
 {
-	struct ax88172a_private *priv = dev->driver_priv;
+	struct ax88172a_private *priv = (struct ax88172a_private *)dev->private;
 	int ret;
 
 	priv->mdio = mdiobus_alloc();
@@ -93,7 +93,7 @@ mfree:
 
 static void ax88172a_remove_mdio(struct usbnet *dev)
 {
-	struct ax88172a_private *priv = dev->driver_priv;
+	struct ax88172a_private *priv = (struct ax88172a_private *)dev->private;
 
 	netdev_info(dev->net, "deregistering mdio bus %s\n", priv->mdio->id);
 	mdiobus_unregister(priv->mdio);
@@ -159,17 +159,11 @@ static int ax88172a_bind(struct usbnet *dev, struct usb_interface *intf)
 {
 	int ret;
 	u8 buf[ETH_ALEN];
-	struct ax88172a_private *priv;
+	struct ax88172a_private *priv = (struct ax88172a_private *)dev->private;
 
 	ret = usbnet_get_endpoints(dev, intf);
 	if (ret)
 		return ret;
-
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
-
-	dev->driver_priv = priv;
 
 	/* Get the MAC address */
 	ret = asix_read_cmd(dev, AX_CMD_READ_NODE_ID, 0, 0, ETH_ALEN, buf, 0);
@@ -230,13 +224,12 @@ static int ax88172a_bind(struct usbnet *dev, struct usb_interface *intf)
 	return 0;
 
 free:
-	kfree(priv);
 	return ret;
 }
 
 static int ax88172a_stop(struct usbnet *dev)
-{
-	struct ax88172a_private *priv = dev->driver_priv;
+	{
+	struct ax88172a_private *priv = (struct ax88172a_private *)dev->private;
 
 	netdev_dbg(dev->net, "Stopping interface\n");
 
@@ -252,16 +245,13 @@ static int ax88172a_stop(struct usbnet *dev)
 
 static void ax88172a_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct ax88172a_private *priv = dev->driver_priv;
-
 	ax88172a_remove_mdio(dev);
-	kfree(priv);
 }
 
 static int ax88172a_reset(struct usbnet *dev)
 {
+	struct ax88172a_private *priv = (struct ax88172a_private *)dev->private;
 	struct asix_data *data = (struct asix_data *)&dev->private;
-	struct ax88172a_private *priv = dev->driver_priv;
 	int ret;
 	u16 rx_ctl;
 
@@ -338,7 +328,7 @@ out:
 
 static int ax88172a_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
-	struct ax88172a_private *dp = dev->driver_priv;
+	struct ax88172a_private *dp = (struct ax88172a_private *)dev->private;
 	struct asix_rx_fixup_info *rx = &dp->rx_fixup_info;
 
 	return asix_rx_fixup_internal(dev, skb, rx);

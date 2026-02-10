@@ -241,7 +241,7 @@ int asix_rx_fixup_internal(struct usbnet *dev, struct sk_buff *skb,
 
 int asix_rx_fixup_common(struct usbnet *dev, struct sk_buff *skb)
 {
-	struct asix_common_private *dp = dev->driver_priv;
+	struct asix_common_private *dp = (struct asix_common_private *)dev->private;
 	struct asix_rx_fixup_info *rx = &dp->rx_fixup_info;
 
 	return asix_rx_fixup_internal(dev, skb, rx);

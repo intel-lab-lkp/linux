@@ -118,7 +118,8 @@ static const struct ethtool_ops ax88172_ethtool_ops = {
 static void ax88172_set_multicast(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct asix_data *data = (struct asix_data *)&dev->private;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+	struct asix_data *data = &priv->asix_data;
 	u8 rx_ctl = 0x8c;
 
 	if (net->flags & IFF_PROMISC) {
@@ -129,10 +130,6 @@ static void ax88172_set_multicast(struct net_device *net)
 	} else if (netdev_mc_empty(net)) {
 		/* just broadcast and directed */
 	} else {
-		/* We use the 20 byte dev->private
-		 * for our 8 byte filter buffer
-		 * to avoid allocating memory that
-		 * is tricky to free later */
 		struct netdev_hw_addr *ha;
 		u32 crc_bits;
 
@@ -295,7 +292,7 @@ static void ax88772_ethtool_get_pauseparam(struct net_device *ndev,
 					  struct ethtool_pauseparam *pause)
 {
 	struct usbnet *dev = netdev_priv(ndev);
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 
 	phylink_ethtool_get_pauseparam(priv->phylink, pause);
 }
@@ -304,7 +301,7 @@ static int ax88772_ethtool_set_pauseparam(struct net_device *ndev,
 					 struct ethtool_pauseparam *pause)
 {
 	struct usbnet *dev = netdev_priv(ndev);
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 
 	return phylink_ethtool_set_pauseparam(priv->phylink, pause);
 }
@@ -331,8 +328,8 @@ static const struct ethtool_ops ax88772_ethtool_ops = {
 
 static int ax88772_reset(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->private;
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+	struct asix_data *data = &priv->asix_data;
 	int ret;
 
 	/* Rewrite MAC address */
@@ -361,8 +358,8 @@ out:
 
 static int ax88772_hw_reset(struct usbnet *dev, int in_pm)
 {
-	struct asix_data *data = (struct asix_data *)&dev->private;
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+	struct asix_data *data = &priv->asix_data;
 	u16 rx_ctl;
 	int ret;
 
@@ -455,8 +452,8 @@ out:
 
 static int ax88772a_hw_reset(struct usbnet *dev, int in_pm)
 {
-	struct asix_data *data = (struct asix_data *)&dev->private;
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+	struct asix_data *data = &priv->asix_data;
 	u16 rx_ctl, phy14h, phy15h, phy16h;
 	int ret;
 
@@ -595,7 +592,7 @@ static const struct net_device_ops ax88772_netdev_ops = {
 
 static void ax88772_suspend(struct usbnet *dev)
 {
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 	u16 medium;
 
 	if (netif_running(dev->net)) {
@@ -631,9 +628,9 @@ static void ax88772_suspend(struct usbnet *dev)
 static int asix_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 
-	if (priv && priv->suspend)
+	if (priv->suspend)
 		priv->suspend(dev);
 
 	return usbnet_suspend(intf, message);
@@ -641,7 +638,7 @@ static int asix_suspend(struct usb_interface *intf, pm_message_t message)
 
 static void ax88772_resume(struct usbnet *dev)
 {
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 	int i;
 
 	for (i = 0; i < 3; i++)
@@ -658,7 +655,7 @@ static void ax88772_resume(struct usbnet *dev)
 static int asix_resume(struct usb_interface *intf)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 
 	if (priv && priv->resume)
 		priv->resume(dev);
@@ -668,7 +665,7 @@ static int asix_resume(struct usb_interface *intf)
 
 static int ax88772_init_mdio(struct usbnet *dev)
 {
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 	int ret;
 
 	priv->mdio = mdiobus_alloc();
@@ -702,7 +699,7 @@ static void ax88772_mdio_unregister(struct asix_common_private *priv)
 
 static int ax88772_init_phy(struct usbnet *dev)
 {
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 	int ret;
 
 	priv->phydev = mdiobus_get_phy(priv->mdio, priv->phy_addr);
@@ -796,7 +793,7 @@ static const struct phylink_mac_ops ax88772_phylink_mac_ops = {
 
 static int ax88772_phylink_setup(struct usbnet *dev)
 {
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 	phy_interface_t phy_if_mode;
 	struct phylink *phylink;
 
@@ -826,15 +823,9 @@ static int ax88772_phylink_setup(struct usbnet *dev)
 
 static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct asix_common_private *priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 	u8 buf[ETH_ALEN] = {0};
 	int ret, i;
-
-	priv = devm_kzalloc(&dev->udev->dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
-
-	dev->driver_priv = priv;
 
 	ret = usbnet_get_endpoints(dev, intf);
 	if (ret)
@@ -943,7 +934,7 @@ mdio_err:
 
 static int ax88772_stop(struct usbnet *dev)
 {
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 
 	phylink_stop(priv->phylink);
 
@@ -952,22 +943,23 @@ static int ax88772_stop(struct usbnet *dev)
 
 static void ax88772_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct asix_common_private *priv = dev->driver_priv;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 
 	rtnl_lock();
 	phylink_disconnect_phy(priv->phylink);
 	rtnl_unlock();
 	phylink_destroy(priv->phylink);
 	ax88772_mdio_unregister(priv);
-	asix_rx_fixup_common_free(dev->driver_priv);
+	asix_rx_fixup_common_free(priv);
 	/* Drop the PM usage ref taken in bind() */
 	pm_runtime_put(&intf->dev);
 }
 
 static void ax88178_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	asix_rx_fixup_common_free(dev->driver_priv);
-	kfree(dev->driver_priv);
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+
+	asix_rx_fixup_common_free(priv);
 }
 
 static const struct ethtool_ops ax88178_ethtool_ops = {
@@ -987,7 +979,8 @@ static const struct ethtool_ops ax88178_ethtool_ops = {
 
 static int marvell_phy_init(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->private;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+	struct asix_data *data = &priv->asix_data;
 	u16 reg;
 
 	netdev_dbg(dev->net, "marvell_phy_init()\n");
@@ -1018,7 +1011,8 @@ static int marvell_phy_init(struct usbnet *dev)
 
 static int rtl8211cl_phy_init(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->private;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+	struct asix_data *data = &priv->asix_data;
 
 	netdev_dbg(dev->net, "rtl8211cl_phy_init()\n");
 
@@ -1065,7 +1059,8 @@ static int marvell_led_status(struct usbnet *dev, u16 speed)
 
 static int ax88178_reset(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->private;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
+	struct asix_data *data = &priv->asix_data;
 	int ret;
 	__le16 eeprom;
 	u8 status;
@@ -1161,9 +1156,10 @@ static int ax88178_reset(struct usbnet *dev)
 
 static int ax88178_link_reset(struct usbnet *dev)
 {
-	u16 mode;
+	struct asix_common_private *priv = (struct asix_common_private *)dev->private;
 	struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET };
-	struct asix_data *data = (struct asix_data *)&dev->private;
+	struct asix_data *data = &priv->asix_data;
+	u16 mode;
 	u32 speed;
 
 	netdev_dbg(dev->net, "ax88178_link_reset()\n");
@@ -1313,10 +1309,6 @@ static int ax88178_bind(struct usbnet *dev, struct usb_interface *intf)
 		   jumbo eth frames */
 		dev->rx_urb_size = 2048;
 	}
-
-	dev->driver_priv = kzalloc(sizeof(struct asix_common_private), GFP_KERNEL);
-	if (!dev->driver_priv)
-			return -ENOMEM;
 
 	return 0;
 }

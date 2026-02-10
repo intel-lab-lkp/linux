@@ -173,6 +173,7 @@ struct ax88179_data {
 	u8 in_pm;
 	u32 wol_supported;
 	u32 wolopts;
+	u8 m_filter[8];
 	u8 disconnecting;
 };
 
@@ -192,14 +193,14 @@ static const struct {
 
 static void ax88179_set_pm_mode(struct usbnet *dev, bool pm_mode)
 {
-	struct ax88179_data *ax179_data = dev->driver_priv;
+	struct ax88179_data *ax179_data = (struct ax88179_data *)dev->private;
 
 	ax179_data->in_pm = pm_mode;
 }
 
 static int ax88179_in_pm(struct usbnet *dev)
 {
-	struct ax88179_data *ax179_data = dev->driver_priv;
+	struct ax88179_data *ax179_data = (struct ax88179_data *)dev->private;
 
 	return ax179_data->in_pm;
 }
@@ -209,7 +210,7 @@ static int __ax88179_read_cmd(struct usbnet *dev, u8 cmd, u16 value, u16 index,
 {
 	int ret;
 	int (*fn)(struct usbnet *, u8, u8, u16, u16, void *, u16);
-	struct ax88179_data *ax179_data = dev->driver_priv;
+	struct ax88179_data *ax179_data = (struct ax88179_data *)dev->private;
 
 	BUG_ON(!dev);
 
@@ -233,7 +234,7 @@ static int __ax88179_write_cmd(struct usbnet *dev, u8 cmd, u16 value, u16 index,
 {
 	int ret;
 	int (*fn)(struct usbnet *, u8, u8, u16, u16, const void *, u16);
-	struct ax88179_data *ax179_data = dev->driver_priv;
+	struct ax88179_data *ax179_data = (struct ax88179_data *)dev->private;
 
 	BUG_ON(!dev);
 
@@ -406,7 +407,7 @@ ax88179_phy_write_mmd_indirect(struct usbnet *dev, u16 prtad, u16 devad,
 static int ax88179_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv = (struct ax88179_data *)dev->private;
 	u16 tmp16;
 	u8 tmp8;
 
@@ -504,7 +505,7 @@ static void ax88179_disconnect(struct usb_interface *intf)
 	if (!dev)
 		return;
 
-	ax179_data = dev->driver_priv;
+	ax179_data = (struct ax88179_data *)dev->private;
 	ax179_data->disconnecting = 1;
 
 	usbnet_disconnect(intf);
@@ -514,7 +515,7 @@ static void
 ax88179_get_wol(struct net_device *net, struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv = (struct ax88179_data *)dev->private;
 
 	wolinfo->supported = priv->wol_supported;
 	wolinfo->wolopts = priv->wolopts;
@@ -524,7 +525,7 @@ static int
 ax88179_set_wol(struct net_device *net, struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv = (struct ax88179_data *)dev->private;
 
 	if (wolinfo->wolopts & ~(priv->wol_supported))
 		return -EINVAL;
@@ -708,7 +709,7 @@ ax88179_ethtool_set_eee(struct usbnet *dev, struct ethtool_keee *data)
 static int ax88179_chk_eee(struct usbnet *dev)
 {
 	struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET };
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv = (struct ax88179_data *)dev->private;
 
 	mii_ethtool_gset(&dev->mii, &ecmd);
 
@@ -811,7 +812,7 @@ static void ax88179_enable_eee(struct usbnet *dev)
 static int ax88179_get_eee(struct net_device *net, struct ethtool_keee *edata)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv = (struct ax88179_data *)dev->private;
 
 	edata->eee_enabled = priv->eee_enabled;
 	edata->eee_active = priv->eee_active;
@@ -822,7 +823,7 @@ static int ax88179_get_eee(struct net_device *net, struct ethtool_keee *edata)
 static int ax88179_set_eee(struct net_device *net, struct ethtool_keee *edata)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv = (struct ax88179_data *)dev->private;
 	int ret;
 
 	priv->eee_enabled = edata->eee_enabled;
@@ -867,8 +868,8 @@ static const struct ethtool_ops ax88179_ethtool_ops = {
 static void ax88179_set_multicast(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct ax88179_data *data = dev->driver_priv;
-	u8 *m_filter = ((u8 *)dev->private);
+	struct ax88179_data *data = (struct ax88179_data *)dev->private;
+	u8 *m_filter = data->m_filter;
 
 	data->rxctl = (AX_RX_CTL_START | AX_RX_CTL_AB | AX_RX_CTL_IPE);
 
@@ -1280,18 +1281,11 @@ static void ax88179_get_mac_addr(struct usbnet *dev)
 
 static int ax88179_bind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct ax88179_data *ax179_data;
 	int ret;
 
 	ret = usbnet_get_endpoints(dev, intf);
 	if (ret < 0)
 		return ret;
-
-	ax179_data = kzalloc(sizeof(*ax179_data), GFP_KERNEL);
-	if (!ax179_data)
-		return -ENOMEM;
-
-	dev->driver_priv = ax179_data;
 
 	dev->net->netdev_ops = &ax88179_netdev_ops;
 	dev->net->ethtool_ops = &ax88179_ethtool_ops;
@@ -1321,7 +1315,6 @@ static int ax88179_bind(struct usbnet *dev, struct usb_interface *intf)
 
 static void ax88179_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct ax88179_data *ax179_data = dev->driver_priv;
 	u16 tmp16;
 
 	/* Configure RX control register => stop operation */
@@ -1334,8 +1327,6 @@ static void ax88179_unbind(struct usbnet *dev, struct usb_interface *intf)
 	/* Power down ethernet PHY */
 	tmp16 = 0;
 	ax88179_write_cmd(dev, AX_ACCESS_MAC, AX_PHYPWR_RSTCTL, 2, 2, &tmp16);
-
-	kfree(ax179_data);
 }
 
 static void
@@ -1507,7 +1498,7 @@ ax88179_tx_fixup(struct usbnet *dev, struct sk_buff *skb, gfp_t flags)
 
 static int ax88179_link_reset(struct usbnet *dev)
 {
-	struct ax88179_data *ax179_data = dev->driver_priv;
+	struct ax88179_data *ax179_data = (struct ax88179_data *)dev->private;
 	u8 tmp[5], link_sts;
 	u16 mode, tmp16, delay = HZ / 10;
 	u32 tmp32 = 0x40000000;
@@ -1585,7 +1576,7 @@ static int ax88179_reset(struct usbnet *dev)
 	u8 buf[5];
 	u16 *tmp16;
 	u8 *tmp;
-	struct ax88179_data *ax179_data = dev->driver_priv;
+	struct ax88179_data *ax179_data = (struct ax88179_data *)dev->private;
 	struct ethtool_keee eee_data;
 
 	tmp16 = (u16 *)buf;
@@ -1718,6 +1709,7 @@ static const struct driver_info ax88179_info = {
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info ax88178a_info = {
@@ -1731,6 +1723,7 @@ static const struct driver_info ax88178a_info = {
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info cypress_GX3_info = {
@@ -1744,6 +1737,7 @@ static const struct driver_info cypress_GX3_info = {
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info dlink_dub1312_info = {
@@ -1757,6 +1751,7 @@ static const struct driver_info dlink_dub1312_info = {
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info sitecom_info = {
@@ -1770,6 +1765,7 @@ static const struct driver_info sitecom_info = {
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info samsung_info = {
@@ -1783,6 +1779,7 @@ static const struct driver_info samsung_info = {
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info lenovo_info = {
@@ -1796,6 +1793,7 @@ static const struct driver_info lenovo_info = {
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info belkin_info = {
@@ -1809,6 +1807,7 @@ static const struct driver_info belkin_info = {
 	.flags	= FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info toshiba_info = {
@@ -1822,6 +1821,7 @@ static const struct driver_info toshiba_info = {
 	.flags	= FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info mct_info = {
@@ -1835,6 +1835,7 @@ static const struct driver_info mct_info = {
 	.flags	= FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info at_umc2000_info = {
@@ -1848,6 +1849,7 @@ static const struct driver_info at_umc2000_info = {
 	.flags  = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info at_umc200_info = {
@@ -1861,6 +1863,7 @@ static const struct driver_info at_umc200_info = {
 	.flags  = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct driver_info at_umc2000sp_info = {
@@ -1874,6 +1877,7 @@ static const struct driver_info at_umc2000sp_info = {
 	.flags  = FLAG_ETHER | FLAG_FRAMING_AX,
 	.rx_fixup = ax88179_rx_fixup,
 	.tx_fixup = ax88179_tx_fixup,
+	.required_room = sizeof(struct ax88179_data),
 };
 
 static const struct usb_device_id products[] = {

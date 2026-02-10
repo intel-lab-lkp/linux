@@ -43,6 +43,10 @@ enum cx82310_status {
 struct cx82310_priv {
 	struct work_struct reenable_work;
 	struct usbnet *dev;
+
+	unsigned int partial_len;		/* length of partial packet data */
+	unsigned int partial_rem;		/* remaining (missing) data length */
+	u8 *partial_data;			/* partial packet data */
 };
 
 /*
@@ -134,10 +138,6 @@ static void cx82310_reenable_work(struct work_struct *work)
 	cx82310_enable_ethernet(priv->dev);
 }
 
-#define partial_len	private[0]		/* length of partial packet data */
-#define partial_rem	private[1]		/* remaining (missing) data length */
-#define partial_data	private[2]		/* partial packet data */
-
 static int cx82310_bind(struct usbnet *dev, struct usb_interface *intf)
 {
 	int ret;
@@ -145,7 +145,7 @@ static int cx82310_bind(struct usbnet *dev, struct usb_interface *intf)
 	struct usb_device *udev = dev->udev;
 	u8 link[3];
 	int timeout = 50;
-	struct cx82310_priv *priv;
+	struct cx82310_priv *priv = (struct cx82310_priv*)dev->private;
 	u8 addr[ETH_ALEN];
 
 	/* avoid ADSL modems - continue only if iProduct is "USB NET CARD" */
@@ -169,16 +169,10 @@ static int cx82310_bind(struct usbnet *dev, struct usb_interface *intf)
 	/* we can receive URBs up to 4KB from the device */
 	dev->rx_urb_size = 4096;
 
-	dev->partial_data = (unsigned long) kmalloc(dev->hard_mtu, GFP_KERNEL);
-	if (!dev->partial_data)
+	priv->partial_data = kmalloc(dev->hard_mtu, GFP_KERNEL);
+	if (!priv->partial_data)
 		return -ENOMEM;
 
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		ret = -ENOMEM;
-		goto err_partial;
-	}
-	dev->driver_priv = priv;
 	INIT_WORK(&priv->reenable_work, cx82310_reenable_work);
 	priv->dev = dev;
 
@@ -217,19 +211,16 @@ static int cx82310_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	return 0;
 err:
-	kfree(dev->driver_priv);
-err_partial:
-	kfree((void *)dev->partial_data);
+	kfree(priv->partial_data);
 	return ret;
 }
 
 static void cx82310_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct cx82310_priv *priv = dev->driver_priv;
+	struct cx82310_priv *priv = (struct cx82310_priv*)dev->private;
 
-	kfree((void *)dev->partial_data);
+	kfree(priv->partial_data);
 	cancel_work_sync(&priv->reenable_work);
-	kfree(dev->driver_priv);
 }
 
 /*
@@ -244,25 +235,25 @@ static int cx82310_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
 	int len;
 	struct sk_buff *skb2;
-	struct cx82310_priv *priv = dev->driver_priv;
+	struct cx82310_priv *priv = (struct cx82310_priv*)dev->private;
 
 	/*
 	 * If the last skb ended with an incomplete packet, this skb contains
 	 * end of that packet at the beginning.
 	 */
-	if (dev->partial_rem) {
-		len = dev->partial_len + dev->partial_rem;
+	if (priv->partial_rem) {
+		len = priv->partial_len + priv->partial_rem;
 		skb2 = alloc_skb(len, GFP_ATOMIC);
 		if (!skb2)
 			return 0;
 		skb_put(skb2, len);
-		memcpy(skb2->data, (void *)dev->partial_data,
-		       dev->partial_len);
-		memcpy(skb2->data + dev->partial_len, skb->data,
-		       dev->partial_rem);
+		memcpy(skb2->data, (void *)priv->partial_data,
+		       priv->partial_len);
+		memcpy(skb2->data + priv->partial_len, skb->data,
+		       priv->partial_rem);
 		usbnet_skb_return(dev, skb2);
-		skb_pull(skb, (dev->partial_rem + 1) & ~1);
-		dev->partial_rem = 0;
+		skb_pull(skb, (priv->partial_rem + 1) & ~1);
+		priv->partial_rem = 0;
 		if (skb->len < 2)
 			return 1;
 	}
@@ -289,10 +280,10 @@ static int cx82310_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 
 		/* incomplete packet, save it for the next skb */
 		if (len > skb->len) {
-			dev->partial_len = skb->len;
-			dev->partial_rem = len - skb->len;
-			memcpy((void *)dev->partial_data, skb->data,
-			       dev->partial_len);
+			priv->partial_len = skb->len;
+			priv->partial_rem = len - skb->len;
+			memcpy((void *)priv->partial_data, skb->data,
+			       priv->partial_len);
 			skb_pull(skb, skb->len);
 			break;
 		}
@@ -338,6 +329,7 @@ static const struct driver_info	cx82310_info = {
 	.unbind		= cx82310_unbind,
 	.rx_fixup	= cx82310_rx_fixup,
 	.tx_fixup	= cx82310_tx_fixup,
+	.required_room	= sizeof(struct cx82310_priv),
 };
 
 #define USB_DEVICE_CLASS(vend, prod, cl, sc, pr) \

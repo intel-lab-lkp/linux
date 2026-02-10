@@ -201,7 +201,7 @@ static void aqc111_get_drvinfo(struct net_device *net,
 			       struct ethtool_drvinfo *info)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 
 	/* Inherit standard device info */
 	usbnet_get_drvinfo(net, info);
@@ -215,7 +215,7 @@ static void aqc111_get_wol(struct net_device *net,
 			   struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 
 	wolinfo->supported = WAKE_MAGIC;
 	wolinfo->wolopts = 0;
@@ -228,7 +228,7 @@ static int aqc111_set_wol(struct net_device *net,
 			  struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 
 	if (wolinfo->wolopts & ~WAKE_MAGIC)
 		return -EINVAL;
@@ -267,7 +267,7 @@ static int aqc111_get_link_ksettings(struct net_device *net,
 				     struct ethtool_link_ksettings *elk)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	enum usb_device_speed usb_speed = dev->udev->speed;
 	u32 speed = SPEED_UNKNOWN;
 
@@ -320,7 +320,7 @@ static int aqc111_get_link_ksettings(struct net_device *net,
 
 static void aqc111_set_phy_speed(struct usbnet *dev, u8 autoneg, u16 speed)
 {
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 
 	aqc111_data->phy_cfg &= ~AQ_ADV_MASK;
 	aqc111_data->phy_cfg |= AQ_PAUSE;
@@ -369,7 +369,7 @@ static int aqc111_set_link_ksettings(struct net_device *net,
 				     const struct ethtool_link_ksettings *elk)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	enum usb_device_speed usb_speed = dev->udev->speed;
 	u8 autoneg = elk->base.autoneg;
 	u32 speed = elk->base.speed;
@@ -529,7 +529,7 @@ static int aqc111_vlan_rx_add_vid(struct net_device *net, __be16 proto, u16 vid)
 static void aqc111_set_rx_mode(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	int mc_count = 0;
 
 	mc_count = netdev_mc_count(net);
@@ -567,7 +567,7 @@ static int aqc111_set_features(struct net_device *net,
 			       netdev_features_t features)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	netdev_features_t changed = net->features ^ features;
 	u16 reg16 = 0;
 	u8 reg8 = 0;
@@ -703,13 +703,6 @@ static int aqc111_bind(struct usbnet *dev, struct usb_interface *intf)
 		return ret;
 	}
 
-	aqc111_data = kzalloc(sizeof(*aqc111_data), GFP_KERNEL);
-	if (!aqc111_data)
-		return -ENOMEM;
-
-	/* store aqc111_data pointer in device data field */
-	dev->driver_priv = aqc111_data;
-
 	/* Init the MAC address */
 	ret = aqc111_read_perm_mac(dev);
 	if (ret)
@@ -746,13 +739,12 @@ static int aqc111_bind(struct usbnet *dev, struct usb_interface *intf)
 	return 0;
 
 out:
-	kfree(aqc111_data);
 	return ret;
 }
 
 static void aqc111_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	u16 reg16;
 
 	/* Force bz */
@@ -775,7 +767,7 @@ static void aqc111_unbind(struct usbnet *dev, struct usb_interface *intf)
 
 static void aqc111_status(struct usbnet *dev, struct urb *urb)
 {
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	u64 *event_data = NULL;
 	int link = 0;
 
@@ -900,7 +892,7 @@ static void aqc111_configure_csum_offload(struct usbnet *dev)
 
 static int aqc111_link_reset(struct usbnet *dev)
 {
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	u16 reg16 = 0;
 	u8 reg8 = 0;
 
@@ -989,7 +981,7 @@ static int aqc111_link_reset(struct usbnet *dev)
 
 static int aqc111_reset(struct usbnet *dev)
 {
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	u8 reg8 = 0;
 
 	dev->rx_urb_size = URB_SIZE;
@@ -1033,7 +1025,7 @@ static int aqc111_reset(struct usbnet *dev)
 
 static int aqc111_stop(struct usbnet *dev)
 {
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	u16 reg16 = 0;
 
 	aqc111_read16_cmd(dev, AQ_ACCESS_MAC, SFR_MEDIUM_STATUS_MODE,
@@ -1071,7 +1063,7 @@ static void aqc111_rx_checksum(struct sk_buff *skb, u64 pkt_desc)
 
 static int aqc111_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	struct sk_buff *new_skb = NULL;
 	u32 pkt_total_offset = 0;
 	u64 *pkt_desc_ptr = NULL;
@@ -1251,6 +1243,7 @@ static const struct driver_info aqc111_info = {
 			  FLAG_AVOID_UNLINK_URBS | FLAG_MULTI_PACKET,
 	.rx_fixup	= aqc111_rx_fixup,
 	.tx_fixup	= aqc111_tx_fixup,
+	.required_room	= sizeof(struct aqc111_data),
 };
 
 #define ASIX111_DESC \
@@ -1268,6 +1261,7 @@ static const struct driver_info asix111_info = {
 			  FLAG_AVOID_UNLINK_URBS | FLAG_MULTI_PACKET,
 	.rx_fixup	= aqc111_rx_fixup,
 	.tx_fixup	= aqc111_tx_fixup,
+	.required_room  = sizeof(struct aqc111_data),
 };
 
 #undef ASIX111_DESC
@@ -1287,6 +1281,7 @@ static const struct driver_info asix112_info = {
 			  FLAG_AVOID_UNLINK_URBS | FLAG_MULTI_PACKET,
 	.rx_fixup	= aqc111_rx_fixup,
 	.tx_fixup	= aqc111_tx_fixup,
+	.required_room  = sizeof(struct aqc111_data),
 };
 
 #undef ASIX112_DESC
@@ -1303,6 +1298,7 @@ static const struct driver_info trendnet_info = {
 			  FLAG_AVOID_UNLINK_URBS | FLAG_MULTI_PACKET,
 	.rx_fixup	= aqc111_rx_fixup,
 	.tx_fixup	= aqc111_tx_fixup,
+	.required_room  = sizeof(struct aqc111_data),
 };
 
 static const struct driver_info qnap_info = {
@@ -1317,12 +1313,13 @@ static const struct driver_info qnap_info = {
 			  FLAG_AVOID_UNLINK_URBS | FLAG_MULTI_PACKET,
 	.rx_fixup	= aqc111_rx_fixup,
 	.tx_fixup	= aqc111_tx_fixup,
+	.required_room  = sizeof(struct aqc111_data),
 };
 
 static int aqc111_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	u16 temp_rx_ctrl = 0x00;
 	u16 reg16;
 	u8 reg8;
@@ -1418,7 +1415,7 @@ static int aqc111_suspend(struct usb_interface *intf, pm_message_t message)
 static int aqc111_resume(struct usb_interface *intf)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct aqc111_data *aqc111_data = dev->driver_priv;
+	struct aqc111_data *aqc111_data = (struct aqc111_data *)dev->private;
 	u16 reg16;
 	u8 reg8;
 

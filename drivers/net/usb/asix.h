@@ -159,7 +159,6 @@
 
 #define AX_EMBD_PHY_ADDR	0x10
 
-/* This structure cannot exceed sizeof(unsigned long [5]) AKA 20 bytes */
 struct asix_data {
 	u8 multi_filter[AX_MCAST_FILTER_SIZE];
 	u8 mac_addr[ETH_ALEN];
@@ -182,6 +181,7 @@ struct asix_common_private {
 	u16 presvd_phy_advertise;
 	u16 presvd_phy_bmcr;
 	struct asix_rx_fixup_info rx_fixup_info;
+	struct asix_data asix_data;
 	struct mii_bus *mdio;
 	struct phy_device *phydev;
 	struct phy_device *phydev_int;
