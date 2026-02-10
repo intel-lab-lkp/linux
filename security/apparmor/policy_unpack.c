@@ -825,7 +825,7 @@ static int unpack_tag_headers(struct aa_ext *e, struct aa_tags_struct *tags)
 	tags->hdrs.size = size;
 	tags->hdrs.table = hdrs;
 	AA_DEBUG(DEBUG_UNPACK, "headers %ld size %d", (long) hdrs, size);
-	return true;
+	return 0;
 
 fail:
 	kfree_sensitive(hdrs);
