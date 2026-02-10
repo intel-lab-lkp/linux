@@ -423,6 +423,34 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 #endif
 #define set_pte_at(mm, addr, ptep, pte) set_ptes(mm, addr, ptep, pte, 1)
 
+#ifndef set_ptes
+static inline void set_anon_ptes(struct mm_struct *mm, unsigned long addr,
+		unsigned long fault_addr, pte_t *ptep, pte_t pte, unsigned int nr)
+{
+	bool young = pte_young(pte);
+
+	page_table_check_ptes_set(mm, ptep, pte, nr);
+
+	for (;;) {
+		if (young && addr == fault_addr)
+			pte = pte_mkyoung(pte);
+		else
+			pte = pte_mkold(pte);
+
+		set_pte(ptep, pte);
+		if (--nr == 0)
+			break;
+
+		addr += PAGE_SIZE;
+		ptep++;
+		pte = pte_next_pfn(pte);
+	}
+}
+#else
+#define set_anon_ptes(mm, addr, fault_addr, ptep, pte, nr) \
+		set_ptes(mm, addr, ptep, pte, nr)
+#endif
+
 #ifndef __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
 extern int ptep_set_access_flags(struct vm_area_struct *vma,
 				 unsigned long address, pte_t *ptep,

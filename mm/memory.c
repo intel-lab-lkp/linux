@@ -5316,7 +5316,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 setpte:
 	if (vmf_orig_pte_uffd_wp(vmf))
 		entry = pte_mkuffd_wp(entry);
-	set_ptes(vma->vm_mm, addr, vmf->pte, entry, nr_pages);
+	set_anon_ptes(vma->vm_mm, addr, vmf->address, vmf->pte, entry, nr_pages);
 
 	/* No need to invalidate - it was non-present before */
 	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr_pages);
