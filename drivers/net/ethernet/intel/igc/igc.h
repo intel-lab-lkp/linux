@@ -348,6 +348,10 @@ struct igc_adapter {
 	struct mutex led_mutex;
 	struct igc_led_classdev *leds;
 	bool leds_available;
+
+	/* PCIe recovery tracking */
+	unsigned int pcie_recovery_attempts;
+	unsigned long last_recovery_time;
 };
 
 void igc_up(struct igc_adapter *adapter);
@@ -425,7 +429,7 @@ enum igc_rss_type_num {
 	IGC_RSS_TYPE_MAX		= 10,
 };
 #define IGC_RSS_TYPE_MAX_TABLE		16
-#define IGC_RSS_TYPE_MASK		GENMASK(3,0) /* 4-bits (3:0) = mask 0x0F */
+#define IGC_RSS_TYPE_MASK		GENMASK(3, 0) /* 4-bits (3:0) = mask 0x0F */
 
 /* igc_rss_type - Rx descriptor RSS type field */
 static inline u32 igc_rss_type(const union igc_adv_rx_desc *rx_desc)
