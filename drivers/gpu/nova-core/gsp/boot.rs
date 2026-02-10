@@ -388,7 +388,7 @@ impl super::Gsp {
 
         // Now that GSP is active, send system info and registry
         self.cmdq
-            .send_command(bar, commands::SetSystemInfo::new(pdev))?;
+            .send_command(bar, commands::SetSystemInfo::new(pdev, chipset))?;
         self.cmdq.send_command(bar, commands::SetRegistry::new())?;
 
         if matches!(
