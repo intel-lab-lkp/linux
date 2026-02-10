@@ -273,13 +273,9 @@ static int acpi_scan_check_and_detach(struct acpi_device *adev, void *p)
 		}
 	}
 
-	adev->flags.match_driver = false;
-	if (handler) {
-		if (handler->detach)
-			handler->detach(adev);
-	} else {
-		device_release_driver(&adev->dev);
-	}
+	if (handler && handler->detach)
+		handler->detach(adev);
+
 	/*
 	 * Most likely, the device is going away, so put it into D3cold before
 	 * that.
@@ -1819,7 +1815,6 @@ void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
 	acpi_set_pnp_ids(handle, &device->pnp, type);
 	acpi_init_properties(device);
 	acpi_bus_get_flags(device);
-	device->flags.match_driver = false;
 	device->flags.initialized = true;
 	device->flags.enumeration_by_parent =
 		acpi_device_enumeration_by_parent(device);
@@ -2373,15 +2368,10 @@ static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
 	if (ret < 0)
 		return 0;
 
-	device->flags.match_driver = true;
 	if (ret > 0 && !device->flags.enumeration_by_parent) {
 		acpi_device_set_enumerated(device);
 		goto ok;
 	}
-
-	ret = device_attach(&device->dev);
-	if (ret < 0)
-		return 0;
 
 	if (device->pnp.type.platform_id || device->pnp.type.backlight ||
 	    device->flags.enumeration_by_parent)
