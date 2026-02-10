@@ -52,6 +52,9 @@
 
 #define IRQ_UNBOUND -1
 
+/* Supported VDUSE features */
+static const uint64_t vduse_features;
+
 /*
  * VDUSE instance have not asked the vduse API version, so assume 0.
  *
@@ -1947,6 +1950,19 @@ static bool vduse_validate_config(struct vduse_dev_config *config,
 			 sizeof(config->reserved)))
 		return false;
 
+	if (api_version < VDUSE_API_VERSION_2) {
+		if (config->vduse_features) {
+			dev_dbg(vduse_ctrl_dev,
+				"config->vduse_features with version %llu",
+				api_version);
+			return false;
+		}
+	} else {
+		if (config->vduse_features & ~vduse_features)
+			return false;
+	}
+
+
 	if (api_version < VDUSE_API_VERSION_1 &&
 	    (config->ngroups || config->nas))
 		return false;
@@ -2207,6 +2223,18 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 		ret = vduse_destroy_dev(name);
 		break;
 	}
+	case VDUSE_GET_FEATURES:
+		if (control->api_version < VDUSE_API_VERSION_2) {
+			dev_dbg(vduse_ctrl_dev,
+				"VDUSE_GET_FEATURES ioctl with version %llu",
+				control->api_version);
+			ret = -EINVAL;
+			break;
+		}
+
+		ret = put_user(vduse_features, (u64 __user *)argp);
+		break;
+
 	default:
 		ret = -EINVAL;
 		break;
