@@ -4,6 +4,7 @@
  * Author: YT SHEN <yt.shen@mediatek.com>
  */
 
+#include <linux/aperture.h>
 #include <linux/component.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -1115,6 +1116,11 @@ static int mtk_drm_probe(struct platform_device *pdev)
 						      GFP_KERNEL);
 	if (!private->all_drm_private)
 		return -ENOMEM;
+
+	/* Remove framebuffer owners, this will release fbcon if active */
+	ret = aperture_remove_all_conflicting_devices(DRIVER_NAME);
+	if (ret < 0)
+		dev_err(dev, "Failed to remove conflicting aperture devices (%d)", ret);
 
 	/* Bringup ovl_adaptor */
 	if (mtk_drm_find_mmsys_comp(private, DDP_COMPONENT_DRM_OVL_ADAPTOR)) {
