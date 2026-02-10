@@ -14,6 +14,10 @@
 
 #define VDUSE_API_VERSION_1	1
 
+/* Features support */
+
+#define VDUSE_API_VERSION_2	2
+
 /*
  * Get the version of VDUSE API that kernel supported (VDUSE_API_VERSION).
  * This is used for future extension.
