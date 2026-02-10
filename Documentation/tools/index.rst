@@ -12,6 +12,7 @@ more additions are needed here:
 
    rtla/index
    rv/index
+   sbom/sbom
 
 .. only::  subproject and html
 
