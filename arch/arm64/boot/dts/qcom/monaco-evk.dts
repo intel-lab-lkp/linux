@@ -487,8 +487,9 @@
 	status = "okay";
 };
 
+/* Host Mode on USB0 SS+HS (JUSB0) */
 &usb_1 {
-	dr_mode = "peripheral";
+	dr_mode = "host";
 
 	status = "okay";
 };
@@ -504,6 +505,21 @@
 &usb_qmpphy {
 	vdda-phy-supply = <&vreg_l7a>;
 	vdda-pll-supply = <&vreg_l5a>;
+
+	status = "okay";
+};
+
+/* Peripheral Mode on USB1 HS (JUSB2/ADB) */
+&usb_2 {
+	dr_mode = "peripheral";
+
+	status = "okay";
+};
+
+&usb_2_hsphy {
+	vdda-pll-supply = <&vreg_l7a>;
+	vdda18-supply = <&vreg_l7c>;
+	vdda33-supply = <&vreg_l9a>;
 
 	status = "okay";
 };
