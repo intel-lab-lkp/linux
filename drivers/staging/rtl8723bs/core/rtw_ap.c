@@ -388,7 +388,7 @@ void update_bmc_sta(struct adapter *padapter)
 
 		psta->ieee8021x_blocked = false;
 
-		memset((void *)&psta->sta_stats, 0, sizeof(struct stainfo_stats));
+		memset(&psta->sta_stats, 0, sizeof(struct stainfo_stats));
 
 		/* prepare for add_ratid */
 		support_rate_num = rtw_get_rateset_len((u8 *)&pcur_network->supported_rates);
@@ -545,7 +545,7 @@ void update_sta_info_apmode(struct adapter *padapter, struct sta_info *psta)
 
 	/* todo: init other variables */
 
-	memset((void *)&psta->sta_stats, 0, sizeof(struct stainfo_stats));
+	memset(&psta->sta_stats, 0, sizeof(struct stainfo_stats));
 
 	/* add ratid */
 	/* add_ratid(padapter, psta); move to ap_sta_info_defer_update() */
