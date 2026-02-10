@@ -515,6 +515,12 @@ struct request_queue {
 	struct request		*last_merge;
 
 	spinlock_t		queue_lock;
+	/*
+	 * Synchronizes quiesce state checks between blk_mq_run_hw_queue()
+	 * and blk_mq_unquiesce_queue(). Uses raw_spinlock to avoid sleeping
+	 * in RT kernel's IRQ thread context during I/O completion.
+	 */
+	raw_spinlock_t		quiesce_sync_lock;
 
 	int			quiesce_depth;
 

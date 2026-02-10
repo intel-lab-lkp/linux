@@ -171,7 +171,7 @@ bool __blk_freeze_queue_start(struct request_queue *q,
 		percpu_ref_kill(&q->q_usage_counter);
 		mutex_unlock(&q->mq_freeze_lock);
 		if (queue_is_mq(q))
-			blk_mq_run_hw_queues(q, false);
+			blk_mq_run_hw_queues(q, true);
 	} else {
 		mutex_unlock(&q->mq_freeze_lock);
 	}
@@ -262,10 +262,10 @@ void blk_mq_quiesce_queue_nowait(struct request_queue *q)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&q->queue_lock, flags);
+	raw_spin_lock_irqsave(&q->quiesce_sync_lock, flags);
 	if (!q->quiesce_depth++)
 		blk_queue_flag_set(QUEUE_FLAG_QUIESCED, q);
-	spin_unlock_irqrestore(&q->queue_lock, flags);
+	raw_spin_unlock_irqrestore(&q->quiesce_sync_lock, flags);
 }
 EXPORT_SYMBOL_GPL(blk_mq_quiesce_queue_nowait);
 
@@ -317,14 +317,14 @@ void blk_mq_unquiesce_queue(struct request_queue *q)
 	unsigned long flags;
 	bool run_queue = false;
 
-	spin_lock_irqsave(&q->queue_lock, flags);
+	raw_spin_lock_irqsave(&q->quiesce_sync_lock, flags);
 	if (WARN_ON_ONCE(q->quiesce_depth <= 0)) {
 		;
 	} else if (!--q->quiesce_depth) {
 		blk_queue_flag_clear(QUEUE_FLAG_QUIESCED, q);
 		run_queue = true;
 	}
-	spin_unlock_irqrestore(&q->queue_lock, flags);
+	raw_spin_unlock_irqrestore(&q->quiesce_sync_lock, flags);
 
 	/* dispatch requests which are inserted during quiescing */
 	if (run_queue)
@@ -2355,14 +2355,19 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 		unsigned long flags;
 
 		/*
-		 * Synchronize with blk_mq_unquiesce_queue(), because we check
-		 * if hw queue is quiesced locklessly above, we need the use
-		 * ->queue_lock to make sure we see the up-to-date status to
-		 * not miss rerunning the hw queue.
+		 * Synchronize with blk_mq_unquiesce_queue(). We check if hw
+		 * queue is quiesced locklessly above, so we need to use
+		 * quiesce_sync_lock to ensure we see the up-to-date status
+		 * and don't miss rerunning the hw queue.
+		 *
+		 * Uses raw_spinlock to avoid sleeping in RT kernel's IRQ
+		 * thread context during I/O completion. Critical section is
+		 * short (only flag and counter checks), making raw_spinlock
+		 * safe.
 		 */
-		spin_lock_irqsave(&hctx->queue->queue_lock, flags);
+		raw_spin_lock_irqsave(&hctx->queue->quiesce_sync_lock, flags);
 		need_run = blk_mq_hw_queue_need_run(hctx);
-		spin_unlock_irqrestore(&hctx->queue->queue_lock, flags);
+		raw_spin_unlock_irqrestore(&hctx->queue->quiesce_sync_lock, flags);
 
 		if (!need_run)
 			return;
