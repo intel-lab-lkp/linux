@@ -122,6 +122,11 @@
 #endif
 };
 
+&pcie {
+	pinctrl-0 = <&pcie_pins>;
+	pinctrl-names = "default";
+};
+
 &pinctrl {
 	canfd_pins: canfd {
 		can1_pins: can1 {
@@ -165,6 +170,17 @@
 		pinmux = <RZG3E_PORT_PINMUX(8, 2, 5)>, /* RXD9 */
 			 <RZG3E_PORT_PINMUX(8, 3, 5)>; /* TXD9 */
 		bias-pull-up;
+	};
+
+	pcie-clkreq-n {
+		gpio-hog;
+		gpios = <RZG3E_GPIO(4, 5) GPIO_ACTIVE_HIGH>;
+		output-low;
+		line-name = "pcie_clkreq_n";
+	};
+
+	pcie_pins: pcie {
+		pinmux = <RZG3E_PORT_PINMUX(G, 7, 1)>; /* PCIE_RST_OUT# */
 	};
 
 	scif_pins: scif {
