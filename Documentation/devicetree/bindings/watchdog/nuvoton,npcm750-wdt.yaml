@@ -12,7 +12,7 @@ maintainers:
 description:
   Nuvoton NPCM timer module provides five 24-bit timer counters, and a watchdog.
   The watchdog supports a pre-timeout interrupt that fires 10ms before the
-  expiry.
+  expiry and reset status detection via syscon integration.
 
 allOf:
   - $ref: watchdog.yaml#
@@ -40,12 +40,55 @@ properties:
   clock-frequency:
     description: Frequency in Hz of the clock that drives the NPCM timer.
 
+  syscon:
+    description: phandle to the Global Control Register (GCR) syscon node.
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+  nuvoton,card-reset-type:
+    description: Reset type for external card reset signal detection.
+    enum:
+      - porst
+      - corst
+      - wd0
+      - wd1
+      - wd2
+      - sw1
+      - sw2
+      - sw3
+      - sw4
+
+  nuvoton,ext1-reset-type:
+    description: Reset type for external reset signal 1 detection.
+    enum:
+      - porst
+      - corst
+      - wd0
+      - wd1
+      - wd2
+      - sw1
+      - sw2
+      - sw3
+      - sw4
+
+  nuvoton,ext2-reset-type:
+    description: Reset type for external reset signal 2 detection.
+    enum:
+      - porst
+      - corst
+      - wd0
+      - wd1
+      - wd2
+      - sw1
+      - sw2
+      - sw3
+      - sw4
+
 required:
   - compatible
   - reg
   - interrupts
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |
@@ -57,4 +100,8 @@ examples:
         interrupts = <GIC_SPI 47 IRQ_TYPE_LEVEL_HIGH>;
         reg = <0xf000801c 0x4>;
         clocks = <&clk NPCM7XX_CLK_TIMER>;
+        syscon = <&gcr>;
+        nuvoton,card-reset-type = "porst";
+        nuvoton,ext1-reset-type = "wd0";
+        nuvoton,ext2-reset-type = "wd2";
     };
