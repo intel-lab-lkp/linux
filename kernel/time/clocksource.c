@@ -1228,7 +1228,8 @@ EXPORT_SYMBOL_GPL(__clocksource_update_freq_scale);
  * @scale:	Scale factor multiplied against freq to get clocksource hz
  * @freq:	clocksource frequency (cycles per second) divided by scale
  *
- * Returns -EBUSY if registration fails, zero otherwise.
+ * Returns 0 on success. On failure, it will issue warnings but will not return
+ * a specific error code.
  *
  * This *SHOULD NOT* be called directly! Please use the
  * clocksource_register_hz() or clocksource_register_khz helper functions.
