@@ -25,11 +25,18 @@ static int vs_primary_plane_atomic_check(struct drm_plane *plane,
 {
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state,
 										 plane);
+	struct vs_plane_state *new_vs_plane_state = state_to_vs_plane_state(new_plane_state);
 	struct drm_crtc *crtc = new_plane_state->crtc;
 	struct drm_crtc_state *crtc_state;
+	int ret;
 
 	if (!crtc)
 		return 0;
+
+	ret = drm_format_to_vs_format(new_plane_state->fb->format->format,
+				      &new_vs_plane_state->format);
+	if (ret)
+		return ret;
 
 	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 	if (WARN_ON(!crtc_state))
@@ -88,11 +95,11 @@ static void vs_primary_plane_atomic_update(struct drm_plane *plane,
 {
 	struct drm_plane_state *state = drm_atomic_get_new_plane_state(atomic_state,
 								       plane);
+	struct vs_plane_state *vs_state = state_to_vs_plane_state(state);
 	struct drm_framebuffer *fb = state->fb;
 	struct drm_crtc *crtc = state->crtc;
 	struct vs_dc *dc;
 	struct vs_crtc *vcrtc;
-	struct vs_format fmt;
 	unsigned int output;
 	dma_addr_t dma_addr;
 
@@ -105,16 +112,15 @@ static void vs_primary_plane_atomic_update(struct drm_plane *plane,
 	output = vcrtc->id;
 	dc = vcrtc->dc;
 
-	drm_format_to_vs_format(state->fb->format->format, &fmt);
-
 	regmap_update_bits(dc->regs, VSDC_FB_CONFIG(output),
 			   VSDC_FB_CONFIG_FMT_MASK,
-			   VSDC_FB_CONFIG_FMT(fmt.color));
+			   VSDC_FB_CONFIG_FMT(vs_state->format.color));
 	regmap_update_bits(dc->regs, VSDC_FB_CONFIG(output),
 			   VSDC_FB_CONFIG_SWIZZLE_MASK,
-			   VSDC_FB_CONFIG_SWIZZLE(fmt.swizzle));
+			   VSDC_FB_CONFIG_SWIZZLE(vs_state->format.swizzle));
 	regmap_assign_bits(dc->regs, VSDC_FB_CONFIG(output),
-			   VSDC_FB_CONFIG_UV_SWIZZLE_EN, fmt.uv_swizzle);
+			   VSDC_FB_CONFIG_UV_SWIZZLE_EN,
+			   vs_state->format.uv_swizzle);
 
 	dma_addr = vs_fb_get_dma_addr(fb, &state->src);
 
