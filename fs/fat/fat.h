@@ -341,6 +341,7 @@ extern int fat_alloc_new_dir(struct inode *dir, struct timespec64 *ts);
 extern int fat_add_entries(struct inode *dir, void *slots, int nr_slots,
 			   struct fat_slot_info *sinfo);
 extern int fat_remove_entries(struct inode *dir, struct fat_slot_info *sinfo);
+extern int fat_rename_volume_label_dentry(struct super_block *sb, char *vol_label);
 
 /* fat/fatent.c */
 struct fat_entry {

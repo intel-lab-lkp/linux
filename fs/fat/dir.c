@@ -1423,3 +1423,25 @@ error_remove:
 	return err;
 }
 EXPORT_SYMBOL_GPL(fat_add_entries);
+
+int fat_rename_volume_label_dentry(struct super_block *sb, char *vol_label)
+{
+	struct inode *root_inode = sb->s_root->d_inode;
+	struct buffer_head *bh;
+	struct msdos_dir_entry *de;
+	loff_t cpos = 0;
+
+	while (1) {
+		if (fat_get_entry(root_inode, &cpos, &bh, &de) == -1)
+			return -ENOENT;
+
+		if (de->attr == ATTR_VOLUME) {
+			memcpy(de->name, vol_label, MSDOS_NAME);
+			mark_inode_dirty(root_inode);
+			return 0;
+		}
+
+		brelse(bh);
+	}
+}
+EXPORT_SYMBOL_GPL(fat_rename_volume_label_dentry);
