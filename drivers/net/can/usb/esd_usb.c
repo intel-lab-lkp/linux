@@ -1301,6 +1301,10 @@ static int esd_usb_probe(struct usb_interface *intf,
 	struct esd_usb *dev;
 	union esd_usb_msg *msg;
 	int i, err;
+	static const u8 bulk_ep_addr[] = {
+		USB_DIR_IN | 1,		/* EP 1 IN  (RX) */
+		USB_DIR_OUT | 2,	/* EP 2 OUT (TX) */
+		0};
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
@@ -1317,6 +1321,13 @@ static int esd_usb_probe(struct usb_interface *intf,
 	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg) {
 		err = -ENOMEM;
+		goto free_msg;
+	}
+
+	/* Verify that the required bulk endpoints are present */
+	if (!usb_check_bulk_endpoints(intf, bulk_ep_addr)) {
+		dev_err(&intf->dev, "Missing or invalid bulk endpoints\n");
+		err = -ENODEV;
 		goto free_msg;
 	}
 
