@@ -121,6 +121,18 @@ static const struct dmi_system_id upside_down_sensor_dmi_ids[] = {
 	{} /* Terminating entry */
 };
 
+/* DMI matches for systems where sensor-CVS dependency is missing. */
+static const struct dmi_system_id missing_dependency_dmi_ids[] = {
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Dell Pro Max 16 Premium MA16250"),
+		},
+		.driver_data = "OVTI08F4",
+	},
+	{} /* Terminating entry */
+};
+
 static const struct ipu_property_names prop_names = {
 	.clock_frequency = "clock-frequency",
 	.rotation = "rotation",
@@ -163,13 +175,22 @@ static struct acpi_device *ipu_bridge_get_ivsc_acpi_dev(struct acpi_device *adev
 		struct acpi_device *consumer, *ivsc_adev;
 
 		acpi_handle handle = acpi_device_handle(ACPI_PTR(adev));
-		for_each_acpi_dev_match(ivsc_adev, acpi_id->id, NULL, -1)
+		for_each_acpi_dev_match(ivsc_adev, acpi_id->id, NULL, -1) {
+			const struct dmi_system_id *dmi_id;
+
+			dmi_id = dmi_first_match(missing_dependency_dmi_ids);
+			if (dmi_id &&
+			    acpi_dev_hid_match(adev, dmi_id->driver_data))
+				return ivsc_adev;
+
 			/* camera sensor depends on IVSC in DSDT if exist */
-			for_each_acpi_consumer_dev(ivsc_adev, consumer)
+			for_each_acpi_consumer_dev(ivsc_adev, consumer) {
 				if (ACPI_PTR(consumer->handle) == handle) {
 					acpi_dev_put(consumer);
 					return ivsc_adev;
 				}
+			}
+		}
 	}
 
 	return NULL;
