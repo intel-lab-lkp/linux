@@ -519,8 +519,10 @@ void nested_copy_vmcb_save_to_cache(struct vcpu_svm *svm,
 void nested_sync_control_from_vmcb02(struct vcpu_svm *svm)
 {
 	u32 mask;
-	svm->nested.ctl.event_inj      = svm->vmcb->control.event_inj;
-	svm->nested.ctl.event_inj_err  = svm->vmcb->control.event_inj_err;
+
+	svm->nested.ctl.event_inj	= svm->vmcb->control.event_inj;
+	svm->nested.ctl.event_inj_err	= svm->vmcb->control.event_inj_err;
+	svm->nested.ctl.next_rip	= svm->vmcb->control.next_rip;
 
 	/* Only a few fields of int_ctl are written by the processor.  */
 	mask = V_IRQ_MASK | V_TPR_MASK;
