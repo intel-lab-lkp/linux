@@ -30,7 +30,8 @@ $(SBOM_TARGETS) &: $(SBOM_DEPS)
 		--src-tree $(abspath $(srctree)) \
 		--obj-tree $(abspath $(objtree)) \
 		--roots-file $(SBOM_ROOTS_FILE) \
-		--output-directory $(abspath $(objtree))
+		--output-directory $(abspath $(objtree)) \
+		--generate-spdx
 
 	$(Q)rm $(SBOM_ROOTS_FILE)
 
