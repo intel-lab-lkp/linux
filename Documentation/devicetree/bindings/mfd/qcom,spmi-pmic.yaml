@@ -221,6 +221,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,pm660
               - qcom,pm8998
     then:
       patternProperties:
