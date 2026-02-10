@@ -17,4 +17,6 @@ struct wmi_method_args_32 {
 int lwmi_dev_evaluate_int(struct wmi_device *wdev, u8 instance, u32 method_id,
 			  unsigned char *buf, size_t size, u32 *retval);
 
+struct dentry *lwmi_debugfs_create_dir(struct wmi_device *wdev);
+
 #endif /* !_LENOVO_WMI_HELPERS_H_ */
