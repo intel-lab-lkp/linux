@@ -178,7 +178,6 @@ void expire_timeout_chk(struct adapter *padapter)
 	struct sta_priv *pstapriv = &padapter->stapriv;
 	u8 chk_alive_num = 0;
 	char chk_alive_list[NUM_STA];
-	int i;
 
 	spin_lock_bh(&pstapriv->auth_list_lock);
 
@@ -278,7 +277,7 @@ void expire_timeout_chk(struct adapter *padapter)
 		}
 
 		/* issue null data to check sta alive*/
-		for (i = 0; i < chk_alive_num; i++) {
+		for (int i = 0; i < chk_alive_num; i++) {
 			int ret = _FAIL;
 
 			psta = rtw_get_stainfo_by_offset(pstapriv, chk_alive_list[i]);
