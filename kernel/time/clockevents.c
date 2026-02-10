@@ -756,12 +756,24 @@ static int __init tick_init_sysfs(void)
 		dev->id = cpu;
 		dev->bus = &clockevents_subsys;
 		err = device_register(dev);
-		if (!err)
-			err = device_create_file(dev, &dev_attr_current_device);
-		if (!err)
-			err = device_create_file(dev, &dev_attr_unbind_device);
 		if (err)
 			return err;
+
+		err = device_create_file(dev, &dev_attr_current_device);
+		if (err)
+			goto err_unregister;
+
+		err = device_create_file(dev, &dev_attr_unbind_device);
+		if (err)
+			goto err_remove_file;
+
+		continue;
+
+err_remove_file:
+		device_remove_file(dev, &dev_attr_current_device);
+err_unregister:
+		device_unregister(dev);
+		return err;
 	}
 	return tick_broadcast_init_sysfs();
 }
