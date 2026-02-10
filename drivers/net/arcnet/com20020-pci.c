@@ -139,9 +139,6 @@ static int com20020pci_probe(struct pci_dev *pdev,
 		return -ENOMEM;
 
 	ci = (struct com20020_pci_card_info *)id->driver_data;
-	if (!ci)
-		return -EINVAL;
-
 	priv->ci = ci;
 	mm = &ci->misc_map;
 
@@ -347,6 +344,18 @@ static struct com20020_pci_card_info card_info_5mbit = {
 	.flags = ARC_IS_5MBIT,
 };
 
+static struct com20020_pci_card_info card_info_2p5mbit = {
+	.name = "ARC-PCI",
+	.devcount = 1,
+	.chan_map_tbl = {
+		{
+			.bar = 2,
+			.offset = 0x00,
+			.size = 0x08,
+		},
+	},
+};
+
 static struct com20020_pci_card_info card_info_sohard = {
 	.name = "SOHARD SH ARC-PCI",
 	.devcount = 1,
@@ -448,49 +457,49 @@ static const struct pci_device_id com20020pci_id_table[] = {
 		0x1571, 0xa001,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0,
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa002,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0,
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa003,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa004,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0,
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa005,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa006,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa007,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa008,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		0
+		(kernel_ulong_t)&card_info_2p5mbit
 	},
 	{
 		0x1571, 0xa009,
