@@ -59,16 +59,43 @@ err:
 	return ERR_PTR(err);
 }
 
-struct xe_bb *xe_bb_ccs_new(struct xe_gt *gt, u32 dwords,
-			    enum xe_sriov_vf_ccs_rw_ctxs ctx_id)
+struct xe_bb *xe_bb_alloc(struct xe_gt *gt)
 {
 	struct xe_bb *bb = kmalloc(sizeof(*bb), GFP_KERNEL);
 	struct xe_device *xe = gt_to_xe(gt);
-	struct xe_sa_manager *bb_pool;
 	int err;
 
 	if (!bb)
 		return ERR_PTR(-ENOMEM);
+
+	bb->bo = xe_sa_bo_alloc(GFP_KERNEL);
+	if (IS_ERR(bb->bo)) {
+		drm_err(&xe->drm, "Sub-allocator memory allocation failed with %ld\n",
+			PTR_ERR(bb->bo));
+		err = PTR_ERR(bb->bo);
+		goto err;
+	}
+
+	return bb;
+
+err:
+	kfree(bb);
+	return ERR_PTR(err);
+}
+
+void xe_bb_release(struct xe_bb *bb)
+{
+	if (bb->bo)
+		xe_sa_bo_release(bb->bo);
+
+	kfree(bb);
+}
+
+int xe_bb_init(struct xe_gt *gt, struct xe_bb *bb,
+	       struct xe_sa_manager *bb_pool, u32 dwords)
+{
+	int err;
+
 	/*
 	 * We need to allocate space for the requested number of dwords &
 	 * one additional MI_BATCH_BUFFER_END dword. Since the whole SA
@@ -76,22 +103,14 @@ struct xe_bb *xe_bb_ccs_new(struct xe_gt *gt, u32 dwords,
 	 * is not over written when the last chunk of SA is allocated for BB.
 	 * So, this extra DW acts as a guard here.
 	 */
-
-	bb_pool = xe->sriov.vf.ccs.contexts[ctx_id].mem.ccs_bb_pool;
-	bb->bo = xe_sa_bo_new(bb_pool, 4 * (dwords + 1));
-
-	if (IS_ERR(bb->bo)) {
-		err = PTR_ERR(bb->bo);
-		goto err;
-	}
+	err = xe_sa_bo_init(bb_pool, bb->bo, 4 * (dwords + 1));
+	if (err)
+		return err;
 
 	bb->cs = xe_sa_bo_cpu_addr(bb->bo);
 	bb->len = 0;
 
-	return bb;
-err:
-	kfree(bb);
-	return ERR_PTR(err);
+	return 0;
 }
 
 static struct xe_sched_job *
