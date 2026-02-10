@@ -393,6 +393,151 @@ static void vkms_color_ctm_3x4_bt709(struct kunit *test)
 	KUNIT_EXPECT_LT(test, out.b, 0x100);
 }
 
+/*
+ * BT.709 encoding matrix: Y'Cb'Cr' coordinates
+ *
+ * BT.709 standard [0] alternative representation of colors by three coordinates
+ * Y'Cb'Cr', which are linear combinations of the (non-linear) RGB coordinates.
+ *
+ * According to these formulas, if RGB varies between [0.0, 1.0], then Y'
+ * will vary between [0.0, 1.0], while Cb' and Cr' will vary between
+ * [-0.5, 0.5].
+ *
+ * The 0.5 offset is added to the Cb' and Cr' components in the 3x4 encoding
+ * matrix, so the resulting pixel values then fits the 16-bit UNORM.
+ *
+ * [0] https://www.itu.int/rec/R-REC-BT.709-6-201506-I/en
+ */
+static const struct drm_color_ctm_3x4 test_matrix_3x4_bt709_alt_enc = { {
+	0x00000000366cf400ull, 0x00000000b7175900ull, 0x0000000127bb300ull, 0,
+	0x800000001d5475a0ull, 0x8000000062ab8a80ull, 0x0000000080000000ull, 0x0000000080000000ull,
+	0x0000000080000000ull, 0x8000000074432c80ull, 0x800000000bbcd360ull, 0x0000000080000000ull,
+} };
+
+static void vkms_color_ctm_3x4_bt709_alt(struct kunit *test)
+{
+	struct pixel_argb_s32 out;
+
+	/* full white to bt709 */
+	out.a = 0xffff;
+	out.r = 0xffff;
+	out.g = 0xffff;
+	out.b = 0xffff;
+
+	apply_3x4_matrix(&out, &test_matrix_3x4_bt709_alt_enc);
+
+	/* Y' 255 */
+	KUNIT_EXPECT_GT(test, out.r, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.r, 0x11000);
+
+	/* Cb' 127 */
+	KUNIT_EXPECT_GT(test, out.g, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.g, 0x8100);
+
+	/* Cr' 127 */
+	KUNIT_EXPECT_GT(test, out.b, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.b, 0x8100);
+
+	/* full black to bt709 */
+	out.a = 0xffff;
+	out.r = 0x0;
+	out.g = 0x0;
+	out.b = 0x0;
+
+	apply_3x4_matrix(&out, &test_matrix_3x4_bt709_alt_enc);
+
+	/* Y' 0 */
+	KUNIT_EXPECT_LT(test, out.r, 0x100);
+
+	/* Cb' 127 */
+	KUNIT_EXPECT_GT(test, out.g, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.g, 0x8100);
+
+	/* Cr' 127 */
+	KUNIT_EXPECT_GT(test, out.b, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.b, 0x8100);
+
+	/* gray to bt709 */
+	out.a = 0xffff;
+	out.r = 0x7fff;
+	out.g = 0x7fff;
+	out.b = 0x7fff;
+
+	apply_3x4_matrix(&out, &test_matrix_3x4_bt709_alt_enc);
+
+	/* Y' 127 */
+	KUNIT_EXPECT_GT(test, out.r, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.r, 0x8100);
+
+	/* Cb' 127 */
+	KUNIT_EXPECT_GT(test, out.g, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.g, 0x8100);
+
+	/* Cr' 127 */
+	KUNIT_EXPECT_GT(test, out.b, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.b, 0x8100);
+
+	/* == red 255 - bt709 enc == */
+	out.a = 0xffff;
+	out.r = 0xffff;
+	out.g = 0x0;
+	out.b = 0x0;
+
+	apply_3x4_matrix(&out, &test_matrix_3x4_bt709_alt_enc);
+
+	/* Y' 54 */
+	KUNIT_EXPECT_GT(test, out.r, 0x3500);
+	KUNIT_EXPECT_LT(test, out.r, 0x3700);
+
+	/* Cb' 99 */
+	KUNIT_EXPECT_GT(test, out.g, 0x6200);
+	KUNIT_EXPECT_LT(test, out.g, 0x6400);
+
+	/* Cr' 255 */
+	KUNIT_EXPECT_GT(test, out.b, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.b, 0x11000);
+
+	/* == green 255 - bt709 enc == */
+	out.a = 0xffff;
+	out.r = 0x0;
+	out.g = 0xffff;
+	out.b = 0x0;
+
+	apply_3x4_matrix(&out, &test_matrix_3x4_bt709_alt_enc);
+
+	/* Y' 182 */
+	KUNIT_EXPECT_GT(test, out.r, 0xB500);
+	KUNIT_EXPECT_LT(test, out.r, 0xB780); /* laxed by half*/
+
+	/* Cb' 29 */
+	KUNIT_EXPECT_GT(test, out.g, 0x1C00);
+	KUNIT_EXPECT_LT(test, out.g, 0x1E00);
+
+	/* Cr' 12 */
+	KUNIT_EXPECT_GT(test, out.b, 0x0B00);
+	KUNIT_EXPECT_LT(test, out.b, 0x0D00);
+
+	/* == blue 255 - bt709 enc == */
+	out.a = 0xffff;
+	out.r = 0x0;
+	out.g = 0x0;
+	out.b = 0xffff;
+
+	apply_3x4_matrix(&out, &test_matrix_3x4_bt709_alt_enc);
+
+	/* Y' 18 */
+	KUNIT_EXPECT_GT(test, out.r, 0x1100);
+	KUNIT_EXPECT_LT(test, out.r, 0x1300);
+
+	/* Cb' 255 */
+	KUNIT_EXPECT_GT(test, out.g, 0x7F00);
+	KUNIT_EXPECT_LT(test, out.g, 0x11000);
+
+	/* Cr' 116 */
+	KUNIT_EXPECT_GT(test, out.b, 0x7300);
+	KUNIT_EXPECT_LT(test, out.b, 0x7500);
+}
+
 static struct kunit_case vkms_color_test_cases[] = {
 	KUNIT_CASE(vkms_color_test_get_lut_index),
 	KUNIT_CASE(vkms_color_test_lerp),
@@ -400,6 +545,7 @@ static struct kunit_case vkms_color_test_cases[] = {
 	KUNIT_CASE(vkms_color_srgb_inv_srgb),
 	KUNIT_CASE(vkms_color_ctm_3x4_50_desat),
 	KUNIT_CASE(vkms_color_ctm_3x4_bt709),
+	KUNIT_CASE(vkms_color_ctm_3x4_bt709_alt),
 	{}
 };
 
