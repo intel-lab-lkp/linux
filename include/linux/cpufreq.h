@@ -657,12 +657,13 @@ static inline bool sugov_is_governor(struct cpufreq_policy *policy)
 }
 #endif
 
-static inline void cpufreq_policy_apply_limits(struct cpufreq_policy *policy)
+static inline void cpufreq_policy_apply_limits(struct cpufreq_policy *policy,
+					       unsigned int target_freq)
 {
-	if (policy->max < policy->cur)
+	if (policy->max < target_freq)
 		__cpufreq_driver_target(policy, policy->max,
 					CPUFREQ_RELATION_HE);
-	else if (policy->min > policy->cur)
+	else if (policy->min > target_freq)
 		__cpufreq_driver_target(policy, policy->min,
 					CPUFREQ_RELATION_LE);
 }

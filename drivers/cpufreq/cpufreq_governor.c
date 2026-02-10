@@ -573,7 +573,7 @@ void cpufreq_dbs_governor_limits(struct cpufreq_policy *policy)
 		goto out;
 
 	mutex_lock(&policy_dbs->update_mutex);
-	cpufreq_policy_apply_limits(policy);
+	cpufreq_policy_apply_limits(policy, policy_dbs->requested_freq);
 	gov_update_sample_delay(policy_dbs, 0);
 	mutex_unlock(&policy_dbs->update_mutex);
 

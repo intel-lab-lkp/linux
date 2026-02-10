@@ -848,7 +848,7 @@ static int sugov_start(struct cpufreq_policy *policy)
 
 	sg_policy->freq_update_delay_ns	= sg_policy->tunables->rate_limit_us * NSEC_PER_USEC;
 	sg_policy->last_freq_update_time	= 0;
-	sg_policy->next_freq			= 0;
+	sg_policy->next_freq			= policy->cur;
 	sg_policy->work_in_progress		= false;
 	sg_policy->limits_changed		= false;
 	sg_policy->cached_raw_freq		= 0;
@@ -895,7 +895,7 @@ static void sugov_limits(struct cpufreq_policy *policy)
 
 	if (!policy->fast_switch_enabled) {
 		mutex_lock(&sg_policy->work_lock);
-		cpufreq_policy_apply_limits(policy);
+		cpufreq_policy_apply_limits(policy, sg_policy->next_freq);
 		mutex_unlock(&sg_policy->work_lock);
 	}
 
