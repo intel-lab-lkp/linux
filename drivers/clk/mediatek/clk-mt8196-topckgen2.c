@@ -147,13 +147,13 @@ static const struct mtk_fixed_factor top_divs[] = {
 
 static const char * const seninf_parents[] = {
 	"clk26m",
-	"ck_osc_d10",
-	"ck_osc_d8",
-	"ck_osc_d5",
-	"ck_osc_d4",
+	"osc_d10",
+	"osc_d8",
+	"osc_d5",
+	"osc_d4",
 	"univpll2_d6_d2",
 	"mainpll2_d9",
-	"ck_osc_d2",
+	"osc_d2",
 	"mainpll2_d4_d2",
 	"univpll2_d4_d2",
 	"mmpll2_d4_d2",
@@ -166,10 +166,10 @@ static const char * const seninf_parents[] = {
 
 static const char * const img1_parents[] = {
 	"clk26m",
-	"ck_osc_d4",
-	"ck_osc_d3",
+	"osc_d4",
+	"osc_d3",
 	"mmpll2_d6_d2",
-	"ck_osc_d2",
+	"osc_d2",
 	"imgpll_d5_d2",
 	"mmpll2_d5_d2",
 	"univpll2_d4_d2",
@@ -185,24 +185,24 @@ static const char * const img1_parents[] = {
 
 static const char * const ipe_parents[] = {
 	"clk26m",
-	"ck_osc_d4",
-	"ck_osc_d3",
-	"ck_osc_d2",
+	"osc_d4",
+	"osc_d3",
+	"osc_d2",
 	"univpll2_d6",
 	"mmpll2_d6",
 	"univpll2_d5",
 	"imgpll_d5",
-	"ck_mainpll_d4",
+	"mainpll_d4",
 	"mmpll2_d5",
 	"imgpll_d4"
 };
 
 static const char * const cam_parents[] = {
 	"clk26m",
-	"ck_osc_d10",
-	"ck_osc_d4",
-	"ck_osc_d3",
-	"ck_osc_d2",
+	"osc_d10",
+	"osc_d4",
+	"osc_d3",
+	"osc_d2",
 	"mmpll2_d5_d2",
 	"univpll2_d4_d2",
 	"univpll2_d7",
@@ -219,8 +219,8 @@ static const char * const cam_parents[] = {
 static const char * const camtm_parents[] = {
 	"clk26m",
 	"univpll2_d6_d4",
-	"ck_osc_d4",
-	"ck_osc_d3",
+	"osc_d4",
+	"osc_d3",
 	"univpll2_d6_d2"
 };
 
@@ -239,7 +239,7 @@ static const char * const dpe_parents[] = {
 
 static const char * const vdec_parents[] = {
 	"clk26m",
-	"ck_mainpll_d5_d2",
+	"mainpll_d5_d2",
 	"mainpll2_d4_d4",
 	"mainpll2_d7_d2",
 	"mainpll2_d6_d2",
@@ -256,9 +256,9 @@ static const char * const vdec_parents[] = {
 
 static const char * const ccusys_parents[] = {
 	"clk26m",
-	"ck_osc_d4",
-	"ck_osc_d3",
-	"ck_osc_d2",
+	"osc_d4",
+	"osc_d3",
+	"osc_d2",
 	"mmpll2_d5_d2",
 	"univpll2_d4_d2",
 	"mmpll2_d7",
@@ -273,8 +273,8 @@ static const char * const ccusys_parents[] = {
 static const char * const ccutm_parents[] = {
 	"clk26m",
 	"univpll2_d6_d4",
-	"ck_osc_d4",
-	"ck_osc_d3",
+	"osc_d4",
+	"osc_d3",
 	"univpll2_d6_d2"
 };
 
@@ -309,14 +309,14 @@ static const char * const dp0_parents[] = {
 	"tvdpll1_d16",
 	"tvdpll1_d8",
 	"tvdpll1_d4",
-	"ck_tvdpll1_d2"
+	"tvdpll1_d2"
 };
 
 static const char * const disp_parents[] = {
 	"clk26m",
-	"ck_mainpll_d5_d2",
-	"ck_mainpll_d4_d2",
-	"ck_mainpll_d6",
+	"mainpll_d5_d2",
+	"mainpll_d4_d2",
+	"mainpll_d6",
 	"mainpll2_d5",
 	"mmpll2_d6",
 	"mainpll2_d4",
@@ -326,7 +326,7 @@ static const char * const disp_parents[] = {
 
 static const char * const mdp_parents[] = {
 	"clk26m",
-	"ck_mainpll_d5_d2",
+	"mainpll_d5_d2",
 	"mainpll2_d5_d2",
 	"mmpll2_d6_d2",
 	"mainpll2_d9",
@@ -342,13 +342,13 @@ static const char * const mdp_parents[] = {
 
 static const char * const mminfra_parents[] = {
 	"clk26m",
-	"ck_osc_d4",
-	"ck_mainpll_d7_d2",
-	"ck_mainpll_d5_d2",
-	"ck_mainpll_d9",
+	"osc_d4",
+	"mainpll_d7_d2",
+	"mainpll_d5_d2",
+	"mainpll_d9",
 	"mmpll2_d6_d2",
 	"mainpll2_d4_d2",
-	"ck_mainpll_d6",
+	"mainpll_d6",
 	"univpll2_d6",
 	"mainpll2_d5",
 	"mmpll2_d6",
@@ -361,14 +361,14 @@ static const char * const mminfra_parents[] = {
 
 static const char * const mminfra_snoc_parents[] = {
 	"clk26m",
-	"ck_osc_d4",
-	"ck_mainpll_d7_d2",
-	"ck_mainpll_d9",
-	"ck_mainpll_d7",
-	"ck_mainpll_d6",
+	"osc_d4",
+	"mainpll_d7_d2",
+	"mainpll_d9",
+	"mainpll_d7",
+	"mainpll_d6",
 	"mmpll2_d4_d2",
-	"ck_mainpll_d5",
-	"ck_mainpll_d4",
+	"mainpll_d5",
+	"mainpll_d4",
 	"univpll2_d4",
 	"mmpll2_d4",
 	"mainpll2_d3",
@@ -381,17 +381,17 @@ static const char * const mmup_parents[] = {
 	"clk26m",
 	"mainpll2_d6",
 	"mainpll2_d5",
-	"ck_osc_d2",
-	"ck_osc",
-	"ck_mainpll_d4",
+	"osc_d2",
+	"ulposc",
+	"mainpll_d4",
 	"univpll2_d4",
 	"mainpll2_d3"
 };
 
 static const char * const mminfra_ao_parents[] = {
 	"clk26m",
-	"ck_osc_d4",
-	"ck_mainpll_d3"
+	"osc_d4",
+	"mainpll_d3"
 };
 
 static const char * const dvo_parents[] = {
