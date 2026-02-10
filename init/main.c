@@ -104,6 +104,7 @@
 #include <linux/pidfs.h>
 #include <linux/ptdump.h>
 #include <linux/time_namespace.h>
+#include <linux/early_times.h>
 #include <net/net_namespace.h>
 
 #include <asm/io.h>
@@ -1119,6 +1120,9 @@ void start_kernel(void)
 	time_init();
 
 	/* This must be after timekeeping is initialized */
+	early_times_start_calibration();
+
+	/* This must be after timekeeping is initialized */
 	random_init();
 
 	/* These make use of the fully initialized rng */
@@ -1599,6 +1603,8 @@ static int __ref kernel_init(void *unused)
 	rcu_end_inkernel_boot();
 
 	do_sysctl_args();
+
+	early_times_finish_calibration();
 
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);

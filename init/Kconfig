@@ -787,6 +787,20 @@ config IKHEADERS
 	  or similar programs.  If you build the headers as a module, a module called
 	  kheaders.ko is built which can be loaded on-demand to get access to headers.
 
+config EARLY_PRINTK_TIMES
+	bool "Show non-zero printk timestamps early in boot"
+	default n
+	depends on PRINTK
+	depends on ARM64 || X86_64
+	help
+	  Use a cycle-counter to provide printk timestamps during
+	  early boot.  This allows seeing timestamps for printks that
+	  would otherwise show as 0.  Note that this will shift the
+	  printk timestamps to be relative to processor power on, instead
+	  of relative to the start of kernel timekeeping.  This should be
+	  closer to machine power on, giving a better indication of
+	  overall boot time.
+
 config LOG_BUF_SHIFT
 	int "Kernel log buffer size (16 => 64KB, 17 => 128KB)"
 	range 12 25

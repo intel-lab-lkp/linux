@@ -46,6 +46,7 @@
 #include <linux/ctype.h>
 #include <linux/uio.h>
 #include <linux/sched/clock.h>
+#include <linux/early_times.h>
 #include <linux/sched/debug.h>
 #include <linux/sched/task_stack.h>
 #include <linux/panic.h>
@@ -74,6 +75,13 @@ atomic_t ignore_console_lock_warning __read_mostly = ATOMIC_INIT(0);
 EXPORT_SYMBOL(ignore_console_lock_warning);
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(console);
+
+#ifdef CONFIG_EARLY_PRINTK_TIMES
+cycles_t start_cycles;
+u64 start_ns;
+u32 early_mult, early_shift;
+u64 early_ts_offset;
+#endif
 
 /*
  * Low level drivers may need that to know if they can schedule in
@@ -641,7 +649,7 @@ static void append_char(char **pp, char *e, char c)
 static ssize_t info_print_ext_header(char *buf, size_t size,
 				     struct printk_info *info)
 {
-	u64 ts_usec = info->ts_nsec;
+	u64 ts_usec = adjust_early_ts(info->ts_nsec);
 	char caller[20];
 #ifdef CONFIG_PRINTK_CALLER
 	u32 id = info->caller_id;
@@ -1354,7 +1362,11 @@ static size_t print_syslog(unsigned int level, char *buf)
 
 static size_t print_time(u64 ts, char *buf)
 {
-	unsigned long rem_nsec = do_div(ts, 1000000000);
+	unsigned long rem_nsec;
+
+	ts = adjust_early_ts(ts);
+
+	rem_nsec = do_div(ts, 1000000000);
 
 	return sprintf(buf, "[%5lu.%06lu]",
 		       (unsigned long)ts, rem_nsec / 1000);
@@ -2244,6 +2256,8 @@ int vprintk_store(int facility, int level,
 	 * timestamp with respect to the caller.
 	 */
 	ts_nsec = local_clock();
+	if (!ts_nsec)
+		ts_nsec = early_cycles();
 
 	caller_id = printk_caller_id();
 
