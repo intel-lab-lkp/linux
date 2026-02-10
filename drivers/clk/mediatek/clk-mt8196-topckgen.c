@@ -324,7 +324,7 @@ static const char * const emi_parents[] = {
 	"mainpll_d5_d8",
 	"mainpll_d5_d4",
 	"mainpll_d4_d4",
-	"emipll1_ck"
+	"emipll"
 };
 
 static const char * const ap2conn_host_parents[] = {
