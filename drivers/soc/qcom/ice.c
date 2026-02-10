@@ -107,11 +107,15 @@ struct qcom_ice {
 	struct device *dev;
 	void __iomem *base;
 
+	struct kref refcount;
 	struct clk *core_clk;
 	bool use_hwkm;
 	bool hwkm_init_complete;
 	u8 hwkm_version;
 };
+
+static DEFINE_MUTEX(ice_mutex);
+struct qcom_ice *ice_handle;
 
 static bool qcom_ice_check_supported(struct qcom_ice *ice)
 {
@@ -592,29 +596,17 @@ static struct qcom_ice *qcom_ice_create(struct device *dev,
 	return engine;
 }
 
-/**
- * of_qcom_ice_get() - get an ICE instance from a DT node
- * @dev: device pointer for the consumer device
- *
- * This function will provide an ICE instance either by creating one for the
- * consumer device if its DT node provides the 'ice' reg range and the 'ice'
- * clock (for legacy DT style). On the other hand, if consumer provides a
- * phandle via 'qcom,ice' property to an ICE DT, the ICE instance will already
- * be created and so this function will return that instead.
- *
- * Return: ICE pointer on success, NULL if there is no ICE data provided by the
- * consumer or ERR_PTR() on error.
- */
 static struct qcom_ice *of_qcom_ice_get(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct qcom_ice *ice;
 	struct resource *res;
 	void __iomem *base;
-	struct device_link *link;
 
 	if (!dev || !dev->of_node)
 		return ERR_PTR(-ENODEV);
+
+	guard(mutex)(&ice_mutex);
 
 	/*
 	 * In order to support legacy style devicetree bindings, we need
@@ -632,6 +624,16 @@ static struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	}
 
 	/*
+	 * If the ICE node has been initialized already, just increase the
+	 * refcount and return the handle.
+	 */
+	if (ice_handle) {
+		kref_get(&ice_handle->refcount);
+
+		return ice_handle;
+	}
+
+	/*
 	 * If the consumer node does not provider an 'ice' reg range
 	 * (legacy DT binding), then it must at least provide a phandle
 	 * to the ICE devicetree node, otherwise ICE is not supported.
@@ -643,41 +645,42 @@ static struct qcom_ice *of_qcom_ice_get(struct device *dev)
 
 	pdev = of_find_device_by_node(node);
 	if (!pdev) {
-		dev_err(dev, "Cannot find device node %s\n", node->name);
+		dev_err(dev, "Cannot find ICE platform device\n");
 		return ERR_PTR(-EPROBE_DEFER);
 	}
 
-	ice = platform_get_drvdata(pdev);
-	if (!ice) {
-		dev_err(dev, "Cannot get ice instance from %s\n",
-			dev_name(&pdev->dev));
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base)) {
+		dev_warn(&pdev->dev, "ICE registers not found\n");
 		platform_device_put(pdev);
-		return ERR_PTR(-EPROBE_DEFER);
+		return base;
 	}
 
-	link = device_link_add(dev, &pdev->dev, DL_FLAG_AUTOREMOVE_SUPPLIER);
-	if (!link) {
-		dev_err(&pdev->dev,
-			"Failed to create device link to consumer %s\n",
-			dev_name(dev));
+	ice = qcom_ice_create(&pdev->dev, base);
+	if (IS_ERR(ice)) {
 		platform_device_put(pdev);
-		ice = ERR_PTR(-EINVAL);
+		return ice_handle;
 	}
 
-	return ice;
+	ice_handle = ice;
+	kref_init(&ice_handle->refcount);
+
+	return ice_handle;
 }
 
-static void qcom_ice_put(const struct qcom_ice *ice)
+static void qcom_ice_put(struct kref *kref)
 {
-	struct platform_device *pdev = to_platform_device(ice->dev);
-
-	if (!platform_get_resource_byname(pdev, IORESOURCE_MEM, "ice"))
-		platform_device_put(pdev);
+	platform_device_put(to_platform_device(ice_handle->dev));
+	ice_handle = NULL;
 }
 
 static void devm_of_qcom_ice_put(struct device *dev, void *res)
 {
-	qcom_ice_put(*(struct qcom_ice **)res);
+	const struct qcom_ice *ice = *(struct qcom_ice **)res;
+	struct platform_device *pdev = to_platform_device(ice->dev);
+
+	if (!platform_get_resource_byname(pdev, IORESOURCE_MEM, "ice"))
+		kref_put(&ice_handle->refcount, qcom_ice_put);
 }
 
 /**
@@ -685,11 +688,14 @@ static void devm_of_qcom_ice_put(struct device *dev, void *res)
  * a DT node.
  * @dev: device pointer for the consumer device.
  *
- * This function will provide an ICE instance either by creating one for the
- * consumer device if its DT node provides the 'ice' reg range and the 'ice'
- * clock (for legacy DT style). On the other hand, if consumer provides a
- * phandle via 'qcom,ice' property to an ICE DT, the ICE instance will already
- * be created and so this function will return that instead.
+ * This function will create the ICE instance (for the first time) and increase
+ * its refcount if the consumer device has either 'ice' reg range (legacy DT
+ * binding) or the 'qcom,ice' property pointing to the ICE DT node. If the ICE
+ * instance was already created, it will just increase its refcount and return
+ * the handle.
+ *
+ * Devres automatically decrements the refcount when consumer device gets
+ * destroyed and frees the ICE instance when the last consumer goes away.
  *
  * Return: ICE pointer on success, NULL if there is no ICE data provided by the
  * consumer or ERR_PTR() on error.
@@ -713,42 +719,6 @@ struct qcom_ice *devm_of_qcom_ice_get(struct device *dev)
 	return ice;
 }
 EXPORT_SYMBOL_GPL(devm_of_qcom_ice_get);
-
-static int qcom_ice_probe(struct platform_device *pdev)
-{
-	struct qcom_ice *engine;
-	void __iomem *base;
-
-	base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(base)) {
-		dev_warn(&pdev->dev, "ICE registers not found\n");
-		return PTR_ERR(base);
-	}
-
-	engine = qcom_ice_create(&pdev->dev, base);
-	if (IS_ERR(engine))
-		return PTR_ERR(engine);
-
-	platform_set_drvdata(pdev, engine);
-
-	return 0;
-}
-
-static const struct of_device_id qcom_ice_of_match_table[] = {
-	{ .compatible = "qcom,inline-crypto-engine" },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, qcom_ice_of_match_table);
-
-static struct platform_driver qcom_ice_driver = {
-	.probe	= qcom_ice_probe,
-	.driver = {
-		.name = "qcom-ice",
-		.of_match_table = qcom_ice_of_match_table,
-	},
-};
-
-module_platform_driver(qcom_ice_driver);
 
 MODULE_DESCRIPTION("Qualcomm Inline Crypto Engine driver");
 MODULE_LICENSE("GPL");
