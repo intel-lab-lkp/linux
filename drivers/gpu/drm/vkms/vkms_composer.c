@@ -16,6 +16,8 @@
 #include "vkms_composer.h"
 #include "vkms_luts.h"
 
+#define UNORM_16BIT_ONE			(1ULL << 16)
+
 static u16 pre_mul_blend_channel(u16 src, u16 dst, u16 alpha)
 {
 	u32 new_color;
@@ -138,20 +140,25 @@ VISIBLE_IF_KUNIT void apply_3x4_matrix(struct pixel_argb_s32 *pixel,
 	g = drm_int2fixp(pixel->g);
 	b = drm_int2fixp(pixel->b);
 
+	/*
+	 * Pixels values are packed as 16-bit UNORM values, so the matrix offset
+	 * components must be multiplied properly by the idempotent element -i.e.
+	 * number 1 encoded as 16-bit UNORM-.
+	 */
 	rf = drm_fixp_mul(drm_sm2fixp(matrix->matrix[0]), r) +
 	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[1]), g) +
 	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[2]), b) +
-	     drm_sm2fixp(matrix->matrix[3]);
+	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[3]), drm_int2fixp(UNORM_16BIT_ONE));
 
 	gf = drm_fixp_mul(drm_sm2fixp(matrix->matrix[4]), r) +
 	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[5]), g) +
 	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[6]), b) +
-	     drm_sm2fixp(matrix->matrix[7]);
+	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[7]), drm_int2fixp(UNORM_16BIT_ONE));
 
 	bf = drm_fixp_mul(drm_sm2fixp(matrix->matrix[8]), r) +
 	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[9]), g) +
 	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[10]), b) +
-	     drm_sm2fixp(matrix->matrix[11]);
+	     drm_fixp_mul(drm_sm2fixp(matrix->matrix[11]), drm_int2fixp(UNORM_16BIT_ONE));
 
 	pixel->r = drm_fixp2int_round(rf);
 	pixel->g = drm_fixp2int_round(gf);
