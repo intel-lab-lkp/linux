@@ -909,7 +909,7 @@ static const struct adc_tm5_data adc_tm5_data_pmic = {
 };
 
 static const struct adc_tm5_data adc_tm_hc_data_pmic = {
-	.full_scale_code_volt = 0x70e4,
+	.full_scale_code_volt = 0x4000,
 	.decimation = (unsigned int []) { 256, 512, 1024 },
 	.hw_settle = (unsigned int []) { 0, 100, 200, 300, 400, 500, 600, 700,
 					 1000, 2000, 4000, 6000, 8000, 10000 },
