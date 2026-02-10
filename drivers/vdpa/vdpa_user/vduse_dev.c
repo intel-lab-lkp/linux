@@ -2168,7 +2168,7 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case VDUSE_GET_API_VERSION:
 		if (control->api_version == VDUSE_API_VERSION_NOT_ASKED)
-			control->api_version = VDUSE_API_VERSION_1;
+			control->api_version = VDUSE_API_VERSION_2;
 		ret = put_user(control->api_version, (u64 __user *)argp);
 		break;
 	case VDUSE_SET_API_VERSION: {
@@ -2179,7 +2179,7 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 			break;
 
 		ret = -EINVAL;
-		if (api_version > VDUSE_API_VERSION_1)
+		if (api_version > VDUSE_API_VERSION_2)
 			break;
 
 		ret = 0;
