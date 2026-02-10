@@ -501,18 +501,35 @@ int simple_util_hw_params(struct snd_pcm_substream *substream,
 				goto end;
 		}
 
-		for_each_rtd_codec_dais(rtd, i, sdai) {
-			pdai = simple_props_to_dai_codec(props, i);
-			ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
-			if (ret && ret != -ENOTSUPP)
-				goto end;
-		}
+		if (props->sysclk_cpu_first) {
+			for_each_rtd_cpu_dais(rtd, i, sdai) {
+				pdai = simple_props_to_dai_cpu(props, i);
+				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				if (ret && ret != -ENOTSUPP)
+					goto end;
+			}
 
-		for_each_rtd_cpu_dais(rtd, i, sdai) {
-			pdai = simple_props_to_dai_cpu(props, i);
-			ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
-			if (ret && ret != -ENOTSUPP)
-				goto end;
+			for_each_rtd_codec_dais(rtd, i, sdai) {
+				pdai = simple_props_to_dai_codec(props, i);
+				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				if (ret && ret != -ENOTSUPP)
+					goto end;
+			}
+		/* default: codec first */
+		} else {
+			for_each_rtd_codec_dais(rtd, i, sdai) {
+				pdai = simple_props_to_dai_codec(props, i);
+				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				if (ret && ret != -ENOTSUPP)
+					goto end;
+			}
+
+			for_each_rtd_cpu_dais(rtd, i, sdai) {
+				pdai = simple_props_to_dai_cpu(props, i);
+				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				if (ret && ret != -ENOTSUPP)
+					goto end;
+			}
 		}
 	}
 

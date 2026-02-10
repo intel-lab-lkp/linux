@@ -63,6 +63,7 @@ struct simple_util_priv {
 		struct snd_soc_codec_conf *codec_conf;
 		struct prop_nums num;
 		unsigned int mclk_fs;
+		bool sysclk_cpu_first;
 	} *dai_props;
 	struct simple_util_jack hp_jack;
 	struct simple_util_jack mic_jack;
