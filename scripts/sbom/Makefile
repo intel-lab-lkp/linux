@@ -31,7 +31,9 @@ $(SBOM_TARGETS) &: $(SBOM_DEPS)
 		--obj-tree $(abspath $(objtree)) \
 		--roots-file $(SBOM_ROOTS_FILE) \
 		--output-directory $(abspath $(objtree)) \
-		--generate-spdx
+		--generate-spdx \
+		--package-license "GPL-2.0 WITH Linux-syscall-note" \
+		--package-version "$(KERNELVERSION)"
 
 	$(Q)rm $(SBOM_ROOTS_FILE)
 
