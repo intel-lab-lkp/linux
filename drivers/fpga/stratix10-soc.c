@@ -147,6 +147,7 @@ static void s10_receive_callback(struct stratix10_svc_client *client,
 	u32 status;
 	int i;
 
+	pr_debug("%s data %x\n", __func__, data->status);
 	WARN_ONCE(!data, "%s: stratix10_svc_rc_data = NULL", __func__);
 
 	status = data->status;
@@ -163,6 +164,7 @@ static void s10_receive_callback(struct stratix10_svc_client *client,
 		s10_unlock_bufs(priv, data->kaddr1);
 		s10_unlock_bufs(priv, data->kaddr2);
 		s10_unlock_bufs(priv, data->kaddr3);
+		s10_unlock_bufs(priv, data->kaddr4);
 	}
 
 	complete(&priv->status_return_completion);
@@ -309,15 +311,8 @@ static int s10_ops_write(struct fpga_manager *mgr, const char *buf,
 				break;
 		}
 
-		/*
-		 * If callback hasn't already happened, wait for buffers to be
-		 * returned from service layer
-		 */
-		wait_status = 1; /* not timed out */
-		if (!priv->status)
-			wait_status = wait_for_completion_timeout(
-				&priv->status_return_completion,
-				S10_BUFFER_TIMEOUT);
+		wait_status = wait_for_completion_timeout(&priv->status_return_completion,
+							  S10_BUFFER_TIMEOUT);
 
 		if (test_and_clear_bit(SVC_STATUS_BUFFER_DONE, &priv->status) ||
 		    test_and_clear_bit(SVC_STATUS_BUFFER_SUBMITTED,
@@ -353,7 +348,10 @@ static int s10_ops_write_complete(struct fpga_manager *mgr,
 	unsigned long timeout;
 	int ret;
 
-	timeout = usecs_to_jiffies(info->config_complete_timeout_us);
+	/* The time taken to process this is close to 600ms
+	 * This MUST be increased over 1 second
+	 */
+	timeout = S10_RECONFIG_TIMEOUT;
 
 	do {
 		reinit_completion(&priv->status_return_completion);
