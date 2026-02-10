@@ -153,6 +153,13 @@ static int fat_ioctl_fitrim(struct inode *inode, unsigned long arg)
 	return 0;
 }
 
+static int fat_ioctl_get_volume_label(struct inode *inode, char __user *arg)
+{
+	struct msdos_sb_info *sbi = MSDOS_SB(inode->i_sb);
+
+	return copy_to_user(arg, sbi->vol_label, MSDOS_NAME);
+}
+
 long fat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -165,6 +172,8 @@ long fat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return fat_ioctl_set_attributes(filp, user_attr);
 	case FAT_IOCTL_GET_VOLUME_ID:
 		return fat_ioctl_get_volume_id(inode, user_attr);
+	case FS_IOC_GETFSLABEL:
+		return fat_ioctl_get_volume_label(inode, (char __user *) arg);
 	case FITRIM:
 		return fat_ioctl_fitrim(inode, arg);
 	default:
