@@ -3452,8 +3452,13 @@ int btrfs_setup_space_cache(struct btrfs_trans_handle *trans)
 	/* Could add new block groups, use _safe just in case */
 	list_for_each_entry_safe(cache, tmp, &cur_trans->dirty_bgs,
 				 dirty_list) {
-		if (cache->disk_cache_state == BTRFS_DC_CLEAR)
-			cache_save_setup(cache, trans, path);
+		if (cache->disk_cache_state == BTRFS_DC_CLEAR) {
+			int ret;
+
+			ret = cache_save_setup(cache, trans, path);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return 0;
@@ -3540,7 +3545,9 @@ again:
 
 		should_put = 1;
 
-		cache_save_setup(cache, trans, path);
+		ret = cache_save_setup(cache, trans, path);
+		if (ret)
+			goto out;
 
 		if (cache->disk_cache_state == BTRFS_DC_SETUP) {
 			cache->io_ctl.inode = NULL;
@@ -3667,6 +3674,8 @@ int btrfs_write_dirty_block_groups(struct btrfs_trans_handle *trans)
 	 */
 	spin_lock(&cur_trans->dirty_bgs_lock);
 	while (!list_empty(&cur_trans->dirty_bgs)) {
+		int ret2;
+
 		cache = list_first_entry(&cur_trans->dirty_bgs,
 					 struct btrfs_block_group,
 					 dirty_list);
@@ -3692,7 +3701,11 @@ int btrfs_write_dirty_block_groups(struct btrfs_trans_handle *trans)
 		spin_unlock(&cur_trans->dirty_bgs_lock);
 		should_put = 1;
 
-		cache_save_setup(cache, trans, path);
+		ret2 = cache_save_setup(cache, trans, path);
+		if (ret2) {
+			btrfs_abort_transaction(trans, ret2);
+			return ret2;
+		}
 
 		if (!ret)
 			ret = btrfs_run_delayed_refs(trans, U64_MAX);
