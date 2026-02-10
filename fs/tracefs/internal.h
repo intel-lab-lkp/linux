@@ -76,4 +76,7 @@ struct inode *tracefs_get_inode(struct super_block *sb);
 void eventfs_remount(struct tracefs_inode *ti, bool update_uid, bool update_gid);
 void eventfs_d_release(struct dentry *dentry);
 
+int tracefs_permission(struct mnt_idmap *idmap,
+		       struct inode *inode, int mask);
+
 #endif /* _TRACEFS_INTERNAL_H */

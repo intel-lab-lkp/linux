@@ -212,10 +212,40 @@ static void set_tracefs_inode_owner(struct inode *inode)
 		inode->i_gid = gid;
 }
 
-static int tracefs_permission(struct mnt_idmap *idmap,
-			      struct inode *inode, int mask)
+int tracefs_permission(struct mnt_idmap *idmap,
+		       struct inode *inode, int mask)
 {
-	set_tracefs_inode_owner(inode);
+	struct tracefs_inode *ti = get_tracefs(inode);
+	const struct file_operations *fops;
+
+	if (!(ti->flags & TRACEFS_EVENT_INODE))
+		set_tracefs_inode_owner(inode);
+
+	/*
+	 * Like sysfs, file permission checks are performed even for superuser
+	 * with CAP_DAC_OVERRIDE. See the KERNFS_ROOT_EXTRA_OPEN_PERM_CHECK
+	 * definition in linux/kernfs.h.
+	 */
+	if (mask & MAY_OPEN) {
+		fops = inode->i_fop;
+
+		if (mask & MAY_WRITE) {
+			if (!(inode->i_mode & 0222))
+				return -EACCES;
+			if (!fops || (!fops->write && !fops->write_iter &&
+				      !fops->mmap))
+				return -EACCES;
+		}
+
+		if (mask & MAY_READ) {
+			if (!(inode->i_mode & 0444))
+				return -EACCES;
+			if (!fops || (!fops->read && !fops->read_iter &&
+				      !fops->mmap && !fops->splice_read))
+				return -EACCES;
+		}
+	}
+
 	return generic_permission(idmap, inode, mask);
 }
 

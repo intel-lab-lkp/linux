@@ -233,10 +233,12 @@ static int eventfs_set_attr(struct mnt_idmap *idmap, struct dentry *dentry,
 static const struct inode_operations eventfs_dir_inode_operations = {
 	.lookup		= eventfs_root_lookup,
 	.setattr	= eventfs_set_attr,
+	.permission	= tracefs_permission,
 };
 
 static const struct inode_operations eventfs_file_inode_operations = {
 	.setattr	= eventfs_set_attr,
+	.permission	= tracefs_permission,
 };
 
 static const struct file_operations eventfs_file_operations = {
