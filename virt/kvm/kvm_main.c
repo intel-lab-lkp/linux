@@ -4592,12 +4592,15 @@ out_free1:
 		break;
 	}
 	case KVM_SET_GUEST_DEBUG: {
-		struct kvm_guest_debug dbg;
+		struct kvm_guest_debug *dbg;
 
-		r = -EFAULT;
-		if (copy_from_user(&dbg, argp, sizeof(dbg)))
+		dbg = memdup_user(argp, sizeof(*dbg));
+		if (IS_ERR(dbg)) {
+			r = PTR_ERR(dbg);
 			goto out;
-		r = kvm_arch_vcpu_ioctl_set_guest_debug(vcpu, &dbg);
+		}
+		r = kvm_arch_vcpu_ioctl_set_guest_debug(vcpu, dbg);
+		kfree(dbg);
 		break;
 	}
 	case KVM_SET_SIGNAL_MASK: {
