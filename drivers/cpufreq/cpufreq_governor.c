@@ -524,6 +524,7 @@ int cpufreq_dbs_governor_start(struct cpufreq_policy *policy)
 
 	policy_dbs->is_shared = policy_is_shared(policy);
 	policy_dbs->rate_mult = 1;
+	policy_dbs->requested_freq = policy->cur;
 
 	sampling_rate = dbs_data->sampling_rate;
 	ignore_nice = dbs_data->ignore_nice_load;

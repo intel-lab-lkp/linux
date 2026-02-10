@@ -97,12 +97,24 @@ struct policy_dbs_info {
 	/* Status indicators */
 	bool is_shared;		/* This object is used by multiple CPUs */
 	bool work_in_progress;	/* Work is being queued up or in progress */
+
+	unsigned int requested_freq;	/* Last frequency requested by the governor */
 };
 
 static inline void gov_update_sample_delay(struct policy_dbs_info *policy_dbs,
 					   unsigned int delay_us)
 {
 	policy_dbs->sample_delay_ns = delay_us * NSEC_PER_USEC;
+}
+
+static inline void gov_freq_request(struct cpufreq_policy *policy,
+				    unsigned int requested_freq,
+				    unsigned int relation)
+{
+	struct policy_dbs_info *policy_dbs = policy->governor_data;
+
+	__cpufreq_driver_target(policy, requested_freq, relation);
+	policy_dbs->requested_freq = requested_freq;
 }
 
 /* Per cpu structures */
