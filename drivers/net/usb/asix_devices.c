@@ -118,7 +118,7 @@ static const struct ethtool_ops ax88172_ethtool_ops = {
 static void ax88172_set_multicast(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	u8 rx_ctl = 0x8c;
 
 	if (net->flags & IFF_PROMISC) {
@@ -129,7 +129,7 @@ static void ax88172_set_multicast(struct net_device *net)
 	} else if (netdev_mc_empty(net)) {
 		/* just broadcast and directed */
 	} else {
-		/* We use the 20 byte dev->data
+		/* We use the 20 byte dev->private
 		 * for our 8 byte filter buffer
 		 * to avoid allocating memory that
 		 * is tricky to free later */
@@ -331,7 +331,7 @@ static const struct ethtool_ops ax88772_ethtool_ops = {
 
 static int ax88772_reset(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	struct asix_common_private *priv = dev->driver_priv;
 	int ret;
 
@@ -361,7 +361,7 @@ out:
 
 static int ax88772_hw_reset(struct usbnet *dev, int in_pm)
 {
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	struct asix_common_private *priv = dev->driver_priv;
 	u16 rx_ctl;
 	int ret;
@@ -455,7 +455,7 @@ out:
 
 static int ax88772a_hw_reset(struct usbnet *dev, int in_pm)
 {
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	struct asix_common_private *priv = dev->driver_priv;
 	u16 rx_ctl, phy14h, phy15h, phy16h;
 	int ret;
@@ -987,7 +987,7 @@ static const struct ethtool_ops ax88178_ethtool_ops = {
 
 static int marvell_phy_init(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	u16 reg;
 
 	netdev_dbg(dev->net, "marvell_phy_init()\n");
@@ -1018,7 +1018,7 @@ static int marvell_phy_init(struct usbnet *dev)
 
 static int rtl8211cl_phy_init(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 
 	netdev_dbg(dev->net, "rtl8211cl_phy_init()\n");
 
@@ -1065,7 +1065,7 @@ static int marvell_led_status(struct usbnet *dev, u16 speed)
 
 static int ax88178_reset(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	int ret;
 	__le16 eeprom;
 	u8 status;
@@ -1163,7 +1163,7 @@ static int ax88178_link_reset(struct usbnet *dev)
 {
 	u16 mode;
 	struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET };
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	u32 speed;
 
 	netdev_dbg(dev->net, "ax88178_link_reset()\n");

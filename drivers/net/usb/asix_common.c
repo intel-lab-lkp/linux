@@ -441,7 +441,7 @@ int asix_write_gpio(struct usbnet *dev, u16 value, int sleep, int in_pm)
 void asix_set_multicast(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	u16 rx_ctl = AX_DEFAULT_RX_CTL;
 
 	if (net->flags & IFF_PROMISC) {
@@ -734,7 +734,7 @@ free:
 int asix_set_mac_address(struct net_device *net, void *p)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = (struct asix_data *)&dev->private;
 	struct sockaddr *addr = p;
 
 	if (netif_running(net))

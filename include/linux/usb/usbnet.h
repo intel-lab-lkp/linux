@@ -16,6 +16,18 @@
 #include <linux/usb.h>
 #include <linux/spinlock.h>
 
+/* Drivers that reuse some of the standard USB CDC infrastructure
+ * (notably, using multiple interfaces according to the CDC
+ * union descriptor) get some helper code.
+ */
+struct cdc_state {
+        struct usb_cdc_header_desc      *header;
+        struct usb_cdc_union_desc       *u;
+        struct usb_cdc_ether_desc       *ether;
+        struct usb_interface            *control;
+        struct usb_interface            *data;
+};
+
 /* interface from usbnet core to each USB networking link we handle */
 struct usbnet {
 	/* housekeeping */
@@ -41,7 +53,7 @@ struct usbnet {
 	/* protocol/interface state */
 	struct net_device	*net;
 	int			msg_enable;
-	unsigned long		data[5];
+	struct cdc_state	cdc;		/* too common to leave out*/
 	u32			xid;
 	u32			hard_mtu;	/* count any extra framing */
 	size_t			rx_urb_size;	/* size for rx urbs */
@@ -84,6 +96,7 @@ struct usbnet {
  * that must be broken
  */
 #		define EVENT_UNPLUG		31
+	unsigned long		private[5];
 };
 
 static inline bool usbnet_going_away(struct usbnet *ubn)
@@ -205,18 +218,6 @@ extern int usbnet_write_cmd_nopm(struct usbnet *dev, u8 cmd, u8 reqtype,
 		    u16 value, u16 index, const void *data, u16 size);
 extern int usbnet_write_cmd_async(struct usbnet *dev, u8 cmd, u8 reqtype,
 		    u16 value, u16 index, const void *data, u16 size);
-
-/* Drivers that reuse some of the standard USB CDC infrastructure
- * (notably, using multiple interfaces according to the CDC
- * union descriptor) get some helper code.
- */
-struct cdc_state {
-	struct usb_cdc_header_desc	*header;
-	struct usb_cdc_union_desc	*u;
-	struct usb_cdc_ether_desc	*ether;
-	struct usb_interface		*control;
-	struct usb_interface		*data;
-};
 
 extern void usbnet_cdc_update_filter(struct usbnet *dev);
 extern int usbnet_generic_cdc_bind(struct usbnet *, struct usb_interface *);

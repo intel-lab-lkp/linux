@@ -107,7 +107,7 @@ static void cdc_ncm_get_ethtool_stats(struct net_device *netdev,
 				    u64 *data)
 {
 	struct usbnet *dev = netdev_priv(netdev);
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	int i;
 	char *p = NULL;
 
@@ -149,7 +149,7 @@ static const struct ethtool_ops cdc_ncm_ethtool_ops = {
 
 static u32 cdc_ncm_check_rx_max(struct usbnet *dev, u32 new_rx)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	u32 val, max, min;
 
 	/* clamp new_rx to sane values */
@@ -172,7 +172,7 @@ static u32 cdc_ncm_check_rx_max(struct usbnet *dev, u32 new_rx)
 
 static u32 cdc_ncm_check_tx_max(struct usbnet *dev, u32 new_tx)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	u32 val, max, min;
 
 	/* clamp new_tx to sane values */
@@ -202,7 +202,7 @@ static ssize_t min_tx_pkt_show(struct device *d,
 			       struct device_attribute *attr, char *buf)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	return sprintf(buf, "%u\n", ctx->min_tx_pkt);
 }
@@ -211,7 +211,7 @@ static ssize_t rx_max_show(struct device *d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	return sprintf(buf, "%u\n", ctx->rx_max);
 }
@@ -220,7 +220,7 @@ static ssize_t tx_max_show(struct device *d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	return sprintf(buf, "%u\n", ctx->tx_max);
 }
@@ -229,7 +229,7 @@ static ssize_t tx_timer_usecs_show(struct device *d,
 				   struct device_attribute *attr, char *buf)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	return sprintf(buf, "%u\n", ctx->timer_interval / (u32)NSEC_PER_USEC);
 }
@@ -239,7 +239,7 @@ static ssize_t min_tx_pkt_store(struct device *d,
 				const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	unsigned long val;
 
 	/* no need to restrict values - anything from 0 to infinity is OK */
@@ -255,7 +255,7 @@ static ssize_t rx_max_store(struct device *d,
 			    const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	unsigned long val;
 
 	if (kstrtoul(buf, 0, &val) || cdc_ncm_check_rx_max(dev, val) != val)
@@ -270,7 +270,7 @@ static ssize_t tx_max_store(struct device *d,
 			    const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	unsigned long val;
 
 	if (kstrtoul(buf, 0, &val) || cdc_ncm_check_tx_max(dev, val) != val)
@@ -285,7 +285,7 @@ static ssize_t tx_timer_usecs_store(struct device *d,
 				    const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	ssize_t ret;
 	unsigned long val;
 
@@ -311,7 +311,7 @@ static DEVICE_ATTR_RW(tx_timer_usecs);
 static ssize_t ndp_to_end_show(struct device *d, struct device_attribute *attr, char *buf)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	return sprintf(buf, "%c\n", ctx->drvflags & CDC_NCM_FLAG_NDP_TO_END ? 'Y' : 'N');
 }
@@ -319,7 +319,7 @@ static ssize_t ndp_to_end_show(struct device *d, struct device_attribute *attr, 
 static ssize_t ndp_to_end_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	bool enable;
 
 	if (kstrtobool(buf, &enable))
@@ -361,7 +361,7 @@ static DEVICE_ATTR_RW(ndp_to_end);
 static ssize_t cdc_ncm_show_##name(struct device *d, struct device_attribute *attr, char *buf) \
 { \
 	struct usbnet *dev = netdev_priv(to_net_dev(d)); \
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0]; \
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0]; \
 	return sprintf(buf, format "\n", tocpu(ctx->ncm_parm.name));	\
 } \
 static DEVICE_ATTR(name, 0444, cdc_ncm_show_##name, NULL)
@@ -404,7 +404,7 @@ static const struct attribute_group cdc_ncm_sysfs_attr_group = {
 /* handle rx_max and tx_max changes */
 static void cdc_ncm_update_rxtx_max(struct usbnet *dev, u32 new_rx, u32 new_tx)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	u8 iface_no = ctx->control->cur_altsetting->desc.bInterfaceNumber;
 	u32 val;
 
@@ -476,7 +476,7 @@ static void cdc_ncm_update_rxtx_max(struct usbnet *dev, u32 new_rx, u32 new_tx)
 /* helpers for NCM and MBIM differences */
 static u8 cdc_ncm_flags(struct usbnet *dev)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	if (cdc_ncm_comm_intf_is_mbim(dev->intf->cur_altsetting) && ctx->mbim_desc)
 		return ctx->mbim_desc->bmNetworkCapabilities;
@@ -501,7 +501,7 @@ static u32 cdc_ncm_min_dgram_size(struct usbnet *dev)
 
 static u32 cdc_ncm_max_dgram_size(struct usbnet *dev)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	if (cdc_ncm_comm_intf_is_mbim(dev->intf->cur_altsetting) && ctx->mbim_desc)
 		return le16_to_cpu(ctx->mbim_desc->wMaxSegmentSize);
@@ -515,7 +515,7 @@ static u32 cdc_ncm_max_dgram_size(struct usbnet *dev)
  */
 static int cdc_ncm_init(struct usbnet *dev)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	u8 iface_no = ctx->control->cur_altsetting->desc.bInterfaceNumber;
 	int err;
 
@@ -608,7 +608,7 @@ static int cdc_ncm_init(struct usbnet *dev)
 /* set a new max datagram size */
 static void cdc_ncm_set_dgram_size(struct usbnet *dev, int new_size)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	u8 iface_no = ctx->control->cur_altsetting->desc.bInterfaceNumber;
 	__le16 max_datagram_size;
 	u16 mbim_mtu;
@@ -656,7 +656,7 @@ out:
 
 static void cdc_ncm_fix_modulus(struct usbnet *dev)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	u32 val;
 
 	/*
@@ -700,7 +700,7 @@ static void cdc_ncm_fix_modulus(struct usbnet *dev)
 
 static int cdc_ncm_setup(struct usbnet *dev)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	u32 def_rx, def_tx;
 
 	/* be conservative when selecting initial buffer size to
@@ -839,7 +839,7 @@ int cdc_ncm_bind_common(struct usbnet *dev, struct usb_interface *intf, u8 data_
 	spin_lock_init(&ctx->mtx);
 
 	/* store ctx pointer in device data field */
-	dev->data[0] = (unsigned long)ctx;
+	dev->private[0] = (unsigned long)ctx;
 
 	/* only the control interface can be successfully probed */
 	ctx->control = intf;
@@ -988,8 +988,8 @@ error2:
 	if (ctx->data != ctx->control)
 		usb_driver_release_interface(driver, ctx->data);
 error:
-	cdc_ncm_free((struct cdc_ncm_ctx *)dev->data[0]);
-	dev->data[0] = 0;
+	cdc_ncm_free((struct cdc_ncm_ctx *)dev->private[0]);
+	dev->private[0] = 0;
 	dev_info(&intf->dev, "bind() failure\n");
 	return -ENODEV;
 }
@@ -997,7 +997,7 @@ EXPORT_SYMBOL_GPL(cdc_ncm_bind_common);
 
 void cdc_ncm_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	struct usb_driver *driver = driver_of(intf);
 
 	if (ctx == NULL)
@@ -1203,7 +1203,7 @@ static struct usb_cdc_ncm_ndp32 *cdc_ncm_ndp32(struct cdc_ncm_ctx *ctx, struct s
 struct sk_buff *
 cdc_ncm_fill_tx_frame(struct usbnet *dev, struct sk_buff *skb, __le32 sign)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	union {
 		struct usb_cdc_ncm_nth16 *nth16;
 		struct usb_cdc_ncm_nth32 *nth32;
@@ -1523,7 +1523,7 @@ struct sk_buff *
 cdc_ncm_tx_fixup(struct usbnet *dev, struct sk_buff *skb, gfp_t flags)
 {
 	struct sk_buff *skb_out;
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	/*
 	 * The Ethernet API we are using does not support transmitting
@@ -1725,7 +1725,7 @@ EXPORT_SYMBOL_GPL(cdc_ncm_rx_verify_ndp32);
 int cdc_ncm_rx_fixup(struct usbnet *dev, struct sk_buff *skb_in)
 {
 	struct sk_buff *skb;
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 	unsigned int len;
 	int nframes;
 	int x;
@@ -1904,7 +1904,7 @@ static void cdc_ncm_status(struct usbnet *dev, struct urb *urb)
 
 static void cdc_ncm_update_filter(struct usbnet *dev)
 {
-	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
+	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->private[0];
 
 	if (ctx->filtering_supported)
 		usbnet_cdc_update_filter(dev);

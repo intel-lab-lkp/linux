@@ -26,7 +26,7 @@
  * Used in (some) LapLink cables
  */
 
-#define frame_errors	data[1]
+#define frame_errors	private[1]
 
 /*
  * NetChip framing of ethernet packets, supporting additional error

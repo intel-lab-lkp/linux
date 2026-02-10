@@ -276,7 +276,7 @@ static void dm9601_set_multicast(struct net_device *net)
 	struct usbnet *dev = netdev_priv(net);
 	/* We use the 20 byte dev->data for our 8 byte filter buffer
 	 * to avoid allocating memory that is tricky to free later */
-	u8 *hashes = (u8 *) & dev->data;
+	u8 *hashes = (u8 *) & dev->private;
 	u8 rx_ctl = 0x31;
 
 	memset(hashes, 0x00, DM_MCAST_SIZE);

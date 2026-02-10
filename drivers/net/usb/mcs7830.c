@@ -327,7 +327,7 @@ static void mcs7830_mdio_write(struct net_device *netdev, int phy_id,
 
 static inline struct mcs7830_data *mcs7830_get_data(struct usbnet *dev)
 {
-	return (struct mcs7830_data *)&dev->data;
+	return (struct mcs7830_data *)&dev->private;
 }
 
 static void mcs7830_hif_update_multicast_hash(struct usbnet *dev)

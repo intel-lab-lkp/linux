@@ -453,7 +453,7 @@ static int smsc75xx_dataport_wait_not_busy(struct usbnet *dev)
 static int smsc75xx_dataport_write(struct usbnet *dev, u32 ram_select, u32 addr,
 				   u32 length, u32 *buf)
 {
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u32 dp_sel;
 	int i, ret;
 
@@ -537,7 +537,7 @@ static void smsc75xx_deferred_multicast_write(struct work_struct *param)
 static void smsc75xx_set_multicast(struct net_device *netdev)
 {
 	struct usbnet *dev = netdev_priv(netdev);
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	unsigned long flags;
 	int i;
 
@@ -701,7 +701,7 @@ static void smsc75xx_ethtool_get_wol(struct net_device *net,
 				     struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 
 	wolinfo->supported = SUPPORTED_WAKE;
 	wolinfo->wolopts = pdata->wolopts;
@@ -711,7 +711,7 @@ static int smsc75xx_ethtool_set_wol(struct net_device *net,
 				    struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	int ret;
 
 	if (wolinfo->wolopts & ~SUPPORTED_WAKE)
@@ -931,7 +931,7 @@ static int smsc75xx_set_features(struct net_device *netdev,
 	netdev_features_t features)
 {
 	struct usbnet *dev = netdev_priv(netdev);
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	unsigned long flags;
 	int ret;
 
@@ -1037,7 +1037,7 @@ static int smsc75xx_phy_gig_workaround(struct usbnet *dev)
 
 static int smsc75xx_reset(struct usbnet *dev)
 {
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u32 buf;
 	int ret = 0, timeout;
 
@@ -1449,13 +1449,13 @@ static int smsc75xx_bind(struct usbnet *dev, struct usb_interface *intf)
 		netdev_warn(dev->net, "usbnet_get_endpoints failed: %d\n", ret);
 		return ret;
 	}
-
-	dev->data[0] = (unsigned long)kzalloc(sizeof(struct smsc75xx_priv),
-					      GFP_KERNEL);
-
-	pdata = (struct smsc75xx_priv *)(dev->data[0]);
+//FIXME
+	pdata = (struct smsc75xx_priv *)kzalloc(sizeof(struct smsc75xx_priv),
+			GFP_KERNEL);
 	if (!pdata)
 		return -ENOMEM;
+	dev->private[0] = (unsigned long)pdata;
+
 
 	pdata->dev = dev;
 
@@ -1500,18 +1500,18 @@ cancel_work:
 	cancel_work_sync(&pdata->set_multicast);
 free_pdata:
 	kfree(pdata);
-	dev->data[0] = 0;
+	memset(dev->private, 0, sizeof(dev->private));
 	return ret;
 }
 
 static void smsc75xx_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	if (pdata) {
 		cancel_work_sync(&pdata->set_multicast);
 		netif_dbg(dev, ifdown, dev->net, "free pdata\n");
 		kfree(pdata);
-		dev->data[0] = 0;
+		memset(dev->private, 0, sizeof(dev->private));
 	}
 }
 
@@ -1562,7 +1562,7 @@ static int smsc75xx_write_wuff(struct usbnet *dev, int filter, u32 wuf_cfg,
 
 static int smsc75xx_enter_suspend0(struct usbnet *dev)
 {
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u32 val;
 	int ret;
 
@@ -1588,7 +1588,7 @@ static int smsc75xx_enter_suspend0(struct usbnet *dev)
 
 static int smsc75xx_enter_suspend1(struct usbnet *dev)
 {
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u32 val;
 	int ret;
 
@@ -1624,7 +1624,7 @@ static int smsc75xx_enter_suspend1(struct usbnet *dev)
 
 static int smsc75xx_enter_suspend2(struct usbnet *dev)
 {
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u32 val;
 	int ret;
 
@@ -1650,7 +1650,7 @@ static int smsc75xx_enter_suspend2(struct usbnet *dev)
 
 static int smsc75xx_enter_suspend3(struct usbnet *dev)
 {
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u32 val;
 	int ret;
 
@@ -1785,7 +1785,7 @@ static int smsc75xx_autosuspend(struct usbnet *dev, u32 link_up)
 static int smsc75xx_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u32 val, link_up;
 	int ret;
 
@@ -2086,7 +2086,7 @@ done:
 static int smsc75xx_resume(struct usb_interface *intf)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
+	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->private);
 	u8 suspend_flags = pdata->suspend_flags;
 	int ret;
 	u32 val;

@@ -36,7 +36,7 @@ struct huawei_cdc_ncm_state {
 
 static int huawei_cdc_ncm_manage_power(struct usbnet *usbnet_dev, int on)
 {
-	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->data;
+	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->private;
 	int rv;
 
 	if ((on && atomic_add_return(1, &drvstate->pmcount) == 1) ||
@@ -68,7 +68,7 @@ static int huawei_cdc_ncm_bind(struct usbnet *usbnet_dev,
 	struct cdc_ncm_ctx *ctx;
 	struct usb_driver *subdriver = ERR_PTR(-ENODEV);
 	int ret;
-	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->data;
+	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->private;
 	int drvflags = 0;
 
 	/* altsetting should always be 1 for NCM devices - so we hard-coded
@@ -116,7 +116,7 @@ err:
 static void huawei_cdc_ncm_unbind(struct usbnet *usbnet_dev,
 				  struct usb_interface *intf)
 {
-	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->data;
+	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->private;
 	struct cdc_ncm_ctx *ctx = drvstate->ctx;
 
 	if (drvstate->subdriver && drvstate->subdriver->disconnect)
@@ -131,7 +131,7 @@ static int huawei_cdc_ncm_suspend(struct usb_interface *intf,
 {
 	int ret = 0;
 	struct usbnet *usbnet_dev = usb_get_intfdata(intf);
-	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->data;
+	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->private;
 	struct cdc_ncm_ctx *ctx = drvstate->ctx;
 
 	if (ctx == NULL) {
@@ -158,7 +158,7 @@ static int huawei_cdc_ncm_resume(struct usb_interface *intf)
 {
 	int ret = 0;
 	struct usbnet *usbnet_dev = usb_get_intfdata(intf);
-	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->data;
+	struct huawei_cdc_ncm_state *drvstate = (void *)&usbnet_dev->private;
 	bool callsub;
 	struct cdc_ncm_ctx *ctx = drvstate->ctx;
 

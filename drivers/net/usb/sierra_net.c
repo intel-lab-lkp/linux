@@ -190,14 +190,14 @@ static const struct net_device_ops sierra_net_device_ops = {
 /* get private data associated with passed in usbnet device */
 static inline struct sierra_net_data *sierra_net_get_private(struct usbnet *dev)
 {
-	return (struct sierra_net_data *)dev->data[0];
+	return (struct sierra_net_data *)dev->private[0];
 }
 
 /* set private data associated with passed in usbnet device */
 static inline void sierra_net_set_private(struct usbnet *dev,
 			struct sierra_net_data *priv)
 {
-	dev->data[0] = (unsigned long)priv;
+	dev->private[0] = (unsigned long)priv;
 }
 
 /* is packet IPv4/IPv6 */
@@ -854,9 +854,6 @@ static struct sk_buff *sierra_net_tx_fixup(struct usbnet *dev,
 	struct sierra_net_data *priv = sierra_net_get_private(dev);
 	u16 len;
 	bool need_tail;
-
-	BUILD_BUG_ON(sizeof_field(struct usbnet, data)
-				< sizeof(struct cdc_state));
 
 	dev_dbg(&dev->udev->dev, "%s", __func__);
 	if (priv->link_up && check_ethip_packet(skb, dev) && is_ip(skb)) {

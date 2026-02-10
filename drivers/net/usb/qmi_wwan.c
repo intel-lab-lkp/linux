@@ -306,7 +306,7 @@ static void qmimux_unregister_device(struct net_device *dev,
 static void qmi_wwan_netdev_setup(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 
 	if (info->flags & QMI_WWAN_FLAG_RAWIP) {
 		net->header_ops      = NULL;  /* No header */
@@ -332,7 +332,7 @@ static void qmi_wwan_netdev_setup(struct net_device *net)
 static ssize_t raw_ip_show(struct device *d, struct device_attribute *attr, char *buf)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 
 	return sprintf(buf, "%c\n", info->flags & QMI_WWAN_FLAG_RAWIP ? 'Y' : 'N');
 }
@@ -340,7 +340,7 @@ static ssize_t raw_ip_show(struct device *d, struct device_attribute *attr, char
 static ssize_t raw_ip_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	bool enable;
 	int ret;
 
@@ -409,7 +409,7 @@ static ssize_t add_mux_show(struct device *d, struct device_attribute *attr, cha
 static ssize_t add_mux_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	u8 mux_id;
 	int ret;
 
@@ -447,7 +447,7 @@ static ssize_t del_mux_show(struct device *d, struct device_attribute *attr, cha
 static ssize_t del_mux_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	struct net_device *del_dev;
 	u8 mux_id;
 	int ret = 0;
@@ -480,7 +480,7 @@ static ssize_t pass_through_show(struct device *d,
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
 	struct qmi_wwan_state *info;
 
-	info = (void *)&dev->data;
+	info = (void *)&dev->private;
 	return sprintf(buf, "%c\n",
 		       info->flags & QMI_WWAN_FLAG_PASS_THROUGH ? 'Y' : 'N');
 }
@@ -496,7 +496,7 @@ static ssize_t pass_through_store(struct device *d,
 	if (kstrtobool(buf, &enable))
 		return -EINVAL;
 
-	info = (void *)&dev->data;
+	info = (void *)&dev->private;
 
 	/* no change? */
 	if (enable == (info->flags & QMI_WWAN_FLAG_PASS_THROUGH))
@@ -562,7 +562,7 @@ static const u8 buggy_fw_addr[ETH_ALEN] = {0x00, 0xa0, 0xc6, 0x00, 0x00, 0x00};
  */
 static int qmi_wwan_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	bool rawip = info->flags & QMI_WWAN_FLAG_RAWIP;
 	__be16 proto;
 
@@ -653,7 +653,7 @@ static const struct net_device_ops qmi_wwan_netdev_ops = {
  */
 static int qmi_wwan_manage_power(struct usbnet *dev, int on)
 {
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	int rv;
 
 	dev_dbg(&dev->intf->dev, "%s() pmcount=%d, on=%d\n", __func__,
@@ -687,7 +687,7 @@ static int qmi_wwan_register_subdriver(struct usbnet *dev)
 {
 	int rv;
 	struct usb_driver *subdriver = NULL;
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 
 	/* collect bulk endpoints */
 	rv = usbnet_get_endpoints(dev, info->data);
@@ -750,11 +750,8 @@ static int qmi_wwan_bind(struct usbnet *dev, struct usb_interface *intf)
 	struct usb_cdc_union_desc *cdc_union;
 	struct usb_cdc_ether_desc *cdc_ether;
 	struct usb_driver *driver = driver_of(intf);
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	struct usb_cdc_parsed_header hdr;
-
-	BUILD_BUG_ON((sizeof(((struct usbnet *)0)->data) <
-		      sizeof(struct qmi_wwan_state)));
 
 	/* set up initial state */
 	info->control = intf;
@@ -848,7 +845,7 @@ err:
 
 static void qmi_wwan_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	struct usb_driver *driver = driver_of(intf);
 	struct usb_interface *other;
 
@@ -887,7 +884,7 @@ static void qmi_wwan_unbind(struct usbnet *dev, struct usb_interface *intf)
 static int qmi_wwan_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	int ret;
 
 	/* Both usbnet_suspend() and subdriver->suspend() MUST return 0
@@ -910,7 +907,7 @@ err:
 static int qmi_wwan_resume(struct usb_interface *intf)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct qmi_wwan_state *info = (void *)&dev->data;
+	struct qmi_wwan_state *info = (void *)&dev->private;
 	int ret = 0;
 	bool callsub = (intf == info->control && info->subdriver &&
 			info->subdriver->resume);
@@ -1584,7 +1581,7 @@ static void qmi_wwan_disconnect(struct usb_interface *intf)
 	/* called twice if separate control and data intf */
 	if (!dev)
 		return;
-	info = (void *)&dev->data;
+	info = (void *)&dev->private;
 	if (info->flags & QMI_WWAN_FLAG_MUX) {
 		if (!rtnl_trylock()) {
 			restart_syscall();

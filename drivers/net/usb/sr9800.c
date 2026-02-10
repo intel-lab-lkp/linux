@@ -295,7 +295,7 @@ static int sr_write_gpio(struct usbnet *dev, u16 value, int sleep)
 static void sr_set_multicast(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct sr_data *data = (struct sr_data *)&dev->data;
+	struct sr_data *data = (struct sr_data *)&dev->private;
 	u16 rx_ctl = SR_DEFAULT_RX_CTL;
 
 	if (net->flags & IFF_PROMISC) {
@@ -438,7 +438,7 @@ sr_set_wol(struct net_device *net, struct ethtool_wolinfo *wolinfo)
 static int sr_get_eeprom_len(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct sr_data *data = (struct sr_data *)&dev->data;
+	struct sr_data *data = (struct sr_data *)&dev->private;
 
 	return data->eeprom_len;
 }
@@ -472,7 +472,7 @@ static int sr_get_eeprom(struct net_device *net,
 static int sr_set_mac_address(struct net_device *net, void *p)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct sr_data *data = (struct sr_data *)&dev->data;
+	struct sr_data *data = (struct sr_data *)&dev->private;
 	struct sockaddr *addr = p;
 
 	if (netif_running(net))
@@ -574,7 +574,7 @@ out:
 
 static int sr9800_reset(struct usbnet *dev)
 {
-	struct sr_data *data = (struct sr_data *)&dev->data;
+	struct sr_data *data = (struct sr_data *)&dev->private;
 	int ret, embd_phy;
 	u16 rx_ctl;
 
@@ -705,7 +705,7 @@ static int sr9800_phy_powerup(struct usbnet *dev)
 
 static int sr9800_bind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct sr_data *data = (struct sr_data *)&dev->data;
+	struct sr_data *data = (struct sr_data *)&dev->private;
 	u16 led01_mux, led23_mux;
 	int ret, embd_phy;
 	u8 addr[ETH_ALEN];

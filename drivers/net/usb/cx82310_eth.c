@@ -134,9 +134,9 @@ static void cx82310_reenable_work(struct work_struct *work)
 	cx82310_enable_ethernet(priv->dev);
 }
 
-#define partial_len	data[0]		/* length of partial packet data */
-#define partial_rem	data[1]		/* remaining (missing) data length */
-#define partial_data	data[2]		/* partial packet data */
+#define partial_len	private[0]		/* length of partial packet data */
+#define partial_rem	private[1]		/* remaining (missing) data length */
+#define partial_data	private[2]		/* partial packet data */
 
 static int cx82310_bind(struct usbnet *dev, struct usb_interface *intf)
 {

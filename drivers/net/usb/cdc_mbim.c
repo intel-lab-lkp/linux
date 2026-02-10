@@ -43,7 +43,7 @@ enum cdc_mbim_flags {
 /* using a counter to merge subdriver requests with our own into a combined state */
 static int cdc_mbim_manage_power(struct usbnet *dev, int on)
 {
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 	int rv = 0;
 
 	dev_dbg(&dev->intf->dev, "%s() pmcount=%d, on=%d\n", __func__, atomic_read(&info->pmcount), on);
@@ -72,7 +72,7 @@ static int cdc_mbim_wdm_manage_power(struct usb_interface *intf, int status)
 static int cdc_mbim_rx_add_vid(struct net_device *netdev, __be16 proto, u16 vid)
 {
 	struct usbnet *dev = netdev_priv(netdev);
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 
 	/* creation of this VLAN is a request to tag IP session 0 */
 	if (vid == MBIM_IPS0_VID)
@@ -86,7 +86,7 @@ static int cdc_mbim_rx_add_vid(struct net_device *netdev, __be16 proto, u16 vid)
 static int cdc_mbim_rx_kill_vid(struct net_device *netdev, __be16 proto, u16 vid)
 {
 	struct usbnet *dev = netdev_priv(netdev);
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 
 	/* this is a request for an untagged IP session 0 */
 	if (vid == MBIM_IPS0_VID)
@@ -143,7 +143,7 @@ static int cdc_mbim_bind(struct usbnet *dev, struct usb_interface *intf)
 	struct usb_driver *subdriver = ERR_PTR(-ENODEV);
 	int ret = -ENODEV;
 	u8 data_altsetting = 1;
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 
 	/* should we change control altsetting on a NCM/MBIM function? */
 	if (cdc_ncm_select_altsetting(intf) == CDC_NCM_COMM_ALTSETTING_MBIM) {
@@ -195,7 +195,7 @@ err:
 
 static void cdc_mbim_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 	struct cdc_ncm_ctx *ctx = info->ctx;
 
 	/* disconnect subdriver from control interface */
@@ -221,7 +221,7 @@ static bool is_ip_proto(__be16 proto)
 static struct sk_buff *cdc_mbim_tx_fixup(struct usbnet *dev, struct sk_buff *skb, gfp_t flags)
 {
 	struct sk_buff *skb_out;
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 	struct cdc_ncm_ctx *ctx = info->ctx;
 	__le32 sign = cpu_to_le32(USB_CDC_MBIM_NDP16_IPS_SIGN);
 	u16 tci = 0;
@@ -411,7 +411,7 @@ err:
 static int cdc_mbim_rx_fixup(struct usbnet *dev, struct sk_buff *skb_in)
 {
 	struct sk_buff *skb;
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 	struct cdc_ncm_ctx *ctx = info->ctx;
 	int len;
 	int nframes;
@@ -506,7 +506,7 @@ static int cdc_mbim_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	int ret = -ENODEV;
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 	struct cdc_ncm_ctx *ctx = info->ctx;
 
 	if (!ctx)
@@ -534,7 +534,7 @@ static int cdc_mbim_resume(struct usb_interface *intf)
 {
 	int  ret = 0;
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct cdc_mbim_state *info = (void *)&dev->data;
+	struct cdc_mbim_state *info = (void *)&dev->private;
 	struct cdc_ncm_ctx *ctx = info->ctx;
 	bool callsub = (intf == ctx->control && info->subdriver && info->subdriver->resume);
 
