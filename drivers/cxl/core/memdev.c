@@ -1098,19 +1098,22 @@ static struct cxl_memdev *cxl_memdev_autoremove(struct cxl_memdev *cxlmd)
 	 * return. Note that failure here could be the result of a race to
 	 * teardown the CXL port topology. I.e. cxl_mem_probe() could have
 	 * succeeded and then cxl_mem unbound before the lock is acquired.
+	 *
+	 * Check under device_lock but unregister outside of it, as
+	 * cxl_memdev_unregister() will also take the device lock.
 	 */
-	guard(device)(&cxlmd->dev);
-	if (cxlmd->attach && !cxlmd->dev.driver) {
-		cxl_memdev_unregister(cxlmd);
-		return ERR_PTR(-ENXIO);
+	scoped_guard(device, &cxlmd->dev) {
+		if (cxlmd->attach && !cxlmd->dev.driver)
+			break;
+
+		rc = devm_add_action_or_reset(cxlmd->cxlds->dev,
+					      cxl_memdev_unregister, cxlmd);
+		if (rc)
+			return ERR_PTR(rc);
+		return cxlmd;
 	}
-
-	rc = devm_add_action_or_reset(cxlmd->cxlds->dev, cxl_memdev_unregister,
-				      cxlmd);
-	if (rc)
-		return ERR_PTR(rc);
-
-	return cxlmd;
+	cxl_memdev_unregister(cxlmd);
+	return ERR_PTR(-ENXIO);
 }
 
 /*
