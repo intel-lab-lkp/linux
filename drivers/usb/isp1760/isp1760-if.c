@@ -196,6 +196,8 @@ static int isp1760_plat_probe(struct platform_device *pdev)
 	int ret;
 
 	mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!mem_res)
+		return -EINVAL;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
