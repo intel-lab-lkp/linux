@@ -255,6 +255,7 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 	struct rt_rq *rt_rq;
 	struct sched_rt_entity *rt_se;
 	int i;
+	int allocated_cpus = -1;
 
 	if (!rt_group_sched_enabled())
 		return 1;
@@ -264,7 +265,7 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 		goto err;
 	tg->rt_se = kcalloc(nr_cpu_ids, sizeof(rt_se), GFP_KERNEL);
 	if (!tg->rt_se)
-		goto err;
+		goto err_free_rt_rq;
 
 	init_rt_bandwidth(&tg->rt_bandwidth, ktime_to_ns(global_rt_period()), 0);
 
@@ -272,22 +273,39 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 		rt_rq = kzalloc_node(sizeof(struct rt_rq),
 				     GFP_KERNEL, cpu_to_node(i));
 		if (!rt_rq)
-			goto err;
+			goto err_free_per_cpu;
 
 		rt_se = kzalloc_node(sizeof(struct sched_rt_entity),
 				     GFP_KERNEL, cpu_to_node(i));
-		if (!rt_se)
-			goto err_free_rq;
+		if (!rt_se) {
+			kfree(rt_rq);
+			goto err_free_per_cpu;
+		}
 
 		init_rt_rq(rt_rq);
 		rt_rq->rt_runtime = tg->rt_bandwidth.rt_runtime;
 		init_tg_rt_entry(tg, rt_rq, rt_se, i, parent->rt_se[i]);
+		allocated_cpus = i;
 	}
 
 	return 1;
-
-err_free_rq:
-	kfree(rt_rq);
+err_free_per_cpu:
+	/* Rollback and free per-CPU rt_rq/rt_se resources */
+	for (i = 0; i <= allocated_cpus; i++) {
+		if (cpu_possible(i)) {
+			kfree(tg->rt_rq[i]);
+			kfree(tg->rt_se[i]);
+		}
+	}
+	/* Free tg-level rt_se array */
+	kfree(tg->rt_se);
+	/* Prevent dangling pointer */
+	tg->rt_se = NULL;
+err_free_rt_rq:
+	/* Free tg-level rt_rq array */
+	kfree(tg->rt_rq);
+	/* Prevent dangling pointer */
+	tg->rt_rq = NULL;
 err:
 	return 0;
 }
