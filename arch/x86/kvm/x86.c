@@ -3992,14 +3992,18 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		data &= ~(u64)0x8;	/* ignore TLB cache disable */
 
 		/*
-		 * Allow McStatusWrEn and TscFreqSel. (Linux guests from v3.2
-		 * through at least v6.6 whine if TscFreqSel is clear,
-		 * depending on F/M/S.
+		 * Allow McStatusWrEn, TscFreqSel, and CpuidUserDis. (Linux
+		 * guests from v3.2 through at least v6.6 whine if TscFreqSel
+		 * is clear, depending on F/M/S.)
 		 */
-		if (data & ~(BIT_ULL(18) | BIT_ULL(24))) {
+		if (data & ~(BIT_ULL(18) | BIT_ULL(24) |
+			     MSR_K7_HWCR_CPUID_USER_DIS)) {
 			kvm_pr_unimpl_wrmsr(vcpu, msr, data);
 			return 1;
 		}
+		if (data & MSR_K7_HWCR_CPUID_USER_DIS &&
+		    !supports_cpuid_fault_amd(vcpu))
+			return 1;
 		vcpu->arch.msr_hwcr = data;
 		break;
 	case MSR_FAM10H_MMIO_CONF_BASE:
@@ -4248,7 +4252,7 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_MISC_FEATURES_ENABLES:
 		if (data & ~MSR_MISC_FEATURES_ENABLES_CPUID_FAULT ||
 		    (data & MSR_MISC_FEATURES_ENABLES_CPUID_FAULT &&
-		     !supports_cpuid_fault(vcpu)))
+		     !supports_cpuid_fault_intel(vcpu)))
 			return 1;
 		vcpu->arch.msr_misc_features_enables = data;
 		break;
