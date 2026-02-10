@@ -472,13 +472,13 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 	case MOST_CH_CONTROL:
 		new_size = dim_norm_ctrl_async_buffer_size(buf_size);
 		if (new_size == 0) {
-			pr_err("%s: too small buffer size\n", hdm_ch->name);
+			dev_err(&dev->dev, "%s: too small buffer size\n", hdm_ch->name);
 			return -EINVAL;
 		}
 		ccfg->buffer_size = new_size;
 		if (new_size != buf_size)
-			pr_warn("%s: fixed buffer size (%d -> %d)\n",
-				hdm_ch->name, buf_size, new_size);
+			dev_warn(&dev->dev, "%s: fixed buffer size (%d -> %d)\n",
+				 hdm_ch->name, buf_size, new_size);
 		spin_lock_irqsave(&dim_lock, flags);
 		hal_ret = dim_init_control(&hdm_ch->ch, is_tx, ch_addr,
 					   is_tx ? new_size * 2 : new_size);
@@ -486,13 +486,13 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 	case MOST_CH_ASYNC:
 		new_size = dim_norm_ctrl_async_buffer_size(buf_size);
 		if (new_size == 0) {
-			pr_err("%s: too small buffer size\n", hdm_ch->name);
+			dev_err(&dev->dev, "%s: too small buffer size\n", hdm_ch->name);
 			return -EINVAL;
 		}
 		ccfg->buffer_size = new_size;
 		if (new_size != buf_size)
-			pr_warn("%s: fixed buffer size (%d -> %d)\n",
-				hdm_ch->name, buf_size, new_size);
+			dev_warn(&dev->dev, "%s: fixed buffer size (%d -> %d)\n",
+				 hdm_ch->name, buf_size, new_size);
 		spin_lock_irqsave(&dim_lock, flags);
 		hal_ret = dim_init_async(&hdm_ch->ch, is_tx, ch_addr,
 					 is_tx ? new_size * 2 : new_size);
@@ -500,41 +500,41 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 	case MOST_CH_ISOC:
 		new_size = dim_norm_isoc_buffer_size(buf_size, sub_size);
 		if (new_size == 0) {
-			pr_err("%s: invalid sub-buffer size or too small buffer size\n",
-			       hdm_ch->name);
+			dev_err(&dev->dev, "%s: invalid sub-buffer size or too small buffer size\n",
+				hdm_ch->name);
 			return -EINVAL;
 		}
 		ccfg->buffer_size = new_size;
 		if (new_size != buf_size)
-			pr_warn("%s: fixed buffer size (%d -> %d)\n",
-				hdm_ch->name, buf_size, new_size);
+			dev_warn(&dev->dev, "%s: fixed buffer size (%d -> %d)\n",
+				 hdm_ch->name, buf_size, new_size);
 		spin_lock_irqsave(&dim_lock, flags);
 		hal_ret = dim_init_isoc(&hdm_ch->ch, is_tx, ch_addr, sub_size);
 		break;
 	case MOST_CH_SYNC:
 		new_size = dim_norm_sync_buffer_size(buf_size, sub_size);
 		if (new_size == 0) {
-			pr_err("%s: invalid sub-buffer size or too small buffer size\n",
-			       hdm_ch->name);
+			dev_err(&dev->dev, "%s: invalid sub-buffer size or too small buffer size\n",
+				hdm_ch->name);
 			return -EINVAL;
 		}
 		ccfg->buffer_size = new_size;
 		if (new_size != buf_size)
-			pr_warn("%s: fixed buffer size (%d -> %d)\n",
-				hdm_ch->name, buf_size, new_size);
+			dev_warn(&dev->dev, "%s: fixed buffer size (%d -> %d)\n",
+				 hdm_ch->name, buf_size, new_size);
 		spin_lock_irqsave(&dim_lock, flags);
 		hal_ret = dim_init_sync(&hdm_ch->ch, is_tx, ch_addr, sub_size);
 		break;
 	default:
-		pr_err("%s: configure failed, bad channel type: %d\n",
-		       hdm_ch->name, ccfg->data_type);
+		dev_err(&dev->dev, "%s: configure failed, bad channel type: %d\n",
+			hdm_ch->name, ccfg->data_type);
 		return -EINVAL;
 	}
 
 	if (hal_ret != DIM_NO_ERROR) {
 		spin_unlock_irqrestore(&dim_lock, flags);
-		pr_err("%s: configure failed (%d), type: %d, is_tx: %d\n",
-		       hdm_ch->name, hal_ret, ccfg->data_type, (int)is_tx);
+		dev_err(&dev->dev, "%s: configure failed (%d), type: %d, is_tx: %d\n",
+			hdm_ch->name, hal_ret, ccfg->data_type, (int)is_tx);
 		return -ENODEV;
 	}
 
@@ -608,7 +608,7 @@ static void request_netinfo(struct most_interface *most_iface, int ch_idx,
 		return;
 
 	if (dev->atx_idx < 0) {
-		pr_err("Async Tx Not initialized\n");
+		dev_err(&dev->dev, "Async Tx Not initialized\n");
 		return;
 	}
 
@@ -657,7 +657,7 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
 		dev->atx_idx = -1;
 	spin_unlock_irqrestore(&dim_lock, flags);
 	if (hal_ret != DIM_NO_ERROR) {
-		pr_err("HAL Failed to close channel %s\n", hdm_ch->name);
+		dev_err(&dev->dev, "HAL Failed to close channel %s\n", hdm_ch->name);
 		ret = -EFAULT;
 	}
 
