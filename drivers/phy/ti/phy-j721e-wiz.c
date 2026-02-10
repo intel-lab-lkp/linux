@@ -1407,9 +1407,8 @@ MODULE_DEVICE_TABLE(of, wiz_id_table);
 
 static int wiz_get_lane_phy_types(struct device *dev, struct wiz *wiz)
 {
-	struct device_node *serdes;
-
-	serdes = of_get_child_by_name(dev->of_node, "serdes");
+	struct device_node *serdes __free(device_node) =
+		of_get_child_by_name(dev->of_node, "serdes");
 	if (!serdes) {
 		dev_err(dev, "%s: Getting \"serdes\"-node failed\n", __func__);
 		return -EINVAL;
