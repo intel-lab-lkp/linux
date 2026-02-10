@@ -68,6 +68,7 @@
  */
 
 static void allow_barrier(struct r10conf *conf);
+static void allow_barrier_nowait(struct r10conf *conf);
 static void lower_barrier(struct r10conf *conf);
 static int _enough(struct r10conf *conf, int previous, int ignore);
 static int enough(struct r10conf *conf, int ignore);
@@ -317,7 +318,7 @@ static void reschedule_retry(struct r10bio *r10_bio)
  * operation and are ready to return a success/failure code to the buffer
  * cache layer.
  */
-static void raid_end_bio_io(struct r10bio *r10_bio)
+static void raid_end_bio_io(struct r10bio *r10_bio, bool adjust_pending)
 {
 	struct bio *bio = r10_bio->master_bio;
 	struct r10conf *conf = r10_bio->mddev->private;
@@ -332,7 +333,10 @@ static void raid_end_bio_io(struct r10bio *r10_bio)
 	 * Wake up any possible resync thread that waits for the device
 	 * to go idle.
 	 */
-	allow_barrier(conf);
+	if (adjust_pending)
+		allow_barrier(conf);
+	else
+		allow_barrier_nowait(conf);
 
 	free_r10bio(r10_bio);
 }
@@ -414,7 +418,7 @@ static void raid10_end_read_request(struct bio *bio)
 			uptodate = 1;
 	}
 	if (uptodate) {
-		raid_end_bio_io(r10_bio);
+		raid_end_bio_io(r10_bio, true);
 		rdev_dec_pending(rdev, conf->mddev);
 	} else {
 		/*
@@ -446,7 +450,7 @@ static void one_write_done(struct r10bio *r10_bio)
 			if (test_bit(R10BIO_MadeGood, &r10_bio->state))
 				reschedule_retry(r10_bio);
 			else
-				raid_end_bio_io(r10_bio);
+				raid_end_bio_io(r10_bio, true);
 		}
 	}
 }
@@ -1030,11 +1034,21 @@ static bool wait_barrier(struct r10conf *conf, bool nowait)
 	return ret;
 }
 
-static void allow_barrier(struct r10conf *conf)
+static void __allow_barrier(struct r10conf *conf, bool adjust_pending)
 {
-	if ((atomic_dec_and_test(&conf->nr_pending)) ||
+	if ((adjust_pending && atomic_dec_and_test(&conf->nr_pending)) ||
 			(conf->array_freeze_pending))
 		wake_up_barrier(conf);
+}
+
+static void allow_barrier(struct r10conf *conf)
+{
+	__allow_barrier(conf, true);
+}
+
+static void allow_barrier_nowait(struct r10conf *conf)
+{
+	__allow_barrier(conf, false);
 }
 
 static void freeze_array(struct r10conf *conf, int extra)
@@ -1184,7 +1198,7 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 	}
 
 	if (!regular_request_wait(mddev, conf, bio, r10_bio->sectors)) {
-		raid_end_bio_io(r10_bio);
+		raid_end_bio_io(r10_bio, false);
 		return;
 	}
 
@@ -1195,7 +1209,7 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 					    mdname(mddev), b,
 					    (unsigned long long)r10_bio->sector);
 		}
-		raid_end_bio_io(r10_bio);
+		raid_end_bio_io(r10_bio, true);
 		return;
 	}
 	if (err_rdev)
@@ -1240,7 +1254,7 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 	return;
 err_handle:
 	atomic_dec(&rdev->nr_pending);
-	raid_end_bio_io(r10_bio);
+	raid_end_bio_io(r10_bio, true);
 }
 
 static void raid10_write_one_disk(struct mddev *mddev, struct r10bio *r10_bio,
@@ -1372,7 +1386,7 @@ static void raid10_write_request(struct mddev *mddev, struct bio *bio,
 
 	sectors = r10_bio->sectors;
 	if (!regular_request_wait(mddev, conf, bio, sectors)) {
-		raid_end_bio_io(r10_bio);
+		raid_end_bio_io(r10_bio, false);
 		return;
 	}
 
@@ -1523,7 +1537,7 @@ err_handle:
 		}
 	}
 
-	raid_end_bio_io(r10_bio);
+	raid_end_bio_io(r10_bio, true);
 }
 
 static void __make_request(struct mddev *mddev, struct bio *bio, int sectors)
@@ -2952,7 +2966,7 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 			if (test_bit(R10BIO_WriteError,
 				     &r10_bio->state))
 				close_write(r10_bio);
-			raid_end_bio_io(r10_bio);
+			raid_end_bio_io(r10_bio, true);
 		}
 	}
 }
@@ -2987,7 +3001,7 @@ static void raid10d(struct md_thread *thread)
 			if (test_bit(R10BIO_WriteError,
 				     &r10_bio->state))
 				close_write(r10_bio);
-			raid_end_bio_io(r10_bio);
+			raid_end_bio_io(r10_bio, true);
 		}
 	}
 
