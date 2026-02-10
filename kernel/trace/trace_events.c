@@ -2090,11 +2090,18 @@ static int trace_format_open(struct inode *inode, struct file *file)
 static ssize_t
 event_id_read(struct file *filp, char __user *ubuf, size_t cnt, loff_t *ppos)
 {
-	int id = (long)event_file_data(filp);
+	struct trace_event_file *file;
+	int id;
 	char buf[32];
 	int len;
 
-	if (unlikely(!id))
+	mutex_lock(&event_mutex);
+	file = event_file_file(filp);
+	if (likely(file))
+		id = file->event_call->event.type;
+	mutex_unlock(&event_mutex);
+
+	if (!file)
 		return -ENODEV;
 
 	len = sprintf(buf, "%d\n", id);
@@ -2572,7 +2579,9 @@ static const struct file_operations ftrace_event_format_fops = {
 
 #ifdef CONFIG_PERF_EVENTS
 static const struct file_operations ftrace_event_id_fops = {
+	.open = tracing_open_file_tr,
 	.read = event_id_read,
+	.release = tracing_release_file_tr,
 	.llseek = default_llseek,
 };
 #endif
@@ -2936,7 +2945,6 @@ static int event_callback(const char *name, umode_t *mode, void **data,
 	if (call->event.type && call->class->reg &&
 	    strcmp(name, "id") == 0) {
 		*mode = TRACE_MODE_READ;
-		*data = (void *)(long)call->event.type;
 		*fops = &ftrace_event_id_fops;
 		return 1;
 	}
