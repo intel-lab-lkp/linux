@@ -741,6 +741,12 @@ static void blk_trace_setup_finalize(struct request_queue *q,
 	 * to underscores for this to work as expected
 	 */
 	strreplace(buts->name, '/', '_');
+	if (version == 1 && IS_ENABLED(CONFIG_BLK_DEV_ZONED)) {
+		pr_info("%s: blktrace events for zone operations will be dropped\n",
+			name);
+		pr_info("use blktrace tools version >= 2 to track zone operations\n");
+
+	}
 
 	bt->version = version;
 	bt->act_mask = buts->act_mask;
