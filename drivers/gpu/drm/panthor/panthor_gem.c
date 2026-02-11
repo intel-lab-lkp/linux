@@ -491,6 +491,7 @@ static void panthor_gem_print_info(struct drm_printer *p, unsigned int indent,
 	drm_printf_indent(p, indent, "vmap_use_count=%u\n",
 			  refcount_read(&bo->cmap.vaddr_use_count));
 	drm_printf_indent(p, indent, "vaddr=%p\n", bo->cmap.vaddr);
+	drm_printf_indent(p, indent, "mmap_count=%u\n", refcount_read(&bo->cmap.mmap_count));
 }
 
 static int panthor_gem_pin_locked(struct drm_gem_object *obj)
@@ -605,6 +606,13 @@ static int panthor_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *v
 
 	if (is_cow_mapping(vma->vm_flags))
 		return -EINVAL;
+
+	if (!refcount_inc_not_zero(&bo->cmap.mmap_count)) {
+		dma_resv_lock(obj->resv, NULL);
+		if (!refcount_inc_not_zero(&bo->cmap.mmap_count))
+			refcount_set(&bo->cmap.mmap_count, 1);
+		dma_resv_unlock(obj->resv);
+	}
 
 	vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP);
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
@@ -732,10 +740,43 @@ static vm_fault_t panthor_gem_fault(struct vm_fault *vmf)
 	return blocking_page_setup(vmf, bo, page_offset, true);
 }
 
+static void panthor_gem_vm_open(struct vm_area_struct *vma)
+{
+	struct panthor_gem_object *bo = to_panthor_bo(vma->vm_private_data);
+
+	/* mmap_count must have been incremented at mmap time, so it can't be
+	 * zero here.
+	 */
+	if (!drm_gem_is_imported(&bo->base))
+		drm_WARN_ON(bo->base.dev, !refcount_inc_not_zero(&bo->cmap.mmap_count));
+
+	drm_gem_vm_open(vma);
+}
+
+static void panthor_gem_vm_close(struct vm_area_struct *vma)
+{
+	struct panthor_gem_object *bo = to_panthor_bo(vma->vm_private_data);
+
+	if (drm_gem_is_imported(&bo->base))
+		goto out;
+
+	if (refcount_dec_not_one(&bo->cmap.mmap_count))
+		goto out;
+
+	dma_resv_lock(bo->base.resv, NULL);
+	if (refcount_dec_and_test(&bo->cmap.mmap_count)) {
+		/* Nothing to do, pages are reclaimed lazily. */
+	}
+	dma_resv_unlock(bo->base.resv);
+
+out:
+	drm_gem_object_put(&bo->base);
+}
+
 const struct vm_operations_struct panthor_gem_vm_ops = {
 	.fault = panthor_gem_fault,
-	.open = drm_gem_vm_open,
-	.close = drm_gem_vm_close,
+	.open = panthor_gem_vm_open,
+	.close = panthor_gem_vm_close,
 };
 
 static const struct drm_gem_object_funcs panthor_gem_funcs = {
