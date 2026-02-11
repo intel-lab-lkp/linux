@@ -26,7 +26,7 @@ static struct tc_action_ops act_skbedit_ops;
 static u16 tcf_skbedit_hash(struct tcf_skbedit_params *params,
 			    struct sk_buff *skb)
 {
-	u16 queue_mapping = params->queue_mapping;
+	u32 queue_mapping = params->queue_mapping;
 
 	if (params->flags & SKBEDIT_F_TXQ_SKBHASH) {
 		u32 hash = skb_get_hash(skb);
@@ -34,7 +34,7 @@ static u16 tcf_skbedit_hash(struct tcf_skbedit_params *params,
 		queue_mapping += hash % params->mapping_mod;
 	}
 
-	return netdev_cap_txqueue(skb->dev, queue_mapping);
+	return netdev_cap_txqueue(skb->dev, (u16)queue_mapping);
 }
 
 TC_INDIRECT_SCOPE int tcf_skbedit_act(struct sk_buff *skb,
@@ -126,7 +126,7 @@ static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
 	struct tcf_skbedit *d;
 	u32 flags = 0, *priority = NULL, *mark = NULL, *mask = NULL;
 	u16 *queue_mapping = NULL, *ptype = NULL;
-	u16 mapping_mod = 1;
+	u32 mapping_mod = 1;
 	bool exists = false;
 	int ret = 0, err;
 	u32 index;
@@ -193,7 +193,7 @@ static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
 				return -EINVAL;
 			}
 
-			mapping_mod = *queue_mapping_max - *queue_mapping + 1;
+			mapping_mod = (u32)(*queue_mapping_max) - (u32)(*queue_mapping) + 1;
 			flags |= SKBEDIT_F_TXQ_SKBHASH;
 		}
 		if (*pure_flags & SKBEDIT_F_INHERITDSFIELD)
@@ -319,7 +319,7 @@ static int tcf_skbedit_dump(struct sk_buff *skb, struct tc_action *a,
 		pure_flags |= SKBEDIT_F_INHERITDSFIELD;
 	if (params->flags & SKBEDIT_F_TXQ_SKBHASH) {
 		if (nla_put_u16(skb, TCA_SKBEDIT_QUEUE_MAPPING_MAX,
-				params->queue_mapping + params->mapping_mod - 1))
+				(u16)(params->queue_mapping + params->mapping_mod - 1)))
 			goto nla_put_failure;
 
 		pure_flags |= SKBEDIT_F_TXQ_SKBHASH;
