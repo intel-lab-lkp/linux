@@ -1635,6 +1635,7 @@ const struct address_space_operations ubifs_file_address_operations = {
 	.dirty_folio	= ubifs_dirty_folio,
 	.migrate_folio	= filemap_migrate_folio,
 	.release_folio	= ubifs_release_folio,
+	.error_remove_folio = generic_error_remove_folio,
 };
 
 const struct inode_operations ubifs_file_inode_operations = {
