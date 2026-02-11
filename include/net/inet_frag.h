@@ -15,6 +15,10 @@ struct fqdir {
 	long			high_thresh;
 	long			low_thresh;
 	int			timeout;
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+	int			timeout_failed_tcp;
+	int			timeout_failed_udp;
+#endif
 	int			max_dist;
 	struct inet_frags	*f;
 	struct net		*net;
