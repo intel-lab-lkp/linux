@@ -110,6 +110,7 @@
 
 /* CFG4 bits */
 #define DP83869_INT_OE	BIT(7)
+#define DP83869_CFG4_ENABLE_AUTO_MDIX_100FD	BIT(9)
 
 /* OP MODE */
 #define DP83869_OP_MODE_MII			BIT(5)
@@ -900,6 +901,23 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 	return dp83869_config_init(phydev);
 }
 
+static void dp83869_link_change_notify(struct phy_device *phydev)
+{
+	int cfg4;
+
+	/* When using DP83869 in force 100Base-Tx mode, the PHY is required
+	 * to have robust Auto-MDIX feature enabled
+	 */
+	if (phydev->autoneg == AUTONEG_DISABLE &&
+	    phydev->speed == SPEED_100 &&
+	    phydev->duplex == DUPLEX_FULL) {
+		cfg4 = phy_read(phydev, DP83869_CFG4);
+		if (cfg4 >= 0) {
+			cfg4 |= DP83869_CFG4_ENABLE_AUTO_MDIX_100FD;
+			phy_write(phydev, DP83869_CFG4, cfg4);
+		}
+	}
+}
 
 #define DP83869_PHY_DRIVER(_id, _name)				\
 {								\
@@ -918,6 +936,7 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 	.set_wol	= dp83869_set_wol,			\
 	.suspend	= genphy_suspend,			\
 	.resume		= genphy_resume,			\
+	.link_change_notify = dp83869_link_change_notify,	\
 }
 
 static struct phy_driver dp83869_driver[] = {
