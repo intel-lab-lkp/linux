@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB
 /*
- * Copyright 2018-2024 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2026 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #include <linux/dma-buf.h>
@@ -2104,6 +2104,51 @@ int efa_mmap(struct ib_ucontext *ibucontext,
 	return __efa_mmap(dev, ucontext, vma);
 }
 
+static int efa_add_ah(struct efa_dev *dev, u16 ah)
+{
+	unsigned long refcount;
+	void *entry;
+	int err;
+
+	xa_lock(&dev->ahs_xa);
+	entry = xa_load(&dev->ahs_xa, ah);
+	refcount = entry ? xa_to_value(entry) : 0;
+	if (refcount == 0)
+		atomic64_inc(&dev->ah_count);
+
+	err = xa_err(__xa_store(&dev->ahs_xa, ah, xa_mk_value(refcount + 1), GFP_ATOMIC));
+	xa_unlock(&dev->ahs_xa);
+
+	return err;
+}
+
+static int efa_remove_ah(struct efa_dev *dev, u16 ah)
+{
+	unsigned long refcount;
+	void *entry;
+	int err;
+
+	xa_lock(&dev->ahs_xa);
+	entry = xa_load(&dev->ahs_xa, ah);
+	refcount = entry ? xa_to_value(entry) : 0;
+	if (refcount == 0) {
+		/* AH already removed or never existed - unexpected but handle gracefully */
+		xa_unlock(&dev->ahs_xa);
+		return 0;
+	}
+
+	refcount--;
+
+	if (refcount == 0) {
+		err = xa_err(__xa_erase(&dev->ahs_xa, ah));
+		atomic64_dec(&dev->ah_count);
+	} else {
+		err = xa_err(__xa_store(&dev->ahs_xa, ah, xa_mk_value(refcount), GFP_ATOMIC));
+	}
+	xa_unlock(&dev->ahs_xa);
+	return err;
+}
+
 static int efa_ah_destroy(struct efa_dev *dev, struct efa_ah *ah)
 {
 	struct efa_com_destroy_ah_params params = {
@@ -2150,6 +2195,10 @@ int efa_create_ah(struct ib_ah *ibah,
 	memcpy(ah->id, ah_attr->grh.dgid.raw, sizeof(ah->id));
 	ah->ah = result.ah;
 
+	err = efa_add_ah(dev, ah->ah);
+	if (err)
+		goto err_destroy_ah;
+
 	resp.efa_address_handle = result.ah;
 
 	if (udata->outlen) {
@@ -2158,13 +2207,15 @@ int efa_create_ah(struct ib_ah *ibah,
 		if (err) {
 			ibdev_dbg(&dev->ibdev,
 				  "Failed to copy udata for create_ah response\n");
-			goto err_destroy_ah;
+			goto err_remove_ah;
 		}
 	}
 	ibdev_dbg(&dev->ibdev, "Created ah[%d]\n", ah->ah);
 
 	return 0;
 
+err_remove_ah:
+	efa_remove_ah(dev, ah->ah);
 err_destroy_ah:
 	efa_ah_destroy(dev, ah);
 err_out:
@@ -2185,6 +2236,7 @@ int efa_destroy_ah(struct ib_ah *ibah, u32 flags)
 		return -EOPNOTSUPP;
 	}
 
+	efa_remove_ah(dev, ah->ah);
 	efa_ah_destroy(dev, ah);
 	return 0;
 }

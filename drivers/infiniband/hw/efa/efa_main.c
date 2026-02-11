@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 /*
- * Copyright 2018-2025 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2026 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -12,6 +12,7 @@
 #include <rdma/uverbs_ioctl.h>
 
 #include "efa.h"
+#include "efa_sysfs.h"
 
 #define PCI_DEV_ID_EFA0_VF 0xefa0
 #define PCI_DEV_ID_EFA1_VF 0xefa1
@@ -561,6 +562,8 @@ static struct efa_dev *efa_probe_device(struct pci_dev *pdev)
 	edev->dmadev = &pdev->dev;
 	dev->pdev = pdev;
 	xa_init(&dev->cqs_xa);
+	xa_init(&dev->ahs_xa);
+	atomic64_set(&dev->ah_count, 0);
 
 	pci_mem_bars = pci_select_bars(pdev, IORESOURCE_MEM);
 	if (EFA_BASE_BAR_MASK & ~pci_mem_bars) {
@@ -619,8 +622,14 @@ static struct efa_dev *efa_probe_device(struct pci_dev *pdev)
 	if (err)
 		goto err_free_mgmnt_irq;
 
+	err = efa_sysfs_init(dev);
+	if (err)
+		goto err_admin_destroy;
+
 	return dev;
 
+err_admin_destroy:
+	efa_com_admin_destroy(edev);
 err_free_mgmnt_irq:
 	efa_free_irq(dev, &dev->admin_irq);
 err_disable_msix:
@@ -645,6 +654,7 @@ static void efa_remove_device(struct pci_dev *pdev,
 	struct efa_com_dev *edev;
 
 	edev = &dev->edev;
+	efa_sysfs_destroy(dev);
 	efa_com_dev_reset(edev, reset_reason);
 	efa_com_admin_destroy(edev);
 	efa_free_irq(dev, &dev->admin_irq);
@@ -653,6 +663,7 @@ static void efa_remove_device(struct pci_dev *pdev,
 	devm_iounmap(&pdev->dev, edev->reg_bar);
 	efa_release_bars(dev, EFA_BASE_BAR_MASK);
 	xa_destroy(&dev->cqs_xa);
+	xa_destroy(&dev->ahs_xa);
 	ib_dealloc_device(&dev->ibdev);
 	pci_disable_device(pdev);
 }

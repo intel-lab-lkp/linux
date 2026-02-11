@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright 2018-2025 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2026 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #ifndef _EFA_H_
@@ -69,6 +69,9 @@ struct efa_dev {
 
 	/* Only stores CQs with interrupts enabled */
 	struct xarray cqs_xa;
+	/* AH tracking xarray and counter*/
+	struct xarray ahs_xa;
+	atomic64_t ah_count;
 };
 
 struct efa_ucontext {
