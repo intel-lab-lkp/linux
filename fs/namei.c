@@ -128,6 +128,8 @@
 /* SLAB cache for struct filename instances */
 static struct kmem_cache *__names_cache __ro_after_init;
 #define names_cache	runtime_const_ptr(__names_cache)
+/* SLAB buckets for long names */
+static kmem_buckets *names_buckets __ro_after_init;
 
 void __init filename_init(void)
 {
@@ -135,6 +137,8 @@ void __init filename_init(void)
 			 SLAB_HWCACHE_ALIGN|SLAB_PANIC, offsetof(struct filename, iname),
 			 EMBEDDED_NAME_MAX, NULL);
 	runtime_const_init(ptr, __names_cache);
+
+	names_buckets = kmem_buckets_create("names_bucket", 0, 0, PATH_MAX, NULL);
 }
 
 static inline struct filename *alloc_filename(void)
@@ -156,7 +160,7 @@ static inline void initname(struct filename *name)
 static int getname_long(struct filename *name, const char __user *filename)
 {
 	int len;
-	char *p __free(kfree) = kmalloc(PATH_MAX, GFP_KERNEL);
+	char *p __free(kfree) = kmem_buckets_alloc(names_buckets, PATH_MAX, GFP_KERNEL);
 	if (unlikely(!p))
 		return -ENOMEM;
 
@@ -264,14 +268,14 @@ static struct filename *do_getname_kernel(const char *filename, bool incomplete)
 
 	if (len <= EMBEDDED_NAME_MAX) {
 		p = (char *)result->iname;
-		memcpy(p, filename, len);
 	} else {
-		p = kmemdup(filename, len, GFP_KERNEL);
+		p = kmem_buckets_alloc(names_buckets, len, GFP_KERNEL);
 		if (unlikely(!p)) {
 			free_filename(result);
 			return ERR_PTR(-ENOMEM);
 		}
 	}
+	memcpy(p, filename, len);
 	result->name = p;
 	initname(result);
 	if (likely(!incomplete))
