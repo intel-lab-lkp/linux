@@ -13,6 +13,8 @@
 		ethernet0 = &gmac0;
 		ethernet1 = &gmac1;
 		ethernet2 = &gmac2;
+		i3c0 = &i3c0;
+		i3c1 = &i3c1;
 	};
 
 	chosen {
@@ -58,6 +60,14 @@
 };
 
 &gpio1 {
+	status = "okay";
+};
+
+&i3c0 {
+	status = "okay";
+};
+
+&i3c1 {
 	status = "okay";
 };
 
