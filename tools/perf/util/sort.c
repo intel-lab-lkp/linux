@@ -238,12 +238,6 @@ sort__comm_cmp(struct hist_entry *left, struct hist_entry *right)
 }
 
 static int64_t
-sort__comm_collapse(struct hist_entry *left, struct hist_entry *right)
-{
-	return strcmp(comm__str(right->comm), comm__str(left->comm));
-}
-
-static int64_t
 sort__comm_sort(struct hist_entry *left, struct hist_entry *right)
 {
 	return strcmp(comm__str(right->comm), comm__str(left->comm));
@@ -258,7 +252,6 @@ static int hist_entry__comm_snprintf(struct hist_entry *he, char *bf,
 struct sort_entry sort_comm = {
 	.se_header	= "Command",
 	.se_cmp		= sort__comm_cmp,
-	.se_collapse	= sort__comm_collapse,
 	.se_sort	= sort__comm_sort,
 	.se_snprintf	= hist_entry__comm_snprintf,
 	.se_filter	= hist_entry__thread_filter,
