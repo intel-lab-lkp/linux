@@ -507,7 +507,8 @@ mt7996_init_wiphy(struct ieee80211_hw *hw, struct mtk_wed_device *wed)
 
 	wiphy->reg_notifier = mt7996_regd_notifier;
 	wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH |
-			WIPHY_FLAG_SUPPORTS_MLO;
+			WIPHY_FLAG_SUPPORTS_MLO |
+			WIPHY_FLAG_MLO_RECONF_ADV_OFFLOAD;
 	wiphy->mbssid_max_interfaces = 16;
 	wiphy->iftype_ext_capab = iftypes_ext_capa;
 	wiphy->num_iftype_ext_capab = ARRAY_SIZE(iftypes_ext_capa);

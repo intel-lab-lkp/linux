@@ -817,6 +817,50 @@ mt7996_mcu_wed_rro_event(struct mt7996_dev *dev, struct sk_buff *skb)
 }
 
 static void
+mt7996_mcu_mld_reconf_finish(void *priv, u8 *mac, struct ieee80211_vif *vif)
+{
+	struct mt7996_mld_event_data *data = priv;
+	struct mt7996_mcu_mld_ap_reconf_event *reconf = (void *)data->data;
+
+	if (!ether_addr_equal(vif->addr, data->mld_addr))
+		return;
+
+	ieee80211_mlo_reconf_complete_notify(vif,
+					     le16_to_cpu(reconf->link_bitmap));
+}
+
+static void
+mt7996_mcu_mld_event(struct mt7996_dev *dev, struct sk_buff *skb)
+{
+	struct mt7996_mcu_mld_event *e = (void *)skb->data;
+	struct mt7996_mld_event_data data = {};
+	struct tlv *tlv;
+	int len;
+
+	memcpy(data.mld_addr, e->mld_addr, ETH_ALEN);
+	skb_pull(skb, sizeof(*e));
+	tlv = (struct tlv *)skb->data;
+	len = skb->len;
+
+	while (len > 0 && le16_to_cpu(tlv->len) <= len) {
+		data.data = (u8 *)tlv;
+
+		switch (le16_to_cpu(tlv->tag)) {
+		case UNI_EVENT_MLD_RECONF_AP_REM_TIMER:
+			ieee80211_iterate_active_interfaces_atomic(
+				dev->mt76.hw, IEEE80211_IFACE_ITER_RESUME_ALL,
+				mt7996_mcu_mld_reconf_finish, &data);
+			break;
+		default:
+			break;
+		}
+
+		len -= le16_to_cpu(tlv->len);
+		tlv = (struct tlv *)((u8 *)tlv + le16_to_cpu(tlv->len));
+	}
+}
+
+static void
 mt7996_mcu_uni_rx_unsolicited_event(struct mt7996_dev *dev, struct sk_buff *skb)
 {
 	struct mt7996_mcu_rxd *rxd = (struct mt7996_mcu_rxd *)skb->data;
@@ -836,6 +880,9 @@ mt7996_mcu_uni_rx_unsolicited_event(struct mt7996_dev *dev, struct sk_buff *skb)
 		break;
 	case MCU_UNI_EVENT_WED_RRO:
 		mt7996_mcu_wed_rro_event(dev, skb);
+		break;
+	case MCU_UNI_EVENT_MLD:
+		mt7996_mcu_mld_event(dev, skb);
 		break;
 	default:
 		break;
@@ -2863,6 +2910,142 @@ mt7996_mcu_beacon_cntdwn(struct sk_buff *rskb, struct sk_buff *skb,
 	}
 }
 
+static int
+mt7996_mcu_mld_reconf(struct mt7996_dev *dev, struct ieee80211_vif *vif,
+		      u16 removed_links, u16 *removal_count)
+{
+	struct mld_req_hdr hdr = { .mld_idx = 0xff };
+	unsigned long rem = removed_links;
+	struct mld_reconf_timer *rt;
+	struct sk_buff *skb;
+	struct tlv *tlv;
+	u8 link_id;
+
+	skb = mt76_mcu_msg_alloc(&dev->mt76, NULL, sizeof(hdr) + sizeof(*rt));
+	if (!skb)
+		return -ENOMEM;
+
+	memcpy(hdr.mld_addr, vif->addr, ETH_ALEN);
+	skb_put_data(skb, &hdr, sizeof(hdr));
+
+	tlv = mt7996_mcu_add_uni_tlv(skb, UNI_CMD_MLD_RECONF_AP_REM_TIMER,
+				     sizeof(*rt));
+	rt = (struct mld_reconf_timer *)tlv;
+	rt->link_bitmap = cpu_to_le16(removed_links);
+
+	for_each_set_bit(link_id, &rem, IEEE80211_MLD_MAX_NUM_LINKS) {
+		struct ieee80211_bss_conf *link_conf;
+		struct mt7996_vif_link *link;
+		u8 band_idx;
+		u16 to_sec;
+
+		link_conf = link_conf_dereference_protected(vif, link_id);
+		if (!link_conf)
+			continue;
+
+		link = mt7996_vif_link(dev, vif, link_id);
+		if (!link)
+			continue;
+
+		to_sec = link_conf->beacon_int * removal_count[link_id] / 1000;
+		band_idx = link->phy->mt76->band_idx;
+		rt->to_sec[band_idx] = cpu_to_le16(to_sec);
+		rt->bss_idx[band_idx] = link->mt76.idx;
+	}
+
+	return mt76_mcu_skb_send_msg(&dev->mt76, skb, MCU_WM_UNI_CMD(MLD), true);
+}
+
+static void
+mt7996_mcu_beacon_ml_reconf(struct mt7996_dev *dev,
+			    struct ieee80211_bss_conf *link_conf,
+			    struct sk_buff *rskb, struct sk_buff *skb,
+			    struct ieee80211_mutable_offsets *offs)
+{
+	u16 tail_offset = offs->tim_offset + offs->tim_length;
+	u16 removal_count[IEEE80211_MLD_MAX_NUM_LINKS] = {};
+	u16 removal_offs[IEEE80211_MLD_MAX_NUM_LINKS] = {};
+	u8 link_id, *beacon_tail = skb->data + tail_offset;
+	struct bss_bcn_ml_reconf_offset *reconf_offs;
+	struct bss_bcn_ml_reconf_tlv *reconf;
+	const struct element *elem, *sub;
+	unsigned long removed_links = 0;
+	bool has_reconf = false;
+	struct tlv *tlv;
+
+	/* TODO: currently manually parse reconf info directly from the IE, it
+	 * is expected to be passed from upper layer in the future.
+	 */
+	for_each_element_extid(elem, WLAN_EID_EXT_EHT_MULTI_LINK, beacon_tail,
+			       skb->len - tail_offset) {
+		if (ieee80211_mle_type_ok(elem->data + 1,
+					  IEEE80211_ML_CONTROL_TYPE_RECONF,
+					  elem->datalen - 1)) {
+			has_reconf = true;
+			break;
+		}
+	}
+
+	if (!has_reconf)
+		return;
+
+	for_each_mle_subelement(sub, elem->data + 1, elem->datalen - 1) {
+		struct ieee80211_mle_per_sta_profile *prof = (void *)sub->data;
+		u8 *pos = prof->variable;
+		u16 control;
+
+		if (sub->id != IEEE80211_MLE_SUBELEM_PER_STA_PROFILE)
+			continue;
+
+		if (!ieee80211_mle_reconf_sta_prof_size_ok(sub->data,
+							   sub->datalen))
+			return;
+
+		control = le16_to_cpu(prof->control);
+		link_id = control & IEEE80211_MLE_STA_RECONF_CONTROL_LINK_ID;
+		removed_links |= BIT(link_id);
+
+		if (control &
+		    IEEE80211_MLE_STA_RECONF_CONTROL_STA_MAC_ADDR_PRESENT)
+			pos += 6;
+
+		if (control &
+		    IEEE80211_MLE_STA_RECONF_CONTROL_AP_REM_TIMER_PRESENT) {
+			removal_offs[link_id] = pos - skb->data;
+			removal_count[link_id] = le16_to_cpu(*(__le16 *)pos);
+		}
+	}
+
+	if (!removed_links)
+		return;
+
+	/* the first link to be removed */
+	if (link_conf->link_id == __ffs(removed_links))
+		mt7996_mcu_mld_reconf(dev, link_conf->vif, removed_links,
+				      removal_count);
+
+	tlv = mt7996_mcu_add_uni_tlv(rskb, UNI_BSS_INFO_BCN_ML_RECONF,
+				     sizeof(*reconf) +
+				     sizeof(*reconf_offs) * hweight16(removed_links));
+	reconf = (struct bss_bcn_ml_reconf_tlv *)tlv;
+	reconf->reconf_count = hweight16(removed_links);
+
+	reconf_offs = (struct bss_bcn_ml_reconf_offset *)reconf->offset;
+	for_each_set_bit(link_id, &removed_links,
+			 IEEE80211_MLD_MAX_NUM_LINKS) {
+		struct mt7996_vif_link *link;
+
+		link = mt7996_vif_link(dev, link_conf->vif, link_id);
+		if (!link)
+			continue;
+
+		reconf_offs->ap_removal_timer_offs =
+			cpu_to_le16(removal_offs[link_id]);
+		reconf_offs->bss_idx = link->mt76.idx;
+		reconf_offs++;
+	}
+}
+
 static void
 mt7996_mcu_beacon_mbss(struct sk_buff *rskb, struct sk_buff *skb,
 		       struct bss_bcn_content_tlv *bcn,
@@ -3006,6 +3189,8 @@ int mt7996_mcu_add_beacon(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	if (link_conf->bssid_indicator)
 		mt7996_mcu_beacon_mbss(rskb, skb, bcn, &offs);
 	mt7996_mcu_beacon_cntdwn(rskb, skb, &offs, link_conf->csa_active);
+	if (ieee80211_vif_is_mld(link_conf->vif))
+		mt7996_mcu_beacon_ml_reconf(dev, link_conf, rskb, skb, &offs);
 out:
 	dev_kfree_skb(skb);
 	return mt76_mcu_skb_send_msg(&dev->mt76, rskb,

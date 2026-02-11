@@ -487,6 +487,20 @@ struct bss_prot_tlv {
 	__le32 prot_mode;
 } __packed;
 
+struct bss_bcn_ml_reconf_tlv {
+	__le16 tag;
+	__le16 len;
+	u8 reconf_count;
+	u8 rsv[3];
+	u8 offset[];
+} __packed;
+
+struct bss_bcn_ml_reconf_offset {
+	__le16 ap_removal_timer_offs;
+	u8 bss_idx;
+	u8 rsv;
+} __packed;
+
 struct sta_rec_ht_uni {
 	__le16 tag;
 	__le16 len;
@@ -659,6 +673,57 @@ struct mld_setup_link {
 	u8 bss_idx;
 	u8 __rsv;
 } __packed;
+
+struct mld_req_hdr {
+	u8 ver;
+	u8 mld_addr[ETH_ALEN];
+	u8 mld_idx;
+	u8 flag;
+	u8 rsv[3];
+	u8 buf[];
+} __packed;
+
+struct mld_reconf_timer {
+	__le16 tag;
+	__le16 len;
+	__le16 link_bitmap;
+	__le16 to_sec[__MT_MAX_BAND]; /* timeout of reconf (second) */
+	u8 bss_idx[__MT_MAX_BAND];
+	u8 rsv;
+} __packed;
+
+enum {
+	UNI_CMD_MLD_RECONF_AP_REM_TIMER = 0x03,
+	UNI_CMD_MLD_RECONF_STOP_LINK = 0x04,
+};
+
+struct mt7996_mcu_mld_event {
+	struct mt7996_mcu_rxd rxd;
+	/* fixed field */
+	u8 ver;
+	u8 mld_addr[ETH_ALEN];
+	u8 mld_idx;
+	u8 rsv[4];
+	/* tlv */
+	u8 buf[];
+} __packed;
+
+struct mt7996_mld_event_data {
+	u8 mld_addr[ETH_ALEN];
+	u8 *data;
+};
+
+struct mt7996_mcu_mld_ap_reconf_event {
+	__le16 tag;
+	__le16 len;
+	__le16 link_bitmap;
+	u8 bss_idx[3];
+	u8 rsv[3];
+} __packed;
+
+enum {
+	UNI_EVENT_MLD_RECONF_AP_REM_TIMER = 0x04,
+};
 
 struct hdr_trans_en {
 	__le16 tag;
@@ -847,7 +912,9 @@ enum {
 					 sizeof(struct bss_bcn_content_tlv) +	\
 					 4 + MT_TXD_SIZE +			\
 					 sizeof(struct bss_bcn_cntdwn_tlv) +	\
-					 sizeof(struct bss_bcn_mbss_tlv))
+					 sizeof(struct bss_bcn_mbss_tlv) +	\
+					 sizeof(struct bss_bcn_ml_reconf_tlv) +	\
+					 3 * sizeof(struct bss_bcn_ml_reconf_offset))
 #define MT7996_MAX_BSS_OFFLOAD_SIZE	2048
 #define MT7996_MAX_BEACON_SIZE		(MT7996_MAX_BSS_OFFLOAD_SIZE - \
 					 MT7996_BEACON_UPDATE_SIZE)
