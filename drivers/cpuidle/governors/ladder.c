@@ -43,6 +43,21 @@ struct ladder_device {
 static DEFINE_PER_CPU(struct ladder_device, ladder_devices);
 
 /**
+ * ladder_get_first_idx - get the first non-polling state index
+ * @drv: cpuidle driver
+ *
+ * Returns the index of the first non-polling state, or 0 if state 0 is not
+ * polling or if there's only one state available.
+ */
+static inline int ladder_get_first_idx(struct cpuidle_driver *drv)
+{
+	if (drv->state_count > 1 &&
+	    drv->states[0].flags & CPUIDLE_FLAG_POLLING)
+		return 1;
+	return 0;
+}
+
+/**
  * ladder_do_selection - prepares private data for a state change
  * @dev: the CPU
  * @ldev: the ladder device
@@ -70,16 +85,17 @@ static int ladder_select_state(struct cpuidle_driver *drv,
 	struct ladder_device *ldev = this_cpu_ptr(&ladder_devices);
 	struct ladder_device_state *last_state;
 	int last_idx = dev->last_state_idx;
-	int first_idx = drv->states[0].flags & CPUIDLE_FLAG_POLLING ? 1 : 0;
+	int first_idx;
 	s64 latency_req = cpuidle_governor_latency_req(dev->cpu);
 	s64 last_residency;
 
-	/* Special case when user has set very strict latency requirement */
-	if (unlikely(latency_req == 0)) {
+	/* Special case when there's only one state or strict latency requirement */
+	if (unlikely(drv->state_count <= 1 || latency_req == 0)) {
 		ladder_do_selection(dev, ldev, last_idx, 0);
 		return 0;
 	}
 
+	first_idx = ladder_get_first_idx(drv);
 	last_state = &ldev->states[last_idx];
 
 	last_residency = dev->last_residency_ns - drv->states[last_idx].exit_latency_ns;
@@ -134,7 +150,7 @@ static int ladder_enable_device(struct cpuidle_driver *drv,
 				struct cpuidle_device *dev)
 {
 	int i;
-	int first_idx = drv->states[0].flags & CPUIDLE_FLAG_POLLING ? 1 : 0;
+	int first_idx = ladder_get_first_idx(drv);
 	struct ladder_device *ldev = &per_cpu(ladder_devices, dev->cpu);
 	struct ladder_device_state *lstate;
 	struct cpuidle_state *state;
