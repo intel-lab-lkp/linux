@@ -56,6 +56,13 @@
 #define DRV260X_LRA_RES_PERIOD	0x22
 #define DRV260X_MAX_REG			0x23
 
+#define DRV260X_STATUS_ID_MASK		0xe0
+#define DRV260X_STATUS_ID_SHIFT		5
+#define DRV260X_ID_DRV2605		3
+#define DRV260X_ID_DRV2604		4
+#define DRV260X_ID_DRV2604L		6
+#define DRV260X_ID_DRV2605L		7
+
 #define DRV260X_GO_BIT				0x01
 
 /* Library Selection */
@@ -305,10 +312,47 @@ static const struct reg_sequence drv260x_erm_cal_regs[] = {
 	{ DRV260X_CTRL4, DRV260X_AUTOCAL_TIME_500MS },
 };
 
+struct drv260x_id_map {
+	u8 id;
+	char *name;
+};
+
+static const struct drv260x_id_map drv_260x_devids[] = {
+	{ DRV260X_ID_DRV2605, "DRV2605"},
+	{ DRV260X_ID_DRV2604, "DRV2604"},
+	{ DRV260X_ID_DRV2604L, "DRV2604L"},
+	{ DRV260X_ID_DRV2605L, "DRV2605L"},
+};
+
+static char *drv260x_get_model(u8 id)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(drv_260x_devids); i++)
+		if (id == drv_260x_devids[i].id)
+			return drv_260x_devids[i].name;
+
+	return NULL;
+}
+
 static int drv260x_init(struct drv260x_data *haptics)
 {
 	int error;
 	unsigned int cal_buf;
+	u8 id;
+
+	error = regmap_read(haptics->regmap, DRV260X_STATUS, &cal_buf);
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to read DRV260X_status register: %d\n",
+				error);
+		return error;
+	}
+
+	id = (cal_buf & DRV260X_STATUS_ID_MASK) >> DRV260X_STATUS_ID_SHIFT;
+
+	dev_info(&haptics->client->dev, "ID: %u (%s)\n", id,
+		 drv260x_get_model(id));
 
 	error = regmap_write(haptics->regmap,
 			     DRV260X_RATED_VOLT, haptics->rated_voltage);
