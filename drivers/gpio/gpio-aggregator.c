@@ -1636,6 +1636,9 @@ static int gpio_aggregator_probe(struct platform_device *pdev)
 
 static const struct of_device_id gpio_aggregator_dt_ids[] = {
 	{
+		.compatible = "gpio-aggregator",
+	},
+	{
 		.compatible = "gpio-delay",
 		.data = (void *)FWD_FEATURE_DELAY,
 	},
