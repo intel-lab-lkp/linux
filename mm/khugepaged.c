@@ -401,10 +401,18 @@ static inline int hpage_collapse_test_exit(struct mm_struct *mm)
 	return atomic_read(&mm->mm_users) == 0;
 }
 
-static inline int hpage_collapse_test_exit_or_disable(struct mm_struct *mm)
+static inline int hpage_collapse_test_exit_or_disable(struct mm_struct *mm,
+						struct collapse_control *cc)
 {
+	bool was_frozen = false;
+
+	if (cc->is_khugepaged &&
+	    unlikely(kthread_freezable_should_stop(&was_frozen)))
+		return 1;
+
 	return hpage_collapse_test_exit(mm) ||
-		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
+		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm) ||
+		was_frozen;
 }
 
 static bool hugepage_pmd_enabled(void)
@@ -904,7 +912,7 @@ static enum scan_result hugepage_vma_revalidate(struct mm_struct *mm, unsigned l
 	enum tva_type type = cc->is_khugepaged ? TVA_KHUGEPAGED :
 				 TVA_FORCED_COLLAPSE;
 
-	if (unlikely(hpage_collapse_test_exit_or_disable(mm)))
+	if (unlikely(hpage_collapse_test_exit_or_disable(mm, cc)))
 		return SCAN_ANY_PROCESS;
 
 	*vmap = vma = find_vma(mm, address);
@@ -2429,7 +2437,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 		goto breakouterloop_mmap_lock;
 
 	progress++;
-	if (unlikely(hpage_collapse_test_exit_or_disable(mm)))
+	if (unlikely(hpage_collapse_test_exit_or_disable(mm, cc)))
 		goto breakouterloop;
 
 	vma_iter_init(&vmi, mm, khugepaged_scan.address);
@@ -2437,7 +2445,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 		unsigned long hstart, hend;
 
 		cond_resched();
-		if (unlikely(hpage_collapse_test_exit_or_disable(mm))) {
+		if (unlikely(hpage_collapse_test_exit_or_disable(mm, cc))) {
 			progress++;
 			break;
 		}
@@ -2459,7 +2467,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 			bool mmap_locked = true;
 
 			cond_resched();
-			if (unlikely(hpage_collapse_test_exit_or_disable(mm)))
+			if (unlikely(hpage_collapse_test_exit_or_disable(mm, cc)))
 				goto breakouterloop;
 
 			VM_BUG_ON(khugepaged_scan.address < hstart ||
@@ -2477,7 +2485,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 				fput(file);
 				if (*result == SCAN_PTE_MAPPED_HUGEPAGE) {
 					mmap_read_lock(mm);
-					if (hpage_collapse_test_exit_or_disable(mm))
+					if (hpage_collapse_test_exit_or_disable(mm, cc))
 						goto breakouterloop;
 					*result = try_collapse_pte_mapped_thp(mm,
 						khugepaged_scan.address, false);
