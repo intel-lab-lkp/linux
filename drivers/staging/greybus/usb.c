@@ -105,8 +105,10 @@ static int hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u16 wIndex,
 	size_t response_size;
 	int ret;
 
-	/* FIXME: handle unspecified lengths */
-	response_size = sizeof(*response) + wLength;
+	/* Calculate expected response size */
+	response_size = sizeof(*response);
+	if (wLength)
+		response_size += wLength;
 
 	operation = gb_operation_create(dev->connection,
 					GB_USB_TYPE_HUB_CONTROL,
@@ -127,9 +129,13 @@ static int hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u16 wIndex,
 		goto out;
 
 	if (wLength) {
-		/* Greybus core has verified response size */
-		response = operation->response->payload;
-		memcpy(buf, response->buf, wLength);
+		size_t actual_size = operation->response->payload_size - sizeof(*response);
+		size_t copy_size = min(wLength, actual_size);
+
+		if (copy_size) {
+			response = operation->response->payload;
+			memcpy(buf, response->buf, copy_size);
+		}
 	}
 out:
 	gb_operation_put(operation);
