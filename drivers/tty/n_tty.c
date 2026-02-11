@@ -1480,6 +1480,8 @@ static void n_tty_lookahead_flow_ctrl(struct tty_struct *tty, const u8 *cp,
 	struct n_tty_data *ldata = tty->disc_data;
 	u8 flag = TTY_NORMAL;
 
+	guard(rwsem_read)(&tty->termios_rwsem);
+
 	ldata->lookahead_count += count;
 
 	if (!I_IXON(tty))
