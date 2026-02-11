@@ -10770,6 +10770,7 @@ M:	Geert Uytterhoeven <geert+renesas@glider.be>
 L:	linux-gpio@vger.kernel.org
 S:	Supported
 F:	Documentation/admin-guide/gpio/gpio-aggregator.rst
+F:	Documentation/devicetree/bindings/gpio/gpio-aggregator.yaml
 F:	drivers/gpio/gpio-aggregator.c
 
 GPIO IR Transmitter
