@@ -401,10 +401,18 @@ static inline int hpage_collapse_test_exit(struct mm_struct *mm)
 	return atomic_read(&mm->mm_users) == 0;
 }
 
-static inline int hpage_collapse_test_exit_or_disable(struct mm_struct *mm)
+static inline int hpage_collapse_test_exit_or_disable(struct mm_struct *mm,
+						struct collapse_control *cc)
 {
+	bool was_frozen = false;
+
+	if (cc->is_khugepaged &&
+	    unlikely(kthread_freezable_should_stop(&was_frozen)))
+		return 1;
+
 	return hpage_collapse_test_exit(mm) ||
-		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
+		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm) ||
+		was_frozen;
 }
 
 static bool hugepage_pmd_enabled(void)
