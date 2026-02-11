@@ -1400,7 +1400,7 @@ out:
 	return collapsed;
 }
 
-static bool try_to_free_pte_page(pte_t *pte)
+static bool try_to_free_pte(pte_t *pte)
 {
 	int i;
 
@@ -1408,7 +1408,7 @@ static bool try_to_free_pte_page(pte_t *pte)
 		if (!pte_none(pte[i]))
 			return false;
 
-	free_page((unsigned long)pte);
+	pgtable_free_addr(pte);
 	return true;
 }
 
@@ -1435,7 +1435,7 @@ static bool unmap_pte_range(pmd_t *pmd, unsigned long start, unsigned long end)
 		pte++;
 	}
 
-	if (try_to_free_pte_page((pte_t *)pmd_page_vaddr(*pmd))) {
+	if (try_to_free_pte((pte_t *)pmd_page_vaddr(*pmd))) {
 		pmd_clear(pmd);
 		return true;
 	}
@@ -1537,9 +1537,9 @@ static void unmap_pud_range(p4d_t *p4d, unsigned long start, unsigned long end)
 	 */
 }
 
-static int alloc_pte_page(pmd_t *pmd)
+static int alloc_pte(pmd_t *pmd)
 {
-	pte_t *pte = (pte_t *)get_zeroed_page(GFP_KERNEL);
+	pte_t *pte = pgtable_alloc_addr(GFP_KERNEL, 0);
 	if (!pte)
 		return -1;
 
@@ -1600,7 +1600,7 @@ static long populate_pmd(struct cpa_data *cpa,
 		 */
 		pmd = pmd_offset(pud, start);
 		if (pmd_none(*pmd))
-			if (alloc_pte_page(pmd))
+			if (alloc_pte(pmd))
 				return -1;
 
 		populate_pte(cpa, start, pre_end, cur_pages, pmd, pgprot);
@@ -1641,7 +1641,7 @@ static long populate_pmd(struct cpa_data *cpa,
 	if (start < end) {
 		pmd = pmd_offset(pud, start);
 		if (pmd_none(*pmd))
-			if (alloc_pte_page(pmd))
+			if (alloc_pte(pmd))
 				return -1;
 
 		populate_pte(cpa, start, end, num_pages - cur_pages,
