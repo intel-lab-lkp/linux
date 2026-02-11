@@ -57,6 +57,7 @@
 #include <net/addrconf.h>
 #include <net/ipv6_frag.h>
 #include <net/inet_ecn.h>
+#include <net/ip6_reasm_policy.h>
 
 static const char ip6_frag_cache_name[] = "ip6-frags";
 
@@ -103,6 +104,59 @@ fq_find(struct net *net, __be32 id, const struct ipv6hdr *hdr, int iif)
 
 	return container_of(q, struct frag_queue, q);
 }
+
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+static u8 ip6_reasm_get_l4proto(struct sk_buff *skb, int nhoff)
+{
+	struct frag_hdr _fhdr, *fhdr;
+	__be16 frag_off;
+	int offset;
+	u8 nexthdr;
+
+	fhdr = skb_header_pointer(skb, nhoff, sizeof(_fhdr), &_fhdr);
+	if (!fhdr)
+		return IPPROTO_NONE;
+
+	nexthdr = fhdr->nexthdr;
+	offset = nhoff + sizeof(struct frag_hdr);
+
+	/* Skip extension headers after fragment header */
+	if (ipv6_skip_exthdr(skb, offset, &nexthdr, &frag_off) < 0)
+		return IPPROTO_NONE;
+
+	return nexthdr;
+}
+
+/**
+ * ip6_reasm_adjust_timer - adjust IPv6 reassembly timer under memory pressure
+ * @fq: fragment queue
+ * @skb: current fragment skb
+ * @nhoff: offset to fragment header
+ *
+ * Shortens reassembly timeout on buffer starvation to
+ * allow faster eviction of incomplete fragment queues.
+ */
+void ip6_reasm_adjust_timer(struct frag_queue *fq,
+			    struct sk_buff *skb, int nhoff)
+{
+	u8 l4proto;
+	unsigned long new_timer;
+
+	if (frag_mem_limit(fq->q.fqdir) < fq->q.fqdir->low_thresh)
+		return;
+
+	l4proto = ip6_reasm_get_l4proto(skb, nhoff);
+
+	if (l4proto == IPPROTO_TCP || l4proto == IPPROTO_ESP)
+		new_timer = fq->q.fqdir->timeout_failed_tcp;
+	else
+		new_timer = fq->q.fqdir->timeout_failed_udp;
+
+	if (time_after(fq->q.timer.expires, jiffies + new_timer))
+		mod_timer(&fq->q.timer, jiffies + new_timer);
+}
+EXPORT_SYMBOL_GPL(ip6_reasm_adjust_timer);
+#endif
 
 static int ip6_frag_queue(struct net *net,
 			  struct frag_queue *fq, struct sk_buff *skb,
@@ -154,6 +208,10 @@ static int ip6_frag_queue(struct net *net,
 			goto discard_fq;
 		fq->q.flags |= INET_FRAG_LAST_IN;
 		fq->q.len = end;
+
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+		ip6_reasm_adjust_timer(fq, skb, nhoff);
+#endif
 	} else {
 		/* Check if the fragment is rounded to 8 bytes.
 		 * Required by the RFC.
@@ -437,6 +495,20 @@ static struct ctl_table ip6_frags_ns_ctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_jiffies,
 	},
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+	{
+		.procname	= "ip6frag_timeout_failed_tcp",
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_jiffies,
+	},
+	{
+		.procname	= "ip6frag_timeout_failed_udp",
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_jiffies,
+	},
+#endif
 };
 
 /* secret interval has been deprecated */
@@ -468,6 +540,10 @@ static int __net_init ip6_frags_ns_sysctl_register(struct net *net)
 	table[1].data	= &net->ipv6.fqdir->low_thresh;
 	table[1].extra2	= &net->ipv6.fqdir->high_thresh;
 	table[2].data	= &net->ipv6.fqdir->timeout;
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+	table[3].data	= &net->ipv6.fqdir->timeout_failed_tcp;
+	table[4].data	= &net->ipv6.fqdir->timeout_failed_udp;
+#endif
 
 	hdr = register_net_sysctl_sz(net, "net/ipv6", table,
 				     ARRAY_SIZE(ip6_frags_ns_ctl_table));
@@ -538,6 +614,12 @@ static int __net_init ipv6_frags_init_net(struct net *net)
 	net->ipv6.fqdir->high_thresh = IPV6_FRAG_HIGH_THRESH;
 	net->ipv6.fqdir->low_thresh = IPV6_FRAG_LOW_THRESH;
 	net->ipv6.fqdir->timeout = IPV6_FRAG_TIMEOUT;
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+	net->ipv6.fqdir->timeout_failed_tcp =
+		IPV6_REASM_TIMEOUT_FAILED_TCP * HZ;
+	net->ipv6.fqdir->timeout_failed_udp =
+		IPV6_REASM_TIMEOUT_FAILED_UDP * HZ;
+#endif
 
 	res = ip6_frags_ns_sysctl_register(net);
 	if (res < 0)

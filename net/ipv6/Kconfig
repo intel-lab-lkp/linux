@@ -340,4 +340,14 @@ config IPV6_IOAM6_LWTUNNEL
 
 	  If unsure, say N.
 
+config IPV6_FRAG_TIMER_ADJ
+	bool "IPv6: Adjust reassembly timer on buffer starvation"
+	default n
+	help
+	  Enable dynamic adjustment of the IPv6 reassembly timer when the
+	  fragment memory usage exceeds the low threshold. This helps to
+	  quickly evict incomplete fragment queues, making room for new
+	  incoming fragments such as latency-sensitive IMS traffic.
+	  If unsure, say N.
+
 endif # IPV6

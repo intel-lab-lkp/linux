@@ -28893,3 +28893,8 @@ S:	Buried alive in reporters
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 F:	*
 F:	*/
+
+ADJUSTABLE FRAGMENT TIMER
+M:	Soukjin Bae <soukjin.bae@samsung.com>
+S:	Maintained
+F:	include/net/ip6_reasm_policy.h
