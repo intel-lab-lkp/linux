@@ -9356,9 +9356,20 @@ static void manage_dm_interrupts(struct amdgpu_device *adev,
 
 			config.offdelay_ms = offdelay ?: 30;
 		} else {
-			/* offdelay_ms = 0 will never disable vblank */
-			config.offdelay_ms = 1;
-			config.disable_immediate = true;
+			if (amdgpu_no_vblank_immediate) {
+				/*
+				 * Use 2-frame offdelay instead of immediate
+				 * disable to work around flip_done timeouts.
+				 */
+				offdelay = DIV64_U64_ROUND_UP((u64)20 *
+							      timing->v_total *
+							      timing->h_total,
+							      timing->pix_clk_100hz);
+				config.offdelay_ms = offdelay ?: 30;
+			} else {
+				config.offdelay_ms = 1;
+				config.disable_immediate = true;
+			}
 		}
 
 		drm_crtc_vblank_on_config(&acrtc->base,

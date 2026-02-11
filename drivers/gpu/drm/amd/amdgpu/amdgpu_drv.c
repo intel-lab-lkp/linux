@@ -925,6 +925,22 @@ MODULE_PARM_DESC(damageclips,
 module_param_named(damageclips, amdgpu_damage_clips, int, 0444);
 
 /**
+ * DOC: no_vblank_immediate (int)
+ * Disable immediate vblank disable on DCN35+ non-PSR CRTCs. Use a 2-frame
+ * offdelay instead, matching the behavior used for older hardware and DGPUs.
+ * This works around flip_done timeouts that cause GPU hangs on some hardware
+ * with DisplayPort connections.
+ * (0 = use default immediate disable (default), 1 = use 2-frame offdelay)
+ *
+ * This is a temporary workaround and should be removed once the underlying
+ * vblank/DM locking issue is resolved.
+ */
+int amdgpu_no_vblank_immediate;
+MODULE_PARM_DESC(no_vblank_immediate,
+	"Disable immediate vblank off on DCN35+ (0 = default, 1 = use 2-frame offdelay)");
+module_param_named(no_vblank_immediate, amdgpu_no_vblank_immediate, int, 0444);
+
+/**
  * DOC: tmz (int)
  * Trusted Memory Zone (TMZ) is a method to protect data being written
  * to or read from memory.

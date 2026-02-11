@@ -208,6 +208,7 @@ extern uint amdgpu_dc_visual_confirm;
 extern int amdgpu_dm_abm_level;
 extern int amdgpu_backlight;
 extern int amdgpu_damage_clips;
+extern int amdgpu_no_vblank_immediate;
 extern struct amdgpu_mgpu_info mgpu_info;
 extern int amdgpu_ras_enable;
 extern uint amdgpu_ras_mask;
