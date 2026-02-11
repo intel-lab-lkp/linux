@@ -1955,8 +1955,10 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 				pgtable_t pgtable = prealloc_pte;
 
 				prealloc_pte = NULL;
+
 				if (!arch_needs_pgtable_deposit() && !pgtable &&
 				    vma_is_anonymous(vma)) {
+					count_vm_event(THP_SPLIT_PMD_PTE_ALLOC_FAILED);
 					page_vma_mapped_walk_done(&pvmw);
 					ret = false;
 					break;
@@ -2359,6 +2361,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 				prealloc_pte = NULL;
 				if (!arch_needs_pgtable_deposit() && !pgtable &&
 				    vma_is_anonymous(vma)) {
+					count_vm_event(THP_SPLIT_PMD_PTE_ALLOC_FAILED);
 					page_vma_mapped_walk_done(&pvmw);
 					ret = false;
 					break;

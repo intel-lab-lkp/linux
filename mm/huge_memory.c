@@ -3332,6 +3332,7 @@ void __split_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 	if (vma_is_anonymous(vma) && !arch_needs_pgtable_deposit()) {
 		pgtable = pte_alloc_one(vma->vm_mm);
 		if (!pgtable) {
+			count_vm_event(THP_SPLIT_PMD_PTE_ALLOC_FAILED);
 			mmu_notifier_invalidate_range_end(&range);
 			return;
 		}
