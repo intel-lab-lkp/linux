@@ -76,6 +76,7 @@
 #include <linux/mm_inline.h>
 #include <linux/oom.h>
 
+#include <asm/pgalloc.h>
 #include <asm/tlb.h>
 
 #define CREATE_TRACE_POINTS
@@ -1863,6 +1864,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	unsigned long pfn;
 	unsigned long hsz = 0;
 	int ptes = 0;
+	pgtable_t prealloc_pte = NULL;
 
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
@@ -1896,6 +1898,10 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		hsz = huge_page_size(hstate_vma(vma));
 	}
 	mmu_notifier_invalidate_range_start(&range);
+
+	if ((flags & TTU_SPLIT_HUGE_PMD) && vma_is_anonymous(vma) &&
+	    !arch_needs_pgtable_deposit())
+		prealloc_pte = pte_alloc_one(mm);
 
 	while (page_vma_mapped_walk(&pvmw)) {
 		/*
@@ -1946,12 +1952,21 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			}
 
 			if (flags & TTU_SPLIT_HUGE_PMD) {
+				pgtable_t pgtable = prealloc_pte;
+
+				prealloc_pte = NULL;
+				if (!arch_needs_pgtable_deposit() && !pgtable &&
+				    vma_is_anonymous(vma)) {
+					page_vma_mapped_walk_done(&pvmw);
+					ret = false;
+					break;
+				}
 				/*
 				 * We temporarily have to drop the PTL and
 				 * restart so we can process the PTE-mapped THP.
 				 */
 				split_huge_pmd_locked(vma, pvmw.address,
-						      pvmw.pmd, false);
+						      pvmw.pmd, false, pgtable);
 				flags &= ~TTU_SPLIT_HUGE_PMD;
 				page_vma_mapped_walk_restart(&pvmw);
 				continue;
@@ -2231,6 +2246,9 @@ walk_done:
 		break;
 	}
 
+	if (prealloc_pte)
+		pte_free(mm, prealloc_pte);
+
 	mmu_notifier_invalidate_range_end(&range);
 
 	return ret;
@@ -2290,6 +2308,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
 	unsigned long pfn;
 	unsigned long hsz = 0;
+	pgtable_t prealloc_pte = NULL;
 
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
@@ -2324,6 +2343,10 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	}
 	mmu_notifier_invalidate_range_start(&range);
 
+	if ((flags & TTU_SPLIT_HUGE_PMD) && vma_is_anonymous(vma) &&
+	    !arch_needs_pgtable_deposit())
+		prealloc_pte = pte_alloc_one(mm);
+
 	while (page_vma_mapped_walk(&pvmw)) {
 		/* PMD-mapped THP migration entry */
 		if (!pvmw.pte) {
@@ -2331,8 +2354,17 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			__maybe_unused pmd_t pmdval;
 
 			if (flags & TTU_SPLIT_HUGE_PMD) {
+				pgtable_t pgtable = prealloc_pte;
+
+				prealloc_pte = NULL;
+				if (!arch_needs_pgtable_deposit() && !pgtable &&
+				    vma_is_anonymous(vma)) {
+					page_vma_mapped_walk_done(&pvmw);
+					ret = false;
+					break;
+				}
 				split_huge_pmd_locked(vma, pvmw.address,
-						      pvmw.pmd, true);
+						      pvmw.pmd, true, pgtable);
 				ret = false;
 				page_vma_mapped_walk_done(&pvmw);
 				break;
@@ -2582,6 +2614,9 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			mlock_drain_local();
 		folio_put(folio);
 	}
+
+	if (prealloc_pte)
+		pte_free(mm, prealloc_pte);
 
 	mmu_notifier_invalidate_range_end(&range);
 

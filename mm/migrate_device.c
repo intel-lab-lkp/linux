@@ -829,9 +829,13 @@ static int migrate_vma_insert_huge_pmd_page(struct migrate_vma *migrate,
 
 	__folio_mark_uptodate(folio);
 
-	pgtable = pte_alloc_one(vma->vm_mm);
-	if (unlikely(!pgtable))
-		goto abort;
+	if (arch_needs_pgtable_deposit()) {
+		pgtable = pte_alloc_one(vma->vm_mm);
+		if (unlikely(!pgtable))
+			goto abort;
+	} else {
+		pgtable = NULL;
+	}
 
 	if (folio_is_device_private(folio)) {
 		swp_entry_t swp_entry;
@@ -879,10 +883,11 @@ static int migrate_vma_insert_huge_pmd_page(struct migrate_vma *migrate,
 	folio_get(folio);
 
 	if (flush) {
-		pte_free(vma->vm_mm, pgtable);
+		if (pgtable)
+			pte_free(vma->vm_mm, pgtable);
 		flush_cache_page(vma, addr, addr + HPAGE_PMD_SIZE);
 		pmdp_invalidate(vma, addr, pmdp);
-	} else {
+	} else if (pgtable) {
 		pgtable_trans_huge_deposit(vma->vm_mm, pmdp, pgtable);
 		mm_inc_nr_ptes(vma->vm_mm);
 	}
