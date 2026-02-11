@@ -30,6 +30,7 @@
 #include <linux/module.h>
 #include <net/netfilter/ipv6/nf_defrag_ipv6.h>
 #include <net/netns/generic.h>
+#include <net/ip6_reasm_policy.h>
 
 static const char nf_frags_cache_name[] = "nf-frags";
 
@@ -62,6 +63,20 @@ static struct ctl_table nf_ct_frag6_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_doulongvec_minmax,
 	},
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+	{
+		.procname	= "nf_conntrack_frag6_timeout_failed_tcp",
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_jiffies,
+	},
+	{
+		.procname	= "nf_conntrack_frag6_timeout_failed_udp",
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_jiffies,
+	},
+#endif
 };
 
 static int nf_ct_frag6_sysctl_register(struct net *net)
@@ -85,6 +100,10 @@ static int nf_ct_frag6_sysctl_register(struct net *net)
 	table[1].extra2	= &nf_frag->fqdir->high_thresh;
 	table[2].data	= &nf_frag->fqdir->high_thresh;
 	table[2].extra1	= &nf_frag->fqdir->low_thresh;
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+	table[3].data	= &nf_frag->fqdir->timeout_failed_tcp;
+	table[4].data	= &nf_frag->fqdir->timeout_failed_udp;
+#endif
 
 	hdr = register_net_sysctl_sz(net, "net/netfilter", table,
 				     ARRAY_SIZE(nf_ct_frag6_sysctl_table));
@@ -214,6 +233,10 @@ static int nf_ct_frag6_queue(struct frag_queue *fq, struct sk_buff *skb,
 		}
 		fq->q.flags |= INET_FRAG_LAST_IN;
 		fq->q.len = end;
+
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+		ip6_reasm_adjust_timer(fq, skb, nhoff);
+#endif
 	} else {
 		/* Check if the fragment is rounded to 8 bytes.
 		 * Required by the RFC.
@@ -513,6 +536,10 @@ static int nf_ct_net_init(struct net *net)
 	nf_frag->fqdir->high_thresh = IPV6_FRAG_HIGH_THRESH;
 	nf_frag->fqdir->low_thresh = IPV6_FRAG_LOW_THRESH;
 	nf_frag->fqdir->timeout = IPV6_FRAG_TIMEOUT;
+#ifdef CONFIG_IPV6_FRAG_TIMER_ADJ
+	nf_frag->fqdir->timeout_failed_tcp = IPV6_REASM_TIMEOUT_FAILED_TCP * HZ;
+	nf_frag->fqdir->timeout_failed_udp = IPV6_REASM_TIMEOUT_FAILED_UDP * HZ;
+#endif
 
 	res = nf_ct_frag6_sysctl_register(net);
 	if (res < 0)
