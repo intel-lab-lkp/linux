@@ -31,8 +31,8 @@ enum ak555x_type {
 
 #define AK5558_NUM_SUPPLIES 2
 static const char *ak5558_supply_names[AK5558_NUM_SUPPLIES] = {
-	"DVDD",
-	"AVDD",
+	"dvdd",
+	"avdd",
 };
 
 /* AK5558 Codec Private Data */
