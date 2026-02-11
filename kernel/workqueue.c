@@ -7659,6 +7659,49 @@ static void wq_watchdog_reset_touched(void)
 		per_cpu(wq_watchdog_touched_cpu, cpu) = jiffies;
 }
 
+#ifdef CONFIG_WQ_WATCHDOG_WORKERS
+/*
+ * Scan all in-flight workers in @pool for stalls. A worker is considered
+ * stalled if its current work item has been executing for longer than @thresh
+ * based on its current_start timestamp. This catches workers that are stuck
+ * regardless of the pool's worklist state or last_progress_ts.
+ */
+static bool report_stalled_workers(struct worker_pool *pool,
+				   unsigned long now,
+				   unsigned long thresh)
+{
+	struct worker *worker;
+	bool stall = false;
+	int bkt;
+
+	/*
+	 * Iterate busy_hash without pool->lock. This is intentionally
+	 * lockless to avoid contention in the watchdog timer path.
+	 * Workers that have been stalled for thresh (typically 30s) are
+	 * unlikely to be transitioning in/out of busy_hash concurrently.
+	 */
+	hash_for_each(pool->busy_hash, bkt, worker, hentry) {
+		if (time_after(now, worker->current_start + thresh)) {
+			pr_emerg("BUG: workqueue lockup - worker ");
+			pr_cont_worker_id(worker);
+			pr_cont(":%ps stuck in pool",
+				worker->current_func);
+			pr_cont_pool_info(pool);
+			pr_cont(" for %us!\n",
+				jiffies_to_msecs(now - worker->current_start) / 1000);
+			stall = true;
+		}
+	}
+	return stall;
+}
+#else
+static bool report_stalled_workers(struct worker_pool *pool,
+				   unsigned long now, unsigned long thresh)
+{
+	return false;
+}
+#endif /* CONFIG_WQ_WATCHDOG_WORKERS */
+
 static void wq_watchdog_timer_fn(struct timer_list *unused)
 {
 	unsigned long thresh = READ_ONCE(wq_watchdog_thresh) * HZ;
@@ -7677,14 +7720,19 @@ static void wq_watchdog_timer_fn(struct timer_list *unused)
 		unsigned long pool_ts, touched, ts;
 
 		pool->cpu_stall = false;
-		if (list_empty(&pool->worklist))
-			continue;
 
 		/*
 		 * If a virtual machine is stopped by the host it can look to
 		 * the watchdog like a stall.
 		 */
 		kvm_check_and_clear_guest_paused();
+
+		/* Check for individual stalled workers in this pool. */
+		if (report_stalled_workers(pool, now, thresh))
+			lockup_detected = true;
+
+		if (list_empty(&pool->worklist))
+			continue;
 
 		/* get the latest of pool and touched timestamps */
 		if (pool->cpu >= 0)

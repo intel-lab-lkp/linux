@@ -1320,6 +1320,18 @@ config BOOTPARAM_WQ_STALL_PANIC
 	  This setting can be overridden at runtime via the
 	  workqueue.panic_on_stall kernel parameter.
 
+config WQ_WATCHDOG_WORKERS
+	bool "Detect individual stalled workqueue workers"
+	depends on WQ_WATCHDOG
+	default n
+	help
+	  Say Y here to enable per-worker stall detection. When enabled,
+	  the workqueue watchdog scans all in-flight workers in each pool
+	  and reports any whose current work item has been executing for
+	  longer than the watchdog threshold. This catches stalled workers
+	  even when the pool's worklist is empty or the pool has recently
+	  made forward progress on other work items.
+
 config WQ_CPU_INTENSIVE_REPORT
 	bool "Report per-cpu work items which hog CPU for too long"
 	depends on DEBUG_KERNEL
