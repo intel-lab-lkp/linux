@@ -13,6 +13,90 @@
 
 static __read_mostly DECLARE_BITMAP(exclusive_cmds, CXL_MEM_COMMAND_ID_MAX);
 
+extern struct ida cxl_nvdimm_bridge_ida;
+
+static struct lock_class_key cxl_nvdimm_bridge_key;
+
+static struct cxl_nvdimm_bridge *cxl_nvdimm_bridge_alloc(struct cxl_port *port)
+{
+	struct cxl_nvdimm_bridge *cxl_nvb;
+	struct device *dev;
+	int rc;
+
+	cxl_nvb = kzalloc(sizeof(*cxl_nvb), GFP_KERNEL);
+	if (!cxl_nvb)
+		return ERR_PTR(-ENOMEM);
+
+	rc = ida_alloc(&cxl_nvdimm_bridge_ida, GFP_KERNEL);
+	if (rc < 0)
+		goto err;
+	cxl_nvb->id = rc;
+
+	dev = &cxl_nvb->dev;
+	cxl_nvb->port = port;
+	device_initialize(dev);
+	lockdep_set_class(&dev->mutex, &cxl_nvdimm_bridge_key);
+	device_set_pm_not_required(dev);
+	dev->parent = &port->dev;
+	dev->bus = &cxl_bus_type;
+	dev->type = &cxl_nvdimm_bridge_type;
+
+	return cxl_nvb;
+
+err:
+	kfree(cxl_nvb);
+	return ERR_PTR(rc);
+}
+
+static void unregister_nvb(void *_cxl_nvb)
+{
+	struct cxl_nvdimm_bridge *cxl_nvb = _cxl_nvb;
+
+	device_unregister(&cxl_nvb->dev);
+}
+
+/**
+ * devm_cxl_add_nvdimm_bridge() - add the root of a LIBNVDIMM topology
+ * @host: platform firmware root device
+ * @port: CXL port at the root of a CXL topology
+ *
+ * Return: bridge device that can host cxl_nvdimm objects
+ */
+struct cxl_nvdimm_bridge *devm_cxl_add_nvdimm_bridge(struct device *host,
+						     struct cxl_port *port)
+{
+	struct cxl_nvdimm_bridge *cxl_nvb;
+	struct device *dev;
+	int rc;
+
+	if (!IS_ENABLED(CONFIG_CXL_PMEM))
+		return ERR_PTR(-ENXIO);
+
+	cxl_nvb = cxl_nvdimm_bridge_alloc(port);
+	if (IS_ERR(cxl_nvb))
+		return cxl_nvb;
+
+	dev = &cxl_nvb->dev;
+	rc = dev_set_name(dev, "nvdimm-bridge%d", cxl_nvb->id);
+	if (rc)
+		goto err;
+
+	rc = device_add(dev);
+	if (rc)
+		goto err;
+
+	rc = devm_add_action_or_reset(host, unregister_nvb, cxl_nvb);
+	if (rc)
+		return ERR_PTR(rc);
+
+	return cxl_nvb;
+
+err:
+	put_device(dev);
+	return ERR_PTR(rc);
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_add_nvdimm_bridge, "CXL");
+
 static void clear_exclusive(void *mds)
 {
 	clear_exclusive_cxl_commands(mds, exclusive_cmds);

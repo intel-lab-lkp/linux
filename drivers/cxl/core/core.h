@@ -7,7 +7,6 @@
 #include <cxl/mailbox.h>
 #include <linux/rwsem.h>
 
-extern const struct device_type cxl_nvdimm_bridge_type;
 extern const struct device_type cxl_nvdimm_type;
 extern const struct device_type cxl_pmu_type;
 

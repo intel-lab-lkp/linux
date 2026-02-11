@@ -877,6 +877,7 @@ int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 bool is_cxl_region(struct device *dev);
 
 extern const struct bus_type cxl_bus_type;
+extern const struct device_type cxl_nvdimm_bridge_type;
 
 /*
  * Note, add_dport() is expressly for the cxl_port driver. TODO: investigate a
