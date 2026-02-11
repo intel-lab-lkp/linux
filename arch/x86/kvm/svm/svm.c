@@ -4399,17 +4399,6 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
 	sync_cr8_to_lapic(vcpu);
 
 	svm->next_rip = 0;
-	if (is_guest_mode(vcpu)) {
-		nested_sync_control_from_vmcb02(svm);
-
-		/* Track VMRUNs that have made past consistency checking */
-		if (svm->nested.nested_run_pending &&
-		    !svm_is_vmrun_failure(svm->vmcb->control.exit_code))
-                        ++vcpu->stat.nested_run;
-
-		svm->nested.nested_run_pending = 0;
-	}
-
 	svm->vmcb->control.tlb_ctl = TLB_CONTROL_DO_NOTHING;
 
 	/*
@@ -4438,12 +4427,17 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
 	/*
 	 * Update the cache after completing interrupts to get an accurate
 	 * NextRIP, e.g. when re-injecting a soft interrupt.
-	 *
-	 * FIXME: Rework svm_get_nested_state() to not pull data from the
-	 *        cache (except for maybe int_ctl).
 	 */
-	if (is_guest_mode(vcpu))
-		svm->nested.ctl.next_rip = svm->vmcb->control.next_rip;
+	if (is_guest_mode(vcpu)) {
+		nested_sync_control_from_vmcb02(svm);
+
+		/* Track VMRUNs that have made past consistency checking */
+		if (svm->nested.nested_run_pending &&
+		    !svm_is_vmrun_failure(svm->vmcb->control.exit_code))
+			++vcpu->stat.nested_run;
+
+		svm->nested.nested_run_pending = 0;
+	}
 
 	return svm_exit_handlers_fastpath(vcpu);
 }
