@@ -38,6 +38,8 @@ properties:
 
   wakeup-source: true
 
+  spi-cpol: true
+
   ti,debounce-max:
     deprecated: true
     $ref: /schemas/types.yaml#/definitions/uint16
