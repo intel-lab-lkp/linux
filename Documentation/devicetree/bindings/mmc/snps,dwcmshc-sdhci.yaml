@@ -49,12 +49,6 @@ properties:
   power-domains:
     maxItems: 1
 
-  resets:
-    maxItems: 5
-
-  reset-names:
-    maxItems: 5
-
   rockchip,txclk-tapnum:
     description: Specify the number of delay for tx sampling.
     $ref: /schemas/types.yaml#/definitions/uint8
