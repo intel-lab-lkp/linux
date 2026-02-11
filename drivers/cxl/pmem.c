@@ -397,6 +397,7 @@ static int cxl_pmem_ctl(struct nvdimm_bus_descriptor *nd_desc,
 static int detach_nvdimm(struct device *dev, void *data)
 {
 	struct cxl_nvdimm *cxl_nvd;
+	struct cxl_memdev *cxlmd;
 	bool release = false;
 
 	if (!is_cxl_nvdimm(dev))
@@ -411,6 +412,10 @@ static int detach_nvdimm(struct device *dev, void *data)
 	}
 	if (release)
 		device_release_driver(dev);
+
+	cxlmd = cxl_nvd->cxlmd;
+	devm_release_action(&cxlmd->dev, cxlmd_release_nvdimm, cxlmd);
+
 	return 0;
 }
 

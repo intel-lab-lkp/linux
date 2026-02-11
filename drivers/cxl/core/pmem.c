@@ -142,11 +142,14 @@ static struct cxl_nvdimm *cxl_nvdimm_alloc(struct cxl_nvdimm_bridge *cxl_nvb,
 	return cxl_nvd;
 }
 
-static void cxlmd_release_nvdimm(void *_cxlmd)
+void cxlmd_release_nvdimm(void *_cxlmd)
 {
 	struct cxl_memdev *cxlmd = _cxlmd;
 	struct cxl_nvdimm *cxl_nvd = cxlmd->cxl_nvd;
 	struct cxl_nvdimm_bridge *cxl_nvb = cxlmd->cxl_nvb;
+
+	dev_info(&cxlmd->dev, "XXX release nvdimm %s\n",
+		 cxl_nvd ? dev_name(&cxl_nvd->dev) : "none");
 
 	cxl_nvd->cxlmd = NULL;
 	cxlmd->cxl_nvd = NULL;
@@ -154,6 +157,7 @@ static void cxlmd_release_nvdimm(void *_cxlmd)
 	device_unregister(&cxl_nvd->dev);
 	put_device(&cxl_nvb->dev);
 }
+EXPORT_SYMBOL_NS_GPL(cxlmd_release_nvdimm, "CXL");
 
 /**
  * devm_cxl_add_nvdimm() - add a bridge between a cxl_memdev and an nvdimm
