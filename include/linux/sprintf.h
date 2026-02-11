@@ -25,7 +25,12 @@ __scanf(2, 0) int vsscanf(const char *, const char *, va_list);
 extern bool no_hash_pointers;
 void hash_pointers_finalize(bool slub_debug);
 
-/* Used for Rust formatting ('%pA') */
+/**
+ * Used for Rust formatting ('%pA').
+ *
+ * Safety preconditions are documented in the Rust implementation
+ * (rust/kernel/print.rs).
+ */
 char *rust_fmt_argument(char *buf, char *end, const void *ptr);
 
 #endif	/* _LINUX_KERNEL_SPRINTF_H */
