@@ -36,6 +36,7 @@ static u8 nvmet_auth_negotiate(struct nvmet_req *req, void *d)
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	struct nvmf_auth_dhchap_negotiate_data *data = d;
 	int i, hash_id = 0, fallback_hash_id = 0, dhgid, fallback_dhgid;
+	size_t idlist_half;
 
 	pr_debug("%s: ctrl %d qid %d: data sc_d %d napd %d authid %d halen %d dhlen %d\n",
 		 __func__, ctrl->cntlid, req->sq->qid,
@@ -72,6 +73,15 @@ static u8 nvmet_auth_negotiate(struct nvmet_req *req, void *d)
 	    NVME_AUTH_DHCHAP_AUTH_ID)
 		return NVME_AUTH_DHCHAP_FAILURE_INCORRECT_PAYLOAD;
 
+	/*
+	 * idlist[0..idlist_half-1]: hash IDs
+	 * idlist[idlist_half..]: DH group IDs
+	 */
+	idlist_half = sizeof(data->auth_protocol[0].dhchap.idlist) / 2;
+	if (data->auth_protocol[0].dhchap.halen > idlist_half ||
+	    data->auth_protocol[0].dhchap.dhlen > idlist_half)
+		return NVME_AUTH_DHCHAP_FAILURE_INCORRECT_PAYLOAD;
+
 	for (i = 0; i < data->auth_protocol[0].dhchap.halen; i++) {
 		u8 host_hmac_id = data->auth_protocol[0].dhchap.idlist[i];
 
@@ -98,7 +108,8 @@ static u8 nvmet_auth_negotiate(struct nvmet_req *req, void *d)
 	dhgid = -1;
 	fallback_dhgid = -1;
 	for (i = 0; i < data->auth_protocol[0].dhchap.dhlen; i++) {
-		int tmp_dhgid = data->auth_protocol[0].dhchap.idlist[i + 30];
+		int tmp_dhgid =
+			data->auth_protocol[0].dhchap.idlist[i + idlist_half];
 
 		if (tmp_dhgid != ctrl->dh_gid) {
 			dhgid = tmp_dhgid;
