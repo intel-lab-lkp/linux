@@ -85,6 +85,15 @@ struct cxl_nvdimm_bridge *devm_cxl_add_nvdimm_bridge(struct device *host,
 	if (rc)
 		goto err;
 
+	/* Ensure that cxl_nvb driver has been bound since it is synchronous. */
+	device_lock(dev);
+	if (!dev->driver) {
+		device_unlock(dev);
+		unregister_nvb(cxl_nvb);
+		return ERR_PTR(-ENODEV);
+	}
+	device_unlock(dev);
+
 	rc = devm_add_action_or_reset(host, unregister_nvb, cxl_nvb);
 	if (rc)
 		return ERR_PTR(rc);
@@ -212,6 +221,9 @@ static int cxl_nvdimm_probe(struct device *dev)
 	unsigned long flags = 0, cmd_mask = 0;
 	struct nvdimm *nvdimm;
 	int rc;
+
+	if (!cxl_nvb->nvdimm_bus)
+		return -ENODEV;
 
 	set_exclusive_cxl_commands(mds, exclusive_cmds);
 	rc = devm_add_action_or_reset(dev, clear_exclusive, mds);
@@ -437,6 +449,7 @@ static struct cxl_driver cxl_nvdimm_bridge_driver = {
 	.probe = cxl_nvdimm_bridge_probe,
 	.id = CXL_DEVICE_NVDIMM_BRIDGE,
 	.drv = {
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 		.suppress_bind_attrs = true,
 	},
 };
