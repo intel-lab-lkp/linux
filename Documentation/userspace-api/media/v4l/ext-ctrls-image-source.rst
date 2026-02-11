@@ -204,3 +204,13 @@ For instance, a value of ``0x0003000100030002`` indicates binning by 3
     Sub-sampling is used to downscale an image, horizontally and vertically, by
     discarding a part of the image data. Typically sub-sampling produces lower
     quality images than binning.
+
+.. _image_source_control_frame_length:
+
+``V4L2_CID_FRAME_LENGTH_LINES (integer)``
+    Frame length in lines. The value of the control is the number of lines
+    captured in the sensor's pixel array added to the vertical blanking.
+
+``V4L2_CID_LINE_LENGTH_PIXELS (integer)``
+    Line length in pixels. The value of the control is the number of pixels per
+    line captured in the sensor's pixel array added to the horizontal blanking.

@@ -1164,6 +1164,8 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_BINNING_FACTORS:		return "Binning Factors";
 	case V4L2_CID_SUBSAMPLING_HORIZONTAL:	return "Sub-Sampling Factor, Horizontal";
 	case V4L2_CID_SUBSAMPLING_VERTICAL:	return "Sub-Sampling Factor, Vertical";
+	case V4L2_CID_FRAME_LENGTH_LINES:	return "Frame Length in Lines";
+	case V4L2_CID_LINE_LENGTH_PIXELS:	return "Line Length in Pixels";
 
 	/* Image processing controls */
 	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
