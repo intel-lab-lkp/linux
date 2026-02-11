@@ -800,13 +800,15 @@ static int input_default_getkeycode(struct input_dev *dev,
 	return 0;
 }
 
-static int input_default_setkeycode(struct input_dev *dev,
-				    const struct input_keymap_entry *ke,
-				    unsigned int *old_keycode)
+int input_default_setkeycode(struct input_dev *dev,
+			     const struct input_keymap_entry *ke,
+			     unsigned int *old_keycode)
 {
 	unsigned int index;
 	int error;
 	int i;
+
+	lockdep_assert_held(&dev->event_lock);
 
 	if (!dev->keycodesize)
 		return -EINVAL;
@@ -861,6 +863,7 @@ static int input_default_setkeycode(struct input_dev *dev,
 	__set_bit(ke->keycode, dev->keybit);
 	return 0;
 }
+EXPORT_SYMBOL(input_default_setkeycode);
 
 /**
  * input_get_keycode - retrieve keycode currently mapped to a given scancode
