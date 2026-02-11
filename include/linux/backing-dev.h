@@ -78,6 +78,17 @@ static inline s64 wb_stat_sum(struct bdi_writeback *wb, enum wb_stat_item item)
 
 extern void wb_writeout_inc(struct bdi_writeback *wb);
 
+static inline int bdi_wb_dirty_exceeded(struct backing_dev_info *bdi)
+{
+	return bdi->wb.dirty_exceeded;
+}
+
+static inline void bdi_wb_stat_mod(struct backing_dev_info *bdi,
+				   enum wb_stat_item item, s64 amount)
+{
+	wb_stat_mod(&bdi->wb, item, amount);
+}
+
 /*
  * maximal error of a stat counter.
  */
