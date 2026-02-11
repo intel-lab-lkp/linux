@@ -5536,6 +5536,15 @@ static int rt5677_init_irq(struct i2c_client *i2c)
 	return ret;
 }
 
+static const struct acpi_gpio_params rt5677_acpi_reset_gpios = {0, 0, true};
+static const struct acpi_gpio_params rt5677_acpi_ldo2_gpios = {1, 0, false};
+
+static const struct acpi_gpio_mapping rt5677_acpi_gpios[] = {
+	{ "realtek,reset-gpios", &rt5677_acpi_reset_gpios, 1 },
+	{ "realtek,pow-ldo2-gpios", &rt5677_acpi_ldo2_gpios, 1 },
+	{},
+};
+
 static int rt5677_i2c_probe(struct i2c_client *i2c)
 {
 	struct rt5677_priv *rt5677;
@@ -5555,6 +5564,9 @@ static int rt5677_i2c_probe(struct i2c_client *i2c)
 	rt5677->type = (enum rt5677_type)(uintptr_t)i2c_get_match_data(i2c);
 	if (rt5677->type == 0)
 		return -EINVAL;
+
+	if (devm_acpi_dev_add_driver_gpios(rt5677->dev, rt5677_acpi_gpios))
+		dev_warn(rt5677->dev, "Unable to add GPIO mapping table\n");
 
 	rt5677_read_device_properties(rt5677, &i2c->dev);
 
