@@ -163,6 +163,7 @@ static int snd_acp6x_probe(struct pci_dev *pci,
 	switch (pci->revision) {
 	case 0x60:
 	case 0x6f:
+	case 0x62: /* RPL */
 		break;
 	default:
 		dev_dbg(&pci->dev, "acp6x pci device not found\n");
@@ -205,6 +206,11 @@ static int snd_acp6x_probe(struct pci_dev *pci,
 	case ACP_CONFIG_2:
 	case ACP_CONFIG_3:
 	case ACP_CONFIG_9:
+	case ACP_CONFIG_10: /* Reserved for RPL */
+	case ACP_CONFIG_11: /* Reserved for RPL */
+	case ACP_CONFIG_12: /* Reserved for RPL */
+	case ACP_CONFIG_13: /* Reserved for RPL */
+	case ACP_CONFIG_14: /* Reserved for RPL */
 	case ACP_CONFIG_15:
 		dev_info(&pci->dev, "Audio Mode %d\n", val);
 		break;
