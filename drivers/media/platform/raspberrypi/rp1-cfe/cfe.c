@@ -2152,6 +2152,9 @@ static int cfe_probe_complete(struct cfe_device *cfe)
 	cfe->v4l2_dev.notify = cfe_notify;
 
 	for (unsigned int i = 0; i < NUM_NODES; i++) {
+		if (check_state(cfe, NODE_REGISTERED, i))
+			continue;
+
 		ret = cfe_register_node(cfe, i);
 		if (ret) {
 			cfe_err(cfe, "Unable to register video node %u.\n", i);
@@ -2204,8 +2207,19 @@ static int cfe_async_complete(struct v4l2_async_notifier *notifier)
 	return cfe_probe_complete(cfe);
 }
 
+static void cfe_async_unbind(struct v4l2_async_notifier *notifier,
+			     struct v4l2_subdev *subdev,
+			     struct v4l2_async_connection *asd)
+{
+	struct cfe_device *cfe = to_cfe_device(notifier->v4l2_dev);
+
+	cfe->source_sd = NULL;
+	cfe_info(cfe, "Unbinding subdev %s\n", subdev->name);
+}
+
 static const struct v4l2_async_notifier_operations cfe_async_ops = {
 	.bound = cfe_async_bound,
+	.unbind = cfe_async_unbind,
 	.complete = cfe_async_complete,
 };
 
