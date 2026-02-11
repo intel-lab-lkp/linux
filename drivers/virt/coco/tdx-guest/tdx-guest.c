@@ -251,11 +251,11 @@ static int wait_for_quote_completion(struct tdx_quote_buf *quote_buf, u32 timeou
 	int i = 0;
 
 	/*
-	 * Quote requests usually take a few seconds to complete, so waking up
-	 * once per second to recheck the status is fine for this use case.
+	 * Quote requests usually take a few milliseconds to complete, so waking up
+	 * once per 5 milliseconds to recheck the status is fine for this use case.
 	 */
-	while (quote_buf->status == GET_QUOTE_IN_FLIGHT && i++ < timeout) {
-		if (msleep_interruptible(MSEC_PER_SEC))
+	while (quote_buf->status == GET_QUOTE_IN_FLIGHT && i++ < 200 * timeout) {
+		if (msleep_interruptible(MSEC_PER_SEC / 200))
 			return -EINTR;
 	}
 
