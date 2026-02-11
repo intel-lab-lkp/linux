@@ -69,15 +69,15 @@ bool is_hfs_cnid_counts_valid(struct super_block *sb)
 	struct hfs_sb_info *sbi = HFS_SB(sb);
 	bool corrupted = false;
 
-	if (unlikely(atomic64_read(&sbi->next_id) > U32_MAX)) {
+	if (unlikely(atomic64_read(&sbi->next_id) >> 32)) {
 		pr_warn("next CNID exceeds limit\n");
 		corrupted = true;
 	}
-	if (unlikely(atomic64_read(&sbi->file_count) > U32_MAX)) {
+	if (unlikely(atomic64_read(&sbi->file_count) >> 32)) {
 		pr_warn("file count exceeds limit\n");
 		corrupted = true;
 	}
-	if (unlikely(atomic64_read(&sbi->folder_count) > U32_MAX)) {
+	if (unlikely(atomic64_read(&sbi->folder_count) >> 32)) {
 		pr_warn("folder count exceeds limit\n");
 		corrupted = true;
 	}
