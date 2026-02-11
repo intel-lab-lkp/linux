@@ -24,8 +24,8 @@
 
 #define AK4458_NUM_SUPPLIES 2
 static const char *ak4458_supply_names[AK4458_NUM_SUPPLIES] = {
-	"DVDD",
-	"AVDD",
+	"dvdd",
+	"avdd",
 };
 
 enum ak4458_type {
