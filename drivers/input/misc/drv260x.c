@@ -173,6 +173,12 @@
 #define DRV260X_AUTOCAL_TIME_500MS		(2 << 4)
 #define DRV260X_AUTOCAL_TIME_1000MS		(3 << 4)
 
+/*
+ * Timeout for waiting for the GO status bit, in seconds. Should be reasonably
+ * large to allow long-duration effects and a calibration cycle
+ */
+#define DRV260X_GO_TIMEOUT_S 5
+
 /**
  * struct drv260x_data -
  * @input_dev: Pointer to the input device
@@ -339,6 +345,7 @@ static int drv260x_init(struct drv260x_data *haptics)
 {
 	int error;
 	unsigned int cal_buf;
+	unsigned long timeout;
 	u8 id;
 
 	error = regmap_read(haptics->regmap, DRV260X_STATUS, &cal_buf);
@@ -442,6 +449,7 @@ static int drv260x_init(struct drv260x_data *haptics)
 		return error;
 	}
 
+	timeout = jiffies + DRV260X_GO_TIMEOUT_S * HZ;
 	do {
 		usleep_range(15000, 15500);
 		error = regmap_read(haptics->regmap, DRV260X_GO, &cal_buf);
@@ -450,6 +458,10 @@ static int drv260x_init(struct drv260x_data *haptics)
 				"Failed to read GO register: %d\n",
 				error);
 			return error;
+		}
+		if (jiffies - timeout <= 0) {
+			dev_err(&haptics->client->dev, "GO timeout\n");
+			break;
 		}
 	} while (cal_buf == DRV260X_GO_BIT);
 
