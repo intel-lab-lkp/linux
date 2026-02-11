@@ -106,9 +106,11 @@ EXPORT_SYMBOL_GPL(devm_extcon_dev_free);
  * @dev:	the device owning the extcon device being created
  * @edev:	the extcon device to be registered
  *
- * this function, that extcon device is automatically unregistered on driver
- * detach. Internally this function calls extcon_dev_register() function.
- * To get more information, refer that function.
+ * This function registers extcon device. Using this function extcon device is
+ * automatically unregistered on driver detach.
+ *
+ * Internally this function calls extcon_dev_register() function. To get more
+ * information, refer that function.
  *
  * If extcon device is registered with this function and the device needs to be
  * unregistered separately, devm_extcon_dev_unregister() should be used.
