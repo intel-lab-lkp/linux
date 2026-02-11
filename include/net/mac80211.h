@@ -7801,6 +7801,19 @@ void
 ieee80211_obss_color_collision_notify(struct ieee80211_vif *vif,
 				      u64 color_bitmap, u8 link_id);
 
+
+/**
+ * ieee80211_mlo_reconf_complete_notify - notify userland about MLO
+ * link reconfiguration announcement completion.
+ *
+ * @vif: &struct ieee80211_vif pointer from the add_interface callback.
+ * @link_bitmap: bitmap representing the links the driver was announcing in
+ * the Reconfiguration Multi-Link element.
+ *
+ */
+void ieee80211_mlo_reconf_complete_notify(struct ieee80211_vif *vif,
+					  u16 link_bitmap);
+
 /**
  * ieee80211_is_tx_data - check if frame is a data frame
  *

@@ -325,6 +325,8 @@ struct ps_data {
 	int sb_count; /* num short beacons til next long beacon */
 };
 
+#define IEEE80211_IF_AP_RECONF_LINKS	BIT(0)
+
 struct ieee80211_if_ap {
 	struct list_head vlans; /* write-protected with RTNL and local->mtx */
 
@@ -333,6 +335,9 @@ struct ieee80211_if_ap {
 
 	bool multicast_to_unicast;
 	bool active;
+
+	unsigned long flags;
+	u16 reconf_links;
 };
 
 struct ieee80211_if_vlan {

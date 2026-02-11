@@ -946,6 +946,7 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_UHR_CAPABILITY] =
 		NLA_POLICY_VALIDATE_FN(NLA_BINARY, validate_uhr_capa, 255),
 	[NL80211_ATTR_DISABLE_UHR] = { .type = NLA_FLAG },
+	[NL80211_ATTR_MLO_RECONF_ADV_OFFLOAD] = { .type = NLA_FLAG },
 };
 
 /* policy for the key attributes */
@@ -3337,6 +3338,9 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 		    nla_put_u16(msg, NL80211_ATTR_MAX_HW_TIMESTAMP_PEERS,
 				rdev->wiphy.hw_timestamp_max_peers))
 			goto nla_put_failure;
+
+		if (rdev->wiphy.flags & WIPHY_FLAG_MLO_RECONF_ADV_OFFLOAD)
+			nla_put_flag(msg, NL80211_ATTR_MLO_RECONF_ADV_OFFLOAD);
 
 		state->split_start++;
 		break;
@@ -20065,6 +20069,63 @@ void cfg80211_links_removed(struct net_device *dev, u16 link_mask)
 	nlmsg_free(msg);
 }
 EXPORT_SYMBOL(cfg80211_links_removed);
+
+void cfg80211_mlo_reconf_complete_notify(struct net_device *dev,
+					 u16 link_bitmap)
+{
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	struct wiphy *wiphy = wdev->wiphy;
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
+	struct nlattr *links;
+	struct sk_buff *msg;
+	void *hdr;
+
+	if (WARN_ON(wdev->iftype != NL80211_IFTYPE_AP))
+		return;
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!msg)
+		return;
+
+	hdr = nl80211hdr_put(msg, 0, 0, 0,
+			     NL80211_CMD_MLO_RECONF_ADV_OFFLOAD_EVENT);
+	if (!hdr)
+		goto nla_put_failure;
+
+	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
+	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, dev->ifindex))
+		goto nla_put_failure;
+
+	links = nla_nest_start(msg, NL80211_ATTR_MLO_LINKS);
+	if (!links)
+		goto nla_put_failure;
+
+	while (link_bitmap) {
+		int link_id = __ffs(link_bitmap);
+		struct nlattr *link;
+
+		link = nla_nest_start(msg, link_id + 1);
+		if (!link)
+			goto nla_put_failure;
+
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id))
+			goto nla_put_failure;
+
+		nla_nest_end(msg, link);
+		link_bitmap &= ~(1 << link_id);
+	}
+
+	nla_nest_end(msg, links);
+	genlmsg_end(msg, hdr);
+
+	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
+				NL80211_MCGRP_MLME, GFP_KERNEL);
+	return;
+
+nla_put_failure:
+	nlmsg_free(msg);
+}
+EXPORT_SYMBOL_GPL(cfg80211_mlo_reconf_complete_notify);
 
 void nl80211_mlo_reconf_add_done(struct net_device *dev,
 				 struct cfg80211_mlo_reconf_done_data *data)

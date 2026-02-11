@@ -5329,6 +5329,8 @@ struct cfg80211_ops {
  * @WIPHY_FLAG_SUPPORTS_NSTR_NONPRIMARY: support connection to non-primary link
  *	of an NSTR mobile AP MLD.
  * @WIPHY_FLAG_DISABLE_WEXT: disable wireless extensions for this device
+ * @WIPHY_FLAG_MLO_RECONF_ADV_OFFLOAD: The underly driver supports link
+ *	reconfiguration countdown in hw.
  */
 enum wiphy_flags {
 	WIPHY_FLAG_SUPPORTS_EXT_KEK_KCK		= BIT(0),
@@ -5357,6 +5359,7 @@ enum wiphy_flags {
 	WIPHY_FLAG_HAS_CHANNEL_SWITCH		= BIT(23),
 	WIPHY_FLAG_NOTIFY_REGDOM_BY_DRIVER	= BIT(24),
 	WIPHY_FLAG_CHANNEL_CHANGE_ON_BEACON     = BIT(25),
+	WIPHY_FLAG_MLO_RECONF_ADV_OFFLOAD	= BIT(26),
 };
 
 /**
@@ -10313,6 +10316,16 @@ struct cfg80211_mlo_reconf_done_data {
  */
 void cfg80211_mlo_reconf_add_done(struct net_device *dev,
 				  struct cfg80211_mlo_reconf_done_data *data);
+
+/**
+ * cfg80211_mlo_reconf_complete_notify - Notify about MLO reconfiguration
+ * countdown completion.
+ * @dev: network device.
+ * @link_bitmap: bitmap representing the links the driver was announcing in
+ * the Reconfiguration Multi-Link element.
+ */
+void cfg80211_mlo_reconf_complete_notify(struct net_device *dev,
+					 u16 link_bitmap);
 
 /**
  * cfg80211_schedule_channels_check - schedule regulatory check if needed

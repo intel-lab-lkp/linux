@@ -5318,6 +5318,22 @@ ieee80211_obss_color_collision_notify(struct ieee80211_vif *vif,
 }
 EXPORT_SYMBOL_GPL(ieee80211_obss_color_collision_notify);
 
+void ieee80211_mlo_reconf_complete_notify(struct ieee80211_vif *vif,
+					  u16 link_bitmap)
+{
+	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+
+	if (vif->type != NL80211_IFTYPE_AP)
+		return;
+
+	if (test_and_set_bit(IEEE80211_IF_AP_RECONF_LINKS, &sdata->u.ap.flags))
+		return;
+
+	sdata->u.ap.reconf_links = link_bitmap;
+	wiphy_work_queue(sdata->local->hw.wiphy, &sdata->work);
+}
+EXPORT_SYMBOL_GPL(ieee80211_mlo_reconf_complete_notify);
+
 static int
 ieee80211_color_change(struct wiphy *wiphy, struct net_device *dev,
 		       struct cfg80211_color_change_settings *params)

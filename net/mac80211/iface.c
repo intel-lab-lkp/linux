@@ -1776,6 +1776,17 @@ static void ieee80211_iface_process_status(struct ieee80211_sub_if_data *sdata,
 	}
 }
 
+static void ieee80211_ap_work(struct ieee80211_sub_if_data *sdata)
+{
+	if (!test_bit(IEEE80211_IF_AP_RECONF_LINKS, &sdata->u.ap.flags))
+		return;
+
+	cfg80211_mlo_reconf_complete_notify(sdata->dev,
+					    sdata->u.ap.reconf_links);
+	sdata->u.ap.reconf_links = 0;
+	clear_bit(IEEE80211_IF_AP_RECONF_LINKS, &sdata->u.ap.flags);
+}
+
 static void ieee80211_iface_work(struct wiphy *wiphy, struct wiphy_work *work)
 {
 	struct ieee80211_sub_if_data *sdata =
@@ -1817,6 +1828,9 @@ static void ieee80211_iface_work(struct wiphy *wiphy, struct wiphy_work *work)
 
 	/* then other type-dependent work */
 	switch (sdata->vif.type) {
+	case NL80211_IFTYPE_AP:
+		ieee80211_ap_work(sdata);
+		break;
 	case NL80211_IFTYPE_STATION:
 		ieee80211_sta_work(sdata);
 		break;
