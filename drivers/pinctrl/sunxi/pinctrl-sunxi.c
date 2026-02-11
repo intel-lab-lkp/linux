@@ -995,6 +995,37 @@ static int sunxi_pinctrl_gpio_direction_output(struct gpio_chip *chip,
 					    chip->base + offset, false);
 }
 
+static int sunxi_pinctrl_gpio_get_direction(struct gpio_chip *chip,
+					    unsigned int offset)
+{
+	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
+	struct sunxi_desc_function *in, *out, *irq;
+	u32 reg, shift, mask, val;
+	u16 pin = chip->base + offset;
+
+	in = sunxi_pinctrl_desc_find_function_by_pin(pctl, pin, "gpio_in");
+	out = sunxi_pinctrl_desc_find_function_by_pin(pctl, pin, "gpio_out");
+	if (!in || !out)
+		return -EINVAL;
+
+	irq = sunxi_pinctrl_desc_find_function_by_pin(pctl, pin, "irq");
+
+	sunxi_mux_reg(pctl, offset, &reg, &shift, &mask);
+	val = (readl(pctl->membase + reg) & mask) >> shift;
+
+	if (val == in->muxval)
+		return GPIO_LINE_DIRECTION_IN;
+
+	if (val == out->muxval)
+		return GPIO_LINE_DIRECTION_OUT;
+
+	/* IRQ function is effectively input. */
+	if (irq && val == irq->muxval)
+		return GPIO_LINE_DIRECTION_IN;
+
+	return -EINVAL;
+}
+
 static int sunxi_pinctrl_gpio_of_xlate(struct gpio_chip *gc,
 				const struct of_phandle_args *gpiospec,
 				u32 *flags)
@@ -1603,6 +1634,7 @@ int sunxi_pinctrl_init_with_flags(struct platform_device *pdev,
 	pctl->chip->set_config = gpiochip_generic_config;
 	pctl->chip->direction_input = sunxi_pinctrl_gpio_direction_input;
 	pctl->chip->direction_output = sunxi_pinctrl_gpio_direction_output;
+	pctl->chip->get_direction = sunxi_pinctrl_gpio_get_direction;
 	pctl->chip->get = sunxi_pinctrl_gpio_get;
 	pctl->chip->set = sunxi_pinctrl_gpio_set;
 	pctl->chip->of_xlate = sunxi_pinctrl_gpio_of_xlate;
