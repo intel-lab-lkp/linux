@@ -3419,6 +3419,10 @@ static inline void __pagetable_free(struct ptdesc *pt)
 	__free_pages(page, compound_order(page));
 }
 
+void *pgtable_alloc_addr_noprof(gfp_t gfp, unsigned int order);
+#define pgtable_alloc_addr(...)     alloc_hooks(pgtable_alloc_addr_noprof(__VA_ARGS__))
+void pgtable_free_addr(const void *addr);
+
 #ifdef CONFIG_ASYNC_KERNEL_PGTABLE_FREE
 void pagetable_free_kernel(struct ptdesc *pt);
 #else

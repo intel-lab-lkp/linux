@@ -7452,6 +7452,40 @@ long copy_folio_from_user(struct folio *dst_folio,
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE || CONFIG_HUGETLBFS */
 
+/**
+ * pgtable_alloc_addr - Allocate pagetables to get an address
+ * @gfp:       GFP flags
+ * @order:     desired pagetable order
+ *
+ * pgtable_alloc_addr is like pagetable_alloc. This is for callers who only want a
+ * page table's address, not its ptdesc.
+ *
+ * Return: The address associated with the allocated page table, or 0 on
+ * failure.
+ */
+void *pgtable_alloc_addr_noprof(gfp_t gfp, unsigned int order)
+{
+	struct ptdesc *ptdesc = pagetable_alloc_noprof(gfp | __GFP_ZERO, order);
+
+	if (!ptdesc)
+		return 0;
+	return ptdesc_address(ptdesc);
+}
+
+/**
+ * pgtable_free_addr - Free pagetables by address
+ * @addr:      The virtual address from pgtable_alloc()
+ *
+ * This function is for callers who have the address but no ptdesc. If you
+ * have the ptdesc, use pagetable_free() instead.
+ */
+void pgtable_free_addr(const void *addr)
+{
+	struct ptdesc *ptdesc = virt_to_ptdesc(addr);
+
+	pagetable_free(ptdesc);
+}
+
 #if defined(CONFIG_SPLIT_PTE_PTLOCKS) && ALLOC_SPLIT_PTLOCKS
 
 static struct kmem_cache *page_ptl_cachep;
