@@ -289,6 +289,15 @@ void nvmet_execute_auth_send(struct nvmet_req *req)
 		goto done_failure1;
 	if (data->auth_type == NVME_AUTH_COMMON_MESSAGES) {
 		if (data->auth_id == NVME_AUTH_DHCHAP_MESSAGE_NEGOTIATE) {
+			size_t min_len = sizeof(struct nvmf_auth_dhchap_negotiate_data) +
+				sizeof(struct nvmf_auth_dhchap_protocol_descriptor);
+
+			if (tl < min_len) {
+				status = NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
+				req->error_loc =
+					offsetof(struct nvmf_auth_send_command, tl);
+				goto done_kfree;
+			}
 			/* Restart negotiation */
 			pr_debug("%s: ctrl %d qid %d reset negotiation\n",
 				 __func__, ctrl->cntlid, req->sq->qid);
