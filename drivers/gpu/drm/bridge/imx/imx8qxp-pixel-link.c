@@ -23,7 +23,6 @@
 
 struct imx8qxp_pixel_link {
 	struct drm_bridge bridge;
-	struct drm_bridge *next_bridge;
 	struct device *dev;
 	struct imx_sc_ipc *ipc_handle;
 	u8 stream_id;
@@ -140,7 +139,7 @@ static int imx8qxp_pixel_link_bridge_attach(struct drm_bridge *bridge,
 	}
 
 	return drm_bridge_attach(encoder,
-				 pl->next_bridge, bridge,
+				 pl->bridge.next_bridge, bridge,
 				 DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 }
 
@@ -260,7 +259,6 @@ static int imx8qxp_pixel_link_find_next_bridge(struct imx8qxp_pixel_link *pl)
 {
 	struct device_node *np = pl->dev->of_node;
 	struct device_node *port;
-	struct drm_bridge *selected_bridge = NULL;
 	u32 port_id;
 	bool found_port = false;
 	int reg;
@@ -297,20 +295,21 @@ static int imx8qxp_pixel_link_find_next_bridge(struct imx8qxp_pixel_link *pl)
 			continue;
 		}
 
-		struct drm_bridge *next_bridge = of_drm_find_bridge(remote);
-		if (!next_bridge)
-			return -EPROBE_DEFER;
-
-		/*
-		 * Select the next bridge with companion PXL2DPI if
-		 * present, otherwise default to the first bridge
-		 */
-		if (!selected_bridge || of_property_present(remote, "fsl,companion-pxl2dpi"))
-			selected_bridge = next_bridge;
+		if (!pl->bridge.next_bridge) {
+			/* Select the first bridge by default... */
+			pl->bridge.next_bridge = of_drm_find_and_get_bridge(remote);
+			if (!pl->bridge.next_bridge)
+				return -EPROBE_DEFER;
+		} else if (of_property_present(remote, "fsl,companion-pxl2dpi")) {
+			/* ... but prefer the companion PXL2DPI if present */
+			drm_bridge_put(pl->bridge.next_bridge);
+			pl->bridge.next_bridge = of_drm_find_and_get_bridge(remote);
+			if (!pl->bridge.next_bridge)
+				return -EPROBE_DEFER;
+		}
 	}
 
 	pl->mst_addr = port_id - 1;
-	pl->next_bridge = selected_bridge;
 
 	return 0;
 }
