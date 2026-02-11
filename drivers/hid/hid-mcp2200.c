@@ -17,7 +17,7 @@
 #include <linux/mutex.h>
 #include "hid-ids.h"
 
-/* Commands codes in a raw output report */
+/* Command codes in a raw output report */
 #define SET_CLEAR_OUTPUTS	0x08
 #define CONFIGURE		0x10
 #define READ_EE			0x20
@@ -30,7 +30,7 @@ enum MCP_IO_DIR {
 	MCP2200_DIR_IN  = 0x01,
 };
 
-/* Altternative pin assignments */
+/* Alternative pin assignments */
 #define TXLED		2
 #define RXLED		3
 #define USBCFG		6
