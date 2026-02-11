@@ -87,6 +87,7 @@ required:
 
 allOf:
   - $ref: can-controller.yaml#
+  - $ref: /schemas/memory-controllers/fsl/fsl,imx-weim-peripherals.yaml
   - if:
       properties:
         compatible:
