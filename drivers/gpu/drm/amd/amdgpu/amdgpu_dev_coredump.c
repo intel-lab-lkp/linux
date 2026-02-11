@@ -34,6 +34,8 @@ void amdgpu_coredump(struct amdgpu_device *adev, bool skip_vram_check,
 }
 #else
 
+#define AMDGPU_CORE_DUMP_SIZE_MAX (256 * 1024 * 1024)
+
 const char *hw_ip_names[MAX_HWIP] = {
 	[GC_HWIP]		= "GC",
 	[HDP_HWIP]		= "HDP",
@@ -196,11 +198,9 @@ static void amdgpu_devcoredump_fw_info(struct amdgpu_device *adev,
 }
 
 static ssize_t
-amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
-			void *data, size_t datalen)
+amdgpu_devcoredump_format(char *buffer, size_t count, struct amdgpu_coredump_info *coredump)
 {
 	struct drm_printer p;
-	struct amdgpu_coredump_info *coredump = data;
 	struct drm_print_iterator iter;
 	struct amdgpu_vm_fault_info *fault_info;
 	struct amdgpu_ip_block *ip_block;
@@ -208,7 +208,6 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 
 	iter.data = buffer;
 	iter.offset = 0;
-	iter.start = offset;
 	iter.remain = count;
 
 	p = drm_coredump_printer(&iter);
@@ -322,9 +321,58 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 	return count - iter.remain;
 }
 
+static ssize_t
+amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
+			void *data, size_t datalen)
+{
+	struct amdgpu_coredump_info *coredump = data;
+	ssize_t byte_copied;
+
+	if (!coredump)
+		return -ENODEV;
+
+	flush_work(&coredump->work);
+
+	if (!coredump->formatted)
+		return -ENODEV;
+
+	if (offset >= coredump->formatted_size)
+		return 0;
+
+	byte_copied = count < coredump->formatted_size - offset ? count :
+		coredump->formatted_size - offset;
+	memcpy(buffer, coredump->formatted + offset, byte_copied);
+
+	return byte_copied;
+}
+
 static void amdgpu_devcoredump_free(void *data)
 {
+	struct amdgpu_coredump_info *coredump = data;
+
+	cancel_work_sync(&coredump->work);
+	coredump->adev->coredump_in_progress = false;
+	kfree(coredump->formatted);
 	kfree(data);
+}
+
+static void amdgpu_devcoredump_deferred_work(struct work_struct *work)
+{
+	struct amdgpu_coredump_info *coredump = container_of(work, typeof(*coredump), work);
+
+	dev_coredumpm(coredump->adev->dev, THIS_MODULE, coredump, 0, GFP_NOWAIT,
+		      amdgpu_devcoredump_read, amdgpu_devcoredump_free);
+
+	/* Do a one-time preparation of the coredump output because
+	 * repeatingly calling drm_coredump_printer is very slow.
+	 */
+	coredump->formatted_size =
+		amdgpu_devcoredump_format(NULL, AMDGPU_CORE_DUMP_SIZE_MAX, coredump);
+	coredump->formatted = kvzalloc(coredump->formatted_size, GFP_KERNEL);
+	if (!coredump->formatted)
+		return;
+	amdgpu_devcoredump_format(coredump->formatted, coredump->formatted_size, coredump);
+	coredump->adev->coredump_in_progress = false;
 }
 
 void amdgpu_coredump(struct amdgpu_device *adev, bool skip_vram_check,
@@ -334,9 +382,14 @@ void amdgpu_coredump(struct amdgpu_device *adev, bool skip_vram_check,
 	struct amdgpu_coredump_info *coredump;
 	struct drm_sched_job *s_job;
 
+	if (adev->coredump_in_progress)
+		return;
+
 	coredump = kzalloc(sizeof(*coredump), GFP_NOWAIT);
 	if (!coredump)
 		return;
+
+	adev->coredump_in_progress = true;
 
 	coredump->skip_vram_check = skip_vram_check;
 	coredump->reset_vram_lost = vram_lost;
@@ -360,8 +413,9 @@ void amdgpu_coredump(struct amdgpu_device *adev, bool skip_vram_check,
 
 	ktime_get_ts64(&coredump->reset_time);
 
-	dev_coredumpm(dev->dev, THIS_MODULE, coredump, 0, GFP_NOWAIT,
-		      amdgpu_devcoredump_read, amdgpu_devcoredump_free);
+	/* Kick off coredump formatting to a worker thread. */
+	INIT_WORK(&coredump->work, amdgpu_devcoredump_deferred_work);
+	queue_work(system_unbound_wq, &coredump->work);
 
 	drm_info(dev, "AMDGPU device coredump file has been created\n");
 	drm_info(dev, "Check your /sys/class/drm/card%d/device/devcoredump/data\n",

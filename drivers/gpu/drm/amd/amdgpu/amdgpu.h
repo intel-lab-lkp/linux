@@ -1187,6 +1187,11 @@ struct amdgpu_device {
 
 	struct amdgpu_reset_domain	*reset_domain;
 
+#ifdef CONFIG_DEV_COREDUMP
+	/* If a coredump state capture is in progress don't start a new one. */
+	bool coredump_in_progress;
+#endif
+
 	struct mutex			benchmark_mutex;
 
 	bool                            scpm_enabled;
