@@ -32,7 +32,17 @@ properties:
     maxItems: 1
 
   reg:
-    maxItems: 1
+    description:
+      Can contain an optional second I2C address pointing to the PMIC's
+      RTC device. If no RTC address is provided, a default address specific
+      to this PMIC will be used.
+    minItems: 1
+    maxItems: 2
+
+  reg-names:
+    items:
+      - const: pmic
+      - const: rtc
 
   voltage-regulators:
     $ref: /schemas/regulator/maxim,max77686.yaml
@@ -59,7 +69,8 @@ examples:
 
         max77686: pmic@9 {
             compatible = "maxim,max77686";
-            reg = <0x09>;
+            reg = <0x09>, <0x06>;
+            reg-names = "pmic", "rtc";
 
             interrupt-parent = <&gpx0>;
             interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
