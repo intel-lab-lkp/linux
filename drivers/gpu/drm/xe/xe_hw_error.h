@@ -11,5 +11,6 @@ struct xe_tile;
 struct xe_device;
 
 void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl);
+void xe_critical_error_handler(struct xe_device *xe);
 void xe_hw_error_init(struct xe_device *xe);
 #endif
