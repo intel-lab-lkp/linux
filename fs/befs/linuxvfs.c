@@ -753,6 +753,23 @@ static int befs_show_options(struct seq_file *m, struct dentry *root)
 	return 0;
 }
 
+static befs_super_block *befs_get_disk_sb(struct super_block *sb,
+					   struct buffer_head *bh)
+{
+	const off_t x86_sb_off = 512;
+	befs_super_block *ret = (befs_super_block *) bh->b_data;
+
+	if ((ret->magic1 == BEFS_SUPER_MAGIC1_LE) ||
+	    (ret->magic1 == BEFS_SUPER_MAGIC1_BE)) {
+		befs_debug(sb, "Using PPC superblock location");
+	} else {
+		befs_debug(sb, "Using x86 superblock location");
+		ret = (befs_super_block *) ((void *) bh->b_data + x86_sb_off);
+	}
+
+	return ret;
+}
+
 /* This function has the responsibiltiy of getting the
  * filesystem ready for unmounting.
  * Basically, we free everything that we allocated in
@@ -761,9 +778,21 @@ static int befs_show_options(struct seq_file *m, struct dentry *root)
 static void
 befs_put_super(struct super_block *sb)
 {
-	kfree(BEFS_SB(sb)->mount_opts.iocharset);
-	BEFS_SB(sb)->mount_opts.iocharset = NULL;
-	unload_nls(BEFS_SB(sb)->nls);
+	struct befs_sb_info *befs_sb = BEFS_SB(sb);
+	struct buffer_head *bh = NULL;
+	befs_super_block *disk_sb;
+
+	bh = sb_bread(sb, 0);
+	if (bh) {
+		disk_sb = befs_get_disk_sb(sb, bh);
+		memcpy(disk_sb->name, befs_sb->name, B_OS_NAME_LENGTH);
+		mark_buffer_dirty(bh);
+		brelse(bh);
+	}
+
+	kfree(befs_sb->mount_opts.iocharset);
+	befs_sb->mount_opts.iocharset = NULL;
+	unload_nls(befs_sb->nls);
 	kfree(sb->s_fs_info);
 	sb->s_fs_info = NULL;
 }
@@ -798,7 +827,6 @@ befs_fill_super(struct super_block *sb, struct fs_context *fc)
 	struct inode *root;
 	long ret = -EINVAL;
 	const unsigned long sb_block = 0;
-	const off_t x86_sb_off = 512;
 	int blocksize;
 	struct befs_mount_options *parsed_opts = fc->fs_private;
 	int silent = fc->sb_flags & SB_SILENT;
@@ -842,15 +870,7 @@ befs_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 
 	/* account for offset of super block on x86 */
-	disk_sb = (befs_super_block *) bh->b_data;
-	if ((disk_sb->magic1 == BEFS_SUPER_MAGIC1_LE) ||
-	    (disk_sb->magic1 == BEFS_SUPER_MAGIC1_BE)) {
-		befs_debug(sb, "Using PPC superblock location");
-	} else {
-		befs_debug(sb, "Using x86 superblock location");
-		disk_sb =
-		    (befs_super_block *) ((void *) bh->b_data + x86_sb_off);
-	}
+	disk_sb = befs_get_disk_sb(sb, bh);
 
 	if ((befs_load_sb(sb, disk_sb) != BEFS_OK) ||
 	    (befs_check_sb(sb) != BEFS_OK))
@@ -963,6 +983,22 @@ static int befs_ioctl_get_volume_label(struct super_block *sb, char __user *arg)
 	return 0;
 }
 
+static int befs_ioctl_set_volume_label(struct super_block *sb, char __user *arg)
+{
+	struct befs_sb_info *sbi = BEFS_SB(sb);
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (sb_rdonly(sb))
+		return -EROFS;
+
+	if (copy_from_user(sbi->name, arg, B_OS_NAME_LENGTH))
+		return -EFAULT;
+
+	return 0;
+}
+
 static long befs_generic_ioctl(struct file *filp, unsigned int cmd,
 			       unsigned long arg)
 {
@@ -972,6 +1008,8 @@ static long befs_generic_ioctl(struct file *filp, unsigned int cmd,
 	switch (cmd) {
 	case FS_IOC_GETFSLABEL:
 		return befs_ioctl_get_volume_label(inode->i_sb, user);
+	case FS_IOC_SETFSLABEL:
+		return befs_ioctl_set_volume_label(inode->i_sb, user);
 	default:
 		return -ENOTTY;
 	}
