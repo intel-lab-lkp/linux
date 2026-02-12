@@ -1127,12 +1127,12 @@ static void collect_traffic_statistics(struct adapter *padapter)
 
 u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 {
-	u8 bEnterPS = false;
-	u16 BusyThresholdHigh = 25;
-	u16 BusyThresholdLow = 10;
-	u16 BusyThreshold = BusyThresholdHigh;
-	u8 bBusyTraffic = false, bTxBusyTraffic = false, bRxBusyTraffic = false;
-	u8 bHigherBusyTraffic = false, bHigherBusyRxTraffic = false, bHigherBusyTxTraffic = false;
+	u8 should_enter_ps = false;
+	u16 busy_threshold_high = 25;
+	u16 busy_threshold_low = 10;
+	u16 busy_threshold = busy_threshold_high;
+	u8 busy_traffic = false, tx_busy_traffic = false, rx_busy_traffic = false;
+	u8 higher_busy_traffic = false, higher_busy_rx_traffic = false, higher_busy_tx_traffic = false;
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	collect_traffic_statistics(padapter);
@@ -1142,37 +1142,37 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 	/*  */
 	if ((check_fwstate(pmlmepriv, _FW_LINKED))
 		/*&& !MgntInitAdapterInProgress(pMgntInfo)*/) {
-		/*  if we raise bBusyTraffic in last watchdog, using lower threshold. */
+		/*  if we raise busy_traffic in last watchdog, using lower threshold. */
 		if (pmlmepriv->link_detect_info.busy_traffic)
-			BusyThreshold = BusyThresholdLow;
+			busy_threshold = busy_threshold_low;
 
-		if (pmlmepriv->link_detect_info.num_rx_ok_in_period > BusyThreshold ||
-		    pmlmepriv->link_detect_info.num_tx_ok_in_period > BusyThreshold) {
-			bBusyTraffic = true;
+		if (pmlmepriv->link_detect_info.num_rx_ok_in_period > busy_threshold ||
+		    pmlmepriv->link_detect_info.num_tx_ok_in_period > busy_threshold) {
+			busy_traffic = true;
 
 			if (pmlmepriv->link_detect_info.num_rx_ok_in_period > pmlmepriv->link_detect_info.num_tx_ok_in_period)
-				bRxBusyTraffic = true;
+				rx_busy_traffic = true;
 			else
-				bTxBusyTraffic = true;
+				tx_busy_traffic = true;
 		}
 
 		/*  Higher Tx/Rx data. */
 		if (pmlmepriv->link_detect_info.num_rx_ok_in_period > 4000 ||
 		    pmlmepriv->link_detect_info.num_tx_ok_in_period > 4000) {
-			bHigherBusyTraffic = true;
+			higher_busy_traffic = true;
 
 			if (pmlmepriv->link_detect_info.num_rx_ok_in_period > pmlmepriv->link_detect_info.num_tx_ok_in_period)
-				bHigherBusyRxTraffic = true;
+				higher_busy_rx_traffic = true;
 			else
-				bHigherBusyTxTraffic = true;
+				higher_busy_tx_traffic = true;
 		}
 
 		/*  check traffic for  powersaving. */
 		if (((pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period + pmlmepriv->link_detect_info.num_tx_ok_in_period) > 8) ||
 		    (pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period > 2)) {
-			bEnterPS = false;
+			should_enter_ps = false;
 
-			if (bBusyTraffic) {
+			if (busy_traffic) {
 				if (pmlmepriv->link_detect_info.traffic_transition_count <= 4)
 					pmlmepriv->link_detect_info.traffic_transition_count = 4;
 
@@ -1188,11 +1188,11 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 				pmlmepriv->link_detect_info.traffic_transition_count = 0;
 
 			if (pmlmepriv->link_detect_info.traffic_transition_count == 0)
-				bEnterPS = true;
+				should_enter_ps = true;
 		}
 
 		/*  LeisurePS only work in infra mode. */
-		if (bEnterPS) {
+		if (should_enter_ps) {
 			if (!from_timer)
 				LPS_Enter(padapter, "TRAFFIC_IDLE");
 		} else {
@@ -1215,14 +1215,14 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 	pmlmepriv->link_detect_info.num_rx_ok_in_period = 0;
 	pmlmepriv->link_detect_info.num_tx_ok_in_period = 0;
 	pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period = 0;
-	pmlmepriv->link_detect_info.busy_traffic = bBusyTraffic;
-	pmlmepriv->link_detect_info.tx_busy_traffic = bTxBusyTraffic;
-	pmlmepriv->link_detect_info.rx_busy_traffic = bRxBusyTraffic;
-	pmlmepriv->link_detect_info.higher_busy_traffic = bHigherBusyTraffic;
-	pmlmepriv->link_detect_info.higher_busy_rx_traffic = bHigherBusyRxTraffic;
-	pmlmepriv->link_detect_info.higher_busy_tx_traffic = bHigherBusyTxTraffic;
+	pmlmepriv->link_detect_info.busy_traffic = busy_traffic;
+	pmlmepriv->link_detect_info.tx_busy_traffic = tx_busy_traffic;
+	pmlmepriv->link_detect_info.rx_busy_traffic = rx_busy_traffic;
+	pmlmepriv->link_detect_info.higher_busy_traffic = higher_busy_traffic;
+	pmlmepriv->link_detect_info.higher_busy_rx_traffic = higher_busy_rx_traffic;
+	pmlmepriv->link_detect_info.higher_busy_tx_traffic = higher_busy_tx_traffic;
 
-	return bEnterPS;
+	return should_enter_ps;
 }
 
 static void dynamic_chk_wk_hdl(struct adapter *padapter)
