@@ -383,10 +383,17 @@ static void io_poll_cancel_req(struct io_kiocb *req)
 
 static __cold int io_pollfree_wake(struct io_kiocb *req, struct io_poll *poll)
 {
+	struct wait_queue_head *head;
 	io_poll_mark_cancelled(req);
 	/* we have to kick tw in case it's not already */
 	io_poll_execute(req, 0);
-	io_poll_remove_waitq(poll);
+	/* Pairs with smp_store_release() in io_poll_remove_waitq() */
+	head = smp_load_acquire(&poll->head);
+	if (head) {
+		spin_lock_irq(&head->lock);
+		io_poll_remove_waitq(poll);
+		spin_unlock_irq(&head->lock);
+	}
 	return 1;
 }
 
