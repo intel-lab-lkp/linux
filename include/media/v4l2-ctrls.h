@@ -1111,6 +1111,8 @@ const s64 *v4l2_ctrl_get_int_menu(u32 id, u32 *len);
  * used from within the &v4l2_ctrl_ops functions.
  *
  * This function is for integer type controls only.
+ *
+ * Returns: the value of the control or 0 on error.
  */
 s32 v4l2_ctrl_g_ctrl(struct v4l2_ctrl *ctrl);
 
@@ -1162,6 +1164,8 @@ static inline int v4l2_ctrl_s_ctrl(struct v4l2_ctrl *ctrl, s32 val)
  * used from within the &v4l2_ctrl_ops functions.
  *
  * This function is for 64-bit integer type controls only.
+ *
+ * Returns: the value of the control or 0 on error.
  */
 s64 v4l2_ctrl_g_ctrl_int64(struct v4l2_ctrl *ctrl);
 
