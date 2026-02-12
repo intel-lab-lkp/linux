@@ -665,7 +665,6 @@ int devlink_health_report(struct devlink_health_reporter *reporter,
 	reporter->error_count++;
 	prev_health_state = reporter->health_state;
 	reporter->health_state = DEVLINK_HEALTH_REPORTER_STATE_ERROR;
-	devlink_recover_notify(reporter, DEVLINK_CMD_HEALTH_REPORTER_RECOVER);
 
 	if (devlink_health_recover_abort(reporter, prev_health_state)) {
 		trace_devlink_health_recover_aborted(devlink,
@@ -686,6 +685,7 @@ int devlink_health_report(struct devlink_health_reporter *reporter,
 	if (!reporter->auto_recover)
 		return 0;
 
+	devlink_recover_notify(reporter, DEVLINK_CMD_HEALTH_REPORTER_RECOVER);
 	devl_lock(devlink);
 	ret = devlink_health_reporter_recover(reporter, priv_ctx, NULL);
 	devl_unlock(devlink);
