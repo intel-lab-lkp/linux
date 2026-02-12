@@ -489,67 +489,71 @@ static void visl_tpg_fill(struct visl_ctx *ctx, struct visl_run *run)
 static void visl_trace_ctrls(struct visl_ctx *ctx, struct visl_run *run)
 {
 	int i;
+	struct v4l2_fh *fh = &ctx->fh;
 
 	switch (ctx->current_codec) {
 	default:
 	case VISL_CODEC_NONE:
 		break;
 	case VISL_CODEC_FWHT:
-		trace_v4l2_ctrl_fwht_params(run->fwht.params);
+		trace_v4l2_ctrl_fwht_params(fh->tgid, fh->fd, run->fwht.params);
 		break;
 	case VISL_CODEC_MPEG2:
-		trace_v4l2_ctrl_mpeg2_sequence(run->mpeg2.seq);
-		trace_v4l2_ctrl_mpeg2_picture(run->mpeg2.pic);
-		trace_v4l2_ctrl_mpeg2_quantisation(run->mpeg2.quant);
+		trace_v4l2_ctrl_mpeg2_sequence(fh->tgid, fh->fd, run->mpeg2.seq);
+		trace_v4l2_ctrl_mpeg2_picture(fh->tgid, fh->fd, run->mpeg2.pic);
+		trace_v4l2_ctrl_mpeg2_quantisation(fh->tgid, fh->fd, run->mpeg2.quant);
 		break;
 	case VISL_CODEC_VP8:
-		trace_v4l2_ctrl_vp8_frame(run->vp8.frame);
-		trace_v4l2_ctrl_vp8_entropy(run->vp8.frame);
+		trace_v4l2_ctrl_vp8_frame(fh->tgid, fh->fd, run->vp8.frame);
+		trace_v4l2_ctrl_vp8_entropy(fh->tgid, fh->fd, run->vp8.frame);
 		break;
 	case VISL_CODEC_VP9:
-		trace_v4l2_ctrl_vp9_frame(run->vp9.frame);
-		trace_v4l2_ctrl_vp9_compressed_hdr(run->vp9.probs);
-		trace_v4l2_ctrl_vp9_compressed_coeff(run->vp9.probs);
-		trace_v4l2_vp9_mv_probs(&run->vp9.probs->mv);
+		trace_v4l2_ctrl_vp9_frame(fh->tgid, fh->fd, run->vp9.frame);
+		trace_v4l2_ctrl_vp9_compressed_hdr(fh->tgid, fh->fd, run->vp9.probs);
+		trace_v4l2_ctrl_vp9_compressed_coeff(fh->tgid, fh->fd, run->vp9.probs);
+		trace_v4l2_vp9_mv_probs(fh->tgid, fh->fd, &run->vp9.probs->mv);
 		break;
 	case VISL_CODEC_H264:
-		trace_v4l2_ctrl_h264_sps(run->h264.sps);
-		trace_v4l2_ctrl_h264_pps(run->h264.pps);
-		trace_v4l2_ctrl_h264_scaling_matrix(run->h264.sm);
-		trace_v4l2_ctrl_h264_slice_params(run->h264.spram);
+		trace_v4l2_ctrl_h264_sps(fh->tgid, fh->fd, run->h264.sps);
+		trace_v4l2_ctrl_h264_pps(fh->tgid, fh->fd, run->h264.pps);
+		trace_v4l2_ctrl_h264_scaling_matrix(fh->tgid, fh->fd, run->h264.sm);
+		trace_v4l2_ctrl_h264_slice_params(fh->tgid, fh->fd, run->h264.spram);
 
 		for (i = 0; i < ARRAY_SIZE(run->h264.spram->ref_pic_list0); i++)
-			trace_v4l2_h264_ref_pic_list0(&run->h264.spram->ref_pic_list0[i], i);
+			trace_v4l2_h264_ref_pic_list0(fh->tgid, fh->fd,
+						      &run->h264.spram->ref_pic_list0[i], i);
 		for (i = 0; i < ARRAY_SIZE(run->h264.spram->ref_pic_list0); i++)
-			trace_v4l2_h264_ref_pic_list1(&run->h264.spram->ref_pic_list1[i], i);
+			trace_v4l2_h264_ref_pic_list1(fh->tgid, fh->fd,
+						      &run->h264.spram->ref_pic_list1[i], i);
 
-		trace_v4l2_ctrl_h264_decode_params(run->h264.dpram);
+		trace_v4l2_ctrl_h264_decode_params(fh->tgid, fh->fd, run->h264.dpram);
 
 		for (i = 0; i < ARRAY_SIZE(run->h264.dpram->dpb); i++)
-			trace_v4l2_h264_dpb_entry(&run->h264.dpram->dpb[i], i);
+			trace_v4l2_h264_dpb_entry(fh->tgid, fh->fd, &run->h264.dpram->dpb[i], i);
 
-		trace_v4l2_ctrl_h264_pred_weights(run->h264.pwht);
+		trace_v4l2_ctrl_h264_pred_weights(fh->tgid, fh->fd, run->h264.pwht);
 		break;
 	case VISL_CODEC_HEVC:
-		trace_v4l2_ctrl_hevc_sps(run->hevc.sps);
-		trace_v4l2_ctrl_hevc_pps(run->hevc.pps);
-		trace_v4l2_ctrl_hevc_slice_params(run->hevc.spram);
-		trace_v4l2_ctrl_hevc_scaling_matrix(run->hevc.sm);
-		trace_v4l2_ctrl_hevc_decode_params(run->hevc.dpram);
+		trace_v4l2_ctrl_hevc_sps(fh->tgid, fh->fd, run->hevc.sps);
+		trace_v4l2_ctrl_hevc_pps(fh->tgid, fh->fd, run->hevc.pps);
+		trace_v4l2_ctrl_hevc_slice_params(fh->tgid, fh->fd, run->hevc.spram);
+		trace_v4l2_ctrl_hevc_scaling_matrix(fh->tgid, fh->fd, run->hevc.sm);
+		trace_v4l2_ctrl_hevc_decode_params(fh->tgid, fh->fd, run->hevc.dpram);
 
 		for (i = 0; i < ARRAY_SIZE(run->hevc.dpram->dpb); i++)
-			trace_v4l2_hevc_dpb_entry(&run->hevc.dpram->dpb[i]);
+			trace_v4l2_hevc_dpb_entry(fh->tgid, fh->fd, &run->hevc.dpram->dpb[i]);
 
-		trace_v4l2_hevc_pred_weight_table(&run->hevc.spram->pred_weight_table);
-		trace_v4l2_ctrl_hevc_ext_sps_lt_rps(run->hevc.rps_lt);
-		trace_v4l2_ctrl_hevc_ext_sps_st_rps(run->hevc.rps_st);
 
+		trace_v4l2_hevc_pred_weight_table(fh->tgid, fh->fd,
+						  &run->hevc.spram->pred_weight_table);
+		trace_v4l2_ctrl_hevc_ext_sps_lt_rps(fh->tgid, fh->fd, run->hevc.rps_lt);
+		trace_v4l2_ctrl_hevc_ext_sps_st_rps(fh->tgid, fh->fd, run->hevc.rps_st);
 		break;
 	case VISL_CODEC_AV1:
-		trace_v4l2_ctrl_av1_sequence(run->av1.seq);
-		trace_v4l2_ctrl_av1_frame(run->av1.frame);
-		trace_v4l2_ctrl_av1_film_grain(run->av1.grain);
-		trace_v4l2_ctrl_av1_tile_group_entry(run->av1.tge);
+		trace_v4l2_ctrl_av1_sequence(fh->tgid, fh->fd, run->av1.seq);
+		trace_v4l2_ctrl_av1_frame(fh->tgid, fh->fd, run->av1.frame);
+		trace_v4l2_ctrl_av1_film_grain(fh->tgid, fh->fd, run->av1.grain);
+		trace_v4l2_ctrl_av1_tile_group_entry(fh->tgid, fh->fd, run->av1.tge);
 		break;
 	}
 }
