@@ -67,7 +67,14 @@ rds_tcp_get_peer_sport(struct socket *sock)
 	} saddr;
 	int sport;
 
-	if (kernel_getpeername(sock, &saddr.addr) >= 0) {
+	/* Call the socket's getname() function (inet_getname() in this case)
+	 * with a final argument greater than 1 to get the peer's port
+	 * regardless of whether the socket is currently connected.
+	 * Using peer=2 will get the peer port even during reconnection states
+	 * (TCPF_CLOSE, TCPF_SYN_SENT). This avoids -ENOTCONN while
+	 * inet_dport still contains the correct peer port.
+	 */
+	if (sock->ops->getname(sock, &saddr.addr, 2) >= 0) {
 		switch (saddr.addr.sa_family) {
 		case AF_INET:
 			sport = ntohs(saddr.sin.sin_port);
@@ -177,7 +184,7 @@ void rds_tcp_conn_slots_available(struct rds_connection *conn, bool fan_out)
 
 	if (fan_out)
 		/* Delegate fan-out to a background worker in order
-		 * to allow "kernel_getpeername" to acquire a lock
+		 * to allow "sock->ops->getname()" to acquire a lock
 		 * on the socket.
 		 * The socket is already locked in this context
 		 * by either "rds_tcp_recv_path" or "tcp_v{4,6}_rcv",
