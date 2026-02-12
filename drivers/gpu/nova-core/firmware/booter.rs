@@ -403,18 +403,6 @@ impl FalconDmaLoadable for BooterFirmware {
     fn dmem_load_params(&self) -> FalconDmaLoadTarget {
         self.dmem_load_target.clone()
     }
-
-    fn brom_params(&self) -> FalconBromParams {
-        self.brom_params.clone()
-    }
-
-    fn boot_addr(&self) -> u32 {
-        if let Some(ns_target) = &self.imem_ns_load_target {
-            ns_target.dst_start
-        } else {
-            self.imem_sec_load_target.src_start
-        }
-    }
 }
 
 impl Deref for BooterFirmware {
@@ -427,4 +415,16 @@ impl Deref for BooterFirmware {
 
 impl FalconFirmware for BooterFirmware {
     type Target = Sec2;
+
+    fn brom_params(&self) -> FalconBromParams {
+        self.brom_params.clone()
+    }
+
+    fn boot_addr(&self) -> u32 {
+        if let Some(ns_target) = &self.imem_ns_load_target {
+            ns_target.dst_start
+        } else {
+            self.imem_sec_load_target.src_start
+        }
+    }
 }

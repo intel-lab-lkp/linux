@@ -234,18 +234,6 @@ impl FalconDmaLoadable for FwsecFirmware {
     fn dmem_load_params(&self) -> FalconDmaLoadTarget {
         self.desc.dmem_load_params()
     }
-
-    fn brom_params(&self) -> FalconBromParams {
-        FalconBromParams {
-            pkc_data_offset: self.desc.pkc_data_offset(),
-            engine_id_mask: self.desc.engine_id_mask(),
-            ucode_id: self.desc.ucode_id(),
-        }
-    }
-
-    fn boot_addr(&self) -> u32 {
-        0
-    }
 }
 
 impl Deref for FwsecFirmware {
@@ -258,6 +246,18 @@ impl Deref for FwsecFirmware {
 
 impl FalconFirmware for FwsecFirmware {
     type Target = Gsp;
+
+    fn brom_params(&self) -> FalconBromParams {
+        FalconBromParams {
+            pkc_data_offset: self.desc.pkc_data_offset(),
+            engine_id_mask: self.desc.engine_id_mask(),
+            ucode_id: self.desc.ucode_id(),
+        }
+    }
+
+    fn boot_addr(&self) -> u32 {
+        0
+    }
 }
 
 impl FirmwareDmaObject<FwsecFirmware, Unsigned> {
