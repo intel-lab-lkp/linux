@@ -87,6 +87,7 @@
 #include <drm/drm_atomic_uapi.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_edid.h>
@@ -11127,8 +11128,12 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 	/* Signal HW programming completion */
 	drm_atomic_helper_commit_hw_done(state);
 
-	if (wait_for_vblank)
-		drm_atomic_helper_wait_for_flip_done(dev, state);
+	if (wait_for_vblank) {
+		if (drm_atomic_helper_wait_for_flip_done(dev, state))
+			drm_dev_wedged_event(dev, DRM_WEDGE_RECOVERY_REBIND |
+					     DRM_WEDGE_RECOVERY_BUS_RESET,
+					     NULL);
+	}
 
 	drm_atomic_helper_cleanup_planes(dev, state);
 
