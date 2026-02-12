@@ -366,3 +366,126 @@ impl<C: CommandToGsp> CommandToGsp for WrappingCommand<C> {
         }
     }
 }
+
+#[kunit_tests(nova_core_gsp_commands)]
+mod tests {
+    use super::*;
+
+    struct TestPayload {
+        data: KVVec<u8>,
+    }
+
+    impl TestPayload {
+        fn generate_pattern(len: usize) -> Result<KVVec<u8>> {
+            let mut data = KVVec::with_capacity(len, GFP_KERNEL)?;
+            for i in 0..len {
+                data.push(i as u8, GFP_KERNEL)?;
+            }
+            Ok(data)
+        }
+
+        fn new(len: usize) -> Result<Self> {
+            Ok(Self {
+                data: Self::generate_pattern(len)?,
+            })
+        }
+    }
+
+    impl CommandToGsp for TestPayload {
+        const FUNCTION: MsgFunction = MsgFunction::Nop;
+        type Command = Empty;
+        type InitError = Infallible;
+
+        fn init(&self) -> impl Init<Self::Command, Self::InitError> {
+            Empty::init_zeroed()
+        }
+
+        fn variable_payload_len(&self) -> usize {
+            self.data.len()
+        }
+
+        fn init_variable_payload(
+            &self,
+            dst: &mut SBufferIter<core::array::IntoIter<&mut [u8], 2>>,
+        ) -> Result {
+            dst.write_all(self.data.as_slice())
+        }
+    }
+
+    fn read_payload(cmd: &impl CommandToGsp) -> Result<KVVec<u8>> {
+        let len = cmd.variable_payload_len();
+        let mut buf = KVVec::from_elem(0u8, len, GFP_KERNEL)?;
+        let mut sbuf = SBufferIter::new_writer([buf.as_mut_slice(), &mut []]);
+        cmd.init_variable_payload(&mut sbuf)?;
+        drop(sbuf);
+        Ok(buf)
+    }
+
+    struct WrappingCommandTest {
+        payload_size: usize,
+        max_size: usize,
+        num_continuations: usize,
+    }
+
+    fn check_wrapping(t: WrappingCommandTest) -> Result {
+        let mut wrapped = WrappingCommand::new(TestPayload::new(t.payload_size)?, t.max_size)?;
+
+        let mut buf = read_payload(&wrapped)?;
+        assert!(buf.len() <= t.max_size);
+
+        let mut num_continuations = 0;
+        while let Some(cont) = wrapped.next_continuation_record() {
+            let payload = read_payload(&cont)?;
+            assert!(payload.len() <= t.max_size);
+            buf.extend_from_slice(&payload, GFP_KERNEL)?;
+            num_continuations += 1;
+        }
+
+        assert_eq!(num_continuations, t.num_continuations);
+        assert_eq!(
+            buf.as_slice(),
+            TestPayload::generate_pattern(t.payload_size)?.as_slice()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn wrapping_command() -> Result {
+        check_wrapping(WrappingCommandTest {
+            payload_size: 0,
+            max_size: 50,
+            num_continuations: 0,
+        })?;
+        check_wrapping(WrappingCommandTest {
+            payload_size: 50,
+            max_size: 50,
+            num_continuations: 0,
+        })?;
+        check_wrapping(WrappingCommandTest {
+            payload_size: 100,
+            max_size: 50,
+            num_continuations: 1,
+        })?;
+        check_wrapping(WrappingCommandTest {
+            payload_size: 101,
+            max_size: 100,
+            num_continuations: 1,
+        })?;
+        check_wrapping(WrappingCommandTest {
+            payload_size: 150,
+            max_size: 100,
+            num_continuations: 1,
+        })?;
+        check_wrapping(WrappingCommandTest {
+            payload_size: 300,
+            max_size: 100,
+            num_continuations: 2,
+        })?;
+        check_wrapping(WrappingCommandTest {
+            payload_size: 350,
+            max_size: 100,
+            num_continuations: 3,
+        })?;
+        Ok(())
+    }
+}
