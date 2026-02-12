@@ -80,6 +80,25 @@ The general format of a function and function-like macro kernel-doc comment is::
    *
    * The longer description may have multiple paragraphs.
    *
+   * When specifying testable code behaviour the longer description must contain
+   * a paragraph formatted as follows:
+   *
+   * function_name behavior:
+   * [ID1] - [expected behavior]
+   *
+   * [ID2] - [expected behavior]
+   *
+   * [...]
+   *
+   * [IDn] - [expected behavior]
+   *
+   * function_name constraints of use:
+   * [ID1] - [constraint to be met by the caller]
+   *
+   * [ID2] - [constraint to be met by the caller]
+   *
+   * [IDn] - [constraint to be met by the caller]
+   *
    * Context: Describes whether the function can sleep, what locks it takes,
    *          releases, or expects to be held. It can extend over multiple
    *          lines.
