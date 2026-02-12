@@ -7,18 +7,12 @@
 #include "visl.h"
 #include "visl-debugfs.h"
 #include "visl-dec.h"
-#include "visl-trace-fwht.h"
-#include "visl-trace-mpeg2.h"
-#include "visl-trace-vp8.h"
-#include "visl-trace-vp9.h"
-#include "visl-trace-h264.h"
-#include "visl-trace-hevc.h"
-#include "visl-trace-av1.h"
 
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 #include <media/v4l2-mem2mem.h>
 #include <media/tpg/v4l2-tpg.h>
+#include <trace/events/v4l2_requests.h>
 
 #define LAST_BUF_IDX (V4L2_AV1_REF_LAST_FRAME - V4L2_AV1_REF_LAST_FRAME)
 #define LAST2_BUF_IDX (V4L2_AV1_REF_LAST2_FRAME - V4L2_AV1_REF_LAST_FRAME)
