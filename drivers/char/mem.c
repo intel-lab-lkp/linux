@@ -31,6 +31,10 @@
 #include <linux/uaccess.h>
 #include <linux/security.h>
 
+#include <kunit/visibility.h>
+
+#include "mem.h"
+
 #define DEVMEM_MINOR	1
 #define DEVPORT_MINOR	4
 
@@ -57,16 +61,17 @@ static inline int valid_mmap_phys_addr_range(unsigned long pfn, size_t size)
 #endif
 
 #ifdef CONFIG_STRICT_DEVMEM
-static inline int page_is_allowed(unsigned long pfn)
+INLINE_VISIBLE_IF_KUNIT int page_is_allowed(unsigned long pfn)
 {
 	return devmem_is_allowed(pfn);
 }
 #else
-static inline int page_is_allowed(unsigned long pfn)
+INLINE_VISIBLE_IF_KUNIT int page_is_allowed(unsigned long pfn)
 {
 	return 1;
 }
 #endif
+EXPORT_SYMBOL_IF_KUNIT(page_is_allowed);
 
 static inline bool should_stop_iteration(void)
 {
@@ -104,7 +109,7 @@ static inline bool should_stop_iteration(void)
  * * %-ENOMEM - out of memory error for auxiliary kernel buffers supporting
  *   the operation of copying content from the physical pages
  */
-static ssize_t read_mem(struct file *file, char __user *buf,
+VISIBLE_IF_KUNIT ssize_t read_mem(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos)
 {
 	phys_addr_t p = *ppos;
@@ -190,6 +195,7 @@ failed:
 	kfree(bounce);
 	return err;
 }
+EXPORT_SYMBOL_IF_KUNIT(read_mem);
 
 /**
  * write_mem - write to physical memory (/dev/mem).
@@ -234,7 +240,7 @@ failed:
  *   be copied from user-space
  * * %-EPERM - access to any of the required pages is not allowed
  */
-static ssize_t write_mem(struct file *file, const char __user *buf,
+VISIBLE_IF_KUNIT ssize_t write_mem(struct file *file, const char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	phys_addr_t p = *ppos;
@@ -306,6 +312,7 @@ static ssize_t write_mem(struct file *file, const char __user *buf,
 	*ppos += written;
 	return written;
 }
+EXPORT_SYMBOL_IF_KUNIT(write_mem);
 
 int __weak phys_mem_access_prot_allowed(struct file *file,
 	unsigned long pfn, unsigned long size, pgprot_t *vma_prot)
