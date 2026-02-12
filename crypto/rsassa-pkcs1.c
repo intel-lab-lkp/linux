@@ -263,9 +263,10 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 		return -EINVAL;
 
 	if (dst_len == ctx->key_size) {
-		if (out_buf[0] != 0x00)
-			/* Encrypted value had no leading 0 byte */
+		if (out_buf[0] != 0x00) {
+			pr_debug("Encrypted value had no leading 0 byte\n");
 			return -EINVAL;
+		}
 
 		dst_len--;
 		out_buf++;

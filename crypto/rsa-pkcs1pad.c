@@ -191,9 +191,10 @@ static int pkcs1pad_decrypt_complete(struct akcipher_request *req, int err)
 
 	out_buf = req_ctx->out_buf;
 	if (dst_len == ctx->key_size) {
-		if (out_buf[0] != 0x00)
-			/* Decrypted value had no leading 0 byte */
+		if (out_buf[0] != 0x00) {
+			pr_debug("Decrypted value had no leading 0 byte\n");
 			goto done;
+		}
 
 		dst_len--;
 		out_buf++;
