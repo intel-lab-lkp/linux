@@ -1178,7 +1178,7 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 
 				pmlmepriv->link_detect_info.traffic_transition_count++;
 
-				if (pmlmepriv->link_detect_info.traffic_transition_count > 30/*TrafficTransitionLevel*/)
+				if (pmlmepriv->link_detect_info.traffic_transition_count > 30)
 					pmlmepriv->link_detect_info.traffic_transition_count = 30;
 			}
 		} else {

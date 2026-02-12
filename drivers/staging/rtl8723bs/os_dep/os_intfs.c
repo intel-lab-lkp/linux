@@ -620,7 +620,6 @@ void rtw_reset_drv_sw(struct adapter *padapter)
 
 	pmlmepriv->link_detect_info.busy_traffic = false;
 
-	/* pmlmepriv->link_detect_info.TrafficBusyState = false; */
 	pmlmepriv->link_detect_info.traffic_transition_count = 0;
 	pmlmepriv->link_detect_info.low_power_transition_count = 0;
 
