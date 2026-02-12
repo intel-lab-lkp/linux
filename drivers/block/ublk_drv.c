@@ -2361,14 +2361,9 @@ static void ublk_partition_scan_work(struct work_struct *work)
 	if (!disk)
 		return;
 
-	if (WARN_ON_ONCE(!test_and_clear_bit(GD_SUPPRESS_PART_SCAN,
-					     &disk->state)))
-		goto out;
-
 	mutex_lock(&disk->open_mutex);
 	bdev_disk_changed(disk, false);
 	mutex_unlock(&disk->open_mutex);
-out:
 	ublk_put_disk(disk);
 }
 
@@ -4429,12 +4424,11 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 
 	set_bit(UB_STATE_USED, &ub->state);
 
-	/* Skip partition scan if disabled by user */
-	if (ub->dev_info.flags & UBLK_F_NO_AUTO_PART_SCAN) {
+	if (!ub->unprivileged_daemons) {
+		/* Enable partition scanning for trusted daemons */
 		clear_bit(GD_SUPPRESS_PART_SCAN, &disk->state);
-	} else {
-		/* Schedule async partition scan for trusted daemons */
-		if (!ub->unprivileged_daemons)
+		/* Skip auto partition scan if requested by user */
+		if (!(ub->dev_info.flags & UBLK_F_NO_AUTO_PART_SCAN))
 			schedule_work(&ub->partition_scan_work);
 	}
 
