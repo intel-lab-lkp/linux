@@ -72,6 +72,7 @@ static void update_shadow_pdps(struct intel_vgpu_workload *workload)
 {
 	struct execlist_ring_context *shadow_ring_context;
 	struct intel_context *ctx = workload->req->context;
+	u32 pdp[8];
 
 	if (WARN_ON(!workload->shadow_mm))
 		return;
@@ -79,9 +80,10 @@ static void update_shadow_pdps(struct intel_vgpu_workload *workload)
 	if (WARN_ON(!atomic_read(&workload->shadow_mm->pincount)))
 		return;
 
+	memcpy(pdp, workload->shadow_mm->ppgtt_mm.shadow_pdps,
+	       sizeof(u64) * ARRAY_SIZE(workload->shadow_mm->ppgtt_mm.shadow_pdps));
 	shadow_ring_context = (struct execlist_ring_context *)ctx->lrc_reg_state;
-	set_context_pdp_root_pointer(shadow_ring_context,
-			(void *)workload->shadow_mm->ppgtt_mm.shadow_pdps);
+	set_context_pdp_root_pointer(shadow_ring_context, pdp);
 }
 
 /*
