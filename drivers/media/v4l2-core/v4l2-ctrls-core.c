@@ -10,7 +10,10 @@
 #include <linux/slab.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-event.h>
+#include <media/v4l2-fh.h>
 #include <media/v4l2-fwnode.h>
+
+#include <trace/events/v4l2_requests.h>
 
 #include "v4l2-ctrls-priv.h"
 
@@ -1462,12 +1465,123 @@ int v4l2_ctrl_type_op_validate(const struct v4l2_ctrl *ctrl,
 }
 EXPORT_SYMBOL(v4l2_ctrl_type_op_validate);
 
+void v4l2_ctrl_type_op_trace(const struct v4l2_fh *fh,
+				    const struct v4l2_ctrl *ctrl, union v4l2_ctrl_ptr ptr)
+{
+	int i = 0;
+
+	switch ((u32)ctrl->type) {
+	case V4L2_CTRL_TYPE_FWHT_PARAMS:
+		trace_v4l2_ctrl_fwht_params(fh->tgid, fh->fd, ptr.p_fwht_params);
+		break;
+	case V4L2_CTRL_TYPE_MPEG2_SEQUENCE:
+		trace_v4l2_ctrl_mpeg2_sequence(fh->tgid, fh->fd, ptr.p_mpeg2_sequence);
+		break;
+	case V4L2_CTRL_TYPE_MPEG2_PICTURE:
+		trace_v4l2_ctrl_mpeg2_picture(fh->tgid, fh->fd, ptr.p_mpeg2_picture);
+		break;
+	case V4L2_CTRL_TYPE_MPEG2_QUANTISATION:
+		trace_v4l2_ctrl_mpeg2_quantisation(fh->tgid, fh->fd, ptr.p_mpeg2_quantisation);
+		break;
+	case V4L2_CTRL_TYPE_VP8_FRAME:
+		trace_v4l2_ctrl_vp8_frame(fh->tgid, fh->fd, ptr.p_vp8_frame);
+		trace_v4l2_ctrl_vp8_entropy(fh->tgid, fh->fd, ptr.p_vp8_frame);
+		break;
+	case V4L2_CTRL_TYPE_VP9_FRAME:
+		trace_v4l2_ctrl_vp9_frame(fh->tgid, fh->fd, ptr.p_vp9_frame);
+		break;
+	case V4L2_CTRL_TYPE_VP9_COMPRESSED_HDR:
+		trace_v4l2_ctrl_vp9_compressed_hdr(fh->tgid, fh->fd,
+						   ptr.p_vp9_compressed_hdr_probs);
+		trace_v4l2_ctrl_vp9_compressed_coeff(fh->tgid, fh->fd,
+						     ptr.p_vp9_compressed_hdr_probs);
+		trace_v4l2_vp9_mv_probs(fh->tgid, fh->fd, &ptr.p_vp9_compressed_hdr_probs->mv);
+		break;
+	case V4L2_CTRL_TYPE_H264_SPS:
+		trace_v4l2_ctrl_h264_sps(fh->tgid, fh->fd, ptr.p_h264_sps);
+		break;
+	case V4L2_CTRL_TYPE_H264_PPS:
+		trace_v4l2_ctrl_h264_pps(fh->tgid, fh->fd, ptr.p_h264_pps);
+		break;
+	case V4L2_CTRL_TYPE_H264_SCALING_MATRIX:
+		trace_v4l2_ctrl_h264_scaling_matrix(fh->tgid, fh->fd, ptr.p_h264_scaling_matrix);
+		break;
+	case V4L2_CTRL_TYPE_H264_SLICE_PARAMS:
+	{
+		struct v4l2_ctrl_h264_slice_params *sp = ptr.p_h264_slice_params;
+
+		trace_v4l2_ctrl_h264_slice_params(fh->tgid, fh->fd, sp);
+
+		for (i = 0; i < ARRAY_SIZE(sp->ref_pic_list0); i++)
+			trace_v4l2_h264_ref_pic_list0(fh->tgid, fh->fd, &sp->ref_pic_list0[i], i);
+		for (i = 0; i < ARRAY_SIZE(sp->ref_pic_list1); i++)
+			trace_v4l2_h264_ref_pic_list1(fh->tgid, fh->fd, &sp->ref_pic_list1[i], i);
+
+		break;
+	}
+	case V4L2_CTRL_TYPE_H264_DECODE_PARAMS:
+	{
+		struct v4l2_ctrl_h264_decode_params *dp = ptr.p_h264_decode_params;
+
+		trace_v4l2_ctrl_h264_decode_params(fh->tgid, fh->fd, dp);
+
+		for (i = 0; i < ARRAY_SIZE(dp->dpb); i++)
+			trace_v4l2_h264_dpb_entry(fh->tgid, fh->fd, &dp->dpb[i], i);
+
+		break;
+	}
+	case V4L2_CTRL_TYPE_H264_PRED_WEIGHTS:
+		trace_v4l2_ctrl_h264_pred_weights(fh->tgid, fh->fd, ptr.p_h264_pred_weights);
+		break;
+	case V4L2_CTRL_TYPE_HEVC_SPS:
+		trace_v4l2_ctrl_hevc_sps(fh->tgid, fh->fd, ptr.p_hevc_sps);
+		break;
+	case V4L2_CTRL_TYPE_HEVC_PPS:
+		trace_v4l2_ctrl_hevc_pps(fh->tgid, fh->fd, ptr.p_hevc_pps);
+		break;
+	case V4L2_CTRL_TYPE_HEVC_SLICE_PARAMS:
+		trace_v4l2_ctrl_hevc_slice_params(fh->tgid, fh->fd, ptr.p_hevc_slice_params);
+		trace_v4l2_hevc_pred_weight_table(fh->tgid, fh->fd,
+						  &ptr.p_hevc_slice_params->pred_weight_table);
+		break;
+	case V4L2_CTRL_TYPE_HEVC_SCALING_MATRIX:
+		trace_v4l2_ctrl_hevc_scaling_matrix(fh->tgid, fh->fd, ptr.p_hevc_scaling_matrix);
+		break;
+	case V4L2_CTRL_TYPE_HEVC_DECODE_PARAMS:
+	{
+		struct v4l2_ctrl_hevc_decode_params *dp = ptr.p_hevc_decode_params;
+
+		trace_v4l2_ctrl_hevc_decode_params(fh->tgid, fh->fd, dp);
+
+		for (i = 0; i < ARRAY_SIZE(dp->dpb); i++)
+			trace_v4l2_hevc_dpb_entry(fh->tgid, fh->fd, &dp->dpb[i]);
+
+		break;
+	}
+	case V4L2_CTRL_TYPE_AV1_SEQUENCE:
+		trace_v4l2_ctrl_av1_sequence(fh->tgid, fh->fd, ptr.p_av1_sequence);
+		break;
+	case V4L2_CTRL_TYPE_AV1_FRAME:
+		trace_v4l2_ctrl_av1_frame(fh->tgid, fh->fd, ptr.p_av1_frame);
+		break;
+	case V4L2_CTRL_TYPE_AV1_FILM_GRAIN:
+		trace_v4l2_ctrl_av1_film_grain(fh->tgid, fh->fd, ptr.p_av1_film_grain);
+		break;
+	case V4L2_CTRL_TYPE_AV1_TILE_GROUP_ENTRY:
+		trace_v4l2_ctrl_av1_tile_group_entry(fh->tgid, fh->fd, ptr.p_av1_tile_group_entry);
+		break;
+	}
+
+}
+EXPORT_SYMBOL(v4l2_ctrl_type_op_trace);
+
 static const struct v4l2_ctrl_type_ops std_type_ops = {
 	.equal = v4l2_ctrl_type_op_equal,
 	.init = v4l2_ctrl_type_op_init,
 	.minimum = v4l2_ctrl_type_op_minimum,
 	.maximum = v4l2_ctrl_type_op_maximum,
 	.log = v4l2_ctrl_type_op_log,
+	.trace = v4l2_ctrl_type_op_trace,
 	.validate = v4l2_ctrl_type_op_validate,
 };
 

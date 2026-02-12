@@ -524,6 +524,12 @@ int v4l2_g_ext_ctrls(struct v4l2_ctrl_handler *hdl, struct video_device *vdev,
 }
 EXPORT_SYMBOL(v4l2_g_ext_ctrls);
 
+static void trace_ext_ctrl(struct v4l2_fh *fh, const struct v4l2_ctrl *ctrl)
+{
+	if (ctrl->type_ops->trace)
+		ctrl->type_ops->trace(fh, ctrl, ctrl->p_cur);
+}
+
 /* Validate a new control */
 static int validate_new(const struct v4l2_ctrl *ctrl, union v4l2_ctrl_ptr p_new)
 {
@@ -713,6 +719,10 @@ int try_set_ext_ctrls_common(struct v4l2_fh *fh,
 				idx = helpers[idx].next;
 			} while (!ret && idx);
 		}
+
+		if (set)
+			trace_ext_ctrl(fh, master);
+
 		v4l2_ctrl_unlock(master);
 	}
 
