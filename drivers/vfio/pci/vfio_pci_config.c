@@ -1995,6 +1995,7 @@ ssize_t vfio_pci_config_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 
 	return done;
 }
+EXPORT_SYMBOL(vfio_pci_config_rw);
 
 /**
  * vfio_pci_core_range_intersect_range() - Determine overlap between a buffer
