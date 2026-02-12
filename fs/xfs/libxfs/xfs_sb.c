@@ -1340,17 +1340,18 @@ xfs_log_sb(
 				percpu_counter_sum_positive(&mp->m_ifree),
 				mp->m_sb.sb_icount);
 		mp->m_sb.sb_fdblocks = xfs_sum_freecounter(mp, XC_FREE_BLOCKS);
-	}
-
-	/*
-	 * sb_frextents was added to the lazy sb counters when the rt groups
-	 * feature was introduced.  This counter can go negative due to the way
-	 * we handle nearly-lockless reservations, so we must use the _positive
-	 * variant here to avoid writing out nonsense frextents.
-	 */
-	if (xfs_has_rtgroups(mp) && !xfs_has_zoned(mp)) {
-		mp->m_sb.sb_frextents =
-				xfs_sum_freecounter(mp, XC_FREE_RTEXTENTS);
+		/*
+		 * sb_frextents was added to the lazy sb counters when the
+		 * rt groups feature was introduced.  This counter can go
+		 * negative due to the way we handle nearly-lockless
+		 * reservations, so we must use the _positive variant here to
+		 * avoid writing out nonsense frextents.
+		 */
+		if (xfs_has_rtgroups(mp) && !xfs_has_zoned(mp)) {
+			mp->m_sb.sb_frextents =
+					xfs_sum_freecounter(mp,
+					XC_FREE_RTEXTENTS);
+		}
 	}
 
 	xfs_sb_to_disk(bp->b_addr, &mp->m_sb);
