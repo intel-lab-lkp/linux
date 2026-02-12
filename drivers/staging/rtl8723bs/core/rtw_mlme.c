@@ -1643,11 +1643,11 @@ void rtw_dynamic_check_timer_handler(struct adapter *adapter)
 	if ((adapter_to_pwrctl(adapter)->fw_current_in_ps_mode)
 		&& !(hal_btcoex_IsBtControlLps(adapter))
 		) {
-		u8 should_enter_ps;
+		bool should_enter_ps;
 
 		linked_status_chk(adapter);
 
-		should_enter_ps = traffic_status_watchdog(adapter, 1);
+		should_enter_ps = traffic_status_watchdog(adapter, true);
 		if (should_enter_ps) {
 			/* rtw_lps_ctrl_wk_cmd(adapter, LPS_CTRL_ENTER, 1); */
 			rtw_hal_dm_watchdog_in_lps(adapter);
