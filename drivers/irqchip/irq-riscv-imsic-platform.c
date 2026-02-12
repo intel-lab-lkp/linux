@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/smp.h>
+#include <linux/iommu.h>
 
 #include <linux/irqchip/irq-msi-lib.h>
 #include "irq-riscv-imsic-state.h"
@@ -69,7 +70,8 @@ static void imsic_irq_ack(struct irq_data *d)
 	irq_move_irq(d);
 }
 
-static void imsic_irq_compose_vector_msg(struct imsic_vector *vec, struct msi_msg *msg)
+static void imsic_irq_compose_vector_msg(struct irq_data *d, struct imsic_vector *vec,
+					 struct msi_msg *msg)
 {
 	phys_addr_t msi_addr;
 
@@ -79,14 +81,13 @@ static void imsic_irq_compose_vector_msg(struct imsic_vector *vec, struct msi_ms
 	if (WARN_ON(!imsic_cpu_page_phys(vec->cpu, 0, &msi_addr)))
 		return;
 
-	msg->address_hi = upper_32_bits(msi_addr);
-	msg->address_lo = lower_32_bits(msi_addr);
 	msg->data = vec->local_id;
+	msi_msg_set_addr(irq_data_get_msi_desc(d), msg, msi_addr);
 }
 
 static void imsic_irq_compose_msg(struct irq_data *d, struct msi_msg *msg)
 {
-	imsic_irq_compose_vector_msg(irq_data_get_irq_chip_data(d), msg);
+	imsic_irq_compose_vector_msg(d, irq_data_get_irq_chip_data(d), msg);
 }
 
 #ifdef CONFIG_SMP
@@ -94,13 +95,15 @@ static void imsic_msi_update_msg(struct irq_data *d, struct imsic_vector *vec)
 {
 	struct msi_msg msg = { };
 
-	imsic_irq_compose_vector_msg(vec, &msg);
+	imsic_irq_compose_vector_msg(d, vec, &msg);
 	irq_data_get_irq_chip(d)->irq_write_msi_msg(d, &msg);
 }
 
 static int imsic_irq_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 				  bool force)
 {
+	int err;
+	phys_addr_t msi_pa;
 	struct imsic_vector *old_vec, *new_vec;
 	struct imsic_vector tmp_vec;
 
@@ -135,6 +138,11 @@ static int imsic_irq_set_affinity(struct irq_data *d, const struct cpumask *mask
 	if (!new_vec)
 		return -ENOSPC;
 
+	imsic_cpu_page_phys(new_vec->cpu, 0, &msi_pa);
+	err = iommu_dma_prepare_msi(irq_data_get_msi_desc(d), msi_pa);
+	if (err)
+		return err;
+
 	/*
 	 * Device having non-atomic MSI update might see an intermediate
 	 * state when changing target IMSIC vector from one CPU to another.
@@ -161,11 +169,11 @@ static int imsic_irq_set_affinity(struct irq_data *d, const struct cpumask *mask
 		imsic_msi_update_msg(irq_get_irq_data(d->irq), &tmp_vec);
 	}
 
-	/* Point device to the new vector */
-	imsic_msi_update_msg(irq_get_irq_data(d->irq), new_vec);
-
 	/* Update irq descriptors with the new vector */
 	d->chip_data = new_vec;
+
+	/* Point device to the new vector */
+	imsic_msi_update_msg(irq_get_irq_data(d->irq), new_vec);
 
 	/* Update effective affinity */
 	irq_data_update_effective_affinity(d, cpumask_of(new_vec->cpu));
@@ -225,6 +233,9 @@ static struct irq_chip imsic_irq_base_chip = {
 static int imsic_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 				  unsigned int nr_irqs, void *args)
 {
+	int err;
+	msi_alloc_info_t *info = args;
+	phys_addr_t msi_pa;
 	struct imsic_vector *vec;
 
 	/* Multi-MSI is not supported yet. */
@@ -234,6 +245,11 @@ static int imsic_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 	vec = imsic_vector_alloc(virq, cpu_online_mask);
 	if (!vec)
 		return -ENOSPC;
+
+	imsic_cpu_page_phys(vec->cpu, 0, &msi_pa);
+	err = iommu_dma_prepare_msi(info->desc, msi_pa);
+	if (err)
+		return err;
 
 	irq_domain_set_info(domain, virq, virq, &imsic_irq_base_chip, vec,
 			    handle_edge_irq, NULL, NULL);
