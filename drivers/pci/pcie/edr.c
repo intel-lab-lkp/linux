@@ -191,7 +191,6 @@ static void edr_handle_event(acpi_handle handle, u32 event, void *data)
 	}
 
 	dpc_process_error(edev);
-	pci_aer_raw_clear_status(edev);
 
 	/*
 	 * Irrespective of whether the DPC event is triggered by ERR_FATAL
@@ -199,6 +198,16 @@ static void edr_handle_event(acpi_handle handle, u32 event, void *data)
 	 * error recovery path for both cases.
 	 */
 	estate = pcie_do_recovery(edev, pci_channel_io_frozen, dpc_reset_link);
+
+	/*
+	 * Clear AER status only after pcie_do_recovery() completes.
+	 * dpc_process_error() has already read and logged the AER
+	 * status above.  Deferring the clear keeps diagnostic data
+	 * available to driver callbacks invoked during recovery and
+	 * avoids interfering with any AER status reads they may
+	 * perform.
+	 */
+	pci_aer_raw_clear_status(edev);
 
 send_ost:
 
