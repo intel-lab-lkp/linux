@@ -25,6 +25,11 @@ struct regulator *rust_helper_regulator_get(struct device *dev, const char *id)
 	return regulator_get(dev, id);
 }
 
+struct regulator *rust_helper_regulator_get_optional(struct device *dev, const char *id)
+{
+	return regulator_get_optional(dev, id);
+}
+
 int rust_helper_regulator_enable(struct regulator *regulator)
 {
 	return regulator_enable(regulator);

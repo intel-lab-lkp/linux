@@ -113,7 +113,8 @@ impl platform::Driver for TyrDriver {
         coregroup_clk.prepare_enable()?;
 
         let mali_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c_str!("mali"))?;
-        let sram_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c_str!("sram"))?;
+        let sram_regulator =
+            Regulator::<regulator::Enabled>::get_optional(pdev.as_ref(), c_str!("sram"))?;
 
         let request = pdev.io_request_by_index(0).ok_or(ENODEV)?;
         let iomem = Arc::pin_init(request.iomap_sized::<SZ_2M>(), GFP_KERNEL)?;
@@ -201,5 +202,5 @@ struct Clocks {
 #[pin_data]
 struct Regulators {
     mali: Regulator<regulator::Enabled>,
-    sram: Regulator<regulator::Enabled>,
+    sram: Option<Regulator<regulator::Enabled>>,
 }

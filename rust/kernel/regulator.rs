@@ -232,10 +232,11 @@ pub fn devm_enable_optional(dev: &Device<Bound>, name: &CStr) -> Result {
 ///
 /// # Invariants
 ///
-/// - `inner` is a non-null wrapper over a pointer to a `struct
-///   regulator` obtained from [`regulator_get()`].
+/// - `inner` is a non-null wrapper over a pointer to a `struct regulator`
+///   obtained from [`regulator_get()`] or [`regulator_get_optional()`].
 ///
 /// [`regulator_get()`]: https://docs.kernel.org/driver-api/regulator.html#c.regulator_get
+/// [`regulator_get_optional()`]: https://docs.kernel.org/driver-api/regulator.html#c.regulator_get_optional
 pub struct Regulator<State>
 where
     State: RegulatorState,
@@ -283,6 +284,29 @@ impl<T: RegulatorState> Regulator<T> {
         })
     }
 
+    fn get_optional_internal(dev: &Device, name: &CStr) -> Result<Option<Regulator<T>>> {
+        // SAFETY: It is safe to call `regulator_get_optional()`, on a
+        // device pointer received from the C code.
+        let inner = from_err_ptr(unsafe {
+            bindings::regulator_get_optional(dev.as_raw(), name.as_char_ptr())
+        });
+
+        let inner = match inner {
+            Ok(inner) => inner,
+            Err(ENODEV) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        // SAFETY: We can safely trust `inner` to be a pointer to a valid
+        // regulator if `ERR_PTR` was not returned.
+        let inner = unsafe { NonNull::new_unchecked(inner) };
+
+        Ok(Some(Self {
+            inner,
+            _phantom: PhantomData,
+        }))
+    }
+
     fn enable_internal(&self) -> Result {
         // SAFETY: Safe as per the type invariants of `Regulator`.
         to_result(unsafe { bindings::regulator_enable(self.inner.as_ptr()) })
@@ -298,6 +322,11 @@ impl Regulator<Disabled> {
     /// Obtains a [`Regulator`] instance from the system.
     pub fn get(dev: &Device, name: &CStr) -> Result<Self> {
         Regulator::get_internal(dev, name)
+    }
+
+    /// Obtains an optional [`Regulator`] instance from the system.
+    pub fn get_optional(dev: &Device, name: &CStr) -> Result<Option<Self>> {
+        Regulator::get_optional_internal(dev, name)
     }
 
     /// Attempts to convert the regulator to an enabled state.
@@ -327,6 +356,18 @@ impl Regulator<Enabled> {
         Regulator::<Disabled>::get_internal(dev, name)?
             .try_into_enabled()
             .map_err(|error| error.error)
+    }
+
+    /// Obtains an optional [`Regulator`] instance from the system and enables it.
+    pub fn get_optional(dev: &Device, name: &CStr) -> Result<Option<Self>> {
+        match Regulator::<Disabled>::get_optional_internal(dev, name)? {
+            Some(regulator) => {
+                let enabled_regulator =
+                    regulator.try_into_enabled().map_err(|error| error.error)?;
+                Ok(Some(enabled_regulator))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Attempts to convert the regulator to a disabled state.
