@@ -64,6 +64,15 @@ static struct dentry *befs_fh_to_parent(struct super_block *sb,
 				struct fid *fid, int fh_len, int fh_type);
 static struct dentry *befs_get_parent(struct dentry *child);
 static void befs_free_fc(struct fs_context *fc);
+static int befs_ioctl_get_volume_label(struct super_block *sb,
+				       char __user *arg);
+static long befs_generic_ioctl(struct file *filp, unsigned int cmd,
+			       unsigned long arg);
+#ifdef CONFIG_COMPAT
+static long befs_generic_compat_ioctl(struct file *filp, unsigned int cmd,
+				      unsigned long arg);
+#endif
+
 
 static const struct super_operations befs_sops = {
 	.alloc_inode	= befs_alloc_inode,	/* allocate a new inode */
@@ -81,6 +90,10 @@ static const struct file_operations befs_dir_operations = {
 	.iterate_shared	= befs_readdir,
 	.llseek		= generic_file_llseek,
 	.setlease	= generic_setlease,
+	.unlocked_ioctl	= befs_generic_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= befs_generic_compat_ioctl,
+#endif
 };
 
 static const struct inode_operations befs_dir_inode_operations = {
@@ -939,6 +952,39 @@ befs_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 	return 0;
 }
+
+static int befs_ioctl_get_volume_label(struct super_block *sb, char __user *arg)
+{
+	struct befs_sb_info *sbi = BEFS_SB(sb);
+
+	if (copy_to_user(arg, sbi->name, B_OS_NAME_LENGTH))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long befs_generic_ioctl(struct file *filp, unsigned int cmd,
+			       unsigned long arg)
+{
+	struct inode *inode = file_inode(filp);
+	char __user *user = (char __user *)arg;
+
+	switch (cmd) {
+	case FS_IOC_GETFSLABEL:
+		return befs_ioctl_get_volume_label(inode->i_sb, user);
+	default:
+		return -ENOTTY;
+	}
+}
+
+#ifdef CONFIG_COMPAT
+static long befs_generic_compat_ioctl(struct file *filp, unsigned int cmd,
+				      unsigned long arg)
+
+{
+	return befs_generic_ioctl(filp, cmd, (unsigned long)compat_ptr(arg));
+}
+#endif
 
 static int befs_get_tree(struct fs_context *fc)
 {

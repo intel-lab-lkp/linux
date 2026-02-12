@@ -28,6 +28,7 @@ befs_load_sb(struct super_block *sb, befs_super_block *disk_sb)
 	else if (disk_sb->fs_byte_order == BEFS_BYTEORDER_NATIVE_BE)
 		befs_sb->byte_order = BEFS_BYTESEX_BE;
 
+	memcpy(befs_sb->name, disk_sb->name, B_OS_NAME_LENGTH);
 	befs_sb->magic1 = fs32_to_cpu(sb, disk_sb->magic1);
 	befs_sb->magic2 = fs32_to_cpu(sb, disk_sb->magic2);
 	befs_sb->magic3 = fs32_to_cpu(sb, disk_sb->magic3);
