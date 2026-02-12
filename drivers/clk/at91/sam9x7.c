@@ -420,7 +420,6 @@ static const struct {
 	{ .n = "lvdsc_clk",	.id = 56, },
 	{ .n = "pit64b1_clk",	.id = 58, },
 	{ .n = "puf_clk",	.id = 59, },
-	{ .n = "gmactsu_clk",	.id = 67, },
 };
 
 /*
@@ -700,15 +699,6 @@ static const struct {
 		.pp = { "plla_div2pmcck", },
 		.pp_mux_table = { 8, },
 		.pp_count = 1,
-		.pp_chg_id = INT_MIN,
-	},
-
-	{
-		.n = "gmac_gclk",
-		.id = 67,
-		.pp = { "audiopll_divpmcck", "plla_div2pmcck", },
-		.pp_mux_table = { 6, 8, },
-		.pp_count = 2,
 		.pp_chg_id = INT_MIN,
 	},
 };
