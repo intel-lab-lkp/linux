@@ -10,6 +10,16 @@
 #include "host.h"
 
 /**
+ * cpc_cport_tcb_reset() - Reset cport's TCB to initial values.
+ * @cport: cport pointer
+ */
+static void cpc_cport_tcb_reset(struct cpc_cport *cport)
+{
+	cport->tcb.ack = 0;
+	cport->tcb.seq = 0;
+}
+
+/**
  * cpc_cport_alloc() - Allocate and initialize CPC cport.
  * @cport_id: cport ID.
  * @gfp_mask: GFP mask for allocation.
@@ -25,6 +35,9 @@ struct cpc_cport *cpc_cport_alloc(u16 cport_id, gfp_t gfp_mask)
 		return NULL;
 
 	cport->id = cport_id;
+	cpc_cport_tcb_reset(cport);
+
+	mutex_init(&cport->lock);
 
 	return cport;
 }
@@ -69,10 +82,22 @@ int cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb)
 {
 	struct cpc_host_device *cpc_hd = cport->cpc_hd;
 	struct gb_operation_msg_hdr *gb_hdr;
+	u8 ack;
 
 	/* Inject cport ID in Greybus header */
 	gb_hdr = (struct gb_operation_msg_hdr *)skb->data;
 	cpc_cport_pack(gb_hdr, cport->id);
+
+	mutex_lock(&cport->lock);
+
+	CPC_SKB_CB(skb)->seq = cport->tcb.seq;
+
+	cport->tcb.seq++;
+	ack = cport->tcb.ack;
+
+	mutex_unlock(&cport->lock);
+
+	cpc_protocol_prepare_header(skb, ack);
 
 	return cpc_hd_send_skb(cpc_hd, skb);
 }

@@ -38,4 +38,6 @@ struct cpc_header {
 	__u8 ack;
 } __packed;
 
+u8 cpc_header_get_seq(const struct cpc_header *hdr);
+
 #endif
