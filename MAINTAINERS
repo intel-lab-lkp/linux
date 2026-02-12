@@ -24734,9 +24734,13 @@ F:	drivers/power/supply/stc3117_fuel_gauge.c
 ST STM32 FIREWALL
 M:	Gatien Chevallier <gatien.chevallier@foss.st.com>
 S:	Maintained
+F:	Documentation/devicetree/bindings/bus/st,stm32-etzpc.yaml
+F:	Documentation/devicetree/bindings/bus/st,stm32mp25-rifsc.yaml
+F:	Documentation/devicetree/bindings/bus/st,stm32mp25-risab.yaml
 F:	drivers/bus/stm32_etzpc.c
 F:	drivers/bus/stm32_firewall.c
 F:	drivers/bus/stm32_rifsc.c
+F:	drivers/bus/stm32_risa*.c
 
 ST STM32 HDP PINCTRL DRIVER
 M:	Clément Le Goffic <legoffic.clement@gmail.com>
