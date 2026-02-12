@@ -54,6 +54,10 @@ unsigned int pci_pm_d3hot_delay;
 
 static void pci_pme_list_scan(struct work_struct *work);
 
+#define PCI_RESET_RESTORE true
+#define PCI_RESET_NO_RESTORE false
+static int pci_reset_bridge(struct pci_dev *bridge, bool restore);
+
 static LIST_HEAD(pci_pme_list);
 static DEFINE_MUTEX(pci_pme_list_mutex);
 static DECLARE_DELAYED_WORK(pci_pme_work, pci_pme_list_scan);
@@ -5600,36 +5604,10 @@ static int pci_bus_reset(struct pci_bus *bus, bool probe)
 /**
  * pci_bus_error_reset - reset the bridge's subordinate bus
  * @bridge: The parent device that connects to the bus to reset
- *
- * This function will first try to reset the slots on this bus if the method is
- * available. If slot reset fails or is not available, this will fall back to a
- * secondary bus reset.
  */
 int pci_bus_error_reset(struct pci_dev *bridge)
 {
-	struct pci_bus *bus = bridge->subordinate;
-	struct pci_slot *slot;
-
-	if (!bus)
-		return -ENOTTY;
-
-	mutex_lock(&pci_slot_mutex);
-	if (list_empty(&bus->slots))
-		goto bus_reset;
-
-	list_for_each_entry(slot, &bus->slots, list)
-		if (pci_probe_reset_slot(slot))
-			goto bus_reset;
-
-	list_for_each_entry(slot, &bus->slots, list)
-		if (pci_slot_reset(slot, PCI_RESET_DO_RESET))
-			goto bus_reset;
-
-	mutex_unlock(&pci_slot_mutex);
-	return 0;
-bus_reset:
-	mutex_unlock(&pci_slot_mutex);
-	return pci_bus_reset(bridge->subordinate, PCI_RESET_DO_RESET);
+	return pci_reset_bridge(bridge, PCI_RESET_NO_RESTORE);
 }
 
 /**
@@ -5650,7 +5628,7 @@ EXPORT_SYMBOL_GPL(pci_probe_reset_bus);
  *
  * Same as above except return -EAGAIN if the bus cannot be locked
  */
-int pci_try_reset_bus(struct pci_bus *bus)
+static int pci_try_reset_bus(struct pci_bus *bus)
 {
 	int rc;
 
@@ -5668,6 +5646,58 @@ int pci_try_reset_bus(struct pci_bus *bus)
 		rc = -EAGAIN;
 
 	return rc;
+}
+
+/**
+ * pci_reset_bridge - reset a bridge's subordinate bus
+ * @bridge: bridge that connects to the bus to reset
+ * @restore: true if affected device states need to be restored after the reset
+ *
+ * This function will first try to reset the slots on this bus if the method is
+ * available. If slot reset fails or is not available, this will fall back to a
+ * secondary bus reset.
+ */
+static int pci_reset_bridge(struct pci_dev *bridge, bool restore)
+{
+	struct pci_bus *bus = bridge->subordinate;
+	struct pci_slot *slot;
+
+	if (!bus)
+		return -ENOTTY;
+
+	mutex_lock(&pci_slot_mutex);
+	if (list_empty(&bus->slots))
+		goto bus_reset;
+
+	list_for_each_entry(slot, &bus->slots, list)
+		if (pci_probe_reset_slot(slot))
+			goto bus_reset;
+
+	list_for_each_entry(slot, &bus->slots, list) {
+		int ret;
+
+		if (restore)
+			ret = pci_try_reset_slot(slot);
+		else
+			ret = pci_slot_reset(slot, PCI_RESET_DO_RESET);
+
+		if (ret)
+			goto bus_reset;
+	}
+
+	mutex_unlock(&pci_slot_mutex);
+	return 0;
+bus_reset:
+	mutex_unlock(&pci_slot_mutex);
+
+	if (restore)
+		return pci_try_reset_bus(bus);
+	return pci_bus_reset(bridge->subordinate, PCI_RESET_DO_RESET);
+}
+
+int pci_try_reset_bridge(struct pci_dev *bridge)
+{
+	return pci_reset_bridge(bridge, PCI_RESET_RESTORE);
 }
 
 /**
