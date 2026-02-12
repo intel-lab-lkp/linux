@@ -379,6 +379,8 @@ struct xilinx_cdma_tx_segment {
  * @cyclic: Check for cyclic transfers.
  * @err: Whether the descriptor has an error.
  * @residue: Residue of the completed descriptor
+ * @xferred_bytes: Number of bytes transferred by this transaction
+ *                 descriptor.
  */
 struct xilinx_dma_tx_descriptor {
 	struct xilinx_dma_chan *chan;
@@ -388,6 +390,7 @@ struct xilinx_dma_tx_descriptor {
 	bool cyclic;
 	bool err;
 	u32 residue;
+	u32 xferred_bytes;
 };
 
 /**
@@ -514,6 +517,7 @@ struct xilinx_dma_config {
  * @mm2s_chan_id: DMA mm2s channel identifier
  * @max_buffer_len: Max buffer length
  * @has_axistream_connected: AXI DMA connected to AXI Stream IP
+ * @has_stsctrl_stream: AXI4-stream status and control interface is enabled
  */
 struct xilinx_dma_device {
 	void __iomem *regs;
@@ -533,6 +537,7 @@ struct xilinx_dma_device {
 	u32 mm2s_chan_id;
 	u32 max_buffer_len;
 	bool has_axistream_connected;
+	bool has_stsctrl_stream;
 };
 
 /* Macros */
@@ -671,8 +676,12 @@ static void *xilinx_dma_get_metadata_ptr(struct dma_async_tx_descriptor *tx,
 				       struct xilinx_axidma_tx_segment, node);
 		metadata_ptr = seg->hw.app;
 	}
-	*max_len = *payload_len = sizeof(u32) * XILINX_DMA_NUM_APP_WORDS;
-	return metadata_ptr;
+	if (desc->chan->xdev->has_stsctrl_stream) {
+		*max_len = *payload_len = sizeof(u32) * XILINX_DMA_NUM_APP_WORDS;
+		return metadata_ptr;
+	}
+	*max_len = *payload_len = sizeof(desc->xferred_bytes);
+	return (void *)&desc->xferred_bytes;
 }
 
 static struct dma_descriptor_metadata_ops xilinx_dma_metadata_ops = {
@@ -863,6 +872,7 @@ xilinx_dma_alloc_tx_descriptor(struct xilinx_dma_chan *chan)
 		return NULL;
 
 	desc->chan = chan;
+	desc->xferred_bytes = 0;
 	INIT_LIST_HEAD(&desc->segments);
 
 	return desc;
@@ -1013,6 +1023,7 @@ static u32 xilinx_dma_get_residue(struct xilinx_dma_chan *chan,
 	struct xilinx_aximcdma_desc_hw *aximcdma_hw;
 	struct list_head *entry;
 	u32 residue = 0;
+	u32 xferred = 0;
 
 	list_for_each(entry, &desc->segments) {
 		if (chan->xdev->dma_config->dmatype == XDMA_TYPE_CDMA) {
@@ -1030,25 +1041,32 @@ static u32 xilinx_dma_get_residue(struct xilinx_dma_chan *chan,
 			axidma_hw = &axidma_seg->hw;
 			residue += (axidma_hw->control - axidma_hw->status) &
 				   chan->xdev->max_buffer_len;
+			xferred += axidma_hw->status & chan->xdev->max_buffer_len;
 		} else {
 			aximcdma_seg =
 				list_entry(entry,
 					   struct xilinx_aximcdma_tx_segment,
 					   node);
 			aximcdma_hw = &aximcdma_seg->hw;
-			if (chan->direction == DMA_DEV_TO_MEM)
+			if (chan->direction == DMA_DEV_TO_MEM) {
 				residue +=
 					(aximcdma_hw->control -
 					 aximcdma_hw->s2mm_status) &
 					chan->xdev->max_buffer_len;
-			else
+				xferred += aximcdma_hw->s2mm_status &
+					chan->xdev->max_buffer_len;
+			} else {
 				residue +=
 					(aximcdma_hw->control -
 					 aximcdma_hw->mm2s_status) &
 					chan->xdev->max_buffer_len;
+				xferred += aximcdma_hw->mm2s_status &
+					chan->xdev->max_buffer_len;
+			}
 		}
 	}
 
+	desc->xferred_bytes = xferred;
 	return residue;
 }
 
@@ -3283,6 +3301,8 @@ static int xilinx_dma_probe(struct platform_device *pdev)
 	    xdev->dma_config->dmatype == XDMA_TYPE_AXIMCDMA) {
 		xdev->has_axistream_connected =
 			of_property_read_bool(node, "xlnx,axistream-connected");
+		xdev->has_stsctrl_stream =
+			of_property_read_bool(node, "xlnx,include-stscntrl-strm");
 	}
 
 	if (xdev->dma_config->dmatype == XDMA_TYPE_VDMA) {
