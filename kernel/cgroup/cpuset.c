@@ -159,6 +159,8 @@ static bool force_sd_rebuild;			/* RWCS */
  *   2 - partition root without load balancing (isolated)
  *  -1 - invalid partition root
  *  -2 - invalid isolated partition root
+ *  -3 - invalid isolated partition root but with effective xcpus still
+ *	 in isolated_cpus (set from CPU hotplug side)
  *
  *  There are 2 types of partitions - local or remote. Local partitions are
  *  those whose parents are partition root themselves. Setting of
@@ -187,6 +189,7 @@ static bool force_sd_rebuild;			/* RWCS */
 #define PRS_ISOLATED		2
 #define PRS_INVALID_ROOT	-1
 #define PRS_INVALID_ISOLATED	-2
+#define PRS_INVALID_ISOLCPUS	-3 /* Effective xcpus still in isolated_cpus */
 
 /*
  * Temporary cpumasks for working with partitions that are passed among
@@ -380,6 +383,30 @@ static inline bool is_in_v2_mode(void)
 {
 	return cpuset_v2() ||
 	      (cpuset_cgrp_subsys.root->flags & CGRP_ROOT_CPUSET_V2_MODE);
+}
+
+/*
+ * If the given cpuset has a partition state of PRS_INVALID_ISOLCPUS,
+ * remove its effective_xcpus from isolated_cpus and reset its state to
+ * PRS_INVALID_ISOLATED. Also clear effective_xcpus if exclusive_cpus is
+ * empty.
+ */
+static void fix_invalid_isolcpus(struct cpuset *cs, struct cpuset *trialcs)
+{
+	if (likely(cs->partition_root_state != PRS_INVALID_ISOLCPUS))
+		return;
+	WARN_ON_ONCE(cpumask_empty(cs->effective_xcpus));
+	spin_lock_irq(&callback_lock);
+	cpumask_andnot(isolated_cpus, isolated_cpus, cs->effective_xcpus);
+	if (cpumask_empty(cs->exclusive_cpus))
+		cpumask_clear(cs->effective_xcpus);
+	cs->partition_root_state = PRS_INVALID_ISOLATED;
+	spin_unlock_irq(&callback_lock);
+	isolated_cpus_updating = true;
+	if (trialcs) {
+		trialcs->partition_root_state = PRS_INVALID_ISOLATED;
+		cpumask_copy(trialcs->effective_xcpus, cs->effective_xcpus);
+	}
 }
 
 /**
@@ -1160,7 +1187,8 @@ static void reset_partition_data(struct cpuset *cs)
 
 	lockdep_assert_held(&callback_lock);
 
-	if (cpumask_empty(cs->exclusive_cpus)) {
+	if (cpumask_empty(cs->exclusive_cpus) &&
+	    (cs->partition_root_state != PRS_INVALID_ISOLCPUS)) {
 		cpumask_clear(cs->effective_xcpus);
 		if (is_cpu_exclusive(cs))
 			clear_bit(CS_CPU_EXCLUSIVE, &cs->flags);
@@ -1189,6 +1217,10 @@ static void isolated_cpus_update(int old_prs, int new_prs, struct cpumask *xcpus
 			return;
 		cpumask_andnot(isolated_cpus, isolated_cpus, xcpus);
 	}
+	/*
+	 * Shouldn't update isolated_cpus from CPU hotplug
+	 */
+	WARN_ON_ONCE(current->flags & PF_KTHREAD);
 	isolated_cpus_updating = true;
 }
 
@@ -1208,7 +1240,6 @@ static void partition_xcpus_add(int new_prs, struct cpuset *parent,
 	if (!parent)
 		parent = &top_cpuset;
 
-
 	if (parent == &top_cpuset)
 		cpumask_or(subpartitions_cpus, subpartitions_cpus, xcpus);
 
@@ -1224,11 +1255,12 @@ static void partition_xcpus_add(int new_prs, struct cpuset *parent,
  * @old_prs: old partition_root_state
  * @parent: parent cpuset
  * @xcpus: exclusive CPUs to be removed
+ * @no_isolcpus: don't update isolated_cpus
  *
  * Remote partition if parent == NULL
  */
 static void partition_xcpus_del(int old_prs, struct cpuset *parent,
-				struct cpumask *xcpus)
+				struct cpumask *xcpus, bool no_isolcpus)
 {
 	WARN_ON_ONCE(old_prs < 0);
 	lockdep_assert_held(&callback_lock);
@@ -1238,7 +1270,7 @@ static void partition_xcpus_del(int old_prs, struct cpuset *parent,
 	if (parent == &top_cpuset)
 		cpumask_andnot(subpartitions_cpus, subpartitions_cpus, xcpus);
 
-	if (old_prs != parent->partition_root_state)
+	if ((old_prs != parent->partition_root_state) && !no_isolcpus)
 		isolated_cpus_update(old_prs, parent->partition_root_state,
 				     xcpus);
 
@@ -1496,6 +1528,8 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
  */
 static void remote_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
 {
+	int old_prs = cs->partition_root_state;
+
 	WARN_ON_ONCE(!is_remote_partition(cs));
 	/*
 	 * When a CPU is offlined, top_cpuset may end up with no available CPUs,
@@ -1508,14 +1542,24 @@ static void remote_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
 
 	spin_lock_irq(&callback_lock);
 	cs->remote_partition = false;
-	partition_xcpus_del(cs->partition_root_state, NULL, cs->effective_xcpus);
 	if (cs->prs_err)
 		cs->partition_root_state = -cs->partition_root_state;
 	else
 		cs->partition_root_state = PRS_MEMBER;
+	/*
+	 * Don't update isolated_cpus if calling from CPU hotplug kthread
+	 */
+	if ((current->flags & PF_KTHREAD) &&
+	    (cs->partition_root_state == PRS_INVALID_ISOLATED))
+		cs->partition_root_state = PRS_INVALID_ISOLCPUS;
 
-	/* effective_xcpus may need to be changed */
-	compute_excpus(cs, cs->effective_xcpus);
+	partition_xcpus_del(old_prs, NULL, cs->effective_xcpus,
+			    cs->partition_root_state == PRS_INVALID_ISOLCPUS);
+	/*
+	 * effective_xcpus may need to be changed
+	 */
+	if (cs->partition_root_state != PRS_INVALID_ISOLCPUS)
+		compute_excpus(cs, cs->effective_xcpus);
 	reset_partition_data(cs);
 	spin_unlock_irq(&callback_lock);
 	update_isolation_cpumasks();
@@ -1580,7 +1624,7 @@ static void remote_cpus_update(struct cpuset *cs, struct cpumask *xcpus,
 	if (adding)
 		partition_xcpus_add(prs, NULL, tmp->addmask);
 	if (deleting)
-		partition_xcpus_del(prs, NULL, tmp->delmask);
+		partition_xcpus_del(prs, NULL, tmp->delmask, false);
 	/*
 	 * Need to update effective_xcpus and exclusive_cpus now as
 	 * update_sibling_cpumasks() below may iterate back to the same cs.
@@ -1893,6 +1937,10 @@ write_error:
 			if (!part_error)
 				new_prs = -old_prs;
 			break;
+		case PRS_INVALID_ISOLCPUS:
+			if (!part_error)
+				new_prs = PRS_ISOLATED;
+			break;
 		}
 	}
 
@@ -1924,11 +1972,18 @@ write_error:
 		cs->partition_root_state = new_prs;
 
 	/*
+	 * Don't update isolated_cpus if calling from CPU hotplug kthread
+	 */
+	if ((current->flags & PF_KTHREAD) &&
+	    (cs->partition_root_state == PRS_INVALID_ISOLATED))
+		cs->partition_root_state = PRS_INVALID_ISOLCPUS;
+	/*
 	 * Adding to parent's effective_cpus means deletion CPUs from cs
 	 * and vice versa.
 	 */
 	if (adding)
-		partition_xcpus_del(old_prs, parent, tmp->addmask);
+		partition_xcpus_del(old_prs, parent, tmp->addmask,
+				    cs->partition_root_state == PRS_INVALID_ISOLCPUS);
 	if (deleting)
 		partition_xcpus_add(new_prs, parent, tmp->delmask);
 
@@ -2317,6 +2372,7 @@ static void partition_cpus_change(struct cpuset *cs, struct cpuset *trialcs,
 	if (cs_is_member(cs))
 		return;
 
+	fix_invalid_isolcpus(cs, trialcs);
 	prs_err = validate_partition(cs, trialcs);
 	if (prs_err)
 		trialcs->prs_err = cs->prs_err = prs_err;
@@ -2818,6 +2874,7 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	if (alloc_tmpmasks(&tmpmask))
 		return -ENOMEM;
 
+	fix_invalid_isolcpus(cs, NULL);
 	err = update_partition_exclusive_flag(cs, new_prs);
 	if (err)
 		goto out;
@@ -3268,6 +3325,7 @@ static int cpuset_partition_show(struct seq_file *seq, void *v)
 		type = "root";
 		fallthrough;
 	case PRS_INVALID_ISOLATED:
+	case PRS_INVALID_ISOLCPUS:
 		if (!type)
 			type = "isolated";
 		err = perr_strings[READ_ONCE(cs->prs_err)];
@@ -3463,9 +3521,9 @@ static void cpuset_css_offline(struct cgroup_subsys_state *css)
 }
 
 /*
- * If a dying cpuset has the 'cpus.partition' enabled, turn it off by
- * changing it back to member to free its exclusive CPUs back to the pool to
- * be used by other online cpusets.
+ * If a dying cpuset has the 'cpus.partition' enabled or is in the
+ * PRS_INVALID_ISOLCPUS state, turn it off by changing it back to member to
+ * free its exclusive CPUs back to the pool to be used by other online cpusets.
  */
 static void cpuset_css_killed(struct cgroup_subsys_state *css)
 {
@@ -3473,7 +3531,8 @@ static void cpuset_css_killed(struct cgroup_subsys_state *css)
 
 	cpuset_full_lock();
 	/* Reset valid partition back to member */
-	if (is_partition_valid(cs))
+	if (is_partition_valid(cs) ||
+	    (cs->partition_root_state == PRS_INVALID_ISOLCPUS))
 		update_prstate(cs, PRS_MEMBER);
 	cpuset_full_unlock();
 }
