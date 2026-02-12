@@ -697,7 +697,7 @@ static void filter_cpuid_features(struct cpuinfo_x86 *c, bool warn)
 			continue;
 
 		pr_warn("CPU: CPU feature %s disabled, no CPUID level 0x%x\n",
-			x86_cap_flags[df->feature], df->level);
+			x86_cap_name(df->feature), df->level);
 	}
 }
 
@@ -1651,10 +1651,7 @@ static inline bool parse_set_clear_cpuid(char *arg, bool set)
 					setup_clear_cpu_cap(bit);
 				}
 				/* empty-string, i.e., ""-defined feature flags */
-				if (!x86_cap_flags[bit])
-					pr_cont(" %d:%d\n", bit >> 5, bit & 31);
-				else
-					pr_cont(" %s\n", x86_cap_flags[bit]);
+				pr_cont(" %s\n", x86_cap_name(bit));
 
 				taint++;
 			}
@@ -1970,6 +1967,24 @@ static void generic_identify(struct cpuinfo_x86 *c)
 #ifdef CONFIG_X86_32
 	set_cpu_bug(c, X86_BUG_ESPFIX);
 #endif
+}
+
+const char *x86_cap_name(unsigned int bit)
+{
+	unsigned int word = bit >> 5;
+	static char undef_buf[16];
+	const char *name = NULL;
+
+	if (likely(word < NCAPINTS))
+		name = x86_cap_flags[bit];
+	else if (likely(word < NCAPINTS + NBUGINTS))
+		name = x86_bug_flags[bit - 32 * NCAPINTS];
+
+	if (name)
+		return name;
+
+	snprintf(undef_buf, sizeof(undef_buf), "%u:%u", word, bit & 31);
+	return undef_buf;
 }
 
 /*
