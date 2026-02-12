@@ -268,6 +268,7 @@ struct hantro_ctx {
 	const struct hantro_codec_ops *codec_ops;
 	struct hantro_postproc_ctx postproc;
 	bool need_postproc;
+	u64 stats_buf_memory;
 
 	/* Specific for particular codec modes. */
 	union {

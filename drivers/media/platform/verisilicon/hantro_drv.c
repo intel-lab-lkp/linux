@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>
@@ -711,6 +712,19 @@ static int hantro_release(struct file *filp)
 	return 0;
 }
 
+static void hantro_show_fdinfo(struct seq_file *m, struct file *filp)
+{
+	struct hantro_ctx *ctx =
+		container_of(filp->private_data, struct hantro_ctx, fh);
+
+	struct vb2_queue *src_q = v4l2_m2m_get_src_vq(ctx->fh.m2m_ctx);
+	struct vb2_queue *dst_q = v4l2_m2m_get_dst_vq(ctx->fh.m2m_ctx);
+
+	seq_printf(m, "src-queued-count: %04u\n", src_q->queued_count);
+	seq_printf(m, "dst-queued-count: %04u\n", dst_q->queued_count);
+	seq_printf(m, "buf-size: %llu\n", ctx->stats_buf_memory);
+}
+
 static const struct v4l2_file_operations hantro_fops = {
 	.owner = THIS_MODULE,
 	.open = hantro_open,
@@ -718,6 +732,7 @@ static const struct v4l2_file_operations hantro_fops = {
 	.poll = v4l2_m2m_fop_poll,
 	.unlocked_ioctl = video_ioctl2,
 	.mmap = v4l2_m2m_fop_mmap,
+	.show_fdinfo = hantro_show_fdinfo,
 };
 
 static const struct of_device_id of_hantro_match[] = {

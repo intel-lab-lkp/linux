@@ -820,18 +820,26 @@ hantro_queue_setup(struct vb2_queue *vq, unsigned int *num_buffers,
 		return -EINVAL;
 	}
 
+	ctx->stats_buf_memory = 0;
+
 	if (*num_planes) {
 		if (*num_planes != pixfmt->num_planes)
 			return -EINVAL;
-		for (i = 0; i < pixfmt->num_planes; ++i)
+		for (i = 0; i < pixfmt->num_planes; ++i) {
 			if (sizes[i] < pixfmt->plane_fmt[i].sizeimage)
 				return -EINVAL;
+			ctx->stats_buf_memory += pixfmt->plane_fmt[i].sizeimage;
+		}
+
+		ctx->stats_buf_memory *= *num_buffers;
+
 		return 0;
 	}
 
 	*num_planes = pixfmt->num_planes;
 	for (i = 0; i < pixfmt->num_planes; ++i)
 		sizes[i] = pixfmt->plane_fmt[i].sizeimage;
+
 	return 0;
 }
 
