@@ -42,6 +42,7 @@
 #include "intel_de.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_display_wa.h"
 #include "intel_frontbuffer.h"
 #include "intel_overlay.h"
 #include "intel_pci_config.h"
