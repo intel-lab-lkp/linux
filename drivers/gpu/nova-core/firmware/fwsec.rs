@@ -34,9 +34,9 @@ use crate::{
         gsp::Gsp,
         Falcon,
         FalconBromParams,
+        FalconDmaLoadTarget, //
+        FalconDmaLoadable,
         FalconFirmware,
-        FalconLoadParams,
-        FalconLoadTarget, //
     },
     firmware::{
         FalconUCodeDesc,
@@ -222,16 +222,16 @@ pub(crate) struct FwsecFirmware {
     ucode: FirmwareDmaObject<Self, Signed>,
 }
 
-impl FalconLoadParams for FwsecFirmware {
-    fn imem_sec_load_params(&self) -> FalconLoadTarget {
+impl FalconDmaLoadable for FwsecFirmware {
+    fn imem_sec_load_params(&self) -> FalconDmaLoadTarget {
         self.desc.imem_sec_load_params()
     }
 
-    fn imem_ns_load_params(&self) -> Option<FalconLoadTarget> {
+    fn imem_ns_load_params(&self) -> Option<FalconDmaLoadTarget> {
         self.desc.imem_ns_load_params()
     }
 
-    fn dmem_load_params(&self) -> FalconLoadTarget {
+    fn dmem_load_params(&self) -> FalconDmaLoadTarget {
         self.desc.dmem_load_params()
     }
 

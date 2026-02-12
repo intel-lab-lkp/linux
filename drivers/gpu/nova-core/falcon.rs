@@ -327,17 +327,6 @@ pub(crate) trait FalconEngine:
     const ID: Self;
 }
 
-/// Represents a portion of the firmware to be loaded into a particular memory (e.g. IMEM or DMEM).
-#[derive(Debug, Clone)]
-pub(crate) struct FalconLoadTarget {
-    /// Offset from the start of the source object to copy from.
-    pub(crate) src_start: u32,
-    /// Offset from the start of the destination memory to copy into.
-    pub(crate) dst_start: u32,
-    /// Number of bytes to copy.
-    pub(crate) len: u32,
-}
-
 /// Parameters for the falcon boot ROM.
 #[derive(Debug, Clone)]
 pub(crate) struct FalconBromParams {
@@ -349,17 +338,29 @@ pub(crate) struct FalconBromParams {
     pub(crate) ucode_id: u8,
 }
 
-/// Trait for providing load parameters of falcon firmwares.
-pub(crate) trait FalconLoadParams {
+/// Represents a portion of the firmware to be loaded into a particular memory (e.g. IMEM or DMEM)
+/// using DMA.
+#[derive(Debug, Clone)]
+pub(crate) struct FalconDmaLoadTarget {
+    /// Offset from the start of the source object to copy from.
+    pub(crate) src_start: u32,
+    /// Offset from the start of the destination memory to copy into.
+    pub(crate) dst_start: u32,
+    /// Number of bytes to copy.
+    pub(crate) len: u32,
+}
+
+/// Trait for providing DMA load parameters of falcon firmwares.
+pub(crate) trait FalconDmaLoadable {
     /// Returns the load parameters for Secure `IMEM`.
-    fn imem_sec_load_params(&self) -> FalconLoadTarget;
+    fn imem_sec_load_params(&self) -> FalconDmaLoadTarget;
 
     /// Returns the load parameters for Non-Secure `IMEM`,
     /// used only on Turing and GA100.
-    fn imem_ns_load_params(&self) -> Option<FalconLoadTarget>;
+    fn imem_ns_load_params(&self) -> Option<FalconDmaLoadTarget>;
 
     /// Returns the load parameters for `DMEM`.
-    fn dmem_load_params(&self) -> FalconLoadTarget;
+    fn dmem_load_params(&self) -> FalconDmaLoadTarget;
 
     /// Returns the parameters to write into the BROM registers.
     fn brom_params(&self) -> FalconBromParams;
@@ -372,7 +373,7 @@ pub(crate) trait FalconLoadParams {
 ///
 /// A falcon firmware can be loaded on a given engine, and is presented in the form of a DMA
 /// object.
-pub(crate) trait FalconFirmware: FalconLoadParams + Deref<Target = DmaObject> {
+pub(crate) trait FalconFirmware: FalconDmaLoadable + Deref<Target = DmaObject> {
     /// Engine on which this firmware is to be loaded.
     type Target: FalconEngine;
 }
@@ -420,7 +421,7 @@ impl<E: FalconEngine + 'static> Falcon<E> {
         bar: &Bar0,
         fw: &F,
         target_mem: FalconMem,
-        load_offsets: FalconLoadTarget,
+        load_offsets: FalconDmaLoadTarget,
     ) -> Result {
         const DMA_LEN: u32 = 256;
 
