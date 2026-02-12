@@ -29,6 +29,10 @@ use kernel::{
 use crate::{
     driver::Bar0,
     gsp::{
+        commands::{
+            ContinuationRecord,
+            WrappingCommand, //
+        },
         fw::{
             GspMsgElement,
             MsgFunction,
@@ -524,7 +528,7 @@ impl Cmdq {
         size_of::<M::Command>() + command.variable_payload_len()
     }
 
-    /// Sends `command` to the GSP.
+    /// Sends `command` to the GSP, without splitting it.
     ///
     /// # Errors
     ///
@@ -533,13 +537,13 @@ impl Cmdq {
     ///   written to by its [`CommandToGsp::init_variable_payload`] method.
     ///
     /// Error codes returned by the command initializers are propagated as-is.
-    pub(crate) fn send_command<M>(&mut self, bar: &Bar0, command: M) -> Result
+    fn send_single_command<M>(&mut self, bar: &Bar0, command: &M) -> Result
     where
         M: CommandToGsp,
         // This allows all error types, including `Infallible`, to be used for `M::InitError`.
         Error: From<M::InitError>,
     {
-        let command_size = Self::command_size(&command);
+        let command_size = Self::command_size(command);
         let dst = self.gsp_mem.allocate_command_with_timeout(command_size)?;
 
         // Extract area for the command itself. The GSP message header and the command header
@@ -586,6 +590,43 @@ impl Cmdq {
         self.seq += 1;
         self.gsp_mem.advance_cpu_write_ptr(elem_count);
         Cmdq::notify_gsp(bar);
+
+        Ok(())
+    }
+
+    fn send_continuation_record(&mut self, bar: &Bar0, cont: &ContinuationRecord<'_>) -> Result {
+        self.send_single_command(bar, cont)
+    }
+
+    /// Sends `command` to the GSP.
+    ///
+    /// The command may be split into multiple messages if it is large.
+    ///
+    /// # Errors
+    ///
+    /// - `ETIMEDOUT` if space does not become available within the timeout.
+    /// - `EIO` if the variable payload requested by the command has not been entirely
+    ///   written to by its [`CommandToGsp::init_variable_payload`] method.
+    ///
+    /// Error codes returned by the command initializers are propagated as-is.
+    pub(crate) fn send_command<M>(&mut self, bar: &Bar0, command: M) -> Result
+    where
+        M: CommandToGsp,
+        Error: From<M::InitError>,
+    {
+        let msg_max_size = MSGQ_MSG_SIZE_MAX - size_of::<GspMsgElement>();
+        let mut wrapped = WrappingCommand::new(command, msg_max_size)?;
+
+        self.send_single_command(bar, &wrapped)?;
+
+        while let Some(continuation) = wrapped.next_continuation_record() {
+            dev_dbg!(
+                &self.dev,
+                "GSP RPC: send continuation: size=0x{:x}\n",
+                Self::command_size(&continuation),
+            );
+            self.send_continuation_record(bar, &continuation)?;
+        }
 
         Ok(())
     }

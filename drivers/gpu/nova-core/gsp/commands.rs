@@ -242,3 +242,127 @@ pub(crate) fn get_gsp_info(cmdq: &mut Cmdq, bar: &Bar0) -> Result<GetGspStaticIn
         }
     }
 }
+
+#[derive(Zeroable)]
+pub(crate) struct Empty {}
+
+// SAFETY: `Empty` is a zero-sized type with no bytes, therefore it trivially has no uninitialized
+// bytes.
+unsafe impl AsBytes for Empty {}
+
+// SAFETY: `Empty` is a zero-sized type with no bytes, therefore it trivially has no uninitialized
+// bytes.
+unsafe impl FromBytes for Empty {}
+
+/// The `ContinuationRecord` command.
+pub(crate) struct ContinuationRecord<'a> {
+    data: &'a [u8],
+}
+
+impl<'a> ContinuationRecord<'a> {
+    /// Creates a new `ContinuationRecord` command with the given data.
+    pub(crate) fn new(data: &'a [u8]) -> Self {
+        Self { data }
+    }
+}
+
+impl<'a> CommandToGsp for ContinuationRecord<'a> {
+    const FUNCTION: MsgFunction = MsgFunction::ContinuationRecord;
+    type Command = Empty;
+    type InitError = Infallible;
+
+    fn init(&self) -> impl Init<Self::Command, Self::InitError> {
+        Empty::init_zeroed()
+    }
+
+    fn variable_payload_len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn init_variable_payload(
+        &self,
+        dst: &mut SBufferIter<core::array::IntoIter<&mut [u8], 2>>,
+    ) -> Result {
+        dst.write_all(self.data)
+    }
+}
+
+/// Wrapper that splits a command across continuation records if needed.
+pub(crate) struct WrappingCommand<C: CommandToGsp> {
+    inner: C,
+    offset: usize,
+    max_size: usize,
+    staging: KVVec<u8>,
+}
+
+impl<C: CommandToGsp> WrappingCommand<C>
+where
+    Error: From<C::InitError>,
+{
+    /// Creates a new `WrappingCommand` that wraps `inner`, splitting it into
+    /// multiple messages if its size exceeds `max_size`.
+    pub(crate) fn new(inner: C, max_size: usize) -> Result<Self> {
+        let payload_len = inner.variable_payload_len();
+        let command_size = size_of::<C::Command>() + payload_len;
+        let (offset, staging) = if command_size > max_size {
+            let mut staging = KVVec::<u8>::from_elem(0u8, payload_len, GFP_KERNEL)?;
+            let mut sbuffer = SBufferIter::new_writer([staging.as_mut_slice(), &mut []]);
+            inner.init_variable_payload(&mut sbuffer)?;
+            if !sbuffer.is_empty() {
+                return Err(EIO);
+            }
+            drop(sbuffer);
+
+            (max_size - size_of::<C::Command>(), staging)
+        } else {
+            (0, KVVec::new())
+        };
+        Ok(Self {
+            inner,
+            offset,
+            max_size,
+            staging,
+        })
+    }
+
+    pub(crate) fn next_continuation_record(&mut self) -> Option<ContinuationRecord<'_>> {
+        let remaining = self.staging.len() - self.offset;
+        if remaining > 0 {
+            let chunk_size = remaining.min(self.max_size);
+            let record = ContinuationRecord::new(
+                &self.staging.as_slice()[self.offset..(self.offset + chunk_size)],
+            );
+            self.offset += chunk_size;
+            Some(record)
+        } else {
+            None
+        }
+    }
+}
+
+impl<C: CommandToGsp> CommandToGsp for WrappingCommand<C> {
+    const FUNCTION: MsgFunction = C::FUNCTION;
+    type Command = C::Command;
+    type InitError = C::InitError;
+
+    fn init(&self) -> impl Init<Self::Command, Self::InitError> {
+        self.inner.init()
+    }
+
+    fn variable_payload_len(&self) -> usize {
+        self.inner
+            .variable_payload_len()
+            .min(self.max_size - size_of::<C::Command>())
+    }
+
+    fn init_variable_payload(
+        &self,
+        dst: &mut SBufferIter<core::array::IntoIter<&mut [u8], 2>>,
+    ) -> Result {
+        if self.staging.is_empty() {
+            self.inner.init_variable_payload(dst)
+        } else {
+            dst.write_all(&self.staging.as_slice()[..self.variable_payload_len()])
+        }
+    }
+}

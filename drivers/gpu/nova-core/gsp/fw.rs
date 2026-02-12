@@ -199,6 +199,7 @@ pub(crate) enum MsgFunction {
     AllocObject = bindings::NV_VGPU_MSG_FUNCTION_ALLOC_OBJECT,
     AllocRoot = bindings::NV_VGPU_MSG_FUNCTION_ALLOC_ROOT,
     BindCtxDma = bindings::NV_VGPU_MSG_FUNCTION_BIND_CTX_DMA,
+    ContinuationRecord = bindings::NV_VGPU_MSG_FUNCTION_CONTINUATION_RECORD,
     Free = bindings::NV_VGPU_MSG_FUNCTION_FREE,
     GetGspStaticInfo = bindings::NV_VGPU_MSG_FUNCTION_GET_GSP_STATIC_INFO,
     GetStaticInfo = bindings::NV_VGPU_MSG_FUNCTION_GET_STATIC_INFO,
@@ -234,6 +235,7 @@ impl fmt::Display for MsgFunction {
             MsgFunction::AllocObject => write!(f, "ALLOC_OBJECT"),
             MsgFunction::AllocRoot => write!(f, "ALLOC_ROOT"),
             MsgFunction::BindCtxDma => write!(f, "BIND_CTX_DMA"),
+            MsgFunction::ContinuationRecord => write!(f, "CONTINUATION_RECORD"),
             MsgFunction::Free => write!(f, "FREE"),
             MsgFunction::GetGspStaticInfo => write!(f, "GET_GSP_STATIC_INFO"),
             MsgFunction::GetStaticInfo => write!(f, "GET_STATIC_INFO"),
@@ -273,6 +275,9 @@ impl TryFrom<u32> for MsgFunction {
             bindings::NV_VGPU_MSG_FUNCTION_ALLOC_OBJECT => Ok(MsgFunction::AllocObject),
             bindings::NV_VGPU_MSG_FUNCTION_ALLOC_ROOT => Ok(MsgFunction::AllocRoot),
             bindings::NV_VGPU_MSG_FUNCTION_BIND_CTX_DMA => Ok(MsgFunction::BindCtxDma),
+            bindings::NV_VGPU_MSG_FUNCTION_CONTINUATION_RECORD => {
+                Ok(MsgFunction::ContinuationRecord)
+            }
             bindings::NV_VGPU_MSG_FUNCTION_FREE => Ok(MsgFunction::Free),
             bindings::NV_VGPU_MSG_FUNCTION_GET_GSP_STATIC_INFO => Ok(MsgFunction::GetGspStaticInfo),
             bindings::NV_VGPU_MSG_FUNCTION_GET_STATIC_INFO => Ok(MsgFunction::GetStaticInfo),
