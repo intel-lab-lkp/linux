@@ -766,7 +766,9 @@ void nested_vmcb02_prepare_rips(struct kvm_vcpu *vcpu, unsigned long csbase,
 	else if (boot_cpu_has(X86_FEATURE_NRIPS))
 		svm->vmcb->control.next_rip    = rip;
 
-	if (!is_evtinj_soft(svm->nested.ctl.event_inj))
+	/* L1's injected events should be cleared after the first run of L2 */
+	if (!is_evtinj_soft(svm->nested.ctl.event_inj) ||
+	    WARN_ON_ONCE(!svm->nested.nested_run_pending))
 		return;
 
 	svm->soft_int_injected = true;

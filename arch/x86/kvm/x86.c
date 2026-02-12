@@ -12112,6 +12112,8 @@ static void __set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	kvm_rip_write(vcpu, regs->rip);
 	kvm_set_rflags(vcpu, regs->rflags | X86_EFLAGS_FIXED);
 
+	kvm_x86_call(post_user_set_regs)(vcpu);
+
 	vcpu->arch.exception.pending = false;
 	vcpu->arch.exception_vmexit.pending = false;
 

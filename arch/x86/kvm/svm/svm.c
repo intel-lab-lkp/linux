@@ -1477,6 +1477,24 @@ static bool svm_get_if_flag(struct kvm_vcpu *vcpu)
 		: kvm_get_rflags(vcpu) & X86_EFLAGS_IF;
 }
 
+static void svm_fixup_nested_rips(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	/*
+	 * In the save/restore path, if nested state is restored before
+	 * RIP or CS, then fixing up the vmcb02 (and soft IRQ tracking) is
+	 * needed. This is only the case if a nested run is pending (i.e. L2
+	 * is yet to run after L1's VMRUN). Otherwise, any soft IRQ injected by
+	 * L1 should have been delivered to L2 or is being tracked separately by
+	 * KVM for re-injection. Similarly, NextRIP would have already been
+	 * updated by the CPU and/or KVM.
+	 */
+	if (svm->nested.nested_run_pending)
+		nested_vmcb02_prepare_rips(vcpu, svm->vmcb->save.cs.base,
+					   kvm_rip_read(vcpu));
+}
+
 static void svm_cache_reg(struct kvm_vcpu *vcpu, enum kvm_reg reg)
 {
 	kvm_register_mark_available(vcpu, reg);
@@ -1826,6 +1844,8 @@ static void svm_set_segment(struct kvm_vcpu *vcpu,
 	if (seg == VCPU_SREG_SS)
 		/* This is symmetric with svm_get_segment() */
 		svm->vmcb->save.cpl = (var->dpl & 3);
+	else if (seg == VCPU_SREG_CS)
+		svm_fixup_nested_rips(vcpu);
 
 	vmcb_mark_dirty(svm->vmcb, VMCB_SEG);
 }
@@ -5172,6 +5192,7 @@ struct kvm_x86_ops svm_x86_ops __initdata = {
 	.get_rflags = svm_get_rflags,
 	.set_rflags = svm_set_rflags,
 	.get_if_flag = svm_get_if_flag,
+	.post_user_set_regs = svm_fixup_nested_rips,
 
 	.flush_tlb_all = svm_flush_tlb_all,
 	.flush_tlb_current = svm_flush_tlb_current,
