@@ -1131,8 +1131,12 @@ bool traffic_status_watchdog(struct adapter *padapter, bool from_timer)
 	u16 busy_threshold_high = 25;
 	u16 busy_threshold_low = 10;
 	u16 busy_threshold = busy_threshold_high;
-	bool busy_traffic = false, tx_busy_traffic = false, rx_busy_traffic = false;
-	bool higher_busy_traffic = false, higher_busy_rx_traffic = false, higher_busy_tx_traffic = false;
+	bool busy_traffic = false;
+	bool tx_busy_traffic = false;
+	bool rx_busy_traffic = false;
+	bool higher_busy_traffic = false;
+	bool higher_busy_rx_traffic = false;
+	bool higher_busy_tx_traffic = false;
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	collect_traffic_statistics(padapter);
