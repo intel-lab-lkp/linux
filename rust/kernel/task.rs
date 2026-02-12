@@ -10,6 +10,8 @@ use crate::{
     mm::MmWithUser,
     pid_namespace::PidNamespace,
     sync::aref::ARef,
+    sync::atomic::ordering::Relaxed,
+    sync::atomic::Atomic,
     types::{NotThreadSafe, Opaque},
 };
 use core::{
@@ -206,9 +208,13 @@ impl Task {
 
     /// Returns the PID of the given task.
     pub fn pid(&self) -> Pid {
-        // SAFETY: The pid of a task never changes after initialization, so reading this field is
-        // not a data race.
-        unsafe { *ptr::addr_of!((*self.as_ptr()).pid) }
+        // SAFETY: The pid of a task almost never changes after initialization,
+        // so reading this field is usually not a data race.
+        // The exception is a race where the task is part of a process that
+        // goes through execve(), see exchange_tids().
+        // A temporary mutable pointer is created, but only actually used for
+        // a load.
+        unsafe { Atomic::from_ptr(&raw mut (*self.as_ptr()).pid).load(Relaxed) }
     }
 
     /// Returns the UID of the given task.
