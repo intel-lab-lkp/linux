@@ -179,6 +179,15 @@ config STM32_FIREWALL
 	  hardware resources linked to a firewall controller can be requested
 	  through this STM32 framework.
 
+config STM32_FIREWALL_DEBUG
+	tristate "STM32 Firewall drivers debug features"
+	depends on STM32_FIREWALL && DEBUG_FS
+	help
+	  Say y to enable STM32 firewall configuration debug features. This
+	  will cause the generation of a "stm32_firewall" directory in the
+	  debugfs with entries for each firewall driver capable of dumping
+	  its configuration.
+
 config SUN50I_DE2_BUS
 	bool "Allwinner A64 DE2 Bus Driver"
 	  default ARM64
