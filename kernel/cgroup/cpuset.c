@@ -178,7 +178,11 @@ static bool		isolcpus_twork_queued;	/* T */
  * Note that update_relax_domain_level() in cpuset-v1.c can still call
  * rebuild_sched_domains_locked() directly without using this flag.
  */
-static bool force_sd_rebuild;			/* RWCS */
+static enum {
+	SD_NO_REBUILD = 0,
+	SD_REBUILD,
+	SD_DEFER_REBUILD,
+} sd_rebuild;					/* RWCS */
 
 /*
  * Partition root states:
@@ -1023,7 +1027,7 @@ void rebuild_sched_domains_locked(void)
 
 	lockdep_assert_cpus_held();
 	lockdep_assert_cpuset_lock_held();
-	force_sd_rebuild = false;
+	sd_rebuild = SD_NO_REBUILD;
 
 	/* Generate domain masks and attrs */
 	ndoms = generate_sched_domains(&doms, &attr);
@@ -1407,6 +1411,9 @@ static void update_isolation_cpumasks(void)
 		return;
 	else
 		isolated_cpus_updating = false;
+
+	/* Defer rebuild_sched_domains() to task_work or wq */
+	sd_rebuild = SD_DEFER_REBUILD;
 
 	/*
 	 * CPU hotplug shouldn't set isolated_cpus_updating.
@@ -3053,7 +3060,7 @@ out:
 	update_partition_sd_lb(cs, old_prs);
 
 	notify_partition_change(cs, old_prs);
-	if (force_sd_rebuild)
+	if (sd_rebuild == SD_REBUILD)
 		rebuild_sched_domains_locked();
 	free_tmpmasks(&tmpmask);
 	return 0;
@@ -3330,7 +3337,7 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 	}
 
 	free_cpuset(trialcs);
-	if (force_sd_rebuild)
+	if (sd_rebuild == SD_REBUILD)
 		rebuild_sched_domains_locked();
 out_unlock:
 	cpuset_full_unlock();
@@ -3815,7 +3822,8 @@ hotplug_update_tasks(struct cpuset *cs,
 
 void cpuset_force_rebuild(void)
 {
-	force_sd_rebuild = true;
+	if (!sd_rebuild)
+		sd_rebuild = SD_REBUILD;
 }
 
 /**
@@ -4025,7 +4033,7 @@ static void cpuset_handle_hotplug(void)
 	}
 
 	/* rebuild sched domains if necessary */
-	if (force_sd_rebuild)
+	if (sd_rebuild == SD_REBUILD)
 		rebuild_sched_domains_cpuslocked();
 
 	free_tmpmasks(ptmp);
