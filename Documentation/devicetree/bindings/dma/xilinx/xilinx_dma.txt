@@ -56,6 +56,8 @@ Optional properties for AXI DMA and MCDMA:
 	AXI stream IP.
 
 Optional properties for AXI DMA:
+- xlnx,include-stscntrl-strm: Tells hardware is configured with AXI4-stream
+	status and control interface.
 Optional properties for VDMA:
 - xlnx,flush-fsync: Tells which channel to Flush on Frame sync.
 	It takes following values:
