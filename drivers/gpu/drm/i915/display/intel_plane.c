@@ -1578,6 +1578,10 @@ static int icl_check_nv12_planes(struct intel_atomic_state *state,
 			if (IS_ERR(y_plane_state))
 				return PTR_ERR(y_plane_state);
 
+			/* Reject if this Y-plane is being configured by userspace */
+			if (y_plane_state->uapi.fb)
+				continue;
+
 			break;
 		}
 
