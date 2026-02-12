@@ -101,6 +101,7 @@ static void l1_guest_code(struct svm_test_data *svm, uint64_t is_nmi, uint64_t i
 		vmcb->control.next_rip = vmcb->save.rip;
 	}
 
+	GUEST_SYNC(true);
 	run_guest(vmcb, svm->vmcb_gpa);
 	__GUEST_ASSERT(vmcb->control.exit_code == SVM_EXIT_VMMCALL,
 		       "Expected VMMCAL #VMEXIT, got '0x%lx', info1 = '0x%lx, info2 = '0x%lx'",
@@ -131,6 +132,7 @@ static void l1_guest_code(struct svm_test_data *svm, uint64_t is_nmi, uint64_t i
 	/* The return address pushed on stack, skip over UD2 */
 	vmcb->control.next_rip = vmcb->save.rip + 2;
 
+	GUEST_SYNC(true);
 	run_guest(vmcb, svm->vmcb_gpa);
 	__GUEST_ASSERT(vmcb->control.exit_code == SVM_EXIT_HLT,
 		       "Expected HLT #VMEXIT, got '0x%lx', info1 = '0x%lx, info2 = '0x%lx'",
@@ -138,6 +140,24 @@ static void l1_guest_code(struct svm_test_data *svm, uint64_t is_nmi, uint64_t i
 		       vmcb->control.exit_info_1, vmcb->control.exit_info_2);
 
 	GUEST_DONE();
+}
+
+static struct kvm_vcpu *save_and_restore_vm(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
+{
+	struct kvm_x86_state *state = vcpu_save_state(vcpu);
+
+	kvm_vm_release(vm);
+	vcpu = vm_recreate_with_one_vcpu(vm);
+	vcpu_load_state(vcpu, state);
+	kvm_x86_state_cleanup(state);
+	return vcpu;
+}
+
+static bool is_nested_run_pending(struct kvm_vcpu *vcpu)
+{
+	struct kvm_x86_state *state = vcpu_save_state(vcpu);
+
+	return state->nested.size && (state->nested.flags & KVM_STATE_NESTED_RUN_PENDING);
 }
 
 static void run_test(bool is_nmi)
@@ -173,22 +193,44 @@ static void run_test(bool is_nmi)
 	memset(&debug, 0, sizeof(debug));
 	vcpu_guest_debug_set(vcpu, &debug);
 
-	struct ucall uc;
+	for (;;) {
+		struct kvm_guest_debug debug;
+		struct ucall uc;
 
-	alarm(2);
-	vcpu_run(vcpu);
-	alarm(0);
-	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+		alarm(2);
+		vcpu_run(vcpu);
+		alarm(0);
+		TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
 
-	switch (get_ucall(vcpu, &uc)) {
-	case UCALL_ABORT:
-		REPORT_GUEST_ASSERT(uc);
-		break;
-		/* NOT REACHED */
-	case UCALL_DONE:
-		goto done;
-	default:
-		TEST_FAIL("Unknown ucall 0x%lx.", uc.cmd);
+		switch (get_ucall(vcpu, &uc)) {
+		case UCALL_SYNC:
+			/*
+			 * L1 syncs before calling run_guest(), single-step over
+			 * all instructions until VMRUN, and save+restore right
+			 * after it (before L2 actually runs).
+			 */
+			debug.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
+			vcpu_guest_debug_set(vcpu, &debug);
+
+			do {
+				vcpu_run(vcpu);
+				TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_DEBUG);
+			} while (!is_nested_run_pending(vcpu));
+
+			memset(&debug, 0, sizeof(debug));
+			vcpu_guest_debug_set(vcpu, &debug);
+			vcpu = save_and_restore_vm(vm, vcpu);
+			break;
+
+		case UCALL_ABORT:
+			REPORT_GUEST_ASSERT(uc);
+			break;
+			/* NOT REACHED */
+		case UCALL_DONE:
+			goto done;
+		default:
+			TEST_FAIL("Unknown ucall 0x%lx.", uc.cmd);
+		}
 	}
 done:
 	kvm_vm_free(vm);

@@ -1291,6 +1291,9 @@ void vcpu_load_state(struct kvm_vcpu *vcpu, struct kvm_x86_state *state)
 
 	if (state->nested.size)
 		vcpu_nested_state_set(vcpu, &state->nested);
+
+	/* Switch between this and the call above */
+	// vcpu_regs_set(vcpu, &state->regs);
 }
 
 void kvm_x86_state_cleanup(struct kvm_x86_state *state)
