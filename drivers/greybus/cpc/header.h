@@ -38,6 +38,9 @@ struct cpc_header {
 	__u8 ack;
 } __packed;
 
+bool cpc_header_is_control(const struct cpc_header *hdr);
 u8 cpc_header_get_seq(const struct cpc_header *hdr);
+bool cpc_header_get_req_ack(const struct cpc_header *hdr);
+u8 cpc_header_encode_ctrl_flags(bool control, bool req_ack);
 
 #endif
