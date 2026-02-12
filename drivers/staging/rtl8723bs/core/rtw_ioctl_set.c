@@ -61,7 +61,7 @@ u8 rtw_do_join(struct adapter *padapter)
 		/* when set_ssid/set_bssid for rtw_do_join(), but scanning queue is empty */
 		/* we try to issue sitesurvey firstly */
 
-		if (pmlmepriv->link_detect_info.bBusyTraffic == false
+		if (pmlmepriv->link_detect_info.busy_traffic == false
 			|| rtw_to_roam(padapter) > 0
 		) {
 			/*  submit site_survey_cmd */
@@ -113,7 +113,7 @@ u8 rtw_do_join(struct adapter *padapter)
 
 				/* when set_ssid/set_bssid for rtw_do_join(), but there are no desired bss in scanning queue */
 				/* we try to issue sitesurvey firstly */
-				if (pmlmepriv->link_detect_info.bBusyTraffic == false
+				if (pmlmepriv->link_detect_info.busy_traffic == false
 					|| rtw_to_roam(padapter) > 0
 				) {
 					ret = rtw_sitesurvey_cmd(padapter, &pmlmepriv->assoc_ssid, 1, NULL, 0);
@@ -380,7 +380,7 @@ u8 rtw_set_802_11_bssid_list_scan(struct adapter *padapter, struct ndis_802_11_s
 	}
 
 	if ((check_fwstate(pmlmepriv, _FW_UNDER_SURVEY|_FW_UNDER_LINKING) == true) ||
-		(pmlmepriv->link_detect_info.bBusyTraffic == true)) {
+		(pmlmepriv->link_detect_info.busy_traffic == true)) {
 		/*  Scan or linking is in progress, do nothing. */
 		res = true;
 

@@ -1143,51 +1143,51 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 	if ((check_fwstate(pmlmepriv, _FW_LINKED))
 		/*&& !MgntInitAdapterInProgress(pMgntInfo)*/) {
 		/*  if we raise bBusyTraffic in last watchdog, using lower threshold. */
-		if (pmlmepriv->link_detect_info.bBusyTraffic)
+		if (pmlmepriv->link_detect_info.busy_traffic)
 			BusyThreshold = BusyThresholdLow;
 
-		if (pmlmepriv->link_detect_info.NumRxOkInPeriod > BusyThreshold ||
-		    pmlmepriv->link_detect_info.NumTxOkInPeriod > BusyThreshold) {
+		if (pmlmepriv->link_detect_info.num_rx_ok_in_period > BusyThreshold ||
+		    pmlmepriv->link_detect_info.num_tx_ok_in_period > BusyThreshold) {
 			bBusyTraffic = true;
 
-			if (pmlmepriv->link_detect_info.NumRxOkInPeriod > pmlmepriv->link_detect_info.NumTxOkInPeriod)
+			if (pmlmepriv->link_detect_info.num_rx_ok_in_period > pmlmepriv->link_detect_info.num_tx_ok_in_period)
 				bRxBusyTraffic = true;
 			else
 				bTxBusyTraffic = true;
 		}
 
 		/*  Higher Tx/Rx data. */
-		if (pmlmepriv->link_detect_info.NumRxOkInPeriod > 4000 ||
-		    pmlmepriv->link_detect_info.NumTxOkInPeriod > 4000) {
+		if (pmlmepriv->link_detect_info.num_rx_ok_in_period > 4000 ||
+		    pmlmepriv->link_detect_info.num_tx_ok_in_period > 4000) {
 			bHigherBusyTraffic = true;
 
-			if (pmlmepriv->link_detect_info.NumRxOkInPeriod > pmlmepriv->link_detect_info.NumTxOkInPeriod)
+			if (pmlmepriv->link_detect_info.num_rx_ok_in_period > pmlmepriv->link_detect_info.num_tx_ok_in_period)
 				bHigherBusyRxTraffic = true;
 			else
 				bHigherBusyTxTraffic = true;
 		}
 
 		/*  check traffic for  powersaving. */
-		if (((pmlmepriv->link_detect_info.NumRxUnicastOkInPeriod + pmlmepriv->link_detect_info.NumTxOkInPeriod) > 8) ||
-		    (pmlmepriv->link_detect_info.NumRxUnicastOkInPeriod > 2)) {
+		if (((pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period + pmlmepriv->link_detect_info.num_tx_ok_in_period) > 8) ||
+		    (pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period > 2)) {
 			bEnterPS = false;
 
 			if (bBusyTraffic) {
-				if (pmlmepriv->link_detect_info.TrafficTransitionCount <= 4)
-					pmlmepriv->link_detect_info.TrafficTransitionCount = 4;
+				if (pmlmepriv->link_detect_info.traffic_transition_count <= 4)
+					pmlmepriv->link_detect_info.traffic_transition_count = 4;
 
-				pmlmepriv->link_detect_info.TrafficTransitionCount++;
+				pmlmepriv->link_detect_info.traffic_transition_count++;
 
-				if (pmlmepriv->link_detect_info.TrafficTransitionCount > 30/*TrafficTransitionLevel*/)
-					pmlmepriv->link_detect_info.TrafficTransitionCount = 30;
+				if (pmlmepriv->link_detect_info.traffic_transition_count > 30/*TrafficTransitionLevel*/)
+					pmlmepriv->link_detect_info.traffic_transition_count = 30;
 			}
 		} else {
-			if (pmlmepriv->link_detect_info.TrafficTransitionCount >= 2)
-				pmlmepriv->link_detect_info.TrafficTransitionCount -= 2;
+			if (pmlmepriv->link_detect_info.traffic_transition_count >= 2)
+				pmlmepriv->link_detect_info.traffic_transition_count -= 2;
 			else
-				pmlmepriv->link_detect_info.TrafficTransitionCount = 0;
+				pmlmepriv->link_detect_info.traffic_transition_count = 0;
 
-			if (pmlmepriv->link_detect_info.TrafficTransitionCount == 0)
+			if (pmlmepriv->link_detect_info.traffic_transition_count == 0)
 				bEnterPS = true;
 		}
 
@@ -1212,15 +1212,15 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 			LPS_Leave(padapter, "NON_LINKED");
 	}
 
-	pmlmepriv->link_detect_info.NumRxOkInPeriod = 0;
-	pmlmepriv->link_detect_info.NumTxOkInPeriod = 0;
-	pmlmepriv->link_detect_info.NumRxUnicastOkInPeriod = 0;
-	pmlmepriv->link_detect_info.bBusyTraffic = bBusyTraffic;
-	pmlmepriv->link_detect_info.bTxBusyTraffic = bTxBusyTraffic;
-	pmlmepriv->link_detect_info.bRxBusyTraffic = bRxBusyTraffic;
-	pmlmepriv->link_detect_info.bHigherBusyTraffic = bHigherBusyTraffic;
-	pmlmepriv->link_detect_info.bHigherBusyRxTraffic = bHigherBusyRxTraffic;
-	pmlmepriv->link_detect_info.bHigherBusyTxTraffic = bHigherBusyTxTraffic;
+	pmlmepriv->link_detect_info.num_rx_ok_in_period = 0;
+	pmlmepriv->link_detect_info.num_tx_ok_in_period = 0;
+	pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period = 0;
+	pmlmepriv->link_detect_info.busy_traffic = bBusyTraffic;
+	pmlmepriv->link_detect_info.tx_busy_traffic = bTxBusyTraffic;
+	pmlmepriv->link_detect_info.rx_busy_traffic = bRxBusyTraffic;
+	pmlmepriv->link_detect_info.higher_busy_traffic = bHigherBusyTraffic;
+	pmlmepriv->link_detect_info.higher_busy_rx_traffic = bHigherBusyRxTraffic;
+	pmlmepriv->link_detect_info.higher_busy_tx_traffic = bHigherBusyTxTraffic;
 
 	return bEnterPS;
 }
