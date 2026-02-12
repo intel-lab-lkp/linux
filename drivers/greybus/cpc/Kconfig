@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config GREYBUS_CPC
+	tristate "Greybus CPC driver"
+	help
+	  CPC (Co-Processor Communication) is a protocol for sharing a single
+	  physical link to a coprocessor between multiple users. CPC adds
+	  checksumming, retransmissions and flow control to Greybus to transmit
+	  messages as reliably as possible.
+
+	  To compile this code as a module, chose M here: the module will be
+	  called gb-cpc.ko
