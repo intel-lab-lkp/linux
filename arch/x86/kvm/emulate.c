@@ -3717,7 +3717,7 @@ static int em_fxsave(struct x86_emulate_ctxt *ctxt)
 
 	kvm_fpu_get();
 
-	rc = asm_safe("fxsave %[fx]", , [fx] "+m"(fx_state));
+	rc = asm_safe("fxsave %[fx]", , [fx] "=m"(fx_state));
 
 	kvm_fpu_put();
 
@@ -3741,7 +3741,7 @@ static noinline int fxregs_fixup(struct fxregs_state *fx_state,
 	struct fxregs_state fx_tmp;
 	int rc;
 
-	rc = asm_safe("fxsave %[fx]", , [fx] "+m"(fx_tmp));
+	rc = asm_safe("fxsave %[fx]", , [fx] "=m"(fx_tmp));
 	memcpy((void *)fx_state + used_size, (void *)&fx_tmp + used_size,
 	       __fxstate_size(16) - used_size);
 
