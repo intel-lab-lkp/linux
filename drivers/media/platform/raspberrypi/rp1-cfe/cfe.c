@@ -2151,31 +2151,19 @@ static int cfe_probe_complete(struct cfe_device *cfe)
 
 	cfe->v4l2_dev.notify = cfe_notify;
 
-	for (unsigned int i = 0; i < NUM_NODES; i++) {
-		ret = cfe_register_node(cfe, i);
-		if (ret) {
-			cfe_err(cfe, "Unable to register video node %u.\n", i);
-			goto unregister;
-		}
-	}
-
 	ret = cfe_link_node_pads(cfe);
 	if (ret) {
 		cfe_err(cfe, "Unable to link node pads.\n");
-		goto unregister;
+		return ret;
 	}
 
 	ret = v4l2_device_register_subdev_nodes(&cfe->v4l2_dev);
 	if (ret) {
 		cfe_err(cfe, "Unable to register subdev nodes.\n");
-		goto unregister;
+		return ret;
 	}
 
 	return 0;
-
-unregister:
-	cfe_unregister_nodes(cfe);
-	return ret;
 }
 
 static int cfe_async_bound(struct v4l2_async_notifier *notifier,
@@ -2204,8 +2192,19 @@ static int cfe_async_complete(struct v4l2_async_notifier *notifier)
 	return cfe_probe_complete(cfe);
 }
 
+static void cfe_async_unbind(struct v4l2_async_notifier *notifier,
+			     struct v4l2_subdev *subdev,
+			     struct v4l2_async_connection *asd)
+{
+	struct cfe_device *cfe = to_cfe_device(notifier->v4l2_dev);
+
+	cfe->source_sd = NULL;
+	cfe_info(cfe, "Unbinding subdev %s\n", subdev->name);
+}
+
 static const struct v4l2_async_notifier_operations cfe_async_ops = {
 	.bound = cfe_async_bound,
+	.unbind = cfe_async_unbind,
 	.complete = cfe_async_complete,
 };
 
@@ -2243,6 +2242,14 @@ static int cfe_register_async_nf(struct cfe_device *cfe)
 	cfe->csi2.dphy.max_lanes = ep.bus.mipi_csi2.num_data_lanes;
 	cfe->csi2.bus_flags = ep.bus.mipi_csi2.flags;
 
+	for (unsigned int i = 0; i < NUM_NODES; i++) {
+		ret = cfe_register_node(cfe, i);
+		if (ret) {
+			cfe_err(cfe, "Unable to register video node %u.\n", i);
+			goto err_unregister;
+		}
+	}
+
 	/* Initialize and register the async notifier. */
 	v4l2_async_nf_init(&cfe->notifier, &cfe->v4l2_dev);
 	cfe->notifier.ops = &cfe_async_ops;
@@ -2252,7 +2259,7 @@ static int cfe_register_async_nf(struct cfe_device *cfe)
 	if (IS_ERR(asd)) {
 		ret = PTR_ERR(asd);
 		cfe_err(cfe, "Error adding subdevice: %d\n", ret);
-		goto err_put_local_fwnode;
+		goto err_unregister;
 	}
 
 	ret = v4l2_async_nf_register(&cfe->notifier);
@@ -2267,6 +2274,8 @@ static int cfe_register_async_nf(struct cfe_device *cfe)
 
 err_nf_cleanup:
 	v4l2_async_nf_cleanup(&cfe->notifier);
+err_unregister:
+	cfe_unregister_nodes(cfe);
 err_put_local_fwnode:
 	fwnode_handle_put(local_ep_fwnode);
 
