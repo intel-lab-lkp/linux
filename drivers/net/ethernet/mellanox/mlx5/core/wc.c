@@ -390,12 +390,10 @@ static void mlx5_core_test_wc(struct mlx5_core_dev *mdev)
 	mlx5_wc_post_nop(sq, &offset, true);
 
 	expires = jiffies + TEST_WC_POLLING_MAX_TIME_JIFFIES;
-	do {
-		err = mlx5_wc_poll_cq(sq);
-		if (err)
-			usleep_range(2, 10);
-	} while (mdev->wc_state == MLX5_WC_STATE_UNINITIALIZED &&
-		 time_is_after_jiffies(expires));
+	while ((mlx5_wc_poll_cq(sq),
+		mdev->wc_state == MLX5_WC_STATE_UNINITIALIZED) &&
+	       time_is_after_jiffies(expires))
+		usleep_range(2, 10);
 
 	mlx5_wc_destroy_sq(sq);
 
