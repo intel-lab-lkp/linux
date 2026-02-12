@@ -231,6 +231,36 @@ u32 nvmet_auth_send_data_len(struct nvmet_req *req)
 	return le32_to_cpu(req->cmd->auth_send.tl);
 }
 
+static bool nvmet_restart_dhchap_auth(struct nvmet_req *req, void *d, u32 tl)
+{
+	struct nvmet_ctrl *ctrl = req->sq->ctrl;
+	struct nvmf_auth_dhchap_negotiate_data *neg = d;
+	u8 dhchap_status;
+	size_t min_len = struct_size(neg, auth_protocol, 1);
+
+	if (tl < min_len) {
+		req->sq->dhchap_status = NVME_AUTH_DHCHAP_FAILURE_INCORRECT_PAYLOAD;
+		req->sq->dhchap_step = NVME_AUTH_DHCHAP_MESSAGE_FAILURE1;
+		return false;
+	}
+
+	/* Restart negotiation */
+	pr_debug("%s: ctrl %d qid %d reset negotiation\n",
+		 __func__, ctrl->cntlid, req->sq->qid);
+	if (!req->sq->qid) {
+		dhchap_status = nvmet_setup_auth(ctrl, req->sq);
+		if (dhchap_status) {
+			pr_err("ctrl %d qid 0 failed to setup re-authentication\n",
+			       ctrl->cntlid);
+			req->sq->dhchap_status = dhchap_status;
+			req->sq->dhchap_step = NVME_AUTH_DHCHAP_MESSAGE_FAILURE1;
+			return false;
+		}
+	}
+	req->sq->dhchap_step = NVME_AUTH_DHCHAP_MESSAGE_NEGOTIATE;
+	return true;
+}
+
 void nvmet_execute_auth_send(struct nvmet_req *req)
 {
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
@@ -289,22 +319,8 @@ void nvmet_execute_auth_send(struct nvmet_req *req)
 		goto done_failure1;
 	if (data->auth_type == NVME_AUTH_COMMON_MESSAGES) {
 		if (data->auth_id == NVME_AUTH_DHCHAP_MESSAGE_NEGOTIATE) {
-			/* Restart negotiation */
-			pr_debug("%s: ctrl %d qid %d reset negotiation\n",
-				 __func__, ctrl->cntlid, req->sq->qid);
-			if (!req->sq->qid) {
-				dhchap_status = nvmet_setup_auth(ctrl, req->sq);
-				if (dhchap_status) {
-					pr_err("ctrl %d qid 0 failed to setup re-authentication\n",
-					       ctrl->cntlid);
-					req->sq->dhchap_status = dhchap_status;
-					req->sq->dhchap_step =
-						NVME_AUTH_DHCHAP_MESSAGE_FAILURE1;
-					goto done_kfree;
-				}
-			}
-			req->sq->dhchap_step =
-				NVME_AUTH_DHCHAP_MESSAGE_NEGOTIATE;
+			if (!nvmet_restart_dhchap_auth(req, d, tl))
+				goto done_kfree;
 		} else if (data->auth_id != req->sq->dhchap_step)
 			goto done_failure1;
 		/* Validate negotiation parameters */
