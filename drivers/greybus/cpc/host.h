@@ -37,6 +37,8 @@ struct cpc_host_device {
 	struct cpc_cport *cports[GB_CPC_NUM_CPORTS];
 
 	struct sk_buff_head tx_queue;
+
+	void *priv;
 };
 
 static inline struct device *cpc_hd_dev(struct cpc_host_device *cpc_hd)
@@ -44,7 +46,8 @@ static inline struct device *cpc_hd_dev(struct cpc_host_device *cpc_hd)
 	return &cpc_hd->gb_hd->dev;
 }
 
-struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct device *parent);
+struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct device *parent,
+				      void *priv);
 int cpc_hd_add(struct cpc_host_device *cpc_hd);
 void cpc_hd_put(struct cpc_host_device *cpc_hd);
 void cpc_hd_del(struct cpc_host_device *cpc_hd);
