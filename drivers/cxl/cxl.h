@@ -480,6 +480,9 @@ enum cxl_config_state {
  * @interleave_ways: number of endpoints in the region
  * @interleave_granularity: capacity each endpoint contributes to a stripe
  * @res: allocated iomem capacity for this region
+ * @res_want_insert: true if the resource should be inserted into the iomem
+ *		tree. Set to false after the first attempt to insert or if
+ *		res originates from the iomem tree via alloc_free_mem_region()
  * @targets: active ordered targets in current decoder configuration
  * @nr_targets: number of targets
  * @cache_size: extended linear cache size if exists, otherwise zero.
@@ -492,6 +495,7 @@ struct cxl_region_params {
 	int interleave_ways;
 	int interleave_granularity;
 	struct resource *res;
+	bool res_want_insert;
 	struct cxl_endpoint_decoder *targets[CXL_DECODER_MAX_INTERLEAVE];
 	int nr_targets;
 	resource_size_t cache_size;

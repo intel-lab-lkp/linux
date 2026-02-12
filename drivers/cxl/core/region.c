@@ -665,6 +665,7 @@ static int alloc_hpa(struct cxl_region *cxlr, resource_size_t size)
 	}
 
 	p->res = res;
+	p->res_want_insert = false;
 	p->state = CXL_CONFIG_INTERLEAVE_ACTIVE;
 
 	return 0;
@@ -2092,6 +2093,24 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		 */
 		p->state = CXL_CONFIG_COMMIT;
 		cxl_region_shared_upstream_bandwidth_update(cxlr);
+
+		/*
+		 * Insert iomem resource only once at first commit. The
+		 * resource remains for the lifetime of this region, across
+		 * disable/enable cycles, and is only removed at unregister.
+		 *
+		 * Set res_want_insert to false on the first attempt, even if
+		 * it fails, to avoid retries if the platform firmware did
+		 * not split resources like "System RAM" on CXL window
+		 * boundaries. Resource is not required to be in iomem tree.
+		 */
+		if (p->res && p->res_want_insert) {
+			rc = insert_resource(cxlrd->res, p->res);
+			if (rc)
+				dev_warn(&cxlr->dev,
+					 "cannot insert iomem resource\n");
+			p->res_want_insert = false;
+		}
 
 		return 0;
 	}
@@ -3619,19 +3638,8 @@ static int __construct_region(struct cxl_region *cxlr,
 	if (rc)
 		return rc;
 
-	rc = insert_resource(cxlrd->res, res);
-	if (rc) {
-		/*
-		 * Platform-firmware may not have split resources like "System
-		 * RAM" on CXL window boundaries see cxl_region_iomem_release()
-		 */
-		dev_warn(cxlmd->dev.parent,
-			 "%s:%s: %s %s cannot insert resource\n",
-			 dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
-			 __func__, dev_name(&cxlr->dev));
-	}
-
 	p->res = res;
+	p->res_want_insert = true;
 	p->interleave_ways = cxled->cxld.interleave_ways;
 	p->interleave_granularity = cxled->cxld.interleave_granularity;
 	p->state = CXL_CONFIG_INTERLEAVE_ACTIVE;
