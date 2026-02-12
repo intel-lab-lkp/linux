@@ -1412,11 +1412,9 @@ static int macsec_aso_query(struct mlx5_core_dev *mdev, struct mlx5e_macsec *mac
 
 	mlx5_aso_post_wqe(maso, false, &aso_wqe->ctrl);
 	expires = jiffies + msecs_to_jiffies(10);
-	do {
-		err = mlx5_aso_poll_cq(maso, false);
-		if (err)
-			usleep_range(2, 10);
-	} while (err && time_is_after_jiffies(expires));
+	while ((err = mlx5_aso_poll_cq(maso, false)) &&
+	       time_is_after_jiffies(expires))
+		usleep_range(2, 10);
 
 	if (err)
 		goto err_out;

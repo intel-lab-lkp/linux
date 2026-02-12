@@ -188,11 +188,9 @@ mlx5e_tc_meter_modify(struct mlx5_core_dev *mdev,
 
 	/* With newer FW, the wait for the first ASO WQE is more than 2us, put the wait 10ms. */
 	expires = jiffies + msecs_to_jiffies(10);
-	do {
-		err = mlx5_aso_poll_cq(aso, true);
-		if (err)
-			usleep_range(2, 10);
-	} while (err && time_is_after_jiffies(expires));
+	while ((err = mlx5_aso_poll_cq(aso, true)) &&
+	       time_is_after_jiffies(expires))
+		usleep_range(2, 10);
 	mutex_unlock(&flow_meters->aso_lock);
 
 	return err;
