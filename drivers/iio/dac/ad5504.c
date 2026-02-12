@@ -15,6 +15,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/module.h>
 #include <linux/bitops.h>
+#include <linux/property.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -274,6 +275,7 @@ static int ad5504_probe(struct spi_device *spi)
 	struct iio_dev *indio_dev;
 	struct ad5504_state *st;
 	int ret;
+	u32 val;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
 	if (!indio_dev)
@@ -281,17 +283,21 @@ static int ad5504_probe(struct spi_device *spi)
 
 	st = iio_priv(indio_dev);
 
-	ret = devm_regulator_get_enable_read_voltage(&spi->dev, "vcc");
-	if (ret < 0 && ret != -ENODEV)
+	ret = devm_regulator_get_enable(&spi->dev, "vcc");
+	if (ret)
 		return ret;
-	if (ret == -ENODEV) {
-		if (pdata->vref_mv)
-			st->vref_mv = pdata->vref_mv;
-		else
-			dev_warn(&spi->dev, "reference voltage unspecified\n");
-	} else {
-		st->vref_mv = ret / 1000;
-	}
+
+	ret = device_property_read_u32(&spi->dev, "adi,output-range-volts", &val);
+	if (ret)
+		val = 60;
+
+	if (val == 60)
+		st->vref_mv = 60000;
+	else
+		st->vref_mv = 30000;
+
+	if (pdata && pdata->vref_mv)
+		st->vref_mv = pdata->vref_mv;
 
 	st->spi = spi;
 	indio_dev->name = spi_get_device_id(st->spi)->name;
