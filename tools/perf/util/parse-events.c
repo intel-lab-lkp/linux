@@ -1246,7 +1246,54 @@ static int get_config_terms(const struct parse_events_terms *head_config,
 			}
 			new_term->free_str = true;
 		} else {
-			new_term->val.val = val;
+			switch (new_type) {
+			case EVSEL__CONFIG_TERM_PERIOD:
+				new_term->val.period = val;
+				break;
+			case EVSEL__CONFIG_TERM_FREQ:
+				new_term->val.freq = val;
+				break;
+			case EVSEL__CONFIG_TERM_TIME:
+				new_term->val.time = val;
+				break;
+			case EVSEL__CONFIG_TERM_STACK_USER:
+				new_term->val.stack_user = val;
+				break;
+			case EVSEL__CONFIG_TERM_INHERIT:
+				new_term->val.inherit = val;
+				break;
+			case EVSEL__CONFIG_TERM_OVERWRITE:
+				new_term->val.overwrite = val;
+				break;
+			case EVSEL__CONFIG_TERM_MAX_STACK:
+				new_term->val.max_stack = val;
+				break;
+			case EVSEL__CONFIG_TERM_MAX_EVENTS:
+				new_term->val.max_events = val;
+				break;
+			case EVSEL__CONFIG_TERM_PERCORE:
+				new_term->val.percore = val;
+				break;
+			case EVSEL__CONFIG_TERM_AUX_OUTPUT:
+				new_term->val.aux_output = val;
+				break;
+			case EVSEL__CONFIG_TERM_AUX_SAMPLE_SIZE:
+				new_term->val.aux_sample_size = val;
+				break;
+			case EVSEL__CONFIG_TERM_CALLGRAPH:
+			case EVSEL__CONFIG_TERM_DRV_CFG:
+			case EVSEL__CONFIG_TERM_BRANCH:
+			case EVSEL__CONFIG_TERM_AUX_ACTION:
+			case EVSEL__CONFIG_TERM_USR_CHG_CONFIG:
+			case EVSEL__CONFIG_TERM_USR_CHG_CONFIG1:
+			case EVSEL__CONFIG_TERM_USR_CHG_CONFIG2:
+			case EVSEL__CONFIG_TERM_USR_CHG_CONFIG3:
+			case EVSEL__CONFIG_TERM_USR_CHG_CONFIG4:
+			case EVSEL__CONFIG_TERM_RATIO_TO_PREV:
+			default:
+				new_term->val.val = val;
+				break;
+			}
 		}
 	}
 	return 0;
