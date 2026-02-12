@@ -542,7 +542,9 @@ impl Cmdq {
         let command_size = Self::command_size(&command);
         let dst = self.gsp_mem.allocate_command_with_timeout(command_size)?;
 
-        // Extract area for the command itself.
+        // Extract area for the command itself. The GSP message header and the command header
+        // together are guaranteed to fit entirely into a single page, so it's ok to only look
+        // at `dst.contents.0` here.
         let (cmd, payload_1) = M::Command::from_bytes_mut_prefix(dst.contents.0).ok_or(EIO)?;
 
         // Fill the header and command in-place.
