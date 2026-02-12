@@ -351,7 +351,7 @@ pub(crate) struct FalconDmaLoadTarget {
 }
 
 /// Trait for providing DMA load parameters of falcon firmwares.
-pub(crate) trait FalconDmaLoadable {
+pub(crate) trait FalconDmaLoadable: Deref<Target = DmaObject> {
     /// Returns the load parameters for Secure `IMEM`.
     fn imem_sec_load_params(&self) -> FalconDmaLoadTarget;
 
@@ -373,7 +373,7 @@ pub(crate) trait FalconDmaLoadable {
 ///
 /// A falcon firmware can be loaded on a given engine, and is presented in the form of a DMA
 /// object.
-pub(crate) trait FalconFirmware: FalconDmaLoadable + Deref<Target = DmaObject> {
+pub(crate) trait FalconFirmware: FalconDmaLoadable {
     /// Engine on which this firmware is to be loaded.
     type Target: FalconEngine;
 }
