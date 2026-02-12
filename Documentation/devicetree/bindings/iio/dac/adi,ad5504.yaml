@@ -27,12 +27,50 @@ properties:
     maxItems: 1
 
   vcc-supply: true
+  vlogic-supply: true
+
+  adi,output-range-volts:
+    description:
+      Hard-wired /R_SEL pin state. 30 V when pin is high and 60 V when
+      pin is low.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [30, 60]
+    default: 60
+
+  adi,output-range-gpios:
+    description:
+      GPIO connected to the R_SEL pin to select the output voltage range.
+    maxItems: 1
+
+  clear-gpios:
+    description: GPIO that controls the /CLR pin (active low).
+    maxItems: 1
+
+  ldac-gpios:
+    description: GPIO that controls the /LDAC pin (active low).
+    maxItems: 1
 
 additionalProperties: false
 
 required:
   - compatible
   - reg
+  - vcc-supply
+
+allOf:
+  - if:
+      required:
+        - adi,output-range-gpios
+    then:
+      properties:
+        adi,output-range-volts: false
+
+  - if:
+      required:
+        - adi,output-range-volts
+    then:
+      properties:
+        adi,output-range-gpios: false
 
 examples:
   - |
