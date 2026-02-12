@@ -416,10 +416,10 @@ impl<E: FalconEngine + 'static> Falcon<E> {
     /// `target_mem`.
     ///
     /// `sec` is set if the loaded firmware is expected to run in secure mode.
-    fn dma_wr<F: FalconFirmware<Target = E>>(
+    fn dma_wr(
         &self,
         bar: &Bar0,
-        fw: &F,
+        fw: &DmaObject,
         target_mem: FalconMem,
         load_offsets: FalconDmaLoadTarget,
     ) -> Result {
