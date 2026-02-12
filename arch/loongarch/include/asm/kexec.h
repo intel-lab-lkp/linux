@@ -42,6 +42,7 @@ struct kimage_arch {
 };
 
 #ifdef CONFIG_KEXEC_FILE
+struct crash_mem;
 extern const struct kexec_file_ops kexec_efi_ops;
 extern const struct kexec_file_ops kexec_elf_ops;
 
@@ -51,7 +52,13 @@ int arch_kimage_file_post_load_cleanup(struct kimage *image);
 extern int load_other_segments(struct kimage *image,
 		unsigned long kernel_load_addr, unsigned long kernel_size,
 		char *initrd, unsigned long initrd_len, char *cmdline, unsigned long cmdline_len);
-#endif
+
+int arch_get_system_nr_ranges(unsigned int *nr_ranges);
+#define arch_get_system_nr_ranges arch_get_system_nr_ranges
+
+int arch_prepare_elf64_ram_headers(struct crash_mem *cmem);
+#define arch_prepare_elf64_ram_headers arch_prepare_elf64_ram_headers
+#endif /* CONFIG_KEXEC_FILE */
 
 typedef void (*do_kexec_t)(unsigned long efi_boot,
 			   unsigned long cmdline_ptr,

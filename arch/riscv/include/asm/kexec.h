@@ -73,6 +73,13 @@ int load_extra_segments(struct kimage *image, unsigned long kernel_start,
 			unsigned long kernel_len, char *initrd,
 			unsigned long initrd_len, char *cmdline,
 			unsigned long cmdline_len);
-#endif
+
+int arch_get_system_nr_ranges(unsigned int *nr_ranges);
+#define arch_get_system_nr_ranges arch_get_system_nr_ranges
+
+struct crash_mem;
+int arch_prepare_elf64_ram_headers(struct crash_mem *cmem);
+#define arch_prepare_elf64_ram_headers arch_prepare_elf64_ram_headers
+#endif /* CONFIG_KEXEC_FILE */
 
 #endif

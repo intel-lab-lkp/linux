@@ -399,6 +399,43 @@ void default_machine_crash_shutdown(struct pt_regs *regs)
 		ppc_md.kexec_cpu_down(1, 0);
 }
 
+int arch_get_crash_memory_ranges(struct crash_mem **cmem, unsigned long *nr_mem_ranges,
+				 struct kimage *image, struct memory_notify *mn)
+{
+#ifdef CONFIG_CRASH_HOTPLUG
+	unsigned long base_addr, size, end;
+#endif
+	int ret;
+
+	ret = get_crash_memory_ranges(cmem);
+	if (ret) {
+		pr_err("Failed to get crash mem range\n");
+		return ret;
+	}
+
+	if (!image || !mn)
+		return 0;
+
+	/*
+	 * The hot unplugged memory is part of crash memory ranges,
+	 * remove it here.
+	 */
+#ifdef CONFIG_CRASH_HOTPLUG
+	if (image->hp_action == KEXEC_CRASH_HP_REMOVE_MEMORY) {
+		base_addr = PFN_PHYS(mn->start_pfn);
+		size = mn->nr_pages * PAGE_SIZE;
+		end = base_addr + size - 1;
+		ret = arch_crash_exclude_mem_range(cmem, base_addr, end);
+		if (ret) {
+			pr_err("Failed to remove hot-unplugged memory from crash memory ranges\n");
+			return ret;
+		}
+	}
+#endif
+
+	return 0;
+}
+
 #ifdef CONFIG_CRASH_HOTPLUG
 #undef pr_fmt
 #define pr_fmt(fmt) "crash hp: " fmt
@@ -427,38 +464,16 @@ unsigned int arch_crash_get_elfcorehdr_size(void)
  */
 static void update_crash_elfcorehdr(struct kimage *image, struct memory_notify *mn)
 {
-	int ret;
-	struct crash_mem *cmem = NULL;
-	struct kexec_segment *ksegment;
 	void *ptr, *mem, *elfbuf = NULL;
-	unsigned long elfsz, memsz, base_addr, size, end;
+	struct kexec_segment *ksegment;
+	unsigned long elfsz, memsz;
+	int ret;
 
 	ksegment = &image->segment[image->elfcorehdr_index];
 	mem = (void *) ksegment->mem;
 	memsz = ksegment->memsz;
 
-	ret = get_crash_memory_ranges(&cmem);
-	if (ret) {
-		pr_err("Failed to get crash mem range\n");
-		return;
-	}
-
-	/*
-	 * The hot unplugged memory is part of crash memory ranges,
-	 * remove it here.
-	 */
-	if (image->hp_action == KEXEC_CRASH_HP_REMOVE_MEMORY) {
-		base_addr = PFN_PHYS(mn->start_pfn);
-		size = mn->nr_pages * PAGE_SIZE;
-		end = base_addr + size - 1;
-		ret = crash_exclude_mem_range_guarded(&cmem, base_addr, end);
-		if (ret) {
-			pr_err("Failed to remove hot-unplugged memory from crash memory ranges\n");
-			goto out;
-		}
-	}
-
-	ret = crash_prepare_elf64_headers(cmem, false, &elfbuf, &elfsz);
+	ret = crash_prepare_elf64_headers(false, &elfbuf, &elfsz, NULL, image, mn);
 	if (ret) {
 		pr_err("Failed to prepare elf header\n");
 		goto out;
@@ -487,7 +502,6 @@ static void update_crash_elfcorehdr(struct kimage *image, struct memory_notify *
 		xchg(&kexec_crash_image, image);
 	}
 out:
-	kvfree(cmem);
 	kvfree(elfbuf);
 }
 

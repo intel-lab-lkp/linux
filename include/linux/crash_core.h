@@ -2,11 +2,14 @@
 #ifndef LINUX_CRASH_CORE_H
 #define LINUX_CRASH_CORE_H
 
-#include <linux/linkage.h>
 #include <linux/elfcore.h>
 #include <linux/elf.h>
+#include <linux/kexec.h>
+#include <linux/linkage.h>
+#include <linux/vmalloc.h>
 
 struct kimage;
+struct memory_notify;
 
 struct crash_mem {
 	unsigned int max_nr_ranges;
@@ -54,6 +57,66 @@ static inline int arch_crash_hotplug_support(struct kimage *image, unsigned long
 }
 #endif
 
+extern int crash_exclude_mem_range(struct crash_mem *mem,
+				   unsigned long long mstart,
+				   unsigned long long mend);
+
+#ifndef arch_crash_exclude_mem_range
+static __always_inline int arch_crash_exclude_mem_range(struct crash_mem **mem_ranges,
+							unsigned long long mstart,
+							unsigned long long mend)
+{
+	return crash_exclude_mem_range(*mem_ranges, mstart, mend);
+}
+#endif
+
+#ifndef arch_get_system_nr_ranges
+static inline int arch_get_system_nr_ranges(unsigned int *nr_ranges)
+{
+	return -EINVAL;
+}
+#endif
+
+#ifndef arch_prepare_elf64_ram_headers
+static inline int arch_prepare_elf64_ram_headers(struct crash_mem *cmem)
+{
+	return -EINVAL;
+}
+#endif
+
+#ifndef arch_get_crash_memory_ranges
+static inline int arch_get_crash_memory_ranges(struct crash_mem **cmem,
+					       unsigned long *nr_mem_ranges,
+					       struct kimage *image,
+					       struct memory_notify *mn)
+{
+	unsigned int nr_ranges;
+	int ret;
+
+	/*
+	 * Exclusion of crash region, crashk_low_res and/or crashk_cma_ranges
+	 * may cause range splits. So add extra slots here.
+	 */
+	nr_ranges = 1 + (crashk_low_res.end != 0) + crashk_cma_cnt;
+	ret = arch_get_system_nr_ranges(&nr_ranges);
+	if (ret)
+		return ret;
+
+	*cmem = kvzalloc(struct_size(*cmem, ranges, nr_ranges), GFP_KERNEL);
+	if (!(*cmem))
+		return -ENOMEM;
+
+	(*cmem)->max_nr_ranges = nr_ranges;
+	ret = arch_prepare_elf64_ram_headers(*cmem);
+	if (ret) {
+		kvfree(*cmem);
+		return ret;
+	}
+
+	return 0;
+}
+#endif
+
 #ifndef crash_get_elfcorehdr_size
 static inline unsigned int crash_get_elfcorehdr_size(void) { return 0; }
 #endif
@@ -61,11 +124,11 @@ static inline unsigned int crash_get_elfcorehdr_size(void) { return 0; }
 /* Alignment required for elf header segment */
 #define ELF_CORE_HEADER_ALIGN   4096
 
-extern int crash_exclude_mem_range(struct crash_mem *mem,
-				   unsigned long long mstart,
-				   unsigned long long mend);
-extern int crash_prepare_elf64_headers(struct crash_mem *mem, int need_kernel_map,
-				       void **addr, unsigned long *sz);
+extern int crash_prepare_elf64_headers(int need_kernel_map,
+				       void **addr, unsigned long *sz,
+				       unsigned long *nr_mem_ranges,
+				       struct kimage *image,
+				       struct memory_notify *mn);
 
 struct kimage;
 struct kexec_segment;

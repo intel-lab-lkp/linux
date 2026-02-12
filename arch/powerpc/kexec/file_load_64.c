@@ -401,17 +401,17 @@ static void update_backup_region_phdr(struct kimage *image, Elf64_Ehdr *ehdr)
 	}
 }
 
-static unsigned int kdump_extra_elfcorehdr_size(struct crash_mem *cmem)
+static unsigned int kdump_extra_elfcorehdr_size(unsigned long nr_mem_ranges)
 {
 #if defined(CONFIG_CRASH_HOTPLUG) && defined(CONFIG_MEMORY_HOTPLUG)
 	unsigned int extra_sz = 0;
 
 	if (CONFIG_CRASH_MAX_MEMORY_RANGES > (unsigned int)PN_XNUM)
 		pr_warn("Number of Phdrs %u exceeds max\n", CONFIG_CRASH_MAX_MEMORY_RANGES);
-	else if (cmem->nr_ranges >= CONFIG_CRASH_MAX_MEMORY_RANGES)
+	else if (nr_mem_ranges >= CONFIG_CRASH_MAX_MEMORY_RANGES)
 		pr_warn("Configured crash mem ranges may not be enough\n");
 	else
-		extra_sz = (CONFIG_CRASH_MAX_MEMORY_RANGES - cmem->nr_ranges) * sizeof(Elf64_Phdr);
+		extra_sz = (CONFIG_CRASH_MAX_MEMORY_RANGES - nr_mem_ranges) * sizeof(Elf64_Phdr);
 
 	return extra_sz;
 #endif
@@ -428,17 +428,13 @@ static unsigned int kdump_extra_elfcorehdr_size(struct crash_mem *cmem)
  */
 static int load_elfcorehdr_segment(struct kimage *image, struct kexec_buf *kbuf)
 {
-	struct crash_mem *cmem = NULL;
+	unsigned long nr_mem_ranges;
 	unsigned long headers_sz;
 	void *headers = NULL;
 	int ret;
 
-	ret = get_crash_memory_ranges(&cmem);
-	if (ret)
-		goto out;
-
 	/* Setup elfcorehdr segment */
-	ret = crash_prepare_elf64_headers(cmem, false, &headers, &headers_sz);
+	ret = crash_prepare_elf64_headers(false, &headers, &headers_sz, &nr_mem_ranges, NULL, NULL);
 	if (ret) {
 		pr_err("Failed to prepare elf headers for the core\n");
 		goto out;
@@ -450,7 +446,7 @@ static int load_elfcorehdr_segment(struct kimage *image, struct kexec_buf *kbuf)
 	kbuf->buffer = headers;
 	kbuf->mem = KEXEC_BUF_MEM_UNKNOWN;
 	kbuf->bufsz = headers_sz;
-	kbuf->memsz = headers_sz + kdump_extra_elfcorehdr_size(cmem);
+	kbuf->memsz = headers_sz + kdump_extra_elfcorehdr_size(nr_mem_ranges);
 	kbuf->top_down = false;
 
 	ret = kexec_add_buffer(kbuf);
@@ -463,7 +459,6 @@ static int load_elfcorehdr_segment(struct kimage *image, struct kexec_buf *kbuf)
 	image->elf_headers_sz = headers_sz;
 	image->elf_headers = headers;
 out:
-	kfree(cmem);
 	return ret;
 }
 

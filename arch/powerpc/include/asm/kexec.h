@@ -212,6 +212,19 @@ static inline void reset_sprs(void)
 }
 #endif
 
+#ifdef CONFIG_CRASH_DUMP
+struct crash_mem;
+struct memory_notify;
+
+int arch_crash_exclude_mem_range(struct crash_mem **mem, unsigned long long mstart,
+				 unsigned long long mend);
+#define arch_crash_exclude_mem_range arch_crash_exclude_mem_range
+
+int arch_get_crash_memory_ranges(struct crash_mem **cmem, unsigned long *nr_mem_ranges,
+				 struct kimage *image, struct memory_notify *mn);
+#define arch_get_crash_memory_ranges arch_get_crash_memory_ranges
+#endif
+
 #endif /* ! __ASSEMBLER__ */
 #endif /* __KERNEL__ */
 #endif /* _ASM_POWERPC_KEXEC_H */
