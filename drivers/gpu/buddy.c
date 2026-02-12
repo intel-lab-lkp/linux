@@ -14,6 +14,24 @@
 
 static struct kmem_cache *slab_blocks;
 
+static unsigned int
+gpu_buddy_block_state(struct gpu_buddy_block *block)
+{
+	return block->header & GPU_BUDDY_HEADER_STATE;
+}
+
+static bool
+gpu_buddy_block_is_allocated(struct gpu_buddy_block *block)
+{
+	return gpu_buddy_block_state(block) == GPU_BUDDY_ALLOCATED;
+}
+
+static bool
+gpu_buddy_block_is_split(struct gpu_buddy_block *block)
+{
+	return gpu_buddy_block_state(block) == GPU_BUDDY_SPLIT;
+}
+
 static struct gpu_buddy_block *gpu_block_alloc(struct gpu_buddy *mm,
 					       struct gpu_buddy_block *parent,
 					       unsigned int order,
@@ -448,23 +466,6 @@ static int split_block(struct gpu_buddy *mm,
 
 	return 0;
 }
-
-/**
- * gpu_get_buddy - get buddy address
- *
- * @block: GPU buddy block
- *
- * Returns the corresponding buddy block for @block, or NULL
- * if this is a root block and can't be merged further.
- * Requires some kind of locking to protect against
- * any concurrent allocate and free operations.
- */
-struct gpu_buddy_block *
-gpu_get_buddy(struct gpu_buddy_block *block)
-{
-	return __get_buddy(block);
-}
-EXPORT_SYMBOL(gpu_get_buddy);
 
 /**
  * gpu_buddy_reset_clear - reset blocks clear state

@@ -191,34 +191,16 @@ gpu_buddy_block_order(struct gpu_buddy_block *block)
 	return block->header & GPU_BUDDY_HEADER_ORDER;
 }
 
-static inline unsigned int
-gpu_buddy_block_state(struct gpu_buddy_block *block)
-{
-	return block->header & GPU_BUDDY_HEADER_STATE;
-}
-
 static inline bool
-gpu_buddy_block_is_allocated(struct gpu_buddy_block *block)
+gpu_buddy_block_is_free(struct gpu_buddy_block *block)
 {
-	return gpu_buddy_block_state(block) == GPU_BUDDY_ALLOCATED;
+	return (block->header & GPU_BUDDY_HEADER_STATE) == GPU_BUDDY_FREE;
 }
 
 static inline bool
 gpu_buddy_block_is_clear(struct gpu_buddy_block *block)
 {
 	return block->header & GPU_BUDDY_HEADER_CLEAR;
-}
-
-static inline bool
-gpu_buddy_block_is_free(struct gpu_buddy_block *block)
-{
-	return gpu_buddy_block_state(block) == GPU_BUDDY_FREE;
-}
-
-static inline bool
-gpu_buddy_block_is_split(struct gpu_buddy_block *block)
-{
-	return gpu_buddy_block_state(block) == GPU_BUDDY_SPLIT;
 }
 
 static inline u64
@@ -231,9 +213,6 @@ gpu_buddy_block_size(struct gpu_buddy *mm,
 int gpu_buddy_init(struct gpu_buddy *mm, u64 size, u64 chunk_size);
 
 void gpu_buddy_fini(struct gpu_buddy *mm);
-
-struct gpu_buddy_block *
-gpu_get_buddy(struct gpu_buddy_block *block);
 
 int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 			   u64 start, u64 end, u64 size,
