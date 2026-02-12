@@ -99,11 +99,14 @@ struct rt_link_detect_t {
 	bool			busy_traffic;
 	bool			tx_busy_traffic;
 	bool			rx_busy_traffic;
-	bool			higher_busy_traffic; /*  For interrupt migration purpose. */
-	bool			higher_busy_rx_traffic; /*  We may disable Tx interrupt according as Rx traffic. */
-	bool			higher_busy_tx_traffic; /*  We may disable Tx interrupt according as Tx traffic. */
-	u8 traffic_transition_count;
-	u32 low_power_transition_count;
+	/* For interrupt migration purpose. */
+	bool			higher_busy_traffic;
+	/* We may disable Tx interrupt according as Rx traffic. */
+	bool			higher_busy_rx_traffic;
+	/* We may disable Tx interrupt according as Tx traffic. */
+	bool			higher_busy_tx_traffic;
+	u8			traffic_transition_count;
+	u32			low_power_transition_count;
 };
 
 /* used for mlme_priv.roam_flags */
