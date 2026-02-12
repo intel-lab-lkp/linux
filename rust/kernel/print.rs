@@ -29,7 +29,11 @@ unsafe extern "C" fn rust_fmt_argument(
     use fmt::Write;
     // SAFETY: The C contract guarantees that `buf` is valid if it's less than `end`.
     let mut w = unsafe { RawFormatter::from_ptrs(buf.cast(), end.cast()) };
-    // SAFETY: TODO.
+
+    // SAFETY: `ptr` originates from `call_printk`, which passes a valid
+    // reference to `fmt::Arguments` using `core::ptr::from_ref`. Therefore,
+    // it is properly aligned, non-null, and valid for the duration of this call.
+
     let _ = w.write_fmt(unsafe { *ptr.cast::<fmt::Arguments<'_>>() });
     w.pos().cast()
 }
@@ -109,7 +113,11 @@ pub unsafe fn call_printk(
 ) {
     // `_printk` does not seem to fail in any path.
     #[cfg(CONFIG_PRINTK)]
-    // SAFETY: TODO.
+    // SAFETY: `_printk` is called with a fixed format string generated
+    // at compile time, a null-terminated module name, and a pointer to
+    // `fmt::Arguments` obtained via `core::ptr::from_ref`. All pointers
+    // are valid for the duration of the call and respect the C ABI.
+
     unsafe {
         bindings::_printk(
             format_string.as_ptr(),
