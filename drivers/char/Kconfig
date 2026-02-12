@@ -291,6 +291,27 @@ config DEVMEM
 	  memory.
 	  When in doubt, say "Y".
 
+config DEVMEM_KUNIT_TEST
+	tristate "KUnit tests for /dev/mem" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enables in-kernel unit tests for /dev/mem read/write logic.
+
+config DEVMEM_KUNIT_TEST_IO
+	bool "KUnit tests for /dev/mem extended to I/O space"
+	depends on DEVMEM_KUNIT_TEST
+	default n
+	help
+	  Extend KUnit tests for devmem to cover IO space.
+	  When CONFIG_IO_STRICT_DEVMEM is enabled, the kernel denies
+	  access to claimed IO regions. Enabling this option adds two
+	  KUnit test cases to verify this behavior.
+	  Note: These tests perform read operations, which can have
+	  side effects on certain hardware.
+	  Enable this only if you are certain your hardware handles
+	  unsolicited reads safely.
+
 config NVRAM
 	tristate "/dev/nvram support"
 	depends on X86 || HAVE_ARCH_NVRAM_OPS
