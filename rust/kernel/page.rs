@@ -7,6 +7,7 @@ use crate::{
     bindings,
     error::code::*,
     error::Result,
+    ffi::c_void,
     uaccess::UserSliceReader,
 };
 use core::{
@@ -260,6 +261,8 @@ impl Page {
     /// # Safety
     ///
     /// * Callers must ensure that `dst` is valid for writing `len` bytes.
+    /// * Callers must ensure that there are no other concurrent reads or writes to/from the
+    ///   destination memory region.
     /// * Callers must ensure that this call does not race with a write to the same page that
     ///   overlaps with this read.
     pub unsafe fn read_raw(&self, dst: *mut u8, offset: usize, len: usize) -> Result {
@@ -274,6 +277,34 @@ impl Page {
         })
     }
 
+    /// Maps the page and reads from it into the given IO memory region using byte-wise atomic
+    /// memory operations.
+    ///
+    /// This method will perform bounds checks on the page offset. If `offset .. offset+len` goes
+    /// outside of the page, then this call returns [`EINVAL`].
+    ///
+    /// # Safety
+    /// Callers must ensure that:
+    ///
+    /// - `dst` is valid for writes for `len` bytes for the duration of the call.
+    /// - For the duration of the call, other accesses to the area described by `dst` and `len`,
+    ///   must not cause data races (defined by [`LKMM`]) against atomic operations executed by this
+    ///   function. Note that if all other accesses are atomic, then this safety requirement is
+    ///   trivially fulfilled.
+    ///
+    /// [`LKMM`]: srctree/tools/memory-model
+    pub unsafe fn read_bytewise_atomic(&self, dst: *mut u8, offset: usize, len: usize) -> Result {
+        self.with_pointer_into_page(offset, len, move |src| {
+            // SAFETY: If `with_pointer_into_page` calls into this closure, then
+            // it has performed a bounds check and guarantees that `src` is
+            // valid for `len` bytes.
+            //
+            // There caller guarantees that there is no data race at the source.
+            unsafe { bindings::memcpy_toio(dst.cast::<c_void>(), src.cast::<c_void>(), len) };
+            Ok(())
+        })
+    }
+
     /// Maps the page and writes into it from the given buffer.
     ///
     /// This method will perform bounds checks on the page offset. If `offset .. offset+len` goes
@@ -282,6 +313,7 @@ impl Page {
     /// # Safety
     ///
     /// * Callers must ensure that `src` is valid for reading `len` bytes.
+    /// * Callers must ensure that there are no concurrent writes to the source memory region.
     /// * Callers must ensure that this call does not race with a read or write to the same page
     ///   that overlaps with this write.
     pub unsafe fn write_raw(&self, src: *const u8, offset: usize, len: usize) -> Result {
@@ -291,6 +323,39 @@ impl Page {
             //
             // There caller guarantees that there is no data race.
             unsafe { ptr::copy_nonoverlapping(src, dst, len) };
+            Ok(())
+        })
+    }
+
+    /// Maps the page and writes into it from the given IO memory region using byte-wise atomic
+    /// memory operations.
+    ///
+    /// This method will perform bounds checks on the page offset. If `offset .. offset+len` goes
+    /// outside of the page, then this call returns [`EINVAL`].
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that:
+    ///
+    /// - `src` is valid for reads for `len` bytes for the duration of the call.
+    /// - For the duration of the call, other accesses to the area described by `src` and `len`,
+    ///   must not cause data races (defined by [`LKMM`]) against atomic operations executed by this
+    ///   function. Note that if all other accesses are atomic, then this safety requirement is
+    ///   trivially fulfilled.
+    ///
+    /// [`LKMM`]: srctree/tools/memory-model
+    pub unsafe fn write_bytewise_atomic(
+        &self,
+        src: *const u8,
+        offset: usize,
+        len: usize,
+    ) -> Result {
+        self.with_pointer_into_page(offset, len, move |dst| {
+            // SAFETY: If `with_pointer_into_page` calls into this closure, then it has performed a
+            // bounds check and guarantees that `dst` is valid for `len` bytes.
+            //
+            // There caller guarantees that there is no data race at the destination.
+            unsafe { bindings::memcpy_fromio(dst.cast::<c_void>(), src.cast::<c_void>(), len) };
             Ok(())
         })
     }
