@@ -122,6 +122,11 @@ pub(crate) trait MessageFromGsp: Sized {
 /// Number of GSP pages making the [`Msgq`].
 pub(crate) const MSGQ_NUM_PAGES: u32 = 0x3f;
 
+/// Maximum size of a single GSP command in bytes.
+///
+/// A single command can span up to 16 GSP pages.
+pub(crate) const MSGQ_MSG_SIZE_MAX: usize = GSP_PAGE_SIZE * 16;
+
 /// Circular buffer of a [`Msgq`].
 ///
 /// This area of memory is to be shared between the driver and the GSP to exchange commands or
@@ -329,8 +334,11 @@ impl DmaGspMem {
     /// # Errors
     ///
     /// - `ETIMEDOUT` if space does not become available within the timeout.
-    /// - `EIO` if the command header is not properly aligned.
+    /// - `EIO` if the command header is not properly aligned or sizing is impossible.
     fn allocate_command_with_timeout(&mut self, size: usize) -> Result<GspCommand<'_>> {
+        if size_of::<GspMsgElement>() + size > MSGQ_MSG_SIZE_MAX {
+            return Err(EIO);
+        }
         read_poll_timeout(
             || Ok(self.driver_bytes_available_to_write()),
             |available_bytes| *available_bytes >= size_of::<GspMsgElement>() + size,
