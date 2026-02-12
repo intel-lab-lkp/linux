@@ -55,7 +55,7 @@ config DRM_DRAW
 
 config DRM_PANIC
 	bool "Display a user-friendly message when a kernel panic occurs"
-	depends on DRM
+	depends on DRM && PRINTK
 	select FONT_SUPPORT
 	select DRM_DRAW
 	help
