@@ -618,11 +618,11 @@ void rtw_reset_drv_sw(struct adapter *padapter)
 	padapter->xmitpriv.tx_pkts = 0;
 	padapter->recvpriv.rx_pkts = 0;
 
-	pmlmepriv->link_detect_info.bBusyTraffic = false;
+	pmlmepriv->link_detect_info.busy_traffic = false;
 
 	/* pmlmepriv->link_detect_info.TrafficBusyState = false; */
-	pmlmepriv->link_detect_info.TrafficTransitionCount = 0;
-	pmlmepriv->link_detect_info.LowPowerTransitionCount = 0;
+	pmlmepriv->link_detect_info.traffic_transition_count = 0;
+	pmlmepriv->link_detect_info.low_power_transition_count = 0;
 
 	_clr_fwstate_(pmlmepriv, _FW_UNDER_SURVEY | _FW_UNDER_LINKING);
 

@@ -1231,7 +1231,7 @@ static int cfg80211_rtw_scan(struct wiphy *wiphy
 		goto check_need_indicate_scan_done;
 	}
 
-	if (pmlmepriv->link_detect_info.bBusyTraffic == true) {
+	if (pmlmepriv->link_detect_info.busy_traffic == true) {
 		static unsigned long lastscantime;
 		unsigned long passtime;
 
