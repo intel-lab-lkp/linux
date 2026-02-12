@@ -17,6 +17,7 @@
      * there is no change to the symbol definition.
      */
     #define VISIBLE_IF_KUNIT
+    #define INLINE_VISIBLE_IF_KUNIT
     /**
      * EXPORT_SYMBOL_IF_KUNIT(symbol) - Exports symbol into
      * EXPORTED_FOR_KUNIT_TESTING namespace only if CONFIG_KUNIT is
@@ -27,6 +28,7 @@
     #define EXPORT_SYMBOL_IF_KUNIT(symbol) EXPORT_SYMBOL_NS(symbol, "EXPORTED_FOR_KUNIT_TESTING")
 #else
     #define VISIBLE_IF_KUNIT static
+    #define INLINE_VISIBLE_IF_KUNIT static inline
     #define EXPORT_SYMBOL_IF_KUNIT(symbol)
 #endif
 
