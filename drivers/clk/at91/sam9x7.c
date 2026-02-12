@@ -569,6 +569,15 @@ static const struct {
 	},
 
 	{
+		.n = "gmac_gclk",
+		.id = 24,
+		.pp = { "audiopll_divpmcck", "plla_div2pmcck", },
+		.pp_mux_table = { 6, 8, },
+		.pp_count = 2,
+		.pp_chg_id = INT_MIN,
+	},
+
+	{
 		.n = "lcd_gclk",
 		.id = 25,
 		.r = { .max = 75000000 },
