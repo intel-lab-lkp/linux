@@ -217,6 +217,21 @@ static void reduce_interleave_weights(unsigned int *bw, u8 *new_iw)
 		new_iw[nid] /= iw_gcd;
 }
 
+#define CHECK_MPOL_NODE_STAT_OFFSET(mpol) \
+	BUILD_BUG_ON(PGALLOC_##mpol - mpol != PGALLOC_MPOL_DEFAULT)
+
+static enum node_stat_item mpol_node_stat(unsigned short mode)
+{
+	CHECK_MPOL_NODE_STAT_OFFSET(MPOL_PREFERRED);
+	CHECK_MPOL_NODE_STAT_OFFSET(MPOL_BIND);
+	CHECK_MPOL_NODE_STAT_OFFSET(MPOL_INTERLEAVE);
+	CHECK_MPOL_NODE_STAT_OFFSET(MPOL_LOCAL);
+	CHECK_MPOL_NODE_STAT_OFFSET(MPOL_PREFERRED_MANY);
+	CHECK_MPOL_NODE_STAT_OFFSET(MPOL_WEIGHTED_INTERLEAVE);
+
+	return PGALLOC_MPOL_DEFAULT + mode;
+}
+
 int mempolicy_set_node_perf(unsigned int node, struct access_coordinate *coords)
 {
 	struct weighted_interleave_state *new_wi_state, *old_wi_state = NULL;
@@ -2445,8 +2460,14 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
-	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+	if (pol->mode == MPOL_PREFERRED_MANY) {
+		page = alloc_pages_preferred_many(gfp, order, nid, nodemask);
+		if (page)
+			__mod_node_page_state(page_pgdat(page),
+					mpol_node_stat(MPOL_PREFERRED_MANY), 1 << order);
+
+		return page;
+	}
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -2471,6 +2492,9 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 			page = __alloc_frozen_pages_noprof(
 				gfp | __GFP_THISNODE | __GFP_NORETRY, order,
 				nid, NULL);
+			if (page)
+				__mod_node_page_state(page_pgdat(page),
+						mpol_node_stat(pol->mode), 1 << order);
 			if (page || !(gfp & __GFP_DIRECT_RECLAIM))
 				return page;
 			/*
@@ -2483,6 +2507,8 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 	}
 
 	page = __alloc_frozen_pages_noprof(gfp, order, nid, nodemask);
+	if (page)
+		__mod_node_page_state(page_pgdat(page), mpol_node_stat(pol->mode), 1 << order);
 
 	if (unlikely(pol->mode == MPOL_INTERLEAVE ||
 		     pol->mode == MPOL_WEIGHTED_INTERLEAVE) && page) {

@@ -1276,6 +1276,15 @@ const char * const vmstat_text[] = {
 	[I(PGDEMOTE_DIRECT)]			= "pgdemote_direct",
 	[I(PGDEMOTE_KHUGEPAGED)]		= "pgdemote_khugepaged",
 	[I(PGDEMOTE_PROACTIVE)]			= "pgdemote_proactive",
+#ifdef CONFIG_NUMA
+	[I(PGALLOC_MPOL_DEFAULT)]		= "pgalloc_mpol_default",
+	[I(PGALLOC_MPOL_PREFERRED)]		= "pgalloc_mpol_preferred",
+	[I(PGALLOC_MPOL_BIND)]			= "pgalloc_mpol_bind",
+	[I(PGALLOC_MPOL_INTERLEAVE)]		= "pgalloc_mpol_interleave",
+	[I(PGALLOC_MPOL_LOCAL)]			= "pgalloc_mpol_local",
+	[I(PGALLOC_MPOL_PREFERRED_MANY)]	= "pgalloc_mpol_preferred_many",
+	[I(PGALLOC_MPOL_WEIGHTED_INTERLEAVE)]	= "pgalloc_mpol_weighted_interleave",
+#endif
 #ifdef CONFIG_HUGETLB_PAGE
 	[I(NR_HUGETLB)]				= "nr_hugetlb",
 #endif
