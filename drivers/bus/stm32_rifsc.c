@@ -73,7 +73,6 @@
 #define RIF_CID0			0x0
 #define RIF_CID1			0x1
 
-#if defined(CONFIG_DEBUG_FS)
 #define RIFSC_RISUP_ENTRIES		128
 #define RIFSC_RIMU_ENTRIES		16
 #define RIFSC_RISAL_SUBREGIONS		2
@@ -434,18 +433,19 @@ struct rifsc_dbg_private {
 	unsigned int nb_risal;
 };
 
-static const struct stm32_rifsc_resources_names rifsc_mp21_res_names = {
+static const struct __maybe_unused stm32_rifsc_resources_names rifsc_mp21_res_names = {
 	.device_names = stm32mp21_rifsc_risup_names,
 	.initiator_names = stm32mp21_rifsc_rimu_names,
 };
 
-static const struct stm32_rifsc_resources_names rifsc_mp25_res_names = {
+static const struct __maybe_unused stm32_rifsc_resources_names rifsc_mp25_res_names = {
 	.device_names = stm32mp25_rifsc_risup_names,
 	.initiator_names = stm32mp25_rifsc_rimu_names,
 };
 
-static void stm32_rifsc_fill_rimu_dbg_entry(struct rifsc_dbg_private *rifsc,
-					    struct rifsc_rimu_debug_data *dbg_entry, int i)
+static void __maybe_unused stm32_rifsc_fill_rimu_dbg_entry(struct rifsc_dbg_private *rifsc,
+							   struct rifsc_rimu_debug_data *dbg_entry,
+							   int i)
 {
 	const struct stm32_rifsc_resources_names *dbg_names = rifsc->res_names;
 	u32 rimc_attr = readl_relaxed(rifsc->mmio + RIFSC_RIMC_ATTR0 + 0x4 * i);
@@ -457,8 +457,9 @@ static void stm32_rifsc_fill_rimu_dbg_entry(struct rifsc_dbg_private *rifsc,
 	dbg_entry->m_priv = rimc_attr & RIFSC_RIMC_MPRIV;
 }
 
-static void stm32_rifsc_fill_dev_dbg_entry(struct rifsc_dbg_private *rifsc,
-					   struct rifsc_risup_debug_data *dbg_entry, int i)
+static void __maybe_unused stm32_rifsc_fill_dev_dbg_entry(struct rifsc_dbg_private *rifsc,
+							  struct rifsc_risup_debug_data *dbg_entry,
+							  int i)
 {
 	const struct stm32_rifsc_resources_names *dbg_names = rifsc->res_names;
 	u32 cid_cfgr, sec_cfgr, priv_cfgr;
@@ -481,9 +482,9 @@ static void stm32_rifsc_fill_dev_dbg_entry(struct rifsc_dbg_private *rifsc,
 }
 
 
-static void stm32_rifsc_fill_subreg_dbg_entry(struct rifsc_dbg_private *rifsc,
-					      struct rifsc_subreg_debug_data *dbg_entry, int i,
-					      int j)
+static void __maybe_unused
+stm32_rifsc_fill_subreg_dbg_entry(struct rifsc_dbg_private *rifsc,
+				  struct rifsc_subreg_debug_data *dbg_entry, int i, int j)
 {
 	u32 risc_xcfgr = readl_relaxed(rifsc->mmio + RIFSC_RISC_REG0_ACFGR + 0x10 * i + 0x8 * j);
 	u32 risc_xaddr;
@@ -503,7 +504,7 @@ static void stm32_rifsc_fill_subreg_dbg_entry(struct rifsc_dbg_private *rifsc,
 	}
 }
 
-static int stm32_rifsc_conf_dump_show(struct seq_file *s, void *data)
+static int __maybe_unused stm32_rifsc_conf_dump_show(struct seq_file *s, void *data)
 {
 	struct rifsc_dbg_private *rifsc = (struct rifsc_dbg_private *)s->private;
 	int i, j;
@@ -603,8 +604,9 @@ static int stm32_rifsc_conf_dump_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(stm32_rifsc_conf_dump);
 
-static int stm32_rifsc_register_debugfs(struct stm32_firewall_controller *rifsc_controller,
-					u32 nb_risup, u32 nb_rimu, u32 nb_risal)
+static int __maybe_unused
+stm32_rifsc_register_debugfs(struct stm32_firewall_controller *rifsc_controller, u32 nb_risup,
+			     u32 nb_rimu, u32 nb_risal)
 {
 	struct rifsc_dbg_private *rifsc_priv;
 	struct dentry *root = NULL;
@@ -630,7 +632,6 @@ static int stm32_rifsc_register_debugfs(struct stm32_firewall_controller *rifsc_
 
 	return 0;
 }
-#endif /* defined(CONFIG_DEBUG_FS) */
 
 static bool stm32_rifsc_is_semaphore_available(void __iomem *addr)
 {
@@ -800,11 +801,12 @@ static int stm32_rifsc_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-#if defined(CONFIG_DEBUG_FS)
-	rc = stm32_rifsc_register_debugfs(rifsc_controller, nb_risup, nb_rimu, nb_risal);
-	if (rc)
-		return dev_err_probe(rifsc_controller->dev, rc, "Failed creating debugfs entry\n");
-#endif
+	if (IS_ENABLED(CONFIG_STM32_FIREWALL_DEBUG)) {
+		rc = stm32_rifsc_register_debugfs(rifsc_controller, nb_risup, nb_rimu, nb_risal);
+		if (rc)
+			return dev_err_probe(rifsc_controller->dev, rc,
+					     "Failed creating debugfs entry\n");
+	}
 
 	/* Populate all allowed nodes */
 	return of_platform_populate(np, NULL, NULL, &pdev->dev);
@@ -813,15 +815,11 @@ static int stm32_rifsc_probe(struct platform_device *pdev)
 static const struct of_device_id stm32_rifsc_of_match[] = {
 	{
 		.compatible = "st,stm32mp25-rifsc",
-#if defined(CONFIG_DEBUG_FS)
-		.data = &rifsc_mp25_res_names,
-#endif
+		.data = PTR_IF(IS_ENABLED(CONFIG_STM32_FIREWALL_DEBUG), &rifsc_mp25_res_names),
 	},
 	{
 		.compatible = "st,stm32mp21-rifsc",
-#if defined(CONFIG_DEBUG_FS)
-		.data = &rifsc_mp21_res_names,
-#endif
+		.data = PTR_IF(IS_ENABLED(CONFIG_STM32_FIREWALL_DEBUG), &rifsc_mp21_res_names)
 	},
 	{}
 };
