@@ -1143,51 +1143,51 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 	if ((check_fwstate(pmlmepriv, _FW_LINKED))
 		/*&& !MgntInitAdapterInProgress(pMgntInfo)*/) {
 		/*  if we raise bBusyTraffic in last watchdog, using lower threshold. */
-		if (pmlmepriv->LinkDetectInfo.bBusyTraffic)
+		if (pmlmepriv->link_detect_info.bBusyTraffic)
 			BusyThreshold = BusyThresholdLow;
 
-		if (pmlmepriv->LinkDetectInfo.NumRxOkInPeriod > BusyThreshold ||
-		    pmlmepriv->LinkDetectInfo.NumTxOkInPeriod > BusyThreshold) {
+		if (pmlmepriv->link_detect_info.NumRxOkInPeriod > BusyThreshold ||
+		    pmlmepriv->link_detect_info.NumTxOkInPeriod > BusyThreshold) {
 			bBusyTraffic = true;
 
-			if (pmlmepriv->LinkDetectInfo.NumRxOkInPeriod > pmlmepriv->LinkDetectInfo.NumTxOkInPeriod)
+			if (pmlmepriv->link_detect_info.NumRxOkInPeriod > pmlmepriv->link_detect_info.NumTxOkInPeriod)
 				bRxBusyTraffic = true;
 			else
 				bTxBusyTraffic = true;
 		}
 
 		/*  Higher Tx/Rx data. */
-		if (pmlmepriv->LinkDetectInfo.NumRxOkInPeriod > 4000 ||
-		    pmlmepriv->LinkDetectInfo.NumTxOkInPeriod > 4000) {
+		if (pmlmepriv->link_detect_info.NumRxOkInPeriod > 4000 ||
+		    pmlmepriv->link_detect_info.NumTxOkInPeriod > 4000) {
 			bHigherBusyTraffic = true;
 
-			if (pmlmepriv->LinkDetectInfo.NumRxOkInPeriod > pmlmepriv->LinkDetectInfo.NumTxOkInPeriod)
+			if (pmlmepriv->link_detect_info.NumRxOkInPeriod > pmlmepriv->link_detect_info.NumTxOkInPeriod)
 				bHigherBusyRxTraffic = true;
 			else
 				bHigherBusyTxTraffic = true;
 		}
 
 		/*  check traffic for  powersaving. */
-		if (((pmlmepriv->LinkDetectInfo.NumRxUnicastOkInPeriod + pmlmepriv->LinkDetectInfo.NumTxOkInPeriod) > 8) ||
-		    (pmlmepriv->LinkDetectInfo.NumRxUnicastOkInPeriod > 2)) {
+		if (((pmlmepriv->link_detect_info.NumRxUnicastOkInPeriod + pmlmepriv->link_detect_info.NumTxOkInPeriod) > 8) ||
+		    (pmlmepriv->link_detect_info.NumRxUnicastOkInPeriod > 2)) {
 			bEnterPS = false;
 
 			if (bBusyTraffic) {
-				if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount <= 4)
-					pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 4;
+				if (pmlmepriv->link_detect_info.TrafficTransitionCount <= 4)
+					pmlmepriv->link_detect_info.TrafficTransitionCount = 4;
 
-				pmlmepriv->LinkDetectInfo.TrafficTransitionCount++;
+				pmlmepriv->link_detect_info.TrafficTransitionCount++;
 
-				if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount > 30/*TrafficTransitionLevel*/)
-					pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 30;
+				if (pmlmepriv->link_detect_info.TrafficTransitionCount > 30/*TrafficTransitionLevel*/)
+					pmlmepriv->link_detect_info.TrafficTransitionCount = 30;
 			}
 		} else {
-			if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount >= 2)
-				pmlmepriv->LinkDetectInfo.TrafficTransitionCount -= 2;
+			if (pmlmepriv->link_detect_info.TrafficTransitionCount >= 2)
+				pmlmepriv->link_detect_info.TrafficTransitionCount -= 2;
 			else
-				pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 0;
+				pmlmepriv->link_detect_info.TrafficTransitionCount = 0;
 
-			if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount == 0)
+			if (pmlmepriv->link_detect_info.TrafficTransitionCount == 0)
 				bEnterPS = true;
 		}
 
@@ -1212,15 +1212,15 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 			LPS_Leave(padapter, "NON_LINKED");
 	}
 
-	pmlmepriv->LinkDetectInfo.NumRxOkInPeriod = 0;
-	pmlmepriv->LinkDetectInfo.NumTxOkInPeriod = 0;
-	pmlmepriv->LinkDetectInfo.NumRxUnicastOkInPeriod = 0;
-	pmlmepriv->LinkDetectInfo.bBusyTraffic = bBusyTraffic;
-	pmlmepriv->LinkDetectInfo.bTxBusyTraffic = bTxBusyTraffic;
-	pmlmepriv->LinkDetectInfo.bRxBusyTraffic = bRxBusyTraffic;
-	pmlmepriv->LinkDetectInfo.bHigherBusyTraffic = bHigherBusyTraffic;
-	pmlmepriv->LinkDetectInfo.bHigherBusyRxTraffic = bHigherBusyRxTraffic;
-	pmlmepriv->LinkDetectInfo.bHigherBusyTxTraffic = bHigherBusyTxTraffic;
+	pmlmepriv->link_detect_info.NumRxOkInPeriod = 0;
+	pmlmepriv->link_detect_info.NumTxOkInPeriod = 0;
+	pmlmepriv->link_detect_info.NumRxUnicastOkInPeriod = 0;
+	pmlmepriv->link_detect_info.bBusyTraffic = bBusyTraffic;
+	pmlmepriv->link_detect_info.bTxBusyTraffic = bTxBusyTraffic;
+	pmlmepriv->link_detect_info.bRxBusyTraffic = bRxBusyTraffic;
+	pmlmepriv->link_detect_info.bHigherBusyTraffic = bHigherBusyTraffic;
+	pmlmepriv->link_detect_info.bHigherBusyRxTraffic = bHigherBusyRxTraffic;
+	pmlmepriv->link_detect_info.bHigherBusyTxTraffic = bHigherBusyTxTraffic;
 
 	return bEnterPS;
 }
