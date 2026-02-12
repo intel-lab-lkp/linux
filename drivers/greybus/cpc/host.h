@@ -18,9 +18,7 @@ struct cpc_cport;
 struct cpc_host_device;
 
 struct cpc_hd_driver {
-	int (*message_send)(struct cpc_host_device *hd, u16 dest_cport_id,
-			    struct gb_message *message, gfp_t gfp_mask);
-	void (*message_cancel)(struct gb_message *message);
+	int (*transmit)(struct cpc_host_device *hd, struct sk_buff *skb);
 };
 
 /**
@@ -48,5 +46,8 @@ int cpc_hd_add(struct cpc_host_device *cpc_hd);
 void cpc_hd_put(struct cpc_host_device *cpc_hd);
 void cpc_hd_del(struct cpc_host_device *cpc_hd);
 void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, u16 cport_id, u8 *data, size_t length);
+void cpc_hd_message_sent(struct sk_buff *skb, int status);
+
+int cpc_hd_send_skb(struct cpc_host_device *cpc_hd, struct sk_buff *skb);
 
 #endif
