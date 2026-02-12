@@ -171,8 +171,16 @@ pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
 		goto out;
 	}
 
+	/*
+	 * Clear both DPC Trigger Status and DPC Interrupt Status.  In the
+	 * native DPC path, dpc_irq() already clears Interrupt Status before
+	 * the threaded handler runs.  But in the EDR (firmware-first) path,
+	 * dpc_irq() is never called, so Interrupt Status must be cleared
+	 * here to prevent it from remaining stale indefinitely.
+	 */
 	pci_write_config_word(pdev, cap + PCI_EXP_DPC_STATUS,
-			      PCI_EXP_DPC_STATUS_TRIGGER);
+			      PCI_EXP_DPC_STATUS_TRIGGER |
+			      PCI_EXP_DPC_STATUS_INTERRUPT);
 
 	if (pci_bridge_wait_for_secondary_bus(pdev, "DPC")) {
 		clear_bit(PCI_DPC_RECOVERED, &pdev->priv_flags);
