@@ -1150,7 +1150,8 @@ bool traffic_status_watchdog(struct adapter *padapter, bool from_timer)
 		    pmlmepriv->link_detect_info.num_tx_ok_in_period > busy_threshold) {
 			busy_traffic = true;
 
-			if (pmlmepriv->link_detect_info.num_rx_ok_in_period > pmlmepriv->link_detect_info.num_tx_ok_in_period)
+			if (pmlmepriv->link_detect_info.num_rx_ok_in_period >
+			    pmlmepriv->link_detect_info.num_tx_ok_in_period)
 				rx_busy_traffic = true;
 			else
 				tx_busy_traffic = true;
@@ -1161,14 +1162,16 @@ bool traffic_status_watchdog(struct adapter *padapter, bool from_timer)
 		    pmlmepriv->link_detect_info.num_tx_ok_in_period > 4000) {
 			higher_busy_traffic = true;
 
-			if (pmlmepriv->link_detect_info.num_rx_ok_in_period > pmlmepriv->link_detect_info.num_tx_ok_in_period)
+			if (pmlmepriv->link_detect_info.num_rx_ok_in_period >
+			    pmlmepriv->link_detect_info.num_tx_ok_in_period)
 				higher_busy_rx_traffic = true;
 			else
 				higher_busy_tx_traffic = true;
 		}
 
 		/*  check traffic for  powersaving. */
-		if (((pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period + pmlmepriv->link_detect_info.num_tx_ok_in_period) > 8) ||
+		if (((pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period +
+		      pmlmepriv->link_detect_info.num_tx_ok_in_period) > 8) ||
 		    (pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period > 2)) {
 			should_enter_ps = false;
 
