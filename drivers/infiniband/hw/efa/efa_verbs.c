@@ -579,7 +579,7 @@ static int qp_mmap_entries_setup(struct efa_qp *qp,
 
 	resp->llq_desc_offset &= ~PAGE_MASK;
 
-	if (qp->rq_size) {
+	if (qp->rq_cpu_addr) {
 		address = dev->db_bar_addr + resp->rq_db_offset;
 
 		qp->rq_db_mmap_entry =
@@ -828,7 +828,7 @@ err_remove_mmap_entries:
 err_destroy_qp:
 	efa_destroy_qp_handle(dev, create_qp_resp.qp_handle);
 err_free_mapped:
-	if (qp->rq_size)
+	if (qp->rq_cpu_addr)
 		efa_free_mapped(dev, qp->rq_cpu_addr, qp->rq_dma_addr,
 				qp->rq_size, DMA_TO_DEVICE);
 err_out:
