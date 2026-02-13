@@ -178,6 +178,7 @@ intel_dp_aux_hdr_get_backlight(struct intel_connector *connector, enum pipe pipe
 	struct intel_dp *intel_dp = enc_to_intel_dp(connector->encoder);
 	u8 tmp;
 	u8 buf[2] = {};
+	u32 level;
 
 	if (drm_dp_dpcd_readb(&intel_dp->aux, INTEL_EDP_HDR_GETSET_CTRL_PARAMS, &tmp) != 1) {
 		drm_err(display->drm,
@@ -205,7 +206,10 @@ intel_dp_aux_hdr_get_backlight(struct intel_connector *connector, enum pipe pipe
 		return 0;
 	}
 
-	return (buf[1] << 8 | buf[0]);
+	level = (buf[1] << 8 | buf[0]);
+	if (!level)
+		return panel->backlight.min;
+	return level;
 }
 
 static void
@@ -427,10 +431,13 @@ intel_dp_aux_hdr_setup_backlight(struct intel_connector *connector, enum pipe pi
 
 	if (luminance_range->max_luminance) {
 		panel->backlight.max = luminance_range->max_luminance;
-		panel->backlight.min = luminance_range->min_luminance;
+		if (luminance_range->min_luminance)
+			panel->backlight.min = luminance_range->min_luminance;
+		else
+			panel->backlight.min = (luminance_range->max_luminance * 10) / 100;
 	} else {
 		panel->backlight.max = 512;
-		panel->backlight.min = 0;
+		panel->backlight.min = 51;
 	}
 
 	intel_dp_aux_write_panel_luminance_override(connector);
