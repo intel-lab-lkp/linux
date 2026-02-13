@@ -445,6 +445,7 @@ struct ioc {
 	int				autop_idx;
 	bool				user_qos_params:1;
 	bool				user_cost_model:1;
+	bool				cost_model_linear_max:1;
 };
 
 struct iocg_pcpu_stat {
@@ -2565,7 +2566,12 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 			cost += coef_seqio;
 		}
 	}
-	cost += pages * coef_page;
+
+	if (ioc->cost_model_linear_max)
+		cost = max(cost + coef_page, pages * coef_page);
+	else
+		cost += pages * coef_page;
+
 out:
 	*costp = cost;
 }
@@ -3368,10 +3374,11 @@ static u64 ioc_cost_model_prfill(struct seq_file *sf,
 		return 0;
 
 	spin_lock(&ioc->lock);
-	seq_printf(sf, "%s ctrl=%s model=linear "
+	seq_printf(sf, "%s ctrl=%s model=%s "
 		   "rbps=%llu rseqiops=%llu rrandiops=%llu "
 		   "wbps=%llu wseqiops=%llu wrandiops=%llu\n",
 		   dname, ioc->user_cost_model ? "user" : "auto",
+		   ioc->cost_model_linear_max ? "linear-max" : "linear",
 		   u[I_LCOEF_RBPS], u[I_LCOEF_RSEQIOPS], u[I_LCOEF_RRANDIOPS],
 		   u[I_LCOEF_WBPS], u[I_LCOEF_WSEQIOPS], u[I_LCOEF_WRANDIOPS]);
 	spin_unlock(&ioc->lock);
@@ -3412,6 +3419,7 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	struct ioc *ioc;
 	u64 u[NR_I_LCOEFS];
 	bool user;
+	bool linear_max;
 	char *body, *p;
 	int ret;
 
@@ -3442,6 +3450,7 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	spin_lock_irq(&ioc->lock);
 	memcpy(u, ioc->params.i_lcoefs, sizeof(u));
 	user = ioc->user_cost_model;
+	linear_max = ioc->cost_model_linear_max;
 
 	while ((p = strsep(&body, " \t\n"))) {
 		substring_t args[MAX_OPT_ARGS];
@@ -3464,7 +3473,11 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 			continue;
 		case COST_MODEL:
 			match_strlcpy(buf, &args[0], sizeof(buf));
-			if (strcmp(buf, "linear"))
+			if (!strcmp(buf, "linear"))
+				linear_max = false;
+			else if (!strcmp(buf, "linear-max"))
+				linear_max = true;
+			else
 				goto einval;
 			continue;
 		}
@@ -3481,8 +3494,10 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	if (user) {
 		memcpy(ioc->params.i_lcoefs, u, sizeof(u));
 		ioc->user_cost_model = true;
+		ioc->cost_model_linear_max = linear_max;
 	} else {
 		ioc->user_cost_model = false;
+		ioc->cost_model_linear_max = false;
 	}
 	ioc_refresh_params(ioc, true);
 	spin_unlock_irq(&ioc->lock);
