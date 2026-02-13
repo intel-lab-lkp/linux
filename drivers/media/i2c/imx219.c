@@ -160,6 +160,9 @@
 #define IMX219_PIXEL_ARRAY_HEIGHT	2480U
 #define IMX219_NATIVE_FORMAT		MEDIA_BUS_FMT_SRGGB10_1X10
 
+#define IMX219_OUTPUT_X_SIZE_MIN	0x100
+#define IMX219_OUTPUT_Y_SIZE_MIN	0x100
+
 /* Embedded metadata stream height */
 #define IMX219_EMBEDDED_DATA_HEIGHT	2U
 
@@ -499,6 +502,45 @@ static inline u32 imx219_get_rate_factor(struct imx219 *imx219)
 		IMX219_BINNING_X2_ANALOG ? 2 : 1;
 }
 
+static void imx219_apply_binning(struct v4l2_subdev_state *state,
+				 struct v4l2_rect *crop, unsigned int index)
+{
+	struct v4l2_rect *compose =
+		v4l2_subdev_state_get_compose(state, IMX219_PAD_IMAGE);
+	struct v4l2_mbus_framefmt *source_format =
+		v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+					     IMX219_STREAM_IMAGE);
+	struct v4l2_mbus_framefmt *embedded_source_format =
+		v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+					     IMX219_STREAM_EDATA);
+	s64 binning = imx219_binning_factors[index];
+
+	crop->width = clamp(crop->width, IMX219_OUTPUT_X_SIZE_MIN *
+			    V4L2_BINNING_FACTORS_HNUM(binning),
+			    IMX219_ACTIVE_AREA_WIDTH) & ~1;
+	crop->height = clamp(crop->height, IMX219_OUTPUT_Y_SIZE_MIN *
+			     V4L2_BINNING_FACTORS_VNUM(binning),
+			     IMX219_ACTIVE_AREA_HEIGHT) & ~1;
+	crop->left = clamp((unsigned int)crop->left, IMX219_ACTIVE_AREA_LEFT,
+			   IMX219_ACTIVE_AREA_LEFT + IMX219_ACTIVE_AREA_WIDTH -
+			   crop->width);
+	crop->top = clamp((unsigned int)crop->top, IMX219_ACTIVE_AREA_TOP,
+			  IMX219_ACTIVE_AREA_TOP + IMX219_ACTIVE_AREA_HEIGHT -
+			  crop->height);
+
+	compose->width = crop->width / V4L2_BINNING_FACTORS_HNUM(binning);
+	compose->height = crop->height / V4L2_BINNING_FACTORS_VNUM(binning);
+
+	source_format->width = compose->width;
+	source_format->height = compose->height;
+
+	struct v4l2_mbus_framefmt *embedded_format =
+		v4l2_subdev_state_get_format(state, IMX219_PAD_EDATA);
+
+	embedded_format->width =
+		embedded_source_format->width = source_format->width;
+}
+
 static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct imx219 *imx219 =
@@ -531,8 +573,20 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 			return ret;
 		break;
 	}
-	case V4L2_CID_BINNING_FACTORS:
+	case V4L2_CID_BINNING_FACTORS: {
+		struct v4l2_rect *crop =
+			v4l2_subdev_state_get_crop(state, IMX219_PAD_IMAGE);
+
+		cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_H,
+			  imx219_binnings[ctrl->val].h, &ret);
+		cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_V,
+			  imx219_binnings[ctrl->val].v, &ret);
+
+		if (ctrl->val != ctrl->cur.val)
+			imx219_apply_binning(state, crop, ctrl->val);
+
 		return 0;
+	}
 	}
 
 	/*
@@ -728,8 +782,6 @@ static int imx219_init_controls(struct imx219 *imx219)
 		goto error;
 	}
 
-	imx219->binning->flags = V4L2_CTRL_FLAG_READ_ONLY;
-
 	ret = v4l2_fwnode_device_parse(&client->dev, &props);
 	if (ret)
 		goto error;
@@ -797,11 +849,6 @@ static int imx219_set_framefmt(struct imx219 *imx219,
 		  crop->top - IMX219_ACTIVE_AREA_TOP, &ret);
 	cci_write(imx219->regmap, IMX219_REG_Y_ADD_END_A,
 		  crop->top - IMX219_ACTIVE_AREA_TOP + crop->height - 1, &ret);
-
-	cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_H,
-		  imx219_binnings[imx219->binning->val].h, &ret);
-	cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_V,
-		  imx219_binnings[imx219->binning->val].v, &ret);
 
 	cci_write(imx219->regmap, IMX219_REG_X_OUTPUT_SIZE,
 		  format->width, &ret);
@@ -881,6 +928,7 @@ static int imx219_enable_streams(struct v4l2_subdev *sd,
 	/* vflip and hflip cannot change during streaming */
 	__v4l2_ctrl_grab(imx219->vflip, true);
 	__v4l2_ctrl_grab(imx219->hflip, true);
+	__v4l2_ctrl_grab(imx219->binning, true);
 
 	return 0;
 
@@ -908,6 +956,7 @@ static int imx219_disable_streams(struct v4l2_subdev *sd,
 
 	__v4l2_ctrl_grab(imx219->vflip, false);
 	__v4l2_ctrl_grab(imx219->hflip, false);
+	__v4l2_ctrl_grab(imx219->binning, false);
 
 	pm_runtime_put_autosuspend(&client->dev);
 
@@ -995,7 +1044,7 @@ static int imx219_enum_frame_size(struct v4l2_subdev *sd,
 		if (fse->code != MEDIA_BUS_FMT_META_8 || fse->index > 0)
 			return -EINVAL;
 
-		fse->min_width = IMX219_ACTIVE_AREA_WIDTH;
+		fse->min_width = IMX219_OUTPUT_X_SIZE_MIN;
 		fse->max_width = IMX219_ACTIVE_AREA_WIDTH;
 		fse->min_height = IMX219_EMBEDDED_DATA_HEIGHT;
 		fse->max_height = IMX219_EMBEDDED_DATA_HEIGHT;
@@ -1253,6 +1302,41 @@ static int imx219_get_selection(struct v4l2_subdev *sd,
 	}
 }
 
+static int imx219_set_selection(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
+				struct v4l2_subdev_state *state,
+				struct v4l2_subdev_selection *sel)
+{
+	if (!(ci && ci->caps & V4L2_SUBDEV_CLIENT_CAP_COMMON_RAW_SENSOR))
+		return -EINVAL;
+
+	/*
+	 * The embedded data stream doesn't support selection rectangles,
+	 * neither on the embedded data pad nor on the source pad.
+	 */
+	if (sel->pad != IMX219_PAD_IMAGE || sel->stream != IMX219_STREAM_IMAGE)
+		return -EINVAL;
+
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP: {
+		struct imx219 *imx219 = to_imx219(sd);
+		struct v4l2_rect *crop =
+			v4l2_subdev_state_get_crop(state, IMX219_PAD_IMAGE);
+
+		imx219_apply_binning(state, &sel->r, imx219->binning->val);
+
+		*crop = sel->r;
+
+		return 0;
+	}
+	case V4L2_SEL_TGT_COMPOSE:
+		sel->r = *v4l2_subdev_state_get_compose(state, sel->pad);
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static int imx219_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 				 struct v4l2_mbus_frame_desc *fd)
 {
@@ -1377,6 +1461,7 @@ static const struct v4l2_subdev_pad_ops imx219_pad_ops = {
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = imx219_set_pad_format,
 	.get_selection = imx219_get_selection,
+	.set_selection = imx219_set_selection,
 	.enum_frame_size = imx219_enum_frame_size,
 	.get_frame_desc = imx219_get_frame_desc,
 	.enable_streams = imx219_enable_streams,
