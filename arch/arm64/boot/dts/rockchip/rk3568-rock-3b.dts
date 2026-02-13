@@ -549,6 +549,7 @@
 };
 
 &pcie30phy {
+	phy-supply = <&vcc3v3_pi6c_03>;
 	status = "okay";
 };
 
