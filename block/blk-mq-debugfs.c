@@ -612,12 +612,14 @@ static void debugfs_create_files(struct request_queue *q, struct dentry *parent,
 				 void *data,
 				 const struct blk_mq_debugfs_attr *attr)
 {
+	unsigned int pflags = READ_ONCE(current->flags);
+
 	lockdep_assert_held(&q->debugfs_mutex);
 	/*
 	 * Creating new debugfs entries with queue freezed has the risk of
 	 * deadlock.
 	 */
-	WARN_ON_ONCE(q->mq_freeze_depth != 0);
+	WARN_ON_ONCE((q->mq_freeze_depth != 0) && !(pflags & PF_MEMALLOC_NOIO));
 	/*
 	 * debugfs_mutex should not be nested under other locks that can be
 	 * grabbed while queue is frozen.
