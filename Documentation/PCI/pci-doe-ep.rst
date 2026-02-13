@@ -289,3 +289,9 @@ When the controller driver receives an error code from
 ``pci_ep_doe_process_request()``, it sets the ERROR bit in the DOE Status
 register instead of writing a response to the read mailbox register,
 and frees the buffers.
+
+API Reference
+=============
+
+.. kernel-doc:: drivers/pci/doe-ep.c
+   :export:
