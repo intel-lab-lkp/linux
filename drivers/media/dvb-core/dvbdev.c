@@ -466,16 +466,15 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 
 	id = dvbdev_get_free_id(adap, type);
 	if (id < 0) {
-		mutex_unlock(&dvbdev_register_lock);
-		*pdvbdev = NULL;
 		pr_err("%s: couldn't find free device id\n", __func__);
-		return -ENFILE;
+		ret = -ENFILE;
+		goto error_set_pdvbdev;
 	}
 
 	*pdvbdev = dvbdev = kzalloc(sizeof(*dvbdev), GFP_KERNEL);
 	if (!dvbdev) {
-		mutex_unlock(&dvbdev_register_lock);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto error_unlock;
 	}
 
 	/*
@@ -494,19 +493,15 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 	if (!dvbdevfops) {
 		dvbdevfops = kmemdup(template->fops, sizeof(*dvbdevfops), GFP_KERNEL);
 		if (!dvbdevfops) {
-			kfree(dvbdev);
-			*pdvbdev = NULL;
-			mutex_unlock(&dvbdev_register_lock);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto error_free_dvbdev;
 		}
 
 		new_node = kzalloc(sizeof(*new_node), GFP_KERNEL);
 		if (!new_node) {
 			kfree(dvbdevfops);
-			kfree(dvbdev);
-			*pdvbdev = NULL;
-			mutex_unlock(&dvbdev_register_lock);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto error_free_dvbdev;
 		}
 
 		new_node->fops = dvbdevfops;
@@ -534,17 +529,8 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 	minor = nums2minor(adap->num, type, id);
 #endif
 	if (minor >= MAX_DVB_MINORS) {
-		if (new_node) {
-			list_del(&new_node->list_head);
-			kfree(dvbdevfops);
-			kfree(new_node);
-		}
-		list_del(&dvbdev->list_head);
-		kfree(dvbdev);
-		*pdvbdev = NULL;
-		up_write(&minor_rwsem);
-		mutex_unlock(&dvbdev_register_lock);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error_dvbdev_cleanup;
 	}
 
 	dvbdev->minor = minor;
@@ -553,18 +539,7 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 	if (ret) {
 		pr_err("%s: dvb_register_media_device failed to create the mediagraph\n",
 		       __func__);
-		if (new_node) {
-			list_del(&new_node->list_head);
-			kfree(dvbdevfops);
-			kfree(new_node);
-		}
-		dvb_media_device_free(dvbdev);
-		list_del(&dvbdev->list_head);
-		kfree(dvbdev);
-		*pdvbdev = NULL;
-		up_write(&minor_rwsem);
-		mutex_unlock(&dvbdev_register_lock);
-		return ret;
+		goto error_free_media;
 	}
 
 	clsdev = device_create(dvb_class, adap->device,
@@ -573,18 +548,8 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 	if (IS_ERR(clsdev)) {
 		pr_err("%s: failed to create device dvb%d.%s%d (%pe)\n",
 		       __func__, adap->num, dnames[type], id, clsdev);
-		if (new_node) {
-			list_del(&new_node->list_head);
-			kfree(dvbdevfops);
-			kfree(new_node);
-		}
-		dvb_media_device_free(dvbdev);
-		list_del(&dvbdev->list_head);
-		kfree(dvbdev);
-		*pdvbdev = NULL;
-		up_write(&minor_rwsem);
-		mutex_unlock(&dvbdev_register_lock);
-		return PTR_ERR(clsdev);
+		ret = PTR_ERR(clsdev);
+		goto error_free_media;
 	}
 
 	dvb_minors[minor] = dvb_device_get(dvbdev);
@@ -595,6 +560,24 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 
 	mutex_unlock(&dvbdev_register_lock);
 	return 0;
+
+error_free_media:
+	dvb_media_device_free(dvbdev);
+error_dvbdev_cleanup:
+	if (new_node) {
+		list_del(&new_node->list_head);
+		kfree(dvbdevfops);
+		kfree(new_node);
+	}
+	list_del(&dvbdev->list_head);
+	up_write(&minor_rwsem);
+error_free_dvbdev:
+	kfree(dvbdev);
+error_set_pdvbdev:
+	*pdvbdev = NULL;
+error_unlock:
+	mutex_unlock(&dvbdev_register_lock);
+	return ret;
 }
 EXPORT_SYMBOL(dvb_register_device);
 
