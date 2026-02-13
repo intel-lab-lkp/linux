@@ -17,6 +17,12 @@
 #define LWMI_ATTR_MODE_ID_MASK	GENMASK(15, 8)
 #define LWMI_ATTR_TYPE_ID_MASK	GENMASK(7, 0)
 
+#define LWMI_ATTR_ID(dev, feat, mode, type) \
+	(FIELD_PREP(LWMI_ATTR_DEV_ID_MASK, dev) | \
+	 FIELD_PREP(LWMI_ATTR_FEAT_ID_MASK, feat) | \
+	 FIELD_PREP(LWMI_ATTR_MODE_ID_MASK, mode) | \
+	 FIELD_PREP(LWMI_ATTR_TYPE_ID_MASK, type))
+
 #define LWMI_DEVICE_ID_FAN	0x04
 
 struct component_match;
