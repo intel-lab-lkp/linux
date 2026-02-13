@@ -2532,7 +2532,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 						0x11 : 1,
 				};
 
-				sd_printk(KERN_NOTICE, sdkp, "Spinning up disk...");
+				sd_printk(KERN_NOTICE, sdkp, "Spinning up disk...\n");
 				scsi_execute_cmd(sdkp->device, start_cmd,
 						 REQ_OP_DRV_IN, NULL, 0,
 						 SD_TIMEOUT, sdkp->max_retries,
@@ -2542,7 +2542,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 			}
 			/* Wait 1 second for next try */
 			msleep(1000);
-			printk(KERN_CONT ".");
+			sd_printk(KERN_NOTICE, sdkp, "Retrying to spin up disk...\n");
 
 		/*
 		 * Wait for USB flash devices with slow firmware.
@@ -2572,9 +2572,9 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 
 	if (spintime) {
 		if (scsi_status_is_good(the_result))
-			printk(KERN_CONT "ready\n");
+			sd_printk(KERN_NOTICE, sdkp, "Disk ready\n");
 		else
-			printk(KERN_CONT "not responding...\n");
+			sd_printk(KERN_WARNING, sdkp, "Disk not responding\n");
 	}
 }
 
