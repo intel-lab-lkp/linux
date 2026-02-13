@@ -398,6 +398,7 @@ struct imx219 {
 	struct v4l2_ctrl *hflip;
 	struct v4l2_ctrl *vblank;
 	struct v4l2_ctrl *hblank;
+	struct v4l2_ctrl *binning;
 
 	/* Two or Four lanes */
 	u8 lanes;
@@ -471,39 +472,32 @@ imx219_get_embedded_format_code(const struct v4l2_mbus_framefmt *format)
 	}
 }
 
-static void imx219_get_binning(struct v4l2_subdev_state *state, u8 *bin_h,
-			       u8 *bin_v)
-{
-	const struct v4l2_mbus_framefmt *format =
-		v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
-					      IMX219_STREAM_IMAGE);
-	const struct v4l2_rect *crop =
-		v4l2_subdev_state_get_crop(state, IMX219_PAD_IMAGE);
-	u32 hbin = crop->width / format->width;
-	u32 vbin = crop->height / format->height;
-
-	if (hbin == 2 && vbin == 2) {
-		*bin_h = IMX219_BINNING_X2_ANALOG;
-		*bin_v = IMX219_BINNING_X2_ANALOG;
-	} else {
-		*bin_h = IMX219_BINNING_NONE;
-		*bin_v = IMX219_BINNING_NONE;
-	}
-
-}
-
-static inline u32 imx219_get_rate_factor(struct v4l2_subdev_state *state)
-{
-	u8 bin_h, bin_v;
-
-	imx219_get_binning(state, &bin_h, &bin_v);
-
-	return (bin_h & bin_v) == IMX219_BINNING_X2_ANALOG ? 2 : 1;
-}
-
 /* -----------------------------------------------------------------------------
  * Controls
  */
+
+enum imx219_binning_factor_indices {
+	IMX219_BINNING_11,
+	IMX219_BINNING_22,
+};
+
+static const struct {
+	u8 h, v;
+} imx219_binnings[] = {
+	[IMX219_BINNING_11] = { IMX219_BINNING_NONE, IMX219_BINNING_NONE, },
+	[IMX219_BINNING_22] = { IMX219_BINNING_X2_ANALOG, IMX219_BINNING_X2_ANALOG, },
+};
+
+static const s64 imx219_binning_factors[] = {
+	[IMX219_BINNING_11] = V4L2_BINNING_FACTORS_MAKE(1, 1, 1, 1),
+	[IMX219_BINNING_22] = V4L2_BINNING_FACTORS_MAKE(2, 1, 2, 1),
+};
+
+static inline u32 imx219_get_rate_factor(struct imx219 *imx219)
+{
+	return imx219_binnings[imx219->binning->val].v ==
+		IMX219_BINNING_X2_ANALOG ? 2 : 1;
+}
 
 static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 {
@@ -518,9 +512,10 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 	state = v4l2_subdev_get_locked_active_state(&imx219->sd);
 	format = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
 					      IMX219_STREAM_IMAGE);
-	rate_factor = imx219_get_rate_factor(state);
+	rate_factor = imx219_get_rate_factor(imx219);
 
-	if (ctrl->id == V4L2_CID_VBLANK) {
+	switch (ctrl->id) {
+	case V4L2_CID_VBLANK: {
 		int exposure_max, exposure_def;
 
 		/* Update max exposure while meeting expected vblanking */
@@ -534,7 +529,10 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 					       rate_factor, exposure_def);
 		if (ret)
 			return ret;
-
+		break;
+	}
+	case V4L2_CID_BINNING_FACTORS:
+		return 0;
 	}
 
 	/*
@@ -611,6 +609,9 @@ static unsigned long imx219_get_pixel_rate(struct imx219 *imx219)
 {
 	return (imx219->lanes == 2) ? IMX219_PIXEL_RATE : IMX219_PIXEL_RATE_4LANE;
 }
+
+static_assert(ARRAY_SIZE(imx219_binnings) ==
+	      ARRAY_SIZE(imx219_binning_factors));
 
 /* Initialize control handlers */
 static int imx219_init_controls(struct imx219 *imx219)
@@ -714,12 +715,20 @@ static int imx219_init_controls(struct imx219 *imx219)
 	v4l2_ctrl_new_std(ctrl_hdlr, NULL, V4L2_CID_CONFIG_MODEL,
 			  0, V4L2_CONFIG_MODEL_COMMON_RAW_SENSOR,
 			  0, V4L2_CONFIG_MODEL_COMMON_RAW_SENSOR);
+	imx219->binning =
+		v4l2_ctrl_new_int_menu(ctrl_hdlr, &imx219_ctrl_ops,
+				       V4L2_CID_BINNING_FACTORS,
+				       ARRAY_SIZE(imx219_binning_factors) - 1,
+				       IMX219_BINNING_11,
+				       imx219_binning_factors);
 
 	if (ctrl_hdlr->error) {
 		ret = ctrl_hdlr->error;
 		dev_err_probe(&client->dev, ret, "Control init failed\n");
 		goto error;
 	}
+
+	imx219->binning->flags = V4L2_CTRL_FLAG_READ_ONLY;
 
 	ret = v4l2_fwnode_device_parse(&client->dev, &props);
 	if (ret)
@@ -772,7 +781,6 @@ static int imx219_set_framefmt(struct imx219 *imx219,
 {
 	const struct v4l2_mbus_framefmt *format;
 	const struct v4l2_rect *crop;
-	u8 bin_h, bin_v;
 	u32 bpp;
 	int ret = 0;
 
@@ -790,9 +798,10 @@ static int imx219_set_framefmt(struct imx219 *imx219,
 	cci_write(imx219->regmap, IMX219_REG_Y_ADD_END_A,
 		  crop->top - IMX219_ACTIVE_AREA_TOP + crop->height - 1, &ret);
 
-	imx219_get_binning(state, &bin_h, &bin_v);
-	cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_H, bin_h, &ret);
-	cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_V, bin_v, &ret);
+	cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_H,
+		  imx219_binnings[imx219->binning->val].h, &ret);
+	cci_write(imx219->regmap, IMX219_REG_BINNING_MODE_V,
+		  imx219_binnings[imx219->binning->val].v, &ret);
 
 	cci_write(imx219->regmap, IMX219_REG_X_OUTPUT_SIZE,
 		  format->width, &ret);
@@ -1083,11 +1092,15 @@ static int imx219_set_pad_format_compat(struct v4l2_subdev *sd,
 		IMX219_ACTIVE_AREA_TOP;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
-		int rate_factor = imx219_get_rate_factor(state);
 		int exposure_max;
 		int exposure_def;
 		int llp_min;
 		int pixel_rate;
+
+		ret = __v4l2_ctrl_s_ctrl(imx219->binning, bin_hv == 1 ?
+					 IMX219_BINNING_11 : IMX219_BINNING_22);
+		if (ret)
+			return ret;
 
 		/* Update limits and set FPS to default */
 		ret = __v4l2_ctrl_modify_range(imx219->vblank, IMX219_VBLANK_MIN,
@@ -1103,6 +1116,7 @@ static int imx219_set_pad_format_compat(struct v4l2_subdev *sd,
 			return ret;
 
 		/* Update max exposure while meeting expected vblanking */
+		int rate_factor = imx219_get_rate_factor(imx219);
 		exposure_max = mode->fll_def -
 			IMX219_EXPOSURE_OFFSET * rate_factor;
 		exposure_def = (exposure_max < IMX219_EXPOSURE_DEFAULT) ?
@@ -1120,9 +1134,9 @@ static int imx219_set_pad_format_compat(struct v4l2_subdev *sd,
 		 * operates on two lines together. So we switch to a higher
 		 * minimum of 3560.
 		 */
-		imx219_get_binning(state, &bin_h, &bin_v);
-		llp_min = (bin_h & bin_v) == IMX219_BINNING_X2_ANALOG ?
-				  IMX219_BINNED_LLP_MIN : IMX219_LLP_MIN;
+		llp_min = imx219_binnings[imx219->binning->val].h ==
+			IMX219_BINNING_X2_ANALOG ?
+			IMX219_BINNED_LLP_MIN : IMX219_LLP_MIN;
 		ret = __v4l2_ctrl_modify_range(imx219->hblank,
 					       llp_min - mode->width,
 					       IMX219_LLP_MAX - mode->width,
