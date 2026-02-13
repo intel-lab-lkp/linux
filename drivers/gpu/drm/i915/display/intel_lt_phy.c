@@ -2141,7 +2141,13 @@ void intel_lt_phy_dump_hw_state(struct intel_display *display,
 {
 	int i, j;
 
-	drm_dbg_kms(display->drm, "lt_phy_pll_hw_state:\n");
+	drm_dbg_kms(display->drm, "lt_phy_pll_hw_state: ssc enabled: %d, tbt mode: %d\n",
+		    hw_state->ssc_enabled, hw_state->tbt_mode);
+
+	for (i = 0; i <= 12; i++)
+		drm_dbg_kms(display->drm, "addr [%d] msb = 0x%.4x, lsb = 0x%.4x\n",
+			    i, hw_state->addr_msb[i], hw_state->addr_lsb[i]);
+
 	for (i = 0; i < 3; i++) {
 		drm_dbg_kms(display->drm, "config[%d] = 0x%.4x,\n",
 			    i, hw_state->config[i]);
@@ -2196,6 +2202,9 @@ void intel_lt_phy_pll_readout_hw_state(struct intel_encoder *encoder,
 	pll_state->config[2] = intel_lt_phy_read(encoder, lane, LT_PHY_VDR_2_CONFIG);
 
 	for (i = 0; i <= 12; i++) {
+		pll_state->addr_msb[i] = intel_lt_phy_read(encoder, INTEL_LT_PHY_LANE0, LT_PHY_VDR_X_ADDR_MSB(i));
+		pll_state->addr_lsb[i] = intel_lt_phy_read(encoder, INTEL_LT_PHY_LANE0, LT_PHY_VDR_X_ADDR_LSB(i));
+
 		for (j = 3, k = 0; j >= 0; j--, k++)
 			pll_state->data[i][k] =
 				intel_lt_phy_read(encoder, INTEL_LT_PHY_LANE0,
