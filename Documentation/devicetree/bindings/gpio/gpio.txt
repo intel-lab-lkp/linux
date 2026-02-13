@@ -199,28 +199,41 @@ gpio-controller@00000000 {
 		"poweroff", "reset";
 }
 
-The GPIO chip may contain GPIO hog definitions. GPIO hogging is a mechanism
-providing automatic GPIO request and configuration as part of the
-gpio-controller's driver probe function.
+The GPIO chip may contain child nodes used for line setup at probe time:
+- gpio-hog: reserves the GPIO line as a hog and configures it.
+- gpio-line: configures the GPIO line without reserving it as a hog.
 
-Each GPIO hog definition is represented as a child node of the GPIO controller.
-Required properties:
-- gpio-hog:   A property specifying that this child node represents a GPIO hog.
+Common properties for gpio-hog and gpio-line child nodes:
 - gpios:      Store the GPIO information (id, flags, ...) for each GPIO to
 	      affect. Shall contain an integer multiple of the number of cells
 	      specified in its parent node (GPIO controller node).
-Only one of the following properties scanned in the order shown below.
-This means that when multiple properties are present they will be searched
-in the order presented below and the first match is taken as the intended
-configuration.
 - input:      A property specifying to set the GPIO direction as input.
 - output-low  A property specifying to set the GPIO direction as output with
 	      the value low.
 - output-high A property specifying to set the GPIO direction as output with
 	      the value high.
+	      When multiple line-state properties are present they are scanned
+	      in the order shown above and the first match is used.
+- gpio-line-name:
+	      Optional GPIO line name for the configured line.
+	      When present, it sets the line name for that line and overrides
+	      any existing name, including names assigned by the controller's
+	      "gpio-line-names". If not present, any existing name is left
+	      unchanged.
 
-Optional properties:
-- line-name:  The GPIO label name. If not present the node name is used.
+gpio-hog specific properties:
+- gpio-hog:   A property specifying that this child node represents a GPIO hog.
+- line-name:  Consumer label used when requesting the hogged GPIO.
+	      If not present the node name is used.
+	      This is independent from "gpio-line-name".
+At least one line-state property ("input", "output-low", or "output-high")
+must be present for gpio-hog.
+
+gpio-line specific properties:
+- gpio-line:  A property specifying that this child node represents GPIO lines
+	      to configure without hogging.
+Line-state properties are optional for gpio-line.
+When no line-state property is present, the line direction/value is left as-is.
 
 Example of two SOC GPIO banks defined as gpio-controller nodes:
 
@@ -235,6 +248,14 @@ Example of two SOC GPIO banks defined as gpio-controller nodes:
 			gpios = <6 0>;
 			output-low;
 			line-name = "foo-bar-gpio";
+			gpio-line-name = "foo-bar-line";
+		};
+
+		line_c-init {
+			gpio-line;
+			gpios = <7 0>;
+			output-high;
+			gpio-line-name = "foo-baz-gpio";
 		};
 	};
 
