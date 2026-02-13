@@ -10,8 +10,8 @@
 #include <linux/list.h>
 #include <linux/scatterlist.h>
 #include <linux/workqueue.h>
-#include <rdma/ib_verbs.h>
 
+struct ib_device;
 struct ib_ucontext;
 struct ib_umem_odp;
 struct dma_buf_attach_ops;
