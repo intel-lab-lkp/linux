@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/input/gpio-charlieplex-keypad.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: GPIO charlieplex keypad
+
+maintainers:
+  - Hugo Villeneuve <hvilleneuve@dimonoff.com>
+
+description:
+  The charlieplex keypad supports N^2)-N different key combinations (where N is
+  the number of lines). Key presses and releases are detected by configuring
+  only one line as output at a time, and reading other line states. This process
+  is repeated for each line.
+  This mechanism doesn't allow to detect simultaneous key presses.
+
+allOf:
+  - $ref: input.yaml#
+  - $ref: /schemas/input/matrix-keymap.yaml#
+
+properties:
+  compatible:
+    const: gpio-charlieplex-keypad
+
+  autorepeat: true
+
+  line-scan-delay-us:
+    description:
+      Delay, measured in microseconds, that is needed
+      before we can scan keypad after activating one line.
+    default: 0
+
+  line-gpios:
+    description:
+      List of GPIOs used as lines. The gpio specifier for this property
+      depends on the gpio controller to which these lines are connected.
+
+  linux,keymap: true
+
+  debounce-delay-ms:
+    description: Debounce interval in milliseconds.
+    default: 5
+
+  poll-interval: true
+
+  wakeup-source: true
+
+required:
+  - compatible
+  - line-gpios
+  - linux,keymap
+  - poll-interval
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/input/input.h>
+
+    charlieplex-keypad {
+        compatible = "gpio-charlieplex-keypad";
+        debounce-delay-ms = <20>;
+        poll-interval = <5>;
+        line-scan-delay-us = <2>;
+
+        line-gpios = <&gpio2 25 0
+                      &gpio2 26 0
+                      &gpio2 27 0>;
+
+        /* MATRIX_KEY(output, input, key-code) */
+        linux,keymap = <
+            MATRIX_KEY(0, 1, KEY_F1)
+            MATRIX_KEY(0, 2, KEY_F2)
+            MATRIX_KEY(1, 0, KEY_F3)
+            MATRIX_KEY(1, 2, KEY_F4)
+            MATRIX_KEY(2, 0, KEY_F5)
+            MATRIX_KEY(2, 1, KEY_F6)
+        >;
+    };
