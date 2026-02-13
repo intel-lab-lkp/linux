@@ -165,6 +165,7 @@ struct pci_epc_mem {
  * @domain_nr: PCI domain number of the endpoint controller
  * @init_complete: flag to indicate whether the EPC initialization is complete
  *                 or not
+ * @doe_mbs: array of DOE mailboxes (CONFIG_PCI_DOE_EP)
  */
 struct pci_epc {
 	struct device			dev;
@@ -182,6 +183,9 @@ struct pci_epc {
 	unsigned long			function_num_map;
 	int				domain_nr;
 	bool				init_complete;
+#ifdef CONFIG_PCI_DOE_EP
+	struct xarray			doe_mbs;
+#endif
 };
 
 /**

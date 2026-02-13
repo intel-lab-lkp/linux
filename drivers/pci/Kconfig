@@ -146,6 +146,20 @@ config PCI_DOE
 	  Say Y here if you want be able to communicate with PCIe DOE
 	  mailboxes.
 
+config PCI_DOE_EP
+	bool "PCI Endpoint Data Object Exchange (DOE) support"
+	depends on PCI_ENDPOINT
+	help
+	  This enables support for Data Object Exchange (DOE) protocol
+	  on PCI Endpoint controllers. It provides a communication
+	  mechanism through mailboxes, primarily used for PCIe security
+	  features.
+
+	  Say Y here if you want be able to communicate using PCIe DOE
+	  mailboxes.
+
+	  If unsure, say N.
+
 config PCI_ECAM
 	bool
 
