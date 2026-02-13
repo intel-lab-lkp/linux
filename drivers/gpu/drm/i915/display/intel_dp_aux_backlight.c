@@ -456,7 +456,11 @@ static u32 intel_dp_aux_vesa_get_backlight(struct intel_connector *connector, en
 		}
 
 		val |= buf[0] | buf[1] << 8 | buf[2] << 16;
-		return val / 1000;
+		val = val / 1000;
+		if (!val)
+			return panel->backlight.min;
+
+		return val;
 	}
 
 	return connector->panel.backlight.level;
@@ -557,10 +561,14 @@ static int intel_dp_aux_vesa_setup_backlight(struct intel_connector *connector, 
 	if (panel->backlight.edp.vesa.info.luminance_set) {
 		if (luminance_range->max_luminance) {
 			panel->backlight.max = panel->backlight.edp.vesa.info.max;
-			panel->backlight.min = luminance_range->min_luminance;
+			if (luminance_range->min_luminance)
+				panel->backlight.min = luminance_range->min_luminance;
+			else
+				panel->backlight.min = (luminance_range->max_luminance * 10) / 100;
+
 		} else {
 			panel->backlight.max = 512;
-			panel->backlight.min = 0;
+			panel->backlight.min = 51;
 		}
 		panel->backlight.level = intel_dp_aux_vesa_get_backlight(connector, 0);
 		panel->backlight.enabled = panel->backlight.level != 0;
