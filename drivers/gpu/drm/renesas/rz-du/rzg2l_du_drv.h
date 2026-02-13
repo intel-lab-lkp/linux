@@ -20,8 +20,12 @@
 struct device;
 struct drm_property;
 
+#define RZG2L_DU_FEATURE_SMUX2_DSI_CLK	BIT(0)	/* Per output mux */
+
 enum rzg2l_du_output {
 	RZG2L_DU_OUTPUT_DSI0,
+	RZG2L_DU_OUTPUT_LVDS0,
+	RZG2L_DU_OUTPUT_LVDS1,
 	RZG2L_DU_OUTPUT_DPAD0,
 	RZG2L_DU_OUTPUT_MAX,
 };
@@ -42,10 +46,12 @@ struct rzg2l_du_output_routing {
 
 /*
  * struct rzg2l_du_device_info - DU model-specific information
+ * @features: device features (RZG2L_DU_FEATURE_*)
  * @channels_mask: bit mask of available DU channels
  * @routes: array of CRTC to output routes, indexed by output (RZG2L_DU_OUTPUT_*)
  */
 struct rzg2l_du_device_info {
+	unsigned int features;
 	unsigned int channels_mask;
 	struct rzg2l_du_output_routing routes[RZG2L_DU_OUTPUT_MAX];
 };
@@ -71,6 +77,12 @@ struct rzg2l_du_device {
 static inline struct rzg2l_du_device *to_rzg2l_du_device(struct drm_device *dev)
 {
 	return container_of(dev, struct rzg2l_du_device, ddev);
+}
+
+static inline bool rzg2l_du_has(struct rzg2l_du_device *rcdu,
+				unsigned int feature)
+{
+	return rcdu->info->features & feature;
 }
 
 const char *rzg2l_du_output_name(enum rzg2l_du_output output);
