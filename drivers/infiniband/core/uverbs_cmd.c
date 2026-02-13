@@ -1032,6 +1032,9 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	if (cmd->comp_vector >= attrs->ufile->device->num_comp_vectors)
 		return -EINVAL;
 
+	if (!cmd->cqe)
+		return -EINVAL;
+
 	obj = (struct ib_ucq_object *)uobj_alloc(UVERBS_OBJECT_CQ, attrs,
 						 &ib_dev);
 	if (IS_ERR(obj))

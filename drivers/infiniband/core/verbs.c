@@ -2203,6 +2203,9 @@ struct ib_cq *__ib_create_cq(struct ib_device *device,
 	if (!cq)
 		return ERR_PTR(-ENOMEM);
 
+	if (WARN_ON_ONCE(!cq_attr->cqe))
+		return ERR_PTR(-EINVAL);
+
 	cq->device = device;
 	cq->comp_handler = comp_handler;
 	cq->event_handler = event_handler;

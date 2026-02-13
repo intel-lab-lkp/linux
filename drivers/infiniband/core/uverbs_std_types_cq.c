@@ -84,12 +84,15 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 
 	ret = uverbs_copy_from(&attr.comp_vector, attrs,
 			       UVERBS_ATTR_CREATE_CQ_COMP_VECTOR);
-	if (!ret)
-		ret = uverbs_copy_from(&attr.cqe, attrs,
-				       UVERBS_ATTR_CREATE_CQ_CQE);
-	if (!ret)
-		ret = uverbs_copy_from(&user_handle, attrs,
-				       UVERBS_ATTR_CREATE_CQ_USER_HANDLE);
+	if (ret)
+		return ret;
+
+	ret = uverbs_copy_from(&attr.cqe, attrs, UVERBS_ATTR_CREATE_CQ_CQE);
+	if (ret || !attr.cqe)
+		return ret ? : -EINVAL;
+
+	ret = uverbs_copy_from(&user_handle, attrs,
+			       UVERBS_ATTR_CREATE_CQ_USER_HANDLE);
 	if (ret)
 		return ret;
 
