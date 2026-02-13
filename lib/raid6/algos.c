@@ -12,6 +12,7 @@
  */
 
 #include <linux/raid/pq.h>
+#include <linux/workqueue.h>
 #ifndef __KERNEL__
 #include <sys/mman.h>
 #include <stdio.h>
@@ -166,7 +167,7 @@ static inline int raid6_choose_gen_fast(void)
 
 	if (best) {
 		raid6_call = *best;
-		pr_info("raid6: skipped pq benchmark and selected %s\n",
+		pr_info("raid6: raid6: fast selected %s, async benchmark pending\n",
 				best->name);
 	} else {
 		pr_err("raid6: No valid algorithm found even for fast selection!\n");
@@ -213,7 +214,7 @@ static inline const struct raid6_calls *raid6_gen_benchmark(
 	}
 
 	if (!best) {
-		pr_err("raid6: Yikes! No algorithm found!\n");
+		pr_warn("raid6: async benchmark failed to find any algorithm\n");
 		goto out;
 	}
 
@@ -289,24 +290,33 @@ static int raid6_choose_gen_benmark(void)
 	return ret;
 }
 
+static struct work_struct raid6_benchmark_work;
+
+static void benchmark_work_func(struct work_struct *work)
+{
+	raid6_choose_gen_benmark();
+}
+
 int __init raid6_select_algo(void)
 {
 	int ret = 0;
 	const struct raid6_recov_calls *rec_best = NULL;
 
-	/* select raid gen_syndrome functions */
-	if (!IS_ENABLED(CONFIG_RAID6_PQ_BENCHMARK))
-		ret = raid6_choose_gen_fast();
-	else
-		ret = raid6_choose_gen_benmark();
-
+	/* phase 1: synchronous fast selection generation algorithm */
+	ret = raid6_choose_gen_fast();
 	if (ret < 0)
 		goto out;
 
 	/* select raid recover functions */
 	rec_best = raid6_choose_recov();
-	if (!rec_best)
+	if (!rec_best) {
 		ret = -EINVAL;
+		goto out;
+	}
+
+	/* phase 2: asynchronous performance benchmarking */
+	INIT_WORK(&raid6_benchmark_work, benchmark_work_func);
+	schedule_work(&raid6_benchmark_work);
 
 out:
 	return ret;
@@ -314,7 +324,7 @@ out:
 
 static void raid6_exit(void)
 {
-	do { } while (0);
+	cancel_work_sync(&raid6_benchmark_work);
 }
 
 subsys_initcall(raid6_select_algo);
