@@ -209,7 +209,7 @@ static int timerlat_hist_bpf_pull_data(struct osnoise_tool *tool)
 	/* Pull histogram */
 	for (i = 0; i < data->entries; i++) {
 		err = timerlat_bpf_get_hist_value(i, value_irq, value_thread,
-						  value_user, nr_cpus);
+						  value_user);
 		if (err)
 			return err;
 		for (j = 0; j < nr_cpus; j++) {
