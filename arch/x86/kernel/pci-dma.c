@@ -34,6 +34,7 @@ int force_iommu __read_mostly = 0;
 int iommu_merge __read_mostly = 0;
 
 int no_iommu __read_mostly;
+static int x86_soft_iommu_only __read_mostly;
 /* Set this to 1 if there is a HW IOMMU in the system */
 int iommu_detected __read_mostly = 0;
 
@@ -102,9 +103,15 @@ void __init pci_iommu_alloc(void)
 		return;
 	}
 	pci_swiotlb_detect();
-	gart_iommu_hole_init();
-	amd_iommu_detect();
-	detect_intel_iommu();
+
+	if (x86_soft_iommu_only)
+		pr_info("PCI-DMA: skipping hardware IOMMU detection and allocation\n");
+	else {
+		gart_iommu_hole_init();
+		amd_iommu_detect();
+		detect_intel_iommu();
+	}
+
 	swiotlb_init(x86_swiotlb_enable, x86_swiotlb_flags);
 }
 
@@ -151,8 +158,10 @@ static __init int iommu_setup(char *p)
 			return 1;
 		}
 #ifdef CONFIG_SWIOTLB
-		if (!strncmp(p, "soft", 4))
+		if (!strncmp(p, "soft", 4)) {
 			x86_swiotlb_enable = true;
+			x86_soft_iommu_only = 1;
+		}
 #endif
 		if (!strncmp(p, "pt", 2))
 			iommu_set_default_passthrough(true);
