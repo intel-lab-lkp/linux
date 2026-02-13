@@ -23,7 +23,10 @@
 	 FIELD_PREP(LWMI_ATTR_MODE_ID_MASK, mode) | \
 	 FIELD_PREP(LWMI_ATTR_TYPE_ID_MASK, type))
 
-#define LWMI_DEVICE_ID_FAN	0x04
+enum lwmi_device_id {
+	LWMI_DEVICE_ID_CPU = 0x01,
+	LWMI_DEVICE_ID_FAN = 0x04,
+};
 
 struct component_match;
 struct device;
