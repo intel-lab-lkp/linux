@@ -49,6 +49,7 @@
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_cache.h>
 #include <rdma/ib_addr.h>
+#include <rdma/ib_umem.h>
 #include <rdma/rw.h>
 #include <rdma/lag.h>
 
@@ -2249,6 +2250,7 @@ int ib_destroy_cq_user(struct ib_cq *cq, struct ib_udata *udata)
 	if (ret)
 		return ret;
 
+	ib_umem_release(cq->umem);
 	rdma_restrack_del(&cq->res);
 	kfree(cq);
 	return ret;

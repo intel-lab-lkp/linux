@@ -1083,15 +1083,14 @@ int efa_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 		  cq->cq_idx, cq->cpu_addr, cq->size, &cq->dma_addr);
 
 	efa_destroy_cq_idx(dev, cq->cq_idx);
-	efa_cq_user_mmap_entries_remove(cq);
+	if (cq->cpu_addr)
+		efa_cq_user_mmap_entries_remove(cq);
 	if (cq->eq) {
 		xa_erase(&dev->cqs_xa, cq->cq_idx);
 		synchronize_irq(cq->eq->irq.irqn);
 	}
 
-	if (cq->umem)
-		ib_umem_release(cq->umem);
-	else
+	if (cq->cpu_addr)
 		efa_free_mapped(dev, cq->cpu_addr, cq->dma_addr, cq->size, DMA_FROM_DEVICE);
 	return 0;
 }
@@ -1212,22 +1211,20 @@ int efa_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	cq->ucontext = ucontext;
 	cq->size = PAGE_ALIGN(cmd.cq_entry_size * entries * cmd.num_sub_cqs);
 
-	if (umem) {
-		if (umem->length < cq->size) {
+	if (ibcq->umem) {
+		if (ibcq->umem->length < cq->size) {
 			ibdev_dbg(&dev->ibdev, "External memory too small\n");
 			err = -EINVAL;
 			goto err_out;
 		}
 
-		if (!ib_umem_is_contiguous(umem)) {
+		if (!ib_umem_is_contiguous(ibcq->umem)) {
 			ibdev_dbg(&dev->ibdev, "Non contiguous CQ unsupported\n");
 			err = -EINVAL;
 			goto err_out;
 		}
 
-		cq->cpu_addr = NULL;
-		cq->dma_addr = ib_umem_start_dma_addr(umem);
-		cq->umem = umem;
+		cq->dma_addr = ib_umem_start_dma_addr(ibcq->umem);
 	} else {
 		cq->cpu_addr = efa_zalloc_mapped(dev, &cq->dma_addr, cq->size,
 						 DMA_FROM_DEVICE);
@@ -1259,7 +1256,7 @@ int efa_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	cq->ibcq.cqe = result.actual_depth;
 	WARN_ON_ONCE(entries != result.actual_depth);
 
-	if (!umem)
+	if (cq->cpu_addr)
 		err = cq_mmap_entries_setup(dev, cq, &resp, result.db_valid);
 
 	if (err) {
@@ -1296,11 +1293,12 @@ err_xa_erase:
 	if (cq->eq)
 		xa_erase(&dev->cqs_xa, cq->cq_idx);
 err_remove_mmap:
-	efa_cq_user_mmap_entries_remove(cq);
+	if (cq->cpu_addr)
+		efa_cq_user_mmap_entries_remove(cq);
 err_destroy_cq:
 	efa_destroy_cq_idx(dev, cq->cq_idx);
 err_free_mapped:
-	if (!umem)
+	if (cq->cpu_addr)
 		efa_free_mapped(dev, cq->cpu_addr, cq->dma_addr, cq->size,
 				DMA_FROM_DEVICE);
 err_out:
