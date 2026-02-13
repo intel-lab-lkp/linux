@@ -120,19 +120,41 @@ static inline unsigned int exttable_size(struct extended_sigtable *et)
 	return et->count * EXT_SIGNATURE_SIZE + EXT_HEADER_SIZE;
 }
 
+/*
+ * Use CPUID to generate a "vfm" value. Useful
+ * before 'cpuinfo_x86' structures are populated.
+ */
+static u32 intel_cpuid_vfm(void)
+{
+	u32 eax   = cpuid_eax(1);
+	u32 fam   = x86_family(eax);
+	u32 model = x86_model(eax);
+
+	return IFM(fam, model);
+}
+
+static u32 intel_get_platform_id(void)
+{
+	unsigned int val[2];
+
+	/*
+	 * This can be called early. Use CPUID directly to
+	 * generate the VFM value for this CPU.
+	 */
+	if (intel_cpuid_vfm() < INTEL_PENTIUM_III_DESCHUTES)
+		return 0;
+
+	/* get processor flags from MSR 0x17 */
+	native_rdmsr(MSR_IA32_PLATFORM_ID, val[0], val[1]);
+
+	return (val[1] >> 18) & 7;
+}
+
 void intel_collect_cpu_info(struct cpu_signature *sig)
 {
 	sig->sig = cpuid_eax(1);
-	sig->pf = 0;
 	sig->rev = intel_get_microcode_revision();
-
-	if (IFM(x86_family(sig->sig), x86_model(sig->sig)) >= INTEL_PENTIUM_III_DESCHUTES) {
-		unsigned int val[2];
-
-		/* get processor flags from MSR 0x17 */
-		native_rdmsr(MSR_IA32_PLATFORM_ID, val[0], val[1]);
-		sig->pf = 1 << ((val[1] >> 18) & 7);
-	}
+	sig->pf  = 1 << intel_get_platform_id();
 }
 EXPORT_SYMBOL_GPL(intel_collect_cpu_info);
 
