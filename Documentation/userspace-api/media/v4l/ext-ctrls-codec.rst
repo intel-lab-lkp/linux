@@ -577,6 +577,13 @@ enum v4l2_mpeg_video_bitrate_mode -
       - Constant bitrate
     * - ``V4L2_MPEG_VIDEO_BITRATE_MODE_CQ``
       - Constant quality
+    * - ``V4L2_MPEG_VIDEO_BITRATE_MODE_MBR``
+      MBR Rate Control is a VBR Rate Control mode optimized for
+      surveillance video contents which has high temporal correlation
+      due to static camera positions. This Rate Control smartly identifies
+      key-frames in the scene, and allocates more bits to them to improve
+      the coding efficiency by taking advantage of high temporal
+      correlation in surveillance videos.
 
 
 
