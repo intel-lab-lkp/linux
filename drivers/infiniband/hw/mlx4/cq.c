@@ -135,45 +135,6 @@ static void mlx4_ib_free_cq_buf(struct mlx4_ib_dev *dev, struct mlx4_ib_cq_buf *
 	mlx4_buf_free(dev->dev, (cqe + 1) * buf->entry_size, &buf->buf);
 }
 
-static int mlx4_ib_get_cq_umem(struct mlx4_ib_dev *dev,
-			       struct mlx4_ib_cq_buf *buf,
-			       struct ib_umem **umem, u64 buf_addr, int cqe)
-{
-	int err;
-	int cqe_size = dev->dev->caps.cqe_size;
-	int shift;
-	int n;
-
-	*umem = ib_umem_get(&dev->ib_dev, buf_addr, cqe * cqe_size,
-			    IB_ACCESS_LOCAL_WRITE);
-	if (IS_ERR(*umem))
-		return PTR_ERR(*umem);
-
-	shift = mlx4_ib_umem_calc_optimal_mtt_size(*umem, 0, &n);
-	if (shift < 0) {
-		err = shift;
-		goto err_buf;
-	}
-
-	err = mlx4_mtt_init(dev->dev, n, shift, &buf->mtt);
-	if (err)
-		goto err_buf;
-
-	err = mlx4_ib_umem_write_mtt(dev, &buf->mtt, *umem);
-	if (err)
-		goto err_mtt;
-
-	return 0;
-
-err_mtt:
-	mlx4_mtt_cleanup(dev->dev, &buf->mtt);
-
-err_buf:
-	ib_umem_release(*umem);
-
-	return err;
-}
-
 #define CQ_CREATE_FLAGS_SUPPORTED IB_UVERBS_CQ_FLAGS_TIMESTAMP_COMPLETION
 int mlx4_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		      struct uverbs_attr_bundle *attrs)
@@ -208,6 +169,9 @@ int mlx4_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 
 	if (udata) {
 		struct mlx4_ib_create_cq ucmd;
+		int cqe_size = dev->dev->caps.cqe_size;
+		int shift;
+		int n;
 
 		if (ib_copy_from_udata(&ucmd, udata, sizeof ucmd)) {
 			err = -EFAULT;
@@ -215,10 +179,28 @@ int mlx4_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		}
 
 		buf_addr = (void *)(unsigned long)ucmd.buf_addr;
-		err = mlx4_ib_get_cq_umem(dev, &cq->buf, &cq->umem,
-					  ucmd.buf_addr, entries);
-		if (err)
+
+		cq->umem = ib_umem_get(&dev->ib_dev, ucmd.buf_addr,
+				       entries * cqe_size,
+				       IB_ACCESS_LOCAL_WRITE);
+		if (IS_ERR(cq->umem)) {
+			err = PTR_ERR(cq->umem);
 			goto err_cq;
+		}
+
+		shift = mlx4_ib_umem_calc_optimal_mtt_size(cq->umem, 0, &n);
+		if (shift < 0) {
+			err = shift;
+			goto err_umem;
+		}
+
+		err = mlx4_mtt_init(dev->dev, n, shift, &cq->buf.mtt);
+		if (err)
+			goto err_umem;
+
+		err = mlx4_ib_umem_write_mtt(dev, &cq->buf.mtt, cq->umem);
+		if (err)
+			goto err_mtt;
 
 		err = mlx4_ib_db_map_user(udata, ucmd.db_addr, &cq->db);
 		if (err)
@@ -281,6 +263,7 @@ err_dbmap:
 err_mtt:
 	mlx4_mtt_cleanup(dev->dev, &cq->buf.mtt);
 
+err_umem:
 	ib_umem_release(cq->umem);
 	if (!udata)
 		mlx4_ib_free_cq_buf(dev, &cq->buf, cq->ibcq.cqe);
@@ -320,6 +303,9 @@ static int mlx4_alloc_resize_umem(struct mlx4_ib_dev *dev, struct mlx4_ib_cq *cq
 				   int entries, struct ib_udata *udata)
 {
 	struct mlx4_ib_resize_cq ucmd;
+	int cqe_size = dev->dev->caps.cqe_size;
+	int shift;
+	int n;
 	int err;
 
 	if (cq->resize_umem)
@@ -332,17 +318,43 @@ static int mlx4_alloc_resize_umem(struct mlx4_ib_dev *dev, struct mlx4_ib_cq *cq
 	if (!cq->resize_buf)
 		return -ENOMEM;
 
-	err = mlx4_ib_get_cq_umem(dev, &cq->resize_buf->buf, &cq->resize_umem,
-				  ucmd.buf_addr, entries);
-	if (err) {
-		kfree(cq->resize_buf);
-		cq->resize_buf = NULL;
-		return err;
+	cq->resize_umem = ib_umem_get(&dev->ib_dev, ucmd.buf_addr,
+				      entries * cqe_size,
+				      IB_ACCESS_LOCAL_WRITE);
+	if (IS_ERR(cq->resize_umem)) {
+		err = PTR_ERR(cq->resize_umem);
+		goto err_buf;
 	}
+
+	shift = mlx4_ib_umem_calc_optimal_mtt_size(cq->resize_umem, 0, &n);
+	if (shift < 0) {
+		err = shift;
+		goto err_umem;
+	}
+
+	err = mlx4_mtt_init(dev->dev, n, shift, &cq->resize_buf->buf.mtt);
+	if (err)
+		goto err_umem;
+
+	err = mlx4_ib_umem_write_mtt(dev, &cq->resize_buf->buf.mtt,
+				     cq->resize_umem);
+	if (err)
+		goto err_mtt;
 
 	cq->resize_buf->cqe = entries - 1;
 
 	return 0;
+
+err_mtt:
+	mlx4_mtt_cleanup(dev->dev, &cq->resize_buf->buf.mtt);
+
+err_umem:
+	ib_umem_release(cq->resize_umem);
+
+err_buf:
+	kfree(cq->resize_buf);
+	cq->resize_buf = NULL;
+	return err;
 }
 
 static int mlx4_ib_get_outstanding_cqes(struct mlx4_ib_cq *cq)
