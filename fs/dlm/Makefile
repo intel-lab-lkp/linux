@@ -18,4 +18,4 @@ dlm-y :=			ast.o \
 				user.o \
 				util.o 
 dlm-$(CONFIG_DLM_DEBUG) +=	debug_fs.o
-
+obj-$(CONFIG_DLM_DLMPFS) +=	dlmpfs/

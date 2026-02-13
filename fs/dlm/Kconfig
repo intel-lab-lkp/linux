@@ -14,3 +14,13 @@ config DLM_DEBUG
 	Under the debugfs mount point, the name of each lockspace will
 	appear as a file in the "dlm" directory.  The output is the
 	list of resource and locks the local node knows about.
+
+config DLM_DLMPFS
+	tristate "DLM locking filesystem"
+	depends on DLM
+	help
+	Offers DLM locking API over filesystem operations locking callbacks
+	each node needs to create the same named file under this filesystem
+	and do locking API as flock or fcntl on it. It can be used if
+	using an applications that already use file locking for distributed
+	locking operations.
