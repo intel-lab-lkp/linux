@@ -233,6 +233,7 @@ static void xe_pagefault_print(struct xe_pagefault *pf)
 					       pf->consumer.engine_class_instance);
 	xe_gt_info(pf->gt, "\n\tASID: %d\n"
 		   "\tFaulted Address: 0x%08x%08x\n"
+		   "\tAddress Precision: %lu\n"
 		   "\tFaultType: %lu\n"
 		   "\tAccessType: %d\n"
 		   "\tFaultLevel: %lu\n"
@@ -241,6 +242,7 @@ static void xe_pagefault_print(struct xe_pagefault *pf)
 		   pf->consumer.asid,
 		   upper_32_bits(pf->consumer.page_addr),
 		   lower_32_bits(pf->consumer.page_addr),
+		   BIT(pf->consumer.addr_precision),
 		   FIELD_GET(XE_PAGEFAULT_TYPE_MASK,
 			     pf->consumer.fault_type_level),
 		   pf->consumer.access_type,

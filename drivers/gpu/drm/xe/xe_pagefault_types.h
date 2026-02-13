@@ -68,6 +68,12 @@ struct xe_pagefault {
 		/** @consumer.asid: address space ID */
 		u32 asid;
 		/**
+		 * @consumer.addr_precision: precision of the page fault address.
+		 * u8 rather than u32 to keep compact - actual precision is
+		 * BIT(consumer.addr_precision).  Currently only 12
+		 */
+		u8 addr_precision;
+		/**
 		 * @consumer.access_type: access type, u8 rather than enum to
 		 * keep size compact
 		 */
@@ -87,11 +93,6 @@ struct xe_pagefault {
 		u8 engine_class_instance;
 #define XE_PAGEFAULT_ENGINE_CLASS_MASK		GENMASK(3, 0)
 #define XE_PAGEFAULT_ENGINE_INSTANCE_MASK	GENMASK(7, 4)
-		/**
-		 * consumer.align: buffer u8 to keep struct aligned to u64.
-		 * Will be used later to store data.
-		 */
-		u8 align;
 		/** consumer.reserved: reserved bits for future expansion */
 		u64 reserved;
 	} consumer;
