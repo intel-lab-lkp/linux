@@ -575,11 +575,15 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 
 	raw_spin_lock_init(&pp->lock);
 
-	bridge = devm_pci_alloc_host_bridge(dev, 0);
-	if (!bridge)
-		return -ENOMEM;
+	if (!pp->bridge) {
+		bridge = devm_pci_alloc_host_bridge(dev, 0);
+		if (!bridge)
+			return -ENOMEM;
 
-	pp->bridge = bridge;
+		pp->bridge = bridge;
+	} else {
+		bridge = pp->bridge;
+	}
 
 	ret = dw_pcie_host_get_resources(pp);
 	if (ret)
