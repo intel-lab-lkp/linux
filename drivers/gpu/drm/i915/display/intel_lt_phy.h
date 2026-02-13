@@ -11,6 +11,7 @@
 struct drm_printer;
 struct intel_atomic_state;
 struct intel_display;
+struct intel_dpll;
 struct intel_dpll_hw_state;
 struct intel_encoder;
 struct intel_crtc_state;
@@ -18,7 +19,8 @@ struct intel_crtc;
 struct intel_lt_phy_pll_state;
 
 void intel_lt_phy_pll_enable(struct intel_encoder *encoder,
-			     const struct intel_crtc_state *crtc_state);
+			     struct intel_dpll *pll,
+			     const struct intel_dpll_hw_state *dpll_hw_state);
 void intel_lt_phy_pll_disable(struct intel_encoder *encoder);
 int
 intel_lt_phy_pll_calc_state(struct intel_crtc_state *crtc_state,
@@ -41,8 +43,12 @@ int
 intel_lt_phy_calculate_hdmi_state(struct intel_lt_phy_pll_state *lt_state,
 				  u32 frequency_khz);
 void intel_xe3plpd_pll_enable(struct intel_encoder *encoder,
-			      const struct intel_crtc_state *crtc_state);
+			      struct intel_dpll *pll,
+			      const struct intel_dpll_hw_state *dpll_hw_state);
 void intel_xe3plpd_pll_disable(struct intel_encoder *encoder);
 void intel_lt_phy_verify_plls(struct intel_display *display);
+void intel_xe3plpd_pll_enable_clock(struct intel_encoder *encoder,
+				    const struct intel_crtc_state *crtc_state);
+void intel_xe3plpd_pll_disable_clock(struct intel_encoder *encoder);
 
 #endif /* __INTEL_LT_PHY_H__ */
