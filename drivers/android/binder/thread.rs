@@ -16,8 +16,8 @@ use kernel::{
     seq_file::SeqFile,
     seq_print,
     sync::atomic::{ordering::Relaxed, Atomic},
-    sync::poll::{PollCondVar, PollTable},
-    sync::{Arc, SpinLock},
+    sync::poll::{PollTable, UpgradePollCondVar},
+    sync::{Arc, LockClassKey, SpinLock},
     task::Task,
     types::ARef,
     uaccess::UserSlice,
@@ -35,7 +35,7 @@ use crate::{
     BinderReturnWriter, DArc, DLArc, DTRWrap, DeliverCode, DeliverToRead,
 };
 
-use core::mem::size_of;
+use core::{mem::size_of, pin::Pin};
 
 /// Stores the layout of the scatter-gather entries. This is used during the `translate_objects`
 /// call and is discarded when it returns.
@@ -412,7 +412,7 @@ pub(crate) struct Thread {
     #[pin]
     inner: SpinLock<InnerThread>,
     #[pin]
-    work_condvar: PollCondVar,
+    work_condvar: UpgradePollCondVar,
     /// Used to insert this thread into the process' `ready_threads` list.
     ///
     /// INVARIANT: May never be used for any other list than the `self.process.ready_threads`.
@@ -433,6 +433,11 @@ kernel::list::impl_list_item! {
     }
 }
 
+const THREAD_CONDVAR_NAME: &CStr = c"Thread::work_condvar";
+fn thread_condvar_class() -> Pin<&'static LockClassKey> {
+    kernel::static_lock_class!()
+}
+
 impl Thread {
     pub(crate) fn new(id: i32, process: Arc<Process>) -> Result<Arc<Self>> {
         let inner = InnerThread::new()?;
@@ -443,7 +448,7 @@ impl Thread {
                 process,
                 task: ARef::from(&**kernel::current!()),
                 inner <- kernel::new_spinlock!(inner, "Thread::inner"),
-                work_condvar <- kernel::new_poll_condvar!("Thread::work_condvar"),
+                work_condvar <- UpgradePollCondVar::new(THREAD_CONDVAR_NAME, thread_condvar_class()),
                 links <- ListLinks::new(),
                 links_track <- AtomicTracker::new(),
             }),
@@ -1484,10 +1489,13 @@ impl Thread {
         ret
     }
 
-    pub(crate) fn poll(&self, file: &File, table: PollTable<'_>) -> (bool, u32) {
-        table.register_wait(file, &self.work_condvar);
+    pub(crate) fn poll(&self, file: &File, table: PollTable<'_>) -> Result<(bool, u32)> {
+        let condvar =
+            self.work_condvar
+                .poll(&self.inner, THREAD_CONDVAR_NAME, thread_condvar_class())?;
+        table.register_wait(file, condvar);
         let mut inner = self.inner.lock();
-        (inner.should_use_process_work_queue(), inner.poll())
+        Ok((inner.should_use_process_work_queue(), inner.poll()))
     }
 
     /// Make the call to `get_work` or `get_work_local` return immediately, if any.
@@ -1523,7 +1531,6 @@ impl Thread {
     pub(crate) fn release(self: &Arc<Self>) {
         self.inner.lock().is_dead = true;
 
-        //self.work_condvar.clear();
         self.unwind_transaction_stack();
 
         // Cancel all pending work items.
