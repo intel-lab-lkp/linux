@@ -541,6 +541,11 @@ static void ad7768_fill_scale_tbl(struct iio_dev *dev)
 	u64 tmp2;
 
 	scan_type = iio_get_current_scan_type(dev, &dev->channels[0]);
+	if (IS_ERR(scan_type)) {
+		dev_err(&st->spi->dev, "Failed to get scan type.\n");
+		return;
+	}
+
 	if (scan_type->sign == 's')
 		val2 = scan_type->realbits - 1;
 	else
