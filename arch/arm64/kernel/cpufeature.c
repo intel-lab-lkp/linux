@@ -2412,6 +2412,14 @@ static void user_feature_fixup(void)
 		if (regp)
 			regp->user_mask &= ~ID_AA64PFR1_EL1_SSBS_MASK;
 	}
+
+	if (arm64_test_sw_feature_override(ARM64_SW_FEATURE_OVERRIDE_NOMTE_EL0)) {
+		struct arm64_ftr_reg *regp;
+
+		regp = get_arm64_ftr_reg(SYS_ID_AA64PFR1_EL1);
+		if (regp)
+			regp->user_mask &= ~ID_AA64PFR1_EL1_MTE_MASK;
+	}
 }
 
 static void elf_hwcap_fixup(void)

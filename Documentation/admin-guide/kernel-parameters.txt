@@ -562,6 +562,9 @@ Kernel parameters
 	arm64.nomte	[ARM64] Unconditionally disable Memory Tagging Extension
 			support
 
+	arm64.nomte_el0	[ARM64] Unconditionally disable Memory Tagging Extension
+			support for userspace
+
 	arm64.nopauth	[ARM64] Unconditionally disable Pointer Authentication
 			support
 
