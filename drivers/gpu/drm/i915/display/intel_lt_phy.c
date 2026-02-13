@@ -2180,6 +2180,27 @@ intel_lt_phy_pll_compare_hw_state(const struct intel_lt_phy_pll_state *a,
 	return false;
 }
 
+static u32 intel_lt_phy_get_pclk_pll_request(u8 lane_mask)
+{
+	u32 val = 0;
+	int lane = 0;
+
+	for_each_lt_phy_lane_in_mask(lane_mask, lane)
+		val |= XELPDP_LANE_PCLK_PLL_REQUEST(lane);
+
+	return val;
+}
+
+static bool intel_lt_phy_pll_is_enabled(struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+	u8 lane = dig_port->lane_reversal ? INTEL_LT_PHY_LANE1 : INTEL_LT_PHY_LANE0;
+
+	return intel_de_read(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port)) &
+			     intel_lt_phy_get_pclk_pll_request(lane);
+}
+
 void intel_lt_phy_pll_readout_hw_state(struct intel_encoder *encoder,
 				       const struct intel_crtc_state *crtc_state,
 				       struct intel_lt_phy_pll_state *pll_state)
@@ -2188,6 +2209,9 @@ void intel_lt_phy_pll_readout_hw_state(struct intel_encoder *encoder,
 	u8 lane;
 	struct ref_tracker *wakeref;
 	int i, j, k;
+
+	if (!intel_lt_phy_pll_is_enabled(encoder))
+		return;
 
 	pll_state->tbt_mode = intel_tc_port_in_tbt_alt_mode(enc_to_dig_port(encoder));
 	if (pll_state->tbt_mode)
