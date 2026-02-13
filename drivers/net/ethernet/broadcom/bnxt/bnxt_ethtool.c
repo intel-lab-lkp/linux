@@ -1267,9 +1267,9 @@ static int bnxt_add_l2_cls_rule(struct bnxt *bp,
 	u8 vf = ethtool_get_flow_spec_ring_vf(fs->ring_cookie);
 	struct ethhdr *h_ether = &fs->h_u.ether_spec;
 	struct ethhdr *m_ether = &fs->m_u.ether_spec;
+	struct bnxt_vnic_info *vnic = NULL;
 	struct bnxt_l2_filter *fltr;
 	struct bnxt_l2_key key;
-	u16 vnic_id;
 	u8 flags;
 	int rc;
 
@@ -1291,17 +1291,16 @@ static int bnxt_add_l2_cls_rule(struct bnxt *bp,
 
 	if (vf) {
 		flags = BNXT_ACT_FUNC_DST;
-		vnic_id = 0xffff;
 		vf--;
 	} else {
 		flags = BNXT_ACT_RING_DST;
-		vnic_id = bp->vnic_info[ring + 1].fw_vnic_id;
+		vnic = &bp->vnic_info[ring + 1];
 	}
 	fltr = bnxt_alloc_new_l2_filter(bp, &key, flags);
 	if (IS_ERR(fltr))
 		return PTR_ERR(fltr);
 
-	fltr->base.fw_vnic_id = vnic_id;
+	fltr->base.vnic = vnic;
 	fltr->base.rxq = ring;
 	fltr->base.vf_idx = vf;
 	rc = bnxt_hwrm_l2_filter_alloc(bp, fltr);

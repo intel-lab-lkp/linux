@@ -6184,6 +6184,7 @@ int bnxt_hwrm_l2_filter_alloc(struct bnxt *bp, struct bnxt_l2_filter *fltr)
 {
 	struct hwrm_cfa_l2_filter_alloc_output *resp;
 	struct hwrm_cfa_l2_filter_alloc_input *req;
+	u16 dst_id = INVALID_HW_RING_ID;
 	u16 target_id = 0xffff;
 	int rc;
 
@@ -6205,7 +6206,10 @@ int bnxt_hwrm_l2_filter_alloc(struct bnxt *bp, struct bnxt_l2_filter *fltr)
 	if (!BNXT_CHIP_TYPE_NITRO_A0(bp))
 		req->flags |=
 			cpu_to_le32(CFA_L2_FILTER_ALLOC_REQ_FLAGS_OUTERMOST);
-	req->dst_id = cpu_to_le16(fltr->base.fw_vnic_id);
+
+	if (fltr->base.vnic)
+		dst_id = fltr->base.vnic->fw_vnic_id;
+	req->dst_id = cpu_to_le16(dst_id);
 	req->enables =
 		cpu_to_le32(CFA_L2_FILTER_ALLOC_REQ_ENABLES_L2_ADDR |
 			    CFA_L2_FILTER_ALLOC_REQ_ENABLES_DST_ID |
@@ -6240,6 +6244,9 @@ int bnxt_hwrm_cfa_ntuple_filter_free(struct bnxt *bp,
 	int rc;
 
 	set_bit(BNXT_FLTR_FW_DELETED, &fltr->base.state);
+	if (fltr->base.vnic->fw_vnic_id == INVALID_HW_RING_ID)
+		return 0;
+
 	rc = hwrm_req_init(bp, req, HWRM_CFA_NTUPLE_FILTER_FREE);
 	if (rc)
 		return rc;
@@ -6291,6 +6298,7 @@ bnxt_cfg_rfs_ring_tbl_idx(struct bnxt *bp,
 		if (ctx) {
 			rss_ctx = ethtool_rxfh_context_priv(ctx);
 			vnic = &rss_ctx->vnic;
+			fltr->base.vnic = vnic;
 
 			req->dst_id = cpu_to_le16(vnic->fw_vnic_id);
 		}
@@ -6301,6 +6309,7 @@ bnxt_cfg_rfs_ring_tbl_idx(struct bnxt *bp,
 		u32 enables;
 
 		vnic = &bp->vnic_info[BNXT_VNIC_NTUPLE];
+		fltr->base.vnic = vnic;
 		req->dst_id = cpu_to_le16(vnic->fw_vnic_id);
 		enables = CFA_NTUPLE_FILTER_ALLOC_REQ_ENABLES_RFS_RING_TBL_IDX;
 		req->enables |= cpu_to_le32(enables);
@@ -6339,6 +6348,7 @@ int bnxt_hwrm_cfa_ntuple_filter_alloc(struct bnxt *bp,
 		bnxt_cfg_rfs_ring_tbl_idx(bp, req, fltr);
 	} else {
 		vnic = &bp->vnic_info[fltr->base.rxq + 1];
+		fltr->base.vnic = vnic;
 		req->dst_id = cpu_to_le16(vnic->fw_vnic_id);
 	}
 	req->enables |= cpu_to_le32(BNXT_NTP_FLTR_FLAGS);
@@ -6393,7 +6403,7 @@ static int bnxt_hwrm_set_vnic_filter(struct bnxt *bp, u16 vnic_id, u16 idx,
 	if (IS_ERR(fltr))
 		return PTR_ERR(fltr);
 
-	fltr->base.fw_vnic_id = bp->vnic_info[vnic_id].fw_vnic_id;
+	fltr->base.vnic = &bp->vnic_info[vnic_id];
 	rc = bnxt_hwrm_l2_filter_alloc(bp, fltr);
 	if (rc)
 		bnxt_del_l2_filter(bp, fltr);
