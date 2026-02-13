@@ -39,7 +39,7 @@ int __vdso_getcpu(unsigned int *cpu, unsigned int *node, struct getcpu_cache *un
 		*cpu = cpu_id;
 
 	if (node)
-		*node = vdso_u_arch_data.pdata[cpu_id].node;
+		*node = vdso_u_arch_data->pdata[cpu_id].node;
 
 	return 0;
 }

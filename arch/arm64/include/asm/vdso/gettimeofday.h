@@ -86,7 +86,7 @@ static __always_inline u64 __arch_get_hw_counter(s32 clock_mode,
 #if IS_ENABLED(CONFIG_CC_IS_GCC) && IS_ENABLED(CONFIG_PAGE_SIZE_64KB)
 static __always_inline const struct vdso_time_data *__arch_get_vdso_u_time_data(void)
 {
-	const struct vdso_time_data *ret = &vdso_u_time_data;
+	const struct vdso_time_data *ret = vdso_u_time_data;
 
 	/* Work around invalid absolute relocations */
 	OPTIMIZER_HIDE_VAR(ret);
