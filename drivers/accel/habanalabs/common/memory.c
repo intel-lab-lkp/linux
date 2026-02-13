@@ -2176,8 +2176,9 @@ static int allocate_timestamps_buffers(struct hl_fpriv *hpriv, struct hl_mem_in 
 	struct hl_mem_mgr *mmg = &hpriv->mem_mgr;
 	struct hl_mmap_mem_buf *buf;
 
-	if (args->num_of_elements > TS_MAX_ELEMENTS_NUM) {
-		dev_err(mmg->dev, "Num of elements exceeds Max allowed number (0x%x > 0x%x)\n",
+	if (args->num_of_elements > TS_MAX_ELEMENTS_NUM ||
+				args->num_of_elements == 0) {
+		dev_err(mmg->dev, "Invalid num of elements %u, valid range [1, 0x%x]\n",
 				args->num_of_elements, TS_MAX_ELEMENTS_NUM);
 		return -EINVAL;
 	}
