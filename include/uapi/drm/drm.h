@@ -1051,6 +1051,11 @@ struct drm_syncobj_timeline_array {
 	__u32 flags;
 };
 
+struct drm_syncobj_error {
+	__u32 handle;
+	__s32 error;
+	__u64 point;
+};
 
 /* Query current scanout sequence number */
 struct drm_crtc_get_sequence {
@@ -1362,6 +1367,14 @@ extern "C" {
  * This ioctl changes the object at one gem handle to use a new gem handle.
  */
 #define DRM_IOCTL_GEM_CHANGE_HANDLE    DRM_IOWR(0xD2, struct drm_gem_change_handle)
+
+/**
+ * DRM_IOCTL_SYNCOBJ_QUERY_ERROR - Query the error code from a failed drm_syncobj
+ *
+ * This ioctl provides userspace a way to query the error code of a binary and
+ * timeline drm_syncobj in the case that the submission fails.
+ */
+#define DRM_IOCTL_SYNCOBJ_QUERY_ERROR	DRM_IOWR(0xD3, struct drm_syncobj_error)
 
 /*
  * Device specific ioctls should only be in their respective headers

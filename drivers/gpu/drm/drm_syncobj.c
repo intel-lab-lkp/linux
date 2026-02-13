@@ -1717,3 +1717,25 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 
 	return ret;
 }
+
+int drm_syncobj_query_error_ioctl(struct drm_device *dev, void *data,
+			    struct drm_file *file_private)
+{
+	struct drm_syncobj_error *args = data;
+	struct dma_fence *fence;
+	int ret;
+
+	if (!drm_core_check_feature(dev, DRIVER_SYNCOBJ))
+		return -EOPNOTSUPP;
+
+	ret = drm_syncobj_find_fence(file_private, args->handle, args->point, 0, &fence);
+
+	if (ret)
+		return ret;
+
+	args->error = fence->error;
+
+	dma_fence_put(fence);
+
+	return 0;
+}
