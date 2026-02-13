@@ -78,7 +78,8 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	int buffer_fd;
 	int ret;
 
-	if ((!ib_dev->ops.create_cq && !ib_dev->ops.create_cq_umem) || !ib_dev->ops.destroy_cq)
+	if ((!ib_dev->ops.create_cq && !ib_dev->ops.create_user_cq) ||
+	    !ib_dev->ops.destroy_cq)
 		return -EOPNOTSUPP;
 
 	ret = uverbs_copy_from(&attr.comp_vector, attrs,
@@ -130,7 +131,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 
 		if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_FD) ||
 		    uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_OFFSET) ||
-		    !ib_dev->ops.create_cq_umem) {
+		    !ib_dev->ops.create_user_cq) {
 			ret = -EINVAL;
 			goto err_event_file;
 		}
@@ -155,7 +156,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 			goto err_event_file;
 
 		if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_VA) ||
-		    !ib_dev->ops.create_cq_umem) {
+		    !ib_dev->ops.create_user_cq) {
 			ret = -EINVAL;
 			goto err_event_file;
 		}
@@ -196,10 +197,15 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
 	rdma_restrack_set_name(&cq->res, NULL);
 
-	ret = umem ? ib_dev->ops.create_cq_umem(cq, &attr, umem, attrs) :
-		ib_dev->ops.create_cq(cq, &attr, attrs);
+	if (ib_dev->ops.create_user_cq)
+		ret = ib_dev->ops.create_user_cq(cq, &attr, attrs);
+	else
+		ret = ib_dev->ops.create_cq(cq, &attr, attrs);
 	if (ret)
 		goto err_free;
+
+	/* Check that driver didn't overrun existing umem */
+	WARN_ON(umem && cq->umem != umem);
 
 	obj->uevent.uobject.object = cq;
 	obj->uevent.uobject.user_handle = user_handle;

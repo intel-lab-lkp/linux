@@ -1130,8 +1130,8 @@ static int cq_mmap_entries_setup(struct efa_dev *dev, struct efa_cq *cq,
 	return 0;
 }
 
-int efa_create_cq_umem(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
-		       struct ib_umem *umem, struct uverbs_attr_bundle *attrs)
+int efa_create_user_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
+		       struct uverbs_attr_bundle *attrs)
 {
 	struct ib_udata *udata = &attrs->driver_udata;
 	struct efa_ucontext *ucontext = rdma_udata_to_drv_context(
@@ -1304,12 +1304,6 @@ err_free_mapped:
 err_out:
 	atomic64_inc(&dev->stats.create_cq_err);
 	return err;
-}
-
-int efa_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
-		  struct uverbs_attr_bundle *attrs)
-{
-	return efa_create_cq_umem(ibcq, attr, NULL, attrs);
 }
 
 static int umem_to_page_list(struct efa_dev *dev,
