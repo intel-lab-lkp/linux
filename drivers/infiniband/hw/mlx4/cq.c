@@ -165,7 +165,6 @@ int mlx4_ib_create_user_cq(struct ib_cq *ibcq,
 	cq->ibcq.cqe = entries - 1;
 	mutex_init(&cq->resize_mutex);
 	spin_lock_init(&cq->lock);
-	cq->create_flags = attr->flags;
 	INIT_LIST_HEAD(&cq->send_qp_list);
 	INIT_LIST_HEAD(&cq->recv_qp_list);
 
@@ -208,8 +207,7 @@ int mlx4_ib_create_user_cq(struct ib_cq *ibcq,
 
 	err = mlx4_cq_alloc(dev->dev, entries, &cq->buf.mtt, &context->uar,
 			    cq->db.dma, &cq->mcq, vector, 0,
-			    !!(cq->create_flags &
-			       IB_UVERBS_CQ_FLAGS_TIMESTAMP_COMPLETION),
+			    attr->flags & IB_UVERBS_CQ_FLAGS_TIMESTAMP_COMPLETION,
 			    buf_addr, true);
 	if (err)
 		goto err_dbmap;
