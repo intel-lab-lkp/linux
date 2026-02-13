@@ -628,6 +628,8 @@ int iris_set_bitrate_mode_gen1(struct iris_inst *inst, enum platform_inst_fw_cap
 		rc_mode = frame_skip ? HFI_RATE_CONTROL_CBR_VFR : HFI_RATE_CONTROL_CBR_CFR;
 	else if (bitrate_mode == V4L2_MPEG_VIDEO_BITRATE_MODE_CQ)
 		rc_mode = HFI_RATE_CONTROL_CQ;
+	else if (bitrate_mode == V4L2_MPEG_VIDEO_BITRATE_MODE_MBR)
+		rc_mode = HFI_RATE_CONTROL_MBR;
 
 	inst->hfi_rc_type = rc_mode;
 

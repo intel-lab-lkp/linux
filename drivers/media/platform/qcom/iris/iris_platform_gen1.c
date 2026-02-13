@@ -15,11 +15,6 @@
 
 #include "iris_platform_sc7280.h"
 
-#define BITRATE_MIN		32000
-#define BITRATE_MAX		160000000
-#define BITRATE_PEAK_DEFAULT	(BITRATE_DEFAULT * 2)
-#define BITRATE_STEP		100
-
 static struct iris_fmt platform_fmts_sm8250_dec[] = {
 	[IRIS_FMT_H264] = {
 		.pixfmt = V4L2_PIX_FMT_H264,
@@ -419,8 +414,8 @@ const struct iris_platform_data sc7280_data = {
 	.inst_caps = &platform_inst_cap_sm8250,
 	.inst_fw_caps_dec = inst_fw_cap_sm8250_dec,
 	.inst_fw_caps_dec_size = ARRAY_SIZE(inst_fw_cap_sm8250_dec),
-	.inst_fw_caps_enc = inst_fw_cap_sm8250_enc,
-	.inst_fw_caps_enc_size = ARRAY_SIZE(inst_fw_cap_sm8250_enc),
+	.inst_fw_caps_enc = inst_fw_cap_sc7280_enc,
+	.inst_fw_caps_enc_size = ARRAY_SIZE(inst_fw_cap_sc7280_enc),
 	.tz_cp_config_data = tz_cp_config_sm8250,
 	.tz_cp_config_data_size = ARRAY_SIZE(tz_cp_config_sm8250),
 	.hw_response_timeout = HW_RESPONSE_TIMEOUT_VALUE,
