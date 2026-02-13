@@ -2069,6 +2069,8 @@ int btrfs_search_slot(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 	u8 lowest_level = 0;
 	int min_write_lock_level;
 	int prev_cmp;
+	int cow_count = 0;
+	int restart_count = 0;
 
 	if (!root)
 		return -EINVAL;
@@ -2157,6 +2159,7 @@ again:
 			    p->nodes[level + 1])) {
 				write_lock_level = level + 1;
 				btrfs_release_path(p);
+				restart_count++;
 				goto again;
 			}
 
@@ -2172,6 +2175,7 @@ again:
 				ret = ret2;
 				goto done;
 			}
+			cow_count++;
 		}
 cow_done:
 		p->nodes[level] = b;
@@ -2219,8 +2223,10 @@ cow_done:
 		p->slots[level] = slot;
 		ret2 = setup_nodes_for_search(trans, root, p, b, level, ins_len,
 					      &write_lock_level);
-		if (ret2 == -EAGAIN)
+		if (ret2 == -EAGAIN) {
+			restart_count++;
 			goto again;
+		}
 		if (ret2) {
 			ret = ret2;
 			goto done;
@@ -2236,6 +2242,7 @@ cow_done:
 		if (slot == 0 && ins_len && write_lock_level < level + 1) {
 			write_lock_level = level + 1;
 			btrfs_release_path(p);
+			restart_count++;
 			goto again;
 		}
 
@@ -2249,8 +2256,10 @@ cow_done:
 		}
 
 		ret2 = read_block_for_search(root, p, &b, slot, key);
-		if (ret2 == -EAGAIN && !p->nowait)
+		if (ret2 == -EAGAIN && !p->nowait) {
+			restart_count++;
 			goto again;
+		}
 		if (ret2) {
 			ret = ret2;
 			goto done;
@@ -2281,6 +2290,8 @@ cow_done:
 	}
 	ret = 1;
 done:
+	if (cow_count > 0)
+		trace_btrfs_search_slot_stats(root, cow_count, restart_count, ret);
 	if (ret < 0 && !p->skip_release_on_error)
 		btrfs_release_path(p);
 
