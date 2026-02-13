@@ -304,6 +304,7 @@ static int linehandle_create(struct gpio_device *gdev, void __user *ip)
 {
 	struct gpiohandle_request handlereq;
 	struct linehandle_state *lh __free(linehandle_free) = NULL;
+	u32 num_descs;
 	int i, ret;
 	u32 lflags;
 
@@ -379,6 +380,7 @@ static int linehandle_create(struct gpio_device *gdev, void __user *ip)
 				      lh, O_RDONLY | O_CLOEXEC));
 	if (fdf.err)
 		return fdf.err;
+	num_descs = lh->num_descs;
 	retain_and_null_ptr(lh);
 
 	handlereq.fd = fd_prepare_fd(fdf);
@@ -388,7 +390,7 @@ static int linehandle_create(struct gpio_device *gdev, void __user *ip)
 	fd_publish(fdf);
 
 	dev_dbg(&gdev->dev, "registered chardev handle for %d lines\n",
-		lh->num_descs);
+		num_descs);
 
 	return 0;
 }
