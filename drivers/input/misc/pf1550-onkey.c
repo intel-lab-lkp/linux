@@ -130,6 +130,7 @@ static int pf1550_onkey_probe(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int pf1550_onkey_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -175,6 +176,7 @@ static int pf1550_onkey_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(pf1550_onkey_pm_ops, pf1550_onkey_suspend,
 			 pf1550_onkey_resume);
+#endif CONFIG_PM_SLEEP
 
 static const struct platform_device_id pf1550_onkey_id[] = {
 	{ "pf1550-onkey", },
