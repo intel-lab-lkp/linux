@@ -339,4 +339,6 @@ struct super_block {
 #define SB_I_NOIDMAP	0x00002000	/* No idmapped mounts on this superblock */
 #define SB_I_ALLOW_HSM	0x00004000	/* Allow HSM events on this superblock */
 
+#define SB_I_USERNS_ALLOW_REVEALING	0x00008000 /* Skip full visibility check */
+
 #endif /* _LINUX_FS_SUPER_TYPES_H */
