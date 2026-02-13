@@ -6287,7 +6287,7 @@ bnxt_cfg_rfs_ring_tbl_idx(struct bnxt *bp,
 		struct bnxt_vnic_info *vnic;
 
 		ctx = xa_load(&bp->dev->ethtool->rss_ctx,
-			      fltr->base.fw_vnic_id);
+			      fltr->base.rss_ctx_id);
 		if (ctx) {
 			rss_ctx = ethtool_rxfh_context_priv(ctx);
 			vnic = &rss_ctx->vnic;
@@ -10899,7 +10899,7 @@ void bnxt_del_one_rss_ctx(struct bnxt *bp, struct bnxt_rss_ctx *rss_ctx,
 
 	list_for_each_entry_safe(usr_fltr, tmp, &bp->usr_fltr_list, list) {
 		if ((usr_fltr->flags & BNXT_ACT_RSS_CTX) &&
-		    usr_fltr->fw_vnic_id == rss_ctx->index) {
+		    usr_fltr->rss_ctx_id == rss_ctx->index) {
 			ntp_fltr = container_of(usr_fltr,
 						struct bnxt_ntuple_filter,
 						base);

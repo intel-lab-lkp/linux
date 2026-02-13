@@ -1435,6 +1435,7 @@ struct bnxt_filter_base {
 	u16			sw_id;
 	u16			rxq;
 	u16			fw_vnic_id;
+	u16			rss_ctx_id;
 	u16			vf_idx;
 	unsigned long		state;
 #define BNXT_FLTR_VALID		0

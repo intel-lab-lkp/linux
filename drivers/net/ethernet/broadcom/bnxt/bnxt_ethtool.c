@@ -1219,7 +1219,7 @@ static int bnxt_grxclsrule(struct bnxt *bp, struct ethtool_rxnfc *cmd)
 		fs->ring_cookie = RX_CLS_FLOW_DISC;
 	} else if (fltr->base.flags & BNXT_ACT_RSS_CTX) {
 		fs->flow_type |= FLOW_RSS;
-		cmd->rss_context = fltr->base.fw_vnic_id;
+		cmd->rss_context = fltr->base.rss_ctx_id;
 	} else {
 		fs->ring_cookie = fltr->base.rxq;
 	}
@@ -1469,11 +1469,10 @@ static int bnxt_add_ntuple_cls_rule(struct bnxt *bp,
 	if (fs->flow_type & FLOW_RSS) {
 		struct bnxt_rss_ctx *rss_ctx;
 
-		new_fltr->base.fw_vnic_id = 0;
 		new_fltr->base.flags |= BNXT_ACT_RSS_CTX;
 		rss_ctx = bnxt_get_rss_ctx_from_index(bp, cmd->rss_context);
 		if (rss_ctx) {
-			new_fltr->base.fw_vnic_id = rss_ctx->index;
+			new_fltr->base.rss_ctx_id = rss_ctx->index;
 		} else {
 			rc = -EINVAL;
 			goto ntuple_err;
