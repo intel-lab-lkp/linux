@@ -164,9 +164,9 @@ struct vdso_rng_data {
  * With the hidden visibility, the compiler simply generates a PC-relative
  * relocation, and this is what we need.
  */
-extern struct vdso_time_data vdso_u_time_data __attribute__((visibility("hidden")));
-extern struct vdso_rng_data vdso_u_rng_data __attribute__((visibility("hidden")));
-extern struct vdso_arch_data vdso_u_arch_data __attribute__((visibility("hidden")));
+extern struct vdso_time_data vdso_u_time_data[] __attribute__((visibility("hidden")));
+extern struct vdso_rng_data vdso_u_rng_data[] __attribute__((visibility("hidden")));
+extern struct vdso_arch_data vdso_u_arch_data[] __attribute__((visibility("hidden")));
 
 extern struct vdso_time_data *vdso_k_time_data;
 extern struct vdso_rng_data *vdso_k_rng_data;
