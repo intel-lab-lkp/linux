@@ -951,6 +951,8 @@ patternProperties:
     description: Loongson Technology Corporation Limited
   "^loongmasses,.*":
     description: Nanjing Loongmasses Ltd.
+  "^lrw,.*":
+    description: LRW Corp.
   "^lsi,.*":
     description: LSI Corp. (LSI Logic)
   "^luckfox,.*":

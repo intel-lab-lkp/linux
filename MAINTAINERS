@@ -14869,6 +14869,13 @@ L:	linux-edac@vger.kernel.org
 S:	Maintained
 F:	drivers/edac/loongson_edac.c
 
+LRW SERIAL DRIVER
+M:	Wenhong Liu <liu.wenhong35@zte.com.cn>
+R:	Qingtao Liu <liu.qingtao2@zte.com.cn>
+L:	linux-serial@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/serial/lrw,lrw-uart.yaml
+
 LSILOGIC MPT FUSION DRIVERS (FC/SAS/SPI)
 M:	Sathya Prakash <sathya.prakash@broadcom.com>
 M:	Sreekanth Reddy <sreekanth.reddy@broadcom.com>
