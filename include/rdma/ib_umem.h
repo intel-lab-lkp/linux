@@ -7,13 +7,9 @@
 #ifndef IB_UMEM_H
 #define IB_UMEM_H
 
-#include <linux/list.h>
 #include <linux/scatterlist.h>
-#include <linux/workqueue.h>
 
 struct ib_device;
-struct ib_ucontext;
-struct ib_umem_odp;
 struct dma_buf_attach_ops;
 
 struct ib_umem {
