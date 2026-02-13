@@ -1419,7 +1419,9 @@ static int io_issue_sqe(struct io_kiocb *req, unsigned int issue_flags)
 		ret = 0;
 
 		/* If the op doesn't have a file, we're not polling for it */
-		if ((req->ctx->flags & IORING_SETUP_IOPOLL) && def->iopoll_queue)
+		if ((req->ctx->flags & IORING_SETUP_IOPOLL) &&
+		    def->iopoll_queue && (!io_is_uring_cmd(req) ||
+					  req->file->f_op->uring_cmd_iopoll))
 			io_iopoll_req_issued(req, issue_flags);
 	}
 	return ret;
