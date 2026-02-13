@@ -80,10 +80,18 @@ struct xe_pagefault {
 #define XE_PAGEFAULT_TYPE_LEVEL_NACK		0xff	/* Producer indicates nack fault */
 #define XE_PAGEFAULT_LEVEL_MASK			GENMASK(3, 0)
 #define XE_PAGEFAULT_TYPE_MASK			GENMASK(7, 4)
-		/** @consumer.engine_class: engine class */
-		u8 engine_class;
-		/** @consumer.engine_instance: engine instance */
-		u8 engine_instance;
+		/**
+		 * @consumer.engine_class_instance: engine class and instance, packed
+		 * into a single u8 to keep compact
+		 */
+		u8 engine_class_instance;
+#define XE_PAGEFAULT_ENGINE_CLASS_MASK		GENMASK(3, 0)
+#define XE_PAGEFAULT_ENGINE_INSTANCE_MASK	GENMASK(7, 4)
+		/**
+		 * consumer.align: buffer u8 to keep struct aligned to u64.
+		 * Will be used later to store data.
+		 */
+		u8 align;
 		/** consumer.reserved: reserved bits for future expansion */
 		u64 reserved;
 	} consumer;
