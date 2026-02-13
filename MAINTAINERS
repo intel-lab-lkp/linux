@@ -14875,6 +14875,9 @@ R:	Qingtao Liu <liu.qingtao2@zte.com.cn>
 L:	linux-serial@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/serial/lrw,lrw-uart.yaml
+F:	drivers/tty/serial/Kconfig
+F:	drivers/tty/serial/Makefile
+F:	drivers/tty/serial/lrw_uart.c
 
 LSILOGIC MPT FUSION DRIVERS (FC/SAS/SPI)
 M:	Sathya Prakash <sathya.prakash@broadcom.com>
