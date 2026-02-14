@@ -1102,7 +1102,7 @@ static int __init fake_init(void)
 	/* Add master windows to list */
 	INIT_LIST_HEAD(&fake_bridge->master_resources);
 	for (i = 0; i < FAKE_MAX_MASTER; i++) {
-		master_image = kmalloc(sizeof(*master_image), GFP_KERNEL);
+		master_image = kmalloc_obj(*master_image, GFP_KERNEL);
 		if (!master_image) {
 			retval = -ENOMEM;
 			goto err_master;
@@ -1128,7 +1128,7 @@ static int __init fake_init(void)
 	/* Add slave windows to list */
 	INIT_LIST_HEAD(&fake_bridge->slave_resources);
 	for (i = 0; i < FAKE_MAX_SLAVE; i++) {
-		slave_image = kmalloc(sizeof(*slave_image), GFP_KERNEL);
+		slave_image = kmalloc_obj(*slave_image, GFP_KERNEL);
 		if (!slave_image) {
 			retval = -ENOMEM;
 			goto err_slave;
@@ -1150,7 +1150,7 @@ static int __init fake_init(void)
 
 	/* Add location monitor to list */
 	INIT_LIST_HEAD(&fake_bridge->lm_resources);
-	lm = kmalloc(sizeof(*lm), GFP_KERNEL);
+	lm = kmalloc_obj(*lm, GFP_KERNEL);
 	if (!lm) {
 		retval = -ENOMEM;
 		goto err_lm;
