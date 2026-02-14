@@ -808,6 +808,34 @@ static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
 	writel(val_irq, data->base + tmu_intclear);
 }
 
+static int exynos_set_trips(struct thermal_zone_device *tz, int low, int high)
+{
+	struct exynos_tmu_data *data = thermal_zone_device_priv(tz);
+
+	mutex_lock(&data->lock);
+	clk_enable(data->clk);
+
+	if (low > INT_MIN)
+		data->soc_config->tmu_set_low_temp(data, low / MCELSIUS);
+	else
+		data->soc_config->tmu_disable_low(data);
+	if (high < INT_MAX)
+		data->soc_config->tmu_set_high_temp(data, high / MCELSIUS);
+	else
+		data->soc_config->tmu_disable_high(data);
+
+	clk_disable(data->clk);
+	mutex_unlock(&data->lock);
+
+	return 0;
+}
+
+static const struct thermal_zone_device_ops exynos_sensor_ops = {
+	.get_temp = exynos_get_temp,
+	.set_emul_temp = exynos_tmu_set_emulation,
+	.set_trips = exynos_set_trips,
+};
+
 static const struct exynos_tmu_soc_config exynos3250_data = {
 	.soc = SOC_ARCH_EXYNOS3250,
 	.tmu_set_low_temp = exynos4412_tmu_set_low_temp,
@@ -1007,34 +1035,6 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 
 	return 0;
 }
-
-static int exynos_set_trips(struct thermal_zone_device *tz, int low, int high)
-{
-	struct exynos_tmu_data *data = thermal_zone_device_priv(tz);
-
-	mutex_lock(&data->lock);
-	clk_enable(data->clk);
-
-	if (low > INT_MIN)
-		data->soc_config->tmu_set_low_temp(data, low / MCELSIUS);
-	else
-		data->soc_config->tmu_disable_low(data);
-	if (high < INT_MAX)
-		data->soc_config->tmu_set_high_temp(data, high / MCELSIUS);
-	else
-		data->soc_config->tmu_disable_high(data);
-
-	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
-
-	return 0;
-}
-
-static const struct thermal_zone_device_ops exynos_sensor_ops = {
-	.get_temp = exynos_get_temp,
-	.set_emul_temp = exynos_tmu_set_emulation,
-	.set_trips = exynos_set_trips,
-};
 
 static int exynos_tmu_probe(struct platform_device *pdev)
 {
