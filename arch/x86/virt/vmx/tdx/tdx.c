@@ -148,8 +148,6 @@ out:
  * global initialization SEAMCALL if not done) on local cpu to make this
  * cpu be ready to run any other SEAMCALLs.
  *
- * Always call this function via IPI function calls.
- *
  * Return 0 on success, otherwise errors.
  */
 int tdx_cpu_enable(void)
@@ -159,8 +157,6 @@ int tdx_cpu_enable(void)
 
 	if (!boot_cpu_has(X86_FEATURE_TDX_HOST_PLATFORM))
 		return -ENODEV;
-
-	lockdep_assert_irqs_disabled();
 
 	if (__this_cpu_read(tdx_lp_initialized))
 		return 0;
