@@ -14,7 +14,7 @@
  * ----------------------------
  */
 
-#include <linux/kernel.h>
+#include <linux/container_of.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/wait.h>
@@ -27,9 +27,6 @@
 #include <linux/io.h>
 #include <linux/moduleparam.h>
 #include <linux/interrupt.h>
-#include <linux/param.h>
-#include <linux/fs.h>
-#include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/jiffies.h>
 #include <linux/miscdevice.h>
