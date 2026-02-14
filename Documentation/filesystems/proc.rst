@@ -545,6 +545,11 @@ replaced by copy-on-write) part of the underlying shmem object out on swap.
 does not take into account swapped out page of underlying shmem objects.
 "Locked" indicates whether the mapping is locked in memory or not.
 
+"AnonZero" shows the size of anonymous pages that have never been accessed
+after mapping, and it can reflect the memory waste caused by huge pages.
+Implemented by scanning the size of zero-filled pages of the VMA. It
+is default disabled, and enabled via cmdline param "count_zero_page=true".
+
 "THPeligible" indicates whether the mapping is eligible for allocating
 naturally aligned THP pages of any currently enabled size. 1 if true, 0
 otherwise.

@@ -881,6 +881,7 @@ struct mem_size_stats {
 	u64 pss_dirty;
 	u64 pss_locked;
 	u64 swap_pss;
+	u64 anon_zero;
 };
 
 static void smaps_page_accumulate(struct mem_size_stats *mss,
@@ -913,6 +914,10 @@ static void smaps_page_accumulate(struct mem_size_stats *mss,
 	}
 }
 
+/* If scan and count zero-filled pages */
+static bool count_zero_page;
+core_param(count_zero_page, count_zero_page, bool, 0644);
+
 static void smaps_account(struct mem_size_stats *mss, struct page *page,
 		bool compound, bool young, bool dirty, bool locked,
 		bool present)
@@ -932,6 +937,9 @@ static void smaps_account(struct mem_size_stats *mss, struct page *page,
 		if (!folio_test_swapbacked(folio) && !dirty &&
 		    !folio_test_dirty(folio))
 			mss->lazyfree += size;
+
+		if (count_zero_page && pages_identical(page, ZERO_PAGE(0)))
+			mss->anon_zero += PAGE_SIZE;
 	}
 
 	if (folio_test_ksm(folio))
@@ -1364,6 +1372,8 @@ static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
 					mss->swap_pss >> PSS_SHIFT);
 	SEQ_PUT_DEC(" kB\nLocked:         ",
 					mss->pss_locked >> PSS_SHIFT);
+	if (count_zero_page)
+		SEQ_PUT_DEC(" kB\nAnonZero:       ", mss->anon_zero);
 	seq_puts(m, " kB\n");
 }
 
