@@ -1015,6 +1015,18 @@ static int iwl_pcie_napi_poll(struct napi_struct *napi, int budget)
 	trans_pcie = iwl_netdev_to_trans_pcie(napi->dev);
 	trans = trans_pcie->trans;
 
+	/* Stop processing RX if firmware has crashed. Stale notifications
+	 * from dying firmware (e.g. TX completions with corrupt SSN values)
+	 * can cause use-after-free in reclaim paths.
+	 */
+	if (unlikely(test_bit(STATUS_FW_ERROR, &trans->status))) {
+		WARN_ONCE(1,
+			  "iwlwifi: NAPI poll[%d] invoked after FW error\n",
+			  rxq->id);
+		napi_complete_done(napi, 0);
+		return 0;
+	}
+
 	ret = iwl_pcie_rx_handle(trans, rxq->id, budget);
 
 	IWL_DEBUG_ISR(trans, "[%d] handled %d, budget %d\n",
@@ -1041,6 +1053,14 @@ static int iwl_pcie_napi_poll_msix(struct napi_struct *napi, int budget)
 
 	trans_pcie = iwl_netdev_to_trans_pcie(napi->dev);
 	trans = trans_pcie->trans;
+
+	if (unlikely(test_bit(STATUS_FW_ERROR, &trans->status))) {
+		WARN_ONCE(1,
+			  "iwlwifi: NAPI MSIX poll[%d] invoked after FW error\n",
+			  rxq->id);
+		napi_complete_done(napi, 0);
+		return 0;
+	}
 
 	ret = iwl_pcie_rx_handle(trans, rxq->id, budget);
 	IWL_DEBUG_ISR(trans, "[%d] handled %d, budget %d\n", rxq->id, ret,
