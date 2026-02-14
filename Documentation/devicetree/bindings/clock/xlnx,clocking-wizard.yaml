@@ -38,6 +38,14 @@ properties:
       - const: clk_in1
       - const: s_axi_aclk
 
+  interrupts:
+    items:
+      - description: user clock monitor interrupt
+
+  interrupt-names:
+    items:
+      - const: monitor
+
   xlnx,static-config:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
@@ -66,12 +74,24 @@ required:
   - xlnx,speed-grade
   - xlnx,nr-outputs
 
+if:
+  properties:
+    compatible:
+      enum:
+        - xlnx,clocking-wizard
+        - xlnx,clocking-wizard-v5.2
+then:
+  properties:
+    interrupts: false
+    interrupt-names: false
+
 additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/interrupt-controller/irq.h>
     clock-controller@b0000000  {
-        compatible = "xlnx,clocking-wizard";
+        compatible = "xlnx,clocking-wizard-v6.0";
         reg = <0xb0000000 0x10000>;
         #clock-cells = <1>;
         xlnx,static-config;
@@ -79,5 +99,7 @@ examples:
         xlnx,nr-outputs = <6>;
         clock-names = "clk_in1", "s_axi_aclk";
         clocks = <&clkc 15>, <&clkc 15>;
+        interrupts-extended = <&intc 52 IRQ_TYPE_EDGE_RISING>;
+        interrupt-names = "monitor";
     };
 ...
