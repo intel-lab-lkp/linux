@@ -833,6 +833,7 @@ bool hda_sdw_check_wakeen_irq_common(struct snd_sof_dev *sdev);
 void hda_sdw_process_wakeen_common(struct snd_sof_dev *sdev);
 void hda_sdw_process_wakeen(struct snd_sof_dev *sdev);
 bool hda_common_check_sdw_irq(struct snd_sof_dev *sdev);
+int hda_sdw_dai_hw_ready(struct snd_sof_dev *sdev, int dai_type);
 
 #else
 
@@ -880,6 +881,11 @@ static inline void hda_sdw_process_wakeen(struct snd_sof_dev *sdev)
 static inline bool hda_common_check_sdw_irq(struct snd_sof_dev *sdev)
 {
 	return false;
+}
+
+static inline int hda_sdw_dai_hw_ready(struct snd_sof_dev *sdev, int dai_type)
+{
+	return 0;
 }
 
 #endif
