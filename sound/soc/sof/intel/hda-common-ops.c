@@ -84,6 +84,7 @@ const struct snd_sof_dsp_ops sof_hda_common_ops = {
 	.unregister_ipc_clients = hda_unregister_clients,
 
 	/* DAI drivers */
+	.dai_link_hw_ready = hda_sdw_dai_hw_ready,
 	.drv		= skl_dai,
 	.num_drv	= SOF_SKL_NUM_DAIS,
 	.is_chain_dma_supported	= hda_is_chain_dma_supported,

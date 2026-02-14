@@ -2256,6 +2256,14 @@ sof_ipc4_prepare_copier_module(struct snd_sof_widget *swidget,
 	case snd_soc_dapm_dai_in:
 	case snd_soc_dapm_dai_out:
 	{
+		/* Wait for DAI link hardware (e.g. SoundWire slaves) to be ready */
+		if (sdev->pdata->desc->ops->dai_link_hw_ready) {
+			ret = sdev->pdata->desc->ops->dai_link_hw_ready(
+					sdev, ipc4_copier->dai_type);
+			if (ret)
+				return ret;
+		}
+
 		/*
 		 * Only SOF_DAI_INTEL_ALH needs copier_data to set blob.
 		 * That's why only ALH dai's blob is set after sof_ipc4_init_input_audio_fmt
