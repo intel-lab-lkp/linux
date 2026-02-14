@@ -40,3 +40,20 @@ config DRM_ST7735R
 
 	  If M is selected the module will be called st7735r.
 
+config DRM_ST7789V
+	tristate "DRM support for Sitronix ST7789V display panels"
+	depends on DRM && SPI
+	select DRM_CLIENT_SELECTION
+	select DRM_GEM_DMA_HELPER
+	select DRM_KMS_HELPER
+	select DRM_MIPI_DBI
+	select BACKLIGHT_CLASS_DEVICE
+	help
+	  DRM driver for Sitronix ST7789V panels connected via SPI.
+	  This driver supports several panels including:
+	  * HannStar HSD20 IPS
+	  * Inanbo T28CP45TN89-V17
+	  * EDT ET028013DMA
+	  * Jasonic JT240MHQS-HWT-EK-E3
+
+	  If M is selected the module will be called st7789v.
