@@ -1817,7 +1817,8 @@ static void f2fs_verify_cluster(struct work_struct *work)
 		if (!rpage)
 			continue;
 
-		if (fsverity_verify_page(dic->vi, rpage))
+		if (fsverity_verify_blocks(dic->vi, page_folio(rpage),
+					   PAGE_SIZE, 0))
 			SetPageUptodate(rpage);
 		else
 			ClearPageUptodate(rpage);
