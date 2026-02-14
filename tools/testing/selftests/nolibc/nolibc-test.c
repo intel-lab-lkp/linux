@@ -65,13 +65,18 @@ static const char *argv0;
 /* will be used by constructor tests */
 static int constructor_test_value;
 
-static const int is_nolibc =
 #ifdef NOLIBC
-	1
+#define is_nolibc 1
 #else
-	0
+#define is_nolibc 0
+/* strlcat() and strlcpy() may not be in the system headers. */
+#undef strlcat
+#undef strlcpy
+#define strlcat(d, s, l) 0
+#define strlcpy(d, s, l) 0
+/* readdir_r() is likely to be marked deprecated */
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
-;
 
 /* definition of a series of tests */
 struct test {
