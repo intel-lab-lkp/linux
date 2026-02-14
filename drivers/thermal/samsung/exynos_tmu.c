@@ -252,8 +252,8 @@ static void sanitize_temp_error(struct exynos_tmu_data *data, u32 trim_info)
 				EXYNOS_TMU_TEMP_MASK);
 
 	if (!data->temp_error1 ||
-	    (data->soc_config->min_efuse_value > data->temp_error1) ||
-	    (data->temp_error1 > data->soc_config->max_efuse_value))
+	    data->soc_config->min_efuse_value > data->temp_error1 ||
+	    data->temp_error1 > data->soc_config->max_efuse_value)
 		data->temp_error1 = data->soc_config->efuse_value & EXYNOS_TMU_TEMP_MASK;
 
 	if (!data->temp_error2)
@@ -536,7 +536,7 @@ static void exynos5433_tmu_initialize(struct platform_device *pdev)
 	}
 
 	dev_info(&pdev->dev, "Calibration type is %d-point calibration\n",
-			cal_type ?  2 : 1);
+		 cal_type ?  2 : 1);
 }
 
 static void exynos7_tmu_set_low_temp(struct exynos_tmu_data *data, u8 temp)
