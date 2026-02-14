@@ -631,7 +631,7 @@ static int nvme_issue_wait_ccr(struct nvme_ctrl *sctrl, struct nvme_ctrl *ictrl)
 	if (result & 0x01) /* Immediate Reset Successful */
 		goto out;
 
-	tmo = secs_to_jiffies(ictrl->kato);
+	tmo = msecs_to_jiffies(max(ictrl->cqt, ictrl->kato * 1000));
 	if (!wait_for_completion_timeout(&ccr.complete, tmo)) {
 		ret = -ETIMEDOUT;
 		goto out;
