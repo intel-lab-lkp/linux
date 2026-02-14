@@ -463,6 +463,11 @@ static void __init deserialize_bitmap(unsigned int order,
 	struct kho_mem_phys_bits *bitmap = KHOSER_LOAD_PTR(elm->bitmap);
 	unsigned long bit;
 
+	if (order > MAX_PAGE_ORDER) {
+		pr_warn("invalid order %u for preserved bitmap\n", order);
+		return;
+	}
+
 	for_each_set_bit(bit, bitmap->preserve, PRESERVE_BITS) {
 		int sz = 1 << (order + PAGE_SHIFT);
 		phys_addr_t phys =
