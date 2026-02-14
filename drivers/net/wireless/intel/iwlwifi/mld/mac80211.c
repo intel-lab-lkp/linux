@@ -558,6 +558,8 @@ iwl_mld_restart_cleanup(struct iwl_mld *mld)
 					  iwl_mld_cleanup_sta, NULL);
 
 	iwl_mld_ftm_restart_cleanup(mld);
+
+	ieee80211_wake_queues(mld->hw);
 }
 
 static
