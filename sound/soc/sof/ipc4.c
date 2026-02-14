@@ -365,20 +365,33 @@ static int ipc4_wait_tx_done(struct snd_sof_ipc *ipc, void *reply_data)
 	return ret;
 }
 
+#define SOF_IPC4_TX_BUSY_RETRIES	50
+#define SOF_IPC4_TX_BUSY_DELAY_US	100
+#define SOF_IPC4_TX_BUSY_DELAY_MAX_US	200
+
 static int ipc4_tx_msg_unlocked(struct snd_sof_ipc *ipc,
 				void *msg_data, size_t msg_bytes,
 				void *reply_data, size_t reply_bytes)
 {
 	struct sof_ipc4_msg *ipc4_msg = msg_data;
 	struct snd_sof_dev *sdev = ipc->sdev;
-	int ret;
+	int ret, i;
 
 	if (msg_bytes > ipc->max_payload_size || reply_bytes > ipc->max_payload_size)
 		return -EINVAL;
 
 	sof_ipc4_log_header(sdev->dev, "ipc tx      ", msg_data, true);
 
-	ret = sof_ipc_send_msg(sdev, msg_data, msg_bytes, reply_bytes);
+	for (i = 0; i < SOF_IPC4_TX_BUSY_RETRIES; i++) {
+		ret = sof_ipc_send_msg(sdev, msg_data, msg_bytes, reply_bytes);
+		if (ret != -EBUSY)
+			break;
+		usleep_range(SOF_IPC4_TX_BUSY_DELAY_US,
+			     SOF_IPC4_TX_BUSY_DELAY_MAX_US);
+	}
+	if (i == SOF_IPC4_TX_BUSY_RETRIES)
+		dev_dbg(sdev->dev, "%s: TX still busy after %d retries\n",
+			__func__, i);
 	if (ret) {
 		dev_err_ratelimited(sdev->dev,
 				    "%s: ipc message send for %#x|%#x failed: %d\n",
