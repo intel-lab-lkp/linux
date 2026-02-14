@@ -367,6 +367,7 @@ static inline void pci_remove_legacy_files(struct pci_bus *bus) { }
 /* Lock for read/write access to pci device and bus lists */
 extern struct rw_semaphore pci_bus_sem;
 extern struct mutex pci_slot_mutex;
+bool pci_lock_rescan_remove_nested(void);
 
 extern raw_spinlock_t pci_lock;
 
