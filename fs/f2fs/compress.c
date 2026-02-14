@@ -1813,11 +1813,15 @@ static void f2fs_verify_cluster(struct work_struct *work)
 	/* Verify, update, and unlock the decompressed pages. */
 	for (i = 0; i < dic->cluster_size; i++) {
 		struct page *rpage = dic->rpages[i];
+		struct folio *rfolio;
+		size_t offset;
 
 		if (!rpage)
 			continue;
+		rfolio = page_folio(rpage);
+		offset = folio_page_idx(rfolio, rpage) * PAGE_SIZE;
 
-		if (fsverity_verify_page(dic->vi, rpage))
+		if (fsverity_verify_blocks(dic->vi, rfolio, PAGE_SIZE, offset))
 			SetPageUptodate(rpage);
 		else
 			ClearPageUptodate(rpage);
