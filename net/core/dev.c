@@ -9639,39 +9639,51 @@ int netif_set_allmulti(struct net_device *dev, int inc, bool notify)
  *	filtering it is put in promiscuous mode while unicast addresses
  *	are present.
  */
-void __dev_set_rx_mode(struct net_device *dev)
+int __dev_set_rx_mode(struct net_device *dev)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
+	int promisc_inc = 0;
 
 	/* dev_open will call this function so the list will stay sane. */
 	if (!(dev->flags&IFF_UP))
-		return;
+		return 0;
 
 	if (!netif_device_present(dev))
-		return;
+		return 0;
 
 	if (!(dev->priv_flags & IFF_UNICAST_FLT)) {
 		/* Unicast addresses changes may only happen under the rtnl,
-		 * therefore calling __dev_set_promiscuity here is safe.
+		 * therefore changing uc_promisc here is safe. The actual
+		 * __dev_set_promiscuity() call is deferred to the caller
+		 * (after releasing addr_list_lock) because it may trigger
+		 * ndo_change_rx_flags -> dev_set_promiscuity on lower
+		 * devices which can acquire netdev instance lock (mutex).
 		 */
 		if (!netdev_uc_empty(dev) && !dev->uc_promisc) {
-			__dev_set_promiscuity(dev, 1, false);
 			dev->uc_promisc = true;
+			promisc_inc = 1;
 		} else if (netdev_uc_empty(dev) && dev->uc_promisc) {
-			__dev_set_promiscuity(dev, -1, false);
 			dev->uc_promisc = false;
+			promisc_inc = -1;
 		}
 	}
 
 	if (ops->ndo_set_rx_mode)
 		ops->ndo_set_rx_mode(dev);
+
+	return promisc_inc;
 }
 
 void dev_set_rx_mode(struct net_device *dev)
 {
+	int promisc_inc;
+
 	netif_addr_lock_bh(dev);
-	__dev_set_rx_mode(dev);
+	promisc_inc = __dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
+
+	if (promisc_inc)
+		__dev_set_promiscuity(dev, promisc_inc, false);
 }
 
 /**

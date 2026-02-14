@@ -667,9 +667,9 @@ int dev_uc_add_excl(struct net_device *dev, const unsigned char *addr)
 	err = __hw_addr_add_ex(&dev->uc, addr, dev->addr_len,
 			       NETDEV_HW_ADDR_T_UNICAST, true, false,
 			       0, true);
-	if (!err)
-		__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
+	if (!err)
+		dev_set_rx_mode(dev);
 	return err;
 }
 EXPORT_SYMBOL(dev_uc_add_excl);
@@ -689,9 +689,9 @@ int dev_uc_add(struct net_device *dev, const unsigned char *addr)
 	netif_addr_lock_bh(dev);
 	err = __hw_addr_add(&dev->uc, addr, dev->addr_len,
 			    NETDEV_HW_ADDR_T_UNICAST);
-	if (!err)
-		__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
+	if (!err)
+		dev_set_rx_mode(dev);
 	return err;
 }
 EXPORT_SYMBOL(dev_uc_add);
@@ -711,9 +711,9 @@ int dev_uc_del(struct net_device *dev, const unsigned char *addr)
 	netif_addr_lock_bh(dev);
 	err = __hw_addr_del(&dev->uc, addr, dev->addr_len,
 			    NETDEV_HW_ADDR_T_UNICAST);
-	if (!err)
-		__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
+	if (!err)
+		dev_set_rx_mode(dev);
 	return err;
 }
 EXPORT_SYMBOL(dev_uc_del);
@@ -740,9 +740,9 @@ int dev_uc_sync(struct net_device *to, struct net_device *from)
 
 	netif_addr_lock(to);
 	err = __hw_addr_sync(&to->uc, &from->uc, to->addr_len);
-	if (!err)
-		__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
+	if (!err)
+		dev_set_rx_mode(to);
 	return err;
 }
 EXPORT_SYMBOL(dev_uc_sync);
@@ -770,9 +770,9 @@ int dev_uc_sync_multiple(struct net_device *to, struct net_device *from)
 
 	netif_addr_lock(to);
 	err = __hw_addr_sync_multiple(&to->uc, &from->uc, to->addr_len);
-	if (!err)
-		__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
+	if (!err)
+		dev_set_rx_mode(to);
 	return err;
 }
 EXPORT_SYMBOL(dev_uc_sync_multiple);
@@ -803,9 +803,9 @@ void dev_uc_unsync(struct net_device *to, struct net_device *from)
 	netif_addr_lock_bh(from);
 	netif_addr_lock(to);
 	__hw_addr_unsync(&to->uc, &from->uc, to->addr_len);
-	__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
 	netif_addr_unlock_bh(from);
+	dev_set_rx_mode(to);
 }
 EXPORT_SYMBOL(dev_uc_unsync);
 
@@ -852,9 +852,9 @@ int dev_mc_add_excl(struct net_device *dev, const unsigned char *addr)
 	err = __hw_addr_add_ex(&dev->mc, addr, dev->addr_len,
 			       NETDEV_HW_ADDR_T_MULTICAST, true, false,
 			       0, true);
-	if (!err)
-		__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
+	if (!err)
+		dev_set_rx_mode(dev);
 	return err;
 }
 EXPORT_SYMBOL(dev_mc_add_excl);
@@ -868,9 +868,9 @@ static int __dev_mc_add(struct net_device *dev, const unsigned char *addr,
 	err = __hw_addr_add_ex(&dev->mc, addr, dev->addr_len,
 			       NETDEV_HW_ADDR_T_MULTICAST, global, false,
 			       0, false);
-	if (!err)
-		__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
+	if (!err)
+		dev_set_rx_mode(dev);
 	return err;
 }
 /**
@@ -908,9 +908,9 @@ static int __dev_mc_del(struct net_device *dev, const unsigned char *addr,
 	netif_addr_lock_bh(dev);
 	err = __hw_addr_del_ex(&dev->mc, addr, dev->addr_len,
 			       NETDEV_HW_ADDR_T_MULTICAST, global, false);
-	if (!err)
-		__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
+	if (!err)
+		dev_set_rx_mode(dev);
 	return err;
 }
 
@@ -963,9 +963,9 @@ int dev_mc_sync(struct net_device *to, struct net_device *from)
 
 	netif_addr_lock(to);
 	err = __hw_addr_sync(&to->mc, &from->mc, to->addr_len);
-	if (!err)
-		__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
+	if (!err)
+		dev_set_rx_mode(to);
 	return err;
 }
 EXPORT_SYMBOL(dev_mc_sync);
@@ -993,9 +993,9 @@ int dev_mc_sync_multiple(struct net_device *to, struct net_device *from)
 
 	netif_addr_lock(to);
 	err = __hw_addr_sync_multiple(&to->mc, &from->mc, to->addr_len);
-	if (!err)
-		__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
+	if (!err)
+		dev_set_rx_mode(to);
 	return err;
 }
 EXPORT_SYMBOL(dev_mc_sync_multiple);
@@ -1018,9 +1018,9 @@ void dev_mc_unsync(struct net_device *to, struct net_device *from)
 	netif_addr_lock_bh(from);
 	netif_addr_lock(to);
 	__hw_addr_unsync(&to->mc, &from->mc, to->addr_len);
-	__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
 	netif_addr_unlock_bh(from);
+	dev_set_rx_mode(to);
 }
 EXPORT_SYMBOL(dev_mc_unsync);
 
