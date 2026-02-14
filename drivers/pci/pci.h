@@ -840,6 +840,8 @@ struct aer_err_info {
 
 int aer_get_device_error_info(struct aer_err_info *info, int i);
 void aer_print_error(struct aer_err_info *info, int i);
+void aer_ratelimit_print_init(struct pci_dev *dev, struct aer_err_info *e_info,
+			int idx);
 
 int pcie_read_tlp_log(struct pci_dev *dev, int where, int where2,
 		      unsigned int tlp_len, bool flit,

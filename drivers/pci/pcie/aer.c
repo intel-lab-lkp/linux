@@ -973,6 +973,29 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 EXPORT_SYMBOL_GPL(pci_print_aer);
 
 /**
+ * aer_ratelimit_print_init - set flag whether error message should be printed
+ * @dev: pointer to pci_dev to be rate-limited
+ * @e_info: pointer to aer error info
+ * @idx: index for dev array in aer error info
+ */
+void aer_ratelimit_print_init(struct pci_dev *dev, struct aer_err_info *e_info,
+			int idx)
+{
+	/*
+	 * Ratelimit AER log messages.  "dev" is either the source
+	 * identified by the root's Error Source ID or it has an unmasked
+	 * error logged in its own AER Capability.  Messages are emitted
+	 * when "ratelimit_print[i]" is non-zero.  If we will print detail
+	 * for a downstream device, make sure we print the Error Source ID
+	 * from the root as well.
+	 */
+	if (aer_ratelimit(dev, e_info->severity)) {
+		e_info->ratelimit_print[idx] = 1;
+		e_info->root_ratelimit_print = 1;
+	}
+}
+
+/**
  * add_error_device - list device to be handled
  * @e_info: pointer to error info
  * @dev: pointer to pci_dev to be added
@@ -987,18 +1010,7 @@ static int add_error_device(struct aer_err_info *e_info, struct pci_dev *dev)
 	e_info->dev[i] = pci_dev_get(dev);
 	e_info->error_dev_num++;
 
-	/*
-	 * Ratelimit AER log messages.  "dev" is either the source
-	 * identified by the root's Error Source ID or it has an unmasked
-	 * error logged in its own AER Capability.  Messages are emitted
-	 * when "ratelimit_print[i]" is non-zero.  If we will print detail
-	 * for a downstream device, make sure we print the Error Source ID
-	 * from the root as well.
-	 */
-	if (aer_ratelimit(dev, e_info->severity)) {
-		e_info->ratelimit_print[i] = 1;
-		e_info->root_ratelimit_print = 1;
-	}
+	aer_ratelimit_print_init(dev, e_info, i);
 	return 0;
 }
 
