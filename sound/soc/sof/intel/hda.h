@@ -549,14 +549,6 @@ struct sof_intel_hda_dev {
 
 	/* work queue for mic privacy state change notification sending */
 	struct sof_ace3_mic_privacy mic_privacy;
-
-	/*
-	 * Pointing to the IPC message if immediate sending was not possible
-	 * because the downlink communication channel was BUSY at the time.
-	 * The message will be re-tried when the channel becomes free (the ACK
-	 * is received from the DSP for the previous message)
-	 */
-	struct snd_sof_ipc_msg *delayed_ipc_tx_msg;
 };
 
 static inline struct hdac_bus *sof_to_bus(struct snd_sof_dev *s)
