@@ -26,6 +26,7 @@ impl From<OutOfBound> for Error {
 /// # Safety
 ///
 /// `get` must return a pointer in bounds of the provided pointer.
+#[diagnostic::on_unimplemented(message = "`{Self}` cannot be used to index `{T}`")]
 #[doc(hidden)]
 pub unsafe trait ProjectIndex<T: ?Sized>: Sized {
     type Output: ?Sized;
