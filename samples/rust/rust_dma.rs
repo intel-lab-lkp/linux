@@ -68,7 +68,7 @@ impl pci::Driver for DmaSampleDriver {
                 CoherentAllocation::alloc_coherent(pdev.as_ref(), TEST_VALUES.len(), GFP_KERNEL)?;
 
             for (i, value) in TEST_VALUES.into_iter().enumerate() {
-                kernel::dma_write!(ca[i] = MyStruct::new(value.0, value.1))?;
+                kernel::dma_write!(ca, [i]?, MyStruct::new(value.0, value.1));
             }
 
             let size = 4 * page::PAGE_SIZE;
@@ -91,17 +91,17 @@ impl PinnedDrop for DmaSampleDriver {
         dev_info!(self.pdev, "Unload DMA test driver.\n");
 
         for (i, value) in TEST_VALUES.into_iter().enumerate() {
-            let val0 = kernel::dma_read!(self.ca[i].h);
-            let val1 = kernel::dma_read!(self.ca[i].b);
-            assert!(val0.is_ok());
-            assert!(val1.is_ok());
+            let result = (|| -> Result<_> {
+                let val0 = kernel::dma_read!(self.ca, [i]?.h);
+                let val1 = kernel::dma_read!(self.ca, [i]?.b);
 
-            if let Ok(val0) = val0 {
                 assert_eq!(val0, value.0);
-            }
-            if let Ok(val1) = val1 {
                 assert_eq!(val1, value.1);
-            }
+
+                Ok(())
+            })();
+
+            assert!(result.is_ok());
         }
 
         for (i, entry) in self.sgt.iter().enumerate() {
