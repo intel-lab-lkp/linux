@@ -16,10 +16,10 @@
 	 *
 	 * The start of data in Flash is _sdata and the start of data in RAM is
 	 * CONFIG_PHYS_RAM_BASE. So this fix-up essentially does this:
-	 * reg += CONFIG_PHYS_RAM_BASE - _start
+	 * reg += CONFIG_PHYS_RAM_BASE - _sdata
 	 */
 	li t0, CONFIG_PHYS_RAM_BASE
-        add \reg, \reg, t0
+	add \reg, \reg, t0
 	la t0, _sdata
 	sub \reg, \reg, t0
 .endm
