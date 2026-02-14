@@ -127,12 +127,13 @@ ssize_t sized_strscpy(char *dest, const char *src, size_t count)
 	 */
 	if ((long)src & (sizeof(long) - 1)) {
 		size_t limit = PAGE_SIZE - ((long)src & (PAGE_SIZE - 1));
+
 		if (limit < max)
 			max = limit;
 	}
 #else
 	/* If src or dest is unaligned, don't do word-at-a-time. */
-	if (((long) dest | (long) src) & (sizeof(long) - 1))
+	if (((long)dest | (long)src) & (sizeof(long) - 1))
 		max = 0;
 #endif
 #endif
@@ -150,23 +151,24 @@ ssize_t sized_strscpy(char *dest, const char *src, size_t count)
 		unsigned long c, data;
 
 #ifdef CONFIG_DCACHE_WORD_ACCESS
-		c = load_unaligned_zeropad(src+res);
+		c = load_unaligned_zeropad(src + res);
 #else
-		c = read_word_at_a_time(src+res);
+		c = read_word_at_a_time(src + res);
 #endif
 		if (has_zero(c, &data, &constants)) {
 			data = prep_zero_mask(c, data, &constants);
 			data = create_zero_mask(data);
-			*(unsigned long *)(dest+res) = c & zero_bytemask(data);
+			*(unsigned long *)(dest + res) = c &
+							 zero_bytemask(data);
 			return res + find_zero(data);
 		}
 		count -= sizeof(unsigned long);
 		if (unlikely(!count)) {
 			c &= ALLBUTLAST_BYTE_MASK;
-			*(unsigned long *)(dest+res) = c;
+			*(unsigned long *)(dest + res) = c;
 			return -E2BIG;
 		}
-		*(unsigned long *)(dest+res) = c;
+		*(unsigned long *)(dest + res) = c;
 		res += sizeof(unsigned long);
 		max -= sizeof(unsigned long);
 	}
@@ -261,7 +263,7 @@ size_t strlcat(char *dest, const char *src, size_t count)
 	dest += dsize;
 	count -= dsize;
 	if (len >= count)
-		len = count-1;
+		len = count - 1;
 	__builtin_memcpy(dest, src, len);
 	dest[len] = 0;
 	return res;
@@ -380,6 +382,7 @@ char *strnchrnul(const char *s, size_t count, int c)
 char *strrchr(const char *s, int c)
 {
 	const char *last = NULL;
+
 	do {
 		if (*s == (char)c)
 			last = s;
@@ -679,6 +682,7 @@ __visible int memcmp(const void *cs, const void *ct, size_t count)
 	if (count >= sizeof(unsigned long)) {
 		const unsigned long *u1 = cs;
 		const unsigned long *u2 = ct;
+
 		do {
 			if (get_unaligned(u1) != get_unaligned(u2))
 				break;
@@ -690,9 +694,10 @@ __visible int memcmp(const void *cs, const void *ct, size_t count)
 		ct = u2;
 	}
 #endif
-	for (su1 = cs, su2 = ct; 0 < count; ++su1, ++su2, count--)
+	for (su1 = cs, su2 = ct; count > 0; ++su1, ++su2, count--) {
 		if ((res = *su1 - *su2) != 0)
 			break;
+	}
 	return res;
 }
 EXPORT_SYMBOL(memcmp);
@@ -737,7 +742,7 @@ void *memscan(void *addr, int c, size_t size)
 		p++;
 		size--;
 	}
-  	return (void *)p;
+	return (void *)p;
 }
 EXPORT_SYMBOL(memscan);
 #endif
@@ -805,10 +810,10 @@ EXPORT_SYMBOL(strnstr);
 void *memchr(const void *s, int c, size_t n)
 {
 	const unsigned char *p = s;
+
 	while (n-- != 0) {
-        	if ((unsigned char)c == *p++) {
+		if ((unsigned char)c == *p++)
 			return (void *)(p - 1);
-		}
 	}
 	return NULL;
 }
