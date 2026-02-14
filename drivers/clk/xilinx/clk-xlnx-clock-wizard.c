@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/devcoredump.h>
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/of.h>
@@ -19,11 +20,15 @@
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/err.h>
+#include <linux/interrupt.h>
 #include <linux/iopoll.h>
 
 #define WZRD_NUM_OUTPUTS	7
 #define WZRD_ACLK_MAX_FREQ	250000000UL
+#define WZRD_NUM_DUMP_REGS	5
 
+#define WZRD_INTR_STATUS	0x0C
+#define WZRD_INTR_ENABLE	0x10
 #define WZRD_CLK_CFG_REG(v, n)	(0x200 + 0x130 * (v) + 4 * (n))
 
 #define WZRD_CLKOUT0_FRAC_EN	BIT(18)
@@ -124,6 +129,7 @@ enum clk_wzrd_int_clks {
 /**
  * struct clk_wzrd - Clock wizard private data structure
  *
+ * @pdev:		Platform device
  * @nb:			Notifier block
  * @base:		Memory base
  * @clk_in1:		Handle to input clock 'clk_in1'
@@ -131,9 +137,11 @@ enum clk_wzrd_int_clks {
  * @clks_internal:	Internal clocks
  * @speed_grade:	Speed grade of the device
  * @suspended:		Flag indicating power state of the device
+ * @work:		Delayed work for devcoredump
  * @clk_data:		Output clock data
  */
 struct clk_wzrd {
+	struct platform_device *pdev;
 	struct notifier_block nb;
 	void __iomem *base;
 	struct clk *clk_in1;
@@ -141,6 +149,7 @@ struct clk_wzrd {
 	struct clk_hw *clks_internal[wzrd_clk_int_max];
 	unsigned int speed_grade;
 	bool suspended;
+	struct delayed_work work;
 	struct clk_hw_onecell_data clk_data;
 };
 
@@ -177,8 +186,9 @@ struct clk_wzrd_divider {
 	spinlock_t *lock;  /* divider lock */
 };
 
-struct versal_clk_data {
+struct clk_wzrd_data {
 	bool is_versal;
+	bool has_monitor;
 };
 
 #define to_clk_wzrd(_nb) container_of(_nb, struct clk_wzrd, nb)
@@ -984,8 +994,13 @@ static int __maybe_unused clk_wzrd_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(clk_wzrd_dev_pm_ops, clk_wzrd_suspend,
 			 clk_wzrd_resume);
 
-static const struct versal_clk_data versal_data = {
+static const struct clk_wzrd_data version_6_0_data = {
+	.is_versal	= false,
+	.has_monitor	= true,
+};
+static const struct clk_wzrd_data versal_data = {
 	.is_versal	= true,
+	.has_monitor	= true,
 };
 
 static int clk_wzrd_register_output_clocks(struct device *dev, int nr_outputs)
@@ -993,7 +1008,7 @@ static int clk_wzrd_register_output_clocks(struct device *dev, int nr_outputs)
 	const char *clkout_name, *clk_name, *clk_mul_name;
 	struct clk_wzrd *clk_wzrd = dev_get_drvdata(dev);
 	u32 regl, regh, edge, regld, reghd, edged, div;
-	const struct versal_clk_data *data;
+	const struct clk_wzrd_data *data;
 	unsigned long flags = 0;
 	bool is_versal = false;
 	void __iomem *ctrl_reg;
@@ -1150,13 +1165,44 @@ static int clk_wzrd_register_output_clocks(struct device *dev, int nr_outputs)
 	return 0;
 }
 
+static irqreturn_t clk_wzrd_user_mon_intr_handler(int irq, void *data)
+{
+	struct clk_wzrd *clk_wzrd = platform_get_drvdata(data);
+
+	schedule_delayed_work(&clk_wzrd->work, msecs_to_jiffies(10));
+	return IRQ_HANDLED;
+}
+
+static void clk_wzrd_user_mon_work(struct work_struct *work)
+{
+	struct clk_wzrd *clk_wzrd = container_of(work, struct clk_wzrd, work.work);
+	u32 *dump = vmalloc(WZRD_NUM_DUMP_REGS * sizeof(*dump));
+
+	ioread32_rep(clk_wzrd->base, dump, WZRD_NUM_DUMP_REGS);
+	dev_coredumpv(&clk_wzrd->pdev->dev, dump, WZRD_NUM_DUMP_REGS * sizeof(*dump), GFP_KERNEL);
+	iowrite32(dump[WZRD_INTR_STATUS / sizeof(*dump)], clk_wzrd->base + WZRD_INTR_STATUS);
+}
+
+static void clk_wzrd_cancel_delayed_work(void *data)
+{
+	struct delayed_work *work = data;
+
+	cancel_delayed_work_sync(work);
+}
+
 static int clk_wzrd_probe(struct platform_device *pdev)
 {
+	const struct clk_wzrd_data *data = device_get_match_data(&pdev->dev);
 	struct device_node *np = pdev->dev.of_node;
 	struct clk_wzrd *clk_wzrd;
 	unsigned long rate;
 	int nr_outputs;
+	int irq;
 	int ret;
+
+	irq = platform_get_irq_optional(pdev, 0);
+	if (irq < 0 && irq != -ENXIO)
+		return dev_err_probe(&pdev->dev, irq, "failed to get irq\n");
 
 	ret = of_property_read_u32(np, "xlnx,nr-outputs", &nr_outputs);
 	if (ret || nr_outputs > WZRD_NUM_OUTPUTS)
@@ -1226,6 +1272,21 @@ static int clk_wzrd_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (data && data->has_monitor && irq > 0) {
+		ret = devm_request_irq(&pdev->dev, irq, clk_wzrd_user_mon_intr_handler, IRQF_SHARED,
+				       "user_mon", clk_wzrd);
+		if (ret)
+			return dev_err_probe(&pdev->dev, ret, "failed to request irq\n");
+
+		INIT_DELAYED_WORK(&clk_wzrd->work, clk_wzrd_user_mon_work);
+		ret = devm_add_action_or_reset(&pdev->dev, clk_wzrd_cancel_delayed_work,
+					       &clk_wzrd->work);
+		if (ret)
+			return ret;
+
+		writel(GENMASK(15, 0), clk_wzrd->base + WZRD_INTR_ENABLE);
+	}
+
 	return 0;
 }
 
@@ -1233,7 +1294,7 @@ static const struct of_device_id clk_wzrd_ids[] = {
 	{ .compatible = "xlnx,versal-clk-wizard", .data = &versal_data },
 	{ .compatible = "xlnx,clocking-wizard"   },
 	{ .compatible = "xlnx,clocking-wizard-v5.2"   },
-	{ .compatible = "xlnx,clocking-wizard-v6.0"  },
+	{ .compatible = "xlnx,clocking-wizard-v6.0", .data = &version_6_0_data },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, clk_wzrd_ids);
