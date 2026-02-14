@@ -689,18 +689,6 @@ unsafe impl<T: AsBytes + FromBytes + Send> Send for CoherentAllocation<T> {}
 /// ```
 #[macro_export]
 macro_rules! dma_read {
-    // Compatibility for old syntax.
-    ($dma:ident [ $idx:expr ] $($proj:tt)* ) => {
-        (|| -> ::core::result::Result<_, $crate::error::Error> {
-            ::core::result::Result::Ok($crate::dma_read!($dma, [$idx]? $($proj)*))
-        })
-    };
-    ($($dma:ident).* [ $idx:expr ] $($proj:tt)* ) => {
-        (|| -> ::core::result::Result<_, $crate::error::Error> {
-            ::core::result::Result::Ok($crate::dma_write!($($dma).*, [$idx]? $($proj)*))
-        })
-    };
-
     ($dma:expr, $($proj:tt)*) => {{
         let dma = &$dma;
         let ptr = $crate::project_pointer!(
@@ -738,14 +726,6 @@ macro_rules! dma_read {
 /// ```
 #[macro_export]
 macro_rules! dma_write {
-    // Compatibility for old syntax.
-    ($dma:ident [ $idx:expr ] $(.$field:ident)* = $val:expr) => {
-        (|| -> ::core::result::Result<_, $crate::error::Error> {
-            $crate::dma_write!($dma, [$idx]? $(.$field)*, $val);
-            ::core::result::Result::Ok(())
-        })()
-    };
-
     (@parse [$dma:expr] [$($proj:tt)*] [, $val:expr]) => {{
         let dma = &$dma;
         let ptr = $crate::project_pointer!(
