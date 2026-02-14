@@ -35,7 +35,7 @@ struct cpu_hw_events {
 	int			enabled;
 	/* Number of events scheduled; also number entries valid in arrays below. */
 	int			n_events;
-	/* Number events added since last hw_perf_disable(). */
+	/* Number of events added since last alpha_pmu_disable(). */
 	int			n_added;
 	/* Events currently scheduled. */
 	struct perf_event	*event[MAX_HWEVENTS];
@@ -371,10 +371,6 @@ static int collect_events(struct perf_event *group, int max_count,
 static int alpha_check_constraints(struct perf_event **events,
 				   unsigned long *evtypes, int n_ev)
 {
-
-	/* No HW events is possible from hw_perf_group_sched_in(). */
-	if (n_ev == 0)
-		return 0;
 
 	if (n_ev > alpha_pmu->num_pmcs)
 		return -1;
