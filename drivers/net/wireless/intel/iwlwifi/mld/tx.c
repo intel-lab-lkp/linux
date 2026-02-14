@@ -1082,6 +1082,18 @@ void iwl_mld_handle_tx_resp_notif(struct iwl_mld *mld,
 	bool mgmt = false;
 	bool tx_failure = (status & TX_STATUS_MSK) != TX_STATUS_SUCCESS;
 
+	/* Firmware is dead — the TX response may contain corrupt SSN values
+	 * from a dying firmware DMA. Processing it could cause
+	 * iwl_trans_reclaim() to free the wrong TX queue entries, leading to
+	 * skb use-after-free or double-free.
+	 */
+	if (unlikely(test_bit(STATUS_FW_ERROR, &mld->trans->status))) {
+		WARN_ONCE(1,
+			  "iwlwifi: TX resp notif (sta=%d txq=%d) after FW error\n",
+			  sta_id, txq_id);
+		return;
+	}
+
 	if (IWL_FW_CHECK(mld, tx_resp->frame_count != 1,
 			 "Invalid tx_resp notif frame_count (%d)\n",
 			 tx_resp->frame_count))
@@ -1359,6 +1371,13 @@ void iwl_mld_handle_compressed_ba_notif(struct iwl_mld *mld,
 	u16 tfd_cnt = le16_to_cpu(ba_res->tfd_cnt);
 	u8 sta_id = ba_res->sta_id;
 	struct ieee80211_link_sta *link_sta;
+
+	if (unlikely(test_bit(STATUS_FW_ERROR, &mld->trans->status))) {
+		WARN_ONCE(1,
+			  "iwlwifi: BA notif (sta=%d) after FW error\n",
+			  sta_id);
+		return;
+	}
 
 	if (!tfd_cnt)
 		return;
