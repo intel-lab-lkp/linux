@@ -378,6 +378,50 @@ static void hda_dsp_sdw_process_mic_privacy(struct snd_sof_dev *sdev)
 		chip->process_mic_privacy(sdev, true, AZX_REG_ML_LEPTR_ID_SDW);
 }
 
+int hda_sdw_dai_hw_ready(struct snd_sof_dev *sdev, int dai_type)
+{
+	struct sof_intel_hda_dev *hdev = sdev->pdata->hw_pdata;
+	struct sdw_peripherals *sdw_p;
+	long ret;
+	int idx;
+
+	if (dai_type != SOF_DAI_INTEL_ALH)
+		return 0;
+
+	if (!hdev || !hdev->sdw || !hdev->sdw->peripherals)
+		return 0;
+
+	sdw_p = hdev->sdw->peripherals;
+
+	for (idx = 0; idx < sdw_p->num_peripherals; idx++) {
+		struct sdw_slave *slave = sdw_p->array[idx];
+
+		if (!slave)
+			continue;
+
+		if (slave->status != SDW_SLAVE_ATTACHED)
+			continue;
+
+		ret = wait_for_completion_interruptible_timeout(
+				&slave->initialization_complete,
+				msecs_to_jiffies(2000));
+		if (ret == 0) {
+			dev_err(sdev->dev,
+				"timeout waiting for SoundWire slave %s initialization\n",
+				dev_name(&slave->dev));
+			return -ETIMEDOUT;
+		}
+		if (ret < 0) {
+			dev_dbg(sdev->dev,
+				"interrupted waiting for SoundWire slave %s initialization: %ld\n",
+				dev_name(&slave->dev), ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 #else /* IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL_SOUNDWIRE) */
 static inline int hda_sdw_acpi_scan(struct snd_sof_dev *sdev)
 {

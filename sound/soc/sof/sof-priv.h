@@ -346,6 +346,9 @@ struct snd_sof_dsp_ops {
 	int (*register_ipc_clients)(struct snd_sof_dev *sdev); /* optional */
 	void (*unregister_ipc_clients)(struct snd_sof_dev *sdev); /* optional */
 
+	/* optional: wait for DAI link hardware readiness (e.g. SoundWire slave init) */
+	int (*dai_link_hw_ready)(struct snd_sof_dev *sdev, int dai_type); /* optional */
+
 	/* DAI ops */
 	struct snd_soc_dai_driver *drv;
 	int num_drv;
