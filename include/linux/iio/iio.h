@@ -816,6 +816,19 @@ static inline void *iio_device_get_drvdata(const struct iio_dev *indio_dev)
 #define IIO_DECLARE_DMA_BUFFER_WITH_TS(type, name, count) \
 	__IIO_DECLARE_BUFFER_WITH_TS(type, name, count) __aligned(IIO_DMA_MINALIGN)
 
+/**
+ * IIO_DECLARE_REPEATED_ELEMENT() - Declare a repeated element
+ * @type: element type of the repeated element
+ * @name: identifier name of the repeated element
+ * @repeat: number of times the element is repeated
+ *
+ * For special cases with repeated elements, like IIO_MOT_QUATERNION, a multi-
+ * word element is treated as a single element of a larger size in the buffer.
+ * As such, it requires alignment to the size of the entire repeated element.
+ */
+#define IIO_DECLARE_REPEATED_ELEMENT(type, name, repeat) \
+	type name[repeat] __aligned(sizeof(type) * repeat)
+
 struct iio_dev *iio_device_alloc(struct device *parent, int sizeof_priv);
 
 /* The information at the returned address is guaranteed to be cacheline aligned */
