@@ -1944,6 +1944,7 @@ static const struct spi_nor_manufacturer *manufacturers[] = {
 	&spi_nor_eon,
 	&spi_nor_esmt,
 	&spi_nor_everspin,
+	&spi_nor_fudan,
 	&spi_nor_gigadevice,
 	&spi_nor_intel,
 	&spi_nor_issi,
