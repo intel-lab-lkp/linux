@@ -101,7 +101,7 @@ long clock_gettime_fallback(clockid_t _clkid, struct __kernel_timespec *_ts)
 	asm (
 		"mov %%ebx, %%edx \n"
 		"mov %[clock], %%ebx \n"
-		"call __kernel_vsyscall \n"
+		"calll __kernel_vsyscall \n"
 		"mov %%edx, %%ebx \n"
 		: "=a" (ret), "=m" (*_ts)
 		: "0" (__NR_clock_gettime64), [clock] "g" (_clkid), "c" (_ts)
@@ -118,7 +118,7 @@ long clock_gettime32_fallback(clockid_t _clkid, struct old_timespec32 *_ts)
 	asm (
 		"mov %%ebx, %%edx \n"
 		"mov %[clock], %%ebx \n"
-		"call __kernel_vsyscall \n"
+		"calll __kernel_vsyscall \n"
 		"mov %%edx, %%ebx \n"
 		: "=a" (ret), "=m" (*_ts)
 		: "0" (__NR_clock_gettime), [clock] "g" (_clkid), "c" (_ts)
@@ -136,7 +136,7 @@ long gettimeofday_fallback(struct __kernel_old_timeval *_tv,
 	asm(
 		"mov %%ebx, %%edx \n"
 		"mov %2, %%ebx \n"
-		"call __kernel_vsyscall \n"
+		"calll __kernel_vsyscall \n"
 		"mov %%edx, %%ebx \n"
 		: "=a" (ret)
 		: "0" (__NR_gettimeofday), "g" (_tv), "c" (_tz)
@@ -153,7 +153,7 @@ clock_getres_fallback(clockid_t _clkid, struct __kernel_timespec *_ts)
 	asm (
 		"mov %%ebx, %%edx \n"
 		"mov %[clock], %%ebx \n"
-		"call __kernel_vsyscall \n"
+		"calll __kernel_vsyscall \n"
 		"mov %%edx, %%ebx \n"
 		: "=a" (ret), "=m" (*_ts)
 		: "0" (__NR_clock_getres_time64), [clock] "g" (_clkid), "c" (_ts)
@@ -170,7 +170,7 @@ long clock_getres32_fallback(clockid_t _clkid, struct old_timespec32 *_ts)
 	asm (
 		"mov %%ebx, %%edx \n"
 		"mov %[clock], %%ebx \n"
-		"call __kernel_vsyscall \n"
+		"calll __kernel_vsyscall \n"
 		"mov %%edx, %%ebx \n"
 		: "=a" (ret), "=m" (*_ts)
 		: "0" (__NR_clock_getres), [clock] "g" (_clkid), "c" (_ts)
