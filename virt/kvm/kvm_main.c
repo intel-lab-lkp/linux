@@ -3984,12 +3984,13 @@ bool __weak kvm_arch_dy_has_pending_interrupt(struct kvm_vcpu *vcpu)
 
 void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 {
-	int nr_vcpus, start, i, idx, yielded;
+	int nr_vcpus, start = 0, i, idx, yielded;
 	struct kvm *kvm = me->kvm;
 	struct kvm_vcpu *vcpu;
-	int try = 3;
+	int try;
 
 	nr_vcpus = atomic_read(&kvm->online_vcpus);
+	try = clamp(ilog2(nr_vcpus + 1), 3, 10);
 	if (nr_vcpus < 2)
 		return;
 
