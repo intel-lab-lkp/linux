@@ -7,6 +7,7 @@
  * Copyright:   (C) 2014 Texas Instruments, Inc.
  */
 
+#include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
@@ -606,6 +607,14 @@ static const struct i2c_device_id drv260x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, drv260x_id);
 
+#ifdef CONFIG_ACPI
+static const struct acpi_device_id drv260x_acpi_match[] = {
+	{ "DRV2604", 0 },
+	{ }
+};
+MODULE_DEVICE_TABLE(acpi, drv260x_acpi_match);
+#endif
+
 static const struct of_device_id drv260x_of_match[] = {
 	{ .compatible = "ti,drv2604", },
 	{ .compatible = "ti,drv2604l", },
@@ -621,6 +630,7 @@ static struct i2c_driver drv260x_driver = {
 		.name	= "drv260x-haptics",
 		.of_match_table = drv260x_of_match,
 		.pm	= pm_sleep_ptr(&drv260x_pm_ops),
+		.acpi_match_table = ACPI_PTR(drv260x_acpi_match),
 	},
 	.id_table = drv260x_id,
 };
