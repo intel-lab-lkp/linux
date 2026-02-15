@@ -1,0 +1,206 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+---
+name: nbd
+protocol: genetlink-c
+uapi-header: linux/nbd-netlink.h
+doc: See :file:`drivers/block/nbd.c`
+
+c-family-name: nbd-genl-family-name
+c-version-name: nbd-genl-version
+max-by-define: true
+
+attribute-sets:
+  -
+    name: nbd-attrs
+    name-prefix: nbd-attr-
+    doc: Configuration policy attributes, used for CONNECT
+    attributes:
+      -
+        name: unspec
+        value: 0
+        type: unused
+      -
+        name: index
+        type: u32
+      -
+        name: size-bytes
+        type: u64
+      -
+        name: block-size-bytes
+        type: u64
+      -
+        name: timeout
+        type: u64
+      -
+        name: server-flags
+        type: u64
+      -
+        name: client-flags
+        type: u64
+      -
+        name: sockets
+        type: nest
+        nested-attributes: sock-item-attrs
+      -
+        name: dead-conn-timeout
+        type: u64
+      -
+        name: device-list
+        type: nest
+        nested-attributes: device-item-attrs
+      -
+        name: backend-identifier
+        type: string
+  -
+    name: device-item-attrs
+    name-prefix: nbd-device-item-
+    doc: |
+      This is the format for multiple devices with :code:`NBD_ATTR_DEVICE_LIST`
+
+      .. code-block::
+
+        [NBD_ATTR_DEVICE_LIST]
+          [NBD_DEVICE_ITEM]
+            [NBD_DEVICE_INDEX]
+            [NBD_DEVICE_CONNECTED]
+    attributes:
+      -
+        name: unspec
+        value: 0
+        type: unused
+      -
+        name: item
+        name-prefix: nbd-device-
+        type: nest
+        nested-attributes: device-attrs
+        multi-attr: true
+  -
+    name: device-attrs
+    name-prefix: nbd-device-
+    attr-max-name: nbd-device-attr-max
+    attributes:
+      -
+        name: unspec
+        value: 0
+        type: unused
+      -
+        name: index
+        type: u32
+      -
+        name: connected
+        type: u8
+  -
+    name: sock-item-attrs
+    name-prefix: nbd-sock-item-
+    doc: |
+      This is the format for multiple sockets with :code:`NBD_ATTR_SOCKETS`
+
+      .. code-block::
+
+        [NBD_ATTR_SOCKETS]
+          [NBD_SOCK_ITEM]
+            [NBD_SOCK_FD]
+          [NBD_SOCK_ITEM]
+            [NBD_SOCK_FD]
+    attributes:
+      -
+        name: unspec
+        value: 0
+        type: unused
+      -
+        name: item
+        name-prefix: nbd-sock-
+        type: nest
+        nested-attributes: sock-attrs
+        multi-attr: true
+  -
+    name: sock-attrs
+    name-prefix: nbd-sock-
+    attributes:
+      -
+        name: unspec
+        value: 0
+        type: unused
+      -
+        name: fd
+        type: u32
+
+operations:
+  enum-model: unified
+  name-prefix: nbd-cmd-
+  list:
+    -
+      name: unspec
+      value: 0
+      doc: NBD_CMD_UNSPEC
+    -
+      name: connect
+      doc: See :file:`drivers/block/nbd.c`, :code:`nbd_genl_connect()`
+      attribute-set: nbd-attrs
+      dont-validate: [strict]
+      do:
+        request:
+          attributes:
+            - index
+            - size-bytes
+            - block-size-bytes
+            - timeout
+            - server-flags
+            - client-flags
+            - sockets
+            - dead-conn-timeout
+            - backend-identifier
+        reply:
+          attributes:
+            - index
+    -
+      name: disconnect
+      doc: See :file:`drivers/block/nbd.c`, :code:`nbd_genl_disconnect()`
+      attribute-set: nbd-attrs
+      dont-validate: [strict]
+      do:
+        request:
+          attributes:
+            - index
+    -
+      name: reconfigure
+      doc: See :file:`drivers/block/nbd.c`, :code:`nbd_genl_reconfigure()`
+      attribute-set: nbd-attrs
+      dont-validate: [strict]
+      do:
+        request:
+          attributes:
+            - index
+            - size-bytes
+            - block-size-bytes
+            - timeout
+            - client-flags
+            - sockets
+            - dead-conn-timeout
+            - backend-identifier
+    -
+      name: link-dead
+      doc: See :file:`drivers/block/nbd.c`, :code:`nbd_mark_nsock_dead()` / :code:`nbd_dead_link_work()`
+      attribute-set: nbd-attrs
+      event:
+        attributes:
+          - index
+      mcgrp: nbd_mc_group
+    -
+      name: status
+      doc: See :file:`drivers/block/nbd.c`, :code:`nbd_genl_status()`
+      attribute-set: nbd-attrs
+      dont-validate: [strict]
+      do:
+        request:
+          attributes:
+            - index
+        reply:
+          attributes:
+            - device-list
+
+mcast-groups:
+  list:
+    -
+      name: nbd_mc_group
+      c-define-name: nbd-genl-mcast-group-name
