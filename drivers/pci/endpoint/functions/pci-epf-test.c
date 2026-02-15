@@ -86,6 +86,7 @@ struct pci_epf_test {
 	bool			dma_private;
 	const struct pci_epc_features *epc_features;
 	struct pci_epf_bar	db_bar;
+	bool			db_irq_requested;
 	size_t			bar_size[PCI_STD_NUM_BARS];
 };
 
@@ -715,7 +716,10 @@ static void pci_epf_test_doorbell_cleanup(struct pci_epf_test *epf_test)
 	struct pci_epf_test_reg *reg = epf_test->reg[epf_test->test_reg_bar];
 	struct pci_epf *epf = epf_test->epf;
 
-	free_irq(epf->db_msg[0].virq, epf_test);
+	if (epf_test->db_irq_requested && epf->db_msg) {
+		free_irq(epf->db_msg[0].virq, epf_test);
+		epf_test->db_irq_requested = false;
+	}
 	reg->doorbell_bar = cpu_to_le32(NO_BAR);
 
 	pci_epf_free_doorbell(epf);
@@ -731,6 +735,8 @@ static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
 	enum pci_barno bar;
 	size_t offset;
 	int ret;
+
+	epf_test->db_irq_requested = false;
 
 	ret = pci_epf_alloc_doorbell(epf, 1);
 	if (ret)
@@ -751,6 +757,7 @@ static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
 		goto err_doorbell_cleanup;
 	}
 
+	epf_test->db_irq_requested = true;
 	reg->doorbell_data = cpu_to_le32(msg->data);
 	reg->doorbell_bar = cpu_to_le32(bar);
 
