@@ -4026,6 +4026,10 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 		vcpu = xa_load(&kvm->vcpu_array, idx);
 		if (!READ_ONCE(vcpu->ready))
 			continue;
+
+		if (READ_ONCE(vcpu->mode) == IN_GUEST_MODE)
+			continue;
+
 		if (kvm_vcpu_is_blocking(vcpu) && !vcpu_dy_runnable(vcpu))
 			continue;
 
