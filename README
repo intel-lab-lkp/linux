@@ -97,7 +97,7 @@ Maintain and stabilize kernel versions:
 System Administrator
 --------------------
 
-Configure, tune, and troubleshoot Linux systems:
+Configure, tune and troubleshoot Linux systems:
 
 * Admin Guide: Documentation/admin-guide/index.rst
 * Kernel Parameters: Documentation/admin-guide/kernel-parameters.rst
