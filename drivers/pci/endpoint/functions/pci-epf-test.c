@@ -761,6 +761,9 @@ static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
 	if (ret)
 		goto err_doorbell_cleanup;
 
+	if (size_add(offset, sizeof(u32)) > epf->bar[bar].size)
+		goto err_doorbell_cleanup;
+
 	reg->doorbell_offset = cpu_to_le32(offset);
 
 	epf_test->db_bar.barno = bar;
