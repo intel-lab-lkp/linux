@@ -299,6 +299,7 @@ enum {
 	CXT_PINCFG_SWS_JS201D,
 	CXT_PINCFG_TOP_SPEAKER,
 	CXT_FIXUP_HP_A_U,
+	CXT_FIXUP_FEVM_FA880_PRO_INTMIC,
 };
 
 /* for hda_fixup_thinkpad_acpi() */
@@ -338,6 +339,16 @@ static void cxt5066_increase_mic_boost(struct hda_codec *codec,
 				  (0x4 << AC_AMPCAP_NUM_STEPS_SHIFT) |
 				  (0x27 << AC_AMPCAP_STEP_SIZE_SHIFT) |
 				  (0 << AC_AMPCAP_MUTE_SHIFT));
+}
+
+static void cxt_fixup_cx20632_intmic(struct hda_codec *codec,
+				     const struct hda_fixup *fix, int action)
+{
+	if (action != HDA_FIXUP_ACT_INIT)
+		return;
+
+	/* Force ADC 0x14 to internal mic pin 0x1e (conn index 3). */
+	snd_hda_codec_write(codec, 0x14, 0, AC_VERB_SET_CONNECT_SEL, 0x03);
 }
 
 static void cxt_update_headset_mode(struct hda_codec *codec)
@@ -1024,6 +1035,10 @@ static const struct hda_fixup cxt_fixups[] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = cxt_fixup_hp_a_u,
 	},
+	[CXT_FIXUP_FEVM_FA880_PRO_INTMIC] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = cxt_fixup_cx20632_intmic,
+	},
 };
 
 static const struct hda_quirk cxt5045_fixups[] = {
@@ -1125,6 +1140,7 @@ static const struct hda_quirk cxt5066_fixups[] = {
 	SND_PCI_QUIRK(0x1c06, 0x2011, "Lemote A1004", CXT_PINCFG_LEMOTE_A1004),
 	SND_PCI_QUIRK(0x1c06, 0x2012, "Lemote A1205", CXT_PINCFG_LEMOTE_A1205),
 	SND_PCI_QUIRK(0x1d05, 0x3012, "MECHREVO Wujie 15X Pro", CXT_FIXUP_HEADSET_MIC),
+	SND_PCI_QUIRK(0x2014, 0x8004, "FEVM FA880 PRO", CXT_FIXUP_FEVM_FA880_PRO_INTMIC),
 	HDA_CODEC_QUIRK(0x2782, 0x12c3, "Sirius Gen1", CXT_PINCFG_TOP_SPEAKER),
 	HDA_CODEC_QUIRK(0x2782, 0x12c5, "Sirius Gen2", CXT_PINCFG_TOP_SPEAKER),
 	{}
@@ -1149,6 +1165,7 @@ static const struct hda_model_fixup cxt5066_fixup_models[] = {
 	{ .id = CXT_PINCFG_SWS_JS201D, .name = "sws-js201d" },
 	{ .id = CXT_PINCFG_TOP_SPEAKER, .name = "sirius-top-speaker" },
 	{ .id = CXT_FIXUP_HP_A_U, .name = "HP-U-support" },
+	{ .id = CXT_FIXUP_FEVM_FA880_PRO_INTMIC, .name = "fevm-fa880-pro-intmic" },
 	{}
 };
 
