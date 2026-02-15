@@ -206,12 +206,17 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 	 * But without knowing if it's beneficial or not (in term of power
 	 * consumption), or how much it slows down the suspend/resume steps,
 	 * let's just keep regulators enabled for the device lifetime.
+	 *
+	 * Treat sram-supply as mandatory except for mt8196-mali. It manages
+	 * SRAM outside Panthor so this driver must not require direct control
+	 * over it.
 	 */
-	ret = devm_regulator_get_enable_optional(dev, "sram");
-	if (ret && ret != -ENODEV) {
-		if (ret != -EPROBE_DEFER)
+	if (!of_device_is_compatible(dev->of_node, "mediatek,mt8196-mali")) {
+		ret = devm_regulator_get_enable_optional(dev, "sram");
+		if (ret) {
 			DRM_DEV_ERROR(dev, "Couldn't retrieve/enable sram supply\n");
-		return ret;
+			return ret;
+		}
 	}
 
 	opp = devfreq_recommended_opp(dev, &cur_freq, 0);
