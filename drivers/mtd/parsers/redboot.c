@@ -269,14 +269,14 @@ nogood:
 		parts[i].name = names;
 
 		strcpy(names, fl->img->name);
-#ifdef CONFIG_MTD_REDBOOT_PARTS_READONLY
-		if (!memcmp(names, "RedBoot", 8) ||
-		    !memcmp(names, "RedBoot config", 15) ||
-		    !memcmp(names, "FIS directory", 14)) {
-			parts[i].mask_flags = MTD_WRITEABLE;
-		}
-#endif
 		names += strlen(names) + 1;
+
+#ifdef CONFIG_MTD_REDBOOT_PARTS_READONLY
+		if (!memcmp(fl->img->name, "RedBoot", 8) ||
+		    !memcmp(fl->img->name, "RedBoot config", 15) ||
+		    !memcmp(fl->img->name, "FIS directory", 14))
+			parts[i].mask_flags = MTD_WRITEABLE;
+#endif
 
 #ifdef CONFIG_MTD_REDBOOT_PARTS_UNALLOCATED
 		if (fl->next && fl->img->flash_base + fl->img->size + master->erasesize <= fl->next->img->flash_base) {
