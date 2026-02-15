@@ -520,19 +520,37 @@ static int drv260x_probe(struct i2c_client *client)
 		return error;
 	}
 
+	error = regulator_enable(haptics->regulator);
+	if (error) {
+		dev_err(dev, "Failed to enable regulator\n");
+		return error;
+	}
+
 	error = drv260x_init(haptics);
 	if (error) {
 		dev_err(dev, "Device init failed: %d\n", error);
-		return error;
+		goto err_regulator_disable;
 	}
 
 	error = input_register_device(haptics->input_dev);
 	if (error) {
 		dev_err(dev, "couldn't register input device: %d\n", error);
-		return error;
+		goto err_regulator_disable;
 	}
 
 	return 0;
+
+err_regulator_disable:
+	regulator_disable(haptics->regulator);
+
+	return error;
+}
+
+static void drv260x_remove(struct i2c_client *client)
+{
+	struct drv260x_data *haptics = i2c_get_clientdata(client);
+
+	regulator_disable(haptics->regulator);
 }
 
 static int drv260x_suspend(struct device *dev)
@@ -626,6 +644,7 @@ MODULE_DEVICE_TABLE(of, drv260x_of_match);
 
 static struct i2c_driver drv260x_driver = {
 	.probe		= drv260x_probe,
+	.remove		= drv260x_remove,
 	.driver		= {
 		.name	= "drv260x-haptics",
 		.of_match_table = drv260x_of_match,
