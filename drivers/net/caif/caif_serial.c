@@ -68,6 +68,7 @@ struct ser_device {
 	struct net_device *dev;
 	struct sk_buff_head head;
 	struct tty_struct *tty;
+	spinlock_t tty_lock; /* protects ser->tty */
 	bool tx_started;
 	unsigned long state;
 #ifdef CONFIG_DEBUG_FS
@@ -197,12 +198,21 @@ static int handle_tx(struct ser_device *ser)
 	struct sk_buff *skb;
 	int tty_wr, len, room;
 
+	spin_lock(&ser->tty_lock);
 	tty = ser->tty;
+	tty_kref_get(tty);
+	spin_unlock(&ser->tty_lock);
+
+	if (!tty)
+		return 0;
+
 	ser->tx_started = true;
 
 	/* Enter critical section */
-	if (test_and_set_bit(CAIF_SENDING, &ser->state))
+	if (test_and_set_bit(CAIF_SENDING, &ser->state)) {
+		tty_kref_put(tty);
 		return 0;
+	}
 
 	/* skb_peek is safe because handle_tx is called after skb_queue_tail */
 	while ((skb = skb_peek(&ser->head)) != NULL) {
@@ -245,9 +255,11 @@ static int handle_tx(struct ser_device *ser)
 		ser->common.flowctrl != NULL)
 				ser->common.flowctrl(ser->dev, ON);
 	clear_bit(CAIF_SENDING, &ser->state);
+	tty_kref_put(tty);
 	return 0;
 error:
 	clear_bit(CAIF_SENDING, &ser->state);
+	tty_kref_put(tty);
 	return tty_wr;
 }
 
@@ -293,7 +305,10 @@ static void ser_release(struct work_struct *work)
 	if (!list_empty(&list)) {
 		rtnl_lock();
 		list_for_each_entry_safe(ser, tmp, &list, node) {
+			spin_lock(&ser->tty_lock);
 			tty = ser->tty;
+			ser->tty = NULL;
+			spin_unlock(&ser->tty_lock);
 			dev_close(ser->dev);
 			unregister_netdevice(ser->dev);
 			debugfs_deinit(ser);
@@ -330,6 +345,7 @@ static int ldisc_open(struct tty_struct *tty)
 		return -ENOMEM;
 
 	ser = netdev_priv(dev);
+	spin_lock_init(&ser->tty_lock);
 	ser->tty = tty_kref_get(tty);
 	ser->dev = dev;
 	debugfs_init(ser, tty);
