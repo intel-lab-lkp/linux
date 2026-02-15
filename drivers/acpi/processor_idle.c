@@ -1062,6 +1062,12 @@ static unsigned int flatten_lpi_states(struct acpi_processor *pr,
 		}
 
 		for (i = 0; i < prev_level->composite_states_size; i++) {
+			if (flat_state_cnt >= ACPI_PROCESSOR_MAX_POWER) {
+				pr_warn("Limiting number of LPI states to max (%d)\n",
+					ACPI_PROCESSOR_MAX_POWER);
+				pr_warn("Please increase ACPI_PROCESSOR_MAX_POWER if needed.\n");
+				break;
+			}
 			p = prev_level->composite_states[i];
 			if (t->index <= p->enable_parent_state &&
 			    combine_lpi_states(p, t, flpi)) {
