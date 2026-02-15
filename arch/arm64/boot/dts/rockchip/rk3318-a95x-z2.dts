@@ -191,6 +191,7 @@
 
 &gpu {
 	mali-supply = <&vdd_log>;
+	sram-supply = <&vdd_log>;
 };
 
 &hdmi {

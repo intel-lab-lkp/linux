@@ -26,6 +26,7 @@
 
 &gpu {
 	mali-supply = <&reg_dcdcc>;
+	sram-supply = <&reg_dcdcc>;
 };
 
 &mmc0 {

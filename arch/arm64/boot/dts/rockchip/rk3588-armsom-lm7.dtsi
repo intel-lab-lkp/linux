@@ -71,6 +71,7 @@
 
 &gpu {
 	mali-supply = <&vdd_gpu_s0>;
+	sram-supply = <&vdd_gpu_s0>;
 	status = "okay";
 };
 

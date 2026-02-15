@@ -83,6 +83,7 @@
 
 &gpu {
 	mali-supply = <&mt6358_vgpu_reg>;
+	sram-supply = <&mt6358_vgpu_reg>;
 };
 
 &i2c0 {

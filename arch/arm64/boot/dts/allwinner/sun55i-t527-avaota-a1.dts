@@ -96,6 +96,7 @@
 
 &gpu {
 	mali-supply = <&reg_dcdc2>;
+	sram-supply = <&reg_dcdc2>;
 	status = "okay";
 };
 

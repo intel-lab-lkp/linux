@@ -356,6 +356,7 @@
 
 &gpu {
 	mali-supply = <&buck6_reg>;
+	sram-supply = <&buck6_reg>;
 	status = "okay";
 };
 

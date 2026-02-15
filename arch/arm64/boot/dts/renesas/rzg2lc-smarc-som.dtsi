@@ -104,6 +104,7 @@
 
 &gpu {
 	mali-supply = <&reg_1p1v>;
+	sram-supply = <&reg_1p1v>;
 };
 
 &i2c2 {

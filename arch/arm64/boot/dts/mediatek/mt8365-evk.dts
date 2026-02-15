@@ -286,6 +286,7 @@
 
 &gpu {
 	mali-supply = <&mt6357_vcore_reg>;
+	sram-supply = <&mt6357_vcore_reg>;
 	status = "okay";
 };
 

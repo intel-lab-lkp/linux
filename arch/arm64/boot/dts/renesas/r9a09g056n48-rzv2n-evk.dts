@@ -112,6 +112,7 @@
 &gpu {
 	status = "okay";
 	mali-supply = <&reg_0p8v>;
+	sram-supply = <&reg_0p8v>;
 };
 
 &hsusb {

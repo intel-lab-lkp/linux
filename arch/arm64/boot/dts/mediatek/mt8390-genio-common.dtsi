@@ -334,6 +334,7 @@
 
 &gpu {
 	mali-supply = <&mt6359_vproc2_buck_reg>;
+	sram-supply = <&mt6359_vproc2_buck_reg>;
 	status = "okay";
 };
 

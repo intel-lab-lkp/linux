@@ -319,6 +319,7 @@
 
 &gpu {
 	mali-supply = <&mt6315_7_vbuck1>;
+	sram-supply = <&mt6315_7_vbuck1>;
 	status = "okay";
 };
 

@@ -406,6 +406,7 @@
 
 &gpu {
 	mali-supply = <&ppvar_gpu>;
+	sram-supply = <&ppvar_gpu>;
 	status = "okay";
 };
 
