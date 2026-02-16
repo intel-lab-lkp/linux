@@ -1399,8 +1399,8 @@ static int cpuhp_down_callbacks(unsigned int cpu, struct cpuhp_cpu_state *st,
 	return ret;
 }
 
-/* Requires cpu_add_remove_lock to be held */
-static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
+/* Requires cpu_add_remove_lock and cpus_write_lock to be held */
+static int __ref cpu_down_locked(unsigned int cpu, int tasks_frozen,
 			   enum cpuhp_state target)
 {
 	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
@@ -1412,7 +1412,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	if (!cpu_present(cpu))
 		return -EINVAL;
 
-	cpus_write_lock();
+	lockdep_assert_cpus_held();
 
 	/*
 	 * Keep at least one housekeeping cpu onlined to avoid generating
@@ -1420,8 +1420,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	 */
 	if (cpumask_any_and(cpu_online_mask,
 			    housekeeping_cpumask(HK_TYPE_DOMAIN)) >= nr_cpu_ids) {
-		ret = -EBUSY;
-		goto out;
+		return -EBUSY;
 	}
 
 	cpuhp_tasks_frozen = tasks_frozen;
@@ -1439,14 +1438,14 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 		 * return the error code..
 		 */
 		if (ret)
-			goto out;
+			return ret;
 
 		/*
 		 * We might have stopped still in the range of the AP hotplug
 		 * thread. Nothing to do anymore.
 		 */
 		if (st->state > CPUHP_TEARDOWN_CPU)
-			goto out;
+			return 0;
 
 		st->target = target;
 	}
@@ -1463,8 +1462,17 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 			WARN(1, "DEAD callback error for CPU%d", cpu);
 		}
 	}
+	return ret;
+}
 
-out:
+static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
+			   enum cpuhp_state target)
+{
+
+	int ret;
+
+	cpus_write_lock();
+	ret = cpu_down_locked(cpu, tasks_frozen, target);
 	cpus_write_unlock();
 	arch_smt_update();
 	return ret;
@@ -1612,18 +1620,18 @@ void cpuhp_online_idle(enum cpuhp_state state)
 	complete_ap_thread(st, true);
 }
 
-/* Requires cpu_add_remove_lock to be held */
-static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
+/* Requires cpu_add_remove_lock and cpus_write_lock to be held. */
+static int cpu_up_locked(unsigned int cpu, int tasks_frozen,
+			 enum cpuhp_state target)
 {
 	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
 	struct task_struct *idle;
 	int ret = 0;
 
-	cpus_write_lock();
+	lockdep_assert_cpus_held();
 
 	if (!cpu_present(cpu)) {
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	/*
@@ -1631,14 +1639,13 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 	 * caller. Nothing to do.
 	 */
 	if (st->state >= target)
-		goto out;
+		return 0;
 
 	if (st->state == CPUHP_OFFLINE) {
 		/* Let it fail before we try to bring the cpu up */
 		idle = idle_thread_get(cpu);
 		if (IS_ERR(idle)) {
-			ret = PTR_ERR(idle);
-			goto out;
+			return PTR_ERR(idle);
 		}
 
 		/*
@@ -1662,7 +1669,7 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 		 * return the error code..
 		 */
 		if (ret)
-			goto out;
+			return ret;
 	}
 
 	/*
@@ -1672,7 +1679,16 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 	 */
 	target = min((int)target, CPUHP_BRINGUP_CPU);
 	ret = cpuhp_up_callbacks(cpu, st, target);
-out:
+	return ret;
+}
+
+/* Requires cpu_add_remove_lock to be held */
+static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
+{
+	int ret;
+
+	cpus_write_lock();
+	ret = cpu_up_locked(cpu, tasks_frozen, target);
 	cpus_write_unlock();
 	arch_smt_update();
 	return ret;
@@ -2658,6 +2674,16 @@ int cpuhp_smt_disable(enum cpuhp_smt_control ctrlval)
 	int cpu, ret = 0;
 
 	cpu_maps_update_begin();
+	if (cpu_hotplug_offline_disabled) {
+		ret = -EOPNOTSUPP;
+		goto out;
+	}
+	if (cpu_hotplug_disabled) {
+		ret = -EBUSY;
+		goto out;
+	}
+	/* Hold cpus_write_lock() for entire batch operation. */
+	cpus_write_lock();
 	for_each_online_cpu(cpu) {
 		if (topology_is_primary_thread(cpu))
 			continue;
@@ -2667,7 +2693,7 @@ int cpuhp_smt_disable(enum cpuhp_smt_control ctrlval)
 		 */
 		if (ctrlval == CPU_SMT_ENABLED && cpu_smt_thread_allowed(cpu))
 			continue;
-		ret = cpu_down_maps_locked(cpu, CPUHP_OFFLINE);
+		ret = cpu_down_locked(cpu, 0, CPUHP_OFFLINE);
 		if (ret)
 			break;
 		/*
@@ -2687,6 +2713,9 @@ int cpuhp_smt_disable(enum cpuhp_smt_control ctrlval)
 	}
 	if (!ret)
 		cpu_smt_control = ctrlval;
+	cpus_write_unlock();
+	arch_smt_update();
+out:
 	cpu_maps_update_done();
 	return ret;
 }
@@ -2704,6 +2733,8 @@ int cpuhp_smt_enable(void)
 	int cpu, ret = 0;
 
 	cpu_maps_update_begin();
+	/* Hold cpus_write_lock() for entire batch operation. */
+	cpus_write_lock();
 	cpu_smt_control = CPU_SMT_ENABLED;
 	for_each_present_cpu(cpu) {
 		/* Skip online CPUs and CPUs on offline nodes */
@@ -2711,12 +2742,14 @@ int cpuhp_smt_enable(void)
 			continue;
 		if (!cpu_smt_thread_allowed(cpu) || !topology_is_core_online(cpu))
 			continue;
-		ret = _cpu_up(cpu, 0, CPUHP_ONLINE);
+		ret = cpu_up_locked(cpu, 0, CPUHP_ONLINE);
 		if (ret)
 			break;
 		/* See comment in cpuhp_smt_disable() */
 		cpuhp_online_cpu_device(cpu);
 	}
+	cpus_write_unlock();
+	arch_smt_update();
 	cpu_maps_update_done();
 	return ret;
 }
