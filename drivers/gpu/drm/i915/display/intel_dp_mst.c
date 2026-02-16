@@ -1463,10 +1463,10 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	struct intel_dp *intel_dp = connector->mst.dp;
 	struct drm_dp_mst_topology_mgr *mgr = &intel_dp->mst.mgr;
 	struct drm_dp_mst_port *port = connector->mst.port;
-	const int min_bpp = 18;
 	int max_rate, mode_rate, max_lanes, max_link_clock;
 	unsigned long bw_overhead_flags =
 		DRM_DP_BW_OVERHEAD_MST | DRM_DP_BW_OVERHEAD_SSC_REF_CLK;
+	int min_link_bpp_x16 = fxp_q4_from_int(18);
 	int ret;
 	bool dsc = false;
 	int target_clock = mode->clock;
@@ -1498,7 +1498,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 					       max_link_clock, max_lanes);
 	mode_rate = intel_dp_link_required(max_link_clock, max_lanes,
 					   mode->clock, mode->hdisplay,
-					   fxp_q4_from_int(min_bpp),
+					   min_link_bpp_x16,
 					   bw_overhead_flags);
 
 	/*
@@ -1518,7 +1518,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		return ret;
 
 	if (mode_rate > max_rate ||
-	    drm_dp_calc_pbn_mode(mode->clock, min_bpp << 4) > port->full_pbn) {
+	    drm_dp_calc_pbn_mode(mode->clock, min_link_bpp_x16) > port->full_pbn) {
 		*status = MODE_CLOCK_HIGH;
 		return 0;
 	}
