@@ -1467,6 +1467,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	unsigned long bw_overhead_flags =
 		DRM_DP_BW_OVERHEAD_MST | DRM_DP_BW_OVERHEAD_SSC_REF_CLK;
 	int min_link_bpp_x16 = fxp_q4_from_int(18);
+	static bool supports_dsc;
 	int ret;
 	bool dsc = false;
 	int target_clock = mode->clock;
@@ -1491,6 +1492,13 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		return 0;
 	}
 
+	supports_dsc = intel_dp_has_dsc(connector) &&
+		       drm_dp_sink_supports_fec(connector->dp.fec_capability);
+
+	if (supports_dsc && connector->mst.port->passthrough_aux)
+		min_link_bpp_x16 = intel_dp_compute_min_compressed_bpp_x16(connector,
+									   INTEL_OUTPUT_FORMAT_RGB);
+
 	max_link_clock = intel_dp_max_link_rate(intel_dp);
 	max_lanes = intel_dp_max_lane_count(intel_dp);
 
@@ -1504,6 +1512,13 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	/*
 	 * TODO:
 	 * - Also check if compression would allow for the mode
+	 *   in non-passthrough mode, i.e. the last branch device
+	 *   decompressing the stream. This makes a difference only if
+	 *   the BW on the link between the last branch device and the
+	 *   sink is higher than the BW on the whole MST path from the
+	 *   source to the last branch device. Relying on the extra BW
+	 *   this provides also requires the
+	 *   DFP_Link_Available_Payload_Bandwidth_Number described below.
 	 * - Calculate the overhead using drm_dp_bw_overhead() /
 	 *   drm_dp_bw_channel_coding_efficiency(), similarly to the
 	 *   compute config code, as drm_dp_calc_pbn_mode() doesn't
@@ -1527,8 +1542,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	for_each_joiner_candidate(connector, mode, num_joined_pipes) {
 		int dsc_slice_count = 0;
 
-		if (intel_dp_has_dsc(connector) &&
-		    drm_dp_sink_supports_fec(connector->dp.fec_capability)) {
+		if (supports_dsc) {
 			/*
 			 * TBD pass the connector BPC,
 			 * for now U8_MAX so that max BPC on that platform would be picked
