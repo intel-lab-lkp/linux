@@ -910,7 +910,21 @@ static bool cluster_alloc_range(struct swap_info_struct *si,
 	return true;
 }
 
-/* Try use a new cluster for current CPU and allocate from it. */
+/*
+ * alloc_swap_scan_cluster - Scan and allocate swap entries from one cluster.
+ * @si: the swap device of the cluster.
+ * @ci: the cluster, must be locked.
+ * @folio: the folio to allocate for, could be NULL.
+ * @offset: scan start offset, must be a swap device offset pointing inside @ci.
+ *
+ * Scan the swap slots inside @ci, starting from @offset, and allocate
+ * contiguous entries that point to these slots. If @folio is not NULL, folio
+ * size number of entries are allocated, and the starting entry is stored to
+ * folio->swap. If @folio is NULL, one entry will be allocated and passed to
+ * the caller as the return value. In both cases, the offset is returned.
+ *
+ * This helper also updates the percpu cached cluster.
+ */
 static unsigned int alloc_swap_scan_cluster(struct swap_info_struct *si,
 					    struct swap_cluster_info *ci,
 					    struct folio *folio, unsigned long offset)
@@ -923,10 +937,13 @@ static unsigned int alloc_swap_scan_cluster(struct swap_info_struct *si,
 	bool need_reclaim, ret, usable;
 
 	lockdep_assert_held(&ci->lock);
-	VM_WARN_ON(!cluster_is_usable(ci, order));
 
-	if (end < nr_pages || ci->count + nr_pages > SWAPFILE_CLUSTER)
+	if (!cluster_is_usable(ci, order) || end < nr_pages ||
+	    ci->count + nr_pages > SWAPFILE_CLUSTER)
 		goto out;
+
+	if (cluster_is_empty(ci))
+		offset = cluster_offset(si, ci);
 
 	for (end -= nr_pages; offset <= end; offset += nr_pages) {
 		need_reclaim = false;
@@ -951,6 +968,14 @@ static unsigned int alloc_swap_scan_cluster(struct swap_info_struct *si,
 		break;
 	}
 out:
+	/*
+	 * Whether the allocation succeeded or failed, relocate the cluster
+	 * and update percpu offset cache. On success this is necessary to
+	 * mark the cluster as cached fast path. On failure, this invalidates
+	 * the percpu cache to indicate an allocation failure and next scan
+	 * should use a new cluster, and move the failed cluster to where it
+	 * should be.
+	 */
 	relocate_cluster(si, ci);
 	swap_cluster_unlock(ci);
 	if (si->flags & SWP_SOLIDSTATE) {
@@ -1060,14 +1085,7 @@ static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si,
 			goto new_cluster;
 
 		ci = swap_cluster_lock(si, offset);
-		/* Cluster could have been used by another order */
-		if (cluster_is_usable(ci, order)) {
-			if (cluster_is_empty(ci))
-				offset = cluster_offset(si, ci);
-			found = alloc_swap_scan_cluster(si, ci, folio, offset);
-		} else {
-			swap_cluster_unlock(ci);
-		}
+		found = alloc_swap_scan_cluster(si, ci, folio, offset);
 		if (found)
 			goto done;
 	}
@@ -1332,14 +1350,7 @@ static bool swap_alloc_fast(struct folio *folio)
 		return false;
 
 	ci = swap_cluster_lock(si, offset);
-	if (cluster_is_usable(ci, order)) {
-		if (cluster_is_empty(ci))
-			offset = cluster_offset(si, ci);
-		alloc_swap_scan_cluster(si, ci, folio, offset);
-	} else {
-		swap_cluster_unlock(ci);
-	}
-
+	alloc_swap_scan_cluster(si, ci, folio, offset);
 	put_swap_device(si);
 	return folio_test_swapcache(folio);
 }
@@ -1943,10 +1954,7 @@ swp_entry_t swap_alloc_hibernation_slot(int type)
 	pcp_offset = this_cpu_read(percpu_swap_cluster.offset[0]);
 	if (pcp_si == si && pcp_offset) {
 		ci = swap_cluster_lock(si, pcp_offset);
-		if (cluster_is_usable(ci, 0))
-			offset = alloc_swap_scan_cluster(si, ci, NULL, pcp_offset);
-		else
-			swap_cluster_unlock(ci);
+		offset = alloc_swap_scan_cluster(si, ci, NULL, pcp_offset);
 	}
 	if (offset == SWAP_ENTRY_INVALID)
 		offset = cluster_alloc_swap_entry(si, NULL);
