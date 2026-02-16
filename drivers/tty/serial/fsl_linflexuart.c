@@ -75,6 +75,10 @@
 
 #define LINFLEXD_UARTCR_ROSE		BIT(23)
 
+#define LINFLEXD_UARTCR_SBUR_MASK	GENMASK(18, 17)
+#define LINFLEXD_UARTCR_SBUR_1SBITS	(0x0 << 17)
+#define LINFLEXD_UARTCR_SBUR_2SBITS	(0x1 << 17)
+
 #define LINFLEXD_UARTCR_RDFLRFC_OFFSET	10
 #define LINFLEXD_UARTCR_RDFLRFC_MASK	(0x7 << LINFLEXD_UARTCR_RDFLRFC_OFFSET)
 #define LINFLEXD_UARTCR_RDFLRFC(uartcr)	(((uartcr) \
@@ -123,6 +127,10 @@
 					 LINFLEXD_UARTSR_PE3)
 
 #define LINFLEX_LDIV_MULTIPLIER		(16)
+
+#define LINFLEXD_GCR_STOP_MASK		BIT(1)
+#define LINFLEXD_GCR_STOP_1SBITS	(0 << 1)
+#define LINFLEXD_GCR_STOP_2SBITS	BIT(1)
 
 #define DRIVER_NAME	"fsl-linflexuart"
 #define DEV_NAME	"ttyLF"
@@ -456,7 +464,7 @@ linflex_set_termios(struct uart_port *port, struct ktermios *termios,
 		    const struct ktermios *old)
 {
 	unsigned long flags;
-	unsigned long cr, old_cr, cr1;
+	unsigned long cr, old_cr, cr1, gcr;
 	unsigned int old_csize = old ? old->c_cflag & CSIZE : CS8;
 	unsigned long ibr, fbr, divisr, dividr;
 	unsigned char ldiv_mul;
@@ -521,8 +529,25 @@ linflex_set_termios(struct uart_port *port, struct ktermios *termios,
 		cr |= LINFLEXD_UARTCR_WL0;
 	}
 
-	if (termios->c_cflag & CSTOPB)
-		termios->c_cflag &= ~CSTOPB;
+	gcr = readl(port->membase + GCR);
+
+	if (termios->c_cflag & CSTOPB) {
+		/* Use 2 stop bits. */
+		cr = (cr & ~LINFLEXD_UARTCR_SBUR_MASK) |
+			LINFLEXD_UARTCR_SBUR_2SBITS;
+		/* Set STOP in GCR field for 2 stop bits. */
+		gcr = (gcr & ~LINFLEXD_GCR_STOP_MASK) |
+			LINFLEXD_GCR_STOP_2SBITS;
+	} else {
+		/* Use 1 stop bit. */
+		cr = (cr & ~LINFLEXD_UARTCR_SBUR_MASK) |
+			LINFLEXD_UARTCR_SBUR_1SBITS;
+		/* Set STOP in GCR field for 1 stop bit. */
+		gcr = (gcr & ~LINFLEXD_GCR_STOP_MASK) |
+			LINFLEXD_GCR_STOP_1SBITS;
+	}
+	/* Update GCR register. */
+	writel(gcr, port->membase + GCR);
 
 	/* parity must be enabled when CS7 to match 8-bits format */
 	if ((termios->c_cflag & CSIZE) == CS7)
