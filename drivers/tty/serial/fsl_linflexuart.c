@@ -3,7 +3,7 @@
  * Freescale LINFlexD UART serial port driver
  *
  * Copyright 2012-2016 Freescale Semiconductor, Inc.
- * Copyright 2017-2019 NXP
+ * Copyright 2017-2019, 2021 NXP
  */
 
 #include <linux/console.h>
@@ -74,6 +74,17 @@
 
 #define LINFLEXD_UARTCR_ROSE		BIT(23)
 
+#define LINFLEXD_UARTCR_RDFLRFC_OFFSET	10
+#define LINFLEXD_UARTCR_RDFLRFC_MASK	(0x7 << LINFLEXD_UARTCR_RDFLRFC_OFFSET)
+#define LINFLEXD_UARTCR_RDFLRFC(uartcr)	(((uartcr) \
+					& LINFLEXD_UARTCR_RDFLRFC_MASK) >> \
+					LINFLEXD_UARTCR_RDFLRFC_OFFSET)
+#define LINFLEXD_UARTCR_TDFLTFC_OFFSET	13
+#define LINFLEXD_UARTCR_TDFLTFC_MASK	(0x7 << LINFLEXD_UARTCR_TDFLTFC_OFFSET)
+#define LINFLEXD_UARTCR_TDFLTFC(uartcr)	(((uartcr) \
+					& LINFLEXD_UARTCR_TDFLTFC_MASK) >> \
+					LINFLEXD_UARTCR_TDFLTFC_OFFSET)
+
 #define LINFLEXD_UARTCR_RFBM		BIT(9)
 #define LINFLEXD_UARTCR_TFBM		BIT(8)
 #define LINFLEXD_UARTCR_WL1		BIT(7)
@@ -139,6 +150,17 @@ static struct {
 	unsigned int len, cap;
 } earlycon_buf;
 #endif
+
+static inline void linflex_wait_tx_fifo_empty(struct uart_port *port)
+{
+	unsigned long cr = readl(port->membase + UARTCR);
+
+	if (!(cr & LINFLEXD_UARTCR_TFBM))
+		return;
+
+	while (LINFLEXD_UARTCR_TDFLTFC(readl(port->membase + UARTCR)))
+		;
+}
 
 static void linflex_stop_tx(struct uart_port *port)
 {
@@ -326,6 +348,11 @@ static void linflex_setup_watermark(struct uart_port *sport)
 	cr &= ~(LINFLEXD_UARTCR_RXEN | LINFLEXD_UARTCR_TXEN);
 	writel(cr, sport->membase + UARTCR);
 
+	/* In FIFO mode, we should make sure the fifo is empty
+	 * before entering INITM.
+	 */
+	linflex_wait_tx_fifo_empty(sport);
+
 	/* Enter initialization mode by setting INIT bit */
 
 	/* set the Linflex in master mode and activate by-pass filter */
@@ -412,8 +439,17 @@ linflex_set_termios(struct uart_port *port, struct ktermios *termios,
 
 	uart_port_lock_irqsave(port, &flags);
 
-	cr = readl(port->membase + UARTCR);
-	old_cr = cr;
+	old_cr = readl(port->membase + UARTCR) &
+		~(LINFLEXD_UARTCR_RXEN | LINFLEXD_UARTCR_TXEN);
+	cr = old_cr;
+
+	/* In FIFO mode, we should make sure the fifo is empty
+	 * before entering INITM.
+	 */
+	linflex_wait_tx_fifo_empty(port);
+
+	/* disable transmit and receive */
+	writel(old_cr, port->membase + UARTCR);
 
 	/* Enter initialization mode by setting INIT bit */
 	cr1 = LINFLEXD_LINCR1_INIT | LINFLEXD_LINCR1_MME;
@@ -509,6 +545,9 @@ linflex_set_termios(struct uart_port *port, struct ktermios *termios,
 	cr1 &= ~(LINFLEXD_LINCR1_INIT);
 
 	writel(cr1, port->membase + LINCR1);
+
+	cr |= (LINFLEXD_UARTCR_TXEN) | (LINFLEXD_UARTCR_RXEN);
+	writel(cr, port->membase + UARTCR);
 
 	uart_port_unlock_irqrestore(port, flags);
 }
