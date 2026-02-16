@@ -1775,4 +1775,21 @@ struct smb2_lease_ack {
 #define SET_MINIMUM_RIGHTS (FILE_READ_EA | FILE_READ_ATTRIBUTES \
 				| READ_CONTROL | SYNCHRONIZE)
 
+/*
+ * [POSIX-SMB2] SMB3 POSIX Extensions
+ * Link: https://gitlab.com/samba-team/smb3-posix-spec/-/blob/master/smb3_posix_extensions.md
+ */
+
+/*
+ * SMB2_CREATE_POSIX_CONTEXT Response
+ * See POSIX-SMB2 2.2.14.2.16
+ */
+struct create_posix_ctxt_rsp {
+	__le32 nlink;
+	__le32 reparse_tag;
+	__le32 mode;
+	// var sized owner SID
+	// var sized group SID
+} __packed;
+
 #endif				/* _COMMON_SMB2PDU_H */

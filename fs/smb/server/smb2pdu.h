@@ -83,13 +83,11 @@ struct create_durable_rsp {
 	} Data;
 } __packed;
 
-/* equivalent of the contents of SMB3.1.1 POSIX open context response */
+/* See POSIX-SMB2 2.2.14.2.16 */
 struct create_posix_rsp {
 	struct create_context_hdr ccontext;
 	__u8    Name[16];
-	__le32 nlink;
-	__le32 reparse_tag;
-	__le32 mode;
+	struct create_posix_ctxt_rsp ctxt_rsp;
 	/* SidBuffer contain two sids(Domain sid(28), UNIX group sid(16)) */
 	u8 SidBuffer[44];
 } __packed;
