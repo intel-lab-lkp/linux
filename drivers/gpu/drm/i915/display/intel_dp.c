@@ -2514,8 +2514,8 @@ dsc_throughput_quirk_max_bpp_x16(const struct intel_connector *connector,
 	return fxp_q4_from_int(12);
 }
 
-static int compute_min_compressed_bpp_x16(struct intel_connector *connector,
-					  enum intel_output_format output_format)
+int intel_dp_compute_min_compressed_bpp_x16(struct intel_connector *connector,
+					    enum intel_output_format output_format)
 {
 	int dsc_src_min_bpp, dsc_sink_min_bpp, dsc_min_bpp;
 	int min_bpp_x16;
@@ -2581,7 +2581,8 @@ bool intel_dp_mode_valid_with_dsc(struct intel_connector *connector,
 				  int pipe_bpp, unsigned long bw_overhead_flags)
 {
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
-	int min_bpp_x16 = compute_min_compressed_bpp_x16(connector, output_format);
+	int min_bpp_x16 = intel_dp_compute_min_compressed_bpp_x16(connector,
+								  output_format);
 	int max_bpp_x16 = compute_max_compressed_bpp_x16(connector,
 							 mode_clock, mode_hdisplay,
 							 num_joined_pipes,
@@ -2635,7 +2636,8 @@ intel_dp_compute_config_link_bpp_limits(struct intel_connector *connector,
 		limits->link.min_bpp_x16 = fxp_q4_from_int(limits->pipe.min_bpp);
 	} else {
 		limits->link.min_bpp_x16 =
-			compute_min_compressed_bpp_x16(connector, crtc_state->output_format);
+			intel_dp_compute_min_compressed_bpp_x16(connector,
+								crtc_state->output_format);
 
 		max_link_bpp_x16 =
 			compute_max_compressed_bpp_x16(connector,
