@@ -169,7 +169,7 @@ static void linflex_put_char(struct uart_port *sport, unsigned char c)
 				LINFLEXD_UARTSR_DTFTFF)
 		;
 
-	writel(status | LINFLEXD_UARTSR_DTFTFF, sport->membase + UARTSR);
+	writel(LINFLEXD_UARTSR_DTFTFF, sport->membase + UARTSR);
 }
 
 static inline void linflex_transmit_buffer(struct uart_port *sport)
@@ -255,7 +255,8 @@ static irqreturn_t linflex_rxint(int irq, void *dev_id)
 				sport->icount.parity++;
 		}
 
-		writel(status, sport->membase + UARTSR);
+
+		writel(~(u32)LINFLEXD_UARTSR_DTFTFF, sport->membase + UARTSR);
 		status = readl(sport->membase + UARTSR);
 
 		if (brk) {
@@ -573,9 +574,7 @@ static void linflex_console_putchar(struct uart_port *port, unsigned char ch)
 				!= LINFLEXD_UARTSR_DTFTFF)
 			;
 
-		writel((readl(port->membase + UARTSR) |
-					LINFLEXD_UARTSR_DTFTFF),
-					port->membase + UARTSR);
+		writel(LINFLEXD_UARTSR_DTFTFF, port->membase + UARTSR);
 	}
 }
 
