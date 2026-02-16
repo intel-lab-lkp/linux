@@ -576,6 +576,40 @@ s32 __i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
 
 	flags &= I2C_M_TEN | I2C_CLIENT_PEC | I2C_CLIENT_SCCB;
 
+	if (data) {
+		switch (protocol) {
+		case I2C_SMBUS_BLOCK_DATA:
+			if (read_write == I2C_SMBUS_WRITE &&
+			    data->block[0] > I2C_SMBUS_BLOCK_MAX) {
+				dev_err(&adapter->dev,
+					"Invalid block write size %d\n",
+					data->block[0]);
+				return -EINVAL;
+			}
+			break;
+		case I2C_SMBUS_I2C_BLOCK_DATA:
+			if (data->block[0] > I2C_SMBUS_BLOCK_MAX) {
+				dev_err(&adapter->dev,
+					"Invalid block %s size %d\n",
+					read_write == I2C_SMBUS_READ ?
+						"read" : "write",
+					data->block[0]);
+				return -EINVAL;
+			}
+			break;
+		case I2C_SMBUS_BLOCK_PROC_CALL:
+			if (data->block[0] > I2C_SMBUS_BLOCK_MAX) {
+				dev_err(&adapter->dev,
+					"Invalid block write size %d\n",
+					data->block[0]);
+				return -EINVAL;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
 	xfer_func = adapter->algo->smbus_xfer;
 	if (i2c_in_atomic_xfer_mode()) {
 		if (adapter->algo->smbus_xfer_atomic)
