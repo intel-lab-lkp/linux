@@ -4399,9 +4399,18 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 		 */
 		btrfs_flush_workqueue(fs_info->delayed_workers);
 
-		ret = btrfs_commit_super(fs_info);
-		if (ret)
-			btrfs_err(fs_info, "commit super ret %d", ret);
+		/*
+		 * If the filesystem is shutdown, then an attempt to commit the
+		 * super block (or any write) will just fail. Since we freeze
+		 * the filesystem before shutting it down, the filesystem should
+		 * be in a consistent state and not committing the super block
+		 * should be fine.
+		 */
+		if (!btrfs_is_shutdown(fs_info)) {
+			ret = btrfs_commit_super(fs_info);
+			if (ret)
+				btrfs_err(fs_info, "commit super ret %d", ret);
+		}
 	}
 
 	kthread_stop(fs_info->transaction_kthread);
