@@ -3160,8 +3160,8 @@ static void gem_get_ethtool_strings(struct net_device *dev, u32 sset, u8 *p)
 
 		for (q = 0, queue = bp->queues; q < bp->num_queues; ++q, ++queue) {
 			for (i = 0; i < QUEUE_STATS_LEN; i++, p += ETH_GSTRING_LEN) {
-				snprintf(stat_string, ETH_GSTRING_LEN, "q%d_%s",
-						q, queue_statistics[i].stat_string);
+				snprintf(stat_string, ETH_GSTRING_LEN, "q%u_%.19s",
+					 q, queue_statistics[i].stat_string);
 				memcpy(p, stat_string, ETH_GSTRING_LEN);
 			}
 		}
