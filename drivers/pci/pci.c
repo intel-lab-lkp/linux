@@ -941,12 +941,6 @@ static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 			}
 		}
 
-		if (mask & ~(PCI_ACS_SV | PCI_ACS_TB | PCI_ACS_RR | PCI_ACS_CR |
-			    PCI_ACS_UF | PCI_ACS_EC | PCI_ACS_DT)) {
-			pci_err(dev, "Invalid ACS flags specified\n");
-			return;
-		}
-
 		ret = pci_dev_str_match(dev, p, &p);
 		if (ret < 0) {
 			pr_info_once("PCI: Can't parse ACS command line parameter\n");
@@ -968,6 +962,12 @@ static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 
 	if (!pci_dev_specific_disable_acs_redir(dev))
 		return;
+
+	if (flags & ~dev->acs_capabilities) {
+		pci_err(dev, "Invalid ACS enable flags specified: %#06x\n",
+			(u16)(flags & ~dev->acs_capabilities));
+		return;
+	}
 
 	pci_dbg(dev, "ACS mask  = %#06x\n", mask);
 	pci_dbg(dev, "ACS flags = %#06x\n", flags);
