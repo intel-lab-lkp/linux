@@ -106,7 +106,7 @@ acpi_pcc_address_space_handler(u32 function, acpi_physical_address addr,
 	/* Write to Shared Memory */
 	memcpy_toio(data->pcc_chan->shmem, (void *)value, data->ctx.length);
 
-	ret = mbox_send_message(data->pcc_chan->mchan, NULL);
+	ret = mbox_ring_doorbell(data->pcc_chan->mchan);
 	if (ret < 0)
 		return AE_ERROR;
 
@@ -122,8 +122,6 @@ acpi_pcc_address_space_handler(u32 function, acpi_physical_address addr,
 		pr_err("PCC command executed timeout!\n");
 		return AE_TIME;
 	}
-
-	mbox_chan_txdone(data->pcc_chan->mchan, ret);
 
 	memcpy_fromio(value, data->pcc_chan->shmem, data->ctx.length);
 
