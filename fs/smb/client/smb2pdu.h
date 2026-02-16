@@ -269,20 +269,7 @@ struct create_posix_rsp {
 struct smb2_posix_info {
 	__le32 NextEntryOffset;
 	__u32 Ignored;
-	__le64 CreationTime;
-	__le64 LastAccessTime;
-	__le64 LastWriteTime;
-	__le64 ChangeTime;
-	__le64 EndOfFile;
-	__le64 AllocationSize;
-	__le32 DosAttributes;
-	__le64 Inode;
-	__le32 DeviceId;
-	__le32 Zero;
-	/* beginning of POSIX Create Context Response */
-	__le32 HardLinks;
-	__le32 ReparseTag;
-	__le32 Mode;
+	struct file_posix_info fpinfo;
 	/*
 	 * var sized owner SID
 	 * var sized group SID
