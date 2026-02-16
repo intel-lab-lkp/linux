@@ -19,6 +19,7 @@
 #include <linux/stringify.h>
 #include <linux/bug.h>
 #include <linux/sched.h>
+#define DA_MON_NAME CONCATENATE(da_mon_, MONITOR_NAME)
 
 static struct rv_monitor rv_this;
 
@@ -183,14 +184,14 @@ static inline bool da_event(struct da_monitor *da_mon, struct task_struct *tsk,
 /*
  * global monitor (a single variable)
  */
-static struct da_monitor da_mon_this;
+static struct da_monitor DA_MON_NAME;
 
 /*
  * da_get_monitor - return the global monitor address
  */
 static struct da_monitor *da_get_monitor(void)
 {
-	return &da_mon_this;
+	return &DA_MON_NAME;
 }
 
 /*
@@ -223,14 +224,14 @@ static inline void da_monitor_destroy(void) { }
 /*
  * per-cpu monitor variables
  */
-static DEFINE_PER_CPU(struct da_monitor, da_mon_this);
+static DEFINE_PER_CPU(struct da_monitor, DA_MON_NAME);
 
 /*
  * da_get_monitor - return current CPU monitor address
  */
 static struct da_monitor *da_get_monitor(void)
 {
-	return this_cpu_ptr(&da_mon_this);
+	return this_cpu_ptr(&DA_MON_NAME);
 }
 
 /*
@@ -242,7 +243,7 @@ static void da_monitor_reset_all(void)
 	int cpu;
 
 	for_each_cpu(cpu, cpu_online_mask) {
-		da_mon = per_cpu_ptr(&da_mon_this, cpu);
+		da_mon = per_cpu_ptr(&DA_MON_NAME, cpu);
 		da_monitor_reset(da_mon);
 	}
 }
