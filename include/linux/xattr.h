@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/spinlock.h>
 #include <linux/mm.h>
+#include <linux/rhashtable-types.h>
 #include <linux/user_namespace.h>
 #include <uapi/linux/xattr.h>
 
@@ -112,6 +113,8 @@ struct simple_xattrs {
 
 struct simple_xattr {
 	struct rb_node rb_node;
+	struct rhash_head hash_node;
+	struct rcu_head rcu;
 	char *name;
 	size_t size;
 	char value[] __counted_by(size);
@@ -122,6 +125,7 @@ void simple_xattrs_free(struct simple_xattrs *xattrs, size_t *freed_space);
 size_t simple_xattr_space(const char *name, size_t size);
 struct simple_xattr *simple_xattr_alloc(const void *value, size_t size);
 void simple_xattr_free(struct simple_xattr *xattr);
+void simple_xattr_free_rcu(struct simple_xattr *xattr);
 int simple_xattr_get(struct simple_xattrs *xattrs, const char *name,
 		     void *buffer, size_t size);
 struct simple_xattr *simple_xattr_set(struct simple_xattrs *xattrs,

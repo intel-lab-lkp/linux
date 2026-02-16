@@ -1197,6 +1197,29 @@ void simple_xattr_free(struct simple_xattr *xattr)
 	kvfree(xattr);
 }
 
+static void simple_xattr_rcu_free(struct rcu_head *head)
+{
+	struct simple_xattr *xattr;
+
+	xattr = container_of(head, struct simple_xattr, rcu);
+	simple_xattr_free(xattr);
+}
+
+/**
+ * simple_xattr_free_rcu - free an xattr object after an RCU grace period
+ * @xattr: the xattr object
+ *
+ * Schedule RCU-deferred freeing of an xattr entry. This is used by
+ * rhashtable-based callers of simple_xattr_set() that replace or remove
+ * an existing entry while concurrent RCU readers may still be accessing
+ * it.
+ */
+void simple_xattr_free_rcu(struct simple_xattr *xattr)
+{
+	if (xattr)
+		call_rcu(&xattr->rcu, simple_xattr_rcu_free);
+}
+
 /**
  * simple_xattr_alloc - allocate new xattr object
  * @value: value of the xattr object
