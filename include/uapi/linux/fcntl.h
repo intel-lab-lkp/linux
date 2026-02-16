@@ -190,4 +190,8 @@ struct delegation {
 #define AT_EXECVE_CHECK		0x10000	/* Only perform a check if execution
 					   would be allowed. */
 
+/* write stream management */
+#define F_GET_MAX_WRITE_STREAMS		(F_LINUX_SPECIFIC_BASE + 17)
+#define F_GET_WRITE_STREAM		(F_LINUX_SPECIFIC_BASE + 18)
+#define F_SET_WRITE_STREAM		(F_LINUX_SPECIFIC_BASE + 19)
 #endif /* _UAPI_LINUX_FCNTL_H */

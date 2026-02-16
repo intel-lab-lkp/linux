@@ -441,6 +441,30 @@ static int f_owner_sig(struct file *filp, int signum, bool setsig)
 	return ret;
 }
 
+static long fcntl_get_max_write_streams(struct file *filp)
+{
+	if (filp->f_op->get_max_write_streams)
+		return filp->f_op->get_max_write_streams(filp);
+
+	return -EOPNOTSUPP;
+}
+
+static long fcntl_set_write_stream(struct file *filp, unsigned long arg)
+{
+	if (filp->f_op->set_write_stream)
+		return filp->f_op->set_write_stream(filp, arg);
+
+	return -EOPNOTSUPP;
+}
+
+static long fcntl_get_write_stream(struct file *filp)
+{
+	if (filp->f_op->get_write_stream)
+		return filp->f_op->get_write_stream(filp);
+
+	return -EOPNOTSUPP;
+}
+
 static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		struct file *filp)
 {
@@ -562,6 +586,15 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		if (copy_from_user(&deleg, argp, sizeof(deleg)))
 			return -EFAULT;
 		err = fcntl_setdeleg(fd, filp, &deleg);
+		break;
+	case F_GET_MAX_WRITE_STREAMS:
+		err = fcntl_get_max_write_streams(filp);
+		break;
+	case F_SET_WRITE_STREAM:
+		err = fcntl_set_write_stream(filp, arg);
+		break;
+	case F_GET_WRITE_STREAM:
+		err = fcntl_get_write_stream(filp);
 		break;
 	default:
 		break;
