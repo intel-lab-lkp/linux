@@ -1777,7 +1777,6 @@ static noinline int btrfs_search_path_in_tree(struct btrfs_fs_info *info,
 		btrfs_release_path(path);
 		key.objectid = key.offset;
 		key.offset = (u64)-1;
-		dirid = key.objectid;
 	}
 	memmove(name, ptr, total_len);
 	name[total_len] = '\0';
