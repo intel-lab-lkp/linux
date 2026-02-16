@@ -396,7 +396,6 @@ static void intel_workarounds(struct cpuinfo_x86 *c)
 	 * system. Announce that the fault handler will be checking for it.
 	 * The Quark is also family 5, but does not have the same bug.
 	 */
-	clear_cpu_bug(c, X86_BUG_F00F);
 	if (c->x86_vfm >= INTEL_FAM5_START && c->x86_vfm < INTEL_QUARK_X1000) {
 		static int f00f_workaround_enabled;
 
