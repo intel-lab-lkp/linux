@@ -97,8 +97,7 @@ struct qmp {
 
 static void qmp_kick(struct qmp *qmp)
 {
-	mbox_send_message(qmp->mbox_chan, NULL);
-	mbox_client_txdone(qmp->mbox_chan, 0);
+	mbox_ring_doorbell(qmp->mbox_chan);
 }
 
 static bool qmp_magic_valid(struct qmp *qmp)
