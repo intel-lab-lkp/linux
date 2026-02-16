@@ -4159,7 +4159,8 @@ static struct page *rtl8169_alloc_rx_data(struct rtl8169_private *tp,
 	dma_addr_t mapping;
 	struct page *data;
 
-	data = alloc_pages_node(node, GFP_KERNEL, get_order(R8169_RX_BUF_SIZE));
+	gfp_t gfp = GFP_KERNEL | __GFP_RETRY_MAYFAIL | __GFP_NOWARN;
+	data = alloc_pages_node(node, gfp, get_order(R8169_RX_BUF_SIZE));
 	if (!data)
 		return NULL;
 
