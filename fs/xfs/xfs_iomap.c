@@ -148,6 +148,7 @@ xfs_bmbt_to_iomap(
 	else
 		iomap->bdev = target->bt_bdev;
 	iomap->flags = iomap_flags;
+	iomap->write_stream = ip->i_write_stream;
 
 	/*
 	 * If the inode is dirty for datasync purposes, let iomap know so it

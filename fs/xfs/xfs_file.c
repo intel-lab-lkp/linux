@@ -2021,6 +2021,57 @@ xfs_file_mmap_prepare(
 	return 0;
 }
 
+static struct block_device *
+xfs_file_get_bdev(
+	struct inode		*inode)
+{
+	struct xfs_inode *ip = XFS_I(inode);
+	struct xfs_mount *mp = ip->i_mount;
+
+	if (XFS_IS_REALTIME_INODE(ip))
+		return mp->m_rtdev_targp->bt_bdev;
+
+	return mp->m_ddev_targp->bt_bdev;
+}
+
+static int
+xfs_file_get_max_write_streams(
+	struct file		*file)
+{
+	struct block_device *bdev = xfs_file_get_bdev(file_inode(file));
+
+	if (bdev)
+		return bdev_max_write_streams(bdev);
+
+	return 0;
+}
+
+static int
+xfs_file_get_write_stream(
+	struct file		*file)
+{
+	struct xfs_inode *ip = XFS_I(file_inode(file));
+
+	return READ_ONCE(ip->i_write_stream);
+}
+
+static int
+xfs_file_set_write_stream(
+	struct file		*file,
+	unsigned long		stream)
+{
+	struct xfs_inode *ip = XFS_I(file_inode(file));
+	int max_streams = xfs_file_get_max_write_streams(file);
+
+	if (stream > max_streams)
+		return -EINVAL;
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	WRITE_ONCE(ip->i_write_stream, stream);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+
+	return 0;
+}
+
 const struct file_operations xfs_file_operations = {
 	.llseek		= xfs_file_llseek,
 	.read_iter	= xfs_file_read_iter,
@@ -2040,6 +2091,9 @@ const struct file_operations xfs_file_operations = {
 	.fallocate	= xfs_file_fallocate,
 	.fadvise	= xfs_file_fadvise,
 	.remap_file_range = xfs_file_remap_range,
+	.get_max_write_streams	= xfs_file_get_max_write_streams,
+	.get_write_stream = xfs_file_get_write_stream,
+	.set_write_stream = xfs_file_set_write_stream,
 	.fop_flags	= FOP_MMAP_SYNC | FOP_BUFFER_RASYNC |
 			  FOP_BUFFER_WASYNC | FOP_DIO_PARALLEL_WRITE |
 			  FOP_DONTCACHE,
