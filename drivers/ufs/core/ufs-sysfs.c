@@ -97,6 +97,14 @@ static const char * const ufs_hid_states[] = {
 	[DEFRAG_NOT_REQUIRED]	= "defrag_not_required",
 };
 
+static const char * const ufshcd_states[] = {
+	[UFSHCD_STATE_RESET]			= "reset",
+	[UFSHCD_STATE_OPERATIONAL]		= "operational",
+	[UFSHCD_STATE_EH_SCHEDULED_NON_FATAL]	= "eh_scheduled_non_fatal",
+	[UFSHCD_STATE_EH_SCHEDULED_FATAL]	= "eh_scheduled_fatal",
+	[UFSHCD_STATE_ERROR]			= "error",
+};
+
 static const char *ufs_hid_state_to_string(enum ufs_hid_state state)
 {
 	if (state < NUM_UFS_HID_STATES)
@@ -633,6 +641,14 @@ static ssize_t dme_qos_notification_store(struct device *dev,
 	return count;
 }
 
+static ssize_t ufshcd_state_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%s\n", ufshcd_states[hba->ufshcd_state]);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -650,6 +666,7 @@ static DEVICE_ATTR_RO(critical_health);
 static DEVICE_ATTR_RW(device_lvl_exception_count);
 static DEVICE_ATTR_RO(device_lvl_exception_id);
 static DEVICE_ATTR_RW(dme_qos_notification);
+static DEVICE_ATTR_RO(ufshcd_state);
 
 static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -669,6 +686,7 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_device_lvl_exception_count.attr,
 	&dev_attr_device_lvl_exception_id.attr,
 	&dev_attr_dme_qos_notification.attr,
+	&dev_attr_ufshcd_state.attr,
 	NULL
 };
 
