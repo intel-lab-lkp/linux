@@ -975,6 +975,17 @@ int amdgpu_bo_pin(struct amdgpu_bo *bo, u32 domain)
 		if (bo->flags & AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS &&
 		    bo->placements[i].mem_type == TTM_PL_VRAM)
 			bo->placements[i].flags |= TTM_PL_FLAG_CONTIGUOUS;
+
+		/* Ensure bo is never pinned at amdgpu_bo_gpu_offset() == 0
+		 * for VRAM allocations, as some of the DC code does not
+		 * like that, e.g., mouse cursor display image bo's.
+		 */
+		if (bo->flags & AMDGPU_GEM_CREATE_VRAM_NON_ZERO_ADDRESS &&
+		    bo->placements[i].mem_type == TTM_PL_VRAM &&
+		    !bo->placements[i].fpfn &&
+		    !amdgpu_ttm_domain_start(adev, TTM_PL_VRAM)) {
+			bo->placements[i].fpfn = 1;
+		}
 	}
 
 	r = ttm_bo_validate(&bo->tbo, &bo->placement, &ctx);

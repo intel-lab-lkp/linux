@@ -181,6 +181,13 @@ extern "C" {
 #define AMDGPU_GEM_CREATE_EXT_COHERENT		(1 << 15)
 /* Set PTE.D and recompress during GTT->VRAM moves according to TILING flags. */
 #define AMDGPU_GEM_CREATE_GFX12_DCC		(1 << 16)
+/* Flag that BO must not be placed in VRAM domain at offset zero if the
+ * VRAM domain itself starts at address zero.
+ *
+ * Used internally to prevent placement of cursor image BO at that location,
+ * as the display hardware doesn't like that for hardware cursors.
+ */
+#define AMDGPU_GEM_CREATE_VRAM_NON_ZERO_ADDRESS (1 << 17)
 
 struct drm_amdgpu_gem_create_in  {
 	/** the requested memory size */
