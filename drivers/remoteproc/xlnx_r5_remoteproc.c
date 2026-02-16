@@ -245,7 +245,7 @@ static void zynqmp_r5_mb_rx_cb(struct mbox_client *cl, void *msg)
 	memcpy(buf_msg->data, ipi_msg->data, len);
 
 	/* received and processed interrupt ack */
-	if (mbox_send_message(ipi->rx_chan, NULL) < 0)
+	if (mbox_ring_doorbell(ipi->rx_chan) < 0)
 		dev_err(cl->dev, "ack failed to mbox rx_chan\n");
 
 	schedule_work(&ipi->mbox_work);
