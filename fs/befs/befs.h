@@ -30,6 +30,7 @@ struct befs_mount_options {
 };
 
 struct befs_sb_info {
+	char name[B_OS_NAME_LENGTH];
 	u32 magic1;
 	u32 block_size;
 	u32 block_shift;
