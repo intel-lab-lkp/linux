@@ -625,7 +625,7 @@ static void crash_handle_hotplug_event(unsigned int hp_action, unsigned int cpu,
 	image->hp_action = hp_action;
 
 	/* Now invoke arch-specific update handler */
-	arch_crash_handle_hotplug_event(image, arg);
+	arch_crash_handle_hotplug_event(image, cpu, arg);
 
 	/* No longer handling a hotplug event */
 	image->hp_action = KEXEC_CRASH_HP_NONE;

@@ -508,7 +508,7 @@ unsigned int arch_crash_get_elfcorehdr_size(void)
  *
  * Prepare the new elfcorehdr and replace the existing elfcorehdr.
  */
-void arch_crash_handle_hotplug_event(struct kimage *image, void *arg)
+void arch_crash_handle_hotplug_event(struct kimage *image, int cpu, void *arg)
 {
 	void *elfbuf = NULL, *old_elfcorehdr;
 	unsigned long nr_mem_ranges;

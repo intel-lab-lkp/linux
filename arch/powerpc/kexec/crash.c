@@ -568,7 +568,7 @@ int arch_crash_hotplug_support(struct kimage *image, unsigned long kexec_flags)
  *	       part of the FDT.
  * Memory add/remove: No action is taken as this is not yet supported.
  */
-void arch_crash_handle_hotplug_event(struct kimage *image, void *arg)
+void arch_crash_handle_hotplug_event(struct kimage *image, int cpu, void *arg)
 {
 	struct memory_notify *mn;
 
@@ -577,7 +577,8 @@ void arch_crash_handle_hotplug_event(struct kimage *image, void *arg)
 		return;
 
 	case KEXEC_CRASH_HP_ADD_CPU:
-		update_crash_fdt(image);
+		if (!cpumask_test_cpu(cpu, &cpus_booted_once_mask))
+			update_crash_fdt(image);
 		break;
 
 	case KEXEC_CRASH_HP_REMOVE_MEMORY:
