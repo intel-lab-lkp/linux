@@ -3984,8 +3984,10 @@ qla24xx_free_purex_list(struct purex_list *list)
 	spin_lock_irqsave(&list->lock, flags);
 	list_for_each_entry_safe(item, next, &list->head, list) {
 		list_del(&item->list);
-		if (item == &item->vha->default_item)
+		if (item == &item->vha->default_item) {
+			atomic_set(&item->vha->default_item.in_use, 0);
 			continue;
+		}
 		kfree(item);
 	}
 	spin_unlock_irqrestore(&list->lock, flags);
@@ -6467,7 +6469,7 @@ void
 qla24xx_free_purex_item(struct purex_item *item)
 {
 	if (item == &item->vha->default_item)
-		memset(&item->vha->default_item, 0, sizeof(struct purex_item));
+		atomic_set(&item->vha->default_item.in_use, 0);
 	else
 		kfree(item);
 }
