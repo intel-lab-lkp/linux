@@ -33,6 +33,7 @@
 #include "async-thread.h"
 #include "block-rsv.h"
 #include "messages.h"
+#include <linux/fserror.h>
 
 struct inode;
 struct super_block;
@@ -1199,8 +1200,10 @@ static inline void btrfs_force_shutdown(struct btrfs_fs_info *fs_info)
 	 * So here we only mark the fs error without flipping it RO.
 	 */
 	WRITE_ONCE(fs_info->fs_error, -EIO);
-	if (!test_and_set_bit(BTRFS_FS_STATE_EMERGENCY_SHUTDOWN, &fs_info->fs_state))
+	if (!test_and_set_bit(BTRFS_FS_STATE_EMERGENCY_SHUTDOWN, &fs_info->fs_state)) {
 		btrfs_crit(fs_info, "emergency shutdown");
+		fserror_report_shutdown(fs_info->sb, GFP_KERNEL);
+	}
 }
 
 /*
