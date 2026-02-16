@@ -487,7 +487,7 @@ static int wiimote_cmd_init_mp(struct wiimote_data *wdata)
 }
 
 /* requires the cmd-mutex to be held */
-static bool wiimote_cmd_map_mp(struct wiimote_data *wdata, __u8 exttype)
+static void wiimote_cmd_map_mp(struct wiimote_data *wdata, __u8 exttype)
 {
 	__u8 wmem;
 
@@ -507,7 +507,7 @@ static bool wiimote_cmd_map_mp(struct wiimote_data *wdata, __u8 exttype)
 		break;
 	}
 
-	return wiimote_cmd_write(wdata, 0xa600fe, &wmem, sizeof(wmem));
+	wiimote_cmd_write(wdata, 0xa600fe, &wmem, sizeof(wmem));
 }
 
 /* requires the cmd-mutex to be held */
