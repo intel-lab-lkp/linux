@@ -1967,6 +1967,12 @@ struct file_operations {
 	int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *,
 				unsigned int poll_flags);
 	int (*mmap_prepare)(struct vm_area_desc *);
+	/* To fetch number of streams that are available for a file */
+	int (*get_max_write_streams)(struct file *);
+	/* To set write stream on a file */
+	int (*set_write_stream)(struct file *, unsigned long);
+	/* To query the write stream on a file */
+	int (*get_write_stream)(struct file *);
 } __randomize_layout;
 
 /* Supports async buffered reads */
