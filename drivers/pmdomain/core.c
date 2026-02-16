@@ -1366,6 +1366,16 @@ static int __init pd_ignore_unused_setup(char *__unused)
 }
 __setup("pd_ignore_unused", pd_ignore_unused_setup);
 
+static bool genpd_ignore_unused(void)
+{
+	if (pd_ignore_unused) {
+		pr_warn_once("genpd: Not disabling unused power domains\n");
+		return true;
+	}
+
+	return false;
+}
+
 /**
  * genpd_power_off_unused - Power off all PM domains with no devices in use.
  */
@@ -1373,10 +1383,8 @@ static int __init genpd_power_off_unused(void)
 {
 	struct generic_pm_domain *genpd;
 
-	if (pd_ignore_unused) {
-		pr_warn("genpd: Not disabling unused power domains\n");
+	if (genpd_ignore_unused())
 		return 0;
-	}
 
 	pr_info("genpd: Disabling unused power domains\n");
 	mutex_lock(&gpd_list_lock);
@@ -3503,6 +3511,9 @@ void of_genpd_sync_state(struct device_node *np)
 {
 	struct generic_pm_domain *genpd;
 
+	if (genpd_ignore_unused())
+		return;
+
 	if (!np)
 		return;
 
@@ -3537,6 +3548,9 @@ static void genpd_provider_sync_state(struct device *dev)
 		break;
 
 	case GENPD_SYNC_STATE_SIMPLE:
+		if (genpd_ignore_unused())
+			return;
+
 		genpd_lock(genpd);
 		genpd->stay_on = false;
 		genpd_power_off(genpd, false, 0);
