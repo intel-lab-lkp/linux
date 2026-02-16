@@ -4,6 +4,10 @@ KCOV_INSTRUMENT_tlb.o			:= n
 KCOV_INSTRUMENT_mem_encrypt.o		:= n
 KCOV_INSTRUMENT_mem_encrypt_amd.o	:= n
 KCOV_INSTRUMENT_pgprot.o		:= n
+# When a kexec kernel is loaded, calling load_segments() breaks all
+# subsequent KCOV instrumentation until new kernel takes control.
+# Keep KCOV instrumentation disabled to prevent kernel crashes.
+KCOV_INSTRUMENT_physaddr.o		:= n
 
 KASAN_SANITIZE_mem_encrypt.o		:= n
 KASAN_SANITIZE_mem_encrypt_amd.o	:= n

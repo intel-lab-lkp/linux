@@ -43,6 +43,10 @@ KCOV_INSTRUMENT_dumpstack_$(BITS).o			:= n
 KCOV_INSTRUMENT_unwind_orc.o				:= n
 KCOV_INSTRUMENT_unwind_frame.o				:= n
 KCOV_INSTRUMENT_unwind_guess.o				:= n
+# When a kexec kernel is loaded, calling load_segments() breaks all
+# subsequent KCOV instrumentation until new kernel takes control.
+# Keep KCOV instrumentation disabled to prevent kernel crashes.
+KCOV_INSTRUMENT_machine_kexec_64.o			:= n
 
 CFLAGS_head32.o := -fno-stack-protector
 CFLAGS_head64.o := -fno-stack-protector
