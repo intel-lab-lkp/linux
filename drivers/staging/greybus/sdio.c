@@ -206,7 +206,7 @@ static int gb_sdio_request_handler(struct gb_operation *op)
 	struct gb_message *request;
 	struct gb_sdio_event_request *payload;
 	u8 type = op->type;
-	int ret =  0;
+	int ret = 0;
 	u8 event;
 
 	if (type != GB_SDIO_TYPE_EVENT) {
