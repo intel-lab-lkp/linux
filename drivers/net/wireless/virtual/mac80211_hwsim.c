@@ -36,6 +36,9 @@
 #include <linux/virtio.h>
 #include <linux/virtio_ids.h>
 #include <linux/virtio_config.h>
+#include <linux/uaccess.h>
+#include <linux/kstrtox.h>
+#include <linux/string.h>
 #include "mac80211_hwsim.h"
 
 #define WARN_QUEUE 100
@@ -1163,6 +1166,80 @@ static int hwsim_write_simulate_radar(void *dat, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(hwsim_simulate_radar, NULL,
 			 hwsim_write_simulate_radar, "%llu\n");
+
+struct hwsim_chanctx_iter_arg {
+	struct ieee80211_chanctx_conf **out;
+	u32 freq_mhz;
+};
+
+static void hwsim_6ghz_chanctx_iter(struct ieee80211_hw *hw,
+				    struct ieee80211_chanctx_conf *conf,
+				    void *data)
+{
+	struct hwsim_chanctx_iter_arg *arg = data;
+
+	if (conf->def.chan &&
+	    conf->def.chan->band == NL80211_BAND_6GHZ &&
+	    conf->def.chan->center_freq == arg->freq_mhz)
+		*arg->out = conf;
+}
+
+static ssize_t hwsim_simulate_incumbent_signal_write(struct file *file,
+						     const char __user *ubuf,
+						     size_t len, loff_t *ppos)
+{
+	struct mac80211_hwsim_data *data = file->private_data;
+	struct ieee80211_chanctx_conf *chanctx_conf = NULL;
+	struct hwsim_chanctx_iter_arg arg;
+	u32 freq_mhz, bitmap;
+	char *sptr, *token;
+	char buf[64];
+
+	if (!len || len >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, ubuf, len))
+		return -EFAULT;
+	buf[len] = '\0';
+
+	strim(buf);
+	sptr = buf;
+	token = strsep(&sptr, " \t");
+	if (!token)
+		return -EINVAL;
+	if (kstrtou32(token, 0, &freq_mhz))
+		return -EINVAL;
+
+	token = strsep(&sptr, " \t");
+	if (!token)
+		return -EINVAL;
+	if (kstrtou32(token, 0, &bitmap))
+		return -EINVAL;
+
+	if (!freq_mhz)
+		return -EINVAL;
+
+	arg.out = &chanctx_conf;
+	arg.freq_mhz = freq_mhz;
+	ieee80211_iter_chan_contexts_atomic(data->hw,
+					    hwsim_6ghz_chanctx_iter,
+					    &arg);
+
+	if (!chanctx_conf)
+		return -EINVAL;
+
+	cfg80211_incumbent_signal_notify(data->hw->wiphy,
+					 &chanctx_conf->def,
+					 bitmap,
+					 GFP_KERNEL);
+
+	return len;
+}
+
+static const struct file_operations hwsim_simulate_incumbent_signal_fops = {
+	.open	= simple_open,
+	.write	= hwsim_simulate_incumbent_signal_write,
+};
 
 static int hwsim_fops_group_read(void *dat, u64 *val)
 {
@@ -5832,6 +5909,9 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 		debugfs_create_file("dfs_simulate_radar", 0222,
 				    data->debugfs,
 				    data, &hwsim_simulate_radar);
+	debugfs_create_file("simulate_incumbent_signal_interference", 0200,
+			    data->debugfs,
+			    data, &hwsim_simulate_incumbent_signal_fops);
 
 	if (param->pmsr_capa) {
 		data->pmsr_capa = *param->pmsr_capa;
