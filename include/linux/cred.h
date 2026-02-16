@@ -168,6 +168,8 @@ extern int set_create_files_as(struct cred *, struct inode *);
 extern int cred_fscmp(const struct cred *, const struct cred *);
 extern void __init cred_init(void);
 extern int set_cred_ucounts(struct cred *);
+bool may_signal_creds(const struct cred *signaler_cred,
+		      const struct cred *signalee_cred);
 
 static inline bool cap_ambient_invariant_ok(const struct cred *cred)
 {

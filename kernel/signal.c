@@ -777,19 +777,22 @@ static inline bool si_fromuser(const struct kernel_siginfo *info)
 		(!is_si_special(info) && SI_FROMUSER(info));
 }
 
+bool may_signal_creds(const struct cred *signaler_cred,
+		      const struct cred *signalee_cred)
+{
+	return uid_eq(signaler_cred->euid, signalee_cred->suid) ||
+	       uid_eq(signaler_cred->euid, signalee_cred->uid) ||
+	       uid_eq(signaler_cred->uid, signalee_cred->suid) ||
+	       uid_eq(signaler_cred->uid, signalee_cred->uid) ||
+	       ns_capable(signalee_cred->user_ns, CAP_KILL);
+}
+
 /*
  * called with RCU read lock from check_kill_permission()
  */
 static bool kill_ok_by_cred(struct task_struct *t)
 {
-	const struct cred *cred = current_cred();
-	const struct cred *tcred = __task_cred(t);
-
-	return uid_eq(cred->euid, tcred->suid) ||
-	       uid_eq(cred->euid, tcred->uid) ||
-	       uid_eq(cred->uid, tcred->suid) ||
-	       uid_eq(cred->uid, tcred->uid) ||
-	       ns_capable(tcred->user_ns, CAP_KILL);
+	return may_signal_creds(current_cred(), __task_cred(t));
 }
 
 /*
