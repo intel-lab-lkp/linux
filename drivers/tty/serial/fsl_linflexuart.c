@@ -350,14 +350,16 @@ static void linflex_setup_watermark(struct uart_port *sport)
 	/* set UART bit to allow writing other bits */
 	writel(LINFLEXD_UARTCR_UART, sport->membase + UARTCR);
 
-	cr = (LINFLEXD_UARTCR_RXEN | LINFLEXD_UARTCR_TXEN |
-	      LINFLEXD_UARTCR_WL0 | LINFLEXD_UARTCR_UART);
+	cr = (LINFLEXD_UARTCR_WL0 | LINFLEXD_UARTCR_UART);
 
 	writel(cr, sport->membase + UARTCR);
 
 	cr1 &= ~(LINFLEXD_LINCR1_INIT);
 
 	writel(cr1, sport->membase + LINCR1);
+
+	cr |= (LINFLEXD_UARTCR_RXEN | LINFLEXD_UARTCR_TXEN);
+	writel(cr, sport->membase + UARTCR);
 
 	ier = readl(sport->membase + LINIER);
 	ier |= LINFLEXD_LINIER_DRIE;
