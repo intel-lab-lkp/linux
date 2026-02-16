@@ -197,8 +197,7 @@ static void glink_rpm_tx_kick(struct qcom_glink_pipe *glink_pipe)
 	struct glink_rpm_pipe *pipe = to_rpm_pipe(glink_pipe);
 	struct glink_rpm *rpm = container_of(pipe, struct glink_rpm, tx_pipe);
 
-	mbox_send_message(rpm->mbox_chan, NULL);
-	mbox_client_txdone(rpm->mbox_chan, 0);
+	mbox_ring_doorbell(rpm->mbox_chan);
 }
 
 static irqreturn_t qcom_glink_rpm_intr(int irq, void *data)
