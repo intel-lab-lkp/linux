@@ -71,6 +71,7 @@
 #define PCI_DEVID(bus, devfn)	((((u16)(bus)) << 8) | (devfn))
 /* return bus from PCI devid = ((u16)bus_number) << 8) | devfn */
 #define PCI_BUS_NUM(x) (((x) >> 8) & 0xff)
+#define PCI_RID_MASK	0xffff
 
 /* pci_slot represents a physical slot */
 struct pci_slot {

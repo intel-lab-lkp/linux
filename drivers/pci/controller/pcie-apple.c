@@ -802,7 +802,7 @@ static void apple_pcie_disable_device(struct pci_host_bridge *bridge, struct pci
 		u32 val;
 
 		val = readl_relaxed(port_rid2sid_addr(port, idx));
-		if ((val & 0xffff) == rid) {
+		if ((val & PCI_RID_MASK) == rid) {
 			apple_pcie_rid2sid_write(port, idx, 0);
 			bitmap_release_region(port->sid_map, idx, 0);
 			dev_dbg(&pdev->dev, "Released %x (%d)\n", val, idx);
