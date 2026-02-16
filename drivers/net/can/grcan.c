@@ -174,6 +174,7 @@ struct grcan_registers {
 #define GRCAN_IRQ_DEFAULT (GRCAN_IRQ_RX | GRCAN_IRQ_TX | GRCAN_IRQ_ERRORS)
 
 #define GRCAN_MSG_SIZE		16
+#define GRCAN_CLASSIC_DATA_SIZE 8
 
 #define GRCAN_MSG_IDE		0x80000000
 #define GRCAN_MSG_RTR		0x40000000
@@ -239,9 +240,23 @@ struct grcan_hwcap {
 	bool fd;
 };
 
+union grcan_msg_slot {
+	/*  First slot: header + 8 bytes payload */
+	struct {
+		u32 id;
+		u32 ctrl;
+		u8  data[GRCAN_CLASSIC_DATA_SIZE];
+	} __packed header;
+
+	/* Continuation slot: payload only */
+	struct {
+		u8 data[GRCAN_MSG_SIZE];
+	} __packed frags;
+} __packed;
+
 struct grcan_dma_buffer {
 	size_t size;
-	void *buf;
+	union grcan_msg_slot *msg_slot;
 	dma_addr_t handle;
 };
 
@@ -1019,8 +1034,8 @@ static int grcan_allocate_dma_buffers(struct net_device *dev,
 	small->handle = large->handle + lsize;
 	shift = large->handle - dma->base_handle;
 
-	large->buf = dma->base_buf + shift;
-	small->buf = large->buf + lsize;
+	large->msg_slot = (union grcan_msg_slot *)((u8 *)dma->base_buf + shift);
+	small->msg_slot = (union grcan_msg_slot *)((u8 *)large->msg_slot + lsize);
 
 	return 0;
 }
@@ -1237,7 +1252,7 @@ static int grcan_receive(struct net_device *dev, int budget)
 			continue;
 		}
 
-		slot = dma->rx.buf + rd;
+		slot = (u32 *)((u8 *)dma->rx.msg_slot + rd);
 		eff = slot[0] & GRCAN_MSG_IDE;
 		rtr = slot[0] & GRCAN_MSG_RTR;
 		if (eff) {
@@ -1418,7 +1433,7 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	space = grcan_txspace(dma->tx.size, txwr, priv->eskbp);
 
 	slotindex = txwr / GRCAN_MSG_SIZE;
-	slot = dma->tx.buf + txwr;
+	slot = (u32 *)((u8 *)dma->tx.msg_slot + txwr);
 
 	if (unlikely(space == 1))
 		netif_stop_queue(dev);
