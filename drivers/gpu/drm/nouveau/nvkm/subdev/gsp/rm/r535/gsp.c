@@ -863,17 +863,18 @@ r535_gsp_acpi_dod(acpi_handle handle, DOD_METHOD_DATA *dod)
 
 	if (_DOD->type != ACPI_TYPE_PACKAGE ||
 	    _DOD->package.count > ARRAY_SIZE(dod->acpiIdList))
-		return;
+		goto out_free;
 
 	for (int i = 0; i < _DOD->package.count; i++) {
 		if (WARN_ON(_DOD->package.elements[i].type != ACPI_TYPE_INTEGER))
-			return;
+			goto out_free;
 
 		dod->acpiIdList[i] = _DOD->package.elements[i].integer.value;
 		dod->acpiIdListLen += sizeof(dod->acpiIdList[0]);
 	}
 
 	dod->status = 0;
+out_free:
 	kfree(output.pointer);
 }
 #endif
