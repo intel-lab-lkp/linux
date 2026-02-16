@@ -3,9 +3,10 @@
  * Freescale LINFlexD UART serial port driver
  *
  * Copyright 2012-2016 Freescale Semiconductor, Inc.
- * Copyright 2017-2019, 2021 NXP
+ * Copyright 2017-2019, 2021-2022 NXP
  */
 
+#include <linux/clk.h>
 #include <linux/console.h>
 #include <linux/io.h>
 #include <linux/irq.h>
@@ -130,6 +131,22 @@
 #define EARLYCON_BUFFER_INITIAL_CAP	8
 
 #define PREINIT_DELAY			2000 /* us */
+
+enum linflex_clk {
+	LINFLEX_CLK_LIN,
+	LINFLEX_CLK_IPG,
+	LINFLEX_CLK_NUM,
+};
+
+static const char * const linflex_clks_id[] = {
+	"lin",
+	"ipg",
+};
+
+struct linflex_port {
+	struct uart_port	port;
+	struct clk_bulk_data	clks[LINFLEX_CLK_NUM];
+};
 
 static const struct of_device_id linflex_dt_ids[] = {
 	{
@@ -421,6 +438,19 @@ static void linflex_shutdown(struct uart_port *port)
 	devm_free_irq(port->dev, port->irq, port);
 }
 
+static unsigned char
+linflex_ldiv_multiplier(struct uart_port *port)
+{
+	unsigned char mul = LINFLEX_LDIV_MULTIPLIER;
+	unsigned long cr;
+
+	cr = readl(port->membase + UARTCR);
+	if (cr & LINFLEXD_UARTCR_ROSE)
+		mul = LINFLEXD_UARTCR_OSR(cr);
+
+	return mul;
+}
+
 static void
 linflex_set_termios(struct uart_port *port, struct ktermios *termios,
 		    const struct ktermios *old)
@@ -428,6 +458,9 @@ linflex_set_termios(struct uart_port *port, struct ktermios *termios,
 	unsigned long flags;
 	unsigned long cr, old_cr, cr1;
 	unsigned int old_csize = old ? old->c_cflag & CSIZE : CS8;
+	unsigned long ibr, fbr, divisr, dividr;
+	unsigned char ldiv_mul;
+	unsigned int baud;
 
 	uart_port_lock_irqsave(port, &flags);
 
@@ -530,6 +563,24 @@ linflex_set_termios(struct uart_port *port, struct ktermios *termios,
 		 */
 		if (termios->c_iflag & IGNPAR)
 			port->ignore_status_mask |= LINFLEXD_UARTSR_BOF;
+	}
+
+	if (port->uartclk) {
+		ldiv_mul = linflex_ldiv_multiplier(port);
+		baud = uart_get_baud_rate(port, termios, old, 0,
+					  port->uartclk / ldiv_mul);
+
+		/* update the per-port timeout */
+		uart_update_timeout(port, termios->c_cflag, baud);
+
+		divisr = port->uartclk;
+		dividr = ((unsigned long)baud * ldiv_mul);
+
+		ibr = divisr / dividr;
+		fbr = ((divisr % dividr) * 16 / dividr) & 0xF;
+
+		writel(ibr, port->membase + LINIBRR);
+		writel(fbr, port->membase + LINFBRR);
 	}
 
 	writel(cr, port->membase + UARTCR);
@@ -760,16 +811,51 @@ static struct uart_driver linflex_reg = {
 	.cons		= LINFLEX_CONSOLE,
 };
 
+static int linflex_init_clk(struct linflex_port *lfport)
+{
+	int i, ret;
+
+	for (i = 0; i < LINFLEX_CLK_NUM; i++) {
+		lfport->clks[i].id = linflex_clks_id[i];
+		lfport->clks[i].clk = NULL;
+	}
+
+	ret = devm_clk_bulk_get(lfport->port.dev, LINFLEX_CLK_NUM,
+				lfport->clks);
+	if (ret) {
+		if (ret == -EPROBE_DEFER)
+			return ret;
+
+		lfport->port.uartclk = 0;
+		dev_info(lfport->port.dev,
+			 "uart clock is missing, err = %d. Skipping clock setup.\n",
+			 ret);
+		return 0;
+	}
+
+	ret = clk_bulk_prepare_enable(LINFLEX_CLK_NUM, lfport->clks);
+	if (ret)
+		return dev_err_probe(lfport->port.dev, ret,
+				     "Failed to enable LINFlexD clocks.\n");
+
+	lfport->port.uartclk = clk_get_rate(lfport->clks[LINFLEX_CLK_LIN].clk);
+
+	return 0;
+}
+
 static int linflex_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
+	struct linflex_port *lfport;
 	struct uart_port *sport;
 	struct resource *res;
 	int ret;
 
-	sport = devm_kzalloc(&pdev->dev, sizeof(*sport), GFP_KERNEL);
-	if (!sport)
+	lfport = devm_kzalloc(&pdev->dev, sizeof(*lfport), GFP_KERNEL);
+	if (!lfport)
 		return -ENOMEM;
+
+	sport = &lfport->port;
 
 	ret = of_alias_get_id(np, "serial");
 	if (ret < 0) {
@@ -800,33 +886,55 @@ static int linflex_probe(struct platform_device *pdev)
 	sport->flags = UPF_BOOT_AUTOCONF;
 	sport->has_sysrq = IS_ENABLED(CONFIG_SERIAL_FSL_LINFLEXUART_CONSOLE);
 
+	ret = linflex_init_clk(lfport);
+	if (ret)
+		return ret;
+
 	linflex_ports[sport->line] = sport;
 
-	platform_set_drvdata(pdev, sport);
+	platform_set_drvdata(pdev, lfport);
 
-	return uart_add_one_port(&linflex_reg, sport);
+	ret = uart_add_one_port(&linflex_reg, sport);
+	if (ret)
+		clk_bulk_disable_unprepare(LINFLEX_CLK_NUM, lfport->clks);
+
+	return ret;
 }
 
 static void linflex_remove(struct platform_device *pdev)
 {
-	struct uart_port *sport = platform_get_drvdata(pdev);
+	struct linflex_port *lfport = platform_get_drvdata(pdev);
+	struct uart_port *sport = &lfport->port;
 
 	uart_remove_one_port(&linflex_reg, sport);
+	clk_bulk_disable_unprepare(LINFLEX_CLK_NUM, lfport->clks);
 }
 
 #ifdef CONFIG_PM_SLEEP
 static int linflex_suspend(struct device *dev)
 {
-	struct uart_port *sport = dev_get_drvdata(dev);
+	struct linflex_port *lfport = dev_get_drvdata(dev);
+	struct uart_port *sport = &lfport->port;
 
 	uart_suspend_port(&linflex_reg, sport);
+	clk_bulk_disable_unprepare(LINFLEX_CLK_NUM, lfport->clks);
 
 	return 0;
 }
 
 static int linflex_resume(struct device *dev)
 {
-	struct uart_port *sport = dev_get_drvdata(dev);
+	struct linflex_port *lfport = dev_get_drvdata(dev);
+	struct uart_port *sport = &lfport->port;
+	int ret;
+
+	if (lfport->clks[LINFLEX_CLK_LIN].clk) {
+		ret = clk_bulk_prepare_enable(LINFLEX_CLK_NUM, lfport->clks);
+		if (ret) {
+			dev_err(dev, "Failed to enable LINFlexD clocks: %d\n", ret);
+			return ret;
+		}
+	}
 
 	uart_resume_port(&linflex_reg, sport);
 
