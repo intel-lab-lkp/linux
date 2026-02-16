@@ -1051,6 +1051,9 @@ static void sa_aes_dma_in_callback(void *data)
 	if (req->iv) {
 		mdptr = (__be32 *)dmaengine_desc_get_metadata_ptr(rxd->tx_in, &pl,
 							       &ml);
+		if (IS_ERR(mdptr))
+			return;
+
 		result = (u32 *)req->iv;
 
 		for (i = 0; i < (rxd->enc_iv_size / 4); i++)
@@ -1272,6 +1275,8 @@ static int sa_run(struct sa_req *req)
 	 * crypto algorithm to be used, data sizes, different keys etc.
 	 */
 	mdptr = (u32 *)dmaengine_desc_get_metadata_ptr(tx_out, &pl, &ml);
+	if (IS_ERR(mdptr))
+		return PTR_ERR(mdptr);
 
 	sa_prepare_tx_desc(mdptr, (sa_ctx->cmdl_size + (SA_PSDATA_CTX_WORDS *
 				   sizeof(u32))), cmdl, sizeof(sa_ctx->epib),
@@ -1367,6 +1372,9 @@ static void sa_sha_dma_in_callback(void *data)
 	authsize = crypto_ahash_digestsize(tfm);
 
 	mdptr = (__be32 *)dmaengine_desc_get_metadata_ptr(rxd->tx_in, &pl, &ml);
+	if (IS_ERR(mdptr))
+		return;
+
 	result = (u32 *)req->result;
 
 	for (i = 0; i < (authsize / 4); i++)
@@ -1677,6 +1685,9 @@ static void sa_aead_dma_in_callback(void *data)
 	authsize = crypto_aead_authsize(tfm);
 
 	mdptr = (u32 *)dmaengine_desc_get_metadata_ptr(rxd->tx_in, &pl, &ml);
+	if (IS_ERR(mdptr))
+		return;
+
 	for (i = 0; i < (authsize / 4); i++)
 		mdptr[i + 4] = swab32(mdptr[i + 4]);
 
