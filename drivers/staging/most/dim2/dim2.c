@@ -942,7 +942,12 @@ static int fsl_mx6_enable(struct platform_device *pdev)
 		}
 
 		writel(0x888, dev->io_base + 0x38);
-		clk_prepare_enable(dev->clk_pll);
+		ret = clk_prepare_enable(dev->clk_pll);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to enable pll clock\n");
+			clk_disable_unprepare(dev->clk);
+			return ret;
+		}
 	}
 
 	return 0;
