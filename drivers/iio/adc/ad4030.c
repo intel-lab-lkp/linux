@@ -151,13 +151,6 @@ enum {
 	AD4030_SCAN_TYPE_AVG,
 };
 
-static const int adaq4216_hw_gains_db[] = {
-	-10,	/* 1/3 V/V gain */
-	-5,	/* 5/9 V/V gain */
-	7,	/* 20/9 V/V gain */
-	16,	/* 20/3 V/V gain */
-};
-
 /*
  * Gains computed as fractions of 1000 so they can be expressed by integers.
  */
@@ -200,7 +193,7 @@ struct ad4030_state {
 	unsigned int avg_log2;
 	enum ad4030_out_mode mode;
 	/* Offload sampling */
-	struct spi_transfer offload_xfer;
+	struct spi_transfer offload_xfer[2];
 	struct spi_message offload_msg;
 	struct spi_offload *offload;
 	struct spi_offload_trigger *offload_trigger;
@@ -208,7 +201,7 @@ struct ad4030_state {
 	struct pwm_device *cnv_trigger;
 	size_t scale_avail_size;
 	struct pwm_waveform cnv_wf;
-	unsigned int scale_avail[ARRAY_SIZE(adaq4216_hw_gains_db)][2];
+	unsigned int scale_avail[ARRAY_SIZE(adaq4216_hw_gains_vpv)][2];
 	struct gpio_descs *pga_gpios;
 	unsigned int pga_index;
 
@@ -245,7 +238,7 @@ struct ad4030_state {
  * - _idx - _ch * 2 + _ch gives the channel number for this specific common-mode
  *   channel
  */
-#define AD4030_CHAN_CMO(_idx, _ch)  {					\
+#define __AD4030_CHAN_CMO(_idx, _ch, _offload)  {			\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |			\
 		BIT(IIO_CHAN_INFO_SCALE),				\
 	.type = IIO_VOLTAGE,						\
@@ -255,11 +248,17 @@ struct ad4030_state {
 	.scan_index = (_idx),						\
 	.scan_type = {							\
 		.sign = 'u',						\
-		.storagebits = 8,					\
+		.storagebits = (_offload ? 32 : 8),			\
 		.realbits = 8,						\
-		.endianness = IIO_BE,					\
+		.endianness = (_offload ? IIO_CPU : IIO_BE),		\
 	},								\
 }
+
+#define AD4030_CHAN_CMO(_idx, _ch)					\
+	__AD4030_CHAN_CMO(_idx, _ch, 0)
+
+#define AD4030_OFFLOAD_CHAN_CMO(_idx, _ch)				\
+	__AD4030_CHAN_CMO(_idx, _ch, 1)
 
 /*
  * For a chip with 2 hardware channel this will be used to create 2 differential
@@ -482,7 +481,7 @@ static void ad4030_fill_scale_avail(struct ad4030_state *st)
 		 * result after right shift and division scales output codes to
 		 * millivolts.
 		 */
-		int_part = div_u64_rem(((u64)range * MICRO) >> mag_bits, NANO, &fract_part);
+		int_part = div_u64_rem((range * MICRO) >> mag_bits, NANO, &fract_part);
 		st->scale_avail[i][0] = int_part;
 		st->scale_avail[i][1] = fract_part;
 	}
@@ -1190,6 +1189,7 @@ static const struct iio_buffer_setup_ops ad4030_buffer_setup_ops = {
 static void ad4030_prepare_offload_msg(struct iio_dev *indio_dev)
 {
 	struct ad4030_state *st = iio_priv(indio_dev);
+	bool common_mode;
 	u8 offload_bpw;
 
 	if (st->mode == AD4030_OUT_DATA_MD_30_AVERAGED_DIFF)
@@ -1197,10 +1197,22 @@ static void ad4030_prepare_offload_msg(struct iio_dev *indio_dev)
 	else
 		offload_bpw = st->chip->precision_bits;
 
-	st->offload_xfer.bits_per_word = offload_bpw;
-	st->offload_xfer.len = spi_bpw_to_bytes(offload_bpw);
-	st->offload_xfer.offload_flags = SPI_OFFLOAD_XFER_RX_STREAM;
-	spi_message_init_with_transfers(&st->offload_msg, &st->offload_xfer, 1);
+	st->offload_xfer[0].bits_per_word = offload_bpw;
+	st->offload_xfer[0].len = spi_bpw_to_bytes(offload_bpw);
+	st->offload_xfer[0].offload_flags = SPI_OFFLOAD_XFER_RX_STREAM;
+
+	common_mode = st->mode == AD4030_OUT_DATA_MD_24_DIFF_8_COM ||
+		      st->mode == AD4030_OUT_DATA_MD_16_DIFF_8_COM;
+
+	if (common_mode) {
+		offload_bpw = 8;
+		st->offload_xfer[1].bits_per_word = offload_bpw;
+		st->offload_xfer[1].len = spi_bpw_to_bytes(offload_bpw);
+		st->offload_xfer[1].offload_flags = SPI_OFFLOAD_XFER_RX_STREAM;
+	}
+
+	spi_message_init_with_transfers(&st->offload_msg, st->offload_xfer,
+					common_mode ? 2 : 1);
 }
 
 static int ad4030_offload_buffer_postenable(struct iio_dev *indio_dev)
@@ -1265,6 +1277,7 @@ static int ad4030_offload_buffer_predisable(struct iio_dev *indio_dev)
 static const struct iio_buffer_setup_ops ad4030_offload_buffer_setup_ops = {
 	.postenable = &ad4030_offload_buffer_postenable,
 	.predisable = &ad4030_offload_buffer_predisable,
+	.validate_scan_mask = ad4030_validate_scan_mask,
 };
 
 static int ad4030_regulators_get(struct ad4030_state *st)
@@ -1409,43 +1422,19 @@ static int ad4030_spi_offload_setup(struct iio_dev *indio_dev,
 static int ad4030_setup_pga(struct device *dev, struct iio_dev *indio_dev,
 			    struct ad4030_state *st)
 {
-	unsigned int i;
-	int pga_gain_dB;
-	int ret;
+	/* Setup GPIOs for PGA control */
+	st->pga_gpios = devm_gpiod_get_array(dev, "pga", GPIOD_OUT_LOW);
+	if (IS_ERR(st->pga_gpios))
+		return dev_err_probe(dev, PTR_ERR(st->pga_gpios),
+				     "Failed to get PGA gpios.\n");
 
-	ret = device_property_read_u32(dev, "adi,pga-gain-db", &pga_gain_dB);
-	if (ret == -EINVAL) {
-		/* Setup GPIOs for PGA control */
-		st->pga_gpios = devm_gpiod_get_array(dev, "pga", GPIOD_OUT_LOW);
-		if (IS_ERR(st->pga_gpios))
-			return dev_err_probe(dev, PTR_ERR(st->pga_gpios),
-					     "Failed to get PGA gpios.\n");
+	if (st->pga_gpios->ndescs != ADAQ4616_PGA_PINS)
+		return dev_err_probe(dev, -EINVAL,
+				     "Expected %d GPIOs for PGA control.\n",
+				     ADAQ4616_PGA_PINS);
 
-		if (st->pga_gpios->ndescs != ADAQ4616_PGA_PINS)
-			return dev_err_probe(dev, -EINVAL,
-					     "Expected 2 GPIOs for PGA control.\n");
-
-		st->scale_avail_size = ARRAY_SIZE(adaq4216_hw_gains_db);
-		st->pga_index = 0;
-		return 0;
-	} else if (ret) {
-		return dev_err_probe(dev, ret, "Failed to get PGA value.\n");
-	}
-
-	/* Set ADC driver to handle pin-strapped PGA pins setup */
-	for (i = 0; i < ARRAY_SIZE(adaq4216_hw_gains_db); i++) {
-		if (pga_gain_dB != adaq4216_hw_gains_db[i])
-			continue;
-
-		st->pga_index = i;
-		break;
-	}
-	if (i == ARRAY_SIZE(adaq4216_hw_gains_db))
-		return dev_err_probe(dev, -EINVAL, "Invalid PGA gain: %d.\n",
-				     pga_gain_dB);
-
-	st->scale_avail_size = 1;
-	st->pga_gpios = NULL;
+	st->scale_avail_size = ARRAY_SIZE(adaq4216_hw_gains_vpv);
+	st->pga_index = 0;
 
 	return 0;
 }
@@ -1539,7 +1528,7 @@ static int ad4030_probe(struct spi_device *spi)
 		 * Offloaded SPI transfers can't support software timestamp so
 		 * no additional timestamp channel is added.
 		 */
-		indio_dev->num_channels = st->chip->num_voltage_inputs;
+		indio_dev->num_channels = 2 * st->chip->num_voltage_inputs;
 		indio_dev->channels = st->chip->offload_channels;
 		ret = ad4030_spi_offload_setup(indio_dev, st);
 		if (ret)
@@ -1659,6 +1648,7 @@ static const struct ad4030_chip_info ad4030_24_chip_info = {
 	},
 	.offload_channels = {
 		AD4030_OFFLOAD_CHAN_DIFF(0, ad4030_24_offload_scan_types),
+		AD4030_OFFLOAD_CHAN_CMO(1, 0),
 	},
 	.grade = AD4030_REG_CHIP_GRADE_AD4030_24_GRADE,
 	.precision_bits = 24,
@@ -1680,6 +1670,8 @@ static const struct ad4030_chip_info ad4630_16_chip_info = {
 	.offload_channels = {
 		AD4030_OFFLOAD_CHAN_DIFF(0, ad4030_16_offload_scan_types),
 		AD4030_OFFLOAD_CHAN_DIFF(1, ad4030_16_offload_scan_types),
+		AD4030_OFFLOAD_CHAN_CMO(2, 0),
+		AD4030_OFFLOAD_CHAN_CMO(3, 1),
 	},
 	.grade = AD4030_REG_CHIP_GRADE_AD4630_16_GRADE,
 	.precision_bits = 16,
@@ -1701,6 +1693,8 @@ static const struct ad4030_chip_info ad4630_24_chip_info = {
 	.offload_channels = {
 		AD4030_OFFLOAD_CHAN_DIFF(0, ad4030_24_offload_scan_types),
 		AD4030_OFFLOAD_CHAN_DIFF(1, ad4030_24_offload_scan_types),
+		AD4030_OFFLOAD_CHAN_CMO(2, 0),
+		AD4030_OFFLOAD_CHAN_CMO(3, 1),
 	},
 	.grade = AD4030_REG_CHIP_GRADE_AD4630_24_GRADE,
 	.precision_bits = 24,
@@ -1722,6 +1716,8 @@ static const struct ad4030_chip_info ad4632_16_chip_info = {
 	.offload_channels = {
 		AD4030_OFFLOAD_CHAN_DIFF(0, ad4030_16_offload_scan_types),
 		AD4030_OFFLOAD_CHAN_DIFF(1, ad4030_16_offload_scan_types),
+		AD4030_OFFLOAD_CHAN_CMO(2, 0),
+		AD4030_OFFLOAD_CHAN_CMO(3, 1),
 	},
 	.grade = AD4030_REG_CHIP_GRADE_AD4632_16_GRADE,
 	.precision_bits = 16,
@@ -1743,6 +1739,8 @@ static const struct ad4030_chip_info ad4632_24_chip_info = {
 	.offload_channels = {
 		AD4030_OFFLOAD_CHAN_DIFF(0, ad4030_24_offload_scan_types),
 		AD4030_OFFLOAD_CHAN_DIFF(1, ad4030_24_offload_scan_types),
+		AD4030_OFFLOAD_CHAN_CMO(2, 0),
+		AD4030_OFFLOAD_CHAN_CMO(3, 1),
 	},
 	.grade = AD4030_REG_CHIP_GRADE_AD4632_24_GRADE,
 	.precision_bits = 24,
@@ -1761,6 +1759,7 @@ static const struct ad4030_chip_info adaq4216_chip_info = {
 	},
 	.offload_channels = {
 		ADAQ4216_OFFLOAD_CHAN_DIFF(0, ad4030_16_offload_scan_types),
+		AD4030_OFFLOAD_CHAN_CMO(1, 0),
 	},
 	.grade = AD4030_REG_CHIP_GRADE_ADAQ4216_GRADE,
 	.precision_bits = 16,
@@ -1780,6 +1779,7 @@ static const struct ad4030_chip_info adaq4224_chip_info = {
 	},
 	.offload_channels = {
 		ADAQ4216_OFFLOAD_CHAN_DIFF(0, ad4030_24_offload_scan_types),
+		AD4030_OFFLOAD_CHAN_CMO(1, 0),
 	},
 	.grade = AD4030_REG_CHIP_GRADE_ADAQ4224_GRADE,
 	.precision_bits = 24,
