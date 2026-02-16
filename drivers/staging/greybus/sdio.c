@@ -372,7 +372,7 @@ static int gb_sdio_transfer(struct gb_sdio_host *host, struct mmc_data *data)
 	left = data->blksz * data->blocks;
 
 	while (left) {
-		/* check is a stop transmission is pending */
+		/* check if a stop transmission is pending */
 		spin_lock(&host->xfer);
 		if (host->xfer_stop) {
 			host->xfer_stop = false;
