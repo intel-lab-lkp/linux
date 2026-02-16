@@ -302,7 +302,7 @@ static int mpm_pd_power_off(struct generic_pm_domain *genpd)
 		qcom_mpm_write(priv, MPM_REG_STATUS, i, 0);
 
 	/* Notify RPM to write vMPM into HW */
-	ret = mbox_send_message(priv->mbox_chan, NULL);
+	ret = mbox_ring_doorbell(priv->mbox_chan);
 	if (ret < 0)
 		return ret;
 
