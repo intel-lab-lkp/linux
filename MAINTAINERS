@@ -1640,6 +1640,7 @@ L:	linux-iio@vger.kernel.org
 S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/frequency/adi,adf41513.yaml
+F:	Documentation/iio/adf41513.rst
 F:	drivers/iio/frequency/adf41513.c
 F:	drivers/iio/test/iio-test-fixpoint-parse.c
 
