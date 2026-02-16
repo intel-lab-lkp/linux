@@ -224,9 +224,9 @@ void iio_kfifo_free(struct iio_buffer *r)
 }
 EXPORT_SYMBOL(iio_kfifo_free);
 
-static void devm_iio_kfifo_release(struct device *dev, void *res)
+static void devm_iio_kfifo_release(void *r)
 {
-	iio_kfifo_free(*(struct iio_buffer **)res);
+	iio_kfifo_free(r);
 }
 
 /**
@@ -234,23 +234,20 @@ static void devm_iio_kfifo_release(struct device *dev, void *res)
  * @dev:		Device to allocate kfifo buffer for
  *
  * RETURNS:
- * Pointer to allocated iio_buffer on success, NULL on failure.
+ * Pointer to allocated iio_buffer on success, error pointer on failure.
  */
 static struct iio_buffer *devm_iio_kfifo_allocate(struct device *dev)
 {
-	struct iio_buffer **ptr, *r;
-
-	ptr = devres_alloc(devm_iio_kfifo_release, sizeof(*ptr), GFP_KERNEL);
-	if (!ptr)
-		return NULL;
+	struct iio_buffer *r;
+	int ret;
 
 	r = iio_kfifo_allocate();
-	if (r) {
-		*ptr = r;
-		devres_add(dev, ptr);
-	} else {
-		devres_free(ptr);
-	}
+	if (!r)
+		return ERR_PTR(-ENOMEM);
+
+	ret = devm_add_action_or_reset(dev, devm_iio_kfifo_release, r);
+	if (ret)
+		return ERR_PTR(ret);
 
 	return r;
 }
@@ -275,8 +272,8 @@ int devm_iio_kfifo_buffer_setup_ext(struct device *dev,
 	struct iio_buffer *buffer;
 
 	buffer = devm_iio_kfifo_allocate(dev);
-	if (!buffer)
-		return -ENOMEM;
+	if (IS_ERR(buffer))
+		return PTR_ERR(buffer);
 
 	indio_dev->modes |= INDIO_BUFFER_SOFTWARE;
 	indio_dev->setup_ops = setup_ops;
