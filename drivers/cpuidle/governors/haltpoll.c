@@ -52,7 +52,7 @@ static int haltpoll_select(struct cpuidle_driver *drv,
 {
 	s64 latency_req = cpuidle_governor_latency_req(dev->cpu);
 
-	if (!drv->state_count || latency_req == 0) {
+	if (latency_req == 0) {
 		*stop_tick = false;
 		return 0;
 	}
