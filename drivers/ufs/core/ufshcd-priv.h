@@ -446,4 +446,10 @@ static inline void ufs_rpmb_remove(struct ufs_hba *hba)
 }
 #endif
 
+static inline void sysfs_notify_dirent_safe(struct kernfs_node *sd)
+{
+	if (sd)
+		sysfs_notify_dirent(sd);
+}
+
 #endif /* _UFSHCD_PRIV_H_ */
