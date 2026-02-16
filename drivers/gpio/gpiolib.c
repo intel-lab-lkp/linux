@@ -5065,6 +5065,54 @@ int gpiod_hog(struct gpio_desc *desc, const char *name,
 }
 
 /**
+ * gpiod_apply_line_init - Apply one-shot line initialization and release
+ * @desc:	gpio whose value will be assigned
+ * @name:	initialization label
+ * @lflags:	bitmask of gpio_lookup_flags GPIO_* values
+ * @dflags:	gpiod_flags - optional GPIO initialization flags
+ *
+ * Applies GPIO configuration using the descriptor APIs without keeping the line
+ * reserved by gpiolib. After configuration, the temporary internal request is
+ * released.
+ *
+ * Returns:
+ * 0 on success, or negative errno on failure.
+ */
+int gpiod_apply_line_init(struct gpio_desc *desc, const char *name,
+			  unsigned long lflags, enum gpiod_flags dflags)
+{
+	struct gpio_device *gdev = desc->gdev;
+	struct gpio_desc *local_desc;
+	int hwnum;
+	int ret;
+
+	CLASS(gpio_chip_guard, guard)(desc);
+	if (!guard.gc)
+		return -ENODEV;
+
+	hwnum = gpiod_hwgpio(desc);
+
+	local_desc = gpiochip_request_own_desc(guard.gc, hwnum, name,
+					       lflags, dflags);
+	if (IS_ERR(local_desc)) {
+		ret = PTR_ERR(local_desc);
+		pr_err("requesting init GPIO %s (chip %s, offset %d) failed, %d\n",
+		       name ? : "?", gdev->label, hwnum, ret);
+		return ret;
+	}
+
+	gpiochip_free_own_desc(local_desc);
+
+	gpiod_dbg(desc, "line init applied as %s/%s\n",
+		  !(dflags & GPIOD_FLAGS_BIT_DIR_SET) ? "as-is" :
+		  (dflags & GPIOD_FLAGS_BIT_DIR_OUT) ? "output" : "input",
+		  (dflags & GPIOD_FLAGS_BIT_DIR_OUT) ?
+		  str_high_low(dflags & GPIOD_FLAGS_BIT_DIR_VAL) : "?");
+
+	return 0;
+}
+
+/**
  * gpiochip_free_hogs - Scan gpio-controller chip and release GPIO hog
  * @gc:	gpio chip to act on
  */
