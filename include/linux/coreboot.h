@@ -13,6 +13,7 @@
 #define _LINUX_COREBOOT_H
 
 #include <linux/compiler_attributes.h>
+#include <linux/stddef.h>
 #include <linux/types.h>
 
 typedef __aligned(4) u64 cb_u64;
@@ -65,5 +66,12 @@ struct lb_framebuffer {
 	u8  reserved_mask_pos;
 	u8  reserved_mask_size;
 };
+
+/*
+ * True if the coreboot-provided data is large enough to hold information
+ * on the linear framebuffer. False otherwise.
+ */
+#define LB_FRAMEBUFFER_HAS_LFB(__fb) \
+	((__fb)->size >= offsetofend(struct lb_framebuffer, reserved_mask_size))
 
 #endif /* _LINUX_COREBOOT_H */
