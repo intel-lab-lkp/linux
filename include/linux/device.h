@@ -87,7 +87,7 @@ int subsys_virtual_register(const struct bus_type *subsys,
  */
 struct device_type {
 	const char *name;
-	const struct attribute_group **groups;
+	const struct attribute_group *const *groups;
 	int (*uevent)(const struct device *dev, struct kobj_uevent_env *env);
 	char *(*devnode)(const struct device *dev, umode_t *mode,
 			 kuid_t *uid, kgid_t *gid);
