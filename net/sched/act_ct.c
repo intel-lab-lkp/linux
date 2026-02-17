@@ -987,6 +987,11 @@ TC_INDIRECT_SCOPE int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	tcf_lastuse_update(&c->tcf_tm);
 	tcf_action_update_bstats(&c->common, skb);
 
+	if (!skb_at_tc_ingress(skb)) {
+		pr_warn_once("act_CT should be attached at ingress!\n");
+		goto drop;
+	}
+
 	if (clear) {
 		qdisc_skb_cb(skb)->post_ct = false;
 		ct = nf_ct_get(skb, &ctinfo);
@@ -1109,6 +1114,7 @@ out_clear:
 out_frag:
 	if (err != -EINPROGRESS)
 		tcf_action_inc_drop_qstats(&c->common);
+
 	return TC_ACT_CONSUMED;
 
 drop:
