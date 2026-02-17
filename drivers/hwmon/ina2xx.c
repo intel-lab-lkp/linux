@@ -49,6 +49,8 @@
 /* INA226 register definitions */
 #define INA226_MASK_ENABLE		0x06
 #define INA226_ALERT_LIMIT		0x07
+
+/* INA226-specific register definitions */
 #define INA226_DIE_ID			0xFF
 
 /* SY24655 register definitions */
@@ -59,6 +61,7 @@
 /* settings - depend on use case */
 #define INA219_CONFIG_DEFAULT		0x399F	/* PGA=8 */
 #define INA226_CONFIG_DEFAULT		0x4527	/* averages=16 */
+#define INA234_CONFIG_DEFAULT		0x4527	/* averages=16 */
 #define INA260_CONFIG_DEFAULT		0x6527	/* averages=16 */
 #define SY24655_CONFIG_DEFAULT		0x4527	/* averages=16 */
 
@@ -135,7 +138,7 @@ static const struct regmap_config ina2xx_regmap_config = {
 	.writeable_reg = ina2xx_writeable_reg,
 };
 
-enum ina2xx_ids { ina219, ina226, ina260, sy24655 };
+enum ina2xx_ids { ina219, ina226, ina234, ina260, sy24655 };
 
 struct ina2xx_config {
 	u16 config_default;
@@ -203,6 +206,15 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.has_alerts = true,
 		.has_ishunt = false,
 		.has_power_average = true,
+	},
+	[ina234] = {
+		.config_default = INA234_CONFIG_DEFAULT,
+		.calibration_value = 2048,
+		.shunt_div = 400, /* 2.5 µV/LSB raw ADC reading from INA2XX_SHUNT_VOLTAGE */
+		.bus_voltage_shift = 4,
+		.bus_voltage_lsb = 25600,
+		.power_lsb_factor = 32,
+		.has_alerts = true,
 	},
 };
 
@@ -768,7 +780,7 @@ static umode_t ina2xx_is_visible(const void *_data, enum hwmon_sensor_types type
 	case hwmon_chip:
 		switch (attr) {
 		case hwmon_chip_update_interval:
-			if (chip == ina226 || chip == ina260)
+			if (chip == ina226 || chip == ina234 || chip == ina260)
 				return 0644;
 			break;
 		default:
@@ -982,6 +994,7 @@ static const struct i2c_device_id ina2xx_id[] = {
 	{ "ina226", ina226 },
 	{ "ina230", ina226 },
 	{ "ina231", ina226 },
+	{ "ina234", ina234 },
 	{ "ina260", ina260 },
 	{ "sy24655", sy24655 },
 	{ }
@@ -1012,6 +1025,10 @@ static const struct of_device_id __maybe_unused ina2xx_of_match[] = {
 	{
 		.compatible = "ti,ina231",
 		.data = (void *)ina226
+	},
+	{
+		.compatible = "ti,ina234",
+		.data = (void *)ina234
 	},
 	{
 		.compatible = "ti,ina260",
