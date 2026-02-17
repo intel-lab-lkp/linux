@@ -116,7 +116,6 @@ fail:
 static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *job)
 {
 	struct rocket_task *task;
-	unsigned int extra_bit;
 
 	/* Don't queue the job if a reset is in progress */
 	if (atomic_read(&core->reset.pending))
@@ -129,17 +128,35 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 
 	rocket_pc_writel(core, BASE_ADDRESS, 0x1);
 
-	 /* From rknpu, in the TRM this bit is marked as reserved */
-	extra_bit = 0x10000000 * core->index;
-	rocket_cna_writel(core, S_POINTER, CNA_S_POINTER_POINTER_PP_EN(1) |
-					   CNA_S_POINTER_EXECUTER_PP_EN(1) |
-					   CNA_S_POINTER_POINTER_PP_MODE(1) |
-					   extra_bit);
+	/*
+	 * Initialize CNA and Core S_POINTER for ping-pong mode via MMIO.
+	 *
+	 * Each core needs a per-core extra_bit (bit 28 * core_index) which
+	 * the TRM marks as reserved but the BSP rknpu driver sets. Without
+	 * it, non-zero cores hang. This MUST be done via MMIO (not regcmd)
+	 * because userspace doesn't know which core the scheduler picks.
+	 *
+	 * For standalone DPU/PPU tasks (element-wise ops, pooling), CNA
+	 * and Core have no work. Writing their S_POINTERs would re-arm
+	 * them with stale state from the previous conv task, corrupting
+	 * the DPU/PPU output. Userspace signals this via the
+	 * ROCKET_TASK_SKIP_CNA_CORE flag.
+	 */
+	if (!(task->flags & ROCKET_TASK_SKIP_CNA_CORE)) {
+		unsigned int extra_bit = 0x10000000 * core->index;
 
-	rocket_core_writel(core, S_POINTER, CORE_S_POINTER_POINTER_PP_EN(1) |
-					    CORE_S_POINTER_EXECUTER_PP_EN(1) |
-					    CORE_S_POINTER_POINTER_PP_MODE(1) |
-					    extra_bit);
+		rocket_cna_writel(core, S_POINTER,
+				  CNA_S_POINTER_POINTER_PP_EN(1) |
+				  CNA_S_POINTER_EXECUTER_PP_EN(1) |
+				  CNA_S_POINTER_POINTER_PP_MODE(1) |
+				  extra_bit);
+
+		rocket_core_writel(core, S_POINTER,
+				   CORE_S_POINTER_POINTER_PP_EN(1) |
+				   CORE_S_POINTER_EXECUTER_PP_EN(1) |
+				   CORE_S_POINTER_POINTER_PP_MODE(1) |
+				   extra_bit);
+	}
 
 	rocket_pc_writel(core, BASE_ADDRESS, task->regcmd);
 	rocket_pc_writel(core, REGISTER_AMOUNTS,
