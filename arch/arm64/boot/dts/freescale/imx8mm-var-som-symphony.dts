@@ -70,10 +70,6 @@
 	};
 };
 
-&ethphy {
-	reset-gpios = <&pca9534 5 GPIO_ACTIVE_HIGH>;
-};
-
 &i2c2 {
 	clock-frequency = <400000>;
 	pinctrl-names = "default";
@@ -97,6 +93,13 @@
 			gpios = <4 GPIO_ACTIVE_HIGH>;
 			output-low;
 			line-name = "usb3_sata_sel";
+		};
+
+		enet-rst-hog {
+			gpio-hog;
+			gpios = <5 GPIO_ACTIVE_HIGH>;
+			output-low;
+			line-name = "enet_rst";
 		};
 
 		som-vselect-hog {
