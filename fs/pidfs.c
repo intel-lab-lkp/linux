@@ -8,6 +8,8 @@
 #include <linux/mount.h>
 #include <linux/pid.h>
 #include <linux/pidfs.h>
+#include <linux/sched/signal.h>
+#include <linux/signal.h>
 #include <linux/pid_namespace.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
@@ -637,7 +639,21 @@ static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return open_namespace(ns_common);
 }
 
+static int pidfs_file_release(struct inode *inode, struct file *file)
+{
+	struct pid *pid = inode->i_private;
+	struct task_struct *task;
+
+	guard(rcu)();
+	task = pid_task(pid, PIDTYPE_TGID);
+	if (task && READ_ONCE(task->signal->autokill_pidfd) == file)
+		do_send_sig_info(SIGKILL, SEND_SIG_PRIV, task, PIDTYPE_TGID);
+
+	return 0;
+}
+
 static const struct file_operations pidfs_file_operations = {
+	.release	= pidfs_file_release,
 	.poll		= pidfd_poll,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= pidfd_show_fdinfo,

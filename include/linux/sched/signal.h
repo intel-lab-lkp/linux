@@ -134,6 +134,9 @@ struct signal_struct {
 	unsigned int		has_child_subreaper:1;
 	unsigned int		autoreap:1;
 
+	/* pidfd that triggers SIGKILL on close, or NULL */
+	const struct file	*autokill_pidfd;
+
 #ifdef CONFIG_POSIX_TIMERS
 
 	/* POSIX.1b Interval Timers */

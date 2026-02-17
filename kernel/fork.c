@@ -2035,6 +2035,15 @@ __latent_entropy struct task_struct *copy_process(
 			return ERR_PTR(-EINVAL);
 	}
 
+	if (clone_flags & CLONE_PIDFD_AUTOKILL) {
+		if (!(clone_flags & CLONE_PIDFD))
+			return ERR_PTR(-EINVAL);
+		if (!(clone_flags & CLONE_AUTOREAP))
+			return ERR_PTR(-EINVAL);
+		if (clone_flags & CLONE_THREAD)
+			return ERR_PTR(-EINVAL);
+	}
+
 	/*
 	 * Force any signals received before this point to be delivered
 	 * before the fork happens.  Collect up signals sent to multiple
@@ -2470,8 +2479,11 @@ __latent_entropy struct task_struct *copy_process(
 	syscall_tracepoint_update(p);
 	write_unlock_irq(&tasklist_lock);
 
-	if (pidfile)
+	if (pidfile) {
+		if (clone_flags & CLONE_PIDFD_AUTOKILL)
+			p->signal->autokill_pidfd = pidfile;
 		fd_install(pidfd, pidfile);
+	}
 
 	proc_fork_connector(p);
 	sched_post_fork(p);
@@ -2909,7 +2921,7 @@ static bool clone3_args_valid(struct kernel_clone_args *kargs)
 	/* Verify that no unknown flags are passed along. */
 	if (kargs->flags &
 	    ~(CLONE_LEGACY_FLAGS | CLONE_CLEAR_SIGHAND | CLONE_INTO_CGROUP |
-	      CLONE_AUTOREAP))
+	      CLONE_AUTOREAP | CLONE_PIDFD_AUTOKILL))
 		return false;
 
 	/*
