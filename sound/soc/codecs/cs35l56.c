@@ -807,6 +807,8 @@ static void cs35l56_patch(struct cs35l56_private *cs35l56, bool firmware_missing
 	reinit_completion(&cs35l56->init_completion);
 
 	cs35l56->soft_resetting = true;
+	if (cs35l56->sdw_peripheral)
+		cs35l56->sdw_peripheral->unattach_pending = true;
 	cs35l56_system_reset(&cs35l56->base, !!cs35l56->sdw_peripheral);
 
 	if (cs35l56->sdw_peripheral) {
@@ -1903,6 +1905,8 @@ int cs35l56_init(struct cs35l56_private *cs35l56)
 	if (!cs35l56->base.reset_gpio) {
 		dev_dbg(cs35l56->base.dev, "No reset gpio: using soft reset\n");
 		cs35l56->soft_resetting = true;
+		if (cs35l56->sdw_peripheral)
+			cs35l56->sdw_peripheral->unattach_pending = true;
 		cs35l56_system_reset(&cs35l56->base, !!cs35l56->sdw_peripheral);
 		if (cs35l56->sdw_peripheral) {
 			/* Keep alive while we wait for re-enumeration */
