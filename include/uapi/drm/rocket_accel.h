@@ -91,6 +91,11 @@ struct drm_rocket_fini_bo {
 };
 
 /**
+ * Flags for drm_rocket_task.flags
+ */
+#define ROCKET_TASK_SKIP_CNA_CORE		0x1
+
+/**
  * struct drm_rocket_task - A task to be run on the NPU
  *
  * A task is the smallest unit of work that can be run on the NPU.
@@ -106,6 +111,26 @@ struct drm_rocket_task {
 	 * buffer
 	 */
 	__u32 regcmd_count;
+
+	/**
+	 * Input: Interrupt mask specifying which block completion signals
+	 * that this task is done. Uses PC_INTERRUPT_MASK_* bits.
+	 *
+	 * For conv/DPU tasks: DPU_0 | DPU_1 (0x0300)
+	 * For PPU tasks:      PPU_0 | PPU_1 (0x0C00)
+	 *
+	 * If zero, defaults to DPU_0 | DPU_1 for backwards compatibility.
+	 */
+	__u32 int_mask;
+
+	/**
+	 * Input: Task flags.
+	 *
+	 * ROCKET_TASK_SKIP_CNA_CORE: Skip CNA and Core S_POINTER MMIO
+	 * writes for this task. Used for standalone DPU element-wise
+	 * and PPU pooling tasks that don't use CNA/Core.
+	 */
+	__u32 flags;
 };
 
 /**

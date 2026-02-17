@@ -13,6 +13,8 @@
 struct rocket_task {
 	u64 regcmd;
 	u32 regcmd_count;
+	u32 int_mask;
+	u32 flags;
 };
 
 struct rocket_job {

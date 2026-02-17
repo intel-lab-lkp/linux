@@ -96,6 +96,14 @@ rocket_copy_tasks(struct drm_device *dev,
 
 		rjob->tasks[i].regcmd = task.regcmd;
 		rjob->tasks[i].regcmd_count = task.regcmd_count;
+		rjob->tasks[i].int_mask = task.int_mask;
+		rjob->tasks[i].flags = task.flags;
+
+		/* Default to DPU completion if no mask specified */
+		if (!rjob->tasks[i].int_mask) {
+			rjob->tasks[i].int_mask = PC_INTERRUPT_MASK_DPU_0 |
+									PC_INTERRUPT_MASK_DPU_1;
+		}
 	}
 
 	return 0;
