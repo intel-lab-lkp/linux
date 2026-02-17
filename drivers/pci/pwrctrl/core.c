@@ -272,14 +272,18 @@ EXPORT_SYMBOL_GPL(pci_pwrctrl_power_on_devices);
  * Check whether the pwrctrl device really needs to be created or not. The
  * pwrctrl device will only be created if the node satisfies below requirements:
  *
- * 1. Presence of compatible property to match against the pwrctrl driver (AND)
- * 2. At least one of the power supplies defined in the devicetree node of the
+ * 1. Presence of 'device_type = "pci"' property to identify PCI node (AND)
+ * 2. Presence of compatible property to match against the pwrctrl driver (AND)
+ * 3. At least one of the power supplies defined in the devicetree node of the
  *    device (OR) in the remote endpoint parent node to indicate pwrctrl
  *    requirement.
  */
 static bool pci_pwrctrl_is_required(struct device_node *np)
 {
 	struct device_node *endpoint;
+
+	if (!of_node_is_type(np, "pci"))
+		return false;
 
 	if (!of_property_present(np, "compatible"))
 		return false;
