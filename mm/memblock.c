@@ -18,6 +18,10 @@
 #include <linux/memblock.h>
 #include <linux/mutex.h>
 
+#ifdef CONFIG_DEBUG_FS
+#include <linux/string_helpers.h>
+#endif
+
 #ifdef CONFIG_KEXEC_HANDOVER
 #include <linux/libfdt.h>
 #include <linux/kexec_handover.h>
@@ -2713,7 +2717,7 @@ err_param:
 }
 __setup("reserve_mem=", reserve_mem);
 
-#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_ARCH_KEEP_MEMBLOCK)
+#ifdef CONFIG_DEBUG_FS
 static const char * const flagname[] = {
 	[ilog2(MEMBLOCK_HOTPLUG)] = "HOTPLUG",
 	[ilog2(MEMBLOCK_MIRROR)] = "MIRROR",
@@ -2724,7 +2728,8 @@ static const char * const flagname[] = {
 	[ilog2(MEMBLOCK_KHO_SCRATCH)] = "KHO_SCRATCH",
 };
 
-static int memblock_debug_show(struct seq_file *m, void *private)
+#ifdef CONFIG_ARCH_KEEP_MEMBLOCK
+static void memblock_debugfs_files(struct seq_file *m)
 {
 	struct memblock_type *type = m->private;
 	struct memblock_region *reg;
@@ -2756,6 +2761,30 @@ static int memblock_debug_show(struct seq_file *m, void *private)
 			seq_printf(m, "%s\n", "NONE");
 		}
 	}
+}
+#else
+static void memblock_debugfs_files(struct seq_file *m) {}
+#endif /* CONFIG_ARCH_KEEP_MEMBLOCK */
+
+static int memblock_debug_show(struct seq_file *m, void *private)
+{
+	if (m->private == &reserved_mem_table[0]) {
+		struct reserve_mem_table *map;
+		char txtsz[16];
+
+		for (int i = 0; i < reserved_mem_count; i++) {
+			map = &reserved_mem_table[i];
+			if (!map->size)
+				continue;
+
+			memset(txtsz, 0, 16);
+			string_get_size((u64)(map->size), 1, STRING_UNITS_2, txtsz, 16);
+			seq_printf(m, "%s\t\t%pa\t(%s)\n",
+				map->name, &map->start, txtsz);
+		}
+	} else
+		memblock_debugfs_files(m);
+
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(memblock_debug);
@@ -2764,6 +2793,9 @@ static int __init memblock_init_debugfs(void)
 {
 	struct dentry *root = debugfs_create_dir("memblock", NULL);
 
+	debugfs_create_file("reserve_mem_param", 0444, root,
+			    &reserved_mem_table[0], &memblock_debug_fops);
+#ifdef CONFIG_ARCH_KEEP_MEMBLOCK
 	debugfs_create_file("memory", 0444, root,
 			    &memblock.memory, &memblock_debug_fops);
 	debugfs_create_file("reserved", 0444, root,
@@ -2773,6 +2805,7 @@ static int __init memblock_init_debugfs(void)
 			    &memblock_debug_fops);
 #endif
 
+#endif /* CONFIG_ARCH_KEEP_MEMBLOCK */
 	return 0;
 }
 __initcall(memblock_init_debugfs);
