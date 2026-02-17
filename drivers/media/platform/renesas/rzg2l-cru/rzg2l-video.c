@@ -411,6 +411,9 @@ static int rzg2l_cru_get_virtual_channel(struct rzg2l_cru_dev *cru)
 	int ret;
 
 	remote_pad = media_pad_remote_pad_unique(&cru->ip.pads[RZG2L_CRU_IP_SINK]);
+	if (IS_ERR(remote_pad))
+		return PTR_ERR(remote_pad);
+
 	ret = v4l2_subdev_call(cru->ip.remote, pad, get_frame_desc, remote_pad->index, &fd);
 	if (ret < 0 && ret != -ENOIOCTLCMD) {
 		dev_err(cru->dev, "get_frame_desc failed on IP remote subdev\n");
