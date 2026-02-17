@@ -4319,7 +4319,7 @@
 			status = "disabled";
 		};
 
-		usb_hsphy_2: phy@88e3000 {
+		usb_2_hsphy: phy@88e3000 {
 			compatible = "qcom,qcs615-qusb2-phy";
 			reg = <0x0 0x088e3000 0x0 0x180>;
 
@@ -4476,7 +4476,7 @@
 				iommus = <&apps_smmu 0xe0 0x0>;
 				interrupts = <GIC_SPI 664 IRQ_TYPE_LEVEL_HIGH>;
 
-				phys = <&usb_hsphy_2>;
+				phys = <&usb_2_hsphy>;
 				phy-names = "usb2-phy";
 
 				snps,dis_u2_susphy_quirk;
