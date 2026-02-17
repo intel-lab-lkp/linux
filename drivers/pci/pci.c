@@ -5912,10 +5912,10 @@ EXPORT_SYMBOL(pcie_bandwidth_available);
  *
  * Return: Supported Link Speeds Vector (+ reserved 0 at LSB).
  */
-u8 pcie_get_supported_speeds(struct pci_dev *dev)
+u16 pcie_get_supported_speeds(struct pci_dev *dev)
 {
 	u32 lnkcap2, lnkcap;
-	u8 speeds;
+	u16 speeds;
 
 	/*
 	 * Speeds retain the reserved 0 at LSB before PCIe Supported Link
@@ -6020,6 +6020,9 @@ void __pcie_print_link_status(struct pci_dev *dev, bool verbose)
 
 	if (dev->bus && dev->bus->flit_mode)
 		flit_mode = ", in Flit mode";
+	else if (dev->bus && pcie_speed_requires_flit(dev->bus->cur_bus_speed))
+		pci_warn(dev, "Flit mode not active at %s, expected for Gen 6+\n",
+			 pci_speed_string(dev->bus->cur_bus_speed));
 
 	if (bw_avail >= bw_cap && verbose)
 		pci_info(dev, "%u.%03u Gb/s available PCIe bandwidth (%s x%d link)%s\n",

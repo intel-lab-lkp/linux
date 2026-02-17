@@ -486,7 +486,8 @@ void pci_bus_put(struct pci_bus *bus);
 ({									\
 	u32 lnkcap_sls = (lnkcap) & PCI_EXP_LNKCAP_SLS;			\
 									\
-	(lnkcap_sls == PCI_EXP_LNKCAP_SLS_64_0GB ? PCIE_SPEED_64_0GT :	\
+	(lnkcap_sls == PCI_EXP_LNKCAP_SLS_128_0GB ? PCIE_SPEED_128_0GT :	\
+	 lnkcap_sls == PCI_EXP_LNKCAP_SLS_64_0GB ? PCIE_SPEED_64_0GT :	\
 	 lnkcap_sls == PCI_EXP_LNKCAP_SLS_32_0GB ? PCIE_SPEED_32_0GT :	\
 	 lnkcap_sls == PCI_EXP_LNKCAP_SLS_16_0GB ? PCIE_SPEED_16_0GT :	\
 	 lnkcap_sls == PCI_EXP_LNKCAP_SLS_8_0GB ? PCIE_SPEED_8_0GT :	\
@@ -497,7 +498,8 @@ void pci_bus_put(struct pci_bus *bus);
 
 /* PCIe link information from Link Capabilities 2 */
 #define PCIE_LNKCAP2_SLS2SPEED(lnkcap2) \
-	((lnkcap2) & PCI_EXP_LNKCAP2_SLS_64_0GB ? PCIE_SPEED_64_0GT : \
+	((lnkcap2) & PCI_EXP_LNKCAP2_SLS_128_0GB ? PCIE_SPEED_128_0GT : \
+	 (lnkcap2) & PCI_EXP_LNKCAP2_SLS_64_0GB ? PCIE_SPEED_64_0GT : \
 	 (lnkcap2) & PCI_EXP_LNKCAP2_SLS_32_0GB ? PCIE_SPEED_32_0GT : \
 	 (lnkcap2) & PCI_EXP_LNKCAP2_SLS_16_0GB ? PCIE_SPEED_16_0GT : \
 	 (lnkcap2) & PCI_EXP_LNKCAP2_SLS_8_0GB ? PCIE_SPEED_8_0GT : \
@@ -509,7 +511,8 @@ void pci_bus_put(struct pci_bus *bus);
 ({									\
 	u16 lnkctl2_tls = (lnkctl2) & PCI_EXP_LNKCTL2_TLS;		\
 									\
-	(lnkctl2_tls == PCI_EXP_LNKCTL2_TLS_64_0GT ? PCIE_SPEED_64_0GT :	\
+	(lnkctl2_tls == PCI_EXP_LNKCTL2_TLS_128_0GT ? PCIE_SPEED_128_0GT :	\
+	 lnkctl2_tls == PCI_EXP_LNKCTL2_TLS_64_0GT ? PCIE_SPEED_64_0GT :	\
 	 lnkctl2_tls == PCI_EXP_LNKCTL2_TLS_32_0GT ? PCIE_SPEED_32_0GT :	\
 	 lnkctl2_tls == PCI_EXP_LNKCTL2_TLS_16_0GT ? PCIE_SPEED_16_0GT :	\
 	 lnkctl2_tls == PCI_EXP_LNKCTL2_TLS_8_0GT ? PCIE_SPEED_8_0GT :	\
@@ -518,9 +521,14 @@ void pci_bus_put(struct pci_bus *bus);
 	 PCI_SPEED_UNKNOWN);						\
 })
 
-/* PCIe speed to Mb/s reduced by encoding overhead */
+/* PCIe speed to Mb/s reduced by encoding overhead:
+ *   Gen 1-2 (2.5, 5 GT/s):       8b/10b encoding
+ *   Gen 3-5 (8, 16, 32 GT/s):    128b/130b encoding
+ *   Gen 6+  (64, 128 GT/s):      Flit mode, 1:1 (no encoding overhead)
+ */
 #define PCIE_SPEED2MBS_ENC(speed) \
-	((speed) == PCIE_SPEED_64_0GT ? 64000*1/1 : \
+	((speed) == PCIE_SPEED_128_0GT ? 128000*1/1 : \
+	 (speed) == PCIE_SPEED_64_0GT ? 64000*1/1 : \
 	 (speed) == PCIE_SPEED_32_0GT ? 32000*128/130 : \
 	 (speed) == PCIE_SPEED_16_0GT ? 16000*128/130 : \
 	 (speed) == PCIE_SPEED_8_0GT  ?  8000*128/130 : \
@@ -543,6 +551,8 @@ static inline int pcie_dev_speed_mbps(enum pci_bus_speed speed)
 		return 32000;
 	case PCIE_SPEED_64_0GT:
 		return 64000;
+	case PCIE_SPEED_128_0GT:
+		return 128000;
 	default:
 		break;
 	}
@@ -550,7 +560,13 @@ static inline int pcie_dev_speed_mbps(enum pci_bus_speed speed)
 	return -EINVAL;
 }
 
-u8 pcie_get_supported_speeds(struct pci_dev *dev);
+/* PCIe Gen 6+ (>= 64 GT/s) requires Flit mode with 1:1 encoding */
+static inline bool pcie_speed_requires_flit(enum pci_bus_speed speed)
+{
+	return speed >= PCIE_SPEED_64_0GT && speed <= PCIE_SPEED_128_0GT;
+}
+
+u16 pcie_get_supported_speeds(struct pci_dev *dev);
 const char *pci_speed_string(enum pci_bus_speed speed);
 void __pcie_print_link_status(struct pci_dev *dev, bool verbose);
 void pcie_report_downtraining(struct pci_dev *dev);

@@ -774,7 +774,7 @@ const unsigned char pcie_link_speed[] = {
 	PCIE_SPEED_16_0GT,		/* 4 */
 	PCIE_SPEED_32_0GT,		/* 5 */
 	PCIE_SPEED_64_0GT,		/* 6 */
-	PCI_SPEED_UNKNOWN,		/* 7 */
+	PCIE_SPEED_128_0GT,		/* 7 */
 	PCI_SPEED_UNKNOWN,		/* 8 */
 	PCI_SPEED_UNKNOWN,		/* 9 */
 	PCI_SPEED_UNKNOWN,		/* A */
@@ -816,6 +816,7 @@ const char *pci_speed_string(enum pci_bus_speed speed)
 	    "16.0 GT/s PCIe",		/* 0x17 */
 	    "32.0 GT/s PCIe",		/* 0x18 */
 	    "64.0 GT/s PCIe",		/* 0x19 */
+	    "128.0 GT/s PCIe",		/* 0x1a */
 	};
 
 	if (speed < ARRAY_SIZE(speed_strings))
