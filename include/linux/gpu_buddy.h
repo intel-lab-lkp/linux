@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/rbtree.h>
+#include <linux/rbtree_augmented.h>
 
 #define GPU_BUDDY_RANGE_ALLOCATION		BIT(0)
 #define GPU_BUDDY_TOPDOWN_ALLOCATION		BIT(1)
@@ -58,6 +59,7 @@ struct gpu_buddy_block {
 	};
 
 	struct list_head tmp_link;
+	unsigned int subtree_max_alignment;
 };
 
 /* Order-zero must be at least SZ_4K */
