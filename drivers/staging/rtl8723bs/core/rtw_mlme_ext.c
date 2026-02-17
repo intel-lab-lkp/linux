@@ -992,7 +992,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	pstat->capability = capab_info;
 
 	/* now parse all ieee802_11 ie to point to elems */
-	if (rtw_ieee802_11_parse_elems(pos, left, &elems, 1) == ParseFailed ||
+	if (rtw_ieee802_11_parse_elems(pos, left, &elems, 1) == PARSE_FAILED ||
 	    !elems.ssid) {
 		status = WLAN_STATUS_CHALLENGE_FAIL;
 		goto OnAssocReqFail;

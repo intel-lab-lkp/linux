@@ -846,9 +846,9 @@ static int rtw_ieee802_11_parse_vendor_specific(u8 *pos, uint elen,
  * @show_errors: Whether to show parsing errors in debug log
  * Returns: Parsing result
  */
-enum ParseRes rtw_ieee802_11_parse_elems(u8 *start, uint len,
-				struct rtw_ieee802_11_elems *elems,
-				int show_errors)
+enum parse_result rtw_ieee802_11_parse_elems(u8 *start, uint len,
+					     struct rtw_ieee802_11_elems *elems,
+					     int show_errors)
 {
 	uint left = len;
 	u8 *pos = start;
@@ -864,7 +864,7 @@ enum ParseRes rtw_ieee802_11_parse_elems(u8 *start, uint len,
 		left -= 2;
 
 		if (elen > left)
-			return ParseFailed;
+			return PARSE_FAILED;
 
 		switch (id) {
 		case WLAN_EID_SSID:
@@ -967,9 +967,9 @@ enum ParseRes rtw_ieee802_11_parse_elems(u8 *start, uint len,
 	}
 
 	if (left)
-		return ParseFailed;
+		return PARSE_FAILED;
 
-	return unknown ? ParseUnknown : ParseOK;
+	return unknown ? PARSE_UNKNOWN : PARSE_OK;
 }
 
 void rtw_macaddr_cfg(struct device *dev, u8 *mac_addr)
