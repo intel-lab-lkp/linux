@@ -303,6 +303,7 @@ enum pci_bus_speed {
 	PCIE_SPEED_16_0GT		= 0x17,
 	PCIE_SPEED_32_0GT		= 0x18,
 	PCIE_SPEED_64_0GT		= 0x19,
+	PCIE_SPEED_128_0GT		= 0x1a,
 	PCI_SPEED_UNKNOWN		= 0xff,
 };
 
@@ -558,7 +559,7 @@ struct pci_dev {
 	struct pci_tsm *tsm;		/* TSM operation state */
 #endif
 	u16		acs_cap;	/* ACS Capability offset */
-	u8		supported_speeds; /* Supported Link Speeds Vector */
+	u16		supported_speeds; /* Supported Link Speeds Vector */
 	phys_addr_t	rom;		/* Physical address if not from BAR */
 	size_t		romlen;		/* Length if not from BAR */
 	/*
