@@ -227,6 +227,14 @@ static void __kprobes setup_singlestep(struct kprobe *p,
 
 		kprobes_save_local_irqflag(kcb, regs);
 		instruction_pointer_set(regs, slot);
+
+		/*
+		 * Disable preemption across the out-of-line (XOL) instruction.
+		 * The XOL instruction executes in normal kernel context and
+		 * kprobe state is per-CPU.
+		 */
+		preempt_disable();
+
 	} else {
 		/* insn simulation */
 		arch_simulate_insn(p, regs);
@@ -362,6 +370,11 @@ kprobe_ss_brk_handler(struct pt_regs *regs, unsigned long esr)
 	    ((unsigned long)&cur->ainsn.xol_insn[1] == addr)) {
 		kprobes_restore_local_irqflag(kcb, regs);
 		post_kprobe_handler(cur, kcb, regs);
+
+		/*
+		 * Re-enable preemption after completing the XOL instruction.
+		 */
+		preempt_enable_no_resched();
 
 		return DBG_HOOK_HANDLED;
 	}
