@@ -640,7 +640,7 @@ struct device {
 	struct list_head	devres_head;
 
 	const struct class	*class;
-	const struct attribute_group **groups;	/* optional groups */
+	const struct attribute_group *const *groups;	/* optional groups */
 
 	void	(*release)(struct device *dev);
 	struct iommu_group	*iommu_group;
