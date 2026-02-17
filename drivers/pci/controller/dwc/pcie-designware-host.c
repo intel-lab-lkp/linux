@@ -1255,11 +1255,13 @@ int dw_pcie_suspend_noirq(struct dw_pcie *pci)
 				val <= DW_PCIE_LTSSM_DETECT_WAIT,
 				PCIE_PME_TO_L2_TIMEOUT_US/10,
 				PCIE_PME_TO_L2_TIMEOUT_US, false, pci);
-	if (ret) {
-		/* Only log message when LTSSM isn't in DETECT or POLL */
-		dev_err(pci->dev, "Timeout waiting for L2 entry! LTSSM: 0x%x\n", val);
-		return ret;
-	}
+	if (ret)
+		/*
+		 * Failure is non-fatal since spec r7.0, sec 5.3.3.2.1,
+		 * recommends proceeding with L2/L3 sequence even if one or more
+		 * devices do not respond with PME_TO_Ack after 10ms timeout.
+		 */
+		dev_warn(pci->dev, "Timeout waiting for L2 entry! LTSSM: 0x%x\n", val);
 
 	/*
 	 * Per PCIe r6.0, sec 5.3.3.2.1, software should wait at least
