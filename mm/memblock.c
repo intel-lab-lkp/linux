@@ -1771,9 +1771,14 @@ void __init memblock_free_late(phys_addr_t base, phys_addr_t size)
 	cursor = PFN_UP(base);
 	end = PFN_DOWN(base + size);
 
+	/* Only free pages that were reserved */
 	for (; cursor < end; cursor++) {
-		memblock_free_pages(pfn_to_page(cursor), cursor, 0);
-		totalram_pages_inc();
+		struct page *p;
+		if (!pfn_valid(cursor))
+			continue;
+		p = pfn_to_page(cursor);
+		if (!WARN_ON(!PageReserved(p)))
+			free_reserved_page(pfn_to_page(cursor));
 	}
 }
 
