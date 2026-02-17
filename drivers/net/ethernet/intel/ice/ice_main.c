@@ -4726,7 +4726,9 @@ void ice_deinit_dev(struct ice_pf *pf)
 
 static void ice_init_features(struct ice_pf *pf)
 {
+	u16 code = ICE_AQC_HEALTH_STATUS_INFO_LOSS_OF_LOCK;
 	struct device *dev = ice_pf_to_dev(pf);
+	int err;
 
 	if (ice_is_safe_mode(pf))
 		return;
@@ -4738,8 +4740,15 @@ static void ice_init_features(struct ice_pf *pf)
 	if (ice_is_feature_supported(pf, ICE_F_GNSS))
 		ice_gnss_init(pf);
 
+	/* Initialize unmanaged DPLL detection */
+	err = ice_is_health_status_code_supported(&pf->hw, code,
+						  &pf->dplls.unmanaged);
+	if (err || !ice_is_unmanaged_cgu_in_netlist(&pf->hw))
+		pf->dplls.unmanaged = false;
+
 	if (ice_is_feature_supported(pf, ICE_F_CGU) ||
-	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK))
+	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK) ||
+	    pf->dplls.unmanaged)
 		ice_dpll_init(pf);
 
 	/* Note: Flow director init failure is non-fatal to load */
