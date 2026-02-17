@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB
 /* Copyright (c) 2015 - 2021 Intel Corporation */
 #include "main.h"
+#include <linux/dma-buf.h>
+#include <linux/dma-resv.h>
 
 /**
  * irdma_query_device - get device attributes
@@ -3590,6 +3592,44 @@ error:
 	return ERR_PTR(err);
 }
 
+static int irdma_hwdereg_mr(struct ib_mr *ib_mr);
+
+static void irdma_dmabuf_invalidate_cb(struct dma_buf_attachment *attach)
+{
+	struct ib_umem_dmabuf *umem_dmabuf = attach->importer_priv;
+	struct irdma_mr *iwmr = umem_dmabuf->private;
+	int err;
+
+	dma_resv_assert_held(umem_dmabuf->attach->dmabuf->resv);
+
+	if (!iwmr)
+		return;
+
+	/* Invalidate the region in hardware, but do not release the key yet.
+	 * This will either invalidate the region or issue a reset. Either way,
+	 * the HW will no longer touch the region after. If successful, the
+	 * region is marked as invalidated so that the real dereg MR later ends
+	 * up skipping the HW request.
+	 */
+	err = irdma_hwdereg_mr(&iwmr->ibmr);
+	if (err) {
+		struct irdma_device *iwdev = to_iwdev(iwmr->ibmr.device);
+
+		ibdev_err(&iwdev->ibdev, "dmabuf mr invalidate failed %d", err);
+		if (!iwdev->rf->reset) {
+			iwdev->rf->reset = true;
+			iwdev->rf->gen_ops.request_reset(iwdev->rf);
+		}
+	}
+
+	ib_umem_dmabuf_unmap_pages(umem_dmabuf);
+}
+
+static struct dma_buf_attach_ops irdma_dmabuf_attach_ops = {
+	.allow_peer2peer = 1,
+	.move_notify = irdma_dmabuf_invalidate_cb,
+};
+
 static struct ib_mr *irdma_reg_user_mr_dmabuf(struct ib_pd *pd, u64 start,
 					      u64 len, u64 virt,
 					      int fd, int access,
@@ -3599,7 +3639,7 @@ static struct ib_mr *irdma_reg_user_mr_dmabuf(struct ib_pd *pd, u64 start,
 	struct irdma_device *iwdev = to_iwdev(pd->device);
 	struct ib_umem_dmabuf *umem_dmabuf;
 	struct irdma_mr *iwmr;
-	int err;
+	int err = -1;
 
 	if (dmah)
 		return ERR_PTR(-EOPNOTSUPP);
@@ -3607,31 +3647,43 @@ static struct ib_mr *irdma_reg_user_mr_dmabuf(struct ib_pd *pd, u64 start,
 	if (len > iwdev->rf->sc_dev.hw_attrs.max_mr_size)
 		return ERR_PTR(-EINVAL);
 
-	umem_dmabuf = ib_umem_dmabuf_get_pinned(pd->device, start, len, fd, access);
+	umem_dmabuf = ib_umem_dmabuf_get(pd->device, start, len, fd, access,
+					 &irdma_dmabuf_attach_ops);
 	if (IS_ERR(umem_dmabuf)) {
 		ibdev_dbg(&iwdev->ibdev, "Failed to get dmabuf umem[%pe]\n",
 			  umem_dmabuf);
 		return ERR_CAST(umem_dmabuf);
 	}
 
+	dma_resv_lock(umem_dmabuf->attach->dmabuf->resv, NULL);
+
+	err = ib_umem_dmabuf_map_pages(umem_dmabuf);
+	if (err)
+		goto err_map;
+
 	iwmr = irdma_alloc_iwmr(&umem_dmabuf->umem, pd, virt, IRDMA_MEMREG_TYPE_MEM);
 	if (IS_ERR(iwmr)) {
 		err = PTR_ERR(iwmr);
-		goto err_release;
+		goto err_alloc;
 	}
 
 	err = irdma_reg_user_mr_type_mem(iwmr, access, true);
 	if (err)
 		goto err_iwmr;
 
+	umem_dmabuf->private = iwmr;
+
+	dma_resv_unlock(umem_dmabuf->attach->dmabuf->resv);
+
 	return &iwmr->ibmr;
 
 err_iwmr:
 	irdma_free_iwmr(iwmr);
-
-err_release:
+err_alloc:
+	ib_umem_dmabuf_unmap_pages(umem_dmabuf);
+err_map:
+	dma_resv_unlock(umem_dmabuf->attach->dmabuf->resv);
 	ib_umem_release(&umem_dmabuf->umem);
-
 	return ERR_PTR(err);
 }
 
@@ -3923,7 +3975,19 @@ static int irdma_dereg_mr(struct ib_mr *ib_mr, struct ib_udata *udata)
 		goto done;
 	}
 
-	ret = irdma_hwdereg_mr(ib_mr);
+	if (iwmr->region && iwmr->region->is_dmabuf) {
+		struct ib_umem_dmabuf *udb = to_ib_umem_dmabuf(iwmr->region);
+
+		dma_resv_lock(udb->attach->dmabuf->resv, NULL);
+		/* Could have already been invalidated, but it's okay. */
+		ret = irdma_hwdereg_mr(ib_mr);
+		ib_umem_dmabuf_unmap_pages(udb);
+		udb->private = NULL;
+		dma_resv_unlock(udb->attach->dmabuf->resv);
+	} else {
+		ret = irdma_hwdereg_mr(ib_mr);
+	}
+
 	if (ret)
 		return ret;
 
