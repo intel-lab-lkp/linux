@@ -12,7 +12,10 @@
 #ifndef _LINUX_COREBOOT_H
 #define _LINUX_COREBOOT_H
 
+#include <linux/compiler_attributes.h>
 #include <linux/types.h>
+
+typedef __aligned(4) u64 cb_u64;
 
 /* List of coreboot entry structures that is used */
 
@@ -30,7 +33,7 @@ struct lb_cbmem_ref {
 	u32 tag;
 	u32 size;
 
-	u64 cbmem_addr;
+	cb_u64 cbmem_addr;
 };
 
 /* Corresponds to LB_TAG_CBMEM_ENTRY */
@@ -38,7 +41,7 @@ struct lb_cbmem_entry {
 	u32 tag;
 	u32 size;
 
-	u64 address;
+	cb_u64 address;
 	u32 entry_size;
 	u32 id;
 };
@@ -48,7 +51,7 @@ struct lb_framebuffer {
 	u32 tag;
 	u32 size;
 
-	u64 physical_address;
+	cb_u64 physical_address;
 	u32 x_resolution;
 	u32 y_resolution;
 	u32 bytes_per_line;
