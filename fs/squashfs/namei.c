@@ -65,8 +65,8 @@ static int get_dir_index_using_name(struct super_block *sb,
 			int index_offset, int i_count, const char *name)
 {
 	struct squashfs_sb_info *msblk = sb->s_fs_info;
-	int i, length = 0, err;
-	unsigned int size;
+	int i, err;
+	unsigned int size, length = 0;
 	struct squashfs_dir_index *index;
 
 	TRACE("Entered get_dir_index_using_name, i_count %d\n", i_count);
