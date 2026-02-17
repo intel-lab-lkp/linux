@@ -28,6 +28,10 @@
 #define CLONE_AUTOREAP 0x400000000ULL
 #endif
 
+#ifndef CLONE_PIDFD_AUTOKILL
+#define CLONE_PIDFD_AUTOKILL 0x800000000ULL
+#endif
+
 static pid_t create_autoreap_child(int *pidfd)
 {
 	struct __clone_args args = {
@@ -484,6 +488,189 @@ TEST(autoreap_no_inherit)
 	ASSERT_EQ(errno, ECHILD);
 
 	close(pidfd);
+}
+
+/*
+ * Helper: create a child with CLONE_PIDFD | CLONE_PIDFD_AUTOKILL | CLONE_AUTOREAP.
+ */
+static pid_t create_autokill_child(int *pidfd)
+{
+	struct __clone_args args = {
+		.flags		= CLONE_PIDFD | CLONE_PIDFD_AUTOKILL |
+				  CLONE_AUTOREAP,
+		.exit_signal	= 0,
+		.pidfd		= ptr_to_u64(pidfd),
+	};
+
+	return sys_clone3(&args, sizeof(args));
+}
+
+/*
+ * Basic autokill test: child blocks in pause(), parent closes the
+ * clone3 pidfd, child should be killed and autoreaped.
+ */
+TEST(autokill_basic)
+{
+	int pidfd = -1, pollfd_fd = -1, ret;
+	struct pollfd pfd;
+	pid_t pid;
+
+	pid = create_autokill_child(&pidfd);
+	if (pid < 0 && errno == EINVAL)
+		SKIP(return, "CLONE_PIDFD_AUTOKILL not supported");
+	ASSERT_GE(pid, 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(1);
+	}
+
+	ASSERT_GE(pidfd, 0);
+
+	/*
+	 * Open a second pidfd via pidfd_open() so we can observe the
+	 * child's death after closing the clone3 pidfd.
+	 */
+	pollfd_fd = sys_pidfd_open(pid, 0);
+	ASSERT_GE(pollfd_fd, 0);
+
+	/* Close the clone3 pidfd — this should trigger autokill. */
+	close(pidfd);
+
+	/* Wait for the child to die via the pidfd_open'd fd. */
+	pfd.fd = pollfd_fd;
+	pfd.events = POLLIN;
+	ret = poll(&pfd, 1, 5000);
+	ASSERT_EQ(ret, 1);
+	ASSERT_TRUE(pfd.revents & POLLIN);
+
+	/* Child should be autoreaped — no zombie. */
+	usleep(100000);
+	ret = waitpid(pid, NULL, WNOHANG);
+	ASSERT_EQ(ret, -1);
+	ASSERT_EQ(errno, ECHILD);
+
+	close(pollfd_fd);
+}
+
+/*
+ * CLONE_PIDFD_AUTOKILL without CLONE_PIDFD must fail with EINVAL.
+ */
+TEST(autokill_requires_pidfd)
+{
+	struct __clone_args args = {
+		.flags		= CLONE_PIDFD_AUTOKILL | CLONE_AUTOREAP,
+		.exit_signal	= 0,
+	};
+	pid_t pid;
+
+	pid = sys_clone3(&args, sizeof(args));
+	ASSERT_EQ(pid, -1);
+	ASSERT_EQ(errno, EINVAL);
+}
+
+/*
+ * CLONE_PIDFD_AUTOKILL without CLONE_AUTOREAP must fail with EINVAL.
+ */
+TEST(autokill_requires_autoreap)
+{
+	struct __clone_args args = {
+		.flags		= CLONE_PIDFD | CLONE_PIDFD_AUTOKILL,
+		.exit_signal	= SIGCHLD,
+	};
+	int pidfd = -1;
+	pid_t pid;
+
+	args.pidfd = ptr_to_u64(&pidfd);
+
+	pid = sys_clone3(&args, sizeof(args));
+	ASSERT_EQ(pid, -1);
+	ASSERT_EQ(errno, EINVAL);
+}
+
+/*
+ * CLONE_PIDFD_AUTOKILL with CLONE_THREAD must fail with EINVAL.
+ */
+TEST(autokill_rejects_thread)
+{
+	struct __clone_args args = {
+		.flags		= CLONE_PIDFD | CLONE_PIDFD_AUTOKILL |
+				  CLONE_AUTOREAP | CLONE_THREAD |
+				  CLONE_SIGHAND | CLONE_VM,
+		.exit_signal	= 0,
+	};
+	int pidfd = -1;
+	pid_t pid;
+
+	args.pidfd = ptr_to_u64(&pidfd);
+
+	pid = sys_clone3(&args, sizeof(args));
+	ASSERT_EQ(pid, -1);
+	ASSERT_EQ(errno, EINVAL);
+}
+
+/*
+ * Test that only the clone3 pidfd triggers autokill, not pidfd_open().
+ * Close the pidfd_open'd fd first — child should survive.
+ * Then close the clone3 pidfd — child should be killed and autoreaped.
+ */
+TEST(autokill_pidfd_open_no_effect)
+{
+	int pidfd = -1, open_fd = -1, ret;
+	struct pollfd pfd;
+	pid_t pid;
+
+	pid = create_autokill_child(&pidfd);
+	if (pid < 0 && errno == EINVAL)
+		SKIP(return, "CLONE_PIDFD_AUTOKILL not supported");
+	ASSERT_GE(pid, 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(1);
+	}
+
+	ASSERT_GE(pidfd, 0);
+
+	/* Open a second pidfd via pidfd_open(). */
+	open_fd = sys_pidfd_open(pid, 0);
+	ASSERT_GE(open_fd, 0);
+
+	/*
+	 * Close the pidfd_open'd fd — child should survive because
+	 * only the clone3 pidfd has autokill.
+	 */
+	close(open_fd);
+	usleep(200000);
+
+	/* Verify child is still alive by polling the clone3 pidfd. */
+	pfd.fd = pidfd;
+	pfd.events = POLLIN;
+	ret = poll(&pfd, 1, 0);
+	ASSERT_EQ(ret, 0) {
+		TH_LOG("Child died after closing pidfd_open fd — should still be alive");
+	}
+
+	/* Open another observation fd before triggering autokill. */
+	open_fd = sys_pidfd_open(pid, 0);
+	ASSERT_GE(open_fd, 0);
+
+	/* Now close the clone3 pidfd — this triggers autokill. */
+	close(pidfd);
+
+	pfd.fd = open_fd;
+	pfd.events = POLLIN;
+	ret = poll(&pfd, 1, 5000);
+	ASSERT_EQ(ret, 1);
+	ASSERT_TRUE(pfd.revents & POLLIN);
+
+	/* Child should be autoreaped — no zombie. */
+	usleep(100000);
+	ret = waitpid(pid, NULL, WNOHANG);
+	ASSERT_EQ(ret, -1);
+	ASSERT_EQ(errno, ECHILD);
+
+	close(open_fd);
 }
 
 TEST_HARNESS_MAIN
