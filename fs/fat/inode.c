@@ -53,12 +53,14 @@ struct fat_bios_param_block {
 
 	u8	fat16_state;
 	u32	fat16_vol_id;
+	u8	fat16_vol_label[MSDOS_NAME];
 
 	u32	fat32_length;
 	u32	fat32_root_cluster;
 	u16	fat32_info_sector;
 	u8	fat32_state;
 	u32	fat32_vol_id;
+	u8	fat32_vol_label[MSDOS_NAME];
 };
 
 static int fat_default_codepage = CONFIG_FAT_DEFAULT_CODEPAGE;
@@ -1406,12 +1408,14 @@ static int fat_read_bpb(struct super_block *sb, struct fat_boot_sector *b,
 
 	bpb->fat16_state = b->fat16.state;
 	bpb->fat16_vol_id = get_unaligned_le32(b->fat16.vol_id);
+	memcpy(bpb->fat16_vol_label, b->fat16.vol_label, MSDOS_NAME);
 
 	bpb->fat32_length = le32_to_cpu(b->fat32.length);
 	bpb->fat32_root_cluster = le32_to_cpu(b->fat32.root_cluster);
 	bpb->fat32_info_sector = le16_to_cpu(b->fat32.info_sector);
 	bpb->fat32_state = b->fat32.state;
 	bpb->fat32_vol_id = get_unaligned_le32(b->fat32.vol_id);
+	memcpy(bpb->fat32_vol_label, b->fat32.vol_label, MSDOS_NAME);
 
 	/* Validate this looks like a FAT filesystem BPB */
 	if (!bpb->fat_reserved) {
@@ -1708,10 +1712,13 @@ int fat_fill_super(struct super_block *sb, struct fs_context *fc,
 	}
 
 	/* interpret volume ID as a little endian 32 bit integer */
-	if (is_fat32(sbi))
+	if (is_fat32(sbi)) {
 		sbi->vol_id = bpb.fat32_vol_id;
-	else /* fat 16 or 12 */
+		memcpy(sbi->vol_label, bpb.fat32_vol_label, MSDOS_NAME);
+	} else { /* fat 16 or 12 */
 		sbi->vol_id = bpb.fat16_vol_id;
+		memcpy(sbi->vol_label, bpb.fat16_vol_label, MSDOS_NAME);
+	}
 
 	__le32 vol_id_le = cpu_to_le32(sbi->vol_id);
 	super_set_uuid(sb, (void *) &vol_id_le, sizeof(vol_id_le));
