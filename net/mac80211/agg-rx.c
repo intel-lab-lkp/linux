@@ -353,7 +353,16 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	       buf_size, sta->sta.addr);
 
 	if (test_bit(tid, sta->ampdu_mlme.agg_session_valid)) {
-		if (sta->ampdu_mlme.tid_rx_token[tid] == dialog_token) {
+		if (sta->ampdu_mlme.tid_rx_token[tid] != dialog_token) {
+			ht_dbg_ratelimited(sta->sdata,
+					   "unexpected AddBA Req from %pM on tid %u\n",
+					   sta->sta.addr, tid);
+
+			/* delete existing Rx BA session on the same tid */
+			__ieee80211_stop_rx_ba_session(sta, tid, WLAN_BACK_RECIPIENT,
+						       WLAN_STATUS_UNSPECIFIED_QOS,
+						       false);
+		} else if (!ieee80211_hw_check(&local->hw, SUPPORTS_REORDERING_BUFFER)) {
 			struct tid_ampdu_rx *tid_rx;
 
 			ht_dbg_ratelimited(sta->sdata,
@@ -374,14 +383,6 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 			goto end;
 		}
 
-		ht_dbg_ratelimited(sta->sdata,
-				   "unexpected AddBA Req from %pM on tid %u\n",
-				   sta->sta.addr, tid);
-
-		/* delete existing Rx BA session on the same tid */
-		__ieee80211_stop_rx_ba_session(sta, tid, WLAN_BACK_RECIPIENT,
-					       WLAN_STATUS_UNSPECIFIED_QOS,
-					       false);
 	}
 
 	if (ieee80211_hw_check(&local->hw, SUPPORTS_REORDERING_BUFFER)) {
