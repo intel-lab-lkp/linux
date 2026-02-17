@@ -75,6 +75,7 @@ static_assert(PCIE_SPEED_5_0GT + 1 == PCIE_SPEED_8_0GT);
 static_assert(PCIE_SPEED_8_0GT + 1 == PCIE_SPEED_16_0GT);
 static_assert(PCIE_SPEED_16_0GT + 1 == PCIE_SPEED_32_0GT);
 static_assert(PCIE_SPEED_32_0GT + 1 == PCIE_SPEED_64_0GT);
+static_assert(PCIE_SPEED_64_0GT + 1 == PCIE_SPEED_128_0GT);
 
 MODULE_AUTHOR("Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>");
 MODULE_DESCRIPTION("PCIe cooling driver");

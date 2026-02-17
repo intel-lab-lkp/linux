@@ -50,7 +50,7 @@ static DECLARE_RWSEM(pcie_bwctrl_setspeed_rwsem);
 
 static bool pcie_valid_speed(enum pci_bus_speed speed)
 {
-	return (speed >= PCIE_SPEED_2_5GT) && (speed <= PCIE_SPEED_64_0GT);
+	return (speed >= PCIE_SPEED_2_5GT) && (speed <= PCIE_SPEED_128_0GT);
 }
 
 static u16 pci_bus_speed2lnkctl2(enum pci_bus_speed speed)
@@ -62,6 +62,7 @@ static u16 pci_bus_speed2lnkctl2(enum pci_bus_speed speed)
 		[PCIE_SPEED_16_0GT] = PCI_EXP_LNKCTL2_TLS_16_0GT,
 		[PCIE_SPEED_32_0GT] = PCI_EXP_LNKCTL2_TLS_32_0GT,
 		[PCIE_SPEED_64_0GT] = PCI_EXP_LNKCTL2_TLS_64_0GT,
+		[PCIE_SPEED_128_0GT] = PCI_EXP_LNKCTL2_TLS_128_0GT,
 	};
 
 	if (WARN_ON_ONCE(!pcie_valid_speed(speed)))
@@ -70,7 +71,7 @@ static u16 pci_bus_speed2lnkctl2(enum pci_bus_speed speed)
 	return speed_conv[speed];
 }
 
-static inline u16 pcie_supported_speeds2target_speed(u8 supported_speeds)
+static inline u16 pcie_supported_speeds2target_speed(u16 supported_speeds)
 {
 	return __fls(supported_speeds);
 }
@@ -88,7 +89,7 @@ static inline u16 pcie_supported_speeds2target_speed(u8 supported_speeds)
 static u16 pcie_bwctrl_select_speed(struct pci_dev *port, enum pci_bus_speed speed_req)
 {
 	struct pci_bus *bus = port->subordinate;
-	u8 desired_speeds, supported_speeds;
+	u16 desired_speeds, supported_speeds;
 	struct pci_dev *dev;
 
 	desired_speeds = GENMASK(pci_bus_speed2lnkctl2(speed_req),
