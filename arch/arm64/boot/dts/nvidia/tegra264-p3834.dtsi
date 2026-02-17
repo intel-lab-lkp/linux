@@ -16,6 +16,10 @@
 		serial@c5a0000 {
 			status = "okay";
 		};
+
+		dma-controller@8400000 {
+			status = "okay";
+		};
 	};
 
 	bus@8100000000 {

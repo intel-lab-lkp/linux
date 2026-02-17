@@ -3243,7 +3243,38 @@
 				     <GIC_SPI 614 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 615 IRQ_TYPE_LEVEL_HIGH>;
 			#dma-cells = <1>;
-			iommus = <&smmu1 0x00000800>;
+			iommu-map =
+				<1  &smmu1 0x801 1>,
+				<2  &smmu1 0x802 1>,
+				<3  &smmu1 0x803 1>,
+				<4  &smmu1 0x804 1>,
+				<5  &smmu1 0x805 1>,
+				<6  &smmu1 0x806 1>,
+				<7  &smmu1 0x807 1>,
+				<8  &smmu1 0x808 1>,
+				<9  &smmu1 0x809 1>,
+				<10 &smmu1 0x80a 1>,
+				<11 &smmu1 0x80b 1>,
+				<12 &smmu1 0x80c 1>,
+				<13 &smmu1 0x80d 1>,
+				<14 &smmu1 0x80e 1>,
+				<15 &smmu1 0x80f 1>,
+				<16 &smmu1 0x810 1>,
+				<17 &smmu1 0x811 1>,
+				<18 &smmu1 0x812 1>,
+				<19 &smmu1 0x813 1>,
+				<20 &smmu1 0x814 1>,
+				<21 &smmu1 0x815 1>,
+				<22 &smmu1 0x816 1>,
+				<23 &smmu1 0x817 1>,
+				<24 &smmu1 0x818 1>,
+				<25 &smmu1 0x819 1>,
+				<26 &smmu1 0x81a 1>,
+				<27 &smmu1 0x81b 1>,
+				<28 &smmu1 0x81c 1>,
+				<29 &smmu1 0x81d 1>,
+				<30 &smmu1 0x81e 1>,
+				<31 &smmu1 0x81f 1>;
 			dma-coherent;
 			dma-channel-mask = <0xfffffffe>;
 			status = "disabled";
