@@ -45,6 +45,15 @@ struct mipi_dbi {
 	bool swap_bytes;
 
 	/**
+	 * @invert_reset: Invert reset logic level.
+	 *
+	 * This is needed as drm_mipi_dbi (formerly tinydrm) introduced reset
+	 * GPIO controls with "logic high" being "out of reset", while other
+	 * bindings typically have "logic high" as "in reset".
+	 */
+	bool invert_reset;
+
+	/**
 	 * @reset: Optional reset gpio
 	 */
 	struct gpio_desc *reset;
