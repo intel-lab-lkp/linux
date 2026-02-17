@@ -162,8 +162,20 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 	rocket_pc_writel(core, REGISTER_AMOUNTS,
 			 PC_REGISTER_AMOUNTS_PC_DATA_AMOUNT((task->regcmd_count + 1) / 2 - 1));
 
-	rocket_pc_writel(core, INTERRUPT_MASK, PC_INTERRUPT_MASK_DPU_0 | PC_INTERRUPT_MASK_DPU_1);
-	rocket_pc_writel(core, INTERRUPT_CLEAR, PC_INTERRUPT_CLEAR_DPU_0 | PC_INTERRUPT_CLEAR_DPU_1);
+	/*
+	 * Enable interrupts for the last block in this task's pipeline.
+	 *
+	 * The int_mask field from userspace specifies which block completion
+	 * signals that this task is done:
+	 *   - Conv/DPU tasks: DPU_0 | DPU_1
+	 *   - PPU tasks (DPU→PPU pipeline): PPU_0 | PPU_1
+	 *
+	 * Only enabling the terminal block's interrupt prevents the kernel
+	 * from stopping the pipeline early (e.g. DPU fires before PPU has
+	 * finished writing its output).
+	 */
+	rocket_pc_writel(core, INTERRUPT_MASK, task->int_mask);
+	rocket_pc_writel(core, INTERRUPT_CLEAR, 0x1ffff);
 
 	rocket_pc_writel(core, TASK_CON, PC_TASK_CON_RESERVED_0(1) |
 					 PC_TASK_CON_TASK_COUNT_CLEAR(1) |
@@ -449,8 +461,17 @@ static irqreturn_t rocket_job_irq_handler(int irq, void *data)
 	WARN_ON(raw_status & PC_INTERRUPT_RAW_STATUS_DMA_READ_ERROR);
 	WARN_ON(raw_status & PC_INTERRUPT_RAW_STATUS_DMA_WRITE_ERROR);
 
-	if (!(raw_status & PC_INTERRUPT_RAW_STATUS_DPU_0 ||
-	      raw_status & PC_INTERRUPT_RAW_STATUS_DPU_1))
+	/*
+	 * Check for any job completion interrupt: DPU or PPU.
+	 *
+	 * Conv and standalone DPU jobs signal via DPU_0/DPU_1.
+	 * PPU pooling jobs signal via PPU_0/PPU_1.
+	 * We must recognize both to avoid PPU job timeouts.
+	 */
+	if (!(raw_status & (PC_INTERRUPT_RAW_STATUS_DPU_0 |
+						PC_INTERRUPT_RAW_STATUS_DPU_1 |
+						PC_INTERRUPT_RAW_STATUS_PPU_0 |
+						PC_INTERRUPT_RAW_STATUS_PPU_1)))
 		return IRQ_NONE;
 
 	rocket_pc_writel(core, INTERRUPT_MASK, 0x0);
