@@ -619,6 +619,7 @@ static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 				   psys_base, &psys_ipdata);
 	if (IS_ERR(isp->psys)) {
 		ret = PTR_ERR(isp->psys);
+		isp->psys = NULL;
 		goto out_ipu6_bus_del_devices;
 	}
 
