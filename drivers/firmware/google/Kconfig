@@ -63,7 +63,8 @@ config GOOGLE_FRAMEBUFFER_COREBOOT
 	help
 	  This option enables the kernel to search for a framebuffer in
 	  the coreboot table.  If found, it is registered with a platform
-	  device of type simple-framebuffer.
+	  device of type coreboot-framebuffer. Using the old device of
+	  type simple-framebuffer is deprecated.
 
 config GOOGLE_MEMCONSOLE_COREBOOT
 	tristate "Firmware Memory Console"
