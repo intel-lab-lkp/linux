@@ -674,7 +674,17 @@ impl Cmdq {
             let (cmd, contents_1) = M::Message::from_bytes_prefix(message.contents.0).ok_or(EIO)?;
             let mut sbuffer = SBufferIter::new_reader([contents_1, message.contents.1]);
 
-            M::read(cmd, &mut sbuffer).map_err(|e| e.into())
+            M::read(cmd, &mut sbuffer)
+                .map_err(|e| e.into())
+                .inspect(|_| {
+                    if !sbuffer.is_empty() {
+                        dev_warn!(
+                            &self.dev,
+                            "GSP message {:?} has unprocessed data\n",
+                            function
+                        );
+                    }
+                })
         } else {
             Err(ERANGE)
         };
