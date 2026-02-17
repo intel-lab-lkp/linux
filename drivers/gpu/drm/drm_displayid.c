@@ -69,7 +69,7 @@ validate_displayid(const u8 *displayid, int length, int idx, bool ignore_checksu
 	for (i = 0; i < dispid_length; i++)
 		csum += displayid[idx + i];
 	if (csum) {
-		DRM_NOTE("DisplayID checksum invalid, remainder is %d%s\n", csum,
+		DRM_DEBUG_KMS("DisplayID checksum invalid, remainder is %d%s\n", csum,
 			 ignore_checksum ? " (ignoring)" : "");
 
 		if (!ignore_checksum)
