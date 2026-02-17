@@ -13,6 +13,11 @@
 #define TASK_SIZE_MAX		TASK_SIZE_USER64
 #endif
 
+#ifdef CONFIG_ALTIVEC
+/* Threshold above which VMX copy path is used */
+#define VMX_COPY_THRESHOLD 3328
+#endif
+
 #include <asm-generic/access_ok.h>
 
 /*
@@ -323,11 +328,41 @@ do {								\
 extern unsigned long __copy_tofrom_user(void __user *to,
 		const void __user *from, unsigned long size);
 
+extern unsigned long __copy_tofrom_user_base(void __user *to,
+		const void __user *from, unsigned long size);
+
+#ifdef CONFIG_ALTIVEC
+extern unsigned long __copy_tofrom_user_power7_vmx(void __user *to,
+		const void __user *from, unsigned long size);
+
+static inline bool will_use_vmx(unsigned long n)
+{
+	return cpu_has_feature(CPU_FTR_VMX_COPY) &&
+		n > VMX_COPY_THRESHOLD;
+}
+#endif
+
 #ifdef __powerpc64__
 static inline unsigned long
 raw_copy_in_user(void __user *to, const void __user *from, unsigned long n)
 {
 	unsigned long ret;
+
+#ifdef CONFIG_ALTIVEC
+	if (will_use_vmx(n) && enter_vmx_usercopy()) {
+		allow_read_write_user(to, from, n);
+		ret = __copy_tofrom_user_power7_vmx(to, from, n);
+		prevent_read_write_user(to, from, n);
+		exit_vmx_usercopy();
+		if (unlikely(ret)) {
+			allow_read_write_user(to, from, n);
+			ret = __copy_tofrom_user_base(to, from, n);
+			prevent_read_write_user(to, from, n);
+		}
+
+		return ret;
+	}
+#endif
 
 	allow_read_write_user(to, from, n);
 	ret = __copy_tofrom_user(to, from, n);
@@ -341,6 +376,22 @@ static inline unsigned long raw_copy_from_user(void *to,
 {
 	unsigned long ret;
 
+#ifdef CONFIG_ALTIVEC
+	if (will_use_vmx(n) && enter_vmx_usercopy()) {
+		allow_read_from_user(from, n);
+		ret = __copy_tofrom_user_power7_vmx((__force void __user *)to, from, n);
+		prevent_read_from_user(from, n);
+		exit_vmx_usercopy();
+		if (unlikely(ret)) {
+			allow_read_from_user(from, n);
+			ret = __copy_tofrom_user_base((__force void __user *)to, from, n);
+			prevent_read_from_user(from, n);
+		}
+
+		return ret;
+	}
+#endif
+
 	allow_read_from_user(from, n);
 	ret = __copy_tofrom_user((__force void __user *)to, from, n);
 	prevent_read_from_user(from, n);
@@ -351,6 +402,22 @@ static inline unsigned long
 raw_copy_to_user(void __user *to, const void *from, unsigned long n)
 {
 	unsigned long ret;
+
+#ifdef CONFIG_ALTIVEC
+	if (will_use_vmx(n) && enter_vmx_usercopy()) {
+		allow_write_to_user(to, n);
+		ret = __copy_tofrom_user_power7_vmx(to, (__force const void __user *)from, n);
+		prevent_write_to_user(to, n);
+		exit_vmx_usercopy();
+		if (unlikely(ret)) {
+			allow_write_to_user(to, n);
+			ret = __copy_tofrom_user_base(to, (__force const void __user *)from, n);
+			prevent_write_to_user(to, n);
+		}
+
+		return ret;
+	}
+#endif
 
 	allow_write_to_user(to, n);
 	ret = __copy_tofrom_user(to, (__force const void __user *)from, n);
