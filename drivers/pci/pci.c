@@ -4958,7 +4958,7 @@ void pci_dev_unlock(struct pci_dev *dev)
 }
 EXPORT_SYMBOL_GPL(pci_dev_unlock);
 
-static void pci_dev_save_and_disable(struct pci_dev *dev)
+static void pci_dev_disable(struct pci_dev *dev)
 {
 	const struct pci_error_handlers *err_handler =
 			dev->driver ? dev->driver->err_handler : NULL;
@@ -4974,13 +4974,11 @@ static void pci_dev_save_and_disable(struct pci_dev *dev)
 		pci_warn(dev, "resetting");
 
 	/*
-	 * Wake-up device prior to save.  PM registers default to D0 after
-	 * reset and a simple register restore doesn't reliably return
-	 * to a non-D0 state anyway.
+	 * PM registers default to D0 after reset and a simple register
+	 * restore doesn't reliably return to a non-D0 state.
 	 */
 	pci_set_power_state(dev, PCI_D0);
 
-	pci_save_state(dev);
 	/*
 	 * Disable the device by clearing the Command register, except for
 	 * INTx-disable which is set.  This not only disables MMIO and I/O port
@@ -5141,7 +5139,7 @@ int pci_reset_function(struct pci_dev *dev)
 		pci_dev_lock(bridge);
 
 	pci_dev_lock(dev);
-	pci_dev_save_and_disable(dev);
+	pci_dev_disable(dev);
 
 	rc = __pci_reset_function_locked(dev);
 
@@ -5179,7 +5177,7 @@ int pci_reset_function_locked(struct pci_dev *dev)
 	if (!pci_reset_supported(dev))
 		return -ENOTTY;
 
-	pci_dev_save_and_disable(dev);
+	pci_dev_disable(dev);
 
 	rc = __pci_reset_function_locked(dev);
 
@@ -5205,7 +5203,7 @@ int pci_try_reset_function(struct pci_dev *dev)
 	if (!pci_dev_trylock(dev))
 		return -EAGAIN;
 
-	pci_dev_save_and_disable(dev);
+	pci_dev_disable(dev);
 	rc = __pci_reset_function_locked(dev);
 	pci_dev_restore(dev);
 	pci_dev_unlock(dev);
@@ -5370,17 +5368,17 @@ unlock:
 }
 
 /*
- * Save and disable devices from the top of the tree down while holding
+ * Disable devices from the top of the tree down while holding
  * the @dev mutex lock for the entire tree.
  */
-static void pci_bus_save_and_disable_locked(struct pci_bus *bus)
+static void pci_bus_disable_locked(struct pci_bus *bus)
 {
 	struct pci_dev *dev;
 
 	list_for_each_entry(dev, &bus->devices, bus_list) {
-		pci_dev_save_and_disable(dev);
+		pci_dev_disable(dev);
 		if (dev->subordinate)
-			pci_bus_save_and_disable_locked(dev->subordinate);
+			pci_bus_disable_locked(dev->subordinate);
 	}
 }
 
@@ -5406,16 +5404,16 @@ static void pci_bus_restore_locked(struct pci_bus *bus)
  * Save and disable devices from the top of the tree down while holding
  * the @dev mutex lock for the entire tree.
  */
-static void pci_slot_save_and_disable_locked(struct pci_slot *slot)
+static void pci_slot_disable_locked(struct pci_slot *slot)
 {
 	struct pci_dev *dev;
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
 			continue;
-		pci_dev_save_and_disable(dev);
+		pci_dev_disable(dev);
 		if (dev->subordinate)
-			pci_bus_save_and_disable_locked(dev->subordinate);
+			pci_bus_disable_locked(dev->subordinate);
 	}
 }
 
@@ -5495,7 +5493,7 @@ static int __pci_reset_slot(struct pci_slot *slot)
 		return rc;
 
 	if (pci_slot_trylock(slot)) {
-		pci_slot_save_and_disable_locked(slot);
+		pci_slot_disable_locked(slot);
 		might_sleep();
 		rc = pci_reset_hotplug_slot(slot->hotplug, PCI_RESET_DO_RESET);
 		pci_slot_restore_locked(slot);
@@ -5589,7 +5587,7 @@ int __pci_reset_bus(struct pci_bus *bus)
 		return rc;
 
 	if (pci_bus_trylock(bus)) {
-		pci_bus_save_and_disable_locked(bus);
+		pci_bus_disable_locked(bus);
 		might_sleep();
 		rc = pci_bridge_secondary_bus_reset(bus->self);
 		pci_bus_restore_locked(bus);
