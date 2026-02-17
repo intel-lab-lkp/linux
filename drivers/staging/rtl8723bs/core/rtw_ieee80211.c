@@ -286,7 +286,7 @@ uint rtw_get_rateset_len(u8 *rateset)
 int rtw_generate_ie(struct registry_priv *pregistrypriv)
 {
 	u8 wireless_mode;
-	int	sz = 0, rateLen;
+	int	sz = 0, rate_len;
 	struct wlan_bssid_ex *pdev_network = &pregistrypriv->dev_network;
 	u8 *ie = pdev_network->ies;
 
@@ -321,13 +321,13 @@ int rtw_generate_ie(struct registry_priv *pregistrypriv)
 
 	rtw_set_supported_rate(pdev_network->supported_rates, wireless_mode);
 
-	rateLen = rtw_get_rateset_len(pdev_network->supported_rates);
+	rate_len = rtw_get_rateset_len(pdev_network->supported_rates);
 
-	if (rateLen > 8) {
+	if (rate_len > 8) {
 		ie = rtw_set_ie(ie, WLAN_EID_SUPP_RATES, 8, pdev_network->supported_rates, &sz);
-		/* ie = rtw_set_ie(ie, WLAN_EID_EXT_SUPP_RATES, (rateLen - 8), (pdev_network->supported_rates + 8), &sz); */
+		/* ie = rtw_set_ie(ie, WLAN_EID_EXT_SUPP_RATES, (rate_len - 8), (pdev_network->supported_rates + 8), &sz); */
 	} else {
-		ie = rtw_set_ie(ie, WLAN_EID_SUPP_RATES, rateLen, pdev_network->supported_rates, &sz);
+		ie = rtw_set_ie(ie, WLAN_EID_SUPP_RATES, rate_len, pdev_network->supported_rates, &sz);
 	}
 
 	/* DS parameter set */
@@ -337,8 +337,8 @@ int rtw_generate_ie(struct registry_priv *pregistrypriv)
 
 	ie = rtw_set_ie(ie, WLAN_EID_IBSS_PARAMS, 2, (u8 *)&(pdev_network->configuration.atim_window), &sz);
 
-	if (rateLen > 8)
-		ie = rtw_set_ie(ie, WLAN_EID_EXT_SUPP_RATES, (rateLen - 8), (pdev_network->supported_rates + 8), &sz);
+	if (rate_len > 8)
+		ie = rtw_set_ie(ie, WLAN_EID_EXT_SUPP_RATES, (rate_len - 8), (pdev_network->supported_rates + 8), &sz);
 
 	/* HT Cap. */
 	if ((pregistrypriv->wireless_mode & WIRELESS_11_24N) &&
