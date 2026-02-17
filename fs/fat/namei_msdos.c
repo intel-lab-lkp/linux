@@ -16,8 +16,8 @@ static unsigned char bad_chars[] = "*?<>|\"";
 static unsigned char bad_if_strict[] = "+=,; ";
 
 /***** Formats an MS-DOS file name. Rejects invalid names. */
-static int msdos_format_name(const unsigned char *name, int len,
-			     unsigned char *res, struct fat_mount_options *opts)
+int msdos_format_name(const unsigned char *name, int len, unsigned char *res,
+		      struct fat_mount_options *opts)
 	/*
 	 * name is the proposed name, len is its length, res is
 	 * the resulting name, opts->name_check is either (r)elaxed,

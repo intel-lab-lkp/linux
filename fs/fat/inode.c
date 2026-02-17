@@ -736,6 +736,21 @@ static void delayed_free(struct rcu_head *p)
 static void fat_put_super(struct super_block *sb)
 {
 	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	struct buffer_head *bh = NULL;
+	struct fat_boot_sector *bs;
+
+	bh = sb_bread(sb, 0);
+	if (bh == NULL)
+		fat_msg(sb, KERN_ERR, "unable to read boot sector");
+	else if (!sb_rdonly(sb)) {
+		bs = (struct fat_boot_sector *)bh->b_data;
+		if (is_fat32(sbi))
+			memcpy(bs->fat32.vol_label, sbi->vol_label, MSDOS_NAME);
+		else
+			memcpy(bs->fat16.vol_label, sbi->vol_label, MSDOS_NAME);
+		mark_buffer_dirty(bh);
+	}
+	brelse(bh);
 
 	fat_set_state(sb, 0, 0);
 

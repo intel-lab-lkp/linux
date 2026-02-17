@@ -1423,3 +1423,54 @@ error_remove:
 	return err;
 }
 EXPORT_SYMBOL_GPL(fat_add_entries);
+
+static int fat_create_volume_label_dentry(struct super_block *sb, char *vol_label)
+{
+	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	struct inode *root_inode = sb->s_root->d_inode;
+	struct msdos_dir_entry de;
+	struct fat_slot_info sinfo;
+	struct timespec64 ts = current_time(root_inode);
+	__le16 date, time;
+	u8 time_cs;
+
+	memcpy(de.name, vol_label, MSDOS_NAME);
+	de.attr = ATTR_VOLUME;
+	de.starthi = de.start = de.size = de.lcase = 0;
+
+	fat_time_unix2fat(sbi, &ts, &time, &date, &time_cs);
+	de.time = time;
+	de.date = date;
+	if (sbi->options.isvfat) {
+		de.cdate = de.adate = date;
+		de.ctime = time;
+		de.ctime_cs = time_cs;
+	} else
+		de.cdate = de.adate = de.ctime = de.ctime_cs = 0;
+
+	return fat_add_entries(root_inode, &de, 1, &sinfo);
+}
+
+int fat_rename_volume_label_dentry(struct super_block *sb, char *vol_label)
+{
+	struct inode *root_inode = sb->s_root->d_inode;
+	struct buffer_head *bh = NULL;
+	struct msdos_dir_entry *de;
+	loff_t cpos = 0;
+	int err = 0;
+
+	while (1) {
+		if (fat_get_entry(root_inode, &cpos, &bh, &de) == -1)
+			return fat_create_volume_label_dentry(sb, vol_label);
+
+		if (de->attr == ATTR_VOLUME) {
+			memcpy(de->name, vol_label, MSDOS_NAME);
+			mark_buffer_dirty_inode(bh, root_inode);
+			if (IS_DIRSYNC(root_inode))
+				err = sync_dirty_buffer(bh);
+			brelse(bh);
+			return err;
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(fat_rename_volume_label_dentry);

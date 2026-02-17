@@ -167,6 +167,67 @@ static int fat_ioctl_get_volume_label(struct super_block *sb, char __user *arg)
 	return 0;
 }
 
+static int fat_convert_volume_label_str(struct msdos_sb_info *sbi, char *in,
+					char *out)
+{
+	int ret, in_len = max(strnlen(in, FSLABEL_MAX), 11);
+	char *needle;
+
+	/*
+	 * '.' is not included in any bad_chars list in this driver,
+	 * but it is specifically not allowed for volume labels
+	 */
+	for (needle = in; needle - in < in_len; needle++)
+		if (*needle == '.')
+			return -EINVAL;
+
+	ret = msdos_format_name(in, in_len, out, &sbi->options);
+	if (ret)
+		return ret;
+
+	/*
+	 * msdos_format_name assumes we're translating an 8.3 name, but
+	 * we can handle 11 chars
+	 */
+	if (in_len > 8)
+		ret = msdos_format_name(in + 8, in_len - 8, out + 8,
+					&sbi->options);
+	return ret;
+}
+
+static int fat_ioctl_set_volume_label(struct super_block *sb, char __user *arg)
+{
+	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	struct inode *root_inode = sb->s_root->d_inode;
+	char from_user[FSLABEL_MAX];
+	char new_vol_label[MSDOS_NAME];
+	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (sb_rdonly(sb))
+		return -EROFS;
+
+	if (copy_from_user(from_user, arg, FSLABEL_MAX))
+		return -EFAULT;
+
+	ret = fat_convert_volume_label_str(sbi, from_user, new_vol_label);
+	if (ret)
+		return ret;
+
+	inode_lock(root_inode);
+	ret = fat_rename_volume_label_dentry(sb, new_vol_label);
+	inode_unlock(root_inode);
+	if (ret)
+		return ret;
+
+	mutex_lock(&sbi->s_lock);
+	memcpy(sbi->vol_label, new_vol_label, MSDOS_NAME);
+	mutex_unlock(&sbi->s_lock);
+	return 0;
+}
+
 long fat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -181,6 +242,8 @@ long fat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return fat_ioctl_get_volume_id(inode, user_attr);
 	case FS_IOC_GETFSLABEL:
 		return fat_ioctl_get_volume_label(inode->i_sb, (char __user *) arg);
+	case FS_IOC_SETFSLABEL:
+		return fat_ioctl_set_volume_label(inode->i_sb, (char __user *) arg);
 	case FITRIM:
 		return fat_ioctl_fitrim(inode, arg);
 	default:
