@@ -1635,8 +1635,12 @@ struct bss_bias {
 	s8 bias;
 } __packed;
 
-struct bss_bias_info {
+struct bss_bias_info_hdr {
 	u8 num_bss;
+} __packed;
+
+struct bss_bias_info {
+	struct bss_bias_info_hdr;
 	struct bss_bias bss_bias[];
 } __packed;
 
@@ -1652,7 +1656,7 @@ struct roam_ctrl_cmd {
 	union {
 		u8 bssid[ETH_ALEN]; /* WMI_FORCE_ROAM */
 		u8 roam_mode; /* WMI_SET_ROAM_MODE */
-		struct bss_bias_info bss; /* WMI_SET_HOST_BIAS */
+		struct bss_bias_info_hdr bss; /* WMI_SET_HOST_BIAS */
 		struct low_rssi_scan_params params; /* WMI_SET_LRSSI_SCAN_PARAMS
 						     */
 	} __packed info;
