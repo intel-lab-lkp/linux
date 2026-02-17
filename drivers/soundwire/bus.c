@@ -1899,8 +1899,13 @@ int sdw_handle_slave_status(struct sdw_bus *bus,
 
 		if (status[i] == SDW_SLAVE_UNATTACHED &&
 		    slave->status != SDW_SLAVE_UNATTACHED) {
-			dev_warn(&slave->dev, "Slave %d state check1: UNATTACHED, status was %d\n",
-				 i, slave->status);
+			if (slave->unattach_pending)
+				dev_dbg(&slave->dev, "Slave %d state check1: UNATTACHED (expected), status was %d\n",
+					i, slave->status);
+			else
+				dev_warn(&slave->dev, "Slave %d state check1: UNATTACHED, status was %d\n",
+					 i, slave->status);
+			slave->unattach_pending = false;
 			sdw_modify_slave_status(slave, SDW_SLAVE_UNATTACHED);
 
 			/* Ensure driver knows that peripheral unattached */
