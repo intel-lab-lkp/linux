@@ -140,6 +140,11 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     description: platform specific settings for DLL_CONFIG reg.
 
+  qcom,ice:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      phandle to the Inline Crypto Engine (ICE) hardware block for this controller.
+
   iommus:
     minItems: 1
     maxItems: 8
@@ -222,6 +227,16 @@ allOf:
             - const: hc
             - const: cqhci
             - const: ice
+
+  - if:
+      required:
+        - qcom,ice
+    then:
+      properties:
+        reg-names:
+          not:
+            contains:
+              const: ice
 
 unevaluatedProperties: false
 
