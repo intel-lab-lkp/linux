@@ -1712,6 +1712,19 @@ static void xilinx_dma_issue_pending(struct dma_chan *dchan)
 }
 
 /**
+ * xilinx_dma_device_caps - Write channel-specific DMA slave capabilities
+ * @dchan: DMA channel
+ * @caps: DMA slave capabilities of DMA channel
+ */
+static void xilinx_dma_device_caps(struct dma_chan *dchan,
+				   struct dma_slave_caps *caps)
+{
+	struct xilinx_dma_chan *chan = to_xilinx_chan(dchan);
+
+	caps->directions = chan->direction;
+}
+
+/**
  * xilinx_dma_device_config - Configure the DMA channel
  * @dchan: DMA channel
  * @config: channel configuration
@@ -3292,6 +3305,7 @@ static int xilinx_dma_probe(struct platform_device *pdev)
 	xdev->common.device_tx_status = xilinx_dma_tx_status;
 	xdev->common.device_issue_pending = xilinx_dma_issue_pending;
 	xdev->common.device_config = xilinx_dma_device_config;
+	xdev->common.device_caps = xilinx_dma_device_caps;
 	if (xdev->dma_config->dmatype == XDMA_TYPE_AXIDMA) {
 		dma_cap_set(DMA_CYCLIC, xdev->common.cap_mask);
 		xdev->common.device_prep_peripheral_dma_vec = xilinx_dma_prep_peripheral_dma_vec;
