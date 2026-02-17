@@ -171,6 +171,77 @@ static void test_numa_allocation(int fd, size_t total_size)
 	kvm_munmap(mem, total_size);
 }
 
+static size_t getpmdsize(void)
+{
+	const char *path = "/sys/kernel/mm/transparent_hugepage/hpage_pmd_size";
+	static size_t pmd_size = -1;
+	FILE *fp;
+
+	if (pmd_size != -1)
+		return pmd_size;
+
+	fp = fopen(path, "r");
+	TEST_ASSERT(fp, "Couldn't open %s to read PMD size.", path);
+
+	TEST_ASSERT_EQ(fscanf(fp, "%lu", &pmd_size), 1);
+
+	TEST_ASSERT_EQ(fclose(fp), 0);
+
+	return pmd_size;
+}
+
+static void test_collapse(struct kvm_vm *vm, uint64_t flags)
+{
+	const size_t pmd_size = getpmdsize();
+	char *mem;
+	off_t i;
+	int fd;
+
+	fd = vm_create_guest_memfd(vm, pmd_size * 2,
+				   GUEST_MEMFD_FLAG_MMAP |
+				   GUEST_MEMFD_FLAG_INIT_SHARED);
+
+	/*
+	 * Use aligned address so that MADV_COLLAPSE will not be
+	 * filtered out early in the collapsing routine.
+	 */
+#define ALIGNED_ADDRESS ((void *)0x4000000000UL)
+	mem = mmap(ALIGNED_ADDRESS, pmd_size, PROT_READ | PROT_WRITE,
+		   MAP_FIXED | MAP_SHARED, fd, 0);
+	TEST_ASSERT_EQ(mem, ALIGNED_ADDRESS);
+
+	/*
+	 * Use reads to populate page table to avoid setting dirty
+	 * flag on page.
+	 */
+	for (i = 0; i < pmd_size; i += getpagesize())
+		READ_ONCE(mem[i]);
+
+	/*
+	 * Advising the use of huge pages in guest_memfd should be
+	 * fine...
+	 */
+	TEST_ASSERT_EQ(madvise(mem, pmd_size, MADV_HUGEPAGE), 0);
+
+	/*
+	 * ... but collapsing folios must not be supported to avoid
+	 * mapping beyond shared ranges into host userspace page
+	 * tables.
+	 */
+	TEST_ASSERT_EQ(madvise(mem, pmd_size, MADV_COLLAPSE), -1);
+	TEST_ASSERT_EQ(errno, EINVAL);
+
+	/*
+	 * Removing from host page tables and re-faulting should be
+	 * fine; should not end up faulting in a collapsed/huge folio.
+	 */
+	TEST_ASSERT_EQ(madvise(mem, pmd_size, MADV_DONTNEED), 0);
+	READ_ONCE(mem[0]);
+
+	kvm_munmap(mem, pmd_size);
+	kvm_close(fd);
+}
+
 static void test_fault_sigbus(int fd, size_t accessible_size, size_t map_size)
 {
 	const char val = 0xaa;
@@ -370,6 +441,7 @@ static void __test_guest_memfd(struct kvm_vm *vm, uint64_t flags)
 			gmem_test(mmap_supported, vm, flags);
 			gmem_test(fault_overflow, vm, flags);
 			gmem_test(numa_allocation, vm, flags);
+			test_collapse(vm, flags);
 		} else {
 			gmem_test(fault_private, vm, flags);
 		}
