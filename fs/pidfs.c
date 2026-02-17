@@ -14,6 +14,7 @@
 #include <linux/proc_ns.h>
 #include <linux/pseudo_fs.h>
 #include <linux/ptrace.h>
+#include <linux/security.h>
 #include <linux/seq_file.h>
 #include <uapi/linux/pidfd.h>
 #include <linux/ipc_namespace.h>
@@ -46,15 +47,23 @@ enum pidfs_attr_mask_bits {
 	PIDFS_ATTR_BIT_COREDUMP	= 1,
 };
 
+struct pidfs_exit_attr {
+	__u64 cgroupid;
+	__s32 exit_code;
+	const struct cred *exit_cred;
+	u64 exit_tgid_ino;
+};
+
+struct pidfs_coredump_attr {
+	__u32 coredump_mask;
+	__u32 coredump_signal;
+};
+
 struct pidfs_attr {
 	unsigned long attr_mask;
 	struct simple_xattrs *xattrs;
-	struct /* exit info */ {
-		__u64 cgroupid;
-		__s32 exit_code;
-	};
-	__u32 coredump_mask;
-	__u32 coredump_signal;
+	struct pidfs_exit_attr;
+	struct pidfs_coredump_attr;
 };
 
 static struct rhashtable pidfs_ino_ht;
@@ -200,6 +209,7 @@ void pidfs_free_pid(struct pid *pid)
 	if (IS_ERR(attr))
 		return;
 
+	put_cred(attr->exit_cred);
 	xattrs = no_free_ptr(attr->xattrs);
 	if (xattrs)
 		simple_xattrs_free(xattrs, NULL);
@@ -703,12 +713,14 @@ void pidfs_exit(struct task_struct *tsk)
 	 * is put
 	 */
 
-#ifdef CONFIG_CGROUPS
 	rcu_read_lock();
+#ifdef CONFIG_CGROUPS
 	cgrp = task_dfl_cgroup(tsk);
 	attr->cgroupid = cgroup_id(cgrp);
-	rcu_read_unlock();
 #endif
+	attr->exit_cred = get_cred(__task_cred(tsk));
+	rcu_read_unlock();
+	attr->exit_tgid_ino = task_tgid(tsk)->ino;
 	attr->exit_code = tsk->exit_code;
 
 	/* Ensure that PIDFD_GET_INFO sees either all or nothing. */
@@ -742,6 +754,66 @@ void pidfs_coredump(const struct coredump_params *cprm)
 static struct vfsmount *pidfs_mnt __ro_after_init;
 
 /*
+ * Fill in the effective {u,g}id of the task referred to by the pidfs
+ * inode. The task's credentials may change due to setuid(), etc.
+ */
+static void pidfs_fill_owner(struct inode *inode, kuid_t *uid, kgid_t *gid)
+{
+	struct pid *pid = inode->i_private;
+
+	VFS_WARN_ON_ONCE(!pid);
+
+	scoped_guard(rcu) {
+		struct task_struct *task;
+
+		task = pid_task(pid, PIDTYPE_PID);
+		if (!task) {
+			struct pidfs_attr *attr = READ_ONCE(pid->attr);
+			const struct cred *cred;
+
+			VFS_WARN_ON_ONCE(!attr);
+			/*
+			 * During copy_process() with CLONE_PIDFD the
+			 * task hasn't been attached to the pid yet so
+			 * pid_task() returns NULL and there's no
+			 * exit_cred as the task obviously hasn't
+			 * exited. Use the parent's credentials.
+			 */
+			cred = attr->exit_cred;
+			if (!cred)
+				cred = current_cred();
+			*uid = cred->euid;
+			*gid = cred->egid;
+		} else if (unlikely(task->flags & PF_KTHREAD)) {
+			*uid = GLOBAL_ROOT_UID;
+			*gid = GLOBAL_ROOT_GID;
+		} else {
+			const struct cred *cred = __task_cred(task);
+
+			*uid = cred->euid;
+			*gid = cred->egid;
+		}
+	}
+}
+
+/*
+ * Set pidfs inode ownership and security label. Called once when the
+ * dentry is first stashed.
+ */
+static void pidfs_update_inode(struct inode *inode)
+{
+	struct pid *pid = inode->i_private;
+	struct task_struct *task;
+
+	pidfs_fill_owner(inode, &inode->i_uid, &inode->i_gid);
+
+	guard(rcu)();
+	task = pid_task(pid, PIDTYPE_PID);
+	if (task)
+		security_task_to_inode(task, inode);
+}
+
+/*
  * The vfs falls back to simple_setattr() if i_op->setattr() isn't
  * implemented. Let's reject it completely until we have a clean
  * permission concept for pidfds.
@@ -756,7 +828,11 @@ static int pidfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 			 struct kstat *stat, u32 request_mask,
 			 unsigned int query_flags)
 {
-	return anon_inode_getattr(idmap, path, stat, request_mask, query_flags);
+	struct inode *inode = d_inode(path->dentry);
+
+	anon_inode_getattr(idmap, path, stat, request_mask, query_flags);
+	pidfs_fill_owner(inode, &stat->uid, &stat->gid);
+	return 0;
 }
 
 static ssize_t pidfs_listxattr(struct dentry *dentry, char *buf, size_t size)
@@ -773,10 +849,37 @@ static ssize_t pidfs_listxattr(struct dentry *dentry, char *buf, size_t size)
 	return simple_xattr_list(inode, xattrs, buf, size);
 }
 
+static int pidfs_permission(struct mnt_idmap *idmap, struct inode *inode,
+			    int mask)
+{
+	struct pid *pid = inode->i_private;
+	struct pidfs_attr *attr = pid->attr;
+
+	VFS_WARN_ON_ONCE(idmap != &nop_mnt_idmap);
+
+	scoped_guard(rcu) {
+		struct task_struct *task;
+
+		task = pid_task(pid, PIDTYPE_PID);
+		if (task) {
+			if (!same_thread_group(current, task) &&
+			    !may_signal_creds(current_cred(), __task_cred(task)))
+				return -EPERM;
+		} else {
+			if (task_tgid(current)->ino != attr->exit_tgid_ino &&
+			    !may_signal_creds(current_cred(), attr->exit_cred))
+				return -EPERM;
+		}
+	}
+
+	return generic_permission(&nop_mnt_idmap, inode, mask);
+}
+
 static const struct inode_operations pidfs_inode_operations = {
 	.getattr	= pidfs_getattr,
 	.setattr	= pidfs_setattr,
 	.listxattr	= pidfs_listxattr,
+	.permission	= pidfs_permission,
 };
 
 static void pidfs_evict_inode(struct inode *inode)
@@ -991,6 +1094,7 @@ static struct dentry *pidfs_stash_dentry(struct dentry **stashed,
 	if (ret)
 		return ERR_PTR(ret);
 
+	pidfs_update_inode(d_inode(dentry));
 	return stash_dentry(stashed, dentry);
 }
 
