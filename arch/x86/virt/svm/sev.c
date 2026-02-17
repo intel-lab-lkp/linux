@@ -127,6 +127,17 @@ static DEFINE_SPINLOCK(snp_leaked_pages_list_lock);
 
 static unsigned long snp_nr_leaked_pages;
 
+#define RMPOPT_TABLE_MAX_LIMIT_IN_TB	2
+#define NUM_TB(pfn_min, pfn_max)	\
+	(((pfn_max) - (pfn_min)) / (1 << (40 - PAGE_SHIFT)))
+
+struct rmpopt_socket_config {
+	unsigned long start_pfn, end_pfn;
+	cpumask_var_t cpulist;
+	int *node_id;
+	int current_node_idx;
+};
+
 #undef pr_fmt
 #define pr_fmt(fmt)	"SEV-SNP: " fmt
 
@@ -501,6 +512,185 @@ static bool __init setup_rmptable(void)
 }
 
 /*
+ * Build a cpumask of online primary threads, accounting for primary threads
+ * that have been offlined while their secondary threads are still online.
+ */
+static void get_cpumask_of_primary_threads(cpumask_var_t cpulist)
+{
+	cpumask_t cpus;
+	int cpu;
+
+	cpumask_copy(&cpus, cpu_online_mask);
+	for_each_cpu(cpu, &cpus) {
+		cpumask_set_cpu(cpu, cpulist);
+		cpumask_andnot(&cpus, &cpus, cpu_smt_mask(cpu));
+	}
+}
+
+static void __configure_rmpopt(void *val)
+{
+	u64 rmpopt_base = ((u64)val & PUD_MASK) | MSR_AMD64_RMPOPT_ENABLE;
+
+	wrmsrq(MSR_AMD64_RMPOPT_BASE, rmpopt_base);
+}
+
+static void configure_rmpopt_non_numa(cpumask_var_t primary_threads_cpulist)
+{
+	on_each_cpu_mask(primary_threads_cpulist, __configure_rmpopt, (void *)0, true);
+}
+
+static void free_rmpopt_socket_config(struct rmpopt_socket_config *socket)
+{
+	int i;
+
+	if (!socket)
+		return;
+
+	for (i = 0; i < topology_max_packages(); i++) {
+		free_cpumask_var(socket[i].cpulist);
+		kfree(socket[i].node_id);
+	}
+
+	kfree(socket);
+}
+DEFINE_FREE(free_rmpopt_socket_config, struct rmpopt_socket_config *, free_rmpopt_socket_config(_T))
+
+static void configure_rmpopt_large_physmem(cpumask_var_t primary_threads_cpulist)
+{
+	struct rmpopt_socket_config *socket __free(free_rmpopt_socket_config) = NULL;
+	int max_packages = topology_max_packages();
+	struct rmpopt_socket_config *sc;
+	int cpu, i;
+
+	socket = kcalloc(max_packages, sizeof(struct rmpopt_socket_config), GFP_KERNEL);
+	if (!socket)
+		return;
+
+	for (i = 0; i < max_packages; i++) {
+		sc = &socket[i];
+		if (!zalloc_cpumask_var(&sc->cpulist, GFP_KERNEL))
+			return;
+		sc->node_id = kcalloc(nr_node_ids, sizeof(int), GFP_KERNEL);
+		if (!sc->node_id)
+			return;
+		sc->current_node_idx = -1;
+	}
+
+	/*
+	 * Handle case of virtualized NUMA software domains, such as AMD Nodes Per Socket(NPS)
+	 * configurations. The kernel does not have an abstraction for physical sockets,
+	 * therefore, enumerate the physical sockets and Nodes Per Socket(NPS) information by
+	 * walking the online CPU list.
+	 */
+	for_each_cpu(cpu, primary_threads_cpulist) {
+		int socket_id, nid;
+
+		socket_id = topology_logical_package_id(cpu);
+		nid = cpu_to_node(cpu);
+		sc = &socket[socket_id];
+
+		/*
+		 * For each socket, determine the corresponding nodes and the socket's start
+		 * and end PFNs.
+		 * Record the node and the start and end PFNs of the first node found on the
+		 * socket, then record each subsequent node and update the end PFN for that
+		 * socket as additional nodes are found.
+		 */
+		if (sc->current_node_idx == -1) {
+			sc->current_node_idx = 0;
+			sc->node_id[sc->current_node_idx] = nid;
+			sc->start_pfn = node_start_pfn(nid);
+			sc->end_pfn = node_end_pfn(nid);
+		} else if (sc->node_id[sc->current_node_idx] != nid) {
+			sc->current_node_idx++;
+			sc->node_id[sc->current_node_idx] = nid;
+			sc->end_pfn = node_end_pfn(nid);
+		}
+
+		cpumask_set_cpu(cpu, sc->cpulist);
+	}
+
+	/*
+	 * If the "physical" socket has up to 2TB of memory, the per-CPU RMPOPT tables are
+	 * configured to the starting physical address of the socket, otherwise the tables
+	 * are configured per-node.
+	 */
+	for (i = 0; i < max_packages; i++) {
+		int num_tb_socket;
+		phys_addr_t pa;
+		int j;
+
+		sc = &socket[i];
+		num_tb_socket = NUM_TB(sc->start_pfn, sc->end_pfn) + 1;
+
+		pr_debug("socket start_pfn 0x%lx, end_pfn 0x%lx, socket cpu mask %*pbl\n",
+			 sc->start_pfn, sc->end_pfn, cpumask_pr_args(sc->cpulist));
+
+		if (num_tb_socket <= RMPOPT_TABLE_MAX_LIMIT_IN_TB) {
+			pa = PFN_PHYS(sc->start_pfn);
+			on_each_cpu_mask(sc->cpulist, __configure_rmpopt, (void *)pa, true);
+			continue;
+		}
+
+		for (j = 0; j <= sc->current_node_idx; j++) {
+			int nid = sc->node_id[j];
+			struct cpumask node_mask;
+
+			cpumask_and(&node_mask, cpumask_of_node(nid), sc->cpulist);
+			pa = PFN_PHYS(node_start_pfn(nid));
+
+			pr_debug("RMPOPT_BASE MSR on nodeid %d cpu mask %*pbl set to 0x%llx\n",
+				 nid, cpumask_pr_args(&node_mask), pa);
+			on_each_cpu_mask(&node_mask, __configure_rmpopt, (void *)pa, true);
+		}
+	}
+}
+
+static __init void configure_and_enable_rmpopt(void)
+{
+	cpumask_var_t primary_threads_cpulist;
+	int num_tb;
+
+	if (!cpu_feature_enabled(X86_FEATURE_RMPOPT)) {
+		pr_debug("RMPOPT not supported on this platform\n");
+		return;
+	}
+
+	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP)) {
+		pr_debug("RMPOPT optimizations not enabled as SNP support is not enabled\n");
+		return;
+	}
+
+	if (!(rmp_cfg & MSR_AMD64_SEG_RMP_ENABLED)) {
+		pr_info("RMPOPT optimizations not enabled, segmented RMP required\n");
+		return;
+	}
+
+	if (!zalloc_cpumask_var(&primary_threads_cpulist, GFP_KERNEL))
+		return;
+
+	num_tb = NUM_TB(min_low_pfn, max_pfn) + 1;
+	pr_debug("NUM_TB pages in system %d\n", num_tb);
+
+	/* Only one thread per core needs to set RMPOPT_BASE MSR as it is per-core */
+	get_cpumask_of_primary_threads(primary_threads_cpulist);
+
+	/*
+	 * Per-CPU RMPOPT tables support at most 2 TB of addressable memory for RMP optimizations.
+	 *
+	 * Fastpath RMPOPT configuration and setup:
+	 * For systems with <= 2 TB of RAM, configure each per-core RMPOPT base to 0,
+	 * ensuring all system RAM is RMP-optimized on all CPUs.
+	 */
+	if (num_tb <= RMPOPT_TABLE_MAX_LIMIT_IN_TB)
+		configure_rmpopt_non_numa(primary_threads_cpulist);
+	else
+		configure_rmpopt_large_physmem(primary_threads_cpulist);
+
+	free_cpumask_var(primary_threads_cpulist);
+}
+
+/*
  * Do the necessary preparations which are verified by the firmware as
  * described in the SNP_INIT_EX firmware command description in the SNP
  * firmware ABI spec.
@@ -554,6 +744,8 @@ int __init snp_rmptable_init(void)
 
 skip_enable:
 	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "x86/rmptable_init:online", __snp_enable, NULL);
+
+	configure_and_enable_rmpopt();
 
 	/*
 	 * Setting crash_kexec_post_notifiers to 'true' to ensure that SNP panic
