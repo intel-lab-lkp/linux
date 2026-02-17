@@ -16,9 +16,6 @@ maintainers:
   - Rajesh Gumasta <rgumasta@nvidia.com>
   - Akhil R <akhilrajeev@nvidia.com>
 
-allOf:
-  - $ref: dma-controller.yaml#
-
 properties:
   compatible:
     oneOf:
@@ -68,11 +65,23 @@ required:
   - compatible
   - reg
   - interrupts
-  - resets
-  - reset-names
   - "#dma-cells"
   - iommus
   - dma-channel-mask
+
+allOf:
+  - $ref: dma-controller.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - nvidia,tegra186-gpcdma
+              - nvidia,tegra194-gpcdma
+      then:
+        required:
+          - resets
+          - reset-names
 
 additionalProperties: false
 
