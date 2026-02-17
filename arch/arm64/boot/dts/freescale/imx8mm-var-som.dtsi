@@ -411,18 +411,6 @@
 	};
 };
 
-&usbotg1 {
-	dr_mode = "otg";
-	usb-role-switch;
-	status = "okay";
-};
-
-&usbotg2 {
-	dr_mode = "otg";
-	usb-role-switch;
-	status = "okay";
-};
-
 /* WIFI */
 &usdhc1 {
 	pinctrl-names = "default", "state_100mhz", "state_200mhz";
