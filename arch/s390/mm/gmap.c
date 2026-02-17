@@ -2271,6 +2271,7 @@ int s390_enable_skey(void)
 {
 	struct mm_struct *mm = current->mm;
 	int rc = 0;
+	int err;
 
 	mmap_write_lock(mm);
 	if (mm_uses_skeys(mm))
@@ -2282,7 +2283,9 @@ int s390_enable_skey(void)
 		mm->context.uses_skeys = 0;
 		goto out_up;
 	}
-	walk_page_range(mm, 0, TASK_SIZE, &enable_skey_walk_ops, NULL);
+	err = walk_page_range(mm, 0, TASK_SIZE, &enable_skey_walk_ops, NULL);
+	if (err < 0)
+		rc = err;
 
 out_up:
 	mmap_write_unlock(mm);
@@ -2305,11 +2308,15 @@ static const struct mm_walk_ops reset_cmma_walk_ops = {
 	.walk_lock		= PGWALK_WRLOCK,
 };
 
-void s390_reset_cmma(struct mm_struct *mm)
+int s390_reset_cmma(struct mm_struct *mm)
 {
+	int err;
+
 	mmap_write_lock(mm);
-	walk_page_range(mm, 0, TASK_SIZE, &reset_cmma_walk_ops, NULL);
+	err = walk_page_range(mm, 0, TASK_SIZE, &reset_cmma_walk_ops, NULL);
 	mmap_write_unlock(mm);
+
+	return (err < 0) ? err : 0;
 }
 EXPORT_SYMBOL_GPL(s390_reset_cmma);
 
