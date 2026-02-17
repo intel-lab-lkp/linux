@@ -909,7 +909,12 @@ out_unlock:
 static int finish_cpu(unsigned int cpu)
 {
 	struct task_struct *idle = idle_thread_get(cpu);
-	struct mm_struct *mm = idle->active_mm;
+	struct mm_struct *mm;
+
+	if (IS_ERR(idle))
+		return PTR_ERR(idle);
+
+	mm = idle->active_mm;
 
 	/*
 	 * sched_force_init_mm() ensured the use of &init_mm,
