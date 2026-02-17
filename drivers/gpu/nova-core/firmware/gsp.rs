@@ -32,9 +32,13 @@ use crate::{
 /// that scheme before nova-core becomes stable, which means this module will eventually be
 /// removed.
 mod elf {
+    use core::{
+        ffi::CStr,
+        mem::size_of, //
+    };
+
     use kernel::{
         bindings,
-        prelude::*,
         transmute::FromBytes, //
     };
 
