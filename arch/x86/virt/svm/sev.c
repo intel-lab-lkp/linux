@@ -20,6 +20,7 @@
 #include <linux/amd-iommu.h>
 #include <linux/nospec.h>
 #include <linux/kthread.h>
+#include <linux/configfs.h>
 
 #include <asm/sev.h>
 #include <asm/processor.h>
@@ -145,6 +146,10 @@ struct rmpopt_socket_config {
 	int *node_id;
 	int current_node_idx;
 };
+
+#define RMPOPT_CONFIGFS_NAME	"rmpopt"
+
+static atomic_t rmpopt_in_progress = ATOMIC_INIT(0);
 
 #undef pr_fmt
 #define pr_fmt(fmt)	"SEV-SNP: " fmt
@@ -581,6 +586,9 @@ static int rmpopt_kthread(void *__unused)
 			cond_resched();
 		}
 
+		/* Clear in_progress flag before going to sleep */
+		atomic_set(&rmpopt_in_progress, 0);
+
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
 	}
@@ -593,6 +601,75 @@ static void rmpopt_all_physmem(void)
 {
 	if (rmpopt_task)
 		wake_up_process(rmpopt_task);
+}
+
+static ssize_t rmpopt_action_show(struct config_item *item, char *page)
+{
+	return sprintf(page, "RMP optimization in progress: %s\n",
+		       atomic_read(&rmpopt_in_progress) == 1 ? "Yes" : "No");
+}
+
+static ssize_t rmpopt_action_store(struct config_item *item,
+				   const char *page, size_t count)
+{
+	int in_progress_flag, ret;
+	unsigned int action;
+
+	ret = kstrtouint(page, 10, &action);
+	if (ret)
+		return ret;
+
+	if (action == 1) {
+		/* perform RMP re-optimizations */
+		in_progress_flag = atomic_cmpxchg(&rmpopt_in_progress, 0, 1);
+		if (!in_progress_flag)
+			rmpopt_all_physmem();
+	} else {
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static ssize_t rmpopt_description_show(struct config_item *item, char *page)
+{
+	return sprintf(page, "[RMPOPT]\n\necho 1 > action to perform RMP optimization.\n");
+}
+
+CONFIGFS_ATTR(rmpopt_, action);
+CONFIGFS_ATTR_RO(rmpopt_, description);
+
+static struct configfs_attribute *rmpopt_attrs[] = {
+	&rmpopt_attr_action,
+	&rmpopt_attr_description,
+	NULL,
+};
+
+static const struct config_item_type rmpopt_config_type = {
+	.ct_attrs       = rmpopt_attrs,
+	.ct_owner       = THIS_MODULE,
+};
+
+static struct configfs_subsystem rmpopt_configfs = {
+	.su_group = {
+		.cg_item = {
+		.ci_namebuf = RMPOPT_CONFIGFS_NAME,
+		.ci_type = &rmpopt_config_type,
+		},
+	},
+	.su_mutex = __MUTEX_INITIALIZER(rmpopt_configfs.su_mutex),
+};
+
+static int rmpopt_configfs_setup(void)
+{
+	int ret;
+
+	config_group_init(&rmpopt_configfs.su_group);
+	ret = configfs_register_subsystem(&rmpopt_configfs);
+	if (ret)
+		pr_err("Error %d while registering subsystem %s\n", ret, RMPOPT_CONFIGFS_NAME);
+
+	return ret;
 }
 
 static void __configure_rmpopt(void *val)
@@ -769,6 +846,8 @@ static __init void configure_and_enable_rmpopt(void)
 	 * optimizations on all physical memory.
 	 */
 	rmpopt_all_physmem();
+
+	rmpopt_configfs_setup();
 
 free_cpumask:
 	free_cpumask_var(primary_threads_cpulist);
