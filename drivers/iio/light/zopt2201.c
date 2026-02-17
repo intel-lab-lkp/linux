@@ -10,16 +10,15 @@
  * TODO: interrupt support, ALS/UVB raw mode
  */
 
-#include <linux/module.h>
-#include <linux/i2c.h>
-#include <linux/mutex.h>
-#include <linux/err.h>
 #include <linux/delay.h>
+#include <linux/err.h>
+#include <linux/i2c.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/unaligned.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-
-#include <linux/unaligned.h>
 
 #define ZOPT2201_DRV_NAME "zopt2201"
 
