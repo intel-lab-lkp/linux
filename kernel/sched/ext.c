@@ -1476,9 +1476,6 @@ static void enqueue_task_scx(struct rq *rq, struct task_struct *p, int enq_flags
 
 	enq_flags |= rq->scx.extra_enq_flags;
 
-	if (sticky_cpu >= 0)
-		p->scx.sticky_cpu = -1;
-
 	/*
 	 * Restoring a running task will be immediately followed by
 	 * set_next_task_scx() which expects the task to not be on the BPF
@@ -1509,6 +1506,9 @@ static void enqueue_task_scx(struct rq *rq, struct task_struct *p, int enq_flags
 		dl_server_start(&rq->ext_server);
 
 	do_enqueue_task(rq, p, enq_flags, sticky_cpu);
+
+	if (sticky_cpu >= 0)
+		p->scx.sticky_cpu = -1;
 out:
 	rq->scx.flags &= ~SCX_RQ_IN_WAKEUP;
 
@@ -1670,10 +1670,13 @@ static void move_remote_task_to_local_dsq(struct task_struct *p, u64 enq_flags,
 {
 	lockdep_assert_rq_held(src_rq);
 
-	/* the following marks @p MIGRATING which excludes dequeue */
+	/*
+	 * Set sticky_cpu before deactivate_task() to properly mark the
+	 * beginning of an SCX-internal migration.
+	 */
+	p->scx.sticky_cpu = cpu_of(dst_rq);
 	deactivate_task(src_rq, p, 0);
 	set_task_cpu(p, cpu_of(dst_rq));
-	p->scx.sticky_cpu = cpu_of(dst_rq);
 
 	raw_spin_rq_unlock(src_rq);
 	raw_spin_rq_lock(dst_rq);
