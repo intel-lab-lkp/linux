@@ -231,6 +231,12 @@ static inline int alternatives_text_reserved(void *start, void *end)
 	ALTERNATIVE(ALTERNATIVE_2(oldinstr, newinstr1, ft_flags1, newinstr2, ft_flags2), \
 		      newinstr3, ft_flags3)
 
+#define ALTERNATIVE_4(oldinstr, newinstr1, ft_flags1, newinstr2, ft_flags2,   \
+		      newinstr3, ft_flags3, newinstr4, ft_flags4)	\
+	ALTERNATIVE(ALTERNATIVE_3(oldinstr, newinstr1, ft_flags1,	\
+				  newinstr2, ft_flags2, newinstr3, ft_flags3),\
+		    newinstr4, ft_flags4)
+
 /*
  * Alternative instructions for different CPU types or capabilities.
  *
