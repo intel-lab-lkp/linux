@@ -92,20 +92,12 @@ struct font_desc {
 #define FONT6x8_IDX	12
 #define TER10x18_IDX	13
 
-extern const struct font_desc	font_vga_8x8,
-			font_vga_8x16,
-			font_pearl_8x8,
-			font_vga_6x11,
-			font_7x14,
-			font_10x18,
-			font_sun_8x16,
-			font_sun_12x22,
-			font_acorn_8x8,
-			font_mini_4x6,
-			font_6x10,
-			font_ter_16x32,
-			font_6x8,
-			font_ter_10x18;
+#if defined(CONFIG_FONT_8x8)
+extern const struct font_desc font_vga_8x8;
+#endif
+#if defined(CONFIG_FONT_8x16)
+extern const struct font_desc font_vga_8x16;
+#endif
 
 /* Find a font with a specific name */
 
@@ -119,17 +111,5 @@ extern const struct font_desc *get_default_font(int xres, int yres,
 
 /* Max. length for the name of a predefined font */
 #define MAX_FONT_NAME	32
-
-/* Extra word getters */
-#define REFCOUNT(fd)	(((int *)(fd))[-1])
-#define FNTSIZE(fd)	(((int *)(fd))[-2])
-#define FNTSUM(fd)	(((int *)(fd))[-4])
-
-#define FONT_EXTRA_WORDS 4
-
-struct font_data {
-	unsigned int extra[FONT_EXTRA_WORDS];
-	unsigned char data[];
-} __packed;
 
 #endif /* _VIDEO_FONT_H */
