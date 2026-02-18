@@ -1308,6 +1308,7 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 		dcset = find_css_set(cset, cset->dfl_cgrp->dom_cgrp);
 		if (!dcset) {
 			put_css_set(cset);
+			free_cgrp_cset_links(&tmp_links);
 			return NULL;
 		}
 
