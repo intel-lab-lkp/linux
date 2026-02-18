@@ -6,6 +6,7 @@
 #include <linux/dma-buf-mapping.h>
 #include <linux/dma-resv.h>
 #include <linux/dma-buf.h>
+#include <linux/seq_file.h>
 
 static struct scatterlist *fill_sg_entry(struct scatterlist *sgl, size_t length,
 					 dma_addr_t addr)
@@ -292,3 +293,97 @@ int dma_buf_match_mapping(struct dma_buf_match_args *args,
 	return -EINVAL;
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_match_mapping, "DMA_BUF");
+
+static int dma_buf_sgt_match(struct dma_buf *dmabuf,
+			     const struct dma_buf_mapping_match *exp,
+			     const struct dma_buf_mapping_match *imp)
+{
+	switch (exp->sgt_data.exporter_requires_p2p) {
+	case DMA_SGT_NO_P2P:
+		return 0;
+	case DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE:
+		if (WARN_ON(!exp->sgt_data.exporting_p2p_device) ||
+		    imp->sgt_data.importer_accepts_p2p !=
+			    DMA_SGT_IMPORTER_ACCEPTS_P2P)
+			return -EOPNOTSUPP;
+		if (pci_p2pdma_distance(exp->sgt_data.exporting_p2p_device,
+					imp->sgt_data.importing_dma_device,
+					true) < 0)
+			return -EOPNOTSUPP;
+		return 0;
+	}
+	return 0;
+}
+
+static inline void
+dma_buf_sgt_finish_match(struct dma_buf_match_args *args,
+			 const struct dma_buf_mapping_match *exp,
+			 const struct dma_buf_mapping_match *imp)
+{
+	struct dma_buf_attachment *attach = args->attach;
+
+	attach->map_type = (struct dma_buf_mapping_match) {
+		.type = &dma_buf_mapping_sgt_type,
+		.exp_ops = exp->exp_ops,
+		.sgt_data = {
+			.importing_dma_device = imp->sgt_data.importing_dma_device,
+			/* exporting_p2p_device is left opaque */
+			.importer_accepts_p2p = imp->sgt_data.importer_accepts_p2p,
+			.exporter_requires_p2p = exp->sgt_data.exporter_requires_p2p,
+		},
+	};
+
+	/*
+	 * Setup the SGT type variables stored in attach because importers and
+	 * exporters that do not natively use mappings expect them to be there.
+	 * When converting to use mappings users should use the match versions
+	 * of these instead.
+	 */
+	attach->dev = imp->sgt_data.importing_dma_device;
+	attach->peer2peer = attach->map_type.sgt_data.importer_accepts_p2p ==
+			    DMA_SGT_IMPORTER_ACCEPTS_P2P;
+}
+
+static void dma_buf_sgt_debugfs_dump(struct seq_file *s,
+				     struct dma_buf_attachment *attach)
+{
+	seq_printf(s, " %s", dev_name(dma_buf_sgt_dma_device(attach)));
+}
+
+struct dma_buf_mapping_type dma_buf_mapping_sgt_type = {
+	.name = "DMA Mapped Scatter Gather Table",
+	.match = dma_buf_sgt_match,
+	.finish_match = dma_buf_sgt_finish_match,
+	.debugfs_dump = dma_buf_sgt_debugfs_dump,
+};
+EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_sgt_type, "DMA_BUF");
+
+static struct sg_table *
+dma_buf_sgt_compat_map_dma_buf(struct dma_buf_attachment *attach,
+			       enum dma_data_direction dir)
+{
+	return attach->dmabuf->ops->map_dma_buf(attach, dir);
+}
+
+static void dma_buf_sgt_compat_unmap_dma_buf(struct dma_buf_attachment *attach,
+					     struct sg_table *sgt,
+					     enum dma_data_direction dir)
+{
+	attach->dmabuf->ops->unmap_dma_buf(attach, sgt, dir);
+}
+
+/* Route the classic map/unmap ops through the exp ops for old importers */
+static const struct dma_buf_mapping_sgt_exp_ops dma_buf_sgt_compat_exp_ops = {
+	.map_dma_buf = dma_buf_sgt_compat_map_dma_buf,
+	.unmap_dma_buf = dma_buf_sgt_compat_unmap_dma_buf,
+};
+
+/*
+ * This mapping type is used for unaware exporters that do not support
+ * match_mapping(). It wraps the dma_buf ops for SGT mappings into a mapping
+ * type so aware importers can transparently work with unaware exporters. This
+ * does not require p2p because old exporters will check it through the
+ * attach->peer2peer mechanism.
+ */
+const struct dma_buf_mapping_match dma_buf_sgt_exp_compat_match =
+	DMA_BUF_EMAPPING_SGT(&dma_buf_sgt_compat_exp_ops);
