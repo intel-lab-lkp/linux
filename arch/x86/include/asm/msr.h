@@ -65,6 +65,8 @@ static inline void do_trace_rdpmc(u32 msr, u64 val, int failed) {}
 
 /* The GNU Assembler (Gas) with Binutils 2.41 adds the .insn directive support */
 #if defined(CONFIG_AS_IS_GNU) && CONFIG_AS_VERSION >= 24100
+#define ASM_RDMSR_IMM			\
+	" .insn VEX.128.F2.M7.W0 0xf6 /0, %[msr]%{:u32}, %[val]\n\t"
 #define ASM_WRMSRNS_IMM			\
 	" .insn VEX.128.F3.M7.W0 0xf6 /0, %[val], %[msr]%{:u32}\n\t"
 #else
@@ -74,9 +76,16 @@ static inline void do_trace_rdpmc(u32 msr, u64 val, int failed) {}
  * The register operand is encoded as %rax because all uses of the immediate
  * form MSR access instructions reference %rax as the register operand.
  */
+#define ASM_RDMSR_IMM			\
+	" .byte 0xc4,0xe7,0x7b,0xf6,0xc0; .long %c[msr]"
 #define ASM_WRMSRNS_IMM			\
 	" .byte 0xc4,0xe7,0x7a,0xf6,0xc0; .long %c[msr]"
 #endif
+
+#define RDMSR_AND_SAVE_RESULT		\
+	"rdmsr\n\t"			\
+	"shl $0x20, %%rdx\n\t"		\
+	"or %%rdx, %%rax\n\t"
 
 #define PREPARE_RDX_FOR_WRMSR		\
 	"mov %%rax, %%rdx\n\t"		\
@@ -93,16 +102,76 @@ static inline void do_trace_rdpmc(u32 msr, u64 val, int failed) {}
  * think of extending them - you will be slapped with a stinking trout or a frozen
  * shark will reach you, wherever you are! You've been warned.
  */
-static __always_inline u64 __rdmsr(u32 msr)
+static __always_inline bool __rdmsrq_variable(u32 msr, u64 *val, int type)
+ {
+#ifdef CONFIG_X86_64
+	BUILD_BUG_ON(__builtin_constant_p(msr));
+
+	asm_inline volatile goto(
+		"1:\n"
+		RDMSR_AND_SAVE_RESULT
+		_ASM_EXTABLE_TYPE(1b, %l[badmsr], %c[type])	/* For RDMSR */
+
+		: [val] "=a" (*val)
+		: "c" (msr), [type] "i" (type)
+		: "rdx"
+		: badmsr);
+#else
+	asm_inline volatile goto(
+		"1: rdmsr\n\t"
+		_ASM_EXTABLE_TYPE(1b, %l[badmsr], %c[type])	/* For RDMSR */
+
+		: "=A" (*val)
+		: "c" (msr), [type] "i" (type)
+		:
+		: badmsr);
+#endif
+
+	return false;
+
+badmsr:
+	*val = 0;
+
+	return true;
+}
+
+#ifdef CONFIG_X86_64
+static __always_inline bool __rdmsrq_constant(u32 msr, u64 *val, int type)
 {
-	EAX_EDX_DECLARE_ARGS(val, low, high);
+	BUILD_BUG_ON(!__builtin_constant_p(msr));
 
-	asm volatile("1: rdmsr\n"
-		     "2:\n"
-		     _ASM_EXTABLE_TYPE(1b, 2b, EX_TYPE_RDMSR)
-		     : EAX_EDX_RET(val, low, high) : "c" (msr));
+	asm_inline volatile goto(
+		"1:\n"
+		ALTERNATIVE("mov %[msr], %%ecx\n\t"
+			    "2:\n"
+			    RDMSR_AND_SAVE_RESULT,
+			    ASM_RDMSR_IMM,
+			    X86_FEATURE_MSR_IMM)
+		_ASM_EXTABLE_TYPE(1b, %l[badmsr], %c[type])	/* For RDMSR immediate */
+		_ASM_EXTABLE_TYPE(2b, %l[badmsr], %c[type])	/* For RDMSR */
 
-	return EAX_EDX_VAL(val, low, high);
+		: [val] "=a" (*val)
+		: [msr] "i" (msr), [type] "i" (type)
+		: "ecx", "rdx"
+		: badmsr);
+
+	return false;
+
+badmsr:
+	*val = 0;
+
+	return true;
+}
+#endif
+
+static __always_inline bool __rdmsr(u32 msr, u64 *val, int type)
+{
+#ifdef CONFIG_X86_64
+	if (__builtin_constant_p(msr))
+		return __rdmsrq_constant(msr, val, type);
+#endif
+
+	return __rdmsrq_variable(msr, val, type);
 }
 
 static __always_inline bool __wrmsrq_variable(u32 msr, u64 val, int type)
@@ -177,17 +246,21 @@ static __always_inline bool __wrmsrq(u32 msr, u64 val, int type)
 	return __wrmsrq_variable(msr, val, type);
 }
 
+static __always_inline u64 native_rdmsrq(u32 msr)
+{
+	u64 val;
+
+	__rdmsr(msr, &val, EX_TYPE_RDMSR);
+
+	return val;
+}
+
 #define native_rdmsr(msr, val1, val2)			\
 do {							\
-	u64 __val = __rdmsr((msr));			\
+	u64 __val = native_rdmsrq((msr));		\
 	(void)((val1) = (u32)__val);			\
 	(void)((val2) = (u32)(__val >> 32));		\
 } while (0)
-
-static __always_inline u64 native_rdmsrq(u32 msr)
-{
-	return __rdmsr(msr);
-}
 
 static __always_inline void native_wrmsrq(u32 msr, u64 val)
 {
@@ -201,23 +274,12 @@ static __always_inline void native_wrmsr(u32 msr, u32 low, u32 high)
 
 static inline u64 native_read_msr(u32 msr)
 {
-	return __rdmsr(msr);
+	return native_rdmsrq(msr);
 }
 
-static inline int native_read_msr_safe(u32 msr, u64 *p)
+static inline int native_read_msr_safe(u32 msr, u64 *val)
 {
-	int err;
-	EAX_EDX_DECLARE_ARGS(val, low, high);
-
-	asm volatile("1: rdmsr ; xor %[err],%[err]\n"
-		     "2:\n\t"
-		     _ASM_EXTABLE_TYPE_REG(1b, 2b, EX_TYPE_RDMSR_SAFE, %[err])
-		     : [err] "=r" (err), EAX_EDX_RET(val, low, high)
-		     : "c" (msr));
-
-	*p = EAX_EDX_VAL(val, low, high);
-
-	return err;
+	return __rdmsr(msr, val, EX_TYPE_RDMSR_SAFE) ? -EIO : 0;
 }
 
 /* Can be uninlined because referenced by paravirt */
