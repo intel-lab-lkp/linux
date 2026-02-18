@@ -255,6 +255,7 @@ static bool g2h_fence_needs_alloc(struct g2h_fence *g2h_fence)
 
 #define CTB_DESC_SIZE		ALIGN(sizeof(struct guc_ct_buffer_desc), SZ_2K)
 #define CTB_H2G_BUFFER_OFFSET	(CTB_DESC_SIZE * 2)
+#define CTB_G2H_BUFFER_OFFSET	(CTB_DESC_SIZE * 2)
 #define CTB_H2G_BUFFER_SIZE	(SZ_4K)
 #define CTB_H2G_BUFFER_DWORDS	(CTB_H2G_BUFFER_SIZE / sizeof(u32))
 #define CTB_G2H_BUFFER_SIZE	(SZ_128K)
@@ -279,10 +280,14 @@ long xe_guc_ct_queue_proc_time_jiffies(struct xe_guc_ct *ct)
 	return (CTB_H2G_BUFFER_SIZE / SZ_4K) * HZ;
 }
 
-static size_t guc_ct_size(void)
+static size_t guc_h2g_size(void)
 {
-	return CTB_H2G_BUFFER_OFFSET + CTB_H2G_BUFFER_SIZE +
-		CTB_G2H_BUFFER_SIZE;
+	return CTB_H2G_BUFFER_OFFSET + CTB_H2G_BUFFER_SIZE;
+}
+
+static size_t guc_g2h_size(void)
+{
+	return CTB_G2H_BUFFER_OFFSET + CTB_G2H_BUFFER_SIZE;
 }
 
 static void guc_ct_fini(struct drm_device *drm, void *arg)
@@ -311,7 +316,8 @@ int xe_guc_ct_init_noalloc(struct xe_guc_ct *ct)
 	struct xe_gt *gt = ct_to_gt(ct);
 	int err;
 
-	xe_gt_assert(gt, !(guc_ct_size() % PAGE_SIZE));
+	xe_gt_assert(gt, !(guc_h2g_size() % PAGE_SIZE));
+	xe_gt_assert(gt, !(guc_g2h_size() % PAGE_SIZE));
 
 	err = drmm_mutex_init(&xe->drm, &ct->lock);
 	if (err)
@@ -356,7 +362,7 @@ int xe_guc_ct_init(struct xe_guc_ct *ct)
 	struct xe_tile *tile = gt_to_tile(gt);
 	struct xe_bo *bo;
 
-	bo = xe_managed_bo_create_pin_map(xe, tile, guc_ct_size(),
+	bo = xe_managed_bo_create_pin_map(xe, tile, guc_h2g_size(),
 					  XE_BO_FLAG_SYSTEM |
 					  XE_BO_FLAG_GGTT |
 					  XE_BO_FLAG_GGTT_INVALIDATE |
@@ -364,7 +370,17 @@ int xe_guc_ct_init(struct xe_guc_ct *ct)
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);
 
-	ct->bo = bo;
+	ct->ctbs.h2g.bo = bo;
+
+	bo = xe_managed_bo_create_pin_map(xe, tile, guc_g2h_size(),
+					  XE_BO_FLAG_SYSTEM |
+					  XE_BO_FLAG_GGTT |
+					  XE_BO_FLAG_GGTT_INVALIDATE |
+					  XE_BO_FLAG_PINNED_NORESTORE);
+	if (IS_ERR(bo))
+		return PTR_ERR(bo);
+
+	ct->ctbs.g2h.bo = bo;
 
 	return devm_add_action_or_reset(xe->drm.dev, guc_action_disable_ct, ct);
 }
@@ -389,7 +405,7 @@ int xe_guc_ct_init_post_hwconfig(struct xe_guc_ct *ct)
 	xe_assert(xe, !xe_guc_ct_enabled(ct));
 
 	if (IS_DGFX(xe)) {
-		ret = xe_managed_bo_reinit_in_vram(xe, tile, &ct->bo);
+		ret = xe_managed_bo_reinit_in_vram(xe, tile, &ct->ctbs.h2g.bo);
 		if (ret)
 			return ret;
 	}
@@ -439,8 +455,7 @@ static void guc_ct_ctb_g2h_init(struct xe_device *xe, struct guc_ctb *g2h,
 	g2h->desc = IOSYS_MAP_INIT_OFFSET(map, CTB_DESC_SIZE);
 	xe_map_memset(xe, &g2h->desc, 0, 0, sizeof(struct guc_ct_buffer_desc));
 
-	g2h->cmds = IOSYS_MAP_INIT_OFFSET(map, CTB_H2G_BUFFER_OFFSET +
-					    CTB_H2G_BUFFER_SIZE);
+	g2h->cmds = IOSYS_MAP_INIT_OFFSET(map, CTB_G2H_BUFFER_OFFSET);
 }
 
 static int guc_ct_ctb_h2g_register(struct xe_guc_ct *ct)
@@ -449,8 +464,8 @@ static int guc_ct_ctb_h2g_register(struct xe_guc_ct *ct)
 	u32 desc_addr, ctb_addr, size;
 	int err;
 
-	desc_addr = xe_bo_ggtt_addr(ct->bo);
-	ctb_addr = xe_bo_ggtt_addr(ct->bo) + CTB_H2G_BUFFER_OFFSET;
+	desc_addr = xe_bo_ggtt_addr(ct->ctbs.h2g.bo);
+	ctb_addr = xe_bo_ggtt_addr(ct->ctbs.h2g.bo) + CTB_H2G_BUFFER_OFFSET;
 	size = ct->ctbs.h2g.info.size * sizeof(u32);
 
 	err = xe_guc_self_cfg64(guc,
@@ -476,9 +491,8 @@ static int guc_ct_ctb_g2h_register(struct xe_guc_ct *ct)
 	u32 desc_addr, ctb_addr, size;
 	int err;
 
-	desc_addr = xe_bo_ggtt_addr(ct->bo) + CTB_DESC_SIZE;
-	ctb_addr = xe_bo_ggtt_addr(ct->bo) + CTB_H2G_BUFFER_OFFSET +
-		CTB_H2G_BUFFER_SIZE;
+	desc_addr = xe_bo_ggtt_addr(ct->ctbs.g2h.bo) + CTB_DESC_SIZE;
+	ctb_addr = xe_bo_ggtt_addr(ct->ctbs.g2h.bo) + CTB_G2H_BUFFER_OFFSET;
 	size = ct->ctbs.g2h.info.size * sizeof(u32);
 
 	err = xe_guc_self_cfg64(guc,
@@ -605,9 +619,12 @@ static int __xe_guc_ct_start(struct xe_guc_ct *ct, bool needs_register)
 	xe_gt_assert(gt, !xe_guc_ct_enabled(ct));
 
 	if (needs_register) {
-		xe_map_memset(xe, &ct->bo->vmap, 0, 0, xe_bo_size(ct->bo));
-		guc_ct_ctb_h2g_init(xe, &ct->ctbs.h2g, &ct->bo->vmap);
-		guc_ct_ctb_g2h_init(xe, &ct->ctbs.g2h, &ct->bo->vmap);
+		xe_map_memset(xe, &ct->ctbs.h2g.bo->vmap, 0, 0,
+			      xe_bo_size(ct->ctbs.h2g.bo));
+		xe_map_memset(xe, &ct->ctbs.g2h.bo->vmap, 0, 0,
+			      xe_bo_size(ct->ctbs.g2h.bo));
+		guc_ct_ctb_h2g_init(xe, &ct->ctbs.h2g, &ct->ctbs.h2g.bo->vmap);
+		guc_ct_ctb_g2h_init(xe, &ct->ctbs.g2h, &ct->ctbs.g2h.bo->vmap);
 
 		err = guc_ct_ctb_h2g_register(ct);
 		if (err)
@@ -624,7 +641,7 @@ static int __xe_guc_ct_start(struct xe_guc_ct *ct, bool needs_register)
 		ct->ctbs.h2g.info.broken = false;
 		ct->ctbs.g2h.info.broken = false;
 		/* Skip everything in H2G buffer */
-		xe_map_memset(xe, &ct->bo->vmap, CTB_H2G_BUFFER_OFFSET, 0,
+		xe_map_memset(xe, &ct->ctbs.h2g.bo->vmap, CTB_H2G_BUFFER_OFFSET, 0,
 			      CTB_H2G_BUFFER_SIZE);
 	}
 
@@ -1962,8 +1979,9 @@ static struct xe_guc_ct_snapshot *guc_ct_snapshot_alloc(struct xe_guc_ct *ct, bo
 	if (!snapshot)
 		return NULL;
 
-	if (ct->bo && want_ctb) {
-		snapshot->ctb_size = xe_bo_size(ct->bo);
+	if (ct->ctbs.h2g.bo && ct->ctbs.g2h.bo && want_ctb) {
+		snapshot->ctb_size = xe_bo_size(ct->ctbs.h2g.bo) +
+			xe_bo_size(ct->ctbs.g2h.bo);
 		snapshot->ctb = kmalloc(snapshot->ctb_size, atomic ? GFP_ATOMIC : GFP_KERNEL);
 	}
 
@@ -2011,8 +2029,13 @@ static struct xe_guc_ct_snapshot *guc_ct_snapshot_capture(struct xe_guc_ct *ct, 
 		guc_ctb_snapshot_capture(xe, &ct->ctbs.g2h, &snapshot->g2h);
 	}
 
-	if (ct->bo && snapshot->ctb)
-		xe_map_memcpy_from(xe, snapshot->ctb, &ct->bo->vmap, 0, snapshot->ctb_size);
+	if (ct->ctbs.h2g.bo && ct->ctbs.g2h.bo && snapshot->ctb) {
+		xe_map_memcpy_from(xe, snapshot->ctb, &ct->ctbs.h2g.bo->vmap, 0,
+				   xe_bo_size(ct->ctbs.h2g.bo));
+		xe_map_memcpy_from(xe, snapshot->ctb + xe_bo_size(ct->ctbs.h2g.bo),
+				   &ct->ctbs.g2h.bo->vmap, 0,
+				   xe_bo_size(ct->ctbs.g2h.bo));
+	}
 
 	return snapshot;
 }
