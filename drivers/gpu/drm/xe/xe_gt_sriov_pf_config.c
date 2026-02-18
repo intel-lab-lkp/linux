@@ -1451,8 +1451,7 @@ int xe_gt_sriov_pf_config_set_fair_dbs(struct xe_gt *gt, unsigned int vfid,
 
 static u64 pf_get_lmem_alignment(struct xe_gt *gt)
 {
-	/* this might be platform dependent */
-	return SZ_2M;
+	return xe_lmtt_page_size(&gt->tile->sriov.pf.lmtt);
 }
 
 static u64 pf_get_min_spare_lmem(struct xe_gt *gt)
