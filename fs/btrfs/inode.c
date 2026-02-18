@@ -9951,9 +9951,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 			ret = -EFAULT;
 			goto out_cb;
 		}
-		if (bytes < min_folio_size)
-			folio_zero_range(folio, bytes, min_folio_size - bytes);
-		ret = bio_add_folio(&cb->bbio.bio, folio, folio_size(folio), 0);
+		ret = bio_add_folio(&cb->bbio.bio, folio, bytes, 0);
 		if (unlikely(!ret)) {
 			folio_put(folio);
 			ret = -EINVAL;
