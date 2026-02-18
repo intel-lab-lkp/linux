@@ -157,7 +157,7 @@ struct pkt_attrib {
 	u8 key_idx;
 	u8 qos_en;
 	u8 ht_en;
-	u8 raid;/* rate adpative id */
+	u8 raid;/* rate adaptive id */
 	u8 bwmode;
 	u8 ch_offset;/* PRIME_CHNL_OFFSET */
 	u8 sgi;/* short GI */
