@@ -2045,17 +2045,19 @@ static void rb_meta_validate_events(struct ring_buffer_per_cpu *cpu_buffer)
 		if (ret < 0) {
 			pr_info("Ring buffer meta [%d] invalid buffer page\n",
 				cpu_buffer->cpu);
-			goto invalid;
+			/* Instead of invalidate whole ring buffer, just clear this subbuffer. */
+			local_set(&head_page->entries, 0);
+			local_set(&head_page->page->commit, 0);
+			/* TODO: commit an event to mark this is broken. */
+		} else {
+			/* If the buffer has content, update pages_touched */
+			if (ret)
+				local_inc(&cpu_buffer->pages_touched);
+
+			entries += ret;
+			entry_bytes += local_read(&head_page->page->commit);
+			local_set(&cpu_buffer->head_page->entries, ret);
 		}
-
-		/* If the buffer has content, update pages_touched */
-		if (ret)
-			local_inc(&cpu_buffer->pages_touched);
-
-		entries += ret;
-		entry_bytes += local_read(&head_page->page->commit);
-		local_set(&cpu_buffer->head_page->entries, ret);
-
 		if (head_page == cpu_buffer->commit_page)
 			break;
 	}
