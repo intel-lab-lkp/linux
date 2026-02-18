@@ -2973,8 +2973,6 @@ static int macb_open(struct net_device *dev)
 	if (err)
 		goto phy_off;
 
-	netif_tx_start_all_queues(dev);
-
 	if (bp->ptp_info)
 		bp->ptp_info->ptp_init(dev);
 
@@ -5607,6 +5605,7 @@ static int macb_probe(struct platform_device *pdev)
 	if (err)
 		goto err_out_phy_exit;
 
+	netif_tx_stop_all_queues(dev);
 	netif_carrier_off(dev);
 
 	err = register_netdev(dev);
