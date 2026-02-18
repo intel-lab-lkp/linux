@@ -764,7 +764,7 @@ static int xe_bo_move_dmabuf(struct ttm_buffer_object *ttm_bo,
 		ttm_bo->sg = NULL;
 	}
 
-	sg = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
+	sg = dma_buf_sgt_map_attachment(attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR(sg))
 		return PTR_ERR(sg);
 

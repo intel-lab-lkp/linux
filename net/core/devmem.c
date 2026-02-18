@@ -223,8 +223,8 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 		goto err_free_binding;
 	}
 
-	binding->sgt = dma_buf_map_attachment_unlocked(binding->attachment,
-						       direction);
+	binding->sgt = dma_buf_sgt_map_attachment_unlocked(binding->attachment,
+							   direction);
 	if (IS_ERR(binding->sgt)) {
 		err = PTR_ERR(binding->sgt);
 		NL_SET_ERR_MSG(extack, "Failed to map dmabuf attachment");

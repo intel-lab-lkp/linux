@@ -101,7 +101,7 @@ int dma_buf_match_mapping(struct dma_buf_match_args *args,
  *
  * When this type is matched the map/unmap functions are:
  *
- *  dma_buf_map_attachment()
+ *  dma_buf_sgt_map_attachment()
  *  dma_buf_unmap_attachment()
  *
  * The struct sg_table returned by those functions has only the DMA portions
@@ -117,7 +117,7 @@ struct dma_buf_mapping_sgt_exp_ops {
 	/**
 	 * @map_dma_buf:
 	 *
-	 * This is called by dma_buf_map_attachment() and is used to map a
+	 * This is called by dma_buf_sgt_map_attachment() and is used to map a
 	 * shared &dma_buf into device address space, and it is mandatory. It
 	 * can only be called if @attach has been called successfully.
 	 *

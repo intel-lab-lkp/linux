@@ -293,7 +293,8 @@ static int igt_dmabuf_import_same_driver(struct drm_i915_private *i915,
 		goto out_import;
 	}
 
-	st = dma_buf_map_attachment_unlocked(import_attach, DMA_BIDIRECTIONAL);
+	st = dma_buf_sgt_map_attachment_unlocked(import_attach,
+						 DMA_BIDIRECTIONAL);
 	if (IS_ERR(st)) {
 		err = PTR_ERR(st);
 		goto out_detach;
