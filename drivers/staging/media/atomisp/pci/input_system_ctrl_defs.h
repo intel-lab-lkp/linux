@@ -222,7 +222,7 @@ InpSysAckOverrule  2/0  [3:0] - 'b0101,
 #define ISYS_CTRL_PORT_ID_CAPT_A                  0 /* device ID for capture unit A      */
 #define ISYS_CTRL_PORT_ID_CAPT_B                  1 /* device ID for capture unit B      */
 #define ISYS_CTRL_PORT_ID_CAPT_C                  2 /* device ID for capture unit C      */
-#define ISYS_CTRL_PORT_ID_ACQUISITION             3 /* device ID for acquistion unit     */
+#define ISYS_CTRL_PORT_ID_ACQUISITION             3 /* device ID for acquisition unit     */
 #define ISYS_CTRL_PORT_ID_DMA_CAPT_A              4 /* device ID for dma unit            */
 #define ISYS_CTRL_PORT_ID_DMA_CAPT_B              5 /* device ID for dma unit            */
 #define ISYS_CTRL_PORT_ID_DMA_CAPT_C              6 /* device ID for dma unit            */
