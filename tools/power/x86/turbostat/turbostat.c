@@ -5161,10 +5161,17 @@ static inline int get_rapl_num_domains(void)
 
 static inline int get_rapl_domain_id(int cpu)
 {
+	int nr_cores_per_package = topo.max_core_id + 1;
+	int rapl_core_id;
+
 	if (!platform->has_per_core_rapl)
 		return cpus[cpu].package_id;
 
-	return GLOBAL_CORE_ID(cpu, cpus[cpu].package_id);
+	/* Compute the system-wide unique core-id for @cpu */
+	rapl_core_id = cpus[cpu].core_id;
+	rapl_core_id += cpus[cpu].package_id * nr_cores_per_package;
+
+	return rapl_core_id;
 }
 
 /*
