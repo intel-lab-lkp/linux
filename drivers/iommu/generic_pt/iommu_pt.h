@@ -1076,7 +1076,7 @@ static size_t NS(unmap_range)(struct pt_iommu *iommu_table, dma_addr_t iova,
 
 	pt_walk_range(&range, __unmap_range, &unmap);
 
-	gather_range_pages(iotlb_gather, iommu_table, iova, len,
+	gather_range_pages(iotlb_gather, iommu_table, iova, unmap.unmapped,
 			   &unmap.free_list);
 
 	return unmap.unmapped;
