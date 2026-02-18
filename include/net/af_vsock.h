@@ -276,10 +276,14 @@ static inline bool vsock_net_mode_global(struct vsock_sock *vsk)
 	return vsock_net_mode(sock_net(sk_vsock(vsk))) == VSOCK_NET_MODE_GLOBAL;
 }
 
-static inline void vsock_net_set_child_mode(struct net *net,
+static inline bool vsock_net_set_child_mode(struct net *net,
 					    enum vsock_net_mode mode)
 {
+	if (xchg(&net->vsock.child_ns_mode_locked, 1))
+		return false;
+
 	WRITE_ONCE(net->vsock.child_ns_mode, mode);
+	return true;
 }
 
 static inline enum vsock_net_mode vsock_net_child_mode(struct net *net)
