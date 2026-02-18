@@ -715,11 +715,12 @@ u32 xe_lrc_pphwsp_offset(struct xe_lrc *lrc)
 #define __xe_lrc_pphwsp_offset xe_lrc_pphwsp_offset
 #define __xe_lrc_regs_offset xe_lrc_regs_offset
 
-#define LRC_SEQNO_PPHWSP_OFFSET 512
-#define LRC_START_SEQNO_PPHWSP_OFFSET (LRC_SEQNO_PPHWSP_OFFSET + 8)
-#define LRC_CTX_JOB_TIMESTAMP_OFFSET (LRC_START_SEQNO_PPHWSP_OFFSET + 8)
+#define LRC_CTX_JOB_TIMESTAMP_OFFSET 512
 #define LRC_ENGINE_ID_PPHWSP_OFFSET 1024
 #define LRC_PARALLEL_PPHWSP_OFFSET 2048
+
+#define LRC_SEQNO_OFFSET 0
+#define LRC_START_SEQNO_OFFSET (LRC_SEQNO_OFFSET + 8)
 
 u32 xe_lrc_regs_offset(struct xe_lrc *lrc)
 {
@@ -747,14 +748,12 @@ size_t xe_lrc_skip_size(struct xe_device *xe)
 
 static inline u32 __xe_lrc_seqno_offset(struct xe_lrc *lrc)
 {
-	/* The seqno is stored in the driver-defined portion of PPHWSP */
-	return xe_lrc_pphwsp_offset(lrc) + LRC_SEQNO_PPHWSP_OFFSET;
+	return LRC_SEQNO_OFFSET;
 }
 
 static inline u32 __xe_lrc_start_seqno_offset(struct xe_lrc *lrc)
 {
-	/* The start seqno is stored in the driver-defined portion of PPHWSP */
-	return xe_lrc_pphwsp_offset(lrc) + LRC_START_SEQNO_PPHWSP_OFFSET;
+	return LRC_START_SEQNO_OFFSET;
 }
 
 static u32 __xe_lrc_ctx_job_timestamp_offset(struct xe_lrc *lrc)
@@ -805,10 +804,11 @@ static inline u32 __xe_lrc_wa_bb_offset(struct xe_lrc *lrc)
 	return xe_bo_size(lrc->bo) - LRC_WA_BB_SIZE;
 }
 
-#define DECL_MAP_ADDR_HELPERS(elem) \
+#define DECL_MAP_ADDR_HELPERS(elem, bo_expr) \
 static inline struct iosys_map __xe_lrc_##elem##_map(struct xe_lrc *lrc) \
 { \
-	struct iosys_map map = lrc->bo->vmap; \
+	struct xe_bo *bo = (bo_expr); \
+	struct iosys_map map = bo->vmap; \
 \
 	xe_assert(lrc_to_xe(lrc), !iosys_map_is_null(&map));  \
 	iosys_map_incr(&map, __xe_lrc_##elem##_offset(lrc)); \
@@ -816,20 +816,22 @@ static inline struct iosys_map __xe_lrc_##elem##_map(struct xe_lrc *lrc) \
 } \
 static inline u32 __maybe_unused __xe_lrc_##elem##_ggtt_addr(struct xe_lrc *lrc) \
 { \
-	return xe_bo_ggtt_addr(lrc->bo) + __xe_lrc_##elem##_offset(lrc); \
+	struct xe_bo *bo = (bo_expr); \
+\
+	return xe_bo_ggtt_addr(bo) + __xe_lrc_##elem##_offset(lrc); \
 } \
 
-DECL_MAP_ADDR_HELPERS(ring)
-DECL_MAP_ADDR_HELPERS(pphwsp)
-DECL_MAP_ADDR_HELPERS(seqno)
-DECL_MAP_ADDR_HELPERS(regs)
-DECL_MAP_ADDR_HELPERS(start_seqno)
-DECL_MAP_ADDR_HELPERS(ctx_job_timestamp)
-DECL_MAP_ADDR_HELPERS(ctx_timestamp)
-DECL_MAP_ADDR_HELPERS(ctx_timestamp_udw)
-DECL_MAP_ADDR_HELPERS(parallel)
-DECL_MAP_ADDR_HELPERS(indirect_ring)
-DECL_MAP_ADDR_HELPERS(engine_id)
+DECL_MAP_ADDR_HELPERS(ring, lrc->bo)
+DECL_MAP_ADDR_HELPERS(pphwsp, lrc->bo)
+DECL_MAP_ADDR_HELPERS(seqno, lrc->seqno_bo)
+DECL_MAP_ADDR_HELPERS(regs, lrc->bo)
+DECL_MAP_ADDR_HELPERS(start_seqno, lrc->seqno_bo)
+DECL_MAP_ADDR_HELPERS(ctx_job_timestamp, lrc->bo)
+DECL_MAP_ADDR_HELPERS(ctx_timestamp, lrc->bo)
+DECL_MAP_ADDR_HELPERS(ctx_timestamp_udw, lrc->bo)
+DECL_MAP_ADDR_HELPERS(parallel, lrc->bo)
+DECL_MAP_ADDR_HELPERS(indirect_ring, lrc->bo)
+DECL_MAP_ADDR_HELPERS(engine_id, lrc->bo)
 
 #undef DECL_MAP_ADDR_HELPERS
 
@@ -1036,6 +1038,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
 {
 	xe_hw_fence_ctx_finish(&lrc->fence_ctx);
 	xe_bo_unpin_map_no_vm(lrc->bo);
+	xe_bo_unpin_map_no_vm(lrc->seqno_bo);
 }
 
 /*
@@ -1445,6 +1448,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	u32 bo_size = ring_size + lrc_size + LRC_WA_BB_SIZE;
 	struct xe_tile *tile = gt_to_tile(gt);
 	struct xe_device *xe = gt_to_xe(gt);
+	struct xe_bo *seqno_bo;
 	struct iosys_map map;
 	u32 arb_enable;
 	u32 bo_flags;
@@ -1478,6 +1482,17 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 					    bo_flags, false);
 	if (IS_ERR(lrc->bo))
 		return PTR_ERR(lrc->bo);
+
+	seqno_bo = xe_bo_create_pin_map_novm(xe, tile, PAGE_SIZE,
+					     ttm_bo_type_kernel,
+					     XE_BO_FLAG_GGTT |
+					     XE_BO_FLAG_GGTT_INVALIDATE |
+					     XE_BO_FLAG_SYSTEM, false);
+	if (IS_ERR(seqno_bo)) {
+		err = PTR_ERR(seqno_bo);
+		goto err_lrc_finish;
+	}
+	lrc->seqno_bo = seqno_bo;
 
 	xe_hw_fence_ctx_init(&lrc->fence_ctx, hwe->gt,
 			     hwe->fence_irq, hwe->name);
