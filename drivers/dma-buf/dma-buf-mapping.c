@@ -349,3 +349,66 @@ struct dma_buf_mapping_type dma_buf_mapping_sgt_type = {
 	.debugfs_dump = dma_buf_sgt_debugfs_dump,
 };
 EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_sgt_type, "DMA_BUF");
+
+static const struct dma_buf_mapping_pal_exp_ops *
+to_pal_exp_ops(struct dma_buf_attachment *attach)
+{
+	return container_of(attach->map_type.exp_ops,
+			    struct dma_buf_mapping_pal_exp_ops, ops);
+}
+
+/**
+ * dma_buf_pal_map_phys - Obtain the physical address list for a PAL attachment
+ * @attach: The DMA-buf attachment
+ *
+ * Calls the exporter's map_phys() callback to retrieve the physical address
+ * list for the buffer. The caller must hold the dma-buf's reservation lock.
+ *
+ * This symbol is restricted to iommufd to prevent misuse.
+ *
+ * Returns the physical address list on success, or an ERR_PTR on failure.
+ * The returned list must be freed with dma_buf_pal_unmap_phys().
+ */
+struct dma_buf_phys_list *
+dma_buf_pal_map_phys(struct dma_buf_attachment *attach)
+{
+	dma_resv_assert_held(attach->dmabuf->resv);
+	return to_pal_exp_ops(attach)->map_phys(attach);
+}
+/*
+ * Restricted, iommufd is the only importer allowed to prevent misuse of this
+ * API.
+ */
+EXPORT_SYMBOL_FOR_MODULES(dma_buf_pal_map_phys, "iommufd");
+
+/**
+ * dma_buf_pal_unmap_phys - Unmap a physical address list
+ * @attach: The DMA-buf attachment
+ * @phys: The physical address list returned by dma_buf_pal_map_phys()
+ *
+ * Returns the mapping back to the exporter. After this point the importer may
+ * not touch any of the addresses in any way.
+ */
+void dma_buf_pal_unmap_phys(struct dma_buf_attachment *attach,
+			    struct dma_buf_phys_list *phys)
+{
+	to_pal_exp_ops(attach)->unmap_phys(attach, phys);
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_pal_unmap_phys, "DMA_BUF");
+
+static inline void
+dma_buf_pal_finish_match(struct dma_buf_match_args *args,
+			 const struct dma_buf_mapping_match *exp,
+			 const struct dma_buf_mapping_match *imp)
+{
+	args->attach->map_type = (struct dma_buf_mapping_match){
+		.type = &dma_buf_mapping_pal_type,
+		.exp_ops = exp->exp_ops,
+	};
+}
+
+struct dma_buf_mapping_type dma_buf_mapping_pal_type = {
+	.name = "Physical Address List",
+	.finish_match = dma_buf_pal_finish_match,
+};
+EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_pal_type, "DMA_BUF");
