@@ -1922,6 +1922,59 @@ static u64 pf_profile_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
 	return ALIGN_DOWN(fair, alignment);
 }
 
+static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
+					unsigned int num_vfs, bool provisioned)
+{
+	unsigned int allvfs = 1 + xe_gt_sriov_pf_get_totalvfs(gt); /* PF plus VFs */
+	unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
+	unsigned int weight;
+	unsigned int n;
+
+	if (!bitmap)
+		return;
+
+	for (n = first_vf; n < first_vf + num_vfs; n++) {
+		if (!!pf_get_vf_config_lmem(gt, VFID(n)) == provisioned)
+			bitmap_set(bitmap, n, 1);
+	}
+
+	weight = bitmap_weight(bitmap, allvfs);
+	if (!weight)
+		return;
+
+	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
+			 weight > 1 ? "s " : "", allvfs, bitmap,
+			 provisioned ? "already" : "not");
+}
+
+static void pf_show_all_provisioned_lmem(struct xe_gt *gt)
+{
+	__pf_show_provisioning_lmem(gt, VFID(1), xe_gt_sriov_pf_get_totalvfs(gt), true);
+}
+
+static void pf_show_unprovisioned_lmem(struct xe_gt *gt, unsigned int first_vf,
+				       unsigned int num_vfs)
+{
+	__pf_show_provisioning_lmem(gt, first_vf, num_vfs, false);
+}
+
+static bool pf_needs_provision_lmem(struct xe_gt *gt, unsigned int first_vf,
+				    unsigned int num_vfs)
+{
+	unsigned int vfid;
+
+	for (vfid = first_vf; vfid < first_vf + num_vfs; vfid++) {
+		if (pf_get_vf_config_lmem(gt, vfid)) {
+			pf_show_all_provisioned_lmem(gt);
+			pf_show_unprovisioned_lmem(gt, first_vf, num_vfs);
+			return false;
+		}
+	}
+
+	pf_show_all_provisioned_lmem(gt);
+	return true;
+}
+
 /**
  * xe_gt_sriov_pf_config_set_fair_lmem - Provision many VFs with fair LMEM.
  * @gt: the &xe_gt (can't be media)
@@ -1946,6 +1999,9 @@ int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
 		return 0;
 
 	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
+
+	if (!pf_needs_provision_lmem(gt, vfid, num_vfs))
+		return 0;
 
 	fair = pf_estimate_fair_lmem(gt, num_vfs);
 	if (!fair)
