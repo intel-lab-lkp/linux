@@ -31,6 +31,7 @@
  * the other one.
  */
 
+#include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -1024,17 +1025,13 @@ static int gp2ap020a00f_write_event_val(struct iio_dev *indio_dev,
 	bool event_en = false;
 	u8 thresh_val_id;
 	u8 thresh_reg_l;
-	int err = 0;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	thresh_reg_l = gp2ap020a00f_get_thresh_reg(chan, dir);
 	thresh_val_id = GP2AP020A00F_THRESH_VAL_ID(thresh_reg_l);
-
-	if (thresh_val_id > GP2AP020A00F_THRESH_PH) {
-		err = -EINVAL;
-		goto error_unlock;
-	}
+	if (thresh_val_id > GP2AP020A00F_THRESH_PH)
+		return -EINVAL;
 
 	switch (thresh_reg_l) {
 	case GP2AP020A00F_TH_L_REG:
@@ -1046,30 +1043,23 @@ static int gp2ap020a00f_write_event_val(struct iio_dev *indio_dev,
 							&data->flags);
 		break;
 	case GP2AP020A00F_PH_L_REG:
-		if (val == 0) {
-			err = -EINVAL;
-			goto error_unlock;
-		}
+		if (val == 0)
+			return -EINVAL;
+
 		event_en = test_bit(GP2AP020A00F_FLAG_PROX_RISING_EV,
 							&data->flags);
 		break;
 	case GP2AP020A00F_PL_L_REG:
-		if (val == 0) {
-			err = -EINVAL;
-			goto error_unlock;
-		}
+		if (val == 0)
+			return -EINVAL;
+
 		event_en = test_bit(GP2AP020A00F_FLAG_PROX_FALLING_EV,
 							&data->flags);
 		break;
 	}
 
 	data->thresh_val[thresh_val_id] = val;
-	err =  gp2ap020a00f_write_event_threshold(data, thresh_val_id,
-							event_en);
-error_unlock:
-	mutex_unlock(&data->lock);
-
-	return err;
+	return gp2ap020a00f_write_event_threshold(data, thresh_val_id, event_en);
 }
 
 static int gp2ap020a00f_read_event_val(struct iio_dev *indio_dev,
@@ -1081,23 +1071,16 @@ static int gp2ap020a00f_read_event_val(struct iio_dev *indio_dev,
 {
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
 	u8 thresh_reg_l;
-	int err = IIO_VAL_INT;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	thresh_reg_l = gp2ap020a00f_get_thresh_reg(chan, dir);
-
-	if (thresh_reg_l > GP2AP020A00F_PH_L_REG) {
-		err = -EINVAL;
-		goto error_unlock;
-	}
+	if (thresh_reg_l > GP2AP020A00F_PH_L_REG)
+		return -EINVAL;
 
 	*val = data->thresh_val[GP2AP020A00F_THRESH_VAL_ID(thresh_reg_l)];
 
-error_unlock:
-	mutex_unlock(&data->lock);
-
-	return err;
+	return IIO_VAL_INT;
 }
 
 static int gp2ap020a00f_write_prox_event_config(struct iio_dev *indio_dev,
@@ -1165,7 +1148,7 @@ static int gp2ap020a00f_write_event_config(struct iio_dev *indio_dev,
 	enum gp2ap020a00f_cmd cmd;
 	int err;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	switch (chan->type) {
 	case IIO_PROXIMITY:
@@ -1186,8 +1169,6 @@ static int gp2ap020a00f_write_event_config(struct iio_dev *indio_dev,
 		err = -EINVAL;
 	}
 
-	mutex_unlock(&data->lock);
-
 	return err;
 }
 
@@ -1199,7 +1180,7 @@ static int gp2ap020a00f_read_event_config(struct iio_dev *indio_dev,
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
 	int event_en = 0;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	switch (chan->type) {
 	case IIO_PROXIMITY:
@@ -1222,8 +1203,6 @@ static int gp2ap020a00f_read_event_config(struct iio_dev *indio_dev,
 		event_en = -EINVAL;
 		break;
 	}
-
-	mutex_unlock(&data->lock);
 
 	return event_en;
 }
@@ -1385,7 +1364,7 @@ static int gp2ap020a00f_buffer_postenable(struct iio_dev *indio_dev)
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
 	int i, err = 0;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	/*
 	 * Enable triggers according to the scan_mask. Enabling either
@@ -1413,14 +1392,11 @@ static int gp2ap020a00f_buffer_postenable(struct iio_dev *indio_dev)
 	}
 
 	if (err < 0)
-		goto error_unlock;
+		return err;
 
 	data->buffer = kmalloc(indio_dev->scan_bytes, GFP_KERNEL);
 	if (!data->buffer)
 		err = -ENOMEM;
-
-error_unlock:
-	mutex_unlock(&data->lock);
 
 	return err;
 }
@@ -1430,7 +1406,7 @@ static int gp2ap020a00f_buffer_predisable(struct iio_dev *indio_dev)
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
 	int i, err = 0;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	iio_for_each_active_channel(indio_dev, i) {
 		switch (i) {
@@ -1451,8 +1427,6 @@ static int gp2ap020a00f_buffer_predisable(struct iio_dev *indio_dev)
 
 	if (err == 0)
 		kfree(data->buffer);
-
-	mutex_unlock(&data->lock);
 
 	return err;
 }
