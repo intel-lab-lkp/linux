@@ -77,10 +77,39 @@ static const struct dma_buf_mapping_sgt_exp_ops vfio_pci_dma_buf_sgt_ops = {
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
 };
 
+static struct dma_buf_phys_list *
+vfio_pci_dma_pal_map_phys(struct dma_buf_attachment *attach)
+{
+	struct vfio_pci_dma_buf *priv = attach->dmabuf->priv;
+	struct dma_buf_phys_list *phys;
+
+	phys = kvmalloc(struct_size(phys, phys, priv->nr_ranges), GFP_KERNEL);
+	if (!phys)
+		return ERR_PTR(-ENOMEM);
+
+	phys->length = priv->nr_ranges;
+	memcpy(phys->phys, priv->phys_vec,
+	       sizeof(phys->phys[0]) * priv->nr_ranges);
+
+	return phys;
+}
+
+static void vfio_pci_dma_pal_unmap_phys(struct dma_buf_attachment *attach,
+					struct dma_buf_phys_list *phys)
+{
+	/* FIXME when rebased on Leon's series this manages the refcount */
+	kvfree(phys);
+}
+
+static const struct dma_buf_mapping_pal_exp_ops vfio_pci_dma_buf_pal_ops = {
+	.map_phys = vfio_pci_dma_pal_map_phys,
+	.unmap_phys = vfio_pci_dma_pal_unmap_phys,
+};
+
 static int vfio_pci_dma_buf_match_mapping(struct dma_buf_match_args *args)
 {
 	struct vfio_pci_dma_buf *priv = args->dmabuf->priv;
-	struct dma_buf_mapping_match sgt_match[1];
+	struct dma_buf_mapping_match sgt_match[2];
 
 	dma_resv_assert_held(priv->dmabuf->resv);
 
@@ -91,7 +120,8 @@ static int vfio_pci_dma_buf_match_mapping(struct dma_buf_match_args *args)
 	if (!priv->vdev)
 		return -ENODEV;
 
-	sgt_match[0] = DMA_BUF_EMAPPING_SGT_P2P(&vfio_pci_dma_buf_sgt_ops,
+	sgt_match[0] = DMA_BUF_EMAPPING_PAL(&vfio_pci_dma_buf_pal_ops);
+	sgt_match[1] = DMA_BUF_EMAPPING_SGT_P2P(&vfio_pci_dma_buf_sgt_ops,
 						priv->vdev->pdev);
 
 	return dma_buf_match_mapping(args, sgt_match, ARRAY_SIZE(sgt_match));
