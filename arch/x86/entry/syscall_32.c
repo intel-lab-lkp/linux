@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* 32-bit system call dispatch */
 
+#include <linux/kprobes.h>
 #include <linux/linkage.h>
 #include <linux/sys.h>
 #include <linux/cache.h>
@@ -48,6 +49,7 @@ long ia32_sys_call(const struct pt_regs *regs, unsigned int nr)
 	default: return __ia32_sys_ni_syscall(regs);
 	}
 }
+NOKPROBE_SYMBOL(ia32_sys_call)
 
 static __always_inline int syscall_32_enter(struct pt_regs *regs)
 {

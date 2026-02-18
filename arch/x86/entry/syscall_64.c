@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* 64-bit system call dispatch */
 
+#include <linux/kprobes.h>
 #include <linux/linkage.h>
 #include <linux/sys.h>
 #include <linux/cache.h>
@@ -39,6 +40,7 @@ long x64_sys_call(const struct pt_regs *regs, unsigned int nr)
 	default: return __x64_sys_ni_syscall(regs);
 	}
 }
+NOKPROBE_SYMBOL(x64_sys_call)
 
 #ifdef CONFIG_X86_X32_ABI
 long x32_sys_call(const struct pt_regs *regs, unsigned int nr)
@@ -48,6 +50,7 @@ long x32_sys_call(const struct pt_regs *regs, unsigned int nr)
 	default: return __x64_sys_ni_syscall(regs);
 	}
 }
+NOKPROBE_SYMBOL(x32_sys_call)
 #endif
 
 static __always_inline bool do_syscall_x64(struct pt_regs *regs, int nr)
