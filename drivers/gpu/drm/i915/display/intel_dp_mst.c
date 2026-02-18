@@ -729,7 +729,7 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 							       pipe_config,
 							       conn_state,
 							       num_joined_pipes);
-		if (ret == 0)
+		if (ret == 0 || ret == -EDEADLK)
 			break;
 	}
 
