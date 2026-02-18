@@ -2969,7 +2969,7 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 
 		ret = intel_dp_compute_link_for_joined_pipes(encoder, crtc_state, conn_state,
 							     respect_downstream_limits);
-		if (ret == 0)
+		if (ret == 0 || ret == -EDEADLK)
 			break;
 	}
 
