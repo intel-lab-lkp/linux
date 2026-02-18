@@ -3,6 +3,8 @@
  * Copyright (c) 2019 Amlogic, Inc. All rights reserved.
  */
 
+#include <dt-bindings/clock/amlogic,t7-peripherals-clkc.h>
+#include <dt-bindings/clock/amlogic,t7-pll-clkc.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/power/amlogic,t7-pwrc.h>
 #include "amlogic-t7-reset.h"
@@ -208,12 +210,14 @@
 		ranges;
 
 		gic: interrupt-controller@fff01000 {
-			compatible = "arm,gic-400";
+			compatible = "arm,cortex-a15-gic", "arm,cortex-a9-gic";
 			#interrupt-cells = <3>;
 			#address-cells = <0>;
 			interrupt-controller;
 			reg = <0x0 0xfff01000 0 0x1000>,
-			      <0x0 0xfff02000 0 0x0100>;
+				  <0x0 0xfff02000 0 0x2000>,
+				  <0x0 0xfff04000 0 0x2000>,
+				  <0x0 0xfff06000 0 0x2000>;
 			interrupts = <GIC_PPI 9 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_HIGH)>;
 		};
 
@@ -223,6 +227,24 @@
 			#address-cells = <2>;
 			#size-cells = <2>;
 			ranges = <0x0 0x0 0x0 0xfe000000 0x0 0x480000>;
+
+			clkc: clock-controller@0 {
+				compatible = "amlogic,t7-peripherals-clkc";
+				reg = <0x0 0x0 0x0 0x49c>;
+				#clock-cells = <1>;
+				clocks = <&xtal>,
+						 <&fpll CLKID_FDIV2>,
+						 <&fpll CLKID_FDIV2P5>,
+						 <&fpll CLKID_FDIV3>,
+						 <&fpll CLKID_FDIV4>,
+						 <&fpll CLKID_FDIV5>,
+						 <&hifi_pll CLKID_HIFI_PLL>,
+						 <&mpll CLKID_MPLL2>,
+						 <&mpll CLKID_MPLL3>,
+						 <&gp0_pll CLKID_GP0_PLL>;
+				clock-names = "xtal", "fdiv2", "fdiv2p5", "fdiv3", "fdiv4",
+							  "fdiv5", "hifi", "mpll2", "mpll3", "gp0";
+			};
 
 			reset: reset-controller@2000 {
 				compatible = "amlogic,t7-reset";
@@ -250,6 +272,68 @@
 					#gpio-cells = <2>;
 					gpio-ranges = <&periphs_pinctrl 0 0 157>;
 				};
+
+				emmc_ctrl_pins: emmc-ctrl {
+					mux-0 {
+						groups = "emmc_cmd";
+						function = "emmc";
+						bias-pull-up;
+						drive-strength-microamp = <4000>;
+					};
+
+					mux-1 {
+						groups = "emmc_clk";
+						function = "emmc";
+						bias-disable;
+						drive-strength-microamp = <4000>;
+					};
+				};
+
+				emmc_data_4b_pins: emmc-data-4b {
+					mux-0 {
+						groups = "emmc_nand_d0",
+								 "emmc_nand_d1",
+								 "emmc_nand_d2",
+								 "emmc_nand_d3";
+						function = "emmc";
+						bias-pull-up;
+						drive-strength-microamp = <4000>;
+					};
+				};
+
+				emmc_data_8b_pins: emmc-data-8b {
+					mux-0 {
+						groups = "emmc_nand_d0",
+								 "emmc_nand_d1",
+								 "emmc_nand_d2",
+								 "emmc_nand_d3",
+								 "emmc_nand_d4",
+								 "emmc_nand_d5",
+								 "emmc_nand_d6",
+								 "emmc_nand_d7";
+						function = "emmc";
+						bias-pull-up;
+						drive-strength-microamp = <4000>;
+					};
+				};
+
+				emmc_ds_pins: emmc-ds {
+					mux {
+						groups = "emmc_nand_ds";
+						function = "emmc";
+						bias-pull-down;
+						drive-strength-microamp = <4000>;
+					};
+				};
+
+				emmc_clk_gate_pins: emmc_clk_gate {
+					mux {
+						groups = "GPIOB_8";
+						function = "gpio_periphs";
+						bias-pull-down;
+						drive-strength-microamp = <4000>;
+					};
+				};
 			};
 
 			gpio_intc: interrupt-controller@4080 {
@@ -262,8 +346,40 @@
 					<10 11 12 13 14 15 16 17 18 19 20 21>;
 			};
 
+			fpll: clock-controller@8040 {
+				compatible = "amlogic,t7-fpll";
+				reg = <0x0 0x8040 0x0 0x20>;
+				#clock-cells = <1>;
+				clocks = <&xtal>;
+				clock-names = "xtal";
+			};
+
+			gp0_pll: clock-controller@8080 {
+				compatible = "amlogic,t7-gp0-pll";
+				reg = <0x0 0x8080 0x0 0x20>;
+				#clock-cells = <1>;
+				clocks = <&xtal>;
+				clock-names = "in0";
+			};
+
+			hifi_pll: clock-controller@8100 {
+				compatible = "amlogic,t7-hifi-pll";
+				reg = <0x0 0x8100 0x0 0x20>;
+				#clock-cells = <1>;
+				clocks = <&xtal>;
+				clock-names = "in0";
+			};
+
+			mpll: clock-controller@8180 {
+				compatible = "amlogic,t7-mpll";
+				reg = <0x0 0x8180 0x0 0x20>;
+				#clock-cells = <1>;
+				clocks = <&fpll CLKID_FPLL_DCO>;
+				clock-names = "in0";
+			};
+
 			uart_a: serial@78000 {
-				compatible = "amlogic,t7-uart", "amlogic,meson-s4-uart";
+				compatible = "amlogic,meson-s4-uart";
 				reg = <0x0 0x78000 0x0 0x18>;
 				interrupts = <GIC_SPI 168 IRQ_TYPE_EDGE_RISING>;
 				status = "disabled";
@@ -275,6 +391,21 @@
 					     "syscon";
 				reg = <0x0 0x10220 0x0 0x140>;
 				amlogic,has-chip-id;
+			};
+
+			sd_emmc_c: mmc@8c000{
+				compatible = "amlogic,meson-axg-mmc";
+				reg = <0x0 0x8c000 0x0 0x800>;
+				interrupts = <GIC_SPI 178 IRQ_TYPE_EDGE_RISING>;
+				status = "disabled";
+				clocks = <&clkc CLKID_SYS_SD_EMMC_C>,
+						 <&clkc CLKID_SD_EMMC_C>,
+						 <&gp0_pll CLKID_GP0_PLL>;
+				clock-names = "core", "clkin0", "clkin1";
+				assigned-clocks = <&clkc CLKID_SD_EMMC_C_SEL>;
+				assigned-clock-parents = <&xtal>;
+				no-sdio;
+				no-sd;
 			};
 		};
 
