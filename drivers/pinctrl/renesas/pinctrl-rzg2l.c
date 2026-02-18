@@ -1848,6 +1848,25 @@ static void rzg2l_gpio_free(struct gpio_chip *chip, unsigned int offset)
 	rzg2l_gpio_direction_input(chip, offset);
 }
 
+static int rzg2l_gpio_set_config(struct gpio_chip *chip, unsigned int offset,
+				 unsigned long config)
+{
+	switch (pinconf_to_config_param(config)) {
+	case PIN_CONFIG_BIAS_DISABLE:
+	case PIN_CONFIG_BIAS_PULL_UP:
+	case PIN_CONFIG_BIAS_PULL_DOWN:
+	case PIN_CONFIG_DRIVE_OPEN_DRAIN:
+	case PIN_CONFIG_DRIVE_PUSH_PULL:
+	case PIN_CONFIG_SLEW_RATE:
+	case PIN_CONFIG_DRIVE_STRENGTH:
+	case PIN_CONFIG_DRIVE_STRENGTH_UA:
+	case PIN_CONFIG_POWER_SOURCE:
+		return pinctrl_gpio_set_config(chip, offset, config);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static const char * const rzg2l_gpio_names[] = {
 	"P0_0", "P0_1", "P0_2", "P0_3", "P0_4", "P0_5", "P0_6", "P0_7",
 	"P1_0", "P1_1", "P1_2", "P1_3", "P1_4", "P1_5", "P1_6", "P1_7",
@@ -2819,6 +2838,7 @@ static int rzg2l_gpio_register(struct rzg2l_pinctrl *pctrl)
 	chip->direction_output = rzg2l_gpio_direction_output;
 	chip->get = rzg2l_gpio_get;
 	chip->set = rzg2l_gpio_set;
+	chip->set_config = rzg2l_gpio_set_config;
 	chip->label = name;
 	chip->parent = pctrl->dev;
 	chip->owner = THIS_MODULE;
