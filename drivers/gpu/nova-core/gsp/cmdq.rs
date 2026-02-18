@@ -23,7 +23,7 @@ use kernel::{
     transmute::{
         AsBytes,
         FromBytes, //
-    },
+    }, //
 };
 
 use crate::{
@@ -34,10 +34,10 @@ use crate::{
             MsgFunction,
             MsgqRxHeader,
             MsgqTxHeader, //
-        },
+        }, //
         PteArray,
         GSP_PAGE_SHIFT,
-        GSP_PAGE_SIZE, //
+        GSP_PAGE_SIZE,
     },
     num,
     regs,
@@ -159,6 +159,7 @@ struct Msgq {
 #[repr(C)]
 struct GspMem {
     /// Self-mapping page table entries.
+    // ptes: [u64; GSP_PAGE_SIZE / size_of::<u64>()],
     ptes: PteArray<{ GSP_PAGE_SIZE / size_of::<u64>() }>,
     /// CPU queue: the driver writes commands here, and the GSP reads them. It also contains the
     /// write and read pointers that the CPU updates.
@@ -199,9 +200,18 @@ impl DmaGspMem {
         const MSGQ_SIZE: u32 = num::usize_into_u32::<{ size_of::<Msgq>() }>();
         const RX_HDR_OFF: u32 = num::usize_into_u32::<{ mem::offset_of!(Msgq, rx) }>();
 
-        let gsp_mem =
+        let mut gsp_mem =
             CoherentAllocation::<GspMem>::alloc_coherent(dev, 1, GFP_KERNEL | __GFP_ZERO)?;
-        dma_write!(gsp_mem[0].ptes = PteArray::new(gsp_mem.dma_handle())?)?;
+
+        let start_address = gsp_mem.dma_handle();
+
+        // SAFETY: `gsp_mem` has just been created and we are its sole user.
+        let mem: &mut [GspMem] = unsafe { gsp_mem.as_slice_mut(0, 1)? };
+
+        // Borrowing the array from gsp_mem and writing directly to that in the init method of
+        // PteArray
+        mem[0].ptes.init(start_address)?;
+
         dma_write!(gsp_mem[0].cpuq.tx = MsgqTxHeader::new(MSGQ_SIZE, RX_HDR_OFF, MSGQ_NUM_PAGES))?;
         dma_write!(gsp_mem[0].cpuq.rx = MsgqRxHeader::new())?;
 

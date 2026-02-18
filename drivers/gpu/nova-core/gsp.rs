@@ -2,6 +2,8 @@
 
 mod boot;
 
+use core::iter::Iterator;
+
 use kernel::{
     device,
     dma::{
@@ -30,7 +32,7 @@ use crate::{
         GspArgumentsPadded,
         LibosMemoryRegionInitArgument, //
     },
-    num,
+    num, //
 };
 
 pub(crate) const GSP_PAGE_SHIFT: usize = 12;
@@ -47,16 +49,17 @@ struct PteArray<const NUM_ENTRIES: usize>([u64; NUM_ENTRIES]);
 unsafe impl<const NUM_ENTRIES: usize> AsBytes for PteArray<NUM_ENTRIES> {}
 
 impl<const NUM_PAGES: usize> PteArray<NUM_PAGES> {
-    /// Creates a new page table array mapping `NUM_PAGES` GSP pages starting at address `start`.
-    fn new(start: DmaAddress) -> Result<Self> {
-        let mut ptes = [0u64; NUM_PAGES];
-        for (i, pte) in ptes.iter_mut().enumerate() {
+    /// Initializes the page table array mapping `NUM_PAGES` GSP pages starting at address `start`.
+    /// This is done "in-memory" without using the stack to avoid overflow, by writing one page at
+    /// a time to the memory region
+    fn init(&mut self, start: DmaAddress) -> Result {
+        for (i, pte) in self.0.iter_mut().enumerate() {
             *pte = start
                 .checked_add(num::usize_as_u64(i) << GSP_PAGE_SHIFT)
                 .ok_or(EOVERFLOW)?;
         }
 
-        Ok(Self(ptes))
+        Ok(())
     }
 }
 
@@ -86,15 +89,24 @@ impl LogBuffer {
             NUM_PAGES * GSP_PAGE_SIZE,
             GFP_KERNEL | __GFP_ZERO,
         )?);
-        let ptes = PteArray::<NUM_PAGES>::new(obj.0.dma_handle())?;
+
+        let start_addr = obj.0.dma_handle();
 
         // SAFETY: `obj` has just been created and we are its sole user.
-        unsafe {
-            // Copy the self-mapping PTE at the expected location.
+        let pte_region = unsafe {
             obj.0
-                .as_slice_mut(size_of::<u64>(), size_of_val(&ptes))?
-                .copy_from_slice(ptes.as_bytes())
+                .as_slice_mut(size_of::<u64>(), NUM_PAGES * size_of::<u64>())?
         };
+
+        // As in [`PteArray::init`], this is a  one by one GSP Page write to the memory
+        // to avoid stack overflow when allocating the whole array at once.
+        for (i, chunk) in pte_region.chunks_exact_mut(size_of::<u64>()).enumerate() {
+            let pte_value = start_addr
+                .checked_add(num::usize_as_u64(i) << GSP_PAGE_SHIFT)
+                .ok_or(EOVERFLOW)?;
+
+            chunk.copy_from_slice(&pte_value.to_ne_bytes());
+        }
 
         Ok(obj)
     }
