@@ -1078,7 +1078,9 @@ static int pfn_reader_user_update_pinned(struct pfn_reader_user *user,
 }
 
 struct pfn_reader_dmabuf {
-	struct dma_buf_phys_vec phys;
+	struct dma_buf_phys_list *exp_phys;
+	unsigned int cur_index;
+	unsigned long cur_base;
 	unsigned long start_offset;
 };
 
@@ -1089,8 +1091,10 @@ static int pfn_reader_dmabuf_init(struct pfn_reader_dmabuf *dmabuf,
 	if (WARN_ON(iopt_dmabuf_revoked(pages)))
 		return -EINVAL;
 
-	dmabuf->phys = pages->dmabuf.phys;
+	dmabuf->exp_phys = pages->dmabuf.exp_phys;
 	dmabuf->start_offset = pages->dmabuf.start;
+	dmabuf->cur_index = 0;
+	dmabuf->cur_base = 0;
 	return 0;
 }
 
@@ -1100,6 +1104,15 @@ static int pfn_reader_fill_dmabuf(struct pfn_reader_dmabuf *dmabuf,
 				  unsigned long last_index)
 {
 	unsigned long start = dmabuf->start_offset + start_index * PAGE_SIZE;
+	unsigned long npages = last_index - start_index + 1;
+	struct dma_buf_phys_vec *vec =
+		&dmabuf->exp_phys->phys[dmabuf->cur_index];
+
+	while (dmabuf->cur_base + vec->len <= start) {
+		dmabuf->cur_base += vec->len;
+		dmabuf->cur_index++;
+		vec++;
+	}
 
 	/*
 	 * start/last_index and start are all PAGE_SIZE aligned, the batch is
@@ -1107,8 +1120,25 @@ static int pfn_reader_fill_dmabuf(struct pfn_reader_dmabuf *dmabuf,
 	 * If the dmabuf has been sliced on a sub page offset then the common
 	 * batch to domain code will adjust it before mapping to the domain.
 	 */
-	batch_add_pfn_num(batch, PHYS_PFN(dmabuf->phys.paddr + start),
-			  last_index - start_index + 1, BATCH_MMIO);
+	while (npages) {
+		unsigned long offset_in_entry = start - dmabuf->cur_base;
+		unsigned long avail_pages = (vec->len - offset_in_entry) >>
+					    PAGE_SHIFT;
+		unsigned long nr = min(npages, avail_pages);
+
+		if (!batch_add_pfn_num(
+			    batch, (vec->paddr + offset_in_entry) >> PAGE_SHIFT,
+			    nr, BATCH_MMIO))
+			break;
+
+		start += nr * PAGE_SIZE;
+		npages -= nr;
+		if (nr == avail_pages) {
+			dmabuf->cur_base += vec->len;
+			dmabuf->cur_index++;
+			vec++;
+		}
+	}
 	return 0;
 }
 
@@ -1447,7 +1477,6 @@ static void iopt_revoke_notify(struct dma_buf_attachment *attach)
 					     iopt_area_index(area),
 					     iopt_area_last_index(area));
 	}
-	pages->dmabuf.phys.len = 0;
 	dma_buf_pal_unmap_phys(pages->dmabuf.attach, pages->dmabuf.exp_phys);
 	pages->dmabuf.exp_phys = NULL;
 }
@@ -1487,21 +1516,12 @@ static int iopt_map_dmabuf(struct iommufd_ctx *ictx, struct iopt_pages *pages,
 		goto err_detach;
 	}
 
-	/* For now only works with single range exporters */
-	if (pages->dmabuf.exp_phys->length != 1) {
-		rc = -EINVAL;
-		goto err_unmap;
-	}
-	pages->dmabuf.phys = pages->dmabuf.exp_phys->phys[0];
-
 	dma_resv_unlock(dmabuf->resv);
 
 	/* On success iopt_release_pages() will detach and put the dmabuf. */
 	pages->dmabuf.attach = attach;
 	return 0;
 
-err_unmap:
-	dma_buf_pal_unmap_phys(attach, pages->dmabuf.exp_phys);
 err_detach:
 	dma_resv_unlock(dmabuf->resv);
 	dma_buf_detach(dmabuf, attach);

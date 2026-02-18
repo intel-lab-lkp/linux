@@ -203,7 +203,6 @@ struct iopt_pages_dmabuf_track {
 struct iopt_pages_dmabuf {
 	struct dma_buf_attachment *attach;
 	struct dma_buf_phys_list *exp_phys;
-	struct dma_buf_phys_vec phys;
 	/* Always PAGE_SIZE aligned */
 	unsigned long start;
 	struct list_head tracker;
@@ -260,7 +259,7 @@ static inline bool iopt_dmabuf_revoked(struct iopt_pages *pages)
 {
 	lockdep_assert_held(&pages->mutex);
 	if (iopt_is_dmabuf(pages))
-		return pages->dmabuf.phys.len == 0;
+		return pages->dmabuf.exp_phys == NULL;
 	return false;
 }
 
