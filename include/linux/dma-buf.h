@@ -561,9 +561,9 @@ static inline bool dma_buf_is_dynamic(struct dma_buf *dmabuf)
 struct dma_buf_attachment *dma_buf_sgt_attach(struct dma_buf *dmabuf,
 					      struct device *dev);
 struct dma_buf_attachment *
-dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
-		       const struct dma_buf_attach_ops *importer_ops,
-		       void *importer_priv);
+dma_buf_sgt_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
+			   const struct dma_buf_attach_ops *importer_ops,
+			   void *importer_priv);
 struct dma_buf_attachment *dma_buf_mapping_attach(
 	struct dma_buf *dmabuf, struct dma_buf_mapping_match *importer_matches,
 	size_t match_len, const struct dma_buf_attach_ops *importer_ops,

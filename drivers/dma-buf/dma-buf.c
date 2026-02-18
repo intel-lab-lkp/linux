@@ -876,7 +876,7 @@ dma_buf_pin_on_map(struct dma_buf_attachment *attach)
  *    functions:
  *
  *     - dma_buf_sgt_attach()
- *     - dma_buf_dynamic_attach()
+ *     - dma_buf_sgt_dynamic_attach()
  *     - dma_buf_detach()
  *     - dma_buf_export()
  *     - dma_buf_fd()
@@ -1019,7 +1019,7 @@ struct dma_buf_attachment *dma_buf_sgt_attach(struct dma_buf *dmabuf,
 EXPORT_SYMBOL_NS_GPL(dma_buf_sgt_attach, "DMA_BUF");
 
 /**
- * dma_buf_dynamic_attach - Add the device to dma_buf's attachments list
+ * dma_buf_sgt_dynamic_attach - Add the device to dma_buf's attachments list
  * @dmabuf:		[in]	buffer to attach device to.
  * @dev:		[in]	device to be attached.
  * @importer_ops:	[in]	importer operations for the attachment
@@ -1028,9 +1028,9 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_sgt_attach, "DMA_BUF");
  * Wrapper to call dma_buf_mapping_attach() for drivers which only support SGT.
  */
 struct dma_buf_attachment *
-dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
-		       const struct dma_buf_attach_ops *importer_ops,
-		       void *importer_priv)
+dma_buf_sgt_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
+			   const struct dma_buf_attach_ops *importer_ops,
+			   void *importer_priv)
 {
 	struct dma_buf_mapping_match sgt_match[] = {
 		DMA_BUF_IMAPPING_SGT(dev, importer_ops->allow_peer2peer ?
@@ -1041,7 +1041,7 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 	return dma_buf_mapping_attach(dmabuf, sgt_match, ARRAY_SIZE(sgt_match),
 				      importer_ops, importer_priv);
 }
-EXPORT_SYMBOL_NS_GPL(dma_buf_dynamic_attach, "DMA_BUF");
+EXPORT_SYMBOL_NS_GPL(dma_buf_sgt_dynamic_attach, "DMA_BUF");
 
 /**
  * dma_buf_detach - Remove the given attachment from dmabuf's attachments list
@@ -1072,7 +1072,7 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_detach, "DMA_BUF");
  * dma_buf_pin - Lock down the DMA-buf
  * @attach:	[in]	attachment which should be pinned
  *
- * Only dynamic importers (who set up @attach with dma_buf_dynamic_attach()) may
+ * Only dynamic importers (who set up @attach with dma_buf_sgt_dynamic_attach()) may
  * call this, and only for limited use cases like scanout and not for temporary
  * pin operations. It is not permitted to allow userspace to pin arbitrary
  * amounts of buffers through this interface.

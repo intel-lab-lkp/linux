@@ -1486,8 +1486,9 @@ static int iopt_map_dmabuf(struct iommufd_ctx *ictx, struct iopt_pages *pages,
 	struct dma_buf_attachment *attach;
 	int rc;
 
-	attach = dma_buf_dynamic_attach(dmabuf, iommufd_global_device(),
-					&iopt_dmabuf_attach_revoke_ops, pages);
+	attach = dma_buf_sgt_dynamic_attach(dmabuf, iommufd_global_device(),
+					    &iopt_dmabuf_attach_revoke_ops,
+					    pages);
 	if (IS_ERR(attach))
 		return PTR_ERR(attach);
 

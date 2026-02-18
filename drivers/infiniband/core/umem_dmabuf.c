@@ -155,11 +155,8 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 	if (!ib_umem_num_pages(umem))
 		goto out_free_umem;
 
-	umem_dmabuf->attach = dma_buf_dynamic_attach(
-					dmabuf,
-					dma_device,
-					ops,
-					umem_dmabuf);
+	umem_dmabuf->attach = dma_buf_sgt_dynamic_attach(dmabuf, dma_device,
+							 ops, umem_dmabuf);
 	if (IS_ERR(umem_dmabuf->attach)) {
 		ret = ERR_CAST(umem_dmabuf->attach);
 		goto out_free_umem;
