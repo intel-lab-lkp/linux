@@ -191,4 +191,19 @@ DMA_BUF_EMAPPING_SGT_P2P(const struct dma_buf_mapping_sgt_exp_ops *exp_ops,
 
 extern const struct dma_buf_mapping_match dma_buf_sgt_exp_compat_match;
 
+/*
+ * dma_buf_ops initializer helper for simple drivers that use a single
+ * SGT map/unmap operation without P2P.
+ */
+#define DMA_BUF_SIMPLE_SGT_EXP_MATCH(_map, _unmap)                       \
+	.single_exporter_match = &((const struct dma_buf_mapping_match){ \
+		.type = &dma_buf_mapping_sgt_type,                       \
+		.exp_ops = &((const struct dma_buf_mapping_sgt_exp_ops){ \
+			.map_dma_buf = _map,                             \
+			.unmap_dma_buf = _unmap,                         \
+		}.ops),                                                  \
+		.sgt_data = {                                            \
+			.exporter_requires_p2p = DMA_SGT_NO_P2P,         \
+		} })
+
 #endif
