@@ -9,7 +9,7 @@
 
 struct ttm_mock_manager {
 	struct ttm_resource_manager man;
-	struct drm_buddy mm;
+	struct gpu_buddy mm;
 	u64 default_page_size;
 	/* protects allocations of mock buffer objects */
 	struct mutex lock;
