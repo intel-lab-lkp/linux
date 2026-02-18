@@ -2622,19 +2622,37 @@ static u64 ice_generate_clock_id(struct ice_pf *pf)
  */
 static void ice_dpll_notify_changes(struct ice_dpll *d)
 {
+	struct ice_dplls *dplls = &d->pf->dplls;
 	bool pin_notified = false;
+	int i;
 
 	if (d->prev_dpll_state != d->dpll_state) {
 		d->prev_dpll_state = d->dpll_state;
 		dpll_device_change_ntf(d->dpll);
 	}
 	if (d->prev_input != d->active_input) {
+		struct dpll_pin *old = d->prev_input;
+
 		if (d->prev_input)
 			dpll_pin_change_ntf(d->prev_input);
 		d->prev_input = d->active_input;
 		if (d->active_input) {
 			dpll_pin_change_ntf(d->active_input);
 			pin_notified = true;
+		}
+		for (i = 0; i < ICE_DPLL_PIN_SW_NUM; i++) {
+			if (dplls->sma[i].pin &&
+			    dplls->sma[i].direction ==
+			    DPLL_PIN_DIRECTION_INPUT &&
+			    (dplls->sma[i].input->pin == d->active_input ||
+			     dplls->sma[i].input->pin == old))
+				dpll_pin_change_ntf(dplls->sma[i].pin);
+			if (dplls->ufl[i].pin &&
+			    dplls->ufl[i].direction ==
+			    DPLL_PIN_DIRECTION_INPUT &&
+			    (dplls->ufl[i].input->pin == d->active_input ||
+			     dplls->ufl[i].input->pin == old))
+				dpll_pin_change_ntf(dplls->ufl[i].pin);
 		}
 	}
 	if (d->prev_phase_offset != d->phase_offset) {
