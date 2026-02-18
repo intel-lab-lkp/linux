@@ -7,6 +7,7 @@
 enum vsock_net_mode {
 	VSOCK_NET_MODE_GLOBAL,
 	VSOCK_NET_MODE_LOCAL,
+	VSOCK_NET_MODE_LOCKED,
 };
 
 struct netns_vsock {
@@ -16,6 +17,12 @@ struct netns_vsock {
 	u32 port;
 
 	enum vsock_net_mode mode;
-	enum vsock_net_mode child_ns_mode;
+
+	/* 0 (GLOBAL)
+	 * 1 (LOCAL)
+	 * 2 (GLOBAL + LOCKED)
+	 * 3 (LOCAL + LOCKED)
+	 */
+	int child_ns_mode;
 };
 #endif /* __NET_NET_NAMESPACE_VSOCK_H */

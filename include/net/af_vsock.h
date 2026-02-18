@@ -276,15 +276,29 @@ static inline bool vsock_net_mode_global(struct vsock_sock *vsk)
 	return vsock_net_mode(sock_net(sk_vsock(vsk))) == VSOCK_NET_MODE_GLOBAL;
 }
 
-static inline void vsock_net_set_child_mode(struct net *net,
+static inline bool vsock_net_set_child_mode(struct net *net,
 					    enum vsock_net_mode mode)
 {
-	WRITE_ONCE(net->vsock.child_ns_mode, mode);
+	int locked = mode + VSOCK_NET_MODE_LOCKED;
+	int cur;
+
+	cur = READ_ONCE(net->vsock.child_ns_mode);
+	if (cur == locked)
+		return true;
+	if (cur >= VSOCK_NET_MODE_LOCKED)
+		return false;
+
+	if (try_cmpxchg(&net->vsock.child_ns_mode, &cur, locked))
+		return true;
+
+	return cur == locked;
 }
 
 static inline enum vsock_net_mode vsock_net_child_mode(struct net *net)
 {
-	return READ_ONCE(net->vsock.child_ns_mode);
+	int mode = READ_ONCE(net->vsock.child_ns_mode);
+
+	return mode & (VSOCK_NET_MODE_LOCKED - 1);
 }
 
 /* Return true if two namespaces pass the mode rules. Otherwise, return false.
