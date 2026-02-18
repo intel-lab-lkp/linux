@@ -102,7 +102,7 @@ int dma_buf_match_mapping(struct dma_buf_match_args *args,
  * When this type is matched the map/unmap functions are:
  *
  *  dma_buf_sgt_map_attachment()
- *  dma_buf_unmap_attachment()
+ *  dma_buf_sgt_unmap_attachment()
  *
  * The struct sg_table returned by those functions has only the DMA portions
  * available. The caller must not try to use the struct page * information.
@@ -175,7 +175,7 @@ struct dma_buf_mapping_sgt_exp_ops {
 	/**
 	 * @unmap_dma_buf:
 	 *
-	 * This is called by dma_buf_unmap_attachment() and should unmap and
+	 * This is called by dma_buf_sgt_unmap_attachment() and should unmap and
 	 * release the &sg_table allocated in @map_dma_buf, and it is mandatory.
 	 * For static dma_buf handling this might also unpin the backing
 	 * storage if this is the last mapping of the DMA buffer.

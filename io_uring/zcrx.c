@@ -92,8 +92,8 @@ static void io_release_dmabuf(struct io_zcrx_mem *mem)
 		return;
 
 	if (mem->sgt)
-		dma_buf_unmap_attachment_unlocked(mem->attach, mem->sgt,
-						  DMA_FROM_DEVICE);
+		dma_buf_sgt_unmap_attachment_unlocked(mem->attach, mem->sgt,
+						      DMA_FROM_DEVICE);
 	if (mem->attach)
 		dma_buf_detach(mem->dmabuf, mem->attach);
 	if (mem->dmabuf)

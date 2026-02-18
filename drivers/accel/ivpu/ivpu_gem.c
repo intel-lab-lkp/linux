@@ -159,8 +159,9 @@ static void ivpu_bo_unbind_locked(struct ivpu_bo *bo)
 
 	if (bo->base.sgt) {
 		if (bo->base.base.import_attach) {
-			dma_buf_unmap_attachment(bo->base.base.import_attach,
-						 bo->base.sgt, DMA_BIDIRECTIONAL);
+			dma_buf_sgt_unmap_attachment(
+				bo->base.base.import_attach, bo->base.sgt,
+				DMA_BIDIRECTIONAL);
 		} else {
 			dma_unmap_sgtable(vdev->drm.dev, bo->base.sgt, DMA_BIDIRECTIONAL, 0);
 			sg_free_table(bo->base.sgt);

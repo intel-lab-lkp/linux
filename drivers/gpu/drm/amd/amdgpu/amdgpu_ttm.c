@@ -1036,7 +1036,8 @@ static void amdgpu_ttm_backend_unbind(struct ttm_device *bdev,
 		struct dma_buf_attachment *attach;
 
 		attach = gtt->gobj->import_attach;
-		dma_buf_unmap_attachment(attach, ttm->sg, DMA_BIDIRECTIONAL);
+		dma_buf_sgt_unmap_attachment(attach, ttm->sg,
+					     DMA_BIDIRECTIONAL);
 		ttm->sg = NULL;
 	}
 

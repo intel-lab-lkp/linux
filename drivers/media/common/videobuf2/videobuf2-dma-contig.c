@@ -717,8 +717,8 @@ static int vb2_dc_map_dmabuf(void *mem_priv)
 	if (contig_size < buf->size) {
 		pr_err("contiguous chunk is too small %lu/%lu\n",
 		       contig_size, buf->size);
-		dma_buf_unmap_attachment_unlocked(buf->db_attach, sgt,
-						  buf->dma_dir);
+		dma_buf_sgt_unmap_attachment_unlocked(buf->db_attach, sgt,
+						      buf->dma_dir);
 		return -EFAULT;
 	}
 
@@ -749,7 +749,8 @@ static void vb2_dc_unmap_dmabuf(void *mem_priv)
 		dma_buf_vunmap_unlocked(buf->db_attach->dmabuf, &map);
 		buf->vaddr = NULL;
 	}
-	dma_buf_unmap_attachment_unlocked(buf->db_attach, sgt, buf->dma_dir);
+	dma_buf_sgt_unmap_attachment_unlocked(buf->db_attach, sgt,
+					      buf->dma_dir);
 
 	buf->dma_addr = 0;
 	buf->dma_sgt = NULL;

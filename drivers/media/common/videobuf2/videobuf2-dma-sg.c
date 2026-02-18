@@ -600,7 +600,8 @@ static void vb2_dma_sg_unmap_dmabuf(void *mem_priv)
 		dma_buf_vunmap_unlocked(buf->db_attach->dmabuf, &map);
 		buf->vaddr = NULL;
 	}
-	dma_buf_unmap_attachment_unlocked(buf->db_attach, sgt, buf->dma_dir);
+	dma_buf_sgt_unmap_attachment_unlocked(buf->db_attach, sgt,
+					      buf->dma_dir);
 
 	buf->dma_sgt = NULL;
 }

@@ -70,8 +70,8 @@ void __net_devmem_dmabuf_binding_free(struct work_struct *wq)
 		  size, avail))
 		gen_pool_destroy(binding->chunk_pool);
 
-	dma_buf_unmap_attachment_unlocked(binding->attachment, binding->sgt,
-					  binding->direction);
+	dma_buf_sgt_unmap_attachment_unlocked(binding->attachment, binding->sgt,
+					      binding->direction);
 	dma_buf_detach(binding->dmabuf, binding->attachment);
 	dma_buf_put(binding->dmabuf);
 	xa_destroy(&binding->bound_rxqs);
@@ -318,8 +318,8 @@ err_free_chunks:
 err_tx_vec:
 	kvfree(binding->tx_vec);
 err_unmap:
-	dma_buf_unmap_attachment_unlocked(binding->attachment, binding->sgt,
-					  direction);
+	dma_buf_sgt_unmap_attachment_unlocked(binding->attachment, binding->sgt,
+					      direction);
 err_detach:
 	dma_buf_detach(dmabuf, binding->attachment);
 err_free_binding:
