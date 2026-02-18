@@ -1301,6 +1301,7 @@ static int sisusb_clear_vram(struct sisusb_usb_data *sisusb,
 {
 	int ret, i;
 	ssize_t j;
+	u32 end_addr;
 
 	if (address < sisusb->vrambase)
 		return 1;
@@ -1308,7 +1309,10 @@ static int sisusb_clear_vram(struct sisusb_usb_data *sisusb,
 	if (address >= sisusb->vrambase + sisusb->vramsize)
 		return 1;
 
-	if (address + length > sisusb->vrambase + sisusb->vramsize)
+	if (check_add_overflow(address, (u32)length, &end_addr))
+		return 1;
+
+	if (end_addr > sisusb->vrambase + sisusb->vramsize)
 		length = sisusb->vrambase + sisusb->vramsize - address;
 
 	if (length <= 0)
