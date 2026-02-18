@@ -13,6 +13,7 @@
 #include <linux/msdos_fs.h>
 #include <linux/writeback.h>
 #include <linux/filelock.h>
+#include <linux/falloc.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -88,6 +89,120 @@ out:
 free_clu:
 	exfat_free_cluster(inode, &clu);
 	return -EIO;
+}
+
+static long __exfat_fallocate(struct inode *inode, loff_t ondisksize,
+			  loff_t newsize)
+{
+	unsigned int num_clusters; /* Number of clusters already allocated */
+	unsigned int nr_clusters; /* Number of clusters to be allocated */
+	unsigned int last_clu;
+	struct exfat_inode_info *ei = EXFAT_I(inode);
+	struct super_block *sb = inode->i_sb;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct exfat_chain clu;
+	int ret;
+
+	/* First compute the number of clusters to be allocated */
+	num_clusters = EXFAT_B_TO_CLU(ondisksize, sbi);
+	nr_clusters = EXFAT_B_TO_CLU_ROUND_UP(newsize, sbi);
+
+	/* Set up the cluster chain */
+	if (num_clusters) {
+		exfat_chain_set(&clu, ei->start_clu, num_clusters, ei->flags);
+		ret = exfat_find_last_cluster(sb, &clu, &last_clu);
+		if (ret)
+			return ret;
+
+		clu.dir = last_clu + 1;
+	} else {
+		last_clu = EXFAT_EOF_CLUSTER;
+		clu.dir = EXFAT_EOF_CLUSTER;
+	}
+
+	clu.size = 0;
+	clu.flags = ei->flags;
+
+	/* Allocate clusters */
+	ret = exfat_alloc_cluster(inode, nr_clusters - num_clusters, &clu,
+			inode_needs_sync(inode));
+	if (ret)
+		return ret;
+
+	/* Append new clusters to chain */
+	if (num_clusters) {
+		if (clu.flags != ei->flags)
+			if (exfat_chain_cont_cluster(sb, ei->start_clu, num_clusters))
+				goto free_clu;
+
+		if (clu.flags == ALLOC_FAT_CHAIN)
+			if (exfat_ent_set(sb, last_clu, clu.dir))
+				goto free_clu;
+	} else
+		ei->start_clu = clu.dir;
+
+	ei->flags = clu.flags;
+
+	/* Wrap up: invalidate everything */
+	/* Not zeroing out the clusters, not updating mtime */
+	inode->i_blocks = round_up(newsize, sbi->cluster_size) >> 9;
+	mark_inode_dirty(inode);
+
+	if (IS_SYNC(inode))
+		return write_inode_now(inode, 1);
+
+	return 0;
+free_clu:
+	exfat_free_cluster(inode, &clu);
+	return -EIO;
+}
+
+/*
+ * Preallocate space for a file. This implements fat's fallocate file
+ * operation, which gets called from sys_fallocate system call. User
+ * space requests len bytes at offset. If FALLOC_FL_KEEP_SIZE is set
+ * we just allocate clusters without zeroing them out. Otherwise we
+ * allocate and zero out clusters via an expanding truncate.
+ */
+static long exfat_fallocate(struct file *file, int mode,
+			  loff_t offset, loff_t len)
+{
+	struct inode *inode = file->f_mapping->host;
+	loff_t ondisksize; /* block aligned on-disk size in bytes*/
+	loff_t newsize = offset + len;
+	int err = 0;
+
+	/* No support for hole punch or other fallocate flags. */
+	if (mode & ~FALLOC_FL_KEEP_SIZE)
+		return -EOPNOTSUPP;
+
+	/* No support for dir */
+	if (!S_ISREG(inode->i_mode))
+		return -EOPNOTSUPP;
+
+	if (unlikely(exfat_forced_shutdown(inode->i_sb)))
+		return -EIO;
+
+	inode_lock(inode);
+
+	if (mode & FALLOC_FL_KEEP_SIZE) {
+		ondisksize = exfat_ondisk_size(inode);
+		if (newsize <= ondisksize)
+			goto error;
+
+		err = __exfat_fallocate(inode, ondisksize, newsize);
+	} else {
+		if (newsize <= i_size_read(inode))
+			goto error;
+
+		/* This is just an expanding truncate */
+		err = exfat_cont_expand(inode, newsize);
+	}
+
+error:
+	inode_unlock(inode);
+
+	return err;
 }
 
 static bool exfat_allow_set_time(struct mnt_idmap *idmap,
@@ -771,6 +886,7 @@ const struct file_operations exfat_file_operations = {
 	.fsync		= exfat_file_fsync,
 	.splice_read	= exfat_splice_read,
 	.splice_write	= iter_file_splice_write,
+	.fallocate	= exfat_fallocate,
 	.setlease	= generic_setlease,
 };
 

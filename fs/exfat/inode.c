@@ -686,13 +686,25 @@ out:
 
 void exfat_evict_inode(struct inode *inode)
 {
+	int err = 0;
 	truncate_inode_pages(&inode->i_data, 0);
 
-	if (!inode->i_nlink) {
+	if (!inode->i_nlink)
 		i_size_write(inode, 0);
+	if (!inode->i_nlink || (exfat_ondisk_size(inode) >
+			round_up(i_size_read(inode),
+				EXFAT_SB(inode->i_sb)->cluster_size))) {
+		/* Release unused blocks only when required.
+		 * The inode commit is handled in __exfat_truncate().
+		 */
 		mutex_lock(&EXFAT_SB(inode->i_sb)->s_lock);
-		__exfat_truncate(inode);
+		err = __exfat_truncate(inode);
 		mutex_unlock(&EXFAT_SB(inode->i_sb)->s_lock);
+	}
+
+	if (err) {
+		exfat_warn(inode->i_sb,
+			"IO error occurred whilst evicting an inode. Please run fsck");
 	}
 
 	invalidate_inode_buffers(inode);

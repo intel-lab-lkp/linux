@@ -232,6 +232,29 @@ the inode from the memory. As a result, for any dependency on
 the fallocated region, user should make sure to recheck fallocate
 after reopening the file.
 
+In the event of unsafe removal of the device(e.g. power loss),
+unused clusters fallocated with FALLOC_FL_KEEP_SIZE can become
+orphaned. In order to reclaim orphaned clusters, option 1: try
+truncating the file to the exact size(truncate -s ...). Option 2:
+delete the file if possible, then unmount the filesystem and run
+fsck or, in case of MS Windows, chkdsk. The contents of the
+reclaimed clusters will be placed in the files in the directory
+named *FOUND.XXX*. Delete the files to free up the space taken up
+by orphan clusters(exFAT support testetd as far back as the Windows
+XP KB955704 patch).
+
+For exFAT, use of FALLOC_FL_KEEP_SIZE shouldn't be necessary as
+long as the write is sequential thanks to ValidDataLength in the
+file entry format. However, be aware that the write operation is
+only deferred. Doing something like this
+
+        fallocate -l 1G file
+        echo -n "data" | dd of=file seek=2097151 conv=nocreat,notrunc
+
+is basically asking the kernel to zero out all the blocks before
+the offset. Currently, this IO operation cannot be canceled. This
+caveat also applies when up-truncating files in vfat.
+
 TODO
 ====
 Need to get rid of the raw scanning stuff.  Instead, always use
