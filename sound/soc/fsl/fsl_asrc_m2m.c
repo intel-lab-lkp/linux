@@ -7,6 +7,7 @@
 
 #include <linux/dma/imx-dma.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
 #include <sound/asound.h>
@@ -411,6 +412,7 @@ static int fsl_asrc_m2m_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 static struct sg_table *fsl_asrc_m2m_map_dma_buf(struct dma_buf_attachment *attachment,
 						 enum dma_data_direction direction)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attachment);
 	struct snd_dma_buffer *dmab = attachment->dmabuf->priv;
 	struct sg_table *sgt;
 
@@ -418,10 +420,10 @@ static struct sg_table *fsl_asrc_m2m_map_dma_buf(struct dma_buf_attachment *atta
 	if (!sgt)
 		return NULL;
 
-	if (dma_get_sgtable(attachment->dev, sgt, dmab->area, dmab->addr, dmab->bytes) < 0)
+	if (dma_get_sgtable(dma_dev, sgt, dmab->area, dmab->addr, dmab->bytes) < 0)
 		goto free;
 
-	if (dma_map_sgtable(attachment->dev, sgt, direction, 0))
+	if (dma_map_sgtable(dma_dev, sgt, direction, 0))
 		goto free;
 
 	return sgt;
@@ -436,7 +438,7 @@ static void fsl_asrc_m2m_unmap_dma_buf(struct dma_buf_attachment *attachment,
 				       struct sg_table *table,
 				       enum dma_data_direction direction)
 {
-	dma_unmap_sgtable(attachment->dev, table, direction, 0);
+	dma_unmap_sgtable(dma_buf_sgt_dma_device(attachment), table, direction, 0);
 }
 
 static void fsl_asrc_m2m_release(struct dma_buf *dmabuf)
@@ -446,9 +448,9 @@ static void fsl_asrc_m2m_release(struct dma_buf *dmabuf)
 
 static const struct dma_buf_ops fsl_asrc_m2m_dma_buf_ops = {
 	.mmap = fsl_asrc_m2m_mmap,
-	.map_dma_buf = fsl_asrc_m2m_map_dma_buf,
-	.unmap_dma_buf = fsl_asrc_m2m_unmap_dma_buf,
 	.release = fsl_asrc_m2m_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(fsl_asrc_m2m_map_dma_buf,
+				     fsl_asrc_m2m_unmap_dma_buf),
 };
 
 static int fsl_asrc_m2m_comp_task_create(struct snd_compr_stream *stream,

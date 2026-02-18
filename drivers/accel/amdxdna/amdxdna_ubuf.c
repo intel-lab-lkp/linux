@@ -7,6 +7,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_print.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/pagemap.h>
 #include <linux/vmalloc.h>
 
@@ -37,7 +38,8 @@ static struct sg_table *amdxdna_ubuf_map(struct dma_buf_attachment *attach,
 		return ERR_PTR(ret);
 
 	if (ubuf->flags & AMDXDNA_UBUF_FLAG_MAP_DMA) {
-		ret = dma_map_sgtable(attach->dev, sg, direction, 0);
+		ret = dma_map_sgtable(dma_buf_sgt_dma_device(attach), sg,
+				      direction, 0);
 		if (ret)
 			return ERR_PTR(ret);
 	}
@@ -52,7 +54,8 @@ static void amdxdna_ubuf_unmap(struct dma_buf_attachment *attach,
 	struct amdxdna_ubuf_priv *ubuf = attach->dmabuf->priv;
 
 	if (ubuf->flags & AMDXDNA_UBUF_FLAG_MAP_DMA)
-		dma_unmap_sgtable(attach->dev, sg, direction, 0);
+		dma_unmap_sgtable(dma_buf_sgt_dma_device(attach), sg, direction,
+				  0);
 
 	sg_free_table(sg);
 	kfree(sg);
@@ -117,12 +120,11 @@ static void amdxdna_ubuf_vunmap(struct dma_buf *dbuf, struct iosys_map *map)
 }
 
 static const struct dma_buf_ops amdxdna_ubuf_dmabuf_ops = {
-	.map_dma_buf = amdxdna_ubuf_map,
-	.unmap_dma_buf = amdxdna_ubuf_unmap,
 	.release = amdxdna_ubuf_release,
 	.mmap = amdxdna_ubuf_mmap,
 	.vmap = amdxdna_ubuf_vmap,
 	.vunmap = amdxdna_ubuf_vunmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(amdxdna_ubuf_map, amdxdna_ubuf_unmap),
 };
 
 struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,

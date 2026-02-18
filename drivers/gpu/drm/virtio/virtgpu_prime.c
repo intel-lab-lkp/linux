@@ -23,6 +23,7 @@
  */
 
 #include <drm/drm_prime.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/virtio_dma_buf.h>
 
 #include "virtgpu_drv.h"
@@ -53,7 +54,8 @@ virtgpu_gem_map_dma_buf(struct dma_buf_attachment *attach,
 	struct virtio_gpu_object *bo = gem_to_virtio_gpu_obj(obj);
 
 	if (virtio_gpu_is_vram(bo))
-		return virtio_gpu_vram_map_dma_buf(bo, attach->dev, dir);
+		return virtio_gpu_vram_map_dma_buf(
+			bo, dma_buf_sgt_dma_device(attach), dir);
 
 	return drm_gem_map_dma_buf(attach, dir);
 }
@@ -66,7 +68,8 @@ static void virtgpu_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 	struct virtio_gpu_object *bo = gem_to_virtio_gpu_obj(obj);
 
 	if (virtio_gpu_is_vram(bo)) {
-		virtio_gpu_vram_unmap_dma_buf(attach->dev, sgt, dir);
+		virtio_gpu_vram_unmap_dma_buf(dma_buf_sgt_dma_device(attach),
+					      sgt, dir);
 		return;
 	}
 
@@ -77,12 +80,12 @@ static const struct virtio_dma_buf_ops virtgpu_dmabuf_ops =  {
 	.ops = {
 		.attach = virtio_dma_buf_attach,
 		.detach = drm_gem_map_detach,
-		.map_dma_buf = virtgpu_gem_map_dma_buf,
-		.unmap_dma_buf = virtgpu_gem_unmap_dma_buf,
 		.release = drm_gem_dmabuf_release,
 		.mmap = drm_gem_dmabuf_mmap,
 		.vmap = drm_gem_dmabuf_vmap,
 		.vunmap = drm_gem_dmabuf_vunmap,
+		DMA_BUF_SIMPLE_SGT_EXP_MATCH(virtgpu_gem_map_dma_buf,
+					     virtgpu_gem_unmap_dma_buf),
 	},
 	.device_attach = drm_gem_map_attach,
 	.get_uuid = virtgpu_virtio_get_uuid,
