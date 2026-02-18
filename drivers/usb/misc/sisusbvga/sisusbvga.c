@@ -2319,6 +2319,11 @@ static ssize_t sisusb_read(struct file *file, char __user *buffer,
 		return -ENODEV;
 	}
 
+	if (!buffer) {
+		mutex_unlock(&sisusb->lock);
+		return -EFAULT;
+	}
+
 	if ((*ppos) >= SISUSB_PCI_PSEUDO_IOPORTBASE &&
 			(*ppos) <  SISUSB_PCI_PSEUDO_IOPORTBASE + 128) {
 
