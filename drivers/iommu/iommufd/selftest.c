@@ -1962,19 +1962,6 @@ struct iommufd_test_dma_buf {
 	bool revoked;
 };
 
-static struct sg_table *
-iommufd_test_dma_buf_map(struct dma_buf_attachment *attachment,
-			 enum dma_data_direction dir)
-{
-	return ERR_PTR(-EOPNOTSUPP);
-}
-
-static void iommufd_test_dma_buf_unmap(struct dma_buf_attachment *attachment,
-				       struct sg_table *sgt,
-				       enum dma_data_direction dir)
-{
-}
-
 static void iommufd_test_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct iommufd_test_dma_buf *priv = dmabuf->priv;
@@ -1983,29 +1970,50 @@ static void iommufd_test_dma_buf_release(struct dma_buf *dmabuf)
 	kfree(priv);
 }
 
-static const struct dma_buf_ops iommufd_test_dmabuf_ops = {
-	.release = iommufd_test_dma_buf_release,
-	DMA_BUF_SIMPLE_SGT_EXP_MATCH(iommufd_test_dma_buf_map,
-				     iommufd_test_dma_buf_unmap),
-};
-
-int iommufd_test_dma_buf_iommufd_map(struct dma_buf_attachment *attachment,
-				     struct dma_buf_phys_vec *phys)
+static struct dma_buf_phys_list *
+iommufd_dma_pal_map_phys(struct dma_buf_attachment *attachment)
 {
 	struct iommufd_test_dma_buf *priv = attachment->dmabuf->priv;
+	struct dma_buf_phys_list *phys;
 
 	dma_resv_assert_held(attachment->dmabuf->resv);
 
-	if (attachment->dmabuf->ops != &iommufd_test_dmabuf_ops)
-		return -EOPNOTSUPP;
-
 	if (priv->revoked)
-		return -ENODEV;
+		return ERR_PTR(-ENODEV);
 
-	phys->paddr = virt_to_phys(priv->memory);
-	phys->len = priv->length;
-	return 0;
+	phys = kvmalloc(struct_size(phys, phys, 1), GFP_KERNEL);
+	if (!phys)
+		return ERR_PTR(-ENOMEM);
+
+	phys->length = 1;
+	phys->phys[0].paddr = virt_to_phys(priv->memory);
+	phys->phys[0].len = priv->length;
+	return phys;
 }
+
+static void iommufd_dma_pal_unmap_phys(struct dma_buf_attachment *attach,
+				       struct dma_buf_phys_list *phys)
+{
+}
+
+static const struct dma_buf_mapping_pal_exp_ops iommufd_test_dma_buf_pal_ops = {
+	.map_phys = iommufd_dma_pal_map_phys,
+	.unmap_phys = iommufd_dma_pal_unmap_phys,
+};
+
+static int iommufd_dma_buf_match_mapping(struct dma_buf_match_args *args)
+{
+	struct dma_buf_mapping_match pal_match[] = {
+		DMA_BUF_EMAPPING_PAL(&iommufd_test_dma_buf_pal_ops),
+	};
+
+	return dma_buf_match_mapping(args, pal_match, ARRAY_SIZE(pal_match));
+}
+
+static const struct dma_buf_ops iommufd_test_dmabuf_ops = {
+	.release = iommufd_test_dma_buf_release,
+	.match_mapping = iommufd_dma_buf_match_mapping,
+};
 
 static int iommufd_test_dmabuf_get(struct iommufd_ucmd *ucmd,
 				   unsigned int open_flags,

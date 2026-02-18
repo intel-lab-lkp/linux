@@ -46,6 +46,7 @@
  * ULONG_MAX so last_index + 1 cannot overflow.
  */
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-resv.h>
 #include <linux/file.h>
 #include <linux/highmem.h>
@@ -1447,6 +1448,8 @@ static void iopt_revoke_notify(struct dma_buf_attachment *attach)
 					     iopt_area_last_index(area));
 	}
 	pages->dmabuf.phys.len = 0;
+	dma_buf_pal_unmap_phys(pages->dmabuf.attach, pages->dmabuf.exp_phys);
+	pages->dmabuf.exp_phys = NULL;
 }
 
 static struct dma_buf_attach_ops iopt_dmabuf_attach_revoke_ops = {
@@ -1454,41 +1457,16 @@ static struct dma_buf_attach_ops iopt_dmabuf_attach_revoke_ops = {
 	.move_notify = iopt_revoke_notify,
 };
 
-/*
- * iommufd and vfio have a circular dependency. Future work for a phys
- * based private interconnect will remove this.
- */
-static int
-sym_vfio_pci_dma_buf_iommufd_map(struct dma_buf_attachment *attachment,
-				 struct dma_buf_phys_vec *phys)
-{
-	typeof(&vfio_pci_dma_buf_iommufd_map) fn;
-	int rc;
-
-	rc = iommufd_test_dma_buf_iommufd_map(attachment, phys);
-	if (rc != -EOPNOTSUPP)
-		return rc;
-
-	if (!IS_ENABLED(CONFIG_VFIO_PCI_DMABUF))
-		return -EOPNOTSUPP;
-
-	fn = symbol_get(vfio_pci_dma_buf_iommufd_map);
-	if (!fn)
-		return -EOPNOTSUPP;
-	rc = fn(attachment, phys);
-	symbol_put(vfio_pci_dma_buf_iommufd_map);
-	return rc;
-}
-
 static int iopt_map_dmabuf(struct iommufd_ctx *ictx, struct iopt_pages *pages,
 			   struct dma_buf *dmabuf)
 {
+	struct dma_buf_mapping_match pal_match[] = { DMA_BUF_IMAPPING_PAL() };
 	struct dma_buf_attachment *attach;
 	int rc;
 
-	attach = dma_buf_sgt_dynamic_attach(dmabuf, iommufd_global_device(),
-					    &iopt_dmabuf_attach_revoke_ops,
-					    pages);
+	attach = dma_buf_mapping_attach(dmabuf, pal_match,
+					ARRAY_SIZE(pal_match),
+					&iopt_dmabuf_attach_revoke_ops, pages);
 	if (IS_ERR(attach))
 		return PTR_ERR(attach);
 
@@ -1502,9 +1480,19 @@ static int iopt_map_dmabuf(struct iommufd_ctx *ictx, struct iopt_pages *pages,
 		mutex_unlock(&pages->mutex);
 	}
 
-	rc = sym_vfio_pci_dma_buf_iommufd_map(attach, &pages->dmabuf.phys);
-	if (rc)
+
+	pages->dmabuf.exp_phys = dma_buf_pal_map_phys(attach);
+	if (IS_ERR(pages->dmabuf.exp_phys)) {
+		rc = PTR_ERR(pages->dmabuf.exp_phys);
 		goto err_detach;
+	}
+
+	/* For now only works with single range exporters */
+	if (pages->dmabuf.exp_phys->length != 1) {
+		rc = -EINVAL;
+		goto err_unmap;
+	}
+	pages->dmabuf.phys = pages->dmabuf.exp_phys->phys[0];
 
 	dma_resv_unlock(dmabuf->resv);
 
@@ -1512,6 +1500,8 @@ static int iopt_map_dmabuf(struct iommufd_ctx *ictx, struct iopt_pages *pages,
 	pages->dmabuf.attach = attach;
 	return 0;
 
+err_unmap:
+	dma_buf_pal_unmap_phys(attach, pages->dmabuf.exp_phys);
 err_detach:
 	dma_resv_unlock(dmabuf->resv);
 	dma_buf_detach(dmabuf, attach);
@@ -1656,6 +1646,12 @@ void iopt_release_pages(struct kref *kref)
 	free_uid(pages->source_user);
 	if (iopt_is_dmabuf(pages) && pages->dmabuf.attach) {
 		struct dma_buf *dmabuf = pages->dmabuf.attach->dmabuf;
+
+		dma_resv_lock(dmabuf->resv, NULL);
+		if (pages->dmabuf.exp_phys)
+			dma_buf_pal_unmap_phys(pages->dmabuf.attach,
+					       pages->dmabuf.exp_phys);
+		dma_resv_unlock(dmabuf->resv);
 
 		dma_buf_detach(dmabuf, pages->dmabuf.attach);
 		dma_buf_put(dmabuf);
