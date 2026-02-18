@@ -14,7 +14,7 @@ void warn(const char *m)
 	error_putstr("\n\n");
 }
 
-void error(char *m)
+void error(const char *m)
 {
 	warn(m);
 	error_putstr(" -- System halted");
