@@ -970,6 +970,14 @@ void iwl_mld_tx_from_txq(struct iwl_mld *mld, struct ieee80211_txq *txq)
 	struct sk_buff *skb = NULL;
 	u8 zero_addr[ETH_ALEN] = {};
 
+	/* Firmware is dead - don't pull frames from mac80211 TXQs.
+	 * Packets dequeued here would fail at iwl_trans_tx() anyway,
+	 * but looping over every queued frame burns CPU and causes
+	 * soft lockups during firmware error recovery.
+	 */
+	if (unlikely(test_bit(STATUS_FW_ERROR, &mld->trans->status)))
+		return;
+
 	/*
 	 * No need for threads to be pending here, they can leave the first
 	 * taker all the work.
