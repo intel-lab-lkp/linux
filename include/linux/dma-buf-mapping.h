@@ -113,8 +113,73 @@ extern struct dma_buf_mapping_type dma_buf_mapping_sgt_type;
 
 struct dma_buf_mapping_sgt_exp_ops {
 	struct dma_buf_mapping_exp_ops ops;
+
+	/**
+	 * @map_dma_buf:
+	 *
+	 * This is called by dma_buf_map_attachment() and is used to map a
+	 * shared &dma_buf into device address space, and it is mandatory. It
+	 * can only be called if @attach has been called successfully.
+	 *
+	 * This call may sleep, e.g. when the backing storage first needs to be
+	 * allocated, or moved to a location suitable for all currently attached
+	 * devices.
+	 *
+	 * Note that any specific buffer attributes required for this function
+	 * should get added to device_dma_parameters accessible via
+	 * &device.dma_params from the &dma_buf_attachment. The @attach callback
+	 * should also check these constraints.
+	 *
+	 * If this is being called for the first time, the exporter can now
+	 * choose to scan through the list of attachments for this buffer,
+	 * collate the requirements of the attached devices, and choose an
+	 * appropriate backing storage for the buffer.
+	 *
+	 * Based on enum dma_data_direction, it might be possible to have
+	 * multiple users accessing at the same time (for reading, maybe), or
+	 * any other kind of sharing that the exporter might wish to make
+	 * available to buffer-users.
+	 *
+	 * This is always called with the dmabuf->resv object locked when
+	 * the dynamic_mapping flag is true.
+	 *
+	 * Note that for non-dynamic exporters the driver must guarantee that
+	 * that the memory is available for use and cleared of any old data by
+	 * the time this function returns.  Drivers which pipeline their buffer
+	 * moves internally must wait for all moves and clears to complete.
+	 * Dynamic exporters do not need to follow this rule: For non-dynamic
+	 * importers the buffer is already pinned through @pin, which has the
+	 * same requirements. Dynamic importers otoh are required to obey the
+	 * dma_resv fences.
+	 *
+	 * Returns:
+	 *
+	 * A &sg_table scatter list of the backing storage of the DMA buffer,
+	 * already mapped into the device address space of the &device attached
+	 * with the provided &dma_buf_attachment. The addresses and lengths in
+	 * the scatter list are PAGE_SIZE aligned.
+	 *
+	 * On failure, returns a negative error value wrapped into a pointer.
+	 * May also return -EINTR when a signal was received while being
+	 * blocked.
+	 *
+	 * Note that exporters should not try to cache the scatter list, or
+	 * return the same one for multiple calls. Caching is done either by the
+	 * DMA-BUF code (for non-dynamic importers) or the importer. Ownership
+	 * of the scatter list is transferred to the caller, and returned by
+	 * @unmap_dma_buf.
+	 */
 	struct sg_table *(*map_dma_buf)(struct dma_buf_attachment *attach,
 					enum dma_data_direction dir);
+
+	/**
+	 * @unmap_dma_buf:
+	 *
+	 * This is called by dma_buf_unmap_attachment() and should unmap and
+	 * release the &sg_table allocated in @map_dma_buf, and it is mandatory.
+	 * For static dma_buf handling this might also unpin the backing
+	 * storage if this is the last mapping of the DMA buffer.
+	 */
 	void (*unmap_dma_buf)(struct dma_buf_attachment *attach,
 			      struct sg_table *sgt,
 			      enum dma_data_direction dir);
@@ -188,8 +253,6 @@ DMA_BUF_EMAPPING_SGT_P2P(const struct dma_buf_mapping_sgt_exp_ops *exp_ops,
 	match.sgt_data.exporting_p2p_device = p2p_device;
 	return match;
 }
-
-extern const struct dma_buf_mapping_match dma_buf_sgt_exp_compat_match;
 
 /*
  * dma_buf_ops initializer helper for simple drivers that use a single
