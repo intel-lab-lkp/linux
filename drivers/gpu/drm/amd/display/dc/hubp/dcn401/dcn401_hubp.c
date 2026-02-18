@@ -589,7 +589,12 @@ void hubp401_program_tiling(
 	 *
 	 * DIM_TYPE field in DCSURF_TILING for Display is always 1 (2D dimension) which is HW default.
 	 */
-	 REG_UPDATE(DCSURF_TILING_CONFIG, SW_MODE, info->gfx_addr3.swizzle);
+	 if (info->gfxversion == DcGfxAddr3) {
+		REG_UPDATE(DCSURF_TILING_CONFIG, SW_MODE, info->gfx_addr3.swizzle);
+	} else {
+		/* linear */
+		REG_UPDATE(DCSURF_TILING_CONFIG, SW_MODE, 0);
+	}
 }
 
 void hubp401_program_size(
@@ -733,10 +738,8 @@ void hubp401_cursor_set_position(
 	const struct dc_cursor_mi_param *param)
 {
 	struct dcn20_hubp *hubp2 = TO_DCN20_HUBP(hubp);
-	int x_pos = pos->x - param->recout.x;
-	int y_pos = pos->y - param->recout.y;
-	int rec_x_offset = x_pos - pos->x_hotspot;
-	int rec_y_offset = y_pos - pos->y_hotspot;
+	int rec_x_offset = pos->x - pos->x_hotspot;
+	int rec_y_offset = pos->y - pos->y_hotspot;
 	int dst_x_offset;
 	int x_pos_viewport = 0;
 	int x_hot_viewport = 0;
@@ -748,10 +751,10 @@ void hubp401_cursor_set_position(
 	 * within preceeding ODM slices.
 	 */
 	if (param->recout.width) {
-		x_pos_viewport = x_pos * param->viewport.width / param->recout.width;
+		x_pos_viewport = pos->x * param->viewport.width / param->recout.width;
 		x_hot_viewport = pos->x_hotspot * param->viewport.width / param->recout.width;
 	} else {
-		ASSERT(!cur_en || x_pos == 0);
+		ASSERT(!cur_en || pos->x == 0);
 		ASSERT(!cur_en || pos->x_hotspot == 0);
 	}
 
@@ -790,8 +793,8 @@ void hubp401_cursor_set_position(
 
 	if (!hubp->cursor_offload) {
 		REG_SET_2(CURSOR_POSITION, 0,
-			CURSOR_X_POSITION, x_pos,
-			CURSOR_Y_POSITION, y_pos);
+			CURSOR_X_POSITION, pos->x,
+			CURSOR_Y_POSITION, pos->y);
 
 		REG_SET_2(CURSOR_HOT_SPOT, 0,
 			CURSOR_HOT_SPOT_X, pos->x_hotspot,
