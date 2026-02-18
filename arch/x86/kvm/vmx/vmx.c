@@ -1473,7 +1473,7 @@ static void vmx_write_guest_host_msr(struct vcpu_vmx *vmx, u32 msr, u64 data,
 {
 	preempt_disable();
 	if (vmx->vt.guest_state_loaded)
-		wrmsrns(msr, data);
+		native_wrmsrq(msr, data);
 	preempt_enable();
 	*cache = data;
 }
