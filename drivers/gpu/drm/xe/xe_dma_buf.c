@@ -211,7 +211,7 @@ static int xe_dma_buf_match_mapping(struct dma_buf_match_args *args)
 		sgt_match[num_match++] =
 			DMA_BUF_EMAPPING_SGT(&xe_dma_buf_sgt_ops);
 
-	return dma_buf_match_mapping(args, sgt_match, ARRAY_SIZE(sgt_match));
+	return dma_buf_match_mapping(args, sgt_match, num_match);
 }
 
 static const struct dma_buf_ops xe_dmabuf_ops = {
