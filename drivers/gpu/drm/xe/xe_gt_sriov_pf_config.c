@@ -1900,6 +1900,28 @@ static u64 pf_estimate_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
 	return fair;
 }
 
+static u64 pf_profile_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
+{
+	struct xe_tile *tile = gt_to_tile(gt);
+	bool admin_only_pf = xe_sriov_pf_admin_only(tile->xe);
+	u64 usable = xe_vram_region_usable_size(tile->mem.vram);
+	u64 spare = pf_get_min_spare_lmem(gt);
+	u64 available = usable > spare ? usable - spare : 0;
+	u64 shareable = ALIGN_DOWN(available, SZ_1G);
+	u64 alignment = pf_get_lmem_alignment(gt);
+	u64 fair;
+
+	if (admin_only_pf)
+		fair = div_u64(shareable, num_vfs);
+	else
+		fair = div_u64(shareable, 1 + num_vfs);
+
+	if (!admin_only_pf && fair)
+		fair = rounddown_pow_of_two(fair);
+
+	return ALIGN_DOWN(fair, alignment);
+}
+
 /**
  * xe_gt_sriov_pf_config_set_fair_lmem - Provision many VFs with fair LMEM.
  * @gt: the &xe_gt (can't be media)
@@ -1913,6 +1935,7 @@ static u64 pf_estimate_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
 int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
 					unsigned int num_vfs)
 {
+	u64 profile;
 	u64 fair;
 
 	xe_gt_assert(gt, vfid);
@@ -1928,6 +1951,12 @@ int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
 
 	if (!fair)
 		return -ENOSPC;
+
+	profile = pf_profile_fair_lmem(gt, num_vfs);
+	fair = min(fair, profile);
+	if (fair < profile)
+		xe_gt_sriov_info(gt, "Using non-profile provisioning (%s %llu vs %llu)\n",
+				 "VRAM", fair, profile);
 
 	return xe_gt_sriov_pf_config_bulk_set_lmem(gt, vfid, num_vfs, fair);
 }
