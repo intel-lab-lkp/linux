@@ -846,6 +846,17 @@ static int iwl_mld_tx_tso_segment(struct iwl_mld *mld, struct sk_buff *skb,
 	 */
 	num_subframes = (max_tid_amsdu_len + pad) / (subf_len + pad);
 
+	/* If the AMSDU length limit is too small to fit even a single
+	 * subframe (e.g. max_tid_amsdu_len is the sentinel value 1 set by
+	 * the TLC notification when AMSDU is disabled for this TID), fall
+	 * back to non-AMSDU TSO segmentation. Without this guard,
+	 * num_subframes=0 causes gso_size=0 in iwl_tx_tso_segment(),
+	 * which makes skb_gso_segment() produce tens of thousands of
+	 * 1-byte segments, overloading the TX ring and completion path.
+	 */
+	if (!num_subframes)
+		return iwl_tx_tso_segment(skb, 1, netdev_flags, mpdus_skbs);
+
 	if (sta->max_amsdu_subframes &&
 	    num_subframes > sta->max_amsdu_subframes)
 		num_subframes = sta->max_amsdu_subframes;
