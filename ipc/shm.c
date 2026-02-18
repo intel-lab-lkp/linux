@@ -1675,12 +1675,15 @@ out_fput:
 out_nattch:
 	down_write(&shm_ids(ns).rwsem);
 	shp = shm_lock(ns, shmid);
-	shp->shm_nattch--;
+	if (!IS_ERR(shp)) {
+		shp->shm_nattch--;
 
-	if (shm_may_destroy(shp))
-		shm_destroy(ns, shp);
-	else
-		shm_unlock(shp);
+		if (shm_may_destroy(shp))
+			shm_destroy(ns, shp);
+		else
+			shm_unlock(shp);
+	}
+
 	up_write(&shm_ids(ns).rwsem);
 	return err;
 
