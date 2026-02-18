@@ -28,6 +28,7 @@
 
 #include <linux/export.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/rbtree.h>
 #include <linux/module.h>
 
@@ -587,6 +588,18 @@ int drm_prime_handle_to_fd_ioctl(struct drm_device *dev, void *data,
  * option for sharing lots of buffers for rendering.
  */
 
+static bool is_gem_map_dma_buf(struct dma_buf_attachment *attach)
+{
+	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops =
+		dma_buf_get_sgt_ops(attach);
+
+	if (attach->dmabuf->ops->map_dma_buf == drm_gem_map_dma_buf)
+		return true;
+	if (sgt_exp_ops && sgt_exp_ops->map_dma_buf == drm_gem_map_dma_buf)
+		return true;
+	return false;
+}
+
 /**
  * drm_gem_map_attach - dma_buf attach implementation for GEM
  * @dma_buf: buffer to attach device to
@@ -608,7 +621,7 @@ int drm_gem_map_attach(struct dma_buf *dma_buf,
 	 * drm_gem_map_dma_buf() requires obj->get_sg_table(), but drivers
 	 * that implement their own ->map_dma_buf() do not.
 	 */
-	if (dma_buf->ops->map_dma_buf == drm_gem_map_dma_buf &&
+	if (is_gem_map_dma_buf(attach) &&
 	    !obj->funcs->get_sg_table)
 		return -ENOSYS;
 
