@@ -457,3 +457,18 @@ FTRACE_ENTRY(timerlat, timerlat_entry,
 		 __entry->context,
 		 __entry->timer_latency)
 );
+
+FTRACE_ENTRY(invalid_subbuf, invalid_subbuf_entry,
+	TRACE_INVALID_BUF,
+
+	F_STRUCT(
+		__field(	long,			lost_bytes	)
+		__field(	long,			lost_entries	)
+		__field(	int,			buffer_index	)
+	),
+
+	F_printk("lost_bytes:%ld\tlost_entries:%ld\tbuffer_index:%d\n",
+		 __entry->lost_bytes,
+		 __entry->lost_entries,
+		 __entry->buffer_index)
+);

@@ -1911,6 +1911,38 @@ static int rb_validate_buffer(struct buffer_data_page *dpage, int cpu)
 	return rb_read_data_buffer(dpage, tail, cpu, &ts, &delta);
 }
 
+/* Inject invalid_buffer event */
+static void rb_record_invalid_buffer(struct buffer_page *buffer,
+				     long commit_bytes, long entries,
+				     int buffer_index)
+{
+	struct buffer_data_page *dpage = buffer->page;
+	struct invalid_subbuf_entry *entry;
+	struct ring_buffer_event *event;
+	long length;
+
+	length = DIV_ROUND_UP(sizeof(*entry), RB_ALIGNMENT);
+
+	/*
+	 * Instead of ring_buffer_lock_reserve(), directly allocate it on
+	 * the first entry of specific buffer_page.
+	 */
+	event = (struct ring_buffer_event *)&dpage->data[0];
+	event->type_len = length;
+	event->time_delta = 0;
+
+	trace_event_setup(event, TRACE_INVALID_BUF, 0);
+
+	entry = ring_buffer_event_data(event);
+	entry->lost_bytes = commit_bytes;
+	entry->lost_entries = entries;
+	entry->buffer_index = buffer_index;
+
+	/* This buffer_page has only one event. */
+	local_set(&buffer->entries, 1);
+	local_set(&buffer->page->commit, rb_event_data_length(event));
+}
+
 /* If the meta data has been validated, now validate the events */
 static void rb_meta_validate_events(struct ring_buffer_per_cpu *cpu_buffer)
 {
@@ -2043,12 +2075,11 @@ static void rb_meta_validate_events(struct ring_buffer_per_cpu *cpu_buffer)
 
 		ret = rb_validate_buffer(head_page->page, cpu_buffer->cpu);
 		if (ret < 0) {
-			pr_info("Ring buffer meta [%d] invalid buffer page\n",
-				cpu_buffer->cpu);
-			/* Instead of invalidate whole ring buffer, just clear this subbuffer. */
-			local_set(&head_page->entries, 0);
-			local_set(&head_page->page->commit, 0);
-			/* TODO: commit an event to mark this is broken. */
+			/* Discard invalid buffer and record it. */
+			rb_record_invalid_buffer(head_page,
+				local_read(&head_page->page->commit),
+				local_read(&head_page->entries),
+				rb_meta_subbuf_idx(meta, head_page->page));
 		} else {
 			/* If the buffer has content, update pages_touched */
 			if (ret)
