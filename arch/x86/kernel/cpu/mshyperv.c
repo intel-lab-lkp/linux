@@ -111,9 +111,12 @@ void hv_para_set_sint_proxy(bool enable)
  */
 u64 hv_para_get_synic_register(unsigned int reg)
 {
+	u64 val;
+
 	if (WARN_ON(!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg)))
 		return ~0ULL;
-	return native_read_msr(reg);
+	rdmsrq(reg, val);
+	return val;
 }
 
 /*
@@ -123,7 +126,7 @@ void hv_para_set_synic_register(unsigned int reg, u64 val)
 {
 	if (WARN_ON(!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg)))
 		return;
-	native_write_msr(reg, val);
+	wrmsrq(reg, val);
 }
 
 u64 hv_get_msr(unsigned int reg)
