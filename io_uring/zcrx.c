@@ -130,7 +130,7 @@ static int io_import_dmabuf(struct io_zcrx_ifq *ifq,
 		goto err;
 	}
 
-	mem->attach = dma_buf_attach(mem->dmabuf, ifq->dev);
+	mem->attach = dma_buf_sgt_attach(mem->dmabuf, ifq->dev);
 	if (IS_ERR(mem->attach)) {
 		ret = PTR_ERR(mem->attach);
 		mem->attach = NULL;

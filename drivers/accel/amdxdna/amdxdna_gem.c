@@ -605,7 +605,7 @@ amdxdna_gem_prime_import(struct drm_device *dev, struct dma_buf *dma_buf)
 
 	get_dma_buf(dma_buf);
 
-	attach = dma_buf_attach(dma_buf, dev->dev);
+	attach = dma_buf_sgt_attach(dma_buf, dev->dev);
 	if (IS_ERR(attach)) {
 		ret = PTR_ERR(attach);
 		goto put_buf;

@@ -646,7 +646,7 @@ err_alloc_file:
  * 2. Userspace passes this file-descriptors to all drivers it wants this buffer
  *    to share with: First the file descriptor is converted to a &dma_buf using
  *    dma_buf_get(). Then the buffer is attached to the device using
- *    dma_buf_attach().
+ *    dma_buf_sgt_attach().
  *
  *    Up to this stage the exporter is still free to migrate or reallocate the
  *    backing storage.
@@ -875,7 +875,7 @@ dma_buf_pin_on_map(struct dma_buf_attachment *attach)
  * 2. Importers must not hold the dma-buf reservation lock when calling these
  *    functions:
  *
- *     - dma_buf_attach()
+ *     - dma_buf_sgt_attach()
  *     - dma_buf_dynamic_attach()
  *     - dma_buf_detach()
  *     - dma_buf_export()
@@ -999,15 +999,15 @@ err_attach:
 EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_attach, "DMA_BUF");
 
 /**
- * dma_buf_attach - Wrapper for dma_buf_mapping_attach
+ * dma_buf_sgt_attach - Wrapper for dma_buf_mapping_attach
  * @dmabuf:	[in]	buffer to attach device to.
  * @dev:	[in]	device to be attached.
  *
  * Wrapper to call dma_buf_mapping_attach() for drivers which still use a static
  * mapping.
  */
-struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
-					  struct device *dev)
+struct dma_buf_attachment *dma_buf_sgt_attach(struct dma_buf *dmabuf,
+					      struct device *dev)
 {
 	struct dma_buf_mapping_match sgt_match[] = {
 		DMA_BUF_IMAPPING_SGT(dev, DMA_SGT_NO_P2P),
@@ -1016,7 +1016,7 @@ struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
 	return dma_buf_mapping_attach(dmabuf, sgt_match, ARRAY_SIZE(sgt_match),
 				      NULL, NULL);
 }
-EXPORT_SYMBOL_NS_GPL(dma_buf_attach, "DMA_BUF");
+EXPORT_SYMBOL_NS_GPL(dma_buf_sgt_attach, "DMA_BUF");
 
 /**
  * dma_buf_dynamic_attach - Add the device to dma_buf's attachments list
@@ -1048,7 +1048,7 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_dynamic_attach, "DMA_BUF");
  * @dmabuf:	[in]	buffer to detach from.
  * @attach:	[in]	attachment to be detached; is free'd after this call.
  *
- * Clean up a device attachment obtained by calling dma_buf_attach().
+ * Clean up a device attachment obtained by calling dma_buf_sgt_attach().
  *
  * Optionally this calls &dma_buf_ops.detach for device-specific detach.
  */

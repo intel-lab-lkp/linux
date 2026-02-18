@@ -80,7 +80,7 @@ static struct host1x_bo_mapping *tegra_bo_pin(struct device *dev, struct host1x_
 	if (obj->dma_buf) {
 		struct dma_buf *buf = obj->dma_buf;
 
-		map->attach = dma_buf_attach(buf, dev);
+		map->attach = dma_buf_sgt_attach(buf, dev);
 		if (IS_ERR(map->attach)) {
 			err = PTR_ERR(map->attach);
 			goto free;
@@ -472,7 +472,7 @@ static struct tegra_bo *tegra_bo_import(struct drm_device *drm,
 	 * domain, map it first to the DRM device to get an sgt.
 	 */
 	if (tegra->domain) {
-		attach = dma_buf_attach(buf, drm->dev);
+		attach = dma_buf_sgt_attach(buf, drm->dev);
 		if (IS_ERR(attach)) {
 			err = PTR_ERR(attach);
 			goto free;

@@ -608,7 +608,7 @@ Remove automatic page mapping from dma-buf importing
 
 When importing dma-bufs, the dma-buf and PRIME frameworks automatically map
 imported pages into the importer's DMA area. drm_gem_prime_fd_to_handle() and
-drm_gem_prime_handle_to_fd() require that importers call dma_buf_attach()
+drm_gem_prime_handle_to_fd() require that importers call dma_buf_sgt_attach()
 even if they never do actual device DMA, but only CPU access through
 dma_buf_vmap(). This is a problem for USB devices, which do not support DMA
 operations.

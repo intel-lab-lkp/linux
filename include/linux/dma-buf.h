@@ -70,7 +70,7 @@ struct dma_buf_ops {
 	/**
 	 * @attach:
 	 *
-	 * This is called from dma_buf_attach() to make sure that a given
+	 * This is called from dma_buf_sgt_attach() to make sure that a given
 	 * &dma_buf_attachment.dev can access the provided &dma_buf. Exporters
 	 * which support buffer objects in special locations like VRAM or
 	 * device-specific carveout areas should check whether the buffer could
@@ -118,7 +118,7 @@ struct dma_buf_ops {
 	 * exclusive with @cache_sgt_mapping.
 	 *
 	 * This is called automatically for non-dynamic importers from
-	 * dma_buf_attach().
+	 * dma_buf_sgt_attach().
 	 *
 	 * Note that similar to non-dynamic exporters in their @map_dma_buf
 	 * callback the driver must guarantee that the memory is available for
@@ -473,7 +473,7 @@ struct dma_buf_attach_ops {
  * and its user device(s). The list contains one attachment struct per device
  * attached to the buffer.
  *
- * An attachment is created by calling dma_buf_attach(), and released again by
+ * An attachment is created by calling dma_buf_sgt_attach(), and released again by
  * calling dma_buf_detach(). The DMA mapping itself needed to initiate a
  * transfer is created by dma_buf_sgt_map_attachment() and freed again by calling
  * dma_buf_sgt_unmap_attachment().
@@ -558,8 +558,8 @@ static inline bool dma_buf_is_dynamic(struct dma_buf *dmabuf)
 	return !!dmabuf->ops->pin;
 }
 
-struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
-					  struct device *dev);
+struct dma_buf_attachment *dma_buf_sgt_attach(struct dma_buf *dmabuf,
+					      struct device *dev);
 struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		       const struct dma_buf_attach_ops *importer_ops,
