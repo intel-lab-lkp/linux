@@ -57,37 +57,23 @@ static int peci_get_cpu_id(struct peci_device *device, u32 *cpu_id)
 	if (ret)
 		goto out_req_free;
 
+	/*
+	 * The id that comes back from the hardware is in the raw
+	 * format of x86 CPUID.01H:EAX leaf and includes the CPU
+	 * Model, Family and Stepping.
+	 */
 	*cpu_id = peci_request_data_readl(req);
+
+	/*
+	 * Remove the stepping (CPUID.01H:EAX[3:0]) to match the
+	 * PECI_INTEL_* identifiers:
+	 */
+	*cpu_id >>= 4;
+
 out_req_free:
 	peci_request_free(req);
 
 	return ret;
-}
-
-static unsigned int peci_x86_cpu_family(unsigned int sig)
-{
-	unsigned int x86;
-
-	x86 = (sig >> 8) & 0xf;
-
-	if (x86 == 0xf)
-		x86 += (sig >> 20) & 0xff;
-
-	return x86;
-}
-
-static unsigned int peci_x86_cpu_model(unsigned int sig)
-{
-	unsigned int fam, model;
-
-	fam = peci_x86_cpu_family(sig);
-
-	model = (sig >> 4) & 0xf;
-
-	if (fam >= 0x6)
-		model += ((sig >> 16) & 0xf) << 4;
-
-	return model;
 }
 
 static int peci_device_info_init(struct peci_device *device)
@@ -100,7 +86,7 @@ static int peci_device_info_init(struct peci_device *device)
 	if (ret)
 		return ret;
 
-	device->info.x86_vfm = IFM(peci_x86_cpu_family(cpu_id), peci_x86_cpu_model(cpu_id));
+	device->info.device_id = cpu_id;
 
 	ret = peci_get_revision(device, &revision);
 	if (ret)

@@ -72,7 +72,7 @@ static inline struct peci_controller *to_peci_controller(void *d)
 struct peci_device {
 	struct device dev;
 	struct {
-		u32 x86_vfm;
+		u32 device_id;
 		u8 peci_revision;
 		u8 socket_id;
 	} info;
