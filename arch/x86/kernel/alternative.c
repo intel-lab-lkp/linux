@@ -534,6 +534,7 @@ noinstr void BUG_func(void)
 }
 EXPORT_SYMBOL(BUG_func);
 
+#define CALL_RIP_INSTRLEN	6
 #define CALL_RIP_REL_OPCODE	0xff
 #define CALL_RIP_REL_MODRM	0x15
 
@@ -551,7 +552,7 @@ static unsigned int alt_replace_call(u8 *instr, u8 *insn_buff, struct alt_instr 
 		BUG();
 	}
 
-	if (a->instrlen != 6 ||
+	if (a->instrlen < CALL_RIP_INSTRLEN ||
 	    instr[0] != CALL_RIP_REL_OPCODE ||
 	    instr[1] != CALL_RIP_REL_MODRM) {
 		pr_err("ALT_FLAG_DIRECT_CALL set for unrecognized indirect call\n");
@@ -563,7 +564,7 @@ static unsigned int alt_replace_call(u8 *instr, u8 *insn_buff, struct alt_instr 
 #ifdef CONFIG_X86_64
 	/* ff 15 00 00 00 00   call   *0x0(%rip) */
 	/* target address is stored at "next instruction + disp". */
-	target = *(void **)(instr + a->instrlen + disp);
+	target = *(void **)(instr + CALL_RIP_INSTRLEN + disp);
 #else
 	/* ff 15 00 00 00 00   call   *0x0 */
 	/* target address is stored at disp. */
