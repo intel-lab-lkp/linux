@@ -144,6 +144,8 @@ struct buffer_head *gfs2_getbuf(struct gfs2_glock *gl, u64 blkno, int create)
 		folio = __filemap_get_folio(mapping, index,
 				FGP_LOCK | FGP_ACCESSED | FGP_CREAT,
 				mapping_gfp_mask(mapping) | __GFP_NOFAIL);
+		if (IS_ERR(folio))
+			return NULL;
 		bh = folio_buffers(folio);
 		if (!bh)
 			bh = create_empty_buffers(folio,
