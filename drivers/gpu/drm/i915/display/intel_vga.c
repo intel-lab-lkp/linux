@@ -112,12 +112,16 @@ static bool intel_pci_bridge_set_vga(struct pci_dev *pdev, bool enable)
 	return old & PCI_BRIDGE_CTL_VGA;
 }
 
-static bool intel_vga_get(struct intel_display *display, bool mmio)
+static int __must_check intel_vga_get(struct intel_display *display, bool mmio,
+				      bool *old_io_decode)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
+	int err;
 
-	if (mmio)
-		return false;
+	if (mmio) {
+		*old_io_decode = false;
+		return 0;
+	}
 
 	/*
 	 * Bypass the VGA arbiter on the iGPU and just enable
@@ -130,10 +134,14 @@ static bool intel_vga_get(struct intel_display *display, bool mmio)
 	 * grab any VGA IO access when IO decode is enabled, regardless
 	 * of how any other VGA routing bits are configured.
 	 */
-	if (display->platform.dgfx)
-		vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+	if (display->platform.dgfx) {
+		err = vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+		if (unlikely(err))
+			return err;
+	}
 
-	return intel_pci_set_io_decode(pdev, true);
+	*old_io_decode = intel_pci_set_io_decode(pdev, true);
+	return 0;
 }
 
 static void intel_vga_put(struct intel_display *display, bool io_decode, bool mmio)
@@ -175,6 +183,7 @@ void intel_vga_disable(struct intel_display *display)
 	bool io_decode;
 	u8 msr, sr1;
 	u32 tmp;
+	int err;
 
 	if (!intel_vga_decode_is_enabled(display)) {
 		drm_dbg_kms(display->drm, "VGA decode is disabled\n");
@@ -216,7 +225,15 @@ void intel_vga_disable(struct intel_display *display)
 			goto reset_vgacntr;
 	}
 
-	io_decode = intel_vga_get(display, mmio);
+	/* This should not fail, because vga_get will only report errors for
+	 * dGPUs that are unreachable via the bridge, and cannot be made
+	 * reachable either. We shouldn't even get here for this case, but if
+	 * we do, we assume that the bridge will also refuse future requests
+	 * to forward VGA accesses.
+	 */
+	err = intel_vga_get(display, mmio, &io_decode);
+	if (unlikely(err))
+		goto reset_vgacntr;
 
 	drm_WARN_ON(display->drm, !mmio && !intel_pci_has_vga_io_decode(pdev));
 
