@@ -29,6 +29,7 @@ struct dma_buf;
 struct dma_buf_attachment;
 struct dma_buf_mapping_type;
 struct dma_buf_mapping_exp_ops;
+struct dma_buf_match_args;
 
 
 /*
@@ -308,6 +309,14 @@ struct dma_buf_ops {
 
 	int (*vmap)(struct dma_buf *dmabuf, struct iosys_map *map);
 	void (*vunmap)(struct dma_buf *dmabuf, struct iosys_map *map);
+
+	/**
+	 * @match_mapping:
+	 *
+	 * Called during attach. Allows the exporter to build its own exporter
+	 * struct dma_buf_mapping_match[] and call dma_buf_match_mapping().
+	 */
+	int (*match_mapping)(struct dma_buf_match_args *args);
 };
 
 /**
@@ -619,6 +628,11 @@ struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		       const struct dma_buf_attach_ops *importer_ops,
 		       void *importer_priv);
+struct dma_buf_attachment *dma_buf_mapping_attach(
+	struct dma_buf *dmabuf, struct dma_buf_mapping_match *importer_matches,
+	size_t match_len, const struct dma_buf_attach_ops *importer_ops,
+	void *importer_priv);
+
 void dma_buf_detach(struct dma_buf *dmabuf,
 		    struct dma_buf_attachment *attach);
 int dma_buf_pin(struct dma_buf_attachment *attach);
