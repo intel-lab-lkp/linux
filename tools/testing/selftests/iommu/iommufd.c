@@ -1580,7 +1580,50 @@ TEST_F(iommufd_ioas, dmabuf_simple)
 	test_err_ioctl_ioas_map_file(EINVAL, dfd, buf_size, buf_size, &iova);
 	test_err_ioctl_ioas_map_file(EINVAL, dfd, 0, buf_size + 1, &iova);
 	test_ioctl_ioas_map_file(dfd, 0, buf_size, &iova);
+	if (variant->mock_domains)
+		test_cmd_check_dmabuf(self->hwpt_id, dfd, iova, buf_size, 0);
 
+	close(dfd);
+}
+
+TEST_F(iommufd_ioas, dmabuf_multi_page)
+{
+	__u64 iova;
+	int dfd;
+
+	/* Single page */
+	test_cmd_get_dmabuf(PAGE_SIZE, &dfd);
+	test_ioctl_ioas_map_file(dfd, 0, PAGE_SIZE, &iova);
+	if (variant->mock_domains)
+		test_cmd_check_dmabuf(self->hwpt_id, dfd, iova, PAGE_SIZE, 0);
+	close(dfd);
+
+	/* Many pages - exercises batch filling across multiple phys entries */
+	test_cmd_get_dmabuf(PAGE_SIZE * 64, &dfd);
+	test_ioctl_ioas_map_file(dfd, 0, PAGE_SIZE * 64, &iova);
+	if (variant->mock_domains)
+		test_cmd_check_dmabuf(self->hwpt_id, dfd, iova, PAGE_SIZE * 64,
+				      0);
+	close(dfd);
+
+	/* Sub-range from the middle - exercises seeking into the phys array */
+	test_cmd_get_dmabuf(PAGE_SIZE * 16, &dfd);
+	test_ioctl_ioas_map_file(dfd, PAGE_SIZE * 4, PAGE_SIZE * 8, &iova);
+	if (variant->mock_domains)
+		test_cmd_check_dmabuf(self->hwpt_id, dfd, iova, PAGE_SIZE * 8,
+				      PAGE_SIZE * 4);
+	close(dfd);
+
+	/* Multiple sub-ranges from the same dmabuf */
+	test_cmd_get_dmabuf(PAGE_SIZE * 16, &dfd);
+	test_ioctl_ioas_map_file(dfd, 0, PAGE_SIZE * 4, &iova);
+	if (variant->mock_domains)
+		test_cmd_check_dmabuf(self->hwpt_id, dfd, iova, PAGE_SIZE * 4,
+				      0);
+	test_ioctl_ioas_map_file(dfd, PAGE_SIZE * 8, PAGE_SIZE * 4, &iova);
+	if (variant->mock_domains)
+		test_cmd_check_dmabuf(self->hwpt_id, dfd, iova, PAGE_SIZE * 4,
+				      PAGE_SIZE * 8);
 	close(dfd);
 }
 

@@ -1957,16 +1957,19 @@ void iommufd_selftest_destroy(struct iommufd_object *obj)
 }
 
 struct iommufd_test_dma_buf {
-	void *memory;
 	size_t length;
+	unsigned int npages;
 	bool revoked;
+	struct page *pages[] __counted_by(npages);
 };
 
 static void iommufd_test_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct iommufd_test_dma_buf *priv = dmabuf->priv;
+	unsigned int i;
 
-	kfree(priv->memory);
+	for (i = 0; i < priv->npages; i++)
+		__free_page(priv->pages[i]);
 	kfree(priv);
 }
 
@@ -1981,19 +1984,22 @@ iommufd_dma_pal_map_phys(struct dma_buf_attachment *attachment)
 	if (priv->revoked)
 		return ERR_PTR(-ENODEV);
 
-	phys = kvmalloc(struct_size(phys, phys, 1), GFP_KERNEL);
+	phys = kvmalloc(struct_size(phys, phys, priv->npages), GFP_KERNEL);
 	if (!phys)
 		return ERR_PTR(-ENOMEM);
 
-	phys->length = 1;
-	phys->phys[0].paddr = virt_to_phys(priv->memory);
-	phys->phys[0].len = priv->length;
+	phys->length = priv->npages;
+	for (unsigned int i = 0; i < priv->npages; i++) {
+		phys->phys[i].paddr = page_to_phys(priv->pages[i]);
+		phys->phys[i].len = PAGE_SIZE;
+	}
 	return phys;
 }
 
 static void iommufd_dma_pal_unmap_phys(struct dma_buf_attachment *attach,
 				       struct dma_buf_phys_list *phys)
 {
+	kfree(phys);
 }
 
 static const struct dma_buf_mapping_pal_exp_ops iommufd_test_dma_buf_pal_ops = {
@@ -2022,21 +2028,27 @@ static int iommufd_test_dmabuf_get(struct iommufd_ucmd *ucmd,
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 	struct iommufd_test_dma_buf *priv;
 	struct dma_buf *dmabuf;
+	size_t i;
 	int rc;
 
-	len = ALIGN(len, PAGE_SIZE);
-	if (len == 0 || len > PAGE_SIZE * 512)
+	unsigned int npages;
+
+	if (len == 0 || len % PAGE_SIZE || len > PAGE_SIZE * 512)
 		return -EINVAL;
 
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	npages = len >> PAGE_SHIFT;
+	priv = kzalloc(struct_size(priv, pages, npages), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	priv->length = len;
-	priv->memory = kzalloc(len, GFP_KERNEL);
-	if (!priv->memory) {
-		rc = -ENOMEM;
-		goto err_free;
+	priv->npages = npages;
+	for (i = 0; i < npages; i++) {
+		priv->pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
+		if (!priv->pages[i]) {
+			rc = -ENOMEM;
+			goto err_free;
+		}
 	}
 
 	exp_info.ops = &iommufd_test_dmabuf_ops;
@@ -2053,7 +2065,11 @@ static int iommufd_test_dmabuf_get(struct iommufd_ucmd *ucmd,
 	return dma_buf_fd(dmabuf, open_flags);
 
 err_free:
-	kfree(priv->memory);
+	for (unsigned int i = 0; i < npages; i++) {
+		if (!priv->pages[i])
+			break;
+		__free_page(priv->pages[i]);
+	}
 	kfree(priv);
 	return rc;
 }
@@ -2082,6 +2098,64 @@ static int iommufd_test_dmabuf_revoke(struct iommufd_ucmd *ucmd, int fd,
 
 err_put:
 	dma_buf_put(dmabuf);
+	return rc;
+}
+
+static int iommufd_test_md_check_dmabuf(struct iommufd_ucmd *ucmd,
+					unsigned int mockpt_id, int dmabuf_fd,
+					unsigned long iova, size_t length,
+					unsigned long offset)
+{
+	struct iommufd_hw_pagetable *hwpt;
+	struct iommufd_test_dma_buf *priv;
+	struct mock_iommu_domain *mock;
+	struct dma_buf *dmabuf;
+	unsigned int page_size;
+	unsigned long end;
+	size_t i;
+	int rc;
+
+	hwpt = get_md_pagetable(ucmd, mockpt_id, &mock);
+	if (IS_ERR(hwpt))
+		return PTR_ERR(hwpt);
+
+	dmabuf = dma_buf_get(dmabuf_fd);
+	if (IS_ERR(dmabuf)) {
+		rc = PTR_ERR(dmabuf);
+		goto out_put_hwpt;
+	}
+
+	if (dmabuf->ops != &iommufd_test_dmabuf_ops) {
+		rc = -EINVAL;
+		goto out_put_dmabuf;
+	}
+
+	priv = dmabuf->priv;
+	page_size = 1 << __ffs(mock->domain.pgsize_bitmap);
+	if (iova % page_size || length % page_size || offset % page_size ||
+	    check_add_overflow(offset, length, &end) || end > priv->length) {
+		rc = -EINVAL;
+		goto out_put_dmabuf;
+	}
+
+	for (i = 0; i < length; i += page_size) {
+		phys_addr_t expected =
+			page_to_phys(priv->pages[(offset + i) / PAGE_SIZE]) +
+			((offset + i) % PAGE_SIZE);
+		phys_addr_t io_phys =
+			mock->domain.ops->iova_to_phys(&mock->domain, iova + i);
+
+		if (io_phys != expected) {
+			rc = -EINVAL;
+			goto out_put_dmabuf;
+		}
+	}
+	rc = 0;
+
+out_put_dmabuf:
+	dma_buf_put(dmabuf);
+out_put_hwpt:
+	iommufd_put_object(ucmd->ictx, &hwpt->obj);
 	return rc;
 }
 
@@ -2170,6 +2244,11 @@ int iommufd_test(struct iommufd_ucmd *ucmd)
 		return iommufd_test_dmabuf_revoke(ucmd,
 						  cmd->dmabuf_revoke.dmabuf_fd,
 						  cmd->dmabuf_revoke.revoked);
+	case IOMMU_TEST_OP_MD_CHECK_DMABUF:
+		return iommufd_test_md_check_dmabuf(
+			ucmd, cmd->id, cmd->check_dmabuf.dmabuf_fd,
+			cmd->check_dmabuf.iova, cmd->check_dmabuf.length,
+			cmd->check_dmabuf.offset);
 	default:
 		return -EOPNOTSUPP;
 	}

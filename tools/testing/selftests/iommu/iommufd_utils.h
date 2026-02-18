@@ -593,6 +593,23 @@ static int _test_cmd_revoke_dmabuf(int fd, int dmabuf_fd, bool revoked)
 #define test_cmd_revoke_dmabuf(dmabuf_fd, revoke) \
 	ASSERT_EQ(0, _test_cmd_revoke_dmabuf(self->fd, dmabuf_fd, revoke))
 
+#define test_cmd_check_dmabuf(_hwpt_id, _dmabuf_fd, _iova, _length, _offset) \
+	({                                                                   \
+		struct iommu_test_cmd check_cmd = {                          \
+			.size = sizeof(check_cmd),                           \
+			.op = IOMMU_TEST_OP_MD_CHECK_DMABUF,                 \
+			.id = _hwpt_id,                                      \
+			.check_dmabuf = { .dmabuf_fd = _dmabuf_fd,           \
+					  .iova = _iova,                     \
+					  .length = _length,                 \
+					  .offset = _offset },               \
+		};                                                           \
+		ASSERT_EQ(0, ioctl(self->fd,                                 \
+				   _IOMMU_TEST_CMD(                          \
+					   IOMMU_TEST_OP_MD_CHECK_DMABUF),   \
+				   &check_cmd));                             \
+	})
+
 static int _test_ioctl_destroy(int fd, unsigned int id)
 {
 	struct iommu_destroy cmd = {
