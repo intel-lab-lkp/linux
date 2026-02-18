@@ -80,6 +80,7 @@
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/types.h>
+#include <linux/rseq.h>
 #include <asm/ptrace.h>
 
 #define CREATE_TRACE_POINTS
@@ -456,7 +457,7 @@ SYSCALL_DEFINE4(rseq, struct rseq __user *, rseq, u32, rseq_len, int, flags, u32
 	 */
 	if (rseq_len < ORIG_RSEQ_SIZE ||
 	    (rseq_len == ORIG_RSEQ_SIZE && !IS_ALIGNED((unsigned long)rseq, ORIG_RSEQ_SIZE)) ||
-	    (rseq_len != ORIG_RSEQ_SIZE && (!IS_ALIGNED((unsigned long)rseq, __alignof__(*rseq)) ||
+	    (rseq_len != ORIG_RSEQ_SIZE && (!IS_ALIGNED((unsigned long)rseq, rseq_alloc_align()) ||
 					    rseq_len < offsetof(struct rseq, end))))
 		return -EINVAL;
 	if (!access_ok(rseq, rseq_len))
