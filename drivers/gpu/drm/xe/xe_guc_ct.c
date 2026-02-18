@@ -939,22 +939,22 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
 	u32 full_len;
 	struct iosys_map map = IOSYS_MAP_INIT_OFFSET(&h2g->cmds,
 							 tail * sizeof(u32));
-	u32 desc_status;
 
 	full_len = len + GUC_CTB_HDR_LEN;
 
 	lockdep_assert_held(&ct->lock);
 	xe_gt_assert(gt, full_len <= GUC_CTB_MSG_MAX_LEN);
 
-	desc_status = desc_read(xe, h2g, status);
-	if (desc_status) {
-		xe_gt_err(gt, "CT write: non-zero status: %u\n", desc_status);
-		goto corrupted;
-	}
-
 	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG)) {
 		u32 desc_tail = desc_read(xe, h2g, tail);
 		u32 desc_head = desc_read(xe, h2g, head);
+		u32 desc_status;
+
+		desc_status = desc_read(xe, h2g, status);
+		if (desc_status) {
+			xe_gt_err(gt, "CT write: non-zero status: %u\n", desc_status);
+			goto corrupted;
+		}
 
 		if (tail != desc_tail) {
 			desc_write(xe, h2g, status, desc_status | GUC_CTB_STATUS_MISMATCH);
@@ -1023,8 +1023,15 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
 	/* Update descriptor */
 	desc_write(xe, h2g, tail, h2g->info.tail);
 
-	trace_xe_guc_ctb_h2g(xe, gt->info.id, *(action - 1), full_len,
-			     desc_read(xe, h2g, head), h2g->info.tail);
+	/*
+	 * desc_read() performs an VRAM read which serializes the CPU and drains
+	 * posted writes on dGPU platforms. Tracepoints evaluate arguments even
+	 * when disabled, so guard the event to avoid adding µs-scale latency to
+	 * the fast H2G submission path when tracing is not active.
+	 */
+	if (trace_xe_guc_ctb_h2g_enabled())
+		trace_xe_guc_ctb_h2g(xe, gt->info.id, *(action - 1), full_len,
+				     desc_read(xe, h2g, head), h2g->info.tail);
 
 	return 0;
 
