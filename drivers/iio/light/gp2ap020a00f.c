@@ -494,27 +494,24 @@ static int gp2ap020a00f_alter_opmode(struct gp2ap020a00f_data *data,
 static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 					enum gp2ap020a00f_cmd cmd)
 {
-	int err = 0;
+	int err;
 
 	switch (cmd) {
 	case GP2AP020A00F_CMD_READ_RAW_CLEAR:
 		if (data->cur_opmode != GP2AP020A00F_OPMODE_SHUTDOWN)
 			return -EBUSY;
-		err = gp2ap020a00f_set_operation_mode(data,
+		return gp2ap020a00f_set_operation_mode(data,
 					GP2AP020A00F_OPMODE_READ_RAW_CLEAR);
-		break;
 	case GP2AP020A00F_CMD_READ_RAW_IR:
 		if (data->cur_opmode != GP2AP020A00F_OPMODE_SHUTDOWN)
 			return -EBUSY;
-		err = gp2ap020a00f_set_operation_mode(data,
+		return gp2ap020a00f_set_operation_mode(data,
 					GP2AP020A00F_OPMODE_READ_RAW_IR);
-		break;
 	case GP2AP020A00F_CMD_READ_RAW_PROXIMITY:
 		if (data->cur_opmode != GP2AP020A00F_OPMODE_SHUTDOWN)
 			return -EBUSY;
-		err = gp2ap020a00f_set_operation_mode(data,
+		return gp2ap020a00f_set_operation_mode(data,
 					GP2AP020A00F_OPMODE_READ_RAW_PROXIMITY);
-		break;
 	case GP2AP020A00F_CMD_TRIGGER_CLEAR_EN:
 		if (data->cur_opmode == GP2AP020A00F_OPMODE_PROX_DETECT)
 			return -EBUSY;
@@ -522,16 +519,17 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 			err = gp2ap020a00f_alter_opmode(data,
 						GP2AP020A00F_OPMODE_ALS,
 						GP2AP020A00F_ADD_MODE);
+		else
+			err = 0;
 		set_bit(GP2AP020A00F_FLAG_ALS_CLEAR_TRIGGER, &data->flags);
-		break;
+		return err;
 	case GP2AP020A00F_CMD_TRIGGER_CLEAR_DIS:
 		clear_bit(GP2AP020A00F_FLAG_ALS_CLEAR_TRIGGER, &data->flags);
 		if (gp2ap020a00f_als_enabled(data))
 			break;
-		err = gp2ap020a00f_alter_opmode(data,
+		return gp2ap020a00f_alter_opmode(data,
 						GP2AP020A00F_OPMODE_ALS,
 						GP2AP020A00F_SUBTRACT_MODE);
-		break;
 	case GP2AP020A00F_CMD_TRIGGER_IR_EN:
 		if (data->cur_opmode == GP2AP020A00F_OPMODE_PROX_DETECT)
 			return -EBUSY;
@@ -539,16 +537,17 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 			err = gp2ap020a00f_alter_opmode(data,
 						GP2AP020A00F_OPMODE_ALS,
 						GP2AP020A00F_ADD_MODE);
+		else
+			err = 0;
 		set_bit(GP2AP020A00F_FLAG_ALS_IR_TRIGGER, &data->flags);
-		break;
+		return err;
 	case GP2AP020A00F_CMD_TRIGGER_IR_DIS:
 		clear_bit(GP2AP020A00F_FLAG_ALS_IR_TRIGGER, &data->flags);
 		if (gp2ap020a00f_als_enabled(data))
 			break;
-		err = gp2ap020a00f_alter_opmode(data,
+		return gp2ap020a00f_alter_opmode(data,
 						GP2AP020A00F_OPMODE_ALS,
 						GP2AP020A00F_SUBTRACT_MODE);
-		break;
 	case GP2AP020A00F_CMD_TRIGGER_PROX_EN:
 		if (data->cur_opmode == GP2AP020A00F_OPMODE_PROX_DETECT)
 			return -EBUSY;
@@ -556,13 +555,12 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 						GP2AP020A00F_OPMODE_PS,
 						GP2AP020A00F_ADD_MODE);
 		set_bit(GP2AP020A00F_FLAG_PROX_TRIGGER, &data->flags);
-		break;
+		return err;
 	case GP2AP020A00F_CMD_TRIGGER_PROX_DIS:
 		clear_bit(GP2AP020A00F_FLAG_PROX_TRIGGER, &data->flags);
-		err = gp2ap020a00f_alter_opmode(data,
+		return gp2ap020a00f_alter_opmode(data,
 						GP2AP020A00F_OPMODE_PS,
 						GP2AP020A00F_SUBTRACT_MODE);
-		break;
 	case GP2AP020A00F_CMD_ALS_HIGH_EV_EN:
 		if (test_bit(GP2AP020A00F_FLAG_ALS_RISING_EV, &data->flags))
 			return 0;
@@ -576,9 +574,8 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 				return err;
 		}
 		set_bit(GP2AP020A00F_FLAG_ALS_RISING_EV, &data->flags);
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_TH, true);
-		break;
 	case GP2AP020A00F_CMD_ALS_HIGH_EV_DIS:
 		if (!test_bit(GP2AP020A00F_FLAG_ALS_RISING_EV, &data->flags))
 			return 0;
@@ -590,9 +587,8 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 			if (err < 0)
 				return err;
 		}
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_TH, false);
-		break;
 	case GP2AP020A00F_CMD_ALS_LOW_EV_EN:
 		if (test_bit(GP2AP020A00F_FLAG_ALS_FALLING_EV, &data->flags))
 			return 0;
@@ -606,9 +602,8 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 				return err;
 		}
 		set_bit(GP2AP020A00F_FLAG_ALS_FALLING_EV, &data->flags);
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_TL, true);
-		break;
 	case GP2AP020A00F_CMD_ALS_LOW_EV_DIS:
 		if (!test_bit(GP2AP020A00F_FLAG_ALS_FALLING_EV, &data->flags))
 			return 0;
@@ -620,9 +615,8 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 			if (err < 0)
 				return err;
 		}
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_TL, false);
-		break;
 	case GP2AP020A00F_CMD_PROX_HIGH_EV_EN:
 		if (test_bit(GP2AP020A00F_FLAG_PROX_RISING_EV, &data->flags))
 			return 0;
@@ -636,9 +630,8 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 				return err;
 		}
 		set_bit(GP2AP020A00F_FLAG_PROX_RISING_EV, &data->flags);
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_PH, true);
-		break;
 	case GP2AP020A00F_CMD_PROX_HIGH_EV_DIS:
 		if (!test_bit(GP2AP020A00F_FLAG_PROX_RISING_EV, &data->flags))
 			return 0;
@@ -647,9 +640,8 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 					GP2AP020A00F_OPMODE_SHUTDOWN);
 		if (err < 0)
 			return err;
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_PH, false);
-		break;
 	case GP2AP020A00F_CMD_PROX_LOW_EV_EN:
 		if (test_bit(GP2AP020A00F_FLAG_PROX_FALLING_EV, &data->flags))
 			return 0;
@@ -663,9 +655,8 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 				return err;
 		}
 		set_bit(GP2AP020A00F_FLAG_PROX_FALLING_EV, &data->flags);
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_PL, true);
-		break;
 	case GP2AP020A00F_CMD_PROX_LOW_EV_DIS:
 		if (!test_bit(GP2AP020A00F_FLAG_PROX_FALLING_EV, &data->flags))
 			return 0;
@@ -674,12 +665,11 @@ static int gp2ap020a00f_exec_cmd(struct gp2ap020a00f_data *data,
 					GP2AP020A00F_OPMODE_SHUTDOWN);
 		if (err < 0)
 			return err;
-		err =  gp2ap020a00f_write_event_threshold(data,
+		return gp2ap020a00f_write_event_threshold(data,
 					GP2AP020A00F_THRESH_PL, false);
-		break;
 	}
 
-	return err;
+	return 0;
 }
 
 static int wait_conversion_complete_irq(struct gp2ap020a00f_data *data)
@@ -1007,10 +997,8 @@ static int gp2ap020a00f_get_thresh_reg(const struct iio_chan_spec *chan,
 		else
 			return GP2AP020A00F_TL_L_REG;
 	default:
-		break;
+		return -EINVAL;
 	}
-
-	return -EINVAL;
 }
 
 static int gp2ap020a00f_write_event_val(struct iio_dev *indio_dev,
@@ -1182,33 +1170,23 @@ static int gp2ap020a00f_read_event_config(struct iio_dev *indio_dev,
 					   enum iio_event_direction dir)
 {
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
-	int event_en = 0;
 
 	guard(mutex)(&data->lock);
 
 	switch (chan->type) {
 	case IIO_PROXIMITY:
 		if (dir == IIO_EV_DIR_RISING)
-			event_en = test_bit(GP2AP020A00F_FLAG_PROX_RISING_EV,
-								&data->flags);
+			return test_bit(GP2AP020A00F_FLAG_PROX_RISING_EV, &data->flags);
 		else
-			event_en = test_bit(GP2AP020A00F_FLAG_PROX_FALLING_EV,
-								&data->flags);
-		break;
+			return test_bit(GP2AP020A00F_FLAG_PROX_FALLING_EV, &data->flags);
 	case IIO_LIGHT:
 		if (dir == IIO_EV_DIR_RISING)
-			event_en = test_bit(GP2AP020A00F_FLAG_ALS_RISING_EV,
-								&data->flags);
+			return test_bit(GP2AP020A00F_FLAG_ALS_RISING_EV, &data->flags);
 		else
-			event_en = test_bit(GP2AP020A00F_FLAG_ALS_FALLING_EV,
-								&data->flags);
-		break;
+			return test_bit(GP2AP020A00F_FLAG_ALS_FALLING_EV, &data->flags);
 	default:
-		event_en = -EINVAL;
-		break;
+		return -EINVAL;
 	}
-
-	return event_en;
 }
 
 static int gp2ap020a00f_read_channel(struct gp2ap020a00f_data *data,
@@ -1366,7 +1344,7 @@ static const struct iio_info gp2ap020a00f_info = {
 static int gp2ap020a00f_buffer_postenable(struct iio_dev *indio_dev)
 {
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
-	int i, err = 0;
+	int i, err;
 
 	guard(mutex)(&data->lock);
 
@@ -1400,15 +1378,15 @@ static int gp2ap020a00f_buffer_postenable(struct iio_dev *indio_dev)
 
 	data->buffer = kmalloc(indio_dev->scan_bytes, GFP_KERNEL);
 	if (!data->buffer)
-		err = -ENOMEM;
+		return -ENOMEM;
 
-	return err;
+	return 0;
 }
 
 static int gp2ap020a00f_buffer_predisable(struct iio_dev *indio_dev)
 {
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
-	int i, err = 0;
+	int i, err;
 
 	guard(mutex)(&data->lock);
 
@@ -1427,12 +1405,12 @@ static int gp2ap020a00f_buffer_predisable(struct iio_dev *indio_dev)
 					GP2AP020A00F_CMD_TRIGGER_PROX_DIS);
 			break;
 		}
+		if (err)
+			return err;
 	}
 
-	if (err == 0)
-		kfree(data->buffer);
-
-	return err;
+	kfree(data->buffer);
+	return 0;
 }
 
 static const struct iio_buffer_setup_ops gp2ap020a00f_buffer_setup_ops = {
