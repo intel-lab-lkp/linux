@@ -41,23 +41,44 @@
 
 #if defined(_ABIO32)
 
-#define _NOLIBC_SYSCALL_CLOBBERLIST \
-	"memory", "cc", "at", "v1", "hi", "lo", \
-	"t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"
 #define _NOLIBC_SYSCALL_STACK_RESERVE "addiu $sp, $sp, -32\n"
 #define _NOLIBC_SYSCALL_STACK_UNRESERVE "addiu $sp, $sp, 32\n"
 
 #else /* _ABIN32 || _ABI64 */
+
+#define _NOLIBC_SYSCALL_STACK_RESERVE
+#define _NOLIBC_SYSCALL_STACK_UNRESERVE
+
+#endif /* _ABIO32 */
+
+
+#if defined(_ABIO32) && __mips_isa_rev >= 6
+
+#define _NOLIBC_SYSCALL_CLOBBERLIST \
+	"memory", "cc", "at", "v1", \
+	"t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"
+
+#elif defined(_ABIO32) && __mips_isa_rev < 6
+
+#define _NOLIBC_SYSCALL_CLOBBERLIST \
+	"memory", "cc", "at", "v1", "hi", "lo", \
+	"t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"
+
+#elif __mips_isa_rev >= 6 /* _ABIN32 || _ABI64 */
 
 /* binutils, GCC and clang disagree about register aliases, use numbers instead. */
 #define _NOLIBC_SYSCALL_CLOBBERLIST \
 	"memory", "cc", "at", "v1", \
 	"10", "11", "12", "13", "14", "15", "24", "25"
 
-#define _NOLIBC_SYSCALL_STACK_RESERVE
-#define _NOLIBC_SYSCALL_STACK_UNRESERVE
+#else /* __mips_is_rev < 6 && (_ABIN32 || _ABI64) */
 
-#endif /* _ABIO32 */
+#define _NOLIBC_SYSCALL_CLOBBERLIST \
+	"memory", "cc", "at", "v1", "hi", "lo", \
+	"10", "11", "12", "13", "14", "15", "24", "25"
+
+#endif /* __mips_isa_rev and ABI */
+
 
 #define my_syscall0(num)                                                      \
 ({                                                                            \
