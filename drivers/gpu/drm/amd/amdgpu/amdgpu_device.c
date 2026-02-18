@@ -4204,9 +4204,9 @@ static int amdgpu_device_get_job_timeout_settings(struct amdgpu_device *adev)
 	long timeout;
 	int ret = 0;
 
-	/* By default timeout for all queues is 2 sec */
+	/* By default timeout for all queues is 3 sec */
 	adev->gfx_timeout = adev->compute_timeout = adev->sdma_timeout =
-		adev->video_timeout = msecs_to_jiffies(2000);
+		adev->video_timeout = msecs_to_jiffies(3000);
 
 	if (!strnlen(input, AMDGPU_MAX_TIMEOUT_PARAM_LENGTH))
 		return 0;
