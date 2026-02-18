@@ -2681,6 +2681,7 @@ int cpuhp_smt_disable(enum cpuhp_smt_control ctrlval)
 		ret = -EBUSY;
 		goto out;
 	}
+	rcu_expedite_gp();
 	/* Hold cpus_write_lock() for entire batch operation. */
 	cpus_write_lock();
 	for_each_online_cpu(cpu) {
@@ -2713,6 +2714,7 @@ int cpuhp_smt_disable(enum cpuhp_smt_control ctrlval)
 	if (!ret)
 		cpu_smt_control = ctrlval;
 	cpus_write_unlock();
+	rcu_unexpedite_gp();
 	arch_smt_update();
 out:
 	cpu_maps_update_done();
@@ -2732,6 +2734,7 @@ int cpuhp_smt_enable(void)
 	int cpu, ret = 0;
 
 	cpu_maps_update_begin();
+	rcu_expedite_gp();
 	/* Hold cpus_write_lock() for entire batch operation. */
 	cpus_write_lock();
 	cpu_smt_control = CPU_SMT_ENABLED;
@@ -2748,6 +2751,7 @@ int cpuhp_smt_enable(void)
 		cpuhp_online_cpu_device(cpu);
 	}
 	cpus_write_unlock();
+	rcu_unexpedite_gp();
 	arch_smt_update();
 	cpu_maps_update_done();
 	return ret;
