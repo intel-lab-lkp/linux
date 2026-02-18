@@ -257,7 +257,6 @@ static int nwl_dsi_config_dpi(struct nwl_dsi *dsi)
 {
 	u32 mode;
 	int color_format;
-	bool burst_mode;
 	int hfront_porch, hback_porch, vfront_porch, vback_porch;
 	int hsync_len, vsync_len;
 
@@ -298,15 +297,12 @@ static int nwl_dsi_config_dpi(struct nwl_dsi *dsi)
 		      NWL_DSI_HSYNC_POLARITY_ACTIVE_HIGH :
 		      NWL_DSI_HSYNC_POLARITY_ACTIVE_LOW);
 
-	burst_mode = (dsi->dsi_mode_flags & MIPI_DSI_MODE_VIDEO_BURST) &&
-		     !(dsi->dsi_mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE);
-
-	if (burst_mode) {
+	if (dsi->dsi_mode_flags & MIPI_DSI_MODE_VIDEO_BURST) {
 		nwl_dsi_write(dsi, NWL_DSI_VIDEO_MODE, NWL_DSI_VM_BURST_MODE);
 		nwl_dsi_write(dsi, NWL_DSI_PIXEL_FIFO_SEND_LEVEL, 256);
 	} else {
 		mode = ((dsi->dsi_mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) ?
-				NWL_DSI_VM_BURST_MODE_WITH_SYNC_PULSES :
+				NWL_DSI_VM_NON_BURST_MODE_WITH_SYNC_PULSES :
 				NWL_DSI_VM_NON_BURST_MODE_WITH_SYNC_EVENTS);
 		nwl_dsi_write(dsi, NWL_DSI_VIDEO_MODE, mode);
 		nwl_dsi_write(dsi, NWL_DSI_PIXEL_FIFO_SEND_LEVEL,
