@@ -37,8 +37,8 @@ struct kernfs_open_node {
  */
 #define KERNFS_NOTIFY_EOL			((void *)&kernfs_notify_list)
 
-static DEFINE_SPINLOCK(kernfs_notify_lock);
-static struct kernfs_node *kernfs_notify_list = KERNFS_NOTIFY_EOL;
+DEFINE_SPINLOCK(kernfs_notify_lock);
+struct kernfs_node *kernfs_notify_list = KERNFS_NOTIFY_EOL;
 
 static inline struct mutex *kernfs_open_file_mutex_ptr(struct kernfs_node *kn)
 {
@@ -909,7 +909,7 @@ static loff_t kernfs_fop_llseek(struct file *file, loff_t offset, int whence)
 	return ret;
 }
 
-static void kernfs_notify_workfn(struct work_struct *work)
+void kernfs_notify_workfn(struct work_struct *work)
 {
 	struct kernfs_node *kn;
 	struct kernfs_super_info *info;
@@ -935,11 +935,7 @@ repeat:
 	down_read(&root->kernfs_supers_rwsem);
 	down_read(&root->kernfs_rwsem);
 	list_for_each_entry(info, &kernfs_root(kn)->supers, node) {
-		struct kernfs_node *parent;
-		struct inode *p_inode = NULL;
-		const char *kn_name;
 		struct inode *inode;
-		struct qstr name;
 
 		/*
 		 * We want fsnotify_modify() on @kn but as the
@@ -951,23 +947,30 @@ repeat:
 		if (!inode)
 			continue;
 
-		kn_name = kernfs_rcu_name(kn);
-		name = QSTR(kn_name);
-		parent = kernfs_get_parent(kn);
-		if (parent) {
-			p_inode = ilookup(info->sb, kernfs_ino(parent));
-			if (p_inode) {
-				fsnotify(notify_event | FS_EVENT_ON_CHILD,
-					 inode, FSNOTIFY_EVENT_INODE,
-					 p_inode, &name, inode, 0);
-				iput(p_inode);
+		if (notify_event == FS_DELETE) {
+			fsnotify_inoderemove(inode);
+		} else {
+			struct kernfs_node *parent = kernfs_get_parent(kn);
+			struct inode *p_inode = NULL;
+
+			if (parent) {
+				p_inode = ilookup(info->sb, kernfs_ino(parent));
+				if (p_inode) {
+					const char *kn_name = kernfs_rcu_name(kn);
+					struct qstr name = QSTR(kn_name);
+
+					fsnotify(notify_event | FS_EVENT_ON_CHILD,
+						 inode, FSNOTIFY_EVENT_INODE,
+						 p_inode, &name, inode, 0);
+					iput(p_inode);
+				}
+
+				kernfs_put(parent);
 			}
 
-			kernfs_put(parent);
+			if (!p_inode)
+				fsnotify_inode(inode, notify_event);
 		}
-
-		if (!p_inode)
-			fsnotify_inode(inode, notify_event);
 
 		iput(inode);
 	}
