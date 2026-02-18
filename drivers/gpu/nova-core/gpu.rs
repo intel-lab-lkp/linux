@@ -18,7 +18,10 @@ use crate::{
     },
     fb::SysmemFlush,
     gfw,
-    gsp::Gsp,
+    gsp::{
+        Gsp,
+        GspBootContext, //
+    },
     regs,
 };
 
@@ -283,7 +286,16 @@ impl Gpu {
 
             gsp <- Gsp::new(pdev),
 
-            _: { gsp.boot(pdev, bar, spec.chipset, gsp_falcon, sec2_falcon)? },
+            _: {
+                let ctx = GspBootContext {
+                    pdev,
+                    bar,
+                    chipset: spec.chipset,
+                    gsp_falcon,
+                    sec2_falcon,
+                };
+                gsp.boot(&ctx)?
+            },
 
             bar: devres_bar,
         })

@@ -23,12 +23,6 @@ use kernel::{
 };
 
 use crate::{
-    driver::Bar0,
-    falcon::{
-        gsp::Gsp,
-        sec2::Sec2,
-        Falcon, //
-    },
     gsp::{
         cmdq::{
             Cmdq,
@@ -133,12 +127,8 @@ impl GspSeqCmd {
 pub(crate) struct GspSequencer<'a> {
     /// Sequencer information with command data.
     seq_info: GspSequence,
-    /// `Bar0` for register access.
-    bar: &'a Bar0,
-    /// SEC2 falcon for core operations.
-    sec2_falcon: &'a Falcon<Sec2>,
-    /// GSP falcon for core operations.
-    gsp_falcon: &'a Falcon<Gsp>,
+    /// GSP boot context.
+    ctx: &'a super::GspBootContext<'a>,
     /// LibOS DMA handle address.
     libos_dma_handle: u64,
     /// Bootloader application version.
@@ -156,7 +146,7 @@ impl GspSeqCmdRunner for fw::RegWritePayload {
     fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
         let addr = usize::from_safe_cast(self.addr());
 
-        sequencer.bar.try_write32(self.val(), addr)
+        sequencer.ctx.bar.try_write32(self.val(), addr)
     }
 }
 
@@ -164,8 +154,9 @@ impl GspSeqCmdRunner for fw::RegModifyPayload {
     fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
         let addr = usize::from_safe_cast(self.addr());
 
-        sequencer.bar.try_read32(addr).and_then(|val| {
+        sequencer.ctx.bar.try_read32(addr).and_then(|val| {
             sequencer
+                .ctx
                 .bar
                 .try_write32((val & !self.mask()) | self.val(), addr)
         })
@@ -184,11 +175,11 @@ impl GspSeqCmdRunner for fw::RegPollPayload {
         };
 
         // First read.
-        sequencer.bar.try_read32(addr)?;
+        sequencer.ctx.bar.try_read32(addr)?;
 
         // Poll the requested register with requested timeout.
         read_poll_timeout(
-            || sequencer.bar.try_read32(addr),
+            || sequencer.ctx.bar.try_read32(addr),
             |current| (current & self.mask()) == self.val(),
             Delta::ZERO,
             Delta::from_micros(timeout_us),
@@ -208,7 +199,7 @@ impl GspSeqCmdRunner for fw::RegStorePayload {
     fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
         let addr = usize::from_safe_cast(self.addr());
 
-        sequencer.bar.try_read32(addr).map(|_| ())
+        sequencer.ctx.bar.try_read32(addr).map(|_| ())
     }
 }
 
@@ -221,16 +212,16 @@ impl GspSeqCmdRunner for GspSeqCmd {
             GspSeqCmd::DelayUs(cmd) => cmd.run(seq),
             GspSeqCmd::RegStore(cmd) => cmd.run(seq),
             GspSeqCmd::CoreReset => {
-                seq.gsp_falcon.reset(seq.bar)?;
-                seq.gsp_falcon.dma_reset(seq.bar);
+                seq.ctx.gsp_falcon.reset(seq.ctx.bar)?;
+                seq.ctx.gsp_falcon.dma_reset(seq.ctx.bar);
                 Ok(())
             }
             GspSeqCmd::CoreStart => {
-                seq.gsp_falcon.start(seq.bar)?;
+                seq.ctx.gsp_falcon.start(seq.ctx.bar)?;
                 Ok(())
             }
             GspSeqCmd::CoreWaitForHalt => {
-                seq.gsp_falcon.wait_till_halted(seq.bar)?;
+                seq.ctx.gsp_falcon.wait_till_halted(seq.ctx.bar)?;
                 Ok(())
             }
             GspSeqCmd::CoreResume => {
@@ -239,35 +230,37 @@ impl GspSeqCmdRunner for GspSeqCmd {
                 // sequencer will start both.
 
                 // Reset the GSP to prepare it for resuming.
-                seq.gsp_falcon.reset(seq.bar)?;
+                seq.ctx.gsp_falcon.reset(seq.ctx.bar)?;
 
                 // Write the libOS DMA handle to GSP mailboxes.
-                seq.gsp_falcon.write_mailboxes(
-                    seq.bar,
+                seq.ctx.gsp_falcon.write_mailboxes(
+                    seq.ctx.bar,
                     Some(seq.libos_dma_handle as u32),
                     Some((seq.libos_dma_handle >> 32) as u32),
                 );
 
                 // Start the SEC2 falcon which will trigger GSP-RM to resume on the GSP.
-                seq.sec2_falcon.start(seq.bar)?;
+                seq.ctx.sec2_falcon.start(seq.ctx.bar)?;
 
                 // Poll until GSP-RM reload/resume has completed (up to 2 seconds).
-                seq.gsp_falcon
-                    .check_reload_completed(seq.bar, Delta::from_secs(2))?;
+                seq.ctx
+                    .gsp_falcon
+                    .check_reload_completed(seq.ctx.bar, Delta::from_secs(2))?;
 
                 // Verify SEC2 completed successfully by checking its mailbox for errors.
-                let mbox0 = seq.sec2_falcon.read_mailbox0(seq.bar);
+                let mbox0 = seq.ctx.sec2_falcon.read_mailbox0(seq.ctx.bar);
                 if mbox0 != 0 {
                     dev_err!(seq.dev, "Sequencer: sec2 errors: {:?}\n", mbox0);
                     return Err(EIO);
                 }
 
                 // Configure GSP with the bootloader version.
-                seq.gsp_falcon
-                    .write_os_version(seq.bar, seq.bootloader_app_version);
+                seq.ctx
+                    .gsp_falcon
+                    .write_os_version(seq.ctx.bar, seq.bootloader_app_version);
 
                 // Verify the GSP's RISC-V core is active indicating successful GSP boot.
-                if !seq.gsp_falcon.is_riscv_active(seq.bar) {
+                if !seq.ctx.gsp_falcon.is_riscv_active(seq.ctx.bar) {
                     dev_err!(seq.dev, "Sequencer: RISC-V core is not active\n");
                     return Err(EIO);
                 }
@@ -348,18 +341,12 @@ impl<'a> GspSequencer<'a> {
 
 /// Parameters for running the GSP sequencer.
 pub(crate) struct GspSequencerParams<'a> {
+    /// Shared boot context.
+    pub(crate) ctx: &'a super::GspBootContext<'a>,
     /// Bootloader application version.
     pub(crate) bootloader_app_version: u32,
     /// LibOS DMA handle address.
     pub(crate) libos_dma_handle: u64,
-    /// GSP falcon for core operations.
-    pub(crate) gsp_falcon: &'a Falcon<Gsp>,
-    /// SEC2 falcon for core operations.
-    pub(crate) sec2_falcon: &'a Falcon<Sec2>,
-    /// Device for logging.
-    pub(crate) dev: ARef<device::Device>,
-    /// BAR0 for register access.
-    pub(crate) bar: &'a Bar0,
 }
 
 impl<'a> GspSequencer<'a> {
@@ -374,12 +361,10 @@ impl<'a> GspSequencer<'a> {
 
         let sequencer = GspSequencer {
             seq_info,
-            bar: params.bar,
-            sec2_falcon: params.sec2_falcon,
-            gsp_falcon: params.gsp_falcon,
+            ctx: params.ctx,
             libos_dma_handle: params.libos_dma_handle,
             bootloader_app_version: params.bootloader_app_version,
-            dev: params.dev,
+            dev: params.ctx.pdev.as_ref().into(),
         };
 
         dev_dbg!(sequencer.dev, "Running CPU Sequencer commands\n");

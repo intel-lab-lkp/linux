@@ -25,6 +25,13 @@ pub(crate) use fw::{
 };
 
 use crate::{
+    driver::Bar0,
+    falcon::{
+        gsp::Gsp as GspFalcon,
+        sec2::Sec2 as Sec2Falcon,
+        Falcon, //
+    },
+    gpu::Chipset,
     gsp::cmdq::Cmdq,
     gsp::fw::{
         GspArgumentsPadded,
@@ -38,6 +45,21 @@ pub(crate) const GSP_PAGE_SIZE: usize = 1 << GSP_PAGE_SHIFT;
 
 /// Number of GSP pages to use in a RM log buffer.
 const RM_LOG_BUFFER_NUM_PAGES: usize = 0x10;
+
+/// Common context for the GSP boot process.
+pub(crate) struct GspBootContext<'a> {
+    pub(crate) pdev: &'a pci::Device<device::Bound>,
+    pub(crate) bar: &'a Bar0,
+    pub(crate) chipset: Chipset,
+    pub(crate) gsp_falcon: &'a Falcon<GspFalcon>,
+    pub(crate) sec2_falcon: &'a Falcon<Sec2Falcon>,
+}
+
+impl GspBootContext<'_> {
+    pub(crate) fn dev(&self) -> &device::Device<device::Bound> {
+        self.pdev.as_ref()
+    }
+}
 
 /// Array of page table entries, as understood by the GSP bootloader.
 #[repr(C)]
