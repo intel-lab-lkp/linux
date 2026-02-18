@@ -36,6 +36,7 @@ properties:
           - qcom,rpmcc-msm8937
           - qcom,rpmcc-msm8940
           - qcom,rpmcc-msm8953
+          - qcom,rpmcc-msm8960
           - qcom,rpmcc-msm8974
           - qcom,rpmcc-msm8976
           - qcom,rpmcc-msm8992
@@ -90,7 +91,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: qcom,rpmcc-apq8064
+            enum:
+              - qcom,rpmcc-apq8064
+              - qcom,rpmcc-msm8960
     then:
       properties:
         clocks:
