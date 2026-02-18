@@ -33,17 +33,6 @@ static bool pf_auto_provisioning_mode(struct xe_device *xe)
 	return xe->sriov.pf.provision.mode == XE_SRIOV_PROVISIONING_MODE_AUTO;
 }
 
-static bool pf_needs_provisioning(struct xe_gt *gt, unsigned int num_vfs)
-{
-	unsigned int n;
-
-	for (n = 1; n <= num_vfs; n++)
-		if (!xe_gt_sriov_pf_config_is_empty(gt, n))
-			return false;
-
-	return true;
-}
-
 static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
 {
 	struct xe_gt *gt;
@@ -52,8 +41,6 @@ static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
 	int err;
 
 	for_each_gt(gt, xe, id) {
-		if (!pf_needs_provisioning(gt, num_vfs))
-			return -EUCLEAN;
 		err = xe_gt_sriov_pf_config_set_fair(gt, VFID(1), num_vfs);
 		result = result ?: err;
 	}
