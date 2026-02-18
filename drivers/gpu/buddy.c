@@ -10,7 +10,7 @@
 #include <linux/module.h>
 #include <linux/sizes.h>
 
-#include <drm/drm_buddy.h>
+#include <linux/gpu_buddy.h>
 #include <drm/drm_print.h>
 
 enum drm_buddy_free_tree {

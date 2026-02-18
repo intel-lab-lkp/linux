@@ -10,9 +10,9 @@
 #include <linux/sched/signal.h>
 #include <linux/sizes.h>
 
-#include <drm/drm_buddy.h>
+#include <linux/gpu_buddy.h>
 
-#include "../lib/drm_random.h"
+#include "gpu_random.h"
 
 static unsigned int random_seed;
 

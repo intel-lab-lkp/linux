@@ -6,7 +6,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 
-#include "drm_random.h"
+#include "gpu_random.h"
 
 u32 drm_prandom_u32_max_state(u32 ep_ro, struct rnd_state *state)
 {

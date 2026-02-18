@@ -526,10 +526,10 @@ DRM GPUVM Function References
 DRM Buddy Allocator
 ===================
 
-DRM Buddy Function References
------------------------------
+Buddy Allocator Function References (GPU buddy)
+-----------------------------------------------
 
-.. kernel-doc:: drivers/gpu/drm/drm_buddy.c
+.. kernel-doc:: drivers/gpu/buddy.c
    :export:
 
 DRM Cache Handling and Fast WC memcpy()
