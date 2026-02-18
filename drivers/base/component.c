@@ -37,6 +37,7 @@
  */
 
 struct component;
+struct aggregate_device;
 
 struct component_match_array {
 	void *data;
@@ -44,6 +45,8 @@ struct component_match_array {
 	int (*compare_typed)(struct device *, int, void *);
 	void (*release)(struct device *, void *);
 	struct component *component;
+	struct list_head component_list;
+	struct aggregate_device *adev;
 	bool duplicate;
 };
 
@@ -64,7 +67,7 @@ struct aggregate_device {
 
 struct component {
 	struct list_head node;
-	struct aggregate_device *adev;
+	struct list_head agdevs;
 	bool bound;
 
 	const struct component_ops *ops;
@@ -156,9 +159,6 @@ static struct component *find_component(struct aggregate_device *adev,
 	struct component *c;
 
 	list_for_each_entry(c, &component_list, node) {
-		if (c->adev && c->adev != adev)
-			continue;
-
 		if (mc->compare && mc->compare(c->dev, mc->data))
 			return c;
 
@@ -168,6 +168,38 @@ static struct component *find_component(struct aggregate_device *adev,
 	}
 
 	return NULL;
+}
+
+static bool component_match_adev(struct component *c,
+				 struct aggregate_device *adev)
+{
+	struct component_match *match = adev->match;
+	size_t i;
+
+	for (i = 0; i < match->num; i++) {
+		struct component_match_array *mc = &match->compare[i];
+
+		if (mc->component == c)
+			return true;
+	}
+
+	return false;
+}
+
+static void component_remove_adev(struct component *c,
+				   struct aggregate_device *adev)
+{
+	struct component_match *match = adev->match;
+	size_t i;
+
+	for (i = 0; i < match->num; i++) {
+		struct component_match_array *mc = &match->compare[i];
+
+		if (mc->component == c) {
+			list_del(&mc->component_list);
+			mc->component = NULL;
+		}
+	}
 }
 
 static int find_components(struct aggregate_device *adev)
@@ -183,6 +215,7 @@ static int find_components(struct aggregate_device *adev)
 	for (i = 0; i < match->num; i++) {
 		struct component_match_array *mc = &match->compare[i];
 		struct component *c;
+		bool duplicate;
 
 		dev_dbg(adev->parent, "Looking for component %zu\n", i);
 
@@ -195,26 +228,17 @@ static int find_components(struct aggregate_device *adev)
 			break;
 		}
 
+		duplicate = component_match_adev(c, adev);
 		dev_dbg(adev->parent, "found component %s, duplicate %u\n",
-			dev_name(c->dev), !!c->adev);
+			dev_name(c->dev), duplicate);
 
 		/* Attach this component to the adev */
-		match->compare[i].duplicate = !!c->adev;
+		match->compare[i].duplicate = duplicate;
 		match->compare[i].component = c;
-		c->adev = adev;
+		match->compare[i].adev = adev;
+		list_add(&match->compare[i].component_list, &c->agdevs);
 	}
 	return ret;
-}
-
-/* Detach component from associated aggregate_device */
-static void remove_component(struct aggregate_device *adev, struct component *c)
-{
-	size_t i;
-
-	/* Detach the component from this adev. */
-	for (i = 0; i < adev->match->num; i++)
-		if (adev->match->compare[i].component == c)
-			adev->match->compare[i].component = NULL;
 }
 
 /*
@@ -236,7 +260,7 @@ static int try_to_bring_up_aggregate_device(struct aggregate_device *adev,
 		return 0;
 	}
 
-	if (component && component->adev != adev) {
+	if (component && !component_match_adev(component, adev)) {
 		dev_dbg(adev->parent, "master is not for this component (%s)\n",
 			dev_name(component->dev));
 		return 0;
@@ -490,7 +514,7 @@ static void free_aggregate_device(struct aggregate_device *adev)
 		for (i = 0; i < match->num; i++) {
 			struct component *c = match->compare[i].component;
 			if (c)
-				c->adev = NULL;
+				component_remove_adev(c, adev);
 		}
 	}
 
@@ -747,8 +771,21 @@ static int __component_add(struct device *dev, const struct component_ops *ops,
 
 	ret = try_to_bring_up_masters(component);
 	if (ret < 0) {
-		if (component->adev)
-			remove_component(component->adev, component);
+		// if we don't bind, do we have to remove all masters from component?
+		// todo: also do we need to remove in reverse order?
+		struct list_head *ptr, *tmp;
+		struct component_match_array *mc;
+
+		list_for_each_safe(ptr, tmp, &component->agdevs) {
+			mc = list_entry(ptr, struct component_match_array, component_list);
+
+			list_del(&mc->component_list);
+			mc->component = NULL;
+
+			if (!mc->duplicate)
+				take_down_aggregate_device(mc->adev);
+		}
+
 		list_del(&component->node);
 
 		kfree(component);
@@ -820,6 +857,8 @@ EXPORT_SYMBOL_GPL(component_add);
 void component_del(struct device *dev, const struct component_ops *ops)
 {
 	struct component *c, *component = NULL;
+	struct list_head *ptr, *tmp;
+	struct component_match_array *mc;
 
 	mutex_lock(&component_mutex);
 	list_for_each_entry(c, &component_list, node)
@@ -829,9 +868,13 @@ void component_del(struct device *dev, const struct component_ops *ops)
 			break;
 		}
 
-	if (component && component->adev) {
-		take_down_aggregate_device(component->adev);
-		remove_component(component->adev, component);
+	list_for_each_safe(ptr, tmp, &component->agdevs) {
+		mc = list_entry(ptr, struct component_match_array, component_list);
+		list_del(&mc->component_list);
+		mc->component = NULL;
+
+		if (!mc->duplicate)
+			take_down_aggregate_device(mc->adev);
 	}
 
 	mutex_unlock(&component_mutex);
