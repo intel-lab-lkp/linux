@@ -61,16 +61,28 @@ static int emac_open(struct net_device *ndev)
 {
 	struct tsn_emac *emac = netdev_priv(ndev);
 	struct phy_device *phydev = NULL;
+	int ret;
+
+	/* Register PTP interrupts */
+	ret = tsn_ptp_init_and_register_irqs(emac);
+	if (ret) {
+		dev_err(emac->common->dev,
+			"EMAC %d: Failed to register PTP interrupts: %d\n",
+			emac->emac_num, ret);
+		return ret;
+	}
 
 	if (emac->phy_node) {
 		phydev = of_phy_connect(emac->ndev, emac->phy_node,
 					tsn_adjust_link_tsn,
 					emac->phy_flags,
 					emac->phy_mode);
-		if (!phydev)
+		if (!phydev) {
 			dev_err(emac->common->dev, "of_phy_connect() failed\n");
-		else
-			phy_start(phydev);
+			tsn_ptp_unregister_irqs(emac);
+			return -ENODEV;
+		}
+		phy_start(phydev);
 	}
 
 	return 0;
@@ -87,8 +99,12 @@ static int emac_open(struct net_device *ndev)
  */
 static int emac_stop(struct net_device *ndev)
 {
+	struct tsn_emac *emac = netdev_priv(ndev);
+
 	if (ndev->phydev)
 		phy_disconnect(ndev->phydev);
+
+	tsn_ptp_unregister_irqs(emac);
 
 	return 0;
 }
@@ -120,8 +136,148 @@ static int emac_validate_addr(struct net_device *ndev)
 static netdev_tx_t emac_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
 	struct tsn_emac *emac = netdev_priv(ndev);
+	u16 queue = skb_get_queue_mapping(skb);
+
+	if (queue == emac->common->num_priorities)
+		return tsn_ptp_xmit(skb, emac);
 
 	return tsn_start_xmit_dmaengine(emac->common, skb, ndev);
+}
+
+/**
+ * emac_select_queue - select queue for packet transmission
+ * @ndev:	Pointer to net_device structure
+ * @skb:	socket buffer containing the packet
+ * @sb_dev:	fallback device (not used)
+ *
+ * Return:	Queue index for PTP packets or default queue
+ *
+ * This function selects the appropriate queue for packet transmission.
+ * PTP packets (ETH_P_1588) are directed to a dedicated PTP queue.
+ */
+static u16 emac_select_queue(struct net_device *ndev,
+			     struct sk_buff *skb,
+			     struct net_device *sb_dev)
+{
+	struct tsn_emac *emac = netdev_priv(ndev);
+	struct tsn_priv *common = emac->common;
+	struct ethhdr *hdr = (struct ethhdr *)skb->data;
+
+	/* PTP over Ethernet (Layer 2) */
+	if (hdr->h_proto == htons(ETH_P_1588))
+		return common->num_priorities;
+	return netdev_pick_tx(ndev, skb, sb_dev);
+}
+
+/**
+ *  emac_set_timestamp_mode - sets up the hardware for the requested mode
+ *  @emac:	Pointer to TSN EMAC structure
+ *  @config:	the hwtstamp configuration requested
+ *
+ * Return:	0 on success, Negative value on errors
+ */
+static int emac_set_timestamp_mode(struct tsn_emac *emac,
+				   struct hwtstamp_config *config)
+{
+	/* reserved for future extensions */
+	if (config->flags)
+		return -EINVAL;
+
+	if (config->tx_type < HWTSTAMP_TX_OFF ||
+	    config->tx_type > HWTSTAMP_TX_ON)
+		return -ERANGE;
+
+	emac->ptp_ts_type = config->tx_type;
+
+	/* On RX always timestamp everything */
+	switch (config->rx_filter) {
+	case HWTSTAMP_FILTER_NONE:
+		emac->current_rx_filter = HWTSTAMP_FILTER_NONE;
+		break;
+	case HWTSTAMP_FILTER_PTP_V2_L2_EVENT:
+		emac->current_rx_filter = HWTSTAMP_FILTER_PTP_V2_L2_EVENT;
+		config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L2_EVENT;
+		break;
+	default:
+		return -ERANGE;
+	}
+	return 0;
+}
+
+/**
+ * emac_set_ts_config - user entry point for timestamp mode
+ * @emac:	Pointer to TSN EMAC structure
+ * @ifr:	ioctl data
+ *
+ * Set hardware to the requested more. If unsupported return an error
+ * with no changes. Otherwise, store the mode for future reference
+ *
+ * Return:	0 on success, Negative value on errors
+ */
+static int emac_set_ts_config(struct tsn_emac *emac, struct ifreq *ifr)
+{
+	struct hwtstamp_config config;
+	int err;
+
+	if (copy_from_user(&config, ifr->ifr_data, sizeof(config)))
+		return -EFAULT;
+
+	err = emac_set_timestamp_mode(emac, &config);
+	if (err)
+		return err;
+
+	/* save these settings for future reference */
+	memcpy(&emac->tstamp_config, &config, sizeof(emac->tstamp_config));
+
+	return copy_to_user(ifr->ifr_data, &config,
+			sizeof(config)) ? -EFAULT : 0;
+}
+
+/**
+ * emac_get_ts_config - return the current timestamp configuration
+ * to the user
+ * @emac:	pointer to TSN EMAC structure
+ * @ifr:	ioctl data
+ *
+ * Return:	0 on success, Negative value on errors
+ */
+static int emac_get_ts_config(struct tsn_emac *emac, struct ifreq *ifr)
+{
+	struct hwtstamp_config *config = &emac->tstamp_config;
+
+	return copy_to_user(ifr->ifr_data, config,
+			    sizeof(*config)) ? -EFAULT : 0;
+}
+
+/**
+ * emac_ioctl - Ioctl MII Interface
+ * @dev:	Pointer to net_device structure
+ * @rq:	ioctl request structure
+ * @cmd:	ioctl command
+ *
+ * Return:	0 on success, Negative value on errors
+ */
+static int emac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+{
+	struct tsn_emac *emac = netdev_priv(dev);
+
+	if (!netif_running(dev))
+		return -EINVAL;
+
+	switch (cmd) {
+	case SIOCGMIIPHY:
+	case SIOCGMIIREG:
+	case SIOCSMIIREG:
+		if (!dev->phydev)
+			return -EOPNOTSUPP;
+		return phy_mii_ioctl(dev->phydev, rq, cmd);
+	case SIOCSHWTSTAMP:
+		return emac_set_ts_config(emac, rq);
+	case SIOCGHWTSTAMP:
+		return emac_get_ts_config(emac, rq);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 static const struct net_device_ops emac_netdev_ops = {
@@ -130,6 +286,8 @@ static const struct net_device_ops emac_netdev_ops = {
 	.ndo_start_xmit		= emac_start_xmit,
 	.ndo_set_mac_address	= tsn_ndo_set_mac_address,
 	.ndo_validate_addr	= emac_validate_addr,
+	.ndo_select_queue	= emac_select_queue,
+	.ndo_eth_ioctl		= emac_ioctl,
 };
 
 /**
@@ -171,7 +329,7 @@ static int emac_get_ts_info(struct net_device *ndev,
 			 BIT(HWTSTAMP_TX_ON);
 
 	info->rx_filters = BIT(HWTSTAMP_FILTER_NONE) |
-			   BIT(HWTSTAMP_FILTER_ALL);
+			   BIT(HWTSTAMP_FILTER_PTP_V2_L2_EVENT);
 
 	if (common->phc_index >= 0)
 		info->phc_index = common->phc_index;
@@ -225,7 +383,9 @@ int tsn_emac_init(struct platform_device *pdev)
 			goto err_cleanup_all;
 		}
 
-		ndev = alloc_etherdev(sizeof(*emac));
+		ndev = alloc_etherdev_mqs(sizeof(*emac),
+					  common->num_tx_queues + 1,
+					  common->num_rx_queues);
 		if (!ndev) {
 			ret = -ENOMEM;
 			of_node_put(emac_np);
@@ -279,6 +439,14 @@ int tsn_emac_init(struct platform_device *pdev)
 				goto err_teardown_mdio;
 			}
 		}
+
+		ret = tsn_ptp_get_irq_info(emac, emac_np);
+		if (ret) {
+			dev_err(dev, "Failed to get PTP IRQ info for EMAC %d: %d\n",
+				emac->emac_num, ret);
+			goto err_remove_ptp;
+		}
+
 		ret = register_netdev(ndev);
 		if (ret) {
 			dev_err(dev, "Failed to register net device for MAC %d\n", mac_id);

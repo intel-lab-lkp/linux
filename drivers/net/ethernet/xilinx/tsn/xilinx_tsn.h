@@ -137,6 +137,37 @@
 /* PTP Timer Register Base Offset */
 #define TSN_PTP_TIMER_OFFSET		0x12800
 
+/* PTP register offsets */
+#define PTP_TX_CONTROL_OFFSET		0x00012000
+#define PTP_RX_CONTROL_OFFSET		0x00012004
+
+/* PTP RX buffer configuration */
+#define PTP_RX_BASE_OFFSET		0x00010000
+#define PTP_RX_PACKET_FIELD_MASK	0x00000F00
+#define PTP_RX_PACKET_CLEAR		0x00000001
+
+/* PTP TX buffer configuration */
+#define PTP_TX_BUFFER_OFFSET(index)	(0x00011000 + (index) * 0x100)
+#define PTP_TX_CMD_FIELD_LEN		8
+#define PTP_TX_CMD_1STEP_SHIFT		BIT(16)
+#define PTP_TX_BUFFER_CMD2_FIELD	0x4
+
+/* PTP TX control and status masks */
+#define PTP_TX_FRAME_WAITING_MASK	0x0000ff00
+#define PTP_TX_FRAME_WAITING_SHIFT	8
+#define PTP_TX_PACKET_FIELD_MASK	0x00070000
+#define PTP_TX_PACKET_FIELD_SHIFT	16
+
+/* PTP timestamp and buffer definitions */
+#define PTP_HW_TSTAMP_SIZE		8	/* 64 bit timestamp */
+#define PTP_RX_HWBUF_SIZE		256
+#define PTP_RX_FRAME_SIZE		252
+#define PTP_HW_TSTAMP_OFFSET		(PTP_RX_HWBUF_SIZE - PTP_HW_TSTAMP_SIZE)
+
+/* PTP message type definitions */
+#define PTP_MSG_TYPE_MASK		BIT(3)
+#define PTP_TYPE_SYNC			0x0
+
 /**
  * struct tsn_ptp_timer - PTP timer private data
  * @dev: Device pointer
@@ -175,6 +206,16 @@ struct tsn_ptp_timer {
  * @mii_clk_div: MDIO clock divider value
  * @emac_num: EMAC instance number (1 or 2)
  * @irq: Interrupt number for this EMAC
+ * @ptp_rx_irq: PTP RX interrupt number
+ * @ptp_tx_irq: PTP TX interrupt number
+ * @ptp_txq: PTP TX packet queue for timestamping
+ * @ptp_tx_lock: Spinlock for PTP TX queue
+ * @tx_tstamp_work: Work structure for TX timestamp processing
+ * @ptp_rx_hw_pointer: Hardware pointer for PTP RX packets
+ * @ptp_rx_sw_pointer: Software pointer for PTP RX packets
+ * @ptp_ts_type: PTP timestamp type configuration
+ * @tstamp_config: Hardware timestamp config structure
+ * @current_rx_filter : Current rx filter
  */
 struct tsn_emac {
 	struct net_device *ndev;
@@ -189,6 +230,16 @@ struct tsn_emac {
 	u8 mii_clk_div;
 	int emac_num;
 	int irq;
+	int ptp_rx_irq;
+	int ptp_tx_irq;
+	struct sk_buff_head ptp_txq;
+	spinlock_t ptp_tx_lock;  /* Protect PTP TX queue */
+	struct work_struct tx_tstamp_work;
+	u8 ptp_rx_hw_pointer;
+	u8 ptp_rx_sw_pointer;
+	int ptp_ts_type;
+	struct hwtstamp_config tstamp_config;
+	int current_rx_filter;
 };
 
 /*
@@ -369,4 +420,11 @@ int tsn_switch_init(struct platform_device *pdev);
 void tsn_switch_exit(struct platform_device *pdev);
 int tsn_ptp_timer_init(struct tsn_emac *emac, struct device_node *emac_np);
 void tsn_ptp_timer_exit(struct tsn_emac *emac);
+int tsn_ptp_get_irq_info(struct tsn_emac *emac, struct device_node *emac_np);
+int tsn_ptp_init_and_register_irqs(struct tsn_emac *emac);
+void tsn_ptp_unregister_irqs(struct tsn_emac *emac);
+int tsn_ptp_xmit(struct sk_buff *skb, struct tsn_emac *emac);
+void tsn_ptp_tx_tstamp(struct work_struct *work);
+irqreturn_t tsn_ptp_rx_irq(int irq, void *data);
+irqreturn_t tsn_ptp_tx_irq(int irq, void *data);
 #endif /* XILINX_TSN_H */
