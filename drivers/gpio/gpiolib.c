@@ -1395,7 +1395,7 @@ EXPORT_SYMBOL_GPL(gpio_device_find_by_label);
 
 static int gpio_chip_match_by_fwnode(struct gpio_chip *gc, const void *fwnode)
 {
-	return device_match_fwnode(&gc->gpiodev->dev, fwnode);
+	return device_match_fwnode_ext(&gc->gpiodev->dev, fwnode);
 }
 
 /**
