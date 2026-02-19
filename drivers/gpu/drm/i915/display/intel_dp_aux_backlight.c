@@ -668,19 +668,11 @@ int intel_dp_aux_init_backlight_funcs(struct intel_connector *connector)
 		if (panel->vbt.backlight.type != INTEL_BACKLIGHT_VESA_EDP_AUX_INTERFACE)
 			try_intel_interface = true;
 
-		try_vesa_interface = true;
-		break;
-	case INTEL_DP_AUX_BACKLIGHT_FORCE_VESA:
-		try_vesa_interface = true;
 		break;
 	case INTEL_DP_AUX_BACKLIGHT_FORCE_INTEL:
 		try_intel_interface = true;
 		break;
 	}
-
-	/* For eDP 1.5 and above we are supposed to use VESA interface for brightness control */
-	if (intel_dp->edp_dpcd[0] >= DP_EDP_15)
-		try_vesa_interface = true;
 
 	/*
 	 * Since Intel has their own backlight control interface, the majority of machines out there
