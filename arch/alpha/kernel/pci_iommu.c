@@ -15,6 +15,7 @@
 #include <linux/iommu-helper.h>
 #include <linux/string_choices.h>
 
+#include <linux/dma-map-ops.h>
 #include <asm/io.h>
 #include <asm/hwrpb.h>
 
@@ -409,12 +410,34 @@ static void *alpha_pci_alloc_coherent(struct device *dev, size_t size,
 	struct pci_dev *pdev = alpha_gendev_to_pci(dev);
 	void *cpu_addr;
 	long order = get_order(size);
+	unsigned long count = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	struct page *cma_page = NULL;
 
+	/* Match existing behavior: prefer normal memory first. */
 	gfp &= ~GFP_DMA;
 
 try_again:
 	cpu_addr = (void *)__get_free_pages(gfp | __GFP_ZERO, order);
 	if (! cpu_addr) {
+		/*
+		 * Fallback to CMA if enabled: this can migrate/compact
+		 * movable pages out of the CMA area to form a contiguous bloc
+		 */
+		if (IS_ENABLED(CONFIG_DMA_CMA)) {
+			cma_page = dma_alloc_from_contiguous(dev, count, order, gfp);
+			if (cma_page) {
+				cpu_addr = page_address(cma_page);
+				if (!cpu_addr) {
+					/* Very unlikely on Alpha, but be safe. */
+					dma_release_from_contiguous(dev, cma_page, count);
+					cma_page = NULL;
+				} else {
+					memset(cpu_addr, 0, size);
+					goto have_mem;
+				}
+			}
+		}
+
 		printk(KERN_INFO "pci_alloc_consistent: "
 		       "get_free_pages failed from %ps\n",
 			__builtin_return_address(0));
@@ -422,11 +445,24 @@ try_again:
 		   with vmalloc and sg if we can't find contiguous memory.  */
 		return NULL;
 	}
+	/* __GFP_ZERO already did this, but keep the old behavior explicit. */
 	memset(cpu_addr, 0, size);
 
+have_mem:
 	*dma_addrp = pci_map_single_1(pdev, virt_to_phys(cpu_addr), size, 0);
 	if (*dma_addrp == DMA_MAPPING_ERROR) {
+		/*
+		 * Free the memory using the right backend:
+		 * - If it came from CMA, release to CMA
+		 * - Otherwise free_pages()
+		 */
+		if (IS_ENABLED(CONFIG_DMA_CMA)) {
+			if (dma_release_from_contiguous(dev, virt_to_page(cpu_addr), count))
+				goto map_failed_freed;
+		}
 		free_pages((unsigned long)cpu_addr, order);
+
+map_failed_freed:
 		if (alpha_mv.mv_pci_tbi || (gfp & GFP_DMA))
 			return NULL;
 		/* The address doesn't fit required mask and we
@@ -452,9 +488,19 @@ static void alpha_pci_free_coherent(struct device *dev, size_t size,
 				    unsigned long attrs)
 {
 	struct pci_dev *pdev = alpha_gendev_to_pci(dev);
+	unsigned long count = PAGE_ALIGN(size) >> PAGE_SHIFT;
+
 	dma_unmap_single(&pdev->dev, dma_addr, size, DMA_BIDIRECTIONAL);
+
+	if (IS_ENABLED(CONFIG_DMA_CMA)) {
+		/* Returns true if cpu_addr belongs to a CMA allocation. */
+		if (dma_release_from_contiguous(dev, virt_to_page(cpu_addr), count))
+			goto out;
+	}
+
 	free_pages((unsigned long)cpu_addr, get_order(size));
 
+out:
 	DBGA2("pci_free_consistent: [%llx,%zx] from %ps\n",
 	      dma_addr, size, __builtin_return_address(0));
 }

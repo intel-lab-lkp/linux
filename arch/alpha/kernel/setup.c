@@ -46,6 +46,7 @@
 #include <asm/io.h>
 #include <linux/log2.h>
 #include <linux/export.h>
+#include <linux/dma-map-ops.h>
 
 static int alpha_panic_event(struct notifier_block *, unsigned long, void *);
 static struct notifier_block alpha_panic_block = {
@@ -513,6 +514,13 @@ setup_arch(char **cmdline_p)
 	/* Replace the command line, now that we've killed it with strsep.  */
 	strcpy(command_line, boot_command_line);
 
+	/*
+	 * Alpha mutates command_line with strsep() above, so make sure
+	 * early params (including "cma=") are parsed from the restored
+	 * command line before any CMA reservation happens.
+	 */
+	parse_early_param();
+
 	/* If we want SRM console printk echoing early, do it now. */
 	if (alpha_using_srm && srmcons_output) {
 		register_srm_console();
@@ -647,6 +655,14 @@ setup_arch(char **cmdline_p)
  	if (hwrpb->max_asn != MAX_ASN) {
 		printk("Max ASN from HWRPB is bad (0x%lx)\n", hwrpb->max_asn);
  	}
+
+#ifdef CONFIG_CMA
+	/*
+	 * Reserve CMA now that memblock knows RAM layout and early params
+	 * (including cma=) have been parsed.
+	 */
+	dma_contiguous_reserve(0);
+#endif
 
 	/*
 	 * Identify the flock of penguins.

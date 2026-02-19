@@ -2,6 +2,7 @@
 config ALPHA
 	bool
 	default y
+	select HAVE_DMA_CONTIGUOUS
 	select ARCH_32BIT_USTAT_F_TINODE
 	select ARCH_HAS_CURRENT_STACK_POINTER
 	select ARCH_HAS_DMA_OPS if PCI
