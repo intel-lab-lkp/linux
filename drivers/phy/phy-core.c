@@ -682,10 +682,10 @@ struct phy *of_phy_get(struct device_node *np, const char *con_id)
 	if (IS_ERR(phy))
 		return phy;
 
-	if (!try_module_get(phy->ops->owner))
+	if (!try_module_get(phy->ops->owner)) {
+		put_device(&phy->dev);
 		return ERR_PTR(-EPROBE_DEFER);
-
-	get_device(&phy->dev);
+	}
 
 	return phy;
 }
@@ -765,7 +765,6 @@ struct phy *of_phy_simple_xlate(struct device *dev,
 	if (!target_dev)
 		return ERR_PTR(-ENODEV);
 
-	put_device(target_dev);
 	return to_phy(target_dev);
 }
 EXPORT_SYMBOL_GPL(of_phy_simple_xlate);
