@@ -113,6 +113,34 @@ patternProperties:
       reg:
         maxItems: 1
 
+      xlnx,mac-id:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [1, 2]
+        description:
+          MAC instance identifier. MAC ID 1 supports PTP timer functionality,
+          while MAC ID 2 does not have PTP timer support.
+
+      interrupts:
+        minItems: 1
+        maxItems: 4
+        description:
+          Interrupt specifiers for MAC interrupts. MAC 1 (with PTP support)
+          requires 4 interrupts (ptp_rx, ptp_tx, mac_irq, ptp_timer).
+          MAC 2 (without PTP support) requires 3 interrupts (ptp_rx, ptp_tx, mac_irq).
+
+      interrupt-names:
+        minItems: 1
+        maxItems: 4
+        items:
+          enum:
+            - interrupt_ptp_rx
+            - interrupt_ptp_tx
+            - mac_irq
+            - interrupt_ptp_timer
+        description:
+          Names for the interrupts. MAC 1 includes "interrupt_ptp_timer" for
+          PTP hardware timer, which is not present in MAC 2.
+
       phy-mode:
         enum:
           - gmii
@@ -124,6 +152,44 @@ patternProperties:
 
       mdio:
         type: object
+
+    allOf:
+      - if:
+          properties:
+            xlnx,mac-id:
+              const: 1
+        then:
+          properties:
+            interrupts:
+              minItems: 4
+              maxItems: 4
+            interrupt-names:
+              items:
+                - const: interrupt_ptp_rx
+                - const: interrupt_ptp_tx
+                - const: mac_irq
+                - const: interrupt_ptp_timer
+          required:
+            - interrupts
+            - interrupt-names
+      - if:
+          properties:
+            xlnx,mac-id:
+              const: 2
+        then:
+          properties:
+            interrupts:
+              minItems: 3
+              maxItems: 3
+            interrupt-names:
+              items:
+                - const: interrupt_ptp_rx
+                - const: interrupt_ptp_tx
+                - const: mac_irq
+          required:
+            - interrupts
+            - interrupt-names
+
     additionalProperties: false
 
   "^ep-mac@":
@@ -225,9 +291,14 @@ examples:
                  xlnx,dma-channel-num = <0x0>;
             };
         };
-        // MAC 1 Node
+        // MAC 1 Node (with PTP timer support)
         mac1: ethernet-mac@0 {
             reg = <0x0 0x14000>;
+            xlnx,mac-id = <1>;
+            interrupt-parent = <&intc>;
+            interrupt-names = "interrupt_ptp_rx", "interrupt_ptp_tx",
+                              "mac_irq", "interrupt_ptp_timer";
+            interrupts = <0 2>, <2 2>, <4 2>, <6 2>;
             phy-mode = "rgmii-id";
             phy-handle = <&phy0>;
             mdio {
@@ -240,9 +311,13 @@ examples:
             };
         };
 
-        // MAC 2 Node
+        // MAC 2 Node (without PTP timer support)
         mac2: ethernet-mac@20000 {
             reg = <0x20000 0x14000>;
+            xlnx,mac-id = <2>;
+            interrupt-parent = <&intc>;
+            interrupt-names = "interrupt_ptp_rx", "interrupt_ptp_tx", "mac_irq";
+            interrupts = <1 2>, <3 2>, <5 2>;
             phy-mode = "rgmii-id";
             phy-handle = <&phy1>;
             mdio {
