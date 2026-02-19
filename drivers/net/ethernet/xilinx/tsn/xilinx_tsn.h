@@ -18,6 +18,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -25,12 +26,15 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_dma.h>
+#include <linux/of_irq.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/ptp_clock_kernel.h>
 #include <linux/spinlock.h>
 #include <linux/u64_stats_sync.h>
+#include <linux/units.h>
 #include <net/netdev_queues.h>
 
 #define TSN_NUM_CLOCKS		6
@@ -107,6 +111,55 @@
 #define TSN_EMMC_LINKSPEED_1000		BIT(31)    /* 1000 Mbit */
 
 #define TSN_MAX_EMAC_NO			2
+#define TSN_TEMAC1			1
+#define TSN_TEMAC2			2
+
+/* PTP Timer Register Offsets (relative to timer base) */
+#define TSN_TIMER_RTC_OFFSET_NS		0x00000  /* RTC Nanoseconds Offset */
+#define TSN_TIMER_RTC_OFFSET_SEC_L	0x00008  /* RTC Seconds Offset - Low */
+#define TSN_TIMER_RTC_OFFSET_SEC_H	0x0000C  /* RTC Seconds Offset - High */
+#define TSN_TIMER_RTC_INCREMENT		0x00010  /* RTC Increment */
+#define TSN_TIMER_CURRENT_RTC_NS	0x00014  /* Current TOD Nanoseconds - RO */
+#define TSN_TIMER_CURRENT_RTC_SEC_L	0x00018  /* Current TOD Seconds Low - RO */
+#define TSN_TIMER_CURRENT_RTC_SEC_H	0x0001C  /* Current TOD Seconds High - RO */
+#define TSN_TIMER_INTERRUPT		0x00020  /* Interrupt register */
+
+/* PTP Timer bit masks and constants */
+#define TSN_TIMER_MAX_NSEC_SIZE		30
+#define TSN_TIMER_MAX_NSEC_MASK		GENMASK_ULL(TSN_TIMER_MAX_NSEC_SIZE - 1, 0)
+#define TSN_TIMER_MAX_SEC_SIZE		48
+#define TSN_TIMER_MAX_SEC_MASK		GENMASK_ULL(TSN_TIMER_MAX_SEC_SIZE - 1, 0)
+#define TSN_TIMER_INT_SHIFT		0
+#define TSN_TIMER_RTC_NS_SHIFT		20
+#define PULSESIN1PPS			128
+#define TSN_TIMER_GTX_CLK_FREQ		(125 * HZ_PER_MHZ)  /* 125 MHz */
+
+/* PTP Timer Register Base Offset */
+#define TSN_PTP_TIMER_OFFSET		0x12800
+
+/**
+ * struct tsn_ptp_timer - PTP timer private data
+ * @dev: Device pointer
+ * @regs: Base address of PTP timer registers
+ * @ptp_clock: PTP clock instance
+ * @ptp_clock_info: PTP clock information
+ * @reg_lock: Register access spinlock
+ * @irq: PTP timer interrupt number
+ * @pps_enable: PPS output enable flag
+ * @countpulse: Pulse counter for PPS generation
+ * @rtc_value: RTC increment value
+ */
+struct tsn_ptp_timer {
+	struct device *dev;
+	void __iomem *regs;
+	struct ptp_clock *ptp_clock;
+	struct ptp_clock_info ptp_clock_info;
+	spinlock_t reg_lock; /* Protect ptp register access */
+	int irq;
+	int pps_enable;
+	int countpulse;
+	u32 rtc_value;
+};
 
 /*
  * struct tsn_emac - TSN Ethernet MAC configuration structure
@@ -218,6 +271,8 @@ struct tsn_endpoint {
  * @tx_chans: Array of TX DMA channels
  * @rx_chans: Array of RX DMA channels
  * @num_emacs: Number of EMAC instances
+ * @ptp_timer: Global PTP timer shared by both EMACs
+ * @phc_index: PTP Hardware Clock index
  */
 struct tsn_priv {
 	struct platform_device *pdev;
@@ -240,6 +295,8 @@ struct tsn_priv {
 	struct tsn_dma_chan **tx_chans;
 	struct tsn_dma_chan **rx_chans;
 	u32 num_emacs;
+	struct tsn_ptp_timer ptp_timer;
+	int phc_index;
 };
 
 /**
@@ -310,4 +367,6 @@ int tsn_mdio_setup(struct tsn_emac *emac, struct device_node *mac_np);
 void tsn_mdio_teardown(struct tsn_emac *emac);
 int tsn_switch_init(struct platform_device *pdev);
 void tsn_switch_exit(struct platform_device *pdev);
+int tsn_ptp_timer_init(struct tsn_emac *emac, struct device_node *emac_np);
+void tsn_ptp_timer_exit(struct tsn_emac *emac);
 #endif /* XILINX_TSN_H */

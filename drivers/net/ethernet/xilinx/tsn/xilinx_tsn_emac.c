@@ -147,11 +147,46 @@ static void emac_get_drvinfo(struct net_device *ndev,
 	strscpy(ed->version, DRIVER_VERSION, sizeof(ed->version));
 }
 
+/**
+ * emac_get_ts_info - Get timestamping and PTP information
+ * @ndev: Pointer to net_device structure
+ * @info: Pointer to ethtool_ts_info structure
+ *
+ * This function provides hardware timestamping capabilities and
+ * PTP hardware clock index for ethtool -T command.
+ *
+ * Return: 0 on success
+ */
+static int emac_get_ts_info(struct net_device *ndev,
+			    struct kernel_ethtool_ts_info *info)
+{
+	struct tsn_emac *emac = netdev_priv(ndev);
+	struct tsn_priv *common = emac->common;
+
+	info->so_timestamping = SOF_TIMESTAMPING_TX_HARDWARE |
+				SOF_TIMESTAMPING_RX_HARDWARE |
+				SOF_TIMESTAMPING_RAW_HARDWARE;
+
+	info->tx_types = BIT(HWTSTAMP_TX_OFF) |
+			 BIT(HWTSTAMP_TX_ON);
+
+	info->rx_filters = BIT(HWTSTAMP_FILTER_NONE) |
+			   BIT(HWTSTAMP_FILTER_ALL);
+
+	if (common->phc_index >= 0)
+		info->phc_index = common->phc_index;
+	else
+		info->phc_index = -1;
+
+	return 0;
+}
+
 static const struct ethtool_ops emac_ethtool_ops = {
 	.get_drvinfo	= emac_get_drvinfo,
 	.get_link	= ethtool_op_get_link,
 	.get_link_ksettings	= phy_ethtool_get_link_ksettings,
 	.set_link_ksettings	= phy_ethtool_set_link_ksettings,
+	.get_ts_info		= emac_get_ts_info,
 };
 
 /**
@@ -235,10 +270,19 @@ int tsn_emac_init(struct platform_device *pdev)
 			}
 		}
 
+		/* PTP timer initialization - ONLY for MAC 1 */
+		if (emac->emac_num == TSN_TEMAC1) {
+			ret = tsn_ptp_timer_init(emac, emac_np);
+			if (ret) {
+				dev_err(dev, "Failed to initialize PTP timer for EMAC %d: %d\n",
+					emac->emac_num, ret);
+				goto err_teardown_mdio;
+			}
+		}
 		ret = register_netdev(ndev);
 		if (ret) {
 			dev_err(dev, "Failed to register net device for MAC %d\n", mac_id);
-			goto err_teardown_mdio;
+			goto err_remove_ptp;
 		}
 
 		common->emacs[array_idx] = emac;
@@ -246,6 +290,9 @@ int tsn_emac_init(struct platform_device *pdev)
 		common->num_emacs = array_idx;
 		continue;
 
+err_remove_ptp:
+		if (emac->emac_num == TSN_TEMAC1)
+			tsn_ptp_timer_exit(emac);
 err_teardown_mdio:
 		if (emac->phy_node)
 			tsn_mdio_teardown(emac);
@@ -275,6 +322,8 @@ err_cleanup_all:
 		dev_info(dev, "Cleaning up MAC %u (array[%d])\n", old->emac_num, array_idx);
 
 		unregister_netdev(old->ndev);
+		if (old->emac_num == TSN_TEMAC1)
+			tsn_ptp_timer_exit(old);
 
 		if (old->phy_node) {
 			tsn_mdio_teardown(old);
@@ -314,6 +363,10 @@ void tsn_emac_exit(struct platform_device *pdev)
 		dev_info(dev, "Cleaning up MAC %u (array[%d])\n", emac->emac_num, i);
 
 		unregister_netdev(emac->ndev);
+
+		if (emac->emac_num == TSN_TEMAC1)
+			tsn_ptp_timer_exit(emac);
+
 		if (emac->phy_node) {
 			tsn_mdio_teardown(emac);
 			of_node_put(emac->phy_node);
