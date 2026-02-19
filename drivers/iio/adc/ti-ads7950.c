@@ -528,19 +528,26 @@ static int ti_ads7950_init_hw(struct ti_ads7950_state *st)
 	return 0;
 }
 
+static void ti_ads7950_power_off(void *data)
+{
+	struct ti_ads7950_state *st = data;
+
+	regulator_disable(st->reg);
+}
+
 static int ti_ads7950_probe(struct spi_device *spi)
 {
 	struct ti_ads7950_state *st;
 	struct iio_dev *indio_dev;
 	const struct ti_ads7950_chip_info *info;
-	int ret;
+	int error;
 
 	spi->bits_per_word = 16;
 	spi->mode |= SPI_CS_WORD;
-	ret = spi_setup(spi);
-	if (ret < 0) {
+	error = spi_setup(spi);
+	if (error) {
 		dev_err(&spi->dev, "Error in spi setup\n");
-		return ret;
+		return error;
 	}
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
@@ -598,36 +605,36 @@ static int ti_ads7950_probe(struct spi_device *spi)
 	mutex_init(&st->slock);
 
 	st->reg = devm_regulator_get(&spi->dev, "vref");
-	if (IS_ERR(st->reg)) {
-		ret = dev_err_probe(&spi->dev, PTR_ERR(st->reg),
+	error = PTR_ERR_OR_ZERO(st->reg);
+	if (error)
+		return dev_err_probe(&spi->dev, error,
 				     "Failed to get regulator \"vref\"\n");
-		goto error_destroy_mutex;
-	}
 
-	ret = regulator_enable(st->reg);
-	if (ret) {
-		dev_err(&spi->dev, "Failed to enable regulator \"vref\"\n");
-		goto error_destroy_mutex;
-	}
+	error = regulator_enable(st->reg);
+	if (error)
+		return dev_err_probe(&spi->dev, error,
+				     "Failed to enable regulator \"vref\"\n");
 
-	ret = iio_triggered_buffer_setup(indio_dev, NULL,
-					 &ti_ads7950_trigger_handler, NULL);
-	if (ret) {
-		dev_err(&spi->dev, "Failed to setup triggered buffer\n");
-		goto error_disable_reg;
-	}
+	error = devm_add_action_or_reset(&spi->dev, ti_ads7950_power_off, st);
+	if (error)
+		return error;
 
-	ret = ti_ads7950_init_hw(st);
-	if (ret) {
-		dev_err(&spi->dev, "Failed to init adc chip\n");
-		goto error_cleanup_ring;
-	}
+	error = devm_iio_triggered_buffer_setup(&spi->dev, indio_dev, NULL,
+						&ti_ads7950_trigger_handler,
+						NULL);
+	if (error)
+		return dev_err_probe(&spi->dev, error,
+				     "Failed to setup triggered buffer\n");
 
-	ret = iio_device_register(indio_dev);
-	if (ret) {
-		dev_err(&spi->dev, "Failed to register iio device\n");
-		goto error_cleanup_ring;
-	}
+	error = ti_ads7950_init_hw(st);
+	if (error)
+		return dev_err_probe(&spi->dev, error,
+				     "Failed to init adc chip\n");
+
+	error = devm_iio_device_register(&spi->dev, indio_dev);
+	if (error)
+		return dev_err_probe(&spi->dev, error,
+				     "Failed to register iio device\n");
 
 	/* Add GPIO chip */
 	st->chip.label = dev_name(&st->spi->dev);
@@ -642,36 +649,12 @@ static int ti_ads7950_probe(struct spi_device *spi)
 	st->chip.get = ti_ads7950_get;
 	st->chip.set = ti_ads7950_set;
 
-	ret = gpiochip_add_data(&st->chip, st);
-	if (ret) {
-		dev_err(&spi->dev, "Failed to init GPIOs\n");
-		goto error_iio_device;
-	}
+	error = devm_gpiochip_add_data(&spi->dev, &st->chip, st);
+	if (error)
+		return dev_err_probe(&spi->dev, error,
+				     "Failed to init GPIOs\n");
 
 	return 0;
-
-error_iio_device:
-	iio_device_unregister(indio_dev);
-error_cleanup_ring:
-	iio_triggered_buffer_cleanup(indio_dev);
-error_disable_reg:
-	regulator_disable(st->reg);
-error_destroy_mutex:
-	mutex_destroy(&st->slock);
-
-	return ret;
-}
-
-static void ti_ads7950_remove(struct spi_device *spi)
-{
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct ti_ads7950_state *st = iio_priv(indio_dev);
-
-	gpiochip_remove(&st->chip);
-	iio_device_unregister(indio_dev);
-	iio_triggered_buffer_cleanup(indio_dev);
-	regulator_disable(st->reg);
-	mutex_destroy(&st->slock);
 }
 
 static const struct spi_device_id ti_ads7950_id[] = {
@@ -714,7 +697,6 @@ static struct spi_driver ti_ads7950_driver = {
 		.of_match_table = ads7950_of_table,
 	},
 	.probe		= ti_ads7950_probe,
-	.remove		= ti_ads7950_remove,
 	.id_table	= ti_ads7950_id,
 };
 module_spi_driver(ti_ads7950_driver);
