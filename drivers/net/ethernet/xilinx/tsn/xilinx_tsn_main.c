@@ -92,13 +92,14 @@ rx_submit_err_revert_head:
  * @tuser: TUSER metadata word from DMA descriptor
  *
  * Extract Input Port ID from TUSER bits[5:4] and return corresponding netdev.
- * Currently only EP is supported; MAC ports will return NULL until implemented.
+ * Supports EP (endpoint) and MAC1/MAC2 (EMAC) ports.
  *
  * Return: net_device pointer on success, NULL if port not available
  */
 static inline struct net_device *tsn_classify_rx_packet(struct tsn_priv *common, u32 tuser)
 {
 	u32 port_id;
+	int i;
 
 	/* Extract Input Port ID from TUSER bits[5:4] */
 	port_id = FIELD_GET(TSN_TUSER_PORT_ID_MASK, tuser);
@@ -112,9 +113,13 @@ static inline struct net_device *tsn_classify_rx_packet(struct tsn_priv *common,
 
 	case TSN_TUSER_PORT_MAC1:
 	case TSN_TUSER_PORT_MAC2:
-		/* MAC ports not yet implemented */
+		for (i = 0; i < common->num_emacs; i++) {
+			if (common->emacs[i] &&
+			    common->emacs[i]->emac_num == port_id)
+				return common->emacs[i]->ndev;
+		}
 		if (net_ratelimit())
-			dev_warn(common->dev, "RX from MAC port %u not yet supported\n", port_id);
+			dev_warn(common->dev, "RX from MAC port %u not found\n", port_id);
 		return NULL;
 
 	default:
@@ -726,13 +731,18 @@ static int tsn_ip_probe(struct platform_device *pdev)
 		goto free_clk;
 	}
 
-	/* Initialize EP - now safe to register because DMA is ready */
 	ret = tsn_ep_init(pdev);
 	if (ret)
 		goto exit_dma;
 
+	ret = tsn_emac_init(pdev);
+	if (ret)
+		goto exit_ep;
+
 	return 0;
 
+exit_ep:
+	tsn_ep_exit(pdev);
 exit_dma:
 	tsn_exit_dmaengine(pdev);
 free_clk:
@@ -748,6 +758,7 @@ static void tsn_ip_remove(struct platform_device *pdev)
 {
 	struct tsn_priv *common = platform_get_drvdata(pdev);
 
+	tsn_emac_exit(pdev);
 	/* Tear down DMA channels and endpoint */
 	if (common->ep)
 		tsn_ep_exit(pdev);
