@@ -1337,6 +1337,13 @@ rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
 		spin_unlock_irqrestore(&priv->rmw_lock, flags);
 	}
 
+	/*
+	 * Turn off clocks marked with init_off flag if they were left
+	 * enabled by the bootloader. This ensures a known initial state.
+	 */
+	if (mod->init_off && rzv2h_mod_clock_is_enabled(&clock->hw))
+		rzv2h_mod_clock_endisable(&clock->hw, false);
+
 	return;
 
 fail:
@@ -1585,7 +1592,7 @@ static int __init rzv2h_cpg_probe(struct platform_device *pdev)
 	struct rzv2h_cpg_priv *priv;
 	unsigned int nclks, i;
 	struct clk **clks;
-	int error;
+	int error, ret;
 
 	info = of_device_get_match_data(dev);
 
@@ -1634,6 +1641,21 @@ static int __init rzv2h_cpg_probe(struct platform_device *pdev)
 
 	for (i = 0; i < info->num_mod_clks; i++)
 		rzv2h_cpg_register_mod_clk(&info->mod_clks[i], priv);
+
+	/*
+	 * Assert resets marked with init_asserted flag if they were left
+	 * deasserted by the bootloader. This ensures a known initial state.
+	 */
+	priv->rcdev.dev = dev;
+	for (i = 0; i < info->num_resets; i++) {
+		if (!info->resets[i].init_asserted)
+			continue;
+
+		/* Check if reset is currently deasserted (status == 0) */
+		ret = rzv2h_cpg_status(&priv->rcdev, i);
+		if (ret == 0)
+			rzv2h_cpg_assert(&priv->rcdev, i);
+	}
 
 	error = of_clk_add_provider(np, rzv2h_cpg_clk_src_twocell_get, priv);
 	if (error)
