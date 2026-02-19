@@ -271,6 +271,7 @@ struct tcp_sock {
 	u32	lsndtime;	/* timestamp of last sent data packet (for restart window) */
 	u32	mdev_us;	/* medium deviation			*/
 	u32	rtt_seq;	/* sequence number to update rttvar	*/
+	u32	rcv_mwnd_seq; /* Maximum window sequence number (RFC 7323, section 2.4) */
 	u64	tcp_wstamp_ns;	/* departure time for next sent data packet */
 	u64	accecn_opt_tstamp;	/* Last AccECN option sent timestamp */
 	struct list_head tsorted_sent_queue; /* time-sorted sent but un-SACKed skbs */
