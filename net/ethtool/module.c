@@ -486,7 +486,6 @@ static void module_flash_fw_work(struct work_struct *work)
 }
 
 #define MODULE_EEPROM_PHYS_ID_PAGE	0
-#define MODULE_EEPROM_PHYS_ID_I2C_ADDR	0x50
 
 static int module_flash_fw_work_init(struct ethtool_module_fw_flash *module_fw,
 				     struct net_device *dev,
@@ -501,31 +500,20 @@ static int module_flash_fw_work_init(struct ethtool_module_fw_flash *module_fw,
 	 * is located at I2C address 0x50, byte 0. See section 4.1 in SFF-8024,
 	 * revision 4.9.
 	 */
-	page_data.page = MODULE_EEPROM_PHYS_ID_PAGE;
-	page_data.offset = SFP_PHYS_ID;
-	page_data.length = sizeof(phys_id);
-	page_data.i2c_address = MODULE_EEPROM_PHYS_ID_I2C_ADDR;
+	ethtool_cmis_page_init(&page_data, MODULE_EEPROM_PHYS_ID_PAGE,
+			       SFP_PHYS_ID, sizeof(phys_id));
 	page_data.data = &phys_id;
 
 	err = ops->get_module_eeprom_by_page(dev, &page_data, extack);
 	if (err < 0)
 		return err;
 
-	switch (phys_id) {
-	case SFF8024_ID_QSFP_DD:
-	case SFF8024_ID_OSFP:
-	case SFF8024_ID_DSFP:
-	case SFF8024_ID_QSFP_PLUS_CMIS:
-	case SFF8024_ID_SFP_DD_CMIS:
-	case SFF8024_ID_SFP_PLUS_CMIS:
-		INIT_WORK(&module_fw->work, module_flash_fw_work);
-		break;
-	default:
-		NL_SET_ERR_MSG(extack,
-			       "Module type does not support firmware flashing");
+	if (!module_is_cmis(phys_id)) {
+		NL_SET_ERR_MSG(extack, "Module type does not support firmware flashing");
 		return -EOPNOTSUPP;
 	}
 
+	INIT_WORK(&module_fw->work, module_flash_fw_work);
 	return 0;
 }
 
