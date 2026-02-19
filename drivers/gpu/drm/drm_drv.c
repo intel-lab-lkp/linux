@@ -1271,5 +1271,5 @@ error:
 	return ret;
 }
 
-module_init(drm_core_init);
+subsys_initcall(drm_core_init);
 module_exit(drm_core_exit);
