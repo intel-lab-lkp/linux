@@ -442,6 +442,9 @@ xrep_adoption_check_dcache(
 		return 0;
 
 	d_child = try_lookup_noperm(&qname, d_orphanage);
+	if (IS_ERR(d_child))
+		return PTR_ERR(d_child);
+
 	if (d_child) {
 		trace_xrep_adoption_check_child(sc->mp, d_child);
 
@@ -464,7 +467,7 @@ xrep_adoption_check_dcache(
  * There should not be any positive entries for the name, since we've
  * maintained our lock on the orphanage directory.
  */
-static void
+static int
 xrep_adoption_zap_dcache(
 	struct xrep_adoption	*adopt)
 {
@@ -476,9 +479,12 @@ xrep_adoption_zap_dcache(
 	/* Invalidate all dentries for the adoption name */
 	d_orphanage = d_find_alias(VFS_I(sc->orphanage));
 	if (!d_orphanage)
-		return;
+		return 0;
 
 	d_child = try_lookup_noperm(&qname, d_orphanage);
+	if (IS_ERR(d_child))
+		return PTR_ERR(d_child);
+
 	while (d_child != NULL) {
 		trace_xrep_adoption_invalidate_child(sc->mp, d_child);
 
@@ -497,6 +503,8 @@ xrep_adoption_zap_dcache(
 		d_invalidate(d_child);
 		dput(d_child);
 	}
+
+	return 0;
 }
 
 /*
@@ -592,7 +600,10 @@ xrep_adoption_move(
 	xfs_dir_update_hook(sc->orphanage, sc->ip, 1, adopt->xname);
 
 	/* Remove negative dentries from the lost+found's dcache */
-	xrep_adoption_zap_dcache(adopt);
+	error = xrep_adoption_zap_dcache(adopt);
+	if (error)
+		return error;
+
 	return 0;
 }
 
