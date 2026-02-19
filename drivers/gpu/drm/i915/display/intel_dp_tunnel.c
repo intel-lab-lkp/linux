@@ -62,7 +62,7 @@ static int get_current_link_bw(struct intel_dp *intel_dp)
 	return intel_dp_max_link_data_rate(intel_dp, rate, lane_count);
 }
 
-static int __update_tunnel_state(struct intel_dp *intel_dp)
+static int __update_tunnel_state(struct intel_dp *intel_dp, bool force_sink_update)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
@@ -79,8 +79,8 @@ static int __update_tunnel_state(struct intel_dp *intel_dp)
 		return ret;
 	}
 
-	if (ret == 0 ||
-	    !drm_dp_tunnel_bw_alloc_is_enabled(intel_dp->tunnel))
+	if (!force_sink_update &&
+	    (ret == 0 || !drm_dp_tunnel_bw_alloc_is_enabled(intel_dp->tunnel)))
 		return 0;
 
 	intel_dp_update_sink_caps(intel_dp);
@@ -124,7 +124,7 @@ static int update_tunnel_state(struct intel_dp *intel_dp)
 
 	old_bw = get_current_link_bw(intel_dp);
 
-	err = __update_tunnel_state(intel_dp);
+	err = __update_tunnel_state(intel_dp, false);
 	if (err)
 		return err;
 
@@ -187,12 +187,23 @@ static int allocate_initial_tunnel_bw(struct intel_dp *intel_dp,
 	return allocate_initial_tunnel_bw_for_pipes(intel_dp, pipe_mask);
 }
 
+/*
+ * Returns:
+ * - 0 in case of success - after any tunnel detected and added to @intel_dp
+ * - 1 in case of success - after a tunnel detected and added to @intel_dp,
+ *   where the link BW via the tunnel changed in a way requiring a user
+ *   notification
+ * - Negative error code if the tunnel detection failed
+ */
 static int detect_new_tunnel(struct intel_dp *intel_dp, struct drm_modeset_acquire_ctx *ctx)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 	struct drm_dp_tunnel *tunnel;
+	int old_bw;
 	int ret;
+
+	old_bw = get_current_link_bw(intel_dp);
 
 	tunnel = drm_dp_tunnel_detect(display->dp_tunnel_mgr,
 				      &intel_dp->aux);
@@ -223,7 +234,11 @@ static int detect_new_tunnel(struct intel_dp *intel_dp, struct drm_modeset_acqui
 		return ret;
 	}
 
-	return update_tunnel_state(intel_dp);
+	ret = __update_tunnel_state(intel_dp, true);
+	if (ret)
+		return ret;
+
+	return has_tunnel_bw_changed(intel_dp, old_bw) ? 1 : 0;
 }
 
 /**
