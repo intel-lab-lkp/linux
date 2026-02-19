@@ -241,9 +241,12 @@ static int detect_new_tunnel(struct intel_dp *intel_dp, struct drm_modeset_acqui
  * tunnel. If the tunnel's state change requires this - for instance the
  * tunnel's group ID has changed - the tunnel will be dropped and recreated.
  *
- * Return 0 in case of success - after any tunnel detected and added to
- * @intel_dp - 1 in case the BW on an already existing tunnel has changed in a
- * way that requires notifying user space.
+ * Returns:
+ * - 0 in case of success - after any tunnel detected and added to @intel_dp
+ * - 1 in case the link BW via the new or an already existing tunnel has changed
+ *   in a way that requires notifying user space
+ * - Negative error code, if creating a new tunnel or updating the tunnel
+ *   state failed
  */
 int intel_dp_tunnel_detect(struct intel_dp *intel_dp, struct drm_modeset_acquire_ctx *ctx)
 {
