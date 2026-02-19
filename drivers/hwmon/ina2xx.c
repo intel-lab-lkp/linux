@@ -46,9 +46,11 @@
 #define INA2XX_CURRENT			0x04 /* readonly */
 #define INA2XX_CALIBRATION		0x05
 
-/* INA226 register definitions */
+/* INA2xx register definitions */
 #define INA226_MASK_ENABLE		0x06
 #define INA226_ALERT_LIMIT		0x07
+
+/* INA226 register definitions */
 #define INA226_DIE_ID			0xFF
 
 /* SY24655 register definitions */
@@ -135,13 +137,19 @@ static const struct regmap_config ina2xx_regmap_config = {
 	.writeable_reg = ina2xx_writeable_reg,
 };
 
-enum ina2xx_ids { ina219, ina226, ina260, sy24655 };
+enum ina2xx_ids {
+	ina219,
+	ina226,
+	ina260,
+	sy24655
+};
 
 struct ina2xx_config {
 	u16 config_default;
 	bool has_alerts;	/* chip supports alerts and limits */
 	bool has_ishunt;	/* chip has internal shunt resistor */
-	bool has_power_average;	/* chip has internal shunt resistor */
+	bool has_power_average;	/* chip supports average power */
+	bool has_update_interval;
 	int calibration_value;
 	int shunt_div;
 	int bus_voltage_shift;
@@ -171,6 +179,7 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.has_alerts = false,
 		.has_ishunt = false,
 		.has_power_average = false,
+		.has_update_interval = false,
 	},
 	[ina226] = {
 		.config_default = INA226_CONFIG_DEFAULT,
@@ -182,6 +191,7 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.has_alerts = true,
 		.has_ishunt = false,
 		.has_power_average = false,
+		.has_update_interval = true,
 	},
 	[ina260] = {
 		.config_default = INA260_CONFIG_DEFAULT,
@@ -192,6 +202,7 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.has_alerts = true,
 		.has_ishunt = true,
 		.has_power_average = false,
+		.has_update_interval = true,
 	},
 	[sy24655] = {
 		.config_default = SY24655_CONFIG_DEFAULT,
@@ -203,6 +214,7 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.has_alerts = true,
 		.has_ishunt = false,
 		.has_power_average = true,
+		.has_update_interval = false,
 	},
 };
 
@@ -706,6 +718,7 @@ static umode_t ina2xx_is_visible(const void *_data, enum hwmon_sensor_types type
 	const struct ina2xx_data *data = _data;
 	bool has_alerts = data->config->has_alerts;
 	bool has_power_average = data->config->has_power_average;
+	bool has_update_interval = data->config->has_update_interval;
 	enum ina2xx_ids chip = data->chip;
 
 	switch (type) {
@@ -768,7 +781,7 @@ static umode_t ina2xx_is_visible(const void *_data, enum hwmon_sensor_types type
 	case hwmon_chip:
 		switch (attr) {
 		case hwmon_chip_update_interval:
-			if (chip == ina226 || chip == ina260)
+			if (has_update_interval)
 				return 0644;
 			break;
 		default:
