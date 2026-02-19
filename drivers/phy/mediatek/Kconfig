@@ -26,7 +26,7 @@ config PHY_MTK_XFI_TPHY
 
 config PHY_MTK_TPHY
 	tristate "MediaTek T-PHY Driver"
-	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on ARCH_MEDIATEK || SOC_MT7621 || COMPILE_TEST
 	depends on OF && OF_ADDRESS
 	depends on HAS_IOMEM
 	select GENERIC_PHY
