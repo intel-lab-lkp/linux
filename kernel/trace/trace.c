@@ -4051,8 +4051,6 @@ int tracing_open_file_tr(struct inode *inode, struct file *filp)
 		event_file_get(file);
 	}
 
-	filp->private_data = inode->i_private;
-
 	return 0;
 }
 
