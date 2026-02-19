@@ -902,8 +902,17 @@ bail:
 
 static int ocfs2_journal_submit_inode_data_buffers(struct jbd2_inode *jinode)
 {
-	return filemap_fdatawrite_range(jinode->i_vfs_inode->i_mapping,
-			jinode->i_dirty_start, jinode->i_dirty_end);
+	struct address_space *mapping = jinode->i_vfs_inode->i_mapping;
+	pgoff_t dirty_start = READ_ONCE(jinode->i_dirty_start);
+	pgoff_t dirty_end = READ_ONCE(jinode->i_dirty_end);
+	loff_t start_byte, end_byte;
+
+	if (dirty_end == JBD2_INODE_DIRTY_RANGE_NONE)
+		return 0;
+	start_byte = (loff_t)dirty_start << PAGE_SHIFT;
+	end_byte = ((loff_t)dirty_end << PAGE_SHIFT) + PAGE_SIZE - 1;
+
+	return filemap_fdatawrite_range(mapping, start_byte, end_byte);
 }
 
 int ocfs2_journal_init(struct ocfs2_super *osb, int *dirty)
