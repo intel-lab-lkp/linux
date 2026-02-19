@@ -390,6 +390,8 @@ static inline void jbd_unlock_bh_journal_head(struct buffer_head *bh)
 /* Wait for outstanding data writes for this inode before commit */
 #define JI_WAIT_DATA (1 << __JI_WAIT_DATA)
 
+#define JBD2_INODE_DIRTY_RANGE_NONE	((pgoff_t)-1)
+
 /**
  * struct jbd2_inode - The jbd_inode type is the structure linking inodes in
  * ordered mode present in a transaction so that we can sync them during commit.
@@ -431,18 +433,23 @@ struct jbd2_inode {
 	/**
 	 * @i_dirty_start:
 	 *
-	 * Offset in bytes where the dirty range for this inode starts.
+	 * Dirty range start in PAGE_SIZE units.
+	 *
+	 * The dirty range is empty if @i_dirty_end is set to
+	 * %JBD2_INODE_DIRTY_RANGE_NONE.
+	 *
 	 * [j_list_lock]
 	 */
-	loff_t i_dirty_start;
+	pgoff_t i_dirty_start;
 
 	/**
 	 * @i_dirty_end:
 	 *
-	 * Inclusive offset in bytes where the dirty range for this inode
-	 * ends. [j_list_lock]
+	 * Dirty range end in PAGE_SIZE units (inclusive).
+	 *
+	 * [j_list_lock]
 	 */
-	loff_t i_dirty_end;
+	pgoff_t i_dirty_end;
 };
 
 struct jbd2_revoke_table_s;
