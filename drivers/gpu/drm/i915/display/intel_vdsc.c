@@ -467,7 +467,7 @@ intel_dsc_power_domain(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 		return POWER_DOMAIN_TRANSCODER_VDSC_PW2;
 }
 
-static int intel_dsc_get_vdsc_per_pipe(const struct intel_crtc_state *crtc_state)
+int intel_dsc_get_vdsc_per_pipe(const struct intel_crtc_state *crtc_state)
 {
 	return crtc_state->dsc.slice_config.streams_per_pipe;
 }

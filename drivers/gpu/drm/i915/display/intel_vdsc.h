@@ -44,5 +44,6 @@ unsigned int intel_vdsc_prefill_lines(const struct intel_crtc_state *crtc_state)
 int intel_dsc_get_pixel_rate_with_dsc_bubbles(struct intel_display *display,
 					      int pixel_rate, int htotal,
 					      int dsc_horizontal_slices);
+int intel_dsc_get_vdsc_per_pipe(const struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_VDSC_H__ */
