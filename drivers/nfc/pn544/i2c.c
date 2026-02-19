@@ -171,7 +171,7 @@ struct pn544_i2c_phy {
 	int run_mode;
 
 	int hard_fault;		/*
-				 * < 0 if hardware error occured (e.g. i2c err)
+				 * < 0 if hardware error occurred (e.g. i2c err)
 				 * and prevents normal operation.
 				 */
 };
