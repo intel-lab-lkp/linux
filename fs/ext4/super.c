@@ -521,6 +521,7 @@ static bool ext4_journalled_writepage_needs_redirty(struct jbd2_inode *jinode,
 {
 	struct buffer_head *bh, *head;
 	struct journal_head *jh;
+	transaction_t *trans = READ_ONCE(jinode->i_transaction);
 
 	bh = head = folio_buffers(folio);
 	do {
@@ -539,7 +540,7 @@ static bool ext4_journalled_writepage_needs_redirty(struct jbd2_inode *jinode,
 		 */
 		jh = bh2jh(bh);
 		if (buffer_dirty(bh) ||
-		    (jh && (jh->b_transaction != jinode->i_transaction ||
+		    (jh && (jh->b_transaction != trans ||
 			    jh->b_next_transaction)))
 			return true;
 	} while ((bh = bh->b_this_page) != head);
@@ -550,12 +551,20 @@ static bool ext4_journalled_writepage_needs_redirty(struct jbd2_inode *jinode,
 static int ext4_journalled_submit_inode_data_buffers(struct jbd2_inode *jinode)
 {
 	struct address_space *mapping = jinode->i_vfs_inode->i_mapping;
+	pgoff_t dirty_start = READ_ONCE(jinode->i_dirty_start);
+	pgoff_t dirty_end = READ_ONCE(jinode->i_dirty_end);
+	loff_t range_start, range_end;
+
+	if (dirty_end == JBD2_INODE_DIRTY_RANGE_NONE)
+		return 0;
+	range_start = (loff_t)dirty_start << PAGE_SHIFT;
+	range_end = ((loff_t)dirty_end << PAGE_SHIFT) + PAGE_SIZE - 1;
 	struct writeback_control wbc = {
-		.sync_mode =  WB_SYNC_ALL,
+		.sync_mode = WB_SYNC_ALL,
 		.nr_to_write = LONG_MAX,
-		.range_start = jinode->i_dirty_start,
-		.range_end = jinode->i_dirty_end,
-        };
+		.range_start = range_start,
+		.range_end = range_end,
+	};
 	struct folio *folio = NULL;
 	int error;
 

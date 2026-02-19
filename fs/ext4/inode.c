@@ -3031,11 +3031,19 @@ static int ext4_writepages(struct address_space *mapping,
 
 int ext4_normal_submit_inode_data_buffers(struct jbd2_inode *jinode)
 {
+	pgoff_t dirty_start = READ_ONCE(jinode->i_dirty_start);
+	pgoff_t dirty_end = READ_ONCE(jinode->i_dirty_end);
+	loff_t range_start, range_end;
+
+	if (dirty_end == JBD2_INODE_DIRTY_RANGE_NONE)
+		return 0;
+	range_start = (loff_t)dirty_start << PAGE_SHIFT;
+	range_end = ((loff_t)dirty_end << PAGE_SHIFT) + PAGE_SIZE - 1;
 	struct writeback_control wbc = {
 		.sync_mode = WB_SYNC_ALL,
 		.nr_to_write = LONG_MAX,
-		.range_start = jinode->i_dirty_start,
-		.range_end = jinode->i_dirty_end,
+		.range_start = range_start,
+		.range_end = range_end,
 	};
 	struct mpage_da_data mpd = {
 		.inode = jinode->i_vfs_inode,
