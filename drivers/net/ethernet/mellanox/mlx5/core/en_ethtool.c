@@ -2103,22 +2103,24 @@ static int mlx5e_get_module_eeprom(struct net_device *netdev,
 	return 0;
 }
 
-static int mlx5e_get_module_eeprom_by_page(struct net_device *netdev,
-					   const struct ethtool_module_eeprom *page_data,
-					   struct netlink_ext_ack *extack)
+static int __mlx5e_access_module_eeprom_by_page(struct net_device *netdev,
+						const struct ethtool_module_eeprom *page_data,
+						struct netlink_ext_ack *extack,
+						bool write)
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 	struct mlx5_module_eeprom_query_params query;
 	struct mlx5_core_dev *mdev = priv->mdev;
 	u8 *data = page_data->data;
-	int size_read;
+	int size_xfered;
 	u8 status = 0;
 	int i = 0;
 
 	if (!page_data->length)
 		return -EINVAL;
 
-	memset(data, 0, page_data->length);
+	if (!write)
+		memset(data, 0, page_data->length);
 
 	query.offset = page_data->offset;
 	query.i2c_address = page_data->i2c_address;
@@ -2126,26 +2128,45 @@ static int mlx5e_get_module_eeprom_by_page(struct net_device *netdev,
 	query.page = page_data->page;
 	while (i < page_data->length) {
 		query.size = page_data->length - i;
-		size_read = mlx5_query_module_eeprom_by_page(mdev, &query,
-							     data + i, &status);
+		size_xfered = mlx5_access_module_eeprom_by_page(mdev, &query,
+								data + i, &status,
+								write);
 
-		/* Done reading, return how many bytes was read */
-		if (!size_read)
+		if (!size_xfered)
 			return i;
 
-		if (size_read < 0) {
+		if (size_xfered < 0) {
 			NL_SET_ERR_MSG_FMT_MOD(
 				extack,
-				"Query module eeprom by page failed, read %u bytes, err %d, status %u",
-				i, size_read, status);
-			return size_read;
+				"%s module eeprom by page failed, %s %u bytes, err %d, status %u",
+				write ? "Set" : "Query",
+				write ? "wrote" : "read",
+				i, size_xfered, status);
+			return size_xfered;
 		}
 
-		i += size_read;
-		query.offset += size_read;
+		i += size_xfered;
+		query.offset += size_xfered;
 	}
 
 	return i;
+}
+
+static int mlx5e_get_module_eeprom_by_page(struct net_device *netdev,
+					   const struct ethtool_module_eeprom *page_data,
+					   struct netlink_ext_ack *extack)
+{
+	return __mlx5e_access_module_eeprom_by_page(netdev, page_data, extack, false);
+}
+
+static int mlx5e_set_module_eeprom_by_page(struct net_device *netdev,
+					   const struct ethtool_module_eeprom *page_data,
+					   struct netlink_ext_ack *extack)
+{
+	int err;
+
+	err = __mlx5e_access_module_eeprom_by_page(netdev, page_data, extack, true);
+	return err < 0 ? err : 0;
 }
 
 int mlx5e_ethtool_flash_device(struct mlx5e_priv *priv,
@@ -2776,6 +2797,7 @@ const struct ethtool_ops mlx5e_ethtool_ops = {
 	.get_module_info   = mlx5e_get_module_info,
 	.get_module_eeprom = mlx5e_get_module_eeprom,
 	.get_module_eeprom_by_page = mlx5e_get_module_eeprom_by_page,
+	.set_module_eeprom_by_page = mlx5e_set_module_eeprom_by_page,
 	.flash_device      = mlx5e_flash_device,
 	.get_priv_flags    = mlx5e_get_priv_flags,
 	.set_priv_flags    = mlx5e_set_priv_flags,

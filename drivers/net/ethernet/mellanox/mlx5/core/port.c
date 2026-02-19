@@ -369,9 +369,9 @@ static int mlx5_mcia_max_bytes(struct mlx5_core_dev *dev)
 	return (MLX5_CAP_MCAM_FEATURE(dev, mcia_32dwords) ? 32 : 12) * sizeof(u32);
 }
 
-static int mlx5_query_mcia(struct mlx5_core_dev *dev,
-			   struct mlx5_module_eeprom_query_params *params,
-			   u8 *data, u8 *status)
+static int __mlx5_access_mcia(struct mlx5_core_dev *dev,
+			      struct mlx5_module_eeprom_query_params *params,
+			      u8 *data, u8 *status, bool write)
 {
 	u32 in[MLX5_ST_SZ_DW(mcia_reg)] = {};
 	u32 out[MLX5_ST_SZ_DW(mcia_reg)];
@@ -388,8 +388,13 @@ static int mlx5_query_mcia(struct mlx5_core_dev *dev,
 	MLX5_SET(mcia_reg, in, page_number, params->page);
 	MLX5_SET(mcia_reg, in, i2c_device_address, params->i2c_address);
 
+	if (write) {
+		ptr = MLX5_ADDR_OF(mcia_reg, in, dword_0);
+		memcpy(ptr, data, size);
+	}
+
 	err = mlx5_core_access_reg(dev, in, sizeof(in), out,
-				   sizeof(out), MLX5_REG_MCIA, 0, 0);
+				   sizeof(out), MLX5_REG_MCIA, 0, write);
 	if (err)
 		return err;
 
@@ -399,10 +404,19 @@ static int mlx5_query_mcia(struct mlx5_core_dev *dev,
 		return -EIO;
 	}
 
-	ptr = MLX5_ADDR_OF(mcia_reg, out, dword_0);
-	memcpy(data, ptr, size);
+	if (!write) {
+		ptr = MLX5_ADDR_OF(mcia_reg, out, dword_0);
+		memcpy(data, ptr, size);
+	}
 
 	return size;
+}
+
+static int mlx5_query_mcia(struct mlx5_core_dev *dev,
+			   struct mlx5_module_eeprom_query_params *params,
+			   u8 *data, u8 *status)
+{
+	return __mlx5_access_mcia(dev, params, data, status, false);
 }
 
 int mlx5_query_module_eeprom(struct mlx5_core_dev *dev,
@@ -446,9 +460,9 @@ int mlx5_query_module_eeprom(struct mlx5_core_dev *dev,
 	return mlx5_query_mcia(dev, &query, data, status);
 }
 
-int mlx5_query_module_eeprom_by_page(struct mlx5_core_dev *dev,
-				     struct mlx5_module_eeprom_query_params *params,
-				     u8 *data, u8 *status)
+int mlx5_access_module_eeprom_by_page(struct mlx5_core_dev *dev,
+				      struct mlx5_module_eeprom_query_params *params,
+				      u8 *data, u8 *status, bool write)
 {
 	int err;
 
@@ -462,7 +476,7 @@ int mlx5_query_module_eeprom_by_page(struct mlx5_core_dev *dev,
 		return -EINVAL;
 	}
 
-	return mlx5_query_mcia(dev, params, data, status);
+	return __mlx5_access_mcia(dev, params, data, status, write);
 }
 
 static int mlx5_query_port_pvlc(struct mlx5_core_dev *dev, u32 *pvlc,
