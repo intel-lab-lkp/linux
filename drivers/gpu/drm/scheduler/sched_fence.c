@@ -235,7 +235,7 @@ void drm_sched_fence_init(struct drm_sched_fence *fence,
 		       &fence->lock, entity->fence_context + 1, seq);
 }
 
-module_init(drm_sched_fence_slab_init);
+subsys_initcall(drm_sched_fence_slab_init);
 module_exit(drm_sched_fence_slab_fini);
 
 MODULE_DESCRIPTION("DRM GPU scheduler");
