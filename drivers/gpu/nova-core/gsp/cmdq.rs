@@ -29,6 +29,10 @@ use kernel::{
 use crate::{
     driver::Bar0,
     gsp::{
+        commands::{
+            ContinuationRecord,
+            SplitState, //
+        },
         fw::{
             GspMsgElement,
             MsgFunction,
@@ -439,7 +443,7 @@ struct GspMessage<'a> {
 
 /// Computes the total size of the command (not including the [`GspMsgElement`] header), including
 /// its variable-length payload.
-fn command_size<M>(command: &M) -> usize
+pub(crate) fn command_size<M>(command: &M) -> usize
 where
     M: CommandToGsp,
 {
@@ -507,7 +511,7 @@ impl Cmdq {
             .write(bar);
     }
 
-    /// Sends `command` to the GSP.
+    /// Sends `command` to the GSP, without splitting it.
     ///
     /// # Errors
     ///
@@ -516,7 +520,7 @@ impl Cmdq {
     ///   written to by its [`CommandToGsp::init_variable_payload`] method.
     ///
     /// Error codes returned by the command initializers are propagated as-is.
-    pub(crate) fn send_command<M>(&mut self, bar: &Bar0, command: M) -> Result
+    fn send_single_command<M>(&mut self, bar: &Bar0, command: M) -> Result
     where
         M: CommandToGsp,
         // This allows all error types, including `Infallible`, to be used for `M::InitError`.
@@ -571,6 +575,39 @@ impl Cmdq {
         self.seq += 1;
         self.gsp_mem.advance_cpu_write_ptr(elem_count);
         Cmdq::notify_gsp(bar);
+
+        Ok(())
+    }
+
+    /// Sends `command` to the GSP.
+    ///
+    /// The command may be split into multiple messages if it is large.
+    ///
+    /// # Errors
+    ///
+    /// - `ETIMEDOUT` if space does not become available within the timeout.
+    /// - `EIO` if the variable payload requested by the command has not been entirely
+    ///   written to by its [`CommandToGsp::init_variable_payload`] method.
+    ///
+    /// Error codes returned by the command initializers are propagated as-is.
+    pub(crate) fn send_command<M>(&mut self, bar: &Bar0, command: M) -> Result
+    where
+        M: CommandToGsp,
+        Error: From<M::InitError>,
+    {
+        let mut state = SplitState::new(&command)?;
+
+        self.send_single_command(bar, state.command(command))?;
+
+        while let Some(continuation) = state.next_continuation_record() {
+            dev_dbg!(
+                &self.dev,
+                "GSP RPC: send continuation: size=0x{:x}\n",
+                command_size(&continuation),
+            );
+            // Turbofish needed because the compiler cannot infer M here.
+            self.send_single_command::<ContinuationRecord<'_>>(bar, continuation)?;
+        }
 
         Ok(())
     }
