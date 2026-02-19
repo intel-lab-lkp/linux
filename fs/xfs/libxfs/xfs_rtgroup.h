@@ -109,6 +109,8 @@ static inline struct xfs_inode *rtg_refcount(const struct xfs_rtgroup *rtg)
 	return rtg->rtg_inodes[XFS_RTGI_REFCOUNT];
 }
 
+int xfs_rtginodes_ensure_all(struct xfs_rtgroup *rtg);
+
 /* Passive rtgroup references */
 static inline struct xfs_rtgroup *
 xfs_rtgroup_get(

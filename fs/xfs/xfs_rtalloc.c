@@ -1175,18 +1175,15 @@ xfs_growfs_rtg(
 	xfs_extlen_t		bmblocks;
 	xfs_fileoff_t		bmbno;
 	struct xfs_rtgroup	*rtg;
-	unsigned int		i;
 	int			error;
 
 	rtg = xfs_rtgroup_grab(mp, rgno);
 	if (!rtg)
 		return -EINVAL;
 
-	for (i = 0; i < XFS_RTGI_MAX; i++) {
-		error = xfs_rtginode_ensure(rtg, i);
-		if (error)
-			goto out_rele;
-	}
+	error = xfs_rtginodes_ensure_all(rtg);
+	if (error)
+		goto out_rele;
 
 	if (xfs_has_zoned(mp)) {
 		error = xfs_growfs_rt_zoned(rtg, nrblocks);
@@ -1280,6 +1277,22 @@ xfs_growfs_check_rtgeom(
 out_inval:
 	kfree(nmp);
 	return -EINVAL;
+}
+
+int
+xfs_rtginodes_ensure_all(struct xfs_rtgroup *rtg)
+{
+	int	i = 0;
+	int	error = 0;
+
+	ASSERT(rtg);
+
+	for (i = 0; i < XFS_RTGI_MAX; i++) {
+		error = xfs_rtginode_ensure(rtg, i);
+		if (error)
+			break;
+	}
+	return error;
 }
 
 /*
