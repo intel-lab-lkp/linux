@@ -139,6 +139,18 @@ struct tsn_emac {
 };
 
 /*
+ * struct tsn_switch - TSN switch configuration structure
+ * @dev: Device pointer for this switch instance
+ * @regs: Virtual address mapping of switch register space
+ * @irq: Interrupt number for switch events
+ */
+struct tsn_switch {
+	struct device *dev;
+	void __iomem *regs;
+	int irq;
+};
+
+/*
  * struct skbuf_dma_descriptor - skb for each dma descriptor
  * @sgl: Pointer for sglist.
  * @desc: Pointer to dma descriptor.
@@ -193,6 +205,7 @@ struct tsn_endpoint {
  * @regs: ioremap()'d base pointer
  * @ep: Pointer to TSN endpoint structure
  * @emacs: Array of EMAC instances (up to 2)
+ * @sw: Pointer to TSN switch structure
  * @clks: Bulk clock data for all required clocks
  * @tx_lock: Spinlock protecting TX rings and related TX state
  * @rx_lock: Spinlock protecting RX rings and related RX state
@@ -214,6 +227,7 @@ struct tsn_priv {
 	void __iomem *regs;
 	struct tsn_endpoint *ep;
 	struct tsn_emac *emacs[TSN_MAX_EMAC_NO];
+	struct tsn_switch *sw;
 	struct clk_bulk_data clks[TSN_NUM_CLOCKS];
 	spinlock_t tx_lock;	/* Protects TX ring buffers */
 	spinlock_t rx_lock;	/* Protects RX ring buffers */
@@ -294,4 +308,6 @@ int tsn_emac_init(struct platform_device *pdev);
 void tsn_emac_exit(struct platform_device *pdev);
 int tsn_mdio_setup(struct tsn_emac *emac, struct device_node *mac_np);
 void tsn_mdio_teardown(struct tsn_emac *emac);
+int tsn_switch_init(struct platform_device *pdev);
+void tsn_switch_exit(struct platform_device *pdev);
 #endif /* XILINX_TSN_H */

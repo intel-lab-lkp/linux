@@ -739,8 +739,14 @@ static int tsn_ip_probe(struct platform_device *pdev)
 	if (ret)
 		goto exit_ep;
 
+	ret = tsn_switch_init(pdev);
+	if (ret)
+		goto exit_emac;
+
 	return 0;
 
+exit_emac:
+	tsn_emac_exit(pdev);
 exit_ep:
 	tsn_ep_exit(pdev);
 exit_dma:
@@ -758,6 +764,7 @@ static void tsn_ip_remove(struct platform_device *pdev)
 {
 	struct tsn_priv *common = platform_get_drvdata(pdev);
 
+	tsn_switch_exit(pdev);
 	tsn_emac_exit(pdev);
 	/* Tear down DMA channels and endpoint */
 	if (common->ep)
