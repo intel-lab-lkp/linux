@@ -644,7 +644,7 @@ int intel_dp_aux_init_backlight_funcs(struct intel_connector *connector)
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
 	struct drm_device *dev = connector->base.dev;
 	struct intel_panel *panel = &connector->panel;
-	bool try_intel_interface = false, try_vesa_interface = false;
+	bool try_intel_interface = false, try_vesa_interface = true;
 
 	/* Check the VBT and user's module parameters to figure out which
 	 * interfaces to probe
