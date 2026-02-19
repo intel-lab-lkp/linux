@@ -349,6 +349,9 @@ static void gaokun_ucsi_handle_no_usb_event(struct gaokun_ucsi *uec, int idx)
 {
 	struct gaokun_ucsi_port *port;
 
+	if (idx < 0 || idx >= uec->num_ports)
+		return;
+
 	port = &uec->ports[idx];
 	if (!wait_for_completion_timeout(&port->usb_ack, 2 * HZ)) {
 		dev_warn(uec->dev, "No USB EVENT, triggered by UCSI EVENT");
