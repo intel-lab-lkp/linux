@@ -1558,7 +1558,7 @@ static void nfs_writeback_result(struct rpc_task *task,
 		nfs_inc_stats(hdr->inode, NFSIOS_SHORTWRITE);
 
 		/* Has the server at least made some progress? */
-		if (resp->count == 0) {
+		if (resp->count == 0 && !hdr->pnfs_error) {
 			if (time_before(complain, jiffies)) {
 				printk(KERN_WARNING
 				       "NFS: Server wrote zero bytes, expected %u.\n",

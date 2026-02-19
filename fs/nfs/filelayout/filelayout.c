@@ -323,6 +323,7 @@ static int filelayout_write_done_cb(struct rpc_task *task,
 
 	switch (err) {
 	case -NFS4ERR_RESET_TO_MDS:
+		hdr->pnfs_error = task->tk_status;
 		filelayout_reset_write(hdr);
 		return task->tk_status;
 	case -EAGAIN:
