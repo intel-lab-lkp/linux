@@ -10,6 +10,26 @@
 #define ETHTOOL_GENL_NAME	"ethtool"
 #define ETHTOOL_GENL_VERSION	1
 
+/**
+ * enum ethtool_module_loopback_types - Defines the loopback types
+ *   (host/electrical or media/optical side) and the signal's path direction
+ *   (input/near-end or output/far-end).
+ * @ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_OUTPUT: Media Side Output Loopback
+ *   (Rx to Tx)
+ * @ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_INPUT: Media Side Input Loopback
+ *   (Tx to Rx)
+ * @ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_OUTPUT: Host Side Output Loopback
+ *   (Rx to Tx)
+ * @ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_INPUT: Host Side Input Loopback (Tx
+ *   to Rx)
+ */
+enum ethtool_module_loopback_types {
+	ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_OUTPUT = 1,
+	ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_INPUT = 2,
+	ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_OUTPUT = 4,
+	ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_INPUT = 8,
+};
+
 enum {
 	ETHTOOL_UDP_TUNNEL_TYPE_VXLAN,
 	ETHTOOL_UDP_TUNNEL_TYPE_GENEVE,
@@ -654,6 +674,8 @@ enum {
 	ETHTOOL_A_MODULE_HEADER,
 	ETHTOOL_A_MODULE_POWER_MODE_POLICY,
 	ETHTOOL_A_MODULE_POWER_MODE,
+	ETHTOOL_A_MODULE_LOOPBACK_CAPABILITIES,
+	ETHTOOL_A_MODULE_LOOPBACK_ENABLED,
 
 	__ETHTOOL_A_MODULE_CNT,
 	ETHTOOL_A_MODULE_MAX = (__ETHTOOL_A_MODULE_CNT - 1)

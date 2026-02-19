@@ -12,6 +12,23 @@ c-version-name: ethtool-genl-version
 
 definitions:
   -
+    name: module-loopback-types
+    type: flags
+    doc: Defines the loopback types (host/electrical or media/optical side) and the signal's path direction (input/near-end or output/far-end).
+    entries:
+      -
+        name: media-side-output
+        doc: Media Side Output Loopback (Rx to Tx)
+      -
+        name: media-side-input
+        doc: Media Side Input Loopback (Tx to Rx)
+      -
+        name: host-side-output
+        doc: Host Side Output Loopback (Rx to Tx)
+      -
+        name: host-side-input
+        doc: Host Side Input Loopback (Tx to Rx)
+  -
     name: udp-tunnel-type
     enum-name:
     type: enum
@@ -1438,6 +1455,14 @@ attribute-sets:
       -
         name: power-mode
         type: u8
+      -
+        name: loopback-capabilities
+        type: uint
+        enum: module-loopback-types
+      -
+        name: loopback-enabled
+        type: uint
+        enum: module-loopback-types
   -
     name: c33-pse-pw-limit
     attr-cnt-name: __ethtool-a-c33-pse-pw-limit-cnt
@@ -2501,6 +2526,8 @@ operations:
             - header
             - power-mode-policy
             - power-mode
+            - loopback-capabilities
+            - loopback-enabled
       dump: *module-get-op
     -
       name: module-set
