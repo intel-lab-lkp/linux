@@ -193,9 +193,10 @@ static void __bench_mem_function(struct bench_mem_info *info, struct bench_param
 {
 	const struct function *r = &info->functions[r_idx];
 	double result_bps = 0.0;
-	union bench_clock rt = { 0 };
+	union bench_clock rt;
 	void *src = NULL, *dst = NULL;
 
+	memset(&rt, 0, sizeof(rt));
 	printf("# function '%s' (%s)\n", r->name, r->desc);
 
 	if (r->fn.init && r->fn.init(info, p, &src, &dst))
