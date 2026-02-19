@@ -5326,6 +5326,20 @@ int device_match_fwnode(struct device *dev, const void *fwnode)
 }
 EXPORT_SYMBOL_GPL(device_match_fwnode);
 
+int device_match_fwnode_ext(struct device *dev, const void *fwnode)
+{
+	struct fwnode_handle *dev_node = dev_fwnode(dev);
+
+	if (!fwnode)
+		return 0;
+
+	if (dev_node == fwnode)
+		return 1;
+
+	return fwnode_is_primary(dev_node) && dev_node->secondary == fwnode;
+}
+EXPORT_SYMBOL_GPL(device_match_fwnode_ext);
+
 int device_match_devt(struct device *dev, const void *pdevt)
 {
 	return dev->devt == *(dev_t *)pdevt;
