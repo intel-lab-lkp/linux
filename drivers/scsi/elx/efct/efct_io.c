@@ -92,6 +92,7 @@ efct_io_pool_free(struct efct_io_pool *io_pool)
 					  io->rspbuf.size, io->rspbuf.virt,
 					  io->rspbuf.phys);
 			memset(&io->rspbuf, 0, sizeof(struct efc_dma));
+			kfree(io);
 		}
 
 		kfree(io_pool);
