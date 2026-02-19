@@ -260,6 +260,10 @@ impl Drop for Allocation {
                 }
             }
 
+            if self.process.task != kernel::current!().group_leader() {
+                // Called from wrong task, so do not free fds.
+                info.file_list.close_on_free.clear();
+            }
             for &fd in &info.file_list.close_on_free {
                 let closer = match DeferredFdCloser::new(GFP_KERNEL) {
                     Ok(closer) => closer,
