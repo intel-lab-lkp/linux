@@ -1381,6 +1381,7 @@ struct intel_crtc_state {
 	u32 psr2_man_track_ctl;
 
 	u32 pipe_srcsz_early_tpt;
+	u32 dsc_su_parameter_set_0_calc;
 
 	struct drm_rect psr2_su_area;
 

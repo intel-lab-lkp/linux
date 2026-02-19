@@ -2618,6 +2618,11 @@ void intel_psr2_program_trans_man_trk_ctl(struct intel_dsb *dsb,
 
 	intel_de_write_dsb(display, dsb, PIPE_SRCSZ_ERLY_TPT(crtc->pipe),
 			   crtc_state->pipe_srcsz_early_tpt);
+	intel_de_write_dsb(display, dsb, DSC_SU_PARAMETER_SET_0_DSC0(crtc->pipe),
+			   crtc_state->dsc_su_parameter_set_0_calc);
+	if (intel_dsc_get_vdsc_per_pipe(crtc_state) > 1)
+		intel_de_write_dsb(display, dsb, DSC_SU_PARAMETER_SET_0_DSC1(crtc->pipe),
+				   crtc_state->dsc_su_parameter_set_0_calc);
 }
 
 static void psr2_man_trk_ctl_calc(struct intel_crtc_state *crtc_state,
@@ -2666,6 +2671,23 @@ static u32 psr2_pipe_srcsz_early_tpt_calc(struct intel_crtc_state *crtc_state,
 	height = drm_rect_height(&crtc_state->psr2_su_area);
 
 	return PIPESRC_WIDTH(width - 1) | PIPESRC_HEIGHT(height - 1);
+}
+
+static u32 psr2_dsc_su_parameter_set_0_calc(struct intel_crtc_state *crtc_state,
+					    bool full_update)
+{
+	const struct drm_dsc_config *vdsc_cfg = &crtc_state->dsc.config;
+	int slice_row_per_frame, pic_height;
+
+	if (!crtc_state->enable_psr2_su_region_et || full_update ||
+	    !crtc_state->dsc.compression_enable)
+		return 0;
+
+	slice_row_per_frame = drm_rect_height(&crtc_state->psr2_su_area) / vdsc_cfg->slice_height;
+	pic_height = slice_row_per_frame * vdsc_cfg->slice_height;
+
+	return DSC_SU_PARAMETER_SET_0_SU_SLICE_ROW_PER_FRAME(slice_row_per_frame) |
+		DSC_SU_PARAMETER_SET_0_SU_PIC_HEIGHT(pic_height);
 }
 
 static void clip_area_update(struct drm_rect *overlap_damage_area,
@@ -3026,6 +3048,8 @@ skip_sel_fetch_set_loop:
 	psr2_man_trk_ctl_calc(crtc_state, full_update);
 	crtc_state->pipe_srcsz_early_tpt =
 		psr2_pipe_srcsz_early_tpt_calc(crtc_state, full_update);
+	crtc_state->dsc_su_parameter_set_0_calc = psr2_dsc_su_parameter_set_0_calc(crtc_state,
+										   full_update);
 	return 0;
 }
 
