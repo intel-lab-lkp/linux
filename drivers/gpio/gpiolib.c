@@ -2914,8 +2914,12 @@ static int gpiochip_set(struct gpio_chip *gc, unsigned int offset, int value)
 		return -EOPNOTSUPP;
 
 	ret = gc->set(gc, offset, value);
-	if (ret > 0)
-		ret = -EBADE;
+	if (ret > 0) {
+		gpiochip_warn(gc,
+			"invalid return value from gc->set(): %d, consider fixing the driver\n",
+			ret);
+		ret = !!ret;
+	}
 
 	return ret;
 }
