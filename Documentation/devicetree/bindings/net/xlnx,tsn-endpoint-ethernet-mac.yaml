@@ -1,0 +1,287 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/xlnx,tsn-endpoint-ethernet-mac.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Xilinx TSN Endpoint Ethernet MAC
+
+description:
+  TSN Endpoint Ethernet MAC IP implements IEEE 802.1 Time-Sensitive Networking (TSN)
+  standards and provides low-latency network connectivity in either Endpoint-only or
+  Bridged Endpoint configurations. In the Bridged Endpoint mode, the IP integrates a
+  three-port switch, with two ports connected to the external network and one port
+  connected to an internal endpoint.It also supports GMII/RGMII interfaces for
+  connection to an external PHY, enabling full-duplex operation at 100 Mb/s and
+  1 Gb/s speeds.
+
+maintainers:
+  - Neeli Srinivas <srinivas.neeli@amd.com>
+
+properties:
+  compatible:
+    enum:
+      - xlnx,tsn-endpoint-ethernet-mac-3.0
+  reg:
+    maxItems: 1
+
+  clocks:
+    minItems: 6
+
+  clock-names:
+    items:
+      - const: gtx
+      - const: gtx90
+      - const: host_rxfifo
+      - const: host_txfifo
+      - const: ref
+      - const: s_axi
+
+  dmas:
+    minItems: 2
+    maxItems: 32
+
+  dma-names:
+    items:
+      pattern: "^[tr]x_chan([0-9]|1[0-5])$"
+    description:
+      Should be "tx_chan0", "tx_chan1" ... "tx_chan15" for DMA Tx channel
+      Should be "rx_chan0", "rx_chan1" ... "rx_chan15" for DMA Rx channel
+    minItems: 2
+    maxItems: 32
+
+  ranges: true
+
+  xlnx,num-priorities:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 2
+    maximum: 8
+    description:
+      Number of traffic classes (priorities) configured in the IP.
+      This is an IP configuration parameter that determines the number of
+      priority queues available for QoS scheduling. Traffic classes map to
+      IEEE 802.1Q priority levels (0-7).
+
+  xlnx,tsn-tx-config:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Multiple TX Queue parameters. Phandle to a node that implements
+      the tx-queues-config.
+
+  tx-queues-config:
+    type: object
+    description:
+      TX queue configuration node that maps IP priority queues to
+      DMA TX channels. The TSN IP supports multiple priority queues for QoS
+      scheduling, and each queue can be connected to a specific DMA channel.
+      This mapping defines which DMA TX channel is used to transmit packets
+      for each priority queue. For example, queue0 with xlnx,dma-channel-num
+      set to 5 means priority queue 0 uses tx_chan5 for data transfer.
+
+    patternProperties:
+      "^queue[0-7]$":
+        description:
+          Each subnode represents a priority queue. The xlnx,dma-channel-num
+          property specifies which DMA TX channel (tx_chan0 to tx_chan15)
+          is connected to this queue for transmitting packets.
+        type: object
+        properties:
+          xlnx,dma-channel-num:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            description:
+              DMA TX channel number connected to this priority queue.
+            minimum: 0
+            maximum: 15
+
+        additionalProperties: false
+    additionalProperties: false
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+patternProperties:
+  "^ethernet-mac@":
+    type: object
+    $ref: /schemas/net/ethernet-controller.yaml#
+    required:
+      - reg
+      - phy-mode
+    properties:
+      reg:
+        maxItems: 1
+
+      phy-mode:
+        enum:
+          - gmii
+          - rgmii
+          - rgmii-id
+
+      phy-handle:
+        $ref: /schemas/types.yaml#/definitions/phandle
+
+      mdio:
+        type: object
+    additionalProperties: false
+
+  "^ep-mac@":
+    type: object
+    $ref: /schemas/net/ethernet-controller.yaml#
+    properties:
+      reg:
+        maxItems: 1
+
+    additionalProperties: false
+
+  "^switch@":
+    type: object
+    $ref: /schemas/net/ethernet-switch.yaml#
+    unevaluatedProperties: false
+
+    properties:
+      reg:
+        maxItems: 1
+
+      ethernet-ports:
+        type: object
+        unevaluatedProperties: false
+
+        properties:
+          '#address-cells':
+            const: 1
+          '#size-cells':
+            const: 0
+
+        patternProperties:
+          "^port@[0-2]$":
+            type: object
+            $ref: ethernet-switch-port.yaml#
+            unevaluatedProperties: false
+
+            properties:
+              reg:
+                maximum: 2
+              ethernet:
+                description: Phandle to associated MAC or endpoint node
+                $ref: /schemas/types.yaml#/definitions/phandle
+            required:
+              - reg
+              - ethernet
+        required:
+          - "#address-cells"
+          - "#size-cells"
+    required:
+      - reg
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - dmas
+  - dma-names
+  - xlnx,num-priorities
+  - ranges
+
+examples:
+  - |
+    tsn_ip: tsn@80040000 {
+        compatible = "xlnx,tsn-endpoint-ethernet-mac-3.0";
+        reg = <0x80040000 0x40000>;
+        clocks = <&misc_clk_2>, <&misc_clk_2>, <&misc_clk_1>, <&misc_clk_1>, <&misc_clk_3>, <&misc_clk_0>;
+        clock-names = "gtx", "gtx90", "host_rxfifo", "host_txfifo", "ref", "s_axi";
+        dmas = <&axi_mcdma_0 0>, <&axi_mcdma_0 1>, <&axi_mcdma_0 2>, <&axi_mcdma_0 3>,
+               <&axi_mcdma_0 4>, <&axi_mcdma_0 5>, <&axi_mcdma_0 6>, <&axi_mcdma_0 7>,
+               <&axi_mcdma_0 16>, <&axi_mcdma_0 17>, <&axi_mcdma_0 18>, <&axi_mcdma_0 19>,
+               <&axi_mcdma_0 20>, <&axi_mcdma_0 21>, <&axi_mcdma_0 22>, <&axi_mcdma_0 23>;
+        dma-names = "tx_chan0","tx_chan1","tx_chan2","tx_chan3","tx_chan4","tx_chan5","tx_chan6",
+                    "tx_chan7","rx_chan0","rx_chan1","rx_chan2","rx_chan3","rx_chan4","rx_chan5",
+                    "rx_chan6","rx_chan7";
+        xlnx,num-priorities = <8>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0x0 0x80040000 0x40000>;
+        xlnx,tsn-tx-config = <&tsn_tx_config>;
+        tsn_tx_config: tx-queues-config {
+            queue0 {
+                xlnx,dma-channel-num = <0x5>;
+            };
+            queue1 {
+                 xlnx,dma-channel-num = <0x4>;
+            };
+            queue2 {
+                 xlnx,dma-channel-num = <0x3>;
+            };
+            queue3 {
+                 xlnx,dma-channel-num = <0x2>;
+            };
+            queue4 {
+                 xlnx,dma-channel-num = <0x1>;
+            };
+            queue5 {
+                 xlnx,dma-channel-num = <0x0>;
+            };
+        };
+        // MAC 1 Node
+        mac1: ethernet-mac@0 {
+            reg = <0x0 0x14000>;
+            phy-mode = "rgmii-id";
+            phy-handle = <&phy0>;
+            mdio {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            phy0: ethernet-phy@0 {
+                device_type = "ethernet-phy";
+                reg = <0>;
+            };
+            };
+        };
+
+        // MAC 2 Node
+        mac2: ethernet-mac@20000 {
+            reg = <0x20000 0x14000>;
+            phy-mode = "rgmii-id";
+            phy-handle = <&phy1>;
+            mdio {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            phy1: ethernet-phy@1 {
+                device_type = "ethernet-phy";
+                reg = <1>;
+            };
+            };
+        };
+
+        // Endpoint Node
+        ep_mac: ep-mac@16000 {
+            reg = <0x16000 0xa000>;
+        };
+
+        // Switch Node
+        tsn_switch: switch@38000 {
+            reg = <0x38000 0x8000>;
+
+            ethernet-ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                    reg = <0>;
+                    ethernet = <&ep_mac>;
+                };
+
+                port@1 {
+                    reg = <1>;
+                    ethernet = <&mac1>;
+                };
+
+                port@2 {
+                    reg = <2>;
+                    ethernet = <&mac2>;
+                };
+            };
+        };
+    };
