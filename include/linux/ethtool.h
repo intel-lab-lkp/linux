@@ -684,6 +684,18 @@ struct ethtool_module_power_mode_params {
 };
 
 /**
+ * struct ethtool_module_loopback_params - module loopback parameters
+ * @caps: The loopback types, %ETHTOOL_MODULE_LOOPBACK_TYPES_*,
+ *	supported by the module.
+ * @enabled: The loopback types, %ETHTOOL_MODULE_LOOPBACK_TYPES_*,
+ *	currently enabled by the module.
+ */
+struct ethtool_module_loopback_params {
+	u32 caps;
+	u32 enabled;
+};
+
+/**
  * struct ethtool_mm_state - 802.3 MAC merge layer state
  * @verify_time:
  *	wait time between verification attempts in ms (according to clause

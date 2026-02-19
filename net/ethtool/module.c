@@ -10,6 +10,7 @@
 #include "common.h"
 #include "bitset.h"
 #include "module_fw.h"
+#include "cmis.h"
 
 struct module_req_info {
 	struct ethnl_req_info base;
@@ -18,6 +19,8 @@ struct module_req_info {
 struct module_reply_data {
 	struct ethnl_reply_data	base;
 	struct ethtool_module_power_mode_params power;
+	struct ethtool_module_loopback_params loopback;
+	bool loopback_supp;
 };
 
 #define MODULE_REPDATA(__reply_base) \
@@ -47,6 +50,144 @@ static int module_get_power_mode(struct net_device *dev,
 	return ops->get_module_power_mode(dev, &data->power, extack);
 }
 
+#define CMIS_PHYS_ADMINISTRATIVE_INFO_PAGE	0
+#define CMIS_PHYS_ADMINISTRATIVE_INFO_OFFSET	0
+
+#define CMIS_PAGE13_ADVERTISEMENT_PAGE		0x01
+#define CMIS_PAGE13_ADVERTISEMENT_OFFSET	0x8E
+#define CMIS_PAGE13_SUPPORTED			BIT(5)
+
+#define CMIS_MODULE_LOOPBACK_CAPS_PAGE		0x13
+#define CMIS_MODULE_LOOPBACK_CAPS_OFFSET	0x80
+
+#define CMIS_MODULE_LOOPBACK_CTRL_PAGE		0x13
+#define CMIS_MODULE_LOOPBACK_CTRL_OFFSET	0xB4	/* 4 consecutive bytes */
+#define CMIS_MODULE_LOOPBACK_CTRL_LEN		4
+
+/* Mapping from Page 13h control bytes to ethtool_module_loopback_types flags.
+ * Byte offset 0xB4+i maps to loopback_ctrl_flags[i].
+ */
+static const u32 loopback_ctrl_flags[] = {
+	ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_OUTPUT,
+	ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_INPUT,
+	ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_OUTPUT,
+	ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_INPUT,
+};
+
+static bool module_is_cmis(u8 phys_id)
+{
+	switch (phys_id) {
+	case SFF8024_ID_QSFP_DD:
+	case SFF8024_ID_OSFP:
+	case SFF8024_ID_DSFP:
+	case SFF8024_ID_QSFP_PLUS_CMIS:
+	case SFF8024_ID_SFP_DD_CMIS:
+	case SFF8024_ID_SFP_PLUS_CMIS:
+		return true;
+	default:
+	}
+	return false;
+}
+
+static bool module_has_cmis_page13(u8 supp)
+{
+	return !!(supp & CMIS_PAGE13_SUPPORTED);
+}
+
+/* Return <0 error, >0 loopback supported, =0 no support */
+static int module_get_loopback_caps(struct net_device *dev, struct netlink_ext_ack *extack,
+				    u8 *caps)
+{
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+	struct ethtool_module_eeprom page_data = {};
+	u8 phys_id, page13;
+	int err;
+
+	*caps = 0;
+
+	/* Read module physical ID to verify CMIS type */
+	ethtool_cmis_page_init(&page_data, CMIS_PHYS_ADMINISTRATIVE_INFO_PAGE,
+			       CMIS_PHYS_ADMINISTRATIVE_INFO_OFFSET, sizeof(phys_id));
+	page_data.data = &phys_id;
+
+	err = ops->get_module_eeprom_by_page(dev, &page_data, extack);
+	if (err < 0)
+		return err;
+
+	if (!module_is_cmis(phys_id))
+		return 0;
+
+	/* Read DiagnosticPagesSupported/Page13 availability */
+	ethtool_cmis_page_init(&page_data, CMIS_PAGE13_ADVERTISEMENT_PAGE,
+			       CMIS_PAGE13_ADVERTISEMENT_OFFSET, sizeof(page13));
+	page_data.data = &page13;
+
+	err = ops->get_module_eeprom_by_page(dev, &page_data, extack);
+	if (err < 0)
+		return err;
+
+	if (!module_has_cmis_page13(page13))
+		return 0;
+
+	/* Read loopback capabilities */
+	ethtool_cmis_page_init(&page_data, CMIS_MODULE_LOOPBACK_CAPS_PAGE,
+			       CMIS_MODULE_LOOPBACK_CAPS_OFFSET, sizeof(*caps));
+	page_data.data = caps;
+
+	err = ops->get_module_eeprom_by_page(dev, &page_data, extack);
+	if (err < 0)
+		return err;
+
+	/* Lower 4 bits map directly to ethtool_module_loopback_types flags */
+	*caps &= 0x0F;
+	return 1;
+}
+
+static int module_get_loopback(struct net_device *dev, struct module_reply_data *data,
+			       struct netlink_ext_ack *extack)
+{
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+	struct ethtool_module_eeprom page_data = {};
+	u8 ctrl[CMIS_MODULE_LOOPBACK_CTRL_LEN];
+	int err, i;
+	u8 caps;
+
+	if (!ops->get_module_eeprom_by_page)
+		return 0;
+
+	if (dev->ethtool->module_fw_flash_in_progress) {
+		NL_SET_ERR_MSG(extack, "Module firmware flashing is in progress");
+		return -EBUSY;
+	}
+
+	err = module_get_loopback_caps(dev, extack, &caps);
+	if (err < 0)
+		return err;
+
+	data->loopback_supp = (err == 1);
+	data->loopback.caps = caps;
+
+	if (!data->loopback.caps)
+		return 0;
+
+	/* Read loopback control from Page 13h, Bytes 180-183 */
+	ethtool_cmis_page_init(&page_data, CMIS_MODULE_LOOPBACK_CTRL_PAGE,
+			       CMIS_MODULE_LOOPBACK_CTRL_OFFSET, sizeof(ctrl));
+	page_data.data = ctrl;
+
+	err = ops->get_module_eeprom_by_page(dev, &page_data, extack);
+	if (err < 0)
+		return err;
+
+	/* Each non-zero byte means that loopback type is enabled */
+	for (i = 0; i < CMIS_MODULE_LOOPBACK_CTRL_LEN; i++) {
+		if (ctrl[i])
+			data->loopback.enabled |= loopback_ctrl_flags[i];
+	}
+
+	return 0;
+}
+
 static int module_prepare_data(const struct ethnl_req_info *req_base,
 			       struct ethnl_reply_data *reply_base,
 			       const struct genl_info *info)
@@ -60,6 +201,10 @@ static int module_prepare_data(const struct ethnl_req_info *req_base,
 		return ret;
 
 	ret = module_get_power_mode(dev, data, info->extack);
+	if (ret < 0)
+		goto out_complete;
+
+	ret = module_get_loopback(dev, data, info->extack);
 	if (ret < 0)
 		goto out_complete;
 
@@ -80,6 +225,11 @@ static int module_reply_size(const struct ethnl_req_info *req_base,
 	if (data->power.mode)
 		len += nla_total_size(sizeof(u8));	/* _MODULE_POWER_MODE */
 
+	if (data->loopback_supp) {
+		/* _MODULE_LOOPBACK_{CAPABILITIES,ENABLED} */
+		len += nla_total_size(sizeof(u32)) * 2;
+	}
+
 	return len;
 }
 
@@ -98,16 +248,32 @@ static int module_fill_reply(struct sk_buff *skb,
 	    nla_put_u8(skb, ETHTOOL_A_MODULE_POWER_MODE, data->power.mode))
 		return -EMSGSIZE;
 
+	if (data->loopback_supp &&
+	    nla_put_uint(skb, ETHTOOL_A_MODULE_LOOPBACK_CAPABILITIES,
+			 data->loopback.caps))
+		return -EMSGSIZE;
+
+	if (data->loopback_supp &&
+	    nla_put_uint(skb, ETHTOOL_A_MODULE_LOOPBACK_ENABLED,
+			 data->loopback.enabled))
+		return -EMSGSIZE;
+
 	return 0;
 }
 
 /* MODULE_SET */
 
-const struct nla_policy ethnl_module_set_policy[ETHTOOL_A_MODULE_POWER_MODE_POLICY + 1] = {
+const struct nla_policy ethnl_module_set_policy[ETHTOOL_A_MODULE_LOOPBACK_ENABLED + 1] = {
 	[ETHTOOL_A_MODULE_HEADER] = NLA_POLICY_NESTED(ethnl_header_policy),
 	[ETHTOOL_A_MODULE_POWER_MODE_POLICY] =
 		NLA_POLICY_RANGE(NLA_U8, ETHTOOL_MODULE_POWER_MODE_POLICY_HIGH,
 				 ETHTOOL_MODULE_POWER_MODE_POLICY_AUTO),
+	[ETHTOOL_A_MODULE_LOOPBACK_ENABLED] =
+		NLA_POLICY_MASK(NLA_UINT,
+				ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_OUTPUT |
+				ETHTOOL_MODULE_LOOPBACK_TYPES_MEDIA_SIDE_INPUT |
+				ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_OUTPUT |
+				ETHTOOL_MODULE_LOOPBACK_TYPES_HOST_SIDE_INPUT),
 };
 
 static int
@@ -117,7 +283,8 @@ ethnl_set_module_validate(struct ethnl_req_info *req_info,
 	const struct ethtool_ops *ops = req_info->dev->ethtool_ops;
 	struct nlattr **tb = info->attrs;
 
-	if (!tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY])
+	if (!tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY] &&
+	    !tb[ETHTOOL_A_MODULE_LOOPBACK_ENABLED])
 		return 0;
 
 	if (req_info->dev->ethtool->module_fw_flash_in_progress) {
@@ -126,38 +293,123 @@ ethnl_set_module_validate(struct ethnl_req_info *req_info,
 		return -EBUSY;
 	}
 
-	if (!ops->get_module_power_mode || !ops->set_module_power_mode) {
+	if (tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY] &&
+	    (!ops->get_module_power_mode || !ops->set_module_power_mode)) {
 		NL_SET_ERR_MSG_ATTR(info->extack,
 				    tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY],
 				    "Setting power mode policy is not supported by this device");
 		return -EOPNOTSUPP;
 	}
 
+	if (tb[ETHTOOL_A_MODULE_LOOPBACK_ENABLED] &&
+	    (!ops->get_module_eeprom_by_page || !ops->set_module_eeprom_by_page)) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[ETHTOOL_A_MODULE_LOOPBACK_ENABLED],
+				    "Setting loopback is not supported by this device");
+		return -EOPNOTSUPP;
+	}
+
+	if (tb[ETHTOOL_A_MODULE_LOOPBACK_ENABLED] &&
+	    (req_info->dev->flags & IFF_UP)) {
+		NL_SET_ERR_MSG(info->extack,
+			       "Netdevice is up, so setting loopback is not permitted");
+		return -EBUSY;
+	}
+
 	return 1;
 }
 
-static int
-ethnl_set_module(struct ethnl_req_info *req_info, struct genl_info *info)
+static int module_set_loopback(struct net_device *dev, struct genl_info *info)
+{
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+	struct ethtool_module_eeprom page_data = {};
+	u8 ctrl[CMIS_MODULE_LOOPBACK_CTRL_LEN], caps;
+	bool changed = false;
+	int err, i;
+	u32 req;
+
+	req = nla_get_uint(info->attrs[ETHTOOL_A_MODULE_LOOPBACK_ENABLED]);
+
+	err = module_get_loopback_caps(dev, info->extack, &caps);
+	if (err < 0)
+		return err;
+
+	if (err == 0 || req & ~(u32)caps) {
+		NL_SET_ERR_MSG(info->extack, "Requested loopback mode(s) not supported by module");
+		return -EOPNOTSUPP;
+	}
+
+	/* Read current enabled state from Page 13h */
+	ethtool_cmis_page_init(&page_data, CMIS_MODULE_LOOPBACK_CTRL_PAGE,
+			       CMIS_MODULE_LOOPBACK_CTRL_OFFSET, sizeof(ctrl));
+	page_data.data = ctrl;
+
+	err = ops->get_module_eeprom_by_page(dev, &page_data, info->extack);
+	if (err < 0)
+		return err;
+
+	/* Update control bytes: 0xFF for all-lanes enable, 0x00 for disable */
+	for (i = 0; i < CMIS_MODULE_LOOPBACK_CTRL_LEN; i++) {
+		u8 new_val = (req & loopback_ctrl_flags[i]) ? 0xFF : 0x00;
+
+		if (ctrl[i] != new_val) {
+			ctrl[i] = new_val;
+			changed = true;
+		}
+	}
+
+	if (!changed)
+		return 0;
+
+	/* Write updated control bytes */
+	ethtool_cmis_page_init(&page_data, CMIS_MODULE_LOOPBACK_CTRL_PAGE,
+			       CMIS_MODULE_LOOPBACK_CTRL_OFFSET, sizeof(ctrl));
+	page_data.data = ctrl;
+
+	err = ops->set_module_eeprom_by_page(dev, &page_data, info->extack);
+	if (err < 0)
+		return err;
+
+	return 1;
+}
+
+static int ethnl_set_module(struct ethnl_req_info *req_info, struct genl_info *info)
 {
 	struct ethtool_module_power_mode_params power = {};
 	struct ethtool_module_power_mode_params power_new;
 	const struct ethtool_ops *ops;
 	struct net_device *dev = req_info->dev;
 	struct nlattr **tb = info->attrs;
-	int ret;
+	int ret = 0;
 
 	ops = dev->ethtool_ops;
 
-	power_new.policy = nla_get_u8(tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY]);
-	ret = ops->get_module_power_mode(dev, &power, info->extack);
-	if (ret < 0)
-		return ret;
+	if (tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY]) {
+		power_new.policy = nla_get_u8(tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY]);
+		ret = ops->get_module_power_mode(dev, &power, info->extack);
+		if (ret < 0)
+			return ret;
 
-	if (power_new.policy == power.policy)
-		return 0;
+		if (power_new.policy != power.policy) {
+			ret = ops->set_module_power_mode(dev, &power_new,
+							 info->extack);
+			if (ret < 0)
+				return ret;
+			ret = 1;
+		}
+	}
 
-	ret = ops->set_module_power_mode(dev, &power_new, info->extack);
-	return ret < 0 ? ret : 1;
+	if (tb[ETHTOOL_A_MODULE_LOOPBACK_ENABLED]) {
+		int lret;
+
+		lret = module_set_loopback(dev, info);
+		if (lret < 0)
+			return lret;
+		if (lret > 0)
+			ret = lret;
+	}
+
+	return ret;
 }
 
 const struct ethnl_request_ops ethnl_module_request_ops = {
