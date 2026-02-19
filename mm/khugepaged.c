@@ -2000,8 +2000,9 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 		 * we locked the first folio, then a THP might be there already.
 		 * This will be discovered on the first iteration.
 		 */
-		if (folio_order(folio) == HPAGE_PMD_ORDER &&
-		    folio->index == start) {
+		if (folio_order(folio) == HPAGE_PMD_ORDER) {
+			VM_WARN_ON(folio->index != start);
+
 			/* Maybe PMD-mapped */
 			result = SCAN_PTE_MAPPED_HUGEPAGE;
 			goto out_unlock;
@@ -2329,8 +2330,9 @@ static enum scan_result hpage_collapse_scan_file(struct mm_struct *mm, unsigned 
 			continue;
 		}
 
-		if (folio_order(folio) == HPAGE_PMD_ORDER &&
-		    folio->index == start) {
+		if (folio_order(folio) == HPAGE_PMD_ORDER) {
+			VM_WARN_ON(folio->index != start);
+
 			/* Maybe PMD-mapped */
 			result = SCAN_PTE_MAPPED_HUGEPAGE;
 			/*
