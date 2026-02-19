@@ -150,11 +150,9 @@ static int allocate_initial_tunnel_bw_for_pipes(struct intel_dp *intel_dp, u8 pi
 			    drm_dp_tunnel_name(intel_dp->tunnel),
 			    encoder->base.base.id, encoder->base.name,
 			    ERR_PTR(err));
-
-		return err;
 	}
 
-	return update_tunnel_state(intel_dp);
+	return err;
 }
 
 static int allocate_initial_tunnel_bw(struct intel_dp *intel_dp,
@@ -200,10 +198,13 @@ static int detect_new_tunnel(struct intel_dp *intel_dp, struct drm_modeset_acqui
 	}
 
 	ret = allocate_initial_tunnel_bw(intel_dp, ctx);
-	if (ret < 0)
+	if (ret < 0) {
 		intel_dp_tunnel_destroy(intel_dp);
 
-	return ret;
+		return ret;
+	}
+
+	return update_tunnel_state(intel_dp);
 }
 
 /**
