@@ -2744,8 +2744,7 @@ static bool intel_psr2_sel_fetch_pipe_alignment(struct intel_crtc_state *crtc_st
  */
 static void
 intel_psr2_sel_fetch_et_alignment(struct intel_atomic_state *state,
-				  struct intel_crtc *crtc,
-				  bool *cursor_in_su_area)
+				  struct intel_crtc *crtc)
 {
 	struct intel_crtc_state *crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
 	struct intel_plane_state *new_plane_state;
@@ -2773,7 +2772,6 @@ intel_psr2_sel_fetch_et_alignment(struct intel_atomic_state *state,
 
 		clip_area_update(&crtc_state->psr2_su_area, &new_plane_state->uapi.dst,
 				 &crtc_state->pipe_src);
-		*cursor_in_su_area = true;
 	}
 }
 
@@ -2869,7 +2867,7 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 	struct intel_crtc_state *crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
 	struct intel_plane_state *new_plane_state, *old_plane_state;
 	struct intel_plane *plane;
-	bool full_update = false, cursor_in_su_area = false;
+	bool full_update = false;
 	int i, ret;
 
 	if (!crtc_state->enable_psr2_sel_fetch)
@@ -2983,8 +2981,7 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		 * drm_atomic_add_affected_planes to ensure visible cursor is added into
 		 * affected planes even when cursor is not updated by itself.
 		 */
-		intel_psr2_sel_fetch_et_alignment(state, crtc, &cursor_in_su_area);
-
+		intel_psr2_sel_fetch_et_alignment(state, crtc);
 	} while (intel_psr2_sel_fetch_pipe_alignment(crtc_state));
 
 	/*
