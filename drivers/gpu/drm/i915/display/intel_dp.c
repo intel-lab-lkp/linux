@@ -4705,6 +4705,32 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 	intel_edp_set_data_override_rates(intel_dp);
 }
 
+void intel_dp_wake_sink(struct intel_dp *intel_dp)
+{
+	u8 value = 0;
+	int ret = 0, try = 0;
+
+	intel_dp_dpcd_set_probe(intel_dp, false);
+
+	/*
+	 * Wake the sink device
+	 * Spec section 2.3.1.2 if AUX CH is powered down by writing 0x02 to
+	 * DP_SET_POWER dpcd reg, 1ms time would be required to wake it up
+	 */
+	while (try < 10 && ret < 0) {
+		ret = drm_dp_dpcd_readb(&intel_dp->aux, DP_SET_POWER, &value);
+		if (value)
+			break;
+		fsleep(1000);
+		try++;
+	}
+	/* After setting to D0 need a min of 1ms to wake(Spec sec 2.3.1.2) */
+	drm_dp_dpcd_writeb(&intel_dp->aux, DP_SET_POWER, DP_SET_POWER_D0);
+	fsleep(1000);
+
+	intel_dp_dpcd_set_probe(intel_dp, true);
+}
+
 static bool
 intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector)
 {
@@ -4712,6 +4738,8 @@ intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector
 
 	/* this function is meant to be called only once */
 	drm_WARN_ON(display->drm, intel_dp->dpcd[DP_DPCD_REV] != 0);
+
+	intel_dp_wake_sink(intel_dp);
 
 	if (drm_dp_read_dpcd_caps(&intel_dp->aux, intel_dp->dpcd) != 0)
 		return false;
