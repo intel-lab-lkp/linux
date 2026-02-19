@@ -519,3 +519,11 @@ void __init init_rootfs(void)
 			is_tmpfs = true;
 	}
 }
+
+void __init create_basic_rootfs(void)
+{
+	WARN_ON_ONCE(init_mkdir("/dev", 0755) != 0);
+	WARN_ON_ONCE(init_mknod("/dev/console", S_IFCHR | 0600,
+			new_encode_dev(MKDEV(5, 1))) != 0);
+	WARN_ON_ONCE(init_mkdir("/root", 0700) != 0);
+}

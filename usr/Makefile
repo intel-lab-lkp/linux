@@ -22,7 +22,7 @@ ramfs-input := $(CONFIG_INITRAMFS_SOURCE)
 cpio-data :=
 
 # If CONFIG_INITRAMFS_SOURCE is empty, generate a small initramfs with the
-# default contents.
+# contents, specified in default_cpio_list, which is currently empty.
 ifeq ($(ramfs-input),)
 ramfs-input := $(src)/default_cpio_list
 endif

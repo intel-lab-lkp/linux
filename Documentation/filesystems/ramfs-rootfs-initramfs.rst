@@ -133,9 +133,9 @@ All this differs from the old initrd in several ways:
 Populating initramfs:
 ---------------------
 
-The 2.6 kernel build process always creates a gzipped cpio format initramfs
+The kernel build process always creates a cpio format initramfs
 archive and links it into the resulting kernel binary.  By default, this
-archive is empty (consuming 134 bytes on x86).
+archive is empty.
 
 The config option CONFIG_INITRAMFS_SOURCE (in General Setup in menuconfig,
 and living in usr/Kconfig) can be used to specify a source for the
