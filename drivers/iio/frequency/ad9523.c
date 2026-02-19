@@ -167,9 +167,9 @@
 
 /* AD9523_CHANNEL_CLOCK_DIST */
 #define AD9523_CLK_DIST_DIV_PHASE(x)		(((x) & 0x3F) << 18)
-#define AD9523_CLK_DIST_DIV_PHASE_REV(x)	((ret >> 18) & 0x3F)
+#define AD9523_CLK_DIST_DIV_PHASE_REV	((ret >> 18) & 0x3F)
 #define AD9523_CLK_DIST_DIV(x)			((((x) - 1) & 0x3FF) << 8)
-#define AD9523_CLK_DIST_DIV_REV(x)		(((ret >> 8) & 0x3FF) + 1)
+#define AD9523_CLK_DIST_DIV_REV		(((ret >> 8) & 0x3FF) + 1)
 #define AD9523_CLK_DIST_INV_DIV_OUTPUT_EN	(1 << 7)
 #define AD9523_CLK_DIST_IGNORE_SYNC_EN		(1 << 6)
 #define AD9523_CLK_DIST_PWR_DOWN_EN		(1 << 5)
@@ -558,52 +558,52 @@ static ssize_t ad9523_show(struct device *dev,
 	return ret;
 }
 
-static IIO_DEVICE_ATTR(pll1_locked, S_IRUGO,
+static IIO_DEVICE_ATTR(pll1_locked, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_PLL1_LD);
 
-static IIO_DEVICE_ATTR(pll2_locked, S_IRUGO,
+static IIO_DEVICE_ATTR(pll2_locked, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_PLL2_LD);
 
-static IIO_DEVICE_ATTR(pll1_reference_clk_a_present, S_IRUGO,
+static IIO_DEVICE_ATTR(pll1_reference_clk_a_present, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_REFA);
 
-static IIO_DEVICE_ATTR(pll1_reference_clk_b_present, S_IRUGO,
+static IIO_DEVICE_ATTR(pll1_reference_clk_b_present, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_REFB);
 
-static IIO_DEVICE_ATTR(pll1_reference_clk_test_present, S_IRUGO,
+static IIO_DEVICE_ATTR(pll1_reference_clk_test_present, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_REF_TEST);
 
-static IIO_DEVICE_ATTR(vcxo_clk_present, S_IRUGO,
+static IIO_DEVICE_ATTR(vcxo_clk_present, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_VCXO);
 
-static IIO_DEVICE_ATTR(pll2_feedback_clk_present, S_IRUGO,
+static IIO_DEVICE_ATTR(pll2_feedback_clk_present, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_PLL2_FB_CLK);
 
-static IIO_DEVICE_ATTR(pll2_reference_clk_present, S_IRUGO,
+static IIO_DEVICE_ATTR(pll2_reference_clk_present, 0444,
 			ad9523_show,
 			NULL,
 			AD9523_STAT_PLL2_REF_CLK);
 
-static IIO_DEVICE_ATTR(sync_dividers, S_IWUSR,
+static IIO_DEVICE_ATTR(sync_dividers, 0200,
 			NULL,
 			ad9523_store,
 			AD9523_SYNC);
 
-static IIO_DEVICE_ATTR(store_eeprom, S_IWUSR,
+static IIO_DEVICE_ATTR(store_eeprom, 0200,
 			NULL,
 			ad9523_store,
 			AD9523_EEPROM);
@@ -649,11 +649,11 @@ static int ad9523_read_raw(struct iio_dev *indio_dev,
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_FREQUENCY:
 		*val = st->vco_out_freq[st->vco_out_map[chan->channel]] /
-			AD9523_CLK_DIST_DIV_REV(ret);
+			AD9523_CLK_DIST_DIV_REV;
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_PHASE:
-		code = (AD9523_CLK_DIST_DIV_PHASE_REV(ret) * 3141592) /
-			AD9523_CLK_DIST_DIV_REV(ret);
+		code = (AD9523_CLK_DIST_DIV_PHASE_REV * 3141592) /
+			AD9523_CLK_DIST_DIV_REV;
 		*val = code / 1000000;
 		*val2 = code % 1000000;
 		return IIO_VAL_INT_PLUS_MICRO;
@@ -701,7 +701,7 @@ static int ad9523_write_raw(struct iio_dev *indio_dev,
 		break;
 	case IIO_CHAN_INFO_PHASE:
 		code = val * 1000000 + val2 % 1000000;
-		tmp = (code * AD9523_CLK_DIST_DIV_REV(ret)) / 3141592;
+		tmp = (code * AD9523_CLK_DIST_DIV_REV) / 3141592;
 		tmp = clamp(tmp, 0, 63);
 		reg &= ~AD9523_CLK_DIST_DIV_PHASE(~0);
 		reg |= AD9523_CLK_DIST_DIV_PHASE(tmp);
@@ -797,8 +797,7 @@ static int ad9523_setup(struct iio_dev *indio_dev)
 		return ret;
 
 	ret = ad9523_write(indio_dev, AD9523_PLL1_CHARGE_PUMP_CTRL,
-		AD9523_PLL1_CHARGE_PUMP_CURRENT_nA(pdata->
-			pll1_charge_pump_current_nA) |
+		AD9523_PLL1_CHARGE_PUMP_CURRENT_nA(pdata->pll1_charge_pump_current_nA) |
 		AD9523_PLL1_CHARGE_PUMP_MODE_NORMAL |
 		AD9523_PLL1_BACKLASH_PW_MIN);
 	if (ret < 0)
@@ -842,8 +841,7 @@ static int ad9523_setup(struct iio_dev *indio_dev)
 	 */
 
 	ret = ad9523_write(indio_dev, AD9523_PLL2_CHARGE_PUMP,
-		AD9523_PLL2_CHARGE_PUMP_CURRENT_nA(pdata->
-			pll2_charge_pump_current_nA));
+		AD9523_PLL2_CHARGE_PUMP_CURRENT_nA(pdata->pll2_charge_pump_current_nA));
 	if (ret < 0)
 		return ret;
 
