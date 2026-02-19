@@ -576,7 +576,8 @@ static int kmb_probe(struct platform_device *pdev)
 	drm_mode_config_cleanup(&kmb->drm);
  err_free1:
 	dev_set_drvdata(dev, NULL);
-	kmb_dsi_host_unregister(kmb->kmb_dsi);
+	if (!IS_ERR(kmb->kmb_dsi))
+		kmb_dsi_host_unregister(kmb->kmb_dsi);
 
 	return ret;
 }
