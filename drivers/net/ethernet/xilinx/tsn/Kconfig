@@ -1,0 +1,14 @@
+config XILINX_TSN
+	tristate "Xilinx TSN Ethernet driver"
+	depends on OF && HAS_IOMEM
+	select PHYLIB
+	select NET_DEVLINK
+	select NET_DEV_STATS
+	help
+	  This driver supports the Xilinx Time-Sensitive Networking (TSN)
+	  Ethernet IP, which includes multiple Ethernet MACs, a TSN switch,
+	  and an endpoint block. It provides support for scheduling,
+	  traffic shaping, and time synchronization to meet real-time
+	  requirements of industrial Ethernet applications.
+
+	  If unsure, say N.

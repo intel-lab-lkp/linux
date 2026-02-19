@@ -1,0 +1,2 @@
+obj-$(CONFIG_XILINX_TSN) :=xilinx_tsn.o
+xilinx_tsn-objs := xilinx_tsn_main.o
