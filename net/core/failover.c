@@ -56,10 +56,10 @@ static int failover_slave_register(struct net_device *slave_dev)
 	ASSERT_RTNL();
 
 	failover_dev = failover_get_bymac(slave_dev->perm_addr, &fops);
-	if (!failover_dev)
+	if (!failover_dev || !fops)
 		goto done;
 
-	if (fops && fops->slave_pre_register &&
+	if (fops->slave_pre_register &&
 	    fops->slave_pre_register(slave_dev, failover_dev))
 		goto done;
 
@@ -82,7 +82,7 @@ static int failover_slave_register(struct net_device *slave_dev)
 
 	slave_dev->priv_flags |= (IFF_FAILOVER_SLAVE | IFF_NO_ADDRCONF);
 
-	if (fops && fops->slave_register &&
+	if (fops->slave_register &&
 	    !fops->slave_register(slave_dev, failover_dev))
 		return NOTIFY_OK;
 
