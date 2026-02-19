@@ -1410,8 +1410,12 @@ xfs_inactive(
 	if (xfs_is_readonly(mp) && !xlog_recovery_needed(mp->m_log))
 		goto out;
 
-	/* Metadata inodes require explicit resource cleanup. */
-	if (xfs_is_internal_inode(ip))
+	/*
+	 * Metadata inodes require explicit resource cleanup. During shrink we
+	 * are using this function to remove the already truncated metadata
+	 * inodes for the bitmap file, summary file.
+	 */
+	if (xfs_is_internal_inode(ip) && !xfs_is_shrinking(mp))
 		goto out;
 
 	/* Try to clean out the cow blocks if there are any. */

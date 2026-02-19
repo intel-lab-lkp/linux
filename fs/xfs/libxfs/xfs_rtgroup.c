@@ -163,8 +163,13 @@ out_unwind_new_rtgs:
 }
 
 /*
- * Update the rt extent count of the previous tail rtgroup if it changed during
- * recovery (i.e. recovery of a growfs).
+ * This function does the following:
+ * - Updates the previous rtgroup tail if prev_rgcount < current rgcount i.e,
+ *   the filesystem has grown OR
+ * - Updates the current tail rtgroup when prev_agcount > current agcount i.e,
+ *   the filesystem has shrunk beyond 1 rtgroup OR
+ * - Updates the current tail rtgroup when only the last rtgroup was shrunk or
+ *   grown i.e, prev_agcount == mp->m_sb.sb_rgcount.
  */
 int
 xfs_update_last_rtgroup_size(
@@ -172,13 +177,18 @@ xfs_update_last_rtgroup_size(
 	xfs_rgnumber_t		prev_rgcount)
 {
 	struct xfs_rtgroup	*rtg;
+	xfs_rgnumber_t		rgno;
 
 	ASSERT(prev_rgcount > 0);
 
-	rtg = xfs_rtgroup_grab(mp, prev_rgcount - 1);
+	if (prev_rgcount >= mp->m_sb.sb_rgcount)
+		rgno = mp->m_sb.sb_rgcount - 1;
+	else
+		rgno = prev_rgcount - 1;
+	rtg = xfs_rtgroup_grab(mp, rgno);
 	if (!rtg)
 		return -EFSCORRUPTED;
-	rtg->rtg_extents = __xfs_rtgroup_extents(mp, prev_rgcount - 1,
+	rtg->rtg_extents = __xfs_rtgroup_extents(mp, rgno,
 			mp->m_sb.sb_rgcount, mp->m_sb.sb_rextents);
 	rtg_group(rtg)->xg_block_count = rtg->rtg_extents * mp->m_sb.sb_rextsize;
 	xfs_rtgroup_rele(rtg);
@@ -748,4 +758,91 @@ xfs_log_rtsb(
 	xfs_update_rtsb(rtsb_bp, sb_bp);
 	xfs_trans_ordered_buf(tp, rtsb_bp);
 	return rtsb_bp;
+}
+
+void
+xfs_rtgroup_activate(struct xfs_rtgroup	*rtg)
+{
+	ASSERT(!xfs_rtgroup_is_active(rtg));
+	init_waitqueue_head(&rtg_group(rtg)->xg_active_wq);
+	atomic_set(&rtg_group(rtg)->xg_active_ref, 1);
+	xfs_add_frextents(rtg_mount(rtg),
+			xfs_rtgroup_extents(rtg_mount(rtg), rtg_rgno(rtg)));
+}
+
+int
+xfs_rtgroup_deactivate(struct xfs_rtgroup	*rtg)
+{
+	ASSERT(rtg);
+
+	int			error = 0;
+	xfs_rgnumber_t		rgno = rtg_rgno(rtg);
+	struct	xfs_mount	*mp = rtg_mount(rtg);
+	xfs_rtxnum_t		rtextents =
+			xfs_rtgroup_extents(mp, rgno);
+
+	ASSERT(xfs_rtgroup_is_active(rtg));
+	ASSERT(rtg_rgno(rtg) < mp->m_sb.sb_rgcount);
+
+	if (!xfs_rtgroup_is_empty(rtg))
+		return -ENOTEMPTY;
+	/*
+	 * Manually reduce/reserve 1 realtime group worth of
+	 * free realtime extents from the global counters. This is necessary
+	 * in order to prevent a race where, some rtgs have been temporarily
+	 * offlined but the delayed allocator has already promised some bytes
+	 * and later the real extent/block allocation is failing due to
+	 * the rtgs(s) being offline.
+	 * If the overall shrink fails, we will restore the values.
+	 */
+
+	error = xfs_dec_frextents(mp, rtextents);
+	if (error)
+		return -ENOTEMPTY;
+	xfs_rtgroup_rele(rtg);
+	do {
+		error = wait_event_killable(rtg_group(rtg)->xg_active_wq,
+				!xfs_rtgroup_is_active(rtg));
+		if (error == -ERESTARTSYS) {
+			/* Restore the reserved free rtextents */
+			xfs_add_frextents(mp, rtextents);
+			return error;
+		}
+	} while (xfs_rtgroup_is_active(rtg));
+
+	return 0;
+}
+
+/*
+ * This function checks whether an rtgroup is empty. An rtg is eligible to be
+ * removed if it is empty.
+ */
+bool
+xfs_rtgroup_is_empty(
+	struct xfs_rtgroup *rtg)
+{
+	ASSERT(rtg);
+
+	struct xfs_mount        *mp = rtg_mount(rtg);
+	int                     error = 0;
+	xfs_rtxnum_t            new;
+	xfs_rtxnum_t            start = 0;
+	xfs_rtxnum_t            len;
+	int                     stat;
+	xfs_rgnumber_t          rgno = rtg_rgno(rtg);
+
+	struct xfs_rtalloc_args args = {
+		.mp  = mp,
+		.rtg = rtg,
+	};
+
+	args.tp = xfs_trans_alloc_empty(mp);
+	if (!args.tp)
+		return false;
+	len = xfs_rtgroup_extents(mp, rgno);
+	xfs_rtgroup_lock(rtg, XFS_RTGLOCK_BITMAP);
+	error = xfs_rtcheck_range(&args, start, len, 1, &new, &stat);
+	xfs_trans_cancel(args.tp);
+	xfs_rtgroup_unlock(rtg, XFS_RTGLOCK_BITMAP);
+	return !error && stat;
 }

@@ -230,3 +230,17 @@ xfs_group_get_by_fsb(
 {
 	return xfs_group_get(mp, xfs_fsb_to_gno(mp, fsbno, type), type);
 }
+
+int
+xfs_group_get_active_refcount(struct xfs_group *xg)
+{
+	ASSERT(xg);
+	return atomic_read(&xg->xg_active_ref);
+}
+
+int
+xfs_group_get_passive_refcount(struct xfs_group *xg)
+{
+	ASSERT(xg);
+	return atomic_read(&xg->xg_ref);
+}

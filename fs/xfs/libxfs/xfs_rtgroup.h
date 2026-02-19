@@ -120,6 +120,20 @@ xfs_rtgroup_get(
 	return to_rtg(xfs_group_get(mp, rgno, XG_TYPE_RTG));
 }
 
+static inline int
+xfs_rtgroup_get_passive_refcount(struct xfs_rtgroup *rtg)
+{
+	ASSERT(rtg);
+	return xfs_group_get_passive_refcount(rtg_group(rtg));
+}
+
+static inline int
+xfs_rtgroup_get_active_refcount(struct xfs_rtgroup *rtg)
+{
+	ASSERT(rtg);
+	return xfs_group_get_active_refcount(rtg_group(rtg));
+}
+
 static inline struct xfs_rtgroup *
 xfs_rtgroup_hold(
 	struct xfs_rtgroup	*rtg)
@@ -276,6 +290,21 @@ xfs_daddr_to_rtb(
 
 	return bno;
 }
+
+static inline bool
+xfs_rtgroup_is_active(struct xfs_rtgroup	*rtg)
+{
+	ASSERT(rtg);
+	return xfs_rtgroup_get_active_refcount(rtg) > 0;
+}
+
+void xfs_rtgroup_activate(struct xfs_rtgroup	*rtg);
+int xfs_rtgroup_deactivate(struct xfs_rtgroup	*rtg);
+bool xfs_rtgroup_is_empty(struct xfs_rtgroup *rtg);
+
+#define for_each_rgno_range_reverse(agno, old_rgcount, new_rgcount) \
+	for ((agno) = ((old_rgcount) - 1); (typeof(old_rgcount))(agno) >= \
+		((typeof(old_rgcount))(new_rgcount) - 1); (agno)--)
 
 #ifdef CONFIG_XFS_RT
 int xfs_rtgroup_alloc(struct xfs_mount *mp, xfs_rgnumber_t rgno,

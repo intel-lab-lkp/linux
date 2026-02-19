@@ -677,6 +677,36 @@ xfs_extent_busy_wait_all(
 }
 
 /*
+ * Similar to xfs_extent_busy_wait_all() - It waits for all the busy extents to
+ * get resolved for the range of rtgroups provided. For now, this function is
+ * introduced to be used in online shrink process. Unlike
+ * xfs_extent_busy_wait_all(), this takes a passive reference, because this
+ * function is expected to be called for the rtgroups whose active reference has
+ * been reduced to 0 i.e, offline rtgroups.
+ *
+ * @mp - The xfs mount point
+ * @first_agno - The 0 based AG index of the range of rtgroups from which we
+ *     will start.
+ * @end_agno - The 0 based AG index of the range of rtgroups from till which we
+ *     will traverse.
+ */
+void
+xfs_extent_busy_wait_rtgroups(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t		first_rgno,
+	xfs_rgnumber_t		end_rgno)
+{
+	xfs_agnumber_t		rgno;
+	struct xfs_rtgroup	*rtg = NULL;
+
+	for_each_rgno_range_reverse(rgno, end_rgno + 1, first_rgno + 1) {
+		rtg = xfs_rtgroup_get(mp, rgno);
+		xfs_extent_busy_wait_group(rtg_group(rtg));
+		xfs_rtgroup_put(rtg);
+	}
+}
+
+/*
  * Callback for list_sort to sort busy extents by the group they reside in.
  */
 int

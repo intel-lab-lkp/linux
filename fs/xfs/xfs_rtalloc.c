@@ -5,6 +5,7 @@
  */
 #include "xfs.h"
 #include "xfs_fs.h"
+#include "xfs_fsops.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
 #include "xfs_log_format.h"
@@ -34,6 +35,8 @@
 #include "xfs_rtrefcount_btree.h"
 #include "xfs_reflink.h"
 #include "xfs_zone_alloc.h"
+#include "xfs_log.h"
+#include "xfs_trans_priv.h"
 
 /*
  * Return whether there are any free extents in the size range given
@@ -89,6 +92,40 @@ out:
 	if (rsum_cache && log + 1 < rsum_cache[bbno])
 		rsum_cache[bbno] = log + 1;
 	return 0;
+}
+
+/* Resets the summary file to 0 */
+static int
+xfs_rt_reset_summary(
+	struct xfs_rtalloc_args	*args)
+{
+	xfs_fileoff_t		bbno;	/* bitmap block number */
+	int			error;
+	int			log;	/* summary level number (log length) */
+	xfs_suminfo_t		sum;	/* summary data */
+
+	for (log = args->mp->m_rsumlevels - 1; log >= 0; log--) {
+		for (bbno = args->mp->m_sb.sb_rbmblocks  - 1;
+		     (xfs_srtblock_t)bbno >= 0;
+		     bbno--) {
+			error = xfs_rtget_summary(args, log, bbno, &sum);
+			if (error)
+				goto out;
+			if (XFS_IS_CORRUPT(args->mp, sum < 0)) {
+				error = -EFSCORRUPTED;
+				goto out;
+			}
+			if (sum == 0)
+				continue;
+			error = xfs_rtmodify_summary(args, log, bbno, -sum);
+			if (error)
+				goto out;
+		}
+	}
+	error = 0;
+out:
+	xfs_rtbuf_cache_relse(args);
+	return error;
 }
 
 /*
@@ -935,6 +972,29 @@ out_free:
 	kfree(nmp);
 	return error;
 }
+static int
+xfs_rt_recreate_summary(
+	struct xfs_rtgroup		*rtg,
+	struct xfs_trans		*tp,
+	const struct xfs_rtalloc_rec	*rec,
+	void				*priv)
+{
+	struct xfs_mount	*mp = (struct xfs_mount *)(priv);
+	struct xfs_rtalloc_args	nargs = {
+		.rtg		= rtg,
+		.tp		= tp,
+		.mp		= mp
+	};
+	xfs_fileoff_t		rbmoff;
+	unsigned int		lenlog;
+	int			error;
+
+	/* Compute the relevant location in the rtsum file. */
+	rbmoff = xfs_rtx_to_rbmblock(mp, rec->ar_startext);
+	lenlog = xfs_highbit64(rec->ar_extcount);
+	error = xfs_rtmodify_summary(&nargs, lenlog, rbmoff, 1);
+	return error;
+}
 
 static int
 xfs_growfs_rt_bmblock(
@@ -1373,6 +1433,713 @@ xfs_rt_check_size(
 }
 
 /*
+ * Get new active references for all the rtgroups. This might be called when
+ * shrinkage process encounters a failure at an intermediate stage after the
+ * active references of all/some of the target rtgroups have become 0.
+ */
+static void
+xfs_shrinkfs_rt_reactivate_rtgroups(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t	old_rgcount,
+	xfs_rgnumber_t	new_rgcount)
+{
+	struct xfs_rtgroup	*rtg = NULL;
+	xfs_rgnumber_t		rgno;
+
+	ASSERT(new_rgcount < old_rgcount);
+	for_each_rgno_range_reverse(rgno, old_rgcount, new_rgcount + 1) {
+		rtg = xfs_rtgroup_get(mp, rgno);
+		xfs_rtgroup_activate(rtg);
+		xfs_rtgroup_put(rtg);
+	}
+	xfs_sync_sb_buf(mp, true);
+}
+
+static int
+xfs_shrinkfs_rt_quiesce_rtgroups(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t	old_rgcount,
+	xfs_rgnumber_t	new_rgcount)
+{
+	int	error = 0;
+	int	count = 0;
+
+	/*
+	 * We should wait for the log to be empty and all the pending I/Os to
+	 * be completed so that the rtgroups are completely stabilized before we
+	 * start tearing them down. Flushing the AIL and synching the superblock
+	 * here ensures that none of the future logged transactions will refer
+	 * to these rtgroups during log recovery in case if sudden
+	 * shutdown/crash happens while we are trying to remove these rtgroups.
+	 * The following code is similar to xfs_log_quiesce() and xfs_log_cover.
+	 *
+	 * We are doing a xfs_sync_sb_buf + AIL flush twice. The first
+	 * xfs_sync_sb_buf writes a checkpoint, then the first AIL flush makes
+	 * the first checkpoint stable. The second set of xfs_sync_sb_buf + AIL
+	 * flush synchs the on-disk LSN with the in-core LSN.
+	 * Unlike xfs_log_cover(), we don't necessarily want the background
+	 * filesytem activity/log activity to stop (like in case of unmount
+	 * or freeze).
+	 */
+	cancel_delayed_work_sync(&mp->m_log->l_work);
+	error = xfs_log_force(mp, XFS_LOG_SYNC);
+	if (error)
+		goto out;
+
+	error = xfs_sync_sb_buf(mp, true);
+	if (error)
+		goto out;
+
+	xfs_ail_push_all_sync(mp->m_ail);
+	xfs_buftarg_wait(mp->m_ddev_targp);
+	xfs_buf_lock(mp->m_sb_bp);
+	xfs_buf_unlock(mp->m_sb_bp);
+
+	/*
+	 * The first xfs_sync_sb serves as a reference for the in-core tail
+	 * pointer and the second one updates the on-disk tail with the in-core
+	 * lsn. This is similar to what is being done in xfs_log_cover, however
+	 * here we are explicitly doing this twice in order to ensure forward
+	 * progress as, during shrink the filesystem is active.
+	 */
+	for (count = 0; count < 2; count++) {
+		error = xfs_sync_sb(mp, true);
+		if (error)
+			goto out;
+		xfs_ail_push_all_sync(mp->m_ail);
+	}
+
+	/*
+	 * Wait for all the busy extents to get resolved along with pending trim
+	 * ops for all the offlined rtgroups.
+	 */
+	xfs_extent_busy_wait_rtgroups(mp, new_rgcount, old_rgcount - 1);
+	flush_workqueue(xfs_discard_wq);
+out:
+	xfs_log_work_queue(mp);
+	return error;
+}
+
+/*
+ * The function deactivates or puts the rtgroups to an offline mode. rtgroup
+ * deactivation or rtgroup offlining means that no new operation can be started
+ * on that rtgroup. The rtgroup still exists, however no new high level
+ * operation (like rtextent allocation) can be started. In terms of
+ * implementation, an rtgroup is taken offline or is deactivated when
+ * xg_active_ref of the struct xfs_rtgroup is 0 i.e, the number
+ * of active references becomes 0.
+ * Since active references act as a form of barrier, so once the active
+ * reference of an rtgroup is 0, no new entity can get an active reference and
+ * in this way we ensure that once an rtgroup is offline (i.e, active reference
+ * count is 0), no one will be able to start a new operation in it unless the
+ * active reference count is explicitly set to 1 i.e, the rtgroup is made
+ * online/activated.
+ */
+static int
+xfs_shrinkfs_rt_deactivate_rtgroups(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t	old_rgcount,
+	xfs_rgnumber_t	new_rgcount)
+{
+	int			error = 0;
+	struct xfs_rtgroup	*rtg = NULL;
+	xfs_rgnumber_t		rgno;
+
+	ASSERT(new_rgcount < old_rgcount);
+	/*
+	 * If we are removing 1 or more rtgroups, we only need to take those
+	 * rtgroups offline which we are planning to remove completely. The new
+	 * tail rtgroup which will be partially shrunk, should not be taken
+	 * offline - since we will be doing an online operation on them, just
+	 * like any other high level operation. For complete rtgroup removal,
+	 * we need to take them offline since we cannot start any new operation
+	 * on them as they will be removed eventually.
+	 *
+	 * However, if the number of blocks that we are trying to remove is
+	 * an exact multiple of the rtgroup size (in rtextents), then the new
+	 * tail rtgroup will not be shrunk at all.
+	 */
+	for_each_rgno_range_reverse(rgno, old_rgcount, new_rgcount + 1) {
+		rtg = xfs_rtgroup_get(mp, rgno);
+		error = xfs_rtgroup_deactivate(rtg);
+		if (error) {
+			xfs_rtgroup_put(rtg);
+			if (rgno < old_rgcount - 1)
+				xfs_shrinkfs_rt_reactivate_rtgroups(mp,
+						old_rgcount, rgno + 1);
+			error = error == -ERESTARTSYS ? -ERESTARTSYS :
+				-ENOTEMPTY;
+			return error;
+		}
+		xfs_rtgroup_put(rtg);
+	}
+	/*
+	 * Now that we have deactivated/offlined the rtgroups, we need to make
+	 * sure that all the pending operations are completed and the in-core
+	 * and the on disk contents are completely in synch i.e, rtgroups are
+	 * stablized on to the disk.
+	 */
+
+	error = xfs_shrinkfs_rt_quiesce_rtgroups(mp, old_rgcount, new_rgcount);
+	if (error)
+		xfs_shrinkfs_rt_reactivate_rtgroups(mp, old_rgcount,
+				new_rgcount);
+	return error;
+}
+
+/*
+ * This function does 2 things:
+ * 1. Deactivate the rtgroups i.e, wait for all the active references to come to
+ *    0.
+ * 2. Checks whether all the rtgroups that the shrink process needs to remove
+ *    are empty.
+ *    If at least one of the target rtgroups is non-empty, shrink fails and
+ *    xfs_shrinkfs_rt_reactivate_rtgroups() is called.
+ * Please look into the individual functions for more details and the definition
+ * of the terminologies.
+ */
+static int
+xfs_shrinkfs_rt_prepare_rtgroups(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t	old_rgcount,
+	xfs_rgnumber_t	new_rgcount)
+{
+	struct xfs_rtgroup	*rtg = NULL;
+	xfs_rgnumber_t		rgno;
+	int			error = 0;
+
+	ASSERT(new_rgcount < old_rgcount);
+	/*
+	 * Deactivating/offlining the AGs i.e waiting for the active references
+	 * to come down to 0.
+	 */
+	error = xfs_shrinkfs_rt_deactivate_rtgroups(mp, old_rgcount,
+			new_rgcount);
+	if (error)
+		return error;
+	/*
+	 * At this point the rtgroups have been deactivated/offlined and the
+	 * in-core and the on-disk are synch. So now we need to check whether
+	 * all the rtgroups that we are trying to remove are empty.We will bail
+	 * out with a failure code even if 1 rtgroup is non-empty.
+	 */
+	for_each_rgno_range_reverse(rgno, old_rgcount, new_rgcount + 1) {
+		rtg = xfs_rtgroup_get(mp, rgno);
+		if (!xfs_rtgroup_is_empty(rtg)) {
+			xfs_rtgroup_put(rtg);
+			xfs_shrinkfs_rt_reactivate_rtgroups(mp, old_rgcount,
+				new_rgcount);
+			return -ENOTEMPTY;
+		}
+		xfs_rtgroup_put(rtg);
+	}
+	return 0;
+}
+
+static int
+xfs_shrinkfs_mark_meta_bufs_stale(
+	struct xfs_mount	*mp,
+	struct xfs_rtgroup	*rtg,
+	struct xfs_trans	*tp,
+	enum xfs_rtg_inodes	type,
+	xfs_fileoff_t		start_fsb,
+	xfs_fileoff_t		end_fsb)
+{
+	struct xfs_rtalloc_args	args = {
+		.mp		= mp,
+		.rtg		= rtg,
+		.tp		= tp
+	};
+	int			error = 0;
+
+	ASSERT(start_fsb <= end_fsb);
+
+	for (xfs_fileoff_t fsb = start_fsb; fsb <= end_fsb; fsb++) {
+		if (type == XFS_RTGI_BITMAP) {
+			error = xfs_rtbitmap_read_buf(&args, fsb);
+			if (error)
+				break;
+			ASSERT(args.rbmoff == fsb);
+			xfs_buf_stale(args.rbmbp);
+		} else if (type == XFS_RTGI_SUMMARY) {
+			error = xfs_rtsummary_read_buf(&args, fsb);
+			if (error)
+				break;
+			ASSERT(args.sumoff == fsb);
+			xfs_buf_stale(args.sumbp);
+		}
+	}
+	return error;
+}
+
+/*
+ * This function removes/unmaps the data blocks of the metadata inode(ip) and
+ * also updates the size of the metadata inode.
+ */
+static int
+xfs_rt_metafile_remove_blocks(
+	struct xfs_rtgroup	*rtg,
+	enum xfs_rtg_inodes	type,
+	struct xfs_trans	**tpp,
+	xfs_fileoff_t		offset_fsb)
+{
+	struct xfs_inode	*ip = rtg->rtg_inodes[type];
+	struct xfs_mount	*mp = ip->i_mount;
+	int			error = 0;
+	uint64_t		new_sz;
+
+	ASSERT(ip);
+	ASSERT(xfs_is_internal_inode(ip));
+	ASSERT(tpp);
+	ASSERT(*tpp);
+
+	new_sz = (offset_fsb + 1) << mp->m_sb.sb_blocklog;
+	ASSERT(new_sz <= ip->i_disk_size);
+	if (new_sz == ip->i_disk_size)
+		return 0;
+	/*
+	 * Pass the start bitmap fsblock and the end bitmap fsblock which we
+	 * want to free (both inclusive).
+	 */
+	error = xfs_shrinkfs_mark_meta_bufs_stale(mp, rtg, *tpp, type,
+			offset_fsb + 1, XFS_B_TO_FSBT(mp, ip->i_disk_size - 1));
+	if (error)
+		return error;
+
+	ip->i_disk_size = new_sz;
+	i_size_write(VFS_I(ip), ip->i_disk_size);
+	xfs_trans_log_inode(*tpp, ip, XFS_ILOG_CORE);
+	error = xfs_itruncate_extents(tpp, ip, XFS_DATA_FORK, new_sz);
+	if (error)
+		return error;
+	xfs_iflags_set(ip, XFS_ITRUNCATED);
+	xfs_inode_clear_eofblocks_tag(ip);
+	return error;
+}
+
+/*
+ * This function will remove all the metadata inodes belonging the
+ * rtgroup.
+ * All the metadata inodes removed here should _not_ be locked
+ * exclusively.
+ */
+static int
+xfs_rt_metainodes_remove(struct xfs_rtgroup *rtg)
+{
+	ASSERT(rtg);
+
+	int			i = 0;
+	int			error = 0;
+	struct xfs_mount	*mp = rtg_mount(rtg);
+	struct xfs_name		xfs_name;
+
+	/* bitmap and summary file have to be present */
+	ASSERT(rtg->rtg_inodes[XFS_RTGI_BITMAP]);
+	ASSERT(rtg->rtg_inodes[XFS_RTGI_SUMMARY]);
+
+	for (i = 0; i < XFS_RTGI_MAX; i++) {
+		struct xfs_inode *ip = rtg->rtg_inodes[i];
+		if (ip) {
+			xfs_name.name = xfs_rtginode_path(rtg_rgno(rtg), i);
+			xfs_name.len = strlen(xfs_name.name);
+			ASSERT(xfs_name.len >= 6);
+			error = xfs_remove(mp->m_rtdirip, &xfs_name, ip);
+			if (error)
+				break;
+			error = xfs_inactive(ip);
+			if (error)
+				break;
+			xfs_irele(ip);
+		}
+	}
+	return error;
+}
+
+/*
+ * This function will truncate all the metadata inodes belonging the rtgroup.
+ */
+static int
+xfs_rt_metainodes_truncate(
+		struct xfs_mount *mp,
+		struct xfs_trans **tpp,
+		struct xfs_rtgroup *rtg)
+{
+	ASSERT(mp);
+	ASSERT(rtg);
+	ASSERT(tpp);
+	ASSERT(*tpp);
+	ASSERT(!xfs_rtgroup_is_active(rtg));
+
+	int			i = 0;
+	int			error = 0;
+
+	/* bitmap and summary file has to be present */
+	ASSERT(rtg->rtg_inodes[XFS_RTGI_BITMAP]);
+	ASSERT(rtg->rtg_inodes[XFS_RTGI_SUMMARY]);
+
+	for (i = 0; i < XFS_RTGI_MAX; i++) {
+		struct xfs_inode *ip = rtg->rtg_inodes[i];
+		if (ip) {
+			xfs_ilock(ip, XFS_ILOCK_EXCL | XFS_IOLOCK_EXCL);
+			xfs_trans_ijoin(*tpp, ip, 0);
+		}
+	}
+
+	for (i = 0; i < XFS_RTGI_MAX; i++) {
+		struct xfs_inode *ip = rtg->rtg_inodes[i];
+		if (ip) {
+			error = xfs_rt_metafile_remove_blocks(rtg, i, tpp, -1);
+			if (error)
+				break;
+			xfs_broot_realloc(&ip->i_df, 0);
+		}
+	}
+	if (error)
+		goto out;
+
+	xfs_growfs_rt_sb_fields(*tpp, mp);
+	error = xfs_trans_commit(*tpp);
+out:
+	for (i = 0; i < XFS_RTGI_MAX; i++) {
+		struct xfs_inode *ip = rtg->rtg_inodes[i];
+		if (ip)
+			xfs_iunlock(ip, XFS_ILOCK_EXCL | XFS_IOLOCK_EXCL);
+	}
+	return error;
+}
+
+/*
+ * This function removes an entire empty rtgroup. Before removing the struct
+ * xfs_rtgroup reference, it removes the associated data structures. Before
+ * removing an rtgroup, the caller must ensure that the rtgroup has been
+ * deactivated with no active references and it has been fully stabilized on
+ * the disk.
+ * The steps are as follows:
+ *  1) Get a fake mount with reduced number of rtextents
+ *  2) load/initiallize all the metadata inodes for the rtgroup
+ *  3) Start a transaction
+ *  4) Remove the mapped data blocks for metadata inodes.
+ *  5) Then remove the metadata inodes.
+ *  6) Remove the group from xarray.
+ *  7) Then free the intents drain list, busy extent list and the group instance
+ */
+static int
+xfs_shrinkfs_rt_remove_rtgroup(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t		rgno)
+{
+	struct xfs_rtgroup	*cur_rtg = NULL;
+	struct xfs_group	*xg = NULL;
+	struct xfs_mount	*nmp = NULL;
+	int			error = 0;
+	struct xfs_trans	*tp = NULL;
+	int64_t			rtx;
+	int64_t			rtb;
+
+	ASSERT(mp);
+
+	cur_rtg = xfs_rtgroup_get(mp, rgno);
+	if (!cur_rtg)
+		return -EINVAL;
+	ASSERT(!xfs_rtgroup_is_active(cur_rtg));
+	rtx = xfs_rtgroup_extents(mp, rgno);
+	rtb = rtx * mp->m_sb.sb_rextsize;
+
+	nmp = xfs_growfs_rt_alloc_fake_mount(mp, mp->m_sb.sb_rblocks - rtb,
+		mp->m_sb.sb_rextsize);
+	if (!nmp) {
+		error = -ENOMEM;
+		goto out_free;
+	}
+
+	error = xfs_rtginodes_ensure_all(cur_rtg);
+	if (error)
+		goto out_free;
+
+	xfs_trans_resv_calc(nmp, &nmp->m_resv);
+	error = xfs_trans_alloc(mp, &M_RES(nmp)->tr_itruncate, 0, 0, 0, &tp);
+	if (error)
+		goto out_free;
+
+	/* Unmap all the blocks of all the metadata inodes */
+	error = xfs_rt_metainodes_truncate(nmp, &tp, cur_rtg);
+	if (error)
+		goto out_cancel;
+	/*
+	 * Now that we have truncated all the metadata inodes, remove and
+	 * free them.
+	 */
+	error = xfs_rt_metainodes_remove(cur_rtg);
+	ASSERT(!error);
+
+	xg = xa_erase(&mp->m_groups[XG_TYPE_RTG].xa, rgno);
+	/*
+	 * We have already ensured in the rtgroup preparation phase that all
+	 * intents for the offlined rtgroups have been resolved. So it safe to
+	 * free it here.
+	 */
+	xfs_defer_drain_free(&xg->xg_intents_drain);
+	/*
+	 * We have already ensured in the rtgroup preparation phase that all the
+	 * busy extents for the offlined rtgroups have been resolved. So it is
+	 * safe to free it here.
+	 */
+	kfree(xg->xg_busy_extents);
+	/*
+	 * Finally free the struct xfs_group of the rtgroup.
+	 */
+	kfree_rcu_mightsleep(xg);
+	error = 0;
+	goto out_free;
+
+out_cancel:
+	xfs_trans_cancel(tp);
+out_free:
+	kfree(nmp);
+	if (cur_rtg) {
+		xfs_rtgroup_put(cur_rtg);
+		XFS_IS_CORRUPT(mp, xfs_rtgroup_get_passive_refcount(
+				cur_rtg) != 0);
+	}
+	return error;
+}
+
+/*
+ * This function resets the contents of the summary file to 0 and re-populates
+ * it based on the new arguments.
+ */
+static int
+xfs_rt_reset_and_recreate_summary(
+	struct xfs_rtalloc_args	*oargs,
+	struct xfs_rtalloc_args	*nargs)
+{
+	int	error = 0;
+
+	error = xfs_rt_reset_summary(oargs);
+	if (error)
+		return error;
+	ASSERT(oargs->rtg);
+	ASSERT(nargs->tp);
+	ASSERT(nargs->mp);
+	error = xfs_rtalloc_query_all(oargs->rtg, nargs->tp, xfs_rt_recreate_summary,
+		nargs->mp);
+	return error;
+}
+
+/*
+ * This function shrinks the tail rtgroup partially.
+ */
+static int
+xfs_shrinkfs_rt_shrink_new_tail_rtgroup(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t		rgno,
+	int64_t			delta_rtx_rem)
+{
+	struct xfs_rtgroup	*rtg = xfs_rtgroup_get(mp, rgno);
+	struct xfs_inode	*rbmip = rtg_bitmap(rtg);
+	struct xfs_inode	*rsumip = rtg_summary(rtg);
+	int64_t			delta_rtb_rem = delta_rtx_rem *
+			mp->m_sb.sb_rextsize;
+	struct xfs_rtalloc_args	args = {
+		.mp		= mp,
+		.rtg		= rtg,
+	};
+	struct xfs_rtalloc_args	nargs = {
+		.rtg		= rtg,
+	};
+	struct xfs_mount	*nmp = NULL;
+	int			error = 0;
+	int64_t			rtgsize = xfs_rtgroup_extents(mp, rgno);
+
+	/*
+	 * Calculate new sb and mount fields for this round.  Also ensure the
+	 * rtg_extents value is uptodate as the rtbitmap code relies on it.
+	 */
+	nmp = nargs.mp = xfs_growfs_rt_alloc_fake_mount(mp,
+			mp->m_sb.sb_rblocks - delta_rtb_rem,
+			mp->m_sb.sb_rextsize);
+	if (!nmp) {
+		error = -ENOMEM;
+		goto out_free;
+	}
+	xfs_rtgroup_calc_geometry(nmp, rtg, rtg_rgno(rtg),
+			nmp->m_sb.sb_rgcount, nmp->m_sb.sb_rextents);
+
+	error = xfs_rtginodes_ensure_all(rtg);
+	if (error)
+		goto out_free;
+
+	/*
+	 * Recompute the growfsrt reservation from the new rsumsize, so that the
+	 * transaction below use the new, potentially larger value.
+	 */
+	xfs_trans_resv_calc(nmp, &nmp->m_resv);
+	error = xfs_trans_alloc(mp, &M_RES(nmp)->tr_itruncate, 0,
+			delta_rtb_rem, 0, &args.tp);
+	if (error)
+		goto out_free;
+	nargs.tp = args.tp;
+
+	xfs_ilock(rbmip, XFS_ILOCK_EXCL | XFS_IOLOCK_EXCL);
+	xfs_ilock(rsumip, XFS_ILOCK_EXCL | XFS_IOLOCK_EXCL);
+	xfs_trans_ijoin(args.tp, rbmip, 0);
+	xfs_trans_ijoin(args.tp, rsumip, 0);
+
+	/*
+	 * Update the rtbitmap file  with the new free rtextents count
+	 */
+	error = xfs_rtmodify_range(&args, rtgsize - delta_rtx_rem,
+			delta_rtx_rem, 0);
+	if (error)
+		goto out_cancel;
+	/*
+	 * For shrink, zero out the summary file and re-populate the
+	 * entries.
+	 */
+	error = xfs_rt_reset_and_recreate_summary(&args, &nargs);
+	if (error)
+		goto out_cancel;
+
+	/*
+	 * If the size of the metadata files have changed, update the inode
+	 * and unmap the metadata file data blocks accordingly. But before that,
+	 * mark the in-core buffers (for the blocks we want to unmap) stale.
+	 */
+	if (nmp->m_sb.sb_rbmblocks < mp->m_sb.sb_rbmblocks) {
+		error = xfs_rt_metafile_remove_blocks(rtg, XFS_RTGI_BITMAP,
+				&args.tp, nmp->m_sb.sb_rbmblocks - 1);
+		if (error)
+			goto out_cancel;
+	}
+
+	if (nmp->m_rsumblocks < mp->m_rsumblocks) {
+		error = xfs_rt_metafile_remove_blocks(rtg, XFS_RTGI_BITMAP,
+				&args.tp, nmp->m_rsumblocks - 1);
+		if (error)
+			goto out_cancel;
+	}
+
+	/*
+	 * Update superblock fields.
+	 */
+	xfs_growfs_rt_sb_fields(args.tp, nmp);
+	xfs_rtbuf_cache_relse(&nargs);
+	/*
+	 * Update # of free rtextents in the superblock.
+	 */
+	xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_FREXTENTS,
+			(int64_t)(-delta_rtx_rem));
+	/*
+	 * Update the calculated values in the real mount structure.
+	 */
+	mp->m_rsumlevels = nmp->m_rsumlevels;
+	mp->m_rsumblocks = nmp->m_rsumblocks;
+	/*
+	 * Recompute the growfsrt reservation from the new rsumsize.
+	 */
+	xfs_trans_resv_calc(mp, &mp->m_resv);
+	xfs_trans_set_sync(args.tp);
+	error = xfs_trans_commit(args.tp);
+	if (error)
+		goto out_cancel;
+	/*
+	 * Ensure the mount RT feature flag is now set, and compute new
+	 * maxlevels for rt btrees.
+	 */
+	mp->m_features |= XFS_FEAT_REALTIME;
+	xfs_rtrmapbt_compute_maxlevels(mp);
+	xfs_rtrefcountbt_compute_maxlevels(mp);
+	goto out;
+
+out_cancel:
+	xfs_trans_cancel(args.tp);
+out:
+	xfs_iunlock(rbmip, XFS_ILOCK_EXCL | XFS_IOLOCK_EXCL);
+	xfs_iunlock(rsumip, XFS_ILOCK_EXCL | XFS_IOLOCK_EXCL);
+out_free:
+	kfree(nmp);
+	if (rtg)
+		xfs_rtgroup_put(rtg);
+	return error;
+}
+
+/*
+ * This function does the job of fully removing the extents and empty rtgroups (
+ * depending of the values of old_rgcount and new_rgcount). By removal it means,
+ * removal of all the rtgroup data structures, other data structures associated
+ * with it. Once this function succeeds, the rtgroups(and their extents) will no
+ * longer exist.
+ * The overall steps are as follows (details are in the function):
+ * - calculate the number of rtextents that will be removed from the new tail
+ *   rtgroup i.e, the rtgroup that will be shrunk partially.
+ * - call xfs_shrinkfs_rt_remove_rtgroup() that removes the rest of the
+ *   associated datastructures with the corresponding struct xfs_rtgroup.
+ * - call xfs_shrinkfs_rt_shrink_new_tail_rtgroup() if a partial shrink of the
+ *   new last rtgroup needs to be done.
+ */
+static int
+xfs_shrinkfs_rt_remove_rtgroups(
+	struct xfs_mount	*mp,
+	xfs_rgnumber_t		old_rgcount,
+	xfs_rgnumber_t		new_rgcount,
+	int64_t			delta_rtb)
+{
+	xfs_rgnumber_t		rgno;
+	int			error = 0;
+	struct xfs_rtgroup	*cur_rtg = NULL;
+	int64_t			delta_rtx_rem;
+	bool is_del		= false;
+
+	delta_rtx_rem = div_u64(-delta_rtb, mp->m_sb.sb_rextsize);
+
+	ASSERT(new_rgcount <= old_rgcount);
+	ASSERT(delta_rtb < 0);
+
+	/*
+	 * This loop is calculating the number of realtime extents that needs to
+	 * be removed from the new tail rtgroup. If delta_rtx_rem is 0 after the
+	 * loop exits, then it means that the number of realtime extents we want
+	 * to remove is a multiple of rtgroup size (in realtime extents).
+	 */
+	for_each_rgno_range_reverse(rgno, old_rgcount, new_rgcount + 1) {
+		cur_rtg = xfs_rtgroup_get(mp, rgno);
+		delta_rtx_rem -= xfs_rtgroup_extents(mp, rgno);
+		xfs_rtgroup_put(cur_rtg);
+	}
+
+	/* We start deleting rtgroups from the end */
+	for_each_rgno_range_reverse(rgno, old_rgcount, new_rgcount + 1) {
+		error = xfs_shrinkfs_rt_remove_rtgroup(mp, rgno);
+		if (error && is_del) {
+			/*
+			 * We are supporting partial shrink success. So we
+			 * return from here with success code and reactivate
+			 * the rtgs which we deactivated earlier and but could
+			 * not remove.
+			 */
+			xfs_shrinkfs_rt_reactivate_rtgroups(mp, rgno + 1,
+				new_rgcount);
+			error = 0;
+		}
+		is_del = true; /* At least 1 rtgroup is removed */
+	}
+
+	if (delta_rtx_rem) {
+		/*
+		 * Remove delta_rtx_rem blocks from the rtgroup that will form
+		 * the new tail rtgroup after the rtgroups are removed. If the
+		 * number of realtime extents to be removed is a multiple of
+		 * realtime group size, then nothing is done here.
+		 */
+		error = xfs_shrinkfs_rt_shrink_new_tail_rtgroup(mp,
+				new_rgcount - 1, delta_rtx_rem);
+		if (error && is_del)
+			error = 0;
+	}
+
+	return error;
+}
+/*
  * Grow the realtime area of the filesystem.
  */
 int
@@ -1385,6 +2152,10 @@ xfs_growfs_rt(
 	xfs_rgnumber_t		rgno;
 	xfs_agblock_t		old_rextsize = mp->m_sb.sb_rextsize;
 	int			error;
+	int64_t			delta_rtb = in->newblocks - mp->m_sb.sb_rblocks;
+	xfs_rtxnum_t		delta_rtx = div_u64(
+			delta_rtb > 0 ? delta_rtb : -delta_rtb,
+			mp->m_sb.sb_rextsize);
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -1396,10 +2167,15 @@ xfs_growfs_rt(
 	if (!mutex_trylock(&mp->m_growlock))
 		return -EWOULDBLOCK;
 
-	/* Shrink not supported. */
 	error = -EINVAL;
-	if (in->newblocks <= mp->m_sb.sb_rblocks)
-		goto out_unlock;
+
+	if (delta_rtb < 0) {
+		/* Can only shrink at the granularity of an rt extent */
+		if (delta_rtx == 0)
+			goto out_unlock;
+		xfs_set_shrinking(mp);
+	}
+
 	/* Can only change rt extent size when adding rt volume. */
 	if (mp->m_sb.sb_rblocks > 0 && in->extsize != mp->m_sb.sb_rextsize)
 		goto out_unlock;
@@ -1449,8 +2225,21 @@ xfs_growfs_rt(
 		if (error)
 			goto out_unlock;
 	}
+	if (new_rgcount < old_rgcount) {
+		ASSERT(xfs_has_rtgroups(mp));
+		error = xfs_shrinkfs_rt_prepare_rtgroups(mp, old_rgcount,
+				new_rgcount);
+		if (error)
+			goto out_unlock;
+	}
 
-	if (xfs_grow_last_rtg(mp)) {
+	if (xfs_is_shrinking(mp)) {
+		error = xfs_shrinkfs_rt_remove_rtgroups(mp, old_rgcount,
+				new_rgcount, delta_rtb);
+		if (error)
+			goto out_unlock;
+	}
+	if (xfs_grow_last_rtg(mp) && (delta_rtb > 0)) {
 		error = xfs_growfs_rtg(mp, old_rgcount - 1, in->newblocks,
 				in->extsize);
 		if (error)
@@ -1500,6 +2289,8 @@ xfs_growfs_rt(
 	}
 
 out_unlock:
+	if (xfs_is_shrinking(mp))
+		xfs_clear_shrinking(mp);
 	mutex_unlock(&mp->m_growlock);
 	return error;
 }

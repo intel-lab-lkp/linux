@@ -431,7 +431,6 @@ xfs_trans_mod_sb(
 		tp->t_rextslog_delta += delta;
 		break;
 	case XFS_TRANS_SB_RGCOUNT:
-		ASSERT(delta > 0);
 		tp->t_rgcount_delta += delta;
 		break;
 	default:

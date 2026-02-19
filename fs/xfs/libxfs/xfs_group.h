@@ -83,6 +83,8 @@ void xfs_group_free(struct xfs_mount *mp, uint32_t index,
 		enum xfs_group_type type, void (*uninit)(struct xfs_group *xg));
 int xfs_group_insert(struct xfs_mount *mp, struct xfs_group *xg,
 		uint32_t index, enum xfs_group_type);
+int xfs_group_get_active_refcount(struct xfs_group *xg);
+int xfs_group_get_passive_refcount(struct xfs_group *xg);
 
 #define xfs_group_set_mark(_xg, _mark) \
 	xa_set_mark(&(_xg)->xg_mount->m_groups[(_xg)->xg_type].xa, \

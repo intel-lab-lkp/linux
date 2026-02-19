@@ -750,11 +750,8 @@ xlog_recover_do_primary_sb_buffer(
 		xfs_alert(mp, "Shrinking AG count in log recovery not supported");
 		return -EFSCORRUPTED;
 	}
-	if (mp->m_sb.sb_rgcount < orig_rgcount) {
-		xfs_warn(mp,
- "Shrinking rtgroup count in log recovery not supported");
-		return -EFSCORRUPTED;
-	}
+	if (mp->m_sb.sb_rgcount < orig_rgcount)
+		xfs_warn_experimental(mp, XFS_EXPERIMENTAL_SHRINK);
 
 	/*
 	 * If the last AG was grown or shrunk, we also need to update the
@@ -789,11 +786,19 @@ xlog_recover_do_primary_sb_buffer(
 	}
 	mp->m_alloc_set_aside = xfs_alloc_set_aside(mp);
 
-	error = xfs_initialize_rtgroups(mp, orig_rgcount, mp->m_sb.sb_rgcount,
-			mp->m_sb.sb_rextents);
-	if (error) {
-		xfs_warn(mp, "Failed recovery rtgroup init: %d", error);
-		return error;
+	if (orig_rgcount > mp->m_sb.sb_rgcount) {
+		/*
+		 * Remove the old rtgroups that were removed previously by a
+		 * growfs.
+		 */
+		xfs_free_rtgroups(mp, mp->m_sb.sb_rgcount, orig_rgcount);
+	} else {
+		error = xfs_initialize_rtgroups(mp, orig_rgcount,
+				mp->m_sb.sb_rgcount, mp->m_sb.sb_rextents);
+		if (error) {
+			xfs_warn(mp, "Failed recovery rtgroup init: %d", error);
+			return error;
+		}
 	}
 	return 0;
 }
