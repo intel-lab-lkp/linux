@@ -120,6 +120,17 @@ The function returns a non-zero value if it succeeded getting the power count or
 runtime PM was disabled, in either of which cases the driver may proceed to
 access the device.
 
+Frame interval
+--------------
+
+If a sensor supports cropping or binning, it is the sensor driver's
+responsibility to ensure that the frame interval formula (see
+:ref:`media_using_camera_sensor_drivers`) remains valid regardless of the
+pipeline configuration. The driver shall adjust the minimum and maximum allowed
+values of ``V4L2_CID_HBLANK`` and ``V4L2_CID_VBLANK`` as needed when the mode
+changes, so that application developers can always rely on the same formula to
+calculate the frame interval.
+
 Rotation, orientation and flipping
 ----------------------------------
 
