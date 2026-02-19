@@ -482,8 +482,6 @@ struct framer *framer_get(struct device *dev, const char *con_id)
 	if (IS_ERR(framer))
 		return framer;
 
-	get_device(&framer->dev);
-
 	if (!try_module_get(framer->ops->owner)) {
 		ret = -EPROBE_DEFER;
 		goto err_put_device;
@@ -749,7 +747,6 @@ struct framer *framer_provider_simple_of_xlate(struct device *dev,
 	if (!target_dev)
 		return ERR_PTR(-ENODEV);
 
-	put_device(target_dev);
 	return dev_to_framer(target_dev);
 }
 EXPORT_SYMBOL_GPL(framer_provider_simple_of_xlate);
