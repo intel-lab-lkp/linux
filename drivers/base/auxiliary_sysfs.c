@@ -22,22 +22,47 @@ static const struct attribute_group auxiliary_irqs_group = {
 	.attrs = auxiliary_irq_attrs,
 };
 
-static int auxiliary_irq_dir_prepare(struct auxiliary_device *auxdev)
+/**
+ * auxiliary_device_sysfs_irq_dir_init - initialize the IRQ sysfs directory
+ * @auxdev: auxiliary bus device to initialize the sysfs directory.
+ *
+ * This function should be called by drivers to initialize the IRQ directory
+ * before adding any IRQ sysfs entries. The driver is responsible for ensuring
+ * this function is called only once and for handling any concurrency control
+ * if needed.
+ *
+ * Drivers must call auxiliary_device_sysfs_irq_dir_destroy() to clean up when
+ * done.
+ *
+ * Return: zero on success or an error code on failure.
+ */
+int auxiliary_device_sysfs_irq_dir_init(struct auxiliary_device *auxdev)
 {
-	int ret = 0;
+	int ret;
 
-	guard(mutex)(&auxdev->sysfs.lock);
-	if (auxdev->sysfs.irq_dir_exists)
-		return 0;
-
-	ret = devm_device_add_group(&auxdev->dev, &auxiliary_irqs_group);
+	ret = sysfs_create_group(&auxdev->dev.kobj, &auxiliary_irqs_group);
 	if (ret)
 		return ret;
 
-	auxdev->sysfs.irq_dir_exists = true;
 	xa_init(&auxdev->sysfs.irqs);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(auxiliary_device_sysfs_irq_dir_init);
+
+/**
+ * auxiliary_device_sysfs_irq_dir_destroy - destroy the IRQ sysfs directory
+ * @auxdev: auxiliary bus device to destroy the sysfs directory.
+ *
+ * This function should be called by drivers to clean up the IRQ directory
+ * after all IRQ sysfs entries have been removed. The driver is responsible
+ * for ensuring all IRQs are removed before calling this function.
+ */
+void auxiliary_device_sysfs_irq_dir_destroy(struct auxiliary_device *auxdev)
+{
+	xa_destroy(&auxdev->sysfs.irqs);
+	sysfs_remove_group(&auxdev->dev.kobj, &auxiliary_irqs_group);
+}
+EXPORT_SYMBOL_GPL(auxiliary_device_sysfs_irq_dir_destroy);
 
 /**
  * auxiliary_device_sysfs_irq_add - add a sysfs entry for the given IRQ
@@ -45,7 +70,8 @@ static int auxiliary_irq_dir_prepare(struct auxiliary_device *auxdev)
  * @irq: The associated interrupt number.
  *
  * This function should be called after auxiliary device have successfully
- * received the irq.
+ * received the irq. The driver must call auxiliary_device_sysfs_irq_dir_init()
+ * before calling this function for the first time.
  * The driver is responsible to add a unique irq for the auxiliary device. The
  * driver can invoke this function from multiple thread context safely for
  * unique irqs of the auxiliary devices. The driver must not invoke this API
@@ -58,10 +84,6 @@ int auxiliary_device_sysfs_irq_add(struct auxiliary_device *auxdev, int irq)
 	struct auxiliary_irq_info *info __free(kfree) = NULL;
 	struct device *dev = &auxdev->dev;
 	int ret;
-
-	ret = auxiliary_irq_dir_prepare(auxdev);
-	if (ret)
-		return ret;
 
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)

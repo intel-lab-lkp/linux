@@ -60,8 +60,6 @@
  * @id: unique identitier if multiple devices of the same name are exported,
  * @sysfs: embedded struct which hold all sysfs related fields,
  * @sysfs.irqs: irqs xarray contains irq indices which are used by the device,
- * @sysfs.lock: Synchronize irq sysfs creation,
- * @sysfs.irq_dir_exists: whether "irqs" directory exists,
  *
  * An auxiliary_device represents a part of its parent device's functionality.
  * It is given a name that, combined with the registering drivers
@@ -145,8 +143,6 @@ struct auxiliary_device {
 	u32 id;
 	struct {
 		struct xarray irqs;
-		struct mutex lock; /* Synchronize irq sysfs creation */
-		bool irq_dir_exists;
 	} sysfs;
 };
 
@@ -222,10 +218,21 @@ int __auxiliary_device_add(struct auxiliary_device *auxdev, const char *modname)
 #define auxiliary_device_add(auxdev) __auxiliary_device_add(auxdev, KBUILD_MODNAME)
 
 #ifdef CONFIG_SYSFS
+int auxiliary_device_sysfs_irq_dir_init(struct auxiliary_device *auxdev);
+void auxiliary_device_sysfs_irq_dir_destroy(struct auxiliary_device *auxdev);
 int auxiliary_device_sysfs_irq_add(struct auxiliary_device *auxdev, int irq);
 void auxiliary_device_sysfs_irq_remove(struct auxiliary_device *auxdev,
 				       int irq);
 #else /* CONFIG_SYSFS */
+static inline int
+auxiliary_device_sysfs_irq_dir_init(struct auxiliary_device *auxdev)
+{
+	return 0;
+}
+
+static inline void
+auxiliary_device_sysfs_irq_dir_destroy(struct auxiliary_device *auxdev) {}
+
 static inline int
 auxiliary_device_sysfs_irq_add(struct auxiliary_device *auxdev, int irq)
 {
@@ -238,7 +245,6 @@ auxiliary_device_sysfs_irq_remove(struct auxiliary_device *auxdev, int irq) {}
 
 static inline void auxiliary_device_uninit(struct auxiliary_device *auxdev)
 {
-	mutex_destroy(&auxdev->sysfs.lock);
 	put_device(&auxdev->dev);
 }
 

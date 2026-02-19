@@ -456,7 +456,15 @@ static void _mlx5_irq_release(struct mlx5_irq *irq)
  */
 void mlx5_ctrl_irq_release(struct mlx5_core_dev *dev, struct mlx5_irq *ctrl_irq)
 {
+	struct mlx5_irq_pool *pool = ctrl_irq_pool_get(dev);
+
 	mlx5_irq_affinity_irq_release(dev, ctrl_irq);
+
+	if (mlx5_irq_pool_is_sf_pool(pool)) {
+		struct auxiliary_device *sadev = mlx5_sf_coredev_to_adev(dev);
+
+		auxiliary_device_sysfs_irq_dir_destroy(sadev);
+	}
 }
 
 /**
@@ -489,9 +497,21 @@ struct mlx5_irq *mlx5_ctrl_irq_request(struct mlx5_core_dev *dev)
 		/* Allocate the IRQ in index 0. The vector was already allocated */
 		irq = irq_pool_request_vector(pool, 0, af_desc, NULL);
 	} else {
+		struct auxiliary_device *sadev = mlx5_sf_coredev_to_adev(dev);
+		int err;
+
+		err = auxiliary_device_sysfs_irq_dir_init(sadev);
+		if (err) {
+			irq = ERR_PTR(err);
+			goto exit;
+		}
+
 		irq = mlx5_irq_affinity_request(dev, pool, af_desc);
+		if (IS_ERR(irq))
+			auxiliary_device_sysfs_irq_dir_destroy(sadev);
 	}
 
+exit:
 	kvfree(af_desc);
 
 	return irq;
