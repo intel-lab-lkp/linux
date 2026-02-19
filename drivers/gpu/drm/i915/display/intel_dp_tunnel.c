@@ -54,30 +54,23 @@ static int kbytes_to_mbits(int kbytes)
 	return DIV_ROUND_UP(kbytes * 8, 1000);
 }
 
-static int get_current_link_bw(struct intel_dp *intel_dp,
-			       bool *below_dprx_bw)
+static int get_current_link_bw(struct intel_dp *intel_dp)
 {
 	int rate = intel_dp_max_common_rate(intel_dp);
 	int lane_count = intel_dp_max_common_lane_count(intel_dp);
-	int bw;
 
-	bw = intel_dp_max_link_data_rate(intel_dp, rate, lane_count);
-	*below_dprx_bw = bw < drm_dp_max_dprx_data_rate(rate, lane_count);
-
-	return bw;
+	return intel_dp_max_link_data_rate(intel_dp, rate, lane_count);
 }
 
 static int update_tunnel_state(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
-	bool old_bw_below_dprx;
-	bool new_bw_below_dprx;
 	int old_bw;
 	int new_bw;
 	int ret;
 
-	old_bw = get_current_link_bw(intel_dp, &old_bw_below_dprx);
+	old_bw = get_current_link_bw(intel_dp);
 
 	ret = drm_dp_tunnel_update_state(intel_dp->tunnel);
 	if (ret < 0) {
@@ -96,11 +89,10 @@ static int update_tunnel_state(struct intel_dp *intel_dp)
 
 	intel_dp_update_sink_caps(intel_dp);
 
-	new_bw = get_current_link_bw(intel_dp, &new_bw_below_dprx);
+	new_bw = get_current_link_bw(intel_dp);
 
 	/* Suppress the notification if the mode list can't change due to bw. */
-	if (old_bw_below_dprx == new_bw_below_dprx &&
-	    !new_bw_below_dprx)
+	if (old_bw == new_bw)
 		return 0;
 
 	drm_dbg_kms(display->drm,
