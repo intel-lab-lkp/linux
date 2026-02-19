@@ -62,15 +62,11 @@ static int get_current_link_bw(struct intel_dp *intel_dp)
 	return intel_dp_max_link_data_rate(intel_dp, rate, lane_count);
 }
 
-static int update_tunnel_state(struct intel_dp *intel_dp)
+static int __update_tunnel_state(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
-	int old_bw;
-	int new_bw;
 	int ret;
-
-	old_bw = get_current_link_bw(intel_dp);
 
 	ret = drm_dp_tunnel_update_state(intel_dp->tunnel);
 	if (ret < 0) {
@@ -89,11 +85,20 @@ static int update_tunnel_state(struct intel_dp *intel_dp)
 
 	intel_dp_update_sink_caps(intel_dp);
 
+	return 0;
+}
+
+static bool has_tunnel_bw_changed(struct intel_dp *intel_dp, int old_bw)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
+	int new_bw;
+
 	new_bw = get_current_link_bw(intel_dp);
 
 	/* Suppress the notification if the mode list can't change due to bw. */
 	if (old_bw == new_bw)
-		return 0;
+		return false;
 
 	drm_dbg_kms(display->drm,
 		    "[DPTUN %s][ENCODER:%d:%s] Notify users about BW change: %d -> %d\n",
@@ -101,7 +106,29 @@ static int update_tunnel_state(struct intel_dp *intel_dp)
 		    encoder->base.base.id, encoder->base.name,
 		    kbytes_to_mbits(old_bw), kbytes_to_mbits(new_bw));
 
-	return 1;
+	return true;
+}
+
+/*
+ * Returns:
+ * - 0 in case of success - if there wasn't any change in the tunnel state
+ *   requiring a user notification
+ * - 1 in case of success - if there was a change in the tunnel state
+ *   requiring a user notification
+ * - Negative error code if updating the tunnel state failed
+ */
+static int update_tunnel_state(struct intel_dp *intel_dp)
+{
+	int old_bw;
+	int err;
+
+	old_bw = get_current_link_bw(intel_dp);
+
+	err = __update_tunnel_state(intel_dp);
+	if (err)
+		return err;
+
+	return has_tunnel_bw_changed(intel_dp, old_bw) ? 1 : 0;
 }
 
 /*
