@@ -346,9 +346,25 @@ static irqreturn_t sf_pdma_done_isr(int irq, void *dev_id)
 	struct sf_pdma_chan *chan = dev_id;
 	struct pdma_regs *regs = &chan->regs;
 	u64 residue;
+	u32 control_reg;
 
 	spin_lock(&chan->vchan.lock);
-	writel((readl(regs->ctrl)) & ~PDMA_DONE_STATUS_MASK, regs->ctrl);
+	control_reg = readl(regs->ctrl);
+	if (control_reg & PDMA_ERR_STATUS_MASK) {
+		spin_unlock(&chan->vchan.lock);
+		return IRQ_HANDLED;
+	}
+
+	/*
+	 * Check if DONE bit is still set. If not, the error ISR on another
+	 * CPU has already cleared it, so abort to avoid double-processing.
+	 */
+	if (!(control_reg & PDMA_DONE_STATUS_MASK)) {
+		spin_unlock(&chan->vchan.lock);
+		return IRQ_HANDLED;
+	}
+
+	writel((control_reg & ~PDMA_DONE_STATUS_MASK), regs->ctrl);
 	residue = readq(regs->residue);
 
 	if (!residue) {
@@ -375,7 +391,7 @@ static irqreturn_t sf_pdma_err_isr(int irq, void *dev_id)
 	struct pdma_regs *regs = &chan->regs;
 
 	spin_lock(&chan->lock);
-	writel((readl(regs->ctrl)) & ~PDMA_ERR_STATUS_MASK, regs->ctrl);
+	writel((readl(regs->ctrl)) & ~(PDMA_DONE_STATUS_MASK | PDMA_ERR_STATUS_MASK), regs->ctrl);
 	spin_unlock(&chan->lock);
 
 	tasklet_schedule(&chan->err_tasklet);
