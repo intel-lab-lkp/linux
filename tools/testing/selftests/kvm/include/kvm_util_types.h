@@ -14,7 +14,7 @@
 #define __kvm_static_assert(expr, msg, ...) _Static_assert(expr, msg)
 #define kvm_static_assert(expr, ...) __kvm_static_assert(expr, ##__VA_ARGS__, #expr)
 
-typedef uint64_t gpa_t; /* Virtual Machine (Guest) physical address */
-typedef uint64_t gva_t; /* Virtual Machine (Guest) virtual address */
+typedef u64 gpa_t; /* Virtual Machine (Guest) physical address */
+typedef u64 gva_t; /* Virtual Machine (Guest) virtual address */
 
 #endif /* SELFTEST_KVM_UTIL_TYPES_H */

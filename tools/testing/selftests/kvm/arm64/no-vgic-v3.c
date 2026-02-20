@@ -11,7 +11,7 @@ static volatile bool handled;
 
 #define __check_sr_read(r)					\
 	({							\
-		uint64_t val;					\
+		u64 val;					\
 								\
 		handled = false;				\
 		dsb(sy);					\
@@ -48,7 +48,7 @@ static volatile bool handled;
 
 static void guest_code(void)
 {
-	uint64_t val;
+	u64 val;
 
 	/*
 	 * Check that we advertise that ID_AA64PFR0_EL1.GIC == 0, having
@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
-	uint64_t pfr0;
+	u64 pfr0;
 
 	test_disable_default_vgic();
 
