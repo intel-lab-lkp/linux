@@ -687,18 +687,15 @@ static int iic_probe(struct platform_device *ofdev)
 	const u32 *freq;
 	int ret;
 
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	dev = devm_kzalloc(&ofdev->dev, sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
 	platform_set_drvdata(ofdev, dev);
 
-	dev->vaddr = of_iomap(np, 0);
-	if (dev->vaddr == NULL) {
-		dev_err(&ofdev->dev, "failed to iomap device\n");
-		ret = -ENXIO;
-		goto error_cleanup;
-	}
+	dev->vaddr = devm_of_iomap(&ofdev->dev, np, 0, NULL);
+	if (dev->vaddr == NULL)
+		return dev_err_probe(&ofdev->dev, -ENXIO, "failed to iomap device\n");
 
 	init_waitqueue_head(&dev->wq);
 
@@ -736,8 +733,8 @@ static int iic_probe(struct platform_device *ofdev)
 	adap->algo = &iic_algo;
 	adap->timeout = HZ;
 
-	ret = i2c_add_adapter(adap);
-	if (ret  < 0)
+	ret = devm_i2c_add_adapter(&ofdev->dev, adap);
+	if (ret < 0)
 		goto error_cleanup;
 
 	dev_info(&ofdev->dev, "using %s mode\n",
@@ -751,10 +748,6 @@ error_cleanup:
 		free_irq(dev->irq, dev);
 	}
 
-	if (dev->vaddr)
-		iounmap(dev->vaddr);
-
-	kfree(dev);
 	return ret;
 }
 
@@ -765,15 +758,10 @@ static void iic_remove(struct platform_device *ofdev)
 {
 	struct ibm_iic_private *dev = platform_get_drvdata(ofdev);
 
-	i2c_del_adapter(&dev->adap);
-
 	if (dev->irq) {
 		iic_interrupt_mode(dev, 0);
 		free_irq(dev->irq, dev);
 	}
-
-	iounmap(dev->vaddr);
-	kfree(dev);
 }
 
 static const struct of_device_id ibm_iic_match[] = {
