@@ -576,9 +576,7 @@ static const struct xe_rtp_entry_sr engine_was[] = {
 				   SMP_FORCE_128B_OVERFETCH))
 	},
 	{ XE_RTP_NAME("14023061436"),
-	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3000, 3001),
-		       FUNC(xe_rtp_match_first_render_or_compute), OR,
-		       GRAPHICS_VERSION_RANGE(3003, 3005),
+	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3000, 3005),
 		       FUNC(xe_rtp_match_first_render_or_compute)),
 	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, QID_WAIT_FOR_THREAD_NOT_RUN_DISABLE))
 	},
