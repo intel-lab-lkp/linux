@@ -11,6 +11,7 @@
 #ifndef ACPI_APEI_GHES_CPER_H
 #define ACPI_APEI_GHES_CPER_H
 
+#include <linux/atomic.h>
 #include <linux/workqueue.h>
 
 #include <acpi/ghes.h>
@@ -48,6 +49,8 @@
 #define GHES_GDATA_FROM_VENDOR_ENTRY(vendor_entry)                     \
 	((struct acpi_hest_generic_data *)                              \
 	((struct ghes_vendor_record_entry *)(vendor_entry) + 1))
+
+extern struct gen_pool *ghes_estatus_pool;
 
 static inline bool is_hest_type_generic_v2(struct ghes *ghes)
 {
@@ -91,5 +94,8 @@ int __ghes_check_estatus(struct ghes *ghes,
 int __ghes_read_estatus(struct acpi_hest_generic_status *estatus,
 			u64 buf_paddr, enum fixed_addresses fixmap_idx,
 			size_t buf_len);
+int ghes_estatus_cached(struct acpi_hest_generic_status *estatus);
+void ghes_estatus_cache_add(struct acpi_hest_generic *generic,
+			    struct acpi_hest_generic_status *estatus);
 
 #endif /* ACPI_APEI_GHES_CPER_H */
