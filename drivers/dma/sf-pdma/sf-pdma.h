@@ -24,7 +24,7 @@
 
 #define PDMA_MAX_NR_CH					4
 
-#define PDMA_BASE_ADDR					0x3000000
+#define PDMA_BASE_OFFSET				0x80000
 #define PDMA_CHAN_OFFSET				0x1000
 
 /* Register Offset */
@@ -54,7 +54,7 @@
 /* Error Recovery */
 #define MAX_RETRY					1
 
-#define SF_PDMA_REG_BASE(ch)	(pdma->membase + (PDMA_CHAN_OFFSET * (ch)))
+#define SF_PDMA_REG_BASE(ch)	(pdma->membase + PDMA_BASE_OFFSET + (PDMA_CHAN_OFFSET * (ch)))
 
 struct pdma_regs {
 	/* read-write regs */
