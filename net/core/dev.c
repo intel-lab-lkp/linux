@@ -4993,13 +4993,11 @@ static bool rps_flow_is_active(struct rps_dev_flow *rflow,
 static struct rps_dev_flow *
 set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	    struct rps_dev_flow *rflow, u16 next_cpu, u32 hash,
-	    u32 flow_id)
+	    u32 flow_id, struct rps_dev_flow_table *flow_table)
 {
 	if (next_cpu < nr_cpu_ids) {
 		u32 head;
 #ifdef CONFIG_RFS_ACCEL
-		struct netdev_rx_queue *rxqueue;
-		struct rps_dev_flow_table *flow_table;
 		struct rps_dev_flow *old_rflow;
 		struct rps_dev_flow *tmp_rflow;
 		unsigned int tmp_cpu;
@@ -5012,11 +5010,6 @@ set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 			goto out;
 		rxq_index = cpu_rmap_lookup_index(dev->rx_cpu_rmap, next_cpu);
 		if (rxq_index == skb_get_rx_queue(skb))
-			goto out;
-
-		rxqueue = dev->_rx + rxq_index;
-		flow_table = rcu_dereference(rxqueue->rps_flow_table);
-		if (!flow_table)
 			goto out;
 
 		tmp_rflow = &flow_table->flows[flow_id];
@@ -5134,7 +5127,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		      rflow->last_qtail)) >= 0)) {
 			tcpu = next_cpu;
 			rflow = set_rps_cpu(dev, skb, rflow, next_cpu, hash,
-					    flow_id);
+					    flow_id, flow_table);
 		}
 
 		if (tcpu < nr_cpu_ids && cpu_online(tcpu)) {
