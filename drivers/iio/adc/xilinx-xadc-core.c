@@ -1475,7 +1475,18 @@ static struct platform_driver xadc_driver = {
 		.of_match_table = xadc_of_match_table,
 	},
 };
-module_platform_driver(xadc_driver);
+
+static int __init xadc_init(void)
+{
+	return platform_driver_register(&xadc_driver);
+}
+module_init(xadc_init);
+
+static void __exit xadc_exit(void)
+{
+	platform_driver_unregister(&xadc_driver);
+}
+module_exit(xadc_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Lars-Peter Clausen <lars@metafoo.de>");
