@@ -77,6 +77,58 @@ struct dma_fence *dma_fence_chain_walk(struct dma_fence *fence)
 EXPORT_SYMBOL(dma_fence_chain_walk);
 
 /**
+ * dma_fence_chain_find_error - find the latest error
+ * @fence: current chain node
+ *
+ * Walk the chain repeatedly until reaches a fence with error, or the
+ * end of the fence chain. Does not garbage collect.
+ *
+ * Returns the first error it finds in the chain.
+ */
+int64_t dma_fence_chain_find_error(struct dma_fence *fence)
+{
+	struct dma_fence_chain *chain, *prev_chain;
+	struct dma_fence *prev;
+	int64_t error = 0;
+
+	chain = to_dma_fence_chain(fence);
+	if (!chain)
+		return fence->error;
+
+	if (chain->fence->error)
+		return chain->fence->error;
+
+	while ((prev = dma_fence_chain_get_prev(chain))) {
+		prev_chain = to_dma_fence_chain(prev);
+
+		if (prev_chain) {
+
+			if (prev_chain->fence->error) {
+				error = prev_chain->fence->error;
+				dma_fence_put(prev);
+				break;
+			}
+
+			chain = prev_chain;
+		} else {
+
+			if (prev->error)
+				error = prev->error;
+			dma_fence_put(prev);
+			break;
+		}
+
+
+		dma_fence_put(prev);
+
+	}
+
+
+	return error;
+}
+EXPORT_SYMBOL(dma_fence_chain_find_error);
+
+/**
  * dma_fence_chain_find_seqno - find fence chain node by seqno
  * @pfence: pointer to the chain node where to start
  * @seqno: the sequence number to search for

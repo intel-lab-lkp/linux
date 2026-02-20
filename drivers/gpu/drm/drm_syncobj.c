@@ -1654,14 +1654,17 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_syncobj_timeline_array *args = data;
 	struct drm_syncobj **syncobjs;
+	unsigned int valid_flags = DRM_SYNCOBJ_QUERY_FLAGS_LAST_SUBMITTED |
+				   DRM_SYNCOBJ_QUERY_FLAGS_ERROR;
 	uint64_t __user *points = u64_to_user_ptr(args->points);
+	uint64_t __user *handles = u64_to_user_ptr(args->handles);
 	uint32_t i;
 	int ret;
 
 	if (!drm_core_check_feature(dev, DRIVER_SYNCOBJ_TIMELINE))
 		return -EOPNOTSUPP;
 
-	if (args->flags & ~DRM_SYNCOBJ_QUERY_FLAGS_LAST_SUBMITTED)
+	if (args->flags & ~valid_flags)
 		return -EINVAL;
 
 	if (args->count_handles == 0)
@@ -1680,6 +1683,22 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 		uint64_t point;
 
 		fence = drm_syncobj_fence_get(syncobjs[i]);
+
+		if (args->flags & DRM_SYNCOBJ_QUERY_FLAGS_ERROR) {
+			int64_t error = 0;
+
+			if (fence)
+				error = dma_fence_chain_find_error(fence);
+
+			ret = copy_to_user(&handles[i], &error, sizeof(int64_t));
+			ret = ret ? -EFAULT : 0;
+			if (ret) {
+				dma_fence_put(fence);
+				break;
+			}
+
+		}
+
 		chain = to_dma_fence_chain(fence);
 		if (chain) {
 			struct dma_fence *iter, *last_signaled =

@@ -122,6 +122,7 @@ static inline void dma_fence_chain_free(struct dma_fence_chain *chain)
 	     iter = dma_fence_chain_walk(iter))
 
 struct dma_fence *dma_fence_chain_walk(struct dma_fence *fence);
+int64_t dma_fence_chain_find_error(struct dma_fence *fence);
 int dma_fence_chain_find_seqno(struct dma_fence **pfence, uint64_t seqno);
 void dma_fence_chain_init(struct dma_fence_chain *chain,
 			  struct dma_fence *prev,

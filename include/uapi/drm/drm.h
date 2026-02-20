@@ -1044,6 +1044,7 @@ struct drm_syncobj_array {
 };
 
 #define DRM_SYNCOBJ_QUERY_FLAGS_LAST_SUBMITTED (1 << 0) /* last available point on timeline syncobj */
+#define DRM_SYNCOBJ_QUERY_FLAGS_ERROR (1 << 1) /* fill out error codes if they are found */
 struct drm_syncobj_timeline_array {
 	__u64 handles;
 	__u64 points;
