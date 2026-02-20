@@ -6254,8 +6254,17 @@ static void ata_port_detach(struct ata_port *ap)
 	/* Wait for any ongoing EH */
 	ata_port_wait_eh(ap);
 
+	/* Requeue any remaining deferred qc. */
+	ata_scsi_requeue_deferred_qc(ap);
+
 	mutex_lock(&ap->scsi_scan_mutex);
+
+	/* Make sure the deferred qc work finished. */
+	cancel_work_sync(&ap->deferred_qc_work);
+
 	spin_lock_irqsave(ap->lock, flags);
+
+	WARN_ON(ap->deferred_qc);
 
 	/* Remove scsi devices */
 	ata_for_each_link(link, ap, HOST_FIRST) {
@@ -6268,10 +6277,6 @@ static void ata_port_detach(struct ata_port *ap)
 			}
 		}
 	}
-
-	/* Make sure the deferred qc work finished. */
-	cancel_work_sync(&ap->deferred_qc_work);
-	WARN_ON(ap->deferred_qc);
 
 	/* Tell EH to disable all devices */
 	ap->pflags |= ATA_PFLAG_UNLOADING;
