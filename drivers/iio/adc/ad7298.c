@@ -216,9 +216,9 @@ static int ad7298_get_ref_voltage(struct ad7298_state *st)
 			return vref;
 
 		return vref / 1000;
-	} else {
-		return AD7298_INTREF_mV;
 	}
+
+	return AD7298_INTREF_mV;
 }
 
 static int ad7298_read_raw(struct iio_dev *indio_dev,
