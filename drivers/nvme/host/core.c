@@ -1883,9 +1883,13 @@ static bool nvme_init_integrity(struct nvme_ns_head *head,
 	return true;
 }
 
-static void nvme_config_discard(struct nvme_ns *ns, struct queue_limits *lim)
+static void nvme_config_discard(struct nvme_ns *ns, struct nvme_id_ns *id,
+				struct nvme_id_ns_nvm *nvm,
+				struct queue_limits *lim)
 {
 	struct nvme_ctrl *ctrl = ns->ctrl;
+	u32 npdg, npda;
+	u8 optperf;
 
 	if (ctrl->dmrsl && ctrl->dmrsl <= nvme_sect_to_lba(ns->head, UINT_MAX))
 		lim->max_hw_discard_sectors =
@@ -1895,7 +1899,13 @@ static void nvme_config_discard(struct nvme_ns *ns, struct queue_limits *lim)
 	else
 		lim->max_hw_discard_sectors = 0;
 
-	lim->discard_granularity = lim->logical_block_size;
+	optperf = id->nsfeat >> NVME_NS_FEAT_OPTPERF_SHIFT &
+		  NVME_NS_FEAT_OPTPERF_MASK;
+	npdg = optperf & 0x2 && nvm && nvm->npdgl ? le32_to_cpu(nvm->npdgl) :
+	       optperf & 0x1 ? le16_to_cpu(id->npdg) + 1 : 1;
+	npda = optperf & 0x2 && nvm && nvm->npdal ? le32_to_cpu(nvm->npdal) :
+	       optperf ? le16_to_cpu(id->npda) + 1 : 1;
+	lim->discard_granularity = max(npdg, npda) * lim->logical_block_size;
 
 	if (ctrl->dmrl)
 		lim->max_discard_segments = ctrl->dmrl;
@@ -2389,7 +2399,7 @@ static int nvme_update_ns_info_block(struct nvme_ns *ns,
 	if (!nvme_update_disk_info(ns, id, &lim))
 		capacity = 0;
 
-	nvme_config_discard(ns, &lim);
+	nvme_config_discard(ns, id, nvm, &lim);
 	if (IS_ENABLED(CONFIG_BLK_DEV_ZONED) &&
 	    ns->head->ids.csi == NVME_CSI_ZNS)
 		nvme_update_zone_info(ns, &lim, &zi);
