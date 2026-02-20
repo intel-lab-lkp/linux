@@ -111,6 +111,17 @@
  *    difference of how they are maintained in the code. In xe it uses the
  *    xe_rtp infrastructure so the workarounds can be kept in tables, following
  *    a more declarative approach rather than procedural.
+ *
+ * .. note::
+ *    When a workaround applies to every single known IP version in a range,
+ *    the preferred handling is to use a single range-based RTP entry rather
+ *    than individual entries for each version, even if some of the intermediate
+ *    version numbers are currently unused.  If a new intermediate IP version
+ *    appears in the future and is enabled in the driver, any existing
+ *    range-based entries that contain the new version number will need to be
+ *    analyzed to determine whether their workarounds should apply to the new
+ *    version, or whether any existing range based entries needs to be split
+ *    into two entries that do not include the new intermediate version.
  */
 
 #undef XE_REG_MCR
