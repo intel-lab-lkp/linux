@@ -66,6 +66,14 @@ bool cpufreq_supports_freq_invariance(void)
 	return static_branch_likely(&cpufreq_freq_invariance);
 }
 
+void cpufreq_disable_freq_invariance(void)
+{
+	cpus_read_lock();
+	static_branch_disable_cpuslocked(&cpufreq_freq_invariance);
+	cpus_read_unlock();
+}
+EXPORT_SYMBOL_GPL(cpufreq_disable_freq_invariance);
+
 /* Flag to suspend/resume CPUFreq governors */
 static bool cpufreq_suspended;
 

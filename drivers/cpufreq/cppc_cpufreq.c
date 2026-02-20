@@ -952,6 +952,10 @@ static int __init cppc_cpufreq_init(void)
 	ret = cpufreq_register_driver(&cppc_cpufreq_driver);
 	if (ret)
 		cppc_freq_invariance_exit();
+#ifndef CONFIG_ACPI_CPPC_CPUFREQ_FIE
+	else
+		cpufreq_disable_freq_invariance();
+#endif
 
 	return ret;
 }
