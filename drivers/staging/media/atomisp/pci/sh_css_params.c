@@ -752,7 +752,7 @@ sh_css_params_ddr_address_map(void)
 
 /* ****************************************************
  * Each coefficient is stored as 7bits to fit 2 of them into one
- * ISP vector element, so we will store 4 coefficents on every
+ * ISP vector element, so we will store 4 coefficients on every
  * memory word (32bits)
  *
  * 0: Coefficient 0 used bits
