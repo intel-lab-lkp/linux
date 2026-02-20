@@ -348,8 +348,8 @@ static irqreturn_t prueth_tx_irq(int irq, void *dev_id)
 {
 	struct prueth_tx_chn *tx_chn = dev_id;
 
-	tx_chn->irq_disabled = true;
 	disable_irq_nosync(irq);
+	tx_chn->irq_disabled = true;
 	napi_schedule(&tx_chn->napi_tx);
 
 	return IRQ_HANDLED;
