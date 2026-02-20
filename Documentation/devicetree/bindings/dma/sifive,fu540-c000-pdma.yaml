@@ -36,6 +36,7 @@ properties:
           - enum:
               - microchip,mpfs-pdma
               - sifive,fu540-c000-pdma
+              - sifive,fu740-c000-pdma
           - const: sifive,pdma0
     description:
       Should be "sifive,<chip>-pdma" and "sifive,pdma<version>".
