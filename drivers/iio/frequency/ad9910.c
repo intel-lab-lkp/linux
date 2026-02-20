@@ -789,10 +789,31 @@ static int ad9910_reg_access(struct iio_dev *indio_dev,
 	return ret;
 }
 
+static ssize_t sysclk_frequency_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct ad9910_state *st = iio_priv(dev_to_iio_dev(dev));
+
+	return sysfs_emit(buf, "%u\n", st->data.sysclk_freq_hz);
+}
+
+static IIO_DEVICE_ATTR_RO(sysclk_frequency, 0);
+
+static struct attribute *ad9910_attrs[] = {
+	&iio_dev_attr_sysclk_frequency.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group ad9910_attrs_group = {
+	.attrs = ad9910_attrs,
+};
+
 static const struct iio_info ad9910_info = {
 	.read_raw = ad9910_read_raw,
 	.write_raw = ad9910_write_raw,
 	.write_raw_get_fmt = ad9910_write_raw_get_fmt,
+	.attrs = &ad9910_attrs_group,
 	.debugfs_reg_access = &ad9910_reg_access,
 };
 
