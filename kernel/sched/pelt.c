@@ -477,10 +477,15 @@ int update_irq_load_avg(struct rq *rq, u64 running)
 bool update_other_load_avgs(struct rq *rq)
 {
 	u64 now = rq_clock_pelt(rq);
-	const struct sched_class *curr_class = rq->donor->sched_class;
+	struct task_struct *donor;
+	const struct sched_class *curr_class;
 	unsigned long hw_pressure = arch_scale_hw_pressure(cpu_of(rq));
 
 	lockdep_assert_rq_held(rq);
+
+	donor = rcu_dereference_protected(rq->donor,
+					  lockdep_is_held(__rq_lockp(rq)));
+	curr_class = donor->sched_class;
 
 	/* hw_pressure doesn't care about invariance */
 	return update_rt_rq_load_avg(now, rq, curr_class == &rt_sched_class) |

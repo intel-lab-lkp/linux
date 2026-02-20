@@ -1387,12 +1387,13 @@ static __always_inline struct rq *__this_rq(void)
 #define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
 #define this_rq()		__this_rq()
 #define task_rq(p)		cpu_rq(task_cpu(p))
-#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
+#define cpu_curr(cpu)		((cpu_rq(cpu)->curr))
 #define raw_rq()		raw_cpu_ptr(&runqueues)
 
 static inline bool idle_rq(struct rq *rq)
 {
-	return rq->curr == rq->idle && !rq->nr_running && !rq->ttwu_pending;
+	return rcu_access_pointer(rq->curr) == rq->idle &&
+		!rq->nr_running && !rq->ttwu_pending;
 }
 
 /**
@@ -2360,7 +2361,7 @@ static inline u64 global_rt_runtime(void)
  */
 static inline int task_current(struct rq *rq, struct task_struct *p)
 {
-	return rq->curr == p;
+	return rcu_access_pointer(rq->curr) == p;
 }
 
 /*
@@ -2371,7 +2372,7 @@ static inline int task_current(struct rq *rq, struct task_struct *p)
  */
 static inline int task_current_donor(struct rq *rq, struct task_struct *p)
 {
-	return rq->donor == p;
+	return rcu_access_pointer(rq->donor) == p;
 }
 
 static inline bool task_is_blocked(struct task_struct *p)
@@ -2659,7 +2660,7 @@ struct sched_class {
 
 static inline void put_prev_task(struct rq *rq, struct task_struct *prev)
 {
-	WARN_ON_ONCE(rq->donor != prev);
+	WARN_ON_ONCE(rcu_access_pointer(rq->donor) != prev);
 	prev->sched_class->put_prev_task(rq, prev, NULL);
 }
 
@@ -2670,8 +2671,7 @@ static inline void set_next_task(struct rq *rq, struct task_struct *next)
 
 static inline void
 __put_prev_set_next_dl_server(struct rq *rq,
-			      struct task_struct *prev,
-			      struct task_struct *next)
+	struct task_struct *prev, struct task_struct *next)
 {
 	prev->dl_server = NULL;
 	next->dl_server = rq->dl_server;
@@ -2679,10 +2679,9 @@ __put_prev_set_next_dl_server(struct rq *rq,
 }
 
 static inline void put_prev_set_next_task(struct rq *rq,
-					  struct task_struct *prev,
-					  struct task_struct *next)
+	struct task_struct *prev, struct task_struct *next)
 {
-	WARN_ON_ONCE(rq->donor != prev);
+	WARN_ON_ONCE(rcu_access_pointer(rq->donor) != prev);
 
 	__put_prev_set_next_dl_server(rq, prev, next);
 
@@ -2809,9 +2808,11 @@ static inline cpumask_t *alloc_user_cpus_ptr(int node)
 
 static inline struct task_struct *get_push_task(struct rq *rq)
 {
-	struct task_struct *p = rq->donor;
+	struct task_struct *p;
 
 	lockdep_assert_rq_held(rq);
+	p = rcu_dereference_protected(rq->donor,
+				      lockdep_is_held(__rq_lockp(rq)));
 
 	if (rq->push_busy)
 		return NULL;

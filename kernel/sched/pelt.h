@@ -99,7 +99,10 @@ static inline void _update_idle_rq_clock_pelt(struct rq *rq)
  */
 static inline void update_rq_clock_pelt(struct rq *rq, s64 delta)
 {
-	if (unlikely(is_idle_task(rq->curr))) {
+	struct task_struct *curr =
+		rcu_dereference_protected(rq->curr,
+					  lockdep_is_held(__rq_lockp(rq)));
+	if (unlikely(is_idle_task(curr))) {
 		_update_idle_rq_clock_pelt(rq);
 		return;
 	}

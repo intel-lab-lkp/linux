@@ -1166,7 +1166,12 @@ static enum hrtimer_restart dl_server_timer(struct hrtimer *timer, struct sched_
 		 * any relevant server through calling dl_server_update() and
 		 * friends.
 		 */
-		rq->donor->sched_class->update_curr(rq);
+		{
+			struct task_struct *donor =
+			rcu_dereference_protected(rq->donor,
+						  lockdep_is_held(__rq_lockp(rq)));
+			donor->sched_class->update_curr(rq);
+		}
 
 		if (dl_se->dl_defer_idle) {
 			dl_server_stop(dl_se);
