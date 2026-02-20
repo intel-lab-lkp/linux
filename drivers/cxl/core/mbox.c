@@ -314,8 +314,9 @@ static bool cxl_mem_raw_command_allowed(u16 opcode)
  * @in_size: Size of @payload_in in bytes.
  *
  * Return:
- *  * true	- payload_in passes check for @opcode.
- *  * false	- payload_in contains invalid or unsupported values.
+ *  * %0	- payload_in passes check for @opcode.
+ *  * %-EINVAL	- payload_in is too small for the opcode.
+ *  * %-EBUSY	- payload_in contains unsupported values.
  *
  * The driver may inspect payload contents before sending a mailbox
  * command from user space to the device. The intent is to reject
@@ -326,40 +327,44 @@ static bool cxl_mem_raw_command_allowed(u16 opcode)
  *
  * The specific checks are determined by the opcode.
  */
-static bool cxl_payload_from_user_allowed(u16 opcode, void *payload_in,
-					  size_t in_size)
+static int cxl_payload_from_user_allowed(u16 opcode, void *payload_in,
+					 size_t in_size)
 {
 	switch (opcode) {
 	case CXL_MBOX_OP_SET_PARTITION_INFO: {
 		struct cxl_mbox_set_partition_info *pi = payload_in;
 
 		if (in_size < sizeof(*pi))
-			return false;
+			return -EINVAL;
 		if (pi->flags & CXL_SET_PARTITION_IMMEDIATE_FLAG)
-			return false;
+			return -EBUSY;
 		break;
 	}
 	case CXL_MBOX_OP_CLEAR_LOG: {
 		const uuid_t *uuid = (uuid_t *)payload_in;
 
 		if (in_size < sizeof(uuid_t))
-			return false;
+			return -EINVAL;
 		/*
-		 * Restrict the ‘Clear log’ action to only apply to
+		 * Restrict the 'Clear log' action to only apply to
 		 * Vendor debug logs.
 		 */
-		return uuid_equal(uuid, &DEFINE_CXL_VENDOR_DEBUG_UUID);
+		if (!uuid_equal(uuid, &DEFINE_CXL_VENDOR_DEBUG_UUID))
+			return -EBUSY;
+		break;
 	}
 	default:
 		break;
 	}
-	return true;
+	return 0;
 }
 
 static int cxl_mbox_cmd_ctor(struct cxl_mbox_cmd *mbox_cmd,
 			     struct cxl_mailbox *cxl_mbox, u16 opcode,
 			     size_t in_size, size_t out_size, u64 in_payload)
 {
+	int rc;
+
 	*mbox_cmd = (struct cxl_mbox_cmd) {
 		.opcode = opcode,
 		.size_in = in_size,
@@ -371,12 +376,13 @@ static int cxl_mbox_cmd_ctor(struct cxl_mbox_cmd *mbox_cmd,
 		if (IS_ERR(mbox_cmd->payload_in))
 			return PTR_ERR(mbox_cmd->payload_in);
 
-		if (!cxl_payload_from_user_allowed(opcode, mbox_cmd->payload_in,
-						  in_size)) {
+		rc = cxl_payload_from_user_allowed(opcode, mbox_cmd->payload_in,
+						   in_size);
+		if (rc) {
 			dev_dbg(cxl_mbox->host, "%s: input payload not allowed\n",
 				cxl_mem_opcode_to_name(opcode));
 			kvfree(mbox_cmd->payload_in);
-			return -EBUSY;
+			return rc;
 		}
 	}
 
