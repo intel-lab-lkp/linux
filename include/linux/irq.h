@@ -1274,6 +1274,7 @@ void ipi_mux_process(void);
 int ipi_mux_create(unsigned int nr_ipi, void (*mux_send)(unsigned int cpu));
 
 #ifdef CONFIG_GENERIC_IRQ_MULTI_HANDLER
+#include <asm/runtime-const.h>
 /*
  * Registers a generic IRQ handling function as the top-level IRQ handler in
  * the system, which is generally the first C code called from an assembly
@@ -1288,7 +1289,8 @@ int __init set_handle_irq(void (*handle_irq)(struct pt_regs *));
  * Allows interrupt handlers to find the irqchip that's been registered as the
  * top-level IRQ handler.
  */
-extern void (*handle_arch_irq)(struct pt_regs *) __ro_after_init;
+extern void (*_handle_arch_irq)(struct pt_regs *) __ro_after_init;
+#define handle_arch_irq runtime_const_ptr(_handle_arch_irq)
 asmlinkage void generic_handle_arch_irq(struct pt_regs *regs);
 #else
 #ifndef set_handle_irq

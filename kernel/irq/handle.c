@@ -15,13 +15,14 @@
 #include <linux/kernel_stat.h>
 
 #include <asm/irq_regs.h>
+#include <asm/runtime-const.h>
 
 #include <trace/events/irq.h>
 
 #include "internals.h"
 
 #ifdef CONFIG_GENERIC_IRQ_MULTI_HANDLER
-void (*handle_arch_irq)(struct pt_regs *) __ro_after_init;
+void (*_handle_arch_irq)(struct pt_regs *) __ro_after_init;
 #endif
 
 /**
@@ -270,10 +271,11 @@ irqreturn_t handle_irq_event(struct irq_desc *desc)
 #ifdef CONFIG_GENERIC_IRQ_MULTI_HANDLER
 int __init set_handle_irq(void (*handle_irq)(struct pt_regs *))
 {
-	if (handle_arch_irq)
+	if (_handle_arch_irq)
 		return -EBUSY;
 
-	handle_arch_irq = handle_irq;
+	_handle_arch_irq = handle_irq;
+	runtime_const_init(ptr, _handle_arch_irq);
 	return 0;
 }
 
