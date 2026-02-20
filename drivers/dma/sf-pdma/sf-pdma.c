@@ -298,7 +298,28 @@ static void sf_pdma_free_desc(struct virt_dma_desc *vdesc)
 static void sf_pdma_donebh_tasklet(struct tasklet_struct *t)
 {
 	struct sf_pdma_chan *chan = from_tasklet(chan, t, done_tasklet);
+	struct sf_pdma_desc *desc;
 	unsigned long flags;
+
+	spin_lock_irqsave(&chan->vchan.lock, flags);
+	desc = chan->desc;
+	if (!desc) {
+		/*
+		 * The descriptor was already freed (e.g., by terminate_all
+		 * or completion on another CPU). Nothing to do.
+		 */
+		spin_unlock_irqrestore(&chan->vchan.lock, flags);
+		return;
+	}
+
+	list_del(&desc->vdesc.node);
+	vchan_cookie_complete(&desc->vdesc);
+
+	chan->desc = sf_pdma_get_first_pending_desc(chan);
+	if (chan->desc)
+		sf_pdma_xfer_desc(chan);
+
+	spin_unlock_irqrestore(&chan->vchan.lock, flags);
 
 	spin_lock_irqsave(&chan->lock, flags);
 	if (chan->xfer_err) {
@@ -307,23 +328,25 @@ static void sf_pdma_donebh_tasklet(struct tasklet_struct *t)
 		chan->xfer_err = false;
 	}
 	spin_unlock_irqrestore(&chan->lock, flags);
-
-	spin_lock_irqsave(&chan->vchan.lock, flags);
-	list_del(&chan->desc->vdesc.node);
-	vchan_cookie_complete(&chan->desc->vdesc);
-
-	chan->desc = sf_pdma_get_first_pending_desc(chan);
-	if (chan->desc)
-		sf_pdma_xfer_desc(chan);
-
-	spin_unlock_irqrestore(&chan->vchan.lock, flags);
 }
 
 static void sf_pdma_errbh_tasklet(struct tasklet_struct *t)
 {
 	struct sf_pdma_chan *chan = from_tasklet(chan, t, err_tasklet);
-	struct sf_pdma_desc *desc = chan->desc;
+	struct sf_pdma_desc *desc;
 	unsigned long flags;
+
+	spin_lock_irqsave(&chan->vchan.lock, flags);
+	desc = chan->desc;
+	if (!desc) {
+		/*
+		 * The descriptor was already freed (e.g., by terminate_all
+		 * or completion on another CPU). Nothing to do.
+		 */
+		spin_unlock_irqrestore(&chan->vchan.lock, flags);
+		return;
+	}
+	spin_unlock_irqrestore(&chan->vchan.lock, flags);
 
 	spin_lock_irqsave(&chan->lock, flags);
 	if (chan->retries <= 0) {
