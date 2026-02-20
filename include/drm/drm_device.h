@@ -67,6 +67,23 @@ enum switch_power_state {
 };
 
 /**
+ * enum drm_kms_reset_phase - reset phase of drm device
+ */
+enum drm_kms_reset_phase {
+	/** @DRM_KMS_RESET_NONE: Not currently attempting recovery */
+	DRM_KMS_RESET_NONE,
+
+	/** @DRM_KMS_RESET_FORCE_MODESET: Force a full modeset */
+	DRM_KMS_RESET_FORCE_MODESET,
+
+	/** @DRM_KMS_RESET_VENDOR: Attempt a vendor reset */
+	DRM_KMS_RESET_VENDOR,
+
+	/** @DRM_KMS_RESET_GIVE_UP: All recovery methods failed */
+	DRM_KMS_RESET_GIVE_UP,
+};
+
+/**
  * struct drm_device - DRM device structure
  *
  * This structure represent a complete card that
@@ -375,6 +392,13 @@ struct drm_device {
 	 * Root directory for debugfs files.
 	 */
 	struct dentry *debugfs_root;
+
+	/**
+	 * @reset_phase:
+	 *
+	 * Reset phase that the device is in.
+	 */
+	enum drm_kms_reset_phase reset_phase;
 };
 
 void drm_dev_set_dma_dev(struct drm_device *dev, struct device *dma_dev);

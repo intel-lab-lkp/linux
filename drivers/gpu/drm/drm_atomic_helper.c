@@ -42,6 +42,7 @@
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_panic.h>
 #include <drm/drm_print.h>
+#include <drm/drm_probe_helper.h>
 #include <drm/drm_self_refresh_helper.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_writeback.h>
@@ -1940,30 +1941,62 @@ EXPORT_SYMBOL(drm_atomic_helper_wait_for_vblanks);
  *
  * This requires that drivers use the nonblocking commit tracking support
  * initialized using drm_atomic_helper_setup_commit().
+ *
+ * Returns:
+ * -ETIMEDOUT to indicate that drivers can attempt a vendor reset, 0 otherwise.
  */
-void drm_atomic_helper_wait_for_flip_done(struct drm_device *dev,
-					  struct drm_atomic_state *state)
+int drm_atomic_helper_wait_for_flip_done(struct drm_device *dev,
+					 struct drm_atomic_state *state)
 {
 	struct drm_crtc *crtc;
+	int ret = 0;
 	int i;
 
 	for (i = 0; i < dev->mode_config.num_crtc; i++) {
 		struct drm_crtc_commit *commit = state->crtcs[i].commit;
-		int ret;
 
 		crtc = state->crtcs[i].ptr;
 
 		if (!crtc || !commit)
 			continue;
 
-		ret = wait_for_completion_timeout(&commit->flip_done, 10 * HZ);
-		if (ret == 0)
-			drm_err(dev, "[CRTC:%d:%s] flip_done timed out\n",
-				crtc->base.id, crtc->name);
+		if (!wait_for_completion_timeout(&commit->flip_done, 10 * HZ)) {
+			switch (dev->reset_phase) {
+			case DRM_KMS_RESET_NONE:
+				drm_err(dev, "[CRTC:%d:%s] flip_done timed out\n",
+					crtc->base.id, crtc->name);
+				dev->reset_phase = DRM_KMS_RESET_FORCE_MODESET;
+				drm_kms_helper_hotplug_event(dev);
+				break;
+			case DRM_KMS_RESET_FORCE_MODESET:
+				drm_err(dev, "[CRTC:%d:%s] force full modeset failed\n",
+					crtc->base.id, crtc->name);
+				dev->reset_phase = DRM_KMS_RESET_VENDOR;
+				ret = -ETIMEDOUT;
+				break;
+			case DRM_KMS_RESET_VENDOR:
+				drm_err(dev, "[CRTC:%d:%s] KMS recovery failed!\n",
+					crtc->base.id, crtc->name);
+				dev->reset_phase = DRM_KMS_RESET_GIVE_UP;
+				break;
+			default:
+				break;
+			}
+
+			goto exit;
+		}
 	}
 
+	if (dev->reset_phase) {
+		drm_info(dev, "KMS recovery succeeded!\n");
+		dev->reset_phase = DRM_KMS_RESET_NONE;
+	}
+
+exit:
 	if (state->fake_commit)
 		complete_all(&state->fake_commit->flip_done);
+
+	return ret;
 }
 EXPORT_SYMBOL(drm_atomic_helper_wait_for_flip_done);
 
