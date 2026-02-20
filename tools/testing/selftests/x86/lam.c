@@ -26,9 +26,11 @@
 
 /* LAM modes, these definitions were copied from kernel code */
 #define LAM_NONE                0
-#define LAM_U57_BITS            6
+#define LAM_U57_BITS            4
+#define LAM_MAX_BITS            6
 
-#define LAM_U57_MASK            (0x3fULL << 57)
+#define LAM_U57_MASK            (0xfULL << 57)
+#define LAM_MAX_MASK            (0x3fULL << 57)
 /* arch prctl for LAM */
 #define ARCH_GET_UNTAG_MASK     0x4001
 #define ARCH_ENABLE_TAGGED_ADDR 0x4002
@@ -175,7 +177,7 @@ static int set_lam(unsigned long lam)
 	int ret = 0;
 	uint64_t ptr = 0;
 
-	if (lam != LAM_U57_BITS && lam != LAM_NONE)
+	if (lam != LAM_U57_BITS && lam != LAM_MAX_BITS && lam != LAM_NONE)
 		return -1;
 
 	/* Skip check return */
@@ -184,16 +186,21 @@ static int set_lam(unsigned long lam)
 	/* Get untagged mask */
 	syscall(SYS_arch_prctl, ARCH_GET_UNTAG_MASK, &ptr);
 
+	/* Update lam in case lam6 is enabled */
+	syscall(SYS_arch_prctl, ARCH_GET_MAX_TAG_BITS, &lam);
+
 	/* Check mask returned is expected */
 	if (lam == LAM_U57_BITS)
 		ret = (ptr != ~(LAM_U57_MASK));
+	else if (lam == LAM_MAX_BITS)
+		ret = (ptr != ~(LAM_MAX_MASK));
 	else if (lam == LAM_NONE)
 		ret = (ptr != -1ULL);
 
 	return ret;
 }
 
-static unsigned long get_default_tag_bits(void)
+static unsigned long get_default_tag_bits(int bits)
 {
 	pid_t pid;
 	int lam = LAM_NONE;
@@ -204,8 +211,8 @@ static unsigned long get_default_tag_bits(void)
 		perror("Fork failed.");
 	} else if (pid == 0) {
 		/* Set LAM mode in child process */
-		if (set_lam(LAM_U57_BITS) == 0)
-			lam = LAM_U57_BITS;
+		if (set_lam(bits) == 0)
+			syscall(SYS_arch_prctl, ARCH_GET_MAX_TAG_BITS, &lam);
 		else
 			lam = LAM_NONE;
 		exit(lam);
@@ -215,6 +222,27 @@ static unsigned long get_default_tag_bits(void)
 	}
 
 	return lam;
+}
+
+static int change_lam_width(unsigned char width)
+{
+	char buf[2];
+	int ret, fd;
+
+	snprintf(buf, sizeof(buf), "%u", width);
+	fd = open("/sys/kernel/debug/x86/lam_available_bits", O_WRONLY);
+	if (fd < 0) {
+		ksft_print_msg("lam_available_bits debug file not found!\n");
+		return fd;
+	}
+
+	ret = write(fd, buf, sizeof(buf));
+	if (ret < 0)
+		return ret;
+
+	close(fd);
+
+	return 0;
 }
 
 /*
@@ -284,20 +312,32 @@ static int handle_lam_test(void *src, unsigned int lam)
 	return (!!strcmp((char *)src, (char *)ptr));
 }
 
-
 int handle_max_bits(struct testcases *test)
 {
-	unsigned long exp_bits = get_default_tag_bits();
-	unsigned long bits = 0;
+	unsigned long exp_bits, bits = 0;
+	int ret = 1;
 
-	if (exp_bits != LAM_NONE)
-		exp_bits = LAM_U57_BITS;
+	if (test->later) {
+		ret = change_lam_width(LAM_MAX_BITS);
+		if (ret)
+			return ret;
+	}
+
+	exp_bits = get_default_tag_bits(test->lam);
 
 	/* Get LAM max tag bits */
 	if (syscall(SYS_arch_prctl, ARCH_GET_MAX_TAG_BITS, &bits) == -1)
-		return 1;
+		goto out;
 
-	return (exp_bits != bits);
+	ret = exp_bits != bits;
+out:
+	if (test->later) {
+		ret = change_lam_width(LAM_U57_BITS);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
 }
 
 /*
@@ -968,8 +1008,29 @@ static struct testcases malloc_cases[] = {
 
 static struct testcases bits_cases[] = {
 	{
+		.later = 0,
+		.lam = LAM_U57_BITS,
 		.test_func = handle_max_bits,
 		.msg = "BITS: Check default tag bits\n",
+	},
+	{
+		.later = 1,
+		.lam = LAM_U57_BITS,
+		.test_func = handle_max_bits,
+		.msg = "BITS: Check if 4 bits can be requested in 6 bit mode.\n",
+	},
+	{
+		.later = 0,
+		.expected = 1,
+		.lam = LAM_MAX_BITS,
+		.test_func = handle_max_bits,
+		.msg = "BITS:[Negative] Check if 6 bits can be requested in 4 bit mode.\n",
+	},
+	{
+		.later = 1,
+		.lam = LAM_MAX_BITS,
+		.test_func = handle_max_bits,
+		.msg = "BITS: Check if 6 bits can be requested in 6 bit mode.\n",
 	},
 };
 
