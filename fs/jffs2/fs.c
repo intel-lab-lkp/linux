@@ -411,6 +411,13 @@ int jffs2_do_remount_fs(struct super_block *sb, struct fs_context *fc)
 		mutex_unlock(&c->alloc_sem);
 	}
 
+	if (!(fc->sb_flags & SB_RDONLY) && c->mount_opts.erase_on_mount) {
+		pr_info("erase_on_mount option set, erasing all pending blocks\n");
+		while (!list_empty(&c->erase_complete_list) ||
+		!list_empty(&c->erase_pending_list))
+			jffs2_erase_pending_blocks(c, 1);
+	}
+
 	if (!(fc->sb_flags & SB_RDONLY))
 		jffs2_start_garbage_collect_thread(c);
 
@@ -594,6 +601,13 @@ int jffs2_do_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_magic = JFFS2_SUPER_MAGIC;
 	sb->s_time_min = 0;
 	sb->s_time_max = U32_MAX;
+
+	if (!sb_rdonly(sb) && c->mount_opts.erase_on_mount) {
+		pr_info("erase_on_mount option set, erasing all pending blocks\n");
+		while (!list_empty(&c->erase_complete_list) ||
+		!list_empty(&c->erase_pending_list))
+			jffs2_erase_pending_blocks(c, 1);
+	}
 
 	if (!sb_rdonly(sb))
 		jffs2_start_garbage_collect_thread(c);

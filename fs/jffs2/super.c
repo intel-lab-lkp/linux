@@ -91,6 +91,8 @@ static int jffs2_show_options(struct seq_file *s, struct dentry *root)
 		seq_printf(s, ",compr=%s", jffs2_compr_name(opts->compr));
 	if (opts->set_rp_size)
 		seq_printf(s, ",rp_size=%u", opts->rp_size / 1024);
+	if (opts->erase_on_mount)
+		seq_puts(s, ",erase_on_mount");
 
 	return 0;
 }
@@ -167,6 +169,7 @@ static const struct export_operations jffs2_export_ops = {
 enum {
 	Opt_override_compr,
 	Opt_rp_size,
+	Opt_erase_on_mount,
 };
 
 static const struct constant_table jffs2_param_compr[] = {
@@ -183,6 +186,7 @@ static const struct constant_table jffs2_param_compr[] = {
 static const struct fs_parameter_spec jffs2_fs_parameters[] = {
 	fsparam_enum	("compr",	Opt_override_compr, jffs2_param_compr),
 	fsparam_u32	("rp_size",	Opt_rp_size),
+	fsparam_flag	("erase_on_mount",	Opt_erase_on_mount),
 	{}
 };
 
@@ -207,6 +211,9 @@ static int jffs2_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		c->mount_opts.rp_size = result.uint_32 * 1024;
 		c->mount_opts.set_rp_size = true;
 		break;
+	case Opt_erase_on_mount:
+		c->mount_opts.erase_on_mount = true;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -228,6 +235,9 @@ static inline void jffs2_update_mount_opts(struct fs_context *fc)
 		c->mount_opts.set_rp_size = new_c->mount_opts.set_rp_size;
 		c->mount_opts.rp_size = new_c->mount_opts.rp_size;
 	}
+
+	c->mount_opts.erase_on_mount = new_c->mount_opts.erase_on_mount;
+
 	mutex_unlock(&c->alloc_sem);
 }
 
