@@ -19,12 +19,12 @@ u32 intel_fbdev_fb_pitch_align(u32 stride)
 
 struct drm_gem_object *intel_fbdev_fb_bo_create(struct drm_device *drm, int size)
 {
-	struct drm_i915_private *dev_priv = to_i915(drm);
+	struct drm_i915_private *i915 = to_i915(drm);
 	struct drm_i915_gem_object *obj;
 
 	obj = ERR_PTR(-ENODEV);
-	if (HAS_LMEM(dev_priv)) {
-		obj = i915_gem_object_create_lmem(dev_priv, size,
+	if (HAS_LMEM(i915)) {
+		obj = i915_gem_object_create_lmem(i915, size,
 						  I915_BO_ALLOC_CONTIGUOUS |
 						  I915_BO_ALLOC_USER);
 	} else {
@@ -35,10 +35,10 @@ struct drm_gem_object *intel_fbdev_fb_bo_create(struct drm_device *drm, int size
 		 *
 		 * Also skip stolen on MTL as Wa_22018444074 mitigation.
 		 */
-		if (!IS_METEORLAKE(dev_priv) && size * 2 < dev_priv->dsm.usable_size)
-			obj = i915_gem_object_create_stolen(dev_priv, size);
+		if (!IS_METEORLAKE(i915) && size * 2 < i915->dsm.usable_size)
+			obj = i915_gem_object_create_stolen(i915, size);
 		if (IS_ERR(obj))
-			obj = i915_gem_object_create_shmem(dev_priv, size);
+			obj = i915_gem_object_create_shmem(i915, size);
 	}
 
 	if (IS_ERR(obj)) {
