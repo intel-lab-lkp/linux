@@ -210,32 +210,6 @@ int rtw_init_evt_priv(struct evt_priv *pevtpriv)
 	return 0;
 }
 
-void _rtw_free_evt_priv(struct	evt_priv *pevtpriv)
-{
-	cancel_work_sync(&pevtpriv->c2h_wk);
-	while (pevtpriv->c2h_wk_alive)
-		msleep(10);
-
-	while (!rtw_cbuf_empty(pevtpriv->c2h_queue)) {
-		void *c2h = rtw_cbuf_pop(pevtpriv->c2h_queue);
-
-		if (c2h && c2h != (void *)pevtpriv)
-			kfree(c2h);
-	}
-	kfree(pevtpriv->c2h_queue);
-}
-
-void _rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
-{
-	if (pcmdpriv) {
-		kfree(pcmdpriv->cmd_allocated_buf);
-
-		kfree(pcmdpriv->rsp_allocated_buf);
-
-		mutex_destroy(&pcmdpriv->sctx_mutex);
-	}
-}
-
 /*
  * Calling Context:
  *
@@ -246,7 +220,7 @@ void _rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
  *
  */
 
-int _rtw_enqueue_cmd(struct __queue *queue, struct cmd_obj *obj)
+static int _rtw_enqueue_cmd(struct __queue *queue, struct cmd_obj *obj)
 {
 	unsigned long irqL;
 
@@ -265,38 +239,35 @@ exit:
 	return _SUCCESS;
 }
 
-struct	cmd_obj	*_rtw_dequeue_cmd(struct __queue *queue)
-{
-	unsigned long irqL;
-	struct cmd_obj *obj;
-
-	/* spin_lock_bh(&(queue->lock)); */
-	spin_lock_irqsave(&queue->lock, irqL);
-	if (list_empty(&queue->queue)) {
-		obj = NULL;
-	} else {
-		obj = container_of(get_next(&queue->queue), struct cmd_obj, list);
-		list_del_init(&obj->list);
-	}
-
-	/* spin_unlock_bh(&(queue->lock)); */
-	spin_unlock_irqrestore(&queue->lock, irqL);
-
-	return obj;
-}
-
 void rtw_free_evt_priv(struct	evt_priv *pevtpriv)
 {
-	_rtw_free_evt_priv(pevtpriv);
+	cancel_work_sync(&pevtpriv->c2h_wk);
+	while (pevtpriv->c2h_wk_alive)
+		msleep(10);
+
+	while (!rtw_cbuf_empty(pevtpriv->c2h_queue)) {
+		void *c2h = rtw_cbuf_pop(pevtpriv->c2h_queue);
+
+		if (c2h && c2h != (void *)pevtpriv)
+			kfree(c2h);
+	}
+	kfree(pevtpriv->c2h_queue);
+
 }
 
 void rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
 {
-	_rtw_free_cmd_priv(pcmdpriv);
+	if (pcmdpriv) {
+		kfree(pcmdpriv->cmd_allocated_buf);
+
+		kfree(pcmdpriv->rsp_allocated_buf);
+
+		mutex_destroy(&pcmdpriv->sctx_mutex);
+	}
+
 }
 
-int rtw_cmd_filter(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj);
-int rtw_cmd_filter(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj)
+static int rtw_cmd_filter(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj)
 {
 	u8 bAllow = false; /* set to true to allow enqueuing cmd when hw_init_completed is false */
 
@@ -337,7 +308,24 @@ exit:
 
 struct	cmd_obj	*rtw_dequeue_cmd(struct cmd_priv *pcmdpriv)
 {
-	return _rtw_dequeue_cmd(&pcmdpriv->cmd_queue);
+	unsigned long irqL;
+	struct cmd_obj *obj;
+	struct __queue *queue = &pcmdpriv->cmd_queue;
+
+	/* spin_lock_bh(&(queue->lock)); */
+	spin_lock_irqsave(&queue->lock, irqL);
+	if (list_empty(&queue->queue)) {
+		obj = NULL;
+	} else {
+		obj = container_of(get_next(&queue->queue), struct cmd_obj, list);
+		list_del_init(&obj->list);
+	}
+
+	/* spin_unlock_bh(&(queue->lock)); */
+	spin_unlock_irqrestore(&queue->lock, irqL);
+
+	return obj;
+
 }
 
 void rtw_free_cmd_obj(struct cmd_obj *pcmd)
