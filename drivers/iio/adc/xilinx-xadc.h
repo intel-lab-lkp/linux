@@ -63,6 +63,12 @@ struct xadc {
 	unsigned int zynq_intmask;
 	struct delayed_work zynq_unmask_work;
 
+#ifdef CONFIG_XILINX_XADC_I2C
+	bool hw_initialized;
+	unsigned int conf0;
+	unsigned int bipolar_mask;
+#endif
+
 	struct mutex mutex;
 	spinlock_t lock;
 
@@ -72,6 +78,7 @@ struct xadc {
 enum xadc_type {
 	XADC_TYPE_S7, /* Series 7 */
 	XADC_TYPE_US, /* UltraScale and UltraScale+ */
+	XADC_TYPE_US_I2C, /* UltraScale+ I2C interface */
 };
 
 struct xadc_ops {

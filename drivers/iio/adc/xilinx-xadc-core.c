@@ -11,9 +11,12 @@
  *  - AXI XADC interface: Xilinx PG019
  */
 
+#include <linux/bits.h>
+#include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -34,6 +37,22 @@
 #include <linux/iio/triggered_buffer.h>
 
 #include "xilinx-xadc.h"
+
+#ifdef CONFIG_XILINX_XADC_I2C
+#define XADC_I2C_READ_DATA_SIZE		2
+#define XADC_I2C_WRITE_DATA_SIZE	4	/* 32-bit DRP packet */
+#define XADC_I2C_INSTR_READ		BIT(2)
+#define XADC_I2C_INSTR_WRITE		BIT(3)
+
+#define XADC_I2C_DRP_DATA0_MASK		GENMASK(7, 0)
+#define XADC_I2C_DRP_DATA1_MASK		GENMASK(15, 8)
+#define XADC_I2C_DRP_ADDR_MASK		GENMASK(7, 0)
+
+struct xadc_i2c {
+	struct xadc xadc;
+	struct i2c_client *client;
+};
+#endif /* CONFIG_XILINX_XADC_I2C */
 
 static int xadc_parse_dt(struct iio_dev *indio_dev, unsigned int *conf, int irq);
 
@@ -595,6 +614,108 @@ static const struct xadc_ops xadc_us_axi_ops = {
 	.temp_offset = 280231,
 };
 
+#ifdef CONFIG_XILINX_XADC_I2C
+static int xadc_i2c_transaction(struct xadc *xadc, unsigned int reg, uint16_t write_data,
+				bool is_write, uint16_t *read_data)
+{
+	struct xadc_i2c *xadc_i2c = container_of(xadc, struct xadc_i2c, xadc);
+	struct i2c_client *client = xadc_i2c->client;
+	char read_buffer[XADC_I2C_READ_DATA_SIZE];
+	char write_buffer[XADC_I2C_WRITE_DATA_SIZE] = { 0 };
+	int ret;
+
+	if (is_write) {
+		write_buffer[0] = FIELD_GET(XADC_I2C_DRP_DATA0_MASK, write_data);
+		write_buffer[1] = FIELD_GET(XADC_I2C_DRP_DATA1_MASK, write_data);
+		write_buffer[2] = FIELD_GET(XADC_I2C_DRP_ADDR_MASK, reg);
+		write_buffer[3] = XADC_I2C_INSTR_WRITE;
+	} else {
+		write_buffer[2] = FIELD_GET(XADC_I2C_DRP_ADDR_MASK, reg);
+		write_buffer[3] = XADC_I2C_INSTR_READ;
+	}
+
+	ret = i2c_master_send(client, write_buffer, XADC_I2C_WRITE_DATA_SIZE);
+	if (ret < 0)
+		return ret;
+
+	/* Read response for read operations */
+	if (!is_write) {
+		ret = i2c_master_recv(client, read_buffer, XADC_I2C_READ_DATA_SIZE);
+		if (ret < 0)
+			return ret;
+
+		*read_data = FIELD_PREP(XADC_I2C_DRP_DATA0_MASK, read_buffer[0]) |
+				FIELD_PREP(XADC_I2C_DRP_DATA1_MASK, read_buffer[1]);
+	}
+
+	return 0;
+}
+
+static int xadc_hardware_init(struct xadc *xadc)
+{
+	int ret, i;
+
+	for (i = 0; i < 16; i++) {
+		ret = xadc_i2c_transaction(xadc, XADC_REG_THRESHOLD(i), 0, false,
+					   &xadc->threshold[i]);
+		if (ret)
+			return ret;
+	}
+
+	ret = xadc_i2c_transaction(xadc, XADC_REG_CONF0, xadc->conf0, true, NULL);
+	if (ret)
+		return ret;
+
+	ret = xadc_i2c_transaction(xadc, XADC_REG_INPUT_MODE(0), xadc->bipolar_mask, true, NULL);
+	if (ret)
+		return ret;
+
+	ret = xadc_i2c_transaction(xadc, XADC_REG_INPUT_MODE(1), xadc->bipolar_mask >> 16, true,
+				   NULL);
+	if (ret)
+		return ret;
+
+	xadc->hw_initialized = true;
+
+	return 0;
+}
+
+static int xadc_i2c_read_reg(struct xadc *xadc, unsigned int reg, uint16_t *val)
+{
+	if (!xadc->hw_initialized) {
+		int ret;
+
+		ret = xadc_hardware_init(xadc);
+		if (ret)
+			return ret;
+	}
+
+	return xadc_i2c_transaction(xadc, reg, 0, false, val);
+}
+
+static int xadc_i2c_write_reg(struct xadc *xadc, unsigned int reg, uint16_t val)
+{
+	if (!xadc->hw_initialized) {
+		int ret;
+
+		ret = xadc_hardware_init(xadc);
+		if (ret)
+			return ret;
+	}
+
+	return xadc_i2c_transaction(xadc, reg, val, true, NULL);
+}
+
+static const struct xadc_ops xadc_system_mgmt_wiz_i2c_ops = {
+	.read = xadc_i2c_read_reg,
+	.write = xadc_i2c_write_reg,
+	.setup_channels = xadc_parse_dt,
+	.type = XADC_TYPE_US_I2C,
+	.temp_scale = 509314,
+	.temp_offset = 280231,
+};
+#endif /* CONFIG_XILINX_XADC_I2C */
+
 static int _xadc_update_adc_reg(struct xadc *xadc, unsigned int reg,
 	uint16_t mask, uint16_t val)
 {
@@ -781,7 +902,8 @@ static int xadc_power_adc_b(struct xadc *xadc, unsigned int seq_mode)
 	 * non-existing ADC-B powers down the main ADC, so just return and don't
 	 * do anything.
 	 */
-	if (xadc->ops->type == XADC_TYPE_US)
+	if (xadc->ops->type == XADC_TYPE_US ||
+	    xadc->ops->type == XADC_TYPE_US_I2C)
 		return 0;
 
 	/* Powerdown the ADC-B when it is not needed. */
@@ -804,7 +926,8 @@ static int xadc_get_seq_mode(struct xadc *xadc, unsigned long scan_mode)
 	unsigned int aux_scan_mode = scan_mode >> 16;
 
 	/* UltraScale has only one ADC and supports only continuous mode */
-	if (xadc->ops->type == XADC_TYPE_US)
+	if (xadc->ops->type == XADC_TYPE_US ||
+	    xadc->ops->type == XADC_TYPE_US_I2C)
 		return XADC_CONF1_SEQ_CONTINUOUS;
 
 	if (xadc->external_mux_mode == XADC_EXTERNAL_MUX_DUAL)
@@ -1305,6 +1428,7 @@ static int xadc_parse_dt(struct iio_dev *indio_dev, unsigned int *conf, int irq)
 static const char * const xadc_type_names[] = {
 	[XADC_TYPE_S7] = "xadc",
 	[XADC_TYPE_US] = "xilinx-system-monitor",
+	[XADC_TYPE_US_I2C] = "xilinx-system-monitor",
 };
 
 static void xadc_cancel_delayed_work(void *data)
@@ -1468,6 +1592,65 @@ static int xadc_probe(struct platform_device *pdev)
 	return devm_iio_device_register(dev, indio_dev);
 }
 
+#ifdef CONFIG_XILINX_XADC_I2C
+static int xadc_i2c_probe(struct i2c_client *client)
+{
+	struct device *dev = &client->dev;
+	unsigned int conf0, bipolar_mask;
+	const struct xadc_ops *ops;
+	struct iio_dev *indio_dev;
+	struct xadc_i2c *xadc_i2c;
+	struct xadc *xadc;
+	int ret;
+
+	indio_dev = xadc_device_setup(dev, sizeof(*xadc_i2c), &ops);
+	if (IS_ERR(indio_dev))
+		return PTR_ERR(indio_dev);
+
+	xadc_i2c = iio_priv(indio_dev);
+	xadc_i2c->client = client;
+	xadc = &xadc_i2c->xadc;
+	xadc->clk = NULL;
+	xadc->ops = ops;
+	mutex_init(&xadc->mutex);
+	spin_lock_init(&xadc->lock);
+
+	indio_dev->name = xadc_type_names[xadc->ops->type];
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->info = &xadc_info;
+
+	ret = xadc_device_configure(dev, indio_dev, 0, &conf0, &bipolar_mask);
+	if (ret) {
+		dev_err(dev, "Failed to setup the device: %d\n", ret);
+		return ret;
+	}
+
+	i2c_set_clientdata(client, indio_dev);
+	xadc->conf0 = conf0;
+	xadc->bipolar_mask = bipolar_mask;
+	xadc->hw_initialized = false;
+
+	return devm_iio_device_register(dev, indio_dev);
+}
+
+static const struct of_device_id xadc_i2c_of_match_table[] = {
+	{
+		.compatible = "xlnx,system-management-wiz-1.3",
+		.data = &xadc_system_mgmt_wiz_i2c_ops
+	},
+	{ },
+};
+MODULE_DEVICE_TABLE(of, xadc_i2c_of_match_table);
+
+static struct i2c_driver xadc_i2c_driver = {
+	.probe = xadc_i2c_probe,
+	.driver = {
+		.name = "xadc-i2c",
+		.of_match_table = xadc_i2c_of_match_table,
+	},
+};
+#endif /* CONFIG_XILINX_XADC_I2C */
+
 static struct platform_driver xadc_driver = {
 	.probe = xadc_probe,
 	.driver = {
@@ -1478,12 +1661,29 @@ static struct platform_driver xadc_driver = {
 
 static int __init xadc_init(void)
 {
-	return platform_driver_register(&xadc_driver);
+	int ret;
+
+	ret = platform_driver_register(&xadc_driver);
+	if (ret)
+		return ret;
+
+#ifdef CONFIG_XILINX_XADC_I2C
+	ret = i2c_add_driver(&xadc_i2c_driver);
+	if (ret) {
+		platform_driver_unregister(&xadc_driver);
+		return ret;
+	}
+#endif
+
+	return 0;
 }
 module_init(xadc_init);
 
 static void __exit xadc_exit(void)
 {
+#ifdef CONFIG_XILINX_XADC_I2C
+	i2c_del_driver(&xadc_i2c_driver);
+#endif
 	platform_driver_unregister(&xadc_driver);
 }
 module_exit(xadc_exit);
