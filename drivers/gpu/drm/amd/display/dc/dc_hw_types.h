@@ -342,7 +342,8 @@ enum swizzle_mode_addr3_values {
 };
 
 enum dc_gfxversion {
-	DcGfxVersion7 = 0,
+	DcGfxBase = 0,
+	DcGfxVersion7,
 	DcGfxVersion8,
 	DcGfxVersion9,
 	DcGfxVersion10,
@@ -491,6 +492,12 @@ struct dc_cursor_position {
 	 * for each plane.
 	 */
 	bool translate_by_source;
+
+	/**
+	 * @use_viewport_for_clip: Use viewport position for clip_x calculation
+	 * instead of clip_rect. Required to protect against clip being overwritten
+	 */
+	bool use_viewport_for_clip;
 };
 
 struct dc_cursor_mi_param {
