@@ -4,7 +4,7 @@
 
 :Original: :ref:`Documentation/process/development-process.rst <development_process_main>`
 :Translator: Alex Shi <alex.shi@linux.alibaba.com>
-             Hu Haowen <2023002089@link.tyut.edu.cn>
+             Haowen Hu <srcres258@furdevs.cn>
 
 .. _tw_development_process_main:
 

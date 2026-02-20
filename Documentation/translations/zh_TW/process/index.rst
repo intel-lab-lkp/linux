@@ -9,7 +9,7 @@
 
 :Original: :ref:`Documentation/process/index.rst <process_index>`
 :Translator: Alex Shi <alex.shi@linux.alibaba.com>
-             Hu Haowen <2023002089@link.tyut.edu.cn>
+             Haowen Hu <srcres258@furdevs.cn>
 
 .. _tw_process_index:
 

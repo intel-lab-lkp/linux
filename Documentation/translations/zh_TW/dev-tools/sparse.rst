@@ -6,7 +6,7 @@ communicating in English you can also ask the Chinese maintainer for
 help.  Contact the Chinese maintainer if this translation is outdated
 or if there is a problem with the translation.
 
-Traditional Chinese maintainer: Hu Haowen <2023002089@link.tyut.edu.cn>
+Traditional Chinese maintainer: Haowen Hu <srcres258@furdevs.cn>
 -------------------------------------------------------------------------
 Documentation/dev-tools/sparse.rst 的繁體中文翻譯
 
@@ -14,8 +14,8 @@ Documentation/dev-tools/sparse.rst 的繁體中文翻譯
 交流有困難的話，也可以向繁體中文版維護者求助。如果本翻譯更新不及時或
 者翻譯存在問題，請聯繫繁體中文版維護者。
 
-繁體中文版維護者： 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-繁體中文版翻譯者： 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
+繁體中文版維護者： 胡皓文 Haowen Hu <srcres258@furdevs.cn>
+繁體中文版翻譯者： 胡皓文 Haowen Hu <srcres258@furdevs.cn>
 
 以下爲正文
 -------------------------------------------------------------------------

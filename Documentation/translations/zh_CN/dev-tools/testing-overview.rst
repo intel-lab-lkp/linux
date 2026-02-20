@@ -3,7 +3,7 @@
 .. include:: ../disclaimer-zh_CN.rst
 
 :Original: Documentation/dev-tools/testing-overview.rst
-:Translator: 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
+:Translator: 胡皓文 Haowen Hu <srcres258@furdevs.cn>
 
 ============
 内核测试指南

@@ -5,7 +5,7 @@
 :Original: :ref:`Documentation/arch/arm64/hugetlbpage.rst <hugetlbpage_index>`
 
 Translator: Bailu Lin <bailu.lin@vivo.com>
-            Hu Haowen <2023002089@link.tyut.edu.cn>
+            Haowen Hu <srcres258@furdevs.cn>
 
 =====================
 ARM64中的 HugeTLBpage

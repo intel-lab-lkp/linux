@@ -6,7 +6,7 @@
 :Translator:
  - Alex Shi <alexs@kernel.org>
  - Wu XiangCheng <bobwxc@email.cn>
- - Hu Haowen <2023002089@link.tyut.edu.cn>
+ - Haowen Hu <srcres258@furdevs.cn>
 
 .. _tw_submitchecklist:
 

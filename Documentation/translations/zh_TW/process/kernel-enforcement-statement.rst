@@ -6,7 +6,7 @@
 
 :Original: :ref:`Documentation/process/kernel-enforcement-statement.rst <process_statement_kernel>`
 :Translator: Alex Shi <alex.shi@linux.alibaba.com>
-             Hu Haowen <2023002089@link.tyut.edu.cn>
+             Haowen Hu <srcres258@furdevs.cn>
 
 Linux 內核執行聲明
 ------------------

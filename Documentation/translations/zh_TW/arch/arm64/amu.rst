@@ -5,7 +5,7 @@
 :Original: :ref:`Documentation/arch/arm64/amu.rst <amu_index>`
 
 Translator: Bailu Lin <bailu.lin@vivo.com>
-            Hu Haowen <2023002089@link.tyut.edu.cn>
+            Haowen Hu <srcres258@furdevs.cn>
 
 ==================================
 AArch64 Linux 中擴展的活動監控單元
