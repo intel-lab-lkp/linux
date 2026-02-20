@@ -1,0 +1,36 @@
+drm drm-fixes 05f7e89ab9731565d8a62e3b5d1ec206485eeb0b
+	Linux 6.19
+drm-misc drm-misc-fixes 7be41fb00e2c2a823f271a8318b453ca11812f1e
+	accel: ethosu: Fix shift overflow in cmd_to_addr()
+drm-rust drm-rust-fixes 0f61b1860cc3f52aef9036d7235ed1f017632193
+	Linux 6.19-rc5
+drm-intel drm-intel-fixes 63804fed149a6750ffd28610c5c1c98cce6bd377
+	Linux 6.19-rc7
+drm-xe drm-xe-fixes 4cb1b327135dddf3d0ec2544ea36ed05ba2252bc
+	drm/xe/guc: Fix CFI violation in debugfs access.
+drm drm-next 3e2138510b2ad556a12a7b284a025a23992e4aa1
+	Merge tag 'amd-drm-next-6.20-2026-02-13' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 777a02812f739af9e349cd0f695400a1d84053f4
+	drm/i915/dp: Add missing slice count check during mode validation
+drm-xe drm-xe-next-fixes 2d01d88a532b8847757d3015c66beca315f496bf
+	drm/xe: Prevent VFs from exposing the CCS mode sysfs file
+drm-misc drm-misc-next 948e195dfaa56e48eabda591f97630502ff7e27e
+	drm/panic: depends on PRINTK
+drm-rust drm-rust-next cea7b66a80412e2a5b74627b89ae25f1d0110a4b
+	Documentation: nova: update pending tasks
+drm-intel drm-intel-next 008304c9ae75c772d3460040de56e12112cdf5e6
+	drm/i915/alpm: ALPM disable fixes
+drm-intel drm-intel-gt-next 8103ecc1999eefc54b740d8d99f264ced1d9c54d
+	drm/i915/selftests: Keep mock file open during unfaultable migrate with fill
+drm-xe drm-xe-next 7c9b2de8a95c4b65b6e83c1312d225c6444dfbf7
+	drm/xe/xe2lpg: Extend Wa_18041344222 to graphics IP 20.04
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 06ad61b1f1955a3ff609b0530fb7a7077d425a39
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
