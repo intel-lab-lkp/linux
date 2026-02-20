@@ -329,6 +329,15 @@
 			clocks = <&prci FU740_PRCI_CLK_PCLK>;
 			status = "disabled";
 		};
+		dma: dma-controller@3000000 {
+			compatible = "sifive,fu740-c000-pdma", "sifive,pdma0";
+			reg = <0x0 0x3000000 0x0 0x100000>;
+			interrupt-parent = <&plic0>;
+			interrupts = <11>, <12>, <13>, <14>, <15>, <16>, <17>, <18>;
+			dma-channels = <4>;
+			clocks = <&prci FU740_PRCI_CLK_PCLK>;
+			#dma-cells = <1>;
+		};
 		pcie@e00000000 {
 			compatible = "sifive,fu740-pcie";
 			#address-cells = <3>;
