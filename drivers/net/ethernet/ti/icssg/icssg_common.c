@@ -1385,8 +1385,8 @@ irqreturn_t prueth_rx_irq(int irq, void *dev_id)
 {
 	struct prueth_emac *emac = dev_id;
 
-	emac->rx_chns.irq_disabled = true;
 	disable_irq_nosync(irq);
+	emac->rx_chns.irq_disabled = true;
 	napi_schedule(&emac->napi_rx);
 
 	return IRQ_HANDLED;
