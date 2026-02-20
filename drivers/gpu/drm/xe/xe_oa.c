@@ -873,10 +873,6 @@ static void xe_oa_stream_destroy(struct xe_oa_stream *stream)
 	xe_force_wake_put(gt_to_fw(gt), stream->fw_ref);
 	xe_pm_runtime_put(stream->oa->xe);
 
-	/* Wa_1509372804:pvc: Unset the override of GUCRC mode to enable rc6 */
-	if (stream->override_gucrc)
-		xe_gt_WARN_ON(gt, xe_guc_rc_unset_mode(&gt->uc.guc));
-
 	xe_oa_free_configs(stream);
 	xe_file_put(stream->xef);
 }
@@ -1760,18 +1756,6 @@ static int xe_oa_stream_init(struct xe_oa_stream *stream,
 		goto exit;
 	}
 
-	/*
-	 * GuC reset of engines causes OA to lose configuration
-	 * state. Prevent this by overriding GUCRC mode.
-	 */
-	if (XE_GT_WA(stream->gt, 1509372804)) {
-		ret = xe_guc_rc_set_mode(&gt->uc.guc, SLPC_GUCRC_MODE_GUCRC_NO_RC6);
-		if (ret)
-			goto err_free_configs;
-
-		stream->override_gucrc = true;
-	}
-
 	/* Take runtime pm ref and forcewake to disable RC6 */
 	xe_pm_runtime_get(stream->oa->xe);
 	stream->fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FORCEWAKE_ALL);
@@ -1822,9 +1806,6 @@ err_free_oa_buf:
 err_fw_put:
 	xe_force_wake_put(gt_to_fw(gt), stream->fw_ref);
 	xe_pm_runtime_put(stream->oa->xe);
-	if (stream->override_gucrc)
-		xe_gt_WARN_ON(gt, xe_guc_rc_unset_mode(&gt->uc.guc));
-err_free_configs:
 	xe_oa_free_configs(stream);
 exit:
 	xe_file_put(stream->xef);
