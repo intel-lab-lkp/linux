@@ -82,6 +82,12 @@ END {
 		}
 		printf " 0\t\\\n";
 		printf "\t) & (1U << ((x) & 31)))\n\n";
+
+		printf "\n#define %s_MASK_INITIALIZER\t\t\t\\", s;
+		printf "\n\t{\t\t\t\t\t\t\\";
+		for (i = 0; i < ncapints; i++)
+			printf "\n\t\t%s_MASK%d,\t\t\t\\", s, i;
+		printf "\n\t}\n\n";
 	}
 
 	printf "#endif /* _ASM_X86_CPUFEATUREMASKS_H */\n";
