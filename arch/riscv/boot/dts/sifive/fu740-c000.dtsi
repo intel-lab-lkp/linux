@@ -273,7 +273,7 @@
 			status = "disabled";
 		};
 		eth0: ethernet@10090000 {
-			compatible = "sifive,fu540-c000-gem";
+			compatible = "sifive,fu740-c000-gem";
 			interrupt-parent = <&plic0>;
 			interrupts = <55>;
 			reg = <0x0 0x10090000 0x0 0x2000>,
