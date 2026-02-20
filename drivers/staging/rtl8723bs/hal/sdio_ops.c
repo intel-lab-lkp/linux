@@ -876,7 +876,7 @@ void sd_int_dpc(struct adapter *adapter)
 
 		SdioLocalCmd52Read1Byte(adapter, SDIO_REG_HCPWM1_8723B);
 
-		_set_workitem(&(pwrctl->cpwm_event));
+		schedule_work(&pwrctl->cpwm_event);
 	}
 
 	if (hal->sdio_hisr & SDIO_HISR_TXERR) {
@@ -912,7 +912,7 @@ void sd_int_dpc(struct adapter *adapter)
 		} else {
 			/* Error handling for malloc fail */
 			rtw_cbuf_push(adapter->evtpriv.c2h_queue, NULL);
-			_set_workitem(&adapter->evtpriv.c2h_wk);
+			schedule_work(&adapter->evtpriv.c2h_wk);
 		}
 	}
 
