@@ -229,4 +229,6 @@ static inline bool cpu_attack_vector_mitigated(enum cpu_attack_vectors v)
 #define smt_mitigations SMT_MITIGATIONS_OFF
 #endif
 
+const char *x86_cap_name(unsigned int bit, char *buf);
+
 #endif /* _LINUX_CPU_H_ */
