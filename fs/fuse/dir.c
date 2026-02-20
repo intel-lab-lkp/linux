@@ -895,7 +895,8 @@ static int fuse_create_open(struct mnt_idmap *idmap, struct inode *dir,
 		goto out_err;
 	}
 	kfree(forget);
-	d_instantiate(entry, inode);
+	d_drop(entry);
+	d_splice_alias(inode, entry);
 	entry->d_time = epoch;
 	fuse_change_entry_timeout(entry, &outentry);
 	fuse_dir_changed(dir);
@@ -936,14 +937,15 @@ static int fuse_atomic_open(struct inode *dir, struct dentry *entry,
 	if (fuse_is_bad(dir))
 		return -EIO;
 
-	if (d_in_lookup(entry)) {
-		struct dentry *res = fuse_lookup(dir, entry, 0);
-		if (res || d_really_is_positive(entry))
-			return finish_no_open(file, res);
-	}
+	if (!(flags & O_CREAT)) {
+		if (d_in_lookup(entry)) {
+			struct dentry *res = fuse_lookup(dir, entry, 0);
 
-	if (!(flags & O_CREAT))
+			if (res || d_really_is_positive(entry))
+				return finish_no_open(file, res);
+		}
 		return finish_no_open(file, NULL);
+	}
 
 	/* Only creates */
 	file->f_mode |= FMODE_CREATED;
