@@ -4832,11 +4832,19 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 			HARD_TX_LOCK(dev, txq, cpu);
 
 			if (!netif_xmit_stopped(txq)) {
+				bool is_list = skb->next != NULL;
+
 				dev_xmit_recursion_inc();
 				skb = dev_hard_start_xmit(skb, dev, txq, &rc);
 				dev_xmit_recursion_dec();
 				if (dev_xmit_complete(rc)) {
 					HARD_TX_UNLOCK(dev, txq);
+					/* GSO segments a single SKB into
+					 * a list of frames. TCP expects error
+					 * to mean none of the data was sent.
+					 */
+					if (is_list && rc > 0)
+						rc = NETDEV_TX_OK;
 					goto out;
 				}
 			}
