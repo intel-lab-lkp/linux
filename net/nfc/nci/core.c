@@ -1482,10 +1482,16 @@ static bool nci_valid_size(struct sk_buff *skb)
 	unsigned int hdr_size = NCI_CTRL_HDR_SIZE;
 
 	if (skb->len < hdr_size ||
-	    !nci_plen(skb->data) ||
 	    skb->len < hdr_size + nci_plen(skb->data)) {
 		return false;
 	}
+
+	/* Require non-zero length for standard OIDs (0x00 - 0x1F).
+	 * But allow zero length in the proprietary range (0x20 - 0x3F). */
+	if (!nci_plen(skb->data))
+		if (nci_opcode_oid(nci_opcode(skb->data)) <= 0x1F)
+			return false;
+
 	return true;
 }
 
