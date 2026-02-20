@@ -179,9 +179,9 @@ static int ad5592r_get_vref(struct ad5592r_state *st)
 			return ret;
 
 		return ret / 1000;
-	} else {
-		return 2500;
 	}
+
+	return 2500;
 }
 
 static int ad5592r_set_channel_modes(struct ad5592r_state *st)
