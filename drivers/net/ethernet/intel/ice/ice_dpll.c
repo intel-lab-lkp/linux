@@ -2615,6 +2615,24 @@ static u64 ice_generate_clock_id(struct ice_pf *pf)
 }
 
 /**
+ * ice_dpll_sw_pin_needs_notify - check if SW pin needs change notification
+ * @p: pointer to SW pin (SMA or U.FL)
+ * @active: currently active input pin (or NULL)
+ * @old: previously active input pin (or NULL)
+ *
+ * Return: true if the SW pin is an input whose backing CGU pin matches either
+ * the old or new active input, meaning its state has changed.
+ */
+static bool
+ice_dpll_sw_pin_needs_notify(struct ice_dpll_pin *p,
+			     struct dpll_pin *active, struct dpll_pin *old)
+{
+	return p->pin &&
+	       p->direction == DPLL_PIN_DIRECTION_INPUT &&
+	       (p->input->pin == active || p->input->pin == old);
+}
+
+/**
  * ice_dpll_notify_changes - notify dpll subsystem about changes
  * @d: pointer do dpll
  *
@@ -2622,6 +2640,7 @@ static u64 ice_generate_clock_id(struct ice_pf *pf)
  */
 static void ice_dpll_notify_changes(struct ice_dpll *d)
 {
+	struct ice_dplls *dplls = &d->pf->dplls;
 	bool pin_notified = false;
 
 	if (d->prev_dpll_state != d->dpll_state) {
@@ -2629,12 +2648,22 @@ static void ice_dpll_notify_changes(struct ice_dpll *d)
 		dpll_device_change_ntf(d->dpll);
 	}
 	if (d->prev_input != d->active_input) {
+		struct dpll_pin *old = d->prev_input;
+
 		if (d->prev_input)
 			dpll_pin_change_ntf(d->prev_input);
 		d->prev_input = d->active_input;
 		if (d->active_input) {
 			dpll_pin_change_ntf(d->active_input);
 			pin_notified = true;
+		}
+		for (int i = 0; i < ICE_DPLL_PIN_SW_NUM; i++) {
+			if (ice_dpll_sw_pin_needs_notify(&dplls->sma[i],
+							 d->active_input, old))
+				dpll_pin_change_ntf(dplls->sma[i].pin);
+			if (ice_dpll_sw_pin_needs_notify(&dplls->ufl[i],
+							 d->active_input, old))
+				dpll_pin_change_ntf(dplls->ufl[i].pin);
 		}
 	}
 	if (d->prev_phase_offset != d->phase_offset) {
