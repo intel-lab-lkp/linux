@@ -25,6 +25,7 @@
 #include <asm/kprobes.h>
 #include <asm/mmu.h>
 #include <asm/processor.h>
+#include <asm/runtime-const.h>
 #include <asm/sdei.h>
 #include <asm/stacktrace.h>
 #include <asm/sysreg.h>
@@ -139,7 +140,8 @@ static void do_interrupt_handler(struct pt_regs *regs,
 	set_irq_regs(old_regs);
 }
 
-extern void (*handle_arch_irq)(struct pt_regs *);
+extern void (*_handle_arch_irq)(struct pt_regs *);
+#define handle_arch_irq runtime_const_ptr(_handle_arch_irq)
 extern void (*handle_arch_fiq)(struct pt_regs *);
 
 static void noinstr __panic_unhandled(struct pt_regs *regs, const char *vector,

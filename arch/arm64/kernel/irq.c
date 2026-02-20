@@ -23,6 +23,7 @@
 #include <asm/daifflags.h>
 #include <asm/exception.h>
 #include <asm/numa.h>
+#include <asm/runtime-const.h>
 #include <asm/softirq_stack.h>
 #include <asm/stacktrace.h>
 #include <asm/vmap_stack.h>
@@ -84,15 +85,17 @@ static void default_handle_fiq(struct pt_regs *regs)
 	panic("FIQ taken without a root FIQ handler\n");
 }
 
-void (*handle_arch_irq)(struct pt_regs *) __ro_after_init = default_handle_irq;
+void (*_handle_arch_irq)(struct pt_regs *) __ro_after_init = default_handle_irq;
+#define handle_arch_irq runtime_const_ptr(_handle_arch_irq)
 void (*handle_arch_fiq)(struct pt_regs *) __ro_after_init = default_handle_fiq;
 
 int __init set_handle_irq(void (*handle_irq)(struct pt_regs *))
 {
-	if (handle_arch_irq != default_handle_irq)
+	if (_handle_arch_irq != default_handle_irq)
 		return -EBUSY;
 
-	handle_arch_irq = handle_irq;
+	_handle_arch_irq = handle_irq;
+	runtime_const_init(ptr, _handle_arch_irq);
 	pr_info("Root IRQ handler: %ps\n", handle_irq);
 	return 0;
 }
