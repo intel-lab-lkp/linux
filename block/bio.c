@@ -900,7 +900,7 @@ static int __bio_clone(struct bio *bio, struct bio *bio_src, gfp_t gfp)
  * Allocate a new bio that is a clone of @bio_src. The caller owns the returned
  * bio, but not the actual data it points to.
  *
- * The caller must ensure that the return bio is not freed before @bio_src.
+ * The caller must ensure that @bio_src is not freed before the returned bio.
  */
 struct bio *bio_alloc_clone(struct block_device *bdev, struct bio *bio_src,
 		gfp_t gfp, struct bio_set *bs)
