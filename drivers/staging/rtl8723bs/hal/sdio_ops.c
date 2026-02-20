@@ -401,7 +401,7 @@ static u32 sdio_read_port(
 	hal_sdio_get_cmd_addr_8723b(adapter, addr, hal->SdioRxFIFOCnt++, &addr);
 
 	if (cnt > psdio->block_transfer_len)
-		cnt = _RND(cnt, psdio->block_transfer_len);
+		cnt = round_up(cnt, psdio->block_transfer_len);
 
 	err = _sd_read(intfhdl, addr, cnt, mem);
 
@@ -448,7 +448,7 @@ static u32 sdio_write_port(
 	hal_sdio_get_cmd_addr_8723b(adapter, addr, cnt >> 2, &addr);
 
 	if (cnt > psdio->block_transfer_len)
-		cnt = _RND(cnt, psdio->block_transfer_len);
+		cnt = round_up(cnt, psdio->block_transfer_len);
 
 	err = sd_write(intfhdl, addr, cnt, xmitbuf->pdata);
 
