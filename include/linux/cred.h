@@ -234,6 +234,15 @@ static inline const struct cred *get_cred(const struct cred *cred)
 	return get_cred_many(cred, 1);
 }
 
+/*
+ * get_cred_rcu - Get a reference on a set of credentials under rcu
+ * @cred: The credentials to reference
+ *
+ * Get a reference on the specified set of credentials, or %NULL if the last
+ * refcount has already been put.
+ *
+ * This is used to obtain a reference under an rcu read lock.
+ */
 static inline const struct cred *get_cred_rcu(const struct cred *cred)
 {
 	struct cred *nonconst_cred = (struct cred *) cred;
@@ -241,6 +250,15 @@ static inline const struct cred *get_cred_rcu(const struct cred *cred)
 		return NULL;
 	if (!atomic_long_inc_not_zero(&nonconst_cred->usage))
 		return NULL;
+	/*
+	 * If non_rcu is not already zero, then this call to get_cred_rcu() is
+	 * probably wrong because if 'usage' goes to zero prior to this call,
+	 * then get_cred_rcu() assumes it is freed with rcu.
+	 *
+	 * However, an exception to this is using get_cred_rcu() in cases where
+	 * get_cred() would have been okay. To support that case, we do not
+	 * check non_rcu and set it to zero regardless.
+	 */
 	nonconst_cred->non_rcu = 0;
 	return cred;
 }
