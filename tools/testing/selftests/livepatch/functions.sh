@@ -96,10 +96,8 @@ function pop_config() {
 }
 
 function set_dynamic_debug() {
-        cat <<-EOF > "$SYSFS_DEBUG_DIR/dynamic_debug/control"
-		file kernel/livepatch/* +p
-		func klp_try_switch_task -p
-		EOF
+	echo "file kernel/livepatch/* +p" > "$SYSFS_DEBUG_DIR/dynamic_debug/control"
+	echo "func klp_try_switch_task -p" > "$SYSFS_DEBUG_DIR/dynamic_debug/control"
 }
 
 function set_ftrace_enabled() {
