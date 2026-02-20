@@ -74,21 +74,21 @@ struct ghes_vendor_record_entry {
 	char vendor_record[];
 };
 
-static struct ghes *ghes_new(struct acpi_hest_generic *generic);
-static void ghes_fini(struct ghes *ghes);
+struct ghes *ghes_new(struct acpi_hest_generic *generic);
+void ghes_fini(struct ghes *ghes);
 
-static int ghes_read_estatus(struct ghes *ghes,
+int ghes_read_estatus(struct ghes *ghes,
 		      struct acpi_hest_generic_status *estatus,
 		      u64 *buf_paddr, enum fixed_addresses fixmap_idx);
-static void ghes_clear_estatus(struct ghes *ghes,
+void ghes_clear_estatus(struct ghes *ghes,
 			struct acpi_hest_generic_status *estatus,
 			u64 buf_paddr, enum fixed_addresses fixmap_idx);
-static int __ghes_peek_estatus(struct ghes *ghes,
+int __ghes_peek_estatus(struct ghes *ghes,
 			struct acpi_hest_generic_status *estatus,
 			u64 *buf_paddr, enum fixed_addresses fixmap_idx);
-static int __ghes_check_estatus(struct ghes *ghes,
+int __ghes_check_estatus(struct ghes *ghes,
 			 struct acpi_hest_generic_status *estatus);
-static int __ghes_read_estatus(struct acpi_hest_generic_status *estatus,
+int __ghes_read_estatus(struct acpi_hest_generic_status *estatus,
 			u64 buf_paddr, enum fixed_addresses fixmap_idx,
 			size_t buf_len);
 
