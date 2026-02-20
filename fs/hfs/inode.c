@@ -185,8 +185,6 @@ struct inode *hfs_new_inode(struct inode *dir, const struct qstr *name, umode_t 
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = new_inode(sb);
 	s64 next_id;
-	s64 file_count;
-	s64 folder_count;
 	int err = -ENOMEM;
 
 	if (!inode)
@@ -216,13 +214,8 @@ struct inode *hfs_new_inode(struct inode *dir, const struct qstr *name, umode_t 
 	HFS_I(inode)->tz_secondswest = sys_tz.tz_minuteswest * 60;
 	if (S_ISDIR(mode)) {
 		inode->i_size = 2;
-		folder_count = atomic64_inc_return(&HFS_SB(sb)->folder_count);
-		if (folder_count> U32_MAX) {
-			atomic64_dec(&HFS_SB(sb)->folder_count);
-			pr_err("cannot create new inode: folder count exceeds limit\n");
-			goto out_discard;
-		}
-		if (dir->i_ino == HFS_ROOT_CNID)
+		atomic64_add_unless(&HFS_SB(sb)->folder_count, 1, U32_MAX);
+		if (dir->i_ino == HFS_ROOT_CNID && HFS_SB(sb)->root_dirs != U16_MAX)
 			HFS_SB(sb)->root_dirs++;
 		inode->i_op = &hfs_dir_inode_operations;
 		inode->i_fop = &hfs_dir_operations;
@@ -230,13 +223,8 @@ struct inode *hfs_new_inode(struct inode *dir, const struct qstr *name, umode_t 
 		inode->i_mode &= ~HFS_SB(inode->i_sb)->s_dir_umask;
 	} else if (S_ISREG(mode)) {
 		HFS_I(inode)->clump_blocks = HFS_SB(sb)->clumpablks;
-		file_count = atomic64_inc_return(&HFS_SB(sb)->file_count);
-		if (file_count > U32_MAX) {
-			atomic64_dec(&HFS_SB(sb)->file_count);
-			pr_err("cannot create new inode: file count exceeds limit\n");
-			goto out_discard;
-		}
-		if (dir->i_ino == HFS_ROOT_CNID)
+		atomic64_add_unless(&HFS_SB(sb)->file_count, 1, U32_MAX);
+		if (dir->i_ino == HFS_ROOT_CNID && HFS_SB(sb)->root_files != U16_MAX)
 			HFS_SB(sb)->root_files++;
 		inode->i_op = &hfs_file_inode_operations;
 		inode->i_fop = &hfs_file_operations;
@@ -272,16 +260,18 @@ void hfs_delete_inode(struct inode *inode)
 
 	hfs_dbg("ino %lu\n", inode->i_ino);
 	if (S_ISDIR(inode->i_mode)) {
-		atomic64_dec(&HFS_SB(sb)->folder_count);
-		if (HFS_I(inode)->cat_key.ParID == cpu_to_be32(HFS_ROOT_CNID))
+		atomic64_add_unless(&HFS_SB(sb)->folder_count, -1, 0);
+		if (HFS_I(inode)->cat_key.ParID == cpu_to_be32(HFS_ROOT_CNID) &&
+		    HFS_SB(sb)->root_dirs)
 			HFS_SB(sb)->root_dirs--;
 		set_bit(HFS_FLG_MDB_DIRTY, &HFS_SB(sb)->flags);
 		hfs_mark_mdb_dirty(sb);
 		return;
 	}
 
-	atomic64_dec(&HFS_SB(sb)->file_count);
-	if (HFS_I(inode)->cat_key.ParID == cpu_to_be32(HFS_ROOT_CNID))
+	atomic64_add_unless(&HFS_SB(sb)->file_count, -1, 0);
+	if (HFS_I(inode)->cat_key.ParID == cpu_to_be32(HFS_ROOT_CNID) &&
+	    HFS_SB(sb)->root_files)
 		HFS_SB(sb)->root_files--;
 	if (S_ISREG(inode->i_mode)) {
 		if (!inode->i_nlink) {
