@@ -1,0 +1,236 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/frequency/adi,ad9910.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices AD9910 Direct Digital Synthesizer
+
+maintainers:
+  - Rodrigo Alencar <rodrigo.alencar@analog.com>
+
+description:
+  The AD9910 is a 1 GSPS direct digital synthesizer (DDS) with an integrated
+  14-bit DAC. It features single tone mode with 8 configurable profiles,
+  a digital ramp generator, RAM control, OSK, and a parallel data port for
+  high-speed streaming.
+
+  https://www.analog.com/en/products/ad9910.html
+
+properties:
+  compatible:
+    const: adi,ad9910
+
+  reg:
+    maxItems: 1
+
+  spi-max-frequency:
+    maximum: 70000000
+
+  clocks:
+    maxItems: 1
+    description:
+      Reference clock input (REFCLK). When the PLL is enabled, this is
+      multiplied by adi,pll-multiplier to produce the system clock.
+      When the PLL is bypassed, the reference clock is used directly or divided
+      by 2 based on adi,reference-div2-enable to produce the system clock.
+
+  dvdd-io33-supply:
+    description: 3.3V Digital I/O supply.
+
+  avdd33-supply:
+    description: 3.3V Analog DAC supply.
+
+  dvdd18-supply:
+    description: 1.8V Digital Core supply.
+
+  avdd18-supply:
+    description: 1.8V Analog Core supply.
+
+  resets:
+    minItems: 1
+    maxItems: 2
+
+  reset-names:
+    oneOf:
+      - items:
+          - const: dev
+      - items:
+          - const: dev
+          - const: io
+
+  reset-gpios:
+    maxItems: 2
+    description:
+      GPIOs controlling the device reset and the I/O_RESET pins. This is only
+      used if resets property is not defined.
+
+  powerdown-gpios:
+    maxItems: 1
+    description:
+      GPIO controlling the EXT_PWR_DWN pin.
+
+  update-gpios:
+    maxItems: 1
+    description:
+      GPIO controlling the I/O_UPDATE pin.
+
+  profile-gpios:
+    minItems: 3
+    maxItems: 3
+    description:
+      GPIOs controlling the PROFILE[2:0] pins for profile selection.
+
+  adi,pll-multiplier:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 12
+    maximum: 127
+    description:
+      PLL feedback divider value (N). The system clock frequency is
+      REFCLK * N. When not specified, the PLL is bypassed.
+
+  adi,pll-vco-select:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 5
+    description: |
+      VCO frequency range selection (0-5). When not specified and the PLL
+      is enabled, the VCO range is automatically selected based on the
+      computed system clock frequency. Typical VCO frequency ranges are:
+      - Range 0: 370 MHz to 510 MHz (Auto-selected when <= 465 MHz)
+      - Range 1: 420 MHz to 590 MHz (Auto-selected when > 465 MHz and <= 545 MHz)
+      - Range 2: 500 MHz to 700 MHz (Auto-selected when > 545 MHz and <= 650 MHz)
+      - Range 3: 600 MHz to 880 MHz (Auto-selected when > 650 MHz and <= 790 MHz)
+      - Range 4: 700 MHz to 950 MHz (Auto-selected when > 790 MHz and <= 885 MHz)
+      - Range 5: 820 MHz to 1050 MHz (Auto-selected when > 885 MHz)
+
+  adi,charge-pump-current-microamp:
+    minimum: 212
+    maximum: 387
+    default: 387
+    description:
+      PLL charge pump current in microamps. Only applicable when the PLL
+      is enabled. The value is rounded to the nearest supported step.
+
+  adi,refclk-out-drive-strength:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum: [ disabled, low, medium, high ]
+    default: disabled
+    description:
+      Reference clock output (DRV0) drive strength. Only applicable when
+      the PLL is enabled.
+
+  adi,reference-div2-enable:
+    type: boolean
+    description:
+      Enable the reference clock input divider. When enabled, the input
+      reference frequency is halved before deriving the system clock.
+      This is only applicable when the PLL is bypassed.
+
+  adi,inverse-sinc-enable:
+    type: boolean
+    description:
+      Enable the inverse sinc filter that compensates for the sinc roll-off
+      of the DAC output. When it is enabled, the filter introduces up to 3 dB
+      of insertion loss.
+
+  adi,sine-output-enable:
+    type: boolean
+    description:
+      Select sine wave output from the DDS core. When not set, the
+      output is a cosine wave.
+
+  adi,sync-clk-disable:
+    type: boolean
+    description:
+      Disable the SYNC_CLK output pin. SYNC_CLK runs at one quarter
+      of the system clock frequency.
+
+  adi,pdclk-disable:
+    type: boolean
+    description:
+      Disable the parallel data clock (PDCLK) output. PDCLK runs at
+      one quarter of the system clock frequency.
+
+  adi,pdclk-invert:
+    type: boolean
+    description:
+      Invert the polarity of the PDCLK output.
+
+  adi,tx-enable-invert:
+    type: boolean
+    description:
+      Invert the polarity of the TX_ENABLE input pin.
+
+  adi,dac-output-current-microamp:
+    minimum: 8640
+    maximum: 31590
+    default: 20070
+    description:
+      DAC full-scale output current in microamps.
+
+dependencies:
+  adi,pll-vco-select: [ 'adi,pll-multiplier' ]
+  adi,charge-pump-current-microamp: [ 'adi,pll-multiplier' ]
+  adi,refclk-out-drive-strength: [ 'adi,pll-multiplier' ]
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - dvdd-io33-supply
+  - avdd33-supply
+  - dvdd18-supply
+  - avdd18-supply
+
+dependentSchemas:
+  resets:
+    properties:
+      reset-gpios: false
+  reset-gpios:
+    properties:
+      resets: false
+  adi,reference-div2-enable:
+    properties:
+      adi,pll-multiplier: false
+  adi,pll-multiplier:
+    properties:
+      adi,reference-div2-enable: false
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        dds@0 {
+            compatible = "adi,ad9910";
+            reg = <0>;
+            spi-max-frequency = <1000000>;
+            clocks = <&ad9910_refclk>;
+
+            dvdd-io33-supply = <&vdd_io33>;
+            avdd33-supply = <&vdd_a33>;
+            dvdd18-supply = <&vdd_d18>;
+            avdd18-supply = <&vdd_a18>;
+
+            reset-gpios = <&gpio 0 GPIO_ACTIVE_HIGH>,
+                          <&gpio 1 GPIO_ACTIVE_HIGH>;
+            powerdown-gpios = <&gpio 2 GPIO_ACTIVE_HIGH>;
+            update-gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
+            profile-gpios = <&gpio 4 GPIO_ACTIVE_HIGH>,
+                            <&gpio 5 GPIO_ACTIVE_HIGH>,
+                            <&gpio 6 GPIO_ACTIVE_HIGH>;
+
+            adi,pll-multiplier = <40>;
+            adi,charge-pump-current-microamp = <387>;
+            adi,refclk-out-drive-strength = "disabled";
+            adi,inverse-sinc-enable;
+        };
+    };
+...
