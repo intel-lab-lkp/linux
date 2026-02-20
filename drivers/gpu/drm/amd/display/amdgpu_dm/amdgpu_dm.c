@@ -87,6 +87,7 @@
 #include <drm/drm_atomic_uapi.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_edid.h>
@@ -10871,6 +10872,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 	struct drm_connector_state *old_con_state = NULL, *new_con_state = NULL;
 	struct dm_crtc_state *dm_old_crtc_state, *dm_new_crtc_state;
 	int crtc_disable_count = 0;
+	struct amdgpu_crtc *acrtc;
 
 	trace_amdgpu_dm_atomic_commit_tail_begin(state);
 
@@ -11127,8 +11129,26 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 	/* Signal HW programming completion */
 	drm_atomic_helper_commit_hw_done(state);
 
-	if (wait_for_vblank)
-		drm_atomic_helper_wait_for_flip_done(dev, state);
+	if (wait_for_vblank &&
+	    drm_atomic_helper_wait_for_flip_done(dev, state)) {
+		mutex_lock(&dm->dc_lock);
+		if (dm_dmub_hw_init(adev))
+			drm_dev_wedged_event(dev, DRM_WEDGE_RECOVERY_REBIND |
+					     DRM_WEDGE_RECOVERY_BUS_RESET,
+					     NULL);
+		mutex_unlock(&dm->dc_lock);
+
+		spin_lock_irqsave(&dev->event_lock, flags);
+		drm_for_each_crtc(crtc, dev) {
+			if (acrtc->event) {
+				drm_crtc_send_vblank_event(crtc, acrtc->event);
+				acrtc->event = NULL;
+				drm_crtc_vblank_put(crtc);
+				acrtc->pflip_status = AMDGPU_FLIP_NONE;
+			}
+		}
+		spin_unlock_irqrestore(&dev->event_lock, flags);
+	}
 
 	drm_atomic_helper_cleanup_planes(dev, state);
 
