@@ -1139,6 +1139,13 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 			if (!fence)
 				continue;
 
+			if ((flags & DRM_SYNCOBJ_WAIT_FLAGS_ABORT_ON_ERROR) && fence->error) {
+				if (idx)
+					*idx = i;
+				timeout = fence->error;
+				goto done_waiting;
+			}
+
 			if ((flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE) ||
 			    dma_fence_is_signaled(fence) ||
 			    (!entries[i].fence_cb.func &&
@@ -1242,8 +1249,12 @@ static int drm_syncobj_array_wait(struct drm_device *dev,
 							 wait->flags,
 							 timeout, &first,
 							 deadline);
-		if (timeout < 0)
+		if (timeout < 0) {
+			if (wait->flags & DRM_SYNCOBJ_WAIT_FLAGS_ABORT_ON_ERROR)
+				wait->first_signaled = first;
+
 			return timeout;
+		}
 		wait->first_signaled = first;
 	} else {
 		timeout = drm_timeout_abs_to_jiffies(timeline_wait->timeout_nsec);
@@ -1253,8 +1264,12 @@ static int drm_syncobj_array_wait(struct drm_device *dev,
 							 timeline_wait->flags,
 							 timeout, &first,
 							 deadline);
-		if (timeout < 0)
+		if (timeout < 0) {
+			if (timeline_wait->flags & DRM_SYNCOBJ_WAIT_FLAGS_ABORT_ON_ERROR)
+				timeline_wait->first_signaled = first;
+
 			return timeout;
+		}
 		timeline_wait->first_signaled = first;
 	}
 	return 0;
@@ -1332,7 +1347,8 @@ drm_syncobj_wait_ioctl(struct drm_device *dev, void *data,
 
 	possible_flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL |
 			 DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT |
-			 DRM_SYNCOBJ_WAIT_FLAGS_WAIT_DEADLINE;
+			 DRM_SYNCOBJ_WAIT_FLAGS_WAIT_DEADLINE |
+			 DRM_SYNCOBJ_WAIT_FLAGS_ABORT_ON_ERROR;
 
 	if (args->flags & ~possible_flags)
 		return -EINVAL;
@@ -1376,7 +1392,8 @@ drm_syncobj_timeline_wait_ioctl(struct drm_device *dev, void *data,
 	possible_flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL |
 			 DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT |
 			 DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE |
-			 DRM_SYNCOBJ_WAIT_FLAGS_WAIT_DEADLINE;
+			 DRM_SYNCOBJ_WAIT_FLAGS_WAIT_DEADLINE |
+			 DRM_SYNCOBJ_WAIT_FLAGS_ABORT_ON_ERROR;
 
 	if (args->flags & ~possible_flags)
 		return -EINVAL;

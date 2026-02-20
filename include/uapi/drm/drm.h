@@ -977,6 +977,7 @@ struct drm_syncobj_transfer {
 #define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT (1 << 1)
 #define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE (1 << 2) /* wait for time point to become available */
 #define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_DEADLINE (1 << 3) /* set fence deadline to deadline_nsec */
+#define DRM_SYNCOBJ_WAIT_FLAGS_ABORT_ON_ERROR (1 << 4) /* abort upon any fence failure return err */
 struct drm_syncobj_wait {
 	__u64 handles;
 	/* absolute timeout */
