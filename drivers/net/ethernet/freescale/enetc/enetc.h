@@ -374,6 +374,7 @@ static inline bool enetc_is_pseudo_mac(struct enetc_si *si)
 struct enetc_int_vector {
 	void __iomem *rbier;
 	void __iomem *tbier_base;
+	void __iomem *tbidr_base;
 	void __iomem *ricr1;
 	unsigned long tx_rings_map;
 	int count_tx_rings;
