@@ -6309,18 +6309,6 @@ static size_t __ksize(const void *object)
 	return slab_ksize(slab);
 }
 
-/**
- * ksize -- Report full size of underlying allocation
- * @objp: pointer to the object
- *
- * This should only be used internally to query the true size of allocations.
- * It is not meant to be a way to discover the usable size of an allocation
- * after the fact. Instead, use kmalloc_size_roundup(). Using memory beyond
- * the originally requested allocation size may trigger KASAN, UBSAN_BOUNDS,
- * and/or FORTIFY_SOURCE.
- *
- * Return: size of the actual memory used by @objp in bytes
- */
 size_t ksize(const void *objp)
 {
 	/*
