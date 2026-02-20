@@ -42,7 +42,9 @@
 #include <asm/fixmap.h>
 #include <asm/tlbflush.h>
 
+#ifdef CONFIG_ACPI_APEI
 #include "apei-internal.h"
+#endif
 
 ATOMIC_NOTIFIER_HEAD(ghes_report_chain);
 

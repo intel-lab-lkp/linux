@@ -34,6 +34,18 @@ if RAS
 source "arch/x86/ras/Kconfig"
 source "drivers/ras/amd/atl/Kconfig"
 
+config RAS_ESOURCE_DT
+	bool "DeviceTree firmware-first CPER error source block provider"
+	depends on OF
+	depends on ARM64
+	select GHES_CPER_HELPERS
+	help
+	  Enable support for firmware-first Common Platform Error Record (CPER)
+	  error source block providers that are described via DeviceTree
+	  instead of ACPI HEST tables. The driver reuses the existing GHES
+	  CPER helpers so the error processing matches the ACPI code paths,
+	  but it can be built even when ACPI is disabled.
+
 config RAS_FMPM
 	tristate "FRU Memory Poison Manager"
 	default m
