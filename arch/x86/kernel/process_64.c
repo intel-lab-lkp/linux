@@ -41,6 +41,7 @@
 #include <linux/ftrace.h>
 #include <linux/syscalls.h>
 #include <linux/iommu.h>
+#include <linux/debugfs.h>
 
 #include <asm/processor.h>
 #include <asm/pkru.h>
@@ -801,6 +802,61 @@ static long prctl_map_vdso(const struct vdso_image *image, unsigned long addr)
 #define LAM_DEFAULT_BITS	4
 
 unsigned long lam_available_bits = LAM_DEFAULT_BITS;
+
+static ssize_t lam_bits_read_file(struct file *file, char __user *user_buf,
+				  size_t count, loff_t *ppos)
+{
+	char buf[2];
+	unsigned int len;
+
+	len = sprintf(buf, "%ld\n", lam_available_bits);
+	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
+}
+
+/*
+ * Writing a number to this file changes the used lam tag width. Valid values
+ * are 4 bit tag width and 6 bit tag width - the second, non-default one is
+ * meant mostly for debug and shall be deprecated in the future.
+ */
+static ssize_t lam_bits_write_file(struct file *file,
+				   const char __user *user_buf, size_t count,
+				   loff_t *ppos)
+{
+	char buf[32];
+	ssize_t len;
+	int ceiling;
+	u8 bits;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, len))
+		return -EFAULT;
+
+	buf[len] = '\0';
+	if (kstrtou8(buf, 0, &bits))
+		return -EINVAL;
+
+	switch (bits) {
+	case LAM_DEFAULT_BITS:
+	case LAM_MAX_BITS:
+		lam_available_bits = bits;
+		return count;
+	default:
+		return -EINVAL;
+	}
+}
+
+static const struct file_operations fops_lam_bits = {
+	.read = lam_bits_read_file,
+	.write = lam_bits_write_file,
+};
+
+static int __init create_lam_available_bits(void)
+{
+	debugfs_create_file("lam_available_bits", 0600,
+			    arch_debugfs_dir, NULL, &fops_lam_bits);
+	return 0;
+}
+late_initcall(create_lam_available_bits);
 
 static void enable_lam_func(void *__mm)
 {
