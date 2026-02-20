@@ -46,6 +46,9 @@ struct drm_gem_object *intel_fbdev_fb_bo_create(struct drm_device *drm, int size
 	} else {
 		if (intel_fbdev_fb_prefer_stolen(drm, size))
 			obj = i915_gem_object_create_stolen(i915, size);
+		else
+			drm_info(drm, "Allocating fbdev: Stolen memory not preferred.\n");
+
 		if (IS_ERR(obj))
 			obj = i915_gem_object_create_shmem(i915, size);
 	}
