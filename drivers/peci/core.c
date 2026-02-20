@@ -163,8 +163,8 @@ EXPORT_SYMBOL_NS_GPL(devm_peci_controller_add, "PECI");
 static const struct peci_device_id *
 peci_bus_match_device_id(const struct peci_device_id *id, struct peci_device *device)
 {
-	while (id->x86_vfm != 0) {
-		if (id->x86_vfm == device->info.x86_vfm)
+	while (id->device_id != 0) {
+		if (id->device_id == device->info.device_id)
 			return id;
 		id++;
 	}

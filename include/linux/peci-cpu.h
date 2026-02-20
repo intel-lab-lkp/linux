@@ -6,31 +6,26 @@
 
 #include <linux/types.h>
 
-/* Copied from x86 <asm/processor.h> */
-#define X86_VENDOR_INTEL       0
+/*
+ * These are in the format of and match the values of the x86
+ * CPUID.01H:EAX[19:4]. They encode the model and family of
+ * the CPU with which the driver is interfacing.
+ *
+ * All driver functionality is common across all CPU steppings
+ * of a given model. Exclude the lower 4 stepping bits from
+ * these IDs.
+ *
+ * Always mirror the naming from the x86 intel-family.h file.
+ */
 
-/* Copied from x86 <asm/cpu_device_id.h> */
-#define VFM_MODEL_BIT	0
-#define VFM_FAMILY_BIT	8
-#define VFM_VENDOR_BIT	16
-#define VFM_RSVD_BIT	24
-
-#define	VFM_MODEL_MASK	GENMASK(VFM_FAMILY_BIT - 1, VFM_MODEL_BIT)
-#define	VFM_FAMILY_MASK	GENMASK(VFM_VENDOR_BIT - 1, VFM_FAMILY_BIT)
-#define	VFM_VENDOR_MASK	GENMASK(VFM_RSVD_BIT - 1, VFM_VENDOR_BIT)
-
-#define VFM_MODEL(vfm)	(((vfm) & VFM_MODEL_MASK) >> VFM_MODEL_BIT)
-#define VFM_FAMILY(vfm)	(((vfm) & VFM_FAMILY_MASK) >> VFM_FAMILY_BIT)
-#define VFM_VENDOR(vfm)	(((vfm) & VFM_VENDOR_MASK) >> VFM_VENDOR_BIT)
-
-#define	VFM_MAKE(_vendor, _family, _model) (	\
-	((_model) << VFM_MODEL_BIT) |		\
-	((_family) << VFM_FAMILY_BIT) |		\
-	((_vendor) << VFM_VENDOR_BIT)		\
-)
-/* End of copied code */
-
-#include "../../arch/x86/include/asm/intel-family.h"
+#define PECI_INTEL_HASWELL_X		0x306F
+#define PECI_INTEL_BROADWELL_X		0x406F
+#define PECI_INTEL_BROADWELL_D		0x5066
+#define PECI_INTEL_SKYLAKE_X		0x5065
+#define PECI_INTEL_ICELAKE_X		0x606A
+#define PECI_INTEL_ICELAKE_D		0x606C
+#define PECI_INTEL_SAPPHIRERAPIDS_X	0x806F
+#define PECI_INTEL_EMERALDRAPIDS_X	0xC06F
 
 #define PECI_PCS_PKG_ID			0  /* Package Identifier Read */
 #define  PECI_PKG_ID_CPU_ID		0x0000  /* CPUID Info */

@@ -294,35 +294,35 @@ peci_cpu_probe(struct peci_device *device, const struct peci_device_id *id)
 
 static const struct peci_device_id peci_cpu_device_ids[] = {
 	{ /* Haswell Xeon */
-		.x86_vfm = INTEL_HASWELL_X,
+		.device_id = PECI_INTEL_HASWELL_X,
 		.data	= "hsx",
 	},
 	{ /* Broadwell Xeon */
-		.x86_vfm = INTEL_BROADWELL_X,
+		.device_id = PECI_INTEL_BROADWELL_X,
 		.data	= "bdx",
 	},
 	{ /* Broadwell Xeon D */
-		.x86_vfm = INTEL_BROADWELL_D,
+		.device_id = PECI_INTEL_BROADWELL_D,
 		.data	= "bdxd",
 	},
 	{ /* Skylake Xeon */
-		.x86_vfm = INTEL_SKYLAKE_X,
+		.device_id = PECI_INTEL_SKYLAKE_X,
 		.data	= "skx",
 	},
 	{ /* Icelake Xeon */
-		.x86_vfm = INTEL_ICELAKE_X,
+		.device_id = PECI_INTEL_ICELAKE_X,
 		.data	= "icx",
 	},
 	{ /* Icelake Xeon D */
-		.x86_vfm = INTEL_ICELAKE_D,
+		.device_id = PECI_INTEL_ICELAKE_D,
 		.data	= "icxd",
 	},
 	{ /* Sapphire Rapids Xeon */
-		.x86_vfm = INTEL_SAPPHIRERAPIDS_X,
+		.device_id = PECI_INTEL_SAPPHIRERAPIDS_X,
 		.data	= "spr",
 	},
 	{ /* Emerald Rapids Xeon */
-		.x86_vfm  = INTEL_EMERALDRAPIDS_X,
+		.device_id  = PECI_INTEL_EMERALDRAPIDS_X,
 		.data  = "emr",
 	},
 	{ }
