@@ -1814,10 +1814,26 @@ static const struct attribute_group ad9910_attrs_group = {
 	.bin_attrs = ad9910_bin_attrs,
 };
 
+static const char * const ad9910_channel_str[] = {
+	[AD9910_CHANNEL_SINGLE_TONE] = "single_tone",
+	[AD9910_CHANNEL_PARALLEL_PORT] = "parallel_port",
+	[AD9910_CHANNEL_DRG] = "digital_ramp_generator",
+	[AD9910_CHANNEL_RAM] = "ram_control",
+	[AD9910_CHANNEL_OSK] = "output_shift_keying",
+};
+
+static int ad9910_read_label(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan,
+			     char *label)
+{
+	return sprintf(label, "%s\n", ad9910_channel_str[chan->channel]);
+}
+
 static const struct iio_info ad9910_info = {
 	.read_raw = ad9910_read_raw,
 	.write_raw = ad9910_write_raw,
 	.write_raw_get_fmt = ad9910_write_raw_get_fmt,
+	.read_label = ad9910_read_label,
 	.attrs = &ad9910_attrs_group,
 	.debugfs_reg_access = &ad9910_reg_access,
 };
