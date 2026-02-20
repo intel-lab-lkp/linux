@@ -69,7 +69,6 @@ static void gb_audio_module_release(struct kobject *kobj)
 	struct gb_audio_manager_module *module = to_gb_audio_module(kobj);
 
 	pr_info("Destroying audio module #%d\n", module->id);
-	/* TODO -> delete from list */
 	kfree(module);
 }
 
