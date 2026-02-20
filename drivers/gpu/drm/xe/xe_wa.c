@@ -363,6 +363,19 @@ static const struct xe_rtp_entry_sr engine_was[] = {
 		       FUNC(xe_rtp_match_first_render_or_compute)),
 	  XE_RTP_ACTIONS(SET(LSC_CHICKEN_BIT_0_UDW, ENABLE_SMP_LD_RENDER_SURFACE_CONTROL))
 	},
+	/*
+	 * Although this workaround isn't required for the RCS, disabling these
+	 * reports has no impact for our driver or the GuC, so we go ahead and
+	 * apply this to all engines for simplicity.
+	 */
+	{ XE_RTP_NAME("16021639441"),
+	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2001, 2004), OR,
+		       MEDIA_VERSION_RANGE(1301, 2000)),
+	  XE_RTP_ACTIONS(SET(CSFE_CHICKEN1(0),
+			     GHWSP_CSB_REPORT_DIS |
+			     PPHWSP_CSB_AND_TIMESTAMP_REPORT_DIS,
+			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
+	},
 
 	/* TGL */
 
@@ -505,20 +518,6 @@ static const struct xe_rtp_entry_sr engine_was[] = {
 		       FUNC(xe_rtp_match_first_render_or_compute)),
 	  XE_RTP_ACTIONS(SET(ROW_CHICKEN4, DISABLE_TDL_PUSH))
 	},
-	/*
-	 * These two workarounds are the same, just applying to different
-	 * engines.  Although Wa_18032095049 (for the RCS) isn't required on
-	 * all steppings, disabling these reports has no impact for our
-	 * driver or the GuC, so we go ahead and treat it the same as
-	 * Wa_16021639441 which does apply to all steppings.
-	 */
-	{ XE_RTP_NAME("18032095049, 16021639441"),
-	  XE_RTP_RULES(GRAPHICS_VERSION(2004)),
-	  XE_RTP_ACTIONS(SET(CSFE_CHICKEN1(0),
-			     GHWSP_CSB_REPORT_DIS |
-			     PPHWSP_CSB_AND_TIMESTAMP_REPORT_DIS,
-			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
-	},
 	{ XE_RTP_NAME("16018610683"),
 	  XE_RTP_RULES(GRAPHICS_VERSION(2004), FUNC(xe_rtp_match_first_render_or_compute)),
 	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN, SLM_WMTP_RESTORE))
@@ -546,18 +545,6 @@ static const struct xe_rtp_entry_sr engine_was[] = {
 		       FUNC(xe_rtp_match_first_render_or_compute)),
 	  XE_RTP_ACTIONS(SET(ROW_CHICKEN, EARLY_EOT_DIS))
 	},
-	/*
-	 * Although this workaround isn't required for the RCS, disabling these
-	 * reports has no impact for our driver or the GuC, so we go ahead and
-	 * apply this to all engines for simplicity.
-	 */
-	{ XE_RTP_NAME("16021639441"),
-	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2001, 2002)),
-	  XE_RTP_ACTIONS(SET(CSFE_CHICKEN1(0),
-			     GHWSP_CSB_REPORT_DIS |
-			     PPHWSP_CSB_AND_TIMESTAMP_REPORT_DIS,
-			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
-	},
 	{ XE_RTP_NAME("14019811474"),
 	  XE_RTP_RULES(GRAPHICS_VERSION(2001),
 		       FUNC(xe_rtp_match_first_render_or_compute)),
@@ -582,26 +569,6 @@ static const struct xe_rtp_entry_sr engine_was[] = {
 		       FUNC(xe_rtp_match_first_render_or_compute),
 		       FUNC(xe_rtp_match_gt_has_discontiguous_dss_groups)),
 	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, EUSTALL_PERF_SAMPLING_DISABLE))
-	},
-
-	/* Xe2_LPM */
-
-	{ XE_RTP_NAME("16021639441"),
-	  XE_RTP_RULES(MEDIA_VERSION(2000)),
-	  XE_RTP_ACTIONS(SET(CSFE_CHICKEN1(0),
-			     GHWSP_CSB_REPORT_DIS |
-			     PPHWSP_CSB_AND_TIMESTAMP_REPORT_DIS,
-			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
-	},
-
-	/* Xe2_HPM */
-
-	{ XE_RTP_NAME("16021639441"),
-	  XE_RTP_RULES(MEDIA_VERSION(1301)),
-	  XE_RTP_ACTIONS(SET(CSFE_CHICKEN1(0),
-			     GHWSP_CSB_REPORT_DIS |
-			     PPHWSP_CSB_AND_TIMESTAMP_REPORT_DIS,
-			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
 	},
 
 	/* Xe3_LPG */
