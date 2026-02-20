@@ -20,7 +20,7 @@
 #define KERNEL_DS	0x10
 #define KERNEL_TSS	0x18
 
-vm_vaddr_t exception_handlers;
+gva_t exception_handlers;
 bool host_cpu_is_amd;
 bool host_cpu_is_intel;
 bool is_forced_emulation_enabled;
@@ -615,7 +615,7 @@ static void kvm_seg_set_kernel_data_64bit(struct kvm_segment *segp)
 	segp->present = true;
 }
 
-vm_paddr_t addr_arch_gva2gpa(struct kvm_vm *vm, vm_vaddr_t gva)
+vm_paddr_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
 {
 	int level = PG_LEVEL_NONE;
 	uint64_t *pte = __vm_get_page_table_entry(vm, &vm->mmu, gva, &level);
@@ -630,7 +630,7 @@ vm_paddr_t addr_arch_gva2gpa(struct kvm_vm *vm, vm_vaddr_t gva)
 	return vm_untag_gpa(vm, PTE_GET_PA(*pte)) | (gva & ~HUGEPAGE_MASK(level));
 }
 
-static void kvm_seg_set_tss_64bit(vm_vaddr_t base, struct kvm_segment *segp)
+static void kvm_seg_set_tss_64bit(gva_t base, struct kvm_segment *segp)
 {
 	memset(segp, 0, sizeof(*segp));
 	segp->base = base;
@@ -743,16 +743,16 @@ static void vm_init_descriptor_tables(struct kvm_vm *vm)
 	struct kvm_segment seg;
 	int i;
 
-	vm->arch.gdt = __vm_vaddr_alloc_page(vm, MEM_REGION_DATA);
-	vm->arch.idt = __vm_vaddr_alloc_page(vm, MEM_REGION_DATA);
-	vm->handlers = __vm_vaddr_alloc_page(vm, MEM_REGION_DATA);
-	vm->arch.tss = __vm_vaddr_alloc_page(vm, MEM_REGION_DATA);
+	vm->arch.gdt = __gva_alloc_page(vm, MEM_REGION_DATA);
+	vm->arch.idt = __gva_alloc_page(vm, MEM_REGION_DATA);
+	vm->handlers = __gva_alloc_page(vm, MEM_REGION_DATA);
+	vm->arch.tss = __gva_alloc_page(vm, MEM_REGION_DATA);
 
 	/* Handlers have the same address in both address spaces.*/
 	for (i = 0; i < NUM_INTERRUPTS; i++)
 		set_idt_entry(vm, i, (unsigned long)(&idt_handlers)[i], 0, KERNEL_CS);
 
-	*(vm_vaddr_t *)addr_gva2hva(vm, (vm_vaddr_t)(&exception_handlers)) = vm->handlers;
+	*(gva_t *)addr_gva2hva(vm, (gva_t)(&exception_handlers)) = vm->handlers;
 
 	kvm_seg_set_kernel_code_64bit(&seg);
 	kvm_seg_fill_gdt_64bit(vm, &seg);
@@ -767,9 +767,9 @@ static void vm_init_descriptor_tables(struct kvm_vm *vm)
 void vm_install_exception_handler(struct kvm_vm *vm, int vector,
 			       void (*handler)(struct ex_regs *))
 {
-	vm_vaddr_t *handlers = (vm_vaddr_t *)addr_gva2hva(vm, vm->handlers);
+	gva_t *handlers = (gva_t *)addr_gva2hva(vm, vm->handlers);
 
-	handlers[vector] = (vm_vaddr_t)handler;
+	handlers[vector] = (gva_t)handler;
 }
 
 void assert_on_unhandled_exception(struct kvm_vcpu *vcpu)
@@ -820,12 +820,12 @@ struct kvm_vcpu *vm_arch_vcpu_add(struct kvm_vm *vm, uint32_t vcpu_id)
 {
 	struct kvm_mp_state mp_state;
 	struct kvm_regs regs;
-	vm_vaddr_t stack_vaddr;
+	gva_t stack_vaddr;
 	struct kvm_vcpu *vcpu;
 
-	stack_vaddr = __vm_vaddr_alloc(vm, DEFAULT_STACK_PGS * getpagesize(),
-				       DEFAULT_GUEST_STACK_VADDR_MIN,
-				       MEM_REGION_DATA);
+	stack_vaddr = __gva_alloc(vm, DEFAULT_STACK_PGS * getpagesize(),
+				  DEFAULT_GUEST_STACK_VADDR_MIN,
+				  MEM_REGION_DATA);
 
 	stack_vaddr += DEFAULT_STACK_PGS * getpagesize();
 
@@ -839,7 +839,7 @@ struct kvm_vcpu *vm_arch_vcpu_add(struct kvm_vm *vm, uint32_t vcpu_id)
 	 * may need to subtract 4 bytes instead of 8 bytes.
 	 */
 	TEST_ASSERT(IS_ALIGNED(stack_vaddr, PAGE_SIZE),
-		    "__vm_vaddr_alloc() did not provide a page-aligned address");
+		    "__gva_alloc() did not provide a page-aligned address");
 	stack_vaddr -= 8;
 
 	vcpu = __vm_vcpu_add(vm, vcpu_id);

@@ -12,9 +12,9 @@
 #define LOONGARCH_GUEST_STACK_VADDR_MIN		0x200000
 
 static vm_paddr_t invalid_pgtable[4];
-static vm_vaddr_t exception_handlers;
+static gva_t exception_handlers;
 
-static uint64_t virt_pte_index(struct kvm_vm *vm, vm_vaddr_t gva, int level)
+static uint64_t virt_pte_index(struct kvm_vm *vm, gva_t gva, int level)
 {
 	unsigned int shift;
 	uint64_t mask;
@@ -71,7 +71,7 @@ static int virt_pte_none(uint64_t *ptep, int level)
 	return *ptep == invalid_pgtable[level];
 }
 
-static uint64_t *virt_populate_pte(struct kvm_vm *vm, vm_vaddr_t gva, int alloc)
+static uint64_t *virt_populate_pte(struct kvm_vm *vm, gva_t gva, int alloc)
 {
 	int level;
 	uint64_t *ptep;
@@ -105,7 +105,7 @@ unmapped_gva:
 	exit(EXIT_FAILURE);
 }
 
-vm_paddr_t addr_arch_gva2gpa(struct kvm_vm *vm, vm_vaddr_t gva)
+vm_paddr_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
 {
 	uint64_t *ptep;
 
@@ -205,8 +205,9 @@ void vm_init_descriptor_tables(struct kvm_vm *vm)
 {
 	void *addr;
 
-	vm->handlers = __vm_vaddr_alloc(vm, sizeof(struct handlers),
-			LOONGARCH_GUEST_STACK_VADDR_MIN, MEM_REGION_DATA);
+	vm->handlers = __gva_alloc(vm, sizeof(struct handlers),
+				   LOONGARCH_GUEST_STACK_VADDR_MIN,
+				   MEM_REGION_DATA);
 
 	addr = addr_gva2hva(vm, vm->handlers);
 	memset(addr, 0, vm->page_size);
@@ -341,8 +342,9 @@ static void loongarch_vcpu_setup(struct kvm_vcpu *vcpu)
 	loongarch_set_csr(vcpu, LOONGARCH_CSR_STLBPGSIZE, PS_DEFAULT_SIZE);
 
 	/* LOONGARCH_CSR_KS1 is used for exception stack */
-	val = __vm_vaddr_alloc(vm, vm->page_size,
-			LOONGARCH_GUEST_STACK_VADDR_MIN, MEM_REGION_DATA);
+	val = __gva_alloc(vm, vm->page_size,
+			  LOONGARCH_GUEST_STACK_VADDR_MIN,
+			  MEM_REGION_DATA);
 	TEST_ASSERT(val != 0,  "No memory for exception stack");
 	val = val + vm->page_size;
 	loongarch_set_csr(vcpu, LOONGARCH_CSR_KS1, val);
@@ -365,8 +367,9 @@ struct kvm_vcpu *vm_arch_vcpu_add(struct kvm_vm *vm, uint32_t vcpu_id)
 
 	vcpu = __vm_vcpu_add(vm, vcpu_id);
 	stack_size = vm->page_size;
-	stack_vaddr = __vm_vaddr_alloc(vm, stack_size,
-			LOONGARCH_GUEST_STACK_VADDR_MIN, MEM_REGION_DATA);
+	stack_vaddr = __gva_alloc(vm, stack_size,
+				  LOONGARCH_GUEST_STACK_VADDR_MIN,
+				  MEM_REGION_DATA);
 	TEST_ASSERT(stack_vaddr != 0,  "No memory for vm stack");
 
 	loongarch_vcpu_setup(vcpu);

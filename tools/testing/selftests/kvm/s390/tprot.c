@@ -146,7 +146,7 @@ static enum stage perform_next_stage(int *i, bool mapped_0)
 		/*
 		 * Some fetch protection override tests require that page 0
 		 * be mapped, however, when the hosts tries to map that page via
-		 * vm_vaddr_alloc, it may happen that some other page gets mapped
+		 * gva_alloc, it may happen that some other page gets mapped
 		 * instead.
 		 * In order to skip these tests we detect this inside the guest
 		 */
@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	struct kvm_run *run;
-	vm_vaddr_t guest_0_page;
+	gva_t guest_0_page;
 
 	ksft_print_header();
 	ksft_set_plan(STAGE_END);
@@ -216,10 +216,10 @@ int main(int argc, char *argv[])
 	run = vcpu->run;
 
 	HOST_SYNC(vcpu, STAGE_INIT_SIMPLE);
-	mprotect(addr_gva2hva(vm, (vm_vaddr_t)pages), PAGE_SIZE * 2, PROT_READ);
+	mprotect(addr_gva2hva(vm, (gva_t)pages), PAGE_SIZE * 2, PROT_READ);
 	HOST_SYNC(vcpu, TEST_SIMPLE);
 
-	guest_0_page = vm_vaddr_alloc(vm, PAGE_SIZE, 0);
+	guest_0_page = gva_alloc(vm, PAGE_SIZE, 0);
 	if (guest_0_page != 0) {
 		/* Use NO_TAP so we don't get a PASS print */
 		HOST_SYNC_NO_TAP(vcpu, STAGE_INIT_FETCH_PROT_OVERRIDE);
@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
 		HOST_SYNC(vcpu, STAGE_INIT_FETCH_PROT_OVERRIDE);
 	}
 	if (guest_0_page == 0)
-		mprotect(addr_gva2hva(vm, (vm_vaddr_t)0), PAGE_SIZE, PROT_READ);
+		mprotect(addr_gva2hva(vm, (gva_t)0), PAGE_SIZE, PROT_READ);
 	run->s.regs.crs[0] |= CR0_FETCH_PROTECTION_OVERRIDE;
 	run->kvm_dirty_regs = KVM_SYNC_CRS;
 	HOST_SYNC(vcpu, TEST_FETCH_PROT_OVERRIDE);

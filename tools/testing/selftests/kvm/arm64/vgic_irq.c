@@ -731,7 +731,7 @@ static void kvm_inject_get_call(struct kvm_vm *vm, struct ucall *uc,
 		struct kvm_inject_args *args)
 {
 	struct kvm_inject_args *kvm_args_hva;
-	vm_vaddr_t kvm_args_gva;
+	gva_t kvm_args_gva;
 
 	kvm_args_gva = uc->args[1];
 	kvm_args_hva = (struct kvm_inject_args *)addr_gva2hva(vm, kvm_args_gva);
@@ -752,7 +752,7 @@ static void test_vgic(uint32_t nr_irqs, bool level_sensitive, bool eoi_split)
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	struct kvm_inject_args inject_args;
-	vm_vaddr_t args_gva;
+	gva_t args_gva;
 
 	struct test_args args = {
 		.nr_irqs = nr_irqs,
@@ -770,7 +770,7 @@ static void test_vgic(uint32_t nr_irqs, bool level_sensitive, bool eoi_split)
 	vcpu_init_descriptor_tables(vcpu);
 
 	/* Setup the guest args page (so it gets the args). */
-	args_gva = vm_vaddr_alloc_page(vm);
+	args_gva = gva_alloc_page(vm);
 	memcpy(addr_gva2hva(vm, args_gva), &args, sizeof(args));
 	vcpu_args_set(vcpu, 1, args_gva);
 
@@ -986,7 +986,7 @@ static void test_vgic_two_cpus(void *gcode)
 	struct kvm_vcpu *vcpus[2];
 	struct test_args args = {};
 	struct kvm_vm *vm;
-	vm_vaddr_t args_gva;
+	gva_t args_gva;
 	int gic_fd, ret;
 
 	vm = vm_create_with_vcpus(2, gcode, vcpus);
@@ -996,7 +996,7 @@ static void test_vgic_two_cpus(void *gcode)
 	vcpu_init_descriptor_tables(vcpus[1]);
 
 	/* Setup the guest args page (so it gets the args). */
-	args_gva = vm_vaddr_alloc_page(vm);
+	args_gva = gva_alloc_page(vm);
 	memcpy(addr_gva2hva(vm, args_gva), &args, sizeof(args));
 	vcpu_args_set(vcpus[0], 2, args_gva, 0);
 	vcpu_args_set(vcpus[1], 2, args_gva, 1);
