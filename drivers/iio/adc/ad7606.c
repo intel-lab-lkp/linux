@@ -540,9 +540,9 @@ static int ad7606_reg_access(struct iio_dev *indio_dev,
 			return ret;
 		*readval = ret;
 		return 0;
-	} else {
-		return st->bops->reg_write(st, reg, writeval);
 	}
+
+	return st->bops->reg_write(st, reg, writeval);
 }
 
 static int ad7606_pwm_set_high(struct ad7606_state *st)
