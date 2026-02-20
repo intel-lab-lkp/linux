@@ -92,6 +92,16 @@ config HID_GENERIC
 
 	If unsure, say Y.
 
+config HID_LAMPARRAY
+	bool "HID LampArray helper"
+	depends on HID_GENERIC && LEDS_CLASS && LEDS_CLASS_MULTICOLOR
+	default y
+	help
+	Helper for HID devices exposing a Lighting/LampArray collection.
+	Treats LampArray devices as a single-zone device and exposes a sysfs
+	interface for changing color and intensity values. Also exposes a
+	sysfs flag to be disabled e.g. by a userspace driver.
+
 config HID_HAPTIC
 	bool "Haptic touchpad support"
 	default n
