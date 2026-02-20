@@ -701,8 +701,8 @@ int intel_dp_aux_init_backlight_funcs(struct intel_connector *connector)
 	 * backlight interface at all. This means that the only sensible way for us to detect both
 	 * interfaces is to probe for Intel's first, and VESA's second.
 	 */
-	if (try_intel_interface && intel_dp_aux_supports_hdr_backlight(connector) &&
-	    intel_dp->edp_dpcd[0] <= DP_EDP_14b) {
+	if (try_intel_interface && intel_dp->edp_dpcd[0] <= DP_EDP_14b &&
+	    intel_dp_aux_supports_hdr_backlight(connector)) {
 		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] Using Intel proprietary eDP backlight controls\n",
 			    connector->base.base.id, connector->base.name);
 		panel->backlight.funcs = &intel_dp_hdr_bl_funcs;
