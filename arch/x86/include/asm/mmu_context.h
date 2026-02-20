@@ -86,6 +86,9 @@ static inline void switch_ldt(struct mm_struct *prev, struct mm_struct *next)
 #endif
 
 #ifdef CONFIG_ADDRESS_MASKING
+
+extern unsigned long lam_available_bits;
+
 static inline unsigned long mm_lam_cr3_mask(struct mm_struct *mm)
 {
 	/*

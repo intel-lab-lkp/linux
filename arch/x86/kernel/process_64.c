@@ -797,7 +797,10 @@ static long prctl_map_vdso(const struct vdso_image *image, unsigned long addr)
 
 #ifdef CONFIG_ADDRESS_MASKING
 
-#define LAM_U57_BITS 6
+#define LAM_MAX_BITS		6
+#define LAM_DEFAULT_BITS	4
+
+unsigned long lam_available_bits = LAM_DEFAULT_BITS;
 
 static void enable_lam_func(void *__mm)
 {
@@ -811,10 +814,10 @@ static void enable_lam_func(void *__mm)
 	}
 }
 
-static void mm_enable_lam(struct mm_struct *mm)
+static void mm_enable_lam(struct mm_struct *mm, unsigned long nr_bits)
 {
 	mm->context.lam_cr3_mask = X86_CR3_LAM_U57;
-	mm->context.untag_mask =  ~GENMASK(62, 57);
+	mm->context.untag_mask =  ~GENMASK(57 + lam_available_bits - 1, 57);
 
 	/*
 	 * Even though the process must still be single-threaded at this
@@ -850,12 +853,12 @@ static int prctl_enable_tagged_addr(struct mm_struct *mm, unsigned long nr_bits)
 		return -EBUSY;
 	}
 
-	if (!nr_bits || nr_bits > LAM_U57_BITS) {
+	if (!nr_bits || nr_bits > lam_available_bits) {
 		mmap_write_unlock(mm);
 		return -EINVAL;
 	}
 
-	mm_enable_lam(mm);
+	mm_enable_lam(mm, nr_bits);
 
 	mmap_write_unlock(mm);
 
@@ -965,7 +968,7 @@ long do_arch_prctl_64(struct task_struct *task, int option, unsigned long arg2)
 		if (!cpu_feature_enabled(X86_FEATURE_LAM))
 			return put_user(0, (unsigned long __user *)arg2);
 		else
-			return put_user(LAM_U57_BITS, (unsigned long __user *)arg2);
+			return put_user(lam_available_bits, (unsigned long __user *)arg2);
 #endif
 	case ARCH_SHSTK_ENABLE:
 	case ARCH_SHSTK_DISABLE:
