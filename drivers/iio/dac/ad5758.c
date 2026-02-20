@@ -483,10 +483,10 @@ static int ad5758_reset(struct ad5758_state *st)
 		usleep_range(100, 1000);
 
 		return 0;
-	} else {
-		/* Perform a software reset */
-		return ad5758_soft_reset(st);
 	}
+
+	/* Perform a software reset */
+	return ad5758_soft_reset(st);
 }
 
 static int ad5758_reg_access(struct iio_dev *indio_dev,
