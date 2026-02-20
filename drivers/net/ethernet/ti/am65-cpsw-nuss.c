@@ -1570,8 +1570,8 @@ static irqreturn_t am65_cpsw_nuss_rx_irq(int irq, void *dev_id)
 {
 	struct am65_cpsw_rx_flow *flow = dev_id;
 
-	flow->irq_disabled = true;
 	disable_irq_nosync(irq);
+	flow->irq_disabled = true;
 	napi_schedule(&flow->napi_rx);
 
 	return IRQ_HANDLED;
