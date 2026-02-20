@@ -503,8 +503,8 @@ void strp_done(struct strparser *strp)
 {
 	WARN_ON(!strp->stopped);
 
-	cancel_delayed_work_sync(&strp->msg_timer_work);
-	cancel_work_sync(&strp->work);
+	disable_delayed_work_sync(&strp->msg_timer_work);
+	disable_work_sync(&strp->work);
 
 	if (strp->skb_head) {
 		kfree_skb(strp->skb_head);
