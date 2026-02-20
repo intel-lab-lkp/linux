@@ -111,7 +111,8 @@ struct gb_audio_manager_module *gb_audio_manager_get_module(int id)
 
 	down_read(&modules_rwsem);
 	module = gb_audio_manager_get_locked(id);
-	kobject_get(&module->kobj);
+	if (module)
+		kobject_get(&module->kobj);
 	up_read(&modules_rwsem);
 	return module;
 }
