@@ -39,8 +39,8 @@
 #include <net/pkt_sched.h>
 #include "macb.h"
 
-/* This structure is only used for MACB on SiFive FU540 devices */
-struct sifive_fu540_macb_mgmt {
+/* This structure is used for MACB on SiFive FU540/FU740 devices */
+struct sifive_macb_mgmt {
 	void __iomem *reg;
 	unsigned long rate;
 	struct clk_hw hw;
@@ -4650,7 +4650,7 @@ static const struct macb_usrio_config macb_default_usrio = {
 /* max number of receive buffers */
 #define AT91ETHER_MAX_RX_DESCR	9
 
-static struct sifive_fu540_macb_mgmt *mgmt;
+static struct sifive_macb_mgmt *mgmt;
 
 static int at91ether_alloc_coherent(struct macb *lp)
 {
@@ -5236,6 +5236,16 @@ static const struct macb_config fu540_c000_config = {
 	.usrio = &macb_default_usrio,
 };
 
+static const struct macb_config fu740_c000_config = {
+	.caps = MACB_CAPS_GIGABIT_MODE_AVAILABLE | MACB_CAPS_JUMBO |
+		MACB_CAPS_GEM_HAS_PTP,
+	.dma_burst_length = 16,
+	.clk_init = fu540_c000_clk_init,
+	.init = fu540_c000_init,
+	.jumbo_max_len = 10240,
+	.usrio = &macb_default_usrio,
+};
+
 static const struct macb_config at91sam9260_config = {
 	.caps = MACB_CAPS_USRIO_HAS_CLKEN | MACB_CAPS_USRIO_DEFAULT_IS_MII_GMII,
 	.clk_init = macb_clk_init,
@@ -5411,6 +5421,7 @@ static const struct of_device_id macb_dt_ids[] = {
 	{ .compatible = "cdns,zynqmp-gem", .data = &zynqmp_config}, /* deprecated */
 	{ .compatible = "cdns,zynq-gem", .data = &zynq_config }, /* deprecated */
 	{ .compatible = "sifive,fu540-c000-gem", .data = &fu540_c000_config },
+	{ .compatible = "sifive,fu740-c000-gem", .data = &fu740_c000_config },
 	{ .compatible = "microchip,mpfs-macb", .data = &mpfs_config },
 	{ .compatible = "microchip,sama7g5-gem", .data = &sama7g5_gem_config },
 	{ .compatible = "microchip,sama7g5-emac", .data = &sama7g5_emac_config },
