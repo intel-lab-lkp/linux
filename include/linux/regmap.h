@@ -10,15 +10,15 @@
  * Author: Mark Brown <broonie@opensource.wolfsonmicro.com>
  */
 
-#include <linux/list.h>
-#include <linux/rbtree.h>
-#include <linux/ktime.h>
+#include <linux/bug.h>
 #include <linux/delay.h>
 #include <linux/err.h>
-#include <linux/bug.h>
-#include <linux/lockdep.h>
-#include <linux/iopoll.h>
 #include <linux/fwnode.h>
+#include <linux/iopoll.h>
+#include <linux/ktime.h>
+#include <linux/list.h>
+#include <linux/lockdep.h>
+#include <linux/rbtree.h>
 
 struct module;
 struct clk;
