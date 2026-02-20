@@ -461,10 +461,9 @@ static int admv1013_init(struct admv1013_state *st, int vcm_uv)
 		return ret;
 
 	data = FIELD_GET(ADMV1013_CHIP_ID_MSK, data);
-	if (data != ADMV1013_CHIP_ID) {
-		dev_err(&spi->dev, "Invalid Chip ID.\n");
-		return -EINVAL;
-	}
+	if (data != ADMV1013_CHIP_ID)
+		return dev_err_probe(&spi->dev, -EINVAL,
+				     "Invalid Chip ID.\n");
 
 	ret = __admv1013_spi_write(st, ADMV1013_REG_VVA_TEMP_COMP, 0xE700);
 	if (ret)
@@ -549,11 +548,9 @@ static int admv1013_properties_parse(struct admv1013_state *st)
 	ret = devm_regulator_bulk_get_enable(&st->spi->dev,
 					     ARRAY_SIZE(admv1013_vcc_regs),
 					     admv1013_vcc_regs);
-	if (ret) {
-		dev_err_probe(&spi->dev, ret,
-			      "Failed to request VCC regulators\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&spi->dev, ret,
+				     "Failed to request VCC regulators\n");
 
 	return 0;
 }
@@ -601,10 +598,9 @@ static int admv1013_probe(struct spi_device *spi)
 	mutex_init(&st->lock);
 
 	ret = admv1013_init(st, vcm_uv);
-	if (ret) {
-		dev_err(&spi->dev, "admv1013 init failed\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&spi->dev, ret,
+				     "admv1013 init failed\n");
 
 	ret = devm_add_action_or_reset(&spi->dev, admv1013_powerdown, st);
 	if (ret)
