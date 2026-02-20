@@ -1309,6 +1309,44 @@ static void xadc_cancel_delayed_work(void *data)
 	cancel_delayed_work_sync(work);
 }
 
+static struct iio_dev *xadc_device_setup(struct device *dev, int size,
+					 const struct xadc_ops **ops)
+{
+	struct iio_dev *indio_dev;
+
+	*ops = device_get_match_data(dev);
+	if (!*ops)
+		return ERR_PTR(-ENODEV);
+
+	indio_dev = devm_iio_device_alloc(dev, size);
+	if (!indio_dev)
+		return ERR_PTR(-ENOMEM);
+
+	indio_dev->name = xadc_type_names[(*ops)->type];
+	indio_dev->info = &xadc_info;
+	indio_dev->modes = INDIO_DIRECT_MODE;
+
+	return indio_dev;
+}
+
+static int xadc_device_configure(struct device *dev, struct iio_dev *indio_dev,
+				 int irq, unsigned int *conf0, unsigned int *bipolar_mask)
+{
+	int ret, i;
+
+	ret = xadc_parse_dt(indio_dev, conf0, irq);
+	if (ret)
+		return ret;
+
+	*bipolar_mask = 0;
+	for (i = 0; i < indio_dev->num_channels; i++) {
+		if (indio_dev->channels[i].scan_type.sign == 's')
+			*bipolar_mask |= BIT(indio_dev->channels[i].scan_index);
+	}
+
+	return 0;
+}
+
 static int xadc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1321,18 +1359,14 @@ static int xadc_probe(struct platform_device *pdev)
 	int irq;
 	int i;
 
-	ops = device_get_match_data(dev);
-	if (!ops)
-		return -EINVAL;
+	indio_dev = xadc_device_setup(dev, sizeof(*xadc), &ops);
+	if (IS_ERR(indio_dev))
+		return PTR_ERR(indio_dev);
 
 	irq = platform_get_irq_optional(pdev, 0);
 	if (irq < 0 &&
 	    (irq != -ENXIO || !(ops->flags & XADC_FLAGS_IRQ_OPTIONAL)))
 		return irq;
-
-	indio_dev = devm_iio_device_alloc(dev, sizeof(*xadc));
-	if (!indio_dev)
-		return -ENOMEM;
 
 	xadc = iio_priv(indio_dev);
 	xadc->ops = ops;
@@ -1345,11 +1379,7 @@ static int xadc_probe(struct platform_device *pdev)
 	if (IS_ERR(xadc->base))
 		return PTR_ERR(xadc->base);
 
-	indio_dev->name = xadc_type_names[xadc->ops->type];
-	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->info = &xadc_info;
-
-	ret = xadc_parse_dt(indio_dev, &conf0, irq);
+	ret = xadc_device_configure(dev, indio_dev, irq, &conf0, &bipolar_mask);
 	if (ret)
 		return ret;
 
@@ -1416,12 +1446,6 @@ static int xadc_probe(struct platform_device *pdev)
 	ret = xadc_write_adc_reg(xadc, XADC_REG_CONF0, conf0);
 	if (ret)
 		return ret;
-
-	bipolar_mask = 0;
-	for (i = 0; i < indio_dev->num_channels; i++) {
-		if (indio_dev->channels[i].scan_type.sign == 's')
-			bipolar_mask |= BIT(indio_dev->channels[i].scan_index);
-	}
 
 	ret = xadc_write_adc_reg(xadc, XADC_REG_INPUT_MODE(0), bipolar_mask);
 	if (ret)
