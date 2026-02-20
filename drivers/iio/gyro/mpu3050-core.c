@@ -1103,12 +1103,13 @@ static int mpu3050_trigger_probe(struct iio_dev *indio_dev, int irq)
 	if (mpu3050->irq_opendrain)
 		irq_trig |= IRQF_SHARED;
 
-	ret = request_threaded_irq(irq,
-				   mpu3050_irq_handler,
-				   mpu3050_irq_thread,
-				   irq_trig,
-				   mpu3050->trig->name,
-				   mpu3050->trig);
+	ret = devm_request_threaded_irq(dev,
+					irq,
+					mpu3050_irq_handler,
+					mpu3050_irq_thread,
+					irq_trig,
+					mpu3050->trig->name,
+					mpu3050->trig);
 	if (ret) {
 		dev_err(dev, "can't get IRQ %d, error %d\n", irq, ret);
 		return ret;
@@ -1260,8 +1261,6 @@ void mpu3050_common_remove(struct device *dev)
 	pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
 	iio_triggered_buffer_cleanup(indio_dev);
-	if (mpu3050->irq)
-		free_irq(mpu3050->irq, mpu3050);
 	iio_device_unregister(indio_dev);
 	mpu3050_power_down(mpu3050);
 }
