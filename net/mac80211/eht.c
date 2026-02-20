@@ -174,9 +174,6 @@ void ieee80211_rx_eml_op_mode_notif(struct ieee80211_sub_if_data *sdata,
 	if (!ift_ext_capa)
 		return;
 
-	if (!status->link_valid)
-		return;
-
 	sta = sta_info_get_bss(sdata, mgmt->sa);
 	if (!sta)
 		return;
