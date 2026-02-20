@@ -99,6 +99,19 @@ required:
   - '#interrupt-cells'
   - '#size-cells'
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - sprd,sc2730
+    then:
+      properties:
+        regulators:
+          type: object
+          $ref: /schemas/regulator/sprd,sc2730-regulator.yaml#
+
 additionalProperties: false
 
 examples:
