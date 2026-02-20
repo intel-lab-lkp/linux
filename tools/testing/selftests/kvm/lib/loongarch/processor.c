@@ -11,7 +11,7 @@
 #define LOONGARCH_PAGE_TABLE_PHYS_MIN		0x200000
 #define LOONGARCH_GUEST_STACK_VADDR_MIN		0x200000
 
-static vm_paddr_t invalid_pgtable[4];
+static gpa_t invalid_pgtable[4];
 static gva_t exception_handlers;
 
 static uint64_t virt_pte_index(struct kvm_vm *vm, gva_t gva, int level)
@@ -34,7 +34,7 @@ static uint64_t ptrs_per_pte(struct kvm_vm *vm)
 	return 1 << (vm->page_shift - 3);
 }
 
-static void virt_set_pgtable(struct kvm_vm *vm, vm_paddr_t table, vm_paddr_t child)
+static void virt_set_pgtable(struct kvm_vm *vm, gpa_t table, gpa_t child)
 {
 	uint64_t *ptep;
 	int i, ptrs_per_pte;
@@ -48,7 +48,7 @@ static void virt_set_pgtable(struct kvm_vm *vm, vm_paddr_t table, vm_paddr_t chi
 void virt_arch_pgd_alloc(struct kvm_vm *vm)
 {
 	int i;
-	vm_paddr_t child, table;
+	gpa_t child, table;
 
 	if (vm->mmu.pgd_created)
 		return;
@@ -75,7 +75,7 @@ static uint64_t *virt_populate_pte(struct kvm_vm *vm, gva_t gva, int alloc)
 {
 	int level;
 	uint64_t *ptep;
-	vm_paddr_t child;
+	gpa_t child;
 
 	if (!vm->mmu.pgd_created)
 		goto unmapped_gva;
@@ -105,7 +105,7 @@ unmapped_gva:
 	exit(EXIT_FAILURE);
 }
 
-vm_paddr_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
+gpa_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
 {
 	uint64_t *ptep;
 
