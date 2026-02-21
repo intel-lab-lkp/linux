@@ -3,8 +3,6 @@
  * mpl115.c - Support for Freescale MPL115A pressure/temperature sensor
  *
  * Copyright (c) 2014 Peter Meerwald <pmeerw@pmeerw.net>
- *
- * TODO: synchronization with system suspend
  */
 
 #include <linux/module.h>
