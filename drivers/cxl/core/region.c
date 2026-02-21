@@ -3971,6 +3971,12 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 	}
 
 	if (attach) {
+		struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+
+		/* Skip device_attach if memdev has is own attach callback */
+		if (cxlmd->attach)
+			return 0;
+
 		/*
 		 * If device_attach() fails the range may still be active via
 		 * the platform-firmware memory map, otherwise the driver for
