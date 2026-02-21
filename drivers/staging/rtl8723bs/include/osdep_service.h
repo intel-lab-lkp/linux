@@ -78,8 +78,6 @@ static inline int rtw_bug_check(void *parg1, void *parg2, void *parg3, void *par
 
 }
 
-#define _RND(sz, r) ((((sz)+((r)-1))/(r))*(r))
-
 extern void rtw_free_netdev(struct net_device *netdev);
 
 /* Macros for handling unaligned memory accesses */

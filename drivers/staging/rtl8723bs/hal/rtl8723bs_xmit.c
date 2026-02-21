@@ -232,7 +232,7 @@ static s32 xmit_xmitframes(struct adapter *padapter, struct xmit_priv *pxmitpriv
 				/*  check xmit_buf size enough or not */
 				txlen = txdesc_size + rtw_wlan_pkt_size(pxmitframe);
 				if (!pxmitbuf ||
-					((_RND(pxmitbuf->len, 8) + txlen) > max_xmit_len) ||
+					((round_up(pxmitbuf->len, 8) + txlen) > max_xmit_len) ||
 					(k >= (rtw_hal_sdio_max_txoqt_free_space(padapter) - 1))
 				) {
 					if (pxmitbuf) {
@@ -303,8 +303,8 @@ static s32 xmit_xmitframes(struct adapter *padapter, struct xmit_priv *pxmitpriv
 					txlen = txdesc_size + pxmitframe->attrib.last_txcmdsz;
 					pxmitframe->pg_num = (txlen + 127) / 128;
 					pxmitbuf->pg_num += (txlen + 127) / 128;
-					pxmitbuf->ptail += _RND(txlen, 8); /*  round to 8 bytes alignment */
-					pxmitbuf->len = _RND(pxmitbuf->len, 8) + txlen;
+					pxmitbuf->ptail += round_up(txlen, 8);
+					pxmitbuf->len = round_up(pxmitbuf->len, 8) + txlen;
 				}
 
 				if (k != 1)
