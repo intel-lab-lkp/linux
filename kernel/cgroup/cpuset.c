@@ -65,14 +65,28 @@ static const char * const perr_strings[] = {
  * CPUSET Locking Convention
  * -------------------------
  *
- * Below are the three global locks guarding cpuset structures in lock
+ * Below are the four global/local locks guarding cpuset structures in lock
  * acquisition order:
+ *  - cpuset_top_mutex
  *  - cpu_hotplug_lock (cpus_read_lock/cpus_write_lock)
  *  - cpuset_mutex
  *  - callback_lock (raw spinlock)
  *
- * A task must hold all the three locks to modify externally visible or
- * used fields of cpusets, though some of the internally used cpuset fields
+ * As cpuset will now indirectly flush a number of different workqueues in
+ * housekeeping_update() to update housekeeping cpumasks when the set of
+ * isolated CPUs is going to be changed, it may be vulnerable to deadlock
+ * if we hold cpus_read_lock while calling into housekeeping_update().
+ *
+ * The first cpuset_top_mutex will be held except when calling into
+ * cpuset_handle_hotplug() from the CPU hotplug code where cpus_write_lock
+ * and cpuset_mutex will be held instead. The main purpose of this mutex
+ * is to prevent regular cpuset control file write actions from interfering
+ * with the call to housekeeping_update(), though CPU hotplug operation can
+ * still happen in parallel. This mutex also provides protection for some
+ * internal variables.
+ *
+ * A task must hold all the remaining three locks to modify externally visible
+ * or used fields of cpusets, though some of the internally used cpuset fields
  * and internal variables can be modified without holding callback_lock. If only
  * reliable read access of the externally used fields are needed, a task can
  * hold either cpuset_mutex or callback_lock which are exposed to other
@@ -100,6 +114,7 @@ static const char * const perr_strings[] = {
  * cpumasks and nodemasks.
  */
 
+static DEFINE_MUTEX(cpuset_top_mutex);
 static DEFINE_MUTEX(cpuset_mutex);
 
 /*
@@ -111,6 +126,8 @@ static DEFINE_MUTEX(cpuset_mutex);
  *
  * CSCB: Readable by holding either cpuset_mutex or callback_lock. Writable
  *	 by holding both cpuset_mutex and callback_lock.
+ *
+ * T:	 Read/write-able by holding the cpuset_top_mutex.
  */
 
 /*
@@ -133,6 +150,11 @@ static cpumask_var_t	isolated_cpus;		/* CSCB */
  * Set if housekeeping cpumasks are to be updated.
  */
 static bool		update_housekeeping;	/* RWCS */
+
+/*
+ * Copy of isolated_cpus to be passed to housekeeping_update()
+ */
+static cpumask_var_t	isolated_hk_cpus;	/* T */
 
 /*
  * A flag to force sched domain rebuild at the end of an operation.
@@ -297,6 +319,7 @@ void lockdep_assert_cpuset_lock_held(void)
  */
 void cpuset_full_lock(void)
 {
+	mutex_lock(&cpuset_top_mutex);
 	cpus_read_lock();
 	mutex_lock(&cpuset_mutex);
 }
@@ -305,12 +328,14 @@ void cpuset_full_unlock(void)
 {
 	mutex_unlock(&cpuset_mutex);
 	cpus_read_unlock();
+	mutex_unlock(&cpuset_top_mutex);
 }
 
 #ifdef CONFIG_LOCKDEP
 bool lockdep_is_cpuset_held(void)
 {
-	return lockdep_is_held(&cpuset_mutex);
+	return lockdep_is_held(&cpuset_mutex) ||
+	       lockdep_is_held(&cpuset_top_mutex);
 }
 #endif
 
@@ -1315,9 +1340,20 @@ static void update_hk_sched_domains(void)
 {
 	if (update_housekeeping) {
 		/* Updating HK cpumasks implies rebuild sched domains */
-		WARN_ON_ONCE(housekeeping_update(isolated_cpus));
 		update_housekeeping = false;
 		force_sd_rebuild = true;
+		cpumask_copy(isolated_hk_cpus, isolated_cpus);
+
+		/*
+		 * housekeeping_update() is now called without holding
+		 * cpus_read_lock and cpuset_mutex. Only cpuset_top_mutex
+		 * is still being held for mutual exclusion.
+		 */
+		mutex_unlock(&cpuset_mutex);
+		cpus_read_unlock();
+		WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus));
+		cpus_read_lock();
+		mutex_lock(&cpuset_mutex);
 	}
 	/* force_sd_rebuild will be cleared in rebuild_sched_domains_locked() */
 	if (force_sd_rebuild)
@@ -3635,6 +3671,7 @@ int __init cpuset_init(void)
 	BUG_ON(!alloc_cpumask_var(&top_cpuset.exclusive_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&subpartitions_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&isolated_cpus, GFP_KERNEL));
+	BUG_ON(!zalloc_cpumask_var(&isolated_hk_cpus, GFP_KERNEL));
 
 	cpumask_setall(top_cpuset.cpus_allowed);
 	nodes_setall(top_cpuset.mems_allowed);
