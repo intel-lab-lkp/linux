@@ -451,17 +451,15 @@ static irqreturn_t ads1015_trigger_handler(int irq, void *p)
 	} scan = { };
 	int chan, ret, res;
 
-	mutex_lock(&data->lock);
-	chan = find_first_bit(indio_dev->active_scan_mask,
-			      iio_get_masklength(indio_dev));
-	ret = ads1015_get_adc_result(data, chan, &res);
-	if (ret < 0) {
-		mutex_unlock(&data->lock);
-		goto err;
-	}
+	scoped_guard(mutex, &data->lock) {
+		chan = find_first_bit(indio_dev->active_scan_mask,
+				      iio_get_masklength(indio_dev));
+		ret = ads1015_get_adc_result(data, chan, &res);
+		if (ret < 0)
+			goto err;
 
-	scan.chan = res;
-	mutex_unlock(&data->lock);
+		scan.chan = res;
+	}
 
 	iio_push_to_buffers_with_ts(indio_dev, &scan, sizeof(scan),
 				    iio_get_time_ns(indio_dev));
