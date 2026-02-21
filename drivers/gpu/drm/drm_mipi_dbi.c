@@ -713,9 +713,9 @@ void mipi_dbi_hw_reset(struct mipi_dbi *dbi)
 	if (!dbi->reset)
 		return;
 
-	gpiod_set_value_cansleep(dbi->reset, 0);
+	gpiod_set_value_cansleep(dbi->reset, dbi->invert_reset ? 1 : 0);
 	usleep_range(20, 1000);
-	gpiod_set_value_cansleep(dbi->reset, 1);
+	gpiod_set_value_cansleep(dbi->reset, dbi->invert_reset ? 0 : 1);
 	msleep(120);
 }
 EXPORT_SYMBOL(mipi_dbi_hw_reset);
