@@ -281,7 +281,10 @@ after:
  */
 static int cmppid(const void *a, const void *b)
 {
-	return *(pid_t *)a - *(pid_t *)b;
+	pid_t pa = *(pid_t *)a;
+	pid_t pb = *(pid_t *)b;
+
+	return (pa > pb) - (pa < pb);
 }
 
 static struct cgroup_pidlist *cgroup_pidlist_find(struct cgroup *cgrp,
