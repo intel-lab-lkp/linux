@@ -561,10 +561,6 @@ struct iio_trigger *viio_trigger_alloc(struct device *parent,
 	if (!trig)
 		return NULL;
 
-	trig->dev.parent = parent;
-	trig->dev.type = &iio_trig_type;
-	trig->dev.bus = &iio_bus_type;
-	device_initialize(&trig->dev);
 	INIT_WORK(&trig->reenable_work, iio_reenable_work_fn);
 
 	mutex_init(&trig->pool_lock);
@@ -591,6 +587,11 @@ struct iio_trigger *viio_trigger_alloc(struct device *parent,
 		irq_modify_status(trig->subirq_base + i,
 				  IRQ_NOREQUEST | IRQ_NOAUTOEN, IRQ_NOPROBE);
 	}
+
+	trig->dev.parent = parent;
+	trig->dev.type = &iio_trig_type;
+	trig->dev.bus = &iio_bus_type;
+	device_initialize(&trig->dev);
 
 	return trig;
 
