@@ -99,17 +99,9 @@ static inline unsigned int disk_zone_wplugs_hash_size(struct gendisk *disk)
  *    being executed or the zone write plug bio list is not empty.
  *  - BLK_ZONE_WPLUG_NEED_WP_UPDATE: Indicates that we lost track of a zone
  *    write pointer offset and need to update it.
- *  - BLK_ZONE_WPLUG_UNHASHED: Indicates that the zone write plug was removed
- *    from the disk hash table and that the initial reference to the zone
- *    write plug set when the plug was first added to the hash table has been
- *    dropped. This flag is set when a zone is reset, finished or become full,
- *    to prevent new references to the zone write plug to be taken for
- *    newly incoming BIOs. A zone write plug flagged with this flag will be
- *    freed once all remaining references from BIOs or functions are dropped.
  */
 #define BLK_ZONE_WPLUG_PLUGGED		(1U << 0)
 #define BLK_ZONE_WPLUG_NEED_WP_UPDATE	(1U << 1)
-#define BLK_ZONE_WPLUG_UNHASHED		(1U << 2)
 
 /**
  * blk_zone_cond_str - Return a zone condition name string
@@ -592,7 +584,7 @@ static inline void disk_put_zone_wplug(struct blk_zone_wplug *zwplug)
 	if (refcount_dec_and_test(&zwplug->ref)) {
 		WARN_ON_ONCE(!bio_list_empty(&zwplug->bio_list));
 		WARN_ON_ONCE(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED);
-		WARN_ON_ONCE(!(zwplug->flags & BLK_ZONE_WPLUG_UNHASHED));
+		WARN_ON_ONCE(!hlist_unhashed_lockless(&zwplug->node));
 
 		call_rcu(&zwplug->rcu_head, disk_free_zone_wplug_rcu);
 	}
@@ -603,12 +595,12 @@ static inline bool disk_should_remove_zone_wplug(struct gendisk *disk,
 {
 	lockdep_assert_held(&zwplug->lock);
 
-	/* If the zone write plug was already removed, we are done. */
-	if (zwplug->flags & BLK_ZONE_WPLUG_UNHASHED)
-		return false;
-
 	/* If the zone write plug is still plugged, it cannot be removed. */
 	if (zwplug->flags & BLK_ZONE_WPLUG_PLUGGED)
+		return false;
+
+	/* If the zone write plug was already removed, we have nothing to do. */
+	if (hlist_unhashed(&zwplug->node))
 		return false;
 
 	/*
@@ -635,16 +627,14 @@ static void disk_remove_zone_wplug(struct gendisk *disk,
 	unsigned long flags;
 
 	/* If the zone write plug was already removed, we have nothing to do. */
-	if (zwplug->flags & BLK_ZONE_WPLUG_UNHASHED)
+	if (hlist_unhashed(&zwplug->node))
 		return;
 
 	/*
-	 * Mark the zone write plug as unhashed and drop the extra reference we
-	 * took when the plug was inserted in the hash table. Also update the
-	 * disk zone condition array with the current condition of the zone
-	 * write plug.
+	 * Update the disk zone condition array with the current condition of
+	 * the zone write plug and drop the extra reference we took when the
+	 * plug was inserted in the hash table.
 	 */
-	zwplug->flags |= BLK_ZONE_WPLUG_UNHASHED;
 	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
 	blk_zone_set_cond(rcu_dereference_check(disk->zones_cond,
 				lockdep_is_held(&disk->zone_wplugs_lock)),
@@ -702,7 +692,7 @@ again:
 		 * we need to get a new plug so start over from the beginning.
 		 */
 		spin_lock_irqsave(&zwplug->lock, *flags);
-		if (zwplug->flags & BLK_ZONE_WPLUG_UNHASHED) {
+		if (hlist_unhashed(&zwplug->node)) {
 			spin_unlock_irqrestore(&zwplug->lock, *flags);
 			disk_put_zone_wplug(zwplug);
 			goto again;
