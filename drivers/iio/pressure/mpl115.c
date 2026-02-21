@@ -244,8 +244,10 @@ static int mpl115_runtime_resume(struct device *dev)
 	return 0;
 }
 
-EXPORT_NS_RUNTIME_DEV_PM_OPS(mpl115_dev_pm_ops, mpl115_runtime_suspend,
-			  mpl115_runtime_resume, NULL, IIO_MPL115);
+EXPORT_NS_GPL_DEV_PM_OPS(mpl115_dev_pm_ops, IIO_MPL115) = {
+	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
+	RUNTIME_PM_OPS(mpl115_runtime_suspend, mpl115_runtime_resume, NULL)
+};
 
 MODULE_AUTHOR("Peter Meerwald <pmeerw@pmeerw.net>");
 MODULE_DESCRIPTION("Freescale MPL115 pressure/temperature driver");
