@@ -749,6 +749,8 @@ static int gfs2_create_inode(struct inode *dir, struct dentry *dentry,
 		if (file) {
 			if (S_ISREG(inode->i_mode))
 				error = finish_open(file, dentry, gfs2_open_common);
+			else if (file->f_flags & OPENAT2_REGULAR)
+				error = -EFTYPE;
 			else
 				error = finish_no_open(file, NULL);
 		}

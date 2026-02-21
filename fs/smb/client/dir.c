@@ -236,6 +236,11 @@ static int cifs_do_create(struct inode *inode, struct dentry *direntry, unsigned
 				 * lookup.
 				 */
 				CIFSSMBClose(xid, tcon, fid->netfid);
+				if (oflags & OPENAT2_REGULAR) {
+					iput(newinode);
+					rc = -EFTYPE;
+					goto out;
+				}
 				goto cifs_create_get_file_info;
 			}
 			/* success, no need to query */
@@ -433,11 +438,15 @@ cifs_create_set_dentry:
 		goto out_err;
 	}
 
-	if (newinode)
+	if (newinode) {
 		if (S_ISDIR(newinode->i_mode)) {
 			rc = -EISDIR;
 			goto out_err;
+		} else if ((oflags & OPENAT2_REGULAR) && !S_ISREG(newinode->i_mode)) {
+			rc = -EFTYPE;
+			goto out_err;
 		}
+	}
 
 	d_drop(direntry);
 	d_add(direntry, newinode);
