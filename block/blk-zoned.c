@@ -1205,13 +1205,15 @@ static void disk_zone_wplug_schedule_bio_work(struct gendisk *disk,
 	lockdep_assert_held(&zwplug->lock);
 
 	/*
-	 * Take a reference on the zone write plug and schedule the submission
-	 * of the next plugged BIO. blk_zone_wplug_bio_work() will release the
-	 * reference we take here.
+	 * Schedule the submission of the next plugged BIO. If the zone write
+	 * plug BIO work is not already scheduled, take a reference on the zone
+	 * write plug to ensure that it does not go away while the work is being
+	 * scheduled but has not run yet. blk_zone_wplug_bio_work() will release
+	 * the reference we take here.
 	 */
 	WARN_ON_ONCE(!(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED));
-	refcount_inc(&zwplug->ref);
-	queue_work(disk->zone_wplugs_wq, &zwplug->bio_work);
+	if (queue_work(disk->zone_wplugs_wq, &zwplug->bio_work))
+		refcount_inc(&zwplug->ref);
 }
 
 static inline void disk_zone_wplug_add_bio(struct gendisk *disk,
