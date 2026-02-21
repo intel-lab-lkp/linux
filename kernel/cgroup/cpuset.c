@@ -1324,6 +1324,16 @@ static void update_hk_sched_domains(void)
 		rebuild_sched_domains_locked();
 }
 
+/*
+ * Work function to invoke update_hk_sched_domains()
+ */
+static void hk_sd_workfn(struct work_struct *work)
+{
+	cpuset_full_lock();
+	update_hk_sched_domains();
+	cpuset_full_unlock();
+}
+
 /**
  * rm_siblings_excl_cpus - Remove exclusive CPUs that are used by sibling cpusets
  * @parent: Parent cpuset containing all siblings
@@ -3796,6 +3806,7 @@ unlock:
  */
 static void cpuset_handle_hotplug(void)
 {
+	static DECLARE_WORK(hk_sd_work, hk_sd_workfn);
 	static cpumask_t new_cpus;
 	static nodemask_t new_mems;
 	bool cpus_updated, mems_updated;
@@ -3878,11 +3889,21 @@ static void cpuset_handle_hotplug(void)
 	}
 
 
-	if (update_housekeeping || force_sd_rebuild) {
-		mutex_lock(&cpuset_mutex);
-		update_hk_sched_domains();
-		mutex_unlock(&cpuset_mutex);
-	}
+	/*
+	 * Queue a work to call housekeeping_update() & rebuild_sched_domains()
+	 * There will be a slight delay before the HK_TYPE_DOMAIN housekeeping
+	 * cpumask can correctly reflect what is in isolated_cpus.
+	 *
+	 * We rely on WORK_STRUCT_PENDING_BIT to not requeue a work item that
+	 * is still pending. Before the pending bit is cleared, the work data
+	 * is copied out and work item dequeued. So it is possible to queue
+	 * the work again before the hk_sd_workfn() is invoked to process the
+	 * previously queued work. Since hk_sd_workfn() doesn't use the work
+	 * item at all, this is not a problem.
+	 */
+	if (update_housekeeping || force_sd_rebuild)
+		queue_work(system_unbound_wq, &hk_sd_work);
+
 	free_tmpmasks(ptmp);
 }
 
