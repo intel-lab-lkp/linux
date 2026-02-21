@@ -655,6 +655,29 @@ static void disk_remove_zone_wplug(struct gendisk *disk,
 	disk_put_zone_wplug(zwplug);
 }
 
+static inline void disk_check_and_put_zone_wplug(struct blk_zone_wplug *zwplug)
+{
+	lockdep_assert_not_held(&zwplug->lock);
+
+	/*
+	 * Check for the need to remove the zone write plug from the hash list
+	 * when we see that only the caller is referencing the zone write plug.
+	 * Since this is racy without holding the zone write plug lock, this
+	 * check is done again in  disk_should_remove_zone_wplug().
+	 */
+	if (refcount_read(&zwplug->ref) <= 2) {
+		struct gendisk *disk = zwplug->disk;
+		unsigned long flags;
+
+		spin_lock_irqsave(&zwplug->lock, flags);
+		if (disk_should_remove_zone_wplug(disk, zwplug))
+			disk_remove_zone_wplug(disk, zwplug);
+		spin_unlock_irqrestore(&zwplug->lock, flags);
+	}
+
+	disk_put_zone_wplug(zwplug);
+}
+
 static void blk_zone_wplug_bio_work(struct work_struct *work);
 
 /*
@@ -835,7 +858,7 @@ static unsigned int disk_zone_wplug_sync_wp_offset(struct gendisk *disk,
 		if (zwplug->flags & BLK_ZONE_WPLUG_NEED_WP_UPDATE)
 			disk_zone_wplug_set_wp_offset(disk, zwplug, wp_offset);
 		spin_unlock_irqrestore(&zwplug->lock, flags);
-		disk_put_zone_wplug(zwplug);
+		disk_check_and_put_zone_wplug(zwplug);
 	}
 
 	return wp_offset;
@@ -1017,14 +1040,14 @@ int blkdev_get_zone_info(struct block_device *bdev, sector_t sector,
 	spin_lock_irqsave(&zwplug->lock, flags);
 	if (zwplug->flags & BLK_ZONE_WPLUG_NEED_WP_UPDATE) {
 		spin_unlock_irqrestore(&zwplug->lock, flags);
-		disk_put_zone_wplug(zwplug);
+		disk_check_and_put_zone_wplug(zwplug);
 		return blkdev_report_zone_fallback(bdev, sector, zone);
 	}
 	zone->cond = zwplug->cond;
 	zone->wp = sector + zwplug->wp_offset;
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 
-	disk_put_zone_wplug(zwplug);
+	disk_check_and_put_zone_wplug(zwplug);
 
 	return 0;
 }
@@ -1107,7 +1130,7 @@ static void blk_zone_reset_bio_endio(struct bio *bio)
 		spin_lock_irqsave(&zwplug->lock, flags);
 		disk_zone_wplug_set_wp_offset(disk, zwplug, 0);
 		spin_unlock_irqrestore(&zwplug->lock, flags);
-		disk_put_zone_wplug(zwplug);
+		disk_check_and_put_zone_wplug(zwplug);
 	} else {
 		disk_zone_set_cond(disk, sector, BLK_ZONE_COND_EMPTY);
 	}
@@ -1165,7 +1188,7 @@ static void blk_zone_finish_bio_endio(struct bio *bio)
 		disk_zone_wplug_set_wp_offset(disk, zwplug,
 					      bdev_zone_sectors(bdev));
 		spin_unlock_irqrestore(&zwplug->lock, flags);
-		disk_put_zone_wplug(zwplug);
+		disk_check_and_put_zone_wplug(zwplug);
 	} else {
 		disk_zone_set_cond(disk, sector, BLK_ZONE_COND_FULL);
 	}
@@ -1530,7 +1553,7 @@ static void blk_zone_wplug_handle_native_zone_append(struct bio *bio)
 	disk_remove_zone_wplug(disk, zwplug);
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 
-	disk_put_zone_wplug(zwplug);
+	disk_check_and_put_zone_wplug(zwplug);
 }
 
 static bool blk_zone_wplug_handle_zone_mgmt(struct bio *bio)
@@ -1631,13 +1654,6 @@ static void disk_zone_wplug_unplug_bio(struct gendisk *disk,
 
 	zwplug->flags &= ~BLK_ZONE_WPLUG_PLUGGED;
 
-	/*
-	 * If the zone is full (it was fully written or finished, or empty
-	 * (it was reset), remove its zone write plug from the hash table.
-	 */
-	if (disk_should_remove_zone_wplug(disk, zwplug))
-		disk_remove_zone_wplug(disk, zwplug);
-
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 }
 
@@ -1701,7 +1717,7 @@ void blk_zone_write_plug_bio_endio(struct bio *bio)
 		disk_zone_wplug_unplug_bio(disk, zwplug);
 
 	/* Drop the reference we took when entering this function. */
-	disk_put_zone_wplug(zwplug);
+	disk_check_and_put_zone_wplug(zwplug);
 }
 
 void blk_zone_write_plug_finish_request(struct request *req)
@@ -1724,7 +1740,7 @@ void blk_zone_write_plug_finish_request(struct request *req)
 	disk_zone_wplug_unplug_bio(disk, zwplug);
 
 	/* Drop the reference we took when entering this function. */
-	disk_put_zone_wplug(zwplug);
+	disk_check_and_put_zone_wplug(zwplug);
 }
 
 static void blk_zone_wplug_bio_work(struct work_struct *work)
@@ -1777,7 +1793,7 @@ again:
 
 put_zwplug:
 	/* Drop the reference we took in disk_zone_wplug_schedule_bio_work(). */
-	disk_put_zone_wplug(zwplug);
+	disk_check_and_put_zone_wplug(zwplug);
 }
 
 void disk_init_zone_resources(struct gendisk *disk)
@@ -1850,7 +1866,7 @@ static void disk_destroy_zone_wplugs_hash_table(struct gendisk *disk)
 					     struct blk_zone_wplug, node);
 			refcount_inc(&zwplug->ref);
 			disk_remove_zone_wplug(disk, zwplug);
-			disk_put_zone_wplug(zwplug);
+			disk_check_and_put_zone_wplug(zwplug);
 		}
 	}
 
@@ -2112,7 +2128,7 @@ static int blk_revalidate_seq_zone(struct blk_zone *zone, unsigned int idx,
 	if (!zwplug)
 		return -ENOMEM;
 	spin_unlock_irqrestore(&zwplug->lock, flags);
-	disk_put_zone_wplug(zwplug);
+	disk_check_and_put_zone_wplug(zwplug);
 
 	return 0;
 }
