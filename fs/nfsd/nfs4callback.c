@@ -36,6 +36,7 @@
 #include <linux/sunrpc/xprt.h>
 #include <linux/sunrpc/svc_xprt.h>
 #include <linux/slab.h>
+#include <linux/sunrpc/metrics.h>
 #include "nfsd.h"
 #include "state.h"
 #include "netns.h"
@@ -1016,7 +1017,7 @@ static int nfs4_xdr_dec_cb_offload(struct rpc_rqst *rqstp,
 	.p_decode  = nfs4_xdr_dec_##restype,				\
 	.p_arglen  = NFS4_enc_##argtype##_sz,				\
 	.p_replen  = NFS4_dec_##restype##_sz,				\
-	.p_statidx = NFSPROC4_CB_##call,				\
+	.p_statidx = NFSPROC4_CLNT_##proc,				\
 	.p_name    = #proc,						\
 }
 
@@ -1785,4 +1786,34 @@ bool nfsd4_run_cb(struct nfsd4_callback *cb)
 	if (!queued)
 		nfsd41_cb_inflight_end(clp);
 	return queued;
+}
+
+void nfsd4_show_cb_stats(struct nfsd_net *nn, struct seq_file *seq)
+{
+	const struct rpc_procinfo *pinfo;
+	const struct rpc_version *ver;
+	struct nfs4_client *clp;
+	int ix;
+
+	/* display system-wide status, count per op */
+	ver = cb_program.version[1];
+	for (ix = 0; ix < ver->nrprocs; ix++) {
+		pinfo = &ver->procs[ix];
+		if (pinfo->p_name)
+			seq_printf(seq, "%s: %d\n",
+				pinfo->p_name, ver->counts[pinfo->p_statidx]);
+	}
+
+	/* display per-client status, similar to mountstats(8) in raw format */
+	spin_lock(&nn->client_lock);
+	for (ix = 0; ix < CLIENT_HASH_SIZE; ix++) {
+		list_for_each_entry(clp, &nn->conf_id_hashtbl[ix], cl_idhash) {
+			if (!clp->cl_cb_client)
+				continue;
+			seq_printf(seq, "\nClient[%pISpc]:\n",
+					(struct sockaddr *)&clp->cl_addr);
+			rpc_clnt_show_stats(seq, clp->cl_cb_client);
+		}
+	}
+	spin_unlock(&nn->client_lock);
 }

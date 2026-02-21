@@ -66,6 +66,8 @@ static int nfsd_show(struct seq_file *seq, void *v)
 		percpu_counter_sum_positive(&nn->counter[NFSD_STATS_WDELEG_GETATTR]));
 
 	seq_putc(seq, '\n');
+
+	nfsd4_show_cb_stats(nn, seq);
 #endif
 
 	return 0;

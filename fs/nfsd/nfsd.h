@@ -585,6 +585,7 @@ extern void nfsd4_ssc_init_umount_work(struct nfsd_net *nn);
 #endif
 
 extern void nfsd4_init_leases_net(struct nfsd_net *nn);
+void nfsd4_show_cb_stats(struct nfsd_net *nn, struct seq_file *seq);
 
 #else /* CONFIG_NFSD_V4 */
 static inline int nfsd4_is_junction(struct dentry *dentry)
