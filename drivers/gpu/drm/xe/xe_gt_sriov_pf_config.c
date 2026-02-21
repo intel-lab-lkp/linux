@@ -1626,13 +1626,15 @@ static int pf_provision_vf_lmem(struct xe_gt *gt, unsigned int vfid, u64 size)
 	struct xe_device *xe = gt_to_xe(gt);
 	struct xe_tile *tile = gt_to_tile(gt);
 	struct xe_bo *bo;
+	u64 alignment;
 	int err;
 
 	xe_gt_assert(gt, vfid);
 	xe_gt_assert(gt, IS_DGFX(xe));
 	xe_gt_assert(gt, xe_gt_is_main_type(gt));
 
-	size = round_up(size, pf_get_lmem_alignment(gt));
+	alignment = pf_get_lmem_alignment(gt);
+	size = round_up(size, alignment);
 
 	if (config->lmem_obj) {
 		err = pf_distribute_config_lmem(gt, vfid, 0);
@@ -1648,12 +1650,12 @@ static int pf_provision_vf_lmem(struct xe_gt *gt, unsigned int vfid, u64 size)
 	if (!size)
 		return 0;
 
-	xe_gt_assert(gt, pf_get_lmem_alignment(gt) == SZ_2M);
+	xe_gt_assert(gt, alignment == XE_PAGE_SIZE || alignment == SZ_2M);
 	bo = xe_bo_create_pin_range_novm(xe, tile,
 					 ALIGN(size, PAGE_SIZE), 0, ~0ull,
 					 ttm_bo_type_kernel,
 					 XE_BO_FLAG_VRAM(tile->mem.vram) |
-					 XE_BO_FLAG_NEEDS_2M |
+					 (alignment == SZ_2M ? XE_BO_FLAG_NEEDS_2M : 0) |
 					 XE_BO_FLAG_PINNED |
 					 XE_BO_FLAG_PINNED_LATE_RESTORE |
 					 XE_BO_FLAG_FORCE_USER_VRAM);
