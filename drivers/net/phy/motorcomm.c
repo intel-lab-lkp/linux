@@ -227,6 +227,9 @@
 #define YT8521_LED_100_ON_EN			BIT(5)
 #define YT8521_LED_10_ON_EN			BIT(4)
 
+#define YTPHY_MDIO_ADDRESS_CONTROL_REG		0xA005
+#define YTPHY_MACR_EN_PHY_ADDR_0		BIT(6)
+
 #define YTPHY_MISC_CONFIG_REG			0xA006
 #define YTPHY_MCR_FIBER_SPEED_MASK		BIT(0)
 #define YTPHY_MCR_FIBER_1000BX			(0x1 << 0)
@@ -2765,6 +2768,30 @@ static int yt8821_soft_reset(struct phy_device *phydev)
 }
 
 /**
+ * yt8821_disable_mdio_address_zero() - disable MDIO broadcast address 0
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * The YT8821 responds on two MDIO addresses by default:
+ *  - the address selected by its strapping pins
+ *  - the broadcast address 0
+ *
+ * Some other PHYs (e.g. the MT7981B internal Gigabit PHY) are hardwired to
+ * respond only on MDIO address 0. If the YT8821 also listens on address 0,
+ * it may incorrectly react to transactions intended for those PHYs.
+ *
+ * Disabling address 0 on the YT8821 early avoids such MDIO bus conflicts.
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8821_disable_mdio_address_zero(struct phy_device *phydev)
+{
+	return ytphy_modify_ext(phydev,
+				YTPHY_MDIO_ADDRESS_CONTROL_REG,
+				YTPHY_MACR_EN_PHY_ADDR_0,
+				0);
+}
+
+/**
  * yt8821_config_init() - phy initializatioin
  * @phydev: a pointer to a &struct phy_device
  *
@@ -2799,6 +2826,10 @@ static int yt8821_config_init(struct phy_device *phydev)
 		phydev->rate_matching = RATE_MATCH_PAUSE;
 	}
 
+	ret = yt8821_disable_mdio_address_zero(phydev);
+	if (ret < 0)
+		return ret;
+
 	ret = yt8821_serdes_init(phydev);
 	if (ret < 0)
 		return ret;
@@ -2814,6 +2845,22 @@ static int yt8821_config_init(struct phy_device *phydev)
 
 	/* soft reset */
 	return yt8821_soft_reset(phydev);
+}
+
+/**
+ * yt8821_probe() - early PHY initialization
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8821_probe(struct phy_device *phydev)
+{
+	/*
+	 * Disable the MDIO broadcast address (0) as early as possible.
+	 * This prevents the YT8821 from responding to transactions
+	 * intended for a different PHY that is fixed at address 0.
+	 */
+	return yt8821_disable_mdio_address_zero(phydev);
 }
 
 /**
@@ -3077,6 +3124,7 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8821),
 		.name			= "YT8821 2.5Gbps PHY",
 		.get_features		= yt8821_get_features,
+		.probe			= yt8821_probe,
 		.read_page		= yt8521_read_page,
 		.write_page		= yt8521_write_page,
 		.get_wol		= ytphy_get_wol,
