@@ -58,21 +58,6 @@ static inline void _set_timer(struct timer_list *ptimer, u32 delay_time)
 	mod_timer(ptimer, (jiffies + (delay_time * HZ / 1000)));
 }
 
-static inline void _init_workitem(struct work_struct *pwork, void *pfunc, void *cntx)
-{
-	INIT_WORK(pwork, pfunc);
-}
-
-static inline void _set_workitem(struct work_struct *pwork)
-{
-	schedule_work(pwork);
-}
-
-static inline void _cancel_workitem_sync(struct work_struct *pwork)
-{
-	cancel_work_sync(pwork);
-}
-
 static inline int rtw_netif_queue_stopped(struct net_device *pnetdev)
 {
 	return (netif_tx_queue_stopped(netdev_get_tx_queue(pnetdev, 0)) &&

@@ -670,7 +670,7 @@ static void pwr_rpwm_timeout_handler(struct timer_list *t)
 	if ((pwrpriv->rpwm == pwrpriv->cpwm) || (pwrpriv->cpwm >= PS_STATE_S2))
 		return;
 
-	_set_workitem(&pwrpriv->rpwmtimeoutwi);
+	schedule_work(&pwrpriv->rpwmtimeoutwi);
 }
 
 static inline void register_task_alive(struct pwrctrl_priv *pwrctrl, u32 tag)
@@ -971,11 +971,11 @@ void rtw_init_pwrctrl_priv(struct adapter *padapter)
 
 	rtw_hal_set_hwreg(padapter, HW_VAR_SET_RPWM, (u8 *)(&pwrctrlpriv->rpwm));
 
-	_init_workitem(&pwrctrlpriv->cpwm_event, cpwm_event_callback, NULL);
+	INIT_WORK(&pwrctrlpriv->cpwm_event, cpwm_event_callback);
 
 	pwrctrlpriv->brpwmtimeout = false;
 	pwrctrlpriv->adapter = padapter;
-	_init_workitem(&pwrctrlpriv->rpwmtimeoutwi, rpwmtimeout_workitem_callback, NULL);
+	INIT_WORK(&pwrctrlpriv->rpwmtimeoutwi, rpwmtimeout_workitem_callback);
 	timer_setup(&pwrctrlpriv->pwr_rpwm_timer, pwr_rpwm_timeout_handler, 0);
 	timer_setup(&pwrctrlpriv->pwr_state_check_timer,
 		    pwr_state_check_handler, 0);
