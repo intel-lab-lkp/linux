@@ -8,11 +8,21 @@ use crate::{
     bindings,
     device,
     device::{Bound, Core},
-    error::{to_result, Result},
-    io::KnownSize,
+    error::{
+        to_result,
+        Result, //
+    },
+    io::{
+        Io,
+        IoCapable,
+        KnownSize, //
+    },
     prelude::*,
     sync::aref::ARef,
-    transmute::{AsBytes, FromBytes}, //
+    transmute::{
+        AsBytes,
+        FromBytes, //
+    }, //
 };
 use core::ptr::NonNull;
 
@@ -813,6 +823,75 @@ impl<T: AsBytes + FromBytes + KnownSize + ?Sized> Drop for Coherent<T> {
 // SAFETY: It is safe to send a `Coherent` to another thread if `T`
 // can be sent to another thread.
 unsafe impl<T: AsBytes + FromBytes + KnownSize + Send + ?Sized> Send for Coherent<T> {}
+
+impl<T: ?Sized + AsBytes + FromBytes + KnownSize> Io for Coherent<T> {
+    type Type = T;
+
+    #[inline]
+    fn as_ptr(&self) -> *mut Self::Type {
+        self.as_mut_ptr()
+    }
+}
+
+impl<B: ?Sized + AsBytes + FromBytes + KnownSize, T: AsBytes + FromBytes> IoCapable<T>
+    for Coherent<B>
+{
+    #[inline]
+    unsafe fn io_read(&self, address: *mut T) -> T {
+        // SAFETY:
+        // - By the safety precondition, the address is within bounds of the allocation and
+        //   aligned.
+        // - Using read_volatile() here so that race with hardware is well-defined.
+        // - Using read_volatile() here is not sound if it races with other CPU per Rust rules,
+        //   but this is allowed per LKMM.
+        unsafe { address.read_volatile() }
+    }
+
+    #[inline]
+    unsafe fn io_write(&self, value: T, address: *mut T) {
+        // SAFETY:
+        // // - By the safety precondition, the address is within bounds of the allocation and
+        //   aligned.
+        // - Using write_volatile() here so that race with hardware is well-defined.
+        // - Using write_volatile() here is not sound if it race with other CPU per Rust rules,
+        //   but this is allowed per LKMM.
+        unsafe { address.write_volatile(value) }
+    }
+}
+
+impl<'a, B: ?Sized + AsBytes + FromBytes + KnownSize, T> crate::io::View<'a, Coherent<B>, T> {
+    /// Returns a reference to the data in the region.
+    ///
+    /// # Safety
+    ///
+    /// * Callers must ensure that the device does not read/write to/from memory while the returned
+    ///   slice is live.
+    /// * Callers must ensure that this call does not race with a write to the same region while
+    ///   the returned slice is live.
+    #[inline]
+    pub unsafe fn as_ref(self) -> &'a T {
+        let ptr = self.as_ptr();
+        // SAFETY: pointer is aligned and valid per type invariant of `View`. Aliasing rule is
+        // satisfied per safety requirement.
+        unsafe { &*ptr }
+    }
+
+    /// Returns a mutable reference to the data in the region.
+    ///
+    /// # Safety
+    ///
+    /// * Callers must ensure that the device does not read/write to/from memory while the returned
+    ///   slice is live.
+    /// * Callers must ensure that this call does not race with a read or write to the same region
+    ///   while the returned slice is live.
+    #[inline]
+    pub unsafe fn as_mut(self) -> &'a mut T {
+        let ptr = self.as_ptr();
+        // SAFETY: pointer is aligned and valid per type invariant of `View`. Aliasing rule is
+        // satisfied per safety requirement.
+        unsafe { &mut *ptr }
+    }
+}
 
 /// Reads a field of an item from an allocated region of structs.
 ///
