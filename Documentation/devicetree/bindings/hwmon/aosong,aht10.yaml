@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/aosong,aht10.yaml#
+$schema: http://devicetree.org/meta-schema.yaml#
+
+title: Aosong AHT10/AHT20/DHT20 Temperature and Humidity Sensor
+
+maintainers:
+  - Hao Yu <haoyufine@gmail.com>
+
+description: |
+  The Aosong AHT10, AHT20, and DHT20 are I2C humidity and temperature sensors.
+
+properties:
+  compatible:
+    enum:
+      - aosong,aht10
+      - aosong,aht20
+      - aosong,dht20
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        sensor@38 {
+            compatible = "aosong,aht20";
+            reg = <0x38>;
+        };
+    };
