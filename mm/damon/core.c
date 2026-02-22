@@ -1952,13 +1952,12 @@ static void damon_verify_reset_aggregated(struct damon_region *r,
 {
 	if (r->nr_accesses_bp == r->last_nr_accesses * 10000)
 		return;
-	pr_err("reset time invalid region found!\n");
 	pr_err("nr_accesses_bp %u last_nr_acceses %u\n",
 			r->nr_accesses_bp, r->last_nr_accesses);
 	pr_err("passed_sis %lu next_aggregation_sis %lu\n",
 			c->passed_sample_intervals,
 			c->next_aggregation_sis);
-	WARN_ONCE(true, "");
+	WARN_ONCE(true, "reset time invalid region found\n");
 }
 #else
 static void damon_verify_reset_aggregated(struct damon_region *r,
