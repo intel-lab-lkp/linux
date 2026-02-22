@@ -48,6 +48,31 @@ struct sprd_pmic_data {
 	u32 irq_base;
 	u32 num_irqs;
 	u32 charger_det;
+	const struct mfd_cell *cells;
+	int num_cells;
+};
+
+static const struct mfd_cell sc2730_devices[] = {
+	MFD_CELL_OF("sc2730-adc", NULL, NULL, 0, 0, "sprd,sc2730-adc"),
+	MFD_CELL_OF("sc2730-bltc", NULL, NULL, 0, 0, "sprd,sc2730-bltc"),
+	MFD_CELL_OF("sc2730-efuse", NULL, NULL, 0, 0, "sprd,sc2730-efuse"),
+	MFD_CELL_OF("sc2730-eic", NULL, NULL, 0, 0, "sprd,sc2730-eic"),
+	MFD_CELL_OF("sc2730-fgu", NULL, NULL, 0, 0, "sprd,sc2730-fgu"),
+	MFD_CELL_OF("sc2730-rtc", NULL, NULL, 0, 0, "sprd,sc2730-rtc"),
+	MFD_CELL_OF("sc2730-vibrator", NULL, NULL, 0, 0, "sprd,sc2730-vibrator"),
+};
+
+static const struct mfd_cell sc2731_devices[] = {
+	MFD_CELL_OF("sc2731-adc", NULL, NULL, 0, 0, "sprd,sc2731-adc"),
+	MFD_CELL_OF("sc2731-bltc", NULL, NULL, 0, 0, "sprd,sc2731-bltc"),
+	MFD_CELL_OF("sc2731-charger", NULL, NULL, 0, 0, "sprd,sc2731-charger"),
+	MFD_CELL_OF("sc2731-efuse", NULL, NULL, 0, 0, "sprd,sc2731-efuse"),
+	MFD_CELL_OF("sc2731-eic", NULL, NULL, 0, 0, "sprd,sc2731-eic"),
+	MFD_CELL_OF("sc2731-fgu", NULL, NULL, 0, 0, "sprd,sc2731-fgu"),
+	MFD_CELL_NAME("sc2731-poweroff"),
+	MFD_CELL_NAME("sc2731-regulator"),
+	MFD_CELL_OF("sc2731-rtc", NULL, NULL, 0, 0, "sprd,sc2731-rtc"),
+	MFD_CELL_OF("sc2731-vibrator", NULL, NULL, 0, 0, "sprd,sc2731-vibrator"),
 };
 
 /*
@@ -59,12 +84,16 @@ static const struct sprd_pmic_data sc2730_data = {
 	.irq_base = SPRD_SC2730_IRQ_BASE,
 	.num_irqs = SPRD_SC2730_IRQ_NUMS,
 	.charger_det = SPRD_SC2730_CHG_DET,
+	.cells = sc2730_devices,
+	.num_cells = ARRAY_SIZE(sc2730_devices),
 };
 
 static const struct sprd_pmic_data sc2731_data = {
 	.irq_base = SPRD_SC2731_IRQ_BASE,
 	.num_irqs = SPRD_SC2731_IRQ_NUMS,
 	.charger_det = SPRD_SC2731_CHG_DET,
+	.cells = sc2731_devices,
+	.num_cells = ARRAY_SIZE(sc2731_devices),
 };
 
 enum usb_charger_type sprd_pmic_detect_charger_type(struct device *dev)
@@ -204,7 +233,9 @@ static int sprd_pmic_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	ret = devm_of_platform_populate(&spi->dev);
+	ret = devm_mfd_add_devices(&spi->dev, PLATFORM_DEVID_AUTO,
+				   pdata->cells, pdata->num_cells, NULL, 0,
+				   regmap_irq_get_domain(ddata->irq_data));
 	if (ret) {
 		dev_err(&spi->dev, "Failed to populate sub-devices %d\n", ret);
 		return ret;
