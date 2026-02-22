@@ -764,11 +764,12 @@ static int init_versalnet(struct mc_priv *priv, struct platform_device *pdev)
 {
 	u32 num_chans, rank, dwidth, config;
 	struct edac_mc_layer layers[2];
+	bool mc_added[NUM_CONTROLLERS] = { };
 	struct mem_ctl_info *mci;
 	struct device *dev;
 	enum dev_type dt;
 	char *name;
-	int rc, i;
+	int rc, i, j;
 
 	for (i = 0; i < NUM_CONTROLLERS; i++) {
 		config = priv->adec[CONF + i * ADEC_NUM];
@@ -813,11 +814,25 @@ static int init_versalnet(struct mc_priv *priv, struct platform_device *pdev)
 		priv->dwidth = dt;
 
 		dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+		if (!dev) {
+			rc = -ENOMEM;
+			goto err_alloc;
+		}
+
 		dev->release = versal_edac_release;
 		name = kmalloc(32, GFP_KERNEL);
-		sprintf(name, "versal-net-ddrmc5-edac-%d", i);
+		if (!name) {
+			kfree(dev);
+			rc = -ENOMEM;
+			goto err_alloc;
+		}
+
+		snprintf(name, 32, "versal-net-ddrmc5-edac-%d", i);
 		dev->init_name = name;
 		rc = device_register(dev);
+		kfree(name);
+		if (rc)
+			put_device(dev);
 		if (rc)
 			goto err_alloc;
 
@@ -831,21 +846,25 @@ static int init_versalnet(struct mc_priv *priv, struct platform_device *pdev)
 			edac_printk(KERN_ERR, EDAC_MC, "Failed to register MC%d with EDAC core\n", i);
 			goto err_alloc;
 		}
+
+		mc_added[i] = true;
 	}
 	return 0;
 
 err_alloc:
-	while (i--) {
-		mci = priv->mci[i];
+	for (j = i; j >= 0; j--) {
+		mci = priv->mci[j];
 		if (!mci)
 			continue;
 
 		if (mci->pdev) {
 			device_unregister(mci->pdev);
-			edac_mc_del_mc(mci->pdev);
+			if (mc_added[j])
+				edac_mc_del_mc(mci->pdev);
 		}
 
 		edac_mc_free(mci);
+		priv->mci[j] = NULL;
 	}
 
 	return rc;
