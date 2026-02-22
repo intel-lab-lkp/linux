@@ -860,6 +860,7 @@ struct __test_xfail {
 	struct __fixture_metadata *fixture;
 	struct __fixture_variant_metadata *variant;
 	struct __test_metadata *test;
+	const char *case_name;
 	struct __test_xfail *prev, *next;
 };
 
@@ -873,19 +874,19 @@ struct __test_xfail {
  * to fail. Tests marked this way will report XPASS / XFAIL return codes,
  * instead of PASS / FAIL,and use respective counters.
  */
-#define XFAIL_ADD(fixture_name, variant_name, test_name) \
+#define XFAIL_ADD(fixture_name, variant_name, tc_name) \
 	static struct __test_xfail \
-		_##fixture_name##_##variant_name##_##test_name##_xfail = \
+		_##fixture_name##_##variant_name##_##tc_name##_xfail = \
 	{ \
 		.fixture = &_##fixture_name##_fixture_object, \
 		.variant = &_##fixture_name##_##variant_name##_object, \
 	}; \
 	static void __attribute__((constructor)) \
-		_register_##fixture_name##_##variant_name##_##test_name##_xfail(void) \
+		_register_##fixture_name##_##variant_name##_##tc_name##_xfail(void) \
 	{ \
-		_##fixture_name##_##variant_name##_##test_name##_xfail.test = \
-			_##fixture_name##_##test_name##_object; \
-		__register_xfail(&_##fixture_name##_##variant_name##_##test_name##_xfail); \
+		_##fixture_name##_##variant_name##_##tc_name##_xfail.case_name = \
+			#tc_name; \
+		__register_xfail(&_##fixture_name##_##variant_name##_##tc_name##_xfail); \
 	}
 
 static struct __fixture_metadata *__fixture_list = &_fixture_global;
@@ -1233,7 +1234,10 @@ static void __run_test(struct __fixture_metadata *f,
 
 	/* Check if we're expecting this test to fail */
 	for (xfail = variant->xfails; xfail; xfail = xfail->next)
-		if (xfail->test == t)
+		if (xfail->test == t ||
+		    (!xfail->test &&
+		     xfail->case_name && t->name &&
+		     !strcmp(xfail->case_name, t->name)))
 			break;
 	if (xfail)
 		t->exit_code = __test_passed(t) ? KSFT_XPASS : KSFT_XFAIL;
