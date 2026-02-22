@@ -1002,7 +1002,7 @@ static void ipmr_cache_resolve(struct net *net, struct mr_table *mrt,
 	struct nlmsgerr *e;
 
 	/* Play the pending entries through our router */
-	while ((skb = __skb_dequeue(&uc->_c.mfc_un.unres.unresolved))) {
+	while ((skb = skb_dequeue(&uc->_c.mfc_un.unres.unresolved))) {
 		if (ip_hdr(skb)->version == 0) {
 			struct nlmsghdr *nlh = skb_pull(skb,
 							sizeof(struct iphdr));
