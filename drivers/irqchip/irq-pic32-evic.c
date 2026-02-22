@@ -40,6 +40,7 @@ struct evic_chip_data {
 static struct irq_domain *evic_irq_domain;
 static void __iomem *evic_base;
 
+#ifdef CONFIG_MIPS
 asmlinkage void __weak plat_irq_dispatch(void)
 {
 	unsigned int hwirq;
@@ -47,6 +48,7 @@ asmlinkage void __weak plat_irq_dispatch(void)
 	hwirq = readl(evic_base + REG_INTSTAT) & 0xFF;
 	do_domain_IRQ(evic_irq_domain, hwirq);
 }
+#endif
 
 static struct evic_chip_data *irqd_to_priv(struct irq_data *data)
 {
