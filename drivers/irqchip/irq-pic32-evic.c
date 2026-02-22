@@ -15,8 +15,10 @@
 #include <linux/irq.h>
 #include <linux/platform_data/pic32.h>
 
+#ifdef CONFIG_MIPS
 #include <asm/irq.h>
 #include <asm/traps.h>
+#endif
 
 #define REG_INTCON	0x0000
 #define REG_INTSTAT	0x0020
