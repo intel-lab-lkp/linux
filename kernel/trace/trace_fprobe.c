@@ -984,6 +984,7 @@ static int __tracepoint_probe_module_cb(struct notifier_block *self,
 			}
 		} else if (val == MODULE_STATE_GOING && tp_mod->mod == tf->mod) {
 			unregister_fprobe(&tf->fp);
+			memset(&tf->fp, 0, sizeof(tf->fp));
 			if (trace_fprobe_is_tracepoint(tf)) {
 				tracepoint_probe_unregister(tf->tpoint,
 					tf->tpoint->probestub, NULL);
