@@ -11824,6 +11824,29 @@ noinline void netdev_core_stats_inc(struct net_device *dev, u32 offset)
 }
 EXPORT_SYMBOL_GPL(netdev_core_stats_inc);
 
+static noinline struct rtnl_link_stats64 *
+netdev_fetch_core_stats(struct net_device *dev, struct rtnl_link_stats64 *storage)
+{
+	const struct net_device_core_stats __percpu *p;
+	const struct net_device_core_stats *core_stats;
+	int i;
+
+	/* This READ_ONCE() pairs with the write in netdev_core_stats_alloc() */
+	p = READ_ONCE(dev->core_stats);
+	if (!p)
+		return storage;
+
+	for_each_possible_cpu(i) {
+		core_stats = per_cpu_ptr(p, i);
+		storage->rx_dropped += READ_ONCE(core_stats->rx_dropped);
+		storage->tx_dropped += READ_ONCE(core_stats->tx_dropped);
+		storage->rx_nohandler += READ_ONCE(core_stats->rx_nohandler);
+		storage->rx_otherhost_dropped += READ_ONCE(core_stats->rx_otherhost_dropped);
+	}
+
+	return storage;
+}
+
 /**
  *	dev_get_stats	- get network device statistics
  *	@dev: device to get statistics from
@@ -11838,7 +11861,6 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 					struct rtnl_link_stats64 *storage)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
-	const struct net_device_core_stats __percpu *p;
 
 	/*
 	 * IPv{4,6} and udp tunnels share common stat helpers and use
@@ -11867,21 +11889,7 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 		netdev_stats_to_stats64(storage, &dev->stats);
 	}
 
-	/* This READ_ONCE() pairs with the write in netdev_core_stats_alloc() */
-	p = READ_ONCE(dev->core_stats);
-	if (p) {
-		const struct net_device_core_stats *core_stats;
-		int i;
-
-		for_each_possible_cpu(i) {
-			core_stats = per_cpu_ptr(p, i);
-			storage->rx_dropped += READ_ONCE(core_stats->rx_dropped);
-			storage->tx_dropped += READ_ONCE(core_stats->tx_dropped);
-			storage->rx_nohandler += READ_ONCE(core_stats->rx_nohandler);
-			storage->rx_otherhost_dropped += READ_ONCE(core_stats->rx_otherhost_dropped);
-		}
-	}
-	return storage;
+	return netdev_fetch_core_stats(dev, storage);
 }
 EXPORT_SYMBOL(dev_get_stats);
 
