@@ -48,6 +48,8 @@ asmlinkage void __weak plat_irq_dispatch(void)
 	hwirq = readl(evic_base + REG_INTSTAT) & 0xFF;
 	do_domain_IRQ(evic_irq_domain, hwirq);
 }
+#else
+static void (*board_bind_eic_interrupt)(int irq, int regset);
 #endif
 
 static struct evic_chip_data *irqd_to_priv(struct irq_data *data)
