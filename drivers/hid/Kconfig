@@ -1439,6 +1439,8 @@ endmenu
 
 source "drivers/hid/bpf/Kconfig"
 
+source "drivers/hid/rust/Kconfig"
+
 source "drivers/hid/i2c-hid/Kconfig"
 
 source "drivers/hid/intel-ish-hid/Kconfig"

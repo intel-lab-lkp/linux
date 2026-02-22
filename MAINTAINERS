@@ -11262,6 +11262,14 @@ F:	include/uapi/linux/hid*
 F:	samples/hid/
 F:	tools/testing/selftests/hid/
 
+HID CORE LAYER [RUST]
+M:	Rahul Rameshbabu <sergeantsagara@protonmail.com>
+R:	Benjamin Tissoires <bentiss@kernel.org>
+L:	linux-input@vger.kernel.org
+S:	Maintained
+F:	drivers/hid/rust/*.rs
+F:	rust/kernel/hid.rs
+
 HID LOGITECH DRIVERS
 R:	Filipe Laíns <lains@riseup.net>
 L:	linux-input@vger.kernel.org

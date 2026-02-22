@@ -8,6 +8,8 @@ hid-$(CONFIG_HID_HAPTIC)	+= hid-haptic.o
 
 obj-$(CONFIG_HID_BPF)		+= bpf/
 
+obj-$(CONFIG_RUST_HID_ABSTRACTIONS)		+= rust/
+
 obj-$(CONFIG_HID)		+= hid.o
 obj-$(CONFIG_UHID)		+= uhid.o
 
