@@ -6,7 +6,11 @@
 
 use crate::{
     bindings,
-    prelude::*, //
+    prelude::*,
+    transmute::{
+        AsBytes, //
+        FromBytes,
+    }, //
 };
 
 pub mod mem;
@@ -276,6 +280,15 @@ pub trait Io {
     /// This is a pointer to capture metadata. The specific meaning of the pointer depends on
     /// I/O backend and is not necessarily valid.
     fn as_ptr(&self) -> *mut Self::Type;
+
+    /// Get the underlying ttype that is `Io`.
+    ///
+    /// This is only used by `io_project!` macro to make use of deref coercion.
+    #[doc(hidden)]
+    #[inline(always)]
+    fn as_io_self(&self) -> &Self {
+        self
+    }
 
     /// Returns the absolute I/O address for a given `offset`,
     /// performing compile-time bound checks.
@@ -610,3 +623,146 @@ impl_mmio_io_capable!(
     readq_relaxed,
     writeq_relaxed
 );
+
+/// A view into an I/O region.
+///
+/// # Invariant
+///
+/// `ptr` must be aligned for `T` and the region it represents must be within `io`'s region.
+pub struct View<'a, IO, T: ?Sized> {
+    io: &'a IO,
+    ptr: *mut T,
+}
+
+impl<'a, IO, T: ?Sized> View<'a, IO, T> {
+    /// Create a view of a provided I/O region.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be aligned and the region it represents must be within `io`'s region.
+    #[inline]
+    pub unsafe fn new_unchecked(io: &'a IO, ptr: *mut T) -> Self {
+        // INVARIANT: per function safety requirement
+        Self { io, ptr }
+    }
+
+    /// Obtain the underlying I/O region.
+    #[inline]
+    pub fn io(self) -> &'a IO {
+        self.io
+    }
+
+    /// Obtain a pointer to the subview.
+    ///
+    /// The interpretation of the pointer depends on the underlying I/O region.
+    #[inline]
+    pub fn as_ptr(self) -> *mut T {
+        self.ptr
+    }
+}
+
+impl<IO, T: ?Sized> Clone for View<'_, IO, T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<IO, T: ?Sized> Copy for View<'_, IO, T> {}
+
+impl<'a, IO, T: ?Sized> View<'a, IO, T> {
+    /// Try to convert this view into a different typed I/O view.
+    ///
+    /// The target type must be of same or smaller size to current type, and of same or smaller
+    /// alignment requirement.
+    pub fn try_cast<U>(self) -> Result<View<'a, IO, U>>
+    where
+        T: KnownSize + FromBytes + AsBytes,
+        U: FromBytes + AsBytes,
+    {
+        if size_of::<U>() > KnownSize::size(self.ptr) {
+            return Err(EINVAL);
+        }
+
+        if self.ptr.addr() % align_of::<U>() != 0 {
+            return Err(EINVAL);
+        }
+
+        // INVARIANT: we have checked bounds and alignment.
+        Ok(View {
+            io: self.io,
+            ptr: self.ptr.cast(),
+        })
+    }
+}
+
+impl<T, IO: Io + IoCapable<T>> View<'_, IO, T> {
+    /// Read from I/O memory.
+    #[inline]
+    pub fn read(&self) -> T {
+        // SAFETY: per type invariant
+        unsafe { self.io.io_read(self.ptr) }
+    }
+
+    /// Write to I/O memory.
+    #[inline]
+    pub fn write(&self, value: T) {
+        // SAFETY: per type invariant
+        unsafe { self.io.io_write(value, self.ptr) }
+    }
+}
+
+/// Project an I/O type to a subview of it.
+///
+/// The syntax is of form `kernel::io_project!(io, proj)` where `io` is an expression to a type that
+/// implements [`Io`] and `proj` is a [projection specification](kernel::project_pointer!).
+#[macro_export]
+macro_rules! io_project {
+    ($io:expr, $($proj:tt)*) => {{
+        use $crate::io::Io as _;
+
+        // Use a method so that `$io` can also be types that deref to types implementing `Io`, not
+        // only types that are themselves `Io`.
+        let io = $io.as_io_self();
+        let ptr = $crate::project_pointer!(
+            mut $crate::io::Io::as_ptr(io), $($proj)*
+        );
+        // SAFETY: pointer created by projection is within the I/O region.
+        unsafe { $crate::io::View::new_unchecked(io, ptr) }
+    }};
+}
+
+/// Read from I/O memory.
+///
+/// The syntax is of form `kernel::io_read!(io, proj)` where `io` is an expression to a type that
+/// implements [`Io`] and `proj` is a [projection specification](kernel::project_pointer!).
+#[macro_export]
+macro_rules! io_read {
+    ($io:expr, $($proj:tt)*) => {
+        $crate::io_project!($io, $($proj)*).read()
+    };
+}
+
+/// Writes to I/O mmeory.
+///
+/// The syntax is of form `kernel::io_write!(io, proj, val)` where  `io` is an expression to a type that
+/// implements [`Io`] and `proj` is a [projection specification](kernel::project_pointer!),
+/// and `val` is the value to be written to the projected location.
+#[macro_export]
+macro_rules! io_write {
+    (@parse [$io:expr] [$($proj:tt)*] [, $val:expr]) => {
+        $crate::io_project!($io, $($proj)*).write($val)
+    };
+    (@parse [$io:expr] [$($proj:tt)*] [.$field:tt $($rest:tt)*]) => {
+        $crate::io_write!(@parse [$io] [$($proj)* .$field] [$($rest)*])
+    };
+    (@parse [$io:expr] [$($proj:tt)*] [[$index:expr]? $($rest:tt)*]) => {
+        $crate::io_write!(@parse [$io] [$($proj)* [$index]?] [$($rest)*])
+    };
+    (@parse [$io:expr] [$($proj:tt)*] [[$index:expr] $($rest:tt)*]) => {
+        $crate::io_write!(@parse [$io] [$($proj)* [$index]] [$($rest)*])
+    };
+    ($io:expr, $($rest:tt)*) => {
+        $crate::io_write!(@parse [$io] [] [$($rest)*])
+    };
+}
