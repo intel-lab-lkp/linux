@@ -325,6 +325,16 @@ static unsigned int fib_info_hashfn_1(int init_val, u8 protocol, u8 scope,
 	return val;
 }
 
+static unsigned int fib_info_hashfn_nh(unsigned int val, const struct fib_nh *nh)
+{
+	val ^= nh->fib_nh_oif;
+
+	if (nh->fib_nh_lws)
+		val ^= lwtunnel_get_encap_hash(nh->fib_nh_lws);
+
+	return val;
+}
+
 static unsigned int fib_info_hashfn_result(const struct net *net,
 					   unsigned int val)
 {
@@ -344,7 +354,7 @@ static struct hlist_head *fib_info_hash_bucket(struct fib_info *fi)
 		val ^= fi->nh->id;
 	} else {
 		for_nexthops(fi) {
-			val ^= nh->fib_nh_oif;
+			val ^= fib_info_hashfn_nh(val, nh);
 		} endfor_nexthops(fi)
 	}
 

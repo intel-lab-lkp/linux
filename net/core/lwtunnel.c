@@ -289,6 +289,28 @@ int lwtunnel_get_encap_size(struct lwtunnel_state *lwtstate)
 }
 EXPORT_SYMBOL_GPL(lwtunnel_get_encap_size);
 
+unsigned int lwtunnel_get_encap_hash(struct lwtunnel_state *lwtstate)
+{
+	const struct lwtunnel_encap_ops *ops;
+	int ret = 0;
+
+	if (!lwtstate)
+		return 0;
+
+	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||
+	    lwtstate->type > LWTUNNEL_ENCAP_MAX)
+		return 0;
+
+	rcu_read_lock();
+	ops = rcu_dereference(lwtun_encaps[lwtstate->type]);
+	if (likely(ops && ops->get_encap_hash))
+		ret = nla_total_size(ops->get_encap_hash(lwtstate));
+	rcu_read_unlock();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(lwtunnel_get_encap_hash);
+
 int lwtunnel_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 {
 	const struct lwtunnel_encap_ops *ops;

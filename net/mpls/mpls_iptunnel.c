@@ -259,6 +259,18 @@ static int mpls_encap_nlsize(struct lwtunnel_state *lwtstate)
 	return nlsize;
 }
 
+static unsigned int mpls_encap_hash(struct lwtunnel_state *lwtstate)
+{
+	struct mpls_iptunnel_encap *tun_encap_info;
+	unsigned int hash;
+
+	tun_encap_info = mpls_lwtunnel_encap(lwtstate);
+
+	hash = jhash2(tun_encap_info->label, tun_encap_info->labels, 0);
+
+	return hash;
+}
+
 static int mpls_encap_cmp(struct lwtunnel_state *a, struct lwtunnel_state *b)
 {
 	struct mpls_iptunnel_encap *a_hdr = mpls_lwtunnel_encap(a);
@@ -281,6 +293,7 @@ static const struct lwtunnel_encap_ops mpls_iptun_ops = {
 	.xmit = mpls_xmit,
 	.fill_encap = mpls_fill_encap_info,
 	.get_encap_size = mpls_encap_nlsize,
+	.get_encap_hash = mpls_encap_hash,
 	.cmp_encap = mpls_encap_cmp,
 	.owner = THIS_MODULE,
 };

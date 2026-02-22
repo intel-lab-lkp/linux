@@ -47,6 +47,7 @@ struct lwtunnel_encap_ops {
 	int (*fill_encap)(struct sk_buff *skb,
 			  struct lwtunnel_state *lwtstate);
 	int (*get_encap_size)(struct lwtunnel_state *lwtstate);
+	unsigned int (*get_encap_hash)(struct lwtunnel_state *lwtstate);
 	int (*cmp_encap)(struct lwtunnel_state *a, struct lwtunnel_state *b);
 	int (*xmit)(struct sk_buff *skb);
 
@@ -127,6 +128,7 @@ int lwtunnel_build_state(struct net *net, u16 encap_type,
 int lwtunnel_fill_encap(struct sk_buff *skb, struct lwtunnel_state *lwtstate,
 			int encap_attr, int encap_type_attr);
 int lwtunnel_get_encap_size(struct lwtunnel_state *lwtstate);
+unsigned int lwtunnel_get_encap_hash(struct lwtunnel_state *lwtstate);
 struct lwtunnel_state *lwtunnel_state_alloc(int hdr_len);
 int lwtunnel_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b);
 int lwtunnel_output(struct net *net, struct sock *sk, struct sk_buff *skb);
@@ -233,6 +235,11 @@ static inline int lwtunnel_fill_encap(struct sk_buff *skb,
 }
 
 static inline int lwtunnel_get_encap_size(struct lwtunnel_state *lwtstate)
+{
+	return 0;
+}
+
+static inline unsigned int lwtunnel_get_encap_hash(struct lwtunnel_state *lwtstate)
 {
 	return 0;
 }
