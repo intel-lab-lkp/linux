@@ -76,8 +76,10 @@ static int glorious_probe(struct hid_device *hdev,
 }
 
 static const struct hid_device_id glorious_devices[] = {
+#if !IS_ENABLED(CONFIG_HID_GLORIOUS_RUST)
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SINOWEALTH,
 		USB_DEVICE_ID_GLORIOUS_MODEL_O) },
+#endif
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SINOWEALTH,
 		USB_DEVICE_ID_GLORIOUS_MODEL_D) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LAVIEW,

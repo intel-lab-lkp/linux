@@ -9,4 +9,20 @@ config RUST_HID_ABSTRACTIONS
 	  Adds support needed for HID drivers written in Rust. It provides a
 	  wrapper around the C hid core.
 
+if RUST_HID_ABSTRACTIONS
+
+menu "Special HID drivers"
+
+config HID_GLORIOUS_RUST
+	tristate "Glorious O and O- mice Rust reference driver"
+	depends on USB_HID
+	depends on RUST_HID_ABSTRACTIONS
+	help
+	  Support for Glorious PC Gaming Race O and O- mice
+	  in Rust.
+
+endmenu # Special HID drivers
+
+endif # RUST_HID_ABSTRACTIONS
+
 endmenu # Rust HID support

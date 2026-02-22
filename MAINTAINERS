@@ -10755,6 +10755,12 @@ L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/x86/gigabyte-wmi.c
 
+GLORIOUS RUST DRIVER [RUST]
+M:	Rahul Rameshbabu <sergeantsagara@protonmail.com>
+L:	linux-input@vger.kernel.org
+S:	Maintained
+F:	drivers/hid/rust/hid_glorious_rust.rs
+
 GNSS SUBSYSTEM
 M:	Johan Hovold <johan@kernel.org>
 S:	Maintained
