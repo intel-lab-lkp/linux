@@ -2927,6 +2927,7 @@ static noinline int mmc_ioctl_cdrom_read_data(struct cdrom_device_info *cdi,
 	struct scsi_sense_hdr sshdr;
 	struct cdrom_msf msf;
 	int blocksize = 0, format = 0, lba;
+	unsigned int cd_nr_sectors;
 	int ret;
 
 	switch (cmd) {
@@ -2945,8 +2946,18 @@ static noinline int mmc_ioctl_cdrom_read_data(struct cdrom_device_info *cdi,
 		return -EFAULT;
 	lba = msf_to_lba(msf.cdmsf_min0, msf.cdmsf_sec0, msf.cdmsf_frame0);
 	/* FIXME: we need upper bound checking, too!! */
+	/* Lower bound check for logical block address. */
 	if (lba < 0)
 		return -EINVAL;
+
+	cd_nr_sectors = cdi->disk->part0->bd_nr_sectors;
+	/* A special case upper bound check. */
+	if (cd_nr_sectors % blocksize == 0) {
+		unsigned int logical_blocks = cd_nr_sectors / blocksize;
+
+		if (lba > blocksize * (logical_blocks - 1))
+			return -EINVAL;
+	}
 
 	cgc->buffer = kzalloc(blocksize, GFP_KERNEL);
 	if (cgc->buffer == NULL)
