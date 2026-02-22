@@ -1031,7 +1031,7 @@ static void ip6mr_cache_resolve(struct net *net, struct mr_table *mrt,
 	 *	Play the pending entries through our router
 	 */
 
-	while ((skb = __skb_dequeue(&uc->_c.mfc_un.unres.unresolved))) {
+	while ((skb = skb_dequeue(&uc->_c.mfc_un.unres.unresolved))) {
 		if (ipv6_hdr(skb)->version == 0) {
 			struct nlmsghdr *nlh = skb_pull(skb,
 							sizeof(struct ipv6hdr));
