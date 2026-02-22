@@ -147,6 +147,10 @@ extern u32 svc_max_payload(const struct svc_rqst *rqstp);
  * rq_pages[0] and set rq_pages_nfree to the count of entries
  * consumed. svc_alloc_arg() refills only that many entries.
  *
+ * For rq_respages, svc_rqst_release_pages() NULLs entries in
+ * [rq_respages, rq_next_page) after each RPC. svc_alloc_arg()
+ * refills only that range.
+ *
  * xdr_buf holds responses; the structure fits NFS read responses
  * (header, data pages, optional tail) and enables sharing of
  * client-side routines.
