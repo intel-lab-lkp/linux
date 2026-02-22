@@ -563,8 +563,17 @@ static int __init of_platform_default_populate_init(void)
 		 * platform_devices for every node in /reserved-memory with a
 		 * "compatible",
 		 */
-		for_each_matching_node(node, reserved_mem_matches)
-			of_platform_device_create(node, NULL, NULL);
+		reserved = of_find_node_by_path("/reserved-memory");
+		if (reserved) {
+			for_each_child_of_node(reserved, node) {
+				if (of_match_node(reserved_mem_matches, node))
+					of_platform_device_create(node, NULL, NULL);
+			}
+			of_node_put(reserved);
+		} else {
+			for_each_matching_node(node, reserved_mem_matches)
+				of_platform_device_create(node, NULL, NULL);
+		}
 
 		node = of_find_node_by_path("/firmware");
 		if (node) {
