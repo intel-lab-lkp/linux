@@ -652,6 +652,9 @@ static int kvm_riscv_vcpu_set_reg_csr(struct kvm_vcpu *vcpu,
 	if (rc)
 		return rc;
 
+	/* Mark CSRs dirty after userspace update csr */
+	vcpu->arch.csr_dirty = true;
+
 	return 0;
 }
 
