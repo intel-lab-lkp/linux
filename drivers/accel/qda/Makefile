@@ -11,5 +11,7 @@ qda-y := \
 	qda_cb.o \
 	qda_memory_manager.o \
 	qda_ioctl.o \
+	qda_gem.o \
+	qda_memory_dma.o \
 
 obj-$(CONFIG_DRM_ACCEL_QDA_COMPUTE_BUS) += qda_compute_bus.o

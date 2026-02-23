@@ -11,6 +11,8 @@
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <linux/xarray.h>
+#include <drm/drm_file.h>
+#include "qda_gem.h"
 
 /**
  * struct qda_iommu_device - IOMMU device instance for memory management
@@ -35,6 +37,10 @@ struct qda_iommu_device {
 	u32 sid;
 	/* Pointer to parent memory manager */
 	struct qda_memory_manager *manager;
+	/* Process ID of the process assigned to this device */
+	pid_t assigned_pid;
+	/* DRM file private data for the assigned process */
+	struct drm_file *assigned_file_priv;
 };
 
 /**
@@ -51,6 +57,8 @@ struct qda_memory_manager {
 	atomic_t next_id;
 	/* Workqueue for asynchronous device operations */
 	struct workqueue_struct *wq;
+	/* Mutex protecting process-to-device assignments */
+	struct mutex process_assignment_lock;
 };
 
 /**
@@ -97,5 +105,30 @@ int qda_memory_manager_register_device(struct qda_memory_manager *mem_mgr,
  */
 void qda_memory_manager_unregister_device(struct qda_memory_manager *mem_mgr,
 					  struct qda_iommu_device *iommu_dev);
+
+/**
+ * qda_memory_manager_alloc() - Allocate memory for a GEM object
+ * @mem_mgr: Pointer to memory manager
+ * @gem_obj: Pointer to GEM object to allocate memory for
+ * @file_priv: DRM file private data for process association
+ *
+ * Allocates memory for the specified GEM object using an appropriate IOMMU
+ * device. The allocation is associated with the calling process via
+ * file_priv.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_memory_manager_alloc(struct qda_memory_manager *mem_mgr, struct qda_gem_obj *gem_obj,
+			     struct drm_file *file_priv);
+
+/**
+ * qda_memory_manager_free() - Free memory for a GEM object
+ * @mem_mgr: Pointer to memory manager
+ * @gem_obj: Pointer to GEM object to free memory for
+ *
+ * Releases memory previously allocated for the specified GEM object and
+ * removes any associated IOMMU mappings.
+ */
+void qda_memory_manager_free(struct qda_memory_manager *mem_mgr, struct qda_gem_obj *gem_obj);
 
 #endif /* _QDA_MEMORY_MANAGER_H */

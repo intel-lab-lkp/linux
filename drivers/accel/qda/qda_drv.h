@@ -33,6 +33,8 @@ struct qda_file_priv {
 	pid_t pid;
 	/* Pointer to qda_user structure for backward compatibility */
 	struct qda_user *qda_user;
+	/* IOMMU device assigned to this process */
+	struct qda_iommu_device *assigned_iommu_dev;
 };
 
 /**
@@ -152,5 +154,10 @@ int qda_init_device(struct qda_dev *qdev);
 void qda_deinit_device(struct qda_dev *qdev);
 int qda_register_device(struct qda_dev *qdev);
 void qda_unregister_device(struct qda_dev *qdev);
+
+/*
+ * Utility function to get DRM private data from DRM device
+ */
+struct qda_drm_priv *get_drm_priv_from_device(struct drm_device *dev);
 
 #endif /* __QDA_DRV_H__ */

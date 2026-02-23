@@ -15,7 +15,7 @@
 #include "qda_ioctl.h"
 #include "qda_rpmsg.h"
 
-static struct qda_drm_priv *get_drm_priv_from_device(struct drm_device *dev)
+struct qda_drm_priv *get_drm_priv_from_device(struct drm_device *dev)
 {
 	if (!dev)
 		return NULL;
@@ -88,6 +88,7 @@ static int qda_open(struct drm_device *dev, struct drm_file *file)
 		return -ENOMEM;
 
 	qda_file_priv->pid = current->pid;
+	qda_file_priv->assigned_iommu_dev = NULL; /* Will be assigned on first allocation */
 
 	qda_user = alloc_qda_user(qdev);
 	if (!qda_user) {
@@ -118,6 +119,26 @@ static void qda_postclose(struct drm_device *dev, struct drm_file *file)
 
 	qda_file_priv = (struct qda_file_priv *)file->driver_priv;
 	if (qda_file_priv) {
+		if (qda_file_priv->assigned_iommu_dev) {
+			struct qda_iommu_device *iommu_dev = qda_file_priv->assigned_iommu_dev;
+			unsigned long flags;
+
+			/* Decrement reference count - if it reaches 0, reset PID assignment */
+			if (refcount_dec_and_test(&iommu_dev->refcount)) {
+				/* Last reference released - reset PID assignment */
+				spin_lock_irqsave(&iommu_dev->lock, flags);
+				iommu_dev->assigned_pid = 0;
+				iommu_dev->assigned_file_priv = NULL;
+				spin_unlock_irqrestore(&iommu_dev->lock, flags);
+
+				qda_dbg(qdev, "Reset PID assignment for IOMMU device %u (process %d exited)\n",
+					iommu_dev->id, qda_file_priv->pid);
+			} else {
+				qda_dbg(qdev, "Decremented reference for IOMMU device %u from process %d\n",
+					iommu_dev->id, qda_file_priv->pid);
+			}
+		}
+
 		qda_user = qda_file_priv->qda_user;
 		if (qda_user)
 			free_qda_user(qda_user);
