@@ -2836,6 +2836,9 @@ again:
 	ASSERT(space_info->subgroup_id == BTRFS_SUB_GROUP_DATA_RELOC,
 	       "space_info->subgroup_id=%d", space_info->subgroup_id);
 	ret = btrfs_chunk_alloc(trans, space_info, alloc_flags, CHUNK_ALLOC_FORCE);
+	if (TRANS_ABORTED(trans))
+		return;
+
 	btrfs_end_transaction(trans);
 	if (ret == 1) {
 		/*
