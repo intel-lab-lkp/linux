@@ -1131,13 +1131,13 @@ static int mcp47feb02_probe(struct i2c_client *client)
 
 	indio_dev->name = chip_features->name;
 
-	ret = mcp47feb02_parse_fw(indio_dev, chip_features);
-	if (ret)
-		return dev_err_probe(dev, ret, "Error parsing firmware data\n");
-
 	ret = devm_mutex_init(dev, &data->lock);
 	if (ret)
 		return ret;
+
+	ret = mcp47feb02_parse_fw(indio_dev, chip_features);
+	if (ret)
+		return dev_err_probe(dev, ret, "Error parsing firmware data\n");
 
 	ret = devm_regulator_get_enable_read_voltage(dev, "vdd");
 	if (ret < 0)
