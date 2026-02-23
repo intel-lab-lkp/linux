@@ -101,6 +101,17 @@ err_free_ring_stats:
 	return rc;
 }
 
+void __bnge_queue_sp_work(struct bnge_net *bn)
+{
+	queue_work(bn->bnge_pf_wq, &bn->sp_task);
+}
+
+static void bnge_queue_sp_work(struct bnge_net *bn, unsigned int event)
+{
+	set_bit(event, &bn->sp_event);
+	__bnge_queue_sp_work(bn);
+}
+
 static void bnge_timer(struct timer_list *t)
 {
 	struct bnge_net *bn = timer_container_of(bn, t, timer);
@@ -113,7 +124,14 @@ static void bnge_timer(struct timer_list *t)
 	if (atomic_read(&bn->intr_sem) != 0)
 		goto bnge_restart_timer;
 
-	/* Periodic work added by later patches */
+	if (bd->link_info.phy_retry) {
+		if (time_after(jiffies, bd->link_info.phy_retry_expires)) {
+			bd->link_info.phy_retry = false;
+			netdev_warn(bn->netdev, "failed to update PHY settings after maximum retries.\n");
+		} else {
+			bnge_queue_sp_work(bn, BNGE_UPDATE_PHY_SP_EVENT);
+		}
+	}
 
 bnge_restart_timer:
 	mod_timer(&bn->timer, jiffies + bn->current_interval);
@@ -132,7 +150,19 @@ static void bnge_sp_task(struct work_struct *work)
 		return;
 	}
 
-	/* Event handling work added by later patches */
+	if (test_and_clear_bit(BNGE_UPDATE_PHY_SP_EVENT, &bn->sp_event)) {
+		int rc;
+
+		mutex_lock(&bd->link_lock);
+		rc = bnge_update_phy_setting(bn);
+		mutex_unlock(&bd->link_lock);
+		if (rc) {
+			netdev_warn(bn->netdev, "update PHY settings retry failed\n");
+		} else {
+			bd->link_info.phy_retry = false;
+			netdev_info(bn->netdev, "update PHY settings retry succeeded\n");
+		}
+	}
 
 	/* Ensure all sp_task work is done before clearing the state */
 	smp_mb__before_atomic();
@@ -2516,6 +2546,8 @@ static void bnge_tx_enable(struct bnge_net *bn)
 	/* Make sure napi polls see @dev_state change */
 	synchronize_net();
 	netif_tx_wake_all_queues(bn->netdev);
+	if (BNGE_LINK_IS_UP(bn->bd))
+		netif_carrier_on(bn->netdev);
 }
 
 static int bnge_open_core(struct bnge_net *bn)
@@ -2552,6 +2584,16 @@ static int bnge_open_core(struct bnge_net *bn)
 
 	bnge_enable_napi(bn);
 
+	mutex_lock(&bd->link_lock);
+	rc = bnge_update_phy_setting(bn);
+	mutex_unlock(&bd->link_lock);
+	if (rc) {
+		netdev_warn(bn->netdev, "failed to update PHY settings (rc: %d)\n",
+			    rc);
+		bd->link_info.phy_retry = true;
+		bd->link_info.phy_retry_expires = jiffies + 5 * HZ;
+	}
+
 	set_bit(BNGE_STATE_OPEN, &bd->state);
 
 	bnge_enable_int(bn);
@@ -2559,6 +2601,11 @@ static int bnge_open_core(struct bnge_net *bn)
 	bnge_tx_enable(bn);
 
 	mod_timer(&bn->timer, jiffies + bn->current_interval);
+
+	/* Poll link status and check for SFP+ module status */
+	mutex_lock(&bd->link_lock);
+	bnge_get_port_module_status(bn);
+	mutex_unlock(&bd->link_lock);
 
 	return 0;
 
@@ -2615,6 +2662,7 @@ static int bnge_close(struct net_device *dev)
 	struct bnge_net *bn = netdev_priv(dev);
 
 	bnge_close_core(bn);
+	bnge_hwrm_shutdown_link(bn->bd);
 
 	return 0;
 }
@@ -2871,6 +2919,10 @@ int bnge_netdev_alloc(struct bnge_dev *bd, int max_irqs)
 
 	bnge_init_l2_fltr_tbl(bn);
 	bnge_init_mac_addr(bd);
+
+	rc = bnge_probe_phy(bn, true);
+	if (rc)
+		goto err_netdev;
 
 	netdev->request_ops_lock = true;
 	rc = register_netdev(netdev);

@@ -282,6 +282,8 @@ static int bnge_probe_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_devl_free;
 	}
 
+	mutex_init(&bd->link_lock);
+
 	rc = bnge_init_hwrm_resources(bd);
 	if (rc)
 		goto err_bar_unmap;
@@ -352,6 +354,7 @@ err_hwrm_cleanup:
 	bnge_cleanup_hwrm_resources(bd);
 
 err_bar_unmap:
+	mutex_destroy(&bd->link_lock);
 	bnge_unmap_bars(pdev);
 
 err_devl_free:
@@ -382,6 +385,7 @@ static void bnge_remove_one(struct pci_dev *pdev)
 
 	bnge_cleanup_hwrm_resources(bd);
 
+	mutex_destroy(&bd->link_lock);
 	bnge_unmap_bars(pdev);
 
 	bnge_devlink_free(bd);
