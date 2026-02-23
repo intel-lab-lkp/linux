@@ -531,7 +531,6 @@ u16 tcp_get_syncookie_mss(struct request_sock_ops *rsk_ops,
  *	TCP v4 functions exported for the inet6 API
  */
 
-void tcp_v4_send_check(struct sock *sk, struct sk_buff *skb);
 void tcp_v4_mtu_reduced(struct sock *sk);
 void tcp_req_err(struct sock *sk, u32 seq, bool abort);
 void tcp_ld_RTO_revert(struct sock *sk, u32 seq);
@@ -1131,8 +1130,6 @@ static inline int tcp_v6_sdif(const struct sk_buff *skb)
 }
 
 extern const struct inet_connection_sock_af_ops ipv6_specific;
-
-void tcp_v6_send_check(struct sock *sk, struct sk_buff *skb);
 
 INDIRECT_CALLABLE_DECLARE(int tcp_v6_rcv(struct sk_buff *skb));
 void tcp_v6_early_demux(struct sk_buff *skb);
