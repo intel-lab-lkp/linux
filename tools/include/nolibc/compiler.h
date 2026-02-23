@@ -71,4 +71,9 @@
 #  define __nolibc_static_assert(_t)
 #endif
 
+#ifndef _NOLIBC_OPTIMIZER_HIDE_VAR
+/* Make the optimizer believe the variable can be manipulated arbitrarily. */
+#define _NOLIBC_OPTIMIZER_HIDE_VAR(var)	__asm__ ("" : "+r" (var))
+#endif
+
 #endif /* _NOLIBC_COMPILER_H */
