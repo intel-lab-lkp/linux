@@ -277,7 +277,7 @@ dmem_cgroup_calculate_protection(struct dmem_cgroup_pool_state *limit_pool,
 			continue;
 
 		page_counter_calculate_protection(
-			climit, &found_pool->cnt, true);
+			climit, &found_pool->cnt, true, false);
 
 		if (found_pool == test_pool)
 			break;

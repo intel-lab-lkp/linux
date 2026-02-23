@@ -120,15 +120,16 @@ static inline void page_counter_reset_watermark(struct page_counter *counter)
 #if IS_ENABLED(CONFIG_MEMCG) || IS_ENABLED(CONFIG_CGROUP_DMEM)
 void page_counter_calculate_protection(struct page_counter *root,
 				       struct page_counter *counter,
-				       bool recursive_protection);
+				       bool recursive_protection, bool toptier);
 void page_counter_update_toptier_capacity(struct page_counter *counter,
 					  const nodemask_t *allowed);
 unsigned long page_counter_toptier_high(struct page_counter *counter);
 unsigned long page_counter_toptier_low(struct page_counter *counter);
 #else
 static inline void page_counter_calculate_protection(struct page_counter *root,
-						     struct page_counter *counter,
-						     bool recursive_protection) {}
+						struct page_counter *counter,
+						bool recursive_protection,
+						bool toptier) {}
 #endif
 
 #endif /* _LINUX_PAGE_COUNTER_H */

@@ -4805,12 +4805,13 @@ struct cgroup_subsys memory_cgrp_subsys = {
  * mem_cgroup_calculate_protection - check if memory consumption is in the normal range
  * @root: the top ancestor of the sub-tree being checked
  * @memcg: the memory cgroup to check
+ * @toptier: whether the caller is in a toptier node
  *
  * WARNING: This function is not stateless! It can only be used as part
  *          of a top-down tree iteration, not for isolated queries.
  */
 void mem_cgroup_calculate_protection(struct mem_cgroup *root,
-				     struct mem_cgroup *memcg)
+				     struct mem_cgroup *memcg, bool toptier)
 {
 	bool recursive_protection =
 		cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_RECURSIVE_PROT;
@@ -4821,7 +4822,16 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 	if (!root)
 		root = root_mem_cgroup;
 
-	page_counter_calculate_protection(&root->memory, &memcg->memory, recursive_protection);
+	page_counter_calculate_protection(&root->memory, &memcg->memory,
+					  recursive_protection, toptier);
+}
+
+unsigned long mem_cgroup_toptier_usage(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled() || !memcg)
+		return 0;
+
+	return atomic_long_read(&memcg->memory.toptier_usage);
 }
 
 void update_memcg_toptier_capacity(void)

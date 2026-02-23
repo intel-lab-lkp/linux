@@ -410,12 +410,39 @@ static unsigned long effective_protection(unsigned long usage,
 	return ep;
 }
 
+static void calculate_protection_toptier(struct page_counter *counter,
+					 bool recursive_protection)
+{
+	struct page_counter *parent = counter->parent;
+	unsigned long toptier_low;
+	unsigned long toptier_usage, parent_toptier_usage;
+	unsigned long toptier_protected, old_toptier_protected;
+	long delta;
+
+	toptier_low = page_counter_toptier_low(counter);
+	toptier_usage = atomic_long_read(&counter->toptier_usage);
+	parent_toptier_usage = atomic_long_read(&parent->toptier_usage);
+
+	/* Propagate toptier low usage to parent for sibling distribution */
+	toptier_protected = min(toptier_usage, toptier_low);
+	old_toptier_protected = atomic_long_xchg(&counter->toptier_low_usage,
+						 toptier_protected);
+	delta = toptier_protected - old_toptier_protected;
+	atomic_long_add(delta, &parent->children_toptier_low_usage);
+
+	WRITE_ONCE(counter->etoptier_low,
+		   effective_protection(toptier_usage, parent_toptier_usage,
+		   toptier_low, READ_ONCE(parent->etoptier_low),
+		   atomic_long_read(&parent->children_toptier_low_usage),
+		   recursive_protection));
+}
 
 /**
  * page_counter_calculate_protection - check if memory consumption is in the normal range
  * @root: the top ancestor of the sub-tree being checked
  * @counter: the page_counter the counter to update
  * @recursive_protection: Whether to use memory_recursiveprot behavior.
+ * @toptier: Whether to calculate toptier-proportional protection
  *
  * Calculates elow/emin thresholds for given page_counter.
  *
@@ -424,7 +451,7 @@ static unsigned long effective_protection(unsigned long usage,
  */
 void page_counter_calculate_protection(struct page_counter *root,
 				       struct page_counter *counter,
-				       bool recursive_protection)
+				       bool recursive_protection, bool toptier)
 {
 	unsigned long usage, parent_usage;
 	struct page_counter *parent = counter->parent;
@@ -446,6 +473,9 @@ void page_counter_calculate_protection(struct page_counter *root,
 	if (parent == root) {
 		counter->emin = READ_ONCE(counter->min);
 		counter->elow = READ_ONCE(counter->low);
+		if (toptier)
+			WRITE_ONCE(counter->etoptier_low,
+				   page_counter_toptier_low(counter));
 		return;
 	}
 
@@ -462,6 +492,9 @@ void page_counter_calculate_protection(struct page_counter *root,
 			READ_ONCE(parent->elow),
 			atomic_long_read(&parent->children_low_usage),
 			recursive_protection));
+
+	if (toptier)
+		calculate_protection_toptier(counter, recursive_protection);
 }
 
 void page_counter_update_toptier_capacity(struct page_counter *counter,
