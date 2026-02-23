@@ -1,0 +1,8 @@
+What:		/sys/kernel/hardware_name
+Date:		Feb 2026
+KernelVersion:	7.1
+Contact:	Richard Weinberger <richard@nod.at>
+Description:
+		The hardware name as shown in stack traces.
+
+		Access: Read
