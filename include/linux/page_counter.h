@@ -5,6 +5,7 @@
 #include <linux/atomic.h>
 #include <linux/cache.h>
 #include <linux/limits.h>
+#include <linux/nodemask.h>
 #include <asm/page.h>
 
 struct page_counter {
@@ -31,8 +32,22 @@ struct page_counter {
 	/* Latest cg2 reset watermark */
 	unsigned long local_watermark;
 
-	/* Keep all the read most fields in a separete cacheline. */
+	/* Keep all the tiered memory fields in a separate cacheline. */
 	CACHELINE_PADDING(_pad2_);
+
+	atomic_long_t toptier_usage;
+
+	/* effective toptier-proportional low protection */
+	unsigned long etoptier_low;
+	atomic_long_t toptier_low_usage;
+	atomic_long_t children_toptier_low_usage;
+
+	/* Cached toptier capacity for proportional limit calculations */
+	unsigned long toptier_capacity;
+	unsigned long total_capacity;
+
+	/* Keep all the read most fields in a separate cacheline. */
+	CACHELINE_PADDING(_pad3_);
 
 	bool protection_support;
 	bool track_failcnt;
@@ -61,6 +76,9 @@ static inline void page_counter_init(struct page_counter *counter,
 	counter->parent = parent;
 	counter->protection_support = protection_support;
 	counter->track_failcnt = false;
+	counter->toptier_usage = (atomic_long_t)ATOMIC_LONG_INIT(0);
+	counter->toptier_capacity = 0;
+	counter->total_capacity = 0;
 }
 
 static inline unsigned long page_counter_read(struct page_counter *counter)
@@ -103,6 +121,8 @@ static inline void page_counter_reset_watermark(struct page_counter *counter)
 void page_counter_calculate_protection(struct page_counter *root,
 				       struct page_counter *counter,
 				       bool recursive_protection);
+unsigned long page_counter_toptier_high(struct page_counter *counter);
+unsigned long page_counter_toptier_low(struct page_counter *counter);
 #else
 static inline void page_counter_calculate_protection(struct page_counter *root,
 						     struct page_counter *counter,
