@@ -9,7 +9,15 @@ import subprocess
 import time
 
 
+class CmdInitFailure(Exception):
+    """ Command failed to start. Only raised by bkg(). """
+    def __init__(self, msg, cmd_obj):
+        super().__init__(msg + "\n" + repr(cmd_obj))
+        self.cmd = cmd_obj
+
+
 class CmdExitFailure(Exception):
+    """ Command failed (returned non-zero exit code). """
     def __init__(self, msg, cmd_obj):
         super().__init__(msg + "\n" + repr(cmd_obj))
         self.cmd = cmd_obj
@@ -76,16 +84,13 @@ class cmd:
                 msg = fd_read_timeout(rfd, ksft_wait)
                 os.close(rfd)
                 if not msg:
-                    raise Exception("Did not receive ready message")
+                    terminate = self.proc.poll() is None
+                    self._process_terminate(terminate=terminate, timeout=1)
+                    raise CmdInitFailure("Did not receive ready message", self)
         if not background:
             self.process(terminate=False, fail=fail, timeout=timeout)
 
-    def process(self, terminate=True, fail=None, timeout=5):
-        if fail is None:
-            fail = not terminate
-
-        if self.ksft_term_fd:
-            os.write(self.ksft_term_fd, b"1")
+    def _process_terminate(self, terminate, timeout):
         if terminate:
             self.proc.terminate()
         stdout, stderr = self.proc.communicate(timeout)
@@ -95,6 +100,17 @@ class cmd:
         self.proc.stderr.close()
         self.ret = self.proc.returncode
 
+        return stdout, stderr
+
+    def process(self, terminate=True, fail=None, timeout=5):
+        if fail is None:
+            fail = not terminate
+
+        if self.ksft_term_fd:
+            os.write(self.ksft_term_fd, b"1")
+
+        stdout, stderr = self._process_terminate(terminate=terminate,
+                                                 timeout=timeout)
         if self.proc.returncode != 0 and fail:
             if len(stderr) > 0 and stderr[-1] == "\n":
                 stderr = stderr[:-1]
