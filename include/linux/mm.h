@@ -3732,6 +3732,7 @@ extern unsigned long vm_unmapped_area(struct vm_unmapped_area_info *info);
 void truncate_inode_pages(struct address_space *mapping, loff_t lstart);
 void truncate_inode_pages_range(struct address_space *mapping, loff_t lstart,
 		uoff_t lend);
+void truncate_inode_pages_final_prepare(struct address_space *mapping);
 void truncate_inode_pages_final(struct address_space *mapping);
 
 /* generic vm_area_ops exported for stackable file systems */
