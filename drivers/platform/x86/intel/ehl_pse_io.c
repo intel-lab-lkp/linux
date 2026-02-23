@@ -56,7 +56,7 @@ static int ehl_pse_io_probe(struct pci_dev *pci, const struct pci_device_id *id)
 
 	pci_set_master(pci);
 
-	ret = pci_alloc_irq_vectors(pci, 2, 2, PCI_IRQ_MSI);
+	ret = pcim_alloc_irq_vectors(pci, 2, 2, PCI_IRQ_MSI);
 	if (ret < 0)
 		return ret;
 
