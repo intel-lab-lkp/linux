@@ -11,7 +11,7 @@ import time
 
 class CmdExitFailure(Exception):
     def __init__(self, msg, cmd_obj):
-        super().__init__(msg)
+        super().__init__(msg + "\n" + repr(cmd_obj))
         self.cmd = cmd_obj
 
 
@@ -98,8 +98,7 @@ class cmd:
         if self.proc.returncode != 0 and fail:
             if len(stderr) > 0 and stderr[-1] == "\n":
                 stderr = stderr[:-1]
-            raise CmdExitFailure("Command failed: %s\nSTDOUT: %s\nSTDERR: %s" %
-                                 (self.proc.args, stdout, stderr), self)
+            raise CmdExitFailure("Command failed", self)
 
     def __repr__(self):
         def str_fmt(name, s):
