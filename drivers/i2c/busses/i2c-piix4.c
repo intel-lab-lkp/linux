@@ -788,7 +788,7 @@ static s32 piix4_access_sb800(struct i2c_adapter *adap, u16 addr,
 	u8 prev_port;
 	int retval;
 
-	retval = piix4_sb800_region_request(&adap->dev, &adapdata->mmio_cfg);
+	retval = piix4_sb800_region_request(i2c_adapter_dev(adap), &adapdata->mmio_cfg);
 	if (retval)
 		return retval;
 
@@ -859,7 +859,7 @@ static s32 piix4_access_sb800(struct i2c_adapter *adap, u16 addr,
 		piix4_imc_wakeup();
 
 release:
-	piix4_sb800_region_release(&adap->dev, &adapdata->mmio_cfg);
+	piix4_sb800_region_release(i2c_adapter_dev(adap), &adapdata->mmio_cfg);
 	return retval;
 }
 
@@ -947,7 +947,7 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 	adap->dev.parent = &dev->dev;
 
 	if (has_acpi_companion(&dev->dev)) {
-		acpi_preset_companion(&adap->dev,
+		acpi_preset_companion(i2c_adapter_dev(adap),
 				      ACPI_COMPANION(&dev->dev),
 				      hw_port_nr);
 	}
