@@ -780,7 +780,7 @@ static int mlx5e_create_rq_hd_mkey(struct mlx5_core_dev *mdev,
 
 static int mlx5_rq_shampo_alloc(struct mlx5_core_dev *mdev,
 				struct mlx5e_params *params,
-				struct mlx5e_rq_param *rqp,
+				struct mlx5e_rq_param *rq_param,
 				struct mlx5e_rq *rq,
 				int node)
 {
@@ -791,7 +791,7 @@ static int mlx5_rq_shampo_alloc(struct mlx5_core_dev *mdev,
 	if (!test_bit(MLX5E_RQ_STATE_SHAMPO, &rq->state))
 		return 0;
 
-	hd_per_wq = mlx5e_shampo_hd_per_wq(mdev, params, rqp);
+	hd_per_wq = mlx5e_shampo_hd_per_wq(mdev, params, rq_param);
 	hd_buf_size = hd_per_wq * BIT(MLX5E_SHAMPO_LOG_HEADER_ENTRY_SIZE);
 	nentries = hd_buf_size / PAGE_SIZE;
 	if (!nentries) {
@@ -852,18 +852,17 @@ static void mlx5e_rq_free_shampo(struct mlx5e_rq *rq)
 
 static int mlx5e_alloc_rq(struct mlx5e_params *params,
 			  struct mlx5e_xsk_param *xsk,
-			  struct mlx5e_rq_param *rqp,
+			  struct mlx5e_rq_param *rq_param,
 			  int node, struct mlx5e_rq *rq)
 {
+	void *rqc_wq = MLX5_ADDR_OF(rqc, rq_param->rqc, wq);
 	struct mlx5_core_dev *mdev = rq->mdev;
-	void *rqc = rqp->rqc;
-	void *rqc_wq = MLX5_ADDR_OF(rqc, rqc, wq);
 	u32 pool_size;
 	int wq_sz;
 	int err;
 	int i;
 
-	rqp->wq.db_numa_node = node;
+	rq_param->wq.db_numa_node = node;
 	INIT_WORK(&rq->recover_work, mlx5e_rq_err_cqe_work);
 	INIT_WORK(&rq->rx_timeout_work, mlx5e_rq_timeout_work);
 
@@ -879,8 +878,8 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 
 	switch (rq->wq_type) {
 	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
-		err = mlx5_wq_ll_create(mdev, &rqp->wq, rqc_wq, &rq->mpwqe.wq,
-					&rq->wq_ctrl);
+		err = mlx5_wq_ll_create(mdev, &rq_param->wq, rqc_wq,
+					&rq->mpwqe.wq, &rq->wq_ctrl);
 		if (err)
 			goto err_rq_xdp_prog;
 
@@ -925,14 +924,14 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 		if (err)
 			goto err_rq_mkey;
 
-		err = mlx5_rq_shampo_alloc(mdev, params, rqp, rq, node);
+		err = mlx5_rq_shampo_alloc(mdev, params, rq_param, rq, node);
 		if (err)
 			goto err_free_mpwqe_info;
 
 		break;
 	default: /* MLX5_WQ_TYPE_CYCLIC */
-		err = mlx5_wq_cyc_create(mdev, &rqp->wq, rqc_wq, &rq->wqe.wq,
-					 &rq->wq_ctrl);
+		err = mlx5_wq_cyc_create(mdev, &rq_param->wq, rqc_wq,
+					 &rq->wqe.wq, &rq->wq_ctrl);
 		if (err)
 			goto err_rq_xdp_prog;
 
@@ -940,7 +939,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 
 		wq_sz = mlx5_wq_cyc_get_size(&rq->wqe.wq);
 
-		rq->wqe.info = rqp->frags_info;
+		rq->wqe.info = rq_param->frags_info;
 		rq->buff.frame0_sz = rq->wqe.info.arr[0].frag_stride;
 
 		err = mlx5e_init_wqe_alloc_info(rq, node);
@@ -1085,7 +1084,8 @@ static void mlx5e_free_rq(struct mlx5e_rq *rq)
 	xdp_rxq_info_unreg(&rq->xdp_rxq);
 }
 
-int mlx5e_create_rq(struct mlx5e_rq *rq, struct mlx5e_rq_param *param, u16 q_counter)
+int mlx5e_create_rq(struct mlx5e_rq *rq, struct mlx5e_rq_param *rq_param,
+		    u16 q_counter)
 {
 	struct mlx5_core_dev *mdev = rq->mdev;
 	u8 ts_format;
@@ -1107,7 +1107,7 @@ int mlx5e_create_rq(struct mlx5e_rq *rq, struct mlx5e_rq_param *param, u16 q_cou
 	rqc = MLX5_ADDR_OF(create_rq_in, in, ctx);
 	wq  = MLX5_ADDR_OF(rqc, rqc, wq);
 
-	memcpy(rqc, param->rqc, sizeof(param->rqc));
+	memcpy(rqc, rq_param->rqc, sizeof(rq_param->rqc));
 
 	MLX5_SET(rqc,  rqc, cqn,		rq->cq.mcq.cqn);
 	MLX5_SET(rqc,  rqc, state,		MLX5_RQC_STATE_RST);
@@ -1323,7 +1323,7 @@ void mlx5e_free_rx_descs(struct mlx5e_rq *rq)
 
 }
 
-int mlx5e_open_rq(struct mlx5e_params *params, struct mlx5e_rq_param *param,
+int mlx5e_open_rq(struct mlx5e_params *params, struct mlx5e_rq_param *rq_param,
 		  struct mlx5e_xsk_param *xsk, int node, u16 q_counter,
 		  struct mlx5e_rq *rq)
 {
@@ -1333,11 +1333,11 @@ int mlx5e_open_rq(struct mlx5e_params *params, struct mlx5e_rq_param *param,
 	if (params->packet_merge.type == MLX5E_PACKET_MERGE_SHAMPO)
 		__set_bit(MLX5E_RQ_STATE_SHAMPO, &rq->state);
 
-	err = mlx5e_alloc_rq(params, xsk, param, node, rq);
+	err = mlx5e_alloc_rq(params, xsk, rq_param, node, rq);
 	if (err)
 		return err;
 
-	err = mlx5e_create_rq(rq, param, q_counter);
+	err = mlx5e_create_rq(rq, rq_param, q_counter);
 	if (err)
 		goto err_free_rq;
 
@@ -2507,16 +2507,17 @@ static int mlx5e_set_tx_maxrate(struct net_device *dev, int index, u32 rate)
 }
 
 static int mlx5e_open_rxq_rq(struct mlx5e_channel *c, struct mlx5e_params *params,
-			     struct mlx5e_rq_param *rq_params)
+			     struct mlx5e_rq_param *rq_param)
 {
 	u16 q_counter = c->priv->q_counter[c->sd_ix];
 	int err;
 
-	err = mlx5e_init_rxq_rq(c, params, rq_params->xdp_frag_size, &c->rq);
+	err = mlx5e_init_rxq_rq(c, params, rq_param->xdp_frag_size, &c->rq);
 	if (err)
 		return err;
 
-	return mlx5e_open_rq(params, rq_params, NULL, cpu_to_node(c->cpu), q_counter, &c->rq);
+	return mlx5e_open_rq(params, rq_param, NULL, cpu_to_node(c->cpu),
+			     q_counter, &c->rq);
 }
 
 static struct mlx5e_icosq *
@@ -3577,15 +3578,14 @@ static void mlx5e_free_drop_rq(struct mlx5e_rq *rq)
 
 static int mlx5e_alloc_drop_rq(struct mlx5_core_dev *mdev,
 			       struct mlx5e_rq *rq,
-			       struct mlx5e_rq_param *param)
+			       struct mlx5e_rq_param *rq_param)
 {
-	void *rqc = param->rqc;
-	void *rqc_wq = MLX5_ADDR_OF(rqc, rqc, wq);
+	void *rqc_wq = MLX5_ADDR_OF(rqc, rq_param->rqc, wq);
 	int err;
 
-	param->wq.db_numa_node = param->wq.buf_numa_node;
+	rq_param->wq.db_numa_node = rq_param->wq.buf_numa_node;
 
-	err = mlx5_wq_cyc_create(mdev, &param->wq, rqc_wq, &rq->wqe.wq,
+	err = mlx5_wq_cyc_create(mdev, &rq_param->wq, rqc_wq, &rq->wqe.wq,
 				 &rq->wq_ctrl);
 	if (err)
 		return err;
