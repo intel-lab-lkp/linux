@@ -7,6 +7,7 @@
 #include <linux/of_device.h>
 #include "qda_drv.h"
 #include "qda_rpmsg.h"
+#include "qda_cb.h"
 
 static int qda_rpmsg_init(struct qda_dev *qdev)
 {
@@ -25,9 +26,40 @@ static struct qda_dev *alloc_and_init_qdev(struct rpmsg_device *rpdev)
 
 	qdev->dev = &rpdev->dev;
 	qdev->rpdev = rpdev;
+	INIT_LIST_HEAD(&qdev->cb_devs);
 
 	qda_dbg(qdev, "Allocated and initialized qda_dev\n");
 	return qdev;
+}
+
+static void qda_unpopulate_child_devices(struct qda_dev *qdev)
+{
+	struct qda_cb_dev *entry, *tmp;
+
+	list_for_each_entry_safe(entry, tmp, &qdev->cb_devs, node) {
+		list_del(&entry->node);
+		qda_destroy_cb_device(entry->dev);
+		kfree(entry);
+	}
+}
+
+static int qda_populate_child_devices(struct qda_dev *qdev, struct device_node *parent_node)
+{
+	struct device_node *child;
+	int count = 0, success = 0;
+
+	for_each_child_of_node(parent_node, child) {
+		if (of_device_is_compatible(child, "qcom,fastrpc-compute-cb")) {
+			count++;
+			if (qda_create_cb_device(qdev, child) == 0) {
+				success++;
+				qda_dbg(qdev, "Created CB device for node: %s\n", child->name);
+			} else {
+				qda_err(qdev, "Failed to create CB device for: %s\n", child->name);
+			}
+		}
+	}
+	return success > 0 ? 0 : (count > 0 ? -ENODEV : 0);
 }
 
 static int qda_rpmsg_cb(struct rpmsg_device *rpdev, void *data, int len, void *priv, u32 src)
@@ -48,6 +80,7 @@ static void qda_rpmsg_remove(struct rpmsg_device *rpdev)
 	qdev->rpdev = NULL;
 	mutex_unlock(&qdev->lock);
 
+	qda_unpopulate_child_devices(qdev);
 	qda_deinit_device(qdev);
 
 	qda_info(qdev, "RPMsg device removed\n");
@@ -82,6 +115,13 @@ static int qda_rpmsg_probe(struct rpmsg_device *rpdev)
 	ret = qda_init_device(qdev);
 	if (ret)
 		return ret;
+
+	ret = qda_populate_child_devices(qdev, rpdev->dev.of_node);
+	if (ret) {
+		qda_err(qdev, "Failed to populate child devices: %d\n", ret);
+		qda_deinit_device(qdev);
+		return ret;
+	}
 
 	qda_info(qdev, "QDA RPMsg probe completed successfully for %s\n", qdev->dsp_name);
 	return 0;

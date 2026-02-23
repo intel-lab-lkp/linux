@@ -7,6 +7,7 @@
 #define __QDA_DRV_H__
 
 #include <linux/device.h>
+#include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/rpmsg.h>
 #include <linux/xarray.h>
@@ -26,6 +27,8 @@ struct qda_dev {
 	atomic_t removing;
 	/* Name of the DSP (e.g., "cdsp", "adsp") */
 	char dsp_name[16];
+	/* Compute context-bank (CB) child devices */
+	struct list_head cb_devs;
 };
 
 /**
