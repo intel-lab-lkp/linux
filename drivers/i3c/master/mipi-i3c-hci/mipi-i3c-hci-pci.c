@@ -282,7 +282,7 @@ static int mipi_i3c_hci_pci_probe(struct pci_dev *pci,
 	if (IS_ERR(hci->base))
 		return PTR_ERR(hci->base);
 
-	ret = pci_alloc_irq_vectors(pci, 1, 1, PCI_IRQ_ALL_TYPES);
+	ret = pcim_alloc_irq_vectors(pci, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (ret < 0)
 		return ret;
 
