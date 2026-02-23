@@ -7,11 +7,11 @@
 
 #include <drm/drm_debugfs.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_gt_debugfs.h"
 #include "xe_gt_sriov_vf.h"
 #include "xe_gt_sriov_vf_debugfs.h"
 #include "xe_gt_types.h"
-#include "xe_sriov.h"
 
 /*
  *      /sys/kernel/debug/dri/0/
@@ -52,7 +52,6 @@ static const struct drm_info_list vf_info[] = {
 void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt, struct dentry *root)
 {
 	struct xe_device *xe = gt_to_xe(gt);
-	struct drm_minor *minor = xe->drm.primary;
 	struct dentry *vfdentry;
 
 	xe_assert(xe, IS_SRIOV_VF(xe));
@@ -68,7 +67,7 @@ void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt, struct dentry *root)
 		return;
 	vfdentry->d_inode->i_private = gt;
 
-	drm_debugfs_create_files(vf_info, ARRAY_SIZE(vf_info), vfdentry, minor);
+	xe_debugfs_create_files(vf_info, ARRAY_SIZE(vf_info), vfdentry, xe);
 
 	/*
 	 *      /sys/kernel/debug/dri/BDF/

@@ -8,6 +8,7 @@
 
 #include "xe_device.h"
 #include "xe_device_types.h"
+#include "xe_debugfs_helpers.h"
 #include "xe_gt_sriov_pf_config.h"
 #include "xe_gt_sriov_pf_debugfs.h"
 #include "xe_pm.h"
@@ -183,20 +184,19 @@ static void pf_add_config_attrs(struct xe_tile *tile, struct dentry *dent, unsig
 static void pf_populate_tile(struct xe_tile *tile, struct dentry *dent, unsigned int vfid)
 {
 	struct xe_device *xe = tile->xe;
-	struct drm_minor *minor = xe->drm.primary;
 	struct xe_gt *gt;
 	unsigned int id;
 
 	pf_add_config_attrs(tile, dent, vfid);
 
 	if (!vfid) {
-		drm_debugfs_create_files(pf_ggtt_info,
-					 ARRAY_SIZE(pf_ggtt_info),
-					 dent, minor);
+		xe_debugfs_create_files(pf_ggtt_info,
+					ARRAY_SIZE(pf_ggtt_info),
+					dent, xe);
 		if (IS_DGFX(xe))
-			drm_debugfs_create_files(pf_vram_info,
-						 ARRAY_SIZE(pf_vram_info),
-						 dent, minor);
+			xe_debugfs_create_files(pf_vram_info,
+						ARRAY_SIZE(pf_vram_info),
+						dent, xe);
 	}
 
 	for_each_gt_on_tile(gt, tile, id)

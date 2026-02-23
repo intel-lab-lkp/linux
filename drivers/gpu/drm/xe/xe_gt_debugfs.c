@@ -10,6 +10,7 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_managed.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_device.h"
 #include "xe_force_wake.h"
 #include "xe_gt.h"
@@ -339,11 +340,13 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
 	struct xe_device *xe = gt_to_xe(gt);
 	struct drm_minor *minor = gt_to_xe(gt)->drm.primary;
 	struct dentry *parent = gt->tile->debugfs;
+	struct dentry *xe_debugfs_root;
 	struct dentry *root;
 	char symlink[16];
 	char name[8];
 
-	xe_gt_assert(gt, minor->debugfs_root);
+	if (!xe_device_is_admin_only(xe))
+		xe_gt_assert(gt, minor->debugfs_root);
 
 	if (IS_ERR(parent))
 		return;
@@ -367,14 +370,14 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
 	debugfs_create_file("force_reset", 0600, root, gt, &force_reset_fops);
 	debugfs_create_file("force_reset_sync", 0600, root, gt, &force_reset_sync_fops);
 
-	drm_debugfs_create_files(vf_safe_debugfs_list,
-				 ARRAY_SIZE(vf_safe_debugfs_list),
-				 root, minor);
+	xe_debugfs_create_files(vf_safe_debugfs_list,
+				ARRAY_SIZE(vf_safe_debugfs_list),
+				root, xe);
 
 	if (!IS_SRIOV_VF(xe))
-		drm_debugfs_create_files(pf_only_debugfs_list,
-					 ARRAY_SIZE(pf_only_debugfs_list),
-					 root, minor);
+		xe_debugfs_create_files(pf_only_debugfs_list,
+					ARRAY_SIZE(pf_only_debugfs_list),
+					root, xe);
 
 	xe_uc_debugfs_register(&gt->uc, root);
 
@@ -388,5 +391,6 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
 	 * who may expect gt/ directory at the root level, not the tile level.
 	 */
 	snprintf(symlink, sizeof(symlink), "tile%u/%s", gt->tile->id, name);
-	debugfs_create_symlink(name, minor->debugfs_root, symlink);
+	xe_debugfs_root = xe_debugfs_root_dir(xe);
+	debugfs_create_symlink(name, xe_debugfs_root, symlink);
 }

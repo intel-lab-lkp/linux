@@ -6,6 +6,7 @@
 #include <linux/debugfs.h>
 #include <drm/drm_debugfs.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_device.h"
 #include "xe_device_types.h"
 #include "xe_pm.h"
@@ -152,9 +153,7 @@ static const struct drm_info_list debugfs_list[] = {
 
 static void pf_populate_pf(struct xe_device *xe, struct dentry *pfdent)
 {
-	struct drm_minor *minor = xe->drm.primary;
-
-	drm_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list), pfdent, minor);
+	xe_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list), pfdent, xe);
 }
 
 /*

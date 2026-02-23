@@ -6,6 +6,7 @@
 #include <linux/debugfs.h>
 #include <drm/drm_debugfs.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_ggtt.h"
 #include "xe_pm.h"
 #include "xe_sa.h"
@@ -123,8 +124,7 @@ static void tile_debugfs_create_vram_mm(struct xe_tile *tile)
 void xe_tile_debugfs_register(struct xe_tile *tile)
 {
 	struct xe_device *xe = tile_to_xe(tile);
-	struct drm_minor *minor = xe->drm.primary;
-	struct dentry *root = minor->debugfs_root;
+	struct dentry *root = xe_debugfs_root_dir(xe);
 	char name[8];
 
 	snprintf(name, sizeof(name), "tile%u", tile->id);
@@ -139,9 +139,9 @@ void xe_tile_debugfs_register(struct xe_tile *tile)
 	 */
 	tile->debugfs->d_inode->i_private = tile;
 
-	drm_debugfs_create_files(vf_safe_debugfs_list,
-				 ARRAY_SIZE(vf_safe_debugfs_list),
-				 tile->debugfs, minor);
+	xe_debugfs_create_files(vf_safe_debugfs_list,
+				ARRAY_SIZE(vf_safe_debugfs_list),
+				tile->debugfs, xe);
 
 	tile_debugfs_create_vram_mm(tile);
 }

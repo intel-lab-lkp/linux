@@ -11,6 +11,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_device_types.h"
 #include "xe_pxp.h"
 #include "xe_pxp_types.h"
@@ -96,17 +97,22 @@ static const struct drm_info_list debugfs_list[] = {
 
 void xe_pxp_debugfs_register(struct xe_pxp *pxp)
 {
-	struct drm_minor *minor;
 	struct drm_info_list *local;
+	struct drm_minor *minor;
+	struct xe_device *xe;
 	struct dentry *root;
 	int i;
 
 	if (!xe_pxp_is_enabled(pxp))
 		return;
 
-	minor = pxp->xe->drm.primary;
-	if (!minor->debugfs_root)
-		return;
+	xe = pxp->xe;
+
+	if (!xe_device_is_admin_only(xe)) {
+		minor = xe->drm.primary;
+		if (!minor->debugfs_root)
+			return;
+	}
 
 #define DEBUGFS_SIZE	(ARRAY_SIZE(debugfs_list) * sizeof(struct drm_info_list))
 	local = drmm_kmalloc(&pxp->xe->drm, DEBUGFS_SIZE, GFP_KERNEL);
@@ -119,11 +125,12 @@ void xe_pxp_debugfs_register(struct xe_pxp *pxp)
 	for (i = 0; i < ARRAY_SIZE(debugfs_list); ++i)
 		local[i].data = pxp;
 
-	root = debugfs_create_dir("pxp", minor->debugfs_root);
+	root = xe_debugfs_root_dir(xe);
+	root = debugfs_create_dir("pxp", root);
 	if (IS_ERR(root))
 		return;
 
-	drm_debugfs_create_files(local,
-				 ARRAY_SIZE(debugfs_list),
-				 root, minor);
+	xe_debugfs_create_files(local,
+				ARRAY_SIZE(debugfs_list),
+				root, xe);
 }

@@ -9,6 +9,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_gt_types.h"
 #include "xe_huc.h"
 #include "xe_pm.h"
@@ -48,7 +49,6 @@ static const struct drm_info_list debugfs_list[] = {
 
 void xe_huc_debugfs_register(struct xe_huc *huc, struct dentry *parent)
 {
-	struct drm_minor *minor = huc_to_xe(huc)->drm.primary;
 	struct drm_info_list *local;
 	int i;
 
@@ -63,7 +63,7 @@ void xe_huc_debugfs_register(struct xe_huc *huc, struct dentry *parent)
 	for (i = 0; i < ARRAY_SIZE(debugfs_list); ++i)
 		local[i].data = huc;
 
-	drm_debugfs_create_files(local,
-				 ARRAY_SIZE(debugfs_list),
-				 parent, minor);
+	xe_debugfs_create_files(local,
+				ARRAY_SIZE(debugfs_list),
+				parent, huc_to_xe(huc));
 }

@@ -971,15 +971,17 @@ int xe_device_probe(struct xe_device *xe)
 	if (err)
 		return err;
 
-	err = drm_dev_register(&xe->drm, 0);
-	if (err)
-		return err;
+	if (!xe_device_is_admin_only(xe)) {
+		err = drm_dev_register(&xe->drm, 0);
+		if (err)
+			return err;
+
+		err = xe_oa_register(xe);
+		if (err)
+			goto err_drm_dev_unregister;
+	}
 
 	xe_display_register(xe);
-
-	err = xe_oa_register(xe);
-	if (err)
-		goto err_unregister_display;
 
 	err = xe_pmu_register(&xe->pmu);
 	if (err)
@@ -1014,6 +1016,7 @@ int xe_device_probe(struct xe_device *xe)
 
 err_unregister_display:
 	xe_display_unregister(xe);
+err_drm_dev_unregister:
 	drm_dev_unregister(&xe->drm);
 
 	return err;
@@ -1023,7 +1026,8 @@ void xe_device_remove(struct xe_device *xe)
 {
 	xe_display_unregister(xe);
 
-	drm_dev_unplug(&xe->drm);
+	if (!xe_device_is_admin_only(xe))
+		drm_dev_unplug(&xe->drm);
 
 	xe_bo_pci_dev_remove_all(xe);
 }

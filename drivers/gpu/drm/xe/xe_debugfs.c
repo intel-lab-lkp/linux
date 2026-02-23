@@ -13,6 +13,7 @@
 
 #include "regs/xe_pmt.h"
 #include "xe_bo.h"
+#include "xe_debugfs_helpers.h"
 #include "xe_device.h"
 #include "xe_force_wake.h"
 #include "xe_gt_debugfs.h"
@@ -512,22 +513,23 @@ static const struct file_operations disable_late_binding_fops = {
 void xe_debugfs_register(struct xe_device *xe)
 {
 	struct ttm_device *bdev = &xe->ttm;
-	struct drm_minor *minor = xe->drm.primary;
-	struct dentry *root = minor->debugfs_root;
 	struct ttm_resource_manager *man;
 	struct xe_tile *tile;
+	struct dentry *root;
 	struct xe_gt *gt;
 	u8 tile_id;
 	u8 id;
 
-	drm_debugfs_create_files(debugfs_list,
-				 ARRAY_SIZE(debugfs_list),
-				 root, minor);
+	root = xe_debugfs_root_dir(xe);
+
+	xe_debugfs_create_files(debugfs_list,
+				ARRAY_SIZE(debugfs_list),
+				root, xe);
 
 	if (xe->info.platform == XE_BATTLEMAGE && !IS_SRIOV_VF(xe)) {
-		drm_debugfs_create_files(debugfs_residencies,
-					 ARRAY_SIZE(debugfs_residencies),
-					 root, minor);
+		xe_debugfs_create_files(debugfs_residencies,
+					ARRAY_SIZE(debugfs_residencies),
+					root, xe);
 		fault_create_debugfs_attr("inject_csc_hw_error", root,
 					  &inject_csc_hw_error);
 	}

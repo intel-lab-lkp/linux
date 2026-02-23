@@ -6,6 +6,7 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_managed.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_gt_sriov_vf.h"
 #include "xe_guc.h"
 #include "xe_sriov_printk.h"
@@ -281,6 +282,6 @@ static const struct drm_info_list debugfs_list[] = {
  */
 void xe_sriov_vf_debugfs_register(struct xe_device *xe, struct dentry *root)
 {
-	drm_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list),
-				 root, xe->drm.primary);
+	xe_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list),
+				root, xe);
 }

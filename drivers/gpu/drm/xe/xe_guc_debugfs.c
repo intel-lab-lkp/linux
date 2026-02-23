@@ -8,6 +8,7 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_managed.h>
 
+#include "xe_debugfs_helpers.h"
 #include "xe_device_types.h"
 #include "xe_gt_types.h"
 #include "xe_guc.h"
@@ -129,20 +130,19 @@ static const struct drm_info_list pf_only_debugfs_list[] = {
 void xe_guc_debugfs_register(struct xe_guc *guc, struct dentry *parent)
 {
 	struct xe_device *xe =  guc_to_xe(guc);
-	struct drm_minor *minor = xe->drm.primary;
 
-	drm_debugfs_create_files(vf_safe_debugfs_list,
-				 ARRAY_SIZE(vf_safe_debugfs_list),
-				 parent, minor);
+	xe_debugfs_create_files(vf_safe_debugfs_list,
+				ARRAY_SIZE(vf_safe_debugfs_list),
+				parent, xe);
 
 	if (!IS_SRIOV_VF(xe)) {
-		drm_debugfs_create_files(pf_only_debugfs_list,
-					 ARRAY_SIZE(pf_only_debugfs_list),
-					 parent, minor);
+		xe_debugfs_create_files(pf_only_debugfs_list,
+					ARRAY_SIZE(pf_only_debugfs_list),
+					parent, xe);
 
 		if (!xe->info.skip_guc_pc)
-			drm_debugfs_create_files(slpc_debugfs_list,
-						 ARRAY_SIZE(slpc_debugfs_list),
-						 parent, minor);
+			xe_debugfs_create_files(slpc_debugfs_list,
+						ARRAY_SIZE(slpc_debugfs_list),
+						parent, xe);
 	}
 }

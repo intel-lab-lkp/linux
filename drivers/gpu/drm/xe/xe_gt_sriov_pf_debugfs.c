@@ -8,7 +8,7 @@
 #include <drm/drm_print.h>
 #include <drm/drm_debugfs.h>
 
-#include "xe_debugfs.h"
+#include "xe_debugfs_helpers.h"
 #include "xe_device.h"
 #include "xe_gt.h"
 #include "xe_gt_debugfs.h"
@@ -806,7 +806,6 @@ static void pf_add_compat_attrs(struct xe_gt *gt, struct dentry *dent, unsigned 
 static void pf_populate_gt(struct xe_gt *gt, struct dentry *dent, unsigned int vfid)
 {
 	struct xe_device *xe = gt_to_xe(gt);
-	struct drm_minor *minor = xe->drm.primary;
 
 	if (vfid) {
 		pf_add_config_attrs(gt, dent, vfid);
@@ -826,7 +825,7 @@ static void pf_populate_gt(struct xe_gt *gt, struct dentry *dent, unsigned int v
 		pf_add_policy_attrs(gt, dent);
 		pf_add_sched_groups(gt, dent, PFID);
 
-		drm_debugfs_create_files(pf_info, ARRAY_SIZE(pf_info), dent, minor);
+		xe_debugfs_create_files(pf_info, ARRAY_SIZE(pf_info), dent, xe);
 	}
 
 	/* for backward compatibility only */
