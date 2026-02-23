@@ -3135,7 +3135,7 @@ bool tcp_schedule_loss_probe(struct sock *sk, bool advancing_rto)
 	 * not in loss recovery, that are either limited by cwnd or application.
 	 */
 	if ((early_retrans != 3 && early_retrans != 4) ||
-	    !tp->packets_out || !tcp_is_sack(tp) ||
+	    !tcp_is_sack(tp) ||
 	    (icsk->icsk_ca_state != TCP_CA_Open &&
 	     icsk->icsk_ca_state != TCP_CA_CWR))
 		return false;
