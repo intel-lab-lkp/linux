@@ -1053,11 +1053,11 @@ int gpiochip_sysfs_register(struct gpio_device *gdev)
 	return 0;
 }
 
-void gpiochip_sysfs_unregister(struct gpio_device *gdev)
+void gpiochip_sysfs_unregister(struct gpio_chip *gc)
 {
+	struct gpio_device *gdev = gc->gpiodev;
 	struct gpiodev_data *data;
 	struct gpio_desc *desc;
-	struct gpio_chip *chip;
 
 	guard(mutex)(&sysfs_lock);
 
@@ -1065,13 +1065,8 @@ void gpiochip_sysfs_unregister(struct gpio_device *gdev)
 	if (!data)
 		return;
 
-	guard(srcu)(&gdev->srcu);
-	chip = srcu_dereference(gdev->chip, &gdev->srcu);
-	if (!chip)
-		return;
-
 	/* unregister gpiod class devices owned by sysfs */
-	for_each_gpio_desc_with_flag(chip, desc, GPIOD_FLAG_SYSFS) {
+	for_each_gpio_desc_with_flag(gc, desc, GPIOD_FLAG_SYSFS) {
 		gpiod_unexport_unlocked(desc);
 		gpiod_free(desc);
 	}
