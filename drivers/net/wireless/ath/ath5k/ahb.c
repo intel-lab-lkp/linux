@@ -87,7 +87,6 @@ static int ath_ahb_probe(struct platform_device *pdev)
 	struct ar231x_board_config *bcfg = dev_get_platdata(&pdev->dev);
 	struct ath5k_hw *ah;
 	struct ieee80211_hw *hw;
-	struct resource *res;
 	void __iomem *mem;
 	int irq;
 	int ret = 0;
@@ -95,35 +94,21 @@ static int ath_ahb_probe(struct platform_device *pdev)
 
 	if (!dev_get_platdata(&pdev->dev)) {
 		dev_err(&pdev->dev, "no platform data specified\n");
-		ret = -EINVAL;
-		goto err_out;
+		return -EINVAL;
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (res == NULL) {
-		dev_err(&pdev->dev, "no memory resource found\n");
-		ret = -ENXIO;
-		goto err_out;
-	}
-
-	mem = ioremap(res->start, resource_size(res));
-	if (mem == NULL) {
-		dev_err(&pdev->dev, "ioremap failed\n");
-		ret = -ENOMEM;
-		goto err_out;
-	}
+	mem = devm_platform_ioremap_resources(pdev, 0);
+	if (IS_ERR(mem))
+		return dev_err_probe(&pdev->dev, PTR_ERR(mem), "ioremap failed\n");
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		ret = irq;
-		goto err_iounmap;
-	}
+	if (irq < 0)
+		return irq;
 
 	hw = ieee80211_alloc_hw(sizeof(struct ath5k_hw), &ath5k_hw_ops);
 	if (hw == NULL) {
 		dev_err(&pdev->dev, "no memory for ieee80211_hw\n");
-		ret = -ENOMEM;
-		goto err_iounmap;
+		return -ENOMEM;
 	}
 
 	ah = hw->priv;
@@ -179,9 +164,6 @@ static int ath_ahb_probe(struct platform_device *pdev)
 
  err_free_hw:
 	ieee80211_free_hw(hw);
- err_iounmap:
-        iounmap(mem);
- err_out:
 	return ret;
 }
 
@@ -213,7 +195,6 @@ static void ath_ahb_remove(struct platform_device *pdev)
 	}
 
 	ath5k_deinit_ah(ah);
-	iounmap(ah->iobase);
 	ieee80211_free_hw(hw);
 }
 
