@@ -39,7 +39,7 @@ static int thunder_mmc_register_interrupts(struct cvm_mmc_host *host,
 {
 	int nvec, ret, i;
 
-	nvec = pci_alloc_irq_vectors(pdev, 1, 9, PCI_IRQ_MSIX);
+	nvec = pcim_alloc_irq_vectors(pdev, 1, 9, PCI_IRQ_MSIX);
 	if (nvec < 0)
 		return nvec;
 
