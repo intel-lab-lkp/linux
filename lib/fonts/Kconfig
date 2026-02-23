@@ -112,6 +112,46 @@ config FONT_SUN12x22
 	  big letters (like the letters used in the SPARC PROM). If the
 	  standard font is unreadable for you, say Y, otherwise say N.
 
+config FONT_TER6x12
+	bool "Terminus 6x12 font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER8x14
+	bool "Terminus 8x14 font"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER8x14B
+	bool "Terminus 8x14 bold font"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER8x16
+	bool "Terminus 8x16 font"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER8x16B
+	bool "Terminus 8x16 bold font"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
 config FONT_TER10x18
 	bool "Terminus 10x18 font (not supported by all drivers)"
 	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
@@ -119,19 +159,103 @@ config FONT_TER10x18
 	help
 	  Terminus Font is a clean, fixed width bitmap font, designed
 	  for long (8 and more hours per day) work with computers.
+<<<<<<< HEAD
+
+config FONT_TER10x18B
+	bool "Terminus 10x18 bold font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER10x20
+	bool "Terminus 10x20 font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER10x20B
+	bool "Terminus 10x20 bold font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER11x22
+	bool "Terminus 11x22 font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER11x22B
+	bool "Terminus 11x22 bold font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER12x24
+	bool "Terminus 12x24 font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER12x24B
+	bool "Terminus 12x24 bold font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER14x28
+	bool "Terminus 14x28 font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER14x28B
+	bool "Terminus 14x28 bold font (not supported by all drivers)"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER16x32
+	bool "Terminus 16x32 font"
+	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
+	depends on !SPARC && FONTS || SPARC
+	help
+	  Terminus Font is a clean, fixed width bitmap font, designed
+	  for long (8 and more hours per day) work with computers.
+
+config FONT_TER16x32B
+	bool "Terminus 16x32 bold font"
+=======
 	  This is the high resolution version made for use with 13-16" laptops.
 	  It fits between the normal 8x16 font and Terminus 16x32.
 	  If other fonts are unreadable for you, say Y, otherwise say N.
 
 config FONT_TER16x32
 	bool "Terminus 16x32 font (not supported by all drivers)"
+>>>>>>> 32a92f8c89326985e05dce8b22d3f0aa07a3e1bd
 	depends on FRAMEBUFFER_CONSOLE || DRM_PANIC
 	depends on !SPARC && FONTS || SPARC
 	help
 	  Terminus Font is a clean, fixed width bitmap font, designed
 	  for long (8 and more hours per day) work with computers.
-	  This is the high resolution, large version for use with HiDPI screens.
-	  If the standard font is unreadable for you, say Y, otherwise say N.
 
 config FONT_6x8
 	bool "OLED 6x8 font" if FONTS
@@ -151,8 +275,27 @@ config FONT_AUTOSELECT
 	depends on !FONT_SUN8x16
 	depends on !FONT_SUN12x22
 	depends on !FONT_10x18
+<<<<<<< HEAD
+	depends on !FONT_TER6x12
+	depends on !FONT_TER8x14
+	depends on !FONT_TER8x14B
+	depends on !FONT_TER8x16
+	depends on !FONT_TER8x16B
 	depends on !FONT_TER10x18
+	depends on !FONT_TER10x18B
+	depends on !FONT_TER10x20
+	depends on !FONT_TER10x20B
+	depends on !FONT_TER11x22
+	depends on !FONT_TER11x22B
+	depends on !FONT_TER12x24
+	depends on !FONT_TER12x24B
+	depends on !FONT_TER14x28
+	depends on !FONT_TER14x28B
+=======
+	depends on !FONT_TER10x18
+>>>>>>> 32a92f8c89326985e05dce8b22d3f0aa07a3e1bd
 	depends on !FONT_TER16x32
+	depends on !FONT_TER16x32B
 	depends on !FONT_6x8
 	select FONT_8x16
 
