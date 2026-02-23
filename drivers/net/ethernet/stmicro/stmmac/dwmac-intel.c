@@ -1122,7 +1122,7 @@ static int stmmac_config_single_msi(struct pci_dev *pdev,
 {
 	int ret;
 
-	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
+	ret = pcim_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (ret < 0) {
 		dev_info(&pdev->dev, "%s: Single IRQ enablement failed\n",
 			 __func__);
@@ -1152,8 +1152,8 @@ static int stmmac_config_multi_msi(struct pci_dev *pdev,
 		return -1;
 	}
 
-	ret = pci_alloc_irq_vectors(pdev, 2, STMMAC_MSI_VEC_MAX,
-				    PCI_IRQ_MSI | PCI_IRQ_MSIX);
+	ret = pcim_alloc_irq_vectors(pdev, 2, STMMAC_MSI_VEC_MAX,
+				     PCI_IRQ_MSI | PCI_IRQ_MSIX);
 	if (ret < 0) {
 		dev_info(&pdev->dev, "%s: multi MSI enablement failed\n",
 			 __func__);
