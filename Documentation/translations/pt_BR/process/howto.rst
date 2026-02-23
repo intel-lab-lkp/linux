@@ -1,6 +1,6 @@
 .. SPDX-License-Identifier: GPL-2.0
 
-.. pt_process_howto:
+.. _pt_process_howto:
 
 COMO FAZER o desenvolvimento do kernel Linux
 ============================================
