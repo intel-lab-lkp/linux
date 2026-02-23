@@ -78,6 +78,7 @@
 #include <linux/sched/sysctl.h>
 #include <linux/pgalloc.h>
 #include <linux/uaccess.h>
+#include <linux/kvm_types.h>
 
 #include <trace/events/kmem.h>
 
@@ -4244,6 +4245,7 @@ void unmap_mapping_folio(struct folio *folio)
 					 last_index, &details);
 	i_mmap_unlock_read(mapping);
 }
+EXPORT_SYMBOL_FOR_KVM(unmap_mapping_folio);
 
 /**
  * unmap_mapping_pages() - Unmap pages from processes.
