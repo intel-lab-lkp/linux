@@ -606,7 +606,9 @@ static inline void mem_cgroup_protection(struct mem_cgroup *root,
 }
 
 void mem_cgroup_calculate_protection(struct mem_cgroup *root,
-				     struct mem_cgroup *memcg);
+				     struct mem_cgroup *memcg, bool toptier);
+
+unsigned long mem_cgroup_toptier_usage(struct mem_cgroup *memcg);
 
 void update_memcg_toptier_capacity(void);
 
@@ -623,10 +625,14 @@ static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 }
 
 static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, bool toptier)
 {
 	if (mem_cgroup_unprotected(target, memcg))
 		return false;
+
+	if (toptier)
+		return READ_ONCE(memcg->memory.etoptier_low) >=
+				 mem_cgroup_toptier_usage(memcg);
 
 	return READ_ONCE(memcg->memory.elow) >=
 		page_counter_read(&memcg->memory);
@@ -1114,7 +1120,8 @@ static inline void mem_cgroup_protection(struct mem_cgroup *root,
 }
 
 static inline void mem_cgroup_calculate_protection(struct mem_cgroup *root,
-						   struct mem_cgroup *memcg)
+						   struct mem_cgroup *memcg,
+						   bool toptier)
 {
 }
 
@@ -1128,7 +1135,7 @@ static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 	return true;
 }
 static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, bool toptier)
 {
 	return false;
 }

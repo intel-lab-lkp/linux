@@ -4144,6 +4144,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	struct mem_cgroup *memcg;
 	unsigned long min_ttl = READ_ONCE(lru_gen_min_ttl);
 	bool reclaimable = !min_ttl;
+	bool toptier = node_is_toptier(pgdat->node_id);
 
 	VM_WARN_ON_ONCE(!current_is_kswapd());
 
@@ -4153,7 +4154,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	do {
 		struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
 
-		mem_cgroup_calculate_protection(NULL, memcg);
+		mem_cgroup_calculate_protection(NULL, memcg, toptier);
 
 		if (!reclaimable)
 			reclaimable = lruvec_is_reclaimable(lruvec, sc, min_ttl);
@@ -4905,12 +4906,14 @@ static int shrink_one(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long reclaimed = sc->nr_reclaimed;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+	bool toptier = tier_aware_memcg_limits &&
+		       node_is_toptier(pgdat->node_id);
 
 	/* lru_gen_age_node() called mem_cgroup_calculate_protection() */
 	if (mem_cgroup_below_min(NULL, memcg))
 		return MEMCG_LRU_YOUNG;
 
-	if (mem_cgroup_below_low(NULL, memcg)) {
+	if (mem_cgroup_below_low(NULL, memcg, toptier)) {
 		/* see the comment on MEMCG_NR_GENS */
 		if (READ_ONCE(lruvec->lrugen.seg) != MEMCG_LRU_TAIL)
 			return MEMCG_LRU_TAIL;
@@ -5960,6 +5963,7 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 	};
 	struct mem_cgroup_reclaim_cookie *partial = &reclaim;
 	struct mem_cgroup *memcg;
+	bool toptier = node_is_toptier(pgdat->node_id);
 
 	/*
 	 * In most cases, direct reclaimers can do partial walks
@@ -5987,7 +5991,7 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 		 */
 		cond_resched();
 
-		mem_cgroup_calculate_protection(target_memcg, memcg);
+		mem_cgroup_calculate_protection(target_memcg, memcg, toptier);
 
 		if (mem_cgroup_below_min(target_memcg, memcg)) {
 			/*
@@ -5995,7 +5999,8 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 			 * If there is no reclaimable memory, OOM.
 			 */
 			continue;
-		} else if (mem_cgroup_below_low(target_memcg, memcg)) {
+		} else if (mem_cgroup_below_low(target_memcg, memcg,
+					tier_aware_memcg_limits && toptier)) {
 			/*
 			 * Soft protection.
 			 * Respect the protection only as long as
