@@ -240,6 +240,8 @@ static int gb_audio_probe(struct gb_bundle *bundle,
 	struct gbaudio_data_connection *dai, *_dai;
 	int ret, i;
 	struct gb_audio_topology *topology;
+	struct gb_audio_get_topology_size_response size_resp;
+	u16 size;
 
 	/* There should be at least one Management and one Data cport */
 	if (bundle->num_cports < 2)
@@ -304,13 +306,30 @@ static int gb_audio_probe(struct gb_bundle *bundle,
 	}
 	gbmodule->dev_id = gbmodule->mgmt_connection->intf->interface_id;
 
-	/*
-	 * FIXME: malloc for topology happens via audio_gb driver
-	 * should be done within codec driver itself
-	 */
-	ret = gb_audio_gb_get_topology(gbmodule->mgmt_connection, &topology);
+	ret = gb_operation_sync(gbmodule->mgmt_connection,
+				GB_AUDIO_TYPE_GET_TOPOLOGY_SIZE, NULL, 0,
+			&size_resp, sizeof(size_resp));
+	if (ret)
+		goto disable_connection;
+
+	size = le16_to_cpu(size_resp.size);
+	if (size < sizeof(*topology)) {
+		ret = -ENODATA;
+		goto disable_connection;
+	}
+
+	topology = kzalloc(size, GFP_KERNEL);
+	if (!topology) {
+		ret = -ENOMEM;
+		goto disable_connection;
+	}
+
+	topology->size = cpu_to_le16(size);
+
+	ret = gb_audio_gb_get_topology(gbmodule->mgmt_connection, topology);
 	if (ret) {
 		dev_err(dev, "%d:Error while fetching topology\n", ret);
+		kfree(topology);
 		goto disable_connection;
 	}
 
