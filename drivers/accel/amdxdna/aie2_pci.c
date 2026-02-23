@@ -551,7 +551,7 @@ static int aie2_init(struct amdxdna_dev *xdna)
 		goto release_fw;
 	}
 
-	ret = pci_alloc_irq_vectors(pdev, nvec, nvec, PCI_IRQ_MSIX);
+	ret = pcim_alloc_irq_vectors(pdev, nvec, nvec, PCI_IRQ_MSIX);
 	if (ret < 0) {
 		XDNA_ERR(xdna, "failed to alloc irq vectors, ret %d", ret);
 		goto release_fw;
