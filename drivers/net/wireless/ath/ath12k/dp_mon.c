@@ -508,7 +508,7 @@ void ath12k_dp_mon_rx_deliver_msdu(struct ath12k_pdev_dp *dp_pdev,
 	};
 	struct ieee80211_rx_status *rx_status;
 	struct ieee80211_radiotap_he *he = NULL;
-	struct ieee80211_sta *pubsta = NULL;
+	struct ieee80211_link_sta *link_pubsta = NULL;
 	struct ath12k_dp_link_peer *peer;
 	struct ath12k_skb_rxcb *rxcb = ATH12K_SKB_RXCB(msdu);
 	struct hal_rx_desc_data rx_info;
@@ -516,8 +516,6 @@ void ath12k_dp_mon_rx_deliver_msdu(struct ath12k_pdev_dp *dp_pdev,
 	bool is_eapol_tkip = rxcb->is_eapol;
 	struct hal_rx_desc *rx_desc = (struct hal_rx_desc *)msdu->data;
 	u8 addr[ETH_ALEN] = {};
-
-	status->link_valid = 0;
 
 	if ((status->encoding == RX_ENC_HE) && !(status->flag & RX_FLAG_RADIOTAP_HE) &&
 	    !(status->flag & RX_FLAG_SKIP_MONITOR)) {
@@ -532,12 +530,11 @@ void ath12k_dp_mon_rx_deliver_msdu(struct ath12k_pdev_dp *dp_pdev,
 	spin_lock_bh(&dp->dp_lock);
 	peer = ath12k_dp_rx_h_find_link_peer(dp_pdev, msdu, &rx_info);
 	if (peer && peer->sta) {
-		pubsta = peer->sta;
-		memcpy(addr, peer->addr, ETH_ALEN);
-		if (pubsta->valid_links) {
-			status->link_valid = 1;
-			status->link_id = peer->link_id;
-		}
+		if (peer->sta->valid_links)
+			link_pubsta =
+				rcu_dereference(peer->sta->link[peer->link_id]);
+		else
+			link_pubsta = &peer->sta->deflink;
 	}
 
 	spin_unlock_bh(&dp->dp_lock);
@@ -583,7 +580,8 @@ void ath12k_dp_mon_rx_deliver_msdu(struct ath12k_pdev_dp *dp_pdev,
 	    !(is_mcbc && rx_status->flag & RX_FLAG_DECRYPTED))
 		rx_status->flag |= RX_FLAG_8023;
 
-	ieee80211_rx_napi(ath12k_pdev_dp_to_hw(dp_pdev), pubsta, msdu, napi);
+	ieee80211_rx_napi(ath12k_pdev_dp_to_hw(dp_pdev), link_pubsta, msdu,
+			  napi);
 }
 EXPORT_SYMBOL(ath12k_dp_mon_rx_deliver_msdu);
 
