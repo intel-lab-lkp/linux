@@ -501,6 +501,18 @@ u16 mlx5e_get_rq_headroom(struct mlx5_core_dev *mdev,
 	return 0;
 }
 
+u32 mlx5e_mpwrq_max_page_size(struct mlx5_core_dev *mdev)
+{
+	if (mlx5_core_is_ecpf(mdev))
+		return PAGE_SIZE;
+
+	/* Two MTTs are needed to form an octword. Driver is using a
+	 * single page per MTT for simplicity. Hence the limit of having
+	 * at least 2 pages per WQE.
+	 */
+	return BIT(MLX5_MPWRQ_MAX_LOG_WQE_SZ - 1);
+}
+
 u16 mlx5e_calc_sq_stop_room(struct mlx5_core_dev *mdev, struct mlx5e_params *params)
 {
 	bool is_mpwqe = MLX5E_GET_PFLAG(params, MLX5E_PFLAG_SKB_TX_MPWQE);

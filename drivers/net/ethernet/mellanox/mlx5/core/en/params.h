@@ -121,6 +121,7 @@ u8 mlx5e_mpwqe_get_min_wqe_bulk(unsigned int wq_sz);
 u16 mlx5e_get_rq_headroom(struct mlx5_core_dev *mdev,
 			  struct mlx5e_params *params,
 			  struct mlx5e_rq_opt_param *rqo);
+u32 mlx5e_mpwrq_max_page_size(struct mlx5_core_dev *mdev);
 
 /* Build queue parameters */
 
