@@ -880,13 +880,70 @@ static u8 rq_end_pad_mode(struct mlx5_core_dev *mdev, struct mlx5e_params *param
 		MLX5_WQ_END_PAD_MODE_NONE : MLX5_WQ_END_PAD_MODE_ALIGN;
 }
 
+static int mlx5e_mpwqe_build_rq_param(struct mlx5_core_dev *mdev,
+				      struct mlx5e_params *params,
+				      struct mlx5e_xsk_param *xsk,
+				      struct mlx5e_rq_param *rq_param)
+{
+	u8 log_rq_sz = mlx5e_mpwqe_get_log_rq_size(mdev, params, xsk);
+	u8 page_shift = mlx5e_mpwrq_page_shift(mdev, xsk);
+	u8 log_wqe_num_of_strides, log_wqe_stride_size;
+	enum mlx5e_mpwrq_umr_mode umr_mode;
+	void *rqc = rq_param->rqc;
+	u32 lro_timeout;
+	void *wq;
+
+	log_wqe_num_of_strides = mlx5e_mpwqe_get_log_num_strides(mdev, params,
+								 xsk);
+	log_wqe_stride_size = mlx5e_mpwqe_get_log_stride_size(mdev, params,
+							      xsk);
+	umr_mode = mlx5e_mpwrq_umr_mode(mdev, xsk);
+
+	wq = MLX5_ADDR_OF(rqc, rqc, wq);
+	if (!mlx5e_verify_rx_mpwqe_strides(mdev, log_wqe_stride_size,
+					   log_wqe_num_of_strides,
+					   page_shift, umr_mode)) {
+		mlx5_core_err(mdev,
+			      "Bad RX MPWQE params: log_stride_size %u, log_num_strides %u, umr_mode %d\n",
+			      log_wqe_stride_size, log_wqe_num_of_strides,
+			      umr_mode);
+		return -EINVAL;
+	}
+
+	MLX5_SET(wq, wq, log_wqe_num_of_strides,
+		 log_wqe_num_of_strides - MLX5_MPWQE_LOG_NUM_STRIDES_BASE);
+	MLX5_SET(wq, wq, log_wqe_stride_size,
+		 log_wqe_stride_size - MLX5_MPWQE_LOG_STRIDE_SZ_BASE);
+	MLX5_SET(wq, wq, log_wq_sz, log_rq_sz);
+	if (params->packet_merge.type != MLX5E_PACKET_MERGE_SHAMPO)
+		return 0;
+
+	MLX5_SET(wq, wq, shampo_enable, true);
+	MLX5_SET(wq, wq, log_reservation_size,
+		 MLX5E_SHAMPO_WQ_LOG_RESRV_SIZE -
+		 MLX5E_SHAMPO_WQ_RESRV_SIZE_BASE_SHIFT);
+	MLX5_SET(wq, wq, log_max_num_of_packets_per_reservation,
+		 mlx5e_shampo_get_log_pkt_per_rsrv(params));
+	MLX5_SET(wq, wq, log_headers_entry_size,
+		 MLX5E_SHAMPO_LOG_HEADER_ENTRY_SIZE -
+		 MLX5E_SHAMPO_WQ_BASE_HEAD_ENTRY_SIZE_SHIFT);
+	lro_timeout = mlx5e_choose_lro_timeout(mdev,
+					       MLX5E_DEFAULT_SHAMPO_TIMEOUT);
+	MLX5_SET(rqc, rqc, reservation_timeout, lro_timeout);
+	MLX5_SET(rqc, rqc, shampo_match_criteria_type,
+		 MLX5_RQC_SHAMPO_MATCH_CRITERIA_TYPE_EXTENDED);
+	MLX5_SET(rqc, rqc, shampo_no_match_alignment_granularity,
+		 MLX5_RQC_SHAMPO_NO_MATCH_ALIGNMENT_GRANULARITY_STRIDE);
+
+	return 0;
+}
+
 int mlx5e_build_rq_param(struct mlx5_core_dev *mdev,
 			 struct mlx5e_params *params,
 			 struct mlx5e_xsk_param *xsk,
 			 struct mlx5e_rq_param *rq_param)
 {
 	void *rqc = rq_param->rqc;
-	u32 lro_timeout;
 	int ndsegs = 1;
 	void *wq;
 	int err;
@@ -894,50 +951,11 @@ int mlx5e_build_rq_param(struct mlx5_core_dev *mdev,
 	wq = MLX5_ADDR_OF(rqc, rqc, wq);
 
 	switch (params->rq_wq_type) {
-	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ: {
-		u8 log_wqe_num_of_strides = mlx5e_mpwqe_get_log_num_strides(mdev, params, xsk);
-		u8 log_wqe_stride_size = mlx5e_mpwqe_get_log_stride_size(mdev, params, xsk);
-		enum mlx5e_mpwrq_umr_mode umr_mode = mlx5e_mpwrq_umr_mode(mdev, xsk);
-		u8 page_shift = mlx5e_mpwrq_page_shift(mdev, xsk);
-
-		if (!mlx5e_verify_rx_mpwqe_strides(mdev, log_wqe_stride_size,
-						   log_wqe_num_of_strides,
-						   page_shift, umr_mode)) {
-			mlx5_core_err(mdev,
-				      "Bad RX MPWQE params: log_stride_size %u, log_num_strides %u, umr_mode %d\n",
-				      log_wqe_stride_size, log_wqe_num_of_strides,
-				      umr_mode);
-			return -EINVAL;
-		}
-
-		MLX5_SET(wq, wq, log_wqe_num_of_strides,
-			 log_wqe_num_of_strides - MLX5_MPWQE_LOG_NUM_STRIDES_BASE);
-		MLX5_SET(wq, wq, log_wqe_stride_size,
-			 log_wqe_stride_size - MLX5_MPWQE_LOG_STRIDE_SZ_BASE);
-		MLX5_SET(wq, wq, log_wq_sz, mlx5e_mpwqe_get_log_rq_size(mdev, params, xsk));
-		if (params->packet_merge.type != MLX5E_PACKET_MERGE_SHAMPO)
-			break;
-
-		MLX5_SET(wq, wq, shampo_enable, true);
-		MLX5_SET(wq, wq, log_reservation_size,
-			 MLX5E_SHAMPO_WQ_LOG_RESRV_SIZE -
-			 MLX5E_SHAMPO_WQ_RESRV_SIZE_BASE_SHIFT);
-		MLX5_SET(wq, wq,
-			 log_max_num_of_packets_per_reservation,
-			 mlx5e_shampo_get_log_pkt_per_rsrv(params));
-		MLX5_SET(wq, wq, log_headers_entry_size,
-			 MLX5E_SHAMPO_LOG_HEADER_ENTRY_SIZE -
-			 MLX5E_SHAMPO_WQ_BASE_HEAD_ENTRY_SIZE_SHIFT);
-		lro_timeout =
-			mlx5e_choose_lro_timeout(mdev,
-						 MLX5E_DEFAULT_SHAMPO_TIMEOUT);
-		MLX5_SET(rqc, rqc, reservation_timeout, lro_timeout);
-		MLX5_SET(rqc, rqc, shampo_match_criteria_type,
-			 MLX5_RQC_SHAMPO_MATCH_CRITERIA_TYPE_EXTENDED);
-		MLX5_SET(rqc, rqc, shampo_no_match_alignment_granularity,
-			 MLX5_RQC_SHAMPO_NO_MATCH_ALIGNMENT_GRANULARITY_STRIDE);
+	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
+		err = mlx5e_mpwqe_build_rq_param(mdev, params, xsk, rq_param);
+		if (err)
+			return err;
 		break;
-	}
 	default: /* MLX5_WQ_TYPE_CYCLIC */
 		MLX5_SET(wq, wq, log_wq_sz, params->log_rq_mtu_frames);
 		err = mlx5e_build_rq_frags_info(mdev, params, xsk,
