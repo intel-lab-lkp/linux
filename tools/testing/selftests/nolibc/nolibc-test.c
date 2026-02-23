@@ -1851,9 +1851,11 @@ static int run_printf(int min, int max)
 		CASE_TEST(truncation);   EXPECT_VFPRINTF(1, "012345678901234567890123456789", "%s", "012345678901234567890123456789"); break;
 		CASE_TEST(string_width); EXPECT_VFPRINTF(1, "         1", "%10s", "1"); break;
 		CASE_TEST(number_width); EXPECT_VFPRINTF(1, "         1", "%10d", 1); break;
+		CASE_TEST(number_left);  EXPECT_VFPRINTF(1, "|-5      |", "|%-8d|", -5); break;
+		CASE_TEST(string_align); EXPECT_VFPRINTF(1, "|foo     |", "|%-8s|", "foo"); break;
 		CASE_TEST(width_trunc);  EXPECT_VFPRINTF(1, "                             1", "%30d", 1); break;
 		CASE_TEST(hex_alt);      EXPECT_VFPRINTF(1, "|0x1|  0x2|    0|", "|%#x|%#5x|%#5x|", 1, 2, 0); break;
-		CASE_TEST(errno);        EXPECT_VFPRINTF(is_nolibc, "22:errno=22", "%d:%m", errno=22); break;
+		CASE_TEST(errno);        EXPECT_VFPRINTF(is_nolibc, "22:errno=22    ", "%d:%-12m", errno=22); break;
 		CASE_TEST(errno-neg);    EXPECT_VFPRINTF(is_nolibc, "-22:   errno=-22", "%d:%12m", errno=-22); break;
 		CASE_TEST(scanf);        EXPECT_ZR(1, test_scanf()); break;
 		CASE_TEST(printf_error); EXPECT_ZR(1, test_printf_error()); break;
