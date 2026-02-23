@@ -71,6 +71,13 @@ properties:
     items:
       - const: bd-address
 
+  ti,no-enhanced-setup-sync-conn:
+    type: boolean
+    description:
+      Indicates that the Bluetooth controller/firmware does not correctly
+      handle the HCI Enhanced Setup Synchronous Connection command for SCO
+      setup, despite advertising support for it.
+
 required:
   - compatible
 
