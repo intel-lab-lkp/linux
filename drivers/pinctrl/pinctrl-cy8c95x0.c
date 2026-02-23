@@ -1312,7 +1312,9 @@ static int cy8c95x0_irq_setup(struct cy8c95x0_pinctrl *chip, int irq)
 	DECLARE_BITMAP(pending_irqs, MAX_LINE);
 	int ret;
 
-	mutex_init(&chip->irq_lock);
+	ret = devm_mutex_init(chip->dev, &chip->irq_lock);
+	if (ret)
+		return ret;
 
 	bitmap_zero(pending_irqs, MAX_LINE);
 
@@ -1474,7 +1476,9 @@ static int cy8c95x0_probe(struct i2c_client *client)
 	bitmap_fill(chip->map, MAX_LINE);
 	bitmap_clear(chip->map, 20, 4);
 
-	mutex_init(&chip->i2c_lock);
+	ret = devm_mutex_init(dev, &chip->i2c_lock);
+	if (ret)
+		return ret;
 
 	if (dmi_first_match(cy8c95x0_dmi_acpi_irq_info)) {
 		ret = cy8c95x0_acpi_get_irq(&client->dev);
