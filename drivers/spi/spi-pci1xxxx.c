@@ -852,8 +852,8 @@ static int pci1xxxx_spi_probe(struct pci_dev *pdev, const struct pci_device_id *
 			if (!spi_bus->reg_base)
 				return -EINVAL;
 
-			num_vector = pci_alloc_irq_vectors(pdev, 1, hw_inst_cnt * NUM_VEC_PER_INST,
-							   PCI_IRQ_INTX | PCI_IRQ_MSI);
+			num_vector = pcim_alloc_irq_vectors(pdev, 1, hw_inst_cnt * NUM_VEC_PER_INST,
+							    PCI_IRQ_INTX | PCI_IRQ_MSI);
 			if (num_vector < 0) {
 				dev_err(&pdev->dev, "Error allocating MSI vectors\n");
 				return num_vector;
