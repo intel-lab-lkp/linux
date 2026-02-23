@@ -537,6 +537,7 @@ struct pci_dev {
 		struct pci_sriov	*sriov;		/* PF: SR-IOV info */
 		struct pci_dev		*physfn;	/* VF: related PF */
 	};
+	unsigned int	no_ats:1;	/* ATS disabled via quirk */
 	u16		ats_cap;	/* ATS Capability offset */
 	u8		ats_stu;	/* ATS Smallest Translation Unit */
 #endif
