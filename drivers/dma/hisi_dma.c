@@ -997,8 +997,7 @@ static int hisi_dma_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	msi_num = hisi_dma_get_msi_num(pdev);
 
-	/* This will be freed by 'pcim_release()'. See 'pcim_enable_device()' */
-	ret = pci_alloc_irq_vectors(pdev, msi_num, msi_num, PCI_IRQ_MSI);
+	ret = pcim_alloc_irq_vectors(pdev, msi_num, msi_num, PCI_IRQ_MSI);
 	if (ret < 0) {
 		dev_err(dev, "Failed to allocate MSI vectors!\n");
 		return ret;
