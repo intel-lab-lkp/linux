@@ -541,6 +541,49 @@ struct damos_migrate_dests {
 	size_t nr_dests;
 };
 
+#define DAMOS_ELIGIBLE_CACHE_SLOTS	4
+#define DAMOS_ELIGIBLE_CACHE_COOLDOWN	3
+#define DAMOS_ELIGIBLE_CACHE_TIMEOUT_MS	10000	/* 10 seconds */
+
+/**
+ * struct damos_eligible_cache - Cache for bridging detection lag after migration.
+ * @base_eligible:	Snapshot of eligible_bytes_per_node at cache creation.
+ * @max_eligible:	Maximum detected eligible seen while cache active.
+ * @migration_delta:	Net bytes migrated TO each node per slot (negative = FROM).
+ * @current_slot:	Current slot index in the rolling window.
+ * @cooldown:		Intervals remaining before cache can deactivate.
+ * @active:		True if cache has recent migration data.
+ * @last_migration_jiffies: Timestamp of last migration for time-based expiry.
+ *
+ * For PA-mode migration, DAMON needs time to re-detect hot memory at new
+ * physical addresses after migration. This cache tracks recent migrations
+ * using a rolling window, allowing goal metric calculation to account for
+ * detection lag. The rolling window automatically expires old migrations
+ * after DAMOS_ELIGIBLE_CACHE_SLOTS intervals.
+ *
+ * The cache maintains zero-sum property: bytes subtracted from source node
+ * equal bytes added to target node, preserving total eligible memory.
+ *
+ * max_eligible tracks the highest detected eligible value seen while the cache
+ * is active. This provides a fallback when both base_eligible and current
+ * detection are 0 due to detection oscillation timing.
+ *
+ * Time-based expiry: The cache clears all slots and deactivates if no migration
+ * occurs for DAMOS_ELIGIBLE_CACHE_TIMEOUT_MS milliseconds. This prevents stale
+ * delta data from persisting indefinitely across test runs or after migration
+ * completes.
+ */
+struct damos_eligible_cache {
+	unsigned long base_eligible[MAX_NUMNODES];
+	unsigned long max_eligible[MAX_NUMNODES];
+	long migration_delta[DAMOS_ELIGIBLE_CACHE_SLOTS][MAX_NUMNODES];
+	unsigned int current_slot;
+	unsigned int cooldown;
+	bool active;
+	unsigned long last_migration_jiffies;
+	unsigned long timeout_ms;	/* Configurable timeout, 0 = use default */
+};
+
 /**
  * struct damos - Represents a Data Access Monitoring-based Operation Scheme.
  * @pattern:		Access pattern of target regions.
@@ -560,6 +603,7 @@ struct damos_migrate_dests {
  * @last_applied:	Last @action applied ops-managing entity.
  * @stat:		Statistics of this scheme.
  * @eligible_bytes_per_node: Scheme-eligible bytes per NUMA node.
+ * @eligible_cache:	Cache for detection lag compensation.
  * @max_nr_snapshots:	Upper limit of nr_snapshots stat.
  * @list:		List head for siblings.
  *
@@ -650,6 +694,7 @@ struct damos {
 	void *last_applied;
 	struct damos_stat stat;
 	unsigned long eligible_bytes_per_node[MAX_NUMNODES];
+	struct damos_eligible_cache eligible_cache;
 	unsigned long max_nr_snapshots;
 	struct list_head list;
 };
