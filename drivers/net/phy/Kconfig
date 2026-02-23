@@ -254,6 +254,15 @@ config LSI_ET1011C_PHY
 	help
 	  Supports the LSI ET1011C PHY.
 
+config ET1011C_RUST_PHY
+	bool "Rust reference driver for LSI ET1011C PHY"
+	depends on RUST_PHYLIB_ABSTRACTIONS && LSI_ET1011C_PHY
+	help
+	  Uses the Rust reference driver for LSI ET1011C PHY
+	  (et1011c_rust.ko). The features and behavior are
+	  equivalent to the C driver. Selecting this option builds
+	  the Rust version instead of the C version.
+
 config MARVELL_PHY
 	tristate "Marvell Alaska PHYs"
 	help
