@@ -71,8 +71,8 @@ struct axis_fifo {
 
 	unsigned int rx_fifo_depth;
 	unsigned int tx_fifo_depth;
-	int has_rx_fifo;
-	int has_tx_fifo;
+	u32 has_rx_fifo;
+	u32 has_tx_fifo;
 
 	wait_queue_head_t read_queue;
 	struct mutex read_lock; /* lock for reading */
