@@ -932,7 +932,6 @@ static void vc4_hdmi_encoder_post_crtc_powerdown(struct drm_encoder *encoder,
 	struct vc4_hdmi *vc4_hdmi = encoder_to_vc4_hdmi(encoder);
 	struct drm_device *drm = vc4_hdmi->connector.dev;
 	unsigned long flags;
-	int ret;
 	int idx;
 
 	mutex_lock(&vc4_hdmi->mutex);
@@ -951,9 +950,7 @@ static void vc4_hdmi_encoder_post_crtc_powerdown(struct drm_encoder *encoder,
 	clk_disable_unprepare(vc4_hdmi->pixel_bvb_clock);
 	clk_disable_unprepare(vc4_hdmi->pixel_clock);
 
-	ret = pm_runtime_put(&vc4_hdmi->pdev->dev);
-	if (ret < 0)
-		drm_err(drm, "Failed to release power domain: %d\n", ret);
+	pm_runtime_put(&vc4_hdmi->pdev->dev);
 
 	drm_dev_exit(idx);
 
@@ -2944,8 +2941,7 @@ static int vc4_hdmi_build_regset(struct drm_device *drm,
 	unsigned int i;
 	int ret;
 
-	regs = kcalloc(variant->num_registers, sizeof(*regs),
-		       GFP_KERNEL);
+	regs = kzalloc_objs(*regs, variant->num_registers);
 	if (!regs)
 		return -ENOMEM;
 

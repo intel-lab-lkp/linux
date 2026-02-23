@@ -108,7 +108,7 @@ xe_tlb_inval_job_create(struct xe_exec_queue *q, struct xe_tlb_inval *tlb_inval,
 	xe_assert(vm->xe, type == XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT ||
 		  type == XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT);
 
-	job = kmalloc(sizeof(*job), GFP_KERNEL);
+	job = kmalloc_obj(*job);
 	if (!job)
 		return ERR_PTR(-ENOMEM);
 
@@ -125,7 +125,7 @@ xe_tlb_inval_job_create(struct xe_exec_queue *q, struct xe_tlb_inval *tlb_inval,
 	xe_exec_queue_get(q);	/* Pairs with put in xe_tlb_inval_job_destroy */
 	xe_vm_get(vm);		/* Pairs with put in xe_tlb_inval_job_destroy */
 
-	ifence = kmalloc(sizeof(*ifence), GFP_KERNEL);
+	ifence = kmalloc_obj(*ifence);
 	if (!ifence) {
 		err = -ENOMEM;
 		goto err_job;
@@ -198,7 +198,7 @@ static void xe_tlb_inval_job_destroy(struct kref *ref)
 }
 
 /**
- * xe_tlb_inval_alloc_dep() - TLB invalidation job alloc dependency
+ * xe_tlb_inval_job_alloc_dep() - TLB invalidation job alloc dependency
  * @job: TLB invalidation job to alloc dependency for
  *
  * Allocate storage for a dependency in the TLB invalidation fence. This

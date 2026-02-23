@@ -1203,7 +1203,7 @@ static ssize_t setup_invalidate_state_cache_wa(struct xe_lrc *lrc,
 		return -ENOSPC;
 
 	*cmd++ = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1);
-	*cmd++ = CS_DEBUG_MODE1(0).addr;
+	*cmd++ = CS_DEBUG_MODE2(0).addr;
 	*cmd++ = _MASKED_BIT_ENABLE(INSTRUCTION_STATE_CACHE_INVALIDATE);
 
 	return cmd - batch;
@@ -1616,7 +1616,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
 	struct xe_lrc *lrc;
 	int err;
 
-	lrc = kzalloc(sizeof(*lrc), GFP_KERNEL);
+	lrc = kzalloc_obj(*lrc);
 	if (!lrc)
 		return ERR_PTR(-ENOMEM);
 
@@ -2269,7 +2269,7 @@ u32 *xe_lrc_emit_hwe_state_instructions(struct xe_exec_queue *q, u32 *cs)
 
 struct xe_lrc_snapshot *xe_lrc_snapshot_capture(struct xe_lrc *lrc)
 {
-	struct xe_lrc_snapshot *snapshot = kmalloc(sizeof(*snapshot), GFP_NOWAIT);
+	struct xe_lrc_snapshot *snapshot = kmalloc_obj(*snapshot, GFP_NOWAIT);
 
 	if (!snapshot)
 		return NULL;

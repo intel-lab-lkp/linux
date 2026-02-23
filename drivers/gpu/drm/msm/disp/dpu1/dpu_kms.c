@@ -375,7 +375,7 @@ dpu_kms_global_create_state(struct drm_private_obj *obj)
 	struct dpu_kms *dpu_kms = to_dpu_kms(priv->kms);
 	struct dpu_global_state *dpu_state;
 
-	dpu_state = kzalloc(sizeof(*dpu_state), GFP_KERNEL);
+	dpu_state = kzalloc_obj(*dpu_state);
 	if (!dpu_state)
 		return ERR_PTR(-ENOMEM);
 

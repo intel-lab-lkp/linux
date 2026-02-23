@@ -86,7 +86,7 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
 	int ret = -ENOMEM;
 	struct task_struct *task = NULL;
 
-	xef = kzalloc(sizeof(*xef), GFP_KERNEL);
+	xef = kzalloc_obj(*xef);
 	if (!xef)
 		return ret;
 
@@ -1025,8 +1025,6 @@ err_unregister_display:
 void xe_device_remove(struct xe_device *xe)
 {
 	xe_display_unregister(xe);
-
-	xe_nvm_fini(xe);
 
 	drm_dev_unplug(&xe->drm);
 

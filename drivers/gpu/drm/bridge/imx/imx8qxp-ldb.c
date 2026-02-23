@@ -294,9 +294,7 @@ static void imx8qxp_ldb_bridge_atomic_disable(struct drm_bridge *bridge,
 	if (is_split && companion)
 		companion->funcs->atomic_disable(companion, state);
 
-	ret = pm_runtime_put(dev);
-	if (ret < 0)
-		DRM_DEV_ERROR(dev, "failed to put runtime PM: %d\n", ret);
+	pm_runtime_put(dev);
 }
 
 static const u32 imx8qxp_ldb_bus_output_fmts[] = {
@@ -335,7 +333,7 @@ imx8qxp_ldb_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 
 	*num_input_fmts = 1;
 
-	input_fmts = kmalloc(sizeof(*input_fmts), GFP_KERNEL);
+	input_fmts = kmalloc_obj(*input_fmts);
 	if (!input_fmts)
 		return NULL;
 

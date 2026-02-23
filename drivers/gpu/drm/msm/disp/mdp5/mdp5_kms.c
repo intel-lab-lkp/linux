@@ -122,7 +122,7 @@ mdp5_global_create_state(struct drm_private_obj *obj)
 	struct mdp5_kms *mdp5_kms = to_mdp5_kms(to_mdp_kms(priv->kms));
 	struct mdp5_global_state *mdp5_state;
 
-	mdp5_state = kzalloc(sizeof(*mdp5_state), GFP_KERNEL);
+	mdp5_state = kzalloc_obj(*mdp5_state);
 	if (!mdp5_state)
 		return ERR_PTR(-ENOMEM);
 

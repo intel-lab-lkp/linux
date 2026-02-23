@@ -923,7 +923,7 @@ ingenic_drm_gem_create_object(struct drm_device *drm, size_t size)
 	struct ingenic_drm *priv = drm_device_get_priv(drm);
 	struct drm_gem_dma_object *obj;
 
-	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+	obj = kzalloc_obj(*obj);
 	if (!obj)
 		return ERR_PTR(-ENOMEM);
 
@@ -959,7 +959,7 @@ ingenic_drm_create_state(struct drm_private_obj *obj)
 {
 	struct ingenic_drm_private_state *priv_state;
 
-	priv_state = kzalloc(sizeof(*priv_state), GFP_KERNEL);
+	priv_state = kzalloc_obj(*priv_state);
 	if (!priv_state)
 		return ERR_PTR(-ENOMEM);
 

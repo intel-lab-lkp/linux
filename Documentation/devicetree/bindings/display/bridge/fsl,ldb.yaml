@@ -68,6 +68,7 @@ required:
   - compatible
   - clocks
   - ports
+  - reg
 
 allOf:
   - if:
@@ -82,6 +83,15 @@ allOf:
         ports:
           properties:
             port@2: false
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: fsl,imx6sx-ldb
+    then:
+      required:
+        - reg-names
 
   - if:
       properties:

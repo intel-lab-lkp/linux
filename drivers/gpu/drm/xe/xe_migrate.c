@@ -1254,7 +1254,7 @@ void xe_migrate_ccs_rw_copy_clear(struct xe_bo *src_bo,
 }
 
 /**
- * xe_get_migrate_exec_queue() - Get the execution queue from migrate context.
+ * xe_migrate_exec_queue() - Get the execution queue from migrate context.
  * @migrate: Migrate context.
  *
  * Return: Pointer to execution queue on success, error on failure
@@ -2303,7 +2303,7 @@ static struct drm_pagemap_addr *xe_migrate_dma_map(struct xe_device *xe,
 	struct drm_pagemap_addr *pagemap_addr;
 	unsigned long i, npages = DIV_ROUND_UP(len, PAGE_SIZE);
 
-	pagemap_addr = kcalloc(npages, sizeof(*pagemap_addr), GFP_KERNEL);
+	pagemap_addr = kzalloc_objs(*pagemap_addr, npages);
 	if (!pagemap_addr)
 		return ERR_PTR(-ENOMEM);
 

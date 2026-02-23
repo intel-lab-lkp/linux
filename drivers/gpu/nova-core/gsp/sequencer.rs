@@ -2,17 +2,14 @@
 
 //! GSP Sequencer implementation for Pre-hopper GSP boot sequence.
 
-use core::{
-    array,
-    mem::{
-        size_of,
-        size_of_val, //
-    },
-};
+use core::array;
 
 use kernel::{
     device,
-    io::poll::read_poll_timeout,
+    io::{
+        poll::read_poll_timeout,
+        Io, //
+    },
     prelude::*,
     sync::aref::ARef,
     time::{

@@ -45,7 +45,7 @@ komeda_layer_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_layer_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 
@@ -97,7 +97,7 @@ komeda_scaler_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_scaler_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 
@@ -150,7 +150,7 @@ komeda_compiz_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_compiz_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 
@@ -203,7 +203,7 @@ komeda_splitter_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_splitter_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 
@@ -256,7 +256,7 @@ komeda_merger_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_merger_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 
@@ -310,7 +310,7 @@ komeda_improc_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_improc_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 
@@ -363,7 +363,7 @@ komeda_timing_ctrlr_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_timing_ctrlr_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 
@@ -417,7 +417,7 @@ komeda_pipeline_atomic_create_state(struct drm_private_obj *obj)
 {
 	struct komeda_pipeline_state *st;
 
-	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	st = kzalloc_obj(*st);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
 

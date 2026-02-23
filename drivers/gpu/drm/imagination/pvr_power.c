@@ -622,7 +622,7 @@ int pvr_power_domains_init(struct pvr_device *pvr_dev)
 
 	link_count = domain_count - 1;
 
-	domain_links = kcalloc(link_count, sizeof(*domain_links), GFP_KERNEL);
+	domain_links = kzalloc_objs(*domain_links, link_count);
 	if (!domain_links)
 		return -ENOMEM;
 

@@ -755,7 +755,7 @@ ingenic_ipu_create_state(struct drm_private_obj *obj)
 {
 	struct ingenic_ipu_private_state *priv_state;
 
-	priv_state = kzalloc(sizeof(*priv_state), GFP_KERNEL);
+	priv_state = kzalloc_obj(*priv_state);
 	if (!priv_state)
 		return ERR_PTR(-ENOMEM);
 

@@ -186,15 +186,16 @@ int drm_gem_object_init(struct drm_device *dev, struct drm_gem_object *obj,
 {
 	struct vfsmount *huge_mnt;
 	struct file *filp;
+	const vma_flags_t flags = mk_vma_flags(VMA_NORESERVE_BIT);
 
 	drm_gem_private_object_init(dev, obj, size);
 
 	huge_mnt = drm_gem_get_huge_mnt(dev);
 	if (huge_mnt)
 		filp = shmem_file_setup_with_mnt(huge_mnt, "drm mm object",
-						 size, VM_NORESERVE);
+						 size, flags);
 	else
-		filp = shmem_file_setup("drm mm object", size, VM_NORESERVE);
+		filp = shmem_file_setup("drm mm object", size, flags);
 
 	if (IS_ERR(filp))
 		return PTR_ERR(filp);
@@ -683,7 +684,7 @@ struct page **drm_gem_get_pages(struct drm_gem_object *obj)
 
 	npages = obj->size >> PAGE_SHIFT;
 
-	pages = kvmalloc_array(npages, sizeof(struct page *), GFP_KERNEL);
+	pages = kvmalloc_objs(struct page *, npages);
 	if (pages == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -840,7 +841,7 @@ int drm_gem_objects_lookup(struct drm_file *filp, void __user *bo_handles,
 	if (!count)
 		return 0;
 
-	objs = kvmalloc_array(count, sizeof(*objs), GFP_KERNEL);
+	objs = kvmalloc_objs(*objs, count);
 	if (!objs)
 		return -ENOMEM;
 
@@ -1018,16 +1019,21 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_gem_change_handle *args = data;
 	struct drm_gem_object *obj;
-	int ret;
+	int handle, ret;
 
 	if (!drm_core_check_feature(dev, DRIVER_GEM))
 		return -EOPNOTSUPP;
+
+	/* idr_alloc() limitation. */
+	if (args->new_handle > INT_MAX)
+		return -EINVAL;
+	handle = args->new_handle;
 
 	obj = drm_gem_object_lookup(file_priv, args->handle);
 	if (!obj)
 		return -ENOENT;
 
-	if (args->handle == args->new_handle) {
+	if (args->handle == handle) {
 		ret = 0;
 		goto out;
 	}
@@ -1035,18 +1041,19 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 	mutex_lock(&file_priv->prime.lock);
 
 	spin_lock(&file_priv->table_lock);
-	ret = idr_alloc(&file_priv->object_idr, obj,
-		args->new_handle, args->new_handle + 1, GFP_NOWAIT);
+	ret = idr_alloc(&file_priv->object_idr, obj, handle, handle + 1,
+			GFP_NOWAIT);
 	spin_unlock(&file_priv->table_lock);
 
 	if (ret < 0)
 		goto out_unlock;
 
 	if (obj->dma_buf) {
-		ret = drm_prime_add_buf_handle(&file_priv->prime, obj->dma_buf, args->new_handle);
+		ret = drm_prime_add_buf_handle(&file_priv->prime, obj->dma_buf,
+					       handle);
 		if (ret < 0) {
 			spin_lock(&file_priv->table_lock);
-			idr_remove(&file_priv->object_idr, args->new_handle);
+			idr_remove(&file_priv->object_idr, handle);
 			spin_unlock(&file_priv->table_lock);
 			goto out_unlock;
 		}
