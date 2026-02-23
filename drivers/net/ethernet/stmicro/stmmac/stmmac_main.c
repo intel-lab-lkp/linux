@@ -1375,9 +1375,21 @@ static int stmmac_phylink_setup(struct stmmac_priv *priv)
 				 pcs->supported_interfaces);
 
 	if (priv->dma_cap.eee) {
-		/* Assume all supported interfaces also support LPI */
-		memcpy(config->lpi_interfaces, config->supported_interfaces,
-		       sizeof(config->lpi_interfaces));
+		/* The GMAC 3.74a databook states that EEE is only supported
+		 * in MII, GMII, and RGMII interfaces.
+		 */
+		__set_bit(PHY_INTERFACE_MODE_MII, config->lpi_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_GMII, config->lpi_interfaces);
+		phy_interface_set_rgmii(config->lpi_interfaces);
+
+		/* If we have a non-integrated PCS, assume that it is connected
+		 * to the GMAC using GMII or another EEE compatible interface,
+		 * and thus all PCS-supported interfaces support LPI.
+		 */
+		if (pcs)
+			phy_interface_or(config->lpi_interfaces,
+					 config->lpi_interfaces,
+					 pcs->supported_interfaces);
 
 		/* All full duplex speeds above 100Mbps are supported */
 		config->lpi_capabilities = ~(MAC_1000FD - 1) | MAC_100FD;
