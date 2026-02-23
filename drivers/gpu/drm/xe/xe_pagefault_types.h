@@ -68,10 +68,12 @@ struct xe_pagefault {
 		/** @consumer.asid: address space ID */
 		u32 asid;
 		/**
-		 * @consumer.access_type: access type, u8 rather than enum to
-		 * keep size compact
+		 * @consumer.access_type: access type and prefetch flag packed
+		 * into a u8.
 		 */
 		u8 access_type;
+#define XE_PAGEFAULT_ACCESS_TYPE_MASK	GENMASK(1, 0)
+#define XE_PAGEFAULT_ACCESS_PREFETCH	BIT(7)
 		/**
 		 * @consumer.fault_type_level: fault type and level, u8 rather
 		 * than enum to keep size compact
