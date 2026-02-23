@@ -1758,14 +1758,14 @@ icmp_msgs_per_sec - INTEGER
 	controlled by this limit. For security reasons, the precise count
 	of messages per second is randomized.
 
-	Default: 1000
+	Default: 10000
 
 icmp_msgs_burst - INTEGER
 	icmp_msgs_per_sec controls number of ICMP packets sent per second,
-	while icmp_msgs_burst controls the burst size of these packets.
+	while icmp_msgs_burst controls the token bucket size.
 	For security reasons, the precise burst size is randomized.
 
-	Default: 50
+	Default: 10000
 
 icmp_ratemask - INTEGER
 	Mask made of ICMP types for which rates are being limited.
