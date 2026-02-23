@@ -2544,6 +2544,111 @@ static unsigned long damos_get_node_memcg_used_bp(
 }
 #endif
 
+#ifdef CONFIG_NUMA
+/*
+ * damos_scheme_uses_eligible_metrics() - Check if scheme uses eligible metrics.
+ * @s: The scheme
+ *
+ * Returns true if any quota goal uses node_eligible_mem_bp or
+ * node_ineligible_mem_bp metrics, which require eligible bytes calculation.
+ */
+static bool damos_scheme_uses_eligible_metrics(struct damos *s)
+{
+	struct damos_quota_goal *goal;
+	struct damos_quota *quota = &s->quota;
+
+	damos_for_each_quota_goal(goal, quota) {
+		if (goal->metric == DAMOS_QUOTA_NODE_ELIGIBLE_MEM_BP ||
+		    goal->metric == DAMOS_QUOTA_NODE_INELIGIBLE_MEM_BP)
+			return true;
+	}
+	return false;
+}
+
+/*
+ * damos_calc_eligible_bytes_per_node() - Calculate eligible bytes per node.
+ * @c: The DAMON context
+ * @s: The scheme
+ *
+ * Calculates scheme-eligible bytes per NUMA node based on access pattern
+ * matching. A region is eligible if it matches the scheme's access pattern
+ * (size, nr_accesses, age).
+ */
+static void damos_calc_eligible_bytes_per_node(struct damon_ctx *c,
+		struct damos *s)
+{
+	struct damon_target *t;
+	struct damon_region *r;
+	phys_addr_t paddr;
+	int nid;
+
+	memset(s->eligible_bytes_per_node, 0,
+			sizeof(s->eligible_bytes_per_node));
+
+	damon_for_each_target(t, c) {
+		damon_for_each_region(r, t) {
+			if (!__damos_valid_target(r, s))
+				continue;
+			paddr = (phys_addr_t)r->ar.start * c->addr_unit;
+			nid = pfn_to_nid(PHYS_PFN(paddr));
+			if (nid >= 0 && nid < MAX_NUMNODES)
+				s->eligible_bytes_per_node[nid] +=
+					damon_sz_region(r) * c->addr_unit;
+		}
+	}
+}
+
+static unsigned long damos_get_node_eligible_mem_bp(struct damos *s, int nid)
+{
+	unsigned long total_eligible = 0;
+	unsigned long node_eligible;
+	int n;
+
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		return 0;
+
+	for_each_online_node(n)
+		total_eligible += s->eligible_bytes_per_node[n];
+
+	if (!total_eligible)
+		return 0;
+
+	node_eligible = s->eligible_bytes_per_node[nid];
+
+	return mult_frac(node_eligible, 10000, total_eligible);
+}
+
+static unsigned long damos_get_node_ineligible_mem_bp(struct damos *s, int nid)
+{
+	unsigned long eligible_bp = damos_get_node_eligible_mem_bp(s, nid);
+
+	if (eligible_bp == 0)
+		return 10000;
+
+	return 10000 - eligible_bp;
+}
+#else
+static bool damos_scheme_uses_eligible_metrics(struct damos *s)
+{
+	return false;
+}
+
+static void damos_calc_eligible_bytes_per_node(struct damon_ctx *c,
+		struct damos *s)
+{
+}
+
+static unsigned long damos_get_node_eligible_mem_bp(struct damos *s, int nid)
+{
+	return 0;
+}
+
+static unsigned long damos_get_node_ineligible_mem_bp(struct damos *s, int nid)
+{
+	return 0;
+}
+#endif
+
 /*
  * Returns LRU-active or inactive memory to total LRU memory size ratio.
  */
@@ -2562,7 +2667,8 @@ static unsigned int damos_get_in_active_mem_bp(bool active_ratio)
 	return mult_frac(inactive, 10000, total);
 }
 
-static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal)
+static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal,
+		struct damos *s)
 {
 	u64 now_psi_total;
 
@@ -2584,6 +2690,14 @@ static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal)
 	case DAMOS_QUOTA_NODE_MEMCG_FREE_BP:
 		goal->current_value = damos_get_node_memcg_used_bp(goal);
 		break;
+	case DAMOS_QUOTA_NODE_ELIGIBLE_MEM_BP:
+		goal->current_value = damos_get_node_eligible_mem_bp(s,
+				goal->nid);
+		break;
+	case DAMOS_QUOTA_NODE_INELIGIBLE_MEM_BP:
+		goal->current_value = damos_get_node_ineligible_mem_bp(s,
+				goal->nid);
+		break;
 	case DAMOS_QUOTA_ACTIVE_MEM_BP:
 	case DAMOS_QUOTA_INACTIVE_MEM_BP:
 		goal->current_value = damos_get_in_active_mem_bp(
@@ -2597,11 +2711,12 @@ static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal)
 /* Return the highest score since it makes schemes least aggressive */
 static unsigned long damos_quota_score(struct damos_quota *quota)
 {
+	struct damos *s = container_of(quota, struct damos, quota);
 	struct damos_quota_goal *goal;
 	unsigned long highest_score = 0;
 
 	damos_for_each_quota_goal(goal, quota) {
-		damos_set_quota_goal_current_value(goal);
+		damos_set_quota_goal_current_value(goal, s);
 		highest_score = max(highest_score,
 				mult_frac(goal->current_value, 10000,
 					goal->target_value));
@@ -2692,6 +2807,10 @@ static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
 
 	if (!quota->ms && !quota->sz && list_empty(&quota->goals))
 		return;
+
+	/* Calculate eligible bytes per node for quota goal metrics */
+	if (damos_scheme_uses_eligible_metrics(s))
+		damos_calc_eligible_bytes_per_node(c, s);
 
 	/* First charge window */
 	if (!quota->total_charged_sz && !quota->charged_from) {
