@@ -1777,11 +1777,11 @@ static int rproc_attach_recovery(struct rproc *rproc)
 {
 	int ret;
 
-	ret = __rproc_detach(rproc);
+	ret = rproc_detach(rproc);
 	if (ret)
 		return ret;
 
-	return __rproc_attach(rproc);
+	return rproc_boot(rproc);
 }
 
 static int rproc_boot_recovery(struct rproc *rproc)
@@ -1790,9 +1790,13 @@ static int rproc_boot_recovery(struct rproc *rproc)
 	struct device *dev = &rproc->dev;
 	int ret;
 
-	ret = rproc_stop(rproc, true);
+	ret = mutex_lock_interruptible(&rproc->lock);
 	if (ret)
 		return ret;
+
+	ret = rproc_stop(rproc, true);
+	if (ret)
+		goto unlock_mutex;
 
 	/* generate coredump */
 	rproc->ops->coredump(rproc);
@@ -1801,7 +1805,7 @@ static int rproc_boot_recovery(struct rproc *rproc)
 	ret = request_firmware(&firmware_p, rproc->firmware, dev);
 	if (ret < 0) {
 		dev_err(dev, "request_firmware failed: %d\n", ret);
-		return ret;
+		goto unlock_mutex;
 	}
 
 	/* boot the remote processor up again */
@@ -1809,6 +1813,8 @@ static int rproc_boot_recovery(struct rproc *rproc)
 
 	release_firmware(firmware_p);
 
+unlock_mutex:
+	mutex_unlock(&rproc->lock);
 	return ret;
 }
 
@@ -1827,26 +1833,13 @@ static int rproc_boot_recovery(struct rproc *rproc)
 int rproc_trigger_recovery(struct rproc *rproc)
 {
 	struct device *dev = &rproc->dev;
-	int ret;
-
-	ret = mutex_lock_interruptible(&rproc->lock);
-	if (ret)
-		return ret;
-
-	/* State could have changed before we got the mutex */
-	if (rproc->state != RPROC_CRASHED)
-		goto unlock_mutex;
 
 	dev_err(dev, "recovering %s\n", rproc->name);
 
 	if (rproc_has_feature(rproc, RPROC_FEAT_ATTACH_ON_RECOVERY))
-		ret = rproc_attach_recovery(rproc);
+		return rproc_attach_recovery(rproc);
 	else
-		ret = rproc_boot_recovery(rproc);
-
-unlock_mutex:
-	mutex_unlock(&rproc->lock);
-	return ret;
+		return rproc_boot_recovery(rproc);
 }
 
 /**
@@ -2057,7 +2050,7 @@ int rproc_detach(struct rproc *rproc)
 		return ret;
 	}
 
-	if (rproc->state != RPROC_ATTACHED) {
+	if (rproc->state != RPROC_ATTACHED && rproc->state != RPROC_CRASHED) {
 		ret = -EINVAL;
 		goto out;
 	}
