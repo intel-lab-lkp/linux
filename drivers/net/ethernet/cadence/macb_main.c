@@ -3634,6 +3634,41 @@ static int macb_set_ringparam(struct net_device *netdev,
 	return 0;
 }
 
+static int macb_get_eee(struct net_device *ndev, struct ethtool_keee *edata)
+{
+	struct macb *bp = netdev_priv(ndev);
+	int ret;
+
+	if (!(bp->caps & MACB_CAPS_EEE))
+		return -EOPNOTSUPP;
+
+	ret = phylink_ethtool_get_eee(bp->phylink, edata);
+	if (ret)
+		return ret;
+
+	edata->tx_lpi_timer = bp->tx_lpi_timer_ms * 1000;
+
+	return 0;
+}
+
+static int macb_set_eee(struct net_device *ndev, struct ethtool_keee *edata)
+{
+	struct macb *bp = netdev_priv(ndev);
+
+	if (!(bp->caps & MACB_CAPS_EEE))
+		return -EOPNOTSUPP;
+
+	if (edata->tx_lpi_timer)
+		bp->tx_lpi_timer_ms = edata->tx_lpi_timer / 1000;
+
+	/* Don't directly control TXLPIEN here. phylink_ethtool_set_eee()
+	 * updates the PHY, which will bounce the link if tx_lpi_enabled
+	 * changes. That triggers mac_link_down/mac_link_up where we
+	 * enable/disable TXLPIEN based on the negotiated state.
+	 */
+	return phylink_ethtool_set_eee(bp->phylink, edata);
+}
+
 #ifdef CONFIG_MACB_USE_HWSTAMP
 static unsigned int gem_get_tsu_rate(struct macb *bp)
 {
@@ -4058,6 +4093,8 @@ static const struct ethtool_ops gem_ethtool_ops = {
 	.get_rxnfc			= gem_get_rxnfc,
 	.set_rxnfc			= gem_set_rxnfc,
 	.get_rx_ring_count		= gem_get_rx_ring_count,
+	.get_eee		= macb_get_eee,
+	.set_eee		= macb_set_eee,
 };
 
 static int macb_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
