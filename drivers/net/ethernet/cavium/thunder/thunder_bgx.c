@@ -1574,8 +1574,8 @@ static void bgx_register_intr(struct pci_dev *pdev)
 	struct bgx *bgx = pci_get_drvdata(pdev);
 	int ret;
 
-	ret = pci_alloc_irq_vectors(pdev, BGX_LMAC_VEC_OFFSET,
-				    BGX_LMAC_VEC_OFFSET, PCI_IRQ_ALL_TYPES);
+	ret = pcim_alloc_irq_vectors(pdev, BGX_LMAC_VEC_OFFSET,
+				     BGX_LMAC_VEC_OFFSET, PCI_IRQ_ALL_TYPES);
 	if (ret < 0) {
 		pci_err(pdev, "Req for #%d msix vectors failed\n",
 			BGX_LMAC_VEC_OFFSET);
