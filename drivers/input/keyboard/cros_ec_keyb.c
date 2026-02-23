@@ -59,8 +59,8 @@ struct cros_ec_keyb {
 	unsigned int cols;
 	int row_shift;
 	bool ghost_filter;
-	u8 *valid_keys;
-	u8 *old_kb_state;
+	u8 valid_keys[CROS_EC_KEYBOARD_COLS_MAX];
+	u8 old_kb_state[CROS_EC_KEYBOARD_COLS_MAX];
 
 	struct device *dev;
 	struct cros_ec_device *ec;
@@ -749,14 +749,6 @@ static int cros_ec_keyb_register_matrix(struct cros_ec_keyb *ckdev)
 			ckdev->cols, CROS_EC_KEYBOARD_COLS_MAX);
 		return -EINVAL;
 	}
-
-	ckdev->valid_keys = devm_kzalloc(dev, ckdev->cols, GFP_KERNEL);
-	if (!ckdev->valid_keys)
-		return -ENOMEM;
-
-	ckdev->old_kb_state = devm_kzalloc(dev, ckdev->cols, GFP_KERNEL);
-	if (!ckdev->old_kb_state)
-		return -ENOMEM;
 
 	/*
 	 * We call the keyboard matrix 'input0'. Allocate phys before input
