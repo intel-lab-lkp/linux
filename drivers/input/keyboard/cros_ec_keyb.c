@@ -277,8 +277,8 @@ static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev, u8 *kb_state, int l
 
 	for (col = 0; col < ckdev->cols; col++) {
 		for (row = 0; row < ckdev->rows; row++) {
-			new_state = kb_state[col] & (1 << row);
-			old_state = ckdev->old_kb_state[col] & (1 << row);
+			new_state = kb_state[col] & BIT(row);
+			old_state = ckdev->old_kb_state[col] & BIT(row);
 
 			if (new_state == old_state)
 				continue;
@@ -411,7 +411,7 @@ static void cros_ec_keyb_compute_valid_keys(struct cros_ec_keyb *ckdev)
 		for (row = 0; row < ckdev->rows; row++) {
 			code = keymap[MATRIX_SCAN_CODE(row, col, row_shift)];
 			if (code && (code != KEY_BATTERY))
-				ckdev->valid_keys[col] |= 1 << row;
+				ckdev->valid_keys[col] |= BIT(row);
 		}
 		dev_dbg(ckdev->dev, "valid_keys[%02d] = 0x%02x\n",
 			col, ckdev->valid_keys[col]);
@@ -780,8 +780,7 @@ static int cros_ec_keyb_register_matrix(struct cros_ec_keyb *ckdev)
 	idev->dev.parent = dev;
 	idev->setkeycode = cros_ec_keyb_setkeycode;
 
-	ckdev->ghost_filter = device_property_read_bool(dev,
-					"google,needs-ghost-filter");
+	ckdev->ghost_filter = device_property_read_bool(dev, "google,needs-ghost-filter");
 
 	err = matrix_keypad_build_keymap(NULL, NULL, ckdev->rows * 2, ckdev->cols,
 					 NULL, idev);
