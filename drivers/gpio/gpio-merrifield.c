@@ -108,7 +108,7 @@ static int mrfld_gpio_probe(struct pci_dev *pdev, const struct pci_device_id *id
 	priv->info.ngpio = MRFLD_NGPIO;
 	priv->info.first = irq_base;
 
-	retval = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
+	retval = pcim_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (retval < 0)
 		return retval;
 
