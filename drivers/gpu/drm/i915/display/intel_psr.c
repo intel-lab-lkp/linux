@@ -4575,3 +4575,9 @@ bool intel_psr_use_trans_push(const struct intel_crtc_state *crtc_state)
 
 	return HAS_PSR_TRANS_PUSH_FRAME_CHANGE(display) && crtc_state->has_psr;
 }
+
+bool intel_psr_is_pr_with_link_off(const struct intel_crtc_state *crtc_state)
+{
+	return crtc_state->has_panel_replay &&
+		crtc_state->link_off_after_as_sdp_when_pr_active;
+}
