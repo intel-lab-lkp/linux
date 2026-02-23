@@ -22,10 +22,12 @@ _test_partition_scan_no_hang()
 	# for partition scan events to complete
 	if [ "$recovery_flag" = "yes" ]; then
 		echo "Testing partition scan with recovery support..."
-		dev_id=$(_add_ublk_dev_no_settle -t fault_inject -q 1 -d 1 --delay_us 60000000 -r 1)
+		dev_id=$(_add_ublk_dev_no_settle -t fault_inject -q 1 -d 1 \
+			--delay_us 60000000 -r 1 -P)
 	else
 		echo "Testing partition scan without recovery..."
-		dev_id=$(_add_ublk_dev_no_settle -t fault_inject -q 1 -d 1 --delay_us 60000000)
+		dev_id=$(_add_ublk_dev_no_settle -t fault_inject -q 1 -d 1 \
+			--delay_us 60000000 -P)
 	fi
 
 	_check_add_dev "$TID" $?

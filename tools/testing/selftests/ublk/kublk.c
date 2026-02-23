@@ -1615,7 +1615,8 @@ static int cmd_dev_get_features(void)
 		FEAT_NAME(UBLK_F_INTEGRITY),
 		FEAT_NAME(UBLK_F_SAFE_STOP_DEV),
 		FEAT_NAME(UBLK_F_BATCH_IO),
-		FEAT_NAME(UBLK_F_NO_AUTO_PART_SCAN),
+		FEAT_NAME(UBLK_F_PARTITIONS),
+		FEAT_NAME(UBLK_F_AUTO_PART_SCAN),
 	};
 	struct ublk_dev *dev;
 	__u64 features = 0;
@@ -1713,7 +1714,7 @@ static void __cmd_create_help(char *exe, bool recovery)
 	printf("\t[--nthreads threads] [--per_io_tasks]\n");
 	printf("\t[--integrity_capable] [--integrity_reftag] [--metadata_size SIZE] "
 		 "[--pi_offset OFFSET] [--csum_type ip|t10dif|nvme] [--tag_size SIZE]\n");
-	printf("\t[--batch|-b] [--no_auto_part_scan]\n");
+	printf("\t[--batch|-b] [-p,--with_partitions] [-P,--auto_part_scan]\n");
 	printf("\t[target options] [backfile1] [backfile2] ...\n");
 	printf("\tdefault: nr_queues=2(max 32), depth=128(max 1024), dev_id=-1(auto allocation)\n");
 	printf("\tdefault: nthreads=nr_queues");
@@ -1783,11 +1784,12 @@ int main(int argc, char *argv[])
 		{ "integrity_reftag",	0,	NULL,  0 },
 		{ "metadata_size",	1,	NULL,  0 },
 		{ "pi_offset",		1,	NULL,  0 },
+		{ "with_partitions",	0,	NULL, 'p' },
+		{ "auto_part_scan",	0,	NULL, 'P' },
 		{ "csum_type",		1,	NULL,  0 },
 		{ "tag_size",		1,	NULL,  0 },
 		{ "safe",		0,	NULL,  0 },
 		{ "batch",              0,      NULL, 'b'},
-		{ "no_auto_part_scan",	0,	NULL,  0 },
 		{ 0, 0, 0, 0 }
 	};
 	const struct ublk_tgt_ops *ops = NULL;
@@ -1810,7 +1812,7 @@ int main(int argc, char *argv[])
 
 	opterr = 0;
 	optind = 2;
-	while ((opt = getopt_long(argc, argv, "t:n:d:q:r:e:i:s:gazub",
+	while ((opt = getopt_long(argc, argv, "t:n:d:q:r:e:i:s:gazubpP",
 				  longopts, &option_idx)) != -1) {
 		switch (opt) {
 		case 'a':
@@ -1856,6 +1858,12 @@ int main(int argc, char *argv[])
 		case 'u':
 			ctx.flags |= UBLK_F_USER_COPY;
 			break;
+		case 'p':
+			ctx.flags |= UBLK_F_PARTITIONS;
+			break;
+		case 'P':
+			ctx.flags |= UBLK_F_PARTITIONS|UBLK_F_AUTO_PART_SCAN;
+			break;
 		case 's':
 			ctx.size = strtoull(optarg, NULL, 10);
 			break;
@@ -1900,8 +1908,6 @@ int main(int argc, char *argv[])
 				ctx.tag_size = strtoul(optarg, NULL, 0);
 			if (!strcmp(longopts[option_idx].name, "safe"))
 				ctx.safe_stop = 1;
-			if (!strcmp(longopts[option_idx].name, "no_auto_part_scan"))
-				ctx.flags |= UBLK_F_NO_AUTO_PART_SCAN;
 			break;
 		case '?':
 			/*

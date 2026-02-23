@@ -10,7 +10,7 @@ format_backing_file()
 	local backing_file=$1
 
 	# Create ublk device to write partition table
-	local tmp_dev=$(_add_ublk_dev -t loop "${backing_file}")
+	local tmp_dev=$(_add_ublk_dev -t loop "${backing_file}" -p)
 	[ $? -ne 0 ] && return 1
 
 	# Write partition table with sfdisk
@@ -30,8 +30,8 @@ test_auto_part_scan()
 {
 	local backing_file=$1
 
-	# Create device WITHOUT --no_auto_part_scan
-	local dev_id=$(_add_ublk_dev -t loop "${backing_file}")
+	# Create device WITH automatic partition scan
+	local dev_id=$(_add_ublk_dev -t loop "${backing_file}" -P)
 	[ $? -ne 0 ] && return 1
 
 	udevadm settle
@@ -50,8 +50,8 @@ test_no_auto_part_scan()
 {
 	local backing_file=$1
 
-	# Create device WITH --no_auto_part_scan
-	local dev_id=$(_add_ublk_dev -t loop --no_auto_part_scan "${backing_file}")
+	# Create device WITHOUT automatic partition scan
+	local dev_id=$(_add_ublk_dev -t loop "${backing_file}" -p)
 	[ $? -ne 0 ] && return 1
 
 	udevadm settle
@@ -79,9 +79,9 @@ if ! _have_program sfdisk || ! _have_program blockdev; then
 	exit "$UBLK_SKIP_CODE"
 fi
 
-_prep_test "generic" "test UBLK_F_NO_AUTO_PART_SCAN"
+_prep_test "generic" "test UBLK_F_PARTITIONS"
 
-if ! _have_feature "UBLK_F_NO_AUTO_PART_SCAN"; then
+if ! _have_feature "UBLK_F_PARTITIONS"; then
 	_cleanup_test "generic"
 	exit "$UBLK_SKIP_CODE"
 fi
