@@ -2394,8 +2394,8 @@ static void damon_do_apply_schemes(struct damon_ctx *c,
 		if (!s->wmarks.activated)
 			continue;
 
-		/* Check the quota */
-		if (quota->esz && quota->charged_sz >= quota->esz)
+		/* Check the quota: skip if esz=0 (goal achieved) or exhausted */
+		if (!quota->esz || quota->charged_sz >= quota->esz)
 			continue;
 
 		if (damos_skip_charged_region(t, r, s, c->min_region_sz))
