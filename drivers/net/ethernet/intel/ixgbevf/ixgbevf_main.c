@@ -602,7 +602,7 @@ static bool ixgbevf_is_non_eop(struct ixgbevf_ring *rx_ring,
 
 static inline unsigned int ixgbevf_rx_offset(struct ixgbevf_ring *rx_ring)
 {
-	return ring_uses_build_skb(rx_ring) ? IXGBEVF_SKB_PAD : 0;
+	return IXGBEVF_SKB_PAD;
 }
 
 static bool ixgbevf_alloc_mapped_page(struct ixgbevf_ring *rx_ring,
@@ -832,9 +832,7 @@ static void ixgbevf_add_rx_frag(struct ixgbevf_ring *rx_ring,
 #if (PAGE_SIZE < 8192)
 	unsigned int truesize = ixgbevf_rx_pg_size(rx_ring) / 2;
 #else
-	unsigned int truesize = ring_uses_build_skb(rx_ring) ?
-				SKB_DATA_ALIGN(IXGBEVF_SKB_PAD + size) :
-				SKB_DATA_ALIGN(size);
+	unsigned int truesize = SKB_DATA_ALIGN(IXGBEVF_SKB_PAD + size);
 #endif
 	skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags, rx_buffer->page,
 			rx_buffer->page_offset, size, truesize);
@@ -843,74 +841,6 @@ static void ixgbevf_add_rx_frag(struct ixgbevf_ring *rx_ring,
 #else
 	rx_buffer->page_offset += truesize;
 #endif
-}
-
-static
-struct sk_buff *ixgbevf_construct_skb(struct ixgbevf_ring *rx_ring,
-				      struct ixgbevf_rx_buffer *rx_buffer,
-				      struct xdp_buff *xdp,
-				      union ixgbe_adv_rx_desc *rx_desc)
-{
-	unsigned int size = xdp->data_end - xdp->data;
-#if (PAGE_SIZE < 8192)
-	unsigned int truesize = ixgbevf_rx_pg_size(rx_ring) / 2;
-#else
-	unsigned int truesize = SKB_DATA_ALIGN(xdp->data_end -
-					       xdp->data_hard_start);
-#endif
-	unsigned int headlen;
-	struct sk_buff *skb;
-
-	/* prefetch first cache line of first page */
-	net_prefetch(xdp->data);
-
-	/* Note, we get here by enabling legacy-rx via:
-	 *
-	 *    ethtool --set-priv-flags <dev> legacy-rx on
-	 *
-	 * In this mode, we currently get 0 extra XDP headroom as
-	 * opposed to having legacy-rx off, where we process XDP
-	 * packets going to stack via ixgbevf_build_skb().
-	 *
-	 * For ixgbevf_construct_skb() mode it means that the
-	 * xdp->data_meta will always point to xdp->data, since
-	 * the helper cannot expand the head. Should this ever
-	 * changed in future for legacy-rx mode on, then lets also
-	 * add xdp->data_meta handling here.
-	 */
-
-	/* allocate a skb to store the frags */
-	skb = napi_alloc_skb(&rx_ring->q_vector->napi, IXGBEVF_RX_HDR_SIZE);
-	if (unlikely(!skb))
-		return NULL;
-
-	/* Determine available headroom for copy */
-	headlen = size;
-	if (headlen > IXGBEVF_RX_HDR_SIZE)
-		headlen = eth_get_headlen(skb->dev, xdp->data,
-					  IXGBEVF_RX_HDR_SIZE);
-
-	/* align pull length to size of long to optimize memcpy performance */
-	memcpy(__skb_put(skb, headlen), xdp->data,
-	       ALIGN(headlen, sizeof(long)));
-
-	/* update all of the pointers */
-	size -= headlen;
-	if (size) {
-		skb_add_rx_frag(skb, 0, rx_buffer->page,
-				(xdp->data + headlen) -
-					page_address(rx_buffer->page),
-				size, truesize);
-#if (PAGE_SIZE < 8192)
-		rx_buffer->page_offset ^= truesize;
-#else
-		rx_buffer->page_offset += truesize;
-#endif
-	} else {
-		rx_buffer->pagecnt_bias++;
-	}
-
-	return skb;
 }
 
 static inline void ixgbevf_irq_enable_queues(struct ixgbevf_adapter *adapter,
@@ -1092,10 +1022,8 @@ static unsigned int ixgbevf_rx_frame_truesize(struct ixgbevf_ring *rx_ring,
 #if (PAGE_SIZE < 8192)
 	truesize = ixgbevf_rx_pg_size(rx_ring) / 2; /* Must be power-of-2 */
 #else
-	truesize = ring_uses_build_skb(rx_ring) ?
-		SKB_DATA_ALIGN(IXGBEVF_SKB_PAD + size) +
-		SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) :
-		SKB_DATA_ALIGN(size);
+	truesize = SKB_DATA_ALIGN(IXGBEVF_SKB_PAD + size) +
+		   SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 #endif
 	return truesize;
 }
@@ -1182,12 +1110,9 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 			total_rx_bytes += size;
 		} else if (skb) {
 			ixgbevf_add_rx_frag(rx_ring, rx_buffer, skb, size);
-		} else if (ring_uses_build_skb(rx_ring)) {
+		} else {
 			skb = ixgbevf_build_skb(rx_ring, rx_buffer,
 						&xdp, rx_desc);
-		} else {
-			skb = ixgbevf_construct_skb(rx_ring, rx_buffer,
-						    &xdp, rx_desc);
 		}
 
 		/* exit if we failed to retrieve a buffer */
@@ -1958,8 +1883,7 @@ static void ixgbevf_configure_rx_ring(struct ixgbevf_adapter *adapter,
 
 #if (PAGE_SIZE < 8192)
 		/* Limit the maximum frame size so we don't overrun the skb */
-		if (ring_uses_build_skb(ring) &&
-		    !ring_uses_large_buffer(ring))
+		if (!ring_uses_large_buffer(ring))
 			rxdctl |= IXGBEVF_MAX_FRAME_BUILD_SKB |
 				  IXGBE_RXDCTL_RLPML_EN;
 #endif
@@ -1978,22 +1902,16 @@ static void ixgbevf_set_rx_buffer_len(struct ixgbevf_adapter *adapter,
 	struct net_device *netdev = adapter->netdev;
 	unsigned int max_frame = netdev->mtu + ETH_HLEN + ETH_FCS_LEN;
 
-	/* set build_skb and buffer size flags */
-	clear_ring_build_skb_enabled(rx_ring);
+	/* set buffer size flags */
 	clear_ring_uses_large_buffer(rx_ring);
 
-	if (adapter->flags & IXGBEVF_FLAGS_LEGACY_RX)
-		return;
-
 	if (PAGE_SIZE < 8192)
-		if (max_frame > IXGBEVF_MAX_FRAME_BUILD_SKB)
+		/* 82599 can't rely on RXDCTL.RLPML to restrict
+		 * the size of the frame
+		 */
+		if (max_frame > IXGBEVF_MAX_FRAME_BUILD_SKB ||
+		    adapter->hw.mac.type == ixgbe_mac_82599_vf)
 			set_ring_uses_large_buffer(rx_ring);
-
-	/* 82599 can't rely on RXDCTL.RLPML to restrict the size of the frame */
-	if (adapter->hw.mac.type == ixgbe_mac_82599_vf && !ring_uses_large_buffer(rx_ring))
-		return;
-
-	set_ring_build_skb_enabled(rx_ring);
 }
 
 /**

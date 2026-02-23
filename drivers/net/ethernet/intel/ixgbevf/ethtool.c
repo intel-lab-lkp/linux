@@ -72,13 +72,6 @@ static const char ixgbe_gstrings_test[][ETH_GSTRING_LEN] = {
 
 #define IXGBEVF_TEST_LEN (sizeof(ixgbe_gstrings_test) / ETH_GSTRING_LEN)
 
-static const char ixgbevf_priv_flags_strings[][ETH_GSTRING_LEN] = {
-#define IXGBEVF_PRIV_FLAGS_LEGACY_RX	BIT(0)
-	"legacy-rx",
-};
-
-#define IXGBEVF_PRIV_FLAGS_STR_LEN ARRAY_SIZE(ixgbevf_priv_flags_strings)
-
 static int ixgbevf_get_link_ksettings(struct net_device *netdev,
 				      struct ethtool_link_ksettings *cmd)
 {
@@ -216,8 +209,6 @@ static void ixgbevf_get_drvinfo(struct net_device *netdev,
 	strscpy(drvinfo->driver, ixgbevf_driver_name, sizeof(drvinfo->driver));
 	strscpy(drvinfo->bus_info, pci_name(adapter->pdev),
 		sizeof(drvinfo->bus_info));
-
-	drvinfo->n_priv_flags = IXGBEVF_PRIV_FLAGS_STR_LEN;
 }
 
 static void ixgbevf_get_ringparam(struct net_device *netdev,
@@ -409,8 +400,6 @@ static int ixgbevf_get_sset_count(struct net_device *netdev, int stringset)
 		return IXGBEVF_TEST_LEN;
 	case ETH_SS_STATS:
 		return IXGBEVF_STATS_LEN;
-	case ETH_SS_PRIV_FLAGS:
-		return IXGBEVF_PRIV_FLAGS_STR_LEN;
 	default:
 		return -EINVAL;
 	}
@@ -537,10 +526,6 @@ static void ixgbevf_get_strings(struct net_device *netdev, u32 stringset,
 			sprintf(p, "rx_queue_%u_bytes", i);
 			p += ETH_GSTRING_LEN;
 		}
-		break;
-	case ETH_SS_PRIV_FLAGS:
-		memcpy(data, ixgbevf_priv_flags_strings,
-		       IXGBEVF_PRIV_FLAGS_STR_LEN * ETH_GSTRING_LEN);
 		break;
 	}
 }
@@ -931,37 +916,6 @@ static int ixgbevf_get_rxfh(struct net_device *netdev,
 	return err;
 }
 
-static u32 ixgbevf_get_priv_flags(struct net_device *netdev)
-{
-	struct ixgbevf_adapter *adapter = netdev_priv(netdev);
-	u32 priv_flags = 0;
-
-	if (adapter->flags & IXGBEVF_FLAGS_LEGACY_RX)
-		priv_flags |= IXGBEVF_PRIV_FLAGS_LEGACY_RX;
-
-	return priv_flags;
-}
-
-static int ixgbevf_set_priv_flags(struct net_device *netdev, u32 priv_flags)
-{
-	struct ixgbevf_adapter *adapter = netdev_priv(netdev);
-	unsigned int flags = adapter->flags;
-
-	flags &= ~IXGBEVF_FLAGS_LEGACY_RX;
-	if (priv_flags & IXGBEVF_PRIV_FLAGS_LEGACY_RX)
-		flags |= IXGBEVF_FLAGS_LEGACY_RX;
-
-	if (flags != adapter->flags) {
-		adapter->flags = flags;
-
-		/* reset interface to repopulate queues */
-		if (netif_running(netdev))
-			ixgbevf_reinit_locked(adapter);
-	}
-
-	return 0;
-}
-
 static const struct ethtool_ops ixgbevf_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS,
 	.get_drvinfo		= ixgbevf_get_drvinfo,
@@ -984,8 +938,6 @@ static const struct ethtool_ops ixgbevf_ethtool_ops = {
 	.get_rxfh_key_size	= ixgbevf_get_rxfh_key_size,
 	.get_rxfh		= ixgbevf_get_rxfh,
 	.get_link_ksettings	= ixgbevf_get_link_ksettings,
-	.get_priv_flags		= ixgbevf_get_priv_flags,
-	.set_priv_flags		= ixgbevf_set_priv_flags,
 };
 
 void ixgbevf_set_ethtool_ops(struct net_device *netdev)
