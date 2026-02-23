@@ -54,6 +54,7 @@
 #include <linux/seq_file.h>
 #include <linux/vmpressure.h>
 #include <linux/memremap.h>
+#include <linux/memory-tiers.h>
 #include <linux/mm_inline.h>
 #include <linux/swap_cgroup.h>
 #include <linux/cpu.h>
@@ -3905,6 +3906,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 
 		page_counter_init(&memcg->memory, &parent->memory, memcg_on_dfl);
 		page_counter_init(&memcg->swap, &parent->swap, false);
+		page_counter_update_toptier_capacity(&memcg->memory, NULL);
 #ifdef CONFIG_MEMCG_V1
 		memcg->memory.track_failcnt = !memcg_on_dfl;
 		WRITE_ONCE(memcg->oom_kill_disable, READ_ONCE(parent->oom_kill_disable));
@@ -3916,6 +3918,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		init_memcg_events();
 		page_counter_init(&memcg->memory, NULL, true);
 		page_counter_init(&memcg->swap, NULL, false);
+		page_counter_update_toptier_capacity(&memcg->memory, NULL);
 #ifdef CONFIG_MEMCG_V1
 		page_counter_init(&memcg->kmem, NULL, false);
 		page_counter_init(&memcg->tcpmem, NULL, false);
@@ -4801,6 +4804,20 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 		root = root_mem_cgroup;
 
 	page_counter_calculate_protection(&root->memory, &memcg->memory, recursive_protection);
+}
+
+void update_memcg_toptier_capacity(void)
+{
+	struct mem_cgroup *memcg;
+	nodemask_t allowed;
+
+	for_each_mem_cgroup(memcg) {
+		if (memcg == root_mem_cgroup)
+			continue;
+
+		cpuset_nodes_allowed(memcg->css.cgroup, &allowed);
+		page_counter_update_toptier_capacity(&memcg->memory, &allowed);
+	}
 }
 
 static int charge_memcg(struct folio *folio, struct mem_cgroup *memcg,
