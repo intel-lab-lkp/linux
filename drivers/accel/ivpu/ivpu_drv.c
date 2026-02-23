@@ -487,7 +487,7 @@ static int ivpu_irq_init(struct ivpu_device *vdev)
 	struct pci_dev *pdev = to_pci_dev(vdev->drm.dev);
 	int ret;
 
-	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI | PCI_IRQ_MSIX);
+	ret = pcim_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI | PCI_IRQ_MSIX);
 	if (ret < 0) {
 		ivpu_err(vdev, "Failed to allocate a MSI IRQ: %d\n", ret);
 		return ret;
