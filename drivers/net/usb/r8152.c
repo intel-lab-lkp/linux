@@ -10,6 +10,7 @@
 #include <linux/etherdevice.h>
 #include <linux/mii.h>
 #include <linux/ethtool.h>
+#include <linux/hex.h>
 #include <linux/phy.h>
 #include <linux/usb.h>
 #include <linux/crc32.h>
@@ -9646,7 +9647,7 @@ static u8 __rtl_get_hw_ver(struct usb_device *udev)
 	int ret;
 	int i;
 
-	tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
+	tmp = kmalloc_obj(*tmp);
 	if (!tmp)
 		return 0;
 
