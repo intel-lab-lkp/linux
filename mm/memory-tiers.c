@@ -938,6 +938,8 @@ subsys_initcall(memory_tier_init);
 
 bool numa_demotion_enabled = false;
 
+bool tier_aware_memcg_limits;
+
 #ifdef CONFIG_MIGRATION
 #ifdef CONFIG_SYSFS
 static ssize_t demotion_enabled_show(struct kobject *kobj,
@@ -974,8 +976,28 @@ static ssize_t demotion_enabled_store(struct kobject *kobj,
 static struct kobj_attribute numa_demotion_enabled_attr =
 	__ATTR_RW(demotion_enabled);
 
+static ssize_t tier_aware_memcg_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n", str_true_false(tier_aware_memcg_limits));
+}
+
+static ssize_t tier_aware_memcg_store(struct kobject *kobj,
+				      struct kobj_attribute *attr,
+				      const char *buf, size_t count)
+{
+	if (kstrtobool(buf, &tier_aware_memcg_limits))
+		return -EINVAL;
+
+	return count;
+}
+
+static struct kobj_attribute numa_tier_aware_memcg_attr =
+	__ATTR_RW(tier_aware_memcg);
+
 static struct attribute *numa_attrs[] = {
 	&numa_demotion_enabled_attr.attr,
+	&numa_tier_aware_memcg_attr.attr,
 	NULL,
 };
 
