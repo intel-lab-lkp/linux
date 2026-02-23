@@ -589,14 +589,18 @@ static void blk_mq_free_tags_callback(struct rcu_head *head)
 	struct page *page;
 
 	while (!list_empty(&tags->page_list)) {
+		int order;
+
 		page = list_first_entry(&tags->page_list, struct page, lru);
 		list_del_init(&page->lru);
+		order = page->private;
 		/*
 		 * Remove kmemleak object previously allocated in
 		 * blk_mq_alloc_rqs().
 		 */
 		kmemleak_free(page_address(page));
-		__free_pages(page, page->private);
+		set_page_private(page, 0);
+		__free_pages(page, order);
 	}
 	kfree(tags);
 }
