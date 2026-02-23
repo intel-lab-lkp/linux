@@ -60,6 +60,7 @@ struct intel_tlv {
 #define BTINTEL_CNVI_BLAZARU		0x930
 #define BTINTEL_CNVI_SCP		0xA00
 #define BTINTEL_CNVI_SCP2		0xA10
+#define BTINTEL_CNVI_SCP2F		0xA20
 
 /* CNVR */
 #define BTINTEL_CNVR_FMP2		0x910
