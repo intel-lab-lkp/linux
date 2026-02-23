@@ -61,8 +61,10 @@ static void pcpu_free_pages(struct pcpu_chunk *chunk,
 		for (i = page_start; i < page_end; i++) {
 			struct page *page = pages[pcpu_page_idx(cpu, i)];
 
-			if (page)
+			if (page) {
+				set_page_private(page, 0);
 				__free_page(page);
+			}
 		}
 	}
 }
