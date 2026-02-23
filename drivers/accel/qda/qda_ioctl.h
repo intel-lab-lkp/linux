@@ -102,4 +102,17 @@ int qda_ioctl_create(struct drm_device *dev, void *data, struct drm_file *file_p
  */
 int qda_ioctl_mmap(struct drm_device *dev, void *data, struct drm_file *file_priv);
 
+/**
+ * qda_ioctl_munmap - Unmap memory from DSP address space
+ * @dev: DRM device structure
+ * @data: User-space data containing memory unmapping parameters
+ * @file_priv: DRM file private data
+ *
+ * This IOCTL handler unmaps a previously mapped buffer from the DSP's
+ * virtual address space, releasing the associated resources.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_ioctl_munmap(struct drm_device *dev, void *data, struct drm_file *file_priv);
+
 #endif /* _QDA_IOCTL_H */
