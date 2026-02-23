@@ -291,7 +291,7 @@ static int pxa2xx_spi_pci_probe(struct pci_dev *dev,
 
 	pci_set_master(dev);
 
-	ret = pci_alloc_irq_vectors(dev, 1, 1, PCI_IRQ_ALL_TYPES);
+	ret = pcim_alloc_irq_vectors(dev, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (ret < 0)
 		return ret;
 	ssp->irq = pci_irq_vector(dev, 0);
