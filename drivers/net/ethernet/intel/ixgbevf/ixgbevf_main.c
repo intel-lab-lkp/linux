@@ -84,6 +84,7 @@ MODULE_DEVICE_TABLE(pci, ixgbevf_pci_tbl);
 
 MODULE_DESCRIPTION("Intel(R) 10 Gigabit Virtual Function Network Driver");
 MODULE_IMPORT_NS("LIBETH");
+MODULE_IMPORT_NS("LIBETH_XDP");
 MODULE_LICENSE("GPL v2");
 
 #define DEFAULT_MSG_ENABLE (NETIF_MSG_DRV|NETIF_MSG_PROBE|NETIF_MSG_LINK)
@@ -647,26 +648,6 @@ static bool ixgbevf_cleanup_headers(struct ixgbevf_ring *rx_ring,
 	return false;
 }
 
-/**
- * ixgbevf_add_rx_frag - Add contents of Rx buffer to sk_buff
- * @rx_ring: rx descriptor ring to transact packets on
- * @rx_buffer: buffer containing page to add
- * @skb: sk_buff to place the data into
- * @size: size of buffer to be added
- *
- * This function will add the data contained in rx_buffer->page to the skb.
- **/
-static void ixgbevf_add_rx_frag(const struct libeth_fqe *rx_buffer,
-				struct sk_buff *skb,
-				unsigned int size)
-{
-	u32 hr = netmem_get_pp(rx_buffer->netmem)->p.offset;
-
-	skb_add_rx_frag_netmem(skb, skb_shinfo(skb)->nr_frags,
-			       rx_buffer->netmem, rx_buffer->offset + hr,
-			       size, rx_buffer->truesize);
-}
-
 static inline void ixgbevf_irq_enable_queues(struct ixgbevf_adapter *adapter,
 					     u32 qmask)
 {
@@ -803,16 +784,16 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 	unsigned int total_rx_bytes = 0, total_rx_packets = 0;
 	struct ixgbevf_adapter *adapter = q_vector->adapter;
 	u16 cleaned_count = ixgbevf_desc_unused(rx_ring);
-	struct sk_buff *skb = rx_ring->skb;
 	LIBETH_XDP_ONSTACK_BUFF(xdp);
 	bool xdp_xmit = false;
 	int xdp_res = 0;
 
-	xdp->base.rxq = &rx_ring->xdp_rxq;
+	libeth_xdp_init_buff(xdp, &rx_ring->xdp_stash, &rx_ring->xdp_rxq);
 
 	while (likely(total_rx_packets < budget)) {
 		union ixgbe_adv_rx_desc *rx_desc;
 		struct libeth_fqe *rx_buffer;
+		struct sk_buff *skb;
 		unsigned int size;
 
 		/* return some buffers to hardware, one at a time is too slow */
@@ -833,42 +814,34 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 		rmb();
 
 		rx_buffer = &rx_ring->rx_fqes[rx_ring->next_to_clean];
-		libeth_rx_sync_for_cpu(rx_buffer, size);
+		libeth_xdp_process_buff(xdp, rx_buffer, size);
 
-		/* retrieve a buffer from the ring */
-		if (!skb) {
-			libeth_xdp_prepare_buff(xdp, rx_buffer, size);
-			prefetch(xdp->data);
-			xdp_res = ixgbevf_run_xdp(adapter, rx_ring, xdp);
-		}
+		cleaned_count++;
+		/* fetch next buffer in frame if non-eop */
+		if (ixgbevf_is_non_eop(rx_ring, rx_desc))
+			continue;
 
+		xdp_res = ixgbevf_run_xdp(adapter, rx_ring, xdp);
 		if (xdp_res) {
 			if (xdp_res == IXGBEVF_XDP_TX)
 				xdp_xmit = true;
 
 			total_rx_packets++;
 			total_rx_bytes += size;
-		} else if (skb) {
-			ixgbevf_add_rx_frag(rx_buffer, skb, size);
-		} else {
-			skb = xdp_build_skb_from_buff(&xdp->base);
+			continue;
 		}
 
+		skb = xdp_build_skb_from_buff(&xdp->base);
+		xdp->data = NULL;
+
 		/* exit if we failed to retrieve a buffer */
-		if (unlikely(!xdp_res && !skb)) {
+		if (unlikely(!skb)) {
 			rx_ring->rx_stats.alloc_rx_buff_failed++;
 			break;
 		}
 
-		cleaned_count++;
-
-		/* fetch next buffer in frame if non-eop */
-		if (ixgbevf_is_non_eop(rx_ring, rx_desc))
-			continue;
-
 		/* verify the packet layout is correct */
-		if (xdp_res ||
-		    unlikely(ixgbevf_cleanup_headers(rx_ring, rx_desc, skb))) {
+		if (unlikely(ixgbevf_cleanup_headers(rx_ring, rx_desc, skb))) {
 			skb = NULL;
 			continue;
 		}
@@ -892,13 +865,10 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 		total_rx_packets++;
 
 		ixgbevf_rx_skb(q_vector, skb);
-
-		/* reset skb pointer */
-		skb = NULL;
 	}
 
 	/* place incomplete frames back on ring for completion */
-	rx_ring->skb = skb;
+	libeth_xdp_save_buff(&rx_ring->xdp_stash, xdp);
 
 	if (xdp_xmit) {
 		struct ixgbevf_ring *xdp_ring =
@@ -2018,10 +1988,7 @@ void ixgbevf_up(struct ixgbevf_adapter *adapter)
 static void ixgbevf_clean_rx_ring(struct ixgbevf_ring *rx_ring)
 {
 	/* Free Rx ring sk_buff */
-	if (rx_ring->skb) {
-		dev_kfree_skb(rx_ring->skb);
-		rx_ring->skb = NULL;
-	}
+	libeth_xdp_return_stash(&rx_ring->xdp_stash);
 
 	/* Free all the Rx ring pages */
 	for (u32 i = rx_ring->next_to_clean; i != rx_ring->next_to_use; ) {
@@ -4101,16 +4068,19 @@ ixgbevf_features_check(struct sk_buff *skb, struct net_device *dev,
 	return features;
 }
 
-static int ixgbevf_xdp_setup(struct net_device *dev, struct bpf_prog *prog)
+static int ixgbevf_xdp_setup(struct net_device *dev, struct bpf_prog *prog,
+			     struct netlink_ext_ack *extack)
 {
-	int i, frame_size = dev->mtu + ETH_HLEN + ETH_FCS_LEN + VLAN_HLEN;
+	u32 frame_size = READ_ONCE(dev->mtu) + LIBETH_RX_LL_LEN;
 	struct ixgbevf_adapter *adapter = netdev_priv(dev);
 	struct bpf_prog *old_prog;
+	bool requires_mbuf;
 
-	/* verify ixgbevf ring attributes are sufficient for XDP */
-	for (i = 0; i < adapter->num_rx_queues; i++) {
-		if (frame_size > IXGBEVF_RXBUFFER_3072)
-			return -EINVAL;
+	requires_mbuf = frame_size > IXGBEVF_RX_PAGE_LEN(LIBETH_XDP_HEADROOM);
+	if (prog && !prog->aux->xdp_has_frags && requires_mbuf) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Configured MTU requires non-linear frames and XDP prog does not support frags");
+		return -EOPNOTSUPP;
 	}
 
 	old_prog = xchg(&adapter->xdp_prog, prog);
@@ -4130,7 +4100,7 @@ static int ixgbevf_xdp_setup(struct net_device *dev, struct bpf_prog *prog)
 		if (netif_running(dev))
 			ixgbevf_open(dev);
 	} else {
-		for (i = 0; i < adapter->num_rx_queues; i++)
+		for (int i = 0; i < adapter->num_rx_queues; i++)
 			xchg(&adapter->rx_ring[i]->xdp_prog, adapter->xdp_prog);
 	}
 
@@ -4144,7 +4114,7 @@ static int ixgbevf_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	switch (xdp->command) {
 	case XDP_SETUP_PROG:
-		return ixgbevf_xdp_setup(dev, xdp->prog);
+		return ixgbevf_xdp_setup(dev, xdp->prog, xdp->extack);
 	default:
 		return -EINVAL;
 	}
@@ -4296,7 +4266,7 @@ static int ixgbevf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 			    NETIF_F_HW_VLAN_CTAG_TX;
 
 	netdev->priv_flags |= IFF_UNICAST_FLT;
-	netdev->xdp_features = NETDEV_XDP_ACT_BASIC;
+	netdev->xdp_features = NETDEV_XDP_ACT_BASIC | NETDEV_XDP_ACT_RX_SG;
 
 	/* MTU range: 68 - 1504 or 9710 */
 	netdev->min_mtu = ETH_MIN_MTU;
