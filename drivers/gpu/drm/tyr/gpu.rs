@@ -1,20 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 
-use core::ops::Deref;
-use core::ops::DerefMut;
-use kernel::bits::genmask_u32;
-use kernel::device::Bound;
-use kernel::device::Device;
-use kernel::devres::Devres;
-use kernel::io::poll;
-use kernel::platform;
-use kernel::prelude::*;
-use kernel::time::Delta;
-use kernel::transmute::AsBytes;
-use kernel::uapi;
+use core::ops::{
+    Deref,
+    DerefMut, //
+};
+use kernel::{
+    bits::genmask_u32,
+    device::{
+        Bound,
+        Device, //
+    },
+    devres::Devres,
+    io::poll,
+    platform,
+    prelude::*,
+    time::Delta,
+    transmute::AsBytes,
+    uapi, //
+};
 
-use crate::driver::IoMem;
-use crate::regs;
+use crate::{
+    driver::IoMem,
+    regs, //
+};
 
 /// Struct containing information that can be queried by userspace. This is read from
 /// the GPU's registers.
