@@ -289,8 +289,8 @@ static int hibmc_msi_init(struct drm_device *dev)
 	int irq;
 	int ret;
 
-	ret = pci_alloc_irq_vectors(pdev, HIBMC_MIN_VECTORS,
-				    HIBMC_MAX_VECTORS, PCI_IRQ_MSI);
+	ret = pcim_alloc_irq_vectors(pdev, HIBMC_MIN_VECTORS,
+				     HIBMC_MAX_VECTORS, PCI_IRQ_MSI);
 	if (ret < 0) {
 		drm_err(dev, "enabling MSI failed: %d\n", ret);
 		return ret;
