@@ -247,6 +247,45 @@ static void kvm_gmem_invalidate_end(struct inode *inode, pgoff_t start,
 		__kvm_gmem_invalidate_end(f, start, end);
 }
 
+static void kvm_gmem_truncate_folio(struct folio *folio)
+{
+	folio_lock(folio);
+
+	if (folio_mapped(folio))
+		unmap_mapping_folio(folio);
+
+	/*
+	 * guest_memfd doesn't need writeback, skip anything to do with
+	 * writeback and just clear the dirty flag.
+	 */
+	folio_clear_dirty(folio);
+	filemap_remove_folio(folio);
+
+	folio_unlock(folio);
+}
+
+static void kvm_gmem_truncate_range(struct inode *inode, pgoff_t start,
+				    size_t nr_pages)
+
+{
+	struct folio_batch fbatch;
+	pgoff_t next;
+	pgoff_t last;
+	int i;
+
+	last = start + nr_pages - 1;
+
+	folio_batch_init(&fbatch);
+	next = start;
+	while (filemap_get_folios(inode->i_mapping, &next, last, &fbatch)) {
+		for (i = 0; i < folio_batch_count(&fbatch); ++i)
+			kvm_gmem_truncate_folio(fbatch.folios[i]);
+
+		folio_batch_release(&fbatch);
+		cond_resched();
+	}
+}
+
 static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 {
 	pgoff_t start = offset >> PAGE_SHIFT;
@@ -260,7 +299,7 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 
 	kvm_gmem_invalidate_begin(inode, start, end);
 
-	truncate_inode_pages_range(inode->i_mapping, offset, offset + len - 1);
+	kvm_gmem_truncate_range(inode, offset, len >> PAGE_SHIFT);
 
 	kvm_gmem_invalidate_end(inode, start, end);
 
@@ -984,7 +1023,7 @@ static void kvm_gmem_evict_inode(struct inode *inode)
 
 	truncate_inode_pages_final_prepare(mapping);
 
-	truncate_inode_pages_range(mapping, 0, inode->i_size);
+	kvm_gmem_truncate_range(inode, 0, inode->i_size >> PAGE_SHIFT);
 
 	clear_inode(inode);
 }
