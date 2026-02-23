@@ -565,13 +565,9 @@ static bool cxl_alloc_irq_vectors(struct pci_dev *pdev)
 	 * Per CXL 3.0 3.1.1 CXL.io Endpoint a function on a CXL device must
 	 * not generate INTx messages if that function participates in
 	 * CXL.cache or CXL.mem.
-	 *
-	 * Additionally pci_alloc_irq_vectors() handles calling
-	 * pci_free_irq_vectors() automatically despite not being called
-	 * pcim_*.  See pci_setup_msi_context().
 	 */
-	nvecs = pci_alloc_irq_vectors(pdev, 1, CXL_PCI_DEFAULT_MAX_VECTORS,
-				      PCI_IRQ_MSIX | PCI_IRQ_MSI);
+	nvecs = pcim_alloc_irq_vectors(pdev, 1, CXL_PCI_DEFAULT_MAX_VECTORS,
+				       PCI_IRQ_MSIX | PCI_IRQ_MSI);
 	if (nvecs < 1) {
 		dev_dbg(&pdev->dev, "Failed to alloc irq vectors: %d\n", nvecs);
 		return false;
