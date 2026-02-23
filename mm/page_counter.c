@@ -462,4 +462,38 @@ void page_counter_calculate_protection(struct page_counter *root,
 			atomic_long_read(&parent->children_low_usage),
 			recursive_protection));
 }
+
+unsigned long page_counter_toptier_high(struct page_counter *counter)
+{
+	unsigned long high = READ_ONCE(counter->high);
+	unsigned long toptier_cap, total_cap;
+
+	if (high == PAGE_COUNTER_MAX)
+		return PAGE_COUNTER_MAX;
+
+	toptier_cap = counter->toptier_capacity;
+	total_cap = counter->total_capacity;
+
+	if (!total_cap)
+		return PAGE_COUNTER_MAX;
+
+	return mult_frac(high, toptier_cap, total_cap);
+}
+
+unsigned long page_counter_toptier_low(struct page_counter *counter)
+{
+	unsigned long low = READ_ONCE(counter->low);
+	unsigned long toptier_cap, total_cap;
+
+	if (!low)
+		return 0;
+
+	toptier_cap = counter->toptier_capacity;
+	total_cap = counter->total_capacity;
+
+	if (!total_cap)
+		return 0;
+
+	return mult_frac(low, toptier_cap, total_cap);
+}
 #endif /* CONFIG_MEMCG || CONFIG_CGROUP_DMEM */
