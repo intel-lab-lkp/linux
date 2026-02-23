@@ -1124,7 +1124,7 @@ static bool guc_ct_send_wait_for_retry(struct xe_guc_ct *ct, u32 len,
 						 h2g->info.size,
 						 h2g->info.space,
 						 len + GUC_CTB_HDR_LEN);
-		xe_sleep_exponential_ms(sleep_period_ms, 64);
+		*sleep_total_ms += xe_sleep_exponential_ms(sleep_period_ms, 64);
 	} else {
 		struct xe_device *xe = ct_to_xe(ct);
 		struct guc_ctb *g2h = &ct->ctbs.g2h;
