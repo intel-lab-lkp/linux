@@ -7,11 +7,9 @@
 
 #include <linux/futex.h>
 #include <linux/uaccess.h>
-#include <linux/stringify.h>
 
-#include <asm/alternative.h>
-#include <asm/alternative-macros.h>
 #include <asm/errno.h>
+#include <asm/lsui.h>
 
 #define FUTEX_MAX_LOOPS	128 /* What's the largest number you can think of? */
 
@@ -90,8 +88,6 @@ __llsc_futex_cmpxchg(u32 __user *uaddr, u32 oldval, u32 newval, u32 *oval)
 }
 
 #ifdef CONFIG_ARM64_LSUI
-
-#define __LSUI_PREAMBLE	".arch_extension lsui\n"
 
 #define LSUI_FUTEX_ATOMIC_OP(op, asm_op)				\
 static __always_inline int						\
@@ -235,17 +231,6 @@ __lsui_futex_cmpxchg(u32 __user *uaddr, u32 oldval, u32 newval, u32 *oval)
 {
 	return __lsui_cmpxchg32(uaddr, oldval, newval, oval);
 }
-
-#define __lsui_llsc_body(op, ...)					\
-({									\
-	alternative_has_cap_unlikely(ARM64_HAS_LSUI) ?			\
-		__lsui_##op(__VA_ARGS__) : __llsc_##op(__VA_ARGS__);	\
-})
-
-#else	/* CONFIG_ARM64_LSUI */
-
-#define __lsui_llsc_body(op, ...)	__llsc_##op(__VA_ARGS__)
-
 #endif	/* CONFIG_ARM64_LSUI */
 
 
