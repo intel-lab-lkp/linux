@@ -636,14 +636,18 @@ static void mlx5e_rq_timeout_work(struct work_struct *timeout_work)
 
 static int mlx5e_alloc_mpwqe_rq_drop_page(struct mlx5e_rq *rq)
 {
-	rq->wqe_overflow.page = alloc_page(GFP_KERNEL);
+	/* xsk can have page_shift < PAGE_SHIFT */
+	u16 page_order = max_t(s16, rq->mpwqe.page_shift - PAGE_SHIFT, 0);
+	u32 page_size = BIT(PAGE_SHIFT + page_order);
+
+	rq->wqe_overflow.page = alloc_pages(GFP_KERNEL, page_order);
 	if (!rq->wqe_overflow.page)
 		return -ENOMEM;
 
 	rq->wqe_overflow.addr = dma_map_page(rq->pdev, rq->wqe_overflow.page, 0,
-					     PAGE_SIZE, rq->buff.map_dir);
+					     page_size, rq->buff.map_dir);
 	if (dma_mapping_error(rq->pdev, rq->wqe_overflow.addr)) {
-		__free_page(rq->wqe_overflow.page);
+		__free_pages(rq->wqe_overflow.page, page_order);
 		return -ENOMEM;
 	}
 	return 0;
@@ -651,9 +655,12 @@ static int mlx5e_alloc_mpwqe_rq_drop_page(struct mlx5e_rq *rq)
 
 static void mlx5e_free_mpwqe_rq_drop_page(struct mlx5e_rq *rq)
 {
-	 dma_unmap_page(rq->pdev, rq->wqe_overflow.addr, PAGE_SIZE,
-			rq->buff.map_dir);
-	 __free_page(rq->wqe_overflow.page);
+	u16 page_order = max_t(s16, rq->mpwqe.page_shift - PAGE_SHIFT, 0);
+	u32 page_size = BIT(PAGE_SHIFT + page_order);
+
+	dma_unmap_page(rq->pdev, rq->wqe_overflow.addr, page_size,
+		       rq->buff.map_dir);
+	 __free_pages(rq->wqe_overflow.page, page_order);
 }
 
 static int mlx5e_init_rxq_rq(struct mlx5e_channel *c, struct mlx5e_params *params,
@@ -884,15 +891,15 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 		if (err)
 			goto err_rq_xdp_prog;
 
-		err = mlx5e_alloc_mpwqe_rq_drop_page(rq);
-		if (err)
-			goto err_rq_wq_destroy;
-
 		rq->mpwqe.wq.db = &rq->mpwqe.wq.db[MLX5_RCV_DBR];
 
 		wq_sz = mlx5_wq_ll_get_size(&rq->mpwqe.wq);
 
 		rq->mpwqe.page_shift = mlx5e_mpwrq_page_shift(mdev, rqo);
+		err = mlx5e_alloc_mpwqe_rq_drop_page(rq);
+		if (err)
+			goto err_rq_wq_destroy;
+
 		rq->mpwqe.umr_mode = mlx5e_mpwrq_umr_mode(mdev, rqo);
 		rq->mpwqe.pages_per_wqe =
 			mlx5e_mpwrq_pages_per_wqe(mdev, rq->mpwqe.page_shift,
