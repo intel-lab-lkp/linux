@@ -213,6 +213,10 @@ static int page_pool_init(struct page_pool *pool,
 	if (pool->p.pool_size)
 		ring_qsize = min(pool->p.pool_size, 16384);
 
+	pool->alloc.refill = min_t(unsigned int, PP_ALLOC_CACHE_REFILL,
+				   ring_qsize);
+	pool->alloc.size = pool->alloc.refill * 2;
+
 	/* DMA direction is either DMA_FROM_DEVICE or DMA_BIDIRECTIONAL.
 	 * DMA_BIDIRECTIONAL is for allowing page used for DMA sending,
 	 * which is the XDP_TX use-case.
@@ -416,7 +420,7 @@ static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 			netmem = 0;
 			break;
 		}
-	} while (pool->alloc.count < PP_ALLOC_CACHE_REFILL);
+	} while (pool->alloc.count < pool->alloc.refill);
 
 	/* Return last page */
 	if (likely(pool->alloc.count > 0)) {
@@ -590,7 +594,7 @@ static struct page *__page_pool_alloc_page_order(struct page_pool *pool,
 static noinline netmem_ref __page_pool_alloc_netmems_slow(struct page_pool *pool,
 							  gfp_t gfp)
 {
-	const int bulk = PP_ALLOC_CACHE_REFILL;
+	const int bulk = pool->alloc.refill;
 	unsigned int pp_order = pool->p.order;
 	bool dma_map = pool->dma_map;
 	netmem_ref netmem;
@@ -799,7 +803,7 @@ static bool page_pool_recycle_in_ring(struct page_pool *pool, netmem_ref netmem)
 static bool page_pool_recycle_in_cache(netmem_ref netmem,
 				       struct page_pool *pool)
 {
-	if (unlikely(pool->alloc.count == PP_ALLOC_CACHE_SIZE)) {
+	if (unlikely(pool->alloc.count == pool->alloc.size)) {
 		recycle_stat_inc(pool, cache_full);
 		return false;
 	}

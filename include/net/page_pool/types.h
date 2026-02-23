@@ -55,6 +55,8 @@
 #define PP_ALLOC_CACHE_REFILL	64
 struct pp_alloc_cache {
 	u32 count;
+	u8 refill;
+	u8 size;
 	netmem_ref cache[PP_ALLOC_CACHE_SIZE];
 };
 
