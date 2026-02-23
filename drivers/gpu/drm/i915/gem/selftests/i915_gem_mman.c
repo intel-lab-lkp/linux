@@ -38,6 +38,8 @@ struct tile {
 	unsigned int swizzle;
 };
 
+bool skip_vma = true;
+
 static u64 swizzle_bit(unsigned int bit, u64 offset)
 {
 	return (offset & BIT_ULL(bit)) >> (bit - 6);
@@ -903,6 +905,9 @@ static int __igt_mmap(struct drm_i915_private *i915,
 	int err, i;
 	u64 offset;
 
+	if (skip_vma)
+		return 0;
+
 	if (!can_mmap(obj, type))
 		return 0;
 
@@ -1163,6 +1168,9 @@ static int __igt_mmap_migrate(struct intel_memory_region **placements,
 	LIST_HEAD(objects);
 	u64 offset;
 	int err;
+
+	if (skip_vma)
+		return 0;
 
 	obj = __i915_gem_object_create_user(i915, PAGE_SIZE,
 					    placements,
@@ -1834,7 +1842,6 @@ static int igt_mmap_revoke(void *arg)
 int i915_gem_mman_live_selftests(struct drm_i915_private *i915)
 {
 	int ret;
-	bool unuse_mm = false;
 	static const struct i915_subtest tests[] = {
 		SUBTEST(igt_partial_tiling),
 		SUBTEST(igt_smoke_tiling),
@@ -1847,14 +1854,41 @@ int i915_gem_mman_live_selftests(struct drm_i915_private *i915)
 	};
 
 	if (!current->mm) {
-		kthread_use_mm(current->active_mm);
-		unuse_mm = true;
+		int timeout = 10;
+		/**
+		 * We want to use current->active_mm, which corresponds to the
+		 * address space of a userspace process that was last handled by
+		 * scheduler. It is possible that this memory is in the middle
+		 * of cleanup indicated by mm_users == 0, in which case kernel
+		 * waits until the process is finished to release its mm_struct.
+		 * Borrowing that memory at that point is unsafe, because it may
+		 * be freed at any point and taking additional references to it
+		 * will not change the cleanup behavior.
+		 * Wait for a bit in hopes that another process is taken by
+		 * scheduler and has reliable memory for us to map into.
+		 */
+		while (timeout--) {
+			if (mmget_not_zero(current->active_mm)) {
+				kthread_use_mm(current->active_mm);
+				skip_vma = false;
+				break;
+			}
+
+			msleep(1000);
+		}
 	}
 
 	ret = i915_live_subtests(tests, i915);
 
-	if (unuse_mm)
-		kthread_unuse_mm(current->active_mm);
+	if (!skip_vma) {
+		/**
+		 * The scheduler was working while the test executed,
+		 * so current->active_mm might have changed. Use the old
+		 * reference to the address space stored in current->mm.
+		 */
+		mmput_async(current->mm);
+		kthread_unuse_mm(current->mm);
+	}
 
 	return ret;
 }
