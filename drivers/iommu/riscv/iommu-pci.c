@@ -75,8 +75,8 @@ static int riscv_iommu_pci_probe(struct pci_dev *pdev, const struct pci_device_i
 	}
 
 	/* Allocate and assign IRQ vectors for the various events */
-	rc = pci_alloc_irq_vectors(pdev, 1, RISCV_IOMMU_INTR_COUNT,
-				   PCI_IRQ_MSIX | PCI_IRQ_MSI);
+	rc = pcim_alloc_irq_vectors(pdev, 1, RISCV_IOMMU_INTR_COUNT,
+				    PCI_IRQ_MSIX | PCI_IRQ_MSI);
 	if (rc <= 0)
 		return dev_err_probe(dev, -ENODEV,
 				     "unable to allocate irq vectors\n");
