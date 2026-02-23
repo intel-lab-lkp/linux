@@ -49,6 +49,7 @@
 #include <linux/sched/mm.h>
 #include <linux/sysctl.h>
 #include <linux/pgalloc.h>
+#include <linux/kvm_types.h>
 
 #include <asm/tlbflush.h>
 #include "internal.h"
@@ -262,6 +263,7 @@ void filemap_remove_folio(struct folio *folio)
 
 	filemap_free_folio(mapping, folio);
 }
+EXPORT_SYMBOL_FOR_KVM(filemap_remove_folio);
 
 /*
  * page_cache_delete_batch - delete several folios from page cache
