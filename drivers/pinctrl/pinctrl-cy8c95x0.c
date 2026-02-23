@@ -72,24 +72,6 @@
 #define CY8C95X0_MUX_REGMAP_TO_OFFSET(x, p) \
 	(CY8C95X0_VIRTUAL + (x) - CY8C95X0_PORTSEL + (p) * MUXED_STRIDE)
 
-static const struct i2c_device_id cy8c95x0_id[] = {
-	{ "cy8c9520", 20, },
-	{ "cy8c9540", 40, },
-	{ "cy8c9560", 60, },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, cy8c95x0_id);
-
-#define OF_CY8C95X(__nrgpio) ((void *)(__nrgpio))
-
-static const struct of_device_id cy8c95x0_dt_ids[] = {
-	{ .compatible = "cypress,cy8c9520", .data = OF_CY8C95X(20), },
-	{ .compatible = "cypress,cy8c9540", .data = OF_CY8C95X(40), },
-	{ .compatible = "cypress,cy8c9560", .data = OF_CY8C95X(60), },
-	{ }
-};
-MODULE_DEVICE_TABLE(of, cy8c95x0_dt_ids);
-
 static const struct acpi_gpio_params cy8c95x0_irq_gpios = { 0, 0, true };
 
 static const struct acpi_gpio_mapping cy8c95x0_acpi_irq_gpios[] = {
@@ -1478,8 +1460,26 @@ static int cy8c95x0_probe(struct i2c_client *client)
 	return cy8c95x0_setup_gpiochip(chip);
 }
 
+static const struct i2c_device_id cy8c95x0_id[] = {
+	{ "cy8c9520", 20 },
+	{ "cy8c9540", 40 },
+	{ "cy8c9560", 60 },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, cy8c95x0_id);
+
+#define OF_CY8C95X(__nrgpio) ((void *)(__nrgpio))
+
+static const struct of_device_id cy8c95x0_dt_ids[] = {
+	{ .compatible = "cypress,cy8c9520", .data = OF_CY8C95X(20) },
+	{ .compatible = "cypress,cy8c9540", .data = OF_CY8C95X(40) },
+	{ .compatible = "cypress,cy8c9560", .data = OF_CY8C95X(60) },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, cy8c95x0_dt_ids);
+
 static const struct acpi_device_id cy8c95x0_acpi_ids[] = {
-	{ "INT3490", 40, },
+	{ "INT3490", 40 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, cy8c95x0_acpi_ids);
