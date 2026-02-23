@@ -1369,13 +1369,13 @@ static int cy8c95x0_detect(struct i2c_client *client,
 		return ret;
 	switch (ret & GENMASK(7, 4)) {
 	case 0x20:
-		name = cy8c95x0_id[0].name;
+		name = "cy8c9520";
 		break;
 	case 0x40:
-		name = cy8c95x0_id[1].name;
+		name = "cy8c9540";
 		break;
 	case 0x60:
-		name = cy8c95x0_id[2].name;
+		name = "cy8c9560";
 		break;
 	default:
 		return -ENODEV;
