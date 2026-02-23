@@ -654,7 +654,7 @@ static int quicki2c_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		}
 	}
 
-	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
+	ret = pcim_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (ret < 0) {
 		dev_err_once(&pdev->dev,
 			     "Failed to allocate IRQ vectors. ret = %d\n", ret);
