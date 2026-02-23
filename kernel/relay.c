@@ -131,8 +131,10 @@ static void *relay_alloc_buf(struct rchan_buf *buf, size_t *size)
 	return mem;
 
 depopulate:
-	for (j = 0; j < i; j++)
+	for (j = 0; j < i; j++) {
+		set_page_private(buf->page_array[i], 0);
 		__free_page(buf->page_array[j]);
+	}
 	relay_free_page_array(buf->page_array);
 	return NULL;
 }
@@ -196,8 +198,10 @@ static void relay_destroy_buf(struct rchan_buf *buf)
 
 	if (likely(buf->start)) {
 		vunmap(buf->start);
-		for (i = 0; i < buf->page_count; i++)
+		for (i = 0; i < buf->page_count; i++) {
+			set_page_private(buf->page_array[i], 0);
 			__free_page(buf->page_array[i]);
+		}
 		relay_free_page_array(buf->page_array);
 	}
 	*per_cpu_ptr(chan->buf, buf->cpu) = NULL;
