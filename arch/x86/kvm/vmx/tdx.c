@@ -172,9 +172,15 @@ static void td_init_cpuid_entry2(struct kvm_cpuid_entry2 *entry, unsigned char i
 	entry->ecx = (u32)td_conf->cpuid_config_values[idx][1];
 	entry->edx = td_conf->cpuid_config_values[idx][1] >> 32;
 
-	if (entry->index == KVM_TDX_CPUID_NO_SUBLEAF)
+	if (entry->index == KVM_TDX_CPUID_NO_SUBLEAF) {
 		entry->index = 0;
+		entry->flags &= ~KVM_CPUID_FLAG_SIGNIFCANT_INDEX;
+	} else {
+		entry->flags |= KVM_CPUID_FLAG_SIGNIFCANT_INDEX;
+	}
 
+	WARN_ON_ONCE(cpuid_function_is_indexed(entry->function) !=
+		     !!(entry->flags & KVM_CPUID_FLAG_SIGNIFCANT_INDEX));
 	/*
 	 * The TDX module doesn't allow configuring the guest phys addr bits
 	 * (EAX[23:16]).  However, KVM uses it as an interface to the userspace
