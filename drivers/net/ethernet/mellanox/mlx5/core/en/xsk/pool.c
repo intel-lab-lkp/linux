@@ -80,6 +80,7 @@ static int mlx5e_xsk_enable_locked(struct mlx5e_priv *priv,
 {
 	struct mlx5e_params *params = &priv->channels.params;
 	struct mlx5e_channel_param *cparam;
+	enum mlx5e_mpwrq_umr_mode umr_mode;
 	struct mlx5e_xsk_param xsk;
 	struct mlx5e_channel *c;
 	int err;
@@ -105,8 +106,9 @@ static int mlx5e_xsk_enable_locked(struct mlx5e_priv *priv,
 	mlx5e_build_xsk_param(pool, &xsk);
 	mlx5e_build_xsk_channel_param(priv->mdev, params, &xsk, cparam);
 
+	umr_mode = mlx5e_mpwrq_umr_mode(priv->mdev, &cparam->rq_opt);
 	if (priv->channels.params.rq_wq_type == MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ &&
-	    mlx5e_mpwrq_umr_mode(priv->mdev, &xsk) == MLX5E_MPWRQ_UMR_MODE_OVERSIZED) {
+	    umr_mode == MLX5E_MPWRQ_UMR_MODE_OVERSIZED) {
 		const char *recommendation = is_power_of_2(xsk.chunk_size) ?
 			"Upgrade firmware" : "Disable striding RQ";
 
@@ -163,7 +165,7 @@ validate_closed:
 	/* Check the configuration in advance, rather than fail at a later stage
 	 * (in mlx5e_xdp_set or on open) and end up with no channels.
 	 */
-	if (!mlx5e_validate_xsk_param(params, &xsk, priv->mdev)) {
+	if (!mlx5e_validate_xsk_param(params, &cparam->rq_opt, priv->mdev)) {
 		err = -EINVAL;
 		goto err_remove_pool;
 	}

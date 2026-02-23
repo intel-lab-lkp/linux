@@ -1060,8 +1060,9 @@ void mlx5e_timestamp_init(struct mlx5e_priv *priv);
 struct mlx5e_xsk_param;
 
 struct mlx5e_rq_param;
+struct mlx5e_rq_opt_param;
 int mlx5e_open_rq(struct mlx5e_params *params, struct mlx5e_rq_param *rq_param,
-		  struct mlx5e_xsk_param *xsk, int node, u16 q_counter,
+		  struct mlx5e_rq_opt_param *rqo, int node, u16 q_counter,
 		  struct mlx5e_rq *rq);
 #define MLX5E_RQ_WQES_TIMEOUT 20000 /* msecs */
 int mlx5e_wait_for_min_rx_wqes(struct mlx5e_rq *rq, int wait_time);
