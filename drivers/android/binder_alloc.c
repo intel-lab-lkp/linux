@@ -306,6 +306,7 @@ static struct page *binder_page_alloc(struct binder_alloc *alloc,
 static void binder_free_page(struct page *page)
 {
 	kfree((struct binder_shrinker_mdata *)page_private(page));
+	set_page_private(page, 0);
 	__free_page(page);
 }
 
