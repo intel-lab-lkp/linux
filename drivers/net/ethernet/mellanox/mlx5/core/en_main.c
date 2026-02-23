@@ -5586,10 +5586,38 @@ static int mlx5e_queue_validate_qcfg(struct net_device *dev,
 				     struct netdev_queue_config *qcfg,
 				     struct netlink_ext_ack *extack)
 {
-	if (qcfg->rx_page_size != PAGE_SIZE)
+	struct mlx5e_priv *priv = netdev_priv(dev);
+	struct mlx5_core_dev *mdev = priv->mdev;
+	u32 max;
+
+	if (!is_power_of_2(qcfg->rx_page_size)) {
+		netdev_err(priv->netdev, "rx_page_size not power of 2: %u",
+			   qcfg->rx_page_size);
 		return -EINVAL;
+	}
+
+	max = mlx5e_mpwrq_max_page_size(mdev);
+	if (qcfg->rx_page_size < PAGE_SIZE || qcfg->rx_page_size > max) {
+		netdev_err(priv->netdev,
+			   "Selected rx_page_size %u not in supported range [%lu, %u]\n",
+			   qcfg->rx_page_size, PAGE_SIZE, max);
+		return -ERANGE;
+	}
 
 	return 0;
+}
+
+static bool mlx5e_queue_validate_page_size(struct net_device *dev,
+					   struct netdev_queue_config *qcfg,
+					   int queue_index)
+{
+	if (qcfg->rx_page_size == PAGE_SIZE)
+		return true;
+
+	if (!netif_rxq_has_unreadable_mp(dev, queue_index))
+		return false;
+
+	return true;
 }
 
 static int mlx5e_queue_mem_alloc(struct net_device *dev,
@@ -5620,6 +5648,12 @@ static int mlx5e_queue_mem_alloc(struct net_device *dev,
 		netdev_err(priv->netdev,
 			   "Cloning channels with Port/rx PTP, XDP or HTB is not supported\n");
 		err = -EOPNOTSUPP;
+		goto unlock;
+	}
+
+	if (!mlx5e_queue_validate_page_size(dev, qcfg, queue_index)) {
+		netdev_err(priv->netdev, "High order pages are supported only in Zero-Copy mode\n");
+		err = -EINVAL;
 		goto unlock;
 	}
 
