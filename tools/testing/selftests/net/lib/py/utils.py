@@ -159,8 +159,11 @@ class bkg(cmd):
         return self
 
     def __exit__(self, ex_type, ex_value, ex_tb):
-        # Force termination on exception
-        terminate = self.terminate or (self._exit_wait and ex_type is not None)
+        terminate = self.terminate
+        # Force termination on exception, but only if bkg() didn't already exit
+        # since forcing termination silences failures with fail=None
+        if self.proc.poll() is None:
+            terminate = terminate or (self._exit_wait and ex_type is not None)
         return self.process(terminate=terminate, fail=self.check_fail)
 
 
