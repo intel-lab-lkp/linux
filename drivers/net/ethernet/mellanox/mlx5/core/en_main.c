@@ -851,8 +851,8 @@ static void mlx5e_rq_free_shampo(struct mlx5e_rq *rq)
 }
 
 static int mlx5e_alloc_rq(struct mlx5e_params *params,
-			  struct mlx5e_xsk_param *xsk,
 			  struct mlx5e_rq_param *rq_param,
+			  struct mlx5e_rq_opt_param *rqo,
 			  int node, struct mlx5e_rq *rq)
 {
 	void *rqc_wq = MLX5_ADDR_OF(rqc, rq_param->rqc, wq);
@@ -871,7 +871,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 	RCU_INIT_POINTER(rq->xdp_prog, params->xdp_prog);
 
 	rq->buff.map_dir = params->xdp_prog ? DMA_BIDIRECTIONAL : DMA_FROM_DEVICE;
-	rq->buff.headroom = mlx5e_get_rq_headroom(mdev, params, xsk);
+	rq->buff.headroom = mlx5e_get_rq_headroom(mdev, params, rqo);
 	pool_size = 1 << params->log_rq_mtu_frames;
 
 	rq->mkey_be = cpu_to_be32(mdev->mlx5e_res.hw_objs.mkey);
@@ -891,8 +891,8 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 
 		wq_sz = mlx5_wq_ll_get_size(&rq->mpwqe.wq);
 
-		rq->mpwqe.page_shift = mlx5e_mpwrq_page_shift(mdev, xsk);
-		rq->mpwqe.umr_mode = mlx5e_mpwrq_umr_mode(mdev, xsk);
+		rq->mpwqe.page_shift = mlx5e_mpwrq_page_shift(mdev, rqo);
+		rq->mpwqe.umr_mode = mlx5e_mpwrq_umr_mode(mdev, rqo);
 		rq->mpwqe.pages_per_wqe =
 			mlx5e_mpwrq_pages_per_wqe(mdev, rq->mpwqe.page_shift,
 						  rq->mpwqe.umr_mode);
@@ -904,14 +904,17 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 						 rq->mpwqe.umr_mode);
 
 		pool_size = rq->mpwqe.pages_per_wqe <<
-			mlx5e_mpwqe_get_log_rq_size(mdev, params, xsk);
+			mlx5e_mpwqe_get_log_rq_size(mdev, params, rqo);
 
-		if (!mlx5e_rx_mpwqe_is_linear_skb(mdev, params, xsk) && params->xdp_prog)
+		if (!mlx5e_rx_mpwqe_is_linear_skb(mdev, params, rqo) &&
+		    params->xdp_prog)
 			pool_size *= 2; /* additional page per packet for the linear part */
 
-		rq->mpwqe.log_stride_sz = mlx5e_mpwqe_get_log_stride_size(mdev, params, xsk);
+		rq->mpwqe.log_stride_sz =
+				mlx5e_mpwqe_get_log_stride_size(mdev, params,
+								rqo);
 		rq->mpwqe.num_strides =
-			BIT(mlx5e_mpwqe_get_log_num_strides(mdev, params, xsk));
+			BIT(mlx5e_mpwqe_get_log_num_strides(mdev, params, rqo));
 		rq->mpwqe.min_wqe_bulk = mlx5e_mpwqe_get_min_wqe_bulk(wq_sz);
 
 		rq->buff.frame0_sz = (1 << rq->mpwqe.log_stride_sz);
@@ -947,7 +950,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 			goto err_rq_wq_destroy;
 	}
 
-	if (xsk) {
+	if (mlx5e_rqo_xsk_param(rqo)) {
 		err = xdp_rxq_info_reg_mem_model(&rq->xdp_rxq,
 						 MEM_TYPE_XSK_BUFF_POOL, NULL);
 		if (err)
@@ -1324,7 +1327,7 @@ void mlx5e_free_rx_descs(struct mlx5e_rq *rq)
 }
 
 int mlx5e_open_rq(struct mlx5e_params *params, struct mlx5e_rq_param *rq_param,
-		  struct mlx5e_xsk_param *xsk, int node, u16 q_counter,
+		  struct mlx5e_rq_opt_param *rqo, int node, u16 q_counter,
 		  struct mlx5e_rq *rq)
 {
 	struct mlx5_core_dev *mdev = rq->mdev;
@@ -1333,7 +1336,7 @@ int mlx5e_open_rq(struct mlx5e_params *params, struct mlx5e_rq_param *rq_param,
 	if (params->packet_merge.type == MLX5E_PACKET_MERGE_SHAMPO)
 		__set_bit(MLX5E_RQ_STATE_SHAMPO, &rq->state);
 
-	err = mlx5e_alloc_rq(params, xsk, rq_param, node, rq);
+	err = mlx5e_alloc_rq(params, rq_param, rqo, node, rq);
 	if (err)
 		return err;
 
@@ -4587,6 +4590,7 @@ static bool mlx5e_xsk_validate_mtu(struct net_device *netdev,
 	for (ix = 0; ix < chs->params.num_channels; ix++) {
 		struct xsk_buff_pool *xsk_pool =
 			mlx5e_xsk_get_pool(&chs->params, chs->params.xsk, ix);
+		struct mlx5e_rq_opt_param rqo = {0};
 		struct mlx5e_xsk_param xsk;
 		int max_xdp_mtu;
 
@@ -4594,12 +4598,13 @@ static bool mlx5e_xsk_validate_mtu(struct net_device *netdev,
 			continue;
 
 		mlx5e_build_xsk_param(xsk_pool, &xsk);
-		max_xdp_mtu = mlx5e_xdp_max_mtu(new_params, &xsk);
+		rqo.xsk = &xsk;
+		max_xdp_mtu = mlx5e_xdp_max_mtu(new_params, &rqo);
 
 		/* Validate XSK params and XDP MTU in advance */
-		if (!mlx5e_validate_xsk_param(new_params, &xsk, mdev) ||
+		if (!mlx5e_validate_xsk_param(new_params, &rqo, mdev) ||
 		    new_params->sw_mtu > max_xdp_mtu) {
-			u32 hr = mlx5e_get_linear_rq_headroom(new_params, &xsk);
+			u32 hr = mlx5e_get_linear_rq_headroom(new_params, &rqo);
 			int max_mtu_frame, max_mtu_page, max_mtu;
 
 			/* Two criteria must be met:

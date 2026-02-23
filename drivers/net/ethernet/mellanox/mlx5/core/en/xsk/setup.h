@@ -9,7 +9,7 @@
 struct mlx5e_xsk_param;
 
 bool mlx5e_validate_xsk_param(struct mlx5e_params *params,
-			      struct mlx5e_xsk_param *xsk,
+			      struct mlx5e_rq_opt_param *rqo,
 			      struct mlx5_core_dev *mdev);
 struct mlx5e_channel_param;
 int mlx5e_open_xsk(struct mlx5e_priv *priv, struct mlx5e_params *params,
