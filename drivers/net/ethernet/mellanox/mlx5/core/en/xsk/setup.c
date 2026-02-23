@@ -90,8 +90,10 @@ static int mlx5e_init_xsk_rq(struct mlx5e_channel *c,
 	return xdp_rxq_info_reg(&rq->xdp_rxq, rq->netdev, rq_xdp_ix, c->napi.napi_id);
 }
 
-static int mlx5e_open_xsk_rq(struct mlx5e_channel *c, struct mlx5e_params *params,
-			     struct mlx5e_rq_param *rq_params, struct xsk_buff_pool *pool,
+static int mlx5e_open_xsk_rq(struct mlx5e_channel *c,
+			     struct mlx5e_params *params,
+			     struct mlx5e_rq_param *rq_param,
+			     struct xsk_buff_pool *pool,
 			     struct mlx5e_xsk_param *xsk)
 {
 	u16 q_counter = c->priv->q_counter[c->sd_ix];
@@ -102,7 +104,8 @@ static int mlx5e_open_xsk_rq(struct mlx5e_channel *c, struct mlx5e_params *param
 	if (err)
 		return err;
 
-	err = mlx5e_open_rq(params, rq_params, xsk, cpu_to_node(c->cpu), q_counter, xskrq);
+	err = mlx5e_open_rq(params, rq_param, xsk, cpu_to_node(c->cpu),
+			    q_counter, xskrq);
 	if (err)
 		return err;
 

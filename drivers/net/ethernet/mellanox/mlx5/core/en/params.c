@@ -883,13 +883,15 @@ static u8 rq_end_pad_mode(struct mlx5_core_dev *mdev, struct mlx5e_params *param
 int mlx5e_build_rq_param(struct mlx5_core_dev *mdev,
 			 struct mlx5e_params *params,
 			 struct mlx5e_xsk_param *xsk,
-			 struct mlx5e_rq_param *param)
+			 struct mlx5e_rq_param *rq_param)
 {
-	void *rqc = param->rqc;
-	void *wq = MLX5_ADDR_OF(rqc, rqc, wq);
+	void *rqc = rq_param->rqc;
 	u32 lro_timeout;
 	int ndsegs = 1;
+	void *wq;
 	int err;
+
+	wq = MLX5_ADDR_OF(rqc, rqc, wq);
 
 	switch (params->rq_wq_type) {
 	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ: {
@@ -938,11 +940,12 @@ int mlx5e_build_rq_param(struct mlx5_core_dev *mdev,
 	}
 	default: /* MLX5_WQ_TYPE_CYCLIC */
 		MLX5_SET(wq, wq, log_wq_sz, params->log_rq_mtu_frames);
-		err = mlx5e_build_rq_frags_info(mdev, params, xsk, &param->frags_info,
-						&param->xdp_frag_size);
+		err = mlx5e_build_rq_frags_info(mdev, params, xsk,
+						&rq_param->frags_info,
+						&rq_param->xdp_frag_size);
 		if (err)
 			return err;
-		ndsegs = param->frags_info.num_frags;
+		ndsegs = rq_param->frags_info.num_frags;
 	}
 
 	MLX5_SET(wq, wq, wq_type,          params->rq_wq_type);
@@ -953,23 +956,23 @@ int mlx5e_build_rq_param(struct mlx5_core_dev *mdev,
 	MLX5_SET(rqc, rqc, vsd,            params->vlan_strip_disable);
 	MLX5_SET(rqc, rqc, scatter_fcs,    params->scatter_fcs_en);
 
-	param->wq.buf_numa_node = dev_to_node(mlx5_core_dma_dev(mdev));
-	mlx5e_build_rx_cq_param(mdev, params, xsk, &param->cqp);
+	rq_param->wq.buf_numa_node = dev_to_node(mlx5_core_dma_dev(mdev));
+	mlx5e_build_rx_cq_param(mdev, params, xsk, &rq_param->cqp);
 
 	return 0;
 }
 
 void mlx5e_build_drop_rq_param(struct mlx5_core_dev *mdev,
-			       struct mlx5e_rq_param *param)
+			       struct mlx5e_rq_param *rq_param)
 {
-	void *rqc = param->rqc;
+	void *rqc = rq_param->rqc;
 	void *wq = MLX5_ADDR_OF(rqc, rqc, wq);
 
 	MLX5_SET(wq, wq, wq_type, MLX5_WQ_TYPE_CYCLIC);
 	MLX5_SET(wq, wq, log_wq_stride,
 		 mlx5e_get_rqwq_log_stride(MLX5_WQ_TYPE_CYCLIC, 1));
 
-	param->wq.buf_numa_node = dev_to_node(mlx5_core_dma_dev(mdev));
+	rq_param->wq.buf_numa_node = dev_to_node(mlx5_core_dma_dev(mdev));
 }
 
 void mlx5e_build_tx_cq_param(struct mlx5_core_dev *mdev,
@@ -1097,7 +1100,7 @@ static u32 mlx5e_mpwrq_total_umr_wqebbs(struct mlx5_core_dev *mdev,
 
 static u8 mlx5e_build_icosq_log_wq_sz(struct mlx5_core_dev *mdev,
 				      struct mlx5e_params *params,
-				      struct mlx5e_rq_param *rqp)
+				      struct mlx5e_rq_param *rq_param)
 {
 	u32 wqebbs, total_pages, useful_space;
 
