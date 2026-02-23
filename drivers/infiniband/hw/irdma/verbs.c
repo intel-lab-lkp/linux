@@ -3359,18 +3359,13 @@ free_pble:
 	return err;
 }
 
-static struct irdma_mr *irdma_alloc_iwmr(struct ib_umem *region,
-					 struct ib_pd *pd, u64 virt,
-					 enum irdma_memreg_type reg_type)
+static int irdma_init_iwmr(struct irdma_mr *iwmr, struct ib_umem *region,
+			   struct ib_pd *pd, u64 virt,
+			   enum irdma_memreg_type reg_type)
 {
 	struct irdma_device *iwdev = to_iwdev(pd->device);
 	struct irdma_pbl *iwpbl;
-	struct irdma_mr *iwmr;
 	unsigned long pgsz_bitmap;
-
-	iwmr = kzalloc_obj(*iwmr);
-	if (!iwmr)
-		return ERR_PTR(-ENOMEM);
 
 	iwpbl = &iwmr->iwpbl;
 	iwpbl->iwmr = iwmr;
@@ -3384,21 +3379,14 @@ static struct irdma_mr *irdma_alloc_iwmr(struct ib_umem *region,
 		iwdev->rf->sc_dev.hw_attrs.page_size_cap : SZ_4K;
 
 	iwmr->page_size = ib_umem_find_best_pgsz(region, pgsz_bitmap, virt);
-	if (unlikely(!iwmr->page_size)) {
-		kfree(iwmr);
-		return ERR_PTR(-EOPNOTSUPP);
-	}
+	if (unlikely(!iwmr->page_size))
+		return -EOPNOTSUPP;
 
 	iwmr->len = region->length;
 	iwpbl->user_base = virt;
 	iwmr->page_cnt = ib_umem_num_dma_blocks(region, iwmr->page_size);
 
-	return iwmr;
-}
-
-static void irdma_free_iwmr(struct irdma_mr *iwmr)
-{
-	kfree(iwmr);
+	return 0;
 }
 
 static int irdma_reg_user_mr_type_qp(struct irdma_mem_reg_req req,
@@ -3547,11 +3535,15 @@ static struct ib_mr *irdma_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 		return ERR_PTR(-EFAULT);
 	}
 
-	iwmr = irdma_alloc_iwmr(region, pd, virt, req.reg_type);
-	if (IS_ERR(iwmr)) {
+	iwmr = kzalloc_obj(*iwmr);
+	if (!iwmr) {
 		ib_umem_release(region);
-		return (struct ib_mr *)iwmr;
+		return ERR_PTR(-ENOMEM);
 	}
+
+	err = irdma_init_iwmr(iwmr, region, pd, virt, req.reg_type);
+	if (err)
+		goto error;
 
 	switch (req.reg_type) {
 	case IRDMA_MEMREG_TYPE_QP:
@@ -3585,9 +3577,37 @@ static struct ib_mr *irdma_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 	return &iwmr->ibmr;
 error:
 	ib_umem_release(region);
-	irdma_free_iwmr(iwmr);
+	kfree(iwmr);
 
 	return ERR_PTR(err);
+}
+
+static int irdma_hwdereg_mr(struct ib_mr *ib_mr);
+
+static void irdma_umem_dmabuf_revoke(void *priv)
+{
+	struct irdma_mr *iwmr = priv;
+	int err;
+
+	iwmr->revoked = true;
+
+	if (!iwmr->is_hwreg)
+		return;
+
+	/* Invalidate the key in hardware. This does not actually release the
+	 * key for potential reuse - that only occurs when the region is fully
+	 * deregistered.
+	 */
+	err = irdma_hwdereg_mr(&iwmr->ibmr);
+	if (err) {
+		struct irdma_device *iwdev = to_iwdev(iwmr->ibmr.device);
+
+		ibdev_err(&iwdev->ibdev, "dmabuf mr invalidate failed %d", err);
+		if (!iwdev->rf->reset) {
+			iwdev->rf->reset = true;
+			iwdev->rf->gen_ops.request_reset(iwdev->rf);
+		}
+	}
 }
 
 static struct ib_mr *irdma_reg_user_mr_dmabuf(struct ib_pd *pd, u64 start,
@@ -3607,31 +3627,45 @@ static struct ib_mr *irdma_reg_user_mr_dmabuf(struct ib_pd *pd, u64 start,
 	if (len > iwdev->rf->sc_dev.hw_attrs.max_mr_size)
 		return ERR_PTR(-EINVAL);
 
-	umem_dmabuf = ib_umem_dmabuf_get_pinned(pd->device, start, len, fd, access);
+	iwmr = kzalloc_obj(*iwmr);
+	if (!iwmr)
+		return ERR_PTR(-ENOMEM);
+
+	umem_dmabuf =
+		ib_umem_dmabuf_get_pinned_revocable(pd->device, start, len, fd,
+						    access,
+						    irdma_umem_dmabuf_revoke,
+						    iwmr);
 	if (IS_ERR(umem_dmabuf)) {
 		ibdev_dbg(&iwdev->ibdev, "Failed to get dmabuf umem[%pe]\n",
 			  umem_dmabuf);
+		kfree(iwmr);
 		return ERR_CAST(umem_dmabuf);
 	}
 
-	iwmr = irdma_alloc_iwmr(&umem_dmabuf->umem, pd, virt, IRDMA_MEMREG_TYPE_MEM);
-	if (IS_ERR(iwmr)) {
-		err = PTR_ERR(iwmr);
-		goto err_release;
-	}
-
-	err = irdma_reg_user_mr_type_mem(iwmr, access, true);
+	err = irdma_init_iwmr(iwmr, &umem_dmabuf->umem, pd, virt,
+			      IRDMA_MEMREG_TYPE_MEM);
 	if (err)
-		goto err_iwmr;
+		goto err_release;
+
+	dma_resv_lock(umem_dmabuf->attach->dmabuf->resv, NULL);
+	/* Catch revocations that occur before grabbing dma_resv_lock. */
+	err = iwmr->revoked ?
+		-ENODEV : irdma_reg_user_mr_type_mem(iwmr, access, true);
+	dma_resv_unlock(umem_dmabuf->attach->dmabuf->resv);
+
+	if (err)
+		goto err_release;
 
 	return &iwmr->ibmr;
 
-err_iwmr:
-	irdma_free_iwmr(iwmr);
-
 err_release:
+	/* ib_umem_release will result in the irdma_umem_dmabuf_revoke callback
+	 * being called, but it ends up being a no-op if the region has not been
+	 * successfully registered with HW because iwmr->is_hwreg is false.
+	 */
 	ib_umem_release(&umem_dmabuf->umem);
-
+	kfree(iwmr);
 	return ERR_PTR(err);
 }
 
@@ -3900,6 +3934,28 @@ static void irdma_del_memlist(struct irdma_mr *iwmr,
 }
 
 /**
+ * irdma_dereg_mr_dmabuf - deregister a dmabuf mr
+ * @iwdev: iwarp device
+ * @iwmr: mr
+ */
+static int irdma_dereg_mr_dmabuf(struct irdma_device *iwdev,
+				 struct irdma_mr *iwmr)
+{
+	struct irdma_pbl *iwpbl = &iwmr->iwpbl;
+
+	/* Causes a synchronous revoke which then causes HW invalidation. */
+	ib_umem_release(iwmr->region);
+
+	irdma_free_stag(iwdev, iwmr->stag);
+
+	if (iwpbl->pbl_allocated)
+		irdma_free_pble(iwdev->rf->pble_rsrc, &iwpbl->pble_alloc);
+
+	kfree(iwmr);
+	return 0;
+}
+
+/**
  * irdma_dereg_mr - deregister mr
  * @ib_mr: mr ptr for dereg
  * @udata: user data
@@ -3910,6 +3966,9 @@ static int irdma_dereg_mr(struct ib_mr *ib_mr, struct ib_udata *udata)
 	struct irdma_device *iwdev = to_iwdev(ib_mr->device);
 	struct irdma_pbl *iwpbl = &iwmr->iwpbl;
 	int ret;
+
+	if (iwmr->region && iwmr->region->is_dmabuf)
+		return irdma_dereg_mr_dmabuf(iwdev, iwmr);
 
 	if (iwmr->type != IRDMA_MEMREG_TYPE_MEM) {
 		if (iwmr->region) {

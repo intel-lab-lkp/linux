@@ -20,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
+#include <linux/dma-resv.h>
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/io.h>
