@@ -144,7 +144,6 @@ static const struct dmi_system_id cy8c95x0_dmi_acpi_irq_info[] = {
  * @map:            Mask used to compensate for Gport2 width
  * @nport:          Number of Gports in this chip
  * @gpio_chip:      gpiolib chip
- * @driver_data:    private driver data
  * @dev:            struct device
  * @pctldev:        pin controller device
  * @pinctrl_desc:   pin controller description
@@ -165,7 +164,6 @@ struct cy8c95x0_pinctrl {
 	DECLARE_BITMAP(map, MAX_LINE);
 	unsigned int nport;
 	struct gpio_chip gpio_chip;
-	unsigned long driver_data;
 	struct device *dev;
 	struct pinctrl_dev *pctldev;
 	struct pinctrl_desc pinctrl_desc;
@@ -1397,6 +1395,7 @@ static int cy8c95x0_probe(struct i2c_client *client)
 	struct cy8c95x0_pinctrl *chip;
 	struct regmap_config regmap_conf;
 	struct regmap_range_cfg regmap_range_conf;
+	unsigned long driver_data;
 	int ret;
 
 	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
@@ -1406,11 +1405,9 @@ static int cy8c95x0_probe(struct i2c_client *client)
 	chip->dev = dev;
 
 	/* Set the device type */
-	chip->driver_data = (uintptr_t)i2c_get_match_data(client);
-	if (!chip->driver_data)
-		return -ENODEV;
+	driver_data = (unsigned long)i2c_get_match_data(client);
 
-	chip->tpin = chip->driver_data & CY8C95X0_GPIO_MASK;
+	chip->tpin = driver_data & CY8C95X0_GPIO_MASK;
 	chip->nport = DIV_ROUND_UP(CY8C95X0_PIN_TO_OFFSET(chip->tpin), BANK_SZ);
 
 	memcpy(&regmap_range_conf, &cy8c95x0_ranges[0], sizeof(regmap_range_conf));
