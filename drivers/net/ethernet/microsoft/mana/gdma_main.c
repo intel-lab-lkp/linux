@@ -490,14 +490,8 @@ static void mana_serv_reset(struct pci_dev *pdev)
 		dev_info(&pdev->dev, "MANA reset cycle completed\n");
 
 out:
-	gc->in_service = false;
+	clear_bit(GC_IN_SERVICE, &gc->flags);
 }
-
-struct mana_serv_work {
-	struct work_struct serv_work;
-	struct pci_dev *pdev;
-	enum gdma_eqe_type type;
-};
 
 static void mana_do_service(enum gdma_eqe_type type, struct pci_dev *pdev)
 {
@@ -542,7 +536,7 @@ static void mana_recovery_delayed_func(struct work_struct *w)
 	spin_unlock_irqrestore(&work->lock, flags);
 }
 
-static void mana_serv_func(struct work_struct *w)
+void mana_serv_func(struct work_struct *w)
 {
 	struct mana_serv_work *mns_wk;
 	struct pci_dev *pdev;
@@ -624,7 +618,7 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 			break;
 		}
 
-		if (gc->in_service) {
+		if (test_bit(GC_IN_SERVICE, &gc->flags)) {
 			dev_info(gc->dev, "Already in service\n");
 			break;
 		}
@@ -641,7 +635,7 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 		}
 
 		dev_info(gc->dev, "Start MANA service type:%d\n", type);
-		gc->in_service = true;
+		set_bit(GC_IN_SERVICE, &gc->flags);
 		mns_wk->pdev = to_pci_dev(gc->dev);
 		mns_wk->type = type;
 		pci_dev_get(mns_wk->pdev);
