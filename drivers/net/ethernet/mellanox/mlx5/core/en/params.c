@@ -1278,6 +1278,7 @@ void mlx5e_build_xsk_channel_param(struct mlx5_core_dev *mdev,
 				   struct mlx5e_xsk_param *xsk,
 				   struct mlx5e_channel_param *cparam)
 {
+	cparam->xsk = xsk;
 	mlx5e_build_rq_param(mdev, params, xsk, &cparam->rq);
 	mlx5e_build_xdpsq_param(mdev, params, &cparam->xdp_sq);
 }

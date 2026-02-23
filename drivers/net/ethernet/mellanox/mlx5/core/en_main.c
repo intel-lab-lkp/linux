@@ -2829,7 +2829,8 @@ static int mlx5e_open_channel(struct mlx5e_priv *priv, int ix,
 
 	if (xsk_pool) {
 		mlx5e_build_xsk_param(xsk_pool, &xsk);
-		err = mlx5e_open_xsk(priv, params, &xsk, xsk_pool, c);
+		mlx5e_build_xsk_channel_param(priv->mdev, params, &xsk, cparam);
+		err = mlx5e_open_xsk(priv, params, cparam, xsk_pool, c);
 		if (unlikely(err))
 			goto err_close_queues;
 	}
