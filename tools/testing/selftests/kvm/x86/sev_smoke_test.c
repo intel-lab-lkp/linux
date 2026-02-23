@@ -213,13 +213,48 @@ static void test_sev_smoke(void *guest, uint32_t type, uint64_t policy)
 	}
 }
 
+static bool sev_es_allowed(void)
+{
+	struct kvm_sev_launch_start launch_start = {
+		.policy = SEV_POLICY_ES,
+	};
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+	int firmware_error, ret;
+	bool supported = true;
+
+	if (!kvm_cpu_has(X86_FEATURE_SEV_ES))
+		return false;
+
+	if (!kvm_cpu_has(X86_FEATURE_SEV_SNP))
+		return true;
+
+	/*
+	 * In some cases when SEV-SNP is enabled, firmware disallows starting
+	 * an SEV-ES VM. When SEV-SNP is enabled try to launch an SEV-ES, and
+	 * check the underlying firmware error for this case.
+	 */
+	vm = vm_sev_create_with_one_vcpu(KVM_X86_SEV_ES_VM, guest_sev_es_code,
+					 &vcpu);
+
+	ret = __vm_sev_ioctl(vm, KVM_SEV_LAUNCH_START, &launch_start,
+			     &firmware_error);
+	if (ret == -1 && firmware_error == SEV_RET_UNSUPPORTED) {
+		pr_info("SEV-ES not supported with SNP\n");
+		supported = false;
+	}
+
+	kvm_vm_free(vm);
+	return supported;
+}
+
 int main(int argc, char *argv[])
 {
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV));
 
 	test_sev_smoke(guest_sev_code, KVM_X86_SEV_VM, 0);
 
-	if (kvm_cpu_has(X86_FEATURE_SEV_ES))
+	if (sev_es_allowed())
 		test_sev_smoke(guest_sev_es_code, KVM_X86_SEV_ES_VM, SEV_POLICY_ES);
 
 	if (kvm_cpu_has(X86_FEATURE_SEV_SNP))
