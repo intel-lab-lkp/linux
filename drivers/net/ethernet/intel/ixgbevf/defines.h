@@ -71,7 +71,7 @@ typedef u32 ixgbe_link_speed;
 #define IXGBE_PSRTYPE_L2HDR	0x00001000
 
 /* SRRCTL bit definitions */
-#define IXGBE_SRRCTL_BSIZEPKT_SHIFT	10     /* so many KBs */
+#define IXGBE_SRRCTL_BSIZEPKT_STEP	1024
 #define IXGBE_SRRCTL_RDMTS_SHIFT	22
 #define IXGBE_SRRCTL_RDMTS_MASK		0x01C00000
 #define IXGBE_SRRCTL_DROP_EN		0x10000000
