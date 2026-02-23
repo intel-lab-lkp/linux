@@ -1506,6 +1506,16 @@ void tcp_v4_send_check(struct sock *sk, struct sk_buff *skb)
 }
 EXPORT_IPV6_MOD(tcp_v4_send_check);
 
+#if IS_ENABLED(CONFIG_IPV6)
+#include <net/ip6_checksum.h>
+
+void tcp_v6_send_check(struct sock *sk, struct sk_buff *skb)
+{
+	__tcp_v6_send_check(skb, &sk->sk_v6_rcv_saddr, &sk->sk_v6_daddr);
+}
+EXPORT_IPV6_MOD(tcp_v6_send_check);
+#endif
+
 /* This routine actually transmits TCP packets queued in by
  * tcp_do_sendmsg().  This is used by both the initial
  * transmission and possible later retransmissions.
@@ -1667,9 +1677,12 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	/* BPF prog is the last one writing header option */
 	bpf_skops_write_hdr_opt(sk, skb, NULL, NULL, 0, &opts);
 
-	INDIRECT_CALL_INET(icsk->icsk_af_ops->send_check,
-			   tcp_v6_send_check, tcp_v4_send_check,
-			   sk, skb);
+#if IS_ENABLED(CONFIG_IPV6)
+	if (likely(icsk->icsk_af_ops->send_check == tcp_v6_send_check))
+		tcp_v6_send_check(sk, skb);
+	else
+#endif
+		tcp_v4_send_check(sk, skb);
 
 	if (likely(tcb->tcp_flags & TCPHDR_ACK))
 		tcp_event_ack_sent(sk, rcv_nxt);
