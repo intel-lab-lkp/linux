@@ -1413,6 +1413,24 @@ static void svm_prepare_switch_to_guest(struct kvm_vcpu *vcpu)
 		sd->bp_spec_reduce_set = true;
 		msr_set_bit(MSR_ZEN4_BP_CFG, MSR_ZEN4_BP_CFG_BP_SPEC_REDUCE_BIT);
 	}
+
+	/*
+	 * If nrips is supported in hardware but not exposed to L1, stuff the
+	 * actual L2 RIP to emulate what a nrips=0 CPU would do (L1 is
+	 * responsible for advancing RIP prior to injecting the event). Once L2
+	 * runs after L1 executes VMRUN, NextRIP is updated by the CPU and/or
+	 * KVM, and this is no longer needed.
+	 *
+	 * This is done here (as opposed to when preparing vmcb02) to use the
+	 * most up-to-date value of RIP regardless of the order of restoring
+	 * registers and nested state in the vCPU save+restore path.
+	 */
+	if (is_guest_mode(vcpu) && svm->nested.nested_run_pending) {
+		if (boot_cpu_has(X86_FEATURE_NRIPS) &&
+		    !guest_cpu_cap_has(vcpu, X86_FEATURE_NRIPS))
+			svm->vmcb->control.next_rip = kvm_rip_read(vcpu);
+	}
+
 	svm->guest_state_loaded = true;
 }
 
