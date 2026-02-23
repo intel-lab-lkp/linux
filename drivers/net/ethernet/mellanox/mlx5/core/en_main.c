@@ -857,6 +857,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 {
 	void *rqc_wq = MLX5_ADDR_OF(rqc, rq_param->rqc, wq);
 	struct mlx5_core_dev *mdev = rq->mdev;
+	u32 pool_order = 0;
 	u32 pool_size;
 	int wq_sz;
 	int err;
@@ -905,6 +906,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 
 		pool_size = rq->mpwqe.pages_per_wqe <<
 			mlx5e_mpwqe_get_log_rq_size(mdev, params, rqo);
+		pool_order = rq->mpwqe.page_shift - PAGE_SHIFT;
 
 		if (!mlx5e_rx_mpwqe_is_linear_skb(mdev, params, rqo) &&
 		    params->xdp_prog)
@@ -960,7 +962,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 		/* Create a page_pool and register it with rxq */
 		struct page_pool_params pp_params = { 0 };
 
-		pp_params.order     = 0;
+		pp_params.order     = pool_order;
 		pp_params.flags     = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV;
 		pp_params.pool_size = pool_size;
 		pp_params.nid       = node;
@@ -968,7 +970,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 		pp_params.napi      = rq->cq.napi;
 		pp_params.netdev    = rq->netdev;
 		pp_params.dma_dir   = rq->buff.map_dir;
-		pp_params.max_len   = PAGE_SIZE;
+		pp_params.max_len   = BIT(PAGE_SHIFT + pool_order);
 		pp_params.queue_idx = rq->ix;
 
 		/* Shampo header data split allow for unreadable netmem */
