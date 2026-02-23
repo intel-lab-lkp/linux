@@ -80,6 +80,7 @@ static void qda_rpmsg_remove(struct rpmsg_device *rpdev)
 	qdev->rpdev = NULL;
 	mutex_unlock(&qdev->lock);
 
+	qda_unregister_device(qdev);
 	qda_unpopulate_child_devices(qdev);
 	qda_deinit_device(qdev);
 
@@ -120,6 +121,13 @@ static int qda_rpmsg_probe(struct rpmsg_device *rpdev)
 	if (ret) {
 		qda_err(qdev, "Failed to populate child devices: %d\n", ret);
 		qda_deinit_device(qdev);
+		return ret;
+	}
+
+	ret = qda_register_device(qdev);
+	if (ret) {
+		qda_deinit_device(qdev);
+		qda_unpopulate_child_devices(qdev);
 		return ret;
 	}
 
