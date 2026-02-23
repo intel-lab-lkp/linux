@@ -886,6 +886,7 @@ static void null_free_page(struct nullb_page *t_page)
 	__set_bit(NULLB_PAGE_FREE, t_page->bitmap);
 	if (test_bit(NULLB_PAGE_LOCK, t_page->bitmap))
 		return;
+	set_page_private(t_page->page, 0);
 	__free_page(t_page->page);
 	kfree(t_page);
 }
