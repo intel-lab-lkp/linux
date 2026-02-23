@@ -269,8 +269,12 @@ int cpci_configure_slot(struct slot *slot)
 	parent = slot->dev->bus;
 
 	for_each_pci_bridge(dev, parent) {
-		if (PCI_SLOT(dev->devfn) == PCI_SLOT(slot->devfn))
-			pci_hp_add_bridge(dev);
+		if (PCI_SLOT(dev->devfn) == PCI_SLOT(slot->devfn)) {
+			if (pci_hp_add_bridge(dev) != 0) {
+				err("Failed to initialize bridge %s at slot %02x",
+				    pci_name(dev), slot->number);
+			}
+		}
 	}
 
 	pci_assign_unassigned_bridge_resources(parent->self);
