@@ -76,7 +76,7 @@ static inline u64 snp_default_policy(void)
  * creating an overlay to pass in an "unsigned long" without a cast (casting
  * will make the compiler unhappy due to dereferencing an aliased pointer).
  */
-#define __vm_sev_ioctl(vm, cmd, arg)					\
+#define __vm_sev_ioctl(vm, cmd, arg, errorp)				\
 ({									\
 	int r;								\
 									\
@@ -90,12 +90,14 @@ static inline u64 snp_default_policy(void)
 	} };								\
 									\
 	r = __vm_ioctl(vm, KVM_MEMORY_ENCRYPT_OP, &sev_cmd.raw);	\
+	if (errorp != NULL)						\
+		*((__u32 *)errorp) = sev_cmd.c.error;			\
 	r ?: sev_cmd.c.error;						\
 })
 
 #define vm_sev_ioctl(vm, cmd, arg)					\
 ({									\
-	int ret = __vm_sev_ioctl(vm, cmd, arg);				\
+	int ret = __vm_sev_ioctl(vm, cmd, arg, NULL);			\
 									\
 	__TEST_ASSERT_VM_VCPU_IOCTL(!ret, #cmd,	ret, vm);		\
 })

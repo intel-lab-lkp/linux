@@ -232,7 +232,7 @@ static void verify_mirror_allowed_cmds(struct kvm_vm *vm)
 		 * These commands should be disallowed before the data
 		 * parameter is examined so NULL is OK here.
 		 */
-		ret = __vm_sev_ioctl(vm, cmd_id, NULL);
+		ret = __vm_sev_ioctl(vm, cmd_id, NULL, NULL);
 		TEST_ASSERT(
 			ret == -1 && errno == EINVAL,
 			"Should not be able call command: %d. ret: %d, errno: %d",
