@@ -1596,10 +1596,10 @@ static int safexcel_probe_generic(void *pdev,
 		 */
 		struct pci_dev *pci_pdev = pdev;
 
-		ret = pci_alloc_irq_vectors(pci_pdev,
-					    priv->config.rings + 1,
-					    priv->config.rings + 1,
-					    PCI_IRQ_MSI | PCI_IRQ_MSIX);
+		ret = pcim_alloc_irq_vectors(pci_pdev,
+					     priv->config.rings + 1,
+					     priv->config.rings + 1,
+					     PCI_IRQ_MSI | PCI_IRQ_MSIX);
 		if (ret < 0) {
 			dev_err(dev, "Failed to allocate PCI MSI interrupts\n");
 			return ret;
