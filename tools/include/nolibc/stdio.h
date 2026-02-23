@@ -373,11 +373,7 @@ int __nolibc_printf(__nolibc_printf_cb cb, intptr_t state, size_t n, const char 
 					outstr="(null)";
 			}
 			else if (c == 'm') {
-#ifdef NOLIBC_IGNORE_ERRNO
-				outstr = "unknown error";
-#else
 				outstr = strerror(errno);
-#endif /* NOLIBC_IGNORE_ERRNO */
 			}
 			else if (c == '%') {
 				/* queue it verbatim */
@@ -682,14 +678,31 @@ int setvbuf(FILE *stream __attribute__((unused)),
 	return 0;
 }
 
-static __attribute__((unused))
-const char *strerror(int errno)
+static __attribute__((unused,))
+int strerror_r(int errnum, char *buf, size_t buflen __attribute__((unused)))
 {
-	static char buf[18] = "errno=";
+#ifdef NOLIBC_IGNORE_ERRNO
+	__builtin_memcpy(buf, "unknown error", 14);
+	return 13;
+#else
+	__builtin_memcpy(buf, "errno=", 6);
+	return 6 + i64toa_r(errnum, buf + 6);
+#endif
+}
 
-	i64toa_r(errno, &buf[6]);
+static __attribute__((unused))
+const char *strerror(int errnum)
+{
+	static char buf[18];
+	char *b = buf;
 
-	return buf;
+	/* Force gcc to use 'register offset' to access buf[]. */
+	_NOLIBC_OPTIMIZER_HIDE_VAR(b);
+
+	/* Use strerror_r() to avoid having the only .data in small programs. */
+	strerror_r(errnum, b, sizeof(buf));
+
+	return b;
 }
 
 #endif /* _NOLIBC_STDIO_H */
