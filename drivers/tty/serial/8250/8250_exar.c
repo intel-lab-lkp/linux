@@ -1478,7 +1478,7 @@ exar_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *ent)
 
 	pci_set_master(pcidev);
 
-	rc = pci_alloc_irq_vectors(pcidev, 1, 1, PCI_IRQ_ALL_TYPES);
+	rc = pcim_alloc_irq_vectors(pcidev, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (rc < 0)
 		return rc;
 
