@@ -275,7 +275,7 @@ static bool g2h_fence_needs_alloc(struct g2h_fence *g2h_fence)
  */
 long xe_guc_ct_queue_proc_time_jiffies(struct xe_guc_ct *ct)
 {
-	BUILD_BUG_ON(!IS_ALIGNED(CTB_H2G_BUFFER_SIZE, SZ_4));
+	BUILD_BUG_ON(!IS_ALIGNED(CTB_H2G_BUFFER_SIZE, SZ_4K));
 	return (CTB_H2G_BUFFER_SIZE / SZ_4K) * HZ;
 }
 
@@ -1126,7 +1126,6 @@ static bool guc_ct_send_wait_for_retry(struct xe_guc_ct *ct, u32 len,
 						 len + GUC_CTB_HDR_LEN);
 		*sleep_total_ms += xe_sleep_exponential_ms(sleep_period_ms, 64);
 	} else {
-		struct xe_device *xe = ct_to_xe(ct);
 		struct guc_ctb *g2h = &ct->ctbs.g2h;
 		int ret;
 
@@ -1148,7 +1147,7 @@ static bool guc_ct_send_wait_for_retry(struct xe_guc_ct *ct, u32 len,
 		ret = dequeue_one_g2h(ct);
 		if (ret < 0) {
 			if (ret != -ECANCELED)
-				xe_gt_err(ct_to_gt(ct), "CTB receive failed (%pe)",
+				xe_gt_err(ct_to_gt(ct), "CTB receive failed (%pe)\n",
 					  ERR_PTR(ret));
 			return false;
 		}
@@ -1324,7 +1323,7 @@ retry_same_fence:
 	 */
 	mutex_lock(&ct->lock);
 	if (!ret) {
-		xe_gt_err(gt, "Timed out wait for G2H, fence %u, action %04x, done %s",
+		xe_gt_err(gt, "Timed out wait for G2H, fence %u, action %04x, done %s\n",
 			  g2h_fence.seqno, action[0], str_yes_no(g2h_fence.done));
 		xa_erase(&ct->fence_lookup, g2h_fence.seqno);
 		mutex_unlock(&ct->lock);
@@ -1834,7 +1833,7 @@ static void g2h_fast_path(struct xe_guc_ct *ct, u32 *msg, u32 len)
 		ret = xe_guc_tlb_inval_done_handler(guc, payload, adj_len);
 		break;
 	default:
-		xe_gt_warn(gt, "NOT_POSSIBLE");
+		xe_gt_warn(gt, "NOT_POSSIBLE\n");
 	}
 
 	if (ret) {
@@ -1937,7 +1936,7 @@ static void receive_g2h(struct xe_guc_ct *ct)
 		mutex_unlock(&ct->lock);
 
 		if (unlikely(ret == -EPROTO || ret == -EOPNOTSUPP)) {
-			xe_gt_err(ct_to_gt(ct), "CT dequeue failed: %d", ret);
+			xe_gt_err(ct_to_gt(ct), "CT dequeue failed: %d\n", ret);
 			CT_DEAD(ct, NULL, G2H_RECV);
 			kick_reset(ct);
 		}
