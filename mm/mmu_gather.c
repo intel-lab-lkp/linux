@@ -339,7 +339,8 @@ static inline void __tlb_remove_table_one(void *table)
 #else
 static inline void __tlb_remove_table_one(void *table)
 {
-	tlb_remove_table_sync_one();
+	if (IS_ENABLED(CONFIG_MMU_GATHER_RCU_TABLE_FREE))
+		synchronize_rcu();
 	__tlb_remove_table(table);
 }
 #endif /* CONFIG_PT_RECLAIM */
