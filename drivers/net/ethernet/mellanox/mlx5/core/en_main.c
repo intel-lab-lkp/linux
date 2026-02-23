@@ -969,6 +969,12 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 		/* Create a page_pool and register it with rxq */
 		struct page_pool_params pp_params = { 0 };
 
+		if (WARN_ON(BIT(PAGE_SHIFT + pool_order) / 64 >
+			    MLX5E_PAGECNT_BIAS_MAX)) {
+			err = -E2BIG;
+			goto err_free_by_rq_type;
+		}
+
 		pp_params.order     = pool_order;
 		pp_params.flags     = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV;
 		pp_params.pool_size = pool_size;
