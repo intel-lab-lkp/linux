@@ -22,6 +22,9 @@ extern "C" {
 #define DRM_QDA_GEM_CREATE		0x01
 #define DRM_QDA_GEM_MMAP_OFFSET	0x02
 #define DRM_QDA_INIT_ATTACH		0x03
+/* Indexes 0x04 to 0x06 are reserved for other requests */
+#define DRM_QDA_INVOKE			0x07
+
 /*
  * QDA IOCTL definitions
  *
@@ -35,6 +38,8 @@ extern "C" {
 #define DRM_IOCTL_QDA_GEM_MMAP_OFFSET	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_GEM_MMAP_OFFSET, \
 						 struct drm_qda_gem_mmap_offset)
 #define DRM_IOCTL_QDA_INIT_ATTACH	DRM_IO(DRM_COMMAND_BASE + DRM_QDA_INIT_ATTACH)
+#define DRM_IOCTL_QDA_INVOKE		DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_INVOKE, \
+						 struct qda_invoke_args)
 
 /**
  * struct drm_qda_query - Device information query structure
@@ -93,6 +98,22 @@ struct fastrpc_invoke_args {
 	__u64 length;
 	__s32 fd;
 	__u32 attr;
+};
+
+/**
+ * struct qda_invoke_args - User-space IOCTL arguments for invoking a function
+ * @handle: Handle identifying the remote function to invoke
+ * @sc: Scalars parameter encoding buffer counts and attributes
+ * @args: User-space pointer to the argument array
+ *
+ * This structure is passed from user-space to invoke a remote function
+ * on the DSP. The scalars parameter encodes the number and types of
+ * input/output buffers.
+ */
+struct qda_invoke_args {
+	__u32 handle;
+	__u32 sc;
+	__u64 args;
 };
 
 #if defined(__cplusplus)

@@ -63,4 +63,17 @@ int qda_ioctl_attach(struct drm_device *dev, void *data, struct drm_file *file_p
  */
 int fastrpc_release_current_dsp_process(struct qda_dev *qdev, struct drm_file *file_priv);
 
+/**
+ * qda_ioctl_invoke - Invoke a remote procedure on the DSP
+ * @dev: DRM device structure
+ * @data: User-space data containing invocation parameters
+ * @file_priv: DRM file private data
+ *
+ * This IOCTL handler initiates a remote procedure call on the DSP,
+ * marshalling arguments, executing the call, and returning results.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_ioctl_invoke(struct drm_device *dev, void *data, struct drm_file *file_priv);
+
 #endif /* _QDA_IOCTL_H */

@@ -12,6 +12,16 @@
 #include "qda_gem.h"
 #include "qda_memory_manager.h"
 
+static int copy_from_user_or_kernel(void *dst, const void __user *src, size_t size)
+{
+	if ((unsigned long)src >= PAGE_OFFSET) {
+		memcpy(dst, src, size);
+		return 0;
+	} else {
+		return copy_from_user(dst, src, size) ? -EFAULT : 0;
+	}
+}
+
 static int copy_to_user_or_kernel(void __user *dst, const void *src, size_t size)
 {
 	if ((unsigned long)dst >= PAGE_OFFSET) {
@@ -509,6 +519,41 @@ static int fastrpc_prepare_args_release_process(struct fastrpc_invoke_context *c
 	return 0;
 }
 
+static int fastrpc_prepare_args_invoke(struct fastrpc_invoke_context *ctx, char __user *argp)
+{
+	struct fastrpc_invoke_args *args = NULL;
+	struct qda_invoke_args inv;
+	int err = 0;
+	int nscalars;
+
+	if (!argp)
+		return -EINVAL;
+
+	err = copy_from_user_or_kernel(&inv, argp, sizeof(inv));
+	if (err)
+		return err;
+
+	nscalars = REMOTE_SCALARS_LENGTH(inv.sc);
+
+	if (nscalars) {
+		args = kcalloc(nscalars, sizeof(*args), GFP_KERNEL);
+		if (!args)
+			return -ENOMEM;
+
+		err = copy_from_user_or_kernel(args, (const void __user *)(uintptr_t)inv.args,
+					       nscalars * sizeof(*args));
+		if (err) {
+			kfree(args);
+			return err;
+		}
+	}
+	ctx->sc = inv.sc;
+	ctx->args = args;
+	ctx->handle = inv.handle;
+
+	return 0;
+}
+
 int fastrpc_prepare_args(struct fastrpc_invoke_context *ctx, char __user *argp)
 {
 	int err;
@@ -520,6 +565,9 @@ int fastrpc_prepare_args(struct fastrpc_invoke_context *ctx, char __user *argp)
 		break;
 	case FASTRPC_RMID_INIT_RELEASE:
 		err = fastrpc_prepare_args_release_process(ctx);
+		break;
+	case FASTRPC_RMID_INVOKE_DYNAMIC:
+		err = fastrpc_prepare_args_invoke(ctx, argp);
 		break;
 	default:
 		return -EINVAL;
