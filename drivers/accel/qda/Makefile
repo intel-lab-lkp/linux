@@ -5,4 +5,6 @@
 
 obj-$(CONFIG_DRM_ACCEL_QDA)	:= qda.o
 
-qda-y := qda_drv.o
+qda-y := \
+	qda_drv.o \
+	qda_rpmsg.o \
