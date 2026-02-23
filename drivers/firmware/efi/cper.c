@@ -26,6 +26,7 @@
 #include <acpi/ghes.h>
 #include <ras/ras_event.h>
 #include <cxl/event.h>
+#include "cper-nvidia.h"
 
 /*
  * CPER record ID need to be unique even after reboot, because record
@@ -697,6 +698,8 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 			cxl_cper_print_prot_err(newpfx, prot_err);
 		else
 			goto err_section_too_small;
+	} else if (guid_equal(sec_type, &CPER_SEC_NVIDIA)) {
+		cper_estatus_print_nvidia(newpfx, gdata);
 	} else {
 		const void *err = acpi_hest_get_payload(gdata);
 

@@ -329,6 +329,22 @@ config UEFI_CPER_X86
 	depends on UEFI_CPER && X86
 	default y
 
+config UEFI_CPER_NVIDIA
+	bool "UEFI CPER NVIDIA support"
+	depends on UEFI_CPER
+	help
+	  This option enables support for decoding NVIDIA-specific error
+	  sections in UEFI Common Platform Error Records (CPER). These
+	  sections contain additional diagnostic information for errors
+	  occurring in NVIDIA hardware such as GPUs, switches, and other
+	  devices.
+
+	  The NVIDIA CPER sections include error signatures (e.g., PCIe-DPC,
+	  DCC-ECC, GPU-STATUS) and diagnostic registers that provide detailed
+	  information about hardware errors for debugging and analysis.
+
+	  If unsure, say N.
+
 config TEE_STMM_EFI
 	tristate "TEE-based EFI runtime variable service driver"
 	depends on EFI && OPTEE
