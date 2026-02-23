@@ -108,6 +108,10 @@ struct rsc_tbl_data {
 	const uintptr_t rsc_tbl;
 } __packed;
 
+enum fw_vendor_rsc {
+	FW_RSC_VENDOR_CRASH_REASON = RSC_VENDOR_START,
+};
+
 /*
  * Hardcoded TCM bank values. This will stay in driver to maintain backward
  * compatibility with device-tree that does not have TCM information.
@@ -128,8 +132,20 @@ static const struct mem_bank_data zynqmp_tcm_banks_lockstep[] = {
 };
 
 /**
+ * struct xlnx_rproc_crash_report - resource to know crash status and reason
+ *
+ * @crash_state: if true, the rproc is notifying crash, time to recover
+ * @crash_reason: reason of crash
+ */
+struct xlnx_rproc_crash_report {
+	u32 crash_state;
+	u32 crash_reason;
+} __packed;
+
+/**
  * struct zynqmp_r5_core - remoteproc core's internal data
  *
+ * @crash_report: rproc crash state and reason
  * @rsc_tbl_va: resource table virtual address
  * @sram: Array of sram memories assigned to this core
  * @num_sram: number of sram for this core
@@ -143,6 +159,7 @@ static const struct mem_bank_data zynqmp_tcm_banks_lockstep[] = {
  * @ipi: pointer to mailbox information
  */
 struct zynqmp_r5_core {
+	struct xlnx_rproc_crash_report *crash_report;
 	void __iomem *rsc_tbl_va;
 	struct zynqmp_sram_bank *sram;
 	int num_sram;
@@ -227,10 +244,14 @@ static void handle_event_notified(struct work_struct *work)
 static void zynqmp_r5_mb_rx_cb(struct mbox_client *cl, void *msg)
 {
 	struct zynqmp_ipi_message *ipi_msg, *buf_msg;
+	struct zynqmp_r5_core *r5_core;
+	struct rproc *rproc;
 	struct mbox_info *ipi;
 	size_t len;
 
 	ipi = container_of(cl, struct mbox_info, mbox_cl);
+	r5_core = ipi->r5_core;
+	rproc = r5_core->rproc;
 
 	/* copy data from ipi buffer to r5_core */
 	ipi_msg = (struct zynqmp_ipi_message *)msg;
@@ -243,6 +264,16 @@ static void zynqmp_r5_mb_rx_cb(struct mbox_client *cl, void *msg)
 	}
 	buf_msg->len = len;
 	memcpy(buf_msg->data, ipi_msg->data, len);
+
+	/* Check for crash only if rproc crash is expected */
+	if (rproc->state == RPROC_ATTACHED || rproc->state == RPROC_RUNNING) {
+		if (r5_core->crash_report && r5_core->crash_report->crash_state) {
+			rproc_report_crash(rproc,
+					   r5_core->crash_report->crash_reason);
+			r5_core->crash_report->crash_state = 0;
+			r5_core->crash_report->crash_reason = 0;
+		}
+	}
 
 	/* received and processed interrupt ack */
 	if (mbox_send_message(ipi->rx_chan, NULL) < 0)
@@ -437,6 +468,13 @@ static int zynqmp_r5_rproc_stop(struct rproc *rproc)
 				     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
 	if (ret)
 		dev_err(r5_core->dev, "core force power down failed\n");
+
+	/*
+	 * Clear attach on recovery flag during stop operation. The next state
+	 * of the remote processor is expected to be "Running" state. In this
+	 * state boot recovery method must take place over attach on recovery.
+	 */
+	test_and_clear_bit(RPROC_FEAT_ATTACH_ON_RECOVERY, rproc->features);
 
 	return ret;
 }
@@ -859,6 +897,9 @@ static int zynqmp_r5_get_rsc_table_va(struct zynqmp_r5_core *r5_core)
 
 static int zynqmp_r5_attach(struct rproc *rproc)
 {
+	/* Enable attach on recovery method. Clear it during rproc stop. */
+	rproc_set_feature(rproc, RPROC_FEAT_ATTACH_ON_RECOVERY);
+
 	dev_dbg(&rproc->dev, "rproc %d attached\n", rproc->index);
 
 	return 0;
@@ -873,7 +914,23 @@ static int zynqmp_r5_detach(struct rproc *rproc)
 	 */
 	zynqmp_r5_rproc_kick(rproc, 0);
 
+	clear_bit(RPROC_FEAT_ATTACH_ON_RECOVERY, rproc->features);
+
 	return 0;
+}
+
+static int zynqmp_r5_handle_rsc(struct rproc *rproc, u32 rsc_type, void *rsc,
+				int offset, int avail)
+{
+	struct zynqmp_r5_core *r5_core = rproc->priv;
+	void *rsc_offset = (r5_core->rsc_tbl_va + offset);
+
+	if (rsc_type == FW_RSC_VENDOR_CRASH_REASON)
+		r5_core->crash_report = (struct xlnx_rproc_crash_report *)(rsc_offset);
+	else
+		return RSC_IGNORED;
+
+	return RSC_HANDLED;
 }
 
 static const struct rproc_ops zynqmp_r5_rproc_ops = {
@@ -890,6 +947,7 @@ static const struct rproc_ops zynqmp_r5_rproc_ops = {
 	.get_loaded_rsc_table = zynqmp_r5_get_loaded_rsc_table,
 	.attach		= zynqmp_r5_attach,
 	.detach		= zynqmp_r5_detach,
+	.handle_rsc	= zynqmp_r5_handle_rsc,
 };
 
 /**
@@ -923,7 +981,7 @@ static struct zynqmp_r5_core *zynqmp_r5_add_rproc_core(struct device *cdev)
 
 	rproc_coredump_set_elf_info(r5_rproc, ELFCLASS32, EM_ARM);
 
-	r5_rproc->recovery_disabled = true;
+	r5_rproc->recovery_disabled = false;
 	r5_rproc->has_iommu = false;
 	r5_rproc->auto_boot = false;
 	r5_core = r5_rproc->priv;
