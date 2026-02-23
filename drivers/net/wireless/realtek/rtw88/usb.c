@@ -1046,13 +1046,17 @@ static int rtw_usb_intf_init(struct rtw_dev *rtwdev,
 
 	rtwusb->udev = udev;
 	ret = rtw_usb_parse(rtwdev, intf);
-	if (ret)
+	if (ret) {
+		usb_put_dev(udev);
 		return ret;
+	}
 
 	rtwusb->usb_data = kcalloc(RTW_USB_MAX_RXTX_COUNT, sizeof(u32),
 				   GFP_KERNEL);
-	if (!rtwusb->usb_data)
+	if (!rtwusb->usb_data) {
+		usb_put_dev(udev);
 		return -ENOMEM;
+	}
 
 	usb_set_intfdata(intf, rtwdev->hw);
 
