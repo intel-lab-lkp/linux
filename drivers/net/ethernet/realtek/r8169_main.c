@@ -5337,7 +5337,7 @@ static int rtl_alloc_irq(struct rtl8169_private *tp)
 		break;
 	}
 
-	return pci_alloc_irq_vectors(tp->pci_dev, 1, 1, flags);
+	return pcim_alloc_irq_vectors(tp->pci_dev, 1, 1, flags);
 }
 
 static void rtl_read_mac_address(struct rtl8169_private *tp,
