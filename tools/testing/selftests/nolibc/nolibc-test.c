@@ -1839,6 +1839,9 @@ static int run_printf(int min, int max)
 		CASE_TEST(unsigned_max); EXPECT_VFPRINTF(1, "4294967295", "%u", ~0u); break;
 		CASE_TEST(char);         EXPECT_VFPRINTF(1, "c", "%c", 'c'); break;
 		CASE_TEST(char);         EXPECT_VFPRINTF(1, "|c|d|   e|", "|%c|%.0c|%4c|", 'c', 'd', 'e'); break;
+		CASE_TEST(octal);        EXPECT_VFPRINTF(1, "|17|  0033||", "|%o|%6.4o|%.0o|", 017, 033, 0); break;
+		CASE_TEST(octal_max);    EXPECT_VFPRINTF(1, "1777777777777777777777", "%llo", ~0ULL); break;
+		CASE_TEST(octal_alt);    EXPECT_VFPRINTF(1, "|0|01|02|034|0|", "|%#o|%#o|%#02o|%#02o|%#.0o|", 0, 1, 2, 034, 0); break;
 		CASE_TEST(hex_nolibc);   EXPECT_VFPRINTF(is_nolibc, "|f|d|", "|%x|%X|", 0xf, 0xd); break;
 		CASE_TEST(hex_libc);     EXPECT_VFPRINTF(!is_nolibc, "|f|D|", "|%x|%X|", 0xf, 0xd); break;
 		CASE_TEST(pointer);      EXPECT_VFPRINTF(1, "0x1", "%p", (void *) 0x1); break;
