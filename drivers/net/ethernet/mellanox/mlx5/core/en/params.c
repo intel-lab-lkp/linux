@@ -10,6 +10,7 @@
 #include <linux/dim.h>
 #include <net/page_pool/types.h>
 #include <net/xdp_sock_drv.h>
+#include <net/netdev_queues.h>
 
 #define MLX5_MPWRQ_MAX_LOG_WQE_SZ 18
 #define MLX5_REP_MPWRQ_MAX_LOG_WQE_SZ 17
@@ -24,11 +25,17 @@ static u8 mlx5e_mpwrq_min_page_shift(struct mlx5_core_dev *mdev)
 u8 mlx5e_mpwrq_page_shift(struct mlx5_core_dev *mdev,
 			  struct mlx5e_rq_opt_param *rqo)
 {
+	struct netdev_queue_config *qcfg = rqo ? rqo->qcfg : NULL;
 	struct mlx5e_xsk_param *xsk = mlx5e_rqo_xsk_param(rqo);
 	u8 min_page_shift = mlx5e_mpwrq_min_page_shift(mdev);
 	u8 req_page_shift;
 
-	req_page_shift = xsk ? order_base_2(xsk->chunk_size) : PAGE_SHIFT;
+	if (xsk)
+		req_page_shift = order_base_2(xsk->chunk_size);
+	else if (qcfg && qcfg->rx_page_size)
+		req_page_shift = order_base_2(qcfg->rx_page_size);
+	else
+		req_page_shift = PAGE_SHIFT;
 
 	/* Regular RQ uses order-0 pages, the NIC must be able to map them. */
 	if (WARN_ON_ONCE(!xsk && req_page_shift < min_page_shift))
@@ -1283,12 +1290,15 @@ void mlx5e_build_xdpsq_param(struct mlx5_core_dev *mdev,
 
 int mlx5e_build_channel_param(struct mlx5_core_dev *mdev,
 			      struct mlx5e_params *params,
+			      struct netdev_queue_config *qcfg,
 			      struct mlx5e_channel_param *cparam)
 {
 	u8 icosq_log_wq_sz, async_icosq_log_wq_sz;
 	int err;
 
-	err = mlx5e_build_rq_param(mdev, params, NULL, &cparam->rq);
+	cparam->rq_opt.qcfg = qcfg;
+
+	err = mlx5e_build_rq_param(mdev, params, &cparam->rq_opt, &cparam->rq);
 	if (err)
 		return err;
 
