@@ -76,7 +76,7 @@ Each struct __queue has its own locks, already.
 Other items in mlme_priv are protected by mlme_priv.lock, while items in
 xmit_priv are protected by xmit_priv.lock.
 
-To avoid possible dead lock, any thread trying to modifiying mlme_priv
+To avoid possible dead lock, any thread trying to modifying mlme_priv
 SHALL not lock up more than one locks at a time!
 
 The only exception is that queue functions which take the __queue.lock
