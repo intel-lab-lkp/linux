@@ -120,6 +120,7 @@ struct drm_dp_as_sdp {
 	unsigned char sdp_type;
 	unsigned char revision;
 	unsigned char length;
+	int version;
 	int vtotal;
 	int target_rr;
 	int duration_incr_ms;
