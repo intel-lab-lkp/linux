@@ -3577,7 +3577,7 @@ static bool rockchip_pinconf_pull_valid(struct rockchip_pin_ctrl *ctrl,
 		return (pull == PIN_CONFIG_BIAS_PULL_PIN_DEFAULT ||
 					pull == PIN_CONFIG_BIAS_DISABLE);
 	case RK3066B:
-		return pull ? false : true;
+		return pull == PIN_CONFIG_BIAS_BUS_HOLD;
 	case PX30:
 	case RV1108:
 	case RV1126:
