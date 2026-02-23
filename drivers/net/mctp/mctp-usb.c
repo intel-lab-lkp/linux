@@ -355,6 +355,7 @@ err_free_urbs:
 	usb_free_urb(dev->tx_urb);
 	usb_free_urb(dev->rx_urb);
 	free_netdev(netdev);
+	usb_put_dev(dev->usbdev);
 	return rc;
 }
 
