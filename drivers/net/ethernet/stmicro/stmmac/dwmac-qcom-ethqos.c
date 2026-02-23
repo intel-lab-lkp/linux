@@ -647,7 +647,6 @@ static void ethqos_fix_mac_speed(void *priv, int speed, unsigned int mode)
 {
 	struct qcom_ethqos *ethqos = priv;
 
-	qcom_ethqos_set_sgmii_loopback(ethqos, false);
 	ethqos_update_link_clk(ethqos, speed);
 	ethqos_configure(ethqos, speed);
 }
@@ -682,6 +681,17 @@ static void qcom_ethqos_serdes_powerdown(struct net_device *ndev, void *priv)
 
 	phy_power_off(ethqos->serdes_phy);
 	phy_exit(ethqos->serdes_phy);
+}
+
+static int ethqos_mac_finish_serdes(struct net_device *ndev, void *priv,
+				    unsigned int mode,
+				    phy_interface_t interface)
+{
+	struct qcom_ethqos *ethqos = priv;
+
+	qcom_ethqos_set_sgmii_loopback(ethqos, false);
+
+	return 0;
 }
 
 static int ethqos_clks_config(void *priv, bool enabled)
@@ -770,6 +780,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	case PHY_INTERFACE_MODE_2500BASEX:
 	case PHY_INTERFACE_MODE_SGMII:
 		ethqos->configure_func = ethqos_configure_sgmii;
+		plat_dat->mac_finish = ethqos_mac_finish_serdes;
 		break;
 	default:
 		dev_err(dev, "Unsupported phy mode %s\n",
