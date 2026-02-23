@@ -9,5 +9,6 @@ qda-y := \
 	qda_drv.o \
 	qda_rpmsg.o \
 	qda_cb.o \
+	qda_memory_manager.o \
 
 obj-$(CONFIG_DRM_ACCEL_QDA_COMPUTE_BUS) += qda_compute_bus.o

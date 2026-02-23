@@ -7,6 +7,7 @@
 #include <linux/iommu.h>
 #include <linux/slab.h>
 #include "qda_drv.h"
+#include "qda_memory_manager.h"
 #include "qda_cb.h"
 
 static void qda_cb_dev_release(struct device *dev)
@@ -33,10 +34,15 @@ static int qda_configure_cb_iommu(struct device *cb_dev, struct device_node *cb_
 
 static int qda_cb_setup_device(struct qda_dev *qdev, struct device *cb_dev)
 {
+	struct qda_iommu_device *iommu_dev;
 	int rc;
 	u32 sid, pa_bits = 32;
 
 	qda_dbg(qdev, "Setting up CB device %s\n", dev_name(cb_dev));
+
+	iommu_dev = kzalloc_obj(*iommu_dev, GFP_KERNEL);
+	if (!iommu_dev)
+		return -ENOMEM;
 
 	if (of_property_read_u32(cb_dev->of_node, "reg", &sid)) {
 		qda_dbg(qdev, "No 'reg' property found, defaulting SID to 0\n");
@@ -46,6 +52,18 @@ static int qda_cb_setup_device(struct qda_dev *qdev, struct device *cb_dev)
 	rc = dma_set_mask(cb_dev, DMA_BIT_MASK(pa_bits));
 	if (rc) {
 		qda_err(qdev, "%d bit DMA enable failed: %d\n", pa_bits, rc);
+		kfree(iommu_dev);
+		return rc;
+	}
+
+	iommu_dev->dev = cb_dev;
+	iommu_dev->sid = sid;
+	snprintf(iommu_dev->name, sizeof(iommu_dev->name), "qda_iommu_dev_%u", sid);
+
+	rc = qda_memory_manager_register_device(qdev->iommu_mgr, iommu_dev);
+	if (rc) {
+		qda_err(qdev, "Failed to register IOMMU device: %d\n", rc);
+		kfree(iommu_dev);
 		return rc;
 	}
 
@@ -127,6 +145,8 @@ cleanup_device_init:
 void qda_destroy_cb_device(struct device *cb_dev)
 {
 	struct iommu_group *group;
+	struct qda_iommu_device *iommu_dev;
+	struct qda_dev *qdev;
 
 	if (!cb_dev) {
 		qda_dbg(NULL, "NULL CB device passed to destroy\n");
@@ -134,6 +154,18 @@ void qda_destroy_cb_device(struct device *cb_dev)
 	}
 
 	qda_dbg(NULL, "Destroying CB device %s\n", dev_name(cb_dev));
+
+	iommu_dev = dev_get_drvdata(cb_dev);
+	if (iommu_dev) {
+		if (cb_dev->parent) {
+			qdev = dev_get_drvdata(cb_dev->parent);
+			if (qdev && qdev->iommu_mgr) {
+				qda_dbg(NULL, "Unregistering IOMMU device for %s\n",
+					dev_name(cb_dev));
+				qda_memory_manager_unregister_device(qdev->iommu_mgr, iommu_dev);
+			}
+		}
+	}
 
 	group = iommu_group_get(cb_dev);
 	if (group) {

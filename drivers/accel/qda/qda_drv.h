@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/rpmsg.h>
 #include <linux/xarray.h>
+#include "qda_memory_manager.h"
 
 /* Driver identification */
 #define DRIVER_NAME "qda"
@@ -23,6 +24,8 @@ struct qda_dev {
 	struct device *dev;
 	/* Mutex protecting device state */
 	struct mutex lock;
+	/* IOMMU/memory manager */
+	struct qda_memory_manager *iommu_mgr;
 	/* Flag indicating device removal in progress */
 	atomic_t removing;
 	/* Name of the DSP (e.g., "cdsp", "adsp") */
