@@ -774,6 +774,11 @@ struct i2c_adapter {
 #define i2c_info(adap, fmt, ...) dev_info(&(adap)->dev, fmt, ##__VA_ARGS__)
 #define i2c_dbg(adap, fmt, ...) dev_dbg(&(adap)->dev, fmt, ##__VA_ARGS__)
 
+static inline struct device *i2c_adapter_dev(struct i2c_adapter *adap)
+{
+	return &adap->dev;
+}
+
 static inline void *i2c_get_adapdata(const struct i2c_adapter *adap)
 {
 	return dev_get_drvdata(&adap->dev);
