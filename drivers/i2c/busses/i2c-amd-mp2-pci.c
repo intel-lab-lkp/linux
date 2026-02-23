@@ -313,7 +313,7 @@ static int amd_mp2_pci_init(struct amd_mp2_dev *privdata,
 
 	/* request and enable interrupt */
 	writel(0, privdata->mmio + AMD_P2C_MSG_INTEN);
-	rc = pci_alloc_irq_vectors(pci_dev, 1, 1, PCI_IRQ_ALL_TYPES);
+	rc = pcim_alloc_irq_vectors(pci_dev, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (rc < 0) {
 		dev_err(&pci_dev->dev, "Failed to allocate single IRQ err=%d\n", rc);
 		goto err_dma_mask;
