@@ -330,8 +330,10 @@ static int cros_ec_keyb_work(struct notifier_block *nb,
 {
 	struct cros_ec_keyb *ckdev = container_of(nb, struct cros_ec_keyb,
 						  notifier);
-	u32 val;
+	struct ec_response_get_next_event_v3 *event_data;
+	unsigned int event_size;
 	unsigned int ev_type;
+	u32 val;
 
 	/*
 	 * If not wake enabled, discard key state changes during
@@ -341,32 +343,32 @@ static int cros_ec_keyb_work(struct notifier_block *nb,
 	if (queued_during_suspend && !device_may_wakeup(ckdev->dev))
 		return NOTIFY_OK;
 
-	switch (ckdev->ec->event_data.event_type) {
+	event_data = &ckdev->ec->event_data;
+	event_size = ckdev->ec->event_size;
+
+	switch (event_data->event_type) {
 	case EC_MKBP_EVENT_KEY_MATRIX:
 		pm_wakeup_event(ckdev->dev, 0);
 
 		if (!ckdev->idev) {
-			dev_warn_once(ckdev->dev,
-				      "Unexpected key matrix event\n");
+			dev_warn_once(ckdev->dev, "Unexpected key matrix event\n");
 			return NOTIFY_OK;
 		}
 
-		if (ckdev->ec->event_size != ckdev->cols) {
+		if (event_size != ckdev->cols) {
 			dev_err(ckdev->dev,
 				"Discarded key matrix event, unexpected length: %d != %d\n",
 				ckdev->ec->event_size, ckdev->cols);
 			return NOTIFY_OK;
 		}
 
-		cros_ec_keyb_process(ckdev,
-				     ckdev->ec->event_data.data.key_matrix,
-				     ckdev->ec->event_size);
+		cros_ec_keyb_process(ckdev, event_data->data.key_matrix, event_size);
 		break;
 
 	case EC_MKBP_EVENT_SYSRQ:
 		pm_wakeup_event(ckdev->dev, 0);
 
-		val = get_unaligned_le32(&ckdev->ec->event_data.data.sysrq);
+		val = get_unaligned_le32(&event_data->data.sysrq);
 		dev_dbg(ckdev->dev, "sysrq code from EC: %#x\n", val);
 		handle_sysrq(val);
 		break;
@@ -375,13 +377,11 @@ static int cros_ec_keyb_work(struct notifier_block *nb,
 	case EC_MKBP_EVENT_SWITCH:
 		pm_wakeup_event(ckdev->dev, 0);
 
-		if (ckdev->ec->event_data.event_type == EC_MKBP_EVENT_BUTTON) {
-			val = get_unaligned_le32(
-					&ckdev->ec->event_data.data.buttons);
+		if (event_data->event_type == EC_MKBP_EVENT_BUTTON) {
+			val = get_unaligned_le32(&event_data->data.buttons);
 			ev_type = EV_KEY;
 		} else {
-			val = get_unaligned_le32(
-					&ckdev->ec->event_data.data.switches);
+			val = get_unaligned_le32(&event_data->data.switches);
 			ev_type = EV_SW;
 		}
 		cros_ec_keyb_report_bs(ckdev, ev_type, val);
@@ -410,7 +410,7 @@ static void cros_ec_keyb_compute_valid_keys(struct cros_ec_keyb *ckdev)
 	for (col = 0; col < ckdev->cols; col++) {
 		for (row = 0; row < ckdev->rows; row++) {
 			code = keymap[MATRIX_SCAN_CODE(row, col, row_shift)];
-			if (code && (code != KEY_BATTERY))
+			if (code != KEY_RESERVED && code != KEY_BATTERY)
 				ckdev->valid_keys[col] |= BIT(row);
 		}
 		dev_dbg(ckdev->dev, "valid_keys[%02d] = 0x%02x\n",
