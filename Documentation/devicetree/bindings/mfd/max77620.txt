@@ -6,10 +6,12 @@ Required properties:
 		"maxim,max77620"
 		"maxim,max20024"
 		"maxim,max77663"
-- reg: I2C device address.
+- reg: I2C device address. In case of MAX77663 there can be 2 addresses,
+       second one specifies position of RTC.
 
 Optional properties:
 -------------------
+- reg-names:		If 2 addresses are specified then, must be "pmic", "rtc"
 - interrupts:		The interrupt on the parent the controller is
 			connected to.
 - interrupt-controller: Marks the device node as an interrupt controller.
