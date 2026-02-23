@@ -210,6 +210,7 @@ void erofs_release_pages(struct page **pagepool)
 			}
 			spin_unlock(&z_erofs_rsvbuf->lock);
 		}
+		set_page_private(page, 0);
 		put_page(page);
 	}
 }
