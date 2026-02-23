@@ -2184,10 +2184,22 @@ static unsigned long reclaim_high(struct mem_cgroup *memcg,
 
 	do {
 		unsigned long pflags;
+		nodemask_t toptier_nodes, *reclaim_nodes;
+		bool mem_high_ok, toptier_high_ok;
 
-		if (page_counter_read(&memcg->memory) <=
-		    READ_ONCE(memcg->memory.high))
+		mt_get_toptier_nodemask(&toptier_nodes, NULL);
+		mem_high_ok = page_counter_read(&memcg->memory) <=
+			      READ_ONCE(memcg->memory.high);
+		toptier_high_ok = !(tier_aware_memcg_limits &&
+				    mem_cgroup_toptier_usage(memcg) >
+				    page_counter_toptier_high(&memcg->memory));
+		if (mem_high_ok && toptier_high_ok)
 			continue;
+
+		if (mem_high_ok && !toptier_high_ok)
+			reclaim_nodes = &toptier_nodes;
+		else
+			reclaim_nodes = NULL;
 
 		memcg_memory_event(memcg, MEMCG_HIGH);
 
@@ -2195,7 +2207,7 @@ static unsigned long reclaim_high(struct mem_cgroup *memcg,
 		nr_reclaimed += try_to_free_mem_cgroup_pages(memcg, nr_pages,
 							gfp_mask,
 							MEMCG_RECLAIM_MAY_SWAP,
-							NULL);
+							NULL, reclaim_nodes);
 		psi_memstall_leave(&pflags);
 	} while ((memcg = parent_mem_cgroup(memcg)) &&
 		 !mem_cgroup_is_root(memcg));
@@ -2296,6 +2308,24 @@ static u64 mem_find_max_overage(struct mem_cgroup *memcg)
 	return max_overage;
 }
 
+static u64 toptier_find_max_overage(struct mem_cgroup *memcg)
+{
+	u64 overage, max_overage = 0;
+
+	if (!tier_aware_memcg_limits)
+		return 0;
+
+	do {
+		unsigned long usage = mem_cgroup_toptier_usage(memcg);
+		unsigned long high = page_counter_toptier_high(&memcg->memory);
+
+		overage = calculate_overage(usage, high);
+		max_overage = max(overage, max_overage);
+	} while ((memcg = parent_mem_cgroup(memcg)) &&
+		  !mem_cgroup_is_root(memcg));
+
+	return max_overage;
+}
 static u64 swap_find_max_overage(struct mem_cgroup *memcg)
 {
 	u64 overage, max_overage = 0;
@@ -2402,6 +2432,14 @@ retry_reclaim:
 						swap_find_max_overage(memcg));
 
 	/*
+	 * Don't double-penalize for toptier high overage if system-wide
+	 * memory.high has already been breached.
+	 */
+	if (!penalty_jiffies)
+		penalty_jiffies += calculate_high_delay(memcg, nr_pages,
+					toptier_find_max_overage(memcg));
+
+	/*
 	 * Clamp the max delay per usermode return so as to still keep the
 	 * application moving forwards and also permit diagnostics, albeit
 	 * extremely slowly.
@@ -2503,7 +2541,8 @@ retry:
 
 	psi_memstall_enter(&pflags);
 	nr_reclaimed = try_to_free_mem_cgroup_pages(mem_over_limit, nr_pages,
-						    gfp_mask, reclaim_options, NULL);
+						    gfp_mask, reclaim_options,
+						    NULL, NULL);
 	psi_memstall_leave(&pflags);
 
 	if (mem_cgroup_margin(mem_over_limit) >= nr_pages)
@@ -2592,23 +2631,26 @@ done_restock:
 	 * reclaim, the cost of mismatch is negligible.
 	 */
 	do {
-		bool mem_high, swap_high;
+		bool mem_high, swap_high, toptier_high = false;
 
 		mem_high = page_counter_read(&memcg->memory) >
 			READ_ONCE(memcg->memory.high);
 		swap_high = page_counter_read(&memcg->swap) >
 			READ_ONCE(memcg->swap.high);
+		toptier_high = tier_aware_memcg_limits &&
+			       (mem_cgroup_toptier_usage(memcg) >
+				page_counter_toptier_high(&memcg->memory));
 
 		/* Don't bother a random interrupted task */
 		if (!in_task()) {
-			if (mem_high) {
+			if (mem_high || toptier_high) {
 				schedule_work(&memcg->high_work);
 				break;
 			}
 			continue;
 		}
 
-		if (mem_high || swap_high) {
+		if (mem_high || swap_high || toptier_high) {
 			/*
 			 * The allocating tasks in this cgroup will need to do
 			 * reclaim or be throttled to prevent further growth
@@ -4475,7 +4517,7 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
 	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
 	bool drained = false;
-	unsigned long high;
+	unsigned long high, toptier_high;
 	int err;
 
 	buf = strstrip(buf);
@@ -4484,15 +4526,22 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 		return err;
 
 	page_counter_set_high(&memcg->memory, high);
+	toptier_high = page_counter_toptier_high(&memcg->memory);
 
 	if (of->file->f_flags & O_NONBLOCK)
 		goto out;
 
 	for (;;) {
 		unsigned long nr_pages = page_counter_read(&memcg->memory);
+		unsigned long toptier_pages = mem_cgroup_toptier_usage(memcg);
 		unsigned long reclaimed;
+		unsigned long to_free;
+		nodemask_t toptier_nodes, *reclaim_nodes;
+		bool mem_high_ok = nr_pages <= high;
+		bool toptier_high_ok = !(tier_aware_memcg_limits &&
+					 toptier_pages > toptier_high);
 
-		if (nr_pages <= high)
+		if (mem_high_ok && toptier_high_ok)
 			break;
 
 		if (signal_pending(current))
@@ -4504,8 +4553,17 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 			continue;
 		}
 
-		reclaimed = try_to_free_mem_cgroup_pages(memcg, nr_pages - high,
-					GFP_KERNEL, MEMCG_RECLAIM_MAY_SWAP, NULL);
+		mt_get_toptier_nodemask(&toptier_nodes, NULL);
+		if (mem_high_ok && !toptier_high_ok) {
+			reclaim_nodes = &toptier_nodes;
+			to_free = toptier_pages - toptier_high;
+		} else {
+			reclaim_nodes = NULL;
+			to_free = nr_pages - high;
+		}
+		reclaimed = try_to_free_mem_cgroup_pages(memcg, to_free,
+					GFP_KERNEL, MEMCG_RECLAIM_MAY_SWAP,
+					NULL, reclaim_nodes);
 
 		if (!reclaimed && !nr_retries--)
 			break;
@@ -4557,7 +4615,8 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 
 		if (nr_reclaims) {
 			if (!try_to_free_mem_cgroup_pages(memcg, nr_pages - max,
-					GFP_KERNEL, MEMCG_RECLAIM_MAY_SWAP, NULL))
+					GFP_KERNEL, MEMCG_RECLAIM_MAY_SWAP,
+					NULL, NULL))
 				nr_reclaims--;
 			continue;
 		}
