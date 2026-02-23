@@ -103,8 +103,8 @@ int hbg_irq_init(struct hbg_priv *priv)
 	u32 i;
 
 	/* used pcim_enable_device(),  so the vectors become device managed */
-	ret = pci_alloc_irq_vectors(priv->pdev, HBG_VECTOR_NUM, HBG_VECTOR_NUM,
-				    PCI_IRQ_MSI | PCI_IRQ_MSIX);
+	ret = pcim_alloc_irq_vectors(priv->pdev, HBG_VECTOR_NUM, HBG_VECTOR_NUM,
+				     PCI_IRQ_MSI | PCI_IRQ_MSIX);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "failed to allocate vectors\n");
 
