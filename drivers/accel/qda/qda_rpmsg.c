@@ -5,7 +5,11 @@
 #include <linux/of_platform.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/completion.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
 #include "qda_drv.h"
+#include "qda_fastrpc.h"
 #include "qda_rpmsg.h"
 #include "qda_cb.h"
 
@@ -15,7 +19,104 @@ static int qda_rpmsg_init(struct qda_dev *qdev)
 	return 0;
 }
 
-/* Utility function to allocate and initialize qda_dev */
+static int validate_device_availability(struct qda_dev *qdev)
+{
+	struct rpmsg_device *rpdev;
+
+	if (!qdev)
+		return -ENODEV;
+
+	if (atomic_read(&qdev->removing)) {
+		qda_dbg(qdev, "RPMsg device unavailable: removing\n");
+		return -ENODEV;
+	}
+
+	mutex_lock(&qdev->lock);
+	rpdev = qdev->rpdev;
+	mutex_unlock(&qdev->lock);
+
+	if (!rpdev) {
+		qda_dbg(qdev, "RPMsg device unavailable: rpdev is NULL\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static struct fastrpc_invoke_context *get_and_validate_context(struct qda_msg *msg,
+							       struct qda_dev *qdev)
+{
+	struct fastrpc_invoke_context *ctx = msg->fastrpc_ctx;
+
+	if (!ctx) {
+		qda_dbg(qdev, "FastRPC context not found in message\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	kref_get(&ctx->refcount);
+	return ctx;
+}
+
+static void populate_fastrpc_msg(struct fastrpc_msg *dst, struct qda_msg *src)
+{
+	dst->client_id = src->client_id;
+	dst->tid = src->tid;
+	dst->ctx = src->ctx;
+	dst->handle = src->handle;
+	dst->sc = src->sc;
+	dst->addr = src->addr;
+	dst->size = src->size;
+}
+
+static int validate_callback_params(struct qda_dev *qdev, void *data, int len)
+{
+	if (!qdev)
+		return -ENODEV;
+
+	if (atomic_read(&qdev->removing))
+		return -ENODEV;
+
+	if (len < sizeof(struct qda_invoke_rsp)) {
+		qda_dbg(qdev, "Invalid message size from remote: %d\n", len);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static unsigned long extract_context_id(struct qda_invoke_rsp *resp_msg)
+{
+	return (resp_msg->ctx & 0xFF0) >> 4;
+}
+
+static struct fastrpc_invoke_context *find_context_by_id(struct qda_dev *qdev,
+							 unsigned long ctxid)
+{
+	struct fastrpc_invoke_context *ctx;
+
+	{
+		unsigned long flags;
+
+		xa_lock_irqsave(&qdev->ctx_xa, flags);
+		ctx = xa_load(&qdev->ctx_xa, ctxid);
+		xa_unlock_irqrestore(&qdev->ctx_xa, flags);
+	}
+
+	if (!ctx) {
+		qda_dbg(qdev, "FastRPC context not found for ctxid: %lu\n", ctxid);
+		return ERR_PTR(-ENOENT);
+	}
+
+	return ctx;
+}
+
+static void complete_context_processing(struct fastrpc_invoke_context *ctx, int retval)
+{
+	ctx->retval = retval;
+	complete(&ctx->work);
+	kref_put(&ctx->refcount, fastrpc_context_free);
+}
+
 static struct qda_dev *alloc_and_init_qdev(struct rpmsg_device *rpdev)
 {
 	struct qda_dev *qdev;
@@ -62,9 +163,68 @@ static int qda_populate_child_devices(struct qda_dev *qdev, struct device_node *
 	return success > 0 ? 0 : (count > 0 ? -ENODEV : 0);
 }
 
+int qda_rpmsg_send_msg(struct qda_dev *qdev, struct qda_msg *msg)
+{
+	int ret;
+	struct fastrpc_invoke_context *ctx;
+	struct fastrpc_msg msg1;
+	struct rpmsg_device *rpdev;
+
+	ret = validate_device_availability(qdev);
+	if (ret)
+		return ret;
+
+	ctx = get_and_validate_context(msg, qdev);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
+
+	populate_fastrpc_msg(&msg1, msg);
+
+	mutex_lock(&qdev->lock);
+	rpdev = qdev->rpdev;
+	if (!rpdev) {
+		mutex_unlock(&qdev->lock);
+		kref_put(&ctx->refcount, fastrpc_context_free);
+		return -ENODEV;
+	}
+
+	ret = rpmsg_send(rpdev->ept, (void *)&msg1, sizeof(msg1));
+	mutex_unlock(&qdev->lock);
+
+	if (ret) {
+		qda_err(qdev, "rpmsg_send failed: %d\n", ret);
+		kref_put(&ctx->refcount, fastrpc_context_free);
+		return ret;
+	}
+
+	return 0;
+}
+
+int qda_rpmsg_wait_for_rsp(struct fastrpc_invoke_context *ctx)
+{
+	return wait_for_completion_interruptible(&ctx->work);
+}
+
 static int qda_rpmsg_cb(struct rpmsg_device *rpdev, void *data, int len, void *priv, u32 src)
 {
-	/* Dummy function for rpmsg driver */
+	struct qda_dev *qdev = dev_get_drvdata(&rpdev->dev);
+	struct qda_invoke_rsp *resp_msg = (struct qda_invoke_rsp *)data;
+	struct fastrpc_invoke_context *ctx;
+	unsigned long ctxid;
+	int ret;
+
+	ret = validate_callback_params(qdev, data, len);
+	if (ret)
+		return ret;
+
+	ctxid = extract_context_id(resp_msg);
+
+	ctx = find_context_by_id(qdev, ctxid);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
+
+	complete_context_processing(ctx, resp_msg->retval);
+
 	return 0;
 }
 

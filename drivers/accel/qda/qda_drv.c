@@ -120,6 +120,8 @@ static void qda_postclose(struct drm_device *dev, struct drm_file *file)
 		return;
 	}
 
+	fastrpc_release_current_dsp_process(qdev, file);
+
 	qda_file_priv = (struct qda_file_priv *)file->driver_priv;
 	if (qda_file_priv) {
 		if (qda_file_priv->assigned_iommu_dev) {
@@ -159,6 +161,7 @@ static const struct drm_ioctl_desc qda_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QDA_QUERY, qda_ioctl_query, 0),
 	DRM_IOCTL_DEF_DRV(QDA_GEM_CREATE, qda_ioctl_gem_create, 0),
 	DRM_IOCTL_DEF_DRV(QDA_GEM_MMAP_OFFSET, qda_ioctl_gem_mmap_offset, 0),
+	DRM_IOCTL_DEF_DRV(QDA_INIT_ATTACH, qda_ioctl_attach, 0),
 };
 
 static struct drm_driver qda_drm_driver = {
@@ -195,6 +198,7 @@ static void cleanup_iommu_manager(struct qda_dev *qdev)
 
 static void cleanup_device_resources(struct qda_dev *qdev)
 {
+	xa_destroy(&qdev->ctx_xa);
 	mutex_destroy(&qdev->lock);
 }
 
@@ -213,6 +217,7 @@ static void init_device_resources(struct qda_dev *qdev)
 	mutex_init(&qdev->lock);
 	atomic_set(&qdev->removing, 0);
 	atomic_set(&qdev->client_id_counter, 0);
+	xa_init_flags(&qdev->ctx_xa, XA_FLAGS_ALLOC1);
 }
 
 static int init_memory_manager(struct qda_dev *qdev)

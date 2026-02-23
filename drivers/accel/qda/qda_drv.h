@@ -92,6 +92,8 @@ struct qda_dev {
 	char dsp_name[16];
 	/* Compute context-bank (CB) child devices */
 	struct list_head cb_devs;
+	/* XArray for context management */
+	struct xarray ctx_xa;
 };
 
 /**

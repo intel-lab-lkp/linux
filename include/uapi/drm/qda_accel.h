@@ -21,6 +21,7 @@ extern "C" {
 #define DRM_QDA_QUERY	0x00
 #define DRM_QDA_GEM_CREATE		0x01
 #define DRM_QDA_GEM_MMAP_OFFSET	0x02
+#define DRM_QDA_INIT_ATTACH		0x03
 /*
  * QDA IOCTL definitions
  *
@@ -33,6 +34,7 @@ extern "C" {
 						 struct drm_qda_gem_create)
 #define DRM_IOCTL_QDA_GEM_MMAP_OFFSET	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_GEM_MMAP_OFFSET, \
 						 struct drm_qda_gem_mmap_offset)
+#define DRM_IOCTL_QDA_INIT_ATTACH	DRM_IO(DRM_COMMAND_BASE + DRM_QDA_INIT_ATTACH)
 
 /**
  * struct drm_qda_query - Device information query structure
@@ -74,6 +76,23 @@ struct drm_qda_gem_mmap_offset {
 	__u32 handle;
 	__u32 pad;
 	__u64 offset;
+};
+
+/**
+ * struct fastrpc_invoke_args - FastRPC invocation argument descriptor
+ * @ptr: Pointer to argument data (user virtual address)
+ * @length: Length of the argument data in bytes
+ * @fd: File descriptor for buffer arguments, -1 for scalar arguments
+ * @attr: Argument attributes and flags
+ *
+ * This structure describes a single argument passed to a FastRPC invocation.
+ * Arguments can be either scalar values or buffer references (via file descriptor).
+ */
+struct fastrpc_invoke_args {
+	__u64 ptr;
+	__u64 length;
+	__s32 fd;
+	__u32 attr;
 };
 
 #if defined(__cplusplus)

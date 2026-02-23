@@ -38,4 +38,29 @@ int qda_ioctl_query(struct drm_device *dev, void *data, struct drm_file *file_pr
 int qda_ioctl_prime_fd_to_handle(struct drm_device *dev, struct drm_file *file_priv,
 				 int prime_fd, u32 *handle);
 
+/**
+ * qda_ioctl_attach - Attach to DSP root protection domain
+ * @dev: DRM device structure
+ * @data: User-space data for the attach operation
+ * @file_priv: DRM file private data
+ *
+ * This IOCTL handler attaches to the DSP root PD (Protection Domain)
+ * to enable communication between the host and DSP.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_ioctl_attach(struct drm_device *dev, void *data, struct drm_file *file_priv);
+
+/**
+ * fastrpc_release_current_dsp_process - Release DSP process resources
+ * @qdev: QDA device structure
+ * @file_priv: DRM file private data
+ *
+ * This function releases all resources associated with a DSP process
+ * when a user-space client closes its file descriptor.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int fastrpc_release_current_dsp_process(struct qda_dev *qdev, struct drm_file *file_priv);
+
 #endif /* _QDA_IOCTL_H */
