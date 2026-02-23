@@ -9878,8 +9878,10 @@ update:
 				 * Give other IO more of a chance.
 				 * The faster the devices, the less we wait.
 				 */
-				wait_event(mddev->recovery_wait,
-					   !atomic_read(&mddev->recovery_active));
+				wait_event_timeout(
+					mddev->recovery_wait,
+					!atomic_read(&mddev->recovery_active),
+					HZ);
 			}
 		}
 	}
