@@ -773,7 +773,7 @@ static int otx2_cptpf_probe(struct pci_dev *pdev,
 		goto clear_drvdata;
 	}
 
-	err = pci_alloc_irq_vectors(pdev, num_vec, num_vec, PCI_IRQ_MSIX);
+	err = pcim_alloc_irq_vectors(pdev, num_vec, num_vec, PCI_IRQ_MSIX);
 	if (err < 0) {
 		dev_err(dev, "Request for %d msix vectors failed\n",
 			RVU_PF_INT_VEC_CNT);

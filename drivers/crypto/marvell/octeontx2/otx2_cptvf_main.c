@@ -42,8 +42,8 @@ static int cptvf_register_interrupts(struct otx2_cptvf_dev *cptvf)
 		return -EINVAL;
 
 	/* Enable MSI-X */
-	ret = pci_alloc_irq_vectors(cptvf->pdev, num_vec, num_vec,
-				    PCI_IRQ_MSIX);
+	ret = pcim_alloc_irq_vectors(cptvf->pdev, num_vec, num_vec,
+				     PCI_IRQ_MSIX);
 	if (ret < 0) {
 		dev_err(&cptvf->pdev->dev,
 			"Request for %d msix vectors failed\n", num_vec);
