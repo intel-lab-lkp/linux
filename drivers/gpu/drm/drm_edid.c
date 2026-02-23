@@ -6517,7 +6517,9 @@ static void drm_get_monitor_range(struct drm_connector *connector,
 		return;
 
 	if (!(drm_edid->edid->features & DRM_EDID_FEATURE_CONTINUOUS_FREQ))
-		return;
+		drm_dbg_kms(connector->dev,
+			    "[CONNECTOR:%d:%s] Display doesn't support continuous frequencies\n",
+			    connector->base.id, connector->name);
 
 	drm_for_each_detailed_block(drm_edid, get_monitor_range, &closure);
 
