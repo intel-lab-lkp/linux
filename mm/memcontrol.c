@@ -1948,6 +1948,24 @@ static void memcg_uncharge(struct mem_cgroup *memcg, unsigned int nr_pages)
 		page_counter_uncharge(&memcg->memsw, nr_pages);
 }
 
+static void memcg_charge_toptier(struct mem_cgroup *memcg,
+				 unsigned long nr_pages)
+{
+	struct page_counter *c;
+
+	for (c = &memcg->memory; c; c = c->parent)
+		atomic_long_add(nr_pages, &c->toptier_usage);
+}
+
+static void memcg_uncharge_toptier(struct mem_cgroup *memcg,
+				   unsigned long nr_pages)
+{
+	struct page_counter *c;
+
+	for (c = &memcg->memory; c; c = c->parent)
+		atomic_long_sub(nr_pages, &c->toptier_usage);
+}
+
 /*
  * Returns stocks cached in percpu and reset cached information.
  */
@@ -4829,6 +4847,9 @@ static int charge_memcg(struct folio *folio, struct mem_cgroup *memcg,
 	if (ret)
 		goto out;
 
+	if (node_is_toptier(folio_nid(folio)))
+		memcg_charge_toptier(memcg, folio_nr_pages(folio));
+
 	css_get(&memcg->css);
 	commit_charge(folio, memcg);
 	memcg1_commit_charge(folio, memcg);
@@ -4920,6 +4941,7 @@ int mem_cgroup_swapin_charge_folio(struct folio *folio, struct mm_struct *mm,
 struct uncharge_gather {
 	struct mem_cgroup *memcg;
 	unsigned long nr_memory;
+	unsigned long nr_toptier;
 	unsigned long pgpgout;
 	unsigned long nr_kmem;
 	int nid;
@@ -4940,6 +4962,8 @@ static void uncharge_batch(const struct uncharge_gather *ug)
 		}
 		memcg1_oom_recover(ug->memcg);
 	}
+	if (ug->nr_toptier)
+		memcg_uncharge_toptier(ug->memcg, ug->nr_toptier);
 
 	memcg1_uncharge_batch(ug->memcg, ug->pgpgout, ug->nr_memory, ug->nid);
 
@@ -4987,6 +5011,9 @@ static void uncharge_folio(struct folio *folio, struct uncharge_gather *ug)
 	}
 
 	nr_pages = folio_nr_pages(folio);
+
+	if (node_is_toptier(folio_nid(folio)))
+		ug->nr_toptier += nr_pages;
 
 	if (folio_memcg_kmem(folio)) {
 		ug->nr_memory += nr_pages;
@@ -5071,6 +5098,10 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 			page_counter_charge(&memcg->memsw, nr_pages);
 	}
 
+	/* The old folio's toptier_usage will be decremented when it is freed */
+	if (node_is_toptier(folio_nid(new)))
+		memcg_charge_toptier(memcg, nr_pages);
+
 	css_get(&memcg->css);
 	commit_charge(new, memcg);
 	memcg1_commit_charge(new, memcg);
@@ -5090,6 +5121,7 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 void mem_cgroup_migrate(struct folio *old, struct folio *new)
 {
 	struct mem_cgroup *memcg;
+	int old_toptier, new_toptier;
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(old), old);
 	VM_BUG_ON_FOLIO(!folio_test_locked(new), new);
@@ -5109,6 +5141,13 @@ void mem_cgroup_migrate(struct folio *old, struct folio *new)
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_hugetlb(old) && !memcg, old);
 	if (!memcg)
 		return;
+
+	old_toptier = node_is_toptier(folio_nid(old));
+	new_toptier = node_is_toptier(folio_nid(new));
+	if (old_toptier && !new_toptier)
+		memcg_uncharge_toptier(memcg, folio_nr_pages(old));
+	else if (!old_toptier && new_toptier)
+		memcg_charge_toptier(memcg, folio_nr_pages(old));
 
 	/* Transfer the charge and the css ref */
 	commit_charge(new, memcg);
