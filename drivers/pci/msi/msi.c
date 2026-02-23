@@ -70,7 +70,6 @@ static void pcim_msi_release(void *pcidev)
 {
 	struct pci_dev *dev = pcidev;
 
-	dev->is_msi_managed = false;
 	pci_free_irq_vectors(dev);
 }
 
@@ -92,14 +91,13 @@ static int pcim_setup_msi_release(struct pci_dev *dev)
 {
 	int ret;
 
-	if (!pci_is_managed(dev) || dev->is_msi_managed)
+	if (!dev->is_msi_managed)
 		return 0;
 
 	ret = devm_add_action(&dev->dev, pcim_msi_release, dev);
 	if (ret)
 		return ret;
 
-	dev->is_msi_managed = true;
 	return 0;
 }
 
