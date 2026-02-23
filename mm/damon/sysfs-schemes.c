@@ -2809,6 +2809,9 @@ static struct damos *damon_sysfs_mk_scheme(
 	if (!scheme)
 		return NULL;
 
+	/* Set goal_tuner after damon_new_scheme() as it defaults to CONSIST */
+	scheme->quota.goal_tuner = sysfs_quotas->goal_tuner;
+
 	err = damos_sysfs_add_quota_score(sysfs_quotas->goals, &scheme->quota);
 	if (err) {
 		damon_destroy_scheme(scheme);
