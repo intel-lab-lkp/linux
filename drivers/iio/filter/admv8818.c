@@ -657,31 +657,31 @@ static void admv8818_clk_disable(void *data)
 static int admv8818_init(struct admv8818_state *st)
 {
 	int ret;
-	struct spi_device *spi = st->spi;
+	struct device *dev = &st->spi->dev;
 	unsigned int chip_id;
 
 	ret = regmap_write(st->regmap, ADMV8818_REG_SPI_CONFIG_A,
 			   ADMV8818_SOFTRESET_N_MSK | ADMV8818_SOFTRESET_MSK);
 	if (ret) {
-		dev_err(&spi->dev, "ADMV8818 Soft Reset failed.\n");
+		dev_err(dev, "ADMV8818 Soft Reset failed.\n");
 		return ret;
 	}
 
 	ret = regmap_write(st->regmap, ADMV8818_REG_SPI_CONFIG_A,
 			   ADMV8818_SDOACTIVE_N_MSK | ADMV8818_SDOACTIVE_MSK);
 	if (ret) {
-		dev_err(&spi->dev, "ADMV8818 SDO Enable failed.\n");
+		dev_err(dev, "ADMV8818 SDO Enable failed.\n");
 		return ret;
 	}
 
 	ret = regmap_read(st->regmap, ADMV8818_REG_CHIPTYPE, &chip_id);
 	if (ret) {
-		dev_err(&spi->dev, "ADMV8818 Chip ID read failed.\n");
+		dev_err(dev, "ADMV8818 Chip ID read failed.\n");
 		return ret;
 	}
 
 	if (chip_id != 0x1) {
-		dev_err(&spi->dev, "ADMV8818 Invalid Chip ID.\n");
+		dev_err(dev, "ADMV8818 Invalid Chip ID.\n");
 		return -EINVAL;
 	}
 
@@ -689,7 +689,7 @@ static int admv8818_init(struct admv8818_state *st)
 				 ADMV8818_SINGLE_INSTRUCTION_MSK,
 				 FIELD_PREP(ADMV8818_SINGLE_INSTRUCTION_MSK, 1));
 	if (ret) {
-		dev_err(&spi->dev, "ADMV8818 Single Instruction failed.\n");
+		dev_err(dev, "ADMV8818 Single Instruction failed.\n");
 		return ret;
 	}
 
@@ -701,12 +701,12 @@ static int admv8818_init(struct admv8818_state *st)
 
 static int admv8818_clk_setup(struct admv8818_state *st)
 {
-	struct spi_device *spi = st->spi;
+	struct device *dev = &st->spi->dev;
 	int ret;
 
-	st->clkin = devm_clk_get_optional(&spi->dev, "rf_in");
+	st->clkin = devm_clk_get_optional(dev, "rf_in");
 	if (IS_ERR(st->clkin))
-		return dev_err_probe(&spi->dev, PTR_ERR(st->clkin),
+		return dev_err_probe(dev, PTR_ERR(st->clkin),
 				     "failed to get the input clock\n");
 	else if (!st->clkin)
 		return 0;
@@ -715,7 +715,7 @@ static int admv8818_clk_setup(struct admv8818_state *st)
 	if (ret)
 		return ret;
 
-	ret = devm_add_action_or_reset(&spi->dev, admv8818_clk_disable, st);
+	ret = devm_add_action_or_reset(dev, admv8818_clk_disable, st);
 	if (ret)
 		return ret;
 
@@ -724,16 +724,16 @@ static int admv8818_clk_setup(struct admv8818_state *st)
 	if (ret < 0)
 		return ret;
 
-	return devm_add_action_or_reset(&spi->dev, admv8818_clk_notifier_unreg, st);
+	return devm_add_action_or_reset(dev, admv8818_clk_notifier_unreg, st);
 }
 
 static int admv8818_read_properties(struct admv8818_state *st)
 {
-	struct spi_device *spi = st->spi;
+	struct device *dev = &st->spi->dev;
 	u32 mhz;
 	int ret;
 
-	ret = device_property_read_u32(&spi->dev, "adi,lpf-margin-mhz", &mhz);
+	ret = device_property_read_u32(dev, "adi,lpf-margin-mhz", &mhz);
 	if (ret == 0)
 		st->lpf_margin_hz = (u64)mhz * HZ_PER_MHZ;
 	else if (ret == -EINVAL)
@@ -742,7 +742,7 @@ static int admv8818_read_properties(struct admv8818_state *st)
 		return ret;
 
 
-	ret = device_property_read_u32(&spi->dev, "adi,hpf-margin-mhz", &mhz);
+	ret = device_property_read_u32(dev, "adi,hpf-margin-mhz", &mhz);
 	if (ret == 0)
 		st->hpf_margin_hz = (u64)mhz * HZ_PER_MHZ;
 	else if (ret == -EINVAL)
@@ -758,9 +758,10 @@ static int admv8818_probe(struct spi_device *spi)
 	struct iio_dev *indio_dev;
 	struct regmap *regmap;
 	struct admv8818_state *st;
+	struct device *dev = &spi->dev;
 	int ret;
 
-	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
+	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
 	if (!indio_dev)
 		return -ENOMEM;
 
@@ -792,7 +793,7 @@ static int admv8818_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	return devm_iio_device_register(&spi->dev, indio_dev);
+	return devm_iio_device_register(dev, indio_dev);
 }
 
 static const struct spi_device_id admv8818_id[] = {
