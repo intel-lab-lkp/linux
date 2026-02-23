@@ -426,7 +426,7 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 	adap->algo_data = bit_data;
 	adap->class = I2C_CLASS_HWMON;
 	adap->parent = dev;
-	device_set_node(&adap->dev, fwnode);
+	i2c_adapter_set_node(adap, fwnode);
 
 	adap->nr = pdev->id;
 	ret = i2c_bit_add_numbered_bus(adap);

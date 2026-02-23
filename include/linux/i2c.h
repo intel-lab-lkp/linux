@@ -29,6 +29,7 @@ extern const struct device_type i2c_client_type;
 
 /* --- General options ------------------------------------------------	*/
 
+struct fwnode_handle;
 struct i2c_msg;
 struct i2c_adapter;
 struct i2c_client;
@@ -791,6 +792,12 @@ static inline void *i2c_get_adapdata(const struct i2c_adapter *adap)
 static inline void i2c_set_adapdata(struct i2c_adapter *adap, void *data)
 {
 	dev_set_drvdata(&adap->dev, data);
+}
+
+static inline void i2c_adapter_set_node(struct i2c_adapter *adap,
+					struct fwnode_handle *fwnode)
+{
+	device_set_node(&adap->dev, fwnode);
 }
 
 static inline struct i2c_adapter *
