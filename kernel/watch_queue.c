@@ -301,8 +301,10 @@ long watch_queue_set_size(struct pipe_inode_info *pipe, unsigned int nr_notes)
 	return 0;
 
 error_p:
-	while (--i >= 0)
+	while (--i >= 0) {
+		set_page_private(pages[i], 0);
 		__free_page(pages[i]);
+	}
 	kfree(pages);
 error:
 	(void) account_pipe_buffers(pipe->user, nr_pages, pipe->nr_accounted);
@@ -398,8 +400,10 @@ static void __put_watch_queue(struct kref *kref)
 	struct watch_filter *wfilter;
 	int i;
 
-	for (i = 0; i < wqueue->nr_pages; i++)
+	for (i = 0; i < wqueue->nr_pages; i++) {
+		set_page_private(wqueue->notes[i], 0);
 		__free_page(wqueue->notes[i]);
+	}
 	kfree(wqueue->notes);
 	bitmap_free(wqueue->notes_bitmap);
 
