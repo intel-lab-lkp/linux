@@ -53,6 +53,9 @@ int mt_perf_to_adistance(struct access_coordinate *perf, int *adist);
 struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 						  struct list_head *memory_types);
 void mt_put_memory_types(struct list_head *memory_types);
+void mt_get_toptier_nodemask(nodemask_t *mask, const nodemask_t *allowed);
+unsigned long mt_get_toptier_capacity(const nodemask_t *allowed);
+unsigned long mt_get_total_capacity(const nodemask_t *allowed);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node, const nodemask_t *allowed_mask);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
@@ -151,6 +154,32 @@ static inline struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 
 static inline void mt_put_memory_types(struct list_head *memory_types)
 {
+}
+
+static inline void mt_get_toptier_nodemask(nodemask_t *mask,
+					   const nodemask_t *allowed)
+{
+	*mask = node_states[N_MEMORY];
+	if (allowed)
+		nodes_and(*mask, *mask, *allowed);
+}
+
+static inline unsigned long mt_get_toptier_capacity(const nodemask_t *allowed)
+{
+	int nid;
+	unsigned long capacity = 0;
+
+	for_each_node_state(nid, N_MEMORY) {
+		if (allowed && !node_isset(nid, *allowed))
+			continue;
+		capacity += NODE_DATA(nid)->node_present_pages;
+	}
+	return capacity;
+}
+
+static inline unsigned long mt_get_total_capacity(const nodemask_t *allowed)
+{
+	return mt_get_toptier_capacity(allowed);
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */

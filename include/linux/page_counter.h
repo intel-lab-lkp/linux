@@ -121,6 +121,8 @@ static inline void page_counter_reset_watermark(struct page_counter *counter)
 void page_counter_calculate_protection(struct page_counter *root,
 				       struct page_counter *counter,
 				       bool recursive_protection);
+void page_counter_update_toptier_capacity(struct page_counter *counter,
+					  const nodemask_t *allowed);
 unsigned long page_counter_toptier_high(struct page_counter *counter);
 unsigned long page_counter_toptier_low(struct page_counter *counter);
 #else

@@ -889,6 +889,7 @@ static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 		mutex_lock(&memory_tier_lock);
 		if (clear_node_memory_tier(nn->nid))
 			establish_demotion_targets();
+		update_memcg_toptier_capacity();
 		mutex_unlock(&memory_tier_lock);
 		break;
 	case NODE_ADDED_FIRST_MEMORY:
@@ -896,6 +897,7 @@ static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 		memtier = set_node_memory_tier(nn->nid);
 		if (!IS_ERR(memtier))
 			establish_demotion_targets();
+		update_memcg_toptier_capacity();
 		mutex_unlock(&memory_tier_lock);
 		break;
 	}
@@ -939,6 +941,45 @@ subsys_initcall(memory_tier_init);
 bool numa_demotion_enabled = false;
 
 bool tier_aware_memcg_limits;
+
+void mt_get_toptier_nodemask(nodemask_t *mask, const nodemask_t *allowed)
+{
+	int nid;
+
+	*mask = NODE_MASK_NONE;
+	for_each_node_state(nid, N_MEMORY) {
+		if (node_is_toptier(nid))
+			node_set(nid, *mask);
+	}
+	if (allowed)
+		nodes_and(*mask, *mask, *allowed);
+}
+
+unsigned long mt_get_toptier_capacity(const nodemask_t *allowed)
+{
+	int nid;
+	unsigned long capacity = 0;
+	nodemask_t mask;
+
+	mt_get_toptier_nodemask(&mask, allowed);
+	for_each_node_mask(nid, mask)
+		capacity += NODE_DATA(nid)->node_present_pages;
+
+	return capacity;
+}
+
+unsigned long mt_get_total_capacity(const nodemask_t *allowed)
+{
+	int nid;
+	unsigned long capacity = 0;
+
+	for_each_node_state(nid, N_MEMORY) {
+		if (allowed && !node_isset(nid, *allowed))
+			continue;
+		capacity += NODE_DATA(nid)->node_present_pages;
+	}
+	return capacity;
+}
 
 #ifdef CONFIG_MIGRATION
 #ifdef CONFIG_SYSFS

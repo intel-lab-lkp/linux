@@ -2619,7 +2619,6 @@ static void update_nodemasks_hier(struct cpuset *cs, nodemask_t *new_mems)
 	rcu_read_lock();
 	cpuset_for_each_descendant_pre(cp, pos_css, cs) {
 		struct cpuset *parent = parent_cs(cp);
-
 		bool has_mems = nodes_and(*new_mems, cp->mems_allowed, parent->effective_mems);
 
 		/*
@@ -2700,6 +2699,7 @@ static int update_nodemask(struct cpuset *cs, struct cpuset *trialcs,
 
 	/* use trialcs->mems_allowed as a temp variable */
 	update_nodemasks_hier(cs, &trialcs->mems_allowed);
+	update_memcg_toptier_capacity();
 	return 0;
 }
 

@@ -11,6 +11,7 @@
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/bug.h>
+#include <linux/memory-tiers.h>
 #include <asm/page.h>
 
 static bool track_protection(struct page_counter *c)
@@ -461,6 +462,13 @@ void page_counter_calculate_protection(struct page_counter *root,
 			READ_ONCE(parent->elow),
 			atomic_long_read(&parent->children_low_usage),
 			recursive_protection));
+}
+
+void page_counter_update_toptier_capacity(struct page_counter *counter,
+					  const nodemask_t *allowed)
+{
+	counter->toptier_capacity = mt_get_toptier_capacity(allowed);
+	counter->total_capacity = mt_get_total_capacity(allowed);
 }
 
 unsigned long page_counter_toptier_high(struct page_counter *counter)
