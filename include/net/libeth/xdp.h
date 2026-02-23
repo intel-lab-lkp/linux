@@ -1094,7 +1094,7 @@ __libeth_xdp_xmit_do_bulk(struct libeth_xdp_tx_bulk *bq,
  * @xqs: array of XDPSQs driver structs
  * @nqs: number of active XDPSQs, the above array length
  * @fl: driver callback to flush an XDP xmit bulk
- * @fin: driver cabback to finalize the queue
+ * @fin: driver callback to finalize the queue
  *
  * If the driver has active XDPSQs, perform common checks and send the frames.
  * Finalize the queue, if requested.
