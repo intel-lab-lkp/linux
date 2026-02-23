@@ -60,6 +60,8 @@ struct fwnode_handle {
 	u8 flags;
 };
 
+struct device *get_dev_from_fwnode(struct fwnode_handle *fwnode);
+
 /*
  * fwnode link flags
  *
