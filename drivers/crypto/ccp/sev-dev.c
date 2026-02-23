@@ -75,6 +75,10 @@ static bool psp_init_on_probe = true;
 module_param(psp_init_on_probe, bool, 0444);
 MODULE_PARM_DESC(psp_init_on_probe, "  if true, the PSP will be initialized on module init. Else the PSP will be initialized on the first command requiring it");
 
+static bool rapl_disable;
+module_param(rapl_disable, bool, 0444);
+MODULE_PARM_DESC(rapl_disable, "  if true, the RAPL_DIS bit will be set during INIT_EX if supported");
+
 #if IS_ENABLED(CONFIG_PCI_TSM)
 static bool sev_tio_enabled = true;
 module_param_named(tio, sev_tio_enabled, bool, 0444);
@@ -1426,6 +1430,16 @@ static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 		if (max_snp_asid) {
 			data.ciphertext_hiding_en = 1;
 			data.max_snp_asid = max_snp_asid;
+		}
+
+		if (rapl_disable) {
+			if (sev->snp_feat_info_0.ecx & SNP_RAPL_DISABLE_SUPPORTED) {
+				data.rapl_dis = 1;
+			} else {
+				dev_info(sev->dev,
+					"SEV: RAPL_DIS requested, but not supported");
+				rapl_disable = false;
+			}
 		}
 
 		data.init_rmp = 1;
