@@ -260,8 +260,10 @@ struct fastrpc_invoke_context {
 /* Remote Method ID table - identifies initialization and control operations */
 #define FASTRPC_RMID_INIT_ATTACH	0	/* Attach to DSP session */
 #define FASTRPC_RMID_INIT_RELEASE	1	/* Release DSP session */
+#define FASTRPC_RMID_INIT_MMAP		4	/* Map memory region to DSP */
 #define FASTRPC_RMID_INIT_CREATE	6	/* Create DSP process */
 #define FASTRPC_RMID_INIT_CREATE_ATTR	7	/* Create DSP process with attributes */
+#define FASTRPC_RMID_INIT_MEM_MAP	10	/* Map DMA buffer with attributes to DSP */
 #define FASTRPC_RMID_INVOKE_DYNAMIC	0xFFFFFFFF	/* Dynamic method invocation */
 
 /* Common handle for initialization operations */
@@ -275,6 +277,59 @@ struct fastrpc_invoke_context {
 #define FASTRPC_CREATE_PROCESS_NARGS	6
 /* Maximum initialization file size (4MB) */
 #define INIT_FILELEN_MAX		(4 * 1024 * 1024)
+
+/* Message structures for internal FastRPC calls */
+
+/**
+ * struct fastrpc_mem_map_req_msg - Memory map request message with attributes
+ *
+ * This message structure is sent to the DSP to request mapping
+ * of a DMA buffer with custom attributes (ATTR request).
+ */
+struct fastrpc_mem_map_req_msg {
+	/* Client identifier for the session */
+	s32 client_id;
+	/* Handle of the buffer */
+	s32 fd;
+	/* Offset within the buffer */
+	s32 offset;
+	/* Mapping flags */
+	u32 flags;
+	/* Virtual address hint for mapping */
+	u64 vaddrin;
+	/* Pages in the mapping */
+	s32 num;
+	/* Length of additional data */
+	s32 data_len;
+};
+
+/**
+ * struct fastrpc_map_req_msg - Legacy memory map request message
+ *
+ * This message structure is sent to the DSP to request mapping
+ * of a DMA buffer into the DSP's virtual address space.
+ */
+struct fastrpc_map_req_msg {
+	/* Client identifier for the session */
+	s32 client_id;
+	/* Mapping flags */
+	u32 flags;
+	/* Virtual address hint for mapping */
+	u64 vaddr;
+	/* Pages in the mapping */
+	s32 num;
+};
+
+/**
+ * struct fastrpc_map_rsp_msg - Memory map response message
+ *
+ * This message structure is returned by the DSP after successfully
+ * mapping a buffer, providing the virtual address for future access.
+ */
+struct fastrpc_map_rsp_msg {
+	/* DSP virtual address assigned to the mapped buffer */
+	u64 vaddrout;
+};
 
 /**
  * fastrpc_context_free - Free an invocation context
@@ -331,5 +386,14 @@ int fastrpc_internal_invoke_pack(struct fastrpc_invoke_context *ctx, struct qda_
  * Returns: 0 on success, negative error code on failure
  */
 int fastrpc_internal_invoke_unpack(struct fastrpc_invoke_context *ctx, struct qda_msg *msg);
+
+/**
+ * fastrpc_return_result - Return invocation result to user-space
+ * @ctx: FastRPC invocation context
+ * @argp: User-space pointer to return result
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int fastrpc_return_result(struct fastrpc_invoke_context *ctx, char __user *argp);
 
 #endif /* __QDA_FASTRPC_H__ */

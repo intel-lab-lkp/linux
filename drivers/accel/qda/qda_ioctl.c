@@ -192,6 +192,10 @@ static int fastrpc_invoke(int type, struct drm_device *dev, void *data,
 	if (err)
 		goto err_context_free;
 
+	err = fastrpc_return_result(ctx, (char __user *)data);
+	if (err)
+		goto err_context_free;
+
 err_context_free:
 	if (type == FASTRPC_RMID_INIT_RELEASE && qda_user->init_mem_gem_obj) {
 		drm_gem_object_put(&qda_user->init_mem_gem_obj->base);
@@ -222,4 +226,24 @@ int qda_ioctl_invoke(struct drm_device *dev, void *data, struct drm_file *file_p
 int qda_ioctl_create(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	return fastrpc_invoke(FASTRPC_RMID_INIT_CREATE, dev, data, file_priv);
+}
+
+int qda_ioctl_mmap(struct drm_device *dev, void *data, struct drm_file *file_priv)
+{
+	struct qda_mem_map *map_req;
+
+	if (!data)
+		return -EINVAL;
+
+	map_req = (struct qda_mem_map *)data;
+
+	switch (map_req->request) {
+	case QDA_MAP_REQUEST_LEGACY:
+		return fastrpc_invoke(FASTRPC_RMID_INIT_MMAP, dev, data, file_priv);
+	case QDA_MAP_REQUEST_ATTR:
+		return fastrpc_invoke(FASTRPC_RMID_INIT_MEM_MAP, dev, data, file_priv);
+	default:
+		qda_err(NULL, "Invalid map request type: %u\n", map_req->request);
+		return -EINVAL;
+	}
 }
