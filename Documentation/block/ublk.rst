@@ -88,6 +88,14 @@ Below is example of using ``ublksrv`` to provide ublk-based loop device.
 
 See usage details in README of ``ublksrv`` [#userspace_readme]_.
 
+Using kublk from ublk test suite
+================================
+
+ublk selftests contain utility(``kublk``) which can be used for reference
+and as a simple server. It is a stripped down  version of ublk.
+
+See ``tools/testing/selftests/ublk/kublk.c``
+
 Design
 ======
 
@@ -237,6 +245,14 @@ commands by ublk driver, for doing that, path of the char device has to
 be provided in these commands' payload from ublk server. With this way,
 ublk device becomes container-ware, and device created in one container
 can be controlled/accessed just inside this container.
+
+Partitions
+----------
+
+By default partitions are disabled on ublk devices.
+
+They can be enabled *only on trusted* devices with ``UBLK_F_PARTITIONS`` flag.
+Automatic partition scan can be requested with ``UBLK_F_AUTO_PART_SCAN`` flag.
 
 Data plane
 ----------
@@ -488,10 +504,10 @@ Limitations
 References
 ==========
 
-.. [#userspace] https://github.com/ming1/ubdsrv
+.. [#userspace] https://github.com/ublk-org/ublksrv
 
-.. [#userspace_lib] https://github.com/ming1/ubdsrv/tree/master/lib
+.. [#userspace_lib] https://github.com/ublk-org/ublksrv/tree/master/lib
 
 .. [#userspace_nbdublk] https://gitlab.com/rwmjones/libnbd/-/tree/nbdublk
 
-.. [#userspace_readme] https://github.com/ming1/ubdsrv/blob/master/README
+.. [#userspace_readme] https://github.com/ublk-org/ublksrv/blob/master/README.rst
