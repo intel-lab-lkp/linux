@@ -3115,7 +3115,8 @@ static bool intel_dp_needs_as_sdp(struct intel_dp *intel_dp,
 				  struct intel_crtc_state *crtc_state)
 {
 	return crtc_state->vrr.enable ||
-	       crtc_state->cmrr.enable;
+	       crtc_state->cmrr.enable ||
+	       crtc_state->has_panel_replay;
 }
 
 static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
@@ -3137,6 +3138,16 @@ static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
 	as_sdp->length = 0x9;
 	as_sdp->duration_incr_ms = 0;
 	as_sdp->version = 0x2;
+
+	if (crtc_state->vrr.enable)
+		as_sdp->version = 0x2;
+	else
+		as_sdp->version = 0x1;
+
+	/* No payload data bytes for Version 1 */
+	if (as_sdp->version == 0x1)
+		return;
+
 	as_sdp->vtotal = intel_vrr_vmin_vtotal(crtc_state);
 
 	if (crtc_state->cmrr.enable) {
@@ -5004,6 +5015,10 @@ static ssize_t intel_dp_as_sdp_pack(const struct drm_dp_as_sdp *as_sdp,
 	sdp->sdp_header.HB1 = as_sdp->sdp_type;
 	sdp->sdp_header.HB2 = as_sdp->version;
 	sdp->sdp_header.HB3 = as_sdp->length;
+
+	/* No Payload Data bytes for Version 1 */
+	if (as_sdp->version == 0x1)
+		return length;
 
 	/* Fill AS (Adaptive Sync) SDP Payload */
 	sdp->db[0] = as_sdp->mode;
