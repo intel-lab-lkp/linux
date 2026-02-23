@@ -48,6 +48,8 @@ struct qda_user {
 	u32 client_id;
 	/* Back-pointer to device structure */
 	struct qda_dev *qda_dev;
+	/* GEM object for PD initialization memory */
+	struct qda_gem_obj *init_mem_gem_obj;
 };
 
 /**

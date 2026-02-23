@@ -76,4 +76,17 @@ int fastrpc_release_current_dsp_process(struct qda_dev *qdev, struct drm_file *f
  */
 int qda_ioctl_invoke(struct drm_device *dev, void *data, struct drm_file *file_priv);
 
+/**
+ * qda_ioctl_create - Create a DSP process
+ * @dev: DRM device structure
+ * @data: User-space data containing process creation parameters
+ * @file_priv: DRM file private data
+ *
+ * This IOCTL handler creates a new process on the DSP, loading the
+ * specified executable and initializing its runtime environment.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_ioctl_create(struct drm_device *dev, void *data, struct drm_file *file_priv);
+
 #endif /* _QDA_IOCTL_H */

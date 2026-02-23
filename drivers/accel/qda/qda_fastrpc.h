@@ -123,6 +123,27 @@ struct fastrpc_invoke_buf {
 };
 
 /**
+ * struct fastrpc_create_process_inbuf - Input buffer for process creation
+ *
+ * This structure defines the input buffer format for creating a new
+ * process on the remote DSP.
+ */
+struct fastrpc_create_process_inbuf {
+	/* Client identifier for the session */
+	int client_id;
+	/* Length of the process name string */
+	u32 namelen;
+	/* Length of the shell file */
+	u32 filelen;
+	/* Length of the pages list */
+	u32 pageslen;
+	/* Process attributes flags */
+	u32 attrs;
+	/* Length of the signature data */
+	u32 siglen;
+};
+
+/**
  * struct qda_msg - Message structure for FastRPC communication
  *
  * This structure represents a message sent to or received from the remote
@@ -226,6 +247,8 @@ struct fastrpc_invoke_context {
 	struct qda_gem_obj *msg_gem_obj;
 	/* DRM file private data */
 	struct drm_file *file_priv;
+	/* GEM object for PD initialization memory */
+	struct qda_gem_obj *init_mem_gem_obj;
 	/* Pointer to request buffer */
 	void *req;
 	/* Pointer to response buffer */
@@ -237,6 +260,8 @@ struct fastrpc_invoke_context {
 /* Remote Method ID table - identifies initialization and control operations */
 #define FASTRPC_RMID_INIT_ATTACH	0	/* Attach to DSP session */
 #define FASTRPC_RMID_INIT_RELEASE	1	/* Release DSP session */
+#define FASTRPC_RMID_INIT_CREATE	6	/* Create DSP process */
+#define FASTRPC_RMID_INIT_CREATE_ATTR	7	/* Create DSP process with attributes */
 #define FASTRPC_RMID_INVOKE_DYNAMIC	0xFFFFFFFF	/* Dynamic method invocation */
 
 /* Common handle for initialization operations */
@@ -244,6 +269,12 @@ struct fastrpc_invoke_context {
 
 /* Protection Domain(PD) ids */
 #define ROOT_PD		(0)
+#define USER_PD		(1)
+
+/* Number of arguments for process creation */
+#define FASTRPC_CREATE_PROCESS_NARGS	6
+/* Maximum initialization file size (4MB) */
+#define INIT_FILELEN_MAX		(4 * 1024 * 1024)
 
 /**
  * fastrpc_context_free - Free an invocation context
