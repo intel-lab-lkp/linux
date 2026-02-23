@@ -18,6 +18,7 @@ from lib.py import KsftSkipEx
 from lib.py import NetDrvEpEnv, PSPFamily, NlError
 from lib.py import bkg, rand_port, wait_port_listen
 
+from lib.py import ip
 
 def _get_outq(s):
     one = b'\0' * 4
@@ -568,6 +569,89 @@ def removal_device_bi(cfg):
     finally:
         _close_conn(cfg, s)
 
+def vlan_basic_send(cfg):
+    """
+    Test PSP over VLAN-to-VLAN traffic
+
+    Network topology:
+      Local VLAN (nsim0.100) <---> Remote VLAN (nsim1.100)
+           |                            |
+      Local Physical (nsim0) <---> Remote Physical (nsim1)
+          [PSP configured here]
+    """
+    _init_psp_dev(cfg)
+
+    # VLAN configuration
+    vlan_id = 100
+    local_vlan_ifname = f"{cfg.ifname}.{vlan_id}"
+    remote_vlan_ifname = f"{cfg.remote_ifname}.{vlan_id}"
+
+    local_vlan_addr_v4 = "192.0.2.21"
+    remote_vlan_addr_v4 = "192.0.2.22"
+    local_vlan_addr_v6 = "2001:db8::21"
+    remote_vlan_addr_v6 = "2001:db8::22"
+
+    # Create VLAN interface on LOCAL side
+    ip(f"link add link {cfg.ifname} name {local_vlan_ifname} type vlan id {vlan_id}")
+    defer(ip, f"link del {local_vlan_ifname}")
+    ip(f"addr add {local_vlan_addr_v4}/24 dev {local_vlan_ifname}")
+    ip(f"-6 addr add {local_vlan_addr_v6}/64 dev {local_vlan_ifname} nodad")
+    ip(f"link set {local_vlan_ifname} up")
+
+    # Create VLAN interface on REMOTE side
+    ip(f"link add link {cfg.remote_ifname} name {remote_vlan_ifname} type vlan id {vlan_id}", host=cfg.remote)
+    defer(ip, f"link del {remote_vlan_ifname}", host=cfg.remote)
+    ip(f"addr add {remote_vlan_addr_v4}/24 dev {remote_vlan_ifname}", host=cfg.remote)
+    ip(f"-6 addr add {remote_vlan_addr_v6}/64 dev {remote_vlan_ifname} nodad", host=cfg.remote)
+    ip(f"link set {remote_vlan_ifname} up", host=cfg.remote)
+
+    # Get VLAN interface index
+    local_vlan_info = ip(f"-j link show {local_vlan_ifname}", json=True)[0]
+    local_vlan_ifindex = local_vlan_info['ifindex']
+
+    # Create a cfg-like object for VLAN interfaces
+    # The PSP device is still on the physical interface, but
+    # the socket will be bound to the VLAN interface
+    class VlanCfg:
+        pass
+
+    vlan_cfg = VlanCfg()
+    vlan_cfg.ifname = local_vlan_ifname
+    vlan_cfg.ifindex = local_vlan_ifindex
+    vlan_cfg.remote_ifname = remote_vlan_ifname
+    vlan_cfg.addr_v = {"4": local_vlan_addr_v4, "6": local_vlan_addr_v6}
+    vlan_cfg.remote_addr_v = {"4": remote_vlan_addr_v4, "6": remote_vlan_addr_v6}
+    vlan_cfg.addr = local_vlan_addr_v4
+    vlan_cfg.remote_addr = remote_vlan_addr_v4
+    vlan_cfg.pspnl = cfg.pspnl
+    vlan_cfg.psp_dev_id = cfg.psp_dev_id
+    vlan_cfg.remote = cfg.remote
+    vlan_cfg.comm_port = cfg.comm_port
+    vlan_cfg.comm_sock = cfg.comm_sock
+
+    s = _make_psp_conn(vlan_cfg, version=0)
+    defer(_close_psp_conn, vlan_cfg, s)
+
+    # Create PSP associations
+    # The socket's device is VLAN, but PSP device is on physical NIC
+    rx_assoc = vlan_cfg.pspnl.rx_assoc({
+        "version": 0,
+        "dev-id": vlan_cfg.psp_dev_id,  # PSP device on physical interface
+        "sock-fd": s.fileno()
+    })
+    rx = rx_assoc['rx-key']
+    tx = _spi_xchg(s, rx)
+
+    vlan_cfg.pspnl.tx_assoc({
+        "dev-id": vlan_cfg.psp_dev_id,
+        "version": 0,
+        "tx-key": tx,
+        "sock-fd": s.fileno()
+    })
+
+    # Send data through VLAN interface (VLAN-to-VLAN traffic!)
+    data_len = _send_careful(vlan_cfg, s, 100)
+    _check_data_rx(vlan_cfg, data_len)
 
 def psp_ip_ver_test_builder(name, test_func, psp_ver, ipver):
     """Build test cases for each combo of PSP version and IP version"""
@@ -620,7 +704,7 @@ def main() -> None:
                 ]
 
                 ksft_run(cases=cases, globs=globals(),
-                         case_pfx={"dev_", "data_", "assoc_", "removal_"},
+                         case_pfx={"dev_", "data_", "assoc_", "removal_", "vlan_"},
                          args=(cfg, ))
 
                 cfg.comm_sock.send(b"exit\0")
