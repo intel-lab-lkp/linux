@@ -3863,7 +3863,6 @@ static int rockchip_pinctrl_parse_groups(struct device_node *np,
 		return -ENOMEM;
 
 	for (i = 0, j = 0; i < size; i += 4, j++) {
-		const __be32 *phandle;
 		struct device_node *np_config;
 
 		num = be32_to_cpu(*list++);
@@ -3874,11 +3873,7 @@ static int rockchip_pinctrl_parse_groups(struct device_node *np,
 		grp->pins[j] = bank->pin_base + be32_to_cpu(*list++);
 		grp->data[j].func = be32_to_cpu(*list++);
 
-		phandle = list++;
-		if (!phandle)
-			return -EINVAL;
-
-		np_config = of_find_node_by_phandle(be32_to_cpup(phandle));
+		np_config = of_find_node_by_phandle(be32_to_cpup(list++));
 		ret = pinconf_generic_parse_dt_config(np_config, NULL,
 				&grp->data[j].configs, &grp->data[j].nconfigs);
 		of_node_put(np_config);
