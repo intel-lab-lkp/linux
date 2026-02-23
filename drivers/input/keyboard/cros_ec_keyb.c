@@ -254,6 +254,26 @@ static void cros_ec_keyb_process_key_fn_map(struct cros_ec_keyb *ckdev,
 	input_report_key(idev, code, state);
 }
 
+static void cros_ec_keyb_process_col(struct cros_ec_keyb *ckdev, int col,
+				     u8 col_state, u8 changed)
+{
+	for (int row = 0; row < ckdev->rows; row++) {
+		if (changed & BIT(row)) {
+			u8 key_state = col_state & BIT(row);
+
+			dev_dbg(ckdev->dev, "changed: [r%d c%d]: byte %02x\n",
+				row, col, key_state);
+
+			if (ckdev->has_fn_map)
+				cros_ec_keyb_process_key_fn_map(ckdev, row, col,
+								key_state);
+			else
+				cros_ec_keyb_process_key_plain(ckdev, row, col,
+							       key_state);
+		}
+	}
+}
+
 /*
  * Compares the new keyboard state to the old one and produces key
  * press/release events accordingly.  The keyboard state is one byte
@@ -261,10 +281,6 @@ static void cros_ec_keyb_process_key_fn_map(struct cros_ec_keyb *ckdev,
  */
 static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev, u8 *kb_state, int len)
 {
-	int col, row;
-	int new_state;
-	int old_state;
-
 	if (ckdev->ghost_filter && cros_ec_keyb_has_ghosting(ckdev, kb_state)) {
 		/*
 		 * Simple-minded solution: ignore this state. The obvious
@@ -275,24 +291,15 @@ static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev, u8 *kb_state, int l
 		return;
 	}
 
-	for (col = 0; col < ckdev->cols; col++) {
-		for (row = 0; row < ckdev->rows; row++) {
-			new_state = kb_state[col] & BIT(row);
-			old_state = ckdev->old_kb_state[col] & BIT(row);
+	for (int col = 0; col < ckdev->cols; col++) {
+		u8 changed = kb_state[col] ^ ckdev->old_kb_state[col];
 
-			if (new_state == old_state)
-				continue;
-
-			dev_dbg(ckdev->dev, "changed: [r%d c%d]: byte %02x\n",
-				row, col, new_state);
-
-			if (ckdev->has_fn_map)
-				cros_ec_keyb_process_key_fn_map(ckdev, row, col, new_state);
-			else
-				cros_ec_keyb_process_key_plain(ckdev, row, col, new_state);
-		}
-		ckdev->old_kb_state[col] = kb_state[col];
+		if (changed)
+			cros_ec_keyb_process_col(ckdev, col, kb_state[col],
+						 changed);
 	}
+
+	memcpy(ckdev->old_kb_state, kb_state, sizeof(ckdev->old_kb_state));
 	input_sync(ckdev->idev);
 }
 
