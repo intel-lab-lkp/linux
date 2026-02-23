@@ -227,6 +227,12 @@ struct bnge_tpa_info {
 #define BNGE_GET_RING_STATS64(sw, counter)		\
 	(*((sw) + offsetof(struct ctx_hw_stats, counter) / 8))
 
+#define BNGE_GET_RX_PORT_STATS64(sw, counter)		\
+	(*((sw) + offsetof(struct rx_port_stats, counter) / 8))
+
+#define BNGE_GET_TX_PORT_STATS64(sw, counter)		\
+	(*((sw) + offsetof(struct tx_port_stats, counter) / 8))
+
 #define BNGE_PORT_STATS_SIZE				\
 	(sizeof(struct rx_port_stats) + sizeof(struct tx_port_stats) + 1024)
 
@@ -285,6 +291,7 @@ struct bnge_sw_stats {
 enum bnge_net_state {
 	BNGE_STATE_NAPI_DISABLED,
 	BNGE_STATE_IN_SP_TASK,
+	BNGE_STATE_READ_STATS,
 };
 
 #define BNGE_TIMER_INTERVAL	HZ
@@ -377,6 +384,7 @@ struct bnge_net {
 
 	u64			flags;
 
+	struct rtnl_link_stats64	net_stats_prev;
 	struct bnge_total_ring_err_stats ring_err_stats_prev;
 
 	struct bnge_stats_mem	port_stats;
@@ -650,7 +658,8 @@ struct bnge_l2_filter {
 
 static inline bool bnge_drv_busy(struct bnge_net *bn)
 {
-	return test_bit(BNGE_STATE_IN_SP_TASK, &bn->state);
+	return test_bit(BNGE_STATE_IN_SP_TASK, &bn->state) ||
+	       test_bit(BNGE_STATE_READ_STATS, &bn->state);
 }
 
 u16 bnge_cp_ring_for_rx(struct bnge_rx_ring_info *rxr);
