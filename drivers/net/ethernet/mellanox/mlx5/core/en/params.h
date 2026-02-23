@@ -42,6 +42,7 @@ struct mlx5e_channel_param {
 	struct mlx5e_sq_param      xdp_sq;
 	struct mlx5e_sq_param      icosq;
 	struct mlx5e_sq_param      async_icosq;
+	struct mlx5e_xsk_param     *xsk;
 };
 
 struct mlx5e_create_sq_param {

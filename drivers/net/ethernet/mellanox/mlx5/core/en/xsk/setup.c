@@ -105,10 +105,11 @@ static int mlx5e_open_xsk_rq(struct mlx5e_channel *c,
 }
 
 int mlx5e_open_xsk(struct mlx5e_priv *priv, struct mlx5e_params *params,
-		   struct mlx5e_xsk_param *xsk, struct xsk_buff_pool *pool,
+		   struct mlx5e_channel_param *cparam,
+		   struct xsk_buff_pool *pool,
 		   struct mlx5e_channel *c)
 {
-	struct mlx5e_channel_param *cparam;
+	struct mlx5e_xsk_param *xsk = cparam->xsk;
 	struct mlx5e_create_cq_param ccp;
 	int err;
 
@@ -117,16 +118,10 @@ int mlx5e_open_xsk(struct mlx5e_priv *priv, struct mlx5e_params *params,
 	if (!mlx5e_validate_xsk_param(params, xsk, priv->mdev))
 		return -EINVAL;
 
-	cparam = kvzalloc(sizeof(*cparam), GFP_KERNEL);
-	if (!cparam)
-		return -ENOMEM;
-
-	mlx5e_build_xsk_channel_param(priv->mdev, params, xsk, cparam);
-
 	err = mlx5e_open_cq(c->mdev, params->rx_cq_moderation, &cparam->rq.cqp, &ccp,
 			    &c->xskrq.cq);
 	if (unlikely(err))
-		goto err_free_cparam;
+		return err;
 
 	err = mlx5e_open_xsk_rq(c, params, &cparam->rq, pool, xsk);
 	if (unlikely(err))
@@ -147,8 +142,6 @@ int mlx5e_open_xsk(struct mlx5e_priv *priv, struct mlx5e_params *params,
 	if (unlikely(err))
 		goto err_close_tx_cq;
 
-	kvfree(cparam);
-
 	set_bit(MLX5E_CHANNEL_STATE_XSK, c->state);
 
 	return 0;
@@ -161,9 +154,6 @@ err_close_rq:
 
 err_close_rx_cq:
 	mlx5e_close_cq(&c->xskrq.cq);
-
-err_free_cparam:
-	kvfree(cparam);
 
 	return err;
 }
