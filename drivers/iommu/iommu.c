@@ -33,6 +33,7 @@
 #include <trace/events/iommu.h>
 #include <linux/sched/mm.h>
 #include <linux/msi.h>
+#include <linux/qda_compute_bus.h>
 #include <uapi/linux/iommufd.h>
 
 #include "dma-iommu.h"
@@ -177,6 +178,9 @@ static const struct bus_type * const iommu_buses[] = {
 #endif
 #ifdef CONFIG_CDX_BUS
 	&cdx_bus_type,
+#endif
+#ifdef CONFIG_DRM_ACCEL_QDA_COMPUTE_BUS
+	&qda_cb_bus_type,
 #endif
 };
 
