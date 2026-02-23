@@ -74,6 +74,7 @@ struct intel_tlv {
 #define BTINTEL_HWID_BZRI	0x1e
 #define BTINTEL_HWID_BZRU	0x1d
 #define BTINTEL_HWID_SCP	0x1f
+#define BTINTEL_HWID_SCP2	0x20
 #define BTINTEL_HWID_BZRIW	0x22
 
 struct intel_version_tlv {
