@@ -5572,6 +5572,22 @@ struct mlx5_qmgmt_data {
 	struct mlx5e_channel *c;
 };
 
+static void mlx5e_queue_default_qcfg(struct net_device *dev,
+				     struct netdev_queue_config *qcfg)
+{
+	qcfg->rx_page_size = PAGE_SIZE;
+}
+
+static int mlx5e_queue_validate_qcfg(struct net_device *dev,
+				     struct netdev_queue_config *qcfg,
+				     struct netlink_ext_ack *extack)
+{
+	if (qcfg->rx_page_size != PAGE_SIZE)
+		return -EINVAL;
+
+	return 0;
+}
+
 static int mlx5e_queue_mem_alloc(struct net_device *dev,
 				 struct netdev_queue_config *qcfg,
 				 void *newq, int queue_index)
@@ -5682,6 +5698,9 @@ static const struct netdev_queue_mgmt_ops mlx5e_queue_mgmt_ops = {
 	.ndo_queue_start	=	mlx5e_queue_start,
 	.ndo_queue_stop		=	mlx5e_queue_stop,
 	.ndo_queue_get_dma_dev	=	mlx5e_queue_get_dma_dev,
+	.ndo_default_qcfg       =	mlx5e_queue_default_qcfg,
+	.ndo_validate_qcfg	=	mlx5e_queue_validate_qcfg,
+	.supported_params       =	QCFG_RX_PAGE_SIZE,
 };
 
 static void mlx5e_build_nic_netdev(struct net_device *netdev)
