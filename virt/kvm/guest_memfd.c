@@ -137,6 +137,8 @@ static struct folio *__kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 		return ERR_PTR(ret);
 	}
 
+	inode_add_bytes(inode, folio_size(folio));
+
 	return folio;
 }
 
@@ -247,9 +249,13 @@ static void kvm_gmem_invalidate_end(struct inode *inode, pgoff_t start,
 		__kvm_gmem_invalidate_end(f, start, end);
 }
 
-static void kvm_gmem_truncate_folio(struct folio *folio)
+static size_t kvm_gmem_truncate_folio(struct folio *folio)
 {
+	size_t nr_bytes;
+
 	folio_lock(folio);
+
+	nr_bytes = folio_size(folio);
 
 	if (folio_mapped(folio))
 		unmap_mapping_folio(folio);
@@ -262,6 +268,8 @@ static void kvm_gmem_truncate_folio(struct folio *folio)
 	filemap_remove_folio(folio);
 
 	folio_unlock(folio);
+
+	return nr_bytes;
 }
 
 static void kvm_gmem_truncate_range(struct inode *inode, pgoff_t start,
@@ -269,6 +277,7 @@ static void kvm_gmem_truncate_range(struct inode *inode, pgoff_t start,
 
 {
 	struct folio_batch fbatch;
+	size_t nr_bytes = 0;
 	pgoff_t next;
 	pgoff_t last;
 	int i;
@@ -279,11 +288,13 @@ static void kvm_gmem_truncate_range(struct inode *inode, pgoff_t start,
 	next = start;
 	while (filemap_get_folios(inode->i_mapping, &next, last, &fbatch)) {
 		for (i = 0; i < folio_batch_count(&fbatch); ++i)
-			kvm_gmem_truncate_folio(fbatch.folios[i]);
+			nr_bytes += kvm_gmem_truncate_folio(fbatch.folios[i]);
 
 		folio_batch_release(&fbatch);
 		cond_resched();
 	}
+
+	inode_sub_bytes(inode, nr_bytes);
 }
 
 static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
