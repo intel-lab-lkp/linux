@@ -59,8 +59,8 @@ struct cros_ec_keyb {
 	unsigned int cols;
 	int row_shift;
 	bool ghost_filter;
-	uint8_t *valid_keys;
-	uint8_t *old_kb_state;
+	u8 *valid_keys;
+	u8 *old_kb_state;
 
 	struct device *dev;
 	struct cros_ec_device *ec;
@@ -145,11 +145,11 @@ static const struct cros_ec_bs_map cros_ec_keyb_bs[] = {
  * Returns true when there is at least one combination of pressed keys that
  * results in ghosting.
  */
-static bool cros_ec_keyb_has_ghosting(struct cros_ec_keyb *ckdev, uint8_t *buf)
+static bool cros_ec_keyb_has_ghosting(struct cros_ec_keyb *ckdev, u8 *buf)
 {
 	int col1, col2, buf1, buf2;
 	struct device *dev = ckdev->dev;
-	uint8_t *valid_keys = ckdev->valid_keys;
+	u8 *valid_keys = ckdev->valid_keys;
 
 	/*
 	 * Ghosting happens if for any pressed key X there are other keys
@@ -259,8 +259,7 @@ static void cros_ec_keyb_process_key_fn_map(struct cros_ec_keyb *ckdev,
  * press/release events accordingly.  The keyboard state is one byte
  * per column.
  */
-static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev,
-			 uint8_t *kb_state, int len)
+static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev, u8 *kb_state, int len)
 {
 	int col, row;
 	int new_state;
