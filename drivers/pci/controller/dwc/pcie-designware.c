@@ -1249,6 +1249,33 @@ void dw_pcie_hide_unsupported_l1ss(struct dw_pcie *pci)
 	dw_pcie_writel_dbi(pci, l1ss + PCI_L1SS_CAP, l1ss_cap);
 }
 
+/* TODO: Need to handle multi root ports */
+void dw_pcie_program_t_power_on(struct dw_pcie *pci, u16 t_power_on)
+{
+	u8 scale, value;
+	u16 offset;
+	u32 val;
+
+	if (!t_power_on)
+		return;
+
+	offset = dw_pcie_find_ext_capability(pci, PCI_EXT_CAP_ID_L1SS);
+	if (offset) {
+		pcie_encode_t_power_on(t_power_on, &scale, &value);
+
+		dw_pcie_dbi_ro_wr_en(pci);
+
+		val = readl(pci->dbi_base + offset + PCI_L1SS_CAP);
+		val &= ~(PCI_L1SS_CAP_P_PWR_ON_SCALE | PCI_L1SS_CAP_P_PWR_ON_VALUE);
+		val |= FIELD_PREP(PCI_L1SS_CAP_P_PWR_ON_SCALE, scale);
+		val |= FIELD_PREP(PCI_L1SS_CAP_P_PWR_ON_VALUE, value);
+
+		writel(val, pci->dbi_base + offset + PCI_L1SS_CAP);
+
+		dw_pcie_dbi_ro_wr_dis(pci);
+	}
+}
+
 void dw_pcie_setup(struct dw_pcie *pci)
 {
 	u32 val;
