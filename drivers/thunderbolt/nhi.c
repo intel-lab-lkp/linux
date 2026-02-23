@@ -1281,10 +1281,10 @@ static int nhi_init_msi(struct tb_nhi *nhi)
 	 * one MSI-X. If for some reason that does not work out, we
 	 * fallback to a single MSI.
 	 */
-	nvec = pci_alloc_irq_vectors(pdev, MSIX_MIN_VECS, MSIX_MAX_VECS,
-				     PCI_IRQ_MSIX);
+	nvec = pcim_alloc_irq_vectors(pdev, MSIX_MIN_VECS, MSIX_MAX_VECS,
+				      PCI_IRQ_MSIX);
 	if (nvec < 0) {
-		nvec = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
+		nvec = pcim_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
 		if (nvec < 0)
 			return nvec;
 
