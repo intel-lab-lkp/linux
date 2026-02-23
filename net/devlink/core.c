@@ -330,7 +330,10 @@ static void devlink_release(struct work_struct *work)
 
 	mutex_destroy(&devlink->lock);
 	lockdep_unregister_key(&devlink->lock_key);
-	put_device(devlink->dev);
+	if (devlink->dev)
+		put_device(devlink->dev);
+	else
+		kfree(devlink->dev_name);
 	kvfree(devlink);
 }
 
@@ -445,7 +448,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	static u32 last_id;
 	int ret;
 
-	WARN_ON(!ops || !dev);
+	WARN_ON(!ops);
 	if (!devlink_reload_actions_valid(ops))
 		return NULL;
 
@@ -453,14 +456,22 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (!devlink)
 		return NULL;
 
+	if (dev) {
+		devlink->dev = get_device(dev);
+		devlink->bus_name = dev->bus->name;
+		devlink->dev_name = dev_name(dev);
+	} else {
+		devlink->bus_name = DEVLINK_INDEX_BUS_NAME;
+		devlink->dev_name = kasprintf(GFP_KERNEL, "%u", devlink->index);
+		if (!devlink->dev_name)
+			goto err_kasprintf;
+	}
+
 	ret = xa_alloc_cyclic(&devlinks, &devlink->index, devlink, xa_limit_31b,
 			      &last_id, GFP_KERNEL);
 	if (ret < 0)
 		goto err_xa_alloc;
 
-	devlink->dev = get_device(dev);
-	devlink->bus_name = dev->bus->name;
-	devlink->dev_name = dev_name(dev);
 	devlink->ops = ops;
 	xa_init_flags(&devlink->ports, XA_FLAGS_ALLOC);
 	xa_init_flags(&devlink->params, XA_FLAGS_ALLOC);
@@ -486,6 +497,11 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	return devlink;
 
 err_xa_alloc:
+	if (devlink->dev)
+		put_device(devlink->dev);
+	else
+		kfree(devlink->dev_name);
+err_kasprintf:
 	kvfree(devlink);
 	return NULL;
 }
