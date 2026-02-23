@@ -1180,6 +1180,7 @@ struct intel_crtc_state {
 	bool has_panel_replay;
 	bool link_off_after_as_sdp_when_pr_active;
 	bool disable_as_sdp_when_pr_active;
+	int pr_as_sdp_transmission;
 	bool wm_level_disabled;
 	bool pkg_c_latency_used;
 	/* Only used for state verification. */

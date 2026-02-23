@@ -779,6 +779,7 @@ static void _panel_replay_enable_sink(struct intel_dp *intel_dp,
 		DP_PANEL_REPLAY_RFB_STORAGE_ERROR_EN |
 		DP_PANEL_REPLAY_ACTIVE_FRAME_CRC_ERROR_EN;
 	u8 panel_replay_config2 = DP_PANEL_REPLAY_CRC_VERIFICATION;
+	u8 panel_replay_config3 = crtc_state->pr_as_sdp_transmission;
 
 	if (crtc_state->has_sel_update)
 		val |= DP_PANEL_REPLAY_SU_ENABLE;
@@ -794,6 +795,9 @@ static void _panel_replay_enable_sink(struct intel_dp *intel_dp,
 
 	drm_dp_dpcd_writeb(&intel_dp->aux, PANEL_REPLAY_CONFIG2,
 			   panel_replay_config2);
+
+	drm_dp_dpcd_writeb(&intel_dp->aux, PANEL_REPLAY_CONFIG3,
+			   panel_replay_config3);
 }
 
 static void _psr_enable_sink(struct intel_dp *intel_dp,
@@ -1770,6 +1774,9 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 
 	crtc_state->link_off_after_as_sdp_when_pr_active = compute_link_off_after_as_sdp_when_pr_active(connector);
 	crtc_state->disable_as_sdp_when_pr_active = compute_disable_as_sdp_when_pr_active(connector);
+
+	/* For now we use T1 as the transmission time */
+	crtc_state->pr_as_sdp_transmission = AS_SDP_SETUP_TIME_T1;
 
 	if (!intel_dp_is_edp(intel_dp))
 		return true;
