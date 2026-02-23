@@ -1648,7 +1648,7 @@ reg_user_mr_dmabuf(struct ib_pd *pd, struct device *dma_device,
 	else if (dma_device)
 		umem_dmabuf = ib_umem_dmabuf_get_pinned_with_dma_device(&dev->ib_dev,
 				dma_device, offset, length,
-				fd, access_flags);
+				fd, access_flags, NULL, NULL);
 	else
 		umem_dmabuf = ib_umem_dmabuf_get_pinned(
 			&dev->ib_dev, offset, length, fd, access_flags);

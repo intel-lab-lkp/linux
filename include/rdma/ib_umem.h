@@ -36,6 +36,8 @@ struct ib_umem_dmabuf {
 	struct scatterlist *last_sg;
 	unsigned long first_sg_offset;
 	unsigned long last_sg_trim;
+	void (*revoke)(void *priv);
+	void *revoke_priv;
 	void *private;
 	u8 pinned : 1;
 	u8 revoked : 1;
@@ -169,10 +171,19 @@ struct ib_umem_dmabuf *ib_umem_dmabuf_get_pinned(struct ib_device *device,
 						 size_t size, int fd,
 						 int access);
 struct ib_umem_dmabuf *
+ib_umem_dmabuf_get_pinned_revocable(struct ib_device *device,
+				    unsigned long offset,
+				    size_t size, int fd,
+				    int access,
+				    void (*revoke)(void *priv),
+				    void *revoke_priv);
+struct ib_umem_dmabuf *
 ib_umem_dmabuf_get_pinned_with_dma_device(struct ib_device *device,
 					  struct device *dma_device,
 					  unsigned long offset, size_t size,
-					  int fd, int access);
+					  int fd, int access,
+					  void (*revoke)(void *priv),
+					  void *revoke_priv);
 int ib_umem_dmabuf_map_pages(struct ib_umem_dmabuf *umem_dmabuf);
 void ib_umem_dmabuf_unmap_pages(struct ib_umem_dmabuf *umem_dmabuf);
 void ib_umem_dmabuf_release(struct ib_umem_dmabuf *umem_dmabuf);
@@ -220,12 +231,22 @@ ib_umem_dmabuf_get_pinned(struct ib_device *device, unsigned long offset,
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
-
+static inline struct ib_umem_dmabuf *
+ib_umem_dmabuf_get_pinned_revocable(struct ib_device *device,
+				    unsigned long offset,
+				    size_t size, int fd, int access,
+				    void (*revoke)(void *priv),
+				    void *revoke_priv)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
 static inline struct ib_umem_dmabuf *
 ib_umem_dmabuf_get_pinned_with_dma_device(struct ib_device *device,
 					  struct device *dma_device,
 					  unsigned long offset, size_t size,
-					  int fd, int access)
+					  int fd, int access,
+					  void (*revoke)(void *priv),
+					  void *revoke_priv)
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
