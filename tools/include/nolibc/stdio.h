@@ -296,7 +296,7 @@ int fseek(FILE *stream, long offset, int whence)
  *  - %% generates a single %
  *  - %m outputs strerror(errno).
  *  - %X outputs a..f the same as %x.
- *  - The modifiers [#-+ 0] are currently ignored.
+ *  - The modifiers [-0] are currently ignored.
  *  - No support for precision or variable widths.
  *  - No support for floating point or wide characters.
  *  - Invalid formats are copied to the output buffer.
@@ -345,9 +345,10 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 	long long signed_v;
 	int written, width, len;
 	unsigned int flags, ch_flag;
-	char outbuf[21];
+	char outbuf[2 + 22 + 1];
 	char *out;
 	const char *outstr;
+	unsigned int sign_prefix;
 
 	written = 0;
 	while (1) {
@@ -409,8 +410,11 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 		 * so that 'X' can be allowed through.
 		 * 'X' gets treated and 'x' because _NOLIBC_PF_FLAG() returns the same
 		 * value for both.
+		 *
+		 * We need to check for "%p" or "%#x" later, merging here gives better code.
+		 * But '#' collides with 'c' so shift right.
 		 */
-		ch_flag = _NOLIBC_PF_FLAG(ch);
+		ch_flag = _NOLIBC_PF_FLAG(ch) | (flags & _NOLIBC_PF_FLAG('#')) >> 1;
 		if (((ch >= 'a' && ch <= 'z') || ch == 'X') &&
 		    _NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'c', 'd', 'i', 'u', 'x', 'p', 's')) {
 			/* 'long' is needed for pointer/string conversions and ltz lengths.
@@ -446,32 +450,64 @@ int __nolibc_printf(__nolibc_printf_cb cb, void *state, const char *fmt, va_list
 				goto do_strlen_output;
 			}
 
-			out = outbuf;
+			/* The 'sign_prefix' can be zero, one or two ("0x") characters. */
+			sign_prefix = 0;
 
 			if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'd', 'i')) {
 				/* "%d" and "%i" - signed decimal numbers. */
 				if (signed_v < 0) {
-					*out++ = '-';
+					sign_prefix = '-';
 					v = -(signed_v + 1);
 					v++;
+				} else if (_NOLIBC_PF_FLAGS_CONTAIN(flags, '+')) {
+					sign_prefix = '+';
+				} else if (_NOLIBC_PF_FLAGS_CONTAIN(flags, ' ')) {
+					sign_prefix = ' ';
 				}
 			}
 
-			/* Convert the number to ascii in the required base. */
-			if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'd', 'i', 'u')) {
-				/* Base 10 */
-				u64toa_r(v, out);
-			} else {
-				/* Base 16 */
+			/* The value is converted offset into the buffer so that
+			 * the sign/prefix can be added in front.
+			 * The longest digit string is 22 + 1 for octal conversions, the
+			 * space is reserved even though octal isn't currently supported.
+			 */
+			out = outbuf + 2;
+
+			if (v == 0) {
+				/* There are special rules for zero. */
 				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'p')) {
-					*(out++) = '0';
-					*(out++) = 'x';
+					/* "%p" match glibc, precision is ignored */
+					outstr = "(nil)";
+					len = 5;
+					goto do_output;
 				}
-				u64toh_r(v, out);
+				/* All other formats (including "%#x") just output "0". */
+				out[0] = '0';
+				len = 1;
+			} else {
+				/* Convert the number to ascii in the required base. */
+				if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'd', 'i', 'u')) {
+					/* Base 10 */
+					len = u64toa_r(v, out);
+				} else {
+					/* Base 16 */
+					if (_NOLIBC_PF_FLAGS_CONTAIN(ch_flag, 'p', '#' - 1)) {
+						/* "%p" and "%#x" need "0x" prepending. */
+						sign_prefix = 'x' | '0' << 8;
+					}
+					len = u64toh_r(v, out);
+				}
 			}
 
-			outstr = outbuf;
-			goto do_strlen_output;
+			/* Add the 0, 1 or 2 ("0x") sign/prefix characters at the front. */
+			for (; sign_prefix; sign_prefix >>= 8) {
+				/* Force gcc to increment len inside the loop. */
+				_NOLIBC_OPTIMIZER_HIDE_VAR(len);
+				len++;
+				*--out = sign_prefix;
+			}
+			outstr = out;
+			goto do_output;
 		}
 
 		if (ch == 'm') {
