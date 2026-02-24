@@ -2264,7 +2264,7 @@ static int rtw_add_beacon(struct adapter *adapter, const u8 *head, size_t head_l
 
 	len = head_len + tail_len - 24;
 
-	/* check wps ie if inclued */
+	/* check wps ie if included */
 	rtw_get_wps_ie(pbuf + _FIXED_IE_LENGTH_, len - _FIXED_IE_LENGTH_, NULL, &wps_ielen);
 
 	/* pbss_network->ies will not include p2p_ie, wfd ie */
