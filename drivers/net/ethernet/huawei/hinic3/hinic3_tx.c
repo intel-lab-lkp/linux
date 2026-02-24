@@ -16,6 +16,13 @@
 
 #define MIN_SKB_LEN                32
 
+#define TXQ_STATS_INC(txq, field) \
+do { \
+	u64_stats_update_begin(&(txq)->txq_stats.syncp); \
+	(txq)->txq_stats.field++; \
+	u64_stats_update_end(&(txq)->txq_stats.syncp); \
+} while (0)
+
 static void hinic3_txq_clean_stats(struct hinic3_txq_stats *txq_stats)
 {
 	u64_stats_update_begin(&txq_stats->syncp);
@@ -97,8 +104,10 @@ static int hinic3_tx_map_skb(struct net_device *netdev, struct sk_buff *skb,
 
 	dma_info[0].dma = dma_map_single(&pdev->dev, skb->data,
 					 skb_headlen(skb), DMA_TO_DEVICE);
-	if (dma_mapping_error(&pdev->dev, dma_info[0].dma))
+	if (dma_mapping_error(&pdev->dev, dma_info[0].dma)) {
+		TXQ_STATS_INC(txq, map_frag_err);
 		return -EFAULT;
+	}
 
 	dma_info[0].len = skb_headlen(skb);
 
@@ -117,6 +126,7 @@ static int hinic3_tx_map_skb(struct net_device *netdev, struct sk_buff *skb,
 						     skb_frag_size(frag),
 						     DMA_TO_DEVICE);
 		if (dma_mapping_error(&pdev->dev, dma_info[idx].dma)) {
+			TXQ_STATS_INC(txq, map_frag_err);
 			err = -EFAULT;
 			goto err_unmap_page;
 		}
@@ -260,6 +270,7 @@ static int hinic3_tx_csum(struct hinic3_txq *txq, struct hinic3_sq_task *task,
 		if (l4_proto != IPPROTO_UDP ||
 		    ((struct udphdr *)skb_transport_header(skb))->dest !=
 		    VXLAN_OFFLOAD_PORT_LE) {
+			TXQ_STATS_INC(txq, unknown_tunnel_pkt);
 			/* Unsupported tunnel packet, disable csum offload */
 			skb_checksum_help(skb);
 			return 0;
@@ -433,6 +444,27 @@ static u32 hinic3_tx_offload(struct sk_buff *skb, struct hinic3_sq_task *task,
 	return offload;
 }
 
+static void hinic3_get_pkt_stats(struct hinic3_txq *txq, struct sk_buff *skb)
+{
+	u32 hdr_len, tx_bytes;
+	unsigned short pkts;
+
+	if (skb_is_gso(skb)) {
+		hdr_len = (skb_shinfo(skb)->gso_segs - 1) *
+			  skb_tcp_all_headers(skb);
+		tx_bytes = skb->len + hdr_len;
+		pkts = skb_shinfo(skb)->gso_segs;
+	} else {
+		tx_bytes = skb->len > ETH_ZLEN ? skb->len : ETH_ZLEN;
+		pkts = 1;
+	}
+
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.bytes += tx_bytes;
+	txq->txq_stats.packets += pkts;
+	u64_stats_update_end(&txq->txq_stats.syncp);
+}
+
 static u16 hinic3_get_and_update_sq_owner(struct hinic3_io_queue *sq,
 					  u16 curr_pi, u16 wqebb_cnt)
 {
@@ -539,8 +571,10 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 	int err;
 
 	if (unlikely(skb->len < MIN_SKB_LEN)) {
-		if (skb_pad(skb, MIN_SKB_LEN - skb->len))
+		if (skb_pad(skb, MIN_SKB_LEN - skb->len)) {
+			TXQ_STATS_INC(txq, skb_pad_err);
 			goto err_out;
+		}
 
 		skb->len = MIN_SKB_LEN;
 	}
@@ -595,6 +629,7 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 				  txq->tx_stop_thrs,
 				  txq->tx_start_thrs);
 
+	hinic3_get_pkt_stats(txq, skb);
 	hinic3_prepare_sq_ctrl(&wqe_combo, queue_info, num_sge, owner);
 	hinic3_write_db(txq->sq, 0, DB_CFLAG_DP_SQ,
 			hinic3_get_sq_local_pi(txq->sq));
@@ -604,6 +639,8 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 err_drop_pkt:
 	dev_kfree_skb_any(skb);
 err_out:
+	TXQ_STATS_INC(txq, dropped);
+
 	return NETDEV_TX_OK;
 }
 
@@ -611,12 +648,22 @@ netdev_tx_t hinic3_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
 	u16 q_id = skb_get_queue_mapping(skb);
+	struct hinic3_txq *txq;
 
-	if (unlikely(!netif_carrier_ok(netdev)))
+	if (unlikely(!netif_carrier_ok(netdev))) {
+		HINIC3_NIC_STATS_INC(nic_dev, tx_carrier_off_drop);
 		goto err_drop_pkt;
+	}
 
-	if (unlikely(q_id >= nic_dev->q_params.num_qps))
+	if (unlikely(q_id >= nic_dev->q_params.num_qps)) {
+		txq = &nic_dev->txqs[0];
+		u64_stats_update_begin(&txq->txq_stats.syncp);
+		txq->txq_stats.dropped++;
+		u64_stats_update_end(&txq->txq_stats.syncp);
+
+		HINIC3_NIC_STATS_INC(nic_dev, tx_invalid_qid);
 		goto err_drop_pkt;
+	}
 
 	return hinic3_send_one_skb(skb, netdev, &nic_dev->txqs[q_id]);
 
@@ -754,6 +801,23 @@ int hinic3_configure_txqs(struct net_device *netdev, u16 num_sq,
 	}
 
 	return 0;
+}
+
+void hinic3_txq_get_stats(struct hinic3_txq *txq,
+			  struct hinic3_txq_stats *stats)
+{
+	struct hinic3_txq_stats *txq_stats = &txq->txq_stats;
+	unsigned int start;
+
+	u64_stats_update_begin(&stats->syncp);
+	do {
+		start = u64_stats_fetch_begin(&txq_stats->syncp);
+		stats->bytes = txq_stats->bytes;
+		stats->packets = txq_stats->packets;
+		stats->busy = txq_stats->busy;
+		stats->dropped = txq_stats->dropped;
+	} while (u64_stats_fetch_retry(&txq_stats->syncp, start));
+	u64_stats_update_end(&stats->syncp);
 }
 
 bool hinic3_tx_poll(struct hinic3_txq *txq, int budget)

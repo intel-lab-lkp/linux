@@ -34,6 +34,20 @@ enum hinic3_event_work_flags {
 	HINIC3_EVENT_WORK_TX_TIMEOUT,
 };
 
+#define HINIC3_NIC_STATS_INC(nic_dev, field) \
+do { \
+	u64_stats_update_begin(&(nic_dev)->stats.syncp); \
+	(nic_dev)->stats.field++; \
+	u64_stats_update_end(&(nic_dev)->stats.syncp); \
+} while (0)
+
+struct hinic3_nic_stats {
+	/* Subdivision statistics show in private tool */
+	u64                   tx_carrier_off_drop;
+	u64                   tx_invalid_qid;
+	struct u64_stats_sync syncp;
+};
+
 enum hinic3_rx_mode_state {
 	HINIC3_HW_PROMISC_ON,
 	HINIC3_HW_ALLMULTI_ON,
@@ -120,6 +134,7 @@ struct hinic3_nic_dev {
 	struct hinic3_dyna_txrxq_params q_params;
 	struct hinic3_txq               *txqs;
 	struct hinic3_rxq               *rxqs;
+	struct hinic3_nic_stats         stats;
 
 	enum hinic3_rss_hash_type       rss_hash_type;
 	struct hinic3_rss_type          rss_type;
