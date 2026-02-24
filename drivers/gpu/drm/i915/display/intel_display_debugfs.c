@@ -1310,6 +1310,78 @@ static const struct file_operations i915_joiner_fops = {
 	.write = i915_joiner_write
 };
 
+static int i915_extended_wakeup_timeout_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = m->private;
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_encoder *encoder = intel_attached_encoder(connector);
+	struct intel_dp *intel_dp;
+	bool retimer_present = false;
+	bool transparent_mode = true;
+	int wakeup_timeout_ms = 1;
+	int lttpr_count;
+	u8 val;
+	int ret;
+
+	if (!encoder)
+		return -ENODEV;
+
+	ret = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
+	if (ret)
+		return ret;
+	if (connector->base.status != connector_status_connected) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	intel_dp = enc_to_intel_dp(encoder);
+	lttpr_count = drm_dp_lttpr_count(intel_dp->lttpr_common_caps);
+	retimer_present = (lttpr_count > 0);
+	transparent_mode = intel_dp_lttpr_transparent_mode_enabled(intel_dp);
+
+	if (transparent_mode) {
+		ret = drm_dp_dpcd_read_data(&intel_dp->aux,
+					    DP_EXTENDED_DPRX_SLEEP_WAKE_TIMEOUT_REQUEST,
+					    &val, 1);
+		if (!ret) {
+			static const u8 timeout_mapping[] = {
+				[DP_DPRX_SLEEP_WAKE_TIMEOUT_PERIOD_1_MS] = 1,
+				[DP_DPRX_SLEEP_WAKE_TIMEOUT_PERIOD_20_MS] = 20,
+				[DP_DPRX_SLEEP_WAKE_TIMEOUT_PERIOD_40_MS] = 40,
+				[DP_DPRX_SLEEP_WAKE_TIMEOUT_PERIOD_60_MS] = 60,
+				[DP_DPRX_SLEEP_WAKE_TIMEOUT_PERIOD_80_MS] = 80,
+				[DP_DPRX_SLEEP_WAKE_TIMEOUT_PERIOD_100_MS] = 100,
+			};
+
+			if (val < ARRAY_SIZE(timeout_mapping) && timeout_mapping[val])
+				wakeup_timeout_ms = timeout_mapping[val];
+		}
+	} else {
+		ret = drm_dp_dpcd_read_data(&intel_dp->aux,
+					    DP_PHY_REPEATER_EXTENDED_WAIT_TIMEOUT,
+					    &val, 1);
+
+		if (!ret) {
+
+			int timeout_val = val & DP_EXTENDED_WAKE_TIMEOUT_REQUEST_MASK;
+
+			wakeup_timeout_ms = timeout_val ? (timeout_val * 10) : 1;
+		}
+	}
+
+	if (ret)
+		wakeup_timeout_ms = -1;
+
+	seq_printf(m, "retimer_present: %s\n", retimer_present ? "yes" : "no");
+	seq_printf(m, "mode: %s\n", transparent_mode ? "transparent" : "non-transparent");
+	seq_printf(m, "wakeup_timeout_ms: %d\n", wakeup_timeout_ms);
+
+out:
+	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
+	return ret;
+}
+DEFINE_SHOW_ATTRIBUTE(i915_extended_wakeup_timeout);
+
 /**
  * intel_connector_debugfs_add - add i915 specific connector debugfs files
  * @connector: pointer to a registered intel_connector
@@ -1334,6 +1406,12 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	intel_alpm_lobf_debugfs_add(connector);
 	intel_dp_link_training_debugfs_add(connector);
 	intel_link_bw_connector_debugfs_add(connector);
+
+	if (DISPLAY_VER(display) >= 30 &&
+	    connector_type == DRM_MODE_CONNECTOR_DisplayPort && !connector->mst.dp) {
+		debugfs_create_file("i915_extended_wakeup_timeout", 0444, root,
+				    connector, &i915_extended_wakeup_timeout_fops);
+	}
 
 	if (DISPLAY_VER(display) >= 11 &&
 	    ((connector_type == DRM_MODE_CONNECTOR_DisplayPort && !connector->mst.dp) ||
