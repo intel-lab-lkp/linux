@@ -1011,6 +1011,8 @@ extern __be32 nfsd4_test_stateid(struct svc_rqst *rqstp,
 extern __be32 nfsd4_free_stateid(struct svc_rqst *rqstp,
 		struct nfsd4_compound_state *, union nfsd4_op_u *);
 extern void nfsd4_bump_seqid(struct nfsd4_compound_state *, __be32 nfserr);
+__be32 nfsd4_decode_nfs4_acl_passthru(struct nfsd4_compoundargs *,
+		u32 *bmval, struct nfs4_acl **acl);
 
 enum nfsd4_op_flags {
 	ALLOWED_WITHOUT_FH = 1 << 0,    /* No current filehandle required */

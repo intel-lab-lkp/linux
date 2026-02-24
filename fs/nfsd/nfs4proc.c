@@ -1224,6 +1224,7 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	};
 	bool save_no_wcc, deleg_attrs;
 	struct nfs4_stid *st = NULL;
+	struct dentry *dentry;
 	struct inode *inode;
 	__be32 status = nfs_ok;
 	int err;
@@ -1281,12 +1282,14 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		goto out;
 	}
 
-	inode = cstate->current_fh.fh_dentry->d_inode;
-	status = nfsd4_acl_to_attr(S_ISDIR(inode->i_mode) ? NF4DIR : NF4REG,
-				   setattr->sa_acl, &attrs);
-
-	if (status)
-		goto out;
+	dentry = cstate->current_fh.fh_dentry;
+	inode = dentry->d_inode;
+	if (IS_POSIXACL(inode)) {
+		status = nfsd4_acl_to_attr(S_ISDIR(inode->i_mode) ? NF4DIR : NF4REG,
+					   setattr->sa_acl, &attrs);
+		if (status)
+			goto out;
+	}
 	save_no_wcc = cstate->current_fh.fh_no_wcc;
 	cstate->current_fh.fh_no_wcc = true;
 	status = nfsd_setattr(rqstp, &cstate->current_fh, &attrs, NULL);
@@ -1297,6 +1300,18 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		status = nfserrno(attrs.na_dpaclerr);
 	if (!status)
 		status = nfserrno(attrs.na_paclerr);
+	if (!status && !IS_POSIXACL(inode) && setattr->sa_acl &&
+	    exportfs_may_passthru_nfs4acl(dentry->d_sb->s_export_op)) {
+		const struct export_operations *ops = dentry->d_sb->s_export_op;
+		if (likely(ops->setacl)) {
+			status = nfsd4_decode_nfs4_acl_passthru(rqstp->rq_argp,
+					setattr->sa_bmval, &setattr->sa_acl);
+			if (status)
+				goto out;
+			status = nfserrno(ops->setacl(inode, setattr->sa_acl));
+		} else
+			status = nfserr_attrnotsupp;
+	}
 out:
 	fh_drop_write(&cstate->current_fh);
 out_err:

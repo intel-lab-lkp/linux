@@ -287,6 +287,45 @@ nfsd4_decode_bitmap4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen)
 	return status == -EBADMSG ? nfserr_bad_xdr : nfs_ok;
 }
 
+__be32 nfsd4_decode_nfs4_acl_passthru(struct nfsd4_compoundargs *argp,
+				      u32 *bmval, struct nfs4_acl **acl)
+{
+	u32 acl_len = (*acl)->payload.len;
+	unsigned int pgbase, num_pages;
+	struct xdr_stream xdr;
+	__be32 status = nfs_ok;
+	void *p;
+
+	xdr_init_decode(&xdr, &(*acl)->payload,
+			(*acl)->payload.head[0].iov_base, NULL);
+
+	p = xdr_inline_decode(&xdr, acl_len);
+	if (p == NULL) {
+		status = nfserr_bad_xdr;
+		goto out;
+	}
+
+	pgbase = (unsigned long)p & ~PAGE_MASK;
+	num_pages = DIV_ROUND_UP(pgbase + acl_len, PAGE_SIZE);
+
+	*acl = svcxdr_tmpalloc(argp, (sizeof(struct nfs4_acl) +
+				      num_pages * sizeof(struct page *)));
+	if (*acl == NULL) {
+		status = nfserr_jukebox;
+		goto out;
+	}
+
+	(*acl)->type = NFS4ACL_ACL;
+	(*acl)->len = acl_len;
+	(*acl)->pgbase = pgbase;
+
+	for (int i = 0; i < num_pages; i++)
+		(*acl)->pages[i] = virt_to_page(p + (i << PAGE_SHIFT));
+out:
+	xdr_finish_decode(&xdr);
+	return status;
+}
+
 static __be32
 nfsd4_decode_nfsace4(struct xdr_stream *xdr, struct svc_rqst *rqstp,
 		     struct nfs4_ace *ace)
@@ -325,7 +364,7 @@ nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl,
 		 u32 acl_len)
 {
 
-	struct xdr_buf payload;
+	struct xdr_buf payload, saved_payload;
 	struct xdr_stream xdr;
 	struct nfs4_ace *ace;
 	__be32 status = nfs_ok;
@@ -333,6 +372,7 @@ nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl,
 
 	if (!xdr_stream_subsegment(argp->xdr, &payload, acl_len))
 		return nfserr_bad_xdr;
+	memcpy(&saved_payload, &payload, sizeof(struct xdr_buf));
 
 	xdr_init_decode(&xdr, &payload, payload.head[0].iov_base, NULL);
 
@@ -356,6 +396,7 @@ nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl,
 		status = nfserr_jukebox;
 		goto out;
 	}
+	memcpy(&(*acl)->payload, &saved_payload, sizeof(struct xdr_buf));
 
 	(*acl)->naces = count;
 	for (ace = (*acl)->aces; ace < (*acl)->aces + count; ace++) {
