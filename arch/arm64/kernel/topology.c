@@ -400,12 +400,29 @@ static inline
 int counters_read_on_cpu(int cpu, smp_call_func_t func, u64 *val)
 {
 	/*
-	 * Abort call on counterless CPU or when interrupts are
-	 * disabled - can lead to deadlock in smp sync call.
+	 * Abort call on counterless CPU.
 	 */
 	if (!cpu_has_amu_feat(cpu))
 		return -EOPNOTSUPP;
 
+	/*
+	 * For same-CPU reads, call the function directly since no IPI
+	 * is needed and this is safe even with IRQs disabled.
+	 * Use get_cpu() to disable preemption as the counter read
+	 * functions call this_cpu_has_cap() which requires a
+	 * non-preemptible context.
+	 */
+	if (cpu == get_cpu()) {
+		func(val);
+		put_cpu();
+		return 0;
+	}
+	put_cpu();
+
+	/*
+	 * Reading from a remote CPU requires IRQs enabled to avoid
+	 * deadlock in smp_call_function_single().
+	 */
 	if (WARN_ON_ONCE(irqs_disabled()))
 		return -EPERM;
 
