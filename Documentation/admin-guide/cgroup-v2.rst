@@ -1573,6 +1573,12 @@ The following nested keys are defined.
 	  vmalloc (npn)
 		Amount of memory used for vmap backed memory.
 
+	  gpu_active (npn)
+		Amount of system memory used for GPU devices.
+
+	  gpu_reclaim (npn)
+		Amount of system memory cached for GPU devices.
+
 	  shmem
 		Amount of cached filesystem data that is swap-backed,
 		such as tmpfs, shm segments, shared anonymous mmap()s
