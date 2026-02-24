@@ -318,7 +318,8 @@ static void PHY_StoreTxPowerByRateNew(struct adapter *padapter,	u32 RfPath,
 	u8 i = 0, rateIndex[4] = {0}, rateNum = 0;
 	s8	PwrByRateVal[4] = {0};
 
-	PHY_GetRateValuesOfTxPowerByRate(padapter, RegAddr, BitMask, Data, rateIndex, PwrByRateVal, &rateNum);
+	PHY_GetRateValuesOfTxPowerByRate(padapter, RegAddr, BitMask, Data,
+					 rateIndex, PwrByRateVal, &rateNum);
 
 	if (RfPath >= RF_PATH_MAX)
 		return;
@@ -436,7 +437,10 @@ void PHY_SetTxPowerIndexByRateSection(
 					       ARRAY_SIZE(ofdmRates));
 
 	} else if (RateSection == HT_MCS0_MCS7) {
-		u8 htRates1T[]  = {MGN_MCS0, MGN_MCS1, MGN_MCS2, MGN_MCS3, MGN_MCS4, MGN_MCS5, MGN_MCS6, MGN_MCS7};
+		u8 htRates1T[]  = {
+			MGN_MCS0, MGN_MCS1, MGN_MCS2, MGN_MCS3,
+			MGN_MCS4, MGN_MCS5, MGN_MCS6, MGN_MCS7
+		};
 		PHY_SetTxPowerIndexByRateArray(padapter, RFPath,
 					       pHalData->CurrentChannelBW,
 					       Channel, htRates1T,
@@ -846,11 +850,15 @@ void PHY_SetTxPowerLimit(
 
 	if (channelIndex == -1)
 		return;
+	{
+		s8 *pLimit = &pHalData->TxPwrLimit_2_4G[regulation][bandwidth]
+						       [rateSection][channelIndex]
+						       [RF_PATH_A];
+		prevPowerLimit = *pLimit;
 
-	prevPowerLimit = pHalData->TxPwrLimit_2_4G[regulation][bandwidth][rateSection][channelIndex][RF_PATH_A];
-
-	if (powerLimit < prevPowerLimit)
-		pHalData->TxPwrLimit_2_4G[regulation][bandwidth][rateSection][channelIndex][RF_PATH_A] = powerLimit;
+		if (powerLimit < prevPowerLimit)
+			*pLimit = powerLimit;
+	}
 }
 
 void Hal_ChannelPlanToRegulation(struct adapter *Adapter, u16 ChannelPlan)

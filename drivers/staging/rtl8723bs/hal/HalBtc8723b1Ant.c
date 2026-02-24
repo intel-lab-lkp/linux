@@ -810,7 +810,8 @@ static void halbtc8723b1ant_SetAntPath(
 	u8 H2C_Parameter[2] = {0}, u1Tmp = 0;
 
 	pBtCoexist->fBtcGet(pBtCoexist, BTC_GET_BL_EXT_SWITCH, &bPgExtSwitch);
-	pBtCoexist->fBtcGet(pBtCoexist, BTC_GET_U4_WIFI_FW_VER, &fwVer); /*  [31:16]=fw ver, [15:0]=fw sub ver */
+	/* [31:16]=fw ver, [15:0]=fw sub ver */
+	pBtCoexist->fBtcGet(pBtCoexist, BTC_GET_U4_WIFI_FW_VER, &fwVer);
 
 	if ((fwVer > 0 && fwVer < 0xc0000) || bPgExtSwitch)
 		bUseExtSwitch = true;
@@ -829,7 +830,8 @@ static void halbtc8723b1ant_SetAntPath(
 		/* set wlan_act control by PTA */
 		pBtCoexist->fBtcWrite1Byte(pBtCoexist, 0x76e, 0x4);
 
-		pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x67, 0x20, 0x1); /* BT select s0/s1 is controlled by WiFi */
+		/* BT select s0/s1 is controlled by WiFi */
+		pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x67, 0x20, 0x1);
 
 		pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x39, 0x8, 0x1);
 		pBtCoexist->fBtcWrite1Byte(pBtCoexist, 0x974, 0xff);
@@ -847,10 +849,13 @@ static void halbtc8723b1ant_SetAntPath(
 		pBtCoexist->fBtcWrite1Byte(pBtCoexist, 0x76e, 0x4);
 
 		pBtCoexist->fBtcGet(pBtCoexist, BTC_GET_BL_WIFI_IS_IN_MP_MODE, &bIsInMpMode);
-		if (!bIsInMpMode)
-			pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x67, 0x20, 0x0); /* BT select s0/s1 is controlled by BT */
-		else
-			pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x67, 0x20, 0x1); /* BT select s0/s1 is controlled by WiFi */
+		if (!bIsInMpMode) {
+			/* BT select s0/s1 is controlled by BT */
+			pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x67, 0x20, 0x0);
+		} else {
+			/* BT select s0/s1 is controlled by WiFi */
+			pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x67, 0x20, 0x1);
+		}
 
 		/*  0x4c[24:23]= 00, Set Antenna control by BT_RFE_CTRL	BT Vendor 0xac = 0xf002 */
 		u4Tmp = pBtCoexist->fBtcRead4Byte(pBtCoexist, 0x4c);
@@ -1059,8 +1064,10 @@ static void halbtc8723b1ant_PsTdma(
 
 
 	if (bTurnOn) {
-		if (pBtLinkInfo->bSlaveRole)
-			psTdmaByte4Val = psTdmaByte4Val | 0x1;  /* 0x778 = 0x1 at wifi slot (no blocking BT Low-Pri pkts) */
+		if (pBtLinkInfo->bSlaveRole) {
+			/* 0x778 = 0x1 at wifi slot (no blocking BT Low-Pri pkts) */
+			psTdmaByte4Val = psTdmaByte4Val | 0x1;
+		}
 
 
 		switch (type) {
@@ -1868,7 +1875,8 @@ static void halbtc8723b1ant_ActionWifiConnected(struct btc_coexist *pBtCoexist)
 					pBtCoexist, BTC_PS_WIFI_NATIVE, 0x0, 0x0
 				);
 			else { /* busy */
-				if  (pCoexSta->nScanAPNum >= BT_8723B_1ANT_WIFI_NOISY_THRESH)  /* no force LPS, no PS-TDMA, use pure TDMA */
+				/* no force LPS, no PS-TDMA, use pure TDMA */
+				if (pCoexSta->nScanAPNum >= BT_8723B_1ANT_WIFI_NOISY_THRESH)
 					halbtc8723b1ant_PowerSaveState(
 						pBtCoexist, BTC_PS_WIFI_NATIVE, 0x0, 0x0
 					);
@@ -2246,7 +2254,8 @@ void EXhalbtc8723b1ant_ScanNotify(struct btc_coexist *pBtCoexist, u8 type)
 	if (type == BTC_SCAN_START) {
 		pCoexSta->bWiFiIsHighPriTask = true;
 
-		halbtc8723b1ant_PsTdma(pBtCoexist, FORCE_EXEC, false, 8);  /* Force antenna setup for no scan result issue */
+		/* Force antenna setup for no scan result issue */
+		halbtc8723b1ant_PsTdma(pBtCoexist, FORCE_EXEC, false, 8);
 		pBtCoexist->fBtcRead4Byte(pBtCoexist, 0x948);
 		pBtCoexist->fBtcRead1Byte(pBtCoexist, 0x765);
 		pBtCoexist->fBtcRead1Byte(pBtCoexist, 0x67);
@@ -2432,7 +2441,8 @@ void EXhalbtc8723b1ant_SpecialPacketNotify(struct btc_coexist *pBtCoexist, u8 ty
 		if (type == BTC_PACKET_ARP) {
 			pCoexDm->nArpCnt++;
 
-			if (pCoexDm->nArpCnt >= 10) /*  if APR PKT > 10 after connect, do not go to ActionWifiConnectedSpecialPacket(pBtCoexist) */
+			/* if ARP PKT > 10 after connect, skip special packet action */
+			if (pCoexDm->nArpCnt >= 10)
 				pCoexSta->bWiFiIsHighPriTask = false;
 			else
 				pCoexSta->bWiFiIsHighPriTask = true;
@@ -2578,7 +2588,8 @@ void EXhalbtc8723b1ant_BtInfoNotify(
 
 	halbtc8723b1ant_UpdateBtLinkInfo(pBtCoexist);
 
-	btInfo = btInfo & 0x1f;  /* mask profile bit for connect-ilde identification (for CSR case: A2DP idle --> 0x41) */
+	/* mask profile bit for connect-idle identification (CSR case: A2DP idle = 0x41) */
+	btInfo = btInfo & 0x1f;
 
 	if (!(btInfo & BT_INFO_8723B_1ANT_B_CONNECTION)) {
 		pCoexDm->btStatus = BT_8723B_1ANT_BT_STATUS_NON_CONNECTED_IDLE;

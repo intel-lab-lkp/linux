@@ -131,8 +131,13 @@ u8 CCKSwingTable_Ch14_New[CCK_TABLE_SIZE][8] = {
 
 static void odm_CommonInfoSelfInit(struct dm_odm_t *pDM_Odm)
 {
-	pDM_Odm->bCckHighPower = (bool) PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(CCK_RPT_FORMAT, pDM_Odm), ODM_BIT(CCK_RPT_FORMAT, pDM_Odm));
-	pDM_Odm->RFPathRxEnable = (u8) PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(BB_RX_PATH, pDM_Odm), ODM_BIT(BB_RX_PATH, pDM_Odm));
+	u32 cck_reg = ODM_REG(CCK_RPT_FORMAT, pDM_Odm);
+	u32 cck_bit = ODM_BIT(CCK_RPT_FORMAT, pDM_Odm);
+	u32 rx_reg = ODM_REG(BB_RX_PATH, pDM_Odm);
+	u32 rx_bit = ODM_BIT(BB_RX_PATH, pDM_Odm);
+
+	pDM_Odm->bCckHighPower = (bool)PHY_QueryBBReg(pDM_Odm->Adapter, cck_reg, cck_bit);
+	pDM_Odm->RFPathRxEnable = (u8)PHY_QueryBBReg(pDM_Odm->Adapter, rx_reg, rx_bit);
 
 	pDM_Odm->TxRate = 0xFF;
 }
@@ -267,12 +272,15 @@ static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
 		struct sta_info *pstat = pDM_Odm->pODM_StaInfo[i];
 
 		if (IS_STA_VALID(pstat)) {
-			if (is_multicast_ether_addr(pstat->hwaddr))  /* if (psta->mac_id == 1) */
+			u32 rssi = pstat->rssi_stat.UndecoratedSmoothedPWDB;
+			bool changed;
+
+			if (is_multicast_ether_addr(pstat->hwaddr))
 				continue;
 
-			if (true == ODM_RAStateCheck(pDM_Odm, pstat->rssi_stat.UndecoratedSmoothedPWDB, false, &pstat->rssi_level)) {
+			changed = ODM_RAStateCheck(pDM_Odm, rssi, false, &pstat->rssi_level);
+			if (changed)
 				rtw_hal_update_ra_mask(pstat, pstat->rssi_level);
-			}
 
 		}
 	}
