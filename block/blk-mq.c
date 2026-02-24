@@ -781,12 +781,10 @@ EXPORT_SYMBOL_GPL(blk_mq_alloc_request_hctx);
 
 static void blk_mq_finish_request(struct request *rq)
 {
-	struct request_queue *q = rq->q;
-
 	blk_zone_finish_request(rq);
 
 	if (rq->rq_flags & RQF_USE_SCHED) {
-		q->elevator->type->ops.finish_request(rq);
+		rq->q->elevator->type->ops.finish_request(rq);
 		/*
 		 * For postflush request that may need to be
 		 * completed twice, we should clear this flag
