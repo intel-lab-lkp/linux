@@ -3917,6 +3917,10 @@ extern int vm_munmap(unsigned long, size_t);
 extern unsigned long __must_check vm_mmap(struct file *, unsigned long,
         unsigned long, unsigned long,
         unsigned long, unsigned long);
+#ifdef CONFIG_ARCH_HAS_USER_SHADOW_STACK
+extern unsigned long __must_check vm_mmap_shadow_stack(unsigned long addr,
+	unsigned long len, unsigned long flags);
+#endif
 
 struct vm_unmapped_area_info {
 #define VM_UNMAPPED_AREA_TOPDOWN 1
