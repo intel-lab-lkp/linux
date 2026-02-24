@@ -2846,9 +2846,6 @@ void cgroup_migrate_finish(struct cgroup_mgctx *mgctx)
 
 	list_for_each_entry_safe(cset, tmp_cset, &mgctx->preloaded_dst_csets,
 				 mg_dst_preload_node) {
-		cset->mg_src_cgrp = NULL;
-		cset->mg_dst_cgrp = NULL;
-		cset->mg_dst_cset = NULL;
 		list_del_init(&cset->mg_dst_preload_node);
 		put_css_set_locked(cset);
 	}
