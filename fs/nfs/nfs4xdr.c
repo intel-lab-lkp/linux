@@ -1722,7 +1722,7 @@ static void encode_setacl(struct xdr_stream *xdr,
 	encode_nfs4_stateid(xdr, &zero_stateid);
 	xdr_encode_bitmap4(xdr, bitmap, ARRAY_SIZE(bitmap));
 	encode_uint32(xdr, arg->acl_len);
-	xdr_write_pages(xdr, arg->acl_pages, 0, arg->acl_len);
+	xdr_write_pages(xdr, arg->acl_pages, arg->acl_pgbase, arg->acl_len);
 }
 
 static void

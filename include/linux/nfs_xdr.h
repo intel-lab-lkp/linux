@@ -833,6 +833,7 @@ struct nfs_setaclargs {
 	struct nfs_fh *			fh;
 	enum nfs4_acl_type		acl_type;
 	size_t				acl_len;
+	unsigned int			acl_pgbase;
 	struct page **			acl_pages;
 };
 
@@ -1763,6 +1764,7 @@ struct nfs_mount_info;
 struct nfs_client_initdata;
 struct nfs_pageio_descriptor;
 struct fs_context;
+struct nfs4_acl;
 
 /*
  * RPC procedure vector for NFSv2/NFSv3 demuxing
@@ -1850,6 +1852,7 @@ struct nfs_rpc_ops {
 	int	(*discover_trunking)(struct nfs_server *, struct nfs_fh *);
 	void	(*enable_swap)(struct inode *inode);
 	void	(*disable_swap)(struct inode *inode);
+	int	(*set_nfs4_acl)(struct inode *, struct nfs4_acl *);
 };
 
 /*
