@@ -57,6 +57,8 @@ my %ignore_type = ();
 my @ignore = ();
 my $help = 0;
 my $configuration_file = ".checkpatch.conf";
+my $def_configuration_dirs = ".:$ENV{HOME}:.scripts";
+my $env_config_dir = 'CHECKPATCH_CONFIG_DIR';
 my $max_line_length = 100;
 my $ignore_perl_version = 0;
 my $minimum_perl_version = 5.10.0;
@@ -146,6 +148,10 @@ Options:
   -h, --help, --version      display this help and exit
 
 When FILE is - read standard input.
+
+CONFIGURATION FILE
+Script searches for a configuration file $configuration_file in path:
+\$$env_config_dir:$def_configuration_dirs
 EOM
 
 	exit($exitcode);
@@ -1531,8 +1537,10 @@ sub which {
 
 sub which_conf {
 	my ($conf) = @_;
+	my $paths = $ENV{$env_config_dir} . ':' if exists($ENV{$env_config_dir});
+	$paths .= $def_configuration_dirs;
 
-	foreach my $path (split(/:/, ".:$ENV{HOME}:.scripts")) {
+	foreach my $path (split(/:/, $paths)) {
 		if (-e "$path/$conf") {
 			return "$path/$conf";
 		}
