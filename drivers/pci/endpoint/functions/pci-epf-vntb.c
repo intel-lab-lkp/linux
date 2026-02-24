@@ -438,6 +438,8 @@ static int epf_ntb_config_spad_bar_alloc(struct epf_ntb *ntb)
 	const struct pci_epc_features *epc_features = pci_epc_get_features(epf->epc,
 								epf->func_no,
 								epf->vfunc_no);
+	if (!epc_features)
+		return -EINVAL;
 	barno = ntb->epf_ntb_bar[BAR_CONFIG];
 	spad_count = ntb->spad_count;
 
@@ -489,6 +491,8 @@ static int epf_ntb_configure_interrupt(struct epf_ntb *ntb)
 	dev = &ntb->epf->dev;
 
 	epc_features = pci_epc_get_features(ntb->epf->epc, ntb->epf->func_no, ntb->epf->vfunc_no);
+	if (!epc_features)
+		return -EINVAL;
 
 	if (!(epc_features->msix_capable || epc_features->msi_capable)) {
 		dev_err(dev, "MSI or MSI-X is required for doorbell\n");
@@ -624,6 +628,8 @@ static int epf_ntb_db_bar_init(struct epf_ntb *ntb)
 	epc_features = pci_epc_get_features(ntb->epf->epc,
 					    ntb->epf->func_no,
 					    ntb->epf->vfunc_no);
+	if (!epc_features)
+		return -EINVAL;
 	barno = ntb->epf_ntb_bar[BAR_DB];
 	epf_bar = &ntb->epf->bar[barno];
 
@@ -852,6 +858,8 @@ static int epf_ntb_init_epc_bar(struct epf_ntb *ntb)
 	num_mws = ntb->num_mws;
 	dev = &ntb->epf->dev;
 	epc_features = pci_epc_get_features(ntb->epf->epc, ntb->epf->func_no, ntb->epf->vfunc_no);
+	if (!epc_features)
+		return -EINVAL;
 
 	/* These are required BARs which are mandatory for NTB functionality */
 	for (bar = BAR_CONFIG; bar <= BAR_MW1; bar++) {
