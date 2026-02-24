@@ -1020,8 +1020,11 @@ bool cma_release(struct cma *cma, const struct page *pages,
 		return false;
 
 	pfn = page_to_pfn(pages);
-	for (i = 0; i < count; i++, pfn++)
-		VM_WARN_ON(!put_page_testzero(pfn_to_page(pfn)));
+	for (i = 0; i < count; i++, pfn++) {
+		int __maybe_unused ret = put_page_testzero(pfn_to_page(pfn));
+
+		VM_WARN_ON(!ret);
+	}
 
 	__cma_release_frozen(cma, cmr, pages, count);
 
