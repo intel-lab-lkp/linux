@@ -2004,7 +2004,7 @@ static int __init tmigr_init(void)
 	tmigr_level_list = kzalloc_objs(struct list_head,
 					tmigr_hierarchy_levels);
 	if (!tmigr_level_list)
-		goto err;
+		goto err_free_cpumask;
 
 	for (i = 0; i < tmigr_hierarchy_levels; i++)
 		INIT_LIST_HEAD(&tmigr_level_list[i]);
@@ -2017,14 +2017,23 @@ static int __init tmigr_init(void)
 	ret = cpuhp_setup_state(CPUHP_TMIGR_PREPARE, "tmigr:prepare",
 				tmigr_cpu_prepare, NULL);
 	if (ret)
-		goto err;
+		goto err_free_level_list;
 
 	ret = cpuhp_setup_state(CPUHP_AP_TMIGR_ONLINE, "tmigr:online",
 				tmigr_set_cpu_available, tmigr_clear_cpu_available);
 	if (ret)
-		goto err;
+		goto err_remove_prepare_state;
 
 	return 0;
+
+err_remove_prepare_state:
+	cpuhp_remove_state(CPUHP_TMIGR_PREPARE);
+
+err_free_level_list:
+	kfree(tmigr_level_list);
+
+err_free_cpumask:
+	free_cpumask_var(tmigr_available_cpumask);
 
 err:
 	pr_err("Timer migration setup failed\n");
