@@ -637,19 +637,6 @@ void vpanic(const char *fmt, va_list args)
 		buf[len - 1] = '\0';
 
 	pr_emerg("Kernel panic - not syncing: %s\n", buf);
-	/*
-	 * Avoid nested stack-dumping if a panic occurs during oops processing
-	 */
-	if (atomic_read(&panic_redirect_cpu) != PANIC_CPU_INVALID &&
-	    panic_force_cpu == raw_smp_processor_id()) {
-		pr_emerg("panic: Redirected from CPU %d, skipping stack dump.\n",
-			 atomic_read(&panic_redirect_cpu));
-	} else if (test_taint(TAINT_DIE) || oops_in_progress > 1) {
-		panic_this_cpu_backtrace_printed = true;
-	} else if (IS_ENABLED(CONFIG_DEBUG_BUGVERBOSE)) {
-		dump_stack();
-		panic_this_cpu_backtrace_printed = true;
-	}
 
 	/*
 	 * If kgdb is enabled, give it a chance to run before we stop all
@@ -680,6 +667,20 @@ void vpanic(const char *fmt, va_list args)
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 
 	sys_info(panic_print);
+
+	/*
+	 * Avoid nested stack-dumping if a panic occurs during oops processing
+	 */
+	if (atomic_read(&panic_redirect_cpu) != PANIC_CPU_INVALID &&
+	    panic_force_cpu == raw_smp_processor_id()) {
+		pr_emerg("panic: Redirected from CPU %d, skipping stack dump.\n",
+			 atomic_read(&panic_redirect_cpu));
+	} else if (test_taint(TAINT_DIE) || oops_in_progress > 1) {
+		panic_this_cpu_backtrace_printed = true;
+	} else if (IS_ENABLED(CONFIG_DEBUG_BUGVERBOSE)) {
+		dump_stack();
+		panic_this_cpu_backtrace_printed = true;
+	}
 
 	kmsg_dump_desc(KMSG_DUMP_PANIC, buf);
 
