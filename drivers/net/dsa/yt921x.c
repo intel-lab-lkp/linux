@@ -185,6 +185,12 @@ struct yt921x_reg_mdio {
 #define to_yt921x_priv(_ds) container_of_const(_ds, struct yt921x_priv, ds)
 #define to_device(priv) ((priv)->ds.dev)
 
+static void
+print_port_err(const struct device *dev, int port, int res, const char *action)
+{
+	dev_err(dev, "Failed to %s port %d: %i\n", action, port, res);
+}
+
 static int yt921x_reg_read(struct yt921x_priv *priv, u32 reg, u32 *valp)
 {
 	WARN_ON(!mutex_is_locked(&priv->reg_lock));
@@ -721,8 +727,7 @@ static int yt921x_read_mib(struct yt921x_priv *priv, int port)
 			mib->tx_jumbo;
 
 	if (res)
-		dev_err(dev, "Failed to %s port %d: %i\n", "read stats for",
-			port, res);
+		print_port_err(dev, port, res, "read stats for");
 	return res;
 }
 
@@ -1102,8 +1107,7 @@ yt921x_dsa_port_mirror_del(struct dsa_switch *ds, int port,
 	mutex_unlock(&priv->reg_lock);
 
 	if (res)
-		dev_err(dev, "Failed to %s port %d: %i\n", "unmirror",
-			port, res);
+		print_port_err(dev, port, res, "unmirror");
 }
 
 static int
@@ -1690,8 +1694,7 @@ static void yt921x_dsa_port_fast_age(struct dsa_switch *ds, int port)
 	mutex_unlock(&priv->reg_lock);
 
 	if (res)
-		dev_err(dev, "Failed to %s port %d: %i\n", "clear FDB for",
-			port, res);
+		print_port_err(dev, port, res, "clear FDB for");
 }
 
 static int
@@ -2266,8 +2269,7 @@ yt921x_dsa_port_bridge_leave(struct dsa_switch *ds, int port,
 	mutex_unlock(&priv->reg_lock);
 
 	if (res)
-		dev_err(dev, "Failed to %s port %d: %i\n", "unbridge",
-			port, res);
+		print_port_err(dev, port, res, "unbridge");
 }
 
 static int
@@ -2399,8 +2401,7 @@ yt921x_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	mutex_unlock(&priv->reg_lock);
 
 	if (res)
-		dev_err(dev, "Failed to %s port %d: %i\n", "set STP state for",
-			port, res);
+		print_port_err(dev, port, res, "set STP state for");
 }
 
 static int __maybe_unused
@@ -2737,8 +2738,7 @@ yt921x_phylink_mac_link_down(struct phylink_config *config, unsigned int mode,
 	mutex_unlock(&priv->reg_lock);
 
 	if (res)
-		dev_err(dp->ds->dev, "Failed to %s port %d: %i\n", "bring down",
-			port, res);
+		print_port_err(dp->ds->dev, port, res, "bring down");
 }
 
 static void
@@ -2758,8 +2758,7 @@ yt921x_phylink_mac_link_up(struct phylink_config *config,
 	mutex_unlock(&priv->reg_lock);
 
 	if (res)
-		dev_err(dp->ds->dev, "Failed to %s port %d: %i\n", "bring up",
-			port, res);
+		print_port_err(dp->ds->dev, port, res, "bring up");
 
 	schedule_delayed_work(&priv->ports[port].mib_read, 0);
 }
@@ -2778,8 +2777,7 @@ yt921x_phylink_mac_config(struct phylink_config *config, unsigned int mode,
 	mutex_unlock(&priv->reg_lock);
 
 	if (res)
-		dev_err(dp->ds->dev, "Failed to %s port %d: %i\n", "config",
-			port, res);
+		print_port_err(dp->ds->dev, port, res, "config");
 }
 
 static void
