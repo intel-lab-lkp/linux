@@ -47,7 +47,7 @@ tap_timeout()
 report_failure()
 {
 	echo "not ok $*"
-	echo "$*" >> "$kselftest_failures_file"
+	echo "$*" >> "${kselftest_failures_file:-/dev/null}"
 }
 
 run_one()
