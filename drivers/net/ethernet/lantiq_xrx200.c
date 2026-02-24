@@ -157,7 +157,7 @@ static int xrx200_open(struct net_device *net_dev)
 	/* The boot loader does not always deactivate the receiving of frames
 	 * on the ports and then some packets queue up in the PPE buffers.
 	 * They already passed the PMAC so they do not have the tags
-	 * configured here. Read the these packets here and drop them.
+	 * configured here. Read these packets here and drop them.
 	 * The HW should have written them into memory after 10us
 	 */
 	usleep_range(20, 40);

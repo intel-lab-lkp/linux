@@ -1417,7 +1417,7 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
 	 * 1 bit customizable at the factory, and 1 bit depending on the
 	 * state of an external pin. The latter is writable. The device
 	 * will only respond to operations to its other registers when
-	 * the these device addressing bits (in the upper 4 bits of the
+	 * these device addressing bits (in the upper 4 bits of the
 	 * registers) match.
 	 *
 	 * By default we support an AXP806 chained to an AXP809 in slave

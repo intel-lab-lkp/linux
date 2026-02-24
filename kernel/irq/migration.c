@@ -89,7 +89,7 @@ void irq_move_masked_irq(struct irq_data *idata)
 
 		ret = irq_do_set_affinity(data, desc->pending_mask, false);
 		/*
-		 * If the there is a cleanup pending in the underlying
+		 * If there is a cleanup pending in the underlying
 		 * vector management, reschedule the move for the next
 		 * interrupt. Leave desc->pending_mask intact.
 		 */

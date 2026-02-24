@@ -14,7 +14,7 @@
  *
  * So this driver is a stub / pseudo driver whose only purpose is to
  * instantiate I²C clients for chips 2 - 4, so that standard I²C drivers
- * for these chips can bind to the them.
+ * for these chips can bind to them.
  */
 
 #include <linux/dmi.h>

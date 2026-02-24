@@ -565,7 +565,7 @@ struct platform_object {
 };
 
 /*
- * Set up default DMA mask for platform devices if the they weren't
+ * Set up default DMA mask for platform devices if they weren't
  * previously set by the architecture / DT.
  */
 static void setup_pdev_dma_masks(struct platform_device *pdev)
