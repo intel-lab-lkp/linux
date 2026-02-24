@@ -1388,11 +1388,12 @@ static void clflush_write32(u32 *addr, u32 value, unsigned int flushes)
 	}
 }
 
-static u64
+static int
 relocate_entry(struct i915_vma *vma,
 	       const struct drm_i915_gem_relocation_entry *reloc,
 	       struct i915_execbuffer *eb,
-	       const struct i915_vma *target)
+	       const struct i915_vma *target,
+	       u64 *pin_offset)
 {
 	u64 target_addr = relocation_target(reloc, target);
 	u64 offset = reloc->offset;
@@ -1417,13 +1418,16 @@ repeat:
 		goto repeat;
 	}
 
-	return target->node.start | UPDATE;
+	if (pin_offset)
+		*pin_offset = target->node.start | UPDATE;
+	return 0;
 }
 
-static u64
+static int
 eb_relocate_entry(struct i915_execbuffer *eb,
 		  struct eb_vma *ev,
-		  const struct drm_i915_gem_relocation_entry *reloc)
+		  const struct drm_i915_gem_relocation_entry *reloc,
+		  u64 *offset)
 {
 	struct drm_i915_private *i915 = eb->i915;
 	struct eb_vma *target;
@@ -1520,7 +1524,7 @@ eb_relocate_entry(struct i915_execbuffer *eb,
 	ev->flags &= ~EXEC_OBJECT_ASYNC;
 
 	/* and update the user's relocation entry */
-	return relocate_entry(ev->vma, reloc, eb, target->vma);
+	return relocate_entry(ev->vma, reloc, eb, target->vma, offset);
 }
 
 static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
@@ -1531,6 +1535,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 	struct drm_i915_gem_relocation_entry __user *urelocs =
 		u64_to_user_ptr(entry->relocs_ptr);
 	unsigned long remain = entry->relocation_count;
+	int err = 0;
 
 	if (unlikely(remain > N_RELOC(INT_MAX)))
 		return -EINVAL;
@@ -1561,21 +1566,20 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 		copied = __copy_from_user_inatomic(r, urelocs, count * sizeof(r[0]));
 		pagefault_enable();
 		if (unlikely(copied)) {
-			remain = -EFAULT;
+			err = -EFAULT;
 			goto out;
 		}
 
 		remain -= count;
 		do {
-			u64 offset = eb_relocate_entry(eb, ev, r);
+			u64 offset = 0;
+
+			err = eb_relocate_entry(eb, ev, r, &offset);
+			if (err)
+				goto out;
 
 			if (likely(offset == 0))
 				continue;
-
-			if ((s64)offset < 0) {
-				remain = (int)offset;
-				goto out;
-			}
 			/*
 			 * Note that reporting an error now
 			 * leaves everything in an inconsistent
@@ -1604,7 +1608,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 	} while (remain);
 out:
 	reloc_cache_reset(&eb->reloc_cache, eb);
-	return remain;
+	return err;
 }
 
 static int
@@ -1614,18 +1618,14 @@ eb_relocate_vma_slow(struct i915_execbuffer *eb, struct eb_vma *ev)
 	struct drm_i915_gem_relocation_entry *relocs =
 		u64_to_ptr(typeof(*relocs), entry->relocs_ptr);
 	unsigned int i;
-	int err;
+	int err = 0;
 
 	for (i = 0; i < entry->relocation_count; i++) {
-		u64 offset = eb_relocate_entry(eb, ev, &relocs[i]);
-
-		if ((s64)offset < 0) {
-			err = (int)offset;
-			goto err;
-		}
+		err = eb_relocate_entry(eb, ev, &relocs[i], NULL);
+		if (err)
+			break;
 	}
-	err = 0;
-err:
+
 	reloc_cache_reset(&eb->reloc_cache, eb);
 	return err;
 }
