@@ -62,6 +62,7 @@ const struct inode_operations ramfs_file_inode_operations = {
 int ramfs_nommu_expand_for_mapping(struct inode *inode, size_t newsize)
 {
 	unsigned long npages, xpages, loop;
+	struct folio *folio;
 	struct page *pages;
 	unsigned order;
 	void *data;
@@ -81,9 +82,11 @@ int ramfs_nommu_expand_for_mapping(struct inode *inode, size_t newsize)
 
 	/* allocate enough contiguous pages to be able to satisfy the
 	 * request */
-	pages = alloc_pages(gfp, order);
-	if (!pages)
+	folio = folio_alloc(gfp, order);
+	if (!folio)
 		return -ENOMEM;
+
+	pages = &folio->page;
 
 	/* split the high-order page into an array of single pages */
 	xpages = 1UL << order;
