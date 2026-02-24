@@ -1006,6 +1006,7 @@ static void fs_enet_remove(struct platform_device *ofdev)
 	dev_set_drvdata(fep->dev, NULL);
 	phylink_destroy(fep->phylink);
 	free_netdev(ndev);
+	kfree(fep);
 }
 
 static const struct of_device_id fs_enet_match[] = {
