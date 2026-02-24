@@ -386,8 +386,19 @@ retry_walk:
 					     nested_access, &walker->fault);
 
 		if (unlikely(real_gpa == INVALID_GPA)) {
+			/*
+			 * Unconditionally set the NPF error_code bits and
+			 * EPT exit_qualification bits for nested page
+			 * faults.  The walker doesn't know whether L1 uses
+			 * NPT or EPT, and each injection handler consumes
+			 * only the field it cares about (error_code for
+			 * NPF, exit_qualification for EPT violations), so
+			 * setting both is harmless.
+			 */
 #if PTTYPE != PTTYPE_EPT
 			walker->fault.error_code |= PFERR_GUEST_PAGE_MASK;
+			walker->fault.exit_qualification |=
+				EPT_VIOLATION_GVA_IS_VALID;
 #endif
 			return 0;
 		}
@@ -449,6 +460,9 @@ retry_walk:
 	if (real_gpa == INVALID_GPA) {
 #if PTTYPE != PTTYPE_EPT
 		walker->fault.error_code |= PFERR_GUEST_FINAL_MASK;
+		walker->fault.exit_qualification |=
+			EPT_VIOLATION_GVA_IS_VALID |
+			EPT_VIOLATION_GVA_TRANSLATED;
 #endif
 		return 0;
 	}
@@ -496,7 +510,7 @@ error:
 	 * [2:0] - Derive from the access bits. The exit_qualification might be
 	 *         out of date if it is serving an EPT misconfiguration.
 	 * [5:3] - Calculated by the page walk of the guest EPT page tables
-	 * [7:8] - Derived from [7:8] of real exit_qualification
+	 * [7:8] - Set at the kvm_translate_gpa() call sites above
 	 *
 	 * The other bits are set to 0.
 	 */
