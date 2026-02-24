@@ -1098,6 +1098,9 @@ static int sisusb_read_mem_bulk(struct sisusb_usb_data *sisusb, u32 addr,
 	u16 swap16;
 	u32 swap32;
 
+	if (!kernbuffer && !userbuffer)
+		return -EINVAL;
+
 	(*bytes_read = 0);
 
 	length &= 0x00ffffff;
