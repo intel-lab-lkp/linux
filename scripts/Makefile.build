@@ -324,6 +324,8 @@ rust_allowed_features := asm_const,asm_goto,arbitrary_self_types,lint_reasons,of
 # `--out-dir` is required to avoid temporaries being created by `rustc` in the
 # current working directory, which may be not accessible in the out-of-tree
 # modules case.
+rust_cratename = $(if $(RUST_CRATENAME_$(target-stem).o),$(RUST_CRATENAME_$(target-stem).o),$(basename $(notdir $@)))
+
 rust_common_cmd = \
 	OBJTREE=$(abspath $(objtree)) \
 	RUST_MODFILE=$(modfile) $(RUSTC_OR_CLIPPY) $(rust_flags) \
@@ -332,7 +334,7 @@ rust_common_cmd = \
 	-Zcrate-attr='feature($(rust_allowed_features))' \
 	-Zunstable-options --extern pin_init --extern kernel \
 	--crate-type rlib -L $(objtree)/rust/ \
-	--crate-name $(basename $(notdir $@)) \
+	--crate-name $(rust_cratename) \
 	--sysroot=/dev/null \
 	--out-dir $(dir $@) --emit=dep-info=$(depfile)
 

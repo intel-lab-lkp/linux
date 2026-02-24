@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -194,6 +195,16 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
         except FileNotFoundError:
             return False
 
+    def get_crate_name(build_file, target):
+        try:
+            contents = build_file.read_text()
+            match = re.search(rf'RUST_CRATENAME_{target}\.o\s*[:=]+\s*(\w+)', contents)
+            if match:
+                return match.group(1)
+        except FileNotFoundError:
+            pass
+        return target
+
     # Then, the rest outside of `rust/`.
     #
     # We explicitly mention the top-level folders we want to cover.
@@ -206,13 +217,17 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
             name = path.name.replace(".rs", "")
 
             # Skip those that are not crate roots.
-            if not is_root_crate(path.parent / "Makefile", name) and \
-               not is_root_crate(path.parent / "Kbuild", name):
+            makefile = path.parent / "Makefile"
+            kbuild = path.parent / "Kbuild"
+            if not is_root_crate(makefile, name) and \
+               not is_root_crate(kbuild, name):
                 continue
 
             logging.info("Adding %s", name)
+            crate_name = get_crate_name(makefile, name)
+
             append_crate(
-                name,
+                crate_name,
                 path,
                 ["core", "kernel", "pin_init"],
                 cfg=cfg,
