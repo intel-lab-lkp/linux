@@ -2204,6 +2204,7 @@ static int pic32_pinctrl_probe(struct platform_device *pdev)
 	pctl->pctldev = devm_pinctrl_register(&pdev->dev, &pic32_pinctrl_desc,
 					      pctl);
 	if (IS_ERR(pctl->pctldev)) {
+		clk_disable_unprepare(pctl->clk);
 		dev_err(&pdev->dev, "Failed to register pinctrl device\n");
 		return PTR_ERR(pctl->pctldev);
 	}
@@ -2260,8 +2261,10 @@ static int pic32_gpio_probe(struct platform_device *pdev)
 	girq->num_parents = 1;
 	girq->parents = devm_kcalloc(&pdev->dev, 1, sizeof(*girq->parents),
 				     GFP_KERNEL);
-	if (!girq->parents)
-		return -ENOMEM;
+	if (!girq->parents) {
+		ret = -ENOMEM;
+		goto err_clk_cleanup;
+	}
 	girq->default_type = IRQ_TYPE_NONE;
 	girq->handler = handle_level_irq;
 	girq->parents[0] = irq;
@@ -2269,9 +2272,13 @@ static int pic32_gpio_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to add GPIO chip %u: %d\n",
 			id, ret);
-		return ret;
+		goto err_clk_cleanup;
 	}
 	return 0;
+
+err_clk_cleanup:
+	clk_disable_unprepare(bank->clk);
+	return ret;
 }
 
 static const struct of_device_id pic32_pinctrl_of_match[] = {
