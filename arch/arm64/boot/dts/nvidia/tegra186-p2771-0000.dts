@@ -2433,7 +2433,7 @@
 		};
 
 		pci@2,0 {
-			nvidia,num-lanes = <0>;
+			nvidia,num-lanes = <1>;
 			status = "disabled";
 		};
 
