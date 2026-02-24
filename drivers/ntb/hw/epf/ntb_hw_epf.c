@@ -333,10 +333,15 @@ static irqreturn_t ntb_epf_vec_isr(int irq, void *dev)
 	irq_no = irq - pci_irq_vector(ndev->ntb.pdev, 0);
 	ndev->db_val = irq_no + 1;
 
-	if (irq_no == 0)
+	if (irq_no == 0) {
 		ntb_link_event(&ndev->ntb);
-	else
-		ntb_db_event(&ndev->ntb, irq_no);
+	} else if (irq_no == 1) {
+		dev_warn_ratelimited(ndev->dev,
+				     "Unexpected irq_no 1 received. Treat it as DB#0.\n");
+		ntb_db_event(&ndev->ntb, 0);
+	} else {
+		ntb_db_event(&ndev->ntb, irq_no - 2);
+	}
 
 	return IRQ_HANDLED;
 }
