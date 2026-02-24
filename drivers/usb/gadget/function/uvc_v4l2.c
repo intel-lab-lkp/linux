@@ -594,7 +594,13 @@ static void uvc_v4l2_disable(struct uvc_device *uvc)
 {
 	uvc_function_disconnect(uvc);
 	uvcg_video_disable(&uvc->video);
+	if (uvc->func_unbinding) {
+		pr_info("uvc: unbinding, skipping buffer cleanup\n");
+		goto skip_buffer_cleanup;
+	}
 	uvcg_free_buffers(&uvc->video.queue);
+
+skip_buffer_cleanup:
 	uvc->func_connected = false;
 	wake_up_interruptible(&uvc->func_connected_queue);
 }

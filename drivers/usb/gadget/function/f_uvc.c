@@ -413,6 +413,11 @@ uvc_function_disconnect(struct uvc_device *uvc)
 {
 	int ret;
 
+	if (uvc->func_unbinding) {
+		pr_info("uvc: unbinding, skipping function deactivate\n");
+		return;
+	}
+
 	if ((ret = usb_function_deactivate(&uvc->func)) < 0)
 		uvcg_info(&uvc->func, "UVC disconnect failed with %d\n", ret);
 }
@@ -659,6 +664,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	int ret = -EINVAL;
 
 	uvcg_info(f, "%s()\n", __func__);
+	uvc->func_unbinding = false;
 
 	opts = fi_to_f_uvc_opts(f->fi);
 	/* Sanity check the streaming endpoint module parameters. */
@@ -994,6 +1000,7 @@ static void uvc_function_unbind(struct usb_configuration *c,
 	long wait_ret = 1;
 
 	uvcg_info(f, "%s()\n", __func__);
+	uvc->func_unbinding = true;
 
 	kthread_cancel_work_sync(&video->hw_submit);
 
