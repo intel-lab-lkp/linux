@@ -59,14 +59,6 @@ static int slot_pwrctrl_power_off(struct pci_pwrctrl *pwrctrl)
 	return 0;
 }
 
-static void devm_slot_pwrctrl_release(void *data)
-{
-	struct slot_pwrctrl *slot = data;
-
-	slot_pwrctrl_power_off(&slot->pwrctrl);
-	regulator_bulk_free(slot->num_supplies, slot->supplies);
-}
-
 static int slot_pwrctrl_probe(struct platform_device *pdev)
 {
 	struct slot_pwrctrl *slot;
@@ -104,10 +96,6 @@ static int slot_pwrctrl_probe(struct platform_device *pdev)
 skip_resources:
 	slot->pwrctrl.power_on = slot_pwrctrl_power_on;
 	slot->pwrctrl.power_off = slot_pwrctrl_power_off;
-
-	ret = devm_add_action_or_reset(dev, devm_slot_pwrctrl_release, slot);
-	if (ret)
-		return ret;
 
 	pci_pwrctrl_init(&slot->pwrctrl, dev);
 
