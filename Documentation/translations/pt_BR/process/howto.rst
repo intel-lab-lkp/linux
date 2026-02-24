@@ -99,7 +99,7 @@ que são de leitura obrigatória:
     o que é necessário fazer para configurar e compilar o kernel. Pessoas
     que são novas no kernel devem começar por aqui.
 
-  :ref:`Documentation/process/changes.rst <changes>`
+  :doc:`changes`
     Este arquivo fornece uma lista das versões mínimas de vários pacotes de
     software que são necessários para compilar e executar o kernel com
     sucesso.

@@ -67,3 +67,4 @@ kernel e sobre como ver seu trabalho integrado.
    :maxdepth: 1
 
    Como começar <process/howto>
+   Requisitos mínimos <process/changes>
