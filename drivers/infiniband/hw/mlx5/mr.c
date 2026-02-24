@@ -1990,7 +1990,8 @@ mlx5_alloc_priv_descs(struct ib_device *device,
 		add_size = min_t(int, end - size, add_size);
 	}
 
-	mr->descs_alloc = kzalloc(size + add_size, GFP_KERNEL);
+	mr->descs_alloc = kzalloc_node(size + add_size, GFP_KERNEL,
+			dev_to_node(ddev));
 	if (!mr->descs_alloc)
 		return -ENOMEM;
 
