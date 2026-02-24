@@ -1001,6 +1001,13 @@ no_delete:
 out_clear:
 	fscrypt_put_encryption_info(inode);
 	fsverity_cleanup_inode(inode);
+	/*
+	 * Defensively truncate any remaining page cache, e.g.
+	 * f2fs_convert_inline_inode() called from f2fs_truncate()
+	 * may leave page #0 behind in the page cache when the
+	 * inline conversion takes the clear_out success path.
+	 */
+	truncate_inode_pages_final(&inode->i_data);
 	clear_inode(inode);
 }
 
