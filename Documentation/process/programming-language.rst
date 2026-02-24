@@ -4,10 +4,11 @@ Programming Language
 ====================
 
 The Linux kernel is written in the C programming language [c-language]_.
-More precisely, it is typically compiled with ``gcc`` [gcc]_
-under ``-std=gnu11`` [gcc-c-dialect-options]_: the GNU dialect of ISO C11.
-``clang`` [clang]_ is also supported; see documentation on
-:ref:`Building Linux with Clang/LLVM <kbuild_llvm>`.
+More precisely, it is compiled with either ``gcc`` [gcc]_ or
+``clang`` [clang]_, both of which are fully supported, using
+``-std=gnu11`` [gcc-c-dialect-options]_:
+the GNU dialect of ISO C11. See
+:ref:`Building Linux with Clang/LLVM <kbuild_llvm>` for additional details.
 
 This dialect contains many extensions to the language [gnu-extensions]_,
 and many of them are used within the kernel as a matter of course.
