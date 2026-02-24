@@ -95,6 +95,9 @@ static int of_pci_prop_bus_range(struct pci_dev *pdev,
 				 struct of_changeset *ocs,
 				 struct device_node *np)
 {
+	if (!pdev->subordinate)
+		return -EINVAL;
+
 	u32 bus_range[] = { pdev->subordinate->busn_res.start,
 			    pdev->subordinate->busn_res.end };
 
