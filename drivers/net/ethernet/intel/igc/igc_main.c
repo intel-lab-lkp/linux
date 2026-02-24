@@ -7544,9 +7544,6 @@ static int __igc_resume(struct device *dev)
 	struct igc_hw *hw = &adapter->hw;
 	u32 err, val;
 
-	pci_set_power_state(pdev, PCI_D0);
-	pci_restore_state(pdev);
-
 	if (!pci_device_is_present(pdev))
 		return -ENODEV;
 	err = pci_enable_device_mem(pdev);
@@ -7555,9 +7552,6 @@ static int __igc_resume(struct device *dev)
 		return err;
 	}
 	pci_set_master(pdev);
-
-	pci_enable_wake(pdev, PCI_D3hot, 0);
-	pci_enable_wake(pdev, PCI_D3cold, 0);
 
 	if (igc_is_device_id_i226(hw))
 		pci_disable_link_state(pdev, PCIE_LINK_STATE_L1_2);
