@@ -423,6 +423,7 @@ static int init_cmdqs_channel(struct hinic3_hwdev *hwdev)
 	return 0;
 
 err_reset_wq_page_size:
+if (HINIC3_FUNC_TYPE(hwdev) != HINIC3_FUNC_TYPE_VF)
 	hinic3_set_wq_page_size(hwdev, hinic3_global_func_id(hwdev),
 				HINIC3_MIN_PAGE_SIZE);
 err_free_ceqs:
@@ -434,6 +435,11 @@ err_free_ceqs:
 static void hinic3_free_cmdqs_channel(struct hinic3_hwdev *hwdev)
 {
 	hinic3_comm_cmdqs_free(hwdev);
+
+	if (HINIC3_FUNC_TYPE(hwdev) != HINIC3_FUNC_TYPE_VF)
+		hinic3_set_wq_page_size(hwdev, hinic3_global_func_id(hwdev),
+					HINIC3_MIN_PAGE_SIZE);
+
 	hinic3_ceqs_free(hwdev);
 }
 
