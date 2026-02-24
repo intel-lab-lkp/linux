@@ -718,7 +718,7 @@ void InitSysInterrupt8723BSdio(struct adapter *adapter)
 
 /*  */
 /*	Description: */
-/*		Enalbe SDIO Host Interrupt Mask configuration on SDIO local domain. */
+/*		Enable SDIO Host Interrupt Mask configuration on SDIO local domain. */
 /*  */
 /*	Assumption: */
 /*		1. Using SDIO Local register ONLY for configuration. */
