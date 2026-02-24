@@ -11,8 +11,13 @@
 
 #include <asm/types.h>
 
+#ifdef CONFIG_ARM64_D128
+#define __PRIpte		"016llx%016llx"
+#define __PRIpte_args(val)	(u64)((val) >> 64), (u64)(val)
+#else
 #define __PRIpte		"016llx"
 #define __PRIpte_args(val)	((u64)val)
+#endif
 
 /*
  * Page Table Descriptor
@@ -20,7 +25,11 @@
  * Generic page table descriptor format from which
  * all level specific descriptors can be derived.
  */
+#ifdef CONFIG_ARM64_D128
+typedef u128 ptdesc_t;
+#else
 typedef u64 ptdesc_t;
+#endif
 
 typedef ptdesc_t pteval_t;
 typedef ptdesc_t pmdval_t;

@@ -49,6 +49,19 @@
 
 #define __tlbi(op, ...)		__TLBI_N(op, ##__VA_ARGS__, 1, 0)
 
+#ifdef CONFIG_ARM64_D128
+#define __tlbip(op, arg1, arg2) do {	\
+	u128 value = 0;			\
+	value |= (u128)arg2 << 64;	\
+	value |= (u128)arg1;		\
+					\
+	asm (ARM64_ASM_PREAMBLE		\
+	".arch_extension d128\n\t"	\
+	"tlbip " #op ", %0, %H0\n"	\
+	: : "r" (value));		\
+} while (0)
+#endif
+
 #define __tlbi_user(op, arg) do {						\
 	if (arm64_kernel_unmapped_at_el0())					\
 		__tlbi(op, (arg) | USER_ASID_FLAG);				\
@@ -128,6 +141,46 @@ static inline unsigned long get_trans_granule(void)
 		__tlbi_level(op, (arg | USER_ASID_FLAG), level);	\
 } while (0)
 
+#ifdef CONFIG_ARM64_D128
+/*
+ *
+ * TLBIP Encoding
+ *
+ * +------------+-----------------+-------+-------+------------------+
+ * |     RES0   |     BADDR       |  ASID |  TTL  |      RES0        |
+ * +------------------------------+-------+-------+------------------+
+ * |127      108|107            64|63   48|47   44|43               0|
+ */
+
+#define __tlbip_user(op, arg, addr) do {					\
+	if (arm64_kernel_unmapped_at_el0())					\
+		__tlbip(op, (arg) | USER_ASID_FLAG, addr);			\
+} while (0)
+/*
+ * FEAT_TTL being mandatory from armv8.4 and FEAT_D128 is available
+ * only from armv9.4, we dont need the capability check for TTL.
+ */
+#define __TLBIP_ARGS(asid, level)						\
+	({									\
+		u64 arg = 0;							\
+										\
+		arg |= FIELD_PREP(TLBI_ASID_MASK, (asid));			\
+		if ((level) >= 0 && (level) <= 3) {				\
+			arg |= FIELD_PREP(TLBI_TG_MASK, get_trans_granule());	\
+			arg |= FIELD_PREP(TLBI_LVL_MASK, (level));		\
+		}								\
+		arg;								\
+	})									\
+
+#define __tlb_asid_level(op, addr, asid, level, tlb_user) do {		\
+	u64 arg1 = __TLBIP_ARGS(asid, level);				\
+	u64 arg2 = (addr) >> 12;					\
+									\
+	__tlbip(op, arg1, arg2);					\
+	if (tlb_user)							\
+		__tlbip_user(op, arg1, arg2);				\
+} while (0)
+#else
 #define __tlb_asid_level(op, addr, asid, level, tlb_user) do {		\
 	u64 arg1;							\
 									\
@@ -136,6 +189,7 @@ static inline unsigned long get_trans_granule(void)
 	if (tlb_user)							\
 		__tlbi_user_level(op, arg1, level);			\
 } while (0)
+#endif
 
 /*
  * This macro creates a properly formatted VA operand for the TLB RANGE. The
@@ -200,6 +254,16 @@ static inline unsigned long get_trans_granule(void)
 		(__pages >> (5 * (scale) + 1)) - 1;			\
 	})
 
+#ifdef CONFIG_ARM64_D128
+#define __tlb_range(op, addr, lpa2, range_args, tlb_user) do {		\
+	u64 arg1 = range_args;						\
+	u64 arg2 = (addr) >> 12;					\
+									\
+	__tlbip(r##op, arg1, arg2);					\
+	if (tlb_user)							\
+		__tlbip_user(r##op, arg1, arg2);			\
+} while (0)
+#else
 #define __tlb_range(op, addr, lpa2, range_args, tlb_user) do {		\
 	u64 arg1;							\
 	int shift = lpa2 ? 16 : PAGE_SHIFT;				\
@@ -209,6 +273,7 @@ static inline unsigned long get_trans_granule(void)
 	if (tlb_user)							\
 		__tlbi_user(r##op, arg1);				\
 } while (0)
+#endif
 
 /*
  *	TLB Invalidation
