@@ -179,6 +179,7 @@ void iommu_sva_unbind_device(struct iommu_sva *handle)
 		return;
 	}
 
+	mmgrab(domain->mm);
 	iommu_detach_device_pasid(domain, dev, iommu_mm->pasid);
 	if (--domain->users == 0) {
 		list_del(&domain->next);
@@ -190,6 +191,7 @@ void iommu_sva_unbind_device(struct iommu_sva *handle)
 		if (list_empty(&iommu_sva_mms))
 			iommu_sva_present = false;
 	}
+	mmdrop(domain->mm);
 
 	mutex_unlock(&iommu_sva_lock);
 	kfree(handle);
