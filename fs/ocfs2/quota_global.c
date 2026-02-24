@@ -311,7 +311,10 @@ int ocfs2_lock_global_qf(struct ocfs2_mem_dqinfo *oinfo, int ex)
 	spin_unlock(&dq_data_lock);
 	if (ex) {
 		inode_lock(oinfo->dqi_gqinode);
-		down_write(&OCFS2_I(oinfo->dqi_gqinode)->ip_alloc_sem);
+		if (!down_write_trylock(&OCFS2_I(oinfo->dqi_gqinode)->ip_alloc_sem)) {
+			inode_unlock(oinfo->dqi_gqinode);
+			return -EBUSY;
+		}
 	} else {
 		down_read(&OCFS2_I(oinfo->dqi_gqinode)->ip_alloc_sem);
 	}
