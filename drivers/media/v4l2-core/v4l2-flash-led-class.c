@@ -625,10 +625,17 @@ static int v4l2_flash_close(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	if (led_cdev) {
 		mutex_lock(&led_cdev->led_access);
 
+		/* If file handle is released, make sure LED enter off state */
+		ret = v4l2_ctrl_s_ctrl(v4l2_flash->ctrls[LED_MODE],
+				       V4L2_FLASH_LED_MODE_NONE);
+		if (ret)
+			goto out_led_close;
+
 		if (v4l2_flash->ctrls[STROBE_SOURCE])
 			ret = v4l2_ctrl_s_ctrl(
 				v4l2_flash->ctrls[STROBE_SOURCE],
 				V4L2_FLASH_STROBE_SOURCE_SOFTWARE);
+out_led_close:
 		led_sysfs_enable(led_cdev);
 
 		mutex_unlock(&led_cdev->led_access);
