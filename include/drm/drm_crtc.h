@@ -893,6 +893,40 @@ struct drm_crtc_funcs {
 	void (*disable_vblank)(struct drm_crtc *crtc);
 
 	/**
+	 * @pre_enable_vblank:
+	 *
+	 * Optional callback to do blocking work prior to vblank_enable(). If
+	 * set, vblank enable/disable will be deferred to a single-threaded
+	 * worker.
+	 */
+	void (*pre_enable_vblank)(struct drm_crtc *crtc);
+
+	/**
+	 * @post_enable_vblank:
+	 *
+	 * Optional callback to do blocking work after vblank_enable(). If set,
+	 * vblank enable/disable will be deferred to a single-threaded worker.
+	 */
+	void (*post_enable_vblank)(struct drm_crtc *crtc);
+
+	/**
+	 * @pre_disable_vblank:
+	 *
+	 * Optional callback to do blocking work prior to vblank_disable(). If
+	 * set, vblank enable/disable will be deferred to a single-threaded
+	 * worker.
+	 */
+	void (*pre_disable_vblank)(struct drm_crtc *crtc);
+
+	/**
+	 * @post_disable_vblank:
+	 *
+	 * Optional callback to do blocking work after vblank_disable(). If set,
+	 * vblank enable/disable will be deferred to a single-threaded worker.
+	 */
+	void (*post_disable_vblank)(struct drm_crtc *crtc);
+
+	/**
 	 * @get_vblank_timestamp:
 	 *
 	 * Called by drm_get_last_vbltimestamp(). Should return a precise

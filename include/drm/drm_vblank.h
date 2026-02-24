@@ -282,6 +282,25 @@ struct drm_vblank_crtc {
 	 * @vblank_timer: Holds the state of the vblank timer
 	 */
 	struct drm_vblank_crtc_timer vblank_timer;
+
+	/**
+	 * @enable_work: Deferred enable work for this vblank CRTC
+	 */
+	struct work_struct enable_work;
+
+	/**
+	 * @disable_work: Delayed disable work for this vblank CRTC
+	 */
+	struct delayed_work disable_work;
+
+	/**
+	 * @enable_done: Signals completion of deferred vblank enable
+	 *
+	 * If deferred enable work is needed, it is reinitialized before
+	 * queueing the enable worker, and completed after the deferred
+	 * drm_vblank_enable() completes.
+	 */
+	struct completion enable_done;
 };
 
 struct drm_vblank_crtc *drm_crtc_vblank_crtc(struct drm_crtc *crtc);
@@ -302,6 +321,7 @@ bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe);
 bool drm_crtc_handle_vblank(struct drm_crtc *crtc);
 int drm_crtc_vblank_get(struct drm_crtc *crtc);
 void drm_crtc_vblank_put(struct drm_crtc *crtc);
+void drm_crtc_vblank_wait_deferred_enable(struct drm_crtc *crtc);
 int drm_crtc_wait_one_vblank(struct drm_crtc *crtc);
 void drm_crtc_vblank_off(struct drm_crtc *crtc);
 void drm_crtc_vblank_reset(struct drm_crtc *crtc);

@@ -696,6 +696,11 @@ static void drm_dev_init_release(struct drm_device *dev, void *res)
 	mutex_destroy(&dev->master_mutex);
 	mutex_destroy(&dev->clientlist_mutex);
 	mutex_destroy(&dev->filelist_mutex);
+
+	if (dev->deferred_vblank_wq) {
+		flush_workqueue(dev->deferred_vblank_wq);
+		destroy_workqueue(dev->deferred_vblank_wq);
+	}
 }
 
 static int drm_dev_init(struct drm_device *dev,

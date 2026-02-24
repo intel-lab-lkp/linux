@@ -127,8 +127,11 @@
  * maintains a vertical blanking use count to ensure that the interrupts are not
  * disabled while a user still needs them. To increment the use count, drivers
  * call drm_crtc_vblank_get() and release the vblank reference again with
- * drm_crtc_vblank_put(). In between these two calls vblank interrupts are
- * guaranteed to be enabled.
+ * drm_crtc_vblank_put(). If drivers do not implement the deferred vblank
+ * callbacks (see &drm_crtc_funcs.pre_enable_vblank and related callbacks), in
+ * between these two calls vblank interrupts are guaranteed to be enabled.
+ * Otherwise, drivers have to wait for deferred enable via
+ * drm_crtc_vblank_wait_deferred_enable() in-between get() and put().
  *
  * On many hardware disabling the vblank interrupt cannot be done in a race-free
  * manner, see &drm_vblank_crtc_config.disable_immediate and
@@ -524,6 +527,9 @@ static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
 	timer_delete_sync(&vblank->disable_timer);
 }
 
+static void drm_vblank_deferred_enable_worker(struct work_struct *work);
+static void drm_vblank_deferred_disable_worker(struct work_struct *work);
+
 /**
  * drm_vblank_init - initialize vblank support
  * @dev: DRM device
@@ -548,6 +554,12 @@ int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
 	if (!dev->vblank)
 		return -ENOMEM;
 
+	dev->deferred_vblank_wq = alloc_workqueue("drm_vblank_deferred_wq",
+						  WQ_HIGHPRI | WQ_UNBOUND,
+						  0);
+	if (!dev->deferred_vblank_wq)
+		return -ENOMEM;
+
 	dev->num_crtcs = num_crtcs;
 
 	for (i = 0; i < num_crtcs; i++) {
@@ -567,6 +579,16 @@ int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
 		ret = drm_vblank_worker_init(vblank);
 		if (ret)
 			return ret;
+
+		INIT_WORK(&vblank->enable_work,
+			  drm_vblank_deferred_enable_worker);
+		INIT_DELAYED_WORK(&vblank->disable_work,
+				  drm_vblank_deferred_disable_worker);
+
+		init_completion(&vblank->enable_done);
+		/* Initialize in the completed state, the first deferred vblank
+		 * enable will reinitialize this. */
+		complete_all(&vblank->enable_done);
 	}
 
 	return 0;
@@ -594,6 +616,29 @@ bool drm_dev_has_vblank(const struct drm_device *dev)
 	return dev->num_crtcs != 0;
 }
 EXPORT_SYMBOL(drm_dev_has_vblank);
+
+/**
+ * drm_crtc_needs_deferred_vblank - If crtc needs deferred vblank enable/disable
+ * @crtc: which CRTC to check
+ *
+ * If the driver implements any of the pre/post enable/disable vblank hooks
+ * where blocking work can be done, then vblank enable/disable need to be
+ * deferred.
+ *
+ * Returns:
+ * True if vblank enable/disable needs to be deferred, false otherwise.
+ */
+static bool drm_crtc_needs_deferred_vblank(const struct drm_crtc *crtc)
+{
+	const struct drm_crtc_funcs *funcs;
+
+	if (!crtc)
+		return false;
+
+	funcs = crtc->funcs;
+	return (funcs->pre_enable_vblank || funcs->post_enable_vblank ||
+		funcs->pre_disable_vblank || funcs->post_disable_vblank);
+}
 
 /**
  * drm_crtc_vblank_waitqueue - get vblank waitqueue for the CRTC
@@ -1208,10 +1253,88 @@ static int drm_vblank_enable(struct drm_device *dev, unsigned int pipe)
 	return ret;
 }
 
+static void drm_vblank_deferred_enable_worker(struct work_struct *work)
+{
+	struct drm_vblank_crtc *vblank =
+		container_of(work, struct drm_vblank_crtc, enable_work);
+	struct drm_device *dev = vblank->dev;
+	struct drm_crtc *crtc = drm_crtc_from_index(dev, vblank->pipe);
+	unsigned long irqflags;
+	int ret;
+
+	if (drm_WARN_ON(dev, !crtc))
+		return;
+
+	if (crtc->funcs->pre_enable_vblank)
+		crtc->funcs->pre_enable_vblank(crtc);
+
+	spin_lock_irqsave(&dev->vbl_lock, irqflags);
+
+	/* Deferred enable should not error */
+	ret = drm_vblank_enable(dev, vblank->pipe);
+	drm_WARN(dev, ret, "CRTC-%d deferred vblank enable failed with %d\n",
+		 crtc->index, ret);
+	/* Deferred enable completed */
+	complete_all(&vblank->enable_done);
+
+	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
+
+	if (crtc->funcs->post_enable_vblank)
+		crtc->funcs->post_enable_vblank(crtc);
+}
+
+static void drm_vblank_deferred_disable_worker(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct drm_vblank_crtc *vblank =
+		container_of(dwork, struct drm_vblank_crtc, disable_work);
+	struct drm_device *dev = vblank->dev;
+	struct drm_crtc *crtc = drm_crtc_from_index(dev, vblank->pipe);
+
+	if (drm_WARN_ON(dev, !crtc))
+		return;
+
+	if (crtc->funcs->pre_disable_vblank)
+		crtc->funcs->pre_disable_vblank(crtc);
+
+	vblank_disable_fn(&vblank->disable_timer);
+
+	if (crtc->funcs->post_disable_vblank)
+		crtc->funcs->post_disable_vblank(crtc);
+}
+
+/**
+ * drm_crtc_vblank_wait_deferred_enable - wait for deferred enable to complete
+ *
+ * @crtc: the CRTC to wait on
+ *
+ * After vblank_get() queues a vblank_enable() worker, wait for the worker to
+ * complete the enable. Drivers that defer vblank enable and use this to wait on
+ * HW vblank enable before continuing with programming that might race with it.
+ *
+ * If the CRTC does not need deferred enable, this function does nothing.
+ *
+ * Can block, and therefore must be called from process context.
+ */
+void drm_crtc_vblank_wait_deferred_enable(struct drm_crtc *crtc)
+{
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
+
+	if (!drm_crtc_needs_deferred_vblank(crtc))
+		return;
+
+	if (!wait_for_completion_timeout(&vblank->enable_done,
+	    msecs_to_jiffies(1000)))
+		drm_err(crtc->dev, "CRTC-%d: Timed out waiting for deferred vblank enable\n",
+			 drm_crtc_index(crtc));
+}
+EXPORT_SYMBOL(drm_crtc_vblank_wait_deferred_enable);
+
 int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
 {
 	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
 	unsigned long irqflags;
+	bool needs_deferred_enable;
 	int ret = 0;
 
 	if (!drm_dev_has_vblank(dev))
@@ -1220,12 +1343,21 @@ int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
 		return -EINVAL;
 
+	needs_deferred_enable =
+		drm_crtc_needs_deferred_vblank(drm_crtc_from_index(dev, pipe));
+
 	spin_lock_irqsave(&dev->vbl_lock, irqflags);
 	/* Going from 0->1 means we have to enable interrupts again */
 	if (atomic_add_return(1, &vblank->refcount) == 1) {
-		ret = drm_vblank_enable(dev, pipe);
+		if (needs_deferred_enable) {
+			/* Arm completion before queueing deferred enable */
+			reinit_completion(&vblank->enable_done);
+			queue_work(dev->deferred_vblank_wq, &vblank->enable_work);
+		} else {
+			ret = drm_vblank_enable(dev, pipe);
+		}
 	} else {
-		if (!vblank->enabled) {
+		if ((!needs_deferred_enable && !vblank->enabled)) {
 			atomic_dec(&vblank->refcount);
 			ret = -EINVAL;
 		}
@@ -1255,6 +1387,7 @@ void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
 {
 	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
 	int vblank_offdelay = vblank->config.offdelay_ms;
+	bool needs_deferred_disable;
 
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
 		return;
@@ -1262,13 +1395,28 @@ void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
 	if (drm_WARN_ON(dev, atomic_read(&vblank->refcount) == 0))
 		return;
 
+	needs_deferred_disable =
+		drm_crtc_needs_deferred_vblank(drm_crtc_from_index(dev, pipe));
+
 	/* Last user schedules interrupt disable */
-	if (atomic_dec_and_test(&vblank->refcount)) {
-		if (!vblank_offdelay)
-			return;
-		else if (vblank_offdelay < 0)
+	if (!atomic_dec_and_test(&vblank->refcount))
+		return;
+
+	if (!vblank_offdelay)
+		return;
+	else if (vblank_offdelay < 0) {
+		if (needs_deferred_disable)
+			mod_delayed_work(dev->deferred_vblank_wq,
+					 &vblank->disable_work,
+					 0);
+		else
 			vblank_disable_fn(&vblank->disable_timer);
-		else if (!vblank->config.disable_immediate)
+	} else if (!vblank->config.disable_immediate) {
+		if (needs_deferred_disable)
+			mod_delayed_work(dev->deferred_vblank_wq,
+					 &vblank->disable_work,
+					 msecs_to_jiffies(vblank_offdelay));
+		else
 			mod_timer(&vblank->disable_timer,
 				  jiffies + ((vblank_offdelay * HZ) / 1000));
 	}
@@ -1348,6 +1496,9 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
 		return;
 
+	if (crtc->funcs->pre_disable_vblank)
+		crtc->funcs->pre_disable_vblank(crtc);
+
 	/*
 	 * Grab event_lock early to prevent vblank work from being scheduled
 	 * while we're in the middle of shutting down vblank interrupts
@@ -1393,6 +1544,9 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 	drm_vblank_cancel_pending_works(vblank);
 
 	spin_unlock_irq(&dev->event_lock);
+
+	if (crtc->funcs->post_disable_vblank)
+		crtc->funcs->post_disable_vblank(crtc);
 
 	/* Will be reset by the modeset helpers when re-enabling the crtc by
 	 * calling drm_calc_timestamping_constants(). */
@@ -1489,6 +1643,9 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
 		return;
 
+	if (crtc->funcs->pre_enable_vblank)
+		crtc->funcs->pre_enable_vblank(crtc);
+
 	spin_lock_irq(&dev->vbl_lock);
 	drm_dbg_vbl(dev, "crtc %d, vblank enabled %d, inmodeset %d\n",
 		    pipe, vblank->enabled, vblank->inmodeset);
@@ -1510,6 +1667,9 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 	if (atomic_read(&vblank->refcount) != 0 || !vblank->config.offdelay_ms)
 		drm_WARN_ON(dev, drm_vblank_enable(dev, pipe));
 	spin_unlock_irq(&dev->vbl_lock);
+
+	if (crtc->funcs->post_enable_vblank)
+		crtc->funcs->post_enable_vblank(crtc);
 }
 EXPORT_SYMBOL(drm_crtc_vblank_on_config);
 
@@ -1962,8 +2122,14 @@ bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe)
 
 	spin_unlock_irqrestore(&dev->event_lock, irqflags);
 
-	if (disable_irq)
-		vblank_disable_fn(&vblank->disable_timer);
+	if (disable_irq) {
+		if (drm_crtc_needs_deferred_vblank(drm_crtc_from_index(dev, pipe)))
+			mod_delayed_work(dev->deferred_vblank_wq,
+					 &vblank->disable_work,
+					 0);
+		else
+			vblank_disable_fn(&vblank->disable_timer);
+	}
 
 	return true;
 }

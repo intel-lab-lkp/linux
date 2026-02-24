@@ -333,6 +333,12 @@ struct drm_device {
 	 */
 	spinlock_t event_lock;
 
+	/**
+	 * @deferred_vblank_wq: Workqueue used for deferred vblank
+	 * enable/disable work.
+	 */
+	struct workqueue_struct *deferred_vblank_wq;
+
 	/** @num_crtcs: Number of CRTCs on this device */
 	unsigned int num_crtcs;
 
