@@ -16,6 +16,7 @@
 #include <linux/list.h>
 #include <linux/uidgid.h>
 #include <uapi/linux/nfs4.h>
+#include <linux/sunrpc/xdr.h>
 #include <linux/sunrpc/msg_prot.h>
 #include <linux/sunrpc/xdrgen/nfs4_1.h>
 
@@ -38,8 +39,26 @@ struct nfs4_ace {
 };
 
 struct nfs4_acl {
-	uint32_t	naces;
-	struct nfs4_ace	aces[];
+	union {
+		struct {
+			/*
+			 * Payload to use for deferred decode into
+			 * pages once ACL passthru is required
+			 * (which uses abnormal members below).
+			 */
+			struct xdr_buf payload;
+			/* Normal counted list of ACEs */
+			uint32_t naces;
+			struct nfs4_ace	aces[];
+		} __attribute__ ((packed));
+		struct {
+			/* Abnormal counted list of pages */
+			uint32_t type;
+			uint32_t len;
+			uint32_t pgbase;
+			struct page *pages[];
+		} __attribute__ ((packed));
+	};
 };
 
 #define NFS4_MAXLABELLEN	2048
