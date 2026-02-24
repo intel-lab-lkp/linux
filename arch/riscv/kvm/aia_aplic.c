@@ -527,6 +527,31 @@ static struct kvm_io_device_ops aplic_iodoev_ops = {
 	.write = aplic_mmio_write,
 };
 
+static int aplic_mmio_has_offset(struct kvm *kvm, gpa_t off)
+{
+	if ((off & 0x3) != 0)
+		return -EOPNOTSUPP;
+
+	if ((off == APLIC_DOMAINCFG) ||
+		(off >= APLIC_SOURCECFG_BASE && off < (APLIC_SOURCECFG_BASE + 1023 * 4)) ||
+		(off >= APLIC_SETIP_BASE && off < (APLIC_SETIP_BASE + 32 * 4)) ||
+		(off == APLIC_SETIPNUM) ||
+		(off >= APLIC_CLRIP_BASE && off < (APLIC_CLRIP_BASE + 32 * 4)) ||
+		(off == APLIC_CLRIPNUM) ||
+		(off >= APLIC_SETIE_BASE && off < (APLIC_SETIE_BASE + 32 * 4)) ||
+		(off == APLIC_SETIENUM) ||
+		(off >= APLIC_CLRIE_BASE && off < (APLIC_CLRIE_BASE + 32 * 4)) ||
+		(off == APLIC_CLRIENUM) ||
+		(off == APLIC_SETIPNUM_LE) ||
+		(off == APLIC_SETIPNUM_BE) ||
+		(off == APLIC_GENMSI) ||
+		(off >= APLIC_TARGET_BASE && off < (APLIC_TARGET_BASE + 1203 * 4))
+	)
+		return 0;
+	else
+		return -ENODEV;
+}
+
 int kvm_riscv_aia_aplic_set_attr(struct kvm *kvm, unsigned long type, u32 v)
 {
 	int rc;
@@ -558,12 +583,11 @@ int kvm_riscv_aia_aplic_get_attr(struct kvm *kvm, unsigned long type, u32 *v)
 int kvm_riscv_aia_aplic_has_attr(struct kvm *kvm, unsigned long type)
 {
 	int rc;
-	u32 val;
 
 	if (!kvm->arch.aia.aplic_state)
 		return -ENODEV;
 
-	rc = aplic_mmio_read_offset(kvm, type, &val);
+	rc = aplic_mmio_has_offset(kvm, type);
 	if (rc)
 		return rc;
 
