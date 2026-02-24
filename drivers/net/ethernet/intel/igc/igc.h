@@ -351,7 +351,7 @@ struct igc_adapter {
 };
 
 void igc_up(struct igc_adapter *adapter);
-void igc_down(struct igc_adapter *adapter);
+void igc_down(struct igc_adapter *adapter, bool reset);
 int igc_open(struct net_device *netdev);
 int igc_close(struct net_device *netdev);
 int igc_setup_tx_resources(struct igc_ring *ring);
