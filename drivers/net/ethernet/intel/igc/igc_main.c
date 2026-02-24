@@ -7536,7 +7536,7 @@ static void igc_deliver_wake_packet(struct net_device *netdev)
 	netif_rx(skb);
 }
 
-static int __igc_resume(struct device *dev, bool rpm)
+static int __igc_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct net_device *netdev = pci_get_drvdata(pdev);
@@ -7581,11 +7581,9 @@ static int __igc_resume(struct device *dev, bool rpm)
 	wr32(IGC_WUS, ~0);
 
 	if (netif_running(netdev)) {
-		if (!rpm)
-			rtnl_lock();
+		rtnl_lock();
 		err = __igc_open(netdev, true);
-		if (!rpm)
-			rtnl_unlock();
+		rtnl_unlock();
 		if (!err)
 			netif_device_attach(netdev);
 	}
@@ -7595,12 +7593,12 @@ static int __igc_resume(struct device *dev, bool rpm)
 
 static int igc_resume(struct device *dev)
 {
-	return __igc_resume(dev, false);
+	return __igc_resume(dev);
 }
 
 static int igc_runtime_resume(struct device *dev)
 {
-	return __igc_resume(dev, true);
+	return __igc_resume(dev);
 }
 
 static int igc_suspend(struct device *dev)
