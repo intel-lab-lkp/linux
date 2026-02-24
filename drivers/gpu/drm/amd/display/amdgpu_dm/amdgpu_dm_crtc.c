@@ -293,20 +293,12 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
 	struct dm_crtc_state *acrtc_state = to_dm_crtc_state(crtc->state);
 	struct amdgpu_display_manager *dm = &adev->dm;
-	struct vblank_control_work *work;
 	int irq_type;
 	int rc = 0;
 
-	if (enable && !acrtc->base.enabled) {
-		drm_dbg_vbl(crtc->dev,
-				"Reject vblank enable on unconfigured CRTC %d (enabled=%d)\n",
-				acrtc->crtc_id, acrtc->base.enabled);
-		return -EINVAL;
-	}
-
 	irq_type = amdgpu_display_crtc_idx_to_irq_type(adev, acrtc->crtc_id);
 
-	if (enable) {
+	if (enable && crtc->enabled) {
 		struct dc *dc = adev->dm.dc;
 		struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 		struct psr_settings *psr = &acrtc_state->stream->link->psr_settings;
@@ -387,39 +379,79 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 			return rc;
 	}
 #endif
+	return 0;
+}
 
-	if (amdgpu_in_reset(adev))
-		return 0;
+static int amdgpu_dm_crtc_queue_vblank_work(struct amdgpu_display_manager *dm,
+					    struct amdgpu_crtc *acrtc,
+					    struct dm_crtc_state *acrtc_state,
+					    bool enable)
+{
+	struct vblank_control_work *work;
 
-	if (dm->vblank_control_workqueue) {
-		work = kzalloc_obj(*work, GFP_ATOMIC);
-		if (!work)
-			return -ENOMEM;
+	work = kzalloc_obj(*work, GFP_ATOMIC);
+	if (!work)
+		return -ENOMEM;
 
-		INIT_WORK(&work->work, amdgpu_dm_crtc_vblank_control_worker);
-		work->dm = dm;
-		work->acrtc = acrtc;
-		work->enable = enable;
+	INIT_WORK(&work->work, amdgpu_dm_crtc_vblank_control_worker);
+	work->dm = dm;
+	work->acrtc = acrtc;
+	work->enable = enable;
 
-		if (acrtc_state->stream) {
-			dc_stream_retain(acrtc_state->stream);
-			work->stream = acrtc_state->stream;
-		}
-
-		queue_work(dm->vblank_control_workqueue, &work->work);
+	if (acrtc_state->stream) {
+		dc_stream_retain(acrtc_state->stream);
+		work->stream = acrtc_state->stream;
 	}
+
+	queue_work(dm->vblank_control_workqueue, &work->work);
 
 	return 0;
 }
 
-int amdgpu_dm_crtc_enable_vblank(struct drm_crtc *crtc)
+static int amdgpu_dm_crtc_enable_vblank(struct drm_crtc *crtc)
 {
-	return amdgpu_dm_crtc_set_vblank(crtc, true);
+	struct dm_crtc_state *acrtc_state = to_dm_crtc_state(crtc->state);
+	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+	struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
+	struct amdgpu_display_manager *dm = &adev->dm;
+	int ret;
+
+	if (!crtc->enabled) {
+		drm_dbg_vbl(crtc->dev,
+				"Reject vblank enable on unconfigured CRTC %d (enabled=%d)\n",
+				crtc->index, crtc->enabled);
+		return -EINVAL;
+	}
+
+	ret = amdgpu_dm_crtc_set_vblank(crtc, true);
+	if (ret)
+		return ret;
+
+	if (amdgpu_in_reset(adev))
+		return 0;
+
+	if (dm->vblank_control_workqueue)
+		return amdgpu_dm_crtc_queue_vblank_work(dm, acrtc,
+							acrtc_state, true);
+
+	return 0;
 }
 
-void amdgpu_dm_crtc_disable_vblank(struct drm_crtc *crtc)
+static void amdgpu_dm_crtc_disable_vblank(struct drm_crtc *crtc)
 {
+	struct dm_crtc_state *acrtc_state = to_dm_crtc_state(crtc->state);
+	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+	struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
+	struct amdgpu_display_manager *dm = &adev->dm;
+
 	amdgpu_dm_crtc_set_vblank(crtc, false);
+
+	if (amdgpu_in_reset(adev))
+		return;
+
+	if (dm->vblank_control_workqueue)
+		amdgpu_dm_crtc_queue_vblank_work(dm, acrtc,
+						 acrtc_state, false);
 }
 
 static void amdgpu_dm_crtc_destroy_state(struct drm_crtc *crtc,
