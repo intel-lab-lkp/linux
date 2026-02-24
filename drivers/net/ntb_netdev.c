@@ -71,7 +71,25 @@ static unsigned int tx_start = 10;
 /* Number of descriptors still available before stop upper layer tx */
 static unsigned int tx_stop = 5;
 
+/*
+ * This is an arbitrary safety cap to avoid unbounded allocations.
+ */
+#define NTB_NETDEV_MAX_QUEUES	64
+
+static int ntb_num_queues_set(const char *val, const struct kernel_param *kp)
+{
+	return param_set_uint_minmax(val, kp, 1, NTB_NETDEV_MAX_QUEUES);
+}
+
+static const struct kernel_param_ops ntb_num_queues_ops = {
+	.set = ntb_num_queues_set,
+	.get = param_get_uint,
+};
+
 static unsigned int ntb_num_queues = 1;
+module_param_cb(ntb_num_queues, &ntb_num_queues_ops, &ntb_num_queues, 0444);
+MODULE_PARM_DESC(ntb_num_queues,
+		 "Number of NTB netdev queue pairs to use (1 by default)");
 
 struct ntb_netdev;
 
