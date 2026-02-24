@@ -1813,14 +1813,21 @@ static inline int pmdp_clear_flush_young_notify(struct vm_area_struct *vma,
 	return young;
 }
 
-static inline int ptep_clear_young_notify(struct vm_area_struct *vma,
-					  unsigned long addr, pte_t *ptep)
+static inline int clear_young_ptes_notify(struct vm_area_struct *vma,
+					  unsigned long addr, pte_t *ptep,
+					  unsigned int nr)
 {
 	int young;
 
-	young = ptep_test_and_clear_young(vma, addr, ptep);
-	young |= mmu_notifier_clear_young(vma->vm_mm, addr, addr + PAGE_SIZE);
+	young = test_and_clear_young_ptes(vma, addr, ptep, nr);
+	young |= mmu_notifier_clear_young(vma->vm_mm, addr, addr + nr * PAGE_SIZE);
 	return young;
+}
+
+static inline int ptep_clear_young_notify(struct vm_area_struct *vma,
+					  unsigned long addr, pte_t *ptep)
+{
+	return clear_young_ptes_notify(vma, addr, ptep, 1);
 }
 
 static inline int pmdp_clear_young_notify(struct vm_area_struct *vma,
@@ -1837,8 +1844,14 @@ static inline int pmdp_clear_young_notify(struct vm_area_struct *vma,
 
 #define clear_flush_young_ptes_notify	clear_flush_young_ptes
 #define pmdp_clear_flush_young_notify	pmdp_clear_flush_young
-#define ptep_clear_young_notify	ptep_test_and_clear_young
+#define clear_young_ptes_notify	test_and_clear_young_ptes
 #define pmdp_clear_young_notify	pmdp_test_and_clear_young
+
+static inline int ptep_clear_young_notify(struct vm_area_struct *vma,
+					  unsigned long addr, pte_t *ptep)
+{
+	return test_and_clear_young_ptes(vma, addr, ptep, 1);
+}
 
 #endif /* CONFIG_MMU_NOTIFIER */
 
