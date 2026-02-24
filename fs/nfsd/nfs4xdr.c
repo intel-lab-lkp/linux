@@ -315,7 +315,13 @@ __be32 nfsd4_decode_nfs4_acl_passthru(struct nfsd4_compoundargs *argp,
 		goto out;
 	}
 
-	(*acl)->type = NFS4ACL_ACL;
+	if (bmval[0] & FATTR4_WORD0_ACL)
+		(*acl)->type = NFS4ACL_ACL;
+	else if (bmval[1] & FATTR4_WORD1_DACL)
+		(*acl)->type = NFS4ACL_DACL;
+	else if (bmval[1] & FATTR4_WORD1_SACL)
+		(*acl)->type = NFS4ACL_SACL;
+
 	(*acl)->len = acl_len;
 	(*acl)->pgbase = pgbase;
 
@@ -571,7 +577,8 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 		iattr->ia_size = size;
 		iattr->ia_valid |= ATTR_SIZE;
 	}
-	if (bmval[0] & FATTR4_WORD0_ACL) {
+	if (bmval[0] & FATTR4_WORD0_ACL ||
+	    (bmval[1] & (FATTR4_WORD1_DACL | FATTR4_WORD1_SACL))) {
 		status = nfsd4_decode_acl(argp, acl, attrlist4_count);
 		if (status)
 			return status;
@@ -3252,8 +3259,12 @@ static __be32 nfsd4_encode_fattr4_supported_attrs(struct xdr_stream *xdr,
 	u32 supp[3];
 
 	memcpy(supp, nfsd_suppattrs[minorversion], sizeof(supp));
-	if (!nfsd_supports_nfs4_acl(args->dentry))
-		supp[0] &= ~FATTR4_WORD0_ACL;
+	if (!nfsd_supports_nfs4_acl(args->dentry)) {
+		if (supp[0] & FATTR4_WORD0_ACL)
+			supp[0] &= ~FATTR4_WORD0_ACL;
+		else if ((supp[1] & (FATTR4_WORD1_DACL | FATTR4_WORD1_SACL)))
+			supp[1] &= ~(FATTR4_WORD1_DACL | FATTR4_WORD1_SACL);
+	}
 	if (!args->contextsupport)
 		supp[2] &= ~FATTR4_WORD2_SECURITY_LABEL;
 
@@ -3688,8 +3699,12 @@ static __be32 nfsd4_encode_fattr4_suppattr_exclcreat(struct xdr_stream *xdr,
 	u32 supp[3];
 
 	memcpy(supp, nfsd_suppattrs[resp->cstate.minorversion], sizeof(supp));
-	if (!nfsd_supports_nfs4_acl(args->dentry))
-		supp[0] &= ~FATTR4_WORD0_ACL;
+	if (!nfsd_supports_nfs4_acl(args->dentry)) {
+		if (supp[0] & FATTR4_WORD0_ACL)
+			supp[0] &= ~FATTR4_WORD0_ACL;
+		else if ((supp[1] & (FATTR4_WORD1_DACL | FATTR4_WORD1_SACL)))
+			supp[1] &= ~(FATTR4_WORD1_DACL | FATTR4_WORD1_SACL);
+	}
 	if (!args->contextsupport)
 		supp[2] &= ~FATTR4_WORD2_SECURITY_LABEL;
 
@@ -3878,8 +3893,8 @@ static const nfsd4_enc_attr nfsd4_enc_fattr4_encode_ops[] = {
 	[FATTR4_MOUNTED_ON_FILEID]	= nfsd4_encode_fattr4_mounted_on_fileid,
 	[FATTR4_DIR_NOTIF_DELAY]	= nfsd4_encode_fattr4__noop,
 	[FATTR4_DIRENT_NOTIF_DELAY]	= nfsd4_encode_fattr4__noop,
-	[FATTR4_DACL]			= nfsd4_encode_fattr4__noop,
-	[FATTR4_SACL]			= nfsd4_encode_fattr4__noop,
+	[FATTR4_DACL]			= nfsd4_encode_fattr4_acl,
+	[FATTR4_SACL]			= nfsd4_encode_fattr4_acl,
 	[FATTR4_CHANGE_POLICY]		= nfsd4_encode_fattr4__noop,
 	[FATTR4_FS_STATUS]		= nfsd4_encode_fattr4__noop,
 
@@ -4061,6 +4076,24 @@ nfsd4_encode_fattr4(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 		err = nfsd4_get_nfs4_acl(rqstp, dentry, NFS4ACL_ACL, &args.acl);
 		if (err == -EOPNOTSUPP)
 			attrmask[0] &= ~FATTR4_WORD0_ACL;
+		else if (err == -EINVAL) {
+			status = nfserr_attrnotsupp;
+			goto out;
+		} else if (err != 0)
+			goto out_nfserr;
+	} else if (attrmask[1] & FATTR4_WORD1_DACL) {
+		err = nfsd4_get_nfs4_acl(rqstp, dentry, NFS4ACL_DACL, &args.acl);
+		if (err == -EOPNOTSUPP)
+			attrmask[1] &= ~FATTR4_WORD1_DACL;
+		else if (err == -EINVAL) {
+			status = nfserr_attrnotsupp;
+			goto out;
+		} else if (err != 0)
+			goto out_nfserr;
+	} else if (attrmask[1] & FATTR4_WORD1_SACL) {
+		err = nfsd4_get_nfs4_acl(rqstp, dentry, NFS4ACL_SACL, &args.acl);
+		if (err == -EOPNOTSUPP)
+			attrmask[1] &= ~FATTR4_WORD1_SACL;
 		else if (err == -EINVAL) {
 			status = nfserr_attrnotsupp;
 			goto out;
