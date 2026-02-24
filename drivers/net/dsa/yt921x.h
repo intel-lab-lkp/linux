@@ -6,6 +6,8 @@
 #ifndef __YT921X_H
 #define __YT921X_H
 
+#include <linux/u64_stats_sync.h>
+
 #include <net/dsa.h>
 
 #define YT921X_SMI_SWITCHID_M		GENMASK(3, 2)
@@ -530,55 +532,61 @@ enum yt921x_fdb_entry_status {
 #define yt921x_port_is_external(port) (8 <= (port) && (port) < 9)
 
 struct yt921x_mib {
-	u64 rx_broadcast;
-	u64 rx_pause;
-	u64 rx_multicast;
-	u64 rx_crc_errors;
+	union {
+		struct {
+			u64_stats_t rx_broadcast;
+			u64_stats_t rx_pause;
+			u64_stats_t rx_multicast;
+			u64_stats_t rx_crc_errors;
 
-	u64 rx_alignment_errors;
-	u64 rx_undersize_errors;
-	u64 rx_fragment_errors;
-	u64 rx_64byte;
+			u64_stats_t rx_alignment_errors;
+			u64_stats_t rx_undersize_errors;
+			u64_stats_t rx_fragment_errors;
+			u64_stats_t rx_64byte;
 
-	u64 rx_65_127byte;
-	u64 rx_128_255byte;
-	u64 rx_256_511byte;
-	u64 rx_512_1023byte;
+			u64_stats_t rx_65_127byte;
+			u64_stats_t rx_128_255byte;
+			u64_stats_t rx_256_511byte;
+			u64_stats_t rx_512_1023byte;
 
-	u64 rx_1024_1518byte;
-	u64 rx_jumbo;
-	u64 rx_good_bytes;
+			u64_stats_t rx_1024_1518byte;
+			u64_stats_t rx_jumbo;
+			u64_stats_t rx_good_bytes;
 
-	u64 rx_bad_bytes;
-	u64 rx_oversize_errors;
+			u64_stats_t rx_bad_bytes;
+			u64_stats_t rx_oversize_errors;
 
-	u64 rx_dropped;
-	u64 tx_broadcast;
-	u64 tx_pause;
-	u64 tx_multicast;
+			u64_stats_t rx_dropped;
+			u64_stats_t tx_broadcast;
+			u64_stats_t tx_pause;
+			u64_stats_t tx_multicast;
 
-	u64 tx_undersize_errors;
-	u64 tx_64byte;
-	u64 tx_65_127byte;
-	u64 tx_128_255byte;
+			u64_stats_t tx_undersize_errors;
+			u64_stats_t tx_64byte;
+			u64_stats_t tx_65_127byte;
+			u64_stats_t tx_128_255byte;
 
-	u64 tx_256_511byte;
-	u64 tx_512_1023byte;
-	u64 tx_1024_1518byte;
-	u64 tx_jumbo;
+			u64_stats_t tx_256_511byte;
+			u64_stats_t tx_512_1023byte;
+			u64_stats_t tx_1024_1518byte;
+			u64_stats_t tx_jumbo;
 
-	u64 tx_good_bytes;
-	u64 tx_collisions;
+			u64_stats_t tx_good_bytes;
+			u64_stats_t tx_collisions;
 
-	u64 tx_aborted_errors;
-	u64 tx_multiple_collisions;
-	u64 tx_single_collisions;
-	u64 tx_good;
+			u64_stats_t tx_aborted_errors;
+			u64_stats_t tx_multiple_collisions;
+			u64_stats_t tx_single_collisions;
+			u64_stats_t tx_good;
 
-	u64 tx_deferred;
-	u64 tx_late_collisions;
-	u64 rx_oam;
-	u64 tx_oam;
+			u64_stats_t tx_deferred;
+			u64_stats_t tx_late_collisions;
+			u64_stats_t rx_oam;
+			u64_stats_t tx_oam;
+		};
+
+		u64_stats_t stats[39];
+	};
 };
 
 struct yt921x_port {
@@ -588,9 +596,13 @@ struct yt921x_port {
 	bool isolated;
 
 	struct delayed_work mib_read;
+	struct u64_stats_sync syncp;
 	struct yt921x_mib mib;
-	u64 rx_frames;
-	u64 tx_frames;
+	u64_stats_t rx_frames;
+	u64_stats_t tx_frames;
+
+	/* only used by read routine to avoid huge allocations on the stack */
+	struct yt921x_mib mib_new;
 };
 
 struct yt921x_reg_ops {
