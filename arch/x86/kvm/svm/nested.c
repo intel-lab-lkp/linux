@@ -40,17 +40,24 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 	struct vmcb *vmcb = svm->vmcb;
 
 	if (vmcb->control.exit_code != SVM_EXIT_NPF) {
-		/*
-		 * TODO: track the cause of the nested page fault, and
-		 * correctly fill in the high bits of exit_info_1.
-		 */
-		vmcb->control.exit_code = SVM_EXIT_NPF;
-		vmcb->control.exit_info_1 = (1ULL << 32);
+		vmcb->control.exit_info_1 = fault->error_code;
 		vmcb->control.exit_info_2 = fault->address;
 	}
 
+	vmcb->control.exit_code = SVM_EXIT_NPF;
 	vmcb->control.exit_info_1 &= ~0xffffffffULL;
 	vmcb->control.exit_info_1 |= fault->error_code;
+
+	/*
+	 * All nested page faults should be annotated as occurring on the
+	 * final translation *or* the page walk. Arbitrarily choose "final"
+	 * if KVM is buggy and enumerated both or neither.
+	 */
+	if (WARN_ON_ONCE(hweight64(vmcb->control.exit_info_1 &
+				   PFERR_GUEST_FAULT_STAGE_MASK) != 1)) {
+		vmcb->control.exit_info_1 &= ~PFERR_GUEST_FAULT_STAGE_MASK;
+		vmcb->control.exit_info_1 |= PFERR_GUEST_FINAL_MASK;
+	}
 
 	nested_svm_vmexit(svm);
 }

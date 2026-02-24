@@ -385,18 +385,12 @@ retry_walk:
 		real_gpa = kvm_translate_gpa(vcpu, mmu, gfn_to_gpa(table_gfn),
 					     nested_access, &walker->fault);
 
-		/*
-		 * FIXME: This can happen if emulation (for of an INS/OUTS
-		 * instruction) triggers a nested page fault.  The exit
-		 * qualification / exit info field will incorrectly have
-		 * "guest page access" as the nested page fault's cause,
-		 * instead of "guest page structure access".  To fix this,
-		 * the x86_exception struct should be augmented with enough
-		 * information to fix the exit_qualification or exit_info_1
-		 * fields.
-		 */
-		if (unlikely(real_gpa == INVALID_GPA))
+		if (unlikely(real_gpa == INVALID_GPA)) {
+#if PTTYPE != PTTYPE_EPT
+			walker->fault.error_code |= PFERR_GUEST_PAGE_MASK;
+#endif
 			return 0;
+		}
 
 		slot = kvm_vcpu_gfn_to_memslot(vcpu, gpa_to_gfn(real_gpa));
 		if (!kvm_is_visible_memslot(slot))
@@ -452,8 +446,12 @@ retry_walk:
 #endif
 
 	real_gpa = kvm_translate_gpa(vcpu, mmu, gfn_to_gpa(gfn), access, &walker->fault);
-	if (real_gpa == INVALID_GPA)
+	if (real_gpa == INVALID_GPA) {
+#if PTTYPE != PTTYPE_EPT
+		walker->fault.error_code |= PFERR_GUEST_FINAL_MASK;
+#endif
 		return 0;
+	}
 
 	walker->gfn = real_gpa >> PAGE_SHIFT;
 
