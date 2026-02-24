@@ -6639,13 +6639,7 @@ static int virtnet_validate(struct virtio_device *vdev)
 			__virtio_clear_bit(vdev, VIRTIO_NET_F_RSS);
 			__virtio_clear_bit(vdev, VIRTIO_NET_F_HASH_REPORT);
 		}
-		if (key_sz > NETDEV_RSS_KEY_LEN) {
-			dev_warn(&vdev->dev,
-				 "rss_max_key_size=%u exceeds driver limit %u, disabling RSS\n",
-				 key_sz, NETDEV_RSS_KEY_LEN);
-			__virtio_clear_bit(vdev, VIRTIO_NET_F_RSS);
-			__virtio_clear_bit(vdev, VIRTIO_NET_F_HASH_REPORT);
-		}
+		BUILD_BUG_ON(type_max(vi->rss_key_size) >= NETDEV_RSS_KEY_LEN);
 	}
 
 	return 0;
