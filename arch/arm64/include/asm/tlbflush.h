@@ -54,6 +54,8 @@
 		__tlbi(op, (arg) | USER_ASID_FLAG);				\
 } while (0)
 
+#define TLBI_ASID_MASK		GENMASK_ULL(63, 48)
+
 /* This macro creates a properly formatted VA operand for the TLBI */
 #define __TLBI_VADDR(addr, asid)				\
 	({							\
@@ -102,6 +104,8 @@ static inline unsigned long get_trans_granule(void)
  * in asm/stage2_pgtable.h.
  */
 #define TLBI_TTL_MASK		GENMASK_ULL(47, 44)
+#define TLBI_TG_MASK		GENMASK_ULL(47, 46)
+#define TLBI_LVL_MASK		GENMASK_ULL(45, 44)
 
 #define TLBI_TTL_UNKNOWN	INT_MAX
 
@@ -122,6 +126,15 @@ static inline unsigned long get_trans_granule(void)
 #define __tlbi_user_level(op, arg, level) do {				\
 	if (arm64_kernel_unmapped_at_el0())				\
 		__tlbi_level(op, (arg | USER_ASID_FLAG), level);	\
+} while (0)
+
+#define __tlb_asid_level(op, addr, asid, level, tlb_user) do {		\
+	u64 arg1;							\
+									\
+	arg1 = __TLBI_VADDR(addr, asid);				\
+	__tlbi_level(op, arg1, level);					\
+	if (tlb_user)							\
+		__tlbi_user_level(op, arg1, level);			\
 } while (0)
 
 /*
@@ -149,16 +162,22 @@ static inline unsigned long get_trans_granule(void)
 #define TLBIR_TTL_MASK		GENMASK_ULL(38, 37)
 #define TLBIR_BADDR_MASK	GENMASK_ULL(36,  0)
 
-#define __TLBI_VADDR_RANGE(baddr, asid, scale, num, ttl)		\
+#define __TLB_RANGE_ARGS(asid, scale, num, ttl)			\
 	({								\
 		unsigned long __ta = 0;					\
 		unsigned long __ttl = (ttl >= 1 && ttl <= 3) ? ttl : 0;	\
-		__ta |= FIELD_PREP(TLBIR_BADDR_MASK, baddr);		\
 		__ta |= FIELD_PREP(TLBIR_TTL_MASK, __ttl);		\
 		__ta |= FIELD_PREP(TLBIR_NUM_MASK, num);		\
 		__ta |= FIELD_PREP(TLBIR_SCALE_MASK, scale);		\
 		__ta |= FIELD_PREP(TLBIR_TG_MASK, get_trans_granule());	\
 		__ta |= FIELD_PREP(TLBIR_ASID_MASK, asid);		\
+		__ta;							\
+	})
+
+#define __TLBI_VADDR_RANGE(baddr, args)					\
+	({								\
+		unsigned long __ta = args;				\
+		__ta |= FIELD_PREP(TLBIR_BADDR_MASK, baddr);		\
 		__ta;							\
 	})
 
@@ -180,6 +199,16 @@ static inline unsigned long get_trans_granule(void)
 				  __TLBI_RANGE_PAGES(31, (scale)));	\
 		(__pages >> (5 * (scale) + 1)) - 1;			\
 	})
+
+#define __tlb_range(op, addr, lpa2, range_args, tlb_user) do {		\
+	u64 arg1;							\
+	int shift = lpa2 ? 16 : PAGE_SHIFT;				\
+									\
+	arg1 = __TLBI_VADDR_RANGE((addr) >> shift,  range_args);	\
+	__tlbi(r##op, arg1);						\
+	if (tlb_user)							\
+		__tlbi_user(r##op, arg1);				\
+} while (0)
 
 /*
  *	TLB Invalidation
@@ -423,17 +452,12 @@ do {									\
 	typeof(pages) __flush_pages = pages;				\
 	int num = 0;							\
 	int scale = 3;							\
-	int shift = lpa2 ? 16 : PAGE_SHIFT;				\
-	unsigned long addr;						\
 									\
 	while (__flush_pages > 0) {					\
 		if (!system_supports_tlb_range() ||			\
 		    __flush_pages == 1 ||				\
 		    (lpa2 && __flush_start != ALIGN(__flush_start, SZ_64K))) {	\
-			addr = __TLBI_VADDR(__flush_start, asid);	\
-			__tlbi_level(op, addr, tlb_level);		\
-			if (tlbi_user)					\
-				__tlbi_user_level(op, addr, tlb_level);	\
+			__tlb_asid_level(op, __flush_start, asid, tlb_level, tlbi_user);	\
 			__flush_start += stride;			\
 			__flush_pages -= stride >> PAGE_SHIFT;		\
 			continue;					\
@@ -441,11 +465,8 @@ do {									\
 									\
 		num = __TLBI_RANGE_NUM(__flush_pages, scale);		\
 		if (num >= 0) {						\
-			addr = __TLBI_VADDR_RANGE(__flush_start >> shift, asid, \
-						scale, num, tlb_level);	\
-			__tlbi(r##op, addr);				\
-			if (tlbi_user)					\
-				__tlbi_user(r##op, addr);		\
+			u64 args = __TLB_RANGE_ARGS(asid, scale, num, tlb_level);	\
+			__tlb_range(op, __flush_start, lpa2, args, tlbi_user); \
 			__flush_start += __TLBI_RANGE_PAGES(num, scale) << PAGE_SHIFT; \
 			__flush_pages -= __TLBI_RANGE_PAGES(num, scale);\
 		}							\
