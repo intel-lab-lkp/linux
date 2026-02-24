@@ -1533,8 +1533,18 @@ static void cxl_detach_ep(void *data)
 		port = to_cxl_port(dev);
 
 		parent_port = to_cxl_port(port->dev.parent);
+		get_device(&parent_port->dev);
 		device_lock(&parent_port->dev);
 		device_lock(&port->dev);
+
+		/* A concurrent detach may have already removed this port */
+		if (port->dead) {
+			device_unlock(&port->dev);
+			device_unlock(&parent_port->dev);
+			put_device(&parent_port->dev);
+			continue;
+		}
+
 		ep = cxl_ep_load(port, cxlmd);
 		dev_dbg(&cxlmd->dev, "disconnect %s from %s\n",
 			ep ? dev_name(ep->ep) : "", dev_name(&port->dev));
@@ -1553,11 +1563,18 @@ static void cxl_detach_ep(void *data)
 		device_unlock(&port->dev);
 
 		if (died) {
+			/*
+			 * Hold an extra reference to parent_port across
+			 * delete_switch_port() since unregister_port(port)
+			 * may cascade and unregister parent_port, freeing
+			 * it before the call to device_unlock().
+			 */
 			dev_dbg(&cxlmd->dev, "delete %s\n",
 				dev_name(&port->dev));
 			delete_switch_port(port);
 		}
 		device_unlock(&parent_port->dev);
+		put_device(&parent_port->dev);
 	}
 }
 
