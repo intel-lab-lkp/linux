@@ -163,6 +163,9 @@ struct scx_dsq_list_node {
  */
 struct sched_ext_entity {
 	struct scx_dispatch_q	*dsq;
+	atomic_long_t		ops_state;
+	u64			ddsp_dsq_id;
+	u64			ddsp_enq_flags;
 	struct scx_dsq_list_node dsq_list;	/* dispatch order */
 	struct rb_node		dsq_priq;	/* p->scx.dsq_vtime order */
 	u32			dsq_seq;
@@ -174,7 +177,6 @@ struct sched_ext_entity {
 	s32			selected_cpu;
 	u32			kf_mask;	/* see scx_kf_mask above */
 	struct task_struct	*kf_tasks[2];	/* see SCX_CALL_OP_TASK() */
-	atomic_long_t		ops_state;
 
 	struct list_head	runnable_node;	/* rq->scx.runnable_list */
 	unsigned long		runnable_at;
@@ -182,8 +184,6 @@ struct sched_ext_entity {
 #ifdef CONFIG_SCHED_CORE
 	u64			core_sched_at;	/* see scx_prio_less() */
 #endif
-	u64			ddsp_dsq_id;
-	u64			ddsp_enq_flags;
 
 	/* BPF scheduler modifiable fields */
 
