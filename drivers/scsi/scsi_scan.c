@@ -36,6 +36,7 @@
 #include <linux/async.h>
 #include <linux/slab.h>
 #include <linux/unaligned.h>
+#include <linux/compl_chain.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -112,14 +113,11 @@ MODULE_PARM_DESC(inq_timeout,
 		 "Timeout (in seconds) waiting for devices to answer INQUIRY."
 		 " Default is 20. Some devices may need more; most need less.");
 
-/* This lock protects only this list */
-static DEFINE_SPINLOCK(async_scan_lock);
-static LIST_HEAD(scanning_hosts);
+DEFINE_COMPL_CHAIN(scanning_hosts);
 
 struct async_scan_data {
-	struct list_head list;
+	struct compl_chain_entry chain_entry;
 	struct Scsi_Host *shost;
-	struct completion prev_finished;
 };
 
 /*
@@ -146,48 +144,10 @@ void scsi_enable_async_suspend(struct device *dev)
  * started scanning after this function was called may or may not have
  * finished.
  */
-int scsi_complete_async_scans(void)
+void scsi_complete_async_scans(void)
 {
-	struct async_scan_data *data;
-
-	do {
-		scoped_guard(spinlock, &async_scan_lock)
-			if (list_empty(&scanning_hosts))
-				return 0;
-		/* If we can't get memory immediately, that's OK.  Just
-		 * sleep a little.  Even if we never get memory, the async
-		 * scans will finish eventually.
-		 */
-		data = kmalloc(sizeof(*data), GFP_KERNEL);
-		if (!data)
-			msleep(1);
-	} while (!data);
-
-	data->shost = NULL;
-	init_completion(&data->prev_finished);
-
-	spin_lock(&async_scan_lock);
-	/* Check that there's still somebody else on the list */
-	if (list_empty(&scanning_hosts))
-		goto done;
-	list_add_tail(&data->list, &scanning_hosts);
-	spin_unlock(&async_scan_lock);
-
 	printk(KERN_INFO "scsi: waiting for bus probes to complete ...\n");
-	wait_for_completion(&data->prev_finished);
-
-	spin_lock(&async_scan_lock);
-	list_del(&data->list);
-	if (!list_empty(&scanning_hosts)) {
-		struct async_scan_data *next = list_entry(scanning_hosts.next,
-				struct async_scan_data, list);
-		complete(&next->prev_finished);
-	}
- done:
-	spin_unlock(&async_scan_lock);
-
-	kfree(data);
-	return 0;
+	compl_chain_flush(&scanning_hosts);
 }
 
 /**
@@ -1960,18 +1920,13 @@ static struct async_scan_data *scsi_prep_async_scan(struct Scsi_Host *shost)
 	data->shost = scsi_host_get(shost);
 	if (!data->shost)
 		goto err;
-	init_completion(&data->prev_finished);
 
 	spin_lock_irqsave(shost->host_lock, flags);
 	shost->async_scan = 1;
 	spin_unlock_irqrestore(shost->host_lock, flags);
 	mutex_unlock(&shost->scan_mutex);
 
-	spin_lock(&async_scan_lock);
-	if (list_empty(&scanning_hosts))
-		complete(&data->prev_finished);
-	list_add_tail(&data->list, &scanning_hosts);
-	spin_unlock(&async_scan_lock);
+	compl_chain_add(&scanning_hosts, &data->chain_entry);
 
 	return data;
 
@@ -2008,7 +1963,7 @@ static void scsi_finish_async_scan(struct async_scan_data *data)
 		return;
 	}
 
-	wait_for_completion(&data->prev_finished);
+	compl_chain_wait(&data->chain_entry);
 
 	scsi_sysfs_add_devices(shost);
 
@@ -2018,14 +1973,7 @@ static void scsi_finish_async_scan(struct async_scan_data *data)
 
 	mutex_unlock(&shost->scan_mutex);
 
-	spin_lock(&async_scan_lock);
-	list_del(&data->list);
-	if (!list_empty(&scanning_hosts)) {
-		struct async_scan_data *next = list_entry(scanning_hosts.next,
-				struct async_scan_data, list);
-		complete(&next->prev_finished);
-	}
-	spin_unlock(&async_scan_lock);
+	compl_chain_complete(&data->chain_entry);
 
 	scsi_autopm_put_host(shost);
 	scsi_host_put(shost);
