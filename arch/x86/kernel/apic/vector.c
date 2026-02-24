@@ -946,7 +946,7 @@ static void apic_force_complete_move(struct irq_data *irqd)
 	 * -EBUSY. This can leave the interrupt in a stale state.
 	 *
 	 * All CPUs are stuck in stop machine with interrupts disabled so
-	 * calling __irq_complete_move() would be completely pointless.
+	 * calling irq_complete_move() would be completely pointless.
 	 *
 	 * 1) The interrupt is in move_in_progress state. That means that we
 	 *    have not seen an interrupt since the io_apic was reprogrammed to
