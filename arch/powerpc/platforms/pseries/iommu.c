@@ -837,6 +837,162 @@ static struct device_node *pci_dma_find(struct device_node *dn,
 	return rdn;
 }
 
+static unsigned long iommu_table_inuse_tces(struct iommu_table *tbl)
+{
+	struct iommu_pool *pool;
+	unsigned long ntces = 0;
+
+	/* Number of TCEs in-use */
+	for (int i = 0; i < tbl->nr_pools; i++) {
+		pool = &tbl->pools[i];
+		ntces += pool->inuse;
+	}
+
+	pool = &tbl->large_pool;
+	ntces += pool->inuse;
+
+	return ntces;
+}
+
+/* Get DDW information for the device */
+int gather_ddw_info(struct device *dev, struct dma_win_data *data)
+{
+	struct iommu_device *iommu;
+	struct pci_controller *phb;
+	struct device_node *dn;
+	struct pci_dn *pci;
+	const __be32 *prop = NULL;
+	bool ddw_direct = false;
+	bool found = false;
+	struct iommu_table *tbl;
+	u32 pgshift;
+	struct dynamic_dma_window_prop *p;
+
+	memset(data, 0, sizeof(*data));
+
+	iommu = dev_get_drvdata(dev);
+	phb = container_of(iommu, struct pci_controller, iommu);
+	dn = phb->dn;
+
+	if (!dn)
+		return SPAPR_ERROR;
+
+	pci = PCI_DN(dn);
+	if (!pci || !pci->table_group)
+		return SPAPR_ERROR;
+
+	/* Find DDW */
+	prop = of_get_property(dn, DIRECT64_PROPNAME, NULL);
+	if (prop) {
+		ddw_direct = true;
+		found = true;
+	} else {
+		prop = of_get_property(dn, DMA64_PROPNAME, NULL);
+		if (prop)
+			found = true;
+	}
+
+	/* NO DDW */
+	if (!found)
+		return SPAPR_NODDWWIN;
+
+	p = (struct dynamic_dma_window_prop *)prop;
+
+	pgshift = be32_to_cpu(p->tce_shift);
+	if (pgshift != 0xc && pgshift != 0x10 && pgshift != 0x15)
+		data->win_pgsize = 0;
+	else
+		data->win_pgsize = 1 << pgshift;
+
+	/* Check if DDW has table associated with it. Having a table associated with
+	 * DDW is indicative that is has some dynamic TCE allocations. In this case the
+	 * DDW can be fully Dynamic or in Hybrid mode. For SR-IOV DDW is on index 0,
+	 * for dedicated adapter on index 1.
+	 */
+	found = false;
+	for (int i = 0; i < IOMMU_TABLE_GROUP_MAX_TABLES; ++i) {
+		tbl = pci->table_group->tables[i];
+
+		if (tbl && tbl->it_index == be32_to_cpu(p->liobn)) {
+			found = true;
+			break;
+		}
+	}
+
+	/* set the parameters depnding on the DDW type */
+	if (ddw_direct && found) {          /* Hybrid */
+		data->direct_addr = be64_to_cpu(p->dma_base);
+		data->dynamic_size = (u64)(tbl->it_size << tbl->it_page_shift);
+
+		data->dynamic_addr = data->direct_addr
+								+ (u64)(1UL << be32_to_cpu(p->window_shift))
+								- data->dynamic_size;
+
+		data->direct_size = data->dynamic_addr - data->direct_addr;
+		data->dynamic_tces_inuse = iommu_table_inuse_tces(tbl);
+
+		sprintf(data->win_type, "%s", "Hybrid");
+	} else if (ddw_direct && !found) {    /* Direct */
+		data->direct_addr = be64_to_cpu(p->dma_base);
+		data->direct_size = (u64)(1UL << be32_to_cpu(p->window_shift));
+
+		sprintf(data->win_type, "%s", "Direct");
+	} else {                              /* Dynamic */
+		data->dynamic_addr = be64_to_cpu(p->dma_base);
+		data->dynamic_size = (u64)(1UL << be32_to_cpu(p->window_shift));
+		data->dynamic_tces_inuse = iommu_table_inuse_tces(tbl);
+
+		sprintf(data->win_type, "%s", "Dynamic");
+	}
+
+	return SPAPR_SUCCESS;
+}
+
+/* Get DDW information for the device */
+int gather_dma_info(struct device *dev, struct dma_win_data *data)
+{
+	struct iommu_device *iommu;
+	struct pci_controller *phb;
+	struct device_node *dn;
+	struct pci_dn *pci;
+	const __be32 *prop = NULL;
+	struct iommu_table *tbl;
+	unsigned long offset, size, liobn;
+
+	memset(data, 0, sizeof(*data));
+
+	iommu = dev_get_drvdata(dev);
+	phb = container_of(iommu, struct pci_controller, iommu);
+	dn = phb->dn;
+
+	if (!dn)
+		return SPAPR_ERROR;
+
+	pci = PCI_DN(dn);
+	if (!pci || !pci->table_group)
+		return SPAPR_ERROR;
+
+	/* search for default DMA window */
+	prop = of_get_property(dn, "ibm,dma-window", NULL);
+
+	if (!prop)
+		return SPAPR_NODMAWIN;
+
+	/* default DMA Window is always at index 0 */
+	tbl = pci->table_group->tables[0];
+	if (!tbl)
+		return SPAPR_ERROR;
+
+	of_parse_dma_window(dn, prop, &liobn, &offset, &size);
+
+	data->dynamic_addr = offset;
+	data->dynamic_size = size;
+	data->win_pgsize = 1ULL << IOMMU_PAGE_SHIFT_4K;
+	data->dynamic_tces_inuse = iommu_table_inuse_tces(tbl);
+
+	return SPAPR_SUCCESS;
+}
+
 static void pci_dma_bus_setup_pSeriesLP(struct pci_bus *bus)
 {
 	struct iommu_table *tbl;

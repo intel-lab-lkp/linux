@@ -339,6 +339,9 @@ again:
 	if (handle)
 		*handle = end;
 
+	/* update use count */
+	pool->inuse += npages;
+
 	spin_unlock_irqrestore(&(pool->lock), flags);
 
 	return n;
@@ -452,6 +455,7 @@ static void __iommu_free(struct iommu_table *tbl, dma_addr_t dma_addr,
 	tbl->it_ops->clear(tbl, entry, npages);
 
 	spin_lock_irqsave(&(pool->lock), flags);
+	pool->inuse -= npages;
 	bitmap_clear(tbl->it_map, free_entry, npages);
 	spin_unlock_irqrestore(&(pool->lock), flags);
 }
@@ -759,6 +763,7 @@ struct iommu_table *iommu_init_table(struct iommu_table *tbl, int nid,
 		p->start = tbl->poolsize * i;
 		p->hint = p->start;
 		p->end = p->start + tbl->poolsize;
+		p->inuse = 0;
 	}
 
 	p = &tbl->large_pool;
@@ -766,6 +771,7 @@ struct iommu_table *iommu_init_table(struct iommu_table *tbl, int nid,
 	p->start = tbl->poolsize * i;
 	p->hint = p->start;
 	p->end = tbl->it_size;
+	p->inuse = 0;
 
 	iommu_table_clear(tbl);
 
@@ -1269,6 +1275,233 @@ static const struct iommu_ops spapr_tce_iommu_ops = {
 	.device_group = spapr_tce_iommu_device_group,
 };
 
+static inline const char *dma_win_error(int err)
+{
+	switch (err) {
+	case SPAPR_ERROR:
+		return "Error";
+	case SPAPR_NODMAWIN:
+		return "No Default DMA Window Found";
+	case SPAPR_NODDWWIN:
+		return "No Dynamic DMA Window Found";
+	default:
+		return "Unknown Result";
+	}
+}
+
+static ssize_t ddw_direct_address_show(struct device *dev,
+									   struct device_attribute *attr,
+									   char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_ddw_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%#llx\n", data.direct_addr);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t ddw_dynamic_address_show(struct device *dev,
+										struct device_attribute *attr,
+										char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_ddw_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%#llx\n", data.dynamic_addr);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t ddw_direct_size_show(struct device *dev,
+									struct device_attribute *attr,
+									char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_ddw_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%lld\n", data.direct_size);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t ddw_dynamic_size_show(struct device *dev,
+									 struct device_attribute *attr,
+									 char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_ddw_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%lld\n", data.dynamic_size);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t ddw_page_size_show(struct device *dev,
+								  struct device_attribute *attr,
+								  char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_ddw_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%d\n", data.win_pgsize);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t ddw_window_type_show(struct device *dev,
+									struct device_attribute *attr,
+									char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_ddw_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%s\n", data.win_type);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t ddw_dynamic_pages_mapped_show(struct device *dev,
+											 struct device_attribute *attr,
+											 char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_ddw_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%d\n", data.dynamic_tces_inuse);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t dma_dynamic_address_show(struct device *dev,
+										struct device_attribute *attr,
+										char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_dma_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%#llx\n", data.dynamic_addr);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t dma_dynamic_size_show(struct device *dev,
+									 struct device_attribute *attr,
+									 char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_dma_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%lld\n", data.dynamic_size);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t dma_page_size_show(struct device *dev,
+								  struct device_attribute *attr,
+								  char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_dma_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%d\n", data.win_pgsize);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+static ssize_t dma_dynamic_pages_mapped_show(struct device *dev,
+											 struct device_attribute *attr,
+											 char *buf)
+{
+	int rc = 0;
+	struct dma_win_data data;
+
+	rc = gather_dma_info(dev, &data);
+
+	if (rc == SPAPR_SUCCESS)
+		return sysfs_emit(buf, "%d\n", data.dynamic_tces_inuse);
+	else
+		return sysfs_emit(buf, "%s\n", dma_win_error(rc));
+}
+
+#define DEVICE_ATTR_DDW(_name)                              \
+		struct device_attribute dev_attr_ddw_##_name =      \
+			__ATTR(_name, 0444, ddw_##_name##_show, NULL)
+#define DEVICE_ATTR_DMA(_name)                              \
+		struct device_attribute dev_attr_dma_##_name =      \
+		__ATTR(_name, 0444, dma_##_name##_show, NULL)
+
+static DEVICE_ATTR_DDW(direct_address);
+static DEVICE_ATTR_DDW(direct_size);
+static DEVICE_ATTR_DDW(page_size);
+static DEVICE_ATTR_DDW(window_type);
+static DEVICE_ATTR_DDW(dynamic_address);
+static DEVICE_ATTR_DDW(dynamic_size);
+static DEVICE_ATTR_DDW(dynamic_pages_mapped);
+static DEVICE_ATTR_DMA(dynamic_address);
+static DEVICE_ATTR_DMA(dynamic_size);
+static DEVICE_ATTR_DMA(page_size);
+static DEVICE_ATTR_DMA(dynamic_pages_mapped);
+
+static struct attribute *spapr_tce_ddw_attrs[] = {
+	&dev_attr_ddw_direct_address.attr,
+	&dev_attr_ddw_direct_size.attr,
+	&dev_attr_ddw_page_size.attr,
+	&dev_attr_ddw_window_type.attr,
+	&dev_attr_ddw_dynamic_address.attr,
+	&dev_attr_ddw_dynamic_size.attr,
+	&dev_attr_ddw_dynamic_pages_mapped.attr,
+	NULL,
+};
+
+static struct attribute *spapr_tce_dma_attrs[] = {
+	&dev_attr_dma_dynamic_address.attr,
+	&dev_attr_dma_dynamic_size.attr,
+	&dev_attr_dma_page_size.attr,
+	&dev_attr_dma_dynamic_pages_mapped.attr,
+	NULL,
+};
+
+static struct attribute_group spapr_tce_ddw_group = {
+	.name = "spapr-tce-ddw",
+	.attrs = spapr_tce_ddw_attrs,
+};
+
+static struct attribute_group spapr_tce_dma_group = {
+	.name = "spapr-tce-dma",
+	.attrs = spapr_tce_dma_attrs,
+};
+
 static struct attribute *spapr_tce_iommu_attrs[] = {
 	NULL,
 };
@@ -1280,6 +1513,8 @@ static struct attribute_group spapr_tce_iommu_group = {
 
 static const struct attribute_group *spapr_tce_iommu_groups[] = {
 	&spapr_tce_iommu_group,
+	&spapr_tce_ddw_group,
+	&spapr_tce_dma_group,
 	NULL,
 };
 

@@ -90,6 +90,7 @@ struct iommu_pool {
 	unsigned long start;
 	unsigned long end;
 	unsigned long hint;
+	unsigned long inuse;
 	spinlock_t lock;
 } ____cacheline_aligned_in_smp;
 
@@ -318,6 +319,25 @@ extern enum dma_data_direction iommu_tce_direction(unsigned long tce);
 extern unsigned long iommu_direction_to_tce_perm(enum dma_data_direction dir);
 
 extern const struct dma_map_ops dma_iommu_ops;
+
+/* used by sysfs when querying Dynamic/Default DMA Window data */
+struct dma_win_data {
+	u32     win_pgsize;
+	u64     direct_addr;
+	u64     direct_size;
+	u64     dynamic_addr;
+	u64     dynamic_size;
+	u32     dynamic_tces_inuse;
+	char    win_type[15];
+};
+
+#define SPAPR_SUCCESS       0
+#define SPAPR_NODMAWIN      -1
+#define SPAPR_NODDWWIN      -2
+#define SPAPR_ERROR         -3
+
+extern int gather_ddw_info(struct device *dev, struct dma_win_data *data);
+extern int gather_dma_info(struct device *dev, struct dma_win_data *data);
 
 #endif /* __KERNEL__ */
 #endif /* _ASM_IOMMU_H */
