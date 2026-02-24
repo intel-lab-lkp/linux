@@ -162,10 +162,10 @@ SYM_FUNC_END(xen_hypercall_intel)
 #else
 # define FEATURES_PV 0
 #endif
-#ifdef CONFIG_XEN_PVH
-# define FEATURES_PVH (1 << XENFEAT_linux_rsdp_unrestricted)
+#ifdef CONFIG_XEN_PVHVM
+# define FEATURES_PVHVM (1 << XENFEAT_linux_rsdp_unrestricted)
 #else
-# define FEATURES_PVH 0
+# define FEATURES_PVHVM 0
 #endif
 #ifdef CONFIG_XEN_DOM0
 # define FEATURES_DOM0 (1 << XENFEAT_dom0)
@@ -173,7 +173,7 @@ SYM_FUNC_END(xen_hypercall_intel)
 # define FEATURES_DOM0 0
 #endif
 	ELFNOTE(Xen, XEN_ELFNOTE_SUPPORTED_FEATURES,
-		.long FEATURES_PV | FEATURES_PVH | FEATURES_DOM0)
+		.long FEATURES_PV | FEATURES_PVHVM | FEATURES_DOM0)
 	ELFNOTE(Xen, XEN_ELFNOTE_LOADER,         .asciz "generic")
 	ELFNOTE(Xen, XEN_ELFNOTE_SUSPEND_CANCEL, .long 1)
 

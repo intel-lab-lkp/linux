@@ -16,7 +16,7 @@ extern enum xen_domain_type xen_domain_type;
 #define xen_domain_type		XEN_NATIVE
 #endif
 
-#ifdef CONFIG_XEN_PVH
+#ifdef CONFIG_XEN_PVHVM
 extern bool xen_pvh;
 #else
 #define xen_pvh			0

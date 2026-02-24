@@ -33,7 +33,7 @@ obj-$(CONFIG_XEN_PV)		+= irq.o
 obj-$(CONFIG_XEN_PV)		+= multicalls.o
 obj-$(CONFIG_XEN_PV)		+= xen-asm.o
 
-obj-$(CONFIG_XEN_PVH)		+= enlighten_pvh.o
+obj-$(CONFIG_XEN_PVHVM)		+= enlighten_pvh.o
 
 obj-$(CONFIG_EVENT_TRACING)	+= trace.o
 

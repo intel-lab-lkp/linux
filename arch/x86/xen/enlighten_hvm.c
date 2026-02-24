@@ -264,7 +264,6 @@ static bool __init msi_ext_dest_id(void)
 
 static __init void xen_hvm_guest_late_init(void)
 {
-#ifdef CONFIG_XEN_PVH
 	/* Test for PVH domain (PVH boot path taken overrides ACPI flags). */
 	if (!xen_pvh &&
 	    (x86_platform.legacy.rtc || !x86_platform.legacy.no_vga))
@@ -282,7 +281,6 @@ static __init void xen_hvm_guest_late_init(void)
 
 	machine_ops.emergency_restart = xen_emergency_restart;
 	pv_info.name = "Xen PVH";
-#endif
 }
 
 static uint32_t __init xen_platform_hvm(void)

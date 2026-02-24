@@ -149,7 +149,7 @@ err:
 	return -ENOMEM;
 }
 
-#ifdef CONFIG_XEN_PVH
+#ifdef CONFIG_XEN_PVHVM
 #include <xen/events.h>
 #include <xen/xen-ops.h>
 static int __init xen_pvh_gnttab_setup(void)
