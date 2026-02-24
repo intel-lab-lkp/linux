@@ -153,7 +153,7 @@ static void show_pte(unsigned long addr)
 		 vabits_actual, mm_to_pgd_phys(mm));
 	pgdp = pgd_offset(mm, addr);
 	pgd = pgdp_get(pgdp);
-	pr_alert("[%016lx] pgd=%016llx", addr, pgd_val(pgd));
+	pr_alert("[%016lx] pgd=%" __PRIpte, addr, __PRIpte_args(pgd_val(pgd)));
 
 	do {
 		p4d_t *p4dp, p4d;
@@ -166,19 +166,19 @@ static void show_pte(unsigned long addr)
 
 		p4dp = p4d_offset(pgdp, addr);
 		p4d = p4dp_get(p4dp);
-		pr_cont(", p4d=%016llx", p4d_val(p4d));
+		pr_cont(", p4d=%" __PRIpte, __PRIpte_args(p4d_val(p4d)));
 		if (p4d_none(p4d) || p4d_bad(p4d))
 			break;
 
 		pudp = pud_offset(p4dp, addr);
 		pud = pudp_get(pudp);
-		pr_cont(", pud=%016llx", pud_val(pud));
+		pr_cont(", pud=%" __PRIpte, __PRIpte_args(pud_val(pud)));
 		if (pud_none(pud) || pud_bad(pud))
 			break;
 
 		pmdp = pmd_offset(pudp, addr);
 		pmd = pmdp_get(pmdp);
-		pr_cont(", pmd=%016llx", pmd_val(pmd));
+		pr_cont(", pmd=%" __PRIpte, __PRIpte_args(pmd_val(pmd)));
 		if (pmd_none(pmd) || pmd_bad(pmd))
 			break;
 
@@ -187,7 +187,7 @@ static void show_pte(unsigned long addr)
 			break;
 
 		pte = __ptep_get(ptep);
-		pr_cont(", pte=%016llx", pte_val(pte));
+		pr_cont(", pte=%" __PRIpte, __PRIpte_args(pte_val(pte)));
 		pte_unmap(ptep);
 	} while(0);
 
