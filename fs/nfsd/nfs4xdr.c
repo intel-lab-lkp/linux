@@ -288,31 +288,32 @@ nfsd4_decode_bitmap4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen)
 }
 
 static __be32
-nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct nfs4_ace *ace)
+nfsd4_decode_nfsace4(struct xdr_stream *xdr, struct svc_rqst *rqstp,
+		     struct nfs4_ace *ace)
 {
 	__be32 *p, status;
 	u32 length;
 
-	if (xdr_stream_decode_u32(argp->xdr, &ace->type) < 0)
+	if (xdr_stream_decode_u32(xdr, &ace->type) < 0)
 		return nfserr_bad_xdr;
-	if (xdr_stream_decode_u32(argp->xdr, &ace->flag) < 0)
+	if (xdr_stream_decode_u32(xdr, &ace->flag) < 0)
 		return nfserr_bad_xdr;
-	if (xdr_stream_decode_u32(argp->xdr, &ace->access_mask) < 0)
+	if (xdr_stream_decode_u32(xdr, &ace->access_mask) < 0)
 		return nfserr_bad_xdr;
 
-	if (xdr_stream_decode_u32(argp->xdr, &length) < 0)
+	if (xdr_stream_decode_u32(xdr, &length) < 0)
 		return nfserr_bad_xdr;
-	p = xdr_inline_decode(argp->xdr, length);
+	p = xdr_inline_decode(xdr, length);
 	if (!p)
 		return nfserr_bad_xdr;
 	ace->whotype = nfs4_acl_get_whotype((char *)p, length);
 	if (ace->whotype != NFS4_ACL_WHO_NAMED)
 		status = nfs_ok;
 	else if (ace->flag & NFS4_ACE_IDENTIFIER_GROUP)
-		status = nfsd_map_name_to_gid(argp->rqstp,
+		status = nfsd_map_name_to_gid(rqstp,
 				(char *)p, length, &ace->who_gid);
 	else
-		status = nfsd_map_name_to_uid(argp->rqstp,
+		status = nfsd_map_name_to_uid(rqstp,
 				(char *)p, length, &ace->who_uid);
 
 	return status;
@@ -320,35 +321,51 @@ nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct nfs4_ace *ace)
 
 /* A counted array of nfsace4's */
 static noinline __be32
-nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl)
+nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl,
+		 u32 acl_len)
 {
+
+	struct xdr_buf payload;
+	struct xdr_stream xdr;
 	struct nfs4_ace *ace;
-	__be32 status;
+	__be32 status = nfs_ok;
 	u32 count;
 
-	if (xdr_stream_decode_u32(argp->xdr, &count) < 0)
+	if (!xdr_stream_subsegment(argp->xdr, &payload, acl_len))
 		return nfserr_bad_xdr;
 
-	if (count > xdr_stream_remaining(argp->xdr) / 20)
+	xdr_init_decode(&xdr, &payload, payload.head[0].iov_base, NULL);
+
+	if (xdr_stream_decode_u32(&xdr, &count) < 0) {
+		status = nfserr_bad_xdr;
+		goto out;
+	}
+
+	if (count > xdr_stream_remaining(&xdr) / 20) {
 		/*
 		 * Even with 4-byte names there wouldn't be
 		 * space for that many aces; something fishy is
 		 * going on:
 		 */
-		return nfserr_fbig;
+		status = nfserr_fbig;
+		goto out;
+	}
 
 	*acl = svcxdr_tmpalloc(argp, nfs4_acl_bytes(count));
-	if (*acl == NULL)
-		return nfserr_jukebox;
+	if (*acl == NULL) {
+		status = nfserr_jukebox;
+		goto out;
+	}
 
 	(*acl)->naces = count;
 	for (ace = (*acl)->aces; ace < (*acl)->aces + count; ace++) {
-		status = nfsd4_decode_nfsace4(argp, ace);
+		status = nfsd4_decode_nfsace4(&xdr, argp->rqstp, ace);
 		if (status)
-			return status;
+			goto out;
 	}
-
-	return nfs_ok;
+out:
+	xdr_finish_decode(&xdr);
+	return status;
 }
 
 static noinline __be32
@@ -514,7 +531,7 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 		iattr->ia_valid |= ATTR_SIZE;
 	}
 	if (bmval[0] & FATTR4_WORD0_ACL) {
-		status = nfsd4_decode_acl(argp, acl);
+		status = nfsd4_decode_acl(argp, acl, attrlist4_count);
 		if (status)
 			return status;
 	} else
