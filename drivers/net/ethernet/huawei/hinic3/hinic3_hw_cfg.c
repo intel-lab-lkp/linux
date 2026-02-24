@@ -17,6 +17,17 @@ static void hinic3_parse_pub_res_cap(struct hinic3_hwdev *hwdev,
 {
 	cap->port_id = dev_cap->port_id;
 	cap->supp_svcs_bitmap = dev_cap->svc_cap_en;
+
+	cap->cos_valid_bitmap = dev_cap->valid_cos_bitmap;
+	cap->port_cos_valid_bitmap = dev_cap->port_cos_valid_bitmap;
+
+	if (type != HINIC3_FUNC_TYPE_VF)
+		cap->max_vf = dev_cap->max_vf;
+	else
+		cap->max_vf = 0;
+
+	dev_dbg(hwdev->dev, "Port_id: 0x%x, cos_bitmap: 0x%x, Max_vf: 0x%x\n",
+		cap->port_id, cap->cos_valid_bitmap, cap->max_vf);
 }
 
 static void hinic3_parse_l2nic_res_cap(struct hinic3_hwdev *hwdev,
@@ -28,6 +39,23 @@ static void hinic3_parse_l2nic_res_cap(struct hinic3_hwdev *hwdev,
 
 	nic_svc_cap->max_sqs = min(dev_cap->nic_max_sq_id + 1,
 				   HINIC3_CFG_MAX_QP);
+
+	nic_svc_cap->max_rqs = dev_cap->nic_max_rq_id + 1;
+	nic_svc_cap->default_num_queues = dev_cap->nic_default_num_queues;
+
+	dev_dbg(hwdev->dev, "L2nic resource capbility, max_sqs: 0x%x, max_rqs: 0x%x\n",
+		nic_svc_cap->max_sqs, nic_svc_cap->max_rqs);
+
+	/* Check parameters from firmware */
+	if (nic_svc_cap->max_sqs > HINIC3_CFG_MAX_QP ||
+	    nic_svc_cap->max_rqs > HINIC3_CFG_MAX_QP) {
+		dev_dbg(hwdev->dev,
+			"Number of qp exceeds limit[1-%d]: sq: %u, rq: %u\n",
+			HINIC3_CFG_MAX_QP, nic_svc_cap->max_sqs,
+			nic_svc_cap->max_rqs);
+		nic_svc_cap->max_sqs = HINIC3_CFG_MAX_QP;
+		nic_svc_cap->max_rqs = HINIC3_CFG_MAX_QP;
+	}
 }
 
 static void hinic3_parse_dev_cap(struct hinic3_hwdev *hwdev,
@@ -65,6 +93,29 @@ static int get_cap_from_fw(struct hinic3_hwdev *hwdev,
 	}
 
 	hinic3_parse_dev_cap(hwdev, &dev_cap, type);
+
+	return 0;
+}
+
+static int hinic3_get_dev_cap(struct hinic3_hwdev *hwdev)
+{
+	enum hinic3_func_type type = HINIC3_FUNC_TYPE(hwdev);
+	int err;
+
+	switch (type) {
+	case HINIC3_FUNC_TYPE_PF:
+	case HINIC3_FUNC_TYPE_VF:
+		err = get_cap_from_fw(hwdev, type);
+		if (err) {
+			dev_err(hwdev->dev, "Failed to get PF capability\n");
+			return err;
+		}
+		break;
+	default:
+		dev_err(hwdev->dev, "Unsupported PCI Function type: %d\n",
+			type);
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -216,7 +267,7 @@ void hinic3_free_irq(struct hinic3_hwdev *hwdev, u32 irq_id)
 
 int hinic3_init_capability(struct hinic3_hwdev *hwdev)
 {
-	return get_cap_from_fw(hwdev, HINIC3_FUNC_TYPE_VF);
+	return hinic3_get_dev_cap(hwdev);
 }
 
 bool hinic3_support_nic(struct hinic3_hwdev *hwdev)
