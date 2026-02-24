@@ -10474,7 +10474,7 @@ static inline unsigned int mm_cid_calc_pcpu_thrs(struct mm_mm_cid *mc)
 
 	opt_cids = min(mc->nr_cpus_allowed, mc->users);
 	/* Has to be at least 1 because 0 indicates PCPU mode off */
-	return max(min(opt_cids - opt_cids / 4, num_possible_cpus() / 2), 1);
+	return clamp(opt_cids - opt_cids / 4, 1, num_possible_cpus() / 2);
 }
 
 static bool mm_update_max_cids(struct mm_struct *mm)
