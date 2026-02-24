@@ -242,6 +242,7 @@ void dma_fence_chain_init(struct dma_fence_chain *chain,
 			  struct dma_fence *fence,
 			  uint64_t seqno)
 {
+	static struct lock_class_key dma_fence_chain_lock_key;
 	struct dma_fence_chain *prev_chain = to_dma_fence_chain(prev);
 	uint64_t context;
 
@@ -262,6 +263,18 @@ void dma_fence_chain_init(struct dma_fence_chain *chain,
 
 	dma_fence_init64(&chain->base, &dma_fence_chain_ops, NULL,
 			 context, seqno);
+
+	/*
+	 * dma_fence_chain_enable_signaling() is invoked while holding
+	 * chain->base.inline_lock and may call dma_fence_add_callback()
+	 * on the underlying fences, which takes their inline_lock.
+	 *
+	 * Since both locks share the same lockdep class, this legitimate
+	 * nesting confuses lockdep and triggers a recursive locking
+	 * warning. Assign a separate lockdep class to the chain lock
+	 * to model this hierarchy correctly.
+	 */
+	lockdep_set_class(&chain->base.inline_lock, &dma_fence_chain_lock_key);
 
 	/*
 	 * Chaining dma_fence_chain container together is only allowed through
