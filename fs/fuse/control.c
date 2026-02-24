@@ -316,7 +316,11 @@ static int fuse_ctl_fill_super(struct super_block *sb, struct fs_context *fsc)
 		return err;
 
 	mutex_lock(&fuse_mutex);
-	BUG_ON(fuse_control_sb);
+	if (WARN_ON(fuse_control_sb)) {
+		mutex_unlock(&fuse_mutex);
+		return -EBUSY;
+	}
+
 	fuse_control_sb = sb;
 	list_for_each_entry(fc, &fuse_conn_list, entry) {
 		err = fuse_ctl_add_conn(fc);
