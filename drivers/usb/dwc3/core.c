@@ -777,6 +777,23 @@ static int dwc3_hs_phy_setup(struct dwc3 *dwc, int index)
 	if (dwc->ulpi_ext_vbus_drv)
 		reg |= DWC3_GUSB2PHYCFG_ULPIEXTVBUSDRV;
 
+	/*
+	 * Fixes High-speed negotiation issue with USB3340, see:
+	 *    http://ww1.microchip.com/downloads/en/DeviceDoc/80000645A.pdf
+	 *    "Device Enumeration Failure with Link IP Systems"
+	 * According to documentation on the Internet,
+	 * DWC3_GUSB2PHYCFG_XCVRDLY:
+	 *    Adds a delay between the assertion of the
+	 *    ULPI Transceiver Select signal (for HS) and
+	 *    the assertion of the TxValid signal during a HS Chirp.
+	 *
+	 * This bit also needs to be set again when the device comes out
+	 * of hibernation, this is currently not an issue since hibernation
+	 * is not enabled.
+	 */
+	if (dwc->enable_xcvrdly_quirk)
+		reg |= DWC3_GUSB2PHYCFG_XCVRDLY;
+
 	dwc3_writel(dwc, DWC3_GUSB2PHYCFG(index), reg);
 
 	return 0;
@@ -1854,6 +1871,9 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 
 	dwc->dis_split_quirk = device_property_read_bool(dev,
 				"snps,dis-split-quirk");
+
+	dwc->enable_xcvrdly_quirk = device_property_read_bool(dev,
+				"snps,enable_xcvrdly_quirk");
 
 	dwc->lpm_nyet_threshold = lpm_nyet_threshold;
 	dwc->tx_de_emphasis = tx_de_emphasis;
