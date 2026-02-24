@@ -21,6 +21,7 @@ struct file_system_type;
 struct fs_context;
 struct file;
 struct path;
+struct notifier_block;
 
 enum mount_flags {
 	MNT_NOSUID	= 0x01,
@@ -108,5 +109,8 @@ extern void drop_collected_paths(const struct path *, const struct path *);
 extern void kern_unmount_array(struct vfsmount *mnt[], unsigned int num);
 
 extern int cifs_root_data(char **dev, char **opts);
+
+int umount_register_notifier(struct notifier_block *nb);
+void umount_unregister_notifier(struct notifier_block *nb);
 
 #endif /* _LINUX_MOUNT_H */

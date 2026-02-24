@@ -34,6 +34,7 @@
 #include <linux/mnt_idmapping.h>
 #include <linux/pidfs.h>
 #include <linux/nstree.h>
+#include <linux/notifier.h>
 
 #include "pnode.h"
 #include "internal.h"
@@ -72,6 +73,70 @@ __setup("initramfs_options=", initramfs_options_setup);
 static u64 event;
 static DEFINE_XARRAY_FLAGS(mnt_id_xa, XA_FLAGS_ALLOC);
 static DEFINE_IDA(mnt_group_ida);
+
+/*
+ * Kernel subsystems can register to be notified when a filesystem is
+ * unmounted. This is used by (e.g.) nfsd to revoke state associated
+ * with files on the filesystem being unmounted.
+ */
+static struct srcu_notifier_head umount_notifier_chain;
+
+/**
+ * umount_register_notifier - register for unmount notifications
+ * @nb: notifier_block to register
+ *
+ * Registers a notifier to be called when any filesystem is
+ * unmounted. The callback is invoked after stuck children are
+ * processed but before fsnotify_vfsmount_delete(), while SB_ACTIVE
+ * is still set and the superblock remains fully accessible.
+ *
+ * Callback signature:
+ *   int (*callback)(struct notifier_block *nb,
+ *                   unsigned long val, void *data)
+ *
+ *   @val:  always 0 (reserved for future extension)
+ *   @data: struct super_block * for the unmounting filesystem
+ *
+ * Callbacks run in process context and may sleep. Return
+ * NOTIFY_DONE from the callback; return values are ignored and
+ * cannot prevent unmount. Callbacks must handle their own error
+ * recovery internally.
+ *
+ * The notification fires once per mount instance. Bind mounts of
+ * the same filesystem trigger multiple callbacks with the same
+ * super_block pointer; callbacks must handle duplicate
+ * notifications idempotently.
+ *
+ * The super_block pointer is valid only for the duration of the
+ * callback. Callbacks must not retain this pointer for
+ * asynchronous use; to access the filesystem after the callback
+ * returns, acquire a separate reference (e.g., via an open file)
+ * during callback execution.
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+int umount_register_notifier(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_register(&umount_notifier_chain, nb);
+}
+EXPORT_SYMBOL_GPL(umount_register_notifier);
+
+/**
+ * umount_unregister_notifier - unregister an unmount notifier
+ * @nb: notifier_block to unregister
+ *
+ * Unregisters a previously registered notifier. This function may
+ * block due to SRCU synchronization.
+ *
+ * Must not be called from within a notifier callback; doing so
+ * causes deadlock. Must be called before module unload if the
+ * notifier_block resides in module memory.
+ */
+void umount_unregister_notifier(struct notifier_block *nb)
+{
+	srcu_notifier_chain_unregister(&umount_notifier_chain, nb);
+}
+EXPORT_SYMBOL_GPL(umount_unregister_notifier);
 
 /* Don't allow confusion with old 32bit mount ID */
 #define MNT_UNIQUE_ID_OFFSET (1ULL << 31)
@@ -1307,6 +1372,8 @@ static void cleanup_mnt(struct mount *mnt)
 		hlist_del(&m->mnt_umount);
 		mntput(&m->mnt);
 	}
+	/* Notify registrants before superblock deactivation */
+	srcu_notifier_call_chain(&umount_notifier_chain, 0, mnt->mnt.mnt_sb);
 	fsnotify_vfsmount_delete(&mnt->mnt);
 	dput(mnt->mnt.mnt_root);
 	deactivate_super(mnt->mnt.mnt_sb);
@@ -6203,6 +6270,8 @@ static void __init init_mount_tree(void)
 void __init mnt_init(void)
 {
 	int err;
+
+	srcu_init_notifier_head(&umount_notifier_chain);
 
 	mnt_cache = kmem_cache_create("mnt_cache", sizeof(struct mount),
 			0, SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT, NULL);
