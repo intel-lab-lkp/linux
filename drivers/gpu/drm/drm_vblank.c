@@ -2318,3 +2318,20 @@ void drm_crtc_vblank_get_vblank_timeout(struct drm_crtc *crtc, ktime_t *vblank_t
 	*vblank_time = ktime_sub(*vblank_time, vtimer->interval);
 }
 EXPORT_SYMBOL(drm_crtc_vblank_get_vblank_timeout);
+
+/**
+ * drm_crtc_vblank_is_off - check if vblank is off on a CRTC
+ * @crtc: CRTC in question
+ *
+ * Return true if vblanks is currently turned off via drm_crtc_vblank_off().
+ * Return False otherwise.
+ */
+bool drm_crtc_vblank_is_off(struct drm_crtc *crtc)
+{
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
+
+	/* Spinlock adds the necessary barriers */
+	guard(spinlock_irqsave)(&crtc->dev->vbl_lock);
+	return vblank->inmodeset && !vblank->enabled;
+}
+EXPORT_SYMBOL(drm_crtc_vblank_is_off);
