@@ -273,14 +273,13 @@ void ice_vsi_cfg_dcb_rings(struct ice_vsi *vsi)
  * ice_dcb_ena_dis_vsi - disable certain VSIs for DCB config/reconfig
  * @pf: pointer to the PF instance
  * @ena: true to enable VSIs, false to disable
- * @locked: true if caller holds RTNL lock, false otherwise
  *
  * Before a new DCB configuration can be applied, VSIs of type PF, SWITCHDEV
  * and CHNL need to be brought down. Following completion of DCB configuration
  * the VSIs that were downed need to be brought up again. This helper function
  * does both.
  */
-static void ice_dcb_ena_dis_vsi(struct ice_pf *pf, bool ena, bool locked)
+static void ice_dcb_ena_dis_vsi(struct ice_pf *pf, bool ena)
 {
 	int i;
 
@@ -294,9 +293,9 @@ static void ice_dcb_ena_dis_vsi(struct ice_pf *pf, bool ena, bool locked)
 		case ICE_VSI_CHNL:
 		case ICE_VSI_PF:
 			if (ena)
-				ice_ena_vsi(vsi, locked);
+				ice_ena_vsi(vsi, true);
 			else
-				ice_dis_vsi(vsi, locked);
+				ice_dis_vsi_locked(vsi);
 			break;
 		default:
 			continue;
@@ -416,7 +415,7 @@ int ice_pf_dcb_cfg(struct ice_pf *pf, struct ice_dcbx_cfg *new_cfg, bool locked)
 		rtnl_lock();
 
 	/* disable VSIs affected by DCB changes */
-	ice_dcb_ena_dis_vsi(pf, false, true);
+	ice_dcb_ena_dis_vsi(pf, false);
 
 	memcpy(curr_cfg, new_cfg, sizeof(*curr_cfg));
 	memcpy(&curr_cfg->etsrec, &curr_cfg->etscfg, sizeof(curr_cfg->etsrec));
@@ -445,7 +444,7 @@ int ice_pf_dcb_cfg(struct ice_pf *pf, struct ice_dcbx_cfg *new_cfg, bool locked)
 
 out:
 	/* enable previously downed VSIs */
-	ice_dcb_ena_dis_vsi(pf, true, true);
+	ice_dcb_ena_dis_vsi(pf, true);
 	if (!locked)
 		rtnl_unlock();
 free_cfg:
@@ -1107,7 +1106,7 @@ ice_dcb_process_lldp_set_mib_change(struct ice_pf *pf,
 
 	rtnl_lock();
 	/* disable VSIs affected by DCB changes */
-	ice_dcb_ena_dis_vsi(pf, false, true);
+	ice_dcb_ena_dis_vsi(pf, false);
 
 	ret = ice_query_port_ets(pi, &buf, sizeof(buf), NULL);
 	if (ret) {
@@ -1119,7 +1118,7 @@ ice_dcb_process_lldp_set_mib_change(struct ice_pf *pf,
 	ice_pf_dcb_recfg(pf, false);
 
 	/* enable previously downed VSIs */
-	ice_dcb_ena_dis_vsi(pf, true, true);
+	ice_dcb_ena_dis_vsi(pf, true);
 unlock_rtnl:
 	rtnl_unlock();
 out:

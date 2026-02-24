@@ -58,6 +58,7 @@ static int ice_sf_cfg_netdev(struct ice_dynamic_port *dyn_port,
 	eth_hw_addr_set(netdev, dyn_port->hw_addr);
 	ether_addr_copy(netdev->perm_addr, dyn_port->hw_addr);
 	netdev->netdev_ops = &ice_sf_netdev_ops;
+	netdev->request_ops_lock = true;
 	SET_NETDEV_DEVLINK_PORT(netdev, devlink_port);
 
 	err = register_netdev(netdev);
@@ -183,7 +184,9 @@ static void ice_sf_dev_remove(struct auxiliary_device *adev)
 	devlink = priv_to_devlink(sf_dev->priv);
 	devl_lock(devlink);
 
+	netdev_lock(vsi->netdev);
 	ice_vsi_close(vsi);
+	netdev_unlock(vsi->netdev);
 
 	ice_sf_decfg_netdev(vsi);
 	ice_devlink_destroy_sf_dev_port(sf_dev);
