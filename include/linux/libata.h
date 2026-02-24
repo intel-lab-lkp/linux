@@ -1225,7 +1225,8 @@ extern int ata_ncq_prio_enable(struct ata_port *ap, struct scsi_device *sdev,
 extern struct ata_device *ata_dev_pair(struct ata_device *adev);
 int ata_set_mode(struct ata_link *link, struct ata_device **r_failed_dev);
 extern void ata_scsi_port_error_handler(struct Scsi_Host *host, struct ata_port *ap);
-extern void ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap, struct list_head *eh_q);
+int ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap,
+			       struct list_head *eh_q);
 
 /*
  * SATA specific code - drivers/ata/libata-sata.c
