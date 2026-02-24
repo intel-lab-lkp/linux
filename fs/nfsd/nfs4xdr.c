@@ -3390,6 +3390,33 @@ static __be32 nfsd4_encode_fattr4_aclsupport(struct xdr_stream *xdr,
 	return nfsd4_encode_uint32_t(xdr, mask);
 }
 
+static __be32 nfsd4_encode_nfs4_acl_passthru(struct xdr_stream *xdr,
+					     struct nfs4_acl *acl)
+{
+	uint32_t pgbase = acl->pgbase;
+	uint32_t remaining = acl->len;
+	unsigned int npages = DIV_ROUND_UP(remaining, PAGE_SIZE);
+
+	for (int i = 0; i < npages; i++) {
+		void *vaddr = page_address(acl->pages[i]);
+		size_t len = (remaining < PAGE_SIZE) ? remaining : PAGE_SIZE;
+
+		if (pgbase) {
+			vaddr += pgbase;
+			pgbase = 0;
+		}
+		WARN_ON_ONCE(xdr_stream_encode_opaque_fixed(xdr, vaddr, len) < 0);
+		remaining -= len;
+		/*
+		 * Free each page that was allocated using alloc_page()
+		 * in nfsd4_get_nfs4_acl_passthru().
+		 */
+		__free_page(acl->pages[i]);
+	}
+
+	return nfs_ok;
+}
+
 static __be32 nfsd4_encode_fattr4_acl(struct xdr_stream *xdr,
 				      const struct nfsd4_fattr_args *args)
 {
@@ -3402,6 +3429,10 @@ static __be32 nfsd4_encode_fattr4_acl(struct xdr_stream *xdr,
 		if (xdr_stream_encode_u32(xdr, 0) != XDR_UNIT)
 			return nfserr_resource;
 	} else {
+		if (!IS_POSIXACL(d_inode(args->dentry)) &&
+		    exportfs_may_passthru_nfs4acl(args->dentry->d_sb->s_export_op))
+			return nfsd4_encode_nfs4_acl_passthru(xdr, acl);
+
 		if (xdr_stream_encode_u32(xdr, acl->naces) != XDR_UNIT)
 			return nfserr_resource;
 		for (ace = acl->aces; ace < acl->aces + acl->naces; ace++) {
@@ -4027,7 +4058,7 @@ nfsd4_encode_fattr4(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 		args.fhp = fhp;
 
 	if (attrmask[0] & FATTR4_WORD0_ACL) {
-		err = nfsd4_get_nfs4_acl(rqstp, dentry, &args.acl);
+		err = nfsd4_get_nfs4_acl(rqstp, dentry, NFS4ACL_ACL, &args.acl);
 		if (err == -EOPNOTSUPP)
 			attrmask[0] &= ~FATTR4_WORD0_ACL;
 		else if (err == -EINVAL) {

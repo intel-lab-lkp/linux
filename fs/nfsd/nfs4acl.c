@@ -37,6 +37,7 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/posix_acl.h>
+#include <linux/nfsacl.h>
 
 #include "nfsfh.h"
 #include "nfsd.h"
@@ -125,9 +126,62 @@ static short ace2type(struct nfs4_ace *);
 static void _posix_to_nfsv4_one(struct posix_acl *, struct nfs4_acl *,
 				unsigned int);
 
+static int
+nfsd4_get_nfs4_acl_passthru(struct inode *inode,
+			    const struct export_operations *ops,
+			    enum nfs4_acl_type acl_type,
+			    u32 acl_len, struct nfs4_acl **acl)
+{
+	int error = 0;
+	int i = 0;
+	unsigned int npages;
+
+	npages = DIV_ROUND_UP(acl_len, PAGE_SIZE);
+	*acl = kmalloc(sizeof(struct nfs4_acl) +
+		       npages * sizeof(struct page *), GFP_KERNEL);
+	if (*acl == NULL)
+		return -ENOMEM;
+
+	(*acl)->type = acl_type;
+	(*acl)->len = acl_len = npages * PAGE_SIZE;
+	(*acl)->pgbase = 0;
+
+	for (; i < npages; i++) {
+		(*acl)->pages[i] = alloc_page(GFP_KERNEL);
+		if (!(*acl)->pages[i]) {
+			error = -ENOMEM;
+			goto out;
+		}
+	}
+
+	if (unlikely(!ops->getacl)) {
+		error = -EOPNOTSUPP;
+		goto out;
+	}
+
+	error = ops->getacl(inode, *acl);
+	if (likely(error > 0)) {
+		error = 0; /* don't error out below */
+		if ((*acl)->len < acl_len) {
+			/* free any unused pages */
+			npages = DIV_ROUND_UP((*acl)->len, PAGE_SIZE);
+			while (--i >= npages)
+				__free_page((*acl)->pages[i]);
+		}
+	}
+out:
+	if (error) {
+		while (--i >= 0)
+			__free_page((*acl)->pages[i]);
+		kfree(*acl);
+		*acl = NULL;
+	}
+	return error;
+}
+
 int
 nfsd4_get_nfs4_acl(struct svc_rqst *rqstp, struct dentry *dentry,
-		struct nfs4_acl **acl)
+		   enum nfs4_acl_type acl_type, struct nfs4_acl **acl)
 {
 	struct inode *inode = d_inode(dentry);
 	int error = 0;
@@ -155,6 +209,19 @@ nfsd4_get_nfs4_acl(struct svc_rqst *rqstp, struct dentry *dentry,
 
 		if (dpacl)
 			size += 2 * dpacl->a_count;
+	}
+
+	if (!IS_POSIXACL(inode) &&
+	    exportfs_may_passthru_nfs4acl(dentry->d_sb->s_export_op)) {
+		/* Ensure NFSv4 ACL has adequate space based on POSIX ACL size */
+		u32 acl_len = min_t(u32, svc_max_payload(rqstp),
+				    (2 * nfs4_acl_bytes(size) -
+				     2 * sizeof(struct nfs4_acl)));
+		const struct export_operations *ops = dentry->d_sb->s_export_op;
+
+		error = nfsd4_get_nfs4_acl_passthru(inode, ops, acl_type,
+						    acl_len, acl);
+		goto out;
 	}
 
 	*acl = kmalloc(nfs4_acl_bytes(size), GFP_KERNEL);
