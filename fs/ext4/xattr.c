@@ -652,6 +652,13 @@ ext4_xattr_ibody_get(struct inode *inode, int name_index, const char *name,
 	header = IHDR(inode, raw_inode);
 	end = ITAIL(inode, raw_inode);
 	entry = IFIRST(header);
+
+	if ((void *)entry + sizeof(__u32) > end) {
+		EXT4_ERROR_INODE(inode, "inline xattr region overflow");
+		error = -EFSCORRUPTED;
+		goto cleanup;
+	}
+
 	error = xattr_find_entry(inode, &entry, end, name_index, name, 0);
 	if (error)
 		goto cleanup;
