@@ -853,6 +853,13 @@ static inline void nfsd4_cancel_copy_by_sb(struct net *net, struct super_block *
 }
 #endif
 
+/* superblock watch for unmount notification (sb_watch.c) */
+int nfsd_sb_watch_init(void);
+void nfsd_sb_watch_exit(void);
+__be32 nfsd_sb_watch(struct net *net, struct vfsmount *mnt);
+int nfsd_sb_watch_setup(struct nfsd_net *nn);
+void nfsd_sb_watch_shutdown(struct nfsd_net *nn);
+
 /* grace period management */
 bool nfsd4_force_end_grace(struct nfsd_net *nn);
 

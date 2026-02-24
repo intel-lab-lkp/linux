@@ -13,6 +13,7 @@
 #include <linux/filelock.h>
 #include <linux/nfs4.h>
 #include <linux/percpu_counter.h>
+#include <linux/xarray.h>
 #include <linux/percpu-refcount.h>
 #include <linux/siphash.h>
 #include <linux/sunrpc/stats.h>
@@ -218,6 +219,10 @@ struct nfsd_net {
 
 	/* last time an admin-revoke happened for NFSv4.0 */
 	time64_t		nfs40_last_revoke;
+
+	/* Superblock watch for automatic state revocation on unmount */
+	struct xarray		nfsd_sb_watches;
+	struct notifier_block	nfsd_umount_notifier;
 
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 	/* Local clients to be invalidated when net is shut down */

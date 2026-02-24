@@ -6463,6 +6463,16 @@ nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nf
 		status = nfserr_bad_stateid;
 		if (nfsd4_is_deleg_cur(open))
 			goto out;
+		/*
+		 * Watch the superblock so unmount can trigger revocation
+		 * of NFSv4 state (opens, locks, delegations) held by
+		 * clients on this filesystem. nfsd_sb_watch() returns
+		 * immediately if a watch already exists for this sb.
+		 */
+		status = nfsd_sb_watch(SVC_NET(rqstp),
+				       current_fh->fh_export->ex_path.mnt);
+		if (status)
+			goto out;
 	}
 
 	if (!stp) {
@@ -9010,8 +9020,13 @@ static int nfs4_state_create_net(struct net *net)
 
 	shrinker_register(nn->nfsd_client_shrinker);
 
+	if (nfsd_sb_watch_setup(nn))
+		goto err_sb_entries;
+
 	return 0;
 
+err_sb_entries:
+	shrinker_free(nn->nfsd_client_shrinker);
 err_shrinker:
 	put_net(net);
 	kfree(nn->sessionid_hashtbl);
@@ -9110,6 +9125,8 @@ nfs4_state_shutdown_net(struct net *net)
 	struct nfs4_delegation *dp = NULL;
 	struct list_head *pos, *next, reaplist;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+
+	nfsd_sb_watch_shutdown(nn);
 
 	shrinker_free(nn->nfsd_client_shrinker);
 	cancel_work_sync(&nn->nfsd_shrinker_work);
@@ -9465,6 +9482,18 @@ nfsd_get_dir_deleg(struct nfsd4_compound_state *cstate,
 	if (rfp != fp) {
 		put_nfs4_file(fp);
 		fp = rfp;
+	} else {
+		/*
+		 * Watch the superblock so unmount can trigger revocation
+		 * of directory delegations held by clients on this
+		 * filesystem. nfsd_sb_watch() returns immediately if a
+		 * watch already exists for this sb.
+		 */
+		if (nfsd_sb_watch(clp->net,
+				  cstate->current_fh.fh_export->ex_path.mnt)) {
+			put_nfs4_file(fp);
+			return ERR_PTR(-EAGAIN);
+		}
 	}
 
 	/* if this client already has one, return that it's unavailable */

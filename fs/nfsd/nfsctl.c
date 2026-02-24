@@ -2268,9 +2268,12 @@ static int __init init_nfsd(void)
 	retval = nfsd4_create_laundry_wq();
 	if (retval)
 		goto out_free_cld;
+	retval = nfsd_sb_watch_init();
+	if (retval)
+		goto out_free_laundry;
 	retval = register_filesystem(&nfsd_fs_type);
 	if (retval)
-		goto out_free_nfsd4;
+		goto out_free_sb;
 	retval = genl_register_family(&nfsd_nl_family);
 	if (retval)
 		goto out_free_filesystem;
@@ -2284,7 +2287,9 @@ out_free_all:
 	genl_unregister_family(&nfsd_nl_family);
 out_free_filesystem:
 	unregister_filesystem(&nfsd_fs_type);
-out_free_nfsd4:
+out_free_sb:
+	nfsd_sb_watch_exit();
+out_free_laundry:
 	nfsd4_destroy_laundry_wq();
 out_free_cld:
 	unregister_cld_notifier();
@@ -2307,6 +2312,7 @@ static void __exit exit_nfsd(void)
 	remove_proc_entry("fs/nfs", NULL);
 	genl_unregister_family(&nfsd_nl_family);
 	unregister_filesystem(&nfsd_fs_type);
+	nfsd_sb_watch_exit();
 	nfsd4_destroy_laundry_wq();
 	unregister_cld_notifier();
 	unregister_pernet_subsys(&nfsd_net_ops);
