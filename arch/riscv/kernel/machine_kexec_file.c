@@ -46,7 +46,7 @@ static int get_nr_ram_ranges_callback(struct resource *res, void *arg)
 
 unsigned int arch_get_system_nr_ranges(void)
 {
-	unsigned int nr_ranges = 1; /* For exclusion of crashkernel region */
+	unsigned int nr_ranges = 1 + crashk_cma_cnt; /* For exclusion of crashkernel region */
 
 	walk_system_ram_res(0, -1, &nr_ranges, get_nr_ram_ranges_callback);
 
@@ -66,8 +66,20 @@ static int prepare_elf64_ram_headers_callback(struct resource *res, void *arg)
 
 int arch_crash_populate_cmem(struct crash_mem *cmem)
 {
+	int ret, i;
+
 	cmem->nr_ranges = 0;
-	return walk_system_ram_res(0, -1, cmem, prepare_elf64_ram_headers_callback);
+	ret = walk_system_ram_res(0, -1, cmem, prepare_elf64_ram_headers_callback);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < crashk_cma_cnt; i++) {
+		cmem->ranges[cmem->nr_ranges].start = crashk_cma_ranges[i].start;
+		cmem->ranges[cmem->nr_ranges].end = crashk_cma_ranges[i].end;
+		cmem->nr_ranges++;
+	}
+
+	return 0;
 }
 
 static char *setup_kdump_cmdline(struct kimage *image, char *cmdline,
