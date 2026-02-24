@@ -420,6 +420,92 @@ void pcc_mbox_free_channel(struct pcc_mbox_chan *pchan)
 EXPORT_SYMBOL_GPL(pcc_mbox_free_channel);
 
 /**
+ * pcc_mbox_query_bytes_available
+ *
+ * @pchan pointer to channel associated with buffer
+ * Return: the number of bytes available to read from the shared buffer
+ */
+int pcc_mbox_query_bytes_available(struct pcc_mbox_chan *pchan)
+{
+	struct acpi_pcct_ext_pcc_shared_memory pcc_header;
+	struct pcc_chan_info *pinfo = pchan->mchan->con_priv;
+	int data_len;
+	u64 val;
+
+	pcc_chan_reg_read(&pinfo->cmd_complete, &val);
+	if (val) {
+		pr_info("%s Buffer not enabled for reading", __func__);
+		return -1;
+	}
+	memcpy_fromio(&pcc_header, pchan->shmem,
+		      sizeof(pcc_header));
+	data_len = pcc_header.length - sizeof(u32) + sizeof(pcc_header);
+	return data_len;
+}
+EXPORT_SYMBOL_GPL(pcc_mbox_query_bytes_available);
+
+/**
+ * pcc_mbox_read_from_buffer - Copy bytes from shared buffer into data
+ *
+ * @pchan - channel associated with the shared buffer
+ * @len - number of bytes to read
+ * @data - pointer to memory in which to write the data from the
+ *         shared buffer
+ *
+ * Return: number of bytes read and written into daa
+ */
+int pcc_mbox_read_from_buffer(struct pcc_mbox_chan *pchan, int len, void *data)
+{
+	struct pcc_chan_info *pinfo = pchan->mchan->con_priv;
+	int data_len;
+	u64 val;
+
+	pcc_chan_reg_read(&pinfo->cmd_complete, &val);
+	if (val) {
+		pr_info("%s buffer not enabled for reading", __func__);
+		return -1;
+	}
+	data_len  = pcc_mbox_query_bytes_available(pchan);
+	if (len < data_len)
+		data_len = len;
+	memcpy_fromio(data, pchan->shmem, len);
+	return len;
+}
+EXPORT_SYMBOL_GPL(pcc_mbox_read_from_buffer);
+
+/**
+ * pcc_mbox_write_to_buffer, copy the contents of the data
+ * pointer to the shared buffer.  Confirms that the command
+ * flag has been set prior to writing.  Data should be a
+ * properly formatted extended data buffer.
+ * pcc_mbox_write_to_buffer
+ * @pchan: channel
+ * @len: Length of the overall buffer passed in, including the
+ *       Entire header. The length value in the shared buffer header
+ *       Will be calculated from len.
+ * @data: Client specific data to be written to the shared buffer.
+ * Return: number of bytes written to the buffer.
+ */
+int pcc_mbox_write_to_buffer(struct pcc_mbox_chan *pchan, int len, void *data)
+{
+	struct acpi_pcct_ext_pcc_shared_memory *pcc_header = data;
+	/*
+	 * The PCC header length includes the command field
+	 * but not the other values from the header.
+	 */
+	pcc_header->length = len - sizeof(struct acpi_pcct_ext_pcc_shared_memory) + sizeof(u32);
+
+	if (len > pchan->shmem_size)
+		return 0;
+
+	memcpy_toio(pchan->shmem,  data, len);
+
+	return len;
+}
+EXPORT_SYMBOL_GPL(pcc_mbox_write_to_buffer);
+
+
+/**
  * pcc_send_data - Called from Mailbox Controller code. Used
  *		here only to ring the channel doorbell. The PCC client
  *		specific read/write is done in the client driver in

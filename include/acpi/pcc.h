@@ -37,6 +37,14 @@ struct pcc_mbox_chan {
 extern struct pcc_mbox_chan *
 pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id);
 extern void pcc_mbox_free_channel(struct pcc_mbox_chan *chan);
+extern
+int pcc_mbox_write_to_buffer(struct pcc_mbox_chan *pchan, int len, void *data);
+extern
+int pcc_mbox_query_bytes_available(struct pcc_mbox_chan *pchan);
+extern
+int pcc_mbox_read_from_buffer(struct pcc_mbox_chan *pchan, int len,
+			      void *data);
+
 #else
 static inline struct pcc_mbox_chan *
 pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
@@ -44,6 +52,20 @@ pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
 	return ERR_PTR(-ENODEV);
 }
 static inline void pcc_mbox_free_channel(struct pcc_mbox_chan *chan) { }
+static inline
+int pcc_mbox_write_to_buffer(struct pcc_mbox_chan *pchan, int len, void *data)
+{
+	return 0;
+}
+static inline int pcc_mbox_query_bytes_available(struct pcc_mbox_chan *pchan);
+{
+	return 0;
+}
+static inline
+int pcc_mbox_read_from_buffer(struct pcc_mbox_chan *pchan, int len, void *data)
+{
+	return 0;
+}
 #endif
 
 #endif /* _PCC_H */
