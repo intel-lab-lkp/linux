@@ -470,10 +470,20 @@ static int ntb_get_link_ksettings(struct net_device *dev,
 	return 0;
 }
 
+static void ntb_get_channels(struct net_device *ndev,
+			     struct ethtool_channels *channels)
+{
+	struct ntb_netdev *dev = netdev_priv(ndev);
+
+	channels->max_combined = dev->num_queues;
+	channels->combined_count = dev->num_queues;
+}
+
 static const struct ethtool_ops ntb_ethtool_ops = {
 	.get_drvinfo = ntb_get_drvinfo,
 	.get_link = ethtool_op_get_link,
 	.get_link_ksettings = ntb_get_link_ksettings,
+	.get_channels = ntb_get_channels,
 };
 
 static const struct ntb_queue_handlers ntb_netdev_handlers = {
