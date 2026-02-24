@@ -786,8 +786,8 @@ static int ade9000_iio_push_streaming(struct iio_dev *indio_dev)
 		ret = regmap_write(st->regmap, ADE9000_REG_WFB_PG_IRQEN,
 				   ADE9000_MIDDLE_PAGE_BIT);
 		if (ret) {
-			dev_err_ratelimited(dev, "IRQ0 WFB write fail");
-			return IRQ_HANDLED;
+			dev_err_ratelimited(dev, "IRQ0 WFB write fail\n");
+			return ret;
 		}
 
 		ade9000_configure_scan(indio_dev, ADE9000_REG_WF_BUFF);
