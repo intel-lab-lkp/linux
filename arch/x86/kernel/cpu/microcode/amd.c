@@ -958,7 +958,7 @@ static int collect_cpu_info_amd(int cpu, struct cpu_signature *csig)
 
 	/*
 	 * a patch could have been loaded early, set uci->mc so that
-	 * mc_bp_resume() can call apply_microcode()
+	 * microcode_bsp_resume() can call apply_microcode()
 	 */
 	p = find_patch(cpu);
 	if (p && (p->patch_id == csig->rev))
