@@ -856,6 +856,7 @@ static int acpi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		 * governor from selecting inadequate CPU frequencies.
 		 */
 		arch_set_max_freq_ratio(true);
+		policy->cpuinfo.max_freq = nominal_freq;
 	}
 
 	policy->freq_table = freq_table;
