@@ -390,6 +390,8 @@ static inline void jbd_unlock_bh_journal_head(struct buffer_head *bh)
 /* Wait for outstanding data writes for this inode before commit */
 #define JI_WAIT_DATA (1 << __JI_WAIT_DATA)
 
+#define JBD2_INODE_DIRTY_RANGE_NONE	((pgoff_t)-1)
+
 /**
  * struct jbd2_inode - The jbd_inode type is the structure linking inodes in
  * ordered mode present in a transaction so that we can sync them during commit.
@@ -429,33 +431,38 @@ struct jbd2_inode {
 	unsigned long i_flags;
 
 	/**
-	 * @i_dirty_start:
+	 * @i_dirty_start_page:
 	 *
-	 * Offset in bytes where the dirty range for this inode starts.
+	 * Dirty range start in PAGE_SIZE units.
+	 *
+	 * The dirty range is empty if @i_dirty_end_page is set to
+	 * %JBD2_INODE_DIRTY_RANGE_NONE.
+	 *
 	 * [j_list_lock]
 	 */
-	loff_t i_dirty_start;
+	pgoff_t i_dirty_start_page;
 
 	/**
-	 * @i_dirty_end:
+	 * @i_dirty_end_page:
 	 *
-	 * Inclusive offset in bytes where the dirty range for this inode
-	 * ends. [j_list_lock]
+	 * Dirty range end in PAGE_SIZE units (inclusive).
+	 *
+	 * [j_list_lock]
 	 */
-	loff_t i_dirty_end;
+	pgoff_t i_dirty_end_page;
 };
 
 static inline bool jbd2_jinode_get_dirty_range(const struct jbd2_inode *jinode,
 					       loff_t *start, loff_t *end)
 {
-	loff_t start_byte = jinode->i_dirty_start;
-	loff_t end_byte = jinode->i_dirty_end;
+	pgoff_t start_page = READ_ONCE(jinode->i_dirty_start_page);
+	pgoff_t end_page = READ_ONCE(jinode->i_dirty_end_page);
 
-	if (!end_byte)
+	if (end_page == JBD2_INODE_DIRTY_RANGE_NONE)
 		return false;
 
-	*start = start_byte;
-	*end = end_byte;
+	*start = (loff_t)start_page << PAGE_SHIFT;
+	*end = ((loff_t)end_page << PAGE_SHIFT) + PAGE_SIZE - 1;
 	return true;
 }
 
