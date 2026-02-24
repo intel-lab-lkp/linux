@@ -910,7 +910,7 @@ static struct kunit_case drm_buddy_tests[] = {
 	KUNIT_CASE(drm_test_buddy_alloc_contiguous),
 	KUNIT_CASE(drm_test_buddy_alloc_clear),
 	KUNIT_CASE(drm_test_buddy_alloc_range_bias),
-	KUNIT_CASE(drm_test_buddy_fragmentation_performance),
+	KUNIT_CASE_SLOW(drm_test_buddy_fragmentation_performance),
 	KUNIT_CASE(drm_test_buddy_alloc_exceeds_max_order),
 	{}
 };
