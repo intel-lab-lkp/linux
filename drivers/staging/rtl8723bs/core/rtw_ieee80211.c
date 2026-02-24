@@ -589,10 +589,9 @@ int rtw_get_wapi_ie(u8 *in_ie, uint in_len, u8 *wapi_ie, u16 *wapi_len)
 			if (wapi_len)
 				*wapi_len = in_ie[cnt + 1] + 2;
 
-			cnt += in_ie[cnt + 1] + 2;  /* get next */
-		} else {
-			cnt += in_ie[cnt + 1] + 2;   /* get next */
 		}
+
+		cnt += in_ie[cnt + 1] + 2;   /* get next */
 	}
 
 	if (wapi_len)
@@ -620,18 +619,14 @@ void rtw_get_sec_ie(u8 *in_ie, uint in_len, u8 *rsn_ie, u16 *rsn_len, u8 *wpa_ie
 				memcpy(wpa_ie, &in_ie[cnt], in_ie[cnt + 1] + 2);
 
 			*wpa_len = in_ie[cnt + 1] + 2;
-			cnt += in_ie[cnt + 1] + 2;  /* get next */
-		} else {
-			if (authmode == WLAN_EID_RSN) {
-				if (rsn_ie)
-					memcpy(rsn_ie, &in_ie[cnt], in_ie[cnt + 1] + 2);
+		} else if (authmode == WLAN_EID_RSN) {
+			if (rsn_ie)
+				memcpy(rsn_ie, &in_ie[cnt], in_ie[cnt + 1] + 2);
 
-				*rsn_len = in_ie[cnt + 1] + 2;
-				cnt += in_ie[cnt + 1] + 2;  /* get next */
-			} else {
-				cnt += in_ie[cnt + 1] + 2;   /* get next */
-			}
+			*rsn_len = in_ie[cnt + 1] + 2;
 		}
+
+		cnt += in_ie[cnt + 1] + 2;   /* get next */
 	}
 }
 
