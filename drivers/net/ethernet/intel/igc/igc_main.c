@@ -5307,8 +5307,9 @@ void igc_update_stats(struct igc_adapter *adapter)
 /**
  * igc_down - Close the interface
  * @adapter: board private structure
+ * @reset: issue reset
  */
-void igc_down(struct igc_adapter *adapter)
+void igc_down(struct igc_adapter *adapter, bool reset)
 {
 	struct net_device *netdev = adapter->netdev;
 	struct igc_hw *hw = &adapter->hw;
@@ -5364,7 +5365,7 @@ void igc_down(struct igc_adapter *adapter)
 	adapter->link_speed = 0;
 	adapter->link_duplex = 0;
 
-	if (!pci_channel_offline(adapter->pdev))
+	if (reset && !pci_channel_offline(adapter->pdev))
 		igc_reset(adapter);
 
 	/* clear VLAN promisc flag so VFTA will be updated if necessary */
@@ -5382,7 +5383,7 @@ void igc_reinit_locked(struct igc_adapter *adapter)
 {
 	while (test_and_set_bit(__IGC_RESETTING, &adapter->state))
 		usleep_range(1000, 2000);
-	igc_down(adapter);
+	igc_down(adapter, true);
 	igc_up(adapter);
 	clear_bit(__IGC_RESETTING, &adapter->state);
 }
@@ -5436,7 +5437,7 @@ static int igc_change_mtu(struct net_device *netdev, int new_mtu)
 	adapter->max_frame_size = max_frame;
 
 	if (netif_running(netdev))
-		igc_down(adapter);
+		igc_down(adapter, true);
 
 	netdev_dbg(netdev, "changing MTU from %d to %d\n", netdev->mtu, new_mtu);
 	WRITE_ONCE(netdev->mtu, new_mtu);
@@ -6300,7 +6301,7 @@ static int __igc_close(struct net_device *netdev, bool suspending)
 	if (!suspending)
 		pm_runtime_get_sync(&pdev->dev);
 
-	igc_down(adapter);
+	igc_down(adapter, !suspending);
 
 	igc_release_hw_control(adapter);
 
@@ -7641,7 +7642,7 @@ static pci_ers_result_t igc_io_error_detected(struct pci_dev *pdev,
 	}
 
 	if (netif_running(netdev))
-		igc_down(adapter);
+		igc_down(adapter, true);
 	pci_disable_device(pdev);
 	rtnl_unlock();
 
