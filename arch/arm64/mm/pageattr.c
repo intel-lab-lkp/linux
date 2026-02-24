@@ -408,7 +408,7 @@ bool kernel_page_present(struct page *page)
 		return true;
 
 	pmdp = pmd_offset(pudp, addr);
-	pmd = READ_ONCE(*pmdp);
+	pmd = pmdp_get(pmdp);
 	if (pmd_none(pmd))
 		return false;
 	if (pmd_sect(pmd))
