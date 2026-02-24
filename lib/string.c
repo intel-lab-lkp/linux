@@ -157,16 +157,16 @@ ssize_t sized_strscpy(char *dest, const char *src, size_t count)
 		if (has_zero(c, &data, &constants)) {
 			data = prep_zero_mask(c, data, &constants);
 			data = create_zero_mask(data);
-			*(unsigned long *)(dest+res) = c & zero_bytemask(data);
+			put_unaligned(c & zero_bytemask(data), (unsigned long *)(dest+res));
 			return res + find_zero(data);
 		}
 		count -= sizeof(unsigned long);
 		if (unlikely(!count)) {
 			c &= ALLBUTLAST_BYTE_MASK;
-			*(unsigned long *)(dest+res) = c;
+			put_unaligned(c, (unsigned long *)(dest+res));
 			return -E2BIG;
 		}
-		*(unsigned long *)(dest+res) = c;
+		put_unaligned(c, (unsigned long *)(dest+res));
 		res += sizeof(unsigned long);
 		max -= sizeof(unsigned long);
 	}
