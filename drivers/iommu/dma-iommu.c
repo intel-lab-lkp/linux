@@ -1423,6 +1423,9 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		size_t s_length = s->length;
 		size_t pad_len = (mask - iova_len + 1) & mask;
 
+		if (!pfn_valid(page_to_pfn(sg_page(s))))
+			goto post_pci_p2pdma;
+
 		switch (pci_p2pdma_state(&p2pdma_state, dev, sg_page(s))) {
 		case PCI_P2PDMA_MAP_THRU_HOST_BRIDGE:
 			/*
@@ -1449,6 +1452,7 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 			goto out_restore_sg;
 		}
 
+post_pci_p2pdma:
 		sg_dma_address(s) = s_iova_off;
 		sg_dma_len(s) = s_length;
 		s->offset -= s_iova_off;
