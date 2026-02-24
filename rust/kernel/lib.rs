@@ -28,6 +28,7 @@
 #![feature(lint_reasons)]
 //
 // Stable since Rust 1.82.0.
+#![feature(offset_of_nested)]
 #![feature(raw_ref_op)]
 //
 // Stable since Rust 1.83.0.

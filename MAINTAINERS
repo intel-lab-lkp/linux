@@ -23181,6 +23181,14 @@ T:	git https://github.com/Rust-for-Linux/linux.git alloc-next
 F:	rust/kernel/alloc.rs
 F:	rust/kernel/alloc/
 
+RUST [FFI HELPER]
+M:	Joel Fernandes <joelagnelf@nvidia.com> (CLIST)
+M:	Alexandre Courbot <acourbot@nvidia.com> (CLIST)
+L:	rust-for-linux@vger.kernel.org
+S:	Maintained
+T:	git https://github.com/Rust-for-Linux/linux.git ffi-next
+F:	rust/kernel/ffi/
+
 RUST [NUM]
 M:	Alexandre Courbot <acourbot@nvidia.com>
 R:	Yury Norov <yury.norov@gmail.com>
