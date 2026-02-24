@@ -1853,6 +1853,7 @@ struct nfs_rpc_ops {
 	void	(*enable_swap)(struct inode *inode);
 	void	(*disable_swap)(struct inode *inode);
 	int	(*set_nfs4_acl)(struct inode *, struct nfs4_acl *);
+	int	(*get_nfs4_acl)(struct inode *, struct nfs4_acl *);
 };
 
 /*

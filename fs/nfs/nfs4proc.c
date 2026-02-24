@@ -6045,7 +6045,8 @@ out:
  * the server, this time with the input buf of the required size.
  */
 static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf,
-				       size_t buflen, enum nfs4_acl_type type)
+				       size_t buflen, enum nfs4_acl_type type,
+				       struct nfs4_acl *acl)
 {
 	struct page **pages;
 	struct nfs_getaclargs args = {
@@ -6069,25 +6070,28 @@ static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf,
 	if (buflen == 0)
 		buflen = server->rsize;
 
-	npages = DIV_ROUND_UP(buflen, PAGE_SIZE) + 1;
-	pages = kmalloc_objs(struct page *, npages);
-	if (!pages)
-		return -ENOMEM;
+	if (!acl) {
+		npages = DIV_ROUND_UP(buflen, PAGE_SIZE) + 1;
+		pages = kmalloc_objs(struct page *, npages);
+		if (!pages)
+			return -ENOMEM;
+		for (i = 0; i < npages; i++) {
+			pages[i] = alloc_page(GFP_KERNEL);
+			if (!pages[i])
+				goto out_free;
+		}
+		args.acl_len = npages * PAGE_SIZE;
+	} else {
+		npages = DIV_ROUND_UP(buflen, PAGE_SIZE);
+		pages = acl->pages;
+	}
 
 	args.acl_pages = pages;
-
-	for (i = 0; i < npages; i++) {
-		pages[i] = alloc_page(GFP_KERNEL);
-		if (!pages[i])
-			goto out_free;
-	}
 
 	/* for decoding across pages */
 	res.acl_scratch = folio_alloc(GFP_KERNEL, 0);
 	if (!res.acl_scratch)
 		goto out_free;
-
-	args.acl_len = npages * PAGE_SIZE;
 
 	dprintk("%s  buf %p buflen %zu npages %d args.acl_len %zu\n",
 		__func__, buf, buflen, npages, args.acl_len);
@@ -6104,8 +6108,18 @@ static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf,
 		ret = -ERANGE;
 		goto out_free;
 	}
-	nfs4_write_cached_acl(inode, pages, res.acl_data_offset, res.acl_len,
-			      type);
+
+	if (!acl) {
+		nfs4_write_cached_acl(inode, pages, res.acl_data_offset,
+				      res.acl_len, type);
+	} else {
+		if (res.acl_len > buflen) {
+			ret = -ERANGE;
+			goto out_free;
+		}
+		acl->len = res.acl_len;
+		acl->pgbase = res.acl_data_offset;
+	}
 	if (buf) {
 		if (res.acl_len > buflen) {
 			ret = -ERANGE;
@@ -6116,23 +6130,26 @@ static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf,
 out_ok:
 	ret = res.acl_len;
 out_free:
-	while (--i >= 0)
-		__free_page(pages[i]);
+	if (!acl) {
+		while (--i >= 0)
+			__free_page(pages[i]);
+		kfree(pages);
+	}
 	if (res.acl_scratch)
 		folio_put(res.acl_scratch);
-	kfree(pages);
 	return ret;
 }
 
 static ssize_t nfs4_get_acl_uncached(struct inode *inode, void *buf,
-				     size_t buflen, enum nfs4_acl_type type)
+				     size_t buflen, enum nfs4_acl_type type,
+				     struct nfs4_acl *acl)
 {
 	struct nfs4_exception exception = {
 		.interruptible = true,
 	};
 	ssize_t ret;
 	do {
-		ret = __nfs4_get_acl_uncached(inode, buf, buflen, type);
+		ret = __nfs4_get_acl_uncached(inode, buf, buflen, type, acl);
 		trace_nfs4_get_acl(inode, ret);
 		if (ret >= 0)
 			break;
@@ -6142,7 +6159,7 @@ static ssize_t nfs4_get_acl_uncached(struct inode *inode, void *buf,
 }
 
 static ssize_t nfs4_proc_get_acl(struct inode *inode, void *buf, size_t buflen,
-				 enum nfs4_acl_type type)
+				 enum nfs4_acl_type type, struct nfs4_acl *acl)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
 	int ret;
@@ -6156,12 +6173,23 @@ static ssize_t nfs4_proc_get_acl(struct inode *inode, void *buf, size_t buflen,
 		return ret;
 	if (NFS_I(inode)->cache_validity & NFS_INO_INVALID_ACL)
 		nfs_zap_acl_cache(inode);
+	/* Must get ACL if @acl != NULL, frontend NFS layer will cache it */
+	if (acl != NULL)
+		goto get_acl_uncached;
 	ret = nfs4_read_cached_acl(inode, buf, buflen, type);
 	if (ret != -ENOENT)
 		/* -ENOENT is returned if there is no ACL or if there is an ACL
 		 * but no cached acl data, just the acl length */
 		return ret;
-	return nfs4_get_acl_uncached(inode, buf, buflen, type);
+get_acl_uncached:
+	return nfs4_get_acl_uncached(inode, buf, buflen, type, acl);
+}
+
+static int nfs4_get_nfs4_acl(struct inode *inode, struct nfs4_acl *acl)
+{
+	if (!nfs4_server_supports_acls(NFS_SERVER(inode), acl->type))
+		return -EOPNOTSUPP;
+	return nfs4_proc_get_acl(inode, NULL, acl->len, acl->type, acl);
 }
 
 static int __nfs4_proc_set_acl(struct inode *inode, const void *buf,
@@ -7831,7 +7859,7 @@ static int nfs4_xattr_get_nfs4_acl(const struct xattr_handler *handler,
 				   struct dentry *unused, struct inode *inode,
 				   const char *key, void *buf, size_t buflen)
 {
-	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_ACL);
+	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_ACL, NULL);
 }
 
 static bool nfs4_xattr_list_nfs4_acl(struct dentry *dentry)
@@ -7854,7 +7882,7 @@ static int nfs4_xattr_get_nfs4_dacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
 				    const char *key, void *buf, size_t buflen)
 {
-	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_DACL);
+	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_DACL, NULL);
 }
 
 static bool nfs4_xattr_list_nfs4_dacl(struct dentry *dentry)
@@ -7877,7 +7905,7 @@ static int nfs4_xattr_get_nfs4_sacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
 				    const char *key, void *buf, size_t buflen)
 {
-	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_SACL);
+	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_SACL, NULL);
 }
 
 static bool nfs4_xattr_list_nfs4_sacl(struct dentry *dentry)
@@ -10704,6 +10732,7 @@ const struct nfs_rpc_ops nfs_v4_clientops = {
 	.enable_swap	= nfs4_enable_swap,
 	.disable_swap	= nfs4_disable_swap,
 	.set_nfs4_acl	= nfs4_set_nfs4_acl,
+	.get_nfs4_acl	= nfs4_get_nfs4_acl,
 };
 
 static const struct xattr_handler nfs4_xattr_nfs4_acl_handler = {
