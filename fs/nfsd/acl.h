@@ -35,6 +35,8 @@
 #ifndef LINUX_NFS4_ACL_H
 #define LINUX_NFS4_ACL_H
 
+#include <linux/exportfs.h>
+
 struct nfs4_acl;
 struct svc_fh;
 struct svc_rqst;
@@ -50,5 +52,11 @@ int nfsd4_get_nfs4_acl(struct svc_rqst *rqstp, struct dentry *dentry,
 __be32 nfsd4_acl_to_attr(enum nfs_ftype4 type, struct nfs4_acl *acl,
 			 struct nfsd_attrs *attr);
 void sort_pacl_range(struct posix_acl *pacl, int start, int end);
+
+static inline bool nfsd_supports_nfs4_acl(struct dentry *dentry)
+{
+	return IS_POSIXACL(d_inode(dentry)) ||
+		exportfs_may_passthru_nfs4acl(dentry->d_sb->s_export_op);
+}
 
 #endif /* LINUX_NFS4_ACL_H */

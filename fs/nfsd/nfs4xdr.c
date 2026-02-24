@@ -3194,7 +3194,7 @@ static __be32 nfsd4_encode_fattr4_supported_attrs(struct xdr_stream *xdr,
 	u32 supp[3];
 
 	memcpy(supp, nfsd_suppattrs[minorversion], sizeof(supp));
-	if (!IS_POSIXACL(d_inode(args->dentry)))
+	if (!nfsd_supports_nfs4_acl(args->dentry))
 		supp[0] &= ~FATTR4_WORD0_ACL;
 	if (!args->contextsupport)
 		supp[2] &= ~FATTR4_WORD2_SECURITY_LABEL;
@@ -3327,7 +3327,7 @@ static __be32 nfsd4_encode_fattr4_aclsupport(struct xdr_stream *xdr,
 	u32 mask;
 
 	mask = 0;
-	if (IS_POSIXACL(d_inode(args->dentry)))
+	if (nfsd_supports_nfs4_acl(args->dentry))
 		mask = ACL4_SUPPORT_ALLOW_ACL | ACL4_SUPPORT_DENY_ACL;
 	return nfsd4_encode_uint32_t(xdr, mask);
 }
@@ -3599,7 +3599,7 @@ static __be32 nfsd4_encode_fattr4_suppattr_exclcreat(struct xdr_stream *xdr,
 	u32 supp[3];
 
 	memcpy(supp, nfsd_suppattrs[resp->cstate.minorversion], sizeof(supp));
-	if (!IS_POSIXACL(d_inode(args->dentry)))
+	if (!nfsd_supports_nfs4_acl(args->dentry))
 		supp[0] &= ~FATTR4_WORD0_ACL;
 	if (!args->contextsupport)
 		supp[2] &= ~FATTR4_WORD2_SECURITY_LABEL;

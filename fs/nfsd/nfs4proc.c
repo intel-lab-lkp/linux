@@ -89,7 +89,7 @@ check_attr_support(struct nfsd4_compound_state *cstate, u32 *bmval,
 
 	if (!nfsd_attrs_supported(cstate->minorversion, bmval))
 		return nfserr_attrnotsupp;
-	if ((bmval[0] & FATTR4_WORD0_ACL) && !IS_POSIXACL(d_inode(dentry)))
+	if ((bmval[0] & FATTR4_WORD0_ACL) && !nfsd_supports_nfs4_acl(dentry))
 		return nfserr_attrnotsupp;
 	if ((bmval[2] & (FATTR4_WORD2_POSIX_DEFAULT_ACL |
 					FATTR4_WORD2_POSIX_ACCESS_ACL)) &&
