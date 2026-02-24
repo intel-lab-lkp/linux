@@ -2136,7 +2136,8 @@ static void __init spectre_v2_select_mitigation(void)
 	if ((spectre_v2_cmd == SPECTRE_V2_CMD_EIBRS ||
 	     spectre_v2_cmd == SPECTRE_V2_CMD_EIBRS_LFENCE ||
 	     spectre_v2_cmd == SPECTRE_V2_CMD_EIBRS_RETPOLINE) &&
-	    !boot_cpu_has(X86_FEATURE_IBRS_ENHANCED)) {
+	    !(boot_cpu_has(X86_FEATURE_IBRS_ENHANCED) ||
+	      boot_cpu_has(X86_FEATURE_AUTOIBRS))) {
 		pr_err("EIBRS selected but CPU doesn't have Enhanced or Automatic IBRS. Switching to AUTO select\n");
 		spectre_v2_cmd = SPECTRE_V2_CMD_AUTO;
 	}
@@ -2182,7 +2183,8 @@ static void __init spectre_v2_select_mitigation(void)
 			break;
 		fallthrough;
 	case SPECTRE_V2_CMD_FORCE:
-		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED)) {
+		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED) ||
+		    boot_cpu_has(X86_FEATURE_AUTOIBRS)) {
 			spectre_v2_enabled = SPECTRE_V2_EIBRS;
 			break;
 		}
@@ -2262,7 +2264,8 @@ static void __init spectre_v2_apply_mitigation(void)
 
 	case SPECTRE_V2_IBRS:
 		setup_force_cpu_cap(X86_FEATURE_KERNEL_IBRS);
-		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED))
+		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED) ||
+		    boot_cpu_has(X86_FEATURE_AUTOIBRS))
 			pr_warn(SPECTRE_V2_IBRS_PERF_MSG);
 		break;
 
