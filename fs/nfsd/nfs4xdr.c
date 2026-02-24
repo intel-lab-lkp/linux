@@ -287,6 +287,8 @@ nfsd4_decode_bitmap4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen)
 	return status == -EBADMSG ? nfserr_bad_xdr : nfs_ok;
 }
 
+static DEFINE_STATIC_KEY_FALSE(nfs4_acl_passthru);
+
 __be32 nfsd4_decode_nfs4_acl_passthru(struct nfsd4_compoundargs *argp,
 				      u32 *bmval, struct nfs4_acl **acl)
 {
@@ -295,6 +297,9 @@ __be32 nfsd4_decode_nfs4_acl_passthru(struct nfsd4_compoundargs *argp,
 	struct xdr_stream xdr;
 	__be32 status = nfs_ok;
 	void *p;
+
+	if (WARN_ON_ONCE(!static_key_enabled(&nfs4_acl_passthru.key)))
+		return nfserr_resource;
 
 	xdr_init_decode(&xdr, &(*acl)->payload,
 			(*acl)->payload.head[0].iov_base, NULL);
@@ -378,8 +383,8 @@ nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl,
 
 	if (!xdr_stream_subsegment(argp->xdr, &payload, acl_len))
 		return nfserr_bad_xdr;
-	memcpy(&saved_payload, &payload, sizeof(struct xdr_buf));
-
+	if (static_key_enabled(&nfs4_acl_passthru.key))
+		memcpy(&saved_payload, &payload, sizeof(struct xdr_buf));
 	xdr_init_decode(&xdr, &payload, payload.head[0].iov_base, NULL);
 
 	if (xdr_stream_decode_u32(&xdr, &count) < 0) {
@@ -402,7 +407,9 @@ nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl,
 		status = nfserr_jukebox;
 		goto out;
 	}
-	memcpy(&(*acl)->payload, &saved_payload, sizeof(struct xdr_buf));
+	if (static_key_enabled(&nfs4_acl_passthru.key))
+		memcpy(&(*acl)->payload, &saved_payload,
+		       sizeof(struct xdr_buf));
 
 	(*acl)->naces = count;
 	for (ace = (*acl)->aces; ace < (*acl)->aces + count; ace++) {
@@ -3407,6 +3414,13 @@ static __be32 nfsd4_encode_nfs4_acl_passthru(struct xdr_stream *xdr,
 	uint32_t pgbase = acl->pgbase;
 	uint32_t remaining = acl->len;
 	unsigned int npages = DIV_ROUND_UP(remaining, PAGE_SIZE);
+
+	/*
+	 * GETACL will precede SETACL, if passthru is used for
+	 * GETACL then enable SETACL's extra work required
+	 * to support passthru.
+	 */
+	static_key_enable(&nfs4_acl_passthru.key);
 
 	for (int i = 0; i < npages; i++) {
 		void *vaddr = page_address(acl->pages[i]);
