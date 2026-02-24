@@ -122,6 +122,18 @@ static inline pgd_t pgdp_get(pgd_t *pgdp)
 	return ptdesc_get(*pgdp);
 }
 
+#define pgprot_read_once pgprot_read_once
+static inline pgprot_t pgprot_read_once(pgprot_t *prot)
+{
+	return ptdesc_get(*prot);
+}
+
+#define pgprot_write_once pgprot_write_once
+static inline void pgprot_write_once(pgprot_t *prot, pgprot_t val)
+{
+	ptdesc_set(*prot, val);
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define __HAVE_ARCH_FLUSH_PMD_TLB_RANGE
 
