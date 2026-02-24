@@ -236,7 +236,7 @@ int cxl_trigger_poison_list(struct cxl_memdev *cxlmd)
 	int rc;
 
 	port = cxlmd->endpoint;
-	if (!port || !is_cxl_endpoint(port))
+	if (IS_ERR_OR_NULL(port) || !is_cxl_endpoint(port))
 		return -EINVAL;
 
 	ACQUIRE(rwsem_read_intr, region_rwsem)(&cxl_rwsem.region);

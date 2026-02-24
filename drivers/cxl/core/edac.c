@@ -1149,7 +1149,7 @@ static bool cxl_is_memdev_memory_online(const struct cxl_memdev *cxlmd)
 {
 	struct cxl_port *port = cxlmd->endpoint;
 
-	if (port && cxl_num_decoders_committed(port))
+	if (!IS_ERR_OR_NULL(port) && cxl_num_decoders_committed(port))
 		return true;
 
 	return false;
