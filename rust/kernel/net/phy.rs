@@ -158,6 +158,14 @@ impl Device {
         bit_field.get(15, 1) == AUTONEG_COMPLETED
     }
 
+    /// Gets the negotiated speed of the PHY.
+    pub fn speed(&self) -> i32 {
+        let phydev = self.0.get();
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        unsafe { (*phydev).speed }
+    }
+
     /// Sets the speed of the PHY.
     pub fn set_speed(&mut self, speed: u32) {
         let phydev = self.0.get();
