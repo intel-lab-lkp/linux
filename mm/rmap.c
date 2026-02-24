@@ -2236,6 +2236,16 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 
 				if (folio_test_dirty(folio) && !(vma->vm_flags & VM_DROPPABLE)) {
 					/*
+					 * The pte batch may have a mix of writable and non-writable
+					 * ptes. If the first pte of the batch was writable, we may
+					 * end up restoring the ptes incorrectly by setting the
+					 * entire batch writable. Avoid this by setting the batch
+					 * non-writable; this is not optimal, but improbable to
+					 * reach by virtue of being a failure path.
+					 */
+					pteval = pte_wrprotect(pteval);
+
+					/*
 					 * redirtied either using the page table or a previously
 					 * obtained GUP reference.
 					 */
@@ -2243,6 +2253,9 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 					folio_set_swapbacked(folio);
 					goto walk_abort;
 				} else if (ref_count != 1 + map_count) {
+					/* See comment above */
+					pteval = pte_wrprotect(pteval);
+
 					/*
 					 * Additional reference. Could be a GUP reference or any
 					 * speculative reference. GUP users must mark the folio
