@@ -823,16 +823,13 @@ static const struct coresight_ops cti_ops = {
 	.helper_ops = &cti_ops_ect,
 };
 
-/*
- * Free up CTI specific resources
- * called by dev->release, need to call down to underlying csdev release.
- */
-static void cti_device_release(struct device *dev)
+static void cti_remove(struct amba_device *adev)
 {
-	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct cti_drvdata *drvdata = dev_get_drvdata(&adev->dev);
 	struct cti_drvdata *ect_item, *ect_tmp;
 
 	mutex_lock(&ect_mutex);
+	cti_remove_conn_xrefs(drvdata);
 	cti_pm_release(drvdata);
 
 	/* remove from the list */
@@ -842,17 +839,6 @@ static void cti_device_release(struct device *dev)
 			break;
 		}
 	}
-	mutex_unlock(&ect_mutex);
-
-	if (drvdata->csdev_release)
-		drvdata->csdev_release(dev);
-}
-static void cti_remove(struct amba_device *adev)
-{
-	struct cti_drvdata *drvdata = dev_get_drvdata(&adev->dev);
-
-	mutex_lock(&ect_mutex);
-	cti_remove_conn_xrefs(drvdata);
 	mutex_unlock(&ect_mutex);
 
 	coresight_unregister(drvdata->csdev);
@@ -946,10 +932,6 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	/* set any cross references */
 	cti_update_conn_xrefs(drvdata);
 	mutex_unlock(&ect_mutex);
-
-	/* set up release chain */
-	drvdata->csdev_release = drvdata->csdev->dev.release;
-	drvdata->csdev->dev.release = cti_device_release;
 
 	/* all done - dec pm refcount */
 	pm_runtime_put(&adev->dev);
