@@ -927,7 +927,7 @@ static int fsl_mx6_enable(struct platform_device *pdev)
 
 	ret = clk_prepare_enable(dev->clk);
 	if (ret) {
-		dev_err(&pdev->dev, "%s\n", "clk_prepare_enable failed");
+		dev_err(&pdev->dev, "clk_prepare_enable failed\n");
 		return ret;
 	}
 
@@ -975,7 +975,7 @@ static int rcar_gen2_enable(struct platform_device *pdev)
 
 	ret = clk_prepare_enable(dev->clk);
 	if (ret) {
-		dev_err(&pdev->dev, "%s\n", "clk_prepare_enable failed");
+		dev_err(&pdev->dev, "clk_prepare_enable failed\n");
 		return ret;
 	}
 
@@ -1020,7 +1020,7 @@ static int rcar_gen3_enable(struct platform_device *pdev)
 
 	ret = clk_prepare_enable(dev->clk);
 	if (ret) {
-		dev_err(&pdev->dev, "%s\n", "clk_prepare_enable failed");
+		dev_err(&pdev->dev, "clk_prepare_enable failed\n");
 		return ret;
 	}
 
