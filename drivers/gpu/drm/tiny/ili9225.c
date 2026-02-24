@@ -284,9 +284,6 @@ static void ili9225_pipe_enable(struct drm_simple_display_pipe *pipe,
 
 	ili9225_command(dbi, ILI9225_DISPLAY_CONTROL_1, 0x1017);
 
-	ili9225_fb_dirty(&shadow_plane_state->data[0], fb, &rect,
-			 &shadow_plane_state->fmtcnv_state);
-
 out_exit:
 	drm_dev_exit(idx);
 }

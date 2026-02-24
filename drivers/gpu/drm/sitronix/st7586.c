@@ -242,9 +242,6 @@ static void st7586_pipe_enable(struct drm_simple_display_pipe *pipe,
 
 	msleep(100);
 
-	st7586_fb_dirty(&shadow_plane_state->data[0], fb, &rect,
-			&shadow_plane_state->fmtcnv_state);
-
 	mipi_dbi_command(dbi, MIPI_DCS_SET_DISPLAY_ON);
 out_exit:
 	drm_dev_exit(idx);
