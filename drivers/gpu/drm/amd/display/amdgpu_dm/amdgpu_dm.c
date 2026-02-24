@@ -10268,6 +10268,14 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 				&acrtc_attach->dm_irq_params.vrr_params.adjust);
 			spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
 		}
+
+		/*
+		 * If vblank is being enabled in worker thread, wait for it to
+		 * enable interrupts before programming pflips, otherwise the
+		 * interrupt may not fire.
+		 */
+		drm_crtc_vblank_wait_deferred_enable(pcrtc);
+
 		mutex_lock(&dm->dc_lock);
 		update_planes_and_stream_adapter(dm->dc,
 					 acrtc_state->update_type,
