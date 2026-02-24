@@ -638,7 +638,7 @@ igc_ethtool_set_ringparam(struct net_device *netdev,
 		goto clear_reset;
 	}
 
-	igc_down(adapter);
+	igc_down(adapter, true);
 
 	/* We can't just free everything and then setup again,
 	 * because the ISRs in MSI-X mode get passed pointers
@@ -737,7 +737,7 @@ static int igc_ethtool_set_pauseparam(struct net_device *netdev,
 	if (adapter->fc_autoneg == AUTONEG_ENABLE) {
 		hw->fc.requested_mode = igc_fc_default;
 		if (netif_running(adapter->netdev)) {
-			igc_down(adapter);
+			igc_down(adapter, true);
 			igc_up(adapter);
 		} else {
 			igc_reset(adapter);
@@ -2109,7 +2109,7 @@ igc_ethtool_set_link_ksettings(struct net_device *netdev,
 
 	/* reset the link */
 	if (netif_running(adapter->netdev)) {
-		igc_down(adapter);
+		igc_down(adapter, true);
 		igc_up(adapter);
 	} else {
 		igc_reset(adapter);
