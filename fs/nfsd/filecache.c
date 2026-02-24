@@ -894,6 +894,51 @@ __nfsd_file_cache_purge(struct net *net)
 	nfsd_file_dispose_list(&dispose);
 }
 
+/**
+ * nfsd_file_close_sb - close GC-managed cached files for a superblock
+ * @sb: target superblock
+ *
+ * Walk the nfsd_file cache and close out GC-managed entries (those
+ * acquired via nfsd_file_acquire_gc) that belong to @sb. Called during
+ * filesystem unmount after NFSv4 state revocation to release remaining
+ * cached file handles that may be pinning the filesystem.
+ */
+void nfsd_file_close_sb(struct super_block *sb)
+{
+	struct rhashtable_iter iter;
+	struct nfsd_file *nf;
+	unsigned int closed = 0;
+	LIST_HEAD(dispose);
+
+	if (!test_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags))
+		return;
+
+	rhltable_walk_enter(&nfsd_file_rhltable, &iter);
+	do {
+		rhashtable_walk_start(&iter);
+
+		nf = rhashtable_walk_next(&iter);
+		while (!IS_ERR_OR_NULL(nf)) {
+			if (test_bit(NFSD_FILE_GC, &nf->nf_flags) &&
+			    nf->nf_file &&
+			    file_inode(nf->nf_file)->i_sb == sb) {
+				nfsd_file_cond_queue(nf, &dispose);
+				closed++;
+			}
+			nf = rhashtable_walk_next(&iter);
+		}
+
+		rhashtable_walk_stop(&iter);
+	} while (nf == ERR_PTR(-EAGAIN));
+	rhashtable_walk_exit(&iter);
+
+	nfsd_file_dispose_list(&dispose);
+
+	if (closed)
+		pr_info("nfsd: closed %u cached file handle%s on %s\n",
+			closed, closed == 1 ? "" : "s", sb->s_id);
+}
+
 static struct nfsd_fcache_disposal *
 nfsd_alloc_fcache_disposal(void)
 {

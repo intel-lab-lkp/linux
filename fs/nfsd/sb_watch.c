@@ -65,6 +65,7 @@ static void nfsd_sb_revoke_work(struct work_struct *work)
 	/* Errors are logged by lockd; no recovery is possible. */
 	(void)nlmsvc_unlock_all_by_sb(watch->sb);
 	nfsd4_revoke_states(nn, watch->sb);
+	nfsd_file_close_sb(watch->sb);
 
 	pr_info("nfsd: state revocation for %s complete\n", watch->sb->s_id);
 
@@ -257,6 +258,15 @@ void nfsd_sb_watch_shutdown(struct nfsd_net *nn)
 {
 	umount_unregister_notifier(&nn->nfsd_umount_notifier);
 	nfsd_sb_watches_destroy(nn);
+	/*
+	 * Ensure any work items still running complete before shutdown
+	 * proceeds. This handles the case where an unmount notification
+	 * returned early due to signal interruption but the work function
+	 * is still executing nfsd_file_close_sb(). Without this flush,
+	 * nfsd_file_cache_shutdown() could destroy the slab while the
+	 * work function is still disposing file cache entries.
+	 */
+	flush_workqueue(nfsd_sb_watch_wq);
 }
 
 int nfsd_sb_watch_init(void)
