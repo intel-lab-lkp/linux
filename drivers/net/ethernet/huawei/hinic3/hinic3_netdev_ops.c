@@ -430,6 +430,59 @@ static void hinic3_vport_down(struct net_device *netdev)
 	}
 }
 
+int
+hinic3_change_channel_settings(struct net_device *netdev,
+			       struct hinic3_dyna_txrxq_params *trxq_params)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_dyna_qp_params new_qp_params = {};
+	struct hinic3_dyna_qp_params cur_qp_params = {};
+	int err;
+
+	hinic3_config_num_qps(netdev, trxq_params);
+
+	err = hinic3_alloc_channel_resources(netdev, &new_qp_params,
+					     trxq_params);
+	if (err) {
+		netdev_err(netdev, "Failed to alloc channel resources\n");
+		return err;
+	}
+
+	if (!test_and_set_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags)) {
+		hinic3_vport_down(netdev);
+		hinic3_close_channel(netdev);
+		hinic3_uninit_qps(nic_dev, &cur_qp_params);
+		hinic3_free_channel_resources(netdev, &cur_qp_params,
+					      &nic_dev->q_params);
+	}
+
+	if (nic_dev->num_qp_irq > trxq_params->num_qps)
+		hinic3_qp_irq_change(netdev, trxq_params->num_qps);
+	nic_dev->q_params = *trxq_params;
+
+	hinic3_init_qps(nic_dev, &new_qp_params);
+
+	err = hinic3_open_channel(netdev);
+	if (err)
+		goto err_uninit_qps;
+
+	err = hinic3_vport_up(netdev);
+	if (err)
+		goto err_close_channel;
+
+	clear_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags);
+
+	return 0;
+
+err_close_channel:
+	hinic3_close_channel(netdev);
+err_uninit_qps:
+	hinic3_uninit_qps(nic_dev, &new_qp_params);
+	hinic3_free_channel_resources(netdev, &new_qp_params, trxq_params);
+
+	return err;
+}
+
 static int hinic3_open(struct net_device *netdev)
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
@@ -495,10 +548,17 @@ static int hinic3_close(struct net_device *netdev)
 		return 0;
 	}
 
+	if (test_and_clear_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags))
+		goto out;
+
 	hinic3_vport_down(netdev);
 	hinic3_close_channel(netdev);
 	hinic3_uninit_qps(nic_dev, &qp_params);
 	hinic3_free_channel_resources(netdev, &qp_params, &nic_dev->q_params);
+
+out:
+	hinic3_free_nicio_res(nic_dev);
+	hinic3_destroy_num_qps(netdev);
 
 	return 0;
 }
