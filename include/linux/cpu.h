@@ -233,4 +233,6 @@ int arch_get_indir_br_lp_status(struct task_struct *t, unsigned long __user *sta
 int arch_set_indir_br_lp_status(struct task_struct *t, unsigned long status);
 int arch_lock_indir_br_lp_status(struct task_struct *t, unsigned long status);
 
+const char *x86_cap_name(unsigned int bit, char *buf);
+
 #endif /* _LINUX_CPU_H_ */
