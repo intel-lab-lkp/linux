@@ -49,6 +49,7 @@
 #include <linux/sched/mm.h>
 #include <trace/events/block.h>
 #include <linux/fscrypt.h>
+#include <linux/kmemleak.h>
 #include <linux/fsverity.h>
 #include <linux/sched/isolation.h>
 
@@ -2799,6 +2800,7 @@ static void submit_bh_wbc(blk_opf_t opf, struct buffer_head *bh,
 		opf |= REQ_PRIO;
 
 	bio = bio_alloc(bh->b_bdev, 1, opf, GFP_NOIO);
+	kmemleak_not_leak(bio);
 
 	fscrypt_set_bio_crypt_ctx_bh(bio, bh, GFP_NOIO);
 
