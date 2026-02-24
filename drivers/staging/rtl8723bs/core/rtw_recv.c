@@ -47,14 +47,23 @@ signed int _rtw_init_recv_priv(struct recv_priv *precvpriv, struct adapter *pada
 
 	precvpriv->free_recvframe_cnt = NR_RECVFRAME;
 
-	precvpriv->pallocated_frame_buf = vzalloc(NR_RECVFRAME * sizeof(union recv_frame) + RXFRAME_ALIGN_SZ);
+	{
+		size_t sz = NR_RECVFRAME * sizeof(union recv_frame) + RXFRAME_ALIGN_SZ;
+
+		precvpriv->pallocated_frame_buf = vzalloc(sz);
+	}
 
 	if (!precvpriv->pallocated_frame_buf) {
 		res = _FAIL;
 		goto exit;
 	}
 
-	precvpriv->precv_frame_buf = (u8 *)N_BYTE_ALIGMENT((SIZE_PTR)(precvpriv->pallocated_frame_buf), RXFRAME_ALIGN_SZ);
+	{
+		SIZE_PTR aligned = N_BYTE_ALIGMENT((SIZE_PTR)(precvpriv->pallocated_frame_buf),
+						 RXFRAME_ALIGN_SZ);
+
+		precvpriv->precv_frame_buf = (u8 *)aligned;
+	}
 	/* precvpriv->precv_frame_buf = precvpriv->pallocated_frame_buf + RXFRAME_ALIGN_SZ - */
 	/* ((SIZE_PTR) (precvpriv->pallocated_frame_buf) &(RXFRAME_ALIGN_SZ-1)); */
 
@@ -390,11 +399,15 @@ static signed int recvframe_chkmic(struct adapter *adapter,  union recv_frame *p
 				mickey = &stainfo->dot11tkiprxmickey.skey[0];
 			}
 
-			datalen = precvframe->u.hdr.len-prxattrib->hdrlen-prxattrib->iv_len-prxattrib->icv_len-8;/* icv_len included the mic code */
+			/* icv_len included the mic code */
+			datalen = precvframe->u.hdr.len - prxattrib->hdrlen -
+				  prxattrib->iv_len - prxattrib->icv_len - 8;
 			pframe = precvframe->u.hdr.rx_data;
-			payload = pframe+prxattrib->hdrlen+prxattrib->iv_len;
+			payload = pframe + prxattrib->hdrlen + prxattrib->iv_len;
 
-			rtw_seccalctkipmic(mickey, pframe, payload, datalen, &miccode[0], (unsigned char)prxattrib->priority); /* care the length of the data */
+			/* care the length of the data */
+			rtw_seccalctkipmic(mickey, pframe, payload, datalen,
+					   &miccode[0], (unsigned char)prxattrib->priority);
 
 			pframemic = payload+datalen;
 
@@ -409,7 +422,10 @@ static signed int recvframe_chkmic(struct adapter *adapter,  union recv_frame *p
 			if (bmic_err == true) {
 				/*  double check key_index for some timing issue , */
 				/*  cannot compare with psecuritypriv->dot118021XGrpKeyid also cause timing issue */
-				if ((is_multicast_ether_addr(prxattrib->ra) == true)  && (prxattrib->key_index != pmlmeinfo->key_index))
+				bool is_mcast = is_multicast_ether_addr(prxattrib->ra);
+				bool key_mismatch = prxattrib->key_index != pmlmeinfo->key_index;
+
+				if (is_mcast && key_mismatch)
 					brpt_micerror = false;
 
 				if (prxattrib->bdecrypted && brpt_micerror)
@@ -463,28 +479,37 @@ static union recv_frame *decryptor(struct adapter *padapter, union recv_frame *p
 		}
 	}
 
-	if ((prxattrib->encrypt > 0) && ((prxattrib->bdecrypted == 0) || (psecuritypriv->sw_decrypt == true))) {
-		psecuritypriv->hw_decrypted = false;
+	{
+		bool need_decrypt = prxattrib->encrypt > 0;
+		bool not_decrypted = !prxattrib->bdecrypted;
+		bool sw_decrypt = psecuritypriv->sw_decrypt;
+		bool decrypted_ok;
 
-		switch (prxattrib->encrypt) {
-		case _WEP40_:
-		case _WEP104_:
-			rtw_wep_decrypt(padapter, (u8 *)precv_frame);
-			break;
-		case _TKIP_:
-			res = rtw_tkip_decrypt(padapter, (u8 *)precv_frame);
-			break;
-		case _AES_:
-			res = rtw_aes_decrypt(padapter, (u8 *)precv_frame);
-			break;
-		default:
+		if (need_decrypt && (not_decrypted || sw_decrypt)) {
+			psecuritypriv->hw_decrypted = false;
+
+			switch (prxattrib->encrypt) {
+			case _WEP40_:
+			case _WEP104_:
+				rtw_wep_decrypt(padapter, (u8 *)precv_frame);
 				break;
+			case _TKIP_:
+				res = rtw_tkip_decrypt(padapter, (u8 *)precv_frame);
+				break;
+			case _AES_:
+				res = rtw_aes_decrypt(padapter, (u8 *)precv_frame);
+				break;
+			default:
+				break;
+			}
+		} else {
+			decrypted_ok = prxattrib->bdecrypted == 1 &&
+				       prxattrib->encrypt > 0 &&
+				       (psecuritypriv->busetkipkey == 1 ||
+					prxattrib->encrypt != _TKIP_);
+			if (decrypted_ok)
+				psecuritypriv->hw_decrypted = true;
 		}
-	} else if (prxattrib->bdecrypted == 1 && prxattrib->encrypt > 0 &&
-		   (psecuritypriv->busetkipkey == 1 || prxattrib->encrypt != _TKIP_)
-		) {
-		psecuritypriv->hw_decrypted = true;
-	} else {
 	}
 
 	if (res == _FAIL) {
@@ -564,7 +589,8 @@ static union recv_frame *portctrl(struct adapter *adapter, union recv_frame *pre
 	return prtnframe;
 }
 
-static signed int recv_decache(union recv_frame *precv_frame, u8 bretry, struct stainfo_rxcache *prxcache)
+static signed int recv_decache(union recv_frame *precv_frame, u8 bretry,
+			       struct stainfo_rxcache *prxcache)
 {
 	signed int tid = precv_frame->u.hdr.attrib.priority;
 
@@ -669,7 +695,8 @@ static void process_wmmps_data(struct adapter *padapter, union recv_frame *precv
 	}
 }
 
-static void count_rx_stats(struct adapter *padapter, union recv_frame *prframe, struct sta_info *sta)
+static void count_rx_stats(struct adapter *padapter, union recv_frame *prframe,
+			   struct sta_info *sta)
 {
 	int sz;
 	struct sta_info *psta = NULL;
@@ -1149,7 +1176,8 @@ static union recv_frame *recvframe_defrag(struct adapter *adapter,
 }
 
 /* check if need to defrag, if needed queue the frame to defrag_q */
-static union recv_frame *recvframe_chk_defrag(struct adapter *padapter, union recv_frame *precv_frame)
+static union recv_frame *recvframe_chk_defrag(struct adapter *padapter,
+					      union recv_frame *precv_frame)
 {
 	u8 ismfrag;
 	u8 fragnum;
@@ -1257,7 +1285,8 @@ static signed int validate_recv_mgnt_frame(struct adapter *padapter, union recv_
 
 	{
 		/* for rx pkt statistics */
-		struct sta_info *psta = rtw_get_stainfo(&padapter->stapriv, GetAddr2Ptr(precv_frame->u.hdr.rx_data));
+		u8 *addr2 = GetAddr2Ptr(precv_frame->u.hdr.rx_data);
+		struct sta_info *psta = rtw_get_stainfo(&padapter->stapriv, addr2);
 
 		if (psta) {
 			psta->sta_stats.rx_mgnt_pkts++;
@@ -1622,7 +1651,8 @@ static signed int wlanhdr_to_ethhdr(union recv_frame *precvframe)
 	return _SUCCESS;
 }
 
-static struct sk_buff *rtw_alloc_msdu_pkt(union recv_frame *prframe, u16 nSubframe_Length, u8 *pdata)
+static struct sk_buff *rtw_alloc_msdu_pkt(union recv_frame *prframe,
+					  u16 nSubframe_Length, u8 *pdata)
 {
 	u16 eth_type;
 	struct sk_buff *sub_skb;
@@ -1662,7 +1692,8 @@ static struct sk_buff *rtw_alloc_msdu_pkt(union recv_frame *prframe, u16 nSubfra
 	return sub_skb;
 }
 
-static void rtw_recv_indicate_pkt(struct adapter *padapter, struct sk_buff *pkt, struct rx_pkt_attrib *pattrib)
+static void rtw_recv_indicate_pkt(struct adapter *padapter, struct sk_buff *pkt,
+				  struct rx_pkt_attrib *pattrib)
 {
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
@@ -1812,7 +1843,8 @@ static int check_indicate_seq(struct recv_reorder_ctrl *preorder_ctrl, u16 seq_n
 	return true;
 }
 
-static int enqueue_reorder_recvframe(struct recv_reorder_ctrl *preorder_ctrl, union recv_frame *prframe)
+static int enqueue_reorder_recvframe(struct recv_reorder_ctrl *preorder_ctrl,
+				     union recv_frame *prframe)
 {
 	struct rx_pkt_attrib *pattrib = &prframe->u.hdr.attrib;
 	struct __queue *ppending_recvframe_queue = &preorder_ctrl->pending_recvframe_queue;
@@ -1894,7 +1926,9 @@ _recv_indicatepkt_drop:
 	return _FAIL;
 }
 
-static int recv_indicatepkts_in_order(struct adapter *padapter, struct recv_reorder_ctrl *preorder_ctrl, int bforced)
+static int recv_indicatepkts_in_order(struct adapter *padapter,
+				      struct recv_reorder_ctrl *preorder_ctrl,
+				      int bforced)
 {
 	struct list_head	*phead, *plist;
 	union recv_frame *prframe;
@@ -2093,7 +2127,8 @@ static int process_recv_indicatepkts(struct adapter *padapter, union recv_frame 
 	if (phtpriv->ht_option == true) { /* B/G/N Mode */
 		/* prframe->u.hdr.preorder_ctrl = &precvpriv->recvreorder_ctrl[pattrib->priority]; */
 
-		if (recv_indicatepkt_reorder(padapter, prframe) != _SUCCESS) { /*  including perform A-MPDU Rx Ordering Buffer Control */
+		/* including perform A-MPDU Rx Ordering Buffer Control */
+		if (recv_indicatepkt_reorder(padapter, prframe) != _SUCCESS) {
 
 			if ((padapter->bDriverStopped == false) &&
 			    (padapter->bSurpriseRemoved == false)) {
@@ -2252,12 +2287,15 @@ static void rtw_signal_stat_timer_hdl(struct timer_list *t)
 	u8 avg_signal_qual = 0;
 	u32 num_signal_strength = 0;
 	u32 __maybe_unused num_signal_qual = 0;
-	u8 _alpha = 5; /*  this value is based on converging_constant = 5000 and sampling_interval = 1000 */
+	/* based on converging_constant = 5000 and sampling_interval = 1000 */
+	u8 _alpha = 5;
 
 	if (adapter->recvpriv.is_signal_dbg) {
 		/* update the user specific value, signal_strength_dbg, to signal_strength, rssi */
-		adapter->recvpriv.signal_strength = adapter->recvpriv.signal_strength_dbg;
-		adapter->recvpriv.rssi = (s8)translate_percentage_to_dbm((u8)adapter->recvpriv.signal_strength_dbg);
+		u8 strength_dbg = adapter->recvpriv.signal_strength_dbg;
+
+		adapter->recvpriv.signal_strength = strength_dbg;
+		adapter->recvpriv.rssi = (s8)translate_percentage_to_dbm(strength_dbg);
 	} else {
 
 		if (recvpriv->signal_strength_data.update_req == 0) {/*  update_req is clear, means we got rx */
@@ -2275,9 +2313,11 @@ static void rtw_signal_stat_timer_hdl(struct timer_list *t)
 		}
 
 		if (num_signal_strength == 0) {
-			if (rtw_get_on_cur_ch_time(adapter) == 0 ||
-			    jiffies_to_msecs(jiffies - rtw_get_on_cur_ch_time(adapter)) < 2 * adapter->mlmeextpriv.mlmext_info.bcn_interval
-			) {
+			unsigned long on_ch_time = rtw_get_on_cur_ch_time(adapter);
+			u32 bcn_intvl = adapter->mlmeextpriv.mlmext_info.bcn_interval;
+
+			if (on_ch_time == 0 ||
+			    jiffies_to_msecs(jiffies - on_ch_time) < 2 * bcn_intvl) {
 				goto set_timer;
 			}
 		}
