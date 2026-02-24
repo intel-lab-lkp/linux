@@ -177,12 +177,14 @@ static void ntb_netdev_tx_handler(struct ntb_transport_qp *qp, void *qp_data,
 				  void *data, int len)
 {
 	struct net_device *ndev = qp_data;
+	struct ntb_netdev *dev;
 	struct sk_buff *skb;
-	struct ntb_netdev *dev = netdev_priv(ndev);
 
 	skb = data;
 	if (!skb || !ndev)
 		return;
+
+	dev = netdev_priv(ndev);
 
 	if (len > 0) {
 		ndev->stats.tx_packets++;
