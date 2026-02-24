@@ -1,0 +1,36 @@
+drm drm-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-fixes 901ec3470994006bc8dd02399e16b675566c3416
+	accel/amdxdna: Validate command buffer payload count
+drm-rust drm-rust-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-intel drm-intel-fixes eb4a7139e97374f42b7242cc754e77f1623fbcd5
+	drm/i915/alpm: ALPM disable fixes
+drm-xe drm-xe-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm drm-next 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 777a02812f739af9e349cd0f695400a1d84053f4
+	drm/i915/dp: Add missing slice count check during mode validation
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next cc27314c67516c138ee3829197d1c3b998e29fae
+	gpu: Fix uninitialized buddy for built-in drivers
+drm-rust drm-rust-next 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-intel drm-intel-next 24e2e6581d602f75174010b32bf3e96ec39465ab
+	drm/i915/lt_phy_regs: Add SoC/OS turnaround time
+drm-intel drm-intel-gt-next 8103ecc1999eefc54b740d8d99f264ced1d9c54d
+	drm/i915/selftests: Keep mock file open during unfaultable migrate with fill
+drm-xe drm-xe-next 1aafc0a9916b95b3f2bdecc8951bd0bb5c3a352b
+	drm/xe: Consolidate workaround entries for Wa_14023061436
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 06ad61b1f1955a3ff609b0530fb7a7077d425a39
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
