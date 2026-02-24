@@ -368,7 +368,9 @@ out_err:
 EXPORT_SYMBOL_FOR_TESTS_ONLY(ttm_tt_swapout);
 
 int ttm_tt_populate(struct ttm_device *bdev,
-		    struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
+		    struct ttm_tt *ttm,
+		    bool memcg_account,
+		    struct ttm_operation_ctx *ctx)
 {
 	int ret;
 
@@ -397,9 +399,9 @@ int ttm_tt_populate(struct ttm_device *bdev,
 	}
 
 	if (bdev->funcs->ttm_tt_populate)
-		ret = bdev->funcs->ttm_tt_populate(bdev, ttm, ctx);
+		ret = bdev->funcs->ttm_tt_populate(bdev, ttm, memcg_account, ctx);
 	else
-		ret = ttm_pool_alloc(&bdev->pool, ttm, ctx);
+		ret = ttm_pool_alloc(&bdev->pool, ttm, memcg_account, ctx);
 	if (ret)
 		goto error;
 

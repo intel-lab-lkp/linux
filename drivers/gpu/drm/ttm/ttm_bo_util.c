@@ -167,7 +167,7 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 	src_man = ttm_manager_type(bdev, src_mem->mem_type);
 	if (ttm && ((ttm->page_flags & TTM_TT_FLAG_SWAPPED) ||
 		    dst_man->use_tt)) {
-		ret = ttm_bo_populate(bo, ctx);
+		ret = ttm_bo_populate(bo, false, ctx);
 		if (ret)
 			return ret;
 	}
@@ -352,7 +352,7 @@ static int ttm_bo_kmap_ttm(struct ttm_buffer_object *bo,
 
 	BUG_ON(!ttm);
 
-	ret = ttm_bo_populate(bo, &ctx);
+	ret = ttm_bo_populate(bo, false, &ctx);
 	if (ret)
 		return ret;
 
@@ -533,7 +533,7 @@ int ttm_bo_vmap(struct ttm_buffer_object *bo, struct iosys_map *map)
 		pgprot_t prot;
 		void *vaddr;
 
-		ret = ttm_bo_populate(bo, &ctx);
+		ret = ttm_bo_populate(bo, false, &ctx);
 		if (ret)
 			return ret;
 

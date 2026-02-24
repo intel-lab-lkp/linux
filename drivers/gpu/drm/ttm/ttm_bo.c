@@ -144,7 +144,7 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 			goto out_err;
 
 		if (mem->mem_type != TTM_PL_SYSTEM) {
-			ret = ttm_bo_populate(bo, ctx);
+			ret = ttm_bo_populate(bo, false, ctx);
 			if (ret)
 				goto out_err;
 		}
@@ -1260,6 +1260,7 @@ void ttm_bo_tt_destroy(struct ttm_buffer_object *bo)
  * is set to true.
  */
 int ttm_bo_populate(struct ttm_buffer_object *bo,
+		    bool memcg_account,
 		    struct ttm_operation_ctx *ctx)
 {
 	struct ttm_device *bdev = bo->bdev;
@@ -1273,7 +1274,7 @@ int ttm_bo_populate(struct ttm_buffer_object *bo,
 		return 0;
 
 	swapped = ttm_tt_is_swapped(tt);
-	ret = ttm_tt_populate(bdev, tt, ctx);
+	ret = ttm_tt_populate(bdev, tt, memcg_account, ctx);
 	if (ret)
 		return ret;
 
@@ -1298,7 +1299,7 @@ int ttm_bo_setup_export(struct ttm_buffer_object *bo,
 	if (ret != 0)
 		return ret;
 
-	ret = ttm_bo_populate(bo, ctx);
+	ret = ttm_bo_populate(bo, false, ctx);
 	ttm_bo_unreserve(bo);
 	return ret;
 }

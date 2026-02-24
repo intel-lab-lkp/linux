@@ -111,6 +111,7 @@ lsdc_ttm_tt_create(struct ttm_buffer_object *tbo, uint32_t page_flags)
 
 static int lsdc_ttm_tt_populate(struct ttm_device *bdev,
 				struct ttm_tt *ttm,
+				bool memcg_account,
 				struct ttm_operation_ctx *ctx)
 {
 	bool slave = !!(ttm->page_flags & TTM_TT_FLAG_EXTERNAL);
@@ -123,7 +124,7 @@ static int lsdc_ttm_tt_populate(struct ttm_device *bdev,
 		return 0;
 	}
 
-	return ttm_pool_alloc(&bdev->pool, ttm, ctx);
+	return ttm_pool_alloc(&bdev->pool, ttm, memcg_account, ctx);
 }
 
 static void lsdc_ttm_tt_unpopulate(struct ttm_device *bdev,

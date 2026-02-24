@@ -752,6 +752,7 @@ static unsigned int ttm_pool_alloc_find_order(unsigned int highest,
 }
 
 static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
+			    bool memcg_account,
 			    const struct ttm_operation_ctx *ctx,
 			    struct ttm_pool_alloc_state *alloc,
 			    struct ttm_pool_tt_restore *restore)
@@ -862,6 +863,7 @@ error_free_all:
  * Returns: 0 on successe, negative error code otherwise.
  */
 int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
+		   bool memcg_account,
 		   struct ttm_operation_ctx *ctx)
 {
 	struct ttm_pool_alloc_state alloc;
@@ -871,7 +873,7 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 
 	ttm_pool_alloc_state_init(tt, &alloc);
 
-	return __ttm_pool_alloc(pool, tt, ctx, &alloc, NULL);
+	return __ttm_pool_alloc(pool, tt, memcg_account, ctx, &alloc, NULL);
 }
 EXPORT_SYMBOL(ttm_pool_alloc);
 
@@ -926,7 +928,7 @@ int ttm_pool_restore_and_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 			return 0;
 	}
 
-	return __ttm_pool_alloc(pool, tt, ctx, &alloc, restore);
+	return __ttm_pool_alloc(pool, tt, false, ctx, &alloc, restore);
 }
 
 /**
