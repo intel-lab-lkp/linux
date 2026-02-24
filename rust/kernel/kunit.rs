@@ -13,6 +13,8 @@ use crate::prelude::*;
 ///
 /// Public but hidden since it should only be used from KUnit generated code.
 #[doc(hidden)]
+// `args` is unused if `CONFIG_PRINTK` is not set.
+#[allow(unused_variables)]
 pub fn err(args: fmt::Arguments<'_>) {
     // SAFETY: The format string is null-terminated and the `%pA` specifier matches the argument we
     // are passing.
@@ -29,6 +31,8 @@ pub fn err(args: fmt::Arguments<'_>) {
 ///
 /// Public but hidden since it should only be used from KUnit generated code.
 #[doc(hidden)]
+// `args` is unused if `CONFIG_PRINTK` is not set.
+#[allow(unused_variables)]
 pub fn info(args: fmt::Arguments<'_>) {
     // SAFETY: The format string is null-terminated and the `%pA` specifier matches the argument we
     // are passing.
