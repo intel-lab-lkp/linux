@@ -3545,7 +3545,7 @@ void __init pci_sort_breadthfirst(void)
 	bus_sort_breadthfirst(&pci_bus_type, &pci_sort_bf_cmp);
 }
 
-int pci_hp_add_bridge(struct pci_dev *dev)
+void pci_hp_add_bridge(struct pci_dev *dev)
 {
 	struct pci_bus *parent = dev->bus;
 	int busnr, start = parent->busn_res.start;
@@ -3558,7 +3558,7 @@ int pci_hp_add_bridge(struct pci_dev *dev)
 	}
 	if (busnr-- > end) {
 		pci_err(dev, "No bus number available for hot-added bridge\n");
-		return -1;
+		return;
 	}
 
 	/* Scan bridges that are already configured */
@@ -3572,10 +3572,5 @@ int pci_hp_add_bridge(struct pci_dev *dev)
 
 	/* Scan bridges that need to be reconfigured */
 	pci_scan_bridge_extend(parent, dev, busnr, available_buses, 1);
-
-	if (!dev->subordinate)
-		return -1;
-
-	return 0;
 }
 EXPORT_SYMBOL_GPL(pci_hp_add_bridge);

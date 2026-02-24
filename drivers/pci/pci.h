@@ -353,7 +353,7 @@ static inline int pci_proc_detach_bus(struct pci_bus *bus) { return 0; }
 #endif
 
 /* Functions for PCI Hotplug drivers to use */
-int pci_hp_add_bridge(struct pci_dev *dev);
+void pci_hp_add_bridge(struct pci_dev *dev);
 bool pci_hp_spurious_link_change(struct pci_dev *pdev);
 
 #if defined(CONFIG_SYSFS) && defined(HAVE_PCI_LEGACY)
