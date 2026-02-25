@@ -3164,7 +3164,8 @@ const struct iommu_ops amd_iommu_ops = {
  *****************************************************************************/
 
 static struct irq_chip amd_ir_chip;
-static DEFINE_SPINLOCK(iommu_table_lock);
+static DEFINE_RAW_SPINLOCK(iommu_table_lock);
+
 
 static void iommu_flush_irt_and_complete(struct amd_iommu *iommu, u16 devid)
 {
@@ -3310,7 +3311,7 @@ static struct irq_remap_table *alloc_irq_table(struct amd_iommu *iommu,
 	int nid = iommu->dev ? dev_to_node(&iommu->dev->dev) : NUMA_NO_NODE;
 	u16 alias;
 
-	spin_lock_irqsave(&iommu_table_lock, flags);
+	raw_spin_lock_irqsave(&iommu_table_lock, flags);
 
 	pci_seg = iommu->pci_seg;
 	table = pci_seg->irq_lookup_table[devid];
@@ -3323,14 +3324,14 @@ static struct irq_remap_table *alloc_irq_table(struct amd_iommu *iommu,
 		set_remap_table_entry(iommu, devid, table);
 		goto out_wait;
 	}
-	spin_unlock_irqrestore(&iommu_table_lock, flags);
+	raw_spin_unlock_irqrestore(&iommu_table_lock, flags);
 
 	/* Nothing there yet, allocate new irq remapping table */
 	new_table = __alloc_irq_table(nid, get_irq_table_size(max_irqs));
 	if (!new_table)
 		return NULL;
 
-	spin_lock_irqsave(&iommu_table_lock, flags);
+	raw_spin_lock_irqsave(&iommu_table_lock, flags);
 
 	table = pci_seg->irq_lookup_table[devid];
 	if (table)
@@ -3358,7 +3359,7 @@ out_wait:
 	iommu_completion_wait(iommu);
 
 out_unlock:
-	spin_unlock_irqrestore(&iommu_table_lock, flags);
+	raw_spin_unlock_irqrestore(&iommu_table_lock, flags);
 
 	if (new_table) {
 		iommu_free_pages(new_table->table);
