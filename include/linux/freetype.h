@@ -2,6 +2,7 @@
 #ifndef _LINUX_FREETYPE_H
 #define _LINUX_FREETYPE_H
 
+#include <linux/log2.h>
 #include <linux/types.h>
 #include <linux/mmdebug.h>
 
@@ -64,13 +65,28 @@ static inline bool migratetype_is_mergeable(int mt)
 	return mt < MIGRATE_PCPTYPES;
 }
 
+enum {
+	/* Defined unconditionally as a hack to avoid a zero-width bitfield. */
+	FREETYPE_UNMAPPED_BIT,
+	NUM_FREETYPE_FLAGS,
+};
+
 /*
  * A freetype is the index used to identify free lists. This consists of a
  * migratetype, and other bits which encode orthogonal properties of memory.
  */
 typedef struct {
-	int migratetype;
+	unsigned int migratetype : order_base_2(MIGRATE_TYPES);
+	unsigned int flags : NUM_FREETYPE_FLAGS;
 } freetype_t;
+
+#ifdef CONFIG_PAGE_ALLOC_UNMAPPED
+#define FREETYPE_UNMAPPED			BIT(FREETYPE_UNMAPPED_BIT)
+#define NUM_UNMAPPED_FREETYPES			1
+#else
+#define FREETYPE_UNMAPPED			0
+#define NUM_UNMAPPED_FREETYPES			0
+#endif
 
 /*
  * Return a dense linear index for freetypes that have lists in the free area.
@@ -78,16 +94,27 @@ typedef struct {
  */
 static inline int freetype_idx(freetype_t freetype)
 {
+	/* For FREETYPE_UNMAPPED, only MIGRATE_UNMOVABLE has an index. */
+	if (freetype.flags & FREETYPE_UNMAPPED) {
+		VM_WARN_ON_ONCE(freetype.flags & ~FREETYPE_UNMAPPED);
+		if (!IS_ENABLED(CONFIG_PAGE_ALLOC_UNMAPPED))
+			return -1;
+		if (freetype.migratetype != MIGRATE_UNMOVABLE)
+			return -1;
+		return MIGRATE_TYPES;
+	}
+	/* No other flags are supported. */
+	VM_WARN_ON_ONCE(freetype.flags);
+
 	return freetype.migratetype;
 }
 
-/* No freetype flags actually exist yet. */
-#define NR_FREETYPE_IDXS MIGRATE_TYPES
+/* One for each migratetype, plus one for MIGRATE_UNMOVABLE-FREETYPE_UNMAPPED */
+#define NR_FREETYPE_IDXS (MIGRATE_TYPES + NUM_UNMAPPED_FREETYPES)
 
 static inline unsigned int freetype_flags(freetype_t freetype)
 {
-	/* No flags supported yet. */
-	return 0;
+	return freetype.flags;
 }
 
 static inline bool freetypes_equal(freetype_t a, freetype_t b)
@@ -100,10 +127,8 @@ static inline freetype_t migrate_to_freetype(enum migratetype mt,
 {
 	freetype_t freetype;
 
-	/* No flags supported yet. */
-	VM_WARN_ON_ONCE(flags);
-
 	freetype.migratetype = mt;
+	freetype.flags = flags;
 	return freetype;
 }
 

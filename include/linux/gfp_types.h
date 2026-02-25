@@ -56,6 +56,9 @@ enum {
 	___GFP_NOLOCKDEP_BIT,
 #endif
 	___GFP_NO_OBJ_EXT_BIT,
+#ifdef CONFIG_PAGE_ALLOC_UNMAPPED
+	___GFP_UNMAPPED_BIT,
+#endif
 	___GFP_LAST_BIT
 };
 
@@ -97,6 +100,10 @@ enum {
 #define ___GFP_NOLOCKDEP	0
 #endif
 #define ___GFP_NO_OBJ_EXT       BIT(___GFP_NO_OBJ_EXT_BIT)
+#ifdef CONFIG_PAGE_ALLOC_UNMAPPED
+#define ___GFP_UNMAPPED		BIT(___GFP_UNMAPPED_BIT)
+/* No #else - __GFP_UNMAPPED should never be a nop. Break the build if it isn't supported. */
+#endif
 
 /*
  * Physical address zone modifiers (see linux/mmzone.h - low four bits)
@@ -292,6 +299,25 @@ enum {
 
 /* Disable lockdep for GFP context tracking */
 #define __GFP_NOLOCKDEP ((__force gfp_t)___GFP_NOLOCKDEP)
+
+/*
+ * Allocate pages that aren't present in the direct map. If the caller changes
+ * direct map presence, it must be restored to the previous state before freeing
+ * the page. (This is true regardless of __GFP_UNMAPPED).
+ *
+ * This uses the mermap (when __GFP_ZERO), so it's only valid to allocate with
+ * this flag where that's valid, namely from process context after the mermap
+ * has been initialised for that process. This also means that the allocator
+ * leaves behind stale TLB entries in the mermap region. The caller is
+ * responsible for ensuring they are flushed as needed.
+ *
+ * This is currently incompatible with __GFP_MOVABLE and __GFP_RECLAIMABLE, but
+ * only because of allocator implementation details, if a usecase arises this
+ * restriction could be dropped.
+ */
+#ifdef CONFIG_PAGE_ALLOC_UNMAPPED
+#define __GFP_UNMAPPED ((__force gfp_t)___GFP_UNMAPPED)
+#endif
 
 /* Room for N __GFP_FOO bits */
 #define __GFP_BITS_SHIFT ___GFP_LAST_BIT
