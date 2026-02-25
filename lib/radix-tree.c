@@ -600,6 +600,11 @@ static int __radix_tree_create(struct radix_tree_root *root,
 		void __rcu ***slotp)
 {
 	struct radix_tree_node *node = NULL, *child;
+	/* Track newly allocated nodes for rollback on failure */
+	struct radix_tree_node *new_nodes[RADIX_TREE_MAX_PATH];
+	void __rcu **first_new_slot = NULL;
+	struct radix_tree_node *first_new_parent = NULL;
+	int new_count = 0, i;
 	void __rcu **slot = (void __rcu **)&root->xa_head;
 	unsigned long maxindex;
 	unsigned int shift, offset = 0;
@@ -623,8 +628,23 @@ static int __radix_tree_create(struct radix_tree_root *root,
 			/* Have to add a child node.  */
 			child = radix_tree_node_alloc(gfp, node, root, shift,
 							offset, 0, 0);
-			if (!child)
+			if (!child) {
+				/* Rollback: sever and free all newly allocated nodes */
+				if (first_new_slot) {
+					rcu_assign_pointer(*first_new_slot, NULL);
+					if (first_new_parent)
+						first_new_parent->count--;
+					for (i = 0; i < new_count; i++)
+						radix_tree_node_free(new_nodes[i]);
+				}
 				return -ENOMEM;
+			}
+			/* Record first new slot and parent for potential rollback */
+			if (!first_new_slot) {
+				first_new_slot = slot;
+				first_new_parent = node;
+			}
+			new_nodes[new_count++] = child;
 			rcu_assign_pointer(*slot, node_to_entry(child));
 			if (node)
 				node->count++;
