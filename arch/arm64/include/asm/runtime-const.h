@@ -7,6 +7,8 @@
 /* Sigh. You can still run arm64 in BE mode */
 #include <asm/byteorder.h>
 
+#if CONFIG_ARM64_VA_BITS > 48
+
 #define runtime_const_ptr(sym) ({				\
 	typeof(sym) __ret;					\
 	asm_inline("1:\t"					\
@@ -19,6 +21,22 @@
 		".popsection"					\
 		:"=r" (__ret));					\
 	__ret; })
+
+#else
+
+#define runtime_const_ptr(sym) ({				\
+	typeof(sym) __ret;					\
+	asm_inline("1:\t"					\
+		"movn %0, #0x3210\n\t"				\
+		"movk %0, #0x89ab, lsl #16\n\t"			\
+		"movk %0, #0x4567, lsl #32\n\t"			\
+		".pushsection runtime_ptr_" #sym ",\"a\"\n\t"	\
+		".long 1b - .\n\t"				\
+		".popsection"					\
+		: "=r" (__ret));				\
+	__ret; })
+
+#endif
 
 #define runtime_const_shift_right_32(val, sym) ({		\
 	unsigned long __ret;					\
@@ -58,11 +76,19 @@ static inline void __runtime_fixup_caches(void *where, unsigned int insns)
 static inline void __runtime_fixup_ptr(void *where, unsigned long val)
 {
 	__le32 *p = lm_alias(where);
+#if CONFIG_ARM64_VA_BITS > 48
 	__runtime_fixup_16(p, val);
+#else
+	__runtime_fixup_16(p, ~val);
+#endif
 	__runtime_fixup_16(p+1, val >> 16);
 	__runtime_fixup_16(p+2, val >> 32);
+#if CONFIG_ARM64_VA_BITS > 48
 	__runtime_fixup_16(p+3, val >> 48);
 	__runtime_fixup_caches(where, 4);
+#else
+	__runtime_fixup_caches(where, 3);
+#endif
 }
 
 /* Immediate value is 6 bits starting at bit #16 */
