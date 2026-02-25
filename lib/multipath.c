@@ -472,11 +472,157 @@ static void mpath_bdev_release(struct gendisk *disk)
 	mpath_put_disk(mpath_disk);
 }
 
+static int mpath_pr_register(struct block_device *bdev, u64 old_key,
+			u64 new_key, unsigned int flags)
+{
+	struct mpath_disk *mpath_disk = dev_get_drvdata(&bdev->bd_device);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+	if (mpath_device)
+		ret = mpath_head->mpdt->pr_ops->pr_register(mpath_device,
+				old_key, new_key, flags);
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+
+static int mpath_pr_reserve(struct block_device *bdev, u64 key,
+		enum pr_type type, unsigned flags)
+{
+	struct mpath_disk *mpath_disk = dev_get_drvdata(&bdev->bd_device);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (mpath_device)
+		ret = mpath_head->mpdt->pr_ops->pr_reserve(mpath_device, key,
+				type, flags);
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+
+static int mpath_pr_release(struct block_device *bdev, u64 key, enum pr_type type)
+{
+	struct mpath_disk *mpath_disk = dev_get_drvdata(&bdev->bd_device);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (mpath_device)
+		ret = mpath_head->mpdt->pr_ops->pr_release(mpath_device, key,
+				type);
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+
+static int mpath_pr_preempt(struct block_device *bdev, u64 old, u64 new,
+		enum pr_type type, bool abort)
+{
+	struct mpath_disk *mpath_disk = dev_get_drvdata(&bdev->bd_device);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (mpath_device)
+		ret = mpath_head->mpdt->pr_ops->pr_preempt(mpath_device, old,
+				new, type, abort);
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+
+static int mpath_pr_clear(struct block_device *bdev, u64 key)
+{
+	struct mpath_disk *mpath_disk = dev_get_drvdata(&bdev->bd_device);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (mpath_device)
+		ret = mpath_head->mpdt->pr_ops->pr_clear(mpath_device, key);
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+
+static int mpath_pr_read_keys(struct block_device *bdev,
+		struct pr_keys *keys_info)
+{
+	struct mpath_disk *mpath_disk = dev_get_drvdata(&bdev->bd_device);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (mpath_device)
+		ret = mpath_head->mpdt->pr_ops->pr_read_keys(mpath_device,
+				keys_info);
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+
+static int mpath_pr_read_reservation(struct block_device *bdev,
+		struct pr_held_reservation *resv)
+{
+	struct mpath_disk *mpath_disk = dev_get_drvdata(&bdev->bd_device);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (mpath_device)
+		ret = mpath_head->mpdt->pr_ops->pr_read_reservation(
+				mpath_device, resv);
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+
+static const struct pr_ops mpath_pr_ops = {
+	.pr_register	= mpath_pr_register,
+	.pr_reserve	= mpath_pr_reserve,
+	.pr_release	= mpath_pr_release,
+	.pr_preempt	= mpath_pr_preempt,
+	.pr_clear	= mpath_pr_clear,
+	.pr_read_keys	= mpath_pr_read_keys,
+	.pr_read_reservation = mpath_pr_read_reservation,
+};
+
 const struct block_device_operations mpath_ops = {
 	.owner          = THIS_MODULE,
 	.open		= mpath_bdev_open,
 	.release	= mpath_bdev_release,
 	.submit_bio	= mpath_bdev_submit_bio,
+	.pr_ops		= &mpath_pr_ops,
 };
 EXPORT_SYMBOL_GPL(mpath_ops);
 
