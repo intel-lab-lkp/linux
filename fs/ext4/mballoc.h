@@ -270,4 +270,7 @@ ext4_mballoc_query_range(
 	ext4_mballoc_query_range_fn	formatter,
 	void				*priv);
 
+/* Expose rotating & regular allocator for vectoring */
+int ext4_mb_rotating_allocator(struct ext4_allocation_context *ac);
+int ext4_mb_regular_allocator(struct ext4_allocation_context *ac);
 #endif

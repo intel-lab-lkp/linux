@@ -1279,6 +1279,10 @@ static void ext4_put_super(struct super_block *sb)
 	int aborted = 0;
 	int err;
 
+	/* free per cpu cursors */
+	if (sbi->s_rralloc_cursor)
+		free_percpu(sbi->s_rralloc_cursor);
+
 	/*
 	 * Unregister sysfs before destroying jbd2 journal.
 	 * Since we could still access attr_journal_task attribute via sysfs
@@ -1675,7 +1679,7 @@ enum {
 	Opt_dioread_nolock, Opt_dioread_lock,
 	Opt_discard, Opt_nodiscard, Opt_init_itable, Opt_noinit_itable,
 	Opt_max_dir_size_kb, Opt_nojournal_checksum, Opt_nombcache,
-	Opt_no_prefetch_block_bitmaps, Opt_mb_optimize_scan,
+	Opt_no_prefetch_block_bitmaps, Opt_mb_optimize_scan, Opt_rralloc,
 	Opt_errors, Opt_data, Opt_data_err, Opt_jqfmt, Opt_dax_type,
 #ifdef CONFIG_EXT4_DEBUG
 	Opt_fc_debug_max_replay, Opt_fc_debug_force
@@ -1797,6 +1801,7 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_u32	("init_itable",		Opt_init_itable),
 	fsparam_flag	("init_itable",		Opt_init_itable),
 	fsparam_flag	("noinit_itable",	Opt_noinit_itable),
+	fsparam_flag	("rralloc",	Opt_rralloc),
 #ifdef CONFIG_EXT4_DEBUG
 	fsparam_flag	("fc_debug_force",	Opt_fc_debug_force),
 	fsparam_u32	("fc_debug_max_replay",	Opt_fc_debug_max_replay),
@@ -1878,6 +1883,7 @@ static const struct mount_opts {
 	{Opt_noauto_da_alloc, EXT4_MOUNT_NO_AUTO_DA_ALLOC, MOPT_SET},
 	{Opt_auto_da_alloc, EXT4_MOUNT_NO_AUTO_DA_ALLOC, MOPT_CLEAR},
 	{Opt_noinit_itable, EXT4_MOUNT_INIT_INODE_TABLE, MOPT_CLEAR},
+	{Opt_rralloc, EXT4_MOUNT_RRALLOC, MOPT_SET},
 	{Opt_dax_type, 0, MOPT_EXT4_ONLY},
 	{Opt_journal_dev, 0, MOPT_NO_EXT2},
 	{Opt_journal_path, 0, MOPT_NO_EXT2},
@@ -2263,6 +2269,9 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		if (param->type == fs_value_is_string)
 			ctx->s_li_wait_mult = result.uint_32;
 		ctx->spec |= EXT4_SPEC_s_li_wait_mult;
+		return 0;
+	case Opt_rralloc:
+		ctx_set_mount_opt(ctx, EXT4_MOUNT_RRALLOC);
 		return 0;
 	case Opt_max_dir_size_kb:
 		ctx->s_max_dir_size_kb = result.uint_32;
@@ -5305,6 +5314,9 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 	struct ext4_fs_context *ctx = fc->fs_private;
 	int silent = fc->sb_flags & SB_SILENT;
 
+	/* Unconditional default regular allocator (rralloc separation) */
+	sbi->s_vectored_allocator = ext4_mb_regular_allocator;
+
 	/* Set defaults for the variables that will be set during parsing */
 	if (!(ctx->spec & EXT4_SPEC_JOURNAL_IOPRIO))
 		ctx->journal_ioprio = EXT4_DEF_JOURNAL_IOPRIO;
@@ -5514,6 +5526,25 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 				goto failed_mount_wq;
 			}
 		}
+	}
+
+	/* rralloc: initialize per-cpu cursors and rotational allocator */
+	if (test_opt(sb, RRALLOC)) {
+		sbi->s_rralloc_cursor = alloc_percpu(ext4_group_t);
+		if (!sbi->s_rralloc_cursor)
+			return -ENOMEM;
+
+		int ncpus = num_possible_cpus();
+		ext4_group_t total_groups = ext4_get_groups_count(sb);
+		ext4_group_t groups_per_cpu = total_groups / ncpus;
+		int cpu;
+
+		for_each_possible_cpu(cpu) {
+			*per_cpu_ptr(sbi->s_rralloc_cursor, cpu) = cpu * groups_per_cpu;
+		}
+
+		/* Vectored allocator to round-robin allocator */
+		sbi->s_vectored_allocator = ext4_mb_rotating_allocator;
 	}
 
 	/*

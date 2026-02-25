@@ -229,6 +229,9 @@ struct ext4_allocation_request {
 	unsigned int flags;
 };
 
+/* rralloc show pointer type to compiler */
+struct ext4_allocation_context;
+
 /*
  * Logical to physical block mapping, used by ext4_map_blocks()
  *
@@ -1032,7 +1035,8 @@ struct ext4_inode_info {
 	__le32	i_data[15];	/* unconverted */
 	__u32	i_dtime;
 	ext4_fsblk_t	i_file_acl;
-
+	/* rralloc per inode cursor */
+	atomic_t	cursor;
 	/*
 	 * i_block_group is the number of the block group which contains
 	 * this file's inode.  Constant across the lifetime of the inode,
@@ -1221,6 +1225,7 @@ struct ext4_inode_info {
  * Mount flags set via mount options or defaults
  */
 #define EXT4_MOUNT_NO_MBCACHE		0x00001 /* Do not use mbcache */
+#define EXT4_MOUNT_RRALLOC			0x00002 /* Use round-robin policy/allocator */
 #define EXT4_MOUNT_GRPID		0x00004	/* Create files with directory's group */
 #define EXT4_MOUNT_DEBUG		0x00008	/* Some debugging messages */
 #define EXT4_MOUNT_ERRORS_CONT		0x00010	/* Continue on errors */
@@ -1550,6 +1555,9 @@ struct ext4_sb_info {
 	unsigned long s_mount_flags;
 	unsigned int s_def_mount_opt;
 	unsigned int s_def_mount_opt2;
+	/* rralloc per-cpu cursors and allocator vector */
+	ext4_group_t __percpu *s_rralloc_cursor;
+	int (*s_vectored_allocator)(struct ext4_allocation_context *ac);
 	ext4_fsblk_t s_sb_block;
 	atomic64_t s_resv_clusters;
 	kuid_t s_resuid;

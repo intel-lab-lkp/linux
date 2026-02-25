@@ -2266,9 +2266,19 @@ static void ext4_mb_use_best_found(struct ext4_allocation_context *ac,
 	folio_get(ac->ac_buddy_folio);
 	/* store last allocated for subsequent stream allocation */
 	if (ac->ac_flags & EXT4_MB_STREAM_ALLOC) {
-		int hash = ac->ac_inode->i_ino % sbi->s_mb_nr_global_goals;
+		/* update global goals */
+		if (!test_opt(ac->ac_sb, RRALLOC)) {
+			int hash = ac->ac_inode->i_ino % sbi->s_mb_nr_global_goals;
 
-		WRITE_ONCE(sbi->s_mb_last_groups[hash], ac->ac_f_ex.fe_group);
+			WRITE_ONCE(sbi->s_mb_last_groups[hash], ac->ac_f_ex.fe_group);
+		} else {
+			/* update inode cursor and current per-cpu cursor */
+			ext4_group_t cursor = ac->ac_f_ex.fe_group;
+			struct ext4_inode_info *ei = EXT4_I(ac->ac_inode);
+
+			atomic_set(&ei->cursor, cursor);
+			*this_cpu_ptr(sbi->s_rralloc_cursor) = cursor;
+		}
 	}
 
 	/*
@@ -2991,7 +3001,7 @@ out_unload:
 	return ret;
 }
 
-static noinline_for_stack int
+noinline_for_stack int
 ext4_mb_regular_allocator(struct ext4_allocation_context *ac)
 {
 	ext4_group_t i;
@@ -3097,6 +3107,102 @@ repeat:
 		    ac->ac_b_ex.fe_group == ac->ac_g_ex.fe_group)
 			atomic_inc(&sbi->s_bal_stream_goals);
 	}
+out:
+	if (!err && ac->ac_status != AC_STATUS_FOUND && ac->ac_first_err)
+		err = ac->ac_first_err;
+
+	mb_debug(sb, "Best len %d, origin len %d, ac_status %u, ac_flags 0x%x, cr %d ret %d\n",
+		 ac->ac_b_ex.fe_len, ac->ac_o_ex.fe_len, ac->ac_status,
+		 ac->ac_flags, ac->ac_criteria, err);
+
+	if (ac->ac_prefetch_nr)
+		ext4_mb_prefetch_fini(sb, ac->ac_prefetch_grp, ac->ac_prefetch_nr);
+
+	return err;
+}
+
+/* Rotating allocator (round-robin) */
+noinline_for_stack int
+ext4_mb_rotating_allocator(struct ext4_allocation_context *ac)
+{
+	ext4_group_t goal;
+	int err = 0;
+	struct super_block *sb = ac->ac_sb;
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct ext4_buddy e4b;
+	struct ext4_inode_info *ei = EXT4_I(ac->ac_inode);
+	ext4_group_t start = *this_cpu_ptr(sbi->s_rralloc_cursor);
+
+	/* if inode cursor=0, use per-cpu cursor */
+	goal = atomic_cmpxchg(&ei->cursor, 0, start);
+	if (!goal)
+		goal = start;
+
+	ac->ac_g_ex.fe_group = goal;
+
+	/* first, try the goal */
+	err = ext4_mb_find_by_goal(ac, &e4b);
+	if (err || ac->ac_status == AC_STATUS_FOUND)
+		goto out;
+
+	/* RRallocation promotes stream behavior */
+	ac->ac_flags |= EXT4_MB_STREAM_ALLOC;
+	ac->ac_flags |= EXT4_MB_HINT_FIRST;
+	ac->ac_flags &= ~EXT4_MB_HINT_GOAL_ONLY;
+	ac->ac_g_ex.fe_group = goal;
+	ac->ac_g_ex.fe_start = -1;
+	ac->ac_2order = 0;
+	ac->ac_criteria = CR_ANY_FREE;
+	ac->ac_e4b = &e4b;
+	ac->ac_prefetch_ios = 0;
+	ac->ac_first_err = 0;
+repeat:
+	while (ac->ac_criteria < EXT4_MB_NUM_CRS) {
+		err = ext4_mb_scan_groups(ac);
+		if (err)
+			goto out;
+
+		if (ac->ac_status != AC_STATUS_CONTINUE)
+			break;
+	}
+
+	if (ac->ac_b_ex.fe_len > 0 && ac->ac_status != AC_STATUS_FOUND &&
+	    !(ac->ac_flags & EXT4_MB_HINT_FIRST)) {
+		/*
+		 * We've been searching too long. Let's try to allocate
+		 * the best chunk we've found so far
+		 */
+		ext4_mb_try_best_found(ac, &e4b);
+		if (ac->ac_status != AC_STATUS_FOUND) {
+			int lost;
+
+			/*
+			 * Someone more lucky has already allocated it.
+			 * The only thing we can do is just take first
+			 * found block(s)
+			 */
+			lost = atomic_inc_return(&sbi->s_mb_lost_chunks);
+			mb_debug(sb, "lost chunk, group: %u, start: %d, len: %d, lost: %d\n",
+				 ac->ac_b_ex.fe_group, ac->ac_b_ex.fe_start,
+				 ac->ac_b_ex.fe_len, lost);
+
+			ac->ac_b_ex.fe_group = 0;
+			ac->ac_b_ex.fe_start = 0;
+			ac->ac_b_ex.fe_len = 0;
+			ac->ac_status = AC_STATUS_CONTINUE;
+			ac->ac_flags |= EXT4_MB_HINT_FIRST;
+			ac->ac_criteria = CR_ANY_FREE;
+			goto repeat;
+		}
+	}
+
+	if (sbi->s_mb_stats && ac->ac_status == AC_STATUS_FOUND) {
+		atomic64_inc(&sbi->s_bal_cX_hits[ac->ac_criteria]);
+		if (ac->ac_flags & EXT4_MB_STREAM_ALLOC &&
+		    ac->ac_b_ex.fe_group == ac->ac_g_ex.fe_group)
+			atomic_inc(&sbi->s_bal_stream_goals);
+	}
+
 out:
 	if (!err && ac->ac_status != AC_STATUS_FOUND && ac->ac_first_err)
 		err = ac->ac_first_err;
@@ -6316,7 +6422,8 @@ ext4_fsblk_t ext4_mb_new_blocks(handle_t *handle,
 			goto errout;
 repeat:
 		/* allocate space in core */
-		*errp = ext4_mb_regular_allocator(ac);
+		/* use vector separation for rralloc allocator */
+		*errp = sbi->s_vectored_allocator(ac);
 		/*
 		 * pa allocated above is added to grp->bb_prealloc_list only
 		 * when we were able to allocate some block i.e. when

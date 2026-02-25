@@ -962,7 +962,8 @@ struct inode *__ext4_new_inode(struct mnt_idmap *idmap,
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 	ei = EXT4_I(inode);
-
+	/* Zero the rralloc per-inode cursor */
+	atomic_set(&ei->cursor, 0);
 	/*
 	 * Initialize owners and quota early so that we don't have to account
 	 * for quota initialization worst case in standard inode creating
