@@ -1778,3 +1778,12 @@ Description:
 		notification from UFSHCI UECDME.
 
 		The attribute is read/write.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/ufshcd_state
+What:		/sys/bus/platform/devices/*.ufs/ufshcd_state
+Date:		February 2026
+Contact:	Can Guo <can.guo@oss.qualcomm.com>
+Description:
+		This attribute shows the state of ufshcd.
+
+		The attribute is read only.
