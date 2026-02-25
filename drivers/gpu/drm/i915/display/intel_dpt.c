@@ -6,7 +6,7 @@
 #include "intel_de.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
-#include "intel_dpt_common.h"
+#include "intel_dpt.h"
 #include "intel_parent.h"
 #include "skl_universal_plane_regs.h"
 
