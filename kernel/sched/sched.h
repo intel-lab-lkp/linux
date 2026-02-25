@@ -2944,6 +2944,8 @@ static inline void sub_nr_running(struct rq *rq, unsigned count)
 
 static inline void __block_task(struct rq *rq, struct task_struct *p)
 {
+	trace_sched_dequeue_tp(p, rq->cpu);
+
 	if (p->sched_contributes_to_load)
 		rq->nr_uninterruptible++;
 
