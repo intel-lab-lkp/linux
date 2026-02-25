@@ -7,6 +7,22 @@
 
 extern const struct block_device_operations mpath_ops;
 
+enum mpath_iopolicy_e {
+	MPATH_IOPOLICY_NUMA,
+	MPATH_IOPOLICY_RR,
+	MPATH_IOPOLICY_QD,
+};
+
+struct mpath_iopolicy {
+	enum mpath_iopolicy_e	iopolicy;
+};
+
+enum mpath_access_state {
+	MPATH_STATE_OPTIMIZED,
+	MPATH_STATE_ACTIVE,
+	MPATH_STATE_INVALID	= 0xFF
+};
+
 struct mpath_disk {
 	struct gendisk		*disk;
 	struct kref		ref;
@@ -18,10 +34,16 @@ struct mpath_disk {
 
 struct mpath_device {
 	struct list_head	siblings;
+	atomic_t		nr_active;
 	struct gendisk		*disk;
+	int			numa_node;
 };
 
 struct mpath_head_template {
+	bool (*is_disabled)(struct mpath_device *);
+	bool (*is_optimized)(struct mpath_device *);
+	enum mpath_access_state (*get_access_state)(struct mpath_device *);
+	enum mpath_iopolicy_e (*get_iopolicy)(struct mpath_head *);
 	const struct attribute_group **device_groups;
 };
 
@@ -50,6 +72,14 @@ static inline struct mpath_disk *mpath_gendisk_to_disk(struct gendisk *disk)
 	return mpath_bd_device_to_disk(disk_to_dev(disk));
 }
 
+static inline enum mpath_iopolicy_e mpath_read_iopolicy(
+			struct mpath_iopolicy *mpath_iopolicy)
+{
+	return READ_ONCE(mpath_iopolicy->iopolicy);
+}
+void mpath_synchronize(struct mpath_head *mpath_head);
+int mpath_set_iopolicy(const char *val, int *iopolicy);
+int mpath_get_iopolicy(char *buf, int iopolicy);
 int mpath_get_head(struct mpath_head *mpath_head);
 void mpath_put_head(struct mpath_head *mpath_head);
 struct mpath_head *mpath_alloc_head(void);
@@ -66,4 +96,10 @@ static inline bool is_mpath_head(struct gendisk *disk)
 {
 	return disk->fops == &mpath_ops;
 }
+
+static inline bool mpath_qd_iopolicy(struct mpath_iopolicy *mpath_iopolicy)
+{
+	return mpath_read_iopolicy(mpath_iopolicy) == MPATH_IOPOLICY_QD;
+}
+
 #endif // _LIBMULTIPATH_H
