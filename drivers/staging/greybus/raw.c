@@ -59,34 +59,28 @@ static int receive_data(struct gb_raw *raw, u32 len, u8 *data)
 {
 	struct raw_data *raw_data;
 	struct device *dev = &raw->connection->bundle->dev;
-	int retval = 0;
 
 	if (len > MAX_PACKET_SIZE) {
 		dev_err(dev, "Too big of a data packet, rejected\n");
 		return -EINVAL;
 	}
 
-	mutex_lock(&raw->list_lock);
+	guard(mutex)(&raw->list_lock);
 	if ((raw->list_data + len) > MAX_DATA_SIZE) {
 		dev_err(dev, "Too much data in receive buffer, now dropping packets\n");
-		retval = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 
 	raw_data = kmalloc_flex(*raw_data, data, len);
-	if (!raw_data) {
-		retval = -ENOMEM;
-		goto exit;
-	}
+	if (!raw_data)
+		return -ENOMEM;
 
 	raw->list_data += len;
 	raw_data->len = len;
 	memcpy(&raw_data->data[0], data, len);
 
 	list_add_tail(&raw_data->entry, &raw->list);
-exit:
-	mutex_unlock(&raw->list_lock);
-	return retval;
+	return 0;
 }
 
 static int gb_raw_request_handler(struct gb_operation *op)
