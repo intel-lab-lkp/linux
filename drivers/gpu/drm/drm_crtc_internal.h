@@ -94,6 +94,7 @@ int drm_mode_setcrtc(struct drm_device *dev,
 
 /* drm_mode_config.c */
 int drm_modeset_register_all(struct drm_device *dev);
+void drm_modeset_unplug_all(struct drm_device *dev);
 void drm_modeset_unregister_all(struct drm_device *dev);
 void drm_mode_config_validate(struct drm_device *dev);
 
@@ -133,6 +134,7 @@ int drm_mode_gamma_set_ioctl(struct drm_device *dev,
 /* drm_property.c */
 void drm_property_destroy_user_blobs(struct drm_device *dev,
 				     struct drm_file *file_priv);
+void drm_property_blob_unplug(struct drm_device *dev);
 bool drm_property_change_valid_get(struct drm_property *property,
 				   uint64_t value,
 				   struct drm_mode_object **ref);
@@ -221,7 +223,7 @@ int drm_mode_addfb2(struct drm_device *dev,
 		    void *data, struct drm_file *file_priv);
 int drm_mode_rmfb(struct drm_device *dev, u32 fb_id,
 		  struct drm_file *file_priv);
-
+void drm_framebuffer_unplug(struct drm_device *dev);
 
 /* IOCTL */
 int drm_mode_addfb_ioctl(struct drm_device *dev,

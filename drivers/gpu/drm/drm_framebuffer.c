@@ -1236,3 +1236,28 @@ void drm_framebuffer_debugfs_init(struct drm_device *dev)
 			      ARRAY_SIZE(drm_framebuffer_debugfs_list));
 }
 #endif
+
+/**
+ * drm_framebuffer_unplug - unplug fb from file list
+ * @dev: drm device
+ *
+ * This function is called from drm_dev_unplug() and removes all
+ * the references to framebuffers from any &struct drm_file that
+ * had opened one.
+ *
+ * This prevents a use-after-free when closing &struct drm_file.
+ *
+ * There is no need to call drm_framebuffer_remove, as the driver
+ * is now gone and will perform it's own cleanup of framebuffers.
+ */
+void drm_framebuffer_unplug(struct drm_device *dev)
+{
+	struct drm_framebuffer *fb, *next;
+
+	list_for_each_entry_safe(fb, next, &dev->mode_config.fb_list, head) {
+		if (!list_empty(&fb->filp_head)) {
+			list_del_init(&fb->filp_head);
+			drm_framebuffer_put(fb);
+		}
+	}
+}

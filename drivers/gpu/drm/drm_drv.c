@@ -493,6 +493,9 @@ void drm_dev_unplug(struct drm_device *dev)
 	dev->unplugged = true;
 	synchronize_srcu(&drm_unplug_srcu);
 
+	if (drm_core_check_feature(dev, DRIVER_MODESET))
+		drm_modeset_unplug_all(dev);
+
 	drm_dev_unregister(dev);
 
 	/* Clear all CPU mappings pointing to this device */

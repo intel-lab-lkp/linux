@@ -1008,3 +1008,23 @@ void drm_property_change_valid_put(struct drm_property *property,
 	} else if (drm_property_type_is(property, DRM_MODE_PROP_BLOB))
 		drm_property_blob_put(obj_to_blob(ref));
 }
+
+/**
+ * drm_property_blob_unplug - remove all &struct drm_file references to blobs
+ * @dev: drm device
+ *
+ * This function is called during drm_dev_unplug(), and is intended to remove all
+ * references to property blobs held by all files, so they are not freed at
+ * file exit, but sooner.
+ */
+void drm_property_blob_unplug(struct drm_device *dev)
+{
+	struct drm_property_blob *blob, *next;
+
+	list_for_each_entry_safe(blob, next, &dev->mode_config.property_blob_list, head_global) {
+		if (!list_empty(&blob->head_file)) {
+			list_del_init(&blob->head_file);
+			drm_property_blob_put(blob);
+		}
+	}
+}

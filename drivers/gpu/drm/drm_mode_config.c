@@ -68,6 +68,14 @@ err_plane:
 	return ret;
 }
 
+void drm_modeset_unplug_all(struct drm_device *dev)
+{
+	/* With drm_dev_enter() now failing, it's safe to unplug all file_priv->fb's and user mode blobs */
+	drm_framebuffer_unplug(dev);
+	drm_property_blob_unplug(dev);
+
+}
+
 void drm_modeset_unregister_all(struct drm_device *dev)
 {
 	drm_connector_unregister_all(dev);
