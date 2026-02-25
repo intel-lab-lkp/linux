@@ -86,6 +86,8 @@ struct mpath_head_template {
 				 unsigned int poll_flags);
 	enum mpath_iopolicy_e (*get_iopolicy)(struct mpath_head *);
 	struct bio *(*clone_bio)(struct bio *);
+	int (*get_unique_id)(struct mpath_device *, u8 id[16],
+				enum blk_unique_id type);
 	const struct mpath_pr_ops *pr_ops;
 	const struct attribute_group **device_groups;
 };
