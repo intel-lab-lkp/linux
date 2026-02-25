@@ -629,19 +629,23 @@ static int sriov_add_vfs(struct pci_dev *dev, u16 num_vfs)
 {
 	unsigned int i;
 	int rc;
+	bool locked;
 
 	if (dev->no_vf_scan)
 		return 0;
 
+	locked = pci_lock_rescan_remove_reentrant();
 	for (i = 0; i < num_vfs; i++) {
 		rc = pci_iov_add_virtfn(dev, i);
 		if (rc)
 			goto failed;
 	}
+	pci_unlock_rescan_remove_reentrant(locked);
 	return 0;
 failed:
 	while (i--)
 		pci_iov_remove_virtfn(dev, i);
+	pci_unlock_rescan_remove_reentrant(locked);
 
 	return rc;
 }
@@ -764,10 +768,13 @@ err_pcibios:
 static void sriov_del_vfs(struct pci_dev *dev)
 {
 	struct pci_sriov *iov = dev->sriov;
+	bool locked;
 	int i;
 
+	locked = pci_lock_rescan_remove_reentrant();
 	for (i = 0; i < iov->num_VFs; i++)
 		pci_iov_remove_virtfn(dev, i);
+	pci_unlock_rescan_remove_reentrant(locked);
 }
 
 static void sriov_disable(struct pci_dev *dev)
