@@ -1018,6 +1018,15 @@ int dw_pcie_ep_raise_msix_irq(struct dw_pcie_ep *ep, u8 func_no,
 	if (!ep_func || !ep_func->msix_cap)
 		return -EINVAL;
 
+	/*
+	 * PCIe spec r7, sec 7.7.2.2 mandates that a Function should raise MSI-X
+	 * only if the MSI-X Enable bit is set and MSI Enable bit is clear.
+	 */
+	if (!dw_pcie_ep_msix_enabled(ep, ep_func, func_no) ||
+	    (dw_pcie_ep_msix_enabled(ep, ep_func, func_no) &&
+	     dw_pcie_ep_msi_enabled(ep, ep_func, func_no)))
+		return -EOPNOTSUPP;
+
 	reg = ep_func->msix_cap + PCI_MSIX_TABLE;
 	tbl_offset = dw_pcie_ep_readl_dbi(ep, func_no, reg);
 	bir = FIELD_GET(PCI_MSIX_TABLE_BIR, tbl_offset);
