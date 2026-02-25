@@ -10,6 +10,8 @@
 
 extern const struct file_operations mpath_generic_chr_fops;
 extern const struct block_device_operations mpath_ops;
+extern const struct attribute_group mpath_attr_group;
+extern const struct attribute_group *mpath_device_groups[];
 
 enum mpath_iopolicy_e {
 	MPATH_IOPOLICY_NUMA,
@@ -145,6 +147,13 @@ struct mpath_disk *mpath_alloc_head_disk(struct queue_limits *lim,
 void mpath_device_set_live(struct mpath_disk *mpath_disk,
 			struct mpath_device *mpath_device);
 void mpath_unregister_disk(struct mpath_disk *mpath_disk);
+ssize_t mpath_numa_nodes_show(struct mpath_head *mpath_head,
+			struct mpath_device *mpath_device,
+			struct mpath_iopolicy *iopolicy, char *buf);
+ssize_t mpath_iopolicy_show(struct mpath_iopolicy *mpath_iopolicy, char *buf);
+ssize_t mpath_iopolicy_store(struct mpath_iopolicy *mpath_iopolicy,
+			const char *buf, size_t count,
+			void (*update)(void *data), void *);
 ssize_t mpath_delayed_removal_secs_show(struct mpath_head *mpath_head,
 			char *buf);
 ssize_t mpath_delayed_removal_secs_store(struct mpath_head *mpath_head,
