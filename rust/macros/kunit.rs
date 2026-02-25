@@ -87,10 +87,15 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
             continue;
         };
 
-        // TODO: Replace below with `extract_if` when MSRV is bumped above 1.85.
-        let before_len = f.attrs.len();
-        f.attrs.retain(|attr| !attr.path().is_ident("test"));
-        if f.attrs.len() == before_len {
+        let mut had_test_attr = false;
+        f.attrs.retain_mut(|attr| {
+            let is_test = attr.path().is_ident("test");
+            if is_test {
+                had_test_attr = true;
+            }
+            !is_test
+        });
+        if !had_test_attr {
             processed_items.push(Item::Fn(f));
             continue;
         }
