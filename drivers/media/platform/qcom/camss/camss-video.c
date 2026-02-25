@@ -111,6 +111,19 @@ static int video_get_subdev_format(struct camss_video *video,
 				    &video->formats[ret], video->bpl_alignment);
 }
 
+static char *print_fourcc(u32 fmt)
+{
+	static char code[5];
+
+	code[0] = (unsigned char)(fmt & 0xff);
+	code[1] = (unsigned char)((fmt >> 8) & 0xff);
+	code[2] = (unsigned char)((fmt >> 16) & 0xff);
+	code[3] = (unsigned char)((fmt >> 24) & 0xff);
+	code[4] = '\0';
+
+	return code;
+}
+
 /* -----------------------------------------------------------------------------
  * Video queue operations
  */
@@ -214,6 +227,12 @@ static int video_check_format(struct camss_video *video)
 	ret = video_get_subdev_format(video, &format);
 	if (ret < 0)
 		return ret;
+
+	pr_debug("%s: format is (%ux%u %s/%up field:%u), trying (%ux%u %s/%up field:%u)",
+		 video->vdev.name, sd_pix->width, sd_pix->height,
+		 print_fourcc(sd_pix->pixelformat), sd_pix->num_planes, sd_pix->field,
+		 pix->width, pix->height, print_fourcc(pix->pixelformat),
+		 pix->num_planes, pix->field);
 
 	if (pix->pixelformat != sd_pix->pixelformat ||
 	    pix->height != sd_pix->height ||
