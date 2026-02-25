@@ -31,6 +31,8 @@
 
 #include <xen/xen.h>
 
+/* LDTs are double-buffered, the buffers are called slots. */
+#define LDT_NUM_SLOTS		2
 /* This is a multiple of PAGE_SIZE. */
 #define LDT_SLOT_STRIDE (LDT_ENTRIES * LDT_ENTRY_SIZE)
 
@@ -186,31 +188,30 @@ static struct ldt_struct *alloc_ldt_struct(unsigned int num_entries)
 
 #ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
 
-static void do_sanity_check(struct mm_struct *mm,
-			    bool had_kernel_mapping,
-			    bool had_user_mapping)
+#ifdef CONFIG_X86_PAE
+
+static void map_ldt_struct_to_user(struct mm_struct *mm)
 {
-	if (mm->context.ldt) {
-		/*
-		 * We already had an LDT.  The top-level entry should already
-		 * have been allocated and synchronized with the usermode
-		 * tables.
-		 */
-		WARN_ON(!had_kernel_mapping);
-		if (boot_cpu_has(X86_FEATURE_PTI))
-			WARN_ON(!had_user_mapping);
-	} else {
-		/*
-		 * This is the first time we're mapping an LDT for this process.
-		 * Sync the pgd to the usermode tables.
-		 */
-		WARN_ON(had_kernel_mapping);
-		if (boot_cpu_has(X86_FEATURE_PTI))
-			WARN_ON(had_user_mapping);
-	}
+	pgd_t *k_pgd = pgd_offset(mm, LDT_BASE_ADDR);
+	pgd_t *u_pgd = kernel_to_user_pgdp(k_pgd);
+	pmd_t *k_pmd, *u_pmd;
+
+	k_pmd = pgd_to_pmd_walk(k_pgd, LDT_BASE_ADDR);
+	u_pmd = pgd_to_pmd_walk(u_pgd, LDT_BASE_ADDR);
+
+	BUILD_BUG_ON(LDT_SLOT_STRIDE * LDT_NUM_SLOTS > PMD_SIZE);
+	if (boot_cpu_has(X86_FEATURE_PTI) && !mm->context.ldt)
+		set_pmd(u_pmd, *k_pmd);
 }
 
-#ifdef CONFIG_X86_PAE
+#else /* !CONFIG_X86_PAE */
+
+static void map_ldt_struct_to_user(struct mm_struct *mm)
+{
+	/* Nothing to do; the whole mm-local region is shared with userspace. */
+}
+
+#endif /* CONFIG_X86_PAE */
 
 static pmd_t *pgd_to_pmd_walk(pgd_t *pgd, unsigned long va)
 {
@@ -231,19 +232,6 @@ static pmd_t *pgd_to_pmd_walk(pgd_t *pgd, unsigned long va)
 	return pmd_offset(pud, va);
 }
 
-static void map_ldt_struct_to_user(struct mm_struct *mm)
-{
-	pgd_t *k_pgd = pgd_offset(mm, LDT_BASE_ADDR);
-	pgd_t *u_pgd = kernel_to_user_pgdp(k_pgd);
-	pmd_t *k_pmd, *u_pmd;
-
-	k_pmd = pgd_to_pmd_walk(k_pgd, LDT_BASE_ADDR);
-	u_pmd = pgd_to_pmd_walk(u_pgd, LDT_BASE_ADDR);
-
-	if (boot_cpu_has(X86_FEATURE_PTI) && !mm->context.ldt)
-		set_pmd(u_pmd, *k_pmd);
-}
-
 static void sanity_check_ldt_mapping(struct mm_struct *mm)
 {
 	pgd_t *k_pgd = pgd_offset(mm, LDT_BASE_ADDR);
@@ -253,32 +241,28 @@ static void sanity_check_ldt_mapping(struct mm_struct *mm)
 
 	k_pmd      = pgd_to_pmd_walk(k_pgd, LDT_BASE_ADDR);
 	u_pmd      = pgd_to_pmd_walk(u_pgd, LDT_BASE_ADDR);
-	had_kernel = (k_pmd->pmd != 0);
-	had_user   = (u_pmd->pmd != 0);
+	had_kernel = k_pmd && (k_pmd->pmd != 0);
+	had_user   = u_pmd && (u_pmd->pmd != 0);
 
-	do_sanity_check(mm, had_kernel, had_user);
+	if (mm->context.ldt) {
+		/*
+		 * We already had an LDT.  The top-level entry should already
+		 * have been allocated and synchronized with the usermode
+		 * tables.
+		 */
+		WARN_ON(!had_kernel);
+		if (boot_cpu_has(X86_FEATURE_PTI))
+			WARN_ON(!had_user);
+	} else {
+		/*
+		 * This is the first time we're mapping an LDT for this process.
+		 * Sync the pgd to the usermode tables.
+		 */
+		WARN_ON(had_kernel);
+		if (boot_cpu_has(X86_FEATURE_PTI))
+			WARN_ON(had_user);
+	}
 }
-
-#else /* !CONFIG_X86_PAE */
-
-static void map_ldt_struct_to_user(struct mm_struct *mm)
-{
-	pgd_t *pgd = pgd_offset(mm, LDT_BASE_ADDR);
-
-	if (boot_cpu_has(X86_FEATURE_PTI) && !mm->context.ldt)
-		set_pgd(kernel_to_user_pgdp(pgd), *pgd);
-}
-
-static void sanity_check_ldt_mapping(struct mm_struct *mm)
-{
-	pgd_t *pgd = pgd_offset(mm, LDT_BASE_ADDR);
-	bool had_kernel = (pgd->pgd != 0);
-	bool had_user   = (kernel_to_user_pgdp(pgd)->pgd != 0);
-
-	do_sanity_check(mm, had_kernel, had_user);
-}
-
-#endif /* CONFIG_X86_PAE */
 
 /*
  * If PTI is enabled, this maps the LDT into the kernelmode and
@@ -294,6 +278,8 @@ map_ldt_struct(struct mm_struct *mm, struct ldt_struct *ldt, int slot)
 
 	if (!boot_cpu_has(X86_FEATURE_PTI))
 		return 0;
+
+	mm_local_region_init(mm);
 
 	/*
 	 * Any given ldt_struct should have map_ldt_struct() called at most
@@ -390,28 +376,6 @@ static void unmap_ldt_struct(struct mm_struct *mm, struct ldt_struct *ldt)
 }
 #endif /* CONFIG_MITIGATION_PAGE_TABLE_ISOLATION */
 
-static void free_ldt_pgtables(struct mm_struct *mm)
-{
-#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
-	struct mmu_gather tlb;
-	unsigned long start = LDT_BASE_ADDR;
-	unsigned long end = LDT_END_ADDR;
-
-	if (!boot_cpu_has(X86_FEATURE_PTI))
-		return;
-
-	/*
-	 * Although free_pgd_range() is intended for freeing user
-	 * page-tables, it also works out for kernel mappings on x86.
-	 * We use tlb_gather_mmu_fullmm() to avoid confusing the
-	 * range-tracking logic in __tlb_adjust_range().
-	 */
-	tlb_gather_mmu_fullmm(&tlb, mm);
-	free_pgd_range(&tlb, start, end, start, end);
-	tlb_finish_mmu(&tlb);
-#endif
-}
-
 /* After calling this, the LDT is immutable. */
 static void finalize_ldt_struct(struct ldt_struct *ldt)
 {
@@ -472,7 +436,6 @@ int ldt_dup_context(struct mm_struct *old_mm, struct mm_struct *mm)
 
 	retval = map_ldt_struct(mm, new_ldt, 0);
 	if (retval) {
-		free_ldt_pgtables(mm);
 		free_ldt_struct(new_ldt);
 		goto out_unlock;
 	}
@@ -492,11 +455,6 @@ void destroy_context_ldt(struct mm_struct *mm)
 {
 	free_ldt_struct(mm->context.ldt);
 	mm->context.ldt = NULL;
-}
-
-void ldt_arch_exit_mmap(struct mm_struct *mm)
-{
-	free_ldt_pgtables(mm);
 }
 
 static int read_ldt(void __user *ptr, unsigned long bytecount)
@@ -645,10 +603,9 @@ static int write_ldt(void __user *ptr, unsigned long bytecount, int oldmode)
 		/*
 		 * This only can fail for the first LDT setup. If an LDT is
 		 * already installed then the PTE page is already
-		 * populated. Mop up a half populated page table.
+		 * populated.
 		 */
-		if (!WARN_ON_ONCE(old_ldt))
-			free_ldt_pgtables(mm);
+		WARN_ON_ONCE(!old_ldt);
 		free_ldt_struct(new_ldt);
 		goto out_unlock;
 	}

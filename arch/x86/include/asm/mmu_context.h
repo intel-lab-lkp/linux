@@ -8,8 +8,10 @@
 
 #include <trace/events/tlb.h>
 
+#include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include <asm/paravirt.h>
+#include <asm/pgalloc.h>
 #include <asm/debugreg.h>
 #include <asm/gsseg.h>
 #include <asm/desc.h>
@@ -59,7 +61,6 @@ static inline void init_new_context_ldt(struct mm_struct *mm)
 }
 int ldt_dup_context(struct mm_struct *oldmm, struct mm_struct *mm);
 void destroy_context_ldt(struct mm_struct *mm);
-void ldt_arch_exit_mmap(struct mm_struct *mm);
 #else	/* CONFIG_MODIFY_LDT_SYSCALL */
 static inline void init_new_context_ldt(struct mm_struct *mm) { }
 static inline int ldt_dup_context(struct mm_struct *oldmm,
@@ -68,7 +69,6 @@ static inline int ldt_dup_context(struct mm_struct *oldmm,
 	return 0;
 }
 static inline void destroy_context_ldt(struct mm_struct *mm) { }
-static inline void ldt_arch_exit_mmap(struct mm_struct *mm) { }
 #endif
 
 #ifdef CONFIG_MODIFY_LDT_SYSCALL
@@ -226,10 +226,75 @@ static inline int arch_dup_mmap(struct mm_struct *oldmm, struct mm_struct *mm)
 	return ldt_dup_context(oldmm, mm);
 }
 
+#ifdef CONFIG_MM_LOCAL_REGION
+static inline void mm_local_region_free(struct mm_struct *mm)
+{
+	if (mm_local_region_used(mm)) {
+		struct mmu_gather tlb;
+		unsigned long start = MM_LOCAL_BASE_ADDR;
+		unsigned long end = MM_LOCAL_END_ADDR;
+
+		/*
+		 * Although free_pgd_range() is intended for freeing user
+		 * page-tables, it also works out for kernel mappings on x86.
+		 * We use tlb_gather_mmu_fullmm() to avoid confusing the
+		 * range-tracking logic in __tlb_adjust_range().
+		 */
+		tlb_gather_mmu_fullmm(&tlb, mm);
+		free_pgd_range(&tlb, start, end, start, end);
+		tlb_finish_mmu(&tlb);
+
+		mm_flags_clear(MMF_LOCAL_REGION_USED, mm);
+	}
+}
+
+/* Do initial setup of the user-local region. Call from process context. */
+static inline int mm_local_region_init(struct mm_struct *mm)
+{
+	int err;
+
+	err = preallocate_sub_pgd(mm, MM_LOCAL_BASE_ADDR);
+	if (err)
+		return err;
+
+#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
+	/*
+	 * The mm-local region is shared with userspace. This is useful for the
+	 * LDT remap. It's assuming nothing gets mapped in here that needs to be
+	 * protected from Meltdown-type attacks from the current process.
+	 *
+	 * Note this can be called multiple times, also concurrently - it's
+	 * assuming the set_pgd() is idempotent.
+	 */
+	if (boot_cpu_has(X86_FEATURE_PTI)) {
+		pgd_t *pgd = pgd_offset(mm, LDT_BASE_ADDR);
+
+		set_pgd(kernel_to_user_pgdp(pgd), *pgd);
+	}
+#endif
+
+	mm_flags_set(MMF_LOCAL_REGION_USED, mm);
+
+	return 0;
+}
+
+static inline bool is_mm_local_addr(unsigned long addr)
+{
+	return addr >= MM_LOCAL_BASE_ADDR && addr < MM_LOCAL_END_ADDR;
+}
+#else
+static inline void mm_local_region_free(struct mm_struct *mm) { }
+
+static inline bool is_mm_local_addr(unsigned long addr)
+{
+	return false;
+}
+#endif /* CONFIG_MM_LOCAL_REGION */
+
 static inline void arch_exit_mmap(struct mm_struct *mm)
 {
 	paravirt_arch_exit_mmap(mm);
-	ldt_arch_exit_mmap(mm);
+	mm_local_region_free(mm);
 }
 
 #ifdef CONFIG_X86_64

@@ -904,6 +904,19 @@ static inline void mm_flags_clear_all(struct mm_struct *mm)
 	bitmap_zero(ACCESS_PRIVATE(&mm->flags, __mm_flags), NUM_MM_FLAG_BITS);
 }
 
+#ifdef CONFIG_MM_LOCAL_REGION
+static inline bool mm_local_region_used(struct mm_struct *mm)
+{
+	return mm_flags_test(MMF_LOCAL_REGION_USED, mm);
+}
+#else
+static inline bool mm_local_region_used(struct mm_struct *mm)
+{
+	VM_WARN_ON_ONCE(mm_flags_test(MMF_LOCAL_REGION_USED, mm));
+	return false;
+}
+#endif
+
 extern const struct vm_operations_struct vma_dummy_vm_ops;
 
 static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)

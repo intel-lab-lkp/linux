@@ -375,6 +375,9 @@ out:
 
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
+	/* Should be cleaned up in mmap exit path. */
+	VM_WARN_ON_ONCE(mm_local_region_used(mm));
+
 	pgd_mop_up_pmds(mm, pgd);
 	pgd_dtor(pgd);
 	paravirt_pgd_free(mm, pgd);
