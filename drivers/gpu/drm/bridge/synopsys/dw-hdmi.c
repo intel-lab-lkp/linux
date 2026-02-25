@@ -2471,7 +2471,6 @@ static const struct drm_edid *dw_hdmi_edid_read(struct dw_hdmi *hdmi,
 						struct drm_connector *connector)
 {
 	const struct drm_edid *drm_edid;
-	const struct edid *edid;
 
 	if (!hdmi->ddc)
 		return NULL;
@@ -2481,19 +2480,9 @@ static const struct drm_edid *dw_hdmi_edid_read(struct dw_hdmi *hdmi,
 		dev_dbg(hdmi->dev, "failed to get edid\n");
 		return NULL;
 	}
-
-	/*
-	 * FIXME: This should use connector->display_info.is_hdmi and
-	 * connector->display_info.has_audio from a path that has read the EDID
-	 * and called drm_edid_connector_update().
-	 */
-	edid = drm_edid_raw(drm_edid);
-
-	dev_dbg(hdmi->dev, "got edid: width[%d] x height[%d]\n",
-		edid->width_cm, edid->height_cm);
-
-	hdmi->sink_is_hdmi = drm_detect_hdmi_monitor(edid);
-	hdmi->sink_has_audio = drm_detect_monitor_audio(edid);
+	drm_edid_connector_update(connector, drm_edid);
+	hdmi->sink_is_hdmi = connector->display_info.is_hdmi;
+	hdmi->sink_has_audio = connector->display_info.has_audio;
 
 	return drm_edid;
 }
