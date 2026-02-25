@@ -123,9 +123,12 @@ static inline bool migratetype_is_mergeable(int mt)
 	return mt < MIGRATE_PCPTYPES;
 }
 
-#define for_each_migratetype_order(order, type) \
+#define for_each_free_list(list, zone, order) \
 	for (order = 0; order < NR_PAGE_ORDERS; order++) \
-		for (type = 0; type < MIGRATE_TYPES; type++)
+		for (unsigned int type = 0; \
+		     list = &zone->free_area[order].free_list[type], \
+		     type < MIGRATE_TYPES; \
+		     type++) \
 
 extern int page_group_by_mobility_disabled;
 
