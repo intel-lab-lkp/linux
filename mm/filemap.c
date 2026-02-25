@@ -176,6 +176,9 @@ static void filemap_unaccount_folio(struct address_space *mapping,
 		}
 	}
 
+	if (unlikely(mapping->a_ops->unaccount_folio))
+		mapping->a_ops->unaccount_folio(folio);
+
 	/* hugetlb folios do not participate in page cache accounting. */
 	if (folio_test_hugetlb(folio))
 		return;

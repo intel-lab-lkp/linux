@@ -809,6 +809,7 @@ cache in your filesystem.  The following members are defined:
 		sector_t (*bmap)(struct address_space *, sector_t);
 		void (*invalidate_folio) (struct folio *, size_t start, size_t len);
 		bool (*release_folio)(struct folio *, gfp_t);
+		void (*unaccount_folio)(struct folio *folio);
 		void (*free_folio)(struct folio *);
 		ssize_t (*direct_IO)(struct kiocb *, struct iov_iter *iter);
 		int (*migrate_folio)(struct mapping *, struct folio *dst,
@@ -966,6 +967,13 @@ cache in your filesystem.  The following members are defined:
 	and needs to be certain that all folios are invalidated, then
 	its release_folio will need to ensure this.  Possibly it can
 	clear the uptodate flag if it cannot free private data yet.
+
+``unaccount_folio``
+       unaccount_folio is called under inode lock and struct
+       address_space's xa_lock, just before the folio is removed from
+       the page cache in order to allow updating any kind of
+       accounting on the inode or address_space mapping while the
+       address_space mapping still exists.
 
 ``free_folio``
 	free_folio is called once the folio is no longer visible in the
