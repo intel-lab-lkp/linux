@@ -6280,7 +6280,7 @@ S:	Maintained
 F:	include/linux/clk.h
 
 CLOCKSOURCE, CLOCKEVENT DRIVERS
-M:	Daniel Lezcano <daniel.lezcano@linaro.org>
+M:	Daniel Lezcano <daniel.lezcano@kernel.org>
 M:	Thomas Gleixner <tglx@kernel.org>
 L:	linux-kernel@vger.kernel.org
 S:	Supported
