@@ -42,19 +42,28 @@ void pidfs_get_root(struct path *path)
 }
 
 enum pidfs_attr_mask_bits {
-	PIDFS_ATTR_BIT_EXIT	= 0,
-	PIDFS_ATTR_BIT_COREDUMP	= 1,
+	PIDFS_ATTR_BIT_EXIT	= (1U << 0),
+	PIDFS_ATTR_BIT_COREDUMP	= (1U << 1),
+	PIDFS_ATTR_BIT_KTHREAD	= (1U << 2),
+};
+
+struct pidfs_exit_attr {
+	__u64 cgroupid;
+	__s32 exit_code;
+	const struct cred *exit_cred;
+	u64 exit_tgid_ino;
+};
+
+struct pidfs_coredump_attr {
+	__u32 coredump_mask;
+	__u32 coredump_signal;
 };
 
 struct pidfs_attr {
-	unsigned long attr_mask;
+	atomic_t attr_mask;
 	struct simple_xattrs *xattrs;
-	struct /* exit info */ {
-		__u64 cgroupid;
-		__s32 exit_code;
-	};
-	__u32 coredump_mask;
-	__u32 coredump_signal;
+	struct pidfs_exit_attr;
+	struct pidfs_coredump_attr;
 };
 
 static struct rhashtable pidfs_ino_ht;
@@ -200,6 +209,7 @@ void pidfs_free_pid(struct pid *pid)
 	if (IS_ERR(attr))
 		return;
 
+	put_cred(attr->exit_cred);
 	xattrs = no_free_ptr(attr->xattrs);
 	if (xattrs)
 		simple_xattrs_free(xattrs, NULL);
@@ -364,7 +374,7 @@ static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 
 	attr = READ_ONCE(pid->attr);
 	if (mask & PIDFD_INFO_EXIT) {
-		if (test_bit(PIDFS_ATTR_BIT_EXIT, &attr->attr_mask)) {
+		if (atomic_read(&attr->attr_mask) & PIDFS_ATTR_BIT_EXIT) {
 			smp_rmb();
 			kinfo.mask |= PIDFD_INFO_EXIT;
 #ifdef CONFIG_CGROUPS
@@ -376,7 +386,7 @@ static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 
 	if (mask & PIDFD_INFO_COREDUMP) {
-		if (test_bit(PIDFS_ATTR_BIT_COREDUMP, &attr->attr_mask)) {
+		if (atomic_read(&attr->attr_mask) & PIDFS_ATTR_BIT_COREDUMP) {
 			smp_rmb();
 			kinfo.mask |= PIDFD_INFO_COREDUMP | PIDFD_INFO_COREDUMP_SIGNAL;
 			kinfo.coredump_mask = attr->coredump_mask;
@@ -674,6 +684,7 @@ void pidfs_exit(struct task_struct *tsk)
 {
 	struct pid *pid = task_pid(tsk);
 	struct pidfs_attr *attr;
+	unsigned int mask;
 #ifdef CONFIG_CGROUPS
 	struct cgroup *cgrp;
 #endif
@@ -703,17 +714,22 @@ void pidfs_exit(struct task_struct *tsk)
 	 * is put
 	 */
 
-#ifdef CONFIG_CGROUPS
 	rcu_read_lock();
+#ifdef CONFIG_CGROUPS
 	cgrp = task_dfl_cgroup(tsk);
 	attr->cgroupid = cgroup_id(cgrp);
-	rcu_read_unlock();
 #endif
+	attr->exit_cred = get_cred(__task_cred(tsk));
+	rcu_read_unlock();
+	attr->exit_tgid_ino = task_tgid(tsk)->ino;
 	attr->exit_code = tsk->exit_code;
 
 	/* Ensure that PIDFD_GET_INFO sees either all or nothing. */
 	smp_wmb();
-	set_bit(PIDFS_ATTR_BIT_EXIT, &attr->attr_mask);
+	mask = PIDFS_ATTR_BIT_EXIT;
+	if (unlikely(tsk->flags & PF_KTHREAD))
+		mask |= PIDFS_ATTR_BIT_KTHREAD;
+	atomic_or(mask, &attr->attr_mask);
 }
 
 #ifdef CONFIG_COREDUMP
@@ -735,11 +751,48 @@ void pidfs_coredump(const struct coredump_params *cprm)
 	/* Expose the signal number that caused the coredump. */
 	attr->coredump_signal = cprm->siginfo->si_signo;
 	smp_wmb();
-	set_bit(PIDFS_ATTR_BIT_COREDUMP, &attr->attr_mask);
+	atomic_or(PIDFS_ATTR_BIT_COREDUMP, &attr->attr_mask);
 }
 #endif
 
 static struct vfsmount *pidfs_mnt __ro_after_init;
+
+static void pidfs_update_owner(struct inode *inode)
+{
+	struct pid *pid = inode->i_private;
+	struct task_struct *task;
+	struct pidfs_attr *attr;
+	const struct cred *cred;
+
+	VFS_WARN_ON_ONCE(!pid);
+
+	attr = READ_ONCE(pid->attr);
+	VFS_WARN_ON_ONCE(!attr);
+
+	if (unlikely(atomic_read(&attr->attr_mask) & PIDFS_ATTR_BIT_KTHREAD))
+		return;
+
+	guard(rcu)();
+	task = pid_task(pid, PIDTYPE_PID);
+	if (task) {
+		cred = __task_cred(task);
+		WRITE_ONCE(inode->i_uid, cred->uid);
+		WRITE_ONCE(inode->i_gid, cred->gid);
+		return;
+	}
+
+	/*
+	 * During copy_process() with CLONE_PIDFD the task hasn't been
+	 * attached to the pid yet so pid_task() returns NULL and
+	 * there's no exit_cred as the task obviously hasn't exited. Use
+	 * the parent's credentials.
+	 */
+	cred = attr->exit_cred;
+	if (!cred)
+		cred = current_cred();
+	WRITE_ONCE(inode->i_uid, cred->uid);
+	WRITE_ONCE(inode->i_gid, cred->gid);
+}
 
 /*
  * The vfs falls back to simple_setattr() if i_op->setattr() isn't
@@ -756,6 +809,9 @@ static int pidfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 			 struct kstat *stat, u32 request_mask,
 			 unsigned int query_flags)
 {
+	struct inode *inode = d_inode(path->dentry);
+
+	pidfs_update_owner(inode);
 	return anon_inode_getattr(idmap, path, stat, request_mask, query_flags);
 }
 
@@ -773,10 +829,24 @@ static ssize_t pidfs_listxattr(struct dentry *dentry, char *buf, size_t size)
 	return simple_xattr_list(inode, xattrs, buf, size);
 }
 
+static int pidfs_permission(struct mnt_idmap *idmap, struct inode *inode,
+			    int mask)
+{
+	struct pid *pid = inode->i_private;
+	struct pidfs_attr *attr = READ_ONCE(pid->attr);
+
+	if (unlikely(atomic_read(&attr->attr_mask) & PIDFS_ATTR_BIT_KTHREAD))
+		return -EPERM;
+
+	pidfs_update_owner(inode);
+	return generic_permission(&nop_mnt_idmap, inode, mask);
+}
+
 static const struct inode_operations pidfs_inode_operations = {
 	.getattr	= pidfs_getattr,
 	.setattr	= pidfs_setattr,
 	.listxattr	= pidfs_listxattr,
+	.permission	= pidfs_permission,
 };
 
 static void pidfs_evict_inode(struct inode *inode)
@@ -835,7 +905,7 @@ static struct pid *pidfs_ino_get_pid(u64 ino)
 	attr = READ_ONCE(pid->attr);
 	if (IS_ERR_OR_NULL(attr))
 		return NULL;
-	if (test_bit(PIDFS_ATTR_BIT_EXIT, &attr->attr_mask))
+	if (atomic_read(&attr->attr_mask) & PIDFS_ATTR_BIT_EXIT)
 		return NULL;
 	/* Within our pid namespace hierarchy? */
 	if (pid_vnr(pid) == 0)
@@ -949,6 +1019,7 @@ static void pidfs_put_data(void *data)
 int pidfs_register_pid(struct pid *pid)
 {
 	struct pidfs_attr *new_attr __free(kfree) = NULL;
+	struct task_struct *task;
 	struct pidfs_attr *attr;
 
 	might_sleep();
@@ -975,6 +1046,9 @@ int pidfs_register_pid(struct pid *pid)
 	if (unlikely(attr))
 		return 0;
 
+	task = pid_task(pid, PIDTYPE_PID);
+	if (task && (task->flags & PF_KTHREAD))
+		atomic_or(PIDFS_ATTR_BIT_KTHREAD, &new_attr->attr_mask);
 	pid->attr = no_free_ptr(new_attr);
 	return 0;
 }
@@ -983,7 +1057,8 @@ static struct dentry *pidfs_stash_dentry(struct dentry **stashed,
 					 struct dentry *dentry)
 {
 	int ret;
-	struct pid *pid = d_inode(dentry)->i_private;
+	struct inode *inode = d_inode(dentry);
+	struct pid *pid = inode->i_private;
 
 	VFS_WARN_ON_ONCE(stashed != &pid->stashed);
 
@@ -991,6 +1066,7 @@ static struct dentry *pidfs_stash_dentry(struct dentry **stashed,
 	if (ret)
 		return ERR_PTR(ret);
 
+	pidfs_update_owner(inode);
 	return stash_dentry(stashed, dentry);
 }
 
