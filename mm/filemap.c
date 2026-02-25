@@ -3567,6 +3567,7 @@ retry_find:
 		}
 	}
 
+	folio_activate_on_mapped(folio);
 	if (!lock_folio_maybe_drop_mmap(vmf, folio, &fpin))
 		goto out_retry;
 
@@ -3926,6 +3927,7 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 					nr_pages, &rss, &mmap_miss, file_end);
 
 		folio_unlock(folio);
+		folio_activate_on_mapped(folio);
 	} while ((folio = next_uptodate_folio(&xas, mapping, end_pgoff)) != NULL);
 	add_mm_counter(vma->vm_mm, folio_type, rss);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
