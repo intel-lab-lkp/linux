@@ -672,6 +672,17 @@ static int dw_pcie_ep_map_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	return 0;
 }
 
+static bool dw_pcie_ep_msi_enabled(struct dw_pcie_ep *ep,
+				   struct dw_pcie_ep_func *ep_func, u8 func_no)
+{
+	u32 val, reg;
+
+	reg = ep_func->msi_cap + PCI_MSI_FLAGS;
+	val = dw_pcie_ep_readw_dbi(ep, func_no, reg);
+
+	return FIELD_GET(PCI_MSI_FLAGS_ENABLE, val);
+}
+
 static int dw_pcie_ep_get_msi(struct pci_epc *epc, u8 func_no, u8 vfunc_no)
 {
 	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
@@ -682,11 +693,11 @@ static int dw_pcie_ep_get_msi(struct pci_epc *epc, u8 func_no, u8 vfunc_no)
 	if (!ep_func || !ep_func->msi_cap)
 		return -EINVAL;
 
-	reg = ep_func->msi_cap + PCI_MSI_FLAGS;
-	val = dw_pcie_ep_readw_dbi(ep, func_no, reg);
-	if (!(val & PCI_MSI_FLAGS_ENABLE))
+	if (!dw_pcie_ep_msi_enabled(ep, ep_func, func_no))
 		return -EINVAL;
 
+	reg = ep_func->msi_cap + PCI_MSI_FLAGS;
+	val = dw_pcie_ep_readw_dbi(ep, func_no, reg);
 	val = FIELD_GET(PCI_MSI_FLAGS_QSIZE, val);
 
 	return 1 << val;
@@ -716,6 +727,17 @@ static int dw_pcie_ep_set_msi(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	return 0;
 }
 
+static bool dw_pcie_ep_msix_enabled(struct dw_pcie_ep *ep,
+				    struct dw_pcie_ep_func *ep_func, u8 func_no)
+{
+	u32 val, reg;
+
+	reg = ep_func->msix_cap + PCI_MSIX_FLAGS;
+	val = dw_pcie_ep_readw_dbi(ep, func_no, reg);
+
+	return FIELD_GET(PCI_MSIX_FLAGS_ENABLE, val);
+}
+
 static int dw_pcie_ep_get_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no)
 {
 	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
@@ -726,11 +748,11 @@ static int dw_pcie_ep_get_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no)
 	if (!ep_func || !ep_func->msix_cap)
 		return -EINVAL;
 
-	reg = ep_func->msix_cap + PCI_MSIX_FLAGS;
-	val = dw_pcie_ep_readw_dbi(ep, func_no, reg);
-	if (!(val & PCI_MSIX_FLAGS_ENABLE))
+	if (!dw_pcie_ep_msix_enabled(ep, ep_func, func_no))
 		return -EINVAL;
 
+	reg = ep_func->msix_cap + PCI_MSIX_FLAGS;
+	val = dw_pcie_ep_readw_dbi(ep, func_no, reg);
 	val &= PCI_MSIX_FLAGS_QSIZE;
 
 	return val + 1;
@@ -876,6 +898,15 @@ int dw_pcie_ep_raise_msi_irq(struct dw_pcie_ep *ep, u8 func_no,
 	ep_func = dw_pcie_ep_get_func_from_ep(ep, func_no);
 	if (!ep_func || !ep_func->msi_cap)
 		return -EINVAL;
+
+	/*
+	 * PCIe spec r7, sec 7.7.1.2 mandates that a Function should raise MSI
+	 * only if the MSI Enable bit is set and MSI-X Enable bit is clear.
+	 */
+	if (!dw_pcie_ep_msi_enabled(ep, ep_func, func_no) ||
+	    (dw_pcie_ep_msi_enabled(ep, ep_func, func_no) &&
+	     dw_pcie_ep_msix_enabled(ep, ep_func, func_no)))
+		return -EOPNOTSUPP;
 
 	/* Raise MSI per the PCI Local Bus Specification Revision 3.0, 6.8.1. */
 	reg = ep_func->msi_cap + PCI_MSI_FLAGS;
