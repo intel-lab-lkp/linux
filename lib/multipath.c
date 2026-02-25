@@ -496,6 +496,46 @@ static void mpath_bdev_release(struct gendisk *disk)
 	mpath_put_disk(mpath_disk);
 }
 
+static int mpath_bdev_ioctl(struct block_device *bdev, blk_mode_t mode,
+		    unsigned int cmd, unsigned long arg)
+{
+	struct gendisk *disk = bdev->bd_disk;
+	struct mpath_disk *mpath_disk = mpath_gendisk_to_disk(disk);
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct mpath_device *mpath_device;
+	int srcu_idx, err;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (!mpath_device) {
+		err = -EWOULDBLOCK;
+		goto out_unlock;
+	}
+
+	if (bdev_is_partition(bdev) && !capable(CAP_SYS_RAWIO)) {
+		err = -ENOIOCTLCMD;
+		goto out_unlock;
+	}
+
+	/* ->ioctl must always unlock */
+	err = mpath_head->mpdt->bdev_ioctl(bdev, mpath_device, mode, cmd,
+				arg, srcu_idx);
+	lockdep_assert_not_held(&mpath_head->srcu);
+	return err;
+
+out_unlock:
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+	return err;
+}
+
+void mpath_head_read_unlock(struct mpath_head *mpath_head, int srcu_idx)
+__releases(&mpath_head->srcu)
+{
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+}
+EXPORT_SYMBOL_GPL(mpath_head_read_unlock);
+
 static int mpath_pr_register(struct block_device *bdev, u64 old_key,
 			u64 new_key, unsigned int flags)
 {
@@ -646,6 +686,8 @@ const struct block_device_operations mpath_ops = {
 	.open		= mpath_bdev_open,
 	.release	= mpath_bdev_release,
 	.submit_bio	= mpath_bdev_submit_bio,
+	.ioctl		= mpath_bdev_ioctl,
+	.compat_ioctl	= blkdev_compat_ptr_ioctl,
 	.report_zones	= mpath_bdev_report_zones,
 	.pr_ops		= &mpath_pr_ops,
 };

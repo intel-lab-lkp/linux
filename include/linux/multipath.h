@@ -72,6 +72,9 @@ struct mpath_head_template {
 	bool (*is_disabled)(struct mpath_device *);
 	bool (*is_optimized)(struct mpath_device *);
 	enum mpath_access_state (*get_access_state)(struct mpath_device *);
+	int (*bdev_ioctl)(struct block_device *bdev, struct mpath_device *,
+			blk_mode_t mode, unsigned int cmd, unsigned long arg,
+			int srcu_idx);
 	int (*cdev_ioctl)(struct mpath_head *, struct mpath_device *,
 			blk_mode_t mode, unsigned int cmd, unsigned long arg, int srcu_idx);
 	int (*report_zones)(struct mpath_device *, sector_t sector,
@@ -154,6 +157,7 @@ void mpath_revalidate_paths(struct mpath_disk *mpath_disk,
 void mpath_add_sysfs_link(struct mpath_disk *mpath_disk);
 void mpath_remove_sysfs_link(struct mpath_disk *mpath_disk,
 				struct mpath_device *mpath_device);
+void mpath_head_read_unlock(struct mpath_head *mpath_head, int srcu_idx);
 int mpath_get_head(struct mpath_head *mpath_head);
 void mpath_put_head(struct mpath_head *mpath_head);
 void mpath_requeue_work(struct work_struct *work);
