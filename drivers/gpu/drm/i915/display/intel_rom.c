@@ -46,7 +46,7 @@ struct intel_rom *intel_rom_spi(struct drm_device *drm)
 	struct intel_rom *rom;
 	u32 static_region;
 
-	rom = kzalloc(sizeof(*rom), GFP_KERNEL);
+	rom = kzalloc_obj(*rom);
 	if (!rom)
 		return NULL;
 
@@ -91,7 +91,7 @@ struct intel_rom *intel_rom_pci(struct drm_device *drm)
 {
 	struct intel_rom *rom;
 
-	rom = kzalloc(sizeof(*rom), GFP_KERNEL);
+	rom = kzalloc_obj(*rom);
 	if (!rom)
 		return NULL;
 

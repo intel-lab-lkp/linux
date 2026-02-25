@@ -308,7 +308,7 @@ static void *mock_domain_hw_info(struct device *dev, u32 *length,
 	    *type != IOMMU_HW_INFO_TYPE_SELFTEST)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	info = kzalloc_obj(*info);
 	if (!info)
 		return ERR_PTR(-ENOMEM);
 
@@ -353,7 +353,7 @@ __mock_domain_alloc_nested(const struct iommu_user_data *user_data)
 	if (rc)
 		return ERR_PTR(rc);
 
-	mock_nested = kzalloc(sizeof(*mock_nested), GFP_KERNEL);
+	mock_nested = kzalloc_obj(*mock_nested);
 	if (!mock_nested)
 		return ERR_PTR(-ENOMEM);
 	mock_nested->domain.ops = &domain_nested_ops;
@@ -441,7 +441,7 @@ mock_domain_alloc_pgtable(struct device *dev,
 	struct mock_iommu_domain *mock;
 	int rc;
 
-	mock = kzalloc(sizeof(*mock), GFP_KERNEL);
+	mock = kzalloc_obj(*mock);
 	if (!mock)
 		return ERR_PTR(-ENOMEM);
 	mock->domain.type = IOMMU_DOMAIN_UNMANAGED;
@@ -674,7 +674,7 @@ static int mock_viommu_cache_invalidate(struct iommufd_viommu *viommu,
 		return 0;
 	}
 
-	cmds = kcalloc(array->entry_num, sizeof(*cmds), GFP_KERNEL);
+	cmds = kzalloc_objs(*cmds, array->entry_num);
 	if (!cmds)
 		return -ENOMEM;
 	cur = cmds;
@@ -1023,7 +1023,7 @@ static struct mock_dev *mock_dev_create(unsigned long dev_flags)
 	if (dev_flags & ~valid_flags)
 		return ERR_PTR(-EINVAL);
 
-	mdev = kzalloc(sizeof(*mdev), GFP_KERNEL);
+	mdev = kzalloc_obj(*mdev);
 	if (!mdev)
 		return ERR_PTR(-ENOMEM);
 
@@ -1184,14 +1184,20 @@ static int iommufd_test_add_reserved(struct iommufd_ucmd *ucmd,
 				     unsigned int mockpt_id,
 				     unsigned long start, size_t length)
 {
+	unsigned long last;
 	struct iommufd_ioas *ioas;
 	int rc;
+
+	if (!length)
+		return -EINVAL;
+	if (check_add_overflow(start, length - 1, &last))
+		return -EOVERFLOW;
 
 	ioas = iommufd_get_ioas(ucmd->ictx, mockpt_id);
 	if (IS_ERR(ioas))
 		return PTR_ERR(ioas);
 	down_write(&ioas->iopt.iova_rwsem);
-	rc = iopt_reserve_iova(&ioas->iopt, start, start + length - 1, NULL);
+	rc = iopt_reserve_iova(&ioas->iopt, start, last, NULL);
 	up_write(&ioas->iopt.iova_rwsem);
 	iommufd_put_object(ucmd->ictx, &ioas->obj);
 	return rc;
@@ -1215,8 +1221,10 @@ static int iommufd_test_md_check_pa(struct iommufd_ucmd *ucmd,
 	page_size = 1 << __ffs(mock->domain.pgsize_bitmap);
 	if (iova % page_size || length % page_size ||
 	    (uintptr_t)uptr % page_size ||
-	    check_add_overflow((uintptr_t)uptr, (uintptr_t)length, &end))
-		return -EINVAL;
+	    check_add_overflow((uintptr_t)uptr, (uintptr_t)length, &end)) {
+		rc = -EINVAL;
+		goto out_put;
+	}
 
 	for (; length; length -= page_size) {
 		struct page *pages[1];
@@ -1440,7 +1448,7 @@ static struct selftest_access *iommufd_test_alloc_access(void)
 	struct selftest_access *staccess;
 	struct file *filep;
 
-	staccess = kzalloc(sizeof(*staccess), GFP_KERNEL_ACCOUNT);
+	staccess = kzalloc_obj(*staccess, GFP_KERNEL_ACCOUNT);
 	if (!staccess)
 		return ERR_PTR(-ENOMEM);
 	INIT_LIST_HEAD(&staccess->items);
@@ -1584,7 +1592,7 @@ static int iommufd_test_access_pages(struct iommufd_ucmd *ucmd,
 	npages = (ALIGN(iova + length, PAGE_SIZE) -
 		  ALIGN_DOWN(iova, PAGE_SIZE)) /
 		 PAGE_SIZE;
-	pages = kvcalloc(npages, sizeof(*pages), GFP_KERNEL_ACCOUNT);
+	pages = kvzalloc_objs(*pages, npages, GFP_KERNEL_ACCOUNT);
 	if (!pages) {
 		rc = -ENOMEM;
 		goto out_put;
@@ -1614,7 +1622,7 @@ static int iommufd_test_access_pages(struct iommufd_ucmd *ucmd,
 			goto out_unaccess;
 	}
 
-	item = kzalloc(sizeof(*item), GFP_KERNEL_ACCOUNT);
+	item = kzalloc_obj(*item, GFP_KERNEL_ACCOUNT);
 	if (!item) {
 		rc = -ENOMEM;
 		goto out_unaccess;
@@ -1994,7 +2002,7 @@ static const struct dma_buf_ops iommufd_test_dmabuf_ops = {
 };
 
 int iommufd_test_dma_buf_iommufd_map(struct dma_buf_attachment *attachment,
-				     struct dma_buf_phys_vec *phys)
+				     struct phys_vec *phys)
 {
 	struct iommufd_test_dma_buf *priv = attachment->dmabuf->priv;
 
@@ -2024,7 +2032,7 @@ static int iommufd_test_dmabuf_get(struct iommufd_ucmd *ucmd,
 	if (len == 0 || len > PAGE_SIZE * 512)
 		return -EINVAL;
 
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	priv = kzalloc_obj(*priv);
 	if (!priv)
 		return -ENOMEM;
 

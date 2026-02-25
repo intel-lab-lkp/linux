@@ -767,18 +767,6 @@ static inline bool force_pte_mapping(void)
 	return rodata_full || arm64_kfence_can_set_direct_map() || is_realm_world();
 }
 
-static inline bool split_leaf_mapping_possible(void)
-{
-	/*
-	 * !BBML2_NOABORT systems should never run into scenarios where we would
-	 * have to split. So exit early and let calling code detect it and raise
-	 * a warning.
-	 */
-	if (!system_supports_bbml2_noabort())
-		return false;
-	return !force_pte_mapping();
-}
-
 static DEFINE_MUTEX(pgtable_split_lock);
 
 int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
@@ -786,11 +774,22 @@ int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
 	int ret;
 
 	/*
-	 * Exit early if the region is within a pte-mapped area or if we can't
-	 * split. For the latter case, the permission change code will raise a
-	 * warning if not already pte-mapped.
+	 * !BBML2_NOABORT systems should not be trying to change permissions on
+	 * anything that is not pte-mapped in the first place. Just return early
+	 * and let the permission change code raise a warning if not already
+	 * pte-mapped.
 	 */
-	if (!split_leaf_mapping_possible() || is_kfence_address((void *)start))
+	if (!system_supports_bbml2_noabort())
+		return 0;
+
+	/*
+	 * If the region is within a pte-mapped area, there is no need to try to
+	 * split. Additionally, CONFIG_DEBUG_PAGEALLOC and CONFIG_KFENCE may
+	 * change permissions from atomic context so for those cases (which are
+	 * always pte-mapped), we must not go any further because taking the
+	 * mutex below may sleep.
+	 */
+	if (force_pte_mapping() || is_kfence_address((void *)start))
 		return 0;
 
 	/*
@@ -801,7 +800,7 @@ int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
 		return -EINVAL;
 
 	mutex_lock(&pgtable_split_lock);
-	arch_enter_lazy_mmu_mode();
+	lazy_mmu_mode_enable();
 
 	/*
 	 * The split_kernel_leaf_mapping_locked() may sleep, it is not a
@@ -823,7 +822,7 @@ int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
 			ret = split_kernel_leaf_mapping_locked(end);
 	}
 
-	arch_leave_lazy_mmu_mode();
+	lazy_mmu_mode_disable();
 	mutex_unlock(&pgtable_split_lock);
 	return ret;
 }
@@ -884,10 +883,10 @@ static int range_split_to_ptes(unsigned long start, unsigned long end, gfp_t gfp
 {
 	int ret;
 
-	arch_enter_lazy_mmu_mode();
+	lazy_mmu_mode_enable();
 	ret = walk_kernel_page_table_range_lockless(start, end,
 					&split_to_ptes_ops, NULL, &gfp);
-	arch_leave_lazy_mmu_mode();
+	lazy_mmu_mode_disable();
 
 	return ret;
 }
@@ -1089,7 +1088,7 @@ bool arch_kfence_init_pool(void)
 	int ret;
 
 	/* Exit early if we know the linear map is already pte-mapped. */
-	if (!split_leaf_mapping_possible())
+	if (force_pte_mapping())
 		return true;
 
 	/* Kfence pool is already pte-mapped for the early init case. */

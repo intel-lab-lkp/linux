@@ -492,7 +492,7 @@ static void zloop_rw(struct zloop_cmd *cmd)
 	if (rq->bio != rq->biotail) {
 		struct bio_vec *bvec;
 
-		cmd->bvec = kmalloc_array(nr_bvec, sizeof(*cmd->bvec), GFP_NOIO);
+		cmd->bvec = kmalloc_objs(*cmd->bvec, nr_bvec, GFP_NOIO);
 		if (!cmd->bvec) {
 			ret = -EIO;
 			goto unlock;
@@ -697,7 +697,7 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct zloop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct zloop_device *zlo = rq->q->queuedata;
 
-	if (zlo->state == Zlo_deleting)
+	if (data_race(READ_ONCE(zlo->state)) == Zlo_deleting)
 		return BLK_STS_IOERR;
 
 	/*
@@ -997,12 +997,12 @@ static int zloop_ctl_add(struct zloop_options *opts)
 		goto out;
 	}
 
-	zlo = kvzalloc(struct_size(zlo, zones, nr_zones), GFP_KERNEL);
+	zlo = kvzalloc_flex(*zlo, zones, nr_zones);
 	if (!zlo) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	zlo->state = Zlo_creating;
+	WRITE_ONCE(zlo->state, Zlo_creating);
 
 	ret = mutex_lock_killable(&zloop_ctl_mutex);
 	if (ret)
@@ -1113,7 +1113,7 @@ static int zloop_ctl_add(struct zloop_options *opts)
 	}
 
 	mutex_lock(&zloop_ctl_mutex);
-	zlo->state = Zlo_live;
+	WRITE_ONCE(zlo->state, Zlo_live);
 	mutex_unlock(&zloop_ctl_mutex);
 
 	pr_info("zloop: device %d, %u zones of %llu MiB, %u B block size\n",
@@ -1177,7 +1177,7 @@ static int zloop_ctl_remove(struct zloop_options *opts)
 		ret = -EINVAL;
 	} else {
 		idr_remove(&zloop_index_idr, zlo->id);
-		zlo->state = Zlo_deleting;
+		WRITE_ONCE(zlo->state, Zlo_deleting);
 	}
 
 	mutex_unlock(&zloop_ctl_mutex);

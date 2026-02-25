@@ -199,7 +199,7 @@ static void unix_free_vertices(struct scm_fp_list *fpl)
 	}
 }
 
-static DEFINE_SPINLOCK(unix_gc_lock);
+static __cacheline_aligned_in_smp DEFINE_SPINLOCK(unix_gc_lock);
 
 void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 {
@@ -288,15 +288,15 @@ int unix_prepare_fpl(struct scm_fp_list *fpl)
 		return 0;
 
 	for (i = 0; i < fpl->count_unix; i++) {
-		vertex = kmalloc(sizeof(*vertex), GFP_KERNEL);
+		vertex = kmalloc_obj(*vertex);
 		if (!vertex)
 			goto err;
 
 		list_add(&vertex->entry, &fpl->vertices);
 	}
 
-	fpl->edges = kvmalloc_array(fpl->count_unix, sizeof(*fpl->edges),
-				    GFP_KERNEL_ACCOUNT);
+	fpl->edges = kvmalloc_objs(*fpl->edges, fpl->count_unix,
+				   GFP_KERNEL_ACCOUNT);
 	if (!fpl->edges)
 		goto err;
 

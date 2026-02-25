@@ -45,7 +45,7 @@ static struct intel_dsb_buffer *xe_dsb_buffer_create(struct drm_device *drm, siz
 	struct xe_bo *obj;
 	int ret;
 
-	dsb_buf = kzalloc(sizeof(*dsb_buf), GFP_KERNEL);
+	dsb_buf = kzalloc_obj(*dsb_buf);
 	if (!dsb_buf)
 		return ERR_PTR(-ENOMEM);
 

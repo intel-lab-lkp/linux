@@ -3365,7 +3365,7 @@ int intel_dbuf_init(struct intel_display *display)
 {
 	struct intel_dbuf_state *dbuf_state;
 
-	dbuf_state = kzalloc(sizeof(*dbuf_state), GFP_KERNEL);
+	dbuf_state = kzalloc_obj(*dbuf_state);
 	if (!dbuf_state)
 		return -ENOMEM;
 
@@ -3891,7 +3891,7 @@ void intel_wm_state_verify(struct intel_atomic_state *state,
 	if (DISPLAY_VER(display) < 9 || !new_crtc_state->hw.active)
 		return;
 
-	hw = kzalloc(sizeof(*hw), GFP_KERNEL);
+	hw = kzalloc_obj(*hw);
 	if (!hw)
 		return;
 

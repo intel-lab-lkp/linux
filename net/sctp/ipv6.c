@@ -83,7 +83,7 @@ static int sctp_inet6addr_event(struct notifier_block *this, unsigned long ev,
 
 	switch (ev) {
 	case NETDEV_UP:
-		addr = kzalloc(sizeof(*addr), GFP_ATOMIC);
+		addr = kzalloc_obj(*addr, GFP_ATOMIC);
 		if (addr) {
 			addr->a.v6.sin6_family = AF_INET6;
 			addr->a.v6.sin6_addr = ifa->addr;
@@ -471,7 +471,7 @@ static void sctp_v6_copy_addrlist(struct list_head *addrlist,
 	read_lock_bh(&in6_dev->lock);
 	list_for_each_entry(ifp, &in6_dev->addr_list, if_list) {
 		/* Add the address to the local list.  */
-		addr = kzalloc(sizeof(*addr), GFP_ATOMIC);
+		addr = kzalloc_obj(*addr, GFP_ATOMIC);
 		if (addr) {
 			addr->a.v6.sin6_family = AF_INET6;
 			addr->a.v6.sin6_addr = ifp->addr;
@@ -491,6 +491,8 @@ static void sctp_v6_copy_ip_options(struct sock *sk, struct sock *newsk)
 {
 	struct ipv6_pinfo *newnp, *np = inet6_sk(sk);
 	struct ipv6_txoptions *opt;
+
+	inet_sk(newsk)->inet_opt = NULL;
 
 	newnp = inet6_sk(newsk);
 

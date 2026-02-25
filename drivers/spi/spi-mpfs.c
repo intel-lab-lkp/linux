@@ -550,7 +550,6 @@ static int mpfs_spi_probe(struct platform_device *pdev)
 	host->transfer_one = mpfs_spi_transfer_one;
 	host->prepare_message = mpfs_spi_prepare_message;
 	host->set_cs = mpfs_spi_set_cs;
-	host->dev.of_node = pdev->dev.of_node;
 
 	spi = spi_controller_get_devdata(host);
 
@@ -577,6 +576,7 @@ static int mpfs_spi_probe(struct platform_device *pdev)
 
 	ret = devm_spi_register_controller(&pdev->dev, host);
 	if (ret) {
+		mpfs_spi_disable_ints(spi);
 		mpfs_spi_disable(spi);
 		return dev_err_probe(&pdev->dev, ret,
 				     "unable to register host for SPI controller\n");

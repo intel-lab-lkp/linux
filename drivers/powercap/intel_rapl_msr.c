@@ -82,7 +82,7 @@ static int rapl_cpu_online(unsigned int cpu)
 		if (IS_ERR(rp))
 			return PTR_ERR(rp);
 		if (rapl_msr_pmu)
-			rapl_package_add_pmu(rp);
+			rapl_package_add_pmu_locked(rp);
 	}
 	cpumask_set_cpu(cpu, &rp->cpumask);
 	return 0;
@@ -101,7 +101,7 @@ static int rapl_cpu_down_prep(unsigned int cpu)
 	lead_cpu = cpumask_first(&rp->cpumask);
 	if (lead_cpu >= nr_cpu_ids) {
 		if (rapl_msr_pmu)
-			rapl_package_remove_pmu(rp);
+			rapl_package_remove_pmu_locked(rp);
 		rapl_remove_package_cpuslocked(rp);
 	} else if (rp->lead_cpu == cpu) {
 		rp->lead_cpu = lead_cpu;
@@ -110,16 +110,14 @@ static int rapl_cpu_down_prep(unsigned int cpu)
 	return 0;
 }
 
-static int rapl_msr_read_raw(int cpu, struct reg_action *ra, bool atomic)
+static int rapl_msr_read_raw(int cpu, struct reg_action *ra, bool pmu_ctx)
 {
 	/*
-	 * When called from atomic-context (eg PMU event handler)
-	 * perform MSR read directly using rdmsrq().
+	 * When called from PMU context, perform MSR read directly using
+	 * rdmsrq() without IPI overhead. Package-scoped MSRs are readable
+	 * from any CPU in the package.
 	 */
-	if (atomic) {
-		if (unlikely(smp_processor_id() != cpu))
-			return -EIO;
-
+	if (pmu_ctx) {
 		rdmsrq(ra->reg.msr, ra->value);
 		goto out;
 	}
@@ -162,6 +160,7 @@ static int rapl_msr_write_raw(int cpu, struct reg_action *ra)
 
 /* List of verified CPUs. */
 static const struct x86_cpu_id pl4_support_ids[] = {
+	X86_MATCH_VFM(INTEL_ICELAKE_L, NULL),
 	X86_MATCH_VFM(INTEL_TIGERLAKE_L, NULL),
 	X86_MATCH_VFM(INTEL_ALDERLAKE, NULL),
 	X86_MATCH_VFM(INTEL_ALDERLAKE_L, NULL),

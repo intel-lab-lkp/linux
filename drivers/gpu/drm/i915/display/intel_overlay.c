@@ -1408,7 +1408,7 @@ void intel_overlay_setup(struct intel_display *display)
 	if (!engine || !engine->kernel_context)
 		return;
 
-	overlay = kzalloc(sizeof(*overlay), GFP_KERNEL);
+	overlay = kzalloc_obj(*overlay);
 	if (!overlay)
 		return;
 
@@ -1483,7 +1483,7 @@ intel_overlay_snapshot_capture(struct intel_display *display)
 	if (!overlay || !overlay->active)
 		return NULL;
 
-	error = kmalloc(sizeof(*error), GFP_ATOMIC);
+	error = kmalloc_obj(*error, GFP_ATOMIC);
 	if (error == NULL)
 		return NULL;
 

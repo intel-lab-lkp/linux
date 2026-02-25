@@ -2480,7 +2480,7 @@ intel_display_irq_snapshot_capture(struct intel_display *display)
 {
 	struct intel_display_irq_snapshot *snapshot;
 
-	snapshot = kzalloc(sizeof(*snapshot), GFP_ATOMIC);
+	snapshot = kzalloc_obj(*snapshot, GFP_ATOMIC);
 	if (!snapshot)
 		return NULL;
 
