@@ -1331,7 +1331,7 @@ static bool kvm_vncr_tlb_lookup(struct kvm_vcpu *vcpu)
 			    vcpu_read_sys_reg(vcpu, TTBR0_EL2));
 		u16 asid;
 
-		asid = FIELD_GET(TTBR_ASID_MASK, ttbr);
+		asid = FIELD_GET(TTBRx_EL1_ASID_MASK, ttbr);
 		if (!kvm_has_feat_enum(vcpu->kvm, ID_AA64MMFR0_EL1, ASIDBITS, 16) ||
 		    !(tcr & TCR_ASID16))
 			asid &= GENMASK(7, 0);
@@ -1447,7 +1447,7 @@ static void kvm_map_l1_vncr(struct kvm_vcpu *vcpu)
 			    vcpu_read_sys_reg(vcpu, TTBR0_EL2));
 		u16 asid;
 
-		asid = FIELD_GET(TTBR_ASID_MASK, ttbr);
+		asid = FIELD_GET(TTBRx_EL1_ASID_MASK, ttbr);
 		if (!kvm_has_feat_enum(vcpu->kvm, ID_AA64MMFR0_EL1, ASIDBITS, 16) ||
 		    !(tcr & TCR_ASID16))
 			asid &= GENMASK(7, 0);

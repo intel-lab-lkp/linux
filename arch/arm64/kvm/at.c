@@ -556,7 +556,7 @@ static int walk_s1(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 			BUG();
 		}
 
-		wr->asid = FIELD_GET(TTBR_ASID_MASK, asid_ttbr);
+		wr->asid = FIELD_GET(TTBRx_EL1_ASID_MASK, asid_ttbr);
 		if (!kvm_has_feat_enum(vcpu->kvm, ID_AA64MMFR0_EL1, ASIDBITS, 16) ||
 		    !(tcr & TCR_ASID16))
 			wr->asid &= GENMASK(7, 0);
