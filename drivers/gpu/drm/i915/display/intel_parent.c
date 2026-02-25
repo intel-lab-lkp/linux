@@ -40,6 +40,18 @@ void intel_parent_dpt_destroy(struct intel_display *display, struct i915_address
 		display->parent->dpt->destroy(vm);
 }
 
+void intel_parent_dpt_suspend(struct intel_display *display, struct i915_address_space *vm)
+{
+	if (display->parent->dpt)
+		display->parent->dpt->suspend(vm);
+}
+
+void intel_parent_dpt_resume(struct intel_display *display, struct i915_address_space *vm)
+{
+	if (display->parent->dpt)
+		display->parent->dpt->resume(vm);
+}
+
 /* hdcp */
 ssize_t intel_parent_hdcp_gsc_msg_send(struct intel_display *display,
 				       struct intel_hdcp_gsc_context *gsc_context,
