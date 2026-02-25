@@ -24,7 +24,7 @@ static inline int set_unmapped_pte(pte_t *ptep, unsigned long addr, void *data)
 	return 0;
 }
 
-static void __mermap_put(struct mm_struct *mm, struct mermap_alloc *alloc)
+VISIBLE_IF_KUNIT void __mermap_put(struct mm_struct *mm, struct mermap_alloc *alloc)
 {
 	unsigned long size = PAGE_ALIGN(alloc->end - alloc->base);
 
@@ -37,6 +37,7 @@ static void __mermap_put(struct mm_struct *mm, struct mermap_alloc *alloc)
 
 	migrate_enable();
 }
+EXPORT_SYMBOL_IF_KUNIT(__mermap_put);
 
 /* Return a region allocated by mermap_get(). */
 void mermap_put(struct mermap_alloc *alloc)
@@ -45,22 +46,24 @@ void mermap_put(struct mermap_alloc *alloc)
 }
 EXPORT_SYMBOL(mermap_put);
 
-static inline unsigned long mermap_cpu_base(int cpu)
+VISIBLE_IF_KUNIT inline unsigned long mermap_cpu_base(int cpu)
 {
 	return MERMAP_BASE_ADDR + (cpu * MERMAP_CPU_REGION_SIZE);
 
 }
+EXPORT_SYMBOL_IF_KUNIT(mermap_cpu_base);
 
 /* Non-inclusive */
-static inline unsigned long mermap_cpu_end(int cpu)
+VISIBLE_IF_KUNIT inline unsigned long mermap_cpu_end(int cpu)
 {
 	return MERMAP_BASE_ADDR + ((cpu + 1) * MERMAP_CPU_REGION_SIZE);
 
 }
+EXPORT_SYMBOL_IF_KUNIT(mermap_cpu_end);
 
 static inline void mermap_flush_tlb(int cpu, struct mermap_cpu *mc)
 {
-#ifdef CONFIG_MERMAP_KUNIT_TEST
+#if IS_ENABLED(CONFIG_MERMAP_KUNIT_TEST)
 	mc->tlb_flushes++;
 #endif
 	arch_mermap_flush_tlb();
@@ -173,7 +176,7 @@ static inline int do_set_pte(pte_t *pte, unsigned long addr, void *data)
 	return 0;
 }
 
-static struct mermap_alloc *
+VISIBLE_IF_KUNIT struct mermap_alloc *
 __mermap_get(struct mm_struct *mm, struct page *page,
 	     unsigned long size, pgprot_t prot, bool use_reserve)
 {
@@ -207,6 +210,7 @@ __mermap_get(struct mm_struct *mm, struct page *page,
 
 	return alloc;
 }
+EXPORT_SYMBOL_IF_KUNIT(__mermap_get);
 
 /*
  * Allocate a region of virtual memory, and map the page into it. This tries

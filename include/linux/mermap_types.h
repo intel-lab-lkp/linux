@@ -23,7 +23,7 @@ struct mermap_cpu {
 	/* Next address immediately available for alloc (no TLB flush needed). */
 	unsigned long next_addr;
 	struct mermap_alloc allocs[4];
-#ifdef CONFIG_MERMAP_KUNIT_TEST
+#if IS_ENABLED(CONFIG_MERMAP_KUNIT_TEST)
 	u64 tlb_flushes;
 #endif
 };

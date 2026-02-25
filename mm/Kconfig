@@ -1491,4 +1491,15 @@ config MERMAP
 	help
 	  Support for epheMERal mappings within the kernel.
 
+config MERMAP_KUNIT_TEST
+	tristate "KUnit tests for the mermap" if !KUNIT_ALL_TESTS
+	depends on ARCH_SUPPORTS_MERMAP
+	depends on KUNIT
+	select MERMAP
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit test for the mermap.
+
+	  If unsure, say N.
+
 endmenu
