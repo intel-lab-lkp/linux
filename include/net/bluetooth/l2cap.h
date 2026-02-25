@@ -552,6 +552,7 @@ struct l2cap_chan {
 	__u16		retrans_timeout;
 	__u16		monitor_timeout;
 	__u16		mps;
+	__u16		mps_orig_le;
 
 	__u16		tx_credits;
 	__u16		rx_credits;
