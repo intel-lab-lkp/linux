@@ -58,6 +58,12 @@ properties:
     description: |
       Pinctrl and GPIO controller child node for the 22 switch inputs.
 
+  hwmon:
+    type: object
+    $ref: /schemas/hwmon/nxp,mc33978-hwmon.yaml#
+    description: |
+      Hardware monitoring child node for fault detection.
+
 required:
   - compatible
   - reg
@@ -93,6 +99,10 @@ examples:
                 compatible = "nxp,mc33978-pinctrl";
                 gpio-controller;
                 #gpio-cells = <2>;
+            };
+
+            hwmon {
+                compatible = "nxp,mc33978-hwmon";
             };
         };
     };
