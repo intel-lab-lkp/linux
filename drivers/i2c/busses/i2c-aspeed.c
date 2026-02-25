@@ -22,6 +22,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 
@@ -1001,6 +1002,10 @@ static int aspeed_i2c_probe_bus(struct platform_device *pdev)
 	struct aspeed_i2c_bus *bus;
 	struct clk *parent_clk;
 	int irq, ret;
+
+	if (device_is_compatible(&pdev->dev, "aspeed,ast2600-i2c-bus") &&
+	    device_property_present(&pdev->dev, "aspeed,global-regs"))
+		return -ENODEV;
 
 	bus = devm_kzalloc(&pdev->dev, sizeof(*bus), GFP_KERNEL);
 	if (!bus)
