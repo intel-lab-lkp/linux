@@ -65,6 +65,7 @@ struct nct6775_data {
 				 * [5]=weight_duty_step, [6]=weight_duty_base
 				 */
 	const u16 *REG_PWM_READ;
+	const u16 *REG_PWM_FREQ;
 
 	const u16 *REG_CRITICAL_PWM_ENABLE;
 	u8 CRITICAL_PWM_ENABLE_MASK;
@@ -137,6 +138,8 @@ struct nct6775_data {
 				 * [3]=pwm_max, [4]=pwm_step,
 				 * [5]=weight_duty_step, [6]=weight_duty_base
 				 */
+	u8 pwm_freq[NUM_FAN];
+	bool pwm_exported[NUM_FAN];
 
 	u8 target_temp[NUM_FAN];
 	u8 target_temp_mask;
