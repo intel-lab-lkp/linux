@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/khugepaged.h>
 #include <linux/mm.h>
+#include <linux/mmzone.h>
 #include <linux/mm_inline.h>
 #include <linux/pagemap.h>
 #include <linux/pagewalk.h>
@@ -658,7 +659,7 @@ struct alloc_context {
 	struct zonelist *zonelist;
 	nodemask_t *nodemask;
 	struct zoneref *preferred_zoneref;
-	int migratetype;
+	freetype_t freetype;
 
 	/*
 	 * highest_zoneidx represents highest usable zone index of
@@ -809,8 +810,8 @@ static inline void clear_zone_contiguous(struct zone *zone)
 }
 
 extern int __isolate_free_page(struct page *page, unsigned int order);
-extern void __putback_isolated_page(struct page *page, unsigned int order,
-				    int mt);
+void __putback_isolated_page(struct page *page, unsigned int order,
+			     freetype_t freetype);
 extern void memblock_free_pages(unsigned long pfn, unsigned int order);
 extern void __free_pages_core(struct page *page, unsigned int order,
 		enum meminit_context context);
@@ -968,7 +969,7 @@ struct compact_control {
 	short search_order;		/* order to start a fast search at */
 	const gfp_t gfp_mask;		/* gfp mask of a direct compactor */
 	int order;			/* order a direct compactor needs */
-	int migratetype;		/* migratetype of direct compactor */
+	freetype_t freetype;		/* freetype of direct compactor */
 	const unsigned int alloc_flags;	/* alloc flags of a direct compactor */
 	const int highest_zoneidx;	/* zone index of a direct compactor */
 	enum migrate_mode mode;		/* Async or sync migration mode */
@@ -1029,7 +1030,7 @@ static inline void init_cma_pageblock(struct page *page)
 #endif
 
 enum fallback_result {
-	/* Found suitable migratetype, *mt_out is valid. */
+	/* Found suitable fallback, *ft_out is valid. */
 	FALLBACK_FOUND,
 	/* No fallback found in requested order. */
 	FALLBACK_EMPTY,
@@ -1038,11 +1039,11 @@ enum fallback_result {
 };
 enum fallback_result
 find_suitable_fallback(struct free_area *area, unsigned int order,
-		       int migratetype, bool claimable, unsigned int *mt_out);
+		       freetype_t freetype, bool claimable, freetype_t *ft_out);
 
-static inline bool free_area_empty(struct free_area *area, int migratetype)
+static inline bool free_area_empty(struct free_area *area, freetype_t freetype)
 {
-	return list_empty(&area->free_list[migratetype]);
+	return list_empty(free_area_list(area, freetype));
 }
 
 /* mm/util.c */

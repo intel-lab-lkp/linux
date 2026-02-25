@@ -5,6 +5,7 @@
 #ifndef __ASSEMBLY__
 #ifndef __GENERATING_BOUNDS_H
 
+#include <linux/freetype.h>
 #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/list_nulls.h>
@@ -125,23 +126,61 @@ static inline bool migratetype_is_mergeable(int mt)
 
 #define for_each_free_list(list, zone, order) \
 	for (order = 0; order < NR_PAGE_ORDERS; order++) \
-		for (unsigned int type = 0; \
-		     list = &zone->free_area[order].free_list[type], \
-		     type < MIGRATE_TYPES; \
-		     type++) \
+		for (unsigned int idx = 0; \
+		     list = &zone->free_area[order].free_list[idx], \
+		     idx < NR_FREETYPE_IDXS; \
+		     idx++)
+
+static inline freetype_t migrate_to_freetype(enum migratetype mt,
+					     unsigned int flags)
+{
+	freetype_t freetype;
+
+	/* No flags supported yet. */
+	VM_WARN_ON_ONCE(flags);
+
+	freetype.migratetype = mt;
+	return freetype;
+}
+
+static inline enum migratetype free_to_migratetype(freetype_t freetype)
+{
+	return freetype.migratetype;
+}
+
+/* Convenience helper, return the freetype modified to have the migratetype. */
+static inline freetype_t freetype_with_migrate(freetype_t freetype,
+					       enum migratetype migratetype)
+{
+	return migrate_to_freetype(migratetype, freetype_flags(freetype));
+}
 
 extern int page_group_by_mobility_disabled;
 
+freetype_t get_pfnblock_freetype(const struct page *page, unsigned long pfn);
+
 #define get_pageblock_migratetype(page) \
 	get_pfnblock_migratetype(page, page_to_pfn(page))
+
+#define get_pageblock_freetype(page) \
+	get_pfnblock_freetype(page, page_to_pfn(page))
 
 #define folio_migratetype(folio) \
 	get_pageblock_migratetype(&folio->page)
 
 struct free_area {
-	struct list_head	free_list[MIGRATE_TYPES];
+	struct list_head	free_list[NR_FREETYPE_IDXS];
 	unsigned long		nr_free;
 };
+
+static inline
+struct list_head *free_area_list(struct free_area *area, freetype_t type)
+{
+	int idx = freetype_idx(type);
+
+	VM_BUG_ON(idx < 0);
+	return &area->free_list[idx];
+}
 
 struct pglist_data;
 
