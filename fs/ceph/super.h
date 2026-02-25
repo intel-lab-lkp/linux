@@ -179,6 +179,10 @@ struct ceph_fs_client {
 	struct dentry *debugfs_status;
 	struct dentry *debugfs_mds_sessions;
 	struct dentry *debugfs_metrics_dir;
+	struct dentry *debugfs_reset_dir;
+	struct dentry *debugfs_reset_force;
+	struct dentry *debugfs_reset_status;
+	struct dentry *debugfs_reset_inject;
 #endif
 
 #ifdef CONFIG_CEPH_FSCACHE

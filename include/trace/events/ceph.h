@@ -226,6 +226,66 @@ TRACE_EVENT(ceph_handle_caps,
 		  __entry->mseq)
 );
 
+/*
+ * Client reset tracepoints
+ */
+TRACE_EVENT(ceph_client_reset_schedule,
+	TP_PROTO(const struct ceph_mds_client *mdsc, const char *reason),
+	TP_ARGS(mdsc, reason),
+	TP_STRUCT__entry(
+		__field(const void *, mdsc)
+		__string(reason, reason ? reason : "")
+	),
+	TP_fast_assign(
+		__entry->mdsc = mdsc;
+		__assign_str(reason);
+	),
+	TP_printk("mdsc=%p reason=%s", __entry->mdsc, __get_str(reason))
+);
+
+TRACE_EVENT(ceph_client_reset_complete,
+	TP_PROTO(const struct ceph_mds_client *mdsc, int ret),
+	TP_ARGS(mdsc, ret),
+	TP_STRUCT__entry(
+		__field(const void *, mdsc)
+		__field(int, ret)
+	),
+	TP_fast_assign(
+		__entry->mdsc = mdsc;
+		__entry->ret = ret;
+	),
+	TP_printk("mdsc=%p ret=%d", __entry->mdsc, __entry->ret)
+);
+
+TRACE_EVENT(ceph_client_reset_blocked,
+	TP_PROTO(const struct ceph_mds_client *mdsc, int blocked_count),
+	TP_ARGS(mdsc, blocked_count),
+	TP_STRUCT__entry(
+		__field(const void *, mdsc)
+		__field(int, blocked_count)
+	),
+	TP_fast_assign(
+		__entry->mdsc = mdsc;
+		__entry->blocked_count = blocked_count;
+	),
+	TP_printk("mdsc=%p blocked_count=%d", __entry->mdsc,
+		  __entry->blocked_count)
+);
+
+TRACE_EVENT(ceph_client_reset_unblocked,
+	TP_PROTO(const struct ceph_mds_client *mdsc, int ret),
+	TP_ARGS(mdsc, ret),
+	TP_STRUCT__entry(
+		__field(const void *, mdsc)
+		__field(int, ret)
+	),
+	TP_fast_assign(
+		__entry->mdsc = mdsc;
+		__entry->ret = ret;
+	),
+	TP_printk("mdsc=%p ret=%d", __entry->mdsc, __entry->ret)
+);
+
 #undef EM
 #undef E_
 #endif /* _TRACE_CEPH_H */

@@ -9,6 +9,8 @@
 #include <linux/seq_file.h>
 #include <linux/math64.h>
 #include <linux/ktime.h>
+#include <linux/uaccess.h>
+#include <linux/kstrtox.h>
 
 #include <linux/ceph/libceph.h>
 #include <linux/ceph/mon_client.h>
@@ -21,6 +23,10 @@
 
 #include "mds_client.h"
 #include "metric.h"
+
+#define CEPH_DEBUGFS_MODE_READONLY 0400
+#define CEPH_DEBUGFS_MODE_WRITEONLY 0200
+#define CEPH_DEBUGFS_MODE_READWRITE 0600
 
 static int mdsmap_show(struct seq_file *s, void *p)
 {
@@ -360,15 +366,139 @@ static int status_show(struct seq_file *s, void *p)
 	return 0;
 }
 
+static int reset_status_show(struct seq_file *s, void *p)
+{
+	struct ceph_fs_client *fsc = s->private;
+	struct ceph_mds_client *mdsc = fsc->mdsc;
+	struct ceph_client_reset_state *st;
+	u64 trigger = 0, success = 0, failure = 0;
+	unsigned long last_start = 0, last_finish = 0;
+	int last_errno = 0;
+	bool in_progress = false;
+	bool inject_error = false;
+	int pending_reconnects = 0;
+	int blocked_requests = 0;
+	char reason[CEPH_CLIENT_RESET_REASON_LEN];
+
+	if (!mdsc)
+		return 0;
+
+	st = &mdsc->reset_state;
+
+	spin_lock(&st->lock);
+	trigger = st->trigger_count;
+	success = st->success_count;
+	failure = st->failure_count;
+	last_start = st->last_start;
+	last_finish = st->last_finish;
+	last_errno = st->last_errno;
+	in_progress = st->in_progress;
+	inject_error = st->inject_error;
+	strscpy(reason, st->last_reason, sizeof(reason));
+	spin_unlock(&st->lock);
+
+	pending_reconnects = atomic_read(&st->pending_reconnects);
+	blocked_requests = atomic_read(&st->blocked_requests);
+
+	seq_printf(s, "in_progress: %s\n", in_progress ? "yes" : "no");
+	seq_printf(s, "trigger_count: %llu\n", trigger);
+	seq_printf(s, "success_count: %llu\n", success);
+	seq_printf(s, "failure_count: %llu\n", failure);
+	if (last_start)
+		seq_printf(s, "last_start_ms_ago: %u\n",
+			   jiffies_to_msecs(jiffies - last_start));
+	else
+		seq_puts(s, "last_start_ms_ago: (never)\n");
+	if (last_finish)
+		seq_printf(s, "last_finish_ms_ago: %u\n",
+			   jiffies_to_msecs(jiffies - last_finish));
+	else
+		seq_puts(s, "last_finish_ms_ago: (never)\n");
+	seq_printf(s, "last_errno: %d\n", last_errno);
+	seq_printf(s, "last_reason: %s\n",
+		   reason[0] ? reason : "(none)");
+	seq_printf(s, "inject_error_pending: %s\n",
+		   inject_error ? "yes" : "no");
+	seq_printf(s, "pending_reconnects: %d\n", pending_reconnects);
+	seq_printf(s, "blocked_requests: %d\n", blocked_requests);
+
+	return 0;
+}
+
+static ssize_t reset_trigger_write(struct file *file, const char __user *buf,
+				   size_t len, loff_t *ppos)
+{
+	struct ceph_fs_client *fsc = file->private_data;
+	struct ceph_mds_client *mdsc = fsc->mdsc;
+	char reason[CEPH_CLIENT_RESET_REASON_LEN];
+	size_t copy;
+	int ret;
+
+	if (!mdsc)
+		return -ENODEV;
+
+	copy = min_t(size_t, len, sizeof(reason) - 1);
+	if (copy && copy_from_user(reason, buf, copy))
+		return -EFAULT;
+	reason[copy] = '\0';
+	strim(reason);
+
+	ret = ceph_mdsc_schedule_reset(mdsc, reason);
+	if (ret)
+		return ret;
+
+	return len;
+}
+
+static ssize_t reset_inject_error_write(struct file *file,
+					const char __user *buf,
+					size_t len, loff_t *ppos)
+{
+	struct ceph_fs_client *fsc = file->private_data;
+	struct ceph_mds_client *mdsc = fsc->mdsc;
+	struct ceph_client_reset_state *st;
+	bool enable;
+	int ret;
+
+	if (!mdsc)
+		return -ENODEV;
+
+	ret = kstrtobool_from_user(buf, len, &enable);
+	if (ret)
+		return ret;
+
+	st = &mdsc->reset_state;
+	spin_lock(&st->lock);
+	st->inject_error = enable;
+	spin_unlock(&st->lock);
+
+	return len;
+}
+
 DEFINE_SHOW_ATTRIBUTE(mdsmap);
 DEFINE_SHOW_ATTRIBUTE(mdsc);
 DEFINE_SHOW_ATTRIBUTE(caps);
 DEFINE_SHOW_ATTRIBUTE(mds_sessions);
 DEFINE_SHOW_ATTRIBUTE(status);
+DEFINE_SHOW_ATTRIBUTE(reset_status);
 DEFINE_SHOW_ATTRIBUTE(metrics_file);
 DEFINE_SHOW_ATTRIBUTE(metrics_latency);
 DEFINE_SHOW_ATTRIBUTE(metrics_size);
 DEFINE_SHOW_ATTRIBUTE(metrics_caps);
+
+static const struct file_operations ceph_reset_trigger_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.write = reset_trigger_write,
+	.llseek = noop_llseek,
+};
+
+static const struct file_operations ceph_reset_inject_error_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.write = reset_inject_error_write,
+	.llseek = noop_llseek,
+};
 
 
 /*
@@ -404,6 +534,10 @@ void ceph_fs_debugfs_cleanup(struct ceph_fs_client *fsc)
 	debugfs_remove(fsc->debugfs_caps);
 	debugfs_remove(fsc->debugfs_status);
 	debugfs_remove(fsc->debugfs_mdsc);
+	debugfs_remove(fsc->debugfs_reset_status);
+	debugfs_remove(fsc->debugfs_reset_force);
+	debugfs_remove(fsc->debugfs_reset_inject);
+	debugfs_remove_recursive(fsc->debugfs_reset_dir);
 	debugfs_remove_recursive(fsc->debugfs_metrics_dir);
 	doutc(fsc->client, "done\n");
 }
@@ -415,7 +549,7 @@ void ceph_fs_debugfs_init(struct ceph_fs_client *fsc)
 	doutc(fsc->client, "begin\n");
 	fsc->debugfs_congestion_kb =
 		debugfs_create_file("writeback_congestion_kb",
-				    0600,
+				    CEPH_DEBUGFS_MODE_READWRITE,
 				    fsc->client->debugfs_dir,
 				    fsc,
 				    &congestion_kb_fops);
@@ -428,31 +562,48 @@ void ceph_fs_debugfs_init(struct ceph_fs_client *fsc)
 				       name);
 
 	fsc->debugfs_mdsmap = debugfs_create_file("mdsmap",
-					0400,
+					CEPH_DEBUGFS_MODE_READONLY,
 					fsc->client->debugfs_dir,
 					fsc,
 					&mdsmap_fops);
 
 	fsc->debugfs_mds_sessions = debugfs_create_file("mds_sessions",
-					0400,
+					CEPH_DEBUGFS_MODE_READONLY,
 					fsc->client->debugfs_dir,
 					fsc,
 					&mds_sessions_fops);
 
 	fsc->debugfs_mdsc = debugfs_create_file("mdsc",
-						0400,
+						CEPH_DEBUGFS_MODE_READONLY,
 						fsc->client->debugfs_dir,
 						fsc,
 						&mdsc_fops);
 
 	fsc->debugfs_caps = debugfs_create_file("caps",
-						0400,
+						CEPH_DEBUGFS_MODE_READONLY,
 						fsc->client->debugfs_dir,
 						fsc,
 						&caps_fops);
 
+	fsc->debugfs_reset_dir = debugfs_create_dir("reset",
+						    fsc->client->debugfs_dir);
+	if (fsc->debugfs_reset_dir) {
+		fsc->debugfs_reset_force =
+			debugfs_create_file("trigger", CEPH_DEBUGFS_MODE_WRITEONLY,
+					    fsc->debugfs_reset_dir, fsc,
+					    &ceph_reset_trigger_fops);
+		fsc->debugfs_reset_status =
+			debugfs_create_file("status", CEPH_DEBUGFS_MODE_READONLY,
+					    fsc->debugfs_reset_dir, fsc,
+					    &reset_status_fops);
+		fsc->debugfs_reset_inject =
+			debugfs_create_file("inject_error", CEPH_DEBUGFS_MODE_WRITEONLY,
+					    fsc->debugfs_reset_dir, fsc,
+					    &ceph_reset_inject_error_fops);
+	}
+
 	fsc->debugfs_status = debugfs_create_file("status",
-						  0400,
+						  CEPH_DEBUGFS_MODE_READONLY,
 						  fsc->client->debugfs_dir,
 						  fsc,
 						  &status_fops);
@@ -460,13 +611,13 @@ void ceph_fs_debugfs_init(struct ceph_fs_client *fsc)
 	fsc->debugfs_metrics_dir = debugfs_create_dir("metrics",
 						      fsc->client->debugfs_dir);
 
-	debugfs_create_file("file", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("file", CEPH_DEBUGFS_MODE_READONLY, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_file_fops);
-	debugfs_create_file("latency", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("latency", CEPH_DEBUGFS_MODE_READONLY, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_latency_fops);
-	debugfs_create_file("size", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("size", CEPH_DEBUGFS_MODE_READONLY, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_size_fops);
-	debugfs_create_file("caps", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("caps", CEPH_DEBUGFS_MODE_READONLY, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_caps_fops);
 	doutc(fsc->client, "done\n");
 }

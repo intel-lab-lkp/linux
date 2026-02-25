@@ -12,6 +12,7 @@
 #include <linux/bits.h>
 #include <linux/ktime.h>
 #include <linux/bitmap.h>
+#include <linux/workqueue.h>
 #include <linux/mnt_idmapping.h>
 
 #include "super.h"
@@ -61,12 +62,16 @@ struct ceph_reconnect_state {
 	struct ceph_pagelist *pagelist;
 	unsigned msg_version;
 	bool allow_multi;
+	bool from_reset;
 };
 
 static void __wake_requests(struct ceph_mds_client *mdsc,
 			    struct list_head *head);
 static void ceph_cap_release_work(struct work_struct *work);
 static void ceph_cap_reclaim_work(struct work_struct *work);
+static void ceph_mdsc_reset_workfn(struct work_struct *work);
+static void ceph_mdsc_reconnect_session_done(struct ceph_mds_client *mdsc,
+					     struct ceph_mds_session *session);
 
 static const struct ceph_connection_operations mds_con_ops;
 
@@ -3742,6 +3747,22 @@ int ceph_mdsc_submit_request(struct ceph_mds_client *mdsc, struct inode *dir,
 	struct ceph_client *cl = mdsc->fsc->client;
 	int err = 0;
 
+	/*
+	 * If a reset is in progress, wait for it to complete.
+	 *
+	 * This is best-effort: a request can pass this check just
+	 * before in_progress is set and proceed concurrently with
+	 * reset.  That is acceptable because (a) such requests will
+	 * either complete normally or fail and be retried by the
+	 * caller, and (b) adding lock serialization here would
+	 * penalize every request for a rare manual operation.
+	 */
+	err = ceph_mdsc_wait_for_reset(mdsc);
+	if (err) {
+		doutc(cl, "wait_for_reset failed: %d\n", err);
+		return err;
+	}
+
 	/* take CAP_PIN refs for r_inode, r_parent, r_old_dentry */
 	if (req->r_inode)
 		ceph_get_cap_refs(ceph_inode(req->r_inode), CEPH_CAP_PIN);
@@ -4375,9 +4396,11 @@ skip_cap_auths:
 
 	switch (op) {
 	case CEPH_SESSION_OPEN:
-		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING)
+		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING) {
 			pr_info_client(cl, "mds%d reconnect success\n",
 				       session->s_mds);
+			ceph_mdsc_reconnect_session_done(mdsc, session);
+		}
 
 		session->s_features = features;
 		if (session->s_state == CEPH_MDS_SESSION_OPEN) {
@@ -4410,9 +4433,11 @@ skip_cap_auths:
 		break;
 
 	case CEPH_SESSION_CLOSE:
-		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING)
+		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING) {
 			pr_info_client(cl, "mds%d reconnect denied\n",
 				       session->s_mds);
+			ceph_mdsc_reconnect_session_done(mdsc, session);
+		}
 		session->s_state = CEPH_MDS_SESSION_CLOSED;
 		cleanup_session_requests(mdsc, session);
 		remove_session_caps(session);
@@ -4451,7 +4476,13 @@ skip_cap_auths:
 		break;
 
 	case CEPH_SESSION_REJECT:
-		WARN_ON(session->s_state != CEPH_MDS_SESSION_OPENING);
+		WARN_ON(session->s_state != CEPH_MDS_SESSION_OPENING &&
+			session->s_state != CEPH_MDS_SESSION_RECONNECTING);
+		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING) {
+			pr_info_client(cl, "mds%d reconnect rejected\n",
+				       session->s_mds);
+			ceph_mdsc_reconnect_session_done(mdsc, session);
+		}
 		pr_info_client(cl, "mds%d rejected session\n",
 			       session->s_mds);
 		session->s_state = CEPH_MDS_SESSION_REJECTED;
@@ -4713,6 +4744,17 @@ static int reconnect_caps_cb(struct inode *inode, int mds, void *arg)
 	cap->mseq = 0;       /* and migrate_seq */
 	cap->cap_gen = atomic_read(&cap->session->s_cap_gen);
 
+	/*
+	 * Don't set CEPH_I_ERROR_FILELOCK here - instead, we attempt to
+	 * reclaim locks by sending them in the reconnect message.
+	 * The MDS will do best-effort reclaim. If locks can't be reclaimed
+	 * (e.g., another client grabbed a conflicting lock), future lock
+	 * operations will fail and the error flag will be set then.
+	 *
+	 * Note: i_filelock_ref > 0 means we have locks to reclaim.
+	 * The lock info will be encoded below if flock_len is non-zero.
+	 */
+
 	/* These are lost when the session goes away */
 	if (S_ISDIR(inode->i_mode)) {
 		if (cap->issued & CEPH_CAP_DIR_CREATE) {
@@ -4728,8 +4770,22 @@ static int reconnect_caps_cb(struct inode *inode, int mds, void *arg)
 		rec.v2.issued = cpu_to_le32(cap->issued);
 		rec.v2.snaprealm = cpu_to_le64(ci->i_snap_realm->ino);
 		rec.v2.pathbase = cpu_to_le64(path_info.vino.ino);
-		rec.v2.flock_len = (__force __le32)
-			((ci->i_ceph_flags & CEPH_I_ERROR_FILELOCK) ? 0 : 1);
+		if (recon_state->from_reset) {
+			/*
+			 * Reset-initiated reconnect: always try to reclaim
+			 * locks. The MDS does best-effort; failures are
+			 * handled on future lock operations.
+			 */
+			rec.v2.flock_len = cpu_to_le32(1);
+		} else {
+			/*
+			 * Normal reconnect: skip lock reclaim if locks
+			 * were already known to be in error state.
+			 */
+			rec.v2.flock_len = cpu_to_le32(
+				test_bit(CEPH_I_ERROR_FILELOCK_BIT,
+					 &ci->i_ceph_flags) ? 0 : 1);
+		}
 	} else {
 		struct timespec64 ts;
 
@@ -4926,8 +4982,9 @@ fail:
  *
  * This is a relatively heavyweight operation, but it's rare.
  */
-static void send_mds_reconnect(struct ceph_mds_client *mdsc,
-			       struct ceph_mds_session *session)
+static int send_mds_reconnect(struct ceph_mds_client *mdsc,
+			      struct ceph_mds_session *session,
+			      bool from_reset)
 {
 	struct ceph_client *cl = mdsc->fsc->client;
 	struct ceph_msg *reply;
@@ -4935,6 +4992,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc,
 	int err = -ENOMEM;
 	struct ceph_reconnect_state recon_state = {
 		.session = session,
+		.from_reset = from_reset,
 	};
 	LIST_HEAD(dispose);
 
@@ -4951,6 +5009,30 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc,
 	xa_destroy(&session->s_delegated_inos);
 
 	mutex_lock(&session->s_mutex);
+	if (session->s_state == CEPH_MDS_SESSION_CLOSED ||
+	    session->s_state == CEPH_MDS_SESSION_REJECTED) {
+		pr_info_client(cl, "mds%d skipping reconnect, session %s\n",
+			       mds,
+			       ceph_session_state_name(session->s_state));
+		mutex_unlock(&session->s_mutex);
+		ceph_msg_put(reply);
+		err = -ESTALE;
+		goto fail_nomsg;
+	}
+
+	mutex_lock(&mdsc->mutex);
+	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] != session) {
+		mutex_unlock(&mdsc->mutex);
+		pr_info_client(cl,
+			       "mds%d skipping reconnect, session unregistered\n",
+			       mds);
+		mutex_unlock(&session->s_mutex);
+		ceph_msg_put(reply);
+		err = -ENOENT;
+		goto fail_nomsg;
+	}
+	mutex_unlock(&mdsc->mutex);
+
 	session->s_state = CEPH_MDS_SESSION_RECONNECTING;
 	session->s_seq = 0;
 
@@ -5080,7 +5162,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc,
 
 	up_read(&mdsc->snap_rwsem);
 	ceph_pagelist_release(recon_state.pagelist);
-	return;
+	return 0;
 
 fail:
 	ceph_msg_put(reply);
@@ -5091,7 +5173,302 @@ fail_nomsg:
 fail_nopagelist:
 	pr_err_client(cl, "error %d preparing reconnect for mds%d\n",
 		      err, mds);
-	return;
+	return err;
+}
+
+/*
+ * Called when a session completes reconnection (success or failure).
+ * Only counts toward reset completion if this session's reconnect was
+ * initiated by the currently active reset generation.  Late completions
+ * from a prior (timed-out) reset are silently ignored.
+ *
+ * Caller must hold session->s_mutex to serialize s_reset_gen updates.
+ */
+static void ceph_mdsc_reconnect_session_done(struct ceph_mds_client *mdsc,
+					     struct ceph_mds_session *session)
+{
+	struct ceph_client_reset_state *st = &mdsc->reset_state;
+	u64 active_gen;
+
+	lockdep_assert_held(&session->s_mutex);
+
+	if (!session->s_reset_gen)
+		return;
+
+	spin_lock(&st->lock);
+	active_gen = st->active_reset_gen;
+	spin_unlock(&st->lock);
+
+	if (session->s_reset_gen != active_gen) {
+		session->s_reset_gen = 0;
+		return;
+	}
+
+	session->s_reset_gen = 0;
+
+	if (atomic_dec_and_test(&st->pending_reconnects))
+		complete(&st->reconnect_done);
+}
+
+/*
+ * Wait for a reset to complete if one is in progress.
+ * Returns 0 if reset completed successfully or wasn't in progress.
+ * Returns -ETIMEDOUT if we timed out waiting.
+ * Returns -ERESTARTSYS if interrupted by signal.
+ */
+int ceph_mdsc_wait_for_reset(struct ceph_mds_client *mdsc)
+{
+	struct ceph_client_reset_state *st = &mdsc->reset_state;
+	struct ceph_client *cl = mdsc->fsc->client;
+	long timeout = CEPH_CLIENT_RESET_WAIT_TIMEOUT_SEC * HZ;
+	int blocked_count;
+	int ret;
+
+	if (!READ_ONCE(st->in_progress))
+		return 0;
+
+	blocked_count = atomic_inc_return(&st->blocked_requests);
+	doutc(cl, "request blocked during reset, %d total blocked\n",
+	      blocked_count);
+	trace_ceph_client_reset_blocked(mdsc, blocked_count);
+
+	ret = wait_event_interruptible_timeout(st->blocked_wq,
+					       !READ_ONCE(st->in_progress),
+					       timeout);
+
+	atomic_dec(&st->blocked_requests);
+
+	if (ret == 0) {
+		pr_warn_client(cl, "timed out waiting for reset to complete\n");
+		trace_ceph_client_reset_unblocked(mdsc, -ETIMEDOUT);
+		return -ETIMEDOUT;
+	}
+	if (ret < 0) {
+		trace_ceph_client_reset_unblocked(mdsc, ret);
+		return ret;  /* -ERESTARTSYS */
+	}
+
+	/* Reset completed, check if it was successful */
+	spin_lock(&st->lock);
+	ret = st->last_errno;
+	spin_unlock(&st->lock);
+
+	trace_ceph_client_reset_unblocked(mdsc, ret);
+	return ret;
+}
+
+static void ceph_mdsc_reset_complete(struct ceph_mds_client *mdsc, int ret)
+{
+	struct ceph_client_reset_state *st = &mdsc->reset_state;
+
+	spin_lock(&st->lock);
+	st->last_finish = jiffies;
+	st->last_errno = ret;
+	st->in_progress = false;
+	if (ret)
+		st->failure_count++;
+	else
+		st->success_count++;
+	spin_unlock(&st->lock);
+
+	/* Wake up all requests that were blocked waiting for reset */
+	wake_up_all(&st->blocked_wq);
+
+	trace_ceph_client_reset_complete(mdsc, ret);
+}
+
+static void ceph_mdsc_reset_workfn(struct work_struct *work)
+{
+	struct ceph_mds_client *mdsc =
+		container_of(work, struct ceph_mds_client, reset_work);
+	struct ceph_client_reset_state *st = &mdsc->reset_state;
+	struct ceph_client *cl = mdsc->fsc->client;
+	struct ceph_mds_session **sessions = NULL;
+	char reason[CEPH_CLIENT_RESET_REASON_LEN];
+	int max_sessions, i, n = 0;
+	bool inject_error;
+	u64 reset_gen;
+	int ret = 0;
+
+	spin_lock(&st->lock);
+	strscpy(reason, st->last_reason, sizeof(reason));
+	inject_error = st->inject_error;
+	if (inject_error)
+		st->inject_error = false;
+	reset_gen = st->active_reset_gen;
+	spin_unlock(&st->lock);
+
+	if (inject_error) {
+		ret = -EIO;
+		goto out_complete;
+	}
+
+	mutex_lock(&mdsc->mutex);
+	max_sessions = mdsc->max_sessions;
+	if (max_sessions <= 0) {
+		mutex_unlock(&mdsc->mutex);
+		goto out_complete;
+	}
+
+	sessions = kcalloc(max_sessions, sizeof(*sessions), GFP_NOFS);
+	if (!sessions) {
+		mutex_unlock(&mdsc->mutex);
+		ret = -ENOMEM;
+		pr_err_client(cl,
+			      "manual session reset failed to allocate session array\n");
+		ceph_mdsc_reset_complete(mdsc, ret);
+		return;
+	}
+
+	for (i = 0; i < max_sessions; i++) {
+		struct ceph_mds_session *session = mdsc->sessions[i];
+
+		if (!session)
+			continue;
+
+		/*
+		 * Read session state without s_mutex to avoid nesting
+		 * mdsc->mutex -> s_mutex, which would invert the
+		 * s_mutex -> mdsc->mutex order used by
+		 * cleanup_session_requests().  s_state is an int
+		 * so loads are atomic; send_mds_reconnect() will
+		 * reject sessions that transitioned to CLOSED or
+		 * REJECTED under s_mutex before proceeding.
+		 */
+		switch (READ_ONCE(session->s_state)) {
+		case CEPH_MDS_SESSION_OPEN:
+		case CEPH_MDS_SESSION_HUNG:
+		case CEPH_MDS_SESSION_OPENING:
+		case CEPH_MDS_SESSION_CLOSING:
+			sessions[n++] = ceph_get_mds_session(session);
+			break;
+		case CEPH_MDS_SESSION_RECONNECTING:
+			pr_info_client(cl,
+				       "mds%d already reconnecting, skipping\n",
+				       session->s_mds);
+			break;
+		default:
+			pr_info_client(cl,
+				       "mds%d in state %s, skipping reconnect\n",
+				       session->s_mds,
+				       ceph_session_state_name(session->s_state));
+			break;
+		}
+	}
+	mutex_unlock(&mdsc->mutex);
+
+	pr_info_client(cl,
+		       "manual session reset executing (sessions=%d, reason=\"%s\")\n",
+		       n, reason);
+
+	if (n == 0) {
+		kfree(sessions);
+		goto out_complete;
+	}
+
+	/* Initialize completion tracking */
+	reinit_completion(&st->reconnect_done);
+	atomic_set(&st->pending_reconnects, n);
+
+	for (i = 0; i < n; i++) {
+		int err;
+
+		if (!sessions[i]) {
+			if (atomic_dec_and_test(&st->pending_reconnects))
+				complete(&st->reconnect_done);
+			continue;
+		}
+
+		mutex_lock(&sessions[i]->s_mutex);
+		sessions[i]->s_reset_gen = reset_gen;
+		mutex_unlock(&sessions[i]->s_mutex);
+
+		err = send_mds_reconnect(mdsc, sessions[i], true);
+		if (err) {
+			bool skipped = (err == -ESTALE || err == -ENOENT);
+
+			mutex_lock(&sessions[i]->s_mutex);
+			sessions[i]->s_reset_gen = 0;
+			mutex_unlock(&sessions[i]->s_mutex);
+
+			if (skipped) {
+				pr_info_client(cl,
+					       "mds%d reconnect skipped during reset: %d\n",
+					       sessions[i]->s_mds, err);
+			} else {
+				pr_err_client(cl,
+					      "mds%d reconnect failed: %d\n",
+					      sessions[i]->s_mds, err);
+				if (!ret)
+					ret = err;
+			}
+			if (atomic_dec_and_test(&st->pending_reconnects))
+				complete(&st->reconnect_done);
+		}
+		ceph_put_mds_session(sessions[i]);
+	}
+
+	kfree(sessions);
+
+	/* Wait for all sessions to complete reconnection */
+	if (!wait_for_completion_timeout(&st->reconnect_done,
+					 CEPH_CLIENT_RESET_TIMEOUT_SEC * HZ)) {
+		pr_warn_client(cl,
+			       "reset timed out waiting for %d sessions\n",
+			       atomic_read(&st->pending_reconnects));
+		if (!ret)
+			ret = -ETIMEDOUT;
+	}
+
+out_complete:
+	ceph_mdsc_reset_complete(mdsc, ret);
+}
+
+int ceph_mdsc_schedule_reset(struct ceph_mds_client *mdsc,
+			     const char *reason)
+{
+	struct ceph_client_reset_state *st = &mdsc->reset_state;
+	struct ceph_fs_client *fsc = mdsc->fsc;
+	const char *msg = (reason && reason[0]) ? reason : "manual";
+	int mount_state;
+
+	mount_state = READ_ONCE(fsc->mount_state);
+	if (mount_state != CEPH_MOUNT_MOUNTED) {
+		pr_warn_client(fsc->client,
+			       "reset rejected: mount_state=%d (not mounted)\n",
+			       mount_state);
+		return -EINVAL;
+	}
+
+	spin_lock(&st->lock);
+	if (st->in_progress) {
+		spin_unlock(&st->lock);
+		return -EBUSY;
+	}
+
+	st->in_progress = true;
+	st->active_reset_gen++;
+	st->last_start = jiffies;
+	st->last_errno = 0;
+	st->trigger_count++;
+	strscpy(st->last_reason, msg, sizeof(st->last_reason));
+	spin_unlock(&st->lock);
+
+	if (!queue_work(system_unbound_wq, &mdsc->reset_work)) {
+		spin_lock(&st->lock);
+		st->in_progress = false;
+		st->last_errno = -EALREADY;
+		st->failure_count++;
+		spin_unlock(&st->lock);
+		wake_up_all(&st->blocked_wq);
+		return -EALREADY;
+	}
+
+	pr_info_client(mdsc->fsc->client,
+		       "manual session reset scheduled (reason=\"%s\")\n",
+		       msg);
+	trace_ceph_client_reset_schedule(mdsc, msg);
+	return 0;
 }
 
 
@@ -5172,9 +5549,15 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		 */
 		if (s->s_state == CEPH_MDS_SESSION_RESTARTING &&
 		    newstate >= CEPH_MDS_STATE_RECONNECT) {
+			int rc;
+
 			mutex_unlock(&mdsc->mutex);
 			clear_bit(i, targets);
-			send_mds_reconnect(mdsc, s);
+			rc = send_mds_reconnect(mdsc, s, false);
+			if (rc)
+				pr_err_client(cl,
+					      "mds%d reconnect failed: %d\n",
+					      i, rc);
 			mutex_lock(&mdsc->mutex);
 		}
 
@@ -5238,7 +5621,11 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		}
 		doutc(cl, "send reconnect to export target mds.%d\n", i);
 		mutex_unlock(&mdsc->mutex);
-		send_mds_reconnect(mdsc, s);
+		err = send_mds_reconnect(mdsc, s, false);
+		if (err)
+			pr_err_client(cl,
+				      "mds%d export target reconnect failed: %d\n",
+				      i, err);
 		ceph_put_mds_session(s);
 		mutex_lock(&mdsc->mutex);
 	}
@@ -5622,6 +6009,23 @@ int ceph_mdsc_init(struct ceph_fs_client *fsc)
 	spin_lock_init(&mdsc->dentry_list_lock);
 	INIT_LIST_HEAD(&mdsc->dentry_leases);
 	INIT_LIST_HEAD(&mdsc->dentry_dir_leases);
+
+	spin_lock_init(&mdsc->reset_state.lock);
+	mdsc->reset_state.trigger_count = 0;
+	mdsc->reset_state.success_count = 0;
+	mdsc->reset_state.failure_count = 0;
+	mdsc->reset_state.last_start = 0;
+	mdsc->reset_state.last_finish = 0;
+	mdsc->reset_state.last_errno = 0;
+	mdsc->reset_state.in_progress = false;
+	mdsc->reset_state.inject_error = false;
+	mdsc->reset_state.active_reset_gen = 0;
+	mdsc->reset_state.last_reason[0] = '\0';
+	atomic_set(&mdsc->reset_state.pending_reconnects, 0);
+	init_completion(&mdsc->reset_state.reconnect_done);
+	init_waitqueue_head(&mdsc->reset_state.blocked_wq);
+	atomic_set(&mdsc->reset_state.blocked_requests, 0);
+	INIT_WORK(&mdsc->reset_work, ceph_mdsc_reset_workfn);
 
 	ceph_caps_init(mdsc);
 	ceph_adjust_caps_max_min(mdsc, fsc->mount_options);
@@ -6148,6 +6552,22 @@ void ceph_mdsc_destroy(struct ceph_fs_client *fsc)
 	/* flush out any connection work with references to us */
 	ceph_msgr_flush();
 
+	/*
+	 * Mark reset as failed and wake any blocked waiters before
+	 * cancelling, so unmount doesn't stall on blocked_wq timeout
+	 * if cancel_work_sync() prevents the work from running.
+	 */
+	spin_lock(&mdsc->reset_state.lock);
+	if (mdsc->reset_state.in_progress) {
+		mdsc->reset_state.in_progress = false;
+		mdsc->reset_state.last_errno = -ESHUTDOWN;
+		mdsc->reset_state.failure_count++;
+	}
+	spin_unlock(&mdsc->reset_state.lock);
+	wake_up_all(&mdsc->reset_state.blocked_wq);
+
+	cancel_work_sync(&mdsc->reset_work);
+
 	ceph_mdsc_stop(mdsc);
 
 	ceph_metric_destroy(&mdsc->metric);
@@ -6335,6 +6755,8 @@ static void mds_dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 
 	mutex_lock(&mdsc->mutex);
 	if (__verify_registered_session(mdsc, s) < 0) {
+		pr_info_client(cl, "dropping tid %llu from unregistered session %d\n",
+			       msg->hdr.tid, s->s_mds);
 		mutex_unlock(&mdsc->mutex);
 		goto out;
 	}
