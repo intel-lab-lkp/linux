@@ -2304,9 +2304,14 @@ int intel_framebuffer_init(struct intel_framebuffer *intel_fb,
 		goto err_bo_framebuffer_fini;
 
 	if (intel_fb_uses_dpt(fb)) {
+		struct drm_gem_object *obj = intel_fb_bo(&intel_fb->base);
 		struct i915_address_space *vm;
+		size_t size = 0;
 
-		vm = intel_dpt_create(intel_fb);
+		if (intel_fb_needs_pot_stride_remap(intel_fb))
+			size = intel_remapped_info_size(&intel_fb->remapped_view.gtt.remapped);
+
+		vm = intel_dpt_create(obj, size);
 		if (IS_ERR(vm)) {
 			drm_dbg_kms(display->drm, "failed to create DPT\n");
 			ret = PTR_ERR(vm);
