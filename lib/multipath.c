@@ -469,6 +469,113 @@ const struct block_device_operations mpath_ops = {
 };
 EXPORT_SYMBOL_GPL(mpath_ops);
 
+static int mpath_generic_chr_open(struct inode *inode, struct file *file)
+{
+	struct cdev *cdev = file_inode(file)->i_cdev;
+	struct mpath_head *mpath_head =
+			container_of(cdev, struct mpath_head, cdev);
+
+	return mpath_get_head(mpath_head);
+}
+
+static int mpath_generic_chr_release(struct inode *inode, struct file *file)
+{
+	struct cdev *cdev = file_inode(file)->i_cdev;
+	struct mpath_head *mpath_head =
+			container_of(cdev, struct mpath_head, cdev);
+
+	mpath_put_head(mpath_head);
+	return 0;
+}
+
+static long mpath_generic_chr_ioctl(struct file *file, unsigned int cmd,
+		unsigned long arg)
+{
+	struct cdev *cdev = file_inode(file)->i_cdev;
+	struct mpath_head *mpath_head =
+			container_of(cdev, struct mpath_head, cdev);
+	struct mpath_device *mpath_device;
+	fmode_t mode = file->f_mode;
+	int srcu_idx, err = -EWOULDBLOCK;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+	if (!mpath_device)
+		goto out_unlock;
+
+	/*
+	 * If we are in the middle of error recovery, don't let anyone
+	 * else try and use this device.  Also, if error recovery fails, it
+	 * may try and take the device offline, in which case all further
+	 * access to the device is prohibited.
+	 */
+	err = mpath_head->mpdt->cdev_ioctl(mpath_head, mpath_device,
+			mode, cmd, arg, srcu_idx);
+	lockdep_assert_not_held(&mpath_head->srcu);
+	return err;// ioctl must unlock
+
+out_unlock:
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+	return err;
+}
+
+static int mpath_generic_chr_uring_cmd(struct io_uring_cmd *ioucmd,
+		unsigned int issue_flags)
+{
+	struct cdev *cdev = file_inode(ioucmd->file)->i_cdev;
+	struct mpath_head *mpath_head =
+			container_of(cdev, struct mpath_head, cdev);
+	struct mpath_device *mpath_device;
+	int srcu_idx, ret = -EWOULDBLOCK;
+
+	if (!mpath_head->mpdt->chr_uring_cmd)
+		return -EOPNOTSUPP;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (!mpath_device)
+		goto out_unlock;
+
+	ret = mpath_head->mpdt->chr_uring_cmd(mpath_device, ioucmd,
+			issue_flags);
+out_unlock:
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+	return ret;
+}
+
+static int mpath_generic_chr_uring_cmd_iopoll(struct io_uring_cmd *ioucmd,
+				 struct io_comp_batch *iob,
+				 unsigned int poll_flags)
+{
+	struct cdev *cdev = file_inode(ioucmd->file)->i_cdev;
+	struct mpath_head *mpath_head =
+			container_of(cdev, struct mpath_head, cdev);
+
+	if (!mpath_head->mpdt->chr_uring_cmd_iopoll)
+		return -EOPNOTSUPP;
+
+	return mpath_head->mpdt->chr_uring_cmd_iopoll(ioucmd, iob, poll_flags);
+}
+
+const struct file_operations mpath_generic_chr_fops = {
+	.owner		= THIS_MODULE,
+	.open		= mpath_generic_chr_open,
+	.release	= mpath_generic_chr_release,
+	.unlocked_ioctl	= mpath_generic_chr_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
+	.uring_cmd	= mpath_generic_chr_uring_cmd,
+	.uring_cmd_iopoll = mpath_generic_chr_uring_cmd_iopoll,
+};
+EXPORT_SYMBOL_GPL(mpath_generic_chr_fops);
+
+static int mpath_head_add_cdev(struct mpath_head *mpath_head)
+{
+	if (mpath_head->mpdt->add_cdev)
+		return mpath_head->mpdt->add_cdev(mpath_head);
+	return 0;
+}
+
 static void multipath_partition_scan_work(struct work_struct *work)
 {
 	struct mpath_disk *mpath_disk =
@@ -501,6 +608,12 @@ void mpath_requeue_work(struct work_struct *work)
 }
 EXPORT_SYMBOL_GPL(mpath_requeue_work);
 
+static void mpath_head_del_cdev(struct mpath_head *mpath_head)
+{
+	if (mpath_head->mpdt->del_cdev)
+		mpath_head->mpdt->del_cdev(mpath_head);
+}
+
 void mpath_remove_disk(struct mpath_disk *mpath_disk)
 {
 	struct mpath_head *mpath_head = mpath_disk->mpath_head;
@@ -514,6 +627,7 @@ void mpath_remove_disk(struct mpath_disk *mpath_disk)
 		 */
 		kblockd_schedule_work(&mpath_head->requeue_work);
 
+		mpath_head_del_cdev(mpath_head);
 		mpath_synchronize(mpath_head);
 		del_gendisk(disk);
 	}
@@ -572,6 +686,8 @@ void mpath_device_set_live(struct mpath_disk *mpath_disk,
 			clear_bit(MPATH_HEAD_DISK_LIVE, &mpath_head->flags);
 			return;
 		}
+
+		mpath_head_add_cdev(mpath_head);
 		queue_work(mpath_wq, &mpath_disk->partition_scan_work);
 	}
 

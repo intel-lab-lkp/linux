@@ -4,8 +4,11 @@
 
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
+#include <linux/cdev.h>
 #include <linux/srcu.h>
+#include <linux/io_uring/cmd.h>
 
+extern const struct file_operations mpath_generic_chr_fops;
 extern const struct block_device_operations mpath_ops;
 
 enum mpath_iopolicy_e {
@@ -45,9 +48,18 @@ struct mpath_device {
 
 struct mpath_head_template {
 	bool (*available_path)(struct mpath_device *, bool *);
+	int (*add_cdev)(struct mpath_head *);
+	void (*del_cdev)(struct mpath_head *);
 	bool (*is_disabled)(struct mpath_device *);
 	bool (*is_optimized)(struct mpath_device *);
 	enum mpath_access_state (*get_access_state)(struct mpath_device *);
+	int (*cdev_ioctl)(struct mpath_head *, struct mpath_device *,
+			blk_mode_t mode, unsigned int cmd, unsigned long arg, int srcu_idx);
+	int (*chr_uring_cmd)(struct mpath_device *, struct io_uring_cmd *ioucmd,
+		unsigned int issue_flags);
+	int (*chr_uring_cmd_iopoll)(struct io_uring_cmd *ioucmd,
+				 struct io_comp_batch *iob,
+				 unsigned int poll_flags);
 	enum mpath_iopolicy_e (*get_iopolicy)(struct mpath_head *);
 	struct bio *(*clone_bio)(struct bio *);
 	const struct attribute_group **device_groups;
@@ -65,6 +77,9 @@ struct mpath_head {
 	struct bio_list		requeue_list; /* list for requeing bio */
 	spinlock_t		requeue_lock;
 	struct work_struct	requeue_work; /* work struct for requeue */
+
+	struct cdev		cdev;
+	struct device		cdev_device;
 
 	unsigned long		flags;
 	struct mpath_device __rcu 		*current_path[MAX_NUMNODES];
