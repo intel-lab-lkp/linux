@@ -1,18 +1,28 @@
 digraph state_automaton {
 	center = true;
 	size = "7,11";
-	{node [shape = plaintext, style=invis, label=""] "__init_other_context"};
-	{node [shape = ellipse] "other_context"};
-	{node [shape = plaintext] "other_context"};
-	{node [shape = plaintext] "own_context"};
-	"__init_other_context" -> "other_context";
-	"other_context" [label = "other_context", color = green3];
-	"other_context" -> "own_context" [ label = "sched_switch_in" ];
+	{node [shape = circle] "dequeued"};
+	{node [shape = circle] "dequeued_running"};
+	{node [shape = plaintext, style=invis, label=""] "__init_enqueued"};
+	{node [shape = doublecircle] "enqueued"};
+	{node [shape = circle] "enqueued"};
+	{node [shape = circle] "own_context"};
+	"__init_enqueued" -> "enqueued";
+	"dequeued" [label = "dequeued"];
+	"dequeued" -> "enqueued" [ label = "sched_enqueue" ];
+	"dequeued_running" [label = "dequeued_running"];
+	"dequeued_running" -> "dequeued" [ label = "sched_switch_out" ];
+	"dequeued_running" -> "dequeued_running" [ label = "sched_set_state" ];
+	"dequeued_running" -> "own_context" [ label = "sched_enqueue" ];
+	"enqueued" [label = "enqueued", color = green3];
+	"enqueued" -> "dequeued" [ label = "sched_dequeue" ];
+	"enqueued" -> "own_context" [ label = "sched_switch_in" ];
 	"own_context" [label = "own_context"];
-	"own_context" -> "other_context" [ label = "sched_switch_out" ];
+	"own_context" -> "dequeued_running" [ label = "sched_dequeue" ];
+	"own_context" -> "enqueued" [ label = "sched_switch_out" ];
 	"own_context" -> "own_context" [ label = "sched_set_state" ];
 	{ rank = min ;
-		"__init_other_context";
-		"other_context";
+		"__init_enqueued";
+		"enqueued";
 	}
 }

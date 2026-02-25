@@ -8,7 +8,9 @@
 #define MONITOR_NAME snroc
 
 enum states_snroc {
-	other_context_snroc,
+	enqueued_snroc,
+	dequeued_snroc,
+	dequeued_running_snroc,
 	own_context_snroc,
 	state_max_snroc,
 };
@@ -16,6 +18,8 @@ enum states_snroc {
 #define INVALID_STATE state_max_snroc
 
 enum events_snroc {
+	sched_dequeue_snroc,
+	sched_enqueue_snroc,
 	sched_set_state_snroc,
 	sched_switch_in_snroc,
 	sched_switch_out_snroc,
@@ -32,18 +36,48 @@ struct automaton_snroc {
 
 static const struct automaton_snroc automaton_snroc = {
 	.state_names = {
-		"other_context",
+		"enqueued",
+		"dequeued",
+		"dequeued_running",
 		"own_context",
 	},
 	.event_names = {
+		"sched_dequeue",
+		"sched_enqueue",
 		"sched_set_state",
 		"sched_switch_in",
 		"sched_switch_out",
 	},
 	.function = {
-		{      INVALID_STATE,  own_context_snroc,       INVALID_STATE },
-		{  own_context_snroc,      INVALID_STATE, other_context_snroc },
+		{
+			dequeued_snroc,
+			INVALID_STATE,
+			INVALID_STATE,
+			own_context_snroc,
+			INVALID_STATE,
+		},
+		{
+			INVALID_STATE,
+			enqueued_snroc,
+			INVALID_STATE,
+			INVALID_STATE,
+			INVALID_STATE,
+		},
+		{
+			INVALID_STATE,
+			own_context_snroc,
+			dequeued_running_snroc,
+			INVALID_STATE,
+			dequeued_snroc,
+		},
+		{
+			dequeued_running_snroc,
+			INVALID_STATE,
+			own_context_snroc,
+			INVALID_STATE,
+			enqueued_snroc,
+		},
 	},
-	.initial_state = other_context_snroc,
-	.final_states = { 1, 0 },
+	.initial_state = enqueued_snroc,
+	.final_states = { 1, 0, 0, 0 },
 };
