@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 
 #include "../../pci.h"
+#include "../pci-host-common.h"
 #include "pcie-designware.h"
 
 static struct pci_ops dw_pcie_ops;
@@ -580,6 +581,13 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 		return -ENOMEM;
 
 	pp->bridge = bridge;
+
+	/* Parse Root Port nodes if present */
+	ret = pci_host_common_parse_ports(dev, bridge);
+	if (ret && ret != -ENOENT) {
+		dev_err(dev, "Failed to parse Root Port nodes: %d\n", ret);
+		return ret;
+	}
 
 	ret = dw_pcie_host_get_resources(pp);
 	if (ret)
