@@ -4303,13 +4303,16 @@ static int move_existing_remap(struct btrfs_fs_info *fs_info,
 	bg_needs_free_space = test_bit(BLOCK_GROUP_FLAG_NEEDS_FREE_SPACE,
 				       &dest_bg->runtime_flags);
 	mutex_unlock(&dest_bg->free_space_lock);
-	btrfs_put_block_group(dest_bg);
 
 	if (bg_needs_free_space) {
 		ret = btrfs_add_block_group_free_space(trans, dest_bg);
-		if (unlikely(ret))
+		if (unlikely(ret)) {
+			btrfs_put_block_group(dest_bg);
 			goto end;
+		}
 	}
+
+	btrfs_put_block_group(dest_bg);
 
 	ret = btrfs_remove_from_free_space_tree(trans, dest_addr, dest_length);
 	if (unlikely(ret)) {
