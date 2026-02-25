@@ -437,6 +437,11 @@
 #ifndef __ASSEMBLER__
 #include <asm/types.h>
 
+static inline bool esr_iss2_is_hdbssf(unsigned long esr)
+{
+	return ESR_ELx_ISS2(esr) & ESR_ELx_HDBSSF;
+}
+
 static inline unsigned long esr_brk_comment(unsigned long esr)
 {
 	return esr & ESR_ELx_BRK64_ISS_COMMENT_MASK;

@@ -213,6 +213,23 @@ static void __vcpu_put_deactivate_traps(struct kvm_vcpu *vcpu)
 	local_irq_restore(flags);
 }
 
+static void __load_hdbss(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	u64 br_el2, prod_el2;
+
+	if (!kvm->arch.enable_hdbss)
+		return;
+
+	br_el2 = HDBSSBR_EL2(vcpu->arch.hdbss.base_phys, vcpu->arch.hdbss.size);
+	prod_el2 = vcpu->arch.hdbss.next_index;
+
+	write_sysreg_s(br_el2, SYS_HDBSSBR_EL2);
+	write_sysreg_s(prod_el2, SYS_HDBSSPROD_EL2);
+
+	isb();
+}
+
 void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu)
 {
 	host_data_ptr(host_ctxt)->__hyp_running_vcpu = vcpu;
@@ -220,10 +237,12 @@ void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu)
 	__vcpu_load_switch_sysregs(vcpu);
 	__vcpu_load_activate_traps(vcpu);
 	__load_stage2(vcpu->arch.hw_mmu, vcpu->arch.hw_mmu->arch);
+	__load_hdbss(vcpu);
 }
 
 void kvm_vcpu_put_vhe(struct kvm_vcpu *vcpu)
 {
+	kvm_flush_hdbss_buffer(vcpu);
 	__vcpu_put_deactivate_traps(vcpu);
 	__vcpu_put_switch_sysregs(vcpu);
 

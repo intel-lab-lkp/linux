@@ -55,11 +55,16 @@
 #define KVM_REQ_GUEST_HYP_IRQ_PENDING	KVM_ARCH_REQ(9)
 #define KVM_REQ_MAP_L1_VNCR_EL2		KVM_ARCH_REQ(10)
 #define KVM_REQ_VGIC_PROCESS_UPDATE	KVM_ARCH_REQ(11)
+#define KVM_REQ_FLUSH_HDBSS			KVM_ARCH_REQ(12)
 
 #define KVM_DIRTY_LOG_MANUAL_CAPS   (KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE | \
 				     KVM_DIRTY_LOG_INITIALLY_SET)
 
 #define KVM_HAVE_MMU_RWLOCK
+
+/* HDBSS entry field definitions */
+#define HDBSS_ENTRY_VALID BIT(0)
+#define HDBSS_ENTRY_IPA GENMASK_ULL(55, 12)
 
 /*
  * Mode of operation configurable with kvm-arm.mode early param.
@@ -84,6 +89,7 @@ int __init kvm_arm_init_sve(void);
 u32 __attribute_const__ kvm_target_cpu(void);
 void kvm_reset_vcpu(struct kvm_vcpu *vcpu);
 void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu);
+void kvm_arm_vcpu_free_hdbss(struct kvm_vcpu *vcpu);
 
 struct kvm_hyp_memcache {
 	phys_addr_t head;
@@ -405,6 +411,8 @@ struct kvm_arch {
 	 * the associated pKVM instance in the hypervisor.
 	 */
 	struct kvm_protected_vm pkvm;
+
+	bool enable_hdbss;
 };
 
 struct kvm_vcpu_fault_info {
@@ -816,6 +824,12 @@ struct vcpu_reset_state {
 	bool		reset;
 };
 
+struct vcpu_hdbss_state {
+	phys_addr_t base_phys;
+	u32 size;
+	u32 next_index;
+};
+
 struct vncr_tlb;
 
 struct kvm_vcpu_arch {
@@ -920,6 +934,9 @@ struct kvm_vcpu_arch {
 
 	/* Per-vcpu TLB for VNCR_EL2 -- NULL when !NV */
 	struct vncr_tlb	*vncr_tlb;
+
+	/* HDBSS registers info */
+	struct vcpu_hdbss_state hdbss;
 };
 
 /*

@@ -125,6 +125,87 @@ int kvm_arch_vcpu_should_kick(struct kvm_vcpu *vcpu)
 	return kvm_vcpu_exiting_guest_mode(vcpu) == IN_GUEST_MODE;
 }
 
+void kvm_arm_vcpu_free_hdbss(struct kvm_vcpu *vcpu)
+{
+	struct page *hdbss_pg;
+
+	hdbss_pg = phys_to_page(vcpu->arch.hdbss.base_phys);
+	if (hdbss_pg)
+		__free_pages(hdbss_pg, vcpu->arch.hdbss.size);
+
+	vcpu->arch.hdbss.size = 0;
+}
+
+static int kvm_cap_arm_enable_hdbss(struct kvm *kvm,
+				    struct kvm_enable_cap *cap)
+{
+	unsigned long i;
+	struct kvm_vcpu *vcpu;
+	struct page *hdbss_pg = NULL;
+	__u64 size = cap->args[0];
+	bool enable = cap->args[1] ? true : false;
+
+	if (!system_supports_hdbss())
+		return -EINVAL;
+
+	if (size > HDBSS_MAX_SIZE)
+		return -EINVAL;
+
+	if (!enable && !kvm->arch.enable_hdbss) /* Already Off */
+		return 0;
+
+	if (enable && kvm->arch.enable_hdbss) /* Already On, can't set size */
+		return -EINVAL;
+
+	if (!enable) { /* Turn it off */
+		kvm->arch.mmu.vtcr &= ~(VTCR_EL2_HD | VTCR_EL2_HDBSS | VTCR_EL2_HA);
+
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			/* Kick vcpus to flush hdbss buffer. */
+			kvm_vcpu_kick(vcpu);
+
+			kvm_arm_vcpu_free_hdbss(vcpu);
+		}
+
+		kvm->arch.enable_hdbss = false;
+
+		return 0;
+	}
+
+	/* Turn it on */
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		hdbss_pg = alloc_pages(GFP_KERNEL_ACCOUNT, size);
+		if (!hdbss_pg)
+			goto error_alloc;
+
+		vcpu->arch.hdbss = (struct vcpu_hdbss_state) {
+			.base_phys = page_to_phys(hdbss_pg),
+			.size = size,
+			.next_index = 0,
+		};
+	}
+
+	kvm->arch.enable_hdbss = true;
+	kvm->arch.mmu.vtcr |= VTCR_EL2_HD | VTCR_EL2_HDBSS | VTCR_EL2_HA;
+
+	/*
+	 * We should kick vcpus out of guest mode here to load new
+	 * vtcr value to vtcr_el2 register when re-enter guest mode.
+	 */
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		kvm_vcpu_kick(vcpu);
+
+	return 0;
+
+error_alloc:
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (vcpu->arch.hdbss.base_phys)
+			kvm_arm_vcpu_free_hdbss(vcpu);
+	}
+
+	return -ENOMEM;
+}
+
 int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			    struct kvm_enable_cap *cap)
 {
@@ -181,6 +262,11 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 	case KVM_CAP_ARM_SEA_TO_USER:
 		r = 0;
 		set_bit(KVM_ARCH_FLAG_EXIT_SEA, &kvm->arch.flags);
+		break;
+	case KVM_CAP_ARM_HW_DIRTY_STATE_TRACK:
+		mutex_lock(&kvm->lock);
+		r = kvm_cap_arm_enable_hdbss(kvm, cap);
+		mutex_unlock(&kvm->lock);
 		break;
 	default:
 		break;
@@ -471,6 +557,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 			r = kvm_supports_cacheable_pfnmap();
 		break;
 
+	case KVM_CAP_ARM_HW_DIRTY_STATE_TRACK:
+		r = system_supports_hdbss();
+		break;
 	default:
 		r = 0;
 	}
@@ -1119,6 +1208,9 @@ static int check_vcpu_requests(struct kvm_vcpu *vcpu)
 
 		if (kvm_dirty_ring_check_request(vcpu))
 			return 0;
+
+		if (kvm_check_request(KVM_REQ_FLUSH_HDBSS, vcpu))
+			kvm_flush_hdbss_buffer(vcpu);
 
 		check_nested_vcpu_requests(vcpu);
 	}
@@ -1898,7 +1990,17 @@ long kvm_arch_vcpu_unlocked_ioctl(struct file *filp, unsigned int ioctl,
 
 void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
+	/*
+	 * Flush all CPUs' dirty log buffers to the dirty_bitmap.  Called
+	 * before reporting dirty_bitmap to userspace. Send a request with
+	 * KVM_REQUEST_WAIT to flush buffer synchronously.
+	 */
+	struct kvm_vcpu *vcpu;
 
+	if (!kvm->arch.enable_hdbss)
+		return;
+
+	kvm_make_all_cpus_request(kvm, KVM_REQ_FLUSH_HDBSS);
 }
 
 static int kvm_vm_ioctl_set_device_addr(struct kvm *kvm,

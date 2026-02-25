@@ -1039,6 +1039,17 @@
 
 #define GCS_CAP(x)	((((unsigned long)x) & GCS_CAP_ADDR_MASK) | \
 					       GCS_CAP_VALID_TOKEN)
+
+/*
+ * Definitions for the HDBSS feature
+ */
+#define HDBSS_MAX_SIZE		HDBSSBR_EL2_SZ_2MB
+
+#define HDBSSBR_EL2(baddr, sz)	(((baddr) & GENMASK(55, 12 + sz)) | \
+				 FIELD_PREP(HDBSSBR_EL2_SZ_MASK, sz))
+
+#define HDBSSPROD_IDX(prod)	FIELD_GET(HDBSSPROD_EL2_INDEX_MASK, prod)
+
 /*
  * Definitions for GICv5 instructions
  */

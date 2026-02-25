@@ -1895,6 +1895,9 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	if (writable)
 		prot |= KVM_PGTABLE_PROT_W;
 
+	if (writable && kvm->arch.enable_hdbss && logging_active)
+		prot |= KVM_PGTABLE_PROT_DBM;
+
 	if (exec_fault)
 		prot |= KVM_PGTABLE_PROT_X;
 
@@ -2032,6 +2035,70 @@ int kvm_handle_guest_sea(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+void kvm_flush_hdbss_buffer(struct kvm_vcpu *vcpu)
+{
+	int idx, curr_idx;
+	u64 br_el2;
+	u64 *hdbss_buf;
+	struct kvm *kvm = vcpu->kvm;
+
+	if (!kvm->arch.enable_hdbss)
+		return;
+
+	curr_idx = HDBSSPROD_IDX(read_sysreg_s(SYS_HDBSSPROD_EL2));
+	br_el2 = HDBSSBR_EL2(vcpu->arch.hdbss.base_phys, vcpu->arch.hdbss.size);
+
+	/* Do nothing if HDBSS buffer is empty or br_el2 is NULL */
+	if (curr_idx == 0 || br_el2 == 0)
+		return;
+
+	hdbss_buf = page_address(phys_to_page(vcpu->arch.hdbss.base_phys));
+	if (!hdbss_buf)
+		return;
+
+	guard(write_lock_irqsave)(&vcpu->kvm->mmu_lock);
+	for (idx = 0; idx < curr_idx; idx++) {
+		u64 gpa;
+
+		gpa = hdbss_buf[idx];
+		if (!(gpa & HDBSS_ENTRY_VALID))
+			continue;
+
+		gpa &= HDBSS_ENTRY_IPA;
+		kvm_vcpu_mark_page_dirty(vcpu, gpa >> PAGE_SHIFT);
+	}
+
+	/* reset HDBSS index */
+	write_sysreg_s(0, SYS_HDBSSPROD_EL2);
+	vcpu->arch.hdbss.next_index = 0;
+	isb();
+}
+
+static int kvm_handle_hdbss_fault(struct kvm_vcpu *vcpu)
+{
+	u64 prod;
+	u64 fsc;
+
+	prod = read_sysreg_s(SYS_HDBSSPROD_EL2);
+	fsc = FIELD_GET(HDBSSPROD_EL2_FSC_MASK, prod);
+
+	switch (fsc) {
+	case HDBSSPROD_EL2_FSC_OK:
+		/* Buffer full, which is reported as permission fault. */
+		kvm_flush_hdbss_buffer(vcpu);
+		return 1;
+	case HDBSSPROD_EL2_FSC_ExternalAbort:
+	case HDBSSPROD_EL2_FSC_GPF:
+		return -EFAULT;
+	default:
+		/* Unknown fault. */
+		WARN_ONCE(1,
+				"Unexpected HDBSS fault type, FSC: 0x%llx (prod=0x%llx, vcpu=%d)\n",
+				fsc, prod, vcpu->vcpu_id);
+		return -EFAULT;
+	}
+}
+
 /**
  * kvm_handle_guest_abort - handles all 2nd stage aborts
  * @vcpu:	the VCPU pointer
@@ -2069,6 +2136,9 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 		return -EFAULT;
 
 	is_iabt = kvm_vcpu_trap_is_iabt(vcpu);
+
+	if (esr_iss2_is_hdbssf(esr))
+		return kvm_handle_hdbss_fault(vcpu);
 
 	if (esr_fsc_is_translation_fault(esr)) {
 		/* Beyond sanitised PARange (which is the IPA limit) */
