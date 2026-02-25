@@ -53,7 +53,7 @@ struct gb_camera {
 	struct gb_connection *data_connection;
 	u16 data_cport_id;
 
-	struct mutex mutex;
+	struct mutex mutex; /* Protects camera state */
 	enum gb_camera_state state;
 
 	struct {
