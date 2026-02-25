@@ -3,6 +3,7 @@
 #define _LIBMULTIPATH_H
 
 #include <linux/blkdev.h>
+#include <linux/blk-mq.h>
 #include <linux/srcu.h>
 
 extern const struct block_device_operations mpath_ops;
@@ -40,10 +41,12 @@ struct mpath_device {
 };
 
 struct mpath_head_template {
+	bool (*available_path)(struct mpath_device *, bool *);
 	bool (*is_disabled)(struct mpath_device *);
 	bool (*is_optimized)(struct mpath_device *);
 	enum mpath_access_state (*get_access_state)(struct mpath_device *);
 	enum mpath_iopolicy_e (*get_iopolicy)(struct mpath_head *);
+	struct bio *(*clone_bio)(struct bio *);
 	const struct attribute_group **device_groups;
 };
 
@@ -56,11 +59,22 @@ struct mpath_head {
 
 	struct kref		ref;
 
+	struct bio_list		requeue_list; /* list for requeing bio */
+	spinlock_t		requeue_lock;
+	struct work_struct	requeue_work; /* work struct for requeue */
+
 	unsigned long		flags;
 	struct mpath_device __rcu 		*current_path[MAX_NUMNODES];
 	const struct mpath_head_template	*mpdt;
 	void			*drvdata;
 };
+
+#define REQ_MPATH		REQ_DRV
+
+static inline bool is_mpath_request(struct request *req)
+{
+	return req->cmd_flags & REQ_MPATH;
+}
 
 static inline struct mpath_disk *mpath_bd_device_to_disk(struct device *dev)
 {
@@ -82,6 +96,7 @@ int mpath_set_iopolicy(const char *val, int *iopolicy);
 int mpath_get_iopolicy(char *buf, int iopolicy);
 int mpath_get_head(struct mpath_head *mpath_head);
 void mpath_put_head(struct mpath_head *mpath_head);
+void mpath_requeue_work(struct work_struct *work);
 struct mpath_head *mpath_alloc_head(void);
 void mpath_put_disk(struct mpath_disk *mpath_disk);
 void mpath_remove_disk(struct mpath_disk *mpath_disk);

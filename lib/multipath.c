@@ -5,6 +5,7 @@
  */
 #include <linux/module.h>
 #include <linux/multipath.h>
+#include <trace/events/block.h>
 
 static struct mpath_device *mpath_find_path(struct mpath_head *mpath_head);
 
@@ -227,7 +228,6 @@ static struct mpath_device *mpath_numa_path(struct mpath_head *mpath_head,
 	return mpath_device;
 }
 
-__maybe_unused
 static struct mpath_device *mpath_find_path(struct mpath_head *mpath_head)
 {
 	enum mpath_iopolicy_e iopolicy =
@@ -241,6 +241,66 @@ static struct mpath_device *mpath_find_path(struct mpath_head *mpath_head)
 	default:
 		return mpath_numa_path(mpath_head, iopolicy);
 	}
+}
+
+static bool mpath_available_path(struct mpath_head *mpath_head)
+{
+	struct mpath_device *mpath_device;
+
+	if (!test_bit(MPATH_HEAD_DISK_LIVE, &mpath_head->flags))
+		return false;
+
+	list_for_each_entry_srcu(mpath_device, &mpath_head->dev_list, siblings,
+				 srcu_read_lock_held(&mpath_head->srcu)) {
+		bool available = false;
+
+		if (!mpath_head->mpdt->available_path(mpath_device,
+				&available))
+			continue;
+		if (available)
+			return true;
+	}
+
+	return false;
+}
+
+static void mpath_bdev_submit_bio(struct bio *bio)
+{
+	struct mpath_disk *mpath_disk = bio->bi_bdev->bd_disk->private_data;
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct device *dev = mpath_disk->parent;
+	struct mpath_device *mpath_device;
+	int srcu_idx;
+
+	bio = bio_split_to_limits(bio);
+	if (!bio)
+		return;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+
+	if (likely(mpath_device)) {
+		bio->bi_opf |= REQ_MPATH;
+		if (mpath_head->mpdt->clone_bio)
+			bio = mpath_head->mpdt->clone_bio(bio);
+		trace_block_bio_remap(bio, disk_devt(mpath_device->disk),
+				      bio->bi_iter.bi_sector);
+		bio_set_dev(bio, mpath_device->disk->part0);
+
+		submit_bio_noacct(bio);
+	} else if (mpath_available_path(mpath_head)) {
+		dev_warn_ratelimited(dev, "no usable path - requeuing I/O\n");
+
+		spin_lock_irq(&mpath_head->requeue_lock);
+		bio_list_add(&mpath_head->requeue_list, bio);
+		spin_unlock_irq(&mpath_head->requeue_lock);
+	} else {
+		dev_warn_ratelimited(dev, "no available path - failing I/O\n");
+
+		bio_io_error(bio);
+	}
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
 }
 
 static void mpath_free_head(struct kref *ref)
@@ -310,6 +370,7 @@ const struct block_device_operations mpath_ops = {
 	.owner          = THIS_MODULE,
 	.open		= mpath_bdev_open,
 	.release	= mpath_bdev_release,
+	.submit_bio	= mpath_bdev_submit_bio,
 };
 EXPORT_SYMBOL_GPL(mpath_ops);
 
@@ -327,12 +388,36 @@ static void multipath_partition_scan_work(struct work_struct *work)
 	mutex_unlock(&mpath_disk->disk->open_mutex);
 }
 
+void mpath_requeue_work(struct work_struct *work)
+{
+	struct mpath_head *mpath_head =
+	    container_of(work, struct mpath_head, requeue_work);
+	struct bio *bio, *next;
+
+	spin_lock_irq(&mpath_head->requeue_lock);
+	next = bio_list_get(&mpath_head->requeue_list);
+	spin_unlock_irq(&mpath_head->requeue_lock);
+
+	while ((bio = next) != NULL) {
+		next = bio->bi_next;
+		bio->bi_next = NULL;
+		submit_bio_noacct(bio);
+	}
+}
+EXPORT_SYMBOL_GPL(mpath_requeue_work);
+
 void mpath_remove_disk(struct mpath_disk *mpath_disk)
 {
 	struct mpath_head *mpath_head = mpath_disk->mpath_head;
 
 	if (test_and_clear_bit(MPATH_HEAD_DISK_LIVE, &mpath_head->flags)) {
 		struct gendisk *disk = mpath_disk->disk;
+
+		/*
+		 * requeue I/O after MPATH_HEAD_DISK_LIVE has been cleared
+		 * to allow multipath to fail all I/O.
+		 */
+		kblockd_schedule_work(&mpath_head->requeue_work);
 
 		mpath_synchronize(mpath_head);
 		del_gendisk(disk);
@@ -409,6 +494,7 @@ void mpath_device_set_live(struct mpath_disk *mpath_disk,
 	mutex_unlock(&mpath_head->lock);
 
 	mpath_synchronize(mpath_head);
+	kblockd_schedule_work(&mpath_head->requeue_work);
 }
 EXPORT_SYMBOL_GPL(mpath_device_set_live);
 
@@ -423,6 +509,10 @@ struct mpath_head *mpath_alloc_head(void)
 	INIT_LIST_HEAD(&mpath_head->dev_list);
 	mutex_init(&mpath_head->lock);
 	kref_init(&mpath_head->ref);
+
+	INIT_WORK(&mpath_head->requeue_work, mpath_requeue_work);
+	spin_lock_init(&mpath_head->requeue_lock);
+	bio_list_init(&mpath_head->requeue_list);
 
 	ret = init_srcu_struct(&mpath_head->srcu);
 	if (ret) {
