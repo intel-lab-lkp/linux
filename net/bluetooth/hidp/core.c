@@ -815,6 +815,9 @@ static int hidp_session_dev_init(struct hidp_session *session,
 {
 	int ret;
 
+	if (req->rd_size > HID_MAX_DESCRIPTOR_SIZE)
+		return -EINVAL;
+
 	if (req->rd_size > 0) {
 		ret = hidp_setup_hid(session, req);
 		if (ret && ret != -ENODEV)
