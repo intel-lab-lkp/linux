@@ -493,6 +493,15 @@ static void *persistent_ram_iomap(phys_addr_t start, size_t size,
 	 * there is no need handle anything special like we do when the
 	 * vmap() case in persistent_ram_vmap() above.
 	 */
+	/*
+	 * ioremap() may fail. Release the mem region and return NULL
+	 * to let the caller handle the error.
+	 */
+	if (!va) {
+		release_mem_region(start, size);
+		return NULL;
+	}
+
 	return va;
 }
 
