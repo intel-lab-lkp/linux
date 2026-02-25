@@ -13,12 +13,8 @@
 /*  */
 /*  Creadted by Roger, 2011.01.31. */
 /*  */
-static void hal_sdio_get_cmd_addr_8723b(
-	struct adapter *adapter,
-	u8 device_id,
-	u32 addr,
-	u32 *cmdaddr
-)
+static void hal_sdio_get_cmd_addr_8723b(struct adapter *adapter, u8 device_id,
+					u32 addr, u32 *cmdaddr)
 {
 	switch (device_id) {
 	case SDIO_LOCAL_DEVICE_ID:
