@@ -1044,6 +1044,11 @@ struct drm_syncobj_array {
 };
 
 #define DRM_SYNCOBJ_QUERY_FLAGS_LAST_SUBMITTED (1 << 0) /* last available point on timeline syncobj */
+/*
+ * Copy the status of the fence as output into the handles array.
+ * The handles array is overwritten by that.
+ */
+#define DRM_SYNCOBJ_QUERY_FLAGS_ERROR (1 << 1)
 struct drm_syncobj_timeline_array {
 	__u64 handles;
 	__u64 points;

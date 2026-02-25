@@ -1654,14 +1654,17 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_syncobj_timeline_array *args = data;
 	struct drm_syncobj **syncobjs;
+	unsigned int valid_flags = DRM_SYNCOBJ_QUERY_FLAGS_LAST_SUBMITTED |
+				   DRM_SYNCOBJ_QUERY_FLAGS_ERROR;
 	uint64_t __user *points = u64_to_user_ptr(args->points);
+	uint32_t __user *handles = u64_to_user_ptr(args->handles);
 	uint32_t i;
-	int ret;
+	int ret, error;
 
 	if (!drm_core_check_feature(dev, DRIVER_SYNCOBJ_TIMELINE))
 		return -EOPNOTSUPP;
 
-	if (args->flags & ~DRM_SYNCOBJ_QUERY_FLAGS_LAST_SUBMITTED)
+	if (args->flags & ~valid_flags)
 		return -EINVAL;
 
 	if (args->count_handles == 0)
@@ -1681,6 +1684,7 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 
 		fence = drm_syncobj_fence_get(syncobjs[i]);
 		chain = to_dma_fence_chain(fence);
+
 		if (chain) {
 			struct dma_fence *iter, *last_signaled =
 				dma_fence_get(fence);
@@ -1688,6 +1692,8 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 			if (args->flags &
 			    DRM_SYNCOBJ_QUERY_FLAGS_LAST_SUBMITTED) {
 				point = fence->seqno;
+				error = dma_fence_get_status(fence);
+
 			} else {
 				dma_fence_chain_for_each(iter, fence) {
 					if (iter->context != fence->context) {
@@ -1702,16 +1708,28 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 				point = dma_fence_is_signaled(last_signaled) ?
 					last_signaled->seqno :
 					to_dma_fence_chain(last_signaled)->prev_seqno;
+
+				error = dma_fence_get_status(last_signaled);
 			}
 			dma_fence_put(last_signaled);
 		} else {
 			point = 0;
+			error = fence ? dma_fence_get_status(fence) : 0;
 		}
 		dma_fence_put(fence);
+
 		ret = copy_to_user(&points[i], &point, sizeof(uint64_t));
 		ret = ret ? -EFAULT : 0;
 		if (ret)
 			break;
+
+		if (args->flags & DRM_SYNCOBJ_QUERY_FLAGS_ERROR) {
+			ret = copy_to_user(&handles[i], &error, sizeof(*handles));
+
+			ret = ret ? -EFAULT : 0;
+			if (ret)
+				break;
+		}
 	}
 	drm_syncobj_array_free(syncobjs, args->count_handles);
 
