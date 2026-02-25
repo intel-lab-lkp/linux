@@ -63,6 +63,15 @@ static ssize_t cur_speed_read_file(struct pci_slot *slot, char *buf)
 	return bus_speed_read(slot->bus->cur_bus_speed, buf);
 }
 
+static ssize_t uevent_write_file(struct pci_slot *slot,
+				 const char *buf, size_t len)
+{
+	int rc;
+
+	rc = kobject_synth_uevent(&slot->kobj, buf, len);
+	return rc ? rc : len;
+}
+
 static void pci_slot_release(struct kobject *kobj)
 {
 	struct pci_dev *dev;
@@ -89,11 +98,14 @@ static struct pci_slot_attribute pci_slot_attr_max_speed =
 	__ATTR(max_bus_speed, S_IRUGO, max_speed_read_file, NULL);
 static struct pci_slot_attribute pci_slot_attr_cur_speed =
 	__ATTR(cur_bus_speed, S_IRUGO, cur_speed_read_file, NULL);
+static struct pci_slot_attribute pci_slot_attr_uevent =
+	__ATTR(uevent, S_IWUSR, NULL, uevent_write_file);
 
 static struct attribute *pci_slot_default_attrs[] = {
 	&pci_slot_attr_address.attr,
 	&pci_slot_attr_max_speed.attr,
 	&pci_slot_attr_cur_speed.attr,
+	&pci_slot_attr_uevent.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(pci_slot_default);
