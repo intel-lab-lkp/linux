@@ -647,6 +647,7 @@ static void pci_release_host_bridge_dev(struct device *dev)
 
 	pci_free_resource_list(&bridge->windows);
 	pci_free_resource_list(&bridge->dma_ranges);
+	pci_free_resource_list(&bridge->ports);
 
 	/* Host bridges only have domain_nr set in the emulation case */
 	if (bridge->domain_nr != PCI_DOMAIN_NR_NOT_SET)
@@ -671,6 +672,7 @@ static void pci_init_host_bridge(struct pci_host_bridge *bridge)
 {
 	INIT_LIST_HEAD(&bridge->windows);
 	INIT_LIST_HEAD(&bridge->dma_ranges);
+	INIT_LIST_HEAD(&bridge->ports);
 
 	/*
 	 * We assume we can manage these PCIe features.  Some systems may
