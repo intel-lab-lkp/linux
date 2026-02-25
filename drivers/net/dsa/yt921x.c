@@ -353,6 +353,14 @@ yt921x_longreg_clear_bits(struct yt921x_priv *priv, u32 reg, const u32 *masks,
 	return yt921x_longreg_write(priv, reg, vs, span);
 }
 
+static void u32a_update_u64(u32 *arr, u64 mask, u64 val)
+{
+	arr[0] &= ~((u32)mask);
+	arr[1] &= ~((u32)(mask >> 32));
+	arr[0] |= (u32)val;
+	arr[1] |= (u32)(val >> 32);
+}
+
 static int yt921x_reg_mdio_read(void *context, u32 reg, u32 *valp)
 {
 	struct yt921x_reg_mdio *mdio = context;
@@ -1046,6 +1054,13 @@ yt921x_dsa_set_mac_eee(struct dsa_switch *ds, int port, struct ethtool_keee *e)
 	return res;
 }
 
+static int yt921x_mtu_fetch(struct yt921x_priv *priv, int port)
+{
+	struct dsa_port *dp = dsa_to_port(&priv->ds, port);
+
+	return dp->user ? READ_ONCE(dp->user->mtu) : ETH_DATA_LEN;
+}
+
 static int
 yt921x_dsa_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 {
@@ -1075,6 +1090,218 @@ static int yt921x_dsa_port_max_mtu(struct dsa_switch *ds, int port)
 {
 	/* Only called for user ports, exclude tag len here */
 	return YT921X_FRAME_SIZE_MAX - ETH_HLEN - ETH_FCS_LEN - YT921X_TAG_LEN;
+}
+
+/* v * 2^e */
+#define ldexpi(v, e) ({ \
+	__auto_type _v = (v); \
+	__auto_type _e = (e); \
+	_e >= 0 ? _v << _e : _v >> -_e; \
+})
+
+/* slot (ns) * rate (/s) / 10^9 (ns/s) = 2^C * token * 4^unit */
+#define rate2token(rate, unit, slot_ns, C) \
+	((u32)(ldexpi((slot_ns) * (rate), \
+		      -(2 * (unit) + (C) + YT921X_TOKEN_RATE_C)) / 1000000000))
+#define token2rate(token, unit, slot_ns, C) \
+	(ldexpi(1000000000 * (u64)(token), \
+		2 * (unit) + (C) + YT921X_TOKEN_RATE_C) / (slot_ns))
+
+/* burst = 2^C * token * 4^unit */
+#define burst2token(burst, unit, C) ((u32)ldexpi((burst), -(2 * (unit) + (C))))
+#define token2burst(token, unit, C) ldexpi((u64)(token), 2 * (unit) + (C))
+
+struct yt921x_meter {
+	u32 cir;
+	u32 cbs;
+	u32 ebs;
+	int unit;
+};
+
+#define YT921X_METER_PKT_MODE		BIT(0)
+#define YT921X_METER_SINGLE_BUCKET	BIT(1)
+
+static struct yt921x_meter
+yt921x_meter_tfm(struct yt921x_priv *priv, int port, unsigned int slot_ns,
+		 u64 rate, u64 burst, unsigned int flags,
+		 u32 cir_max, u32 cbs_max, int unit_max)
+{
+	const int C = flags & YT921X_METER_PKT_MODE ? YT921X_TOKEN_PKT_C :
+		      YT921X_TOKEN_BYTE_C;
+	struct device *dev = to_device(priv);
+	struct yt921x_meter meter;
+	bool distorted;
+	u64 burst_est;
+	u64 burst_max;
+	u64 rate_max;
+
+	meter.unit = unit_max;
+	rate_max = token2rate(cir_max, meter.unit, slot_ns, C);
+	burst_max = token2burst(cbs_max, meter.unit, C);
+
+	/* Clamp rate and burst */
+	if (rate > rate_max || burst > burst_max) {
+		dev_warn(dev,
+			 "rate %llu, burst %llu too high, max is %llu, %llu, clamping...\n",
+			 rate, burst, rate_max, burst_max);
+
+		if (rate > rate_max)
+			rate = rate_max;
+		if (burst > burst_max)
+			burst = burst_max;
+
+		burst_est = slot_ns * rate / 1000000000;
+	} else {
+		u64 burst_sug;
+
+		burst_est = slot_ns * rate / 1000000000;
+		burst_sug = burst_est;
+		if (flags & YT921X_METER_PKT_MODE)
+			burst_sug++;
+		else
+			burst_sug += ETH_HLEN + yt921x_mtu_fetch(priv, port) +
+				     ETH_FCS_LEN;
+		if (burst_sug > burst)
+			dev_warn(dev,
+				 "Consider burst at least %llu to match rate %llu\n",
+				 burst_sug, rate);
+
+		/* Select unit */
+		for (; meter.unit > 0; meter.unit--) {
+			if (rate > (rate_max >> 2) || burst > (burst_max >> 2))
+				break;
+			rate_max >>= 2;
+			burst_max >>= 2;
+		}
+	}
+
+	/* Calculate information rate and bucket size */
+	distorted = false;
+	meter.cir = rate2token(rate, meter.unit, slot_ns, C);
+	if (!meter.cir) {
+		distorted = true;
+		meter.cir = 1;
+	} else if (meter.cir > cir_max) {
+		WARN_ON(1);
+		meter.cir = cir_max;
+	}
+	meter.cbs = burst2token(burst, meter.unit, C);
+	if (!meter.cbs) {
+		distorted = true;
+		meter.cbs = 1;
+	} else if (meter.cbs > cbs_max) {
+		WARN_ON(1);
+		meter.cbs = cbs_max;
+	}
+	if (distorted)
+		dev_warn(dev,
+			 "Have to increase rate %llu, burst %llu to %llu, %llu\n",
+			 rate, burst,
+			 token2rate(meter.cir, meter.unit, slot_ns, C),
+			 token2burst(meter.cbs, meter.unit, C));
+
+	/* Cut EBS */
+	meter.ebs = 0;
+	if (!(flags & YT921X_METER_SINGLE_BUCKET)) {
+		/* We don't have a chance to adjust rate when MTU is changed */
+		if (flags & YT921X_METER_PKT_MODE)
+			burst_est++;
+		else
+			burst_est += YT921X_FRAME_SIZE_MAX;
+
+		if (burst_est < burst) {
+			u32 pbs = meter.cbs;
+
+			meter.cbs = burst2token(burst_est, meter.unit, C);
+			if (!meter.cbs) {
+				meter.cbs = 1;
+			} else if (meter.cbs > cbs_max) {
+				WARN_ON(1);
+				meter.cbs = cbs_max;
+			}
+
+			if (pbs > meter.cbs)
+				meter.ebs = pbs - meter.cbs;
+		}
+	}
+
+	dev_dbg(dev,
+		"slot %u ns, rate %llu, burst %llu -> unit %d, cir %u, cbs %u, ebs %u\n",
+		slot_ns, rate, burst,
+		meter.unit, meter.cir, meter.cbs, meter.ebs);
+
+	return meter;
+}
+
+static void yt921x_dsa_port_policer_del(struct dsa_switch *ds, int port)
+{
+	struct yt921x_priv *priv = to_yt921x_priv(ds);
+	struct device *dev = to_device(priv);
+	int res;
+
+	mutex_lock(&priv->reg_lock);
+	res = yt921x_reg_write(priv, YT921X_PORTn_METER(port), 0);
+	mutex_unlock(&priv->reg_lock);
+
+	if (res)
+		dev_err(dev, "Failed to %s port %d: %i\n", "delete policer on",
+			port, res);
+}
+
+static int
+yt921x_dsa_port_policer_add(struct dsa_switch *ds, int port,
+			    const struct flow_action_police *policer)
+{
+	struct yt921x_priv *priv = to_yt921x_priv(ds);
+	struct device *dev = to_device(priv);
+	u32 ctrls[YT921X_METER_CTRL_S];
+	struct yt921x_meter meter;
+	bool pkt_mode;
+	u64 burst;
+	u64 rate;
+	u32 ctrl;
+	int res;
+
+	/* mtu defaults to unlimited but we got 2040 here, don't know why */
+	if (policer->exceed.act_id != FLOW_ACTION_DROP ||
+	    policer->notexceed.act_id != FLOW_ACTION_ACCEPT ||
+	    policer->peakrate_bytes_ps || policer->avrate ||
+	    policer->overhead) {
+		dev_err(dev, "Unsupported options specified\n");
+		return -EOPNOTSUPP;
+	}
+
+	pkt_mode = !!policer->rate_pkt_ps;
+	rate = pkt_mode ? policer->rate_pkt_ps : policer->rate_bytes_ps;
+	burst = pkt_mode ? policer->burst_pkt : policer->burst;
+	meter = yt921x_meter_tfm(priv, port, priv->meter_slot_ns, rate, burst,
+				 pkt_mode ? YT921X_METER_PKT_MODE : 0,
+				 YT921X_METER_RATE_MAX, YT921X_METER_BURST_MAX,
+				 YT921X_METER_UNIT_MAX);
+
+	mutex_lock(&priv->reg_lock);
+	ctrl = YT921X_PORT_METER_ID(port) | YT921X_PORT_METER_EN;
+	res = yt921x_reg_write(priv, YT921X_PORTn_METER(port), ctrl);
+	if (res)
+		goto end;
+
+	ctrls[0] = 0;
+	ctrls[1] = YT921X_METER_CTRLb_CIR(meter.cir);
+	ctrls[2] = YT921X_METER_CTRLc_UNIT(meter.unit) |
+		   YT921X_METER_CTRLc_DROP_R |
+		   YT921X_METER_CTRLc_TOKEN_OVERFLOW_EN |
+		   YT921X_METER_CTRLc_METER_EN;
+	u32a_update_u64(&ctrls[0], YT921X_METER_CTRLab_EBS_M,
+			YT921X_METER_CTRLab_EBS(meter.ebs));
+	u32a_update_u64(&ctrls[1], YT921X_METER_CTRLbc_CBS_M,
+			YT921X_METER_CTRLbc_CBS(meter.cbs));
+	res = yt921x_longreg_write(priv,
+				   YT921X_METERn_CTRL(port + YT921X_METER_NUM),
+				   ctrls, YT921X_METER_CTRL_S);
+end:
+	mutex_unlock(&priv->reg_lock);
+
+	return res;
 }
 
 static int
@@ -3045,6 +3272,7 @@ static int yt921x_chip_detect(struct yt921x_priv *priv)
 	u32 chipid;
 	u32 major;
 	u32 mode;
+	u32 val;
 	int res;
 
 	res = yt921x_reg_read(priv, YT921X_CHIP_ID, &chipid);
@@ -3079,12 +3307,27 @@ static int yt921x_chip_detect(struct yt921x_priv *priv)
 		return -ENODEV;
 	}
 
+	res = yt921x_reg_read(priv, YT921X_SYS_CLK, &val);
+	if (res)
+		return res;
+	switch (FIELD_GET(YT921X_SYS_CLK_SEL_M, val)) {
+	case 0:
+		priv->cycle_ns = info->major == YT9215_MAJOR ? 8 : 6;
+		break;
+	case YT921X_SYS_CLK_143M:
+		priv->cycle_ns = 7;
+		break;
+	default:
+		priv->cycle_ns = 8;
+	}
+
 	/* Print chipid here since we are interested in lower 16 bits */
 	dev_info(dev,
 		 "Motorcomm %s ethernet switch, chipid: 0x%x, chipmode: 0x%x 0x%x\n",
 		 info->name, chipid, mode, extmode);
 
 	priv->info = info;
+
 	return 0;
 }
 
@@ -3207,6 +3450,23 @@ static int yt921x_chip_setup_dsa(struct yt921x_priv *priv)
 	return 0;
 }
 
+static int yt921x_chip_setup_tc(struct yt921x_priv *priv)
+{
+	unsigned int op_ns;
+	u32 ctrl;
+	int res;
+
+	op_ns = 8 * priv->cycle_ns;
+
+	ctrl = max(priv->meter_slot_ns / op_ns, YT921X_METER_SLOT_MIN);
+	res = yt921x_reg_write(priv, YT921X_METER_SLOT, ctrl);
+	if (res)
+		return res;
+	priv->meter_slot_ns = ctrl * op_ns;
+
+	return 0;
+}
+
 static int __maybe_unused yt921x_chip_setup_qos(struct yt921x_priv *priv)
 {
 	u32 ctrl;
@@ -3253,12 +3513,16 @@ static int yt921x_chip_setup(struct yt921x_priv *priv)
 	u32 ctrl;
 	int res;
 
-	ctrl = YT921X_FUNC_MIB;
+	ctrl = YT921X_FUNC_MIB | YT921X_FUNC_METER;
 	res = yt921x_reg_set_bits(priv, YT921X_FUNC, ctrl);
 	if (res)
 		return res;
 
 	res = yt921x_chip_setup_dsa(priv);
+	if (res)
+		return res;
+
+	res = yt921x_chip_setup_tc(priv);
 	if (res)
 		return res;
 
@@ -3353,6 +3617,9 @@ static const struct dsa_switch_ops yt921x_dsa_switch_ops = {
 	/* mtu */
 	.port_change_mtu	= yt921x_dsa_port_change_mtu,
 	.port_max_mtu		= yt921x_dsa_port_max_mtu,
+	/* rate */
+	.port_policer_del	= yt921x_dsa_port_policer_del,
+	.port_policer_add	= yt921x_dsa_port_policer_add,
 	/* hsr */
 	.port_hsr_leave		= dsa_port_simple_hsr_leave,
 	.port_hsr_join		= dsa_port_simple_hsr_join,
