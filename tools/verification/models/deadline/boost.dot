@@ -1,0 +1,48 @@
+digraph state_automaton {
+	center = true;
+	size = "7,11";
+	{node [shape = circle] "idle"};
+	{node [shape = circle] "ready"};
+	{node [shape = circle] "running"};
+	{node [shape = plaintext, style=invis, label=""] "__init_stopped"};
+	{node [shape = doublecircle] "stopped"};
+	{node [shape = circle] "stopped"};
+	{node [shape = circle] "throttled"};
+	{node [shape = circle] "throttled_running"};
+	"__init_stopped" -> "stopped";
+	"idle" [label = "idle"];
+	"idle" -> "idle" [ label = "dl_server_idle\ndl_replenish;reset(clk)\ndl_throttle" ];
+	"idle" -> "ready" [ label = "dl_server_resume" ];
+	"idle" -> "stopped" [ label = "dl_server_stop" ];
+	"idle" -> "throttled" [ label = "dl_server_resume_throttled" ];
+	"ready" [label = "ready\nclk < server_threshold_ns()"];
+	"ready" -> "idle" [ label = "dl_server_idle" ];
+	"ready" -> "ready" [ label = "sched_switch_out\ndl_server_resume_throttled\ndl_server_resume\ndl_replenish;reset(clk)" ];
+	"ready" -> "running" [ label = "sched_switch_in" ];
+	"ready" -> "stopped" [ label = "dl_server_stop" ];
+	"ready" -> "throttled" [ label = "dl_throttle" ];
+	"running" [label = "running"];
+	"running" -> "idle" [ label = "dl_server_idle" ];
+	"running" -> "ready" [ label = "sched_switch_out" ];
+	"running" -> "running" [ label = "dl_server_resume_throttled\ndl_server_resume\ndl_replenish;reset(clk)" ];
+	"running" -> "stopped" [ label = "dl_server_stop" ];
+	"running" -> "throttled_running" [ label = "dl_throttle" ];
+	"stopped" [label = "stopped", color = green3];
+	"stopped" -> "ready" [ label = "dl_server_start;reset(clk)" ];
+	"stopped" -> "stopped" [ label = "dl_server_idle\nsched_switch_out\ndl_server_resume\ndl_server_resume_throttled" ];
+	"throttled" [label = "throttled"];
+	"throttled" -> "idle" [ label = "dl_server_idle" ];
+	"throttled" -> "ready" [ label = "dl_replenish;reset(clk)" ];
+	"throttled" -> "stopped" [ label = "dl_server_stop" ];
+	"throttled" -> "throttled" [ label = "dl_throttle\ndl_server_resume_throttled" ];
+	"throttled" -> "throttled_running" [ label = "sched_switch_in" ];
+	"throttled_running" [label = "throttled_running"];
+	"throttled_running" -> "idle" [ label = "dl_server_idle" ];
+	"throttled_running" -> "running" [ label = "dl_replenish;reset(clk)" ];
+	"throttled_running" -> "throttled" [ label = "sched_switch_out" ];
+	"throttled_running" -> "throttled_running" [ label = "dl_throttle\ndl_server_resume_throttled" ];
+	{ rank = min ;
+		"__init_stopped";
+		"stopped";
+	}
+}

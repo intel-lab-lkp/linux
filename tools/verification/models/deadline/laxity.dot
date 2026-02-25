@@ -1,0 +1,37 @@
+digraph state_automaton {
+	center = true;
+	size = "7,11";
+	{node [shape = circle] "idle_wait"};
+	{node [shape = circle] "replenish_wait"};
+	{node [shape = circle] "running"};
+	{node [shape = plaintext, style=invis, label=""] "__init_stopped"};
+	{node [shape = doublecircle] "stopped"};
+	{node [shape = circle] "stopped"};
+	{node [shape = circle] "zero_laxity_wait"};
+	"__init_stopped" -> "stopped";
+	"idle_wait" [label = "idle_wait\nclk < period_ns()"];
+	"idle_wait" -> "idle_wait" [ label = "dl_replenish_idle;reset(clk)" ];
+	"idle_wait" -> "stopped" [ label = "dl_server_stop" ];
+	"idle_wait" -> "zero_laxity_wait" [ label = "dl_replenish;reset(clk)\ndl_server_resume" ];
+	"replenish_wait" [label = "replenish_wait\nclk < period_ns()"];
+	"replenish_wait" -> "idle_wait" [ label = "dl_replenish_idle;reset(clk)" ];
+	"replenish_wait" -> "replenish_wait" [ label = "dl_server_resume" ];
+	"replenish_wait" -> "running" [ label = "dl_replenish_running;reset(clk)" ];
+	"replenish_wait" -> "zero_laxity_wait" [ label = "dl_replenish;reset(clk)" ];
+	"running" [label = "running"];
+	"running" -> "replenish_wait" [ label = "dl_throttle;reset(clk)" ];
+	"running" -> "running" [ label = "sched_switch_in\ndl_server_resume\ndl_replenish_running;clk < REPLENISH_NS" ];
+	"running" -> "stopped" [ label = "dl_server_stop" ];
+	"stopped" [label = "stopped", color = green3];
+	"stopped" -> "running" [ label = "dl_server_start_running;reset(clk)" ];
+	"stopped" -> "stopped" [ label = "dl_server_resume" ];
+	"stopped" -> "zero_laxity_wait" [ label = "dl_server_start;reset(clk)" ];
+	"zero_laxity_wait" [label = "zero_laxity_wait\nclk < period_ns()"];
+	"zero_laxity_wait" -> "idle_wait" [ label = "dl_replenish_idle;reset(clk)" ];
+	"zero_laxity_wait" -> "running" [ label = "dl_replenish_running;reset(clk)" ];
+	"zero_laxity_wait" -> "zero_laxity_wait" [ label = "dl_replenish;reset(clk)\ndl_server_resume" ];
+	{ rank = min ;
+		"__init_stopped";
+		"stopped";
+	}
+}

@@ -82,6 +82,8 @@ source "kernel/trace/rv/monitors/stall/Kconfig"
 source "kernel/trace/rv/monitors/deadline/Kconfig"
 source "kernel/trace/rv/monitors/nomiss/Kconfig"
 source "kernel/trace/rv/monitors/throttle/Kconfig"
+source "kernel/trace/rv/monitors/boost/Kconfig"
+source "kernel/trace/rv/monitors/laxity/Kconfig"
 # Add new deadline monitors here
 
 # Add new monitors here

@@ -156,3 +156,123 @@ server can run from sleeping without being ready::
  +--------------+ <---------+                                        ^
         |                                                            |
         +------ dl_throttle;is_constr_dl == 1 || is_defer == 1 ------+
+
+Monitor boost
+~~~~~~~~~~~~~
+
+The boost monitor ensures tasks associated to a server (e.g. fair tasks) run
+either independently or boosted in a timely manner.
+Unlike other models, the ``running`` state (and the ``switch_in/out`` events)
+indicates that any fair task is running, this needs to happen within a
+threshold that depends on server deadline and remaining runtime, whenever a
+task is ready.
+
+The following chart is simplified to avoid confusion, several less important
+self-loops on states have been removed and event names have been simplified:
+
+* ``idle`` (``dl_server_idle``) occurs when the CPU runs the idle task.
+* ``start/stop`` (``dl_server_start/stop``) start and stop the server.
+* ``switch`` (``sched_switch_in/out``) represented as a double arrow to
+  indicate both edges are present: ``ready -- switch_in -> running`` and
+  ``running -- switch_out -> ready``. As stated above this fires when any fair
+  task starts or stops to running.
+* ``resume/resume_throttle``: a fair task woke up, potentially when the server
+  is throttled (no runtime left), this event is especially frequent on self
+  loops (no state change during a wakeup) but is removed here for clarity.
+* arrows merge with an ``x`` sign to indicate they are the same event going to
+  the same state (but with different origins, e.g. ``{idle/throttled} -- stop
+  -> stopped``). The ``+`` sign indicates standard crossings or corners.
+
+Refer to the dot file for the full specification::
+
+                      |
+                      v
+                #===============#        stop;reset(clk)
+                H               H <---------------+
+  +------------>H    stopped    H                 |
+  |             H               H                 |
+  |             #===============#                 |
+  |                 ^          |                  |
+  |                 |          |                  |      replenish;reset(clk)
+  |               stop         |                  |                    +--+
+  |                 |     start;reset(clk)        +-----------------+  |  |
+  |                 |          v                                    |  |  v
+  |                +---------------+ <---------- switch --------> +---------+
+  |   +- resume -> |     ready     |                              |         |
+  |   |            |               | -replenish;reset(clk)        | running |
+  |   |  +- idle - | clk < thesh() |   |                          |         |
+  |   |  |         +---------------+ <-+        +---------------- +---------+
+  |   |  |         |  ^                         |                   ^    |
+  |   |  |         |  |                       throttle              |    |
+  |   |  |         |  |replenish;reset(clk)     |                   |    |
+  |   |  |  throttle  |                         |   replenish;reset(clk) |
+  |   |  |         |  |                         |                   |    |
+  |   |  |         v  |                         v                   |    |
+  |   |  |   +---------+    switch    +-------------------+         |    |
+  x---+--+-- |         | <----------> | throttled_running | --------+    |
+  |   |  |   |throttled|              +-------------------+              |
+  |   |  |   |         | -----+            |                             |
+  |   |  |   +---------+      |            |                             |
+  |   |  |      ^             |            |                             |
+  |   |  | resume_throttle    |            |                             |
+ stop |  |      |             |            |                             |
+  |   |  v      |             |            |                             |
+  |   +---------+ <-----------x--- idle ---x-----------------------------+
+  |   |         |
+  +-- |  idle   | <--+
+      |         |    | replenish;reset(clk)
+      +---------+ ---+
+
+Monitor laxity
+~~~~~~~~~~~~~~
+
+The laxity monitor ensure deferrable servers go to a zero-laxity wait unless
+already running and run in starvation cases. The model can stay in the
+zero-laxity wait only for up to a period, then the server either prepares to
+stop (after ``idle_wait``) or prepares to boost a task (``running``). Boosting
+(``sched_switch_in``) is only allowed in the ``running`` state.
+``dl_replenish_running`` should not be allowed in ``running``, but can happen
+as soon as the server started, the model allows this only within a short
+threshold::
+
+                                                  |
+ +---- dl_server_stop -----+                      |
+ |                         v                      v
+ |            #=======================================#
+ |   +------- H                stopped                H
+ |   |        #=======================================#
+ |   |          |                             ^
+ |   |  dl_server_start_running;        dl_server_stop
+ |   |        reset(clk)                      |
+ |   |          v                             |            dl_replenish_running;
+ |   |     +-------------------------------------+ -----------clk < REPLENISH_NS
+ |   |     |                                     |              |
+ |   |     |              running                | <------------+
+ |   |     |                                     |
+ |   |     +-------------------------------------+ ------------------+
+ |   |       |            ^                    ^                     |
+ |   |  dl_throttle    dl_replenish_running    |               dl_update
+ |   |       v            |                    |        dl_replenish;reset(clk)
+ |   |   +-------------------+                 |   dl_replenish_idle;reset(clk)
+ |   |   |  replenish_wait   |                 |                     |
+ |   |   | clk < period_ns() | ----------------+---------------------+--------+
+ |   |   +-------------------+                 |                     |        |
+ |   |                   |                     |                     |        |
+ |   |               dl_update                 |                     |        |
+ |   |         dl_replenish;reset(clk)     dl_replenish_running      |        |
+ |   |                   v                     |                     |        |
+ |   |                 +--------------------------+                  |        |
+ | dl_server_start;    |                          | <----------------+        |
+ |   reset(clk)        |     zero_laxity_wait     |                           |
+ |   |                 |     clk < period_ns()    | ------+ dl_replenish;     |
+ |   +---------------> |                          |       |    reset(clk)     |
+ |                     +--------------------------+ <-----+ dl_update         |
+ |                               |              ^                             |
+ |  dl_replenish_idle;reset(clk) |      dl_replenish;reset(clk)               |
+ |                               v            dl_update                       |
+ |                  +------------------------+  |                             |
+ +----------------- |        idle_wait       | -+                             |
+                    |   clk < period_ns()    |                                |
+                    +------------------------+ <-- dl_replenish_idle;reset(clk)
+                         ^             |
+                         +------dl_replenish_idle;reset(clk)

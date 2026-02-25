@@ -190,6 +190,8 @@ DECLARE_EVENT_CLASS(error_env_da_monitor_id,
 #include <monitors/stall/stall_trace.h>
 #include <monitors/nomiss/nomiss_trace.h>
 #include <monitors/throttle/throttle_trace.h>
+#include <monitors/boost/boost_trace.h>
+#include <monitors/laxity/laxity_trace.h>
 // Add new monitors based on CONFIG_HA_MON_EVENTS_ID here
 
 #endif

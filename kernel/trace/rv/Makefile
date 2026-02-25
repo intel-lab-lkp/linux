@@ -21,6 +21,8 @@ obj-$(CONFIG_RV_MON_STALL) += monitors/stall/stall.o
 obj-$(CONFIG_RV_MON_DEADLINE) += monitors/deadline/deadline.o
 obj-$(CONFIG_RV_MON_NOMISS) += monitors/nomiss/nomiss.o
 obj-$(CONFIG_RV_MON_THROTTLE) += monitors/throttle/throttle.o
+obj-$(CONFIG_RV_MON_BOOST) += monitors/boost/boost.o
+obj-$(CONFIG_RV_MON_LAXITY) += monitors/laxity/laxity.o
 # Add new monitors here
 obj-$(CONFIG_RV_REACTORS) += rv_reactors.o
 obj-$(CONFIG_RV_REACT_PRINTK) += reactor_printk.o
