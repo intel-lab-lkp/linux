@@ -450,6 +450,8 @@ What:		/sys/bus/iio/devices/iio:deviceX/in_magn_offset
 What:		/sys/bus/iio/devices/iio:deviceX/in_rot_offset
 What:		/sys/bus/iio/devices/iio:deviceX/in_angl_offset
 What:		/sys/bus/iio/devices/iio:deviceX/in_capacitanceY_offset
+What:		/sys/bus/iio/devices/iio:deviceX/in_custom_offset
+What:		/sys/bus/iio/devices/iio:deviceX/in_customY_offset
 KernelVersion:	2.6.35
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -507,6 +509,8 @@ What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_red_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_green_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_blue_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_concentration_co2_scale
+What:		/sys/bus/iio/devices/iio:deviceX/in_custom_scale
+What:		/sys/bus/iio/devices/iio:deviceX/in_customY_scale
 KernelVersion:	2.6.35
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -1486,6 +1490,8 @@ What:		/sys/.../iio:deviceX/bufferY/in_pressureY_en
 What:		/sys/.../iio:deviceX/bufferY/in_pressure_en
 What:		/sys/.../iio:deviceX/bufferY/in_rot_quaternion_en
 What:		/sys/.../iio:deviceX/bufferY/in_proximity_en
+What:		/sys/.../iio:deviceX/bufferY/in_custom_en
+What:		/sys/.../iio:deviceX/bufferY/in_customZ_en
 KernelVersion:	5.11
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -1505,6 +1511,8 @@ What:		/sys/.../iio:deviceX/bufferY/in_pressureY_type
 What:		/sys/.../iio:deviceX/bufferY/in_pressure_type
 What:		/sys/.../iio:deviceX/bufferY/in_rot_quaternion_type
 What:		/sys/.../iio:deviceX/bufferY/in_proximity_type
+What:		/sys/.../iio:deviceX/bufferY/in_custom_type
+What:		/sys/.../iio:deviceX/bufferY/in_customZ_type
 KernelVersion:	5.11
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -1566,6 +1574,8 @@ What:		/sys/.../iio:deviceX/bufferY/in_pressureY_index
 What:		/sys/.../iio:deviceX/bufferY/in_pressure_index
 What:		/sys/.../iio:deviceX/bufferY/in_rot_quaternion_index
 What:		/sys/.../iio:deviceX/bufferY/in_proximity_index
+What:		/sys/.../iio:deviceX/bufferY/in_custom_index
+What:		/sys/.../iio:deviceX/bufferY/in_customZ_index
 KernelVersion:	5.11
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -2392,6 +2402,15 @@ Contact:	linux-iio@vger.kernel.org
 Description:
 		The x and y light color coordinate on the CIE 1931 chromaticity
 		diagram.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_custom_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_customY_raw
+KernelVersion:	7.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Custom input value, whose type is driver-specific and is described
+		in a separate document. It can have a modifier Y, in which case it
+		is a measuremement from channel Y.
 
 What:		/sys/bus/iio/devices/iio:deviceX/events/in_altvoltageY_mag_either_label
 What:		/sys/bus/iio/devices/iio:deviceX/events/in_altvoltageY_mag_rising_label
