@@ -57,7 +57,12 @@
  *
  * Note that dumb objects may not be used for gpu acceleration, as has been
  * attempted on some ARM embedded platforms. Such drivers really must have
- * a hardware-specific ioctl to allocate suitable buffer objects.
+ * a hardware-specific ioctl to allocate suitable buffer objects. They are
+ * also currently meant for only linear buffers, and using them with any
+ * modifier other than DRM_FORMAT_MOD_LINEAR is undefined behavior. There
+ * exist some KMS drivers abusing dumb objects for AFBC framebuffers, but this
+ * behavior is discouraged, only exists as a hack now and shouldn't be
+ * replicated.
  */
 
 static int drm_mode_align_dumb(struct drm_mode_create_dumb *args,
