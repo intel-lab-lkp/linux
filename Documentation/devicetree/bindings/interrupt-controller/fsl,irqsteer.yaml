@@ -22,6 +22,7 @@ properties:
               - fsl,imx94-irqsteer
               - fsl,imx95-irqsteer
           - const: fsl,imx-irqsteer
+      - const: nxp,s32n79-irqsteer
 
   reg:
     maxItems: 1
