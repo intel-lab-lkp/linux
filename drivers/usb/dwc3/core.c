@@ -777,6 +777,15 @@ static int dwc3_hs_phy_setup(struct dwc3 *dwc, int index)
 	if (dwc->ulpi_ext_vbus_drv)
 		reg |= DWC3_GUSB2PHYCFG_ULPIEXTVBUSDRV;
 
+	/*
+	 * DWC3_GUSB2PHYCFG_XCVRDLY:
+	 *    Adds a delay between the assertion of the
+	 *    ULPI/UTMI Transceiver Select signal (for HS) and
+	 *    the assertion of the TxValid signal during a HS Chirp.
+	 */
+	if (dwc->enable_usb2_transceiver_delay)
+		reg |= DWC3_GUSB2PHYCFG_XCVRDLY;
+
 	dwc3_writel(dwc, DWC3_GUSB2PHYCFG(index), reg);
 
 	return 0;
@@ -1854,6 +1863,9 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 
 	dwc->dis_split_quirk = device_property_read_bool(dev,
 				"snps,dis-split-quirk");
+
+	dwc->enable_usb2_transceiver_delay = device_property_read_bool(dev,
+				"snps,enable-usb2-transceiver-delay");
 
 	dwc->lpm_nyet_threshold = lpm_nyet_threshold;
 	dwc->tx_de_emphasis = tx_de_emphasis;
