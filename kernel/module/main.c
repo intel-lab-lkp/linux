@@ -45,7 +45,6 @@
 #include <linux/license.h>
 #include <asm/sections.h>
 #include <linux/tracepoint.h>
-#include <linux/ftrace.h>
 #include <linux/livepatch.h>
 #include <linux/async.h>
 #include <linux/percpu.h>
@@ -836,7 +835,6 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 	blocking_notifier_call_chain(&module_notify_list,
 				     MODULE_STATE_GOING, mod);
 	klp_module_going(mod);
-	ftrace_release_mod(mod);
 
 	async_synchronize_full();
 
@@ -3067,8 +3065,6 @@ static noinline int do_init_module(struct module *mod)
 	if (!mod->async_probe_requested)
 		async_synchronize_full();
 
-	ftrace_free_mem(mod, mod->mem[MOD_INIT_TEXT].base,
-			mod->mem[MOD_INIT_TEXT].base + mod->mem[MOD_INIT_TEXT].size);
 	mutex_lock(&module_mutex);
 	/* Drop initial reference. */
 	module_put(mod);
@@ -3131,7 +3127,6 @@ fail:
 	blocking_notifier_call_chain(&module_notify_list,
 				     MODULE_STATE_GOING, mod);
 	klp_module_going(mod);
-	ftrace_release_mod(mod);
 	free_module(mod);
 	wake_up_all(&module_wq);
 
@@ -3278,7 +3273,6 @@ static int prepare_coming_module(struct module *mod)
 {
 	int err;
 
-	ftrace_module_enable(mod);
 	err = klp_module_coming(mod);
 	if (err)
 		return err;
@@ -3461,7 +3455,8 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	init_build_id(mod, info);
 
 	/* Ftrace init must be called in the MODULE_STATE_UNFORMED state */
-	ftrace_module_init(mod);
+	blocking_notifier_call_chain(&module_notify_list,
+				MODULE_STATE_UNFORMED, mod);
 
 	/* Finally it's fully formed, ready to start executing. */
 	err = complete_formation(mod, info);
@@ -3513,8 +3508,6 @@ static int load_module(struct load_info *info, const char __user *uargs,
  coming_cleanup:
 	mod->state = MODULE_STATE_GOING;
 	destroy_params(mod->kp, mod->num_kp);
-	blocking_notifier_call_chain(&module_notify_list,
-				     MODULE_STATE_GOING, mod);
 	klp_module_going(mod);
  bug_cleanup:
 	mod->state = MODULE_STATE_GOING;
@@ -3524,7 +3517,8 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	mutex_unlock(&module_mutex);
 
  ddebug_cleanup:
-	ftrace_release_mod(mod);
+	blocking_notifier_call_chain(&module_notify_list,
+				     MODULE_STATE_GOING, mod);
 	synchronize_rcu();
 	kfree(mod->args);
  free_arch_cleanup:

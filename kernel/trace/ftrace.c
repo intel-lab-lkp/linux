@@ -5230,6 +5230,43 @@ static int __init ftrace_mod_cmd_init(void)
 }
 core_initcall(ftrace_mod_cmd_init);
 
+static int ftrace_module_callback(struct notifier_block *nb, unsigned long op,
+			void *module)
+{
+	struct module *mod = module;
+
+	switch (op) {
+	case MODULE_STATE_UNFORMED:
+		ftrace_module_init(mod);
+		break;
+	case MODULE_STATE_COMING:
+		ftrace_module_enable(mod);
+		break;
+	case MODULE_STATE_LIVE:
+		ftrace_free_mem(mod, mod->mem[MOD_INIT_TEXT].base,
+				mod->mem[MOD_INIT_TEXT].base + mod->mem[MOD_INIT_TEXT].size);
+		break;
+	case MODULE_STATE_GOING:
+		ftrace_release_mod(mod);
+		break;
+	default:
+		break;
+	}
+
+	return notifier_from_errno(0);
+}
+
+static struct notifier_block ftrace_module_nb = {
+	.notifier_call = ftrace_module_callback,
+	.priority = 0
+};
+
+static int __init ftrace_register_module_notifier(void)
+{
+	return register_module_notifier(&ftrace_module_nb);
+}
+core_initcall(ftrace_register_module_notifier);
+
 static void function_trace_probe_call(unsigned long ip, unsigned long parent_ip,
 				      struct ftrace_ops *op, struct ftrace_regs *fregs)
 {
