@@ -7334,12 +7334,14 @@ void folio_zero_user(struct folio *folio, unsigned long addr_hint)
 	r[0] = DEFINE_RANGE(r[2].end + 1, pg.end);
 
 	for (i = 0; i < ARRAY_SIZE(r); i++) {
-		const unsigned long addr = base_addr + r[i].start * PAGE_SIZE;
 		const long nr_pages = (long)range_len(&r[i]);
-		struct page *page = folio_page(folio, r[i].start);
 
-		if (nr_pages > 0)
+		if (nr_pages > 0) {
+			const unsigned long addr = base_addr + r[i].start * PAGE_SIZE;
+			struct page *page = folio_page(folio, r[i].start);
+
 			clear_contig_highpages(page, addr, nr_pages);
+		}
 	}
 }
 
