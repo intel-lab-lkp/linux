@@ -7,6 +7,7 @@
 #include <linux/auxvec.h>
 #include <linux/kref.h>
 #include <linux/list.h>
+#include <linux/mermap_types.h>
 #include <linux/spinlock.h>
 #include <linux/rbtree.h>
 #include <linux/maple_tree.h>
@@ -34,6 +35,7 @@
 struct address_space;
 struct futex_private_hash;
 struct mem_cgroup;
+struct mermap;
 
 typedef struct {
 	unsigned long f;
@@ -1158,6 +1160,8 @@ struct mm_struct {
 		 */
 		atomic_t membarrier_state;
 #endif
+
+		struct mermap mermap;
 
 		/**
 		 * @mm_users: The number of users including userspace.

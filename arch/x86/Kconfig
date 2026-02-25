@@ -37,6 +37,7 @@ config X86_64
 	select ZONE_DMA32
 	select EXECMEM if DYNAMIC_FTRACE
 	select ACPI_MRRM if ACPI
+	select ARCH_SUPPORTS_MERMAP
 
 config FORCE_DYNAMIC_FTRACE
 	def_bool y
