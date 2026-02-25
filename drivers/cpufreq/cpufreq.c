@@ -1458,6 +1458,18 @@ static int cpufreq_policy_online(struct cpufreq_policy *policy,
 	cpumask_and(policy->cpus, policy->cpus, cpu_online_mask);
 
 	if (new_policy) {
+		unsigned int min, max;
+
+		/*
+		 * If the driver has set policy->min or max,
+		 * use the value as a QoS request.
+		 */
+		min = max(FREQ_QOS_MIN_DEFAULT_VALUE, policy->min);
+		if (policy->max)
+			max = min(FREQ_QOS_MAX_DEFAULT_VALUE, policy->max);
+		else
+			max = FREQ_QOS_MAX_DEFAULT_VALUE;
+
 		for_each_cpu(j, policy->related_cpus) {
 			per_cpu(cpufreq_cpu_data, j) = policy;
 			add_cpu_dev_symlink(policy, j, get_cpu_device(j));
@@ -1472,7 +1484,7 @@ static int cpufreq_policy_online(struct cpufreq_policy *policy,
 
 		ret = freq_qos_add_request(&policy->constraints,
 					   policy->min_freq_req, FREQ_QOS_MIN,
-					   FREQ_QOS_MIN_DEFAULT_VALUE);
+					   min);
 		if (ret < 0) {
 			/*
 			 * So we don't call freq_qos_remove_request() for an
@@ -1492,7 +1504,7 @@ static int cpufreq_policy_online(struct cpufreq_policy *policy,
 
 		ret = freq_qos_add_request(&policy->constraints,
 					   policy->max_freq_req, FREQ_QOS_MAX,
-					   FREQ_QOS_MAX_DEFAULT_VALUE);
+					   max);
 		if (ret < 0) {
 			policy->max_freq_req = NULL;
 			goto out_destroy_policy;
