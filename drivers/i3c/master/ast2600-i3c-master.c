@@ -156,6 +156,7 @@ static int ast2600_i3c_probe(struct platform_device *pdev)
 			i3c->sda_pullup);
 
 	i3c->dw.platform_ops = &ast2600_i3c_ops;
+	i3c->dw.base.i2c.dev.of_node = np;
 	return dw_i3c_common_probe(&i3c->dw, pdev);
 }
 
