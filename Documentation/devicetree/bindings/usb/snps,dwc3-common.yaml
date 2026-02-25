@@ -207,6 +207,13 @@ properties:
       avoid -EPROTO errors with usbhid on some devices (Hikey 970).
     type: boolean
 
+  snps,enable-usb2-transceiver-delay:
+    description:
+      When set, inserts a delay before the assertion of the TxValid signal
+      during a HS Chirp. This fixes USB high-speed negotiation when using
+      a USB 3440x ULPI PHY.
+    type: boolean
+
   snps,gfladj-refclk-lpm-sel-quirk:
     description:
       When set, run the SOF/ITP counter based on ref_clk.
