@@ -544,7 +544,7 @@ SYM53C500_info(struct Scsi_Host *SChost)
 	return (info_msg);
 }
 
-static int SYM53C500_queue_lck(struct scsi_cmnd *SCpnt)
+static enum scsi_qc_status SYM53C500_queue_lck(struct scsi_cmnd *SCpnt)
 {
 	struct sym53c500_cmd_priv *scp = scsi_cmd_priv(SCpnt);
 	int i;
@@ -597,7 +597,7 @@ SYM53C500_host_reset(struct scsi_cmnd *SCpnt)
 
 static int 
 SYM53C500_biosparm(struct scsi_device *disk,
-    struct block_device *dev,
+    struct gendisk *unused,
     sector_t capacity, int *info_array)
 {
 	int size;

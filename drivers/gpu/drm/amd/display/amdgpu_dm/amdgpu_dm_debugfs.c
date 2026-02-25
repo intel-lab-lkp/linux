@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.
  *
@@ -94,7 +95,7 @@ static int parse_write_buffer_into_params(char *wr_buf, uint32_t wr_buf_size,
 		return -EFAULT;
 	}
 
-	/* check number of parameters. isspace could not differ space and \n */
+	/* check number of parameters. isspace could not differ space and\n */
 	while ((*wr_buf_ptr != 0xa) && (wr_buf_count < wr_buf_size)) {
 		/* skip space*/
 		while (isspace(*wr_buf_ptr) && (wr_buf_count < wr_buf_size)) {
@@ -758,6 +759,7 @@ static ssize_t dp_phy_test_pattern_debugfs_write(struct file *f, const char __us
 	int max_param_num = 11;
 	enum dp_test_pattern test_pattern = DP_TEST_PATTERN_UNSUPPORTED;
 	bool disable_hpd = false;
+	bool supports_hpd = link->irq_source_hpd != DC_IRQ_SOURCE_INVALID;
 	bool valid_test_pattern = false;
 	uint8_t param_nums = 0;
 	/* init with default 80bit custom pattern */
@@ -849,7 +851,7 @@ static ssize_t dp_phy_test_pattern_debugfs_write(struct file *f, const char __us
 	 * because it might have been disabled after a test pattern was set.
 	 * AUX depends on HPD * sequence dependent, do not move!
 	 */
-	if (!disable_hpd)
+	if (supports_hpd && !disable_hpd)
 		dc_link_enable_hpd(link);
 
 	prefer_link_settings.lane_count = link->verified_link_cap.lane_count;
@@ -887,7 +889,7 @@ static ssize_t dp_phy_test_pattern_debugfs_write(struct file *f, const char __us
 	 * Need disable interrupt to avoid SW driver disable DP output. This is
 	 * done after the test pattern is set.
 	 */
-	if (valid_test_pattern && disable_hpd)
+	if (valid_test_pattern && supports_hpd && disable_hpd)
 		dc_link_disable_hpd(link);
 
 	kfree(wr_buf);
@@ -1301,7 +1303,8 @@ static int odm_combine_segments_show(struct seq_file *m, void *unused)
 	if (connector->status != connector_status_connected)
 		return -ENODEV;
 
-	if (pipe_ctx != NULL && pipe_ctx->stream_res.tg->funcs->get_odm_combine_segments)
+	if (pipe_ctx && pipe_ctx->stream_res.tg &&
+	    pipe_ctx->stream_res.tg->funcs->get_odm_combine_segments)
 		pipe_ctx->stream_res.tg->funcs->get_odm_combine_segments(pipe_ctx->stream_res.tg, &segments);
 
 	seq_printf(m, "%d\n", segments);
@@ -2707,6 +2710,65 @@ static int ips_status_show(struct seq_file *m, void *unused)
 }
 
 /*
+ * IPS residency information from DMUB service. Read only.
+ *
+ * For time-window (segment) measurement:
+ *	1) echo 1 > /sys/kernel/debug/dri/0/amdgpu_dm_ips_residency_cntl
+ *	2) sleep <seconds>
+ *	3) echo 0 > /sys/kernel/debug/dri/0/amdgpu_dm_ips_residency_cntl
+ *	4) cat /sys/kernel/debug/dri/0/amdgpu_dm_ips_residency
+ */
+static int ips_residency_show(struct seq_file *m, void *unused)
+{
+	struct amdgpu_device *adev = m->private;
+	struct dc *dc = adev->dm.dc;
+	uint8_t panel_inst = 0;
+	enum ips_residency_mode mode;
+	struct dmub_ips_residency_info info;
+
+	mutex_lock(&adev->dm.dc_lock);
+
+	mode = IPS_RESIDENCY__IPS1_RCG;
+	if (!dc_dmub_srv_ips_query_residency_info(dc->ctx, panel_inst, &info, mode)) {
+		seq_printf(m, "ISP query failed\n");
+	} else {
+		unsigned int pct, frac;
+		pct = info.residency_millipercent / 1000;
+		frac = info.residency_millipercent % 1000;
+
+		seq_printf(m, "IPS residency: %u.%03u%% \n", pct, frac);
+		seq_printf(m, "    entry_counter: %u\n", info.entry_counter);
+		seq_printf(m, "    total_time_us: %llu\n",
+			(unsigned long long)info.total_time_us);
+		seq_printf(m, "    total_inactive_time_us: %llu\n",
+			(unsigned long long)info.total_inactive_time_us);
+	}
+	mutex_unlock(&adev->dm.dc_lock);
+	return 0;
+}
+
+static int ips_residency_cntl_get(void *data, u64 *val)
+{
+	*val = 0;
+	return 0;
+}
+
+static int ips_residency_cntl_set(void *data, u64 val)
+{
+	struct amdgpu_device *adev = data;
+	struct dc *dc = adev->dm.dc;
+	uint8_t panel_inst = 0;
+	int ret = 0;
+
+	mutex_lock(&adev->dm.dc_lock);
+	if (!dc_dmub_srv_ips_residency_cntl(dc->ctx, panel_inst, !!val))
+		ret = -EIO;
+	mutex_unlock(&adev->dm.dc_lock);
+
+	return ret;
+}
+
+/*
  * Backlight at this moment.  Read only.
  * As written to display, taking ABM and backlight lut into account.
  * Ranges from 0x0 to 0x10000 (= 100% PWM)
@@ -3106,6 +3168,35 @@ static int replay_get_state(void *data, u64 *val)
 }
 
 /*
+ *  Start / Stop capture Replay residency
+ */
+static int replay_set_residency(void *data, u64 val)
+{
+	struct amdgpu_dm_connector *connector = data;
+	struct dc_link *link = connector->dc_link;
+	bool is_start = (val != 0);
+	u32 residency = 0;
+
+	link->dc->link_srv->edp_replay_residency(link, &residency, is_start, PR_RESIDENCY_MODE_PHY);
+	return 0;
+}
+
+/*
+ *  Read Replay residency
+ */
+static int replay_get_residency(void *data, u64 *val)
+{
+	struct amdgpu_dm_connector *connector = data;
+	struct dc_link *link = connector->dc_link;
+	u32 residency = 0;
+
+	link->dc->link_srv->edp_replay_residency(link, &residency, false, PR_RESIDENCY_MODE_PHY);
+	*val = (u64)residency;
+
+	return 0;
+}
+
+/*
  *  Read PSR state
  */
 static int psr_get(void *data, u64 *val)
@@ -3324,7 +3415,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(dmcub_trace_event_state_fops, dmcub_trace_event_state_g
 			 dmcub_trace_event_state_set, "%llu\n");
 
 DEFINE_DEBUGFS_ATTRIBUTE(replay_state_fops, replay_get_state, NULL, "%llu\n");
-
+DEFINE_DEBUGFS_ATTRIBUTE(replay_residency_fops, replay_get_residency, replay_set_residency,
+			 "%llu\n");
 DEFINE_DEBUGFS_ATTRIBUTE(psr_fops, psr_get, NULL, "%llu\n");
 DEFINE_DEBUGFS_ATTRIBUTE(psr_residency_fops, psr_read_residency, NULL,
 			 "%llu\n");
@@ -3337,9 +3429,12 @@ DEFINE_DEBUGFS_ATTRIBUTE(disallow_edp_enter_psr_fops,
 			disallow_edp_enter_psr_get,
 			disallow_edp_enter_psr_set, "%llu\n");
 
+DEFINE_DEBUGFS_ATTRIBUTE(ips_residency_cntl_fops, ips_residency_cntl_get,
+			   ips_residency_cntl_set, "%llu\n");
 DEFINE_SHOW_ATTRIBUTE(current_backlight);
 DEFINE_SHOW_ATTRIBUTE(target_backlight);
 DEFINE_SHOW_ATTRIBUTE(ips_status);
+DEFINE_SHOW_ATTRIBUTE(ips_residency);
 
 static const struct {
 	char *name;
@@ -3502,6 +3597,8 @@ void connector_debugfs_init(struct amdgpu_dm_connector *connector)
 		debugfs_create_file("replay_capability", 0444, dir, connector,
 					&replay_capability_fops);
 		debugfs_create_file("replay_state", 0444, dir, connector, &replay_state_fops);
+		debugfs_create_file_unsafe("replay_residency", 0444, dir,
+					   connector, &replay_residency_fops);
 		debugfs_create_file_unsafe("psr_capability", 0444, dir, connector, &psr_capability_fops);
 		debugfs_create_file_unsafe("psr_state", 0444, dir, connector, &psr_fops);
 		debugfs_create_file_unsafe("psr_residency", 0444, dir,
@@ -3988,7 +4085,7 @@ static int capabilities_show(struct seq_file *m, void *unused)
 
 	struct hubbub *hubbub = dc->res_pool->hubbub;
 
-	if (hubbub->funcs->get_mall_en)
+	if (hubbub && hubbub->funcs->get_mall_en)
 		hubbub->funcs->get_mall_en(hubbub, &mall_in_use);
 
 	if (dc->cap_funcs.get_subvp_en)
@@ -4236,7 +4333,14 @@ void dtn_debugfs_init(struct amdgpu_device *adev)
 	debugfs_create_file_unsafe("amdgpu_dm_disable_hpd", 0644, root, adev,
 				   &disable_hpd_ops);
 
-	if (adev->dm.dc->caps.ips_support)
+	if (adev->dm.dc->caps.ips_support) {
 		debugfs_create_file_unsafe("amdgpu_dm_ips_status", 0644, root, adev,
 					   &ips_status_fops);
+
+		debugfs_create_file_unsafe("amdgpu_dm_ips_residency_cntl", 0644, root, adev,
+					   &ips_residency_cntl_fops);
+
+		debugfs_create_file_unsafe("amdgpu_dm_ips_residency", 0644, root, adev,
+					   &ips_residency_fops);
+	}
 }

@@ -85,7 +85,8 @@ static void mcb_remove(struct device *dev)
 	struct mcb_device *mdev = to_mcb_device(dev);
 	struct module *carrier_mod;
 
-	mdrv->remove(mdev);
+	if (mdrv->remove)
+		mdrv->remove(mdev);
 
 	carrier_mod = mdev->dev.parent->driver->owner;
 	module_put(carrier_mod);
@@ -107,7 +108,7 @@ static ssize_t revision_show(struct device *dev, struct device_attribute *attr,
 {
 	struct mcb_bus *bus = to_mcb_bus(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", bus->revision);
+	return sysfs_emit(buf, "%d\n", bus->revision);
 }
 static DEVICE_ATTR_RO(revision);
 
@@ -116,7 +117,7 @@ static ssize_t model_show(struct device *dev, struct device_attribute *attr,
 {
 	struct mcb_bus *bus = to_mcb_bus(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%c\n", bus->model);
+	return sysfs_emit(buf, "%c\n", bus->model);
 }
 static DEVICE_ATTR_RO(model);
 
@@ -125,7 +126,7 @@ static ssize_t minor_show(struct device *dev, struct device_attribute *attr,
 {
 	struct mcb_bus *bus = to_mcb_bus(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", bus->minor);
+	return sysfs_emit(buf, "%d\n", bus->minor);
 }
 static DEVICE_ATTR_RO(minor);
 
@@ -134,7 +135,7 @@ static ssize_t name_show(struct device *dev, struct device_attribute *attr,
 {
 	struct mcb_bus *bus = to_mcb_bus(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%s\n", bus->name);
+	return sysfs_emit(buf, "%s\n", bus->name);
 }
 static DEVICE_ATTR_RO(name);
 
@@ -176,13 +177,13 @@ static const struct device_type mcb_carrier_device_type = {
  * @owner: The @mcb_driver's module
  * @mod_name: The name of the @mcb_driver's module
  *
- * Register a @mcb_driver at the system. Perform some sanity checks, if
- * the .probe and .remove methods are provided by the driver.
+ * Register a @mcb_driver at the system. Perform a sanity check, if
+ * .probe method is provided by the driver.
  */
 int __mcb_register_driver(struct mcb_driver *drv, struct module *owner,
 			const char *mod_name)
 {
-	if (!drv->probe || !drv->remove)
+	if (!drv->probe)
 		return -EINVAL;
 
 	drv->driver.owner = owner;

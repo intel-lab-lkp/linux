@@ -12,6 +12,7 @@
 
 #include "uvc_configfs.h"
 
+#include <linux/hex.h>
 #include <linux/sort.h>
 #include <linux/usb/uvc.h>
 #include <linux/usb/video.h>
@@ -127,7 +128,7 @@ static void uvcg_config_item_release(struct config_item *item)
 	kfree(group);
 }
 
-static struct configfs_item_operations uvcg_config_item_ops = {
+static const struct configfs_item_operations uvcg_config_item_ops = {
 	.release	= uvcg_config_item_release,
 };
 
@@ -284,7 +285,7 @@ static struct config_item *uvcg_control_header_make(struct config_group *group,
 	return &h->item;
 }
 
-static struct configfs_group_operations uvcg_control_header_grp_ops = {
+static const struct configfs_group_operations uvcg_control_header_grp_ops = {
 	.make_item		= uvcg_control_header_make,
 };
 
@@ -1232,7 +1233,7 @@ static void uvcg_extension_drop_link(struct config_item *src, struct config_item
 	mutex_unlock(su_mutex);
 }
 
-static struct configfs_item_operations uvcg_extension_item_ops = {
+static const struct configfs_item_operations uvcg_extension_item_ops = {
 	.release	= uvcg_extension_release,
 	.allow_link	= uvcg_extension_allow_link,
 	.drop_link	= uvcg_extension_drop_link,
@@ -1297,7 +1298,7 @@ static struct config_item *uvcg_extension_make(struct config_group *group, const
 	return &xu->item;
 }
 
-static struct configfs_group_operations uvcg_extensions_grp_ops = {
+static const struct configfs_group_operations uvcg_extensions_grp_ops = {
 	.make_item	= uvcg_extension_make,
 	.drop_item	= uvcg_extension_drop,
 };
@@ -1413,7 +1414,7 @@ out:
 	mutex_unlock(su_mutex);
 }
 
-static struct configfs_item_operations uvcg_control_class_item_ops = {
+static const struct configfs_item_operations uvcg_control_class_item_ops = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_control_class_allow_link,
 	.drop_link	= uvcg_control_class_drop_link,
@@ -1663,7 +1664,7 @@ static void uvcg_format_drop_link(struct config_item *src, struct config_item *t
 	mutex_unlock(su_mutex);
 }
 
-static struct configfs_item_operations uvcg_format_item_operations = {
+static const struct configfs_item_operations uvcg_format_item_operations = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_format_allow_link,
 	.drop_link	= uvcg_format_drop_link,
@@ -1839,7 +1840,7 @@ out:
 	mutex_unlock(su_mutex);
 }
 
-static struct configfs_item_operations uvcg_streaming_header_item_ops = {
+static const struct configfs_item_operations uvcg_streaming_header_item_ops = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_streaming_header_allow_link,
 	.drop_link	= uvcg_streaming_header_drop_link,
@@ -1913,7 +1914,7 @@ static struct config_item
 	return &h->item;
 }
 
-static struct configfs_group_operations uvcg_streaming_header_grp_ops = {
+static const struct configfs_group_operations uvcg_streaming_header_grp_ops = {
 	.make_item		= uvcg_streaming_header_make,
 };
 
@@ -2260,7 +2261,7 @@ static void uvcg_format_set_indices(struct config_group *fmt)
  * streaming/uncompressed/<NAME>
  */
 
-static struct configfs_group_operations uvcg_uncompressed_group_ops = {
+static const struct configfs_group_operations uvcg_uncompressed_group_ops = {
 	.make_item		= uvcg_frame_make,
 	.drop_item		= uvcg_frame_drop,
 };
@@ -2507,7 +2508,7 @@ static struct config_group *uvcg_uncompressed_make(struct config_group *group,
 	return &h->fmt.group;
 }
 
-static struct configfs_group_operations uvcg_uncompressed_grp_ops = {
+static const struct configfs_group_operations uvcg_uncompressed_grp_ops = {
 	.make_group		= uvcg_uncompressed_make,
 };
 
@@ -2524,7 +2525,7 @@ static const struct uvcg_config_group_type uvcg_uncompressed_grp_type = {
  * streaming/mjpeg/<NAME>
  */
 
-static struct configfs_group_operations uvcg_mjpeg_group_ops = {
+static const struct configfs_group_operations uvcg_mjpeg_group_ops = {
 	.make_item		= uvcg_frame_make,
 	.drop_item		= uvcg_frame_drop,
 };
@@ -2697,7 +2698,7 @@ static struct config_group *uvcg_mjpeg_make(struct config_group *group,
 	return &h->fmt.group;
 }
 
-static struct configfs_group_operations uvcg_mjpeg_grp_ops = {
+static const struct configfs_group_operations uvcg_mjpeg_grp_ops = {
 	.make_group		= uvcg_mjpeg_make,
 };
 
@@ -2714,7 +2715,7 @@ static const struct uvcg_config_group_type uvcg_mjpeg_grp_type = {
  * streaming/framebased/<NAME>
  */
 
-static struct configfs_group_operations uvcg_framebased_group_ops = {
+static const struct configfs_group_operations uvcg_framebased_group_ops = {
 	.make_item              = uvcg_frame_make,
 	.drop_item              = uvcg_frame_drop,
 };
@@ -2916,7 +2917,14 @@ static struct config_group *uvcg_framebased_make(struct config_group *group,
 		'H',  '2',  '6',  '4', 0x00, 0x00, 0x10, 0x00,
 		0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71
 	};
+	struct uvcg_color_matching *color_match;
+	struct config_item *streaming;
 	struct uvcg_framebased *h;
+
+	streaming = group->cg_item.ci_parent;
+	color_match = uvcg_format_get_default_color_match(streaming);
+	if (!color_match)
+		return ERR_PTR(-EINVAL);
 
 	h = kzalloc(sizeof(*h), GFP_KERNEL);
 	if (!h)
@@ -2936,13 +2944,16 @@ static struct config_group *uvcg_framebased_make(struct config_group *group,
 
 	INIT_LIST_HEAD(&h->fmt.frames);
 	h->fmt.type = UVCG_FRAMEBASED;
+
+	h->fmt.color_matching = color_match;
+	color_match->refcnt++;
 	config_group_init_type_name(&h->fmt.group, name,
 				    &uvcg_framebased_type);
 
 	return &h->fmt.group;
 }
 
-static struct configfs_group_operations uvcg_framebased_grp_ops = {
+static const struct configfs_group_operations uvcg_framebased_grp_ops = {
 	.make_group             = uvcg_framebased_make,
 };
 
@@ -3045,7 +3056,7 @@ static void uvcg_color_matching_release(struct config_item *item)
 	kfree(color_match);
 }
 
-static struct configfs_item_operations uvcg_color_matching_item_ops = {
+static const struct configfs_item_operations uvcg_color_matching_item_ops = {
 	.release	= uvcg_color_matching_release,
 };
 
@@ -3078,7 +3089,7 @@ static struct config_group *uvcg_color_matching_make(struct config_group *group,
 	return &color_match->group;
 }
 
-static struct configfs_group_operations uvcg_color_matching_grp_group_ops = {
+static const struct configfs_group_operations uvcg_color_matching_grp_group_ops = {
 	.make_group	= uvcg_color_matching_make,
 };
 
@@ -3519,7 +3530,7 @@ out:
 	mutex_unlock(su_mutex);
 }
 
-static struct configfs_item_operations uvcg_streaming_class_item_ops = {
+static const struct configfs_item_operations uvcg_streaming_class_item_ops = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_streaming_class_allow_link,
 	.drop_link	= uvcg_streaming_class_drop_link,
@@ -3687,7 +3698,7 @@ static void uvc_func_drop_link(struct config_item *src, struct config_item *tgt)
 	mutex_unlock(&opts->lock);
 }
 
-static struct configfs_item_operations uvc_func_item_ops = {
+static const struct configfs_item_operations uvc_func_item_ops = {
 	.release	= uvc_func_item_release,
 	.allow_link	= uvc_func_allow_link,
 	.drop_link	= uvc_func_drop_link,

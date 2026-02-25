@@ -138,17 +138,14 @@ static struct phy *phy_find(struct device *dev, const char *con_id)
 static struct phy_provider *of_phy_provider_lookup(struct device_node *node)
 {
 	struct phy_provider *phy_provider;
-	struct device_node *child;
 
 	list_for_each_entry(phy_provider, &phy_provider_list, list) {
 		if (phy_provider->dev->of_node == node)
 			return phy_provider;
 
-		for_each_child_of_node(phy_provider->children, child)
-			if (child == node) {
-				of_node_put(child);
+		for_each_child_of_node_scoped(phy_provider->children, child)
+			if (child == node)
 				return phy_provider;
-			}
 	}
 
 	return ERR_PTR(-EPROBE_DEFER);
@@ -190,15 +187,15 @@ int phy_pm_runtime_get_sync(struct phy *phy)
 }
 EXPORT_SYMBOL_GPL(phy_pm_runtime_get_sync);
 
-int phy_pm_runtime_put(struct phy *phy)
+void phy_pm_runtime_put(struct phy *phy)
 {
 	if (!phy)
-		return 0;
+		return;
 
 	if (!pm_runtime_enabled(&phy->dev))
-		return -ENOTSUPP;
+		return;
 
-	return pm_runtime_put(&phy->dev);
+	pm_runtime_put(&phy->dev);
 }
 EXPORT_SYMBOL_GPL(phy_pm_runtime_put);
 
@@ -361,7 +358,7 @@ int phy_power_off(struct phy *phy)
 
 	mutex_lock(&phy->mutex);
 	if (phy->power_count == 1 && phy->ops->power_off) {
-		ret =  phy->ops->power_off(phy);
+		ret = phy->ops->power_off(phy);
 		if (ret < 0) {
 			dev_err(&phy->dev, "phy poweroff failed --> %d\n", ret);
 			mutex_unlock(&phy->mutex);
@@ -519,6 +516,31 @@ int phy_notify_disconnect(struct phy *phy, int port)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(phy_notify_disconnect);
+
+/**
+ * phy_notify_state() - phy state notification
+ * @phy: the PHY returned by phy_get()
+ * @state: the PHY state
+ *
+ * Notify the PHY of a state transition. Used to notify and
+ * configure the PHY accordingly.
+ *
+ * Returns: %0 if successful, a negative error code otherwise
+ */
+int phy_notify_state(struct phy *phy, union phy_notify state)
+{
+	int ret;
+
+	if (!phy || !phy->ops->notify_phystate)
+		return 0;
+
+	mutex_lock(&phy->mutex);
+	ret = phy->ops->notify_phystate(phy, state);
+	mutex_unlock(&phy->mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phy_notify_state);
 
 /**
  * phy_configure() - Changes the phy parameters
@@ -994,7 +1016,8 @@ struct phy *phy_create(struct device *dev, struct device_node *node,
 	}
 
 	device_initialize(&phy->dev);
-	mutex_init(&phy->mutex);
+	lockdep_register_key(&phy->lockdep_key);
+	mutex_init_with_key(&phy->mutex, &phy->lockdep_key);
 
 	phy->dev.class = &phy_class;
 	phy->dev.parent = dev;
@@ -1259,6 +1282,8 @@ static void phy_release(struct device *dev)
 	dev_vdbg(dev, "releasing '%s'\n", dev_name(dev));
 	debugfs_remove_recursive(phy->debugfs);
 	regulator_put(phy->pwr);
+	mutex_destroy(&phy->mutex);
+	lockdep_unregister_key(&phy->lockdep_key);
 	ida_free(&phy_ida, phy->id);
 	kfree(phy);
 }

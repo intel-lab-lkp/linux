@@ -3,7 +3,7 @@
  * Copyright (C) 2019-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs.h"
+#include "xfs_platform.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -237,7 +237,8 @@ xchk_setup_fscounters(
 			return error;
 	}
 
-	return xchk_trans_alloc_empty(sc);
+	xchk_trans_alloc_empty(sc);
+	return 0;
 }
 
 /*

@@ -39,7 +39,8 @@ static inline struct pscsi_dev_virt *PSCSI_DEV(struct se_device *dev)
 }
 
 static sense_reason_t pscsi_execute_cmd(struct se_cmd *cmd);
-static enum rq_end_io_ret pscsi_req_done(struct request *, blk_status_t);
+static enum rq_end_io_ret pscsi_req_done(struct request *, blk_status_t,
+					 const struct io_comp_batch *);
 
 /*	pscsi_attach_hba():
  *
@@ -861,7 +862,7 @@ new_bio:
 				bio = bio_kmalloc(nr_vecs, GFP_KERNEL);
 				if (!bio)
 					goto fail;
-				bio_init(bio, NULL, bio->bi_inline_vecs, nr_vecs,
+				bio_init_inline(bio, NULL, nr_vecs,
 					 rw ? REQ_OP_WRITE : REQ_OP_READ);
 				bio->bi_end_io = pscsi_bi_endio;
 
@@ -1001,7 +1002,8 @@ static sector_t pscsi_get_blocks(struct se_device *dev)
 }
 
 static enum rq_end_io_ret pscsi_req_done(struct request *req,
-					 blk_status_t status)
+					 blk_status_t status,
+					 const struct io_comp_batch *iob)
 {
 	struct se_cmd *cmd = req->end_io_data;
 	struct scsi_cmnd *scmd = blk_mq_rq_to_pdu(req);

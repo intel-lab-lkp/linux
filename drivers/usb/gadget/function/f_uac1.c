@@ -1512,7 +1512,7 @@ static void f_uac1_attr_release(struct config_item *item)
 	usb_put_function_instance(&opts->func_inst);
 }
 
-static struct configfs_item_operations f_uac1_item_ops = {
+static const struct configfs_item_operations f_uac1_item_ops = {
 	.release	= f_uac1_attr_release,
 };
 
@@ -1634,7 +1634,7 @@ static ssize_t f_uac1_opts_##name##_show(struct config_item *item,	\
 	int result;							\
 									\
 	mutex_lock(&opts->lock);					\
-	result = scnprintf(page, sizeof(opts->name), "%s", opts->name);	\
+	result = sysfs_emit(page, "%s", opts->name);        	        \
 	mutex_unlock(&opts->lock);					\
 									\
 	return result;							\

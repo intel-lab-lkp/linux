@@ -367,7 +367,7 @@ nvmet_rdma_alloc_cmds(struct nvmet_rdma_device *ndev,
 	struct nvmet_rdma_cmd *cmds;
 	int ret = -EINVAL, i;
 
-	cmds = kcalloc(nr_cmds, sizeof(struct nvmet_rdma_cmd), GFP_KERNEL);
+	cmds = kvcalloc(nr_cmds, sizeof(struct nvmet_rdma_cmd), GFP_KERNEL);
 	if (!cmds)
 		goto out;
 
@@ -382,7 +382,7 @@ nvmet_rdma_alloc_cmds(struct nvmet_rdma_device *ndev,
 out_free:
 	while (--i >= 0)
 		nvmet_rdma_free_cmd(ndev, cmds + i, admin);
-	kfree(cmds);
+	kvfree(cmds);
 out:
 	return ERR_PTR(ret);
 }
@@ -394,7 +394,7 @@ static void nvmet_rdma_free_cmds(struct nvmet_rdma_device *ndev,
 
 	for (i = 0; i < nr_cmds; i++)
 		nvmet_rdma_free_cmd(ndev, cmds + i, admin);
-	kfree(cmds);
+	kvfree(cmds);
 }
 
 static int nvmet_rdma_alloc_rsp(struct nvmet_rdma_device *ndev,
@@ -455,7 +455,7 @@ nvmet_rdma_alloc_rsps(struct nvmet_rdma_queue *queue)
 			NUMA_NO_NODE, false, true))
 		goto out;
 
-	queue->rsps = kcalloc(nr_rsps, sizeof(struct nvmet_rdma_rsp),
+	queue->rsps = kvcalloc(nr_rsps, sizeof(struct nvmet_rdma_rsp),
 			GFP_KERNEL);
 	if (!queue->rsps)
 		goto out_free_sbitmap;
@@ -473,7 +473,7 @@ nvmet_rdma_alloc_rsps(struct nvmet_rdma_queue *queue)
 out_free:
 	while (--i >= 0)
 		nvmet_rdma_free_rsp(ndev, &queue->rsps[i]);
-	kfree(queue->rsps);
+	kvfree(queue->rsps);
 out_free_sbitmap:
 	sbitmap_free(&queue->rsp_tags);
 out:
@@ -487,7 +487,7 @@ static void nvmet_rdma_free_rsps(struct nvmet_rdma_queue *queue)
 
 	for (i = 0; i < nr_rsps; i++)
 		nvmet_rdma_free_rsp(ndev, &queue->rsps[i]);
-	kfree(queue->rsps);
+	kvfree(queue->rsps);
 	sbitmap_free(&queue->rsp_tags);
 }
 
@@ -1731,7 +1731,7 @@ static void nvmet_rdma_queue_connect_fail(struct rdma_cm_id *cm_id,
  * We registered an ib_client to handle device removal for queues,
  * so we only need to handle the listening port cm_ids. In this case
  * we nullify the priv to prevent double cm_id destruction and destroying
- * the cm_id implicitely by returning a non-zero rc to the callout.
+ * the cm_id implicitly by returning a non-zero rc to the callout.
  */
 static int nvmet_rdma_device_removal(struct rdma_cm_id *cm_id,
 		struct nvmet_rdma_queue *queue)
@@ -1742,7 +1742,7 @@ static int nvmet_rdma_device_removal(struct rdma_cm_id *cm_id,
 		/*
 		 * This is a queue cm_id. we have registered
 		 * an ib_client to handle queues removal
-		 * so don't interfear and just return.
+		 * so don't interfere and just return.
 		 */
 		return 0;
 	}
@@ -1760,7 +1760,7 @@ static int nvmet_rdma_device_removal(struct rdma_cm_id *cm_id,
 
 	/*
 	 * We need to return 1 so that the core will destroy
-	 * it's own ID.  What a great API design..
+	 * its own ID.  What a great API design..
 	 */
 	return 1;
 }

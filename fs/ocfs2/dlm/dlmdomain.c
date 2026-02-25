@@ -1105,7 +1105,7 @@ static int dlm_query_region_handler(struct o2net_msg *msg, u32 len,
 	mlog(0, "Node %u queries hb regions on domain %s\n", qr->qr_node,
 	     qr->qr_domain);
 
-	/* buffer used in dlm_mast_regions() */
+	/* buffer used in dlm_match_regions() */
 	local = kmalloc(sizeof(qr->qr_regions), GFP_KERNEL);
 	if (!local)
 		return -ENOMEM;
@@ -1876,7 +1876,8 @@ static int dlm_join_domain(struct dlm_ctxt *dlm)
 	dlm_debug_init(dlm);
 
 	snprintf(wq_name, O2NM_MAX_NAME_LEN, "dlm_wq-%s", dlm->name);
-	dlm->dlm_worker = alloc_workqueue(wq_name, WQ_MEM_RECLAIM, 0);
+	dlm->dlm_worker = alloc_workqueue(wq_name, WQ_MEM_RECLAIM | WQ_PERCPU,
+					  0);
 	if (!dlm->dlm_worker) {
 		status = -ENOMEM;
 		mlog_errno(status);

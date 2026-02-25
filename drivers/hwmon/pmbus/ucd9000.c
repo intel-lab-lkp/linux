@@ -8,6 +8,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/hex.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -226,15 +227,15 @@ static int ucd9000_gpio_set(struct gpio_chip *gc, unsigned int offset,
 	}
 
 	if (value) {
-		if (ret & UCD9000_GPIO_CONFIG_STATUS)
+		if (ret & UCD9000_GPIO_CONFIG_OUT_VALUE)
 			return 0;
 
-		ret |= UCD9000_GPIO_CONFIG_STATUS;
+		ret |= UCD9000_GPIO_CONFIG_OUT_VALUE;
 	} else {
-		if (!(ret & UCD9000_GPIO_CONFIG_STATUS))
+		if (!(ret & UCD9000_GPIO_CONFIG_OUT_VALUE))
 			return 0;
 
-		ret &= ~UCD9000_GPIO_CONFIG_STATUS;
+		ret &= ~UCD9000_GPIO_CONFIG_OUT_VALUE;
 	}
 
 	ret |= UCD9000_GPIO_CONFIG_ENABLE;
@@ -364,7 +365,7 @@ static void ucd9000_probe_gpio(struct i2c_client *client,
 	data->gpio.direction_input = ucd9000_gpio_direction_input;
 	data->gpio.direction_output = ucd9000_gpio_direction_output;
 	data->gpio.get = ucd9000_gpio_get;
-	data->gpio.set_rv = ucd9000_gpio_set;
+	data->gpio.set = ucd9000_gpio_set;
 	data->gpio.can_sleep = true;
 	data->gpio.base = -1;
 	data->gpio.parent = &client->dev;

@@ -11,6 +11,8 @@
  *   Dirk Behme <dirk.behme@de.bosch.com>  - changes for 2.6 kernel API
  *   Texas Instruments                     - H3 support
  */
+
+#include <linux/export.h>
 #include <linux/platform_device.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -844,12 +846,10 @@ static int omapfb_setup_mem(struct fb_info *fbi, struct omapfb_mem_info *mi)
 		 * be reenabled unless its size is > 0.
 		 */
 		if (old_size != size && size) {
-			if (size) {
-				memcpy(new_var, &fbi->var, sizeof(*new_var));
-				r = set_fb_var(fbi, new_var);
-				if (r < 0)
-					goto out;
-			}
+			memcpy(new_var, &fbi->var, sizeof(*new_var));
+			r = set_fb_var(fbi, new_var);
+			if (r < 0)
+				goto out;
 		}
 
 		if (fbdev->ctrl->sync)

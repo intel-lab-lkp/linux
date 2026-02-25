@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/overflow.h>
 #include <linux/percpu.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
@@ -39,7 +40,7 @@ static void *deflate_alloc_stream(void)
 						     DEFLATE_DEF_MEMLEVEL));
 	struct deflate_stream *ctx;
 
-	ctx = kvmalloc(sizeof(*ctx) + size, GFP_KERNEL);
+	ctx = kvmalloc(struct_size(ctx, workspace, size), GFP_KERNEL);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 
@@ -48,9 +49,14 @@ static void *deflate_alloc_stream(void)
 	return ctx;
 }
 
+static void deflate_free_stream(void *ctx)
+{
+	kvfree(ctx);
+}
+
 static struct crypto_acomp_streams deflate_streams = {
 	.alloc_ctx = deflate_alloc_stream,
-	.cfree_ctx = kvfree,
+	.free_ctx = deflate_free_stream,
 };
 
 static int deflate_compress_one(struct acomp_req *req,

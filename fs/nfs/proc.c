@@ -353,7 +353,8 @@ static int nfs_proc_unlink_done(struct rpc_task *task, struct inode *dir)
 static void
 nfs_proc_rename_setup(struct rpc_message *msg,
 		struct dentry *old_dentry,
-		struct dentry *new_dentry)
+		struct dentry *new_dentry,
+		struct inode *same_parent)
 {
 	msg->rpc_proc = &nfs_procedures[NFSPROC_RENAME];
 }
@@ -696,11 +697,10 @@ static int nfs_have_delegation(struct inode *inode, fmode_t type, int flags)
 	return 0;
 }
 
-static int nfs_return_delegation(struct inode *inode)
+static void nfs_return_delegation(struct inode *inode)
 {
 	if (S_ISREG(inode->i_mode))
 		nfs_wb_all(inode);
-	return 0;
 }
 
 static const struct inode_operations nfs_dir_inode_operations = {

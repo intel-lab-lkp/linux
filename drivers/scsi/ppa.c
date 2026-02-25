@@ -816,7 +816,7 @@ static int ppa_engine(ppa_struct *dev, struct scsi_cmnd *cmd)
 	return 0;
 }
 
-static int ppa_queuecommand_lck(struct scsi_cmnd *cmd)
+static enum scsi_qc_status ppa_queuecommand_lck(struct scsi_cmnd *cmd)
 {
 	ppa_struct *dev = ppa_dev(cmd->device->host);
 
@@ -845,7 +845,7 @@ static DEF_SCSI_QCMD(ppa_queuecommand)
  * be done in sd.c.  Even if it gets fixed there, this will still
  * work.
  */
-static int ppa_biosparam(struct scsi_device *sdev, struct block_device *dev,
+static int ppa_biosparam(struct scsi_device *sdev, struct gendisk *unused,
 	      sector_t capacity, int ip[])
 {
 	ip[0] = 0x40;

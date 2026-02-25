@@ -60,7 +60,9 @@ static void rnbd_clt_put_dev(struct rnbd_clt_dev *dev)
 	kfree(dev->pathname);
 	rnbd_clt_put_sess(dev->sess);
 	mutex_destroy(&dev->lock);
-	kfree(dev);
+
+	if (dev->kobj.state_initialized)
+		kobject_put(&dev->kobj);
 }
 
 static inline bool rnbd_clt_get_dev(struct rnbd_clt_dev *dev)
@@ -942,11 +944,11 @@ static void rnbd_client_release(struct gendisk *gen)
 	rnbd_clt_put_dev(dev);
 }
 
-static int rnbd_client_getgeo(struct block_device *block_device,
+static int rnbd_client_getgeo(struct gendisk *disk,
 			      struct hd_geometry *geo)
 {
 	u64 size;
-	struct rnbd_clt_dev *dev = block_device->bd_disk->private_data;
+	struct rnbd_clt_dev *dev = disk->private_data;
 	struct queue_limits *limit = &dev->queue->limits;
 
 	size = dev->size * (limit->logical_block_size / SECTOR_SIZE);
@@ -1423,9 +1425,11 @@ static struct rnbd_clt_dev *init_dev(struct rnbd_clt_session *sess,
 		goto out_alloc;
 	}
 
-	ret = ida_alloc_max(&index_ida, (1 << (MINORBITS - RNBD_PART_BITS)) - 1,
-			    GFP_KERNEL);
-	if (ret < 0) {
+	dev->clt_device_id = ida_alloc_max(&index_ida,
+					   (1 << (MINORBITS - RNBD_PART_BITS)) - 1,
+					   GFP_KERNEL);
+	if (dev->clt_device_id < 0) {
+		ret = dev->clt_device_id;
 		pr_err("Failed to initialize device '%s' from session %s, allocating idr failed, err: %d\n",
 		       pathname, sess->sessname, ret);
 		goto out_queues;
@@ -1434,10 +1438,9 @@ static struct rnbd_clt_dev *init_dev(struct rnbd_clt_session *sess,
 	dev->pathname = kstrdup(pathname, GFP_KERNEL);
 	if (!dev->pathname) {
 		ret = -ENOMEM;
-		goto out_queues;
+		goto out_ida;
 	}
 
-	dev->clt_device_id	= ret;
 	dev->sess		= sess;
 	dev->access_mode	= access_mode;
 	dev->nr_poll_queues	= nr_poll_queues;
@@ -1453,6 +1456,8 @@ static struct rnbd_clt_dev *init_dev(struct rnbd_clt_session *sess,
 
 	return dev;
 
+out_ida:
+	ida_free(&index_ida, dev->clt_device_id);
 out_queues:
 	kfree(dev->hw_queues);
 out_alloc:
@@ -1514,7 +1519,7 @@ static bool insert_dev_if_not_exists_devpath(struct rnbd_clt_dev *dev)
 	return found;
 }
 
-static void delete_dev(struct rnbd_clt_dev *dev)
+static void rnbd_delete_dev(struct rnbd_clt_dev *dev)
 {
 	struct rnbd_clt_session *sess = dev->sess;
 
@@ -1635,7 +1640,7 @@ put_iu:
 	kfree(rsp);
 	rnbd_put_iu(sess, iu);
 del_dev:
-	delete_dev(dev);
+	rnbd_delete_dev(dev);
 put_dev:
 	rnbd_clt_put_dev(dev);
 put_sess:
@@ -1644,13 +1649,13 @@ put_sess:
 	return ERR_PTR(ret);
 }
 
-static void destroy_gen_disk(struct rnbd_clt_dev *dev)
+static void rnbd_destroy_gen_disk(struct rnbd_clt_dev *dev)
 {
 	del_gendisk(dev->gd);
 	put_disk(dev->gd);
 }
 
-static void destroy_sysfs(struct rnbd_clt_dev *dev,
+static void rnbd_destroy_sysfs(struct rnbd_clt_dev *dev,
 			  const struct attribute *sysfs_self)
 {
 	rnbd_clt_remove_dev_symlink(dev);
@@ -1659,7 +1664,6 @@ static void destroy_sysfs(struct rnbd_clt_dev *dev,
 			/* To avoid deadlock firstly remove itself */
 			sysfs_remove_file_self(&dev->kobj, sysfs_self);
 		kobject_del(&dev->kobj);
-		kobject_put(&dev->kobj);
 	}
 }
 
@@ -1688,9 +1692,9 @@ int rnbd_clt_unmap_device(struct rnbd_clt_dev *dev, bool force,
 	dev->dev_state = DEV_STATE_UNMAPPED;
 	mutex_unlock(&dev->lock);
 
-	delete_dev(dev);
-	destroy_sysfs(dev, sysfs_self);
-	destroy_gen_disk(dev);
+	rnbd_delete_dev(dev);
+	rnbd_destroy_sysfs(dev, sysfs_self);
+	rnbd_destroy_gen_disk(dev);
 	if (was_mapped && sess->rtrs)
 		send_msg_close(dev, dev->device_id, RTRS_PERMIT_WAIT);
 
@@ -1809,7 +1813,7 @@ static int __init rnbd_client_init(void)
 		unregister_blkdev(rnbd_client_major, "rnbd");
 		return err;
 	}
-	rnbd_clt_wq = alloc_workqueue("rnbd_clt_wq", 0, 0);
+	rnbd_clt_wq = alloc_workqueue("rnbd_clt_wq", WQ_PERCPU, 0);
 	if (!rnbd_clt_wq) {
 		pr_err("Failed to load module, alloc_workqueue failed.\n");
 		rnbd_clt_destroy_sysfs_files();

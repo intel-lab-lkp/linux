@@ -7,11 +7,11 @@
  *  Author(s): Harald Freudenberger
  */
 
-#define KMSG_COMPONENT "pkey"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "pkey: " fmt
 
 #include <linux/init.h>
 #include <linux/miscdevice.h>
+#include <linux/export.h>
 #include <linux/slab.h>
 
 #include "zcrypt_api.h"

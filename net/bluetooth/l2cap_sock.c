@@ -80,7 +80,7 @@ static int l2cap_validate_le_psm(u16 psm)
 	return 0;
 }
 
-static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
+static int l2cap_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int alen)
 {
 	struct sock *sk = sock->sk;
 	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
@@ -178,7 +178,7 @@ done:
 	return err;
 }
 
-static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr,
+static int l2cap_sock_connect(struct socket *sock, struct sockaddr_unsized *addr,
 			      int alen, int flags)
 {
 	struct sock *sk = sock->sk;
@@ -885,7 +885,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 	struct bt_power pwr;
 	struct l2cap_conn *conn;
 	int err = 0;
-	u32 opt;
+	u32 opt, phys;
 	u16 mtu;
 	u8 mode;
 
@@ -1057,6 +1057,24 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 		else
 			chan->imtu = mtu;
 
+		break;
+
+	case BT_PHY:
+		if (sk->sk_state != BT_CONNECTED) {
+			err = -ENOTCONN;
+			break;
+		}
+
+		err = copy_safe_from_sockptr(&phys, sizeof(phys), optval,
+					     optlen);
+		if (err)
+			break;
+
+		if (!chan->conn)
+			break;
+
+		conn = chan->conn;
+		err = hci_conn_set_phy(conn->hcon, phys);
 		break;
 
 	case BT_MODE:
@@ -1422,7 +1440,10 @@ static int l2cap_sock_release(struct socket *sock)
 	if (!sk)
 		return 0;
 
+	lock_sock_nested(sk, L2CAP_NESTING_PARENT);
 	l2cap_sock_cleanup_listen(sk);
+	release_sock(sk);
+
 	bt_sock_unlink(&l2cap_sk_list, sk);
 
 	err = l2cap_sock_shutdown(sock, SHUT_RDWR);
@@ -1702,6 +1723,9 @@ static void l2cap_sock_defer_cb(struct l2cap_chan *chan)
 static void l2cap_sock_resume_cb(struct l2cap_chan *chan)
 {
 	struct sock *sk = chan->data;
+
+	if (!sk)
+		return;
 
 	if (test_and_clear_bit(FLAG_PENDING_SECURITY, &chan->flags)) {
 		sk->sk_state = BT_CONNECTED;
