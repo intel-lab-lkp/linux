@@ -3670,11 +3670,21 @@ static int pre_svm_run(struct kvm_vcpu *vcpu)
 	 * This is done here (as opposed to when preparing vmcb02) to use the
 	 * most up-to-date value of RIP regardless of the order of restoring
 	 * registers and nested state in the vCPU save+restore path.
+	 *
+	 * Simiarly, initialize svm->soft_int_* fields here to use the most
+	 * up-to-date values of RIP and CS base, regardless of restore order.
 	 */
 	if (is_guest_mode(vcpu) && svm->nested.nested_run_pending) {
 		if (boot_cpu_has(X86_FEATURE_NRIPS) &&
 		    !guest_cpu_cap_has(vcpu, X86_FEATURE_NRIPS))
 			svm->vmcb->control.next_rip = kvm_rip_read(vcpu);
+
+		if (svm->soft_int_injected) {
+			svm->soft_int_csbase = svm->vmcb->save.cs.base;
+			svm->soft_int_old_rip = kvm_rip_read(vcpu);
+			if (!guest_cpu_cap_has(vcpu, X86_FEATURE_NRIPS))
+				svm->soft_int_next_rip = kvm_rip_read(vcpu);
+		}
 	}
 
 	return 0;
