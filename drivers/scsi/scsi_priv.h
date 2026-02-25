@@ -132,7 +132,7 @@ extern void scsi_exit_procfs(void);
 
 /* scsi_scan.c */
 void scsi_enable_async_suspend(struct device *dev);
-extern int scsi_complete_async_scans(void);
+void scsi_complete_async_scans(void);
 extern int scsi_scan_host_selected(struct Scsi_Host *, unsigned int,
 				   unsigned int, u64, enum scsi_scan_mode);
 extern void scsi_forget_host(struct Scsi_Host *);
