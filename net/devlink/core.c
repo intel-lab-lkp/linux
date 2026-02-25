@@ -331,7 +331,10 @@ static void devlink_release(struct work_struct *work)
 
 	mutex_destroy(&devlink->lock);
 	lockdep_unregister_key(&devlink->lock_key);
-	put_device(devlink->dev);
+	if (devlink->dev)
+		put_device(devlink->dev);
+	else
+		kfree(devlink->dev_name);
 	kvfree(devlink);
 }
 
@@ -433,7 +436,7 @@ EXPORT_SYMBOL_GPL(devlink_unregister);
  *	@ops: ops
  *	@priv_size: size of user private data
  *	@net: net namespace
- *	@dev: parent device
+ *	@dev: parent device, or NULL for a device-less devlink instance
  *
  *	Allocate new devlink instance resources, including devlink index
  *	and name.
@@ -446,7 +449,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	static u32 last_id;
 	int ret;
 
-	WARN_ON(!ops || !dev);
+	WARN_ON(!ops);
 	if (!devlink_reload_actions_valid(ops))
 		return NULL;
 
@@ -459,9 +462,17 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (ret < 0)
 		goto err_xa_alloc;
 
-	devlink->dev = get_device(dev);
-	devlink->bus_name = dev->bus->name;
-	devlink->dev_name = dev_name(dev);
+	if (dev) {
+		devlink->dev = get_device(dev);
+		devlink->bus_name = dev->bus->name;
+		devlink->dev_name = dev_name(dev);
+	} else {
+		devlink->bus_name = DEVLINK_INDEX_BUS_NAME;
+		devlink->dev_name = kasprintf(GFP_KERNEL, "%u", devlink->index);
+		if (!devlink->dev_name)
+			goto err_kasprintf;
+	}
+
 	devlink->ops = ops;
 	xa_init_flags(&devlink->ports, XA_FLAGS_ALLOC);
 	xa_init_flags(&devlink->params, XA_FLAGS_ALLOC);
@@ -486,6 +497,8 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 
 	return devlink;
 
+err_kasprintf:
+	xa_erase(&devlinks, devlink->index);
 err_xa_alloc:
 	kvfree(devlink);
 	return NULL;
