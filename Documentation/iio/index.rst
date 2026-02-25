@@ -39,3 +39,4 @@ Industrial I/O Kernel Drivers
    bno055
    ep93xx_adc
    opt4060
+   st_lsm6dsx
