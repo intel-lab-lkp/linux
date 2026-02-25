@@ -452,6 +452,7 @@ Memory Area, or VMA) there is a series of lines such as the following::
     Size:               1084 kB
     KernelPageSize:        4 kB
     MMUPageSize:           4 kB
+    MMUPageSize2:       2048 kB
     Rss:                 892 kB
     Pss:                 374 kB
     Pss_Dirty:             0 kB
@@ -476,14 +477,17 @@ Memory Area, or VMA) there is a series of lines such as the following::
     VmFlags: rd ex mr mw me dw
 
 The first of these lines shows the same information as is displayed for
-the mapping in /proc/PID/maps.  Following lines show the size of the
+the mapping in /proc/PID/maps (except that there might be more page sizes
+if the mapping has them)
+Following lines show the size of the
 mapping (size); the size of each page allocated when backing a VMA
 (KernelPageSize), which is usually the same as the size in the page table
 entries; the page size used by the MMU when backing a VMA (in most cases,
 the same as KernelPageSize); the amount of the mapping that is currently
 resident in RAM (RSS); the process's proportional share of this mapping
 (PSS); and the number of clean and dirty shared and private pages in the
-mapping.
+mapping. If the mapping has multiple page size there might be a be multiple
+numbered MMUPageSize entries.
 
 The "proportional set size" (PSS) of a process is the count of pages it has
 in memory, where each page is divided by the number of processes sharing it.

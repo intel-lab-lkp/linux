@@ -874,6 +874,7 @@ struct mem_size_stats {
 	unsigned long shared_hugetlb;
 	unsigned long private_hugetlb;
 	unsigned long ksm;
+	unsigned long compound_orders;
 	u64 pss;
 	u64 pss_anon;
 	u64 pss_file;
@@ -941,6 +942,9 @@ static void smaps_account(struct mem_size_stats *mss, struct page *page,
 	/* Accumulate the size in pages that have been accessed. */
 	if (young || folio_test_young(folio) || folio_test_referenced(folio))
 		mss->referenced += size;
+
+	mss->compound_orders |=
+		BIT_ULL(compound ? folio_large_order(folio) : 0);
 
 	/*
 	 * Then accumulate quantities that may depend on sharing, or that may
@@ -1371,6 +1375,7 @@ static int show_smap(struct seq_file *m, void *v)
 {
 	struct vm_area_struct *vma = v;
 	struct mem_size_stats mss = {};
+	int i, cnt = 0;
 
 	smap_gather_stats(vma, &mss, 0);
 
@@ -1378,7 +1383,14 @@ static int show_smap(struct seq_file *m, void *v)
 
 	SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);
 	SEQ_PUT_DEC(" kB\nKernelPageSize: ", vma_kernel_pagesize(vma));
-	SEQ_PUT_DEC(" kB\nMMUPageSize:    ", vma_mmu_pagesize(vma));
+
+	for_each_set_bit(i, &mss.compound_orders, BITS_PER_LONG) {
+		if (cnt++ == 0)
+			SEQ_PUT_DEC(" kB\nMMUPageSize:    ", PAGE_SIZE << i);
+		else
+			seq_printf(m, " kB\nMMUPageSize%d:   %8u",
+					cnt, 1 << (PAGE_SHIFT-10+i));
+	}
 	seq_puts(m, " kB\n");
 
 	__show_smap(m, &mss, false);
