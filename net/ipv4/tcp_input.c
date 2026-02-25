@@ -4895,6 +4895,7 @@ EXPORT_IPV6_MOD(tcp_done_with_error);
 /* When we get a reset we do this. */
 void tcp_reset(struct sock *sk, struct sk_buff *skb)
 {
+	const struct net *net = sock_net(sk);
 	int err;
 
 	trace_tcp_receive_reset(sk);
@@ -4911,6 +4912,21 @@ void tcp_reset(struct sock *sk, struct sk_buff *skb)
 		err = ECONNREFUSED;
 		break;
 	case TCP_CLOSE_WAIT:
+		/* RFC9293 3.10.7.4. Other States
+		 *   Second, check the RST bit:
+		 *     CLOSE-WAIT STATE
+		 *
+		 * If the RST bit is set, then any outstanding RECEIVEs and
+		 * SEND should receive "reset" responses.  All segment queues
+		 * should be flushed.  Users should also receive an unsolicited
+		 * general "connection reset" signal.  Enter the CLOSED state,
+		 * delete the TCB, and return.
+		 *
+		 * If net.ipv4.tcp_purge_receive_queue is enabled,
+		 * sk_receive_queue will be flushed too.
+		 */
+		if (unlikely(net->ipv4.sysctl_tcp_purge_receive_queue))
+			skb_queue_purge(&sk->sk_receive_queue);
 		err = EPIPE;
 		break;
 	case TCP_CLOSE:

@@ -123,6 +123,7 @@ unsigned_long                   sysctl_tcp_comp_sack_delay_ns                   
 unsigned_long                   sysctl_tcp_comp_sack_slack_ns                                                        __tcp_ack_snd_check
 int                             sysctl_max_syn_backlog
 int                             sysctl_tcp_fastopen
+u8                              sysctl_tcp_purge_receive_queue
 struct_tcp_congestion_ops       tcp_congestion_control                                                               init_cc
 struct_tcp_fastopen_context     tcp_fastopen_ctx
 unsigned_int                    sysctl_tcp_fastopen_blackhole_timeout

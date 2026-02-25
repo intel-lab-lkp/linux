@@ -1441,6 +1441,24 @@ tcp_rto_max_ms - INTEGER
 
 	Default: 120,000
 
+tcp_purge_receive_queue - BOOLEAN
+	When a socket in the TCP_CLOSE_WAIT state receives a RST packet, the
+	default behavior is to not clear its receive queue.  As a result,
+	any SKBs in the queue are not freed until the socket is closed.
+	Consequently, the pages held by these SKBs are not released, which
+	can also prevent the associated page pool from being freed.
+
+	If enabled, the receive queue is purged upon receiving the RST,
+	allowing the SKBs and their associated memory to be released
+	promptly.
+
+	Possible values:
+
+	- 0 (disabled)
+	- 1 (enabled)
+
+	Default: 0 (disabled)
+
 UDP variables
 =============
 
