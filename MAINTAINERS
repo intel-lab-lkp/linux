@@ -26780,7 +26780,7 @@ F:	drivers/hwmon/pmbus/tps546d24.c
 
 TQ SYSTEMS BOARD & DRIVER SUPPORT
 L:	linux@ew.tq-group.com
-S:	Supported
+S:	Orphan
 W:	https://www.tq-group.com/en/products/tq-embedded/
 F:	arch/arm/boot/dts/nxp/imx/*mba*.dts*
 F:	arch/arm/boot/dts/nxp/imx/*tqma*.dts*
