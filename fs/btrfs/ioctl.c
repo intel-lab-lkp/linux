@@ -1717,7 +1717,7 @@ static noinline int btrfs_search_path_in_tree(struct btrfs_fs_info *info,
 	struct btrfs_root *root;
 	struct btrfs_key key;
 	char *ptr;
-	int ret = -1;
+	int ret = 0;
 	int slot;
 	int len;
 	int total_len = 0;
@@ -1780,7 +1780,6 @@ static noinline int btrfs_search_path_in_tree(struct btrfs_fs_info *info,
 	}
 	memmove(name, ptr, total_len);
 	name[total_len] = '\0';
-	ret = 0;
 out:
 	btrfs_put_root(root);
 	return ret;
