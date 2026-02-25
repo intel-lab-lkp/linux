@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2026 Unisoc Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/sprd,sc9832e-clk.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Unisoc SC9832E Clock Controllers
+
+maintainers:
+  - Nadi Ke <kenadicanady@gmail.com>
+  - Orson Zhai <orsonzhai@gmail.com>
+  - Baolin Wang <baolin.wang7@gmail.com>
+  - Chunyan Zhang <zhang.lyra@gmail.com>
+
+properties:
+  compatible:
+    enum:
+      - sprd,sc9832e-glbregs
+      - sprd,sc9832e-pll
+      - sprd,sc9832e-mpll
+      - sprd,sc9832e-dpll
+      - sprd,sc9832e-rpll
+      - sprd,sc9832e-apahb-gate
+      - sprd,sc9832e-aonapb-gate
+      - sprd,sc9832e-ap-clk
+      - sprd,sc9832e-aon-clk
+      - sprd,sc9832e-apapb-gate
+
+  "#clock-cells":
+    const: 1
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    minItems: 1
+    maxItems: 6
+
+  clock-names:
+    minItems: 1
+    maxItems: 6
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - "#clock-cells"
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - sprd,sc9832e-glbregs
+              - sprd,sc9832e-pll
+              - sprd,sc9832e-mpll
+              - sprd,sc9832e-dpll
+              - sprd,sc9832e-rpll
+              - sprd,sc9832e-apahb-gate
+              - sprd,sc9832e-aonapb-gate
+              - sprd,sc9832e-apapb-gate
+    then:
+      properties:
+        clocks:
+          maxItems: 1
+        clock-names:
+          items:
+            - const: ext-26m
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: sprd,sc9832e-ap-clk
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          items:
+            - const: ext-26m
+            - const: ext-1m
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: sprd,sc9832e-aon-clk
+    then:
+      properties:
+        clocks:
+          minItems: 6
+          maxItems: 6
+        clock-names:
+          items:
+            - const: ext-4m3
+            - const: ext-26m
+            - const: ext-32k
+            - const: ext-6m5
+            - const: ext-13m
+            - const: ext-250k
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/sprd,sc9832e-clk.h>
+
+    clock-controller@21500000 {
+        compatible = "sprd,sc9832e-ap-clk";
+        reg = <0x21500000 0x1000>;
+        clocks = <&ext_26m>, <&ext_1m>;
+        clock-names = "ext-26m", "ext-1m";
+        #clock-cells = <1>;
+    };
+...
