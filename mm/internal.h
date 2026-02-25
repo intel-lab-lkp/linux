@@ -1781,4 +1781,10 @@ static inline int io_remap_pfn_range_complete(struct vm_area_struct *vma,
 	return remap_pfn_range_complete(vma, addr, pfn, size, prot);
 }
 
+#if IS_ENABLED(CONFIG_KUNIT)
+unsigned int order_to_pindex(freetype_t freetype, int order);
+int pindex_to_order(unsigned int pindex);
+bool pcp_allowed_order(unsigned int order);
+#endif /* IS_ENABLED(CONFIG_KUNIT) */
+
 #endif	/* __MM_INTERNAL_H */

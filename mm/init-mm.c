@@ -13,6 +13,8 @@
 #include <linux/iommu.h>
 #include <asm/mmu.h>
 
+#include <kunit/visibility.h>
+
 #ifndef INIT_MM_CONTEXT
 #define INIT_MM_CONTEXT(name)
 #endif
@@ -50,6 +52,7 @@ struct mm_struct init_mm = {
 	.flexible_array	= MM_STRUCT_FLEXIBLE_ARRAY_INIT,
 	INIT_MM_CONTEXT(init_mm)
 };
+EXPORT_SYMBOL_IF_KUNIT(init_mm);
 
 void setup_initial_init_mm(void *start_code, void *end_code,
 			   void *end_data, void *brk)

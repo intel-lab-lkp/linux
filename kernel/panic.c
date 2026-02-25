@@ -39,6 +39,7 @@
 #include <linux/sys_info.h>
 #include <trace/events/error_report.h>
 #include <asm/sections.h>
+#include <kunit/visibility.h>
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -900,6 +901,7 @@ unsigned long get_taint(void)
 {
 	return tainted_mask;
 }
+EXPORT_SYMBOL_IF_KUNIT(get_taint);
 
 /**
  * add_taint: add a taint flag if not already set.
