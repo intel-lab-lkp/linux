@@ -3780,6 +3780,16 @@ void noinline lock_sock_nested(struct sock *sk, int subclass)
 	mutex_acquire(&sk->sk_lock.dep_map, subclass, 0, _RET_IP_);
 
 	might_sleep();
+#ifdef CONFIG_64BIT
+	if (sizeof(struct slock_owned) == sizeof(long)) {
+		socket_lock_t tmp;
+
+		tmp.slock = __SPIN_LOCK_UNLOCKED(tmp.slock);
+		tmp.owned = 1;
+		if (likely(!cmpxchg(&sk->sk_lock.combined, 0, tmp.combined)))
+			return;
+	}
+#endif
 	spin_lock_bh(&sk->sk_lock.slock);
 	if (unlikely(sock_owned_by_user_nocheck(sk)))
 		__lock_sock(sk);
