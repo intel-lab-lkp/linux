@@ -3772,6 +3772,14 @@ bool task_should_scx(int policy)
 	return policy == SCHED_EXT;
 }
 
+/*
+ * Used by verification/observability tools like RV monitors.
+ */
+bool task_is_scx_enabled(struct task_struct *p)
+{
+	return scx_get_task_state(p) == SCX_TASK_ENABLED;
+}
+
 bool scx_allow_ttwu_queue(const struct task_struct *p)
 {
 	struct scx_sched *sch;
