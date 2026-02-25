@@ -1895,7 +1895,7 @@ int pidfd_prepare(struct pid *pid, unsigned int flags, struct file **ret_file)
 	if (pidfd < 0)
 		return pidfd;
 
-	pidfs_file = pidfs_alloc_file(pid, flags | O_RDWR);
+	pidfs_file = pidfs_alloc_file(pid, flags);
 	if (IS_ERR(pidfs_file))
 		return PTR_ERR(pidfs_file);
 
