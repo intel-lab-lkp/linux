@@ -604,7 +604,7 @@ static struct erdma_mtt *erdma_create_cont_mtt(struct erdma_dev *dev,
 		return ERR_PTR(-ENOMEM);
 
 	mtt->size = size;
-	mtt->buf = kzalloc(mtt->size, GFP_KERNEL);
+	mtt->buf = kzalloc_node(mtt->size, GFP_KERNEL, dev->attrs.numa_node);
 	if (!mtt->buf)
 		goto err_free_mtt;
 
@@ -729,7 +729,7 @@ static struct erdma_mtt *erdma_create_scatter_mtt(struct erdma_dev *dev,
 		return ERR_PTR(-ENOMEM);
 
 	mtt->size = ALIGN(size, PAGE_SIZE);
-	mtt->buf = vzalloc(mtt->size);
+	mtt->buf = vzalloc_node(mtt->size, dev->attrs.numa_node);
 	mtt->continuous = false;
 	if (!mtt->buf)
 		goto err_free_mtt;
