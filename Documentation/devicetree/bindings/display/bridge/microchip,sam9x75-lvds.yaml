@@ -17,7 +17,11 @@ description:
 
 properties:
   compatible:
-    const: microchip,sam9x75-lvds
+    oneOf:
+      - const: microchip,sam9x75-lvds
+      - items:
+          - const: microchip,sama7d65-lvds
+          - const: microchip,sam9x75-lvds
 
   reg:
     maxItems: 1
