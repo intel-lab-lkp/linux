@@ -43,17 +43,48 @@
 #include "xfs_zone_alloc.h"
 
 static DEFINE_MUTEX(xfs_uuid_table_mutex);
-static int xfs_uuid_table_size;
-static uuid_t *xfs_uuid_table;
+static DEFINE_XARRAY_ALLOC(xfs_uuid_table);
+
+/*
+ * Helper fucntions to store UUID in xarray.
+ */
+static int
+xfs_uuid_insert(
+	uuid_t		*uuid,
+	unsigned int	*index)
+{
+	return xa_alloc(&xfs_uuid_table, index, uuid,
+			xa_limit_32b, GFP_KERNEL);
+}
+
+static uuid_t *
+xfs_uuid_search(
+	uuid_t		*new_uuid)
+{
+	unsigned long	index = 0;
+	uuid_t		*uuid;
+
+	xa_for_each(&xfs_uuid_table, index, uuid) {
+		if (uuid_equal(uuid, new_uuid))
+			return uuid;
+	}
+	return NULL;
+}
+
+static void
+xfs_uuid_delete(
+	uuid_t		*uuid,
+	unsigned int	index)
+{
+	ASSERT(uuid_equal(xa_load(&xfs_uuid_table, index), uuid));
+	xa_erase(&xfs_uuid_table, index);
+}
 
 void
 xfs_uuid_table_free(void)
 {
-	if (xfs_uuid_table_size == 0)
-		return;
-	kfree(xfs_uuid_table);
-	xfs_uuid_table = NULL;
-	xfs_uuid_table_size = 0;
+	ASSERT(xa_empty(&xfs_uuid_table));
+	xa_destroy(&xfs_uuid_table);
 }
 
 /*
@@ -65,7 +96,7 @@ xfs_uuid_mount(
 	struct xfs_mount	*mp)
 {
 	uuid_t			*uuid = &mp->m_sb.sb_uuid;
-	int			hole, i;
+	int			ret;
 
 	/* Publish UUID in struct super_block */
 	super_set_uuid(mp->m_super, uuid->b, sizeof(*uuid));
@@ -78,31 +109,16 @@ xfs_uuid_mount(
 		return -EINVAL;
 	}
 
-	mutex_lock(&xfs_uuid_table_mutex);
-	for (i = 0, hole = -1; i < xfs_uuid_table_size; i++) {
-		if (uuid_is_null(&xfs_uuid_table[i])) {
-			hole = i;
-			continue;
-		}
-		if (uuid_equal(uuid, &xfs_uuid_table[i]))
-			goto out_duplicate;
+	mutex_unlock(&xfs_uuid_table_mutex);
+	if (unlikely(xfs_uuid_search(uuid))) {
+		xfs_warn(mp, "Filesystem has duplicate UUID %pU - can't mount",
+				uuid);
+		return -EINVAL;
 	}
 
-	if (hole < 0) {
-		xfs_uuid_table = krealloc(xfs_uuid_table,
-			(xfs_uuid_table_size + 1) * sizeof(*xfs_uuid_table),
-			GFP_KERNEL | __GFP_NOFAIL);
-		hole = xfs_uuid_table_size++;
-	}
-	xfs_uuid_table[hole] = *uuid;
+	ret = xfs_uuid_insert(uuid, &mp->m_uuid_table_index);
 	mutex_unlock(&xfs_uuid_table_mutex);
-
-	return 0;
-
- out_duplicate:
-	mutex_unlock(&xfs_uuid_table_mutex);
-	xfs_warn(mp, "Filesystem has duplicate UUID %pU - can't mount", uuid);
-	return -EINVAL;
+	return ret;
 }
 
 STATIC void
@@ -110,22 +126,14 @@ xfs_uuid_unmount(
 	struct xfs_mount	*mp)
 {
 	uuid_t			*uuid = &mp->m_sb.sb_uuid;
-	int			i;
 
 	if (xfs_has_nouuid(mp))
 		return;
 
 	mutex_lock(&xfs_uuid_table_mutex);
-	for (i = 0; i < xfs_uuid_table_size; i++) {
-		if (uuid_is_null(&xfs_uuid_table[i]))
-			continue;
-		if (!uuid_equal(uuid, &xfs_uuid_table[i]))
-			continue;
-		memset(&xfs_uuid_table[i], 0, sizeof(uuid_t));
-		break;
-	}
-	ASSERT(i < xfs_uuid_table_size);
+	xfs_uuid_delete(uuid, mp->m_uuid_table_index);
 	mutex_unlock(&xfs_uuid_table_mutex);
+	return;
 }
 
 /*
