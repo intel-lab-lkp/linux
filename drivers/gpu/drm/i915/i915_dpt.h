@@ -9,10 +9,9 @@
 struct i915_address_space;
 struct i915_vma;
 
-struct i915_vma *intel_dpt_pin_to_ggtt(struct i915_address_space *vm,
-				       unsigned int alignment);
-void intel_dpt_unpin_from_ggtt(struct i915_address_space *vm);
-u64 intel_dpt_offset(struct i915_vma *dpt_vma);
+struct i915_vma *i915_dpt_pin_to_ggtt(struct i915_address_space *vm, unsigned int alignment);
+void i915_dpt_unpin_from_ggtt(struct i915_address_space *vm);
+u64 i915_dpt_offset(struct i915_vma *dpt_vma);
 
 extern const struct intel_display_dpt_interface i915_display_dpt_interface;
 
