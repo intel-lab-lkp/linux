@@ -8,9 +8,7 @@
 
 #include "display/intel_display_core.h"
 #include "display/intel_display_rpm.h"
-#include "display/intel_display_types.h"
 #include "display/intel_dpt.h"
-#include "display/intel_fb.h"
 #include "gem/i915_gem_domain.h"
 #include "gem/i915_gem_internal.h"
 #include "gem/i915_gem_lmem.h"
@@ -185,64 +183,6 @@ void intel_dpt_unpin_from_ggtt(struct i915_address_space *vm)
 	i915_vma_put(dpt->vma);
 }
 
-/**
- * intel_dpt_resume - restore the memory mapping for all DPT FBs during system resume
- * @display: display device instance
- *
- * Restore the memory mapping during system resume for all framebuffers which
- * are mapped to HW via a GGTT->DPT page table. The content of these page
- * tables are not stored in the hibernation image during S4 and S3RST->S4
- * transitions, so here we reprogram the PTE entries in those tables.
- *
- * This function must be called after the mappings in GGTT have been restored calling
- * i915_ggtt_resume().
- */
-void intel_dpt_resume(struct intel_display *display)
-{
-	struct drm_framebuffer *drm_fb;
-
-	if (!HAS_DISPLAY(display))
-		return;
-
-	mutex_lock(&display->drm->mode_config.fb_lock);
-	drm_for_each_fb(drm_fb, display->drm) {
-		struct intel_framebuffer *fb = to_intel_framebuffer(drm_fb);
-
-		if (fb->dpt_vm)
-			i915_ggtt_resume_vm(fb->dpt_vm, true);
-	}
-	mutex_unlock(&display->drm->mode_config.fb_lock);
-}
-
-/**
- * intel_dpt_suspend - suspend the memory mapping for all DPT FBs during system suspend
- * @display: display device instance
- *
- * Suspend the memory mapping during system suspend for all framebuffers which
- * are mapped to HW via a GGTT->DPT page table.
- *
- * This function must be called before the mappings in GGTT are suspended calling
- * i915_ggtt_suspend().
- */
-void intel_dpt_suspend(struct intel_display *display)
-{
-	struct drm_framebuffer *drm_fb;
-
-	if (!HAS_DISPLAY(display))
-		return;
-
-	mutex_lock(&display->drm->mode_config.fb_lock);
-
-	drm_for_each_fb(drm_fb, display->drm) {
-		struct intel_framebuffer *fb = to_intel_framebuffer(drm_fb);
-
-		if (fb->dpt_vm)
-			i915_ggtt_suspend_vm(fb->dpt_vm, true);
-	}
-
-	mutex_unlock(&display->drm->mode_config.fb_lock);
-}
-
 static struct i915_address_space *i915_dpt_create(struct drm_gem_object *obj, size_t size)
 {
 	struct drm_i915_private *i915 = to_i915(obj->dev);
@@ -316,6 +256,16 @@ static void i915_dpt_destroy(struct i915_address_space *vm)
 	i915_vm_put(&dpt->vm);
 }
 
+static void i915_dpt_suspend(struct i915_address_space *vm)
+{
+	i915_ggtt_suspend_vm(vm, true);
+}
+
+static void i915_dpt_resume(struct i915_address_space *vm)
+{
+	i915_ggtt_resume_vm(vm, true);
+}
+
 u64 intel_dpt_offset(struct i915_vma *dpt_vma)
 {
 	return i915_vma_offset(dpt_vma);
@@ -324,4 +274,6 @@ u64 intel_dpt_offset(struct i915_vma *dpt_vma)
 const struct intel_display_dpt_interface i915_display_dpt_interface = {
 	.create = i915_dpt_create,
 	.destroy = i915_dpt_destroy,
+	.suspend = i915_dpt_suspend,
+	.resume = i915_dpt_resume,
 };

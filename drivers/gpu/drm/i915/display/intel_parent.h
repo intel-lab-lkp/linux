@@ -20,6 +20,8 @@ struct i915_address_space *intel_parent_dpt_create(struct intel_display *display
 						   struct drm_gem_object *obj,
 						   size_t size);
 void intel_parent_dpt_destroy(struct intel_display *display, struct i915_address_space *vm);
+void intel_parent_dpt_suspend(struct intel_display *display, struct i915_address_space *vm);
+void intel_parent_dpt_resume(struct intel_display *display, struct i915_address_space *vm);
 
 /* hdcp */
 ssize_t intel_parent_hdcp_gsc_msg_send(struct intel_display *display,
