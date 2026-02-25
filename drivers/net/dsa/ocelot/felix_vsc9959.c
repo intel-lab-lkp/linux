@@ -2254,7 +2254,7 @@ static int vsc9959_psfp_filter_add(struct ocelot *ocelot, int port,
 	struct felix_stream_gate *sgi;
 	struct ocelot_psfp_list *psfp;
 	struct ocelot_policer pol;
-	int ret, i, size;
+	int ret, i;
 	u64 rate, burst;
 	u32 index;
 
@@ -2271,8 +2271,7 @@ static int vsc9959_psfp_filter_add(struct ocelot *ocelot, int port,
 	flow_action_for_each(i, a, &f->rule->action) {
 		switch (a->id) {
 		case FLOW_ACTION_GATE:
-			size = struct_size(sgi, entries, a->gate.num_entries);
-			sgi = kzalloc(size, GFP_KERNEL);
+			sgi = kzalloc_flex(*sgi, entries, a->gate.num_entries, GFP_KERNEL);
 			if (!sgi) {
 				ret = -ENOMEM;
 				goto err;
