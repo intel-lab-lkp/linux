@@ -586,7 +586,7 @@ static int ads1119_alloc_and_config_channels(struct iio_dev *indio_dev)
 		BIT(IIO_CHAN_INFO_SCALE) |
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

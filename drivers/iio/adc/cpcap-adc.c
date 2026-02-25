@@ -340,7 +340,7 @@ static const int temp_map[CPCAP_MAX_TEMP_LVL][2] = {
 			      BIT(IIO_CHAN_INFO_PROCESSED), \
 	.scan_index = (_index), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 10, \
 		.storagebits = 16, \
 		.endianness = IIO_CPU, \

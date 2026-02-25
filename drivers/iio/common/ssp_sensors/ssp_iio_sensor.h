@@ -10,7 +10,7 @@
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SAMP_FREQ),\
 		.scan_index = _index,\
 		.scan_type = {\
-			.sign = 's',\
+			.format = 's',\
 			.realbits = 16,\
 			.storagebits = 16,\
 			.shift = 0,\
@@ -24,7 +24,7 @@
 	.channel = -1,							\
 	.scan_index = _si,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 64,						\
 		.storagebits = 64,					\
 		},							\

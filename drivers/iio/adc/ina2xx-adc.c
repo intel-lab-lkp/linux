@@ -623,7 +623,7 @@ static ssize_t ina2xx_shunt_resistor_store(struct device *dev,
 	.info_mask_shared_by_dir = BIT(IIO_CHAN_INFO_SAMP_FREQ), \
 	.scan_index = (_index), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 16, \
 		.storagebits = 16, \
 		.endianness = IIO_CPU, \
@@ -641,7 +641,7 @@ static ssize_t ina2xx_shunt_resistor_store(struct device *dev,
 				   BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
 	.scan_index = (_index), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 16, \
 		.storagebits = 16, \
 		.endianness = IIO_CPU, \
@@ -666,7 +666,7 @@ static ssize_t ina2xx_shunt_resistor_store(struct device *dev,
 	.info_mask_shared_by_dir = BIT(IIO_CHAN_INFO_SAMP_FREQ), \
 	.scan_index = (_index), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.shift = _shift, \
 		.realbits = 16 - _shift, \
 		.storagebits = 16, \
@@ -686,7 +686,7 @@ static ssize_t ina2xx_shunt_resistor_store(struct device *dev,
 				   BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
 	.scan_index = (_index), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 16, \
 		.storagebits = 16, \
 		.endianness = IIO_LE, \

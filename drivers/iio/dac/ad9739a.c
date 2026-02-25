@@ -335,7 +335,7 @@ static struct iio_chan_spec ad9739a_channels[] = {
 		.output = 1,
 		.ext_info = ad9739a_ext_info,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.storagebits = 16,
 			.realbits = 16,
 		},

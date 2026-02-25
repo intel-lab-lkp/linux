@@ -45,7 +45,7 @@ static const struct iio_chan_spec max6675_channels[] = {
 			BIT(IIO_CHAN_INFO_THERMOCOUPLE_TYPE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 13,
 			.storagebits = 16,
 			.shift = 3,
@@ -64,7 +64,7 @@ static const struct iio_chan_spec max31855_channels[] = {
 			BIT(IIO_CHAN_INFO_THERMOCOUPLE_TYPE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 14,
 			.storagebits = 16,
 			.shift = 2,
@@ -80,7 +80,7 @@ static const struct iio_chan_spec max31855_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 12,
 			.storagebits = 16,
 			.shift = 4,

@@ -1549,7 +1549,7 @@ static const struct iio_info ad7173_info = {
 };
 
 static const struct iio_scan_type ad4113_scan_type = {
-	.sign = 'u',
+	.format = 'u',
 	.realbits = 16,
 	.storagebits = 16,
 	.endianness = IIO_BE,
@@ -1561,7 +1561,7 @@ static const struct iio_chan_spec ad7173_channel_template = {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 		BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_SAMP_FREQ),
 	.scan_type = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 24,
 		.storagebits = 32,
 		.endianness = IIO_BE,
@@ -1577,7 +1577,7 @@ static const struct iio_chan_spec ad7173_temp_iio_channel_template = {
 		BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_OFFSET) |
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),
 	.scan_type = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 24,
 		.storagebits = 32,
 		.endianness = IIO_BE,

@@ -741,7 +741,7 @@ static int adis16480_write_raw(struct iio_dev *indio_dev,
 		.address = (_address), \
 		.scan_index = (_si), \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = (_bits), \
 			.storagebits = (_bits), \
 			.endianness = IIO_BE, \
@@ -798,7 +798,7 @@ static int adis16480_write_raw(struct iio_dev *indio_dev,
 		.address = ADIS16480_REG_BAROM_OUT, \
 		.scan_index = ADIS16480_SCAN_BARO, \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = 32, \
 			.storagebits = 32, \
 			.endianness = IIO_BE, \
@@ -816,7 +816,7 @@ static int adis16480_write_raw(struct iio_dev *indio_dev,
 		.address = ADIS16480_REG_TEMP_OUT, \
 		.scan_index = ADIS16480_SCAN_TEMP, \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = 16, \
 			.storagebits = 16, \
 			.endianness = IIO_BE, \

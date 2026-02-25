@@ -46,7 +46,7 @@ struct max5522_state {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) | \
 			      BIT(IIO_CHAN_INFO_SCALE), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 10, \
 		.storagebits = 16, \
 		.shift = 2, \

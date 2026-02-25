@@ -1120,7 +1120,7 @@ static const struct iio_info ad74413r_info = {
 		.info_mask_separate_available =				\
 					BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 16,					\
 			.storagebits = 32,				\
 			.shift = 8,					\

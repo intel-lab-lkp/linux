@@ -283,7 +283,7 @@ static int cros_ec_sensors_probe(struct platform_device *pdev)
 	channel->scan_index = index;
 	channel->type = IIO_TIMESTAMP;
 	channel->channel = -1;
-	channel->scan_type.sign = 's';
+	channel->scan_type.format = 's';
 	channel->scan_type.realbits = 64;
 	channel->scan_type.storagebits = 64;
 

@@ -534,7 +534,7 @@ static void opt4060_chip_off_action(void *chip)
 	.address = OPT4060_##_color##_MSB,					\
 	.scan_index = OPT4060_##_color,						\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 32,							\
 		.storagebits = 32,						\
 		.endianness = IIO_CPU,						\
@@ -558,7 +558,7 @@ static void opt4060_chip_off_action(void *chip)
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_INT_TIME),	\
 	.scan_index = OPT4060_##_channel,					\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 32,							\
 		.storagebits = 32,						\
 		.endianness = IIO_CPU,						\

@@ -248,7 +248,7 @@ static const struct iio_event_spec bmi323_accel_event[] = {
 				    BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
 	.scan_index = _index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_LE,					\
@@ -272,7 +272,7 @@ static const struct iio_event_spec bmi323_accel_event[] = {
 				    BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
 	.scan_index = _index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_LE,					\

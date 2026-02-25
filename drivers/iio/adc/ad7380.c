@@ -149,13 +149,13 @@ enum {
 /* Extended scan types for 12-bit unsigned chips. */
 static const struct iio_scan_type ad7380_scan_type_12_u[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 12,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 14,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
@@ -165,13 +165,13 @@ static const struct iio_scan_type ad7380_scan_type_12_u[] = {
 /* Extended scan types for 14-bit signed chips. */
 static const struct iio_scan_type ad7380_scan_type_14_s[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 14,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
@@ -181,13 +181,13 @@ static const struct iio_scan_type ad7380_scan_type_14_s[] = {
 /* Extended scan types for 14-bit unsigned chips. */
 static const struct iio_scan_type ad7380_scan_type_14_u[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 14,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 16,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
@@ -197,13 +197,13 @@ static const struct iio_scan_type ad7380_scan_type_14_u[] = {
 /* Extended scan types for 16-bit signed_chips. */
 static const struct iio_scan_type ad7380_scan_type_16_s[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 18,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
@@ -213,13 +213,13 @@ static const struct iio_scan_type ad7380_scan_type_16_s[] = {
 /* Extended scan types for 16-bit unsigned chips. */
 static const struct iio_scan_type ad7380_scan_type_16_u[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 16,
 		.storagebits = 16,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 18,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
@@ -234,13 +234,13 @@ static const struct iio_scan_type ad7380_scan_type_16_u[] = {
 /* Extended scan types for 12-bit unsigned chips, offload support. */
 static const struct iio_scan_type ad7380_scan_type_12_u_offload[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 12,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 14,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
@@ -250,13 +250,13 @@ static const struct iio_scan_type ad7380_scan_type_12_u_offload[] = {
 /* Extended scan types for 14-bit signed chips, offload support. */
 static const struct iio_scan_type ad7380_scan_type_14_s_offload[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 14,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
@@ -266,13 +266,13 @@ static const struct iio_scan_type ad7380_scan_type_14_s_offload[] = {
 /* Extended scan types for 14-bit unsigned chips, offload support. */
 static const struct iio_scan_type ad7380_scan_type_14_u_offload[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 14,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 16,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
@@ -282,13 +282,13 @@ static const struct iio_scan_type ad7380_scan_type_14_u_offload[] = {
 /* Extended scan types for 16-bit signed_chips, offload support. */
 static const struct iio_scan_type ad7380_scan_type_16_s_offload[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 18,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
@@ -298,13 +298,13 @@ static const struct iio_scan_type ad7380_scan_type_16_s_offload[] = {
 /* Extended scan types for 16-bit unsigned chips, offload support. */
 static const struct iio_scan_type ad7380_scan_type_16_u_offload[] = {
 	[AD7380_SCAN_TYPE_NORMAL] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 16,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
 	},
 	[AD7380_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 18,
 		.storagebits = 32,
 		.endianness = IIO_CPU,
@@ -1398,14 +1398,14 @@ static int ad7380_read_direct(struct ad7380_state *st, unsigned int scan_index,
 		return ret;
 
 	if (scan_type->realbits > 16) {
-		if (scan_type->sign == 's')
+		if (scan_type->format == 's')
 			*val = sign_extend32(*(u32 *)(st->scan_data + 4 * index),
 					     scan_type->realbits - 1);
 		else
 			*val = *(u32 *)(st->scan_data + 4 * index) &
 				GENMASK(scan_type->realbits - 1, 0);
 	} else {
-		if (scan_type->sign == 's')
+		if (scan_type->format == 's')
 			*val = sign_extend32(*(u16 *)(st->scan_data + 2 * index),
 					     scan_type->realbits - 1);
 		else

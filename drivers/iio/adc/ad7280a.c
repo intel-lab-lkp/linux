@@ -621,7 +621,7 @@ static void ad7280_common_fields_init(struct iio_chan_spec *chan, int addr,
 	chan->info_mask_shared_by_all = BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO);
 	chan->address = addr;
 	chan->scan_index = cnt;
-	chan->scan_type.sign = 'u';
+	chan->scan_type.format = 'u';
 	chan->scan_type.realbits = 12;
 	chan->scan_type.storagebits = 32;
 }
@@ -638,7 +638,7 @@ static void ad7280_total_voltage_channel_init(struct iio_chan_spec *chan,
 	chan->info_mask_separate = BIT(IIO_CHAN_INFO_RAW);
 	chan->info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE);
 	chan->scan_index = cnt;
-	chan->scan_type.sign = 'u';
+	chan->scan_type.format = 'u';
 	chan->scan_type.realbits = 32;
 	chan->scan_type.storagebits = 32;
 }

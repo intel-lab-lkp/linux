@@ -38,7 +38,7 @@ static const struct iio_chan_spec acpi_als_channels[] = {
 	{
 		.type		= IIO_LIGHT,
 		.scan_type	= {
-			.sign		= 's',
+			.format		= 's',
 			.realbits	= 32,
 			.storagebits	= 32,
 		},

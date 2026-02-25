@@ -515,7 +515,7 @@ static const struct iio_chan_spec_ext_info vf610_ext_info[] = {
 	.ext_info = vf610_ext_info,				\
 	.scan_index = (_idx),			\
 	.scan_type = {					\
-		.sign = 'u',				\
+		.format = 'u',				\
 		.realbits = 12,				\
 		.storagebits = 16,			\
 	},						\
@@ -527,7 +527,7 @@ static const struct iio_chan_spec_ext_info vf610_ext_info[] = {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),	\
 	.scan_index = (_idx),					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = 12,					\
 		.storagebits = 16,				\
 	},							\

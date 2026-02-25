@@ -471,7 +471,7 @@ done:
 			BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 		.scan_index = idx,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = 16,					\
 			.storagebits = 16,				\
 			.endianness = IIO_BE,				\
@@ -489,7 +489,7 @@ done:
 			BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 		.scan_index = idx,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = 16,					\
 			.storagebits = 16,				\
 			.endianness = IIO_BE,				\

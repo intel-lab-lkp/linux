@@ -109,7 +109,7 @@ static int ltc1660_write_raw(struct iio_dev *indio_dev,
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),	\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 	.scan_type = {					\
-		.sign = 'u',				\
+		.format = 'u',				\
 		.realbits = (bits),			\
 		.storagebits = 16,			\
 		.shift = 12 - (bits),			\

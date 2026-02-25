@@ -512,7 +512,7 @@ static int at91_adc_channel_init(struct iio_dev *idev)
 		chan->indexed = 1;
 		chan->channel = bit;
 		chan->scan_index = idx;
-		chan->scan_type.sign = 'u';
+		chan->scan_type.format = 'u';
 		chan->scan_type.realbits = st->res;
 		chan->scan_type.storagebits = 16;
 		chan->info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE);
@@ -524,7 +524,7 @@ static int at91_adc_channel_init(struct iio_dev *idev)
 	timestamp->type = IIO_TIMESTAMP;
 	timestamp->channel = -1;
 	timestamp->scan_index = idx;
-	timestamp->scan_type.sign = 's';
+	timestamp->scan_type.format = 's';
 	timestamp->scan_type.realbits = 64;
 	timestamp->scan_type.storagebits = 64;
 

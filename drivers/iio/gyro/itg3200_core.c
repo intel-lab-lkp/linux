@@ -257,7 +257,7 @@ static const struct iio_chan_spec_ext_info itg3200_ext_info[] = {
 };
 
 #define ITG3200_ST						\
-	{ .sign = 's', .realbits = 16, .storagebits = 16, .endianness = IIO_BE }
+	{ .format = 's', .realbits = 16, .storagebits = 16, .endianness = IIO_BE }
 
 #define ITG3200_GYRO_CHAN(_mod) { \
 	.type = IIO_ANGL_VEL, \

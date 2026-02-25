@@ -117,7 +117,7 @@ struct ads124s_private {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 	.scan_index = index,					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = 32,					\
 		.storagebits = 32,				\
 	},							\

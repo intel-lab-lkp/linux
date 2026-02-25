@@ -87,7 +87,7 @@
 		.address = _index,				\
 		.scan_index = _index,				\
 		.scan_type = {					\
-				.sign = 's',			\
+				.format = 's',			\
 				.realbits = 24,			\
 				.storagebits = 32,		\
 				.endianness = IIO_CPU,		\

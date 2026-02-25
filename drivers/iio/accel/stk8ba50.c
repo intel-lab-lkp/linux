@@ -108,7 +108,7 @@ struct stk8ba50_data {
 				    BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 10,						\
 		.storagebits = 16,					\
 		.shift = STK8BA50_DATA_SHIFT,				\

@@ -421,7 +421,7 @@ static ssize_t iio_show_fixed_type(struct device *dev,
 	if (scan_type->repeat > 1)
 		return sysfs_emit(buf, "%s:%c%d/%dX%d>>%u\n",
 		       iio_endian_prefix[type],
-		       scan_type->sign,
+		       scan_type->format,
 		       scan_type->realbits,
 		       scan_type->storagebits,
 		       scan_type->repeat,
@@ -429,7 +429,7 @@ static ssize_t iio_show_fixed_type(struct device *dev,
 	else
 		return sysfs_emit(buf, "%s:%c%d/%d>>%u\n",
 		       iio_endian_prefix[type],
-		       scan_type->sign,
+		       scan_type->format,
 		       scan_type->realbits,
 		       scan_type->storagebits,
 		       scan_type->shift);

@@ -258,7 +258,7 @@ static const struct iio_chan_spec_ext_info ad5380_ext_info[] = {
 		BIT(IIO_CHAN_INFO_CALIBBIAS),			\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = (_bits),				\
 		.storagebits =  16,				\
 		.shift = 14 - (_bits),				\

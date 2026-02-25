@@ -891,12 +891,12 @@ static int ad4851_read_avail(struct iio_dev *indio_dev,
 
 static const struct iio_scan_type ad4851_scan_type_20_u[] = {
 	[AD4851_SCAN_TYPE_NORMAL] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 20,
 		.storagebits = 32,
 	},
 	[AD4851_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 24,
 		.storagebits = 32,
 	},
@@ -904,12 +904,12 @@ static const struct iio_scan_type ad4851_scan_type_20_u[] = {
 
 static const struct iio_scan_type ad4851_scan_type_20_b[] = {
 	[AD4851_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 20,
 		.storagebits = 32,
 	},
 	[AD4851_SCAN_TYPE_RESOLUTION_BOOST] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 24,
 		.storagebits = 32,
 	},
@@ -949,7 +949,7 @@ static int ad4851_get_current_scan_type(const struct iio_dev *indio_dev,
 {										\
 	AD4851_IIO_CHANNEL,							\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 16,							\
 		.storagebits = 16,						\
 	},									\
@@ -997,7 +997,7 @@ static int ad4851_parse_channels_common(struct iio_dev *indio_dev,
 		st->bipolar_ch[reg] = fwnode_property_read_bool(child, "bipolar");
 
 		if (st->bipolar_ch[reg]) {
-			channels->scan_type.sign = 's';
+			channels->scan_type.format = 's';
 		} else {
 			ret = regmap_write(st->regmap, AD4851_REG_CHX_SOFTSPAN(reg),
 					   AD4851_SOFTSPAN_0V_40V);

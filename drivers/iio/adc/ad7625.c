@@ -54,7 +54,7 @@ struct ad7625_chip_info {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_SCALE),			\
 	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = 0,						\
-	.scan_type.sign = 's',						\
+	.scan_type.format = 's',					\
 	.scan_type.storagebits = (_bits) > 16 ? 32 : 16,		\
 	.scan_type.realbits = (_bits),					\
 }

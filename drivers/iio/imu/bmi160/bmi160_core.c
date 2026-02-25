@@ -105,7 +105,7 @@
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 	.scan_index = _index,					\
 	.scan_type = {						\
-		.sign = 's',					\
+		.format = 's',					\
 		.realbits = 16,					\
 		.storagebits = 16,				\
 		.endianness = IIO_LE,				\

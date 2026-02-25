@@ -67,7 +67,7 @@ struct adc12138 {
 					| BIT(IIO_CHAN_INFO_OFFSET),	\
 		.scan_index = chan,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = 13,					\
 			.storagebits = 16,				\
 			.shift = 3,					\
@@ -87,7 +87,7 @@ struct adc12138 {
 					| BIT(IIO_CHAN_INFO_OFFSET),	\
 		.scan_index = si,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = 13,					\
 			.storagebits = 16,				\
 			.shift = 3,					\

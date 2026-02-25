@@ -422,7 +422,7 @@ done:
 		BIT(IIO_CHAN_INFO_SCALE), \
 	.scan_index = idx, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = 16, \
 		.storagebits = 16, \
 		.endianness = IIO_BE, \
@@ -439,7 +439,7 @@ static const struct iio_chan_spec mag3110_channels[] = {
 			BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 3,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 8,
 			.storagebits = 8,
 			},

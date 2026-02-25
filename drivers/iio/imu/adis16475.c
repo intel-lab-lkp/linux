@@ -671,7 +671,7 @@ static int adis16475_write_raw(struct iio_dev *indio_dev,
 		.address = (_address), \
 		.scan_index = (_si), \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = (_r_bits), \
 			.storagebits = (_s_bits), \
 			.endianness = IIO_BE, \
@@ -699,7 +699,7 @@ static int adis16475_write_raw(struct iio_dev *indio_dev,
 		.address = ADIS16475_REG_TEMP_OUT, \
 		.scan_index = ADIS16475_SCAN_TEMP, \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = 16, \
 			.storagebits = 16, \
 			.endianness = IIO_BE, \
@@ -717,7 +717,7 @@ static int adis16475_write_raw(struct iio_dev *indio_dev,
 		.address = (_address), \
 		.scan_index = _si, \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = (_r_bits), \
 			.storagebits = (_s_bits), \
 			.endianness = IIO_BE, \

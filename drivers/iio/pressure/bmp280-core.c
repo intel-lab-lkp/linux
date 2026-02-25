@@ -161,7 +161,7 @@ static const struct iio_chan_spec bmp280_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -176,7 +176,7 @@ static const struct iio_chan_spec bmp280_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -195,7 +195,7 @@ static const struct iio_chan_spec bme280_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -210,7 +210,7 @@ static const struct iio_chan_spec bme280_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -225,7 +225,7 @@ static const struct iio_chan_spec bme280_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 2,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -246,7 +246,7 @@ static const struct iio_chan_spec bmp380_channels[] = {
 					   BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -263,7 +263,7 @@ static const struct iio_chan_spec bmp380_channels[] = {
 					   BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -284,7 +284,7 @@ static const struct iio_chan_spec bmp580_channels[] = {
 					   BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 24,
 			.storagebits = 32,
 			.endianness = IIO_LE,
@@ -301,7 +301,7 @@ static const struct iio_chan_spec bmp580_channels[] = {
 					   BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 24,
 			.storagebits = 32,
 			.endianness = IIO_LE,

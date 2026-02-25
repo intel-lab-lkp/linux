@@ -36,7 +36,7 @@ static const struct iio_chan_spec cros_ec_lid_angle_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
 		.scan_type.realbits = CROS_EC_SENSOR_BITS,
 		.scan_type.storagebits = CROS_EC_SENSOR_BITS,
-		.scan_type.sign = 'u',
+		.scan_type.format = 'u',
 		.type = IIO_ANGL
 	},
 	IIO_CHAN_SOFT_TIMESTAMP(1)

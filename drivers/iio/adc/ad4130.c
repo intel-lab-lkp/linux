@@ -1002,7 +1002,7 @@ static const struct iio_chan_spec ad4130_channel_template = {
 					BIT(IIO_CHAN_INFO_SAMP_FREQ),
 	.ext_info = ad4130_ext_info,
 	.scan_type = {
-		.sign = 'u',
+		.format = 'u',
 		.endianness = IIO_BE,
 	},
 };

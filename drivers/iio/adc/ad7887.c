@@ -188,7 +188,7 @@ static int ad7887_read_raw(struct iio_dev *indio_dev,
 	.address = (x), \
 	.scan_index = (x), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 12, \
 		.storagebits = 16, \
 		.shift = 0, \

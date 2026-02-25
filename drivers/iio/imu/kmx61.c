@@ -234,7 +234,7 @@ static const struct iio_event_spec kmx61_event = {
 	.address = KMX61_ACC, \
 	.scan_index = KMX61_AXIS_ ## _axis, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = 12, \
 		.storagebits = 16, \
 		.shift = 4, \
@@ -254,7 +254,7 @@ static const struct iio_event_spec kmx61_event = {
 				BIT(IIO_CHAN_INFO_SAMP_FREQ), \
 	.scan_index = KMX61_AXIS_ ## _axis, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = 14, \
 		.storagebits = 16, \
 		.shift = 2, \

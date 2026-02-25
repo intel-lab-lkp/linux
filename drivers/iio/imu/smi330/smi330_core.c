@@ -85,7 +85,7 @@
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),				\
 	.scan_index = SMI330_SCAN_ACCEL_##_axis,			\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_LE,					\
@@ -110,7 +110,7 @@
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),				\
 	.scan_index = SMI330_SCAN_GYRO_##_axis,				\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_LE,					\
@@ -124,7 +124,7 @@
 		BIT(IIO_CHAN_INFO_SCALE),		\
 	.scan_index = _index,				\
 	.scan_type = {					\
-		.sign = 's',				\
+		.format = 's',				\
 		.realbits = 16,				\
 		.storagebits = 16,			\
 		.endianness = IIO_LE,			\

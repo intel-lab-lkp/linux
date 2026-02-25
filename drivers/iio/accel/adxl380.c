@@ -1789,7 +1789,7 @@ static const struct iio_event_spec adxl380_events[] = {
 		BIT(IIO_CHAN_INFO_HIGH_PASS_FILTER_3DB_FREQUENCY),	\
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_BE,					\
@@ -1810,7 +1810,7 @@ static const struct iio_chan_spec adxl380_channels[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 3,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 12,
 			.storagebits = 16,
 			.shift = 4,

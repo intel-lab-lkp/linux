@@ -2109,7 +2109,7 @@ static void stm32_adc_chan_init_one(struct iio_dev *indio_dev,
 		chan->info_mask_shared_by_all |= BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO);
 		chan->info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO);
 	}
-	chan->scan_type.sign = 'u';
+	chan->scan_type.format = 'u';
 	chan->scan_type.realbits = adc->cfg->adc_info->resolutions[adc->res];
 	chan->scan_type.storagebits = 16;
 	chan->ext_info = stm32_adc_ext_info;
@@ -2448,7 +2448,7 @@ static int stm32_adc_chan_fw_init(struct iio_dev *indio_dev, bool timestamping)
 		timestamp->type = IIO_TIMESTAMP;
 		timestamp->channel = -1;
 		timestamp->scan_index = scan_index;
-		timestamp->scan_type.sign = 's';
+		timestamp->scan_type.format = 's';
 		timestamp->scan_type.realbits = 64;
 		timestamp->scan_type.storagebits = 64;
 

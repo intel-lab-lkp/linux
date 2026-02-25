@@ -109,7 +109,7 @@ enum ad5360_type {
 		BIT(IIO_CHAN_INFO_CALIBSCALE) |			\
 		BIT(IIO_CHAN_INFO_CALIBBIAS),			\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = (bits),				\
 		.storagebits = 16,				\
 		.shift = 16 - (bits),				\

@@ -314,25 +314,25 @@ enum {
 
 static const struct iio_scan_type ad4695_scan_type_offload_u[] = {
 	[AD4695_SCAN_TYPE_OSR_1] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 16,
 		.shift = 3,
 		.storagebits = 32,
 	},
 	[AD4695_SCAN_TYPE_OSR_4] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 17,
 		.shift = 2,
 		.storagebits = 32,
 	},
 	[AD4695_SCAN_TYPE_OSR_16] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 18,
 		.shift = 1,
 		.storagebits = 32,
 	},
 	[AD4695_SCAN_TYPE_OSR_64] = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 19,
 		.storagebits = 32,
 	},
@@ -340,25 +340,25 @@ static const struct iio_scan_type ad4695_scan_type_offload_u[] = {
 
 static const struct iio_scan_type ad4695_scan_type_offload_s[] = {
 	[AD4695_SCAN_TYPE_OSR_1] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.shift = 3,
 		.storagebits = 32,
 	},
 	[AD4695_SCAN_TYPE_OSR_4] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 17,
 		.shift = 2,
 		.storagebits = 32,
 	},
 	[AD4695_SCAN_TYPE_OSR_16] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 18,
 		.shift = 1,
 		.storagebits = 32,
 	},
 	[AD4695_SCAN_TYPE_OSR_64] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 19,
 		.storagebits = 32,
 	},
@@ -375,7 +375,7 @@ static const struct iio_chan_spec ad4695_channel_template = {
 	.info_mask_separate_available = BIT(IIO_CHAN_INFO_CALIBSCALE) |
 					BIT(IIO_CHAN_INFO_CALIBBIAS),
 	.scan_type = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 16,
 		.storagebits = 16,
 	},
@@ -388,7 +388,7 @@ static const struct iio_chan_spec ad4695_temp_channel_template = {
 			      BIT(IIO_CHAN_INFO_SCALE) |
 			      BIT(IIO_CHAN_INFO_OFFSET),
 	.scan_type = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.storagebits = 16,
 	},
@@ -1037,7 +1037,7 @@ static int __ad4695_read_info_raw(struct ad4695_state *st,
 	if (ret)
 		return ret;
 
-	if (chan->scan_type.sign == 's')
+	if (chan->scan_type.format == 's')
 		*val = sign_extend32(st->raw_data, realbits - 1);
 	else
 		*val = st->raw_data;
@@ -1603,7 +1603,7 @@ static int ad4695_parse_channel_cfg(struct ad4695_state *st)
 				fwnode_get_name(child));
 
 		if (chan_cfg->bipolar)
-			iio_chan->scan_type.sign = 's';
+			iio_chan->scan_type.format = 's';
 
 		ret = ad4695_write_chn_cfg(st, chan_cfg);
 		if (ret)

@@ -49,7 +49,7 @@ struct adc0832 {
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 		.scan_index = chan,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 8,					\
 			.storagebits = 8,				\
 		},							\
@@ -66,7 +66,7 @@ struct adc0832 {
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 		.scan_index = si,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 8,					\
 			.storagebits = 8,				\
 		},							\

@@ -1147,7 +1147,7 @@ static const struct iio_chan_spec_ext_info kxcjk1013_ext_info[] = {
 				BIT(IIO_CHAN_INFO_SAMP_FREQ),		\
 	.scan_index = AXIS_##_axis,					\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 12,						\
 		.storagebits = 16,					\
 		.shift = 4,						\

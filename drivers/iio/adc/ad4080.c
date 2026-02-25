@@ -435,7 +435,7 @@ static struct iio_chan_spec_ext_info ad4080_ext_info[] = {
 	.ext_info = ad4080_ext_info,					\
 	.scan_index = 0,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = (bits),					\
 		.storagebits = (storage),				\
 	},								\

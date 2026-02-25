@@ -653,7 +653,7 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	.address = (addr), \
 	.scan_index = (si), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 0, \
@@ -679,7 +679,7 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	.address = addr, \
 	.scan_index = ADIS16400_SCAN_GYRO_ ## mod, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 0, \
@@ -699,7 +699,7 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	.address = (addr), \
 	.scan_index = ADIS16400_SCAN_ACC_ ## mod, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 0, \
@@ -718,7 +718,7 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	.address = (addr), \
 	.scan_index = ADIS16400_SCAN_MAGN_ ## mod, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 0, \
@@ -744,7 +744,7 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	.address = (addr), \
 	.scan_index = ADIS16350_SCAN_TEMP_ ## mod, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 0, \
@@ -763,7 +763,7 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	.address = (addr), \
 	.scan_index = ADIS16350_SCAN_TEMP_X, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 0, \
@@ -781,7 +781,7 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	.address = (addr), \
 	.scan_index = ADIS16300_SCAN_INCLI_ ## mod, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 0, \
@@ -834,7 +834,7 @@ static const struct iio_chan_spec adis16448_channels[] = {
 		.address = ADIS16448_BARO_OUT,
 		.scan_index = ADIS16400_SCAN_BARO,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_BE,

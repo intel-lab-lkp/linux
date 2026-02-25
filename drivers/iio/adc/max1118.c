@@ -54,7 +54,7 @@ struct max1118 {
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 		.scan_index = ch,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 8,					\
 			.storagebits = 8,				\
 		},							\

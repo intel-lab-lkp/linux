@@ -449,7 +449,7 @@ static const struct iio_chan_spec_ext_info ad5766_ext_info[] = {
 		BIT(IIO_CHAN_INFO_SCALE),				\
 	.scan_index = (_chan),						\
 	.scan_type = {							\
-		.sign = 'u',						\
+		.format = 'u',						\
 		.realbits = (_bits),					\
 		.storagebits = 16,					\
 		.shift = 16 - (_bits),					\

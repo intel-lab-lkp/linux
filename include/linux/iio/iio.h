@@ -178,7 +178,7 @@ struct iio_event_spec {
 
 /**
  * struct iio_scan_type - specification for channel data format in buffer
- * @sign:		's' or 'u' to specify signed or unsigned
+ * @format:		(signed or unsigned) integer, or floating point
  * @realbits:		Number of valid bits of data
  * @storagebits:	Realbits + padding
  * @shift:		Shift right by this before masking out realbits.
@@ -189,7 +189,7 @@ struct iio_event_spec {
  * @endianness:		little or big endian
  */
 struct iio_scan_type {
-	char	sign;
+	char	format;
 	u8	realbits;
 	u8	storagebits;
 	u8	shift;
@@ -332,7 +332,7 @@ static inline bool iio_channel_has_available(const struct iio_chan_spec *chan,
 	.channel = -1,							\
 	.scan_index = _si,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 64,					\
 		.storagebits = 64,					\
 		},							\

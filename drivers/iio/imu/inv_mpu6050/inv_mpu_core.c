@@ -1469,7 +1469,7 @@ static const struct iio_event_spec inv_wom_events[] = {
 				      BIT(IIO_CHAN_INFO_CALIBBIAS),   \
 		.scan_index = _index,                                 \
 		.scan_type = {                                        \
-				.sign = 's',                          \
+				.format = 's',                        \
 				.realbits = 16,                       \
 				.storagebits = 16,                    \
 				.shift = 0,                           \
@@ -1486,7 +1486,7 @@ static const struct iio_event_spec inv_wom_events[] = {
 				| BIT(IIO_CHAN_INFO_SCALE),	\
 		.scan_index = _index,				\
 		.scan_type = {					\
-			.sign = 's',				\
+			.format = 's',				\
 			.realbits = 16,				\
 			.storagebits = 16,			\
 			.shift = 0,				\
@@ -1578,7 +1578,7 @@ static const unsigned long inv_mpu_scan_masks[] = {
 				      BIT(IIO_CHAN_INFO_RAW),		\
 		.scan_index = _index,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = _bits,				\
 			.storagebits = 16,				\
 			.shift = 0,					\

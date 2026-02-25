@@ -91,7 +91,7 @@ enum ad7923_id {
 		.address = index,					\
 		.scan_index = index,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = (bits),				\
 			.storagebits = 16,				\
 			.shift = 12 - (bits),				\

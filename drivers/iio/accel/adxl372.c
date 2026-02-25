@@ -262,7 +262,7 @@ static const struct iio_event_spec adxl372_events[] = {
 		BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),	\
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 12,						\
 		.storagebits = 16,					\
 		.shift = 4,						\

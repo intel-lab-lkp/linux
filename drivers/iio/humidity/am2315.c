@@ -51,7 +51,7 @@ static const struct iio_chan_spec am2315_channels[] = {
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,
@@ -63,7 +63,7 @@ static const struct iio_chan_spec am2315_channels[] = {
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

@@ -541,7 +541,7 @@ static int bma180_read_raw(struct iio_dev *indio_dev,
 		iio_device_release_direct(indio_dev);
 		if (ret < 0)
 			return ret;
-		if (chan->scan_type.sign == 's') {
+		if (chan->scan_type.format == 's') {
 			*val = sign_extend32(ret >> chan->scan_type.shift,
 				chan->scan_type.realbits - 1);
 		} else {
@@ -663,7 +663,7 @@ static const struct iio_chan_spec_ext_info bma180_ext_info[] = {
 		BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),	\
 	.scan_index = AXIS_##_axis,					\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = _bits,					\
 		.storagebits = 16,					\
 		.shift = 16 - _bits,					\
@@ -677,7 +677,7 @@ static const struct iio_chan_spec_ext_info bma180_ext_info[] = {
 		BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_OFFSET),	\
 	.scan_index = TEMP,						\
 	.scan_type = {							\
-		.sign = 'u',						\
+		.format = 'u',						\
 		.realbits = 8,						\
 		.storagebits = 16,					\
 	},								\
@@ -692,7 +692,7 @@ static const struct iio_chan_spec_ext_info bma180_ext_info[] = {
 		BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),	\
 	.scan_index = AXIS_##_axis,					\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = _bits,					\
 		.storagebits = 16,					\
 		.shift = 16 - _bits,					\
@@ -706,7 +706,7 @@ static const struct iio_chan_spec_ext_info bma180_ext_info[] = {
 		BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_OFFSET),	\
 	.scan_index = TEMP,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 8,						\
 		.storagebits = 16,					\
 	},								\

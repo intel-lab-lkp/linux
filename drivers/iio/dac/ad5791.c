@@ -323,7 +323,7 @@ static const struct ad5791_chip_info _name##_chip_info = {		\
 			.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
 				BIT(IIO_CHAN_INFO_OFFSET),		\
 			.scan_type = {					\
-				.sign = 'u',				\
+				.format = 'u',				\
 				.realbits = (bits),			\
 				.storagebits = 32,			\
 				.shift = (_shift),			\
@@ -341,7 +341,7 @@ static const struct ad5791_chip_info _name##_chip_info = {		\
 				BIT(IIO_CHAN_INFO_OFFSET),		\
 			.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),\
 			.scan_type = {					\
-				.sign = 'u',				\
+				.format = 'u',				\
 				.realbits = (bits),			\
 				.storagebits = 32,			\
 				.shift = (_shift),			\

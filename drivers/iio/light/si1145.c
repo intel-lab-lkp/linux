@@ -793,7 +793,7 @@ static int si1145_write_raw(struct iio_dev *indio_dev,
 }
 
 #define SI1145_ST { \
-	.sign = 'u', \
+	.format = 'u', \
 	.realbits = 16, \
 	.storagebits = 16, \
 	.endianness = IIO_LE, \

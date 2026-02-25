@@ -477,7 +477,7 @@ static const struct iio_event_spec sca3000_event = {
 		.address = index,				\
 		.scan_index = index,				\
 		.scan_type = {					\
-			.sign = 's',				\
+			.format = 's',				\
 			.realbits = 13,				\
 			.storagebits = 16,			\
 			.shift = 3,				\
@@ -520,7 +520,7 @@ static const struct iio_chan_spec sca3000_channels_with_temp[] = {
 		/* No buffer support */
 		.scan_index = -1,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 9,
 			.storagebits = 16,
 			.shift = 5,

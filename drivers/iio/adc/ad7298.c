@@ -63,7 +63,7 @@ struct ad7298_state {
 		.address = index,					\
 		.scan_index = index,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 12,					\
 			.storagebits = 16,				\
 			.endianness = IIO_BE,				\
@@ -81,7 +81,7 @@ static const struct iio_chan_spec ad7298_channels[] = {
 		.address = AD7298_CH_TEMP,
 		.scan_index = -1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 		},

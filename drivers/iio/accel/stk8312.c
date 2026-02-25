@@ -80,7 +80,7 @@ static const struct {
 				    BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 8,						\
 		.storagebits = 8,					\
 		.endianness = IIO_CPU,					\

@@ -43,7 +43,7 @@ static const struct iio_chan_spec st_uvis25_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 8,
 			.storagebits = 8,
 		},

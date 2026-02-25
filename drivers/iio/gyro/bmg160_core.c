@@ -833,7 +833,7 @@ static const struct iio_event_spec bmg160_event = {
 		BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),	\
 	.scan_index = AXIS_##_axis,					\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,					\
 		.storagebits = 16,					\
 		.endianness = IIO_LE,					\

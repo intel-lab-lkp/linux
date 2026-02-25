@@ -585,7 +585,7 @@ static const struct iio_event_spec ltr501_pxs_event_spec[] = {
 	.info_mask_shared_by_type = (_shared), \
 	.scan_index = (_idx), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 16, \
 		.storagebits = 16, \
 		.endianness = IIO_CPU, \
@@ -617,7 +617,7 @@ static const struct iio_chan_spec ltr501_channels[] = {
 			BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 2,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 11,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

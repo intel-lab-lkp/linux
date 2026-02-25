@@ -152,7 +152,7 @@ done:
 	.channel2 = (IIO_MOD_LIGHT_##_color), \
 	.scan_index = (_scan_idx), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 10, \
 		.storagebits = 16, \
 		.endianness = IIO_CPU, \

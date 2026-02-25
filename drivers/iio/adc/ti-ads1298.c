@@ -149,7 +149,7 @@ struct ads1298_private {
 		BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),	\
 	.scan_index = index,				\
 	.scan_type = {					\
-		.sign = 's',				\
+		.format = 's',				\
 		.realbits = ADS1298_BITS_PER_SAMPLE,	\
 		.storagebits = 32,			\
 		.endianness = IIO_CPU,			\

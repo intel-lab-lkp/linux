@@ -172,7 +172,7 @@ static const struct iio_chan_spec bme680_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,
@@ -187,7 +187,7 @@ static const struct iio_chan_spec bme680_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -202,7 +202,7 @@ static const struct iio_chan_spec bme680_channels[] = {
 				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 2,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -213,7 +213,7 @@ static const struct iio_chan_spec bme680_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
 		.scan_index = 3,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,

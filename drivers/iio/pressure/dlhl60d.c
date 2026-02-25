@@ -214,7 +214,7 @@ static const struct iio_chan_spec dlh_channels[] = {
 			BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = DLH_NUM_PR_BITS,
 			.storagebits = 32,
 			.shift = 8,
@@ -229,7 +229,7 @@ static const struct iio_chan_spec dlh_channels[] = {
 			BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = DLH_NUM_TEMP_BITS,
 			.storagebits = 32,
 			.shift = 8,

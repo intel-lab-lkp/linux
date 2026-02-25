@@ -254,14 +254,14 @@ static const char * const ad7768_filter_enum[] = {
 
 static const struct iio_scan_type ad7768_scan_type[] = {
 	[AD7768_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 24,
 		.storagebits = 32,
 		.shift = 8,
 		.endianness = IIO_BE,
 	},
 	[AD7768_SCAN_TYPE_HIGH_SPEED] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.storagebits = 16,
 		.endianness = IIO_BE,
@@ -541,7 +541,7 @@ static void ad7768_fill_scale_tbl(struct iio_dev *dev)
 	u64 tmp2;
 
 	scan_type = iio_get_current_scan_type(dev, &dev->channels[0]);
-	if (scan_type->sign == 's')
+	if (scan_type->format == 's')
 		val2 = scan_type->realbits - 1;
 	else
 		val2 = scan_type->realbits;
@@ -1102,7 +1102,7 @@ static int ad7768_write_raw(struct iio_dev *indio_dev,
 		if (!st->chip->has_pga)
 			return -EOPNOTSUPP;
 
-		if (scan_type->sign == 's')
+		if (scan_type->format == 's')
 			gain_mode = ad7768_calc_pga_gain(st, val, val2,
 							 scan_type->realbits - 1);
 		else

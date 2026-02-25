@@ -725,7 +725,7 @@ out_unlock_notify:
 		BIT(IIO_CHAN_INFO_HIGH_PASS_FILTER_3DB_FREQUENCY),	\
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 20,						\
 		.storagebits = 32,					\
 		.shift = 4,						\
@@ -745,7 +745,7 @@ static const struct iio_chan_spec adxl355_channels[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 3,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 12,
 			.storagebits = 16,
 			.endianness = IIO_BE,

@@ -468,7 +468,7 @@ int adis_single_conversion(struct iio_dev *indio_dev,
 	.address = (addr), \
 	.scan_index = (si), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.endianness = IIO_BE, \
@@ -492,7 +492,7 @@ int adis_single_conversion(struct iio_dev *indio_dev,
 	.address = (addr), \
 	.scan_index = (si), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.endianness = IIO_BE, \
@@ -510,7 +510,7 @@ int adis_single_conversion(struct iio_dev *indio_dev,
 	.address = (addr), \
 	.scan_index = (si), \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.endianness = IIO_BE, \

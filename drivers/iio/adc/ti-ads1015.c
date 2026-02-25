@@ -193,7 +193,7 @@ static const struct iio_event_spec ads1015_events[] = {
 				BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = _addr,					\
 	.scan_type = {						\
-		.sign = 's',					\
+		.format = 's',					\
 		.realbits = (_realbits),			\
 		.storagebits = FIT_CHECK((_realbits) + (_shift), 16),	\
 		.shift = (_shift),				\
@@ -219,7 +219,7 @@ static const struct iio_event_spec ads1015_events[] = {
 				BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = _addr,					\
 	.scan_type = {						\
-		.sign = 's',					\
+		.format = 's',					\
 		.realbits = (_realbits),			\
 		.storagebits = FIT_CHECK((_realbits) + (_shift), 16),	\
 		.shift = (_shift),				\

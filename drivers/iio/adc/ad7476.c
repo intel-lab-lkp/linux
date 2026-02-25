@@ -160,7 +160,7 @@ static int ad7476_read_raw(struct iio_dev *indio_dev,
 	.info_mask_separate = _info_mask_sep,			\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = (bits),				\
 		.storagebits = 16,				\
 		.shift = (_shift),				\

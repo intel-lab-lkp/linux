@@ -955,7 +955,7 @@ static const struct iio_chan_spec ad4170_temp_channel_template = {
 			      BIT(IIO_CHAN_INFO_SAMP_FREQ),
 	.info_mask_separate_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),
 	.scan_type = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 24,
 		.storagebits = 32,
 		.shift = 8,
@@ -1101,7 +1101,7 @@ static int ad4170_get_input_range(struct ad4170_state *st,
 				  struct iio_chan_spec const *chan,
 				  unsigned int ch_reg, unsigned int ref_sel)
 {
-	bool bipolar = chan->scan_type.sign == 's';
+	bool bipolar = chan->scan_type.format == 's';
 	struct device *dev = &st->spi->dev;
 	int refp, refn, ain_voltage, ret;
 
@@ -1228,7 +1228,7 @@ static int __ad4170_read_sample(struct iio_dev *indio_dev,
 	if (ret)
 		return ret;
 
-	if (chan->scan_type.sign == 's')
+	if (chan->scan_type.format == 's')
 		*val = sign_extend32(*val, chan->scan_type.realbits - 1);
 
 	return 0;
@@ -1353,7 +1353,7 @@ static int ad4170_fill_scale_tbl(struct iio_dev *indio_dev,
 	struct ad4170_state *st = iio_priv(indio_dev);
 	struct ad4170_chan_info *chan_info = &st->chan_infos[chan->address];
 	struct device *dev = &st->spi->dev;
-	int bipolar = chan->scan_type.sign == 's' ? 1 : 0;
+	int bipolar = chan->scan_type.format == 's' ? 1 : 0;
 	int precision_bits = chan->scan_type.realbits;
 	int pga, ainm_voltage, ret;
 	unsigned long long offset;
@@ -2335,9 +2335,9 @@ static int ad4170_parse_channel_node(struct iio_dev *indio_dev,
 	bipolar = fwnode_property_read_bool(child, "bipolar");
 	setup->afe |= FIELD_PREP(AD4170_AFE_BIPOLAR_MSK, bipolar);
 	if (bipolar)
-		chan->scan_type.sign = 's';
+		chan->scan_type.format = 's';
 	else
-		chan->scan_type.sign = 'u';
+		chan->scan_type.format = 'u';
 
 	ret = ad4170_validate_channel(st, chan);
 	if (ret)

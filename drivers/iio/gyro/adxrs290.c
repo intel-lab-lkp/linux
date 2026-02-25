@@ -538,7 +538,7 @@ out_unlock_notify:
 	BIT(IIO_CHAN_INFO_HIGH_PASS_FILTER_3DB_FREQUENCY),		\
 	.scan_index = ADXRS290_IDX_##axis,				\
 	.scan_type = {                                                  \
-		.sign = 's',                                            \
+		.format = 's',                                          \
 		.realbits = 16,                                         \
 		.storagebits = 16,                                      \
 		.endianness = IIO_LE,					\
@@ -555,7 +555,7 @@ static const struct iio_chan_spec adxrs290_channels[] = {
 		BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = ADXRS290_IDX_TEMP,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 12,
 			.storagebits = 16,
 			.endianness = IIO_LE,

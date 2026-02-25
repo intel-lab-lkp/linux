@@ -438,7 +438,7 @@ static int dln2_update_scan_mode(struct iio_dev *indio_dev,
 	lval.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE) |	\
 				       BIT(IIO_CHAN_INFO_SAMP_FREQ);	\
 	lval.scan_index = idx;						\
-	lval.scan_type.sign = 'u';					\
+	lval.scan_type.format = 'u';					\
 	lval.scan_type.realbits = DLN2_ADC_DATA_BITS;			\
 	lval.scan_type.storagebits = 16;				\
 	lval.scan_type.endianness = IIO_LE;				\
@@ -449,7 +449,7 @@ static int dln2_update_scan_mode(struct iio_dev *indio_dev,
 	lval.type = IIO_TIMESTAMP;			\
 	lval.channel = -1;				\
 	lval.scan_index = _si;				\
-	lval.scan_type.sign = 's';			\
+	lval.scan_type.format = 's';			\
 	lval.scan_type.realbits = 64;			\
 	lval.scan_type.storagebits = 64;		\
 }

@@ -330,7 +330,7 @@ struct pac1934_chip_info {
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = (_si),							\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 48,							\
 		.storagebits = 64,						\
 		.endianness = IIO_CPU,						\
@@ -348,7 +348,7 @@ struct pac1934_chip_info {
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = (_si),							\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 16,							\
 		.storagebits = 16,						\
 		.endianness = IIO_CPU,						\
@@ -366,7 +366,7 @@ struct pac1934_chip_info {
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = (_si),							\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 16,							\
 		.storagebits = 16,						\
 		.endianness = IIO_CPU,						\
@@ -384,7 +384,7 @@ struct pac1934_chip_info {
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = (_si),							\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 16,							\
 		.storagebits = 16,						\
 		.endianness = IIO_CPU,						\
@@ -402,7 +402,7 @@ struct pac1934_chip_info {
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = (_si),							\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 16,							\
 		.storagebits = 16,						\
 		.endianness = IIO_CPU,						\
@@ -420,7 +420,7 @@ struct pac1934_chip_info {
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = (_si),							\
 	.scan_type = {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = 28,							\
 		.storagebits = 32,						\
 		.shift = 4,							\
@@ -839,7 +839,7 @@ static int pac1934_read_raw(struct iio_dev *indio_dev,
 		case PAC1934_VBUS_AVG_3_ADDR:
 		case PAC1934_VBUS_AVG_4_ADDR:
 			*val = PAC1934_VOLTAGE_MILLIVOLTS_MAX;
-			if (chan->scan_type.sign == 'u')
+			if (chan->scan_type.format == 'u')
 				*val2 = PAC1934_VOLTAGE_U_RES;
 			else
 				*val2 = PAC1934_VOLTAGE_S_RES;
@@ -858,7 +858,7 @@ static int pac1934_read_raw(struct iio_dev *indio_dev,
 		case PAC1934_VSENSE_AVG_3_ADDR:
 		case PAC1934_VSENSE_AVG_4_ADDR:
 			*val = PAC1934_MAX_VSENSE_RSHIFTED_BY_16B;
-			if (chan->scan_type.sign == 'u')
+			if (chan->scan_type.format == 'u')
 				*val2 = info->shunts[channel];
 			else
 				*val2 = info->shunts[channel] >> 1;
@@ -873,7 +873,7 @@ static int pac1934_read_raw(struct iio_dev *indio_dev,
 		case PAC1934_VPOWER_3_ADDR:
 		case PAC1934_VPOWER_4_ADDR:
 			*val = PAC1934_MAX_VPOWER_RSHIFTED_BY_28B;
-			if (chan->scan_type.sign == 'u')
+			if (chan->scan_type.format == 'u')
 				*val2 = info->shunts[channel];
 			else
 				*val2 = info->shunts[channel] >> 1;
@@ -888,7 +888,7 @@ static int pac1934_read_raw(struct iio_dev *indio_dev,
 			 */
 			*val = PAC1934_SCALE_CONSTANT;
 
-			if (chan->scan_type.sign == 'u')
+			if (chan->scan_type.format == 'u')
 				*val2 = info->shunts[channel];
 			else
 				*val2 = info->shunts[channel] >> 1;
@@ -1393,17 +1393,17 @@ static int pac1934_prep_iio_channels(struct pac1934_chip_info *info, struct iio_
 		 * whole chip rail(channel) is bi-directional
 		 */
 		if (info->bi_dir[cnt]) {
-			ch_sp[PAC1934_CH_ENERGY].scan_type.sign = 's';
+			ch_sp[PAC1934_CH_ENERGY].scan_type.format = 's';
 			ch_sp[PAC1934_CH_ENERGY].scan_type.realbits = 47;
-			ch_sp[PAC1934_CH_POWER].scan_type.sign = 's';
+			ch_sp[PAC1934_CH_POWER].scan_type.format = 's';
 			ch_sp[PAC1934_CH_POWER].scan_type.realbits = 27;
-			ch_sp[PAC1934_CH_VOLTAGE].scan_type.sign = 's';
+			ch_sp[PAC1934_CH_VOLTAGE].scan_type.format = 's';
 			ch_sp[PAC1934_CH_VOLTAGE].scan_type.realbits = 15;
-			ch_sp[PAC1934_CH_CURRENT].scan_type.sign = 's';
+			ch_sp[PAC1934_CH_CURRENT].scan_type.format = 's';
 			ch_sp[PAC1934_CH_CURRENT].scan_type.realbits = 15;
-			ch_sp[PAC1934_CH_VOLTAGE_AVERAGE].scan_type.sign = 's';
+			ch_sp[PAC1934_CH_VOLTAGE_AVERAGE].scan_type.format = 's';
 			ch_sp[PAC1934_CH_VOLTAGE_AVERAGE].scan_type.realbits = 15;
-			ch_sp[PAC1934_CH_CURRENT_AVERAGE].scan_type.sign = 's';
+			ch_sp[PAC1934_CH_CURRENT_AVERAGE].scan_type.format = 's';
 			ch_sp[PAC1934_CH_CURRENT_AVERAGE].scan_type.realbits = 15;
 		}
 		tmp_data += sizeof(pac1934_single_channel);

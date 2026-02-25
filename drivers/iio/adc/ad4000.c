@@ -51,7 +51,7 @@
 	.info_mask_separate_available = _reg_access ? BIT(IIO_CHAN_INFO_SCALE) : 0,\
 	.scan_index = 0,							\
 	.scan_type = {								\
-		.sign = _sign,							\
+		.format = _sign,						\
 		.realbits = _real_bits,						\
 		.storagebits = _storage_bits,					\
 		.shift = (_offl ? 0 : _storage_bits - _real_bits),		\
@@ -89,7 +89,7 @@
 	.info_mask_separate_available = _reg_access ? BIT(IIO_CHAN_INFO_SCALE) : 0,\
 	.scan_index = 0,							\
 	.scan_type = {								\
-		.sign = _sign,							\
+		.format = _sign,						\
 		.realbits = _real_bits,						\
 		.storagebits = _storage_bits,					\
 		.shift = (_offl ? 0 : _storage_bits - _real_bits),		\
@@ -540,7 +540,7 @@ static void ad4000_fill_scale_tbl(struct ad4000_state *st,
 	 * ADCs that output two's complement code have one less bit to express
 	 * voltage magnitude.
 	 */
-	if (chan->scan_type.sign == 's')
+	if (chan->scan_type.format == 's')
 		scale_bits = chan->scan_type.realbits - 1;
 	else
 		scale_bits = chan->scan_type.realbits;
@@ -657,7 +657,7 @@ static int ad4000_single_conversion(struct iio_dev *indio_dev,
 
 	sample >>= chan->scan_type.shift;
 
-	if (chan->scan_type.sign == 's')
+	if (chan->scan_type.format == 's')
 		*val = sign_extend32(sample, chan->scan_type.realbits - 1);
 	else
 		*val = sample;

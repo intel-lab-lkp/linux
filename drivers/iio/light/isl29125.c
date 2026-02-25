@@ -61,7 +61,7 @@ struct isl29125_data {
 	.channel2 = IIO_MOD_LIGHT_##_color, \
 	.scan_index = _si, \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 16, \
 		.storagebits = 16, \
 		.endianness = IIO_CPU, \

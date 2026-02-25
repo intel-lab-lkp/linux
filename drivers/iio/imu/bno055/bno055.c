@@ -444,7 +444,7 @@ static void bno055_uninit(void *arg)
 	.info_mask_shared_by_type_available = _avail,				\
 	.scan_index = _index,							\
 	.scan_type = {								\
-		.sign = 's',							\
+		.format = 's',							\
 		.realbits = 16,							\
 		.storagebits = 16,						\
 		.endianness = IIO_LE,						\

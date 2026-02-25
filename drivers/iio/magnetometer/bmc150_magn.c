@@ -635,7 +635,7 @@ static const struct attribute_group bmc150_magn_attrs_group = {
 				    BIT(IIO_CHAN_INFO_SCALE),		\
 	.scan_index = AXIS_##_axis,					\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 32,						\
 		.storagebits = 32,					\
 		.endianness = IIO_LE					\

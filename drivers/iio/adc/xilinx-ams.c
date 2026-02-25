@@ -1208,7 +1208,7 @@ static int ams_get_ext_chan(struct fwnode_handle *chan_node,
 		memcpy(chan, &ams_pl_channels[ext_chan], sizeof(*channels));
 
 		if (fwnode_property_read_bool(child, "xlnx,bipolar"))
-			chan->scan_type.sign = 's';
+			chan->scan_type.format = 's';
 
 		num_channels++;
 	}

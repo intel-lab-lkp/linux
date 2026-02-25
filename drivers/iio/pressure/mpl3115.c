@@ -341,7 +341,7 @@ static const struct iio_chan_spec mpl3115_channels[] = {
 			BIT(IIO_CHAN_INFO_SAMP_FREQ),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 20,
 			.storagebits = 32,
 			.shift = 12,
@@ -359,7 +359,7 @@ static const struct iio_chan_spec mpl3115_channels[] = {
 			BIT(IIO_CHAN_INFO_SAMP_FREQ),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 12,
 			.storagebits = 16,
 			.shift = 4,

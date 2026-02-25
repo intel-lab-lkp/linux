@@ -128,7 +128,7 @@ static int ad3552r_update_reg_field(struct ad3552r_desc *dac, u8 addr, u16 mask,
 	.channel = _idx,					\
 	.scan_index = _idx,					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = 16,					\
 		.storagebits = 16,				\
 		.endianness = IIO_BE,				\

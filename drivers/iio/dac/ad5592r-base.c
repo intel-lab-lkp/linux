@@ -480,7 +480,7 @@ static void ad5592r_setup_channel(struct iio_dev *iio_dev,
 	chan->channel = id;
 	chan->info_mask_separate = BIT(IIO_CHAN_INFO_RAW);
 	chan->info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE);
-	chan->scan_type.sign = 'u';
+	chan->scan_type.format = 'u';
 	chan->scan_type.realbits = 12;
 	chan->scan_type.storagebits = 16;
 	chan->ext_info = ad5592r_ext_info;

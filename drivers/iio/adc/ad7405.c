@@ -133,7 +133,7 @@ static const struct iio_chan_spec ad7405_channel = {
 	.differential = 1,
 	.scan_index = 0,
 	.scan_type = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 16,
 		.storagebits = 16,
 	},

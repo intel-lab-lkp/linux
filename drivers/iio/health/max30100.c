@@ -124,7 +124,7 @@ static const struct iio_chan_spec max30100_channels[] = {
 
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_BE,
@@ -137,7 +137,7 @@ static const struct iio_chan_spec max30100_channels[] = {
 
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_BE,

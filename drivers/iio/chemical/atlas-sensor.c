@@ -118,7 +118,7 @@ static const struct iio_chan_spec atlas_ph_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_BE,
@@ -145,7 +145,7 @@ static const struct iio_chan_spec atlas_ph_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE), \
 		.scan_index = _idx + 1, \
 		.scan_type = { \
-			.sign = 'u', \
+			.format = 'u', \
 			.realbits = 32, \
 			.storagebits = 32, \
 			.endianness = IIO_BE, \
@@ -160,7 +160,7 @@ static const struct iio_chan_spec atlas_ec_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_BE,
@@ -187,7 +187,7 @@ static const struct iio_chan_spec atlas_orp_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_BE,
@@ -204,7 +204,7 @@ static const struct iio_chan_spec atlas_do_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_BE,
@@ -228,7 +228,7 @@ static const struct iio_chan_spec atlas_rtd_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_BE,

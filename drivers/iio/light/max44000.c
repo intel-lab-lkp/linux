@@ -135,7 +135,7 @@ static const struct iio_chan_spec max44000_channels[] = {
 					    BIT(IIO_CHAN_INFO_INT_TIME),
 		.scan_index = MAX44000_SCAN_INDEX_ALS,
 		.scan_type = {
-			.sign		= 'u',
+			.format		= 'u',
 			.realbits	= 14,
 			.storagebits	= 16,
 		}
@@ -145,7 +145,7 @@ static const struct iio_chan_spec max44000_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
 		.scan_index = MAX44000_SCAN_INDEX_PRX,
 		.scan_type = {
-			.sign		= 'u',
+			.format		= 'u',
 			.realbits	= 8,
 			.storagebits	= 16,
 		}

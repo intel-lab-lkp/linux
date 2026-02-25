@@ -105,7 +105,7 @@ struct ads1018 {
 	.channel2 = _chan2,							\
 	.scan_index = _index,							\
 	.scan_type = {								\
-		.sign = 's',							\
+		.format = 's',							\
 		.realbits = _realbits,						\
 		.storagebits = 16,						\
 		.shift = 16 - _realbits,					\
@@ -125,7 +125,7 @@ struct ads1018 {
 	.channel = _chan,							\
 	.scan_index = _index,							\
 	.scan_type = {								\
-		.sign = 's',							\
+		.format = 's',							\
 		.realbits = _realbits,						\
 		.storagebits = 16,						\
 		.shift = 16 - _realbits,					\
@@ -143,7 +143,7 @@ struct ads1018 {
 	.type = IIO_TEMP,							\
 	.scan_index = _index,							\
 	.scan_type = {								\
-		.sign = 's',							\
+		.format = 's',							\
 		.realbits = _realbits,						\
 		.storagebits = 16,						\
 		.shift = 16 - _realbits,					\

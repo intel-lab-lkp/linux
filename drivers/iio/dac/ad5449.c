@@ -203,7 +203,7 @@ static const struct iio_info ad5449_info = {
 		BIT(IIO_CHAN_INFO_SCALE),			\
 	.address = (chan),					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = (bits),				\
 		.storagebits = 16,				\
 		.shift = 12 - (bits),				\

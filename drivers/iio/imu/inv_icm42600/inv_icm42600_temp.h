@@ -17,7 +17,7 @@
 			BIT(IIO_CHAN_INFO_SCALE),			\
 		.scan_index = _index,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = 16,					\
 			.storagebits = 16,				\
 		},							\

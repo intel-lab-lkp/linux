@@ -61,7 +61,7 @@
 	.channel2 = ch2, \
 	.address = addr, \
 	.scan_type = { \
-		.sign = s, \
+		.format = s, \
 		.realbits = rbits, \
 		.shift = sbits - rbits, \
 		.storagebits = sbits, \

@@ -96,7 +96,7 @@ static const struct iio_chan_spec lmp92064_adc_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = TI_LMP92064_CHAN_INC,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},
@@ -109,7 +109,7 @@ static const struct iio_chan_spec lmp92064_adc_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = TI_LMP92064_CHAN_INV,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},

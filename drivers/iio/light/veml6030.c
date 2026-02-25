@@ -285,7 +285,7 @@ static const struct iio_chan_spec veml6030_channels[] = {
 		.num_event_specs = ARRAY_SIZE(veml6030_event_spec),
 		.scan_index = VEML6030_SCAN_ALS,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,
@@ -303,7 +303,7 @@ static const struct iio_chan_spec veml6030_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = VEML6030_SCAN_WH,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,
@@ -324,7 +324,7 @@ static const struct iio_chan_spec veml7700_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = VEML6030_SCAN_ALS,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,
@@ -342,7 +342,7 @@ static const struct iio_chan_spec veml7700_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = VEML6030_SCAN_WH,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

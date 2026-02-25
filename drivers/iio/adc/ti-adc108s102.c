@@ -90,7 +90,7 @@ struct adc108s102_state {
 		.address = index,					\
 		.scan_index = index,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = ADC108S102_BITS,			\
 			.storagebits = 16,				\
 			.endianness = IIO_BE,				\

@@ -1233,7 +1233,7 @@ static const struct iio_chan_spec_ext_info mma8452_ext_info[] = {
 			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
 	.scan_index = idx, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 16 - (bits), \
@@ -1255,7 +1255,7 @@ static const struct iio_chan_spec_ext_info mma8452_ext_info[] = {
 		BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
 	.scan_index = idx, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = (bits), \
 		.storagebits = 16, \
 		.shift = 16 - (bits), \

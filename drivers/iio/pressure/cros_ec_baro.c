@@ -158,7 +158,7 @@ static int cros_ec_baro_probe(struct platform_device *pdev)
 	channel->scan_type.shift = 0;
 	channel->scan_index = 0;
 	channel->ext_info = cros_ec_sensors_ext_info;
-	channel->scan_type.sign = 'u';
+	channel->scan_type.format = 'u';
 
 	/* Sensor specific */
 	switch (state->core.type) {
@@ -175,7 +175,7 @@ static int cros_ec_baro_probe(struct platform_device *pdev)
 	channel->type = IIO_TIMESTAMP;
 	channel->channel = -1;
 	channel->scan_index = 1;
-	channel->scan_type.sign = 's';
+	channel->scan_type.format = 's';
 	channel->scan_type.realbits = 64;
 	channel->scan_type.storagebits = 64;
 

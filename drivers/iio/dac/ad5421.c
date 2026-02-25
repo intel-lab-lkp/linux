@@ -116,7 +116,7 @@ static const struct iio_chan_spec ad5421_channels[] = {
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |
 			BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 		},

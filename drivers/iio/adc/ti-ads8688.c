@@ -157,7 +157,7 @@ static const struct attribute_group ads8688_attribute_group = {
 			      | BIT(IIO_CHAN_INFO_OFFSET),	\
 	.scan_index = index,					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = 16,					\
 		.storagebits = 16,				\
 		.endianness = IIO_BE,				\

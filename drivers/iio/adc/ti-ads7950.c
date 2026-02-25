@@ -144,7 +144,7 @@ enum ti_ads7950_id {
 	.datasheet_name = "CH##index",				\
 	.scan_index = index,					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = bits,				\
 		.storagebits = 16,				\
 		.shift = 12 - (bits),				\

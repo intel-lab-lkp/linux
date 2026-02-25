@@ -260,7 +260,7 @@ static int cros_ec_sensors_probe(struct platform_device *pdev)
 		channel->ext_info = cros_ec_sensors_ext_info;
 		channel->modified = 1;
 		channel->channel2 = IIO_MOD_X + i;
-		channel->scan_type.sign = 's';
+		channel->scan_type.format = 's';
 
 		/* Sensor specific */
 		switch (state->core.type) {
@@ -283,7 +283,7 @@ static int cros_ec_sensors_probe(struct platform_device *pdev)
 	channel->type = IIO_TIMESTAMP;
 	channel->channel = -1;
 	channel->scan_index = CROS_EC_SENSOR_MAX_AXIS;
-	channel->scan_type.sign = 's';
+	channel->scan_type.format = 's';
 	channel->scan_type.realbits = 64;
 	channel->scan_type.storagebits = 64;
 

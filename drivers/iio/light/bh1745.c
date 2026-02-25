@@ -207,7 +207,7 @@ static const struct iio_event_spec bh1745_event_spec[] = {
 		.channel2 = IIO_MOD_LIGHT_##_colour, .address = _addr,  \
 		.scan_index = _si,                                      \
 		.scan_type = {                                          \
-			.sign = 'u',                                    \
+			.format = 'u',                                  \
 			.realbits = 16,                                 \
 			.storagebits = 16,                              \
 			.endianness = IIO_CPU,                          \

@@ -382,7 +382,7 @@ enum msa311_si {
 					      BIT(IIO_CHAN_INFO_SAMP_FREQ), \
 	.scan_index = MSA311_SI_##axis,                                     \
 	.scan_type = {                                                      \
-		.sign = 's',                                                \
+		.format = 's',                                              \
 		.realbits = 12,                                             \
 		.storagebits = 16,                                          \
 		.shift = 4,                                                 \

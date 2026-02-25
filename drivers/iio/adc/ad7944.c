@@ -135,7 +135,7 @@ static const struct ad7944_chip_info _name##_chip_info = {		\
 			.channel = 0,					\
 			.channel2 = _diff ? 1 : 0,			\
 			.scan_index = 0,				\
-			.scan_type.sign = _diff ? 's' : 'u',		\
+			.scan_type.format = _diff ? 's' : 'u',		\
 			.scan_type.realbits = _bits,			\
 			.scan_type.storagebits = _bits > 16 ? 32 : 16,	\
 			.scan_type.endianness = IIO_CPU,		\
@@ -152,7 +152,7 @@ static const struct ad7944_chip_info _name##_chip_info = {		\
 			.channel = 0,					\
 			.channel2 = _diff ? 1 : 0,			\
 			.scan_index = 0,				\
-			.scan_type.sign = _diff ? 's' : 'u',		\
+			.scan_type.format = _diff ? 's' : 'u',		\
 			.scan_type.realbits = _bits,			\
 			.scan_type.storagebits = 32,			\
 			.scan_type.endianness = IIO_CPU,		\
@@ -364,7 +364,7 @@ static int ad7944_single_conversion(struct ad7944_adc *adc,
 			*val = adc->sample.raw.u16;
 	}
 
-	if (chan->scan_type.sign == 's')
+	if (chan->scan_type.format == 's')
 		*val = sign_extend32(*val, chan->scan_type.realbits - 1);
 	else
 		*val &= GENMASK(chan->scan_type.realbits - 1, 0);
@@ -410,7 +410,7 @@ static int ad7944_read_raw(struct iio_dev *indio_dev,
 		case IIO_VOLTAGE:
 			*val = adc->ref_mv;
 
-			if (chan->scan_type.sign == 's')
+			if (chan->scan_type.format == 's')
 				*val2 = chan->scan_type.realbits - 1;
 			else
 				*val2 = chan->scan_type.realbits;

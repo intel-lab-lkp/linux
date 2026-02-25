@@ -167,7 +167,7 @@ struct nxp_sar_adc_data {
 				BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = (_idx),					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = 12,					\
 		.storagebits = 16,				\
 	},							\

@@ -696,7 +696,7 @@ static const struct attribute_group fxas21002c_attrs_group = {
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),				\
 	.scan_index = CHANNEL_SCAN_INDEX_##_axis,			\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_BE,					\

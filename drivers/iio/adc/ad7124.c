@@ -1182,7 +1182,7 @@ static const struct iio_chan_spec ad7124_channel_template = {
 		BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
 	.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SCALE),
 	.scan_type = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 24,
 		.storagebits = 32,
 		.endianness = IIO_BE,
@@ -1308,7 +1308,7 @@ static int ad7124_parse_channel_config(struct iio_dev *indio_dev,
 				 * measurement yields an unsigned value, but
 				 * this matches the device's manual.
 				 */
-				.sign = 'u',
+				.format = 'u',
 				.realbits = 24,
 				.storagebits = 32,
 				.endianness = IIO_BE,

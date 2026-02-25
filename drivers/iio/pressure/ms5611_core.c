@@ -347,7 +347,7 @@ static const struct iio_chan_spec ms5611_channels[] = {
 			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,
@@ -360,7 +360,7 @@ static const struct iio_chan_spec ms5611_channels[] = {
 			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,

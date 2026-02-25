@@ -1275,7 +1275,7 @@ static const struct iio_info bmi270_info = {
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 	.scan_index = BMI270_SCAN_ACCEL_##_axis,		\
 	.scan_type = {						\
-		.sign = 's',					\
+		.format = 's',					\
 		.realbits = 16,					\
 		.storagebits = 16,				\
 		.endianness = IIO_LE,				\
@@ -1296,7 +1296,7 @@ static const struct iio_info bmi270_info = {
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 	.scan_index = BMI270_SCAN_GYRO_##_axis,			\
 	.scan_type = {						\
-		.sign = 's',					\
+		.format = 's',					\
 		.realbits = 16,					\
 		.storagebits = 16,				\
 		.endianness = IIO_LE,				\

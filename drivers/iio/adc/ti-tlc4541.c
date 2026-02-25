@@ -60,7 +60,7 @@ enum tlc4541_id {
 		.info_mask_separate       = BIT(IIO_CHAN_INFO_RAW),   \
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE), \
 		.scan_type = {                                        \
-			.sign = 'u',                                  \
+			.format = 'u',                                \
 			.realbits = (bits),                           \
 			.storagebits = 16,                            \
 			.shift = (bitshift),                          \

@@ -70,7 +70,7 @@ enum sca3300_scan_indexes {
 	BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),		\
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_CPU,					\
@@ -87,7 +87,7 @@ enum sca3300_scan_indexes {
 	.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SCALE), \
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 16,						\
 		.storagebits = 16,					\
 		.endianness = IIO_CPU,					\
@@ -100,7 +100,7 @@ enum sca3300_scan_indexes {
 		.scan_index = index,					\
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = 16,					\
 			.storagebits = 16,				\
 			.endianness = IIO_CPU,				\

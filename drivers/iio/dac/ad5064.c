@@ -402,7 +402,7 @@ static const struct iio_chan_spec_ext_info ltc2617_ext_info[] = {
 	BIT(IIO_CHAN_INFO_SCALE),					\
 	.address = addr,					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = (bits),				\
 		.storagebits = 16,				\
 		.shift = (_shift),				\

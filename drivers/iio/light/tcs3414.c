@@ -65,7 +65,7 @@ struct tcs3414_data {
 	.address = _addr, \
 	.scan_index = _si, \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 16, \
 		.storagebits = 16, \
 		.endianness = IIO_CPU, \

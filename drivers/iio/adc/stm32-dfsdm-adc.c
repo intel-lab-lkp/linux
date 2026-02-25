@@ -1559,7 +1559,7 @@ static int stm32_dfsdm_adc_chan_init_one(struct iio_dev *indio_dev, struct iio_c
 	} else {
 		ch->scan_type.shift = 8;
 	}
-	ch->scan_type.sign = 's';
+	ch->scan_type.format = 's';
 	ch->scan_type.realbits = 24;
 	ch->scan_type.storagebits = 32;
 

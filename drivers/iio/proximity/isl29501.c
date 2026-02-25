@@ -496,7 +496,7 @@ static const struct iio_chan_spec isl29501_channels[] = {
 			BIT(IIO_CHAN_INFO_SCALE) |
 			BIT(IIO_CHAN_INFO_CALIBBIAS),
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

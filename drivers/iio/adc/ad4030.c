@@ -196,7 +196,7 @@ struct ad4030_state {
 	.channel = ((_idx) - (_ch)) * 2 + (_ch),			\
 	.scan_index = (_idx),						\
 	.scan_type = {							\
-		.sign = 'u',						\
+		.format = 'u',						\
 		.storagebits = 8,					\
 		.realbits = 8,						\
 		.endianness = IIO_BE,					\
@@ -1089,14 +1089,14 @@ static const unsigned long ad4630_channel_masks[] = {
 
 static const struct iio_scan_type ad4030_24_scan_types[] = {
 	[AD4030_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.storagebits = 32,
 		.realbits = 24,
 		.shift = 8,
 		.endianness = IIO_BE,
 	},
 	[AD4030_SCAN_TYPE_AVG] = {
-		.sign = 's',
+		.format = 's',
 		.storagebits = 32,
 		.realbits = 30,
 		.shift = 2,
@@ -1106,14 +1106,14 @@ static const struct iio_scan_type ad4030_24_scan_types[] = {
 
 static const struct iio_scan_type ad4030_16_scan_types[] = {
 	[AD4030_SCAN_TYPE_NORMAL] = {
-		.sign = 's',
+		.format = 's',
 		.storagebits = 32,
 		.realbits = 16,
 		.shift = 16,
 		.endianness = IIO_BE,
 	},
 	[AD4030_SCAN_TYPE_AVG] = {
-		.sign = 's',
+		.format = 's',
 		.storagebits = 32,
 		.realbits = 30,
 		.shift = 2,

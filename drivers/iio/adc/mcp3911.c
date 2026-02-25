@@ -446,7 +446,7 @@ static int mcp3911_calc_scale_table(u32 vref_mv)
 		.info_mask_separate_available =			\
 			BIT(IIO_CHAN_INFO_SCALE),		\
 		.scan_type = {					\
-			.sign = 's',				\
+			.format = 's',				\
 			.realbits = 24,				\
 			.storagebits = 32,			\
 			.endianness = IIO_BE,			\

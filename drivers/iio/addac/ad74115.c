@@ -1280,7 +1280,7 @@ static const struct iio_info ad74115_info = {
 					BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 		.scan_index = index,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 16,					\
 			.storagebits = 32,				\
 			.shift = 8,					\

@@ -189,7 +189,7 @@ static const struct iio_info cros_ec_accel_legacy_info = {
 			BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 		.ext_info = cros_ec_sensors_ext_info,			\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = CROS_EC_SENSOR_BITS,		\
 			.storagebits = CROS_EC_SENSOR_BITS,		\
 		},							\

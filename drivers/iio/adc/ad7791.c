@@ -80,7 +80,7 @@
 		.info_mask_shared_by_all = _mask_all, \
 		.scan_index = (_si), \
 		.scan_type = { \
-			.sign = 'u', \
+			.format = 'u', \
 			.realbits = (_bits), \
 			.storagebits = (_storagebits), \
 			.shift = (_shift), \

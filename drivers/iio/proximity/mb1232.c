@@ -166,7 +166,7 @@ static const struct iio_chan_spec mb1232_channels[] = {
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

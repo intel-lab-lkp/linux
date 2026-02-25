@@ -46,7 +46,7 @@ struct adc084s021 {
 		.indexed = 1,                                        \
 		.scan_index = (num),                                 \
 		.scan_type = {                                       \
-			.sign = 'u',                                       \
+			.format = 'u',                                     \
 			.realbits = 8,                                     \
 			.storagebits = 16,                                 \
 			.shift = 4,                                        \

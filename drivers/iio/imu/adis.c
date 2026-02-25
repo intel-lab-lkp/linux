@@ -482,7 +482,7 @@ int adis_single_conversion(struct iio_dev *indio_dev,
 			return ret;
 	}
 
-	if (chan->scan_type.sign == 's')
+	if (chan->scan_type.format == 's')
 		*val = sign_extend32(uval, chan->scan_type.realbits - 1);
 	else
 		*val = uval & ((1 << chan->scan_type.realbits) - 1);

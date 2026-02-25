@@ -928,7 +928,7 @@ static int xadc_read_raw(struct iio_dev *indio_dev,
 			return ret;
 
 		val16 >>= chan->scan_type.shift;
-		if (chan->scan_type.sign == 'u')
+		if (chan->scan_type.format == 'u')
 			*val = val16;
 		else
 			*val = sign_extend32(val16, bits - 1);
@@ -1066,7 +1066,7 @@ static const struct iio_event_spec xadc_voltage_events[] = {
 	.num_event_specs = ARRAY_SIZE(xadc_temp_events), \
 	.scan_index = (_scan_index), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = (_bits), \
 		.storagebits = 16, \
 		.shift = 16 - (_bits), \
@@ -1086,7 +1086,7 @@ static const struct iio_event_spec xadc_voltage_events[] = {
 	.num_event_specs = (_alarm) ? ARRAY_SIZE(xadc_voltage_events) : 0, \
 	.scan_index = (_scan_index), \
 	.scan_type = { \
-		.sign = ((_addr) == XADC_REG_VREFN) ? 's' : 'u', \
+		.format = ((_addr) == XADC_REG_VREFN) ? 's' : 'u', \
 		.realbits = (_bits), \
 		.storagebits = 16, \
 		.shift = 16 - (_bits), \
@@ -1265,7 +1265,7 @@ static int xadc_parse_dt(struct iio_dev *indio_dev, unsigned int *conf, int irq)
 			continue;
 
 		if (fwnode_property_read_bool(child, "xlnx,bipolar"))
-			chan->scan_type.sign = 's';
+			chan->scan_type.format = 's';
 
 		if (reg == 0) {
 			chan->scan_index = 11;
@@ -1420,7 +1420,7 @@ static int xadc_probe(struct platform_device *pdev)
 
 	bipolar_mask = 0;
 	for (i = 0; i < indio_dev->num_channels; i++) {
-		if (indio_dev->channels[i].scan_type.sign == 's')
+		if (indio_dev->channels[i].scan_type.format == 's')
 			bipolar_mask |= BIT(indio_dev->channels[i].scan_index);
 	}
 

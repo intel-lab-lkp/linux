@@ -160,7 +160,7 @@ static int ad7266_read_raw(struct iio_dev *indio_dev,
 		if (ret < 0)
 			return ret;
 		*val = (*val >> 2) & 0xfff;
-		if (chan->scan_type.sign == 's')
+		if (chan->scan_type.format == 's')
 			*val = sign_extend32(*val,
 					     chan->scan_type.realbits - 1);
 
@@ -196,7 +196,7 @@ static int ad7266_read_raw(struct iio_dev *indio_dev,
 		| BIT(IIO_CHAN_INFO_OFFSET),			\
 	.scan_index = (_chan),				\
 	.scan_type = {					\
-		.sign = (_sign),			\
+		.format = (_sign),			\
 		.realbits = 12,				\
 		.storagebits = 16,			\
 		.shift = 2,				\
@@ -244,7 +244,7 @@ static AD7266_DECLARE_SINGLE_ENDED_CHANNELS_FIXED(s, 's');
 		| BIT(IIO_CHAN_INFO_OFFSET),			\
 	.scan_index = (_chan),				\
 	.scan_type = {					\
-		.sign = _sign,			\
+		.format = _sign,			\
 		.realbits = 12,				\
 		.storagebits = 16,			\
 		.shift = 2,				\

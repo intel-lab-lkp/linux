@@ -455,7 +455,7 @@ static const struct iio_info scd30_info = {
 };
 
 #define SCD30_CHAN_SCAN_TYPE(_sign, _realbits) .scan_type = { \
-	.sign = _sign, \
+	.format = _sign, \
 	.realbits = _realbits, \
 	.storagebits = 32, \
 	.endianness = IIO_CPU, \

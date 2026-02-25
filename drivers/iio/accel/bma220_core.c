@@ -107,7 +107,7 @@
 	    BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),		\
 	.scan_index = index,						\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = 6,						\
 		.storagebits = 8,					\
 		.shift = 2,						\

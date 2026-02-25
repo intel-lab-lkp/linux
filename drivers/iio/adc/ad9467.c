@@ -319,7 +319,7 @@ static void __ad9467_get_scale(struct ad9467_state *st, int index,
 	.info_mask_shared_by_type_available = avai_mask,		\
 	.scan_index = _si,						\
 	.scan_type = {							\
-		.sign = _sign,						\
+		.format = _sign,					\
 		.realbits = _bits,					\
 		.storagebits = 16,					\
 	},								\
@@ -343,7 +343,7 @@ static const struct iio_chan_spec ad9434_channels[] = {
 			BIT(IIO_CHAN_INFO_CALIBBIAS),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 12,
 			.storagebits = 16,
 		},

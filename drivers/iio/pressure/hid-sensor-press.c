@@ -57,7 +57,7 @@ static const struct iio_chan_spec press_channels[] = {
 static void press_adjust_channel_bit_mask(struct iio_chan_spec *channels,
 					int channel, int size)
 {
-	channels[channel].scan_type.sign = 's';
+	channels[channel].scan_type.format = 's';
 	/* Real storage bits will change based on the report desc. */
 	channels[channel].scan_type.realbits = size * 8;
 	/* Maximum size of a sample to capture is u32 */

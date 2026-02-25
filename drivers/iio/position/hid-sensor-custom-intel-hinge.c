@@ -65,7 +65,7 @@ static const struct iio_chan_spec hinge_channels[] = {
 			BIT(IIO_CHAN_INFO_SAMP_FREQ) | BIT(IIO_CHAN_INFO_HYSTERESIS),
 		.scan_index = CHANNEL_SCAN_INDEX_HINGE_ANGLE,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.storagebits = 32,
 		},
 	}, {
@@ -78,7 +78,7 @@ static const struct iio_chan_spec hinge_channels[] = {
 			BIT(IIO_CHAN_INFO_SAMP_FREQ) | BIT(IIO_CHAN_INFO_HYSTERESIS),
 		.scan_index = CHANNEL_SCAN_INDEX_SCREEN_ANGLE,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.storagebits = 32,
 		},
 	}, {
@@ -91,7 +91,7 @@ static const struct iio_chan_spec hinge_channels[] = {
 			BIT(IIO_CHAN_INFO_SAMP_FREQ) | BIT(IIO_CHAN_INFO_HYSTERESIS),
 		.scan_index = CHANNEL_SCAN_INDEX_KEYBOARD_ANGLE,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.storagebits = 32,
 		},
 	},

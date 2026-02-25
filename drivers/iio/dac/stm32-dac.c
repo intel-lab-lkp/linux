@@ -255,7 +255,7 @@ static const struct iio_chan_spec_ext_info stm32_dac_ext_info[] = {
 		BIT(IIO_CHAN_INFO_SCALE),		\
 	/* scan_index is always 0 as num_channels is 1 */ \
 	.scan_type = {					\
-		.sign = 'u',				\
+		.format = 'u',				\
 		.realbits = 12,				\
 		.storagebits = 16,			\
 	},						\

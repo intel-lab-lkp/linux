@@ -103,7 +103,7 @@ MODULE_DEVICE_TABLE(of, max1027_adc_dt_ids);
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 		.scan_index = index + 1,				\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = depth,				\
 			.storagebits = 16,				\
 			.shift = (depth == 10) ? 2 : 0,			\
@@ -119,7 +119,7 @@ MODULE_DEVICE_TABLE(of, max1027_adc_dt_ids);
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 		.scan_index = 0,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 12,					\
 			.storagebits = 16,				\
 			.endianness = IIO_BE,				\

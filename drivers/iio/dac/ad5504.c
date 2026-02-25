@@ -254,7 +254,7 @@ static const struct iio_chan_spec_ext_info ad5504_ext_info[] = {
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE), \
 	.address = AD5504_ADDR_DAC(_chan), \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 12, \
 		.storagebits = 16, \
 	}, \

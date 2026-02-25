@@ -417,7 +417,7 @@ static int tiadc_channel_init(struct device *dev, struct iio_dev *indio_dev,
 		chan->info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE);
 		chan->datasheet_name = chan_name_ain[chan->channel];
 		chan->scan_index = i;
-		chan->scan_type.sign = 'u';
+		chan->scan_type.format = 'u';
 		chan->scan_type.realbits = 12;
 		chan->scan_type.storagebits = 16;
 	}

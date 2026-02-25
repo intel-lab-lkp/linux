@@ -768,7 +768,7 @@ static int ads131e08_alloc_channels(struct iio_dev *indio_dev)
 						BIT(IIO_CHAN_INFO_SCALE);
 		channels[i].info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SAMP_FREQ);
 		channels[i].scan_index = channel;
-		channels[i].scan_type.sign = 's';
+		channels[i].scan_type.format = 's';
 		channels[i].scan_type.realbits = 24;
 		channels[i].scan_type.storagebits = 32;
 		channels[i].scan_type.shift = 8;

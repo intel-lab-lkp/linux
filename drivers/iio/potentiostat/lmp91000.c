@@ -85,7 +85,7 @@ static const struct iio_chan_spec lmp91000_channels[] = {
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 32,
 			.storagebits = 32,
 		},

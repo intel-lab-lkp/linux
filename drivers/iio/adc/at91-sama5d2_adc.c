@@ -337,7 +337,7 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
 		.address = addr,					\
 		.scan_index = index,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = rbits,				\
 			.storagebits = 16,				\
 		},							\
@@ -366,7 +366,7 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
 		.address = addr,					\
 		.scan_index = index,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = rbits,				\
 			.storagebits = 16,				\
 		},							\
@@ -394,7 +394,7 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
 		.channel2 = mod,					\
 		.scan_index = num,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 12,					\
 			.storagebits = 16,				\
 		},							\
@@ -411,7 +411,7 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
 		.channel = num,						\
 		.scan_index = num,					\
 		.scan_type = {						\
-			.sign = 'u',					\
+			.format = 'u',					\
 			.realbits = 12,					\
 			.storagebits = 16,				\
 		},							\
@@ -1787,7 +1787,7 @@ static int at91_adc_read_info_raw(struct iio_dev *indio_dev,
 	if (ret > 0) {
 		*val = st->conversion_value;
 		ret = at91_adc_adjust_val_osr(st, val);
-		if (chan->scan_type.sign == 's')
+		if (chan->scan_type.format == 's')
 			*val = sign_extend32(*val,
 					     chan->scan_type.realbits - 1);
 		st->conversion_done = false;

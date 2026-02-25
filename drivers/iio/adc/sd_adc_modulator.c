@@ -21,7 +21,7 @@ static const struct iio_chan_spec iio_sd_mod_ch = {
 	.type = IIO_VOLTAGE,
 	.indexed = 1,
 	.scan_type = {
-		.sign = 'u',
+		.format = 'u',
 		.realbits = 1,
 		.shift = 0,
 	},

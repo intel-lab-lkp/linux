@@ -261,7 +261,7 @@ trigger_out:
 		.address = index,					     \
 		.scan_index = index,					     \
 		.scan_type = {						     \
-			.sign = 's',					     \
+			.format = 's',					     \
 			.realbits = 12,					     \
 			.storagebits = 16,				     \
 			.endianness = IIO_CPU,				     \
@@ -277,7 +277,7 @@ static const struct iio_chan_spec als31300_channels[] = {
 		.address = TEMPERATURE,
 		.scan_index = TEMPERATURE,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

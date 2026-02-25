@@ -582,7 +582,7 @@ static const struct iio_buffer_setup_ops mxs_lradc_adc_buffer_ops = {
 	.channel = (idx),					\
 	.address = (idx),					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = LRADC_RESOLUTION,			\
 		.storagebits = 32,				\
 	},							\
@@ -607,7 +607,7 @@ static const struct iio_chan_spec mx23_lradc_chan_spec[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET) |
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.channel = 8,
-		.scan_type = {.sign = 'u', .realbits = 18, .storagebits = 32,},
+		.scan_type = {.format = 'u', .realbits = 18, .storagebits = 32,},
 		.datasheet_name = "TEMP_DIE",
 	},
 	/* Hidden channel to keep indexes */
@@ -643,7 +643,7 @@ static const struct iio_chan_spec mx28_lradc_chan_spec[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET) |
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.channel = 8,
-		.scan_type = {.sign = 'u', .realbits = 18, .storagebits = 32,},
+		.scan_type = {.format = 'u', .realbits = 18, .storagebits = 32,},
 		.datasheet_name = "TEMP_DIE",
 	},
 	/* Hidden channel to keep indexes */

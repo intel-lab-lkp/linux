@@ -192,7 +192,7 @@ struct tsc2046_adc_priv {
 	.datasheet_name = "#name",				\
 	.scan_index = index,					\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = bits,				\
 		.storagebits = 16,				\
 		.endianness = IIO_CPU,				\

@@ -278,7 +278,7 @@ static const struct iio_event_spec apds9960_als_event_spec[] = {
 	.scan_index = _si, \
 	.indexed = 1, \
 	.scan_type = { \
-		.sign = 'u', \
+		.format = 'u', \
 		.realbits = 8, \
 		.storagebits = 8, \
 	}, \

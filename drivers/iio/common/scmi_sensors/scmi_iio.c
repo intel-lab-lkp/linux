@@ -425,7 +425,7 @@ static void scmi_iio_set_timestamp_channel(struct iio_chan_spec *iio_chan,
 	iio_chan->type = IIO_TIMESTAMP;
 	iio_chan->channel = -1;
 	iio_chan->scan_index = scan_index;
-	iio_chan->scan_type.sign = 'u';
+	iio_chan->scan_type.format = 'u';
 	iio_chan->scan_type.realbits = 64;
 	iio_chan->scan_type.storagebits = 64;
 }
@@ -443,7 +443,7 @@ static void scmi_iio_set_data_channel(struct iio_chan_spec *iio_chan,
 	iio_chan->info_mask_shared_by_type_available =
 		BIT(IIO_CHAN_INFO_SAMP_FREQ);
 	iio_chan->scan_index = scan_index;
-	iio_chan->scan_type.sign = 's';
+	iio_chan->scan_type.format = 's';
 	iio_chan->scan_type.realbits = 64;
 	iio_chan->scan_type.storagebits = 64;
 	iio_chan->scan_type.endianness = IIO_LE;

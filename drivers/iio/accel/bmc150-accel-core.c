@@ -1059,7 +1059,7 @@ static const struct iio_event_spec bmc150_accel_event = {
 				BIT(IIO_CHAN_INFO_SAMP_FREQ),		\
 	.scan_index = AXIS_##_axis,					\
 	.scan_type = {							\
-		.sign = 's',						\
+		.format = 's',						\
 		.realbits = (bits),					\
 		.storagebits = 16,					\
 		.shift = 16 - (bits),					\

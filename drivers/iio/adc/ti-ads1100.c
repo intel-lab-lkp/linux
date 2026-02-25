@@ -60,7 +60,7 @@ static const struct iio_chan_spec ads1100_channel = {
 	.info_mask_shared_by_all_available =
 	    BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_SAMP_FREQ),
 	.scan_type = {
-		      .sign = 's',
+		      .format = 's',
 		      .realbits = 16,
 		      .storagebits = 16,
 		      .endianness = IIO_CPU,

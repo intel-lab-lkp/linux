@@ -38,7 +38,7 @@ static const struct iio_chan_spec ti_adc141s626_channels[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 14,
 			.storagebits = 16,
 		},
@@ -55,7 +55,7 @@ static const struct iio_chan_spec ti_adc161s626_channels[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 16,
 			.storagebits = 16,
 		},

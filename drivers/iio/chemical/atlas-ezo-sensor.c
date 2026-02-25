@@ -52,7 +52,7 @@ struct atlas_ezo_data {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE), \
 		.scan_index = 0, \
 		.scan_type =  { \
-			.sign = 'u', \
+			.format = 'u', \
 			.realbits = 32, \
 			.storagebits = 32, \
 			.endianness = IIO_CPU, \
@@ -74,7 +74,7 @@ static const struct iio_chan_spec atlas_hum_ezo_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = 0,
 		.scan_type =  {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 32,
 			.storagebits = 32,
 			.endianness = IIO_CPU,

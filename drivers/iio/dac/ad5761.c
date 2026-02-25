@@ -257,7 +257,7 @@ static const struct iio_info ad5761_info = {
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
 		BIT(IIO_CHAN_INFO_OFFSET),		\
 	.scan_type = {					\
-		.sign = 'u',				\
+		.format = 'u',				\
 		.realbits = (_bits),			\
 		.storagebits = 16,			\
 		.shift = 16 - (_bits),			\

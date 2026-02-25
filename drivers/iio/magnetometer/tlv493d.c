@@ -379,7 +379,7 @@ out_trigger_notify:
 		.address = index,				\
 		.scan_index = index,				\
 		.scan_type = {					\
-			.sign = 's',				\
+			.format = 's',				\
 			.realbits = 12,				\
 			.storagebits = 16,			\
 			.endianness = IIO_CPU,			\
@@ -398,7 +398,7 @@ static const struct iio_chan_spec tlv493d_channels[] = {
 		.address = TLV493D_TEMPERATURE,
 		.scan_index = TLV493D_TEMPERATURE,
 		.scan_type = {
-			.sign = 's',
+			.format = 's',
 			.realbits = 12,
 			.storagebits = 16,
 			.endianness = IIO_CPU,

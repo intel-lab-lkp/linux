@@ -196,7 +196,7 @@ struct mtk_pmic_auxadc_info {
 	.scan_index = PMIC_AUXADC_CHAN_##_ch_idx,				\
 	.datasheet_name = __stringify(_name),					\
 	.scan_type =  {								\
-		.sign = 'u',							\
+		.format = 'u',							\
 		.realbits = _nbits,						\
 		.storagebits = 16,						\
 		.endianness = IIO_CPU						\

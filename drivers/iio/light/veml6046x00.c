@@ -329,7 +329,7 @@ static const struct iio_chan_spec veml6046x00_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = VEML6046X00_SCAN_R,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_LE,
@@ -347,7 +347,7 @@ static const struct iio_chan_spec veml6046x00_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = VEML6046X00_SCAN_G,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_LE,
@@ -365,7 +365,7 @@ static const struct iio_chan_spec veml6046x00_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = VEML6046X00_SCAN_B,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_LE,
@@ -383,7 +383,7 @@ static const struct iio_chan_spec veml6046x00_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = VEML6046X00_SCAN_IR,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 			.endianness = IIO_LE,

@@ -281,7 +281,7 @@ static const struct iio_chan_spec vl6180_channels[] = {
 		.address = VL6180_ALS,
 		.scan_index = VL6180_ALS,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 		},
@@ -295,7 +295,7 @@ static const struct iio_chan_spec vl6180_channels[] = {
 		.address = VL6180_RANGE,
 		.scan_index = VL6180_RANGE,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 8,
 			.storagebits = 8,
 		},
@@ -307,7 +307,7 @@ static const struct iio_chan_spec vl6180_channels[] = {
 		.address = VL6180_PROX,
 		.scan_index = VL6180_PROX,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 16,
 			.storagebits = 16,
 		},

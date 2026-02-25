@@ -122,13 +122,13 @@ enum {
 
 static const struct iio_scan_type ad4062_scan_type_12_s[] = {
 	[AD4062_SCAN_TYPE_SAMPLE] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 12,
 		.storagebits = 16,
 		.endianness = IIO_BE,
 	},
 	[AD4062_SCAN_TYPE_BURST_AVG] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 14,
 		.storagebits = 16,
 		.endianness = IIO_BE,
@@ -137,13 +137,13 @@ static const struct iio_scan_type ad4062_scan_type_12_s[] = {
 
 static const struct iio_scan_type ad4062_scan_type_16_s[] = {
 	[AD4062_SCAN_TYPE_SAMPLE] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 16,
 		.storagebits = 16,
 		.endianness = IIO_BE,
 	},
 	[AD4062_SCAN_TYPE_BURST_AVG] = {
-		.sign = 's',
+		.format = 's',
 		.realbits = 20,
 		.storagebits = 32,
 		.endianness = IIO_BE,

@@ -456,7 +456,7 @@ static const struct iio_chan_spec jz4770_channels[] = {
 		.channel = INGENIC_ADC_TOUCH_XP,
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},
@@ -467,7 +467,7 @@ static const struct iio_chan_spec jz4770_channels[] = {
 		.channel = INGENIC_ADC_TOUCH_YP,
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},
@@ -478,7 +478,7 @@ static const struct iio_chan_spec jz4770_channels[] = {
 		.channel = INGENIC_ADC_TOUCH_XN,
 		.scan_index = 2,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},
@@ -489,7 +489,7 @@ static const struct iio_chan_spec jz4770_channels[] = {
 		.channel = INGENIC_ADC_TOUCH_YN,
 		.scan_index = 3,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},
@@ -500,7 +500,7 @@ static const struct iio_chan_spec jz4770_channels[] = {
 		.channel = INGENIC_ADC_TOUCH_XD,
 		.scan_index = 4,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},
@@ -511,7 +511,7 @@ static const struct iio_chan_spec jz4770_channels[] = {
 		.channel = INGENIC_ADC_TOUCH_YD,
 		.scan_index = 5,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 12,
 			.storagebits = 16,
 		},

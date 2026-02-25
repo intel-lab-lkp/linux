@@ -237,7 +237,7 @@ unlock_return:
 			BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 		.scan_index = idx,					\
 		.scan_type = {						\
-			.sign = 's',					\
+			.format = 's',					\
 			.realbits = 24,					\
 			.storagebits = 32,				\
 			.shift = 8,					\

@@ -219,7 +219,7 @@ static const struct iio_info mma7455_info = {
 				    BIT(IIO_CHAN_INFO_SCALE), \
 	.scan_index = idx, \
 	.scan_type = { \
-		.sign = 's', \
+		.format = 's', \
 		.realbits = 10, \
 		.storagebits = 16, \
 		.endianness = IIO_LE, \

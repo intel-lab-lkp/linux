@@ -410,7 +410,7 @@ static const struct iio_chan_spec hsc_channels[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 0,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 14,
 			.storagebits = 16,
 			.endianness = IIO_BE,
@@ -423,7 +423,7 @@ static const struct iio_chan_spec hsc_channels[] = {
 				      BIT(IIO_CHAN_INFO_OFFSET),
 		.scan_index = 1,
 		.scan_type = {
-			.sign = 'u',
+			.format = 'u',
 			.realbits = 11,
 			.storagebits = 16,
 			.shift = 5,

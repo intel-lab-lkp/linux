@@ -77,7 +77,7 @@ static const struct iio_chan_spec as3935_channels[] = {
 			BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index     = 0,
 		.scan_type = {
-			.sign           = 'u',
+			.format         = 'u',
 			.realbits       = 6,
 			.storagebits    = 8,
 		},

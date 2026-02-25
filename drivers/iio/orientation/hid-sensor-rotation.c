@@ -54,7 +54,7 @@ static const struct iio_chan_spec dev_rot_channels[] = {
 static void dev_rot_adjust_channel_bit_mask(struct iio_chan_spec *chan,
 						int size)
 {
-	chan->scan_type.sign = 's';
+	chan->scan_type.format = 's';
 	/* Real storage bits will change based on the report desc. */
 	chan->scan_type.realbits = size * 8;
 	/* Maximum size of a sample to capture is u32 */

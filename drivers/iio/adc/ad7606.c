@@ -413,7 +413,7 @@ static int ad7606c_18bit_chan_scale_setup(struct iio_dev *indio_dev,
 		/* Bipolar single-ended ranges start at 0 (b0000) */
 		ci->reg_offset = 0;
 		ci->range = 3;
-		chan->scan_type.sign = 's';
+		chan->scan_type.format = 's';
 
 		return 0;
 	}
@@ -424,7 +424,7 @@ static int ad7606c_18bit_chan_scale_setup(struct iio_dev *indio_dev,
 	/* Unipolar single-ended ranges start at 5 (b0101) */
 	ci->reg_offset = 5;
 	ci->range = 1;
-	chan->scan_type.sign = 'u';
+	chan->scan_type.format = 'u';
 
 	return 0;
 }
@@ -458,7 +458,7 @@ static int ad7606c_16bit_chan_scale_setup(struct iio_dev *indio_dev,
 		ci->range = 1;
 		chan->differential = 1;
 		chan->channel2 = chan->channel;
-		chan->scan_type.sign = 's';
+		chan->scan_type.format = 's';
 
 		return 0;
 	}
@@ -472,7 +472,7 @@ static int ad7606c_16bit_chan_scale_setup(struct iio_dev *indio_dev,
 		/* Bipolar single-ended ranges start at 0 (b0000) */
 		ci->reg_offset = 0;
 		ci->range = 3;
-		chan->scan_type.sign = 's';
+		chan->scan_type.format = 's';
 
 		return 0;
 	}
@@ -483,7 +483,7 @@ static int ad7606c_16bit_chan_scale_setup(struct iio_dev *indio_dev,
 	/* Unipolar single-ended ranges start at 5 (b0101) */
 	ci->reg_offset = 5;
 	ci->range = 1;
-	chan->scan_type.sign = 'u';
+	chan->scan_type.format = 'u';
 
 	return 0;
 }
@@ -703,7 +703,7 @@ static int ad7606_scan_direct(struct iio_dev *indio_dev, unsigned int ch,
 
 	*val &= GENMASK(realbits - 1, 0);
 
-	if (chan->scan_type.sign == 's')
+	if (chan->scan_type.format == 's')
 		*val = sign_extend32(*val, realbits - 1);
 
 error_ret:
@@ -1412,7 +1412,7 @@ static int ad7606_probe_channels(struct iio_dev *indio_dev)
 		chan->indexed = 1;
 		chan->channel = i;
 		chan->scan_index = i;
-		chan->scan_type.sign = 's';
+		chan->scan_type.format = 's';
 		chan->scan_type.realbits = st->chip_info->bits;
 		/*
 		 * If in SPI offload mode, storagebits are set based

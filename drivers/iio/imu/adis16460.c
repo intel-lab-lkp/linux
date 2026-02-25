@@ -242,7 +242,7 @@ enum {
 		.address = (_address), \
 		.scan_index = (_si), \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = (_bits), \
 			.storagebits = (_bits), \
 			.endianness = IIO_BE, \
@@ -270,7 +270,7 @@ enum {
 		.address = ADIS16460_REG_TEMP_OUT, \
 		.scan_index = ADIS16460_SCAN_TEMP, \
 		.scan_type = { \
-			.sign = 's', \
+			.format = 's', \
 			.realbits = 16, \
 			.storagebits = 16, \
 			.endianness = IIO_BE, \

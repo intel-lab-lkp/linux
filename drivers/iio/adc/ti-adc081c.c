@@ -81,7 +81,7 @@ static int adc081c_read_raw(struct iio_dev *iio,
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 	.scan_type = {						\
-		.sign = 'u',					\
+		.format = 'u',					\
 		.realbits = (_bits),				\
 		.storagebits = 16,				\
 		.shift = 12 - (_bits),				\
