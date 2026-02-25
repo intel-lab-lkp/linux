@@ -1853,8 +1853,18 @@ static int check_command_size_in_blocks(struct fsg_common *common,
 		int cmnd_size, enum data_direction data_dir,
 		unsigned int mask, int needs_medium, const char *name)
 {
-	if (common->curlun)
-		common->data_size_from_cmnd <<= common->curlun->blkbits;
+	unsigned int blkbits;
+
+	if (common->curlun) {
+		blkbits = common->curlun->blkbits;
+		if (cmnd_size > 10 &&
+			common->data_size_from_cmnd > (U32_MAX >> blkbits)) {
+			common->phase_error = 1;
+			return -EINVAL;
+		}
+		common->data_size_from_cmnd <<= blkbits;
+	}
+
 	return check_command(common, cmnd_size, data_dir,
 			mask, needs_medium, name);
 }
