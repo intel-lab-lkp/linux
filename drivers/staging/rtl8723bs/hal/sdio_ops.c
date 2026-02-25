@@ -583,11 +583,9 @@ s32 sdio_local_write(
 	)
 		return sd_cmd52_write(intfhdl, addr, cnt, buf);
 
-	tmpbuf = kmalloc(cnt, GFP_ATOMIC);
+	tmpbuf = kmemdup(buf, cnt, GFP_ATOMIC);
 	if (!tmpbuf)
 		return -ENOMEM;
-
-	memcpy(tmpbuf, buf, cnt);
 
 	err = sd_write(intfhdl, addr, cnt, tmpbuf);
 
