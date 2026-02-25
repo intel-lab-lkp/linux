@@ -243,19 +243,15 @@ void intel_dpt_suspend(struct intel_display *display)
 }
 
 struct i915_address_space *
-intel_dpt_create(struct intel_framebuffer *fb)
+intel_dpt_create(struct drm_gem_object *obj, size_t size)
 {
-	struct drm_gem_object *obj = intel_fb_bo(&fb->base);
 	struct drm_i915_private *i915 = to_i915(obj->dev);
 	struct drm_i915_gem_object *dpt_obj;
 	struct i915_address_space *vm;
 	struct i915_dpt *dpt;
-	size_t size;
 	int ret;
 
-	if (intel_fb_needs_pot_stride_remap(fb))
-		size = intel_remapped_info_size(&fb->remapped_view.gtt.remapped);
-	else
+	if (!size)
 		size = DIV_ROUND_UP_ULL(obj->size, I915_GTT_PAGE_SIZE);
 
 	size = round_up(size * sizeof(gen8_pte_t), I915_GTT_PAGE_SIZE);
