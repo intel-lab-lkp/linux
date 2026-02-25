@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mux/nxp,mc33978-mux.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP MC33978/MC34978 Analog Multiplexer
+
+maintainers:
+  - David Jander <david@protonic.nl>
+  - Oleksij Rempel <o.rempel@pengutronix.de>
+
+description: |
+  The MC33978 and MC34978 include a 24-to-1 analog multiplexer (AMUX) that
+  routes one of the following signals to an external AMUX pin for measurement
+  by an external ADC:
+
+  - Channels 0-13: SG0-SG13 switch input voltages
+  - Channels 14-21: SP0-SP7 switch input voltages
+  - Channel 22: Internal temperature diode
+  - Channel 23: Battery voltage (VBATP)
+
+  The AMUX requires a settling time of up to 200 us for full-scale voltage
+  steps. Consumers (e.g., io-channel-mux) must configure this delay.
+
+properties:
+  compatible:
+    enum:
+      - nxp,mc33978-mux
+      - nxp,mc34978-mux
+
+  '#mux-control-cells':
+    const: 0
+
+required:
+  - compatible
+  - '#mux-control-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    amux: mux-controller {
+        compatible = "nxp,mc33978-mux";
+        #mux-control-cells = <0>;
+    };
+
+    iio-mux {
+        compatible = "io-channel-mux";
+        io-channels = <&adc 0>;
+        io-channel-names = "parent";
+        mux-controls = <&amux>;
+        settle-time-us = <200>;
+        channels = "sg0", "sg1", "sg2"; /* ... */
+    };

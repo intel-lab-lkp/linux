@@ -64,6 +64,12 @@ properties:
     description: |
       Hardware monitoring child node for fault detection.
 
+  mux-controller:
+    type: object
+    $ref: /schemas/mux/nxp,mc33978-mux.yaml#
+    description: |
+      Analog multiplexer (AMUX) controller child node.
+
 required:
   - compatible
   - reg
@@ -103,6 +109,11 @@ examples:
 
             hwmon {
                 compatible = "nxp,mc33978-hwmon";
+            };
+
+            mux-controller {
+                compatible = "nxp,mc33978-mux";
+                #mux-control-cells = <0>;
             };
         };
     };
