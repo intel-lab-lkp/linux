@@ -34,7 +34,7 @@ struct tcp_congestion_ops;
  */
 struct inet_connection_sock_af_ops {
 	int	    (*queue_xmit)(struct sock *sk, struct sk_buff *skb, struct flowi *fl);
-	void	    (*send_check)(struct sock *sk, struct sk_buff *skb);
+	u16	    net_header_len;
 	int	    (*rebuild_header)(struct sock *sk);
 	void	    (*sk_rx_dst_set)(struct sock *sk, const struct sk_buff *skb);
 	int	    (*conn_request)(struct sock *sk, struct sk_buff *skb);
@@ -43,7 +43,6 @@ struct inet_connection_sock_af_ops {
 				      struct dst_entry *dst,
 				      struct request_sock *req_unhash,
 				      bool *own_req);
-	u16	    net_header_len;
 	int	    (*setsockopt)(struct sock *sk, int level, int optname,
 				  sockptr_t optval, unsigned int optlen);
 	int	    (*getsockopt)(struct sock *sk, int level, int optname,
