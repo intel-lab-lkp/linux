@@ -31,6 +31,7 @@ use core::{
     },
 };
 
+mod cap;
 mod id;
 mod io;
 mod irq;
@@ -52,6 +53,12 @@ pub use self::irq::{
     IrqType,
     IrqTypes,
     IrqVector, //
+};
+pub use self::cap::{
+    ExtCapId,
+    ExtCapability,
+    ExtSriovCapability,
+    ExtSriovRegs, //
 };
 
 /// An adapter for the registration of PCI drivers.
