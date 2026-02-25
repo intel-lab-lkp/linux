@@ -1002,7 +1002,7 @@ void rebuild_sched_domains_locked(void)
 	* offline CPUs, a warning is emitted and we return directly to
 	* prevent the panic.
 	*/
-	for (i = 0; i < ndoms; ++i) {
+	for (i = 0; doms && i < ndoms; i++) {
 		if (WARN_ON_ONCE(!cpumask_subset(doms[i], cpu_active_mask)))
 			return;
 	}
