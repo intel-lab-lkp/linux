@@ -692,8 +692,17 @@ enum zone_watermarks {
 #else
 #define NR_PCP_THP 0
 #endif
+/*
+ * FREETYPE_UNMAPPED can currently only be used with MIGRATE_UNMOVABLE, no for
+ * those there's no need to encode the migratetype in the pindex.
+ */
+#ifdef CONFIG_PAGE_ALLOC_UNMAPPED
+#define NR_UNMAPPED_PCP_LISTS (PAGE_ALLOC_COSTLY_ORDER + 1 + !!NR_PCP_THP)
+#else
+#define NR_UNMAPPED_PCP_LISTS 0
+#endif
 #define NR_LOWORDER_PCP_LISTS (MIGRATE_PCPTYPES * (PAGE_ALLOC_COSTLY_ORDER + 1))
-#define NR_PCP_LISTS (NR_LOWORDER_PCP_LISTS + NR_PCP_THP)
+#define NR_PCP_LISTS (NR_LOWORDER_PCP_LISTS + NR_PCP_THP + NR_UNMAPPED_PCP_LISTS)
 
 /*
  * Flags used in pcp->flags field.

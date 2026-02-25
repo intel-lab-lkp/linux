@@ -729,18 +729,30 @@ out:
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
 }
 
-static inline unsigned int order_to_pindex(int migratetype, int order)
+static inline unsigned int order_to_pindex(freetype_t freetype, int order)
 {
+	int migratetype = free_to_migratetype(freetype);
+
+	VM_BUG_ON(migratetype >= MIGRATE_PCPTYPES);
+	VM_BUG_ON(order > PAGE_ALLOC_COSTLY_ORDER &&
+		(!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) || order != HPAGE_PMD_ORDER));
+
+	/* FREETYPE_UNMAPPED currently always means MIGRATE_UNMOVABLE. */
+	if (freetype_flags(freetype) & FREETYPE_UNMAPPED) {
+		int order_offset = order;
+
+		VM_BUG_ON(migratetype != MIGRATE_UNMOVABLE);
+		if (order > PAGE_ALLOC_COSTLY_ORDER)
+			order_offset = PAGE_ALLOC_COSTLY_ORDER + 1;
+
+		return NR_LOWORDER_PCP_LISTS + NR_PCP_THP + order_offset;
+	}
+
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
 		bool movable = migratetype == MIGRATE_MOVABLE;
 
-		if (order > PAGE_ALLOC_COSTLY_ORDER) {
-			VM_BUG_ON(order != HPAGE_PMD_ORDER);
-
+		if (order > PAGE_ALLOC_COSTLY_ORDER)
 			return NR_LOWORDER_PCP_LISTS + movable;
-		}
-	} else {
-		VM_BUG_ON(order > PAGE_ALLOC_COSTLY_ORDER);
 	}
 
 	return (MIGRATE_PCPTYPES * order) + migratetype;
@@ -748,8 +760,18 @@ static inline unsigned int order_to_pindex(int migratetype, int order)
 
 static inline int pindex_to_order(unsigned int pindex)
 {
-	int order = pindex / MIGRATE_PCPTYPES;
+	unsigned int unmapped_base = NR_LOWORDER_PCP_LISTS + NR_PCP_THP;
+	int order;
 
+	if (pindex >= unmapped_base) {
+		order = pindex - unmapped_base;
+		if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+		    order > PAGE_ALLOC_COSTLY_ORDER)
+			return HPAGE_PMD_ORDER;
+		return order;
+	}
+
+	order = pindex / MIGRATE_PCPTYPES;
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
 		if (pindex >= NR_LOWORDER_PCP_LISTS)
 			order = HPAGE_PMD_ORDER;
@@ -2970,7 +2992,7 @@ static bool free_frozen_page_commit(struct zone *zone,
 	 */
 	pcp->alloc_factor >>= 1;
 	__count_vm_events(PGFREE, 1 << order);
-	pindex = order_to_pindex(free_to_migratetype(freetype), order);
+	pindex = order_to_pindex(freetype, order);
 	list_add(&page->pcp_list, &pcp->lists[pindex]);
 	pcp->count += 1 << order;
 
@@ -3490,7 +3512,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	 * frees.
 	 */
 	pcp->free_count >>= 1;
-	list = &pcp->lists[order_to_pindex(free_to_migratetype(freetype), order)];
+	list = &pcp->lists[order_to_pindex(freetype, order)];
 	page = __rmqueue_pcplist(zone, order, freetype, alloc_flags, pcp, list);
 	pcp_spin_unlock(pcp, UP_flags);
 	if (page) {
@@ -5275,7 +5297,7 @@ retry_this_zone:
 		goto failed;
 
 	/* Attempt the batch allocation */
-	pcp_list = &pcp->lists[order_to_pindex(free_to_migratetype(ac.freetype), 0)];
+	pcp_list = &pcp->lists[order_to_pindex(ac.freetype, 0)];
 	while (nr_populated < nr_pages) {
 
 		/* Skip existing pages */
