@@ -999,7 +999,7 @@ static inline __alloc_size(1, 2) void *kmalloc_array_noprof(size_t n, size_t siz
 	size_t bytes;
 
 	if (unlikely(check_mul_overflow(n, size, &bytes)))
-		return NULL;
+		bytes = SIZE_MAX;
 	return kmalloc_noprof(bytes, flags);
 }
 #define kmalloc_array(...)			alloc_hooks(kmalloc_array_noprof(__VA_ARGS__))
@@ -1029,7 +1029,7 @@ static inline __realloc_size(2, 3) void * __must_check krealloc_array_noprof(voi
 	size_t bytes;
 
 	if (unlikely(check_mul_overflow(new_n, new_size, &bytes)))
-		return NULL;
+		bytes = SIZE_MAX;
 
 	return krealloc_noprof(p, bytes, flags);
 }
@@ -1069,7 +1069,7 @@ static inline __alloc_size(1, 2) void *kmalloc_array_node_noprof(size_t n, size_
 	size_t bytes;
 
 	if (unlikely(check_mul_overflow(n, size, &bytes)))
-		return NULL;
+		bytes = SIZE_MAX;
 	if (__builtin_constant_p(n) && __builtin_constant_p(size))
 		return kmalloc_node_noprof(bytes, flags, node);
 	return __kmalloc_node_noprof(PASS_BUCKET_PARAMS(bytes, NULL), flags, node);
@@ -1117,7 +1117,7 @@ kvmalloc_array_node_noprof(size_t n, size_t size, gfp_t flags, int node)
 	size_t bytes;
 
 	if (unlikely(check_mul_overflow(n, size, &bytes)))
-		return NULL;
+		bytes = SIZE_MAX;
 
 	return kvmalloc_node_align_noprof(bytes, 1, flags, node);
 }
