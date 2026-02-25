@@ -86,7 +86,8 @@ within the buffer and hence the form in which it is read from userspace. Format
 is [be|le]:[s|u]bits/storagebits[Xrepeat][>>shift], where:
 
 - **be** or **le** specifies big or little-endian.
-- **s** or **u** specifies if signed (2's complement) or unsigned.
+- **s** or **u** or **f** specifies if signed (2's complement) or unsigned or
+  floating-point.
 - **bits** is the number of valid data bits.
 - **storagebits** is the number of bits (after padding) that it occupies in the
   buffer.
