@@ -518,7 +518,8 @@ static inline const char *vm_event_name(enum vm_event_item item)
 
 void mod_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
 			int val);
-
+void memcg_stat_mod(struct mem_cgroup *memcg, pg_data_t *pgdat,
+		enum node_stat_item idx, long val);
 void lruvec_stat_mod_folio(struct folio *folio,
 			     enum node_stat_item idx, int val);
 
@@ -534,6 +535,12 @@ static inline void mod_lruvec_state(struct lruvec *lruvec,
 				    enum node_stat_item idx, int val)
 {
 	mod_node_page_state(lruvec_pgdat(lruvec), idx, val);
+}
+
+static inline void memcg_stat_mod(struct mem_cgroup *memcg, pg_data_t *pgdat,
+		enum node_stat_item idx, long val)
+{
+	mod_node_page_state(pgdat, idx, val);
 }
 
 static inline void lruvec_stat_mod_folio(struct folio *folio,
