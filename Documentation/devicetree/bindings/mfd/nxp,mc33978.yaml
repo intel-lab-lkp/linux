@@ -52,6 +52,12 @@ properties:
   vbatp-supply:
     description: Battery/power supply
 
+  pinctrl:
+    type: object
+    $ref: /schemas/pinctrl/nxp,mc33978-pinctrl.yaml#
+    description: |
+      Pinctrl and GPIO controller child node for the 22 switch inputs.
+
 required:
   - compatible
   - reg
@@ -82,5 +88,11 @@ examples:
 
             vddq-supply = <&reg_3v3>;
             vbatp-supply = <&reg_12v>;
+
+            pinctrl {
+                compatible = "nxp,mc33978-pinctrl";
+                gpio-controller;
+                #gpio-cells = <2>;
+            };
         };
     };

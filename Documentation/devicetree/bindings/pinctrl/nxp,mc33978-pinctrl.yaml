@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/nxp,mc33978-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP MC33978/MC34978 Pinctrl/GPIO Driver
+
+maintainers:
+  - David Jander <david@protonic.nl>
+  - Oleksij Rempel <o.rempel@pengutronix.de>
+
+description: |
+  Pin control and GPIO driver for the MC33978/MC34978 MSDI device.
+
+  Pin numbering:
+  - Pins 0-13: SG0-SG13 (Switch-to-Ground inputs)
+  - Pins 14-21: SP0-SP7 (Programmable inputs, can be SG or SB)
+
+properties:
+  compatible:
+    enum:
+      - nxp,mc33978-pinctrl
+      - nxp,mc34978-pinctrl
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  ngpios:
+    const: 22
+
+patternProperties:
+  "-grp$":
+    type: object
+    $ref: pincfg-node.yaml#
+    additionalProperties: false
+    description: |
+      Pin configuration subnodes.
+    properties:
+      pins: true
+      bias-pull-up: true
+      bias-pull-down: true
+      bias-high-impedance: true
+
+required:
+  - compatible
+  - gpio-controller
+  - '#gpio-cells'
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    pinctrl {
+        compatible = "nxp,mc33978-pinctrl";
+        gpio-controller;
+        #gpio-cells = <2>;
+        ngpios = <22>;
+
+        door-grp {
+            pins = "sg0";
+            bias-high-impedance;
+        };
+    };
