@@ -15,7 +15,7 @@
 #include "i915_dpt.h"
 #include "i915_drv.h"
 
-struct i915_dpt {
+struct intel_dpt {
 	struct i915_address_space vm;
 
 	struct drm_i915_gem_object *obj;
@@ -25,12 +25,12 @@ struct i915_dpt {
 
 #define i915_is_dpt(vm) ((vm)->is_dpt)
 
-static inline struct i915_dpt *
+static inline struct intel_dpt *
 i915_vm_to_dpt(struct i915_address_space *vm)
 {
-	BUILD_BUG_ON(offsetof(struct i915_dpt, vm));
+	BUILD_BUG_ON(offsetof(struct intel_dpt, vm));
 	drm_WARN_ON(&vm->i915->drm, !i915_is_dpt(vm));
-	return container_of(vm, struct i915_dpt, vm);
+	return container_of(vm, struct intel_dpt, vm);
 }
 
 static void gen8_set_pte(void __iomem *addr, gen8_pte_t pte)
@@ -44,7 +44,7 @@ static void dpt_insert_page(struct i915_address_space *vm,
 			    unsigned int pat_index,
 			    u32 flags)
 {
-	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
+	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
 	gen8_pte_t __iomem *base = dpt->iomem;
 
 	gen8_set_pte(base + offset / I915_GTT_PAGE_SIZE,
@@ -56,7 +56,7 @@ static void dpt_insert_entries(struct i915_address_space *vm,
 			       unsigned int pat_index,
 			       u32 flags)
 {
-	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
+	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
 	gen8_pte_t __iomem *base = dpt->iomem;
 	const gen8_pte_t pte_encode = vm->pte_encode(0, pat_index, flags);
 	struct sgt_iter sgt_iter;
@@ -116,7 +116,7 @@ static void dpt_unbind_vma(struct i915_address_space *vm,
 
 static void dpt_cleanup(struct i915_address_space *vm)
 {
-	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
+	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
 
 	i915_gem_object_put(dpt->obj);
 }
@@ -125,7 +125,7 @@ struct i915_vma *i915_dpt_pin_to_ggtt(struct i915_address_space *vm, unsigned in
 {
 	struct drm_i915_private *i915 = vm->i915;
 	struct intel_display *display = i915->display;
-	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
+	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
 	struct ref_tracker *wakeref;
 	struct i915_vma *vma;
 	void __iomem *iomem;
@@ -175,7 +175,7 @@ struct i915_vma *i915_dpt_pin_to_ggtt(struct i915_address_space *vm, unsigned in
 
 void i915_dpt_unpin_from_ggtt(struct i915_address_space *vm)
 {
-	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
+	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
 
 	i915_vma_unpin_iomap(dpt->vma);
 	i915_vma_put(dpt->vma);
@@ -186,7 +186,7 @@ static struct i915_address_space *i915_dpt_create(struct drm_gem_object *obj, si
 	struct drm_i915_private *i915 = to_i915(obj->dev);
 	struct drm_i915_gem_object *dpt_obj;
 	struct i915_address_space *vm;
-	struct i915_dpt *dpt;
+	struct intel_dpt *dpt;
 	int ret;
 
 	if (!size)
@@ -248,7 +248,7 @@ static struct i915_address_space *i915_dpt_create(struct drm_gem_object *obj, si
 
 static void i915_dpt_destroy(struct i915_address_space *vm)
 {
-	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
+	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
 
 	dpt->obj->is_dpt = false;
 	i915_vm_put(&dpt->vm);
