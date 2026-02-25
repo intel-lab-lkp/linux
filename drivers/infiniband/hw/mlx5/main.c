@@ -4261,6 +4261,34 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_VAR_OBJ_ALLOC)(
 	return err;
 }
 
+static int UVERBS_HANDLER(MLX5_IB_METHOD_VAR_OBJ_QUERY)(
+	struct uverbs_attr_bundle *attrs)
+{
+	struct mlx5_user_mmap_entry *entry =
+		uverbs_attr_get_obj(attrs, MLX5_IB_ATTR_VAR_OBJ_QUERY_HANDLE);
+	u64 mmap_offset;
+	u32 length;
+	int err;
+
+	mmap_offset = mlx5_entry_to_mmap_offset(entry);
+	if (check_mul_overflow(entry->rdma_entry.npages, (u32)PAGE_SIZE, &length))
+		return -EOVERFLOW;
+
+	err = uverbs_copy_to(attrs, MLX5_IB_ATTR_VAR_OBJ_QUERY_MMAP_OFFSET,
+			     &mmap_offset, sizeof(mmap_offset));
+	if (err)
+		return err;
+
+	err = uverbs_copy_to(attrs, MLX5_IB_ATTR_VAR_OBJ_QUERY_PAGE_ID,
+			     &entry->page_idx, sizeof(entry->page_idx));
+	if (err)
+		return err;
+
+	err = uverbs_copy_to(attrs, MLX5_IB_ATTR_VAR_OBJ_QUERY_MMAP_LENGTH,
+			     &length, sizeof(length));
+	return err;
+}
+
 DECLARE_UVERBS_NAMED_METHOD(
 	MLX5_IB_METHOD_VAR_OBJ_ALLOC,
 	UVERBS_ATTR_IDR(MLX5_IB_ATTR_VAR_OBJ_ALLOC_HANDLE,
@@ -4287,10 +4315,27 @@ DECLARE_UVERBS_NAMED_METHOD_DESTROY(
 			UVERBS_ACCESS_DESTROY,
 			UA_MANDATORY));
 
+DECLARE_UVERBS_NAMED_METHOD(
+	MLX5_IB_METHOD_VAR_OBJ_QUERY,
+	UVERBS_ATTR_IDR(MLX5_IB_ATTR_VAR_OBJ_QUERY_HANDLE,
+			MLX5_IB_OBJECT_VAR,
+			UVERBS_ACCESS_READ,
+			UA_MANDATORY),
+	UVERBS_ATTR_PTR_OUT(MLX5_IB_ATTR_VAR_OBJ_QUERY_PAGE_ID,
+			    UVERBS_ATTR_TYPE(u32),
+			    UA_MANDATORY),
+	UVERBS_ATTR_PTR_OUT(MLX5_IB_ATTR_VAR_OBJ_QUERY_MMAP_LENGTH,
+			    UVERBS_ATTR_TYPE(u32),
+			    UA_MANDATORY),
+	UVERBS_ATTR_PTR_OUT(MLX5_IB_ATTR_VAR_OBJ_QUERY_MMAP_OFFSET,
+			    UVERBS_ATTR_TYPE(u64),
+			    UA_MANDATORY));
+
 DECLARE_UVERBS_NAMED_OBJECT(MLX5_IB_OBJECT_VAR,
 			    UVERBS_TYPE_ALLOC_IDR(mmap_obj_cleanup),
 			    &UVERBS_METHOD(MLX5_IB_METHOD_VAR_OBJ_ALLOC),
-			    &UVERBS_METHOD(MLX5_IB_METHOD_VAR_OBJ_DESTROY));
+			    &UVERBS_METHOD(MLX5_IB_METHOD_VAR_OBJ_DESTROY),
+			    &UVERBS_METHOD(MLX5_IB_METHOD_VAR_OBJ_QUERY));
 
 static bool var_is_supported(struct ib_device *device)
 {
