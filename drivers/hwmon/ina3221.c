@@ -66,6 +66,14 @@
 #define INA3221_MASK_ENABLE_SCC_MASK	GENMASK(14, 12)
 
 #define SQ52210_ALERT_CONFIG_MASK	GENMASK(15, 4)
+#define SQ52210_MASK_ALERT_CHANNEL1 (BIT(15) | BIT(12) | BIT(9) | BIT(6))
+#define SQ52210_MASK_ALERT_CHANNEL2 (BIT(14) | BIT(11) | BIT(8) | BIT(5))
+#define SQ52210_MASK_ALERT_CHANNEL3 (BIT(13) | BIT(10) | BIT(7) | BIT(4))
+
+#define SQ52210_ALERT_ALL_SUL_MASK	(BIT(15) | BIT(14) | BIT(13))
+#define SQ52210_ALERT_ALL_BOL_MASK	(BIT(12) | BIT(11) | BIT(10))
+#define SQ52210_ALERT_ALL_BUL_MASK	(BIT(9) | BIT(8) | BIT(7))
+#define SQ52210_ALERT_ALL_POL_MASK	(BIT(6) | BIT(5) | BIT(4))
 
 #define INA3221_CONFIG_DEFAULT		0x7127
 #define INA3221_RSHUNT_DEFAULT		10000
@@ -106,6 +114,13 @@ enum ina3221_channels {
 	INA3221_CHANNEL2,
 	INA3221_CHANNEL3,
 	INA3221_NUM_CHANNELS
+};
+
+enum sq52210_alert_types {
+	SQ52210_ALERT_SUL,
+	SQ52210_ALERT_BOL,
+	SQ52210_ALERT_BUL,
+	SQ52210_ALERT_POL
 };
 
 /**
@@ -284,13 +299,59 @@ static int ina3221_read_value(struct ina3221_data *ina, unsigned int reg,
 
 	/*
 	 * Shunt Voltage Sum register has 14-bit value with 1-bit shift
+	 * Current registers have 15-bit value
+	 * Power registers have 16-bit value
+	 * ALERT_LIMIT registers have 16-bit value with 3-bit shift
 	 * Other Shunt Voltage registers have 12 bits with 3-bit shift
 	 */
-	if (reg == INA3221_SHUNT_SUM || reg == INA3221_CRIT_SUM)
+	switch (reg) {
+	case INA3221_SHUNT_SUM:
+	case INA3221_CRIT_SUM:
 		*val = sign_extend32(regval >> 1, 14);
-	else
+		break;
+	case SQ52210_CURRENT1:
+	case SQ52210_CURRENT2:
+	case SQ52210_CURRENT3:
+		*val = sign_extend32(regval, 15);
+		break;
+	case SQ52210_POWER1:
+	case SQ52210_POWER2:
+	case SQ52210_POWER3:
+		*val = regval;
+		break;
+	case INA3221_BUS1:
+	case INA3221_BUS2:
+	case INA3221_BUS3:
+	case INA3221_SHUNT1:
+	case INA3221_SHUNT2:
+	case INA3221_SHUNT3:
+	case INA3221_WARN1:
+	case INA3221_WARN2:
+	case INA3221_WARN3:
+	case INA3221_CRIT1:
+	case INA3221_CRIT2:
+	case INA3221_CRIT3:
 		*val = sign_extend32(regval >> 3, 12);
-
+		break;
+	case SQ52210_ALERT_LIMIT1:
+	case SQ52210_ALERT_LIMIT2:
+	case SQ52210_ALERT_LIMIT3:
+		/*
+		 * This register is a 16-bit register with the lower 3 bits fixed at 0.
+		 * When used to store bus and shunt alert values, shifting is required.
+		 * However, for POL (Power Over Limit), it functions as a 16-bit unsigned
+		 * register where the lower 3 bits being fixed at 0 will result in some
+		 * loss of precision.
+		 */
+		if (ina->alert_type_select & SQ52210_ALERT_ALL_POL_MASK)
+			*val = regval;
+		else
+			*val = sign_extend32(regval >> 3, 12);
+		break;
+	default:
+		*val = 0;
+		return -EOPNOTSUPP;
+	};
 	return 0;
 }
 
