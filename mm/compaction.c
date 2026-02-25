@@ -494,6 +494,53 @@ static bool test_and_set_skip(struct compact_control *cc, struct page *page)
 }
 #endif /* CONFIG_COMPACTION */
 
+enum compact_lock_type {
+	COMPACT_LOCK_ZONE,
+	COMPACT_LOCK_RAW_SPINLOCK,
+};
+
+struct compact_lock {
+	enum compact_lock_type type;
+	union {
+		struct zone *zone;
+		spinlock_t *lock; /* Reference to lru lock */
+	};
+};
+
+static bool compact_do_trylock_irqsave(struct compact_lock lock,
+				       unsigned long *flags)
+{
+	if (lock.type == COMPACT_LOCK_ZONE)
+		return zone_trylock_irqsave(lock.zone, *flags);
+
+	return spin_trylock_irqsave(lock.lock, *flags);
+}
+
+static void compact_do_zone_lock_irqsave(struct zone *zone,
+					 unsigned long *flags)
+__acquires(zone->lock)
+{
+	zone_lock_irqsave(zone, *flags);
+}
+
+static void compact_do_raw_lock_irqsave(spinlock_t *lock,
+					unsigned long *flags)
+__acquires(lock)
+{
+	spin_lock_irqsave(lock, *flags);
+}
+
+static void compact_do_lock_irqsave(struct compact_lock lock,
+				    unsigned long *flags)
+{
+	if (lock.type == COMPACT_LOCK_ZONE) {
+		compact_do_zone_lock_irqsave(lock.zone, flags);
+		return;
+	}
+
+	compact_do_raw_lock_irqsave(lock.lock, flags);
+}
+
 /*
  * Compaction requires the taking of some coarse locks that are potentially
  * very heavily contended. For async compaction, trylock and record if the
@@ -503,19 +550,19 @@ static bool test_and_set_skip(struct compact_control *cc, struct page *page)
  *
  * Always returns true which makes it easier to track lock state in callers.
  */
-static bool compact_lock_irqsave(spinlock_t *lock, unsigned long *flags,
-						struct compact_control *cc)
-	__acquires(lock)
+static bool compact_lock_irqsave(struct compact_lock lock,
+				 unsigned long *flags,
+				 struct compact_control *cc)
 {
 	/* Track if the lock is contended in async mode */
 	if (cc->mode == MIGRATE_ASYNC && !cc->contended) {
-		if (spin_trylock_irqsave(lock, *flags))
+		if (compact_do_trylock_irqsave(lock, flags))
 			return true;
 
 		cc->contended = true;
 	}
 
-	spin_lock_irqsave(lock, *flags);
+	compact_do_lock_irqsave(lock, flags);
 	return true;
 }
 
@@ -531,7 +578,6 @@ static bool compact_lock_irqsave(spinlock_t *lock, unsigned long *flags,
  * Returns true if compaction should abort due to fatal signal pending.
  * Returns false when compaction can continue.
  */
-
 static bool compact_unlock_should_abort(struct zone *zone,
 					unsigned long flags,
 					bool *locked,
@@ -616,8 +662,12 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 
 		/* If we already hold the lock, we can skip some rechecking. */
 		if (!locked) {
-			locked = compact_lock_irqsave(&cc->zone->lock,
-								&flags, cc);
+			struct compact_lock zol = {
+				.type = COMPACT_LOCK_ZONE,
+				.zone = cc->zone,
+			};
+
+			locked = compact_lock_irqsave(zol, &flags, cc);
 
 			/* Recheck this is a buddy page under lock */
 			if (!PageBuddy(page))
@@ -1160,10 +1210,15 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 
 		/* If we already hold the lock, we can skip some rechecking */
 		if (lruvec != locked) {
+			struct compact_lock zol = {
+				.type = COMPACT_LOCK_RAW_SPINLOCK,
+				.lock = &lruvec->lru_lock,
+			};
+
 			if (locked)
 				unlock_page_lruvec_irqrestore(locked, flags);
 
-			compact_lock_irqsave(&lruvec->lru_lock, &flags, cc);
+			compact_lock_irqsave(zol, &flags, cc);
 			locked = lruvec;
 
 			lruvec_memcg_debug(lruvec, folio);
