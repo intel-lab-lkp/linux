@@ -4280,17 +4280,19 @@ end:
 
 		rci = list_first_entry(chunks, struct remap_chunk_info, list);
 
-		spin_lock(&rci->bg->lock);
-		is_unused = !btrfs_is_block_group_used(rci->bg);
-		spin_unlock(&rci->bg->lock);
+		if (rci->bg) {
+			spin_lock(&rci->bg->lock);
+			is_unused = !btrfs_is_block_group_used(rci->bg);
+			spin_unlock(&rci->bg->lock);
 
-		if (is_unused)
-			btrfs_mark_bg_unused(rci->bg);
+			if (is_unused)
+				btrfs_mark_bg_unused(rci->bg);
 
-		if (rci->made_ro)
-			btrfs_dec_block_group_ro(rci->bg);
+			if (rci->made_ro)
+				btrfs_dec_block_group_ro(rci->bg);
 
-		btrfs_put_block_group(rci->bg);
+			btrfs_put_block_group(rci->bg);
+		}
 
 		list_del(&rci->list);
 		kfree(rci);
