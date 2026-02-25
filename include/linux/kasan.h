@@ -492,7 +492,12 @@ size_t kasan_metadata_size(struct kmem_cache *cache, bool in_object);
 void kasan_cache_create(struct kmem_cache *cache, unsigned int *size,
 			slab_flags_t *flags);
 
-void kasan_cache_shrink(struct kmem_cache *cache);
+void __kasan_cache_shrink(struct kmem_cache *cache);
+static inline void kasan_cache_shrink(struct kmem_cache *cache)
+{
+	if (kasan_enabled())
+		__kasan_cache_shrink(cache);
+}
 void kasan_cache_shutdown(struct kmem_cache *cache);
 void kasan_record_aux_stack(void *ptr);
 
