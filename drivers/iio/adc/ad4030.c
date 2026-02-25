@@ -423,10 +423,10 @@ static int ad4030_get_chan_calibscale(struct iio_dev *indio_dev,
 
 	/* From datasheet: multiplied output = input × gain word/0x8000 */
 	*val = gain / AD4030_GAIN_MIDLE_POINT;
-	*val2 = mul_u64_u32_div(gain % AD4030_GAIN_MIDLE_POINT, NANO,
+	*val2 = mul_u64_u32_div(gain % AD4030_GAIN_MIDLE_POINT, MICRO,
 				AD4030_GAIN_MIDLE_POINT);
 
-	return IIO_VAL_INT_PLUS_NANO;
+	return IIO_VAL_INT_PLUS_MICRO;
 }
 
 /* Returns the offset where 1 LSB = (VREF/2^precision_bits - 1)/gain */
@@ -720,8 +720,8 @@ out:
 
 static const int ad4030_gain_avail[3][2] = {
 	{ 0, 0 },
-	{ 0, 30518 },
-	{ 1, 999969482 },
+	{ 0, 30 },
+	{ 1, 999969 },
 };
 
 static int ad4030_read_avail(struct iio_dev *indio_dev,
@@ -739,7 +739,7 @@ static int ad4030_read_avail(struct iio_dev *indio_dev,
 
 	case IIO_CHAN_INFO_CALIBSCALE:
 		*vals = (void *)ad4030_gain_avail;
-		*type = IIO_VAL_INT_PLUS_NANO;
+		*type = IIO_VAL_INT_PLUS_MICRO;
 		return IIO_AVAIL_RANGE;
 
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
