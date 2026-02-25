@@ -74,6 +74,8 @@ struct mpath_head_template {
 	enum mpath_access_state (*get_access_state)(struct mpath_device *);
 	int (*cdev_ioctl)(struct mpath_head *, struct mpath_device *,
 			blk_mode_t mode, unsigned int cmd, unsigned long arg, int srcu_idx);
+	int (*report_zones)(struct mpath_device *, sector_t sector,
+		unsigned int nr_zones, struct blk_report_zones_args *args);
 	int (*chr_uring_cmd)(struct mpath_device *, struct io_uring_cmd *ioucmd,
 		unsigned int issue_flags);
 	int (*chr_uring_cmd_iopoll)(struct io_uring_cmd *ioucmd,
