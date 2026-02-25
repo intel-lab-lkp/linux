@@ -145,7 +145,7 @@ struct intel_framebuffer {
 		struct intel_fb_view remapped_view;
 	};
 
-	struct i915_address_space *dpt_vm;
+	struct intel_dpt *dpt;
 
 	unsigned int min_alignment;
 	unsigned int vtd_guard;

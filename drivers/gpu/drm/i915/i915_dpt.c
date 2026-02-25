@@ -33,6 +33,11 @@ i915_vm_to_dpt(struct i915_address_space *vm)
 	return container_of(vm, struct intel_dpt, vm);
 }
 
+struct i915_address_space *i915_dpt_to_vm(struct intel_dpt *dpt)
+{
+	return &dpt->vm;
+}
+
 static void gen8_set_pte(void __iomem *addr, gen8_pte_t pte)
 {
 	writeq(pte, addr);
@@ -121,11 +126,10 @@ static void dpt_cleanup(struct i915_address_space *vm)
 	i915_gem_object_put(dpt->obj);
 }
 
-struct i915_vma *i915_dpt_pin_to_ggtt(struct i915_address_space *vm, unsigned int alignment)
+struct i915_vma *i915_dpt_pin_to_ggtt(struct intel_dpt *dpt, unsigned int alignment)
 {
-	struct drm_i915_private *i915 = vm->i915;
+	struct drm_i915_private *i915 = dpt->vm.i915;
 	struct intel_display *display = i915->display;
-	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
 	struct ref_tracker *wakeref;
 	struct i915_vma *vma;
 	void __iomem *iomem;
@@ -173,15 +177,13 @@ struct i915_vma *i915_dpt_pin_to_ggtt(struct i915_address_space *vm, unsigned in
 	return err ? ERR_PTR(err) : vma;
 }
 
-void i915_dpt_unpin_from_ggtt(struct i915_address_space *vm)
+void i915_dpt_unpin_from_ggtt(struct intel_dpt *dpt)
 {
-	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
-
 	i915_vma_unpin_iomap(dpt->vma);
 	i915_vma_put(dpt->vma);
 }
 
-static struct i915_address_space *i915_dpt_create(struct drm_gem_object *obj, size_t size)
+static struct intel_dpt *i915_dpt_create(struct drm_gem_object *obj, size_t size)
 {
 	struct drm_i915_private *i915 = to_i915(obj->dev);
 	struct drm_i915_gem_object *dpt_obj;
@@ -243,25 +245,23 @@ static struct i915_address_space *i915_dpt_create(struct drm_gem_object *obj, si
 	dpt->obj = dpt_obj;
 	dpt->obj->is_dpt = true;
 
-	return &dpt->vm;
+	return dpt;
 }
 
-static void i915_dpt_destroy(struct i915_address_space *vm)
+static void i915_dpt_destroy(struct intel_dpt *dpt)
 {
-	struct intel_dpt *dpt = i915_vm_to_dpt(vm);
-
 	dpt->obj->is_dpt = false;
 	i915_vm_put(&dpt->vm);
 }
 
-static void i915_dpt_suspend(struct i915_address_space *vm)
+static void i915_dpt_suspend(struct intel_dpt *dpt)
 {
-	i915_ggtt_suspend_vm(vm, true);
+	i915_ggtt_suspend_vm(&dpt->vm, true);
 }
 
-static void i915_dpt_resume(struct i915_address_space *vm)
+static void i915_dpt_resume(struct intel_dpt *dpt)
 {
-	i915_ggtt_resume_vm(vm, true);
+	i915_ggtt_resume_vm(&dpt->vm, true);
 }
 
 u64 i915_dpt_offset(struct i915_vma *dpt_vma)

@@ -9,19 +9,18 @@
 struct dma_fence;
 struct drm_gem_object;
 struct drm_scanout_buffer;
-struct i915_address_space;
 struct intel_display;
+struct intel_dpt;
 struct intel_hdcp_gsc_context;
 struct intel_panic;
 struct intel_stolen_node;
 
 /* dpt */
-struct i915_address_space *intel_parent_dpt_create(struct intel_display *display,
-						   struct drm_gem_object *obj,
-						   size_t size);
-void intel_parent_dpt_destroy(struct intel_display *display, struct i915_address_space *vm);
-void intel_parent_dpt_suspend(struct intel_display *display, struct i915_address_space *vm);
-void intel_parent_dpt_resume(struct intel_display *display, struct i915_address_space *vm);
+struct intel_dpt *intel_parent_dpt_create(struct intel_display *display,
+					  struct drm_gem_object *obj, size_t size);
+void intel_parent_dpt_destroy(struct intel_display *display, struct intel_dpt *dpt);
+void intel_parent_dpt_suspend(struct intel_display *display, struct intel_dpt *dpt);
+void intel_parent_dpt_resume(struct intel_display *display, struct intel_dpt *dpt);
 
 /* hdcp */
 ssize_t intel_parent_hdcp_gsc_msg_send(struct intel_display *display,

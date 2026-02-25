@@ -13,8 +13,8 @@ struct drm_framebuffer;
 struct drm_gem_object;
 struct drm_plane_state;
 struct drm_scanout_buffer;
-struct i915_address_space;
 struct i915_vma;
+struct intel_dpt;
 struct intel_dsb_buffer;
 struct intel_hdcp_gsc_context;
 struct intel_initial_plane_config;
@@ -25,10 +25,10 @@ struct ref_tracker;
 /* Keep struct definitions sorted */
 
 struct intel_display_dpt_interface {
-	struct i915_address_space *(*create)(struct drm_gem_object *obj, size_t size);
-	void (*destroy)(struct i915_address_space *vm);
-	void (*suspend)(struct i915_address_space *vm);
-	void (*resume)(struct i915_address_space *vm);
+	struct intel_dpt *(*create)(struct drm_gem_object *obj, size_t size);
+	void (*destroy)(struct intel_dpt *dpt);
+	void (*suspend)(struct intel_dpt *dpt);
+	void (*resume)(struct intel_dpt *dpt);
 };
 
 struct intel_display_dsb_interface {
