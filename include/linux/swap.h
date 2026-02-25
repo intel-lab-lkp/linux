@@ -319,6 +319,7 @@ void folio_add_lru(struct folio *);
 void folio_add_lru_vma(struct folio *, struct vm_area_struct *);
 void mark_page_accessed(struct page *);
 void folio_mark_accessed(struct folio *);
+void folio_activate_on_mapped(struct folio *folio);
 
 static inline bool folio_may_be_lru_cached(struct folio *folio)
 {

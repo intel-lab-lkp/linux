@@ -488,6 +488,19 @@ void folio_mark_accessed(struct folio *folio)
 }
 EXPORT_SYMBOL(folio_mark_accessed);
 
+void folio_activate_on_mapped(struct folio *folio)
+{
+	if (lru_gen_enabled() && lru_gen_in_fault() &&
+			!(current->flags & PF_MEMALLOC) &&
+			!folio_test_active(folio) &&
+			!folio_test_unevictable(folio)) {
+		if (folio_test_lru(folio))
+			folio_activate(folio);
+		else /* still in lru cache */
+			__lru_cache_activate_folio(folio);
+	}
+}
+
 /**
  * folio_add_lru - Add a folio to an LRU list.
  * @folio: The folio to be added to the LRU.
@@ -506,7 +519,8 @@ void folio_add_lru(struct folio *folio)
 	/* see the comment in lru_gen_folio_seq() */
 	if (lru_gen_enabled() && !folio_test_unevictable(folio) &&
 	    lru_gen_in_fault() && !(current->flags & PF_MEMALLOC))
-		folio_set_active(folio);
+		if (!folio_is_file_lru(folio))
+			folio_set_active(folio);
 
 	folio_batch_add_and_move(folio, lru_add);
 }
