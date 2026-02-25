@@ -8,6 +8,17 @@ config SPRD_COMMON_CLK
 if SPRD_COMMON_CLK
 
 # SoC Drivers
+config SPRD_SC9832E_CLK
+	tristate "Support for the Spreadtrum SC9832E clocks"
+	depends on (ARM64 && ARCH_SPRD) || COMPILE_TEST
+	default ARM64 && ARCH_SPRD
+	help
+	  This driver provides support for the clock controller on the
+	  Unisoc SC9832E SoC. The SC9832E is a quad-core LTE platform.
+
+	  This driver adds support for the PLLs and various clock gates
+	  required for peripheral devices. Say Y if you want to use
+	  peripheral devices on sc9832e SoC.
 
 config SPRD_SC9860_CLK
 	tristate "Support for the Spreadtrum SC9860 clocks"
