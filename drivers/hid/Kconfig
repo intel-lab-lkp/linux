@@ -755,6 +755,14 @@ config HID_MEGAWORLD_FF
 	Say Y here if you have a Mega World based game controller and want
 	to have force feedback support for it.
 
+config HID_RAKK
+	tristate "Rakk support"
+	help
+	  Support for Rakk gaming peripherals.
+
+	  Fixes the HID report descriptor of the Rakk Dasig X mouse,
+	  which declares only 3 buttons instead of 5.
+
 config HID_REDRAGON
 	tristate "Redragon keyboards"
 	default !EXPERT
