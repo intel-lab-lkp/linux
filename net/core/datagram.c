@@ -490,7 +490,10 @@ static size_t crc32c_and_copy_to_iter(const void *addr, size_t bytes,
 	u32 *crcp = _crcp;
 	size_t copied;
 
-	copied = copy_to_iter(addr, bytes, i);
+	if (user_backed_iter(i))
+		copied = copy_to_iter(addr, bytes, i);
+	else
+		copied = _copy_to_iter(addr, bytes, i);
 	*crcp = crc32c(*crcp, addr, copied);
 	return copied;
 }
@@ -515,10 +518,17 @@ int skb_copy_and_crc32c_datagram_iter(const struct sk_buff *skb, int offset,
 EXPORT_SYMBOL(skb_copy_and_crc32c_datagram_iter);
 #endif /* CONFIG_NET_CRC32C */
 
+/*
+ * Bypass usercopy hardening for kernel-only iterators: no data
+ * crosses the user/kernel boundary, so the slab whitelist check
+ * on the source buffer is unnecessary overhead.
+ */
 static size_t simple_copy_to_iter(const void *addr, size_t bytes,
 		void *data __always_unused, struct iov_iter *i)
 {
-	return copy_to_iter(addr, bytes, i);
+	if (user_backed_iter(i))
+		return copy_to_iter(addr, bytes, i);
+	return _copy_to_iter(addr, bytes, i);
 }
 
 /**
