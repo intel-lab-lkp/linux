@@ -392,11 +392,8 @@ get_pfnblock_bitmap_bitidx(const struct page *page, unsigned long pfn,
 	unsigned long *bitmap;
 	unsigned long word_bitidx;
 
-#ifdef CONFIG_MEMORY_ISOLATION
-	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 8);
-#else
-	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 4);
-#endif
+	/* NR_PAGEBLOCK_BITS must divide word size. */
+	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 4 && NR_PAGEBLOCK_BITS != 8);
 	BUILD_BUG_ON(__MIGRATE_TYPE_END > PAGEBLOCK_MIGRATETYPE_MASK);
 	VM_BUG_ON_PAGE(!zone_spans_pfn(page_zone(page), pfn), page);
 
@@ -469,9 +466,20 @@ __always_inline freetype_t
 __get_pfnblock_freetype(const struct page *page, unsigned long pfn,
 			bool ignore_iso)
 {
-	int mt = get_pfnblock_migratetype(page, pfn);
+	unsigned long mask = PAGEBLOCK_FREETYPE_MASK;
+	enum migratetype migratetype;
+	unsigned int ft_flags;
+	unsigned long flags;
 
-	return migrate_to_freetype(mt, 0);
+	flags = __get_pfnblock_flags_mask(page, pfn, mask);
+	ft_flags = (flags & PAGEBLOCK_FREETYPE_FLAGS_MASK) >> PB_freetype_flags;
+
+	migratetype = flags & PAGEBLOCK_MIGRATETYPE_MASK;
+#ifdef CONFIG_MEMORY_ISOLATION
+	if (!ignore_iso && flags & BIT(PB_migrate_isolate))
+		migratetype = MIGRATE_ISOLATE;
+#endif
+	return migrate_to_freetype(migratetype, ft_flags);
 }
 
 /**
@@ -605,6 +613,15 @@ static void set_pageblock_migratetype(struct page *page,
 				  PAGEBLOCK_MIGRATETYPE_MASK | PAGEBLOCK_ISO_MASK);
 }
 
+static inline void set_pageblock_freetype_flags(struct page *page,
+						unsigned int ft_flags)
+{
+	unsigned int flags = ft_flags << PB_freetype_flags;
+
+	__set_pfnblock_flags_mask(page, page_to_pfn(page), flags,
+				  PAGEBLOCK_FREETYPE_FLAGS_MASK);
+}
+
 void __meminit init_pageblock_migratetype(struct page *page,
 					  enum migratetype migratetype,
 					  bool isolate)
@@ -628,7 +645,7 @@ void __meminit init_pageblock_migratetype(struct page *page,
 		flags |= BIT(PB_migrate_isolate);
 #endif
 	__set_pfnblock_flags_mask(page, page_to_pfn(page), flags,
-				  PAGEBLOCK_MIGRATETYPE_MASK | PAGEBLOCK_ISO_MASK);
+				  PAGEBLOCK_FREETYPE_MASK);
 }
 
 #ifdef CONFIG_DEBUG_VM

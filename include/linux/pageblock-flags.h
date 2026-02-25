@@ -11,6 +11,8 @@
 #ifndef PAGEBLOCK_FLAGS_H
 #define PAGEBLOCK_FLAGS_H
 
+#include <linux/freetype.h>
+#include <linux/log2.h>
 #include <linux/types.h>
 
 /* Bit indices that affect a whole block of pages */
@@ -18,6 +20,9 @@ enum pageblock_bits {
 	PB_migrate_0,
 	PB_migrate_1,
 	PB_migrate_2,
+	PB_freetype_flags,
+	PB_freetype_flags_end = PB_freetype_flags + NUM_FREETYPE_FLAGS - 1,
+
 	PB_compact_skip,/* If set the block is skipped by compaction */
 
 #ifdef CONFIG_MEMORY_ISOLATION
@@ -37,12 +42,17 @@ enum pageblock_bits {
 #define NR_PAGEBLOCK_BITS (roundup_pow_of_two(__NR_PAGEBLOCK_BITS))
 
 #define PAGEBLOCK_MIGRATETYPE_MASK (BIT(PB_migrate_0)|BIT(PB_migrate_1)|BIT(PB_migrate_2))
+#define PAGEBLOCK_FREETYPE_FLAGS_MASK (((1 << NUM_FREETYPE_FLAGS) - 1) << PB_freetype_flags)
 
 #ifdef CONFIG_MEMORY_ISOLATION
 #define PAGEBLOCK_ISO_MASK	BIT(PB_migrate_isolate)
 #else
 #define PAGEBLOCK_ISO_MASK	0
 #endif
+
+#define PAGEBLOCK_FREETYPE_MASK (PAGEBLOCK_MIGRATETYPE_MASK | \
+				 PAGEBLOCK_ISO_MASK | \
+				 PAGEBLOCK_FREETYPE_FLAGS_MASK)
 
 #if defined(CONFIG_HUGETLB_PAGE)
 
