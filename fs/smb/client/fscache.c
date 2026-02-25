@@ -29,7 +29,7 @@ static void cifs_fscache_fill_volume_coherency(
 	memset(cd, 0, sizeof(*cd));
 	cd->resource_id		= cpu_to_le64(tcon->resource_id);
 	cd->vol_create_time	= tcon->vol_create_time;
-	cd->vol_serial_number	= cpu_to_le32(tcon->vol_serial_number);
+	cd->vol_serial_number	= tcon->vol_serial_number;
 }
 
 int cifs_fscache_get_super_cookie(struct cifs_tcon *tcon)

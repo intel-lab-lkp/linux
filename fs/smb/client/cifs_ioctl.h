@@ -11,7 +11,7 @@ struct smb_mnt_fs_info {
 	__u32	version; /* 0001 */
 	__u16	protocol_id;
 	__u16	tcon_flags;
-	__u32	vol_serial_number;
+	__le32	vol_serial_number;
 	__u32	vol_create_time;
 	__u32	share_caps;
 	__u32	share_flags;

@@ -1270,7 +1270,7 @@ struct cifs_tcon {
 	__le32 capabilities;
 	__u32 share_flags;
 	__u32 maximal_access;
-	__u32 vol_serial_number;
+	__le32 vol_serial_number;
 	__le64 vol_create_time;
 	__u64 snapshot_time; /* for timewarp tokens - timestamp of snapshot */
 	__u32 handle_timeout; /* persistent and durable handle timeout in ms */

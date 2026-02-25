@@ -373,7 +373,7 @@ cifs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	else
 		buf->f_namelen = PATH_MAX;
 
-	buf->f_fsid.val[0] = tcon->vol_serial_number;
+	buf->f_fsid.val[0] = le32_to_cpu(tcon->vol_serial_number);
 	/* are using part of create time for more randomness, see man statfs */
 	buf->f_fsid.val[1] =  (int)le64_to_cpu(tcon->vol_create_time);
 
