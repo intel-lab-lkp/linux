@@ -14,6 +14,7 @@
  *          (lots of bits borrowed from Ingo Molnar & Andrew Morton)
  */
 
+#include <linux/mermap.h>
 #include <linux/stddef.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
@@ -1365,15 +1366,72 @@ static inline bool should_skip_kasan_poison(struct page *page)
 	return page_kasan_tag(page) == KASAN_TAG_KERNEL;
 }
 
-static void kernel_init_pages(struct page *page, int numpages)
+#ifdef CONFIG_PAGE_ALLOC_UNMAPPED
+static inline bool pageblock_unmapped(struct page *page)
 {
-	int i;
+	return freetype_flags(get_pageblock_freetype(page)) & FREETYPE_UNMAPPED;
+}
 
-	/* s390's use of memset() could override KASAN redzones. */
-	kasan_disable_current();
-	for (i = 0; i < numpages; i++)
-		clear_highpage_kasan_tagged(page + i);
-	kasan_enable_current();
+static inline void clear_page_mermap(struct page *page, unsigned int numpages)
+{
+	void *mermap;
+
+	BUILD_BUG_ON(IS_ENABLED(CONFIG_HIGHMEM));
+
+	/* Fast path: single mapping (may fail under preemption). */
+	mermap = mermap_get(page, numpages << PAGE_SHIFT, PAGE_KERNEL_NOGLOBAL);
+	if (mermap) {
+		void *buf = kasan_reset_tag(mermap_addr(mermap));
+
+		for (int i = 0; i < numpages; i++)
+			clear_page(buf + (i << PAGE_SHIFT));
+		mermap_put(mermap);
+		return;
+	}
+
+	/* Slow path, map each page individually (always succeeds). */
+	for (int i = 0; i < numpages; i++) {
+		unsigned long flags;
+
+		local_irq_save(flags);
+		mermap = mermap_get_reserved(page + i, PAGE_KERNEL);
+		clear_page(kasan_reset_tag(mermap_addr(mermap)));
+		mermap_put(mermap);
+		local_irq_restore(flags);
+	}
+}
+#else
+static inline bool pageblock_unmapped(struct page *page)
+{
+	return false;
+}
+
+static inline void clear_page_mermap(struct page *page, unsigned int numpages)
+{
+	BUG();
+}
+#endif
+
+static void kernel_init_pages(struct page *page, unsigned int numpages)
+{
+	int num_blocks = DIV_ROUND_UP(numpages, pageblock_nr_pages);
+
+	for (int block = 0; block < num_blocks; block++) {
+		struct page *block_page = page + (block << pageblock_order);
+		bool unmapped = pageblock_unmapped(block_page);
+
+		/* s390's use of memset() could override KASAN redzones. */
+		kasan_disable_current();
+		if (unmapped) {
+			clear_page_mermap(page, numpages);
+		} else {
+			for (int i = 0; i < min(numpages, pageblock_nr_pages); i++)
+				clear_highpage_kasan_tagged(block_page + i);
+		}
+		kasan_enable_current();
+
+		numpages -= pageblock_nr_pages;
+	}
 }
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING
@@ -5284,8 +5342,8 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 	ac->nodemask = nodemask;
 	ac->freetype = gfp_freetype(gfp_mask);
 
-	/* Not implemented yet. */
-	if (freetype_flags(ac->freetype) & FREETYPE_UNMAPPED && gfp_mask & __GFP_ZERO)
+	if (freetype_flags(ac->freetype) & FREETYPE_UNMAPPED &&
+	    WARN_ON(!mermap_ready()))
 		return false;
 
 	if (cpusets_enabled()) {
