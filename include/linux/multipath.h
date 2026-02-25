@@ -33,10 +33,13 @@ struct mpath_disk {
 	struct device		*parent;
 };
 
+#define MPATH_DEVICE_SYSFS_ATTR_LINK      0
+
 struct mpath_device {
 	struct list_head	siblings;
 	atomic_t		nr_active;
 	struct gendisk		*disk;
+	unsigned long		flags;
 	int			numa_node;
 };
 
@@ -94,6 +97,21 @@ static inline enum mpath_iopolicy_e mpath_read_iopolicy(
 void mpath_synchronize(struct mpath_head *mpath_head);
 int mpath_set_iopolicy(const char *val, int *iopolicy);
 int mpath_get_iopolicy(char *buf, int iopolicy);
+bool mpath_clear_current_path(struct mpath_head *mpath_head,
+			struct mpath_device *mpath_device);
+void mpath_synchronize(struct mpath_head *mpath_head);
+void mpath_add_device(struct mpath_head *mpath_head,
+			struct mpath_device *mpath_device);
+void mpath_delete_device(struct mpath_head *mpath_head,
+			struct mpath_device *mpath_device);
+int mpath_call_for_device(struct mpath_head *mpath_head,
+			int (*cb)(struct mpath_device *mpath_device));
+void mpath_clear_paths(struct mpath_head *mpath_head);
+void mpath_revalidate_paths(struct mpath_disk *mpath_disk,
+	void (*cb)(struct mpath_device *mpath_device, sector_t capacity));
+void mpath_add_sysfs_link(struct mpath_disk *mpath_disk);
+void mpath_remove_sysfs_link(struct mpath_disk *mpath_disk,
+				struct mpath_device *mpath_device);
 int mpath_get_head(struct mpath_head *mpath_head);
 void mpath_put_head(struct mpath_head *mpath_head);
 void mpath_requeue_work(struct work_struct *work);

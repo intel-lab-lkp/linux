@@ -40,12 +40,107 @@ int mpath_get_iopolicy(char *buf, int iopolicy)
 }
 EXPORT_SYMBOL_GPL(mpath_get_iopolicy);
 
-
 void mpath_synchronize(struct mpath_head *mpath_head)
 {
 	synchronize_srcu(&mpath_head->srcu);
 }
 EXPORT_SYMBOL_GPL(mpath_synchronize);
+
+void mpath_add_device(struct mpath_head *mpath_head,
+			struct mpath_device *mpath_device)
+{
+	mutex_lock(&mpath_head->lock);
+	list_add_tail_rcu(&mpath_device->siblings, &mpath_head->dev_list);
+	mutex_unlock(&mpath_head->lock);
+}
+EXPORT_SYMBOL_GPL(mpath_add_device);
+
+void mpath_delete_device(struct mpath_head *mpath_head,
+			struct mpath_device *mpath_device)
+{
+	mutex_lock(&mpath_head->lock);
+	list_del_rcu(&mpath_device->siblings);
+	mutex_unlock(&mpath_head->lock);
+}
+EXPORT_SYMBOL_GPL(mpath_delete_device);
+
+int mpath_call_for_device(struct mpath_head *mpath_head,
+			int (*cb)(struct mpath_device *mpath_device))
+{
+	struct mpath_device *mpath_device;
+	int ret = -EWOULDBLOCK, srcu_idx;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	mpath_device = mpath_find_path(mpath_head);
+	if (mpath_device)
+		ret = cb(mpath_device);
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(mpath_call_for_device);
+
+bool mpath_clear_current_path(struct mpath_head *mpath_head,
+			struct mpath_device *mpath_device)
+{
+	bool changed = false;
+	int node;
+
+	if (!mpath_head)
+		goto out;
+
+	for_each_node(node) {
+		if (mpath_device ==
+			rcu_access_pointer(mpath_head->current_path[node])) {
+			rcu_assign_pointer(mpath_head->current_path[node],
+				NULL);
+			changed = true;
+		}
+	}
+out:
+	return changed;
+}
+EXPORT_SYMBOL_GPL(mpath_clear_current_path);
+
+static void mpath_revalidate_paths_iter(struct mpath_disk *mpath_disk,
+	void (*cb)(struct mpath_device *mpath_device, sector_t capacity))
+{
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	sector_t capacity = get_capacity(mpath_disk->disk);
+	struct mpath_device *mpath_device;
+	int srcu_idx;
+
+	if (!cb)
+		return;
+
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+	list_for_each_entry_srcu(mpath_device, &mpath_head->dev_list, siblings,
+				 srcu_read_lock_held(&mpath_head->srcu)) {
+		cb(mpath_device, capacity);
+	}
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+}
+
+void mpath_clear_paths(struct mpath_head *mpath_head)
+{
+	int node;
+
+	for_each_node(node)
+		rcu_assign_pointer(mpath_head->current_path[node], NULL);
+}
+EXPORT_SYMBOL_GPL(mpath_clear_paths);
+
+void mpath_revalidate_paths(struct mpath_disk *mpath_disk,
+	void (*cb)(struct mpath_device *mpath_device, sector_t capacity))
+{
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+
+	mpath_revalidate_paths_iter(mpath_disk, cb);
+	mpath_clear_paths(mpath_head);
+
+	kblockd_schedule_work(&mpath_head->requeue_work);
+}
+EXPORT_SYMBOL_GPL(mpath_revalidate_paths);
 
 static bool mpath_path_is_disabled(struct mpath_head *mpath_head,
 				struct mpath_device *mpath_device)
@@ -480,6 +575,8 @@ void mpath_device_set_live(struct mpath_disk *mpath_disk,
 		queue_work(mpath_wq, &mpath_disk->partition_scan_work);
 	}
 
+	mpath_add_sysfs_link(mpath_disk);
+
 	mutex_lock(&mpath_head->lock);
 	if (mpath_path_is_optimized(mpath_head, mpath_device)) {
 		int node, srcu_idx;
@@ -497,6 +594,76 @@ void mpath_device_set_live(struct mpath_disk *mpath_disk,
 	kblockd_schedule_work(&mpath_head->requeue_work);
 }
 EXPORT_SYMBOL_GPL(mpath_device_set_live);
+
+void mpath_add_sysfs_link(struct mpath_disk *mpath_disk)
+{
+	struct mpath_head *mpath_head = mpath_disk->mpath_head;
+	struct device *target;
+	struct device *source;
+	int rc, srcu_idx;
+	struct kobject *mpath_gd_kobj;
+	struct mpath_device *mpath_device;
+
+	/*
+	 * Ensure head disk node is already added otherwise we may get invalid
+	 * kobj for head disk node
+	 */
+	if (!test_bit(GD_ADDED, &mpath_disk->disk->state))
+		return;
+
+	mpath_gd_kobj = &disk_to_dev(mpath_disk->disk)->kobj;
+	srcu_idx = srcu_read_lock(&mpath_head->srcu);
+
+	list_for_each_entry_srcu(mpath_device, &mpath_head->dev_list, siblings,
+				 srcu_read_lock_held(&mpath_head->srcu)) {
+		if (!test_bit(GD_ADDED, &mpath_device->disk->state))
+			continue;
+
+		if (test_and_set_bit(MPATH_DEVICE_SYSFS_ATTR_LINK, &mpath_device->flags))
+			continue;
+
+		target = disk_to_dev(mpath_device->disk);
+		source = disk_to_dev(mpath_disk->disk);
+		/*
+		 * Create sysfs link from head gendisk kobject @kobj to the
+		 * ns path gendisk kobject @target->kobj.
+		 */
+		rc = sysfs_add_link_to_group(mpath_gd_kobj, "multipath",
+				&target->kobj, dev_name(target));
+
+		if (unlikely(rc)) {
+			dev_err(disk_to_dev(mpath_disk->disk),
+					"failed to create link to %s rc=%d\n",
+					dev_name(target), rc);
+			clear_bit(MPATH_DEVICE_SYSFS_ATTR_LINK, &mpath_device->flags);
+		} else {
+			dev_info(source, "Created multipath sysfs link to %s\n",
+					mpath_device->disk->disk_name);
+		}
+	}
+
+	srcu_read_unlock(&mpath_head->srcu, srcu_idx);
+}
+EXPORT_SYMBOL_GPL(mpath_add_sysfs_link);
+
+void mpath_remove_sysfs_link(struct mpath_disk *mpath_disk,
+				struct mpath_device *mpath_device)
+{
+	struct device *target;
+	struct kobject *mpath_gd_kobj;
+
+	if (!test_bit(MPATH_DEVICE_SYSFS_ATTR_LINK, &mpath_device->flags))
+		return;
+
+	target = disk_to_dev(mpath_device->disk);
+	mpath_gd_kobj = &disk_to_dev(mpath_disk->disk)->kobj;
+
+	sysfs_remove_link_from_group(mpath_gd_kobj, "multipath",
+			dev_name(target));
+
+	clear_bit(MPATH_DEVICE_SYSFS_ATTR_LINK, &mpath_device->flags);
+}
+EXPORT_SYMBOL_GPL(mpath_remove_sysfs_link);
 
 struct mpath_head *mpath_alloc_head(void)
 {
