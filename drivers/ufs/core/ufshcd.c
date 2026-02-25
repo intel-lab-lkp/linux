@@ -6966,10 +6966,17 @@ static irqreturn_t ufshcd_update_uic_error(struct ufs_hba *hba)
 	}
 
 	reg = ufshcd_readl(hba, REG_UIC_ERROR_CODE_DME);
-	if ((reg & UIC_DME_ERROR) &&
-	    (reg & UIC_DME_ERROR_CODE_MASK)) {
+	if (reg & UIC_DME_ERROR) {
 		ufshcd_update_evt_hist(hba, UFS_EVT_DME_ERR, reg);
-		hba->uic_error |= UFSHCD_UIC_DME_ERROR;
+
+		if (reg & UIC_DME_ERROR_CODE_MASK)
+			hba->uic_error |= UFSHCD_UIC_DME_ERROR;
+
+		if (reg & UIC_DME_QOS_MASK) {
+			atomic_set(&hba->dme_qos_notification, reg & UIC_DME_QOS_MASK);
+			sysfs_notify_dirent_safe(hba->dme_qos_sysfs_handle);
+		}
+
 		retval |= IRQ_HANDLED;
 	}
 
@@ -11052,6 +11059,8 @@ initialized:
 		goto out_disable;
 
 	ufs_sysfs_add_nodes(hba->dev);
+	hba->dme_qos_sysfs_handle = sysfs_get_dirent(hba->dev->kobj.sd,
+						     "dme_qos_notification");
 	async_schedule(ufshcd_async_scan, hba);
 
 	device_enable_async_suspend(dev);
