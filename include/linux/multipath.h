@@ -66,6 +66,7 @@ struct mpath_head_template {
 };
 
 #define MPATH_HEAD_DISK_LIVE 			0
+#define MPATH_HEAD_QUEUE_IF_NO_PATH		1
 
 struct mpath_head {
 	struct srcu_struct	srcu;
@@ -80,6 +81,10 @@ struct mpath_head {
 
 	struct cdev		cdev;
 	struct device		cdev_device;
+
+	struct delayed_work	remove_work;
+	unsigned int		delayed_removal_secs;
+	struct module		*drv_module;
 
 	unsigned long		flags;
 	struct mpath_device __rcu 		*current_path[MAX_NUMNODES];
@@ -132,6 +137,7 @@ void mpath_put_head(struct mpath_head *mpath_head);
 void mpath_requeue_work(struct work_struct *work);
 struct mpath_head *mpath_alloc_head(void);
 void mpath_put_disk(struct mpath_disk *mpath_disk);
+bool mpath_can_remove_head(struct mpath_head *mpath_head);
 void mpath_remove_disk(struct mpath_disk *mpath_disk);
 void mpath_unregister_disk(struct mpath_disk *mpath_disk);
 struct mpath_disk *mpath_alloc_head_disk(struct queue_limits *lim,
@@ -139,6 +145,10 @@ struct mpath_disk *mpath_alloc_head_disk(struct queue_limits *lim,
 void mpath_device_set_live(struct mpath_disk *mpath_disk,
 			struct mpath_device *mpath_device);
 void mpath_unregister_disk(struct mpath_disk *mpath_disk);
+ssize_t mpath_delayed_removal_secs_show(struct mpath_head *mpath_head,
+			char *buf);
+ssize_t mpath_delayed_removal_secs_store(struct mpath_head *mpath_head,
+			const char *buf, size_t count);
 
 static inline bool is_mpath_head(struct gendisk *disk)
 {
@@ -148,6 +158,13 @@ static inline bool is_mpath_head(struct gendisk *disk)
 static inline bool mpath_qd_iopolicy(struct mpath_iopolicy *mpath_iopolicy)
 {
 	return mpath_read_iopolicy(mpath_iopolicy) == MPATH_IOPOLICY_QD;
+}
+
+static inline bool mpath_head_queue_if_no_path(struct mpath_head *mpath_head)
+{
+	if (test_bit(MPATH_HEAD_QUEUE_IF_NO_PATH, &mpath_head->flags))
+		return true;
+	return false;
 }
 
 #endif // _LIBMULTIPATH_H
