@@ -3660,6 +3660,23 @@ static int pre_svm_run(struct kvm_vcpu *vcpu)
 	if (svm->current_vmcb->asid_generation != sd->asid_generation)
 		new_asid(svm, sd);
 
+	/*
+	 * If nrips is supported in hardware but not exposed to L1, stuff the
+	 * actual L2 RIP to emulate what a nrips=0 CPU would do (L1 is
+	 * responsible for advancing RIP prior to injecting the event). Once L2
+	 * runs after L1 executes VMRUN, NextRIP is updated by the CPU and/or
+	 * KVM, and this is no longer needed.
+	 *
+	 * This is done here (as opposed to when preparing vmcb02) to use the
+	 * most up-to-date value of RIP regardless of the order of restoring
+	 * registers and nested state in the vCPU save+restore path.
+	 */
+	if (is_guest_mode(vcpu) && svm->nested.nested_run_pending) {
+		if (boot_cpu_has(X86_FEATURE_NRIPS) &&
+		    !guest_cpu_cap_has(vcpu, X86_FEATURE_NRIPS))
+			svm->vmcb->control.next_rip = kvm_rip_read(vcpu);
+	}
+
 	return 0;
 }
 
