@@ -1275,6 +1275,8 @@ struct kvm_x86_state *vcpu_save_state(struct kvm_vcpu *vcpu)
 	return state;
 }
 
+#define LOAD_REGS_BEFORE_NESTED 1
+
 void vcpu_load_state(struct kvm_vcpu *vcpu, struct kvm_x86_state *state)
 {
 	vcpu_sregs_set(vcpu, &state->sregs);
@@ -1287,10 +1289,14 @@ void vcpu_load_state(struct kvm_vcpu *vcpu, struct kvm_x86_state *state)
 	vcpu_events_set(vcpu, &state->events);
 	vcpu_mp_state_set(vcpu, &state->mp_state);
 	vcpu_debugregs_set(vcpu, &state->debugregs);
-	vcpu_regs_set(vcpu, &state->regs);
+	if (LOAD_REGS_BEFORE_NESTED)
+		vcpu_regs_set(vcpu, &state->regs);
 
 	if (state->nested.size)
 		vcpu_nested_state_set(vcpu, &state->nested);
+
+	if (!LOAD_REGS_BEFORE_NESTED)
+		vcpu_regs_set(vcpu, &state->regs);
 }
 
 void kvm_x86_state_cleanup(struct kvm_x86_state *state)
