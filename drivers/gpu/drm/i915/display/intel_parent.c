@@ -23,6 +23,23 @@
 #include "intel_display_core.h"
 #include "intel_parent.h"
 
+/* dpt */
+struct i915_address_space *intel_parent_dpt_create(struct intel_display *display,
+						   struct drm_gem_object *obj,
+						   size_t size)
+{
+	if (display->parent->dpt)
+		return display->parent->dpt->create(obj, size);
+
+	return NULL;
+}
+
+void intel_parent_dpt_destroy(struct intel_display *display, struct i915_address_space *vm)
+{
+	if (display->parent->dpt)
+		display->parent->dpt->destroy(vm);
+}
+
 /* hdcp */
 ssize_t intel_parent_hdcp_gsc_msg_send(struct intel_display *display,
 				       struct intel_hdcp_gsc_context *gsc_context,

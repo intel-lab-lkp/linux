@@ -7,11 +7,19 @@
 #include <linux/types.h>
 
 struct dma_fence;
+struct drm_gem_object;
 struct drm_scanout_buffer;
+struct i915_address_space;
 struct intel_display;
 struct intel_hdcp_gsc_context;
 struct intel_panic;
 struct intel_stolen_node;
+
+/* dpt */
+struct i915_address_space *intel_parent_dpt_create(struct intel_display *display,
+						   struct drm_gem_object *obj,
+						   size_t size);
+void intel_parent_dpt_destroy(struct intel_display *display, struct i915_address_space *vm);
 
 /* hdcp */
 ssize_t intel_parent_hdcp_gsc_msg_send(struct intel_display *display,

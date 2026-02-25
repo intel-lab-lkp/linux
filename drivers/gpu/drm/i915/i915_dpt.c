@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_print.h>
+#include <drm/intel/display_parent_interface.h>
 
 #include "display/intel_display_core.h"
 #include "display/intel_display_rpm.h"
@@ -242,8 +243,7 @@ void intel_dpt_suspend(struct intel_display *display)
 	mutex_unlock(&display->drm->mode_config.fb_lock);
 }
 
-struct i915_address_space *
-intel_dpt_create(struct drm_gem_object *obj, size_t size)
+static struct i915_address_space *i915_dpt_create(struct drm_gem_object *obj, size_t size)
 {
 	struct drm_i915_private *i915 = to_i915(obj->dev);
 	struct drm_i915_gem_object *dpt_obj;
@@ -308,7 +308,7 @@ intel_dpt_create(struct drm_gem_object *obj, size_t size)
 	return &dpt->vm;
 }
 
-void intel_dpt_destroy(struct i915_address_space *vm)
+static void i915_dpt_destroy(struct i915_address_space *vm)
 {
 	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
 
@@ -320,3 +320,8 @@ u64 intel_dpt_offset(struct i915_vma *dpt_vma)
 {
 	return i915_vma_offset(dpt_vma);
 }
+
+const struct intel_display_dpt_interface i915_display_dpt_interface = {
+	.create = i915_dpt_create,
+	.destroy = i915_dpt_destroy,
+};

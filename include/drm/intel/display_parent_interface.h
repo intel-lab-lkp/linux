@@ -13,6 +13,7 @@ struct drm_framebuffer;
 struct drm_gem_object;
 struct drm_plane_state;
 struct drm_scanout_buffer;
+struct i915_address_space;
 struct i915_vma;
 struct intel_dsb_buffer;
 struct intel_hdcp_gsc_context;
@@ -22,6 +23,11 @@ struct intel_stolen_node;
 struct ref_tracker;
 
 /* Keep struct definitions sorted */
+
+struct intel_display_dpt_interface {
+	struct i915_address_space *(*create)(struct drm_gem_object *obj, size_t size);
+	void (*destroy)(struct i915_address_space *vm);
+};
 
 struct intel_display_dsb_interface {
 	u32 (*ggtt_offset)(struct intel_dsb_buffer *dsb_buf);
@@ -124,6 +130,9 @@ struct intel_display_stolen_interface {
  * check the optional pointers.
  */
 struct intel_display_parent_interface {
+	/** @dsb: DPT interface. Optional. */
+	const struct intel_display_dpt_interface *dpt;
+
 	/** @dsb: DSB buffer interface */
 	const struct intel_display_dsb_interface *dsb;
 
