@@ -455,6 +455,26 @@ void ext4_fc_bytelog_release(struct super_block *sb)
 	memset(&sbi->s_fc_bytelog, 0, sizeof(sbi->s_fc_bytelog));
 }
 
+void ext4_fc_bytelog_anchor_to_disk(struct ext4_fc_bytelog_entry *dst,
+				    const struct ext4_fc_bytelog_anchor *src)
+{
+	dst->fc_tid = cpu_to_le32(src->tid);
+	dst->fc_head = cpu_to_le64(src->head);
+	dst->fc_tail = cpu_to_le64(src->tail);
+	dst->fc_seq = cpu_to_le64(src->seq);
+	dst->fc_crc = cpu_to_le32(src->crc);
+}
+
+void ext4_fc_bytelog_anchor_from_disk(struct ext4_fc_bytelog_anchor *dst,
+				      const struct ext4_fc_bytelog_entry *src)
+{
+	dst->tid = le32_to_cpu(src->fc_tid);
+	dst->head = le64_to_cpu(src->fc_head);
+	dst->tail = le64_to_cpu(src->fc_tail);
+	dst->seq = le64_to_cpu(src->fc_seq);
+	dst->crc = le32_to_cpu(src->fc_crc);
+}
+
 void ext4_fc_bytelog_reset(struct super_block *sb, bool full)
 {
 	struct ext4_fc_bytelog *log = &EXT4_SB(sb)->s_fc_bytelog;

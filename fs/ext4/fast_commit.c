@@ -723,6 +723,12 @@ static u8 *ext4_fc_reserve_space(struct super_block *sb, int len, u32 *crc)
 	 * leaving enough space for a PAD tlv.
 	 */
 	remaining = bsize - EXT4_FC_TAG_BASE_LEN - off;
+	if (ext4_fc_bytelog_active(sbi) && len > remaining) {
+		ext4_fc_mark_ineligible(sb,
+					EXT4_FC_REASON_BYTELOG_TLV_OVERFLOW,
+					NULL);
+		return NULL;
+	}
 	if (len <= remaining) {
 		sbi->s_fc_bytes += len;
 		return dst;
@@ -806,6 +812,31 @@ static bool ext4_fc_add_tlv(struct super_block *sb, u16 tag, u16 len, u8 *val,
 	struct ext4_fc_tl tl;
 	u8 *dst;
 
+	if (ext4_fc_bytelog_active(EXT4_SB(sb)) &&
+	    (tag == EXT4_FC_TAG_ADD_RANGE || tag == EXT4_FC_TAG_DEL_RANGE ||
+	     tag == EXT4_FC_TAG_LINK || tag == EXT4_FC_TAG_UNLINK ||
+	     tag == EXT4_FC_TAG_CREAT || tag == EXT4_FC_TAG_INODE)) {
+		struct ext4_fc_bytelog_vec vecs[2];
+		int ret;
+
+		tl.fc_tag = cpu_to_le16(tag);
+		tl.fc_len = cpu_to_le16(len);
+		vecs[0].base = &tl;
+		vecs[0].len = sizeof(tl);
+		vecs[1].base = val;
+		vecs[1].len = len;
+
+		ret = ext4_fc_bytelog_append_vec(sb, tag, vecs,
+						 ARRAY_SIZE(vecs));
+		if (!ret)
+			return true;
+		if (ret == -ENOSPC)
+			ext4_fc_mark_ineligible(sb,
+						EXT4_FC_REASON_BYTELOG_TLV_OVERFLOW,
+						NULL);
+		return false;
+	}
+
 	dst = ext4_fc_reserve_space(sb, EXT4_FC_TAG_BASE_LEN + len, crc);
 	if (!dst)
 		return false;
@@ -819,6 +850,17 @@ static bool ext4_fc_add_tlv(struct super_block *sb, u16 tag, u16 len, u8 *val,
 	return true;
 }
 
+static bool ext4_fc_add_bytelog_anchor_tlv(struct super_block *sb,
+					   struct ext4_fc_bytelog_anchor *anchor,
+					   u32 *crc)
+{
+	struct ext4_fc_bytelog_entry entry;
+
+	ext4_fc_bytelog_anchor_to_disk(&entry, anchor);
+	return ext4_fc_add_tlv(sb, EXT4_FC_TAG_DAX_BYTELOG_ANCHOR,
+			       sizeof(entry), (u8 *)&entry, crc);
+}
+
 /* Same as above, but adds dentry tlv. */
 static bool ext4_fc_add_dentry_tlv(struct super_block *sb, u32 *crc,
 				   struct ext4_fc_dentry_update *fc_dentry)
@@ -826,9 +868,40 @@ static bool ext4_fc_add_dentry_tlv(struct super_block *sb, u32 *crc,
 	struct ext4_fc_dentry_info fcd;
 	struct ext4_fc_tl tl;
 	int dlen = fc_dentry->fcd_name.name.len;
-	u8 *dst = ext4_fc_reserve_space(sb,
-			EXT4_FC_TAG_BASE_LEN + sizeof(fcd) + dlen, crc);
+	u8 *dst;
 
+	if (ext4_fc_bytelog_active(EXT4_SB(sb)) &&
+	    (fc_dentry->fcd_op == EXT4_FC_TAG_LINK ||
+	     fc_dentry->fcd_op == EXT4_FC_TAG_UNLINK ||
+	     fc_dentry->fcd_op == EXT4_FC_TAG_CREAT)) {
+		struct ext4_fc_bytelog_vec vecs[3];
+		int ret;
+
+		fcd.fc_parent_ino = cpu_to_le32(fc_dentry->fcd_parent);
+		fcd.fc_ino = cpu_to_le32(fc_dentry->fcd_ino);
+		tl.fc_tag = cpu_to_le16(fc_dentry->fcd_op);
+		tl.fc_len = cpu_to_le16(sizeof(fcd) + dlen);
+
+		vecs[0].base = &tl;
+		vecs[0].len = sizeof(tl);
+		vecs[1].base = &fcd;
+		vecs[1].len = sizeof(fcd);
+		vecs[2].base = fc_dentry->fcd_name.name.name;
+		vecs[2].len = dlen;
+
+		ret = ext4_fc_bytelog_append_vec(sb, fc_dentry->fcd_op, vecs,
+						 ARRAY_SIZE(vecs));
+		if (!ret)
+			return true;
+		if (ret == -ENOSPC)
+			ext4_fc_mark_ineligible(sb,
+						EXT4_FC_REASON_BYTELOG_TLV_OVERFLOW,
+						NULL);
+		return false;
+	}
+
+	dst = ext4_fc_reserve_space(sb, EXT4_FC_TAG_BASE_LEN + sizeof(fcd) +
+				    dlen, crc);
 	if (!dst)
 		return false;
 
@@ -871,6 +944,25 @@ static int ext4_fc_write_inode(struct inode *inode, u32 *crc)
 	fc_inode.fc_ino = cpu_to_le32(inode->i_ino);
 	tl.fc_tag = cpu_to_le16(EXT4_FC_TAG_INODE);
 	tl.fc_len = cpu_to_le16(inode_len + sizeof(fc_inode.fc_ino));
+
+	if (ext4_fc_bytelog_active(EXT4_SB(inode->i_sb))) {
+		struct ext4_fc_bytelog_vec vecs[3];
+
+		vecs[0].base = &tl;
+		vecs[0].len = sizeof(tl);
+		vecs[1].base = &fc_inode.fc_ino;
+		vecs[1].len = sizeof(fc_inode.fc_ino);
+		vecs[2].base = ext4_raw_inode(&iloc);
+		vecs[2].len = inode_len;
+
+		ret = ext4_fc_bytelog_append_vec(inode->i_sb, EXT4_FC_TAG_INODE,
+						 vecs, ARRAY_SIZE(vecs));
+		if (ret == -ENOSPC)
+			ext4_fc_mark_ineligible(inode->i_sb,
+						EXT4_FC_REASON_BYTELOG_TLV_OVERFLOW,
+						NULL);
+		goto err;
+	}
 
 	ret = -ECANCELED;
 	dst = ext4_fc_reserve_space(inode->i_sb,
@@ -1139,6 +1231,8 @@ static int ext4_fc_perform_commit(journal_t *journal)
 	}
 
 	/* Step 6.2: Now write all the dentry updates. */
+	if (ext4_fc_bytelog_active(sbi))
+		ext4_fc_bytelog_begin_commit(sb);
 	ret = ext4_fc_commit_dentry_updates(journal, &crc);
 	if (ret)
 		goto out;
@@ -1155,6 +1249,22 @@ static int ext4_fc_perform_commit(journal_t *journal)
 		ret = ext4_fc_write_inode(inode, &crc);
 		if (ret)
 			goto out;
+	}
+
+	if (ext4_fc_bytelog_active(sbi)) {
+		struct ext4_fc_bytelog_anchor anchor;
+
+		ret = ext4_fc_bytelog_end_commit(sb);
+		if (ret)
+			goto out;
+		if (sbi->s_fc_bytelog.seq) {
+			ext4_fc_bytelog_build_anchor(sb, &anchor,
+						     sbi->s_journal->j_running_transaction->t_tid);
+			if (!ext4_fc_add_bytelog_anchor_tlv(sb, &anchor, &crc)) {
+				ret = -ENOSPC;
+				goto out;
+			}
+		}
 	}
 	/* Step 6.4: Finally write tail tag to conclude this fast commit. */
 	ret = ext4_fc_write_tail(sb, crc);
@@ -1254,6 +1364,12 @@ restart_fc:
 	else
 		journal_ioprio = EXT4_DEF_JOURNAL_IOPRIO;
 	set_task_ioprio(current, journal_ioprio);
+
+	if (ext4_fc_bytelog_active(sbi)) {
+		journal->j_fc_off = 0;
+		sbi->s_fc_bytes = 0;
+	}
+
 	fc_bufs_before = (sbi->s_fc_bytes + bsize - 1) / bsize;
 	ret = ext4_fc_perform_commit(journal);
 	if (ret < 0) {
@@ -1359,8 +1475,9 @@ static void ext4_fc_cleanup(journal_t *journal, int full, tid_t tid)
 		ext4_clear_mount_flag(sb, EXT4_MF_FC_INELIGIBLE);
 	}
 
-	if (full)
+	if (full || ext4_fc_bytelog_active(sbi))
 		sbi->s_fc_bytes = 0;
+	ext4_fc_bytelog_reset(sb, full);
 	ext4_fc_unlock(sb, alloc_ctx);
 	trace_ext4_fc_stats(sb);
 }
@@ -2307,6 +2424,7 @@ static const char * const fc_ineligible_reasons[] = {
 	[EXT4_FC_REASON_FALLOC_RANGE] = "Falloc range op",
 	[EXT4_FC_REASON_INODE_JOURNAL_DATA] = "Data journalling",
 	[EXT4_FC_REASON_ENCRYPTED_FILENAME] = "Encrypted filename",
+	[EXT4_FC_REASON_BYTELOG_TLV_OVERFLOW] = "ByteLog TLV overflow",
 	[EXT4_FC_REASON_MIGRATE] = "Inode format migration",
 	[EXT4_FC_REASON_VERITY] = "fs-verity enable",
 	[EXT4_FC_REASON_MOVE_EXT] = "Move extents",

@@ -9,6 +9,7 @@
 struct super_block;
 struct journal_s;
 struct ext4_sb_info;
+struct ext4_fc_bytelog_entry;
 
 #define EXT4_FC_BYTELOG_MAGIC			0x4c424346 /* "FCBL" */
 #define EXT4_FC_BYTELOG_VERSION			1
@@ -109,6 +110,10 @@ int ext4_fc_bytelog_append_vec(struct super_block *sb, u16 tag,
 void ext4_fc_bytelog_build_anchor(struct super_block *sb,
 				  struct ext4_fc_bytelog_anchor *anchor,
 				  u32 tid);
+void ext4_fc_bytelog_anchor_to_disk(struct ext4_fc_bytelog_entry *dst,
+				    const struct ext4_fc_bytelog_anchor *src);
+void ext4_fc_bytelog_anchor_from_disk(struct ext4_fc_bytelog_anchor *dst,
+				      const struct ext4_fc_bytelog_entry *src);
 
 static inline bool ext4_fc_bytelog_record_committed(const struct ext4_fc_bytelog_hdr *hdr)
 {

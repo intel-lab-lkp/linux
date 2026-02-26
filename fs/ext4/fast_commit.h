@@ -18,6 +18,7 @@
 #define EXT4_FC_TAG_PAD			0x0007
 #define EXT4_FC_TAG_TAIL		0x0008
 #define EXT4_FC_TAG_HEAD		0x0009
+#define EXT4_FC_TAG_DAX_BYTELOG_ANCHOR	0x000a
 
 #define EXT4_FC_SUPPORTED_FEATURES	0x0
 
@@ -70,6 +71,15 @@ struct ext4_fc_tail {
 	__le32 fc_crc;
 };
 
+/* Value structure for tag EXT4_FC_TAG_DAX_BYTELOG_ANCHOR. */
+struct ext4_fc_bytelog_entry {
+	__le32 fc_tid;
+	__le64 fc_head;
+	__le64 fc_tail;
+	__le64 fc_seq;
+	__le32 fc_crc;
+};
+
 /* Tag base length */
 #define EXT4_FC_TAG_BASE_LEN (sizeof(struct ext4_fc_tl))
 
@@ -97,6 +107,7 @@ enum {
 	EXT4_FC_REASON_FALLOC_RANGE,
 	EXT4_FC_REASON_INODE_JOURNAL_DATA,
 	EXT4_FC_REASON_ENCRYPTED_FILENAME,
+	EXT4_FC_REASON_BYTELOG_TLV_OVERFLOW,
 	EXT4_FC_REASON_MIGRATE,
 	EXT4_FC_REASON_VERITY,
 	EXT4_FC_REASON_MOVE_EXT,
@@ -181,6 +192,8 @@ static inline const char *tag2str(__u16 tag)
 		return "TAIL";
 	case EXT4_FC_TAG_HEAD:
 		return "HEAD";
+	case EXT4_FC_TAG_DAX_BYTELOG_ANCHOR:
+		return "BYTELOG_ANCHOR";
 	default:
 		return "ERROR";
 	}
