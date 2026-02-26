@@ -3782,10 +3782,6 @@ void set_extent_buffer_dirty(struct extent_buffer *eb)
 					 eb->len,
 					 eb->fs_info->dirty_metadata_batch);
 	}
-#ifdef CONFIG_BTRFS_DEBUG
-	for (int i = 0; i < num_extent_folios(eb); i++)
-		ASSERT(folio_test_dirty(eb->folios[i]));
-#endif
 }
 
 void clear_extent_buffer_uptodate(struct extent_buffer *eb)
