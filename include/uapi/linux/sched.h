@@ -37,6 +37,7 @@
 #define CLONE_CLEAR_SIGHAND 0x100000000ULL /* Clear any signal handler and reset to SIG_DFL. */
 #define CLONE_INTO_CGROUP 0x200000000ULL /* Clone into a specific cgroup given the right permissions. */
 #define CLONE_AUTOREAP 0x400000000ULL /* Auto-reap child on exit. */
+#define CLONE_NNP 0x1000000000ULL /* Set no_new_privs on child. */
 
 /*
  * cloning flags intersect with CSIGNAL so can be used with unshare and clone3
