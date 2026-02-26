@@ -11,6 +11,7 @@
 #include <linux/const.h>
 #include <linux/types.h>
 #include <linux/compiler.h>
+#include <linux/stddef.h>
 #include <linux/ioctl.h>
 #include <asm/kvm.h>
 
@@ -1045,9 +1046,11 @@ struct kvm_irq_routing_entry {
 };
 
 struct kvm_irq_routing {
-	__u32 nr;
-	__u32 flags;
-	struct kvm_irq_routing_entry entries[];
+	__struct_group(kvm_irq_routing_hdr, hdr, /* no attrs */,
+		__u32 nr;
+		__u32 flags;
+	);
+	__DECLARE_FLEX_ARRAY(struct kvm_irq_routing_entry, entries);
 };
 
 #define KVM_IRQFD_FLAG_DEASSIGN (1 << 0)
