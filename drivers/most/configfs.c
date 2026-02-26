@@ -8,6 +8,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/init.h>
 #include <linux/configfs.h>
 #include <linux/most.h>
@@ -159,7 +160,7 @@ static ssize_t mdev_link_destroy_link_store(struct config_item *item,
 
 static ssize_t mdev_link_direction_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%s\n", to_mdev_link(item)->direction);
+	return sysfs_emit(page, "%s\n", to_mdev_link(item)->direction);
 }
 
 static ssize_t mdev_link_direction_store(struct config_item *item,
@@ -177,7 +178,7 @@ static ssize_t mdev_link_direction_store(struct config_item *item,
 
 static ssize_t mdev_link_datatype_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%s\n", to_mdev_link(item)->datatype);
+	return sysfs_emit(page, "%s\n", to_mdev_link(item)->datatype);
 }
 
 static ssize_t mdev_link_datatype_store(struct config_item *item,
@@ -196,7 +197,7 @@ static ssize_t mdev_link_datatype_store(struct config_item *item,
 
 static ssize_t mdev_link_device_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%s\n", to_mdev_link(item)->device);
+	return sysfs_emit(page, "%s\n", to_mdev_link(item)->device);
 }
 
 static ssize_t mdev_link_device_store(struct config_item *item,
@@ -211,7 +212,7 @@ static ssize_t mdev_link_device_store(struct config_item *item,
 
 static ssize_t mdev_link_channel_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%s\n", to_mdev_link(item)->channel);
+	return sysfs_emit(page, "%s\n", to_mdev_link(item)->channel);
 }
 
 static ssize_t mdev_link_channel_store(struct config_item *item,
@@ -226,7 +227,7 @@ static ssize_t mdev_link_channel_store(struct config_item *item,
 
 static ssize_t mdev_link_comp_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%s\n", to_mdev_link(item)->comp);
+	return sysfs_emit(page, "%s\n", to_mdev_link(item)->comp);
 }
 
 static ssize_t mdev_link_comp_store(struct config_item *item,
@@ -241,8 +242,7 @@ static ssize_t mdev_link_comp_store(struct config_item *item,
 
 static ssize_t mdev_link_comp_params_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%s\n",
-			to_mdev_link(item)->comp_params);
+	return sysfs_emit(page, "%s\n", to_mdev_link(item)->comp_params);
 }
 
 static ssize_t mdev_link_comp_params_store(struct config_item *item,
@@ -257,8 +257,7 @@ static ssize_t mdev_link_comp_params_store(struct config_item *item,
 
 static ssize_t mdev_link_num_buffers_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%d\n",
-			to_mdev_link(item)->num_buffers);
+	return sysfs_emit(page, "%d\n", to_mdev_link(item)->num_buffers);
 }
 
 static ssize_t mdev_link_num_buffers_store(struct config_item *item,
@@ -275,8 +274,7 @@ static ssize_t mdev_link_num_buffers_store(struct config_item *item,
 
 static ssize_t mdev_link_buffer_size_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%d\n",
-			to_mdev_link(item)->buffer_size);
+	return sysfs_emit(page, "%d\n", to_mdev_link(item)->buffer_size);
 }
 
 static ssize_t mdev_link_buffer_size_store(struct config_item *item,
@@ -294,8 +292,7 @@ static ssize_t mdev_link_buffer_size_store(struct config_item *item,
 static ssize_t mdev_link_subbuffer_size_show(struct config_item *item,
 					     char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%d\n",
-			to_mdev_link(item)->subbuffer_size);
+	return sysfs_emit(page, "%d\n", to_mdev_link(item)->subbuffer_size);
 }
 
 static ssize_t mdev_link_subbuffer_size_store(struct config_item *item,
@@ -313,8 +310,7 @@ static ssize_t mdev_link_subbuffer_size_store(struct config_item *item,
 static ssize_t mdev_link_packets_per_xact_show(struct config_item *item,
 					       char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%d\n",
-			to_mdev_link(item)->packets_per_xact);
+	return sysfs_emit(page, "%d\n", to_mdev_link(item)->packets_per_xact);
 }
 
 static ssize_t mdev_link_packets_per_xact_store(struct config_item *item,
@@ -331,7 +327,7 @@ static ssize_t mdev_link_packets_per_xact_store(struct config_item *item,
 
 static ssize_t mdev_link_dbr_size_show(struct config_item *item, char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%d\n", to_mdev_link(item)->dbr_size);
+	return sysfs_emit(page, "%d\n", to_mdev_link(item)->dbr_size);
 }
 
 static ssize_t mdev_link_dbr_size_store(struct config_item *item,
