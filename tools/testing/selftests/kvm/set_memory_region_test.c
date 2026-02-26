@@ -107,31 +107,42 @@ static void wait_for_vcpu(void)
 	usleep(100000);
 }
 
-static struct kvm_vm *spawn_vm(struct kvm_vcpu **vcpu, pthread_t *vcpu_thread,
-			       void *guest_code)
+static void vm_userspace_mem_region_add_map(struct kvm_vm *vm,
+		uint64_t addr, uint32_t slot, size_t size, uint32_t flags)
 {
-	struct kvm_vm *vm;
 	uint64_t *hva;
 	uint64_t gpa;
 
-	vm = vm_create_with_one_vcpu(vcpu, guest_code);
-
 	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS_THP,
-				    MEM_REGION_GPA, MEM_REGION_SLOT,
-				    MEM_REGION_SIZE / getpagesize(), 0);
+				    addr, slot,
+				    size / getpagesize(), flags);
 
 	/*
 	 * Allocate and map two pages so that the GPA accessed by guest_code()
 	 * stays valid across the memslot move.
 	 */
-	gpa = vm_phy_pages_alloc(vm, 2, MEM_REGION_GPA, MEM_REGION_SLOT);
-	TEST_ASSERT(gpa == MEM_REGION_GPA, "Failed vm_phy_pages_alloc\n");
+	gpa = vm_phy_pages_alloc(vm, 2, addr, slot);
+	TEST_ASSERT(gpa == addr, "Failed vm_phy_pages_alloc\n");
 
-	virt_map(vm, MEM_REGION_GPA, MEM_REGION_GPA, 2);
+	virt_map(vm, addr, addr, 2);
 
 	/* Ditto for the host mapping so that both pages can be zeroed. */
 	hva = addr_gpa2hva(vm, MEM_REGION_GPA);
 	memset(hva, 0, 2 * 4096);
+}
+
+static struct kvm_vm *spawn_vm(struct kvm_vcpu **vcpu, pthread_t *vcpu_thread,
+			       void *guest_code)
+{
+	struct kvm_vm *vm;
+
+	vm = vm_create_with_one_vcpu(vcpu, guest_code);
+
+	vm_userspace_mem_region_add_map(vm,
+					MEM_REGION_GPA,
+					MEM_REGION_SLOT,
+					MEM_REGION_SIZE,
+					0);
 
 	pthread_create(vcpu_thread, NULL, vcpu_worker, *vcpu);
 
