@@ -3965,7 +3965,7 @@ static int find_free_extent_unclustered(struct btrfs_block_group *bg,
 		free_space_ctl = bg->free_space_ctl;
 		spin_lock(&free_space_ctl->tree_lock);
 		if (free_space_ctl->free_space <
-		    ffe_ctl->num_bytes + ffe_ctl->empty_cluster +
+		    ffe_ctl->num_bytes +
 		    ffe_ctl->empty_size) {
 			ffe_ctl->total_free_space = max_t(u64,
 					ffe_ctl->total_free_space,
