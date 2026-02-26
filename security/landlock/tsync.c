@@ -486,6 +486,13 @@ int landlock_restrict_sibling_threads(const struct cred *old_cred,
 	shared_ctx.set_no_new_privs = task_no_new_privs(current);
 
 	/*
+	 * Serialize concurrent TSYNC operations to prevent deadlocks when multiple
+	 * threads call landlock_restrict_self() simultaneously.
+	 */
+	if (!down_write_trylock(&current->signal->exec_update_lock))
+		return -ERESTARTNOINTR;
+
+	/*
 	 * We schedule a pseudo-signal task_work for each of the calling task's
 	 * sibling threads.  In the task work, each thread:
 	 *
@@ -594,6 +601,7 @@ int landlock_restrict_sibling_threads(const struct cred *old_cred,
 		wait_for_completion(&shared_ctx.all_finished);
 
 	tsync_works_release(&works);
+	up_write(&current->signal->exec_update_lock);
 
 	return atomic_read(&shared_ctx.preparation_error);
 }
