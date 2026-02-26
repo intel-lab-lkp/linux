@@ -980,7 +980,7 @@ static void zs_charge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
 	rcu_read_lock();
 	memcg = obj_cgroup_memcg(objcg);
 	mod_memcg_state(memcg, MEMCG_ZSWAP_B, size);
-	mod_memcg_state(memcg, MEMCG_ZSWAPPED, 1);
+	mod_memcg_state(memcg, MEMCG_ZSWAPPED_B, 1);
 	rcu_read_unlock();
 }
 
@@ -997,7 +997,7 @@ static void zs_uncharge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
 	rcu_read_lock();
 	memcg = obj_cgroup_memcg(objcg);
 	mod_memcg_state(memcg, MEMCG_ZSWAP_B, -size);
-	mod_memcg_state(memcg, MEMCG_ZSWAPPED, -1);
+	mod_memcg_state(memcg, MEMCG_ZSWAPPED_B, -1);
 	rcu_read_unlock();
 }
 
