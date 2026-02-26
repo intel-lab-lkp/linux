@@ -8,3 +8,5 @@ neutron-y := \
 	neutron_gem.o \
 	neutron_job.o \
 	neutron_mailbox.o
+
+neutron-$(CONFIG_DEBUG_FS) += neutron_debugfs.o
