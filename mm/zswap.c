@@ -1214,9 +1214,9 @@ static unsigned long zswap_shrinker_count(struct shrinker *shrinker,
 	 */
 	if (!mem_cgroup_disabled()) {
 		mem_cgroup_flush_stats(memcg);
-		nr_backing = memcg_page_state(memcg, MEMCG_ZSWAP_B);
+		nr_backing = memcg_page_state(memcg, NR_ZSWAP_B);
 		nr_backing >>= PAGE_SHIFT;
-		nr_stored = memcg_page_state(memcg, MEMCG_ZSWAPPED_B);
+		nr_stored = memcg_page_state(memcg, NR_ZSWAPPED_B);
 		nr_stored >>= PAGE_SHIFT;
 	} else {
 		nr_backing = zswap_total_pages();

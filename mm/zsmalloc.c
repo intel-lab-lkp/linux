@@ -810,6 +810,7 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 				struct zspage *zspage)
 {
 	struct zpdesc *zpdesc, *next;
+	bool objcg = !!zpdesc_objcgs(zspage->first_zpdesc);
 
 	assert_spin_locked(&class->lock);
 
@@ -823,6 +824,8 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 		reset_zpdesc(zpdesc);
 		zpdesc_unlock(zpdesc);
 		zpdesc_dec_zone_page_state(zpdesc);
+		if (objcg)
+			dec_node_page_state(zpdesc_page(zpdesc), NR_ZSWAP_B);
 		zpdesc_put(zpdesc);
 		zpdesc = next;
 	} while (zpdesc != NULL);
@@ -963,11 +966,45 @@ static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
 	return true;
 }
 
+static void __zs_mod_memcg_lruvec(struct zpdesc *zpdesc,
+				  struct obj_cgroup *objcg, int size,
+				  int sign, unsigned long offset)
+{
+	struct mem_cgroup *memcg;
+	struct lruvec *lruvec;
+	int compressed_size = size, original_size = PAGE_SIZE;
+	int nid = page_to_nid(zpdesc_page(zpdesc));
+	int next_nid = nid;
+
+	if (offset + size > PAGE_SIZE) {
+		struct zpdesc *next_zpdesc = get_next_zpdesc(zpdesc);
+
+		next_nid = page_to_nid(zpdesc_page(next_zpdesc));
+		if (nid != next_nid) {
+			compressed_size = PAGE_SIZE - offset;
+			original_size = (PAGE_SIZE * compressed_size) / size;
+		}
+	}
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+	mod_memcg_lruvec_state(lruvec, NR_ZSWAP_B, sign * compressed_size);
+	mod_memcg_lruvec_state(lruvec, NR_ZSWAPPED_B, sign * original_size);
+
+	if (nid != next_nid) {
+		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(next_nid));
+		mod_memcg_lruvec_state(lruvec, NR_ZSWAP_B,
+				       sign * (size - compressed_size));
+		mod_memcg_lruvec_state(lruvec, NR_ZSWAPPED_B,
+				       sign * (PAGE_SIZE - original_size));
+	}
+	rcu_read_unlock();
+}
+
 static void zs_charge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
 			    int size, unsigned long offset)
 {
-	struct mem_cgroup *memcg;
-
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return;
 
@@ -977,28 +1014,30 @@ static void zs_charge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
 	if (obj_cgroup_charge(objcg, GFP_KERNEL, size))
 		VM_WARN_ON_ONCE(1);
 
-	rcu_read_lock();
-	memcg = obj_cgroup_memcg(objcg);
-	mod_memcg_state(memcg, MEMCG_ZSWAP_B, size);
-	mod_memcg_state(memcg, MEMCG_ZSWAPPED_B, 1);
-	rcu_read_unlock();
+	__zs_mod_memcg_lruvec(zpdesc, objcg, size, 1, offset);
+
+	/*
+	 * Node-level vmstats are charged in PAGE_SIZE units. As a
+	 * best-effort, always charge NR_ZSWAPPED_B to the first zpdesc.
+	 */
+	inc_node_page_state(zpdesc_page(zpdesc), NR_ZSWAPPED_B);
 }
 
 static void zs_uncharge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
 			      int size, unsigned long offset)
 {
-	struct mem_cgroup *memcg;
-
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return;
 
 	obj_cgroup_uncharge(objcg, size);
 
-	rcu_read_lock();
-	memcg = obj_cgroup_memcg(objcg);
-	mod_memcg_state(memcg, MEMCG_ZSWAP_B, -size);
-	mod_memcg_state(memcg, MEMCG_ZSWAPPED_B, -1);
-	rcu_read_unlock();
+	__zs_mod_memcg_lruvec(zpdesc, objcg, size, -1, offset);
+
+	/*
+	 * Node-level vmstats are uncharged in PAGE_SIZE units. As a
+	 * best-effort, always uncharge NR_ZSWAPPED_B to the first zpdesc.
+	 */
+	dec_node_page_state(zpdesc_page(zpdesc), NR_ZSWAPPED_B);
 }
 
 static void migrate_obj_objcg(unsigned long used_obj, unsigned long free_obj,
@@ -1135,6 +1174,8 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		__zpdesc_set_zsmalloc(zpdesc);
 
 		zpdesc_inc_zone_page_state(zpdesc);
+		if (objcg)
+			inc_node_page_state(zpdesc_page(zpdesc), NR_ZSWAP_B);
 		zpdescs[i] = zpdesc;
 	}
 
@@ -1149,6 +1190,9 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 err:
 	while (--i >= 0) {
 		zpdesc_dec_zone_page_state(zpdescs[i]);
+		if (objcg)
+			dec_node_page_state(zpdesc_page(zpdescs[i]),
+					    NR_ZSWAP_B);
 		free_zpdesc(zpdescs[i]);
 	}
 	cache_free_zspage(zspage);
