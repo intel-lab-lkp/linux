@@ -116,7 +116,7 @@ impl VmaRef {
     pub fn zap_page_range_single(&self, address: usize, size: usize) {
         let (end, did_overflow) = address.overflowing_add(size);
         if did_overflow || address < self.start() || self.end() < end {
-            // TODO: call WARN_ONCE once Rust version of it is added
+            crate::pr_warn_once!("VMA contains invalid range\n");
             return;
         }
 
