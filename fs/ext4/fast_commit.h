@@ -153,6 +153,13 @@ struct ext4_fc_alloc_region {
 	int ino, len;
 };
 
+struct ext4_fc_bytelog_state {
+	u64 cursor;
+	u64 next_seq;
+	u32 ring_crc;
+	bool initialized;
+};
+
 /*
  * Fast commit replay state.
  */
@@ -166,6 +173,8 @@ struct ext4_fc_replay_state {
 	int fc_regions_size, fc_regions_used, fc_regions_valid;
 	int *fc_modified_inodes;
 	int fc_modified_inodes_used, fc_modified_inodes_size;
+	struct ext4_fc_bytelog_state fc_bytelog_scan;
+	struct ext4_fc_bytelog_state fc_bytelog_replay;
 };
 
 #define region_last(__region) (((__region)->lblk) + ((__region)->len) - 1)

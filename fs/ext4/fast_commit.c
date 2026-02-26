@@ -12,6 +12,7 @@
 #include "ext4_extents.h"
 #include "mballoc.h"
 
+#include <linux/crc32c.h>
 #include <linux/lockdep.h>
 /*
  * Ext4 Fast Commits
@@ -2164,8 +2165,226 @@ static bool ext4_fc_value_len_isvalid(struct ext4_sb_info *sbi,
 		return len >= sizeof(struct ext4_fc_tail);
 	case EXT4_FC_TAG_HEAD:
 		return len == sizeof(struct ext4_fc_head);
+	case EXT4_FC_TAG_DAX_BYTELOG_ANCHOR:
+		return len == sizeof(struct ext4_fc_bytelog_entry);
 	}
 	return false;
+}
+
+static void ext4_fc_reset_bytelog_state(struct ext4_fc_bytelog_state *state)
+{
+	state->cursor = 0;
+	state->next_seq = 0;
+	state->ring_crc = ~0U;
+	state->initialized = false;
+}
+
+typedef int (*ext4_fc_bytelog_cb_t)(struct super_block *sb,
+				    struct ext4_fc_tl_mem *tl,
+				    u8 *val, void *data);
+
+static int ext4_fc_bytelog_iterate(struct super_block *sb,
+				   struct ext4_fc_bytelog_state *iter,
+				   const struct ext4_fc_bytelog_anchor *anchor,
+				   ext4_fc_bytelog_cb_t fn, void *data)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct ext4_fc_bytelog *log = &sbi->s_fc_bytelog;
+	u8 *base = log->kaddr;
+	u64 cursor, end;
+	int ret;
+
+	if (!log->mapped || !base)
+		return -EOPNOTSUPP;
+	if (anchor->head > log->size_bytes)
+		return -EFSCORRUPTED;
+
+	iter->cursor = anchor->tail;
+	iter->next_seq = 0;
+	iter->ring_crc = ~0U;
+	iter->initialized = true;
+	cursor = iter->cursor;
+	end = anchor->head;
+
+	if (cursor < log->base_off)
+		return -EFSCORRUPTED;
+	if (cursor > end || cursor > log->size_bytes)
+		return -EFSCORRUPTED;
+
+	while (cursor < end) {
+		struct ext4_fc_bytelog_hdr *hdr;
+		size_t remaining;
+		u32 payload_len, record_len;
+		u16 record_tag;
+		u8 *payload;
+		struct ext4_fc_tl_mem tl;
+
+		if (end - cursor > SIZE_MAX)
+			return -E2BIG;
+		remaining = end - cursor;
+		if (cursor > log->size_bytes - sizeof(*hdr))
+			return -EFSCORRUPTED;
+
+		hdr = (struct ext4_fc_bytelog_hdr *)(base + cursor);
+		payload = (u8 *)hdr + sizeof(*hdr);
+		ret = ext4_fc_bytelog_validate_hdr(hdr, remaining, payload);
+		if (ret)
+			return ret;
+		if (!ext4_fc_bytelog_record_committed(hdr))
+			return -EUCLEAN;
+		if (ext4_fc_bytelog_seq(hdr) != iter->next_seq)
+			return -EUCLEAN;
+
+		payload_len = ext4_fc_bytelog_payload_len(hdr);
+		if (payload_len < EXT4_FC_TAG_BASE_LEN)
+			return -EFSCORRUPTED;
+
+		record_tag = le16_to_cpu(hdr->tag);
+		if (record_tag == EXT4_FC_BYTELOG_TAG_BATCH) {
+			u32 pos = 0;
+
+			while (pos < payload_len) {
+				u32 value_len;
+
+				if (payload_len - pos < EXT4_FC_TAG_BASE_LEN)
+					return -EFSCORRUPTED;
+
+				ext4_fc_get_tl(&tl, payload + pos);
+				value_len = tl.fc_len;
+				if (value_len >
+				    payload_len - pos - EXT4_FC_TAG_BASE_LEN)
+					return -EFSCORRUPTED;
+				if (!ext4_fc_value_len_isvalid(sbi, tl.fc_tag,
+							       tl.fc_len))
+					return -EFSCORRUPTED;
+				if (fn) {
+					ret = fn(sb, &tl,
+						 payload + pos +
+						 EXT4_FC_TAG_BASE_LEN,
+						 data);
+					if (ret)
+						return ret;
+				}
+				pos += EXT4_FC_TAG_BASE_LEN + value_len;
+			}
+		} else {
+			u32 value_len;
+
+			ext4_fc_get_tl(&tl, payload);
+			value_len = payload_len - EXT4_FC_TAG_BASE_LEN;
+			if (tl.fc_len != value_len)
+				return -EFSCORRUPTED;
+			if (record_tag != tl.fc_tag)
+				return -EFSCORRUPTED;
+			if (!ext4_fc_value_len_isvalid(sbi, tl.fc_tag, tl.fc_len))
+				return -EFSCORRUPTED;
+			if (fn) {
+				ret = fn(sb, &tl,
+					 payload + EXT4_FC_TAG_BASE_LEN,
+					 data);
+				if (ret)
+					return ret;
+			}
+		}
+
+		iter->ring_crc = crc32c(iter->ring_crc, payload, payload_len);
+		record_len = ext4_fc_bytelog_record_len(hdr);
+		cursor += record_len;
+		iter->next_seq++;
+	}
+
+	if (cursor != end)
+		return -EFSCORRUPTED;
+	iter->cursor = cursor;
+	if (iter->next_seq != anchor->seq)
+		return -EUCLEAN;
+	if (iter->ring_crc != anchor->crc)
+		return -EFSBADCRC;
+	return 0;
+}
+
+static int ext4_fc_bytelog_scan_cb(struct super_block *sb,
+				   struct ext4_fc_tl_mem *tl, u8 *val,
+				   void *data)
+{
+	struct ext4_fc_add_range ext;
+	struct ext4_extent *ex;
+
+	(void)data;
+	switch (tl->fc_tag) {
+	case EXT4_FC_TAG_ADD_RANGE:
+		memcpy(&ext, val, sizeof(ext));
+		ex = (struct ext4_extent *)&ext.fc_ex;
+		return ext4_fc_record_regions(sb, le32_to_cpu(ext.fc_ino),
+					      le32_to_cpu(ex->ee_block),
+					      ext4_ext_pblock(ex),
+					      ext4_ext_get_actual_len(ex), 0);
+	case EXT4_FC_TAG_DEL_RANGE:
+	case EXT4_FC_TAG_LINK:
+	case EXT4_FC_TAG_UNLINK:
+	case EXT4_FC_TAG_CREAT:
+	case EXT4_FC_TAG_INODE:
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int ext4_fc_bytelog_replay_cb(struct super_block *sb,
+				     struct ext4_fc_tl_mem *tl, u8 *val,
+				     void *data)
+{
+	(void)data;
+	switch (tl->fc_tag) {
+	case EXT4_FC_TAG_LINK:
+		return ext4_fc_replay_link(sb, tl, val);
+	case EXT4_FC_TAG_UNLINK:
+		return ext4_fc_replay_unlink(sb, tl, val);
+	case EXT4_FC_TAG_ADD_RANGE:
+		return ext4_fc_replay_add_range(sb, tl, val);
+	case EXT4_FC_TAG_CREAT:
+		return ext4_fc_replay_create(sb, tl, val);
+	case EXT4_FC_TAG_DEL_RANGE:
+		return ext4_fc_replay_del_range(sb, tl, val);
+	case EXT4_FC_TAG_INODE:
+		return ext4_fc_replay_inode(sb, tl, val);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int ext4_fc_replay_scan_bytelog(struct super_block *sb,
+				       struct ext4_fc_replay_state *state,
+				       const struct ext4_fc_bytelog_anchor *anchor)
+{
+	int ret;
+
+	ret = ext4_fc_bytelog_iterate(sb, &state->fc_bytelog_scan, anchor,
+				      ext4_fc_bytelog_scan_cb, state);
+	if (ret)
+		return ret;
+	return JBD2_FC_REPLAY_CONTINUE;
+}
+
+static int ext4_fc_replay_apply_bytelog(struct super_block *sb,
+					struct ext4_fc_replay_state *state,
+					const struct ext4_fc_bytelog_anchor *anchor)
+{
+	return ext4_fc_bytelog_iterate(sb, &state->fc_bytelog_replay, anchor,
+				       ext4_fc_bytelog_replay_cb, NULL);
+}
+
+static int ext4_fc_replay_bytelog_anchor(struct super_block *sb,
+					 struct ext4_fc_replay_state *state,
+					 struct ext4_fc_tl_mem *tl, u8 *val)
+{
+	struct ext4_fc_bytelog_entry entry;
+	struct ext4_fc_bytelog_anchor anchor;
+
+	(void)tl;
+	memcpy(&entry, val, sizeof(entry));
+	ext4_fc_bytelog_anchor_from_disk(&anchor, &entry);
+	return ext4_fc_replay_apply_bytelog(sb, state, &anchor);
 }
 
 /*
@@ -2198,6 +2417,8 @@ static int ext4_fc_replay_scan(journal_t *journal,
 	struct ext4_fc_tail tail;
 	__u8 *start, *end, *cur, *val;
 	struct ext4_fc_head head;
+	struct ext4_fc_bytelog_entry entry;
+	struct ext4_fc_bytelog_anchor anchor;
 	struct ext4_extent *ex;
 
 	state = &sbi->s_fc_replay_state;
@@ -2212,6 +2433,8 @@ static int ext4_fc_replay_scan(journal_t *journal,
 		state->fc_regions = NULL;
 		state->fc_regions_valid = state->fc_regions_used =
 			state->fc_regions_size = 0;
+		ext4_fc_reset_bytelog_state(&state->fc_bytelog_scan);
+		ext4_fc_reset_bytelog_state(&state->fc_bytelog_replay);
 		/* Check if we can stop early */
 		if (le16_to_cpu(((struct ext4_fc_tl *)start)->fc_tag)
 			!= EXT4_FC_TAG_HEAD)
@@ -2270,6 +2493,9 @@ static int ext4_fc_replay_scan(journal_t *journal,
 				state->fc_replay_num_tags = state->fc_cur_tag;
 				state->fc_regions_valid =
 					state->fc_regions_used;
+				if (ext4_fc_bytelog_active(sbi) ||
+				    state->fc_bytelog_scan.initialized)
+					ret = JBD2_FC_REPLAY_STOP;
 			} else {
 				ret = state->fc_replay_num_tags ?
 					JBD2_FC_REPLAY_STOP : -EFSBADCRC;
@@ -2290,6 +2516,15 @@ static int ext4_fc_replay_scan(journal_t *journal,
 			state->fc_cur_tag++;
 			state->fc_crc = ext4_chksum(state->fc_crc, cur,
 				EXT4_FC_TAG_BASE_LEN + tl.fc_len);
+			break;
+		case EXT4_FC_TAG_DAX_BYTELOG_ANCHOR:
+			state->fc_cur_tag++;
+			state->fc_crc = ext4_chksum(state->fc_crc, cur,
+						    EXT4_FC_TAG_BASE_LEN +
+						    tl.fc_len);
+			memcpy(&entry, val, sizeof(entry));
+			ext4_fc_bytelog_anchor_from_disk(&anchor, &entry);
+			ret = ext4_fc_replay_scan_bytelog(sb, state, &anchor);
 			break;
 		default:
 			ret = state->fc_replay_num_tags ?
@@ -2327,6 +2562,8 @@ static int ext4_fc_replay(journal_t *journal, struct buffer_head *bh,
 	if (state->fc_current_pass != pass) {
 		state->fc_current_pass = pass;
 		sbi->s_mount_state |= EXT4_FC_REPLAY;
+		if (pass == PASS_REPLAY)
+			ext4_fc_reset_bytelog_state(&state->fc_bytelog_replay);
 	}
 	if (!sbi->s_fc_replay_state.fc_replay_num_tags) {
 		ext4_debug("Replay stops\n");
@@ -2385,8 +2622,17 @@ static int ext4_fc_replay(journal_t *journal, struct buffer_head *bh,
 					     0, tl.fc_len, 0);
 			memcpy(&tail, val, sizeof(tail));
 			WARN_ON(le32_to_cpu(tail.fc_tid) != expected_tid);
+			if ((ext4_fc_bytelog_active(sbi) ||
+			     state->fc_bytelog_scan.initialized) &&
+			    state->fc_replay_num_tags == 0) {
+				ext4_fc_set_bitmaps_and_counters(sb);
+				return JBD2_FC_REPLAY_STOP;
+			}
 			break;
 		case EXT4_FC_TAG_HEAD:
+			break;
+		case EXT4_FC_TAG_DAX_BYTELOG_ANCHOR:
+			ret = ext4_fc_replay_bytelog_anchor(sb, state, &tl, val);
 			break;
 		default:
 			trace_ext4_fc_replay(sb, tl.fc_tag, 0, tl.fc_len, 0);
