@@ -514,15 +514,20 @@ static int mlx5_lag_create_ttc_table(struct mlx5_lag *ldev)
 {
 	int first_idx = mlx5_lag_get_dev_index_by_seq(ldev, MLX5_LAG_P1);
 	struct mlx5_lag_port_sel *port_sel = &ldev->port_sel;
-	struct ttc_params ttc_params = {};
+	struct ttc_params *ttc_params;
 	struct mlx5_core_dev *dev;
 
 	if (first_idx < 0)
 		return -EINVAL;
 
+	ttc_params = kzalloc(sizeof(*ttc_params), GFP_KERNEL);
+        if (!ttc_params)
+                return -ENOMEM;
+
 	dev = ldev->pf[first_idx].dev;
-	mlx5_lag_set_outer_ttc_params(ldev, &ttc_params);
-	port_sel->outer.ttc = mlx5_create_ttc_table(dev, &ttc_params);
+	mlx5_lag_set_outer_ttc_params(ldev, ttc_params);
+        port_sel->outer.ttc = mlx5_create_ttc_table(dev, ttc_params);
+	kfree(ttc_params);
 	return PTR_ERR_OR_ZERO(port_sel->outer.ttc);
 }
 
@@ -530,15 +535,20 @@ static int mlx5_lag_create_inner_ttc_table(struct mlx5_lag *ldev)
 {
 	int first_idx = mlx5_lag_get_dev_index_by_seq(ldev, MLX5_LAG_P1);
 	struct mlx5_lag_port_sel *port_sel = &ldev->port_sel;
-	struct ttc_params ttc_params = {};
+	struct ttc_params *ttc_params;
 	struct mlx5_core_dev *dev;
 
 	if (first_idx < 0)
 		return -EINVAL;
 
+	ttc_params = kzalloc(sizeof(*ttc_params), GFP_KERNEL);
+        if (!ttc_params)
+                return -ENOMEM;
+
 	dev = ldev->pf[first_idx].dev;
-	mlx5_lag_set_inner_ttc_params(ldev, &ttc_params);
-	port_sel->inner.ttc = mlx5_create_inner_ttc_table(dev, &ttc_params);
+	mlx5_lag_set_inner_ttc_params(ldev, ttc_params);
+	port_sel->inner.ttc = mlx5_create_inner_ttc_table(dev, ttc_params);
+	kfree(ttc_params);
 	return PTR_ERR_OR_ZERO(port_sel->inner.ttc);
 }
 

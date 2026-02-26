@@ -966,27 +966,34 @@ static int mlx5e_create_rep_ttc_table(struct mlx5e_priv *priv)
 {
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
 	struct mlx5_eswitch_rep *rep = rpriv->rep;
-	struct ttc_params ttc_params = {};
+	struct ttc_params *ttc_params;
 	int err;
+
+	ttc_params = kzalloc(sizeof(*ttc_params), GFP_KERNEL);
+        if (!ttc_params)
+                return -ENOMEM;
 
 	mlx5e_fs_set_ns(priv->fs,
 			mlx5_get_flow_namespace(priv->mdev,
 						MLX5_FLOW_NAMESPACE_KERNEL), false);
 
 	/* The inner_ttc in the ttc params is intentionally not set */
-	mlx5e_set_ttc_params(priv->fs, priv->rx_res, &ttc_params, false, false);
+	mlx5e_set_ttc_params(priv->fs, priv->rx_res, ttc_params, false, false);
 
 	if (rep->vport != MLX5_VPORT_UPLINK)
 		/* To give uplik rep TTC a lower level for chaining from root ft */
-		ttc_params.ft_attr.level = MLX5E_TTC_FT_LEVEL + 1;
+		ttc_params->ft_attr.level = MLX5E_TTC_FT_LEVEL + 1;
 
-	mlx5e_fs_set_ttc(priv->fs, mlx5_create_ttc_table(priv->mdev, &ttc_params), false);
+	mlx5e_fs_set_ttc(priv->fs, mlx5_create_ttc_table(priv->mdev, ttc_params), false);
 	if (IS_ERR(mlx5e_fs_get_ttc(priv->fs, false))) {
 		err = PTR_ERR(mlx5e_fs_get_ttc(priv->fs, false));
 		netdev_err(priv->netdev, "Failed to create rep ttc table, err=%d\n",
 			   err);
+		kfree(ttc_params);
 		return err;
 	}
+
+	kfree(ttc_params);
 	return 0;
 }
 

@@ -855,7 +855,7 @@ static void mlx5e_hairpin_set_ttc_params(struct mlx5e_hairpin *hp,
 static int mlx5e_hairpin_rss_init(struct mlx5e_hairpin *hp)
 {
 	struct mlx5e_priv *priv = hp->func_priv;
-	struct ttc_params ttc_params;
+	struct ttc_params *ttc_params;
 	struct mlx5_ttc_table *ttc;
 	int err;
 
@@ -867,8 +867,14 @@ static int mlx5e_hairpin_rss_init(struct mlx5e_hairpin *hp)
 	if (err)
 		goto err_create_indirect_tirs;
 
-	mlx5e_hairpin_set_ttc_params(hp, &ttc_params);
-	hp->ttc = mlx5_create_ttc_table(priv->mdev, &ttc_params);
+	ttc_params = kzalloc(sizeof(*ttc_params), GFP_KERNEL);
+	if (!ttc_params) {
+		err = -ENOMEM;
+		goto err_alloc_ttc_params;
+	}
+
+	mlx5e_hairpin_set_ttc_params(hp, ttc_params);
+	hp->ttc = mlx5_create_ttc_table(priv->mdev, ttc_params);
 	if (IS_ERR(hp->ttc)) {
 		err = PTR_ERR(hp->ttc);
 		goto err_create_ttc_table;
@@ -879,9 +885,12 @@ static int mlx5e_hairpin_rss_init(struct mlx5e_hairpin *hp)
 		   hp->num_channels,
 		   mlx5_get_ttc_flow_table(ttc)->id);
 
+	kfree(ttc_params);
 	return 0;
 
 err_create_ttc_table:
+	kfree(ttc_params);
+err_alloc_ttc_params:
 	mlx5e_hairpin_destroy_indirect_tirs(hp);
 err_create_indirect_tirs:
 	mlx5e_rqt_destroy(&hp->indir_rqt);
