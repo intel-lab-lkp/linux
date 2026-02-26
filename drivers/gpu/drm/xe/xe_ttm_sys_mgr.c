@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 /*
  * Copyright © 2021-2022 Intel Corporation
- * Copyright (C) 2021-2002 Red Hat
+ * Copyright (C) 2021-2022 Red Hat
  */
 
 #include "xe_ttm_sys_mgr.h"
@@ -13,7 +13,6 @@
 #include <drm/ttm/ttm_tt.h>
 
 #include "xe_bo.h"
-#include "xe_gt.h"
 
 struct xe_ttm_sys_node {
 	struct ttm_buffer_object *tbo;
@@ -85,7 +84,7 @@ static const struct ttm_resource_manager_func xe_ttm_sys_mgr_func = {
 	.debug = xe_ttm_sys_mgr_debug
 };
 
-static void ttm_sys_mgr_fini(struct drm_device *drm, void *arg)
+static void xe_ttm_sys_mgr_fini(struct drm_device *drm, void *arg)
 {
 	struct xe_device *xe = (struct xe_device *)arg;
 	struct ttm_resource_manager *man = &xe->mem.sys_mgr;
@@ -116,5 +115,5 @@ int xe_ttm_sys_mgr_init(struct xe_device *xe)
 	ttm_resource_manager_init(man, &xe->ttm, gtt_size >> PAGE_SHIFT);
 	ttm_set_driver_manager(&xe->ttm, XE_PL_TT, man);
 	ttm_resource_manager_set_used(man, true);
-	return drmm_add_action_or_reset(&xe->drm, ttm_sys_mgr_fini, xe);
+	return drmm_add_action_or_reset(&xe->drm, xe_ttm_sys_mgr_fini, xe);
 }

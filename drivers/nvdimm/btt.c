@@ -1104,10 +1104,10 @@ static int btt_data_read(struct arena_info *arena, struct page *page,
 {
 	int ret;
 	u64 nsoff = to_namespace_offset(arena, lba);
-	void *mem = kmap_atomic(page);
+	void *mem = kmap_local_page(page);
 
 	ret = arena_read_bytes(arena, nsoff, mem + off, len, NVDIMM_IO_ATOMIC);
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 
 	return ret;
 }
@@ -1117,20 +1117,20 @@ static int btt_data_write(struct arena_info *arena, u32 lba,
 {
 	int ret;
 	u64 nsoff = to_namespace_offset(arena, lba);
-	void *mem = kmap_atomic(page);
+	void *mem = kmap_local_page(page);
 
 	ret = arena_write_bytes(arena, nsoff, mem + off, len, NVDIMM_IO_ATOMIC);
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 
 	return ret;
 }
 
 static void zero_fill_data(struct page *page, unsigned int off, u32 len)
 {
-	void *mem = kmap_atomic(page);
+	void *mem = kmap_local_page(page);
 
 	memset(mem + off, 0, len);
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 }
 
 #ifdef CONFIG_BLK_DEV_INTEGRITY
@@ -1478,12 +1478,12 @@ static void btt_submit_bio(struct bio *bio)
 	bio_endio(bio);
 }
 
-static int btt_getgeo(struct block_device *bd, struct hd_geometry *geo)
+static int btt_getgeo(struct gendisk *disk, struct hd_geometry *geo)
 {
 	/* some standard values */
 	geo->heads = 1 << 6;
 	geo->sectors = 1 << 5;
-	geo->cylinders = get_capacity(bd->bd_disk) >> 11;
+	geo->cylinders = get_capacity(disk) >> 11;
 	return 0;
 }
 
@@ -1506,7 +1506,7 @@ static int btt_blk_init(struct btt *btt)
 	int rc;
 
 	if (btt_meta_size(btt) && IS_ENABLED(CONFIG_BLK_DEV_INTEGRITY)) {
-		lim.integrity.tuple_size = btt_meta_size(btt);
+		lim.integrity.metadata_size = btt_meta_size(btt);
 		lim.integrity.tag_size = btt_meta_size(btt);
 	}
 

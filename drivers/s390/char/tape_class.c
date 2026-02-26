@@ -8,19 +8,12 @@
  * Based on simple class device code by Greg K-H
  */
 
-#define KMSG_COMPONENT "tape"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "tape: " fmt
 
+#include <linux/export.h>
 #include <linux/slab.h>
 
 #include "tape_class.h"
-
-MODULE_AUTHOR("Stefan Bader <shbader@de.ibm.com>");
-MODULE_DESCRIPTION(
-	"Copyright IBM Corp. 2004   All Rights Reserved.\n"
-	"tape_class.c"
-);
-MODULE_LICENSE("GPL");
 
 static const struct class tape_class = {
 	.name = "tape390",
@@ -116,16 +109,12 @@ void unregister_tape_dev(struct device *device, struct tape_class_device *tcd)
 }
 EXPORT_SYMBOL(unregister_tape_dev);
 
-
-static int __init tape_init(void)
+int tape_class_init(void)
 {
 	return class_register(&tape_class);
 }
 
-static void __exit tape_exit(void)
+void tape_class_exit(void)
 {
 	class_unregister(&tape_class);
 }
-
-postcore_initcall(tape_init);
-module_exit(tape_exit);

@@ -2427,9 +2427,9 @@ static int sof_ipc3_free_widgets_in_list(struct snd_sof_dev *sdev, bool include_
 		/* Do not free widgets for static pipelines with FW older than SOF2.2 */
 		if (!verify && !swidget->dynamic_pipeline_widget &&
 		    SOF_FW_VER(v->major, v->minor, v->micro) < SOF_FW_VER(2, 2, 0)) {
-			mutex_lock(&swidget->setup_mutex);
-			swidget->use_count = 0;
-			mutex_unlock(&swidget->setup_mutex);
+			scoped_guard(mutex, &swidget->setup_mutex)
+				swidget->use_count = 0;
+
 			if (swidget->spipe)
 				swidget->spipe->complete = 0;
 			continue;
@@ -2473,11 +2473,6 @@ static int sof_ipc3_tear_down_all_pipelines(struct snd_sof_dev *sdev, bool verif
 	if (ret < 0)
 		return ret;
 
-	/* free all the scheduler widgets now */
-	ret = sof_ipc3_free_widgets_in_list(sdev, true, &dyn_widgets, verify);
-	if (ret < 0)
-		return ret;
-
 	/*
 	 * Tear down all pipelines associated with PCMs that did not get suspended
 	 * and unset the prepare flag so that they can be set up again during resume.
@@ -2492,6 +2487,11 @@ static int sof_ipc3_tear_down_all_pipelines(struct snd_sof_dev *sdev, bool verif
 			return ret;
 		}
 	}
+
+	/* free all the scheduler widgets now. This will also power down the secondary cores */
+	ret = sof_ipc3_free_widgets_in_list(sdev, true, &dyn_widgets, verify);
+	if (ret < 0)
+		return ret;
 
 	list_for_each_entry(sroute, &sdev->route_list, list)
 		sroute->setup = false;

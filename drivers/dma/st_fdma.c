@@ -68,7 +68,7 @@ static void st_fdma_dreq_put(struct st_fdma_chan *fchan)
 {
 	struct st_fdma_dev *fdev = fchan->fdev;
 
-	dev_dbg(fdev->dev, "put dreq_line:%#x\n", fchan->dreq_line);
+	dev_dbg(fdev->dev, "put dreq_line:%#lx\n", fchan->dreq_line);
 	clear_bit(fchan->dreq_line, &fdev->dreq_mask);
 }
 
@@ -866,4 +866,3 @@ MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("STMicroelectronics FDMA engine driver");
 MODULE_AUTHOR("Ludovic.barre <Ludovic.barre@st.com>");
 MODULE_AUTHOR("Peter Griffin <peter.griffin@linaro.org>");
-MODULE_ALIAS("platform:" DRIVER_NAME);

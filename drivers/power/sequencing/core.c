@@ -628,7 +628,7 @@ static int pwrseq_match_device(struct device *pwrseq_dev, void *data)
 		return 0;
 
 	ret = pwrseq->match(pwrseq, match_data->dev);
-	if (ret <= 0)
+	if (ret == PWRSEQ_NO_MATCH || ret < 0)
 		return ret;
 
 	/* We got the matching device, let's find the right target. */
@@ -651,7 +651,7 @@ static int pwrseq_match_device(struct device *pwrseq_dev, void *data)
 
 	match_data->desc->pwrseq = pwrseq_device_get(pwrseq);
 
-	return 1;
+	return PWRSEQ_MATCH_OK;
 }
 
 /**
@@ -684,7 +684,7 @@ struct pwrseq_desc *pwrseq_get(struct device *dev, const char *target)
 			       pwrseq_match_device);
 	if (ret < 0)
 		return ERR_PTR(ret);
-	if (ret == 0)
+	if (ret == PWRSEQ_NO_MATCH)
 		/* No device matched. */
 		return ERR_PTR(-EPROBE_DEFER);
 
@@ -914,8 +914,10 @@ int pwrseq_power_on(struct pwrseq_desc *desc)
 	if (target->post_enable) {
 		ret = target->post_enable(pwrseq);
 		if (ret) {
-			pwrseq_unit_disable(pwrseq, unit);
-			desc->powered_on = false;
+			scoped_guard(mutex, &pwrseq->state_lock) {
+				pwrseq_unit_disable(pwrseq, unit);
+				desc->powered_on = false;
+			}
 		}
 	}
 

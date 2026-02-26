@@ -121,7 +121,9 @@ mlx5_fs_hws_pr_bulk_create(struct mlx5_core_dev *dev, void *pool_ctx)
 	if (!pr_bulk)
 		return NULL;
 
-	if (mlx5_fs_bulk_init(dev, &pr_bulk->fs_bulk, bulk_len))
+	mlx5_fs_bulk_init(&pr_bulk->fs_bulk, bulk_len);
+
+	if (mlx5_fs_bulk_bitmap_alloc(dev, &pr_bulk->fs_bulk))
 		goto free_pr_bulk;
 
 	for (i = 0; i < bulk_len; i++) {
@@ -275,7 +277,9 @@ mlx5_fs_hws_mh_bulk_create(struct mlx5_core_dev *dev, void *pool_ctx)
 	if (!mh_bulk)
 		return NULL;
 
-	if (mlx5_fs_bulk_init(dev, &mh_bulk->fs_bulk, bulk_len))
+	mlx5_fs_bulk_init(&mh_bulk->fs_bulk, bulk_len);
+
+	if (mlx5_fs_bulk_bitmap_alloc(dev, &mh_bulk->fs_bulk))
 		goto free_mh_bulk;
 
 	for (int i = 0; i < bulk_len; i++) {
@@ -407,15 +411,21 @@ struct mlx5hws_action *mlx5_fc_get_hws_action(struct mlx5hws_context *ctx,
 {
 	struct mlx5_fs_hws_create_action_ctx create_ctx;
 	struct mlx5_fc_bulk *fc_bulk = counter->bulk;
+	struct mlx5hws_action *hws_action;
 
 	create_ctx.hws_ctx = ctx;
 	create_ctx.id = fc_bulk->base_id;
 	create_ctx.actions_type = MLX5HWS_ACTION_TYP_CTR;
 
-	return mlx5_fs_get_hws_action(&fc_bulk->hws_data, &create_ctx);
+	mlx5_fc_local_get(counter);
+	hws_action = mlx5_fs_get_hws_action(&fc_bulk->hws_data, &create_ctx);
+	if (!hws_action)
+		mlx5_fc_local_put(counter);
+	return hws_action;
 }
 
 void mlx5_fc_put_hws_action(struct mlx5_fc *counter)
 {
 	mlx5_fs_put_hws_action(&counter->bulk->hws_data);
+	mlx5_fc_local_put(counter);
 }

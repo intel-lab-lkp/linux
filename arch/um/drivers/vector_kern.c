@@ -13,6 +13,7 @@
 #include <linux/memblock.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
+#include <linux/hex.h>
 #include <linux/inetdevice.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -1721,7 +1722,7 @@ static int __init vector_setup(char *str)
 __setup("vec", vector_setup);
 __uml_help(vector_setup,
 "vec[0-9]+:<option>=<value>,<option>=<value>\n"
-"	 Configure a vector io network device.\n\n"
+"    Configure a vector io network device.\n\n"
 );
 
 late_initcall(vector_init);

@@ -3,7 +3,7 @@
  * Copyright (C) 2022-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs.h"
+#include "xfs_platform.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -26,6 +26,15 @@
 #include "scrub/trace.h"
 #include "scrub/repair.h"
 #include "scrub/newbt.h"
+
+/*
+ * This is the maximum number of deferred extent freeing item extents (EFIs)
+ * that we'll attach to a transaction without rolling the transaction to avoid
+ * overrunning a tr_itruncate reservation.  The newbt code should reserve
+ * exactly the correct number of blocks to rebuild the btree, so there should
+ * not be any excess blocks to free when committing a new btree.
+ */
+#define XREP_MAX_ITRUNCATE_EFIS	(128)
 
 /*
  * Estimate proper slack values for a btree that's being reloaded.

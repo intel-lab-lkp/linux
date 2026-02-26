@@ -26,7 +26,7 @@
 #include <linux/highmem.h>
 #include <linux/slab.h>
 #include <net/9p/9p.h>
-#include <linux/parser.h>
+#include <linux/fs_context.h>
 #include <net/9p/client.h>
 #include <net/9p/transport.h>
 #include <linux/scatterlist.h>
@@ -284,8 +284,8 @@ req_retry:
 		if (err == -ENOSPC) {
 			chan->ring_bufs_avail = 0;
 			spin_unlock_irqrestore(&chan->lock, flags);
-			err = wait_event_killable(*chan->vc_wq,
-						  chan->ring_bufs_avail);
+			err = io_wait_event_killable(*chan->vc_wq,
+						     chan->ring_bufs_avail);
 			if (err  == -ERESTARTSYS)
 				return err;
 
@@ -325,7 +325,7 @@ static int p9_get_mapped_pages(struct virtio_chan *chan,
 		 * Other zc request to finish here
 		 */
 		if (atomic_read(&vp_pinned) >= chan->p9_max_pages) {
-			err = wait_event_killable(vp_wq,
+			err = io_wait_event_killable(vp_wq,
 			      (atomic_read(&vp_pinned) < chan->p9_max_pages));
 			if (err == -ERESTARTSYS)
 				return err;
@@ -512,8 +512,8 @@ req_retry_pinned:
 		if (err == -ENOSPC) {
 			chan->ring_bufs_avail = 0;
 			spin_unlock_irqrestore(&chan->lock, flags);
-			err = wait_event_killable(*chan->vc_wq,
-						  chan->ring_bufs_avail);
+			err = io_wait_event_killable(*chan->vc_wq,
+						     chan->ring_bufs_avail);
 			if (err  == -ERESTARTSYS)
 				goto err_out;
 
@@ -531,8 +531,8 @@ req_retry_pinned:
 	spin_unlock_irqrestore(&chan->lock, flags);
 	kicked = 1;
 	p9_debug(P9_DEBUG_TRANS, "virtio request kicked\n");
-	err = wait_event_killable(req->wq,
-			          READ_ONCE(req->status) >= REQ_STATUS_RCVD);
+	err = io_wait_event_killable(req->wq,
+				     READ_ONCE(req->status) >= REQ_STATUS_RCVD);
 	// RERROR needs reply (== error string) in static data
 	if (READ_ONCE(req->status) == REQ_STATUS_RCVD &&
 	    unlikely(req->rc.sdata[4] == P9_RERROR))
@@ -679,8 +679,7 @@ fail:
 /**
  * p9_virtio_create - allocate a new virtio channel
  * @client: client instance invoking this transport
- * @devname: string identifying the channel to connect to (unused)
- * @args: args passed from sys_mount() for per-transport options (unused)
+ * @fc: the filesystem context
  *
  * This sets up a transport channel for 9p communication.  Right now
  * we only match the first available channel, but eventually we could look up
@@ -691,8 +690,9 @@ fail:
  */
 
 static int
-p9_virtio_create(struct p9_client *client, const char *devname, char *args)
+p9_virtio_create(struct p9_client *client, struct fs_context *fc)
 {
+	const char *devname = fc->source;
 	struct virtio_chan *chan;
 	int ret = -ENOENT;
 	int found = 0;
@@ -802,7 +802,8 @@ static struct p9_trans_module p9_virtio_trans = {
 	 */
 	.maxsize = PAGE_SIZE * (VIRTQUEUE_NUM - 3),
 	.pooled_rbuffers = false,
-	.def = 1,
+	.def = true,
+	.supports_vmalloc = false,
 	.owner = THIS_MODULE,
 };
 

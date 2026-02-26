@@ -17,6 +17,7 @@
 #include <drm/drm_ioctl.h>
 #include <drm/drm_of.h>
 #include <drm/drm_prime.h>
+#include <drm/drm_print.h>
 
 #include "etnaviv_cmdbuf.h"
 #include "etnaviv_drv.h"
@@ -599,6 +600,9 @@ static void etnaviv_unbind(struct device *dev)
 	drm_dev_unregister(drm);
 
 	component_unbind_all(dev, drm);
+
+	etnaviv_cmdbuf_free(priv->flop_reset_data_ppu);
+	kfree(priv->flop_reset_data_ppu);
 
 	etnaviv_cmdbuf_suballoc_destroy(priv->cmdbuf_suballoc);
 

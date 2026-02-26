@@ -500,7 +500,7 @@ void thermal_zone_set_trip_hyst(struct thermal_zone_device *tz,
 	WRITE_ONCE(trip->hysteresis, hyst);
 	thermal_notify_tz_trip_change(tz, trip);
 	/*
-	 * If the zone temperature is above or at the trip tmperature, the trip
+	 * If the zone temperature is above or at the trip temperature, the trip
 	 * is in the trips_reached list and its threshold is equal to its low
 	 * temperature.  It needs to stay in that list, but its threshold needs
 	 * to be updated and the list ordering may need to be restored.
@@ -1043,7 +1043,7 @@ static void thermal_cooling_device_init_complete(struct thermal_cooling_device *
  * @np:		a pointer to a device tree node.
  * @type:	the thermal cooling device type.
  * @devdata:	device private data.
- * @ops:		standard thermal cooling devices callbacks.
+ * @ops:	standard thermal cooling devices callbacks.
  *
  * This interface function adds a new thermal cooling device (fan/processor/...)
  * to /sys/class/thermal/ folder as cooling_device[0-*]. It tries to bind itself
@@ -1505,15 +1505,19 @@ thermal_zone_device_register_with_trips(const char *type,
 	const struct thermal_trip *trip = trips;
 	struct thermal_zone_device *tz;
 	struct thermal_trip_desc *td;
+	size_t type_len = 0;
 	int id;
 	int result;
 
-	if (!type || strlen(type) == 0) {
+	if (type)
+		type_len = strnlen(type, THERMAL_NAME_LENGTH);
+
+	if (type_len == 0) {
 		pr_err("No thermal zone type defined\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (strlen(type) >= THERMAL_NAME_LENGTH) {
+	if (type_len == THERMAL_NAME_LENGTH) {
 		pr_err("Thermal zone name (%s) too long, should be under %d chars\n",
 		       type, THERMAL_NAME_LENGTH);
 		return ERR_PTR(-EINVAL);

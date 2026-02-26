@@ -202,14 +202,14 @@ static int sgl_map_user_pages(struct st_buffer *, const unsigned int,
 			      unsigned long, size_t, int);
 static int sgl_unmap_user_pages(struct st_buffer *, const unsigned int, int);
 
-static int st_probe(struct device *);
-static int st_remove(struct device *);
+static int st_probe(struct scsi_device *);
+static void st_remove(struct scsi_device *);
 
 static struct scsi_driver st_template = {
+	.probe = st_probe,
+	.remove = st_remove,
 	.gendrv = {
 		.name		= "st",
-		.probe		= st_probe,
-		.remove		= st_remove,
 		.groups		= st_drv_groups,
 	},
 };
@@ -525,7 +525,8 @@ static void st_do_stats(struct scsi_tape *STp, struct request *req)
 }
 
 static enum rq_end_io_ret st_scsi_execute_end(struct request *req,
-					      blk_status_t status)
+					      blk_status_t status,
+					      const struct io_comp_batch *iob)
 {
 	struct scsi_cmnd *scmd = blk_mq_rq_to_pdu(req);
 	struct st_request *SRpnt = req->end_io_data;
@@ -3526,8 +3527,64 @@ static int partition_tape(struct scsi_tape *STp, int size)
 out:
 	return result;
 }
-
 
+/*
+ * Handles any extra state needed for ioctls which are not st-specific.
+ * Called with the scsi_tape lock held, released before return
+ */
+static long st_common_ioctl(struct scsi_tape *STp, struct st_modedef *STm,
+			    struct file *file, unsigned int cmd_in,
+			    unsigned long arg)
+{
+	int i, retval = 0;
+
+	if (!STm->defined) {
+		retval = -ENXIO;
+		goto out;
+	}
+
+	switch (cmd_in) {
+	case SCSI_IOCTL_GET_IDLUN:
+	case SCSI_IOCTL_GET_BUS_NUMBER:
+	case SCSI_IOCTL_GET_PCI:
+		break;
+	case SG_IO:
+	case SCSI_IOCTL_SEND_COMMAND:
+	case CDROM_SEND_PACKET:
+		if (!capable(CAP_SYS_RAWIO)) {
+			retval = -EPERM;
+			goto out;
+		}
+		fallthrough;
+	default:
+		if ((i = flush_buffer(STp, 0)) < 0) {
+			retval = i;
+			goto out;
+		} else { /* flush_buffer succeeds */
+			if (STp->can_partitions) {
+				i = switch_partition(STp);
+				if (i < 0) {
+					retval = i;
+					goto out;
+				}
+			}
+		}
+	}
+	mutex_unlock(&STp->lock);
+
+	retval = scsi_ioctl(STp->device, file->f_mode & FMODE_WRITE,
+			    cmd_in, (void __user *)arg);
+	if (!retval && cmd_in == SCSI_IOCTL_STOP_UNIT) {
+		/* unload */
+		STp->rew_at_close = 0;
+		STp->ready = ST_NO_TAPE;
+	}
+
+	return retval;
+out:
+	mutex_unlock(&STp->lock);
+	return retval;
+}
 
 /* The ioctl command */
 static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
@@ -3564,6 +3621,15 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 			file->f_flags & O_NDELAY);
 	if (retval)
 		goto out;
+
+	switch (cmd_in) {
+	case MTIOCPOS:
+	case MTIOCGET:
+	case MTIOCTOP:
+		break;
+	default:
+		return st_common_ioctl(STp, STm, file, cmd_in, arg);
+	}
 
 	cmd_type = _IOC_TYPE(cmd_in);
 	cmd_nr = _IOC_NR(cmd_in);
@@ -3876,29 +3942,7 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 		}
 		mt_pos.mt_blkno = blk;
 		retval = put_user_mtpos(p, &mt_pos);
-		goto out;
 	}
-	mutex_unlock(&STp->lock);
-
-	switch (cmd_in) {
-	case SG_IO:
-	case SCSI_IOCTL_SEND_COMMAND:
-	case CDROM_SEND_PACKET:
-		if (!capable(CAP_SYS_RAWIO))
-			return -EPERM;
-		break;
-	default:
-		break;
-	}
-
-	retval = scsi_ioctl(STp->device, file->f_mode & FMODE_WRITE, cmd_in, p);
-	if (!retval && cmd_in == SCSI_IOCTL_STOP_UNIT) {
-		/* unload */
-		STp->rew_at_close = 0;
-		STp->ready = ST_NO_TAPE;
-	}
-	return retval;
-
  out:
 	mutex_unlock(&STp->lock);
 	return retval;
@@ -4299,9 +4343,9 @@ static void remove_cdevs(struct scsi_tape *tape)
 	}
 }
 
-static int st_probe(struct device *dev)
+static int st_probe(struct scsi_device *SDp)
 {
-	struct scsi_device *SDp = to_scsi_device(dev);
+	struct device *dev = &SDp->sdev_gendev;
 	struct scsi_tape *tpnt = NULL;
 	struct st_modedef *STm;
 	struct st_partstat *STps;
@@ -4456,12 +4500,13 @@ out:
 };
 
 
-static int st_remove(struct device *dev)
+static void st_remove(struct scsi_device *SDp)
 {
+	struct device *dev = &SDp->sdev_gendev;
 	struct scsi_tape *tpnt = dev_get_drvdata(dev);
 	int index = tpnt->index;
 
-	scsi_autopm_get_device(to_scsi_device(dev));
+	scsi_autopm_get_device(SDp);
 	remove_cdevs(tpnt);
 
 	mutex_lock(&st_ref_mutex);
@@ -4470,7 +4515,6 @@ static int st_remove(struct device *dev)
 	spin_lock(&st_index_lock);
 	idr_remove(&st_index_idr, index);
 	spin_unlock(&st_index_lock);
-	return 0;
 }
 
 /**
@@ -4533,7 +4577,7 @@ static int __init init_st(void)
 		goto err_class;
 	}
 
-	err = scsi_register_driver(&st_template.gendrv);
+	err = scsi_register_driver(&st_template);
 	if (err)
 		goto err_chrdev;
 
@@ -4549,7 +4593,7 @@ err_class:
 
 static void __exit exit_st(void)
 {
-	scsi_unregister_driver(&st_template.gendrv);
+	scsi_unregister_driver(&st_template);
 	unregister_chrdev_region(MKDEV(SCSI_TAPE_MAJOR, 0),
 				 ST_MAX_TAPE_ENTRIES);
 	class_unregister(&st_sysfs_class);

@@ -2,7 +2,7 @@
 //
 // tas2781-fmwlib.c -- TASDEVICE firmware support
 //
-// Copyright 2023 - 2025 Texas Instruments, Inc.
+// Copyright 2023 - 2026 Texas Instruments, Inc.
 //
 // Author: Shenghao Ding <shenghao-ding@ti.com>
 // Author: Baojun Xu <baojun.xu@ti.com>
@@ -80,6 +80,14 @@
 #define POST_SOFTWARE_RESET_DEVICE_C			0x47
 #define POST_SOFTWARE_RESET_DEVICE_D			0x48
 
+#define COPY_CAL_DATA(i) \
+	do { \
+		calbin_data[i + 1] = data[7]; \
+		calbin_data[i + 2] = data[8]; \
+		calbin_data[i + 3] = data[9]; \
+		calbin_data[i + 4] = data[10]; \
+	} while (0)
+
 struct tas_crc {
 	unsigned char offset;
 	unsigned char len;
@@ -91,7 +99,7 @@ struct blktyp_devidx_map {
 };
 
 static const char deviceNumber[TASDEVICE_DSP_TAS_MAX_DEVICE] = {
-	1, 2, 1, 2, 1, 1, 0, 2, 4, 3, 1, 2, 3, 4
+	1, 2, 1, 2, 1, 1, 0, 2, 4, 3, 1, 2, 3, 4, 1, 2
 };
 
 /* fixed m68k compiling issue: mapping table can save code field */
@@ -179,6 +187,16 @@ static struct tasdevice_config_info *tasdevice_add_config(
 			*status = -EINVAL;
 			dev_err(tas_priv->dev, "add conf: Out of boundary\n");
 			goto out;
+		}
+		/* If in the RCA bin file are several profiles with the
+		 * keyword "init", init_profile_id only store the last
+		 * init profile id.
+		 */
+		if (strnstr(&config_data[config_offset], "init", 64)) {
+			tas_priv->rcabin.init_profile_id =
+				tas_priv->rcabin.ncfgs - 1;
+			dev_dbg(tas_priv->dev, "%s: init profile id = %d\n",
+				__func__, tas_priv->rcabin.init_profile_id);
 		}
 		config_offset += 64;
 	}
@@ -283,6 +301,8 @@ int tasdevice_rca_parser(void *context, const struct firmware *fmw)
 	int i;
 
 	rca = &(tas_priv->rcabin);
+	/* Initialize to none */
+	rca->init_profile_id = -1;
 	fw_hdr = &(rca->fw_hdr);
 	if (!fmw || !fmw->data) {
 		dev_err(tas_priv->dev, "Failed to read %s\n",
@@ -506,6 +526,56 @@ static int fw_parse_data_kernel(struct tasdevice_fw *tas_fmw,
 	}
 
 out:
+	return offset;
+}
+
+static int fw_parse_tas5825_program_data_kernel(
+	struct tasdevice_priv *tas_priv, struct tasdevice_fw *tas_fmw,
+	const struct firmware *fmw, int offset)
+{
+	struct tasdevice_prog *program;
+	unsigned int i;
+
+	for (i = 0; i < tas_fmw->nr_programs; i++) {
+		program = &(tas_fmw->programs[i]);
+		if (offset + 72 > fmw->size) {
+			dev_err(tas_priv->dev, "%s: mpName error\n", __func__);
+			return -EINVAL;
+		}
+		/* Skip 65 unused byts*/
+		offset += 65;
+		offset = fw_parse_data_kernel(tas_fmw, &(program->dev_data),
+			fmw, offset);
+		if (offset < 0)
+			return offset;
+	}
+
+	return offset;
+}
+
+static int fw_parse_tas5825_configuration_data_kernel(
+	struct tasdevice_priv *tas_priv,
+	struct tasdevice_fw *tas_fmw, const struct firmware *fmw, int offset)
+{
+	const unsigned char *data = fmw->data;
+	struct tasdevice_config *config;
+	unsigned int i;
+
+	for (i = 0; i < tas_fmw->nr_configurations; i++) {
+		config = &(tas_fmw->configs[i]);
+		if (offset + 80 > fmw->size) {
+			dev_err(tas_priv->dev, "%s: mpName error\n", __func__);
+			return -EINVAL;
+		}
+		memcpy(config->name, &data[offset], 64);
+		/* Skip extra 8 bytes*/
+		offset += 72;
+		offset = fw_parse_data_kernel(tas_fmw, &(config->dev_data),
+			fmw, offset);
+		if (offset < 0)
+			return offset;
+	}
+
 	return offset;
 }
 
@@ -1826,7 +1896,8 @@ static void dspbin_type_check(struct tasdevice_priv *tas_priv,
 		else
 			tas_priv->dspbin_typ = TASDEV_ALPHA;
 	}
-	if (tas_priv->dspbin_typ != TASDEV_BASIC)
+	if ((tas_priv->dspbin_typ != TASDEV_BASIC) &&
+		(ppcver < PPC3_VERSION_TAS5825_BASE))
 		tas_priv->fw_parse_fct_param_address =
 			fw_parse_fct_param_address;
 }
@@ -1837,7 +1908,17 @@ static int dspfw_default_callback(struct tasdevice_priv *tas_priv,
 	int rc = 0;
 
 	if (drv_ver == 0x100) {
-		if (ppcver >= PPC3_VERSION_BASE) {
+		if (ppcver >= PPC3_VERSION_TAS5825_BASE) {
+			tas_priv->fw_parse_variable_header =
+				fw_parse_variable_header_kernel;
+			tas_priv->fw_parse_program_data =
+				fw_parse_tas5825_program_data_kernel;
+			tas_priv->fw_parse_configuration_data =
+				fw_parse_tas5825_configuration_data_kernel;
+			tas_priv->tasdevice_load_block =
+				tasdevice_load_block_kernel;
+			dspbin_type_check(tas_priv, ppcver);
+		} else if (ppcver >= PPC3_VERSION_BASE) {
 			tas_priv->fw_parse_variable_header =
 				fw_parse_variable_header_kernel;
 			tas_priv->fw_parse_program_data =
@@ -1877,23 +1958,6 @@ static int dspfw_default_callback(struct tasdevice_priv *tas_priv,
 	}
 
 	return rc;
-}
-
-static int load_calib_data(struct tasdevice_priv *tas_priv,
-	struct tasdevice_data *dev_data)
-{
-	struct tasdev_blk *block;
-	unsigned int i;
-	int ret = 0;
-
-	for (i = 0; i < dev_data->nr_blk; i++) {
-		block = &(dev_data->dev_blks[i]);
-		ret = tasdevice_load_block(tas_priv, block);
-		if (ret < 0)
-			break;
-	}
-
-	return ret;
 }
 
 static int fw_parse_header(struct tasdevice_priv *tas_priv,
@@ -1956,6 +2020,103 @@ out:
 	return offset;
 }
 
+static inline int check_cal_bin_data(struct device *dev,
+	const unsigned char *data, const char *name)
+{
+	if (data[2] != 0x85 || data[1] != 4) {
+		dev_err(dev, "Invalid cal bin file in %s\n", name);
+		return -1;
+	}
+	return 0;
+}
+
+static void calbin_conversion(struct tasdevice_priv *priv,
+	struct tasdevice_fw *tas_fmw)
+{
+	struct calidata *cali_data = &priv->cali_data;
+	unsigned char *calbin_data = cali_data->data;
+	struct cali_reg *p = &cali_data->cali_reg_array;
+	struct tasdevice_calibration *calibration;
+	struct tasdevice_data *img_data;
+	struct tasdev_blk *blk;
+	unsigned char *data;
+	int chn, k;
+
+	if (cali_data->total_sz != priv->ndev *
+		(cali_data->cali_dat_sz_per_dev + 1)) {
+		dev_err(priv->dev, "%s: cali_data size err\n",
+			__func__);
+		return;
+	}
+	calibration = &(tas_fmw->calibrations[0]);
+	img_data = &(calibration->dev_data);
+
+	if (img_data->nr_blk != 1) {
+		dev_err(priv->dev, "%s: Invalid nr_blk, wrong cal bin\n",
+			__func__);
+		return;
+	}
+
+	blk = &(img_data->dev_blks[0]);
+	if (blk->nr_cmds != 15) {
+		dev_err(priv->dev, "%s: Invalid nr_cmds, wrong cal bin\n",
+			__func__);
+		return;
+	}
+
+	switch (blk->type) {
+	case COEFF_DEVICE_A:
+		chn = 0;
+		break;
+	case COEFF_DEVICE_B:
+		chn = 1;
+		break;
+	case COEFF_DEVICE_C:
+		chn = 2;
+		break;
+	case COEFF_DEVICE_D:
+		chn = 3;
+		break;
+	default:
+		dev_err(priv->dev, "%s: Other Type = 0x%02x\n",
+			__func__, blk->type);
+		return;
+	}
+	k = chn * (cali_data->cali_dat_sz_per_dev + 1);
+
+	data = blk->data;
+	if (check_cal_bin_data(priv->dev, data, "r0_reg") < 0)
+		return;
+	p->r0_reg = TASDEVICE_REG(data[4], data[5], data[6]);
+	COPY_CAL_DATA(k);
+
+	data = blk->data + 12;
+	if (check_cal_bin_data(priv->dev, data, "r0_low_reg") < 0)
+		return;
+	p->r0_low_reg = TASDEVICE_REG(data[4], data[5], data[6]);
+	COPY_CAL_DATA(k + 4);
+
+	data = blk->data + 24;
+	if (check_cal_bin_data(priv->dev, data, "invr0_reg") < 0)
+		return;
+	p->invr0_reg = TASDEVICE_REG(data[4], data[5], data[6]);
+	COPY_CAL_DATA(k + 8);
+
+	data = blk->data + 36;
+	if (check_cal_bin_data(priv->dev, data, "pow_reg") < 0)
+		return;
+	p->pow_reg = TASDEVICE_REG(data[4], data[5], data[6]);
+	COPY_CAL_DATA(k + 12);
+
+	data = blk->data + 48;
+	if (check_cal_bin_data(priv->dev, data, "tlimit_reg") < 0)
+		return;
+	p->tlimit_reg = TASDEVICE_REG(data[4], data[5], data[6]);
+	COPY_CAL_DATA(k + 16);
+
+	calbin_data[k] = chn;
+}
+
 /* When calibrated data parsing error occurs, DSP can still work with default
  * calibrated data, memory resource related to calibrated data will be
  * released in the tasdevice_codec_remove.
@@ -2013,6 +2174,7 @@ static int fw_parse_calibration_data(struct tasdevice_priv *tas_priv,
 			goto out;
 	}
 
+	calbin_conversion(tas_priv, tas_fmw);
 out:
 	return offset;
 }
@@ -2298,25 +2460,12 @@ static int tasdevice_load_data(struct tasdevice_priv *tas_priv,
 
 static void tasdev_load_calibrated_data(struct tasdevice_priv *priv, int i)
 {
-	struct tasdevice_fw *cal_fmw = priv->tasdevice[i].cali_data_fmw;
 	struct calidata *cali_data = &priv->cali_data;
 	struct cali_reg *p = &cali_data->cali_reg_array;
 	unsigned char *data = cali_data->data;
-	struct tasdevice_calibration *cal;
 	int k = i * (cali_data->cali_dat_sz_per_dev + 1);
 	int rc;
 
-	/* Load the calibrated data from cal bin file */
-	if (!priv->is_user_space_calidata && cal_fmw) {
-		cal = cal_fmw->calibrations;
-
-		if (cal)
-			load_calib_data(priv, &cal->dev_data);
-		return;
-	}
-	if (!priv->is_user_space_calidata)
-		return;
-	/* load calibrated data from user space */
 	if (data[k] != i) {
 		dev_err(priv->dev, "%s: no cal-data for dev %d from usr-spc\n",
 			__func__, i);

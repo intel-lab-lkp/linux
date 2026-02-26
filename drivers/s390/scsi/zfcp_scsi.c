@@ -7,8 +7,7 @@
  * Copyright IBM Corp. 2002, 2020
  */
 
-#define KMSG_COMPONENT "zfcp"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "zfcp: " fmt
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -64,8 +63,8 @@ static void zfcp_scsi_command_fail(struct scsi_cmnd *scpnt, int result)
 	scsi_done(scpnt);
 }
 
-static
-int zfcp_scsi_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scpnt)
+static enum scsi_qc_status zfcp_scsi_queuecommand(struct Scsi_Host *shost,
+						  struct scsi_cmnd *scpnt)
 {
 	struct zfcp_scsi_dev *zfcp_sdev = sdev_to_zfcp(scpnt->device);
 	struct fc_rport *rport = starget_to_rport(scsi_target(scpnt->device));

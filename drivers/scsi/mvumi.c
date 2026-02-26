@@ -2077,8 +2077,8 @@ error:
  * @shost:			Scsi host to queue command on
  * @scmd:			SCSI command to be queued
  */
-static int mvumi_queue_command(struct Scsi_Host *shost,
-					struct scsi_cmnd *scmd)
+static enum scsi_qc_status mvumi_queue_command(struct Scsi_Host *shost,
+					       struct scsi_cmnd *scmd)
 {
 	struct mvumi_cmd *cmd;
 	struct mvumi_hba *mhba;
@@ -2142,7 +2142,7 @@ static enum scsi_timeout_action mvumi_timed_out(struct scsi_cmnd *scmd)
 }
 
 static int
-mvumi_bios_param(struct scsi_device *sdev, struct block_device *bdev,
+mvumi_bios_param(struct scsi_device *sdev, struct gendisk *unused,
 			sector_t capacity, int geom[])
 {
 	int heads, sectors;
