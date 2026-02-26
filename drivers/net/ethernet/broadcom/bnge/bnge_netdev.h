@@ -291,6 +291,7 @@ struct bnge_sw_stats {
 enum bnge_net_state {
 	BNGE_STATE_NAPI_DISABLED,
 	BNGE_STATE_IN_SP_TASK,
+	BNGE_STATE_READ_STATS,
 };
 
 #define BNGE_TIMER_INTERVAL	HZ
@@ -382,6 +383,7 @@ struct bnge_net {
 
 	u64			flags;
 
+	struct rtnl_link_stats64	net_stats_prev;
 	struct bnge_total_ring_err_stats ring_err_stats_prev;
 
 	struct bnge_stats_mem	port_stats;
