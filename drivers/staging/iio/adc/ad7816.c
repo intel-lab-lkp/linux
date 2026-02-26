@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/gpio/consumer.h>
 #include <linux/device.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
@@ -85,8 +86,14 @@ static int ad7816_spi_read(struct ad7816_chip_info *chip, u16 *data)
 	}
 
 	if (chip->id == ID_AD7816 || chip->id == ID_AD7817) {
-		while (gpiod_get_value(chip->busy_pin))
-			cpu_relax();
+		int val;
+
+		ret = read_poll_timeout_atomic(gpiod_get_value, val, val <= 0,
+					5, 1000, false, chip->busy_pin);
+		if (val < 0)
+			return val;
+		if (ret)
+			return ret;
 	}
 
 	gpiod_set_value(chip->rdwr_pin, 0);
