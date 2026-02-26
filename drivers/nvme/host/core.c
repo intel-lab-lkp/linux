@@ -454,6 +454,51 @@ void nvme_end_req(struct request *req)
 	blk_mq_end_request(req, status);
 }
 
+static void nvme_failover_req(struct request *req)
+{
+	struct nvme_ns *ns = req->q->queuedata;
+	u16 status = nvme_req(req)->status & NVME_SCT_SC_MASK;
+	unsigned long flags;
+	struct bio *bio;
+
+	if (nvme_ns_head_multipath(ns->head))
+		nvme_mpath_clear_current_path(ns);
+
+	/*
+	 * If we got back an ANA error, we know the controller is alive but not
+	 * ready to serve this namespace.  Kick of a re-read of the ANA
+	 * information page, and just try any other available path for now.
+	 */
+	if (nvme_is_ana_error(status) && ns->ctrl->ana_log_buf) {
+		set_bit(NVME_NS_ANA_PENDING, &ns->flags);
+		queue_work(nvme_wq, &ns->ctrl->ana_work);
+	}
+
+	spin_lock_irqsave(&ns->head->requeue_lock, flags);
+	for (bio = req->bio; bio; bio = bio->bi_next) {
+		if (nvme_ns_head_multipath(ns->head))
+			bio_set_dev(bio, ns->head->disk->part0);
+		if (bio->bi_opf & REQ_POLLED) {
+			bio->bi_opf &= ~REQ_POLLED;
+			bio->bi_cookie = BLK_QC_T_NONE;
+		}
+		/*
+		 * The alternate request queue that we may end up submitting
+		 * the bio to may be frozen temporarily, in this case REQ_NOWAIT
+		 * will fail the I/O immediately with EAGAIN to the issuer.
+		 * We are not in the issuer context which cannot block. Clear
+		 * the flag to avoid spurious EAGAIN I/O failures.
+		 */
+		bio->bi_opf &= ~REQ_NOWAIT;
+	}
+	blk_steal_bios(&ns->head->requeue_list, req);
+	spin_unlock_irqrestore(&ns->head->requeue_lock, flags);
+
+	nvme_req(req)->status = 0;
+	nvme_end_req(req);
+	kblockd_schedule_work(&ns->head->requeue_work);
+}
+
 void nvme_complete_rq(struct request *req)
 {
 	struct nvme_ctrl *ctrl = nvme_req(req)->ctrl;
@@ -762,8 +807,13 @@ blk_status_t nvme_fail_nonready_command(struct nvme_ctrl *ctrl,
 	    state != NVME_CTRL_DELETING &&
 	    state != NVME_CTRL_DEAD &&
 	    !test_bit(NVME_CTRL_FAILFAST_EXPIRED, &ctrl->flags) &&
-	    !blk_noretry_request(rq) && !(rq->cmd_flags & REQ_NVME_MPATH))
+	    !blk_noretry_request(rq) && !(rq->cmd_flags & REQ_NVME_MPATH)) {
+		if (test_bit(BLK_MQ_S_INACTIVE, &rq->mq_hctx->state)) {
+			nvme_failover_req(rq);
+			return BLK_STS_OK;
+		}
 		return BLK_STS_RESOURCE;
+	}
 
 	if (!(rq->rq_flags & RQF_DONTPREP))
 		nvme_clear_nvme_request(rq);
@@ -808,6 +858,9 @@ bool __nvme_check_ready(struct nvme_ctrl *ctrl, struct request *rq,
 			return false;
 		}
 	}
+
+	if (test_bit(BLK_MQ_S_INACTIVE, &rq->mq_hctx->state))
+		return false;
 
 	return queue_live;
 }
