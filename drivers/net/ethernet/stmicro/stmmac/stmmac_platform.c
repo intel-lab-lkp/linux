@@ -697,9 +697,40 @@ struct clk *stmmac_pltfr_find_clk(struct plat_stmmacenet_data *plat_dat,
 }
 EXPORT_SYMBOL_GPL(stmmac_pltfr_find_clk);
 
+static int stmmac_pltfr_get_queue_irqs(struct platform_device *pdev,
+				       struct stmmac_resources *stmmac_res,
+				       bool tx)
+{
+	int *irqs = tx ? &stmmac_res->tx_irq[0] : &stmmac_res->rx_irq[0];
+	char name[16];
+	int i;
+
+	/* RX channels irq */
+	STMMAC_FOREACH_MTL_QUEUE(i, MTL_MAX_RX_QUEUES) {
+		scnprintf(name, sizeof(name), "%cx-queue-%d",
+			  tx ? 't' : 'r', i);
+
+		irqs[i] = platform_get_irq_byname_optional(pdev, name);
+		if (irqs[i] <= 0) {
+			if (irqs[i] == -EPROBE_DEFER)
+				return -EPROBE_DEFER;
+
+			dev_dbg(&pdev->dev, "IRQ %s not found\n", name);
+
+			/* Stop on first unset rx/tx-queue-%i property member */
+			irqs[i] = 0;
+			break;
+		}
+	}
+
+	return 0;
+}
+
 int stmmac_get_platform_resources(struct platform_device *pdev,
 				  struct stmmac_resources *stmmac_res)
 {
+	int ret;
+
 	memset(stmmac_res, 0, sizeof(*stmmac_res));
 
 	/* Get IRQ information early to have an ability to ask for deferred
@@ -735,7 +766,20 @@ int stmmac_get_platform_resources(struct platform_device *pdev,
 
 	stmmac_res->addr = devm_platform_ioremap_resource(pdev, 0);
 
-	return PTR_ERR_OR_ZERO(stmmac_res->addr);
+	if (IS_ERR(stmmac_res->addr))
+		return PTR_ERR(stmmac_res->addr);
+
+	/* TX channels irq */
+	ret = stmmac_pltfr_get_queue_irqs(pdev, stmmac_res, true);
+	if (ret)
+		return ret;
+
+	/* RX channels irq */
+	ret = stmmac_pltfr_get_queue_irqs(pdev, stmmac_res, false);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(stmmac_get_platform_resources);
 
