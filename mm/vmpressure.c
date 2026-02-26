@@ -32,11 +32,20 @@
  * As the vmscan reclaimer logic works with chunks which are multiple of
  * SWAP_CLUSTER_MAX, it makes sense to use it for the window size as well.
  *
- * TODO: Make the window size depend on machine size, as we do for vmstat
- * thresholds. Currently we set it to 512 pages (2MB for 4KB pages).
+ * The window size scales with machine memory using logarithmic scaling
+ * Smaller machines get smaller window size, while larger ones, for
+ * example, get proportionally larger window size.
  */
-static const unsigned long vmpressure_win = SWAP_CLUSTER_MAX * 16;
+static unsigned long vmpressure_win;
 
+static int __init vmpressure_win_init(void)
+{
+	unsigned long mem = totalram_pages() >> (27 - PAGE_SHIFT);
+
+	vmpressure_win = SWAP_CLUSTER_MAX * max(16UL, (unsigned long)fls(mem) * 8);
+	return 0;
+}
+core_initcall(vmpressure_win_init);
 /*
  * These thresholds are used when we account memory pressure through
  * scanned/reclaimed ratio. The current values were chosen empirically. In
