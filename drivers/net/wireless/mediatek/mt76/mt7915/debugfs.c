@@ -603,6 +603,86 @@ mt7915_fw_debug_wa_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_fw_debug_wa, mt7915_fw_debug_wa_get,
 			 mt7915_fw_debug_wa_set, "%lld\n");
 
+struct {
+	u8 idx;
+	u8 query_cmd;
+	char *description;
+} mt7915_fw_wa_debug_query[] = {
+	{ 0, 0x16, "MSDU drop info" },
+	{ 1, 0x17, "AC queue tail drop" },
+	{ 2, 0x19, "TX Free info" },
+	{ 3, 0x20, "BSS Table" },
+	{ 4, 0x21, "STA records" },
+};
+
+static ssize_t
+mt7915_fw_query_wa_set(struct file *file, const char __user *user_buf,
+		       size_t count, loff_t *ppos)
+{
+	struct mt7915_phy *phy = file->private_data;
+	struct mt7915_dev *dev = phy->dev;
+	char buf[16];
+	u16 val;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	if (count && buf[count - 1] == '\n')
+		buf[count - 1] = '\0';
+	else
+		buf[count] = '\0';
+
+	if (kstrtou16(buf, 0, &val))
+		return -EINVAL;
+
+	for (int i = 0; i < ARRAY_SIZE(mt7915_fw_wa_debug_query); i++) {
+		if (val != mt7915_fw_wa_debug_query[i].idx)
+			continue;
+
+		mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(QUERY),
+				  mt7915_fw_wa_debug_query[i].query_cmd,
+				  0, 0);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static ssize_t
+mt7915_fw_query_wa_get(struct file *file, char __user *user_buf,
+		       size_t count, loff_t *ppos)
+{
+	static const size_t bufsz = 1024;
+	ssize_t ret;
+	char *buff;
+	int desc = 0;
+	int i;
+
+	buff = kmalloc(bufsz, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	for (i = 0; i < ARRAY_SIZE(mt7915_fw_wa_debug_query); i++) {
+		desc += scnprintf(buff + desc, bufsz - desc,
+				  "%d: %s\n", mt7915_fw_wa_debug_query[i].idx,
+				  mt7915_fw_wa_debug_query[i].description);
+	}
+
+	ret = simple_read_from_buffer(user_buf, count, ppos, buff, desc);
+	kfree(buff);
+	return ret;
+}
+
+static const struct file_operations fw_query_wa_fops = {
+	.write = mt7915_fw_query_wa_set,
+	.read = mt7915_fw_query_wa_get,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
 static struct dentry *
 create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
 		   struct rchan_buf *buf, int *is_global)
@@ -1310,6 +1390,7 @@ int mt7915_init_debugfs(struct mt7915_phy *phy)
 			    &mt7915_sys_recovery_ops);
 	debugfs_create_file("fw_debug_wm", 0600, dir, dev, &fops_fw_debug_wm);
 	debugfs_create_file("fw_debug_wa", 0600, dir, dev, &fops_fw_debug_wa);
+	debugfs_create_file("fw_query_wa", 0600, dir, dev, &fw_query_wa_fops);
 	debugfs_create_file("fw_debug_bin", 0600, dir, dev, &fops_fw_debug_bin);
 	debugfs_create_file("fw_util_wm", 0400, dir, dev,
 			    &mt7915_fw_util_wm_fops);
