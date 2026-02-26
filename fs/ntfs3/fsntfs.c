@@ -1239,7 +1239,7 @@ int ntfs_read_run_nb_ra(struct ntfs_sb_info *sbi, const struct runs_tree *run,
 			if (!ra_has_index(ra, index)) {
 				page_cache_sync_readahead(mapping, ra, NULL,
 							  index, 1);
-				ra->prev_pos = (loff_t)index << PAGE_SHIFT;
+				WRITE_ONCE(ra->prev_pos, (loff_t)index << PAGE_SHIFT);
 			}
 		}
 

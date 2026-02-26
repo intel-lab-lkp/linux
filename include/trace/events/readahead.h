@@ -101,7 +101,7 @@ DECLARE_EVENT_CLASS(page_cache_ra_op,
 		__entry->async_size = ra->async_size;
 		__entry->ra_pages = ra->ra_pages;
 		__entry->mmap_miss = ra->mmap_miss;
-		__entry->prev_pos = ra->prev_pos;
+		__entry->prev_pos = READ_ONCE(ra->prev_pos);
 		__entry->req_count = req_count;
 	),
 

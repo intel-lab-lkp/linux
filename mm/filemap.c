@@ -2771,7 +2771,7 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 	int i, error = 0;
 	bool writably_mapped;
 	loff_t isize, end_offset;
-	loff_t last_pos = ra->prev_pos;
+	loff_t last_pos = READ_ONCE(ra->prev_pos);
 
 	if (unlikely(iocb->ki_pos < 0))
 		return -EINVAL;
@@ -2870,7 +2870,7 @@ put_folios:
 	} while (iov_iter_count(iter) && iocb->ki_pos < isize && !error);
 
 	file_accessed(filp);
-	ra->prev_pos = last_pos;
+	WRITE_ONCE(ra->prev_pos, last_pos);
 	return already_read ? already_read : error;
 }
 EXPORT_SYMBOL_GPL(filemap_read);
@@ -3122,7 +3122,7 @@ ssize_t filemap_splice_read(struct file *in, loff_t *ppos,
 			len -= n;
 			total_spliced += n;
 			*ppos += n;
-			in->f_ra.prev_pos = *ppos;
+			WRITE_ONCE(in->f_ra.prev_pos, *ppos);
 			if (pipe_is_full(pipe))
 				goto out;
 		}

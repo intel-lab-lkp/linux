@@ -142,7 +142,7 @@ void
 file_ra_state_init(struct file_ra_state *ra, struct address_space *mapping)
 {
 	ra->ra_pages = inode_to_bdi(mapping->host)->ra_pages;
-	ra->prev_pos = -1;
+	WRITE_ONCE(ra->prev_pos, -1);
 }
 EXPORT_SYMBOL_GPL(file_ra_state_init);
 
@@ -584,7 +584,7 @@ void page_cache_sync_ra(struct readahead_control *ractl,
 	}
 
 	max_pages = ractl_max_pages(ractl, req_count);
-	prev_index = (unsigned long long)ra->prev_pos >> PAGE_SHIFT;
+	prev_index = (unsigned long long)READ_ONCE(ra->prev_pos) >> PAGE_SHIFT;
 	/*
 	 * A start of file, oversized read, or sequential cache miss:
 	 * trivial case: (index - prev_index) == 1

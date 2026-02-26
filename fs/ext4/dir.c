@@ -200,7 +200,7 @@ static int ext4_readdir(struct file *file, struct dir_context *ctx)
 					sb->s_bdev->bd_mapping,
 					&file->f_ra, file, index,
 					1 << EXT4_SB(sb)->s_min_folio_order);
-			file->f_ra.prev_pos = (loff_t)index << PAGE_SHIFT;
+			WRITE_ONCE(file->f_ra.prev_pos, (loff_t)index << PAGE_SHIFT);
 			bh = ext4_bread(NULL, inode, map.m_lblk, 0);
 			if (IS_ERR(bh)) {
 				err = PTR_ERR(bh);
