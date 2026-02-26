@@ -9,6 +9,7 @@ import socket
 import struct
 import termios
 import time
+import types
 
 from lib.py import defer
 from lib.py import ksft_run, ksft_exit, ksft_pr
@@ -18,6 +19,7 @@ from lib.py import KsftSkipEx
 from lib.py import NetDrvEpEnv, PSPFamily, NlError
 from lib.py import bkg, rand_port, wait_port_listen
 
+from lib.py import cmd, ip
 
 def _get_outq(s):
     one = b'\0' * 4
@@ -568,6 +570,83 @@ def removal_device_bi(cfg):
     finally:
         _close_conn(cfg, s)
 
+def vlan_basic_send(cfg):
+    """
+    Test PSP over VLAN-to-VLAN traffic
+
+    Network topology:
+      Local VLAN (nsim0.100) <---> Remote VLAN (nsim1.100)
+           |                            |
+      Local Physical (nsim0) <---> Remote Physical (nsim1)
+          [PSP configured here]
+    """
+    _init_psp_dev(cfg)
+
+    try:
+        cmd("modprobe 8021q")
+    except Exception:
+        raise KsftSkipEx("VLAN (8021q) kernel module not available")
+
+    vlan_id = 100
+    local_ifname = f"{cfg.ifname}.{vlan_id}"
+    remote_ifname = f"{cfg.remote_ifname}.{vlan_id}"
+
+    # Create VLAN interface on LOCAL side
+    ip(f"link add link {cfg.ifname} name {local_ifname} type vlan id {vlan_id}")
+    defer(ip, f"link del {local_ifname}")
+    ip(f"addr add 192.0.2.21/24 dev {local_ifname}")
+    ip(f"-6 addr add 2001:db8::21/64 dev {local_ifname} nodad")
+    ip(f"link set {local_ifname} up")
+
+    # Create VLAN interface on REMOTE side
+    ip(f"link add link {cfg.remote_ifname} name {remote_ifname} "
+       f"type vlan id {vlan_id}", host=cfg.remote)
+    defer(ip, f"link del {remote_ifname}", host=cfg.remote)
+    ip(f"addr add 192.0.2.22/24 dev {remote_ifname}", host=cfg.remote)
+    ip(f"-6 addr add 2001:db8::22/64 dev {remote_ifname} nodad",
+       host=cfg.remote)
+    ip(f"link set {remote_ifname} up", host=cfg.remote)
+
+    local_ifindex = ip(f"-j link show {local_ifname}", json=True)[0]['ifindex']
+
+    vlan_cfg = types.SimpleNamespace(
+        ifname=local_ifname,
+        ifindex=local_ifindex,
+        remote_ifname=remote_ifname,
+        addr_v={"4": "192.0.2.21", "6": "2001:db8::21"},
+        remote_addr_v={"4": "192.0.2.22", "6": "2001:db8::22"},
+        addr="192.0.2.21",
+        remote_addr="192.0.2.22",
+        pspnl=cfg.pspnl,
+        psp_dev_id=cfg.psp_dev_id,
+        remote=cfg.remote,
+        comm_port=cfg.comm_port,
+        comm_sock=cfg.comm_sock,
+    )
+
+    s = _make_psp_conn(vlan_cfg, version=0)
+    defer(_close_psp_conn, vlan_cfg, s)
+
+    # Create PSP associations
+    # The socket's device is VLAN, but PSP device is on physical NIC
+    rx_assoc = vlan_cfg.pspnl.rx_assoc({
+        "version": 0,
+        "dev-id": vlan_cfg.psp_dev_id,  # PSP device on physical interface
+        "sock-fd": s.fileno()
+    })
+    rx = rx_assoc['rx-key']
+    tx = _spi_xchg(s, rx)
+
+    vlan_cfg.pspnl.tx_assoc({
+        "dev-id": vlan_cfg.psp_dev_id,
+        "version": 0,
+        "tx-key": tx,
+        "sock-fd": s.fileno()
+    })
+
+    # Send data through VLAN interface (VLAN-to-VLAN traffic!)
+    data_len = _send_careful(vlan_cfg, s, 100)
+    _check_data_rx(vlan_cfg, data_len)
 
 def psp_ip_ver_test_builder(name, test_func, psp_ver, ipver):
     """Build test cases for each combo of PSP version and IP version"""
@@ -620,7 +699,7 @@ def main() -> None:
                 ]
 
                 ksft_run(cases=cases, globs=globals(),
-                         case_pfx={"dev_", "data_", "assoc_", "removal_"},
+                         case_pfx={"dev_", "data_", "assoc_", "removal_", "vlan_"},
                          args=(cfg, ))
 
                 cfg.comm_sock.send(b"exit\0")
