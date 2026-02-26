@@ -35,7 +35,7 @@ pub fn fsleep(delta: Delta) {
     let delta = if (Delta::ZERO..=MAX_DELTA).contains(&delta) {
         delta
     } else {
-        // TODO: Add WARN_ONCE() when it's supported.
+        crate::pr_warn_once!("delta out of range, clamping to maximum\n");
         MAX_DELTA
     };
 
