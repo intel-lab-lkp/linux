@@ -17,4 +17,8 @@
 typedef uint64_t vm_paddr_t; /* Virtual Machine (Guest) physical address */
 typedef uint64_t vm_vaddr_t; /* Virtual Machine (Guest) virtual address */
 
+#if defined(__riscv)
+#define INVALID_GPA (~(uint64_t)0)
+#endif
+
 #endif /* SELFTEST_KVM_UTIL_TYPES_H */
