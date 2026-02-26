@@ -2154,6 +2154,7 @@ again:
 			    p->nodes[level + 1])) {
 				write_lock_level = level + 1;
 				btrfs_release_path(p);
+				trace_btrfs_search_slot_restart(root, level, "write_lock");
 				goto again;
 			}
 
@@ -2216,8 +2217,10 @@ cow_done:
 		p->slots[level] = slot;
 		ret2 = setup_nodes_for_search(trans, root, p, b, level, ins_len,
 					      &write_lock_level);
-		if (ret2 == -EAGAIN)
+		if (ret2 == -EAGAIN) {
+			trace_btrfs_search_slot_restart(root, level, "setup_nodes");
 			goto again;
+		}
 		if (ret2) {
 			ret = ret2;
 			goto done;
@@ -2233,6 +2236,7 @@ cow_done:
 		if (slot == 0 && ins_len && write_lock_level < level + 1) {
 			write_lock_level = level + 1;
 			btrfs_release_path(p);
+			trace_btrfs_search_slot_restart(root, level, "slot_zero");
 			goto again;
 		}
 
@@ -2246,8 +2250,10 @@ cow_done:
 		}
 
 		ret2 = read_block_for_search(root, p, &b, slot, key);
-		if (ret2 == -EAGAIN && !p->nowait)
+		if (ret2 == -EAGAIN && !p->nowait) {
+			trace_btrfs_search_slot_restart(root, level, "read_block");
 			goto again;
+		}
 		if (ret2) {
 			ret = ret2;
 			goto done;
