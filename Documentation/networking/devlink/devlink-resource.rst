@@ -40,11 +40,31 @@ device drivers and their description must be added to the following table:
 example usage
 -------------
 
-The resources exposed by the driver can be observed, for example:
+The resources exposed by the driver can be observed.
+
+To list resources for all devlink devices that have resources registered:
 
 .. code:: shell
 
-    $devlink resource show pci/0000:03:00.0
+    $ devlink resource show
+    pci/0000:03:00.0:
+      name kvd size 245760 unit entry
+        resources:
+          name linear size 98304 occ 0 unit entry size_min 0 size_max 147456 size_gran 128
+          name hash_double size 60416 unit entry size_min 32768 size_max 180224 size_gran 128
+          name hash_single size 87040 unit entry size_min 65536 size_max 212992 size_gran 128
+    pci/0000:04:00.0:
+      name kvd size 245760 unit entry
+        resources:
+          name linear size 98304 occ 0 unit entry size_min 0 size_max 147456 size_gran 128
+          name hash_double size 60416 unit entry size_min 32768 size_max 180224 size_gran 128
+          name hash_single size 87040 unit entry size_min 65536 size_max 212992 size_gran 128
+
+To show resources for a specific device:
+
+.. code:: shell
+
+    $ devlink resource show pci/0000:03:00.0
     pci/0000:03:00.0:
       name kvd size 245760 unit entry
         resources:
