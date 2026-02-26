@@ -148,6 +148,10 @@ struct devlink_nl_dump_state {
 		struct {
 			u64 dump_ts;
 		};
+		/* DEVLINK_CMD_PORT_RESOURCE_GET - dump */
+		struct {
+			unsigned long port_index;
+		};
 	};
 };
 
