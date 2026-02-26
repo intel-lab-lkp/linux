@@ -3211,6 +3211,8 @@ static void nvme_reset_work(struct work_struct *work)
 	nvme_unquiesce_admin_queue(&dev->ctrl);
 	mutex_unlock(&dev->shutdown_lock);
 
+	nvme_set_hw_queues_idle(&dev->ctrl);
+
 	/*
 	 * Introduce CONNECTING state from nvme-fc/rdma transports to mark the
 	 * initializing procedure here.
@@ -3243,6 +3245,7 @@ static void nvme_reset_work(struct work_struct *work)
 	if (result)
 		goto out;
 
+	nvme_clear_hw_queues_idle(&dev->ctrl);
 	/*
 	 * Freeze and update the number of I/O queues as those might have
 	 * changed.  If there are no I/O queues left after this reset, keep the

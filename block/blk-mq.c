@@ -112,6 +112,31 @@ void blk_mq_in_driver_rw(struct block_device *part, unsigned int inflight[2])
 	inflight[WRITE] = mi.inflight[WRITE];
 }
 
+static void __blk_update_hw_queue_idle(struct request_queue *q, bool idle)
+{
+	struct blk_mq_hw_ctx *hctx;
+	unsigned long i;
+
+	queue_for_each_hw_ctx(q, hctx, i) {
+		if (idle)
+			set_bit(BLK_MQ_S_IDLE, &hctx->state);
+		else
+			clear_bit(BLK_MQ_S_IDLE, &hctx->state);
+	}
+}
+
+void blk_mq_set_hw_queues_idle(struct request_queue *q)
+{
+	__blk_update_hw_queue_idle(q, true);
+}
+EXPORT_SYMBOL_GPL(blk_mq_set_hw_queues_idle);
+
+void blk_mq_clear_hw_queues_idle(struct request_queue *q)
+{
+	__blk_update_hw_queue_idle(q, false);
+}
+EXPORT_SYMBOL_GPL(blk_mq_clear_hw_queues_idle);
+
 #ifdef CONFIG_LOCKDEP
 static bool blk_freeze_set_owner(struct request_queue *q,
 				 struct task_struct *owner)
@@ -3679,6 +3704,17 @@ static bool blk_mq_has_request(struct request *rq, void *data)
 
 	if (rq->mq_hctx != iter_data->hctx)
 		return true;
+
+	/*
+	 * The driver ensures that all hardware queue resources are freed, even
+	 * if a request has a tag allocated to a CPU that is going offline. This
+	 * applies to requests not yet handed to the hardware. Essentially those
+	 * 'in-flight' between the block layer and the hardware (e.g., a request
+	 * blocked because the queue is quiesced).
+	 */
+	if (test_bit(BLK_MQ_S_IDLE, &iter_data->hctx->state))
+		return false;
+
 	iter_data->has_rq = true;
 	return false;
 }

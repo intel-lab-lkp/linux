@@ -721,6 +721,7 @@ enum {
 	BLK_MQ_S_SCHED_RESTART,
 	/* hw queue is inactive after all its CPUs become offline */
 	BLK_MQ_S_INACTIVE,
+	BLK_MQ_S_IDLE,
 	BLK_MQ_S_MAX
 };
 
@@ -934,6 +935,8 @@ void blk_mq_stop_hw_queues(struct request_queue *q);
 void blk_mq_start_hw_queues(struct request_queue *q);
 void blk_mq_start_stopped_hw_queue(struct blk_mq_hw_ctx *hctx, bool async);
 void blk_mq_start_stopped_hw_queues(struct request_queue *q, bool async);
+void blk_mq_set_hw_queues_idle(struct request_queue *q);
+void blk_mq_clear_hw_queues_idle(struct request_queue *q);
 void blk_mq_quiesce_queue(struct request_queue *q);
 void blk_mq_wait_quiesce_done(struct blk_mq_tag_set *set);
 void blk_mq_quiesce_tagset(struct blk_mq_tag_set *set);

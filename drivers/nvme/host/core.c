@@ -5354,6 +5354,34 @@ void nvme_unquiesce_admin_queue(struct nvme_ctrl *ctrl)
 }
 EXPORT_SYMBOL_GPL(nvme_unquiesce_admin_queue);
 
+static void __nvme_set_hw_queues_idle(struct nvme_ctrl *ctrl, bool idle)
+{
+	struct nvme_ns *ns;
+	int srcu_idx;
+
+	srcu_idx = srcu_read_lock(&ctrl->srcu);
+	list_for_each_entry_srcu(ns, &ctrl->namespaces, list,
+				 srcu_read_lock_held(&ctrl->srcu)) {
+		if (idle)
+			blk_mq_set_hw_queues_idle(ns->queue);
+		else
+			blk_mq_clear_hw_queues_idle(ns->queue);
+	}
+	srcu_read_unlock(&ctrl->srcu, srcu_idx);
+}
+
+void nvme_set_hw_queues_idle(struct nvme_ctrl *ctrl)
+{
+	__nvme_set_hw_queues_idle(ctrl, true);
+}
+EXPORT_SYMBOL_GPL(nvme_set_hw_queues_idle);
+
+void nvme_clear_hw_queues_idle(struct nvme_ctrl *ctrl)
+{
+	__nvme_set_hw_queues_idle(ctrl, false);
+}
+EXPORT_SYMBOL_GPL(nvme_clear_hw_queues_idle);
+
 void nvme_sync_io_queues(struct nvme_ctrl *ctrl)
 {
 	struct nvme_ns *ns;

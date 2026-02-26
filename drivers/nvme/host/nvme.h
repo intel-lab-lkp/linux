@@ -834,6 +834,8 @@ void nvme_quiesce_io_queues(struct nvme_ctrl *ctrl);
 void nvme_unquiesce_io_queues(struct nvme_ctrl *ctrl);
 void nvme_quiesce_admin_queue(struct nvme_ctrl *ctrl);
 void nvme_unquiesce_admin_queue(struct nvme_ctrl *ctrl);
+void nvme_set_hw_queues_idle(struct nvme_ctrl *ctrl);
+void nvme_clear_hw_queues_idle(struct nvme_ctrl *ctrl);
 void nvme_mark_namespaces_dead(struct nvme_ctrl *ctrl);
 void nvme_sync_queues(struct nvme_ctrl *ctrl);
 void nvme_sync_io_queues(struct nvme_ctrl *ctrl);

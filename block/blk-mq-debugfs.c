@@ -162,6 +162,7 @@ static const char *const hctx_state_name[] = {
 	HCTX_STATE_NAME(TAG_ACTIVE),
 	HCTX_STATE_NAME(SCHED_RESTART),
 	HCTX_STATE_NAME(INACTIVE),
+	HCTX_STATE_NAME(IDLE),
 };
 #undef HCTX_STATE_NAME
 
