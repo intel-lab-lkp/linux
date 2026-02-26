@@ -8,6 +8,34 @@
 
 #include "vgic.h"
 
+static struct vgic_v5_ppi_caps ppi_caps;
+
+/*
+ * Not all PPIs are guaranteed to be implemented for GICv5. Deterermine which
+ * ones are, and generate a mask.
+ */
+static void vgic_v5_get_implemented_ppis(void)
+{
+	if (!cpus_have_final_cap(ARM64_HAS_GICV5_CPUIF))
+		return;
+
+	/*
+	 * If we have KVM, we have EL2, which means that we have support for the
+	 * EL1 and EL2 P & V timers.
+	 */
+	ppi_caps.impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTHP);
+	ppi_caps.impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTV);
+	ppi_caps.impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTHV);
+	ppi_caps.impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTP);
+
+	/* The SW_PPI should be available */
+	ppi_caps.impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_SW_PPI);
+
+	/* The PMUIRQ is available if we have the PMU */
+	if (system_supports_pmuv3())
+		ppi_caps.impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_PMUIRQ);
+}
+
 /*
  * Probe for a vGICv5 compatible interrupt controller, returning 0 on success.
  * Currently only supports GICv3-based VMs on a GICv5 host, and hence only
@@ -17,6 +45,8 @@ int vgic_v5_probe(const struct gic_kvm_info *info)
 {
 	u64 ich_vtr_el2;
 	int ret;
+
+	vgic_v5_get_implemented_ppis();
 
 	if (!cpus_have_final_cap(ARM64_HAS_GICV5_LEGACY))
 		return -ENODEV;

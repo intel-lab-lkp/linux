@@ -25,6 +25,16 @@
 #define GICV5_HWIRQ_TYPE_SPI		UL(0x3)
 
 /*
+ * Architected PPIs
+ */
+#define GICV5_ARCH_PPI_SW_PPI		0x3
+#define GICV5_ARCH_PPI_PMUIRQ		0x17
+#define GICV5_ARCH_PPI_CNTHP		0x1a
+#define GICV5_ARCH_PPI_CNTV		0x1b
+#define GICV5_ARCH_PPI_CNTHV		0x1c
+#define GICV5_ARCH_PPI_CNTP		0x1e
+
+/*
  * Tables attributes
  */
 #define GICV5_NO_READ_ALLOC		0b0
