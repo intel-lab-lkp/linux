@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0+
+
+config DRM_ACCEL_NXP_NEUTRON
+	tristate "NXP Neutron NPU"
+	depends on HAS_IOMEM
+	depends on DRM_ACCEL
+	depends on ARCH_MXC
+	select DRM_GEM_DMA_HELPER
+	select DRM_SCHED
+	help
+	  Enables driver for NXP Neutron NPU.
+
+	  Select this if you have an NXP SoC with Neutron, like i.MX95,
+	  and want to run machine learning applications.
+
+	  If built as module, the module is named neutron.
