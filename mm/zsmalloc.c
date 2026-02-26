@@ -977,6 +977,30 @@ static void migrate_obj_objcg(unsigned long used_obj, unsigned long free_obj,
 	zpdesc_set_obj_cgroup(d_zpdesc, d_obj_idx, size, objcg);
 	zpdesc_set_obj_cgroup(s_zpdesc, s_obj_idx, size, NULL);
 }
+
+struct obj_cgroup *zs_lookup_objcg(struct zs_pool *pool, unsigned long handle)
+{
+	unsigned long obj;
+	struct zpdesc *zpdesc;
+	struct zspage *zspage;
+	struct size_class *class;
+	struct obj_cgroup *objcg;
+	unsigned int obj_idx;
+
+	read_lock(&pool->lock);
+	obj = handle_to_obj(handle);
+	obj_to_location(obj, &zpdesc, &obj_idx);
+
+	zspage = get_zspage(zpdesc);
+	zspage_read_lock(zspage);
+	read_unlock(&pool->lock);
+
+	class = zspage_class(pool, zspage);
+	objcg = zpdesc_obj_cgroup(zpdesc, obj_idx, class->size);
+	zspage_read_unlock(zspage);
+
+	return objcg;
+}
 #else
 static inline struct obj_cgroup *zpdesc_obj_cgroup(struct zpdesc *zpdesc,
 						   unsigned int offset,
@@ -996,6 +1020,11 @@ static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
 
 static void migrate_obj_objcg(unsigned long used_obj, unsigned long free_obj,
 			      int size) {}
+
+struct obj_cgroup *zs_lookup_objcg(struct zs_pool *pool, unsigned long handle)
+{
+	return NULL;
+}
 #endif
 
 static void create_page_chain(struct size_class *class, struct zspage *zspage,
