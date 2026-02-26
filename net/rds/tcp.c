@@ -490,18 +490,24 @@ bool rds_tcp_tune(struct socket *sock)
 	struct rds_tcp_net *rtn;
 
 	tcp_sock_set_nodelay(sock->sk);
-	lock_sock(sk);
 	/* TCP timer functions might access net namespace even after
 	 * a process which created this net namespace terminated.
 	 */
 	if (!sk->sk_net_refcnt) {
-		if (!maybe_get_net(net)) {
-			release_sock(sk);
+		if (!maybe_get_net(net))
 			return false;
-		}
+		/*
+		 * We call sk_net_refcnt_upgrade before the lock_sock since it is
+		 * not yet shared, no lock is needed at this time.  Further,
+		 * because sk_net_refcnt_upgrade does a GFP_KERNEL allocation,
+		 * this can trigger an fs_reclaim in other systems which creates
+		 * a circular lock dependancy.  Avoid this by upgrading the
+		 * refcnt before the locking the socket.
+		 */
 		sk_net_refcnt_upgrade(sk);
 		put_net(net);
 	}
+	lock_sock(sk);
 	rtn = net_generic(net, rds_tcp_netid);
 	if (rtn->sndbuf_size > 0) {
 		sk->sk_sndbuf = rtn->sndbuf_size;
