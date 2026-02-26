@@ -14,18 +14,18 @@ void __zone_lock_do_trace_start_locking(struct zone *zone)
 {
 	trace_zone_lock_start_locking(zone);
 }
-EXPORT_SYMBOL(__zone_lock_do_trace_start_locking);
+EXPORT_SYMBOL_GPL(__zone_lock_do_trace_start_locking);
 
 void __zone_lock_do_trace_acquire_returned(struct zone *zone, bool success)
 {
 	trace_zone_lock_acquire_returned(zone, success);
 }
-EXPORT_SYMBOL(__zone_lock_do_trace_acquire_returned);
+EXPORT_SYMBOL_GPL(__zone_lock_do_trace_acquire_returned);
 
 void __zone_lock_do_trace_released(struct zone *zone)
 {
 	trace_zone_lock_released(zone);
 }
-EXPORT_SYMBOL(__zone_lock_do_trace_released);
+EXPORT_SYMBOL_GPL(__zone_lock_do_trace_released);
 
 #endif /* CONFIG_TRACING */
