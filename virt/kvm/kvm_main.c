@@ -2577,6 +2577,8 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		.on_lock = kvm_mmu_invalidate_end,
 		.may_block = true,
 	};
+	struct kvm_memslots *slots = kvm_memslots(kvm);
+	struct kvm_memory_slot *slot;
 	unsigned long i;
 	void *entry;
 	int r = 0;
@@ -2603,6 +2605,34 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		cond_resched();
 	}
 
+	/*
+	 * Prevent pfncaches from being activated / refreshed using stale PFN
+	 * resolutions.  To invalidate pfncaches _before_ invalidating the
+	 * secondary MMUs (i.e. without acquiring mmu_lock), pfncaches must use
+	 * active_invalidate_count instead of mmu_invalidate_in_progress.
+	 */
+	spin_lock(&kvm->invalidate_lock);
+	kvm->active_invalidate_count++;
+	spin_unlock(&kvm->invalidate_lock);
+
+	/*
+	 * Invalidation of pfncaches must be done using a HVA range.  pfncaches
+	 * can be either GPA-based or HVA-based, and all pfncaches store uhva
+	 * while HVA-based pfncaches do not have gpa/memslot info.  Thus,
+	 * using GFN ranges would miss invalidating HVA-based ones.
+	 */
+	kvm_for_each_memslot(slot, slots) {
+		gfn_t gfn_start = max(start, slot->base_gfn);
+		gfn_t gfn_end = min(end, slot->base_gfn + slot->npages);
+
+		if (gfn_start < gfn_end) {
+			unsigned long hva_start = gfn_to_hva_memslot(slot, gfn_start);
+			unsigned long hva_end = gfn_to_hva_memslot(slot, gfn_end);
+
+			gpc_invalidate_hva_range_start(kvm, hva_start, hva_end);
+		}
+	}
+
 	kvm_handle_gfn_range(kvm, &pre_set_range);
 
 	for (i = start; i < end; i++) {
@@ -2613,6 +2643,21 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	}
 
 	kvm_handle_gfn_range(kvm, &post_set_range);
+
+	/*
+	 * This must be done after the increment of mmu_invalidate_seq and
+	 * smp_wmb() in kvm_mmu_invalidate_end() to guarantee that
+	 * gpc_invalidate_retry() observes either the old (non-zero)
+	 * active_invalidate_count or the new (incremented) mmu_invalidate_seq.
+	 *
+	 * memslots_update_rcuwait does not need to be waked when
+	 * active_invalidate_count drops to zero because active memslots swap is
+	 * also done while holding slots_lock.
+	 */
+	spin_lock(&kvm->invalidate_lock);
+	if (!WARN_ON_ONCE(!kvm->active_invalidate_count))
+		kvm->active_invalidate_count--;
+	spin_unlock(&kvm->invalidate_lock);
 
 out_unlock:
 	mutex_unlock(&kvm->slots_lock);
