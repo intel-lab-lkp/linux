@@ -140,19 +140,12 @@ static ssize_t init_pkru_read_file(struct file *file, char __user *user_buf,
 static ssize_t init_pkru_write_file(struct file *file,
 		 const char __user *user_buf, size_t count, loff_t *ppos)
 {
-	char buf[32];
-	ssize_t len;
 	u32 new_init_pkru;
+	int ret;
 
-	len = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, len))
-		return -EFAULT;
-
-	/* Make the buffer a valid string that we can not overrun */
-	buf[len] = '\0';
-	if (kstrtouint(buf, 0, &new_init_pkru))
-		return -EINVAL;
-
+	ret = kstrtouint_from_user(user_buf, count, 0, &new_init_pkru);
+	if (ret)
+		return ret;
 	/*
 	 * Don't allow insane settings that will blow the system
 	 * up immediately if someone attempts to disable access
