@@ -1363,6 +1363,7 @@ static void ext4_put_super(struct super_block *sb)
 	sbi->s_ea_block_cache = NULL;
 
 	ext4_stop_mmpd(sbi);
+	ext4_fc_bytelog_release(sb);
 
 	brelse(sbi->s_sbh);
 	sb->s_fs_info = NULL;
@@ -1677,6 +1678,8 @@ enum {
 	Opt_max_dir_size_kb, Opt_nojournal_checksum, Opt_nombcache,
 	Opt_no_prefetch_block_bitmaps, Opt_mb_optimize_scan,
 	Opt_errors, Opt_data, Opt_data_err, Opt_jqfmt, Opt_dax_type,
+	Opt_dax_fc_bytelog, Opt_dax_fc_bytelog_off, Opt_dax_fc_bytelog_on,
+	Opt_dax_fc_bytelog_force,
 #ifdef CONFIG_EXT4_DEBUG
 	Opt_fc_debug_max_replay, Opt_fc_debug_force
 #endif
@@ -1713,6 +1716,13 @@ static const struct constant_table ext4_param_dax[] = {
 	{"always",	Opt_dax_always},
 	{"inode",	Opt_dax_inode},
 	{"never",	Opt_dax_never},
+	{}
+};
+
+static const struct constant_table ext4_param_dax_fc_bytelog[] = {
+	{"off",		Opt_dax_fc_bytelog_off},
+	{"on",		Opt_dax_fc_bytelog_on},
+	{"force",	Opt_dax_fc_bytelog_force},
 	{}
 };
 
@@ -1772,6 +1782,8 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_flag	("i_version",		Opt_removed),
 	fsparam_flag	("dax",			Opt_dax),
 	fsparam_enum	("dax",			Opt_dax_type, ext4_param_dax),
+	fsparam_enum("dax_fc_bytelog", Opt_dax_fc_bytelog,
+		     ext4_param_dax_fc_bytelog),
 	fsparam_u32	("stripe",		Opt_stripe),
 	fsparam_flag	("delalloc",		Opt_delalloc),
 	fsparam_flag	("nodelalloc",		Opt_nodelalloc),
@@ -1957,6 +1969,7 @@ ext4_sb_read_encoding(const struct ext4_super_block *es)
 #define EXT4_SPEC_s_fc_debug_max_replay		(1 << 17)
 #define EXT4_SPEC_s_sb_block			(1 << 18)
 #define EXT4_SPEC_mb_optimize_scan		(1 << 19)
+#define EXT4_SPEC_s_dax_fc_bytelog		BIT(20)
 
 struct ext4_fs_context {
 	char		*s_qf_names[EXT4_MAXQUOTAS];
@@ -2362,6 +2375,26 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		ext4_msg(NULL, KERN_INFO, "dax option not supported");
 		return -EINVAL;
 #endif
+	case Opt_dax_fc_bytelog:
+		switch (result.uint_32) {
+		case Opt_dax_fc_bytelog_off:
+			ctx_clear_mount_opt2(ctx, EXT4_MOUNT2_DAX_FC_BYTELOG);
+			ctx_clear_mount_opt2(ctx,
+					     EXT4_MOUNT2_DAX_FC_BYTELOG_FORCE);
+			break;
+		case Opt_dax_fc_bytelog_on:
+			ctx_set_mount_opt2(ctx, EXT4_MOUNT2_DAX_FC_BYTELOG);
+			ctx_clear_mount_opt2(ctx,
+					     EXT4_MOUNT2_DAX_FC_BYTELOG_FORCE);
+			break;
+		case Opt_dax_fc_bytelog_force:
+			ctx_set_mount_opt2(ctx, EXT4_MOUNT2_DAX_FC_BYTELOG);
+			ctx_set_mount_opt2(ctx,
+					   EXT4_MOUNT2_DAX_FC_BYTELOG_FORCE);
+			break;
+		}
+		ctx->spec |= EXT4_SPEC_s_dax_fc_bytelog;
+		return 0;
 	case Opt_data_err:
 		if (result.uint_32 == Opt_data_err_abort)
 			ctx_set_mount_opt(ctx, m->mount_opt);
@@ -2811,7 +2844,22 @@ fail_dax_change_remount:
 			    !(sbi->s_mount_opt2 & EXT4_MOUNT2_DAX_INODE))) {
 			goto fail_dax_change_remount;
 		}
-	}
+
+		if (ctx->spec & EXT4_SPEC_s_dax_fc_bytelog) {
+			bool new_on = ctx_test_mount_opt2(ctx,
+					EXT4_MOUNT2_DAX_FC_BYTELOG);
+			bool new_force = ctx_test_mount_opt2(ctx,
+					EXT4_MOUNT2_DAX_FC_BYTELOG_FORCE);
+			bool cur_on = test_opt2(sb, DAX_FC_BYTELOG);
+			bool cur_force = test_opt2(sb, DAX_FC_BYTELOG_FORCE);
+
+				if (new_on != cur_on || new_force != cur_force) {
+					ext4_msg(NULL, KERN_ERR,
+						 "can't change dax_fc_bytelog mount option while remounting");
+					return -EINVAL;
+				}
+			}
+		}
 
 	return ext4_check_quota_consistency(fc, sb);
 }
@@ -3029,6 +3077,12 @@ static int _ext4_show_options(struct seq_file *seq, struct super_block *sb,
 		SEQ_OPTS_PUTS("dax=never");
 	} else if (test_opt2(sb, DAX_INODE)) {
 		SEQ_OPTS_PUTS("dax=inode");
+	}
+	if (test_opt2(sb, DAX_FC_BYTELOG)) {
+		if (test_opt2(sb, DAX_FC_BYTELOG_FORCE))
+			SEQ_OPTS_PUTS("dax_fc_bytelog=force");
+		else
+			SEQ_OPTS_PUTS("dax_fc_bytelog=on");
 	}
 
 	if (sbi->s_groups_count >= MB_DEFAULT_LINEAR_SCAN_THRESHOLD &&
@@ -4942,6 +4996,8 @@ static int ext4_load_and_init_journal(struct super_block *sb,
 			"Failed to set fast commit journal feature");
 		goto out;
 	}
+	if (test_opt2(sb, JOURNAL_FAST_COMMIT))
+		ext4_fc_bytelog_init(sb, sbi->s_journal);
 
 	/* We have now updated the journal if required, so we can
 	 * validate the data journaling mode. */
@@ -6116,10 +6172,29 @@ static int ext4_load_journal(struct super_block *sb,
 		char *save = kmalloc(EXT4_S_ERR_LEN, GFP_KERNEL);
 		__le16 orig_state;
 		bool changed = false;
+		int fc_err;
 
 		if (save)
 			memcpy(save, ((char *) es) +
 			       EXT4_S_ERR_START, EXT4_S_ERR_LEN);
+
+		/*
+		 * Map the ByteLog ring before fast-commit replay so that
+		 * EXT4_FC_TAG_DAX_BYTELOG_ANCHOR records can be processed
+		 * during jbd2_journal_load().
+		 *
+		 * For filesystems with the INCOMPAT_DAX_FC_BYTELOG feature
+		 * bit set, failing to initialize the ByteLog ring must be
+		 * treated as fatal.
+		 */
+		if (test_opt2(sb, JOURNAL_FAST_COMMIT)) {
+			fc_err = ext4_fc_bytelog_init(sb, journal);
+			if (fc_err && ext4_has_feature_dax_fc_bytelog(sb)) {
+				kfree(save);
+				err = fc_err;
+				goto err_out;
+			}
+		}
 		err = jbd2_journal_load(journal);
 		if (save && memcmp(((char *) es) + EXT4_S_ERR_START,
 				   save, EXT4_S_ERR_LEN)) {
