@@ -21,6 +21,7 @@
 #include "fs.h"
 #include "accessors.h"
 #include "extent-tree.h"
+#include "extent_io.h"
 #include "relocation.h"
 #include "file-item.h"
 
@@ -590,6 +591,9 @@ int btrfs_force_cow_block(struct btrfs_trans_handle *trans,
 		btrfs_tree_unlock(buf);
 	free_extent_buffer_stale(buf);
 	btrfs_mark_buffer_dirty(trans, cow);
+
+	btrfs_inhibit_eb_writeback(trans, cow);
+
 	*cow_ret = cow;
 	return 0;
 
@@ -617,6 +621,9 @@ error_unlock_cow:
  * When returning false for a WRITTEN buffer allocated in the current
  * transaction, re-dirties the buffer for in-place overwrite instead
  * of requesting a new COW.
+ *
+ * When returning false, inhibits background writeback on the buffer
+ * for the lifetime of the transaction handle.
  */
 static inline bool should_cow_block(struct btrfs_trans_handle *trans,
 				    const struct btrfs_root *root,
@@ -684,6 +691,7 @@ static inline bool should_cow_block(struct btrfs_trans_handle *trans,
 		btrfs_mark_buffer_dirty(trans, buf);
 	}
 
+	btrfs_inhibit_eb_writeback(trans, buf);
 	return false;
 }
 
