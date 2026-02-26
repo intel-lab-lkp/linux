@@ -844,6 +844,7 @@ static int stmmac_init_timestamping(struct stmmac_priv *priv)
 		netdev_info(priv->dev,
 			    "IEEE 1588-2008 Advanced Timestamp supported\n");
 
+	memset(&priv->tstamp_config, 0, sizeof(priv->tstamp_config));
 	priv->hwts_tx_en = 0;
 	priv->hwts_rx_en = 0;
 
@@ -2216,9 +2217,7 @@ static int __alloc_dma_rx_desc_resources(struct stmmac_priv *priv,
 		return ret;
 	}
 
-	rx_q->buf_pool = kcalloc(dma_conf->dma_rx_size,
-				 sizeof(*rx_q->buf_pool),
-				 GFP_KERNEL);
+	rx_q->buf_pool = kzalloc_objs(*rx_q->buf_pool, dma_conf->dma_rx_size);
 	if (!rx_q->buf_pool)
 		return -ENOMEM;
 
@@ -2301,15 +2300,12 @@ static int __alloc_dma_tx_desc_resources(struct stmmac_priv *priv,
 	tx_q->queue_index = queue;
 	tx_q->priv_data = priv;
 
-	tx_q->tx_skbuff_dma = kcalloc(dma_conf->dma_tx_size,
-				      sizeof(*tx_q->tx_skbuff_dma),
-				      GFP_KERNEL);
+	tx_q->tx_skbuff_dma = kzalloc_objs(*tx_q->tx_skbuff_dma,
+					   dma_conf->dma_tx_size);
 	if (!tx_q->tx_skbuff_dma)
 		return -ENOMEM;
 
-	tx_q->tx_skbuff = kcalloc(dma_conf->dma_tx_size,
-				  sizeof(struct sk_buff *),
-				  GFP_KERNEL);
+	tx_q->tx_skbuff = kzalloc_objs(struct sk_buff *, dma_conf->dma_tx_size);
 	if (!tx_q->tx_skbuff)
 		return -ENOMEM;
 
@@ -4020,7 +4016,7 @@ stmmac_setup_dma_desc(struct stmmac_priv *priv, unsigned int mtu)
 	struct stmmac_dma_conf *dma_conf;
 	int chan, bfsize, ret;
 
-	dma_conf = kzalloc(sizeof(*dma_conf), GFP_KERNEL);
+	dma_conf = kzalloc_obj(*dma_conf);
 	if (!dma_conf) {
 		netdev_err(priv->dev, "%s: DMA conf allocation failed\n",
 			   __func__);
