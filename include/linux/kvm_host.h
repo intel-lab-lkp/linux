@@ -796,10 +796,13 @@ struct kvm {
 	 */
 	atomic_t nr_memslots_dirty_logging;
 
-	/* Used to wait for completion of MMU notifiers.  */
-	spinlock_t mn_invalidate_lock;
-	unsigned long mn_active_invalidate_count;
-	struct rcuwait mn_memslots_update_rcuwait;
+	/*
+	 * Used by active memslots swap and pfncache refresh to wait for
+	 * invalidation to complete.
+	 */
+	spinlock_t invalidate_lock;
+	unsigned long active_invalidate_count;
+	struct rcuwait memslots_update_rcuwait;
 
 	/* For management / invalidation of gfn_to_pfn_caches */
 	spinlock_t gpc_lock;
