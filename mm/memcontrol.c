@@ -5488,57 +5488,6 @@ bool obj_cgroup_may_zswap(struct obj_cgroup *objcg)
 	return ret;
 }
 
-/**
- * obj_cgroup_charge_zswap - charge compression backend memory
- * @objcg: the object cgroup
- * @size: size of compressed object
- *
- * This forces the charge after obj_cgroup_may_zswap() allowed
- * compression and storage in zswap for this cgroup to go ahead.
- */
-void obj_cgroup_charge_zswap(struct obj_cgroup *objcg, size_t size)
-{
-	struct mem_cgroup *memcg;
-
-	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
-		return;
-
-	VM_WARN_ON_ONCE(!(current->flags & PF_MEMALLOC));
-
-	/* PF_MEMALLOC context, charging must succeed */
-	if (obj_cgroup_charge(objcg, GFP_KERNEL, size))
-		VM_WARN_ON_ONCE(1);
-
-	rcu_read_lock();
-	memcg = obj_cgroup_memcg(objcg);
-	mod_memcg_state(memcg, MEMCG_ZSWAP_B, size);
-	mod_memcg_state(memcg, MEMCG_ZSWAPPED, 1);
-	rcu_read_unlock();
-}
-
-/**
- * obj_cgroup_uncharge_zswap - uncharge compression backend memory
- * @objcg: the object cgroup
- * @size: size of compressed object
- *
- * Uncharges zswap memory on page in.
- */
-void obj_cgroup_uncharge_zswap(struct obj_cgroup *objcg, size_t size)
-{
-	struct mem_cgroup *memcg;
-
-	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
-		return;
-
-	obj_cgroup_uncharge(objcg, size);
-
-	rcu_read_lock();
-	memcg = obj_cgroup_memcg(objcg);
-	mod_memcg_state(memcg, MEMCG_ZSWAP_B, -size);
-	mod_memcg_state(memcg, MEMCG_ZSWAPPED, -1);
-	rcu_read_unlock();
-}
-
 bool mem_cgroup_zswap_writeback_enabled(struct mem_cgroup *memcg)
 {
 	/* if zswap is disabled, do not block pages going to the swapping device */

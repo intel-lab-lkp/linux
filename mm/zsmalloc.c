@@ -963,6 +963,44 @@ static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
 	return true;
 }
 
+static void zs_charge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
+			    int size, unsigned long offset)
+{
+	struct mem_cgroup *memcg;
+
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return;
+
+	VM_WARN_ON_ONCE(!(current->flags & PF_MEMALLOC));
+
+	/* PF_MEMALLOC context, charging must succeed */
+	if (obj_cgroup_charge(objcg, GFP_KERNEL, size))
+		VM_WARN_ON_ONCE(1);
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	mod_memcg_state(memcg, MEMCG_ZSWAP_B, size);
+	mod_memcg_state(memcg, MEMCG_ZSWAPPED, 1);
+	rcu_read_unlock();
+}
+
+static void zs_uncharge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
+			      int size, unsigned long offset)
+{
+	struct mem_cgroup *memcg;
+
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return;
+
+	obj_cgroup_uncharge(objcg, size);
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	mod_memcg_state(memcg, MEMCG_ZSWAP_B, -size);
+	mod_memcg_state(memcg, MEMCG_ZSWAPPED, -1);
+	rcu_read_unlock();
+}
+
 static void migrate_obj_objcg(unsigned long used_obj, unsigned long free_obj,
 			      int size)
 {
@@ -1017,6 +1055,12 @@ static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
 {
 	return true;
 }
+
+static void zs_charge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
+		            int size, unsigned long offset) {}
+
+static void zs_uncharge_objcg(struct zpdesc *zpdesc, struct obj_cgroup *objcg,
+			      int size, unsigned long offset) {}
 
 static void migrate_obj_objcg(unsigned long used_obj, unsigned long free_obj,
 			      int size) {}
@@ -1334,8 +1378,11 @@ void zs_obj_write(struct zs_pool *pool, unsigned long handle,
 	class = zspage_class(pool, zspage);
 	off = offset_in_page(class->size * obj_idx);
 
-	if (objcg)
+	if (objcg) {
+		obj_cgroup_get(objcg);
+		zs_charge_objcg(zpdesc, objcg, class->size, off);
 		zpdesc_set_obj_cgroup(zpdesc, obj_idx, class->size, objcg);
+	}
 
 	if (!ZsHugePage(zspage))
 		off += ZS_HANDLE_SIZE;
@@ -1501,6 +1548,7 @@ static void obj_free(int class_size, unsigned long obj)
 	struct link_free *link;
 	struct zspage *zspage;
 	struct zpdesc *f_zpdesc;
+	struct obj_cgroup *objcg;
 	unsigned long f_offset;
 	unsigned int f_objidx;
 	void *vaddr;
@@ -1510,7 +1558,12 @@ static void obj_free(int class_size, unsigned long obj)
 	f_offset = offset_in_page(class_size * f_objidx);
 	zspage = get_zspage(f_zpdesc);
 
-	zpdesc_set_obj_cgroup(f_zpdesc, f_objidx, class_size, NULL);
+	objcg = zpdesc_obj_cgroup(f_zpdesc, f_objidx, class_size);
+	if (objcg) {
+		zs_uncharge_objcg(f_zpdesc, objcg, class_size, f_offset);
+		obj_cgroup_put(objcg);
+		zpdesc_set_obj_cgroup(f_zpdesc, f_objidx, class_size, NULL);
+	}
 
 	vaddr = kmap_local_zpdesc(f_zpdesc);
 	link = (struct link_free *)(vaddr + f_offset);
