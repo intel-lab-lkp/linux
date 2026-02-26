@@ -450,6 +450,15 @@ struct GspMessage<'a> {
     contents: (&'a [u8], &'a [u8]),
 }
 
+/// Computes the total size of the command (including its variable-length payload) without the
+/// [`GspMsgElement`] header.
+fn command_size<M>(command: &M) -> usize
+where
+    M: CommandToGsp,
+{
+    size_of::<M::Command>() + command.variable_payload_len()
+}
+
 /// GSP command queue.
 ///
 /// Provides the ability to send commands and receive messages from the GSP using a shared memory
@@ -526,7 +535,7 @@ impl Cmdq {
         // This allows all error types, including `Infallible`, to be used for `M::InitError`.
         Error: From<M::InitError>,
     {
-        let command_size = size_of::<M::Command>() + command.variable_payload_len();
+        let command_size = command_size(&command);
         let dst = self
             .gsp_mem
             .allocate_command(command_size, Delta::from_secs(1))?;
