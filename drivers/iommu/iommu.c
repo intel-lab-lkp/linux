@@ -1218,6 +1218,14 @@ map_end:
 				ret = iommu_map(domain, addr - map_size,
 						addr - map_size, map_size,
 						entry->prot, GFP_KERNEL);
+				/*
+				 * iommu_iova_to_phys() may return 0 for allicated addresses,
+				 * e.g., for the 0 address, causing iommu_map to fail. Since
+				 * the intent of the code is to allow aliasing of reserved
+				 * regions, ignore the EADDRINUSE error.
+				 */
+				if (ret == -EADDRINUSE)
+					ret = 0;
 				if (ret)
 					goto out;
 				map_size = 0;
