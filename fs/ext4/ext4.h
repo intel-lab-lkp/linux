@@ -999,6 +999,7 @@ do {										\
 
 #include "extents_status.h"
 #include "fast_commit.h"
+#include "fast_commit_bytelog.h"
 
 /*
  * Lock subclasses for i_data_sem in the ext4_inode_info structure.
@@ -1286,6 +1287,8 @@ struct ext4_inode_info {
 						    * scanning in mballoc
 						    */
 #define EXT4_MOUNT2_ABORT		0x00000100 /* Abort filesystem */
+#define EXT4_MOUNT2_DAX_FC_BYTELOG	0x00000200 /* Use DAX ByteLog FC backend */
+#define EXT4_MOUNT2_DAX_FC_BYTELOG_FORCE 0x00000400 /* Ignore feature bit */
 
 #define clear_opt(sb, opt)		EXT4_SB(sb)->s_mount_opt &= \
 						~EXT4_MOUNT_##opt
@@ -1801,6 +1804,7 @@ struct ext4_sb_info {
 	int s_fc_debug_max_replay;
 #endif
 	struct ext4_fc_replay_state s_fc_replay_state;
+	struct ext4_fc_bytelog s_fc_bytelog;
 };
 
 static inline struct ext4_sb_info *EXT4_SB(struct super_block *sb)
@@ -2129,6 +2133,7 @@ static inline bool ext4_inode_orphan_tracked(struct inode *inode)
 #define EXT4_FEATURE_INCOMPAT_INLINE_DATA	0x8000 /* data in inode */
 #define EXT4_FEATURE_INCOMPAT_ENCRYPT		0x10000
 #define EXT4_FEATURE_INCOMPAT_CASEFOLD		0x20000
+#define EXT4_FEATURE_INCOMPAT_DAX_FC_BYTELOG	0x40000
 
 extern void ext4_update_dynamic_rev(struct super_block *sb);
 
@@ -2228,6 +2233,7 @@ EXT4_FEATURE_INCOMPAT_FUNCS(largedir,		LARGEDIR)
 EXT4_FEATURE_INCOMPAT_FUNCS(inline_data,	INLINE_DATA)
 EXT4_FEATURE_INCOMPAT_FUNCS(encrypt,		ENCRYPT)
 EXT4_FEATURE_INCOMPAT_FUNCS(casefold,		CASEFOLD)
+EXT4_FEATURE_INCOMPAT_FUNCS(dax_fc_bytelog,	DAX_FC_BYTELOG)
 
 #define EXT2_FEATURE_COMPAT_SUPP	EXT4_FEATURE_COMPAT_EXT_ATTR
 #define EXT2_FEATURE_INCOMPAT_SUPP	(EXT4_FEATURE_INCOMPAT_FILETYPE| \
@@ -2258,7 +2264,8 @@ EXT4_FEATURE_INCOMPAT_FUNCS(casefold,		CASEFOLD)
 					 EXT4_FEATURE_INCOMPAT_ENCRYPT | \
 					 EXT4_FEATURE_INCOMPAT_CASEFOLD | \
 					 EXT4_FEATURE_INCOMPAT_CSUM_SEED | \
-					 EXT4_FEATURE_INCOMPAT_LARGEDIR)
+					 EXT4_FEATURE_INCOMPAT_LARGEDIR | \
+					 EXT4_FEATURE_INCOMPAT_DAX_FC_BYTELOG)
 #define EXT4_FEATURE_RO_COMPAT_SUPP	(EXT4_FEATURE_RO_COMPAT_SPARSE_SUPER| \
 					 EXT4_FEATURE_RO_COMPAT_LARGE_FILE| \
 					 EXT4_FEATURE_RO_COMPAT_GDT_CSUM| \
