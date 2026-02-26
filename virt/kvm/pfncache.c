@@ -16,6 +16,7 @@
 #include <linux/highmem.h>
 #include <linux/module.h>
 #include <linux/errno.h>
+#include <linux/pagemap.h>
 
 #include "kvm_mm.h"
 
@@ -98,8 +99,19 @@ bool kvm_gpc_check(struct gfn_to_pfn_cache *gpc, unsigned long len)
 
 static void *gpc_map(kvm_pfn_t pfn)
 {
-	if (pfn_valid(pfn))
-		return kmap(pfn_to_page(pfn));
+	if (pfn_valid(pfn)) {
+		struct page *page = pfn_to_page(pfn);
+		struct page *head = compound_head(page);
+		struct address_space *mapping = READ_ONCE(head->mapping);
+
+		if (mapping && mapping_no_direct_map(mapping)) {
+			struct page *pages[] = { page };
+
+			return vmap(pages, 1, VM_MAP, PAGE_KERNEL);
+		}
+
+		return kmap(page);
+	}
 
 #ifdef CONFIG_HAS_IOMEM
 	return memremap(pfn_to_hpa(pfn), PAGE_SIZE, MEMREMAP_WB);
@@ -115,7 +127,15 @@ static void gpc_unmap(kvm_pfn_t pfn, void *khva)
 		return;
 
 	if (pfn_valid(pfn)) {
-		kunmap(pfn_to_page(pfn));
+		/*
+		 * For valid PFNs, gpc_map() returns either a kmap() address
+		 * (non-vmalloc) or a vmap() address (vmalloc).
+		 */
+		if (is_vmalloc_addr(khva))
+			vunmap(khva);
+		else
+			kunmap(pfn_to_page(pfn));
+
 		return;
 	}
 
@@ -233,8 +253,11 @@ static kvm_pfn_t gpc_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 
 		/*
 		 * Obtain a new kernel mapping if KVM itself will access the
-		 * pfn.  Note, kmap() and memremap() can both sleep, so this
-		 * too must be done outside of gpc->lock!
+		 * pfn.  Note, kmap(), vmap() and memremap() can all sleep, so
+		 * this too must be done outside of gpc->lock!
+		 * Note that even though gpc->lock is dropped, it's still fine
+		 * to read gpc->pfn and other fields because gpc->refresh_lock
+		 * mutex prevents them from being updated.
 		 */
 		if (new_pfn == gpc->pfn)
 			new_khva = old_khva;
