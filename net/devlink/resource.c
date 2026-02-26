@@ -213,21 +213,43 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+static int devlink_resource_list_fill(struct sk_buff *skb,
+				      struct devlink *devlink,
+				      int *idx)
+{
+	struct devlink_resource *resource;
+	int i = 0;
+	int err;
+
+	list_for_each_entry(resource, &devlink->resource_list, list) {
+		if (i < *idx) {
+			i++;
+			continue;
+		}
+		err = devlink_resource_put(devlink, skb, resource);
+		if (err) {
+			*idx = i;
+			return err;
+		}
+		i++;
+	}
+	*idx = 0;
+	return 0;
+}
+
 static int devlink_resource_fill(struct genl_info *info,
 				 enum devlink_command cmd, int flags)
 {
 	struct devlink *devlink = info->user_ptr[0];
-	struct devlink_resource *resource;
 	struct nlattr *resources_attr;
 	struct sk_buff *skb = NULL;
 	struct nlmsghdr *nlh;
 	bool incomplete;
+	int start_idx;
 	void *hdr;
-	int i;
+	int i = 0;
 	int err;
 
-	resource = list_first_entry(&devlink->resource_list,
-				    struct devlink_resource, list);
 start_again:
 	err = devlink_nl_msg_reply_and_new(&skb, info);
 	if (err)
@@ -249,16 +271,12 @@ start_again:
 		goto nla_put_failure;
 
 	incomplete = false;
-	i = 0;
-	list_for_each_entry_from(resource, &devlink->resource_list, list) {
-		err = devlink_resource_put(devlink, skb, resource);
-		if (err) {
-			if (!i)
-				goto err_resource_put;
-			incomplete = true;
-			break;
-		}
-		i++;
+	start_idx = i;
+	err = devlink_resource_list_fill(skb, devlink, &i);
+	if (err) {
+		if (i == start_idx)
+			goto err_resource_put;
+		incomplete = true;
 	}
 	nla_nest_end(skb, resources_attr);
 	genlmsg_end(skb, hdr);
@@ -290,6 +308,59 @@ int devlink_nl_resource_dump_doit(struct sk_buff *skb, struct genl_info *info)
 		return -EOPNOTSUPP;
 
 	return devlink_resource_fill(info, DEVLINK_CMD_RESOURCE_DUMP, 0);
+}
+
+static int
+devlink_nl_resource_dump_one(struct sk_buff *skb, struct devlink *devlink,
+			     struct netlink_callback *cb, int flags)
+{
+	struct devlink_nl_dump_state *state = devlink_dump_state(cb);
+	struct nlattr *resources_attr;
+	int start_idx = state->idx;
+	void *hdr;
+	int err;
+
+	if (list_empty(&devlink->resource_list))
+		return 0;
+
+	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
+			  &devlink_nl_family, flags, DEVLINK_CMD_RESOURCE_DUMP);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	err = devlink_nl_put_handle(skb, devlink);
+	if (err)
+		goto nla_put_failure;
+
+	resources_attr = nla_nest_start_noflag(skb, DEVLINK_ATTR_RESOURCE_LIST);
+	if (!resources_attr) {
+		err = -EMSGSIZE;
+		goto nla_put_failure;
+	}
+
+	err = devlink_resource_list_fill(skb, devlink, &state->idx);
+	if (err) {
+		if (state->idx == start_idx)
+			goto nla_put_failure_unwind;
+		nla_nest_end(skb, resources_attr);
+		genlmsg_end(skb, hdr);
+		return err;
+	}
+	nla_nest_end(skb, resources_attr);
+	genlmsg_end(skb, hdr);
+	return 0;
+
+nla_put_failure_unwind:
+	nla_nest_cancel(skb, resources_attr);
+nla_put_failure:
+	genlmsg_cancel(skb, hdr);
+	return err;
+}
+
+int devlink_nl_resource_dump_dumpit(struct sk_buff *skb,
+				    struct netlink_callback *cb)
+{
+	return devlink_nl_dumpit(skb, cb, devlink_nl_resource_dump_one);
 }
 
 int devlink_resources_validate(struct devlink *devlink,
