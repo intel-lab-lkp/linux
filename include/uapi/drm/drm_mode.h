@@ -1260,6 +1260,10 @@ struct drm_mode_crtc_page_flip_target {
  * Do not attempt to allocate anything but linear framebuffer memory
  * with single-plane RGB data. Allocation of other framebuffer
  * layouts requires dedicated ioctls in the respective DRM driver.
+ * There exists drivers exploiting this interface for framebuffers
+ * with modifiers other than DRM_FORMAT_MOD_LINEAR, but this is
+ * incorrect usage with undefined behavior, and should not be
+ * replicated.
  */
 struct drm_mode_create_dumb {
 	__u32 height;
