@@ -664,6 +664,13 @@ enum fuse_opcode {
 	FUSE_STATX		= 52,
 	FUSE_COPY_FILE_RANGE_64	= 53,
 
+	/* A compound request is handled like a single request,
+	 * but contains multiple requests as input.
+	 * This can be used to signal to the fuse server that
+	 * the requests can be combined atomically.
+	 */
+	FUSE_COMPOUND		= 54,
+
 	/* CUSE specific operations */
 	CUSE_INIT		= 4096,
 
@@ -1243,6 +1250,51 @@ struct fuse_ext_header {
 struct fuse_supp_groups {
 	uint32_t	nr_groups;
 	uint32_t	groups[];
+};
+
+/*
+ * This is a hint to the fuse server that all requests are complete and it can
+ * use automatic decoding and sequential processing from libfuse.
+ */
+#define FUSE_COMPOUND_SEPARABLE (1 << 0)
+/*
+ * This will be used by the kernel to continue on
+ * even after one of the requests fail.
+ */
+#define FUSE_COMPOUND_CONTINUE (1 << 1)
+/*
+ * This flags the compound as atomic, which
+ * means that the operation has to be interpreted
+ * atomically and be directly supported by the fuse server
+ * itself.
+ */
+#define FUSE_COMPOUND_ATOMIC (1 << 2)
+
+/*
+ * Compound request header
+ *
+ * This header is followed by the fuse requests
+ */
+struct fuse_compound_in {
+	uint32_t	flags;			/* Compound flags */
+
+	/* Total size of all results expected from the fuse server.
+	 * This is needed for preallocating the whole result for all
+	 * commands in the fuse server.
+	 */
+	uint32_t	result_size;
+	uint64_t	reserved;
+};
+
+/*
+ * Compound response header
+ *
+ * This header is followed by complete fuse responses
+ */
+struct fuse_compound_out {
+	uint32_t	flags;     /* Result flags */
+	uint32_t	padding;
+	uint64_t	reserved;
 };
 
 /**

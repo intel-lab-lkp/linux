@@ -1273,6 +1273,45 @@ static inline ssize_t fuse_simple_idmap_request(struct mnt_idmap *idmap,
 int fuse_simple_background(struct fuse_mount *fm, struct fuse_args *args,
 			   gfp_t gfp_flags);
 
+/*
+ * Compound request builder, state tracker, and args pointer storage
+ */
+struct fuse_compound_req {
+	struct fuse_mount *fm;
+	struct fuse_compound_in compound_header;
+	struct fuse_compound_out result_header;
+
+	struct fuse_args **op_args;
+
+	/*
+	 * Every op can add a converter function to construct the ops args from
+	 * the already received responses.
+	 */
+	int (**op_converters)(struct fuse_compound_req *compound,
+			      unsigned int index);
+	int *op_errors;
+
+	unsigned int max_count;
+	unsigned int count;
+};
+
+/*
+ * Compound request API
+ */
+ssize_t fuse_compound_send(struct fuse_compound_req *compound);
+
+struct fuse_compound_req *fuse_compound_alloc(struct fuse_mount *fm,
+					       u32 max_count, u32 flags);
+int fuse_compound_add(struct fuse_compound_req *compound,
+		      struct fuse_args *args,
+		      int (*converter)(struct fuse_compound_req *compound,
+				       unsigned int index));
+void fuse_compound_free(struct fuse_compound_req *compound);
+static inline int fuse_compound_get_error(struct fuse_compound_req *compound, int op_idx)
+{
+	return compound->op_errors[op_idx];
+}
+
 /**
  * Assign a unique id to a fuse request
  */
