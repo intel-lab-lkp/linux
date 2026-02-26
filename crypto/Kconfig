@@ -1054,8 +1054,6 @@ config CRYPTO_XXHASH
 
 	  Extremely fast, working at speeds close to RAM limits.
 
-	  Used by the btrfs filesystem.
-
 endmenu
 
 menu "CRCs (cyclic redundancy checks)"
