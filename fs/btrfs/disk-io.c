@@ -4471,7 +4471,7 @@ void btrfs_mark_buffer_dirty(struct btrfs_trans_handle *trans,
 #endif
 	/* This is an active transaction (its state < TRANS_STATE_UNBLOCKED). */
 	ASSERT(trans->transid == fs_info->generation);
-	btrfs_assert_tree_write_locked(buf);
+	lockdep_assert_held(&buf->lock);
 	if (unlikely(transid != fs_info->generation)) {
 		btrfs_abort_transaction(trans, -EUCLEAN);
 		btrfs_crit(fs_info,
