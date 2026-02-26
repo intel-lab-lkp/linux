@@ -1737,6 +1737,8 @@ patternProperties:
     description: United Western Technologies Corp (UniWest)
   "^upisemi,.*":
     description: uPI Semiconductor Corp.
+  "^uqsoft,.*":
+    description: Beijing UQ Interactive Co.,Ltd.
   "^urt,.*":
     description: United Radiant Technology Corporation
   "^usi,.*":
