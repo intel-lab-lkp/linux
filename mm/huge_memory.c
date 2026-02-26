@@ -1375,7 +1375,7 @@ static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 			return ret;
 		}
 		if (pgtable) {
-			pgtable_trans_huge_deposit(vma->vm_mm, vmf->pmd,
+			arch_pgtable_trans_huge_deposit(vma->vm_mm, vmf->pmd,
 						   pgtable);
 			mm_inc_nr_ptes(vma->vm_mm);
 		}
@@ -1476,7 +1476,7 @@ static void set_huge_zero_folio(pgtable_t pgtable, struct mm_struct *mm,
 	entry = folio_mk_pmd(zero_folio, vma->vm_page_prot);
 	entry = pmd_mkspecial(entry);
 	if (pgtable) {
-		pgtable_trans_huge_deposit(mm, pmd, pgtable);
+		arch_pgtable_trans_huge_deposit(mm, pmd, pgtable);
 		mm_inc_nr_ptes(mm);
 	}
 	set_pmd_at(mm, haddr, pmd, entry);
@@ -1609,7 +1609,7 @@ static vm_fault_t insert_pmd(struct vm_area_struct *vma, unsigned long addr,
 	}
 
 	if (pgtable) {
-		pgtable_trans_huge_deposit(mm, pmd, pgtable);
+		arch_pgtable_trans_huge_deposit(mm, pmd, pgtable);
 		mm_inc_nr_ptes(mm);
 		pgtable = NULL;
 	}
@@ -1871,7 +1871,7 @@ static void copy_huge_non_present_pmd(
 	add_mm_counter(dst_mm, MM_ANONPAGES, HPAGE_PMD_NR);
 	if (pgtable) {
 		mm_inc_nr_ptes(dst_mm);
-		pgtable_trans_huge_deposit(dst_mm, dst_pmd, pgtable);
+		arch_pgtable_trans_huge_deposit(dst_mm, dst_pmd, pgtable);
 	}
 	if (!userfaultfd_wp(dst_vma))
 		pmd = pmd_swp_clear_uffd_wp(pmd);
@@ -1978,7 +1978,7 @@ int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 out_zero_page:
 	if (pgtable) {
 		mm_inc_nr_ptes(dst_mm);
-		pgtable_trans_huge_deposit(dst_mm, dst_pmd, pgtable);
+		arch_pgtable_trans_huge_deposit(dst_mm, dst_pmd, pgtable);
 	}
 	pmdp_set_wrprotect(src_mm, addr, src_pmd);
 	if (!userfaultfd_wp(dst_vma))
@@ -2386,7 +2386,7 @@ static inline void zap_deposited_table(struct mm_struct *mm, pmd_t *pmd)
 {
 	pgtable_t pgtable;
 
-	pgtable = pgtable_trans_huge_withdraw(mm, pmd);
+	pgtable = arch_pgtable_trans_huge_withdraw(mm, pmd);
 	pte_free(mm, pgtable);
 	mm_dec_nr_ptes(mm);
 }
@@ -2405,7 +2405,7 @@ int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	/*
 	 * For architectures like ppc64 we look at deposited pgtable
 	 * when calling pmdp_huge_get_and_clear. So do the
-	 * pgtable_trans_huge_withdraw after finishing pmdp related
+	 * arch_pgtable_trans_huge_withdraw after finishing pmdp related
 	 * operations.
 	 */
 	orig_pmd = pmdp_huge_get_and_clear_full(vma, addr, pmd,
@@ -2547,8 +2547,8 @@ bool move_huge_pmd(struct vm_area_struct *vma, unsigned long old_addr,
 		if (pmd_move_must_withdraw(new_ptl, old_ptl, vma) &&
 		    arch_needs_pgtable_deposit()) {
 			pgtable_t pgtable;
-			pgtable = pgtable_trans_huge_withdraw(mm, old_pmd);
-			pgtable_trans_huge_deposit(mm, new_pmd, pgtable);
+			pgtable = arch_pgtable_trans_huge_withdraw(mm, old_pmd);
+			arch_pgtable_trans_huge_deposit(mm, new_pmd, pgtable);
 		}
 		pmd = move_soft_dirty_pmd(pmd);
 		if (vma_has_uffd_without_event_remap(vma))
@@ -2854,8 +2854,8 @@ int move_pages_huge_pmd(struct mm_struct *mm, pmd_t *dst_pmd, pmd_t *src_pmd, pm
 	set_pmd_at(mm, dst_addr, dst_pmd, _dst_pmd);
 
 	if (arch_needs_pgtable_deposit()) {
-		src_pgtable = pgtable_trans_huge_withdraw(mm, src_pmd);
-		pgtable_trans_huge_deposit(mm, dst_pmd, src_pgtable);
+		src_pgtable = arch_pgtable_trans_huge_withdraw(mm, src_pmd);
+		arch_pgtable_trans_huge_deposit(mm, dst_pmd, src_pgtable);
 	}
 unlock_ptls:
 	double_pt_unlock(src_ptl, dst_ptl);
@@ -3017,7 +3017,7 @@ static void __split_huge_zero_page_pmd(struct vm_area_struct *vma,
 	old_pmd = pmdp_huge_clear_flush(vma, haddr, pmd);
 
 	if (arch_needs_pgtable_deposit()) {
-		pgtable = pgtable_trans_huge_withdraw(mm, pmd);
+		pgtable = arch_pgtable_trans_huge_withdraw(mm, pmd);
 	} else {
 		VM_BUG_ON(!pgtable);
 		/*
@@ -3234,7 +3234,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	 * This's critical for some architectures (Power).
 	 */
 	if (arch_needs_pgtable_deposit()) {
-		pgtable = pgtable_trans_huge_withdraw(mm, pmd);
+		pgtable = arch_pgtable_trans_huge_withdraw(mm, pmd);
 	} else {
 		VM_BUG_ON(!pgtable);
 		/*
