@@ -434,6 +434,21 @@ static const unsigned long cr4_pinned_mask = X86_CR4_SMEP | X86_CR4_SMAP | X86_C
 static DEFINE_STATIC_KEY_FALSE_RO(cr_pinning);
 static unsigned long cr4_pinned_bits __ro_after_init;
 
+static bool cr_pinning_enabled(void)
+{
+	if (!static_branch_likely(&cr_pinning))
+		return false;
+
+	/*
+	 * Do not enforce pinning during CPU bringup. It might
+	 * turn on features that are not set up yet, like FRED.
+	 */
+	if (!cpu_online(smp_processor_id()))
+		return false;
+
+	return true;
+}
+
 void native_write_cr0(unsigned long val)
 {
 	unsigned long bits_missing = 0;
@@ -441,7 +456,7 @@ void native_write_cr0(unsigned long val)
 set_register:
 	asm volatile("mov %0,%%cr0": "+r" (val) : : "memory");
 
-	if (static_branch_likely(&cr_pinning)) {
+	if (cr_pinning_enabled()) {
 		if (unlikely((val & X86_CR0_WP) != X86_CR0_WP)) {
 			bits_missing = X86_CR0_WP;
 			val |= bits_missing;
@@ -460,7 +475,7 @@ void __no_profile native_write_cr4(unsigned long val)
 set_register:
 	asm volatile("mov %0,%%cr4": "+r" (val) : : "memory");
 
-	if (static_branch_likely(&cr_pinning)) {
+	if (cr_pinning_enabled()) {
 		if (unlikely((val & cr4_pinned_mask) != cr4_pinned_bits)) {
 			bits_changed = (val & cr4_pinned_mask) ^ cr4_pinned_bits;
 			val = (val & ~cr4_pinned_mask) | cr4_pinned_bits;
@@ -502,8 +517,8 @@ void cr4_init(void)
 
 	if (boot_cpu_has(X86_FEATURE_PCID))
 		cr4 |= X86_CR4_PCIDE;
-	if (static_branch_likely(&cr_pinning))
-		cr4 = (cr4 & ~cr4_pinned_mask) | cr4_pinned_bits;
+
+	WARN_ON_ONCE(cr_pinning_enabled());
 
 	__write_cr4(cr4);
 
