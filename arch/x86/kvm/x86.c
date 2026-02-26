@@ -2434,7 +2434,7 @@ static void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_o
 	kvm_write_guest(kvm, wall_clock, &version, sizeof(version));
 }
 
-static void kvm_write_system_time(struct kvm_vcpu *vcpu, gpa_t system_time,
+static int kvm_write_system_time(struct kvm_vcpu *vcpu, gpa_t system_time,
 				  bool old_msr, bool host_initiated)
 {
 	struct kvm_arch *ka = &vcpu->kvm->arch;
@@ -2451,12 +2451,12 @@ static void kvm_write_system_time(struct kvm_vcpu *vcpu, gpa_t system_time,
 
 	/* we verify if the enable bit is set... */
 	if (system_time & 1)
-		kvm_gpc_activate(&vcpu->arch.pv_time, system_time & ~1ULL,
-				 sizeof(struct pvclock_vcpu_time_info));
-	else
-		kvm_gpc_deactivate(&vcpu->arch.pv_time);
+		return kvm_gpc_activate(&vcpu->arch.pv_time,
+					system_time & ~1ULL,
+					sizeof(struct pvclock_vcpu_time_info));
 
-	return;
+	kvm_gpc_deactivate(&vcpu->arch.pv_time);
+	return 0;
 }
 
 static uint32_t div_frac(uint32_t dividend, uint32_t divisor)
@@ -4112,13 +4112,15 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (!guest_pv_has(vcpu, KVM_FEATURE_CLOCKSOURCE2))
 			return 1;
 
-		kvm_write_system_time(vcpu, data, false, msr_info->host_initiated);
+		if (kvm_write_system_time(vcpu, data, false, msr_info->host_initiated))
+			return 1;
 		break;
 	case MSR_KVM_SYSTEM_TIME:
 		if (!guest_pv_has(vcpu, KVM_FEATURE_CLOCKSOURCE))
 			return 1;
 
-		kvm_write_system_time(vcpu, data, true,  msr_info->host_initiated);
+		if (kvm_write_system_time(vcpu, data, true,  msr_info->host_initiated))
+			return 1;
 		break;
 	case MSR_KVM_ASYNC_PF_EN:
 		if (!guest_pv_has(vcpu, KVM_FEATURE_ASYNC_PF))
