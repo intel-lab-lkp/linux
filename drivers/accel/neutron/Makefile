@@ -4,4 +4,5 @@ obj-$(CONFIG_DRM_ACCEL_NXP_NEUTRON) := neutron.o
 
 neutron-y := \
 	neutron_driver.o \
-	neutron_device.o
+	neutron_device.o \
+	neutron_gem.o
