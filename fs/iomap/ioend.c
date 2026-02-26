@@ -216,6 +216,7 @@ ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 
 	switch (wpc->iomap.type) {
 	case IOMAP_INLINE:
+	case IOMAP_DELALLOC:
 		WARN_ON_ONCE(1);
 		return -EIO;
 	case IOMAP_HOLE:
