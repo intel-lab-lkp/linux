@@ -1281,6 +1281,12 @@ struct netdev_net_notifier {
  *	constraints, and returns the resulting flags. Must not modify
  *	the device state.
  *
+ * void (*ndo_update_offloads)(struct net_device *dev);
+ *	Called during feature update to allow device to compute and update
+ *	offload features (like vlan_features, hw_enc_features) based on
+ *	current lower device configuration. Typically used by master
+ *	devices to aggregate features from slave devices.
+ *
  * int (*ndo_set_features)(struct net_device *dev, netdev_features_t features);
  *	Called to update device configuration to new features. Passed
  *	feature set might be less than what was returned by ndo_fix_features()).
@@ -1558,6 +1564,7 @@ struct net_device_ops {
 							struct sock *sk);
 	netdev_features_t	(*ndo_fix_features)(struct net_device *dev,
 						    netdev_features_t features);
+	void			(*ndo_update_offloads)(struct net_device *dev);
 	int			(*ndo_set_features)(struct net_device *dev,
 						    netdev_features_t features);
 	int			(*ndo_neigh_construct)(struct net_device *dev,
