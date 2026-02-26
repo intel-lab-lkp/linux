@@ -998,14 +998,18 @@ abort:
 	if (anon_dup)
 		unlink_anon_vmas(anon_dup);
 
-	/*
-	 * This means we have failed to clone anon_vma's correctly, but no
-	 * actual changes to VMAs have occurred, so no harm no foul - if the
-	 * user doesn't want this reported and instead just wants to give up on
-	 * the merge, allow it.
-	 */
-	if (!vmg->give_up_on_oom)
-		vmg->state = VMA_MERGE_ERROR_NOMEM;
+	if (err == -EINTR) {
+		vmg->state = VMA_MERGE_ERROR_INTR;
+	} else {
+		/*
+		 * This means we have failed to clone anon_vma's correctly,
+		 * but no actual changes to VMAs have occurred, so no harm no
+		 * foul - if the user doesn't want this reported and instead
+		 * just wants to give up on the merge, allow it.
+		 */
+		if (!vmg->give_up_on_oom)
+			vmg->state = VMA_MERGE_ERROR_NOMEM;
+	}
 	return NULL;
 }
 
@@ -1681,6 +1685,8 @@ static struct vm_area_struct *vma_modify(struct vma_merge_struct *vmg)
 	merged = vma_merge_existing_range(vmg);
 	if (merged)
 		return merged;
+	if (vmg_intr(vmg))
+		return ERR_PTR(-EINTR);
 	if (vmg_nomem(vmg))
 		return ERR_PTR(-ENOMEM);
 

@@ -988,6 +988,8 @@ queue_pages_range(struct mm_struct *mm, unsigned long start, unsigned long end,
 			&queue_pages_lock_vma_walk_ops : &queue_pages_walk_ops;
 
 	err = walk_page_range(mm, start, end, ops, &qp);
+	if (err == -EINTR)
+		return err;
 
 	if (!qp.first)
 		/* whole range in hole */
@@ -1309,9 +1311,14 @@ static long migrate_to_node(struct mm_struct *mm, int source, int dest,
 				      flags | MPOL_MF_DISCONTIG_OK, &pagelist);
 	mmap_read_unlock(mm);
 
+	if (nr_failed == -EINTR)
+		err = nr_failed;
+
 	if (!list_empty(&pagelist)) {
-		err = migrate_pages(&pagelist, alloc_migration_target, NULL,
-			(unsigned long)&mtc, MIGRATE_SYNC, MR_SYSCALL, NULL);
+		if (!err)
+			err = migrate_pages(&pagelist, alloc_migration_target,
+					    NULL, (unsigned long)&mtc,
+					    MIGRATE_SYNC, MR_SYSCALL, NULL);
 		if (err)
 			putback_movable_pages(&pagelist);
 	}
@@ -1611,7 +1618,8 @@ static long do_mbind(unsigned long start, unsigned long len,
 				MR_MEMPOLICY_MBIND, NULL);
 	}
 
-	if (nr_failed && (flags & MPOL_MF_STRICT))
+	/* Do not mask EINTR */
+	if ((err != -EINTR) && (nr_failed && (flags & MPOL_MF_STRICT)))
 		err = -EIO;
 	if (!list_empty(&pagelist))
 		putback_movable_pages(&pagelist);

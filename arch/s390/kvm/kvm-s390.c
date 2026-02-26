@@ -2948,7 +2948,7 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		}
 		/* must be called without kvm->lock */
 		r = kvm_s390_handle_pv(kvm, &args);
-		if (copy_to_user(argp, &args, sizeof(args))) {
+		if (r != -EINTR && copy_to_user(argp, &args, sizeof(args))) {
 			r = -EFAULT;
 			break;
 		}

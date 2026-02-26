@@ -56,6 +56,7 @@ struct vma_munmap_struct {
 enum vma_merge_state {
 	VMA_MERGE_START,
 	VMA_MERGE_ERROR_NOMEM,
+	VMA_MERGE_ERROR_INTR,
 	VMA_MERGE_NOMERGE,
 	VMA_MERGE_SUCCESS,
 };
@@ -224,6 +225,11 @@ static inline void unmap_pgtable_init(struct unmap_desc *unmap,
 static inline bool vmg_nomem(struct vma_merge_struct *vmg)
 {
 	return vmg->state == VMA_MERGE_ERROR_NOMEM;
+}
+
+static inline bool vmg_intr(struct vma_merge_struct *vmg)
+{
+	return vmg->state == VMA_MERGE_ERROR_INTR;
 }
 
 /* Assumes addr >= vma->vm_start. */
