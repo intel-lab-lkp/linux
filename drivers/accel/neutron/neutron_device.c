@@ -7,6 +7,7 @@
 #include <linux/iopoll.h>
 
 #include "neutron_device.h"
+#include "neutron_mailbox.h"
 
 void neutron_enable_irq(struct neutron_device *ndev)
 {
@@ -147,6 +148,9 @@ int neutron_boot(struct neutron_device *ndev)
 	ret = neutron_start(ndev);
 	if (ret)
 		return ret;
+
+	/* Prepare device to receive jobs */
+	neutron_mbox_reset_state(ndev);
 
 	ndev->flags |= NEUTRON_BOOTED;
 
