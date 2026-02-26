@@ -4570,7 +4570,19 @@ static void scx_dump_task(struct seq_buf *s, struct scx_dump_ctx *dctx,
 			  struct task_struct *p, char marker)
 {
 	static unsigned long bt[SCX_EXIT_BT_LEN];
-	struct scx_sched *sch = scx_root;
+	struct scx_sched *sch;
+
+	/*
+	 * The BPF scheduler can be torn down concurrently
+	 */
+	rcu_read_lock();
+	sch = rcu_dereference(scx_root);
+	if (!sch) {
+		rcu_read_unlock();
+		return;
+	}
+	rcu_read_unlock();
+
 	char dsq_id_buf[19] = "(n/a)";
 	unsigned long ops_state = atomic_long_read(&p->scx.ops_state);
 	unsigned int bt_len = 0;
@@ -4613,7 +4625,19 @@ static void scx_dump_state(struct scx_exit_info *ei, size_t dump_len)
 {
 	static DEFINE_SPINLOCK(dump_lock);
 	static const char trunc_marker[] = "\n\n~~~~ TRUNCATED ~~~~\n";
-	struct scx_sched *sch = scx_root;
+	struct scx_sched *sch;
+
+	/*
+	 * The BPF scheduler can be torn down concurrently
+	 */
+	rcu_read_lock();
+	sch = rcu_dereference(scx_root);
+	if (!sch) {
+		rcu_read_unlock();
+		return;
+	}
+	rcu_read_unlock();
+
 	struct scx_dump_ctx dctx = {
 		.kind = ei->kind,
 		.exit_code = ei->exit_code,
