@@ -120,7 +120,8 @@ static bool sgx_reclaimer_age(struct sgx_epc_page *epc_page)
 
 	idx = srcu_read_lock(&encl->srcu);
 
-	list_for_each_entry_rcu(encl_mm, &encl->mm_list, list) {
+	list_for_each_entry_srcu(encl_mm, &encl->mm_list, list,
+			srcu_read_lock_held(&encl->srcu)) {
 		if (!mmget_not_zero(encl_mm->mm))
 			continue;
 

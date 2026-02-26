@@ -822,7 +822,8 @@ static struct sgx_encl_mm *sgx_encl_find_mm(struct sgx_encl *encl,
 
 	idx = srcu_read_lock(&encl->srcu);
 
-	list_for_each_entry_rcu(tmp, &encl->mm_list, list) {
+	list_for_each_entry_srcu(tmp, &encl->mm_list, list,
+			srcu_read_lock_held(&encl->srcu)) {
 		if (tmp->mm == mm) {
 			encl_mm = tmp;
 			break;
@@ -933,7 +934,8 @@ const cpumask_t *sgx_encl_cpumask(struct sgx_encl *encl)
 
 	idx = srcu_read_lock(&encl->srcu);
 
-	list_for_each_entry_rcu(encl_mm, &encl->mm_list, list) {
+	list_for_each_entry_srcu(encl_mm, &encl->mm_list, list,
+			srcu_read_lock_held(&encl->srcu)) {
 		if (!mmget_not_zero(encl_mm->mm))
 			continue;
 
@@ -1018,7 +1020,8 @@ static struct mem_cgroup *sgx_encl_get_mem_cgroup(struct sgx_encl *encl)
 	 */
 	idx = srcu_read_lock(&encl->srcu);
 
-	list_for_each_entry_rcu(encl_mm, &encl->mm_list, list) {
+	list_for_each_entry_srcu(encl_mm, &encl->mm_list, list,
+			srcu_read_lock_held(&encl->srcu)) {
 		if (!mmget_not_zero(encl_mm->mm))
 			continue;
 
@@ -1212,7 +1215,8 @@ void sgx_zap_enclave_ptes(struct sgx_encl *encl, unsigned long addr)
 
 		idx = srcu_read_lock(&encl->srcu);
 
-		list_for_each_entry_rcu(encl_mm, &encl->mm_list, list) {
+		list_for_each_entry_srcu(encl_mm, &encl->mm_list, list,
+				srcu_read_lock_held(&encl->srcu)) {
 			if (!mmget_not_zero(encl_mm->mm))
 				continue;
 
