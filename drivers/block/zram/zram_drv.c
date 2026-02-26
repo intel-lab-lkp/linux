@@ -2220,8 +2220,8 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 	 * like we do for compressible pages.
 	 */
 	handle = zs_malloc(zram->mem_pool, PAGE_SIZE,
-			   GFP_NOIO | __GFP_NOWARN |
-			   __GFP_HIGHMEM | __GFP_MOVABLE, page_to_nid(page));
+			   GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM |
+			   __GFP_MOVABLE, page_to_nid(page), false);
 	if (IS_ERR_VALUE(handle))
 		return PTR_ERR((void *)handle);
 
@@ -2283,8 +2283,8 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	}
 
 	handle = zs_malloc(zram->mem_pool, comp_len,
-			   GFP_NOIO | __GFP_NOWARN |
-			   __GFP_HIGHMEM | __GFP_MOVABLE, page_to_nid(page));
+			   GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM |
+			   __GFP_MOVABLE, page_to_nid(page), false);
 	if (IS_ERR_VALUE(handle)) {
 		zcomp_stream_put(zstrm);
 		return PTR_ERR((void *)handle);
@@ -2514,7 +2514,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 	handle_new = zs_malloc(zram->mem_pool, comp_len_new,
 			       GFP_NOIO | __GFP_NOWARN |
 			       __GFP_HIGHMEM | __GFP_MOVABLE,
-			       page_to_nid(page));
+			       page_to_nid(page), false);
 	if (IS_ERR_VALUE(handle_new)) {
 		zcomp_stream_put(zstrm);
 		return PTR_ERR((void *)handle_new);

@@ -20,10 +20,12 @@
  * @zspage:		Points to the zspage this zpdesc is a part of.
  * @first_obj_offset:	First object offset in zsmalloc pool.
  * @_refcount:		The number of references to this zpdesc.
+ * @objcgs:		Array of objcgs pointers that the stored objs
+ *			belong to. Overlayed on top of page->memcg_data, and
+ *			will always have first bit set if it is a valid pointer.
  *
  * This struct overlays struct page for now. Do not modify without a good
- * understanding of the issues. In particular, do not expand into the overlap
- * with memcg_data.
+ * understanding of the issues.
  *
  * Page flags used:
  * * PG_private identifies the first component page.
@@ -47,6 +49,9 @@ struct zpdesc {
 	 */
 	unsigned int first_obj_offset;
 	atomic_t _refcount;
+#ifdef CONFIG_MEMCG
+	unsigned long objcgs;
+#endif
 };
 #define ZPDESC_MATCH(pg, zp) \
 	static_assert(offsetof(struct page, pg) == offsetof(struct zpdesc, zp))
@@ -59,6 +64,9 @@ ZPDESC_MATCH(__folio_index, handle);
 ZPDESC_MATCH(private, zspage);
 ZPDESC_MATCH(page_type, first_obj_offset);
 ZPDESC_MATCH(_refcount, _refcount);
+#ifdef CONFIG_MEMCG
+ZPDESC_MATCH(memcg_data, objcgs);
+#endif
 #undef ZPDESC_MATCH
 static_assert(sizeof(struct zpdesc) <= sizeof(struct page));
 
@@ -171,4 +179,17 @@ static inline bool zpdesc_is_locked(struct zpdesc *zpdesc)
 {
 	return folio_test_locked(zpdesc_folio(zpdesc));
 }
+
+#ifdef CONFIG_MEMCG
+static inline struct obj_cgroup **zpdesc_objcgs(struct zpdesc *zpdesc)
+{
+	return (struct obj_cgroup **)(zpdesc->objcgs & ~OBJEXTS_FLAGS_MASK);
+}
+
+static inline void zpdesc_set_objcgs(struct zpdesc *zpdesc,
+				     struct obj_cgroup **objcgs)
+{
+	zpdesc->objcgs = (unsigned long)objcgs | MEMCG_DATA_OBJEXTS;
+}
+#endif
 #endif

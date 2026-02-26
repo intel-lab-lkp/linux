@@ -39,6 +39,7 @@
 #include <linux/zsmalloc.h>
 #include <linux/fs.h>
 #include <linux/workqueue.h>
+#include <linux/memcontrol.h>
 #include "zpdesc.h"
 
 #define ZSPAGE_MAGIC	0x58
@@ -777,6 +778,10 @@ static void reset_zpdesc(struct zpdesc *zpdesc)
 	ClearPagePrivate(page);
 	zpdesc->zspage = NULL;
 	zpdesc->next = NULL;
+#ifdef CONFIG_MEMCG
+	kfree(zpdesc_objcgs(zpdesc));
+	zpdesc->objcgs = 0;
+#endif
 	/* PageZsmalloc is sticky until the page is freed to the buddy. */
 }
 
@@ -893,6 +898,43 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 	set_freeobj(zspage, 0);
 }
 
+#ifdef CONFIG_MEMCG
+static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
+				struct zpdesc *zpdescs[])
+{
+	/*
+	 * Add 2 to objcgs_per_zpdesc to account for partial objs that may be
+	 * stored at the beginning or end of the zpdesc.
+	 */
+	int objcgs_per_zpdesc = (PAGE_SIZE / class->size) + 2;
+	int i;
+	struct obj_cgroup **objcgs;
+
+	for (i = 0; i < class->pages_per_zspage; i++) {
+		objcgs = kcalloc(objcgs_per_zpdesc, sizeof(struct obj_cgroup *),
+				 gfp & ~__GFP_HIGHMEM);
+		if (!objcgs) {
+			while (--i >= 0) {
+				kfree(zpdesc_objcgs(zpdescs[i]));
+				zpdescs[i]->objcgs = 0;
+			}
+
+			return false;
+		}
+
+		zpdesc_set_objcgs(zpdescs[i], objcgs);
+	}
+
+	return true;
+}
+#else
+static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
+				struct zpdesc *zpdescs[])
+{
+	return true;
+}
+#endif
+
 static void create_page_chain(struct size_class *class, struct zspage *zspage,
 				struct zpdesc *zpdescs[])
 {
@@ -931,7 +973,7 @@ static void create_page_chain(struct size_class *class, struct zspage *zspage,
  */
 static struct zspage *alloc_zspage(struct zs_pool *pool,
 				   struct size_class *class,
-				   gfp_t gfp, const int nid)
+				   gfp_t gfp, const int nid, bool objcg)
 {
 	int i;
 	struct zpdesc *zpdescs[ZS_MAX_PAGES_PER_ZSPAGE];
@@ -952,24 +994,29 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		struct zpdesc *zpdesc;
 
 		zpdesc = alloc_zpdesc(gfp, nid);
-		if (!zpdesc) {
-			while (--i >= 0) {
-				zpdesc_dec_zone_page_state(zpdescs[i]);
-				free_zpdesc(zpdescs[i]);
-			}
-			cache_free_zspage(zspage);
-			return NULL;
-		}
+		if (!zpdesc)
+			goto err;
 		__zpdesc_set_zsmalloc(zpdesc);
 
 		zpdesc_inc_zone_page_state(zpdesc);
 		zpdescs[i] = zpdesc;
 	}
 
+	if (objcg && !alloc_zspage_objcgs(class, gfp, zpdescs))
+		goto err;
+
 	create_page_chain(class, zspage, zpdescs);
 	init_zspage(class, zspage);
 
 	return zspage;
+
+err:
+	while (--i >= 0) {
+		zpdesc_dec_zone_page_state(zpdescs[i]);
+		free_zpdesc(zpdescs[i]);
+	}
+	cache_free_zspage(zspage);
+	return NULL;
 }
 
 static struct zspage *find_get_zspage(struct size_class *class)
@@ -1289,13 +1336,14 @@ static unsigned long obj_malloc(struct zs_pool *pool,
  * @size: size of block to allocate
  * @gfp: gfp flags when allocating object
  * @nid: The preferred node id to allocate new zspage (if needed)
+ * @objcg: Whether the zspage should track per-object memory charging.
  *
  * On success, handle to the allocated object is returned,
  * otherwise an ERR_PTR().
  * Allocation requests with size > ZS_MAX_ALLOC_SIZE will fail.
  */
 unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp,
-			const int nid)
+			const int nid, bool objcg)
 {
 	unsigned long handle;
 	struct size_class *class;
@@ -1330,7 +1378,7 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp,
 
 	spin_unlock(&class->lock);
 
-	zspage = alloc_zspage(pool, class, gfp, nid);
+	zspage = alloc_zspage(pool, class, gfp, nid, objcg);
 	if (!zspage) {
 		cache_free_handle(handle);
 		return (unsigned long)ERR_PTR(-ENOMEM);
@@ -1672,6 +1720,10 @@ static void replace_sub_page(struct size_class *class, struct zspage *zspage,
 	if (unlikely(ZsHugePage(zspage)))
 		newzpdesc->handle = oldzpdesc->handle;
 	__zpdesc_set_movable(newzpdesc);
+#ifdef CONFIG_MEMCG
+	zpdesc_set_objcgs(newzpdesc, zpdesc_objcgs(oldzpdesc));
+	oldzpdesc->objcgs = 0;
+#endif
 }
 
 static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
