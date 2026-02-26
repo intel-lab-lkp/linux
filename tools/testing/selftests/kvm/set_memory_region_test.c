@@ -28,7 +28,10 @@
  * Somewhat arbitrary location and slot, intended to not overlap anything.
  */
 #define MEM_REGION_GPA		0xc0000000
+#define MEM_REGION_RO_GPA	0xd0000000
+
 #define MEM_REGION_SLOT		10
+#define MEM_REGION_RO_SLOT	11
 
 static const uint64_t MMIO_VAL = 0xbeefull;
 
@@ -48,6 +51,8 @@ static inline uint64_t guest_spin_on_val(uint64_t spin_val)
 	GUEST_SYNC(0);
 	return val;
 }
+
+static int allow_mmio_fault;
 
 static void *vcpu_worker(void *data)
 {
@@ -75,6 +80,13 @@ static void *vcpu_worker(void *data)
 
 		if (run->exit_reason != KVM_EXIT_MMIO)
 			break;
+
+		if (allow_mmio_fault && run->mmio.is_write)
+			/*
+			 * in this case, skip checking mmio-related assertions
+			 * and exit status
+			 */
+			return NULL;
 
 		TEST_ASSERT(!run->mmio.is_write, "Unexpected exit mmio write");
 		TEST_ASSERT(run->mmio.len == 8,
@@ -334,6 +346,92 @@ static void test_delete_memory_region(bool disable_slot_zap_quirk)
 			    final_rip_start, final_rip_end, regs.rip);
 
 	kvm_vm_free(vm);
+}
+
+static void guest_code_ro_memory_region(void)
+{
+	uint64_t val;
+	unsigned char c;
+	void *instruction_addr;
+
+	GUEST_SYNC(0);
+
+	val = guest_spin_on_val(0);
+	__GUEST_ASSERT(val == 1, "Expected '1', got '%lx'", val);
+
+	/* RO memory read; should succeed if the backing memory is readable */
+	c = *(unsigned char *)MEM_REGION_RO_GPA;
+	__GUEST_ASSERT(c == 0xab, "Expected '0xab', got '0x%x'", c);
+
+	/* RO memory exec; should succeed if the backing memory is executable */
+	instruction_addr = ((unsigned char *)MEM_REGION_RO_GPA) + 8;
+	val = ((uint32_t (*)(void))instruction_addr)();
+	__GUEST_ASSERT(val == 0xbeef,
+			"Expected 0xbeef, but got '%lx'", val);
+
+	/* Spin until the mmio fault is allowed for RO-memslot write */
+	val = guest_spin_on_val(1);
+	__GUEST_ASSERT(val == 2, "Expected '2', got '%lx'", val);
+
+	/* RO memory write; should fail */
+	WRITE_ONCE(*((uint64_t *)MEM_REGION_RO_GPA), 0x12);
+	__GUEST_ASSERT(0, "RO memory write is expected to fail, but it didn't");
+}
+
+/*
+ * On x86 environment, write access to the readonly memslots are trapped as
+ * a special MMIO fault. This test verifies that write access on the readonly
+ * memslot is blocked, and read/exec access isn't.
+ */
+static void test_ro_memory_region(void)
+{
+	pthread_t vcpu_thread;
+	uint64_t *hva, *hva_ro;
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+
+	/*
+	 * Equivalent C function (assuming SysV ABI):
+	 * uint32_t some_function(void) {
+	 * 	return 0xbeef;
+	 * }
+	 */
+	unsigned char inst_bytes[] = {
+		0x48, 0xc7, 0xc0, 0xef, 0xbe, 0x00, 0x00,	// mov %eax, $0xbeef
+		0xc3,						// ret
+	};
+
+	pr_info("Testing write on RO memslot\n");
+
+	vm = spawn_vm(&vcpu, &vcpu_thread, guest_code_ro_memory_region);
+
+	vm_userspace_mem_region_add_map(vm,
+					MEM_REGION_RO_GPA,
+					MEM_REGION_RO_SLOT,
+					MEM_REGION_SIZE,
+					KVM_MEM_READONLY);
+
+	hva = addr_gpa2hva(vm, MEM_REGION_GPA);
+	hva_ro = addr_gpa2hva(vm, MEM_REGION_RO_GPA);
+
+	memset(hva_ro, 0xcccccccc, 0x2000);
+	WRITE_ONCE(*hva_ro, 0xab);
+	memcpy(((unsigned char *)hva_ro) + 8, inst_bytes, sizeof(inst_bytes));
+
+	WRITE_ONCE(*hva, 1);
+
+	/* Wait the vcpu thread to complete read/exec on ro memory */
+	usleep(100000);
+
+	allow_mmio_fault = true;
+	WRITE_ONCE(*hva, 2);
+
+	wait_for_vcpu();
+
+	pthread_join(vcpu_thread, NULL);
+
+	kvm_vm_free(vm);
+	allow_mmio_fault = false;
 }
 
 static void test_zero_memory_regions(void)
@@ -629,6 +727,8 @@ int main(int argc, char *argv[])
 	 */
 	test_zero_memory_regions();
 	test_mmio_during_vectoring();
+
+	test_ro_memory_region();
 #endif
 
 	test_invalid_memory_region_flags();
