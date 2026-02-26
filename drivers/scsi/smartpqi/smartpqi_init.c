@@ -2829,12 +2829,14 @@ static int pqi_calc_aio_r5_or_r6(struct pqi_scsi_dev_raid_map_data *rmd,
 	u64 tmpdiv;
 #endif
 
-	if (rmd->blocks_per_row == 0) /* Used as a divisor in many calculations */
+	/* Used as a divisors in many calculations */
+	if (rmd->blocks_per_row == 0 || rmd->layout_map_count == 0)
 		return PQI_RAID_BYPASS_INELIGIBLE;
 
 	/* RAID 50/60 */
 	/* Verify first and last block are in same RAID group. */
-	rmd->stripesize = rmd->blocks_per_row * rmd->layout_map_count;
+	if (check_mul_overflow(rmd->blocks_per_row, rmd->layout_map_count, &rmd->stripesize))
+		return PQI_RAID_BYPASS_INELIGIBLE;
 #if BITS_PER_LONG == 32
 	tmpdiv = rmd->first_block;
 	rmd->first_group = do_div(tmpdiv, rmd->stripesize);
