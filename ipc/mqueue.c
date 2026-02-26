@@ -53,6 +53,7 @@ struct mqueue_fs_context {
 
 #define SEND		0
 #define RECV		1
+#define MQ_PEEK     2
 
 #define STATE_NONE	0
 #define STATE_READY	1
@@ -61,6 +62,12 @@ struct posix_msg_tree_node {
 	struct rb_node		rb_node;
 	struct list_head	msg_list;
 	int			priority;
+};
+
+struct mq_timedreceive2_args {
+	size_t msg_len;
+	unsigned int  *msg_prio;
+    char  *msg_ptr;
 };
 
 /*
@@ -1230,6 +1237,116 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 	return ret;
 }
 
+static struct msg_msg *mq_peek_index(struct mqueue_inode_info *info, int index)
+{
+	struct rb_node *node;
+	struct posix_msg_tree_node *leaf;
+	struct msg_msg *msg;
+	int count = 0;
+	/* Start from highest priority */
+	node = rb_last(&info->msg_tree);
+	while (node) {
+		leaf = rb_entry(node, struct posix_msg_tree_node, rb_node);
+		list_for_each_entry(msg, &leaf->msg_list, m_list) {
+			if (count == index)
+				return msg;
+			count++;
+		}
+
+		node = rb_prev(node);
+	}
+
+	return NULL;
+}
+
+static int do_mq_timedreceive2(mqd_t mqdes,
+			       struct mq_timedreceive2_args __user *uargs,
+			       unsigned int flags, unsigned long index,
+			       struct timespec64 *ts)
+{
+	struct mq_timedreceive2_args args;
+	ssize_t ret;
+	struct msg_msg *msg_ptr, *k_msg_buffer;
+	long k_m_type;
+	size_t k_m_ts;
+	struct inode *inode;
+	struct mqueue_inode_info *info;
+
+	if (copy_from_user(&args, uargs, sizeof(args)))
+		return -EFAULT;
+
+	if (!(flags & MQ_PEEK)) {
+		return do_mq_timedreceive(mqdes, args.msg_ptr, args.msg_len,
+					  args.msg_prio, ts);
+	}
+	audit_mq_sendrecv(mqdes, args.msg_len, 0, ts);
+	CLASS(fd, f)(mqdes);
+	if (fd_empty(f))
+		return -EBADF;
+
+	inode = file_inode(fd_file(f));
+	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations))
+		return -EBADF;
+	info = MQUEUE_I(inode);
+	audit_file(fd_file(f));
+
+	if (unlikely(!(fd_file(f)->f_mode & FMODE_READ)))
+		return -EBADF;
+
+	if (unlikely(args.msg_len < info->attr.mq_msgsize))
+		return -EMSGSIZE;
+	if (index >= (unsigned long)info->attr.mq_maxmsg)
+		return -ENOENT;
+
+	spin_lock(&info->lock);
+	if (info->attr.mq_curmsgs == 0) {
+		spin_unlock(&info->lock);
+		return -EAGAIN;
+	}
+	msg_ptr = mq_peek_index(info, index);
+	if (!msg_ptr) {
+		spin_unlock(&info->lock);
+		return -ENOENT;
+	}
+	k_m_type = msg_ptr->m_type;
+	k_m_ts = msg_ptr->m_ts;
+	spin_unlock(&info->lock);
+
+	k_msg_buffer = alloc_msg(k_m_ts);
+	if (!k_msg_buffer)
+		return -ENOMEM;
+
+	/*Two spin lock is necessary we are avoiding atomic memory allocation
+    *and to early allocation without confirming that , is even msg exists to peek
+    */
+	spin_lock(&info->lock);
+	msg_ptr = mq_peek_index(info, index);
+	if (!msg_ptr || msg_ptr->m_type != k_m_type ||
+	    msg_ptr->m_ts != k_m_ts) {
+		spin_unlock(&info->lock);
+		free_msg(k_msg_buffer);
+		return -EAGAIN;
+	}
+	if (IS_ERR(copy_msg(msg_ptr, k_msg_buffer, k_m_ts))) {
+		spin_unlock(&info->lock);
+		free_msg(k_msg_buffer);
+		return -EINVAL;
+	}
+	spin_unlock(&info->lock);
+
+	ret = k_msg_buffer->m_ts;
+	if (args.msg_prio && put_user(k_m_type, args.msg_prio)) {
+		free_msg(k_msg_buffer);
+		return -EFAULT;
+	}
+	if (store_msg(args.msg_ptr, k_msg_buffer, k_m_ts)) {
+		free_msg(k_msg_buffer);
+		return -EFAULT;
+	}
+	free_msg(k_msg_buffer);
+	return ret;
+}
+
 SYSCALL_DEFINE5(mq_timedsend, mqd_t, mqdes, const char __user *, u_msg_ptr,
 		size_t, msg_len, unsigned int, msg_prio,
 		const struct __kernel_timespec __user *, u_abs_timeout)
@@ -1256,6 +1373,23 @@ SYSCALL_DEFINE5(mq_timedreceive, mqd_t, mqdes, char __user *, u_msg_ptr,
 		p = &ts;
 	}
 	return do_mq_timedreceive(mqdes, u_msg_ptr, msg_len, u_msg_prio, p);
+}
+
+SYSCALL_DEFINE5(mq_timedreceive2, mqd_t, mqdes,
+		struct mq_timedreceive2_args __user *, uargs, unsigned int,
+		flags, const unsigned long, index,
+		const struct __kernel_timespec __user *, u_abs_timeout)
+{
+	struct timespec64 ts, *p = NULL;
+
+	if (u_abs_timeout) {
+		int res = prepare_timeout(u_abs_timeout, &ts);
+
+		if (res)
+			return res;
+		p = &ts;
+	}
+	return do_mq_timedreceive2(mqdes, uargs, flags, index, p);
 }
 
 /*
@@ -1450,6 +1584,7 @@ SYSCALL_DEFINE3(mq_getsetattr, mqd_t, mqdes,
 }
 
 #ifdef CONFIG_COMPAT
+#include "asm-generic/compat.h"
 
 struct compat_mq_attr {
 	compat_long_t mq_flags;      /* message queue flags		     */
@@ -1457,6 +1592,12 @@ struct compat_mq_attr {
 	compat_long_t mq_msgsize;    /* maximum message size		     */
 	compat_long_t mq_curmsgs;    /* number of messages currently queued  */
 	compat_long_t __reserved[4]; /* ignored for input, zeroed for output */
+};
+
+struct compat_mq_timedreceive2_args {
+	compat_size_t msg_len;
+	compat_uptr_t msg_prio;
+	compat_uptr_t msg_ptr;
 };
 
 static inline int get_compat_mq_attr(struct mq_attr *attr,
@@ -1487,6 +1628,22 @@ static inline int put_compat_mq_attr(const struct mq_attr *attr,
 	v.mq_curmsgs = attr->mq_curmsgs;
 	if (copy_to_user(uattr, &v, sizeof(*uattr)))
 		return -EFAULT;
+	return 0;
+}
+
+static inline int get_compat_mq_args(struct mq_timedreceive2_args *args,
+					struct compat_mq_timedreceive2_args __user *uargs)
+{
+	struct compat_mq_timedreceive2_args v;
+
+	if (copy_from_user(&v, uargs, sizeof(*uargs)))
+		return -EFAULT;
+
+	memset(args, 0, sizeof(*args));
+	args->msg_len = (size_t)compat_ptr(v.msg_len);
+	args->msg_prio = (unsigned int *)compat_ptr(v.msg_prio);
+	args->msg_ptr = (char *)compat_ptr(v.msg_ptr);
+
 	return 0;
 }
 
@@ -1582,6 +1739,29 @@ SYSCALL_DEFINE5(mq_timedreceive_time32, mqd_t, mqdes,
 		p = &ts;
 	}
 	return do_mq_timedreceive(mqdes, u_msg_ptr, msg_len, u_msg_prio, p);
+}
+
+SYSCALL_DEFINE5(mq_timedreceive2_time32, mqd_t, mqdes,
+		struct compat_mq_timedreceive2_args __user *, uargs,
+		unsigned int, flags, const unsigned long, index,
+		const struct old_timespec32 __user *, u_abs_timeout)
+{
+	struct mq_timedreceive2_args args, *pargs = NULL;
+
+	pargs = &args;
+
+	if (get_compat_mq_args(pargs, uargs))
+		return -EFAULT;
+
+	struct timespec64 ts, *p = NULL;
+
+	if (u_abs_timeout) {
+		int res = compat_prepare_timeout(u_abs_timeout, &ts);
+		if (res)
+			return res;
+		p = &ts;
+	}
+	return do_mq_timedreceive2(mqdes, pargs, flags, index, p);
 }
 #endif
 

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 uname_M := $(shell uname -m 2>/dev/null || echo not)
 ARCH ?= $(shell echo $(uname_M) | sed -e s/i.86/i386/)
+CC = gcc
+CFLAGS = -static -O2
 ifeq ($(ARCH),i386)
         ARCH := x86
 	CFLAGS := -DCONFIG_X86_32 -D__i386__
@@ -12,7 +14,8 @@ endif
 
 CFLAGS += $(KHDR_INCLUDES)
 
-TEST_GEN_PROGS := msgque
+TEST_GEN_PROGS := msgque mq_peek
+LDLIBS += -lrt -lpthread
 
 include ../lib.mk
 

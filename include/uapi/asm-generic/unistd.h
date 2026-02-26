@@ -865,7 +865,10 @@ __SYSCALL(__NR_rseq_slice_yield, sys_rseq_slice_yield)
 
 #undef __NR_syscalls
 #define __NR_syscalls 472
-
+#define __NR_mq_timedreceive2 473
+__SC_3264(__NR_mq_timedreceive2, sys_mq_timedreceive2_time32, sys_mq_timedreceive2)
+#define __NR_mq_timedreceive2_time64 474
+__SYSCALL(__NR_mq_timedreceive2_time64, sys_mq_timedreceive2)
 /*
  * 32 bit systems traditionally used different
  * syscalls for off_t and loff_t arguments, while
