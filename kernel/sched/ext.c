@@ -1360,10 +1360,10 @@ static void do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
 	 * is offline and are just running the hotplug path. Don't bother the
 	 * BPF scheduler.
 	 */
-	if (!scx_rq_online(rq))
+	if (unlikely(!scx_rq_online(rq)))
 		goto local;
 
-	if (scx_rq_bypassing(rq)) {
+	if (unlikely(scx_rq_bypassing(rq))) {
 		__scx_add_event(sch, SCX_EV_BYPASS_DISPATCH, 1);
 		goto bypass;
 	}
