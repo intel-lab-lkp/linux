@@ -899,6 +899,41 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 }
 
 #ifdef CONFIG_MEMCG
+/* idx is indexed per-zspage, not per-zpdesc. */
+static inline struct obj_cgroup *zpdesc_obj_cgroup(struct zpdesc *zpdesc,
+						   unsigned int idx,
+						   int size)
+{
+	struct obj_cgroup **objcgs = zpdesc_objcgs(zpdesc);
+	unsigned int off = offset_in_page(size * idx);
+	unsigned int zpdesc_idx = DIV_ROUND_UP(off, size);
+
+	if (!objcgs)
+		return NULL;
+
+	return objcgs[zpdesc_idx];
+}
+
+/* idx is indexed per-zspage, not per-zpdesc. */
+static inline void zpdesc_set_obj_cgroup(struct zpdesc *zpdesc,
+					 unsigned int idx, int size,
+					 struct obj_cgroup *objcg)
+{
+	struct obj_cgroup **objcgs = zpdesc_objcgs(zpdesc);
+	unsigned int off = offset_in_page(size * idx);
+	unsigned int zpdesc_idx = DIV_ROUND_UP(off, size);
+
+	if (!objcgs)
+		return;
+
+	objcgs[zpdesc_idx] = objcg;
+	if (off + size > PAGE_SIZE) {
+		/* object spans two pages */
+		objcgs = zpdesc_objcgs(get_next_zpdesc(zpdesc));
+		objcgs[0] = objcg;
+	}
+}
+
 static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
 				struct zpdesc *zpdescs[])
 {
@@ -927,12 +962,40 @@ static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
 
 	return true;
 }
+
+static void migrate_obj_objcg(unsigned long used_obj, unsigned long free_obj,
+			      int size)
+{
+	unsigned int s_obj_idx, d_obj_idx;
+	struct zpdesc *s_zpdesc, *d_zpdesc;
+	struct obj_cgroup *objcg;
+
+	obj_to_location(used_obj, &s_zpdesc, &s_obj_idx);
+	obj_to_location(free_obj, &d_zpdesc, &d_obj_idx);
+	objcg = zpdesc_obj_cgroup(s_zpdesc, s_obj_idx, size);
+
+	zpdesc_set_obj_cgroup(d_zpdesc, d_obj_idx, size, objcg);
+	zpdesc_set_obj_cgroup(s_zpdesc, s_obj_idx, size, NULL);
+}
 #else
+static inline struct obj_cgroup *zpdesc_obj_cgroup(struct zpdesc *zpdesc,
+						   unsigned int offset,
+						   int size)
+{
+	return NULL;
+}
+
+static inline void zpdesc_set_obj_cgroup(struct zpdesc *zpdesc,
+					 unsigned int offset, int size,
+					 struct obj_cgroup *objcg) {}
 static bool alloc_zspage_objcgs(struct size_class *class, gfp_t gfp,
 				struct zpdesc *zpdescs[])
 {
 	return true;
 }
+
+static void migrate_obj_objcg(unsigned long used_obj, unsigned long free_obj,
+			      int size) {}
 #endif
 
 static void create_page_chain(struct size_class *class, struct zspage *zspage,
@@ -1221,7 +1284,7 @@ void zs_obj_read_sg_end(struct zs_pool *pool, unsigned long handle)
 EXPORT_SYMBOL_GPL(zs_obj_read_sg_end);
 
 void zs_obj_write(struct zs_pool *pool, unsigned long handle,
-		  void *handle_mem, size_t mem_len)
+		  void *handle_mem, size_t mem_len, struct obj_cgroup *objcg)
 {
 	struct zspage *zspage;
 	struct zpdesc *zpdesc;
@@ -1241,6 +1304,9 @@ void zs_obj_write(struct zs_pool *pool, unsigned long handle,
 
 	class = zspage_class(pool, zspage);
 	off = offset_in_page(class->size * obj_idx);
+
+	if (objcg)
+		zpdesc_set_obj_cgroup(zpdesc, obj_idx, class->size, objcg);
 
 	if (!ZsHugePage(zspage))
 		off += ZS_HANDLE_SIZE;
@@ -1415,6 +1481,8 @@ static void obj_free(int class_size, unsigned long obj)
 	f_offset = offset_in_page(class_size * f_objidx);
 	zspage = get_zspage(f_zpdesc);
 
+	zpdesc_set_obj_cgroup(f_zpdesc, f_objidx, class_size, NULL);
+
 	vaddr = kmap_local_zpdesc(f_zpdesc);
 	link = (struct link_free *)(vaddr + f_offset);
 
@@ -1587,6 +1655,7 @@ static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 		used_obj = handle_to_obj(handle);
 		free_obj = obj_malloc(pool, dst_zspage, handle);
 		zs_obj_copy(class, free_obj, used_obj);
+		migrate_obj_objcg(used_obj, free_obj, class->size);
 		obj_idx++;
 		obj_free(class->size, used_obj);
 

@@ -851,7 +851,7 @@ static void acomp_ctx_put_unlock(struct crypto_acomp_ctx *acomp_ctx)
 }
 
 static bool zswap_compress(struct page *page, struct zswap_entry *entry,
-			   struct zswap_pool *pool)
+			   struct zswap_pool *pool, struct obj_cgroup *objcg)
 {
 	struct crypto_acomp_ctx *acomp_ctx;
 	struct scatterlist input, output;
@@ -911,7 +911,7 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 		goto unlock;
 	}
 
-	zs_obj_write(pool->zs_pool, handle, dst, dlen);
+	zs_obj_write(pool->zs_pool, handle, dst, dlen, objcg);
 	entry->handle = handle;
 	entry->length = dlen;
 
@@ -1413,7 +1413,7 @@ static bool zswap_store_page(struct page *page,
 		return false;
 	}
 
-	if (!zswap_compress(page, entry, pool))
+	if (!zswap_compress(page, entry, pool, objcg))
 		goto compress_failed;
 
 	old = xa_store(swap_zswap_tree(page_swpentry),

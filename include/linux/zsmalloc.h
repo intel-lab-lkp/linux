@@ -15,6 +15,7 @@
 #define _ZS_MALLOC_H_
 
 #include <linux/types.h>
+#include <linux/memcontrol.h>
 
 struct zs_pool_stats {
 	/* How many pages were migrated (freed) */
@@ -48,7 +49,7 @@ void zs_obj_read_sg_begin(struct zs_pool *pool, unsigned long handle,
 			  struct scatterlist *sg, size_t mem_len);
 void zs_obj_read_sg_end(struct zs_pool *pool, unsigned long handle);
 void zs_obj_write(struct zs_pool *pool, unsigned long handle,
-		  void *handle_mem, size_t mem_len);
+		  void *handle_mem, size_t mem_len, struct obj_cgroup *objcg);
 
 extern const struct movable_operations zsmalloc_mops;
 
