@@ -4587,9 +4587,11 @@ static void scx_dump_task(struct seq_buf *s, struct scx_dump_ctx *dctx,
 	unsigned long ops_state = atomic_long_read(&p->scx.ops_state);
 	unsigned int bt_len = 0;
 
-	if (p->scx.dsq)
+	struct scx_dispatch_q *dsq = READ_ONCE(p->scx.dsq);
+
+	if (dsq)
 		scnprintf(dsq_id_buf, sizeof(dsq_id_buf), "0x%llx",
-			  (unsigned long long)p->scx.dsq->id);
+			  (unsigned long long)dsq->id);
 
 	dump_newline(s);
 	dump_line(s, " %c%c %s[%d] %+ldms",
