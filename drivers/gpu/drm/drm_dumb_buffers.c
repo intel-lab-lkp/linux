@@ -57,7 +57,10 @@
  *
  * Note that dumb objects may not be used for gpu acceleration, as has been
  * attempted on some ARM embedded platforms. Such drivers really must have
- * a hardware-specific ioctl to allocate suitable buffer objects.
+ * a hardware-specific ioctl to allocate suitable buffer objects. The current
+ * userspace API also includes some constraints on the format and modifier to
+ * be used with buffers backed by dumb objects, see &struct
+ * drm_mode_create_dumb for more details.
  */
 
 static int drm_mode_align_dumb(struct drm_mode_create_dumb *args,
