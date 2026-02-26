@@ -70,8 +70,8 @@ static struct task_struct *khugepaged_thread __read_mostly;
 static DEFINE_MUTEX(khugepaged_mutex);
 
 /*
- * default scan 8*HPAGE_PMD_NR ptes, pmd_mapped, no_pte_table or vmas
- * every 10 second.
+ * default scan 8*HPAGE_PMD_NR ptes, pte_mapped_hugepage, pmd_mapped,
+ * no_pte_table or vmas every 10 second.
  */
 static unsigned int khugepaged_pages_to_scan __read_mostly;
 static unsigned int khugepaged_pages_collapsed;
@@ -103,6 +103,12 @@ struct collapse_control {
 
 	/* Num pages scanned per node */
 	u32 node_load[MAX_NUMNODES];
+
+	/*
+	 * Num pages scanned per pmd, include ptes,
+	 * pte_mapped_hugepage, pmd_mapped or no_pte_table.
+	 */
+	unsigned int progress_in_pmd;
 
 	/* nodemask for allocation fallback */
 	nodemask_t alloc_nmask;
@@ -1242,8 +1248,7 @@ out_nolock:
 
 static enum scan_result hpage_collapse_scan_pmd(struct mm_struct *mm,
 		struct vm_area_struct *vma, unsigned long start_addr,
-		bool *mmap_locked, unsigned int *cur_progress,
-		struct collapse_control *cc)
+		bool *mmap_locked, struct collapse_control *cc)
 {
 	pmd_t *pmd;
 	pte_t *pte, *_pte;
@@ -1259,25 +1264,23 @@ static enum scan_result hpage_collapse_scan_pmd(struct mm_struct *mm,
 
 	result = find_pmd_or_thp_or_none(mm, start_addr, &pmd);
 	if (result != SCAN_SUCCEED) {
-		if (cur_progress)
-			*cur_progress = 1;
+		cc->progress_in_pmd = 1;
 		goto out;
 	}
 
 	memset(cc->node_load, 0, sizeof(cc->node_load));
 	nodes_clear(cc->alloc_nmask);
+	cc->progress_in_pmd = 0;
 	pte = pte_offset_map_lock(mm, pmd, start_addr, &ptl);
 	if (!pte) {
-		if (cur_progress)
-			*cur_progress = 1;
+		cc->progress_in_pmd = 1;
 		result = SCAN_NO_PTE_TABLE;
 		goto out;
 	}
 
 	for (addr = start_addr, _pte = pte; _pte < pte + HPAGE_PMD_NR;
 	     _pte++, addr += PAGE_SIZE) {
-		if (cur_progress)
-			*cur_progress += 1;
+		cc->progress_in_pmd++;
 
 		pte_t pteval = ptep_get(_pte);
 		if (pte_none_or_zero(pteval)) {
@@ -2306,7 +2309,7 @@ out:
 
 static enum scan_result hpage_collapse_scan_file(struct mm_struct *mm,
 		unsigned long addr, struct file *file, pgoff_t start,
-		unsigned int *cur_progress, struct collapse_control *cc)
+		struct collapse_control *cc)
 {
 	struct folio *folio = NULL;
 	struct address_space *mapping = file->f_mapping;
@@ -2319,6 +2322,7 @@ static enum scan_result hpage_collapse_scan_file(struct mm_struct *mm,
 	swap = 0;
 	memset(cc->node_load, 0, sizeof(cc->node_load));
 	nodes_clear(cc->alloc_nmask);
+	cc->progress_in_pmd = 0;
 	rcu_read_lock();
 	xas_for_each(&xas, folio, start + HPAGE_PMD_NR - 1) {
 		if (xas_retry(&xas, folio))
@@ -2396,12 +2400,10 @@ static enum scan_result hpage_collapse_scan_file(struct mm_struct *mm,
 		}
 	}
 	rcu_read_unlock();
-	if (cur_progress) {
-		if (result == SCAN_PTE_MAPPED_HUGEPAGE)
-			*cur_progress = 1;
-		else
-			*cur_progress = HPAGE_PMD_NR;
-	}
+	if (result == SCAN_PTE_MAPPED_HUGEPAGE)
+		cc->progress_in_pmd = 1;
+	else
+		cc->progress_in_pmd = HPAGE_PMD_NR;
 
 	if (result == SCAN_SUCCEED) {
 		if (cc->is_khugepaged &&
@@ -2426,7 +2428,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 	struct mm_slot *slot;
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
-	int progress = 0;
+	unsigned int progress = 0;
 
 	VM_BUG_ON(!pages);
 	lockdep_assert_held(&khugepaged_mm_lock);
@@ -2480,7 +2482,6 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 
 		while (khugepaged_scan.address < hend) {
 			bool mmap_locked = true;
-			unsigned int cur_progress = 0;
 
 			cond_resched();
 			if (unlikely(hpage_collapse_test_exit_or_disable(mm)))
@@ -2497,8 +2498,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 				mmap_read_unlock(mm);
 				mmap_locked = false;
 				*result = hpage_collapse_scan_file(mm,
-					khugepaged_scan.address, file, pgoff,
-					&cur_progress, cc);
+					khugepaged_scan.address, file, pgoff, cc);
 				fput(file);
 				if (*result == SCAN_PTE_MAPPED_HUGEPAGE) {
 					mmap_read_lock(mm);
@@ -2512,8 +2512,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 				}
 			} else {
 				*result = hpage_collapse_scan_pmd(mm, vma,
-					khugepaged_scan.address, &mmap_locked,
-					&cur_progress, cc);
+					khugepaged_scan.address, &mmap_locked, cc);
 			}
 
 			if (*result == SCAN_SUCCEED)
@@ -2521,7 +2520,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, enum scan_result
 
 			/* move to next address */
 			khugepaged_scan.address += HPAGE_PMD_SIZE;
-			progress += cur_progress;
+			progress += cc->progress_in_pmd;
 			if (!mmap_locked)
 				/*
 				 * We released mmap_lock so break loop.  Note
@@ -2844,7 +2843,7 @@ retry:
 			mmap_locked = false;
 			*lock_dropped = true;
 			result = hpage_collapse_scan_file(mm, addr, file, pgoff,
-							  NULL, cc);
+							  cc);
 
 			if (result == SCAN_PAGE_DIRTY_OR_WRITEBACK && !triggered_wb &&
 			    mapping_can_writeback(file->f_mapping)) {
@@ -2859,7 +2858,7 @@ retry:
 			fput(file);
 		} else {
 			result = hpage_collapse_scan_pmd(mm, vma, addr,
-							 &mmap_locked, NULL, cc);
+							 &mmap_locked, cc);
 		}
 		if (!mmap_locked)
 			*lock_dropped = true;
