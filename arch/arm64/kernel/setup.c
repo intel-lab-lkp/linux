@@ -32,6 +32,7 @@
 #include <linux/sched/task.h>
 #include <linux/scs.h>
 #include <linux/mm.h>
+#include <linux/kfence.h>
 
 #include <asm/acpi.h>
 #include <asm/fixmap.h>
@@ -54,6 +55,7 @@
 #include <asm/efi.h>
 #include <asm/xen/hypervisor.h>
 #include <asm/mmu_context.h>
+#include <asm/kfence.h>
 
 static int num_standard_resources;
 static struct resource *standard_resources;
@@ -280,6 +282,8 @@ u64 cpu_logical_map(unsigned int cpu)
 
 void __init __no_sanitize_address setup_arch(char **cmdline_p)
 {
+	phys_addr_t early_kfence_pool;
+
 	setup_initial_init_mm(_text, _etext, _edata, _end);
 
 	*cmdline_p = boot_command_line;
@@ -340,6 +344,9 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	if (acpi_disabled)
 		unflatten_device_tree();
+
+	early_kfence_pool = arm64_kfence_alloc_pool();
+	arm64_kfence_map_pool(early_kfence_pool, swapper_pg_dir);
 
 	bootmem_init();
 
