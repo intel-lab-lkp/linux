@@ -437,6 +437,12 @@ void br_do_suppress_nd(struct sk_buff *skb, struct net_bridge *br,
 		return;
 	}
 
+	/* IPv6 disabled at boot, return before calling into br_is_local_ip6()
+	 * or neigh_lookup()
+	 */
+	if (!ipv6_stub->nd_tbl)
+		return;
+
 	if (vid != 0) {
 		/* build neigh table lookup on the vlan device */
 		vlandev = __vlan_find_dev_deep_rcu(br->dev, skb->vlan_proto,
