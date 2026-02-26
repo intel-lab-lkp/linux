@@ -5,7 +5,7 @@ lib_dir=$(dirname $0)/../../../net/forwarding
 
 ALL_TESTS="fw_flash_test params_test  \
 	   params_default_test regions_test reload_test \
-	   netns_reload_test resource_test dev_info_test \
+	   netns_reload_test resource_test resource_dump_test dev_info_test \
 	   empty_reporter_test dummy_reporter_test rate_test"
 NUM_NETIFS=0
 source $lib_dir/lib.sh
@@ -480,6 +480,21 @@ resource_test()
 	devlink_wait 2000
 
 	log_test "resource test"
+}
+
+resource_dump_test()
+{
+	RET=0
+
+	if ! devlink resource show > /dev/null 2>&1; then
+		echo "SKIP: devlink resource dump not supported"
+		return
+	fi
+
+	devlink resource show > /dev/null 2>&1
+	check_err $? "Failed to dump all resources"
+
+	log_test "resource dump test"
 }
 
 info_get()
