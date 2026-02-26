@@ -484,6 +484,8 @@ struct s390_io_adapter {
 #define MAX_S390_IO_ADAPTERS ((MAX_ISC + 1) * 8)
 #define MAX_S390_ADAPTER_MAPS 256
 
+#define S390_ARCH_FAC_ORIGIN_MASK 0x7ffffff8U
+
 /* maximum size of facilities and facility mask is 2k bytes */
 #define S390_ARCH_FAC_LIST_SIZE_BYTE (1<<11)
 #define S390_ARCH_FAC_LIST_SIZE_U64 \
