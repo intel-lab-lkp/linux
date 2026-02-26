@@ -309,10 +309,10 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 				   unsigned long initrd_len,
 				   const char *cmdline, size_t extra_fdt_size)
 {
-	void *fdt;
-	int ret, chosen_node, len;
+	int ret, chosen_node, len, i;
 	const void *prop;
 	size_t fdt_size;
+	void *fdt;
 
 	fdt_size = fdt_totalsize(initial_boot_params) +
 		   (cmdline ? strlen(cmdline) : 0) +
@@ -430,6 +430,15 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 				crashk_res.end - crashk_res.start + 1);
 		if (ret)
 			goto out;
+
+		for (i = 0; i < crashk_cma_cnt; i++) {
+			ret = fdt_appendprop_addrrange(fdt, 0, chosen_node,
+					"linux,usable-memory-range",
+					crashk_cma_ranges[i].start,
+					crashk_cma_ranges[i].end - crashk_cma_ranges[i].start + 1);
+			if (ret)
+				goto out;
+		}
 
 		if (crashk_low_res.end) {
 			ret = fdt_appendprop_addrrange(fdt, 0, chosen_node,
