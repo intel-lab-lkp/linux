@@ -196,6 +196,9 @@ enum pageflags {
 
 #define PAGEFLAGS_MASK		((1UL << NR_PAGEFLAGS) - 1)
 
+/* Most significant bit in page refcount */
+#define PAGEREF_LOCKED_BIT	(1 << 31)
+
 #ifndef __GENERATING_BOUNDS_H
 
 #ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
@@ -257,7 +260,7 @@ static __always_inline bool page_count_writable(const struct page *page)
 	 * The refcount check also prevents modification attempts to other (r/o)
 	 * tail pages that are not fake heads.
 	 */
-	if (!atomic_read_acquire(&page->_refcount))
+	if (atomic_read_acquire(&page->_refcount) & PAGEREF_LOCKED_BIT)
 		return false;
 
 	return page_fixed_fake_head(page) == page;
