@@ -89,23 +89,6 @@ inclusion is required::
 	#include <crypto/public_key.h>
 
 This gives access to functions for dealing with asymmetric / public keys.
-Three enums are defined there for representing public-key cryptography
-algorithms::
-
-	enum pkey_algo
-
-digest algorithms used by those::
-
-	enum pkey_hash_algo
-
-and key identifier representations::
-
-	enum pkey_id_type
-
-Note that the key type representation types are required because key
-identifiers from different standards aren't necessarily compatible.  For
-instance, PGP generates key identifiers by hashing the key data plus some
-PGP-specific metadata, whereas X.509 has arbitrary certificate identifiers.
 
 The operations defined upon a key are:
 
@@ -127,20 +110,9 @@ an asymmetric key to provide or to provide access to the public key::
 
 The caller must have already obtained the key from some source and can then use
 it to check the signature.  The caller must have parsed the signature and
-transferred the relevant bits to the structure pointed to by sig::
+transferred the relevant bits to the structure pointed to by sig.
 
-	struct public_key_signature {
-		u8 *digest;
-		u8 digest_size;
-		enum pkey_hash_algo pkey_hash_algo : 8;
-		u8 nr_mpi;
-		union {
-			MPI mpi[2];
-			...
-		};
-	};
-
-The algorithm used must be noted in sig->pkey_hash_algo, and all the MPIs that
+The algorithm used must be noted in sig->hash_algo, and all the MPIs that
 make up the actual signature must be stored in sig->mpi[] and the count of MPIs
 placed in sig->nr_mpi.
 
