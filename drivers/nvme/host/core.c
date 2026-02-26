@@ -2358,11 +2358,9 @@ static int nvme_update_ns_info_block(struct nvme_ns *ns,
 	}
 	lbaf = nvme_lbaf_index(id->flbas);
 
-	if (ns->ctrl->ctratt & NVME_CTRL_ATTR_ELBAS) {
-		ret = nvme_identify_ns_nvm(ns->ctrl, info->nsid, &nvm);
-		if (ret < 0)
-			goto out;
-	}
+	ret = nvme_identify_ns_nvm(ns->ctrl, info->nsid, &nvm);
+	if (ret < 0)
+		goto out;
 
 	if (IS_ENABLED(CONFIG_BLK_DEV_ZONED) &&
 	    ns->head->ids.csi == NVME_CSI_ZNS) {
