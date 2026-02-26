@@ -1491,10 +1491,11 @@ static void zs_obj_copy(struct size_class *class, unsigned long dst,
  * return handle.
  */
 static unsigned long find_alloced_obj(struct size_class *class,
-				      struct zpdesc *zpdesc, int *obj_idx)
+				      struct zpdesc *zpdesc,
+				      unsigned int *obj_idx)
 {
 	unsigned int offset;
-	int index = *obj_idx;
+	unsigned int index = *obj_idx;
 	unsigned long handle = 0;
 	void *addr = kmap_local_zpdesc(zpdesc);
 
@@ -1521,7 +1522,7 @@ static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 {
 	unsigned long used_obj, free_obj;
 	unsigned long handle;
-	int obj_idx = 0;
+	unsigned int obj_idx = 0;
 	struct zpdesc *s_zpdesc = get_first_zpdesc(src_zspage);
 	struct size_class *class = pool->size_class[src_zspage->class];
 
