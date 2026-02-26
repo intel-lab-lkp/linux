@@ -124,8 +124,7 @@ impl Error {
         if let Some(error) = Self::try_from_errno(errno) {
             error
         } else {
-            // TODO: Make it a `WARN_ONCE` once available.
-            crate::pr_warn!(
+            crate::pr_warn_once!(
                 "attempted to create `Error` with out of range `errno`: {}\n",
                 errno
             );
