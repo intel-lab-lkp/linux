@@ -23,8 +23,8 @@
 /*
  * MMU notifier 'invalidate_range_start' hook.
  */
-void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
-				       unsigned long end)
+void gpc_invalidate_hva_range_start(struct kvm *kvm, unsigned long start,
+				    unsigned long end)
 {
 	struct gfn_to_pfn_cache *gpc;
 
