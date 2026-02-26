@@ -215,7 +215,10 @@ static int query_engines(struct xe_device *xe,
 			i++;
 		}
 
-	engines->num_engines = i;
+	if (xe_device_is_admin_only(xe))
+		engines->num_engines = 0;
+	else
+		engines->num_engines = i;
 
 	if (copy_to_user(query_ptr, engines, size)) {
 		kfree(engines);
@@ -296,6 +299,9 @@ static int query_mem_regions(struct xe_device *xe,
 			mem_regions->num_mem_regions++;
 		}
 	}
+
+	if (xe_device_is_admin_only(xe))
+		mem_regions->num_mem_regions = 0;
 
 	if (!copy_to_user(query_ptr, mem_regions, size))
 		ret = 0;
@@ -418,6 +424,9 @@ static int query_gt_list(struct xe_device *xe, struct drm_xe_device_query *query
 
 		iter++;
 	}
+
+	if (xe_device_is_admin_only(xe))
+		gt_list->num_gt = 0;
 
 	if (copy_to_user(query_ptr, gt_list, size)) {
 		kfree(gt_list);

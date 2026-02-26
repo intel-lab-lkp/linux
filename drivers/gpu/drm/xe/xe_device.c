@@ -25,6 +25,7 @@
 #include "regs/xe_regs.h"
 #include "xe_bo.h"
 #include "xe_bo_evict.h"
+#include "xe_configfs.h"
 #include "xe_debugfs.h"
 #include "xe_defaults.h"
 #include "xe_devcoredump.h"
@@ -211,6 +212,11 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
 			  DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(XE_EXEC_QUEUE_SET_PROPERTY, xe_exec_queue_set_property_ioctl,
 			  DRM_RENDER_ALLOW),
+};
+
+static const struct drm_ioctl_desc xe_pf_admin_only_ioctls[] = {
+	DRM_IOCTL_DEF_DRV(XE_DEVICE_QUERY, xe_query_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
 };
 
 static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -441,6 +447,14 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
 {
 	struct xe_device *xe;
 	int err;
+
+	if (xe_configfs_admin_only_pf(pdev)) {
+		driver.ioctls = xe_pf_admin_only_ioctls;
+		driver.num_ioctls = ARRAY_SIZE(xe_pf_admin_only_ioctls);
+	} else {
+		driver.ioctls = xe_ioctls;
+		driver.num_ioctls = ARRAY_SIZE(xe_ioctls);
+	}
 
 	xe_display_driver_set_hooks(&driver);
 
