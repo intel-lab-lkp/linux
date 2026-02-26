@@ -577,8 +577,10 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 		goto out_put_forget;
 
 	err = -EIO;
-	if (fuse_invalid_attr(&outarg->attr))
-		goto out_put_forget;
+	if (fuse_invalid_attr(&outarg->attr)) {
+		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
+		goto out;
+	}
 	if (outarg->nodeid == FUSE_ROOT_ID && outarg->generation != 0) {
 		pr_warn_once("root generation should be zero\n");
 		outarg->generation = 0;
@@ -877,14 +879,24 @@ static int fuse_create_open(struct mnt_idmap *idmap, struct inode *dir,
 	if (err)
 		goto out_free_ff;
 
-	err = -EIO;
-	if (!S_ISREG(outentry.attr.mode) || invalid_nodeid(outentry.nodeid) ||
-	    fuse_invalid_attr(&outentry.attr))
-		goto out_free_ff;
-
 	ff->fh = outopenp->fh;
 	ff->nodeid = outentry.nodeid;
 	ff->open_flags = outopenp->open_flags;
+
+	err = -EIO;
+	if (invalid_nodeid(outentry.nodeid)) {
+		flags &= ~(O_CREAT | O_EXCL | O_TRUNC);
+		fuse_sync_release(NULL, ff, flags);
+		goto out_put_forget_req;
+	}
+
+	if (!S_ISREG(outentry.attr.mode) || fuse_invalid_attr(&outentry.attr)) {
+		flags &= ~(O_CREAT | O_EXCL | O_TRUNC);
+		fuse_sync_release(NULL, ff, flags);
+		fuse_queue_forget(fm->fc, forget, outentry.nodeid, 1);
+		goto out_err;
+	}
+
 	inode = fuse_iget(dir->i_sb, outentry.nodeid, outentry.generation,
 			  &outentry.attr, ATTR_TIMEOUT(&outentry), 0, 0);
 	if (!inode) {
@@ -1006,11 +1018,14 @@ static struct dentry *create_new_entry(struct mnt_idmap *idmap, struct fuse_moun
 		goto out_put_forget_req;
 
 	err = -EIO;
-	if (invalid_nodeid(outarg.nodeid) || fuse_invalid_attr(&outarg.attr))
+	if (invalid_nodeid(outarg.nodeid))
 		goto out_put_forget_req;
 
-	if ((outarg.attr.mode ^ mode) & S_IFMT)
-		goto out_put_forget_req;
+	if (fuse_invalid_attr(&outarg.attr) ||
+	    ((outarg.attr.mode ^ mode) & S_IFMT)) {
+		fuse_queue_forget(fm->fc, forget, outarg.nodeid, 1);
+		goto out_err;
+	}
 
 	inode = fuse_iget(dir->i_sb, outarg.nodeid, outarg.generation,
 			  &outarg.attr, ATTR_TIMEOUT(&outarg), 0, 0);
@@ -1039,6 +1054,7 @@ static struct dentry *create_new_entry(struct mnt_idmap *idmap, struct fuse_moun
 	if (err == -EEXIST)
 		fuse_invalidate_entry(entry);
 	kfree(forget);
+out_err:
 	return ERR_PTR(err);
 }
 
