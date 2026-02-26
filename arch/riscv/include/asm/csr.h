@@ -99,7 +99,8 @@
 #define IRQ_M_EXT		11
 #define IRQ_S_GEXT		12
 #define IRQ_PMU_OVF		13
-#define IRQ_LOCAL_MAX		(IRQ_PMU_OVF + 1)
+#define IRQ_SYS_ERROR		23
+#define IRQ_LOCAL_MAX		(IRQ_SYS_ERROR + 1)
 #define IRQ_LOCAL_MASK		GENMASK((IRQ_LOCAL_MAX - 1), 0)
 
 /* Exception causes */
@@ -535,6 +536,7 @@
 # define RV_IRQ_TIMER	IRQ_S_TIMER
 # define RV_IRQ_EXT		IRQ_S_EXT
 # define RV_IRQ_PMU	IRQ_PMU_OVF
+# define RV_IRQ_SYS_ERROR	IRQ_SYS_ERROR
 # define SIP_LCOFIP     (_AC(0x1, UL) << IRQ_PMU_OVF)
 
 #endif /* !CONFIG_RISCV_M_MODE */
