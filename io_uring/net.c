@@ -576,7 +576,8 @@ int io_sendmsg(struct io_kiocb *req, unsigned int issue_flags)
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
-		req_set_fail(req);
+		if (!sr->done_io)
+			req_set_fail(req);
 	}
 	io_req_msg_cleanup(req, issue_flags);
 	if (ret >= 0)
@@ -688,7 +689,8 @@ retry_bundle:
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
-		req_set_fail(req);
+		if (!sr->done_io)
+			req_set_fail(req);
 	}
 	if (ret >= 0)
 		ret += sr->done_io;
@@ -1074,7 +1076,8 @@ retry_multishot:
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
-		req_set_fail(req);
+		if (!sr->done_io)
+			req_set_fail(req);
 	} else if ((flags & MSG_WAITALL) && (kmsg->msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC))) {
 		req_set_fail(req);
 	}
@@ -1220,7 +1223,8 @@ retry_multishot:
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
-		req_set_fail(req);
+		if (!sr->done_io)
+			req_set_fail(req);
 	} else if ((flags & MSG_WAITALL) && (kmsg->msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC))) {
 out_free:
 		req_set_fail(req);
@@ -1498,7 +1502,8 @@ int io_send_zc(struct io_kiocb *req, unsigned int issue_flags)
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
-		req_set_fail(req);
+		if (!zc->done_io)
+			req_set_fail(req);
 	}
 
 	if (ret >= 0)
@@ -1570,7 +1575,8 @@ int io_sendmsg_zc(struct io_kiocb *req, unsigned int issue_flags)
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
-		req_set_fail(req);
+		if (!sr->done_io)
+			req_set_fail(req);
 	}
 
 	if (ret >= 0)
@@ -1595,8 +1601,10 @@ void io_sendrecv_fail(struct io_kiocb *req)
 {
 	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
 
-	if (sr->done_io)
+	if (sr->done_io) {
 		req->cqe.res = sr->done_io;
+		req->flags &= ~REQ_F_FAIL;
+	}
 
 	if ((req->flags & REQ_F_NEED_CLEANUP) &&
 	    (req->opcode == IORING_OP_SEND_ZC || req->opcode == IORING_OP_SENDMSG_ZC))
