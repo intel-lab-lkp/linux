@@ -66,6 +66,9 @@ static inline bool arm64_supports_kpkeys_hardened_pgtables(void)
 		system_supports_poe() : cpu_has_poe();
 }
 
+#define arch_kpkeys_protect_static_pgtables arch_kpkeys_protect_static_pgtables
+void arch_kpkeys_protect_static_pgtables(void);
+
 #else /* CONFIG_KPKEYS_HARDENED_PGTABLES */
 
 static inline bool arm64_supports_kpkeys_hardened_pgtables(void)
