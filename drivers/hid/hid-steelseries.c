@@ -32,6 +32,7 @@
 #define SS_CAP_VOLUME_LIMITER		BIT(8)
 #define SS_CAP_BT_CALL_DUCKING		BIT(9)
 #define SS_CAP_INACTIVE_TIME		BIT(10)
+#define SS_CAP_BT_AUTO_ENABLE		BIT(11)
 
 #define SS_QUIRK_STATUS_SYNC_POLL	BIT(0)
 
@@ -40,6 +41,7 @@
 #define SS_SETTING_VOLUME_LIMITER	2
 #define SS_SETTING_BT_CALL_DUCKING	3
 #define SS_SETTING_INACTIVE_TIME	4
+#define SS_SETTING_BT_AUTO_ENABLE	5
 
 struct steelseries_device;
 
@@ -97,6 +99,7 @@ struct steelseries_device {
 	bool bt_enabled;
 	bool bt_device_connected;
 	u8 inactive_timeout;
+	bool bt_auto_enable;
 
 	spinlock_t lock;
 	bool removed;
@@ -644,6 +647,9 @@ static int steelseries_arctis_nova_7_write_setting(struct hid_device *hdev,
 	case SS_SETTING_INACTIVE_TIME:
 		cmd = 0xa3;
 		break;
+	case SS_SETTING_BT_AUTO_ENABLE:
+		cmd = 0xb2;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -999,6 +1005,7 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 		break;
 	case 0xa0:
 		sd->inactive_timeout = data[1];
+		sd->bt_auto_enable = data[3];
 		sd->bt_call_ducking = data[4];
 		break;
 	case 0x37:
@@ -1012,6 +1019,9 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 		break;
 	case 0xa3:
 		sd->inactive_timeout = data[1];
+		break;
+	case 0xb2:
+		sd->bt_auto_enable = data[1];
 		break;
 	case 0xb3:
 		sd->bt_call_ducking = data[1];
@@ -1147,7 +1157,8 @@ static const struct steelseries_device_info arctis_nova_7_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
 			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
-			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME,
+			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME |
+			SS_CAP_BT_AUTO_ENABLE,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
@@ -1160,7 +1171,8 @@ static const struct steelseries_device_info arctis_nova_7_info = {
 static const struct steelseries_device_info arctis_nova_7p_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
-			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME,
+			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME |
+			SS_CAP_BT_AUTO_ENABLE,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.mic_volume_max = 7,
 	.inactive_time_max = 255,
@@ -1176,7 +1188,8 @@ static const struct steelseries_device_info arctis_nova_7_gen2_info = {
 			SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
 			SS_CAP_EXTERNAL_CONFIG | SS_CAP_SIDETONE |
 			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
-			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME,
+			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME |
+			SS_CAP_BT_AUTO_ENABLE,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
 	.inactive_time_max = 255,
@@ -1416,14 +1429,53 @@ static ssize_t inactive_time_store(struct device *dev,
 	return count;
 }
 
+static ssize_t bt_auto_enable_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct steelseries_device *sd = hid_get_drvdata(hdev);
+
+	if (!sd->headset_connected)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", sd->bt_auto_enable);
+}
+
+static ssize_t bt_auto_enable_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct steelseries_device *sd = hid_get_drvdata(hdev);
+	bool value;
+	int ret;
+
+	if (!sd->headset_connected)
+		return -ENODEV;
+
+	ret = kstrtobool(buf, &value);
+	if (ret)
+		return ret;
+
+	ret = sd->info->write_setting(sd->hdev, SS_SETTING_BT_AUTO_ENABLE, value);
+	if (ret)
+		return ret;
+
+	sd->bt_auto_enable = value;
+
+	return count;
+}
+
 static DEVICE_ATTR_RO(bt_enabled);
 static DEVICE_ATTR_RO(bt_device_connected);
 static DEVICE_ATTR_RW(inactive_time);
+static DEVICE_ATTR_RW(bt_auto_enable);
 
 static struct attribute *steelseries_headset_attrs[] = {
 	&dev_attr_bt_enabled.attr,
 	&dev_attr_bt_device_connected.attr,
 	&dev_attr_inactive_time.attr,
+	&dev_attr_bt_auto_enable.attr,
 	NULL,
 };
 
@@ -1447,6 +1499,8 @@ static umode_t steelseries_headset_attr_is_visible(struct kobject *kobj,
 		return (caps & SS_CAP_BT_DEVICE_CONNECTED) ? attr->mode : 0;
 	if (attr == &dev_attr_inactive_time.attr)
 		return (caps & SS_CAP_INACTIVE_TIME) ? attr->mode : 0;
+	if (attr == &dev_attr_bt_auto_enable.attr)
+		return (caps & SS_CAP_BT_AUTO_ENABLE) ? attr->mode : 0;
 
 	return 0;
 }
@@ -2106,7 +2160,8 @@ static int steelseries_probe(struct hid_device *hdev,
 		}
 
 		if (info->capabilities & (SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
-					  SS_CAP_INACTIVE_TIME)) {
+					  SS_CAP_INACTIVE_TIME |
+					  SS_CAP_BT_AUTO_ENABLE)) {
 			ret = sysfs_create_group(&hdev->dev.kobj,
 						 &steelseries_headset_attr_group);
 			if (ret)
@@ -2189,7 +2244,7 @@ static void steelseries_remove(struct hid_device *hdev)
 
 	if (interface_num == sd->info->sync_interface) {
 		if (sd->info->capabilities & (SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
-					      SS_CAP_INACTIVE_TIME))
+					      SS_CAP_INACTIVE_TIME | SS_CAP_BT_AUTO_ENABLE))
 			sysfs_remove_group(&hdev->dev.kobj,
 					   &steelseries_headset_attr_group);
 
