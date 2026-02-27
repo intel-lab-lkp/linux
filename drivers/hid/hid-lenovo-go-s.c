@@ -573,7 +573,7 @@ static ssize_t gamepad_property_show(struct device *dev,
 				     struct device_attribute *attr, char *buf,
 				     enum feature_status_index index)
 {
-	size_t count = 0;
+	ssize_t count = 0;
 	u8 i;
 
 	count = mcu_property_out(drvdata.hdev, GET_GAMEPAD_CFG, index, 0, 0);
