@@ -129,18 +129,12 @@ void btrfs_csum_final(struct btrfs_csum_ctx *ctx, u8 *out)
 /*
  * We support the following block sizes for all systems:
  *
- * - 4K
+ * - MIN_BLOCKSIZE (4K)
  *   This is the most common block size. For PAGE SIZE > 4K cases the subpage
  *   mode is used.
  *
  * - PAGE_SIZE
  *   The straightforward block size to support.
- *
- * And extra support for the following block sizes based on the kernel config:
- *
- * - MIN_BLOCKSIZE
- *   This is either 4K (regular builds) or 2K (debug builds)
- *   This allows testing subpage routines on x86_64.
  */
 bool __attribute_const__ btrfs_supported_blocksize(u32 blocksize)
 {
@@ -148,7 +142,7 @@ bool __attribute_const__ btrfs_supported_blocksize(u32 blocksize)
 	ASSERT(is_power_of_2(blocksize) && blocksize >= BTRFS_MIN_BLOCKSIZE &&
 	       blocksize <= BTRFS_MAX_BLOCKSIZE);
 
-	if (blocksize == PAGE_SIZE || blocksize == SZ_4K || blocksize == BTRFS_MIN_BLOCKSIZE)
+	if (blocksize == PAGE_SIZE || blocksize == BTRFS_MIN_BLOCKSIZE)
 		return true;
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	/*
