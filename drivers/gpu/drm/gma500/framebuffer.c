@@ -21,6 +21,7 @@ static const struct drm_framebuffer_funcs psb_fb_funcs = {
  *	psb_framebuffer_init	-	initialize a framebuffer
  *	@dev: our DRM device
  *	@fb: framebuffer to set up
+ *	@info: pixel format information
  *	@mode_cmd: mode description
  *	@obj: backing object
  *
@@ -91,6 +92,7 @@ struct drm_framebuffer *psb_framebuffer_create(struct drm_device *dev,
  *	psb_user_framebuffer_create	-	create framebuffer
  *	@dev: our DRM device
  *	@filp: client file
+ *	@info: pixel format information
  *	@cmd: mode request
  *
  *	Create a new framebuffer backed by a userspace GEM object
