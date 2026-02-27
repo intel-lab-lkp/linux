@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/acpi.h>
 
 #define DRIVER_NAME "gpdfan"
 #define GPD_PWM_CTR_OFFSET 0x1841
@@ -251,44 +252,12 @@ static const struct gpd_fan_drvdata *gpd_module_drvdata[] = {
 // Helper functions to handle EC read/write
 static void gpd_ecram_read(u16 offset, u8 *val)
 {
-	u16 addr_port = gpd_driver_priv.drvdata->addr_port;
-	u16 data_port = gpd_driver_priv.drvdata->data_port;
-
-	outb(0x2E, addr_port);
-	outb(0x11, data_port);
-	outb(0x2F, addr_port);
-	outb((u8)((offset >> 8) & 0xFF), data_port);
-
-	outb(0x2E, addr_port);
-	outb(0x10, data_port);
-	outb(0x2F, addr_port);
-	outb((u8)(offset & 0xFF), data_port);
-
-	outb(0x2E, addr_port);
-	outb(0x12, data_port);
-	outb(0x2F, addr_port);
-	*val = inb(data_port);
+	*val = ec_read(offset, val);
 }
 
 static void gpd_ecram_write(u16 offset, u8 value)
 {
-	u16 addr_port = gpd_driver_priv.drvdata->addr_port;
-	u16 data_port = gpd_driver_priv.drvdata->data_port;
-
-	outb(0x2E, addr_port);
-	outb(0x11, data_port);
-	outb(0x2F, addr_port);
-	outb((u8)((offset >> 8) & 0xFF), data_port);
-
-	outb(0x2E, addr_port);
-	outb(0x10, data_port);
-	outb(0x2F, addr_port);
-	outb((u8)(offset & 0xFF), data_port);
-
-	outb(0x2E, addr_port);
-	outb(0x12, data_port);
-	outb(0x2F, addr_port);
-	outb(value, data_port);
+	ec_write(offset, value);
 }
 
 static int gpd_generic_read_rpm(void)
