@@ -3611,7 +3611,7 @@ static int xe_vm_bind_ioctl_validate_bo(struct xe_device *xe, struct xe_bo *bo,
 	 * with a PAT index that enables compression.
 	 */
 	comp_en = xe_pat_index_get_comp_en(xe, pat_index);
-	if (XE_IOCTL_DBG(xe, bo->ttm.base.import_attach && comp_en))
+	if (XE_IOCTL_DBG(xe, drm_gem_is_imported(&bo->ttm.base) && comp_en))
 		return -EINVAL;
 
 	/* If a BO is protected it can only be mapped if the key is still valid */
