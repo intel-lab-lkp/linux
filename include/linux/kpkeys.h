@@ -139,6 +139,8 @@ void kpkeys_hardened_pgtables_init(void);
  */
 void kpkeys_hardened_pgtables_init_late(void);
 
+phys_addr_t kpkeys_physmem_pgtable_alloc(void);
+
 #else /* CONFIG_KPKEYS_HARDENED_PGTABLES */
 
 static inline bool kpkeys_hardened_pgtables_enabled(void)
@@ -166,6 +168,11 @@ static inline void kpkeys_pgtable_free(struct page *page) {}
 static inline void kpkeys_hardened_pgtables_init(void) {}
 
 static inline void kpkeys_hardened_pgtables_init_late(void) {}
+
+static inline phys_addr_t kpkeys_physmem_pgtable_alloc(void)
+{
+	return 0;
+}
 
 #endif /* CONFIG_KPKEYS_HARDENED_PGTABLES */
 
