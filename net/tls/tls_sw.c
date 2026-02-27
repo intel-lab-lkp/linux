@@ -404,7 +404,7 @@ static void tls_free_open_rec(struct sock *sk)
 	}
 }
 
-int tls_tx_records(struct sock *sk, int flags)
+static int __tls_tx_records(struct sock *sk, int flags, int extra_flags)
 {
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
 	struct tls_sw_context_tx *ctx = tls_sw_ctx_tx(tls_ctx);
@@ -417,9 +417,9 @@ int tls_tx_records(struct sock *sk, int flags)
 				       struct tls_rec, list);
 
 		if (flags == -1)
-			tx_flags = rec->tx_flags;
+			tx_flags = rec->tx_flags | extra_flags;
 		else
-			tx_flags = flags;
+			tx_flags = flags | extra_flags;
 
 		rc = tls_push_partial_record(sk, tls_ctx, tx_flags);
 		if (rc)
@@ -461,6 +461,11 @@ tx_err:
 		tls_err_abort(sk, rc);
 
 	return rc;
+}
+
+int tls_tx_records(struct sock *sk, int flags)
+{
+	return __tls_tx_records(sk, flags, 0);
 }
 
 static void tls_encrypt_done(void *data, int err)
@@ -2629,6 +2634,7 @@ static void tx_work_handler(struct work_struct *work)
 	struct sock *sk = tx_work->sk;
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
 	struct tls_sw_context_tx *ctx;
+	int rc;
 
 	if (unlikely(!tls_ctx))
 		return;
@@ -2642,16 +2648,21 @@ static void tx_work_handler(struct work_struct *work)
 
 	if (mutex_trylock(&tls_ctx->tx_lock)) {
 		lock_sock(sk);
-		tls_tx_records(sk, -1);
+		rc = __tls_tx_records(sk, -1, MSG_DONTWAIT);
 		release_sock(sk);
 		mutex_unlock(&tls_ctx->tx_lock);
-	} else if (!test_and_set_bit(BIT_TX_SCHEDULED, &ctx->tx_bitmask)) {
-		/* Someone is holding the tx_lock, they will likely run Tx
-		 * and cancel the work on their way out of the lock section.
-		 * Schedule a long delay just in case.
-		 */
-		schedule_delayed_work(&ctx->tx_work.work, msecs_to_jiffies(10));
+		if (rc != -EAGAIN)
+			return;
 	}
+
+	/* Someone is holding the tx_lock, they will likely run Tx
+	 * and cancel the work on their way out of the lock section.
+	 * Schedule a long delay just in case.
+	 * Also reschedule on -EAGAIN when the send buffer is full
+	 * to avoid blocking the workqueue indefinitely.
+	 */
+	if (!test_and_set_bit(BIT_TX_SCHEDULED, &ctx->tx_bitmask))
+		schedule_delayed_work(&ctx->tx_work.work, msecs_to_jiffies(10));
 }
 
 static bool tls_is_tx_ready(struct tls_sw_context_tx *ctx)
