@@ -21,6 +21,7 @@ void led_init_core(struct led_classdev *led_cdev);
 void led_stop_software_blink(struct led_classdev *led_cdev);
 void led_set_brightness_nopm(struct led_classdev *led_cdev, unsigned int value);
 void led_set_brightness_nosleep(struct led_classdev *led_cdev, unsigned int value);
+void led_load_hw_control_trigger(struct led_classdev *led_cdev);
 ssize_t led_trigger_read(struct file *filp, struct kobject *kobj,
 			const struct bin_attribute *attr, char *buf,
 			loff_t pos, size_t count);

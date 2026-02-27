@@ -576,6 +576,7 @@ int led_classdev_register_ext(struct device *parent,
 
 #ifdef CONFIG_LEDS_TRIGGERS
 	led_trigger_set_default(led_cdev);
+	led_load_hw_control_trigger(led_cdev);
 #endif
 
 	mutex_unlock(&led_cdev->led_access);

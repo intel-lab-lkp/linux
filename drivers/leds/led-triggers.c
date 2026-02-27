@@ -313,6 +313,39 @@ void led_trigger_set_default(struct led_classdev *led_cdev)
 }
 EXPORT_SYMBOL_GPL(led_trigger_set_default);
 
+static inline bool led_match_hw_control_trigger(struct led_classdev *led_cdev,
+						struct led_trigger *trig)
+{
+	return (!strcmp(led_cdev->hw_control_trigger, trig->name) &&
+		trigger_relevant(led_cdev, trig));
+}
+
+void led_load_hw_control_trigger(struct led_classdev *led_cdev)
+{
+	struct led_trigger *trig;
+	bool found = false;
+
+	if (!led_cdev->hw_control_trigger)
+		return;
+
+	/* default_trigger is handled by led_trigger_set_default(). */
+	if (led_cdev->default_trigger &&
+	    !strcmp(led_cdev->default_trigger, led_cdev->hw_control_trigger))
+		return;
+
+	down_read(&triggers_list_lock);
+	list_for_each_entry(trig, &trigger_list, next_trig) {
+		found = led_match_hw_control_trigger(led_cdev, trig);
+		if (found)
+			break;
+	}
+	up_read(&triggers_list_lock);
+
+	if (!found)
+		request_module_nowait("ledtrig:%s", led_cdev->hw_control_trigger);
+}
+EXPORT_SYMBOL_GPL(led_load_hw_control_trigger);
+
 /* LED Trigger Interface */
 
 int led_trigger_register(struct led_trigger *trig)
