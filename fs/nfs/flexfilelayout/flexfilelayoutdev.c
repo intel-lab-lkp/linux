@@ -181,7 +181,7 @@ out_err:
 	kfree(new_ds);
 
 	dprintk("%s ERROR: returning %d\n", __func__, ret);
-	return NULL;
+	return ERR_PTR(ret);
 }
 
 static void extend_ds_error(struct nfs4_ff_layout_ds_err *err,

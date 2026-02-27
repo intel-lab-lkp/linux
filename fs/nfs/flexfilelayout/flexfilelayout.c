@@ -2566,7 +2566,7 @@ ff_layout_alloc_deviceid_node(struct nfs_server *server,
 	struct nfs4_ff_layout_ds *dsaddr;
 
 	dsaddr = nfs4_ff_alloc_deviceid_node(server, pdev, gfp_flags);
-	if (!dsaddr)
+	if (IS_ERR(dsaddr))
 		return NULL;
 	return &dsaddr->id_node;
 }
