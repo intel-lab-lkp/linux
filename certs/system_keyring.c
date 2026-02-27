@@ -298,6 +298,49 @@ late_initcall(load_system_certificate_list);
 #ifdef CONFIG_SYSTEM_DATA_VERIFICATION
 
 /**
+ * validate_pkcs7_trust - add trust markers based on keyring
+ * @pkcs7: The PKCS#7 message that is the signature.
+ * @trusted_keys: Trusted keys to use (NULL for builtin trusted keys only,
+ *					(void *)1UL for all trusted keys).
+ */
+int validate_pkcs7_trust(struct pkcs7_message *pkcs7, struct key *trusted_keys)
+{
+	int ret;
+
+	ret = is_key_on_revocation_list(pkcs7);
+	if (ret != -ENOKEY) {
+		pr_devel("PKCS#7 key is on revocation list\n");
+		return ret;
+	}
+
+	if (!trusted_keys) {
+		trusted_keys = builtin_trusted_keys;
+	} else if (trusted_keys == VERIFY_USE_SECONDARY_KEYRING) {
+#ifdef CONFIG_SECONDARY_TRUSTED_KEYRING
+		trusted_keys = secondary_trusted_keys;
+#else
+		trusted_keys = builtin_trusted_keys;
+#endif
+	} else if (trusted_keys == VERIFY_USE_PLATFORM_KEYRING) {
+#ifdef CONFIG_INTEGRITY_PLATFORM_KEYRING
+		trusted_keys = platform_trusted_keys;
+#else
+		trusted_keys = NULL;
+#endif
+		if (!trusted_keys) {
+			pr_devel("PKCS#7 platform keyring is not available\n");
+			return -ENOKEY;
+		}
+	}
+	ret = pkcs7_validate_trust(pkcs7, trusted_keys);
+	if (ret == -ENOKEY)
+		pr_devel("PKCS#7 signature not signed with a trusted key\n");
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(validate_pkcs7_trust);
+
+/**
  * verify_pkcs7_message_sig - Verify a PKCS#7-based signature on system data.
  * @data: The data to be verified (NULL if expecting internal data).
  * @len: Size of @data.
@@ -330,38 +373,9 @@ int verify_pkcs7_message_sig(const void *data, size_t len,
 	if (ret < 0)
 		goto error;
 
-	ret = is_key_on_revocation_list(pkcs7);
-	if (ret != -ENOKEY) {
-		pr_devel("PKCS#7 key is on revocation list\n");
+	ret = validate_pkcs7_trust(pkcs7, trusted_keys);
+	if (ret < 0)
 		goto error;
-	}
-
-	if (!trusted_keys) {
-		trusted_keys = builtin_trusted_keys;
-	} else if (trusted_keys == VERIFY_USE_SECONDARY_KEYRING) {
-#ifdef CONFIG_SECONDARY_TRUSTED_KEYRING
-		trusted_keys = secondary_trusted_keys;
-#else
-		trusted_keys = builtin_trusted_keys;
-#endif
-	} else if (trusted_keys == VERIFY_USE_PLATFORM_KEYRING) {
-#ifdef CONFIG_INTEGRITY_PLATFORM_KEYRING
-		trusted_keys = platform_trusted_keys;
-#else
-		trusted_keys = NULL;
-#endif
-		if (!trusted_keys) {
-			ret = -ENOKEY;
-			pr_devel("PKCS#7 platform keyring is not available\n");
-			goto error;
-		}
-	}
-	ret = pkcs7_validate_trust(pkcs7, trusted_keys);
-	if (ret < 0) {
-		if (ret == -ENOKEY)
-			pr_devel("PKCS#7 signature not signed with a trusted key\n");
-		goto error;
-	}
 
 	if (view_content) {
 		size_t asn1hdrlen;
