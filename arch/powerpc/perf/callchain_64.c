@@ -79,6 +79,9 @@ void perf_callchain_user_64(struct perf_callchain_entry_ctx *entry,
 	sp = regs->gpr[1];
 	perf_callchain_store(entry, next_ip);
 
+	if (!current->mm)
+		return;
+
 	while (entry->nr < entry->max_stack) {
 		fp = (unsigned long __user *) sp;
 		if (invalid_user_sp(sp) || read_user_stack_64(fp, &next_sp))
