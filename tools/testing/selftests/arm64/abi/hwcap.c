@@ -56,7 +56,10 @@ static void atomics_sigill(void)
 
 static void cmpbr_sigill(void)
 {
-	/* Not implemented, too complicated and unreliable anyway */
+	/* CBEQ x0, x0, +8 */
+	asm volatile(".inst 0x74C00040" : : : "x0");
+	/* UDF #0 */
+	asm volatile("udf #0" : : : );
 }
 
 static void crc32_sigill(void)
