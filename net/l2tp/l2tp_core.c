@@ -1226,18 +1226,16 @@ static int l2tp_xmit_core(struct l2tp_session *session, struct sk_buff *skb, uns
 	struct l2tp_tunnel *tunnel = session->tunnel;
 	unsigned int data_len = skb->len;
 	struct sock *sk = tunnel->sock;
-	int headroom, uhlen, udp_len;
 	int ret = NET_XMIT_SUCCESS;
 	struct inet_sock *inet;
 	struct udphdr *uh;
+	int udp_len;
 
 	/* Check that there's enough headroom in the skb to insert IP,
 	 * UDP and L2TP headers. If not enough, expand it to
 	 * make room. Adjust truesize.
 	 */
-	uhlen = (tunnel->encap == L2TP_ENCAPTYPE_UDP) ? sizeof(*uh) : 0;
-	headroom = NET_SKB_PAD + tunnel->l3_overhead + uhlen + session->hdr_len;
-	if (skb_cow_head(skb, headroom)) {
+	if (skb_cow_head(skb, l2tp_session_skb_headroom(session))) {
 		kfree_skb(skb);
 		return NET_XMIT_DROP;
 	}
@@ -1289,7 +1287,7 @@ static int l2tp_xmit_core(struct l2tp_session *session, struct sk_buff *skb, uns
 		uh = udp_hdr(skb);
 		uh->source = inet->inet_sport;
 		uh->dest = inet->inet_dport;
-		udp_len = uhlen + session->hdr_len + data_len;
+		udp_len = l2tp_session_udp_hdrlen(session) + session->hdr_len + data_len;
 		uh->len = htons(udp_len);
 
 		/* Calculate UDP checksum if configured to do so */

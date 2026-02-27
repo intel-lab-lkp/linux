@@ -335,6 +335,23 @@ static inline int l2tp_v3_ensure_opt_in_linear(struct l2tp_session *session, str
 	return 0;
 }
 
+static inline int l2tp_session_udp_hdrlen(struct l2tp_session *session)
+{
+	return session->tunnel->encap == L2TP_ENCAPTYPE_UDP ?
+		sizeof(struct udphdr) : 0;
+}
+
+static inline int l2tp_session_overhead(struct l2tp_session *session)
+{
+	return l2tp_session_udp_hdrlen(session) + session->hdr_len +
+		session->tunnel->l3_overhead;
+}
+
+static inline int l2tp_session_skb_headroom(struct l2tp_session *session)
+{
+	return NET_SKB_PAD + l2tp_session_overhead(session);
+}
+
 #define MODULE_ALIAS_L2TP_PWTYPE(type) \
 	MODULE_ALIAS("net-l2tp-type-" __stringify(type))
 
