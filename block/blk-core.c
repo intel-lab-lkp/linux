@@ -635,7 +635,7 @@ static void __submit_bio(struct bio *bio)
 		blk_mq_submit_bio(bio);
 	} else if (likely(bio_queue_enter(bio) == 0)) {
 		struct gendisk *disk = bio->bi_bdev->bd_disk;
-	
+
 		if ((bio->bi_opf & REQ_POLLED) &&
 		    !(disk->queue->limits.features & BLK_FEAT_POLL)) {
 			bio->bi_status = BLK_STS_NOTSUPP;
@@ -695,7 +695,7 @@ static void __submit_bio_noacct(struct bio *bio)
 		 */
 		bio_list_init(&lower);
 		bio_list_init(&same);
-		while ((bio = bio_list_pop(&bio_list_on_stack[0])) != NULL)
+		while ((bio = bio_list_pop(&bio_list_on_stack[0])))
 			if (q == bdev_get_queue(bio->bi_bdev))
 				bio_list_add(&same, bio);
 			else

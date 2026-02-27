@@ -689,7 +689,7 @@ static void blkiolatency_timer_fn(struct timer_list *t)
 		 * We scaled down but don't have a scale_grp, scale up and carry
 		 * on.
 		 */
-		if (lat_info->scale_grp == NULL) {
+		if (!lat_info->scale_grp) {
 			scale_cookie_change(iolat->blkiolat, lat_info, true);
 			goto next_lock;
 		}

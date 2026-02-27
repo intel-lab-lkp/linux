@@ -1374,7 +1374,7 @@ EXPORT_SYMBOL_GPL(badblocks_clear);
  */
 void ack_all_badblocks(struct badblocks *bb)
 {
-	if (bb->page == NULL || bb->changed)
+	if (!bb->page || bb->changed)
 		/* no point even trying */
 		return;
 	write_seqlock_irq(&bb->lock);

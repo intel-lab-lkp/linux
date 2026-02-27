@@ -762,7 +762,7 @@ static int __bio_alloc_cache_prune(struct bio_alloc_cache *cache,
 	unsigned int i = 0;
 	struct bio *bio;
 
-	while ((bio = cache->free_list) != NULL) {
+	while ((bio = cache->free_list)) {
 		cache->free_list = bio->bi_next;
 		cache->nr--;
 		bio_free(bio);
