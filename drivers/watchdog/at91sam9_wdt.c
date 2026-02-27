@@ -168,8 +168,8 @@ static int at91_wdt_init(struct platform_device *pdev, struct at91wdt *wdt)
 		}
 	}
 
-	if (tmp & AT91_WDT_WDDIS) {
-		if (wdt->mr & AT91_WDT_WDDIS)
+	if (tmp & AT91_WDT_WDDIS_LEGACY) {
+		if (wdt->mr & AT91_WDT_WDDIS_LEGACY)
 			return 0;
 		dev_err(dev, "watchdog is disabled\n");
 		return -EINVAL;
@@ -303,8 +303,8 @@ static int of_at91wdt_init(struct device_node *np, struct at91wdt *wdt)
 		wdt->mr |= AT91_WDT_WDRPROC;
 
 	if (of_property_read_bool(np, "atmel,disable")) {
-		wdt->mr |= AT91_WDT_WDDIS;
-		wdt->mr_mask &= AT91_WDT_WDDIS;
+		wdt->mr |= AT91_WDT_WDDIS_LEGACY;
+		wdt->mr_mask &= AT91_WDT_WDDIS_LEGACY;
 	}
 
 	if (of_property_read_bool(np, "atmel,idle-halt"))
