@@ -54,6 +54,7 @@
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
 #include <linux/pgalloc_tag.h>
+#include <linux/mmzone_lock.h>
 #include <asm/div64.h>
 #include "internal.h"
 #include "shuffle.h"
@@ -1500,7 +1501,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	/* Ensure requested pindex is drained first. */
 	pindex = pindex - 1;
 
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 
 	while (count > 0) {
 		struct list_head *list;
@@ -1533,7 +1534,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 		} while (count > 0 && !list_empty(list));
 	}
 
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 }
 
 /* Split a multi-block free page into its individual pageblocks. */
@@ -1577,12 +1578,12 @@ static void free_one_page(struct zone *zone, struct page *page,
 	unsigned long flags;
 
 	if (unlikely(fpi_flags & FPI_TRYLOCK)) {
-		if (!spin_trylock_irqsave(&zone->lock, flags)) {
+		if (!zone_trylock_irqsave(zone, flags)) {
 			add_page_to_zone_llist(zone, page, order);
 			return;
 		}
 	} else {
-		spin_lock_irqsave(&zone->lock, flags);
+		zone_lock_irqsave(zone, flags);
 	}
 
 	/* The lock succeeded. Process deferred pages. */
@@ -1600,7 +1601,7 @@ static void free_one_page(struct zone *zone, struct page *page,
 		}
 	}
 	split_large_buddy(zone, page, pfn, order, fpi_flags);
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 
 	__count_vm_events(PGFREE, 1 << order);
 }
@@ -2553,10 +2554,10 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	int i;
 
 	if (unlikely(alloc_flags & ALLOC_TRYLOCK)) {
-		if (!spin_trylock_irqsave(&zone->lock, flags))
+		if (!zone_trylock_irqsave(zone, flags))
 			return 0;
 	} else {
-		spin_lock_irqsave(&zone->lock, flags);
+		zone_lock_irqsave(zone, flags);
 	}
 	for (i = 0; i < count; ++i) {
 		struct page *page = __rmqueue(zone, order, migratetype,
@@ -2576,7 +2577,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 		 */
 		list_add_tail(&page->pcp_list, list);
 	}
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 
 	return i;
 }
@@ -3246,10 +3247,10 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 	do {
 		page = NULL;
 		if (unlikely(alloc_flags & ALLOC_TRYLOCK)) {
-			if (!spin_trylock_irqsave(&zone->lock, flags))
+			if (!zone_trylock_irqsave(zone, flags))
 				return NULL;
 		} else {
-			spin_lock_irqsave(&zone->lock, flags);
+			zone_lock_irqsave(zone, flags);
 		}
 		if (alloc_flags & ALLOC_HIGHATOMIC)
 			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
@@ -3268,11 +3269,11 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 				page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
 
 			if (!page) {
-				spin_unlock_irqrestore(&zone->lock, flags);
+				zone_unlock_irqrestore(zone, flags);
 				return NULL;
 			}
 		}
-		spin_unlock_irqrestore(&zone->lock, flags);
+		zone_unlock_irqrestore(zone, flags);
 	} while (check_new_pages(page, order));
 
 	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
@@ -3459,7 +3460,7 @@ static void reserve_highatomic_pageblock(struct page *page, int order,
 	if (zone->nr_reserved_highatomic >= max_managed)
 		return;
 
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 
 	/* Recheck the nr_reserved_highatomic limit under the lock */
 	if (zone->nr_reserved_highatomic >= max_managed)
@@ -3481,7 +3482,7 @@ static void reserve_highatomic_pageblock(struct page *page, int order,
 	}
 
 out_unlock:
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 }
 
 /*
@@ -3514,7 +3515,7 @@ static bool unreserve_highatomic_pageblock(const struct alloc_context *ac,
 					pageblock_nr_pages)
 			continue;
 
-		spin_lock_irqsave(&zone->lock, flags);
+		zone_lock_irqsave(zone, flags);
 		for (order = 0; order < NR_PAGE_ORDERS; order++) {
 			struct free_area *area = &(zone->free_area[order]);
 			unsigned long size;
@@ -3562,11 +3563,11 @@ static bool unreserve_highatomic_pageblock(const struct alloc_context *ac,
 			 */
 			WARN_ON_ONCE(ret == -1);
 			if (ret > 0) {
-				spin_unlock_irqrestore(&zone->lock, flags);
+				zone_unlock_irqrestore(zone, flags);
 				return ret;
 			}
 		}
-		spin_unlock_irqrestore(&zone->lock, flags);
+		zone_unlock_irqrestore(zone, flags);
 	}
 
 	return false;
@@ -6446,7 +6447,7 @@ static void __setup_per_zone_wmarks(void)
 	for_each_zone(zone) {
 		u64 tmp;
 
-		spin_lock_irqsave(&zone->lock, flags);
+		zone_lock_irqsave(zone, flags);
 		tmp = (u64)pages_min * zone_managed_pages(zone);
 		tmp = div64_ul(tmp, lowmem_pages);
 		if (is_highmem(zone) || zone_idx(zone) == ZONE_MOVABLE) {
@@ -6487,7 +6488,7 @@ static void __setup_per_zone_wmarks(void)
 		zone->_watermark[WMARK_PROMO] = high_wmark_pages(zone) + tmp;
 		trace_mm_setup_per_zone_wmarks(zone);
 
-		spin_unlock_irqrestore(&zone->lock, flags);
+		zone_unlock_irqrestore(zone, flags);
 	}
 
 	/* update totalreserve_pages */
@@ -7258,7 +7259,7 @@ retry:
 	zonelist = node_zonelist(nid, gfp_mask);
 	for_each_zone_zonelist_nodemask(zone, z, zonelist,
 					gfp_zone(gfp_mask), nodemask) {
-		spin_lock_irqsave(&zone->lock, flags);
+		zone_lock_irqsave(zone, flags);
 
 		pfn = ALIGN(zone->zone_start_pfn, nr_pages);
 		while (zone_spans_last_pfn(zone, pfn, nr_pages)) {
@@ -7272,18 +7273,18 @@ retry:
 				 * allocation spinning on this lock, it may
 				 * win the race and cause allocation to fail.
 				 */
-				spin_unlock_irqrestore(&zone->lock, flags);
+				zone_unlock_irqrestore(zone, flags);
 				ret = alloc_contig_frozen_range_noprof(pfn,
 							pfn + nr_pages,
 							ACR_FLAGS_NONE,
 							gfp_mask);
 				if (!ret)
 					return pfn_to_page(pfn);
-				spin_lock_irqsave(&zone->lock, flags);
+				zone_lock_irqsave(zone, flags);
 			}
 			pfn += nr_pages;
 		}
-		spin_unlock_irqrestore(&zone->lock, flags);
+		zone_unlock_irqrestore(zone, flags);
 	}
 	/*
 	 * If we failed, retry the search, but treat regions with HugeTLB pages
@@ -7437,7 +7438,7 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 
 	offline_mem_sections(pfn, end_pfn);
 	zone = page_zone(pfn_to_page(pfn));
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 	while (pfn < end_pfn) {
 		page = pfn_to_page(pfn);
 		/*
@@ -7467,7 +7468,7 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 		del_page_from_free_list(page, zone, order, MIGRATE_ISOLATE);
 		pfn += (1 << order);
 	}
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 
 	return end_pfn - start_pfn - already_offline;
 }
@@ -7543,7 +7544,7 @@ bool take_page_off_buddy(struct page *page)
 	unsigned int order;
 	bool ret = false;
 
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 	for (order = 0; order < NR_PAGE_ORDERS; order++) {
 		struct page *page_head = page - (pfn & ((1 << order) - 1));
 		int page_order = buddy_order(page_head);
@@ -7564,7 +7565,7 @@ bool take_page_off_buddy(struct page *page)
 		if (page_count(page_head) > 0)
 			break;
 	}
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 	return ret;
 }
 
@@ -7577,7 +7578,7 @@ bool put_page_back_buddy(struct page *page)
 	unsigned long flags;
 	bool ret = false;
 
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 	if (put_page_testzero(page)) {
 		unsigned long pfn = page_to_pfn(page);
 		int migratetype = get_pfnblock_migratetype(page, pfn);
@@ -7588,7 +7589,7 @@ bool put_page_back_buddy(struct page *page)
 			ret = true;
 		}
 	}
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 
 	return ret;
 }
@@ -7637,7 +7638,7 @@ static void __accept_page(struct zone *zone, unsigned long *flags,
 	account_freepages(zone, -MAX_ORDER_NR_PAGES, MIGRATE_MOVABLE);
 	__mod_zone_page_state(zone, NR_UNACCEPTED, -MAX_ORDER_NR_PAGES);
 	__ClearPageUnaccepted(page);
-	spin_unlock_irqrestore(&zone->lock, *flags);
+	zone_unlock_irqrestore(zone, *flags);
 
 	accept_memory(page_to_phys(page), PAGE_SIZE << MAX_PAGE_ORDER);
 
@@ -7649,9 +7650,9 @@ void accept_page(struct page *page)
 	struct zone *zone = page_zone(page);
 	unsigned long flags;
 
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 	if (!PageUnaccepted(page)) {
-		spin_unlock_irqrestore(&zone->lock, flags);
+		zone_unlock_irqrestore(zone, flags);
 		return;
 	}
 
@@ -7664,11 +7665,11 @@ static bool try_to_accept_memory_one(struct zone *zone)
 	unsigned long flags;
 	struct page *page;
 
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 	page = list_first_entry_or_null(&zone->unaccepted_pages,
 					struct page, lru);
 	if (!page) {
-		spin_unlock_irqrestore(&zone->lock, flags);
+		zone_unlock_irqrestore(zone, flags);
 		return false;
 	}
 
@@ -7725,12 +7726,12 @@ static bool __free_unaccepted(struct page *page)
 	if (!lazy_accept)
 		return false;
 
-	spin_lock_irqsave(&zone->lock, flags);
+	zone_lock_irqsave(zone, flags);
 	list_add_tail(&page->lru, &zone->unaccepted_pages);
 	account_freepages(zone, MAX_ORDER_NR_PAGES, MIGRATE_MOVABLE);
 	__mod_zone_page_state(zone, NR_UNACCEPTED, MAX_ORDER_NR_PAGES);
 	__SetPageUnaccepted(page);
-	spin_unlock_irqrestore(&zone->lock, flags);
+	zone_unlock_irqrestore(zone, flags);
 
 	return true;
 }
