@@ -43,6 +43,7 @@
 #include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/configfs.h>
+#include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
 #include <linux/cpumask.h>
