@@ -230,6 +230,36 @@ static int tx_eq_gear_set(void *data, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(tx_eq_gear_fops, tx_eq_gear_get, tx_eq_gear_set, "%#llx\n");
 
+static int retrain_tx_eq_set(void *data, u64 val)
+{
+	struct ufs_hba *hba = data;
+	struct ufs_pa_layer_attr *pwr_info = &hba->max_pwr_info.info;
+	u32 gear = (u32)val;
+	int err;
+
+	if (hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL)
+		return -EBUSY;
+
+	if (!hba->ufs_device_wlun)
+		return -ENODEV;
+
+	if (gear < UFS_HS_G1 || gear >= UFS_HS_GEAR_MAX ||
+	    !hba->max_pwr_info.is_valid || gear > pwr_info->gear_tx)
+		return -EINVAL;
+
+	err = ufs_debugfs_get_user_access(hba);
+	if (err)
+		return err;
+	ufshcd_hold(hba);
+	err = ufshcd_retrain_tx_eq(hba, gear);
+	ufshcd_release(hba);
+	ufs_debugfs_put_user_access(hba);
+
+	return err;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(retrain_tx_eq_fops, NULL, retrain_tx_eq_set, "%#llx\n");
+
 static int ufs_tx_eq_params_show(struct seq_file *s, void *data)
 {
 	struct ufs_debugfs_attr *attr = s->private;
@@ -433,6 +463,8 @@ void ufs_debugfs_hba_init(struct ufs_hba *hba)
 	hba->debugfs_tx_eq_gear = UFS_HS_GEAR_MAX - 1;
 	debugfs_create_file("tx_eq_gear_sel", 0600, hba->debugfs_root, hba,
 			    &tx_eq_gear_fops);
+	debugfs_create_file("retrain_tx_eq", 0200, hba->debugfs_root, hba,
+			    &retrain_tx_eq_fops);
 	for (attr = ufs_tx_eq_attrs; attr->name; attr++)
 		debugfs_create_file(attr->name, attr->mode, root, (void *)attr,
 				    attr->fops);
