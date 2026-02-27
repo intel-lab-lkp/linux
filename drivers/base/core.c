@@ -1888,7 +1888,7 @@ static bool fwnode_init_without_drv(struct fwnode_handle *fwnode)
 	if (!(fwnode->flags & FWNODE_FLAG_INITIALIZED))
 		return false;
 
-	dev = get_dev_from_fwnode(fwnode);
+	dev = get_device_from_fwnode(fwnode);
 	ret = !dev || dev->links.status == DL_DEV_NO_DRIVER;
 	put_device(dev);
 
@@ -1957,7 +1957,7 @@ static struct device *fwnode_get_next_parent_dev(const struct fwnode_handle *fwn
 	struct device *dev;
 
 	fwnode_for_each_parent_node(fwnode, parent) {
-		dev = get_dev_from_fwnode(parent);
+		dev = get_device_from_fwnode(parent);
 		if (dev) {
 			fwnode_handle_put(parent);
 			return dev;
@@ -2013,8 +2013,8 @@ static bool __fw_devlink_relax_cycles(struct fwnode_handle *con_handle,
 		goto out;
 	}
 
-	sup_dev = get_dev_from_fwnode(sup_handle);
-	con_dev = get_dev_from_fwnode(con_handle);
+	sup_dev = get_device_from_fwnode(sup_handle);
+	con_dev = get_device_from_fwnode(con_handle);
 	/*
 	 * If sup_dev is bound to a driver and @con hasn't started binding to a
 	 * driver, sup_dev can't be a consumer of @con. So, no need to check
@@ -2153,7 +2153,7 @@ static int fw_devlink_create_devlink(struct device *con,
 	if (sup_handle->flags & FWNODE_FLAG_NOT_DEVICE)
 		sup_dev = fwnode_get_next_parent_dev(sup_handle);
 	else
-		sup_dev = get_dev_from_fwnode(sup_handle);
+		sup_dev = get_device_from_fwnode(sup_handle);
 
 	if (sup_dev) {
 		/*
@@ -2222,7 +2222,7 @@ static void __fw_devlink_link_to_consumers(struct device *dev)
 		bool own_link = true;
 		int ret;
 
-		con_dev = get_dev_from_fwnode(link->consumer);
+		con_dev = get_device_from_fwnode(link->consumer);
 		/*
 		 * If consumer device is not available yet, make a "proxy"
 		 * SYNC_STATE_ONLY link from the consumer's parent device to
@@ -5278,7 +5278,7 @@ void device_set_node(struct device *dev, struct fwnode_handle *fwnode)
 EXPORT_SYMBOL_GPL(device_set_node);
 
 /**
- * get_dev_from_fwnode - Obtain a reference count of the struct device the
+ * get_device_from_fwnode - Obtain a reference count of the struct device the
  * struct fwnode_handle is associated with.
  * @fwnode: The pointer to the struct fwnode_handle to obtain the struct device
  * reference count of.
@@ -5296,11 +5296,11 @@ EXPORT_SYMBOL_GPL(device_set_node);
  * This is possible since struct fwnode_handle has its own reference count and
  * hence can out-live the struct device it is associated with.
  */
-struct device *get_dev_from_fwnode(struct fwnode_handle *fwnode)
+struct device *get_device_from_fwnode(struct fwnode_handle *fwnode)
 {
 	return get_device((fwnode)->dev);
 }
-EXPORT_SYMBOL_GPL(get_dev_from_fwnode);
+EXPORT_SYMBOL_GPL(get_device_from_fwnode);
 
 int device_match_name(struct device *dev, const void *name)
 {
