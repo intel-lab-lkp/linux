@@ -8,6 +8,7 @@
 #include <drv_types.h>
 #include <hal_data.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
 
 u8 PHY_GetTxPowerByRateBase(struct adapter *Adapter, u8 RfPath,
 			    enum rate_section RateSection)
@@ -819,27 +820,27 @@ void PHY_SetTxPowerLimit(
 
 	powerLimit = powerLimit > MAX_POWER_INDEX ? MAX_POWER_INDEX : powerLimit;
 
-	if (eqNByte(Regulation, (u8 *)("FCC"), 3))
+	if (memcmp(Regulation, "FCC", 3) == 0)
 		regulation = 0;
-	else if (eqNByte(Regulation, (u8 *)("MKK"), 3))
+	else if (memcmp(Regulation, "MKK", 3) == 0)
 		regulation = 1;
-	else if (eqNByte(Regulation, (u8 *)("ETSI"), 4))
+	else if (memcmp(Regulation, "ETSI", 4) == 0)
 		regulation = 2;
-	else if (eqNByte(Regulation, (u8 *)("WW13"), 4))
+	else if (memcmp(Regulation, "WW13", 4) == 0)
 		regulation = 3;
 
-	if (eqNByte(RateSection, (u8 *)("CCK"), 3) && eqNByte(RfPath, (u8 *)("1T"), 2))
+	if (memcmp(RateSection, "CCK", 3) == 0 && memcmp(RfPath, "1T", 2) == 0)
 		rateSection = 0;
-	else if (eqNByte(RateSection, (u8 *)("OFDM"), 4) && eqNByte(RfPath, (u8 *)("1T"), 2))
+	else if (memcmp(RateSection, "OFDM", 4) == 0 && memcmp(RfPath, "1T", 2) == 0)
 		rateSection = 1;
-	else if (eqNByte(RateSection, (u8 *)("HT"), 2) && eqNByte(RfPath, (u8 *)("1T"), 2))
+	else if (memcmp(RateSection, "HT", 2) == 0 && memcmp(RfPath, "1T", 2) == 0)
 		rateSection = 2;
 	else
 		return;
 
-	if (eqNByte(Bandwidth, (u8 *)("20M"), 3))
+	if (memcmp(Bandwidth, "20M", 3) == 0)
 		bandwidth = 0;
-	else if (eqNByte(Bandwidth, (u8 *)("40M"), 3))
+	else if (memcmp(Bandwidth, "40M", 3) == 0)
 		bandwidth = 1;
 
 	channelIndex = phy_GetChannelIndexOfTxPowerLimit(channel);
