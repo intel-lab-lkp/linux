@@ -121,6 +121,9 @@ static inline bool kpkeys_hardened_pgtables_enabled(void)
 	return static_branch_unlikely(&kpkeys_hardened_pgtables_key);
 }
 
+struct page *kpkeys_pgtable_alloc(gfp_t gfp);
+void kpkeys_pgtable_free(struct page *page);
+
 /*
  * Should be called from mem_init(): as soon as the buddy allocator becomes
  * available and before any call to pagetable_alloc().
@@ -133,6 +136,13 @@ static inline bool kpkeys_hardened_pgtables_enabled(void)
 {
 	return false;
 }
+
+static inline struct page *kpkeys_pgtable_alloc(gfp_t gfp)
+{
+	return NULL;
+}
+
+static inline void kpkeys_pgtable_free(struct page *page) {}
 
 static inline void kpkeys_hardened_pgtables_init(void) {}
 
