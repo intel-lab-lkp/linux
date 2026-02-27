@@ -23,6 +23,7 @@
 
 #define SS_CAP_BATTERY			BIT(0)
 #define SS_CAP_CHATMIX			BIT(1)
+#define SS_CAP_MIC_MUTE			BIT(2)
 
 #define SS_QUIRK_STATUS_SYNC_POLL	BIT(0)
 
@@ -56,8 +57,10 @@ struct steelseries_device {
 	struct snd_card *card;
 	struct snd_ctl_elem_id chatmix_chat_id;
 	struct snd_ctl_elem_id chatmix_game_id;
+	struct snd_ctl_elem_id mic_muted_id;
 	u8 chatmix_chat;
 	u8 chatmix_game;
+	bool mic_muted;
 
 	spinlock_t lock;
 	bool removed;
@@ -628,7 +631,7 @@ static void steelseries_arctis_nova_7_parse_status(struct steelseries_device *sd
 static void steelseries_arctis_nova_7_gen2_parse_status(struct steelseries_device *sd,
 							u8 *data, int size)
 {
-	if (size < 6)
+	if (size < 10)
 		return;
 
 	switch (data[0]) {
@@ -638,6 +641,7 @@ static void steelseries_arctis_nova_7_gen2_parse_status(struct steelseries_devic
 		sd->battery_charging = (data[3] == 0x01);
 		sd->chatmix_game = data[4];
 		sd->chatmix_chat = data[5];
+		sd->mic_muted = (data[9] == 0x01);
 		break;
 	case 0xb7:
 		sd->battery_capacity = data[1];
@@ -652,6 +656,9 @@ static void steelseries_arctis_nova_7_gen2_parse_status(struct steelseries_devic
 		sd->chatmix_game = data[1];
 		sd->chatmix_chat = data[2];
 		break;
+	case 0x52:
+		sd->mic_muted = (data[2] == 0x01);
+		break;
 	}
 }
 
@@ -665,6 +672,7 @@ static void steelseries_arctis_nova_pro_parse_status(struct steelseries_device *
 		sd->headset_connected = (data[15] == 0x08 || data[15] == 0x02);
 		sd->battery_capacity = steelseries_map_capacity(data[6], 0x00, 0x08);
 		sd->battery_charging = (data[15] == 0x02);
+		sd->mic_muted = (data[9] == 0x01);
 	} else if (data[0] == 0x07 && data[1] == 0x45) {
 		sd->chatmix_game = data[2];
 		sd->chatmix_chat = data[3];
@@ -752,14 +760,14 @@ static const struct steelseries_device_info arctis_nova_7p_info = {
 static const struct steelseries_device_info arctis_nova_7_gen2_info = {
 	.sync_interface = 3,
 	.async_interface = 5,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_MIC_MUTE,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_gen2_parse_status,
 };
 
 static const struct steelseries_device_info arctis_nova_pro_info = {
 	.sync_interface = 4,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_MIC_MUTE,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.request_status = steelseries_arctis_nova_pro_request_status,
 	.parse_status = steelseries_arctis_nova_pro_parse_status,
@@ -938,6 +946,29 @@ static int steelseries_chatmix_game_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int steelseries_mic_muted_info(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 1;
+	uinfo->value.integer.step = 1;
+	return 0;
+}
+
+static int steelseries_mic_muted_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct steelseries_device *sd = snd_kcontrol_chip(kcontrol);
+	unsigned long flags;
+
+	spin_lock_irqsave(&sd->lock, flags);
+	ucontrol->value.integer.value[0] = sd->mic_muted;
+	spin_unlock_irqrestore(&sd->lock, flags);
+	return 0;
+}
+
 static const struct snd_kcontrol_new steelseries_chatmix_chat_control = {
 	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
 	.name = "ChatMix Chat",
@@ -952,6 +983,14 @@ static const struct snd_kcontrol_new steelseries_chatmix_game_control = {
 	.access = SNDRV_CTL_ELEM_ACCESS_READ | SNDRV_CTL_ELEM_ACCESS_VOLATILE,
 	.info = steelseries_chatmix_info,
 	.get = steelseries_chatmix_game_get,
+};
+
+static const struct snd_kcontrol_new steelseries_mic_muted_control = {
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+	.name = "Mic Muted",
+	.access = SNDRV_CTL_ELEM_ACCESS_READ | SNDRV_CTL_ELEM_ACCESS_VOLATILE,
+	.info = steelseries_mic_muted_info,
+	.get = steelseries_mic_muted_get,
 };
 
 static int steelseries_snd_register(struct steelseries_device *sd)
@@ -986,6 +1025,16 @@ static int steelseries_snd_register(struct steelseries_device *sd)
 		sd->chatmix_game_id = kctl->id;
 	}
 
+	if (sd->info->capabilities & SS_CAP_MIC_MUTE) {
+		struct snd_kcontrol *kctl;
+
+		kctl = snd_ctl_new1(&steelseries_mic_muted_control, sd);
+		ret = snd_ctl_add(sd->card, kctl);
+		if (ret < 0)
+			goto err_free_card;
+		sd->mic_muted_id = kctl->id;
+	}
+
 	ret = snd_card_register(sd->card);
 	if (ret < 0)
 		goto err_free_card;
@@ -1015,6 +1064,7 @@ static int steelseries_raw_event(struct hid_device *hdev,
 	bool old_charging;
 	u8 old_chatmix_chat;
 	u8 old_chatmix_game;
+	bool old_mic_muted;
 	bool is_async_interface = false;
 
 	if (hdev->product == USB_DEVICE_ID_STEELSERIES_SRWS1)
@@ -1028,6 +1078,7 @@ static int steelseries_raw_event(struct hid_device *hdev,
 	old_charging = sd->battery_charging;
 	old_chatmix_chat = sd->chatmix_chat;
 	old_chatmix_game = sd->chatmix_game;
+	old_mic_muted = sd->mic_muted;
 
 	if (hid_is_usb(hdev)) {
 		struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
@@ -1079,6 +1130,9 @@ static int steelseries_raw_event(struct hid_device *hdev,
 		if (sd->chatmix_game != old_chatmix_game)
 			snd_ctl_notify(sd->card, SNDRV_CTL_EVENT_MASK_VALUE,
 				       &sd->chatmix_game_id);
+		if (sd->mic_muted != old_mic_muted)
+			snd_ctl_notify(sd->card, SNDRV_CTL_EVENT_MASK_VALUE,
+				       &sd->mic_muted_id);
 	}
 
 	return 0;
