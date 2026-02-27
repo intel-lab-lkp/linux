@@ -1221,7 +1221,7 @@ retry_multishot:
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
 		req_set_fail(req);
-	} else if ((flags & MSG_WAITALL) && (kmsg->msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC))) {
+	} else if ((flags & MSG_WAITALL) && (kmsg->msg.msg_flags & MSG_TRUNC)) {
 out_free:
 		req_set_fail(req);
 	}
