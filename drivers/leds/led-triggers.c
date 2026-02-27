@@ -7,6 +7,7 @@
  * Author: Richard Purdie <rpurdie@openedhand.com>
  */
 
+#include <linux/bug.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -162,8 +163,8 @@ ssize_t led_trigger_read(struct file *filp, struct kobject *kobj,
 }
 EXPORT_SYMBOL_GPL(led_trigger_read);
 
-/* Caller must ensure led_cdev->trigger_lock held */
-int led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trig)
+static int __led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trig,
+			     bool hw_triggered)
 {
 	char *event = NULL;
 	char *envp[2];
@@ -194,7 +195,15 @@ int led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trig)
 		led_cdev->trigger_data = NULL;
 		led_cdev->activated = false;
 		led_cdev->flags &= ~LED_INIT_DEFAULT_TRIGGER;
-		led_set_brightness(led_cdev, LED_OFF);
+
+		/*
+		 * Hardware may have select a new brightness level during its
+		 * hw control mode transition, so only reset brightness if we
+		 * are switching to another trigger or if the switching is not
+		 * hardware triggered.
+		 */
+		if (trig || !hw_triggered)
+			led_set_brightness(led_cdev, LED_OFF);
 	}
 	if (trig) {
 		spin_lock(&trig->leddev_list_lock);
@@ -257,6 +266,12 @@ err_activate:
 	kfree(event);
 
 	return ret;
+}
+
+/* Caller must ensure led_cdev->trigger_lock held */
+int led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trig)
+{
+	return __led_trigger_set(led_cdev, trig, false);
 }
 EXPORT_SYMBOL_GPL(led_trigger_set);
 
@@ -477,6 +492,86 @@ int devm_led_trigger_register(struct device *dev,
 	return rc;
 }
 EXPORT_SYMBOL_GPL(devm_led_trigger_register);
+
+static void led_trigger_do_hw_control_transition(struct led_classdev *led_cdev, bool activate,
+						 struct led_trigger *hc_trig)
+{
+	int err = 0;
+
+	if (!led_cdev->trigger) {
+		/* "none" => hw control trigger (offloaded). */
+		if (activate) {
+			err = __led_trigger_set(led_cdev, hc_trig, true);
+
+			/*
+			 * hw control trigger must recognize the current hw state during
+			 * its activation and mark itself as offloaded.
+			 */
+			WARN_ON(!err && !led_trigger_get_offloaded(led_cdev));
+		}
+	} else if (led_cdev->trigger == hc_trig && led_trigger_get_offloaded(led_cdev)) {
+		/* hw control trigger (offloaded) => "none". */
+		if (!activate)
+			err = __led_trigger_set(led_cdev, NULL, true);
+	} else {
+		/* Other trigger is active, or hw control trigger is not offloaded. */
+		dev_dbg(led_cdev->dev,
+			"Do not %s hw control trigger %s while %s is active",
+			activate ? "activate" : "deactivate", hc_trig->name,
+			led_cdev->trigger->name);
+
+		return;
+	}
+
+	if (err)
+		dev_warn(led_cdev->dev, "Failed to %s hw control trigger %s: %d",
+			 activate ? "activate" : "deactivate", hc_trig->name, err);
+}
+
+/* Caller must ensure led_cdev->led_access held */
+void led_trigger_notify_hw_control_changed(struct led_classdev *led_cdev, bool activate,
+					   struct led_trigger *priv_trig)
+{
+	struct led_trigger *trig;
+
+	down_write(&led_cdev->trigger_lock);
+
+	if (WARN_ON(!led_cdev->hw_control_trigger))
+		goto out;
+
+	/* Fast path: hw control trigger is a private trigger. */
+	if (priv_trig) {
+		if (WARN_ON(!led_match_hw_control_trigger(led_cdev, priv_trig)))
+			goto out;
+
+		led_trigger_do_hw_control_transition(led_cdev, activate, priv_trig);
+		goto out;
+	}
+
+	/* Fast path: hw control trigger is the current trigger. */
+	if (led_cdev->trigger && led_match_hw_control_trigger(led_cdev, led_cdev->trigger)) {
+		led_trigger_do_hw_control_transition(led_cdev, activate, led_cdev->trigger);
+		goto out;
+	}
+
+	down_read(&triggers_list_lock);
+	list_for_each_entry(trig, &trigger_list, next_trig) {
+		if (led_match_hw_control_trigger(led_cdev, trig)) {
+			led_trigger_do_hw_control_transition(led_cdev, activate, trig);
+
+			up_read(&triggers_list_lock);
+			goto out;
+		}
+	}
+	up_read(&triggers_list_lock);
+
+	dev_dbg(led_cdev->dev, "hw control trigger not found: %s",
+		led_cdev->hw_control_trigger);
+
+out:
+	up_write(&led_cdev->trigger_lock);
+}
+EXPORT_SYMBOL_GPL(led_trigger_notify_hw_control_changed);
 
 /* Simple LED Trigger Interface */
 

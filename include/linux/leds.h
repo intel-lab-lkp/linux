@@ -533,6 +533,8 @@ void led_trigger_blink_oneshot(struct led_trigger *trigger,
 			       int invert);
 void led_trigger_set_default(struct led_classdev *led_cdev);
 int led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trigger);
+void led_trigger_notify_hw_control_changed(struct led_classdev *led_cdev, bool activate,
+					   struct led_trigger *priv_trig);
 void led_trigger_remove(struct led_classdev *led_cdev);
 
 static inline void led_set_trigger_data(struct led_classdev *led_cdev,
@@ -583,6 +585,9 @@ static inline int led_trigger_set(struct led_classdev *led_cdev,
 {
 	return 0;
 }
+static inline void led_trigger_notify_hw_control_changed(struct led_classdev *led_cdev,
+							 bool activate,
+							 struct led_trigger *priv_trig) {}
 
 static inline void led_trigger_remove(struct led_classdev *led_cdev) {}
 static inline void led_set_trigger_data(struct led_classdev *led_cdev) {}

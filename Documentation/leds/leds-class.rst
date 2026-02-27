@@ -255,8 +255,71 @@ the end use hw_control_set to activate hw control.
 A trigger can use hw_control_get to check if a LED is already in hw control
 and init their flags.
 
+Alternatively, a private trigger can be implemented along with the LED driver
+if the hw control mode of the LED doesn't fit any generic trigger. To associate
+the private trigger with the LED classdev, their `trigger_type` must be the same.
+The name of the private trigger must be the same as `hw_control_trigger`. Since
+both the LED classdev and the private trigger are in the same LED driver, it's not
+necessary for them to coordinate via `hw_control_*` callbacks.
+
 When the LED is in hw control, no software blink is possible and doing so
 will effectively disable hw control.
+
+Hardware initiated hw control mode transition
+==========================================
+
+Some hardware can autonomously activate/deactivate hw control mode. After the
+mode transition, the LED hardware notifies the LED driver. To update the current
+trigger accordingly, call `led_trigger_notify_hw_control_changed` on the
+classdev. The driver must set `hw_control_trigger` before registering, or else
+calling this is a bug and will trigger a WARN_ON. An LED driver that implements
+a private trigger can pass a pointer to the private trigger as the last
+parameter, otherwise NULL should be passed. The private trigger must have been
+properly registered (see above) and named after `hw_control_trigger`, or else a
+WARN_ON will be triggered.
+
+For convenience, `hw_control_trigger` refers to a trigger name defined in LED
+classdev, while "hw control trigger" refers to a unique trigger with the
+same name as the former.
+
+Only two transitions are defined:
+
+- "none" => hw control trigger (offloaded):
+        This happens when the hardware autonomously activates hw control mode
+        and when "none" (i.e., no trigger) is currently active. If the hw
+        control trigger is already active and offloaded during the hw control
+        mode transition, this is essentially a no-op.
+
+        The activation sequence for the hw control trigger will be executed as
+        normal. After switching to the hw control trigger, its offloaded status
+        is checked and must be true. Failing to set the offloaded status
+        appropriately will trigger a WARN_ON.
+
+        The LED driver must be able to handle the activation sequence even if
+        the hardware is currently under hw control mode. If the hardware can
+        handle hw control mode transition idempotently, the LED driver probably
+        already has this capability. Otherwise, the LED driver should take extra
+        care to handle the transition.
+
+        If error occurs in the activation sequence, the LED Trigger core reverts
+        the effective trigger to "none".
+
+- hw control trigger (offloaded) => "none"
+        This happens when the hardware autonomously deactivates hw control mode
+        and when the hw control trigger is currently active and offloaded. If
+        "none" (i.e., no trigger) is active during the hw control mode
+        transition, this is essentially a no-op.
+
+        The deactivation sequence for the hw control trigger will be executed as
+        normal, except that the current LED brightness is retained. The reason
+        for keeping the brightness unchanged is that some hardware may choose a
+        specific brightness instead of simply turning off the LED during its hw
+        control mode transition.
+
+        The idempotence rule also applies.
+
+If the current trigger is neither hw control trigger nor "none", or if hw
+control trigger is not offloaded, no transition will be made.
 
 Known Issues
 ============
