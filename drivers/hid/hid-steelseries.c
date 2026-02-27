@@ -30,12 +30,14 @@
 #define SS_CAP_SIDETONE			BIT(6)
 #define SS_CAP_MIC_VOLUME		BIT(7)
 #define SS_CAP_VOLUME_LIMITER		BIT(8)
+#define SS_CAP_BT_CALL_DUCKING		BIT(9)
 
 #define SS_QUIRK_STATUS_SYNC_POLL	BIT(0)
 
 #define SS_SETTING_SIDETONE		0
 #define SS_SETTING_MIC_VOLUME		1
 #define SS_SETTING_VOLUME_LIMITER	2
+#define SS_SETTING_BT_CALL_DUCKING	3
 
 struct steelseries_device;
 
@@ -80,12 +82,14 @@ struct steelseries_device {
 	struct snd_ctl_elem_id sidetone_id;
 	struct snd_ctl_elem_id mic_volume_id;
 	struct snd_ctl_elem_id volume_limiter_id;
+	struct snd_ctl_elem_id bt_call_ducking_id;
 	u8 chatmix_chat;
 	u8 chatmix_game;
 	bool mic_muted;
 	u8 sidetone;
 	u8 mic_volume;
 	bool volume_limiter;
+	u8 bt_call_ducking;
 
 	bool bt_enabled;
 	bool bt_device_connected;
@@ -573,6 +577,9 @@ static int steelseries_arctis_nova_7_write_setting(struct hid_device *hdev,
 	case SS_SETTING_VOLUME_LIMITER:
 		cmd = 0x3a;
 		break;
+	case SS_SETTING_BT_CALL_DUCKING:
+		cmd = 0xb3;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -883,15 +890,23 @@ static void steelseries_arctis_nova_7_gen2_parse_status(struct steelseries_devic
 
 static int steelseries_arctis_nova_7_gen2_request_settings(struct hid_device *hdev)
 {
-	const u8 data[] = { 0x00, 0x20 };
+	const u8 audio_data[] = { 0x00, 0x20 };
+	const u8 device_data[] = { 0x00, 0xa0 };
+	int ret;
 
-	return steelseries_send_output_report(hdev, data, sizeof(data));
+	ret = steelseries_send_output_report(hdev, audio_data, sizeof(audio_data));
+	if (ret)
+		return ret;
+
+	msleep(10);
+
+	return steelseries_send_output_report(hdev, device_data, sizeof(device_data));
 }
 
 static void steelseries_arctis_nova_7_gen2_parse_settings(
 	struct steelseries_device *sd, u8 *data, int size)
 {
-	if (size < 4)
+	if (size < 5)
 		return;
 
 	switch (data[0]) {
@@ -899,6 +914,9 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 		sd->mic_volume = data[1];
 		sd->sidetone = data[2];
 		sd->volume_limiter = data[3];
+		break;
+	case 0xa0:
+		sd->bt_call_ducking = data[4];
 		break;
 	case 0x37:
 		sd->mic_volume = data[1];
@@ -908,6 +926,9 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 		break;
 	case 0x3a:
 		sd->volume_limiter = data[1];
+		break;
+	case 0xb3:
+		sd->bt_call_ducking = data[1];
 		break;
 	}
 }
@@ -1025,7 +1046,8 @@ static const struct steelseries_device_info arctis_nova_5x_info = {
 static const struct steelseries_device_info arctis_nova_7_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
-			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
+			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
+			SS_CAP_BT_CALL_DUCKING,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
@@ -1036,7 +1058,8 @@ static const struct steelseries_device_info arctis_nova_7_info = {
 
 static const struct steelseries_device_info arctis_nova_7p_info = {
 	.sync_interface = 3,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
+			SS_CAP_BT_CALL_DUCKING,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.mic_volume_max = 7,
 	.request_status = steelseries_arctis_nova_request_status,
@@ -1050,7 +1073,8 @@ static const struct steelseries_device_info arctis_nova_7_gen2_info = {
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_MIC_MUTE |
 			SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
 			SS_CAP_EXTERNAL_CONFIG | SS_CAP_SIDETONE |
-			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
+			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
+			SS_CAP_BT_CALL_DUCKING,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
 	.request_status = steelseries_arctis_nova_request_status,
@@ -1557,6 +1581,70 @@ static const struct snd_kcontrol_new steelseries_volume_limiter_control = {
 	.put = steelseries_volume_limiter_put,
 };
 
+static const char *const bt_call_ducking_texts[] = {
+	"Off",
+	"Lower Volume (-12dB)",
+	"Mute Game",
+};
+
+static int steelseries_bt_call_ducking_info(struct snd_kcontrol *kcontrol,
+					    struct snd_ctl_elem_info *uinfo)
+{
+	return snd_ctl_enum_info(uinfo, 1, ARRAY_SIZE(bt_call_ducking_texts),
+				 bt_call_ducking_texts);
+}
+
+static int steelseries_bt_call_ducking_get(struct snd_kcontrol *kcontrol,
+					   struct snd_ctl_elem_value *ucontrol)
+{
+	struct steelseries_device *sd = snd_kcontrol_chip(kcontrol);
+	unsigned long flags;
+
+	spin_lock_irqsave(&sd->lock, flags);
+	ucontrol->value.enumerated.item[0] = sd->bt_call_ducking;
+	spin_unlock_irqrestore(&sd->lock, flags);
+	return 0;
+}
+
+static int steelseries_bt_call_ducking_put(struct snd_kcontrol *kcontrol,
+					   struct snd_ctl_elem_value *ucontrol)
+{
+	struct steelseries_device *sd = snd_kcontrol_chip(kcontrol);
+	unsigned long flags;
+	u8 new_value;
+	int ret;
+
+	new_value = ucontrol->value.enumerated.item[0];
+	if (new_value >= ARRAY_SIZE(bt_call_ducking_texts))
+		return -EINVAL;
+
+	spin_lock_irqsave(&sd->lock, flags);
+	if (sd->bt_call_ducking == new_value) {
+		spin_unlock_irqrestore(&sd->lock, flags);
+		return 0;
+	}
+	spin_unlock_irqrestore(&sd->lock, flags);
+
+	ret = sd->info->write_setting(sd->hdev, SS_SETTING_BT_CALL_DUCKING,
+				      new_value);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&sd->lock, flags);
+	sd->bt_call_ducking = new_value;
+	spin_unlock_irqrestore(&sd->lock, flags);
+
+	return 1;
+}
+
+static const struct snd_kcontrol_new steelseries_bt_call_ducking_control = {
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+	.name = "Bluetooth Call Audio Ducking",
+	.info = steelseries_bt_call_ducking_info,
+	.get = steelseries_bt_call_ducking_get,
+	.put = steelseries_bt_call_ducking_put,
+};
+
 static int steelseries_snd_register(struct steelseries_device *sd)
 {
 	struct hid_device *hdev = sd->hdev;
@@ -1644,6 +1732,21 @@ static int steelseries_snd_register(struct steelseries_device *sd)
 		sd->volume_limiter_id = kctl->id;
 	}
 
+	if (sd->info->capabilities & SS_CAP_BT_CALL_DUCKING) {
+		struct snd_kcontrol *kctl;
+		struct snd_kcontrol_new ducking_ctl = steelseries_bt_call_ducking_control;
+
+		ducking_ctl.access = SNDRV_CTL_ELEM_ACCESS_READWRITE;
+		if (sd->info->capabilities & SS_CAP_EXTERNAL_CONFIG)
+			ducking_ctl.access |= SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+		kctl = snd_ctl_new1(&ducking_ctl, sd);
+		ret = snd_ctl_add(sd->card, kctl);
+		if (ret < 0)
+			goto err_free_card;
+		sd->bt_call_ducking_id = kctl->id;
+	}
+
 	ret = snd_card_register(sd->card);
 	if (ret < 0)
 		goto err_free_card;
@@ -1677,6 +1780,7 @@ static int steelseries_raw_event(struct hid_device *hdev,
 	u8 old_sidetone;
 	u8 old_mic_volume;
 	bool old_volume_limiter;
+	u8 old_bt_call_ducking;
 	bool is_async_interface = false;
 
 	if (hdev->product == USB_DEVICE_ID_STEELSERIES_SRWS1)
@@ -1694,6 +1798,7 @@ static int steelseries_raw_event(struct hid_device *hdev,
 	old_sidetone = sd->sidetone;
 	old_mic_volume = sd->mic_volume;
 	old_volume_limiter = sd->volume_limiter;
+	old_bt_call_ducking = sd->bt_call_ducking;
 
 	if (hid_is_usb(hdev)) {
 		struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
@@ -1763,6 +1868,9 @@ static int steelseries_raw_event(struct hid_device *hdev,
 		if (sd->volume_limiter != old_volume_limiter)
 			snd_ctl_notify(sd->card, SNDRV_CTL_EVENT_MASK_VALUE,
 				       &sd->volume_limiter_id);
+		if (sd->bt_call_ducking != old_bt_call_ducking)
+			snd_ctl_notify(sd->card, SNDRV_CTL_EVENT_MASK_VALUE,
+				       &sd->bt_call_ducking_id);
 	}
 
 	return 0;
