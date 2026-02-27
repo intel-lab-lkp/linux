@@ -159,16 +159,22 @@ static int ufs_sprd_common_init(struct ufs_hba *hba)
 	return ret;
 }
 
+static int sprd_ufs_negotiate_pwr_mode(struct ufs_hba *hba,
+				       const struct ufs_pa_layer_attr *dev_max_params,
+				       struct ufs_pa_layer_attr *dev_req_params)
+{
+	memcpy(dev_req_params, dev_max_params, sizeof(struct ufs_pa_layer_attr));
+
+	return 0;
+}
+
 static int sprd_ufs_pwr_change_notify(struct ufs_hba *hba,
 				enum ufs_notify_change_status status,
-				const struct ufs_pa_layer_attr *dev_max_params,
 				struct ufs_pa_layer_attr *dev_req_params)
 {
 	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
 
 	if (status == PRE_CHANGE) {
-		memcpy(dev_req_params, dev_max_params,
-			sizeof(struct ufs_pa_layer_attr));
 		if (host->unipro_ver >= UFS_UNIPRO_VER_1_8)
 			ufshcd_dme_configure_adapt(hba, dev_req_params->gear_tx,
 						   PA_INITIAL_ADAPT);
@@ -398,6 +404,7 @@ static struct ufs_sprd_priv n6_ufs = {
 		.name = "sprd,ums9620-ufs",
 		.init = ufs_sprd_n6_init,
 		.hce_enable_notify = sprd_ufs_n6_hce_enable_notify,
+		.negotiate_pwr_mode = sprd_ufs_negotiate_pwr_mode,
 		.pwr_change_notify = sprd_ufs_pwr_change_notify,
 		.hibern8_notify = sprd_ufs_n6_h8_notify,
 		.device_reset = ufs_sprd_n6_device_reset,
