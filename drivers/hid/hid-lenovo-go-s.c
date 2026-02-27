@@ -504,9 +504,6 @@ static ssize_t gamepad_property_store(struct device *dev,
 		ret = kstrtou8(buf, 10, &val);
 		if (ret)
 			return ret;
-
-		if (val < 0 || val > 255)
-			return -EINVAL;
 		break;
 	case FEATURE_IMU_ENABLE:
 		ret = sysfs_match_string(feature_enabled_text, buf);
