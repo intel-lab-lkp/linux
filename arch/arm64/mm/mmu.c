@@ -764,7 +764,8 @@ static inline bool force_pte_mapping(void)
 		return true;
 	if (bbml2)
 		return false;
-	return rodata_full || arm64_kfence_can_set_direct_map() || is_realm_world();
+	return rodata_full || arm64_kfence_can_set_direct_map() || is_realm_world() ||
+		arm64_supports_kpkeys_hardened_pgtables();
 }
 
 static DEFINE_MUTEX(pgtable_split_lock);

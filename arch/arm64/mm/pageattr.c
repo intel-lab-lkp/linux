@@ -96,7 +96,8 @@ bool can_set_direct_map(void)
 	 * Realms need to make pages shared/protected at page granularity.
 	 */
 	return rodata_full || debug_pagealloc_enabled() ||
-		arm64_kfence_can_set_direct_map() || is_realm_world();
+		arm64_kfence_can_set_direct_map() || is_realm_world() ||
+		arm64_supports_kpkeys_hardened_pgtables();
 }
 
 static int update_range_prot(unsigned long start, unsigned long size,

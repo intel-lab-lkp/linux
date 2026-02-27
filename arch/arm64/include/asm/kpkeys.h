@@ -57,6 +57,24 @@ static __always_inline void arch_kpkeys_restore_pkey_reg(u64 pkey_reg)
 
 #endif /* CONFIG_ARM64_POE */
 
+#ifdef CONFIG_KPKEYS_HARDENED_PGTABLES
+
+static inline bool arm64_supports_kpkeys_hardened_pgtables(void)
+{
+	/* POE is a boot feature */
+	return boot_capabilities_finalized() ?
+		system_supports_poe() : cpu_has_poe();
+}
+
+#else /* CONFIG_KPKEYS_HARDENED_PGTABLES */
+
+static inline bool arm64_supports_kpkeys_hardened_pgtables(void)
+{
+	return false;
+}
+
+#endif /* CONFIG_KPKEYS_HARDENED_PGTABLES */
+
 #endif	/* __ASSEMBLY__ */
 
 #endif	/* __ASM_KPKEYS_H */
