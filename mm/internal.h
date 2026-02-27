@@ -1683,6 +1683,9 @@ void __meminit __init_page_from_nid(unsigned long pfn, int nid);
 unsigned long shrink_slab(gfp_t gfp_mask, int nid, struct mem_cgroup *memcg,
 			  int priority);
 
+unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
+			     struct shrinker *shrinker, int priority);
+
 int shmem_add_to_page_cache(struct folio *folio,
 			    struct address_space *mapping,
 			    pgoff_t index, void *expected, gfp_t gfp);

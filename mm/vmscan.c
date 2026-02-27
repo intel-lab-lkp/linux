@@ -436,6 +436,56 @@ void drop_slab(void)
 	} while ((freed >> shift++) > 1);
 }
 
+static unsigned long drop_shrinker_node(int nid, struct shrinker *shrinker)
+{
+	unsigned long freed = 0;
+	struct mem_cgroup *memcg = NULL;
+
+	memcg = mem_cgroup_iter(NULL, NULL, NULL);
+	do {
+		unsigned long ret;
+
+		struct shrink_control sc = {
+			.gfp_mask = GFP_KERNEL,
+			.nid = nid,
+			.memcg = memcg,
+		};
+
+		if (!mem_cgroup_disabled() &&
+		    !mem_cgroup_is_root(memcg) &&
+		    !mem_cgroup_online(memcg))
+			continue;
+
+		ret = do_shrink_slab(&sc, shrinker, 0);
+		if (ret == SHRINK_EMPTY)
+			ret = 0;
+		freed += ret;
+		cond_resched();
+	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)) != NULL);
+
+	return freed;
+}
+
+void drop_sb_dentry_inode(struct super_block *sb)
+{
+	int nid;
+	int shift = 0;
+	unsigned long freed;
+
+	if (!sb || !sb->s_shrink)
+		return;
+
+	do {
+		freed = 0;
+
+		for_each_online_node(nid) {
+			if (fatal_signal_pending(current))
+				return;
+			freed += drop_shrinker_node(nid, sb->s_shrink);
+		}
+	} while ((freed >> shift++) > 1);
+}
+
 #define CHECK_RECLAIMER_OFFSET(type)					\
 	do {								\
 		BUILD_BUG_ON(PGSTEAL_##type - PGSTEAL_KSWAPD !=		\

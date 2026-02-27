@@ -366,8 +366,8 @@ static long add_nr_deferred(long nr, struct shrinker *shrinker,
 
 #define SHRINK_BATCH 128
 
-static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
-				    struct shrinker *shrinker, int priority)
+unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
+			     struct shrinker *shrinker, int priority)
 {
 	unsigned long freed = 0;
 	unsigned long long delta;
