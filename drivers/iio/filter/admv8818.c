@@ -7,6 +7,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/iio/iio.h>
@@ -205,13 +206,8 @@ hpf_write:
 
 static int admv8818_hpf_select(struct admv8818_state *st, u64 freq)
 {
-	int ret;
-
-	mutex_lock(&st->lock);
-	ret = __admv8818_hpf_select(st, freq);
-	mutex_unlock(&st->lock);
-
-	return ret;
+	guard(mutex)(&st->lock);
+	return __admv8818_hpf_select(st, freq);
 }
 
 static int __admv8818_lpf_select(struct admv8818_state *st, u64 freq)
@@ -281,13 +277,8 @@ lpf_write:
 
 static int admv8818_lpf_select(struct admv8818_state *st, u64 freq)
 {
-	int ret;
-
-	mutex_lock(&st->lock);
-	ret = __admv8818_lpf_select(st, freq);
-	mutex_unlock(&st->lock);
-
-	return ret;
+	guard(mutex)(&st->lock);
+	return __admv8818_lpf_select(st, freq);
 }
 
 static int admv8818_rfin_band_select(struct admv8818_state *st)
@@ -308,16 +299,17 @@ static int admv8818_rfin_band_select(struct admv8818_state *st)
 	if (lpf_corner_target < st->cf_hz)
 		lpf_corner_target = U64_MAX;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 
 	ret = __admv8818_hpf_select(st, hpf_corner_target);
 	if (ret)
-		goto exit;
+		return ret;
 
 	ret = __admv8818_lpf_select(st, lpf_corner_target);
-exit:
-	mutex_unlock(&st->lock);
-	return ret;
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 static int __admv8818_read_hpf_freq(struct admv8818_state *st, u64 *hpf_freq)
@@ -352,13 +344,8 @@ static int __admv8818_read_hpf_freq(struct admv8818_state *st, u64 *hpf_freq)
 
 static int admv8818_read_hpf_freq(struct admv8818_state *st, u64 *hpf_freq)
 {
-	int ret;
-
-	mutex_lock(&st->lock);
-	ret = __admv8818_read_hpf_freq(st, hpf_freq);
-	mutex_unlock(&st->lock);
-
-	return ret;
+	guard(mutex)(&st->lock);
+	return __admv8818_read_hpf_freq(st, hpf_freq);
 }
 
 static int __admv8818_read_lpf_freq(struct admv8818_state *st, u64 *lpf_freq)
@@ -393,13 +380,8 @@ static int __admv8818_read_lpf_freq(struct admv8818_state *st, u64 *lpf_freq)
 
 static int admv8818_read_lpf_freq(struct admv8818_state *st, u64 *lpf_freq)
 {
-	int ret;
-
-	mutex_lock(&st->lock);
-	ret = __admv8818_read_lpf_freq(st, lpf_freq);
-	mutex_unlock(&st->lock);
-
-	return ret;
+	guard(mutex)(&st->lock);
+	return __admv8818_read_lpf_freq(st, lpf_freq);
 }
 
 static int admv8818_write_raw_get_fmt(struct iio_dev *indio_dev,
@@ -485,7 +467,7 @@ static int admv8818_filter_bypass(struct admv8818_state *st)
 {
 	int ret;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 
 	ret = regmap_update_bits(st->regmap, ADMV8818_REG_WR0_SW,
 				 ADMV8818_SW_IN_SET_WR0_MSK |
@@ -497,18 +479,17 @@ static int admv8818_filter_bypass(struct admv8818_state *st)
 				 FIELD_PREP(ADMV8818_SW_OUT_SET_WR0_MSK, 1) |
 				 FIELD_PREP(ADMV8818_SW_OUT_WR0_MSK, 0));
 	if (ret)
-		goto exit;
+		return ret;
 
 	ret = regmap_update_bits(st->regmap, ADMV8818_REG_WR0_FILTER,
 				 ADMV8818_HPF_WR0_MSK |
 				 ADMV8818_LPF_WR0_MSK,
 				 FIELD_PREP(ADMV8818_HPF_WR0_MSK, 0) |
 				 FIELD_PREP(ADMV8818_LPF_WR0_MSK, 0));
+	if (ret)
+		return ret;
 
-exit:
-	mutex_unlock(&st->lock);
-
-	return ret;
+	return 0;
 }
 
 static int admv8818_get_mode(struct iio_dev *indio_dev,
