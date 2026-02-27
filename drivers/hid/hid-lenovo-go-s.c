@@ -377,7 +377,7 @@ static int hid_gos_set_event_return(struct command_report *cmd_rep)
 	return 0;
 }
 
-static u8 get_endpoint_address(struct hid_device *hdev)
+static int get_endpoint_address(struct hid_device *hdev)
 {
 	struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
 	struct usb_host_endpoint *ep;
