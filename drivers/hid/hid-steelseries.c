@@ -19,7 +19,8 @@
 
 #define STEELSERIES_SRWS1		BIT(0)
 #define STEELSERIES_ARCTIS_1		BIT(1)
-#define STEELSERIES_ARCTIS_9		BIT(2)
+#define STEELSERIES_ARCTIS_1_X		BIT(2)
+#define STEELSERIES_ARCTIS_9		BIT(3)
 
 struct steelseries_device {
 	struct hid_device *hdev;
@@ -97,7 +98,7 @@ static const __u8 steelseries_srws1_rdesc_fixed[] = {
 0x29, 0x11,         /*          Usage Maximum (11h),        */
 0x95, 0x11,         /*          Report Count (17),          */
 0x81, 0x02,         /*          Input (Variable),           */
-                    /*   ---- Dial patch starts here ----   */
+		    /*   ---- Dial patch starts here ----   */
 0x05, 0x01,         /*          Usage Page (Desktop),       */
 0x09, 0x33,         /*          Usage (RX),                 */
 0x75, 0x04,         /*          Report Size (4),            */
@@ -110,7 +111,7 @@ static const __u8 steelseries_srws1_rdesc_fixed[] = {
 0x95, 0x01,         /*          Report Count (1),           */
 0x25, 0x03,         /*          Logical Maximum (3),        */
 0x81, 0x02,         /*          Input (Variable),           */
-                    /*    ---- Dial patch ends here ----    */
+		    /*    ---- Dial patch ends here ----    */
 0x06, 0x00, 0xFF,   /*          Usage Page (FF00h),         */
 0x09, 0x01,         /*          Usage (01h),                */
 0x75, 0x04,         /* Changed  Report Size (4),            */
@@ -374,7 +375,8 @@ static void steelseries_headset_fetch_battery(struct hid_device *hdev)
 {
 	int ret = 0;
 
-	if (hdev->product == USB_DEVICE_ID_STEELSERIES_ARCTIS_1)
+	if (hdev->product == USB_DEVICE_ID_STEELSERIES_ARCTIS_1 ||
+	    hdev->product == USB_DEVICE_ID_STEELSERIES_ARCTIS_1_X)
 		ret = steelseries_headset_request_battery(hdev,
 			arctis_1_battery_request, sizeof(arctis_1_battery_request));
 	else if (hdev->product == USB_DEVICE_ID_STEELSERIES_ARCTIS_9)
@@ -638,7 +640,8 @@ static int steelseries_headset_raw_event(struct hid_device *hdev,
 	if (hdev->product == USB_DEVICE_ID_STEELSERIES_SRWS1)
 		return 0;
 
-	if (hdev->product == USB_DEVICE_ID_STEELSERIES_ARCTIS_1) {
+	if (hdev->product == USB_DEVICE_ID_STEELSERIES_ARCTIS_1 ||
+	    hdev->product == USB_DEVICE_ID_STEELSERIES_ARCTIS_1_X) {
 		hid_dbg(sd->hdev,
 			"Parsing raw event for Arctis 1 headset (%*ph)\n", size, read_buf);
 		if (size < ARCTIS_1_BATTERY_RESPONSE_LEN ||
@@ -724,9 +727,13 @@ static const struct hid_device_id steelseries_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_SRWS1),
 	  .driver_data = STEELSERIES_SRWS1 },
 
-	{ /* SteelSeries Arctis 1 Wireless for XBox */
+	{ /* SteelSeries Arctis 1 Wireless */
 	  HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_ARCTIS_1),
 	  .driver_data = STEELSERIES_ARCTIS_1 },
+
+	{ /* SteelSeries Arctis 1 Wireless for XBox */
+	  HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_ARCTIS_1_X),
+	  .driver_data = STEELSERIES_ARCTIS_1_X },
 
 	{ /* SteelSeries Arctis 9 Wireless for XBox */
 	  HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_ARCTIS_9),
