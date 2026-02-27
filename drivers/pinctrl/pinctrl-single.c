@@ -1423,7 +1423,7 @@ static inline void pcs_irq_set(struct pcs_soc_data *pcs_soc,
 		pcs->write(mask, pcswi->reg);
 
 		/* flush posted write */
-		mask = pcs->read(pcswi->reg);
+		pcs->read(pcswi->reg);
 		raw_spin_unlock(&pcs->lock);
 	}
 
