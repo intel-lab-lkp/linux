@@ -382,7 +382,7 @@ static void drm_sched_change_priority(struct kunit *test)
 	struct drm_mock_sched_entity *entity[DRM_SCHED_PRIORITY_COUNT];
 	struct drm_mock_scheduler *sched = test->priv;
 	struct drm_mock_sched_job *job;
-	const unsigned int qd = 1000;
+	const unsigned int qd = 500;
 	unsigned int i, cur_ent = 0;
 	enum drm_sched_priority p;
 
@@ -421,7 +421,7 @@ static void drm_sched_change_priority(struct kunit *test)
 
 static struct kunit_case drm_sched_priority_tests[] = {
 	KUNIT_CASE(drm_sched_priorities),
-	KUNIT_CASE_SLOW(drm_sched_change_priority),
+	KUNIT_CASE(drm_sched_change_priority),
 	{}
 };
 
@@ -438,7 +438,7 @@ static void drm_sched_test_modify_sched(struct kunit *test)
 	struct drm_mock_sched_entity *entity[13];
 	struct drm_mock_scheduler *sched[3];
 	struct drm_mock_sched_job *job;
-	const unsigned int qd = 1000;
+	const unsigned int qd = 500;
 
 	/*
 	 * Submit a bunch of jobs against entities configured with different
@@ -500,6 +500,7 @@ static struct kunit_suite drm_sched_modify_sched = {
 
 static void drm_sched_test_credits(struct kunit *test)
 {
+	const long timeout = msecs_to_jiffies(200);
 	struct drm_mock_sched_entity *entity;
 	struct drm_mock_scheduler *sched;
 	struct drm_mock_sched_job *job[2];
@@ -523,22 +524,33 @@ static void drm_sched_test_credits(struct kunit *test)
 	drm_mock_sched_job_submit(job[0]);
 	drm_mock_sched_job_submit(job[1]);
 
-	done = drm_mock_sched_job_wait_scheduled(job[0], HZ);
+	done = drm_mock_sched_job_wait_scheduled(job[0], timeout);
 	KUNIT_ASSERT_TRUE(test, done);
 
-	done = drm_mock_sched_job_wait_scheduled(job[1], HZ);
+	/*
+	 * Verify that the scheduler has not consumed more than the configured
+	 * single credit. This can false negative if the system fails to
+	 * execute the scheduler's workqueue two times between submitting two
+	 * jobs and this wait expires, but this is so unlikely that we opt for a
+	 * timeout which does not make the test excessively slow.
+	 */
+	done = drm_mock_sched_job_wait_scheduled(job[1], timeout);
 	KUNIT_ASSERT_FALSE(test, done);
 
+	/*
+	 * Advance the timeline and make sure the second job gets scheduled and
+	 * completed.
+	 */
 	i = drm_mock_sched_advance(sched, 1);
 	KUNIT_ASSERT_EQ(test, i, 1);
 
-	done = drm_mock_sched_job_wait_scheduled(job[1], HZ);
+	done = drm_mock_sched_job_wait_scheduled(job[1], timeout);
 	KUNIT_ASSERT_TRUE(test, done);
 
 	i = drm_mock_sched_advance(sched, 1);
 	KUNIT_ASSERT_EQ(test, i, 1);
 
-	done = drm_mock_sched_job_wait_finished(job[1], HZ);
+	done = drm_mock_sched_job_wait_finished(job[1], timeout);
 	KUNIT_ASSERT_TRUE(test, done);
 
 	drm_mock_sched_entity_free(entity);
@@ -546,7 +558,7 @@ static void drm_sched_test_credits(struct kunit *test)
 }
 
 static struct kunit_case drm_sched_credits_tests[] = {
-	KUNIT_CASE_SLOW(drm_sched_test_credits),
+	KUNIT_CASE(drm_sched_test_credits),
 	{}
 };
 
