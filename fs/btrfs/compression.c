@@ -36,9 +36,9 @@
 
 static struct bio_set btrfs_compressed_bioset;
 
-static const char* const btrfs_compress_types[] = { "", "zlib", "lzo", "zstd" };
+static const char * const btrfs_compress_types[] = { "", "zlib", "lzo", "zstd" };
 
-const char* btrfs_compress_type2str(enum btrfs_compression_type type)
+const char *btrfs_compress_type2str(enum btrfs_compression_type type)
 {
 	switch (type) {
 	case BTRFS_COMPRESS_ZLIB:
@@ -482,6 +482,7 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 
 			if (zero_offset) {
 				int zeros;
+
 				zeros = folio_size(folio) - zero_offset;
 				folio_zero_range(folio, zero_offset, zeros);
 			}
@@ -783,7 +784,7 @@ struct list_head *btrfs_get_workspace(struct btrfs_fs_info *fs_info, int type, i
 	struct workspace_manager *wsm = fs_info->compr_wsm[type];
 	struct list_head *workspace;
 	int cpus = num_online_cpus();
-	unsigned nofs_flag;
+	unsigned int nofs_flag;
 	struct list_head *idle_ws;
 	spinlock_t *ws_lock;
 	atomic_t *total_ws;
@@ -1166,17 +1167,17 @@ static u64 file_offset_from_bvec(const struct bio_vec *bvec)
  * @buf:		The decompressed data buffer
  * @buf_len:		The decompressed data length
  * @decompressed:	Number of bytes that are already decompressed inside the
- * 			compressed extent
+ *			compressed extent
  * @cb:			The compressed extent descriptor
  * @orig_bio:		The original bio that the caller wants to read for
  *
  * An easier to understand graph is like below:
  *
- * 		|<- orig_bio ->|     |<- orig_bio->|
- * 	|<-------      full decompressed extent      ----->|
- * 	|<-----------    @cb range   ---->|
- * 	|			|<-- @buf_len -->|
- * 	|<--- @decompressed --->|
+ *		|<- orig_bio ->|     |<- orig_bio->|
+ *	|<-------      full decompressed extent      ----->|
+ *	|<-----------    @cb range   ---->|
+ *	|			|<-- @buf_len -->|
+ *	|<--- @decompressed --->|
  *
  * Note that, @cb can be a subpage of the full decompressed extent, but
  * @cb->start always has the same as the orig_file_offset value of the full
@@ -1298,7 +1299,8 @@ static u32 shannon_entropy(struct heuristic_ws *ws)
 #define RADIX_BASE		4U
 #define COUNTERS_SIZE		(1U << RADIX_BASE)
 
-static u8 get4bits(u64 num, int shift) {
+static u8 get4bits(u64 num, int shift)
+{
 	u8 low4bits;
 
 	num >>= shift;
@@ -1373,7 +1375,7 @@ static void radix_sort(struct bucket_item *array, struct bucket_item *array_buf,
 		 */
 		memset(counters, 0, sizeof(counters));
 
-		for (i = 0; i < num; i ++) {
+		for (i = 0; i < num; i++) {
 			buf_num = array_buf[i].count;
 			addr = get4bits(buf_num, shift);
 			counters[addr]++;
