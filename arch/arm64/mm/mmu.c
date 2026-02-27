@@ -707,7 +707,7 @@ static int split_kernel_leaf_mapping_locked(unsigned long addr)
 	if (!pud_present(pud))
 		goto out;
 	if (pud_leaf(pud)) {
-		ret = split_pud(pudp, pud, GFP_PGTABLE_KERNEL, true);
+		ret = split_pud(pudp, pud, GFP_PGTABLE_KERNEL | __GFP_PGTABLE_SPLIT, true);
 		if (ret)
 			goto out;
 	}
@@ -732,7 +732,7 @@ static int split_kernel_leaf_mapping_locked(unsigned long addr)
 		 */
 		if (ALIGN_DOWN(addr, PMD_SIZE) == addr)
 			goto out;
-		ret = split_pmd(pmdp, pmd, GFP_PGTABLE_KERNEL, true);
+		ret = split_pmd(pmdp, pmd, GFP_PGTABLE_KERNEL | __GFP_PGTABLE_SPLIT, true);
 		if (ret)
 			goto out;
 	}
@@ -800,7 +800,18 @@ int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
 	if (start != PAGE_ALIGN(start) || end != PAGE_ALIGN(end))
 		return -EINVAL;
 
+kpkeys_retry:
+	ret = kpkeys_prepare_direct_map_split();
+	if (ret)
+		return ret;
+
 	mutex_lock(&pgtable_split_lock);
+
+	if (!kpkeys_ready_for_direct_map_split()) {
+		mutex_unlock(&pgtable_split_lock);
+		goto kpkeys_retry;
+	}
+
 	lazy_mmu_mode_enable();
 
 	/*
