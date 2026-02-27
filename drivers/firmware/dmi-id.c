@@ -12,6 +12,8 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 
+static bool relaxed_perms;
+
 struct dmi_device_attribute{
 	struct device_attribute dev_attr;
 	int field;
@@ -184,10 +186,14 @@ static struct class dmi_class = {
 static struct device *dmi_dev;
 
 /* Initialization */
-
-#define ADD_DMI_ATTR(_name, _field) \
-	if (dmi_get_system_info(_field)) \
-		sys_dmi_attributes[i++] = &sys_dmi_##_name##_attr.dev_attr.attr;
+#define ADD_DMI_ATTR(_name, _field)						\
+	({									\
+	if (dmi_get_system_info(_field)) {					\
+		if (relaxed_perms)						\
+			sys_dmi_##_name##_attr.dev_attr.attr.mode |= 0444;	\
+		sys_dmi_attributes[i++] = &sys_dmi_##_name##_attr.dev_attr.attr;\
+	}									\
+	})
 
 /* In a separate function to keep gcc 3.2 happy - do NOT merge this in
    dmi_id_init! */
@@ -261,5 +267,6 @@ fail_class_unregister:
 
 	return ret;
 }
-
+module_param(relaxed_perms, bool, 0400);
+MODULE_PARM_DESC(relaxed_perms, "Allow everyone read access to all IDs");
 arch_initcall(dmi_id_init);
