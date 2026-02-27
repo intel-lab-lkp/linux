@@ -49,6 +49,7 @@
 #include <linux/sched/mm.h>
 #include <linux/sysctl.h>
 #include <linux/pgalloc.h>
+#include <linux/local_lock.h>
 
 #include <asm/tlbflush.h>
 #include "internal.h"
@@ -1085,6 +1086,8 @@ static const struct ctl_table filemap_sysctl_table[] = {
 	}
 };
 
+static void __init dropbehind_init(void);
+
 void __init pagecache_init(void)
 {
 	int i;
@@ -1092,6 +1095,7 @@ void __init pagecache_init(void)
 	for (i = 0; i < PAGE_WAIT_TABLE_SIZE; i++)
 		init_waitqueue_head(&folio_wait_table[i]);
 
+	dropbehind_init();
 	page_writeback_init();
 	register_sysctl_init("vm", filemap_sysctl_table);
 }
@@ -1613,25 +1617,130 @@ static void filemap_end_dropbehind(struct folio *folio)
  * If folio was marked as dropbehind, then pages should be dropped when writeback
  * completes. Do that now. If we fail, it's likely because of a big folio -
  * just reset dropbehind for that case and latter completions should invalidate.
+ *
+ * When called from IRQ context (e.g. buffer_head completion), we cannot lock
+ * the folio and invalidate. Defer to a workqueue so that callers like
+ * end_buffer_async_write() that complete in IRQ context still get their folios
+ * pruned.
+ */
+struct dropbehind_batch {
+	local_lock_t lock_irq;
+	struct folio_batch fbatch;
+	struct work_struct work;
+};
+
+static DEFINE_PER_CPU(struct dropbehind_batch, dropbehind_batch) = {
+	.lock_irq = INIT_LOCAL_LOCK(lock_irq),
+};
+
+static void dropbehind_work_fn(struct work_struct *w)
+{
+	struct dropbehind_batch *db_batch;
+	struct folio_batch fbatch;
+
+again:
+	local_lock_irq(&dropbehind_batch.lock_irq);
+	db_batch = this_cpu_ptr(&dropbehind_batch);
+	fbatch = db_batch->fbatch;
+	folio_batch_reinit(&db_batch->fbatch);
+	local_unlock_irq(&dropbehind_batch.lock_irq);
+
+	for (int i = 0; i < folio_batch_count(&fbatch); i++) {
+		struct folio *folio = fbatch.folios[i];
+
+		if (folio_trylock(folio)) {
+			filemap_end_dropbehind(folio);
+			folio_unlock(folio);
+		}
+		folio_put(folio);
+	}
+
+	/* Drain folios that were added while we were processing. */
+	local_lock_irq(&dropbehind_batch.lock_irq);
+	if (folio_batch_count(&db_batch->fbatch)) {
+		local_unlock_irq(&dropbehind_batch.lock_irq);
+		goto again;
+	}
+	local_unlock_irq(&dropbehind_batch.lock_irq);
+}
+
+/*
+ * Drain a dead CPU's dropbehind batch. The CPU is already dead so no
+ * locking is needed.
+ */
+void dropbehind_drain_cpu(int cpu)
+{
+	struct dropbehind_batch *db_batch = per_cpu_ptr(&dropbehind_batch, cpu);
+	struct folio_batch *fbatch = &db_batch->fbatch;
+
+	for (int i = 0; i < folio_batch_count(fbatch); i++) {
+		struct folio *folio = fbatch->folios[i];
+
+		if (folio_trylock(folio)) {
+			filemap_end_dropbehind(folio);
+			folio_unlock(folio);
+		}
+		folio_put(folio);
+	}
+	folio_batch_reinit(fbatch);
+}
+
+static void __init dropbehind_init(void)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		struct dropbehind_batch *db_batch = per_cpu_ptr(&dropbehind_batch, cpu);
+
+		folio_batch_init(&db_batch->fbatch);
+		INIT_WORK(&db_batch->work, dropbehind_work_fn);
+	}
+}
+
+/*
+ * Must be called from task context. Use folio_end_dropbehind_irq() for
+ * IRQ context (e.g. buffer_head completion).
  */
 void folio_end_dropbehind(struct folio *folio)
 {
 	if (!folio_test_dropbehind(folio))
 		return;
 
-	/*
-	 * Hitting !in_task() should not happen off RWF_DONTCACHE writeback,
-	 * but can happen if normal writeback just happens to find dirty folios
-	 * that were created as part of uncached writeback, and that writeback
-	 * would otherwise not need non-IRQ handling. Just skip the
-	 * invalidation in that case.
-	 */
-	if (in_task() && folio_trylock(folio)) {
+	if (folio_trylock(folio)) {
 		filemap_end_dropbehind(folio);
 		folio_unlock(folio);
 	}
 }
 EXPORT_SYMBOL_GPL(folio_end_dropbehind);
+
+/*
+ * In IRQ context we cannot lock the folio or call into the invalidation
+ * path. Defer to a workqueue. This happens for buffer_head-based writeback
+ * which runs from bio IRQ context.
+ */
+static void folio_end_dropbehind_irq(struct folio *folio)
+{
+	struct dropbehind_batch *db_batch;
+	unsigned long flags;
+
+	if (!folio_test_dropbehind(folio))
+		return;
+
+	local_lock_irqsave(&dropbehind_batch.lock_irq, flags);
+	db_batch = this_cpu_ptr(&dropbehind_batch);
+
+	/* If there is no space in the folio_batch, skip the invalidation. */
+	if (!folio_batch_space(&db_batch->fbatch)) {
+		local_unlock_irqrestore(&dropbehind_batch.lock_irq, flags);
+		return;
+	}
+
+	folio_get(folio);
+	folio_batch_add(&db_batch->fbatch, folio);
+	local_unlock_irqrestore(&dropbehind_batch.lock_irq, flags);
+
+	schedule_work_on(smp_processor_id(), &db_batch->work);
+}
 
 /**
  * folio_end_writeback_no_dropbehind - End writeback against a folio.
@@ -1685,7 +1794,10 @@ void folio_end_writeback(struct folio *folio)
 	 */
 	folio_get(folio);
 	folio_end_writeback_no_dropbehind(folio);
-	folio_end_dropbehind(folio);
+	if (in_task())
+		folio_end_dropbehind(folio);
+	else
+		folio_end_dropbehind_irq(folio);
 	folio_put(folio);
 }
 EXPORT_SYMBOL(folio_end_writeback);

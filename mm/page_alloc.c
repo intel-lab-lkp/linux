@@ -6277,6 +6277,7 @@ static int page_alloc_cpu_dead(unsigned int cpu)
 	struct zone *zone;
 
 	lru_add_drain_cpu(cpu);
+	dropbehind_drain_cpu(cpu);
 	mlock_drain_remote(cpu);
 	drain_pages(cpu);
 
