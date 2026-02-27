@@ -581,7 +581,7 @@ static int bng_re_map_creq_db(struct bng_re_rcfw *rcfw, u32 reg_offt)
 	creq_db->dbinfo.flags = 0;
 	creq_db->reg.bar_id = BNG_FW_COMM_CONS_PCI_BAR_REGION;
 	creq_db->reg.bar_base = pci_resource_start(pdev, creq_db->reg.bar_id);
-	if (!creq_db->reg.bar_id)
+	if (!creq_db->reg.bar_base)
 		dev_err(&pdev->dev,
 			"CREQ BAR region %d resc start is 0!",
 			creq_db->reg.bar_id);
