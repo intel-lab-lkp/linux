@@ -37,6 +37,17 @@ static inline bool xe_device_is_sriov_vf(const struct xe_device *xe)
 	return xe_device_sriov_mode(xe) == XE_SRIOV_MODE_VF;
 }
 
+/**
+ * xe_device_is_admin_only_pf() - Check whether device is admin only PF or not.
+ * @xe: the &xe_device to check
+ *
+ * Return: true if the device is admin only PF, false otherwise.
+ */
+static inline bool xe_device_is_admin_only_pf(const struct xe_device *xe)
+{
+	return xe_device_is_sriov_pf(xe) && xe->sriov.pf.admin_only;
+}
+
 #define IS_SRIOV_PF(xe) xe_device_is_sriov_pf(xe)
 #define IS_SRIOV_VF(xe) xe_device_is_sriov_vf(xe)
 

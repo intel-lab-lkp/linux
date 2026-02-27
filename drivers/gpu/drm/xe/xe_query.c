@@ -55,6 +55,9 @@ static size_t calc_hw_engine_info_size(struct xe_device *xe)
 	u8 gt_id;
 	int i = 0;
 
+	if (xe_device_is_admin_only_pf(xe))
+		return 0;
+
 	for_each_gt(gt, xe, gt_id)
 		for_each_hw_engine(hwe, gt, id) {
 			if (xe_hw_engine_is_reserved(hwe))
@@ -126,7 +129,10 @@ query_engine_cycles(struct xe_device *xe,
 	if (IS_SRIOV_VF(xe))
 		return -EOPNOTSUPP;
 
-	if (query->size == 0) {
+	if (xe_device_is_admin_only_pf(xe))
+		size = 0;
+
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -190,7 +196,7 @@ static int query_engines(struct xe_device *xe,
 	u8 gt_id;
 	int i = 0;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -231,6 +237,9 @@ static size_t calc_mem_regions_size(struct xe_device *xe)
 	u32 num_managers = 1;
 	int i;
 
+	if (xe_device_is_admin_only_pf(xe))
+		return 0;
+
 	for (i = XE_PL_VRAM0; i <= XE_PL_VRAM1; ++i)
 		if (ttm_manager_type(&xe->ttm, i))
 			num_managers++;
@@ -248,7 +257,7 @@ static int query_mem_regions(struct xe_device *xe,
 	struct ttm_resource_manager *man;
 	int ret, i;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -309,13 +318,13 @@ static int query_mem_regions(struct xe_device *xe,
 static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
 {
 	const u32 num_params = DRM_XE_QUERY_CONFIG_MAX_EXEC_QUEUE_PRIORITY + 1;
-	size_t size =
+	size_t size = xe_device_is_admin_only_pf(xe) ? 0 :
 		sizeof(struct drm_xe_query_config) + num_params * sizeof(u64);
 	struct drm_xe_query_config __user *query_ptr =
 		u64_to_user_ptr(query->data);
 	struct drm_xe_query_config *config;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -358,15 +367,15 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
 static int query_gt_list(struct xe_device *xe, struct drm_xe_device_query *query)
 {
 	struct xe_gt *gt;
-	size_t size = sizeof(struct drm_xe_query_gt_list) +
-		xe->info.gt_count * sizeof(struct drm_xe_gt);
+	size_t size = xe_device_is_admin_only_pf(xe) ? 0 :
+		sizeof(struct drm_xe_query_gt_list) + xe->info.gt_count * sizeof(struct drm_xe_gt);
 	struct drm_xe_query_gt_list __user *query_ptr =
 		u64_to_user_ptr(query->data);
 	struct drm_xe_query_gt_list *gt_list;
 	int iter = 0;
 	u8 id;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -436,7 +445,10 @@ static int query_hwconfig(struct xe_device *xe,
 	void __user *query_ptr = u64_to_user_ptr(query->data);
 	void *hwconfig;
 
-	if (query->size == 0) {
+	if (xe_device_is_admin_only_pf(xe))
+		size = 0;
+
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -463,6 +475,9 @@ static size_t calc_topo_query_size(struct xe_device *xe)
 	struct xe_gt *gt;
 	size_t query_size = 0;
 	int id;
+
+	if (xe_device_is_admin_only_pf(xe))
+		return 0;
 
 	for_each_gt(gt, xe, id) {
 		query_size += 3 * sizeof(struct drm_xe_query_topology_mask) +
@@ -505,7 +520,7 @@ static int query_gt_topology(struct xe_device *xe,
 	struct xe_gt *gt;
 	int id;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -559,11 +574,12 @@ static int
 query_uc_fw_version(struct xe_device *xe, struct drm_xe_device_query *query)
 {
 	struct drm_xe_query_uc_fw_version __user *query_ptr = u64_to_user_ptr(query->data);
-	size_t size = sizeof(struct drm_xe_query_uc_fw_version);
+	size_t size = xe_device_is_admin_only_pf(xe) ? 0 :
+		sizeof(struct drm_xe_query_uc_fw_version);
 	struct drm_xe_query_uc_fw_version resp;
 	struct xe_uc_fw_version *version = NULL;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -634,6 +650,9 @@ static size_t calc_oa_unit_query_size(struct xe_device *xe)
 	struct xe_gt *gt;
 	int i, id;
 
+	if (xe_device_is_admin_only_pf(xe))
+		return 0;
+
 	for_each_gt(gt, xe, id) {
 		for (i = 0; i < gt->oa.num_oa_units; i++) {
 			size += sizeof(struct drm_xe_oa_unit);
@@ -659,7 +678,7 @@ static int query_oa_units(struct xe_device *xe,
 	struct xe_gt *gt;
 	u8 *pdu;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -711,11 +730,12 @@ static int query_oa_units(struct xe_device *xe,
 static int query_pxp_status(struct xe_device *xe, struct drm_xe_device_query *query)
 {
 	struct drm_xe_query_pxp_status __user *query_ptr = u64_to_user_ptr(query->data);
-	size_t size = sizeof(struct drm_xe_query_pxp_status);
+	size_t size = xe_device_is_admin_only_pf(xe) ? 0 :
+		sizeof(struct drm_xe_query_pxp_status);
 	struct drm_xe_query_pxp_status resp = { 0 };
 	int ret;
 
-	if (query->size == 0) {
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
@@ -751,7 +771,10 @@ static int query_eu_stall(struct xe_device *xe,
 	array_size = xe_eu_stall_get_sampling_rates(&num_rates, &rates);
 	size = sizeof(struct drm_xe_query_eu_stall) + array_size;
 
-	if (query->size == 0) {
+	if (xe_device_is_admin_only_pf(xe))
+		size = 0;
+
+	if (query->size == 0 || !size) {
 		query->size = size;
 		return 0;
 	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
