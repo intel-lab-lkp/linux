@@ -1142,7 +1142,8 @@ config HID_STEELSERIES
 	depends on USB_HID
 	help
 	Support for Steelseries SRW-S1 steering wheel, and the Steelseries
-	Arctis 1 Wireless for XBox headset.
+	Arctis headset family (Arctis 1, Arctis 7, Arctis 7+, Arctis 9,
+	Arctis Nova 3, Arctis Nova 5, Arctis Nova 7, and Arctis Nova Pro).
 
 config HID_SUNPLUS
 	tristate "Sunplus wireless desktop"
