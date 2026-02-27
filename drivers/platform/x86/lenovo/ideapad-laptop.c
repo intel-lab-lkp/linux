@@ -26,6 +26,7 @@
 #include <linux/kernel.h>
 #include <linux/leds.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/platform_profile.h>
 #include <linux/power_supply.h>
@@ -165,6 +166,8 @@ enum {
 	KBD_BL_TRISTATE      = 2,
 	KBD_BL_TRISTATE_AUTO = 3,
 };
+
+#define KBD_BL_AUTO_MODE_HW_BRIGHTNESS	3
 
 #define KBD_BL_QUERY_TYPE		0x1
 #define KBD_BL_TRISTATE_TYPE		0x5
@@ -1620,8 +1623,9 @@ static int ideapad_kbd_bl_brightness_parse(struct ideapad_private *priv,
 	if (hw_brightness <= priv->kbd_bl.led.max_brightness)
 		return hw_brightness;
 
-	/* Auto, report as off */
-	if (hw_brightness == priv->kbd_bl.led.max_brightness + 1)
+	/* Auto (controlled by EC according to ALS), report as off */
+	if (priv->kbd_bl.type == KBD_BL_TRISTATE_AUTO &&
+	    hw_brightness == KBD_BL_AUTO_MODE_HW_BRIGHTNESS)
 		return 0;
 
 	/* Unknown value */
@@ -1709,8 +1713,38 @@ static int ideapad_kbd_bl_led_cdev_brightness_set(struct led_classdev *led_cdev,
 {
 	struct ideapad_private *priv = container_of(led_cdev, struct ideapad_private, kbd_bl.led);
 
+	/*
+	 * When deinitializing: It must be the side effect of led_cdev
+	 * unregistration when our private trigger is active. We've set
+	 * LED_RETAIN_AT_SHUTDOWN to retain led_cdev brightness level. To do the
+	 * same for auto mode, gate changes and return early.
+	 */
+	if (unlikely(!priv->kbd_bl.initialized))
+		return 0;
+
 	return ideapad_kbd_bl_brightness_set(priv, brightness);
 }
+
+static int ideapad_kbd_bl_auto_trigger_activate(struct led_classdev *led_cdev)
+{
+	struct ideapad_private *priv = container_of(led_cdev, struct ideapad_private, kbd_bl.led);
+
+	return ideapad_kbd_bl_hw_brightness_set(priv, KBD_BL_AUTO_MODE_HW_BRIGHTNESS);
+}
+
+static bool ideapad_kbd_bl_auto_trigger_offloaded(struct led_classdev *led_cdev)
+{
+	return true;
+}
+
+static struct led_hw_trigger_type ideapad_kbd_bl_auto_trigger_type;
+
+static struct led_trigger ideapad_kbd_bl_auto_trigger = {
+	.name = "ideapad-auto",
+	.trigger_type = &ideapad_kbd_bl_auto_trigger_type,
+	.activate = ideapad_kbd_bl_auto_trigger_activate,
+	.offloaded = ideapad_kbd_bl_auto_trigger_offloaded,
+};
 
 static void ideapad_kbd_bl_notify_known(struct ideapad_private *priv, unsigned int brightness)
 {
@@ -1724,12 +1758,23 @@ static void ideapad_kbd_bl_notify_known(struct ideapad_private *priv, unsigned i
 
 static void ideapad_kbd_bl_notify(struct ideapad_private *priv)
 {
-	int brightness;
+	int hw_brightness, brightness;
 
 	if (!priv->kbd_bl.initialized)
 		return;
 
-	brightness = ideapad_kbd_bl_brightness_get(priv);
+	hw_brightness = ideapad_kbd_bl_hw_brightness_get(priv);
+	if (hw_brightness < 0)
+		return;
+
+	if (priv->kbd_bl.type == KBD_BL_TRISTATE_AUTO) {
+		bool activate = hw_brightness == KBD_BL_AUTO_MODE_HW_BRIGHTNESS;
+
+		led_trigger_notify_hw_control_changed(&priv->kbd_bl.led, activate,
+						      &ideapad_kbd_bl_auto_trigger);
+	}
+
+	brightness = ideapad_kbd_bl_brightness_parse(priv, hw_brightness);
 	if (brightness < 0)
 		return;
 
@@ -1738,7 +1783,7 @@ static void ideapad_kbd_bl_notify(struct ideapad_private *priv)
 
 static int ideapad_kbd_bl_init(struct ideapad_private *priv)
 {
-	int brightness, err;
+	int hw_brightness, brightness, err;
 
 	if (!priv->features.kbd_bl)
 		return -ENODEV;
@@ -1746,12 +1791,37 @@ static int ideapad_kbd_bl_init(struct ideapad_private *priv)
 	if (WARN_ON(priv->kbd_bl.initialized))
 		return -EEXIST;
 
-	if (ideapad_kbd_bl_check_tristate(priv->kbd_bl.type))
-		priv->kbd_bl.led.max_brightness = 2;
-	else
-		priv->kbd_bl.led.max_brightness = 1;
+	hw_brightness = ideapad_kbd_bl_hw_brightness_get(priv);
+	if (hw_brightness < 0)
+		return hw_brightness;
 
-	brightness = ideapad_kbd_bl_brightness_get(priv);
+	switch (priv->kbd_bl.type) {
+	case KBD_BL_TRISTATE_AUTO:
+		err = devm_led_trigger_register(&priv->platform_device->dev,
+						&ideapad_kbd_bl_auto_trigger);
+		if (err)
+			return err;
+
+		priv->kbd_bl.led.trigger_type       = &ideapad_kbd_bl_auto_trigger_type;
+		priv->kbd_bl.led.hw_control_trigger = ideapad_kbd_bl_auto_trigger.name;
+
+		/* HW remembers the last brightness level, including auto mode. */
+		if (hw_brightness == KBD_BL_AUTO_MODE_HW_BRIGHTNESS)
+			priv->kbd_bl.led.default_trigger = ideapad_kbd_bl_auto_trigger.name;
+
+		fallthrough;
+	case KBD_BL_TRISTATE:
+		priv->kbd_bl.led.max_brightness = 2;
+		break;
+	case KBD_BL_STANDARD:
+		priv->kbd_bl.led.max_brightness = 1;
+		break;
+	default:
+		/* This has already been validated by ideapad_check_features(). */
+		unreachable();
+	}
+
+	brightness = ideapad_kbd_bl_brightness_parse(priv, hw_brightness);
 	if (brightness < 0)
 		return brightness;
 
