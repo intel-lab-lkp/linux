@@ -30,7 +30,7 @@ test_auto_part_scan()
 {
 	local backing_file=$1
 
-	# Create device WITHOUT --no_auto_part_scan
+	# Create device WITH automatic partition scan
 	local dev_id=$(_add_ublk_dev -t loop "${backing_file}")
 	[ $? -ne 0 ] && return 1
 
@@ -50,8 +50,8 @@ test_no_auto_part_scan()
 {
 	local backing_file=$1
 
-	# Create device WITH --no_auto_part_scan
-	local dev_id=$(_add_ublk_dev -t loop --no_auto_part_scan "${backing_file}")
+	# Create device WITHOUT automatic partition scan
+	local dev_id=$(_add_ublk_dev -t loop "${backing_file}" -p)
 	[ $? -ne 0 ] && return 1
 
 	udevadm settle
