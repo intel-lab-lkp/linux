@@ -37,12 +37,15 @@
 #include "xfs_ioctl.h"
 #include "xfs_xattr.h"
 #include "xfs_rtbitmap.h"
+#include "xfs_rtrmap_btree.h"
 #include "xfs_file.h"
 #include "xfs_exchrange.h"
 #include "xfs_handle.h"
 #include "xfs_rtgroup.h"
 #include "xfs_healthmon.h"
 #include "xfs_verify_media.h"
+#include "xfs_zone_priv.h"
+#include "xfs_zone_alloc.h"
 
 #include <linux/mount.h>
 #include <linux/fileattr.h>
@@ -413,6 +416,7 @@ xfs_ioc_rtgroup_geometry(
 {
 	struct xfs_rtgroup	*rtg;
 	struct xfs_rtgroup_geometry rgeo;
+	xfs_rgblock_t		highest_rgbno, write_pointer;
 	int			error;
 
 	if (copy_from_user(&rgeo, arg, sizeof(rgeo)))
@@ -432,6 +436,22 @@ xfs_ioc_rtgroup_geometry(
 	xfs_rtgroup_put(rtg);
 	if (error)
 		return error;
+
+	if (xfs_has_zoned(mp)) {
+		xfs_rtgroup_lock(rtg, XFS_RTGLOCK_RMAP);
+		if (rtg->rtg_open_zone) {
+			write_pointer = rtg->rtg_open_zone->oz_allocated;
+		} else {
+			highest_rgbno = xfs_rtrmap_highest_rgbno(rtg);
+			if (highest_rgbno == NULLRGBLOCK)
+				write_pointer = 0;
+			else
+				write_pointer = highest_rgbno + 1;
+		}
+		xfs_rtgroup_unlock(rtg, XFS_RTGLOCK_RMAP);
+		rgeo.rg_writepointer = XFS_FSB_TO_BB(mp, write_pointer);
+		rgeo.rg_flags |= XFS_RTGROUP_GEOM_WRITEPOINTER;
+	}
 
 	if (copy_to_user(arg, &rgeo, sizeof(rgeo)))
 		return -EFAULT;
