@@ -26,6 +26,7 @@
 #define SS_CAP_MIC_MUTE			BIT(2)
 #define SS_CAP_BT_ENABLED		BIT(3)
 #define SS_CAP_BT_DEVICE_CONNECTED	BIT(4)
+#define SS_CAP_EXTERNAL_CONFIG		BIT(5)
 
 #define SS_QUIRK_STATUS_SYNC_POLL	BIT(0)
 
@@ -40,6 +41,9 @@ struct steelseries_device_info {
 
 	int (*request_status)(struct hid_device *hdev);
 	void (*parse_status)(struct steelseries_device *sd, u8 *data, int size);
+
+	int (*request_settings)(struct hid_device *hdev);
+	void (*parse_settings)(struct steelseries_device *sd, u8 *data, int size);
 };
 
 struct steelseries_device {
@@ -49,6 +53,7 @@ struct steelseries_device {
 	bool use_async_protocol;
 
 	struct delayed_work status_work;
+	struct delayed_work settings_work;
 
 	struct power_supply_desc battery_desc;
 	struct power_supply *battery;
@@ -690,6 +695,14 @@ static void steelseries_arctis_nova_7_gen2_parse_status(struct steelseries_devic
 	}
 }
 
+static int steelseries_arctis_nova_7_gen2_request_settings(struct hid_device *hdev)
+{
+	const u8 data[] = { 0x00, 0x20 };
+
+	return steelseries_send_output_report(hdev, data, sizeof(data));
+}
+
+
 static void steelseries_arctis_nova_pro_parse_status(struct steelseries_device *sd,
 						     u8 *data, int size)
 {
@@ -791,9 +804,11 @@ static const struct steelseries_device_info arctis_nova_7_gen2_info = {
 	.sync_interface = 3,
 	.async_interface = 5,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_MIC_MUTE |
-			SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED,
+			SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
+			SS_CAP_EXTERNAL_CONFIG,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_gen2_parse_status,
+	.request_settings = steelseries_arctis_nova_7_gen2_request_settings,
 };
 
 static const struct steelseries_device_info arctis_nova_pro_info = {
@@ -899,6 +914,15 @@ static void steelseries_status_timer_work_handler(struct work_struct *work)
 		schedule_delayed_work(&sd->status_work,
 				msecs_to_jiffies(STEELSERIES_HEADSET_STATUS_TIMEOUT_MS));
 	spin_unlock_irqrestore(&sd->lock, flags);
+}
+
+static void steelseries_settings_work_handler(struct work_struct *work)
+{
+	struct steelseries_device *sd = container_of(
+		work, struct steelseries_device, settings_work.work);
+
+	if (sd->info->request_settings)
+		sd->info->request_settings(sd->hdev);
 }
 
 static int steelseries_battery_register(struct steelseries_device *sd)
@@ -1185,6 +1209,9 @@ static int steelseries_raw_event(struct hid_device *hdev,
 
 	sd->info->parse_status(sd, data, size);
 
+	if (sd->info->parse_settings)
+		sd->info->parse_settings(sd, data, size);
+
 	if (sd->headset_connected != old_connected) {
 		hid_dbg(hdev,
 			"Connected status changed from %sconnected to %sconnected\n",
@@ -1194,6 +1221,9 @@ static int steelseries_raw_event(struct hid_device *hdev,
 		if (sd->headset_connected && !old_connected &&
 		    sd->use_async_protocol && is_async_interface) {
 			schedule_delayed_work(&sd->status_work, 0);
+			if (sd->info->request_settings)
+				schedule_delayed_work(&sd->settings_work,
+						      msecs_to_jiffies(10));
 		}
 
 		if (sd->battery) {
@@ -1329,7 +1359,11 @@ static int steelseries_probe(struct hid_device *hdev,
 #endif
 
 		INIT_DELAYED_WORK(&sd->status_work, steelseries_status_timer_work_handler);
+		INIT_DELAYED_WORK(&sd->settings_work, steelseries_settings_work_handler);
+
 		schedule_delayed_work(&sd->status_work, msecs_to_jiffies(100));
+		if (info->request_settings)
+			schedule_delayed_work(&sd->settings_work, msecs_to_jiffies(200));
 
 		return 0;
 	}
@@ -1415,6 +1449,7 @@ static void steelseries_remove(struct hid_device *hdev)
 		spin_unlock_irqrestore(&sd->lock, flags);
 
 		cancel_delayed_work_sync(&sd->status_work);
+		cancel_delayed_work_sync(&sd->settings_work);
 	}
 
 	hid_hw_close(hdev);
