@@ -203,7 +203,6 @@ struct odm_rate_adaptive {
 /*  Declare for common info */
 /*  */
 #define MAX_PATH_NUM_92CS		2
-#define MAX_PATH_NUM_8188E		1
 #define MAX_PATH_NUM_8192E		2
 #define MAX_PATH_NUM_8723B		1
 #define MAX_PATH_NUM_8812A		2
@@ -538,8 +537,6 @@ struct odm_rf_cal_t { /* ODM_RF_Calibration_Structure */
 	u8 DeltaSwingTableIdx_2GA_N[DELTA_SWINGIDX_SIZE];
 	u8 DeltaSwingTableIdx_2GB_P[DELTA_SWINGIDX_SIZE];
 	u8 DeltaSwingTableIdx_2GB_N[DELTA_SWINGIDX_SIZE];
-	u8 DeltaSwingTableIdx_2GA_P_8188E[DELTA_SWINGIDX_SIZE];
-	u8 DeltaSwingTableIdx_2GA_N_8188E[DELTA_SWINGIDX_SIZE];
 
 	/*  */
 

@@ -202,7 +202,7 @@
 #define WCAMI					REG_CAMWRITE	/*  Software write CAM input content */
 
 /*  */
-/*        8723/8188E Host System Interrupt Status Register (offset 0x5C, 32 byte) */
+/*        8723 Host System Interrupt Status Register (offset 0x5C, 32 byte) */
 /*  */
 #define HSISR_GPIO12_0_INT				BIT0
 #define HSISR_SPS_OCP_INT				BIT5
@@ -539,7 +539,7 @@
 
 #define SDIO_HIMR_DISABLED			0
 
-/*  RTL8723/RTL8188E SDIO Host Interrupt Mask Register */
+/*  RTL8723 SDIO Host Interrupt Mask Register */
 #define SDIO_HIMR_RX_REQUEST_MSK		BIT0
 #define SDIO_HIMR_AVAL_MSK			BIT1
 
