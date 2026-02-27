@@ -39,11 +39,12 @@ enum {
 	 * source if we rejected it as EINVAL */
 	Opt_source,
 	/* Options that take integer arguments */
-	Opt_debug, Opt_dfltuid, Opt_dfltgid, Opt_afid,
+	Opt_debug, Opt_dfltuid, Opt_dfltgid, Opt_afid, Opt_ndentrycachetmo,
 	/* String options */
 	Opt_uname, Opt_remotename, Opt_cache, Opt_cachetag,
 	/* Options that take no arguments */
 	Opt_nodevmap, Opt_noxattr, Opt_directio, Opt_ignoreqv,
+	Opt_ndentrycache,
 	/* Access options */
 	Opt_access, Opt_posixacl,
 	/* Lock timeout option */
@@ -77,41 +78,43 @@ static const struct constant_table p9_versions[] = {
  * the client, and all the transports.
  */
 const struct fs_parameter_spec v9fs_param_spec[] = {
-	fsparam_string	("source",	Opt_source),
-	fsparam_u32hex	("debug",	Opt_debug),
-	fsparam_uid	("dfltuid",	Opt_dfltuid),
-	fsparam_gid	("dfltgid",	Opt_dfltgid),
-	fsparam_u32	("afid",	Opt_afid),
-	fsparam_string	("uname",	Opt_uname),
-	fsparam_string	("aname",	Opt_remotename),
-	fsparam_flag	("nodevmap",	Opt_nodevmap),
-	fsparam_flag	("noxattr",	Opt_noxattr),
-	fsparam_flag	("directio",	Opt_directio),
-	fsparam_flag	("ignoreqv",	Opt_ignoreqv),
-	fsparam_string	("cache",	Opt_cache),
-	fsparam_string	("cachetag",	Opt_cachetag),
-	fsparam_string	("access",	Opt_access),
-	fsparam_flag	("posixacl",	Opt_posixacl),
-	fsparam_u32	("locktimeout",	Opt_locktimeout),
+	fsparam_string	("source",		Opt_source),
+	fsparam_u32hex	("debug",		Opt_debug),
+	fsparam_uid	("dfltuid",		Opt_dfltuid),
+	fsparam_gid	("dfltgid",		Opt_dfltgid),
+	fsparam_u32	("afid",		Opt_afid),
+	fsparam_string	("uname",		Opt_uname),
+	fsparam_string	("aname",		Opt_remotename),
+	fsparam_flag	("nodevmap",		Opt_nodevmap),
+	fsparam_flag	("noxattr",		Opt_noxattr),
+	fsparam_flag	("directio",		Opt_directio),
+	fsparam_flag	("ignoreqv",		Opt_ignoreqv),
+	fsparam_string	("cache",		Opt_cache),
+	fsparam_string	("cachetag",		Opt_cachetag),
+	fsparam_string	("access",		Opt_access),
+	fsparam_flag	("posixacl",		Opt_posixacl),
+	fsparam_u32	("locktimeout",		Opt_locktimeout),
+	fsparam_flag	("ndentrycache",	Opt_ndentrycache),
+	fsparam_u32	("ndentrycache",	Opt_ndentrycachetmo),
 
 	/* client options */
-	fsparam_u32	("msize",	Opt_msize),
-	fsparam_flag	("noextend",	Opt_legacy),
-	fsparam_string	("trans",	Opt_trans),
-	fsparam_enum	("version",	Opt_version, p9_versions),
+	fsparam_u32	("msize",		Opt_msize),
+	fsparam_flag	("noextend",		Opt_legacy),
+	fsparam_string	("trans",		Opt_trans),
+	fsparam_enum	("version",		Opt_version, p9_versions),
 
 	/* fd transport options */
-	fsparam_u32	("rfdno",	Opt_rfdno),
-	fsparam_u32	("wfdno",	Opt_wfdno),
+	fsparam_u32	("rfdno",		Opt_rfdno),
+	fsparam_u32	("wfdno",		Opt_wfdno),
 
 	/* rdma transport options */
-	fsparam_u32	("sq",		Opt_sq_depth),
-	fsparam_u32	("rq",		Opt_rq_depth),
-	fsparam_u32	("timeout",	Opt_timeout),
+	fsparam_u32	("sq",			Opt_sq_depth),
+	fsparam_u32	("rq",			Opt_rq_depth),
+	fsparam_u32	("timeout",		Opt_timeout),
 
 	/* fd and rdma transprt options */
-	fsparam_u32	("port",	Opt_port),
-	fsparam_flag	("privport",	Opt_privport),
+	fsparam_u32	("port",		Opt_port),
+	fsparam_flag	("privport",		Opt_privport),
 	{}
 };
 
@@ -159,6 +162,10 @@ int v9fs_show_options(struct seq_file *m, struct dentry *root)
 			   from_kgid_munged(&init_user_ns, v9ses->dfltgid));
 	if (v9ses->afid != ~0)
 		seq_printf(m, ",afid=%u", v9ses->afid);
+	if (v9ses->ndentry_timeout_ms == NDENTRY_TMOUT_NEVER)
+		seq_printf(m, ",ndentrycache");
+	else if (v9ses->flags & V9FS_NDENTRY_TMOUT_SET)
+		seq_printf(m, ",ndentrycache=%u", v9ses->ndentry_timeout_ms);
 	if (strcmp(v9ses->uname, V9FS_DEFUSER) != 0)
 		seq_printf(m, ",uname=%s", v9ses->uname);
 	if (strcmp(v9ses->aname, V9FS_DEFANAME) != 0)
@@ -335,6 +342,16 @@ int v9fs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			return -EINVAL;
 		}
 		session_opts->session_lock_timeout = (long)result.uint_32 * HZ;
+		break;
+
+	case Opt_ndentrycache:
+		session_opts->flags |= V9FS_NDENTRY_TMOUT_SET;
+		session_opts->ndentry_timeout_ms = NDENTRY_TMOUT_NEVER;
+		break;
+
+	case Opt_ndentrycachetmo:
+		session_opts->flags |= V9FS_NDENTRY_TMOUT_SET;
+		session_opts->ndentry_timeout_ms = result.uint_64;
 		break;
 
 	/* Options for client */
