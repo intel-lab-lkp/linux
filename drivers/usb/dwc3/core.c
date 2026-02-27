@@ -782,6 +782,20 @@ static int dwc3_hs_phy_setup(struct dwc3 *dwc, int index)
 	return 0;
 }
 
+static void dwc3_hs_apply_ulpi_quirks(struct dwc3 *dwc)
+{
+	if (dwc->enable_usb2_transceiver_delay) {
+		int index;
+		u32 reg;
+
+		for (index = 0; index < dwc->num_usb2_ports; index++) {
+			reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(index));
+			reg |= DWC3_GUSB2PHYCFG_XCVRDLY;
+			dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(index), reg);
+		}
+	}
+}
+
 /**
  * dwc3_phy_setup - Configure USB PHY Interface of DWC3 Core
  * @dwc: Pointer to our controller context structure
@@ -1361,6 +1375,8 @@ int dwc3_core_init(struct dwc3 *dwc)
 			return ret;
 		}
 		dwc->ulpi_ready = true;
+
+		dwc3_hs_apply_ulpi_quirks(dwc);
 	}
 
 	if (!dwc->phys_ready) {
