@@ -95,11 +95,9 @@ static int compression_decompress_bio(struct list_head *ws,
 	case BTRFS_COMPRESS_ZSTD: return zstd_decompress_bio(ws, cb);
 	case BTRFS_COMPRESS_NONE:
 	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
+		btrfs_err(cb_to_fs_info(cb), "invalid compression type %d",
+			  cb->compress_type);
+		return -EUCLEAN;
 	}
 }
 
@@ -116,11 +114,7 @@ static int compression_decompress(int type, struct list_head *ws,
 						dest_pgoff, srclen, destlen);
 	case BTRFS_COMPRESS_NONE:
 	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
+		return -EUCLEAN;
 	}
 }
 
@@ -706,11 +700,8 @@ static struct list_head *alloc_workspace(struct btrfs_fs_info *fs_info, int type
 	case BTRFS_COMPRESS_LZO:  return lzo_alloc_workspace(fs_info);
 	case BTRFS_COMPRESS_ZSTD: return zstd_alloc_workspace(fs_info, level);
 	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
+		btrfs_err(fs_info, "invalid compression type %d", type);
+		return ERR_PTR(-EUCLEAN);
 	}
 }
 
@@ -722,11 +713,8 @@ static void free_workspace(int type, struct list_head *ws)
 	case BTRFS_COMPRESS_LZO:  return lzo_free_workspace(ws);
 	case BTRFS_COMPRESS_ZSTD: return zstd_free_workspace(ws);
 	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
+		WARN_ONCE(1, "invalid compression type %d", type);
+		return;
 	}
 }
 
@@ -877,11 +865,8 @@ static struct list_head *get_workspace(struct btrfs_fs_info *fs_info, int type, 
 	case BTRFS_COMPRESS_LZO:  return btrfs_get_workspace(fs_info, type, level);
 	case BTRFS_COMPRESS_ZSTD: return zstd_get_workspace(fs_info, level);
 	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
+		btrfs_err(fs_info, "invalid compression type %d", type);
+		return ERR_PTR(-EUCLEAN);
 	}
 }
 
@@ -928,11 +913,8 @@ static void put_workspace(struct btrfs_fs_info *fs_info, int type, struct list_h
 	case BTRFS_COMPRESS_LZO:  return btrfs_put_workspace(fs_info, type, ws);
 	case BTRFS_COMPRESS_ZSTD: return zstd_put_workspace(fs_info, ws);
 	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
+		btrfs_err(fs_info, "invalid compression type %d", type);
+		return;
 	}
 }
 
