@@ -628,7 +628,13 @@ static noinline int remove_extent_data_ref(struct btrfs_trans_handle *trans,
 		return -EUCLEAN;
 	}
 
-	BUG_ON(num_refs < refs_to_drop);
+	if (unlikely(num_refs < refs_to_drop)) {
+		btrfs_err(trans->fs_info,
+			  "dropping more refs than available, have %u want %u",
+			  num_refs, refs_to_drop);
+		btrfs_abort_transaction(trans, -EUCLEAN);
+		return -EUCLEAN;
+	}
 	num_refs -= refs_to_drop;
 
 	if (num_refs == 0) {
@@ -905,7 +911,13 @@ again:
 
 	if (flags & BTRFS_EXTENT_FLAG_TREE_BLOCK && !skinny_metadata) {
 		ptr += sizeof(struct btrfs_tree_block_info);
-		BUG_ON(ptr > end);
+		if (unlikely(ptr > end)) {
+			btrfs_err(
+				fs_info,
+				"extent item overflow at slot %d, ptr %lu end %lu",
+				path->slots[0], ptr, end);
+			return -EUCLEAN;
+		}
 	}
 
 	if (owner >= BTRFS_FIRST_FREE_OBJECTID)
@@ -1279,7 +1291,12 @@ static int remove_extent_backref(struct btrfs_trans_handle *trans,
 {
 	int ret = 0;
 
-	BUG_ON(!is_data && refs_to_drop != 1);
+	if (unlikely(!is_data && refs_to_drop != 1)) {
+		btrfs_err(trans->fs_info,
+			  "invalid refs_to_drop %d for tree block, must be 1",
+			  refs_to_drop);
+		return -EUCLEAN;
+	}
 	if (iref)
 		ret = update_inline_extent_backref(trans, path, iref,
 						   -refs_to_drop, NULL);
@@ -1495,8 +1512,9 @@ int btrfs_inc_extent_ref(struct btrfs_trans_handle *trans,
 
 	ASSERT(generic_ref->type != BTRFS_REF_NOT_SET &&
 	       generic_ref->action);
-	BUG_ON(generic_ref->type == BTRFS_REF_METADATA &&
-	       generic_ref->ref_root == BTRFS_TREE_LOG_OBJECTID);
+	if (WARN_ON(generic_ref->type == BTRFS_REF_METADATA &&
+		    generic_ref->ref_root == BTRFS_TREE_LOG_OBJECTID))
+		return -EINVAL;
 
 	if (generic_ref->type == BTRFS_REF_METADATA)
 		ret = btrfs_add_delayed_tree_ref(trans, generic_ref, NULL);
@@ -1664,7 +1682,9 @@ static int run_delayed_data_ref(struct btrfs_trans_handle *trans,
 	} else if (node->action == BTRFS_DROP_DELAYED_REF) {
 		ret = __btrfs_free_extent(trans, href, node, extent_op);
 	} else {
-		BUG();
+		btrfs_err(trans->fs_info, "unexpected delayed ref action %d",
+			  node->action);
+		return -EUCLEAN;
 	}
 	return ret;
 }
@@ -1681,7 +1701,8 @@ static void __run_delayed_extent_op(struct btrfs_delayed_extent_op *extent_op,
 
 	if (extent_op->update_key) {
 		struct btrfs_tree_block_info *bi;
-		BUG_ON(!(flags & BTRFS_EXTENT_FLAG_TREE_BLOCK));
+		if (WARN_ON(!(flags & BTRFS_EXTENT_FLAG_TREE_BLOCK)))
+			return;
 		bi = (struct btrfs_tree_block_info *)(ei + 1);
 		btrfs_set_tree_block_key(leaf, bi, &extent_op->key);
 	}
@@ -1823,7 +1844,9 @@ static int run_delayed_tree_ref(struct btrfs_trans_handle *trans,
 		else
 			ret = __btrfs_free_extent(trans, href, node, extent_op);
 	} else {
-		BUG();
+		btrfs_err(trans->fs_info, "unexpected delayed ref action %d",
+			  node->action);
+		return -EUCLEAN;
 	}
 	return ret;
 }
@@ -2706,7 +2729,11 @@ int btrfs_pin_extent(struct btrfs_trans_handle *trans, u64 bytenr, u64 num_bytes
 	struct btrfs_block_group *cache;
 
 	cache = btrfs_lookup_block_group(trans->fs_info, bytenr);
-	BUG_ON(!cache); /* Logic error */
+	if (unlikely(!cache)) {
+		btrfs_err(trans->fs_info,
+			  "unable to find block group for bytenr %llu", bytenr);
+		return -EUCLEAN;
+	}
 
 	pin_down_extent(trans, cache, bytenr, num_bytes, true);
 
@@ -4201,7 +4228,9 @@ static int do_allocation(struct btrfs_block_group *block_group,
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		return do_allocation_zoned(block_group, ffe_ctl, bg_ret);
 	default:
-		BUG();
+		btrfs_err(block_group->fs_info, "invalid allocation policy %d",
+			  ffe_ctl->policy);
+		return -EUCLEAN;
 	}
 }
 
@@ -4217,11 +4246,20 @@ static void release_block_group(struct btrfs_block_group *block_group,
 		/* Nothing to do */
 		break;
 	default:
-		BUG();
+		btrfs_err(block_group->fs_info, "invalid allocation policy %d",
+			  ffe_ctl->policy);
+		goto release;
 	}
 
-	BUG_ON(btrfs_bg_flags_to_raid_index(block_group->flags) !=
-	       ffe_ctl->index);
+	if (unlikely(btrfs_bg_flags_to_raid_index(block_group->flags) !=
+		     ffe_ctl->index)) {
+		btrfs_err(block_group->fs_info,
+			  "mismatched raid index, block group flags %llu index %d",
+			  block_group->flags, ffe_ctl->index);
+		goto release;
+	}
+
+release:
 	btrfs_release_block_group(block_group, delalloc);
 }
 
@@ -4248,7 +4286,8 @@ static void found_extent(struct find_free_extent_ctl *ffe_ctl,
 		/* Nothing to do */
 		break;
 	default:
-		BUG();
+		WARN_ONCE(1, "invalid allocation policy %d", ffe_ctl->policy);
+		return;
 	}
 }
 
@@ -4314,7 +4353,9 @@ static int can_allocate_chunk(struct btrfs_fs_info *fs_info,
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		return can_allocate_chunk_zoned(fs_info, ffe_ctl);
 	default:
-		BUG();
+		btrfs_err(fs_info, "invalid allocation policy %d",
+			  ffe_ctl->policy);
+		return -EUCLEAN;
 	}
 }
 
@@ -4524,7 +4565,9 @@ static int prepare_allocation(struct btrfs_fs_info *fs_info,
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		return prepare_allocation_zoned(fs_info, ffe_ctl, space_info);
 	default:
-		BUG();
+		btrfs_err(fs_info, "invalid allocation policy %d",
+			  ffe_ctl->policy);
+		return -EUCLEAN;
 	}
 }
 
@@ -5382,8 +5425,8 @@ struct extent_buffer *btrfs_alloc_tree_block(struct btrfs_trans_handle *trans,
 			parent = ins.objectid;
 		flags |= BTRFS_BLOCK_FLAG_FULL_BACKREF;
 		owning_root = reloc_src_root;
-	} else
-		BUG_ON(parent > 0);
+	} else if (WARN_ON(parent > 0))
+		return ERR_PTR(-EINVAL);
 
 	if (root_objectid != BTRFS_TREE_LOG_OBJECTID) {
 		struct btrfs_delayed_extent_op *extent_op;
@@ -6527,7 +6570,8 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 	int parent_level;
 	int ret = 0;
 
-	BUG_ON(btrfs_root_id(root) != BTRFS_TREE_RELOC_OBJECTID);
+	if (WARN_ON(btrfs_root_id(root) != BTRFS_TREE_RELOC_OBJECTID))
+		return -EINVAL;
 
 	path = btrfs_alloc_path();
 	if (!path)
