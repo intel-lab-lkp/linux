@@ -757,101 +757,6 @@ static inline unsigned long get_orig_size(struct kmem_cache *s, void *object)
 	return *(unsigned long *)p;
 }
 
-#ifdef CONFIG_SLAB_OBJ_EXT
-
-/*
- * Check if memory cgroup or memory allocation profiling is enabled.
- * If enabled, SLUB tries to reduce memory overhead of accounting
- * slab objects. If neither is enabled when this function is called,
- * the optimization is simply skipped to avoid affecting caches that do not
- * need slabobj_ext metadata.
- *
- * However, this may disable optimization when memory cgroup or memory
- * allocation profiling is used, but slabs are created too early
- * even before those subsystems are initialized.
- */
-static inline bool need_slab_obj_exts(struct kmem_cache *s)
-{
-	if (s->flags & SLAB_NO_OBJ_EXT)
-		return false;
-
-	if (memcg_kmem_online() && (s->flags & SLAB_ACCOUNT))
-		return true;
-
-	if (mem_alloc_profiling_enabled())
-		return true;
-
-	return false;
-}
-
-static inline unsigned int obj_exts_size_in_slab(struct slab *slab)
-{
-	return sizeof(struct slabobj_ext) * slab->objects;
-}
-
-static inline unsigned long obj_exts_offset_in_slab(struct kmem_cache *s,
-						    struct slab *slab)
-{
-	unsigned long objext_offset;
-
-	objext_offset = s->size * slab->objects;
-	objext_offset = ALIGN(objext_offset, sizeof(struct slabobj_ext));
-	return objext_offset;
-}
-
-static inline bool obj_exts_fit_within_slab_leftover(struct kmem_cache *s,
-						     struct slab *slab)
-{
-	unsigned long objext_offset = obj_exts_offset_in_slab(s, slab);
-	unsigned long objext_size = obj_exts_size_in_slab(slab);
-
-	return objext_offset + objext_size <= slab_size(slab);
-}
-
-static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
-{
-	unsigned long obj_exts;
-	unsigned long start;
-	unsigned long end;
-
-	obj_exts = slab_obj_exts(slab);
-	if (!obj_exts)
-		return false;
-
-	start = (unsigned long)slab_address(slab);
-	end = start + slab_size(slab);
-	return (obj_exts >= start) && (obj_exts < end);
-}
-#else
-static inline bool need_slab_obj_exts(struct kmem_cache *s)
-{
-	return false;
-}
-
-static inline unsigned int obj_exts_size_in_slab(struct slab *slab)
-{
-	return 0;
-}
-
-static inline unsigned long obj_exts_offset_in_slab(struct kmem_cache *s,
-						    struct slab *slab)
-{
-	return 0;
-}
-
-static inline bool obj_exts_fit_within_slab_leftover(struct kmem_cache *s,
-						     struct slab *slab)
-{
-	return false;
-}
-
-static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
-{
-	return false;
-}
-
-#endif
-
 #if defined(CONFIG_SLAB_OBJ_EXT) && defined(CONFIG_64BIT)
 static bool obj_exts_in_object(struct kmem_cache *s, struct slab *slab)
 {
@@ -2196,7 +2101,6 @@ int alloc_slab_obj_exts(struct slab *slab, struct kmem_cache *s,
 retry:
 	old_exts = READ_ONCE(slab->obj_exts);
 	handle_failed_objexts_alloc(old_exts, vec, objects);
-	slab_set_stride(slab, sizeof(struct slabobj_ext));
 
 	if (new_slab) {
 		/*
@@ -2272,6 +2176,9 @@ static void alloc_slab_obj_exts_early(struct kmem_cache *s, struct slab *slab)
 	void *addr;
 	unsigned long obj_exts;
 
+	/* Initialize stride early to avoid memory ordering issues */
+	slab_set_stride(slab, sizeof(struct slabobj_ext));
+
 	if (!need_slab_obj_exts(s))
 		return;
 
@@ -2288,7 +2195,6 @@ static void alloc_slab_obj_exts_early(struct kmem_cache *s, struct slab *slab)
 		obj_exts |= MEMCG_DATA_OBJEXTS;
 #endif
 		slab->obj_exts = obj_exts;
-		slab_set_stride(slab, sizeof(struct slabobj_ext));
 	} else if (s->flags & SLAB_OBJ_EXT_IN_OBJ) {
 		unsigned int offset = obj_exts_offset_in_object(s);
 

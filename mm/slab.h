@@ -578,6 +578,101 @@ static inline unsigned short slab_get_stride(struct slab *slab)
 }
 #endif
 
+#ifdef CONFIG_SLAB_OBJ_EXT
+
+/*
+ * Check if memory cgroup or memory allocation profiling is enabled.
+ * If enabled, SLUB tries to reduce memory overhead of accounting
+ * slab objects. If neither is enabled when this function is called,
+ * the optimization is simply skipped to avoid affecting caches that do not
+ * need slabobj_ext metadata.
+ *
+ * However, this may disable optimization when memory cgroup or memory
+ * allocation profiling is used, but slabs are created too early
+ * even before those subsystems are initialized.
+ */
+static inline bool need_slab_obj_exts(struct kmem_cache *s)
+{
+	if (s->flags & SLAB_NO_OBJ_EXT)
+		return false;
+
+	if (memcg_kmem_online() && (s->flags & SLAB_ACCOUNT))
+		return true;
+
+	if (mem_alloc_profiling_enabled())
+		return true;
+
+	return false;
+}
+
+static inline unsigned int obj_exts_size_in_slab(struct slab *slab)
+{
+	return sizeof(struct slabobj_ext) * slab->objects;
+}
+
+static inline unsigned long obj_exts_offset_in_slab(struct kmem_cache *s,
+						    struct slab *slab)
+{
+	unsigned long objext_offset;
+
+	objext_offset = s->size * slab->objects;
+	objext_offset = ALIGN(objext_offset, sizeof(struct slabobj_ext));
+	return objext_offset;
+}
+
+static inline bool obj_exts_fit_within_slab_leftover(struct kmem_cache *s,
+						     struct slab *slab)
+{
+	unsigned long objext_offset = obj_exts_offset_in_slab(s, slab);
+	unsigned long objext_size = obj_exts_size_in_slab(slab);
+
+	return objext_offset + objext_size <= slab_size(slab);
+}
+
+static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
+{
+	unsigned long obj_exts;
+	unsigned long start;
+	unsigned long end;
+
+	obj_exts = slab_obj_exts(slab);
+	if (!obj_exts)
+		return false;
+
+	start = (unsigned long)slab_address(slab);
+	end = start + slab_size(slab);
+	return (obj_exts >= start) && (obj_exts < end);
+}
+#else
+static inline bool need_slab_obj_exts(struct kmem_cache *s)
+{
+	return false;
+}
+
+static inline unsigned int obj_exts_size_in_slab(struct slab *slab)
+{
+	return 0;
+}
+
+static inline unsigned long obj_exts_offset_in_slab(struct kmem_cache *s,
+						    struct slab *slab)
+{
+	return 0;
+}
+
+static inline bool obj_exts_fit_within_slab_leftover(struct kmem_cache *s,
+						     struct slab *slab)
+{
+	return false;
+}
+
+static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
+{
+	return false;
+}
+
+#endif
+
 /*
  * slab_obj_ext - get the pointer to the slab object extension metadata
  * associated with an object in a slab.
@@ -592,13 +687,41 @@ static inline struct slabobj_ext *slab_obj_ext(struct slab *slab,
 					       unsigned long obj_exts,
 					       unsigned int index)
 {
-	struct slabobj_ext *obj_ext;
+	struct slabobj_ext *ext_before;
+	struct slabobj_ext *ext_after;
+	struct obj_cgroup *objcg_before;
+	struct obj_cgroup *objcg_after;
 
 	VM_WARN_ON_ONCE(obj_exts != slab_obj_exts(slab));
 
-	obj_ext = (struct slabobj_ext *)(obj_exts +
-					 slab_get_stride(slab) * index);
-	return kasan_reset_tag(obj_ext);
+	ext_before = (struct slabobj_ext *)(obj_exts +
+					    slab_get_stride(slab) * index);
+	objcg_before = ext_before->objcg;
+	// re-read things after rmb
+	smp_rmb();
+	// is ext_before the right obj_ext for this object?
+	if (obj_exts_in_slab(slab->slab_cache, slab)) {
+		struct kmem_cache *s = slab->slab_cache;
+
+		if (obj_exts_fit_within_slab_leftover(s, slab))
+			WARN(ext_before != (struct slabobj_ext *)(obj_exts + sizeof(struct slabobj_ext) * index),
+			     "obj_exts array in leftover");
+		else
+			WARN(ext_before != (struct slabobj_ext *)(obj_exts + s->size * index),
+			     "obj_ext in object");
+
+	} else {
+		WARN(ext_before != (struct slabobj_ext *)(obj_exts + sizeof(struct slabobj_ext) * index),
+		     "obj_exts array allocated from slab");
+	}
+
+	ext_after = (struct slabobj_ext *)(obj_exts +
+					   slab_get_stride(slab) * index);
+	objcg_after = ext_after->objcg;
+
+	WARN(ext_before != ext_after, "obj_ext pointer has changed");
+	WARN(objcg_before != objcg_after, "obj_ext->objcg has changed");
+	return kasan_reset_tag(ext_before);
 }
 
 int alloc_slab_obj_exts(struct slab *slab, struct kmem_cache *s,
