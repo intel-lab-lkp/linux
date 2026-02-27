@@ -33,6 +33,7 @@
 #define SS_CAP_BT_CALL_DUCKING		BIT(9)
 #define SS_CAP_INACTIVE_TIME		BIT(10)
 #define SS_CAP_BT_AUTO_ENABLE		BIT(11)
+#define SS_CAP_MIC_MUTE_BRIGHTNESS	BIT(12)
 
 #define SS_QUIRK_STATUS_SYNC_POLL	BIT(0)
 
@@ -42,6 +43,7 @@
 #define SS_SETTING_BT_CALL_DUCKING	3
 #define SS_SETTING_INACTIVE_TIME	4
 #define SS_SETTING_BT_AUTO_ENABLE	5
+#define SS_SETTING_MIC_MUTE_BRIGHTNESS	6
 
 struct steelseries_device;
 
@@ -100,6 +102,12 @@ struct steelseries_device {
 	bool bt_device_connected;
 	u8 inactive_timeout;
 	bool bt_auto_enable;
+	u8 mic_mute_brightness;
+
+#if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
+    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
+	struct led_classdev *mic_mute_led;
+#endif
 
 	spinlock_t lock;
 	bool removed;
@@ -606,6 +614,14 @@ static int steelseries_arctis_nova_5_write_setting(struct hid_device *hdev,
 	case SS_SETTING_INACTIVE_TIME:
 		cmd = 0xa3;
 		break;
+	case SS_SETTING_MIC_MUTE_BRIGHTNESS:
+		cmd = 0xae;
+		/* Hardware uses non-linear values: 0=off, 1=low, 4=medium, 10=high */
+		if (value == 2)
+			value = 0x04;
+		else if (value == 3)
+			value = 0x0a;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -649,6 +665,9 @@ static int steelseries_arctis_nova_7_write_setting(struct hid_device *hdev,
 		break;
 	case SS_SETTING_BT_AUTO_ENABLE:
 		cmd = 0xb2;
+		break;
+	case SS_SETTING_MIC_MUTE_BRIGHTNESS:
+		cmd = 0xae;
 		break;
 	default:
 		return -EINVAL;
@@ -1005,6 +1024,7 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 		break;
 	case 0xa0:
 		sd->inactive_timeout = data[1];
+		sd->mic_mute_brightness = data[2];
 		sd->bt_auto_enable = data[3];
 		sd->bt_call_ducking = data[4];
 		break;
@@ -1019,6 +1039,9 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 		break;
 	case 0xa3:
 		sd->inactive_timeout = data[1];
+		break;
+	case 0xae:
+		sd->mic_mute_brightness = data[1];
 		break;
 	case 0xb2:
 		sd->bt_auto_enable = data[1];
@@ -1129,7 +1152,8 @@ static const struct steelseries_device_info arctis_nova_3p_info = {
 static const struct steelseries_device_info arctis_nova_5_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME |
-			SS_CAP_VOLUME_LIMITER | SS_CAP_INACTIVE_TIME,
+			SS_CAP_VOLUME_LIMITER | SS_CAP_INACTIVE_TIME |
+			SS_CAP_MIC_MUTE_BRIGHTNESS,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 10,
 	.mic_volume_max = 15,
@@ -1143,7 +1167,7 @@ static const struct steelseries_device_info arctis_nova_5x_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
 			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
-			SS_CAP_INACTIVE_TIME,
+			SS_CAP_INACTIVE_TIME | SS_CAP_MIC_MUTE_BRIGHTNESS,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 10,
 	.mic_volume_max = 15,
@@ -1158,7 +1182,7 @@ static const struct steelseries_device_info arctis_nova_7_info = {
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
 			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
 			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME |
-			SS_CAP_BT_AUTO_ENABLE,
+			SS_CAP_BT_AUTO_ENABLE | SS_CAP_MIC_MUTE_BRIGHTNESS,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
@@ -1172,7 +1196,7 @@ static const struct steelseries_device_info arctis_nova_7p_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
 			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME |
-			SS_CAP_BT_AUTO_ENABLE,
+			SS_CAP_BT_AUTO_ENABLE | SS_CAP_MIC_MUTE_BRIGHTNESS,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.mic_volume_max = 7,
 	.inactive_time_max = 255,
@@ -1189,7 +1213,7 @@ static const struct steelseries_device_info arctis_nova_7_gen2_info = {
 			SS_CAP_EXTERNAL_CONFIG | SS_CAP_SIDETONE |
 			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
 			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME |
-			SS_CAP_BT_AUTO_ENABLE,
+			SS_CAP_BT_AUTO_ENABLE | SS_CAP_MIC_MUTE_BRIGHTNESS,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
 	.inactive_time_max = 255,
@@ -1970,6 +1994,82 @@ static void steelseries_snd_unregister(struct steelseries_device *sd)
 
 #endif
 
+/*
+ * Mic mute LED
+ */
+
+#if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
+    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
+
+#define SS_MIC_MUTE_BRIGHTNESS_MAX 3
+
+static int steelseries_mic_mute_led_brightness_set(struct led_classdev *led_cdev,
+						   enum led_brightness brightness)
+{
+	struct device *dev = led_cdev->dev->parent;
+	struct hid_device *hdev = to_hid_device(dev);
+	struct steelseries_device *sd = hid_get_drvdata(hdev);
+	unsigned long flags;
+	int ret;
+
+	if (brightness > SS_MIC_MUTE_BRIGHTNESS_MAX)
+		brightness = SS_MIC_MUTE_BRIGHTNESS_MAX;
+
+	spin_lock_irqsave(&sd->lock, flags);
+	if (sd->removed) {
+		spin_unlock_irqrestore(&sd->lock, flags);
+		return 0;
+	}
+	spin_unlock_irqrestore(&sd->lock, flags);
+
+	ret = sd->info->write_setting(sd->hdev, SS_SETTING_MIC_MUTE_BRIGHTNESS,
+				      brightness);
+	if (ret)
+		return ret;
+
+	sd->mic_mute_brightness = brightness;
+
+	return 0;
+}
+
+static enum led_brightness
+steelseries_mic_mute_led_brightness_get(struct led_classdev *led_cdev)
+{
+	struct device *dev = led_cdev->dev->parent;
+	struct hid_device *hdev = to_hid_device(dev);
+	struct steelseries_device *sd = hid_get_drvdata(hdev);
+
+	return sd->mic_mute_brightness;
+}
+
+static int steelseries_mic_mute_led_register(struct steelseries_device *sd)
+{
+	struct hid_device *hdev = sd->hdev;
+	struct led_classdev *led;
+	size_t name_size;
+	char *name;
+
+	name_size = strlen(dev_name(&hdev->dev)) + 16;
+
+	led = devm_kzalloc(&hdev->dev, sizeof(*led) + name_size, GFP_KERNEL);
+	if (!led)
+		return -ENOMEM;
+
+	name = (void *)(&led[1]);
+	snprintf(name, name_size, "%s::micmute", dev_name(&hdev->dev));
+	led->name = name;
+	led->brightness = 0;
+	led->max_brightness = SS_MIC_MUTE_BRIGHTNESS_MAX;
+	led->brightness_get = steelseries_mic_mute_led_brightness_get;
+	led->brightness_set_blocking = steelseries_mic_mute_led_brightness_set;
+
+	sd->mic_mute_led = led;
+
+	return devm_led_classdev_register(&hdev->dev, led);
+}
+
+#endif
+
 static int steelseries_raw_event(struct hid_device *hdev,
 				 struct hid_report *report, u8 *data, int size)
 {
@@ -2173,6 +2273,15 @@ static int steelseries_probe(struct hid_device *hdev,
 		ret = steelseries_snd_register(sd);
 		if (ret < 0)
 			hid_warn(hdev, "Failed to register sound card: %d\n", ret);
+#endif
+
+#if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
+	(IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
+		if (info->capabilities & SS_CAP_MIC_MUTE_BRIGHTNESS) {
+			ret = steelseries_mic_mute_led_register(sd);
+			if (ret < 0)
+				hid_warn(hdev, "Failed to register mic mute LED: %d\n", ret);
+		}
 #endif
 
 		INIT_DELAYED_WORK(&sd->status_work, steelseries_status_timer_work_handler);
