@@ -49,6 +49,7 @@ static struct key *integrity_keyring_from_id(const unsigned int id)
 			request_key(&key_type_keyring, keyring_name[id], NULL);
 		if (IS_ERR(keyring[id])) {
 			int err = PTR_ERR(keyring[id]);
+
 			pr_err("no %s keyring: %d\n", keyring_name[id], err);
 			keyring[id] = NULL;
 			return ERR_PTR(err);
