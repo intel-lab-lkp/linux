@@ -37,6 +37,7 @@
 #include <asm/lbt.h>
 #include <asm/ucontext.h>
 #include <asm/vdso.h>
+#include <asm/sigframe.h>
 
 #ifdef DEBUG_SIG
 #  define DEBUGP(fmt, args...) printk("%s: " fmt, __func__, ##args)
@@ -50,11 +51,6 @@
 /* Make sure we will not lose LBT ownership */
 #define lock_lbt_owner()	({ preempt_disable(); pagefault_disable(); })
 #define unlock_lbt_owner()	({ pagefault_enable(); preempt_enable(); })
-
-struct rt_sigframe {
-	struct siginfo rs_info;
-	struct ucontext rs_uctx;
-};
 
 struct _ctx_layout {
 	struct sctx_info *addr;
