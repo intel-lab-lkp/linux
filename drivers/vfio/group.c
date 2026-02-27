@@ -588,7 +588,7 @@ err_put:
 	return ret;
 }
 
-static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
+static struct vfio_group *vfio_noiommu_group_alloc(struct vfio_device *vdev,
 		enum vfio_group_type type)
 {
 	struct iommu_group *iommu_group;
@@ -610,7 +610,7 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 	ret = iommu_group_set_name(iommu_group, "vfio-noiommu");
 	if (ret)
 		goto out_put_group;
-	ret = iommu_group_add_device(iommu_group, dev);
+	ret = iommu_group_add_device(iommu_group, vdev->dev);
 	if (ret)
 		goto out_put_group;
 
@@ -625,7 +625,7 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 	return group;
 
 out_remove_device:
-	iommu_group_remove_device(dev);
+	iommu_group_remove_device(vdev->dev);
 out_put_group:
 	iommu_group_put(iommu_group);
 	return ERR_PTR(ret);
@@ -646,23 +646,24 @@ static bool vfio_group_has_device(struct vfio_group *group, struct device *dev)
 	return false;
 }
 
-static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
+static struct vfio_group *vfio_group_find_or_alloc(struct vfio_device *vdev)
 {
 	struct iommu_group *iommu_group;
 	struct vfio_group *group;
 
-	iommu_group = iommu_group_get(dev);
+	iommu_group = iommu_group_get(vdev->dev);
 	if (!iommu_group && vfio_noiommu) {
+		vdev->noiommu = 1;
 		/*
 		 * With noiommu enabled, create an IOMMU group for devices that
 		 * don't already have one, implying no IOMMU hardware/driver
 		 * exists.  Taint the kernel because we're about to give a DMA
 		 * capable device to a user without IOMMU protection.
 		 */
-		group = vfio_noiommu_group_alloc(dev, VFIO_NO_IOMMU);
+		group = vfio_noiommu_group_alloc(vdev, VFIO_NO_IOMMU);
 		if (!IS_ERR(group)) {
 			add_taint(TAINT_USER, LOCKDEP_STILL_OK);
-			dev_warn(dev, "Adding kernel taint for vfio-noiommu group on device\n");
+			dev_warn(vdev->dev, "Adding kernel taint for vfio-noiommu group on device\n");
 		}
 		return group;
 	}
@@ -673,7 +674,7 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	mutex_lock(&vfio.group_lock);
 	group = vfio_group_find_from_iommu(iommu_group);
 	if (group) {
-		if (WARN_ON(vfio_group_has_device(group, dev)))
+		if (WARN_ON(vfio_group_has_device(group, vdev->dev)))
 			group = ERR_PTR(-EINVAL);
 		else
 			refcount_inc(&group->drivers);
@@ -693,9 +694,9 @@ int vfio_device_set_group(struct vfio_device *device,
 	struct vfio_group *group;
 
 	if (type == VFIO_IOMMU)
-		group = vfio_group_find_or_alloc(device->dev);
+		group = vfio_group_find_or_alloc(device);
 	else
-		group = vfio_noiommu_group_alloc(device->dev, type);
+		group = vfio_noiommu_group_alloc(device, type);
 
 	if (IS_ERR(group))
 		return PTR_ERR(group);
