@@ -383,7 +383,9 @@ static void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
 	cpu = raw_smp_processor_id();
 
 	if (blk_tracer) {
+		preempt_disable_notrace();
 		tracing_record_cmdline(current);
+		preempt_enable_notrace();
 
 		buffer = blk_tr->array_buffer.buffer;
 		trace_ctx = tracing_gen_ctx_flags(0);
