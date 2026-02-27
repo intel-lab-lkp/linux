@@ -11914,6 +11914,19 @@ static int kvm_x86_vcpu_pre_run(struct kvm_vcpu *vcpu)
 	    !kvm_apic_init_sipi_allowed(vcpu))
 		return -EINVAL;
 
+	/*
+	 * If a triple fault was injected in guest mode (e.g. through
+	 * KVM_SET_VCPU_EVENTS), but before L2 actually ran, inject it into L1
+	 * instead of synthesizing a SHUTDOWN VM-Exit to L1, as synthesizing a
+	 * VM-Exit is not allowed before completing the nested VM-Enter.
+	 */
+	if (is_guest_mode(vcpu) && vcpu->arch.nested_run_pending &&
+	    kvm_check_request(KVM_REQ_TRIPLE_FAULT, vcpu)) {
+		vcpu->run->exit_reason = KVM_EXIT_SHUTDOWN;
+		vcpu->mmio_needed = 0;
+		return 0;
+	}
+
 	return kvm_x86_call(vcpu_pre_run)(vcpu);
 }
 
