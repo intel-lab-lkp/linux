@@ -8,6 +8,14 @@
 
 #include <asm-generic/kpkeys.h>
 
+/*
+ * Equivalent to por_set_kpkeys_level(0, KPKEYS_LVL_DEFAULT), but can also be
+ * used in assembly.
+ */
+#define POR_EL1_INIT	POR_ELx_PERM_PREP(KPKEYS_PKEY_DEFAULT, POE_RWX)
+
+#ifndef __ASSEMBLY__
+
 static inline bool arch_kpkeys_enabled(void)
 {
 	return system_supports_poe();
@@ -45,5 +53,7 @@ static __always_inline void arch_kpkeys_restore_pkey_reg(u64 pkey_reg)
 }
 
 #endif /* CONFIG_ARM64_POE */
+
+#endif	/* __ASSEMBLY__ */
 
 #endif	/* __ASM_KPKEYS_H */
