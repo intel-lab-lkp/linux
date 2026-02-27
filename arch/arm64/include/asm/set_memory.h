@@ -9,6 +9,9 @@
 bool can_set_direct_map(void);
 #define can_set_direct_map can_set_direct_map
 
+bool arch_has_pte_only_direct_map(void);
+#define arch_has_pte_only_direct_map arch_has_pte_only_direct_map
+
 int set_memory_valid(unsigned long addr, int numpages, int enable);
 
 int set_direct_map_invalid_noflush(struct page *page);

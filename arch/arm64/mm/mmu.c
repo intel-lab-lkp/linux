@@ -1181,6 +1181,11 @@ static void __init map_mem(pgd_t *pgdp)
 	arm64_kfence_map_pool(early_kfence_pool, pgdp);
 }
 
+bool arch_has_pte_only_direct_map(void)
+{
+	return force_pte_mapping();
+}
+
 void mark_rodata_ro(void)
 {
 	unsigned long section_size;
