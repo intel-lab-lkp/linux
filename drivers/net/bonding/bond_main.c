@@ -4272,17 +4272,17 @@ void bond_work_cancel_all(struct bonding *bond)
 	cancel_delayed_work_sync(&bond->peer_notify_work);
 }
 
+int bond_create_init(struct bonding *bond)
+{
+	bond->rr_tx_counter = alloc_percpu(u32);
+	return bond->rr_tx_counter ? 0 : -ENOMEM;
+}
+
 static int bond_open(struct net_device *bond_dev)
 {
 	struct bonding *bond = netdev_priv(bond_dev);
 	struct list_head *iter;
 	struct slave *slave;
-
-	if (BOND_MODE(bond) == BOND_MODE_ROUNDROBIN && !bond->rr_tx_counter) {
-		bond->rr_tx_counter = alloc_percpu(u32);
-		if (!bond->rr_tx_counter)
-			return -ENOMEM;
-	}
 
 	/* reset slave->backup and slave->inactive */
 	if (bond_has_slaves(bond)) {
@@ -6458,6 +6458,12 @@ int bond_create(struct net *net, const char *name)
 	bond = netdev_priv(bond_dev);
 	dev_net_set(bond_dev, net);
 	bond_dev->rtnl_link_ops = &bond_link_ops;
+
+	res = bond_create_init(bond);
+	if (res) {
+		free_netdev(bond_dev);
+		goto out;
+	}
 
 	res = register_netdevice(bond_dev);
 	if (res < 0) {

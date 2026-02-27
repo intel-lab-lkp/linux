@@ -714,6 +714,7 @@ void bond_slave_arr_work_rearm(struct bonding *bond, unsigned long delay);
 void bond_peer_notify_work_rearm(struct bonding *bond, unsigned long delay);
 void bond_work_init_all(struct bonding *bond);
 void bond_work_cancel_all(struct bonding *bond);
+int bond_create_init(struct bonding *bond);
 
 #ifdef CONFIG_PROC_FS
 void bond_create_proc_entry(struct bonding *bond);

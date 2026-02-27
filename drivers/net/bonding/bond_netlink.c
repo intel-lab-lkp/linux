@@ -598,6 +598,10 @@ static int bond_newlink(struct net_device *bond_dev,
 	struct nlattr **tb = params->tb;
 	int err;
 
+	err = bond_create_init(bond);
+	if (err)
+		return err;
+
 	err = register_netdevice(bond_dev);
 	if (err)
 		return err;
