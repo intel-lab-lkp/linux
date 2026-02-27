@@ -4433,7 +4433,8 @@ int bnxt_re_alloc_ucontext(struct ib_ucontext *ctx, struct ib_udata *udata)
 	}
 	spin_lock_init(&uctx->sh_lock);
 
-	resp.comp_mask = BNXT_RE_UCNTX_CMASK_HAVE_CCTX;
+	resp.comp_mask = BNXT_RE_UCNTX_CMASK_HAVE_CCTX |
+			 BNXT_RE_UCNTX_CMASK_UAPI_COMPAT_SUPPORTED;
 	chip_met_rev_num = rdev->chip_ctx->chip_num;
 	chip_met_rev_num |= ((u32)rdev->chip_ctx->chip_rev & 0xFF) <<
 			     BNXT_RE_CHIP_ID0_CHIP_REV_SFT;
