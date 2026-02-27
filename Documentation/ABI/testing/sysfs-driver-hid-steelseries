@@ -1,0 +1,87 @@
+What:		/sys/bus/hid/drivers/steelseries/<dev>/bt_enabled
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:	(RO) Whether the Bluetooth radio on the headset is currently
+		enabled.
+
+		* 0 = Bluetooth radio off
+		* 1 = Bluetooth radio on
+
+		Returns -ENODEV if the headset is not connected to the
+		receiver.
+
+		Supported on: Arctis Nova 7 Gen2, Arctis Nova Pro Wireless
+
+What:		/sys/bus/hid/drivers/steelseries/<dev>/bt_device_connected
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:	(RO) Whether a Bluetooth device is currently connected to
+		the headset.
+
+		* 0 = no Bluetooth device connected
+		* 1 = Bluetooth device connected
+
+		Returns -ENODEV if the headset is not connected to the
+		receiver.
+
+		Supported on: Arctis Nova 7 Gen2, Arctis Nova Pro Wireless
+
+What:		/sys/bus/hid/drivers/steelseries/<dev>/inactive_time
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:	(RW) Auto-shutoff timer for the headset, in minutes. A
+		value of 0 disables the timer. The maximum accepted value
+		is device-specific.
+
+		The encoding sent to the firmware varies by device family:
+		the Arctis 9 converts the value to seconds, the Nova 3P
+		rounds down to its nearest supported discrete step, and the
+		Nova Pro maps to six firmware-defined level indices. For all
+		other devices the value is sent in minutes directly.
+
+		Reading the attribute returns the last value reported by the
+		firmware. Writing immediately sends the new timeout to the
+		device.
+
+		Returns -ENODEV if the headset is not connected to the
+		receiver.
+
+		Supported on: Arctis 1 Wireless, Arctis 7, Arctis 7+,
+		Arctis 9, Arctis Nova 3P, Arctis Nova 5, Arctis Nova 5X,
+		Arctis Nova 7, Arctis Nova 7P, Arctis Nova 7 Gen2,
+		Arctis Nova Pro Wireless
+
+What:		/sys/bus/hid/drivers/steelseries/<dev>/bt_auto_enable
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:	(RW) Whether the headset automatically enables its
+		Bluetooth radio on power-on.
+
+		* 0 = Bluetooth radio stays off at power-on
+		* 1 = Bluetooth radio activates automatically at power-on
+
+		Returns -ENODEV if the headset is not connected to the
+		receiver.
+
+		Supported on: Arctis Nova 7, Arctis Nova 7P,
+		Arctis Nova 7 Gen2
+
+What:		/sys/class/leds/<dev>::micmute/brightness
+Date:		February 2026
+KernelVersion:	6.20
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:	(RW) Brightness of the microphone mute status LED.
+		<dev> is the HID device node name (e.g.
+		0003:1038:12AE.0001).
+
+		* 0 = off
+		* 1 = low
+		* 2 = medium
+		* 3 = high
+
+		Supported on: Arctis Nova 5, Arctis Nova 5X, Arctis Nova 7,
+		Arctis Nova 7P, Arctis Nova 7 Gen2
