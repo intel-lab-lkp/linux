@@ -6,6 +6,7 @@
 #include <linux/ethtool.h>
 
 #include <net/mana/mana.h>
+#include <net/page_pool/helpers.h>
 
 struct mana_stats_desc {
 	char name[ETH_GSTRING_LEN];
@@ -143,8 +144,10 @@ static int mana_get_sset_count(struct net_device *ndev, int stringset)
 	if (stringset != ETH_SS_STATS)
 		return -EINVAL;
 
-	return ARRAY_SIZE(mana_eth_stats) + ARRAY_SIZE(mana_phy_stats) + ARRAY_SIZE(mana_hc_stats) +
-			num_queues * (MANA_STATS_RX_COUNT + MANA_STATS_TX_COUNT);
+	return  ARRAY_SIZE(mana_eth_stats) + ARRAY_SIZE(mana_phy_stats) +
+		ARRAY_SIZE(mana_hc_stats) +
+		num_queues * (MANA_STATS_RX_COUNT + MANA_STATS_TX_COUNT) +
+		page_pool_ethtool_stats_get_count();
 }
 
 static void mana_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
@@ -185,6 +188,27 @@ static void mana_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 		ethtool_sprintf(&data, "tx_%d_csum_partial", i);
 		ethtool_sprintf(&data, "tx_%d_mana_map_err", i);
 	}
+
+	page_pool_ethtool_stats_get_strings(data);
+}
+
+static void mana_get_page_pool_stats(struct net_device *ndev, u64 *data)
+{
+#ifdef CONFIG_PAGE_POOL_STATS
+	struct mana_port_context *apc = netdev_priv(ndev);
+	unsigned int num_queues = apc->num_queues;
+	struct page_pool_stats pp_stats = {};
+	int q;
+
+	for (q = 0; q < num_queues; q++) {
+		if (!apc->rxqs[q] || !apc->rxqs[q]->page_pool)
+			continue;
+
+		page_pool_get_stats(apc->rxqs[q]->page_pool, &pp_stats);
+	}
+
+	page_pool_ethtool_stats_get(data, &pp_stats);
+#endif /* CONFIG_PAGE_POOL_STATS */
 }
 
 static void mana_get_ethtool_stats(struct net_device *ndev,
@@ -280,6 +304,8 @@ static void mana_get_ethtool_stats(struct net_device *ndev,
 		data[i++] = csum_partial;
 		data[i++] = mana_map_err;
 	}
+
+	mana_get_page_pool_stats(ndev, &data[i]);
 }
 
 static u32 mana_get_rx_ring_count(struct net_device *ndev)
