@@ -2444,6 +2444,11 @@ static int fbcon_do_set_font(struct vc_data *vc, int w, int h, int charcount,
 		rows = FBCON_SWAP(par->rotate, info->var.yres, info->var.xres);
 		cols /= w;
 		rows /= h;
+		if (!con_is_visible(vc)) {
+			ret = fbcon_rotate_font(info, vc);
+			if (ret)
+				goto err_out;
+		}
 		ret = vc_resize(vc, cols, rows);
 		if (ret)
 			goto err_out;
