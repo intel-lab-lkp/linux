@@ -125,6 +125,7 @@ void __init kpkeys_hardened_pgtables_init_late(void)
 		pba_init_late();
 
 	ppa_finalize();
+	arch_kpkeys_protect_static_pgtables();
 }
 
 /*
