@@ -81,6 +81,7 @@
 		| (IS_ENABLED(CONFIG_BLK_DEV_INTEGRITY) ? UBLK_F_INTEGRITY : 0) \
 		| UBLK_F_SAFE_STOP_DEV \
 		| UBLK_F_BATCH_IO \
+		| UBLK_F_NO_PARTITIONS \
 		| UBLK_F_NO_AUTO_PART_SCAN)
 
 #define UBLK_F_ALL_RECOVERY_FLAGS (UBLK_F_USER_RECOVERY \
@@ -2361,14 +2362,9 @@ static void ublk_partition_scan_work(struct work_struct *work)
 	if (!disk)
 		return;
 
-	if (WARN_ON_ONCE(!test_and_clear_bit(GD_SUPPRESS_PART_SCAN,
-					     &disk->state)))
-		goto out;
-
 	mutex_lock(&disk->open_mutex);
 	bdev_disk_changed(disk, false);
 	mutex_unlock(&disk->open_mutex);
-out:
 	ublk_put_disk(disk);
 }
 
@@ -4409,10 +4405,10 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 	 * wait while holding ub->mutex, which can deadlock with other
 	 * operations that need the mutex. Defer partition scan to async
 	 * work.
-	 * For unprivileged daemons, keep GD_SUPPRESS_PART_SCAN set
-	 * permanently.
+	 * For unprivileged daemons, set GENHD_FL_NO_PART to
+	 * disable partitions.
 	 */
-	set_bit(GD_SUPPRESS_PART_SCAN, &disk->state);
+	disk->flags |= GENHD_FL_NO_PART;
 
 	ublk_get_device(ub);
 	ub->dev_info.state = UBLK_S_DEV_LIVE;
@@ -4429,12 +4425,11 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 
 	set_bit(UB_STATE_USED, &ub->state);
 
-	/* Skip partition scan if disabled by user */
-	if (ub->dev_info.flags & UBLK_F_NO_AUTO_PART_SCAN) {
-		clear_bit(GD_SUPPRESS_PART_SCAN, &disk->state);
-	} else {
-		/* Schedule async partition scan for trusted daemons */
-		if (!ub->unprivileged_daemons)
+	if (!ub->unprivileged_daemons && !(ub->dev_info.flags & UBLK_F_NO_PARTITIONS)) {
+		/* Enable partitions on device */
+		disk->flags &= ~GENHD_FL_NO_PART;
+		/* Disable auto partition scan if requested */
+		if (!(ub->dev_info.flags & UBLK_F_NO_AUTO_PART_SCAN))
 			schedule_work(&ub->partition_scan_work);
 	}
 
