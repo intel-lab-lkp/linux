@@ -4820,7 +4820,7 @@ static void rtl8xxxu_set_aifs(struct rtl8xxxu_priv *priv, u8 slot_time)
 void rtl8xxxu_update_ra_report(struct rtl8xxxu_ra_report *rarpt,
 			       u8 rate, u8 sgi, u8 bw)
 {
-	u8 mcs, nss;
+	u8 mcs = 0, nss = 1;
 
 	rarpt->txrate.flags = 0;
 
