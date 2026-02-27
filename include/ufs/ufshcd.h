@@ -1038,6 +1038,7 @@ enum ufshcd_mcq_opr {
  * @host_deemphasis_cap: host TX DeEmphasis capability
  * @device_preshoot_cap: device TX PreShoot capability
  * @device_deemphasis_cap: device TX DeEmphasis capability
+ * @debugfs_tx_eq_gear: used to select Gear for TX Equalization debugfs entries
  * @tx_eq_params: TX Equalization settings
  */
 struct ufs_hba {
@@ -1217,6 +1218,7 @@ struct ufs_hba {
 	u32 host_deemphasis_cap;
 	u32 device_preshoot_cap;
 	u32 device_deemphasis_cap;
+	u32 debugfs_tx_eq_gear;
 	struct ufshcd_tx_eq_params tx_eq_params[UFS_HS_GEAR_MAX - 1];
 };
 
