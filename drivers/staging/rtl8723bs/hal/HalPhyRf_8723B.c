@@ -23,14 +23,14 @@
 
 /*---------------------------Define Local Constant---------------------------*/
 
-/* In the case that we fail to read TxPowerTrack.txt, we use the table for
- * 88E as the default table.
+/* In the case that we fail to read TxPowerTrack.txt, we use the default
+ * delta swing table.
  */
-static u8 DeltaSwingTableIdx_2GA_N_8188E[] = {
+static u8 DeltaSwingTableIdx_2GA_N_8723B[] = {
 	0, 0, 0, 2, 2, 3, 3, 4,  4,  4,  4,  5,  5,  6,  6,
 	7, 7, 7, 7, 8, 8, 9, 9, 10, 10, 10, 11, 11, 11, 11
 };
-static u8 DeltaSwingTableIdx_2GA_P_8188E[] = {
+static u8 DeltaSwingTableIdx_2GA_P_8723B[] = {
 	0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4,
 	4, 4, 4, 5, 5, 7, 7, 8, 8, 8, 9, 9, 9, 9, 9
 };
@@ -326,10 +326,10 @@ static void GetDeltaSwingTable_8723B(
 			*TemperatureDOWN_B = pRFCalibrateInfo->DeltaSwingTableIdx_2GB_N;
 		}
 	} else {
-		*TemperatureUP_A   = (u8 *)DeltaSwingTableIdx_2GA_P_8188E;
-		*TemperatureDOWN_A = (u8 *)DeltaSwingTableIdx_2GA_N_8188E;
-		*TemperatureUP_B   = (u8 *)DeltaSwingTableIdx_2GA_P_8188E;
-		*TemperatureDOWN_B = (u8 *)DeltaSwingTableIdx_2GA_N_8188E;
+		*TemperatureUP_A   = (u8 *)DeltaSwingTableIdx_2GA_P_8723B;
+		*TemperatureDOWN_A = (u8 *)DeltaSwingTableIdx_2GA_N_8723B;
+		*TemperatureUP_B   = (u8 *)DeltaSwingTableIdx_2GA_P_8723B;
+		*TemperatureDOWN_B = (u8 *)DeltaSwingTableIdx_2GA_N_8723B;
 	}
 }
 

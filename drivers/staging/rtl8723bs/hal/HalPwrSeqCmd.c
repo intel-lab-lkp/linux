@@ -26,7 +26,7 @@ Major Change History:
 
 /*  */
 /*  Description: */
-/*  This routine deal with the Power Configuration CMDs parsing for RTL8723/RTL8188E Series IC. */
+/*  This routine deals with the Power Configuration CMDs parsing for RTL8723 Series IC. */
 /*  */
 /*  Assumption: */
 /*  We should follow specific format which was released from HW SD. */

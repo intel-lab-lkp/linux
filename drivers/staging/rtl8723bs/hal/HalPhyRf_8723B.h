@@ -65,4 +65,4 @@ void _PHY_MACSettingCalibration_8723B(
 	struct adapter *padapter, u32 *MACReg, u32 *MACBackup
 );
 
-#endif /*  #ifndef __HAL_PHY_RF_8188E_H__ */
+#endif /*  #ifndef __HAL_PHY_RF_8723B_H__ */
