@@ -37,6 +37,7 @@ Currently, these files are in /proc/sys/vm:
 - dirtytime_expire_seconds
 - dirty_writeback_centisecs
 - drop_caches
+- drop_fs_caches
 - enable_soft_offline
 - extfrag_threshold
 - highmem_is_dirtyable
@@ -285,6 +286,49 @@ used::
 
 These are informational only.  They do not mean that anything is wrong
 with your system.  To disable them, echo 4 (bit 2) into drop_caches.
+
+drop_fs_caches
+==============
+
+Writing to this will cause the kernel to drop clean for a specific file system
+caches, as well as reclaimable slab objects like dentries and inodes. Once
+dropped, their memory becomes free. Except for specifying the device number
+or file path for a specific file system, everything else is consistent with
+drop_caches. The device number can be viewed through "cat /proc/self/montinfo"
+or 'lsblk'.
+
+To free pagecache::
+
+	echo "1 MAJOR:MINOR" > /proc/sys/vm/drop_fs_caches
+Or
+	echo "1 /mnt/XX" > /proc/sys/vm/drop_fs_caches
+
+To free reclaimable slab objects (includes dentries and inodes)::
+
+	echo "2 MAJOR:MINOR" > /proc/sys/vm/drop_fs_caches
+Or
+	echo "2 /mnt/XX" > /proc/sys/vm/drop_fs_caches
+
+To free slab objects and pagecache::
+
+	echo "3 MAJOR:MINOR" > /proc/sys/vm/drop_fs_caches
+Or
+	echo "3 /mnt/XX" > /proc/sys/vm/drop_fs_caches
+
+You may see error messages in your kernel log when incorrect path or device
+number provided::
+
+	echo (1234): drop_fs_caches: failed to get path(/mnt/XX) ERRNO
+Or
+	echo (1234): drop_fs_caches: failed to get dev(MAJOR:MINOR)'s sb
+
+You may see informational messages in your kernel log when this file is
+used::
+
+	echo (1234): drop_fs_caches: 3 MAJOR:MINOR
+
+These are informational only. They do not mean that anything is wrong
+with your system. To disable them, echo 4 (bit 2) into drop_fs_caches.
 
 enable_soft_offline
 ===================
