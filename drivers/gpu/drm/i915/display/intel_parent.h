@@ -7,11 +7,20 @@
 #include <linux/types.h>
 
 struct dma_fence;
+struct drm_gem_object;
 struct drm_scanout_buffer;
 struct intel_display;
+struct intel_dpt;
 struct intel_hdcp_gsc_context;
 struct intel_panic;
 struct intel_stolen_node;
+
+/* dpt */
+struct intel_dpt *intel_parent_dpt_create(struct intel_display *display,
+					  struct drm_gem_object *obj, size_t size);
+void intel_parent_dpt_destroy(struct intel_display *display, struct intel_dpt *dpt);
+void intel_parent_dpt_suspend(struct intel_display *display, struct intel_dpt *dpt);
+void intel_parent_dpt_resume(struct intel_display *display, struct intel_dpt *dpt);
 
 /* hdcp */
 ssize_t intel_parent_hdcp_gsc_msg_send(struct intel_display *display,
@@ -35,6 +44,13 @@ void intel_parent_panic_finish(struct intel_display *display, struct intel_panic
 /* pc8 */
 void intel_parent_pc8_block(struct intel_display *display);
 void intel_parent_pc8_unblock(struct intel_display *display);
+
+/* pcode */
+int intel_parent_pcode_read(struct intel_display *display, u32 mbox, u32 *val, u32 *val1);
+int intel_parent_pcode_write_timeout(struct intel_display *display, u32 mbox, u32 val, int timeout_ms);
+int intel_parent_pcode_write(struct intel_display *display, u32 mbox, u32 val);
+int intel_parent_pcode_request(struct intel_display *display, u32 mbox, u32 request,
+			       u32 reply_mask, u32 reply, int timeout_base_ms);
 
 /* rps */
 bool intel_parent_rps_available(struct intel_display *display);
