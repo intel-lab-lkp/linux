@@ -29,11 +29,13 @@
 #define SS_CAP_EXTERNAL_CONFIG		BIT(5)
 #define SS_CAP_SIDETONE			BIT(6)
 #define SS_CAP_MIC_VOLUME		BIT(7)
+#define SS_CAP_VOLUME_LIMITER		BIT(8)
 
 #define SS_QUIRK_STATUS_SYNC_POLL	BIT(0)
 
 #define SS_SETTING_SIDETONE		0
 #define SS_SETTING_MIC_VOLUME		1
+#define SS_SETTING_VOLUME_LIMITER	2
 
 struct steelseries_device;
 
@@ -77,11 +79,13 @@ struct steelseries_device {
 	struct snd_ctl_elem_id mic_muted_id;
 	struct snd_ctl_elem_id sidetone_id;
 	struct snd_ctl_elem_id mic_volume_id;
+	struct snd_ctl_elem_id volume_limiter_id;
 	u8 chatmix_chat;
 	u8 chatmix_game;
 	bool mic_muted;
 	u8 sidetone;
 	u8 mic_volume;
+	bool volume_limiter;
 
 	bool bt_enabled;
 	bool bt_device_connected;
@@ -531,6 +535,44 @@ static int steelseries_arctis_nova_5_write_setting(struct hid_device *hdev,
 	case SS_SETTING_MIC_VOLUME:
 		cmd = 0x37;
 		break;
+	case SS_SETTING_VOLUME_LIMITER:
+		cmd = 0x27;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	data[0] = 0x00;
+	data[1] = cmd;
+	data[2] = value;
+
+	ret = steelseries_send_output_report(hdev, data, sizeof(data));
+	if (ret)
+		return ret;
+
+	msleep(10);
+
+	return steelseries_send_output_report(hdev, save, sizeof(save));
+}
+
+static int steelseries_arctis_nova_7_write_setting(struct hid_device *hdev,
+						   u8 setting, u8 value)
+{
+	const u8 save[] = { 0x00, 0x09 };
+	u8 cmd;
+	int ret;
+	u8 data[3];
+
+	switch (setting) {
+	case SS_SETTING_SIDETONE:
+		cmd = 0x39;
+		break;
+	case SS_SETTING_MIC_VOLUME:
+		cmd = 0x37;
+		break;
+	case SS_SETTING_VOLUME_LIMITER:
+		cmd = 0x3a;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -849,19 +891,23 @@ static int steelseries_arctis_nova_7_gen2_request_settings(struct hid_device *hd
 static void steelseries_arctis_nova_7_gen2_parse_settings(
 	struct steelseries_device *sd, u8 *data, int size)
 {
-	if (size < 3)
+	if (size < 4)
 		return;
 
 	switch (data[0]) {
 	case 0x20:
 		sd->mic_volume = data[1];
 		sd->sidetone = data[2];
+		sd->volume_limiter = data[3];
 		break;
 	case 0x37:
 		sd->mic_volume = data[1];
 		break;
 	case 0x39:
 		sd->sidetone = data[1];
+		break;
+	case 0x3a:
+		sd->volume_limiter = data[1];
 		break;
 	}
 }
@@ -954,7 +1000,8 @@ static const struct steelseries_device_info arctis_nova_3p_info = {
 
 static const struct steelseries_device_info arctis_nova_5_info = {
 	.sync_interface = 3,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME |
+			SS_CAP_VOLUME_LIMITER,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 10,
 	.mic_volume_max = 15,
@@ -966,7 +1013,7 @@ static const struct steelseries_device_info arctis_nova_5_info = {
 static const struct steelseries_device_info arctis_nova_5x_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
-			SS_CAP_MIC_VOLUME,
+			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 10,
 	.mic_volume_max = 15,
@@ -978,23 +1025,23 @@ static const struct steelseries_device_info arctis_nova_5x_info = {
 static const struct steelseries_device_info arctis_nova_7_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
-			SS_CAP_MIC_VOLUME,
+			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_parse_status,
-	.write_setting = steelseries_arctis_nova_5_write_setting,
+	.write_setting = steelseries_arctis_nova_7_write_setting,
 };
 
 static const struct steelseries_device_info arctis_nova_7p_info = {
 	.sync_interface = 3,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_MIC_VOLUME,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.mic_volume_max = 7,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_parse_status,
-	.write_setting = steelseries_arctis_nova_5_write_setting,
+	.write_setting = steelseries_arctis_nova_7_write_setting,
 };
 
 static const struct steelseries_device_info arctis_nova_7_gen2_info = {
@@ -1003,14 +1050,14 @@ static const struct steelseries_device_info arctis_nova_7_gen2_info = {
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_MIC_MUTE |
 			SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
 			SS_CAP_EXTERNAL_CONFIG | SS_CAP_SIDETONE |
-			SS_CAP_MIC_VOLUME,
+			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_gen2_parse_status,
 	.request_settings = steelseries_arctis_nova_7_gen2_request_settings,
 	.parse_settings = steelseries_arctis_nova_7_gen2_parse_settings,
-	.write_setting = steelseries_arctis_nova_5_write_setting,
+	.write_setting = steelseries_arctis_nova_7_write_setting,
 };
 
 static const struct steelseries_device_info arctis_nova_pro_info = {
@@ -1450,6 +1497,66 @@ static const struct snd_kcontrol_new steelseries_mic_volume_control = {
 	.put = steelseries_mic_volume_put,
 };
 
+static int steelseries_volume_limiter_info(struct snd_kcontrol *kcontrol,
+					   struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 1;
+	uinfo->value.integer.step = 1;
+	return 0;
+}
+
+static int steelseries_volume_limiter_get(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	struct steelseries_device *sd = snd_kcontrol_chip(kcontrol);
+	unsigned long flags;
+
+	spin_lock_irqsave(&sd->lock, flags);
+	ucontrol->value.integer.value[0] = sd->volume_limiter;
+	spin_unlock_irqrestore(&sd->lock, flags);
+	return 0;
+}
+
+static int steelseries_volume_limiter_put(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	struct steelseries_device *sd = snd_kcontrol_chip(kcontrol);
+	unsigned long flags;
+	bool new_volume_limiter;
+	int ret;
+
+	new_volume_limiter = !!ucontrol->value.integer.value[0];
+
+	spin_lock_irqsave(&sd->lock, flags);
+	if (sd->volume_limiter == new_volume_limiter) {
+		spin_unlock_irqrestore(&sd->lock, flags);
+		return 0;
+	}
+	spin_unlock_irqrestore(&sd->lock, flags);
+
+	ret = sd->info->write_setting(sd->hdev, SS_SETTING_VOLUME_LIMITER,
+				      new_volume_limiter ? 1 : 0);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&sd->lock, flags);
+	sd->volume_limiter = new_volume_limiter;
+	spin_unlock_irqrestore(&sd->lock, flags);
+
+	return 1;
+}
+
+static const struct snd_kcontrol_new steelseries_volume_limiter_control = {
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+	.name = "Volume Limiter",
+	.info = steelseries_volume_limiter_info,
+	.get = steelseries_volume_limiter_get,
+	.put = steelseries_volume_limiter_put,
+};
+
 static int steelseries_snd_register(struct steelseries_device *sd)
 {
 	struct hid_device *hdev = sd->hdev;
@@ -1522,6 +1629,21 @@ static int steelseries_snd_register(struct steelseries_device *sd)
 		sd->mic_volume_id = kctl->id;
 	}
 
+	if (sd->info->capabilities & SS_CAP_VOLUME_LIMITER) {
+		struct snd_kcontrol *kctl;
+		struct snd_kcontrol_new vol_lim_ctl = steelseries_volume_limiter_control;
+
+		vol_lim_ctl.access = SNDRV_CTL_ELEM_ACCESS_READWRITE;
+		if (sd->info->capabilities & SS_CAP_EXTERNAL_CONFIG)
+			vol_lim_ctl.access |= SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+		kctl = snd_ctl_new1(&vol_lim_ctl, sd);
+		ret = snd_ctl_add(sd->card, kctl);
+		if (ret < 0)
+			goto err_free_card;
+		sd->volume_limiter_id = kctl->id;
+	}
+
 	ret = snd_card_register(sd->card);
 	if (ret < 0)
 		goto err_free_card;
@@ -1554,6 +1676,7 @@ static int steelseries_raw_event(struct hid_device *hdev,
 	bool old_mic_muted;
 	u8 old_sidetone;
 	u8 old_mic_volume;
+	bool old_volume_limiter;
 	bool is_async_interface = false;
 
 	if (hdev->product == USB_DEVICE_ID_STEELSERIES_SRWS1)
@@ -1570,6 +1693,7 @@ static int steelseries_raw_event(struct hid_device *hdev,
 	old_mic_muted = sd->mic_muted;
 	old_sidetone = sd->sidetone;
 	old_mic_volume = sd->mic_volume;
+	old_volume_limiter = sd->volume_limiter;
 
 	if (hid_is_usb(hdev)) {
 		struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
@@ -1636,6 +1760,9 @@ static int steelseries_raw_event(struct hid_device *hdev,
 		if (sd->mic_volume != old_mic_volume)
 			snd_ctl_notify(sd->card, SNDRV_CTL_EVENT_MASK_VALUE,
 				       &sd->mic_volume_id);
+		if (sd->volume_limiter != old_volume_limiter)
+			snd_ctl_notify(sd->card, SNDRV_CTL_EVENT_MASK_VALUE,
+				       &sd->volume_limiter_id);
 	}
 
 	return 0;
