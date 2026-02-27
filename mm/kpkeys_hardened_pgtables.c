@@ -39,6 +39,7 @@ static void pba_pgtable_free(struct page *page);
 static int pba_prepare_direct_map_split(void);
 static bool pba_ready_for_direct_map_split(void);
 static void pba_init(void);
+static void pba_init_late(void);
 
 /* Trivial allocator in case the linear map is PTE-mapped (no block mapping) */
 static struct page *noblock_pgtable_alloc(gfp_t gfp)
@@ -105,6 +106,15 @@ void __init kpkeys_hardened_pgtables_init(void)
 
 	pba_init();
 	static_branch_enable(&kpkeys_hardened_pgtables_key);
+}
+
+void __init kpkeys_hardened_pgtables_init_late(void)
+{
+	if (!arch_kpkeys_enabled())
+		return;
+
+	if (pba_enabled())
+		pba_init_late();
 }
 
 /*
@@ -174,7 +184,13 @@ static struct pkeys_block_allocator pkeys_block_allocator = {
 	.alloc_mutex = __MUTEX_INITIALIZER(pkeys_block_allocator.alloc_mutex)
 };
 
+static struct {
+	struct page *head_page;
+	unsigned int order;
+} pba_early_region __initdata;
+
 static __ro_after_init DEFINE_STATIC_KEY_FALSE(pba_enabled_key);
+static __ro_after_init DEFINE_STATIC_KEY_FALSE(pba_can_set_pkey);
 
 static bool pba_enabled(void)
 {
@@ -186,6 +202,28 @@ static bool alloc_mutex_locked(void)
 	struct pkeys_block_allocator *pba = &pkeys_block_allocator;
 
 	return mutex_get_owner(&pba->alloc_mutex) == (unsigned long)current;
+}
+
+/*
+ * __ref is used as this is called from __refill_pages() which is not __init.
+ * The call to pba_init_late() guarantees this is not called after boot has
+ * completed.
+ */
+static void __ref register_early_region(struct page *head_page,
+					unsigned int order)
+{
+	/*
+	 * Only one region is expected to be registered. Any further region
+	 * is left untracked (i.e. unprotected).
+	 */
+	if (WARN_ON(pba_early_region.head_page))
+		return;
+
+	pr_debug("%s: order=%d, pfn=%lx\n", __func__, order,
+		 page_to_pfn(head_page));
+
+	pba_early_region.head_page = head_page;
+	pba_early_region.order = order;
 }
 
 static void cached_list_add_pages(struct page *page, unsigned int nr_pages)
@@ -227,7 +265,7 @@ static struct page *__refill_pages(bool alloc_one)
 	struct pkeys_block_allocator *pba = &pkeys_block_allocator;
 	struct page *page;
 	unsigned int order;
-	int ret;
+	int ret = 0;
 
 	for (int i = 0; i < ARRAY_SIZE(refill_orders); ++i) {
 		order = refill_orders[i];
@@ -243,7 +281,10 @@ static struct page *__refill_pages(bool alloc_one)
 
 	guard(mutex)(&pba->alloc_mutex);
 
-	ret = set_pkey_pgtable(page, 1 << order);
+	if (static_branch_likely(&pba_can_set_pkey))
+		ret = set_pkey_pgtable(page, 1 << order);
+	else
+		register_early_region(page, order);
 
 	if (ret) {
 		__free_pages(page, order);
@@ -406,7 +447,20 @@ static void __init pba_init(void)
 	/*
 	 * Refill the cache so that the reserve pages are available for
 	 * splitting next time we need to refill.
+	 *
+	 * We cannot split the linear map at this stage, so the allocated
+	 * region will be registered as early region (pba_early_region) and
+	 * its pkey set later.
 	 */
 	ret = refill_pages();
 	WARN_ON(ret);
+}
+
+static void __init pba_init_late(void)
+{
+	static_branch_enable(&pba_can_set_pkey);
+
+	if (pba_early_region.head_page)
+		set_pkey_pgtable(pba_early_region.head_page,
+				 1 << pba_early_region.order);
 }

@@ -133,6 +133,12 @@ bool kpkeys_ready_for_direct_map_split(void);
  */
 void kpkeys_hardened_pgtables_init(void);
 
+/*
+ * Should be called by architecture code as soon as it is safe to modify the
+ * pkey of arbitrary linear map ranges.
+ */
+void kpkeys_hardened_pgtables_init_late(void);
+
 #else /* CONFIG_KPKEYS_HARDENED_PGTABLES */
 
 static inline bool kpkeys_hardened_pgtables_enabled(void)
@@ -158,6 +164,8 @@ static inline bool kpkeys_ready_for_direct_map_split(void)
 static inline void kpkeys_pgtable_free(struct page *page) {}
 
 static inline void kpkeys_hardened_pgtables_init(void) {}
+
+static inline void kpkeys_hardened_pgtables_init_late(void) {}
 
 #endif /* CONFIG_KPKEYS_HARDENED_PGTABLES */
 
