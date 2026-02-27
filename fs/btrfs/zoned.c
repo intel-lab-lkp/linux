@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include "linux/rcupdate.h"
 #include <linux/bitops.h>
 #include <linux/slab.h>
 #include <linux/blkdev.h>
@@ -401,17 +402,22 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 
 	/* We reject devices with a zone size larger than 8GB */
 	if (zone_info->zone_size > BTRFS_MAX_ZONE_SIZE) {
-		btrfs_err(fs_info,
-		"zoned: %s: zone size %llu larger than supported maximum %llu",
-				 rcu_dereference(device->name),
-				 zone_info->zone_size, BTRFS_MAX_ZONE_SIZE);
+		rcu_read_lock();
+		btrfs_err(
+			fs_info,
+			"zoned: %s: zone size %llu larger than supported maximum %llu",
+			rcu_dereference(device->name), zone_info->zone_size,
+			BTRFS_MAX_ZONE_SIZE);
+		rcu_read_unlock();
 		ret = -EINVAL;
 		goto out;
 	} else if (zone_info->zone_size < BTRFS_MIN_ZONE_SIZE) {
+		rcu_read_lock();
 		btrfs_err(fs_info,
 		"zoned: %s: zone size %llu smaller than supported minimum %u",
 				 rcu_dereference(device->name),
 				 zone_info->zone_size, BTRFS_MIN_ZONE_SIZE);
+		rcu_read_unlock();
 		ret = -EINVAL;
 		goto out;
 	}
@@ -427,10 +433,12 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 	if (!max_active_zones && zone_info->nr_zones > BTRFS_DEFAULT_MAX_ACTIVE_ZONES)
 		max_active_zones = BTRFS_DEFAULT_MAX_ACTIVE_ZONES;
 	if (max_active_zones && max_active_zones < BTRFS_MIN_ACTIVE_ZONES) {
+		rcu_read_lock();
 		btrfs_err(fs_info,
 "zoned: %s: max active zones %u is too small, need at least %u active zones",
 				 rcu_dereference(device->name), max_active_zones,
 				 BTRFS_MIN_ACTIVE_ZONES);
+		rcu_read_unlock();
 		ret = -EINVAL;
 		goto out;
 	}
@@ -469,9 +477,11 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 		zone_info->zone_cache = vcalloc(zone_info->nr_zones,
 						sizeof(struct blk_zone));
 		if (!zone_info->zone_cache) {
+			rcu_read_lock();
 			btrfs_err(device->fs_info,
 				"zoned: failed to allocate zone cache for %s",
 				rcu_dereference(device->name));
+			rcu_read_unlock();
 			ret = -ENOMEM;
 			goto out;
 		}
@@ -507,10 +517,12 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 	}
 
 	if (unlikely(nreported != zone_info->nr_zones)) {
+		rcu_read_lock();
 		btrfs_err(device->fs_info,
 				 "inconsistent number of zones on %s (%u/%u)",
 				 rcu_dereference(device->name), nreported,
 				 zone_info->nr_zones);
+		rcu_read_unlock();
 		ret = -EIO;
 		goto out;
 	}
@@ -522,10 +534,12 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 				zone_info->max_active_zones = 0;
 				goto validate;
 			}
+			rcu_read_lock();
 			btrfs_err(device->fs_info,
 			"zoned: %u active zones on %s exceeds max_active_zones %u",
 					 nactive, rcu_dereference(device->name),
 					 max_active_zones);
+			rcu_read_unlock();
 			ret = -EIO;
 			goto out;
 		}
@@ -591,10 +605,12 @@ validate:
 		emulated = "emulated ";
 	}
 
+	rcu_read_lock();
 	btrfs_info(fs_info,
 		"%s block device %s, %u %szones of %llu bytes",
 		model, rcu_dereference(device->name), zone_info->nr_zones,
 		emulated, zone_info->zone_size);
+	rcu_read_unlock();
 
 	return 0;
 
