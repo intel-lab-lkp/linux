@@ -5,66 +5,86 @@
  * Copyright (C) 2019 Renesas Electronics Corp.
  */
 
-#include <linux/module.h>
 #include <linux/i2c.h>
-#include <linux/usb/role.h>
-#include <linux/irqreturn.h>
-#include <linux/interrupt.h>
-#include <linux/regmap.h>
-#include <linux/slab.h>
 #include <linux/usb/typec.h>
-#include <linux/delay.h>
-#include <linux/workqueue.h>
-#include <linux/gpio/consumer.h>
+#include <linux/usb/role.h>
+#include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
-#include <linux/of_graph.h>
+#include <linux/gpio/consumer.h>
+#include <linux/interrupt.h>
+#include <linux/sysfs.h>
+#include <linux/string.h>
+#include <linux/module.h>
+#include <linux/workqueue.h>
+#include <linux/of.h>
 
-#define HD3SS3220_REG_CN_STAT		0x08
-#define HD3SS3220_REG_CN_STAT_CTRL	0x09
-#define HD3SS3220_REG_GEN_CTRL		0x0A
-#define HD3SS3220_REG_DEV_REV		0xA0
+#define HD3SS3220_REG_CN_STAT 0x08
+#define HD3SS3220_REG_CN_STAT_CTRL 0x09
+#define HD3SS3220_REG_GEN_CTRL 0x0A
+#define HD3SS3220_REG_DEV_REV 0xA0
 
 /* Register HD3SS3220_REG_CN_STAT */
-#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_MASK		(BIT(7) | BIT(6))
-#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_DEFAULT	0x00
-#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_MID		BIT(6)
-#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_HIGH		BIT(7)
+#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_MASK (BIT(7) | BIT(6))
+#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_DEFAULT 0x00
+#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_MID BIT(6)
+#define HD3SS3220_REG_CN_STAT_CURRENT_MODE_HIGH BIT(7)
 
 /* Register HD3SS3220_REG_CN_STAT_CTRL*/
-#define HD3SS3220_REG_CN_STAT_CTRL_ATTACHED_STATE_MASK	(BIT(7) | BIT(6))
-#define HD3SS3220_REG_CN_STAT_CTRL_AS_DFP		BIT(6)
-#define HD3SS3220_REG_CN_STAT_CTRL_AS_UFP		BIT(7)
-#define HD3SS3220_REG_CN_STAT_CTRL_TO_ACCESSORY		(BIT(7) | BIT(6))
-#define HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS		BIT(4)
+#define HD3SS3220_REG_CN_STAT_CTRL_ATTACHED_STATE_MASK (BIT(7) | BIT(6))
+#define HD3SS3220_REG_CN_STAT_CTRL_AS_DFP BIT(6)
+#define HD3SS3220_REG_CN_STAT_CTRL_AS_UFP BIT(7)
+#define HD3SS3220_REG_CN_STAT_CTRL_TO_ACCESSORY (BIT(7) | BIT(6))
+#define HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS BIT(4)
 
 /* Register HD3SS3220_REG_GEN_CTRL*/
-#define HD3SS3220_REG_GEN_CTRL_DISABLE_TERM		BIT(0)
-#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_MASK		(BIT(2) | BIT(1))
-#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_DRP_DEFAULT	0x00
-#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_DRP_TRY_SNK	BIT(1)
-#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_DRP_TRY_SRC	(BIT(2) | BIT(1))
-#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_MASK		(BIT(5) | BIT(4))
-#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_DEFAULT	0x00
-#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_DFP		BIT(5)
-#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_UFP		BIT(4)
-#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_DRP		(BIT(5) | BIT(4))
+#define HD3SS3220_REG_GEN_CTRL_DISABLE_TERM BIT(0)
+#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_MASK (BIT(2) | BIT(1))
+#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_DRP_DEFAULT 0x00
+#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_DRP_TRY_SNK BIT(1)
+#define HD3SS3220_REG_GEN_CTRL_SRC_PREF_DRP_TRY_SRC (BIT(2) | BIT(1))
+#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_MASK (BIT(5) | BIT(4))
+#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_DEFAULT 0x00
+#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_DFP BIT(5)
+#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_UFP BIT(4)
+#define HD3SS3220_REG_GEN_CTRL_MODE_SELECT_DRP (BIT(5) | BIT(4))
 
 struct hd3ss3220 {
 	struct device *dev;
 	struct regmap *regmap;
-	struct usb_role_switch	*role_sw;
+	struct usb_role_switch *role_sw;
 	struct typec_port *port;
 	struct delayed_work output_poll_work;
 	enum usb_role role_state;
 	bool poll;
-
 	struct gpio_desc *id_gpiod;
 	int id_irq;
-
 	struct regulator *vbus;
 };
 
-static int hd3ss3220_set_power_opmode(struct hd3ss3220 *hd3ss3220, int power_opmode)
+/*
+ * Sysfs attribute to show current USB role (device/host/none)
+ */
+static ssize_t usb_role_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct hd3ss3220 *hd3ss3220 = dev_get_drvdata(dev);
+	const char *role_str = usb_role_string(hd3ss3220->role_state);
+
+	return sysfs_emit(buf, "%s\n", role_str);
+}
+static DEVICE_ATTR_RO(usb_role);
+
+static struct attribute *hd3ss3220_attrs[] = {
+	&dev_attr_usb_role.attr,
+	NULL
+};
+
+static const struct attribute_group hd3ss3220_attr_group = {
+	.attrs = hd3ss3220_attrs,
+};
+
+static int hd3ss3220_set_power_opmode(struct hd3ss3220 *hd3ss3220,
+				      int power_opmode)
 {
 	int current_mode;
 
@@ -78,9 +98,11 @@ static int hd3ss3220_set_power_opmode(struct hd3ss3220 *hd3ss3220, int power_opm
 	case TYPEC_PWR_MODE_3_0A:
 		current_mode = HD3SS3220_REG_CN_STAT_CURRENT_MODE_HIGH;
 		break;
-	case TYPEC_PWR_MODE_PD: /* Power delivery not supported */
+	case TYPEC_PWR_MODE_PD:
+		/* Power delivery not supported */
 	default:
-		dev_err(hd3ss3220->dev, "bad power operation mode: %d\n", power_opmode);
+		dev_err(hd3ss3220->dev, "bad power operation mode: %d\n",
+			power_opmode);
 		return -EINVAL;
 	}
 
@@ -108,12 +130,15 @@ static int hd3ss3220_set_port_type(struct hd3ss3220 *hd3ss3220, int type)
 		return -EINVAL;
 	}
 
-	/* Disable termination before changing MODE_SELECT as required by datasheet */
+	/* Disable termination before changing MODE_SELECT as required by
+	 * datasheet
+	 */
 	err = regmap_update_bits(hd3ss3220->regmap, HD3SS3220_REG_GEN_CTRL,
 				 HD3SS3220_REG_GEN_CTRL_DISABLE_TERM,
 				 HD3SS3220_REG_GEN_CTRL_DISABLE_TERM);
 	if (err < 0) {
-		dev_err(hd3ss3220->dev, "Failed to disable port for mode change: %d\n", err);
+		dev_err(hd3ss3220->dev,
+			"Failed to disable port for mode change: %d\n", err);
 		return err;
 	}
 
@@ -130,12 +155,15 @@ static int hd3ss3220_set_port_type(struct hd3ss3220 *hd3ss3220, int type)
 	err = regmap_update_bits(hd3ss3220->regmap, HD3SS3220_REG_GEN_CTRL,
 				 HD3SS3220_REG_GEN_CTRL_DISABLE_TERM, 0);
 	if (err < 0)
-		dev_err(hd3ss3220->dev, "Failed to re-enable port after mode change: %d\n", err);
+		dev_err(hd3ss3220->dev,
+			"Failed to re-enable port after mode change: %d\n",
+			err);
 
 	return err;
 }
 
-static int hd3ss3220_set_source_pref(struct hd3ss3220 *hd3ss3220, int prefer_role)
+static int hd3ss3220_set_source_pref(struct hd3ss3220 *hd3ss3220,
+				     int prefer_role)
 {
 	int src_pref;
 
@@ -150,7 +178,8 @@ static int hd3ss3220_set_source_pref(struct hd3ss3220 *hd3ss3220, int prefer_rol
 		src_pref = HD3SS3220_REG_GEN_CTRL_SRC_PREF_DRP_TRY_SRC;
 		break;
 	default:
-		dev_err(hd3ss3220->dev, "bad role preference: %d\n", prefer_role);
+		dev_err(hd3ss3220->dev, "bad role preference: %d\n",
+			prefer_role);
 		return -EINVAL;
 	}
 
@@ -192,7 +221,8 @@ static int hd3ss3220_try_role(struct typec_port *port, int role)
 	return hd3ss3220_set_source_pref(hd3ss3220, role);
 }
 
-static int hd3ss3220_port_type_set(struct typec_port *port, enum typec_port_type type)
+static int hd3ss3220_port_type_set(struct typec_port *port,
+				   enum typec_port_type type)
 {
 	struct hd3ss3220 *hd3ss3220 = typec_get_drvdata(port);
 
@@ -217,8 +247,8 @@ static void hd3ss3220_regulator_control(struct hd3ss3220 *hd3ss3220, bool on)
 		ret = regulator_disable(hd3ss3220->vbus);
 
 	if (ret)
-		dev_err(hd3ss3220->dev,
-			"vbus regulator %s failed: %d\n", on ? "disable" : "enable", ret);
+		dev_err(hd3ss3220->dev, "vbus regulator %s failed: %d\n",
+			on ? "disable" : "enable", ret);
 }
 
 static void hd3ss3220_set_role(struct hd3ss3220 *hd3ss3220)
@@ -239,9 +269,14 @@ static void hd3ss3220_set_role(struct hd3ss3220 *hd3ss3220)
 	}
 
 	if (hd3ss3220->vbus && !hd3ss3220->id_gpiod)
-		hd3ss3220_regulator_control(hd3ss3220, role_state == USB_ROLE_HOST);
+		hd3ss3220_regulator_control(hd3ss3220,
+					    role_state == USB_ROLE_HOST);
 
 	hd3ss3220->role_state = role_state;
+
+	/* Notify userspace of usb_role change */
+	sysfs_notify(&hd3ss3220->dev->kobj, NULL, "usb_role");
+	kobject_uevent(&hd3ss3220->dev->kobj, KOBJ_CHANGE);
 }
 
 static void output_poll_execute(struct work_struct *work)
@@ -263,9 +298,10 @@ static irqreturn_t hd3ss3220_irq(struct hd3ss3220 *hd3ss3220)
 	int err;
 
 	hd3ss3220_set_role(hd3ss3220);
+
 	err = regmap_write_bits(hd3ss3220->regmap, HD3SS3220_REG_CN_STAT_CTRL,
-				HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS,
-				HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS);
+			HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS,
+			HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS);
 	if (err < 0)
 		return IRQ_NONE;
 
@@ -283,17 +319,17 @@ static irqreturn_t hd3ss3220_irq_handler(int irq, void *data)
 static int hd3ss3220_configure_power_opmode(struct hd3ss3220 *hd3ss3220,
 					    struct fwnode_handle *connector)
 {
-	/*
-	 * Supported power operation mode can be configured through device tree
-	 */
+	/* Supported power operation mode can be configured through device tree */
 	const char *cap_str;
 	int ret, power_opmode;
 
-	ret = fwnode_property_read_string(connector, "typec-power-opmode", &cap_str);
+	ret = fwnode_property_read_string(connector, "typec-power-opmode",
+					  &cap_str);
 	if (ret)
 		return 0;
 
 	power_opmode = typec_find_pwr_opmode(cap_str);
+
 	return hd3ss3220_set_power_opmode(hd3ss3220, power_opmode);
 }
 
@@ -301,9 +337,7 @@ static int hd3ss3220_configure_port_type(struct hd3ss3220 *hd3ss3220,
 					 struct fwnode_handle *connector,
 					 struct typec_capability *cap)
 {
-	/*
-	 * Port type can be configured through device tree
-	 */
+	/* Port type can be configured through device tree */
 	const char *cap_str;
 	int ret;
 
@@ -316,6 +350,7 @@ static int hd3ss3220_configure_port_type(struct hd3ss3220 *hd3ss3220,
 		return ret;
 
 	cap->type = ret;
+
 	return hd3ss3220_set_port_type(hd3ss3220, cap->type);
 }
 
@@ -323,13 +358,12 @@ static int hd3ss3220_configure_source_pref(struct hd3ss3220 *hd3ss3220,
 					   struct fwnode_handle *connector,
 					   struct typec_capability *cap)
 {
-	/*
-	 * Preferred role can be configured through device tree
-	 */
+	/* Preferred role can be configured through device tree */
 	const char *cap_str;
 	int ret;
 
-	ret = fwnode_property_read_string(connector, "try-power-role", &cap_str);
+	ret = fwnode_property_read_string(connector, "try-power-role",
+					  &cap_str);
 	if (ret)
 		return 0;
 
@@ -338,6 +372,7 @@ static int hd3ss3220_configure_source_pref(struct hd3ss3220 *hd3ss3220,
 		return ret;
 
 	cap->prefer_role = ret;
+
 	return hd3ss3220_set_source_pref(hd3ss3220, cap->prefer_role);
 }
 
@@ -373,8 +408,8 @@ static int hd3ss3220_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	i2c_set_clientdata(client, hd3ss3220);
-
 	hd3ss3220->dev = &client->dev;
+
 	hd3ss3220->regmap = devm_regmap_init_i2c(client, &config);
 	if (IS_ERR(hd3ss3220->regmap))
 		return PTR_ERR(hd3ss3220->regmap);
@@ -384,13 +419,16 @@ static int hd3ss3220_probe(struct i2c_client *client)
 	if (connector) {
 		hd3ss3220->role_sw = fwnode_usb_role_switch_get(connector);
 	} else {
-		ep = fwnode_graph_get_next_endpoint(dev_fwnode(hd3ss3220->dev), NULL);
+		ep = fwnode_graph_get_next_endpoint(dev_fwnode(hd3ss3220->dev),
+						   NULL);
 		if (!ep)
 			return -ENODEV;
+
 		connector = fwnode_graph_get_remote_port_parent(ep);
 		fwnode_handle_put(ep);
 		if (!connector)
 			return -ENODEV;
+
 		hd3ss3220->role_sw = usb_role_switch_get(hd3ss3220->dev);
 	}
 
@@ -400,8 +438,7 @@ static int hd3ss3220_probe(struct i2c_client *client)
 	}
 
 	vbus = devm_of_regulator_get_optional(hd3ss3220->dev,
-					      to_of_node(connector),
-					      "vbus");
+					      to_of_node(connector), "vbus");
 	if (IS_ERR(vbus) && vbus != ERR_PTR(-ENODEV)) {
 		ret = PTR_ERR(vbus);
 		dev_err(hd3ss3220->dev, "failed to get vbus: %d", ret);
@@ -412,8 +449,7 @@ static int hd3ss3220_probe(struct i2c_client *client)
 
 	if (hd3ss3220->vbus) {
 		hd3ss3220->id_gpiod = devm_gpiod_get_optional(hd3ss3220->dev,
-							      "id",
-							      GPIOD_IN);
+							      "id", GPIOD_IN);
 		if (IS_ERR(hd3ss3220->id_gpiod)) {
 			ret = PTR_ERR(hd3ss3220->id_gpiod);
 			goto err_put_fwnode;
@@ -424,8 +460,7 @@ static int hd3ss3220_probe(struct i2c_client *client)
 		hd3ss3220->id_irq = gpiod_to_irq(hd3ss3220->id_gpiod);
 		if (hd3ss3220->id_irq < 0) {
 			ret = hd3ss3220->id_irq;
-			dev_err(hd3ss3220->dev,
-				"failed to get ID gpio: %d\n",
+			dev_err(hd3ss3220->dev, "failed to get ID gpio: %d\n",
 				hd3ss3220->id_irq);
 			goto err_put_fwnode;
 		}
@@ -434,10 +469,13 @@ static int hd3ss3220_probe(struct i2c_client *client)
 						hd3ss3220->id_irq, NULL,
 						hd3ss3220_id_isr,
 						IRQF_TRIGGER_RISING |
-						IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-						dev_name(hd3ss3220->dev), hd3ss3220);
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT,
+						dev_name(hd3ss3220->dev),
+						hd3ss3220);
 		if (ret < 0) {
-			dev_err(hd3ss3220->dev, "failed to get ID irq: %d\n", ret);
+			dev_err(hd3ss3220->dev, "failed to get ID irq: %d\n",
+				ret);
 			goto err_put_fwnode;
 		}
 	}
@@ -467,28 +505,37 @@ static int hd3ss3220_probe(struct i2c_client *client)
 	if (ret < 0)
 		goto err_unreg_port;
 
+	ret = devm_device_add_group(&client->dev, &hd3ss3220_attr_group);
+	if (ret) {
+		dev_err(&client->dev,
+			"Failed to create sysfs attributes: %d\n", ret);
+		goto err_unreg_port;
+	}
+
 	hd3ss3220_set_role(hd3ss3220);
+
 	ret = regmap_read(hd3ss3220->regmap, HD3SS3220_REG_CN_STAT_CTRL, &data);
 	if (ret < 0)
 		goto err_unreg_port;
 
 	if (data & HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS) {
-		ret = regmap_write(hd3ss3220->regmap,
-				HD3SS3220_REG_CN_STAT_CTRL,
-				data | HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS);
+		ret = regmap_write(hd3ss3220->regmap, HD3SS3220_REG_CN_STAT_CTRL,
+				   data | HD3SS3220_REG_CN_STAT_CTRL_INT_STATUS);
 		if (ret < 0)
 			goto err_unreg_port;
 	}
 
 	if (client->irq > 0) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq, NULL,
-					hd3ss3220_irq_handler,
-					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					"hd3ss3220", &client->dev);
+						hd3ss3220_irq_handler,
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT,
+						"hd3ss3220", &client->dev);
 		if (ret)
 			goto err_unreg_port;
 	} else {
-		INIT_DELAYED_WORK(&hd3ss3220->output_poll_work, output_poll_execute);
+		INIT_DELAYED_WORK(&hd3ss3220->output_poll_work,
+				  output_poll_execute);
 		hd3ss3220->poll = true;
 	}
 
@@ -504,6 +551,7 @@ static int hd3ss3220_probe(struct i2c_client *client)
 	dev_info(&client->dev, "probed revision=0x%x\n", ret);
 
 	return 0;
+
 err_unreg_port:
 	typec_unregister_port(hd3ss3220->port);
 err_put_role:
@@ -526,7 +574,7 @@ static void hd3ss3220_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id dev_ids[] = {
-	{ .compatible = "ti,hd3ss3220"},
+	{ .compatible = "ti,hd3ss3220" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, dev_ids);
@@ -545,3 +593,4 @@ module_i2c_driver(hd3ss3220_driver);
 MODULE_AUTHOR("Biju Das <biju.das@bp.renesas.com>");
 MODULE_DESCRIPTION("TI HD3SS3220 DRP Port Controller Driver");
 MODULE_LICENSE("GPL");
+
