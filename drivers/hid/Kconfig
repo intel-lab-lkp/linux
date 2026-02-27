@@ -1139,7 +1139,7 @@ config STEAM_FF
 
 config HID_STEELSERIES
 	tristate "Steelseries devices support"
-	depends on USB_HID
+	depends on USB_HID && SND
 	help
 	Support for Steelseries SRW-S1 steering wheel, and the Steelseries
 	Arctis headset family (Arctis 1, Arctis 7, Arctis 7+, Arctis 9,

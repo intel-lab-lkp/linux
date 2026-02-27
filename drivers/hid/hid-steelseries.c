@@ -16,6 +16,7 @@
 #include <linux/power_supply.h>
 #include <linux/workqueue.h>
 #include <linux/spinlock.h>
+#include <sound/core.h>
 
 #include "hid-ids.h"
 
@@ -49,6 +50,8 @@ struct steelseries_device {
 	bool headset_connected;
 	u8 battery_capacity;
 	bool battery_charging;
+
+	struct snd_card *card;
 
 	spinlock_t lock;
 	bool removed;
@@ -830,6 +833,43 @@ static int steelseries_battery_register(struct steelseries_device *sd)
 	return 0;
 }
 
+#if IS_BUILTIN(CONFIG_SND) || \
+	(IS_MODULE(CONFIG_SND) && IS_MODULE(CONFIG_HID_STEELSERIES))
+
+static int steelseries_snd_register(struct steelseries_device *sd)
+{
+	struct hid_device *hdev = sd->hdev;
+	int ret;
+
+	ret = snd_card_new(&hdev->dev, -1, "SteelSeries", THIS_MODULE,
+			   0, &sd->card);
+	if (ret < 0)
+		return ret;
+
+	sd->card->private_data = sd;
+	strscpy(sd->card->driver, "SteelSeries");
+	strscpy(sd->card->shortname, hdev->name);
+	snprintf(sd->card->longname, sizeof(sd->card->longname),
+		"%s at USB %s", hdev->name, dev_name(&hdev->dev));
+
+	ret = snd_card_register(sd->card);
+	if (ret < 0) {
+		snd_card_free(sd->card);
+		sd->card = NULL;
+		return ret;
+	}
+
+	return 0;
+}
+
+static void steelseries_snd_unregister(struct steelseries_device *sd)
+{
+	if (sd->card)
+		snd_card_free(sd->card);
+}
+
+#endif
+
 static int steelseries_raw_event(struct hid_device *hdev,
 				 struct hid_report *report, u8 *data, int size)
 {
@@ -975,6 +1015,13 @@ static int steelseries_probe(struct hid_device *hdev,
 				hid_warn(hdev, "Failed to register battery: %d\n", ret);
 		}
 
+#if IS_BUILTIN(CONFIG_SND) || \
+	(IS_MODULE(CONFIG_SND) && IS_MODULE(CONFIG_HID_STEELSERIES))
+		ret = steelseries_snd_register(sd);
+		if (ret < 0)
+			hid_warn(hdev, "Failed to register sound card: %d\n", ret);
+#endif
+
 		INIT_DELAYED_WORK(&sd->status_work, steelseries_status_timer_work_handler);
 		schedule_delayed_work(&sd->status_work, msecs_to_jiffies(100));
 
@@ -1047,6 +1094,11 @@ static void steelseries_remove(struct hid_device *hdev)
 			if (sibling)
 				hid_set_drvdata(sibling, NULL);
 		}
+
+#if IS_BUILTIN(CONFIG_SND) || \
+	(IS_MODULE(CONFIG_SND) && IS_MODULE(CONFIG_HID_STEELSERIES))
+		steelseries_snd_unregister(sd);
+#endif
 
 		spin_lock_irqsave(&sd->lock, flags);
 		sd->removed = true;
