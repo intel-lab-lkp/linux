@@ -58,6 +58,19 @@ static inline bool can_set_direct_map(void)
 #endif
 #endif /* CONFIG_ARCH_HAS_SET_DIRECT_MAP */
 
+#ifndef arch_has_pte_only_direct_map
+/*
+ * The default assumption is that the direct map might be created using block
+ * mappings (PMD or higher). An architecture may override this if the direct
+ * map is fully PTE-mapped.
+ */
+static inline bool arch_has_pte_only_direct_map(void)
+{
+	return false;
+}
+#define arch_has_pte_only_direct_map arch_has_pte_only_direct_map
+#endif
+
 #ifdef CONFIG_X86_64
 int set_mce_nospec(unsigned long pfn);
 int clear_mce_nospec(unsigned long pfn);
