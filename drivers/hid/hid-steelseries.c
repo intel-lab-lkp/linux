@@ -31,6 +31,7 @@
 #define SS_CAP_MIC_VOLUME		BIT(7)
 #define SS_CAP_VOLUME_LIMITER		BIT(8)
 #define SS_CAP_BT_CALL_DUCKING		BIT(9)
+#define SS_CAP_INACTIVE_TIME		BIT(10)
 
 #define SS_QUIRK_STATUS_SYNC_POLL	BIT(0)
 
@@ -38,6 +39,7 @@
 #define SS_SETTING_MIC_VOLUME		1
 #define SS_SETTING_VOLUME_LIMITER	2
 #define SS_SETTING_BT_CALL_DUCKING	3
+#define SS_SETTING_INACTIVE_TIME	4
 
 struct steelseries_device;
 
@@ -51,6 +53,7 @@ struct steelseries_device_info {
 	u8 sidetone_max;
 	u8 mic_volume_min;
 	u8 mic_volume_max;
+	u8 inactive_time_max;
 
 	int (*request_status)(struct hid_device *hdev);
 	void (*parse_status)(struct steelseries_device *sd, u8 *data, int size);
@@ -93,6 +96,7 @@ struct steelseries_device {
 
 	bool bt_enabled;
 	bool bt_device_connected;
+	u8 inactive_timeout;
 
 	spinlock_t lock;
 	bool removed;
@@ -476,6 +480,37 @@ static int steelseries_arctis_1_write_setting(struct hid_device *hdev,
 			return steelseries_send_feature_report(hdev, data,
 							       sizeof(data));
 		}
+	case SS_SETTING_INACTIVE_TIME: {
+		const u8 data[] = { 0x06, 0x53, value };
+
+		return steelseries_send_feature_report(hdev, data, sizeof(data));
+	}
+	default:
+		return -EINVAL;
+	}
+}
+
+static int steelseries_arctis_7_write_setting(struct hid_device *hdev,
+					      u8 setting, u8 value)
+{
+	switch (setting) {
+	case SS_SETTING_SIDETONE:
+		if (value == 0) {
+			const u8 data[] = { 0x06, 0x35 };
+
+			return steelseries_send_feature_report(hdev, data,
+							       sizeof(data));
+		} else {
+			const u8 data[] = { 0x06, 0x35, 0x01, 0x00, value };
+
+			return steelseries_send_feature_report(hdev, data,
+							       sizeof(data));
+		}
+	case SS_SETTING_INACTIVE_TIME: {
+		const u8 data[] = { 0x06, 0x51, value };
+
+		return steelseries_send_feature_report(hdev, data, sizeof(data));
+	}
 	default:
 		return -EINVAL;
 	}
@@ -490,9 +525,28 @@ static int steelseries_arctis_9_write_setting(struct hid_device *hdev,
 
 		return steelseries_send_feature_report(hdev, data, sizeof(data));
 	}
+	case SS_SETTING_INACTIVE_TIME: {
+		u16 seconds = (u16)value * 60;
+		const u8 data[] = { 0x04, 0x00, seconds >> 8, seconds & 0xff };
+
+		return steelseries_send_feature_report(hdev, data, sizeof(data));
+	}
 	default:
 		return -EINVAL;
 	}
+}
+
+static u8 steelseries_arctis_nova_3p_round_inactive_time(u8 minutes)
+{
+	static const u8 supported[] = { 0, 1, 5, 10, 15, 30, 45, 60, 75, 90 };
+	int i;
+
+	for (i = ARRAY_SIZE(supported) - 1; i > 0; i--) {
+		if (minutes >= supported[i])
+			return supported[i];
+	}
+
+	return 0;
 }
 
 static int steelseries_arctis_nova_3p_write_setting(struct hid_device *hdev,
@@ -509,6 +563,10 @@ static int steelseries_arctis_nova_3p_write_setting(struct hid_device *hdev,
 		break;
 	case SS_SETTING_MIC_VOLUME:
 		cmd = 0x37;
+		break;
+	case SS_SETTING_INACTIVE_TIME:
+		cmd = 0xa3;
+		value = steelseries_arctis_nova_3p_round_inactive_time(value);
 		break;
 	default:
 		return -EINVAL;
@@ -541,6 +599,9 @@ static int steelseries_arctis_nova_5_write_setting(struct hid_device *hdev,
 		break;
 	case SS_SETTING_VOLUME_LIMITER:
 		cmd = 0x27;
+		break;
+	case SS_SETTING_INACTIVE_TIME:
+		cmd = 0xa3;
 		break;
 	default:
 		return -EINVAL;
@@ -580,6 +641,9 @@ static int steelseries_arctis_nova_7_write_setting(struct hid_device *hdev,
 	case SS_SETTING_BT_CALL_DUCKING:
 		cmd = 0xb3;
 		break;
+	case SS_SETTING_INACTIVE_TIME:
+		cmd = 0xa3;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -611,6 +675,24 @@ static int steelseries_arctis_nova_pro_write_setting(struct hid_device *hdev,
 		break;
 	case SS_SETTING_MIC_VOLUME:
 		cmd = 0x37;
+		break;
+	case SS_SETTING_INACTIVE_TIME:
+		cmd = 0xc1;
+		/* Map minutes to firmware level */
+		if (value >= 45)
+			value = 6; /* 60 min */
+		else if (value >= 23)
+			value = 5; /* 30 min */
+		else if (value >= 13)
+			value = 4; /* 15 min */
+		else if (value >= 8)
+			value = 3; /* 10 min */
+		else if (value >= 3)
+			value = 2; /* 5 min */
+		else if (value > 0)
+			value = 1; /* 1 min */
+		else
+			value = 0; /* disabled */
 		break;
 	default:
 		return -EINVAL;
@@ -916,6 +998,7 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 		sd->volume_limiter = data[3];
 		break;
 	case 0xa0:
+		sd->inactive_timeout = data[1];
 		sd->bt_call_ducking = data[4];
 		break;
 	case 0x37:
@@ -927,6 +1010,9 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 	case 0x3a:
 		sd->volume_limiter = data[1];
 		break;
+	case 0xa3:
+		sd->inactive_timeout = data[1];
+		break;
 	case 0xb3:
 		sd->bt_call_ducking = data[1];
 		break;
@@ -936,11 +1022,13 @@ static void steelseries_arctis_nova_7_gen2_parse_settings(
 static void steelseries_arctis_nova_pro_parse_settings(
 	struct steelseries_device *sd, u8 *data, int size)
 {
-	if (size < 10)
+	if (size < 13)
 		return;
 
-	if (data[0] == 0x06 && data[1] == 0xb0)
+	if (data[0] == 0x06 && data[1] == 0xb0) {
 		sd->mic_volume = data[9];
+		sd->inactive_timeout = data[12];
+	}
 }
 
 static void steelseries_arctis_nova_pro_parse_status(struct steelseries_device *sd,
@@ -970,9 +1058,10 @@ static const struct steelseries_device_info srws1_info = { };
 
 static const struct steelseries_device_info arctis_1_info = {
 	.sync_interface = 3,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE | SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 18,
+	.inactive_time_max = 90,
 	.request_status = steelseries_arctis_1_request_status,
 	.parse_status = steelseries_arctis_1_parse_status,
 	.write_setting = steelseries_arctis_1_write_setting,
@@ -980,19 +1069,23 @@ static const struct steelseries_device_info arctis_1_info = {
 
 static const struct steelseries_device_info arctis_7_info = {
 	.sync_interface = 5,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
+			SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 18,
+	.inactive_time_max = 90,
 	.request_status = steelseries_arctis_7_request_status,
 	.parse_status = steelseries_arctis_7_parse_status,
-	.write_setting = steelseries_arctis_1_write_setting,
+	.write_setting = steelseries_arctis_7_write_setting,
 };
 
 static const struct steelseries_device_info arctis_7_plus_info = {
 	.sync_interface = 3,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
+			SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 3,
+	.inactive_time_max = 90,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_7_plus_parse_status,
 	.write_setting = steelseries_arctis_nova_5_write_setting,
@@ -1000,9 +1093,11 @@ static const struct steelseries_device_info arctis_7_plus_info = {
 
 static const struct steelseries_device_info arctis_9_info = {
 	.sync_interface = 0,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
+			SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 61,
+	.inactive_time_max = 255,
 	.request_status = steelseries_arctis_9_request_status,
 	.parse_status = steelseries_arctis_9_parse_status,
 	.write_setting = steelseries_arctis_9_write_setting,
@@ -1010,10 +1105,12 @@ static const struct steelseries_device_info arctis_9_info = {
 
 static const struct steelseries_device_info arctis_nova_3p_info = {
 	.sync_interface = 4,
-	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME,
+	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME |
+			SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 10,
 	.mic_volume_max = 14,
+	.inactive_time_max = 90,
 	.request_status = steelseries_arctis_nova_3p_request_status,
 	.parse_status = steelseries_arctis_nova_3p_parse_status,
 	.write_setting = steelseries_arctis_nova_3p_write_setting,
@@ -1022,10 +1119,11 @@ static const struct steelseries_device_info arctis_nova_3p_info = {
 static const struct steelseries_device_info arctis_nova_5_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME |
-			SS_CAP_VOLUME_LIMITER,
+			SS_CAP_VOLUME_LIMITER | SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 10,
 	.mic_volume_max = 15,
+	.inactive_time_max = 255,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_5_parse_status,
 	.write_setting = steelseries_arctis_nova_5_write_setting,
@@ -1034,10 +1132,12 @@ static const struct steelseries_device_info arctis_nova_5_info = {
 static const struct steelseries_device_info arctis_nova_5x_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
-			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER,
+			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
+			SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 10,
 	.mic_volume_max = 15,
+	.inactive_time_max = 255,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_5x_parse_status,
 	.write_setting = steelseries_arctis_nova_5_write_setting,
@@ -1047,10 +1147,11 @@ static const struct steelseries_device_info arctis_nova_7_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_SIDETONE |
 			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
-			SS_CAP_BT_CALL_DUCKING,
+			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
+	.inactive_time_max = 255,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_parse_status,
 	.write_setting = steelseries_arctis_nova_7_write_setting,
@@ -1059,9 +1160,10 @@ static const struct steelseries_device_info arctis_nova_7_info = {
 static const struct steelseries_device_info arctis_nova_7p_info = {
 	.sync_interface = 3,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
-			SS_CAP_BT_CALL_DUCKING,
+			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.mic_volume_max = 7,
+	.inactive_time_max = 255,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_parse_status,
 	.write_setting = steelseries_arctis_nova_7_write_setting,
@@ -1074,9 +1176,10 @@ static const struct steelseries_device_info arctis_nova_7_gen2_info = {
 			SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
 			SS_CAP_EXTERNAL_CONFIG | SS_CAP_SIDETONE |
 			SS_CAP_MIC_VOLUME | SS_CAP_VOLUME_LIMITER |
-			SS_CAP_BT_CALL_DUCKING,
+			SS_CAP_BT_CALL_DUCKING | SS_CAP_INACTIVE_TIME,
 	.sidetone_max = 3,
 	.mic_volume_max = 7,
+	.inactive_time_max = 255,
 	.request_status = steelseries_arctis_nova_request_status,
 	.parse_status = steelseries_arctis_nova_7_gen2_parse_status,
 	.request_settings = steelseries_arctis_nova_7_gen2_request_settings,
@@ -1088,11 +1191,12 @@ static const struct steelseries_device_info arctis_nova_pro_info = {
 	.sync_interface = 4,
 	.capabilities = SS_CAP_BATTERY | SS_CAP_CHATMIX | SS_CAP_MIC_MUTE |
 			SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
-			SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME,
+			SS_CAP_SIDETONE | SS_CAP_MIC_VOLUME | SS_CAP_INACTIVE_TIME,
 	.quirks = SS_QUIRK_STATUS_SYNC_POLL,
 	.sidetone_max = 3,
 	.mic_volume_min = 1,
 	.mic_volume_max = 10,
+	.inactive_time_max = 60,
 	.request_status = steelseries_arctis_nova_pro_request_status,
 	.parse_status = steelseries_arctis_nova_pro_parse_status,
 	.parse_settings = steelseries_arctis_nova_pro_parse_settings,
@@ -1271,12 +1375,55 @@ static ssize_t bt_device_connected_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", sd->bt_device_connected);
 }
 
+static ssize_t inactive_time_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct steelseries_device *sd = hid_get_drvdata(hdev);
+
+	if (!sd->headset_connected)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", sd->inactive_timeout);
+}
+
+static ssize_t inactive_time_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct steelseries_device *sd = hid_get_drvdata(hdev);
+	unsigned int value;
+	int ret;
+
+	if (!sd->headset_connected)
+		return -ENODEV;
+
+	ret = kstrtouint(buf, 10, &value);
+	if (ret)
+		return ret;
+
+	if (value > sd->info->inactive_time_max)
+		return -EINVAL;
+
+	ret = sd->info->write_setting(sd->hdev, SS_SETTING_INACTIVE_TIME,
+				      value);
+	if (ret)
+		return ret;
+
+	sd->inactive_timeout = value;
+
+	return count;
+}
+
 static DEVICE_ATTR_RO(bt_enabled);
 static DEVICE_ATTR_RO(bt_device_connected);
+static DEVICE_ATTR_RW(inactive_time);
 
 static struct attribute *steelseries_headset_attrs[] = {
 	&dev_attr_bt_enabled.attr,
 	&dev_attr_bt_device_connected.attr,
+	&dev_attr_inactive_time.attr,
 	NULL,
 };
 
@@ -1298,6 +1445,8 @@ static umode_t steelseries_headset_attr_is_visible(struct kobject *kobj,
 		return (caps & SS_CAP_BT_ENABLED) ? attr->mode : 0;
 	if (attr == &dev_attr_bt_device_connected.attr)
 		return (caps & SS_CAP_BT_DEVICE_CONNECTED) ? attr->mode : 0;
+	if (attr == &dev_attr_inactive_time.attr)
+		return (caps & SS_CAP_INACTIVE_TIME) ? attr->mode : 0;
 
 	return 0;
 }
@@ -1956,7 +2105,8 @@ static int steelseries_probe(struct hid_device *hdev,
 				hid_warn(hdev, "Failed to register battery: %d\n", ret);
 		}
 
-		if (info->capabilities & (SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED)) {
+		if (info->capabilities & (SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
+					  SS_CAP_INACTIVE_TIME)) {
 			ret = sysfs_create_group(&hdev->dev.kobj,
 						 &steelseries_headset_attr_group);
 			if (ret)
@@ -2038,7 +2188,8 @@ static void steelseries_remove(struct hid_device *hdev)
 	}
 
 	if (interface_num == sd->info->sync_interface) {
-		if (sd->info->capabilities & (SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED))
+		if (sd->info->capabilities & (SS_CAP_BT_ENABLED | SS_CAP_BT_DEVICE_CONNECTED |
+					      SS_CAP_INACTIVE_TIME))
 			sysfs_remove_group(&hdev->dev.kobj,
 					   &steelseries_headset_attr_group);
 
