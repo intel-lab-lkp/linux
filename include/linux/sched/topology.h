@@ -82,7 +82,6 @@ struct sched_domain {
 	unsigned int cache_nice_tries;	/* Leave cache hot tasks for # tries */
 	unsigned int imb_numa_nr;	/* Nr running tasks that allows a NUMA imbalance */
 
-	int nohz_idle;			/* NOHZ IDLE status */
 	int flags;			/* See SD_* */
 	int level;
 
