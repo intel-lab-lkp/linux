@@ -30,16 +30,17 @@ function check {
 
     if [ $code $cop 0 ]; then
 	((num_errors++))
-	return
+	return 1
     fi
 
     if [ "$str" != "$exp_str"  ]; then
 	echo -e "Expected: '$exp_str', got '$str'"
 	((num_errors++))
-	return
+	return 1
     fi
 
     ((num_passes++))
+    return 0
 }
 
 function make_netdev {
