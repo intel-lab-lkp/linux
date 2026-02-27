@@ -240,7 +240,6 @@ static int __admv8818_lpf_select(struct admv8818_state *st, u64 freq)
 		freq_step = div_u64(freq_step, ADMV8818_NUM_STATES - 1);
 
 		for (state = ADMV8818_STATE_MAX; state >= ADMV8818_STATE_MIN; --state) {
-
 			freq_corner = freq_range_lpf[band][ADMV8818_BAND_CORNER_LOW] +
 				      state * freq_step;
 
@@ -385,8 +384,8 @@ static int admv8818_read_lpf_freq(struct admv8818_state *st, u64 *lpf_freq)
 }
 
 static int admv8818_write_raw_get_fmt(struct iio_dev *indio_dev,
-								struct iio_chan_spec const *chan,
-								long mask)
+				      struct iio_chan_spec const *chan,
+				      long mask)
 {
 	switch (mask) {
 	case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
@@ -721,7 +720,6 @@ static int admv8818_read_properties(struct admv8818_state *st)
 		st->lpf_margin_hz = 0;
 	else
 		return ret;
-
 
 	ret = device_property_read_u32(&spi->dev, "adi,hpf-margin-mhz", &mhz);
 	if (ret == 0)
