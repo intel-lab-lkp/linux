@@ -5,6 +5,7 @@
 #include <linux/kpkeys.h>
 #include <linux/memcontrol.h>
 #include <linux/mm.h>
+#include <linux/mutex.h>
 #include <linux/set_memory.h>
 
 __ro_after_init DEFINE_STATIC_KEY_FALSE(kpkeys_hardened_pgtables_key);
@@ -35,6 +36,8 @@ static int set_pkey_default(struct page *page, unsigned int nr_pages)
 static bool pba_enabled(void);
 static struct page *pba_pgtable_alloc(gfp_t gfp);
 static void pba_pgtable_free(struct page *page);
+static int pba_prepare_direct_map_split(void);
+static bool pba_ready_for_direct_map_split(void);
 static void pba_init(void);
 
 /* Trivial allocator in case the linear map is PTE-mapped (no block mapping) */
@@ -79,6 +82,22 @@ void kpkeys_pgtable_free(struct page *page)
 		noblock_pgtable_free(page);
 }
 
+int kpkeys_prepare_direct_map_split(void)
+{
+	if (pba_enabled())
+		return pba_prepare_direct_map_split();
+
+	return 0;
+}
+
+bool kpkeys_ready_for_direct_map_split(void)
+{
+	if (pba_enabled())
+		return pba_ready_for_direct_map_split();
+
+	return true;
+}
+
 void __init kpkeys_hardened_pgtables_init(void)
 {
 	if (!arch_kpkeys_enabled())
@@ -94,7 +113,24 @@ void __init kpkeys_hardened_pgtables_init(void)
  * freeing of full blocks.
  */
 #define PBA_GFP_ALLOC		GFP_KERNEL
-#define PBA_GFP_OPT_MASK	(__GFP_ZERO | __GFP_ACCOUNT)
+#define PBA_GFP_OPT_MASK	(__GFP_ZERO | __GFP_ACCOUNT | __GFP_PGTABLE_SPLIT)
+
+/*
+ * Pages need to be reserved for splitting the linear map; __GFP_PGTABLE_SPLIT
+ * must be passed to access these pages. 4 pages are reserved:
+ *
+ * - 2 in case a PMD and/or PTE page needs to be allocated if set_memory_pkey()
+ *   splits the linear map while refilling our own page cache (see
+ *   __refill_pages()). These 2 pages must always be available as we cannot
+ *   refill recursively. They are protected by alloc_mutex and are guaranteed to
+ *   be replenished when refilling is complete and we release the mutex.
+ *
+ * - 2 for splitting the linear map for any other purpose (e.g. calling
+ *   set_memory_pkey() or set_memory_ro() on an arbitrary range). These pages
+ *   are replenished before the split is attempted, see
+ *   kpkeys_prepare_direct_map_split().
+ */
+#define PBA_NR_RESERVED_PAGES	4
 
 #define BLOCK_ORDER		PMD_ORDER
 
@@ -128,12 +164,14 @@ struct pkeys_block_allocator {
 	struct list_head cached_list;
 	unsigned long nr_cached;
 	spinlock_t lock;
+	struct mutex alloc_mutex;
 };
 
 static struct pkeys_block_allocator pkeys_block_allocator = {
 	.cached_list = LIST_HEAD_INIT(pkeys_block_allocator.cached_list),
 	.nr_cached = 0,
 	.lock = __SPIN_LOCK_UNLOCKED(pkeys_block_allocator.lock),
+	.alloc_mutex = __MUTEX_INITIALIZER(pkeys_block_allocator.alloc_mutex)
 };
 
 static __ro_after_init DEFINE_STATIC_KEY_FALSE(pba_enabled_key);
@@ -141,6 +179,13 @@ static __ro_after_init DEFINE_STATIC_KEY_FALSE(pba_enabled_key);
 static bool pba_enabled(void)
 {
 	return static_branch_likely(&pba_enabled_key);
+}
+
+static bool alloc_mutex_locked(void)
+{
+	struct pkeys_block_allocator *pba = &pkeys_block_allocator;
+
+	return mutex_get_owner(&pba->alloc_mutex) == (unsigned long)current;
 }
 
 static void cached_list_add_pages(struct page *page, unsigned int nr_pages)
@@ -179,6 +224,7 @@ static void __refill_pages_add_to_cache(struct page *page, unsigned int order,
 
 static struct page *__refill_pages(bool alloc_one)
 {
+	struct pkeys_block_allocator *pba = &pkeys_block_allocator;
 	struct page *page;
 	unsigned int order;
 	int ret;
@@ -195,6 +241,8 @@ static struct page *__refill_pages(bool alloc_one)
 
 	pr_debug("%s: order=%d, pfn=%lx\n", __func__, order, page_to_pfn(page));
 
+	guard(mutex)(&pba->alloc_mutex);
+
 	ret = set_pkey_pgtable(page, 1 << order);
 
 	if (ret) {
@@ -210,16 +258,27 @@ static struct page *__refill_pages(bool alloc_one)
 	return page;
 }
 
+static int refill_pages(void)
+{
+	return __refill_pages(false) ? 0 : -ENOMEM;
+}
+
 static struct page *refill_pages_and_alloc_one(void)
 {
 	return __refill_pages(true);
 }
 
-static bool cached_page_available(void)
+static bool cached_page_available(gfp_t gfp)
 {
 	struct pkeys_block_allocator *pba = &pkeys_block_allocator;
 
-	return pba->nr_cached > 0;
+	if (gfp & __GFP_PGTABLE_SPLIT) {
+		pr_debug("%s: split pgtable (nr_cached: %lu, in_alloc: %d)\n",
+			__func__, pba->nr_cached, alloc_mutex_locked());
+		return true;
+	}
+
+	return pba->nr_cached > PBA_NR_RESERVED_PAGES;
 }
 
 static struct page *get_cached_page(gfp_t gfp)
@@ -229,7 +288,7 @@ static struct page *get_cached_page(gfp_t gfp)
 
 	guard(spinlock_bh)(&pba->lock);
 
-	if (!cached_page_available())
+	if (!cached_page_available(gfp))
 		return NULL;
 
 	page = list_first_entry_or_null(&pba->cached_list, struct page, lru);
@@ -311,10 +370,43 @@ static void pba_pgtable_free(struct page *page)
 	cached_list_add_pages(page, 1);
 }
 
+static int pba_prepare_direct_map_split(void)
+{
+	if (pba_ready_for_direct_map_split())
+		return 0;
+
+	/* Ensure we have at least PBA_NR_RESERVED_PAGES available */
+	return refill_pages();
+}
+
+static bool pba_ready_for_direct_map_split(void)
+{
+	struct pkeys_block_allocator *pba = &pkeys_block_allocator;
+
+	/*
+	 * For a regular split, we must ensure the reserve is fully replenished
+	 * before splitting (which may consume 2 pages out of 4).
+	 *
+	 * When refilling our cache, alloc_mutex is locked and we must use
+	 * pages from the reserve (remaining 2 pages).
+	 */
+	return READ_ONCE(pba->nr_cached) >= PBA_NR_RESERVED_PAGES ||
+		alloc_mutex_locked();
+}
+
 static void __init pba_init(void)
 {
+	int ret;
+
 	if (arch_has_pte_only_direct_map())
 		return;
 
 	static_branch_enable(&pba_enabled_key);
+
+	/*
+	 * Refill the cache so that the reserve pages are available for
+	 * splitting next time we need to refill.
+	 */
+	ret = refill_pages();
+	WARN_ON(ret);
 }

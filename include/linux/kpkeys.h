@@ -124,6 +124,9 @@ static inline bool kpkeys_hardened_pgtables_enabled(void)
 struct page *kpkeys_pgtable_alloc(gfp_t gfp);
 void kpkeys_pgtable_free(struct page *page);
 
+int kpkeys_prepare_direct_map_split(void);
+bool kpkeys_ready_for_direct_map_split(void);
+
 /*
  * Should be called from mem_init(): as soon as the buddy allocator becomes
  * available and before any call to pagetable_alloc().
@@ -140,6 +143,16 @@ static inline bool kpkeys_hardened_pgtables_enabled(void)
 static inline struct page *kpkeys_pgtable_alloc(gfp_t gfp)
 {
 	return NULL;
+}
+
+static inline int kpkeys_prepare_direct_map_split(void)
+{
+	return 0;
+}
+
+static inline bool kpkeys_ready_for_direct_map_split(void)
+{
+	return true;
 }
 
 static inline void kpkeys_pgtable_free(struct page *page) {}
