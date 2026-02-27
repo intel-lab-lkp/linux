@@ -1217,7 +1217,6 @@ struct drm_mode_crtc_page_flip_target {
  * or a variant thereof. The value often corresponds to the number of bits
  * per pixel for most modes, although there are exceptions. Each color mode
  * maps to a DRM format plus a number of modes with similar pixel layout.
- * Framebuffer layout is always linear.
  *
  * Support for all modes and formats is optional. Even if dumb-buffer
  * creation with a certain color mode succeeds, it is not guaranteed that
@@ -1257,9 +1256,13 @@ struct drm_mode_crtc_page_flip_target {
  * legacy user space. Please don't use them in new code. Other modes
  * are not support.
  *
+ * Framebuffer layout is always linear when allocated with this interface.
  * Do not attempt to allocate anything but linear framebuffer memory
  * with single-plane RGB data. Allocation of other framebuffer
  * layouts requires dedicated ioctls in the respective DRM driver.
+ * There exists userspace software exploiting this interface for
+ * framebuffers with non-linear layout, but this is incorrect usage with
+ * undefined behavior, and should not be replicated.
  */
 struct drm_mode_create_dumb {
 	__u32 height;
