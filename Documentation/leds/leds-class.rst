@@ -235,6 +235,11 @@ LED driver must implement the following API to support hw control:
                 Returns a pointer to a struct device or NULL if nothing
                 is currently attached.
 
+LED trigger must implement the following API to support hw control:
+    - offloaded:
+                return a boolean indicating if the trigger is offloaded to
+                hardware.
+
 LED driver can activate additional modes by default to workaround the
 impossibility of supporting each different mode on the supported trigger.
 Examples are hardcoding the blink speed to a set interval, enable special
