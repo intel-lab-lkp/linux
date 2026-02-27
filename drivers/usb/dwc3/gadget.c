@@ -971,8 +971,9 @@ static int __dwc3_gadget_ep_enable(struct dwc3_ep *dep, unsigned int action)
 	 * Issue StartTransfer here with no-op TRB so we can always rely on No
 	 * Response Update Transfer command.
 	 */
-	if (usb_endpoint_xfer_bulk(desc) ||
-			usb_endpoint_xfer_int(desc)) {
+	if ((usb_endpoint_xfer_bulk(desc) ||
+			usb_endpoint_xfer_int(desc)) &&
+			!(dep->flags & DWC3_EP_TRANSFER_STARTED)) {
 		struct dwc3_gadget_ep_cmd_params params;
 		struct dwc3_trb	*trb;
 		dma_addr_t trb_dma;
@@ -1096,6 +1097,23 @@ static int __dwc3_gadget_ep_disable(struct dwc3_ep *dep)
 	 */
 	if (dep->flags & DWC3_EP_DELAY_STOP)
 		mask |= (DWC3_EP_DELAY_STOP | DWC3_EP_TRANSFER_STARTED);
+
+	/*
+	 * When dwc3_gadget_ep_disable() calls dwc3_gadget_giveback(),
+	 * the dwc->lock is temporarily released. If dwc3_gadget_ep_queue()
+	 * runs in that window it may set the DWC3_EP_TRANSFER_STARTED flag as
+	 * part of dwc3_send_gadget_ep_cmd. The original code cleared the flag
+	 * unconditionally in the mask operation, which could overwrite the
+	 * concurrent modification.
+	 *
+	 * As a workaround for the interrupt context constraint where we cannot
+	 * wait for endpoint flushing, preserve the DWC3_EP_TRANSFER_STARTED
+	 * flag if it is set, avoiding resource conflicts until the framework
+	 * is fixed to properly synchronize endpoint lifecycle management.
+	 */
+	if (dep->flags & DWC3_EP_TRANSFER_STARTED)
+		mask |= DWC3_EP_TRANSFER_STARTED;
+
 	dep->flags &= mask;
 
 	/* Clear out the ep descriptors for non-ep0 */
