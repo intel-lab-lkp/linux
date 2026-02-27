@@ -30,10 +30,16 @@ struct sama5d4_wdt {
 	void __iomem		*reg_base;
 	u32			mr;
 	u32			ir;
+	u32			wddis_mask;
 	unsigned long		last_ping;
 	bool			need_irq;
-	bool			sam9x60_support;
+	bool			is_modern_chip;
 };
+
+static inline bool wdt_enabled(struct sama5d4_wdt *wdt, u32 mr)
+{
+	return !(mr & wdt->wddis_mask);
+}
 
 static int wdt_timeout;
 static bool nowayout = WATCHDOG_NOWAYOUT;
@@ -48,13 +54,21 @@ MODULE_PARM_DESC(nowayout,
 	"Watchdog cannot be stopped once started (default="
 	__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
-#define wdt_enabled (!(wdt->mr & AT91_WDT_WDDIS))
 
 #define wdt_read(wdt, field) \
 	readl_relaxed((wdt)->reg_base + (field))
 
 /* 4 slow clock periods is 4/32768 = 122.07µs*/
 #define WDT_DELAY	usecs_to_jiffies(123)
+
+static bool check_is_modern_chip_by_compatible(struct device *dev)
+{
+	if (of_device_is_compatible(dev->of_node, "microchip,sam9x60-wdt") ||
+	    of_device_is_compatible(dev->of_node, "microchip,sama7g5-wdt"))
+		return true;
+
+	return false;
+}
 
 static void wdt_write(struct sama5d4_wdt *wdt, u32 field, u32 val)
 {
@@ -77,37 +91,31 @@ static void wdt_write_nosleep(struct sama5d4_wdt *wdt, u32 field, u32 val)
 	wdt->last_ping = jiffies;
 }
 
-static int sama5d4_wdt_start(struct watchdog_device *wdd)
+static int wdt_start(struct watchdog_device *wdd)
 {
 	struct sama5d4_wdt *wdt = watchdog_get_drvdata(wdd);
 
-	if (wdt->sam9x60_support) {
-		writel_relaxed(wdt->ir, wdt->reg_base + AT91_SAM9X60_IER);
-		wdt->mr &= ~AT91_SAM9X60_WDDIS;
-	} else {
-		wdt->mr &= ~AT91_WDT_WDDIS;
-	}
+	if (wdt->is_modern_chip)
+		writel_relaxed(wdt->ir, wdt->reg_base + AT91_WDT_IER);
+	wdt->mr &= ~wdt->wddis_mask;
 	wdt_write(wdt, AT91_WDT_MR, wdt->mr);
 
 	return 0;
 }
 
-static int sama5d4_wdt_stop(struct watchdog_device *wdd)
+static int wdt_stop(struct watchdog_device *wdd)
 {
 	struct sama5d4_wdt *wdt = watchdog_get_drvdata(wdd);
 
-	if (wdt->sam9x60_support) {
-		writel_relaxed(wdt->ir, wdt->reg_base + AT91_SAM9X60_IDR);
-		wdt->mr |= AT91_SAM9X60_WDDIS;
-	} else {
-		wdt->mr |= AT91_WDT_WDDIS;
-	}
+	if (wdt->is_modern_chip)
+		writel_relaxed(wdt->ir, wdt->reg_base + AT91_WDT_IDR);
+	wdt->mr |= wdt->wddis_mask;
 	wdt_write(wdt, AT91_WDT_MR, wdt->mr);
 
 	return 0;
 }
 
-static int sama5d4_wdt_ping(struct watchdog_device *wdd)
+static int wdt_ping(struct watchdog_device *wdd)
 {
 	struct sama5d4_wdt *wdt = watchdog_get_drvdata(wdd);
 
@@ -116,15 +124,15 @@ static int sama5d4_wdt_ping(struct watchdog_device *wdd)
 	return 0;
 }
 
-static int sama5d4_wdt_set_timeout(struct watchdog_device *wdd,
-				 unsigned int timeout)
+static int wdt_set_timeout(struct watchdog_device *wdd,
+			   unsigned int timeout)
 {
 	struct sama5d4_wdt *wdt = watchdog_get_drvdata(wdd);
 	u32 value = WDT_SEC2TICKS(timeout);
 
-	if (wdt->sam9x60_support) {
-		wdt_write(wdt, AT91_SAM9X60_WLR,
-			  AT91_SAM9X60_SET_COUNTER(value));
+	if (wdt->is_modern_chip) {
+		wdt_write(wdt, AT91_WDT_WLR,
+			  AT91_WDT_SET_COUNTER(value));
 
 		wdd->timeout = timeout;
 		return 0;
@@ -140,8 +148,8 @@ static int sama5d4_wdt_set_timeout(struct watchdog_device *wdd,
 	 * If the watchdog is enabled, then the timeout can be updated. Else,
 	 * wait that the user enables it.
 	 */
-	if (wdt_enabled)
-		wdt_write(wdt, AT91_WDT_MR, wdt->mr & ~AT91_WDT_WDDIS);
+	if (wdt_enabled(wdt, wdt->mr))
+		wdt_write(wdt, AT91_WDT_MR, wdt->mr & ~wdt->wddis_mask);
 
 	wdd->timeout = timeout;
 
@@ -155,19 +163,19 @@ static const struct watchdog_info sama5d4_wdt_info = {
 
 static const struct watchdog_ops sama5d4_wdt_ops = {
 	.owner = THIS_MODULE,
-	.start = sama5d4_wdt_start,
-	.stop = sama5d4_wdt_stop,
-	.ping = sama5d4_wdt_ping,
-	.set_timeout = sama5d4_wdt_set_timeout,
+	.start = wdt_start,
+	.stop = wdt_stop,
+	.ping = wdt_ping,
+	.set_timeout = wdt_set_timeout,
 };
 
-static irqreturn_t sama5d4_wdt_irq_handler(int irq, void *dev_id)
+static irqreturn_t wdt_irq_handler(int irq, void *dev_id)
 {
 	struct sama5d4_wdt *wdt = platform_get_drvdata(dev_id);
 	u32 reg;
 
-	if (wdt->sam9x60_support)
-		reg = wdt_read(wdt, AT91_SAM9X60_ISR);
+	if (wdt->is_modern_chip)
+		reg = wdt_read(wdt, AT91_WDT_ISR);
 	else
 		reg = wdt_read(wdt, AT91_WDT_SR);
 
@@ -180,14 +188,11 @@ static irqreturn_t sama5d4_wdt_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int of_sama5d4_wdt_init(struct device_node *np, struct sama5d4_wdt *wdt)
+static int of_wdt_init(struct device_node *np, struct sama5d4_wdt *wdt)
 {
 	const char *tmp;
 
-	if (wdt->sam9x60_support)
-		wdt->mr = AT91_SAM9X60_WDDIS;
-	else
-		wdt->mr = AT91_WDT_WDDIS;
+	wdt->mr = wdt->wddis_mask;
 
 	if (!of_property_read_string(np, "atmel,watchdog-type", &tmp) &&
 	    !strcmp(tmp, "software"))
@@ -202,36 +207,35 @@ static int of_sama5d4_wdt_init(struct device_node *np, struct sama5d4_wdt *wdt)
 	return 0;
 }
 
-static int sama5d4_wdt_init(struct sama5d4_wdt *wdt)
+static int wdt_init(struct sama5d4_wdt *wdt)
 {
+	struct watchdog_device *wdd = &wdt->wdd;
 	u32 reg, val;
 
 	val = WDT_SEC2TICKS(WDT_DEFAULT_TIMEOUT);
+
 	/*
 	 * When booting and resuming, the bootloader may have changed the
 	 * watchdog configuration.
-	 * If the watchdog is already running, we can safely update it.
-	 * Else, we have to disable it properly.
+	 * If the watchdog is not running, we need to disable it properly.
+	 * Otherwise, we can safely update it.
 	 */
-	if (!wdt_enabled) {
-		reg = wdt_read(wdt, AT91_WDT_MR);
-		if (wdt->sam9x60_support && (!(reg & AT91_SAM9X60_WDDIS)))
-			wdt_write_nosleep(wdt, AT91_WDT_MR,
-					  reg | AT91_SAM9X60_WDDIS);
-		else if (!wdt->sam9x60_support &&
-			 (!(reg & AT91_WDT_WDDIS)))
-			wdt_write_nosleep(wdt, AT91_WDT_MR,
-					  reg | AT91_WDT_WDDIS);
+	reg = wdt_read(wdt, AT91_WDT_MR);
+	if (wdt_enabled(wdt, reg)) {
+		wdt->mr &= ~wdt->wddis_mask;
+		set_bit(WDOG_HW_RUNNING, &wdd->status);
+	} else {
+		wdt->mr |= wdt->wddis_mask;
 	}
 
-	if (wdt->sam9x60_support) {
+	if (wdt->is_modern_chip) {
 		if (wdt->need_irq)
-			wdt->ir = AT91_SAM9X60_PERINT;
+			wdt->ir = AT91_WDT_PERINT;
 		else
-			wdt->mr |= AT91_SAM9X60_PERIODRST;
+			wdt->mr |= AT91_WDT_PERIODRST;
 
-		wdt_write(wdt, AT91_SAM9X60_IER, wdt->ir);
-		wdt_write(wdt, AT91_SAM9X60_WLR, AT91_SAM9X60_SET_COUNTER(val));
+		wdt_write(wdt, AT91_WDT_IER, wdt->ir);
+		wdt_write(wdt, AT91_WDT_WLR, AT91_WDT_SET_COUNTER(val));
 	} else {
 		wdt->mr |= AT91_WDT_SET_WDD(WDT_SEC2TICKS(MAX_WDT_TIMEOUT));
 		wdt->mr |= AT91_WDT_SET_WDV(val);
@@ -247,14 +251,13 @@ static int sama5d4_wdt_init(struct sama5d4_wdt *wdt)
 	return 0;
 }
 
-static int sama5d4_wdt_probe(struct platform_device *pdev)
+static int wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct watchdog_device *wdd;
 	struct sama5d4_wdt *wdt;
 	void __iomem *regs;
 	u32 irq = 0;
-	u32 reg;
 	int ret;
 
 	wdt = devm_kzalloc(dev, sizeof(*wdt), GFP_KERNEL);
@@ -268,10 +271,11 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 	wdd->min_timeout = MIN_WDT_TIMEOUT;
 	wdd->max_timeout = MAX_WDT_TIMEOUT;
 	wdt->last_ping = jiffies;
-
-	if (of_device_is_compatible(dev->of_node, "microchip,sam9x60-wdt") ||
-	    of_device_is_compatible(dev->of_node, "microchip,sama7g5-wdt"))
-		wdt->sam9x60_support = true;
+	wdt->is_modern_chip = check_is_modern_chip_by_compatible(dev);
+	if (wdt->is_modern_chip)
+		wdt->wddis_mask = AT91_WDT_WDDIS_MODERN;
+	else
+		wdt->wddis_mask = AT91_WDT_WDDIS_LEGACY;
 
 	watchdog_set_drvdata(wdd, wdt);
 
@@ -281,7 +285,7 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 
 	wdt->reg_base = regs;
 
-	ret = of_sama5d4_wdt_init(dev->of_node, wdt);
+	ret = of_wdt_init(dev->of_node, wdt);
 	if (ret)
 		return ret;
 
@@ -294,7 +298,7 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 	}
 
 	if (wdt->need_irq) {
-		ret = devm_request_irq(dev, irq, sama5d4_wdt_irq_handler,
+		ret = devm_request_irq(dev, irq, wdt_irq_handler,
 				       IRQF_SHARED | IRQF_IRQPOLL |
 				       IRQF_NO_SUSPEND, pdev->name, pdev);
 		if (ret) {
@@ -305,13 +309,7 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 
 	watchdog_init_timeout(wdd, wdt_timeout, dev);
 
-	reg = wdt_read(wdt, AT91_WDT_MR);
-	if (!(reg & AT91_WDT_WDDIS)) {
-		wdt->mr &= ~AT91_WDT_WDDIS;
-		set_bit(WDOG_HW_RUNNING, &wdd->status);
-	}
-
-	ret = sama5d4_wdt_init(wdt);
+	ret = wdt_init(wdt);
 	if (ret)
 		return ret;
 
@@ -330,7 +328,7 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id sama5d4_wdt_of_match[] = {
+static const struct of_device_id wdt_of_match[] = {
 	{
 		.compatible = "atmel,sama5d4-wdt",
 	},
@@ -343,19 +341,19 @@ static const struct of_device_id sama5d4_wdt_of_match[] = {
 
 	{ }
 };
-MODULE_DEVICE_TABLE(of, sama5d4_wdt_of_match);
+MODULE_DEVICE_TABLE(of, wdt_of_match);
 
-static int sama5d4_wdt_suspend_late(struct device *dev)
+static int wdt_suspend_late(struct device *dev)
 {
 	struct sama5d4_wdt *wdt = dev_get_drvdata(dev);
 
 	if (watchdog_active(&wdt->wdd))
-		sama5d4_wdt_stop(&wdt->wdd);
+		wdt_stop(&wdt->wdd);
 
 	return 0;
 }
 
-static int sama5d4_wdt_resume_early(struct device *dev)
+static int wdt_resume_early(struct device *dev)
 {
 	struct sama5d4_wdt *wdt = dev_get_drvdata(dev);
 
@@ -364,25 +362,25 @@ static int sama5d4_wdt_resume_early(struct device *dev)
 	 * This should only be done when the registers are lost on suspend but
 	 * there is no way to get this information right now.
 	 */
-	sama5d4_wdt_init(wdt);
+	wdt_init(wdt);
 
 	if (watchdog_active(&wdt->wdd))
-		sama5d4_wdt_start(&wdt->wdd);
+		wdt_start(&wdt->wdd);
 
 	return 0;
 }
 
 static const struct dev_pm_ops sama5d4_wdt_pm_ops = {
-	LATE_SYSTEM_SLEEP_PM_OPS(sama5d4_wdt_suspend_late,
-				 sama5d4_wdt_resume_early)
+	LATE_SYSTEM_SLEEP_PM_OPS(wdt_suspend_late,
+				 wdt_resume_early)
 };
 
 static struct platform_driver sama5d4_wdt_driver = {
-	.probe		= sama5d4_wdt_probe,
+	.probe		= wdt_probe,
 	.driver		= {
 		.name	= "sama5d4_wdt",
 		.pm	= pm_sleep_ptr(&sama5d4_wdt_pm_ops),
-		.of_match_table = sama5d4_wdt_of_match,
+		.of_match_table = wdt_of_match,
 	}
 };
 module_platform_driver(sama5d4_wdt_driver);
