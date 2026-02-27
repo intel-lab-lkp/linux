@@ -2166,7 +2166,7 @@ static noinline int __btrfs_run_delayed_refs(struct btrfs_trans_handle *trans,
 			 * head
 			 */
 			ret = cleanup_ref_head(trans, locked_ref, &bytes_processed);
-			if (ret > 0 ) {
+			if (ret > 0) {
 				/* We dropped our lock, we need to loop. */
 				ret = 0;
 				continue;
@@ -4427,8 +4427,7 @@ static int find_free_extent_update_loop(struct btrfs_fs_info *fs_info,
 			if (ret == -ENOSPC) {
 				ret = 0;
 				ffe_ctl->loop++;
-			}
-			else if (ret < 0)
+			} else if (ret < 0)
 				btrfs_abort_transaction(trans, ret);
 			else
 				ret = 0;
@@ -5766,7 +5765,7 @@ again:
 		 * If we get 0 then we found our reference, return 1, else
 		 * return the error if it's not -ENOENT;
 		 */
-		return (ret < 0 ) ? ret : 1;
+		return (ret < 0) ? ret : 1;
 	}
 
 	/*
