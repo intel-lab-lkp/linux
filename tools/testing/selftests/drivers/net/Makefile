@@ -23,6 +23,7 @@ TEST_PROGS := \
 	shaper.py \
 	stats.py \
 	xdp.py \
+	xdp_metadata.py \
 # end of TEST_PROGS
 
 # YNL files, must be before "include ..lib.mk"
