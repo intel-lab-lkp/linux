@@ -1113,8 +1113,7 @@ static int dw_i3c_master_i2c_xfers(struct i2c_dev_desc *dev,
 		dev_err(master->dev,
 			"<%s> cannot resume i3c bus master, err: %d\n",
 			__func__, ret);
-		dw_i3c_master_free_xfer(xfer);
-		return ret;
+		goto free_xfer;
 	}
 
 	for (i = 0; i < i2c_nxfers; i++) {
@@ -1144,10 +1143,10 @@ static int dw_i3c_master_i2c_xfers(struct i2c_dev_desc *dev,
 	if (!wait_for_completion_timeout(&xfer->comp, m->i2c.timeout))
 		dw_i3c_master_dequeue_xfer(master, xfer);
 
-	ret = xfer->ret;
-	dw_i3c_master_free_xfer(xfer);
-
 	pm_runtime_put_autosuspend(master->dev);
+	ret = xfer->ret;
+free_xfer:
+	dw_i3c_master_free_xfer(xfer);
 	return ret;
 }
 
