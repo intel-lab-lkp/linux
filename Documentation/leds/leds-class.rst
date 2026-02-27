@@ -177,7 +177,9 @@ limited to blink but also to turn off or on autonomously.
 To support this feature, a LED needs to implement various additional
 ops and needs to declare specific support for the supported triggers.
 
-With hw control we refer to the LED driven by hardware.
+With hw control we refer to the LED driven by hardware. In hw control mode,
+the current trigger is offloaded to hardware. The `trigger_may_offload`
+attribute can be used to query supported triggers and their states.
 
 LED driver must define the following value to support hw control:
 

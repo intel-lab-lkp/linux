@@ -62,19 +62,6 @@ Description:
 		When offloaded is true, the blink interval is controlled by
 		hardware and won't reflect the value set in interval.
 
-What:		/sys/class/leds/<led>/offloaded
-Date:		Jun 2023
-KernelVersion:	6.5
-Contact:	linux-leds@vger.kernel.org
-Description:
-		Communicate whether the LED trigger modes are offloaded to
-		hardware or whether software fallback is used.
-
-		If 0, the LED is using software fallback to blink.
-
-		If 1, the LED blinking in requested mode is offloaded to
-		hardware.
-
 What:		/sys/class/leds/<led>/link_10
 Date:		Jun 2023
 KernelVersion:	6.5

@@ -1,0 +1,15 @@
+What:		/sys/class/leds/<led>/offloaded
+Date:		March 2026
+Contact:	linux-leds@vger.kernel.org
+Description:
+		Communicate whether the LED trigger modes are offloaded to
+		hardware or whether software fallback is used.
+
+		If 0, the LED is using software fallback to blink.
+
+		If 1, the LED blinking in requested mode is offloaded to
+		hardware.
+
+		Since 7.1, /sys/class/leds/<led>/trigger_may_offload provides
+		a generic method to query the offloaded state of supported
+		trigger, so this has been deprecated.

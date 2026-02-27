@@ -346,6 +346,48 @@ void led_load_hw_control_trigger(struct led_classdev *led_cdev)
 }
 EXPORT_SYMBOL_GPL(led_load_hw_control_trigger);
 
+/*
+ * Caller must ensure led_cdev->trigger_lock held,
+ * and led_cdev->trigger->name must match led_cdev->hw_control_trigger.
+ */
+static bool led_trigger_get_offloaded(struct led_classdev *led_cdev)
+{
+	if (likely(led_cdev->trigger->offloaded))
+		return led_cdev->trigger->offloaded(led_cdev);
+
+	dev_err_once(led_cdev->dev,
+		     "hw control trigger %s doesn't implement offloaded(), this is a bug\n",
+		     led_cdev->trigger->name);
+	return false;
+}
+
+ssize_t led_trigger_may_offload_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	bool hit, offloaded = false;
+	int len;
+
+	mutex_lock(&led_cdev->led_access);
+	down_read(&led_cdev->trigger_lock);
+
+	hit = led_cdev->trigger && led_match_hw_control_trigger(led_cdev, led_cdev->trigger);
+	if (hit)
+		offloaded = led_trigger_get_offloaded(led_cdev);
+
+	/* [offloaded] <active_but_not_offloaded> inactive */
+	len = led_trigger_snprintf(buf, PAGE_SIZE,
+				   hit ? (offloaded ? "[%s]\n" : "<%s>\n")
+				       : "%s\n",
+				   led_cdev->hw_control_trigger);
+
+	up_read(&led_cdev->trigger_lock);
+	mutex_unlock(&led_cdev->led_access);
+
+	return len;
+}
+EXPORT_SYMBOL_GPL(led_trigger_may_offload_show);
+
 /* LED Trigger Interface */
 
 int led_trigger_register(struct led_trigger *trig)
