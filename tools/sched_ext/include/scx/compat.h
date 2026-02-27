@@ -137,8 +137,8 @@ static inline long scx_hotplug_seq(void)
 	buf[len] = 0;
 	close(fd);
 
-	val = strtoul(buf, NULL, 10);
-	SCX_BUG_ON(val < 0, "invalid num hotplug events: %lu", val);
+	val = strtol(buf, NULL, 10);
+	SCX_BUG_ON(val < 0, "invalid num hotplug events: %ld", val);
 
 	return val;
 }
