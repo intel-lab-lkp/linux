@@ -2273,3 +2273,8 @@ int arch_set_user_pkey_access(struct task_struct *tsk, int pkey, unsigned long i
 	return 0;
 }
 #endif
+
+void __init mem_init(void)
+{
+	kpkeys_hardened_pgtables_init();
+}
