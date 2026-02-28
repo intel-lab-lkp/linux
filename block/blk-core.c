@@ -1026,10 +1026,11 @@ void update_io_ticks(struct block_device *part, unsigned long now, bool end)
 	unsigned long stamp;
 again:
 	stamp = READ_ONCE(part->bd_stamp);
-	if (unlikely(time_after(now, stamp)) &&
-	    likely(try_cmpxchg(&part->bd_stamp, &stamp, now)) &&
-	    (end || bdev_count_inflight(part)))
-		__part_stat_add(part, io_ticks, now - stamp);
+	if (unlikely(time_after(now, stamp))) {
+		bool busy = end || bdev_count_inflight(part);
+		if (likely(try_cmpxchg(&part->bd_stamp, &stamp, now)) && busy)
+			__part_stat_add(part, io_ticks, now - stamp);
+	}
 
 	if (bdev_is_partition(part)) {
 		part = bdev_whole(part);
