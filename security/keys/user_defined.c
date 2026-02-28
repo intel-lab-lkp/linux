@@ -171,20 +171,14 @@ EXPORT_SYMBOL_GPL(user_describe);
 long user_read(const struct key *key, char *buffer, size_t buflen)
 {
 	const struct user_key_payload *upayload;
-	long ret;
 
 	upayload = user_key_payload_locked(key);
-	ret = upayload->datalen;
 
 	/* we can return the data as is */
-	if (buffer && buflen > 0) {
-		if (buflen > upayload->datalen)
-			buflen = upayload->datalen;
+	if (buffer)
+		memcpy(buffer, upayload->data, min(buflen, upayload->datalen));
 
-		memcpy(buffer, upayload->data, buflen);
-	}
-
-	return ret;
+	return upayload->datalen;
 }
 
 EXPORT_SYMBOL_GPL(user_read);
