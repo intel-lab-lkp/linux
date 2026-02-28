@@ -472,13 +472,48 @@ int phy_register_fixup_for_id(const char *bus_id,
 }
 EXPORT_SYMBOL(phy_register_fixup_for_id);
 
+/**
+ * genphy_check_device_id - match a PHY device against a given ID
+ * @phydev: target phy_device struct
+ * @phy_id: expected PHY ID
+ * @phy_id_mask: the PHY ID mask, set bits are significant in matching
+ *
+ * Description: Checks whether the given PHY device matches the specified
+ * ID. For Clause 45 PHYs, iterates over the available device identifiers
+ * and compares them against the expected PHY ID, applying the provided mask.
+ * For Clause 22 PHYs, a direct ID comparison is performed.
+ *
+ * Return: true if the PHY device matches the masked ID, false otherwise.
+ */
+static bool genphy_check_device_id(struct phy_device *phydev,
+				   u32 phy_id, u32 phy_id_mask)
+{
+	if (phydev->is_c45) {
+		const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
+		int i;
+
+		for (i = 1; i < num_ids; i++) {
+			if (phydev->c45_ids.device_ids[i] == 0xffffffff)
+				continue;
+
+			if (phy_id_compare(phydev->c45_ids.device_ids[i],
+					   phy_id, phy_id_mask))
+				return true;
+		}
+
+		return false;
+	}
+
+	return phy_id_compare(phydev->phy_id, phy_id, phy_id_mask);
+}
+
 static bool phy_needs_fixup(struct phy_device *phydev, struct phy_fixup *fixup)
 {
 	if (!strcmp(fixup->bus_id, phydev_name(phydev)))
 		return true;
 
 	if (fixup->phy_uid_mask &&
-	    phy_id_compare(phydev->phy_id, fixup->phy_uid, fixup->phy_uid_mask))
+	    genphy_check_device_id(phydev, fixup->phy_uid, fixup->phy_uid_mask))
 		return true;
 
 	return false;
@@ -522,24 +557,7 @@ static int phy_scan_fixups(struct phy_device *phydev)
 int genphy_match_phy_device(struct phy_device *phydev,
 			    const struct phy_driver *phydrv)
 {
-	if (phydev->is_c45) {
-		const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
-		int i;
-
-		for (i = 1; i < num_ids; i++) {
-			if (phydev->c45_ids.device_ids[i] == 0xffffffff)
-				continue;
-
-			if (phy_id_compare(phydev->c45_ids.device_ids[i],
-					   phydrv->phy_id, phydrv->phy_id_mask))
-				return 1;
-		}
-
-		return 0;
-	}
-
-	return phy_id_compare(phydev->phy_id, phydrv->phy_id,
-			      phydrv->phy_id_mask);
+	return genphy_check_device_id(phydev, phydrv->phy_id, phydrv->phy_id_mask);
 }
 EXPORT_SYMBOL_GPL(genphy_match_phy_device);
 
