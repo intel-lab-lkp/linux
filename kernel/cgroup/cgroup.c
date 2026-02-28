@@ -107,12 +107,6 @@ static bool cgroup_debug __read_mostly;
  */
 static DEFINE_SPINLOCK(cgroup_idr_lock);
 
-/*
- * Protects cgroup_file->kn for !self csses.  It synchronizes notifications
- * against file removal/re-creation across css hiding.
- */
-static DEFINE_SPINLOCK(cgroup_file_kn_lock);
-
 DEFINE_PERCPU_RWSEM(cgroup_threadgroup_rwsem);
 
 #define cgroup_assert_mutex_or_rcu_locked()				\
@@ -1748,9 +1742,9 @@ static void cgroup_rm_file(struct cgroup *cgrp, const struct cftype *cft)
 		struct cgroup_subsys_state *css = cgroup_css(cgrp, cft->ss);
 		struct cgroup_file *cfile = (void *)css + cft->file_offset;
 
-		spin_lock_irq(&cgroup_file_kn_lock);
+		spin_lock_irq(&cfile->lock);
 		WRITE_ONCE(cfile->kn, NULL);
-		spin_unlock_irq(&cgroup_file_kn_lock);
+		spin_unlock_irq(&cfile->lock);
 
 		timer_delete_sync(&cfile->notify_timer);
 	}
@@ -4428,10 +4422,8 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
 		struct cgroup_file *cfile = (void *)css + cft->file_offset;
 
 		timer_setup(&cfile->notify_timer, cgroup_file_notify_timer, 0);
-
-		spin_lock_irq(&cgroup_file_kn_lock);
-		WRITE_ONCE(cfile->kn, kn);
-		spin_unlock_irq(&cgroup_file_kn_lock);
+		spin_lock_init(&cfile->lock);
+		cfile->kn = kn;
 	}
 
 	return 0;
@@ -4696,7 +4688,7 @@ void cgroup_file_notify(struct cgroup_file *cfile)
 	if (time_before_eq(jiffies, last + CGROUP_FILE_NOTIFY_MIN_INTV))
 		return;
 
-	spin_lock_irqsave(&cgroup_file_kn_lock, flags);
+	spin_lock_irqsave(&cfile->lock, flags);
 	if (cfile->kn) {
 		last = cfile->notified_at;
 		next = last + CGROUP_FILE_NOTIFY_MIN_INTV;
@@ -4709,7 +4701,7 @@ void cgroup_file_notify(struct cgroup_file *cfile)
 			WRITE_ONCE(cfile->notified_at, jiffies);
 		}
 	}
-	spin_unlock_irqrestore(&cgroup_file_kn_lock, flags);
+	spin_unlock_irqrestore(&cfile->lock, flags);
 
 	if (kn) {
 		kernfs_notify(kn);
@@ -4727,10 +4719,10 @@ void cgroup_file_show(struct cgroup_file *cfile, bool show)
 {
 	struct kernfs_node *kn;
 
-	spin_lock_irq(&cgroup_file_kn_lock);
+	spin_lock_irq(&cfile->lock);
 	kn = cfile->kn;
 	kernfs_get(kn);
-	spin_unlock_irq(&cgroup_file_kn_lock);
+	spin_unlock_irq(&cfile->lock);
 
 	if (kn)
 		kernfs_show(kn, show);
