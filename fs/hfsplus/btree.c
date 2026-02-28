@@ -239,15 +239,31 @@ static int hfs_bmap_clear_bit(struct hfs_bnode *node, u32 bit_idx)
 	return 0;
 }
 
+static const char *hfs_btree_name(u32 cnid)
+{
+	static const char * const tree_names[] = {
+		[HFSPLUS_EXT_CNID] = "Extents",
+		[HFSPLUS_CAT_CNID] = "Catalog",
+		[HFSPLUS_ATTR_CNID] = "Attributes",
+	};
+
+	if (cnid < ARRAY_SIZE(tree_names) && tree_names[cnid])
+		return tree_names[cnid];
+
+	return "Unknown";
+}
+
 /* Get a reference to a B*Tree and do some initial checks */
 struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 {
 	struct hfs_btree *tree;
 	struct hfs_btree_header_rec *head;
 	struct address_space *mapping;
+	struct hfs_bnode *node;
 	struct inode *inode;
 	struct page *page;
 	unsigned int size;
+	int res;
 
 	tree = kzalloc_obj(*tree);
 	if (!tree)
@@ -352,6 +368,26 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 
 	kunmap_local(head);
 	put_page(page);
+
+	node = hfs_bnode_find(tree, HFSPLUS_TREE_HEAD);
+	if (IS_ERR(node))
+		goto free_inode;
+
+	res = hfs_bmap_test_bit(node, 0);
+	if (res < 0) {
+		pr_warn("(%s): %s Btree (cnid 0x%x) map record invalid/corrupted, forcing read-only.\n",
+				sb->s_id, hfs_btree_name(id), id);
+		pr_warn("Run fsck.hfsplus to repair.\n");
+		sb->s_flags |= SB_RDONLY;
+	} else if (res == 0) {
+		pr_warn("(%s): %s Btree (cnid 0x%x) bitmap corruption detected, forcing read-only.\n",
+				sb->s_id, hfs_btree_name(id), id);
+		pr_warn("Run fsck.hfsplus to repair.\n");
+		sb->s_flags |= SB_RDONLY;
+	}
+
+	hfs_bnode_put(node);
+
 	return tree;
 
  fail_page:
