@@ -556,10 +556,7 @@ static struct tpmi_per_power_domain_info *get_instance(int pkg_id, int power_dom
 
 static bool disable_dynamic_sst_features(void)
 {
-	u64 value;
-
-	rdmsrq(MSR_PM_ENABLE, value);
-	return !(value & 0x1);
+	return !static_cpu_has(X86_FEATURE_HWP);
 }
 
 #define _read_cp_info(name_str, name, offset, start, width, mult_factor)\
