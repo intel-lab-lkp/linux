@@ -13,6 +13,12 @@
 #include <asm/processor.h>
 #include <asm/time.h>
 
+#define seq_cpu_feature(m, feature)		\
+do {						\
+	if (cpu_has_##feature)			\
+		seq_puts(m, " " #feature);	\
+} while (0)
+
 static int show_cpuinfo(struct seq_file *m, void *v)
 {
 	unsigned long n = (unsigned long) v - 1;
@@ -60,38 +66,24 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	seq_puts(m, "\n");
 
 	seq_puts(m, "Features\t\t:");
-	if (cpu_has_cpucfg)
-		seq_puts(m, " cpucfg");
-	if (cpu_has_lam)
-		seq_puts(m, " lam");
-	if (cpu_has_scq)
-		seq_puts(m, " scq");
-	if (cpu_has_ual)
-		seq_puts(m, " ual");
-	if (cpu_has_fpu)
-		seq_puts(m, " fpu");
-	if (cpu_has_lsx)
-		seq_puts(m, " lsx");
-	if (cpu_has_lasx)
-		seq_puts(m, " lasx");
-	if (cpu_has_crc32)
-		seq_puts(m, " crc32");
-	if (cpu_has_complex)
-		seq_puts(m, " complex");
-	if (cpu_has_crypto)
-		seq_puts(m, " crypto");
-	if (cpu_has_ptw)
-		seq_puts(m, " ptw");
-	if (cpu_has_lspw)
-		seq_puts(m, " lspw");
-	if (cpu_has_lvz)
-		seq_puts(m, " lvz");
-	if (cpu_has_lbt_x86)
-		seq_puts(m, " lbt_x86");
-	if (cpu_has_lbt_arm)
-		seq_puts(m, " lbt_arm");
-	if (cpu_has_lbt_mips)
-		seq_puts(m, " lbt_mips");
+
+	seq_cpu_feature(m, cpucfg);
+	seq_cpu_feature(m, lam);
+	seq_cpu_feature(m, scq);
+	seq_cpu_feature(m, ual);
+	seq_cpu_feature(m, fpu);
+	seq_cpu_feature(m, lsx);
+	seq_cpu_feature(m, lasx);
+	seq_cpu_feature(m, crc32);
+	seq_cpu_feature(m, complex);
+	seq_cpu_feature(m, crypto);
+	seq_cpu_feature(m, ptw);
+	seq_cpu_feature(m, lspw);
+	seq_cpu_feature(m, lvz);
+	seq_cpu_feature(m, lbt_x86);
+	seq_cpu_feature(m, lbt_arm);
+	seq_cpu_feature(m, lbt_mips);
+
 	seq_puts(m, "\n");
 
 	seq_printf(m, "Hardware Watchpoint\t: %s", str_yes_no(cpu_has_watch));
