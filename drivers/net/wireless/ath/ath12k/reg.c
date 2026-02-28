@@ -87,9 +87,20 @@ ath12k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 	}
 
 	if (!IS_ENABLED(CONFIG_ATH_REG_DYNAMIC_USER_REG_HINTS)) {
-		ath12k_dbg(ar->ab, ATH12K_DBG_REG,
-			   "Country Setting is not allowed\n");
-		return;
+		/* Allow user hints when firmware reports world domain ("00").
+		 * Some firmware versions default to alpha2 "00" on init, which
+		 * causes cfg80211 to mark all 5 GHz channels as no-IR, blocking
+		 * active scanning and making 5 GHz networks invisible. When the
+		 * firmware has not provided a valid country code, accept a user
+		 * hint so the correct regulatory domain can be applied.
+		 * Once the firmware responds with a valid country, subsequent
+		 * user hints are blocked again as usual.
+		 */
+		if (ath12k_regdom_changes(hw, "00")) {
+			ath12k_dbg(ar->ab, ATH12K_DBG_REG,
+				   "Country Setting is not allowed\n");
+			return;
+		}
 	}
 
 	if (!ath12k_regdom_changes(hw, request->alpha2)) {
