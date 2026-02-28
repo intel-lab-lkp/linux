@@ -48,7 +48,7 @@ void __delay(unsigned long cycles)
 		wfit(end);
 		while ((__delay_cycles() - start) < cycles)
 			wfet(end);
-	} else 	if (arch_timer_evtstrm_available()) {
+	} else if (arch_timer_evtstrm_available()) {
 		const cycles_t timer_evt_period =
 			USECS_TO_CYCLES(ARCH_TIMER_EVT_STREAM_PERIOD_US);
 
