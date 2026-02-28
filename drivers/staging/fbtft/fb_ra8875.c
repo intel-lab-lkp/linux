@@ -29,7 +29,7 @@ static int write_spi(struct fbtft_par *par, void *buf, size_t len)
 	if (!par->spi) {
 		dev_err(par->info->device,
 			"%s: par->spi is unexpectedly NULL\n", __func__);
-		return -1;
+		return -ENODEV;
 	}
 
 	spi_message_init(&m);
@@ -144,7 +144,7 @@ static int init_display(struct fbtft_par *par)
 		write_reg(par, 0x1F, 0x01);
 	} else {
 		dev_err(par->info->device, "display size is not supported!!");
-		return -1;
+		return -EINVAL;
 	}
 
 	/* PWM clock */

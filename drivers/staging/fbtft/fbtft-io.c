@@ -19,7 +19,7 @@ int fbtft_write_spi(struct fbtft_par *par, void *buf, size_t len)
 	if (!par->spi) {
 		dev_err(par->info->device,
 			"%s: par->spi is unexpectedly NULL\n", __func__);
-		return -1;
+		return -ENODEV;
 	}
 
 	spi_message_init(&m);
@@ -231,6 +231,6 @@ EXPORT_SYMBOL(fbtft_write_gpio16_wr);
 int fbtft_write_gpio16_wr_latched(struct fbtft_par *par, void *buf, size_t len)
 {
 	dev_err(par->info->device, "%s: function not implemented\n", __func__);
-	return -1;
+	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(fbtft_write_gpio16_wr_latched);
