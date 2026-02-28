@@ -208,7 +208,12 @@ static int mdiobus_scan_bus_c22(struct mii_bus *bus)
 {
 	int i;
 
-	for (i = 0; i < PHY_MAX_ADDR; i++) {
+	/* Scan address 0 last. Some vendors consider it a broadcast address
+	 * and so their PHYs respond at it in addition to the actual PHY address.
+	 * Scanning addresses 1-31 first allows PHY fixups to reconfigure these
+	 * PHYs to not respond at address 0 before we try to scan it.
+	 */
+	for (i = PHY_MAX_ADDR - 1; i >= 0; i--) {
 		if ((bus->phy_mask & BIT(i)) == 0) {
 			struct phy_device *phydev;
 
@@ -224,7 +229,12 @@ static int mdiobus_scan_bus_c45(struct mii_bus *bus)
 {
 	int i;
 
-	for (i = 0; i < PHY_MAX_ADDR; i++) {
+	/* Scan address 0 last. Some vendors consider it a broadcast address
+	 * and so their PHYs respond at it in addition to the actual PHY address.
+	 * Scanning addresses 1-31 first allows PHY fixups to reconfigure these
+	 * PHYs to not respond at address 0 before we try to scan it.
+	 */
+	for (i = PHY_MAX_ADDR - 1; i >= 0; i--) {
 		if ((bus->phy_mask & BIT(i)) == 0) {
 			struct phy_device *phydev;
 
