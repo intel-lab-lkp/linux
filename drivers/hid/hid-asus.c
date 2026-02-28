@@ -1309,7 +1309,8 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	if (is_vendor && (drvdata->quirks & QUIRK_USE_KBD_BACKLIGHT) &&
-	    asus_kbd_register_leds(hdev))
+	    (asus_has_report_id(hdev, FEATURE_KBD_REPORT_ID)) &&
+		(asus_kbd_register_leds(hdev)))
 		hid_warn(hdev, "Failed to initialize backlight.\n");
 
 	/*
