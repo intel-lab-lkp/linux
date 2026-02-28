@@ -3978,6 +3978,10 @@ static int __init phy_init(void)
 	if (rc)
 		goto err_ethtool_phy_ops;
 
+	rc = phy_register_address_0_fixups();
+	if (rc)
+		goto err_ethtool_phy_ops;
+
 	features_init();
 
 	rc = phy_driver_register(&genphy_c45_driver, THIS_MODULE);

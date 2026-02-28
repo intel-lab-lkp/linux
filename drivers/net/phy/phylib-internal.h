@@ -22,4 +22,6 @@ void phy_check_downshift(struct phy_device *phydev);
 
 int genphy_c45_read_eee_adv(struct phy_device *phydev, unsigned long *adv);
 
+int phy_register_address_0_fixups(void);
+
 #endif /* __PHYLIB_INTERNAL_H */
