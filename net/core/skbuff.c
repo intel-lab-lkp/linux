@@ -5174,6 +5174,19 @@ static void skb_extensions_init(void) {}
 
 void __init skb_init(void)
 {
+	struct kmem_cache_args kmem_args_small_head = {
+		.align		= 0,
+		.ctor		= NULL,
+		/* usercopy should only access first SKB_SMALL_HEAD_HEADROOM
+		 * bytes.
+		 * struct skb_shared_info is located at the end of skb->head,
+		 * and should not be copied to/from user.
+		 */
+		.useroffset	= 0,
+		.usersize	= SKB_SMALL_HEAD_HEADROOM,
+		.sheaf_capacity = 32,
+	};
+
 	net_hotdata.skbuff_cache = kmem_cache_create_usercopy("skbuff_head_cache",
 					      sizeof(struct sk_buff),
 					      0,
@@ -5189,17 +5202,13 @@ void __init skb_init(void)
 						0,
 						SLAB_HWCACHE_ALIGN|SLAB_PANIC,
 						NULL);
-	/* usercopy should only access first SKB_SMALL_HEAD_HEADROOM bytes.
-	 * struct skb_shared_info is located at the end of skb->head,
-	 * and should not be copied to/from user.
-	 */
-	net_hotdata.skb_small_head_cache = kmem_cache_create_usercopy("skbuff_small_head",
-						SKB_SMALL_HEAD_CACHE_SIZE,
-						0,
-						SLAB_HWCACHE_ALIGN | SLAB_PANIC,
-						0,
-						SKB_SMALL_HEAD_HEADROOM,
-						NULL);
+
+	net_hotdata.skb_small_head_cache = kmem_cache_create(
+			"skbuff_small_head",
+			SKB_SMALL_HEAD_CACHE_SIZE,
+			&kmem_args_small_head,
+			SLAB_HWCACHE_ALIGN | SLAB_PANIC);
+
 	skb_extensions_init();
 }
 
