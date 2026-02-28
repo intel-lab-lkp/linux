@@ -244,6 +244,8 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 			if (svm_gp_erratum_intercept && !sev_guest(vcpu->kvm))
 				set_exception_intercept(svm, GP_VECTOR);
 		}
+
+		kvm_make_request(KVM_REQ_RECALC_INTERCEPTS, vcpu);
 	}
 
 	svm->vmcb->save.efer = efer | EFER_SVME;
@@ -1021,6 +1023,7 @@ static bool svm_has_pending_gif_event(struct vcpu_svm *svm)
 static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	u64 efer = vcpu->arch.efer;
 
 	/*
 	 * Intercept INVPCID if shadow paging is enabled to sync/free shadow
@@ -1045,8 +1048,13 @@ static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu)
 	 * No need to toggle VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK here, it is
 	 * always set if vls is enabled. If the intercepts are set, the bit is
 	 * meaningless anyway.
+	 *
+	 * Intercept instructions that #UD if EFER.SVME=0, as SVME must be set even
+	 * when running the guest, i.e. hardware will only ever see EFER.SVME=1.
 	 */
-	if (guest_cpuid_is_intel_compatible(vcpu)) {
+	if (guest_cpuid_is_intel_compatible(vcpu) || !(efer & EFER_SVME)) {
+		svm_set_intercept(svm, INTERCEPT_CLGI);
+		svm_set_intercept(svm, INTERCEPT_STGI);
 		svm_set_intercept(svm, INTERCEPT_VMLOAD);
 		svm_set_intercept(svm, INTERCEPT_VMSAVE);
 	} else {
