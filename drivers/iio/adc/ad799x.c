@@ -847,7 +847,7 @@ static int ad799x_probe(struct i2c_client *client)
 	if (ret)
 		goto error_disable_vref;
 
-	ret = iio_triggered_buffer_setup(indio_dev, NULL,
+	ret = devm_iio_triggered_buffer_setup(&client->dev, indio_dev, NULL,
 		&ad799x_trigger_handler, NULL);
 	if (ret)
 		goto error_disable_vref;
@@ -862,19 +862,17 @@ static int ad799x_probe(struct i2c_client *client)
 						client->name,
 						indio_dev);
 		if (ret)
-			goto error_cleanup_ring;
+			goto error_disable_vref;
 	}
 
 	mutex_init(&st->lock);
 
-	ret = iio_device_register(indio_dev);
+	ret = devm_iio_device_register(&client->dev, indio_dev);
 	if (ret)
-		goto error_cleanup_ring;
+		goto error_disable_vref;
 
 	return 0;
 
-error_cleanup_ring:
-	iio_triggered_buffer_cleanup(indio_dev);
 error_disable_vref:
 	if (st->vref)
 		regulator_disable(st->vref);
@@ -889,9 +887,6 @@ static void ad799x_remove(struct i2c_client *client)
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct ad799x_state *st = iio_priv(indio_dev);
 
-	iio_device_unregister(indio_dev);
-
-	iio_triggered_buffer_cleanup(indio_dev);
 	if (st->vref)
 		regulator_disable(st->vref);
 	regulator_disable(st->reg);
