@@ -4,6 +4,32 @@
 
 #include "phylib-internal.h"
 
+#define PHY_ID_YT8821				0x4f51ea19
+#define YTPHY_PAGE_SELECT			0x1E
+#define YTPHY_PAGE_DATA				0x1F
+#define YTPHY_MDIO_ADDRESS_CONTROL_REG		0xA005
+#define YTPHY_MACR_EN_PHY_ADDR_0		BIT(6)
+
+/**
+ * yt8821_disable_broadcast - Disable MDIO broadcast on address 0
+ */
+static int yt8821_disable_broadcast(struct phy_device *phydev)
+{
+	int rc = 0;
+
+	phy_lock_mdio_bus(phydev);
+
+	rc = __phy_write(phydev, YTPHY_PAGE_SELECT, YTPHY_MDIO_ADDRESS_CONTROL_REG);
+	if (rc < 0)
+		goto unlock;
+
+	rc = __phy_modify(phydev, YTPHY_PAGE_DATA, YTPHY_MACR_EN_PHY_ADDR_0, 0);
+
+unlock:
+	phy_unlock_mdio_bus(phydev);
+	return rc;
+}
+
 /**
  * phy_register_address_0_fixups - Register fixups for disabling MDIO
  * broadcast address 0
@@ -22,5 +48,12 @@
  */
 int phy_register_address_0_fixups(void)
 {
+	int rc;
+
+	rc = phy_register_fixup_for_uid(PHY_ID_YT8821, 0xFFFFFFFF,
+					yt8821_disable_broadcast);
+	if (rc < 0)
+		return rc;
+
 	return 0;
 }

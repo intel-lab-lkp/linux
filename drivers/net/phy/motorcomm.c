@@ -227,6 +227,9 @@
 #define YT8521_LED_100_ON_EN			BIT(5)
 #define YT8521_LED_10_ON_EN			BIT(4)
 
+#define YTPHY_MDIO_ADDRESS_CONTROL_REG		0xA005
+#define YTPHY_MACR_EN_PHY_ADDR_0		BIT(6)
+
 #define YTPHY_MISC_CONFIG_REG			0xA006
 #define YTPHY_MCR_FIBER_SPEED_MASK		BIT(0)
 #define YTPHY_MCR_FIBER_1000BX			(0x1 << 0)
@@ -2765,6 +2768,28 @@ static int yt8821_soft_reset(struct phy_device *phydev)
 }
 
 /**
+ * yt8821_disable_mdio_address_zero() - disable MDIO broadcast address 0
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * The YT8821 responds on two MDIO addresses by default:
+ *  - the address selected by its strapping pins
+ *  - the broadcast address 0
+ *
+ * Some other PHYs (e.g. the MT7981B internal Gigabit PHY) are hardwired to
+ * respond only at MDIO address 0. If the YT8821 also listens on address 0,
+ * it may incorrectly react to transactions intended for those PHYs.
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8821_disable_mdio_address_zero(struct phy_device *phydev)
+{
+	return ytphy_modify_ext_with_lock(phydev,
+					  YTPHY_MDIO_ADDRESS_CONTROL_REG,
+					  YTPHY_MACR_EN_PHY_ADDR_0,
+					  0);
+}
+
+/**
  * yt8821_config_init() - phy initializatioin
  * @phydev: a pointer to a &struct phy_device
  *
@@ -2798,6 +2823,10 @@ static int yt8821_config_init(struct phy_device *phydev)
 	} else if (mode == YT8821_CHIP_MODE_FORCE_BX2500) {
 		phydev->rate_matching = RATE_MATCH_PAUSE;
 	}
+
+	ret = yt8821_disable_mdio_address_zero(phydev);
+	if (ret < 0)
+		return ret;
 
 	ret = yt8821_serdes_init(phydev);
 	if (ret < 0)
