@@ -755,13 +755,16 @@ static int hidp_setup_hid(struct hidp_session *session,
 				const struct hidp_connadd_req *req)
 {
 	struct hid_device *hid;
+	unsigned int rd_size;
 	int err;
 
-	session->rd_data = memdup_user(req->rd_data, req->rd_size);
+	rd_size = min_t(unsigned int, req->rd_size, HID_MAX_DESCRIPTOR_SIZE);
+
+	session->rd_data = memdup_user(req->rd_data, rd_size);
 	if (IS_ERR(session->rd_data))
 		return PTR_ERR(session->rd_data);
 
-	session->rd_size = req->rd_size;
+	session->rd_size = rd_size;
 
 	hid = hid_allocate_device();
 	if (IS_ERR(hid)) {
