@@ -470,7 +470,7 @@ static int dmi_system_event_log(struct dmi_sysfs_entry *entry)
 out_del:
 	kobject_del(entry->child);
 out_free:
-	kfree(entry->child);
+	kobject_put(entry->child);
 	return ret;
 }
 
@@ -626,11 +626,12 @@ static void __init dmi_sysfs_register_handle(const struct dmi_header *dh,
 	/* Create the raw binary file to access the entry */
 	*ret = sysfs_create_bin_file(&entry->kobj, &bin_attr_raw);
 	if (*ret)
-		goto out_err;
+		goto out_err_child;
 
 	return;
-out_err:
+out_err_child:
 	kobject_put(entry->child);
+out_err:
 	kobject_put(&entry->kobj);
 	return;
 }
