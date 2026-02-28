@@ -40,6 +40,8 @@ config HP_WMI
 	depends on ACPI_EC
 	depends on ACPI_WMI
 	depends on INPUT
+	depends on LEDS_CLASS
+	depends on LEDS_CLASS_MULTICOLOR
 	depends on RFKILL || RFKILL = n
 	select POWER_SUPPLY
 	select INPUT_SPARSEKMAP
