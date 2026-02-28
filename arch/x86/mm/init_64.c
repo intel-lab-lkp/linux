@@ -572,7 +572,7 @@ phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 				paddr_last = paddr_next;
 				continue;
 			}
-			new_prot = pte_pgprot(pte_clrhuge(*(pte_t *)pmd));
+			new_prot = pmd_pgprot(*pmd);
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_2M)) {
@@ -658,7 +658,7 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 				paddr_last = paddr_next;
 				continue;
 			}
-			prot = pte_pgprot(pte_clrhuge(*(pte_t *)pud));
+			prot = pud_pgprot(*pud);
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_1G)) {

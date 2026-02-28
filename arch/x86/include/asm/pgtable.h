@@ -475,11 +475,6 @@ static inline pte_t pte_mkhuge(pte_t pte)
 	return pte_set_flags(pte, _PAGE_PSE);
 }
 
-static inline pte_t pte_clrhuge(pte_t pte)
-{
-	return pte_clear_flags(pte, _PAGE_PSE);
-}
-
 static inline pte_t pte_mkglobal(pte_t pte)
 {
 	return pte_set_flags(pte, _PAGE_GLOBAL);
