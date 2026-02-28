@@ -124,8 +124,9 @@ int st_sensors_allocate_trigger(struct iio_dev *indio_dev,
 	unsigned long irq_trig;
 	int err;
 
-	sdata->trig = devm_iio_trigger_alloc(parent, "%s-trigger",
-					     indio_dev->name);
+	sdata->trig = devm_iio_trigger_alloc(parent, "%s-dev%d",
+					     indio_dev->name,
+					     iio_device_id(indio_dev));
 	if (sdata->trig == NULL) {
 		dev_err(parent, "failed to allocate iio trigger.\n");
 		return -ENOMEM;
