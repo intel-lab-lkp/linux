@@ -1631,6 +1631,12 @@ int fib_check_nexthop(struct nexthop *nh, u8 scope,
 			goto out;
 		}
 
+		if (!nhg->has_v4) {
+			NL_SET_ERR_MSG(extack, "IPv4 routes can not use an IPv6 nexthop");
+			err = -EINVAL;
+			goto out;
+		}
+
 		if (scope == RT_SCOPE_HOST) {
 			NL_SET_ERR_MSG(extack, "Route with host scope can not have multiple nexthops");
 			err = -EINVAL;
@@ -1644,6 +1650,11 @@ int fib_check_nexthop(struct nexthop *nh, u8 scope,
 		nhi = rtnl_dereference(nh->nh_info);
 		if (nhi->fdb_nh) {
 			NL_SET_ERR_MSG(extack, "Route cannot point to a fdb nexthop");
+			err = -EINVAL;
+			goto out;
+		}
+		if (nhi->family != AF_INET) {
+			NL_SET_ERR_MSG(extack, "IPv4 routes can not use an IPv6 nexthop");
 			err = -EINVAL;
 			goto out;
 		}
