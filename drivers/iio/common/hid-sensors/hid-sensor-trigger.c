@@ -202,6 +202,11 @@ static void hid_sensor_set_power_work(struct work_struct *work)
 		_hid_sensor_power_state(attrb, true);
 }
 
+static irqreturn_t hid_sensor_dummy_handler(int irq, void *p)
+{
+	return IRQ_HANDLED;
+}
+
 static int hid_sensor_data_rdy_trigger_set_state(struct iio_trigger *trig,
 						bool state)
 {
@@ -240,7 +245,7 @@ int hid_sensor_setup_trigger(struct iio_dev *indio_dev, const char *name,
 		fifo_attrs = NULL;
 
 	ret = iio_triggered_buffer_setup_ext(indio_dev,
-					     &iio_pollfunc_store_time, NULL,
+					     &iio_pollfunc_store_time, &hid_sensor_dummy_handler,
 					     IIO_BUFFER_DIRECTION_IN,
 					     NULL, fifo_attrs);
 	if (ret) {
