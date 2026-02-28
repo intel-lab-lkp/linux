@@ -577,7 +577,7 @@ void btrfs_submit_compressed_read(struct btrfs_bio *bbio)
 
 		ret = bio_add_folio(&cb->bbio.bio, folio, cur_len, 0);
 		if (unlikely(!ret)) {
-			folio_put(folio);
+			btrfs_free_compr_folio(folio);
 			ret = -EINVAL;
 			goto out_free_bio;
 		}
