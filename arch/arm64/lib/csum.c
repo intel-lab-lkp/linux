@@ -11,6 +11,7 @@
 static u64 accumulate(u64 sum, u64 data)
 {
 	__uint128_t tmp = (__uint128_t)sum + data;
+
 	return tmp + (tmp >> 64);
 }
 
