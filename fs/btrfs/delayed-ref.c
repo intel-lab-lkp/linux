@@ -1141,7 +1141,9 @@ int btrfs_add_delayed_tree_ref(struct btrfs_trans_handle *trans,
 			       struct btrfs_ref *generic_ref,
 			       struct btrfs_delayed_extent_op *extent_op)
 {
-	ASSERT(generic_ref->type == BTRFS_REF_METADATA && generic_ref->action);
+	ASSERT(generic_ref->type == BTRFS_REF_METADATA &&
+	       (generic_ref->action == BTRFS_ADD_DELAYED_REF ||
+					generic_ref->action == BTRFS_DROP_DELAYED_REF));
 	return add_delayed_ref(trans, generic_ref, extent_op, 0);
 }
 
@@ -1152,7 +1154,9 @@ int btrfs_add_delayed_data_ref(struct btrfs_trans_handle *trans,
 			       struct btrfs_ref *generic_ref,
 			       u64 reserved)
 {
-	ASSERT(generic_ref->type == BTRFS_REF_DATA && generic_ref->action);
+	ASSERT(generic_ref->type == BTRFS_REF_DATA &&
+	       (generic_ref->action == BTRFS_ADD_DELAYED_REF ||
+	        generic_ref->action == BTRFS_DROP_DELAYED_REF));
 	return add_delayed_ref(trans, generic_ref, NULL, reserved);
 }
 

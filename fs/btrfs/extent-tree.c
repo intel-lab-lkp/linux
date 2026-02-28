@@ -628,7 +628,7 @@ static noinline int remove_extent_data_ref(struct btrfs_trans_handle *trans,
 		return -EUCLEAN;
 	}
 
-	BUG_ON(num_refs < refs_to_drop);
+	ASSERT(num_refs >= refs_to_drop);
 	num_refs -= refs_to_drop;
 
 	if (num_refs == 0) {
@@ -905,7 +905,7 @@ again:
 
 	if (flags & BTRFS_EXTENT_FLAG_TREE_BLOCK && !skinny_metadata) {
 		ptr += sizeof(struct btrfs_tree_block_info);
-		BUG_ON(ptr > end);
+		ASSERT(ptr <= end);
 	}
 
 	if (owner >= BTRFS_FIRST_FREE_OBJECTID)
@@ -1279,7 +1279,7 @@ static int remove_extent_backref(struct btrfs_trans_handle *trans,
 {
 	int ret = 0;
 
-	BUG_ON(!is_data && refs_to_drop != 1);
+	ASSERT(is_data || refs_to_drop == 1);
 	if (iref)
 		ret = update_inline_extent_backref(trans, path, iref,
 						   -refs_to_drop, NULL);
@@ -1493,10 +1493,9 @@ int btrfs_inc_extent_ref(struct btrfs_trans_handle *trans,
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	int ret;
 
-	ASSERT(generic_ref->type != BTRFS_REF_NOT_SET &&
-	       generic_ref->action);
-	BUG_ON(generic_ref->type == BTRFS_REF_METADATA &&
-	       generic_ref->ref_root == BTRFS_TREE_LOG_OBJECTID);
+	ASSERT(generic_ref->type != BTRFS_REF_NOT_SET && generic_ref->action);
+	ASSERT(generic_ref->type != BTRFS_REF_METADATA ||
+	       generic_ref->ref_root != BTRFS_TREE_LOG_OBJECTID);
 
 	if (generic_ref->type == BTRFS_REF_METADATA)
 		ret = btrfs_add_delayed_tree_ref(trans, generic_ref, NULL);
@@ -1663,8 +1662,6 @@ static int run_delayed_data_ref(struct btrfs_trans_handle *trans,
 		ret = __btrfs_inc_extent_ref(trans, node, extent_op);
 	} else if (node->action == BTRFS_DROP_DELAYED_REF) {
 		ret = __btrfs_free_extent(trans, href, node, extent_op);
-	} else {
-		BUG();
 	}
 	return ret;
 }
@@ -1681,7 +1678,7 @@ static void __run_delayed_extent_op(struct btrfs_delayed_extent_op *extent_op,
 
 	if (extent_op->update_key) {
 		struct btrfs_tree_block_info *bi;
-		BUG_ON(!(flags & BTRFS_EXTENT_FLAG_TREE_BLOCK));
+		ASSERT(flags & BTRFS_EXTENT_FLAG_TREE_BLOCK);
 		bi = (struct btrfs_tree_block_info *)(ei + 1);
 		btrfs_set_tree_block_key(leaf, bi, &extent_op->key);
 	}
@@ -1822,8 +1819,6 @@ static int run_delayed_tree_ref(struct btrfs_trans_handle *trans,
 			ret = drop_remap_tree_ref(trans, node);
 		else
 			ret = __btrfs_free_extent(trans, href, node, extent_op);
-	} else {
-		BUG();
 	}
 	return ret;
 }
@@ -2143,7 +2138,7 @@ static noinline int __btrfs_run_delayed_refs(struct btrfs_trans_handle *trans,
 			 * head
 			 */
 			ret = cleanup_ref_head(trans, locked_ref, &bytes_processed);
-			if (ret > 0 ) {
+			if (ret > 0) {
 				/* We dropped our lock, we need to loop. */
 				ret = 0;
 				continue;
@@ -2706,7 +2701,7 @@ int btrfs_pin_extent(struct btrfs_trans_handle *trans, u64 bytenr, u64 num_bytes
 	struct btrfs_block_group *cache;
 
 	cache = btrfs_lookup_block_group(trans->fs_info, bytenr);
-	BUG_ON(!cache); /* Logic error */
+	ASSERT(cache);
 
 	pin_down_extent(trans, cache, bytenr, num_bytes, true);
 
@@ -4195,20 +4190,25 @@ static int do_allocation(struct btrfs_block_group *block_group,
 			 struct find_free_extent_ctl *ffe_ctl,
 			 struct btrfs_block_group **bg_ret)
 {
+	ASSERT(ffe_ctl->policy == BTRFS_EXTENT_ALLOC_CLUSTERED ||
+	       ffe_ctl->policy == BTRFS_EXTENT_ALLOC_ZONED);
 	switch (ffe_ctl->policy) {
 	case BTRFS_EXTENT_ALLOC_CLUSTERED:
 		return do_allocation_clustered(block_group, ffe_ctl, bg_ret);
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		return do_allocation_zoned(block_group, ffe_ctl, bg_ret);
-	default:
-		BUG();
 	}
+	return -EUCLEAN;
 }
 
 static void release_block_group(struct btrfs_block_group *block_group,
 				struct find_free_extent_ctl *ffe_ctl,
 				bool delalloc)
 {
+	ASSERT(btrfs_bg_flags_to_raid_index(block_group->flags) ==
+	       ffe_ctl->index);
+	ASSERT(ffe_ctl->policy == BTRFS_EXTENT_ALLOC_CLUSTERED ||
+	       ffe_ctl->policy == BTRFS_EXTENT_ALLOC_ZONED);
 	switch (ffe_ctl->policy) {
 	case BTRFS_EXTENT_ALLOC_CLUSTERED:
 		ffe_ctl->retry_uncached = false;
@@ -4216,12 +4216,8 @@ static void release_block_group(struct btrfs_block_group *block_group,
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		/* Nothing to do */
 		break;
-	default:
-		BUG();
 	}
 
-	BUG_ON(btrfs_bg_flags_to_raid_index(block_group->flags) !=
-	       ffe_ctl->index);
 	btrfs_release_block_group(block_group, delalloc);
 }
 
@@ -4240,6 +4236,8 @@ static void found_extent_clustered(struct find_free_extent_ctl *ffe_ctl,
 static void found_extent(struct find_free_extent_ctl *ffe_ctl,
 			 struct btrfs_key *ins)
 {
+	ASSERT(ffe_ctl->policy == BTRFS_EXTENT_ALLOC_CLUSTERED ||
+	       ffe_ctl->policy == BTRFS_EXTENT_ALLOC_ZONED);
 	switch (ffe_ctl->policy) {
 	case BTRFS_EXTENT_ALLOC_CLUSTERED:
 		found_extent_clustered(ffe_ctl, ins);
@@ -4247,8 +4245,6 @@ static void found_extent(struct find_free_extent_ctl *ffe_ctl,
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		/* Nothing to do */
 		break;
-	default:
-		BUG();
 	}
 }
 
@@ -4308,14 +4304,15 @@ static int can_allocate_chunk_zoned(struct btrfs_fs_info *fs_info,
 static int can_allocate_chunk(struct btrfs_fs_info *fs_info,
 			      struct find_free_extent_ctl *ffe_ctl)
 {
+	ASSERT(ffe_ctl->policy == BTRFS_EXTENT_ALLOC_CLUSTERED ||
+	       ffe_ctl->policy == BTRFS_EXTENT_ALLOC_ZONED);
 	switch (ffe_ctl->policy) {
 	case BTRFS_EXTENT_ALLOC_CLUSTERED:
 		return 0;
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		return can_allocate_chunk_zoned(fs_info, ffe_ctl);
-	default:
-		BUG();
 	}
+	return -EUCLEAN;
 }
 
 /*
@@ -4386,8 +4383,7 @@ static int find_free_extent_update_loop(struct btrfs_fs_info *fs_info,
 			if (ret == -ENOSPC) {
 				ret = 0;
 				ffe_ctl->loop++;
-			}
-			else if (ret < 0)
+			} else if (ret < 0)
 				btrfs_abort_transaction(trans, ret);
 			else
 				ret = 0;
@@ -4517,15 +4513,16 @@ static int prepare_allocation(struct btrfs_fs_info *fs_info,
 			      struct btrfs_space_info *space_info,
 			      struct btrfs_key *ins)
 {
+	ASSERT(ffe_ctl->policy == BTRFS_EXTENT_ALLOC_CLUSTERED ||
+	       ffe_ctl->policy == BTRFS_EXTENT_ALLOC_ZONED);
 	switch (ffe_ctl->policy) {
 	case BTRFS_EXTENT_ALLOC_CLUSTERED:
 		return prepare_allocation_clustered(fs_info, ffe_ctl,
 						    space_info, ins);
 	case BTRFS_EXTENT_ALLOC_ZONED:
 		return prepare_allocation_zoned(fs_info, ffe_ctl, space_info);
-	default:
-		BUG();
 	}
+	return -EUCLEAN;
 }
 
 /*
@@ -5350,6 +5347,8 @@ struct extent_buffer *btrfs_alloc_tree_block(struct btrfs_trans_handle *trans,
 	bool skinny_metadata = btrfs_fs_incompat(fs_info, SKINNY_METADATA);
 	u64 owning_root;
 
+	ASSERT(parent <= 0);
+
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
 	if (btrfs_is_testing(fs_info)) {
 		buf = btrfs_init_new_buffer(trans, root, root->alloc_bytenr,
@@ -5382,8 +5381,7 @@ struct extent_buffer *btrfs_alloc_tree_block(struct btrfs_trans_handle *trans,
 			parent = ins.objectid;
 		flags |= BTRFS_BLOCK_FLAG_FULL_BACKREF;
 		owning_root = reloc_src_root;
-	} else
-		BUG_ON(parent > 0);
+	}
 
 	if (root_objectid != BTRFS_TREE_LOG_OBJECTID) {
 		struct btrfs_delayed_extent_op *extent_op;
@@ -5723,7 +5721,7 @@ again:
 		 * If we get 0 then we found our reference, return 1, else
 		 * return the error if it's not -ENOENT;
 		 */
-		return (ret < 0 ) ? ret : 1;
+		return (ret < 0) ? ret : 1;
 	}
 
 	/*
@@ -6527,7 +6525,7 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 	int parent_level;
 	int ret = 0;
 
-	BUG_ON(btrfs_root_id(root) != BTRFS_TREE_RELOC_OBJECTID);
+	ASSERT(btrfs_root_id(root) == BTRFS_TREE_RELOC_OBJECTID);
 
 	path = btrfs_alloc_path();
 	if (!path)
