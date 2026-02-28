@@ -196,13 +196,33 @@ similar backwards compatibility check is needed for the restrict flags
 (see sys_landlock_restrict_self() documentation for available flags):
 
 .. code-block:: c
-
-    __u32 restrict_flags = LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON;
-    if (abi < 7) {
-        /* Clear logging flags unsupported before ABI 7. */
+    __u32 restrict_flags =
+        LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON |
+        LANDLOCK_RESTRICT_SELF_TSYNC;
+    switch (abi) {
+    case 1 ... 6:
+        /* Clear logging flags unsupported for ABI < 7 */
         restrict_flags &= ~(LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF |
                             LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON |
                             LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF);
+        __attribute__((fallthrough));
+    case 7:
+        /* Removes multithreaded enforcement flag unsupported for ABI < 8 */
+        /*
+         * WARNING!
+         * Don't copy-paste this just yet! This example impacts enforcement
+         * and can potentially decrease protection if misused.
+         *
+         * Below ABI v8, a Landlock policy can only be enforced for the calling
+         * thread and its children. This behavior remains a default for ABI v8,
+         * but the flag ``LANDLOCK_RESTRICT_SELF_TSYNC`` can now be used to
+         * enforce policies across all threads of the calling process. If an
+         * application's Landlock integration was designed under the assumption
+         * that the flag is used (such as when children threads are responsible
+         * for enforcing and/or overriding policies of parents and siblings),
+         * removing said flag can decrease protection for older Linux versions.
+         */
+        restrict_flags &= ~LANDLOCK_RESTRICT_SELF_TSYNC;
     }
 
 The next step is to restrict the current thread from gaining more privileges
