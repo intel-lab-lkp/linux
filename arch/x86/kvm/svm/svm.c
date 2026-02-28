@@ -1009,6 +1009,14 @@ void svm_write_tsc_multiplier(struct kvm_vcpu *vcpu)
 	preempt_enable();
 }
 
+static bool svm_has_pending_gif_event(struct vcpu_svm *svm)
+{
+	return svm->vcpu.arch.smi_pending ||
+	       svm->vcpu.arch.nmi_pending ||
+	       kvm_cpu_has_injectable_intr(&svm->vcpu) ||
+	       kvm_apic_has_pending_init_or_sipi(&svm->vcpu);
+}
+
 /* Evaluate instruction intercepts that depend on guest CPUID features. */
 static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu)
 {
@@ -1049,6 +1057,20 @@ static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu)
 		if (vls) {
 			svm_clr_intercept(svm, INTERCEPT_VMLOAD);
 			svm_clr_intercept(svm, INTERCEPT_VMSAVE);
+		}
+
+		if (vgif) {
+			/*
+			 * If there is a pending interrupt controlled by GIF, set
+			 * KVM_REQ_EVENT to re-evaluate if the intercept needs to be set
+			 * again to track when GIF is re-enabled (e.g. for NMI
+			 * injection).
+			 */
+			svm_clr_intercept(svm, INTERCEPT_STGI);
+			if (svm_has_pending_gif_event(svm))
+				kvm_make_request(KVM_REQ_EVENT, &svm->vcpu);
+
+			svm_clr_intercept(svm, INTERCEPT_CLGI);
 		}
 	}
 
@@ -2320,10 +2342,7 @@ void svm_set_gif(struct vcpu_svm *svm, bool value)
 			svm_clear_vintr(svm);
 
 		enable_gif(svm);
-		if (svm->vcpu.arch.smi_pending ||
-		    svm->vcpu.arch.nmi_pending ||
-		    kvm_cpu_has_injectable_intr(&svm->vcpu) ||
-		    kvm_apic_has_pending_init_or_sipi(&svm->vcpu))
+		if (svm_has_pending_gif_event(svm))
 			kvm_make_request(KVM_REQ_EVENT, &svm->vcpu);
 	} else {
 		disable_gif(svm);
