@@ -92,10 +92,10 @@ static int nvec_kbd_event(struct input_dev *dev, unsigned int type,
 		return 0;
 
 	if (type != EV_LED)
-		return -1;
+		return -EINVAL;
 
 	if (code != LED_CAPSL)
-		return -1;
+		return -EINVAL;
 
 	buf[2] = !!value;
 	nvec_write_async(nvec, buf, sizeof(buf));
