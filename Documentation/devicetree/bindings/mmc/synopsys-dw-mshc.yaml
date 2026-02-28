@@ -24,16 +24,21 @@ properties:
     maxItems: 1
 
   clocks:
-    minItems: 2
+    minItems: 1
     maxItems: 2
     description:
       Handle to "biu" and "ciu" clocks for the
       bus interface unit clock and the card interface unit clock.
 
   clock-names:
-    items:
-      - const: biu
-      - const: ciu
+    minItems: 1
+    maxItems: 2
+    oneOf:
+      - items:
+          - const: biu
+          - const: ciu
+      - items:
+          - const: ciu
 
   iommus:
     maxItems: 1
