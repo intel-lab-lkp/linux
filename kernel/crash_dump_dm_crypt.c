@@ -115,7 +115,7 @@ static int restore_dm_crypt_keys_to_thread_keyring(void)
 
 	addr = dm_crypt_keys_addr;
 	dm_crypt_keys_read((char *)&key_count, sizeof(key_count), &addr);
-	if (key_count < 0 || key_count > KEY_NUM_MAX) {
+	if (key_count > KEY_NUM_MAX) {
 		kexec_dprintk("Failed to read the number of dm-crypt keys\n");
 		return -1;
 	}
@@ -139,7 +139,7 @@ static int restore_dm_crypt_keys_to_thread_keyring(void)
 	return 0;
 }
 
-static int read_key_from_user_keying(struct dm_crypt_key *dm_key)
+static int read_key_from_user_keyring(struct dm_crypt_key *dm_key)
 {
 	const struct user_key_payload *ukp;
 	struct key *key;
@@ -387,7 +387,7 @@ static int build_keys_header(void)
 
 		strscpy(keys_header->keys[i].key_desc, key->description,
 			KEY_DESC_MAX_LEN);
-		r = read_key_from_user_keying(&keys_header->keys[i]);
+		r = read_key_from_user_keyring(&keys_header->keys[i]);
 		if (r != 0) {
 			kexec_dprintk("Failed to read key %s\n",
 				      keys_header->keys[i].key_desc);
@@ -414,14 +414,16 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 
 	if (key_count <= 0) {
 		kexec_dprintk("No dm-crypt keys\n");
-		return -ENOENT;
+		return 0;
 	}
 
 	if (!is_dm_key_reused) {
 		image->dm_crypt_keys_addr = 0;
 		r = build_keys_header();
-		if (r)
+		if (r) {
+			pr_err("Failed to build dm-crypt keys header, ret=%d\n", r);
 			return r;
+		}
 	}
 
 	kbuf.buffer = keys_header;
@@ -432,6 +434,7 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
 	r = kexec_add_buffer(&kbuf);
 	if (r) {
+		pr_err("Failed to call kexec_add_buffer, ret=%d\n", r);
 		kvfree((void *)kbuf.buffer);
 		return r;
 	}
