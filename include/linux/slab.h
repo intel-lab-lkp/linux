@@ -359,9 +359,8 @@ struct kmem_cache_args {
 	 * may replace it with an empty sheaf, unless it's over capacity. In
 	 * that case a sheaf is bulk freed to slab pages.
 	 *
-	 * The sheaves do not enforce NUMA placement of objects, so allocations
-	 * via kmem_cache_alloc_node() with a node specified other than
-	 * NUMA_NO_NODE will bypass them.
+	 * The sheaves try to enforce NUMA placement of objects, but the
+	 * allocation may fall back to the normal operation.
 	 *
 	 * Bulk allocation and free operations also try to use the cpu sheaves
 	 * and barn, but fallback to using slab pages directly.
