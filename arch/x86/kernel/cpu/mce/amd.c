@@ -604,6 +604,18 @@ bool amd_filter_mce(struct mce *m)
 	enum smca_bank_types bank_type = smca_get_bank_type(m->extcpu, m->bank);
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 
+	/*
+	 * Bogus L3 cache deferred errors on Cezanne A0.
+	 *
+	 * Case #1: PCC bit set. This is not valid for deferred errors.
+	 * Case #2: XEC 29. This is not a valid error code.
+	 */
+	if (c->x86 == 0x19 && c->x86_model == 0x50 && c->x86_stepping == 0x0 &&
+	    bank_type == SMCA_L3_CACHE && (m->status & MCI_STATUS_DEFERRED)) {
+		if ((m->status & MCI_STATUS_PCC) || XEC(m->status, 0x3f) == 29)
+			return true;
+	}
+
 	/* See Family 17h Models 10h-2Fh Erratum #1114. */
 	if (c->x86 == 0x17 &&
 	    c->x86_model >= 0x10 && c->x86_model <= 0x2F &&
