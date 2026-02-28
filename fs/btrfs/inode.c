@@ -9970,7 +9970,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 		ret = copy_from_iter(kaddr, bytes, from);
 		kunmap_local(kaddr);
 		if (ret != bytes) {
-			folio_put(folio);
+			btrfs_free_compr_folio(folio);
 			ret = -EFAULT;
 			goto out_cb;
 		}
@@ -9978,7 +9978,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 			folio_zero_range(folio, bytes, round_up(bytes, blocksize) - bytes);
 		ret = bio_add_folio(&cb->bbio.bio, folio, round_up(bytes, blocksize), 0);
 		if (unlikely(!ret)) {
-			folio_put(folio);
+			btrfs_free_compr_folio(folio);
 			ret = -EINVAL;
 			goto out_cb;
 		}
