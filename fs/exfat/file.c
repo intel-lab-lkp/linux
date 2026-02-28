@@ -449,6 +449,91 @@ out:
 	return err;
 }
 
+static int exfat_ioctl_get_valid_data(struct inode *inode, unsigned long arg)
+{
+	u64 valid_size;
+
+	/*
+	 * Tt doesn't really make sense to acquire lock for a getter op but we
+	 * have to stay consistent with the grandfather clause -
+	 * ioctl_get_attributes().
+	 */
+	inode_lock(inode);
+	valid_size = EXFAT_I(inode)->valid_size;
+	inode_unlock(inode);
+
+	return put_user(valid_size, (__u64 __user *)arg);
+}
+
+static int exfat_ioctl_set_valid_data(struct file *file, unsigned long arg)
+{
+	struct inode *inode = file_inode(file);
+	struct exfat_inode_info *ei = EXFAT_I(inode);
+	int err = 0;
+	u64 new_valid_size;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	/* No support for dir */
+	if (!S_ISREG(inode->i_mode))
+		return -EOPNOTSUPP;
+
+	err = get_user(new_valid_size, (__u64 __user *)arg);
+	if (err)
+		return err;
+
+	err = mnt_want_write_file(file);
+	if (err)
+		return err;
+
+	inode_lock(inode);
+
+	/* No security check - this is already a privileged op. */
+
+	if (ei->valid_size > new_valid_size || i_size_read(inode) < new_valid_size) {
+		/*
+		 * No change requested. The actual up/down truncation of isize
+		 * is not the scope of the ioctl. SetFileValidData() WinAPI
+		 * treats this case as an error, so we do the same here as well.
+		 */
+		err = -EINVAL;
+		goto out_unlock_inode;
+	}
+	if (ei->valid_size == new_valid_size)
+		/* No op. Don't change mtime. */
+		goto out_unlock_inode;
+
+	ei->valid_size = new_valid_size;
+	/*
+	 * DO NOT invalidate cache here!
+	 *
+	 * The cache incoherency in range [ei->valid_size, new_valid_size) after
+	 * this point is intentional. The point of this ioctl is minimising I/O
+	 * from the shortcoming of FAT/NTFS, not correctness. Neither we nor the
+	 * userspace should care about the garbage data.
+	 */
+
+	/*
+	 * Windows kernel does not update mtime of the file upon successful
+	 * SetFileValidData() call. We think we should - garbage data is still
+	 * data that's part of the contents of the file, so...
+	 */
+	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
+	/*
+	 * Notify the size change although isize didn't actually change. This is
+	 * not conformant but a good measure for any userspace process that
+	 * wishes to get VDL change notification through the standard inotify.
+	 */
+	fsnotify_change(file->f_path.dentry, ATTR_SIZE | ATTR_MTIME);
+	mark_inode_dirty(inode);
+
+out_unlock_inode:
+	inode_unlock(inode);
+	mnt_drop_write_file(file);
+	return err;
+}
+
 static int exfat_ioctl_fitrim(struct inode *inode, unsigned long arg)
 {
 	struct fstrim_range range;
@@ -544,10 +629,17 @@ long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	u32 __user *user_attr = (u32 __user *)arg;
 
 	switch (cmd) {
+	/* inode-specific ops */
 	case FAT_IOCTL_GET_ATTRIBUTES:
 		return exfat_ioctl_get_attributes(inode, user_attr);
 	case FAT_IOCTL_SET_ATTRIBUTES:
 		return exfat_ioctl_set_attributes(filp, user_attr);
+	case EXFAT_IOC_GET_VALID_DATA:
+		return exfat_ioctl_get_valid_data(inode, arg);
+	case EXFAT_IOC_SET_VALID_DATA:
+		return exfat_ioctl_set_valid_data(filp, arg);
+
+	/* fs-wide ops */
 	case EXFAT_IOC_SHUTDOWN:
 		return exfat_ioctl_shutdown(inode->i_sb, arg);
 	case FITRIM:
@@ -556,6 +648,7 @@ long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return exfat_ioctl_get_volume_label(inode->i_sb, arg);
 	case FS_IOC_SETFSLABEL:
 		return exfat_ioctl_set_volume_label(inode->i_sb, arg);
+
 	default:
 		return -ENOTTY;
 	}

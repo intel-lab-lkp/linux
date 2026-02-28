@@ -12,7 +12,15 @@
  * exfat-specific ioctl commands
  */
 
-#define EXFAT_IOC_SHUTDOWN _IOR('X', 125, __u32)
+#define EXFAT_IOC_SHUTDOWN		_IOR('X', 125, __u32)
+/* Get the current valid data length(VDL) of a file */
+#define EXFAT_IOC_GET_VALID_DATA	_IOR('r', 0x14, __u64)
+/*
+ * Set the valid data length(VDL) of a file. This is equivalent to
+ * SetValidData() in WinAPI. Due to security implications, CAP_SYS_ADMIN is
+ * required(see capabilities(7)).
+ */
+#define EXFAT_IOC_SET_VALID_DATA	_IOW('r', 0x15, __u64)
 
 /*
  * Flags used by EXFAT_IOC_SHUTDOWN
