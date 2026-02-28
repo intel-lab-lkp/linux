@@ -5195,13 +5195,16 @@ static void lru_gen_change_state(bool enabled)
 			VM_WARN_ON_ONCE(!seq_is_valid(lruvec));
 			VM_WARN_ON_ONCE(!state_is_valid(lruvec));
 
-			lruvec->lrugen.enabled = enabled;
+			smp_store_release(&lruvec->lrugen.enabled, enabled);
+			smp_store_release(&lruvec->lrugen.draining, true);
 
 			while (!(enabled ? fill_evictable(lruvec) : drain_evictable(lruvec))) {
 				spin_unlock_irq(&lruvec->lru_lock);
 				cond_resched();
 				spin_lock_irq(&lruvec->lru_lock);
 			}
+
+			smp_store_release(&lruvec->lrugen.draining, false);
 
 			spin_unlock_irq(&lruvec->lru_lock);
 		}
@@ -5779,10 +5782,15 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
 	bool proportional_reclaim;
 	struct blk_plug plug;
+	bool lrugen_enabled = smp_load_acquire(&lruvec->lrugen.enabled);
+	bool lru_draining = smp_load_acquire(&lruvec->lrugen.draining);
 
-	if (lru_gen_enabled() && !root_reclaim(sc)) {
+	if (lrugen_enabled || lru_draining && !root_reclaim(sc)) {
 		lru_gen_shrink_lruvec(lruvec, sc);
-		return;
+
+		if (!lru_draining)
+			return;
+
 	}
 
 	get_scan_count(lruvec, sc, nr);
