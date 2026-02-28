@@ -134,7 +134,9 @@ static inline pteval_t __phys_to_pte_val(phys_addr_t phys)
 
 #define pte_pfn(pte)		(__pte_to_phys(pte) >> PAGE_SHIFT)
 #define pfn_pte(pfn,prot)	\
-	__pte(__phys_to_pte_val((phys_addr_t)(pfn) << PAGE_SHIFT) | pgprot_val(prot))
+	__pte(__phys_to_pte_val((phys_addr_t)(pfn) << PAGE_SHIFT) | \
+		((pgprot_val(prot) & ~(PTE_TYPE_MASK & ~PTE_VALID)) | \
+		(PTE_TYPE_PAGE & ~PTE_VALID)))
 
 #define pte_none(pte)		(!pte_val(pte))
 #define pte_page(pte)		(pfn_to_page(pte_pfn(pte)))
