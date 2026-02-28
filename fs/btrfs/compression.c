@@ -36,9 +36,9 @@
 
 static struct bio_set btrfs_compressed_bioset;
 
-static const char* const btrfs_compress_types[] = { "", "zlib", "lzo", "zstd" };
+static const char * const btrfs_compress_types[] = { "", "zlib", "lzo", "zstd" };
 
-const char* btrfs_compress_type2str(enum btrfs_compression_type type)
+const char *btrfs_compress_type2str(enum btrfs_compression_type type)
 {
 	switch (type) {
 	case BTRFS_COMPRESS_ZLIB:
@@ -89,24 +89,21 @@ bool btrfs_compress_is_valid_type(const char *str, size_t len)
 static int compression_decompress_bio(struct list_head *ws,
 				      struct compressed_bio *cb)
 {
+	ASSERT(cb->compress_type > BTRFS_COMPRESS_NONE &&
+	       cb->compress_type < BTRFS_NR_COMPRESS_TYPES);
 	switch (cb->compress_type) {
 	case BTRFS_COMPRESS_ZLIB: return zlib_decompress_bio(ws, cb);
 	case BTRFS_COMPRESS_LZO:  return lzo_decompress_bio(ws, cb);
 	case BTRFS_COMPRESS_ZSTD: return zstd_decompress_bio(ws, cb);
-	case BTRFS_COMPRESS_NONE:
-	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
 	}
+	return -EUCLEAN;
 }
 
 static int compression_decompress(int type, struct list_head *ws,
 		const u8 *data_in, struct folio *dest_folio,
 		unsigned long dest_pgoff, size_t srclen, size_t destlen)
 {
+	ASSERT(type > BTRFS_COMPRESS_NONE && type < BTRFS_NR_COMPRESS_TYPES);
 	switch (type) {
 	case BTRFS_COMPRESS_ZLIB: return zlib_decompress(ws, data_in, dest_folio,
 						dest_pgoff, srclen, destlen);
@@ -114,14 +111,8 @@ static int compression_decompress(int type, struct list_head *ws,
 						dest_pgoff, srclen, destlen);
 	case BTRFS_COMPRESS_ZSTD: return zstd_decompress(ws, data_in, dest_folio,
 						dest_pgoff, srclen, destlen);
-	case BTRFS_COMPRESS_NONE:
-	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
 	}
+	return -EUCLEAN;
 }
 
 static int btrfs_decompress_bio(struct compressed_bio *cb);
@@ -488,6 +479,7 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 
 			if (zero_offset) {
 				int zeros;
+
 				zeros = folio_size(folio) - zero_offset;
 				folio_zero_range(folio, zero_offset, zeros);
 			}
@@ -700,33 +692,25 @@ static const struct btrfs_compress_levels * const btrfs_compress_levels[] = {
 
 static struct list_head *alloc_workspace(struct btrfs_fs_info *fs_info, int type, int level)
 {
+
+	ASSERT(type >= BTRFS_COMPRESS_NONE && type < BTRFS_NR_COMPRESS_TYPES);
 	switch (type) {
 	case BTRFS_COMPRESS_NONE: return alloc_heuristic_ws(fs_info);
 	case BTRFS_COMPRESS_ZLIB: return zlib_alloc_workspace(fs_info, level);
 	case BTRFS_COMPRESS_LZO:  return lzo_alloc_workspace(fs_info);
 	case BTRFS_COMPRESS_ZSTD: return zstd_alloc_workspace(fs_info, level);
-	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
 	}
+	return ERR_PTR(-EUCLEAN);
 }
 
 static void free_workspace(int type, struct list_head *ws)
 {
+	ASSERT(type >= BTRFS_COMPRESS_NONE && type < BTRFS_NR_COMPRESS_TYPES);
 	switch (type) {
 	case BTRFS_COMPRESS_NONE: return free_heuristic_ws(ws);
 	case BTRFS_COMPRESS_ZLIB: return zlib_free_workspace(ws);
 	case BTRFS_COMPRESS_LZO:  return lzo_free_workspace(ws);
 	case BTRFS_COMPRESS_ZSTD: return zstd_free_workspace(ws);
-	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
 	}
 }
 
@@ -795,7 +779,7 @@ struct list_head *btrfs_get_workspace(struct btrfs_fs_info *fs_info, int type, i
 	struct workspace_manager *wsm = fs_info->compr_wsm[type];
 	struct list_head *workspace;
 	int cpus = num_online_cpus();
-	unsigned nofs_flag;
+	unsigned int nofs_flag;
 	struct list_head *idle_ws;
 	spinlock_t *ws_lock;
 	atomic_t *total_ws;
@@ -871,18 +855,14 @@ again:
 
 static struct list_head *get_workspace(struct btrfs_fs_info *fs_info, int type, int level)
 {
+	ASSERT(type >= BTRFS_COMPRESS_NONE && type < BTRFS_NR_COMPRESS_TYPES);
 	switch (type) {
 	case BTRFS_COMPRESS_NONE: return btrfs_get_workspace(fs_info, type, level);
 	case BTRFS_COMPRESS_ZLIB: return zlib_get_workspace(fs_info, level);
 	case BTRFS_COMPRESS_LZO:  return btrfs_get_workspace(fs_info, type, level);
 	case BTRFS_COMPRESS_ZSTD: return zstd_get_workspace(fs_info, level);
-	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
 	}
+	return ERR_PTR(-EUCLEAN);
 }
 
 /*
@@ -922,17 +902,12 @@ wake:
 
 static void put_workspace(struct btrfs_fs_info *fs_info, int type, struct list_head *ws)
 {
+	ASSERT(type >= BTRFS_COMPRESS_NONE && type < BTRFS_NR_COMPRESS_TYPES);
 	switch (type) {
 	case BTRFS_COMPRESS_NONE: return btrfs_put_workspace(fs_info, type, ws);
 	case BTRFS_COMPRESS_ZLIB: return btrfs_put_workspace(fs_info, type, ws);
 	case BTRFS_COMPRESS_LZO:  return btrfs_put_workspace(fs_info, type, ws);
 	case BTRFS_COMPRESS_ZSTD: return zstd_put_workspace(fs_info, ws);
-	default:
-		/*
-		 * This can't happen, the type is validated several times
-		 * before we get here.
-		 */
-		BUG();
 	}
 }
 
@@ -1184,17 +1159,17 @@ static u64 file_offset_from_bvec(const struct bio_vec *bvec)
  * @buf:		The decompressed data buffer
  * @buf_len:		The decompressed data length
  * @decompressed:	Number of bytes that are already decompressed inside the
- * 			compressed extent
+ *			compressed extent
  * @cb:			The compressed extent descriptor
  * @orig_bio:		The original bio that the caller wants to read for
  *
  * An easier to understand graph is like below:
  *
- * 		|<- orig_bio ->|     |<- orig_bio->|
- * 	|<-------      full decompressed extent      ----->|
- * 	|<-----------    @cb range   ---->|
- * 	|			|<-- @buf_len -->|
- * 	|<--- @decompressed --->|
+ *		|<- orig_bio ->|     |<- orig_bio->|
+ *	|<-------      full decompressed extent      ----->|
+ *	|<-----------    @cb range   ---->|
+ *	|			|<-- @buf_len -->|
+ *	|<--- @decompressed --->|
  *
  * Note that, @cb can be a subpage of the full decompressed extent, but
  * @cb->start always has the same as the orig_file_offset value of the full
@@ -1316,7 +1291,8 @@ static u32 shannon_entropy(struct heuristic_ws *ws)
 #define RADIX_BASE		4U
 #define COUNTERS_SIZE		(1U << RADIX_BASE)
 
-static u8 get4bits(u64 num, int shift) {
+static u8 get4bits(u64 num, int shift)
+{
 	u8 low4bits;
 
 	num >>= shift;
@@ -1391,7 +1367,7 @@ static void radix_sort(struct bucket_item *array, struct bucket_item *array_buf,
 		 */
 		memset(counters, 0, sizeof(counters));
 
-		for (i = 0; i < num; i ++) {
+		for (i = 0; i < num; i++) {
 			buf_num = array_buf[i].count;
 			addr = get4bits(buf_num, shift);
 			counters[addr]++;
