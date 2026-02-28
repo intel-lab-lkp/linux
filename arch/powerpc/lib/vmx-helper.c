@@ -10,6 +10,32 @@
 #include <linux/hardirq.h>
 #include <asm/switch_to.h>
 
+unsigned long __copy_tofrom_user_vmx(void __user *to, const void __user *from,
+			unsigned long size, enum usercopy_mode mode)
+{
+	unsigned long ret;
+
+	if (!enter_vmx_usercopy()) {
+		raw_copy_allow(to, mode);
+		ret = __copy_tofrom_user(to, from, size);
+		raw_copy_prevent(mode);
+		return ret;
+	}
+
+	raw_copy_allow(to, mode);
+	ret = __copy_tofrom_user_power7_vmx(to, from, size);
+	raw_copy_prevent(mode);
+	exit_vmx_usercopy();
+	if (unlikely(ret)) {
+		raw_copy_allow(to, mode);
+		ret = __copy_tofrom_user_base(to, from, size);
+		raw_copy_prevent(mode);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(__copy_tofrom_user_vmx);
+
 int enter_vmx_usercopy(void)
 {
 	if (in_interrupt())

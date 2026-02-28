@@ -15,6 +15,9 @@
 #define TASK_SIZE_MAX		TASK_SIZE_USER64
 #endif
 
+/* Threshold above which VMX copy path is used */
+#define VMX_COPY_THRESHOLD 3328
+
 #include <asm-generic/access_ok.h>
 
 /*
@@ -326,40 +329,96 @@ do {								\
 extern unsigned long __copy_tofrom_user(void __user *to,
 		const void __user *from, unsigned long size);
 
+enum usercopy_mode {
+	USERCOPY_IN,
+	USERCOPY_FROM,
+	USERCOPY_TO,
+};
+
+unsigned long __copy_tofrom_user_vmx(void __user *to, const void __user *from,
+				unsigned long size, enum usercopy_mode mode);
+
+unsigned long __copy_tofrom_user_base(void __user *to,
+		const void __user *from, unsigned long size);
+
+unsigned long __copy_tofrom_user_power7_vmx(void __user *to,
+		const void __user *from, unsigned long size);
+
+
+static inline bool will_use_vmx(unsigned long n)
+{
+	return IS_ENABLED(CONFIG_ALTIVEC) &&
+		cpu_has_feature(CPU_FTR_VMX_COPY) &&
+		n > VMX_COPY_THRESHOLD;
+}
+
+static inline void raw_copy_allow(void __user *to, enum usercopy_mode mode)
+{
+	switch (mode) {
+	case USERCOPY_IN:
+		allow_user_access(to, KUAP_READ_WRITE);
+		break;
+	case USERCOPY_FROM:
+		allow_user_access(NULL, KUAP_READ);
+		break;
+	case USERCOPY_TO:
+		allow_user_access(to, KUAP_WRITE);
+		break;
+	}
+}
+
+static inline void raw_copy_prevent(enum usercopy_mode mode)
+{
+	switch (mode) {
+	case USERCOPY_IN:
+		prevent_user_access(KUAP_READ_WRITE);
+		break;
+	case USERCOPY_FROM:
+		prevent_user_access(KUAP_READ);
+		break;
+	case USERCOPY_TO:
+		prevent_user_access(KUAP_WRITE);
+		break;
+	}
+}
+
+static inline unsigned long raw_copy_tofrom_user(void __user *to,
+		const void __user *from, unsigned long n,
+		enum usercopy_mode mode)
+{
+	unsigned long ret;
+
+	if (will_use_vmx(n))
+		return __copy_tofrom_user_vmx(to, from,	n, mode);
+
+	raw_copy_allow(to, mode);
+	ret = __copy_tofrom_user(to, from, n);
+	raw_copy_prevent(mode);
+	return ret;
+
+}
+
 #ifdef __powerpc64__
 static inline unsigned long
 raw_copy_in_user(void __user *to, const void __user *from, unsigned long n)
 {
-	unsigned long ret;
-
 	barrier_nospec();
-	allow_user_access(to, KUAP_READ_WRITE);
-	ret = __copy_tofrom_user(to, from, n);
-	prevent_user_access(KUAP_READ_WRITE);
-	return ret;
+	return raw_copy_tofrom_user(to, from, n, USERCOPY_IN);
 }
 #endif /* __powerpc64__ */
 
 static inline unsigned long raw_copy_from_user(void *to,
 		const void __user *from, unsigned long n)
 {
-	unsigned long ret;
-
-	allow_user_access(NULL, KUAP_READ);
-	ret = __copy_tofrom_user((__force void __user *)to, from, n);
-	prevent_user_access(KUAP_READ);
-	return ret;
+	return raw_copy_tofrom_user((__force void __user *)to, from,
+					n, USERCOPY_FROM);
 }
 
 static inline unsigned long
 raw_copy_to_user(void __user *to, const void *from, unsigned long n)
 {
-	unsigned long ret;
-
-	allow_user_access(to, KUAP_WRITE);
-	ret = __copy_tofrom_user(to, (__force const void __user *)from, n);
-	prevent_user_access(KUAP_WRITE);
-	return ret;
+	return raw_copy_tofrom_user(to, (__force const void __user *)from,
+					n, USERCOPY_TO);
 }
 
 unsigned long __arch_clear_user(void __user *addr, unsigned long size);
