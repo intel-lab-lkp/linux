@@ -1518,11 +1518,11 @@ static int __meminitdata node_start;
 void __meminit vmemmap_set_pmd(pmd_t *pmd, void *p, int node,
 			       unsigned long addr, unsigned long next)
 {
-	pte_t entry;
+	pmd_t entry;
 
-	entry = pfn_pte(__pa(p) >> PAGE_SHIFT,
+	entry = pfn_pmd(__pa(p) >> PAGE_SHIFT,
 			PAGE_KERNEL_LARGE);
-	set_pmd(pmd, __pmd(pte_val(entry)));
+	set_pmd(pmd, entry);
 
 	/* check to see if we have contiguous blocks */
 	if (p_end != p || node_start != node) {

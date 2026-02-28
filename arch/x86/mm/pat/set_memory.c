@@ -1059,7 +1059,11 @@ static int __should_split_large_page(pte_t *kpte, unsigned long address,
 		return 1;
 
 	/* All checks passed. Update the large page mapping. */
-	new_pte = pfn_pte(old_pfn, new_prot);
+	if (level == PG_LEVEL_2M)
+		new_pte = __pte(pmd_val(pfn_pmd(old_pfn, new_prot)));
+	else
+		new_pte = __pte(pud_val(pfn_pud(old_pfn, new_prot)));
+
 	__set_pmd_pte(kpte, address, new_pte);
 	cpa->flags |= CPA_FLUSHTLB;
 	cpa_inc_lp_preserved(level);
