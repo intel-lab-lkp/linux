@@ -4278,12 +4278,6 @@ static int bond_open(struct net_device *bond_dev)
 	struct list_head *iter;
 	struct slave *slave;
 
-	if (BOND_MODE(bond) == BOND_MODE_ROUNDROBIN && !bond->rr_tx_counter) {
-		bond->rr_tx_counter = alloc_percpu(u32);
-		if (!bond->rr_tx_counter)
-			return -ENOMEM;
-	}
-
 	/* reset slave->backup and slave->inactive */
 	if (bond_has_slaves(bond)) {
 		bond_for_each_slave(bond, slave, iter) {
@@ -6411,6 +6405,12 @@ static int bond_init(struct net_device *bond_dev)
 					   bond_dev->name);
 	if (!bond->wq)
 		return -ENOMEM;
+
+	bond->rr_tx_counter = alloc_percpu(u32);
+	if (!bond->rr_tx_counter) {
+		destroy_workqueue(bond->wq);
+		return -ENOMEM;
+	}
 
 	bond->notifier_ctx = false;
 
