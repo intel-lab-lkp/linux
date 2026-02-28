@@ -90,6 +90,7 @@
 #include <net/tls.h>
 #endif
 #include <net/ip6_route.h>
+#include <net/ipv6_stubs.h>
 #include <net/netdev_lock.h>
 #include <net/xdp.h>
 
@@ -3250,6 +3251,9 @@ static int bond_confirm_addr6(struct net_device *dev,
 			      struct netdev_nested_priv *priv)
 {
 	struct in6_addr *addr = (struct in6_addr *)priv->data;
+
+	if (!ipv6_stub->nd_tbl)
+		return 0;
 
 	return ipv6_chk_addr(dev_net(dev), addr, dev, 0);
 }
