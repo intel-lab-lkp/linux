@@ -34,6 +34,11 @@ properties:
         - nvidia,tegra186-sysram
         - nvidia,tegra194-sysram
         - nvidia,tegra234-sysram
+        - qcom,ipq5018-imem
+        - qcom,ipq5332-imem
+        - qcom,ipq6018-imem
+        - qcom,ipq8074-imem
+        - qcom,ipq9574-imem
         - qcom,kaanapali-imem
         - qcom,rpm-msg-ram
         - rockchip,rk3288-pmu-sram
