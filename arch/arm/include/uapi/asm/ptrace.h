@@ -119,7 +119,12 @@
 #define PT_DATA_ADDR		0x10004
 #define PT_TEXT_END_ADDR	0x10008
 
-#ifndef __ASSEMBLY__
+#if defined(__GNUC__) && (__GNUC__ <  3)
+# error "GCC 3.0+ is required for proper __ASSEMBLER__ support. \
+Your compiler is too old to safely handle modern kernel assembly headers."
+#endif
+
+#ifndef __ASSEMBLER__ 
 
 /*
  * This struct defines the way the registers are stored on the
@@ -158,6 +163,6 @@ struct pt_regs {
 #define ARM_VFPREGS_SIZE ( 32 * 8 /*fpregs*/ + 4 /*fpscr*/ )
 
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__  */
 
 #endif /* _UAPI__ASM_ARM_PTRACE_H */
