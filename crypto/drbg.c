@@ -100,8 +100,9 @@
 #include <crypto/drbg.h>
 #include <crypto/df_sp80090a.h>
 #include <crypto/internal/cipher.h>
-#include <linux/kernel.h>
+#include <linux/cleanup.h>
 #include <linux/jiffies.h>
+#include <linux/kernel.h>
 #include <linux/string_choices.h>
 
 /***************************************************************
@@ -1339,7 +1340,7 @@ static int drbg_instantiate(struct drbg_state *drbg, struct drbg_string *pers,
 
 	pr_devel("DRBG: Initializing DRBG core %d with prediction resistance "
 		 "%s\n", coreref, str_enabled_disabled(pr));
-	mutex_lock(&drbg->drbg_mutex);
+	guard(mutex)(&drbg->drbg_mutex);
 
 	/* 9.1 step 1 is implicit with the selected DRBG type */
 
@@ -1360,7 +1361,7 @@ static int drbg_instantiate(struct drbg_state *drbg, struct drbg_string *pers,
 
 		ret = drbg_alloc_state(drbg);
 		if (ret)
-			goto unlock;
+			return ret;
 
 		ret = drbg_prepare_hrng(drbg);
 		if (ret)
@@ -1374,15 +1375,9 @@ static int drbg_instantiate(struct drbg_state *drbg, struct drbg_string *pers,
 	if (ret && !reseed)
 		goto free_everything;
 
-	mutex_unlock(&drbg->drbg_mutex);
-	return ret;
-
-unlock:
-	mutex_unlock(&drbg->drbg_mutex);
 	return ret;
 
 free_everything:
-	mutex_unlock(&drbg->drbg_mutex);
 	drbg_uninstantiate(drbg);
 	return ret;
 }
