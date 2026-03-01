@@ -140,6 +140,7 @@ EXPORT_SYMBOL(vc_cons);
 static const struct consw *con_driver_map[MAX_NR_CONSOLES];
 
 static int con_open(struct tty_struct *, struct file *);
+static void con_init_vc(int console_idx);
 static void vc_init(struct vc_data *vc, int do_clear);
 static void gotoxy(struct vc_data *vc, int new_x, int new_y);
 static void restore_cur(struct vc_data *vc);
@@ -159,9 +160,13 @@ static void unblank_screen(void);
 
 int default_utf8 = true;
 module_param(default_utf8, int, S_IRUGO | S_IWUSR);
+
 int global_cursor_default = -1;
 module_param(global_cursor_default, int, S_IRUGO | S_IWUSR);
 EXPORT_SYMBOL(global_cursor_default);
+
+int default_console;
+module_param(default_console, int, S_IRUGO | S_IWUSR);
 
 static int cur_default = CUR_UNDERLINE;
 module_param(cur_default, int, S_IRUGO | S_IWUSR);
@@ -3742,7 +3747,7 @@ static int __init con_init(void)
 {
 	const char *display_desc = NULL;
 	struct vc_data *vc;
-	unsigned int currcons = 0, i;
+	unsigned int i, di;
 
 	console_lock();
 
@@ -3776,18 +3781,18 @@ static int __init con_init(void)
 		mod_timer(&console_timer, jiffies + (blankinterval * HZ));
 	}
 
-	for (currcons = 0; currcons < MIN_NR_CONSOLES; currcons++) {
-		vc_cons[currcons].d = vc = kzalloc_obj(struct vc_data,
-						       GFP_NOWAIT);
-		INIT_WORK(&vc_cons[currcons].SAK_work, vc_SAK);
-		tty_port_init(&vc->port);
-		visual_init(vc, currcons, true);
-		/* Assuming vc->vc_{cols,rows,screenbuf_size} are sane here. */
-		vc->vc_screenbuf = kzalloc(vc->vc_screenbuf_size, GFP_NOWAIT);
-		vc_init(vc, currcons || !vc->vc_sw->con_save_screen);
-	}
-	currcons = fg_console = 0;
-	master_display_fg = vc = vc_cons[currcons].d;
+	for (i = 0; i < MIN_NR_CONSOLES; i++)
+		con_init_vc(i);
+
+	/* Init default_console if we didn't already do that above */
+	di = clamp(default_console, 0, MAX_NR_CONSOLES - 1);
+	if (di >= MIN_NR_CONSOLES)
+		con_init_vc(di);
+
+	fg_console = di;
+
+	vc = vc_cons[fg_console].d;
+	master_display_fg = vc;
 	set_origin(vc);
 	save_screen(vc);
 	gotoxy(vc, vc->state.x, vc->state.y);
@@ -3805,6 +3810,19 @@ static int __init con_init(void)
 	return 0;
 }
 console_initcall(con_init);
+
+static void con_init_vc(int console_idx)
+{
+	struct vc_data *vc = kzalloc_obj(struct vc_data, GFP_NOWAIT);
+
+	vc_cons[console_idx].d = vc;
+	INIT_WORK(&vc_cons[console_idx].SAK_work, vc_SAK);
+	tty_port_init(&vc->port);
+	visual_init(vc, console_idx, true);
+	/* Assuming vc->vc_{cols,rows,screenbuf_size} are sane here. */
+	vc->vc_screenbuf = kzalloc(vc->vc_screenbuf_size, GFP_NOWAIT);
+	vc_init(vc, console_idx || !vc->vc_sw->con_save_screen);
+}
 
 static const struct tty_operations con_ops = {
 	.install = con_install,

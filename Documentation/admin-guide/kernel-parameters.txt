@@ -8429,6 +8429,11 @@ Kernel parameters
 			overridden by individual drivers. 0 will hide
 			cursors, 1 will display them.
 
+	vt.default_console=
+			[VT]
+			Set default console; 0-62.
+			Default: 0 (vt1)
+
 	vt.italic=	[VT] Default color for italic text; 0-15.
 			Default: 2 = green.
 
