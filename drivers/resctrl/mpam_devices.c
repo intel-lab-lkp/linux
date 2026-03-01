@@ -2401,12 +2401,20 @@ static void mpam_reset_component_cfg(struct mpam_component *comp)
 
 	for (i = 0; i <= mpam_partid_max; i++) {
 		comp->cfg[i] = (struct mpam_config) {};
-		if (cprops->cpbm_wd)
+		if (cprops->cpbm_wd) {
 			comp->cfg[i].cpbm = GENMASK(cprops->cpbm_wd - 1, 0);
-		if (cprops->mbw_pbm_bits)
+			mpam_set_feature(mpam_feat_cpor_part, &comp->cfg[i]);
+		}
+		if (cprops->mbw_pbm_bits) {
 			comp->cfg[i].mbw_pbm = GENMASK(cprops->mbw_pbm_bits - 1, 0);
-		if (cprops->bwa_wd)
+			if (mpam_has_feature(mpam_feat_mbw_part, cprops))
+				mpam_set_feature(mpam_feat_mbw_part, &comp->cfg[i]);
+		}
+		if (cprops->bwa_wd) {
 			comp->cfg[i].mbw_max = GENMASK(15, 16 - cprops->bwa_wd);
+			if (mpam_has_feature(mpam_feat_mbw_max, cprops))
+				mpam_set_feature(mpam_feat_mbw_max, &comp->cfg[i]);
+		}
 	}
 }
 
