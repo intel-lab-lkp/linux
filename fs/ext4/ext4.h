@@ -2429,6 +2429,8 @@ struct ext4_dir_entry_2 {
 	char	name[EXT4_NAME_LEN];	/* File name */
 };
 
+#define DIFF_AREA_DE_XH sizeof(struct ext4_dir_entry_2)
+
 /*
  * Access the hashes at the end of ext4_dir_entry_2
  */
