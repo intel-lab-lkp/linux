@@ -355,7 +355,7 @@ static int cmp_refs_node(const struct rb_node *new, const struct rb_node *exist)
 	return comp_refs(new_node, exist_node, true);
 }
 
-static struct btrfs_delayed_ref_node* tree_insert(struct rb_root_cached *root,
+static struct btrfs_delayed_ref_node *tree_insert(struct rb_root_cached *root,
 		struct btrfs_delayed_ref_node *ins)
 {
 	struct rb_node *node = &ins->ref_node;
@@ -1053,6 +1053,10 @@ static int add_delayed_ref(struct btrfs_trans_handle *trans,
 	}
 
 	delayed_refs = &trans->transaction->delayed_refs;
+	if (TRANS_ABORTED(trans->transaction)) {
+		ret = -EIO;
+		goto free_head_ref;
+	}
 
 	if (btrfs_qgroup_full_accounting(fs_info) && !generic_ref->skip_qgroup) {
 		record = kzalloc_obj(*record, GFP_NOFS);
@@ -1181,6 +1185,10 @@ int btrfs_add_delayed_extent_op(struct btrfs_trans_handle *trans,
 	head_ref->extent_op = extent_op;
 
 	delayed_refs = &trans->transaction->delayed_refs;
+	if (TRANS_ABORTED(trans->transaction)) {
+		kmem_cache_free(btrfs_delayed_ref_head_cachep, head_ref);
+		return -EIO;
+	}
 
 	ret = xa_reserve(&delayed_refs->head_refs, index, GFP_NOFS);
 	if (ret) {
