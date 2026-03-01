@@ -353,6 +353,9 @@ static int prepare_nsset(unsigned flags, struct nsset *nsset)
 	if (IS_ERR(nsset->nsproxy))
 		return PTR_ERR(nsset->nsproxy);
 
+	/* Set flags early so put_nsset() can clean up properly on failure. */
+	nsset->flags = flags;
+
 	if (flags & CLONE_NEWUSER)
 		nsset->cred = prepare_creds();
 	else
@@ -368,8 +371,6 @@ static int prepare_nsset(unsigned flags, struct nsset *nsset)
 		if (!nsset->fs)
 			goto out;
 	}
-
-	nsset->flags = flags;
 	return 0;
 
 out:
