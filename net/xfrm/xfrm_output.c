@@ -900,7 +900,7 @@ int xfrm6_tunnel_check_size(struct sk_buff *skb)
 		skb->protocol = htons(ETH_P_IPV6);
 
 		if (xfrm6_local_dontfrag(sk))
-			ipv6_stub->xfrm6_local_rxpmtu(skb, mtu);
+			IPV6_CALL(xfrm6_local_rxpmtu)(skb, mtu);
 		else if (sk)
 			xfrm_local_error(skb, mtu);
 		else

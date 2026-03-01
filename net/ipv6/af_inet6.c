@@ -1023,16 +1023,18 @@ static struct pernet_operations inet6_net_ops = {
 	.exit = inet6_net_exit,
 };
 
-static int ipv6_route_input(struct sk_buff *skb)
+int ipv6_route_input(struct sk_buff *skb)
 {
 	ip6_route_input(skb);
 	return skb_dst(skb)->error;
 }
 
 static const struct ipv6_stub ipv6_stub_impl = {
+	.nd_tbl	= &nd_tbl,
+#if !defined(CONFIG_IPV6)
 	.ipv6_sock_mc_join = ipv6_sock_mc_join,
 	.ipv6_sock_mc_drop = ipv6_sock_mc_drop,
-	.ipv6_dst_lookup_flow = ip6_dst_lookup_flow,
+	.ip6_dst_lookup_flow = ip6_dst_lookup_flow,
 	.ipv6_route_input  = ipv6_route_input,
 	.fib6_get_table	   = fib6_get_table,
 	.fib6_table_lookup = fib6_table_lookup,
@@ -1053,10 +1055,10 @@ static const struct ipv6_stub ipv6_stub_impl = {
 	.xfrm6_gro_udp_encap_rcv = xfrm6_gro_udp_encap_rcv,
 	.xfrm6_rcv_encap = xfrm6_rcv_encap,
 #endif
-	.nd_tbl	= &nd_tbl,
-	.ipv6_fragment = ip6_fragment,
+	.ip6_fragment = ip6_fragment,
 	.ipv6_dev_find = ipv6_dev_find,
 	.ip6_xmit = ip6_xmit,
+#endif
 };
 
 static const struct ipv6_bpf_stub ipv6_bpf_stub_impl = {
@@ -1235,7 +1237,7 @@ static int __init inet6_init(void)
 
 	/* ensure that ipv6 stubs are visible only after ipv6 is ready */
 	wmb();
-	ipv6_stub = &ipv6_stub_impl;
+	WRITE_ONCE(ipv6_stub, &ipv6_stub_impl);
 	ipv6_bpf_stub = &ipv6_bpf_stub_impl;
 out:
 	return err;

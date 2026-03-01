@@ -207,9 +207,9 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 				.saddr = src->ipv6,
 				.flowi6_proto = IPPROTO_UDP
 			};
-			ndst = ipv6_stub->ipv6_dst_lookup_flow(net,
-							       ub->ubsock->sk,
-							       &fl6, NULL);
+			ndst = IPV6_CALL(ip6_dst_lookup_flow)(net,
+							      ub->ubsock->sk,
+							      &fl6, NULL);
 			if (IS_ERR(ndst)) {
 				err = PTR_ERR(ndst);
 				goto tx_error;
@@ -418,7 +418,7 @@ static int enable_mcast(struct udp_bearer *ub, struct udp_media_addr *remote)
 #if IS_ENABLED(CONFIG_IPV6)
 	} else {
 		lock_sock(sk);
-		err = ipv6_stub->ipv6_sock_mc_join(sk, ub->ifindex,
+		err = IPV6_CALL(ipv6_sock_mc_join)(sk, ub->ifindex,
 						   &remote->ipv6);
 		release_sock(sk);
 #endif

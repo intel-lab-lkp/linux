@@ -17,18 +17,22 @@ struct fib6_nh;
 struct fib6_config;
 struct fib6_result;
 
+int ipv6_route_input(struct sk_buff *skb);
+
 /* This is ugly, ideally these symbols should be built
  * into the core kernel.
  */
 struct ipv6_stub {
+	struct neigh_table *nd_tbl;
+#if !defined(CONFIG_IPV6)
 	int (*ipv6_sock_mc_join)(struct sock *sk, int ifindex,
 				 const struct in6_addr *addr);
 	int (*ipv6_sock_mc_drop)(struct sock *sk, int ifindex,
 				 const struct in6_addr *addr);
-	struct dst_entry *(*ipv6_dst_lookup_flow)(struct net *net,
-						  const struct sock *sk,
-						  struct flowi6 *fl6,
-						  const struct in6_addr *final_dst);
+	struct dst_entry *(*ip6_dst_lookup_flow)(struct net *net,
+						 const struct sock *sk,
+						 struct flowi6 *fl6,
+						 const struct in6_addr *final_dst);
 	int (*ipv6_route_input)(struct sk_buff *skb);
 
 	struct fib6_table *(*fib6_get_table)(struct net *net, u32 id);
@@ -67,14 +71,14 @@ struct ipv6_stub {
 	int (*xfrm6_rcv_encap)(struct sk_buff *skb, int nexthdr, __be32 spi,
 			       int encap_type);
 #endif
-	struct neigh_table *nd_tbl;
 
-	int (*ipv6_fragment)(struct net *net, struct sock *sk, struct sk_buff *skb,
-			     int (*output)(struct net *, struct sock *, struct sk_buff *));
+	int (*ip6_fragment)(struct net *net, struct sock *sk, struct sk_buff *skb,
+			    int (*output)(struct net *, struct sock *, struct sk_buff *));
 	struct net_device *(*ipv6_dev_find)(struct net *net, const struct in6_addr *addr,
 					    struct net_device *dev);
 	int (*ip6_xmit)(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 			__u32 mark, struct ipv6_txoptions *opt, int tclass, u32 priority);
+#endif
 };
 extern const struct ipv6_stub *ipv6_stub __read_mostly;
 
@@ -98,5 +102,11 @@ struct ipv6_bpf_stub {
 				  struct in6_addr *saddr);
 };
 extern const struct ipv6_bpf_stub *ipv6_bpf_stub __read_mostly;
+
+#if defined(CONFIG_IPV6)
+#define IPV6_CALL(X) (X)
+#else
+#define IPV6_CALL(X) (READ_ONCE(ipv6_stub)->X)
+#endif
 
 #endif

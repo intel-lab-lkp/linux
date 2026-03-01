@@ -129,7 +129,8 @@ int inet6addr_validator_notifier_call_chain(unsigned long val, void *v)
 }
 EXPORT_SYMBOL(inet6addr_validator_notifier_call_chain);
 
-static struct dst_entry *eafnosupport_ipv6_dst_lookup_flow(struct net *net,
+#if !defined(CONFIG_IPV6)
+static struct dst_entry *eafnosupport_ip6_dst_lookup_flow(struct net *net,
 							   const struct sock *sk,
 							   struct flowi6 *fl6,
 							   const struct in6_addr *final_dst)
@@ -203,9 +204,11 @@ static struct net_device *eafnosupport_ipv6_dev_find(struct net *net, const stru
 {
 	return ERR_PTR(-EAFNOSUPPORT);
 }
+#endif
 
 const struct ipv6_stub *ipv6_stub __read_mostly = &(struct ipv6_stub) {
-	.ipv6_dst_lookup_flow = eafnosupport_ipv6_dst_lookup_flow,
+#if !defined(CONFIG_IPV6)
+	.ip6_dst_lookup_flow = eafnosupport_ip6_dst_lookup_flow,
 	.ipv6_route_input  = eafnosupport_ipv6_route_input,
 	.fib6_get_table    = eafnosupport_fib6_get_table,
 	.fib6_table_lookup = eafnosupport_fib6_table_lookup,
@@ -214,8 +217,9 @@ const struct ipv6_stub *ipv6_stub __read_mostly = &(struct ipv6_stub) {
 	.ip6_mtu_from_fib6 = eafnosupport_ip6_mtu_from_fib6,
 	.fib6_nh_init	   = eafnosupport_fib6_nh_init,
 	.ip6_del_rt	   = eafnosupport_ip6_del_rt,
-	.ipv6_fragment	   = eafnosupport_ipv6_fragment,
+	.ip6_fragment	   = eafnosupport_ipv6_fragment,
 	.ipv6_dev_find     = eafnosupport_ipv6_dev_find,
+#endif
 };
 EXPORT_SYMBOL_GPL(ipv6_stub);
 
