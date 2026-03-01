@@ -151,7 +151,7 @@ h1_create()
 h1_destroy()
 {
 	ip route del vrf v$h1 192.0.2.16/28 via 192.0.2.2
-	simple_if_fini $h1 192.0.2.1/28
+	simple_if_fini $h1 192.0.2.1/28 2001:db8:1::1/64
 }
 
 h2_create()
