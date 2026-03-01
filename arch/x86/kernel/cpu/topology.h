@@ -22,6 +22,11 @@ void topology_set_dom(struct topo_scan *tscan, enum x86_topology_domains dom,
 bool cpu_parse_topology_ext(struct topo_scan *tscan);
 void cpu_parse_topology_amd(struct topo_scan *tscan);
 void cpu_topology_fixup_amd(struct topo_scan *tscan);
+#ifdef CONFIG_CPU_SUP_HYGON
+void cpu_topology_fixup_hygon(struct topo_scan *tscan);
+#else
+static inline void cpu_topology_fixup_hygon(struct topo_scan *tscan) { }
+#endif
 
 static inline u32 topo_shift_apicid(u32 apicid, enum x86_topology_domains dom)
 {

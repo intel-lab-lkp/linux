@@ -199,6 +199,9 @@ static void topo_set_ids(struct topo_scan *tscan, bool early)
 
 	if (c->x86_vendor == X86_VENDOR_AMD)
 		cpu_topology_fixup_amd(tscan);
+
+	if (c->x86_vendor == X86_VENDOR_HYGON && !early)
+		cpu_topology_fixup_hygon(tscan);
 }
 
 void cpu_parse_topology(struct cpuinfo_x86 *c)
