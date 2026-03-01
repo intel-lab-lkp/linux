@@ -42,18 +42,26 @@
 
 #define EXPORT_RUNTIME_DEV_PM_OPS(name, suspend_fn, resume_fn, idle_fn) \
 	EXPORT_DEV_PM_OPS(name) = { \
+		SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, \
+				    pm_runtime_force_resume) \
 		RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
 	}
 #define EXPORT_GPL_RUNTIME_DEV_PM_OPS(name, suspend_fn, resume_fn, idle_fn) \
 	EXPORT_GPL_DEV_PM_OPS(name) = { \
+		SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, \
+				    pm_runtime_force_resume) \
 		RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
 	}
 #define EXPORT_NS_RUNTIME_DEV_PM_OPS(name, suspend_fn, resume_fn, idle_fn, ns) \
 	EXPORT_NS_DEV_PM_OPS(name, ns) = { \
+		SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, \
+				    pm_runtime_force_resume) \
 		RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
 	}
 #define EXPORT_NS_GPL_RUNTIME_DEV_PM_OPS(name, suspend_fn, resume_fn, idle_fn, ns) \
 	EXPORT_NS_GPL_DEV_PM_OPS(name, ns) = { \
+		SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, \
+				    pm_runtime_force_resume) \
 		RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
 	}
 
