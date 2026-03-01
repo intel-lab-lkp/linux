@@ -41,8 +41,12 @@ static void read_stats(struct scx_cpu0 *skel, __u64 *stats)
 {
 	int nr_cpus = libbpf_num_possible_cpus();
 	assert(nr_cpus > 0);
-	__u64 cnts[2][nr_cpus];
+	__u64 *cnts;
 	__u32 idx;
+
+	cnts = calloc(nr_cpus, sizeof(__u64));
+	if (!cnts)
+		return;
 
 	memset(stats, 0, sizeof(stats[0]) * 2);
 
@@ -50,12 +54,14 @@ static void read_stats(struct scx_cpu0 *skel, __u64 *stats)
 		int ret, cpu;
 
 		ret = bpf_map_lookup_elem(bpf_map__fd(skel->maps.stats),
-					  &idx, cnts[idx]);
+					  &idx, cnts);
 		if (ret < 0)
 			continue;
 		for (cpu = 0; cpu < nr_cpus; cpu++)
-			stats[idx] += cnts[idx][cpu];
+			stats[idx] += cnts[cpu];
 	}
+
+	free(cnts);
 }
 
 int main(int argc, char **argv)
