@@ -884,7 +884,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_2658417,
 		/* Cortex-A510 r0p0 - r1p1 */
 		ERRATA_MIDR_RANGE(MIDR_CORTEX_A510, 0, 0, 1, 1),
-		MIDR_FIXED(MIDR_CPU_VAR_REV(1,1), BIT(25)),
+		MIDR_FIXED(MIDR_CPU_VAR_REV(1, 1), BIT(25)),
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_3194386
