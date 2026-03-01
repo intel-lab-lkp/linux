@@ -1206,8 +1206,15 @@ static int bandgap_omap_cpu_notifier(struct notifier_block *nb,
 	case CPU_CLUSTER_PM_EXIT:
 		if (bgp->is_suspended)
 			break;
-		if (TI_BANDGAP_HAS(bgp, CLK_CTRL))
-			clk_enable(bgp->fclock);
+		if (TI_BANDGAP_HAS(bgp, CLK_CTRL)) {
+			int ret = clk_enable(bgp->fclock);
+
+			if (ret) {
+				dev_err(bgp->dev, "Failed to enable clock on PM exit: %d\n", ret);
+				spin_unlock(&bgp->lock);
+				return NOTIFY_BAD;
+			}
+		}
 		ti_bandgap_power(bgp, true);
 		ti_bandgap_restore_ctxt(bgp);
 		break;
