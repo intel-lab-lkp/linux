@@ -966,6 +966,20 @@ sub get_maintainers {
 	    }
 	}
 
+	## Add KUnit maintainers for KUnit test files
+	if ($file =~ m/[_-]kunit[_-]?.*\.c$/) {
+	    my $kunit_tvi = find_first_section();
+	    while ($kunit_tvi < @typevalue) {
+		my $kunit_start = find_starting_index($kunit_tvi);
+		if ($typevalue[$kunit_start] =~ m/^KERNEL UNIT TESTING FRAMEWORK/) {
+		    $hash{$kunit_tvi} = 0;
+		    add_categories($kunit_tvi, "");
+		    last;
+		}
+		$kunit_tvi = find_ending_index($kunit_tvi) + 1;
+	    }
+	}
+
 	maintainers_in_file($file);
     }
 
