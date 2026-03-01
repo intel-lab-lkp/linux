@@ -463,11 +463,9 @@ static int axis_fifo_probe(struct platform_device *pdev)
 
 	rc = devm_request_irq(fifo->dt_device, irq, &axis_fifo_irq, 0,
 			      DRIVER_NAME, fifo);
-	if (rc) {
-		dev_err(fifo->dt_device, "couldn't allocate interrupt %i\n",
-			irq);
-		return rc;
-	}
+	if (rc)
+		return dev_err_probe(fifo->dt_device, rc,
+				     "couldn't allocate interrupt %i\n", irq);
 
 	fifo->id = ida_alloc(&axis_fifo_ida, GFP_KERNEL);
 	if (fifo->id < 0)
