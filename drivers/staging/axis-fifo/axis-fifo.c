@@ -233,9 +233,15 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 	    (words_to_write > (fifo->tx_fifo_depth - 4)))
 		return -EINVAL;
 
+	txbuf = vmemdup_user(buf, len);
+	if (IS_ERR(txbuf))
+		return PTR_ERR(txbuf);
+
 	if (f->f_flags & O_NONBLOCK) {
-		if (!mutex_trylock(&fifo->write_lock))
-			return -EAGAIN;
+		if (!mutex_trylock(&fifo->write_lock)) {
+			ret = -EAGAIN;
+			goto err_free;
+		}
 
 		if (words_to_write > ioread32(fifo->base_addr +
 					      XLLF_TDFV_OFFSET)) {
@@ -251,21 +257,17 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 			goto end_unlock;
 	}
 
-	txbuf = vmemdup_user(buf, len);
-	if (IS_ERR(txbuf)) {
-		ret = PTR_ERR(txbuf);
-		goto end_unlock;
-	}
-
 	for (int i = 0; i < words_to_write; ++i)
 		iowrite32(txbuf[i], fifo->base_addr + XLLF_TDFD_OFFSET);
 
 	iowrite32(len, fifo->base_addr + XLLF_TLR_OFFSET);
 
 	ret = len;
-	kvfree(txbuf);
+
 end_unlock:
 	mutex_unlock(&fifo->write_lock);
+err_free:
+	kvfree(txbuf);
 
 	return ret;
 }
