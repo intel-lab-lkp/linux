@@ -302,6 +302,9 @@ static irqreturn_t axis_fifo_irq(int irq, void *dw)
 	isr = ioread32(fifo->base_addr + XLLF_ISR_OFFSET);
 	intr = ier & isr;
 
+	if (!intr)
+		return IRQ_NONE;
+
 	if (intr & XLLF_INT_RC_MASK)
 		wake_up(&fifo->read_queue);
 
@@ -324,7 +327,7 @@ static irqreturn_t axis_fifo_irq(int irq, void *dw)
 		dev_err(fifo->dt_device,
 			"transmit length mismatch error interrupt\n");
 
-	iowrite32(XLLF_INT_CLEAR_ALL, fifo->base_addr + XLLF_ISR_OFFSET);
+	iowrite32(intr, fifo->base_addr + XLLF_ISR_OFFSET);
 
 	return IRQ_HANDLED;
 }
