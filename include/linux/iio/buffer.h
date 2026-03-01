@@ -34,8 +34,16 @@ static inline int iio_push_to_buffers_with_timestamp(struct iio_dev *indio_dev,
 	void *data, int64_t timestamp)
 {
 	if (ACCESS_PRIVATE(indio_dev, scan_timestamp)) {
-		size_t ts_offset = indio_dev->scan_bytes / sizeof(int64_t) - 1;
-		((int64_t *)data)[ts_offset] = timestamp;
+		size_t ts_offset = indio_dev->scan_bytes -
+			ACCESS_PRIVATE(indio_dev, largest_scan_element_size);
+
+		/*
+		 * The size of indio_dev->scan_bytes is always aligned to
+		 * largest_scan_element_size (see iio_compute_scan_bytes()).
+		 * And this size is always going to be >= sizeof(timestamp).
+		 * So to correctly place the timestamp, it goes at this offset.
+		 */
+		*(int64_t *)(data + ts_offset) = timestamp;
 	}
 
 	return iio_push_to_buffers(indio_dev, data);
