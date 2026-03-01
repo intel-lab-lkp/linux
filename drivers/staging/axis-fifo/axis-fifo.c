@@ -46,7 +46,7 @@
 #define XLLF_RDFD_OFFSET	0x20 /* Receive Data */
 #define XLLF_RLR_OFFSET		0x24 /* Receive Length */
 #define XLLF_SRR_OFFSET		0x28 /* Local Link Reset */
-#define XLLF_TDR_OFFSET		0x2C /* Transmit Destination */
+#define XLLF_TDR_OFFSET		0x2c /* Transmit Destination */
 #define XLLF_RDR_OFFSET		0x30 /* Receive Destination */
 
 #define XLLF_RDFR_RESET_MASK	0xa5 /* Receive reset value */
