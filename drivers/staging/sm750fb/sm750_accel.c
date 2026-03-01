@@ -97,7 +97,7 @@ int sm750_hw_fillrect(struct lynx_accel *accel,
 		 * got something error
 		 */
 		pr_debug("De engine always busy\n");
-		return -1;
+		return -EBUSY;
 	}
 
 	write_dpr(accel, DE_WINDOW_DESTINATION_BASE, base); /* dpr40 */
@@ -264,7 +264,7 @@ int sm750_hw_copyarea(struct lynx_accel *accel,
 		  (sPitch / Bpp & DE_WINDOW_WIDTH_SRC_MASK)); /* dpr3c */
 
 	if (accel->de_wait() != 0)
-		return -1;
+		return -EBUSY;
 
 	write_dpr(accel, DE_SOURCE,
 		  ((sx << DE_SOURCE_X_K1_SHIFT) & DE_SOURCE_X_K1_MASK) |
@@ -333,7 +333,7 @@ int sm750_hw_imageblit(struct lynx_accel *accel, const char *pSrcbuf,
 	ulBytesRemain = ulBytesPerScan & 3;
 
 	if (accel->de_wait() != 0)
-		return -1;
+		return -EBUSY;
 
 	/*
 	 * 2D Source Base.
