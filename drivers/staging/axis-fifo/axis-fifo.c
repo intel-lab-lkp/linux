@@ -395,22 +395,22 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 				   &value);
 	if (ret) {
 		dev_err(fifo->dt_device, "missing xlnx,axi-str-rxd-tdata-width property\n");
-		goto end;
+		return ret;
 	} else if (value != 32) {
 		dev_err(fifo->dt_device, "xlnx,axi-str-rxd-tdata-width only supports 32 bits\n");
 		ret = -EIO;
-		goto end;
+		return ret;
 	}
 
 	ret = of_property_read_u32(node, "xlnx,axi-str-txd-tdata-width",
 				   &value);
 	if (ret) {
 		dev_err(fifo->dt_device, "missing xlnx,axi-str-txd-tdata-width property\n");
-		goto end;
+		return ret;
 	} else if (value != 32) {
 		dev_err(fifo->dt_device, "xlnx,axi-str-txd-tdata-width only supports 32 bits\n");
 		ret = -EIO;
-		goto end;
+		return ret;
 	}
 
 	ret = of_property_read_u32(node, "xlnx,rx-fifo-depth",
@@ -418,7 +418,7 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 	if (ret) {
 		dev_err(fifo->dt_device, "missing xlnx,rx-fifo-depth property\n");
 		ret = -EIO;
-		goto end;
+		return ret;
 	}
 
 	ret = of_property_read_u32(node, "xlnx,tx-fifo-depth",
@@ -426,7 +426,7 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 	if (ret) {
 		dev_err(fifo->dt_device, "missing xlnx,tx-fifo-depth property\n");
 		ret = -EIO;
-		goto end;
+		return ret;
 	}
 
 	ret = of_property_read_u32(node, "xlnx,use-rx-data",
@@ -434,7 +434,7 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 	if (ret) {
 		dev_err(fifo->dt_device, "missing xlnx,use-rx-data property\n");
 		ret = -EIO;
-		goto end;
+		return ret;
 	}
 
 	ret = of_property_read_u32(node, "xlnx,use-tx-data",
@@ -442,10 +442,9 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 	if (ret) {
 		dev_err(fifo->dt_device, "missing xlnx,use-tx-data property\n");
 		ret = -EIO;
-		goto end;
+		return ret;
 	}
 
-end:
 	return ret;
 }
 
