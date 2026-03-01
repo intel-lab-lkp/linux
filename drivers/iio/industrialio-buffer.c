@@ -765,7 +765,8 @@ static int iio_storage_bytes_for_timestamp(struct iio_dev *indio_dev)
 
 static int iio_compute_scan_bytes(struct iio_dev *indio_dev,
 				  const unsigned long *mask, bool timestamp,
-				  unsigned int *scan_bytes)
+				  unsigned int *scan_bytes,
+				  unsigned int *largest_element_size)
 {
 	unsigned int bytes = 0;
 	int length, i, largest = 0;
@@ -792,6 +793,9 @@ static int iio_compute_scan_bytes(struct iio_dev *indio_dev,
 	}
 
 	*scan_bytes = ALIGN(bytes, largest);
+
+	if (largest_element_size)
+		*largest_element_size = largest;
 
 	return 0;
 }
@@ -848,7 +852,7 @@ static int iio_buffer_update_bytes_per_datum(struct iio_dev *indio_dev,
 		return 0;
 
 	ret = iio_compute_scan_bytes(indio_dev, buffer->scan_mask,
-				     buffer->scan_timestamp, &bytes);
+				     buffer->scan_timestamp, &bytes, NULL);
 	if (ret)
 		return ret;
 
@@ -892,6 +896,7 @@ struct iio_device_config {
 	unsigned int watermark;
 	const unsigned long *scan_mask;
 	unsigned int scan_bytes;
+	unsigned int largest_scan_element_size;
 	bool scan_timestamp;
 };
 
@@ -997,7 +1002,8 @@ static int iio_verify_update(struct iio_dev *indio_dev,
 	}
 
 	ret = iio_compute_scan_bytes(indio_dev, scan_mask, scan_timestamp,
-				     &config->scan_bytes);
+				     &config->scan_bytes,
+				     &config->largest_scan_element_size);
 	if (ret)
 		return ret;
 
@@ -1155,6 +1161,8 @@ static int iio_enable_buffers(struct iio_dev *indio_dev,
 	indio_dev->active_scan_mask = config->scan_mask;
 	ACCESS_PRIVATE(indio_dev, scan_timestamp) = config->scan_timestamp;
 	indio_dev->scan_bytes = config->scan_bytes;
+	ACCESS_PRIVATE(indio_dev, largest_scan_element_size) =
+		config->largest_scan_element_size;
 	iio_dev_opaque->currentmode = config->mode;
 
 	iio_update_demux(indio_dev);

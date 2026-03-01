@@ -584,6 +584,8 @@ struct iio_buffer_setup_ops {
  *			and owner
  * @buffer:		[DRIVER] any buffer present
  * @scan_bytes:		[INTERN] num bytes captured to be fed to buffer demux
+ * @largest_scan_element_size: [INTERN] cache of the largest scan element size
+ *			       among the channels selected in the scan mask
  * @available_scan_masks: [DRIVER] optional array of allowed bitmasks. Sort the
  *			   array in order of preference, the most preferred
  *			   masks first.
@@ -610,6 +612,7 @@ struct iio_dev {
 
 	struct iio_buffer		*buffer;
 	int				scan_bytes;
+	unsigned int			__private largest_scan_element_size;
 
 	const unsigned long		*available_scan_masks;
 	unsigned int			__private masklength;
