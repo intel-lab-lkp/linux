@@ -20,7 +20,7 @@
 
 static u64 __init get_kaslr_seed(void *fdt, int node)
 {
-	static char const seed_str[] __initconst = "kaslr-seed";
+	static const char seed_str[] __initconst = "kaslr-seed";
 	fdt64_t *prop;
 	u64 ret;
 	int len;
