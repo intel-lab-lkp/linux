@@ -121,7 +121,7 @@ struct fwnet_partial_datagram {
 	struct list_head pd_link;
 	struct list_head fi_list;
 	struct sk_buff *skb;
-	/* FIXME Why not use skb->data? */
+	/* FIXME: Why not use skb->data? */
 	char *pbuf;
 	u16 datagram_label;
 	u16 ether_type;
