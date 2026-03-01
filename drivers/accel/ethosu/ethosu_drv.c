@@ -337,7 +337,8 @@ static int ethosu_probe(struct platform_device *pdev)
 	ethosudev = devm_drm_dev_alloc(&pdev->dev, &ethosu_drm_driver,
 				       struct ethosu_device, base);
 	if (IS_ERR(ethosudev))
-		return -ENOMEM;
+		return PTR_ERR(ethosudev);
+
 	platform_set_drvdata(pdev, ethosudev);
 
 	dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(40));
