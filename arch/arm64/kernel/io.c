@@ -17,10 +17,10 @@
 #define memcpy_toio_aligned(to, from, count, bits)                        \
 	({                                                                \
 		volatile u##bits __iomem *_to = to;                       \
-		const u##bits *_from = from;                              \
+		const u##bits * _from = from;                             \
 		size_t _count = count;                                    \
-		const u##bits *_end_from = _from + ALIGN_DOWN(_count, 8); \
-                                                                          \
+		const u##bits * _end_from = _from + ALIGN_DOWN(_count, 8);\
+\
 		for (; _from < _end_from; _from += 8, _to += 8)           \
 			__const_memcpy_toio_aligned##bits(_to, _from, 8); \
 		if ((_count % 8) >= 4) {                                  \
