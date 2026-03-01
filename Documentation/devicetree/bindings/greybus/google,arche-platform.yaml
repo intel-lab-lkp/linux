@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/greybus/google,arche-platform.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Google Arche Platform
+
+maintainers:
+  - Vaibhav Hiremath <hvaibhav.linux@gmail.com>
+
+description:
+  The Arche platform driver enables the Unipro link between the
+  application processor and the SVC (Supervisory Controller) in
+  a Greybus-based system.
+
+properties:
+  compatible:
+    const: google,arche-platform
+
+  svc,reset-gpios:
+    description: GPIO used to reset the SVC
+    maxItems: 1
+
+  svc,sysboot-gpios:
+    description: GPIO used for SVC sysboot signal
+    maxItems: 1
+
+  svc,refclk-req-gpios:
+    description: GPIO used to request the SVC reference clock
+    maxItems: 1
+
+  svc,wake-detect-gpios:
+    description: Bidirectional GPIO for wake/detect signal between AP and SVC
+    maxItems: 1
+
+  clocks:
+    description: SVC reference clock
+    maxItems: 1
+
+  clock-names:
+    items:
+      - const: svc_ref_clk
+
+  svc,reset-active-high:
+    description: Present if the SVC reset GPIO is active high
+    type: boolean
+
+additionalProperties: false
+
+required:
+  - compatible
+  - svc,reset-gpios
+  - svc,sysboot-gpios
+  - svc,refclk-req-gpios
+  - svc,wake-detect-gpios
+  - clocks
+  - clock-names
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    arche-platform {
+        compatible = "google,arche-platform";
+        svc,reset-gpios = <&gpio 0 GPIO_ACTIVE_LOW>;
+        svc,sysboot-gpios = <&gpio 1 GPIO_ACTIVE_HIGH>;
+        svc,refclk-req-gpios = <&gpio 2 GPIO_ACTIVE_HIGH>;
+        svc,wake-detect-gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
+        clocks = <&svc_ref_clk>;
+        clock-names = "svc_ref_clk";
+    };
