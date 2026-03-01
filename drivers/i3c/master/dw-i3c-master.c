@@ -953,7 +953,7 @@ static int dw_i3c_master_i3c_xfers(struct i3c_dev_desc *dev,
 		dev_err(master->dev,
 			"<%s> cannot resume i3c bus master, err: %d\n",
 			__func__, ret);
-		return ret;
+		goto free_xfer;
 	}
 
 	for (i = 0; i < i3c_nxfers; i++) {
@@ -994,10 +994,10 @@ static int dw_i3c_master_i3c_xfers(struct i3c_dev_desc *dev,
 			i3c_xfers[i].len = cmd->rx_len;
 	}
 
-	ret = xfer->ret;
-	dw_i3c_master_free_xfer(xfer);
-
 	pm_runtime_put_autosuspend(master->dev);
+	ret = xfer->ret;
+free_xfer:
+	dw_i3c_master_free_xfer(xfer);
 	return ret;
 }
 
