@@ -325,7 +325,7 @@ static void sahara_hello(struct sahara_context *context)
 	context->tx[0]->hello_resp.version = cpu_to_le32(SAHARA_VERSION);
 	context->tx[0]->hello_resp.version_compat = cpu_to_le32(SAHARA_VERSION);
 	context->tx[0]->hello_resp.status = cpu_to_le32(SAHARA_SUCCESS);
-	context->tx[0]->hello_resp.mode = context->rx->hello_resp.mode;
+	context->tx[0]->hello_resp.mode = context->rx->hello.mode;
 
 	ret = mhi_queue_buf(context->mhi_dev, DMA_TO_DEVICE, context->tx[0],
 			    SAHARA_HELLO_LENGTH, MHI_EOT);
