@@ -121,8 +121,6 @@ struct x86_init_ops x86_init __initdata = {
 	},
 
 	.acpi = {
-		.set_root_pointer	= x86_default_set_root_pointer,
-		.get_root_pointer	= x86_default_get_root_pointer,
 		.reduced_hw_early_init	= acpi_generic_reduced_hw_init,
 	},
 };

@@ -17,6 +17,7 @@
 #include <asm/cpufeature.h>
 #include <asm/irq_vectors.h>
 #include <asm/xen/hypervisor.h>
+#include <asm/setup.h>
 
 #include <xen/xen.h>
 
@@ -160,19 +161,16 @@ static inline bool acpi_has_cpu_in_madt(void)
 #define ACPI_HAVE_ARCH_SET_ROOT_POINTER
 static __always_inline void acpi_arch_set_root_pointer(u64 addr)
 {
-	x86_init.acpi.set_root_pointer(addr);
+	boot_params.acpi_rsdp_addr = addr;
 }
 
 #define ACPI_HAVE_ARCH_GET_ROOT_POINTER
 static __always_inline u64 acpi_arch_get_root_pointer(void)
 {
-	return x86_init.acpi.get_root_pointer();
+	return boot_params.acpi_rsdp_addr;
 }
 
 void acpi_generic_reduced_hw_init(void);
-
-void x86_default_set_root_pointer(u64 addr);
-u64 x86_default_get_root_pointer(void);
 
 #ifdef CONFIG_XEN_PV
 /* A Xen PV domain needs a special acpi_os_ioremap() handling. */
@@ -192,13 +190,6 @@ static inline void acpi_disable_pci(void) { }
 static inline void disable_acpi(void) { }
 
 static inline void acpi_generic_reduced_hw_init(void) { }
-
-static inline void x86_default_set_root_pointer(u64 addr) { }
-
-static inline u64 x86_default_get_root_pointer(void)
-{
-	return 0;
-}
 
 #endif /* !CONFIG_ACPI */
 
