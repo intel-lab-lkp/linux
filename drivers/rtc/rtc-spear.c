@@ -437,7 +437,7 @@ static int spear_rtc_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct spear_rtc_config *config = platform_get_drvdata(pdev);
-	int irq;
+	int irq, ret;
 
 	irq = platform_get_irq(pdev, 0);
 
@@ -447,7 +447,11 @@ static int spear_rtc_resume(struct device *dev)
 			config->irq_wake = 0;
 		}
 	} else {
-		clk_enable(config->clk);
+		ret = clk_enable(config->clk);
+		if (ret) {
+			dev_err(dev, "Unable to enable clock on resume: %d\n", ret);
+			return ret;
+		}
 		spear_rtc_enable_interrupt(config);
 	}
 
