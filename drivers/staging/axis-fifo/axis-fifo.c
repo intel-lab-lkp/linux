@@ -456,8 +456,8 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 static int axis_fifo_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct axis_fifo *fifo = NULL;
-	int rc = 0; /* error return value */
+	struct axis_fifo *fifo;
+	int rc;
 	int irq;
 
 	fifo = devm_kzalloc(dev, sizeof(*fifo), GFP_KERNEL);
