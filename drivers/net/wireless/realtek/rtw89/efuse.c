@@ -270,6 +270,7 @@ int rtw89_parse_efuse_map_ax(struct rtw89_dev *rtwdev)
 	u8 *log_map = NULL;
 	u8 *dav_phy_map = NULL;
 	u8 *dav_log_map = NULL;
+	int retry;
 	int ret;
 
 	if (rtw89_read16(rtwdev, R_AX_SYS_WL_EFUSE_CTRL) & B_AX_AUTOLOAD_SUS)
@@ -289,7 +290,17 @@ int rtw89_parse_efuse_map_ax(struct rtw89_dev *rtwdev)
 		goto out_free;
 	}
 
-	ret = rtw89_dump_physical_efuse_map(rtwdev, phy_map, 0, phy_size, false);
+	for (retry = 0; retry < 3; retry++) {
+		if (retry) {
+			rtw89_warn(rtwdev, "efuse dump failed, retrying (%d)\n",
+				   retry);
+			fsleep(500000);
+		}
+		ret = rtw89_dump_physical_efuse_map(rtwdev, phy_map, 0,
+						    phy_size, false);
+		if (!ret)
+			break;
+	}
 	if (ret) {
 		rtw89_warn(rtwdev, "failed to dump efuse physical map\n");
 		goto out_free;
