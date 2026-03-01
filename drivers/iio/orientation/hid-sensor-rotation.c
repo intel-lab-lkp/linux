@@ -20,7 +20,11 @@ struct dev_rot_state {
 	struct hid_sensor_hub_attribute_info quaternion;
 	struct {
 		s32 sampled_vals[4];
-		aligned_s64 timestamp;
+		/*
+		 * HACK: There are two copies of the same timestamp in case of
+		 * userspace depending on broken alignment from older kernels.
+		 */
+		aligned_s64 timestamp[2];
 	} scan;
 	int scale_pre_decml;
 	int scale_post_decml;
@@ -154,8 +158,18 @@ static int dev_rot_proc_event(struct hid_sensor_hub_device *hsdev,
 		if (!rot_state->timestamp)
 			rot_state->timestamp = iio_get_time_ns(indio_dev);
 
-		iio_push_to_buffers_with_timestamp(indio_dev, &rot_state->scan,
-						   rot_state->timestamp);
+		/*
+		 * HACK: IIO previously had an incorrect implementation of
+		 * iio_push_to_buffers_with_timestamp() that put the timestamp
+		 * in the last 8 bytes of the buffer, which was incorrect
+		 * according to the IIO ABI. To avoid breaking userspace that
+		 * depended on this broken behavior, we put the timestamp in
+		 * both the correct place and the old incorrect place.
+		 */
+		rot_state->scan.timestamp[0] = rot_state->timestamp;
+		rot_state->scan.timestamp[1] = rot_state->timestamp;
+
+		iio_push_to_buffers(indio_dev, &rot_state->scan);
 
 		rot_state->timestamp = 0;
 	}
