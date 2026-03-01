@@ -549,7 +549,7 @@ static int vec_proc_do_default_vl(const struct ctl_table *table, int write,
 	enum vec_type type = info->type;
 	int ret;
 	int vl = get_default_vl(type);
-	struct ctl_table tmp_table = {
+	const struct ctl_table tmp_table = {
 		.data = &vl,
 		.maxlen = sizeof(vl),
 	};
