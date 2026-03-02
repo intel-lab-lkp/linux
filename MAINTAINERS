@@ -10964,6 +10964,16 @@ K:	(devm_)?gpio_(request|free|direction|get|set)
 K:	GPIOD_FLAGS_BIT_NONEXCLUSIVE
 K:	devm_gpiod_unhinge
 
+PHYTIUM GPIO DRIVERS
+M:	Zhu Ling <1536943441@qq.com>
+M:	Chen Baozi <chenbaozi@phytium.com.cn>
+L:	linux-gpio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/gpio/phytium,gpio.yaml
+F:	drivers/gpio/gpio-phytium-core.c
+F:	drivers/gpio/gpio-phytium-core.h
+F:	drivers/gpio/gpio-phytium-platform.c
+
 GPIO UAPI
 M:	Bartosz Golaszewski <brgl@kernel.org>
 R:	Kent Gibson <warthog618@gmail.com>
