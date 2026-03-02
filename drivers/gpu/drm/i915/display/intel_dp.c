@@ -4749,7 +4749,7 @@ intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector
 	intel_dp_init_source_oui(intel_dp);
 
 	/* Read ALPM DPCD caps before reading the PSR CAPS */
-	intel_alpm_init(intel_dp);
+	intel_alpm_init_dpcd(intel_dp);
 
 	/*
 	 * This has to be called after intel_dp->edp_dpcd is filled, PSR checks
