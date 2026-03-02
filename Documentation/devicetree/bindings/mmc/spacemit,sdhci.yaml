@@ -32,6 +32,18 @@ properties:
       - const: core
       - const: io
 
+  spacemit,aib-mmc1-io-reg:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: AIB MMC1 IO register address for voltage switching
+
+  spacemit,apbc-asfar-reg:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: APBC ASFAR register address for AIB access
+
+  spacemit,apbc-assar-reg:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: APBC ASSAR register address for AIB access
+
 required:
   - compatible
   - reg
@@ -50,4 +62,7 @@ examples:
       interrupt-parent = <&plic>;
       clocks = <&clk_apmu 10>, <&clk_apmu 13>;
       clock-names = "core", "io";
+      spacemit,aib-mmc1-io-reg = <0xd401e81c>;
+      spacemit,apbc-asfar-reg = <0xd4015050>;
+      spacemit,apbc-assar-reg = <0xd4015054>;
     };
