@@ -641,6 +641,7 @@ our $signature_tags = qr{(?xi:
 	Reviewed-by:|
 	Reported-by:|
 	Suggested-by:|
+	Assisted-by:|
 	To:|
 	Cc:
 )};
@@ -737,7 +738,7 @@ sub find_standard_signature {
 	my ($sign_off) = @_;
 	my @standard_signature_tags = (
 		'Signed-off-by:', 'Co-developed-by:', 'Acked-by:', 'Tested-by:',
-		'Reviewed-by:', 'Reported-by:', 'Suggested-by:'
+		'Reviewed-by:', 'Reported-by:', 'Suggested-by:', 'Assisted-by:'
 	);
 	foreach my $signature (@standard_signature_tags) {
 		return $signature if (get_edit_distance($sign_off, $signature) <= 2);
@@ -3107,7 +3108,15 @@ sub process {
 
 			my ($email_name, $name_comment, $email_address, $comment) = parse_email($email);
 			my $suggested_email = format_email(($email_name, $name_comment, $email_address, $comment));
-			if ($suggested_email eq "") {
+			# Assisted-by: uses "Agent:Model" notation without an email
+			# address, as mandated by Documentation/process/coding-assistants.rst.
+			# Skip email validation for this tag.
+			if ($sign_off =~ /^Assisted-by:$/i) {
+				if ($email !~ /\S+:\S+/) {
+					WARN("BAD_SIGN_OFF",
+					     "Assisted-by: should use 'Agent:Model' notation (e.g. 'GitHub Copilot:claude-sonnet-4.6')\n" . $herecurr);
+				}
+			} elsif ($suggested_email eq "") {
 				ERROR("BAD_SIGN_OFF",
 				      "Unrecognized email address: '$email'\n" . $herecurr);
 			} else {
