@@ -479,6 +479,9 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 		else if (remote_cid <= VMADDR_CID_HOST || !transport_h2g ||
 			 (remote_flags & VMADDR_FLAG_TO_HOST))
 			new_transport = transport_g2h;
+		else if (transport_h2g->has_cid &&
+			 !transport_h2g->has_cid(remote_cid))
+			new_transport = transport_g2h;
 		else
 			new_transport = transport_h2g;
 		break;
