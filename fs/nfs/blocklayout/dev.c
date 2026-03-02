@@ -33,10 +33,14 @@ static bool bl_register_scsi(struct pnfs_block_dev *dev)
 	const struct pr_ops *ops = bdev->bd_disk->fops->pr_ops;
 	int status;
 
-	if (test_and_set_bit(PNFS_BDEV_REGISTERED, &dev->flags))
+	mutex_lock(&dev->pbd_mutex);
+	if (test_and_set_bit(PNFS_BDEV_REGISTERED, &dev->flags)) {
+		mutex_unlock(&dev->pbd_mutex);
 		return true;
+	}
 
 	status = ops->pr_register(bdev, 0, dev->pr_key, true);
+	mutex_unlock(&dev->pbd_mutex);
 	if (status) {
 		trace_bl_pr_key_reg_err(bdev, dev->pr_key, status);
 		return false;
@@ -572,6 +576,7 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	top = kzalloc_obj(*top, gfp_mask);
 	if (!top)
 		goto out_free_volumes;
+	mutex_init(&top->pbd_mutex);
 
 	ret = bl_parse_deviceid(server, top, volumes, nr_volumes - 1, gfp_mask);
 

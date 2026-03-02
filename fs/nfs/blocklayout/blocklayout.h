@@ -117,6 +117,7 @@ struct pnfs_block_dev {
 
 	bool (*map)(struct pnfs_block_dev *dev, u64 offset,
 			struct pnfs_block_dev_map *map);
+	struct mutex			pbd_mutex;
 };
 
 /* pnfs_block_dev flag bits */
