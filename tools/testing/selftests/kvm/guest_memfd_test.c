@@ -80,7 +80,7 @@ static void test_mbind(int fd, size_t total_size)
 {
 	const unsigned long nodemask_0 = 1; /* nid: 0 */
 	unsigned long nodemask = 0;
-	unsigned long maxnode = 8;
+	unsigned long maxnode = sizeof(nodemask) * 8;
 	int policy;
 	char *mem;
 	int ret;
