@@ -1071,7 +1071,7 @@ tcp_timestamps - INTEGER
 
 	- 0: Disabled.
 	- 1: Enable timestamps as defined in RFC1323 and use random offset for
-	  each connection rather than only using the current time.
+	  each pair (src-addr, dst-addr) rather than only using the current time.
 	- 2: Like 1, but without random offsets.
 
 	Default: 1
