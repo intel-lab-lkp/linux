@@ -1121,6 +1121,100 @@ DECLARE_RTL_COND(rtl_ocp_gphy_cond)
 	return RTL_R32(tp, GPHY_OCP) & OCPAR_FLAG;
 }
 
+static u32 rtl_other_csi_read(struct rtl8169_private *tp, u8 multi_fun_sel_bit, int addr)
+{
+	RTL_W32(tp, CSIAR, (addr & CSIAR_ADDR_MASK) | multi_fun_sel_bit << 16 |
+		CSIAR_BYTE_ENABLE);
+
+	return rtl_loop_wait_high(tp, &rtl_csiar_cond, 10, 100) ?
+		RTL_R32(tp, CSIDR) : ~0;
+}
+
+static void rtl_other_csi_write(struct rtl8169_private *tp,
+				u8 multi_fun_sel_bit,
+				int addr,
+				int value)
+{
+	RTL_W32(tp, CSIDR, value);
+	RTL_W32(tp, CSIAR, CSIAR_WRITE_CMD | (addr & CSIAR_ADDR_MASK) |
+		CSIAR_BYTE_ENABLE | multi_fun_sel_bit << 16);
+
+	rtl_loop_wait_low(tp, &rtl_csiar_cond, 10, 100);
+}
+
+static void rtl8168_clear_and_set_other_fun_pci_bit(struct rtl8169_private *tp,
+						    u8 multi_fun_sel_bit,
+						    u32 addr,
+						    u32 clearmask,
+						    u32 setmask)
+{
+	u32 val;
+
+	val = rtl_other_csi_read(tp, multi_fun_sel_bit, addr);
+	val &= ~clearmask;
+	val |= setmask;
+	rtl_other_csi_write(tp, multi_fun_sel_bit, addr, val);
+}
+
+static void rtl8168_other_fun_dev_pci_setting(struct rtl8169_private *tp,
+					      u32 addr,
+					      u32 clearmask,
+					      u32 setmask,
+					      u8 multi_fun_sel_bit)
+{
+	u32 val;
+	u8 i;
+	u8 FunBit;
+	/* 0: BMC, 1: NIC, 2: TCR, 3: VGA/PCIE_TO_USB, 4: EHCI, 5: WIFI, 6: WIFI, 7: KCS */
+	for (i = 0; i < 8; i++) {
+		FunBit = (1 << i);
+		if (FunBit & multi_fun_sel_bit) {
+			u8 set_other_fun = true;
+
+			if (i == 0) {
+				set_other_fun = true;
+			} else if (i == 5 || i == 6) {
+				if (tp->dash_enabled) {
+					val = rtl_eri_read(tp, 0x184);
+					if (val & BIT(26))
+						set_other_fun = false;
+					else
+						set_other_fun = true;
+				}
+			} else {
+				val = rtl_other_csi_read(tp, i, 0x00);
+				if (val == 0xffffffff)
+					set_other_fun = true;
+				else
+					set_other_fun = false;
+			}
+			if (set_other_fun)
+				rtl8168_clear_and_set_other_fun_pci_bit(tp, i, addr,
+									clearmask, setmask);
+		}
+	}
+}
+
+static void rtl8168_set_dash_other_fun_dev_state_change(struct rtl8169_private *tp,
+							u8 dev_state,
+							u8 multi_fun_sel_bit)
+{
+	u32 clearmask;
+	u32 setmask;
+
+	if (dev_state == 0) {
+		clearmask = (BIT(0) | BIT(1));
+		setmask = 0;
+		rtl8168_other_fun_dev_pci_setting(tp, 0x44, clearmask,
+						  setmask, multi_fun_sel_bit);
+	} else {
+		clearmask = 0;
+		setmask = (BIT(0) | BIT(1));
+		rtl8168_other_fun_dev_pci_setting(tp, 0x44, clearmask,
+						  setmask, multi_fun_sel_bit);
+	}
+}
+
 static void r8168_phy_ocp_write(struct rtl8169_private *tp, u32 reg, u32 data)
 {
 	if (rtl_ocp_reg_failure(reg))
@@ -3785,6 +3879,7 @@ static void rtl_hw_start_8117(struct rtl8169_private *tp)
 	r8168_mac_ocp_write(tp, 0xc094, 0x0000);
 	r8168_mac_ocp_write(tp, 0xc09e, 0x0000);
 
+	rtl8168_set_dash_other_fun_dev_state_change(tp, 3, 0xfc);
 	/* firmware is for MAC only */
 	r8169_apply_firmware(tp);
 }
