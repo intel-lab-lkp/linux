@@ -67,6 +67,14 @@ static int regcache_hw_init(struct regmap *map, int count)
 	unsigned int reg, val;
 	void *tmp_buf;
 
+	/*
+	 * When count is zero, it means there is nothing to cache and hence
+	 * nothing to read back from HW to set up defaults, so skip this phase
+	 * without an error code returned.
+	 */
+	if (!count)
+		return 0;
+
 	map->num_reg_defaults = count;
 	map->reg_defaults = kmalloc_objs(struct reg_default, count);
 	if (!map->reg_defaults)
@@ -202,14 +210,6 @@ int regcache_init(struct regmap *map, const struct regmap_config *config)
 		count = regcache_count_cacheable_registers(map);
 		if (map->cache_bypass)
 			return 0;
-
-		/* Some devices such as PMICs don't have cache defaults,
-		 * we cope with this by reading back the HW registers and
-		 * crafting the cache defaults by hand.
-		 */
-		ret = regcache_hw_init(map, count);
-		if (ret < 0)
-			return ret;
 	}
 
 	if (!map->max_register_is_set && map->num_reg_defaults_raw) {
@@ -226,6 +226,15 @@ int regcache_init(struct regmap *map, const struct regmap_config *config)
 		if (ret)
 			goto err_free;
 	}
+
+	/*
+	 * Some devices such as PMICs don't have cache defaults,
+	 * we cope with this by reading back the HW registers and
+	 * crafting the cache defaults by hand.
+	 */
+	ret = regcache_hw_init(map, count);
+	if (ret)
+		goto err_exit;
 
 	if (map->cache_ops->populate &&
 	    (map->num_reg_defaults || map->reg_default_cb)) {
