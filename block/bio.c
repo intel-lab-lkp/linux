@@ -1505,8 +1505,17 @@ int submit_bio_wait(struct bio *bio)
 	bio->bi_private = &done;
 	bio->bi_end_io = submit_bio_wait_endio;
 	bio->bi_opf |= REQ_SYNC;
-	submit_bio(bio);
-	blk_wait_io(&done);
+	if (!current->bio_list) {
+		submit_bio(bio);
+		blk_wait_io(&done);
+	} else {
+		struct bio_list *tmp = current->bio_list;
+
+		current->bio_list = NULL;
+		submit_bio(bio);
+		blk_wait_io(&done);
+		current->bio_list = tmp;
+	}
 
 	return blk_status_to_errno(bio->bi_status);
 }
