@@ -151,7 +151,6 @@ struct ina2xx_config {
 	bool has_update_interval;
 	int calibration_value;
 	int shunt_div;
-	int bus_voltage_shift;
 	int bus_voltage_lsb;	/* uV */
 	int power_lsb_factor;
 };
@@ -172,8 +171,7 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.config_default = INA219_CONFIG_DEFAULT,
 		.calibration_value = 4096,
 		.shunt_div = 100,
-		.bus_voltage_shift = 3,
-		.bus_voltage_lsb = 4000,
+		.bus_voltage_lsb = 500,
 		.power_lsb_factor = 20,
 		.has_alerts = false,
 		.has_ishunt = false,
@@ -184,7 +182,6 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.config_default = INA226_CONFIG_DEFAULT,
 		.calibration_value = 2048,
 		.shunt_div = 400,
-		.bus_voltage_shift = 0,
 		.bus_voltage_lsb = 1250,
 		.power_lsb_factor = 25,
 		.has_alerts = true,
@@ -196,8 +193,7 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.config_default = INA226_CONFIG_DEFAULT,
 		.calibration_value = 2048,
 		.shunt_div = 400, /* 2.5 µV/LSB raw ADC reading from INA2XX_SHUNT_VOLTAGE */
-		.bus_voltage_shift = 4,
-		.bus_voltage_lsb = 25600,
+		.bus_voltage_lsb = 1600,
 		.power_lsb_factor = 32,
 		.has_alerts = true,
 		.has_ishunt = false,
@@ -207,7 +203,6 @@ static const struct ina2xx_config ina2xx_config[] = {
 	[ina260] = {
 		.config_default = INA260_CONFIG_DEFAULT,
 		.shunt_div = 400,
-		.bus_voltage_shift = 0,
 		.bus_voltage_lsb = 1250,
 		.power_lsb_factor = 8,
 		.has_alerts = true,
@@ -219,7 +214,6 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.config_default = SY24655_CONFIG_DEFAULT,
 		.calibration_value = 4096,
 		.shunt_div = 400,
-		.bus_voltage_shift = 0,
 		.bus_voltage_lsb = 1250,
 		.power_lsb_factor = 25,
 		.has_alerts = true,
@@ -281,8 +275,7 @@ static int ina2xx_get_value(struct ina2xx_data *data, u8 reg,
 		val = DIV_ROUND_CLOSEST((s16)regval, data->config->shunt_div);
 		break;
 	case INA2XX_BUS_VOLTAGE:
-		val = (regval >> data->config->bus_voltage_shift) *
-		  data->config->bus_voltage_lsb;
+		val = regval * data->config->bus_voltage_lsb;
 		val = DIV_ROUND_CLOSEST(val, 1000);
 		break;
 	case INA2XX_POWER:
@@ -387,7 +380,7 @@ static u16 ina226_alert_to_reg(struct ina2xx_data *data, int reg, long val)
 		return clamp_val(val, 0, SHRT_MAX);
 	case INA2XX_BUS_VOLTAGE:
 		val = clamp_val(val, 0, 200000);
-		val = (val * 1000) << data->config->bus_voltage_shift;
+		val = val * 1000;
 		val = DIV_ROUND_CLOSEST(val, data->config->bus_voltage_lsb);
 		return clamp_val(val, 0, USHRT_MAX);
 	case INA2XX_POWER:
