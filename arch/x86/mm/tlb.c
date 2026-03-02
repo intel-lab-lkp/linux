@@ -1427,9 +1427,11 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	if (mm_global_asid(mm)) {
 		broadcast_tlb_flush(&info);
 	} else if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids) {
+		put_cpu();
 		info.trim_cpumask = should_trim_cpumask(mm);
 		flush_tlb_multi(mm_cpumask(mm), &info);
 		consider_global_asid(mm);
+		goto invalidate;
 	} else if (mm == this_cpu_read(cpu_tlbstate.loaded_mm)) {
 		lockdep_assert_irqs_enabled();
 		local_irq_disable();
@@ -1438,6 +1440,7 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	}
 
 	put_cpu();
+invalidate:
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, start, end);
 }
 
@@ -1718,7 +1721,9 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 		invlpgb_flush_all_nonglobals();
 		batch->unmapped_pages = false;
 	} else if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids) {
+		put_cpu();
 		flush_tlb_multi(&batch->cpumask, &info);
+		goto clear;
 	} else if (cpumask_test_cpu(cpu, &batch->cpumask)) {
 		lockdep_assert_irqs_enabled();
 		local_irq_disable();
@@ -1726,9 +1731,9 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 		local_irq_enable();
 	}
 
-	cpumask_clear(&batch->cpumask);
-
 	put_cpu();
+clear:
+	cpumask_clear(&batch->cpumask);
 }
 
 /*
