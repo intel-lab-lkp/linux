@@ -370,29 +370,6 @@ cxl_handle_ras(struct device *dev, u64 serial, void __iomem *ras_base)
 	return PCI_ERS_RESULT_PANIC;
 }
 
-void cxl_cor_error_detected(struct pci_dev *pdev)
-{
-	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-	struct cxl_memdev *cxlmd = cxlds->cxlmd;
-	struct device *dev = &cxlds->cxlmd->dev;
-
-	scoped_guard(device, dev) {
-		if (!dev->driver) {
-			dev_warn(&pdev->dev,
-				 "%s: memdev disabled, abort error handling\n",
-				 dev_name(dev));
-			return;
-		}
-
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(pdev);
-
-		cxl_handle_cor_ras(&cxlds->cxlmd->dev, cxlds->serial,
-				   cxlmd->endpoint->regs.ras);
-	}
-}
-EXPORT_SYMBOL_NS_GPL(cxl_cor_error_detected, "CXL");
-
 static bool cxl_uncor_aer_present(struct pci_dev *pdev)
 {
 	struct aer_capability_regs aer_regs;
