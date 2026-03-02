@@ -77,6 +77,7 @@ int smpcfd_dead_cpu(unsigned int cpu)
 {
 	struct call_function_data *cfd = &per_cpu(cfd_data, cpu);
 
+	synchronize_rcu();
 	free_cpumask_var(cfd->cpumask);
 	free_cpumask_var(cfd->cpumask_ipi);
 	free_percpu(cfd->csd);
@@ -810,6 +811,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 
 	lockdep_assert_preemption_disabled();
 
+	rcu_read_lock();
 	cfd = this_cpu_ptr(&cfd_data);
 	cpumask = cfd->cpumask;
 
@@ -907,6 +909,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 
 	if (preemptible_wait)
 		free_cpumask_var(cpumask_stack);
+	rcu_read_unlock();
 }
 
 /**
