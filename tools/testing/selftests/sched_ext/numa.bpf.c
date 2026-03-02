@@ -44,12 +44,12 @@ s32 BPF_STRUCT_OPS(numa_select_cpu,
 	 */
 	cpu = __COMPAT_scx_bpf_pick_idle_cpu_node(p->cpus_ptr, node,
 					__COMPAT_SCX_PICK_IDLE_IN_NODE);
-	if (cpu < 0)
+	if (cpu < 0) {
 		cpu = __COMPAT_scx_bpf_pick_any_cpu_node(p->cpus_ptr, node,
 						__COMPAT_SCX_PICK_IDLE_IN_NODE);
-
-	if (is_cpu_idle(cpu, node))
-		scx_bpf_error("CPU %d should be marked as busy", cpu);
+		if (is_cpu_idle(cpu, node))
+			scx_bpf_error("CPU %d should be marked as busy", cpu);
+	}
 
 	if (__COMPAT_scx_bpf_cpu_node(cpu) != node)
 		scx_bpf_error("CPU %d should be in node %d", cpu, node);
