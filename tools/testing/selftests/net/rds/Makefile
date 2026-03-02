@@ -8,6 +8,7 @@ TEST_PROGS := run.sh
 TEST_FILES := \
 	include.sh \
 	test.py \
+	rds_basic.py \
 # end of TEST_FILES
 
 EXTRA_CLEAN := \
