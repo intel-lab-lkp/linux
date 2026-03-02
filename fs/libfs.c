@@ -2322,3 +2322,17 @@ void simple_done_creating(struct dentry *child)
 	dput(child);
 }
 EXPORT_SYMBOL(simple_done_creating);
+
+/*
+ * Like simple_done_creating(), but also fires fsnotify_create() for the
+ * new dentry.  Call on the success path after d_make_persistent().
+ * Use simple_done_creating() on the failure path where the child dentry is
+ * still negative.
+ */
+void simple_end_creating(struct dentry *child)
+{
+	fsnotify_create(child->d_parent->d_inode, child);
+	inode_unlock(child->d_parent->d_inode);
+	dput(child);
+}
+EXPORT_SYMBOL(simple_end_creating);

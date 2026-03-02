@@ -3,7 +3,6 @@
 #include <linux/compiler_types.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
-#include <linux/fsnotify.h>
 #include <linux/gfp.h>
 #include <linux/idr.h>
 #include <linux/init.h>
@@ -190,8 +189,7 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	}
 	inode->i_private = device;
 	d_make_persistent(dentry, inode);
-	fsnotify_create(root->d_inode, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 
 	binder_add_device(device);
 
@@ -490,8 +488,7 @@ struct dentry *binderfs_create_file(struct dentry *parent, const char *name,
 	new_inode->i_fop = fops;
 	new_inode->i_private = data;
 	d_make_persistent(dentry, new_inode);
-	fsnotify_create(parent_inode, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 	return dentry; // borrowed
 }
 
@@ -521,8 +518,7 @@ static struct dentry *binderfs_create_dir(struct dentry *parent,
 	set_nlink(new_inode, 2);
 	d_make_persistent(dentry, new_inode);
 	inc_nlink(parent_inode);
-	fsnotify_mkdir(parent_inode, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 	return dentry;
 }
 

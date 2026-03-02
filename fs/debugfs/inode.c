@@ -409,7 +409,7 @@ static struct dentry *debugfs_failed_creating(struct dentry *dentry)
 
 static struct dentry *debugfs_end_creating(struct dentry *dentry)
 {
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 	return dentry; // borrowed
 }
 
@@ -448,7 +448,6 @@ static struct dentry *__debugfs_create_file(const char *name, umode_t mode,
 	DEBUGFS_I(inode)->aux = (void *)aux;
 
 	d_make_persistent(dentry, inode);
-	fsnotify_create(d_inode(dentry->d_parent), dentry);
 	return debugfs_end_creating(dentry);
 }
 
@@ -590,7 +589,6 @@ struct dentry *debugfs_create_dir(const char *name, struct dentry *parent)
 	inc_nlink(inode);
 	d_make_persistent(dentry, inode);
 	inc_nlink(d_inode(dentry->d_parent));
-	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);
 	return debugfs_end_creating(dentry);
 }
 EXPORT_SYMBOL_GPL(debugfs_create_dir);
@@ -632,7 +630,6 @@ struct dentry *debugfs_create_automount(const char *name,
 	inc_nlink(inode);
 	d_make_persistent(dentry, inode);
 	inc_nlink(d_inode(dentry->d_parent));
-	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);
 	return debugfs_end_creating(dentry);
 }
 EXPORT_SYMBOL(debugfs_create_automount);

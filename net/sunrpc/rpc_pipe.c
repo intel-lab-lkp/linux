@@ -16,7 +16,6 @@
 #include <linux/mount.h>
 #include <linux/fs_context.h>
 #include <linux/namei.h>
-#include <linux/fsnotify.h>
 #include <linux/kernel.h>
 #include <linux/rcupdate.h>
 #include <linux/utsname.h>
@@ -544,8 +543,7 @@ static int rpc_new_file(struct dentry *parent,
 		inode->i_fop = i_fop;
 	rpc_inode_setowner(inode, private);
 	d_make_persistent(dentry, inode);
-	fsnotify_create(dir, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 	return 0;
 }
 
@@ -569,8 +567,7 @@ static struct dentry *rpc_new_dir(struct dentry *parent,
 	inode->i_ino = iunique(dir->i_sb, 100);
 	inc_nlink(dir);
 	d_make_persistent(dentry, inode);
-	fsnotify_mkdir(dir, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 
 	return dentry; // borrowed
 }
@@ -667,8 +664,7 @@ int rpc_mkpipe_dentry(struct dentry *parent, const char *name,
 	rpc_inode_setowner(inode, private);
 	pipe->dentry = dentry; // borrowed
 	d_make_persistent(dentry, inode);
-	fsnotify_create(dir, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 	return 0;
 
 failed:

@@ -17,7 +17,6 @@
 #include <linux/sunrpc/rpc_pipe_fs.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/module.h>
-#include <linux/fsnotify.h>
 #include <linux/nfslocalio.h>
 
 #include "idmap.h"
@@ -1146,8 +1145,7 @@ static struct dentry *nfsd_mkdir(struct dentry *parent, struct nfsdfs_client *nc
 	}
 	d_make_persistent(dentry, inode);
 	inc_nlink(dir);
-	fsnotify_mkdir(dir, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 	return dentry;	// borrowed
 }
 
@@ -1178,8 +1176,7 @@ static void _nfsd_symlink(struct dentry *parent, const char *name,
 	inode->i_size = strlen(content);
 
 	d_make_persistent(dentry, inode);
-	fsnotify_create(dir, dentry);
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 }
 #else
 static inline void _nfsd_symlink(struct dentry *parent, const char *name,
@@ -1219,7 +1216,6 @@ static int nfsdfs_create_files(struct dentry *root,
 				struct nfsdfs_client *ncl,
 				struct dentry **fdentries)
 {
-	struct inode *dir = d_inode(root);
 	struct dentry *dentry;
 
 	for (int i = 0; files->name && files->name[0]; i++, files++) {
@@ -1236,10 +1232,9 @@ static int nfsdfs_create_files(struct dentry *root,
 		inode->i_fop = files->ops;
 		inode->i_private = ncl;
 		d_make_persistent(dentry, inode);
-		fsnotify_create(dir, dentry);
 		if (fdentries)
 			fdentries[i] = dentry; // borrowed
-		simple_done_creating(dentry);
+		simple_end_creating(dentry);
 	}
 	return 0;
 }

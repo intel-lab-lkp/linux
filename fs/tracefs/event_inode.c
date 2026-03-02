@@ -14,7 +14,6 @@
  *  inodes/dentries in a just-in-time (JIT) manner. The eventfs will clean up
  *  and delete the inodes/dentries when they are no longer referenced.
  */
-#include <linux/fsnotify.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/workqueue.h>
@@ -826,7 +825,6 @@ struct eventfs_inode *eventfs_create_events_dir(const char *name, struct dentry 
 	d_make_persistent(dentry, inode);
 	/* The dentry of the "events" parent does keep track though */
 	inc_nlink(dentry->d_parent->d_inode);
-	fsnotify_mkdir(dentry->d_parent->d_inode, dentry);
 	tracefs_end_creating(dentry);
 
 	return ei;

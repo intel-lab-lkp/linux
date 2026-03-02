@@ -16,7 +16,6 @@
 #include <linux/kobject.h>
 #include <linux/namei.h>
 #include <linux/tracefs.h>
-#include <linux/fsnotify.h>
 #include <linux/security.h>
 #include <linux/seq_file.h>
 #include <linux/magic.h>
@@ -578,7 +577,7 @@ struct dentry *tracefs_failed_creating(struct dentry *dentry)
 
 struct dentry *tracefs_end_creating(struct dentry *dentry)
 {
-	simple_done_creating(dentry);
+	simple_end_creating(dentry);
 	return dentry;	// borrowed
 }
 
@@ -661,7 +660,6 @@ struct dentry *tracefs_create_file(const char *name, umode_t mode,
 	inode->i_uid = d_inode(dentry->d_parent)->i_uid;
 	inode->i_gid = d_inode(dentry->d_parent)->i_gid;
 	d_make_persistent(dentry, inode);
-	fsnotify_create(d_inode(dentry->d_parent), dentry);
 	return tracefs_end_creating(dentry);
 }
 
@@ -693,7 +691,6 @@ static struct dentry *__create_dir(const char *name, struct dentry *parent,
 	inc_nlink(inode);
 	d_make_persistent(dentry, inode);
 	inc_nlink(d_inode(dentry->d_parent));
-	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);
 	return tracefs_end_creating(dentry);
 }
 
