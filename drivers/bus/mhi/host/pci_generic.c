@@ -1440,6 +1440,10 @@ static void mhi_pci_remove(struct pci_dev *pdev)
 	struct mhi_pci_device *mhi_pdev = pci_get_drvdata(pdev);
 	struct mhi_controller *mhi_cntrl = &mhi_pdev->mhi_cntrl;
 
+	/* balancing probe put_noidle */
+	if (pci_pme_capable(pdev, PCI_D3hot))
+		pm_runtime_get_sync(&pdev->dev);
+
 	pci_disable_sriov(pdev);
 
 	if (pdev->is_physfn)
@@ -1450,10 +1454,6 @@ static void mhi_pci_remove(struct pci_dev *pdev)
 		mhi_power_down(mhi_cntrl, true);
 		mhi_unprepare_after_power_down(mhi_cntrl);
 	}
-
-	/* balancing probe put_noidle */
-	if (pci_pme_capable(pdev, PCI_D3hot))
-		pm_runtime_get_noresume(&pdev->dev);
 
 	if (mhi_pdev->reset_on_remove)
 		mhi_soc_reset(mhi_cntrl);
