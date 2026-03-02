@@ -135,6 +135,10 @@ struct ad799x_state {
 	u16				config;
 
 	unsigned int			transfer_size;
+
+	int				vcc_uv;
+	int				vref_uv;
+
 	IIO_DECLARE_DMA_BUFFER_WITH_TS(__be16, rx_buf, AD799X_MAX_CHANNELS);
 };
 
@@ -303,9 +307,9 @@ static int ad799x_read_raw(struct iio_dev *indio_dev,
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SCALE:
 		if (st->vref)
-			ret = regulator_get_voltage(st->vref);
+			ret = st->vref_uv;
 		else
-			ret = regulator_get_voltage(st->reg);
+			ret = st->vcc_uv;
 
 		if (ret < 0)
 			return ret;
@@ -809,6 +813,10 @@ static int ad799x_probe(struct i2c_client *client)
 	ret = regulator_enable(st->reg);
 	if (ret)
 		return ret;
+	ret = regulator_get_voltage(st->reg);
+	if (ret < 0)
+		goto error_disable_reg;
+	st->vcc_uv = ret;
 
 	/* check if an external reference is supplied */
 	if (chip_info->has_vref) {
@@ -827,6 +835,11 @@ static int ad799x_probe(struct i2c_client *client)
 			ret = regulator_enable(st->vref);
 			if (ret)
 				goto error_disable_reg;
+
+			ret = regulator_get_voltage(st->vref);
+			if (ret < 0)
+				goto error_disable_vref;
+			st->vref_uv = ret;
 		}
 	}
 
