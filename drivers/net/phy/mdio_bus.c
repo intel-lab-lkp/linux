@@ -23,6 +23,7 @@
 #include <linux/of_device.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
+#include <linux/property.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -959,6 +960,7 @@ static int mdio_bus_match(struct device *dev, const struct device_driver *drv)
 {
 	const struct mdio_driver *mdiodrv = to_mdio_driver(drv);
 	struct mdio_device *mdio = to_mdio_device(dev);
+	const struct of_device_id *id;
 
 	/* Both the driver and device must type-match */
 	if (!(mdiodrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY) !=
@@ -967,6 +969,19 @@ static int mdio_bus_match(struct device *dev, const struct device_driver *drv)
 
 	if (of_driver_match_device(dev, drv))
 		return 1;
+
+	/*
+	 * Fall back to fwnode compatible matching for non-DT systems.
+	 * This enables MDIO drivers (e.g., DSA switch drivers) to bind
+	 * on platforms using software nodes or ACPI to describe the
+	 * MDIO device topology.
+	 */
+	if (dev_fwnode(dev) && !dev->of_node && drv->of_match_table) {
+		for (id = drv->of_match_table; id->compatible[0]; id++) {
+			if (device_is_compatible(dev, id->compatible))
+				return 1;
+		}
+	}
 
 	if (mdio->bus_match)
 		return mdio->bus_match(dev, drv);
