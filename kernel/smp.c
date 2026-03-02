@@ -761,16 +761,26 @@ EXPORT_SYMBOL_GPL(smp_call_function_single_async);
 int smp_call_function_any(const struct cpumask *mask,
 			  smp_call_func_t func, void *info, int wait)
 {
+	bool local = true;
 	unsigned int cpu;
 	int ret;
 
-	/* Try for same CPU (cheapest) */
+	/*
+	 * Prevent migration to another CPU after selecting the current CPU
+	 * as the target.
+	 */
 	cpu = get_cpu();
-	if (!cpumask_test_cpu(cpu, mask))
+
+	/* Try for same CPU (cheapest) */
+	if (!cpumask_test_cpu(cpu, mask)) {
 		cpu = sched_numa_find_nth_cpu(mask, 0, cpu_to_node(cpu));
+		local = false;
+		put_cpu();
+	}
 
 	ret = smp_call_function_single(cpu, func, info, wait);
-	put_cpu();
+	if (local)
+		put_cpu();
 	return ret;
 }
 EXPORT_SYMBOL_GPL(smp_call_function_any);
