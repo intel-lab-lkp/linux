@@ -1245,6 +1245,149 @@ static int sg2042_init(struct device *dev, struct sdhci_host *host,
 					     ARRAY_SIZE(clk_ids), clk_ids);
 }
 
+/*
+ * HPE GSC-specific vendor configuration: disable command conflict check
+ * and program Auto-Tuning Control register.
+ *
+ * ATCTRL value 0x021f0005 field breakdown:
+ *   BIT(0)      - Auto-tuning circuit enabled
+ *   BIT(2)      - Center-phase auto-tuning
+ *   BIT(16)     - Tune clock stop enable
+ *   BITS[18:17] - Pre-change delay = 3
+ *   BITS[20:19] - Post-change delay = 3
+ *   BIT(25)     - Sample window threshold enable
+ */
+static void dwcmshc_hpe_vendor_specific(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
+	u8 extra;
+
+	extra = sdhci_readb(host, dwc_priv->vendor_specific_area1 + DWCMSHC_HOST_CTRL3);
+	extra &= ~BIT(0);
+	sdhci_writeb(host, extra, dwc_priv->vendor_specific_area1 + DWCMSHC_HOST_CTRL3);
+	sdhci_writel(host, 0x021f0005, dwc_priv->vendor_specific_area1 + DWCMSHC_EMMC_ATCTRL);
+}
+
+static void dwcmshc_hpe_reset(struct sdhci_host *host, u8 mask)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
+	u16 ctrl;
+
+	dwcmshc_reset(host, mask);
+
+	dwcmshc_hpe_vendor_specific(host);
+
+	/* HPE GSC eMMC always needs CARD_IS_EMMC set after reset */
+	ctrl = sdhci_readw(host, dwc_priv->vendor_specific_area1 + DWCMSHC_EMMC_CONTROL);
+	ctrl |= DWCMSHC_CARD_IS_EMMC;
+	sdhci_writew(host, ctrl, dwc_priv->vendor_specific_area1 + DWCMSHC_EMMC_CONTROL);
+}
+
+static void dwcmshc_hpe_set_uhs_signaling(struct sdhci_host *host,
+					  unsigned int timing)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *priv = sdhci_pltfm_priv(pltfm_host);
+	u16 ctrl, ctrl_2;
+
+	ctrl_2 = sdhci_readw(host, SDHCI_HOST_CONTROL2);
+	ctrl_2 &= ~SDHCI_CTRL_UHS_MASK;
+
+	/* HPE GSC: always set CARD_IS_EMMC for all timing modes */
+	ctrl = sdhci_readw(host, priv->vendor_specific_area1 + DWCMSHC_EMMC_CONTROL);
+	ctrl |= DWCMSHC_CARD_IS_EMMC;
+	sdhci_writew(host, ctrl, priv->vendor_specific_area1 + DWCMSHC_EMMC_CONTROL);
+
+	if ((timing == MMC_TIMING_MMC_HS200) ||
+	    (timing == MMC_TIMING_UHS_SDR104))
+		ctrl_2 |= SDHCI_CTRL_UHS_SDR104;
+	else if (timing == MMC_TIMING_UHS_SDR12)
+		ctrl_2 |= SDHCI_CTRL_UHS_SDR12;
+	else if ((timing == MMC_TIMING_UHS_SDR25) ||
+		 (timing == MMC_TIMING_MMC_HS))
+		ctrl_2 |= SDHCI_CTRL_UHS_SDR25;
+	else if (timing == MMC_TIMING_UHS_SDR50)
+		ctrl_2 |= SDHCI_CTRL_UHS_SDR50;
+	else if ((timing == MMC_TIMING_UHS_DDR50) ||
+		 (timing == MMC_TIMING_MMC_DDR52))
+		ctrl_2 |= SDHCI_CTRL_UHS_DDR50;
+	else if (timing == MMC_TIMING_MMC_HS400)
+		ctrl_2 |= DWCMSHC_CTRL_HS400;
+
+	if (priv->flags & FLAG_IO_FIXED_1V8)
+		ctrl_2 |= SDHCI_CTRL_VDD_180;
+	sdhci_writew(host, ctrl_2, SDHCI_HOST_CONTROL2);
+}
+
+/*
+ * HPE GSC eMMC controller clock setup.
+ *
+ * The GSC SoC wires the freq_sel field of SDHCI_CLOCK_CONTROL directly to a
+ * clock mux rather than a divider. Force freq_sel = 1 when running at
+ * 200 MHz (HS200) so the mux selects the correct clock source.
+ */
+static void dwcmshc_hpe_set_clock(struct sdhci_host *host, unsigned int clock)
+{
+	u16 clk;
+
+	host->mmc->actual_clock = 0;
+
+	sdhci_writew(host, 0, SDHCI_CLOCK_CONTROL);
+
+	if (clock == 0)
+		return;
+
+	clk = sdhci_calc_clk(host, clock, &host->mmc->actual_clock);
+
+	if (host->mmc->actual_clock == 200000000)
+		clk |= (1 << SDHCI_DIVIDER_SHIFT);
+
+	sdhci_enable_clk(host, clk);
+}
+
+/*
+ * HPE GSC eMMC controller init.
+ *
+ * The GSC SoC requires configuring MSHCCS.  Bit 18 (SCGSyncDis) disables clock
+ * synchronisation for phase-select values going to the HS200 RX delay lines,
+ * allowing the card clock to be stopped while the delay selection settles and
+ * the phase shift is applied.  This must be used together with the ATCTRL
+ * settings programmed in dwcmshc_hpe_vendor_specific():
+ *   AT_CTRL_R.TUNE_CLK_STOP_EN  = 0x1
+ *   AT_CTRL_R.POST_CHANGE_DLY   = 0x3
+ *   AT_CTRL_R.PRE_CHANGE_DLY    = 0x3
+ *
+ * The DTS node provides a second reg entry for this register.
+ */
+static int dwcmshc_hpe_gsc_init(struct device *dev, struct sdhci_host *host,
+				struct dwcmshc_priv *dwc_priv)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	void __iomem *mshccs;
+	u32 value;
+
+	/* Disable cmd conflict check and configure auto-tuning */
+	dwcmshc_hpe_vendor_specific(host);
+
+	/* Map MSHCCS from DTS reg[1] */
+	mshccs = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(mshccs)) {
+		dev_err(dev, "failed to map MSHCCS register\n");
+		return PTR_ERR(mshccs);
+	}
+
+	/* Set SCGSyncDis (bit 18) to disable sync on HS200 RX delay lines */
+	value = readl(mshccs);
+	value |= BIT(18);
+	writel(value, mshccs);
+
+	sdhci_enable_v4_mode(host);
+
+	return 0;
+}
+
 static void sdhci_eic7700_set_clock(struct sdhci_host *host, unsigned int clock)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -1834,6 +1977,25 @@ static const struct dwcmshc_pltfm_data sdhci_dwcmshc_eic7700_pdata = {
 	.init = eic7700_init,
 };
 
+static const struct sdhci_ops sdhci_dwcmshc_hpe_ops = {
+	.set_clock		= dwcmshc_hpe_set_clock,
+	.set_bus_width		= sdhci_set_bus_width,
+	.set_uhs_signaling	= dwcmshc_hpe_set_uhs_signaling,
+	.get_max_clock		= dwcmshc_get_max_clock,
+	.reset			= dwcmshc_hpe_reset,
+	.adma_write_desc	= dwcmshc_adma_write_desc,
+	.irq			= dwcmshc_cqe_irq_handler,
+};
+
+static const struct dwcmshc_pltfm_data sdhci_dwcmshc_hpe_gsc_pdata = {
+	.pdata = {
+		.ops = &sdhci_dwcmshc_hpe_ops,
+		.quirks = SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN,
+		.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
+	},
+	.init = dwcmshc_hpe_gsc_init,
+};
+
 static const struct cqhci_host_ops dwcmshc_cqhci_ops = {
 	.enable		= dwcmshc_sdhci_cqe_enable,
 	.disable	= sdhci_cqe_disable,
@@ -1941,6 +2103,10 @@ static const struct of_device_id sdhci_dwcmshc_dt_ids[] = {
 	{
 		.compatible = "eswin,eic7700-dwcmshc",
 		.data = &sdhci_dwcmshc_eic7700_pdata,
+	},
+	{
+		.compatible = "hpe,gsc-dwcmshc",
+		.data = &sdhci_dwcmshc_hpe_gsc_pdata,
 	},
 	{},
 };
