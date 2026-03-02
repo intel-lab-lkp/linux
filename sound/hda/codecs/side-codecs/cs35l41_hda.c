@@ -1023,14 +1023,12 @@ static int cs35l41_system_resume(struct device *dev)
 		gpiod_set_value_cansleep(cs35l41->reset_gpio, 0);
 		usleep_range(2000, 2100);
 		gpiod_set_value_cansleep(cs35l41->reset_gpio, 1);
+		usleep_range(2000, 2100);
+	} else {
+		regmap_write(cs35l41->regmap, CS35L41_SFT_RESET, CS35L41_SOFTWARE_RESET);
+		usleep_range(2000, 2100);
 	}
-
-	usleep_range(2000, 2100);
-
 	regcache_cache_only(cs35l41->regmap, false);
-
-	regmap_write(cs35l41->regmap, CS35L41_SFT_RESET, CS35L41_SOFTWARE_RESET);
-	usleep_range(2000, 2100);
 
 	ret = cs35l41_wait_boot_done(cs35l41);
 	if (ret)
@@ -1973,11 +1971,11 @@ int cs35l41_hda_probe(struct device *dev, const char *device_name, int id, int i
 		gpiod_set_value_cansleep(cs35l41->reset_gpio, 0);
 		usleep_range(2000, 2100);
 		gpiod_set_value_cansleep(cs35l41->reset_gpio, 1);
+		usleep_range(2000, 2100);
+	} else {
+		regmap_write(cs35l41->regmap, CS35L41_SFT_RESET, CS35L41_SOFTWARE_RESET);
+		usleep_range(2000, 2100);
 	}
-
-	usleep_range(2000, 2100);
-	regmap_write(cs35l41->regmap, CS35L41_SFT_RESET, CS35L41_SOFTWARE_RESET);
-	usleep_range(2000, 2100);
 
 	ret = cs35l41_wait_boot_done(cs35l41);
 	if (ret)
