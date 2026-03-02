@@ -2372,6 +2372,13 @@ quirk_flags
           audible volume
         * bit 25: ``mixer_capture_min_mute``
           Similar to bit 24 but for capture streams
+        * bit 27: ``mixer_playback_linear_vol``
+          Set linear volume mapping for devices where the playback volume
+          control value is mapped to voltage (instead of dB) level linearly.
+          In short: ``x(raw) = (raw - raw_min) / (raw_max - raw_min)``;
+          ``V(x) = k * x``; ``dB(x) = 20 * log10(x)``. Overrides bit 24
+        * bit 28: ``mixer_capture_linear_vol``
+          Similar to bit 27 but for capture streams. Overrides bit 25
 
 This module supports multiple devices, autoprobe and hotplugging.
 
