@@ -3179,6 +3179,9 @@ static void __account_obj_stock(struct obj_cgroup *objcg,
 {
 	int *bytes;
 
+	if (!stock)
+		goto direct;
+
 	/*
 	 * Save vmstat data in stock and skip vmstat array update unless
 	 * accumulating over a page of vmstat data or when pgdat changes.
@@ -3218,6 +3221,7 @@ static void __account_obj_stock(struct obj_cgroup *objcg,
 			nr = 0;
 		}
 	}
+direct:
 	if (nr)
 		mod_objcg_mlstate(objcg, pgdat, idx, nr);
 }
@@ -3334,7 +3338,7 @@ static void refill_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	stock = trylock_stock();
 	if (!stock) {
 		if (pgdat)
-			mod_objcg_mlstate(objcg, pgdat, idx, nr_acct);
+			__account_obj_stock(objcg, NULL, nr_acct, pgdat, idx);
 		nr_pages = nr_bytes >> PAGE_SHIFT;
 		nr_bytes = nr_bytes & (PAGE_SIZE - 1);
 		atomic_add(nr_bytes, &objcg->nr_charged_bytes);
