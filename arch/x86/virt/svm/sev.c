@@ -132,7 +132,7 @@ static unsigned long snp_nr_leaked_pages;
 #undef pr_fmt
 #define pr_fmt(fmt)	"SEV-SNP: " fmt
 
-static void mfd_enable(void *arg)
+static void mfd_reconfigure(void *arg)
 {
 	u64 val;
 
@@ -141,7 +141,10 @@ static void mfd_enable(void *arg)
 
 	rdmsrq(MSR_AMD64_SYSCFG, val);
 
-	val |= MSR_AMD64_SYSCFG_MFDM;
+	if (arg)
+		val |= MSR_AMD64_SYSCFG_MFDM;
+	else
+		val &= ~MSR_AMD64_SYSCFG_MFDM;
 
 	wrmsrq(MSR_AMD64_SYSCFG, val);
 }
@@ -532,7 +535,7 @@ void snp_prepare_for_snp_init(void)
 	 * MtrrFixDramModEn is not shared between threads on a core,
 	 * therefore it must be set on all CPUs prior to enabling SNP.
 	 */
-	on_each_cpu(mfd_enable, NULL, 1);
+	on_each_cpu(mfd_reconfigure, (void *)1, 1);
 
 	on_each_cpu(snp_enable, NULL, 1);
 
