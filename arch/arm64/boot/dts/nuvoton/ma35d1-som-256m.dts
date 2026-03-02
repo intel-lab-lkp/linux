@@ -98,6 +98,14 @@
 			power-source = <1>;
 		};
 	};
+	i2c-grp {
+		pinctrl_i2c1: i2c1-pins {
+			nuvoton,pins = <1 10 12>,
+				       <1 11 12>;
+			bias-disable;
+		};
+
+	};
 };
 
 &uart0 {
@@ -127,5 +135,11 @@
 &uart16 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart16>;
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1>;
 	status = "okay";
 };
