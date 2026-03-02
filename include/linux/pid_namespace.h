@@ -103,7 +103,10 @@ static inline int pidns_memfd_noexec_scope(struct pid_namespace *ns)
 {
 	return 0;
 }
-
+static inline struct pid_namespace *to_pid_ns(struct ns_common *ns)
+{
+	return &init_pid_ns;
+}
 static inline struct pid_namespace *copy_pid_ns(u64 flags,
 	struct user_namespace *user_ns, struct pid_namespace *ns)
 {
