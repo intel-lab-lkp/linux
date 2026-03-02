@@ -19,6 +19,7 @@
 #include <linux/iommu.h>
 #include <linux/amd-iommu.h>
 #include <linux/nospec.h>
+#include <linux/kthread.h>
 
 #include <asm/sev.h>
 #include <asm/processor.h>
@@ -121,6 +122,13 @@ static u64 rmp_cfg;
 #define PFN_PMD_MASK	GENMASK_ULL(63, PMD_SHIFT - PAGE_SHIFT)
 
 static u64 probed_rmp_base, probed_rmp_size;
+
+enum rmpopt_function {
+	RMPOPT_FUNC_VERIFY_AND_REPORT_STATUS,
+	RMPOPT_FUNC_REPORT_STATUS
+};
+
+static struct task_struct *rmpopt_task;
 
 static LIST_HEAD(snp_leaked_pages_list);
 static DEFINE_SPINLOCK(snp_leaked_pages_list_lock);
@@ -500,6 +508,61 @@ static bool __init setup_rmptable(void)
 	}
 }
 
+/*
+ * 'val' is a system physical address aligned to 1GB OR'ed with
+ * a function selection. Currently supported functions are 0
+ * (verify and report status) and 1 (report status).
+ */
+static void rmpopt(void *val)
+{
+	asm volatile(".byte 0xf2, 0x0f, 0x01, 0xfc"
+		     : : "a" ((u64)val & PUD_MASK), "c" ((u64)val & 0x1)
+		     : "memory", "cc");
+}
+
+static int rmpopt_kthread(void *__unused)
+{
+	phys_addr_t pa_start, pa_end;
+
+	pa_start = ALIGN_DOWN(PFN_PHYS(min_low_pfn), PUD_SIZE);
+	pa_end = ALIGN(PFN_PHYS(max_pfn), PUD_SIZE);
+
+	/* Limit memory scanning to the first 2 TB of RAM */
+	pa_end = (pa_end - pa_start) <= SZ_2T ? pa_end : pa_start + SZ_2T;
+
+	while (!kthread_should_stop()) {
+		phys_addr_t pa;
+
+		pr_info("RMP optimizations enabled on physical address range @1GB alignment [0x%016llx - 0x%016llx]\n",
+			pa_start, pa_end);
+
+		/*
+		 * RMPOPT optimizations skip RMP checks at 1GB granularity if this range of
+		 * memory does not contain any SNP guest memory.
+		 */
+		for (pa = pa_start; pa < pa_end; pa += PUD_SIZE) {
+			/* Bit zero passes the function to the RMPOPT instruction. */
+			on_each_cpu_mask(cpu_online_mask, rmpopt,
+					 (void *)(pa | RMPOPT_FUNC_VERIFY_AND_REPORT_STATUS),
+					 true);
+
+			 /* Give a chance for other threads to run */
+			cond_resched();
+		}
+
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
+
+	return 0;
+}
+
+static void rmpopt_all_physmem(void)
+{
+	if (rmpopt_task)
+		wake_up_process(rmpopt_task);
+}
+
 static void __configure_rmpopt(void *val)
 {
 	u64 rmpopt_base = ((u64)val & PUD_MASK) | MSR_AMD64_RMPOPT_ENABLE;
@@ -533,6 +596,21 @@ static __init void configure_and_enable_rmpopt(void)
 	 * up to 2TB of system RAM on all CPUs.
 	 */
 	on_each_cpu_mask(cpu_online_mask, __configure_rmpopt, (void *)pa_start, true);
+
+	rmpopt_task = kthread_create(rmpopt_kthread, NULL, "rmpopt_kthread");
+	if (IS_ERR(rmpopt_task)) {
+		pr_warn("Unable to start RMPOPT kernel thread\n");
+		rmpopt_task = NULL;
+		return;
+	}
+
+	pr_info("RMPOPT worker thread created with PID %d\n", task_pid_nr(rmpopt_task));
+
+	/*
+	 * Once all per-CPU RMPOPT tables have been configured, enable RMPOPT
+	 * optimizations on all physical memory.
+	 */
+	rmpopt_all_physmem();
 }
 
 /*
