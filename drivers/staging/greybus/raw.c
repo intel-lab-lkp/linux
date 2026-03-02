@@ -21,6 +21,7 @@ struct gb_raw {
 	struct list_head list;
 	int list_data;
 	struct mutex list_lock;
+	struct mutex write_lock;	/* Synchronize access to connection */
 	struct cdev cdev;
 	struct device dev;
 };
@@ -124,8 +125,8 @@ static int gb_raw_request_handler(struct gb_operation *op)
 
 static int gb_raw_send(struct gb_raw *raw, u32 len, const char __user *data)
 {
-	struct gb_connection *connection = raw->connection;
 	struct gb_raw_send_request *request;
+	struct gb_connection *connection;
 	int retval;
 
 	request = kmalloc(len + sizeof(*request), GFP_KERNEL);
@@ -139,9 +140,15 @@ static int gb_raw_send(struct gb_raw *raw, u32 len, const char __user *data)
 
 	request->len = cpu_to_le32(len);
 
-	retval = gb_operation_sync(connection, GB_RAW_TYPE_SEND,
-				   request, len + sizeof(*request),
-				   NULL, 0);
+	mutex_lock(&raw->write_lock);
+	retval = -ENODEV;
+
+	connection = raw->connection;
+	if (connection)
+		retval = gb_operation_sync(connection, GB_RAW_TYPE_SEND,
+					   request, len + sizeof(*request),
+					   NULL, 0);
+	mutex_unlock(&raw->write_lock);
 
 	kfree(request);
 	return retval;
@@ -186,6 +193,7 @@ static int gb_raw_probe(struct gb_bundle *bundle,
 
 	INIT_LIST_HEAD(&raw->list);
 	mutex_init(&raw->list_lock);
+	mutex_init(&raw->write_lock);
 
 	raw->connection = connection;
 	greybus_set_drvdata(bundle, raw);
@@ -238,9 +246,9 @@ static void gb_raw_disconnect(struct gb_bundle *bundle)
 	struct raw_data *temp;
 
 	cdev_device_del(&raw->cdev, &raw->dev);
-	gb_connection_disable(connection);
 	ida_free(&minors, MINOR(raw->dev.devt));
-	gb_connection_destroy(connection);
+
+	gb_connection_disable(connection);
 
 	mutex_lock(&raw->list_lock);
 	list_for_each_entry_safe(raw_data, temp, &raw->list, entry) {
@@ -248,6 +256,12 @@ static void gb_raw_disconnect(struct gb_bundle *bundle)
 		kfree(raw_data);
 	}
 	mutex_unlock(&raw->list_lock);
+
+	mutex_lock(&raw->write_lock);
+	raw->connection = NULL;
+	gb_connection_destroy(connection);
+	mutex_unlock(&raw->write_lock);
+
 	put_device(&raw->dev);
 }
 
