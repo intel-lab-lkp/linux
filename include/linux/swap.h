@@ -19,6 +19,7 @@
 struct notifier_block;
 
 struct bio;
+struct swap_iocb;
 
 struct pagevec;
 
@@ -222,6 +223,17 @@ enum {
 #define SWAP_CLUSTER_MAX_SKIPPED (SWAP_CLUSTER_MAX << 10)
 #define COMPACT_CLUSTER_MAX SWAP_CLUSTER_MAX
 
+struct swap_ops {
+	void (*read_folio)(struct swap_info_struct *sis,
+			   struct folio *folio,
+			   struct swap_iocb **plug);
+	void (*write_folio)(struct swap_info_struct *sis,
+			    struct folio *folio,
+			    struct swap_iocb **plug);
+};
+
+int probe_swap_fs(struct swap_info_struct *sis);
+
 /*
  * The first page in the swap file is the swap header, which is always marked
  * bad to prevent it from being allocated as an entry. This also prevents the
@@ -284,6 +296,7 @@ struct swap_info_struct {
 	struct work_struct reclaim_work; /* reclaim worker */
 	struct list_head discard_clusters; /* discard clusters list */
 	struct plist_node avail_list;   /* entry in swap_avail_head */
+	struct swap_ops *ops;
 };
 
 static inline swp_entry_t page_swap_entry(struct page *page)
