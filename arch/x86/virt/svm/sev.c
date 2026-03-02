@@ -537,9 +537,6 @@ int __init snp_rmptable_init(void)
 
 	snp_clear_rmp();
 
-	/* Flush the caches to ensure that data is written before SNP is enabled. */
-	wbinvd_on_all_cpus();
-
 	/* MtrrFixDramModEn must be enabled on all the CPUs prior to enabling SNP. */
 	on_each_cpu(mfd_enable, NULL, 1);
 
