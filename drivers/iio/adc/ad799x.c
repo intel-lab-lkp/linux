@@ -781,6 +781,13 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 };
 
+static void ad799x_reg_disable(void *data)
+{
+	struct regulator *reg = data;
+
+	regulator_disable(reg);
+}
+
 static int ad799x_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
@@ -818,6 +825,10 @@ static int ad799x_probe(struct i2c_client *client)
 		goto error_disable_reg;
 	st->vcc_uv = ret;
 
+	ret = devm_add_action_or_reset(&client->dev, ad799x_reg_disable, st->reg);
+	if (ret)
+		return ret;
+
 	/* check if an external reference is supplied */
 	if (chip_info->has_vref) {
 		st->vref = devm_regulator_get_optional(&client->dev, "vref");
@@ -840,6 +851,11 @@ static int ad799x_probe(struct i2c_client *client)
 			if (ret < 0)
 				goto error_disable_vref;
 			st->vref_uv = ret;
+
+			ret = devm_add_action_or_reset(&client->dev, ad799x_reg_disable,
+							st->vref);
+			if (ret)
+				goto error_disable_reg;
 		}
 	}
 
@@ -901,9 +917,6 @@ static void ad799x_remove(struct i2c_client *client)
 	iio_device_unregister(indio_dev);
 
 	iio_triggered_buffer_cleanup(indio_dev);
-	if (st->vref)
-		regulator_disable(st->vref);
-	regulator_disable(st->reg);
 }
 
 static int ad799x_suspend(struct device *dev)
