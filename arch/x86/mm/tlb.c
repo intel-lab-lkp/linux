@@ -1467,6 +1467,8 @@ static void invlpgb_kernel_range_flush(struct flush_tlb_info *info)
 {
 	unsigned long addr, nr;
 
+	guard(preempt)();
+
 	for (addr = info->start; addr < info->end; addr += nr << PAGE_SHIFT) {
 		nr = (info->end - addr) >> PAGE_SHIFT;
 
@@ -1516,8 +1518,6 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 		.trim_cpumask = 0,
 		.new_tlb_gen = TLB_GENERATION_INVALID
 	};
-
-	guard(preempt)();
 
 	if ((end - start) >> PAGE_SHIFT > tlb_single_page_flush_ceiling) {
 		start = 0;
