@@ -617,17 +617,26 @@ EXPORT_SYMBOL(devm_mmc_alloc_host);
 static int mmc_validate_host_caps(struct mmc_host *host)
 {
 	struct device *dev = host->parent;
-	u32 caps = host->caps, caps2 = host->caps2;
 
-	if (caps & MMC_CAP_SDIO_IRQ && !host->ops->enable_sdio_irq) {
+	if (host->caps & MMC_CAP_SDIO_IRQ && !host->ops->enable_sdio_irq) {
 		dev_warn(dev, "missing ->enable_sdio_irq() ops\n");
 		return -EINVAL;
 	}
 
-	if (caps2 & (MMC_CAP2_HS400_ES | MMC_CAP2_HS400) &&
-	    !(caps & MMC_CAP_8_BIT_DATA) && !(caps2 & MMC_CAP2_NO_MMC)) {
+	/* UHS/DDR/HS200/HS400 modes require at least 4-bit bus */
+	if (!(host->caps & (MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA)) &&
+	    ((host->caps & (MMC_CAP_UHS | MMC_CAP_DDR)) ||
+	     (host->caps2 & (MMC_CAP2_HS200 | MMC_CAP2_HS400_ES | MMC_CAP2_HS400)))) {
+		dev_warn(dev, "drop UHS/DDR/HS200/HS400 support since 1-bit bus only\n");
+		host->caps &= ~(MMC_CAP_UHS | MMC_CAP_DDR);
+		host->caps2 &= ~(MMC_CAP2_HS200 | MMC_CAP2_HS400_ES | MMC_CAP2_HS400);
+	}
+
+	if (host->caps2 & (MMC_CAP2_HS400_ES | MMC_CAP2_HS400) &&
+	    !(host->caps & MMC_CAP_8_BIT_DATA) &&
+	    !(host->caps2 & MMC_CAP2_NO_MMC)) {
 		dev_warn(dev, "drop HS400 support since no 8-bit bus\n");
-		host->caps2 = caps2 & ~MMC_CAP2_HS400_ES & ~MMC_CAP2_HS400;
+		host->caps2 &= ~(MMC_CAP2_HS400_ES | MMC_CAP2_HS400);
 	}
 
 	return 0;
