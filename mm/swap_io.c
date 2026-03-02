@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- *  linux/mm/page_io.c
+ *  linux/mm/swap_io.c
  *
  *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  *
