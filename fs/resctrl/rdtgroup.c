@@ -1238,16 +1238,27 @@ static ssize_t max_threshold_occ_write(struct kernfs_open_file *of,
 	unsigned int bytes;
 	int ret;
 
-	ret = kstrtouint(buf, 0, &bytes);
-	if (ret)
-		return ret;
+	mutex_lock(&rdtgroup_mutex);
+	rdt_last_cmd_clear();
 
-	if (bytes > resctrl_rmid_realloc_limit)
-		return -EINVAL;
+	ret = kstrtouint(buf, 0, &bytes);
+	if (ret) {
+		rdt_last_cmd_puts("Invalid input\n");
+		goto out_unlock;
+	}
+
+	if (bytes > resctrl_rmid_realloc_limit) {
+		rdt_last_cmd_printf("Exceeds limit (before adjustment) of %u bytes\n",
+				    resctrl_rmid_realloc_limit);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
 
 	resctrl_rmid_realloc_threshold = resctrl_arch_round_mon_val(bytes);
 
-	return nbytes;
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+	return ret ?: nbytes;
 }
 
 /*
