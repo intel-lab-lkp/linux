@@ -515,7 +515,7 @@ static ssize_t rdtgroup_cpus_write(struct kernfs_open_file *of,
 	struct rdtgroup *rdtgrp;
 	int ret;
 
-	if (!buf)
+	if (!buf || nbytes == 0)
 		return -EINVAL;
 
 	if (!zalloc_cpumask_var(&tmpmask, GFP_KERNEL))
@@ -554,6 +554,9 @@ static ssize_t rdtgroup_cpus_write(struct kernfs_open_file *of,
 		rdt_last_cmd_puts("Bad CPU list/mask\n");
 		goto unlock;
 	}
+
+	if (cpumask_empty(newmask))
+		goto unlock;
 
 	/* check that user didn't specify any offline cpus */
 	cpumask_andnot(tmpmask, newmask, cpu_online_mask);
