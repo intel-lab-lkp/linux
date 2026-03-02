@@ -45,6 +45,7 @@ struct cdns3_platform_data {
 	unsigned long quirks;
 #define CDNS3_DEFAULT_PM_RUNTIME_ALLOW	BIT(0)
 #define CDNS3_DRD_SUSPEND_RESIDENCY_ENABLE	BIT(1)
+	u32 override_apb_timeout;	/* 0 = use default (e.g. for PCI) */
 };
 
 /**

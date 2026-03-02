@@ -23,6 +23,9 @@
 #include "gadget-export.h"
 #include "drd.h"
 
+static const unsigned long cdns3_plat;
+static const unsigned long cdnsp_plat;
+
 static int set_phy_power_on(struct cdns *cdns)
 {
 	int ret;
@@ -64,6 +67,8 @@ static int cdns3_plat_probe(struct platform_device *pdev)
 
 	cdns->dev = dev;
 	cdns->pdata = dev_get_platdata(dev);
+	if (cdns->pdata && cdns->pdata->override_apb_timeout)
+		cdns->override_apb_timeout = cdns->pdata->override_apb_timeout;
 
 	platform_set_drvdata(pdev, cdns);
 
@@ -143,7 +148,10 @@ static int cdns3_plat_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_phy_power_on;
 
-	cdns->gadget_init = cdns3_gadget_init;
+	if (device_get_match_data(dev) == &cdnsp_plat)
+		cdns->gadget_init = cdnsp_gadget_init;
+	else
+		cdns->gadget_init = cdns3_gadget_init;
 
 	ret = cdns_init(cdns);
 	if (ret)
@@ -317,7 +325,8 @@ static const struct dev_pm_ops cdns3_pm_ops = {
 
 #ifdef CONFIG_OF
 static const struct of_device_id of_cdns3_match[] = {
-	{ .compatible = "cdns,usb3" },
+	{ .compatible = "cdns,usb3", .data = &cdns3_plat },
+	{ .compatible = "cdns,usbssp", .data = &cdnsp_plat },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, of_cdns3_match);
@@ -336,6 +345,7 @@ static struct platform_driver cdns3_driver = {
 module_platform_driver(cdns3_driver);
 
 MODULE_ALIAS("platform:cdns3");
+MODULE_ALIAS("platform:cdnsp");
 MODULE_AUTHOR("Pawel Laszczak <pawell@cadence.com>");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Cadence USB3 DRD Controller Driver");
