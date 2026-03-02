@@ -53,3 +53,6 @@ pub use super::uaccess::UserPtr;
 
 #[cfg(not(CONFIG_RUSTC_HAS_SLICE_AS_FLATTENED))]
 pub use super::slice::AsFlattened;
+
+#[cfg(not(CONFIG_RUSTC_HAS_USIZE_IS_MULTIPLE_OF))]
+pub use super::usize_ext::UsizeExt as _;

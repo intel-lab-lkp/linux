@@ -36,10 +36,6 @@ use crate::{
 
 use core::mem::size_of;
 
-fn is_aligned(value: usize, to: usize) -> bool {
-    value % to == 0
-}
-
 /// Stores the layout of the scatter-gather entries. This is used during the `translate_objects`
 /// call and is discarded when it returns.
 struct ScatterGatherState {
@@ -796,7 +792,7 @@ impl Thread {
                 let num_fds = usize::try_from(obj.num_fds).map_err(|_| EINVAL)?;
                 let fds_len = num_fds.checked_mul(size_of::<u32>()).ok_or(EINVAL)?;
 
-                if !is_aligned(parent_offset, size_of::<u32>()) {
+                if !parent_offset.is_multiple_of(size_of::<u32>()) {
                     return Err(EINVAL.into());
                 }
 
@@ -814,7 +810,7 @@ impl Thread {
                     }
                 };
 
-                if !is_aligned(parent_entry.sender_uaddr, size_of::<u32>()) {
+                if !parent_entry.sender_uaddr.is_multiple_of(size_of::<u32>()) {
                     return Err(EINVAL.into());
                 }
 
@@ -975,10 +971,10 @@ impl Thread {
             None => 0,
         };
 
-        if !is_aligned(offsets_size, size_of::<u64>()) {
+        if !offsets_size.is_multiple_of(size_of::<u64>()) {
             return Err(EINVAL.into());
         }
-        if !is_aligned(buffers_size, size_of::<u64>()) {
+        if !buffers_size.is_multiple_of(size_of::<u64>()) {
             return Err(EINVAL.into());
         }
 
@@ -1047,7 +1043,7 @@ impl Thread {
                     .try_into()
                     .map_err(|_| EINVAL)?;
 
-                if offset < end_of_previous_object || !is_aligned(offset, size_of::<u32>()) {
+                if offset < end_of_previous_object || !offset.is_multiple_of(size_of::<u32>()) {
                     pr_warn!("Got transaction with invalid offset.");
                     return Err(EINVAL.into());
                 }
