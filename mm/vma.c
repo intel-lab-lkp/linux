@@ -629,8 +629,10 @@ static int dup_anon_vma(struct vm_area_struct *dst,
 		vma_assert_write_locked(dst);
 		dst->anon_vma = src->anon_vma;
 		ret = anon_vma_clone(dst, src, VMA_OP_MERGE_UNFAULTED);
-		if (ret)
+		if (ret) {
+			dst->anon_vma = NULL;
 			return ret;
+		}
 
 		*dup = dst;
 	}
