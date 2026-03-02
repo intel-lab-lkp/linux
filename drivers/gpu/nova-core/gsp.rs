@@ -16,6 +16,7 @@ use kernel::{
 
 pub(crate) mod cmdq;
 pub(crate) mod commands;
+mod continuation;
 mod fw;
 mod sequencer;
 
