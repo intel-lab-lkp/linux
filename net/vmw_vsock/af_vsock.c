@@ -206,6 +206,8 @@ static const struct vsock_transport *transport_dgram;
 static const struct vsock_transport *transport_local;
 static DEFINE_MUTEX(vsock_register_mutex);
 
+static int vsock_g2h_fallback = 1;
+
 /**** UTILS ****/
 
 /* Each bound VSocket is stored in the bind hash table and each connected
@@ -543,7 +545,8 @@ static void vsock_deassign_transport(struct vsock_sock *vsk)
  *    g2h is not loaded, will use local transport;
  *  - remote CID <= VMADDR_CID_HOST or h2g is not loaded or remote flags field
  *    includes VMADDR_FLAG_TO_HOST flag value, will use guest->host transport;
- *  - remote CID > VMADDR_CID_HOST will use host->guest transport;
+ *  - remote CID > VMADDR_CID_HOST will use host->guest transport if h2g has
+ *    registered that CID, otherwise will use guest->host transport (overlay);
  */
 int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 {
@@ -580,6 +583,12 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 		else if (remote_cid <= VMADDR_CID_HOST || !transport_h2g ||
 			 (remote_flags & VMADDR_FLAG_TO_HOST))
 			new_transport = transport_g2h;
+		else if (vsock_g2h_fallback &&
+			 transport_h2g->has_remote_cid &&
+			 !transport_h2g->has_remote_cid(vsk, remote_cid)) {
+			vsk->remote_addr.svm_flags |= VMADDR_FLAG_TO_HOST;
+			new_transport = transport_g2h;
+		}
 		else
 			new_transport = transport_h2g;
 		break;
@@ -2873,6 +2882,15 @@ static struct ctl_table vsock_table[] = {
 		.maxlen		= VSOCK_NET_MODE_STR_MAX,
 		.mode		= 0644,
 		.proc_handler	= vsock_net_child_mode_string
+	},
+	{
+		.procname	= "g2h_fallback",
+		.data		= &vsock_g2h_fallback,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 };
 

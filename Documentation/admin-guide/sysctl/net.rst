@@ -599,3 +599,25 @@ it does not modify the current namespace or any existing children.
 
 A namespace with ``ns_mode`` set to ``local`` cannot change
 ``child_ns_mode`` to ``global`` (returns ``-EPERM``).
+
+g2h_fallback
+------------
+
+Controls whether connections to CIDs not owned by the host-to-guest (H2G)
+transport automatically fall back to the guest-to-host (G2H) transport.
+
+When enabled, if a connect targets a CID that the H2G transport (e.g.
+vhost-vsock) does not serve, the connection is routed via the G2H transport
+(e.g. virtio-vsock) instead. This allows a host running both nested VMs
+(via vhost-vsock) and sibling VMs reachable through the hypervisor (e.g.
+Nitro Enclaves) to address both using a single CID space, without requiring
+applications to set ``VMADDR_FLAG_TO_HOST``.
+
+When the fallback is taken, ``VMADDR_FLAG_TO_HOST`` is automatically set on
+the remote address so that userspace can determine the path via
+``getpeername()``.
+
+Values:
+
+	- 0 - Connections to CIDs < 3 get handled by G2H, others by H2G.
+	- 1 - Connections to CIDs not owned by H2G fall back to G2H. (default)

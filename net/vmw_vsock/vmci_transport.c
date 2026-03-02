@@ -2045,6 +2045,11 @@ static u32 vmci_transport_get_local_cid(void)
 	return vmci_get_context_id();
 }
 
+static bool vmci_transport_has_remote_cid(struct vsock_sock *vsk, u32 cid)
+{
+	return vmci_ctx_exists(cid);
+}
+
 static struct vsock_transport vmci_transport = {
 	.module = THIS_MODULE,
 	.init = vmci_transport_socket_init,
@@ -2074,6 +2079,7 @@ static struct vsock_transport vmci_transport = {
 	.notify_send_post_enqueue = vmci_transport_notify_send_post_enqueue,
 	.shutdown = vmci_transport_shutdown,
 	.get_local_cid = vmci_transport_get_local_cid,
+	.has_remote_cid = vmci_transport_has_remote_cid,
 };
 
 static bool vmci_check_transport(struct vsock_sock *vsk)

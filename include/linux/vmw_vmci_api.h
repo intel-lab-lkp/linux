@@ -37,6 +37,7 @@ int vmci_doorbell_create(struct vmci_handle *handle, u32 flags,
 int vmci_doorbell_destroy(struct vmci_handle handle);
 u32 vmci_get_context_id(void);
 bool vmci_is_context_owner(u32 context_id, kuid_t uid);
+bool vmci_ctx_exists(u32 cid);
 int vmci_register_vsock_callback(vmci_vsock_cb callback);
 
 int vmci_event_subscribe(u32 event,

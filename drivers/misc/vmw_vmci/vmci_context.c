@@ -364,6 +364,7 @@ bool vmci_ctx_exists(u32 cid)
 	rcu_read_unlock();
 	return exists;
 }
+EXPORT_SYMBOL_GPL(vmci_ctx_exists);
 
 /*
  * Retrieves VMCI context corresponding to the given cid.

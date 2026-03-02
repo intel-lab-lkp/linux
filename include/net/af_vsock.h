@@ -179,6 +179,9 @@ struct vsock_transport {
 	/* Addressing. */
 	u32 (*get_local_cid)(void);
 
+	/* Check if this transport serves a specific remote CID. */
+	bool (*has_remote_cid)(struct vsock_sock *vsk, u32 remote_cid);
+
 	/* Read a single skb */
 	int (*read_skb)(struct vsock_sock *, skb_read_actor_t);
 
