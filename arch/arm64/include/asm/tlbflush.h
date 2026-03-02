@@ -591,7 +591,7 @@ static inline void __flush_tlb_page(struct vm_area_struct *vma,
 	unsigned long start = round_down(uaddr, PAGE_SIZE);
 	unsigned long end = start + PAGE_SIZE;
 
-	__do_flush_tlb_range(vma, start, end, PAGE_SIZE, TLBI_TTL_UNKNOWN,
+	__do_flush_tlb_range(vma, start, end, PAGE_SIZE, 3,
 			     TLBF_NOWALKCACHE | flags);
 }
 
