@@ -5284,6 +5284,11 @@ static void *cgroup_procs_start(struct seq_file *s, loff_t *pos)
 
 static int cgroup_procs_show(struct seq_file *s, void *v)
 {
+	struct task_struct *tsk = v;
+
+	if (READ_ONCE(tsk->__state) & TASK_DEAD)
+		return 0;
+
 	seq_printf(s, "%d\n", task_pid_vnr(v));
 	return 0;
 }
