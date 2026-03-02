@@ -216,6 +216,12 @@ static void spacemit_sdhci_pre_hs400_to_hs200(struct mmc_host *mmc)
 			       SPACEMIT_SDHC_PHY_CTRL_REG);
 }
 
+static int spacemit_sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
+						      struct mmc_ios *ios)
+{
+	return sdhci_start_signal_voltage_switch(mmc, ios);
+}
+
 static inline int spacemit_sdhci_get_clocks(struct device *dev,
 					    struct sdhci_pltfm_host *pltfm_host)
 {
@@ -290,6 +296,12 @@ static int spacemit_sdhci_probe(struct platform_device *pdev)
 	}
 
 	host->mmc->caps |= MMC_CAP_NEED_RSP_BUSY;
+
+	ret = mmc_regulator_get_supply(host->mmc);
+	if (ret)
+		dev_warn(dev, "Failed to get regulators: %d\n", ret);
+
+	host->mmc_host_ops.start_signal_voltage_switch = spacemit_sdhci_start_signal_voltage_switch;
 
 	ret = spacemit_sdhci_get_clocks(dev, pltfm_host);
 	if (ret)
