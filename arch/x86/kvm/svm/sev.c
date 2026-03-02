@@ -5109,6 +5109,15 @@ int sev_gmem_max_mapping_level(struct kvm *kvm, kvm_pfn_t pfn, bool is_private)
 	return level;
 }
 
+void sev_gmem_cleanup(void)
+{
+	/*
+	 * Re-enable RMP optimizations once all guest pages are
+	 * converted back to shared following guest shutdown.
+	 */
+	snp_perform_rmp_optimization();
+}
+
 struct vmcb_save_area *sev_decrypt_vmsa(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
