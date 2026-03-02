@@ -2160,7 +2160,8 @@ getblk_failed:
 				error = -EIO;
 				goto getblk_failed;
 			}
-			memcpy(new_bh->b_data, s->base, new_bh->b_size);
+			memcpy(new_bh->b_data + DIFF_AREA_DE_XH, s->base,
+			       new_bh->b_size - DIFF_AREA_DE_XH);
 			ext4_xattr_block_csum_set(inode, new_bh);
 			set_buffer_uptodate(new_bh);
 			unlock_buffer(new_bh);

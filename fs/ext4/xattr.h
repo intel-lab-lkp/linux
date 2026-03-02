@@ -8,6 +8,7 @@
 */
 
 #include <linux/xattr.h>
+#include "ext4.h"
 
 /* Magic value in attribute blocks */
 #define EXT4_XATTR_MAGIC		0xEA020000
@@ -90,7 +91,7 @@ struct ext4_xattr_entry {
 #define EXT4_XATTR_MIN_LARGE_EA_SIZE(b)					\
 	((b) - EXT4_XATTR_LEN(3) - sizeof(struct ext4_xattr_header) - 4)
 
-#define BHDR(bh) ((struct ext4_xattr_header *)((bh)->b_data))
+#define BHDR(bh) ((struct ext4_xattr_header *)((bh)->b_data + DIFF_AREA_DE_XH))
 #define ENTRY(ptr) ((struct ext4_xattr_entry *)(ptr))
 #define BFIRST(bh) ENTRY(BHDR(bh)+1)
 #define IS_LAST_ENTRY(entry) (*(__u32 *)(entry) == 0)
