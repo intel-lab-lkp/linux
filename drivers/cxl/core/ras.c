@@ -393,33 +393,40 @@ void cxl_cor_error_detected(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_cor_error_detected, "CXL");
 
-pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
-				    pci_channel_state_t state)
+static bool cxl_uncor_aer_present(struct pci_dev *pdev)
 {
-	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-	struct cxl_memdev *cxlmd = cxlds->cxlmd;
-	struct device *dev = &cxlmd->dev;
-	bool ue;
+	struct aer_capability_regs aer_regs;
+	u32 fatal, aer_cap = pdev->aer_cap;
 
-	scoped_guard(device, dev) {
-		if (!dev->driver) {
-			dev_warn(&pdev->dev,
-				 "%s: memdev disabled, abort error handling\n",
-				 dev_name(dev));
-			return PCI_ERS_RESULT_DISCONNECT;
-		}
-
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(pdev);
-		/*
-		 * A frozen channel indicates an impending reset which is fatal to
-		 * CXL.mem operation, and will likely crash the system. On the off
-		 * chance the situation is recoverable dump the status of the RAS
-		 * capability registers and bounce the active state of the memdev.
-		 */
-		ue = cxl_handle_ras(&cxlds->cxlmd->dev, cxlds->serial,
-				    cxlmd->endpoint->regs.ras);
+	if (!aer_cap) {
+		pr_warn_ratelimited("%s: AER capability isn't present\n",
+				    pci_name(pdev));
+		return false;
 	}
+
+	pci_read_config_dword(pdev, aer_cap + PCI_ERR_UNCOR_STATUS,
+			      &aer_regs.uncor_status);
+	pci_read_config_dword(pdev, aer_cap + PCI_ERR_UNCOR_MASK,
+			      &aer_regs.uncor_mask);
+	pci_read_config_dword(pdev, aer_cap + PCI_ERR_UNCOR_SEVER,
+			      &aer_regs.uncor_severity);
+
+	fatal = (aer_regs.uncor_severity & aer_regs.uncor_severity);
+	pci_print_aer(pdev, fatal ? AER_FATAL : AER_NONFATAL, &aer_regs);
+
+	pci_aer_clear_nonfatal_status(pdev);
+	pci_aer_clear_fatal_status(pdev);
+
+	return aer_regs.uncor_status & ~aer_regs.uncor_mask;
+}
+
+pci_ers_result_t cxl_pci_error_detected(struct pci_dev *pdev,
+					pci_channel_state_t state)
+{
+	bool ue = cxl_uncor_aer_present(pdev);
+	struct cxl_port *port = get_cxl_port(pdev);
+	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
+	struct device *dev = &cxlmd->dev;
 
 	switch (state) {
 	case pci_channel_io_normal:
@@ -441,7 +448,7 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	}
 	return PCI_ERS_RESULT_NEED_RESET;
 }
-EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
+EXPORT_SYMBOL_NS_GPL(cxl_pci_error_detected, "CXL");
 
 static void cxl_handle_proto_error(struct pci_dev *pdev, int severity)
 {
