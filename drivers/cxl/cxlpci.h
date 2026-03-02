@@ -82,6 +82,7 @@ void devm_cxl_dport_rch_ras_setup(struct cxl_dport *dport);
 pci_ers_result_t cxl_pci_error_detected(struct pci_dev *pdev,
 					pci_channel_state_t error);
 void devm_cxl_port_ras_setup(struct cxl_port *port);
+void cxl_unmask_proto_interrupts(struct device *dev);
 #else
 static inline pci_ers_result_t cxl_pci_error_detected(struct pci_dev *pdev,
 						      pci_channel_state_t state)
@@ -94,6 +95,9 @@ static inline void devm_cxl_dport_rch_ras_setup(struct cxl_dport *dport)
 }
 
 static inline void devm_cxl_port_ras_setup(struct cxl_port *port)
+{
+}
+static inline void cxl_unmask_proto_interrupts(struct device *dev)
 {
 }
 #endif
