@@ -74,6 +74,18 @@ config ELFCORE
 	help
 	  This option enables kernel/elfcore.o.
 
+config ELF_RO_LOAD_THP_ALIGNMENT
+	bool "Align read-only ELF load segments for THP (EXPERIMENTAL)"
+	depends on READ_ONLY_THP_FOR_FS
+
+	help
+	  Align eligible read-only ELF PT_LOAD segments to PMD_SIZE so
+	  they can be mapped using PMD-sized Transparent Huge Pages
+	  when THP is enabled in "always" mode.
+
+	  This only affects ELF executables loaded by the kernel ELF
+	  binary loader.
+
 config CORE_DUMP_DEFAULT_ELF_HEADERS
 	bool "Write ELF core dumps with partial segments"
 	default y

@@ -28,6 +28,7 @@
 #include <linux/highuid.h>
 #include <linux/compiler.h>
 #include <linux/highmem.h>
+#include <linux/huge_mm.h>
 #include <linux/hugetlb.h>
 #include <linux/pagemap.h>
 #include <linux/vmalloc.h>
@@ -500,6 +501,14 @@ static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
 			/* skip non-power of two alignments as invalid */
 			if (!is_power_of_2(p_align))
 				continue;
+
+#if defined(CONFIG_ELF_RO_LOAD_THP_ALIGNMENT) && PMD_SIZE <= SZ_32M
+			if (hugepage_global_always() && !(cmds[i].p_flags & PF_W)
+				&& IS_ALIGNED(cmds[i].p_vaddr | cmds[i].p_offset, PMD_SIZE)
+				&& cmds[i].p_filesz >= PMD_SIZE && p_align < PMD_SIZE)
+				p_align = PMD_SIZE;
+#endif
+
 			alignment = max(alignment, p_align);
 		}
 	}
