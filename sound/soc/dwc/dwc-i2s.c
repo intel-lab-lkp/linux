@@ -478,8 +478,11 @@ static int dw_i2s_runtime_suspend(struct device *dev)
 {
 	struct dw_i2s_dev *dw_dev = dev_get_drvdata(dev);
 
+	reset_control_assert(dw_dev->reset);
+
 	if (dw_dev->capability & DW_I2S_MASTER)
-		clk_disable(dw_dev->clk);
+		clk_disable_unprepare(dw_dev->clk);
+
 	return 0;
 }
 
@@ -489,10 +492,18 @@ static int dw_i2s_runtime_resume(struct device *dev)
 	int ret;
 
 	if (dw_dev->capability & DW_I2S_MASTER) {
-		ret = clk_enable(dw_dev->clk);
+		ret = clk_prepare_enable(dw_dev->clk);
 		if (ret)
 			return ret;
 	}
+
+	ret = reset_control_deassert(dw_dev->reset);
+	if (ret) {
+		if (dw_dev->capability & DW_I2S_MASTER)
+			clk_disable_unprepare(dw_dev->clk);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -501,22 +512,16 @@ static int dw_i2s_suspend(struct snd_soc_component *component)
 {
 	struct dw_i2s_dev *dev = snd_soc_component_get_drvdata(component);
 
-	if (dev->capability & DW_I2S_MASTER)
-		clk_disable(dev->clk);
-	return 0;
+	return pm_runtime_force_suspend(dev->dev);
 }
 
 static int dw_i2s_resume(struct snd_soc_component *component)
 {
 	struct dw_i2s_dev *dev = snd_soc_component_get_drvdata(component);
 	struct snd_soc_dai *dai;
-	int stream, ret;
+	int stream;
 
-	if (dev->capability & DW_I2S_MASTER) {
-		ret = clk_enable(dev->clk);
-		if (ret)
-			return ret;
-	}
+	pm_runtime_force_resume(dev->dev);
 
 	for_each_component_dais(component, dai) {
 		for_each_pcm_streams(stream)
@@ -1027,6 +1032,17 @@ static int dw_i2s_probe(struct platform_device *pdev)
 	}
 
 	pm_runtime_enable(&pdev->dev);
+	if (pm_runtime_enabled(&pdev->dev)) {
+		/*
+		 * runtime_pm will control clocks and resets,
+		 * but if RPM is off - turn on clocks and resets permanently
+		 */
+		if (dev->capability & DW_I2S_MASTER)
+			clk_disable_unprepare(dev->clk);
+		if (!dev->is_jh7110)
+			reset_control_assert(dev->reset);
+	}
+
 	return 0;
 
 err_assert_reset:
