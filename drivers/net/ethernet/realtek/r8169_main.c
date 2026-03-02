@@ -1052,6 +1052,11 @@ DECLARE_RTL_COND(rtl_eriar_cond)
 	return RTL_R32(tp, ERIAR) & ERIAR_FLAG;
 }
 
+DECLARE_RTL_COND(rtl_csiar_cond)
+{
+	return RTL_R32(tp, CSIAR) & CSIAR_FLAG;
+}
+
 static void _rtl_eri_write(struct rtl8169_private *tp, int addr, u32 mask,
 			   u32 val, int type)
 {
@@ -2925,11 +2930,6 @@ static void rtl_set_rx_mode(struct net_device *dev)
 
 	tmp = RTL_R32(tp, RxConfig);
 	RTL_W32(tp, RxConfig, (tmp & ~RX_CONFIG_ACCEPT_OK_MASK) | rx_mode);
-}
-
-DECLARE_RTL_COND(rtl_csiar_cond)
-{
-	return RTL_R32(tp, CSIAR) & CSIAR_FLAG;
 }
 
 static void rtl_csi_write(struct rtl8169_private *tp, int addr, int value)
