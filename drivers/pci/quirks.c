@@ -6380,3 +6380,12 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+static void quirk_qcom_modem_class(struct pci_dev *pdev)
+{
+	pdev->class = (PCI_CLASS_COMMUNICATION_MODEM << 8) | pdev->class;
+}
+DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_VENDOR_ID_QCOM, 0x011a, PCI_CLASS_NOT_DEFINED,
+			      8, quirk_qcom_modem_class);
+DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_VENDOR_ID_QCOM, 0x0306, PCI_CLASS_NOT_DEFINED,
+			      8, quirk_qcom_modem_class);
