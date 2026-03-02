@@ -3131,7 +3131,7 @@ static unsigned long gup_fast(unsigned long start, unsigned long end,
 {
 	unsigned long flags;
 	int nr_pinned = 0;
-	unsigned seq;
+	unsigned int seq = 0;
 
 	if (!IS_ENABLED(CONFIG_HAVE_GUP_FAST) ||
 	    !gup_fast_permitted(start, end))
