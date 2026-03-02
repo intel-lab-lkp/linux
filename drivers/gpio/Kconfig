@@ -128,6 +128,10 @@ config GPIO_SWNODE_UNDEFINED
 config GPIO_MAX730X
 	tristate
 
+# This symbol is selected by Phytium platform frontend
+config GPIO_PHYTIUM_CORE
+	tristate
+
 config GPIO_IDIO_16
 	tristate
 	select REGMAP_IRQ
@@ -560,6 +564,18 @@ config GPIO_OMAP
 	select GPIOLIB_IRQCHIP
 	help
 	  Say yes here to enable GPIO support for TI OMAP SoCs.
+
+config GPIO_PHYTIUM_PLAT
+	tristate "Phytium GPIO platform support"
+	depends on (ARM64 || COMPILE_TEST) && (ACPI || OF_GPIO)
+	select GPIO_PHYTIUM_CORE
+	select GPIOLIB_IRQCHIP
+	help
+	  Say yes here to support the platform GPIO controller
+	  found in Phytium SoCs.
+
+	  This driver supports GPIO line configuration and
+	  interrupt delivery.
 
 config GPIO_PL061
 	tristate "PrimeCell PL061 GPIO support"
