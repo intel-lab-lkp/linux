@@ -352,6 +352,7 @@ static void nft_netdev_hook_free_ops(struct nft_hook *hook)
 
 	list_for_each_entry_safe(ops, next, &hook->ops_list, list) {
 		list_del(&ops->list);
+		dev_put(ops->dev);
 		kfree(ops);
 	}
 }
@@ -2374,6 +2375,7 @@ static struct nft_hook *nft_netdev_hook_alloc(struct net *net,
 			err = -ENOMEM;
 			goto err_hook_free;
 		}
+		dev_hold(dev);
 		ops->dev = dev;
 		list_add_tail(&ops->list, &hook->ops_list);
 	}
