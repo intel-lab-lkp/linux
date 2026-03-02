@@ -291,4 +291,9 @@ struct ftgmac100_rxdes {
 #define AST2600_MAC2_BASE_ADDR		0x1e670000
 #define AST2600_MAC3_BASE_ADDR		0x1e690000
 
+/* Keep original delay */
+#define AST2600_RGMII_KEEP_DELAY	0x01
+/* Need to disable delay on MAC side */
+#define AST2600_RGMII_DIS_DELAY		0x02
+
 #endif /* __FTGMAC100_H */

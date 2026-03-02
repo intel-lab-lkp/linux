@@ -1871,10 +1871,40 @@ err_register_ndev:
 	return err;
 }
 
+static struct phy_device *ftgmac100_ast2600_phy_get(struct net_device *dev,
+						    struct device_node *np,
+						    void (*hndlr)(struct net_device *),
+						    phy_interface_t phy_intf)
+{
+	struct device_node *phy_np;
+	struct phy_device *phy;
+	int ret;
+
+	if (of_phy_is_fixed_link(np)) {
+		ret = of_phy_register_fixed_link(np);
+		if (ret < 0) {
+			netdev_err(dev, "broken fixed-link specification\n");
+			return NULL;
+		}
+		phy_np = of_node_get(np);
+	} else {
+		phy_np = of_parse_phandle(np, "phy-handle", 0);
+		if (!phy_np)
+			return NULL;
+	}
+
+	phy = of_phy_connect(dev, phy_np, hndlr, 0, phy_intf);
+
+	of_node_put(phy_np);
+
+	return phy;
+}
+
 static int ftgmac100_probe_dt(struct net_device *netdev,
 			      struct platform_device *pdev,
 			      struct ftgmac100 *priv,
-			      struct device_node *np)
+			      struct device_node *np,
+			      phy_interface_t phy_intf)
 {
 	struct phy_device *phy;
 	int err;
@@ -1890,8 +1920,16 @@ static int ftgmac100_probe_dt(struct net_device *netdev,
 		 * them. 2600 has an independent MDIO controller, not
 		 * part of the MAC.
 		 */
-		phy = of_phy_get_and_connect(priv->netdev, np,
-					     &ftgmac100_adjust_link);
+		if (priv->mac_id == FTGMAC100_AST2600)
+			/* Because AST2600 will use the RGMII delay to determine
+			 * which phy interface to use.
+			 */
+			phy = ftgmac100_ast2600_phy_get(priv->netdev, np,
+							&ftgmac100_adjust_link,
+							phy_intf);
+		else
+			phy = of_phy_get_and_connect(priv->netdev, np,
+						     &ftgmac100_adjust_link);
 		if (!phy) {
 			dev_err(&pdev->dev, "Failed to connect to phy\n");
 			return -EINVAL;
@@ -1923,10 +1961,62 @@ static int ftgmac100_probe_dt(struct net_device *netdev,
 	return 0;
 }
 
+static int ftgmac100_get_ast2600_rgmii_flag(u32 delay)
+{
+	if ((delay > 500 && delay < 1500) ||
+	    (delay > 2500 && delay < 7500))
+		return AST2600_RGMII_KEEP_DELAY;
+
+	return AST2600_RGMII_DIS_DELAY;
+}
+
+static int ftgmac100_check_ast2600_rgmii_delay(struct regmap *scu,
+					       u32 delay_unit,
+					       int mac_id, int dly_reg)
+{
+	u32 delay_value;
+	u32 tx_delay;
+	u32 rx_delay;
+	int tx_flag;
+	int rx_flag;
+
+	regmap_read(scu, dly_reg, &delay_value);
+	if (mac_id == 0 || mac_id == 2) {
+		tx_delay = FIELD_GET(ASPEED_MAC0_2_TX_DLY, delay_value);
+		rx_delay = FIELD_GET(ASPEED_MAC0_2_RX_DLY, delay_value);
+	} else {
+		tx_delay = FIELD_GET(ASPEED_MAC1_3_TX_DLY, delay_value);
+		rx_delay = FIELD_GET(ASPEED_MAC1_3_RX_DLY, delay_value);
+	}
+
+	/* Due to the hardware design reason, for MAC2/3 on AST2600,
+	 * the zero delay ns on RX is configured by setting value 0x1a.
+	 * List as below:
+	 * 0x1a, 0x1b, ... , 0x1f, 0x00, 0x01, ... , 0x19
+	 * Covert for calculation purpose.
+	 * 0x00, 0x01, ... , 0x19, 0x1a, 0x1b, ... , 0x1f
+	 */
+	if (mac_id == 2 || mac_id == 3)
+		rx_delay = (rx_delay + 0x06) & 0x1f;
+
+	tx_delay *= delay_unit;
+	rx_delay *= delay_unit;
+
+	tx_flag = ftgmac100_get_ast2600_rgmii_flag(tx_delay);
+	rx_flag = ftgmac100_get_ast2600_rgmii_flag(rx_delay);
+
+	if (tx_flag == AST2600_RGMII_KEEP_DELAY ||
+	    rx_flag == AST2600_RGMII_KEEP_DELAY) {
+		return AST2600_RGMII_KEEP_DELAY;
+	}
+
+	return AST2600_RGMII_DIS_DELAY;
+}
+
 static int ftgmac100_set_ast2600_rgmii_delay(struct ftgmac100 *priv,
-					     u32 rgmii_tx_delay,
-					     u32 rgmii_rx_delay,
-					     phy_interface_t phy_intf)
+					     s32 rgmii_tx_delay,
+					     s32 rgmii_rx_delay,
+					     phy_interface_t *phy_intf)
 {
 	struct device *dev = priv->dev;
 	struct device_node *np;
@@ -1975,13 +2065,59 @@ static int ftgmac100_set_ast2600_rgmii_delay(struct ftgmac100 *priv,
 		return -EINVAL;
 	}
 
-	/* Please refer to ethernet-controller.yaml. */
-	if (phy_intf == PHY_INTERFACE_MODE_RGMII &&
-	    (rgmii_tx_delay == 2000 || rgmii_rx_delay == 2000)) {
-		dev_warn(dev, "RX/TX delay cannot set to 2000 on 'rgmii'\n");
-		return -EINVAL;
+	if (of_phy_is_fixed_link(np)) {
+		if (rgmii_tx_delay < 0 || rgmii_rx_delay < 0) {
+			dev_err(dev,
+				"Add rx/tx-internal-delay-ps for fixed-link\n");
+			/* Keep original RGMII delay value*/
+			return 0;
+		}
+
+		/* Must have both of rx/tx-internal-delay-ps for fixed-link */
+		goto conf_delay;
 	}
 
+	if (*phy_intf == PHY_INTERFACE_MODE_RGMII_RXID ||
+	    *phy_intf == PHY_INTERFACE_MODE_RGMII_TXID)
+		goto out_warn;
+
+	/* Both rx/tx-internal-delay-ps are not existed. */
+	if (rgmii_tx_delay < 0 && rgmii_rx_delay < 0) {
+		int flag;
+
+		flag = ftgmac100_check_ast2600_rgmii_delay(scu,
+							   rgmii_delay_unit,
+							   mac_id,
+							   dly_reg);
+		if (flag == AST2600_RGMII_KEEP_DELAY)
+			goto out_warn;
+
+		if (*phy_intf == PHY_INTERFACE_MODE_RGMII) {
+			dev_err(dev, "Update phy-mode to 'rgmii-id'\n");
+			/* Forced phy interface to RGMII_ID and MAC will disable
+			 * RGMII delay.
+			 */
+			*phy_intf = PHY_INTERFACE_MODE_RGMII_ID;
+		}
+	} else {
+		/* Please refer to ethernet-controller.yaml. */
+		if (*phy_intf == PHY_INTERFACE_MODE_RGMII &&
+		    (rgmii_tx_delay == 2000 || rgmii_rx_delay == 2000)) {
+			dev_warn(dev,
+				 "RX/TX delay cannot set to 2000 on 'rgmii'\n");
+			return -EINVAL;
+		}
+	}
+
+	/* The value is negative, which means the rx/tx-internal-delay-ps
+	 * property is not existed in dts. Therefore, set to default 0.
+	 */
+	if (rgmii_tx_delay < 0)
+		rgmii_tx_delay = 0;
+	if (rgmii_rx_delay < 0)
+		rgmii_rx_delay = 0;
+
+conf_delay:
 	tx_delay_index = DIV_ROUND_CLOSEST(rgmii_tx_delay, rgmii_delay_unit);
 	if (tx_delay_index >= 32) {
 		dev_err(dev, "The %u ps of TX delay is out of range\n",
@@ -2019,14 +2155,20 @@ static int ftgmac100_set_ast2600_rgmii_delay(struct ftgmac100 *priv,
 	regmap_update_bits(scu, dly_reg, dly_mask, tx_delay_index | rx_delay_index);
 
 	return 0;
+
+out_warn:
+	/* Print the warning message. Keep the phy-mode and the RGMII delay value. */
+	dev_warn(dev, "Update phy-mode to 'rgmii-id' and add rx/tx-internal-delay-ps\n");
+
+	return 0;
 }
 
-static int ftgmac100_config_rgmii_delay(struct ftgmac100 *priv)
+static int ftgmac100_config_rgmii_delay(struct ftgmac100 *priv,
+					phy_interface_t *phy_intf)
 {
 	struct device_node *np = priv->dev->of_node;
-	phy_interface_t phy_intf;
-	u32 rgmii_tx_delay;
-	u32 rgmii_rx_delay;
+	s32 rgmii_tx_delay;
+	s32 rgmii_rx_delay;
 	int err = 0;
 
 	/* Because some old dts using NC-SI mode does not include phy-mode
@@ -2036,20 +2178,23 @@ static int ftgmac100_config_rgmii_delay(struct ftgmac100 *priv)
 	if (of_get_property(np, "use-ncsi", NULL))
 		return 0;
 
-	err = of_get_phy_mode(np, &phy_intf);
+	err = of_get_phy_mode(np, phy_intf);
 	if (err) {
 		dev_err(priv->dev, "Failed to get phy mode: %d\n", err);
 		return err;
 	}
 
 	/* RMII does not need to configure RGMII delay */
-	if (!phy_interface_mode_is_rgmii(phy_intf))
+	if (!phy_interface_mode_is_rgmii(*phy_intf))
 		return 0;
 
+	/* AST2600 needs to know if the "tx/rx-internal-delay-ps" properties
+	 * are existed in dts. If not existed, set -1 and delay is equal to 0.
+	 */
 	if (of_property_read_u32(np, "tx-internal-delay-ps", &rgmii_tx_delay))
-		rgmii_tx_delay = 0;
+		rgmii_tx_delay = -1;
 	if (of_property_read_u32(np, "rx-internal-delay-ps", &rgmii_rx_delay))
-		rgmii_rx_delay = 0;
+		rgmii_rx_delay = -1;
 
 	if (priv->mac_id == FTGMAC100_AST2600)
 		err = ftgmac100_set_ast2600_rgmii_delay(priv,
@@ -2068,9 +2213,12 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	struct resource *res;
 	int irq;
 	struct net_device *netdev;
+	phy_interface_t phy_intf;
 	struct ftgmac100 *priv;
 	struct device_node *np;
 	int err = 0;
+
+	phy_intf = PHY_INTERFACE_MODE_NA;
 
 	np = pdev->dev.of_node;
 	if (np) {
@@ -2151,7 +2299,7 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	}
 
 	if (rgmii_delay_conf) {
-		err = ftgmac100_config_rgmii_delay(priv);
+		err = ftgmac100_config_rgmii_delay(priv, &phy_intf);
 		if (err)
 			return err;
 	}
@@ -2165,7 +2313,7 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	}
 
 	if (np) {
-		err = ftgmac100_probe_dt(netdev, pdev, priv, np);
+		err = ftgmac100_probe_dt(netdev, pdev, priv, np, phy_intf);
 		if (err)
 			goto err;
 	}
