@@ -58,6 +58,7 @@ enum osnoise_options_index {
 	OSN_PANIC_ON_STOP,
 	OSN_PREEMPT_DISABLE,
 	OSN_IRQ_DISABLE,
+	OSN_TIMERLAT_ALIGN,
 	OSN_MAX
 };
 
@@ -66,7 +67,8 @@ static const char * const osnoise_options_str[OSN_MAX] = {
 							"OSNOISE_WORKLOAD",
 							"PANIC_ON_STOP",
 							"OSNOISE_PREEMPT_DISABLE",
-							"OSNOISE_IRQ_DISABLE" };
+							"OSNOISE_IRQ_DISABLE",
+							"TIMERLAT_ALIGN" };
 
 #define OSN_DEFAULT_OPTIONS		0x2
 static unsigned long osnoise_options	= OSN_DEFAULT_OPTIONS;
@@ -326,6 +328,7 @@ static struct osnoise_data {
 	u64	stop_tracing_total;	/* stop trace in the final operation (report/thread) */
 #ifdef CONFIG_TIMERLAT_TRACER
 	u64	timerlat_period;	/* timerlat period */
+	u64	timerlat_align_us;	/* timerlat alignment */
 	u64	print_stack;		/* print IRQ stack if total > */
 	int	timerlat_tracer;	/* timerlat tracer */
 #endif
@@ -338,6 +341,7 @@ static struct osnoise_data {
 #ifdef CONFIG_TIMERLAT_TRACER
 	.print_stack			= 0,
 	.timerlat_period		= DEFAULT_TIMERLAT_PERIOD,
+	.timerlat_align_us		= 0,
 	.timerlat_tracer		= 0,
 #endif
 };
@@ -1814,6 +1818,11 @@ static enum hrtimer_restart timerlat_irq(struct hrtimer *timer)
 }
 
 /*
+ * timerlat wake-up offset for next thread with TIMERLAT_ALIGN set.
+ */
+static atomic64_t align_next;
+
+/*
  * wait_next_period - Wait for the next period for timerlat
  */
 static int wait_next_period(struct timerlat_variables *tlat)
@@ -1828,6 +1837,26 @@ static int wait_next_period(struct timerlat_variables *tlat)
 	 * Save the next abs_period.
 	 */
 	tlat->abs_period = (u64) ktime_to_ns(next_abs_period);
+
+	/*
+	 * Align thread in the first cycle on each CPU to the set alignment
+	 * if TIMERLAT_ALIGN is set.
+	 *
+	 * This is done by using an atomic64_t to store the next absolute period.
+	 * The first thread that wakes up will set the atomic64_t to its
+	 * absolute period, and the other threads will increment it by
+	 * the alignment value.
+	 */
+	if (test_bit(OSN_TIMERLAT_ALIGN, &osnoise_options) && !tlat->count
+	    && atomic64_cmpxchg_relaxed(&align_next, 0, tlat->abs_period)) {
+		/*
+		 * A thread has already set align_next, use it and increment it
+		 * to be used by the next thread that wakes up after this one.
+		 */
+		tlat->abs_period = atomic64_add_return_relaxed(
+			osnoise_data.timerlat_align_us * 1000, &align_next);
+		next_abs_period = ns_to_ktime(tlat->abs_period);
+	}
 
 	/*
 	 * If the new abs_period is in the past, skip the activation.
@@ -2650,6 +2679,17 @@ static struct trace_min_max_param timerlat_period = {
 	.min	= &timerlat_min_period,
 };
 
+/*
+ * osnoise/timerlat_align_us: align the first wakeup of all timerlat
+ * threads to a common boundary (in us). 0 means disabled.
+ */
+static struct trace_min_max_param timerlat_align_us = {
+	.lock	= &interface_lock,
+	.val	= &osnoise_data.timerlat_align_us,
+	.max	= NULL,
+	.min	= NULL,
+};
+
 static const struct file_operations timerlat_fd_fops = {
 	.open		= timerlat_fd_open,
 	.read		= timerlat_fd_read,
@@ -2743,6 +2783,11 @@ static int init_timerlat_tracefs(struct dentry *top_dir)
 
 	tmp = tracefs_create_file("timerlat_period_us", TRACE_MODE_WRITE, top_dir,
 				  &timerlat_period, &trace_min_max_fops);
+	if (!tmp)
+		return -ENOMEM;
+
+	tmp = tracefs_create_file("timerlat_align_us", TRACE_MODE_WRITE, top_dir,
+				  &timerlat_align_us, &trace_min_max_fops);
 	if (!tmp)
 		return -ENOMEM;
 
@@ -2877,6 +2922,11 @@ static int osnoise_workload_start(void)
 		return 0;
 
 	osn_var_reset_all();
+	/*
+	 * Reset also align_next, to be filled by a new offset by the first timerlat
+	 * thread that wakes up, if TIMERLAT_ALIGN is set.
+	 */
+	atomic64_set(&align_next, 0);
 
 	retval = osnoise_hook_events();
 	if (retval)
