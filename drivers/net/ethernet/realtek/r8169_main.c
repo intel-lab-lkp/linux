@@ -726,6 +726,12 @@ enum rtl_dash_type {
 	RTL_DASH_25_BP,
 };
 
+enum rtl_sfp_mode {
+	RTL_SFP_NONE,
+	RTL_SFP_8168_AF,
+	RTL_SFP_8127_ATF,
+};
+
 struct rtl8169_private {
 	void __iomem *mmio_addr;	/* memory map physical address */
 	struct pci_dev *pci_dev;
@@ -734,6 +740,7 @@ struct rtl8169_private {
 	struct napi_struct napi;
 	enum mac_version mac_version;
 	enum rtl_dash_type dash_type;
+	enum rtl_sfp_mode sfp_mode;
 	u32 cur_rx; /* Index into the Rx descriptor buffer of next Rx pkt. */
 	u32 cur_tx; /* Index into the Tx descriptor buffer of next Rx pkt. */
 	u32 dirty_tx;
@@ -760,7 +767,6 @@ struct rtl8169_private {
 	unsigned supports_gmii:1;
 	unsigned aspm_manageable:1;
 	unsigned dash_enabled:1;
-	bool sfp_mode:1;
 	dma_addr_t counters_phys_addr;
 	struct rtl8169_counters *counters;
 	struct rtl8169_tc_offsets tc_offset;
@@ -1126,7 +1132,7 @@ static int r8168_phy_ocp_read(struct rtl8169_private *tp, u32 reg)
 		return 0;
 
 	/* Return dummy MII_PHYSID2 in SFP mode to match SFP PHY driver */
-	if (tp->sfp_mode && reg == (OCP_STD_PHY_BASE + 2 * MII_PHYSID2))
+	if (tp->sfp_mode == RTL_SFP_8127_ATF && reg == (OCP_STD_PHY_BASE + 2 * MII_PHYSID2))
 		return PHY_ID_RTL_DUMMY_SFP & 0xffff;
 
 	RTL_W32(tp, GPHY_OCP, reg << 15);
@@ -1270,6 +1276,34 @@ static int r8168g_mdio_read(struct rtl8169_private *tp, int reg)
 	return r8168_phy_ocp_read(tp, tp->ocp_base + reg * 2);
 }
 
+/* The quirk reflects RTL8116af SerDes status. */
+static int r8116af_mdio_read_quirk(struct rtl8169_private *tp, int reg)
+{
+	u8 phyStatus = RTL_R8(tp, PHYstatus);
+
+	if (!(phyStatus & LinkStatus))
+		return 0;
+
+	/* BMSR */
+	if (tp->ocp_base == OCP_STD_PHY_BASE && reg == MII_BMSR)
+		return BMSR_ANEGCOMPLETE | BMSR_LSTATUS;
+
+	/* PHYSR */
+	if (tp->ocp_base == 0xa430 && reg == 0x12) {
+		if (phyStatus & _1000bpsF)
+			return 0x0028;
+		else if (phyStatus & _100bps)
+			return 0x0018;
+	}
+
+	return 0;
+}
+
+static int r8116af_mdio_read(struct rtl8169_private *tp, int reg)
+{
+	return r8168g_mdio_read(tp, reg) | r8116af_mdio_read_quirk(tp, reg);
+}
+
 static void mac_mcu_write(struct rtl8169_private *tp, int reg, int value)
 {
 	if (reg == 0x1f) {
@@ -1278,6 +1312,13 @@ static void mac_mcu_write(struct rtl8169_private *tp, int reg, int value)
 	}
 
 	r8168_mac_ocp_write(tp, tp->ocp_base + reg, value);
+}
+
+static bool rtl_is_8116af(struct rtl8169_private *tp)
+{
+	return tp->mac_version == RTL_GIGA_MAC_VER_52 &&
+		(r8168_mac_ocp_read(tp, 0xdc00) & 0x0078) == 0x0030 &&
+		(r8168_mac_ocp_read(tp, 0xd006) & 0x00ff) == 0x0000;
 }
 
 static int mac_mcu_read(struct rtl8169_private *tp, int reg)
@@ -1386,7 +1427,10 @@ static int rtl_readphy(struct rtl8169_private *tp, int location)
 	case RTL_GIGA_MAC_VER_31:
 		return r8168dp_2_mdio_read(tp, location);
 	case RTL_GIGA_MAC_VER_40 ... RTL_GIGA_MAC_VER_LAST:
-		return r8168g_mdio_read(tp, location);
+		if (tp->sfp_mode == RTL_SFP_8168_AF)
+			return r8116af_mdio_read(tp, location);
+		else
+			return r8168g_mdio_read(tp, location);
 	default:
 		return r8169_mdio_read(tp, location);
 	}
@@ -1573,6 +1617,20 @@ static bool rtl_dash_is_enabled(struct rtl8169_private *tp)
 	default:
 		return false;
 	}
+}
+
+static enum rtl_sfp_mode rtl_get_sfp_mode(struct rtl8169_private *tp)
+{
+	if (rtl_is_8125(tp)) {
+		u16 data = r8168_mac_ocp_read(tp, 0xd006);
+
+		if ((data & 0xff) == 0x07)
+			return RTL_SFP_8127_ATF;
+	} else if (rtl_is_8116af(tp)) {
+		return RTL_SFP_8168_AF;
+	}
+
+	return RTL_SFP_NONE;
 }
 
 static enum rtl_dash_type rtl_get_dash_type(struct rtl8169_private *tp)
@@ -5693,12 +5751,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 	tp->aspm_manageable = !rc;
 
-	if (rtl_is_8125(tp)) {
-		u16 data = r8168_mac_ocp_read(tp, 0xd006);
-
-		if ((data & 0xff) == 0x07)
-			tp->sfp_mode = true;
-	}
+	tp->sfp_mode = rtl_get_sfp_mode(tp);
 
 	tp->dash_type = rtl_get_dash_type(tp);
 	tp->dash_enabled = rtl_dash_is_enabled(tp);
