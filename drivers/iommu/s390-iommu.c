@@ -812,10 +812,6 @@ static void s390_iommu_iotlb_sync(struct iommu_domain *domain,
 	size_t size = gather->end - gather->start + 1;
 	struct zpci_dev *zdev;
 
-	/* If gather was never added to there is nothing to flush */
-	if (!gather->end)
-		return;
-
 	rcu_read_lock();
 	list_for_each_entry_rcu(zdev, &s390_domain->devices, iommu_list) {
 		atomic64_inc(&s390_domain->ctrs.sync_rpcits);
