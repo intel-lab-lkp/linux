@@ -629,6 +629,7 @@ enum {
 	kvm_ioeventfd_flag_nr_deassign,
 	kvm_ioeventfd_flag_nr_virtio_ccw_notify,
 	kvm_ioeventfd_flag_nr_fast_mmio,
+	kvm_ioevetnfd_flag_nr_commit_write,
 	kvm_ioeventfd_flag_nr_max,
 };
 
@@ -637,6 +638,7 @@ enum {
 #define KVM_IOEVENTFD_FLAG_DEASSIGN  (1 << kvm_ioeventfd_flag_nr_deassign)
 #define KVM_IOEVENTFD_FLAG_VIRTIO_CCW_NOTIFY \
 	(1 << kvm_ioeventfd_flag_nr_virtio_ccw_notify)
+#define KVM_IOEVENTFD_FLAG_COMMIT_WRITE (1 << kvm_ioevetnfd_flag_nr_commit_write)
 
 #define KVM_IOEVENTFD_VALID_FLAG_MASK  ((1 << kvm_ioeventfd_flag_nr_max) - 1)
 

@@ -741,6 +741,7 @@ struct _ioeventfd {
 	struct kvm_io_device dev;
 	u8                   bus_idx;
 	bool                 wildcard;
+	void         __user *post_addr;
 };
 
 static inline struct _ioeventfd *
@@ -812,6 +813,9 @@ ioeventfd_write(struct kvm_vcpu *vcpu, struct kvm_io_device *this, gpa_t addr,
 	if (!ioeventfd_in_range(p, addr, len, val))
 		return -EOPNOTSUPP;
 
+	if (p->post_addr && len > 0 && __copy_to_user(p->post_addr, val, len))
+		return -EFAULT;
+
 	eventfd_signal(p->eventfd);
 	return 0;
 }
@@ -879,6 +883,27 @@ static int kvm_assign_ioeventfd_idx(struct kvm *kvm,
 		goto fail;
 	}
 
+	if (args->flags & KVM_IOEVENTFD_FLAG_POST_WRITE) {
+		/*
+		 * Although a NULL pointer it technically valid for userspace, it's
+		 * unlikely that any use case actually cares.
+		 */
+		if (!args->len || !args->post_addr ||
+			args->post_addr != untagged_addr(args->post_addr) ||
+			!access_ok((void __user *)(unsigned long)args->post_addr, args->len)) {
+			ret = -EINVAL;
+			goto free_fail;
+		}
+		p->post_addr = args->post_addr;
+	} else if (!args->post_addr) {
+		/*
+		 * Ensure that post_addr isn't set without POST_WRITE to avoid accidental
+		 * userspace errors.
+		 */
+		ret = -EINVAL;
+		goto free_fail;
+	}
+
 	INIT_LIST_HEAD(&p->list);
 	p->addr    = args->addr;
 	p->bus_idx = bus_idx;
@@ -915,8 +940,8 @@ static int kvm_assign_ioeventfd_idx(struct kvm *kvm,
 
 unlock_fail:
 	mutex_unlock(&kvm->slots_lock);
+free_fail:
 	kfree(p);
-
 fail:
 	eventfd_ctx_put(eventfd);
 
@@ -932,12 +957,14 @@ kvm_deassign_ioeventfd_idx(struct kvm *kvm, enum kvm_bus bus_idx,
 	struct kvm_io_bus	 *bus;
 	int                       ret = -ENOENT;
 	bool                      wildcard;
+	void              __user *post_addr;
 
 	eventfd = eventfd_ctx_fdget(args->fd);
 	if (IS_ERR(eventfd))
 		return PTR_ERR(eventfd);
 
 	wildcard = !(args->flags & KVM_IOEVENTFD_FLAG_DATAMATCH);
+	post_addr = args->post_addr;
 
 	mutex_lock(&kvm->slots_lock);
 
@@ -946,7 +973,8 @@ kvm_deassign_ioeventfd_idx(struct kvm *kvm, enum kvm_bus bus_idx,
 		    p->eventfd != eventfd  ||
 		    p->addr != args->addr  ||
 		    p->length != args->len ||
-		    p->wildcard != wildcard)
+		    p->wildcard != wildcard ||
+		    p->post_addr != post_addr)
 			continue;
 
 		if (!p->wildcard && p->datamatch != args->datamatch)
