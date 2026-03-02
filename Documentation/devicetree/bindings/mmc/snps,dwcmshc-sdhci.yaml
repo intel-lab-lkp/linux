@@ -23,6 +23,7 @@ properties:
           - const: sophgo,sg2044-dwcmshc
           - const: sophgo,sg2042-dwcmshc
       - enum:
+          - hpe,gsc-dwcmshc
           - rockchip,rk3568-dwcmshc
           - rockchip,rk3588-dwcmshc
           - snps,dwcmshc-sdhci
@@ -33,7 +34,8 @@ properties:
           - eswin,eic7700-dwcmshc
 
   reg:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
 
   interrupts:
     maxItems: 1
@@ -86,6 +88,35 @@ required:
 
 allOf:
   - $ref: mmc-controller.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: hpe,gsc-dwcmshc
+
+    then:
+      properties:
+        reg:
+          items:
+            - description: SDHCI base registers
+            - description: |
+                MSHCCS register. A 32-bit register that controls SCG sync
+                disable (bit 18) for HS200 RX delay-line phase selection
+                and reflects the current data transfer width (bits 17:16).
+        clocks:
+          maxItems: 1
+          items:
+            - description: core clock
+        clock-names:
+          maxItems: 1
+          items:
+            - const: core
+
+    else:
+      properties:
+        reg:
+          maxItems: 1
 
   - if:
       properties:
@@ -189,6 +220,16 @@ examples:
       bus-width = <8>;
       #address-cells = <1>;
       #size-cells = <0>;
+    };
+  - |
+    mmc@c0100000 {
+      compatible = "hpe,gsc-dwcmshc";
+      reg = <0xc0100000 0x1000>, <0xc0000110 0x4>;
+      interrupts = <0 17 0x4>;
+      clocks = <&emmcclk>;
+      clock-names = "core";
+      bus-width = <8>;
+      non-removable;
     };
 
 ...
