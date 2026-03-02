@@ -205,6 +205,11 @@ static void parse_gb_huge_pages(char *param, char *val)
 	char *p;
 
 	if (!strcmp(param, "hugepagesz")) {
+		if (!val) {
+			warn("Missing value in hugepagesz= boot parameter\n");
+			return;
+		}
+
 		p = val;
 		if (memparse(p, &p) != PUD_SIZE) {
 			gbpage_sz = false;
@@ -218,6 +223,11 @@ static void parse_gb_huge_pages(char *param, char *val)
 	}
 
 	if (!strcmp(param, "hugepages") && gbpage_sz) {
+		if (!val) {
+			warn("Missing value in hugepages= boot parameter\n");
+			return;
+		}
+
 		p = val;
 		max_gb_huge_pages = simple_strtoull(p, &p, 0);
 		return;
