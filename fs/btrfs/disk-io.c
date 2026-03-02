@@ -2057,6 +2057,18 @@ static int load_global_roots_objectid(struct btrfs_root *tree_root,
 	};
 	bool found = false;
 
+	/*
+	 * Without EXTENT_TREE_V2 we only have a single global extent/csum root.
+	 * btrfs_extent_root() and btrfs_csum_root() always look it up with offset
+	 * 0 (btrfs_global_root_id() returns 0). If we load only non-zero offsets
+	 * here, later users will see NULL and can crash (e.g. when backing up
+	 * super roots during a commit).
+	 */
+	bool need_offset0 = !btrfs_fs_incompat(fs_info, EXTENT_TREE_V2) &&
+		      (objectid == BTRFS_EXTENT_TREE_OBJECTID ||
+		       objectid == BTRFS_CSUM_TREE_OBJECTID);
+	bool found_offset0 = false;
+
 	/* If we have IGNOREDATACSUMS skip loading these roots. */
 	if (objectid == BTRFS_CSUM_TREE_OBJECTID &&
 	    btrfs_test_opt(fs_info, IGNOREDATACSUMS)) {
@@ -2082,6 +2094,8 @@ static int load_global_roots_objectid(struct btrfs_root *tree_root,
 		btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
 		if (key.objectid != objectid)
 			break;
+		if (need_offset0 && key.offset == 0)
+			found_offset0 = true;
 		btrfs_release_path(path);
 
 		/*
@@ -2106,6 +2120,13 @@ static int load_global_roots_objectid(struct btrfs_root *tree_root,
 		key.offset++;
 	}
 	btrfs_release_path(path);
+
+	if (need_offset0 && found && !found_offset0) {
+		btrfs_err(fs_info,
+			  "missing global %s root item with offset 0 (extent_tree_v2 not enabled)",
+			  name);
+		return -EUCLEAN;
+	}
 
 	if (objectid == BTRFS_EXTENT_TREE_OBJECTID)
 		fs_info->nr_global_roots = max_global_id + 1;
