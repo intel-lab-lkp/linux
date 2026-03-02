@@ -122,6 +122,42 @@ struct async_scan_data {
 	struct completion prev_finished;
 };
 
+static bool scsi_test_async_scan(struct Scsi_Host *shost)
+{
+	bool async;
+	unsigned long flags;
+
+	lockdep_assert_not_held(shost->host_lock);
+
+	spin_lock_irqsave(shost->host_lock, flags);
+	async = shost->async_scan;
+	spin_unlock_irqrestore(shost->host_lock, flags);
+
+	return async;
+}
+
+static void scsi_set_async_scan(struct Scsi_Host *shost)
+{
+	unsigned long flags;
+
+	lockdep_assert_not_held(shost->host_lock);
+
+	spin_lock_irqsave(shost->host_lock, flags);
+	shost->async_scan = 1;
+	spin_unlock_irqrestore(shost->host_lock, flags);
+}
+
+static void scsi_clear_async_scan(struct Scsi_Host *shost)
+{
+	unsigned long flags;
+
+	lockdep_assert_not_held(shost->host_lock);
+
+	spin_lock_irqsave(shost->host_lock, flags);
+	shost->async_scan = 0;
+	spin_unlock_irqrestore(shost->host_lock, flags);
+}
+
 /*
  * scsi_enable_async_suspend - Enable async suspend and resume
  */
@@ -1299,7 +1335,7 @@ static int scsi_probe_and_add_lun(struct scsi_target *starget,
 		goto out_free_result;
 	}
 
-	res = scsi_add_lun(sdev, result, &bflags, shost->async_scan);
+	res = scsi_add_lun(sdev, result, &bflags, scsi_test_async_scan(shost));
 	if (res == SCSI_SCAN_LUN_PRESENT) {
 		if (bflags & BLIST_KEY) {
 			sdev->lockable = 0;
@@ -1630,7 +1666,7 @@ struct scsi_device *__scsi_add_device(struct Scsi_Host *shost, uint channel,
 	scsi_autopm_get_target(starget);
 
 	mutex_lock(&shost->scan_mutex);
-	if (!shost->async_scan)
+	if (!scsi_test_async_scan(shost))
 		scsi_complete_async_scans();
 
 	if (scsi_host_scan_allowed(shost) && scsi_autopm_get_host(shost) == 0) {
@@ -1840,7 +1876,7 @@ void scsi_scan_target(struct device *parent, unsigned int channel,
 		return;
 
 	mutex_lock(&shost->scan_mutex);
-	if (!shost->async_scan)
+	if (!scsi_test_async_scan(shost))
 		scsi_complete_async_scans();
 
 	if (scsi_host_scan_allowed(shost) && scsi_autopm_get_host(shost) == 0) {
@@ -1897,7 +1933,7 @@ int scsi_scan_host_selected(struct Scsi_Host *shost, unsigned int channel,
 		return -EINVAL;
 
 	mutex_lock(&shost->scan_mutex);
-	if (!shost->async_scan)
+	if (!scsi_test_async_scan(shost))
 		scsi_complete_async_scans();
 
 	if (scsi_host_scan_allowed(shost) && scsi_autopm_get_host(shost) == 0) {
@@ -1944,13 +1980,12 @@ static void scsi_sysfs_add_devices(struct Scsi_Host *shost)
 static struct async_scan_data *scsi_prep_async_scan(struct Scsi_Host *shost)
 {
 	struct async_scan_data *data = NULL;
-	unsigned long flags;
 
 	if (strncmp(scsi_scan_type, "sync", 4) == 0)
 		return NULL;
 
 	mutex_lock(&shost->scan_mutex);
-	if (shost->async_scan) {
+	if (scsi_test_async_scan(shost)) {
 		shost_printk(KERN_DEBUG, shost, "%s called twice\n", __func__);
 		goto err;
 	}
@@ -1962,10 +1997,7 @@ static struct async_scan_data *scsi_prep_async_scan(struct Scsi_Host *shost)
 	if (!data->shost)
 		goto err;
 	init_completion(&data->prev_finished);
-
-	spin_lock_irqsave(shost->host_lock, flags);
-	shost->async_scan = 1;
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	scsi_set_async_scan(shost);
 	mutex_unlock(&shost->scan_mutex);
 
 	spin_lock(&async_scan_lock);
@@ -1993,7 +2025,6 @@ static struct async_scan_data *scsi_prep_async_scan(struct Scsi_Host *shost)
 static void scsi_finish_async_scan(struct async_scan_data *data)
 {
 	struct Scsi_Host *shost;
-	unsigned long flags;
 
 	if (!data)
 		return;
@@ -2002,7 +2033,7 @@ static void scsi_finish_async_scan(struct async_scan_data *data)
 
 	mutex_lock(&shost->scan_mutex);
 
-	if (!shost->async_scan) {
+	if (!scsi_test_async_scan(shost)) {
 		shost_printk(KERN_INFO, shost, "%s called twice\n", __func__);
 		dump_stack();
 		mutex_unlock(&shost->scan_mutex);
@@ -2012,10 +2043,7 @@ static void scsi_finish_async_scan(struct async_scan_data *data)
 	wait_for_completion(&data->prev_finished);
 
 	scsi_sysfs_add_devices(shost);
-
-	spin_lock_irqsave(shost->host_lock, flags);
-	shost->async_scan = 0;
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	scsi_clear_async_scan(shost);
 
 	mutex_unlock(&shost->scan_mutex);
 
