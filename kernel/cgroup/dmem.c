@@ -569,11 +569,10 @@ void dmem_cgroup_pool_state_put(struct dmem_cgroup_pool_state *pool)
 EXPORT_SYMBOL_GPL(dmem_cgroup_pool_state_put);
 
 static struct dmem_cgroup_pool_state *
-get_cg_pool_unlocked(struct dmemcg_state *cg, struct dmem_cgroup_region *region)
+find_cg_pool_unlocked(struct dmemcg_state *cg, struct dmem_cgroup_region *region)
 {
-	struct dmem_cgroup_pool_state *pool, *allocpool = NULL;
+	struct dmem_cgroup_pool_state *pool;
 
-	/* fastpath lookup? */
 	rcu_read_lock();
 	pool = find_cg_pool_locked(cg, region);
 	if (pool && !READ_ONCE(pool->inited))
@@ -581,6 +580,17 @@ get_cg_pool_unlocked(struct dmemcg_state *cg, struct dmem_cgroup_region *region)
 	if (pool && !dmemcg_pool_tryget(pool))
 		pool = NULL;
 	rcu_read_unlock();
+
+	return pool;
+}
+
+static struct dmem_cgroup_pool_state *
+get_cg_pool_unlocked(struct dmemcg_state *cg, struct dmem_cgroup_region *region)
+{
+	struct dmem_cgroup_pool_state *pool, *allocpool = NULL;
+
+	/* fastpath lookup? */
+	pool = find_cg_pool_unlocked(cg, region);
 
 	while (!pool) {
 		spin_lock(&dmemcg_lock);
@@ -755,6 +765,33 @@ bool dmem_cgroup_below_low(struct dmem_cgroup_pool_state *root,
 	return page_counter_read(&test->cnt) <= READ_ONCE(test->cnt.elow);
 }
 EXPORT_SYMBOL_GPL(dmem_cgroup_below_low);
+
+/**
+ * dmem_cgroup_common_ancestor(): Find the first common ancestor of two pools.
+ * @a: First pool to find the common ancestor of.
+ * @b: First pool to find the common ancestor of.
+ *
+ * Return: The first pool that is a parent of both @a and @b, or NULL if either @a or @b are NULL,
+ * or if such a pool does not exist.
+ */
+struct dmem_cgroup_pool_state *dmem_cgroup_common_ancestor(struct dmem_cgroup_pool_state *a,
+							   struct dmem_cgroup_pool_state *b)
+{
+	struct cgroup *ancestor_cgroup;
+	struct cgroup_subsys_state *ancestor_css;
+
+	if (!a || !b)
+		return NULL;
+
+	ancestor_cgroup = cgroup_common_ancestor(a->cs->css.cgroup, b->cs->css.cgroup);
+	if (!ancestor_cgroup)
+		return NULL;
+
+	ancestor_css = cgroup_e_css(ancestor_cgroup, &dmem_cgrp_subsys);
+
+	return find_cg_pool_unlocked(css_to_dmemcs(ancestor_css), a->region);
+}
+EXPORT_SYMBOL_GPL(dmem_cgroup_common_ancestor);
 
 static int dmem_cgroup_region_capacity_show(struct seq_file *sf, void *v)
 {
