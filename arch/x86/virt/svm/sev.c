@@ -500,6 +500,41 @@ static bool __init setup_rmptable(void)
 	}
 }
 
+static void __configure_rmpopt(void *val)
+{
+	u64 rmpopt_base = ((u64)val & PUD_MASK) | MSR_AMD64_RMPOPT_ENABLE;
+
+	wrmsrq(MSR_AMD64_RMPOPT_BASE, rmpopt_base);
+}
+
+static __init void configure_and_enable_rmpopt(void)
+{
+	phys_addr_t pa_start = ALIGN_DOWN(PFN_PHYS(min_low_pfn), PUD_SIZE);
+
+	if (!cpu_feature_enabled(X86_FEATURE_RMPOPT)) {
+		pr_debug("RMPOPT not supported on this platform\n");
+		return;
+	}
+
+	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP)) {
+		pr_debug("RMPOPT optimizations not enabled as SNP support is not enabled\n");
+		return;
+	}
+
+	if (!(rmp_cfg & MSR_AMD64_SEG_RMP_ENABLED)) {
+		pr_info("RMPOPT optimizations not enabled, segmented RMP required\n");
+		return;
+	}
+
+	/*
+	 * Per-CPU RMPOPT tables support at most 2 TB of addressable memory for RMP optimizations.
+	 *
+	 * Set per-core RMPOPT base to min_low_pfn to enable RMP optimization for
+	 * up to 2TB of system RAM on all CPUs.
+	 */
+	on_each_cpu_mask(cpu_online_mask, __configure_rmpopt, (void *)pa_start, true);
+}
+
 /*
  * Do the necessary preparations which are verified by the firmware as
  * described in the SNP_INIT_EX firmware command description in the SNP
@@ -554,6 +589,8 @@ int __init snp_rmptable_init(void)
 
 skip_enable:
 	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "x86/rmptable_init:online", __snp_enable, NULL);
+
+	configure_and_enable_rmpopt();
 
 	/*
 	 * Setting crash_kexec_post_notifiers to 'true' to ensure that SNP panic
