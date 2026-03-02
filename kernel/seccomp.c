@@ -33,6 +33,8 @@
 
 /* Not exposed in headers: strictly internal use only. */
 #define SECCOMP_MODE_DEAD	(SECCOMP_MODE_FILTER + 1)
+/* Run SECCOMP_MODE_STRICT checks, followed by SECCOMP_MODE_FILTER  */
+#define SECCOMP_MODE_COMBINED (SECCOMP_MODE_DEAD + 1)
 
 #ifdef CONFIG_SECCOMP_FILTER
 #include <linux/file.h>
@@ -432,14 +434,21 @@ static u32 seccomp_run_filters(const struct seccomp_data *sd,
 }
 #endif /* CONFIG_SECCOMP_FILTER */
 
-static inline bool seccomp_may_assign_mode(unsigned long seccomp_mode)
+/**
+ * seccomp_needs_combined: internal function for checking if requested mode
+ * needs to be upgraded to `SECCOMP_MODE_COMBINED`.
+ *
+ */
+static inline bool seccomp_needs_combined(unsigned long seccomp_mode)
 {
 	assert_spin_locked(&current->sighand->siglock);
 
-	if (current->seccomp.mode && current->seccomp.mode != seccomp_mode)
-		return false;
+	if ((current->seccomp.mode == SECCOMP_MODE_STRICT ||
+	     current->seccomp.mode == SECCOMP_MODE_FILTER) &&
+	    current->seccomp.mode != seccomp_mode)
+		return true;
 
-	return true;
+	return false;
 }
 
 void __weak arch_seccomp_spec_mitigate(struct task_struct *task) { }
@@ -1407,6 +1416,9 @@ int __secure_computing(void)
 		WARN_ON_ONCE(1);
 		do_exit(SIGKILL);
 		return -1;
+	case SECCOMP_MODE_COMBINED:
+		__secure_computing_strict(this_syscall);
+		return __seccomp_filter(this_syscall, false);
 	default:
 		BUG();
 	}
@@ -1421,30 +1433,23 @@ long prctl_get_seccomp(void)
 /**
  * seccomp_set_mode_strict: internal function for setting strict seccomp
  *
- * Once current->seccomp.mode is non-zero, it may not be changed.
+ * Once current->seccomp.mode is non-zero, it may only be changed to `COMBINED` or `DEAD`.
  *
- * Returns 0 on success or -EINVAL on failure.
  */
-static long seccomp_set_mode_strict(void)
+static void seccomp_set_mode_strict(void)
 {
-	const unsigned long seccomp_mode = SECCOMP_MODE_STRICT;
-	long ret = -EINVAL;
+	unsigned long seccomp_mode = SECCOMP_MODE_STRICT;
 
 	spin_lock_irq(&current->sighand->siglock);
 
-	if (!seccomp_may_assign_mode(seccomp_mode))
-		goto out;
+	if (seccomp_needs_combined(seccomp_mode))
+		seccomp_mode = SECCOMP_MODE_COMBINED;
 
 #ifdef TIF_NOTSC
 	disable_TSC();
 #endif
 	seccomp_assign_mode(current, seccomp_mode, 0);
-	ret = 0;
-
-out:
 	spin_unlock_irq(&current->sighand->siglock);
-
-	return ret;
 }
 
 #ifdef CONFIG_SECCOMP_FILTER
@@ -1956,7 +1961,7 @@ static bool has_duplicate_listener(struct seccomp_filter *new_child)
 static long seccomp_set_mode_filter(unsigned int flags,
 				    const char __user *filter)
 {
-	const unsigned long seccomp_mode = SECCOMP_MODE_FILTER;
+	long seccomp_mode = SECCOMP_MODE_FILTER;
 	struct seccomp_filter *prepared = NULL;
 	long ret = -EINVAL;
 	int listener = -1;
@@ -2016,8 +2021,8 @@ static long seccomp_set_mode_filter(unsigned int flags,
 
 	spin_lock_irq(&current->sighand->siglock);
 
-	if (!seccomp_may_assign_mode(seccomp_mode))
-		goto out;
+	if (seccomp_needs_combined(seccomp_mode))
+		seccomp_mode = SECCOMP_MODE_COMBINED;
 
 	if (has_duplicate_listener(prepared)) {
 		ret = -EBUSY;
@@ -2105,7 +2110,8 @@ static long do_seccomp(unsigned int op, unsigned int flags,
 	case SECCOMP_SET_MODE_STRICT:
 		if (flags != 0 || uargs != NULL)
 			return -EINVAL;
-		return seccomp_set_mode_strict();
+		seccomp_set_mode_strict();
+		return 0;
 	case SECCOMP_SET_MODE_FILTER:
 		return seccomp_set_mode_filter(flags, uargs);
 	case SECCOMP_GET_ACTION_AVAIL:
