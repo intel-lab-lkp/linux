@@ -2306,6 +2306,7 @@ static void set_default_power_save(struct azx *chip)
 		dev_info(chip->card->dev, "Forcing power_save to 0 via option\n");
 		val = 0;
 	}
+	power_save = val;
 	snd_hda_set_power_save(&chip->bus, val * 1000);
 }
 
