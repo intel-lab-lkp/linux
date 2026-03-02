@@ -2856,6 +2856,7 @@ static int nh_create_ipv6(struct net *net,  struct nexthop *nh,
 	struct fib6_config fib6_cfg = {
 		.fc_table = l3mdev_fib_table(cfg->dev),
 		.fc_ifindex = cfg->nh_ifindex,
+		.fc_is_nh = true,
 		.fc_gateway = cfg->gw.ipv6,
 		.fc_flags = cfg->nh_flags,
 		.fc_nlinfo = cfg->nlinfo,

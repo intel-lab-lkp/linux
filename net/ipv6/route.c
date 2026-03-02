@@ -3628,7 +3628,13 @@ int fib6_nh_init(struct net *net, struct fib6_nh *fib6_nh,
 	 * they would result in kernel looping; promote them to reject routes
 	 */
 	addr_type = ipv6_addr_type(&cfg->fc_dst);
-	if (fib6_is_reject(cfg->fc_flags, dev, addr_type)) {
+	/*
+	 * Nexthop objects have no destination prefix, so fib6_is_reject()
+	 * will misclassify loopback nexthops as reject routes, causing
+	 * fib_nh_common_init() to be skipped along with its allocation
+	 * of nhc_pcpu_rth_output, which IPv4 routes require.
+	 */
+	if (!cfg->fc_is_nh && fib6_is_reject(cfg->fc_flags, dev, addr_type)) {
 		/* hold loopback dev/idev if we haven't done so. */
 		if (dev != net->loopback_dev) {
 			if (dev) {

@@ -62,6 +62,7 @@ struct fib6_config {
 	struct nlattr	*fc_encap;
 	u16		fc_encap_type;
 	bool		fc_is_fdb;
+	bool		fc_is_nh;
 };
 
 struct fib6_node {
