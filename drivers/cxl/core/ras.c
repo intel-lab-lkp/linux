@@ -119,16 +119,6 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
-int cxl_ras_init(void)
-{
-	return cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
-}
-
-void cxl_ras_exit(void)
-{
-	cxl_cper_unregister_prot_err_work(&cxl_cper_prot_err_work);
-}
-
 static void cxl_dport_map_ras(struct cxl_dport *dport)
 {
 	struct cxl_register_map *map = &dport->reg_map;
@@ -184,6 +174,117 @@ void devm_cxl_port_ras_setup(struct cxl_port *port)
 		dev_dbg(&port->dev, "Failed to map RAS capability\n");
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
+
+/*
+ * get_cxl_port - Return the parent CXL Port of a PCI device
+ * @pdev: PCI device whose parent CXL Port is being queried
+ *
+ * Looks up and returns the parent CXL Port associated with @pdev. On
+ * success, the returned port has its reference count incremented and must
+ * be released by the caller. Returns NULL if no associated CXL port is
+ * found.
+ *
+ * Return: Pointer to the parent &struct cxl_port or NULL on failure
+ */
+static struct cxl_port *get_cxl_port(struct pci_dev *pdev)
+{
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM: {
+		struct cxl_dport *dport;
+		struct cxl_port *port = find_cxl_port(&pdev->dev, &dport);
+
+		if (!port) {
+			pci_err(pdev, "Failed to find the CXL device");
+			return NULL;
+		}
+		return port;
+	}
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_RC_END: {
+		struct cxl_port *port = find_cxl_port_by_uport(&pdev->dev);
+
+		if (!port) {
+			pci_err(pdev, "Failed to find the CXL device");
+			return NULL;
+		}
+		return port;
+	}
+	}
+
+	pr_err_ratelimited("%s: Error - Unsupported device type (%#x)",
+			   pci_name(pdev), pci_pcie_type(pdev));
+	return NULL;
+}
+
+static u64 cxl_serial_number(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct cxl_port *port __free(put_cxl_port) = get_cxl_port(pdev);
+	struct device *port_dev = port ? port->uport_dev : NULL;
+	struct cxl_memdev *cxlmd;
+
+	if (!port_dev || !is_cxl_memdev(dev))
+		return 0;
+
+	cxlmd = to_cxl_memdev(port_dev);
+	return cxlmd->cxlds->serial;
+}
+
+static void __iomem *cxl_get_ras_base(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM: {
+		struct cxl_dport *dport = NULL;
+		struct cxl_port *port __free(put_cxl_port) = find_cxl_port(&pdev->dev, &dport);
+
+		if (!dport) {
+			pci_err(pdev, "Failed to find the CXL device");
+			return NULL;
+		}
+		return dport->regs.ras;
+	}
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_RC_END: {
+		struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_uport(&pdev->dev);
+
+		if (!port) {
+			pci_err(pdev, "Failed to find the CXL device");
+			return NULL;
+		}
+		return port->regs.ras;
+	}
+	}
+	dev_warn_once(dev, "Error: Unsupported device type (%#x)", pci_pcie_type(pdev));
+	return NULL;
+}
+
+static void cxl_do_recovery(struct pci_dev *pdev)
+{
+	struct cxl_port *port __free(put_cxl_port) = get_cxl_port(pdev);
+	struct device *dev = &pdev->dev;
+	pci_ers_result_t status;
+
+	if (!port) {
+		pci_err(pdev, "Failed to find the CXL device\n");
+		return;
+	}
+
+	status =  cxl_handle_ras(dev, cxl_serial_number(dev), cxl_get_ras_base(dev));
+	if (status == PCI_ERS_RESULT_PANIC)
+		panic("CXL cachemem error.");
+
+	if (pcie_aer_is_native(pdev)) {
+		pcie_clear_device_status(pdev);
+		pci_aer_clear_nonfatal_status(pdev);
+		pci_aer_clear_fatal_status(pdev);
+	}
+}
 
 void cxl_handle_cor_ras(struct device *dev, u64 serial, void __iomem *ras_base)
 {
@@ -327,3 +428,71 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	return PCI_ERS_RESULT_NEED_RESET;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
+
+static void cxl_handle_proto_error(struct pci_dev *pdev, int severity)
+{
+	if (severity == AER_CORRECTABLE) {
+		struct device *dev = &pdev->dev;
+
+		if (!pcie_aer_is_native(pdev))
+			return;
+
+		if (pdev->aer_cap)
+			pci_clear_and_set_config_dword(pdev,
+						       pdev->aer_cap + PCI_ERR_COR_STATUS,
+						       0, PCI_ERR_COR_INTERNAL);
+
+		cxl_handle_cor_ras(dev, cxl_serial_number(dev),
+				   cxl_get_ras_base(dev));
+		pcie_clear_device_status(pdev);
+	} else {
+		cxl_do_recovery(pdev);
+	}
+}
+
+static void cxl_proto_err_work_fn(struct work_struct *work)
+{
+	struct cxl_proto_err_work_data wd;
+
+	/*
+	 * Dequeue work forwarded from the AER driver
+	 * See cxl_forward_error() for matching pci_dev_get()
+	 */
+	while (cxl_proto_err_kfifo_get(&wd)) {
+		struct pci_dev *pdev __free(pci_dev_put) = wd.pdev;
+		struct cxl_port *port __free(put_cxl_port) = get_cxl_port(pdev);
+
+		if (!port) {
+			pr_err_ratelimited("%s: Failed to find parent port device in CXL topology\n",
+					   pci_name(pdev));
+			continue;
+		}
+
+		guard(device)(&port->dev);
+		if (!port->dev.driver) {
+			pr_err_ratelimited("%s: Port device is unbound, abort error handling\n",
+					    dev_name(&port->dev));
+			continue;
+		}
+
+		cxl_handle_proto_error(pdev, wd.severity);
+	}
+}
+
+static DECLARE_WORK(cxl_proto_err_work, cxl_proto_err_work_fn);
+
+int cxl_ras_init(void)
+{
+	if (cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work))
+		pr_err("Failed to initialize CXL RAS CPER\n");
+
+	cxl_register_proto_err_work(&cxl_proto_err_work);
+
+	return 0;
+}
+
+void cxl_ras_exit(void)
+{
+	cxl_cper_unregister_prot_err_work(&cxl_cper_prot_err_work);
+	cxl_unregister_proto_err_work();
+}

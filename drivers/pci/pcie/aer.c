@@ -295,6 +295,7 @@ void pci_aer_clear_fatal_status(struct pci_dev *dev)
 	if (status)
 		pci_write_config_dword(dev, aer + PCI_ERR_UNCOR_STATUS, status);
 }
+EXPORT_SYMBOL_NS_GPL(pci_aer_clear_fatal_status, "CXL");
 
 /**
  * pci_aer_raw_clear_status - Clear AER error registers.
