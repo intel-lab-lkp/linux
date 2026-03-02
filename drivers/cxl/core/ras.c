@@ -218,7 +218,7 @@ static struct cxl_port *get_cxl_port(struct pci_dev *pdev)
 	return NULL;
 }
 
-static u64 cxl_serial_number(struct device *dev)
+u64 cxl_serial_number(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct cxl_port *port __free(put_cxl_port) = get_cxl_port(pdev);
@@ -371,7 +371,7 @@ void cxl_cor_error_detected(struct pci_dev *pdev)
 		}
 
 		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
+			cxl_handle_rdport_errors(pdev);
 
 		cxl_handle_cor_ras(&cxlds->cxlmd->dev, cxlds->serial,
 				   cxlmd->endpoint->regs.ras);
@@ -396,7 +396,7 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 		}
 
 		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
+			cxl_handle_rdport_errors(pdev);
 		/*
 		 * A frozen channel indicates an impending reset which is fatal to
 		 * CXL.mem operation, and will likely crash the system. On the off
@@ -431,6 +431,15 @@ EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
 
 static void cxl_handle_proto_error(struct pci_dev *pdev, int severity)
 {
+	/*
+	 * CXL RCD's AER error interrupt is used for reporting RCD and RCH
+	 * Downstream Port protocol errors. RCH protocol errors are handled
+	 * using a unique procedure separate from from CXL Port devices.
+	 * See CXL spec r4.0, 12.2 CXL Error Handling
+	 */
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END)
+		cxl_handle_rdport_errors(pdev);
+
 	if (severity == AER_CORRECTABLE) {
 		struct device *dev = &pdev->dev;
 
