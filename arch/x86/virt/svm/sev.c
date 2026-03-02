@@ -544,6 +544,13 @@ void snp_prepare_for_snp_init(void)
 }
 EXPORT_SYMBOL_FOR_MODULES(snp_prepare_for_snp_init, "ccp");
 
+void snp_x86_shutdown(void)
+{
+	snp_clear_rmp();
+	on_each_cpu(mfd_reconfigure, 0, 1);
+}
+EXPORT_SYMBOL_FOR_MODULES(snp_x86_shutdown, "ccp");
+
 /*
  * Do the necessary preparations which are verified by the firmware as
  * described in the SNP_INIT_EX firmware command description in the SNP
