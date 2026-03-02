@@ -130,7 +130,7 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
 
 	is_c45 = fwnode_device_is_compatible(child, "ethernet-phy-ieee802.3-c45");
 	if (is_c45 || fwnode_get_phy_id(child, &phy_id))
-		phy = get_phy_device(bus, addr, is_c45);
+		phy = fwnode_get_phy_device(bus, addr, child, is_c45);
 	else
 		phy = phy_device_create(bus, addr, phy_id, 0, NULL);
 	if (IS_ERR(phy)) {

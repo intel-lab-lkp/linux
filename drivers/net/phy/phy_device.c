@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
+#include <linux/gpio/consumer.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -34,6 +35,7 @@
 #include <linux/pse-pd/pse.h>
 #include <linux/property.h>
 #include <linux/ptp_clock_kernel.h>
+#include <linux/reset.h>
 #include <linux/rtnetlink.h>
 #include <linux/sfp.h>
 #include <linux/skbuff.h>
@@ -1050,13 +1052,16 @@ int fwnode_get_phy_id(struct fwnode_handle *fwnode, u32 *phy_id)
 EXPORT_SYMBOL(fwnode_get_phy_id);
 
 /**
- * get_phy_device - reads the specified PHY device and returns its @phy_device
- *		    struct
+ * fwnode_get_phy_device - reads the specified PHY device and returns its
+ *			   @phy_device struct
  * @bus: the target MII bus
  * @addr: PHY address on the MII bus
+ * @fwnode: PHY fwnode handle
  * @is_c45: If true the PHY uses the 802.3 clause 45 protocol
  *
  * Probe for a PHY at @addr on @bus.
+ *
+ * Transparently handle any reset GPIOs.
  *
  * When probing for a clause 22 PHY, then read the ID registers. If we find
  * a valid ID, allocate and return a &struct phy_device.
@@ -1068,20 +1073,54 @@ EXPORT_SYMBOL(fwnode_get_phy_id);
  * Returns an allocated &struct phy_device on success, %-ENODEV if there is
  * no PHY present, or %-EIO on bus access error.
  */
-struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
+struct phy_device *fwnode_get_phy_device(struct mii_bus *bus, int addr,
+					 struct fwnode_handle *fwnode, bool is_c45)
 {
 	struct phy_c45_device_ids c45_ids;
+	struct gpio_desc *gpiod = NULL;
+	struct reset_control *rstc = NULL;
 	u32 phy_id = 0;
+	u32 delay = 0;
 	int r;
 
 	c45_ids.devices_in_package = 0;
 	c45_ids.mmds_present = 0;
 	memset(c45_ids.device_ids, 0xff, sizeof(c45_ids.device_ids));
 
+	if (fwnode) {
+		/* Deassert the optional reset signal */
+		gpiod = fwnode_gpiod_get_index(fwnode, "reset", 0,
+					       GPIOD_OUT_LOW, "PHY reset");
+		if (IS_ERR(gpiod)) {
+			if (PTR_ERR(gpiod) == -ENOENT)
+				gpiod = NULL;
+			else if (PTR_ERR(gpiod) == -ENOSYS)
+				gpiod = NULL;
+			else
+				return ERR_CAST(gpiod);
+		}
+
+		if (is_of_node(fwnode)) {
+			rstc = of_reset_control_get_optional_exclusive(to_of_node(fwnode), "phy");
+			if (IS_ERR(rstc))
+				return ERR_CAST(rstc);
+			reset_control_deassert(rstc);
+		}
+
+		/* Wait for PHY to come out of reset if needed */
+		if (!fwnode_property_read_u32(fwnode, "reset-deassert-us", &delay))
+			fsleep(delay);
+	}
+
 	if (is_c45)
 		r = get_phy_c45_ids(bus, addr, &c45_ids);
 	else
 		r = get_phy_c22_id(bus, addr, &phy_id);
+
+	if (!IS_ERR_OR_NULL(rstc))
+		reset_control_put(rstc);
+	if (!IS_ERR_OR_NULL(gpiod))
+		gpiod_put(gpiod);
 
 	if (r)
 		return ERR_PTR(r);
@@ -1100,7 +1139,7 @@ struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 
 	return phy_device_create(bus, addr, phy_id, is_c45, &c45_ids);
 }
-EXPORT_SYMBOL(get_phy_device);
+EXPORT_SYMBOL(fwnode_get_phy_device);
 
 /**
  * phy_device_register - Register the phy device on the MDIO bus
