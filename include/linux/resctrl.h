@@ -54,10 +54,10 @@ enum resctrl_res_level {
 	RDT_RESOURCE_MBA,
 	RDT_RESOURCE_SMBA,
 	RDT_RESOURCE_PERF_PKG,
-
-	/* Must be the last */
-	RDT_NUM_RESOURCES,
+	/* Additions to enum need to update RDT_NUM_RESOURCES. */
 };
+
+#define RDT_NUM_RESOURCES (RDT_RESOURCE_PERF_PKG + 1)
 
 /**
  * enum resctrl_conf_type - The type of configuration.
@@ -319,7 +319,7 @@ struct resctrl_mon {
  * @cdp_capable:	Is the CDP feature available on this resource
  */
 struct rdt_resource {
-	int			rid;
+	enum resctrl_res_level	rid;
 	bool			alloc_capable;
 	bool			mon_capable;
 	enum resctrl_scope	ctrl_scope;
