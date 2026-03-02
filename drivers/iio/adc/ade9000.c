@@ -804,6 +804,8 @@ static int ade9000_iio_push_buffer(struct iio_dev *indio_dev)
 
 	guard(mutex)(&st->lock);
 
+	st->xfer[1].len = st->wfb_nr_samples * 4;
+
 	ret = spi_sync(st->spi, &st->spi_msg);
 	if (ret) {
 		dev_err_ratelimited(&st->spi->dev,
