@@ -14079,6 +14079,13 @@ void kvm_arch_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end)
 	kvm_x86_call(gmem_invalidate)(start, end);
 }
 #endif
+
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CLEANUP
+void kvm_arch_gmem_cleanup(void)
+{
+	kvm_x86_call(gmem_cleanup)();
+}
+#endif
 #endif
 
 int kvm_spec_ctrl_test_value(u64 value)

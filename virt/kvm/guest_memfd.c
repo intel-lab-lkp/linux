@@ -955,6 +955,14 @@ static void kvm_gmem_destroy_inode(struct inode *inode)
 
 static void kvm_gmem_free_inode(struct inode *inode)
 {
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CLEANUP
+	/*
+	 * Finalize cleanup for the inode once the last guest_memfd
+	 * reference is released. This usually occurs after guest
+	 * termination.
+	 */
+	kvm_arch_gmem_cleanup();
+#endif
 	kmem_cache_free(kvm_gmem_inode_cachep, GMEM_I(inode));
 }
 
