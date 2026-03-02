@@ -70,6 +70,15 @@ static bool kprobes_all_disarmed;
 static DEFINE_MUTEX(kprobe_mutex);
 static DEFINE_PER_CPU(struct kprobe *, kprobe_instance);
 
+/* Per-CPU re-entrancy state for kprobe_busy_begin/end.
+ * kprobe_busy_begin() may be called while a kprobe handler
+ * is active - e.g. kprobe_flush_task() via softirq during
+ * kretprobe entry_handler on arm64 where IRQs are re-enabled.
+ */
+static DEFINE_PER_CPU(int, kprobe_busy_depth);
+static DEFINE_PER_CPU(struct kprobe *, kprobe_busy_saved_current);
+static DEFINE_PER_CPU(unsigned long, kprobe_busy_saved_status);
+
 kprobe_opcode_t * __weak kprobe_lookup_name(const char *name,
 					unsigned int __unused)
 {
@@ -1307,14 +1316,31 @@ void kprobe_busy_begin(void)
 	struct kprobe_ctlblk *kcb;
 
 	preempt_disable();
-	__this_cpu_write(current_kprobe, &kprobe_busy);
-	kcb = get_kprobe_ctlblk();
-	kcb->kprobe_status = KPROBE_HIT_ACTIVE;
+	if (__this_cpu_read(kprobe_busy_depth) == 0) {
+		kcb = get_kprobe_ctlblk();
+		__this_cpu_write(kprobe_busy_saved_current,
+				 __this_cpu_read(current_kprobe));
+		__this_cpu_write(kprobe_busy_saved_status,
+				 kcb->kprobe_status);
+		__this_cpu_write(current_kprobe, &kprobe_busy);
+		kcb->kprobe_status = KPROBE_HIT_ACTIVE;
+	}
+	__this_cpu_inc(kprobe_busy_depth);
 }
 
 void kprobe_busy_end(void)
 {
-	__this_cpu_write(current_kprobe, NULL);
+	struct kprobe_ctlblk *kcb;
+
+	__this_cpu_dec(kprobe_busy_depth);
+
+	if (__this_cpu_read(kprobe_busy_depth) == 0) {
+		kcb = get_kprobe_ctlblk();
+		__this_cpu_write(current_kprobe,
+				 __this_cpu_read(kprobe_busy_saved_current));
+		kcb->kprobe_status =
+				__this_cpu_read(kprobe_busy_saved_status);
+	}
 	preempt_enable();
 }
 
