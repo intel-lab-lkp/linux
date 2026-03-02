@@ -276,6 +276,9 @@ static int ads1119_single_conversion(struct ads1119_state *st,
 	if (ret)
 		goto pdown;
 
+	if (st->client->irq)
+		reinit_completion(&st->completion);
+
 	ret = ads1119_configure_channel(st, mux, gain, datarate);
 	if (ret)
 		goto pdown;
