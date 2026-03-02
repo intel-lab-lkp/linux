@@ -135,3 +135,6 @@ static struct platform_driver syscon_led_driver = {
 	},
 };
 builtin_platform_driver(syscon_led_driver);
+
+MODULE_DESCRIPTION("SYSCON LED driver");
+MODULE_LICENSE("GPL");
