@@ -111,6 +111,7 @@ Hardware Monitoring Kernel Drivers
    kbatt
    kfan
    lan966x
+   lattepanda-sigma-ec
    lineage-pem
    lm25066
    lm63
