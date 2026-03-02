@@ -41,7 +41,7 @@ do {							\
 } while (0)
 
 #ifdef CONFIG_64BIT
-extern u64 new_vmalloc[NR_CPUS / sizeof(u64) + 1];
+extern u64 new_valid_map_cpus[NR_CPUS / sizeof(u64) + 1];
 extern char _end[];
 #define flush_cache_vmap flush_cache_vmap
 static inline void flush_cache_vmap(unsigned long start, unsigned long end)
@@ -54,8 +54,8 @@ static inline void flush_cache_vmap(unsigned long start, unsigned long end)
 		 * the only place this can happen is in handle_exception() where
 		 * an sfence.vma is emitted.
 		 */
-		for (i = 0; i < ARRAY_SIZE(new_vmalloc); ++i)
-			new_vmalloc[i] = -1ULL;
+		for (i = 0; i < ARRAY_SIZE(new_valid_map_cpus); ++i)
+			new_valid_map_cpus[i] = -1ULL;
 	}
 }
 #define flush_cache_vmap_early(start, end)	local_flush_tlb_kernel_range(start, end)
