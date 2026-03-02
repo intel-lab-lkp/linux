@@ -4748,6 +4748,9 @@ intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector
 	 */
 	intel_dp_init_source_oui(intel_dp);
 
+	/* Read ALPM DPCD caps before reading the PSR CAPS */
+	intel_alpm_init(intel_dp);
+
 	/*
 	 * This has to be called after intel_dp->edp_dpcd is filled, PSR checks
 	 * for SET_POWER_CAPABLE bit in intel_dp->edp_dpcd[1]
@@ -6913,8 +6916,6 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 	 * The DPCD probe below will make sure VDD is on.
 	 */
 	intel_hpd_enable_detection(encoder);
-
-	intel_alpm_init(intel_dp);
 
 	/* Cache DPCD and EDID for edp. */
 	has_dpcd = intel_edp_init_dpcd(intel_dp, connector);
