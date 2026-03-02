@@ -413,17 +413,19 @@ static bool scmi_dev_used_by_cpus(struct device *scmi_dev)
 		cpu_np = dev_of_node(cpu_dev);
 
 		np = of_parse_phandle(cpu_np, "clocks", 0);
-		of_node_put(np);
-
-		if (np == scmi_np)
+		if (np == scmi_np) {
+			of_node_put(np);
 			return true;
+		}
+		of_node_put(np);
 
 		idx = of_property_match_string(cpu_np, "power-domain-names", "perf");
 		np = of_parse_phandle(cpu_np, "power-domains", idx);
-		of_node_put(np);
-
-		if (np == scmi_np)
+		if (np == scmi_np) {
+			of_node_put(np);
 			return true;
+		}
+		of_node_put(np);
 	}
 
 	/*
