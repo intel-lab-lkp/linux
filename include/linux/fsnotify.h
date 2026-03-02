@@ -318,9 +318,15 @@ static inline void fsnotify_inoderemove(struct inode *inode)
  */
 static inline void fsnotify_create(struct inode *dir, struct dentry *dentry)
 {
+	struct inode *inode = d_inode(dentry);
+	__u32 mask = FS_CREATE;
+
+	if (inode && S_ISDIR(inode->i_mode))
+		mask |= FS_ISDIR;
+
 	audit_inode_child(dir, dentry, AUDIT_TYPE_CHILD_CREATE);
 
-	fsnotify_dirent(dir, dentry, FS_CREATE);
+	fsnotify_dirent(dir, dentry, mask);
 }
 
 /*
