@@ -1137,6 +1137,7 @@ static int vc3_register_clk(struct vc3_device_data *vc3,
 	struct device *dev = &vc3->client->dev;
 	struct clk_parent_data *pd;
 	struct clk_init_data init;
+	const char *name;
 	int ret;
 
 	if (!hw_data->data)
@@ -1147,7 +1148,15 @@ static int vc3_register_clk(struct vc3_device_data *vc3,
 	if (!pd)
 		return -ENOMEM;
 
+	name = kasprintf(GFP_KERNEL, "%s.%s", dev_name(dev),
+			 template->hw.init->name);
+	if (!name) {
+		kfree(pd);
+		return -ENOMEM;
+	}
+
 	init = *template->hw.init;
+	init.name = name;
 	init.parent_data = pd;
 	init.num_parents = hw_data->parent_info->num_parents;
 
@@ -1157,6 +1166,7 @@ static int vc3_register_clk(struct vc3_device_data *vc3,
 	ret = devm_clk_hw_register(dev, &hw_data->hw);
 
 	kfree(pd);
+	kfree(name);
 
 	return ret;
 }
@@ -1321,12 +1331,18 @@ static int vc3_probe(struct i2c_client *client)
 			return dev_err_probe(dev, -EINVAL, "invalid clk output %d\n", i);
 		}
 
+		name = kasprintf(GFP_KERNEL, "%s.%s", dev_name(dev), name);
+		if (!name)
+			return -ENOMEM;
+
 		if (i == VC3_REF)
 			vc3->clk_out[i] = devm_clk_hw_register_fixed_factor_index(dev,
 				name, 0, CLK_SET_RATE_PARENT, 1, 1);
 		else
 			vc3->clk_out[i] = devm_clk_hw_register_fixed_factor_parent_hw(dev,
 				name, &vc3->clk_mux[i - 1].hw, CLK_SET_RATE_PARENT, 1, 1);
+
+		kfree(name);
 
 		if (IS_ERR(vc3->clk_out[i]))
 			return PTR_ERR(vc3->clk_out[i]);
