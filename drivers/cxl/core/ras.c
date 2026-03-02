@@ -291,15 +291,22 @@ void cxl_handle_cor_ras(struct device *dev, u64 serial, void __iomem *ras_base)
 	void __iomem *addr;
 	u32 status;
 
-	if (!ras_base)
+	if (!ras_base) {
+		pr_err_ratelimited("%s: CXL RAS registers aren't mapped\n",
+				   dev_name(dev));
 		return;
+	}
 
 	addr = ras_base + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
-	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
-		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
+	if (!(status & CXL_RAS_CORRECTABLE_STATUS_MASK))
+		return;
+
+	writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
+	if (is_cxl_memdev(dev))
 		trace_cxl_aer_correctable_error(dev, status, serial);
-	}
+	else
+		trace_cxl_port_aer_correctable_error(dev, status);
 }
 
 /* CXL spec rev3.0 8.2.4.16.1 */
@@ -321,22 +328,26 @@ static void header_log_copy(void __iomem *ras_base, u32 *log)
 
 /*
  * Log the state of the RAS status registers and prepare them to log the
- * next error status. Return 1 if reset needed.
+ * next error status. Return PCI_ERS_RESULT_PANIC if reset needed.
  */
-bool cxl_handle_ras(struct device *dev, u64 serial, void __iomem *ras_base)
+pci_ers_result_t
+cxl_handle_ras(struct device *dev, u64 serial, void __iomem *ras_base)
 {
 	u32 hl[CXL_HEADERLOG_SIZE_U32];
 	void __iomem *addr;
 	u32 status;
 	u32 fe;
 
-	if (!ras_base)
-		return false;
+	if (!ras_base) {
+		pr_err_ratelimited("%s: CXL RAS registers aren't mapped\n",
+				   dev_name(dev));
+		return PCI_ERS_RESULT_NONE;
+	}
 
 	addr = ras_base + CXL_RAS_UNCORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
 	if (!(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK))
-		return false;
+		return PCI_ERS_RESULT_NONE;
 
 	/* If multiple errors, log header points to first error from ctrl reg */
 	if (hweight32(status) > 1) {
@@ -350,10 +361,13 @@ bool cxl_handle_ras(struct device *dev, u64 serial, void __iomem *ras_base)
 	}
 
 	header_log_copy(ras_base, hl);
-	trace_cxl_aer_uncorrectable_error(dev, status, fe, hl, serial);
+	if (is_cxl_memdev(dev))
+		trace_cxl_aer_uncorrectable_error(dev, status, fe, hl, serial);
+	else
+		trace_cxl_port_aer_uncorrectable_error(dev, status, fe, hl);
 	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
 
-	return true;
+	return PCI_ERS_RESULT_PANIC;
 }
 
 void cxl_cor_error_detected(struct pci_dev *pdev)
