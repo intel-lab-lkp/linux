@@ -1989,6 +1989,37 @@ const char *x86_cap_name(unsigned int bit, char *buf)
 }
 
 /*
+ * As a sanity check compare the final x86_capability bitmask with the initial
+ * predefined required feature bits. In case of a mismatch emit a warning with
+ * the faulty bitmask value.
+ */
+static void verify_required_features(const struct cpuinfo_x86 *c)
+{
+	u32 missing[NCAPINTS] = REQUIRED_MASK_INITIALIZER;
+	char cap_buf[16];
+	u32 error = 0;
+	unsigned int i;
+
+	for (i = 0; i < NCAPINTS; i++) {
+		missing[i] &= ~c->x86_capability[i];
+		error |= missing[i];
+	}
+
+	if (!error)
+		return;		/* All good */
+
+	/*
+	 * At least one required feature is missing. Print a warning,
+	 * and taint the kernel.
+	 */
+	pr_warn("cpu %d: missing required feature(s):", c->cpu_index);
+	for_each_set_bit(i, (void *)missing, NCAPINTS << 5)
+		pr_cont(" %s", x86_cap_name(i, cap_buf));
+	pr_cont("\n");
+	add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_STILL_OK);
+}
+
+/*
  * This does the hard work of actually picking apart the CPU stuff...
  */
 static void identify_cpu(struct cpuinfo_x86 *c)
@@ -2117,6 +2148,8 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	mcheck_cpu_init(c);
 
 	numa_add_cpu(smp_processor_id());
+
+	verify_required_features(c);
 }
 
 /*
