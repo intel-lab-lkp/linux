@@ -6914,8 +6914,6 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 	 */
 	intel_hpd_enable_detection(encoder);
 
-	intel_alpm_init(intel_dp);
-
 	/* Cache DPCD and EDID for edp. */
 	has_dpcd = intel_edp_init_dpcd(intel_dp, connector);
 
@@ -6926,6 +6924,8 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 			 encoder->base.base.id, encoder->base.name);
 		goto out_vdd_off;
 	}
+
+	intel_alpm_init(intel_dp);
 
 	/*
 	 * VBT and straps are liars. Also check HPD as that seems
