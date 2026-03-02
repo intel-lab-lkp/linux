@@ -68,12 +68,19 @@
 #define  SDHC_PHY_DRIVE_SEL		GENMASK(2, 0)
 #define  SDHC_RX_BIAS_CTRL		BIT(5)
 
+#define  MMC1_IO_V18EN			BIT(2)
+#define  AKEY_ASFAR			0xBABA
+#define  AKEY_ASSAR			0xEB10
+
 struct spacemit_sdhci_host {
 	struct clk *clk_core;
 	struct clk *clk_io;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pinctrl_default;
 	struct pinctrl_state *pinctrl_uhs;
+	u32 aib_mmc1_io_reg;
+	u32 apbc_asfar_reg;
+	u32 apbc_assar_reg;
 };
 
 /* All helper functions will update clr/set while preserve rest bits */
@@ -220,6 +227,47 @@ static void spacemit_sdhci_pre_hs400_to_hs200(struct mmc_host *mmc)
 			       SPACEMIT_SDHC_PHY_CTRL_REG);
 }
 
+static void spacemit_sdhci_set_aib_mmc1_io(struct sdhci_host *host, int signal_voltage)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct spacemit_sdhci_host *sdhst = sdhci_pltfm_priv(pltfm_host);
+	void __iomem *aib_reg, *asfar_reg, *assar_reg;
+	u32 reg_value;
+
+	if (!sdhst->aib_mmc1_io_reg || !sdhst->apbc_asfar_reg || !sdhst->apbc_assar_reg)
+		return;
+
+	asfar_reg = ioremap(sdhst->apbc_asfar_reg, 4);
+	assar_reg = ioremap(sdhst->apbc_assar_reg, 4);
+	aib_reg = ioremap(sdhst->aib_mmc1_io_reg, 4);
+
+	if (!asfar_reg || !assar_reg || !aib_reg) {
+		dev_err(mmc_dev(host->mmc), "Failed to map AIB registers\n");
+		goto cleanup;
+	}
+
+	writel(AKEY_ASFAR, asfar_reg);
+	writel(AKEY_ASSAR, assar_reg);
+	reg_value = readl(aib_reg);
+
+	if (signal_voltage == MMC_SIGNAL_VOLTAGE_180)
+		reg_value |= MMC1_IO_V18EN;
+	else
+		reg_value &= ~MMC1_IO_V18EN;
+
+	writel(AKEY_ASFAR, asfar_reg);
+	writel(AKEY_ASSAR, assar_reg);
+	writel(reg_value, aib_reg);
+
+cleanup:
+	if (aib_reg)
+		iounmap(aib_reg);
+	if (asfar_reg)
+		iounmap(asfar_reg);
+	if (assar_reg)
+		iounmap(assar_reg);
+}
+
 static int spacemit_sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 						      struct mmc_ios *ios)
 {
@@ -232,6 +280,8 @@ static int spacemit_sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 	ret = sdhci_start_signal_voltage_switch(mmc, ios);
 	if (ret)
 		return ret;
+
+	spacemit_sdhci_set_aib_mmc1_io(host, ios->signal_voltage);
 
 	/* Select appropriate pinctrl state based on signal voltage */
 	if (sdhst->pinctrl) {
@@ -341,6 +391,16 @@ static int spacemit_sdhci_probe(struct platform_device *pdev)
 		dev_warn(dev, "Failed to get regulators: %d\n", ret);
 
 	sdhst = sdhci_pltfm_priv(pltfm_host);
+
+	if (of_property_read_u32(dev->of_node, "spacemit,aib-mmc1-io-reg", &sdhst->aib_mmc1_io_reg))
+		sdhst->aib_mmc1_io_reg = 0;
+
+	if (of_property_read_u32(dev->of_node, "spacemit,apbc-asfar-reg", &sdhst->apbc_asfar_reg))
+		sdhst->apbc_asfar_reg = 0;
+
+	if (of_property_read_u32(dev->of_node, "spacemit,apbc-assar-reg", &sdhst->apbc_assar_reg))
+		sdhst->apbc_assar_reg = 0;
+
 	sdhst->pinctrl = devm_pinctrl_get(dev);
 	if (!IS_ERR(sdhst->pinctrl)) {
 		sdhst->pinctrl_default = pinctrl_lookup_state(sdhst->pinctrl, "default");
