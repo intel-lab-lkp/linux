@@ -2000,17 +2000,18 @@ static char *vt_kdskbsent(char *kbs, unsigned char cur)
 int vt_do_kdgkb_ioctl(int cmd, struct kbsentry __user *user_kdgkb, int perm)
 {
 	unsigned char kb_func;
+	ssize_t len;
 
 	if (get_user(kb_func, &user_kdgkb->kb_func))
 		return -EFAULT;
 
 	kb_func = array_index_nospec(kb_func, MAX_NR_FUNC);
 
+	/* size should have been a struct member */
+	len = sizeof(user_kdgkb->kb_string);
+
 	switch (cmd) {
 	case KDGKBSENT: {
-		/* size should have been a struct member */
-		ssize_t len = sizeof(user_kdgkb->kb_string);
-
 		char __free(kfree) *kbs = kmalloc(len, GFP_KERNEL);
 		if (!kbs)
 			return -ENOMEM;
@@ -2031,11 +2032,16 @@ int vt_do_kdgkb_ioctl(int cmd, struct kbsentry __user *user_kdgkb, int perm)
 			return -EPERM;
 
 		char __free(kfree) *kbs = strndup_user(user_kdgkb->kb_string,
-						       sizeof(user_kdgkb->kb_string));
+						       len);
 		if (IS_ERR(kbs))
 			return PTR_ERR(kbs);
 
 		guard(spinlock_irqsave)(&func_buf_lock);
+
+		/*
+		 * Ownership transfer: vt_kdskbsent() returns a pointer
+		 * that must be freed (new buffer, old buffer, or NULL).
+		 */
 		kbs = vt_kdskbsent(kbs, kb_func);
 
 		return 0;
