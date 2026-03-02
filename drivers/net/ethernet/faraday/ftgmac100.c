@@ -26,6 +26,9 @@
 #include <linux/if_vlan.h>
 #include <linux/of_net.h>
 #include <linux/phy_fixed.h>
+#include <linux/mfd/syscon.h>
+#include <linux/regmap.h>
+#include <linux/bitfield.h>
 #include <net/ip.h>
 #include <net/ncsi.h>
 
@@ -42,6 +45,7 @@ enum ftgmac100_mac_id {
 
 struct ftgmac100_match_data {
 	enum ftgmac100_mac_id mac_id;
+	bool rgmii_delay_conf;
 };
 
 /* Arbitrary values, I am not sure the HW has limits */
@@ -1919,10 +1923,148 @@ static int ftgmac100_probe_dt(struct net_device *netdev,
 	return 0;
 }
 
+static int ftgmac100_set_ast2600_rgmii_delay(struct ftgmac100 *priv,
+					     u32 rgmii_tx_delay,
+					     u32 rgmii_rx_delay,
+					     phy_interface_t phy_intf)
+{
+	struct device *dev = priv->dev;
+	struct device_node *np;
+	u32 rgmii_delay_unit;
+	u32 rx_delay_index;
+	u32 tx_delay_index;
+	struct regmap *scu;
+	int dly_mask;
+	int dly_reg;
+	int mac_id;
+
+	np = dev->of_node;
+
+	scu = syscon_regmap_lookup_by_phandle(np, "aspeed,scu");
+	if (IS_ERR(scu)) {
+		dev_err(dev, "failed to get aspeed,scu");
+		return PTR_ERR(scu);
+	}
+
+	/* According to the register base address to specify the corresponding
+	 * values.
+	 */
+	switch (priv->res->start) {
+	case AST2600_MAC0_BASE_ADDR:
+		mac_id = 0;
+		rgmii_delay_unit = AST2600_MAC01_CLK_DLY_UNIT;
+		dly_reg = AST2600_MAC01_CLK_DLY;
+		break;
+	case AST2600_MAC1_BASE_ADDR:
+		mac_id = 1;
+		rgmii_delay_unit = AST2600_MAC01_CLK_DLY_UNIT;
+		dly_reg = AST2600_MAC01_CLK_DLY;
+		break;
+	case AST2600_MAC2_BASE_ADDR:
+		mac_id = 2;
+		rgmii_delay_unit = AST2600_MAC23_CLK_DLY_UNIT;
+		dly_reg = AST2600_MAC23_CLK_DLY;
+		break;
+	case AST2600_MAC3_BASE_ADDR:
+		mac_id = 3;
+		rgmii_delay_unit = AST2600_MAC23_CLK_DLY_UNIT;
+		dly_reg = AST2600_MAC23_CLK_DLY;
+		break;
+	default:
+		dev_err(dev, "Invalid mac base address");
+		return -EINVAL;
+	}
+
+	/* Please refer to ethernet-controller.yaml. */
+	if (phy_intf == PHY_INTERFACE_MODE_RGMII &&
+	    (rgmii_tx_delay == 2000 || rgmii_rx_delay == 2000)) {
+		dev_warn(dev, "RX/TX delay cannot set to 2000 on 'rgmii'\n");
+		return -EINVAL;
+	}
+
+	tx_delay_index = DIV_ROUND_CLOSEST(rgmii_tx_delay, rgmii_delay_unit);
+	if (tx_delay_index >= 32) {
+		dev_err(dev, "The %u ps of TX delay is out of range\n",
+			rgmii_tx_delay);
+		return -EINVAL;
+	}
+
+	rx_delay_index = DIV_ROUND_CLOSEST(rgmii_rx_delay, rgmii_delay_unit);
+	if (rx_delay_index >= 32) {
+		dev_err(dev, "The %u ps of RX delay is out of range\n",
+			rgmii_rx_delay);
+		return -EINVAL;
+	}
+
+	/* Due to the hardware design reason, for MAC2/3 on AST2600, the zero
+	 * delay ns on RX is configured by setting value 0x1a.
+	 * List as below:
+	 * 0x1a -> 0   ns, 0x1b -> 0.25 ns, ... , 0x1f -> 1.25 ns,
+	 * 0x00 -> 1.5 ns, 0x01 -> 1.75 ns, ... , 0x19 -> 7.75 ns, 0x1a -> 0 ns
+	 */
+	if (mac_id == 2 || mac_id == 3)
+		rx_delay_index = (AST2600_MAC23_RX_DLY_0_NS + rx_delay_index) &
+				 AST2600_MAC_TX_RX_DLY_MASK;
+
+	if (mac_id == 0 || mac_id == 2) {
+		dly_mask = ASPEED_MAC0_2_TX_DLY | ASPEED_MAC0_2_RX_DLY;
+		tx_delay_index = FIELD_PREP(ASPEED_MAC0_2_TX_DLY, tx_delay_index);
+		rx_delay_index = FIELD_PREP(ASPEED_MAC0_2_RX_DLY, rx_delay_index);
+	} else {
+		dly_mask = ASPEED_MAC1_3_TX_DLY | ASPEED_MAC1_3_RX_DLY;
+		tx_delay_index = FIELD_PREP(ASPEED_MAC1_3_TX_DLY, tx_delay_index);
+		rx_delay_index = FIELD_PREP(ASPEED_MAC1_3_RX_DLY, rx_delay_index);
+	}
+
+	regmap_update_bits(scu, dly_reg, dly_mask, tx_delay_index | rx_delay_index);
+
+	return 0;
+}
+
+static int ftgmac100_config_rgmii_delay(struct ftgmac100 *priv)
+{
+	struct device_node *np = priv->dev->of_node;
+	phy_interface_t phy_intf;
+	u32 rgmii_tx_delay;
+	u32 rgmii_rx_delay;
+	int err = 0;
+
+	/* Because some old dts using NC-SI mode does not include phy-mode
+	 * property, here need to skip RGMII delay configuration and prevent
+	 * of_get_phy_mode() from returning error.
+	 */
+	if (of_get_property(np, "use-ncsi", NULL))
+		return 0;
+
+	err = of_get_phy_mode(np, &phy_intf);
+	if (err) {
+		dev_err(priv->dev, "Failed to get phy mode: %d\n", err);
+		return err;
+	}
+
+	/* RMII does not need to configure RGMII delay */
+	if (!phy_interface_mode_is_rgmii(phy_intf))
+		return 0;
+
+	if (of_property_read_u32(np, "tx-internal-delay-ps", &rgmii_tx_delay))
+		rgmii_tx_delay = 0;
+	if (of_property_read_u32(np, "rx-internal-delay-ps", &rgmii_rx_delay))
+		rgmii_rx_delay = 0;
+
+	if (priv->mac_id == FTGMAC100_AST2600)
+		err = ftgmac100_set_ast2600_rgmii_delay(priv,
+							rgmii_tx_delay,
+							rgmii_rx_delay,
+							phy_intf);
+
+	return err;
+}
+
 static int ftgmac100_probe(struct platform_device *pdev)
 {
 	const struct ftgmac100_match_data *match_data;
 	enum ftgmac100_mac_id mac_id;
+	bool rgmii_delay_conf;
 	struct resource *res;
 	int irq;
 	struct net_device *netdev;
@@ -1936,8 +2078,10 @@ static int ftgmac100_probe(struct platform_device *pdev)
 		if (!match_data)
 			return -EINVAL;
 		mac_id = match_data->mac_id;
+		rgmii_delay_conf = match_data->rgmii_delay_conf;
 	} else {
 		mac_id = FTGMAC100_FARADAY;
+		rgmii_delay_conf = false;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -2004,6 +2148,12 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	} else {
 		priv->rxdes0_edorr_mask = BIT(15);
 		priv->txdes0_edotr_mask = BIT(15);
+	}
+
+	if (rgmii_delay_conf) {
+		err = ftgmac100_config_rgmii_delay(priv);
+		if (err)
+			return err;
 	}
 
 	if (priv->mac_id == FTGMAC100_FARADAY ||
@@ -2100,19 +2250,23 @@ static void ftgmac100_remove(struct platform_device *pdev)
 }
 
 static const struct ftgmac100_match_data ftgmac100_match_data_ast2400 = {
-	.mac_id = FTGMAC100_AST2400
+	.mac_id = FTGMAC100_AST2400,
+	.rgmii_delay_conf = false
 };
 
 static const struct ftgmac100_match_data ftgmac100_match_data_ast2500 = {
-	.mac_id = FTGMAC100_AST2500
+	.mac_id = FTGMAC100_AST2500,
+	.rgmii_delay_conf = false
 };
 
 static const struct ftgmac100_match_data ftgmac100_match_data_ast2600 = {
-	.mac_id = FTGMAC100_AST2600
+	.mac_id = FTGMAC100_AST2600,
+	.rgmii_delay_conf = true
 };
 
 static const struct ftgmac100_match_data ftgmac100_match_data_faraday = {
-	.mac_id = FTGMAC100_FARADAY
+	.mac_id = FTGMAC100_FARADAY,
+	.rgmii_delay_conf = false
 };
 
 static const struct of_device_id ftgmac100_of_match[] = {
