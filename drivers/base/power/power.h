@@ -106,10 +106,6 @@ extern int pm_async_enabled;
 /* drivers/base/power/main.c */
 extern struct list_head dpm_list;	/* The active device list */
 
-static inline struct device *to_device(struct list_head *entry)
-{
-	return container_of(entry, struct device, power.entry);
-}
 
 extern void device_pm_sleep_init(struct device *dev);
 extern void device_pm_add(struct device *);
@@ -161,6 +157,11 @@ static inline int pm_wakeup_source_sysfs_add(struct device *parent)
 }
 
 #endif /* !CONFIG_PM_SLEEP */
+
+static inline struct device *to_device(struct list_head *entry)
+{
+	return container_of(entry, struct device, power.entry);
+}
 
 static inline void device_pm_init(struct device *dev)
 {
