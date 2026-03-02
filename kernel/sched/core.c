@@ -6625,9 +6625,30 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 			return p;
 		}
 
-		if (!READ_ONCE(owner->on_rq) || owner->se.sched_delayed) {
-			/* XXX Don't handle blocked owners/delayed dequeue yet */
+		if (!READ_ONCE(owner->on_rq)) {
+			/*
+			 * Owner is off the runqueue; proxy execution cannot
+			 * proceed through it. Deactivate the donor so it will
+			 * be properly re-enqueued when the owner eventually
+			 * wakes and releases the mutex.
+			 */
 			return proxy_deactivate(rq, donor);
+		}
+		if (owner->se.sched_delayed) {
+			/*
+			 * The owner is in EEVDF's deferred-dequeue state: it
+			 * called schedule() but the scheduler kept it physically
+			 * on the runqueue because its lag was still positive.
+			 * This is a transient condition -- the owner will either
+			 * be woken (clearing sched_delayed) or fully dequeued
+			 * (clearing on_rq) very shortly.
+			 *
+			 * Unlike the !on_rq case the donor is still valid; do
+			 * not deactivate it.  Yield to idle so the owner can
+			 * complete its state transition, then retry PE on the
+			 * next scheduling cycle.
+			 */
+			return proxy_resched_idle(rq);
 		}
 
 		if (task_cpu(owner) != this_cpu) {
