@@ -9,6 +9,7 @@ TEST_FILES := \
 	include.sh \
 	test.py \
 	rds_basic.py \
+	rds_stress.py \
 # end of TEST_FILES
 
 EXTRA_CLEAN := \

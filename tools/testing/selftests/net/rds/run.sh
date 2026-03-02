@@ -152,7 +152,34 @@ PLOSS=0
 PCORRUPT=0
 PDUP=0
 GENERATE_GCOV_REPORT=1
-while getopts "d:l:c:u:" opt; do
+RDS_BASIC=0
+RDS_STRESS=0
+FLAGS=""
+
+check_flags()
+{
+	if [ "$RDS_STRESS" -ne 0 ] && ! which rds-stress > /dev/null 2>&1; then
+		echo "selftests: Could not run rds-stress.  Disabling rds-stress."
+		RDS_STRESS=0
+	fi
+	if [ "$RDS_STRESS" -eq 0 ] && [ "$RDS_BASIC" -eq 0 ]; then
+		echo "selftests: Default to rds basic tests"
+		RDS_BASIC=1
+	fi
+}
+
+set_flags()
+{
+	if [ "$RDS_STRESS" -ne 0 ];then
+		FLAGS="$FLAGS -s"
+	fi
+
+	if [ "$RDS_BASIC" -ne 0 ]; then
+		FLAGS="$FLAGS -b"
+	fi
+}
+
+while getopts "d:l:c:u:bs" opt; do
   case ${opt} in
     d)
       LOG_DIR=${OPTARG}
@@ -166,9 +193,15 @@ while getopts "d:l:c:u:" opt; do
     u)
       PDUP=${OPTARG}
       ;;
+    b)
+      RDS_BASIC=1
+      ;;
+    s)
+      RDS_STRESS=1
+      ;;
     :)
       echo "USAGE: run.sh [-d logdir] [-l packet_loss] [-c packet_corruption]" \
-           "[-u packet_duplcate] [-g]"
+           "[-u packet_duplcate] [-g] [-b] [-s]"
       exit 1
       ;;
     ?)
@@ -182,7 +215,8 @@ done
 check_env
 check_conf
 check_gcov_conf
-
+check_flags
+set_flags
 
 rm -fr "$LOG_DIR"
 TRACE_FILE="${LOG_DIR}/rds-strace.txt"
@@ -195,7 +229,7 @@ echo running RDS tests...
 echo Traces will be logged to "$TRACE_FILE"
 rm -f "$TRACE_FILE"
 strace -T -tt -o "$TRACE_FILE" python3 "$(dirname "$0")/test.py" --timeout 400 -d "$LOG_DIR" \
-       -l "$PLOSS" -c "$PCORRUPT" -u "$PDUP"
+       -l "$PLOSS" -c "$PCORRUPT" -u "$PDUP" $FLAGS
 
 test_rc=$?
 dmesg > "${LOG_DIR}/dmesg.out"
