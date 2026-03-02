@@ -1300,7 +1300,7 @@ static int read_response(struct i2c_client *client, unsigned char *resp)
 	while (retry_cnt > 0) {
 		ret = i2c_smbus_read_block_data(client, SSIF_IPMI_RESPONSE,
 						resp);
-		if (ret > 0)
+		if (ret >= 3)
 			break;
 		msleep(SSIF_MSG_MSEC);
 		retry_cnt--;
