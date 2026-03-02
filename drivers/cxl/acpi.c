@@ -952,7 +952,7 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	if (rc < 0)
 		return rc;
 
-	if (IS_ENABLED(CONFIG_CXL_PMEM))
+	if (IS_REACHABLE(CONFIG_CXL_PMEM))
 		rc = device_for_each_child(&root_port->dev, root_port,
 					   add_root_nvdimm_bridge);
 	if (rc < 0)
