@@ -74,8 +74,15 @@ EXPORT_SYMBOL_NS_GPL(cxl_register_proto_err_work, "CXL");
 
 void cxl_unregister_proto_err_work(void)
 {
-	guard(rwsem_write)(&cxl_proto_err_kfifo.rwsema);
+	struct work_struct *work;
+
+	down_write(&cxl_proto_err_kfifo.rwsema);
+	work = cxl_proto_err_kfifo.work;
 	cxl_proto_err_kfifo.work = NULL;
+	up_write(&cxl_proto_err_kfifo.rwsema);
+
+	if (work)
+		cancel_work_sync(work);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_unregister_proto_err_work, "CXL");
 

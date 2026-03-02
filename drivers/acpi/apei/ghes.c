@@ -776,8 +776,12 @@ int cxl_cper_unregister_prot_err_work(struct work_struct *work)
 	if (cxl_cper_prot_err_work != work)
 		return -EINVAL;
 
-	guard(spinlock)(&cxl_cper_prot_err_work_lock);
+	spin_lock(&cxl_cper_prot_err_work_lock);
 	cxl_cper_prot_err_work = NULL;
+	spin_unlock(&cxl_cper_prot_err_work_lock);
+
+	cancel_work_sync(work);
+
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_cper_unregister_prot_err_work, "CXL");
