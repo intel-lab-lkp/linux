@@ -271,6 +271,8 @@ enum iommu_cap {
 	 */
 	IOMMU_CAP_DEFERRED_FLUSH,
 	IOMMU_CAP_DIRTY_TRACKING,	/* IOMMU supports dirty tracking */
+	/* ATS is not supported and not used on this device */
+	IOMMU_CAP_PCI_ATS_NOT_SUPPORTED,
 };
 
 /* These are the possible reserved region types */
