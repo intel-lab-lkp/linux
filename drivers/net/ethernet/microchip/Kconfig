@@ -62,5 +62,6 @@ source "drivers/net/ethernet/microchip/lan966x/Kconfig"
 source "drivers/net/ethernet/microchip/sparx5/Kconfig"
 source "drivers/net/ethernet/microchip/vcap/Kconfig"
 source "drivers/net/ethernet/microchip/fdma/Kconfig"
+source "drivers/net/dsa/microchip/lan9645x/Kconfig"
 
 endif # NET_VENDOR_MICROCHIP
