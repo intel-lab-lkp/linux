@@ -492,6 +492,20 @@ EXPORT_SYMBOL(mark_buffer_async_write);
  * b_inode back.
  */
 
+void mmb_init(struct mapping_metadata_bhs *mmb)
+{
+	spin_lock_init(&mmb->lock);
+	INIT_LIST_HEAD(&mmb->list);
+}
+EXPORT_SYMBOL(mmb_init);
+
+static struct mapping_metadata_bhs *inode_get_metadata_bhs(struct inode *inode)
+{
+	if (inode->i_op->get_metadata_bhs)
+		return inode->i_op->get_metadata_bhs(inode);
+	return &inode->i_mapping->i_metadata_bhs;
+}
+
 static void __remove_assoc_queue(struct mapping_metadata_bhs *mmb,
 			         struct buffer_head *bh)
 {
@@ -518,7 +532,7 @@ static void remove_assoc_queue(struct buffer_head *bh)
 		rcu_read_lock();
 		mapping = READ_ONCE(bh->b_assoc_map);
 		if (mapping) {
-			mmb = &mapping->i_metadata_bhs;
+			mmb = inode_get_metadata_bhs(mapping->host);
 			spin_lock(&mmb->lock);
 			if (bh->b_assoc_map == mapping)
 				__remove_assoc_queue(mmb, bh);
@@ -557,7 +571,8 @@ EXPORT_SYMBOL_GPL(inode_has_buffers);
  */
 int sync_mapping_buffers(struct address_space *mapping)
 {
-	struct mapping_metadata_bhs *mmb = &mapping->i_metadata_bhs;
+	struct mapping_metadata_bhs *mmb =
+					inode_get_metadata_bhs(mapping->host);
 	struct buffer_head *bh;
 	int err = 0;
 	struct blk_plug plug;
@@ -721,15 +736,15 @@ void write_boundary_block(struct block_device *bdev,
 
 void mark_buffer_dirty_inode(struct buffer_head *bh, struct inode *inode)
 {
-	struct address_space *mapping = inode->i_mapping;
-
 	mark_buffer_dirty(bh);
 	if (!bh->b_assoc_map) {
-		spin_lock(&mapping->i_metadata_bhs.lock);
-		list_move_tail(&bh->b_assoc_buffers,
-				&mapping->i_metadata_bhs.list);
-		bh->b_assoc_map = mapping;
-		spin_unlock(&mapping->i_metadata_bhs.lock);
+		struct mapping_metadata_bhs *mmb;
+
+		mmb = inode_get_metadata_bhs(inode);
+		spin_lock(&mmb->lock);
+		list_move_tail(&bh->b_assoc_buffers, &mmb->list);
+		bh->b_assoc_map = inode->i_mapping;
+		spin_unlock(&mmb->lock);
 	}
 }
 EXPORT_SYMBOL(mark_buffer_dirty_inode);
@@ -806,7 +821,7 @@ EXPORT_SYMBOL(block_dirty_folio);
 void invalidate_inode_buffers(struct inode *inode)
 {
 	if (inode_has_buffers(inode)) {
-		struct mapping_metadata_bhs *mmb = &inode->i_data.i_metadata_bhs;
+		struct mapping_metadata_bhs *mmb = inode_get_metadata_bhs(inode);
 
 		spin_lock(&mmb->lock);
 		while (!list_empty(&mmb->list))
