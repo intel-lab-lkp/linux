@@ -41,6 +41,8 @@ static int usbip_host_driver_open(struct usbip_host_driver *hdriver)
 struct usbip_host_driver host_driver = {
 	.edev_list = LIST_HEAD_INIT(host_driver.edev_list),
 	.udev_subsystem = "usb",
+	.bus_type = "usb",
+	.drv_name = USBIP_HOST_DRV_NAME,
 	.ops = {
 		.open = usbip_host_driver_open,
 		.close = usbip_generic_driver_close,

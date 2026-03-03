@@ -40,6 +40,8 @@ struct usbip_host_driver {
 	/* list of exported device */
 	struct list_head edev_list;
 	const char *udev_subsystem;
+	const char *bus_type;
+	const char *drv_name;
 	struct usbip_host_driver_ops ops;
 };
 

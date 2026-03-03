@@ -164,6 +164,31 @@ static void usbip_exported_device_destroy(struct list_head *devs)
 	}
 }
 
+/* Check if the usbip host driver is available in sysfs */
+static int check_driver_available(struct usbip_host_driver *hdriver)
+{
+	char driver_path[SYSFS_PATH_MAX];
+	struct stat st;
+	int ret;
+
+	if (!hdriver->drv_name || !hdriver->bus_type)
+		return 0;
+
+	//Check if the usbip-host or usbip-vudc driver directory exists in sysfs.
+	snprintf(driver_path, sizeof(driver_path), "%s/%s/%s/%s/%s",
+		SYSFS_MNT_PATH, SYSFS_BUS_NAME, hdriver->bus_type,
+		SYSFS_DRIVERS_NAME, hdriver->drv_name);
+
+	ret = stat(driver_path, &st);
+	if (ret == 0 && S_ISDIR(st.st_mode)) {
+		dbg("driver '%s' is available", hdriver->drv_name);
+		return 1;
+	}
+
+	return 0;
+}
+
+
 int usbip_generic_driver_open(struct usbip_host_driver *hdriver)
 {
 	int rc;
@@ -172,6 +197,12 @@ int usbip_generic_driver_open(struct usbip_host_driver *hdriver)
 	if (!udev_context) {
 		err("udev_new failed");
 		return -1;
+	}
+
+	//Check if the required driver is actually available.
+	if (!check_driver_available(hdriver)) {
+		err("please load '%s' kernel module", hdriver->drv_name);
+		goto err;
 	}
 
 	rc = refresh_exported_devices(hdriver);
