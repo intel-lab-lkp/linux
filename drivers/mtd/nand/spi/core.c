@@ -1594,6 +1594,7 @@ int spinand_match_and_init(struct spinand_device *spinand,
 		spinand->user_otp = &table[i].user_otp;
 		spinand->read_retries = table[i].read_retries;
 		spinand->set_read_retry = table[i].set_read_retry;
+		spinand->spimem->spi->rx_sampling_delay_ns = table[i].rx_sampling_delay_ns;
 
 		/* I/O variants selection with single-spi SDR commands */
 

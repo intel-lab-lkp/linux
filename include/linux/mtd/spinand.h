@@ -568,6 +568,7 @@ enum spinand_bus_interface {
  * @model: model name
  * @devid: device ID
  * @flags: OR-ing of the SPINAND_XXX flags
+ * @rx_sampling_delay_ns: clock to rx data delay timing (tCLQV)
  * @memorg: memory organization
  * @eccreq: ECC requirements
  * @eccinfo: on-die ECC info
@@ -592,6 +593,7 @@ struct spinand_info {
 	const char *model;
 	struct spinand_devid devid;
 	u32 flags;
+	u32 rx_sampling_delay_ns;
 	struct nand_memory_organization memorg;
 	struct nand_ecc_props eccreq;
 	struct spinand_ecc_info eccinfo;
@@ -642,6 +644,9 @@ struct spinand_info {
 
 #define SPINAND_CONFIGURE_CHIP(__configure_chip)			\
 	.configure_chip = __configure_chip
+
+#define SPINAND_RX_SAMPLING_DELAY(__delay)				\
+	.rx_sampling_delay_ns = __delay
 
 #define SPINAND_CONT_READ(__set_cont_read)				\
 	.set_cont_read = __set_cont_read
