@@ -571,6 +571,11 @@ static inline int has_pushable_dl_tasks(struct rq *rq)
 	return !RB_EMPTY_ROOT(&rq->dl.pushable_dl_tasks_root.rb_root);
 }
 
+static inline bool dl_task_pushable(struct task_struct *p)
+{
+	return !RB_EMPTY_NODE(&p->pushable_dl_tasks);
+}
+
 /*
  * The list of pushable -deadline task is not a plist, like in
  * sched_rt.c, it is an rb-tree with tasks ordered by deadline.
@@ -579,7 +584,7 @@ static void enqueue_pushable_dl_task(struct rq *rq, struct task_struct *p)
 {
 	struct rb_node *leftmost;
 
-	WARN_ON_ONCE(!RB_EMPTY_NODE(&p->pushable_dl_tasks));
+	WARN_ON_ONCE(dl_task_pushable(p));
 
 	leftmost = rb_add_cached(&p->pushable_dl_tasks,
 				 &rq->dl.pushable_dl_tasks_root,
@@ -599,7 +604,7 @@ static void dequeue_pushable_dl_task(struct rq *rq, struct task_struct *p)
 	struct rb_root_cached *root = &dl_rq->pushable_dl_tasks_root;
 	struct rb_node *leftmost;
 
-	if (RB_EMPTY_NODE(&p->pushable_dl_tasks))
+	if (!dl_task_pushable(p))
 		return;
 
 	leftmost = rb_erase_cached(&p->pushable_dl_tasks, root);
@@ -2648,6 +2653,21 @@ static void put_prev_task_dl(struct rq *rq, struct task_struct *p, struct task_s
 	update_dl_rq_load_avg(rq_clock_pelt(rq), rq, 1);
 
 	if (task_is_blocked(p))
+		return;
+
+	/*
+	 * its possible the following call chain from
+	 * update_curr_dl() called above has already
+	 * added us to the pushable list:
+	 * update_curr_dl()
+	 * -> update_curr_dl_se()
+	 *    -> enqueue_task_dl()
+	 *       -> enqueue_pushable_dl_task()
+	 *
+	 * So check dl_task_pushable() first to make sure we don't
+	 * get added twice
+	 */
+	if (dl_task_pushable(p))
 		return;
 
 	if (on_dl_rq(&p->dl) && p->nr_cpus_allowed > 1)
