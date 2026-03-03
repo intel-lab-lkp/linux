@@ -88,6 +88,7 @@
 
 #define QUADSPI_SMPR			0x108
 #define QUADSPI_SMPR_DDRSMP_MASK	GENMASK(18, 16)
+#define QUADSPI_SMPR_SDRSMP(x)		((x) << 5)
 #define QUADSPI_SMPR_FSDLY_MASK		BIT(6)
 #define QUADSPI_SMPR_FSPHS_MASK		BIT(5)
 #define QUADSPI_SMPR_HSENA_MASK		BIT(0)
@@ -290,6 +291,16 @@ struct fsl_qspi {
 	struct device *dev;
 	int selected;
 	u32 memmap_phy;
+	u32 smpr;
+};
+
+#define RX_SAMPLING_MAX_DELAY_CYCLES			3
+#define RX_SAMPLING_DELAY_CYCLES_PER_CLOCK_CYCLE	2
+
+struct fsl_qspi_chip_data {
+	u8 sdrsmp;
+	u32 rx_sampling_delay_ns;
+	unsigned int rate;
 };
 
 static bool needs_swap_endian(struct fsl_qspi *q)
@@ -545,6 +556,27 @@ static void fsl_qspi_invalidate(struct fsl_qspi *q)
 	qspi_writel(q, reg, q->iobase + QUADSPI_MCR);
 }
 
+static void fsl_qspi_update_rx_sampling_delay(struct fsl_qspi *q, u32 sdrsmp)
+{
+	void __iomem *base = q->iobase;
+	u32 mcr, smpr = QUADSPI_SMPR_SDRSMP(sdrsmp);
+
+	/* skip if requested value matches cached value */
+	if (q->smpr == smpr)
+		return;
+
+	/* Disable the module */
+	mcr = qspi_readl(q, base + QUADSPI_MCR);
+	qspi_writel(q, mcr | QUADSPI_MCR_MDIS_MASK, base + QUADSPI_MCR);
+
+	qspi_writel(q, smpr, base + QUADSPI_SMPR);
+
+	/* Enable the module */
+	qspi_writel(q, mcr & ~QUADSPI_MCR_MDIS_MASK, base + QUADSPI_MCR);
+
+	q->smpr = smpr;
+}
+
 static void fsl_qspi_select_mem(struct fsl_qspi *q, struct spi_device *spi,
 				const struct spi_mem_op *op)
 {
@@ -668,6 +700,7 @@ static int fsl_qspi_readl_poll_tout(struct fsl_qspi *q, void __iomem *base,
 static int fsl_qspi_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 {
 	struct fsl_qspi *q = spi_controller_get_devdata(mem->spi->controller);
+	struct fsl_qspi_chip_data *chip = spi_get_ctldata(mem->spi);
 	void __iomem *base = q->iobase;
 	u32 addr_offset = 0;
 	int err = 0;
@@ -678,6 +711,8 @@ static int fsl_qspi_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 	/* wait for the controller being ready */
 	fsl_qspi_readl_poll_tout(q, base + QUADSPI_SR, (QUADSPI_SR_IP_ACC_MASK |
 				 QUADSPI_SR_AHB_ACC_MASK), 10, 1000);
+
+	fsl_qspi_update_rx_sampling_delay(q, chip->sdrsmp);
 
 	fsl_qspi_select_mem(q, mem->spi, op);
 
@@ -871,6 +906,28 @@ static const struct spi_controller_mem_caps fsl_qspi_mem_caps = {
 	.per_op_freq = true,
 };
 
+static int fsl_qspi_setup_device(struct spi_device *spi)
+{
+	struct fsl_qspi_chip_data *chip = spi_get_ctldata(spi);
+
+	if (!chip) {
+		chip = kzalloc_obj(*chip, GFP_KERNEL);
+		if (!chip)
+			return -ENOMEM;
+		spi_set_ctldata(spi, chip);
+	}
+
+	return 0;
+}
+
+static void fsl_qspi_cleanup_device(struct spi_device *spi)
+{
+	struct fsl_qspi_chip_data *chip = spi_get_ctldata(spi);
+
+	kfree(chip);
+	spi_set_ctldata(spi, NULL);
+}
+
 static void fsl_qspi_disable(void *data)
 {
 	struct fsl_qspi *q = data;
@@ -889,6 +946,25 @@ static void fsl_qspi_cleanup(void *data)
 	fsl_qspi_clk_disable_unprep(q);
 
 	mutex_destroy(&q->lock);
+}
+
+static unsigned int fsl_qspi_set_rx_sampling_point(struct spi_device *spi, unsigned int freq)
+{
+	struct fsl_qspi_chip_data *chip = spi_get_ctldata(spi);
+
+	/* skip calculation if input clock rate and sampling delay did not change */
+	if (spi->rx_sampling_delay_ns == chip->rx_sampling_delay_ns &&
+	    freq == chip->rate)
+		return freq;
+
+	chip->rate = freq;
+	chip->rx_sampling_delay_ns = spi->rx_sampling_delay_ns;
+
+	chip->sdrsmp = spi_calc_rx_sampling_point(spi, &freq,
+						  RX_SAMPLING_MAX_DELAY_CYCLES,
+						  RX_SAMPLING_DELAY_CYCLES_PER_CLOCK_CYCLE);
+
+	return freq;
 }
 
 static int fsl_qspi_probe(struct platform_device *pdev)
@@ -914,6 +990,10 @@ static int fsl_qspi_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	platform_set_drvdata(pdev, q);
+
+	ctlr->setup = fsl_qspi_setup_device;
+	ctlr->cleanup = fsl_qspi_cleanup_device;
+	ctlr->set_rx_sampling_point = fsl_qspi_set_rx_sampling_point;
 
 	/* find the resources */
 	q->iobase = devm_platform_ioremap_resource_byname(pdev, "QuadSPI");
