@@ -108,6 +108,7 @@ static struct inode *affs_alloc_inode(struct super_block *sb)
 	i->i_lc = NULL;
 	i->i_ext_bh = NULL;
 	i->i_pa_cnt = 0;
+	mmb_init(&i->i_metadata_bhs);
 
 	return &i->vfs_inode;
 }
@@ -145,6 +146,11 @@ static void destroy_inodecache(void)
 	 */
 	rcu_barrier();
 	kmem_cache_destroy(affs_inode_cachep);
+}
+
+struct mapping_metadata_bhs *affs_get_metadata_bhs(struct inode *inode)
+{
+	return &AFFS_I(inode)->i_metadata_bhs;
 }
 
 static const struct super_operations affs_sops = {

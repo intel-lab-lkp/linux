@@ -72,4 +72,5 @@ const struct address_space_operations affs_symlink_aops = {
 const struct inode_operations affs_symlink_inode_operations = {
 	.get_link	= page_get_link,
 	.setattr	= affs_notify_change,
+	.get_metadata_bhs = affs_get_metadata_bhs,
 };

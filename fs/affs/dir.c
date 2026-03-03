@@ -72,6 +72,7 @@ const struct inode_operations affs_dir_inode_operations = {
 	.rmdir		= affs_rmdir,
 	.rename		= affs_rename2,
 	.setattr	= affs_notify_change,
+	.get_metadata_bhs = affs_get_metadata_bhs,
 };
 
 static int

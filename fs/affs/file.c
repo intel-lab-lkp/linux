@@ -1014,4 +1014,5 @@ const struct file_operations affs_file_operations = {
 
 const struct inode_operations affs_file_inode_operations = {
 	.setattr	= affs_notify_change,
+	.get_metadata_bhs = affs_get_metadata_bhs,
 };
