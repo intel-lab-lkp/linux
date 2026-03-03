@@ -655,8 +655,6 @@ gen_sesskey:
 		chap->status = NVME_AUTH_DHCHAP_FAILURE_INCORRECT_PAYLOAD;
 		return ret;
 	}
-	dev_dbg(ctrl->device, "shared secret %*ph\n",
-		(int)chap->sess_key_len, chap->sess_key);
 	return 0;
 }
 
