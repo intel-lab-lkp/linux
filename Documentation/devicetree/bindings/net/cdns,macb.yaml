@@ -27,6 +27,7 @@ properties:
 
       - items:
           - enum:
+              - microchip,p64h-gem    # Microchip P64H SoC
               - xlnx,versal-gem       # Xilinx Versal
               - xlnx,zynq-gem         # Xilinx Zynq-7xxx SoC
               - xlnx,zynqmp-gem       # Xilinx Zynq Ultrascale+ MPSoC
