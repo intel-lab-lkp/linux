@@ -44,3 +44,30 @@ config AMD_ISP_PLATFORM
 
 	  This driver can also be built as a module. If so, the module
 	  will be called amd_isp4.
+
+config AMD_DPTC
+	tristate "AMD Dynamic Power and Thermal Configuration Interface (DPTCi)"
+	depends on X86_64 && ACPI && DMI
+	select FIRMWARE_ATTRIBUTES_CLASS
+	help
+	  Driver for AMD AGESA ALIB Function 0x0C, the Dynamic Power and
+	  Thermal Configuration Interface (DPTCi). Exposes TDP and thermal
+	  parameters for AMD APU-based handheld devices via the
+	  firmware-attributes sysfs ABI, allowing userspace tools to stage
+	  and atomically commit power limit settings.
+
+	  The driver requires a recognized AMD SoC and will only expose
+	  device-specific limits when the system is present in the DMI table.
+
+	  If built as a module, the module will be called amd_dptc.
+
+config AMD_DPTC_EXTENDED
+	bool "AMD DPTCi extended limit modes (soc, unbound)"
+	depends on AMD_DPTC
+	help
+	  Expose the soc and unbound limit modes, which allow setting TDP
+	  values beyond the device-specific safe range validated in the DMI
+	  table. When enabled, the default limit_mode is unbound.
+
+	  Only enable this if you know what you are doing. Incorrect power
+	  limit values can cause thermal or stability issues.
