@@ -64,6 +64,7 @@ static bool folio_swapcache_freeable(struct folio *folio);
 static void move_cluster(struct swap_info_struct *si,
 			 struct swap_cluster_info *ci, struct list_head *list,
 			 enum swap_cluster_flags new_flags);
+static void swap_update_all_ram_backed(void);
 
 static DEFINE_SPINLOCK(swap_lock);
 static unsigned int nr_swapfiles;
@@ -74,8 +75,15 @@ atomic_long_t nr_swap_pages;
  * check to see if any swap space is available.
  */
 EXPORT_SYMBOL_GPL(nr_swap_pages);
-/* protected with swap_lock. reading in vm_swap_full() doesn't need lock */
+
+/*
+ * Updates to these globals are serialized by swap_lock.
+ * Read locklessly in vm_swap_full() (total_swap_pages) and
+ * should_reclaim_retry() (swap_all_ram_backed).
+ */
 long total_swap_pages;
+bool swap_all_ram_backed;
+
 #define DEF_SWAP_PRIO  -1
 unsigned long swapfile_maximum_size;
 #ifdef CONFIG_MIGRATION
@@ -2670,6 +2678,8 @@ static void _enable_swap_info(struct swap_info_struct *si)
 
 	plist_add(&si->list, &swap_active_head);
 
+	swap_update_all_ram_backed();
+
 	/* Add back to available list */
 	add_to_avail_list(si, true);
 }
@@ -2813,6 +2823,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	spin_lock(&p->lock);
 	del_from_avail_list(p, true);
 	plist_del(&p->list, &swap_active_head);
+	swap_update_all_ram_backed();
 	atomic_long_sub(p->pages, &nr_swap_pages);
 	total_swap_pages -= p->pages;
 	spin_unlock(&p->lock);
@@ -3460,6 +3471,9 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	if (si->bdev && bdev_synchronous(si->bdev))
 		si->flags |= SWP_SYNCHRONOUS_IO;
 
+	if (si->bdev && bdev_ram_backed(si->bdev))
+		si->flags |= SWP_RAM_BACKED;
+
 	if (si->bdev && bdev_nonrot(si->bdev)) {
 		si->flags |= SWP_SOLIDSTATE;
 	} else {
@@ -3585,6 +3599,37 @@ void si_swapinfo(struct sysinfo *val)
 	val->freeswap = atomic_long_read(&nr_swap_pages) + nr_to_be_unused;
 	val->totalswap = total_swap_pages + nr_to_be_unused;
 	spin_unlock(&swap_lock);
+}
+
+/*
+ * Recompute swap_all_ram_backed. Must be called with swap_lock held
+ * whenever a swap device is added to or removed from swap_active_head.
+ *
+ * swap_all_ram_backed is true when every active swap device is backed
+ * by main memory (e.g. zram, brd). False if there are no swap devices
+ * configured or at least one of them is backed by disk.
+ *
+ * With RAM-backed swap, swapping out an anonymous page does not yield
+ * net free pages because the driver must allocate physical RAM to
+ * store the compressed data.
+ *
+ * See should_reclaim_retry().
+ */
+static void swap_update_all_ram_backed(void)
+{
+	struct swap_info_struct *si;
+	bool all_ram = !plist_head_empty(&swap_active_head);
+
+	assert_spin_locked(&swap_lock);
+
+	plist_for_each_entry(si, &swap_active_head, list) {
+		if (!(si->flags & SWP_RAM_BACKED)) {
+			all_ram = false;
+			break;
+		}
+	}
+
+	WRITE_ONCE(swap_all_ram_backed, all_ram);
 }
 
 /*

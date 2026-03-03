@@ -216,6 +216,7 @@ enum {
 	SWP_PAGE_DISCARD = (1 << 10),	/* freed swap page-cluster discards */
 	SWP_STABLE_WRITES = (1 << 11),	/* no overwrite PG_writeback pages */
 	SWP_SYNCHRONOUS_IO = (1 << 12),	/* synchronous IO is efficient */
+	SWP_RAM_BACKED	= (1 << 13),	/* swap device uses main memory (e.g. zram) */
 					/* add others here before... */
 };
 
@@ -451,6 +452,11 @@ static inline long get_nr_swap_pages(void)
 }
 
 extern void si_swapinfo(struct sysinfo *);
+extern bool swap_all_ram_backed;
+static inline bool swap_is_all_ram_backed(void)
+{
+	return READ_ONCE(swap_all_ram_backed);
+}
 extern int add_swap_count_continuation(swp_entry_t, gfp_t);
 int swap_type_of(dev_t device, sector_t offset);
 int find_first_swap(dev_t *device);
@@ -508,6 +514,9 @@ static inline void put_swap_device(struct swap_info_struct *si)
 
 #define si_swapinfo(val) \
 	do { (val)->freeswap = (val)->totalswap = 0; } while (0)
+
+static inline bool swap_is_all_ram_backed(void) { return false; }
+
 #define free_folio_and_swap_cache(folio) \
 	folio_put(folio)
 #define free_pages_and_swap_cache(pages, nr) \

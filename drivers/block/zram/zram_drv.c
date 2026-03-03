@@ -3074,7 +3074,8 @@ static int zram_add(void)
 		.max_write_zeroes_sectors	= UINT_MAX,
 #endif
 		.features			= BLK_FEAT_STABLE_WRITES |
-						  BLK_FEAT_SYNCHRONOUS,
+						  BLK_FEAT_SYNCHRONOUS |
+						  BLK_FEAT_RAM_BACKED,
 	};
 	struct zram *zram;
 	int ret, device_id;

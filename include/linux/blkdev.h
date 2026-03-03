@@ -334,6 +334,9 @@ typedef unsigned int __bitwise blk_features_t;
 /* is a zoned device */
 #define BLK_FEAT_ZONED			((__force blk_features_t)(1u << 10))
 
+/* storage is backed by system RAM (e.g. zram, brd) */
+#define BLK_FEAT_RAM_BACKED		((__force blk_features_t)(1u << 11))
+
 /* supports PCI(e) p2p requests */
 #define BLK_FEAT_PCI_P2PDMA		((__force blk_features_t)(1u << 12))
 
@@ -1475,6 +1478,11 @@ static inline bool bdev_nonrot(struct block_device *bdev)
 static inline bool bdev_synchronous(struct block_device *bdev)
 {
 	return bdev->bd_disk->queue->limits.features & BLK_FEAT_SYNCHRONOUS;
+}
+
+static inline bool bdev_ram_backed(struct block_device *bdev)
+{
+	return bdev->bd_disk->queue->limits.features & BLK_FEAT_RAM_BACKED;
 }
 
 static inline bool bdev_stable_writes(struct block_device *bdev)

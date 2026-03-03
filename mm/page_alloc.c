@@ -37,6 +37,7 @@
 #include <linux/vmstat.h>
 #include <linux/fault-inject.h>
 #include <linux/compaction.h>
+#include <linux/swap.h>
 #include <trace/events/kmem.h>
 #include <trace/events/oom.h>
 #include <linux/prefetch.h>
@@ -4604,6 +4605,7 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 	struct zone *zone;
 	struct zoneref *z;
 	bool ret = false;
+	bool ram_backed_swap = swap_is_all_ram_backed();
 
 	/*
 	 * Costly allocations might have made a progress but this doesn't mean
@@ -4637,7 +4639,26 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 			!__cpuset_zone_allowed(zone, gfp_mask))
 				continue;
 
-		available = reclaimable = zone_reclaimable_pages(zone);
+		if (ram_backed_swap) {
+			/*
+			 * Exclude anon pages when all swap is RAM-backed.
+			 * The reclaimable estimate assumes anon can be
+			 * reclaimed using free swap slots, but those slots
+			 * are only logical accounting for zram: storing the
+			 * swapped data still consumes physical pages. Free
+			 * RAM is the real limit, so counting anon inflates
+			 * 'available', keeps the watermark check passing,
+			 * and delays falling through to OOM.
+			 */
+			reclaimable =
+				zone_page_state_snapshot(zone,
+							 NR_ZONE_INACTIVE_FILE) +
+				zone_page_state_snapshot(zone,
+							 NR_ZONE_ACTIVE_FILE);
+		} else {
+			reclaimable = zone_reclaimable_pages(zone);
+		}
+		available = reclaimable;
 		available += zone_page_state_snapshot(zone, NR_FREE_PAGES);
 
 		/*
