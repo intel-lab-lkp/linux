@@ -361,7 +361,7 @@ static inline int intel_guc_send_busy_loop(struct intel_guc *guc,
 					   bool loop)
 {
 	int err;
-	unsigned int sleep_period_ms = 1;
+	unsigned int loop_count = 0;
 	bool not_atomic = !in_atomic() && !irqs_disabled();
 
 	/*
@@ -377,13 +377,17 @@ static inline int intel_guc_send_busy_loop(struct intel_guc *guc,
 retry:
 	err = intel_guc_send_nb(guc, action, len, g2h_len_dw);
 	if (unlikely(err == -EBUSY && loop)) {
+		if (loop_count >= 20)
+			return -EBUSY;
+
 		if (likely(not_atomic)) {
-			if (msleep_interruptible(sleep_period_ms))
+			if (msleep_interruptible(1 << loop_count))
 				return -EINTR;
-			sleep_period_ms = sleep_period_ms << 1;
 		} else {
 			cpu_relax();
 		}
+
+		loop_count++;
 		goto retry;
 	}
 

@@ -716,7 +716,7 @@ static int ct_send(struct intel_guc_ct *ct,
 	struct intel_guc_ct_buffer *ctb = &ct->ctbs.send;
 	struct ct_request request;
 	unsigned long flags;
-	unsigned int sleep_period_ms = 1;
+	unsigned int loop_count = 0;
 	bool send_again;
 	u32 fence;
 	int err;
@@ -747,9 +747,11 @@ retry:
 		if (unlikely(ct_deadlocked(ct)))
 			return -EPIPE;
 
-		if (msleep_interruptible(sleep_period_ms))
+		if (loop_count >= 20)
+			return -EBUSY;
+
+		if (msleep_interruptible(1 << loop_count++))
 			return -EINTR;
-		sleep_period_ms = sleep_period_ms << 1;
 
 		goto retry;
 	}
