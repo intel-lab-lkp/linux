@@ -14,6 +14,8 @@
 #include "core.h"
 #include "io.h"
 
+#define USB_VENDOR_MICROCHIP 0x0424
+
 #define DWC3_ULPI_ADDR(a) \
 		((a >= ULPI_EXT_VENDOR_SPECIFIC) ? \
 		DWC3_GUSB2PHYACC_ADDR(ULPI_ACCESS_EXTENDED) | \
@@ -83,6 +85,46 @@ static const struct ulpi_ops dwc3_ulpi_ops = {
 	.write = dwc3_ulpi_write,
 };
 
+static void dwc3_ulpi_detect_config(struct dwc3 *dwc)
+{
+	u16 product_id;
+	u16 vendor_id;
+	int ret;
+
+	/* Test the interface */
+	ret = dwc3_ulpi_write(dwc->dev, ULPI_SCRATCH, 0xaa);
+	if (ret < 0)
+		return;
+
+	ret = dwc3_ulpi_read(dwc->dev, ULPI_SCRATCH);
+	if (ret < 0)
+		return;
+
+	if (ret != 0xaa)
+		return;
+
+	vendor_id = dwc3_ulpi_read(dwc->dev, ULPI_VENDOR_ID_LOW);
+	vendor_id |= dwc3_ulpi_read(dwc->dev, ULPI_VENDOR_ID_HIGH) << 8;
+
+	product_id = dwc3_ulpi_read(dwc->dev, ULPI_PRODUCT_ID_LOW);
+	product_id |= dwc3_ulpi_read(dwc->dev, ULPI_PRODUCT_ID_HIGH) << 8;
+
+	dev_dbg(
+		dwc->dev, "dwc3_ulpi: VendorID 0x%04x, ProductID 0x%04x\n",
+		vendor_id, product_id
+	);
+	switch (vendor_id) {
+	case USB_VENDOR_MICROCHIP:
+		switch (product_id) {
+		case 0x0009:
+			/* Microchip USB3340 ULPI PHY */
+			dwc->enable_usb2_transceiver_delay = true;
+			break;
+		}
+		break;
+	}
+}
+
 int dwc3_ulpi_init(struct dwc3 *dwc)
 {
 	/* Register the interface */
@@ -91,6 +133,8 @@ int dwc3_ulpi_init(struct dwc3 *dwc)
 		dev_err(dwc->dev, "failed to register ULPI interface");
 		return PTR_ERR(dwc->ulpi);
 	}
+
+	dwc3_ulpi_detect_config(dwc);
 
 	return 0;
 }
