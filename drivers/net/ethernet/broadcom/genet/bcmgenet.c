@@ -3365,6 +3365,16 @@ static int bcmgenet_open(struct net_device *dev)
 
 	bcmgenet_phy_pause_set(dev, priv->rx_pause, priv->tx_pause);
 
+	/* Enable EEE by default on hardware that supports it.  This sets the
+	 * software state so that the link-change callback will activate EEE
+	 * in hardware once EEE is negotiated with the link partner.
+	 */
+	if (!GENET_IS_V1(priv)) {
+		priv->eee.eee_enabled = true;
+		priv->eee.tx_lpi_enabled = true;
+		bcmgenet_umac_writel(priv, 250, UMAC_EEE_LPI_TIMER);
+	}
+
 	bcmgenet_netif_start(dev);
 
 	netif_tx_start_all_queues(dev);
