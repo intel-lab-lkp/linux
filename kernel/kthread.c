@@ -45,6 +45,7 @@ struct kthread_create_info
 	int (*threadfn)(void *data);
 	void *data;
 	int node;
+	u32 kthread_worker:1;
 
 	/* Result passed back to kthread_create() from kthreadd. */
 	struct task_struct *result;
@@ -451,13 +452,20 @@ int tsk_fork_get_node(struct task_struct *tsk)
 static void create_kthread(struct kthread_create_info *create)
 {
 	int pid;
+	struct kernel_clone_args args = {
+		.flags		= CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_UNTRACED,
+		.exit_signal	= SIGCHLD,
+		.fn		= kthread,
+		.fn_arg		= create,
+		.name		= create->full_name,
+		.kthread	= 1,
+	};
 
 #ifdef CONFIG_NUMA
 	current->pref_node_fork = create->node;
 #endif
 	/* We want our own signal handler (we take no signals by default). */
-	pid = kernel_thread(kthread, create, create->full_name,
-			    CLONE_FS | CLONE_FILES | SIGCHLD);
+	pid = kernel_clone(&args);
 	if (pid < 0) {
 		/* Release the structure when caller killed by a fatal signal. */
 		struct completion *done = xchg(&create->done, NULL);
@@ -472,21 +480,32 @@ static void create_kthread(struct kthread_create_info *create)
 	}
 }
 
-static __printf(4, 0)
-struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
-						    void *data, int node,
+static struct task_struct *__kthread_create_on_node(const struct kthread_create_info *info,
 						    const char namefmt[],
 						    va_list args)
 {
 	DECLARE_COMPLETION_ONSTACK(done);
+	struct kthread_worker *worker = NULL;
 	struct task_struct *task;
-	struct kthread_create_info *create = kmalloc_obj(*create);
+	struct kthread_create_info *create;
 
+	create = kmalloc_obj(*create);
 	if (!create)
 		return ERR_PTR(-ENOMEM);
-	create->threadfn = threadfn;
-	create->data = data;
-	create->node = node;
+
+	*create = *info;
+
+	if (create->kthread_worker) {
+		worker = kzalloc_obj(*worker);
+		if (!worker) {
+			kfree(create);
+			return ERR_PTR(-ENOMEM);
+		}
+		kthread_init_worker(worker);
+		create->threadfn = kthread_worker_fn;
+		create->data = worker;
+	}
+
 	create->done = &done;
 	create->full_name = kvasprintf(GFP_KERNEL, namefmt, args);
 	if (!create->full_name) {
@@ -520,6 +539,8 @@ struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 	}
 	task = create->result;
 free_create:
+	if (IS_ERR(task))
+		kfree(worker);
 	kfree(create);
 	return task;
 }
@@ -552,11 +573,16 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 					   const char namefmt[],
 					   ...)
 {
+	struct kthread_create_info info = {
+		.threadfn	= threadfn,
+		.data		= data,
+		.node		= node,
+	};
 	struct task_struct *task;
 	va_list args;
 
 	va_start(args, namefmt);
-	task = __kthread_create_on_node(threadfn, data, node, namefmt, args);
+	task = __kthread_create_on_node(&info, namefmt, args);
 	va_end(args);
 
 	return task;
@@ -1045,34 +1071,6 @@ repeat:
 }
 EXPORT_SYMBOL_GPL(kthread_worker_fn);
 
-static __printf(3, 0) struct kthread_worker *
-__kthread_create_worker_on_node(unsigned int flags, int node,
-				const char namefmt[], va_list args)
-{
-	struct kthread_worker *worker;
-	struct task_struct *task;
-
-	worker = kzalloc_obj(*worker);
-	if (!worker)
-		return ERR_PTR(-ENOMEM);
-
-	kthread_init_worker(worker);
-
-	task = __kthread_create_on_node(kthread_worker_fn, worker,
-					node, namefmt, args);
-	if (IS_ERR(task))
-		goto fail_task;
-
-	worker->flags = flags;
-	worker->task = task;
-
-	return worker;
-
-fail_task:
-	kfree(worker);
-	return ERR_CAST(task);
-}
-
 /**
  * kthread_create_worker_on_node - create a kthread worker
  * @flags: flags modifying the default behavior of the worker
@@ -1086,13 +1084,24 @@ fail_task:
 struct kthread_worker *
 kthread_create_worker_on_node(unsigned int flags, int node, const char namefmt[], ...)
 {
+	struct kthread_create_info info = {
+		.node		= node,
+		.kthread_worker	= 1,
+	};
 	struct kthread_worker *worker;
+	struct task_struct *task;
 	va_list args;
 
 	va_start(args, namefmt);
-	worker = __kthread_create_worker_on_node(flags, node, namefmt, args);
+	task = __kthread_create_on_node(&info, namefmt, args);
 	va_end(args);
 
+	if (IS_ERR(task))
+		return ERR_CAST(task);
+
+	worker = kthread_data(task);
+	worker->flags = flags;
+	worker->task = task;
 	return worker;
 }
 EXPORT_SYMBOL(kthread_create_worker_on_node);
