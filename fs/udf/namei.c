@@ -1025,4 +1025,5 @@ const struct inode_operations udf_dir_inode_operations = {
 	.mknod				= udf_mknod,
 	.rename				= udf_rename,
 	.tmpfile			= udf_tmpfile,
+	.get_metadata_bhs		= udf_get_metadata_bhs,
 };

@@ -166,6 +166,7 @@ static struct inode *udf_alloc_inode(struct super_block *sb)
 	ei->cached_extent.lstart = -1;
 	spin_lock_init(&ei->i_extent_cache_lock);
 	inode_set_iversion(&ei->vfs_inode, 1);
+	mmb_init(&ei->i_metadata_bhs);
 
 	return &ei->vfs_inode;
 }
@@ -203,6 +204,11 @@ static void destroy_inodecache(void)
 	 */
 	rcu_barrier();
 	kmem_cache_destroy(udf_inode_cachep);
+}
+
+struct mapping_metadata_bhs *udf_get_metadata_bhs(struct inode *inode)
+{
+	return &UDF_I(inode)->i_metadata_bhs;
 }
 
 /* Superblock operations */

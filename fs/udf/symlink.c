@@ -168,4 +168,5 @@ const struct address_space_operations udf_symlink_aops = {
 const struct inode_operations udf_symlink_inode_operations = {
 	.get_link	= page_get_link,
 	.getattr	= udf_symlink_getattr,
+	.get_metadata_bhs	= udf_get_metadata_bhs,
 };

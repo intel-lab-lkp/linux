@@ -126,6 +126,7 @@ static inline void udf_updated_lvid(struct super_block *sb)
 extern u64 lvid_get_unique_id(struct super_block *sb);
 struct inode *udf_find_metadata_inode_efe(struct super_block *sb,
 					u32 meta_file_loc, u32 partition_num);
+struct mapping_metadata_bhs *udf_get_metadata_bhs(struct inode *inode);
 
 /* namei.c */
 static inline unsigned int udf_dir_entry_len(struct fileIdentDesc *cfi)

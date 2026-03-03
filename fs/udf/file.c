@@ -251,4 +251,5 @@ static int udf_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 
 const struct inode_operations udf_file_inode_operations = {
 	.setattr		= udf_setattr,
+	.get_metadata_bhs	= udf_get_metadata_bhs,
 };
