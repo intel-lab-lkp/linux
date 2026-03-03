@@ -703,8 +703,8 @@ static bool mddev_set_bitmap_ops(struct mddev *mddev)
 	mddev->bitmap_ops = (void *)head;
 	xa_unlock(&md_submodule);
 
-	if (!mddev_is_dm(mddev) && mddev->bitmap_ops->group) {
-		if (sysfs_create_group(&mddev->kobj, mddev->bitmap_ops->group))
+	if (!mddev_is_dm(mddev) && mddev->bitmap_ops->register_group) {
+		if (mddev->bitmap_ops->register_group(mddev))
 			pr_warn("md: cannot register extra bitmap attributes for %s\n",
 				mdname(mddev));
 		else
@@ -724,8 +724,8 @@ err:
 static void mddev_clear_bitmap_ops(struct mddev *mddev)
 {
 	if (!mddev_is_dm(mddev) && mddev->bitmap_ops &&
-	    mddev->bitmap_ops->group)
-		sysfs_remove_group(&mddev->kobj, mddev->bitmap_ops->group);
+	    mddev->bitmap_ops->unregister_group)
+		mddev->bitmap_ops->unregister_group(mddev);
 
 	mddev->bitmap_ops = NULL;
 }
@@ -6368,6 +6368,14 @@ struct mddev *md_alloc(dev_t dev, char *name)
 		mddev_put(mddev);
 		return ERR_PTR(error);
 	}
+
+	/*
+	 * md_sysfs_remove_common_group is not needed because mddev_delayed_delete
+	 * calls kobject_put(&mddev->kobj) if mddev is to be deleted.
+	 */
+	if (md_sysfs_create_common_group(mddev))
+		pr_warn("md: cannot register common bitmap attributes for %s\n",
+			mdname(mddev));
 
 	kobject_uevent(&mddev->kobj, KOBJ_ADD);
 	mddev->sysfs_state = sysfs_get_dirent_safe(mddev->kobj.sd, "array_state");

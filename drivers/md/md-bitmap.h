@@ -125,6 +125,9 @@ struct bitmap_operations {
 	void (*set_pages)(void *data, unsigned long pages);
 	void (*free)(void *data);
 
+	int (*register_group)(struct mddev *mddev);
+	void (*unregister_group)(struct mddev *mddev);
+
 	struct attribute_group *group;
 };
 
@@ -168,6 +171,8 @@ static inline void md_bitmap_end_sync(struct mddev *mddev, sector_t offset,
 
 	mddev->bitmap_ops->end_sync(mddev, offset, blocks);
 }
+
+int md_sysfs_create_common_group(struct mddev *mddev);
 
 #ifdef CONFIG_MD_BITMAP
 int md_bitmap_init(void);

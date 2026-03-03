@@ -2956,7 +2956,6 @@ __ATTR(max_backlog_used, S_IRUGO | S_IWUSR,
        behind_writes_used_show, behind_writes_used_reset);
 
 static struct attribute *md_bitmap_attrs[] = {
-	&bitmap_location.attr,
 	&bitmap_space.attr,
 	&bitmap_timeout.attr,
 	&bitmap_backlog.attr,
@@ -2967,10 +2966,39 @@ static struct attribute *md_bitmap_attrs[] = {
 	NULL
 };
 
+static struct attribute *md_bitmap_common_attrs[] = {
+	&bitmap_location.attr,
+	NULL
+};
+
 static struct attribute_group md_bitmap_group = {
 	.name = "bitmap",
 	.attrs = md_bitmap_attrs,
 };
+
+static struct attribute_group md_bitmap_common_group = {
+	.name = "bitmap",
+	.attrs = md_bitmap_common_attrs,
+};
+
+int md_sysfs_create_common_group(struct mddev *mddev)
+{
+	return sysfs_create_group(&mddev->kobj, &md_bitmap_common_group);
+}
+
+static int bitmap_register_group(struct mddev *mddev)
+{
+	/*
+	 * md_bitmap_group and md_bitmap_common_group are using same name
+	 * 'bitmap'.
+	 */
+	return sysfs_merge_group(&mddev->kobj, &md_bitmap_group);
+}
+
+static void bitmap_unregister_group(struct mddev *mddev)
+{
+	sysfs_unmerge_group(&mddev->kobj, &md_bitmap_group);
+}
 
 static struct bitmap_operations bitmap_ops = {
 	.head = {
@@ -3013,6 +3041,8 @@ static struct bitmap_operations bitmap_ops = {
 	.set_pages		= bitmap_set_pages,
 	.free			= md_bitmap_free,
 
+	.register_group		= bitmap_register_group,
+	.unregister_group	= bitmap_unregister_group,
 	.group			= &md_bitmap_group,
 };
 
