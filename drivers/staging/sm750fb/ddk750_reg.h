@@ -102,12 +102,8 @@
     #define CURRENT_GATE_M2XCLK_DIV_3                 (0x2 << 12)
     #define CURRENT_GATE_M2XCLK_DIV_4                 (0x3 << 12)
 #endif
-#define CURRENT_GATE_VGA                              BIT(10)
-#define CURRENT_GATE_PWM                              BIT(9)
 #define CURRENT_GATE_I2C                              BIT(8)
-#define CURRENT_GATE_SSP                              BIT(7)
 #define CURRENT_GATE_GPIO                             BIT(6)
-#define CURRENT_GATE_ZVPORT                           BIT(5)
 #define CURRENT_GATE_CSC                              BIT(4)
 #define CURRENT_GATE_DE                               BIT(3)
 #define CURRENT_GATE_DISPLAY                          BIT(2)
@@ -602,26 +598,6 @@
 #define CRT_SCALE_HORIZONTAL_MODE                     BIT(15)
 #define CRT_SCALE_HORIZONTAL_SCALE_MASK               0xfff
 
-/* CRT Cursor Control */
-
-#define CRT_HWC_ADDRESS                               0x080230
-#define CRT_HWC_ADDRESS_ENABLE                        BIT(31)
-#define CRT_HWC_ADDRESS_EXT                           BIT(27)
-#define CRT_HWC_ADDRESS_ADDRESS_MASK                  0x3ffffff
-
-#define CRT_HWC_LOCATION                              0x080234
-#define CRT_HWC_LOCATION_TOP                          BIT(27)
-#define CRT_HWC_LOCATION_Y_MASK                       (0x7ff << 16)
-#define CRT_HWC_LOCATION_LEFT                         BIT(11)
-#define CRT_HWC_LOCATION_X_MASK                       0x7ff
-
-#define CRT_HWC_COLOR_12                              0x080238
-#define CRT_HWC_COLOR_12_2_RGB565_MASK                (0xffff << 16)
-#define CRT_HWC_COLOR_12_1_RGB565_MASK                0xffff
-
-#define CRT_HWC_COLOR_3                               0x08023C
-#define CRT_HWC_COLOR_3_RGB565_MASK                   0xffff
-
 /* This vertical expansion below start at 0x080240 ~ 0x080264 */
 #define CRT_VERTICAL_EXPANSION                        0x080240
 #ifndef VALIDATION_CHIP
@@ -703,25 +679,8 @@
 #define I2C_DATA14                                      0x010052
 #define I2C_DATA15                                      0x010053
 
-#define DMA_1_SOURCE                                    0x0D0010
-#define DMA_1_SOURCE_ADDRESS_EXT                        BIT(27)
-#define DMA_1_SOURCE_ADDRESS_CS                         BIT(26)
-#define DMA_1_SOURCE_ADDRESS_MASK                       0x3ffffff
-
-#define DMA_1_DESTINATION                               0x0D0014
-#define DMA_1_DESTINATION_ADDRESS_EXT                   BIT(27)
-#define DMA_1_DESTINATION_ADDRESS_CS                    BIT(26)
-#define DMA_1_DESTINATION_ADDRESS_MASK                  0x3ffffff
-
-#define DMA_1_SIZE_CONTROL                              0x0D0018
-#define DMA_1_SIZE_CONTROL_STATUS                       BIT(31)
-#define DMA_1_SIZE_CONTROL_SIZE_MASK                    0xffffff
-
 #define DMA_ABORT_INTERRUPT                             0x0D0020
 #define DMA_ABORT_INTERRUPT_ABORT_1                     BIT(5)
-#define DMA_ABORT_INTERRUPT_ABORT_0                     BIT(4)
-#define DMA_ABORT_INTERRUPT_INT_1                       BIT(1)
-#define DMA_ABORT_INTERRUPT_INT_0                       BIT(0)
 
 /* Default i2c CLK and Data GPIO. These are the default i2c pins */
 #define DEFAULT_I2C_SCL                     30
