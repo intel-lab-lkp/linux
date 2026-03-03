@@ -1101,6 +1101,14 @@ int ip6_tnl_xmit(struct sk_buff *skb, struct net_device *dev, __u8 dsfield,
 	u8 hop_limit;
 	int err = -1;
 
+	if (dev_recursion_level() > IP_TUNNEL_RECURSION_LIMIT) {
+		net_crit_ratelimited("Dead loop on virtual device %s, fix it urgently!\n",
+				     dev->name);
+		DEV_STATS_INC(dev, tx_errors);
+		kfree_skb(skb);
+		return -1;
+	}
+
 	payload_protocol = skb_protocol(skb, true);
 
 	if (t->parms.collect_md) {
@@ -1277,7 +1285,9 @@ route_lookup:
 	ipv6h->nexthdr = proto;
 	ipv6h->saddr = fl6->saddr;
 	ipv6h->daddr = fl6->daddr;
+	dev_xmit_recursion_inc();
 	ip6tunnel_xmit(NULL, skb, dev, 0);
+	dev_xmit_recursion_dec();
 	return 0;
 tx_err_link_failure:
 	DEV_STATS_INC(dev, tx_carrier_errors);
