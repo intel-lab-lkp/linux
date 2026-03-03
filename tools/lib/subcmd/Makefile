@@ -106,8 +106,12 @@ $(INSTALL_HDRS): $(INSTALL_HDRS_PFX)/%.h: %.h
 	$(call QUIET_INSTALL, $@) \
 		$(call do_install,$<,$(INSTALL_HDRS_PFX)/,644)
 
-install_headers: $(INSTALL_HDRS)
+$(INSTALL_HDRS_PFX): $(INSTALL_HDRS)
 	$(call QUIET_INSTALL, libsubcmd_headers)
+	@touch $@
+
+install_headers: $(INSTALL_HDRS_PFX)
+	@true
 
 install: install_lib install_headers
 
