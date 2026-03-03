@@ -149,7 +149,7 @@ static void send_ipi_allbut(unsigned int vector, bool nmi)
 
 	src_cpu = raw_smp_processor_id();
 
-	for_each_cpu(cpu, cpu_online_mask) {
+	for_each_online_cpu(cpu) {
 		if (cpu == src_cpu)
 			continue;
 		send_ipi_dest(cpu, vector, nmi);
