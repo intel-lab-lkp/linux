@@ -6190,10 +6190,6 @@ static void __init init_mount_tree(void)
 
 	init_task.nsproxy->mnt_ns = &init_mnt_ns;
 	get_mnt_ns(&init_mnt_ns);
-
-	/* The root and pwd always point to the mutable rootfs. */
-	root.mnt	= mnt;
-	root.dentry	= mnt->mnt_root;
 	set_fs_pwd(current->fs, &root);
 	set_fs_root(current->fs, &root);
 

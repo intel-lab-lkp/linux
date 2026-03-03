@@ -8,6 +8,7 @@
 #include <linux/fs_struct.h>
 #include <linux/init_task.h>
 #include "internal.h"
+#include "mount.h"
 
 /*
  * Replace the fs->{rootmnt,root} with {mnt,dentry}. Put the old values.
@@ -160,13 +161,30 @@ EXPORT_SYMBOL_GPL(unshare_fs_struct);
  * fs_struct state. Breaking that contract sucks for both sides.
  * So just don't bother with extra work for this. No sane init
  * system should ever do this.
+ *
+ * On older kernels if PID 1 unshared its filesystem state with us the
+ * kernel simply used the stale fs_struct state implicitly pinning
+ * anything that PID 1 had last used. Even if PID 1 might've moved on to
+ * some completely different fs_struct state and might've even unmounted
+ * the old root.
+ *
+ * This has hilarious consequences: Think continuing to dump coredump
+ * state into an implicitly pinned directory somewhere. Calling random
+ * binaries in the old rootfs via usermodehelpers.
+ *
+ * Be aggressive about this: We simply reject operating on stale
+ * fs_struct state by reverting to nullfs. Every kworker that does
+ * lookups after this point will fail. Every usermodehelper call will
+ * fail. Tough luck but let's be kind and emit a warning to userspace.
  */
 static inline bool nullfs_userspace_init(void)
 {
 	struct fs_struct *fs = current->fs;
 
-	if (unlikely(current->pid == 1) && fs != &init_fs) {
+	if (unlikely(current->pid == 1) && fs != &userspace_init_fs) {
 		pr_warn("VFS: Pid 1 stopped sharing filesystem state\n");
+		set_fs_root(&userspace_init_fs, &init_fs.root);
+		set_fs_pwd(&userspace_init_fs, &init_fs.root);
 		return true;
 	}
 
@@ -186,7 +204,9 @@ struct fs_struct *switch_fs_struct(struct fs_struct *new_fs)
 		new_fs = fs;
 	read_sequnlock_excl(&fs->seq);
 
-	nullfs_userspace_init();
+	/* one reference belongs to us */
+	if (nullfs_userspace_init())
+		return NULL;
 	return new_fs;
 }
 
@@ -197,8 +217,31 @@ struct fs_struct init_fs = {
 	.umask		= 0022,
 };
 
+struct fs_struct userspace_init_fs = {
+	.users		= 1,
+	.seq		= __SEQLOCK_UNLOCKED(userspace_init_fs.seq),
+	.umask		= 0022,
+};
+
 void init_root(struct path *root)
 {
-	get_fs_root(&init_fs, root);
+	get_fs_root(&userspace_init_fs, root);
 }
 EXPORT_SYMBOL_GPL(init_root);
+
+void __init init_userspace_fs(void)
+{
+	struct mount *m;
+	struct path root;
+
+	/* Move PID 1 from nullfs into the initramfs. */
+	m = topmost_overmount(current->nsproxy->mnt_ns->root);
+	root.mnt = &m->mnt;
+	root.dentry = root.mnt->mnt_root;
+
+	VFS_WARN_ON_ONCE(current->fs != &init_fs);
+	VFS_WARN_ON_ONCE(current->pid != 1);
+	set_fs_root(&userspace_init_fs, &root);
+	set_fs_pwd(&userspace_init_fs, &root);
+	switch_fs_struct(&userspace_init_fs);
+}

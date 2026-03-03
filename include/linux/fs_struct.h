@@ -50,5 +50,6 @@ static inline int current_umask(void)
 }
 
 void init_root(struct path *root);
+void __init init_userspace_fs(void);
 
 #endif /* _LINUX_FS_STRUCT_H */

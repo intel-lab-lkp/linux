@@ -1102,7 +1102,7 @@ static int set_root(struct nameidata *nd)
 	struct fs_struct *fs;
 
 	if (nd->flags & LOOKUP_IN_INIT)
-		fs = &init_fs;
+		fs = &userspace_init_fs;
 	else
 		fs = current->fs;
 
@@ -2724,7 +2724,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		struct fs_struct *fs;
 
 		if (nd->flags & LOOKUP_IN_INIT)
-			fs = &init_fs;
+			fs = &userspace_init_fs;
 		else
 			fs = current->fs;
 
