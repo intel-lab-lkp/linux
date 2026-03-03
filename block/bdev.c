@@ -420,7 +420,6 @@ static void init_once(void *data)
 static void bdev_evict_inode(struct inode *inode)
 {
 	truncate_inode_pages_final(&inode->i_data);
-	invalidate_inode_buffers(inode); /* is it needed here? */
 	clear_inode(inode);
 }
 
