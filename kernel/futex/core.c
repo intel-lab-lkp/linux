@@ -596,13 +596,29 @@ int get_futex_key(u32 __user *uaddr, unsigned int flags, union futex_key *key,
 
 	if (flags & FLAGS_NUMA) {
 		u32 __user *naddr = (void *)uaddr + size / 2;
+		u32 old_node;
 
 		if (node == FUTEX_NO_NODE) {
 			node = numa_node_id();
 			node_updated = true;
 		}
-		if (node_updated && put_user_inline(node, naddr))
-			return -EFAULT;
+		if (node_updated) {
+retry_numa_node:
+			err = futex_cmpxchg_value_locked(&old_node, naddr,
+							 FUTEX_NO_NODE, (u32)node);
+			if (err == -EAGAIN) {
+				cond_resched();
+				goto retry_numa_node;
+			}
+			if (err)
+				return err;
+			if (old_node != FUTEX_NO_NODE) {
+				node = old_node;
+				if ((unsigned int)node >= MAX_NUMNODES ||
+				    !node_possible(node))
+					return -EINVAL;
+			}
+		}
 	}
 
 	key->both.node = node;
