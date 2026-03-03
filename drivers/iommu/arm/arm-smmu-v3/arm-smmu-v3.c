@@ -992,29 +992,56 @@ static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 					   cmds->num, true);
 }
 
-static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
+static void arm_smmu_page_response(struct device *dev, struct iopf_fault *evt,
 				   struct iommu_page_response *resp)
 {
 	struct arm_smmu_cmdq_ent cmd = {0};
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
 	int sid = master->streams[0].id;
 
-	if (WARN_ON(!master->stall_enabled))
+	/* Handle PRI responses */
+	if (evt && evt->fault.type == IOMMU_FAULT_PAGE_REQ) {
+		cmd.opcode = CMDQ_OP_PRI_RESP;
+		cmd.pri.sid = sid;
+		cmd.pri.grpid = resp->grpid;
+		if (evt->fault.prm.flags &
+		    IOMMU_FAULT_PAGE_REQUEST_PASID_VALID) {
+			cmd.substream_valid = true;
+			cmd.pri.ssid = resp->pasid;
+		}
+		switch (resp->code) {
+		case IOMMU_PAGE_RESP_SUCCESS:
+			cmd.pri.resp = PRI_RESP_SUCC;
+			break;
+		case IOMMU_PAGE_RESP_FAILURE:
+			cmd.pri.resp = PRI_RESP_FAIL;
+			break;
+		case IOMMU_PAGE_RESP_INVALID:
+			cmd.pri.resp = PRI_RESP_DENY;
+			break;
+		default:
+			WARN_ON(true);
+			return;
+		}
+	} else if (master->stall_enabled) {
+		cmd.opcode = CMDQ_OP_RESUME;
+		cmd.resume.sid = sid;
+		cmd.resume.stag = resp->grpid;
+		switch (resp->code) {
+		case IOMMU_PAGE_RESP_INVALID:
+		case IOMMU_PAGE_RESP_FAILURE:
+			cmd.resume.resp = CMDQ_RESUME_0_RESP_ABORT;
+			break;
+		case IOMMU_PAGE_RESP_SUCCESS:
+			cmd.resume.resp = CMDQ_RESUME_0_RESP_RETRY;
+			break;
+		default:
+			WARN_ON(true);
+			return;
+		}
+	} else {
+		WARN_ON(true);
 		return;
-
-	cmd.opcode		= CMDQ_OP_RESUME;
-	cmd.resume.sid		= sid;
-	cmd.resume.stag		= resp->grpid;
-	switch (resp->code) {
-	case IOMMU_PAGE_RESP_INVALID:
-	case IOMMU_PAGE_RESP_FAILURE:
-		cmd.resume.resp = CMDQ_RESUME_0_RESP_ABORT;
-		break;
-	case IOMMU_PAGE_RESP_SUCCESS:
-		cmd.resume.resp = CMDQ_RESUME_0_RESP_RETRY;
-		break;
-	default:
-		break;
 	}
 
 	arm_smmu_cmdq_issue_cmd(master->smmu, &cmd);
