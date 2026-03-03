@@ -158,6 +158,34 @@ enum lan9645x_vlan_port_tag {
 	LAN9645X_TAG_ALL = 3,
 };
 
+/* MAC table entry types.
+ * ENTRYTYPE_NORMAL is subject to aging.
+ * ENTRYTYPE_LOCKED is not subject to aging.
+ * ENTRYTYPE_MACv4 is not subject to aging. For IPv4 multicast.
+ * ENTRYTYPE_MACv6 is not subject to aging. For IPv6 multicast.
+ */
+enum macaccess_entry_type {
+	ENTRYTYPE_NORMAL = 0,
+	ENTRYTYPE_LOCKED,
+	ENTRYTYPE_MACV4,
+	ENTRYTYPE_MACV6,
+};
+
+struct lan9645x_mact_common {
+	struct lan9645x_mact_key {
+		u16 vid;
+		u8 mac[ETH_ALEN] __aligned(2);
+	} key;
+	u32 row: 11, /* 2048 rows, 4 buckets each */
+	    pgid: 6, /* 0-63 general purpose pgids. */
+	    type: 2;
+};
+
+struct lan9645x_mact_entry {
+	struct lan9645x_mact_common common;
+	struct list_head list;
+};
+
 struct lan9645x {
 	struct device *dev;
 	struct dsa_switch *ds;
@@ -180,6 +208,9 @@ struct lan9645x {
 	u16 bridge_mask; /* Mask for bridged ports */
 	u16 bridge_fwd_mask; /* Mask for forwarding bridged ports */
 	struct mutex fwd_domain_lock; /* lock forwarding configuration */
+	struct list_head mac_entries;
+	struct mutex mact_lock; /* lock access to mact_table */
+	struct mutex mac_entry_lock; /* lock for mac_entries list */
 
 	/* VLAN */
 	u16 vlan_mask[VLAN_N_VID]; /* Port mask per vlan */
@@ -423,5 +454,22 @@ void lan9645x_vlan_cpu_clear_vlan(struct lan9645x *lan9645x, u16 vid);
 void lan9645x_vlan_set_hostmode(struct lan9645x_port *p);
 int lan9645x_port_vlan_prepare(struct lan9645x_port *p, u16 vid, bool pvid,
 			       bool untagged, struct netlink_ext_ack *extack);
+
+/* MAC table: lan9645x_mac.c */
+int lan9645x_mact_flush(struct lan9645x *lan9645x, int port);
+int lan9645x_mact_learn(struct lan9645x *lan9645x, int port,
+			const unsigned char *addr, u16 vid,
+			enum macaccess_entry_type type);
+int lan9645x_mact_forget(struct lan9645x *lan9645x,
+			 const unsigned char mac[ETH_ALEN], unsigned int vid,
+			 enum macaccess_entry_type type);
+void lan9645x_mac_init(struct lan9645x *lan9645x);
+void lan9645x_mac_deinit(struct lan9645x *lan9645x);
+int lan9645x_mact_dsa_dump(struct lan9645x *lan9645x, int port,
+			   dsa_fdb_dump_cb_t *cb, void *data);
+int lan9645x_mact_entry_del(struct lan9645x *lan9645x, int pgid,
+			    const unsigned char *mac, u16 vid);
+int lan9645x_mact_entry_add(struct lan9645x *lan9645x, int pgid,
+			    const unsigned char *mac, u16 vid);
 
 #endif /* __LAN9645X_MAIN_H__ */
