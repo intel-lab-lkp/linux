@@ -261,6 +261,15 @@ int symbol__disassemble_llvm(const char *filename, struct symbol *sym,
 	ret = 0;
 
 err:
+	if (ret != 0) {
+		struct disasm_line *tmp;
+
+		list_for_each_entry_safe(dl, tmp, &notes->src->source,
+					 al.node) {
+			list_del(&dl->al.node);
+			disasm_line__free(dl);
+		}
+	}
 	LLVMDisasmDispose(disasm);
 	free(code_buf);
 	free(line_storage);
