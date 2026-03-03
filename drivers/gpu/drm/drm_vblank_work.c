@@ -279,9 +279,9 @@ int drm_vblank_worker_init(struct drm_vblank_crtc *vblank)
 
 	INIT_LIST_HEAD(&vblank->pending_work);
 	init_waitqueue_head(&vblank->work_wait_queue);
-	worker = kthread_run_worker(0, "card%d-crtc%d",
-				       vblank->dev->primary->index,
-				       vblank->pipe);
+	worker = kthread_run_worker("card%d-crtc%d",
+				    vblank->dev->primary->index,
+				    vblank->pipe);
 	if (IS_ERR(worker))
 		return PTR_ERR(worker);
 

@@ -342,7 +342,7 @@ static int wave5_vpu_probe(struct platform_device *pdev)
 		dev->irq_thread = kthread_run(irq_thread, dev, "irq thread");
 		hrtimer_setup(&dev->hrtimer, &wave5_vpu_timer_callback, CLOCK_MONOTONIC,
 			      HRTIMER_MODE_REL_PINNED);
-		dev->worker = kthread_run_worker(0, "vpu_irq_thread");
+		dev->worker = kthread_run_worker("vpu_irq_thread");
 		if (IS_ERR(dev->worker)) {
 			dev_err(&pdev->dev, "failed to create vpu irq worker\n");
 			ret = PTR_ERR(dev->worker);

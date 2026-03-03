@@ -966,7 +966,7 @@ zl3073x_devm_dpll_init(struct zl3073x_dev *zldev, u8 num_dplls)
 
 	/* Initialize monitoring thread */
 	kthread_init_delayed_work(&zldev->work, zl3073x_dev_periodic_work);
-	kworker = kthread_run_worker(0, "zl3073x-%s", dev_name(zldev->dev));
+	kworker = kthread_run_worker("zl3073x-%s", dev_name(zldev->dev));
 	if (IS_ERR(kworker)) {
 		rc = PTR_ERR(kworker);
 		goto error;

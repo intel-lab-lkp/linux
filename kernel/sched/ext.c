@@ -4863,7 +4863,7 @@ static struct scx_sched *scx_alloc_and_add_sched(struct sched_ext_ops *ops)
 		goto err_free_gdsqs;
 	}
 
-	sch->helper = kthread_run_worker(0, "sched_ext_helper");
+	sch->helper = kthread_run_worker("sched_ext_helper");
 	if (IS_ERR(sch->helper)) {
 		ret = PTR_ERR(sch->helper);
 		goto err_free_pcpu;

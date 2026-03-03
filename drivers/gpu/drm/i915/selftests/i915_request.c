@@ -493,7 +493,7 @@ static int mock_breadcrumbs_smoketest(void *arg)
 	for (n = 0; n < ncpus; n++) {
 		struct kthread_worker *worker;
 
-		worker = kthread_run_worker(0, "igt/%d", n);
+		worker = kthread_run_worker("igt/%d", n);
 		if (IS_ERR(worker)) {
 			ret = PTR_ERR(worker);
 			ncpus = n;
@@ -1646,8 +1646,8 @@ static int live_parallel_engines(void *arg)
 		for_each_uabi_engine(engine, i915) {
 			struct kthread_worker *worker;
 
-			worker = kthread_run_worker(0, "igt/parallel:%s",
-						       engine->name);
+			worker = kthread_run_worker("igt/parallel:%s",
+						    engine->name);
 			if (IS_ERR(worker)) {
 				err = PTR_ERR(worker);
 				break;
@@ -1805,7 +1805,7 @@ static int live_breadcrumbs_smoketest(void *arg)
 			unsigned int i = idx * ncpus + n;
 			struct kthread_worker *worker;
 
-			worker = kthread_run_worker(0, "igt/%d.%d", idx, n);
+			worker = kthread_run_worker("igt/%d.%d", idx, n);
 			if (IS_ERR(worker)) {
 				ret = PTR_ERR(worker);
 				goto out_flush;
@@ -3218,8 +3218,8 @@ static int perf_parallel_engines(void *arg)
 
 			memset(&engines[idx].p, 0, sizeof(engines[idx].p));
 
-			worker = kthread_run_worker(0, "igt:%s",
-						       engine->name);
+			worker = kthread_run_worker("igt:%s",
+						    engine->name);
 			if (IS_ERR(worker)) {
 				err = PTR_ERR(worker);
 				intel_engine_pm_put(engine);

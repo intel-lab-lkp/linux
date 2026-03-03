@@ -1020,9 +1020,6 @@ int kthread_worker_fn(void *worker_ptr)
 	WARN_ON(worker->task && worker->task != current);
 	worker->task = current;
 
-	if (worker->flags & KTW_FREEZABLE)
-		set_freezable();
-
 repeat:
 	set_current_state(TASK_INTERRUPTIBLE);	/* mb paired w/ kthread_stop */
 
@@ -1073,7 +1070,6 @@ EXPORT_SYMBOL_GPL(kthread_worker_fn);
 
 /**
  * kthread_create_worker_on_node - create a kthread worker
- * @flags: flags modifying the default behavior of the worker
  * @node: task structure for the thread is allocated on this node
  * @namefmt: printf-style name for the kthread worker (task).
  *
@@ -1082,7 +1078,7 @@ EXPORT_SYMBOL_GPL(kthread_worker_fn);
  * when the caller was killed by a fatal signal.
  */
 struct kthread_worker *
-kthread_create_worker_on_node(unsigned int flags, int node, const char namefmt[], ...)
+kthread_create_worker_on_node(int node, const char namefmt[], ...)
 {
 	struct kthread_create_info info = {
 		.node		= node,
@@ -1100,7 +1096,6 @@ kthread_create_worker_on_node(unsigned int flags, int node, const char namefmt[]
 		return ERR_CAST(task);
 
 	worker = kthread_data(task);
-	worker->flags = flags;
 	worker->task = task;
 	return worker;
 }
@@ -1110,7 +1105,6 @@ EXPORT_SYMBOL(kthread_create_worker_on_node);
  * kthread_create_worker_on_cpu - create a kthread worker and bind it
  *	to a given CPU and the associated NUMA node.
  * @cpu: CPU number
- * @flags: flags modifying the default behavior of the worker
  * @namefmt: printf-style name for the thread. Format is restricted
  *	     to "name.*%u". Code fills in cpu number.
  *
@@ -1143,12 +1137,11 @@ EXPORT_SYMBOL(kthread_create_worker_on_node);
  * when the caller was killed by a fatal signal.
  */
 struct kthread_worker *
-kthread_create_worker_on_cpu(int cpu, unsigned int flags,
-			     const char namefmt[])
+kthread_create_worker_on_cpu(int cpu, const char namefmt[])
 {
 	struct kthread_worker *worker;
 
-	worker = kthread_create_worker_on_node(flags, cpu_to_node(cpu), namefmt, cpu);
+	worker = kthread_create_worker_on_node(cpu_to_node(cpu), namefmt, cpu);
 	if (!IS_ERR(worker))
 		kthread_bind(worker->task, cpu);
 

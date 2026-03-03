@@ -3207,8 +3207,8 @@ static int ice_ptp_init_work(struct ice_pf *pf, struct ice_ptp *ptp)
 	/* Allocate a kworker for handling work required for the ports
 	 * connected to the PTP hardware clock.
 	 */
-	kworker = kthread_run_worker(0, "ice-ptp-%s",
-					dev_name(ice_pf_to_dev(pf)));
+	kworker = kthread_run_worker("ice-ptp-%s",
+				     dev_name(ice_pf_to_dev(pf)));
 	if (IS_ERR(kworker))
 		return PTR_ERR(kworker);
 

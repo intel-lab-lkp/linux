@@ -137,12 +137,7 @@ struct kthread_work;
 typedef void (*kthread_work_func_t)(struct kthread_work *work);
 void kthread_delayed_work_timer_fn(struct timer_list *t);
 
-enum {
-	KTW_FREEZABLE		= 1 << 0,	/* freeze during suspend */
-};
-
 struct kthread_worker {
-	unsigned int		flags;
 	raw_spinlock_t		lock;
 	struct list_head	work_list;
 	struct list_head	delayed_work_list;
@@ -207,39 +202,35 @@ extern void __kthread_init_worker(struct kthread_worker *worker,
 
 int kthread_worker_fn(void *worker_ptr);
 
-__printf(3, 4)
-struct kthread_worker *kthread_create_worker_on_node(unsigned int flags,
-						     int node,
+__printf(2, 3)
+struct kthread_worker *kthread_create_worker_on_node(int node,
 						     const char namefmt[], ...);
 
-#define kthread_create_worker(flags, namefmt, ...) \
-	kthread_create_worker_on_node(flags, NUMA_NO_NODE, namefmt, ## __VA_ARGS__);
+#define kthread_create_worker(namefmt, ...) \
+	kthread_create_worker_on_node(NUMA_NO_NODE, namefmt, ## __VA_ARGS__)
 
 /**
  * kthread_run_worker - create and wake a kthread worker.
- * @flags: flags modifying the default behavior of the worker
  * @namefmt: printf-style name for the thread.
  *
  * Description: Convenient wrapper for kthread_create_worker() followed by
  * wake_up_process().  Returns the kthread_worker or ERR_PTR(-ENOMEM).
  */
-#define kthread_run_worker(flags, namefmt, ...)					\
+#define kthread_run_worker(namefmt, ...)						\
 ({										\
 	struct kthread_worker *__kw						\
-		= kthread_create_worker(flags, namefmt, ## __VA_ARGS__);	\
+		= kthread_create_worker(namefmt, ## __VA_ARGS__);		\
 	if (!IS_ERR(__kw))							\
 		wake_up_process(__kw->task);					\
 	__kw;									\
 })
 
 struct kthread_worker *
-kthread_create_worker_on_cpu(int cpu, unsigned int flags,
-			     const char namefmt[]);
+kthread_create_worker_on_cpu(int cpu, const char namefmt[]);
 
 /**
  * kthread_run_worker_on_cpu - create and wake a cpu bound kthread worker.
  * @cpu: CPU number
- * @flags: flags modifying the default behavior of the worker
  * @namefmt: printf-style name for the thread. Format is restricted
  *	     to "name.*%u". Code fills in cpu number.
  *
@@ -248,12 +239,11 @@ kthread_create_worker_on_cpu(int cpu, unsigned int flags,
  * ERR_PTR(-ENOMEM).
  */
 static inline struct kthread_worker *
-kthread_run_worker_on_cpu(int cpu, unsigned int flags,
-			  const char namefmt[])
+kthread_run_worker_on_cpu(int cpu, const char namefmt[])
 {
 	struct kthread_worker *kw;
 
-	kw = kthread_create_worker_on_cpu(cpu, flags, namefmt);
+	kw = kthread_create_worker_on_cpu(cpu, namefmt);
 	if (!IS_ERR(kw))
 		wake_up_process(kw->task);
 
