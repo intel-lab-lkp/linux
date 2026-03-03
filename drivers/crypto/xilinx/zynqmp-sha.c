@@ -31,6 +31,7 @@ struct xilinx_sha_drv_ctx {
 	struct ahash_engine_alg sha3_384;
 	struct crypto_engine *engine;
 	struct device *dev;
+	u8 dma_addr_size;
 };
 
 struct xilinx_sha_tfm_ctx {
@@ -248,6 +249,7 @@ static struct xilinx_sha_drv_ctx zynqmp_sha3_drv_ctx = {
 	.sha3_384.op = {
 		.do_one_request = handle_zynqmp_sha_engine_req,
 	},
+	.dma_addr_size = ZYNQMP_DMA_BIT_MASK,
 };
 
 
@@ -273,7 +275,7 @@ static int zynqmp_sha_probe(struct platform_device *pdev)
 		return PTR_ERR(sha3_drv_ctx);
 	}
 
-	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(ZYNQMP_DMA_BIT_MASK));
+	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(sha3_drv_ctx->dma_addr_size));
 	if (err < 0) {
 		dev_err(dev, "No usable DMA configuration\n");
 		return err;
