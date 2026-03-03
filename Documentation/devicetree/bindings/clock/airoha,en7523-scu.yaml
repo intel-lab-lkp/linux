@@ -32,6 +32,7 @@ properties:
       - enum:
           - airoha,en7523-scu
           - airoha,en7581-scu
+          - econet,en751221-scu
 
   reg:
     items:
@@ -67,7 +68,10 @@ allOf:
   - if:
       properties:
         compatible:
-          const: airoha,en7581-scu
+          items:
+            - enum:
+                - airoha,en7581-scu
+                - econet,en751221-scu
     then:
       properties:
         reg:
@@ -96,5 +100,18 @@ examples:
         reg = <0x0 0x1fb00000 0x0 0x970>;
               #clock-cells = <1>;
               #reset-cells = <1>;
+      };
+    };
+
+  - |
+    soc {
+      #address-cells = <1>;
+      #size-cells = <1>;
+
+      scuclk2: clock-controller@1fb00000 {
+        compatible = "econet,en751221-scu";
+        reg = <0x1fb00000 0x970>;
+        #clock-cells = <1>;
+        #reset-cells = <1>;
       };
     };
