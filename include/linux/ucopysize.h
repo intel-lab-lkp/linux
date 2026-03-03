@@ -42,7 +42,7 @@ static inline void copy_overflow(int size, unsigned long count)
 }
 
 static __always_inline __must_check bool
-check_copy_size(const void *addr, size_t bytes, bool is_source)
+check_copy_size_nosec(const void *addr, size_t bytes, bool is_source)
 {
 	int sz = __builtin_object_size(addr, 0);
 	if (unlikely(sz >= 0 && sz < bytes)) {
@@ -55,6 +55,14 @@ check_copy_size(const void *addr, size_t bytes, bool is_source)
 		return false;
 	}
 	if (WARN_ON_ONCE(bytes > INT_MAX))
+		return false;
+	return true;
+}
+
+static __always_inline __must_check bool
+check_copy_size(const void *addr, size_t bytes, bool is_source)
+{
+	if (!check_copy_size_nosec(addr, bytes, is_source))
 		return false;
 	check_object_size(addr, bytes, is_source);
 	return true;
