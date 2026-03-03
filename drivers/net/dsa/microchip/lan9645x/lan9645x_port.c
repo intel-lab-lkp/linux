@@ -15,6 +15,8 @@ int lan9645x_port_init(struct lan9645x *lan9645x, int port)
 		ANA_PORT_CFG_LEARN_ENA,
 		lan9645x, ANA_PORT_CFG(p->chip_port));
 
+	p->learn_ena = false;
+
 	lan9645x_port_set_maxlen(lan9645x, port, ETH_DATA_LEN);
 
 	lan9645x_phylink_port_down(lan9645x, port);

@@ -175,6 +175,12 @@ struct lan9645x {
 	/* debugfs */
 	struct dentry *debugfs_root;
 
+	/* Forwarding Database */
+	struct net_device *bridge; /* Only support single bridge */
+	u16 bridge_mask; /* Mask for bridged ports */
+	u16 bridge_fwd_mask; /* Mask for forwarding bridged ports */
+	struct mutex fwd_domain_lock; /* lock forwarding configuration */
+
 	int num_port_dis;
 	bool dd_dis;
 	bool tsn_dis;
@@ -271,6 +277,11 @@ static inline struct net_device *
 lan9645x_chipport_to_ndev(struct lan9645x *lan9645x, int port)
 {
 	return lan9645x_port_to_ndev(lan9645x_to_port(lan9645x, port));
+}
+
+static inline bool lan9645x_port_is_bridged(struct lan9645x_port *p)
+{
+	return p && (p->lan9645x->bridge_mask & BIT(p->chip_port));
 }
 
 static inline bool lan9645x_port_is_used(struct lan9645x *lan9645x, int port)
