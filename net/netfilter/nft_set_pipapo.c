@@ -1687,6 +1687,7 @@ static void nft_pipapo_gc_deactivate(struct net *net, struct nft_set *set,
  */
 static void pipapo_gc_scan(struct nft_set *set, struct nft_pipapo_match *m)
 {
+	unsigned long stop_time = jiffies + 10 * HZ;
 	struct nft_pipapo *priv = nft_set_priv(set);
 	struct net *net = read_pnet(&set->net);
 	unsigned int rules_f0, first_rule = 0;
@@ -1697,6 +1698,9 @@ static void pipapo_gc_scan(struct nft_set *set, struct nft_pipapo_match *m)
 		union nft_pipapo_map_bucket rulemap[NFT_PIPAPO_MAX_FIELDS];
 		const struct nft_pipapo_field *f;
 		unsigned int i, start, rules_fx;
+
+		if (priv->to_free && time_after(jiffies, stop_time))
+			return;
 
 		start = first_rule;
 		rules_fx = rules_f0;
