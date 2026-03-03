@@ -1204,6 +1204,132 @@ void ethtool_rxfh_context_lost(struct net_device *dev, u32 context_id)
 }
 EXPORT_SYMBOL(ethtool_rxfh_context_lost);
 
+static bool ethtool_rxfh_indir_is_periodic(const u32 *tbl, u32 old_size, u32 new_size)
+{
+	u32 i;
+
+	for (i = new_size; i < old_size; i++)
+		if (tbl[i] != tbl[i % new_size])
+			return false;
+	return true;
+}
+
+/**
+ * ethtool_rxfh_indir_can_resize - Check if an indirection table can be resized
+ * @tbl: indirection table
+ * @old_size: current number of entries in the table
+ * @new_size: desired number of entries
+ *
+ * Validate that @tbl can be resized from @old_size to @new_size without
+ * data loss. Read-only; does not modify the table.
+ *
+ * Return: 0 if resize is possible, -%EINVAL otherwise.
+ */
+int ethtool_rxfh_indir_can_resize(const u32 *tbl, u32 old_size, u32 new_size)
+{
+	if (old_size == 0 || new_size == 0)
+		return -EINVAL;
+	if (new_size == old_size)
+		return 0;
+
+	if (new_size < old_size) {
+		if (old_size % new_size != 0)
+			return -EINVAL;
+		if (!ethtool_rxfh_indir_is_periodic(tbl, old_size, new_size))
+			return -EINVAL;
+		return 0;
+	}
+
+	if (new_size % old_size != 0)
+		return -EINVAL;
+	return 0;
+}
+EXPORT_SYMBOL(ethtool_rxfh_indir_can_resize);
+
+/* Resize without validation; caller must have called can_resize first */
+static void __ethtool_rxfh_indir_resize(u32 *tbl, u32 old_size, u32 new_size)
+{
+	u32 i;
+
+	/* Unfold (grow): replicate existing pattern; fold is a no-op on the data */
+	for (i = old_size; i < new_size; i++)
+		tbl[i] = tbl[i % old_size];
+}
+
+/**
+ * ethtool_rxfh_indir_resize - Fold or unfold an indirection table
+ * @tbl: indirection table (must have room for max(old_size, new_size) entries)
+ * @old_size: current number of entries in the table
+ * @new_size: desired number of entries
+ *
+ * Resize an RSS indirection table in place. When folding (shrinking),
+ * the table must be periodic with period @new_size; otherwise the
+ * operation is rejected. When unfolding (growing), the existing
+ * pattern is replicated. Both directions require the sizes to be
+ * multiples of each other.
+ *
+ * Return: 0 on success, -%EINVAL on failure (no mutation on failure).
+ */
+int ethtool_rxfh_indir_resize(u32 *tbl, u32 old_size, u32 new_size)
+{
+	int ret;
+
+	ret = ethtool_rxfh_indir_can_resize(tbl, old_size, new_size);
+	if (ret)
+		return ret;
+
+	__ethtool_rxfh_indir_resize(tbl, old_size, new_size);
+	return 0;
+}
+EXPORT_SYMBOL(ethtool_rxfh_indir_resize);
+
+/**
+ * ethtool_rxfh_contexts_resize_all - Resize all RSS context indirection tables
+ * @dev: network device
+ * @new_indir_size: new indirection table size
+ *
+ * Resize the indirection table of every non-default RSS context to
+ * @new_indir_size. Intended to be called from drivers when the
+ * device's indirection table size changes (e.g. on channel count
+ * change). An %ETHTOOL_MSG_RSS_NTF is sent for each resized context.
+ *
+ * All contexts are validated before any are modified, so either all
+ * contexts are resized or none are.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int ethtool_rxfh_contexts_resize_all(struct net_device *dev, u32 new_indir_size)
+{
+	struct ethtool_rxfh_context *ctx;
+	unsigned long context;
+	int ret;
+
+	if (dev->ethtool_ops->rxfh_indir_space == 0 ||
+	    new_indir_size > dev->ethtool_ops->rxfh_indir_space)
+		return -EINVAL;
+
+	scoped_guard(mutex, &dev->ethtool->rss_lock) {
+		xa_for_each(&dev->ethtool->rss_ctx, context, ctx) {
+			ret = ethtool_rxfh_indir_can_resize(ethtool_rxfh_context_indir(ctx),
+							    ctx->indir_size, new_indir_size);
+			if (ret)
+				return ret;
+		}
+
+		xa_for_each(&dev->ethtool->rss_ctx, context, ctx) {
+			__ethtool_rxfh_indir_resize(ethtool_rxfh_context_indir(ctx),
+						    ctx->indir_size, new_indir_size);
+			ctx->indir_size = new_indir_size;
+		}
+	}
+
+	xa_for_each(&dev->ethtool->rss_ctx, context, ctx)
+		ethtool_rss_notify(dev, ETHTOOL_MSG_RSS_NTF, context);
+
+	return 0;
+}
+EXPORT_SYMBOL(ethtool_rxfh_contexts_resize_all);
+
 enum ethtool_link_medium ethtool_str_to_medium(const char *str)
 {
 	int i;

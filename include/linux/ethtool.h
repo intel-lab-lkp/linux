@@ -214,6 +214,9 @@ static inline u8 *ethtool_rxfh_context_key(struct ethtool_rxfh_context *ctx)
 }
 
 void ethtool_rxfh_context_lost(struct net_device *dev, u32 context_id);
+int ethtool_rxfh_indir_can_resize(const u32 *tbl, u32 old_size, u32 new_size);
+int ethtool_rxfh_indir_resize(u32 *tbl, u32 old_size, u32 new_size);
+int ethtool_rxfh_contexts_resize_all(struct net_device *dev, u32 new_indir_size);
 
 struct link_mode_info {
 	int	speed;
