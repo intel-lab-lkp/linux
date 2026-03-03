@@ -85,6 +85,8 @@ static struct inode *minix_alloc_inode(struct super_block *sb)
 	ei = alloc_inode_sb(sb, minix_inode_cachep, GFP_KERNEL);
 	if (!ei)
 		return NULL;
+	mmb_init(&ei->i_metadata_bhs);
+
 	return &ei->vfs_inode;
 }
 
@@ -120,6 +122,11 @@ static void destroy_inodecache(void)
 	 */
 	rcu_barrier();
 	kmem_cache_destroy(minix_inode_cachep);
+}
+
+struct mapping_metadata_bhs *minix_get_metadata_bhs(struct inode *inode)
+{
+	return &minix_i(inode)->i_metadata_bhs;
 }
 
 static const struct super_operations minix_sops = {
@@ -502,6 +509,7 @@ static const struct address_space_operations minix_aops = {
 static const struct inode_operations minix_symlink_inode_operations = {
 	.get_link	= page_get_link,
 	.getattr	= minix_getattr,
+	.get_metadata_bhs = minix_get_metadata_bhs,
 };
 
 void minix_set_inode(struct inode *inode, dev_t rdev)

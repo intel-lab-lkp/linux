@@ -50,4 +50,5 @@ static int minix_setattr(struct mnt_idmap *idmap,
 const struct inode_operations minix_file_inode_operations = {
 	.setattr	= minix_setattr,
 	.getattr	= minix_getattr,
+	.get_metadata_bhs = minix_get_metadata_bhs,
 };

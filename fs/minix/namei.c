@@ -288,4 +288,5 @@ const struct inode_operations minix_dir_inode_operations = {
 	.rename		= minix_rename,
 	.getattr	= minix_getattr,
 	.tmpfile	= minix_tmpfile,
+	.get_metadata_bhs = minix_get_metadata_bhs,
 };
