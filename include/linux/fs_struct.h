@@ -49,4 +49,6 @@ static inline int current_umask(void)
 	return current->fs->umask;
 }
 
+void init_root(struct path *root);
+
 #endif /* _LINUX_FS_STRUCT_H */

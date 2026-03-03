@@ -196,3 +196,9 @@ struct fs_struct init_fs = {
 	.seq		= __SEQLOCK_UNLOCKED(init_fs.seq),
 	.umask		= 0022,
 };
+
+void init_root(struct path *root)
+{
+	get_fs_root(&init_fs, root);
+}
+EXPORT_SYMBOL_GPL(init_root);
