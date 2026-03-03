@@ -127,8 +127,6 @@ struct bitmap_operations {
 
 	int (*register_group)(struct mddev *mddev);
 	void (*unregister_group)(struct mddev *mddev);
-
-	struct attribute_group *group;
 };
 
 /* the bitmap API */

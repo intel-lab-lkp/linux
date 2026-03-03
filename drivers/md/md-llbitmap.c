@@ -1609,8 +1609,6 @@ static struct bitmap_operations llbitmap_ops = {
 
 	.register_group		= llbitmap_register_group,
 	.unregister_group	= llbitmap_unregister_group,
-
-	.group			= &md_llbitmap_group,
 };
 
 int md_llbitmap_init(void)

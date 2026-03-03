@@ -3049,7 +3049,6 @@ static struct bitmap_operations bitmap_ops = {
 
 	.register_group		= bitmap_register_group,
 	.unregister_group	= bitmap_unregister_group,
-	.group			= &md_bitmap_group,
 };
 
 int md_bitmap_init(void)
