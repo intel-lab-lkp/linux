@@ -25,26 +25,53 @@ static inline struct kthread *tsk_is_kthread(struct task_struct *p)
 	return NULL;
 }
 
+/**
+ * struct kthread_args - kthread creation parameters.
+ * @threadfn: the function to run in the kthread.
+ * @data: data pointer passed to @threadfn.
+ * @node: NUMA node for stack/task allocation (NUMA_NO_NODE for any).
+ * @kthread_worker: set to 1 to create a kthread worker.
+ *
+ * Pass a pointer to this struct as the first argument of kthread_create()
+ * or kthread_run() to use the struct-based creation path.  Legacy callers
+ * that pass a function pointer as the first argument continue to work
+ * unchanged via _Generic dispatch.
+ */
+struct kthread_args {
+	int (*threadfn)(void *data);
+	void *data;
+	int node;
+	u32 kthread_worker:1;
+};
+
 __printf(4, 5)
 struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 					   void *data,
 					   int node,
 					   const char namefmt[], ...);
 
-/**
- * kthread_create - create a kthread on the current node
- * @threadfn: the function to run in the thread
- * @data: data pointer for @threadfn()
- * @namefmt: printf-style format string for the thread name
- * @arg: arguments for @namefmt.
- *
- * This macro will create a kthread on the current node, leaving it in
- * the stopped state.  This is just a helper for kthread_create_on_node();
- * see the documentation there for more details.
- */
-#define kthread_create(threadfn, data, namefmt, arg...) \
-	kthread_create_on_node(threadfn, data, NUMA_NO_NODE, namefmt, ##arg)
+__printf(2, 3)
+struct task_struct *kthread_create_on_info(struct kthread_args *kargs,
+					   const char namefmt[], ...);
 
+__printf(3, 4)
+struct task_struct *__kthread_create(int (*threadfn)(void *data),
+				     void *data,
+				     const char namefmt[], ...);
+
+/**
+ * kthread_create - create a kthread on the current node.
+ * @first: either a function pointer (legacy) or a &struct kthread_args
+ *         pointer (struct-based).
+ *
+ * _Generic dispatch: when @first is a &struct kthread_args pointer the
+ * call is forwarded to kthread_create_on_info(); otherwise it goes through
+ * __kthread_create() which wraps kthread_create_on_node() with NUMA_NO_NODE.
+ */
+#define kthread_create(__first, ...)					\
+	_Generic((__first),						\
+		struct kthread_args *: kthread_create_on_info,	\
+		default: __kthread_create)(__first, __VA_ARGS__)
 
 struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
 					  void *data,
@@ -59,20 +86,20 @@ bool kthread_is_per_cpu(struct task_struct *k);
 
 /**
  * kthread_run - create and wake a thread.
- * @threadfn: the function to run until signal_pending(current).
- * @data: data ptr for @threadfn.
- * @namefmt: printf-style name for the thread.
+ * @first: either a function pointer (legacy) or a &struct kthread_args
+ *         pointer (struct-based).  Remaining arguments are forwarded to
+ *         kthread_create().
  *
  * Description: Convenient wrapper for kthread_create() followed by
  * wake_up_process().  Returns the kthread or ERR_PTR(-ENOMEM).
  */
-#define kthread_run(threadfn, data, namefmt, ...)			   \
-({									   \
-	struct task_struct *__k						   \
-		= kthread_create(threadfn, data, namefmt, ## __VA_ARGS__); \
-	if (!IS_ERR(__k))						   \
-		wake_up_process(__k);					   \
-	__k;								   \
+#define kthread_run(__first, ...)					\
+({									\
+	struct task_struct *__k						\
+		= kthread_create(__first, __VA_ARGS__);			\
+	if (!IS_ERR(__k))						\
+		wake_up_process(__k);					\
+	__k;								\
 })
 
 /**

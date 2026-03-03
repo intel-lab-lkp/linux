@@ -38,8 +38,7 @@ struct task_struct *kthreadd_task;
 static LIST_HEAD(kthread_affinity_list);
 static DEFINE_MUTEX(kthread_affinity_lock);
 
-struct kthread_create_info
-{
+struct kthread_create_req {
 	/* Information passed to kthread() from kthreadd. */
 	char *full_name;
 	int (*threadfn)(void *data);
@@ -382,7 +381,7 @@ static int kthread(void *_create)
 {
 	static const struct sched_param param = { .sched_priority = 0 };
 	/* Copy data: it's on kthread's stack */
-	struct kthread_create_info *create = _create;
+	struct kthread_create_req *create = _create;
 	int (*threadfn)(void *data) = create->threadfn;
 	void *data = create->data;
 	struct completion *done;
@@ -449,7 +448,7 @@ int tsk_fork_get_node(struct task_struct *tsk)
 	return NUMA_NO_NODE;
 }
 
-static void create_kthread(struct kthread_create_info *create)
+static void create_kthread(struct kthread_create_req *create)
 {
 	int pid;
 	struct kernel_clone_args args = {
@@ -480,20 +479,23 @@ static void create_kthread(struct kthread_create_info *create)
 	}
 }
 
-static struct task_struct *__kthread_create_on_node(const struct kthread_create_info *info,
+static struct task_struct *__kthread_create_on_node(const struct kthread_args *kargs,
 						    const char namefmt[],
 						    va_list args)
 {
 	DECLARE_COMPLETION_ONSTACK(done);
 	struct kthread_worker *worker = NULL;
 	struct task_struct *task;
-	struct kthread_create_info *create;
+	struct kthread_create_req *create;
 
 	create = kmalloc_obj(*create);
 	if (!create)
 		return ERR_PTR(-ENOMEM);
 
-	*create = *info;
+	create->threadfn	= kargs->threadfn;
+	create->data		= kargs->data;
+	create->node		= kargs->node;
+	create->kthread_worker	= kargs->kthread_worker;
 
 	if (create->kthread_worker) {
 		worker = kzalloc_obj(*worker);
@@ -573,7 +575,7 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 					   const char namefmt[],
 					   ...)
 {
-	struct kthread_create_info info = {
+	struct kthread_args kargs = {
 		.threadfn	= threadfn,
 		.data		= data,
 		.node		= node,
@@ -582,12 +584,67 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 	va_list args;
 
 	va_start(args, namefmt);
-	task = __kthread_create_on_node(&info, namefmt, args);
+	task = __kthread_create_on_node(&kargs, namefmt, args);
 	va_end(args);
 
 	return task;
 }
 EXPORT_SYMBOL(kthread_create_on_node);
+
+/**
+ * kthread_create_on_info - create a kthread from a struct kthread_args.
+ * @kargs: kthread creation parameters.
+ * @namefmt: printf-style name for the thread.
+ *
+ * This is the struct-based kthread creation path, dispatched via the
+ * kthread_create() _Generic macro when the first argument is a
+ * &struct kthread_args pointer.
+ *
+ * Returns a task_struct or ERR_PTR(-ENOMEM) or ERR_PTR(-EINTR).
+ */
+struct task_struct *kthread_create_on_info(struct kthread_args *kargs,
+					   const char namefmt[], ...)
+{
+	struct task_struct *task;
+	va_list args;
+
+	va_start(args, namefmt);
+	task = __kthread_create_on_node(kargs, namefmt, args);
+	va_end(args);
+
+	return task;
+}
+EXPORT_SYMBOL(kthread_create_on_info);
+
+/**
+ * __kthread_create - create a kthread (legacy positional-argument path).
+ * @threadfn: the function to run until signal_pending(current).
+ * @data: data ptr for @threadfn.
+ * @namefmt: printf-style name for the thread.
+ *
+ * _Generic dispatch target for kthread_create() when the first argument
+ * is a function pointer rather than a &struct kthread_args.
+ *
+ * Returns a task_struct or ERR_PTR(-ENOMEM) or ERR_PTR(-EINTR).
+ */
+struct task_struct *__kthread_create(int (*threadfn)(void *data),
+				     void *data, const char namefmt[], ...)
+{
+	struct kthread_args kargs = {
+		.threadfn	= threadfn,
+		.data		= data,
+		.node		= NUMA_NO_NODE,
+	};
+	struct task_struct *task;
+	va_list args;
+
+	va_start(args, namefmt);
+	task = __kthread_create_on_node(&kargs, namefmt, args);
+	va_end(args);
+
+	return task;
+}
+EXPORT_SYMBOL(__kthread_create);
 
 static void __kthread_bind_mask(struct task_struct *p, const struct cpumask *mask, unsigned int state)
 {
@@ -833,10 +890,10 @@ int kthreadd(void *unused)
 
 		spin_lock(&kthread_create_lock);
 		while (!list_empty(&kthread_create_list)) {
-			struct kthread_create_info *create;
+			struct kthread_create_req *create;
 
 			create = list_entry(kthread_create_list.next,
-					    struct kthread_create_info, list);
+					    struct kthread_create_req, list);
 			list_del_init(&create->list);
 			spin_unlock(&kthread_create_lock);
 
@@ -1080,7 +1137,7 @@ EXPORT_SYMBOL_GPL(kthread_worker_fn);
 struct kthread_worker *
 kthread_create_worker_on_node(int node, const char namefmt[], ...)
 {
-	struct kthread_create_info info = {
+	struct kthread_args kargs = {
 		.node		= node,
 		.kthread_worker	= 1,
 	};
@@ -1089,7 +1146,7 @@ kthread_create_worker_on_node(int node, const char namefmt[], ...)
 	va_list args;
 
 	va_start(args, namefmt);
-	task = __kthread_create_on_node(&info, namefmt, args);
+	task = __kthread_create_on_node(&kargs, namefmt, args);
 	va_end(args);
 
 	if (IS_ERR(task))
