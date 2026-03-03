@@ -53,16 +53,22 @@ extern int finish_clean_context(struct fs_context *fc);
  */
 extern int filename_lookup(int dfd, struct filename *name, unsigned flags,
 			   struct path *path, const struct path *root);
-int filename_rmdir(int dfd, struct filename *name);
-int filename_unlinkat(int dfd, struct filename *name);
+int filename_rmdir(int dfd, struct filename *name,
+		   unsigned int lookup_flags);
+int filename_unlinkat(int dfd, struct filename *name,
+		      unsigned int lookup_flags);
 int may_linkat(struct mnt_idmap *idmap, const struct path *link);
 int filename_renameat2(int olddfd, struct filename *oldname, int newdfd,
 		 struct filename *newname, unsigned int flags);
-int filename_mkdirat(int dfd, struct filename *name, umode_t mode);
-int filename_mknodat(int dfd, struct filename *name, umode_t mode, unsigned int dev);
-int filename_symlinkat(struct filename *from, int newdfd, struct filename *to);
+int filename_mkdirat(int dfd, struct filename *name, umode_t mode,
+		     unsigned int lookup_flags);
+int filename_mknodat(int dfd, struct filename *name, umode_t mode,
+		     unsigned int dev, unsigned int lookup_flags);
+int filename_symlinkat(struct filename *from, int newdfd, struct filename *to,
+		       unsigned int lookup_flags);
 int filename_linkat(int olddfd, struct filename *old, int newdfd,
-			struct filename *new, int flags);
+		    struct filename *new, int flags,
+		    unsigned int lookup_flags);
 int vfs_tmpfile(struct mnt_idmap *idmap,
 		const struct path *parentpath,
 		struct file *file, umode_t mode);

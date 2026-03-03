@@ -140,9 +140,9 @@ int io_unlinkat(struct io_kiocb *req, unsigned int issue_flags)
 	WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
 
 	if (un->flags & AT_REMOVEDIR)
-		ret = filename_rmdir(un->dfd, name);
+		ret = filename_rmdir(un->dfd, name, 0);
 	else
-		ret = filename_unlinkat(un->dfd, name);
+		ret = filename_unlinkat(un->dfd, name, 0);
 
 	req->flags &= ~REQ_F_NEED_CLEANUP;
 	io_req_set_res(req, ret, 0);
@@ -188,7 +188,7 @@ int io_mkdirat(struct io_kiocb *req, unsigned int issue_flags)
 
 	WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
 
-	ret = filename_mkdirat(mkd->dfd, name, mkd->mode);
+	ret = filename_mkdirat(mkd->dfd, name, mkd->mode, 0);
 
 	req->flags &= ~REQ_F_NEED_CLEANUP;
 	io_req_set_res(req, ret, 0);
@@ -241,7 +241,7 @@ int io_symlinkat(struct io_kiocb *req, unsigned int issue_flags)
 
 	WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
 
-	ret = filename_symlinkat(old, sl->new_dfd, new);
+	ret = filename_symlinkat(old, sl->new_dfd, new, 0);
 
 	req->flags &= ~REQ_F_NEED_CLEANUP;
 	io_req_set_res(req, ret, 0);
@@ -289,7 +289,7 @@ int io_linkat(struct io_kiocb *req, unsigned int issue_flags)
 
 	WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
 
-	ret = filename_linkat(lnk->old_dfd, old, lnk->new_dfd, new, lnk->flags);
+	ret = filename_linkat(lnk->old_dfd, old, lnk->new_dfd, new, lnk->flags, 0);
 
 	req->flags &= ~REQ_F_NEED_CLEANUP;
 	io_req_set_res(req, ret, 0);

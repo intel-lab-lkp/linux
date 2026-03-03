@@ -900,7 +900,7 @@ static bool coredump_file(struct core_name *cn, struct coredump_params *cprm,
 		 * If it doesn't exist, that's fine. If there's some
 		 * other problem, we'll catch it at the filp_open().
 		 */
-		filename_unlinkat(AT_FDCWD, name);
+		filename_unlinkat(AT_FDCWD, name, 0);
 	}
 
 	/*

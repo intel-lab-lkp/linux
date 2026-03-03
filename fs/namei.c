@@ -5125,14 +5125,13 @@ static int may_mknod(umode_t mode)
 }
 
 int filename_mknodat(int dfd, struct filename *name, umode_t mode,
-		     unsigned int dev)
+		     unsigned int dev, unsigned int lookup_flags)
 {
 	struct delegated_inode di = { };
 	struct mnt_idmap *idmap;
 	struct dentry *dentry;
 	struct path path;
 	int error;
-	unsigned int lookup_flags = 0;
 
 	error = may_mknod(mode);
 	if (error)
@@ -5181,13 +5180,13 @@ SYSCALL_DEFINE4(mknodat, int, dfd, const char __user *, filename, umode_t, mode,
 		unsigned int, dev)
 {
 	CLASS(filename, name)(filename);
-	return filename_mknodat(dfd, name, mode, dev);
+	return filename_mknodat(dfd, name, mode, dev, 0);
 }
 
 SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, dev)
 {
 	CLASS(filename, name)(filename);
-	return filename_mknodat(AT_FDCWD, name, mode, dev);
+	return filename_mknodat(AT_FDCWD, name, mode, dev, 0);
 }
 
 /**
@@ -5258,13 +5257,15 @@ err:
 }
 EXPORT_SYMBOL(vfs_mkdir);
 
-int filename_mkdirat(int dfd, struct filename *name, umode_t mode)
+int filename_mkdirat(int dfd, struct filename *name, umode_t mode,
+		     unsigned int lookup_flags)
 {
 	struct dentry *dentry;
 	struct path path;
 	int error;
-	unsigned int lookup_flags = LOOKUP_DIRECTORY;
 	struct delegated_inode delegated_inode = { };
+
+	lookup_flags |= LOOKUP_DIRECTORY;
 
 retry:
 	dentry = filename_create(dfd, name, &path, lookup_flags);
@@ -5295,13 +5296,13 @@ retry:
 SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
 {
 	CLASS(filename, name)(pathname);
-	return filename_mkdirat(dfd, name, mode);
+	return filename_mkdirat(dfd, name, mode, 0);
 }
 
 SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
 {
 	CLASS(filename, name)(pathname);
-	return filename_mkdirat(AT_FDCWD, name, mode);
+	return filename_mkdirat(AT_FDCWD, name, mode, 0);
 }
 
 /**
@@ -5364,14 +5365,14 @@ out:
 }
 EXPORT_SYMBOL(vfs_rmdir);
 
-int filename_rmdir(int dfd, struct filename *name)
+int filename_rmdir(int dfd, struct filename *name,
+		   unsigned int lookup_flags)
 {
 	int error;
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
 	int type;
-	unsigned int lookup_flags = 0;
 	struct delegated_inode delegated_inode = { };
 retry:
 	error = filename_parentat(dfd, name, lookup_flags, &path, &last, &type);
@@ -5424,7 +5425,7 @@ exit2:
 SYSCALL_DEFINE1(rmdir, const char __user *, pathname)
 {
 	CLASS(filename, name)(pathname);
-	return filename_rmdir(AT_FDCWD, name);
+	return filename_rmdir(AT_FDCWD, name, 0);
 }
 
 /**
@@ -5506,7 +5507,8 @@ EXPORT_SYMBOL(vfs_unlink);
  * writeout happening, and we don't want to prevent access to the directory
  * while waiting on the I/O.
  */
-int filename_unlinkat(int dfd, struct filename *name)
+int filename_unlinkat(int dfd, struct filename *name,
+		      unsigned int lookup_flags)
 {
 	int error;
 	struct dentry *dentry;
@@ -5515,7 +5517,6 @@ int filename_unlinkat(int dfd, struct filename *name)
 	int type;
 	struct inode *inode;
 	struct delegated_inode delegated_inode = { };
-	unsigned int lookup_flags = 0;
 retry:
 	error = filename_parentat(dfd, name, lookup_flags, &path, &last, &type);
 	if (error)
@@ -5576,14 +5577,14 @@ SYSCALL_DEFINE3(unlinkat, int, dfd, const char __user *, pathname, int, flag)
 
 	CLASS(filename, name)(pathname);
 	if (flag & AT_REMOVEDIR)
-		return filename_rmdir(dfd, name);
-	return filename_unlinkat(dfd, name);
+		return filename_rmdir(dfd, name, 0);
+	return filename_unlinkat(dfd, name, 0);
 }
 
 SYSCALL_DEFINE1(unlink, const char __user *, pathname)
 {
 	CLASS(filename, name)(pathname);
-	return filename_unlinkat(AT_FDCWD, name);
+	return filename_unlinkat(AT_FDCWD, name, 0);
 }
 
 /**
@@ -5630,12 +5631,12 @@ int vfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 }
 EXPORT_SYMBOL(vfs_symlink);
 
-int filename_symlinkat(struct filename *from, int newdfd, struct filename *to)
+int filename_symlinkat(struct filename *from, int newdfd, struct filename *to,
+		       unsigned int lookup_flags)
 {
 	int error;
 	struct dentry *dentry;
 	struct path path;
-	unsigned int lookup_flags = 0;
 	struct delegated_inode delegated_inode = { };
 
 	if (IS_ERR(from))
@@ -5668,14 +5669,14 @@ SYSCALL_DEFINE3(symlinkat, const char __user *, oldname,
 {
 	CLASS(filename, old)(oldname);
 	CLASS(filename, new)(newname);
-	return filename_symlinkat(old, newdfd, new);
+	return filename_symlinkat(old, newdfd, new, 0);
 }
 
 SYSCALL_DEFINE2(symlink, const char __user *, oldname, const char __user *, newname)
 {
 	CLASS(filename, old)(oldname);
 	CLASS(filename, new)(newname);
-	return filename_symlinkat(old, AT_FDCWD, new);
+	return filename_symlinkat(old, AT_FDCWD, new, 0);
 }
 
 /**
@@ -5779,13 +5780,14 @@ EXPORT_SYMBOL(vfs_link);
  * and other special files.  --ADM
 */
 int filename_linkat(int olddfd, struct filename *old,
-		    int newdfd, struct filename *new, int flags)
+		    int newdfd, struct filename *new, int flags,
+		    unsigned int lookup_flags)
 {
 	struct mnt_idmap *idmap;
 	struct dentry *new_dentry;
 	struct path old_path, new_path;
 	struct delegated_inode delegated_inode = { };
-	int how = 0;
+	int how = lookup_flags;
 	int error;
 
 	if ((flags & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH)) != 0)
@@ -5807,7 +5809,7 @@ retry:
 		return error;
 
 	new_dentry = filename_create(newdfd, new, &new_path,
-					(how & LOOKUP_REVAL));
+					(how & (LOOKUP_REVAL | LOOKUP_IN_INIT)));
 	error = PTR_ERR(new_dentry);
 	if (IS_ERR(new_dentry))
 		goto out_putpath;
@@ -5848,14 +5850,14 @@ SYSCALL_DEFINE5(linkat, int, olddfd, const char __user *, oldname,
 {
 	CLASS(filename_uflags, old)(oldname, flags);
 	CLASS(filename, new)(newname);
-	return filename_linkat(olddfd, old, newdfd, new, flags);
+	return filename_linkat(olddfd, old, newdfd, new, flags, 0);
 }
 
 SYSCALL_DEFINE2(link, const char __user *, oldname, const char __user *, newname)
 {
 	CLASS(filename, old)(oldname);
 	CLASS(filename, new)(newname);
-	return filename_linkat(AT_FDCWD, old, AT_FDCWD, new, 0);
+	return filename_linkat(AT_FDCWD, old, AT_FDCWD, new, 0, 0);
 }
 
 /**
