@@ -222,6 +222,7 @@ static int sev_cmd_buffer_len(int cmd)
 	case SEV_CMD_GUEST_STATUS:		return sizeof(struct sev_data_guest_status);
 	case SEV_CMD_DBG_DECRYPT:		return sizeof(struct sev_data_dbg);
 	case SEV_CMD_DBG_ENCRYPT:		return sizeof(struct sev_data_dbg);
+	case SEV_CMD_SNP_VERIFY_MITIGATION:	return sizeof(struct sev_data_snp_verify_mitigation);
 	case SEV_CMD_SEND_START:		return sizeof(struct sev_data_send_start);
 	case SEV_CMD_SEND_UPDATE_DATA:		return sizeof(struct sev_data_send_update_data);
 	case SEV_CMD_SEND_UPDATE_VMSA:		return sizeof(struct sev_data_send_update_vmsa);
