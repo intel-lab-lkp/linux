@@ -3,7 +3,7 @@
  * Interface with platform TEE Security Manager (TSM) objects as defined by
  * PCIe r7.0 section 11 TEE Device Interface Security Protocol (TDISP)
  *
- * Copyright(c) 2024-2025 Intel Corporation. All rights reserved.
+ * Copyright (C) 2024-2026 Intel Corporation
  */
 
 #define dev_fmt(fmt) "PCI/TSM: " fmt
@@ -16,13 +16,13 @@
 #include <linux/sysfs.h>
 #include <linux/tsm.h>
 #include <linux/xarray.h>
-#include "pci.h"
+#include "../pci.h"
 
 /*
  * Provide a read/write lock against the init / exit of pdev tsm
  * capabilities and arrival/departure of a TSM instance
  */
-static DECLARE_RWSEM(pci_tsm_rwsem);
+DECLARE_RWSEM(pci_tsm_rwsem);
 
 /*
  * Count of TSMs registered that support physical link operations vs device
@@ -302,6 +302,7 @@ static ssize_t connect_store(struct device *dev, struct device_attribute *attr,
 	rc = pci_tsm_connect(pdev, tsm_dev);
 	if (rc)
 		return rc;
+
 	return len;
 }
 static DEVICE_ATTR_RW(connect);
@@ -932,6 +933,16 @@ void pci_tsm_tdi_constructor(struct pci_dev *pdev, struct pci_tdi *tdi,
 	tdi->tdi_id = tdi_id;
 }
 EXPORT_SYMBOL_GPL(pci_tsm_tdi_constructor);
+
+void pci_tsm_init_evidence(struct pci_tsm_evidence *evidence, int slot,
+			   enum hash_algo digest_algo)
+{
+	evidence->slot = slot;
+	evidence->generation = 1;
+	evidence->digest_algo = digest_algo;
+	init_rwsem(&evidence->lock);
+}
+EXPORT_SYMBOL_GPL(pci_tsm_init_evidence);
 
 /**
  * pci_tsm_link_constructor() - base 'struct pci_tsm' initialization for link TSMs
