@@ -68,6 +68,14 @@ properties:
       output gpio signal (SFP+ only), low - low Tx rate, high - high Tx rate. Must
       not be present for SFF modules
 
+  vccr-supply:
+    description:
+      Phandle to a regulator supplying the receiver power (AKA VccR) pin.
+
+  vcct-supply:
+    description:
+      Phandle to a regulator supplying the transmitter power (AKA VccT) pin.
+
 allOf:
   - if:
       properties:
