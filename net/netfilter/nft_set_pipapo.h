@@ -156,12 +156,14 @@ struct nft_pipapo_match {
  * @clone:	Copy where pending insertions and deletions are kept
  * @width:	Total bytes to be matched for one packet, including padding
  * @last_gc:	Timestamp of last garbage collection run, jiffies
+ * @to_free:	single-linked list of elements to queue up for memory reclaim
  */
 struct nft_pipapo {
 	struct nft_pipapo_match __rcu *match;
 	struct nft_pipapo_match *clone;
 	int width;
 	unsigned long last_gc;
+	struct nft_pipapo_elem *to_free;
 };
 
 struct nft_pipapo_elem;
@@ -169,10 +171,12 @@ struct nft_pipapo_elem;
 /**
  * struct nft_pipapo_elem - API-facing representation of single set element
  * @priv:	element placeholder
+ * @to_free:	list of elements waiting for mem reclaim
  * @ext:	nftables API extensions
  */
 struct nft_pipapo_elem {
 	struct nft_elem_priv	priv;
+	struct nft_pipapo_elem  *to_free;
 	struct nft_set_ext	ext;
 };
 
