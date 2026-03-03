@@ -2306,6 +2306,9 @@ static struct pci_driver mlx5_core_driver = {
 	.sriov_configure   = mlx5_core_sriov_configure,
 	.sriov_get_vf_total_msix = mlx5_sriov_get_vf_total_msix,
 	.sriov_set_msix_vec_count = mlx5_core_sriov_set_msix_vec_count,
+	.driver		= {
+		.probe_type	= PROBE_PREFER_ASYNCHRONOUS,
+	}
 };
 
 /**
