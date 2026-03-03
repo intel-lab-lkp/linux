@@ -611,6 +611,12 @@ struct sev_data_snp_verify_mitigation {
 #define SNP_MIT_SUBCMD_REQ_STATUS	0x0
 #define SNP_MIT_SUBCMD_REQ_VERIFY	0x1
 
+/*
+ * For CVE-2025-48514 defined in AMD-SB-3023
+ * https://www.amd.com/en/resources/product-security/bulletin/amd-sb-3023.html
+ */
+#define SNP_MIT_VEC_CVE_2025_48514		BIT(3)
+
 /**
  * struct snp_verify_mitigation_dst - mitigation result vectors
  *
@@ -1092,6 +1098,7 @@ void snp_free_firmware_page(void *addr);
 void sev_platform_shutdown(void);
 bool sev_is_snp_ciphertext_hiding_supported(void);
 u64 sev_get_snp_policy_bits(void);
+int sev_firmware_supported_vm_types(void);
 
 #else	/* !CONFIG_CRYPTO_DEV_SP_PSP */
 
@@ -1134,6 +1141,8 @@ static inline void snp_free_firmware_page(void *addr) { }
 static inline void sev_platform_shutdown(void) { }
 
 static inline bool sev_is_snp_ciphertext_hiding_supported(void) { return false; }
+
+static inline int sev_firmware_supported_vm_types(void) { return 0; }
 
 #endif	/* CONFIG_CRYPTO_DEV_SP_PSP */
 

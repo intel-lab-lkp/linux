@@ -2930,3 +2930,86 @@ void sev_pci_exit(void)
 
 	sev_firmware_shutdown(sev);
 }
+
+static int snp_verify_mitigation(struct sev_device *sev, u64 vector, u64 *verified)
+{
+	struct sev_data_snp_verify_mitigation data = {0};
+	struct snp_verify_mitigation_dst *dst;
+	struct page *p;
+	int rc, error = 0;
+
+	if (!sev->snp_plat_status.feature_info ||
+	    !(sev->snp_feat_info_0.ecx & SNP_VERIFY_MITIGATION_SUPPORTED)) {
+		return -EOPNOTSUPP;
+	}
+
+	p = __snp_alloc_firmware_pages(GFP_KERNEL, 0, true);
+	if (!p)
+		return -ENOMEM;
+	dst = page_address(p);
+
+	data.length = sizeof(data);
+	data.subcommand = SNP_MIT_SUBCMD_REQ_VERIFY;
+	data.vector = vector;
+	data.dst_paddr_en = 1;
+	data.dst_paddr = __psp_pa(dst);
+
+	rc = sev_do_cmd(SEV_CMD_SNP_VERIFY_MITIGATION, &data, &error);
+	if (rc < 0) {
+		if (error)
+			dev_err(sev->dev, "VERIFY_MITIGATION error %d\n", error);
+		goto reclaim_pages;
+	}
+
+	rc = -EIO;
+	if (dst->mit_failure_status) {
+		dev_err(sev->dev, "VERIFY_MITIGATION failure status %d\n", dst->mit_failure_status);
+		goto reclaim_pages;
+	}
+
+	*verified = dst->mit_verified_vector;
+	rc = 0;
+
+reclaim_pages:
+	__snp_free_firmware_pages(p, 0, true);
+	return rc;
+}
+
+int sev_firmware_supported_vm_types(void)
+{
+	int rc, supported_vm_types = 0;
+	struct sev_device *sev;
+	u64 verified = 0;
+
+	if (!psp_master || !psp_master->sev_data)
+		return supported_vm_types;
+	sev = psp_master->sev_data;
+
+	supported_vm_types |= BIT(KVM_X86_SEV_VM);
+	supported_vm_types |= BIT(KVM_X86_SEV_ES_VM);
+
+	if (!sev->snp_initialized)
+		return supported_vm_types;
+
+	supported_vm_types |= BIT(KVM_X86_SNP_VM);
+
+	rc = snp_verify_mitigation(sev, SNP_MIT_VEC_CVE_2025_48514, &verified);
+	if (rc < 0) {
+		/*
+		 * Older firmware that doesn't support VERIFY_MITIGATION won't
+		 * have the mitigation for this CVE, so all types are supported.
+		 */
+		if (rc == -EOPNOTSUPP)
+			return supported_vm_types;
+		dev_err(sev->dev, "Unable to determine supported vm types: %d\n", rc);
+		return supported_vm_types;
+	}
+
+	/* This mitigation disables SEV-ES guests when present */
+	if (verified & SNP_MIT_VEC_CVE_2025_48514)
+		supported_vm_types &= ~BIT(KVM_X86_SEV_ES_VM);
+
+	return supported_vm_types;
+
+}
+EXPORT_SYMBOL_FOR_MODULES(sev_firmware_supported_vm_types, "kvm-amd");
