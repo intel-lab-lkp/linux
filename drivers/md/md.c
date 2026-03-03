@@ -6455,7 +6455,7 @@ static void md_safemode_timeout(struct timer_list *t)
 
 static int start_dirty_degraded;
 
-static int md_bitmap_create(struct mddev *mddev)
+int md_bitmap_create(struct mddev *mddev)
 {
 	if (mddev->bitmap_id == ID_BITMAP_NONE)
 		return -EINVAL;
@@ -6466,7 +6466,7 @@ static int md_bitmap_create(struct mddev *mddev)
 	return mddev->bitmap_ops->create(mddev);
 }
 
-static void md_bitmap_destroy(struct mddev *mddev)
+void md_bitmap_destroy(struct mddev *mddev)
 {
 	if (!md_bitmap_registered(mddev))
 		return;
