@@ -685,6 +685,9 @@ struct spi_controller {
 	 */
 	int (*set_cs_timing)(struct spi_device *spi);
 
+	/* set RX sampling point */
+	unsigned int (*set_rx_sampling_point)(struct spi_device *spi, unsigned int freq);
+
 	/*
 	 * Bidirectional bulk transfers
 	 *
@@ -1336,6 +1339,11 @@ extern int devm_spi_optimize_message(struct device *dev, struct spi_device *spi,
 extern int spi_setup(struct spi_device *spi);
 extern int spi_async(struct spi_device *spi, struct spi_message *message);
 extern int spi_target_abort(struct spi_device *spi);
+
+unsigned int spi_calc_rx_sampling_point(struct spi_device *spi, unsigned int *freq,
+					       u16 max_delay_cycles,
+					       u16 delay_cycles_per_clock_cycle);
+unsigned int spi_set_rx_sampling_point(struct spi_device *spi, unsigned int freq);
 
 static inline size_t
 spi_max_message_size(struct spi_device *spi)

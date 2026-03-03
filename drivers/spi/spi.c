@@ -3989,6 +3989,77 @@ static int spi_set_cs_timing(struct spi_device *spi)
 }
 
 /**
+ * spi_calc_rx_sampling_point - calculate RX sampling delay cycles
+ * @spi: the device that requires specific a RX sampling delay
+ * @freq: pointer to the clock frequency setpoint for the calculation. This gets
+ *        altered to a reduced value if required.
+ * @max_delay_cycles: the upper limit of supported delay cycles
+ * @delay_cycles_per_clock_cycle: the ratio between delay cycles and
+ *				  master clock cycles
+ *
+ * This function takes in the rx_sampling_delay_ns value from the SPI device
+ * and the given clock frequency setpoint and calculates the required sampling
+ * delay cycles to meet the device's spec. It uses the given controller
+ * constraints and if those are exceeded, it adjusts the clock frequency
+ * setpoint to a lower value that is safe to be used.
+ *
+ * Return: calculated number of delay cycles
+ */
+unsigned int spi_calc_rx_sampling_point(struct spi_device *spi, unsigned int *freq,
+					u16 max_delay_cycles,
+					u16 delay_cycles_per_clock_cycle)
+{
+	unsigned long long temp;
+	u16 delay_cycles;
+
+	/* if sampling delay is zero, we assume the default sampling point can be used */
+	if (!spi->rx_sampling_delay_ns)
+		return 0;
+
+	temp = *freq * delay_cycles_per_clock_cycle * spi->rx_sampling_delay_ns;
+	do_div(temp, 1000000000UL);
+	delay_cycles = temp;
+
+	if (delay_cycles > max_delay_cycles) {
+		/*
+		 * Reduce the clock to the point where the sampling delay requirement
+		 * can be met.
+		 */
+		delay_cycles = max_delay_cycles;
+		temp = (1000000000UL * delay_cycles);
+		do_div(temp, spi->rx_sampling_delay_ns * delay_cycles_per_clock_cycle);
+		*freq = temp;
+	}
+
+	dev_dbg(&spi->controller->dev, "calculated RX sampling point delay: %u cycle(s) at %lu KHz", delay_cycles, *freq / 1000);
+
+	return delay_cycles;
+}
+EXPORT_SYMBOL_GPL(spi_calc_rx_sampling_point);
+
+/**
+ * spi_set_rx_sampling_point - set the RX sampling delay in the controller driver
+ * @spi: the device that requires specific a RX sampling delay
+ * @freq: the clock frequency setpoint for the RX sampling delay calculation
+ *
+ * This function calls the set_rx_sampling_point() handle in the controller
+ * driver it is available. This makes sure that the controller uses the proper
+ * RX sampling point adjustment. This function should be called whenever
+ * the devices rx_sampling_delay_ns or the currently used clock frequency
+ * changes.
+ *
+ * Return: adjusted clock frequency
+ */
+unsigned int spi_set_rx_sampling_point(struct spi_device *spi, unsigned int freq)
+{
+	if (spi->controller->set_rx_sampling_point)
+		return spi->controller->set_rx_sampling_point(spi, spi->max_speed_hz);
+
+	return freq;
+}
+EXPORT_SYMBOL_GPL(spi_set_rx_sampling_point);
+
+/**
  * spi_setup - setup SPI mode and clock rate
  * @spi: the device whose settings are being modified
  * Context: can sleep, and no requests are queued to the device
@@ -4089,6 +4160,8 @@ int spi_setup(struct spi_device *spi)
 			return status;
 		}
 	}
+
+	spi->max_speed_hz = spi_set_rx_sampling_point(spi, spi->max_speed_hz);
 
 	status = spi_set_cs_timing(spi);
 	if (status) {
