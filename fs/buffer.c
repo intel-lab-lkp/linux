@@ -501,9 +501,13 @@ EXPORT_SYMBOL(mmb_init);
 
 static struct mapping_metadata_bhs *inode_get_metadata_bhs(struct inode *inode)
 {
+	/*
+	 * We can get called for various half-initialized or bad inodes so
+	 * verify .get_metadata_bhs callback exists.
+	 */
 	if (inode->i_op->get_metadata_bhs)
 		return inode->i_op->get_metadata_bhs(inode);
-	return &inode->i_mapping->i_metadata_bhs;
+	return NULL;
 }
 
 static void __remove_assoc_queue(struct mapping_metadata_bhs *mmb,
@@ -544,7 +548,7 @@ static void remove_assoc_queue(struct buffer_head *bh)
 
 bool mmb_has_buffers(struct mapping_metadata_bhs *mmb)
 {
-	return !list_empty(&mmb->list);
+	return mmb && !list_empty(&mmb->list);
 }
 EXPORT_SYMBOL_GPL(mmb_has_buffers);
 
@@ -552,10 +556,10 @@ EXPORT_SYMBOL_GPL(mmb_has_buffers);
  * sync_mapping_buffers - write out & wait upon a mapping's "associated" buffers
  * @mapping: the mapping which wants those buffers written
  *
- * Starts I/O against the buffers at mapping->i_metadata_bhs and waits upon
- * that I/O. Basically, this is a convenience function for fsync().  @mapping
- * is a file or directory which needs those buffers to be written for a
- * successful fsync().
+ * Starts I/O against the buffers tracked in mapping_metadata_bhs for the
+ * mapping and waits upon that I/O. Basically, this is a convenience function
+ * for fsync().  @mapping is a file or directory which needs those buffers to
+ * be written for a successful fsync().
  *
  * We have conflicting pressures: we want to make sure that all
  * initially dirty buffers get waited on, but that any subsequently
