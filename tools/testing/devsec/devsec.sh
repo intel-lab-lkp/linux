@@ -126,6 +126,46 @@ ide_multi_test() {
 	done
 }
 
+check_evidence() {
+	pci_dev=$1
+
+	set +x
+
+	python3 tools/net/ynl/pyynl/cli.py --family pci-tsm --dump evidence-read \
+	--json "{\"type-mask\": 2047, \"dev-name\": \"$(basename $pci_dev)\", \"flags\": 0}" \
+	--output-json > json
+
+	# Coalesce multi-message payloads where the protocol is a tuple
+	# of (type, val) followed by one more (val) only messages.
+	objects=()
+	for obj in $(jq -c '.[]' json); do
+		if [[ $(echo $obj | jq -r 'has("type")') == "true" ]]; then
+			t=$(echo $obj | jq -r '.type')
+			val_len=$(echo $obj | jq -r '.val | length')
+			objects[$t]=$val_len
+		else
+			val_len=$(echo $obj | jq -r '.val | length')
+			objects[$t]=$((objects[$t] + val_len))
+		fi
+	done
+
+	# Check that all 11 objects (PCI_TSM_EVIDENCE_TYPE_MAX) were
+	# returned and only objects 0 and 9
+	# (PCI_TSM_EVIDENCE_TYPE_CERT0,
+	# PCI_TSM_EVIDENCE_TYPE_MEASUREMENTS) have a length of 8192 and
+	# the rest are empty.
+	[[ ${#objects[@]} -eq 11 ]] || err "$LINENO"
+	for i in ${!objects[@]}; do
+		if [[ $i == 0 || $i == 9 ]]; then
+			[[ ${objects[$i]} == 8192 ]] || err "$LINENO"
+		else
+			[[ ${objects[$i]} == 0 ]] || err "$LINENO"
+		fi
+	done
+
+	set -x
+}
+
 ide_test() {
 	pci_dev=${PCI_DEVS[$1]}
 	fn_dev=${FN_DEVS[$1]}
@@ -154,6 +194,8 @@ ide_test() {
 	[[ $dsm == $(basename $pci_dev) ]] || err "$LINENO"
 	dsm=$(cat $fn_dev/tsm/dsm)
 	[[ $dsm == $(basename $pci_dev) ]] || err "$LINENO"
+
+	check_evidence $pci_dev
 
 	# bind both functions and validate that they display bound to
 	# the TSM device
@@ -212,6 +254,10 @@ devsec_test() {
 	done
 	[[ -n $tsm_devsec ]] || err "$LINENO"
 	[[ -n $tsm_link ]] || err "$LINENO"
+
+	# initialize evidence payloads
+	dd if=/dev/zero of=/sys/bus/faux/devices/devsec_link_tsm/certs bs=4K count=1
+	dd if=/dev/zero of=/sys/bus/faux/devices/devsec_link_tsm/transcript bs=4K count=1
 
 	# check that devsec bus loads correctly and the TSM is detected
 	for i in ${!PCI_DEVS[@]}; do
