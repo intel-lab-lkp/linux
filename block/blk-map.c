@@ -398,8 +398,10 @@ static struct bio *bio_copy_kern(struct request *rq, void *data, unsigned int le
 		if (op_is_write(op))
 			memcpy(page_address(page), p, bytes);
 
-		if (bio_add_page(bio, page, bytes, 0) < bytes)
+		if (bio_add_page(bio, page, bytes, 0) < bytes) {
+			__free_page(page);
 			break;
+		}
 
 		len -= bytes;
 		p += bytes;
