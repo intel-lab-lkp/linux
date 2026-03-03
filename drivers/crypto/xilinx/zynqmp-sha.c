@@ -18,8 +18,17 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 
+#define CONTINUE_PACKET		BIT(31)
+#define FIRST_PACKET		BIT(30)
+#define FINAL_PACKET		0
+#define RESET			0
 #define ZYNQMP_DMA_BIT_MASK		32U
+#define VERSAL_DMA_BIT_MASK		64U
 #define ZYNQMP_DMA_ALLOC_FIXED_SIZE	0x1000U
+#define VERSAL_SHA3_INVALID_PARAM		0x08U
+#define VERSAL_SHA3_STATE_MISMATCH_ERROR	0x0AU
+#define VERSAL_SHA3_FINISH_ERROR		0x07U
+#define VERSAL_SHA3_PMC_DMA_UPDATE_ERROR	0x04U
 
 enum zynqmp_sha_op {
 	ZYNQMP_SHA3_INIT = 1,
@@ -209,11 +218,84 @@ static int zynqmp_sha_digest(struct ahash_request *req)
 	return ret;
 }
 
+static int versal_sha_fw_error_decode(int status)
+{
+	switch (status) {
+	case VERSAL_SHA3_INVALID_PARAM:
+		pr_err("ERROR: On invalid parameter\n");
+		return -EINVAL;
+	case VERSAL_SHA3_STATE_MISMATCH_ERROR:
+		pr_err("ERROR: SHA3 state mismatch error\n");
+		return -EINVAL;
+	case VERSAL_SHA3_FINISH_ERROR:
+		pr_err("ERROR: SHA3 finish error\n");
+		return -EIO;
+	case VERSAL_SHA3_PMC_DMA_UPDATE_ERROR:
+		pr_err("ERROR: SHA3 PMC DMA update error\n");
+		return -EIO;
+	default:
+		pr_err("ERROR: Unknown SHA3 FW error code: %u\n", status);
+		return -EIO;
+	}
+}
+
+static int versal_sha_digest(struct ahash_request *req)
+{
+	int update_size, ret, flag = FIRST_PACKET;
+	unsigned int processed = 0;
+	unsigned int remaining_len;
+	unsigned int fw_status = 0;
+
+	remaining_len = req->nbytes;
+	while (remaining_len) {
+		if (remaining_len >= ZYNQMP_DMA_ALLOC_FIXED_SIZE)
+			update_size = ZYNQMP_DMA_ALLOC_FIXED_SIZE;
+		else
+			update_size = remaining_len;
+
+		sg_pcopy_to_buffer(req->src, sg_nents(req->src), ubuf, update_size, processed);
+		flush_icache_range((unsigned long)ubuf,
+				   (unsigned long)ubuf + update_size);
+
+		flag |= CONTINUE_PACKET;
+		ret = versal_pm_sha_hash(update_dma_addr, 0,
+					 update_size | flag, &fw_status);
+		if (ret)
+			return versal_sha_fw_error_decode(fw_status);
+
+		remaining_len -= update_size;
+		processed += update_size;
+		flag = RESET;
+	}
+
+	flag |= FINAL_PACKET;
+	ret = versal_pm_sha_hash(0, final_dma_addr, flag, &fw_status);
+	if (ret)
+		return versal_sha_fw_error_decode(fw_status);
+
+	memcpy(req->result, fbuf, SHA3_384_DIGEST_SIZE);
+	memzero_explicit(fbuf, SHA3_384_DIGEST_SIZE);
+
+	return 0;
+}
+
 static int handle_zynqmp_sha_engine_req(struct crypto_engine *engine, void *req)
 {
 	int err;
 
 	err = zynqmp_sha_digest(req);
+	local_bh_disable();
+	crypto_finalize_hash_request(engine, req, err);
+	local_bh_enable();
+
+	return 0;
+}
+
+static int handle_versal_sha_engine_req(struct crypto_engine *engine, void *req)
+{
+	int err;
+
+	err = versal_sha_digest(req);
 	local_bh_disable();
 	crypto_finalize_hash_request(engine, req, err);
 	local_bh_enable();
@@ -252,7 +334,36 @@ static struct xilinx_sha_drv_ctx zynqmp_sha3_drv_ctx = {
 	.dma_addr_size = ZYNQMP_DMA_BIT_MASK,
 };
 
-
+static struct xilinx_sha_drv_ctx versal_sha3_drv_ctx = {
+	.sha3_384.base = {
+		.init = zynqmp_sha_init,
+		.update = zynqmp_sha_update,
+		.final = zynqmp_sha_final,
+		.finup = zynqmp_sha_finup,
+		.digest = sha_digest,
+		.export = zynqmp_sha_export,
+		.import = zynqmp_sha_import,
+		.halg = {
+			.base.cra_init = zynqmp_sha_init_tfm,
+			.base.cra_exit = zynqmp_sha_exit_tfm,
+			.base.cra_name = "sha3-384",
+			.base.cra_driver_name = "versal-sha3-384",
+			.base.cra_priority = 300,
+			.base.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY |
+				CRYPTO_ALG_ALLOCATES_MEMORY |
+				CRYPTO_ALG_NEED_FALLBACK,
+			.base.cra_blocksize = SHA3_384_BLOCK_SIZE,
+			.base.cra_ctxsize = sizeof(struct xilinx_sha_tfm_ctx),
+			.base.cra_module = THIS_MODULE,
+			.statesize = sizeof(struct sha3_state),
+			.digestsize = SHA3_384_DIGEST_SIZE,
+		}
+	},
+	.sha3_384.op = {
+		.do_one_request = handle_versal_sha_engine_req,
+	},
+	.dma_addr_size = VERSAL_DMA_BIT_MASK,
+};
 
 static struct xlnx_feature sha_feature_map[] = {
 	{
@@ -260,6 +371,12 @@ static struct xlnx_feature sha_feature_map[] = {
 		.feature_id = PM_SECURE_SHA,
 		.data = &zynqmp_sha3_drv_ctx,
 	},
+	{
+		.family = PM_VERSAL_FAMILY_CODE,
+		.feature_id = XSECURE_API_SHA3_UPDATE,
+		.data = &versal_sha3_drv_ctx,
+	},
+	{ /* sentinel */ }
 };
 
 static int zynqmp_sha_probe(struct platform_device *pdev)
