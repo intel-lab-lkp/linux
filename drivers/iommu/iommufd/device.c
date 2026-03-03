@@ -1624,6 +1624,9 @@ int iommufd_get_hw_info(struct iommufd_ucmd *ucmd)
 	if (device_iommu_capable(idev->dev, IOMMU_CAP_DIRTY_TRACKING))
 		cmd->out_capabilities |= IOMMU_HW_CAP_DIRTY_TRACKING;
 
+	if (device_iommu_capable(idev->dev, IOMMU_CAP_PCI_ATS_NOT_SUPPORTED))
+		cmd->out_capabilities |= IOMMU_HW_CAP_PCI_ATS_NOT_SUPPORTED;
+
 	cmd->out_max_pasid_log2 = 0;
 	/*
 	 * Currently, all iommu drivers enable PASID in the probe_device()
