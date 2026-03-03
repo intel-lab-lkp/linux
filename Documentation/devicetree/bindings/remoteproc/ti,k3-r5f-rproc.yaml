@@ -158,12 +158,28 @@ patternProperties:
           defined. The reserved memory nodes should be carveout nodes, and
           should be defined with a "no-map" property as per the bindings in
           Documentation/devicetree/bindings/reserved-memory/reserved-memory.txt
+
+          For IO+DDR low power mode support on AM62x SoCs, additional memory
+          regions may be defined to partition the DDR_LPM_DATA section:
+            [0] DMA allocations (required)
+            [1] IPC resources or firmware image sections
+            [2] LPM FS stub section
+            [3] LPM metadata section containing dmEntryPoint and fsCtxtAddr
+            [4] LPM FS context and reserved sections
+            [5] DM trace and firmware sections
+
+          The LPM metadata region at index 3 allows the bootloader to directly
+          read the LPM metadata address without hardcoded offsets.
         minItems: 2
         maxItems: 8
         items:
           - description: region used for dynamic DMA allocations like vrings and
                          vring buffers
-          - description: region reserved for firmware image sections
+          - description: region reserved for firmware image sections or IPC resources
+          - description: LPM FS stub binary and X.509 certificate
+          - description: LPM metadata (dmEntryPoint, fsCtxtAddr)
+          - description: LPM FS context data and reserved sections
+          - description: DM RM/PM trace and firmware code/data
         additionalItems: true
 
 # Optional properties:
