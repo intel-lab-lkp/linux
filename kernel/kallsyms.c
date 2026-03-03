@@ -467,6 +467,62 @@ static int append_buildid(char *buffer,   const char *modname,
 
 #endif /* CONFIG_STACKTRACE_BUILD_ID */
 
+#ifdef CONFIG_KALLSYMS_LINEINFO
+bool kallsyms_lookup_lineinfo(unsigned long addr, unsigned long sym_start,
+			      const char **file, unsigned int *line)
+{
+	unsigned long long raw_offset;
+	unsigned int offset, low, high, mid, file_id;
+	unsigned long line_addr;
+
+	if (!lineinfo_num_entries)
+		return false;
+
+	/* Compute offset from _text */
+	if (addr < (unsigned long)_text)
+		return false;
+
+	raw_offset = addr - (unsigned long)_text;
+	if (raw_offset > UINT_MAX)
+		return false;
+	offset = (unsigned int)raw_offset;
+
+	/* Binary search for largest entry <= offset */
+	low = 0;
+	high = lineinfo_num_entries;
+	while (low < high) {
+		mid = low + (high - low) / 2;
+		if (lineinfo_addrs[mid] <= offset)
+			low = mid + 1;
+		else
+			high = mid;
+	}
+
+	if (low == 0)
+		return false;
+	low--;
+
+	/*
+	 * Validate that the matched lineinfo entry belongs to the same
+	 * symbol.  Without this check, assembly routines or other
+	 * functions lacking DWARF data would inherit the file:line of
+	 * a preceding C function.
+	 */
+	line_addr = (unsigned long)_text + lineinfo_addrs[low];
+	if (line_addr < sym_start)
+		return false;
+
+	file_id = lineinfo_file_ids[low];
+	*line = lineinfo_lines[low];
+
+	if (file_id >= lineinfo_num_files)
+		return false;
+
+	*file = &lineinfo_filenames[lineinfo_file_offsets[file_id]];
+	return true;
+}
+#endif /* CONFIG_KALLSYMS_LINEINFO */
+
 /* Look up a kernel symbol and return it in a text buffer. */
 static int __sprint_symbol(char *buffer, unsigned long address,
 			   int symbol_offset, int add_offset, int add_buildid)
@@ -496,6 +552,19 @@ static int __sprint_symbol(char *buffer, unsigned long address,
 			len += append_buildid(buffer + len, modname, buildid);
 		len += sprintf(buffer + len, "]");
 	}
+
+#ifdef CONFIG_KALLSYMS_LINEINFO
+	if (!modname) {
+		const char *li_file;
+		unsigned int li_line;
+		unsigned long sym_start = address - offset;
+
+		if (kallsyms_lookup_lineinfo(address, sym_start,
+					     &li_file, &li_line))
+			len += snprintf(buffer + len, KSYM_SYMBOL_LEN - len,
+					" (%s:%u)", li_file, li_line);
+	}
+#endif
 
 	return len;
 }

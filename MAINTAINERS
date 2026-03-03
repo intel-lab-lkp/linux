@@ -14280,6 +14280,12 @@ F:	lib/Kconfig.kmsan
 F:	mm/kmsan/
 F:	scripts/Makefile.kmsan
 
+KALLSYMS LINEINFO
+M:	Sasha Levin <sashal@kernel.org>
+S:	Maintained
+F:	Documentation/admin-guide/kallsyms-lineinfo.rst
+F:	scripts/gen_lineinfo.c
+
 KPROBES
 M:	Naveen N Rao <naveen@kernel.org>
 M:	"David S. Miller" <davem@davemloft.net>
