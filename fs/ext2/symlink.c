@@ -26,6 +26,7 @@ const struct inode_operations ext2_symlink_inode_operations = {
 	.getattr	= ext2_getattr,
 	.setattr	= ext2_setattr,
 	.listxattr	= ext2_listxattr,
+	.get_metadata_bhs = ext2_get_metadata_bhs,
 };
  
 const struct inode_operations ext2_fast_symlink_inode_operations = {
@@ -33,4 +34,5 @@ const struct inode_operations ext2_fast_symlink_inode_operations = {
 	.getattr	= ext2_getattr,
 	.setattr	= ext2_setattr,
 	.listxattr	= ext2_listxattr,
+	.get_metadata_bhs = ext2_get_metadata_bhs,
 };

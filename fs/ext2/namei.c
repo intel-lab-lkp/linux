@@ -422,6 +422,7 @@ const struct inode_operations ext2_dir_inode_operations = {
 	.tmpfile	= ext2_tmpfile,
 	.fileattr_get	= ext2_fileattr_get,
 	.fileattr_set	= ext2_fileattr_set,
+	.get_metadata_bhs = ext2_get_metadata_bhs,
 };
 
 const struct inode_operations ext2_special_inode_operations = {
@@ -430,4 +431,5 @@ const struct inode_operations ext2_special_inode_operations = {
 	.setattr	= ext2_setattr,
 	.get_inode_acl	= ext2_get_acl,
 	.set_acl	= ext2_set_acl,
+	.get_metadata_bhs = ext2_get_metadata_bhs,
 };

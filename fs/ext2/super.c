@@ -215,6 +215,7 @@ static struct inode *ext2_alloc_inode(struct super_block *sb)
 #ifdef CONFIG_QUOTA
 	memset(&ei->i_dquot, 0, sizeof(ei->i_dquot));
 #endif
+	mmb_init(&ei->i_metadata_bhs);
 
 	return &ei->vfs_inode;
 }
@@ -257,6 +258,11 @@ static void destroy_inodecache(void)
 	 */
 	rcu_barrier();
 	kmem_cache_destroy(ext2_inode_cachep);
+}
+
+struct mapping_metadata_bhs *ext2_get_metadata_bhs(struct inode *inode)
+{
+	return &EXT2_I(inode)->i_metadata_bhs;
 }
 
 static int ext2_show_options(struct seq_file *seq, struct dentry *root)
