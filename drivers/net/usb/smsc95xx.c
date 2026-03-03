@@ -84,7 +84,7 @@ MODULE_PARM_DESC(turbo_mode, "Enable multiple frames per Rx transaction");
 static int __must_check smsc95xx_read_reg(struct usbnet *dev, u32 index,
 					  u32 *data)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 buf;
 	int ret;
 	int (*fn)(struct usbnet *, u8, u8, u16, u16, void *, u16);
@@ -115,7 +115,7 @@ static int __must_check smsc95xx_read_reg(struct usbnet *dev, u32 index,
 static int __must_check smsc95xx_write_reg(struct usbnet *dev, u32 index,
 					   u32 data)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 buf;
 	int ret;
 	int (*fn)(struct usbnet *, u8, u8, u16, u16, const void *, u16);
@@ -265,7 +265,7 @@ static int smsc95xx_mdiobus_reset(struct mii_bus *bus)
 	int ret;
 
 	dev = bus->priv;
-	pdata = dev->driver_priv;
+	pdata = usbnet_priv(dev);
 
 	if (pdata->is_internal_phy)
 		return 0;
@@ -481,7 +481,7 @@ static unsigned int smsc95xx_hash(char addr[ETH_ALEN])
 static void smsc95xx_set_multicast(struct net_device *netdev)
 {
 	struct usbnet *dev = netdev_priv(netdev);
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	unsigned long flags;
 	int ret;
 
@@ -539,7 +539,7 @@ static void smsc95xx_set_multicast(struct net_device *netdev)
 
 static int smsc95xx_phy_update_flowcontrol(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 flow = 0, afc_cfg;
 
 	int ret = smsc95xx_read_reg(dev, AFC_CFG, &afc_cfg);
@@ -584,7 +584,7 @@ static int smsc95xx_phy_update_flowcontrol(struct usbnet *dev)
 
 static void smsc95xx_mac_update_fullduplex(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	unsigned long flags;
 	int ret;
 
@@ -613,7 +613,7 @@ static void smsc95xx_mac_update_fullduplex(struct usbnet *dev)
 
 static void smsc95xx_status(struct usbnet *dev, struct urb *urb)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	unsigned long flags;
 	u32 intdata;
 
@@ -730,7 +730,7 @@ static void smsc95xx_ethtool_get_wol(struct net_device *net,
 				     struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 
 	wolinfo->supported = SUPPORTED_WAKE;
 	wolinfo->wolopts = pdata->wolopts;
@@ -740,7 +740,7 @@ static int smsc95xx_ethtool_set_wol(struct net_device *net,
 				    struct ethtool_wolinfo *wolinfo)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	int ret;
 
 	if (wolinfo->wolopts & ~SUPPORTED_WAKE)
@@ -788,7 +788,7 @@ static void smsc95xx_get_pauseparam(struct net_device *ndev,
 	struct usbnet *dev;
 
 	dev = netdev_priv(ndev);
-	pdata = dev->driver_priv;
+	pdata = usbnet_priv(dev);
 
 	pause->autoneg = pdata->pause_autoneg;
 	pause->rx_pause = pdata->pause_rx;
@@ -804,7 +804,7 @@ static int smsc95xx_set_pauseparam(struct net_device *ndev,
 	struct usbnet *dev;
 
 	dev = netdev_priv(ndev);
-	pdata = dev->driver_priv;
+	pdata = usbnet_priv(dev);
 	phydev = ndev->phydev;
 
 	if (!phydev)
@@ -898,7 +898,7 @@ static int smsc95xx_set_mac_address(struct usbnet *dev)
 /* starts the TX path */
 static int smsc95xx_start_tx_path(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	unsigned long flags;
 	int ret;
 
@@ -918,7 +918,7 @@ static int smsc95xx_start_tx_path(struct usbnet *dev)
 /* Starts the Receive path */
 static int smsc95xx_start_rx_path(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	unsigned long flags;
 
 	spin_lock_irqsave(&pdata->mac_cr_lock, flags);
@@ -930,7 +930,7 @@ static int smsc95xx_start_rx_path(struct usbnet *dev)
 
 static int smsc95xx_reset(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 read_buf, burst_cap;
 	int ret = 0, timeout;
 
@@ -1157,12 +1157,6 @@ static int smsc95xx_bind(struct usbnet *dev, struct usb_interface *intf)
 		return ret;
 	}
 
-	pdata = kzalloc_obj(*pdata);
-	if (!pdata)
-		return -ENOMEM;
-
-	dev->driver_priv = pdata;
-
 	spin_lock_init(&pdata->mac_cr_lock);
 
 	/* LAN95xx devices do not alter the computed checksum of 0 to 0xffff.
@@ -1185,14 +1179,14 @@ static int smsc95xx_bind(struct usbnet *dev, struct usb_interface *intf)
 	/* Init all registers */
 	ret = smsc95xx_reset(dev);
 	if (ret)
-		goto free_pdata;
+		goto bail_out;
 
 	/* create irq domain for use by PHY driver and GPIO consumers */
 	usb_make_path(dev->udev, usb_path, sizeof(usb_path));
 	pdata->irqfwnode = irq_domain_alloc_named_fwnode(usb_path);
 	if (!pdata->irqfwnode) {
 		ret = -ENOMEM;
-		goto free_pdata;
+		goto bail_out;
 	}
 
 	pdata->irqdomain = irq_domain_create_linear(pdata->irqfwnode,
@@ -1309,14 +1303,13 @@ remove_irqdomain:
 free_irqfwnode:
 	irq_domain_free_fwnode(pdata->irqfwnode);
 
-free_pdata:
-	kfree(pdata);
+bail_out:
 	return ret;
 }
 
 static void smsc95xx_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 
 	phy_disconnect(dev->net->phydev);
 	mdiobus_unregister(pdata->mdiobus);
@@ -1324,8 +1317,6 @@ static void smsc95xx_unbind(struct usbnet *dev, struct usb_interface *intf)
 	irq_dispose_mapping(irq_find_mapping(pdata->irqdomain, PHY_HWIRQ));
 	irq_domain_remove(pdata->irqdomain);
 	irq_domain_free_fwnode(pdata->irqfwnode);
-	netif_dbg(dev, ifdown, dev->net, "free pdata\n");
-	kfree(pdata);
 }
 
 static int smsc95xx_start_phy(struct usbnet *dev)
@@ -1350,7 +1341,7 @@ static u32 smsc_crc(const u8 *buffer, size_t len, int filter)
 
 static int smsc95xx_link_ok(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	int ret;
 
 	/* first, a dummy read, needed to latch some MII phys */
@@ -1367,7 +1358,7 @@ static int smsc95xx_link_ok(struct usbnet *dev)
 
 static int smsc95xx_enter_suspend0(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 val;
 	int ret;
 
@@ -1406,7 +1397,7 @@ static int smsc95xx_enter_suspend0(struct usbnet *dev)
 
 static int smsc95xx_enter_suspend1(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	int ret, phy_id = pdata->phydev->mdio.addr;
 	u32 val;
 
@@ -1453,7 +1444,7 @@ static int smsc95xx_enter_suspend1(struct usbnet *dev)
 
 static int smsc95xx_enter_suspend2(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 val;
 	int ret;
 
@@ -1475,7 +1466,7 @@ static int smsc95xx_enter_suspend2(struct usbnet *dev)
 
 static int smsc95xx_enter_suspend3(struct usbnet *dev)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 val;
 	int ret;
 
@@ -1514,7 +1505,7 @@ static int smsc95xx_enter_suspend3(struct usbnet *dev)
 
 static int smsc95xx_autosuspend(struct usbnet *dev, u32 link_up)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 
 	if (!netif_running(dev->net)) {
 		/* interface is ifconfig down so fully power down hw */
@@ -1544,7 +1535,7 @@ static int smsc95xx_autosuspend(struct usbnet *dev, u32 link_up)
 static int smsc95xx_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	u32 val, link_up;
 	int ret;
 
@@ -1805,7 +1796,7 @@ static int smsc95xx_resume(struct usb_interface *intf)
 	u32 val;
 
 	BUG_ON(!dev);
-	pdata = dev->driver_priv;
+	pdata = usbnet_priv(dev);
 	suspend_flags = pdata->suspend_flags;
 
 	netdev_dbg(dev->net, "resume suspend_flags=0x%02x\n", suspend_flags);
@@ -1854,7 +1845,7 @@ done:
 static int smsc95xx_reset_resume(struct usb_interface *intf)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 	int ret;
 
 	pdata->pm_task = current;
@@ -2038,7 +2029,7 @@ static struct sk_buff *smsc95xx_tx_fixup(struct usbnet *dev,
 
 static int smsc95xx_manage_power(struct usbnet *dev, int on)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = usbnet_priv(dev);
 
 	dev->intf->needs_remote_wakeup = on;
 
