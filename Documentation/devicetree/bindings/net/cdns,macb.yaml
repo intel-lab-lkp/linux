@@ -197,6 +197,17 @@ allOf:
       required:
         - phys
 
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: microchip,p64h-gem
+    then:
+      patternProperties:
+        "^ethernet-phy@[0-9a-f]$": false
+      properties:
+        mdio: false
+
 unevaluatedProperties: false
 
 examples:
