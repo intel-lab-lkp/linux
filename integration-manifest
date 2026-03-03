@@ -1,0 +1,36 @@
+drm drm-fixes 11439c4635edd669ae435eec308f4ab8a0804808
+	Linux 7.0-rc2
+drm-misc drm-misc-fixes a116bac87118903925108e57781bbfc7a7eea27b
+	dma-buf: Include ioctl.h in UAPI header
+drm-rust drm-rust-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-intel drm-intel-fixes 11439c4635edd669ae435eec308f4ab8a0804808
+	Linux 7.0-rc2
+drm-xe drm-xe-fixes 11439c4635edd669ae435eec308f4ab8a0804808
+	Linux 7.0-rc2
+drm drm-next 17b95278ae6adb9ea5b801fcd2ae5d182448e99d
+	Merge tag 'drm-xe-next-2026-03-02' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 777a02812f739af9e349cd0f695400a1d84053f4
+	drm/i915/dp: Add missing slice count check during mode validation
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 6716101ae42949e98ad4b9e71eeba08c055be410
+	Merge drm/drm-next into drm-misc-next
+drm-rust drm-rust-next 15da5bc9f3adab7242867db0251fe451ac3ddb72
+	drm/tyr: Clarify driver/device type names
+drm-intel drm-intel-next cbbf2df81dd9ed1623bf290a799d4e6b77fedd29
+	drm/i915/dp: Fix DSC state computation
+drm-intel drm-intel-gt-next 945d0fec02f6c22b182d51d8da39aa1b0df9f622
+	drm/i915: Test for imported buffers with drm_gem_is_imported()
+drm-xe drm-xe-next 6bc6fec71ac45f52db609af4e62bdb96b9f5fadb
+	drm/xe/reg_sr: Fix leak on xa_store failure
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 06ad61b1f1955a3ff609b0530fb7a7077d425a39
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
