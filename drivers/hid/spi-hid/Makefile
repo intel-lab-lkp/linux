@@ -7,3 +7,4 @@
 
 obj-$(CONFIG_SPI_HID_CORE)	+= spi-hid.o
 spi-hid-objs 			= spi-hid-core.o
+obj-$(CONFIG_SPI_HID_ACPI)	+= spi-hid-acpi.o
