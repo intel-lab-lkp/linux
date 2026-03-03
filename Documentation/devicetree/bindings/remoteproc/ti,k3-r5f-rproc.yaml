@@ -182,6 +182,25 @@ patternProperties:
           - description: DM RM/PM trace and firmware code/data
         additionalItems: true
 
+      memory-region-names:
+        description: |
+          Optional names for the memory regions specified in the memory-region
+          property.
+        oneOf:
+          - description: Basic configuration with DMA and firmware regions
+            items:
+              - const: dma
+              - const: firmware
+
+          - description: Extended LPM configuration with split memory regions
+            items:
+              - const: dma
+              - const: ipc
+              - const: lpm-stub
+              - const: lpm-metadata
+              - const: lpm-context
+              - const: dm-firmware
+
 # Optional properties:
 # --------------------
 # The following properties are optional properties for each of the R5F cores:
