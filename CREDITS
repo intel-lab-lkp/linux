@@ -2770,6 +2770,10 @@ E: merker@linuxtag.org
 D: DECstation framebuffer drivers
 S: Germany
 
+N: Salil Mehta
+E: salil.mehta@huawei.com
+D: Upstreaming of the HiSilicon HNS3 network driver
+
 N: Michael Meskes
 E: meskes@debian.org
 P: 1024/04B6E8F5 6C 77 33 CA CC D6 22 03  AB AB 15 A3 AE AD 39 7D
