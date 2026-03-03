@@ -46,9 +46,10 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT};
 #define LOOKUP_NO_XDEV		BIT(26) /* No mountpoint crossing. */
 #define LOOKUP_BENEATH		BIT(27) /* No escaping from starting point. */
 #define LOOKUP_IN_ROOT		BIT(28) /* Treat dirfd as fs root. */
+#define LOOKUP_IN_INIT		BIT(29) /* Lookup in init's namespace. */
 /* LOOKUP_* flags which do scope-related checks based on the dirfd. */
 #define LOOKUP_IS_SCOPED (LOOKUP_BENEATH | LOOKUP_IN_ROOT)
-/* 3 spare bits for scoping */
+/* 2 spare bits for scoping */
 
 extern int path_pts(struct path *path);
 

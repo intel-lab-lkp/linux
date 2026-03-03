@@ -1099,7 +1099,12 @@ static int complete_walk(struct nameidata *nd)
 
 static int set_root(struct nameidata *nd)
 {
-	struct fs_struct *fs = current->fs;
+	struct fs_struct *fs;
+
+	if (nd->flags & LOOKUP_IN_INIT)
+		fs = &init_fs;
+	else
+		fs = current->fs;
 
 	/*
 	 * Jumping to the real root in a scoped-lookup is a BUG in namei, but we
@@ -2716,8 +2721,14 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 	/* Relative pathname -- get the starting-point it is relative to. */
 	if (nd->dfd == AT_FDCWD) {
+		struct fs_struct *fs;
+
+		if (nd->flags & LOOKUP_IN_INIT)
+			fs = &init_fs;
+		else
+			fs = current->fs;
+
 		if (flags & LOOKUP_RCU) {
-			struct fs_struct *fs = current->fs;
 			unsigned seq;
 
 			do {
@@ -2727,7 +2738,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqretry(&fs->seq, seq));
 		} else {
-			get_fs_pwd(current->fs, &nd->path);
+			get_fs_pwd(fs, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
 	} else {
