@@ -815,6 +815,10 @@ static void usbhs_remove(struct platform_device *pdev)
 
 	usbhs_platform_call(priv, hardware_exit, pdev);
 	reset_control_assert(priv->rsts);
+
+	/* Disable IRQ before freeing resources to prevent UAF in ISR */
+	disable_irq(priv->irq);
+
 	usbhs_mod_remove(priv);
 	usbhs_fifo_remove(priv);
 	usbhs_pipe_remove(priv);
