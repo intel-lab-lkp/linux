@@ -643,6 +643,18 @@ config MCHP_LAN966X_PCI
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
 
+config RTL_PCI
+	tristate "Realtek Management Interface Support"
+	depends on PCI
+	help
+	  This enables support for the Realtek nic PCIe Management device.
+
+	  Please note that this is NOT the standard Ethernet driver for network
+	  traffic. It specifically handles the management function.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called rtl_pci.o.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
