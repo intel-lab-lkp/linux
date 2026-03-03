@@ -236,3 +236,27 @@ int versal_pm_aes_init(void)
 	return zynqmp_pm_invoke_fn(XSECURE_API_AES_INIT, NULL, 0);
 }
 EXPORT_SYMBOL_GPL(versal_pm_aes_init);
+
+/**
+ * versal_pm_sha_hash - Access the SHA engine to calculate the hash
+ * @src:	Address of the data
+ * @dst:	Address of the output buffer
+ * @size:	Size of the data.
+ * @out_status:	Returned output value
+ *
+ * Return:	Returns status, either success or error code.
+ */
+int versal_pm_sha_hash(const u64 src, const u64 dst, const u32 size, u32 *out_status)
+{
+	u32 ret_payload[PAYLOAD_ARG_CNT];
+	int ret;
+
+	if (!out_status)
+		return -EINVAL;
+	ret = zynqmp_pm_invoke_fn(XSECURE_API_SHA3_UPDATE, ret_payload, 5,
+				  lower_32_bits(src), upper_32_bits(src),
+				  size, lower_32_bits(dst), upper_32_bits(dst));
+	*out_status = ret_payload[0];
+	return ret;
+}
+EXPORT_SYMBOL_GPL(versal_pm_sha_hash);

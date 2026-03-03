@@ -33,6 +33,8 @@ struct xlnx_feature {
 #define XSECURE_API_AES_KEY_ZERO	0x510
 #define XSECURE_API_AES_WRITE_KEY	0x511
 
+#define XSECURE_API_SHA3_UPDATE		0x504
+
 #if IS_REACHABLE(CONFIG_ZYNQMP_FIRMWARE)
 int zynqmp_pm_aes_engine(const u64 address, u32 *out);
 int zynqmp_pm_sha_hash(const u64 address, const u32 size, const u32 flags);
@@ -47,6 +49,7 @@ int versal_pm_aes_dec_update(const u64 in_params, const u64 in_addr);
 int versal_pm_aes_dec_final(const u64 gcm_addr);
 int versal_pm_aes_enc_final(const u64 gcm_addr);
 int versal_pm_aes_init(void);
+int versal_pm_sha_hash(const u64 src, const u64 dst, const u32 size, u32 *out_status);
 
 #else
 static inline int zynqmp_pm_aes_engine(const u64 address, u32 *out)
@@ -110,6 +113,11 @@ static inline int versal_pm_aes_dec_final(const u64 gcm_addr)
 }
 
 static inline int versal_pm_aes_init(void)
+{
+	return -ENODEV;
+}
+
+static inline int versal_pm_sha_hash(const u64 src, const u64 dst, const u32 size, u32 *out_status)
 {
 	return -ENODEV;
 }
