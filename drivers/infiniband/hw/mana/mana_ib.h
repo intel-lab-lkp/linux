@@ -625,7 +625,7 @@ int mana_ib_gd_destroy_dma_region(struct mana_ib_dev *dev,
 int mana_ib_create_kernel_queue(struct mana_ib_dev *mdev, u32 size, enum gdma_queue_type type,
 				struct mana_ib_queue *queue);
 int mana_ib_create_queue(struct mana_ib_dev *mdev, u64 addr, u32 size,
-			 struct mana_ib_queue *queue);
+			 struct mana_ib_queue *queue, struct ib_umem **umem);
 void mana_ib_destroy_queue(struct mana_ib_dev *mdev, struct mana_ib_queue *queue);
 
 struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
@@ -667,7 +667,8 @@ void mana_ib_uncfg_vport(struct mana_ib_dev *dev, struct mana_ib_pd *pd,
 
 int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		      struct uverbs_attr_bundle *attrs);
-
+int mana_ib_create_user_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
+			   struct uverbs_attr_bundle *attrs);
 int mana_ib_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata);
 
 int mana_ib_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata);

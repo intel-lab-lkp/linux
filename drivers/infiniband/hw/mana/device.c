@@ -21,6 +21,7 @@ static const struct ib_device_ops mana_ib_dev_ops = {
 	.alloc_ucontext = mana_ib_alloc_ucontext,
 	.create_ah = mana_ib_create_ah,
 	.create_cq = mana_ib_create_cq,
+	.create_user_cq = mana_ib_create_user_cq,
 	.create_qp = mana_ib_create_qp,
 	.create_rwq_ind_table = mana_ib_create_rwq_ind_table,
 	.create_wq = mana_ib_create_wq,
