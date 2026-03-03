@@ -4799,7 +4799,17 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 	trace_net_dev_queue(skb);
 	if (q->enqueue) {
+		if (unlikely(dev_xmit_recursion())) {
+			net_crit_ratelimited("Dead loop on virtual device %s, fix it urgently!\n",
+					     dev->name);
+			rc = -ENETDOWN;
+			dev_core_stats_tx_dropped_inc(dev);
+			kfree_skb_list(skb);
+			goto out;
+		}
+		dev_xmit_recursion_inc();
 		rc = __dev_xmit_skb(skb, q, dev, txq);
+		dev_xmit_recursion_dec();
 		goto out;
 	}
 
