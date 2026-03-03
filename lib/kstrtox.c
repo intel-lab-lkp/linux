@@ -93,17 +93,56 @@ unsigned int _parse_integer(const char *s, unsigned int base, unsigned long long
 	return _parse_integer_limit(s, base, p, INT_MAX);
 }
 
-static int _kstrtoull(const char *s, unsigned int base, unsigned long long *res)
+/**
+ * kstrntoull - convert a string to an unsigned long long with a maximum
+ * character limit
+ * @s: The start of the string. The string does not need to be null-terminated.
+ * The first character cannot be a sign.
+ * @base: The number base to use. The maximum supported base is 16. If base is
+ *  given as 0, then the base of the string is automatically detected with the
+ *  conventional semantics - If it begins with 0x the number will be parsed as a
+ *  hexadecimal (case insensitive), if it otherwise begins with 0, it will be
+ *  parsed as an octal number. Otherwise it will be parsed as a decimal.
+ * @res: Where to write the result of the conversion.
+ * @max_chars: The maximum number of characters to convert.
+ *
+ * Conversion stops when the maximum number of characters is reached or a
+ * non-digit character is encountered.
+ *
+ * Returns the number of characters consumed on success, -ERANGE on overflow and
+ * -EINVAL on invalid input. Return code must be checked.
+ */
+noinline
+ssize_t kstrntoull(const char *s, unsigned int base, unsigned long long *res,
+		   size_t max_chars)
 {
-	unsigned long long _res;
+	const char *cp;
+	size_t prefix_cnt;
 	unsigned int rv;
 
-	s = _parse_integer_fixup_radix(s, &base);
-	rv = _parse_integer(s, base, &_res);
+	cp = _parse_integer_fixup_radix(s, &base);
+	prefix_cnt = cp - s;
+	if (prefix_cnt >= max_chars)
+		return -EINVAL;
+
+	rv = _parse_integer_limit(cp, base, res, max_chars - prefix_cnt);
 	if (rv & KSTRTOX_OVERFLOW)
 		return -ERANGE;
 	if (rv == 0)
 		return -EINVAL;
+
+	return prefix_cnt + rv;
+}
+EXPORT_SYMBOL(kstrntoull);
+
+static int _kstrtoull(const char *s, unsigned int base, unsigned long long *res)
+{
+	unsigned long long _res;
+	ssize_t rv;
+
+	rv = kstrntoull(s, base, &_res, INT_MAX);
+	if (rv < 0)
+		return rv;
 	s += rv;
 	if (*s == '\n')
 		s++;

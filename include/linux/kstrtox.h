@@ -9,6 +9,9 @@
 int __must_check _kstrtoul(const char *s, unsigned int base, unsigned long *res);
 int __must_check _kstrtol(const char *s, unsigned int base, long *res);
 
+ssize_t __must_check kstrntoull(const char *s, unsigned int base,
+				unsigned long long *res, size_t max_chars);
+
 int __must_check kstrtoull(const char *s, unsigned int base, unsigned long long *res);
 int __must_check kstrtoll(const char *s, unsigned int base, long long *res);
 
