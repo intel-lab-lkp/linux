@@ -335,6 +335,19 @@ int acpi_get_cpuid(acpi_handle handle, int type, u32 acpi_id)
 }
 EXPORT_SYMBOL_GPL(acpi_get_cpuid);
 
+#ifdef CONFIG_ARCH_HAS_GET_CPU_ACPI_ID_API
+unsigned int acpi_get_cpu_acpi_id(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return 0;
+#ifdef CONFIG_X86
+	return cpu_acpi_id(cpu);
+#elif CONFIG_ARM64
+	return get_acpi_id_for_cpu(cpu);
+#endif
+}
+#endif /* CONFIG_ARCH_HAS_GET_CPU_ACPI_ID_API */
+
 #ifdef CONFIG_ACPI_HOTPLUG_IOAPIC
 static int get_ioapic_id(struct acpi_subtable_header *entry, u32 gsi_base,
 			 u64 *phys_addr, int *ioapic_id)

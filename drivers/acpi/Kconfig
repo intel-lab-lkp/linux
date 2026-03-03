@@ -606,6 +606,14 @@ config ACPI_PRMT
 	  substantially increase computational overhead related to the
 	  initialization of some server systems.
 
+config ARCH_HAS_GET_CPU_ACPI_ID_API
+	bool "Architecture supports get cpu's ACPI Processor UID"
+	depends on (X86 || ARM64)
+	default y
+	help
+	  This config indicates whether the architecture provides a standard
+	  API to get ACPI Processor UID of a cpu from MADT table.
+
 endif	# ACPI
 
 config X86_PM_TIMER

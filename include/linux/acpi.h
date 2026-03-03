@@ -324,6 +324,10 @@ int acpi_unmap_cpu(int cpu);
 
 acpi_handle acpi_get_processor_handle(int cpu);
 
+#ifdef CONFIG_ARCH_HAS_GET_CPU_ACPI_ID_API
+unsigned int acpi_get_cpu_acpi_id(unsigned int cpu);
+#endif
+
 #ifdef CONFIG_ACPI_HOTPLUG_IOAPIC
 int acpi_get_ioapic_id(acpi_handle handle, u32 gsi_base, u64 *phys_addr);
 #endif
