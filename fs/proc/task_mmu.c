@@ -1371,6 +1371,7 @@ static int show_smap(struct seq_file *m, void *v)
 {
 	struct vm_area_struct *vma = v;
 	struct mem_size_stats mss = {};
+	unsigned ps;
 
 	smap_gather_stats(vma, &mss, 0);
 
@@ -1378,7 +1379,16 @@ static int show_smap(struct seq_file *m, void *v)
 
 	SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);
 	SEQ_PUT_DEC(" kB\nKernelPageSize: ", vma_kernel_pagesize(vma));
-	SEQ_PUT_DEC(" kB\nMMUPageSize:    ", vma_mmu_pagesize(vma));
+	ps = vma_mmu_pagesize(vma);
+	/*
+	 * When the mapping is only PMD THP report the correct page size.
+	 * When multiple pages are there the user has to figure it out
+	 * from other fields.
+	 */
+	if (mss.shmem_thp + mss.file_thp + mss.anonymous_thp == mss.resident &&
+	    mss.resident)
+		ps = HPAGE_PMD_SIZE;
+	SEQ_PUT_DEC(" kB\nMMUPageSize:    ", ps);
 	seq_puts(m, " kB\n");
 
 	__show_smap(m, &mss, false);
