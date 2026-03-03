@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/mfd/ti,bq25703a.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: BQ25703A Charger Manager/Buck/Boost Converter
+title: BQ257xx Charger Manager/Buck/Boost Converter
 
 maintainers:
   - Chris Morgan <macromorgan@hotmail.com>
@@ -14,7 +14,9 @@ allOf:
 
 properties:
   compatible:
-    const: ti,bq25703a
+    enum:
+      - ti,bq25703a
+      - ti,bq25792
 
   reg:
     const: 0x6b
@@ -23,9 +25,6 @@ properties:
     description:
       Maximum total input current allowed used for both charging and
       powering the device.
-    minimum: 50000
-    maximum: 6400000
-    default: 3250000
 
   interrupts:
     maxItems: 1
@@ -50,18 +49,10 @@ properties:
 
         properties:
           regulator-name: true
-          regulator-min-microamp:
-            minimum: 0
-            maximum: 6350000
-          regulator-max-microamp:
-            minimum: 0
-            maximum: 6350000
-          regulator-min-microvolt:
-            minimum: 4480000
-            maximum: 20800000
-          regulator-max-microvolt:
-            minimum: 4480000
-            maximum: 20800000
+          regulator-min-microamp: true
+          regulator-max-microamp: true
+          regulator-min-microvolt: true
+          regulator-max-microvolt: true
           enable-gpios:
             description:
               The BQ25703 may require both a register write and a GPIO
@@ -73,6 +64,60 @@ properties:
           - regulator-max-microamp
           - regulator-min-microvolt
           - regulator-max-microvolt
+
+  allOf:
+    - if:
+        properties:
+          compatible:
+            const: ti,bq25703a
+      then:
+        properties:
+          input-current-limit-microamp:
+            minimum: 500000
+            maximum: 6350000
+            default: 5000000
+          regulators:
+            properties:
+              vbus:
+                properties:
+                  regulator-min-microamp:
+                    minimum: 0
+                    maximum: 6350000
+                  regulator-max-microamp:
+                    minimum: 0
+                    maximum: 6350000
+                  regulator-min-microvolt:
+                    minimum: 4480000
+                    maximum: 20800000
+                  regulator-max-microvolt:
+                    minimum: 4480000
+                    maximum: 20800000
+    - if:
+        properties:
+          compatible:
+            const: ti,bq25792
+      then:
+        properties:
+          input-current-limit-microamp:
+            minimum: 1000000
+            maximum: 3300000
+            default: 3000000
+          regulators:
+            properties:
+              vbus:
+                properties:
+                  regulator-min-microamp:
+                    minimum: 0
+                    maximum: 3320000
+                  regulator-max-microamp:
+                    minimum: 0
+                    maximum: 3320000
+                  regulator-min-microvolt:
+                    minimum: 2800000
+                    maximum: 22000000
+                  regulator-max-microvolt:
+                    minimum: 2800000
+                    maximum: 22000000
 
 unevaluatedProperties: false
 
