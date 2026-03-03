@@ -4839,7 +4839,7 @@ static void get_file_access_info(struct smb2_query_info_rsp *rsp,
 static int get_file_basic_info(struct smb2_query_info_rsp *rsp,
 			       struct ksmbd_file *fp, void *rsp_org)
 {
-	struct smb2_file_basic_info *basic_info;
+	struct file_basic_info *basic_info;
 	struct kstat stat;
 	u64 time;
 	int ret;
@@ -4855,7 +4855,7 @@ static int get_file_basic_info(struct smb2_query_info_rsp *rsp,
 	if (ret)
 		return ret;
 
-	basic_info = (struct smb2_file_basic_info *)rsp->Buffer;
+	basic_info = (struct file_basic_info *)rsp->Buffer;
 	basic_info->CreationTime = cpu_to_le64(fp->create_time);
 	time = ksmbd_UnixTimeToNT(stat.atime);
 	basic_info->LastAccessTime = cpu_to_le64(time);
@@ -4864,9 +4864,9 @@ static int get_file_basic_info(struct smb2_query_info_rsp *rsp,
 	time = ksmbd_UnixTimeToNT(stat.ctime);
 	basic_info->ChangeTime = cpu_to_le64(time);
 	basic_info->Attributes = fp->f_ci->m_fattr;
-	basic_info->Pad1 = 0;
+	basic_info->Pad = 0;
 	rsp->OutputBufferLength =
-		cpu_to_le32(sizeof(struct smb2_file_basic_info));
+		cpu_to_le32(sizeof(struct file_basic_info));
 	return 0;
 }
 
@@ -6137,7 +6137,7 @@ out:
 }
 
 static int set_file_basic_info(struct ksmbd_file *fp,
-			       struct smb2_file_basic_info *file_info,
+			       struct file_basic_info *file_info,
 			       struct ksmbd_share_config *share)
 {
 	struct iattr attrs;
@@ -6419,10 +6419,10 @@ static int smb2_set_info_file(struct ksmbd_work *work, struct ksmbd_file *fp,
 	switch (req->FileInfoClass) {
 	case FILE_BASIC_INFORMATION:
 	{
-		if (buf_len < sizeof(struct smb2_file_basic_info))
+		if (buf_len < sizeof(struct file_basic_info))
 			return -EMSGSIZE;
 
-		return set_file_basic_info(fp, (struct smb2_file_basic_info *)buffer, share);
+		return set_file_basic_info(fp, (struct file_basic_info *)buffer, share);
 	}
 	case FILE_ALLOCATION_INFORMATION:
 	{
