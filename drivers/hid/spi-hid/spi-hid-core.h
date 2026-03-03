@@ -62,6 +62,10 @@ struct spi_hid {
 	u16 response_length;
 	u16 bufsize;
 
+	bool prev_mode_enabled;	/* Previous device mode tracked for SPI_HID_QUIRK_MODE_SWITCH. */
+
+	unsigned long quirks;	/* Various quirks. */
+
 	enum hidspi_power_state power_state;
 
 	u8 reset_attempts;	/* The number of reset attempts. */

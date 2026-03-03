@@ -22,6 +22,7 @@
 
 #include <linux/completion.h>
 #include <linux/crc32.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
@@ -45,8 +46,13 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 
+#include "../hid-ids.h"
 #include "spi-hid.h"
 #include "spi-hid-core.h"
+
+/* quirks to control the device */
+#define SPI_HID_QUIRK_MODE_SWITCH	BIT(0)
+#define SPI_HID_QUIRK_READ_DELAY	BIT(1)
 
 /* Protocol constants */
 #define SPI_HID_READ_APPROVAL_CONSTANT		0xff
@@ -86,6 +92,16 @@
 #define SPI_HID_CREATE_DEVICE	4
 #define SPI_HID_ERROR	5
 
+static const struct spi_hid_quirks {
+	__u16 idVendor;
+	__u16 idProduct;
+	__u32 quirks;
+} spi_hid_quirks[] = {
+	{ USB_VENDOR_ID_ILITEK, HID_ANY_ID,
+		SPI_HID_QUIRK_MODE_SWITCH | SPI_HID_QUIRK_READ_DELAY },
+	{ 0, 0 }
+};
+
 /* Processed data from input report header */
 struct spi_hid_input_header {
 	u8 version;
@@ -111,6 +127,27 @@ struct spi_hid_output_report {
 };
 
 static struct hid_ll_driver spi_hid_ll_driver;
+
+/**
+ * spi_hid_lookup_quirk: return any quirks associated with a SPI HID device
+ * @idVendor: the 16-bit vendor ID
+ * @idProduct: the 16-bit product ID
+ *
+ * Returns: a u32 quirks value.
+ */
+static u32 spi_hid_lookup_quirk(const u16 idVendor, const u16 idProduct)
+{
+	u32 quirks = 0;
+	int n;
+
+	for (n = 0; spi_hid_quirks[n].idVendor; n++)
+		if (spi_hid_quirks[n].idVendor == idVendor &&
+		    (spi_hid_quirks[n].idProduct == (__u16)HID_ANY_ID ||
+		     spi_hid_quirks[n].idProduct == idProduct))
+			quirks = spi_hid_quirks[n].quirks;
+
+	return quirks;
+}
 
 static void spi_hid_populate_read_approvals(const struct spi_hid_conf *conf,
 					    u8 *header_buf, u8 *body_buf)
@@ -382,6 +419,9 @@ static int spi_hid_send_output_report(struct spi_hid *shid,
 	u8 padding;
 	int error;
 
+	if (shid->quirks & SPI_HID_QUIRK_READ_DELAY)
+		usleep_range(2000, 2100);
+
 	guard(mutex)(&shid->output_lock);
 	if (report->content_length > shid->desc.max_output_length) {
 		dev_err(dev, "Output report too big, content_length 0x%x.",
@@ -406,18 +446,38 @@ static int spi_hid_send_output_report(struct spi_hid *shid,
 	return error;
 }
 
+static const u32 spi_hid_get_timeout(struct spi_hid *shid)
+{
+	struct device *dev = &shid->spi->dev;
+	u32 timeout;
+
+	timeout = READ_ONCE(shid->ops->response_timeout_ms);
+
+	if (timeout < SPI_HID_RESP_TIMEOUT || timeout > 10000) {
+		dev_dbg(dev, "Response timeout is out of range, using default %d",
+			SPI_HID_RESP_TIMEOUT);
+		timeout = SPI_HID_RESP_TIMEOUT;
+	}
+
+	return timeout;
+}
+
 static int spi_hid_sync_request(struct spi_hid *shid,
 				struct spi_hid_output_report *report)
 {
 	struct device *dev = &shid->spi->dev;
+	u32 timeout = SPI_HID_RESP_TIMEOUT;
 	int error;
 
 	error = spi_hid_send_output_report(shid, report);
 	if (error)
 		return error;
 
+	if (shid->quirks & SPI_HID_QUIRK_MODE_SWITCH)
+		timeout = spi_hid_get_timeout(shid);
+
 	error = wait_for_completion_interruptible_timeout(&shid->output_done,
-							  msecs_to_jiffies(SPI_HID_RESP_TIMEOUT));
+							  msecs_to_jiffies(timeout));
 	if (error == 0) {
 		dev_err(dev, "Response timed out.");
 		return -ETIMEDOUT;
@@ -560,6 +620,8 @@ static int spi_hid_create_device(struct spi_hid *shid)
 	hid->version = shid->desc.hid_version;
 	hid->vendor = shid->desc.vendor_id;
 	hid->product = shid->desc.product_id;
+
+	shid->quirks = spi_hid_lookup_quirk(hid->vendor, hid->product);
 
 	snprintf(hid->name, sizeof(hid->name), "spi %04X:%04X",
 		 hid->vendor, hid->product);
@@ -834,6 +896,24 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 	if (shid->power_state == HIDSPI_OFF) {
 		dev_warn(dev, "Device is off after header was received.");
 		goto out;
+	}
+
+	if (shid->quirks & SPI_HID_QUIRK_MODE_SWITCH) {
+		/*
+		 * Update reset_pending on mode transitions inferred from
+		 * response timeout (entering/exiting a mode).
+		 */
+		u32 timeout = spi_hid_get_timeout(shid);
+		bool mode_enabled = timeout > SPI_HID_RESP_TIMEOUT;
+
+		if (mode_enabled != shid->prev_mode_enabled) {
+			if (mode_enabled)
+				set_bit(SPI_HID_RESET_PENDING, &shid->flags);
+			else
+				clear_bit(SPI_HID_RESET_PENDING, &shid->flags);
+		}
+
+		shid->prev_mode_enabled = mode_enabled;
 	}
 
 	if (shid->input_message.status < 0) {
@@ -1189,6 +1269,8 @@ static int spi_hid_dev_init(struct spi_hid *shid)
 	struct spi_device *spi = shid->spi;
 	struct device *dev = &spi->dev;
 	int error;
+
+	shid->ops->custom_init(shid->ops);
 
 	shid->ops->assert_reset(shid->ops);
 

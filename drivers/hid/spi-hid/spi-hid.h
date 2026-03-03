@@ -25,6 +25,9 @@ struct spi_hid_conf {
  * @power_down: do sequencing to power down the device
  * @assert_reset: do sequencing to assert the reset line
  * @deassert_reset: do sequencing to deassert the reset line
+ * @sleep_minimal_reset_delay: minimal sleep delay during reset
+ * @custom_init: customized device init
+ * @response_timeout_ms: output report response timeout in ms
  */
 struct spihid_ops {
 	int (*power_up)(struct spihid_ops *ops);
@@ -32,6 +35,9 @@ struct spihid_ops {
 	int (*assert_reset)(struct spihid_ops *ops);
 	int (*deassert_reset)(struct spihid_ops *ops);
 	void (*sleep_minimal_reset_delay)(struct spihid_ops *ops);
+	int (*custom_init)(struct spihid_ops *ops);
+
+	u32 response_timeout_ms;
 };
 
 int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
