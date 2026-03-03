@@ -18,6 +18,7 @@
 
 #include <linux/cpuset.h>
 #include <linux/sched/clock.h>
+#include <linux/sched/isolation.h>
 #include <uapi/linux/sched/types.h>
 #include "sched.h"
 #include "pelt.h"
@@ -593,7 +594,7 @@ static void enqueue_pushable_dl_task(struct rq *rq, struct task_struct *p)
 	}
 }
 
-static void dequeue_pushable_dl_task(struct rq *rq, struct task_struct *p)
+void dequeue_pushable_dl_task(struct rq *rq, struct task_struct *p)
 {
 	struct dl_rq *dl_rq = &rq->dl;
 	struct rb_root_cached *root = &dl_rq->pushable_dl_tasks_root;

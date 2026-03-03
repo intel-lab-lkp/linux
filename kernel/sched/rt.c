@@ -410,7 +410,7 @@ static void enqueue_pushable_task(struct rq *rq, struct task_struct *p)
 	}
 }
 
-static void dequeue_pushable_task(struct rq *rq, struct task_struct *p)
+void dequeue_pushable_task(struct rq *rq, struct task_struct *p)
 {
 	plist_del(&p->pushable_tasks, &rq->rt.pushable_tasks);
 

@@ -6761,16 +6761,26 @@ static inline void proxy_tag_curr(struct rq *rq, struct task_struct *owner)
 	if (!sched_proxy_exec())
 		return;
 	/*
-	 * pick_next_task() calls set_next_task() on the chosen task
-	 * at some point, which ensures it is not push/pullable.
-	 * However, the chosen/donor task *and* the mutex owner form an
-	 * atomic pair wrt push/pull.
+	 * The donor goes through set_next_task() which calls
+	 * dequeue_pushable_task() making it non-pushable.  The owner
+	 * does not go through that path, so we must remove it from
+	 * the pushable list explicitly.
 	 *
-	 * Make sure owner we run is not pushable. Unfortunately we can
-	 * only deal with that by means of a dequeue/enqueue cycle. :-/
+	 * For RT tasks: remove from the plist directly.
+	 * For DL tasks: remove from the rb-tree directly.
+	 * For CFS tasks: no pushable list exists; can_migrate_task()
+	 * already rejects blocked owners via task_is_blocked().
+	 *
+	 * The prior dequeue/enqueue(SAVE/RESTORE) cycle achieved the
+	 * same result by relying on task_is_blocked() suppressing the
+	 * re-enqueue into the pushable list, but it carried O(log n)
+	 * overhead and, for DL owners, triggered sub_running_bw() +
+	 * sub_rq_bw() -- bandwidth counter churn with no net effect.
 	 */
-	dequeue_task(rq, owner, DEQUEUE_NOCLOCK | DEQUEUE_SAVE);
-	enqueue_task(rq, owner, ENQUEUE_NOCLOCK | ENQUEUE_RESTORE);
+	if (rt_task(owner))
+		dequeue_pushable_task(rq, owner);
+	else if (dl_task(owner))
+		dequeue_pushable_dl_task(rq, owner);
 }
 
 /*
