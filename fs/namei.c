@@ -4906,7 +4906,7 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 	struct dentry *dentry = ERR_PTR(-EEXIST);
 	struct qstr last;
 	bool want_dir = lookup_flags & LOOKUP_DIRECTORY;
-	unsigned int reval_flag = lookup_flags & LOOKUP_REVAL;
+	unsigned int reval_flag = lookup_flags & (LOOKUP_REVAL | LOOKUP_IN_INIT);
 	unsigned int create_flags = LOOKUP_CREATE | LOOKUP_EXCL;
 	int type;
 	int error;

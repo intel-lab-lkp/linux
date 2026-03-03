@@ -165,7 +165,7 @@ static void __init miscdev_test_can_open(struct kunit *test, struct miscdevice *
 	if (ret != 0)
 		KUNIT_FAIL(test, "failed to create node\n");
 
-	filp = filp_open(devname, O_RDONLY, 0);
+	filp = filp_open_init(devname, O_RDONLY, 0);
 	if (IS_ERR(filp))
 		KUNIT_FAIL(test, "failed to open misc device: %ld\n", PTR_ERR(filp));
 	else

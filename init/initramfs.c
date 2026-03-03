@@ -382,7 +382,7 @@ static int __init do_name(void)
 			int openflags = O_WRONLY|O_CREAT|O_LARGEFILE;
 			if (ml != 1)
 				openflags |= O_TRUNC;
-			wfile = filp_open(collected, openflags, mode);
+			wfile = filp_open_init(collected, openflags, mode);
 			if (IS_ERR(wfile))
 				return 0;
 			wfile_pos = 0;
@@ -702,7 +702,7 @@ static void __init populate_initrd_image(char *err)
 
 	printk(KERN_INFO "rootfs image is not initramfs (%s); looks like an initrd\n",
 			err);
-	file = filp_open("/initrd.image", O_WRONLY|O_CREAT|O_LARGEFILE, 0700);
+	file = filp_open_init("/initrd.image", O_WRONLY|O_CREAT|O_LARGEFILE, 0700);
 	if (IS_ERR(file))
 		return;
 

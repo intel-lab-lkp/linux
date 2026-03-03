@@ -262,9 +262,7 @@ static struct file *open_file_as_root(const char *filename, int flags, umode_t m
 {
 	struct path root __free(path_put) = {};
 
-	task_lock(&init_task);
-	get_fs_root(init_task.fs, &root);
-	task_unlock(&init_task);
+	init_root(&root);
 
 	CLASS(prepare_creds, cred)();
 	if (!cred)

@@ -12,6 +12,7 @@
 #include <linux/init_syscalls.h>
 #include <linux/security.h>
 #include "internal.h"
+#include "mount.h"
 
 int __init init_pivot_root(const char *new_root, const char *put_old)
 {
@@ -102,7 +103,7 @@ int __init init_chown(const char *filename, uid_t user, gid_t group, int flags)
 	struct path path;
 	int error;
 
-	error = kern_path(filename, lookup_flags, &path);
+	error = kern_path(filename, lookup_flags | LOOKUP_IN_INIT, &path);
 	if (error)
 		return error;
 	error = mnt_want_write(path.mnt);
@@ -119,7 +120,7 @@ int __init init_chmod(const char *filename, umode_t mode)
 	struct path path;
 	int error;
 
-	error = kern_path(filename, LOOKUP_FOLLOW, &path);
+	error = kern_path(filename, LOOKUP_FOLLOW | LOOKUP_IN_INIT, &path);
 	if (error)
 		return error;
 	error = chmod_common(&path, mode);
@@ -132,7 +133,7 @@ int __init init_eaccess(const char *filename)
 	struct path path;
 	int error;
 
-	error = kern_path(filename, LOOKUP_FOLLOW, &path);
+	error = kern_path(filename, LOOKUP_FOLLOW | LOOKUP_IN_INIT, &path);
 	if (error)
 		return error;
 	error = path_permission(&path, MAY_ACCESS);
@@ -146,7 +147,7 @@ int __init init_stat(const char *filename, struct kstat *stat, int flags)
 	struct path path;
 	int error;
 
-	error = kern_path(filename, lookup_flags, &path);
+	error = kern_path(filename, lookup_flags | LOOKUP_IN_INIT, &path);
 	if (error)
 		return error;
 	error = vfs_getattr(&path, stat, STATX_BASIC_STATS,
@@ -158,39 +159,39 @@ int __init init_stat(const char *filename, struct kstat *stat, int flags)
 int __init init_mknod(const char *filename, umode_t mode, unsigned int dev)
 {
 	CLASS(filename_kernel, name)(filename);
-	return filename_mknodat(AT_FDCWD, name, mode, dev, 0);
+	return filename_mknodat(AT_FDCWD, name, mode, dev, LOOKUP_IN_INIT);
 }
 
 int __init init_link(const char *oldname, const char *newname)
 {
 	CLASS(filename_kernel, old)(oldname);
 	CLASS(filename_kernel, new)(newname);
-	return filename_linkat(AT_FDCWD, old, AT_FDCWD, new, 0, 0);
+	return filename_linkat(AT_FDCWD, old, AT_FDCWD, new, 0, LOOKUP_IN_INIT);
 }
 
 int __init init_symlink(const char *oldname, const char *newname)
 {
 	CLASS(filename_kernel, old)(oldname);
 	CLASS(filename_kernel, new)(newname);
-	return filename_symlinkat(old, AT_FDCWD, new, 0);
+	return filename_symlinkat(old, AT_FDCWD, new, LOOKUP_IN_INIT);
 }
 
 int __init init_unlink(const char *pathname)
 {
 	CLASS(filename_kernel, name)(pathname);
-	return filename_unlinkat(AT_FDCWD, name, 0);
+	return filename_unlinkat(AT_FDCWD, name, LOOKUP_IN_INIT);
 }
 
 int __init init_mkdir(const char *pathname, umode_t mode)
 {
 	CLASS(filename_kernel, name)(pathname);
-	return filename_mkdirat(AT_FDCWD, name, mode, 0);
+	return filename_mkdirat(AT_FDCWD, name, mode, LOOKUP_IN_INIT);
 }
 
 int __init init_rmdir(const char *pathname)
 {
 	CLASS(filename_kernel, name)(pathname);
-	return filename_rmdir(AT_FDCWD, name, 0);
+	return filename_rmdir(AT_FDCWD, name, LOOKUP_IN_INIT);
 }
 
 int __init init_utimes(char *filename, struct timespec64 *ts)
@@ -198,7 +199,7 @@ int __init init_utimes(char *filename, struct timespec64 *ts)
 	struct path path;
 	int error;
 
-	error = kern_path(filename, 0, &path);
+	error = kern_path(filename, LOOKUP_IN_INIT, &path);
 	if (error)
 		return error;
 	error = vfs_utimes(&path, ts);

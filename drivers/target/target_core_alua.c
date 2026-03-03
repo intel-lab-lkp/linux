@@ -856,7 +856,7 @@ static int core_alua_write_tpg_metadata(
 	unsigned char *md_buf,
 	u32 md_buf_len)
 {
-	struct file *file = filp_open(path, O_RDWR | O_CREAT | O_TRUNC, 0600);
+	struct file *file = filp_open_init(path, O_RDWR | O_CREAT | O_TRUNC, 0600);
 	loff_t pos = 0;
 	int ret;
 

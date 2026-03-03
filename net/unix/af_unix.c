@@ -1200,9 +1200,7 @@ static struct sock *unix_find_bsd(struct sockaddr_un *sunaddr, int addr_len,
 	if (flags & SOCK_COREDUMP) {
 		struct path root;
 
-		task_lock(&init_task);
-		get_fs_root(init_task.fs, &root);
-		task_unlock(&init_task);
+		init_root(&root);
 
 		scoped_with_kernel_creds()
 			err = vfs_path_lookup(root.dentry, root.mnt, sunaddr->sun_path,

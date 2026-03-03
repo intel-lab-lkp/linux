@@ -5462,7 +5462,7 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 	if (!share->path)
 		return -EIO;
 
-	rc = kern_path(share->path, LOOKUP_NO_SYMLINKS, &path);
+	rc = kern_path(share->path, LOOKUP_NO_SYMLINKS | LOOKUP_IN_INIT, &path);
 	if (rc) {
 		pr_err("cannot create vfs path\n");
 		return -EIO;

@@ -2119,8 +2119,12 @@ static int btrfs_add_dev_item(struct btrfs_trans_handle *trans,
 static void update_dev_time(const char *device_path)
 {
 	struct path path;
+	unsigned int flags = LOOKUP_FOLLOW;
 
-	if (!kern_path(device_path, LOOKUP_FOLLOW, &path)) {
+	if (tsk_is_kthread(current))
+		flags |= LOOKUP_IN_INIT;
+
+	if (!kern_path(device_path, flags, &path)) {
 		vfs_utimes(&path, NULL);
 		path_put(&path);
 	}

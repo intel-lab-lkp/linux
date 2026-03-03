@@ -224,7 +224,7 @@ static void __init initramfs_test_data(struct kunit *test)
 	err = unpack_to_rootfs(cpio_srcbuf, len);
 	KUNIT_EXPECT_NULL(test, err);
 
-	file = filp_open(c[0].fname, O_RDONLY, 0);
+	file = filp_open_init(c[0].fname, O_RDONLY, 0);
 	if (IS_ERR(file)) {
 		KUNIT_FAIL(test, "open failed");
 		goto out;
@@ -430,7 +430,7 @@ static void __init initramfs_test_fname_pad(struct kunit *test)
 	err = unpack_to_rootfs(tbufs->cpio_srcbuf, len);
 	KUNIT_EXPECT_NULL(test, err);
 
-	file = filp_open(c[0].fname, O_RDONLY, 0);
+	file = filp_open_init(c[0].fname, O_RDONLY, 0);
 	if (IS_ERR(file)) {
 		KUNIT_FAIL(test, "open failed");
 		goto out;

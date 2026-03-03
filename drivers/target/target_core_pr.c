@@ -1969,7 +1969,7 @@ static int __core_scsi3_write_aptpl_to_file(
 	if (!path)
 		return -ENOMEM;
 
-	file = filp_open(path, flags, 0600);
+	file = filp_open_init(path, flags, 0600);
 	if (IS_ERR(file)) {
 		pr_err("filp_open(%s) for APTPL metadata"
 			" failed\n", path);

@@ -156,9 +156,7 @@ ssize_t kernel_read_file_from_path_initns(const char *path, loff_t offset,
 	if (!path || !*path)
 		return -EINVAL;
 
-	task_lock(&init_task);
-	get_fs_root(init_task.fs, &root);
-	task_unlock(&init_task);
+	init_root(&root);
 
 	file = file_open_root(&root, path, O_RDONLY, 0);
 	path_put(&root);

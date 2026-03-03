@@ -62,6 +62,7 @@ static int ksmbd_vfs_path_lookup(struct ksmbd_share_config *share_conf,
 	if (pathname[0] == '\0') {
 		pathname = share_conf->path;
 		root_share_path = NULL;
+		flags |= LOOKUP_IN_INIT;
 	} else {
 		flags |= LOOKUP_BENEATH;
 	}
@@ -622,7 +623,7 @@ int ksmbd_vfs_link(struct ksmbd_work *work, const char *oldname,
 	if (ksmbd_override_fsids(work))
 		return -ENOMEM;
 
-	err = kern_path(oldname, LOOKUP_NO_SYMLINKS, &oldpath);
+	err = kern_path(oldname, LOOKUP_NO_SYMLINKS | LOOKUP_IN_INIT, &oldpath);
 	if (err) {
 		pr_err("cannot get linux path for %s, err = %d\n",
 		       oldname, err);
@@ -1258,7 +1259,8 @@ struct dentry *ksmbd_vfs_kern_path_create(struct ksmbd_work *work,
 	if (!abs_name)
 		return ERR_PTR(-ENOMEM);
 
-	dent = start_creating_path(AT_FDCWD, abs_name, path, flags);
+	dent = start_creating_path(AT_FDCWD, abs_name, path,
+				   flags | LOOKUP_IN_INIT);
 	kfree(abs_name);
 	return dent;
 }
