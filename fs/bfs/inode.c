@@ -259,6 +259,8 @@ static struct inode *bfs_alloc_inode(struct super_block *sb)
 	bi = alloc_inode_sb(sb, bfs_inode_cachep, GFP_KERNEL);
 	if (!bi)
 		return NULL;
+	mmb_init(&bi->i_metadata_bhs);
+
 	return &bi->vfs_inode;
 }
 
@@ -294,6 +296,11 @@ static void destroy_inodecache(void)
 	 */
 	rcu_barrier();
 	kmem_cache_destroy(bfs_inode_cachep);
+}
+
+struct mapping_metadata_bhs *bfs_get_metadata_bhs(struct inode *inode)
+{
+	return &BFS_I(inode)->i_metadata_bhs;
 }
 
 static const struct super_operations bfs_sops = {

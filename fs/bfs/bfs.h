@@ -35,6 +35,7 @@ struct bfs_inode_info {
 	unsigned long i_dsk_ino; /* inode number from the disk, can be 0 */
 	unsigned long i_sblock;
 	unsigned long i_eblock;
+	struct mapping_metadata_bhs i_metadata_bhs;
 	struct inode vfs_inode;
 };
 
@@ -55,6 +56,7 @@ static inline struct bfs_inode_info *BFS_I(struct inode *inode)
 /* inode.c */
 extern struct inode *bfs_iget(struct super_block *sb, unsigned long ino);
 extern void bfs_dump_imap(const char *, struct super_block *);
+struct mapping_metadata_bhs *bfs_get_metadata_bhs(struct inode *inode);
 
 /* file.c */
 extern const struct inode_operations bfs_file_inops;

@@ -200,4 +200,6 @@ const struct address_space_operations bfs_aops = {
 	.bmap		= bfs_bmap,
 };
 
-const struct inode_operations bfs_file_inops;
+const struct inode_operations bfs_file_inops = {
+	.get_metadata_bhs = bfs_get_metadata_bhs,
+};

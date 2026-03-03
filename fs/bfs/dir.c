@@ -262,6 +262,7 @@ const struct inode_operations bfs_dir_inops = {
 	.link			= bfs_link,
 	.unlink			= bfs_unlink,
 	.rename			= bfs_rename,
+	.get_metadata_bhs	= bfs_get_metadata_bhs,
 };
 
 static int bfs_add_entry(struct inode *dir, const struct qstr *child, int ino)
