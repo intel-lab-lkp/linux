@@ -9,10 +9,12 @@
 #ifndef _DMA_HEAPS_H
 #define _DMA_HEAPS_H
 
+#include <linux/errno.h>
 #include <linux/types.h>
 
 struct dma_heap;
 struct device;
+struct reserved_mem;
 
 /**
  * struct dma_heap_ops - ops to operate on a given heap
@@ -52,5 +54,14 @@ void dma_heap_destroy(struct dma_heap *heap);
 struct dma_heap *dma_heap_add(const struct dma_heap_export_info *exp_info);
 
 extern bool mem_accounting;
+
+#if IS_ENABLED(CONFIG_DMABUF_HEAPS_COHERENT)
+int dma_heap_coherent_register(struct reserved_mem *rmem);
+#else
+static inline int dma_heap_coherent_register(struct reserved_mem *rmem)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 
 #endif /* _DMA_HEAPS_H */

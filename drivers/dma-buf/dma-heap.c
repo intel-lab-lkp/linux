@@ -390,8 +390,8 @@ struct dma_heap *dma_heap_add(const struct dma_heap_export_info *exp_info)
 
 	heap = dma_heap_create(exp_info);
 	if (IS_ERR(heap)) {
-		pr_err("dma_heap: failed to create heap (%d)\n", PTR_ERR(heap));
-		return PTR_ERR(heap);
+		pr_err("dma_heap: failed to create heap (%ld)\n", PTR_ERR(heap));
+		return ERR_CAST(heap);
 	}
 
 	ret = dma_heap_register(heap);
