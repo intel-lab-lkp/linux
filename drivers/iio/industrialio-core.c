@@ -882,6 +882,93 @@ static ssize_t iio_read_channel_info_avail(struct device *dev,
 }
 
 /**
+ * __iio_str_to_fixpoint64() - Parse a fixed-point number from a string
+ * @str: The string to parse
+ * @fract_mult: Multiplier for the first decimal place, should be a power of 10
+ * @integer: The integer part of the number
+ * @fract: The fractional part of the number
+ * @scale_db: True if this should parse as dB
+ *
+ * This variant uses 64-bit integers for both integer and fractional parts.
+ * Parsed positive values greater than S64_MAX are returned as-is. Parsed
+ * negative values less than S64_MIN are treated as range error, so -ERANGE is
+ * returned.
+ *
+ * Returns:
+ * 0 on success, or a negative error code if the string could not be parsed.
+ */
+static int __iio_str_to_fixpoint64(const char *str, u64 fract_mult,
+				   s64 *integer, s64 *fract, bool scale_db)
+{
+	u64 i = 0, f = 0;
+	int precision = ffs(fract_mult);
+	bool negative = false;
+	ssize_t len;
+
+	if (precision > 20) /* ceil(log10(U64_MAX)) = 20 */
+		return -EINVAL;
+
+	if (str[0] == '-') {
+		negative = true;
+		str++;
+	} else if (str[0] == '+') {
+		str++;
+	}
+
+	if (*str != '.') {
+		len = kstrntoull(str, 10, &i, SIZE_MAX);
+		if (len < 0)
+			return len;
+		str += len;
+	}
+
+	if (precision && *str == '.') {
+		str++; /* skip decimal point */
+		len = kstrntoull(str, 10, &f, precision);
+		if (len < 0)
+			return len;
+		str += len;
+
+		if (len < precision) /* scale up */
+			f *= int_pow(10, precision - len);
+
+		while (isdigit(*str)) /* truncate: ignore further digits */
+			str++;
+	}
+
+	if (scale_db) {
+		/* Ignore the dB suffix */
+		if (!strncmp(str, " dB", sizeof(" dB") - 1))
+			str += sizeof(" dB") - 1;
+		else if (!strncmp(str, "dB", sizeof("dB") - 1))
+			str += sizeof("dB") - 1;
+	}
+
+	if (*str == '\n')
+		str++;
+
+	if (*str != '\0')
+		return -EINVAL;
+
+	if (negative) {
+		if (i) {
+			if ((s64)-i > 0)
+				return -ERANGE;
+			i = -i;
+		} else {
+			if ((s64)-f > 0)
+				return -ERANGE;
+			f = -f;
+		}
+	}
+
+	*integer = i;
+	*fract = f;
+
+	return 0;
+}
+
+/**
  * __iio_str_to_fixpoint() - Parse a fixed-point number from a string
  * @str: The string to parse
  * @fract_mult: Multiplier for the first decimal place, should be a power of 10
@@ -895,62 +982,42 @@ static ssize_t iio_read_channel_info_avail(struct device *dev,
 static int __iio_str_to_fixpoint(const char *str, int fract_mult,
 				 int *integer, int *fract, bool scale_db)
 {
-	int i = 0, f = 0;
-	bool integer_part = true, negative = false;
+	s64 integer64, fract64;
+	int ret;
 
-	if (fract_mult == 0) {
-		*fract = 0;
+	ret = __iio_str_to_fixpoint64(str, fract_mult, &integer64, &fract64,
+				      scale_db);
+	if (ret)
+		return ret;
 
-		return kstrtoint(str, 0, integer);
-	}
+	if (integer64 < INT_MIN || integer64 > UINT_MAX ||
+	    fract64 < INT_MIN || fract64 > UINT_MAX)
+		return -ERANGE;
 
-	if (str[0] == '-') {
-		negative = true;
-		str++;
-	} else if (str[0] == '+') {
-		str++;
-	}
-
-	while (*str) {
-		if ('0' <= *str && *str <= '9') {
-			if (integer_part) {
-				i = i * 10 + *str - '0';
-			} else {
-				f += fract_mult * (*str - '0');
-				fract_mult /= 10;
-			}
-		} else if (*str == '\n') {
-			if (*(str + 1) == '\0')
-				break;
-			return -EINVAL;
-		} else if (!strncmp(str, " dB", sizeof(" dB") - 1) && scale_db) {
-			/* Ignore the dB suffix */
-			str += sizeof(" dB") - 1;
-			continue;
-		} else if (!strncmp(str, "dB", sizeof("dB") - 1) && scale_db) {
-			/* Ignore the dB suffix */
-			str += sizeof("dB") - 1;
-			continue;
-		} else if (*str == '.' && integer_part) {
-			integer_part = false;
-		} else {
-			return -EINVAL;
-		}
-		str++;
-	}
-
-	if (negative) {
-		if (i)
-			i = -i;
-		else
-			f = -f;
-	}
-
-	*integer = i;
-	*fract = f;
+	*integer = integer64;
+	*fract = fract64;
 
 	return 0;
 }
+
+/**
+ * iio_str_to_fixpoint64() - Parse a fixed-point number from a string
+ * @str: The string to parse
+ * @fract_mult: Multiplier for the first decimal place, should be a power of 10
+ * @integer: The integer part of the number
+ * @fract: The fractional part of the number
+ *
+ * This variant uses 64-bit integers for both integer and fractional parts.
+ *
+ * Returns:
+ * 0 on success, or a negative error code if the string could not be parsed.
+ */
+int iio_str_to_fixpoint64(const char *str, u64 fract_mult, s64 *integer,
+			  s64 *fract)
+{
+	return __iio_str_to_fixpoint64(str, fract_mult, integer, fract, false);
+}
+EXPORT_SYMBOL_GPL(iio_str_to_fixpoint64);
 
 /**
  * iio_str_to_fixpoint() - Parse a fixed-point number from a string
