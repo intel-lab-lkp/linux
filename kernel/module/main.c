@@ -2648,6 +2648,10 @@ static int find_module_sections(struct module *mod, struct load_info *info)
 	mod->btf_base_data = any_section_objs(info, ".BTF.base", 1,
 					      &mod->btf_base_data_size);
 #endif
+#ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+	mod->lineinfo_data = any_section_objs(info, ".mod_lineinfo", 1,
+					      &mod->lineinfo_data_size);
+#endif
 #ifdef CONFIG_JUMP_LABEL
 	mod->jump_entries = section_objs(info, "__jump_table",
 					sizeof(*mod->jump_entries),

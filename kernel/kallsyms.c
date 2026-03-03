@@ -554,13 +554,27 @@ static int __sprint_symbol(char *buffer, unsigned long address,
 	}
 
 #ifdef CONFIG_KALLSYMS_LINEINFO
-	if (!modname) {
+	{
 		const char *li_file;
 		unsigned int li_line;
 		unsigned long sym_start = address - offset;
+		bool found = false;
 
-		if (kallsyms_lookup_lineinfo(address, sym_start,
-					     &li_file, &li_line))
+		if (!modname)
+			found = kallsyms_lookup_lineinfo(address, sym_start,
+							 &li_file, &li_line);
+#ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+		else {
+			struct module *mod = __module_address(address);
+
+			if (mod)
+				found = module_lookup_lineinfo(mod, address,
+							      sym_start,
+							      &li_file,
+							      &li_line);
+		}
+#endif
+		if (found)
 			len += snprintf(buffer + len, KSYM_SYMBOL_LEN - len,
 					" (%s:%u)", li_file, li_line);
 	}
