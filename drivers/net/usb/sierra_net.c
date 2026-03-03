@@ -187,19 +187,6 @@ static const struct net_device_ops sierra_net_device_ops = {
 	.ndo_validate_addr      = eth_validate_addr,
 };
 
-/* get private data associated with passed in usbnet device */
-static inline struct sierra_net_data *sierra_net_get_private(struct usbnet *dev)
-{
-	return (struct sierra_net_data *)dev->data[0];
-}
-
-/* set private data associated with passed in usbnet device */
-static inline void sierra_net_set_private(struct usbnet *dev,
-			struct sierra_net_data *priv)
-{
-	dev->data[0] = (unsigned long)priv;
-}
-
 /* is packet IPv4/IPv6 */
 static inline int is_ip(struct sk_buff *skb)
 {
@@ -317,7 +304,7 @@ static void build_hip(u8 *buf, const u16 payloadlen,
 static int sierra_net_send_cmd(struct usbnet *dev,
 		u8 *cmd, int cmdlen, const char * cmd_name)
 {
-	struct sierra_net_data *priv = sierra_net_get_private(dev);
+	struct sierra_net_data *priv = usbnet_priv(dev);
 	int  status;
 
 	status = usbnet_write_cmd(dev, USB_CDC_SEND_ENCAPSULATED_COMMAND,
@@ -333,7 +320,7 @@ static int sierra_net_send_cmd(struct usbnet *dev,
 static int sierra_net_send_sync(struct usbnet *dev)
 {
 	int  status;
-	struct sierra_net_data *priv = sierra_net_get_private(dev);
+	struct sierra_net_data *priv = usbnet_priv(dev);
 
 	dev_dbg(&dev->udev->dev, "%s", __func__);
 
@@ -410,7 +397,7 @@ static int sierra_net_parse_lsi(struct usbnet *dev, char *data, int datalen)
 static void sierra_net_handle_lsi(struct usbnet *dev, char *data,
 		struct hip_hdr	*hh)
 {
-	struct sierra_net_data *priv = sierra_net_get_private(dev);
+	struct sierra_net_data *priv = usbnet_priv(dev);
 	int link_up;
 
 	link_up = sierra_net_parse_lsi(dev, data + hh->hdrlen,
@@ -431,7 +418,7 @@ static void sierra_net_handle_lsi(struct usbnet *dev, char *data,
 static void sierra_net_dosync(struct usbnet *dev)
 {
 	int status;
-	struct sierra_net_data *priv = sierra_net_get_private(dev);
+	struct sierra_net_data *priv = usbnet_priv(dev);
 
 	dev_dbg(&dev->udev->dev, "%s", __func__);
 
@@ -560,7 +547,7 @@ static void sierra_net_kevent(struct work_struct *work)
 
 static void sierra_net_defer_kevent(struct usbnet *dev, int work)
 {
-	struct sierra_net_data *priv = sierra_net_get_private(dev);
+	struct sierra_net_data *priv = usbnet_priv(dev);
 
 	set_bit(work, &priv->kevent_flags);
 	schedule_work(&priv->sierra_net_kevent);
@@ -608,8 +595,10 @@ static void sierra_net_status(struct usbnet *dev, struct urb *urb)
 static u32 sierra_net_get_link(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
+	struct sierra_net_data *priv = usbnet_priv(dev);
+
 	/* Report link is down whenever the interface is down */
-	return sierra_net_get_private(dev)->link_up && netif_running(net);
+	return priv->link_up && netif_running(net);
 }
 
 static const struct ethtool_ops sierra_net_ethtool_ops = {
@@ -682,11 +671,8 @@ static int sierra_net_bind(struct usbnet *dev, struct usb_interface *intf)
 		dev_err(&dev->udev->dev, "No status endpoint found");
 		return -ENODEV;
 	}
-	/* Initialize sierra private data */
-	priv = kzalloc_obj(*priv);
-	if (!priv)
-		return -ENOMEM;
 
+	/* Initialize sierra private data */
 	priv->usbnet = dev;
 	priv->ifnum = ifacenum;
 	dev->net->netdev_ops = &sierra_net_device_ops;
@@ -718,8 +704,6 @@ static int sierra_net_bind(struct usbnet *dev, struct usb_interface *intf)
 	dev->net->ethtool_ops = &sierra_net_ethtool_ops;
 	netif_carrier_off(dev->net);
 
-	sierra_net_set_private(dev, priv);
-
 	priv->kevent_flags = 0;
 
 	/* Use the shared workqueue */
@@ -747,7 +731,7 @@ static int sierra_net_bind(struct usbnet *dev, struct usb_interface *intf)
 static void sierra_net_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
 	int status;
-	struct sierra_net_data *priv = sierra_net_get_private(dev);
+	struct sierra_net_data *priv = usbnet_priv(dev);
 
 	dev_dbg(&dev->udev->dev, "%s", __func__);
 
@@ -764,7 +748,6 @@ static void sierra_net_unbind(struct usbnet *dev, struct usb_interface *intf)
 
 	usbnet_status_stop(dev);
 
-	sierra_net_set_private(dev, NULL);
 	kfree(priv);
 }
 
@@ -851,7 +834,7 @@ static int sierra_net_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 static struct sk_buff *sierra_net_tx_fixup(struct usbnet *dev,
 					   struct sk_buff *skb, gfp_t flags)
 {
-	struct sierra_net_data *priv = sierra_net_get_private(dev);
+	struct sierra_net_data *priv = usbnet_priv(dev);
 	u16 len;
 	bool need_tail;
 
@@ -905,6 +888,7 @@ static const struct driver_info sierra_net_info_direct_ip = {
 	.status = sierra_net_status,
 	.rx_fixup = sierra_net_rx_fixup,
 	.tx_fixup = sierra_net_tx_fixup,
+	.required_room = sizeof(struct sierra_net_data),
 };
 
 static int
