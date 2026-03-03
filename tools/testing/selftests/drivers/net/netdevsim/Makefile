@@ -8,6 +8,7 @@ TEST_PROGS := \
 	ethtool-features.sh \
 	ethtool-fec.sh \
 	ethtool-pause.sh \
+	ethtool-rss.sh \
 	fib.sh \
 	fib_notifications.sh \
 	hw_stats_l3.sh \
