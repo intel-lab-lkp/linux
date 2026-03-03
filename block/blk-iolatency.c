@@ -946,9 +946,6 @@ static void iolatency_pd_stat(struct blkg_policy_data *pd, struct seq_file *s)
 	unsigned long long avg_lat;
 	unsigned long long cur_win;
 
-	if (!blkcg_debug_stats)
-		return;
-
 	if (iolat->ssd)
 		return iolatency_ssd_stat(iolat, s);
 

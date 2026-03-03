@@ -189,7 +189,6 @@ struct blkcg_policy {
 };
 
 extern struct blkcg blkcg_root;
-extern bool blkcg_debug_stats;
 
 void blkg_init_queue(struct request_queue *q);
 int blkcg_init_disk(struct gendisk *disk);
