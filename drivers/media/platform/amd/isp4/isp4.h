@@ -13,6 +13,7 @@ struct isp4_device {
 	struct v4l2_device v4l2_dev;
 	struct isp4_subdev isp_subdev;
 	struct media_device mdev;
+	bool was_powered_before_suspend;
 };
 
 void isp4_intr_enable(struct isp4_subdev *isp_subdev, u32 index, bool enable);

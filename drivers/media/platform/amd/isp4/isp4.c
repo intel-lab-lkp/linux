@@ -4,6 +4,7 @@
  */
 
 #include <linux/irq.h>
+#include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/vmalloc.h>
 #include <media/v4l2-ioctl.h>
@@ -221,11 +222,58 @@ static void isp4_capture_remove(struct platform_device *pdev)
 	media_device_cleanup(&isp_dev->mdev);
 }
 
+static int isp4_capture_suspend(struct device *dev)
+{
+	struct isp4_device *isp_dev = dev_get_drvdata(dev);
+	struct isp4_subdev *isp_subdev;
+	struct isp4_interface *ispif;
+	int ret;
+
+	if (!isp_dev)
+		return 0;
+
+	isp_subdev = &isp_dev->isp_subdev;
+	ispif = &isp_subdev->ispif;
+
+	if (ispif->status == ISP4IF_STATUS_PWR_OFF)
+		return 0;
+
+	dev_info(dev, "tearing down fw and hw state for suspend\n");
+
+	ret = isp4sd_pwroff_and_deinit(&isp_subdev->sdev);
+	if (ret)
+		dev_err(dev, "suspend teardown failed: %d\n", ret);
+
+	isp_dev->was_powered_before_suspend = true;
+
+	return 0;
+}
+
+static int isp4_capture_resume(struct device *dev)
+{
+	struct isp4_device *isp_dev = dev_get_drvdata(dev);
+
+	if (!isp_dev)
+		return 0;
+
+	if (isp_dev->was_powered_before_suspend) {
+		dev_info(dev, "ISP was active before suspend, camera must be reopened\n");
+		isp_dev->was_powered_before_suspend = false;
+	}
+
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(isp4_capture_pm_ops,
+				isp4_capture_suspend,
+				isp4_capture_resume);
+
 static struct platform_driver isp4_capture_drv = {
 	.probe = isp4_capture_probe,
 	.remove = isp4_capture_remove,
 	.driver = {
 		.name = ISP4_DRV_NAME,
+		.pm = pm_sleep_ptr(&isp4_capture_pm_ops),
 	}
 };
 
