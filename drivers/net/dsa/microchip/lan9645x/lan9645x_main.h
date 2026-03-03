@@ -181,6 +181,11 @@ struct lan9645x {
 	u16 bridge_fwd_mask; /* Mask for forwarding bridged ports */
 	struct mutex fwd_domain_lock; /* lock forwarding configuration */
 
+	/* VLAN */
+	u16 vlan_mask[VLAN_N_VID]; /* Port mask per vlan */
+	u8 vlan_flags[VLAN_N_VID];
+	DECLARE_BITMAP(cpu_vlan_mask, VLAN_N_VID); /* CPU VLAN membership */
+
 	int num_port_dis;
 	bool dd_dis;
 	bool tsn_dis;
@@ -403,5 +408,20 @@ int lan9645x_port_parse_ports_node(struct lan9645x *lan9645x);
 void lan9645x_phylink_get_caps(struct lan9645x *lan9645x, int port,
 			       struct phylink_config *c);
 void lan9645x_phylink_port_down(struct lan9645x *lan9645x, int port);
+
+/* VLAN lan9645x_vlan.c */
+void lan9645x_vlan_init(struct lan9645x *lan9645x);
+void lan9645x_vlan_port_set_vlan_aware(struct lan9645x_port *p,
+				       bool vlan_aware);
+u16 lan9645x_vlan_unaware_pvid(bool is_bridged);
+void lan9645x_vlan_port_apply(struct lan9645x_port *p);
+void lan9645x_vlan_port_add_vlan(struct lan9645x_port *p, u16 vid, bool pvid,
+				 bool untagged);
+void lan9645x_vlan_port_del_vlan(struct lan9645x_port *p, u16 vid);
+void lan9645x_vlan_cpu_set_vlan(struct lan9645x *lan9645x, u16 vid);
+void lan9645x_vlan_cpu_clear_vlan(struct lan9645x *lan9645x, u16 vid);
+void lan9645x_vlan_set_hostmode(struct lan9645x_port *p);
+int lan9645x_port_vlan_prepare(struct lan9645x_port *p, u16 vid, bool pvid,
+			       bool untagged, struct netlink_ext_ack *extack);
 
 #endif /* __LAN9645X_MAIN_H__ */
