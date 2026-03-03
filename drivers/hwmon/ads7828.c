@@ -62,7 +62,7 @@ static ssize_t ads7828_in_show(struct device *dev,
 	if (err < 0)
 		return err;
 
-	return sprintf(buf, "%d\n",
+	return sysfs_emit(buf, "%d\n",
 		       DIV_ROUND_CLOSEST(regval * data->lsb_resol, 1000));
 }
 
