@@ -3522,6 +3522,22 @@ void pci_unlock_rescan_remove(void)
 }
 EXPORT_SYMBOL_GPL(pci_unlock_rescan_remove);
 
+bool pci_lock_rescan_remove_reentrant(void)
+{
+	if (mutex_get_owner(&pci_rescan_remove_lock) == (unsigned long)current)
+		return false;
+	pci_lock_rescan_remove();
+	return true;
+}
+EXPORT_SYMBOL_GPL(pci_lock_rescan_remove_reentrant);
+
+void pci_unlock_rescan_remove_reentrant(const bool locked)
+{
+	if (locked)
+		pci_unlock_rescan_remove();
+}
+EXPORT_SYMBOL_GPL(pci_unlock_rescan_remove_reentrant);
+
 static int __init pci_sort_bf_cmp(const struct device *d_a,
 				  const struct device *d_b)
 {
