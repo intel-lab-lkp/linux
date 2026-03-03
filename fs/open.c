@@ -1342,6 +1342,31 @@ struct file *filp_open(const char *filename, int flags, umode_t mode)
 }
 EXPORT_SYMBOL(filp_open);
 
+/**
+ * filp_open_init - open file resolving paths against init's root
+ *
+ * @filename:	path to open
+ * @flags:	open flags as per the open(2) second argument
+ * @mode:	mode for the new file if O_CREAT is set, else ignored
+ *
+ * Same as filp_open() but path resolution is done relative to init's
+ * root (using pid1_fs) instead of current->fs. Intended for kernel
+ * threads that need to open files by absolute path after being rooted
+ * in nullfs.
+ */
+struct file *filp_open_init(const char *filename, int flags, umode_t mode)
+{
+	struct open_flags op;
+	struct open_how how = build_open_how(flags, mode);
+	int err = build_open_flags(&how, &op);
+	if (err)
+		return ERR_PTR(err);
+	op.lookup_flags |= LOOKUP_IN_INIT;
+	CLASS(filename_kernel, name)(filename);
+	return do_file_open(AT_FDCWD, name, &op);
+}
+EXPORT_SYMBOL(filp_open_init);
+
 struct file *file_open_root(const struct path *root,
 			    const char *filename, int flags, umode_t mode)
 {
