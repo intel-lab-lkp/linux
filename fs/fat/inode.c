@@ -763,6 +763,7 @@ static struct inode *fat_alloc_inode(struct super_block *sb)
 	ei->i_pos = 0;
 	ei->i_crtime.tv_sec = 0;
 	ei->i_crtime.tv_nsec = 0;
+	mmb_init(&ei->i_metadata_bhs);
 
 	return &ei->vfs_inode;
 }
@@ -806,6 +807,12 @@ static void __exit fat_destroy_inodecache(void)
 	rcu_barrier();
 	kmem_cache_destroy(fat_inode_cachep);
 }
+
+struct mapping_metadata_bhs *fat_get_metadata_bhs(struct inode *inode)
+{
+	return &MSDOS_I(inode)->i_metadata_bhs;
+}
+EXPORT_SYMBOL_GPL(fat_get_metadata_bhs);
 
 int fat_reconfigure(struct fs_context *fc)
 {
@@ -1531,6 +1538,10 @@ out:
 	return error;
 }
 
+static const struct inode_operations fat_table_inode_operations = {
+	.get_metadata_bhs = fat_get_metadata_bhs,
+};
+
 /*
  * Read the super block of an MS-DOS FS.
  */
@@ -1806,6 +1817,7 @@ int fat_fill_super(struct super_block *sb, struct fs_context *fc,
 	fat_inode = new_inode(sb);
 	if (!fat_inode)
 		goto out_fail;
+	fat_inode->i_op = &fat_table_inode_operations;
 	sbi->fat_inode = fat_inode;
 
 	fsinfo_inode = new_inode(sb);

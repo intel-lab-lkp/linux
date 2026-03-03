@@ -1186,6 +1186,7 @@ static const struct inode_operations vfat_dir_inode_operations = {
 	.setattr	= fat_setattr,
 	.getattr	= fat_getattr,
 	.update_time	= fat_update_time,
+	.get_metadata_bhs = fat_get_metadata_bhs,
 };
 
 static void setup(struct super_block *sb)
