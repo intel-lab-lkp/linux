@@ -1734,6 +1734,7 @@ usbnet_probe(struct usb_interface *udev, const struct usb_device_id *prod)
 	int				status;
 	const char			*name;
 	struct usb_driver 	*driver = to_usb_driver(udev->dev.driver);
+	unsigned int extra;
 
 	/* usbnet already took usb runtime pm, so have to enable the feature
 	 * for usb interface, otherwise usb_autopm_get_interface may return
@@ -1756,7 +1757,9 @@ usbnet_probe(struct usb_interface *udev, const struct usb_device_id *prod)
 	status = -ENOMEM;
 
 	// set up our own records
-	net = alloc_etherdev(sizeof(*dev));
+	extra = info->required_room ?
+		info->required_room : 5 * sizeof(unsigned long);
+	net = alloc_etherdev(sizeof(*dev) + extra);
 	if (!net)
 		goto out;
 
