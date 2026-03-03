@@ -77,57 +77,6 @@
 
 #define GPIO_MUX                                      0x000008
 
-#define RAW_INT                                       0x000020
-#define RAW_INT_ZVPORT1_VSYNC                         BIT(4)
-#define RAW_INT_ZVPORT0_VSYNC                         BIT(3)
-#define RAW_INT_CRT_VSYNC                             BIT(2)
-#define RAW_INT_PANEL_VSYNC                           BIT(1)
-#define RAW_INT_VGA_VSYNC                             BIT(0)
-
-#define INT_STATUS                                    0x000024
-#define INT_STATUS_GPIO31                             BIT(31)
-#define INT_STATUS_GPIO30                             BIT(30)
-#define INT_STATUS_GPIO29                             BIT(29)
-#define INT_STATUS_GPIO28                             BIT(28)
-#define INT_STATUS_GPIO27                             BIT(27)
-#define INT_STATUS_GPIO26                             BIT(26)
-#define INT_STATUS_GPIO25                             BIT(25)
-#define INT_STATUS_I2C                                BIT(12)
-#define INT_STATUS_PWM                                BIT(11)
-#define INT_STATUS_DMA1                               BIT(10)
-#define INT_STATUS_DMA0                               BIT(9)
-#define INT_STATUS_PCI                                BIT(8)
-#define INT_STATUS_SSP1                               BIT(7)
-#define INT_STATUS_SSP0                               BIT(6)
-#define INT_STATUS_DE                                 BIT(5)
-#define INT_STATUS_ZVPORT1_VSYNC                      BIT(4)
-#define INT_STATUS_ZVPORT0_VSYNC                      BIT(3)
-#define INT_STATUS_CRT_VSYNC                          BIT(2)
-#define INT_STATUS_PANEL_VSYNC                        BIT(1)
-#define INT_STATUS_VGA_VSYNC                          BIT(0)
-
-#define INT_MASK                                      0x000028
-#define INT_MASK_GPIO31                               BIT(31)
-#define INT_MASK_GPIO30                               BIT(30)
-#define INT_MASK_GPIO29                               BIT(29)
-#define INT_MASK_GPIO28                               BIT(28)
-#define INT_MASK_GPIO27                               BIT(27)
-#define INT_MASK_GPIO26                               BIT(26)
-#define INT_MASK_GPIO25                               BIT(25)
-#define INT_MASK_I2C                                  BIT(12)
-#define INT_MASK_PWM                                  BIT(11)
-#define INT_MASK_DMA1                                 BIT(10)
-#define INT_MASK_DMA                                  BIT(9)
-#define INT_MASK_PCI                                  BIT(8)
-#define INT_MASK_SSP1                                 BIT(7)
-#define INT_MASK_SSP0                                 BIT(6)
-#define INT_MASK_DE                                   BIT(5)
-#define INT_MASK_ZVPORT1_VSYNC                        BIT(4)
-#define INT_MASK_ZVPORT0_VSYNC                        BIT(3)
-#define INT_MASK_CRT_VSYNC                            BIT(2)
-#define INT_MASK_PANEL_VSYNC                          BIT(1)
-#define INT_MASK_VGA_VSYNC                            BIT(0)
-
 #define CURRENT_GATE                                  0x000040
 #define CURRENT_GATE_MCLK_MASK                        (0x3 << 14)
 #ifdef VALIDATION_CHIP
