@@ -217,6 +217,9 @@ struct lan9645x {
 	u8 vlan_flags[VLAN_N_VID];
 	DECLARE_BITMAP(cpu_vlan_mask, VLAN_N_VID); /* CPU VLAN membership */
 
+	/* Statistics  */
+	struct lan9645x_stats *stats;
+
 	int num_port_dis;
 	bool dd_dis;
 	bool tsn_dis;

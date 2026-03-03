@@ -7,3 +7,4 @@ mchp-lan9645x-objs := lan9645x_main.o \
 	lan9645x_phylink.o \
 	lan9645x_vlan.o \
 	lan9645x_mac.o \
+	lan9645x_stats.o \
