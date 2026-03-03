@@ -512,15 +512,19 @@ bool module_lookup_lineinfo(struct module *mod, unsigned long addr,
 {
 	const struct mod_lineinfo_header *hdr;
 	const void *base;
-	const u32 *addrs, *lines, *file_offsets;
-	const u16 *file_ids;
+	const u32 *blk_addrs, *blk_offsets, *file_offsets;
+	const u8 *data;
 	const char *filenames;
-	u32 num_entries, num_files, filenames_size;
+	u32 num_entries, num_files, filenames_size, num_blocks, data_size;
 	unsigned long text_base;
 	unsigned int offset;
 	unsigned long long raw_offset;
-	unsigned int low, high, mid;
-	u16 file_id;
+	unsigned int low, high, mid, block;
+	unsigned int cur_addr, cur_file_id, cur_line;
+	unsigned int best_file_id = 0, best_line = 0;
+	unsigned int block_entries, data_end;
+	bool found = false;
+	u32 pos;
 
 	base = mod->lineinfo_data;
 	if (!base)
@@ -533,20 +537,24 @@ bool module_lookup_lineinfo(struct module *mod, unsigned long addr,
 	num_entries = hdr->num_entries;
 	num_files = hdr->num_files;
 	filenames_size = hdr->filenames_size;
+	num_blocks = hdr->num_blocks;
+	data_size = hdr->data_size;
 
-	if (num_entries == 0)
+	if (num_entries == 0 || num_blocks == 0)
 		return false;
 
 	/* Validate section is large enough for all arrays */
 	if (mod->lineinfo_data_size <
-	    mod_lineinfo_filenames_off(num_entries, num_files) + filenames_size)
+	    mod_lineinfo_filenames_off(num_blocks, data_size, num_files) +
+	    filenames_size)
 		return false;
 
-	addrs = base + mod_lineinfo_addrs_off();
-	file_ids = base + mod_lineinfo_file_ids_off(num_entries);
-	lines = base + mod_lineinfo_lines_off(num_entries);
-	file_offsets = base + mod_lineinfo_file_offsets_off(num_entries);
-	filenames = base + mod_lineinfo_filenames_off(num_entries, num_files);
+	blk_addrs = base + mod_lineinfo_block_addrs_off();
+	blk_offsets = base + mod_lineinfo_block_offsets_off(num_blocks);
+	data = base + mod_lineinfo_data_off(num_blocks);
+	file_offsets = base + mod_lineinfo_file_offsets_off(num_blocks, data_size);
+	filenames = base + mod_lineinfo_filenames_off(num_blocks, data_size,
+						      num_files);
 
 	/* Compute offset from module .text base */
 	text_base = (unsigned long)mod->mem[MOD_TEXT].base;
@@ -558,12 +566,12 @@ bool module_lookup_lineinfo(struct module *mod, unsigned long addr,
 		return false;
 	offset = (unsigned int)raw_offset;
 
-	/* Binary search for largest entry <= offset */
+	/* Binary search on block_addrs[] to find the right block */
 	low = 0;
-	high = num_entries;
+	high = num_blocks;
 	while (low < high) {
 		mid = low + (high - low) / 2;
-		if (addrs[mid] <= offset)
+		if (blk_addrs[mid] <= offset)
 			low = mid + 1;
 		else
 			high = mid;
@@ -571,21 +579,74 @@ bool module_lookup_lineinfo(struct module *mod, unsigned long addr,
 
 	if (low == 0)
 		return false;
-	low--;
+	block = low - 1;
 
-	/* Ensure the matched entry belongs to the same symbol */
-	if (text_base + addrs[low] < sym_start)
+	/* How many entries in this block? */
+	block_entries = LINEINFO_BLOCK_ENTRIES;
+	if (block == num_blocks - 1) {
+		unsigned int remaining = num_entries - block * LINEINFO_BLOCK_ENTRIES;
+
+		if (remaining < block_entries)
+			block_entries = remaining;
+	}
+
+	/* Determine end of this block's data in the compressed stream */
+	if (block + 1 < num_blocks)
+		data_end = blk_offsets[block + 1];
+	else
+		data_end = data_size;
+
+	/* Decode entry 0: addr from block_addrs, file_id and line from stream */
+	pos = blk_offsets[block];
+	if (pos >= data_end)
 		return false;
 
-	file_id = file_ids[low];
-	if (file_id >= num_files)
+	cur_addr = blk_addrs[block];
+	cur_file_id = lineinfo_read_uleb128(data, &pos, data_end);
+	cur_line = lineinfo_read_uleb128(data, &pos, data_end);
+
+	/* Check entry 0 */
+	if (cur_addr <= offset &&
+	    text_base + cur_addr >= sym_start) {
+		best_file_id = cur_file_id;
+		best_line = cur_line;
+		found = true;
+	}
+
+	/* Decode entries 1..N */
+	for (unsigned int i = 1; i < block_entries; i++) {
+		unsigned int addr_delta;
+		int32_t file_delta, line_delta;
+
+		addr_delta = lineinfo_read_uleb128(data, &pos, data_end);
+		file_delta = zigzag_decode(lineinfo_read_uleb128(data, &pos, data_end));
+		line_delta = zigzag_decode(lineinfo_read_uleb128(data, &pos, data_end));
+
+		cur_addr += addr_delta;
+		cur_file_id = (unsigned int)((int32_t)cur_file_id + file_delta);
+		cur_line = (unsigned int)((int32_t)cur_line + line_delta);
+
+		if (cur_addr > offset)
+			break;
+
+		if (text_base + cur_addr >= sym_start) {
+			best_file_id = cur_file_id;
+			best_line = cur_line;
+			found = true;
+		}
+	}
+
+	if (!found)
 		return false;
 
-	if (file_offsets[file_id] >= filenames_size)
+	if (best_file_id >= num_files)
 		return false;
 
-	*file = &filenames[file_offsets[file_id]];
-	*line = lines[low];
+	if (file_offsets[best_file_id] >= filenames_size)
+		return false;
+
+	*file = &filenames[file_offsets[best_file_id]];
+	*line = best_line;
 	return true;
 }
 #endif /* CONFIG_KALLSYMS_LINEINFO_MODULES */

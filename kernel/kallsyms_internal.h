@@ -17,10 +17,11 @@ extern const u8 kallsyms_seqs_of_names[];
 
 #ifdef CONFIG_KALLSYMS_LINEINFO
 extern const u32 lineinfo_num_entries;
-extern const u32 lineinfo_addrs[];
-extern const u16 lineinfo_file_ids[];
-extern const u32 lineinfo_lines[];
 extern const u32 lineinfo_num_files;
+extern const u32 lineinfo_num_blocks;
+extern const u32 lineinfo_block_addrs[];
+extern const u32 lineinfo_block_offsets[];
+extern const u8  lineinfo_data[];
 extern const u32 lineinfo_file_offsets[];
 extern const char lineinfo_filenames[];
 #endif

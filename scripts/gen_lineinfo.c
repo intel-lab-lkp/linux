@@ -8,6 +8,9 @@
  * file containing sorted lookup tables that the kernel uses to annotate
  * stack traces with source file:line information.
  *
+ * The output uses a block-indexed, delta-encoded, ULEB128-compressed format
+ * for ~3-4x size reduction compared to flat arrays.
+ *
  * Requires libdw from elfutils.
  */
 
@@ -52,6 +55,15 @@ static unsigned int entries_capacity;
 static struct file_entry *files;
 static unsigned int num_files;
 static unsigned int files_capacity;
+
+/* Compressed output */
+static unsigned char *compressed_data;
+static unsigned int compressed_size;
+static unsigned int compressed_capacity;
+
+static unsigned int *block_addrs;
+static unsigned int *block_offsets;
+static unsigned int num_blocks;
 
 #define FILE_HASH_BITS 13
 #define FILE_HASH_SIZE (1 << FILE_HASH_BITS)
@@ -352,6 +364,93 @@ static void deduplicate(void)
 	num_entries = j + 1;
 }
 
+static void compressed_ensure(unsigned int need)
+{
+	if (compressed_size + need <= compressed_capacity)
+		return;
+	compressed_capacity = compressed_capacity ? compressed_capacity * 2 : 1024 * 1024;
+	while (compressed_capacity < compressed_size + need)
+		compressed_capacity *= 2;
+	compressed_data = realloc(compressed_data, compressed_capacity);
+	if (!compressed_data) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+}
+
+static void compress_entries(void)
+{
+	unsigned int i, block;
+
+	if (num_entries == 0) {
+		num_blocks = 0;
+		return;
+	}
+
+	num_blocks = (num_entries + LINEINFO_BLOCK_ENTRIES - 1) / LINEINFO_BLOCK_ENTRIES;
+	block_addrs = calloc(num_blocks, sizeof(*block_addrs));
+	block_offsets = calloc(num_blocks, sizeof(*block_offsets));
+	if (!block_addrs || !block_offsets) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+
+	for (block = 0; block < num_blocks; block++) {
+		unsigned int base = block * LINEINFO_BLOCK_ENTRIES;
+		unsigned int count = num_entries - base;
+		unsigned int prev_addr, prev_file_id, prev_line;
+		unsigned char buf[10]; /* max 5 bytes per ULEB128 */
+
+		if (count > LINEINFO_BLOCK_ENTRIES)
+			count = LINEINFO_BLOCK_ENTRIES;
+
+		block_addrs[block] = entries[base].offset;
+		block_offsets[block] = compressed_size;
+
+		/* Entry 0: file_id (ULEB128), line (ULEB128) */
+		compressed_ensure(20);
+		compressed_size += lineinfo_write_uleb128(
+			compressed_data + compressed_size,
+			entries[base].file_id);
+		compressed_size += lineinfo_write_uleb128(
+			compressed_data + compressed_size,
+			entries[base].line);
+
+		prev_addr = entries[base].offset;
+		prev_file_id = entries[base].file_id;
+		prev_line = entries[base].line;
+
+		/* Entries 1..N: deltas */
+		for (i = 1; i < count; i++) {
+			unsigned int idx = base + i;
+			unsigned int addr_delta;
+			int32_t file_delta, line_delta;
+			unsigned int n;
+
+			addr_delta = entries[idx].offset - prev_addr;
+			file_delta = (int32_t)entries[idx].file_id - (int32_t)prev_file_id;
+			line_delta = (int32_t)entries[idx].line - (int32_t)prev_line;
+
+			compressed_ensure(15);
+			n = lineinfo_write_uleb128(buf, addr_delta);
+			memcpy(compressed_data + compressed_size, buf, n);
+			compressed_size += n;
+
+			n = lineinfo_write_uleb128(buf, zigzag_encode(file_delta));
+			memcpy(compressed_data + compressed_size, buf, n);
+			compressed_size += n;
+
+			n = lineinfo_write_uleb128(buf, zigzag_encode(line_delta));
+			memcpy(compressed_data + compressed_size, buf, n);
+			compressed_size += n;
+
+			prev_addr = entries[idx].offset;
+			prev_file_id = entries[idx].file_id;
+			prev_line = entries[idx].line;
+		}
+	}
+}
+
 static void compute_file_offsets(void)
 {
 	unsigned int offset = 0;
@@ -395,28 +494,40 @@ static void output_assembly(void)
 	printf("lineinfo_num_files:\n");
 	printf("\t.long %u\n\n", num_files);
 
-	/* Sorted address offsets from _text */
-	printf("\t.globl lineinfo_addrs\n");
+	/* Number of blocks */
+	printf("\t.globl lineinfo_num_blocks\n");
 	printf("\t.balign 4\n");
-	printf("lineinfo_addrs:\n");
-	for (unsigned int i = 0; i < num_entries; i++)
-		printf("\t.long 0x%x\n", entries[i].offset);
+	printf("lineinfo_num_blocks:\n");
+	printf("\t.long %u\n\n", num_blocks);
+
+	/* Block first-addresses for binary search */
+	printf("\t.globl lineinfo_block_addrs\n");
+	printf("\t.balign 4\n");
+	printf("lineinfo_block_addrs:\n");
+	for (unsigned int i = 0; i < num_blocks; i++)
+		printf("\t.long 0x%x\n", block_addrs[i]);
 	printf("\n");
 
-	/* File IDs, parallel to addrs (u16 -- supports up to 65535 files) */
-	printf("\t.globl lineinfo_file_ids\n");
-	printf("\t.balign 2\n");
-	printf("lineinfo_file_ids:\n");
-	for (unsigned int i = 0; i < num_entries; i++)
-		printf("\t.short %u\n", entries[i].file_id);
+	/* Block byte offsets into compressed stream */
+	printf("\t.globl lineinfo_block_offsets\n");
+	printf("\t.balign 4\n");
+	printf("lineinfo_block_offsets:\n");
+	for (unsigned int i = 0; i < num_blocks; i++)
+		printf("\t.long %u\n", block_offsets[i]);
 	printf("\n");
 
-	/* Line numbers, parallel to addrs */
-	printf("\t.globl lineinfo_lines\n");
-	printf("\t.balign 4\n");
-	printf("lineinfo_lines:\n");
-	for (unsigned int i = 0; i < num_entries; i++)
-		printf("\t.long %u\n", entries[i].line);
+	/* Compressed data stream */
+	printf("\t.globl lineinfo_data\n");
+	printf("lineinfo_data:\n");
+	for (unsigned int i = 0; i < compressed_size; i++) {
+		if ((i % 16) == 0)
+			printf("\t.byte ");
+		else
+			printf(",");
+		printf("0x%02x", compressed_data[i]);
+		if ((i % 16) == 15 || i == compressed_size - 1)
+			printf("\n");
+	}
 	printf("\n");
 
 	/* File string offset table */
@@ -450,33 +561,38 @@ static void output_module_assembly(void)
 
 	printf("\t.section .mod_lineinfo, \"a\"\n\n");
 
-	/* Header: num_entries, num_files, filenames_size, reserved */
+	/* Header: num_entries, num_files, filenames_size, num_blocks, data_size, reserved */
 	printf("\t.balign 4\n");
 	printf("\t.long %u\n", num_entries);
 	printf("\t.long %u\n", num_files);
 	printf("\t.long %u\n", filenames_size);
+	printf("\t.long %u\n", num_blocks);
+	printf("\t.long %u\n", compressed_size);
 	printf("\t.long 0\n\n");
 
-	/* addrs[] */
-	for (unsigned int i = 0; i < num_entries; i++)
-		printf("\t.long 0x%x\n", entries[i].offset);
-	if (num_entries)
+	/* block_addrs[] */
+	for (unsigned int i = 0; i < num_blocks; i++)
+		printf("\t.long 0x%x\n", block_addrs[i]);
+	if (num_blocks)
 		printf("\n");
 
-	/* file_ids[] */
-	for (unsigned int i = 0; i < num_entries; i++)
-		printf("\t.short %u\n", entries[i].file_id);
-
-	/* Padding to align lines[] to 4 bytes */
-	if (num_entries & 1)
-		printf("\t.short 0\n");
-	if (num_entries)
+	/* block_offsets[] */
+	for (unsigned int i = 0; i < num_blocks; i++)
+		printf("\t.long %u\n", block_offsets[i]);
+	if (num_blocks)
 		printf("\n");
 
-	/* lines[] */
-	for (unsigned int i = 0; i < num_entries; i++)
-		printf("\t.long %u\n", entries[i].line);
-	if (num_entries)
+	/* compressed data[] */
+	for (unsigned int i = 0; i < compressed_size; i++) {
+		if ((i % 16) == 0)
+			printf("\t.byte ");
+		else
+			printf(",");
+		printf("0x%02x", compressed_data[i]);
+		if ((i % 16) == 15 || i == compressed_size - 1)
+			printf("\n");
+	}
+	if (compressed_size)
 		printf("\n");
 
 	/* file_offsets[] */
@@ -558,10 +674,11 @@ int main(int argc, char *argv[])
 			skipped_overflow);
 
 	deduplicate();
+	compress_entries();
 	compute_file_offsets();
 
-	fprintf(stderr, "lineinfo: %u entries, %u files\n",
-		num_entries, num_files);
+	fprintf(stderr, "lineinfo: %u entries, %u files, %u blocks, %u compressed bytes\n",
+		num_entries, num_files, num_blocks, compressed_size);
 
 	if (module_mode)
 		output_module_assembly();
@@ -577,6 +694,9 @@ int main(int argc, char *argv[])
 	for (unsigned int i = 0; i < num_files; i++)
 		free(files[i].name);
 	free(files);
+	free(compressed_data);
+	free(block_addrs);
+	free(block_offsets);
 
 	return 0;
 }
