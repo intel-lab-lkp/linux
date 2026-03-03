@@ -835,7 +835,7 @@ static void smb311_posix_info_to_fattr(struct cifs_fattr *fattr,
 				       struct cifs_open_info_data *data,
 				       struct super_block *sb)
 {
-	struct smb311_posix_qinfo *info = &data->posix_fi;
+	struct file_posix_info *info = &data->posix_fi;
 	struct cifs_sb_info *cifs_sb = CIFS_SB(sb);
 	struct cifs_tcon *tcon = cifs_sb_master_tcon(cifs_sb);
 

@@ -270,7 +270,7 @@ struct cifs_open_info_data {
 	struct smb_sid posix_group;
 	union {
 		struct smb2_file_all_info fi;
-		struct smb311_posix_qinfo posix_fi;
+		struct file_posix_info posix_fi;
 	};
 };
 

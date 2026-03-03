@@ -104,7 +104,7 @@ static inline bool cifs_open_data_reparse(struct cifs_open_info_data *data)
 	bool ret;
 
 	if (data->contains_posix_file_info) {
-		struct smb311_posix_qinfo *fi = &data->posix_fi;
+		struct file_posix_info *fi = &data->posix_fi;
 
 		attrs = le32_to_cpu(fi->DosAttributes);
 		if (data->reparse_point) {
