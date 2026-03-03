@@ -589,6 +589,8 @@ void spi_mem_adjust_op_freq(struct spi_mem *mem, struct spi_mem_op *op)
 {
 	if (!op->max_freq || op->max_freq > mem->spi->max_speed_hz)
 		op->max_freq = mem->spi->max_speed_hz;
+
+	op->max_freq = spi_set_rx_sampling_point(mem->spi, op->max_freq);
 }
 EXPORT_SYMBOL_GPL(spi_mem_adjust_op_freq);
 
