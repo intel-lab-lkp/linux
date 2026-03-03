@@ -1083,6 +1083,20 @@ struct file *bdev_file_open_by_dev(dev_t dev, blk_mode_t mode, void *holder,
 }
 EXPORT_SYMBOL(bdev_file_open_by_dev);
 
+static int validate_bdev(const struct path *path, dev_t *dev)
+{
+	struct inode *inode;
+
+	inode = d_backing_inode(path->dentry);
+	if (!S_ISBLK(inode->i_mode))
+		return -ENOTBLK;
+	if (!may_open_dev(path))
+		return -EACCES;
+
+	*dev = inode->i_rdev;
+	return 0;
+}
+
 struct file *bdev_file_open_by_path(const char *path, blk_mode_t mode,
 				    void *holder,
 				    const struct blk_holder_ops *hops)
@@ -1106,6 +1120,35 @@ struct file *bdev_file_open_by_path(const char *path, blk_mode_t mode,
 	return file;
 }
 EXPORT_SYMBOL(bdev_file_open_by_path);
+
+struct file *bdev_file_open_init(const char *path, blk_mode_t mode,
+				 void *holder,
+				 const struct blk_holder_ops *hops)
+{
+	struct path p __free(path_put) = {};
+	struct file *file;
+	dev_t dev;
+	int error;
+
+	error = kern_path(path, LOOKUP_FOLLOW | LOOKUP_IN_INIT, &p);
+	if (error)
+		return ERR_PTR(error);
+
+	error = validate_bdev(&p, &dev);
+	if (error)
+		return ERR_PTR(error);
+
+	file = bdev_file_open_by_dev(dev, mode, holder, hops);
+	if (!IS_ERR(file) && (mode & BLK_OPEN_WRITE)) {
+		if (bdev_read_only(file_bdev(file))) {
+			fput(file);
+			file = ERR_PTR(-EACCES);
+		}
+	}
+
+	return file;
+}
+EXPORT_SYMBOL(bdev_file_open_init);
 
 static inline void bd_yield_claim(struct file *bdev_file)
 {
@@ -1211,8 +1254,7 @@ EXPORT_SYMBOL(bdev_fput);
  */
 int lookup_bdev(const char *pathname, dev_t *dev)
 {
-	struct inode *inode;
-	struct path path;
+	struct path path __free(path_put) = {};
 	int error;
 
 	if (!pathname || !*pathname)
@@ -1222,19 +1264,7 @@ int lookup_bdev(const char *pathname, dev_t *dev)
 	if (error)
 		return error;
 
-	inode = d_backing_inode(path.dentry);
-	error = -ENOTBLK;
-	if (!S_ISBLK(inode->i_mode))
-		goto out_path_put;
-	error = -EACCES;
-	if (!may_open_dev(&path))
-		goto out_path_put;
-
-	*dev = inode->i_rdev;
-	error = 0;
-out_path_put:
-	path_put(&path);
-	return error;
+	return validate_bdev(&path, dev);
 }
 EXPORT_SYMBOL(lookup_bdev);
 
