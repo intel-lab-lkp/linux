@@ -4228,6 +4228,7 @@ const struct inode_operations ext4_dir_inode_operations = {
 	.fiemap         = ext4_fiemap,
 	.fileattr_get	= ext4_fileattr_get,
 	.fileattr_set	= ext4_fileattr_set,
+	.get_metadata_bhs = ext4_get_metadata_bhs,
 };
 
 const struct inode_operations ext4_special_inode_operations = {
@@ -4236,4 +4237,5 @@ const struct inode_operations ext4_special_inode_operations = {
 	.listxattr	= ext4_listxattr,
 	.get_inode_acl	= ext4_get_acl,
 	.set_acl	= ext4_set_acl,
+	.get_metadata_bhs = ext4_get_metadata_bhs,
 };

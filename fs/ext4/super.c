@@ -1428,6 +1428,7 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 	INIT_WORK(&ei->i_rsv_conversion_work, ext4_end_io_rsv_work);
 	ext4_fc_init_inode(&ei->vfs_inode);
 	spin_lock_init(&ei->i_fc_lock);
+	mmb_init(&ei->i_metadata_bhs);
 	return &ei->vfs_inode;
 }
 
@@ -1519,6 +1520,11 @@ static void destroy_inodecache(void)
 	 */
 	rcu_barrier();
 	kmem_cache_destroy(ext4_inode_cachep);
+}
+
+struct mapping_metadata_bhs *ext4_get_metadata_bhs(struct inode *inode)
+{
+	return &EXT4_I(inode)->i_metadata_bhs;
 }
 
 void ext4_clear_inode(struct inode *inode)

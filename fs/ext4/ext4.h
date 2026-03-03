@@ -1121,6 +1121,7 @@ struct ext4_inode_info {
 	struct rw_semaphore i_data_sem;
 	struct inode vfs_inode;
 	struct jbd2_inode *jinode;
+	struct mapping_metadata_bhs i_metadata_bhs;
 
 	/*
 	 * File creation time. Its function is same as that of
@@ -3203,8 +3204,9 @@ extern void ext4_mark_group_bitmap_corrupted(struct super_block *sb,
 					     unsigned int flags);
 extern unsigned int ext4_num_base_meta_blocks(struct super_block *sb,
 					      ext4_group_t block_group);
-extern void print_daily_error_info(struct timer_list *t);
+struct mapping_metadata_bhs *ext4_get_metadata_bhs(struct inode *inode);
 
+extern void print_daily_error_info(struct timer_list *t);
 extern __printf(7, 8)
 void __ext4_error(struct super_block *, const char *, unsigned int, bool,
 		  int, __u64, const char *, ...);

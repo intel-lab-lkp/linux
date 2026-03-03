@@ -987,5 +987,6 @@ const struct inode_operations ext4_file_inode_operations = {
 	.fiemap		= ext4_fiemap,
 	.fileattr_get	= ext4_fileattr_get,
 	.fileattr_set	= ext4_fileattr_set,
+	.get_metadata_bhs = ext4_get_metadata_bhs,
 };
 

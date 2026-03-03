@@ -119,6 +119,7 @@ const struct inode_operations ext4_encrypted_symlink_inode_operations = {
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_encrypted_symlink_getattr,
 	.listxattr	= ext4_listxattr,
+	.get_metadata_bhs = ext4_get_metadata_bhs,
 };
 
 const struct inode_operations ext4_symlink_inode_operations = {
@@ -126,6 +127,7 @@ const struct inode_operations ext4_symlink_inode_operations = {
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_getattr,
 	.listxattr	= ext4_listxattr,
+	.get_metadata_bhs = ext4_get_metadata_bhs,
 };
 
 const struct inode_operations ext4_fast_symlink_inode_operations = {
@@ -133,4 +135,5 @@ const struct inode_operations ext4_fast_symlink_inode_operations = {
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_getattr,
 	.listxattr	= ext4_listxattr,
+	.get_metadata_bhs = ext4_get_metadata_bhs,
 };
