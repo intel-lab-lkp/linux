@@ -2,6 +2,7 @@
 // Copyright (c) 2020 Facebook
 
 #include <linux/debugfs.h>
+#include <linux/ethtool.h>
 #include <linux/random.h>
 #include <net/netdev_queues.h>
 
@@ -117,18 +118,120 @@ nsim_wake_queues(struct net_device *dev)
 	rcu_read_unlock();
 }
 
+static u32 nsim_get_rx_ring_count(struct net_device *dev)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	return ns->ethtool.channels;
+}
+
+static u32 nsim_rss_indir_size(u32 channels)
+{
+	return min_t(u32, roundup_pow_of_two(channels) * 16, NSIM_RSS_INDIR_MAX);
+}
+
+static u32 nsim_get_rxfh_indir_size(struct net_device *dev)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	return nsim_rss_indir_size(ns->ethtool.channels);
+}
+
+static u32 nsim_get_rxfh_key_size(struct net_device *dev)
+{
+	return NSIM_RSS_HKEY_SIZE;
+}
+
+static int nsim_get_rxfh(struct net_device *dev, struct ethtool_rxfh_param *rxfh)
+{
+	u32 indir_size = nsim_get_rxfh_indir_size(dev);
+	struct netdevsim *ns = netdev_priv(dev);
+
+	rxfh->hfunc = ETH_RSS_HASH_TOP;
+
+	if (rxfh->indir)
+		memcpy(rxfh->indir, ns->ethtool.rss_indir_tbl, indir_size * sizeof(u32));
+	if (rxfh->key)
+		memcpy(rxfh->key, ns->ethtool.rss_hkey, NSIM_RSS_HKEY_SIZE);
+
+	return 0;
+}
+
+static int nsim_set_rxfh(struct net_device *dev, struct ethtool_rxfh_param *rxfh,
+			 struct netlink_ext_ack *extack)
+{
+	u32 indir_size = nsim_get_rxfh_indir_size(dev);
+	struct netdevsim *ns = netdev_priv(dev);
+
+	if (rxfh->indir)
+		memcpy(ns->ethtool.rss_indir_tbl, rxfh->indir, indir_size * sizeof(u32));
+	if (rxfh->key)
+		memcpy(ns->ethtool.rss_hkey, rxfh->key, NSIM_RSS_HKEY_SIZE);
+
+	return 0;
+}
+
+static int nsim_create_rxfh_context(struct net_device *dev, struct ethtool_rxfh_context *ctx,
+				    const struct ethtool_rxfh_param *rxfh,
+				    struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static int nsim_modify_rxfh_context(struct net_device *dev, struct ethtool_rxfh_context *ctx,
+				    const struct ethtool_rxfh_param *rxfh,
+				    struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static int nsim_remove_rxfh_context(struct net_device *dev, struct ethtool_rxfh_context *ctx,
+				    u32 rss_context, struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static void nsim_rss_init(struct netdevsim *ns)
+{
+	u32 i, indir_size = nsim_rss_indir_size(ns->ethtool.channels);
+
+	for (i = 0; i < indir_size; i++)
+		ns->ethtool.rss_indir_tbl[i] = ethtool_rxfh_indir_default(i, ns->ethtool.channels);
+}
+
 static int
 nsim_set_channels(struct net_device *dev, struct ethtool_channels *ch)
 {
 	struct netdevsim *ns = netdev_priv(dev);
+	u32 old_indir_size, new_indir_size;
 	int err;
 
-	err = netif_set_real_num_queues(dev, ch->combined_count,
-					ch->combined_count);
+	old_indir_size = nsim_get_rxfh_indir_size(dev);
+	new_indir_size = nsim_rss_indir_size(ch->combined_count);
+
+	if (old_indir_size != new_indir_size) {
+		if (netif_is_rxfh_configured(dev) &&
+		    ethtool_rxfh_indir_can_resize(ns->ethtool.rss_indir_tbl,
+						  old_indir_size, new_indir_size))
+			return -EINVAL;
+
+		err = ethtool_rxfh_contexts_resize_all(dev, new_indir_size);
+		if (err)
+			return err;
+
+		if (netif_is_rxfh_configured(dev))
+			ethtool_rxfh_indir_resize(ns->ethtool.rss_indir_tbl,
+						  old_indir_size, new_indir_size);
+	}
+
+	err = netif_set_real_num_queues(dev, ch->combined_count, ch->combined_count);
 	if (err)
 		return err;
 
 	ns->ethtool.channels = ch->combined_count;
+
+	if (old_indir_size != new_indir_size && !netif_is_rxfh_configured(dev))
+		nsim_rss_init(ns);
 
 	/* Only wake up queues if devices are linked */
 	if (rcu_access_pointer(ns->peer))
@@ -209,6 +312,7 @@ static const struct ethtool_ops nsim_ethtool_ops = {
 	.supported_coalesce_params	= ETHTOOL_COALESCE_ALL_PARAMS,
 	.supported_ring_params		= ETHTOOL_RING_USE_TCP_DATA_SPLIT |
 					  ETHTOOL_RING_USE_HDS_THRS,
+	.rxfh_indir_space		= NSIM_RSS_INDIR_MAX,
 	.get_pause_stats	        = nsim_get_pause_stats,
 	.get_pauseparam		        = nsim_get_pauseparam,
 	.set_pauseparam		        = nsim_set_pauseparam,
@@ -218,10 +322,18 @@ static const struct ethtool_ops nsim_ethtool_ops = {
 	.set_ringparam			= nsim_set_ringparam,
 	.get_channels			= nsim_get_channels,
 	.set_channels			= nsim_set_channels,
+	.get_rx_ring_count		= nsim_get_rx_ring_count,
 	.get_fecparam			= nsim_get_fecparam,
 	.set_fecparam			= nsim_set_fecparam,
 	.get_fec_stats			= nsim_get_fec_stats,
 	.get_ts_info			= nsim_get_ts_info,
+	.get_rxfh_indir_size		= nsim_get_rxfh_indir_size,
+	.get_rxfh_key_size		= nsim_get_rxfh_key_size,
+	.get_rxfh			= nsim_get_rxfh,
+	.set_rxfh			= nsim_set_rxfh,
+	.create_rxfh_context		= nsim_create_rxfh_context,
+	.modify_rxfh_context		= nsim_modify_rxfh_context,
+	.remove_rxfh_context		= nsim_remove_rxfh_context,
 };
 
 static void nsim_ethtool_ring_init(struct netdevsim *ns)
@@ -249,6 +361,9 @@ void nsim_ethtool_init(struct netdevsim *ns)
 	ns->ethtool.fec.active_fec = ETHTOOL_FEC_NONE;
 
 	ns->ethtool.channels = ns->nsim_bus_dev->num_queues;
+
+	nsim_rss_init(ns);
+	get_random_bytes(ns->ethtool.rss_hkey, NSIM_RSS_HKEY_SIZE);
 
 	ethtool = debugfs_create_dir("ethtool", ns->nsim_dev_port->ddir);
 

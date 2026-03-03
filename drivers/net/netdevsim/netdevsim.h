@@ -82,6 +82,8 @@ struct nsim_ethtool_pauseparam {
 	bool report_stats_tx;
 };
 
+#define NSIM_RSS_INDIR_MAX	128
+#define NSIM_RSS_HKEY_SIZE	40
 struct nsim_ethtool {
 	u32 get_err;
 	u32 set_err;
@@ -90,6 +92,8 @@ struct nsim_ethtool {
 	struct ethtool_coalesce coalesce;
 	struct ethtool_ringparam ring;
 	struct ethtool_fecparam fec;
+	u32 rss_indir_tbl[NSIM_RSS_INDIR_MAX];
+	u8 rss_hkey[NSIM_RSS_HKEY_SIZE];
 };
 
 struct nsim_rq {
