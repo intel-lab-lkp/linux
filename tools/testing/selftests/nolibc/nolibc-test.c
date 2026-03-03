@@ -969,6 +969,56 @@ int test_fork(enum fork_type type)
 	}
 }
 
+int test_ftruncate(void)
+{
+	int ret;
+	int fd;
+	struct stat stat_buf;
+	const char *filename = "/tmp/ftruncate_test";
+
+	ret = ftruncate(-1, 0);
+	if (ret != -1 || errno != EBADF) {
+		errno = EINVAL;
+		return __LINE__;
+	}
+
+	fd = open(filename, O_RDWR | O_CREAT);
+	if (fd == -1)
+		return __LINE__;
+
+	ret = ftruncate(fd, -1);
+	if (ret != -1 || errno != EINVAL) {
+		if (ret == 0)
+			errno = EINVAL;
+		ret = __LINE__;
+		goto end;
+	}
+
+	ret = ftruncate(fd, 42);
+	if (ret != 0) {
+		ret = __LINE__;
+		goto end;
+	}
+
+	ret = fstat(fd, &stat_buf);
+	if (ret != 0) {
+		ret = __LINE__;
+		goto end;
+	}
+
+	if (stat_buf.st_size != 42) {
+		errno = EINVAL;
+		ret = stat_buf.st_size;
+		goto end;
+	}
+
+end:
+	close(fd);
+	unlink(filename);
+
+	return ret;
+}
+
 int test_stat_timestamps(void)
 {
 	struct stat st;
@@ -1406,6 +1456,7 @@ int run_syscall(int min, int max)
 		CASE_TEST(file_stream);       EXPECT_SYSZR(1, test_file_stream()); break;
 		CASE_TEST(file_stream_wsr);   EXPECT_SYSZR(1, test_file_stream_wsr()); break;
 		CASE_TEST(fork);              EXPECT_SYSZR(1, test_fork(FORK_STANDARD)); break;
+		CASE_TEST(ftruncate);         EXPECT_SYSZR(1, test_ftruncate()); break;
 		CASE_TEST(getdents64_root);   EXPECT_SYSNE(1, test_getdents64("/"), -1); break;
 		CASE_TEST(getdents64_null);   EXPECT_SYSER(1, test_getdents64("/dev/null"), -1, ENOTDIR); break;
 		CASE_TEST(directories);       EXPECT_SYSZR(proc, test_dirent()); break;

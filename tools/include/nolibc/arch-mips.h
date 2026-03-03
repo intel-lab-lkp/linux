@@ -6,9 +6,11 @@
 
 #ifndef _NOLIBC_ARCH_MIPS_H
 #define _NOLIBC_ARCH_MIPS_H
+#include <linux/unistd.h>
 
 #include "compiler.h"
 #include "crt.h"
+#include "std.h"
 
 #if !defined(_ABIO32) && !defined(_ABIN32) && !defined(_ABI64)
 #error Unsupported MIPS ABI
@@ -268,5 +270,14 @@ void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector __
 	__nolibc_entrypoint_epilogue();
 }
 #endif /* NOLIBC_NO_RUNTIME */
+
+#ifdef __NR_ftruncate64
+static __attribute__((unused))
+int sys_ftruncate64(int fd, uint32_t length0, uint32_t length1)
+{
+	return my_syscall4(__NR_ftruncate64, fd, 0, length0, length1);
+}
+#define sys_ftruncate64 sys_ftruncate64
+#endif
 
 #endif /* _NOLIBC_ARCH_MIPS_H */
