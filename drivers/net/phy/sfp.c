@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/regulator/consumer.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
@@ -3094,6 +3095,14 @@ static int sfp_probe(struct platform_device *pdev)
 	char *sfp_irq_name;
 	struct sfp *sfp;
 	int err, i;
+
+	err = devm_regulator_get_enable_optional(&pdev->dev, "vccr");
+	if (err && err != -ENODEV)
+		return err;
+
+	err = devm_regulator_get_enable_optional(&pdev->dev, "vcct");
+	if (err && err != -ENODEV)
+		return err;
 
 	sfp = sfp_alloc(&pdev->dev);
 	if (IS_ERR(sfp))
