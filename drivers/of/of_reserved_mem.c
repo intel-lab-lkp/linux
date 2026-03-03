@@ -606,6 +606,28 @@ static LIST_HEAD(of_rmem_assigned_device_list);
 static DEFINE_MUTEX(of_rmem_assigned_device_mutex);
 
 /**
+ * of_reserved_mem_device_init_with_mem() - assign reserved memory region to
+ *					    given device
+ * @dev:	Pointer to the device to configure
+ * @rmem:	Reserved memory region to assign
+ *
+ * This function assigns respective DMA-mapping operations based on the
+ * reserved memory region already provided in @rmem to the @dev device,
+ * without walking DT nodes.
+ *
+ * Returns error code or zero on success.
+ */
+int of_reserved_mem_device_init_with_mem(struct device *dev,
+					 struct reserved_mem *rmem)
+{
+	if (!dev || !rmem || !rmem->ops || !rmem->ops->device_init)
+		return -EINVAL;
+
+	return rmem->ops->device_init(rmem, dev);
+}
+EXPORT_SYMBOL_GPL(of_reserved_mem_device_init_with_mem);
+
+/**
  * of_reserved_mem_device_init_by_idx() - assign reserved memory region to
  *					  given device
  * @dev:	Pointer to the device to configure
@@ -643,14 +665,11 @@ int of_reserved_mem_device_init_by_idx(struct device *dev,
 	rmem = of_reserved_mem_lookup(target);
 	of_node_put(target);
 
-	if (!rmem || !rmem->ops || !rmem->ops->device_init)
-		return -EINVAL;
-
 	rd = kmalloc_obj(struct rmem_assigned_device);
 	if (!rd)
 		return -ENOMEM;
 
-	ret = rmem->ops->device_init(rmem, dev);
+	ret = of_reserved_mem_device_init_with_mem(dev, rmem);
 	if (ret == 0) {
 		rd->dev = dev;
 		rd->rmem = rmem;
