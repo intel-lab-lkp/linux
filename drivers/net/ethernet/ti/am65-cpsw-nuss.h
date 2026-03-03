@@ -53,6 +53,7 @@ struct am65_cpsw_port {
 	struct am65_cpsw_slave_data	slave;
 	bool				tx_ts_enabled;
 	bool				rx_ts_enabled;
+	int				rx_ts_filter;
 	struct am65_cpsw_qos		qos;
 	struct devlink_port		devlink_port;
 	struct bpf_prog			*xdp_prog;
