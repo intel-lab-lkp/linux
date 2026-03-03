@@ -246,14 +246,18 @@ main (int argc, char *argv[])
 	    perror("read");
 	    exit(1);
 	}
-	do {
-	    nwritten = write(ofd, buf, n);
-	    if ((ssize_t) nwritten == -1) {
-		perror("write");
-		exit(1);
-	    }
-	    n -= nwritten;
-	} while (n > 0);
+	{
+	    char *p = buf;
+	    do {
+		nwritten = write(ofd, p, n);
+		if ((ssize_t) nwritten == -1) {
+		    perror("write");
+		    exit(1);
+		}
+		p += nwritten;
+		n -= nwritten;
+	    } while (n > 0);
+	}
     }
 
     if (pad) {
