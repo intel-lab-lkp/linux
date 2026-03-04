@@ -25,9 +25,11 @@
 /* DT "interrupts" indexes */
 #define ICU_IRQ_START				1
 #define ICU_IRQ_COUNT				16
-#define ICU_TINT_START				(ICU_IRQ_START + ICU_IRQ_COUNT)
+#define ICU_IRQ_LAST				(ICU_IRQ_START + ICU_IRQ_COUNT - 1)
+#define ICU_TINT_START				(ICU_IRQ_LAST + 1)
 #define ICU_TINT_COUNT				32
-#define ICU_NUM_IRQ				(ICU_TINT_START + ICU_TINT_COUNT)
+#define ICU_TINT_LAST				(ICU_TINT_START + ICU_TINT_COUNT - 1)
+#define ICU_NUM_IRQ				(ICU_TINT_LAST + 1)
 
 /* Registers */
 #define ICU_NSCNT				0x00
@@ -508,11 +510,11 @@ static int rzv2h_icu_alloc(struct irq_domain *domain, unsigned int virq, unsigne
 	 * hwirq is embedded in bits 0-15.
 	 * TINT is embedded in bits 16-31.
 	 */
-	if (hwirq >= ICU_TINT_START) {
-		tint = ICU_TINT_EXTRACT_GPIOINT(hwirq);
+	tint = ICU_TINT_EXTRACT_GPIOINT(hwirq);
+	if (tint || (hwirq >= ICU_TINT_START && hwirq <= ICU_TINT_LAST)) {
 		hwirq = ICU_TINT_EXTRACT_HWIRQ(hwirq);
 
-		if (hwirq < ICU_TINT_START)
+		if (hwirq < ICU_TINT_START || hwirq > ICU_TINT_LAST)
 			return -EINVAL;
 	}
 
