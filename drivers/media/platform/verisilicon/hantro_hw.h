@@ -15,8 +15,8 @@
 #include <media/v4l2-vp9.h>
 #include <media/videobuf2-core.h>
 
-#include "rockchip_av1_entropymode.h"
-#include "rockchip_av1_filmgrain.h"
+#include "hantro_av1_entropymode.h"
+#include "hantro_av1_filmgrain.h"
 
 #define DEC_8190_ALIGN_MASK	0x07U
 
