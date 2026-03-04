@@ -10,10 +10,7 @@
  */
 #include "resctrl.h"
 
-#define UNCORE_IMC		"uncore_imc"
-#define READ_FILE_NAME		"events/cas_count_read"
 #define DYN_PMU_PATH		"/sys/bus/event_source/devices"
-#define SCALE			0.00006103515625
 #define MAX_IMCS		20
 #define MAX_TOKENS		5
 
@@ -36,10 +33,30 @@ struct imc_counter_config {
 	int fd;
 };
 
+struct membw_read_config {
+	int vendor_id;
+	const char *name;
+	const char *event;
+	double scale;
+};
+
+static struct membw_read_config membw_read_configs[] = {
+	{
+		.vendor_id = ARCH_INTEL | ARCH_AMD | ARCH_HYGON,
+		.name = "uncore_imc",
+		.event = "events/cas_count_read",
+		.scale = 64.0 / MB,
+	},
+	{
+		.vendor_id = NULL
+	}
+};
+
 static char mbm_total_path[1024];
 static int imcs;
 static struct imc_counter_config imc_counters_config[MAX_IMCS];
 static const struct resctrl_test *current_test;
+static struct membw_read_config *current_config;
 
 static void read_mem_bw_initialize_perf_event_attr(int i)
 {
@@ -133,7 +150,7 @@ static int read_from_imc_dir(char *imc_dir, int count)
 	fclose(fp);
 
 	/* Get read config */
-	sprintf(imc_counter_cfg, "%s%s", imc_dir, READ_FILE_NAME);
+	sprintf(imc_counter_cfg, "%s%s", imc_dir, current_config->event);
 	fp = fopen(imc_counter_cfg, "r");
 	if (!fp) {
 		ksft_perror("Failed to open iMC config file");
@@ -176,18 +193,18 @@ static int num_of_imcs(void)
 	dp = opendir(DYN_PMU_PATH);
 	if (dp) {
 		while ((ep = readdir(dp))) {
-			temp = strstr(ep->d_name, UNCORE_IMC);
+			temp = strstr(ep->d_name, current_config->name);
 			if (!temp)
 				continue;
 
 			/*
 			 * imc counters are named as "uncore_imc_<n>", hence
 			 * increment the pointer to point to <n>. Note that
-			 * sizeof(UNCORE_IMC) would count for null character as
+			 * sizeof("uncore_imc") would count for null character as
 			 * well and hence the last underscore character in
 			 * uncore_imc'_' need not be counted.
 			 */
-			temp = temp + sizeof(UNCORE_IMC);
+			temp = temp + strlen(current_config->name) + 1;
 
 			/*
 			 * Some directories under "DYN_PMU_PATH" could have
@@ -328,7 +345,7 @@ static int get_read_mem_bw_imc(float *bw_imc)
 			of_mul_read = (float)r_time_enabled /
 					(float)r_time_running;
 
-		reads += r->return_value.value * of_mul_read * SCALE;
+		reads += r->return_value.value * of_mul_read * current_config->scale;
 	}
 
 	*bw_imc = reads;
@@ -465,6 +482,21 @@ static int print_results_bw(char *filename, pid_t bm_pid, float bw_imc,
 		}
 		fclose(fp);
 	}
+
+	return 0;
+}
+
+int initialize_measure_read_mem_bw(const struct resctrl_val_param *param, int domain_id)
+{
+	unsigned int vendor = get_vendor();
+
+	for (current_config = membw_read_configs;
+		!(current_config->vendor_id & vendor);
+		current_config++)
+		continue;
+
+	if (!current_config->vendor_id)
+		return -1;
 
 	return 0;
 }
