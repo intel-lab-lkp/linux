@@ -139,6 +139,26 @@ int get_domain_id(const char *resource, int cpu_no, int *domain_id)
 	if (cache_num < 0)
 		return cache_num;
 
+	/* On HiSilicon's platform, the "MB" resource domain is associated with the NUMA Node. */
+	if (get_vendor() == ARCH_HISILICON && !strncmp(resource, "MB", sizeof("MB"))) {
+		struct dirent *ep;
+		DIR *dp;
+
+		sprintf(phys_pkg_path, "%s%d/", PHYS_ID_PATH, cpu_no);
+		dp = opendir(phys_pkg_path);
+		if (dp) {
+			while ((ep = readdir(dp))) {
+				if (!strstr(ep->d_name, "node"))
+					continue;
+				if (sscanf(ep->d_name, "node%d\n", domain_id) == 1)
+					return 0;
+			}
+			closedir(dp);
+		}
+		ksft_perror("Could not get domain ID");
+		return -1;
+	}
+
 	sprintf(phys_pkg_path, "%s%d/cache/index%d/id", PHYS_ID_PATH, cpu_no, cache_num);
 
 	fp = fopen(phys_pkg_path, "r");

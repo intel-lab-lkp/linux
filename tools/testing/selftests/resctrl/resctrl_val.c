@@ -15,6 +15,8 @@
 
 #define CON_MBM_LOCAL_BYTES_PATH		\
 	"%s/%s/mon_data/mon_L3_%02d/mbm_local_bytes"
+#define CON_MBM_TOTAL_BYTES_PATH		\
+	"%s/%s/mon_data/mon_MB_%02d/mbm_total_bytes"
 
 struct membw_read_format {
 	__u64 value;         /* The value of the event */
@@ -27,6 +29,7 @@ struct imc_counter_config {
 	__u32 type;
 	__u64 event;
 	__u64 umask;
+	__u64 config;
 	struct perf_event_attr pe;
 	struct membw_read_format return_value;
 	int fd;
@@ -39,9 +42,11 @@ struct membw_read_config {
 	const char *event;
 	double scale;
 	int (*num_of)(void);
+	const char *mbm_path;
 };
 
 static int num_of_imcs(void);
+static int num_of_hisi_ddrc(void);
 
 static struct membw_read_config membw_read_configs[] = {
 	{
@@ -50,6 +55,15 @@ static struct membw_read_config membw_read_configs[] = {
 		.event = "events/cas_count_read",
 		.scale = 64.0 / MB,
 		.num_of = num_of_imcs,
+		.mbm_path = CON_MBM_LOCAL_BYTES_PATH
+	},
+	{
+		.vendor_id = ARCH_HISILICON,
+		.name = "hisi_sccl%d_ddrc%d_%d",
+		.event = "events/flux_rd",
+		.scale = 32.0 / MB,
+		.num_of = num_of_hisi_ddrc,
+		.mbm_path = CON_MBM_TOTAL_BYTES_PATH
 	},
 	{
 		.vendor_id = NULL
@@ -71,6 +85,7 @@ static void read_mem_bw_initialize_perf_event_attr(struct imc_counter_config *im
 	imc_counters_config->pe.inherit = 1;
 	imc_counters_config->pe.exclude_guest = 0;
 	imc_counters_config->pe.config =
+		imc_counters_config->config ? :
 		imc_counters_config->umask << 8 |
 		imc_counters_config->event;
 	imc_counters_config->pe.sample_type = PERF_SAMPLE_IDENTIFIER;
@@ -114,6 +129,8 @@ static void get_read_event_and_umask(char *cas_count_cfg, struct imc_counter_con
 			imc_counters_config->event = strtol(token[i + 1], NULL, 16);
 		if (strcmp(token[i], "umask") == 0)
 			imc_counters_config->umask = strtol(token[i + 1], NULL, 16);
+		if (strcmp(token[i], "config") == 0)
+			imc_counters_config->config = strtol(token[i + 1], NULL, 16);
 	}
 }
 
@@ -236,6 +253,49 @@ static int num_of_imcs(void)
 		closedir(dp);
 		if (count == 0) {
 			ksft_print_msg("Unable to find iMC counters\n");
+
+			return -1;
+		}
+	} else {
+		ksft_perror("Unable to open PMU directory");
+
+		return -1;
+	}
+
+	return count;
+}
+
+static int num_of_hisi_ddrc(void)
+{
+	char hisi_ddrc_dir[512], *temp;
+	unsigned int count = 0;
+	struct dirent *ep;
+	int ret;
+	DIR *dp;
+	struct imc_counter_config *imc_counters_config;
+
+	dp = opendir(DYN_PMU_PATH);
+	if (dp) {
+		while ((ep = readdir(dp))) {
+			if (!strstr(ep->d_name, "hisi") || !strstr(ep->d_name, "ddrc"))
+				continue;
+
+			imc_counters_config = malloc(sizeof(struct imc_counter_config));
+			sprintf(hisi_ddrc_dir, "%s/%s/", DYN_PMU_PATH,
+				ep->d_name);
+			ret = read_from_imc_dir(hisi_ddrc_dir, imc_counters_config);
+			if (ret) {
+				free(imc_counters_config);
+				closedir(dp);
+
+				return ret;
+			}
+			list_add(&imc_counters_config->imc_list, &imc_counters_configs);
+			count++;
+		}
+		closedir(dp);
+		if (count == 0) {
+			ksft_print_msg("Unable to find PMU counters\n");
 
 			return -1;
 		}
@@ -382,7 +442,7 @@ static int get_read_mem_bw_imc(float *bw_imc)
 void initialize_mem_bw_resctrl(const struct resctrl_val_param *param,
 			       int domain_id)
 {
-	sprintf(mbm_total_path, CON_MBM_LOCAL_BYTES_PATH, RESCTRL_PATH,
+	sprintf(mbm_total_path, current_config->mbm_path, RESCTRL_PATH,
 		param->ctrlgrp, domain_id);
 }
 
@@ -579,7 +639,10 @@ int measure_read_mem_bw(const struct user_params *uparams,
 	perf_close_imc_read_mem_bw();
 	fclose(mem_bw_fp);
 
-	bw_resc = (bw_resc_end - bw_resc_start) / MB;
+	if (get_vendor() == ARCH_HISILICON)
+		bw_resc = bw_resc_end;
+	else
+		bw_resc = (bw_resc_end - bw_resc_start) / MB;
 
 	return print_results_bw(param->filename, bm_pid, bw_imc, bw_resc);
 
