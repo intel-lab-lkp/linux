@@ -4448,6 +4448,11 @@ struct cfg80211_pmsr_result {
  *	basis in this case.
  * @range_report: negotiate for FTM range report. Only valid for
  *	EDCA based ranging.
+ * @pd_suppress_range_results: flag to suppress ranging results for PD
+ *	requests. When set, ranging measurements are performed but results
+ *	are not reported to userspace, regardless of ranging role or type.
+ *	Only valid when @pd_request is set. Cannot be used with @range_report
+ *	or @lmr_feedback as these require result reporting.
  *
  * See also nl80211 for the respective attribute documentation.
  */
@@ -4474,7 +4479,8 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u32 measurements_per_aw;
 	u64 ingress_distancemm;
 	u64 egress_distancemm;
-	u8 range_report:1;
+	u8 range_report:1,
+	   pd_suppress_range_results:1;
 };
 
 /**

@@ -268,6 +268,24 @@ static int pmsr_parse_ftm(struct cfg80211_registered_device *rdev,
 		return -EINVAL;
 	}
 
+	out->ftm.pd_suppress_range_results =
+		nla_get_flag(tb[NL80211_PMSR_FTM_REQ_ATTR_PD_SUPPRESS_RESULTS]);
+
+	if (!out->pd_request && out->ftm.pd_suppress_range_results) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[NL80211_PMSR_FTM_REQ_ATTR_PD_SUPPRESS_RESULTS],
+				    "FTM: suppress range result flag only valid for PD requests");
+		return -EINVAL;
+	}
+
+	if (out->ftm.pd_suppress_range_results && out->ftm.rsta &&
+	    (out->ftm.range_report || out->ftm.lmr_feedback)) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[NL80211_PMSR_FTM_REQ_ATTR_PD_SUPPRESS_RESULTS],
+				    "FTM: cannot report with suppressed results");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
