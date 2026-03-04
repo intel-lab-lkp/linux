@@ -418,6 +418,8 @@ nl80211_pmsr_attr_policy[NL80211_PMSR_ATTR_MAX + 1] = {
 	[NL80211_PMSR_ATTR_PD_CONCURRENT_ISTA_RSTA_SUPPORT] = {
 		.type = NLA_REJECT
 	},
+	[NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE] = { .type = NLA_REJECT },
+	[NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE] = { .type = NLA_REJECT },
 };
 
 static const struct nla_policy
@@ -2449,6 +2451,16 @@ static int nl80211_send_pmsr_capa(struct cfg80211_registered_device *rdev,
 		if (cap->pd_concurrent_ista_rsta_support &&
 		    nla_put_flag(msg,
 				 NL80211_PMSR_ATTR_PD_CONCURRENT_ISTA_RSTA_SUPPORT))
+			return -ENOBUFS;
+
+		if (cap->pd_max_peer_ista_role &&
+		    nla_put_u32(msg, NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE,
+				cap->pd_max_peer_ista_role))
+			return -ENOBUFS;
+
+		if (cap->pd_max_peer_rsta_role &&
+		    nla_put_u32(msg, NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE,
+				cap->pd_max_peer_rsta_role))
 			return -ENOBUFS;
 	}
 	caps = nla_nest_start_noflag(msg, NL80211_PMSR_ATTR_TYPE_CAPA);
