@@ -85,15 +85,7 @@ static int check_results(size_t span)
 
 static int mbm_init(const struct resctrl_val_param *param, int domain_id)
 {
-	int ret;
-
-	ret = initialize_read_mem_bw_imc();
-	if (ret)
-		return ret;
-
-	initialize_mem_bw_resctrl(param, domain_id);
-
-	return 0;
+	return initialize_measure_read_mem_bw(param, domain_id);
 }
 
 static int mbm_setup(const struct resctrl_test *test,
@@ -123,6 +115,7 @@ static int mbm_measure(const struct user_params *uparams,
 
 static void mbm_test_cleanup(void)
 {
+	cleanup_read_mem_bw_imc();
 	remove(RESULT_FILE_NAME);
 }
 

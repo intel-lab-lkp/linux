@@ -520,6 +520,14 @@ int initialize_measure_read_mem_bw(const struct resctrl_val_param *param, int do
 	if (!current_config->vendor_id)
 		return -1;
 
+	int ret;
+
+	ret = initialize_read_mem_bw_imc();
+	if (ret)
+		return ret;
+
+	initialize_mem_bw_resctrl(param, domain_id);
+
 	return 0;
 }
 
