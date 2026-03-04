@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+CONTEXT_ANALYSIS := y
+
 ccflags-y := -I$(srctree)/drivers/infiniband/ulp/rtrs
 
 rnbd-client-y := rnbd-clt.o \

@@ -6,6 +6,8 @@
 # Rewritten to use lists instead of if-statements.
 # 
 
+CONTEXT_ANALYSIS := y
+
 # needed for trace events
 ccflags-y				+= -I$(src)
 
