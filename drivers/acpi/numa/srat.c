@@ -31,6 +31,7 @@ static int node_to_pxm_map[MAX_NUMNODES]
 
 unsigned char acpi_srat_revision __initdata;
 static int acpi_numa __initdata;
+static int cfmws_numa __initdata;
 
 static int last_real_pxm;
 
@@ -38,6 +39,12 @@ void __init disable_srat(void)
 {
 	acpi_numa = -1;
 }
+
+void __init disable_cfmws(void)
+{
+	cfmws_numa = -1;
+}
+
 
 int pxm_to_node(int pxm)
 {
@@ -312,6 +319,12 @@ int __init srat_disabled(void)
 {
 	return acpi_numa < 0;
 }
+
+int __init cfmws_disabled(void)
+{
+	return cfmws_numa < 0;
+}
+
 
 __weak int __init numa_fill_memblks(u64 start, u64 end)
 {
@@ -648,14 +661,16 @@ int __init acpi_numa_init(void)
 	 */
 
 	/* fake_pxm is the next unused PXM value after SRAT parsing */
-	for (i = 0, fake_pxm = -1; i < MAX_NUMNODES; i++) {
-		if (node_to_pxm_map[i] > fake_pxm)
-			fake_pxm = node_to_pxm_map[i];
+	if (!cfmws_disabled()) {
+		for (i = 0, fake_pxm = -1; i < MAX_NUMNODES; i++) {
+			if (node_to_pxm_map[i] > fake_pxm)
+				fake_pxm = node_to_pxm_map[i];
+		}
+		last_real_pxm = fake_pxm;
+		fake_pxm++;
+		acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, acpi_parse_cfmws,
+				      &fake_pxm);
 	}
-	last_real_pxm = fake_pxm;
-	fake_pxm++;
-	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, acpi_parse_cfmws,
-			      &fake_pxm);
 
 	if (cnt < 0)
 		return cnt;

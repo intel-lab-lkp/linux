@@ -37,6 +37,8 @@ static __init int numa_setup(char *opt)
 		disable_srat();
 	if (!strncmp(opt, "nohmat", 6))
 		disable_hmat();
+	if (!strncmp(opt, "nocfmws", 7))
+		disable_cfmws();
 	return 0;
 }
 early_param("numa", numa_setup);

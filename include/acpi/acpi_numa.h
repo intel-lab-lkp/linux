@@ -21,6 +21,7 @@ extern int fix_pxm_node_maps(int max_nid);
 
 extern void bad_srat(void);
 extern int srat_disabled(void);
+extern void disable_cfmws(void);
 
 #else				/* CONFIG_ACPI_NUMA */
 static inline int fix_pxm_node_maps(int max_nid)
@@ -30,6 +31,11 @@ static inline int fix_pxm_node_maps(int max_nid)
 static inline void disable_srat(void)
 {
 }
+
+static inline void disable_cfmws(void)
+{
+}
+
 static inline int pxm_to_node(int pxm)
 {
 	return 0;
