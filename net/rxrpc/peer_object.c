@@ -149,8 +149,7 @@ struct rxrpc_peer *rxrpc_lookup_peer_rcu(struct rxrpc_local *local,
  * assess the MTU size for the network interface through which this peer is
  * reached
  */
-static void rxrpc_assess_MTU_size(struct rxrpc_local *local,
-				  struct rxrpc_peer *peer)
+void rxrpc_assess_MTU_size(struct rxrpc_local *local, struct rxrpc_peer *peer)
 {
 	struct net *net = local->net;
 	struct dst_entry *dst;
@@ -227,7 +226,7 @@ struct rxrpc_peer *rxrpc_alloc_peer(struct rxrpc_local *local, gfp_t gfp,
 
 	_enter("");
 
-	peer = kzalloc(sizeof(struct rxrpc_peer), gfp);
+	peer = kzalloc_obj(struct rxrpc_peer, gfp);
 	if (peer) {
 		refcount_set(&peer->ref, 1);
 		peer->local = rxrpc_get_local(local, rxrpc_local_get_peer);
@@ -277,8 +276,6 @@ static void rxrpc_init_peer(struct rxrpc_local *local, struct rxrpc_peer *peer,
 
 	peer->hdrsize += sizeof(struct rxrpc_wire_header);
 	peer->max_data = peer->if_mtu - peer->hdrsize;
-
-	rxrpc_assess_MTU_size(local, peer);
 }
 
 /*
@@ -297,6 +294,7 @@ static struct rxrpc_peer *rxrpc_create_peer(struct rxrpc_local *local,
 	if (peer) {
 		memcpy(&peer->srx, srx, sizeof(*srx));
 		rxrpc_init_peer(local, peer, hash_key);
+		rxrpc_assess_MTU_size(local, peer);
 	}
 
 	_leave(" = %p", peer);

@@ -589,7 +589,7 @@ static int isofs_fill_super(struct super_block *s, struct fs_context *fc)
 	unsigned int vol_desc_start;
 	int silent = fc->sb_flags & SB_SILENT;
 
-	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
+	sbi = kzalloc_obj(*sbi);
 	if (!sbi)
 		return -ENOMEM;
 	s->s_fs_info = sbi;
@@ -610,6 +610,11 @@ static int isofs_fill_super(struct super_block *s, struct fs_context *fc)
 		goto out_freesbi;
 	}
 	opt->blocksize = sb_min_blocksize(s, opt->blocksize);
+	if (!opt->blocksize) {
+		printk(KERN_ERR
+		       "ISOFS: unable to set blocksize\n");
+		goto out_freesbi;
+	}
 
 	sbi->s_high_sierra = 0; /* default is iso9660 */
 	sbi->s_session = opt->session;
@@ -939,7 +944,7 @@ root_found:
 	sbi->s_check = opt->check;
 
 	if (table)
-		s->s_d_op = &isofs_dentry_ops[table - 1];
+		set_default_d_op(s, &isofs_dentry_ops[table - 1]);
 
 	/* get the root dentry */
 	s->s_root = d_make_root(inode);
@@ -1440,9 +1445,16 @@ static int isofs_read_inode(struct inode *inode, int relocated)
 		inode->i_op = &page_symlink_inode_operations;
 		inode_nohighmem(inode);
 		inode->i_data.a_ops = &isofs_symlink_aops;
-	} else
+	} else if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
+		   S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
 		/* XXX - parse_rock_ridge_inode() had already set i_rdev. */
 		init_special_inode(inode, inode->i_mode, inode->i_rdev);
+	} else {
+		printk(KERN_DEBUG "ISOFS: Invalid file type 0%04o for inode %lu.\n",
+			inode->i_mode, inode->i_ino);
+		ret = -EIO;
+		goto fail;
+	}
 
 	ret = 0;
 out:
@@ -1508,7 +1520,7 @@ struct inode *__isofs_iget(struct super_block *sb,
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 
-	if (inode->i_state & I_NEW) {
+	if (inode_state_read_once(inode) & I_NEW) {
 		ret = isofs_read_inode(inode, relocated);
 		if (ret < 0) {
 			iget_failed(inode);
@@ -1545,7 +1557,7 @@ static int isofs_init_fs_context(struct fs_context *fc)
 {
 	struct isofs_options *opt;
 
-	opt = kzalloc(sizeof(*opt), GFP_KERNEL);
+	opt = kzalloc_obj(*opt);
 	if (!opt)
 		return -ENOMEM;
 
