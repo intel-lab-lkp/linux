@@ -17,6 +17,7 @@
 #include <linux/seq_file.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
+#include <linux/string_helpers.h>
 
 #ifdef CONFIG_KEXEC_HANDOVER
 #include <linux/libfdt.h>
@@ -2713,7 +2714,8 @@ err_param:
 }
 __setup("reserve_mem=", reserve_mem);
 
-#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_ARCH_KEEP_MEMBLOCK)
+#ifdef CONFIG_DEBUG_FS
+#ifdef CONFIG_ARCH_KEEP_MEMBLOCK
 static const char * const flagname[] = {
 	[ilog2(MEMBLOCK_HOTPLUG)] = "HOTPLUG",
 	[ilog2(MEMBLOCK_MIRROR)] = "MIRROR",
@@ -2760,10 +2762,40 @@ static int memblock_debug_show(struct seq_file *m, void *private)
 }
 DEFINE_SHOW_ATTRIBUTE(memblock_debug);
 
+#endif /* CONFIG_ARCH_KEEP_MEMBLOCK */
+
+static int memblock_reserve_mem_show(struct seq_file *m, void *private)
+{
+	struct reserve_mem_table *map;
+	char txtsz[16];
+
+	for (int i = 0; i < reserved_mem_count; i++) {
+		map = &reserved_mem_table[i];
+		if (!map->size)
+			continue;
+
+		memset(txtsz, 0, sizeof(txtsz));
+		string_get_size(map->size, 1, STRING_UNITS_2, txtsz, sizeof(txtsz));
+		seq_printf(m, "%s\t\t(%s)\n", map->name, txtsz);
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(memblock_reserve_mem);
+
 static int __init memblock_init_debugfs(void)
 {
-	struct dentry *root = debugfs_create_dir("memblock", NULL);
+	struct dentry *root;
 
+	if (!(IS_ENABLED(CONFIG_ARCH_KEEP_MEMBLOCK) || reserved_mem_count))
+		return 0;
+
+	root = debugfs_create_dir("memblock", NULL);
+
+	if (reserved_mem_count)
+		debugfs_create_file("reserve_mem_param", 0444, root, NULL,
+				    &memblock_reserve_mem_fops);
+#ifdef CONFIG_ARCH_KEEP_MEMBLOCK
 	debugfs_create_file("memory", 0444, root,
 			    &memblock.memory, &memblock_debug_fops);
 	debugfs_create_file("reserved", 0444, root,
@@ -2773,6 +2805,7 @@ static int __init memblock_init_debugfs(void)
 			    &memblock_debug_fops);
 #endif
 
+#endif /* CONFIG_ARCH_KEEP_MEMBLOCK */
 	return 0;
 }
 __initcall(memblock_init_debugfs);
