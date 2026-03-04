@@ -121,6 +121,7 @@
 #define RK3568_PHYREG32_SSC_OFFSET_500PPM	1
 
 #define RK3568_PHYREG33				0x80
+#define RK3568_PHYREG33_PLL_SSC_CTRL		BIT(5)
 #define RK3568_PHYREG33_PLL_KVCO_MASK		GENMASK(4, 2)
 #define RK3568_PHYREG33_PLL_KVCO_SHIFT		2
 #define RK3568_PHYREG33_PLL_KVCO_VALUE		2
@@ -964,6 +965,56 @@ static const struct rockchip_combphy_cfg rk3568_combphy_cfgs = {
 	.combphy_cfg	= rk3568_combphy_cfg,
 };
 
+static void rk_combphy_cfg_ssc_for_pcie(struct rockchip_combphy_priv *priv, unsigned long rate)
+{
+	struct device_node *np = priv->dev->of_node;
+	u32 val;
+
+	/* Some SoCs' combphys share the same PCIe SSC tuning result */
+	if (!of_device_is_compatible(np, "rockchip,rk3588-naneng-combphy") ||
+	    !of_device_is_compatible(np, "rockchip,rk3576-naneng-combphy")) {
+		dev_warn(priv->dev, "Incompatible platform\n");
+		return;
+	}
+
+	val = readl(priv->mmio + RK3568_PHYREG8);
+	val |= RK3568_PHYREG8_SSC_EN;
+	writel(val, priv->mmio + RK3568_PHYREG8);
+
+	/* PLL control SSC module period should be set */
+	val = readl(priv->mmio + RK3568_PHYREG33);
+	val |= RK3568_PHYREG33_PLL_SSC_CTRL;
+	writel(val, priv->mmio + RK3568_PHYREG33);
+
+	if (priv->type == PHY_TYPE_PCIE && rate == REF_CLOCK_24MHz) {
+		/* Set PLL loop divider */
+		writel(0x00, priv->mmio + RK3576_PHYREG17);
+		writel(RK3568_PHYREG18_PLL_LOOP, priv->mmio + RK3568_PHYREG18);
+
+		/* Set up rx_pck invert and rx msb to disable */
+		writel(0x00, priv->mmio + RK3588_PHYREG27);
+
+		/*
+		 * Set up SU adjust signal:
+		 * su_trim[7:0],   PLL KVCO adjust bits[2:0] to min
+		 * su_trim[15:8],  PLL LPF R1 adujst bits[9:7]=3'b101
+		 * su_trim[23:16], CKRCV adjust
+		 * su_trim[31:24], CKDRV adjust
+		 */
+		writel(0x90, priv->mmio + RK3568_PHYREG11);
+		writel(0x02, priv->mmio + RK3568_PHYREG12);
+		writel(0x08, priv->mmio + RK3568_PHYREG13);
+		writel(0x57, priv->mmio + RK3568_PHYREG14);
+		writel(0x40, priv->mmio + RK3568_PHYREG15);
+
+		writel(RK3568_PHYREG16_SSC_CNT_VALUE, priv->mmio + RK3568_PHYREG16);
+
+		val = FIELD_PREP(RK3568_PHYREG33_PLL_KVCO_MASK,
+				 RK3576_PHYREG33_PLL_KVCO_VALUE);
+		writel(val, priv->mmio + RK3568_PHYREG33);
+	}
+}
+
 static int rk3576_combphy_cfg(struct rockchip_combphy_priv *priv)
 {
 	const struct rockchip_combphy_grfcfg *cfg = priv->cfg->grfcfg;
@@ -1156,39 +1207,8 @@ static int rk3576_combphy_cfg(struct rockchip_combphy_priv *priv)
 		}
 	}
 
-	if (priv->enable_ssc) {
-		val = readl(priv->mmio + RK3568_PHYREG8);
-		val |= RK3568_PHYREG8_SSC_EN;
-		writel(val, priv->mmio + RK3568_PHYREG8);
-
-		if (priv->type == PHY_TYPE_PCIE && rate == REF_CLOCK_24MHz) {
-			/* Set PLL loop divider */
-			writel(0x00, priv->mmio + RK3576_PHYREG17);
-			writel(RK3568_PHYREG18_PLL_LOOP, priv->mmio + RK3568_PHYREG18);
-
-			/* Set up rx_pck invert and rx msb to disable */
-			writel(0x00, priv->mmio + RK3588_PHYREG27);
-
-			/*
-			 * Set up SU adjust signal:
-			 * su_trim[7:0],   PLL KVCO adjust bits[2:0] to min
-			 * su_trim[15:8],  PLL LPF R1 adujst bits[9:7]=3'b101
-			 * su_trim[23:16], CKRCV adjust
-			 * su_trim[31:24], CKDRV adjust
-			 */
-			writel(0x90, priv->mmio + RK3568_PHYREG11);
-			writel(0x02, priv->mmio + RK3568_PHYREG12);
-			writel(0x08, priv->mmio + RK3568_PHYREG13);
-			writel(0x57, priv->mmio + RK3568_PHYREG14);
-			writel(0x40, priv->mmio + RK3568_PHYREG15);
-
-			writel(RK3568_PHYREG16_SSC_CNT_VALUE, priv->mmio + RK3568_PHYREG16);
-
-			val = FIELD_PREP(RK3568_PHYREG33_PLL_KVCO_MASK,
-					 RK3576_PHYREG33_PLL_KVCO_VALUE);
-			writel(val, priv->mmio + RK3568_PHYREG33);
-		}
-	}
+	if (priv->enable_ssc)
+		rk_combphy_cfg_ssc_for_pcie(priv, rate);
 
 	return 0;
 }
@@ -1371,11 +1391,8 @@ static int rk3588_combphy_cfg(struct rockchip_combphy_priv *priv)
 		}
 	}
 
-	if (priv->enable_ssc) {
-		val = readl(priv->mmio + RK3568_PHYREG8);
-		val |= RK3568_PHYREG8_SSC_EN;
-		writel(val, priv->mmio + RK3568_PHYREG8);
-	}
+	if (priv->enable_ssc)
+		rk_combphy_cfg_ssc_for_pcie(priv, rate);
 
 	return 0;
 }
