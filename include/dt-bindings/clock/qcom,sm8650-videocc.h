@@ -16,8 +16,14 @@
 #define VIDEO_CC_MVS1_SHIFT_CLK					14
 #define VIDEO_CC_MVS1C_SHIFT_CLK				15
 #define VIDEO_CC_XO_CLK_SRC					16
+/* X1P42100 introduces below new clocks compared to SM8650 */
+#define VIDEO_CC_MVS0_BSE_CLK					17
+#define VIDEO_CC_MVS0_BSE_CLK_SRC				18
+#define VIDEO_CC_MVS0_BSE_DIV4_DIV_CLK_SRC			19
 
 /* VIDEO_CC resets */
 #define VIDEO_CC_XO_CLK_ARES					7
+/* X1P42100 introduces below new reset compared to SM8650 */
+#define VIDEO_CC_MVS0_BSE_BCR					8
 
 #endif
