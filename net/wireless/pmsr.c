@@ -250,6 +250,24 @@ static int pmsr_parse_ftm(struct cfg80211_registered_device *rdev,
 		out->ftm.egress_distancemm =
 			nla_get_u64(tb[NL80211_PMSR_FTM_REQ_ATTR_EGRESS]);
 
+	out->ftm.range_report =
+		nla_get_flag(tb[NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT]);
+
+	if (!capa->ftm.support_range_report && out->ftm.range_report) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT],
+				    "FTM: Range report negotiation not supported");
+		return -EOPNOTSUPP;
+	}
+
+	if ((out->ftm.non_trigger_based || out->ftm.trigger_based) &&
+	    out->ftm.range_report) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT],
+				    "FTM: Range report request is not valid for TB/NTB ranging");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 

@@ -383,6 +383,7 @@ nl80211_pmsr_ftm_req_attr_policy[NL80211_PMSR_FTM_REQ_ATTR_MAX + 1] = {
 	[NL80211_PMSR_FTM_REQ_ATTR_MEAS_PER_AW] = NLA_POLICY_MAX(NLA_U32, 4),
 	[NL80211_PMSR_FTM_REQ_ATTR_INGRESS] = { .type = NLA_U64 },
 	[NL80211_PMSR_FTM_REQ_ATTR_EGRESS] = { .type = NLA_U64 },
+	[NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT] = { .type = NLA_FLAG },
 };
 
 static const struct nla_policy
@@ -2423,6 +2424,9 @@ nl80211_send_pmsr_ftm_capa(const struct cfg80211_pmsr_capabilities *cap,
 		return -ENOBUFS;
 	if (nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_BANDWIDTHS,
 			cap->ftm.pd_ntb_bandwidths))
+		return -ENOBUFS;
+	if (cap->ftm.support_range_report &&
+	    nla_put_flag(msg, NL80211_PMSR_FTM_CAPA_ATTR_RANGE_REPORT))
 		return -ENOBUFS;
 
 	nla_nest_end(msg, ftm);
