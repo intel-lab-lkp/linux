@@ -49,5 +49,6 @@ void intel_xe3plpd_pll_disable(struct intel_encoder *encoder);
 void intel_lt_phy_verify_plls(struct intel_display *display);
 void intel_xe3plpd_pll_enable_clock(struct intel_encoder *encoder,
 				    const struct intel_crtc_state *crtc_state);
+void intel_xe3plpd_pll_disable_clock(struct intel_encoder *encoder);
 
 #endif /* __INTEL_LT_PHY_H__ */
