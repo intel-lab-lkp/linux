@@ -209,7 +209,7 @@ repro_spinner(void *arg)
 
 	VERBOSE_REPROOUT_STRING("repro_spinner task started");
 	set_cpus_allowed_ptr(current, cpumask_of(me % nr_cpu_ids));
-	sched_set_normal(current, spinner_nice);
+	torture_sched_set_normal(current, spinner_nice);
 	atomic_inc(&n_repro_spinner_started);
 
 	if (holdoff) {
@@ -247,7 +247,7 @@ static int repro_stats(void *arg)
 	VERBOSE_REPROOUT_STRING("repro_stats task started");
 	if (cpu < nr_cpu_ids)
 		set_cpus_allowed_ptr(current, cpumask_of(cpu));
-	sched_set_normal(current, -20);
+	sched_set_normal(current, MIN_NICE);
 	do {
 		j = jiffies;
 		torture_hrtimeout_s(stat_interval, 0, NULL);
@@ -280,7 +280,7 @@ static int repro_timer(void *arg)
 	const unsigned long jwait = 10;
 
 	VERBOSE_REPROOUT_STRING("repro_timer task started");
-	sched_set_normal(current, timer_nice);
+	torture_sched_set_normal(current, timer_nice);
 	atomic_inc(&n_repro_timer_started);
 
 	if (holdoff) {
@@ -453,7 +453,7 @@ static int
 repro_shutdown(void *arg)
 {
 	REPROOUT_STRING("Invoked repro_shutdown.");
-	sched_set_normal(current, -20);
+	sched_set_normal(current, MIN_NICE);
 	torture_hrtimeout_s(shutdown_secs, 0, NULL);
 	REPROOUT_STRING("Reached shutdown_secs in repro_shutdown.");
 	WARN(atomic_read(&n_repro_writer_started) < nrealwriters ||
