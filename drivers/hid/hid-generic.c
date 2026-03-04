@@ -67,7 +67,27 @@ static int hid_generic_probe(struct hid_device *hdev,
 	if (ret)
 		return ret;
 
-	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+	if (ret)
+		return ret;
+
+	if (hdev->quirks & HID_QUIRK_KEEP_OPEN) {
+		ret = hid_hw_open(hdev);
+		if (ret) {
+			hid_hw_stop(hdev);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static void hid_generic_remove(struct hid_device *hdev)
+{
+	if (hdev->quirks & HID_QUIRK_KEEP_OPEN)
+		hid_hw_close(hdev);
+
+	hid_hw_stop(hdev);
 }
 
 static int hid_generic_reset_resume(struct hid_device *hdev)
@@ -89,6 +109,7 @@ static struct hid_driver hid_generic = {
 	.id_table = hid_table,
 	.match = hid_generic_match,
 	.probe = hid_generic_probe,
+	.remove = hid_generic_remove,
 	.reset_resume = hid_generic_reset_resume,
 };
 module_hid_driver(hid_generic);
