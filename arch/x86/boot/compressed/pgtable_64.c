@@ -102,7 +102,7 @@ static unsigned long find_trampoline_placement(void)
 
 asmlinkage void configure_5level_paging(struct boot_params *bp, void *pgtable)
 {
-	void (*toggle_la57)(void *cr3);
+	void (*toggle_la57)(void *cr3) = trampoline_32bit_src;
 	bool l5_required = false;
 
 	/* Initialize boot_params. Required for cmdline_find_option_bool(). */
@@ -135,18 +135,22 @@ asmlinkage void configure_5level_paging(struct boot_params *bp, void *pgtable)
 	if (l5_required == !!(native_read_cr4() & X86_CR4_LA57))
 		return;
 
-	trampoline_32bit = (unsigned long *)find_trampoline_placement();
+	if ((unsigned long)pgtable > U32_MAX) {
+		trampoline_32bit = (unsigned long *)find_trampoline_placement();
 
-	/* Preserve trampoline memory */
-	memcpy(trampoline_save, trampoline_32bit, TRAMPOLINE_32BIT_SIZE);
+		/* Preserve trampoline memory */
+		memcpy(trampoline_save, trampoline_32bit, TRAMPOLINE_32BIT_SIZE);
 
-	/* Clear trampoline memory first */
-	memset(trampoline_32bit, 0, TRAMPOLINE_32BIT_SIZE);
+		/* Clear trampoline memory first */
+		memset(trampoline_32bit, 0, TRAMPOLINE_32BIT_SIZE);
 
-	/* Copy trampoline code in place */
-	toggle_la57 = memcpy(trampoline_32bit +
-			TRAMPOLINE_32BIT_CODE_OFFSET / sizeof(unsigned long),
-			&trampoline_32bit_src, TRAMPOLINE_32BIT_CODE_SIZE);
+		/* Copy trampoline code in place */
+		toggle_la57 = memcpy(trampoline_32bit +
+				TRAMPOLINE_32BIT_CODE_OFFSET / sizeof(unsigned long),
+				&trampoline_32bit_src, TRAMPOLINE_32BIT_CODE_SIZE);
+	} else {
+		trampoline_32bit = memset(pgtable, 0, PAGE_SIZE);
+	}
 
 	/*
 	 * Avoid the need for a stack in the 32-bit trampoline code, by using
@@ -189,12 +193,14 @@ asmlinkage void configure_5level_paging(struct boot_params *bp, void *pgtable)
 
 	toggle_la57(trampoline_32bit);
 
-	/*
-	 * Move the top level page table out of trampoline memory.
-	 */
-	memcpy(pgtable, trampoline_32bit, PAGE_SIZE);
-	native_write_cr3((unsigned long)pgtable);
+	if (pgtable != trampoline_32bit) {
+		/*
+		 * Move the top level page table out of trampoline memory.
+		 */
+		memcpy(pgtable, trampoline_32bit, PAGE_SIZE);
+		native_write_cr3((unsigned long)pgtable);
 
-	/* Restore trampoline memory */
-	memcpy(trampoline_32bit, trampoline_save, TRAMPOLINE_32BIT_SIZE);
+		/* Restore trampoline memory */
+		memcpy(trampoline_32bit, trampoline_save, TRAMPOLINE_32BIT_SIZE);
+	}
 }

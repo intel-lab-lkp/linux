@@ -2,9 +2,6 @@
 
 #include <linux/efi.h>
 
-extern void trampoline_32bit_src(void *, bool);
-extern const u16 trampoline_ljmp_imm_offset;
-
 efi_status_t efi_adjust_memory_range_protection(unsigned long start,
 						unsigned long size);
 

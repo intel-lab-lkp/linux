@@ -93,7 +93,7 @@ extern struct boot_params *boot_params_ptr;
 extern unsigned long *trampoline_32bit;
 extern const u16 trampoline_ljmp_imm_offset;
 
-void trampoline_32bit_src(void *trampoline, bool enable_5lvl);
+void trampoline_32bit_src(void *cr3);
 
 #endif
 
