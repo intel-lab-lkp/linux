@@ -545,7 +545,6 @@ int resctrl_val(const struct resctrl_test *test,
 	cpu_set_t old_affinity;
 	int domain_id;
 	int ret = 0;
-	pid_t ppid;
 
 	if (strcmp(param->filename, "") == 0)
 		sprintf(param->filename, "stdio");
@@ -556,22 +555,10 @@ int resctrl_val(const struct resctrl_test *test,
 		return ret;
 	}
 
-	ppid = getpid();
-
-	/* Taskset test to specified CPU. */
-	ret = taskset_benchmark(ppid, uparams->cpu, &old_affinity);
-	if (ret)
-		return ret;
-
-	/* Write test to specified control & monitoring group in resctrl FS. */
-	ret = write_bm_pid_to_resctrl(ppid, param->ctrlgrp, param->mongrp);
-	if (ret)
-		goto reset_affinity;
-
 	if (param->init) {
 		ret = param->init(param, domain_id);
 		if (ret)
-			goto reset_affinity;
+			return ret;
 	}
 
 	/*
@@ -586,10 +573,8 @@ int resctrl_val(const struct resctrl_test *test,
 	if (param->fill_buf) {
 		buf = alloc_buffer(param->fill_buf->buf_size,
 				   param->fill_buf->memflush);
-		if (!buf) {
-			ret = -ENOMEM;
-			goto reset_affinity;
-		}
+		if (!buf)
+			return -ENOMEM;
 	}
 
 	fflush(stdout);
@@ -605,11 +590,26 @@ int resctrl_val(const struct resctrl_test *test,
 	 * terminated.
 	 */
 	if (bm_pid == 0) {
+		bm_pid = getpid();
+
+		/* Taskset test to specified CPU. */
+		ret = taskset_benchmark(bm_pid, uparams->cpu, &old_affinity);
+		if (ret)
+			exit(ret);
+
+		/* Write test to specified control & monitoring group in resctrl FS. */
+		ret = write_bm_pid_to_resctrl(bm_pid, param->ctrlgrp, param->mongrp);
+		if (ret)
+			goto reset_affinity;
+
 		if (param->fill_buf)
 			fill_cache_read(buf, param->fill_buf->buf_size, false);
 		else if (uparams->benchmark_cmd[0])
 			execvp(uparams->benchmark_cmd[0], (char **)uparams->benchmark_cmd);
-		exit(EXIT_SUCCESS);
+
+reset_affinity:
+		taskset_restore(bm_pid, &old_affinity);
+		exit(ret);
 	}
 
 	ksft_print_msg("Benchmark PID: %d\n", (int)bm_pid);
@@ -619,23 +619,33 @@ int resctrl_val(const struct resctrl_test *test,
 
 	/* Test runs until the callback setup() tells the test to stop. */
 	while (1) {
-		ret = param->setup(test, uparams, param);
-		if (ret == END_OF_TESTS) {
-			ret = 0;
+		pid_t wpid = waitpid(bm_pid, &ret, WNOHANG);
+
+		if (wpid == -1) {
+			ret = -errno;
+			ksft_perror("Unable to waitpid");
 			break;
 		}
-		if (ret < 0)
-			break;
 
-		ret = param->measure(uparams, param, bm_pid);
-		if (ret)
-			break;
+		if (wpid == 0) {
+			ret = param->setup(test, uparams, param);
+			if (ret == END_OF_TESTS) {
+				ret = 0;
+				break;
+			}
+			if (ret < 0)
+				break;
+
+			ret = param->measure(uparams, param, bm_pid);
+			if (ret)
+				break;
+		} else {
+			goto free_buf;
+		}
 	}
 
 	kill(bm_pid, SIGKILL);
 free_buf:
 	free(buf);
-reset_affinity:
-	taskset_restore(ppid, &old_affinity);
 	return ret;
 }
