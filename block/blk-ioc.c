@@ -364,7 +364,7 @@ static struct io_cq *ioc_create_icq(struct request_queue *q)
 	if (!icq)
 		return NULL;
 
-	if (radix_tree_maybe_preload(GFP_ATOMIC) < 0) {
+	if (radix_tree_maybe_preload(GFP_ATOMIC) != 0) {
 		kmem_cache_free(et->icq_cache, icq);
 		return NULL;
 	}
