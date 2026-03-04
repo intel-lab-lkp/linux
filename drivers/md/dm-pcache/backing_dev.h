@@ -96,7 +96,7 @@ static inline u32 backing_dev_req_coalesced_max_len(const void *data, u32 len)
 
 	first_page = vmalloc_to_page(p);
 advance:
-	in_page = PAGE_SIZE - offset_in_page(p);
+	in_page = rest_of_page(p);
 	to_advance = min_t(u32, in_page, len - done);
 
 	done += to_advance;

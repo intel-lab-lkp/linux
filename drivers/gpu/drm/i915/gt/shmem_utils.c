@@ -99,8 +99,7 @@ static int __shmem_rw(struct file *file, loff_t off,
 	unsigned long pfn;
 
 	for (pfn = off >> PAGE_SHIFT; len; pfn++) {
-		unsigned int this =
-			min_t(size_t, PAGE_SIZE - offset_in_page(off), len);
+		unsigned int this = min_t(size_t, rest_of_page(off), len);
 		struct page *page;
 		void *vaddr;
 
@@ -135,7 +134,7 @@ int shmem_read_to_iosys_map(struct file *file, loff_t off,
 
 	for (pfn = off >> PAGE_SHIFT; len; pfn++) {
 		unsigned int this =
-			min_t(size_t, PAGE_SIZE - offset_in_page(off), len);
+			min_t(size_t, rest_of_page(off), len);
 		struct page *page;
 		void *vaddr;
 

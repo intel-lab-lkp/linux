@@ -1147,8 +1147,7 @@ static blk_status_t copy_to_nullb(struct nullb *nullb, void *source,
 	sector_t sector;
 
 	while (count < n) {
-		temp = min3(nullb->dev->blocksize, n - count,
-			    PAGE_SIZE - offset_in_page(pos));
+		temp = min3(nullb->dev->blocksize, n - count, rest_of_page(pos));
 		sector = pos >> SECTOR_SHIFT;
 
 		if (null_cache_active(nullb) && !is_fua)
@@ -1181,8 +1180,7 @@ static void copy_from_nullb(struct nullb *nullb, void *dest, loff_t pos,
 	sector_t sector;
 
 	while (count < n) {
-		temp = min3(nullb->dev->blocksize, n - count,
-			    PAGE_SIZE - offset_in_page(pos));
+		temp = min3(nullb->dev->blocksize, n - count, rest_of_page(pos));
 		sector = pos >> SECTOR_SHIFT;
 
 		t_page = null_lookup_page(nullb, sector, false,
