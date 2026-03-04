@@ -58,7 +58,12 @@ impl GpuInfo {
         let thread_max_barrier_size = regs::GPU_THREAD_MAX_BARRIER_SIZE.read(dev, iomem)?;
         let coherency_features = regs::GPU_COHERENCY_FEATURES.read(dev, iomem)?;
 
-        let texture_features = regs::GPU_TEXTURE_FEATURES0.read(dev, iomem)?;
+        let texture_features = [
+            regs::GPU_TEXTURE_FEATURES0.read(dev, iomem)?,
+            regs::GPU_TEXTURE_FEATURES1.read(dev, iomem)?,
+            regs::GPU_TEXTURE_FEATURES2.read(dev, iomem)?,
+            regs::GPU_TEXTURE_FEATURES3.read(dev, iomem)?,
+        ];
 
         let as_present = regs::GPU_AS_PRESENT.read(dev, iomem)?;
 
@@ -86,8 +91,7 @@ impl GpuInfo {
             thread_max_workgroup_size,
             thread_max_barrier_size,
             coherency_features,
-            // TODO: Add texture_features_{1,2,3}.
-            texture_features: [texture_features, 0, 0, 0],
+            texture_features,
             as_present,
             pad0: 0,
             shader_present,
