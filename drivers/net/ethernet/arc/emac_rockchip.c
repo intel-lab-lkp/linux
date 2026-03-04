@@ -103,7 +103,7 @@ static int emac_rockchip_probe(struct platform_device *pdev)
 	if (!pdev->dev.of_node)
 		return -ENODEV;
 
-	ndev = alloc_etherdev(sizeof(struct rockchip_priv_data));
+	ndev = devm_alloc_etherdev(dev, sizeof(struct rockchip_priv_data));
 	if (!ndev)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, ndev);
@@ -240,7 +240,6 @@ out_regulator_disable:
 out_clk_disable:
 	clk_disable_unprepare(priv->refclk);
 out_netdev:
-	free_netdev(ndev);
 	return err;
 }
 
@@ -258,8 +257,6 @@ static void emac_rockchip_remove(struct platform_device *pdev)
 
 	if (priv->soc_data->need_div_macclk)
 		clk_disable_unprepare(priv->macclk);
-
-	free_netdev(ndev);
 }
 
 static struct platform_driver emac_rockchip_driver = {
