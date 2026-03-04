@@ -6712,11 +6712,19 @@ static inline void proxy_tag_curr(struct rq *rq, struct task_struct *owner)
 	 * However, the chosen/donor task *and* the mutex owner form an
 	 * atomic pair wrt push/pull.
 	 *
-	 * Make sure owner we run is not pushable. Unfortunately we can
-	 * only deal with that by means of a dequeue/enqueue cycle. :-/
+	 * Make sure owner we run is not pushable.
 	 */
-	dequeue_task(rq, owner, DEQUEUE_NOCLOCK | DEQUEUE_SAVE);
-	enqueue_task(rq, owner, ENQUEUE_NOCLOCK | ENQUEUE_RESTORE);
+	if (owner->sched_class->prevent_migration)
+		owner->sched_class->prevent_migration(rq, owner);
+}
+
+static inline void proxy_untag_prev(struct rq *rq, struct task_struct *prev)
+{
+	if (!sched_proxy_exec())
+		return;
+
+	if (prev->sched_class->allow_migration)
+		prev->sched_class->allow_migration(rq, prev);
 }
 
 /*
@@ -6874,7 +6882,7 @@ keep_resched:
 		if (!task_current_donor(rq, next))
 			proxy_tag_curr(rq, next);
 		if (!(!preempt && prev_state) && prev != prev_donor)
-			proxy_tag_curr(rq, prev);
+			proxy_untag_prev(rq, prev);
 
 		/*
 		 * The membarrier system call requires each architecture

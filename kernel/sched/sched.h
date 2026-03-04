@@ -2575,6 +2575,9 @@ struct sched_class {
 	 */
 	void (*migrate_task_rq)(struct task_struct *p, int new_cpu);
 
+	void (*allow_migration)(struct rq *rq, struct task_struct *p);
+	void (*prevent_migration)(struct rq *rq, struct task_struct *p);
+
 	/*
 	 * ttwu_do_activate: rq->lock
 	 * wake_up_new_task: task_rq_lock

@@ -2289,6 +2289,28 @@ static void dequeue_dl_entity(struct sched_dl_entity *dl_se, int flags)
 		task_non_contending(dl_se, true);
 }
 
+static inline void __allow_migration_dl(struct rq *rq, struct task_struct *p)
+{
+	if (dl_server(&p->dl))
+		return;
+
+	if (task_is_blocked(p))
+		return;
+
+	if (!task_current(rq, p) && !p->dl.dl_throttled && p->nr_cpus_allowed > 1)
+		enqueue_pushable_dl_task(rq, p);
+}
+
+static void allow_migration_dl(struct rq *rq, struct task_struct *p)
+{
+	__allow_migration_dl(rq, p);
+}
+
+static void prevent_migration_dl(struct rq *rq, struct task_struct *p)
+{
+	dequeue_pushable_dl_task(rq, p);
+}
+
 static void enqueue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 {
 	if (is_dl_boosted(&p->dl)) {
@@ -2339,14 +2361,7 @@ static void enqueue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 
 	enqueue_dl_entity(&p->dl, flags);
 
-	if (dl_server(&p->dl))
-		return;
-
-	if (task_is_blocked(p))
-		return;
-
-	if (!task_current(rq, p) && !p->dl.dl_throttled && p->nr_cpus_allowed > 1)
-		enqueue_pushable_dl_task(rq, p);
+	__allow_migration_dl(rq, p);
 }
 
 static bool dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
@@ -3407,6 +3422,9 @@ DEFINE_SCHED_CLASS(dl) = {
 	.enqueue_task		= enqueue_task_dl,
 	.dequeue_task		= dequeue_task_dl,
 	.yield_task		= yield_task_dl,
+
+	.allow_migration	= allow_migration_dl,
+	.prevent_migration	= prevent_migration_dl,
 
 	.wakeup_preempt		= wakeup_preempt_dl,
 

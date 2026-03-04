@@ -1424,6 +1424,25 @@ static void dequeue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flags)
 	enqueue_top_rt_rq(&rq->rt);
 }
 
+static void __allow_migration_rt(struct rq *rq, struct task_struct *p)
+{
+	if (task_is_blocked(p))
+		return;
+
+	if (!task_current(rq, p) && p->nr_cpus_allowed > 1)
+		enqueue_pushable_task(rq, p);
+}
+
+static void allow_migration_rt(struct rq *rq, struct task_struct *p)
+{
+	__allow_migration_rt(rq, p);
+}
+
+static void prevent_migration_rt(struct rq *rq, struct task_struct *p)
+{
+	dequeue_pushable_task(rq, p);
+}
+
 /*
  * Adding/removing a task to/from a priority array:
  */
@@ -1440,11 +1459,7 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 
 	enqueue_rt_entity(rt_se, flags);
 
-	if (task_is_blocked(p))
-		return;
-
-	if (!task_current(rq, p) && p->nr_cpus_allowed > 1)
-		enqueue_pushable_task(rq, p);
+	__allow_migration_rt(rq, p);
 }
 
 static bool dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
@@ -2582,6 +2597,9 @@ DEFINE_SCHED_CLASS(rt) = {
 	.enqueue_task		= enqueue_task_rt,
 	.dequeue_task		= dequeue_task_rt,
 	.yield_task		= yield_task_rt,
+
+	.allow_migration	= allow_migration_rt,
+	.prevent_migration	= prevent_migration_rt,
 
 	.wakeup_preempt		= wakeup_preempt_rt,
 
