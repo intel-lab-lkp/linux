@@ -48,6 +48,8 @@ void ksz_port_txtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb);
 void ksz_port_deferred_xmit(struct kthread_work *work);
 bool ksz_port_rxtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb,
 		       unsigned int type);
+int ksz8463_ptp_irq_setup(struct dsa_switch *ds);
+void ksz8463_ptp_irq_free(struct dsa_switch *ds);
 int ksz_ptp_irq_setup(struct dsa_switch *ds, u8 p);
 void ksz_ptp_irq_free(struct dsa_switch *ds, u8 p);
 
@@ -64,6 +66,13 @@ static inline int ksz_ptp_clock_register(struct dsa_switch *ds)
 }
 
 static inline void ksz_ptp_clock_unregister(struct dsa_switch *ds) { }
+
+static inline int ksz8463_ptp_irq_setup(struct dsa_switch *ds)
+{
+	return 0;
+}
+
+static inline void ksz8463_ptp_irq_free(struct dsa_switch *ds) {}
 
 static inline int ksz_ptp_irq_setup(struct dsa_switch *ds, u8 p)
 {
