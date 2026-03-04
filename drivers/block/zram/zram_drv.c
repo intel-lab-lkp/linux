@@ -2395,6 +2395,7 @@ next:
 static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 			   u64 *num_recomp_pages, u32 threshold, u32 prio,
 			   u32 prio_max)
+	__no_context_analysis /* too complex for Clang */
 {
 	struct zcomp_strm *zstrm = NULL;
 	unsigned long handle_old;
