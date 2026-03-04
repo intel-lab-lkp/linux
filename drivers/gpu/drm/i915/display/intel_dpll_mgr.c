@@ -5117,8 +5117,9 @@ verify_single_dpll_state(struct intel_display *display,
 				 pll->info->name, pipe_mask, pll->state.pipe_mask);
 
 	if (INTEL_DISPLAY_STATE_WARN(display,
-				     pll->on && memcmp(&pll->state.hw_state, &dpll_hw_state,
-						       sizeof(dpll_hw_state)),
+				     pll->on && HAS_LT_PHY(display) ?
+				     !intel_lt_phy_pll_compare_hw_state(&pll->state.hw_state.ltpll, &dpll_hw_state.ltpll) :
+				     memcmp(&pll->state.hw_state, &dpll_hw_state, sizeof(dpll_hw_state)),
 				     "%s: pll hw state mismatch\n",
 				     pll->info->name)) {
 		struct drm_printer p = drm_dbg_printer(display->drm, DRM_UT_KMS, NULL);
