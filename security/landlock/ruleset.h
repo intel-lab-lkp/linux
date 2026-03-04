@@ -37,6 +37,14 @@ struct landlock_layer {
 	access_mask_t access;
 };
 
+/*
+ * Flexible array of Landlock layers, used for pointer-to-array function
+ * parameters that reference either a stack-allocated layer array or a rule's
+ * flexible array member (struct landlock_rule.layers).  This typedef avoids
+ * the complex (*const name)[] syntax that the kernel-doc parser cannot handle.
+ */
+typedef struct landlock_layer landlock_layer_array_t[];
+
 /**
  * union landlock_key - Key of a ruleset's red-black tree
  */
