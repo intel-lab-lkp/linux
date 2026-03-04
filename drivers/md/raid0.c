@@ -576,15 +576,10 @@ static void raid0_map_submit_bio(struct mddev *mddev, struct bio *bio)
 		return;
 	}
 
-	if (unlikely(is_rdev_broken(tmp_dev))) {
-		bio_io_error(bio);
-		md_error(mddev, tmp_dev);
-		return;
-	}
-
 	bio_set_dev(bio, tmp_dev->bdev);
 	bio->bi_iter.bi_sector = sector + zone->dev_start +
 		tmp_dev->data_offset;
+	md_set_clone_rdev((struct md_io_clone *)bio->bi_private, tmp_dev);
 	mddev_trace_remap(mddev, bio, bio_sector);
 	mddev_check_write_zeroes(mddev, bio);
 	submit_bio_noacct(bio);
