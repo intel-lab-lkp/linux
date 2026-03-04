@@ -1848,8 +1848,8 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 	/* a new mm has just been created */
 	retval = arch_dup_mmap(oldmm, mm);
 loop_out:
-	vma_iter_free(&vmi);
 	if (!retval) {
+		vma_iter_free(&vmi);
 		mt_set_in_rcu(vmi.mas.tree);
 		ksm_fork(mm, oldmm);
 		khugepaged_fork(mm, oldmm);
@@ -1893,6 +1893,7 @@ loop_out:
 			charge = tear_down_vmas(mm, &vmi, tmp, end);
 			vm_unacct_memory(charge);
 		}
+		vma_iter_free(&vmi);
 		__mt_destroy(&mm->mm_mt);
 		/*
 		 * The mm_struct is going to exit, but the locks will be dropped
