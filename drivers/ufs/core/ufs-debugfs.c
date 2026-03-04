@@ -383,9 +383,53 @@ static const struct file_operations ufs_tx_eqtr_record_fops = {
 	.release	= single_release,
 };
 
+static ssize_t ufs_retrain_tx_eq_write(struct file *file,
+				       const char __user *buf,
+				       size_t count, loff_t *ppos)
+{
+	struct ufs_hba *hba = hba_from_file(file);
+	struct ufs_pa_layer_attr *pwr_info = &hba->max_pwr_info.info;
+	u32 gear = (u32)(uintptr_t)file->f_inode->i_private;
+	int val, ret;
+
+	ret = kstrtoint_from_user(buf, count, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val != 1)
+		return -EINVAL;
+
+	if (hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL)
+		return -EBUSY;
+
+	if (!hba->ufs_device_wlun)
+		return -ENODEV;
+
+	if (!hba->max_pwr_info.is_valid || gear > pwr_info->gear_tx)
+		return -EINVAL;
+
+	ret = ufs_debugfs_get_user_access(hba);
+	if (ret)
+		return ret;
+	ufshcd_hold(hba);
+	ret = ufshcd_retrain_tx_eq(hba, gear);
+	ufshcd_release(hba);
+	ufs_debugfs_put_user_access(hba);
+
+	return ret ? ret : count;
+}
+
+static const struct file_operations ufs_retrain_tx_eq_fops = {
+	.owner		= THIS_MODULE,
+	.open		= simple_open,
+	.write		= ufs_retrain_tx_eq_write,
+	.llseek		= noop_llseek,
+};
+
 static const struct ufs_debugfs_attr ufs_tx_eqtr_attrs[] = {
 	{ "host_tx_eqtr_record", 0400, &ufs_tx_eqtr_record_fops },
 	{ "device_tx_eqtr_record", 0400, &ufs_tx_eqtr_record_fops },
+	{ "retrain_tx_eq", 0400, &ufs_retrain_tx_eq_fops },
 	{ }
 };
 

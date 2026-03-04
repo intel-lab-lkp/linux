@@ -1102,6 +1102,7 @@ out:
  * ufshcd_config_tx_eq_settings - Configure TX Equalization settings
  * @hba: per adapter instance
  * @pwr_mode: target power mode containing gear and rate information
+ * @force_tx_eqtr: do a TX EQTR regardless
  *
  * This function finds and sets the TX Equalization settings for the given
  * target power mode.
@@ -1109,7 +1110,8 @@ out:
  * Returns 0 on success, error code otherwise
  */
 int ufshcd_config_tx_eq_settings(struct ufs_hba *hba,
-				 struct ufs_pa_layer_attr *pwr_mode)
+				 struct ufs_pa_layer_attr *pwr_mode,
+				 bool force_tx_eqtr)
 {
 	struct ufshcd_tx_eq_params *params;
 	u32 gear, rate;
@@ -1144,7 +1146,7 @@ int ufshcd_config_tx_eq_settings(struct ufs_hba *hba,
 	if (gear < UFS_HS_G4)
 		goto apply_tx_eq_settings;
 
-	if (!params->is_valid) {
+	if (!params->is_valid || force_tx_eqtr) {
 		int ret;
 
 		ret = ufshcd_tx_eqtr(hba, params, pwr_mode);
@@ -1207,4 +1209,62 @@ void ufshcd_apply_valid_tx_eq_settings(struct ufs_hba *hba)
 			}
 		}
 	}
+}
+
+int ufshcd_retrain_tx_eq(struct ufs_hba *hba, u32 gear)
+{
+	struct ufs_pa_layer_attr new_pwr_info, final_params = { 0 };
+	int ret;
+
+	if (!ufshcd_is_tx_eq_supported(hba) || !use_adaptive_txeq)
+		return -EOPNOTSUPP;
+
+	if (gear < adaptive_txeq_gear)
+		return -ETOOSMALL;
+
+	ret = ufshcd_pause_command_processing(hba, 1 * USEC_PER_SEC);
+	if (ret)
+		return ret;
+
+	ufshcd_hold(hba);
+
+	/* scale up clocks to max frequency before TX EQTR */
+	if (ufshcd_is_clkscaling_supported(hba))
+		ufshcd_scale_clks(hba, ULONG_MAX, true);
+
+	new_pwr_info = hba->pwr_info;
+	new_pwr_info.gear_tx = gear;
+	new_pwr_info.gear_rx = gear;
+
+	ret = ufshcd_vops_negotiate_pwr_mode(hba, &new_pwr_info, &final_params);
+	if (ret)
+		memcpy(&final_params, &new_pwr_info, sizeof(final_params));
+
+	if (final_params.gear_tx != gear) {
+		dev_err(hba->dev, "%s: Negotiated Gear (%u) does not match target Gear (%u)\n",
+			__func__, final_params.gear_tx, gear);
+		goto out;
+	}
+
+	ret = ufshcd_config_tx_eq_settings(hba, &final_params, true);
+	if (ret) {
+		dev_err(hba->dev, "%s: Failed to configure TX Equalization settings for HS-G%u, Rate-%s: %d\n",
+			__func__, final_params.gear_tx,
+			UFS_HS_RATE_STRING(final_params.hs_rate), ret);
+		goto out;
+	}
+
+	/* Change Power Mode to apply the new TX EQ settings */
+	ret = ufshcd_change_power_mode(hba, &final_params,
+				       UFSHCD_PMC_POLICY_FORCE);
+	if (ret)
+		dev_err(hba->dev, "%s: Failed to change Power Mode to HS-G%u, Rate-%s: %d\n",
+			__func__, final_params.gear_tx,
+			UFS_HS_RATE_STRING(final_params.hs_rate), ret);
+
+out:
+	ufshcd_resume_command_processing(hba);
+	ufshcd_release(hba);
+
+	return ret;
 }
