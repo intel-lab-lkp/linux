@@ -171,6 +171,9 @@ int kvm_riscv_gstage_map_page(struct kvm_gstage *gstage,
 {
 	pgprot_t prot;
 	int ret;
+	pte_t *ptep;
+	u32 ptep_level;
+	bool found_leaf;
 
 	out_map->addr = gpa;
 	out_map->level = 0;
@@ -178,6 +181,12 @@ int kvm_riscv_gstage_map_page(struct kvm_gstage *gstage,
 	ret = gstage_page_size_to_level(page_size, &out_map->level);
 	if (ret)
 		return ret;
+
+	found_leaf = kvm_riscv_gstage_get_leaf(gstage, gpa, &ptep, &ptep_level);
+	if (found_leaf && ptep_level > out_map->level) {
+		kvm_riscv_gstage_split_huge(gstage, pcache, gpa,
+					    out_map->level, true);
+	}
 
 	/*
 	 * A RISC-V implementation can choose to either:
