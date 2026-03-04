@@ -202,14 +202,32 @@ static int mba_run_test(const struct resctrl_test *test, const struct user_param
 
 static bool mba_feature_check(const struct resctrl_test *test)
 {
-	return test_resource_feature_check(test) &&
-	       resctrl_mon_feature_exists("L3_MON", "mbm_local_bytes");
+	unsigned int vendor = get_vendor();
+	bool feature_exists = false;
+
+	switch (vendor) {
+	case ARCH_INTEL:
+		feature_exists = test_resource_feature_check(test) &&
+					resctrl_mon_feature_exists("L3_MON", "mbm_local_bytes");
+		break;
+
+	case ARCH_HISILICON:
+		feature_exists = test_resource_feature_check(test) &&
+					resctrl_mon_feature_exists("MB_MON", "mbm_total_bytes");
+		break;
+
+	default:
+		break;
+	}
+
+	return feature_exists;
+
 }
 
 struct resctrl_test mba_test = {
 	.name = "MBA",
 	.resource = "MB",
-	.vendor_specific = ARCH_INTEL,
+	.vendor_specific = ARCH_INTEL | ARCH_HISILICON,
 	.feature_check = mba_feature_check,
 	.run_test = mba_run_test,
 	.cleanup = mba_test_cleanup,
