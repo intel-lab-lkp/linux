@@ -7855,6 +7855,11 @@ enum nl80211_peer_measurement_peer_attrs {
  *	%NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE and
  *	%NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE is considered to enforce the
  *	max peers supported in case the request is of peer-to-peer PD type
+ * @NL80211_PMSR_ATTR_PD_RANDOMIZE_MAC_ADDR_CONNECTED: flag attribute in
+ *	capability indicating that MAC address randomization is supported for
+ *	PD request in connected state. if capable the MAC address used for
+ *	discovery, authentication will be used for ranging too. only valid if
+ *	%NL80211_PMSR_ATTR_PD_SUPPORT is set
  *
  * @NUM_NL80211_PMSR_ATTR: internal
  * @NL80211_PMSR_ATTR_MAX: highest attribute number
@@ -7871,6 +7876,7 @@ enum nl80211_peer_measurement_attrs {
 	NL80211_PMSR_ATTR_PD_CONCURRENT_ISTA_RSTA_SUPPORT,
 	NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE,
 	NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE,
+	NL80211_PMSR_ATTR_PD_RANDOMIZE_MAC_ADDR_CONNECTED,
 
 	/* keep last */
 	NUM_NL80211_PMSR_ATTR,

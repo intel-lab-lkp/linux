@@ -5794,6 +5794,10 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type);
  *	multi-peer request this will indicate if the device can act
  *	simultaneously as initiator and a responder. Only valid if @pd_support
  *	is set.
+ * @pd_randomize_mac_addr_conn: flag attribute in capability indicating that MAC
+ *	address randomization is supported in connected state for PD request.
+ *	if capable the MAC address used for discovery, authentication will be
+ *	used for ranging too. only valid if @pd_support is set
  * @pd_max_peer_ista_role: Maximum number of peers allowed for a device
  *	operating in the ISTA role under proximity detection. Only valid if
  *	@pd_support is set. Sum of both @pd_max_peer_ista_role and
@@ -5861,7 +5865,8 @@ struct cfg80211_pmsr_capabilities {
 	u8 report_ap_tsf:1,
 	   randomize_mac_addr:1,
 	   pd_support:1,
-	   pd_concurrent_ista_rsta_support:1;
+	   pd_concurrent_ista_rsta_support:1,
+	   pd_randomize_mac_addr_conn:1;
 	u32 pd_max_peer_ista_role;
 	u32 pd_max_peer_rsta_role;
 
