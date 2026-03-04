@@ -511,6 +511,13 @@ xfsaild_push(
 			goto next_item;
 
 		/*
+		 * The log item may be freed after the push if the AIL lock is
+		 * temporarily dropped and the RCU grace period expires,
+		 * so trace it before pushing.
+		 */
+		trace_xfs_ail_push(lip);
+
+		/*
 		 * Note that iop_push may unlock and reacquire the AIL lock.  We
 		 * rely on the AIL cursor implementation to be able to deal with
 		 * the dropped lock.
@@ -519,7 +526,6 @@ xfsaild_push(
 		switch (lock_result) {
 		case XFS_ITEM_SUCCESS:
 			XFS_STATS_INC(mp, xs_push_ail_success);
-			trace_xfs_ail_push(lip);
 
 			ailp->ail_last_pushed_lsn = lsn;
 			break;
