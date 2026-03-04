@@ -125,6 +125,7 @@ static const char * const iio_modifier_names[] = {
 	[IIO_MOD_LIGHT_UVB] = "uvb",
 	[IIO_MOD_LIGHT_DUV] = "duv",
 	[IIO_MOD_QUATERNION] = "quaternion",
+	[IIO_MOD_PARTIAL_QUATERNION] = "partial_quaternion",
 	[IIO_MOD_TEMP_AMBIENT] = "ambient",
 	[IIO_MOD_TEMP_OBJECT] = "object",
 	[IIO_MOD_NORTH_MAGN] = "from_north_magnetic",
