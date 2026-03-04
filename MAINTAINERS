@@ -25122,6 +25122,13 @@ L:	linux-tegra@vger.kernel.org
 S:	Maintained
 F:	drivers/staging/nvec/
 
+STAGING - REALTEK WIRELESS DRIVER (rtl8723bs)
+M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+R:	Ethan Tidmore <ethantidmore06@gmail.com>
+L:	linux-staging@lists.linux.dev
+S:	Maintained
+F:	drivers/staging/rtl8723bs/
+
 STAGING - SEPS525 LCD CONTROLLER DRIVERS
 M:	Michael Hennerich <michael.hennerich@analog.com>
 L:	linux-fbdev@vger.kernel.org
