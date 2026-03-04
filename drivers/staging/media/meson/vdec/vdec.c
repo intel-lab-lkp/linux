@@ -914,6 +914,7 @@ static int vdec_open(struct file *file)
 	return 0;
 
 err_m2m_release:
+	v4l2_ctrl_handler_free(&sess->ctrl_handler);
 	v4l2_m2m_release(sess->m2m_dev);
 err_free_sess:
 	kfree(sess);
@@ -926,6 +927,7 @@ static int vdec_close(struct file *file)
 
 	v4l2_m2m_ctx_release(sess->m2m_ctx);
 	v4l2_m2m_release(sess->m2m_dev);
+	v4l2_ctrl_handler_free(&sess->ctrl_handler);
 	v4l2_fh_del(&sess->fh, file);
 	v4l2_fh_exit(&sess->fh);
 
