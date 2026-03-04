@@ -702,7 +702,7 @@ static int xhci_ss_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, USB_SPEED_SUPER, s);
+	ret = xhci_port_bw_show(xhci, DEV_PORT_SPEED(XDEV_SS), s);
 	return ret;
 }
 
@@ -711,7 +711,7 @@ static int xhci_hs_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, USB_SPEED_HIGH, s);
+	ret = xhci_port_bw_show(xhci, DEV_PORT_SPEED(XDEV_HS), s);
 	return ret;
 }
 
@@ -720,7 +720,7 @@ static int xhci_fs_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, USB_SPEED_FULL, s);
+	ret = xhci_port_bw_show(xhci, DEV_PORT_SPEED(XDEV_FS), s);
 	return ret;
 }
 
