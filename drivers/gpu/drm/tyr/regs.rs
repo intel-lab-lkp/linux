@@ -81,7 +81,7 @@ pub(crate) const L2_READY_HI: Register<0x164> = Register;
 pub(crate) const L2_PWRON_LO: Register<0x1a0> = Register;
 pub(crate) const L2_PWRON_HI: Register<0x1a4> = Register;
 pub(crate) const L2_PWRTRANS_LO: Register<0x220> = Register;
-pub(crate) const L2_PWRTRANS_HI: Register<0x204> = Register;
+pub(crate) const L2_PWRTRANS_HI: Register<0x224> = Register;
 pub(crate) const L2_PWRACTIVE_LO: Register<0x260> = Register;
 pub(crate) const L2_PWRACTIVE_HI: Register<0x264> = Register;
 
