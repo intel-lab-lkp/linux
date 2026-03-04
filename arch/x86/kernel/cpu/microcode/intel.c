@@ -133,7 +133,7 @@ static u32 intel_cpuid_vfm(void)
 	return IFM(fam, model);
 }
 
-static u32 intel_get_platform_id(void)
+u32 intel_get_platform_id(void)
 {
 	unsigned int val[2];
 
