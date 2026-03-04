@@ -866,6 +866,8 @@ our %deprecated_apis = (
 	"idr_init_base"				=> "xa_init_flags",
 	"rcu_read_lock_trace"			=> "rcu_read_lock_tasks_trace",
 	"rcu_read_unlock_trace"			=> "rcu_read_unlock_tasks_trace",
+	"pcim_iomap_regions"			=> "pcim_iomap_region",
+	"pcim_iomap_table"			=> "pcim_iomap",
 );
 
 #Create a search pattern for all these strings to speed up a loop below
