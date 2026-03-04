@@ -407,7 +407,7 @@ impl TableBuilder {
 ///         .set_fast_switch_possible(true)
 ///         .set_transition_latency_ns(DEFAULT_TRANSITION_LATENCY_NS);
 ///
-///     pr_info!("The policy details are: {:?}\n", (policy.cpu(), policy.cur()));
+///     pr_info!("The policy details are: cpu={:?}, cur={:?}\n", policy.cpu(), policy.cur());
 /// }
 /// ```
 #[repr(transparent)]
