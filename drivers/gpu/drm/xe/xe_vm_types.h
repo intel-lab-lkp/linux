@@ -365,6 +365,8 @@ struct xe_vm {
 	bool batch_invalidate_tlb;
 	/** @xef: Xe file handle for tracking this VM's drm client */
 	struct xe_file *xef;
+	/** @id: The id of the VM in the VM table of @xef. */
+	u32 id;
 };
 
 /** struct xe_vma_op_map - VMA map operation */

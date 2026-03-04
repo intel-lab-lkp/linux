@@ -83,6 +83,7 @@ extern "C" {
  *  - &DRM_IOCTL_XE_OBSERVATION
  *  - &DRM_IOCTL_XE_MADVISE
  *  - &DRM_IOCTL_XE_VM_QUERY_MEM_RANGE_ATTRS
+ *  - &DRM_IOCTL_XE_WATCH_QUEUE
  */
 
 /*
@@ -107,6 +108,7 @@ extern "C" {
 #define DRM_XE_MADVISE			0x0c
 #define DRM_XE_VM_QUERY_MEM_RANGE_ATTRS	0x0d
 #define DRM_XE_EXEC_QUEUE_SET_PROPERTY	0x0e
+#define DRM_XE_WATCH_QUEUE		0x0f
 
 /* Must be kept compact -- no holes */
 
@@ -125,6 +127,7 @@ extern "C" {
 #define DRM_IOCTL_XE_MADVISE			DRM_IOW(DRM_COMMAND_BASE + DRM_XE_MADVISE, struct drm_xe_madvise)
 #define DRM_IOCTL_XE_VM_QUERY_MEM_RANGE_ATTRS	DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_QUERY_MEM_RANGE_ATTRS, struct drm_xe_vm_query_mem_range_attr)
 #define DRM_IOCTL_XE_EXEC_QUEUE_SET_PROPERTY	DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC_QUEUE_SET_PROPERTY, struct drm_xe_exec_queue_set_property)
+#define DRM_IOCTL_XE_WATCH_QUEUE		DRM_IOW(DRM_COMMAND_BASE + DRM_XE_WATCH_QUEUE, struct drm_xe_watch_queue)
 
 /**
  * DOC: Xe IOCTL Extensions
@@ -2355,6 +2358,49 @@ struct drm_xe_exec_queue_set_property {
 
 	/** @reserved: Reserved */
 	__u64 reserved[2];
+};
+
+/**
+ * DOC: DRM_XE_WATCH_QUEUE
+ *
+ * Subscribe a notification pipe to receive device events for the calling
+ * process's DRM file handle.  Events are scoped to the subscribing file:
+ * only events that belong to that file (for example, VM error on a VM created
+ * through the same file) are delivered, preventing information leaks between
+ * processes sharing the same GPU device.
+ *
+ * The pipe must first be opened with O_NOTIFICATION_PIPE (i.e. O_EXCL passed
+ * to pipe2()) and sized via %IOC_WATCH_QUEUE_SET_SIZE before subscribing.
+ *
+ * Events are delivered as notification records read from the pipe.  The
+ * @watch_id field is embedded in the notification info field and can be used
+ * to distinguish multiple watches sharing a pipe.
+ *
+ * Currently defined event subtypes:
+ *  - %DRM_XE_WATCH_EVENT_VM_ERR - a VM owned by this file has encountered an error
+ */
+
+/**
+ * struct drm_xe_watch_queue - subscribe to device event notifications
+ *
+ * Used with %DRM_IOCTL_XE_WATCH_QUEUE.  Notifications are scoped to the
+ * DRM file handle used to issue this IOCTL.
+ */
+struct drm_xe_watch_queue {
+	/** @fd: file descriptor of pipe opened with O_NOTIFICATION_PIPE */
+	__u32 fd;
+
+	/**
+	 * @watch_id: identifier (0–255) embedded in the watch notification
+	 * info field; allows multiplexing several watches on one pipe
+	 */
+	__u32 watch_id;
+
+	/** @flags: must be zero */
+	__u32 flags;
+
+	/** @pad: reserved, must be zero */
+	__u32 pad;
 };
 
 #if defined(__cplusplus)

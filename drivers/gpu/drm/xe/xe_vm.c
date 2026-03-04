@@ -13,6 +13,7 @@
 #include <drm/drm_print.h>
 #include <drm/ttm/ttm_tt.h>
 #include <uapi/drm/xe_drm.h>
+#include <uapi/drm/xe_drm_events.h>
 #include <linux/ascii85.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
@@ -40,6 +41,7 @@
 #include "xe_tlb_inval.h"
 #include "xe_trace_bo.h"
 #include "xe_wa.h"
+#include "xe_watch_queue.h"
 
 static struct drm_gem_object *xe_vm_obj(struct xe_vm *vm)
 {
@@ -567,13 +569,13 @@ out_unlock_outer:
 	}
 
 	if (err) {
-		drm_warn(&vm->xe->drm, "VM worker error: %d\n", err);
+		xe_watch_queue_post_vm_err_event(vm->xef, vm->id, err);
+		drm_dbg(&vm->xe->drm, "VM worker error: %d\n", err);
 		xe_vm_kill(vm, true);
 	}
 	up_write(&vm->lock);
 
 	free_preempt_fences(&preempt_fences);
-
 	trace_xe_vm_rebind_worker_exit(vm);
 }
 
@@ -2008,6 +2010,7 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
 	if (err)
 		goto err_close_and_put;
 
+	vm->id = id;
 	args->vm_id = id;
 
 	return 0;

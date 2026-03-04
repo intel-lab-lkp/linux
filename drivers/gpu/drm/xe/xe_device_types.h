@@ -11,6 +11,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
 #include <drm/ttm/ttm_device.h>
+#include <linux/watch_queue.h>
 
 #include "xe_devcoredump_types.h"
 #include "xe_heci_gsc.h"
@@ -631,6 +632,11 @@ struct xe_file {
 
 	/** @refcount: ref count of this xe file */
 	struct kref refcount;
+
+#ifdef CONFIG_WATCH_QUEUE
+	/** @watch_list: per-file notification source for device events */
+	struct watch_list watch_list;
+#endif
 };
 
 #endif
