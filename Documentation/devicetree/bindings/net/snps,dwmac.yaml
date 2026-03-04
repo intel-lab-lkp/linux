@@ -202,11 +202,11 @@ properties:
         * snps,xit_frm, unlock on WoL
         * snps,wr_osr_lmt, max write outstanding req. limit
         * snps,rd_osr_lmt, max read outstanding req. limit
-        * snps,kbbe, do not cross 1KiB boundary.
+        * snps,kbbe, do not cross 1KiB boundary (not implemented)
         * snps,blen, this is a vector of supported burst length.
         * snps,fb, fixed-burst
-        * snps,mb, mixed-burst
-        * snps,rb, rebuild INCRx Burst
+        * snps,mb, mixed-burst (not implemented)
+        * snps,rb, rebuild INCRx Burst (not implemented)
 
   snps,mtl-rx-config:
     $ref: /schemas/types.yaml#/definitions/phandle
