@@ -186,7 +186,7 @@ static int usb_create_newid_files(struct usb_driver *usb_drv)
 	int error = 0;
 
 	if (usb_drv->no_dynamic_id)
-		goto exit;
+		return error;
 
 	if (usb_drv->probe != NULL) {
 		error = driver_create_file(&usb_drv->driver,
@@ -199,8 +199,6 @@ static int usb_create_newid_files(struct usb_driver *usb_drv)
 						&driver_attr_new_id);
 		}
 	}
-exit:
-	return error;
 }
 
 static void usb_remove_newid_files(struct usb_driver *usb_drv)
