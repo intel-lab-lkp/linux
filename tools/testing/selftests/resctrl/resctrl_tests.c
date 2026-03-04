@@ -23,39 +23,77 @@ static struct resctrl_test *resctrl_tests[] = {
 	&l2_noncont_cat_test,
 };
 
+#define VENDOR_ENTRY struct {\
+	unsigned int vendor_id; \
+	void *arg; \
+	}
+
+#define SEQ_ENTRY struct {\
+	char *format; \
+	VENDOR_ENTRY *vendor; \
+	}
+
+#define DETECTION_ENTRY struct {\
+	char *pathname; \
+	SEQ_ENTRY *seq; \
+	}
+
+static DETECTION_ENTRY vendor_detection[] = {
+	{
+		.pathname = "/proc/cpuinfo",
+		.seq = (SEQ_ENTRY[]) {
+			{
+				.format = "vendor_id\t: %s\n",
+				.vendor = (VENDOR_ENTRY[]) {
+					{ .vendor_id = ARCH_INTEL,	.arg = "GenuineIntel" },
+					{ .vendor_id = ARCH_AMD,	.arg = "AuthenticAMD" },
+					{ .vendor_id = ARCH_HYGON,	.arg = "HygonGenuine" },
+					{ .vendor_id = 0,	.arg = NULL }
+				}
+			}
+		}
+	},
+	{ .pathname = NULL, .seq = NULL}
+};
+
 static unsigned int detect_vendor(void)
 {
 	static unsigned int vendor_id;
 	static bool initialized;
-	char *s = NULL;
+	char s[64];
 	FILE *inf;
 	char *res;
 
 	if (initialized)
 		return vendor_id;
 
-	inf = fopen("/proc/cpuinfo", "r");
-	if (!inf) {
-		vendor_id = 0;
-		initialized = true;
-		return vendor_id;
+	for (DETECTION_ENTRY *dentry = &vendor_detection[0];
+		 dentry && dentry->pathname;
+		 dentry++) {
+		inf = fopen(dentry->pathname, "r");
+		if (!inf)
+			continue;
+		for (SEQ_ENTRY *sentry = &dentry->seq[0];
+			 sentry && sentry->format;
+			 sentry++) {
+			for (VENDOR_ENTRY *ventry = &sentry->vendor[0];
+				 ventry && ventry->vendor_id;
+				 ventry++) {
+				snprintf(s, sizeof(s), sentry->format, ventry->arg);
+				char *res = fgrep(inf, s);
+
+				if (res) {
+					free(res);
+					fclose(inf);
+					vendor_id = ventry->vendor_id;
+					goto out;
+				}
+				rewind(inf);
+			}
+		}
+		fclose(inf);
 	}
-
-	res = fgrep(inf, "vendor_id");
-
-	if (res)
-		s = strchr(res, ':');
-
-	if (s && !strcmp(s, ": GenuineIntel\n"))
-		vendor_id = ARCH_INTEL;
-	else if (s && !strcmp(s, ": AuthenticAMD\n"))
-		vendor_id = ARCH_AMD;
-	else if (s && !strcmp(s, ": HygonGenuine\n"))
-		vendor_id = ARCH_HYGON;
-
-	fclose(inf);
-	free(res);
-
+out:
 	initialized = true;
 	return vendor_id;
 }
