@@ -8649,6 +8649,8 @@ __init int vmx_hardware_setup(void)
 		vt_x86_ops.set_hv_timer = NULL;
 		vt_x86_ops.cancel_hv_timer = NULL;
 	}
+	WARN_ON(enable_preemption_timer && vt_x86_ops.set_hv_timer == NULL);
+	WARN_ON(enable_preemption_timer && vt_x86_ops.cancel_hv_timer == NULL);
 
 	kvm_caps.supported_mce_cap |= MCG_LMCE_P;
 	kvm_caps.supported_mce_cap |= MCG_CMCI_P;
@@ -8719,6 +8721,22 @@ void vmx_exit(void)
 
 	kvm_x86_vendor_exit();
 }
+
+#ifndef MODULE
+static int __init vmx_ops_early_init(void)
+{
+	if (!kvm_is_vmx_supported())
+		return -EOPNOTSUPP;
+
+	if (!enable_preemption_timer) {
+		vt_x86_ops.set_hv_timer = NULL;
+		vt_x86_ops.cancel_hv_timer = NULL;
+	}
+
+	return kvm_x86_vendor_init_early(&vt_init_ops);
+}
+early_initcall(vmx_ops_early_init);
+#endif
 
 int __init vmx_init(void)
 {

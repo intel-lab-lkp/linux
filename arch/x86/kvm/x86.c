@@ -10013,6 +10013,22 @@ static void kvm_x86_check_cpu_compat(void *ret)
 	*(int *)ret = kvm_x86_check_processor_compatibility();
 }
 
+int kvm_x86_vendor_init_early(struct kvm_x86_init_ops *ops)
+{
+	guard(mutex)(&vendor_module_lock);
+
+	if (kvm_x86_ops.enable_virtualization_cpu) {
+		pr_err("already loaded vendor module '%s'\n", kvm_x86_ops.name);
+		return -EEXIST;
+	}
+
+	kvm_ops_update(ops);
+	kvm_register_perf_callbacks(ops->handle_intel_pt_intr);
+
+	return 0;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_x86_vendor_init_early);
+
 int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 {
 	u64 host_pat;
@@ -10020,7 +10036,8 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 
 	guard(mutex)(&vendor_module_lock);
 
-	if (kvm_x86_ops.enable_virtualization_cpu) {
+	if (kvm_x86_ops.enable_virtualization_cpu &&
+	    kvm_x86_ops.enable_virtualization_cpu != ops->runtime_ops->enable_virtualization_cpu) {
 		pr_err("already loaded vendor module '%s'\n", kvm_x86_ops.name);
 		return -EEXIST;
 	}

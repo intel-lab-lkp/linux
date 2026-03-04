@@ -7386,7 +7386,8 @@ DEFINE_STATIC_CALL_RET0(__perf_guest_handle_intel_pt_intr, *perf_guest_cbs->hand
 
 void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 {
-	if (WARN_ON_ONCE(rcu_access_pointer(perf_guest_cbs)))
+	if (WARN_ON_ONCE(rcu_access_pointer(perf_guest_cbs) &&
+		rcu_access_pointer(perf_guest_cbs) != cbs))
 		return;
 
 	rcu_assign_pointer(perf_guest_cbs, cbs);
@@ -7397,6 +7398,9 @@ void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 	if (cbs->handle_intel_pt_intr)
 		static_call_update(__perf_guest_handle_intel_pt_intr,
 				   cbs->handle_intel_pt_intr);
+	else
+		static_call_update(__perf_guest_handle_intel_pt_intr,
+				   (void *)__static_call_return0);
 }
 EXPORT_SYMBOL_GPL(perf_register_guest_info_callbacks);
 

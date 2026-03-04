@@ -5473,6 +5473,17 @@ static void __svm_exit(void)
 	kvm_x86_vendor_exit();
 }
 
+#ifndef MODULE
+static int __init svm_ops_early_init(void)
+{
+	if (!kvm_is_svm_supported())
+		return -EOPNOTSUPP;
+
+	return kvm_x86_vendor_init_early(&svm_init_ops);
+}
+early_initcall(svm_ops_early_init);
+#endif
+
 static int __init svm_init(void)
 {
 	int r;
