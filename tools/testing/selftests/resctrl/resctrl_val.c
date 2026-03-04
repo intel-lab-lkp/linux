@@ -11,7 +11,6 @@
 #include "resctrl.h"
 
 #define DYN_PMU_PATH		"/sys/bus/event_source/devices"
-#define MAX_IMCS		20
 #define MAX_TOKENS		5
 
 #define CON_MBM_LOCAL_BYTES_PATH		\
@@ -31,6 +30,7 @@ struct imc_counter_config {
 	struct perf_event_attr pe;
 	struct membw_read_format return_value;
 	int fd;
+	struct list_head	imc_list;
 };
 
 struct membw_read_config {
@@ -38,7 +38,10 @@ struct membw_read_config {
 	const char *name;
 	const char *event;
 	double scale;
+	int (*num_of)(void);
 };
+
+static int num_of_imcs(void);
 
 static struct membw_read_config membw_read_configs[] = {
 	{
@@ -46,6 +49,7 @@ static struct membw_read_config membw_read_configs[] = {
 		.name = "uncore_imc",
 		.event = "events/cas_count_read",
 		.scale = 64.0 / MB,
+		.num_of = num_of_imcs,
 	},
 	{
 		.vendor_id = NULL
@@ -53,37 +57,38 @@ static struct membw_read_config membw_read_configs[] = {
 };
 
 static char mbm_total_path[1024];
-static int imcs;
-static struct imc_counter_config imc_counters_config[MAX_IMCS];
+LIST_HEAD(imc_counters_configs);
 static const struct resctrl_test *current_test;
 static struct membw_read_config *current_config;
 
-static void read_mem_bw_initialize_perf_event_attr(int i)
+static void read_mem_bw_initialize_perf_event_attr(struct imc_counter_config *imc_counters_config)
 {
-	memset(&imc_counters_config[i].pe, 0,
+	memset(&imc_counters_config->pe, 0,
 	       sizeof(struct perf_event_attr));
-	imc_counters_config[i].pe.type = imc_counters_config[i].type;
-	imc_counters_config[i].pe.size = sizeof(struct perf_event_attr);
-	imc_counters_config[i].pe.disabled = 1;
-	imc_counters_config[i].pe.inherit = 1;
-	imc_counters_config[i].pe.exclude_guest = 0;
-	imc_counters_config[i].pe.config =
-		imc_counters_config[i].umask << 8 |
-		imc_counters_config[i].event;
-	imc_counters_config[i].pe.sample_type = PERF_SAMPLE_IDENTIFIER;
-	imc_counters_config[i].pe.read_format =
+	imc_counters_config->pe.type = imc_counters_config->type;
+	imc_counters_config->pe.size = sizeof(struct perf_event_attr);
+	imc_counters_config->pe.disabled = 1;
+	imc_counters_config->pe.inherit = 1;
+	imc_counters_config->pe.exclude_guest = 0;
+	imc_counters_config->pe.config =
+		imc_counters_config->umask << 8 |
+		imc_counters_config->event;
+	imc_counters_config->pe.sample_type = PERF_SAMPLE_IDENTIFIER;
+	imc_counters_config->pe.read_format =
 		PERF_FORMAT_TOTAL_TIME_ENABLED | PERF_FORMAT_TOTAL_TIME_RUNNING;
 }
 
-static void read_mem_bw_ioctl_perf_event_ioc_reset_enable(int i)
+static void read_mem_bw_ioctl_perf_event_ioc_reset_enable(struct imc_counter_config
+	*imc_counters_config)
 {
-	ioctl(imc_counters_config[i].fd, PERF_EVENT_IOC_RESET, 0);
-	ioctl(imc_counters_config[i].fd, PERF_EVENT_IOC_ENABLE, 0);
+	ioctl(imc_counters_config->fd, PERF_EVENT_IOC_RESET, 0);
+	ioctl(imc_counters_config->fd, PERF_EVENT_IOC_ENABLE, 0);
 }
 
-static void read_mem_bw_ioctl_perf_event_ioc_disable(int i)
+static void read_mem_bw_ioctl_perf_event_ioc_disable(struct imc_counter_config
+	*imc_counters_config)
 {
-	ioctl(imc_counters_config[i].fd, PERF_EVENT_IOC_DISABLE, 0);
+	ioctl(imc_counters_config->fd, PERF_EVENT_IOC_DISABLE, 0);
 }
 
 /*
@@ -91,7 +96,8 @@ static void read_mem_bw_ioctl_perf_event_ioc_disable(int i)
  * @cas_count_cfg:	Config
  * @count:		iMC number
  */
-static void get_read_event_and_umask(char *cas_count_cfg, int count)
+static void get_read_event_and_umask(char *cas_count_cfg, struct imc_counter_config
+									*imc_counters_config)
 {
 	char *token[MAX_TOKENS];
 	int i = 0;
@@ -105,21 +111,21 @@ static void get_read_event_and_umask(char *cas_count_cfg, int count)
 		if (!token[i])
 			break;
 		if (strcmp(token[i], "event") == 0)
-			imc_counters_config[count].event = strtol(token[i + 1], NULL, 16);
+			imc_counters_config->event = strtol(token[i + 1], NULL, 16);
 		if (strcmp(token[i], "umask") == 0)
-			imc_counters_config[count].umask = strtol(token[i + 1], NULL, 16);
+			imc_counters_config->umask = strtol(token[i + 1], NULL, 16);
 	}
 }
 
-static int open_perf_read_event(int i, int cpu_no)
+static int open_perf_read_event(struct imc_counter_config *imc_counters_config, int cpu_no)
 {
-	imc_counters_config[i].fd =
-		perf_event_open(&imc_counters_config[i].pe, -1, cpu_no, -1,
+	imc_counters_config->fd =
+		perf_event_open(&imc_counters_config->pe, -1, cpu_no, -1,
 				PERF_FLAG_FD_CLOEXEC);
 
-	if (imc_counters_config[i].fd == -1) {
+	if (imc_counters_config->fd == -1) {
 		fprintf(stderr, "Error opening leader %llx\n",
-			imc_counters_config[i].pe.config);
+			imc_counters_config->pe.config);
 
 		return -1;
 	}
@@ -128,7 +134,7 @@ static int open_perf_read_event(int i, int cpu_no)
 }
 
 /* Get type and config of an iMC counter's read event. */
-static int read_from_imc_dir(char *imc_dir, int count)
+static int read_from_imc_dir(char *imc_dir, struct imc_counter_config *imc_counters_config)
 {
 	char cas_count_cfg[1024], imc_counter_cfg[1024], imc_counter_type[1024];
 	FILE *fp;
@@ -141,7 +147,7 @@ static int read_from_imc_dir(char *imc_dir, int count)
 
 		return -1;
 	}
-	if (fscanf(fp, "%u", &imc_counters_config[count].type) <= 0) {
+	if (fscanf(fp, "%u", &imc_counters_config->type) <= 0) {
 		ksft_perror("Could not get iMC type");
 		fclose(fp);
 
@@ -165,7 +171,7 @@ static int read_from_imc_dir(char *imc_dir, int count)
 	}
 	fclose(fp);
 
-	get_read_event_and_umask(cas_count_cfg, count);
+	get_read_event_and_umask(cas_count_cfg, imc_counters_config);
 
 	return 0;
 }
@@ -189,6 +195,7 @@ static int num_of_imcs(void)
 	struct dirent *ep;
 	int ret;
 	DIR *dp;
+	struct imc_counter_config *imc_counters_config;
 
 	dp = opendir(DYN_PMU_PATH);
 	if (dp) {
@@ -212,14 +219,17 @@ static int num_of_imcs(void)
 			 * first character is a numerical digit or not.
 			 */
 			if (temp[0] >= '0' && temp[0] <= '9') {
+				imc_counters_config = malloc(sizeof(struct imc_counter_config));
 				sprintf(imc_dir, "%s/%s/", DYN_PMU_PATH,
 					ep->d_name);
-				ret = read_from_imc_dir(imc_dir, count);
+				ret = read_from_imc_dir(imc_dir, imc_counters_config);
 				if (ret) {
+					free(imc_counters_config);
 					closedir(dp);
 
 					return ret;
 				}
+				list_add(&imc_counters_config->imc_list, &imc_counters_configs);
 				count++;
 			}
 		}
@@ -240,26 +250,40 @@ static int num_of_imcs(void)
 
 int initialize_read_mem_bw_imc(void)
 {
-	int imc;
+	struct imc_counter_config *imc_counters_config;
 
-	imcs = num_of_imcs();
+	int imcs = current_config->num_of();
 	if (imcs <= 0)
 		return imcs;
 
 	/* Initialize perf_event_attr structures for all iMC's */
-	for (imc = 0; imc < imcs; imc++)
-		read_mem_bw_initialize_perf_event_attr(imc);
+	list_for_each_entry(imc_counters_config, &imc_counters_configs, imc_list) {
+		read_mem_bw_initialize_perf_event_attr(imc_counters_config);
+	}
 
 	return 0;
 }
 
+void cleanup_read_mem_bw_imc(void)
+{
+	struct imc_counter_config *imc_counters_config;
+	struct imc_counter_config *next_imc_counters_config;
+
+	list_for_each_entry_safe(imc_counters_config, next_imc_counters_config,
+				 &imc_counters_configs, imc_list) {
+		list_del(&imc_counters_config->imc_list);
+		free(imc_counters_config);
+	}
+	list_del_init(&imc_counters_configs);
+}
+
 static void perf_close_imc_read_mem_bw(void)
 {
-	int mc;
+	struct imc_counter_config *imc_counters_config;
 
-	for (mc = 0; mc < imcs; mc++) {
-		if (imc_counters_config[mc].fd != -1)
-			close(imc_counters_config[mc].fd);
+	list_for_each_entry(imc_counters_config, &imc_counters_configs, imc_list) {
+		if (imc_counters_config->fd != -1)
+			close(imc_counters_config->fd);
 	}
 }
 
@@ -271,13 +295,14 @@ static void perf_close_imc_read_mem_bw(void)
  */
 static int perf_open_imc_read_mem_bw(int cpu_no)
 {
-	int imc, ret;
+	int ret;
+	struct imc_counter_config *imc_counters_config;
 
-	for (imc = 0; imc < imcs; imc++)
-		imc_counters_config[imc].fd = -1;
+	list_for_each_entry(imc_counters_config, &imc_counters_configs, imc_list)
+		imc_counters_config->fd = -1;
 
-	for (imc = 0; imc < imcs; imc++) {
-		ret = open_perf_read_event(imc, cpu_no);
+	list_for_each_entry(imc_counters_config, &imc_counters_configs, imc_list) {
+		ret = open_perf_read_event(imc_counters_config, cpu_no);
 		if (ret)
 			goto close_fds;
 	}
@@ -297,16 +322,16 @@ close_fds:
  */
 static void do_imc_read_mem_bw_test(void)
 {
-	int imc;
+	struct imc_counter_config *imc_counters_config;
 
-	for (imc = 0; imc < imcs; imc++)
-		read_mem_bw_ioctl_perf_event_ioc_reset_enable(imc);
+	list_for_each_entry(imc_counters_config, &imc_counters_configs, imc_list)
+		read_mem_bw_ioctl_perf_event_ioc_reset_enable(imc_counters_config);
 
 	sleep(1);
 
 	/* Stop counters after a second to get results. */
-	for (imc = 0; imc < imcs; imc++)
-		read_mem_bw_ioctl_perf_event_ioc_disable(imc);
+	list_for_each_entry(imc_counters_config, &imc_counters_configs, imc_list)
+		read_mem_bw_ioctl_perf_event_ioc_disable(imc_counters_config);
 }
 
 /*
@@ -321,17 +346,14 @@ static void do_imc_read_mem_bw_test(void)
 static int get_read_mem_bw_imc(float *bw_imc)
 {
 	float reads = 0, of_mul_read = 1;
-	int imc;
+	struct imc_counter_config *r;
 
 	/*
 	 * Log read event values from all iMC counters into
 	 * struct imc_counter_config.
 	 * Take overflow into consideration before calculating total bandwidth.
 	 */
-	for (imc = 0; imc < imcs; imc++) {
-		struct imc_counter_config *r =
-			&imc_counters_config[imc];
-
+	list_for_each_entry(r, &imc_counters_configs, imc_list) {
 		if (read(r->fd, &r->return_value,
 			 sizeof(struct membw_read_format)) == -1) {
 			ksft_perror("Couldn't get read bandwidth through iMC");

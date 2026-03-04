@@ -24,6 +24,7 @@
 #include <linux/perf_event.h>
 #include <linux/compiler.h>
 #include <linux/bits.h>
+#include  <linux/list.h>
 #include "kselftest.h"
 
 #define MB			(1024 * 1024)
