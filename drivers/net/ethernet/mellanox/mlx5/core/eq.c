@@ -22,6 +22,10 @@
 #include "devlink.h"
 #include "en_accel/ipsec.h"
 
+unsigned int mlx5_reap_eq_irq_aff_change;
+module_param(mlx5_reap_eq_irq_aff_change, int, 0644);
+MODULE_PARM_DESC(mlx5_reap_eq_irq_aff_change, "mlx5_reap_eq_irq_aff_change: 0 = Disable MLX5 EQ Reap upon IRQ affinity change, \
+		 1 = Enable MLX5 EQ Reap upon IRQ affinity change. Default=0");
 enum {
 	MLX5_EQE_OWNER_INIT_VAL	= 0x1,
 };
@@ -951,9 +955,35 @@ static int alloc_rmap(struct mlx5_core_dev *mdev) { return 0; }
 static void free_rmap(struct mlx5_core_dev *mdev) {}
 #endif
 
+void mlx5_eq_reap_irq_notify(struct irq_affinity_notify *notify, const cpumask_t *mask)
+{
+	u32 eqe_count;
+	struct mlx5_eq_comp *eq = container_of(notify, struct mlx5_eq_comp, notify);
+
+	if (mlx5_reap_eq_irq_aff_change) {
+		mlx5_core_warn(eq->core.dev, "irqn = 0x%x migration notified, EQ 0x%x: Cons = 0x%x\n",
+			       eq->core.irqn, eq->core.eqn, eq->core.cons_index);
+
+		while (!rtnl_trylock())
+			msleep(20);
+
+		eqe_count = mlx5_eq_poll_irq_disabled(eq);
+		if (eqe_count)
+			mlx5_core_warn(eq->core.dev, "Recovered %d eqes on EQ 0x%x\n",
+				       eqe_count, eq->core.eqn);
+		rtnl_unlock();
+	}
+}
+
+void mlx5_eq_reap_irq_release(struct kref *ref) {}
+
 static void destroy_comp_eq(struct mlx5_core_dev *dev, struct mlx5_eq_comp *eq, u16 vecidx)
 {
 	struct mlx5_eq_table *table = dev->priv.eq_table;
+
+	if (irq_set_affinity_notifier(eq->core.irqn, NULL))
+		mlx5_core_warn(dev, "failed to unset EQ 0x%x to irq 0x%x affinty\n",
+			       eq->core.eqn, eq->core.irqn);
 
 	xa_erase(&table->comp_eqs, vecidx);
 	mlx5_eq_disable(dev, &eq->core, &eq->irq_nb);
@@ -990,6 +1020,7 @@ static int create_comp_eq(struct mlx5_core_dev *dev, u16 vecidx)
 	struct mlx5_irq *irq;
 	int nent;
 	int err;
+	int ret;
 
 	lockdep_assert_held(&table->comp_lock);
 	if (table->curr_comp_eqs == table->max_comp_eqs) {
@@ -1035,6 +1066,16 @@ static int create_comp_eq(struct mlx5_core_dev *dev, u16 vecidx)
 	err = xa_err(xa_store(&table->comp_eqs, vecidx, eq, GFP_KERNEL));
 	if (err)
 		goto disable_eq;
+
+	eq->notify.notify = mlx5_eq_reap_irq_notify;
+	eq->notify.release = mlx5_eq_reap_irq_release;
+	ret = irq_set_affinity_notifier(eq->core.irqn, &eq->notify);
+	if (ret) {
+		mlx5_core_warn(dev, "mlx5_eq_reap_irq_nofifier: EQ 0x%x irqn = 0x%x irq_set_affinity_notifier failed: %d\n",
+			       eq->core.eqn, eq->core.irqn, ret);
+	}
+	mlx5_core_dbg(dev, "mlx5_eq_reap_irq_nofifier: EQ 0x%x irqn = 0x%x irq_set_affinity_notifier set.\n",
+		      eq->core.eqn, eq->core.irqn);
 
 	table->curr_comp_eqs++;
 	return eq->core.eqn;

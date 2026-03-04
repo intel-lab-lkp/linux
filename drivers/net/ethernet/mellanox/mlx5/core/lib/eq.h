@@ -46,6 +46,7 @@ struct mlx5_eq_comp {
 	struct notifier_block   irq_nb;
 	struct mlx5_eq_tasklet  tasklet_ctx;
 	struct list_head        list;
+	struct irq_affinity_notify notify;
 };
 
 static inline u32 eq_get_size(struct mlx5_eq *eq)
