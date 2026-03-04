@@ -195,6 +195,12 @@ static struct inode *exfat_alloc_inode(struct super_block *sb)
 	if (!ei)
 		return NULL;
 
+	spin_lock_init(&ei->cache_lru_lock);
+	ei->nr_caches = 0;
+	ei->cache_valid_id = EXFAT_CACHE_VALID + 1;
+	INIT_LIST_HEAD(&ei->cache_lru);
+	INIT_HLIST_NODE(&ei->i_hash_fat);
+
 	init_rwsem(&ei->truncate_lock);
 	return &ei->vfs_inode;
 }
@@ -879,11 +885,6 @@ static void exfat_inode_init_once(void *foo)
 {
 	struct exfat_inode_info *ei = (struct exfat_inode_info *)foo;
 
-	spin_lock_init(&ei->cache_lru_lock);
-	ei->nr_caches = 0;
-	ei->cache_valid_id = EXFAT_CACHE_VALID + 1;
-	INIT_LIST_HEAD(&ei->cache_lru);
-	INIT_HLIST_NODE(&ei->i_hash_fat);
 	inode_init_once(&ei->vfs_inode);
 }
 
