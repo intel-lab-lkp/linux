@@ -203,24 +203,13 @@ v3d_job_update_stats(struct v3d_job *job, enum v3d_queue q)
 	u64 now = local_clock();
 	unsigned long flags;
 
-	/* See comment in v3d_job_start_stats() */
-	if (IS_ENABLED(CONFIG_LOCKDEP))
-		local_irq_save(flags);
-	else
-		preempt_disable();
-
 	/* Don't update the local stats if the file context has already closed */
-	spin_lock(&queue->queue_lock);
+	spin_lock_irqsave(&queue->queue_lock, flags);
 	if (job->file_priv)
 		v3d_stats_update(&job->file_priv->stats[q], now);
-	spin_unlock(&queue->queue_lock);
+	spin_unlock_irqrestore(&queue->queue_lock, flags);
 
 	v3d_stats_update(global_stats, now);
-
-	if (IS_ENABLED(CONFIG_LOCKDEP))
-		local_irq_restore(flags);
-	else
-		preempt_enable();
 }
 
 static struct dma_fence *v3d_bin_job_run(struct drm_sched_job *sched_job)
