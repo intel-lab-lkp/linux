@@ -68,6 +68,8 @@ torture_param(int, shutdown_secs, 0, "Shutdown time (s), <= zero to disable");
 torture_param(int, spinner_hold, 100, "Time to spin on each pass through loop (us)");
 torture_param(int, spinner_nice, -10, "Nice-value for spinner priority");
 torture_param(int, stat_interval, 60, "Number of seconds between stats printk()s");
+torture_param(int, timer_hold, 100, "Time to spin between timer calls (us)");
+torture_param(int, timer_nice, +19, "Nice-value for timer priority");
 torture_param(int, verbose, 1, "Enable verbose debugging printk()s");
 torture_param(int, writer_hold, 1000, "Time to write-hold lock (us)");
 torture_param(int, writer_wait, 1000, "Time to between write acquisitions (us)");
@@ -278,6 +280,7 @@ static int repro_timer(void *arg)
 	const unsigned long jwait = 10;
 
 	VERBOSE_REPROOUT_STRING("repro_timer task started");
+	sched_set_normal(current, timer_nice);
 	atomic_inc(&n_repro_timer_started);
 
 	if (holdoff) {
@@ -295,6 +298,7 @@ static int repro_timer(void *arg)
 		j = atomic_long_read(&n_repro_timer_jmax);
 		if (jmax > j)
 			(void)atomic_long_try_cmpxchg(&n_repro_timer_jmax, &j, jmax);
+		udelay(100);
 		torture_shutdown_absorb("repro_timer");
 	} while (!torture_must_stop());
 	j = atomic_long_read(&n_repro_timer_jmax);
@@ -359,8 +363,8 @@ static void
 repro_print_module_parms(struct repro_ops *cur_ops, const char *tag)
 {
 	pr_alert("%s" REPRO_FLAG
-		 "--- %s: nreaders=%d nspinners=%d ntimers=%d nwriters=%d reader_hold=%d reader_wait=%d shutdown_secs=%d stat_interval=%d writer_hold=%d writer_wait=%d verbose=%d\n",
-		 scale_type, tag, nrealreaders, nspinners, nrealtimers, nrealwriters, reader_hold, reader_wait, shutdown_secs, stat_interval, writer_hold, writer_wait, verbose);
+		 "--- %s: holdoff=%d nreaders=%d nspinners=%d ntimers=%d nwriters=%d reader_hold=%d reader_wait=%d shutdown_secs=%d spinner_hold=%d spinner_nice=%d stat_interval=%d timer_hold=%d timer_nice=%d writer_hold=%d writer_wait=%d verbose=%d\n",
+		 scale_type, tag, holdoff, nrealreaders, nspinners, nrealtimers, nrealwriters, reader_hold, reader_wait, shutdown_secs, spinner_hold, spinner_nice, stat_interval, timer_hold, timer_nice, writer_hold, writer_wait, verbose);
 }
 
 /*
