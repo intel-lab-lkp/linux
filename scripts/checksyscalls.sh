@@ -104,6 +104,7 @@ cat << EOF
 #define __IGNORE_recvmmsg_time64
 #define __IGNORE_mq_timedsend_time64
 #define __IGNORE_mq_timedreceive_time64
+#define __IGNORE_mq_timedreceive2_time64
 #define __IGNORE_semtimedop_time64
 #define __IGNORE_rt_sigtimedwait_time64
 #define __IGNORE_futex_time64

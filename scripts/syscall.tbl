@@ -412,3 +412,6 @@
 469	common	file_setattr			sys_file_setattr
 470	common	listns				sys_listns
 471	common	rseq_slice_yield		sys_rseq_slice_yield
+472	time32	mq_timedreceive2		sys_mq_timedreceive2_time32
+473	64	mq_timedreceive2			sys_mq_timedreceive2
+474	32	mq_timedreceive_time64		sys_mq_timedreceive2
