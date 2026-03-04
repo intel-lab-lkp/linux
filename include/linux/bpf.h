@@ -2489,6 +2489,7 @@ bpf_prog_run_array(const struct bpf_prog_array *array,
 static __always_inline u32
 bpf_prog_run_array_uprobe(const struct bpf_prog_array *array,
 			  const void *ctx, bpf_prog_run_fn run_prog)
+	__no_context_analysis /* conditional locking */
 {
 	const struct bpf_prog_array_item *item;
 	const struct bpf_prog *prog;

@@ -774,6 +774,7 @@ EXPORT_SYMBOL_GPL(blkg_conf_init);
  * of @ctx->input. Returns -errno on error.
  */
 int blkg_conf_open_bdev(struct blkg_conf_ctx *ctx)
+	__no_context_analysis /* conditional locking */
 {
 	char *input = ctx->input;
 	unsigned int major, minor;
@@ -819,6 +820,7 @@ int blkg_conf_open_bdev(struct blkg_conf_ctx *ctx)
  * for restoring the memalloc scope.
  */
 unsigned long __must_check blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx)
+	__must_hold(&ctx->bdev->bd_queue->rq_qos_mutex)
 {
 	int ret;
 	unsigned long memflags;
@@ -860,7 +862,7 @@ unsigned long __must_check blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx)
  */
 int blkg_conf_prep(struct blkcg *blkcg, const struct blkcg_policy *pol,
 		   struct blkg_conf_ctx *ctx)
-	__acquires(&bdev->bd_queue->queue_lock)
+	__cond_acquires(0, &ctx->bdev->bd_disk->queue->queue_lock)
 {
 	struct gendisk *disk;
 	struct request_queue *q;
@@ -974,8 +976,7 @@ EXPORT_SYMBOL_GPL(blkg_conf_prep);
  * blkg_conf_ctx's initialized with blkg_conf_init().
  */
 void blkg_conf_exit(struct blkg_conf_ctx *ctx)
-	__releases(&ctx->bdev->bd_queue->queue_lock)
-	__releases(&ctx->bdev->bd_queue->rq_qos_mutex)
+	__no_context_analysis /* conditional unlocking */
 {
 	if (ctx->blkg) {
 		spin_unlock_irq(&bdev_get_queue(ctx->bdev)->queue_lock);

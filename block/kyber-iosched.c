@@ -894,7 +894,7 @@ static int kyber_##name##_tokens_show(void *data, struct seq_file *m)	\
 }									\
 									\
 static void *kyber_##name##_rqs_start(struct seq_file *m, loff_t *pos)	\
-	__acquires(&khd->lock)						\
+	__acquires(((struct kyber_hctx_data *)((struct blk_mq_hw_ctx *)m->private)->sched_data)->lock) \
 {									\
 	struct blk_mq_hw_ctx *hctx = m->private;			\
 	struct kyber_hctx_data *khd = hctx->sched_data;			\
@@ -913,7 +913,7 @@ static void *kyber_##name##_rqs_next(struct seq_file *m, void *v,	\
 }									\
 									\
 static void kyber_##name##_rqs_stop(struct seq_file *m, void *v)	\
-	__releases(&khd->lock)						\
+	__releases(((struct kyber_hctx_data *)((struct blk_mq_hw_ctx *)m->private)->sched_data)->lock)						\
 {									\
 	struct blk_mq_hw_ctx *hctx = m->private;			\
 	struct kyber_hctx_data *khd = hctx->sched_data;			\

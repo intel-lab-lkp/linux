@@ -518,6 +518,7 @@ static int blkdev_pr_read_reservation(struct block_device *bdev,
 
 static int blkdev_flushbuf(struct block_device *bdev, unsigned cmd,
 		unsigned long arg)
+	__cond_acquires(0, bdev->bd_holder_lock)
 {
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
