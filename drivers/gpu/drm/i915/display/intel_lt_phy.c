@@ -2309,6 +2309,17 @@ void intel_xe3plpd_pll_disable(struct intel_encoder *encoder)
 		intel_mtl_tbt_pll_disable_clock(encoder);
 	else
 		intel_lt_phy_pll_disable(encoder);
+}
+
+void intel_xe3plpd_pll_disable_clock(struct intel_encoder *encoder)
+{
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+
+	if (intel_tc_port_in_tbt_alt_mode(dig_port))
+		intel_mtl_tbt_pll_disable_clock(encoder);
+	else
+		/* TODO: remove when PLL mgr is in place. */
+		intel_xe3plpd_pll_disable(encoder);
 
 }
 
