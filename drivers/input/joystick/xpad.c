@@ -94,6 +94,12 @@
 #define XTYPE_XBOXONE     3
 #define XTYPE_UNKNOWN     4
 
+#define FLAG_FORCE_FEEDBACK 0x01
+#define FLAG_WIRELESS       0x02
+#define FLAG_VOICE          0x04
+#define FLAG_PLUGIN_MODULES 0x08
+#define FLAG_NO_NAVIGATION  0x10
+
 /* Send power-off packet to xpad360w after holding the mode button for this many
  * seconds
  */
@@ -742,6 +748,47 @@ static const struct xboxone_init_packet xboxone_init_packets[] = {
 	XBOXONE_INIT_PKT(0x24c6, 0x543a, xboxone_rumbleend_init),
 };
 
+struct xpad_x360_gamepad_descriptor {
+	u8 bLength;
+	u8 bDescriptorType;
+	u8 reserved;
+	u8 type;
+	u8 subType;
+	u8 reserved2;
+	u8 bEndpointAddressIn;
+	u8 bMaxDataSizeIn;
+	u8 reserved3[5];
+	u8 bEndpointAddressOut;
+	u8 bMaxDataSizeOut;
+	u8 reserved4[2];
+} __packed;
+
+struct x360_capabilities {
+	u8 type;
+	u8 subType;
+	struct {
+		u8 id;
+		u8 rsize;
+		u16 buttons;
+		u8 leftTrigger;
+		u8 rightTrigger;
+		u16 leftThumbX;
+		u16 leftThumbY;
+		u16 rightThumbX;
+		u16 rightThumbY;
+		u8 reserved[4];
+		u16 flags;
+	} gamepad;
+	struct {
+		u8 id;
+		u8 rsize;
+		u8 padding;
+		u16 leftMotorSpeed;
+		u16 rightMotorSpeed;
+		u8 padding2[3];
+	} vibration;
+} __packed;
+
 struct xpad_output_packet {
 	u8 data[XPAD_PKT_LEN];
 	u8 len;
@@ -790,6 +837,7 @@ struct usb_xpad {
 	int xtype;			/* type of xbox device */
 	int packet_type;		/* type of the extended packet */
 	int pad_nr;			/* the order x360 pads were attached */
+	struct x360_capabilities capabilities; /* capabilities of the device */
 	const char *name;		/* name of the device */
 	struct work_struct work;	/* init/remove device from callback */
 	time64_t mode_btn_down_ts;
@@ -797,11 +845,63 @@ struct usb_xpad {
 	bool delayed_init_done;
 };
 
+#define XPAD_SHOW(name, object) \
+static ssize_t name##_show(struct device *dev,\
+			   struct device_attribute *attr,\
+			   char *buf)\
+{\
+	struct usb_xpad *xpad = input_get_drvdata(to_input_dev(dev));\
+\
+	return sysfs_emit(buf, "%x\n", xpad->capabilities.object);\
+} \
+\
+static DEVICE_ATTR_RO(name)
+
+XPAD_SHOW(subtype, subType);
+XPAD_SHOW(type, type);
+XPAD_SHOW(flags, gamepad.flags);
+XPAD_SHOW(gamepad_buttons, gamepad.buttons);
+XPAD_SHOW(gamepad_lt, gamepad.leftTrigger);
+XPAD_SHOW(gamepad_rt, gamepad.rightTrigger);
+XPAD_SHOW(gamepad_lsx, gamepad.leftThumbX);
+XPAD_SHOW(gamepad_lsy, gamepad.leftThumbY);
+XPAD_SHOW(gamepad_rsx, gamepad.rightThumbX);
+XPAD_SHOW(gamepad_rsy, gamepad.rightThumbY);
+XPAD_SHOW(rumble_l, vibration.leftMotorSpeed);
+XPAD_SHOW(rumble_r, vibration.rightMotorSpeed);
+
+static struct attribute *xpad_attrs[] = {
+	&dev_attr_type.attr,
+	&dev_attr_subtype.attr,
+	&dev_attr_flags.attr,
+	&dev_attr_gamepad_buttons.attr,
+	&dev_attr_gamepad_lt.attr,
+	&dev_attr_gamepad_rt.attr,
+	&dev_attr_gamepad_lsx.attr,
+	&dev_attr_gamepad_lsy.attr,
+	&dev_attr_gamepad_rsx.attr,
+	&dev_attr_gamepad_rsy.attr,
+	&dev_attr_rumble_l.attr,
+	&dev_attr_rumble_r.attr,
+	NULL
+};
+
+static struct attribute_group xpad_group = {
+	.attrs = xpad_attrs,
+	.name = "xpad"
+};
+
+static const struct attribute_group *xpad_groups[] = {
+	&xpad_group,
+	NULL,
+};
+
 static int xpad_init_input(struct usb_xpad *xpad);
 static void xpad_deinit_input(struct usb_xpad *xpad);
 static int xpad_start_input(struct usb_xpad *xpad);
 static void xpadone_ack_mode_report(struct usb_xpad *xpad, u8 seq_num);
 static void xpad360w_poweroff_controller(struct usb_xpad *xpad);
+static int xpad_inquiry_pad_capabilities(struct usb_xpad *xpad);
 
 /*
  *	xpad_process_packet
@@ -1025,6 +1125,29 @@ static void xpad360w_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned cha
 			xpad->pad_present = present;
 			schedule_work(&xpad->work);
 		}
+	}
+
+	/* Link report */
+	if (data[0] == 0x00 && data[1] == 0x0F) {
+		xpad->capabilities.subType = data[25] & 0x7f;
+		xpad->capabilities.gamepad.flags = FLAG_WIRELESS;
+		if ((data[25] & 0x80) != 0)
+			xpad->capabilities.gamepad.flags |= FLAG_FORCE_FEEDBACK;
+		xpad_inquiry_pad_capabilities(xpad);
+	}
+
+	/* Capabilities report */
+	if (data[0] == 0x00 && data[1] == 0x05 && data[5] == 0x12) {
+		xpad->capabilities.gamepad.buttons = (data[7] << 8) | data[6];
+		xpad->capabilities.gamepad.leftTrigger = data[8];
+		xpad->capabilities.gamepad.rightTrigger = data[9];
+		xpad->capabilities.gamepad.leftThumbX = (data[11] << 8) | data[10];
+		xpad->capabilities.gamepad.leftThumbY = (data[13] << 8) | data[12];
+		xpad->capabilities.gamepad.rightThumbX = (data[15] << 8) | data[14];
+		xpad->capabilities.gamepad.rightThumbY = (data[17] << 8) | data[16];
+		xpad->capabilities.gamepad.flags |= data[20];
+		xpad->capabilities.vibration.leftMotorSpeed = data[18];
+		xpad->capabilities.vibration.rightMotorSpeed = data[19];
 	}
 
 	/* Valid pad data */
@@ -1490,6 +1613,31 @@ static int xpad_inquiry_pad_presence(struct usb_xpad *xpad)
 	return xpad_try_sending_next_out_packet(xpad);
 }
 
+static int xpad_inquiry_pad_capabilities(struct usb_xpad *xpad)
+{
+	struct xpad_output_packet *packet =
+			&xpad->out_packets[XPAD_OUT_CMD_IDX];
+
+	guard(spinlock_irqsave)(&xpad->odata_lock);
+
+	packet->data[0] = 0x00;
+	packet->data[1] = 0x00;
+	packet->data[2] = 0x02;
+	packet->data[3] = 0x80;
+	packet->data[4] = 0x00;
+	packet->data[5] = 0x00;
+	packet->data[6] = 0x00;
+	packet->data[7] = 0x00;
+	packet->data[8] = 0x00;
+	packet->data[9] = 0x00;
+	packet->data[10] = 0x00;
+	packet->data[11] = 0x00;
+	packet->len = 12;
+	packet->pending = true;
+
+	return xpad_try_sending_next_out_packet(xpad);
+}
+
 static int xpad_start_xbox_one(struct usb_xpad *xpad)
 {
 	int error;
@@ -1803,25 +1951,37 @@ static int xpad_start_input(struct usb_xpad *xpad)
 		}
 	}
 	if (xpad->xtype == XTYPE_XBOX360) {
-		/*
-		 * Some third-party controllers Xbox 360-style controllers
-		 * require this message to finish initialization.
-		 */
-		u8 dummy[20];
-
 		error = usb_control_msg_recv(xpad->udev, 0,
 					     /* bRequest */ 0x01,
 					     /* bmRequestType */
 					     USB_TYPE_VENDOR | USB_DIR_IN |
-						USB_RECIP_INTERFACE,
+					     USB_RECIP_INTERFACE,
 					     /* wValue */ 0x100,
 					     /* wIndex */ 0x00,
-					     dummy, sizeof(dummy),
+					     &xpad->capabilities.gamepad,
+					     sizeof(xpad->capabilities.gamepad),
 					     25, GFP_KERNEL);
 		if (error)
 			dev_warn(&xpad->dev->dev,
-				 "unable to receive magic message: %d\n",
+				 "unable to receive input capabilities: %d\n",
 				 error);
+
+		if (xpad->capabilities.gamepad.flags & FLAG_FORCE_FEEDBACK) {
+			error = usb_control_msg_recv(xpad->udev, 0,
+						     /* bRequest */ 0x01,
+						     /* bmRequestType */
+						     USB_TYPE_VENDOR | USB_DIR_IN |
+						     USB_RECIP_INTERFACE,
+						     /* wValue */ 0x00,
+						     /* wIndex */ 0x00,
+						     &xpad->capabilities.vibration,
+						     sizeof(xpad->capabilities.vibration),
+						     25, GFP_KERNEL);
+			if (error)
+				dev_warn(&xpad->dev->dev,
+					 "unable to receive vibration capabilities: %d\n",
+					 error);
+		}
 	}
 
 	return 0;
@@ -1948,6 +2108,7 @@ static void xpad_deinit_input(struct usb_xpad *xpad)
 static int xpad_init_input(struct usb_xpad *xpad)
 {
 	struct input_dev *input_dev;
+	struct xpad_x360_gamepad_descriptor *input_desc;
 	int i, error;
 
 	input_dev = input_allocate_device();
@@ -1957,11 +2118,29 @@ static int xpad_init_input(struct usb_xpad *xpad)
 	xpad->dev = input_dev;
 	input_dev->name = xpad->name;
 	input_dev->phys = xpad->phys;
+	xpad->capabilities.subType = 1;
+	xpad->capabilities.type = 1;
+	xpad->capabilities.gamepad.flags = 0;
+	xpad->capabilities.gamepad.buttons = 0xFFFF;
+	xpad->capabilities.gamepad.leftTrigger = 0xFF;
+	xpad->capabilities.gamepad.rightTrigger = 0xFF;
+	xpad->capabilities.gamepad.leftThumbX = 0xFFC0;
+	xpad->capabilities.gamepad.leftThumbY = 0xFFC0;
+	xpad->capabilities.gamepad.rightThumbX = 0xFFC0;
+	xpad->capabilities.gamepad.rightThumbY = 0xFFC0;
+	xpad->dev->dev.groups = xpad_groups;
 	usb_to_input_id(xpad->udev, &input_dev->id);
 
 	if (xpad->xtype == XTYPE_XBOX360W) {
 		/* x360w controllers and the receiver have different ids */
 		input_dev->id.product = 0x02a1;
+		xpad->capabilities.gamepad.flags = FLAG_WIRELESS;
+	}
+
+	if (xpad->xtype == XTYPE_XBOX360 &&
+	    usb_get_extra_descriptor(xpad->intf->cur_altsetting, 0x21, &input_desc) == 0) {
+		xpad->capabilities.subType = input_desc->subType;
+		xpad->capabilities.type = input_desc->type;
 	}
 
 	input_dev->dev.parent = &xpad->intf->dev;
