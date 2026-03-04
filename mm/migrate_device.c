@@ -911,8 +911,10 @@ static int migrate_vma_split_unmapped_folio(struct migrate_vma *migrate,
 	folio_get(folio);
 	split_huge_pmd_address(migrate->vma, addr, true);
 	ret = folio_split_unmapped(folio, 0);
-	if (ret)
+	if (ret) {
+		folio_put(folio);
 		return ret;
+	}
 	migrate->src[idx] &= ~MIGRATE_PFN_COMPOUND;
 	flags = migrate->src[idx] & ((1UL << MIGRATE_PFN_SHIFT) - 1);
 	pfn = migrate->src[idx] >> MIGRATE_PFN_SHIFT;
