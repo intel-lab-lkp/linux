@@ -457,6 +457,7 @@ struct smb2_tree_disconnect_rsp {
 #define SMB2_TRANSPORT_CAPABILITIES		cpu_to_le16(6)
 #define SMB2_RDMA_TRANSFORM_CAPABILITIES	cpu_to_le16(7)
 #define SMB2_SIGNING_CAPABILITIES		cpu_to_le16(8)
+#define SMB2_IMPLEMENTATION_ID_CONTEXT_ID	cpu_to_le16(0xF100)
 #define SMB2_POSIX_EXTENSIONS_AVAILABLE		cpu_to_le16(0x100)
 
 struct smb2_neg_context {
@@ -594,6 +595,37 @@ struct smb2_signing_capabilities {
 	__le16	SigningAlgorithmCount;
 	__le16	SigningAlgorithms[];
 	/*  Followed by padding to 8 byte boundary (required by some servers) */
+} __packed;
+
+/*
+ * For implementation ID context see MS-SMB2 2.2.3.1.8
+ * Maximum string lengths per specification
+ */
+#define SMB2_IMPL_ID_MAX_DOMAIN_LEN	128
+#define SMB2_IMPL_ID_MAX_NAME_LEN	260
+#define SMB2_IMPL_ID_MAX_VERSION_LEN	260
+#define SMB2_IMPL_ID_MAX_HOSTNAME_LEN	64
+#define SMB2_IMPL_ID_MAX_OS_NAME_LEN	64
+#define SMB2_IMPL_ID_MAX_OS_VERSION_LEN	64
+#define SMB2_IMPL_ID_MAX_ARCH_LEN	64
+
+struct smb2_implementation_id_context {
+	__le16	ContextType; /* 9 */
+	__le16	DataLength;
+	__le32	Reserved;
+	__le16	ImplDomainLength;
+	__le16	ImplNameLength;
+	__le16	ImplVersionLength;
+	__le16	HostNameLength;
+	__le16	OSNameLength;
+	__le16	OSVersionLength;
+	__le16	ArchLength;
+	__le16	Reserved2;
+	/* Followed by variable length UTF-16 strings:
+	 * ImplDomain, ImplName, ImplVersion, HostName,
+	 * OSName, OSVersion, Arch
+	 */
+	__u8	Data[];
 } __packed;
 
 #define POSIX_CTXT_DATA_LEN	16

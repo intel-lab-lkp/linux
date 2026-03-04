@@ -24,6 +24,7 @@
 #include <linux/pagemap.h>
 #include <linux/xattr.h>
 #include <linux/netfs.h>
+#include <linux/utsname.h>
 #include <trace/events/netfs.h>
 #include "cifsglob.h"
 #include "cifsproto.h"
@@ -45,6 +46,7 @@
 #include "cached_dir.h"
 #include "compress.h"
 #include "fs_context.h"
+#include "cifsfs.h"
 
 /*
  *  The following table defines the expected "StructureSize" of SMB2 requests
@@ -724,6 +726,75 @@ build_posix_ctxt(struct smb2_posix_neg_context *pneg_ctxt)
 	pneg_ctxt->Name[15] = 0x7C;
 }
 
+static unsigned int
+build_implementation_id_ctxt(struct smb2_implementation_id_context *pneg_ctxt)
+{
+	struct nls_table *cp = load_nls_default();
+	struct new_utsname *uts = utsname();
+	const char *impl_domain = "kernel.org";
+	const char *impl_name = "fs/smb/client";
+	const char *os_name = "Linux";
+	unsigned int data_len = 0;
+	__u8 *data_ptr;
+	int len;
+
+	pneg_ctxt->ContextType = SMB2_IMPLEMENTATION_ID_CONTEXT_ID;
+	data_ptr = pneg_ctxt->Data;
+
+	/* ImplDomain */
+	len = cifs_strtoUTF16((__le16 *)data_ptr, impl_domain,
+			      SMB2_IMPL_ID_MAX_DOMAIN_LEN, cp);
+	pneg_ctxt->ImplDomainLength = cpu_to_le16(len * 2);
+	data_ptr += len * 2;
+	data_len += len * 2;
+
+	/* ImplName */
+	len = cifs_strtoUTF16((__le16 *)data_ptr, impl_name,
+			      SMB2_IMPL_ID_MAX_NAME_LEN, cp);
+	pneg_ctxt->ImplNameLength = cpu_to_le16(len * 2);
+	data_ptr += len * 2;
+	data_len += len * 2;
+
+	/* ImplVersion - CIFS_VERSION from cifsfs.h */
+	len = cifs_strtoUTF16((__le16 *)data_ptr, CIFS_VERSION,
+			      SMB2_IMPL_ID_MAX_VERSION_LEN, cp);
+	pneg_ctxt->ImplVersionLength = cpu_to_le16(len * 2);
+	data_ptr += len * 2;
+	data_len += len * 2;
+
+	/* HostName - from utsname()->nodename */
+	len = cifs_strtoUTF16((__le16 *)data_ptr, uts->nodename,
+			      SMB2_IMPL_ID_MAX_HOSTNAME_LEN, cp);
+	pneg_ctxt->HostNameLength = cpu_to_le16(len * 2);
+	data_ptr += len * 2;
+	data_len += len * 2;
+
+	/* OSName */
+	len = cifs_strtoUTF16((__le16 *)data_ptr, os_name,
+			      SMB2_IMPL_ID_MAX_OS_NAME_LEN, cp);
+	pneg_ctxt->OSNameLength = cpu_to_le16(len * 2);
+	data_ptr += len * 2;
+	data_len += len * 2;
+
+	/* OSVersion - from utsname()->release */
+	len = cifs_strtoUTF16((__le16 *)data_ptr, uts->release,
+			      SMB2_IMPL_ID_MAX_OS_VERSION_LEN, cp);
+	pneg_ctxt->OSVersionLength = cpu_to_le16(len * 2);
+	data_ptr += len * 2;
+	data_len += len * 2;
+
+	/* Arch - from utsname()->machine */
+	len = cifs_strtoUTF16((__le16 *)data_ptr, uts->machine,
+			      SMB2_IMPL_ID_MAX_ARCH_LEN, cp);
+	pneg_ctxt->ArchLength = cpu_to_le16(len * 2);
+	data_len += len * 2;
+
+	pneg_ctxt->Reserved2 = 0;
+	pneg_ctxt->DataLength = cpu_to_le16(data_len + 14); /* 14 = 7 length fields * 2 bytes */
+	/* Context size is DataLength + minimal smb2_neg_context, aligned to 8 */
+	return ALIGN(le16_to_cpu(pneg_ctxt->DataLength) + sizeof(struct smb2_neg_context), 8);
+}
+
 static void
 assemble_neg_contexts(struct smb2_negotiate_req *req,
 		      struct TCP_Server_Info *server, unsigned int *total_len)
@@ -796,6 +867,13 @@ assemble_neg_contexts(struct smb2_negotiate_req *req,
 		pneg_ctxt += ctxt_len;
 		neg_context_count++;
 	}
+
+	/* Add implementation ID context */
+	ctxt_len = build_implementation_id_ctxt((struct smb2_implementation_id_context *)
+				pneg_ctxt);
+	*total_len += ctxt_len;
+	pneg_ctxt += ctxt_len;
+	neg_context_count++;
 
 	/* check for and add transport_capabilities and signing capabilities */
 	req->NegotiateContextCount = cpu_to_le16(neg_context_count);
