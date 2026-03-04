@@ -44,6 +44,11 @@ properties:
       - items:
           - enum:
               - fairphone,fp1
+              - lenovo,b6000-f
+              - lenovo,b6000-h
+              - lenovo,b8000-f
+              - lenovo,b8000-h
+              - lenovo,blade
               - mundoreader,bq-aquaris5
           - const: mediatek,mt6589
       - items:
