@@ -252,10 +252,8 @@ static int xgbe_platform_probe(struct platform_device *pdev)
 		dev_dbg(dev, "sir1_regs  = %p\n", pdata->sir1_regs);
 
 	/* Retrieve the MAC address */
-	ret = device_property_read_u8_array(dev, XGBE_MAC_ADDR_PROPERTY,
-					    pdata->mac_addr,
-					    sizeof(pdata->mac_addr));
-	if (ret || !is_valid_ether_addr(pdata->mac_addr)) {
+	ret = device_get_mac_address(dev, pdata->mac_addr);
+	if (ret) {
 		dev_err(dev, "invalid %s property\n", XGBE_MAC_ADDR_PROPERTY);
 		if (!ret)
 			ret = -EINVAL;
