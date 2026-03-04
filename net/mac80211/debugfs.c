@@ -320,7 +320,8 @@ static ssize_t aql_enable_read(struct file *file, char __user *user_buf,
 static ssize_t aql_enable_write(struct file *file, const char __user *user_buf,
 				size_t count, loff_t *ppos)
 {
-	bool aql_disabled = static_key_false(&aql_disable.key);
+	static DEFINE_MUTEX(aql_disable_mutex);
+	bool aql_disabled;
 	char buf[3];
 	size_t len;
 
@@ -335,15 +336,19 @@ static ssize_t aql_enable_write(struct file *file, const char __user *user_buf,
 	if (len > 0 && buf[len - 1] == '\n')
 		buf[len - 1] = 0;
 
-	if (buf[0] == '0' && buf[1] == '\0') {
-		if (!aql_disabled)
-			static_branch_inc(&aql_disable);
-	} else if (buf[0] == '1' && buf[1] == '\0') {
-		if (aql_disabled)
-			static_branch_dec(&aql_disable);
-	} else {
+	if ((buf[0] != '0' && buf[0] != '1') || buf[1] != '\0')
 		return -EINVAL;
-	}
+
+	mutex_lock(&aql_disable_mutex);
+
+	aql_disabled = static_key_false(&aql_disable.key);
+
+	if (buf[0] == '0' && !aql_disabled)
+		static_branch_inc(&aql_disable);
+	else if (buf[0] == '1' && aql_disabled)
+		static_branch_dec(&aql_disable);
+
+	mutex_unlock(&aql_disable_mutex);
 
 	return count;
 }
