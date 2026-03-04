@@ -678,9 +678,6 @@ struct Scsi_Host {
 	/* Task mgmt function in progress */
 	unsigned tmf_in_progress:1;
 
-	/* Asynchronous scan in progress */
-	unsigned async_scan:1;
-
 	/* Don't resume host in EH */
 	unsigned eh_noresume:1;
 
@@ -698,6 +695,9 @@ struct Scsi_Host {
 
 	/* The transport requires the LUN bits NOT to be stored in CDB[1] */
 	unsigned no_scsi2_lun_in_cdb:1;
+
+	/* Asynchronous scan in progress */
+	bool async_scan;
 
 	/*
 	 * Optional work queue to be utilized by the transport
