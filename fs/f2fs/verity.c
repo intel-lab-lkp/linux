@@ -44,8 +44,7 @@ static int pagecache_read(struct inode *inode, void *buf, size_t count,
 			  loff_t pos)
 {
 	while (count) {
-		size_t n = min_t(size_t, count,
-				 PAGE_SIZE - offset_in_page(pos));
+		size_t n = min_t(size_t, count, rest_of_page(pos));
 		struct page *page;
 
 		page = read_mapping_page(inode->i_mapping, pos >> PAGE_SHIFT,
@@ -78,8 +77,7 @@ static int pagecache_write(struct inode *inode, const void *buf, size_t count,
 		return -EFBIG;
 
 	while (count) {
-		size_t n = min_t(size_t, count,
-				 PAGE_SIZE - offset_in_page(pos));
+		size_t n = min_t(size_t, count, rest_of_page(pos));
 		struct folio *folio;
 		void *fsdata = NULL;
 		int res;

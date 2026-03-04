@@ -60,7 +60,7 @@ static struct page *nfs_page_iter_page_get(struct nfs_page_iter_page *i)
 
 	if (i->count != req->wb_bytes) {
 		size_t base = i->count + req->wb_pgbase;
-		size_t len = PAGE_SIZE - offset_in_page(base);
+		size_t len = rest_of_page(base);
 
 		page = nfs_page_to_page(req, base);
 		nfs_page_iter_page_advance(i, len);

@@ -135,8 +135,7 @@ xfile_load(
 			 * No data stored at this offset, just zero the output
 			 * buffer until the next page boundary.
 			 */
-			len = min_t(ssize_t, count,
-				PAGE_SIZE - offset_in_page(pos));
+			len = min_t(ssize_t, count, rest_of_page(pos));
 			memset(buf, 0, len);
 		} else {
 			if (filemap_check_wb_err(inode->i_mapping, 0)) {
