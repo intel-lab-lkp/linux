@@ -2114,6 +2114,18 @@ void vmstat_flush_workqueue(void)
 	flush_workqueue(mm_percpu_wq);
 }
 
+static int vmstat_interval_handler(const struct ctl_table *table, int write,
+				    void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret = proc_dointvec_jiffies(table, write, buffer, lenp, ppos);
+
+	if (ret == 0 && write && sysctl_stat_interval == 0) {
+		sysctl_stat_interval = HZ;
+		return -EINVAL;
+	}
+	return ret;
+}
+
 static void vmstat_shepherd(struct work_struct *w)
 {
 	int cpu;
@@ -2236,7 +2248,7 @@ static const struct ctl_table vmstat_table[] = {
 		.data		= &sysctl_stat_interval,
 		.maxlen		= sizeof(sysctl_stat_interval),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_jiffies,
+		.proc_handler	= vmstat_interval_handler,
 	},
 	{
 		.procname	= "stat_refresh",
