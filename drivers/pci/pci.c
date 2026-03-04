@@ -1301,6 +1301,13 @@ int pci_power_up(struct pci_dev *dev)
 	pci_power_t state;
 	u16 pmcsr;
 
+	if (dev->pm_cap && dev->current_state == PCI_UNKNOWN && !pci_dev_is_disconnected(dev)) {
+		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
+		if (!PCI_POSSIBLE_ERROR(pmcsr) && (pmcsr & PCI_PM_CTRL_STATE_MASK) == PCI_D0) {
+			dev->current_state = PCI_D0;
+			return 0;
+		}
+	}
 	platform_pci_set_power_state(dev, PCI_D0);
 
 	if (!dev->pm_cap) {
@@ -3190,7 +3197,27 @@ void pci_pm_init(struct pci_dev *dev)
 	}
 
 poweron:
-	pci_pm_power_up_and_verify_state(dev);
+	/*
+	 * Explicitly put the device into D0 to ensure platform power methods
+	 * such as _PS0 are called and _REG is notified.  Only do this when
+	 * the hardware is not already in D0: pcie_aspm_init_link_state()
+	 * enables PCIe L1 PM substates (L1.1/L1.2) only when both the
+	 * downstream device and its parent report current_state == PCI_D0.
+	 * Calling pci_pm_power_up_and_verify_state() for a device already in
+	 * D0 would set current_state prematurely, enabling L1.2 before the
+	 * driver is ready and causing the device to enter a deep sleep state
+	 * it cannot exit without platform intervention (_PS0).
+	 */
+	if (dev->pm_cap) {
+		u16 pmcsr;
+
+		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
+		if (PCI_POSSIBLE_ERROR(pmcsr) ||
+		    (pmcsr & PCI_PM_CTRL_STATE_MASK) != PCI_D0)
+			pci_pm_power_up_and_verify_state(dev);
+	} else {
+		pci_pm_power_up_and_verify_state(dev);
+	}
 	pm_runtime_forbid(&dev->dev);
 
 	/*
