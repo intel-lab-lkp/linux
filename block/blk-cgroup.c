@@ -1606,8 +1606,7 @@ static void blkcg_policy_teardown_pds(struct request_queue *q,
 int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 {
 	struct request_queue *q = disk->queue;
-	struct blkg_policy_data *pd_prealloc = NULL;
-	struct blkcg_gq *blkg, *pinned_blkg = NULL;
+	struct blkcg_gq *blkg;
 	unsigned int memflags;
 	int ret;
 
@@ -1622,90 +1621,65 @@ int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 	if (WARN_ON_ONCE(!pol->pd_alloc_fn || !pol->pd_free_fn))
 		return -EINVAL;
 
-	if (queue_is_mq(q))
-		memflags = blk_mq_freeze_queue(q);
-
+	/*
+	 * Allocate all pds before freezing queue. Some policies like iocost
+	 * and iolatency do percpu allocation in pd_alloc_fn(), which can
+	 * deadlock with queue frozen because percpu memory reclaim may issue
+	 * IO. blkcg_mutex protects q->blkg_list iteration.
+	 */
 	mutex_lock(&q->blkcg_mutex);
-retry:
-	spin_lock_irq(&q->queue_lock);
-
-	/* blkg_list is pushed at the head, reverse walk to initialize parents first */
 	list_for_each_entry_reverse(blkg, &q->blkg_list, q_node) {
 		struct blkg_policy_data *pd;
 
-		if (blkg->pd[pol->plid])
-			continue;
+		/* Skip dying blkg */
 		if (hlist_unhashed(&blkg->blkcg_node))
 			continue;
 
-		/* If prealloc matches, use it; otherwise try GFP_NOWAIT */
-		if (blkg == pinned_blkg) {
-			pd = pd_prealloc;
-			pd_prealloc = NULL;
-		} else {
-			pd = pol->pd_alloc_fn(disk, blkg->blkcg,
-					      GFP_NOWAIT);
-		}
-
+		pd = pol->pd_alloc_fn(disk, blkg->blkcg, GFP_KERNEL);
 		if (!pd) {
-			/*
-			 * GFP_NOWAIT failed.  Free the existing one and
-			 * prealloc for @blkg w/ GFP_KERNEL.
-			 */
-			if (pinned_blkg)
-				blkg_put(pinned_blkg);
-			blkg_get(blkg);
-			pinned_blkg = blkg;
-
-			spin_unlock_irq(&q->queue_lock);
-
-			if (pd_prealloc)
-				pol->pd_free_fn(pd_prealloc);
-			pd_prealloc = pol->pd_alloc_fn(disk, blkg->blkcg,
-						       GFP_KERNEL);
-			if (pd_prealloc)
-				goto retry;
-			else
-				goto enomem;
+			ret = -ENOMEM;
+			goto err_teardown;
 		}
-
-		spin_lock(&blkg->blkcg->lock);
 
 		pd->blkg = blkg;
 		pd->plid = pol->plid;
+		pd->online = false;
 		blkg->pd[pol->plid] = pd;
+	}
 
+	/* Now freeze queue and initialize/online all pds */
+	if (queue_is_mq(q))
+		memflags = blk_mq_freeze_queue(q);
+
+	spin_lock_irq(&q->queue_lock);
+	list_for_each_entry_reverse(blkg, &q->blkg_list, q_node) {
+		struct blkg_policy_data *pd = blkg->pd[pol->plid];
+
+		/* Skip dying blkg */
+		if (hlist_unhashed(&blkg->blkcg_node))
+			continue;
+
+		spin_lock(&blkg->blkcg->lock);
 		if (pol->pd_init_fn)
 			pol->pd_init_fn(pd);
-
 		if (pol->pd_online_fn)
 			pol->pd_online_fn(pd);
 		pd->online = true;
-
 		spin_unlock(&blkg->blkcg->lock);
 	}
 
 	__set_bit(pol->plid, q->blkcg_pols);
-	ret = 0;
-
 	spin_unlock_irq(&q->queue_lock);
-out:
-	mutex_unlock(&q->blkcg_mutex);
+
 	if (queue_is_mq(q))
 		blk_mq_unfreeze_queue(q, memflags);
-	if (pinned_blkg)
-		blkg_put(pinned_blkg);
-	if (pd_prealloc)
-		pol->pd_free_fn(pd_prealloc);
-	return ret;
+	mutex_unlock(&q->blkcg_mutex);
+	return 0;
 
-enomem:
-	/* alloc failed, take down everything */
-	spin_lock_irq(&q->queue_lock);
+err_teardown:
 	blkcg_policy_teardown_pds(q, pol);
-	spin_unlock_irq(&q->queue_lock);
-	ret = -ENOMEM;
-	goto out;
+	mutex_unlock(&q->blkcg_mutex);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(blkcg_activate_policy);
 
@@ -1726,18 +1700,19 @@ void blkcg_deactivate_policy(struct gendisk *disk,
 	if (!blkcg_policy_enabled(q, pol))
 		return;
 
+	/* Same locking order as blkcg_activate_policy(): mutex -> freeze */
+	mutex_lock(&q->blkcg_mutex);
 	if (queue_is_mq(q))
 		memflags = blk_mq_freeze_queue(q);
 
-	mutex_lock(&q->blkcg_mutex);
 	spin_lock_irq(&q->queue_lock);
 	__clear_bit(pol->plid, q->blkcg_pols);
 	blkcg_policy_teardown_pds(q, pol);
 	spin_unlock_irq(&q->queue_lock);
-	mutex_unlock(&q->blkcg_mutex);
 
 	if (queue_is_mq(q))
 		blk_mq_unfreeze_queue(q, memflags);
+	mutex_unlock(&q->blkcg_mutex);
 }
 EXPORT_SYMBOL_GPL(blkcg_deactivate_policy);
 
