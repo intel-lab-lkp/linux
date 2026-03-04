@@ -245,11 +245,15 @@ static int cat_run_test(const struct resctrl_test *test, const struct user_param
 	ret = get_full_cbm(test->resource, &full_cache_mask);
 	if (ret)
 		return ret;
-	/* Get the largest contiguous exclusive portion of the cache */
-	ret = get_mask_no_shareable(test->resource, &long_mask);
-	if (ret)
-		return ret;
-
+	if (get_vendor() == ARCH_HISILICON) {
+		/* On HiSilicon's platform, all cache are shareable. */
+		long_mask = full_cache_mask;
+	} else {
+		/* Get the largest contiguous exclusive portion of the cache */
+		ret = get_mask_no_shareable(test->resource, &long_mask);
+		if (ret)
+			return ret;
+	}
 	/* Get L3/L2 cache size */
 	ret = get_cache_size(uparams->cpu, test->resource, &cache_total_size);
 	if (ret)
@@ -292,8 +296,8 @@ static bool arch_supports_noncont_cat(const struct resctrl_test *test)
 {
 	unsigned int vendor_id = get_vendor();
 
-	/* AMD and Hygon always support non-contiguous CBM. */
-	if (vendor_id == ARCH_AMD || vendor_id == ARCH_HYGON)
+	/* AMD and Hygon and HiSilicon always support non-contiguous CBM. */
+	if (vendor_id == ARCH_AMD || vendor_id == ARCH_HYGON || vendor_id == ARCH_HISILICON)
 		return true;
 
 #if defined(__i386__) || defined(__x86_64__) /* arch */

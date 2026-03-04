@@ -69,7 +69,10 @@ int mount_resctrlfs(void)
 		return -1;
 
 	ksft_print_msg("Mounting resctrl to \"%s\"\n", RESCTRL_PATH);
-	ret = mount("resctrl", RESCTRL_PATH, "resctrl", 0, NULL);
+	if (get_vendor() == ARCH_HISILICON)
+		ret = mount("resctrl", RESCTRL_PATH, "resctrl", 0, "l2");
+	else
+		ret = mount("resctrl", RESCTRL_PATH, "resctrl", 0, NULL);
 	if (ret)
 		ksft_perror("mount");
 
