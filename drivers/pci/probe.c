@@ -119,7 +119,7 @@ static u64 pci_size(u64 base, u64 maxbase, u64 mask)
 	 * Get the lowest of them to find the decode size, and from that
 	 * the extent.
 	 */
-	size = size & ~(size-1);
+	size = size & ~(size - 1);
 
 	/*
 	 * base == maxbase can be valid only if the BAR has already been
@@ -594,7 +594,7 @@ void pci_read_bridge_bases(struct pci_bus *child)
 
 	pci_bus_remove_resources(child);
 	for (i = 0; i < PCI_BRIDGE_RESOURCE_NUM; i++)
-		child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
+		child->resource[i] = pci_resource_n(dev, PCI_BRIDGE_RESOURCES + i);
 
 	pci_read_bridge_io(child->self,
 			   child->resource[PCI_BUS_BRIDGE_IO_WINDOW], false);
@@ -2600,7 +2600,7 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	struct pci_dev *dev;
 	u32 l;
 
-	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60*1000))
+	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60 * MSEC_PER_SEC))
 		return NULL;
 
 	dev = pci_alloc_dev(bus);
