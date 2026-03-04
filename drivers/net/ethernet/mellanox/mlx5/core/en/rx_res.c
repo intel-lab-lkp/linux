@@ -16,7 +16,6 @@ struct mlx5e_rx_res {
 
 	struct mlx5e_rss *rss[MLX5E_MAX_NUM_RSS];
 	bool rss_active;
-	u32 *rss_rqns;
 	u32 *rss_vhca_ids;
 	unsigned int rss_nch;
 
@@ -29,6 +28,8 @@ struct mlx5e_rx_res {
 		struct mlx5e_rqt rqt;
 		struct mlx5e_tir tir;
 	} ptp;
+
+	u32 rss_rqns[];
 };
 
 /* API for rx_res_rss_* */
@@ -316,7 +317,6 @@ struct mlx5e_rss *mlx5e_rx_res_rss_get(struct mlx5e_rx_res *res, u32 rss_idx)
 static void mlx5e_rx_res_free(struct mlx5e_rx_res *res)
 {
 	kvfree(res->rss_vhca_ids);
-	kvfree(res->rss_rqns);
 	kvfree(res);
 }
 
@@ -325,20 +325,13 @@ static struct mlx5e_rx_res *mlx5e_rx_res_alloc(struct mlx5_core_dev *mdev, unsig
 {
 	struct mlx5e_rx_res *rx_res;
 
-	rx_res = kvzalloc_obj(*rx_res);
+	rx_res = kvzalloc_flex(*rx_res, rss_rqns, max_nch, GFP_KERNEL);
 	if (!rx_res)
 		return NULL;
-
-	rx_res->rss_rqns = kvcalloc(max_nch, sizeof(*rx_res->rss_rqns), GFP_KERNEL);
-	if (!rx_res->rss_rqns) {
-		kvfree(rx_res);
-		return NULL;
-	}
 
 	if (multi_vhca) {
 		rx_res->rss_vhca_ids = kvcalloc(max_nch, sizeof(*rx_res->rss_vhca_ids), GFP_KERNEL);
 		if (!rx_res->rss_vhca_ids) {
-			kvfree(rx_res->rss_rqns);
 			kvfree(rx_res);
 			return NULL;
 		}
