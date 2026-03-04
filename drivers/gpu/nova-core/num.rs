@@ -215,3 +215,37 @@ impl_const_into!(usize => { u8, u16, u32 });
 impl_const_into!(u64 => { u8, u16, u32 });
 impl_const_into!(u32 => { u8, u16 });
 impl_const_into!(u16 => { u8 });
+
+/// Implements [`TryFrom`] and [`From`] conversions between a `#[repr(primitive)]` enum and its
+/// underlying primitive type.
+///
+/// The [`TryFrom`] conversion returns the specified error for unrecognized values. The [`From`]
+/// conversion casts the enum variant to the primitive type.
+///
+/// Only the variants listed in the macro invocation are recognized by [`TryFrom`]. This allows
+/// excluding certain variants (e.g., dead code) from the reverse mapping.
+///
+/// The enum **must** have a `#[repr($prim_type)]` attribute. Without it, the `as` cast in the
+/// generated [`From`] impl is not guaranteed to be correct.
+macro_rules! impl_num_enum {
+    ($enum_type:ty : $prim_type:ty [$($variant:ident),+ $(,)?] => $err:expr) => {
+        impl From<$enum_type> for $prim_type {
+            fn from(val: $enum_type) -> $prim_type {
+                val as $prim_type
+            }
+        }
+
+        impl TryFrom<$prim_type> for $enum_type {
+            type Error = kernel::error::Error;
+
+            fn try_from(val: $prim_type) -> core::result::Result<Self, Self::Error> {
+                $(if val == <$enum_type>::$variant as $prim_type {
+                    return Ok(<$enum_type>::$variant);
+                })*
+                Err($err)
+            }
+        }
+    };
+}
+
+pub(crate) use impl_num_enum;

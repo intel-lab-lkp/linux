@@ -23,6 +23,7 @@ use crate::{
     driver::Bar0,
     gpu::Chipset,
     num::{
+        impl_num_enum,
         FromSafeCast,
         IntoSafeCast, //
     },
@@ -33,17 +34,6 @@ use crate::{
 pub(crate) mod gsp;
 mod hal;
 pub(crate) mod sec2;
-
-// TODO[FPRI]: Replace with `ToPrimitive`.
-macro_rules! impl_from_enum_to_u8 {
-    ($enum_type:ty) => {
-        impl From<$enum_type> for u8 {
-            fn from(value: $enum_type) -> Self {
-                value as u8
-            }
-        }
-    };
-}
 
 /// Revision number of a falcon core, used in the [`crate::regs::NV_PFALCON_FALCON_HWCFG1`]
 /// register.
@@ -59,29 +49,7 @@ pub(crate) enum FalconCoreRev {
     Rev6 = 6,
     Rev7 = 7,
 }
-impl_from_enum_to_u8!(FalconCoreRev);
-
-// TODO[FPRI]: replace with `FromPrimitive`.
-impl TryFrom<u8> for FalconCoreRev {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        use FalconCoreRev::*;
-
-        let rev = match value {
-            1 => Rev1,
-            2 => Rev2,
-            3 => Rev3,
-            4 => Rev4,
-            5 => Rev5,
-            6 => Rev6,
-            7 => Rev7,
-            _ => return Err(EINVAL),
-        };
-
-        Ok(rev)
-    }
-}
+impl_num_enum!(FalconCoreRev: u8 [Rev1, Rev2, Rev3, Rev4, Rev5, Rev6, Rev7] => EINVAL);
 
 /// Revision subversion number of a falcon core, used in the
 /// [`crate::regs::NV_PFALCON_FALCON_HWCFG1`] register.
@@ -94,24 +62,27 @@ pub(crate) enum FalconCoreRevSubversion {
     Subversion2 = 2,
     Subversion3 = 3,
 }
-impl_from_enum_to_u8!(FalconCoreRevSubversion);
 
-// TODO[FPRI]: replace with `FromPrimitive`.
+impl From<FalconCoreRevSubversion> for u8 {
+    fn from(val: FalconCoreRevSubversion) -> u8 {
+        val as u8
+    }
+}
+
+// Manual TryFrom is required here due to the bitmask operation on the input value.
 impl TryFrom<u8> for FalconCoreRevSubversion {
     type Error = Error;
 
     fn try_from(value: u8) -> Result<Self> {
         use FalconCoreRevSubversion::*;
 
-        let sub_version = match value & 0b11 {
-            0 => Subversion0,
-            1 => Subversion1,
-            2 => Subversion2,
-            3 => Subversion3,
-            _ => return Err(EINVAL),
-        };
-
-        Ok(sub_version)
+        match value & 0b11 {
+            0 => Ok(Subversion0),
+            1 => Ok(Subversion1),
+            2 => Ok(Subversion2),
+            3 => Ok(Subversion3),
+            _ => Err(EINVAL),
+        }
     }
 }
 
@@ -138,25 +109,7 @@ pub(crate) enum FalconSecurityModel {
     /// Also known as High-Secure, Privilege Level 3 or PL3.
     Heavy = 3,
 }
-impl_from_enum_to_u8!(FalconSecurityModel);
-
-// TODO[FPRI]: replace with `FromPrimitive`.
-impl TryFrom<u8> for FalconSecurityModel {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        use FalconSecurityModel::*;
-
-        let sec_model = match value {
-            0 => None,
-            2 => Light,
-            3 => Heavy,
-            _ => return Err(EINVAL),
-        };
-
-        Ok(sec_model)
-    }
-}
+impl_num_enum!(FalconSecurityModel: u8 [None, Light, Heavy] => EINVAL);
 
 /// Signing algorithm for a given firmware, used in the [`crate::regs::NV_PFALCON2_FALCON_MOD_SEL`]
 /// register. It is passed to the Falcon Boot ROM (BROM) as a parameter.
@@ -170,19 +123,7 @@ pub(crate) enum FalconModSelAlgo {
     #[default]
     Rsa3k = 1,
 }
-impl_from_enum_to_u8!(FalconModSelAlgo);
-
-// TODO[FPRI]: replace with `FromPrimitive`.
-impl TryFrom<u8> for FalconModSelAlgo {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        match value {
-            1 => Ok(FalconModSelAlgo::Rsa3k),
-            _ => Err(EINVAL),
-        }
-    }
-}
+impl_num_enum!(FalconModSelAlgo: u8 [Rsa3k] => EINVAL);
 
 /// Valid values for the `size` field of the [`crate::regs::NV_PFALCON_FALCON_DMATRFCMD`] register.
 #[repr(u8)]
@@ -192,19 +133,7 @@ pub(crate) enum DmaTrfCmdSize {
     #[default]
     Size256B = 0x6,
 }
-impl_from_enum_to_u8!(DmaTrfCmdSize);
-
-// TODO[FPRI]: replace with `FromPrimitive`.
-impl TryFrom<u8> for DmaTrfCmdSize {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        match value {
-            0x6 => Ok(Self::Size256B),
-            _ => Err(EINVAL),
-        }
-    }
-}
+impl_num_enum!(DmaTrfCmdSize: u8 [Size256B] => EINVAL);
 
 /// Currently active core on a dual falcon/riscv (Peregrine) controller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -247,6 +176,7 @@ pub(crate) enum FalconMem {
 /// This determines the memory type for external memory access during a DMA transfer, which is
 /// performed by the Falcon's Framebuffer DMA (FBDMA) engine. See falcon.rst for more details.
 #[derive(Debug, Clone, Default)]
+#[repr(u8)]
 pub(crate) enum FalconFbifTarget {
     /// VRAM.
     #[default]
@@ -257,23 +187,7 @@ pub(crate) enum FalconFbifTarget {
     /// Non-coherent system memory (System DRAM).
     NoncoherentSysmem = 2,
 }
-impl_from_enum_to_u8!(FalconFbifTarget);
-
-// TODO[FPRI]: replace with `FromPrimitive`.
-impl TryFrom<u8> for FalconFbifTarget {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        let res = match value {
-            0 => Self::LocalFb,
-            1 => Self::CoherentSysmem,
-            2 => Self::NoncoherentSysmem,
-            _ => return Err(EINVAL),
-        };
-
-        Ok(res)
-    }
-}
+impl_num_enum!(FalconFbifTarget: u8 [LocalFb, CoherentSysmem, NoncoherentSysmem] => EINVAL);
 
 /// Type of memory addresses to use.
 #[derive(Debug, Clone, Default)]

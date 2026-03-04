@@ -19,6 +19,7 @@ use crate::{
     fb::SysmemFlush,
     gfw,
     gsp::Gsp,
+    num::impl_num_enum,
     regs,
 };
 
@@ -135,25 +136,7 @@ pub(crate) enum Architecture {
     Ada = 0x19,
 }
 
-impl TryFrom<u8> for Architecture {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        match value {
-            0x16 => Ok(Self::Turing),
-            0x17 => Ok(Self::Ampere),
-            0x19 => Ok(Self::Ada),
-            _ => Err(ENODEV),
-        }
-    }
-}
-
-impl From<Architecture> for u8 {
-    fn from(value: Architecture) -> Self {
-        // CAST: `Architecture` is `repr(u8)`, so this cast is always lossless.
-        value as u8
-    }
-}
+impl_num_enum!(Architecture: u8 [Turing, Ampere, Ada] => ENODEV);
 
 pub(crate) struct Revision {
     major: u8,
