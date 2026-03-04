@@ -90,6 +90,12 @@ enum {
 	ADMV1013_SE_MODE_DIFF = 12
 };
 
+enum {
+	ADMV1013_QUAD_SE_DIFF,
+	ADMV1013_QUAD_SE_POS,
+	ADMV1013_QUAD_SE_NEG,
+};
+
 struct admv1013_state {
 	struct spi_device	*spi;
 	struct clk		*clkin;
@@ -512,37 +518,42 @@ static void admv1013_powerdown(void *data)
 	admv1013_spi_update_bits(data, ADMV1013_REG_ENABLE, enable_reg_msk, enable_reg);
 }
 
+static const char * const admv1013_input_modes[] = {
+	[ADMV1013_IQ_MODE] = "iq",
+	[ADMV1013_IF_MODE] = "if",
+};
+
+static const char * const admv1013_quad_se_modes[] = {
+	[ADMV1013_QUAD_SE_DIFF] = "diff",
+	[ADMV1013_QUAD_SE_POS] = "se-pos",
+	[ADMV1013_QUAD_SE_NEG] = "se-neg",
+};
+
+static const unsigned int admv1013_quad_se_regvals[] = {
+	[ADMV1013_QUAD_SE_DIFF] = ADMV1013_SE_MODE_DIFF,
+	[ADMV1013_QUAD_SE_POS] = ADMV1013_SE_MODE_POS,
+	[ADMV1013_QUAD_SE_NEG] = ADMV1013_SE_MODE_NEG,
+};
+
 static int admv1013_properties_parse(struct admv1013_state *st)
 {
 	int ret;
-	const char *str;
 	struct device *dev = &st->spi->dev;
 
 	st->det_en = device_property_read_bool(dev, "adi,detector-enable");
 
-	ret = device_property_read_string(dev, "adi,input-mode", &str);
-	if (ret)
-		st->input_mode = ADMV1013_IQ_MODE;
+	ret = device_property_match_property_string(dev, "adi,input-mode",
+						    admv1013_input_modes,
+						    ARRAY_SIZE(admv1013_input_modes));
+	st->input_mode = ret >= 0 ? ret : ADMV1013_IQ_MODE;
 
-	if (!strcmp(str, "iq"))
-		st->input_mode = ADMV1013_IQ_MODE;
-	else if (!strcmp(str, "if"))
-		st->input_mode = ADMV1013_IF_MODE;
-	else
-		return -EINVAL;
+	ret = device_property_match_property_string(dev, "adi,quad-se-mode",
+						    admv1013_quad_se_modes,
+						    ARRAY_SIZE(admv1013_quad_se_modes));
+	if (ret < 0)
+		ret = ADMV1013_QUAD_SE_DIFF;
 
-	ret = device_property_read_string(dev, "adi,quad-se-mode", &str);
-	if (ret)
-		st->quad_se_mode = ADMV1013_SE_MODE_DIFF;
-
-	if (!strcmp(str, "diff"))
-		st->quad_se_mode = ADMV1013_SE_MODE_DIFF;
-	else if (!strcmp(str, "se-pos"))
-		st->quad_se_mode = ADMV1013_SE_MODE_POS;
-	else if (!strcmp(str, "se-neg"))
-		st->quad_se_mode = ADMV1013_SE_MODE_NEG;
-	else
-		return -EINVAL;
+	st->quad_se_mode = admv1013_quad_se_regvals[ret];
 
 	ret = devm_regulator_bulk_get_enable(dev,
 					     ARRAY_SIZE(admv1013_vcc_regs),
