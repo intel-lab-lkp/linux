@@ -4211,6 +4211,10 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 	/* avoid taking the LRU lock under the PTL when possible */
 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
 
+	/* may the pmd has been set in bloom filter */
+	if (mm_state && test_bloom_filter(mm_state, max_seq, pvmw->pmd))
+		return true;
+
 	start = max(addr & PMD_MASK, vma->vm_start);
 	end = min(addr | ~PMD_MASK, vma->vm_end - 1) + 1;
 
