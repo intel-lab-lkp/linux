@@ -589,6 +589,7 @@ static void *__conn_prepare_command(struct drbd_connection *connection,
 }
 
 void *conn_prepare_command(struct drbd_connection *connection, struct drbd_socket *sock)
+	__cond_acquires(true, sock->mutex)
 {
 	void *p;
 
@@ -601,6 +602,7 @@ void *conn_prepare_command(struct drbd_connection *connection, struct drbd_socke
 }
 
 void *drbd_prepare_command(struct drbd_peer_device *peer_device, struct drbd_socket *sock)
+	__cond_acquires(true, sock->mutex)
 {
 	return conn_prepare_command(peer_device->connection, sock);
 }
@@ -646,6 +648,7 @@ static int __conn_send_command(struct drbd_connection *connection, struct drbd_s
 int conn_send_command(struct drbd_connection *connection, struct drbd_socket *sock,
 		      enum drbd_packet cmd, unsigned int header_size,
 		      void *data, unsigned int size)
+	__releases(sock->mutex)
 {
 	int err;
 
@@ -657,6 +660,7 @@ int conn_send_command(struct drbd_connection *connection, struct drbd_socket *so
 int drbd_send_command(struct drbd_peer_device *peer_device, struct drbd_socket *sock,
 		      enum drbd_packet cmd, unsigned int header_size,
 		      void *data, unsigned int size)
+	__releases(sock->mutex)
 {
 	int err;
 
@@ -667,6 +671,7 @@ int drbd_send_command(struct drbd_peer_device *peer_device, struct drbd_socket *
 }
 
 int drbd_send_ping(struct drbd_connection *connection)
+	__cond_acquires(true, connection->meta.mutex)
 {
 	struct drbd_socket *sock;
 
@@ -677,6 +682,7 @@ int drbd_send_ping(struct drbd_connection *connection)
 }
 
 int drbd_send_ping_ack(struct drbd_connection *connection)
+	__cond_acquires(true, connection->meta.mutex)
 {
 	struct drbd_socket *sock;
 
@@ -687,6 +693,7 @@ int drbd_send_ping_ack(struct drbd_connection *connection)
 }
 
 int drbd_send_sync_param(struct drbd_peer_device *peer_device)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_rs_param_95 *p;
@@ -800,6 +807,7 @@ int drbd_send_protocol(struct drbd_connection *connection)
 }
 
 static int _drbd_send_uuids(struct drbd_peer_device *peer_device, u64 uuid_flags)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_device *device = peer_device->device;
 	struct drbd_socket *sock;
@@ -862,6 +870,7 @@ void drbd_print_uuids(struct drbd_device *device, const char *text)
 }
 
 void drbd_gen_and_send_sync_uuid(struct drbd_peer_device *peer_device)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_device *device = peer_device->device;
 	struct drbd_socket *sock;
@@ -888,6 +897,7 @@ void drbd_gen_and_send_sync_uuid(struct drbd_peer_device *peer_device)
 }
 
 int drbd_send_sizes(struct drbd_peer_device *peer_device, int trigger_reply, enum dds_flags flags)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_device *device = peer_device->device;
 	struct drbd_socket *sock;
@@ -969,6 +979,7 @@ int drbd_send_sizes(struct drbd_peer_device *peer_device, int trigger_reply, enu
  * @peer_device:	DRBD peer device.
  */
 int drbd_send_current_state(struct drbd_peer_device *peer_device)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_state *p;
@@ -992,6 +1003,7 @@ int drbd_send_current_state(struct drbd_peer_device *peer_device)
  * want to send each intermediary state in the order it occurred.
  */
 int drbd_send_state(struct drbd_peer_device *peer_device, union drbd_state state)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_state *p;
@@ -1005,6 +1017,7 @@ int drbd_send_state(struct drbd_peer_device *peer_device, union drbd_state state
 }
 
 int drbd_send_state_req(struct drbd_peer_device *peer_device, union drbd_state mask, union drbd_state val)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_req_state *p;
@@ -1019,6 +1032,7 @@ int drbd_send_state_req(struct drbd_peer_device *peer_device, union drbd_state m
 }
 
 int conn_send_state_req(struct drbd_connection *connection, union drbd_state mask, union drbd_state val)
+	__cond_acquires(true, connection->data.mutex)
 {
 	enum drbd_packet cmd;
 	struct drbd_socket *sock;
@@ -1035,6 +1049,7 @@ int conn_send_state_req(struct drbd_connection *connection, union drbd_state mas
 }
 
 void drbd_send_sr_reply(struct drbd_peer_device *peer_device, enum drbd_state_rv retcode)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_req_state_reply *p;
@@ -1048,6 +1063,7 @@ void drbd_send_sr_reply(struct drbd_peer_device *peer_device, enum drbd_state_rv
 }
 
 void conn_send_sr_reply(struct drbd_connection *connection, enum drbd_state_rv retcode)
+	__cond_acquires(true, connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_req_state_reply *p;
@@ -1381,6 +1397,7 @@ int drbd_send_ack_ex(struct drbd_peer_device *peer_device, enum drbd_packet cmd,
 
 int drbd_send_rs_deallocated(struct drbd_peer_device *peer_device,
 			     struct drbd_peer_request *peer_req)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_block_desc *p;
@@ -1397,6 +1414,7 @@ int drbd_send_rs_deallocated(struct drbd_peer_device *peer_device,
 
 int drbd_send_drequest(struct drbd_peer_device *peer_device, int cmd,
 		       sector_t sector, int size, u64 block_id)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_block_req *p;
@@ -1413,6 +1431,7 @@ int drbd_send_drequest(struct drbd_peer_device *peer_device, int cmd,
 
 int drbd_send_drequest_csum(struct drbd_peer_device *peer_device, sector_t sector, int size,
 			    void *digest, int digest_size, enum drbd_packet cmd)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_block_req *p;
@@ -1430,6 +1449,7 @@ int drbd_send_drequest_csum(struct drbd_peer_device *peer_device, sector_t secto
 }
 
 int drbd_send_ov_request(struct drbd_peer_device *peer_device, sector_t sector, int size)
+	__cond_acquires(true, peer_device->connection->data.mutex)
 {
 	struct drbd_socket *sock;
 	struct p_block_req *p;
@@ -3282,7 +3302,7 @@ void drbd_md_mark_dirty(struct drbd_device *device)
 		mod_timer(&device->md_sync_timer, jiffies + 5*HZ);
 }
 
-void drbd_uuid_move_history(struct drbd_device *device) __must_hold(local)
+void drbd_uuid_move_history(struct drbd_device *device)
 {
 	int i;
 
@@ -3290,7 +3310,7 @@ void drbd_uuid_move_history(struct drbd_device *device) __must_hold(local)
 		device->ldev->md.uuid[i+1] = device->ldev->md.uuid[i];
 }
 
-void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local)
+void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
 {
 	if (idx == UI_CURRENT) {
 		if (device->state.role == R_PRIMARY)
@@ -3305,7 +3325,7 @@ void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(l
 	drbd_md_mark_dirty(device);
 }
 
-void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local)
+void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&device->ldev->md.uuid_lock, flags);
@@ -3313,7 +3333,7 @@ void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(lo
 	spin_unlock_irqrestore(&device->ldev->md.uuid_lock, flags);
 }
 
-void drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local)
+void drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&device->ldev->md.uuid_lock, flags);
@@ -3332,7 +3352,7 @@ void drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(loc
  * Creates a new current UUID, and rotates the old current UUID into
  * the bitmap slot. Causes an incremental resync upon next connect.
  */
-void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local)
+void drbd_uuid_new_current(struct drbd_device *device)
 {
 	u64 val;
 	unsigned long long bm_uuid;
@@ -3354,7 +3374,7 @@ void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local)
 	drbd_md_sync(device);
 }
 
-void drbd_uuid_set_bm(struct drbd_device *device, u64 val) __must_hold(local)
+void drbd_uuid_set_bm(struct drbd_device *device, u64 val)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&device->ldev->md.uuid_lock, flags);
@@ -3387,7 +3407,7 @@ void drbd_uuid_set_bm(struct drbd_device *device, u64 val) __must_hold(local)
  * Sets all bits in the bitmap and writes the whole bitmap to stable storage.
  */
 int drbd_bmio_set_n_write(struct drbd_device *device,
-			  struct drbd_peer_device *peer_device) __must_hold(local)
+			  struct drbd_peer_device *peer_device)
 
 {
 	int rv = -EIO;
@@ -3414,7 +3434,7 @@ int drbd_bmio_set_n_write(struct drbd_device *device,
  * Clears all bits in the bitmap and writes the whole bitmap to stable storage.
  */
 int drbd_bmio_clear_n_write(struct drbd_device *device,
-			  struct drbd_peer_device *peer_device) __must_hold(local)
+			  struct drbd_peer_device *peer_device)
 
 {
 	drbd_resume_al(device);
@@ -3541,7 +3561,7 @@ int drbd_bitmap_io(struct drbd_device *device,
 	return rv;
 }
 
-void drbd_md_set_flag(struct drbd_device *device, int flag) __must_hold(local)
+void drbd_md_set_flag(struct drbd_device *device, int flag)
 {
 	if ((device->ldev->md.flags & flag) != flag) {
 		drbd_md_mark_dirty(device);
@@ -3549,7 +3569,7 @@ void drbd_md_set_flag(struct drbd_device *device, int flag) __must_hold(local)
 	}
 }
 
-void drbd_md_clear_flag(struct drbd_device *device, int flag) __must_hold(local)
+void drbd_md_clear_flag(struct drbd_device *device, int flag)
 {
 	if ((device->ldev->md.flags & flag) != 0) {
 		drbd_md_mark_dirty(device);
@@ -3649,6 +3669,7 @@ const char *cmdname(enum drbd_packet cmd)
  *		struct drbd_peer_request
  */
 int drbd_wait_misc(struct drbd_device *device, struct drbd_interval *i)
+	__must_hold(&device->resource->req_lock)
 {
 	struct net_conf *nc;
 	DEFINE_WAIT(wait);
@@ -3678,6 +3699,8 @@ int drbd_wait_misc(struct drbd_device *device, struct drbd_interval *i)
 }
 
 void lock_all_resources(void)
+	__acquires(&resources_mutex)
+	__no_context_analysis /* locking loop */
 {
 	struct drbd_resource *resource;
 	int __maybe_unused i = 0;
@@ -3689,6 +3712,8 @@ void lock_all_resources(void)
 }
 
 void unlock_all_resources(void)
+	__releases(&resources_mutex)
+	__no_context_analysis /* unlock loop */
 {
 	struct drbd_resource *resource;
 

@@ -1056,14 +1056,14 @@ extern void conn_md_sync(struct drbd_connection *connection);
 extern void drbd_md_write(struct drbd_device *device, void *buffer);
 extern void drbd_md_sync(struct drbd_device *device);
 extern int  drbd_md_read(struct drbd_device *device, struct drbd_backing_dev *bdev);
-extern void drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local);
-extern void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local);
-extern void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local);
-extern void drbd_uuid_set_bm(struct drbd_device *device, u64 val) __must_hold(local);
-extern void drbd_uuid_move_history(struct drbd_device *device) __must_hold(local);
-extern void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local);
-extern void drbd_md_set_flag(struct drbd_device *device, int flags) __must_hold(local);
-extern void drbd_md_clear_flag(struct drbd_device *device, int flags)__must_hold(local);
+extern void drbd_uuid_set(struct drbd_device *device, int idx, u64 val);
+extern void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val);
+extern void drbd_uuid_new_current(struct drbd_device *device);
+extern void drbd_uuid_set_bm(struct drbd_device *device, u64 val);
+extern void drbd_uuid_move_history(struct drbd_device *device);
+extern void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val);
+extern void drbd_md_set_flag(struct drbd_device *device, int flags);
+extern void drbd_md_clear_flag(struct drbd_device *device, int flags);
 extern int drbd_md_test_flag(struct drbd_backing_dev *, int);
 extern void drbd_md_mark_dirty(struct drbd_device *device);
 extern void drbd_queue_bitmap_io(struct drbd_device *device,
@@ -1080,9 +1080,9 @@ extern int drbd_bitmap_io_from_worker(struct drbd_device *device,
 		char *why, enum bm_flag flags,
 		struct drbd_peer_device *peer_device);
 extern int drbd_bmio_set_n_write(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
+		struct drbd_peer_device *peer_device);
 extern int drbd_bmio_clear_n_write(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
+		struct drbd_peer_device *peer_device);
 
 /* Meta data layout
  *
@@ -1292,17 +1292,17 @@ extern void _drbd_bm_set_bits(struct drbd_device *device,
 extern int  drbd_bm_test_bit(struct drbd_device *device, unsigned long bitnr);
 extern int  drbd_bm_e_weight(struct drbd_device *device, unsigned long enr);
 extern int  drbd_bm_read(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
+		struct drbd_peer_device *peer_device);
 extern void drbd_bm_mark_for_writeout(struct drbd_device *device, int page_nr);
 extern int  drbd_bm_write(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
-extern void drbd_bm_reset_al_hints(struct drbd_device *device) __must_hold(local);
-extern int  drbd_bm_write_hinted(struct drbd_device *device) __must_hold(local);
-extern int  drbd_bm_write_lazy(struct drbd_device *device, unsigned upper_idx) __must_hold(local);
+		struct drbd_peer_device *peer_device);
+extern void drbd_bm_reset_al_hints(struct drbd_device *device);
+extern int  drbd_bm_write_hinted(struct drbd_device *device);
+extern int  drbd_bm_write_lazy(struct drbd_device *device, unsigned upper_idx);
 extern int drbd_bm_write_all(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
+		struct drbd_peer_device *peer_device);
 extern int  drbd_bm_write_copy_pages(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
+		struct drbd_peer_device *peer_device);
 extern size_t	     drbd_bm_words(struct drbd_device *device);
 extern unsigned long drbd_bm_bits(struct drbd_device *device);
 extern sector_t      drbd_bm_capacity(struct drbd_device *device);
@@ -1389,7 +1389,8 @@ enum determine_dev_size {
 	DS_GREW_FROM_ZERO = 3,
 };
 extern enum determine_dev_size
-drbd_determine_dev_size(struct drbd_device *, enum dds_flags, struct resize_parms *) __must_hold(local);
+drbd_determine_dev_size(struct drbd_device *device, enum dds_flags,
+			struct resize_parms *);
 extern void resync_after_online_grow(struct drbd_device *);
 extern void drbd_reconsider_queue_parameters(struct drbd_device *device,
 			struct drbd_backing_dev *bdev, struct o_qlim *o);
@@ -1470,10 +1471,10 @@ extern bool drbd_rs_should_slow_down(struct drbd_peer_device *peer_device, secto
 		bool throttle_if_app_is_waiting);
 extern int drbd_submit_peer_request(struct drbd_peer_request *peer_req);
 extern int drbd_free_peer_reqs(struct drbd_device *, struct list_head *);
-extern struct drbd_peer_request *drbd_alloc_peer_req(struct drbd_peer_device *, u64,
+extern struct drbd_peer_request *drbd_alloc_peer_req(struct drbd_peer_device *device, u64,
 						     sector_t, unsigned int,
 						     unsigned int,
-						     gfp_t) __must_hold(local);
+						     gfp_t);
 extern void drbd_free_peer_req(struct drbd_device *device, struct drbd_peer_request *req);
 extern struct page *drbd_alloc_pages(struct drbd_peer_device *, unsigned int, bool);
 extern void _drbd_clear_done_ee(struct drbd_device *device, struct list_head *to_be_freed);
@@ -1488,7 +1489,6 @@ void drbd_set_my_capacity(struct drbd_device *device, sector_t size);
 static inline void drbd_submit_bio_noacct(struct drbd_device *device,
 					     int fault_type, struct bio *bio)
 {
-	__release(local);
 	if (!bio->bi_bdev) {
 		drbd_err(device, "drbd_submit_bio_noacct: bio->bi_bdev == NULL\n");
 		bio->bi_status = BLK_STS_IOERR;
@@ -1975,8 +1975,7 @@ static inline bool is_sync_state(enum drbd_conns connection_state)
  * You have to call put_ldev() when finished working with device->ldev.
  */
 #define get_ldev_if_state(_device, _min_state)				\
-	(_get_ldev_if_state((_device), (_min_state)) ?			\
-	 ({ __acquire(x); true; }) : false)
+	(_get_ldev_if_state((_device), (_min_state)))
 #define get_ldev(_device) get_ldev_if_state(_device, D_INCONSISTENT)
 
 static inline void put_ldev(struct drbd_device *device)
@@ -1991,7 +1990,6 @@ static inline void put_ldev(struct drbd_device *device)
 	/* This may be called from some endio handler,
 	 * so we must not sleep here. */
 
-	__release(local);
 	D_ASSERT(device, i >= 0);
 	if (i == 0) {
 		if (disk_state == D_DISKLESS)
