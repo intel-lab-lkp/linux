@@ -56,13 +56,13 @@ struct hsphy_data {
 
 struct hsphy_priv {
 	void __iomem *base;
-	struct clk_bulk_data *clks;
 	int num_clks;
 	struct reset_control *phy_reset;
 	struct reset_control *por_reset;
 	struct regulator_bulk_data vregs[VREG_NUM];
 	const struct hsphy_data *data;
 	enum phy_mode mode;
+	struct clk_bulk_data clks[] __counted_by(num_clks);
 };
 
 static int qcom_snps_hsphy_set_mode(struct phy *phy, enum phy_mode mode,
@@ -309,22 +309,20 @@ static int qcom_snps_hsphy_probe(struct platform_device *pdev)
 	struct phy_provider *provider;
 	struct hsphy_priv *priv;
 	struct phy *phy;
+	size_t size;
 	int ret;
 	int i;
 
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	size = ARRAY_SIZE(qcom_snps_hsphy_clks);
+	priv = devm_kzalloc(dev, struct_size(priv, clks, size), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+
+	priv->num_clks = size;
 
 	priv->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
-
-	priv->num_clks = ARRAY_SIZE(qcom_snps_hsphy_clks);
-	priv->clks = devm_kcalloc(dev, priv->num_clks, sizeof(*priv->clks),
-				  GFP_KERNEL);
-	if (!priv->clks)
-		return -ENOMEM;
 
 	for (i = 0; i < priv->num_clks; i++)
 		priv->clks[i].id = qcom_snps_hsphy_clks[i];
