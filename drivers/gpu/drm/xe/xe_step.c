@@ -248,7 +248,7 @@ struct xe_step_info xe_step_gmdid_get(struct xe_device *xe,
 	case STEP_##name:	\
 		return #name;
 
-const char *xe_step_name(enum xe_step step)
+const char *xe_step_name(enum intel_step step)
 {
 	switch (step) {
 	STEP_NAME_LIST(STEP_NAME_CASE);
