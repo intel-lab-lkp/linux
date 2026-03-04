@@ -33,10 +33,15 @@ static bool bl_register_scsi(struct pnfs_block_dev *dev)
 	const struct pr_ops *ops = bdev->bd_disk->fops->pr_ops;
 	int status;
 
-	if (test_and_set_bit(PNFS_BDEV_REGISTERED, &dev->flags))
+	mutex_lock(&dev->pbd_registration_mutex);
+	if (dev->flags & BIT(PNFS_BDEV_REGISTERED)) {
+		mutex_unlock(&dev->pbd_registration_mutex);
 		return true;
+	}
+	dev->flags |= BIT(PNFS_BDEV_REGISTERED);
 
 	status = ops->pr_register(bdev, 0, dev->pr_key, true);
+	mutex_unlock(&dev->pbd_registration_mutex);
 	if (status) {
 		trace_bl_pr_key_reg_err(bdev, dev->pr_key, status);
 		return false;
@@ -55,9 +60,13 @@ static void bl_unregister_dev(struct pnfs_block_dev *dev)
 		return;
 	}
 
+	mutex_lock(&dev->pbd_registration_mutex);
 	if (dev->type == PNFS_BLOCK_VOLUME_SCSI &&
-		test_and_clear_bit(PNFS_BDEV_REGISTERED, &dev->flags))
+			dev->flags & BIT(PNFS_BDEV_REGISTERED)) {
+		dev->flags &= ~BIT(PNFS_BDEV_REGISTERED);
 		bl_unregister_scsi(dev);
+	}
+	mutex_unlock(&dev->pbd_registration_mutex);
 }
 
 bool bl_register_dev(struct pnfs_block_dev *dev)
@@ -572,6 +581,7 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	top = kzalloc_obj(*top, gfp_mask);
 	if (!top)
 		goto out_free_volumes;
+	mutex_init(&top->pbd_registration_mutex);
 
 	ret = bl_parse_deviceid(server, top, volumes, nr_volumes - 1, gfp_mask);
 

@@ -114,9 +114,12 @@ struct pnfs_block_dev {
 	unsigned long			flags;
 
 	u64				pr_key;
+	/* Mutex to serialize SCSI PR register/unregister operations. */
+	struct mutex			pbd_registration_mutex;
 
 	bool (*map)(struct pnfs_block_dev *dev, u64 offset,
 			struct pnfs_block_dev_map *map);
+
 };
 
 /* pnfs_block_dev flag bits */
