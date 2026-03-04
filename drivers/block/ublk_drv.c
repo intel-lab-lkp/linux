@@ -353,11 +353,13 @@ static inline bool ublk_support_batch_io(const struct ublk_queue *ubq)
 }
 
 static inline void ublk_io_lock(struct ublk_io *io)
+	__acquires(&io->lock)
 {
 	spin_lock(&io->lock);
 }
 
 static inline void ublk_io_unlock(struct ublk_io *io)
+	__releases(&io->lock)
 {
 	spin_unlock(&io->lock);
 }
@@ -2926,7 +2928,6 @@ static void ublk_queue_reset_io_flags(struct ublk_queue *ubq)
 
 /* device can only be started after all IOs are ready */
 static void ublk_mark_io_ready(struct ublk_device *ub, u16 q_id)
-	__must_hold(&ub->mutex)
 {
 	struct ublk_queue *ubq = ublk_get_queue(ub, q_id);
 
@@ -3160,6 +3161,7 @@ static int ublk_check_fetch_buf(const struct ublk_device *ub, __u64 buf_addr)
 
 static int __ublk_fetch(struct io_uring_cmd *cmd, struct ublk_device *ub,
 			struct ublk_io *io, u16 q_id)
+	__must_hold(&ub->mutex)
 {
 	/* UBLK_IO_FETCH_REQ is only allowed before dev is setup */
 	if (ublk_dev_ready(ub))
@@ -3598,9 +3600,11 @@ static int ublk_batch_prep_io(struct ublk_queue *ubq,
 	}
 
 	ublk_io_lock(io);
+	__acquire(&data->ub->mutex);
 	ret = __ublk_fetch(data->cmd, data->ub, io, ubq->q_id);
 	if (!ret)
 		io->buf = buf;
+	__release(&data->ub->mutex);
 	ublk_io_unlock(io);
 
 	if (!ret)
