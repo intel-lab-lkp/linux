@@ -89,7 +89,7 @@ static void print1byte(uint8_t input, struct iio_channel_info *info)
 	 */
 	input >>= info->shift;
 	input &= info->mask;
-	if (info->is_signed) {
+	if (info->format == 's') {
 		int8_t val = (int8_t)(input << (8 - info->bits_used)) >>
 			     (8 - info->bits_used);
 		printf("%05f ", ((float)val + info->offset) * info->scale);
@@ -112,12 +112,26 @@ static void print2byte(uint16_t input, struct iio_channel_info *info)
 	 */
 	input >>= info->shift;
 	input &= info->mask;
-	if (info->is_signed) {
+	switch (info->format) {
+	case 's': {
 		int16_t val = (int16_t)(input << (16 - info->bits_used)) >>
 			      (16 - info->bits_used);
 		printf("%05f ", ((float)val + info->offset) * info->scale);
-	} else {
+		break;
+	}
+	case 'u':
 		printf("%05f ", ((float)input + info->offset) * info->scale);
+		break;
+	case 'f': {
+		union {
+			uint16_t u;
+			__fp16 f;
+		} converter;
+
+		converter.u = input;
+		printf("%05f ", ((float)converter.f + info->offset) * info->scale);
+		break;
+	}
 	}
 }
 
@@ -135,12 +149,26 @@ static void print4byte(uint32_t input, struct iio_channel_info *info)
 	 */
 	input >>= info->shift;
 	input &= info->mask;
-	if (info->is_signed) {
+	switch (info->format) {
+	case 's': {
 		int32_t val = (int32_t)(input << (32 - info->bits_used)) >>
 			      (32 - info->bits_used);
 		printf("%05f ", ((float)val + info->offset) * info->scale);
-	} else {
+		break;
+	}
+	case 'u':
 		printf("%05f ", ((float)input + info->offset) * info->scale);
+		break;
+	case 'f': {
+		union {
+			uint32_t u;
+			float f;
+		} converter;
+
+		converter.u = input;
+		printf("%05f ", (converter.f + info->offset) * info->scale);
+		break;
+	}
 	}
 }
 
@@ -158,7 +186,8 @@ static void print8byte(uint64_t input, struct iio_channel_info *info)
 	 */
 	input >>= info->shift;
 	input &= info->mask;
-	if (info->is_signed) {
+	switch (info->format) {
+	case 's': {
 		int64_t val = (int64_t)(input << (64 - info->bits_used)) >>
 			      (64 - info->bits_used);
 		/* special case for timestamp */
@@ -167,8 +196,21 @@ static void print8byte(uint64_t input, struct iio_channel_info *info)
 		else
 			printf("%05f ",
 			       ((float)val + info->offset) * info->scale);
-	} else {
+		break;
+	}
+	case 'u':
 		printf("%05f ", ((float)input + info->offset) * info->scale);
+		break;
+	case 'f': {
+		union {
+			uint64_t u;
+			double f;
+		} converter;
+
+		converter.u = input;
+		printf("%05f ", (converter.f + info->offset) * info->scale);
+		break;
+	}
 	}
 }
 
