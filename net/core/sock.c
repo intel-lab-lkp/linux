@@ -3968,7 +3968,7 @@ int sock_common_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 {
 	struct sock *sk = sock->sk;
 
-	return sk->sk_prot->recvmsg(sk, msg, size, flags);
+	return READ_ONCE(sk->sk_prot)->recvmsg(sk, msg, size, flags);
 }
 EXPORT_SYMBOL(sock_common_recvmsg);
 
