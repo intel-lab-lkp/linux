@@ -49,6 +49,13 @@ static DETECTION_ENTRY vendor_detection[] = {
 					{ .vendor_id = ARCH_AMD,	.arg = "AuthenticAMD" },
 					{ .vendor_id = ARCH_HYGON,	.arg = "HygonGenuine" },
 					{ .vendor_id = 0,	.arg = NULL }
+				},
+			},
+			{
+				.format = "CPU implementer\t: 0x%02x\n",
+				.vendor = (VENDOR_ENTRY[]) {
+					{ .vendor_id = ARCH_HISILICON,	.arg = 0x48 },
+					{ .vendor_id = 0,	.arg = NULL }
 				}
 			}
 		}
