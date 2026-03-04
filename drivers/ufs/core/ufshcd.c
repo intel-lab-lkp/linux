@@ -7226,8 +7226,11 @@ static irqreturn_t ufshcd_intr(int irq, void *__hba)
 	u32 intr_status, enabled_intr_status;
 
 	/* Move interrupt handling to thread when MCQ & ESI are not enabled */
-	if (!hba->mcq_enabled || !hba->mcq_esi_enabled)
-		return IRQ_WAKE_THREAD;
+	if (!hba->mcq_enabled || !hba->mcq_esi_enabled) {
+		/* UIC commands should be processed promptly */
+		if (!hba->active_uic_cmd)
+			return IRQ_WAKE_THREAD;
+	}
 
 	intr_status = ufshcd_readl(hba, REG_INTERRUPT_STATUS);
 	enabled_intr_status = intr_status & ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
