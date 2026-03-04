@@ -4283,12 +4283,6 @@ static int bond_open(struct net_device *bond_dev)
 	struct list_head *iter;
 	struct slave *slave;
 
-	if (BOND_MODE(bond) == BOND_MODE_ROUNDROBIN && !bond->rr_tx_counter) {
-		bond->rr_tx_counter = alloc_percpu(u32);
-		if (!bond->rr_tx_counter)
-			return -ENOMEM;
-	}
-
 	/* reset slave->backup and slave->inactive */
 	if (bond_has_slaves(bond)) {
 		bond_for_each_slave(bond, slave, iter) {
@@ -6416,6 +6410,19 @@ static int bond_init(struct net_device *bond_dev)
 					   bond_dev->name);
 	if (!bond->wq)
 		return -ENOMEM;
+
+	/* rr_tx_counter is only used in round-robin mode, but we allocate
+	 * it unconditionally because the XDP redirect path
+	 * (xdp_master_redirect -> bond_xdp_get_xmit_slave) can reach here
+	 * even when the bond is not up, and deferring allocation to
+	 * bond_open or bond_option_mode_set would require memory barriers
+	 * on the XDP hot path. The cost is a per-cpu u32 per bond device.
+	 */
+	bond->rr_tx_counter = alloc_percpu(u32);
+	if (!bond->rr_tx_counter) {
+		destroy_workqueue(bond->wq);
+		return -ENOMEM;
+	}
 
 	bond->notifier_ctx = false;
 
