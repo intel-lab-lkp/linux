@@ -5075,7 +5075,11 @@ replay_again:
 
 	memset(&rqst, 0, sizeof(struct smb_rqst));
 	rqst.rq_iov = iov;
-	rqst.rq_nvec = n_vec + 1;
+	rqst.rq_nvec = 1;
+	iov_iter_kvec(&rqst.rq_iter, ITER_SOURCE, &iov[1], n_vec,
+		      io_parms->length);
+	rqst.rq_iter_size = io_parms->length;
+
 
 	if (retries)
 		smb2_set_replay(server, &rqst);
