@@ -26,6 +26,8 @@
 
 #include "mm_internal.h"
 
+DEFINE_STATIC_KEY_FALSE(tlb_ipi_broadcast_key);
+
 #ifdef CONFIG_PARAVIRT
 # define STATIC_NOPV
 #else
@@ -1834,3 +1836,15 @@ static int __init create_tlb_single_page_flush_ceiling(void)
 	return 0;
 }
 late_initcall(create_tlb_single_page_flush_ceiling);
+
+#ifndef CONFIG_PARAVIRT
+void __init native_pv_tlb_init(void)
+{
+	/*
+	 * For non-PARAVIRT builds, check if native TLB flush sends real IPIs
+	 * (i.e., not using INVLPGB broadcast invalidation).
+	 */
+	if (!cpu_feature_enabled(X86_FEATURE_INVLPGB))
+		static_branch_enable(&tlb_ipi_broadcast_key);
+}
+#endif

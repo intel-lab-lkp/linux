@@ -5,6 +5,7 @@
 #include <linux/mm_types.h>
 #include <linux/mmu_notifier.h>
 #include <linux/sched.h>
+#include <linux/jump_label.h>
 
 #include <asm/barrier.h>
 #include <asm/processor.h>
@@ -17,6 +18,8 @@
 #include <asm/pgtable.h>
 
 DECLARE_PER_CPU(u64, tlbstate_untag_mask);
+
+DECLARE_STATIC_KEY_FALSE(tlb_ipi_broadcast_key);
 
 void __flush_tlb_all(void);
 
