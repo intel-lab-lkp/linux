@@ -554,7 +554,7 @@ struct npc_kpu_profile_adapter {
 	u64				version;
 	const struct npc_lt_def_cfg	*lt_def;
 	const struct npc_kpu_profile_action	*ikpu; /* array[pkinds] */
-	const struct npc_kpu_profile	*kpu; /* array[kpus] */
+	struct npc_kpu_profile	*kpu; /* array[kpus] */
 	union npc_mcam_key_prfl {
 		struct npc_mcam_kex		*mkex;
 					/* used for cn9k and cn10k */
@@ -564,6 +564,7 @@ struct npc_kpu_profile_adapter {
 	bool				custom;
 	size_t				pkinds;
 	size_t				kpus;
+	bool				from_fs;
 };
 
 #define RVU_SWITCH_LBK_CHAN	63
