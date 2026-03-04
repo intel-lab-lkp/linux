@@ -6760,7 +6760,7 @@ static inline void proxy_tag_curr(struct rq *rq, struct task_struct *owner)
  */
 static void __sched notrace __schedule(int sched_mode)
 {
-	struct task_struct *prev, *next;
+	struct task_struct *prev, *next, *prev_donor;
 	/*
 	 * On PREEMPT_RT kernel, SM_RTLOCK_WAIT is noted
 	 * as a preemption by schedule_debug() and RCU.
@@ -6779,7 +6779,7 @@ static void __sched notrace __schedule(int sched_mode)
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
-
+	prev_donor = rq->donor;
 	schedule_debug(prev, preempt);
 
 	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
@@ -6873,6 +6873,8 @@ keep_resched:
 
 		if (!task_current_donor(rq, next))
 			proxy_tag_curr(rq, next);
+		if (!(!preempt && prev_state) && prev != prev_donor)
+			proxy_tag_curr(rq, prev);
 
 		/*
 		 * The membarrier system call requires each architecture
