@@ -263,6 +263,8 @@ void percpu_up_write(struct percpu_rw_semaphore *sem)
 {
 	rwsem_release(&sem->dep_map, _RET_IP_);
 
+	trace_contended_release(sem);
+
 	/*
 	 * Signal the writer is done, no fast path yet.
 	 *
@@ -297,6 +299,7 @@ void __percpu_up_read_slowpath(struct percpu_rw_semaphore *sem)
 	 * writer.
 	 */
 	smp_mb(); /* B matches C */
+	trace_contended_release(sem);
 	/*
 	 * In other words, if they see our decrement (presumably to
 	 * aggregate zero, as that is the only time it matters) they
