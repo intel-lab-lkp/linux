@@ -186,6 +186,22 @@ devlink_get_from_attrs_lock(struct net *net, struct nlattr **attrs,
 	char *busname;
 	char *devname;
 
+	if (attrs[DEVLINK_ATTR_INDEX]) {
+		u64 tmp;
+
+		if (attrs[DEVLINK_ATTR_BUS_NAME] ||
+		    attrs[DEVLINK_ATTR_DEV_NAME])
+			return ERR_PTR(-EINVAL);
+		tmp = nla_get_uint(attrs[DEVLINK_ATTR_INDEX]);
+		if (tmp > U32_MAX)
+			return ERR_PTR(-EINVAL);
+		index = tmp;
+		devlink = devlinks_xa_lookup_get(net, index);
+		if (!devlink)
+			return ERR_PTR(-ENODEV);
+		goto found;
+	}
+
 	if (!attrs[DEVLINK_ATTR_BUS_NAME] || !attrs[DEVLINK_ATTR_DEV_NAME])
 		return ERR_PTR(-EINVAL);
 
@@ -356,7 +372,8 @@ int devlink_nl_dumpit(struct sk_buff *msg, struct netlink_callback *cb,
 	int flags = NLM_F_MULTI;
 
 	if (attrs &&
-	    (attrs[DEVLINK_ATTR_BUS_NAME] || attrs[DEVLINK_ATTR_DEV_NAME]))
+	    (attrs[DEVLINK_ATTR_BUS_NAME] || attrs[DEVLINK_ATTR_DEV_NAME] ||
+	     attrs[DEVLINK_ATTR_INDEX]))
 		return devlink_nl_inst_single_dumpit(msg, cb, flags, dump_one,
 						     attrs);
 	else
