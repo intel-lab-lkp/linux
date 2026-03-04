@@ -71,8 +71,8 @@ struct dvfsrc_opp {
 };
 
 struct dvfsrc_opp_desc {
-	const struct dvfsrc_opp *opps;
 	u32 num_opp;
+	struct dvfsrc_opp opps[] __counted_by(num_opp);
 };
 
 struct dvfsrc_soc_data;
@@ -489,7 +489,6 @@ static u32 dvfsrc_get_opp_gear(struct mtk_dvfsrc *dvfsrc, u8 level)
 
 static int dvfsrc_get_hw_opps_v4(struct mtk_dvfsrc *dvfsrc)
 {
-	struct dvfsrc_opp *dvfsrc_opps;
 	struct dvfsrc_opp_desc *desc;
 	u32 num_opps, gear_info;
 	u8 num_vcore, num_dram;
@@ -520,24 +519,19 @@ static int dvfsrc_get_hw_opps_v4(struct mtk_dvfsrc *dvfsrc)
 		 num_opps, num_vcore, num_dram, num_emi);
 
 	/* Allocate everything now as anything else after that cannot fail */
-	desc = devm_kzalloc(dvfsrc->dev, sizeof(*desc), GFP_KERNEL);
+	desc = devm_kzalloc(dvfsrc->dev, struct_size(desc, opps, num_ops + 1), GFP_KERNEL);
 	if (!desc)
 		return -ENOMEM;
 
-	dvfsrc_opps = devm_kcalloc(dvfsrc->dev, num_opps + 1,
-				   sizeof(*dvfsrc_opps), GFP_KERNEL);
-	if (!dvfsrc_opps)
-		return -ENOMEM;
+	desc->num_opp = num_opps + 1;
 
 	/* Read the OPP table gear indices */
 	for (i = 0; i <= num_opps; i++) {
 		gear_info = dvfsrc_get_opp_gear(dvfsrc, num_opps - i);
-		dvfsrc_opps[i].vcore_opp = FIELD_GET(DVFSRC_V4_GEAR_INFO_VCORE, gear_info);
-		dvfsrc_opps[i].dram_opp = FIELD_GET(DVFSRC_V4_GEAR_INFO_DRAM, gear_info);
-		dvfsrc_opps[i].emi_opp = FIELD_GET(DVFSRC_V4_GEAR_INFO_EMI, gear_info);
+		desc->opps[i].vcore_opp = FIELD_GET(DVFSRC_V4_GEAR_INFO_VCORE, gear_info);
+		desc->opps[i].dram_opp = FIELD_GET(DVFSRC_V4_GEAR_INFO_DRAM, gear_info);
+		desc->opps[i].emi_opp = FIELD_GET(DVFSRC_V4_GEAR_INFO_EMI, gear_info);
 	};
-	desc->num_opp = num_opps + 1;
-	desc->opps = dvfsrc_opps;
 
 	/* Assign to main structure now that everything is done! */
 	dvfsrc->curr_opps = desc;
