@@ -97,7 +97,6 @@ static void memory_block_release(struct device *dev)
 	kfree(mem);
 }
 
-
 /* Max block size to be set by memory_block_advise_max_size */
 static unsigned long memory_block_advised_size;
 static bool memory_block_advised_size_queried;
