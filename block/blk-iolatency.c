@@ -842,11 +842,6 @@ static ssize_t iolatency_set_limit(struct kernfs_open_file *of, char *buf,
 	if (ret)
 		goto out;
 
-	/*
-	 * blk_iolatency_init() may fail after rq_qos_add() succeeds which can
-	 * confuse iolat_rq_qos() test. Make the test and init atomic.
-	 */
-	lockdep_assert_held(&ctx.bdev->bd_queue->rq_qos_mutex);
 	if (!iolat_rq_qos(ctx.bdev->bd_queue))
 		ret = blk_iolatency_init(ctx.bdev->bd_disk);
 	if (ret)

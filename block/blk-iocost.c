@@ -3220,16 +3220,13 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	u32 qos[NR_QOS_PARAMS];
 	bool enable, user;
 	char *body, *p;
-	unsigned long memflags;
 	int ret;
 
 	blkg_conf_init(&ctx, input);
 
-	memflags = blkg_conf_open_bdev_frozen(&ctx);
-	if (IS_ERR_VALUE(memflags)) {
-		ret = memflags;
+	ret = blkg_conf_open_bdev(&ctx);
+	if (ret)
 		goto err;
-	}
 
 	body = ctx.body;
 	disk = ctx.bdev->bd_disk;
@@ -3346,14 +3343,14 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 
 	blk_mq_unquiesce_queue(disk->queue);
 
-	blkg_conf_exit_frozen(&ctx, memflags);
+	blkg_conf_exit(&ctx);
 	return nbytes;
 einval:
 	spin_unlock_irq(&ioc->lock);
 	blk_mq_unquiesce_queue(disk->queue);
 	ret = -EINVAL;
 err:
-	blkg_conf_exit_frozen(&ctx, memflags);
+	blkg_conf_exit(&ctx);
 	return ret;
 }
 
