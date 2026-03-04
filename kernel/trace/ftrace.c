@@ -1284,7 +1284,7 @@ static void clear_ftrace_mod_list(struct list_head *head)
 	if (!head)
 		return;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	list_for_each_entry_safe(p, n, head, list)
 		free_ftrace_mod(p);
 	mutex_unlock(&ftrace_lock);
@@ -4254,7 +4254,7 @@ static void *t_start(struct seq_file *m, loff_t *pos)
 	void *p = NULL;
 	loff_t l;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	if (unlikely(ftrace_disabled))
 		return NULL;
@@ -4362,7 +4362,7 @@ static __init void ftrace_check_work_func(struct work_struct *work)
 	struct ftrace_page *pg;
 	struct dyn_ftrace *rec;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	do_for_each_ftrace_rec(pg, rec) {
 		test_for_valid_rec(rec);
 	} while_for_each_ftrace_rec();
@@ -5123,7 +5123,7 @@ static void process_mod_list(struct list_head *head, struct ftrace_ops *ops,
 	if (!new_hash)
 		goto out; /* warn? */
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	list_for_each_entry_safe(ftrace_mod, n, head, list) {
 
@@ -5159,7 +5159,7 @@ static void process_mod_list(struct list_head *head, struct ftrace_ops *ops,
 	if (enable && list_empty(head))
 		new_hash->flags &= ~FTRACE_HASH_FL_MOD;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	ftrace_hash_move_and_update_ops(ops, orig_hash,
 					      new_hash, enable);
@@ -5465,7 +5465,7 @@ register_ftrace_function_probe(char *glob, struct trace_array *tr,
 		return -EINVAL;
 
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	/* Check if the probe_ops is already registered */
 	list_for_each_entry(iter, &tr->func_probes, list) {
 		if (iter->probe_ops == probe_ops) {
@@ -5540,7 +5540,7 @@ register_ftrace_function_probe(char *glob, struct trace_array *tr,
 		}
 	}
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	if (!count) {
 		/* Nothing was added? */
@@ -5619,7 +5619,7 @@ unregister_ftrace_function_probe_func(char *glob, struct trace_array *tr,
 			return -EINVAL;
 	}
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	/* Check if the probe_ops is already registered */
 	list_for_each_entry(iter, &tr->func_probes, list) {
 		if (iter->probe_ops == probe_ops) {
@@ -5679,7 +5679,7 @@ unregister_ftrace_function_probe_func(char *glob, struct trace_array *tr,
 		goto out_unlock;
 	}
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	WARN_ON(probe->ref < count);
 
@@ -5943,7 +5943,7 @@ ftrace_set_hash(struct ftrace_ops *ops, unsigned char *buf, int len,
 			goto out_regex_unlock;
 	}
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	ret = ftrace_hash_move_and_update_ops(ops, orig_hash, hash, enable);
 	mutex_unlock(&ftrace_lock);
 
@@ -6205,7 +6205,7 @@ __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
 	 * Now the ftrace_ops_list_func() is called to do the direct callers.
 	 * We can safely change the direct functions attached to each entry.
 	 */
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	size = 1 << hash->size_bits;
 	for (i = 0; i < size; i++) {
@@ -6625,7 +6625,7 @@ int update_ftrace_direct_mod(struct ftrace_ops *ops, struct ftrace_hash *hash, b
 	 * Now the ftrace_ops_list_func() is called to do the direct callers.
 	 * We can safely change the direct functions attached to each entry.
 	 */
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	size = 1 << hash->size_bits;
 	for (i = 0; i < size; i++) {
@@ -6980,7 +6980,7 @@ int ftrace_regex_release(struct inode *inode, struct file *file)
 		} else
 			orig_hash = &iter->ops->func_hash->notrace_hash;
 
-		mutex_lock(&ftrace_lock);
+		mutex_lock_nospin(&ftrace_lock);
 		ftrace_hash_move_and_update_ops(iter->ops, orig_hash,
 						      iter->hash, filter_hash);
 		mutex_unlock(&ftrace_lock);
@@ -7464,7 +7464,7 @@ void ftrace_create_filter_files(struct ftrace_ops *ops,
  */
 void ftrace_destroy_filter_files(struct ftrace_ops *ops)
 {
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	if (ops->flags & FTRACE_OPS_FL_ENABLED)
 		ftrace_shutdown(ops, 0);
 	ops->flags |= FTRACE_OPS_FL_DELETED;
@@ -7571,7 +7571,7 @@ static int ftrace_process_locs(struct module *mod,
 	if (!start_pg)
 		return -ENOMEM;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	/*
 	 * Core and each module needs their own pages, as
@@ -7868,7 +7868,7 @@ void ftrace_release_mod(struct module *mod)
 	struct ftrace_page *tmp_page = NULL;
 	struct ftrace_page *pg;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	/*
 	 * To avoid the UAF problem after the module is unloaded, the
@@ -7938,7 +7938,7 @@ void ftrace_module_enable(struct module *mod)
 	struct dyn_ftrace *rec;
 	struct ftrace_page *pg;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	if (ftrace_disabled)
 		goto out_unlock;
@@ -8267,7 +8267,7 @@ void ftrace_free_mem(struct module *mod, void *start_ptr, void *end_ptr)
 	key.ip = start;
 	key.flags = end;	/* overload flags, as it is unsigned long */
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	/*
 	 * If we are freeing module init memory, then check if
@@ -8686,7 +8686,7 @@ static void clear_ftrace_pids(struct trace_array *tr, int type)
 
 void ftrace_clear_pids(struct trace_array *tr)
 {
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	clear_ftrace_pids(tr, TRACE_PIDS | TRACE_NO_PIDS);
 
@@ -8695,7 +8695,7 @@ void ftrace_clear_pids(struct trace_array *tr)
 
 static void ftrace_pid_reset(struct trace_array *tr, int type)
 {
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	clear_ftrace_pids(tr, type);
 
 	ftrace_update_pid_func();
@@ -8713,7 +8713,7 @@ static void *fpid_start(struct seq_file *m, loff_t *pos)
 	struct trace_pid_list *pid_list;
 	struct trace_array *tr = m->private;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	rcu_read_lock_sched();
 
 	pid_list = rcu_dereference_sched(tr->function_pids);
@@ -8766,7 +8766,7 @@ static void *fnpid_start(struct seq_file *m, loff_t *pos)
 	struct trace_pid_list *pid_list;
 	struct trace_array *tr = m->private;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	rcu_read_lock_sched();
 
 	pid_list = rcu_dereference_sched(tr->function_no_pids);
@@ -9057,7 +9057,7 @@ static int prepare_direct_functions_for_ipmodify(struct ftrace_ops *ops)
 			unsigned long ip = entry->ip;
 			bool found_op = false;
 
-			mutex_lock(&ftrace_lock);
+			mutex_lock_nospin(&ftrace_lock);
 			do_for_each_ftrace_op(op, ftrace_ops_list) {
 				if (!(op->flags & FTRACE_OPS_FL_DIRECT))
 					continue;
@@ -9106,7 +9106,7 @@ static void cleanup_direct_functions_after_ipmodify(struct ftrace_ops *ops)
 			unsigned long ip = entry->ip;
 			bool found_op = false;
 
-			mutex_lock(&ftrace_lock);
+			mutex_lock_nospin(&ftrace_lock);
 			do_for_each_ftrace_op(op, ftrace_ops_list) {
 				if (!(op->flags & FTRACE_OPS_FL_DIRECT))
 					continue;
@@ -9153,7 +9153,7 @@ static int register_ftrace_function_nolock(struct ftrace_ops *ops)
 
 	ftrace_ops_init(ops);
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 
 	ret = ftrace_startup(ops, 0);
 
@@ -9200,7 +9200,7 @@ int unregister_ftrace_function(struct ftrace_ops *ops)
 {
 	int ret;
 
-	mutex_lock(&ftrace_lock);
+	mutex_lock_nospin(&ftrace_lock);
 	ret = ftrace_shutdown(ops, 0);
 	mutex_unlock(&ftrace_lock);
 
