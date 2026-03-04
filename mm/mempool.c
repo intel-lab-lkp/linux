@@ -384,8 +384,8 @@ int mempool_resize(struct mempool *pool, int new_min_nr)
 	}
 	memcpy(new_elements, pool->elements,
 			pool->curr_nr * sizeof(*new_elements));
-	kfree(pool->elements);
-	pool->elements = new_elements;
+	xchg(pool->elements, new_elements);
+	kfree(new_elements);
 	pool->min_nr = new_min_nr;
 
 	while (pool->curr_nr < pool->min_nr) {
