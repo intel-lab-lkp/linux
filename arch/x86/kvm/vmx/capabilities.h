@@ -107,7 +107,7 @@ static inline bool cpu_has_load_perf_global_ctrl(void)
 
 static inline bool cpu_has_load_cet_ctrl(void)
 {
-	return (vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_CET_STATE);
+	return vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_CET_STATE;
 }
 
 static inline bool cpu_has_save_perf_global_ctrl(void)
@@ -162,7 +162,7 @@ static inline bool cpu_has_vmx_ept(void)
 static inline bool vmx_umip_emulated(void)
 {
 	return !boot_cpu_has(X86_FEATURE_UMIP) &&
-	       (vmcs_config.cpu_based_2nd_exec_ctrl & SECONDARY_EXEC_DESC);
+	       vmcs_config.cpu_based_2nd_exec_ctrl & SECONDARY_EXEC_DESC;
 }
 
 static inline bool cpu_has_vmx_rdtscp(void)
@@ -376,9 +376,9 @@ static inline bool cpu_has_vmx_invvpid_global(void)
 
 static inline bool cpu_has_vmx_intel_pt(void)
 {
-	return (vmcs_config.misc & VMX_MISC_INTEL_PT) &&
-		(vmcs_config.cpu_based_2nd_exec_ctrl & SECONDARY_EXEC_PT_USE_GPA) &&
-		(vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_IA32_RTIT_CTL);
+	return vmcs_config.misc & VMX_MISC_INTEL_PT &&
+	       vmcs_config.cpu_based_2nd_exec_ctrl & SECONDARY_EXEC_PT_USE_GPA &&
+	       vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_IA32_RTIT_CTL;
 }
 
 /*
