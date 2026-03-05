@@ -625,6 +625,7 @@ class SphinxBuilder:
 
                 # Use shlex here, as it handles well parameters with commas
                 args = shlex.split(line)
+                name = args[1].replace("/", " ")
                 fname = f"{output_dir}/{args[3]}.{args[2]}"
 
                 if self.verbose:
