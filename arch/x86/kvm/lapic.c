@@ -2657,6 +2657,9 @@ void kvm_apic_write_nodecode(struct kvm_vcpu *vcpu, u32 offset)
 {
 	struct kvm_lapic *apic = vcpu->arch.apic;
 
+	if (WARN_ON_ONCE(!apic))
+		return;
+
 	/*
 	 * ICR is a single 64-bit register when x2APIC is enabled, all others
 	 * registers hold 32-bit values.  For legacy xAPIC, ICR writes need to
