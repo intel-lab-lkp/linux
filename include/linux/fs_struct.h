@@ -41,7 +41,15 @@ static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd)
 	read_sequnlock_excl(&fs->seq);
 }
 
-/* Acquire a pwd reference from the pwd_refs pool, if available */
+/*
+ * Acquire a pwd reference from the pwd_refs pool, if available.
+ *
+ * Uses read_seqlock_excl() (writer spinlock without sequence bump) rather
+ * than write_seqlock() because modifying pwd_refs does not change the path
+ * values that lockless seq readers care about. Bumping the sequence counter
+ * would force unnecessary retries in concurrent get_fs_pwd()/get_fs_root()
+ * callers.
+ */
 static inline void get_fs_pwd_pool(struct fs_struct *fs, struct path *pwd)
 {
 	read_seqlock_excl(&fs->seq);
@@ -53,7 +61,7 @@ static inline void get_fs_pwd_pool(struct fs_struct *fs, struct path *pwd)
 	read_sequnlock_excl(&fs->seq);
 }
 
-/* Release a pwd reference back to the pwd_refs pool, if appropriate */
+/* Release a pwd reference back to the pwd_refs pool, if appropriate. */
 static inline void put_fs_pwd_pool(struct fs_struct *fs, struct path *pwd)
 {
 	read_seqlock_excl(&fs->seq);
