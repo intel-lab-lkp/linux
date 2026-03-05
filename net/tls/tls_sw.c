@@ -1372,7 +1372,10 @@ tls_rx_rec_wait(struct sock *sk, struct sk_psock *psock, bool nonblock,
 			return ret;
 
 		if (!skb_queue_empty(&sk->sk_receive_queue)) {
-			tls_strp_check_rcv(&ctx->strp);
+			/* tls_strp_check_rcv() is called on the read_sock_end
+			 * path before the socket lock is released.
+			 */
+			tls_strp_check_rcv_quiet(&ctx->strp);
 			if (tls_strp_msg_ready(ctx))
 				break;
 		}
@@ -1851,6 +1854,11 @@ static int tls_record_content_type(struct msghdr *msg, struct tls_msg *tlm,
 	}
 
 	return 1;
+}
+
+static void tls_rx_rec_release(struct tls_sw_context_rx *ctx)
+{
+	tls_strp_msg_release(&ctx->strp);
 }
 
 static void tls_rx_rec_done(struct tls_sw_context_rx *ctx)
@@ -2384,7 +2392,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 			tlm = tls_msg(skb);
 			decrypted += rxm->full_len;
 
-			tls_rx_rec_done(ctx);
+			tls_rx_rec_release(ctx);
 		}
 
 		/* read_sock does not support reading control messages */
@@ -2414,6 +2422,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	}
 
 read_sock_end:
+	tls_strp_check_rcv(&ctx->strp);
 	tls_rx_reader_release(sk, ctx);
 	return copied ? : err;
 
