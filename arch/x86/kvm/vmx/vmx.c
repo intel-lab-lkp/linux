@@ -2802,7 +2802,8 @@ static int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 					      & ~TERTIARY_EXEC_GUEST_APIC_TIMER,
 					      MSR_IA32_VMX_PROCBASED_CTLS3);
 
-	if (!(_cpu_based_2nd_exec_control & SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY))
+	if (!IS_ENABLED(CONFIG_X86_64) ||
+	    !(_cpu_based_2nd_exec_control & SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY))
 		_cpu_based_3rd_exec_control &= ~TERTIARY_EXEC_GUEST_APIC_TIMER;
 
 	if (adjust_vmx_controls(KVM_REQUIRED_VMX_VM_EXIT_CONTROLS,
@@ -8363,6 +8364,86 @@ int vmx_set_hv_timer(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc,
 void vmx_cancel_hv_timer(struct kvm_vcpu *vcpu)
 {
 	to_vmx(vcpu)->hv_deadline_tsc = -1;
+}
+
+bool vmx_can_use_apic_virt_timer(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->kvm->arch.vm_type != KVM_X86_DEFAULT_VM)
+		return false;
+
+	return cpu_has_vmx_apic_timer_virt() &&
+		/* SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY and in-kernel apic */
+		kvm_vcpu_apicv_active(vcpu) &&
+		/* VMX guest virtual timer supports only TSC deadline mode. */
+		kvm_lapic_lvtt_timer_mode(vcpu) == APIC_LVT_TIMER_TSCDEADLINE &&
+		/* KVM doesn't use RDTSC existing. Safeguard. */
+		!(exec_controls_get(to_vmx(vcpu)) & CPU_BASED_RDTSC_EXITING);
+}
+
+void vmx_set_apic_virt_timer(struct kvm_vcpu *vcpu, u16 vector)
+{
+	vmcs_write16(GUEST_APIC_TIMER_VECTOR, vector);
+	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_TSC_DEADLINE, MSR_TYPE_RW);
+	tertiary_exec_controls_setbit(to_vmx(vcpu), TERTIARY_EXEC_GUEST_APIC_TIMER);
+}
+
+void vmx_cancel_apic_virt_timer(struct kvm_vcpu *vcpu)
+{
+	vmx_enable_intercept_for_msr(vcpu, MSR_IA32_TSC_DEADLINE, MSR_TYPE_RW);
+	tertiary_exec_controls_clearbit(to_vmx(vcpu), TERTIARY_EXEC_GUEST_APIC_TIMER);
+}
+
+static u64 vmx_calc_deadline_l1_to_host(struct kvm_vcpu *vcpu, u64 l1_tsc)
+{
+	u64 host_tsc_now = rdtsc();
+	u64 l1_tsc_now = kvm_read_l1_tsc(vcpu, host_tsc_now);
+	u64 host_tsc;
+
+	/* 0 means that timer is disarmed. */
+	if (!l1_tsc)
+		return 0;
+
+	host_tsc = l1_tsc - vcpu->arch.l1_tsc_offset;
+	if (vcpu->arch.l1_tsc_scaling_ratio != kvm_caps.default_tsc_scaling_ratio)
+		if (u64_shl_div_u64(l1_tsc,
+				    kvm_caps.tsc_scaling_ratio_frac_bits,
+				    vcpu->arch.l1_tsc_scaling_ratio,
+				    &host_tsc))
+			host_tsc = ~0ull;
+
+	/*
+	 * Clamp the result on overflow.
+	 * TSC deadline isn't supposed to overflow in practice.
+	 * ~0ull is considered that the timer is armed, but won't fire in
+	 * practical time frame.
+	 */
+	if (l1_tsc > l1_tsc_now && host_tsc <= host_tsc_now)
+		host_tsc = ~0ull;
+	/*
+	 * Clamp the result on underflow.
+	 * The past value means fire the timer immediately.
+	 * Pick the obvious past value.
+	 */
+	if (l1_tsc <= l1_tsc_now && host_tsc > host_tsc_now)
+		host_tsc = 1ull;
+
+	if (!host_tsc)
+		host_tsc = 1ull;
+
+	return host_tsc;
+}
+
+void vmx_set_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu,
+				     u64 guest_deadline_virt)
+{
+	vmcs_write64(GUEST_DEADLINE_VIR, guest_deadline_virt);
+	vmcs_write64(GUEST_DEADLINE_PHY,
+		     vmx_calc_deadline_l1_to_host(vcpu, guest_deadline_virt));
+}
+
+u64 vmx_get_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu)
+{
+	return vmcs_read64(GUEST_DEADLINE_VIR);
 }
 #endif
 

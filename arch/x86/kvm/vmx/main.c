@@ -994,6 +994,11 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 #ifdef CONFIG_X86_64
 	.set_hv_timer = vt_op(set_hv_timer),
 	.cancel_hv_timer = vt_op(cancel_hv_timer),
+	.can_use_apic_virt_timer = vmx_can_use_apic_virt_timer,
+	.set_apic_virt_timer = vmx_set_apic_virt_timer,
+	.cancel_apic_virt_timer = vmx_cancel_apic_virt_timer,
+	.set_guest_tsc_deadline_virt = vmx_set_guest_tsc_deadline_virt,
+	.get_guest_tsc_deadline_virt = vmx_get_guest_tsc_deadline_virt,
 #endif
 
 	.setup_mce = vt_op(setup_mce),
