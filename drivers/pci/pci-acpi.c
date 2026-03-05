@@ -16,6 +16,7 @@
 #include <linux/pci_hotplug.h>
 #include <linux/module.h>
 #include <linux/pci-acpi.h>
+#include <linux/pci-ats.h>
 #include <linux/pci-ecam.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_qos.h>
@@ -977,7 +978,15 @@ int pci_dev_acpi_reset(struct pci_dev *dev, bool probe)
 		ret = -ENOTTY;
 	}
 
-	pci_dev_reset_iommu_done(dev);
+	/*
+	 * The reset might be invoked to recover a serious error. E.g. when the
+	 * ATC failed to invalidate its stale entries, which can result in data
+	 * corruption. Thus, do not unblock ATS until a successful reset.
+	 */
+	if (!ret || !pci_ats_supported(dev))
+		pci_dev_reset_iommu_done(dev);
+	else
+		pci_warn(dev, "Reset failed. Blocking ATS to protect memory\n");
 	return ret;
 }
 

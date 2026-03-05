@@ -4357,7 +4357,15 @@ int pcie_flr(struct pci_dev *dev)
 
 	ret = pci_dev_wait(dev, "FLR", PCIE_RESET_READY_POLL_MS);
 done:
-	pci_dev_reset_iommu_done(dev);
+	/*
+	 * The reset might be invoked to recover a serious error. E.g. when the
+	 * ATC failed to invalidate its stale entries, which can result in data
+	 * corruption. Thus, do not unblock ATS until a successful reset.
+	 */
+	if (!ret || !pci_ats_supported(dev))
+		pci_dev_reset_iommu_done(dev);
+	else
+		pci_warn(dev, "Reset failed. Blocking ATS to protect memory\n");
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pcie_flr);
@@ -4435,7 +4443,15 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 
 	ret = pci_dev_wait(dev, "AF_FLR", PCIE_RESET_READY_POLL_MS);
 done:
-	pci_dev_reset_iommu_done(dev);
+	/*
+	 * The reset might be invoked to recover a serious error. E.g. when the
+	 * ATC failed to invalidate its stale entries, which can result in data
+	 * corruption. Thus, do not unblock ATS until a successful reset.
+	 */
+	if (!ret || !pci_ats_supported(dev))
+		pci_dev_reset_iommu_done(dev);
+	else
+		pci_warn(dev, "Reset failed. Blocking ATS to protect memory\n");
 	return ret;
 }
 
@@ -4489,7 +4505,15 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	pci_dev_d3_sleep(dev);
 
 	ret = pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
-	pci_dev_reset_iommu_done(dev);
+	/*
+	 * The reset might be invoked to recover a serious error. E.g. when the
+	 * ATC failed to invalidate its stale entries, which can result in data
+	 * corruption. Thus, do not unblock ATS until a successful reset.
+	 */
+	if (!ret || !pci_ats_supported(dev))
+		pci_dev_reset_iommu_done(dev);
+	else
+		pci_warn(dev, "Reset failed. Blocking ATS to protect memory\n");
 	return ret;
 }
 
@@ -4932,7 +4956,15 @@ static int pci_reset_bus_function(struct pci_dev *dev, bool probe)
 
 	rc = pci_parent_bus_reset(dev, probe);
 done:
-	pci_dev_reset_iommu_done(dev);
+	/*
+	 * The reset might be invoked to recover a serious error. E.g. when the
+	 * ATC failed to invalidate its stale entries, which can result in data
+	 * corruption. Thus, do not unblock ATS until a successful reset.
+	 */
+	if (!rc || !pci_ats_supported(dev))
+		pci_dev_reset_iommu_done(dev);
+	else
+		pci_warn(dev, "Reset failed. Blocking ATS to protect memory\n");
 	return rc;
 }
 
@@ -4977,7 +5009,15 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 		pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
 				      reg);
 
-	pci_dev_reset_iommu_done(dev);
+	/*
+	 * The reset might be invoked to recover a serious error. E.g. when the
+	 * ATC failed to invalidate its stale entries, which can result in data
+	 * corruption. Thus, do not unblock ATS until a successful reset.
+	 */
+	if (!rc || !pci_ats_supported(dev))
+		pci_dev_reset_iommu_done(dev);
+	else
+		pci_warn(dev, "Reset failed. Blocking ATS to protect memory\n");
 	return rc;
 }
 

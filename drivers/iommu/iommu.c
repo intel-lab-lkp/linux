@@ -3938,8 +3938,10 @@ EXPORT_SYMBOL_NS_GPL(iommu_replace_group_handle, "IOMMUFD_INTERNAL");
  * IOMMU activity while leaving the group->domain pointer intact. Later when the
  * reset is finished, pci_dev_reset_iommu_done() can restore everything.
  *
- * Caller must use pci_dev_reset_iommu_prepare() with pci_dev_reset_iommu_done()
- * before/after the core-level reset routine, to unset the resetting_domain.
+ * Caller must use pci_dev_reset_iommu_done() after a successful PCI-level reset
+ * to unset the resetting_domain. If the reset fails, caller can choose to keep
+ * the device in the resetting_domain to protect system memory using IOMMU from
+ * any bad ATS.
  *
  * Return: 0 on success or negative error code if the preparation failed.
  *
@@ -3961,9 +3963,9 @@ int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 
 	guard(mutex)(&group->mutex);
 
-	/* Re-entry is not allowed */
-	if (WARN_ON(group->resetting_domain))
-		return -EBUSY;
+	/* Already prepared */
+	if (group->resetting_domain)
+		return 0;
 
 	ret = __iommu_group_alloc_blocking_domain(group);
 	if (ret)
@@ -4001,7 +4003,9 @@ EXPORT_SYMBOL_GPL(pci_dev_reset_iommu_prepare);
  * re-attaching all RID/PASID of the device's back to the domains retained in
  * the core-level structure.
  *
- * Caller must pair it with a successful pci_dev_reset_iommu_prepare().
+ * This is a pairing function for pci_dev_reset_iommu_prepare(). Caller should
+ * use it on a successful PCI-level reset. Otherwise, it's suggested for caller
+ * to keep the device in the resetting_domain to protect system memory.
  *
  * Note that, although unlikely, there is a risk that re-attaching domains might
  * fail due to some unexpected happening like OOM.
