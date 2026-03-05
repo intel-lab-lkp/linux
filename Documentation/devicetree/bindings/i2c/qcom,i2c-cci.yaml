@@ -78,6 +78,14 @@ patternProperties:
       clock-frequency:
         default: 100000
 
+      qcom,scl-stretch-enable:
+        type: boolean
+        description:
+          Enable SCL clock stretching on this CCI master. When set, the
+          CCI hardware will assert the SCL stretch enable bit in the
+          MISC_CTL register, allowing peripherals to hold SCL low to
+          throttle the bus.
+
 required:
   - compatible
   - clock-names
