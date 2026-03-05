@@ -5768,6 +5768,16 @@ static int handle_vmresume(struct kvm_vcpu *vcpu)
 	return nested_vmx_run(vcpu, false);
 }
 
+static bool is_vmcs_field_valid(struct kvm_vcpu *vcpu, unsigned long field)
+{
+	if (!nested_cpu_supports_tertiary_ctls(vcpu) &&
+	    (field == TERTIARY_VM_EXEC_CONTROL ||
+	     field == TERTIARY_VM_EXEC_CONTROL_HIGH))
+		return false;
+
+	return true;
+}
+
 static int handle_vmread(struct kvm_vcpu *vcpu)
 {
 	struct vmcs12 *vmcs12 = is_guest_mode(vcpu) ? get_shadow_vmcs12(vcpu)
@@ -5797,6 +5807,9 @@ static int handle_vmread(struct kvm_vcpu *vcpu)
 		    (is_guest_mode(vcpu) &&
 		     get_vmcs12(vcpu)->vmcs_link_pointer == INVALID_GPA))
 			return nested_vmx_failInvalid(vcpu);
+
+		if (!is_vmcs_field_valid(vcpu, field))
+			return nested_vmx_fail(vcpu, VMXERR_UNSUPPORTED_VMCS_COMPONENT);
 
 		offset = get_vmcs12_field_offset(field);
 		if (offset < 0)
@@ -5921,6 +5934,9 @@ static int handle_vmwrite(struct kvm_vcpu *vcpu)
 	}
 
 	field = kvm_register_read(vcpu, (((instr_info) >> 28) & 0xf));
+
+	if (!is_vmcs_field_valid(vcpu, field))
+		return nested_vmx_fail(vcpu, VMXERR_UNSUPPORTED_VMCS_COMPONENT);
 
 	offset = get_vmcs12_field_offset(field);
 	if (offset < 0)
@@ -7169,6 +7185,10 @@ static int vmx_set_nested_state(struct kvm_vcpu *vcpu,
 		vmx->nested.preemption_timer_deadline =
 			kvm_state->hdr.vmx.preemption_timer_deadline;
 	}
+
+	if (!nested_cpu_supports_tertiary_ctls(vcpu) &&
+	    vmcs12->tertiary_vm_exec_control)
+		goto error_guest_mode;
 
 	if (nested_vmx_check_controls(vcpu, vmcs12) ||
 	    nested_vmx_check_host_state(vcpu, vmcs12) ||
