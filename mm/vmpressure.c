@@ -10,6 +10,7 @@
  */
 
 #include <linux/cgroup.h>
+#include <linux/debugfs.h>
 #include <linux/fs.h>
 #include <linux/log2.h>
 #include <linux/sched.h>
@@ -29,14 +30,19 @@
  * sizes can cause lot of false positives, but too big window size will
  * delay the notifications.
  *
- * As the vmscan reclaimer logic works with chunks which are multiple of
- * SWAP_CLUSTER_MAX, it makes sense to use it for the window size as well.
- *
- * TODO: Make the window size depend on machine size, as we do for vmstat
- * thresholds. Currently we set it to 512 pages (2MB for 4KB pages).
+ * As of now, we use a logarithmic scale to scale the window based on
+ * machine RAM size.
  */
-static const unsigned long vmpressure_win = SWAP_CLUSTER_MAX * 16;
+static unsigned long vmpressure_win;
 
+static int __init vmpressure_win_init(void)
+{
+	unsigned long mem = totalram_pages() >> (27 - PAGE_SHIFT);
+
+	vmpressure_win = SWAP_CLUSTER_MAX * max(16UL, (unsigned long)fls64(mem) * 8UL);
+	return 0;
+}
+core_initcall(vmpressure_win_init);
 /*
  * These thresholds are used when we account memory pressure through
  * scanned/reclaimed ratio. The current values were chosen empirically. In
