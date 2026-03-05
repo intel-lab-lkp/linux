@@ -113,7 +113,15 @@ struct shadow_vmcs is ever changed.
 		u64 guest_pdptr3;
 		u64 host_ia32_pat;
 		u64 host_ia32_efer;
-		u64 padding64[8]; /* room for future expansion */
+		u64 host_ia32_perf_global_ctrl;
+		u64 vmread_bitmap;
+		u64 vmwrite_bitmap;
+		u64 vm_function_control;
+		u64 eptp_list_address;
+		u64 pml_address;
+		u64 encls_exiting_bitmap;
+		u64 tsc_multiplier;
+		u64 tertiary_vm_exec_control;
 		natural_width cr0_guest_host_mask;
 		natural_width cr4_guest_host_mask;
 		natural_width cr0_read_shadow;
@@ -217,6 +225,10 @@ struct shadow_vmcs is ever changed.
 		u16 host_fs_selector;
 		u16 host_gs_selector;
 		u16 host_tr_selector;
+		u16 guest_pml_index;
+		u16 virtual_timer_vector;
+		u64 guest_deadline;
+		u64 guest_deadline_shadow;
 	};
 
 
