@@ -28,6 +28,7 @@
 #include <linux/stackprotector.h>
 #include <linux/utsname.h>
 #include <linux/efi.h>
+#include <linux/acpi.h>
 
 #include <asm/alternative.h>
 #include <asm/cmdline.h>
@@ -57,6 +58,7 @@
 #include <asm/asm.h>
 #include <asm/bugs.h>
 #include <asm/cpu.h>
+#include <asm/smp.h>
 #include <asm/mce.h>
 #include <asm/msr.h>
 #include <asm/cacheinfo.h>
@@ -2643,3 +2645,18 @@ void __init arch_cpu_finalize_init(void)
 	 */
 	mem_encrypt_init();
 }
+
+int acpi_get_cpu_acpi_id(unsigned int cpu)
+{
+	u32 acpi_id;
+
+	if (cpu >= nr_cpu_ids || !cpu_possible(cpu))
+		return -EINVAL;
+
+	acpi_id = cpu_acpi_id(cpu);
+	if (acpi_id == CPU_ACPIID_INVALID)
+		return -ENODEV;
+
+	return (int)acpi_id;
+}
+EXPORT_SYMBOL_GPL(acpi_get_cpu_acpi_id);

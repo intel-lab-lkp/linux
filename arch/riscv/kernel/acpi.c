@@ -22,6 +22,8 @@
 #include <linux/pci.h>
 #include <linux/serial_core.h>
 
+#include <asm/acpi.h>
+
 int acpi_noirq = 1;		/* skip ACPI IRQ initialization */
 int acpi_disabled = 1;
 EXPORT_SYMBOL(acpi_disabled);
@@ -337,3 +339,11 @@ int raw_pci_write(unsigned int domain, unsigned int bus,
 }
 
 #endif	/* CONFIG_PCI */
+
+int acpi_get_cpu_acpi_id(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids || !cpu_possible(cpu))
+		return -EINVAL;
+	return get_acpi_id_for_cpu(cpu);
+}
+EXPORT_SYMBOL_GPL(acpi_get_cpu_acpi_id);

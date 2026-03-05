@@ -29,6 +29,7 @@
 #include <linux/suspend.h>
 #include <linux/pgtable.h>
 
+#include <acpi/acpi.h>
 #include <acpi/ghes.h>
 #include <acpi/processor.h>
 #include <asm/cputype.h>
@@ -458,3 +459,11 @@ int acpi_unmap_cpu(int cpu)
 }
 EXPORT_SYMBOL(acpi_unmap_cpu);
 #endif /* CONFIG_ACPI_HOTPLUG_CPU */
+
+int acpi_get_cpu_acpi_id(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids || !cpu_possible(cpu))
+		return -EINVAL;
+	return get_acpi_id_for_cpu(cpu);
+}
+EXPORT_SYMBOL_GPL(acpi_get_cpu_acpi_id);

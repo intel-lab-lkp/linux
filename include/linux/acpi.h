@@ -324,6 +324,16 @@ int acpi_unmap_cpu(int cpu);
 
 acpi_handle acpi_get_processor_handle(int cpu);
 
+/*
+ * acpi_get_cpu_acpi_id() - Get ACPI Processor UID of a specified CPU from MADT table
+ * @cpu: Logical CPU number (0-based)
+ *
+ * Return: ACPI Processor ID of the CPU on success (non-negative);
+ *         -EINVAL if the CPU number is invalid or not possible;
+ *         -ENODEV if the ACPI ID of the CPU is invalid.
+ */
+int acpi_get_cpu_acpi_id(unsigned int cpu);
+
 #ifdef CONFIG_ACPI_HOTPLUG_IOAPIC
 int acpi_get_ioapic_id(acpi_handle handle, u32 gsi_base, u64 *phys_addr);
 #endif
