@@ -1143,8 +1143,6 @@ static int acpi_video_bus_get_one_device(struct acpi_device *device, void *arg)
 		return -ENOMEM;
 	}
 
-	strscpy(acpi_device_class(device), ACPI_VIDEO_CLASS);
-
 	data->device_id = device_id;
 	data->video = video;
 	data->dev = device;
@@ -2020,7 +2018,6 @@ static int acpi_video_bus_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, video);
 
 	video->device = device;
-	strscpy(acpi_device_class(device), ACPI_VIDEO_CLASS);
 	device->driver_data = video;
 
 	acpi_video_bus_find_cap(video);
