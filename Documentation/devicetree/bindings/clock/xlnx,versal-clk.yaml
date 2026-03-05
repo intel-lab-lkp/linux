@@ -51,28 +51,7 @@ allOf:
       properties:
         compatible:
           contains:
-            enum:
-              - xlnx,versal-clk
-
-    then:
-      properties:
-        clocks:
-          items:
-            - description: reference clock
-            - description: alternate reference clock for programmable logic
-
-        clock-names:
-          items:
-            - const: ref
-            - const: pl_alt_ref
-
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - xlnx,versal-net-clk
-
+            const: xlnx,versal-net-clk
     then:
       properties:
         clocks:
@@ -86,6 +65,23 @@ allOf:
             - const: ref
             - const: pl_alt_ref
             - const: alt_ref
+    else:
+      if:
+        properties:
+          compatible:
+            contains:
+              const: xlnx,versal-clk
+      then:
+        properties:
+          clocks:
+            items:
+              - description: reference clock
+              - description: alternate reference clock for programmable logic
+
+          clock-names:
+            items:
+              - const: ref
+              - const: pl_alt_ref
 
   - if:
       properties:
@@ -135,6 +131,15 @@ examples:
       };
     };
 
+  - |
+    clock-controller {
+        #clock-cells = <1>;
+        compatible = "xlnx,versal-net-clk", "xlnx,versal-clk";
+        clocks = <&ref>, <&pl_alt_ref>, <&alt_ref>;
+        clock-names = "ref", "pl_alt_ref", "alt_ref";
+    };
+
+  - |
     clock-controller {
         #clock-cells = <1>;
         compatible = "xlnx,zynqmp-clk";
