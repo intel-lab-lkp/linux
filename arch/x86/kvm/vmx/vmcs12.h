@@ -217,7 +217,8 @@ struct __packed vmcs12 {
  * although appending fields and/or filling gaps is obviously allowed.
  */
 #define CHECK_OFFSET(field, loc) \
-	ASSERT_STRUCT_OFFSET(struct vmcs12, field, loc)
+	ASSERT_STRUCT_OFFSET(struct vmcs12, field, loc);		\
+	static_assert(loc % __alignof(((struct vmcs12 *)0)->field) == 0)
 
 static inline void vmx_check_vmcs12_offsets(void)
 {
