@@ -806,8 +806,6 @@ static void es2_destroy(struct es2_ap_dev *es2)
 
 	udev = es2->usb_dev;
 	gb_hd_put(es2->hd);
-
-	usb_put_dev(udev);
 }
 
 static void cport_in_callback(struct urb *urb)
@@ -1257,7 +1255,7 @@ static int ap_probe(struct usb_interface *interface,
 	bool bulk_in_found = false;
 	bool arpc_in_found = false;
 
-	udev = usb_get_dev(interface_to_usbdev(interface));
+	udev = interface_to_usbdev(interface);
 
 	num_cports = apb_get_cport_count(udev);
 	if (num_cports < 0) {
