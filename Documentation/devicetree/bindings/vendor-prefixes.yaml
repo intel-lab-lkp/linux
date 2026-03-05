@@ -1915,6 +1915,8 @@ patternProperties:
     description: Shenzhen Zkmagic Technology Co., Ltd.
   "^zte,.*":
     description: ZTE Corp.
+  "^zhunyi,.*":
+    description: Shenzhen Zhunyi Technology Co., Ltd.
   "^zyxel,.*":
     description: ZyXEL Communications Corp.
 
