@@ -1895,6 +1895,9 @@ static void cancel_apic_virt_timer(struct kvm_lapic *apic)
 
 	kvm_x86_call(cancel_apic_virt_timer)(vcpu);
 	apic->lapic_timer.apic_virt_timer_in_use = false;
+
+	trace_kvm_apic_virt_timer_state(vcpu->vcpu_id,
+					apic->lapic_timer.apic_virt_timer_in_use);
 }
 
 static void apic_cancel_apic_virt_timer(struct kvm_lapic *apic)
@@ -1923,6 +1926,8 @@ static void apic_set_apic_virt_timer(struct kvm_lapic *apic)
 	kvm_x86_call(set_apic_virt_timer)(vcpu, vector);
 	kvm_x86_call(set_guest_tsc_deadline_virt)(vcpu, ktimer->tscdeadline);
 	ktimer->apic_virt_timer_in_use = true;
+
+	trace_kvm_apic_virt_timer_state(vcpu->vcpu_id, ktimer->apic_virt_timer_in_use);
 }
 
 static bool kvm_can_use_apic_virt_timer(struct kvm_vcpu *vcpu)
