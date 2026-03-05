@@ -32,10 +32,12 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 {
 	u32 chip_rev;
 	u32 cfg_load;
+	u32 dev_rev;
 	u32 hw_cfg;
 	u32 strap;
 	int ret;
 
+	dev_rev = adapter->csr.id_rev & ID_REV_CHIP_REV_MASK_;
 	/* Timeout = 100 (i.e. 1 sec (10 msce * 100)) */
 	ret = lan743x_hs_syslock_acquire(adapter, 100);
 	if (ret < 0) {
@@ -47,10 +49,11 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 	cfg_load = lan743x_csr_read(adapter, ETH_SYS_CONFIG_LOAD_STARTED_REG);
 	lan743x_hs_syslock_release(adapter);
 	hw_cfg = lan743x_csr_read(adapter, HW_CFG);
-
-	if (cfg_load & GEN_SYS_LOAD_STARTED_REG_ETH_ ||
-	    hw_cfg & HW_CFG_RST_PROTECT_) {
-		strap = lan743x_csr_read(adapter, STRAP_READ);
+	strap = lan743x_csr_read(adapter, STRAP_READ);
+	if ((dev_rev == ID_REV_CHIP_REV_PCI11X1X_A0_  &&
+	     (cfg_load & GEN_SYS_LOAD_STARTED_REG_ETH_ ||
+	     hw_cfg & HW_CFG_RST_PROTECT_)) ||
+	     (strap & STRAP_READ_USE_SGMII_EN_)) {
 		if (strap & STRAP_READ_SGMII_EN_)
 			adapter->is_sgmii_en = true;
 		else
