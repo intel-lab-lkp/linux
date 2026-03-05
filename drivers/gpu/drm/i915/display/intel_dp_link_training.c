@@ -93,13 +93,11 @@ static void intel_dp_read_lttpr_phy_caps(struct intel_dp *intel_dp,
 	       phy_caps);
 }
 
-static bool intel_dp_read_lttpr_common_caps(struct intel_dp *intel_dp,
-					    const u8 dpcd[DP_RECEIVER_CAP_SIZE])
+static bool intel_dp_read_lttpr_common_caps(struct intel_dp *intel_dp)
 {
 	int ret;
 
-	ret = drm_dp_read_lttpr_common_caps(&intel_dp->aux, dpcd,
-					    intel_dp->lttpr_common_caps);
+	ret = drm_dp_read_lttpr_caps(&intel_dp->aux, intel_dp->lttpr_common_caps);
 	if (ret < 0)
 		goto reset_caps;
 
@@ -145,12 +143,12 @@ bool intel_dp_lttpr_transparent_mode_enabled(struct intel_dp *intel_dp)
  * Return the number of detected LTTPRs in non-transparent mode or 0 if the
  * LTTPRs are in transparent mode or the detection failed.
  */
-static int intel_dp_init_lttpr_phys(struct intel_dp *intel_dp, const u8 dpcd[DP_RECEIVER_CAP_SIZE])
+static int intel_dp_init_lttpr(struct intel_dp *intel_dp)
 {
 	int lttpr_count;
 	int ret;
 
-	if (!intel_dp_read_lttpr_common_caps(intel_dp, dpcd))
+	if (!intel_dp_read_lttpr_common_caps(intel_dp))
 		return 0;
 
 	lttpr_count = drm_dp_lttpr_count(intel_dp->lttpr_common_caps);
@@ -195,19 +193,16 @@ out_reset_lttpr_count:
 	return 0;
 }
 
-static int intel_dp_init_lttpr(struct intel_dp *intel_dp, const u8 dpcd[DP_RECEIVER_CAP_SIZE])
+static int intel_dp_init_lttpr_phys(struct intel_dp *intel_dp, int lttpr_count)
 {
-	int lttpr_count;
 	int i;
 
-	lttpr_count = intel_dp_init_lttpr_phys(intel_dp, dpcd);
-
 	for (i = 0; i < lttpr_count; i++) {
-		intel_dp_read_lttpr_phy_caps(intel_dp, dpcd, DP_PHY_LTTPR(i));
+		intel_dp_read_lttpr_phy_caps(intel_dp, intel_dp->dpcd, DP_PHY_LTTPR(i));
 		drm_dp_dump_lttpr_desc(&intel_dp->aux, DP_PHY_LTTPR(i));
 	}
 
-	return lttpr_count;
+	return 0;
 }
 
 int intel_dp_read_dprx_caps(struct intel_dp *intel_dp, u8 dpcd[DP_RECEIVER_CAP_SIZE])
@@ -261,23 +256,23 @@ int intel_dp_init_lttpr_and_dprx_caps(struct intel_dp *intel_dp)
 	 */
 	if (!intel_dp_is_edp(intel_dp) &&
 	    (DISPLAY_VER(display) >= 10 && !display->platform.geminilake)) {
-		u8 dpcd[DP_RECEIVER_CAP_SIZE];
-		int err = intel_dp_read_dprx_caps(intel_dp, dpcd);
-
-		if (err != 0)
-			return err;
-
-		lttpr_count = intel_dp_init_lttpr(intel_dp, dpcd);
+		/*
+		 * Spec DP2.1 section 3.6.8.6.1, section 2.12.1, section 2.12.3
+		 * (Link Policy) the LTTPR caps is to be read first followed by
+		 * the DPRX capability
+		 */
+		lttpr_count = intel_dp_init_lttpr(intel_dp);
 	}
 
 	/*
 	 * The DPTX shall read the DPRX caps after LTTPR detection, so re-read
 	 * it here.
 	 */
-	if (drm_dp_read_dpcd_caps(&intel_dp->aux, intel_dp->dpcd)) {
+	if (intel_dp_read_dprx_caps(intel_dp, intel_dp->dpcd)) {
 		intel_dp_reset_lttpr_common_caps(intel_dp);
 		return -EIO;
 	}
+	intel_dp_init_lttpr_phys(intel_dp, lttpr_count);
 
 	return lttpr_count;
 }
