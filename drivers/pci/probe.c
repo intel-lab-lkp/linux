@@ -993,9 +993,9 @@ static int pci_register_host_bridge(struct pci_host_bridge *bridge)
 	LIST_HEAD(resources);
 	struct resource *res, *next_res;
 	bool bus_registered = false;
-	char addr[64], *fmt;
+	char numa[32], addr[64], *fmt;
 	const char *name;
-	int err;
+	int err, node;
 
 	bus = pci_alloc_bus(NULL);
 	if (!bus)
@@ -1071,13 +1071,17 @@ static int pci_register_host_bridge(struct pci_host_bridge *bridge)
 	/* Create legacy_io and legacy_mem files for this bus */
 	pci_create_legacy_files(bus);
 
-	if (parent)
-		dev_info(parent, "PCI host bridge to bus %s\n", name);
-	else
-		pr_info("PCI host bridge to bus %s\n", name);
+	numa[0] = '\0';
+	if (nr_node_ids > 1) {
+		node = pcibus_to_node(bus);
+		if (node != NUMA_NO_NODE)
+			snprintf(numa, sizeof(numa), " on NUMA node %u", node);
+	}
 
-	if (nr_node_ids > 1 && pcibus_to_node(bus) == NUMA_NO_NODE)
-		dev_warn(&bus->dev, "Unknown NUMA node; performance will be reduced\n");
+	if (parent)
+		dev_info(parent, "PCI host bridge to bus %s%s\n", name, numa);
+	else
+		pr_info("PCI host bridge to bus %s%s\n", name, numa);
 
 	/* Check if the boot configuration by FW needs to be preserved */
 	bridge->preserve_config = pci_preserve_config(bridge);
