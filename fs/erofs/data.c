@@ -267,12 +267,6 @@ void erofs_onlinefolio_end(struct folio *folio, int err, bool dirty)
 	folio_end_read(folio, !(v & BIT(EROFS_ONLINEFOLIO_EIO)));
 }
 
-struct erofs_iomap_iter_ctx {
-	struct page *page;
-	void *base;
-	struct inode *realinode;
-};
-
 static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		unsigned int flags, struct iomap *iomap, struct iomap *srcmap)
 {
@@ -313,6 +307,9 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		else
 			iomap->bdev = mdev.m_bdev;
 		iomap->addr = mdev.m_dif->fsoff + mdev.m_pa;
+		/* keep device context when mapping to device */
+		if (ctx)
+			ctx->dif = mdev.m_dif;
 		if (flags & IOMAP_DAX)
 			iomap->addr += mdev.m_dif->dax_part_off;
 	}
@@ -357,7 +354,7 @@ static int erofs_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 	return written;
 }
 
-static const struct iomap_ops erofs_iomap_ops = {
+const struct iomap_ops erofs_iomap_ops = {
 	.iomap_begin = erofs_iomap_begin,
 	.iomap_end = erofs_iomap_end,
 };

@@ -411,6 +411,13 @@ struct erofs_map_dev {
 	unsigned int m_deviceid;
 };
 
+struct erofs_iomap_iter_ctx {
+	struct page *page;
+	void *base;
+	struct inode *realinode;
+	struct erofs_device_info *dif;
+};
+
 extern const struct super_operations erofs_sops;
 
 extern const struct address_space_operations erofs_aops;
@@ -427,6 +434,7 @@ extern const struct file_operations erofs_file_fops;
 extern const struct file_operations erofs_dir_fops;
 extern const struct file_operations erofs_ishare_fops;
 
+extern const struct iomap_ops erofs_iomap_ops;
 extern const struct iomap_ops z_erofs_iomap_report_ops;
 
 /* flags for erofs_fscache_register_cookie() */
