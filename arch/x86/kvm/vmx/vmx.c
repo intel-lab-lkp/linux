@@ -7214,6 +7214,9 @@ bool vmx_has_emulated_msr(struct kvm *kvm, u32 index)
 		 */
 		return enable_unrestricted_guest || emulate_invalid_guest_state;
 	case KVM_FIRST_EMULATED_VMX_MSR ... KVM_LAST_EMULATED_VMX_MSR:
+		if (index == MSR_IA32_VMX_PROCBASED_CTLS3 &&
+		    !__nested_cpu_supports_tertiary_ctls(&vmcs_config.nested))
+			return false;
 		return nested;
 	case MSR_AMD64_VIRT_SPEC_CTRL:
 	case MSR_AMD64_TSC_RATIO:
