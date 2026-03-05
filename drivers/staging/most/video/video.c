@@ -158,7 +158,7 @@ static ssize_t comp_vdev_read(struct file *filp, char __user *buf,
 {
 	struct comp_fh *fh = to_comp_fh(filp);
 	struct most_video_dev *mdev = fh->mdev;
-	int ret = 0;
+	ssize_t ret = 0;
 
 	if (*pos)
 		return -ESPIPE;
@@ -177,8 +177,19 @@ static ssize_t comp_vdev_read(struct file *filp, char __user *buf,
 
 	while (count > 0 && data_ready(mdev)) {
 		struct mbo *const mbo = get_top_mbo(mdev);
-		int const rem = mbo->processed_length - fh->offs;
-		int const cnt = rem < count ? rem : count;
+		size_t rem, cnt;
+
+		if (fh->offs >= mbo->processed_length) {
+			fh->offs = 0;
+			spin_lock_irq(&mdev->list_lock);
+			list_del(&mbo->list);
+			spin_unlock_irq(&mdev->list_lock);
+			most_put_mbo(mbo);
+			continue;
+		}
+
+		rem = mbo->processed_length - fh->offs;
+		cnt = min_t(size_t, rem, count);
 
 		if (copy_to_user(buf, mbo->virt_address + fh->offs, cnt)) {
 			v4l2_err(&mdev->v4l2_dev, "read: copy_to_user failed\n");
