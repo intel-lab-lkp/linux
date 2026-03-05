@@ -193,7 +193,7 @@ export quiet Q
 # Call by doing: $(call descend,directory[,target])
 #
 descend = \
-	+mkdir -p $(OUTPUT)$(1) && \
+	+$(Q)mkdir -p $(OUTPUT)$(1) && \
 	$(MAKE) $(COMMAND_O) subdir=$(if $(subdir),$(subdir)/$(1),$(1)) $(PRINT_DIR) -C $(1) $(2)
 
 QUIET_SUBDIR0  = +$(MAKE) $(COMMAND_O) -C # space to separate -C and subdir
@@ -215,11 +215,6 @@ ifneq ($(silent),1)
 	QUIET_FLEX     = @echo '  FLEX    '$@;
 	QUIET_BISON    = @echo '  BISON   '$@;
 	QUIET_GENSKEL  = @echo '  GENSKEL '$@;
-
-	descend = \
-		+@echo	       '  DESCEND '$(1); \
-		mkdir -p $(OUTPUT)$(1) && \
-		$(MAKE) $(COMMAND_O) subdir=$(if $(subdir),$(subdir)/$(1),$(1)) $(PRINT_DIR) -C $(1) $(2)
 
 	QUIET_CLEAN    = @printf '  CLEAN   %s\n' $1;
 	QUIET_INSTALL  = @printf '  INSTALL %s\n' $1;
