@@ -3184,6 +3184,10 @@ static int tipc_setsockopt(struct socket *sock, int lvl, int opt,
 		tsk_set_unreturnable(tsk, value);
 		break;
 	case TIPC_CONN_TIMEOUT:
+		if (value < 4) {
+			res = -EINVAL;
+			break;
+		}
 		tipc_sk(sk)->conn_timeout = value;
 		break;
 	case TIPC_MCAST_BROADCAST:
