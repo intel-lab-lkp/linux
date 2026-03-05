@@ -38,6 +38,8 @@ properties:
     type: boolean
     description: Specifies that controller should use auto CMD12
 
+  dma-coherent: true
+
 required:
   - compatible
   - reg
