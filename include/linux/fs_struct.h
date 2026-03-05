@@ -17,6 +17,7 @@ struct fs_struct {
 } __randomize_layout;
 
 extern struct kmem_cache *fs_cachep;
+extern struct fs_struct *userspace_init_fs;
 
 extern void exit_fs(struct task_struct *);
 extern void set_fs_root(struct fs_struct *, const struct path *);
@@ -60,13 +61,13 @@ static inline struct fs_struct *__override_init_fs(void)
 	struct fs_struct *fs;
 
 	fs = current->fs;
-	smp_store_release(&current->fs, current->fs);
+	smp_store_release(&current->fs, userspace_init_fs);
 	return fs;
 }
 
 static inline void __revert_init_fs(struct fs_struct *revert_fs)
 {
-	VFS_WARN_ON_ONCE(current->fs != current->fs);
+	VFS_WARN_ON_ONCE(current->fs != userspace_init_fs);
 	smp_store_release(&current->fs, revert_fs);
 }
 
