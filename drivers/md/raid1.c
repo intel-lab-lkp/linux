@@ -85,12 +85,20 @@ static void wait_for_serialization(struct md_rdev *rdev, struct r1bio *r1_bio)
 	struct serial_info *si;
 	int idx = sector_to_idx(r1_bio->sector);
 	struct serial_in_rdev *serial = &rdev->serial[idx];
+	DEFINE_WAIT(wait);
 
 	if (WARN_ON(!mddev->serial_info_pool))
 		return;
 	si = mempool_alloc(mddev->serial_info_pool, GFP_NOIO);
-	wait_event(serial->serial_io_wait,
-		   check_and_add_serial(rdev, r1_bio, si, idx) == 0);
+
+	for (;;) {
+		prepare_to_wait_exclusive(&serial->serial_io_wait, &wait,
+					  TASK_UNINTERRUPTIBLE);
+		if (check_and_add_serial(rdev, r1_bio, si, idx) == 0)
+			break;
+		schedule();
+	}
+	finish_wait(&serial->serial_io_wait, &wait);
 }
 
 static void remove_serial(struct md_rdev *rdev, sector_t lo, sector_t hi)
