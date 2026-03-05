@@ -175,7 +175,7 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	}
 
 	ret = request_irq(pci_irq_vector(pdev, 0), xhci_msi_irq, 0, "xhci_hcd",
-			  xhci_to_hcd(xhci));
+			  &xhci->interrupters[0]);
 	if (ret)
 		goto free_irq_vectors;
 
