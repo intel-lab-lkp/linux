@@ -803,6 +803,11 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+
+	struct {
+		struct list_head	list;
+		spinlock_t		lock; /* Lock the list */
+	} atc_recovery;
 };
 
 struct arm_smmu_stream {
