@@ -39,7 +39,7 @@
  *   - retrieve(): Reconstructs the file in the new kernel from the preserved
  *     handle.
  *   - finish(): Performs final check and cleanup in the new kernel. After
- *     succesul finish call, LUO gives up ownership to this file.
+ *     successful finish call, LUO gives up ownership to this file.
  *
  * File Preservation Lifecycle happy path:
  *
