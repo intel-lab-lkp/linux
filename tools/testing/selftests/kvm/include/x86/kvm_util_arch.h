@@ -9,6 +9,7 @@
 #include "test_util.h"
 
 extern bool is_forced_emulation_enabled;
+extern bool disable_inkernel_irqchip;
 
 struct pte_masks {
 	uint64_t present;

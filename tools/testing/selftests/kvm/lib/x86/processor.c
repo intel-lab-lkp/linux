@@ -27,6 +27,7 @@ bool host_cpu_is_hygon;
 bool host_cpu_is_amd_compatible;
 bool is_forced_emulation_enabled;
 uint64_t guest_tsc_khz;
+bool disable_inkernel_irqchip;
 
 const char *ex_str(int vector)
 {
@@ -789,7 +790,8 @@ void kvm_arch_vm_post_create(struct kvm_vm *vm, unsigned int nr_vcpus)
 	TEST_ASSERT(kvm_has_cap(KVM_CAP_GET_TSC_KHZ),
 		    "Require KVM_GET_TSC_KHZ to provide udelay() to guest.");
 
-	vm_create_irqchip(vm);
+	if (!disable_inkernel_irqchip)
+		vm_create_irqchip(vm);
 	vm_init_descriptor_tables(vm);
 
 	sync_global_to_guest(vm, host_cpu_is_intel);
@@ -798,6 +800,7 @@ void kvm_arch_vm_post_create(struct kvm_vm *vm, unsigned int nr_vcpus)
 	sync_global_to_guest(vm, host_cpu_is_amd_compatible);
 	sync_global_to_guest(vm, is_forced_emulation_enabled);
 	sync_global_to_guest(vm, pmu_errata_mask);
+	sync_global_to_guest(vm, disable_inkernel_irqchip);
 
 	if (is_sev_vm(vm)) {
 		struct kvm_sev_init init = { 0 };
