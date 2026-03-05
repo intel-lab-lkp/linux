@@ -179,6 +179,8 @@ static int fu740_pcie_start_link(struct dw_pcie *pci)
 {
 	struct device *dev = pci->dev;
 	struct fu740_pcie *afp = dev_get_drvdata(dev);
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+						struct dw_pcie_port, list);
 	u8 cap_exp = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
 	int ret;
 	u32 orig, tmp;
@@ -202,7 +204,7 @@ static int fu740_pcie_start_link(struct dw_pcie *pci)
 	/* Enable LTSSM */
 	writel_relaxed(0x1, afp->mgmt_base + PCIEX8MGMT_APP_LTSSM_ENABLE);
 
-	ret = dw_pcie_wait_for_link(pci);
+	ret = dw_pcie_wait_for_link(pci, port);
 	if (ret) {
 		dev_err(dev, "error: link did not start\n");
 		goto err;
@@ -220,7 +222,7 @@ static int fu740_pcie_start_link(struct dw_pcie *pci)
 		tmp |= PORT_LOGIC_SPEED_CHANGE;
 		dw_pcie_writel_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL, tmp);
 
-		ret = dw_pcie_wait_for_link(pci);
+		ret = dw_pcie_wait_for_link(pci, port);
 		if (ret) {
 			dev_err(dev, "error: link did not start at new speed\n");
 			goto err;

@@ -132,6 +132,8 @@ static int rcar_gen4_pcie_speed_change(struct dw_pcie *dw)
 static int rcar_gen4_pcie_start_link(struct dw_pcie *dw)
 {
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+	struct dw_pcie_port *port = list_first_entry(&dw->pp.ports,
+						struct dw_pcie_port, list);
 	int i, changes, ret;
 
 	if (rcar->drvdata->ltssm_control) {
@@ -144,7 +146,7 @@ static int rcar_gen4_pcie_start_link(struct dw_pcie *dw)
 	 * Require direct speed change with retrying here if the max_link_speed
 	 * is PCIe Gen2 or higher.
 	 */
-	changes = min_not_zero(dw->max_link_speed, RCAR_MAX_LINK_SPEED) - 1;
+	changes = min_not_zero(port->max_link_speed, RCAR_MAX_LINK_SPEED) - 1;
 
 	/*
 	 * Since dw_pcie_setup_rc() sets it once, PCIe Gen2 will be trained.
@@ -173,6 +175,8 @@ static void rcar_gen4_pcie_stop_link(struct dw_pcie *dw)
 static int rcar_gen4_pcie_common_init(struct rcar_gen4_pcie *rcar)
 {
 	struct dw_pcie *dw = &rcar->dw;
+	struct dw_pcie_port *port = list_first_entry(&dw->pp.ports,
+						struct dw_pcie_port, list);
 	u32 val;
 	int ret;
 
@@ -195,7 +199,7 @@ static int rcar_gen4_pcie_common_init(struct rcar_gen4_pcie *rcar)
 		goto err_unprepare;
 	}
 
-	if (dw->num_lanes < 4)
+	if (port->num_lanes < 4)
 		val |= BIFUR_MOD_SET_ON;
 
 	writel(val, rcar->base + PCIEMSR0);
@@ -563,12 +567,15 @@ static int r8a779f0_pcie_ltssm_control(struct rcar_gen4_pcie *rcar, bool enable)
 static void rcar_gen4_pcie_additional_common_init(struct rcar_gen4_pcie *rcar)
 {
 	struct dw_pcie *dw = &rcar->dw;
+	struct dw_pcie_port *port = list_first_entry(&dw->pp.ports,
+						struct dw_pcie_port, list);
 	u32 val;
 
 	val = dw_pcie_readl_dbi(dw, PCIE_PORT_LANE_SKEW);
 	val &= ~PORT_LANE_SKEW_INSERT_MASK;
-	if (dw->num_lanes < 4)
+	if (port->num_lanes < 4)
 		val |= BIT(6);
+
 	dw_pcie_writel_dbi(dw, PCIE_PORT_LANE_SKEW, val);
 
 	val = readl(rcar->base + PCIEPWRMNGCTRL);

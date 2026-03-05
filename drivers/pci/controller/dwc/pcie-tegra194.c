@@ -957,6 +957,8 @@ static int tegra_pcie_dw_host_init(struct dw_pcie_rp *pp)
 static int tegra_pcie_dw_start_link(struct dw_pcie *pci)
 {
 	struct tegra_pcie_dw *pcie = to_tegra_pcie(pci);
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+						struct dw_pcie_port, list);
 	struct dw_pcie_rp *pp = &pci->pp;
 	u32 val, offset, tmp;
 	bool retry = true;
@@ -986,7 +988,7 @@ retry_link:
 
 	msleep(100);
 
-	if (dw_pcie_wait_for_link(pci)) {
+	if (dw_pcie_wait_for_link(pci, port)) {
 		if (!retry)
 			return 0;
 		/*

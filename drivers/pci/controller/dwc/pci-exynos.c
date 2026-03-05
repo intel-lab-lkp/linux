@@ -358,6 +358,8 @@ static int exynos_pcie_resume_noirq(struct device *dev)
 	struct exynos_pcie *ep = dev_get_drvdata(dev);
 	struct dw_pcie *pci = &ep->pci;
 	struct dw_pcie_rp *pp = &pci->pp;
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+						struct dw_pcie_port, list);
 	int ret;
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(ep->supplies), ep->supplies);
@@ -368,7 +370,7 @@ static int exynos_pcie_resume_noirq(struct device *dev)
 	exynos_pcie_host_init(pp);
 	dw_pcie_setup_rc(pp);
 	exynos_pcie_start_link(pci);
-	return dw_pcie_wait_for_link(pci);
+	return dw_pcie_wait_for_link(pci, port);
 }
 
 static const struct dev_pm_ops exynos_pcie_pm_ops = {

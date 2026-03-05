@@ -939,6 +939,8 @@ static int imx_pcie_start_link(struct dw_pcie *pci)
 	struct imx_pcie *imx_pcie = to_imx_pcie(pci);
 	struct device *dev = pci->dev;
 	u8 offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+						struct dw_pcie_port, list);
 	u32 tmp;
 	int ret;
 
@@ -963,8 +965,8 @@ static int imx_pcie_start_link(struct dw_pcie *pci)
 	/* Start LTSSM. */
 	imx_pcie_ltssm_enable(dev);
 
-	if (pci->max_link_speed > 1) {
-		ret = dw_pcie_wait_for_link(pci);
+	if (port->max_link_speed > 1) {
+		ret = dw_pcie_wait_for_link(pci, port);
 		if (ret)
 			goto err_reset_phy;
 
@@ -972,7 +974,7 @@ static int imx_pcie_start_link(struct dw_pcie *pci)
 		dw_pcie_dbi_ro_wr_en(pci);
 		tmp = dw_pcie_readl_dbi(pci, offset + PCI_EXP_LNKCAP);
 		tmp &= ~PCI_EXP_LNKCAP_SLS;
-		tmp |= pci->max_link_speed;
+		tmp |= port->max_link_speed;
 		dw_pcie_writel_dbi(pci, offset + PCI_EXP_LNKCAP, tmp);
 
 		/*
@@ -1605,6 +1607,7 @@ static int imx_pcie_probe(struct platform_device *pdev)
 	struct dw_pcie *pci;
 	struct imx_pcie *imx_pcie;
 	struct device_node *np;
+	struct dw_pcie_port *port;
 	struct device_node *node = dev->of_node;
 	int ret, domain;
 	u16 val;
@@ -1741,9 +1744,9 @@ static int imx_pcie_probe(struct platform_device *pdev)
 				 &imx_pcie->tx_swing_low))
 		imx_pcie->tx_swing_low = 127;
 
-	/* Limit link speed */
-	pci->max_link_speed = 1;
-	of_property_read_u32(node, "fsl,max-link-speed", &pci->max_link_speed);
+	port = list_first_entry(&pci->pp.ports, struct dw_pcie_port, list);
+	port->max_link_speed = 1;
+	of_property_read_u32(node, "fsl,max-link-speed", &port->max_link_speed);
 
 	imx_pcie->vpcie = devm_regulator_get_optional(&pdev->dev, "vpcie");
 	if (IS_ERR(imx_pcie->vpcie)) {

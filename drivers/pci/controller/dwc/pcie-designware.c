@@ -178,11 +178,6 @@ int dw_pcie_get_resources(struct dw_pcie *pci)
 			return ret;
 	}
 
-	if (pci->max_link_speed < 1)
-		pci->max_link_speed = of_pci_get_max_link_speed(np);
-
-	of_property_read_u32(np, "num-lanes", &pci->num_lanes);
-
 	if (of_property_read_bool(np, "snps,enable-cdm-check"))
 		dw_pcie_cap_set(pci, CDM_CHECK);
 
@@ -696,7 +691,7 @@ void dw_pcie_disable_atu(struct dw_pcie *pci, u32 dir, int index)
 	dw_pcie_writel_atu(pci, dir, index, PCIE_ATU_REGION_CTRL2, 0);
 }
 
-int dw_pcie_wait_for_link(struct dw_pcie *pci)
+int dw_pcie_wait_for_link(struct dw_pcie *pci, struct dw_pcie_port *port)
 {
 	u32 offset, val;
 	int retries;
@@ -719,7 +714,7 @@ int dw_pcie_wait_for_link(struct dw_pcie *pci)
 	 * speeds greater than 5.0 GT/s, software must wait a minimum of 100 ms
 	 * after Link training completes before sending a Configuration Request.
 	 */
-	if (pci->max_link_speed > 2)
+	if (port && port->max_link_speed > 2)
 		msleep(PCIE_RESET_CONFIG_WAIT_MS);
 
 	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
@@ -756,10 +751,11 @@ void dw_pcie_upconfig_setup(struct dw_pcie *pci)
 }
 EXPORT_SYMBOL_GPL(dw_pcie_upconfig_setup);
 
-static void dw_pcie_link_set_max_speed(struct dw_pcie *pci)
+static void dw_pcie_link_set_max_speed(struct dw_pcie *pci, struct dw_pcie_port *port)
 {
 	u32 cap, ctrl2, link_speed;
 	u8 offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
+	int max_speed = port->max_link_speed;
 
 	cap = dw_pcie_readl_dbi(pci, offset + PCI_EXP_LNKCAP);
 
@@ -768,15 +764,16 @@ static void dw_pcie_link_set_max_speed(struct dw_pcie *pci)
 	 * just cache the hardware default value so that the vendor drivers can
 	 * use it to do any link specific configuration.
 	 */
-	if (pci->max_link_speed < 1) {
-		pci->max_link_speed = FIELD_GET(PCI_EXP_LNKCAP_SLS, cap);
+	if (max_speed < 1) {
+		max_speed = FIELD_GET(PCI_EXP_LNKCAP_SLS, cap);
+		port->max_link_speed = max_speed;
 		return;
 	}
 
 	ctrl2 = dw_pcie_readl_dbi(pci, offset + PCI_EXP_LNKCTL2);
 	ctrl2 &= ~PCI_EXP_LNKCTL2_TLS;
 
-	switch (pcie_link_speed[pci->max_link_speed]) {
+	switch (pcie_link_speed[max_speed]) {
 	case PCIE_SPEED_2_5GT:
 		link_speed = PCI_EXP_LNKCTL2_TLS_2_5GT;
 		break;
@@ -800,10 +797,10 @@ static void dw_pcie_link_set_max_speed(struct dw_pcie *pci)
 
 	cap &= ~((u32)PCI_EXP_LNKCAP_SLS);
 	dw_pcie_writel_dbi(pci, offset + PCI_EXP_LNKCAP, cap | link_speed);
-
 }
 
-int dw_pcie_link_get_max_link_width(struct dw_pcie *pci)
+/* TODO: Implement per-port max link width detection using port-specific DBI space */
+int dw_pcie_link_get_max_link_width(struct dw_pcie *pci, struct dw_pcie_port *port)
 {
 	u8 cap = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
 	u32 lnkcap = dw_pcie_readl_dbi(pci, cap + PCI_EXP_LNKCAP);
@@ -1141,9 +1138,14 @@ void dw_pcie_edma_remove(struct dw_pcie *pci)
 
 void dw_pcie_setup(struct dw_pcie *pci)
 {
+	struct dw_pcie_port *port;
 	u32 val;
 
-	dw_pcie_link_set_max_speed(pci);
+	/* Configure per-port settings */
+	list_for_each_entry(port, &pci->pp.ports, list) {
+		dw_pcie_link_set_max_speed(pci, port);
+		dw_pcie_link_set_max_link_width(pci, port->num_lanes);
+	}
 
 	/* Configure Gen1 N_FTS */
 	if (pci->n_fts[0]) {
@@ -1173,8 +1175,6 @@ void dw_pcie_setup(struct dw_pcie *pci)
 	val &= ~PORT_LINK_FAST_LINK_MODE;
 	val |= PORT_LINK_DLL_LINK_EN;
 	dw_pcie_writel_dbi(pci, PCIE_PORT_LINK_CONTROL, val);
-
-	dw_pcie_link_set_max_link_width(pci, pci->num_lanes);
 }
 
 resource_size_t dw_pcie_parent_bus_offset(struct dw_pcie *pci,

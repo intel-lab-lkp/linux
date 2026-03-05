@@ -49,6 +49,8 @@ EXPORT_SYMBOL_GPL(qcom_pcie_common_set_16gt_equalization);
 void qcom_pcie_common_set_16gt_lane_margining(struct dw_pcie *pci)
 {
 	u32 reg;
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+					struct dw_pcie_port, list);
 
 	reg = dw_pcie_readl_dbi(pci, GEN4_LANE_MARGINING_1_OFF);
 	reg &= ~(MARGINING_MAX_VOLTAGE_OFFSET |
@@ -70,7 +72,8 @@ void qcom_pcie_common_set_16gt_lane_margining(struct dw_pcie *pci)
 		MARGINING_MAXLANES |
 		MARGINING_SAMPLE_RATE_TIMING |
 		MARGINING_SAMPLE_RATE_VOLTAGE);
-	reg |= FIELD_PREP(MARGINING_MAXLANES, pci->num_lanes) |
+
+	reg |= FIELD_PREP(MARGINING_MAXLANES, port->num_lanes) |
 		FIELD_PREP(MARGINING_SAMPLE_RATE_TIMING, 0x3f) |
 		FIELD_PREP(MARGINING_SAMPLE_RATE_VOLTAGE, 0x3f);
 	dw_pcie_writel_dbi(pci, GEN4_LANE_MARGINING_2_OFF, reg);

@@ -191,6 +191,7 @@ static int spear13xx_pcie_probe(struct platform_device *pdev)
 	struct dw_pcie *pci;
 	struct spear13xx_pcie *spear13xx_pcie;
 	struct device_node *np = dev->of_node;
+	struct dw_pcie_port *port;
 	int ret;
 
 	spear13xx_pcie = devm_kzalloc(dev, sizeof(*spear13xx_pcie), GFP_KERNEL);
@@ -228,9 +229,9 @@ static int spear13xx_pcie_probe(struct platform_device *pdev)
 		dev_err(dev, "couldn't enable clk for pcie\n");
 		return ret;
 	}
-
+	port = list_first_entry(&pci->pp.ports, struct dw_pcie_port, list);
 	if (of_property_read_bool(np, "st,pcie-is-gen1"))
-		pci->max_link_speed = 1;
+		port->max_link_speed = 1;
 
 	platform_set_drvdata(pdev, spear13xx_pcie);
 
