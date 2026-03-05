@@ -5692,6 +5692,13 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type);
  * @max_peers: maximum number of peers in a single measurement
  * @report_ap_tsf: can report assoc AP's TSF for radio resource measurement
  * @randomize_mac_addr: can randomize MAC address for measurement
+ * @pd_support: supports peer-to-peer ranging as mentioned in the specification
+ *	"PR Implementation Consideration Draft 1.9 rev 1" where PD stands for
+ *	proximity detection
+ * @pd_concurrent_ista_rsta_support: As the peer measurement request can be a
+ *	multi-peer request this will indicate if the device can act
+ *	simultaneously as initiator and a responder. Only valid if @pd_support
+ *	is set.
  * @ftm: FTM measurement data
  * @ftm.supported: FTM measurement is supported
  * @ftm.asap: ASAP-mode is supported
@@ -5718,12 +5725,24 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type);
  *	(0 means unknown)
  * @ftm.max_total_ltf_rx: maximum total number of LTFs that can be received
  *	(0 means unknown)
+ * @ftm.max_no_of_tx_antennas: maximum number of transmit antennas supported for
+ *	ranging
+ * @ftm.max_no_of_rx_antennas: maximum number of receive antennas supported for
+ *	ranging
+ * @ftm.min_allowed_ranging_interval_edca: Minimum EDCA ranging
+ *	interval supported by the device in milli seconds. (0 means unknown)
+ * @ftm.min_allowed_ranging_interval_ntb: Minimum NTB ranging
+ *	interval supported by the device in milli seconds. (0 means unknown)
  * @ftm.support_rsta: supports operating as RSTA in PMSR FTM request
+ * @ftm.support_edca_responder: supports operating as FTM responder in PMSR FTM
+ *	request for EDCA-based ranging
  */
 struct cfg80211_pmsr_capabilities {
 	unsigned int max_peers;
 	u8 report_ap_tsf:1,
-	   randomize_mac_addr:1;
+	   randomize_mac_addr:1,
+	   pd_support:1,
+	   pd_concurrent_ista_rsta_support:1;
 
 	struct {
 		u32 preambles;
@@ -5744,7 +5763,12 @@ struct cfg80211_pmsr_capabilities {
 		u8 max_rx_sts;
 		u8 max_total_ltf_tx;
 		u8 max_total_ltf_rx;
-		u8 support_rsta:1;
+		u32 max_no_of_tx_antennas;
+		u32 max_no_of_rx_antennas;
+		u32 min_allowed_ranging_interval_edca;
+		u32 min_allowed_ranging_interval_ntb;
+		u8 support_rsta:1,
+		   support_edca_responder:1;
 	} ftm;
 };
 

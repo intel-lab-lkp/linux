@@ -398,6 +398,7 @@ nl80211_pmsr_peer_attr_policy[NL80211_PMSR_PEER_ATTR_MAX + 1] = {
 
 static const struct nla_policy
 nl80211_pmsr_attr_policy[NL80211_PMSR_ATTR_MAX + 1] = {
+	[0] = { .strict_start_type = NL80211_PMSR_ATTR_PD_SUPPORT },
 	[NL80211_PMSR_ATTR_MAX_PEERS] = { .type = NLA_REJECT },
 	[NL80211_PMSR_ATTR_REPORT_AP_TSF] = { .type = NLA_REJECT },
 	[NL80211_PMSR_ATTR_RANDOMIZE_MAC_ADDR] = { .type = NLA_REJECT },
@@ -2375,6 +2376,25 @@ nl80211_send_pmsr_ftm_capa(const struct cfg80211_pmsr_capabilities *cap,
 	if (cap->ftm.support_rsta &&
 	    nla_put_flag(msg, NL80211_PMSR_FTM_CAPA_ATTR_RSTA_SUPPORT))
 		return -ENOBUFS;
+	if (cap->ftm.support_edca_responder &&
+	    nla_put_flag(msg, NL80211_PMSR_FTM_CAPA_ATTR_EDCA_BASED_RESPONDER))
+		return -ENOBUFS;
+	if (cap->ftm.max_no_of_tx_antennas &&
+	    nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_MAX_NUM_TX_ANTENNAS,
+			cap->ftm.max_no_of_tx_antennas))
+		return -ENOBUFS;
+	if (cap->ftm.max_no_of_rx_antennas &&
+	    nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_MAX_NUM_RX_ANTENNAS,
+			cap->ftm.max_no_of_rx_antennas))
+		return -ENOBUFS;
+	if (cap->ftm.min_allowed_ranging_interval_edca &&
+	    nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_MIN_INTERVAL_EDCA,
+			cap->ftm.min_allowed_ranging_interval_edca))
+		return -ENOBUFS;
+	if (cap->ftm.min_allowed_ranging_interval_ntb &&
+	    nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_MIN_INTERVAL_NTB,
+			cap->ftm.min_allowed_ranging_interval_ntb))
+		return -ENOBUFS;
 
 	nla_nest_end(msg, ftm);
 	return 0;
@@ -2409,6 +2429,15 @@ static int nl80211_send_pmsr_capa(struct cfg80211_registered_device *rdev,
 	    nla_put_flag(msg, NL80211_PMSR_ATTR_RANDOMIZE_MAC_ADDR))
 		return -ENOBUFS;
 
+	if (cap->pd_support) {
+		if (nla_put_flag(msg, NL80211_PMSR_ATTR_PD_SUPPORT))
+			return -ENOBUFS;
+
+		if (cap->pd_concurrent_ista_rsta_support &&
+		    nla_put_flag(msg,
+				 NL80211_PMSR_ATTR_PD_CONCURRENT_ISTA_RSTA_SUPPORT))
+			return -ENOBUFS;
+	}
 	caps = nla_nest_start_noflag(msg, NL80211_PMSR_ATTR_TYPE_CAPA);
 	if (!caps)
 		return -ENOBUFS;
