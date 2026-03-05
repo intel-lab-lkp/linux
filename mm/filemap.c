@@ -1954,13 +1954,13 @@ repeat:
 			folio_lock(folio);
 		}
 
-		/* Has the page been truncated? */
-		if (unlikely(folio->mapping != mapping)) {
+		/* Has the page been truncated or split? */
+		if (unlikely(folio->mapping != mapping) ||
+		    unlikely(!folio_contains(folio, index))) {
 			folio_unlock(folio);
 			folio_put(folio);
 			goto repeat;
 		}
-		VM_BUG_ON_FOLIO(!folio_contains(folio, index), folio);
 	}
 
 	if (fgp_flags & FGP_ACCESSED)
@@ -2179,10 +2179,9 @@ unsigned find_lock_entries(struct address_space *mapping, pgoff_t *start,
 			if (!folio_trylock(folio))
 				goto put;
 			if (folio->mapping != mapping ||
-			    folio_test_writeback(folio))
+			    folio_test_writeback(folio) ||
+			    !folio_contains(folio, xas.xa_index))
 				goto unlock;
-			VM_BUG_ON_FOLIO(!folio_contains(folio, xas.xa_index),
-					folio);
 		} else {
 			nr = 1 << xas_get_order(&xas);
 			base = xas.xa_index & ~(nr - 1);
@@ -3570,13 +3569,13 @@ retry_find:
 	if (!lock_folio_maybe_drop_mmap(vmf, folio, &fpin))
 		goto out_retry;
 
-	/* Did it get truncated? */
-	if (unlikely(folio->mapping != mapping)) {
+	/* Did it get truncated or split? */
+	if (unlikely(folio->mapping != mapping) ||
+	    unlikely(!folio_contains(folio, index))) {
 		folio_unlock(folio);
 		folio_put(folio);
 		goto retry_find;
 	}
-	VM_BUG_ON_FOLIO(!folio_contains(folio, index), folio);
 
 	/*
 	 * We have a locked folio in the page cache, now we need to check
