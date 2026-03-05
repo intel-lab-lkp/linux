@@ -1571,10 +1571,6 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	if (err < 0)
 		return err;
 
-	err = tegra_output_probe(&dsi->output);
-	if (err < 0)
-		return err;
-
 	dsi->output.connector.polled = DRM_CONNECTOR_POLL_HPD;
 
 	/*
