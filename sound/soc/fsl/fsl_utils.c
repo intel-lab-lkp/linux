@@ -10,6 +10,7 @@
 #include <linux/clk-provider.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
+#include <linux/pm_runtime.h>
 #include <sound/soc.h>
 
 #include "fsl_utils.h"
@@ -196,6 +197,94 @@ void fsl_asoc_constrain_rates(struct snd_pcm_hw_constraint_list *target_constr,
 	}
 }
 EXPORT_SYMBOL(fsl_asoc_constrain_rates);
+
+/*
+ * Below functions are used by mixer interface to avoid accessing registers
+ * which are volatile at pm runtime suspend state (cache_only is enabled).
+ */
+int fsl_asoc_get_xr_sx(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	bool pm_active = pm_runtime_active(component->dev);
+
+	if (!pm_active) {
+		ucontrol->value.integer.value[0] = 0;
+		return 0;
+	}
+
+	return snd_soc_get_xr_sx(kcontrol, ucontrol);
+}
+EXPORT_SYMBOL(fsl_asoc_get_xr_sx);
+
+int fsl_asoc_put_xr_sx(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	bool pm_active = pm_runtime_active(component->dev);
+
+	if (!pm_active)
+		return 0;
+
+	return snd_soc_put_xr_sx(kcontrol, ucontrol);
+}
+EXPORT_SYMBOL(fsl_asoc_put_xr_sx);
+
+int fsl_asoc_get_enum_double(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	bool pm_active = pm_runtime_active(component->dev);
+
+	if (!pm_active) {
+		ucontrol->value.enumerated.item[0] = 0;
+		return 0;
+	}
+
+	return snd_soc_get_enum_double(kcontrol, ucontrol);
+}
+EXPORT_SYMBOL(fsl_asoc_get_enum_double);
+
+int fsl_asoc_put_enum_double(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	bool pm_active = pm_runtime_active(component->dev);
+
+	if (!pm_active)
+		return 0;
+
+	return snd_soc_put_enum_double(kcontrol, ucontrol);
+}
+EXPORT_SYMBOL(fsl_asoc_put_enum_double);
+
+int fsl_asoc_get_volsw(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	bool pm_active = pm_runtime_active(component->dev);
+
+	if (!pm_active) {
+		ucontrol->value.integer.value[0] = 0;
+		return 0;
+	}
+
+	return snd_soc_get_volsw(kcontrol, ucontrol);
+}
+EXPORT_SYMBOL(fsl_asoc_get_volsw);
+
+int fsl_asoc_put_volsw(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	bool pm_active = pm_runtime_active(component->dev);
+
+	if (!pm_active)
+		return 0;
+
+	return snd_soc_put_volsw(kcontrol, ucontrol);
+}
+EXPORT_SYMBOL(fsl_asoc_put_volsw);
 
 MODULE_AUTHOR("Timur Tabi <timur@freescale.com>");
 MODULE_DESCRIPTION("Freescale ASoC utility code");
