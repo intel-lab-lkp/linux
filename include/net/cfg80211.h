@@ -4439,6 +4439,13 @@ struct cfg80211_pmsr_result {
  *	in units of milli seconds. Only valid if @non_trigger_based is set.
  * @measurements_per_aw: number of measurement attempts per availability window
  *	with a maximum value of 4. Only valid if @non_trigger_based is set.
+ * @ingress_distancemm: the measurement result of the peer needs
+ *	to be indicated in case the device moves into this range.(units mm, u64)
+ *	measurement results need to be sent on a burst index basis in this case.
+ * @egress_distancemm: the measurement result of the peer needs
+ *	to be indicated in case the device moves out of this range.
+ *	(units mm, u64). measurement results need to be sent on a burst index
+ *	basis in this case.
  *
  * See also nl80211 for the respective attribute documentation.
  */
@@ -4463,6 +4470,8 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u32 availability_window;
 	u32 nominal_time;
 	u32 measurements_per_aw;
+	u64 ingress_distancemm;
+	u64 egress_distancemm;
 };
 
 /**
