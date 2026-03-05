@@ -22,6 +22,7 @@ System calls
    ioctl/index
    mseal
    rseq
+   syscall
 
 Security-related interfaces
 ===========================
