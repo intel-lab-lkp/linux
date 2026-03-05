@@ -360,6 +360,10 @@ static int mali_c55_isp_enable_streams(struct v4l2_subdev *sd,
 
 	sink_pad = &isp->pads[MALI_C55_ISP_PAD_SINK_VIDEO];
 	isp->remote_src = media_pad_remote_pad_unique(sink_pad);
+	if (IS_ERR(isp->remote_src))
+		return dev_err_probe(mali_c55->dev, PTR_ERR(isp->remote_src),
+				     "Failed to get unique remote pad\n");
+
 	src_sd = media_entity_to_v4l2_subdev(isp->remote_src->entity);
 
 	isp->frame_sequence = 0;
