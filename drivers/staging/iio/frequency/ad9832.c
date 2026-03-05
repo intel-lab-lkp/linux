@@ -23,8 +23,6 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 
-#include "dds.h"
-
 /* Registers */
 #define AD9832_FREQ0LL		0x0
 #define AD9832_FREQ0HL		0x1
@@ -168,12 +166,63 @@ static int ad9832_write_phase(struct ad9832_state *st,
 	return spi_sync(st->spi, &st->phase_msg);
 }
 
-static ssize_t ad9832_write(struct device *dev, struct device_attribute *attr,
-			    const char *buf, size_t len)
+static int ad9832_write_raw(struct iio_dev *indio_dev,
+			    struct iio_chan_spec const *chan,
+			    int val, int val2, long mask)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad9832_state *st = iio_priv(indio_dev);
-	struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
+	int ret;
+	unsigned int addr;
+
+	if (val < 0)
+		return -EINVAL;
+
+	mutex_lock(&st->lock);
+	switch (mask) {
+	case IIO_CHAN_INFO_FREQUENCY:
+		if (st->ctrl_fp & AD9832_FREQ)
+			addr = AD9832_FREQ1HM;
+		else
+			addr = AD9832_FREQ0HM;
+
+		ret = ad9832_write_frequency(st, addr, val);
+		break;
+
+	case IIO_CHAN_INFO_PHASE:
+		switch (FIELD_GET(AD9832_PHASE_MASK, st->ctrl_fp)) {
+		case 0:
+			addr = AD9832_PHASE0H;
+			break;
+		case 1:
+			addr = AD9832_PHASE1H;
+			break;
+		case 2:
+			addr = AD9832_PHASE2H;
+			break;
+		case 3:
+			addr = AD9832_PHASE3H;
+			break;
+		default:
+			addr = AD9832_PHASE0H;
+			break;
+		}
+		ret = ad9832_write_phase(st, addr, val);
+		break;
+
+	default:
+		ret = -EINVAL;
+	}
+	mutex_unlock(&st->lock);
+
+	return ret;
+}
+
+static ssize_t ad9832_write_ext_info(struct iio_dev *indio_dev,
+				     uintptr_t private,
+				     const struct iio_chan_spec *chan,
+				     const char *buf, size_t len)
+{
+	struct ad9832_state *st = iio_priv(indio_dev);
 	int ret;
 	unsigned long val;
 
@@ -182,17 +231,7 @@ static ssize_t ad9832_write(struct device *dev, struct device_attribute *attr,
 		goto error_ret;
 
 	mutex_lock(&st->lock);
-	switch ((u32)this_attr->address) {
-	case AD9832_FREQ0HM:
-	case AD9832_FREQ1HM:
-		ret = ad9832_write_frequency(st, this_attr->address, val);
-		break;
-	case AD9832_PHASE0H:
-	case AD9832_PHASE1H:
-	case AD9832_PHASE2H:
-	case AD9832_PHASE3H:
-		ret = ad9832_write_phase(st, this_attr->address, val);
-		break;
+	switch ((u32)private) {
 	case AD9832_PINCTRL_EN:
 		st->ctrl_ss &= ~AD9832_SELSRC;
 		st->ctrl_ss |= FIELD_PREP(AD9832_SELSRC, val ? 0 : 1);
@@ -245,50 +284,34 @@ error_ret:
 	return ret ? ret : len;
 }
 
-/*
- * see dds.h for further information
- */
+#define AD9832_EXT_INFO(_name, _ident) { \
+	.name = _name, \
+	.write = ad9832_write_ext_info, \
+	.private = _ident, \
+	.shared = IIO_SEPARATE, \
+}
 
-static IIO_DEV_ATTR_FREQ(0, 0, 0200, NULL, ad9832_write, AD9832_FREQ0HM);
-static IIO_DEV_ATTR_FREQ(0, 1, 0200, NULL, ad9832_write, AD9832_FREQ1HM);
-static IIO_DEV_ATTR_FREQSYMBOL(0, 0200, NULL, ad9832_write, AD9832_FREQ_SYM);
-static IIO_CONST_ATTR_FREQ_SCALE(0, "1"); /* 1Hz */
-
-static IIO_DEV_ATTR_PHASE(0, 0, 0200, NULL, ad9832_write, AD9832_PHASE0H);
-static IIO_DEV_ATTR_PHASE(0, 1, 0200, NULL, ad9832_write, AD9832_PHASE1H);
-static IIO_DEV_ATTR_PHASE(0, 2, 0200, NULL, ad9832_write, AD9832_PHASE2H);
-static IIO_DEV_ATTR_PHASE(0, 3, 0200, NULL, ad9832_write, AD9832_PHASE3H);
-static IIO_DEV_ATTR_PHASESYMBOL(0, 0200, NULL,
-				ad9832_write, AD9832_PHASE_SYM);
-static IIO_CONST_ATTR_PHASE_SCALE(0, "0.0015339808"); /* 2PI/2^12 rad*/
-
-static IIO_DEV_ATTR_PINCONTROL_EN(0, 0200, NULL,
-				ad9832_write, AD9832_PINCTRL_EN);
-static IIO_DEV_ATTR_OUT_ENABLE(0, 0200, NULL,
-				ad9832_write, AD9832_OUTPUT_EN);
-
-static struct attribute *ad9832_attributes[] = {
-	&iio_dev_attr_out_altvoltage0_frequency0.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_frequency1.dev_attr.attr,
-	&iio_const_attr_out_altvoltage0_frequency_scale.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_phase0.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_phase1.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_phase2.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_phase3.dev_attr.attr,
-	&iio_const_attr_out_altvoltage0_phase_scale.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_pincontrol_en.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_frequencysymbol.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_phasesymbol.dev_attr.attr,
-	&iio_dev_attr_out_altvoltage0_out_enable.dev_attr.attr,
-	NULL,
+static const struct iio_chan_spec_ext_info ad9832_ext_info[] = {
+	AD9832_EXT_INFO("pincontrol_en", AD9832_PINCTRL_EN),
+	AD9832_EXT_INFO("frequencysymbol", AD9832_FREQ_SYM),
+	AD9832_EXT_INFO("phasesymbol", AD9832_PHASE_SYM),
+	AD9832_EXT_INFO("out_enable", AD9832_OUTPUT_EN),
+	{ }
 };
 
-static const struct attribute_group ad9832_attribute_group = {
-	.attrs = ad9832_attributes,
+static const struct iio_chan_spec ad9832_channels[] = {
+	{
+		.type = IIO_ALTVOLTAGE,
+		.indexed = 1,
+		.channel = 0,
+		.info_mask_separate = BIT(IIO_CHAN_INFO_FREQUENCY) |
+				      BIT(IIO_CHAN_INFO_PHASE),
+		.ext_info = ad9832_ext_info,
+	},
 };
 
 static const struct iio_info ad9832_info = {
-	.attrs = &ad9832_attribute_group,
+	.write_raw = ad9832_write_raw,
 };
 
 static int ad9832_probe(struct spi_device *spi)
@@ -321,6 +344,8 @@ static int ad9832_probe(struct spi_device *spi)
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->info = &ad9832_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = ad9832_channels;
+	indio_dev->num_channels = ARRAY_SIZE(ad9832_channels);
 
 	/* Setup default messages */
 	st->xfer.tx_buf = &st->data;
