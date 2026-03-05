@@ -172,6 +172,7 @@ struct kvm_x86_cpu_feature {
 #define	X86_FEATURE_RDPID		KVM_X86_CPU_FEATURE(0x7, 0, ECX, 22)
 #define	X86_FEATURE_SGX_LC		KVM_X86_CPU_FEATURE(0x7, 0, ECX, 30)
 #define	X86_FEATURE_SHSTK		KVM_X86_CPU_FEATURE(0x7, 0, ECX, 7)
+#define	X86_FEATURE_SERIALIZE		KVM_X86_CPU_FEATURE(0x7, 0, EDX, 14)
 #define	X86_FEATURE_IBT			KVM_X86_CPU_FEATURE(0x7, 0, EDX, 20)
 #define	X86_FEATURE_AMX_TILE		KVM_X86_CPU_FEATURE(0x7, 0, EDX, 24)
 #define	X86_FEATURE_SPEC_CTRL		KVM_X86_CPU_FEATURE(0x7, 0, EDX, 26)
@@ -1431,6 +1432,12 @@ static inline void sti(void)
 static inline void cli(void)
 {
 	asm volatile ("cli");
+}
+
+static inline void serialize(void)
+{
+	/* serialize instruction. binutils >= 2.35 */
+	kvm_asm_safe(".byte 0x0f, 0x01, 0xe8");
 }
 
 void __vm_xsave_require_permission(uint64_t xfeature, const char *name);
