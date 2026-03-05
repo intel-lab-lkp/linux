@@ -539,6 +539,12 @@ USBDEVFS_BULK
     kernels support requests up to about 128KBytes. *FIXME say how read
     length is returned, and how short reads are handled.*.
 
+    kernels support requests up to about 128KBytes. On success, the
+    ioctl returns the number of bytes actually transferred. Short reads
+    are supported; if fewer bytes are received than requested, only the
+    actual number of bytes received are copied to the buffer and that
+    count is returned. On error, a negative error code is returned.
+
 USBDEVFS_CLEAR_HALT
     Clears endpoint halt (stall) and resets the endpoint toggle. This is
     only meaningful for bulk or interrupt endpoints. The ioctl parameter
