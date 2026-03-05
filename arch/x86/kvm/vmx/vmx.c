@@ -119,6 +119,9 @@ module_param(enable_ipiv, bool, 0444);
 
 module_param(enable_device_posted_irqs, bool, 0444);
 
+static bool __read_mostly enable_apic_timer_virt = true;
+module_param_named(apic_timer_virt, enable_apic_timer_virt, bool, 0444);
+
 /*
  * If nested=1, nested virtualization is supported, i.e., guests may use
  * VMX and be a hypervisor for its own guests. If nested=0, guests may not
@@ -2804,7 +2807,7 @@ static int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 			adjust_vmx_controls64(KVM_OPTIONAL_VMX_TERTIARY_VM_EXEC_CONTROL,
 					      MSR_IA32_VMX_PROCBASED_CTLS3);
 
-	if (!IS_ENABLED(CONFIG_X86_64) ||
+	if (!IS_ENABLED(CONFIG_X86_64) || !enable_apic_timer_virt ||
 	    !(_cpu_based_2nd_exec_control & SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY))
 		_cpu_based_3rd_exec_control &= ~TERTIARY_EXEC_GUEST_APIC_TIMER;
 
@@ -8834,6 +8837,9 @@ __init int vmx_hardware_setup(void)
 
 	if (!cpu_has_vmx_preemption_timer())
 		enable_preemption_timer = false;
+
+	if (!cpu_has_vmx_apic_timer_virt())
+		enable_apic_timer_virt = false;
 
 	if (enable_preemption_timer) {
 		u64 use_timer_freq = 5000ULL * 1000 * 1000;
