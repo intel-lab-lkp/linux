@@ -3656,6 +3656,8 @@ enum nvmx_vmentry_status nested_vmx_enter_non_root_mode(struct kvm_vcpu *vcpu,
 	if (!enable_ept)
 		vmcs_writel(GUEST_CR3, vcpu->arch.cr3);
 
+	kvm_sync_apic_virt_timer(vcpu);
+
 	vmx_switch_vmcs(vcpu, &vmx->nested.vmcs02);
 
 	prepare_vmcs02_early(vmx, &vmx->vmcs01, vmcs12);
@@ -3730,6 +3732,14 @@ enum nvmx_vmentry_status nested_vmx_enter_non_root_mode(struct kvm_vcpu *vcpu,
 		u64 timer_value = vmx_calc_preemption_timer_value(vcpu);
 		vmx_start_preemption_timer(vcpu, timer_value);
 	}
+
+	/*
+	 * Disable apic virtual timer for L1 to use sw timer (hr timer) or
+	 * hypervisor timer (VMX preemption timer).
+	 * When L1 timer interrupt occurs during running L2, KVM emulates
+	 * VMExit from L2 to L1.  Not directly injecting the interrupt into L2.
+	 */
+	kvm_cancel_apic_virt_timer(vcpu);
 
 	/*
 	 * Note no nested_vmx_succeed or nested_vmx_fail here. At this point
@@ -5157,6 +5167,9 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 
 	/* in case we halted in L2 */
 	kvm_set_mp_state(vcpu, KVM_MP_STATE_RUNNABLE);
+
+	/* If apic virtual timer is supported, switch back to it. */
+	kvm_update_apic_virt_timer(vcpu);
 
 	if (likely(!vmx->fail)) {
 		if (vm_exit_reason != -1)

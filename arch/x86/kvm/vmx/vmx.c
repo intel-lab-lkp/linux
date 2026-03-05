@@ -8373,6 +8373,9 @@ bool vmx_can_use_apic_virt_timer(struct kvm_vcpu *vcpu)
 	if (vcpu->kvm->arch.vm_type != KVM_X86_DEFAULT_VM)
 		return false;
 
+	if (is_guest_mode(vcpu))
+		return false;
+
 	return cpu_has_vmx_apic_timer_virt() &&
 		/* SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY and in-kernel apic */
 		kvm_vcpu_apicv_active(vcpu) &&
@@ -8384,6 +8387,8 @@ bool vmx_can_use_apic_virt_timer(struct kvm_vcpu *vcpu)
 
 void vmx_set_apic_virt_timer(struct kvm_vcpu *vcpu, u16 vector)
 {
+	WARN_ON_ONCE(is_guest_mode(vcpu));
+
 	vmcs_write16(GUEST_APIC_TIMER_VECTOR, vector);
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_TSC_DEADLINE, MSR_TYPE_RW);
 	tertiary_exec_controls_setbit(to_vmx(vcpu), TERTIARY_EXEC_GUEST_APIC_TIMER);
