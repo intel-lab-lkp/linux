@@ -2333,6 +2333,8 @@ splice_requeue:
 	goto splice_read_end;
 }
 
+#define TLS_READ_SOCK_BATCH	16
+
 int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		     sk_read_actor_t read_actor)
 {
@@ -2344,6 +2346,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	struct sk_psock *psock;
 	size_t flushed_at = 0;
 	bool released = true;
+	bool async = false;
 	struct tls_msg *tlm;
 	ssize_t copied = 0;
 	ssize_t decrypted;
@@ -2366,33 +2369,71 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	decrypted = 0;
 	for (;;) {
 		struct tls_decrypt_arg darg;
+		int nr_async = 0;
 
-		/* Phase 1: Submit -- decrypt one record onto rx_list.
+		/* Phase 1: Submit -- decrypt records onto rx_list.
 		 * Flush the backlog first so that segments that
 		 * arrived while the lock was held appear on
 		 * sk_receive_queue before tls_rx_rec_wait waits
 		 * for a new record.
 		 */
 		if (skb_queue_empty(&ctx->rx_list)) {
-			sk_flush_backlog(sk);
-			err = tls_rx_rec_wait(sk, NULL, true, released);
-			if (err <= 0)
-				goto read_sock_end;
+			while (nr_async < TLS_READ_SOCK_BATCH) {
+				if (nr_async == 0) {
+					sk_flush_backlog(sk);
+					err = tls_rx_rec_wait(sk, NULL,
+							      true,
+							      released);
+					if (err <= 0)
+						goto read_sock_end;
+				} else {
+					if (!tls_strp_msg_ready(ctx)) {
+						tls_strp_check_rcv_quiet(&ctx->strp);
+						if (!tls_strp_msg_ready(ctx))
+							break;
+					}
+					if (!tls_strp_msg_load(&ctx->strp,
+							       released))
+						break;
+				}
 
-			memset(&darg.inargs, 0, sizeof(darg.inargs));
+				memset(&darg.inargs, 0,
+				       sizeof(darg.inargs));
+				darg.async = ctx->async_capable;
 
-			err = tls_rx_one_record(sk, NULL, &darg);
-			if (err < 0) {
-				tls_err_abort(sk, -EBADMSG);
+				err = tls_rx_one_record(sk, NULL, &darg);
+				if (err < 0) {
+					tls_err_abort(sk, -EBADMSG);
+					goto read_sock_end;
+				}
+
+				async |= darg.async;
+				released = tls_read_flush_backlog(sk, prot,
+								  INT_MAX,
+								  0,
+								  decrypted,
+								  &flushed_at);
+				decrypted += strp_msg(darg.skb)->full_len;
+				tls_rx_rec_release(ctx);
+				__skb_queue_tail(&ctx->rx_list, darg.skb);
+				nr_async++;
+
+				if (!ctx->async_capable)
+					break;
+			}
+		}
+
+		/* Async wait -- collect pending AEAD completions */
+		if (async) {
+			int ret = tls_decrypt_async_wait(ctx);
+
+			__skb_queue_purge(&ctx->async_hold);
+			async = false;
+			if (ret) {
+				__skb_queue_purge(&ctx->rx_list);
+				err = ret;
 				goto read_sock_end;
 			}
-
-			released = tls_read_flush_backlog(sk, prot, INT_MAX,
-							  0, decrypted,
-							  &flushed_at);
-			decrypted += strp_msg(darg.skb)->full_len;
-			tls_rx_rec_release(ctx);
-			__skb_queue_tail(&ctx->rx_list, darg.skb);
 		}
 
 		/* Phase 2: Deliver -- drain rx_list to read_actor */
@@ -2430,6 +2471,14 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	}
 
 read_sock_end:
+	if (async) {
+		int ret = tls_decrypt_async_wait(ctx);
+
+		__skb_queue_purge(&ctx->async_hold);
+		__skb_queue_purge(&ctx->rx_list);
+		if (ret && !err)
+			err = ret;
+	}
 	tls_strp_check_rcv(&ctx->strp);
 	tls_rx_reader_release(sk, ctx);
 	return copied ? : err;
