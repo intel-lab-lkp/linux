@@ -89,12 +89,13 @@ void free_fs_struct(struct fs_struct *fs)
 
 void exit_fs(struct task_struct *tsk)
 {
-	struct fs_struct *fs = tsk->fs;
+	struct fs_struct *fs = tsk->real_fs;
 
 	if (fs) {
 		int kill;
 		task_lock(tsk);
 		read_seqlock_excl(&fs->seq);
+		tsk->real_fs = NULL;
 		tsk->fs = NULL;
 		kill = !--fs->users;
 		read_sequnlock_excl(&fs->seq);
@@ -126,7 +127,7 @@ struct fs_struct *copy_fs_struct(struct fs_struct *old)
 
 int unshare_fs_struct(void)
 {
-	struct fs_struct *fs = current->fs;
+	struct fs_struct *fs = current->real_fs;
 	struct fs_struct *new_fs = copy_fs_struct(fs);
 	int kill;
 
@@ -135,8 +136,10 @@ int unshare_fs_struct(void)
 
 	task_lock(current);
 	read_seqlock_excl(&fs->seq);
+	VFS_WARN_ON_ONCE(fs != current->fs);
 	kill = !--fs->users;
 	current->fs = new_fs;
+	current->real_fs = new_fs;
 	read_sequnlock_excl(&fs->seq);
 	task_unlock(current);
 
@@ -177,13 +180,14 @@ struct fs_struct *switch_fs_struct(struct fs_struct *new_fs)
 
 	fs = current->fs;
 	read_seqlock_excl(&fs->seq);
+	VFS_WARN_ON_ONCE(current->fs != current->real_fs);
 	current->fs = new_fs;
+	current->real_fs = new_fs;
 	if (--fs->users)
 		new_fs = NULL;
 	else
 		new_fs = fs;
 	read_sequnlock_excl(&fs->seq);
-
 	nullfs_userspace_init(fs);
 	return new_fs;
 }
