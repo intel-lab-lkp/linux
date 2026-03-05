@@ -22,6 +22,8 @@
 #include <net/genetlink.h>
 #include <linux/atomic.h>
 #include <linux/sched/cputime.h>
+#include <linux/ptrace.h>
+#include <linux/netlink.h>
 
 /*
  * Maximum length of a cpumask that can be specified in
@@ -198,19 +200,24 @@ static void fill_stats(struct user_namespace *user_ns,
 	exe_add_tsk(stats, tsk);
 }
 
-static int fill_stats_for_pid(pid_t pid, struct taskstats *stats)
+static int fill_stats_for_pid(struct sk_buff *skb, pid_t pid, struct taskstats *stats)
 {
 	struct task_struct *tsk;
 
 	tsk = find_get_task_by_vpid(pid);
 	if (!tsk)
 		return -ESRCH;
+	if (!(netlink_capable(skb, CAP_NET_ADMIN) ||
+		ptrace_may_access(tsk, PTRACE_MODE_READ_FSCREDS))) {
+		put_task_struct(tsk);
+		return -EPERM;
+	}
 	fill_stats(current_user_ns(), task_active_pid_ns(current), tsk, stats);
 	put_task_struct(tsk);
 	return 0;
 }
 
-static int fill_stats_for_tgid(pid_t tgid, struct taskstats *stats)
+static int fill_stats_for_tgid(struct sk_buff *skb, pid_t tgid, struct taskstats *stats)
 {
 	struct task_struct *tsk, *first;
 	unsigned long flags;
@@ -225,7 +232,14 @@ static int fill_stats_for_tgid(pid_t tgid, struct taskstats *stats)
 	rcu_read_lock();
 	first = find_task_by_vpid(tgid);
 
-	if (!first || !lock_task_sighand(first, &flags))
+	if (!first)
+		goto out;
+	if (!(netlink_capable(skb, CAP_NET_ADMIN) ||
+		ptrace_may_access(first, PTRACE_MODE_READ_FSCREDS))) {
+		rc = -EPERM;
+		goto out;
+	}
+	if (!lock_task_sighand(first, &flags))
 		goto out;
 
 	if (first->signal->stats)
@@ -447,10 +461,13 @@ static int cgroupstats_user_cmd(struct sk_buff *skb, struct genl_info *info)
 	return send_reply(rep_skb, info);
 }
 
-static int cmd_attr_register_cpumask(struct genl_info *info)
+static int cmd_attr_register_cpumask(struct sk_buff *skb, struct genl_info *info)
 {
 	cpumask_var_t mask;
 	int rc;
+
+	if (!netlink_capable(skb, CAP_NET_ADMIN))
+		return -EPERM;
 
 	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
 		return -ENOMEM;
@@ -463,10 +480,13 @@ out:
 	return rc;
 }
 
-static int cmd_attr_deregister_cpumask(struct genl_info *info)
+static int cmd_attr_deregister_cpumask(struct sk_buff *skb, struct genl_info *info)
 {
 	cpumask_var_t mask;
 	int rc;
+
+	if (!netlink_capable(skb, CAP_NET_ADMIN))
+		return -EPERM;
 
 	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
 		return -ENOMEM;
@@ -490,7 +510,7 @@ static size_t taskstats_packet_size(void)
 	return size;
 }
 
-static int cmd_attr_pid(struct genl_info *info)
+static int cmd_attr_pid(struct sk_buff *skb, struct genl_info *info)
 {
 	struct taskstats *stats;
 	struct sk_buff *rep_skb;
@@ -510,7 +530,7 @@ static int cmd_attr_pid(struct genl_info *info)
 	if (!stats)
 		goto err;
 
-	rc = fill_stats_for_pid(pid, stats);
+	rc = fill_stats_for_pid(skb, pid, stats);
 	if (rc < 0)
 		goto err;
 	return send_reply(rep_skb, info);
@@ -519,7 +539,7 @@ err:
 	return rc;
 }
 
-static int cmd_attr_tgid(struct genl_info *info)
+static int cmd_attr_tgid(struct sk_buff *skb, struct genl_info *info)
 {
 	struct taskstats *stats;
 	struct sk_buff *rep_skb;
@@ -539,7 +559,7 @@ static int cmd_attr_tgid(struct genl_info *info)
 	if (!stats)
 		goto err;
 
-	rc = fill_stats_for_tgid(tgid, stats);
+	rc = fill_stats_for_tgid(skb, tgid, stats);
 	if (rc < 0)
 		goto err;
 	return send_reply(rep_skb, info);
@@ -551,13 +571,13 @@ err:
 static int taskstats_user_cmd(struct sk_buff *skb, struct genl_info *info)
 {
 	if (info->attrs[TASKSTATS_CMD_ATTR_REGISTER_CPUMASK])
-		return cmd_attr_register_cpumask(info);
+		return cmd_attr_register_cpumask(skb, info);
 	else if (info->attrs[TASKSTATS_CMD_ATTR_DEREGISTER_CPUMASK])
-		return cmd_attr_deregister_cpumask(info);
+		return cmd_attr_deregister_cpumask(skb, info);
 	else if (info->attrs[TASKSTATS_CMD_ATTR_PID])
-		return cmd_attr_pid(info);
+		return cmd_attr_pid(skb, info);
 	else if (info->attrs[TASKSTATS_CMD_ATTR_TGID])
-		return cmd_attr_tgid(info);
+		return cmd_attr_tgid(skb, info);
 	else
 		return -EINVAL;
 }
@@ -664,7 +684,6 @@ static const struct genl_ops taskstats_ops[] = {
 		.doit		= taskstats_user_cmd,
 		.policy		= taskstats_cmd_get_policy,
 		.maxattr	= ARRAY_SIZE(taskstats_cmd_get_policy) - 1,
-		.flags		= GENL_ADMIN_PERM,
 	},
 	{
 		.cmd		= CGROUPSTATS_CMD_GET,
