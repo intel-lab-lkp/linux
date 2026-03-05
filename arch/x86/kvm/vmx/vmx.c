@@ -8318,25 +8318,32 @@ int vmx_check_intercept(struct kvm_vcpu *vcpu,
 	return X86EMUL_INTERCEPTED;
 }
 
-#ifdef CONFIG_X86_64
 /* (a << shift) / divisor, return 1 if overflow otherwise 0 */
 static inline int u64_shl_div_u64(u64 a, unsigned int shift,
 				  u64 divisor, u64 *result)
 {
-	u64 low = a << shift, high = a >> (64 - shift);
+	u64 high = a >> (64 - shift);
+#ifdef CONFIG_X86_64
+	u64 low = a << shift;
+#endif
 
 	/* To avoid the overflow on divq */
 	if (high >= divisor)
 		return 1;
 
+#ifdef CONFIG_X86_64
 	/* Low hold the result, high hold rem which is discarded */
 	asm("divq %2\n\t" : "=a" (low), "=d" (high) :
 	    "rm" (divisor), "0" (low), "1" (high));
 	*result = low;
+#else
+	*result = mul_u64_u64_div_u64(a, 1ULL << shift, divisor);
+#endif
 
 	return 0;
 }
 
+#ifdef CONFIG_X86_64
 int vmx_set_hv_timer(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc,
 		     bool *expired)
 {
@@ -8414,7 +8421,21 @@ void vmx_cancel_apic_virt_timer(struct kvm_vcpu *vcpu)
 	tertiary_exec_controls_clearbit(to_vmx(vcpu), TERTIARY_EXEC_GUEST_APIC_TIMER);
 }
 
-static u64 vmx_calc_deadline_l1_to_host(struct kvm_vcpu *vcpu, u64 l1_tsc)
+void vmx_set_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu,
+				     u64 guest_deadline_virt)
+{
+	vmcs_write64(GUEST_DEADLINE_VIR, guest_deadline_virt);
+	vmcs_write64(GUEST_DEADLINE_PHY,
+		     vmx_calc_deadline_l1_to_host(vcpu, guest_deadline_virt));
+}
+
+u64 vmx_get_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu)
+{
+	return vmcs_read64(GUEST_DEADLINE_VIR);
+}
+#endif
+
+u64 vmx_calc_deadline_l1_to_host(struct kvm_vcpu *vcpu, u64 l1_tsc)
 {
 	u64 host_tsc_now = rdtsc();
 	u64 l1_tsc_now = kvm_read_l1_tsc(vcpu, host_tsc_now);
@@ -8453,20 +8474,6 @@ static u64 vmx_calc_deadline_l1_to_host(struct kvm_vcpu *vcpu, u64 l1_tsc)
 
 	return host_tsc;
 }
-
-void vmx_set_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu,
-				     u64 guest_deadline_virt)
-{
-	vmcs_write64(GUEST_DEADLINE_VIR, guest_deadline_virt);
-	vmcs_write64(GUEST_DEADLINE_PHY,
-		     vmx_calc_deadline_l1_to_host(vcpu, guest_deadline_virt));
-}
-
-u64 vmx_get_guest_tsc_deadline_virt(struct kvm_vcpu *vcpu)
-{
-	return vmcs_read64(GUEST_DEADLINE_VIR);
-}
-#endif
 
 void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu)
 {

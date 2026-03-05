@@ -394,6 +394,8 @@ static inline void vmx_enable_intercept_for_msr(struct kvm_vcpu *vcpu,
 u64 vmx_get_l2_tsc_offset(struct kvm_vcpu *vcpu);
 u64 vmx_get_l2_tsc_multiplier(struct kvm_vcpu *vcpu);
 
+u64 vmx_calc_deadline_l1_to_host(struct kvm_vcpu *vcpu, u64 l1_tsc);
+
 gva_t vmx_get_untagged_addr(struct kvm_vcpu *vcpu, gva_t gva, unsigned int flags);
 
 void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu);
