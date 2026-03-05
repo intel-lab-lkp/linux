@@ -89,13 +89,23 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 		path_put(old_root);
 }
 
+/*
+ * Drain extra pwd references from the pool. The caller must ensure
+ * exclusive access to @fs (e.g., fs->users == 1 or under write_seqlock).
+ */
+void drain_fs_pwd_pool(struct fs_struct *fs)
+{
+	while (fs->pwd_refs) {
+		path_put(&fs->pwd);
+		fs->pwd_refs--;
+	}
+}
+
 void free_fs_struct(struct fs_struct *fs)
 {
-	int count = fs->pwd_refs + 1;
-
 	path_put(&fs->root);
-	while (count--)
-		path_put(&fs->pwd);
+	drain_fs_pwd_pool(fs);
+	path_put(&fs->pwd);
 	kmem_cache_free(fs_cachep, fs);
 }
 
