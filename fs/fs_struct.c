@@ -50,7 +50,7 @@ void set_fs_pwd(struct fs_struct *fs, const struct path *path)
 
 static inline int replace_path(struct path *p, const struct path *old, const struct path *new)
 {
-	if (likely(p->dentry != old->dentry || p->mnt != old->mnt))
+	if (likely(!path_equal(p, old)))
 		return 0;
 	*p = *new;
 	return 1;

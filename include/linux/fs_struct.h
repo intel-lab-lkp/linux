@@ -57,7 +57,7 @@ static inline void get_fs_pwd_pool(struct fs_struct *fs, struct path *pwd)
 static inline void put_fs_pwd_pool(struct fs_struct *fs, struct path *pwd)
 {
 	read_seqlock_excl(&fs->seq);
-	if ((fs->pwd.dentry == pwd->dentry) && (fs->pwd.mnt == pwd->mnt)) {
+	if (path_equal(&fs->pwd, pwd)) {
 		fs->pwd_refs++;
 		pwd = NULL;
 	}
