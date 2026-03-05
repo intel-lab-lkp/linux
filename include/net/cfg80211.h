@@ -4363,8 +4363,9 @@ struct cfg80211_pmsr_result {
  *		 EDCA based ranging will be used.
  * @lmr_feedback: negotiate for I2R LMR feedback. Only valid if either
  *		 @trigger_based or @non_trigger_based is set.
- * @rsta: Operate as the RSTA in the measurement. Only valid if @lmr_feedback
- *	and either @trigger_based or @non_trigger_based is set.
+ * @rsta: Operate as the RSTA in the measurement. Only valid if either
+ *	@trigger_based or @non_trigger_based is set. Set @lmr_feedback
+ *	to receive measurement results in response.
  * @bss_color: the bss color of the responder. Optional. Set to zero to
  *	indicate the driver should set the BSS color. Only valid if
  *	@non_trigger_based or @trigger_based is set.
