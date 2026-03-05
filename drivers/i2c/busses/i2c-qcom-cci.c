@@ -111,6 +111,7 @@ struct cci_master {
 	struct i2c_adapter adap;
 	u16 master;
 	u8 mode;
+	bool scl_stretch_en;
 	int status;
 	struct completion irq_complete;
 	struct cci *cci;
@@ -284,7 +285,8 @@ static int cci_init(struct cci *cci)
 		val = hw->tbuf;
 		writel(val, cci->base + CCI_I2C_Mm_SDA_CTL_2(i));
 
-		val = hw->scl_stretch_en << 8 | hw->trdhld << 4 | hw->tsp;
+		val = (hw->scl_stretch_en | cci->master[i].scl_stretch_en) << 8 |
+			hw->trdhld << 4 | hw->tsp;
 		writel(val, cci->base + CCI_I2C_Mm_MISC_CTL(i));
 	}
 
@@ -571,6 +573,9 @@ static int cci_probe(struct platform_device *pdev)
 			else if (val == I2C_MAX_FAST_MODE_PLUS_FREQ)
 				master->mode = I2C_MODE_FAST_PLUS;
 		}
+
+		master->scl_stretch_en =
+			of_property_read_bool(child, "qcom,scl-stretch-enable");
 
 		init_completion(&master->irq_complete);
 	}
