@@ -277,7 +277,7 @@ static int repro_timer(void *arg)
 {
 	unsigned long j;
 	unsigned long jmax = 0; // Maximum timer delay in jiffies.
-	const unsigned long jwait = 10;
+	ktime_t jwait;
 
 	VERBOSE_REPROOUT_STRING("repro_timer task started");
 	torture_sched_set_normal(current, timer_nice);
@@ -289,7 +289,9 @@ static int repro_timer(void *arg)
 	}
 	do {
 		j = jiffies;
-		torture_hrtimeout_jiffies(jwait, NULL);
+		jwait = jiffies_to_nsecs(10);
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule_hrtimeout(&jwait, HRTIMER_MODE_REL);
 		j = jiffies - j - jwait;
 		if (j > (unsigned long)LONG_MAX)
 			j = 0;
