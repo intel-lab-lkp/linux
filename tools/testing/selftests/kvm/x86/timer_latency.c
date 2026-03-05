@@ -15,6 +15,10 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "apic.h"
+#include "vmx.h"
+
+#define L2_GUEST_STACK_SIZE 256
+static unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
 
 #define LOCAL_TIMER_VECTOR	0xec
 
@@ -30,6 +34,7 @@ struct options {
 	bool use_oneshot_timer;
 	bool use_x2apic;
 	bool use_poll;
+	bool nested;
 
 	uint64_t timer_inc_ns;
 	uint64_t allowed_timer_latency_ns;
@@ -307,6 +312,65 @@ static void guest_code(void)
 	GUEST_DONE();
 }
 
+static void l1_guest_code(struct vmx_pages *vmx_pages)
+{
+	union vmx_ctrl_msr ctls_msr, ctls2_msr;
+	uint64_t pin, ctls, ctls2, ctls3;
+
+	GUEST_ASSERT(prepare_for_vmx_operation(vmx_pages));
+	GUEST_ASSERT(load_vmcs(vmx_pages));
+	prepare_vmcs(vmx_pages, guest_code,
+		     &l2_guest_stack[L2_GUEST_STACK_SIZE]);
+
+	/* Check prerequisites */
+	GUEST_ASSERT(!rdmsr_safe(MSR_IA32_VMX_PROCBASED_CTLS, &ctls_msr.val));
+	GUEST_ASSERT(ctls_msr.clr & CPU_BASED_ACTIVATE_SECONDARY_CONTROLS);
+	GUEST_ASSERT(ctls_msr.clr & CPU_BASED_ACTIVATE_TERTIARY_CONTROLS);
+
+	GUEST_ASSERT(!rdmsr_safe(MSR_IA32_VMX_PROCBASED_CTLS2, &ctls2_msr.val));
+	GUEST_ASSERT(ctls2_msr.clr & SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY);
+
+	GUEST_ASSERT(!rdmsr_safe(MSR_IA32_VMX_PROCBASED_CTLS3, &ctls3));
+	GUEST_ASSERT(ctls3 & TERTIARY_EXEC_GUEST_APIC_TIMER);
+
+	/*
+	 * SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY requires
+	 * PIN_BASED_EXT_INTR_MASK
+	 */
+	pin = vmreadz(PIN_BASED_VM_EXEC_CONTROL);
+	pin |= PIN_BASED_EXT_INTR_MASK;
+	GUEST_ASSERT(!vmwrite(PIN_BASED_VM_EXEC_CONTROL, pin));
+
+	ctls = vmreadz(CPU_BASED_VM_EXEC_CONTROL);
+	ctls |= CPU_BASED_USE_MSR_BITMAPS | CPU_BASED_TPR_SHADOW |
+		CPU_BASED_ACTIVATE_SECONDARY_CONTROLS |
+		CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+	GUEST_ASSERT(!vmwrite(CPU_BASED_VM_EXEC_CONTROL, ctls));
+
+	/* guest apic timer requires virtual interrutp delivery */
+	ctls2 = vmreadz(SECONDARY_VM_EXEC_CONTROL);
+	ctls2 |= SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE |
+		SECONDARY_EXEC_APIC_REGISTER_VIRT |
+		SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY;
+	vmwrite(SECONDARY_VM_EXEC_CONTROL, ctls2);
+
+	ctls3 = vmreadz(TERTIARY_VM_EXEC_CONTROL);
+	ctls3 |= TERTIARY_EXEC_GUEST_APIC_TIMER;
+	GUEST_ASSERT(!vmwrite(TERTIARY_VM_EXEC_CONTROL, ctls3));
+
+	/*
+	 * We don't emulate apic registers(including APIC_LVTT) for simplicity.
+	 * Directly set vector for timer interrupt instead.
+	 */
+	GUEST_ASSERT(!vmwrite(GUEST_APIC_TIMER_VECTOR, LOCAL_TIMER_VECTOR));
+
+	/* launch L2 */
+	GUEST_ASSERT(!vmlaunch());
+	GUEST_ASSERT_EQ(vmreadz(VM_EXIT_REASON), EXIT_REASON_VMCALL);
+
+	GUEST_DONE();
+}
+
 static void __run_vcpu(struct kvm_vcpu *vcpu)
 {
 	struct ucall uc;
@@ -411,12 +475,40 @@ static void setup_timer_freq(struct kvm_vm *vm,
 		ns_to_tsc(data, options.allowed_timer_latency_ns);
 }
 
+static void clear_msr_bitmap(struct vmx_pages *vmx, int msr)
+{
+	clear_bit(msr, vmx->msr_hva);
+	clear_bit(msr, vmx->msr_hva + 2048);
+}
+
 static void setup(struct kvm_vm **vm__, struct kvm_vcpu **vcpu__)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 
-	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+	if (options.nested) {
+		vm_vaddr_t vmx_pages_gva = 0;
+		struct vmx_pages *vmx;
+
+		vm = vm_create_with_one_vcpu(&vcpu, l1_guest_code);
+
+		vmx = vcpu_alloc_vmx(vm, &vmx_pages_gva);
+		memset(vmx->msr_hva, 0xff, 4096);
+
+		/* Allow nested apic timer virtualization. */
+		clear_msr_bitmap(vmx, MSR_IA32_TSC_DEADLINE);
+
+		/*  Rely on x2apic virtualization. */
+		clear_msr_bitmap(vmx, MSR_IA32_APICBASE);
+		clear_msr_bitmap(vmx, APIC_BASE_MSR + (APIC_TDCR >> 4));
+		clear_msr_bitmap(vmx, APIC_BASE_MSR + (APIC_LVTT >> 4));
+		clear_msr_bitmap(vmx, APIC_BASE_MSR + (APIC_SPIV >> 4));
+		clear_msr_bitmap(vmx, APIC_BASE_MSR + (APIC_EOI >> 4));
+
+		vcpu_args_set(vcpu, 1, vmx_pages_gva);
+	} else
+		vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+
 	vm_install_exception_handler(vm, LOCAL_TIMER_VECTOR,
 				     guest_timer_interrupt_handler);
 	setup_timer_freq(vm, &shared_data);
@@ -509,6 +601,8 @@ static void help(const char *name)
 	printf("-P: print result stat\n");
 	printf("-x: use xAPIC mode\n");
 	printf("-X: use x2APIC mode (default)\n");
+	printf("-n: Only measure nested VM (L2)\n");
+	printf("-N: Don't measure nested VM (L2)\n");
 	puts("");
 
 	exit(EXIT_SUCCESS);
@@ -518,8 +612,10 @@ int main(int argc, char **argv)
 {
 	int opt;
 	unsigned int duration = TEST_DURATION_DEFAULT_IN_SEC;
+	bool nested_only = false;
+	bool no_nest = false;
 
-	while ((opt = getopt(argc, argv, "hld:p:a:otxXP")) != -1) {
+	while ((opt = getopt(argc, argv, "hld:p:a:otxXPnN")) != -1) {
 		switch (opt) {
 		case 'l':
 			options.use_poll = true;
@@ -557,6 +653,15 @@ int main(int argc, char **argv)
 			options.print_result = true;
 			break;
 
+		case 'n':
+			nested_only = true;
+			no_nest = false;
+			break;
+		case 'N':
+			nested_only = false;
+			no_nest = true;
+			break;
+
 		case 'h':
 		default:
 			help(argv[0]);
@@ -572,7 +677,28 @@ int main(int argc, char **argv)
 	if (options.use_x2apic)
 		TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_X2APIC));
 
-	run_test(duration);
+	if (!nested_only) {
+		options.nested = false;
+		run_test(duration);
+	}
+
+	if (!no_nest) {
+		union vmx_ctrl_msr ctls;
+		uint64_t ctls3;
+
+		ctls.val = kvm_get_feature_msr(MSR_IA32_VMX_TRUE_PROCBASED_CTLS);
+		TEST_REQUIRE(ctls.clr & CPU_BASED_ACTIVATE_TERTIARY_CONTROLS);
+
+		ctls3 = kvm_get_feature_msr(MSR_IA32_VMX_PROCBASED_CTLS3);
+		TEST_REQUIRE(ctls3 & TERTIARY_EXEC_GUEST_APIC_TIMER);
+
+		/* L1 doesn't emulate HLT and memory-mapped APIC. */
+		options.use_poll = true;
+		options.use_oneshot_timer = false;
+
+		options.nested = true;
+		run_test(duration);
+	}
 
 	return 0;
 }
