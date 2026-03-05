@@ -2801,15 +2801,7 @@ static int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 
 	if (_cpu_based_exec_control & CPU_BASED_ACTIVATE_TERTIARY_CONTROLS)
 		_cpu_based_3rd_exec_control =
-			adjust_vmx_controls64(KVM_OPTIONAL_VMX_TERTIARY_VM_EXEC_CONTROL
-					      /*
-					       * Disable apic timer
-					       * virtualization until the logic
-					       * is imlemented.
-					       * Once it's supported, add
-					       * TERTIARY_EXEC_GUEST_APIC_TIMER.
-					       */
-					      & ~TERTIARY_EXEC_GUEST_APIC_TIMER,
+			adjust_vmx_controls64(KVM_OPTIONAL_VMX_TERTIARY_VM_EXEC_CONTROL,
 					      MSR_IA32_VMX_PROCBASED_CTLS3);
 
 	if (!IS_ENABLED(CONFIG_X86_64) ||
