@@ -119,7 +119,7 @@ module_param(enable_ipiv, bool, 0444);
 
 module_param(enable_device_posted_irqs, bool, 0444);
 
-static bool __read_mostly enable_apic_timer_virt = true;
+bool __read_mostly enable_apic_timer_virt = true;
 module_param_named(apic_timer_virt, enable_apic_timer_virt, bool, 0444);
 
 /*

@@ -27,6 +27,10 @@ module_param_named(enable_shadow_vmcs, enable_shadow_vmcs, bool, S_IRUGO);
 static bool __ro_after_init warn_on_missed_cc;
 module_param(warn_on_missed_cc, bool, 0444);
 
+static bool __read_mostly enable_nested_apic_timer_virt = true;
+module_param_named(nested_apic_timer_virt, enable_nested_apic_timer_virt, bool,
+		   0444);
+
 #define CC KVM_NESTED_VMENTER_CONSISTENCY_CHECK
 
 /*
@@ -7453,13 +7457,20 @@ static void nested_vmx_setup_secondary_ctls(u32 ept_caps,
 static void nested_vmx_setup_tertiary_ctls(struct vmcs_config *vmcs_conf,
 					   struct nested_vmx_msrs *msrs)
 {
-	msrs->tertiary_ctls = vmcs_conf->cpu_based_3rd_exec_ctrl;
+	enable_nested_apic_timer_virt &= enable_apic_timer_virt;
 
+	msrs->tertiary_ctls = vmcs_conf->cpu_based_3rd_exec_ctrl;
 	msrs->tertiary_ctls &= TERTIARY_EXEC_GUEST_APIC_TIMER;
+
+	if (!enable_nested_apic_timer_virt)
+		msrs->tertiary_ctls &= ~TERTIARY_EXEC_GUEST_APIC_TIMER;
 
 	if (msrs->tertiary_ctls)
 		msrs->procbased_ctls_high |=
 			CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+
+	if (!(msrs->tertiary_ctls & TERTIARY_EXEC_GUEST_APIC_TIMER))
+		enable_nested_apic_timer_virt = false;
 }
 
 static void nested_vmx_setup_misc_data(struct vmcs_config *vmcs_conf,
