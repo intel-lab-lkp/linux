@@ -393,6 +393,11 @@ static void handle_rpc_func_rpmb_frames(struct tee_context *ctx,
 			    params[0].u.memref.shm_offs);
 	p1 = tee_shm_get_va(params[1].u.memref.shm,
 			    params[1].u.memref.shm_offs);
+	if (IS_ERR(p0) || IS_ERR(p1)) {
+		arg->ret = TEEC_ERROR_BAD_PARAMETERS;
+		goto out;
+	}
+
 	if (rpmb_route_frames(rdev, p0, params[0].u.memref.size, p1,
 			      params[1].u.memref.size)) {
 		arg->ret = TEEC_ERROR_BAD_PARAMETERS;
