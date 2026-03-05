@@ -11661,7 +11661,7 @@ int kvm_arch_vcpu_runnable(struct kvm_vcpu *vcpu)
 /* Called within kvm->srcu read side.  */
 static inline int vcpu_block(struct kvm_vcpu *vcpu)
 {
-	bool hv_timer;
+	bool hv_timer, virt_timer;
 
 	if (!kvm_arch_vcpu_runnable(vcpu)) {
 		/*
@@ -11672,7 +11672,8 @@ static inline int vcpu_block(struct kvm_vcpu *vcpu)
 		 * timer before blocking.
 		 */
 		hv_timer = kvm_lapic_hv_timer_in_use(vcpu);
-		if (hv_timer)
+		virt_timer = kvm_lapic_apic_virt_timer_in_use(vcpu);
+		if (hv_timer || virt_timer)
 			kvm_lapic_switch_to_sw_timer(vcpu);
 
 		kvm_vcpu_srcu_read_unlock(vcpu);
@@ -11684,6 +11685,8 @@ static inline int vcpu_block(struct kvm_vcpu *vcpu)
 
 		if (hv_timer)
 			kvm_lapic_switch_to_hv_timer(vcpu);
+		else if (virt_timer)
+			kvm_lapic_switch_to_apic_virt_timer(vcpu);
 
 		/*
 		 * If the vCPU is not runnable, a signal or another host event
