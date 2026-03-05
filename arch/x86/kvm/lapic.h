@@ -57,6 +57,7 @@ struct kvm_timer {
 	u32 timer_advance_ns;
 	atomic_t pending;			/* accumulated triggered timers */
 	bool hv_timer_in_use;
+	bool apic_virt_timer_in_use;
 };
 
 struct kvm_lapic {
