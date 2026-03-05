@@ -29,6 +29,7 @@
 #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/sched/task_stack.h>
 
 #include <asm/stacktrace.h>
 #include <asm/traps.h>
@@ -524,12 +525,15 @@ void unwind_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 {
 	struct stackframe frame;
 
-	printk("%sCall trace: ", loglvl);
-
 	pr_debug("%s(regs = %p tsk = %p)\n", __func__, regs, tsk);
 
 	if (!tsk)
 		tsk = current;
+
+	if (!try_get_task_stack(tsk))
+		return;
+
+	printk("%sCall trace: ", loglvl);
 
 	if (regs) {
 		arm_get_current_stackframe(regs, &frame);
@@ -567,6 +571,8 @@ here:
 			break;
 		dump_backtrace_entry(where, frame.pc, frame.sp - 4, loglvl);
 	}
+
+	put_task_stack(tsk);
 }
 
 struct unwind_table *unwind_table_add(unsigned long start, unsigned long size,

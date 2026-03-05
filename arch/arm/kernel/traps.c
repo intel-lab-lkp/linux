@@ -221,10 +221,13 @@ void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 	unsigned int fp, mode;
 	int ok = 1;
 
-	printk("%sCall trace: ", loglvl);
-
 	if (!tsk)
 		tsk = current;
+
+	if (!try_get_task_stack(tsk))
+		return;
+
+	printk("%sCall trace: ", loglvl);
 
 	if (regs) {
 		fp = frame_pointer(regs);
@@ -249,6 +252,8 @@ void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 
 	if (ok)
 		c_backtrace(fp, mode, loglvl);
+
+	put_task_stack(tsk);
 }
 #endif
 
