@@ -2768,6 +2768,22 @@ static void prepare_vmcs02_rare(struct vcpu_vmx *vmx, struct vmcs12 *vmcs12)
 	set_cr4_guest_host_mask(vmx);
 }
 
+static void nested_guest_apic_timer(struct kvm_vcpu *vcpu, struct vmcs12 *vmcs12)
+{
+	u64 guest_deadline_shadow = vmcs12->guest_deadline_shadow;
+	u64 guest_deadline = vmcs12->guest_deadline;
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+
+	if (!vmx->nested.guest_deadline_dirty)
+		return;
+
+	guest_deadline = vmx_calc_deadline_l1_to_host(vcpu, guest_deadline);
+
+	vmcs_write64(GUEST_DEADLINE_PHY, guest_deadline);
+	vmcs_write64(GUEST_DEADLINE_VIR, guest_deadline_shadow);
+	vmx->nested.guest_deadline_dirty = false;
+}
+
 /*
  * prepare_vmcs02 is called when the L1 guest hypervisor runs its nested
  * L2 guest. L1 has a vmcs for L2 (vmcs12), and this function "merges" it
@@ -2844,6 +2860,9 @@ static int prepare_vmcs02(struct kvm_vcpu *vcpu, struct vmcs12 *vmcs12,
 	vmcs_write64(TSC_OFFSET, vcpu->arch.tsc_offset);
 	if (kvm_caps.has_tsc_control)
 		vmcs_write64(TSC_MULTIPLIER, vcpu->arch.tsc_scaling_ratio);
+
+	if (nested_cpu_has_guest_apic_timer(vmcs12))
+		nested_guest_apic_timer(vcpu, vmcs12);
 
 	nested_vmx_transition_tlb_flush(vcpu, vmcs12, true);
 
@@ -4635,6 +4654,8 @@ static bool is_vmcs12_ext_field(unsigned long field)
 	case GUEST_IDTR_BASE:
 	case GUEST_PENDING_DBG_EXCEPTIONS:
 	case GUEST_BNDCFGS:
+	case GUEST_DEADLINE_PHY:
+	case GUEST_DEADLINE_VIR:
 		return true;
 	default:
 		break;
@@ -4684,6 +4705,24 @@ static void sync_vmcs02_to_vmcs12_rare(struct kvm_vcpu *vcpu,
 	vmcs12->guest_idtr_base = vmcs_readl(GUEST_IDTR_BASE);
 	vmcs12->guest_pending_dbg_exceptions =
 		vmcs_readl(GUEST_PENDING_DBG_EXCEPTIONS);
+
+	if (nested_cpu_has_guest_apic_timer(vmcs12)) {
+		u64 guest_deadline_shadow = vmcs_read64(GUEST_DEADLINE_VIR);
+		u64 guest_deadline = vmcs_read64(GUEST_DEADLINE_PHY);
+
+		if (guest_deadline) {
+			guest_deadline = kvm_read_l1_tsc(vcpu, guest_deadline);
+			if (!guest_deadline)
+				guest_deadline = 1;
+		}
+
+		vmcs12->guest_deadline = guest_deadline;
+		vmcs12->guest_deadline_shadow = guest_deadline_shadow;
+	} else if (vmx->nested.msrs.tertiary_ctls & TERTIARY_EXEC_GUEST_APIC_TIMER) {
+		vmcs12->guest_deadline = 0;
+		vmcs12->guest_deadline_shadow = 0;
+	}
+	vmx->nested.guest_deadline_dirty = false;
 
 	vmx->nested.need_sync_vmcs02_to_vmcs12_rare = false;
 }
@@ -5933,6 +5972,13 @@ static int handle_vmwrite(struct kvm_vcpu *vcpu)
 		vmx->nested.dirty_vmcs12 = true;
 	}
 
+	if (!is_guest_mode(vcpu) &&
+	    (field == GUEST_DEADLINE_PHY ||
+	     field == GUEST_DEADLINE_PHY_HIGH ||
+	     field == GUEST_DEADLINE_VIR ||
+	     field == GUEST_DEADLINE_VIR_HIGH))
+		vmx->nested.guest_deadline_dirty = true;
+
 	return nested_vmx_succeed(vcpu);
 }
 
@@ -5947,6 +5993,7 @@ static void set_current_vmptr(struct vcpu_vmx *vmx, gpa_t vmptr)
 	}
 	vmx->nested.dirty_vmcs12 = true;
 	vmx->nested.force_msr_bitmap_recalc = true;
+	vmx->nested.guest_deadline_dirty = true;
 }
 
 /* Emulate the VMPTRLD instruction */
@@ -7124,6 +7171,7 @@ static int vmx_set_nested_state(struct kvm_vcpu *vcpu,
 
 	vmx->nested.dirty_vmcs12 = true;
 	vmx->nested.force_msr_bitmap_recalc = true;
+	vmx->nested.guest_deadline_dirty = true;
 	ret = nested_vmx_enter_non_root_mode(vcpu, false);
 	if (ret)
 		goto error_guest_mode;
