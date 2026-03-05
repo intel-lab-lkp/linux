@@ -2017,8 +2017,7 @@ static void xhci_set_hc_event_deq(struct xhci_hcd *xhci, struct xhci_interrupter
 	/* Don't clear the EHB bit (which is RW1C) because
 	 * there might be more events to service.
 	 */
-	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
-		       "// Write event ring dequeue pointer, preserving EHB bit");
+	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "Write ERST %pad, preserving EHB bit", &deq);
 	xhci_write_64(xhci, deq & ERST_PTR_MASK, &ir->ir_set->erst_dequeue);
 }
 

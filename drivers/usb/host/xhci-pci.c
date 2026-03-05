@@ -181,6 +181,10 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 
 	hcd->msi_enabled = 1;
 	hcd->msix_enabled = pdev->msix_enabled;
+
+	/* MSI/MSI-X interrupts clear IMAN IP bit automatically */
+	xhci->interrupters[0]->ip_autoclear = true;
+
 	return 0;
 
 free_irq_vectors:
