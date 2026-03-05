@@ -898,6 +898,7 @@ int ieee80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 		need_offchan = true;
 		break;
 	case NL80211_IFTYPE_NAN:
+	case NL80211_IFTYPE_PD:
 		break;
 	default:
 		return -EOPNOTSUPP;
