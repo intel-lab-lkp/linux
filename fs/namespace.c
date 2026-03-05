@@ -6188,12 +6188,14 @@ static void __init init_mount_tree(void)
 		init_mnt_ns.nr_mounts++;
 	}
 
+	nullfs_mnt = kern_mount(&nullfs_fs_type);
+	if (IS_ERR(nullfs_mnt))
+		panic("VFS: Failed to create private nullfs instance");
+	root.mnt	= nullfs_mnt;
+	root.dentry	= nullfs_mnt->mnt_root;
+
 	init_task.nsproxy->mnt_ns = &init_mnt_ns;
 	get_mnt_ns(&init_mnt_ns);
-
-	/* The root and pwd always point to the mutable rootfs. */
-	root.mnt	= mnt;
-	root.dentry	= mnt->mnt_root;
 	set_fs_pwd(current->fs, &root);
 	set_fs_root(current->fs, &root);
 
