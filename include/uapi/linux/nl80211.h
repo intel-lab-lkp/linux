@@ -7960,6 +7960,8 @@ enum nl80211_peer_measurement_attrs {
  *	Note that a higher channel bandwidth may be configured to allow for
  *	other measurements types with different bandwidth requirement in the
  *	same measurement.
+ * @NL80211_PMSR_FTM_CAPA_ATTR_RANGE_REPORT: flag indicating if range report
+ *	negotiation and reporting is supported in case of EDCA based ranging.
  *
  * @NUM_NL80211_PMSR_FTM_CAPA_ATTR: internal
  * @NL80211_PMSR_FTM_CAPA_ATTR_MAX: highest attribute number
@@ -7994,6 +7996,7 @@ enum nl80211_peer_measurement_ftm_capa {
 	NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_PREAMBLES,
 	NL80211_PMSR_FTM_CAPA_ATTR_PD_EDCA_BANDWIDTHS,
 	NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_BANDWIDTHS,
+	NL80211_PMSR_FTM_CAPA_ATTR_RANGE_REPORT,
 
 	/* keep last */
 	NUM_NL80211_PMSR_FTM_CAPA_ATTR,
@@ -8077,6 +8080,8 @@ enum nl80211_peer_measurement_ftm_capa {
  * @NL80211_PMSR_FTM_REQ_ATTR_EGRESS: the measurement result of the peer needs
  *	to be indicated in case the device moves out of this range.
  *	(units mm, u64)
+ * @NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT: Negotiate Range report in case of
+ *	EDCA based ranging (flag).
  *
  * @NUM_NL80211_PMSR_FTM_REQ_ATTR: internal
  * @NL80211_PMSR_FTM_REQ_ATTR_MAX: highest attribute number
@@ -8106,6 +8111,7 @@ enum nl80211_peer_measurement_ftm_req {
 	NL80211_PMSR_FTM_REQ_ATTR_PAD,
 	NL80211_PMSR_FTM_REQ_ATTR_INGRESS,
 	NL80211_PMSR_FTM_REQ_ATTR_EGRESS,
+	NL80211_PMSR_FTM_REQ_ATTR_RANGE_REPORT,
 
 	/* keep last */
 	NUM_NL80211_PMSR_FTM_REQ_ATTR,
