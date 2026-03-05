@@ -5,9 +5,11 @@
 
 usage() {
 	echo "Usage:"
-	echo "	$0 -r <release>"
-	echo "	$0 [<vmlinux> [<base_path>|auto [<modules_path>]]]"
+	echo "	$0 [-c] -r <release>"
+	echo "	$0 [-c] [<vmlinux> [<base_path>|auto [<modules_path>]]]"
 	echo "	$0 -h"
+	echo "Options:"
+	echo "   -c: Decode heuristically searched call address."
 }
 
 # Try to find a Rust demangler
@@ -33,11 +35,17 @@ fi
 READELF=${UTIL_PREFIX}readelf${UTIL_SUFFIX}
 ADDR2LINE=${UTIL_PREFIX}addr2line${UTIL_SUFFIX}
 NM=${UTIL_PREFIX}nm${UTIL_SUFFIX}
+call_search=false
 
 if [[ $1 == "-h" ]] ; then
 	usage
 	exit 0
-elif [[ $1 == "-r" ]] ; then
+elif [[ $1 == "-c" ]] ; then
+	call_search=true
+	shift 1
+fi
+
+if [[ $1 == "-r" ]] ; then
 	vmlinux=""
 	basepath="auto"
 	modpath=""
@@ -123,6 +131,28 @@ find_module() {
 	return 1
 }
 
+UNKNOWN_LINE="??:0"
+
+search_call_site() {
+	# Instead of using the return address, use the nearest line info
+	# address before given address.
+	local return_addr=${2}
+	local max=${3}
+	local i
+
+	for i in $(seq 1 ${max}); do
+		local expr=$((0x$return_addr-$i))
+		local address=$(printf "%x\n" "$expr")
+
+		local code=$(${ADDR2LINE} -i -e "${1}" "$address" 2>/dev/null)
+		local first=${code% *}
+		if [[ "$code" != "" && "$code" != ${UNKNOWN_LINE} && "${first#*:}" != "?" ]]; then
+			echo "$code"
+			break
+		fi
+	done
+}
+
 parse_symbol() {
 	# The structure of symbol at this point is:
 	#   ([name]+[offset]/[total length])
@@ -176,6 +206,9 @@ parse_symbol() {
 	# Let's start doing the math to get the exact address into the
 	# symbol. First, strip out the symbol total length.
 	local expr=${symbol%/*}
+	# Also parse the offset from symbol.
+	local offset=${expr#*+}
+	offset=$((offset))
 
 	# Now, replace the symbol name with the base address we found
 	# before.
@@ -190,7 +223,15 @@ parse_symbol() {
 	if [[ $aarray_support == true && "${cache[$module,$address]+isset}" == "isset" ]]; then
 		local code=${cache[$module,$address]}
 	else
-		local code=$(${ADDR2LINE} -i -e "$objfile" "$address" 2>/dev/null)
+		local code
+		if [[ $call_search == true && $offset != 0 ]]; then
+			code=$(search_call_site "$objfile" "$address" "$offset")
+		fi
+
+		if [[ "$code" == "" ]]; then
+			code=$(${ADDR2LINE} -i -e "$objfile" "$address" 2>/dev/null)
+		fi
+
 		if [[ $aarray_support == true ]]; then
 			cache[$module,$address]=$code
 		fi
@@ -199,7 +240,7 @@ parse_symbol() {
 	# addr2line doesn't return a proper error code if it fails, so
 	# we detect it using the value it prints so that we could preserve
 	# the offset/size into the function and bail out
-	if [[ $code == "??:0" ]]; then
+	if [[ $code == ${UNKNOWN_LINE} ]]; then
 		return
 	fi
 
