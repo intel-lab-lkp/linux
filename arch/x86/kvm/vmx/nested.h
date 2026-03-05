@@ -286,6 +286,11 @@ static inline bool nested_cpu_has_encls_exit(struct vmcs12 *vmcs12)
 	return nested_cpu_has2(vmcs12, SECONDARY_EXEC_ENCLS_EXITING);
 }
 
+static inline bool nested_cpu_has_guest_apic_timer(struct vmcs12 *vmcs12)
+{
+	return nested_cpu_has3(vmcs12, TERTIARY_EXEC_GUEST_APIC_TIMER);
+}
+
 /*
  * if fixed0[i] == 1: val[i] must be 1
  * if fixed1[i] == 0: val[i] must be 0

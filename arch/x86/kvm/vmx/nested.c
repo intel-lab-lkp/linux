@@ -598,6 +598,26 @@ static inline void enable_x2apic_msr_intercepts(unsigned long *msr_bitmap)
 	}
 }
 
+static inline void prepare_tsc_deadline_msr_intercepts(struct vmcs12 *vmcs12,
+						       unsigned long *msr_bitmap_l1,
+						       unsigned long *msr_bitmap_l0)
+{
+	if (nested_cpu_has_guest_apic_timer(vmcs12)) {
+		if (vmx_test_msr_bitmap_read(msr_bitmap_l1, MSR_IA32_TSC_DEADLINE))
+			vmx_set_msr_bitmap_read(msr_bitmap_l0, MSR_IA32_TSC_DEADLINE);
+		else
+			vmx_clear_msr_bitmap_read(msr_bitmap_l0, MSR_IA32_TSC_DEADLINE);
+
+		if (vmx_test_msr_bitmap_write(msr_bitmap_l1, MSR_IA32_TSC_DEADLINE))
+			vmx_set_msr_bitmap_write(msr_bitmap_l0, MSR_IA32_TSC_DEADLINE);
+		else
+			vmx_clear_msr_bitmap_write(msr_bitmap_l0, MSR_IA32_TSC_DEADLINE);
+	} else {
+		vmx_set_msr_bitmap_read(msr_bitmap_l0, MSR_IA32_TSC_DEADLINE);
+		vmx_set_msr_bitmap_write(msr_bitmap_l0, MSR_IA32_TSC_DEADLINE);
+	}
+}
+
 #define BUILD_NVMX_MSR_INTERCEPT_HELPER(rw)					\
 static inline									\
 void nested_vmx_set_msr_##rw##_intercept(struct vcpu_vmx *vmx,			\
@@ -744,6 +764,8 @@ static inline bool nested_vmx_prepare_msr_bitmap(struct kvm_vcpu *vcpu,
 				MSR_TYPE_W);
 		}
 	}
+
+	prepare_tsc_deadline_msr_intercepts(vmcs12, msr_bitmap_l1, msr_bitmap_l0);
 
 	/*
 	 * Always check vmcs01's bitmap to honor userspace MSR filters and any
