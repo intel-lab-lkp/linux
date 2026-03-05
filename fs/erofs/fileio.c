@@ -13,10 +13,9 @@ struct erofs_fileio_rq {
 	refcount_t ref;
 };
 
-struct erofs_fileio {
-	struct erofs_map_blocks map;
-	struct erofs_map_dev dev;
+struct erofs_fileio_ctx {
 	struct erofs_fileio_rq *rq;
+	struct erofs_device_info *dif;
 };
 
 static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
@@ -30,7 +29,8 @@ static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
 	if (!rq->bio.bi_end_io) {
 		bio_for_each_folio_all(fi, &rq->bio) {
 			DBG_BUGON(folio_test_uptodate(fi.folio));
-			erofs_onlinefolio_end(fi.folio, ret < 0, false);
+			iomap_finish_folio_read(fi.folio, fi.offset, fi.length,
+						ret < 0 ? ret : 0);
 		}
 	} else if (ret < 0 && !rq->bio.bi_status) {
 		rq->bio.bi_status = errno_to_blk_status(ret);
@@ -86,111 +86,113 @@ void erofs_fileio_submit_bio(struct bio *bio)
 						   bio));
 }
 
-static int erofs_fileio_scan_folio(struct erofs_fileio *io,
-				   struct inode *inode, struct folio *folio)
+static int erofs_fileio_read_folio_range(const struct iomap_iter *iter,
+					 struct iomap_read_folio_ctx *ctx, size_t len)
 {
-	struct erofs_map_blocks *map = &io->map;
-	unsigned int cur = 0, end = folio_size(folio), len, attached = 0;
-	loff_t pos = folio_pos(folio), ofs;
-	int err = 0;
+	struct erofs_iomap_iter_ctx *iter_ctx = iter->private;
+	struct erofs_device_info *dif = iter_ctx->dif;
+	struct inode *realinode = iter_ctx ? iter_ctx->realinode : iter->inode;
+	struct folio *folio = ctx->cur_folio;
+	struct erofs_fileio_ctx *fileio_ctx = ctx->read_ctx;
+	struct iomap *iomap = (struct iomap *)&iter->iomap;
+	size_t poff = offset_in_folio(folio, iter->pos);
+	loff_t pos = iter->pos;
+	int ret = 0;
 
-	erofs_onlinefolio_init(folio);
-	while (cur < end) {
-		if (!in_range(pos + cur, map->m_la, map->m_llen)) {
-			map->m_la = pos + cur;
-			map->m_llen = end - cur;
-			err = erofs_map_blocks(inode, map);
-			if (err)
-				break;
-		}
-
-		ofs = folio_pos(folio) + cur - map->m_la;
-		len = min_t(loff_t, map->m_llen - ofs, end - cur);
-		if (map->m_flags & EROFS_MAP_META) {
-			struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
-			void *src;
-
-			src = erofs_read_metabuf(&buf, inode->i_sb,
-				map->m_pa + ofs, erofs_inode_in_metabox(inode));
-			if (IS_ERR(src)) {
-				err = PTR_ERR(src);
-				break;
-			}
-			memcpy_to_folio(folio, cur, src, len);
-			erofs_put_metabuf(&buf);
-		} else if (!(map->m_flags & EROFS_MAP_MAPPED)) {
-			folio_zero_segment(folio, cur, cur + len);
-			attached = 0;
-		} else {
-			if (io->rq && (map->m_pa + ofs != io->dev.m_pa ||
-				       map->m_deviceid != io->dev.m_deviceid)) {
-io_retry:
-				erofs_fileio_rq_submit(io->rq);
-				io->rq = NULL;
-			}
-
-			if (!io->rq) {
-				io->dev = (struct erofs_map_dev) {
-					.m_pa = io->map.m_pa + ofs,
-					.m_deviceid = io->map.m_deviceid,
-				};
-				err = erofs_map_dev(inode->i_sb, &io->dev);
-				if (err)
-					break;
-				io->rq = erofs_fileio_rq_alloc(&io->dev);
-				io->rq->bio.bi_iter.bi_sector =
-					(io->dev.m_dif->fsoff + io->dev.m_pa) >> 9;
-				attached = 0;
-			}
-			if (!bio_add_folio(&io->rq->bio, folio, len, cur))
-				goto io_retry;
-			if (!attached++)
-				erofs_onlinefolio_split(folio);
-			io->dev.m_pa += len;
-		}
-		cur += len;
+	if (iomap->type == IOMAP_HOLE) {
+		folio_zero_range(folio, poff, len);
+		return 0;
 	}
-	erofs_onlinefolio_end(folio, err, false);
-	return err;
+
+	while (len > 0) {
+		sector_t sector = iomap_sector(iomap, pos);
+		unsigned int off = offset_in_folio(folio, pos);
+		unsigned int n = min(len, folio_size(folio) - off);
+		struct erofs_map_dev mdev = {};
+
+		if (!n)
+			break;
+		if (!fileio_ctx->rq ||
+		    fileio_ctx->dif != dif ||
+		    bio_end_sector(&fileio_ctx->rq->bio) != sector) {
+			erofs_fileio_rq_submit(fileio_ctx->rq);
+			mdev = (struct erofs_map_dev) {
+				.m_dif = dif,
+				.m_sb = realinode->i_sb,
+				.m_pa = (sector << SECTOR_SHIFT) + off,
+			};
+			fileio_ctx->dif = mdev.m_dif;
+			fileio_ctx->rq = erofs_fileio_rq_alloc(&mdev);
+			fileio_ctx->rq->bio.bi_iter.bi_sector =
+				(mdev.m_dif->fsoff + mdev.m_pa) >> SECTOR_SHIFT;
+		}
+		if (!bio_add_folio(&fileio_ctx->rq->bio, folio, n, off)) {
+			erofs_fileio_rq_submit(fileio_ctx->rq);
+			fileio_ctx->rq = NULL;
+			continue;
+		}
+		pos += n;
+		len -= n;
+	}
+	return ret;
 }
+
+static void erofs_fileio_submit_read(struct iomap_read_folio_ctx *ctx)
+{
+	struct erofs_fileio_ctx *fileio_ctx = ctx->read_ctx;
+
+	erofs_fileio_rq_submit(fileio_ctx->rq);
+	fileio_ctx->rq = NULL;
+}
+
+static const struct iomap_read_ops erofs_fileio_read_ops = {
+	.read_folio_range = erofs_fileio_read_folio_range,
+	.submit_read = erofs_fileio_submit_read,
+};
 
 static int erofs_fileio_read_folio(struct file *file, struct folio *folio)
 {
+	struct erofs_fileio_ctx fileio_ctx = {};
+	struct iomap_read_folio_ctx read_ctx = {
+		.ops = &erofs_fileio_read_ops,
+		.cur_folio = folio,
+		.read_ctx = &fileio_ctx,
+	};
 	bool need_iput;
-	struct inode *realinode = erofs_real_inode(folio_inode(folio), &need_iput);
-	struct erofs_fileio io = {};
-	int err;
+	struct erofs_iomap_iter_ctx iter_ctx = {
+		.realinode = erofs_real_inode(folio_inode(folio), &need_iput),
+	};
 
-	trace_erofs_read_folio(realinode, folio, true);
-	err = erofs_fileio_scan_folio(&io, realinode, folio);
-	erofs_fileio_rq_submit(io.rq);
+	trace_erofs_read_folio(iter_ctx.realinode, folio, true);
+	iomap_read_folio(&erofs_iomap_ops, &read_ctx, &iter_ctx);
 	if (need_iput)
-		iput(realinode);
-	return err;
+		iput(iter_ctx.realinode);
+	return 0;
 }
 
 static void erofs_fileio_readahead(struct readahead_control *rac)
 {
+	struct erofs_fileio_ctx fileio_ctx = {};
+	struct iomap_read_folio_ctx read_ctx = {
+		.ops = &erofs_fileio_read_ops,
+		.rac = rac,
+		.read_ctx = &fileio_ctx,
+	};
 	bool need_iput;
-	struct inode *realinode = erofs_real_inode(rac->mapping->host, &need_iput);
-	struct erofs_fileio io = {};
-	struct folio *folio;
-	int err;
+	struct erofs_iomap_iter_ctx iter_ctx = {
+		.realinode = erofs_real_inode(rac->mapping->host, &need_iput),
+	};
 
-	trace_erofs_readahead(realinode, readahead_index(rac),
+	trace_erofs_readahead(iter_ctx.realinode, readahead_index(rac),
 			      readahead_count(rac), true);
-	while ((folio = readahead_folio(rac))) {
-		err = erofs_fileio_scan_folio(&io, realinode, folio);
-		if (err && err != -EINTR)
-			erofs_err(realinode->i_sb, "readahead error at folio %lu @ nid %llu",
-				  folio->index, EROFS_I(realinode)->nid);
-	}
-	erofs_fileio_rq_submit(io.rq);
+	iomap_readahead(&erofs_iomap_ops, &read_ctx, &iter_ctx);
 	if (need_iput)
-		iput(realinode);
+		iput(iter_ctx.realinode);
 }
 
 const struct address_space_operations erofs_fileio_aops = {
 	.read_folio = erofs_fileio_read_folio,
 	.readahead = erofs_fileio_readahead,
+	.release_folio = iomap_release_folio,
+	.invalidate_folio = iomap_invalidate_folio,
 };
