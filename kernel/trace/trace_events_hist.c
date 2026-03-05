@@ -6875,7 +6875,7 @@ static int event_hist_trigger_parse(struct event_command *cmd_ops,
 	trigger_data = trigger_data_alloc(cmd_ops, cmd, param, hist_data);
 	if (!trigger_data) {
 		ret = -ENOMEM;
-		goto out_free;
+		goto out_destroy;
 	}
 
 	ret = event_trigger_set_filter(cmd_ops, file, filter, trigger_data);
@@ -6943,7 +6943,7 @@ static int event_hist_trigger_parse(struct event_command *cmd_ops,
 	remove_hist_vars(hist_data);
 
 	trigger_data_free(trigger_data);
-
+out_destroy:
 	destroy_hist_data(hist_data);
 	goto out;
 }
