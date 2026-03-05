@@ -47,8 +47,8 @@ static inline void nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 }
 
 void nested_sync_vmcs12_to_shadow(struct kvm_vcpu *vcpu);
-int vmx_set_vmx_msr(struct kvm_vcpu *vcpu, u32 msr_index, u64 data);
-int vmx_get_vmx_msr(struct nested_vmx_msrs *msrs, u32 msr_index, u64 *pdata);
+int vmx_set_vmx_msr(struct kvm_vcpu *vcpu, struct msr_data *msr);
+int vmx_get_vmx_msr(struct nested_vmx_msrs *msrs, struct msr_data *msr);
 int get_vmx_mem_address(struct kvm_vcpu *vcpu, unsigned long exit_qualification,
 			u32 vmx_instruction_info, bool wr, int len, gva_t *ret);
 bool nested_vmx_check_io_bitmaps(struct kvm_vcpu *vcpu, unsigned int port,

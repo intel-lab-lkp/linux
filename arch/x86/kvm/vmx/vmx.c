@@ -2070,11 +2070,22 @@ static inline bool is_vmx_feature_control_msr_valid(struct vcpu_vmx *vmx,
 
 int vmx_get_feature_msr(u32 msr, u64 *data)
 {
+	struct msr_data msr_info;
+	int r;
+
 	switch (msr) {
 	case KVM_FIRST_EMULATED_VMX_MSR ... KVM_LAST_EMULATED_VMX_MSR:
 		if (!nested)
 			return 1;
-		return vmx_get_vmx_msr(&vmcs_config.nested, msr, data);
+
+		msr_info = (struct msr_data) {
+			.index = msr,
+			.host_initiated = true,
+		};
+		r = vmx_get_vmx_msr(&vmcs_config.nested, &msr_info);
+		if (!r)
+			*data = msr_info.data;
+		return r;
 	default:
 		return KVM_MSR_RET_UNSUPPORTED;
 	}
@@ -2159,8 +2170,7 @@ int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case KVM_FIRST_EMULATED_VMX_MSR ... KVM_LAST_EMULATED_VMX_MSR:
 		if (!guest_cpu_cap_has(vcpu, X86_FEATURE_VMX))
 			return 1;
-		if (vmx_get_vmx_msr(&vmx->nested.msrs, msr_info->index,
-				    &msr_info->data))
+		if (vmx_get_vmx_msr(&vmx->nested.msrs, msr_info))
 			return 1;
 #ifdef CONFIG_KVM_HYPERV
 		/*
@@ -2487,7 +2497,7 @@ int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1; /* they are read-only */
 		if (!guest_cpu_cap_has(vcpu, X86_FEATURE_VMX))
 			return 1;
-		return vmx_set_vmx_msr(vcpu, msr_index, data);
+		return vmx_set_vmx_msr(vcpu, msr_info);
 	case MSR_IA32_RTIT_CTL:
 		if (!vmx_pt_mode_is_host_guest() ||
 			vmx_rtit_ctl_check(vcpu, data) ||

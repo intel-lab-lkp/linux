@@ -1475,9 +1475,11 @@ static int vmx_restore_fixed0_msr(struct vcpu_vmx *vmx, u32 msr_index, u64 data)
  *
  * Returns 0 on success, non-0 otherwise.
  */
-int vmx_set_vmx_msr(struct kvm_vcpu *vcpu, u32 msr_index, u64 data)
+int vmx_set_vmx_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	u32 msr_index = msr_info->index;
+	u64 data = msr_info->data;
 
 	/*
 	 * Don't allow changes to the VMX capability MSRs while the vCPU
@@ -1540,8 +1542,11 @@ int vmx_set_vmx_msr(struct kvm_vcpu *vcpu, u32 msr_index, u64 data)
 }
 
 /* Returns 0 on success, non-0 otherwise. */
-int vmx_get_vmx_msr(struct nested_vmx_msrs *msrs, u32 msr_index, u64 *pdata)
+int vmx_get_vmx_msr(struct nested_vmx_msrs *msrs, struct msr_data *msr_info)
 {
+	u32 msr_index = msr_info->index;
+	u64 *pdata = &msr_info->data;
+
 	switch (msr_index) {
 	case MSR_IA32_VMX_BASIC:
 		*pdata = msrs->basic;
