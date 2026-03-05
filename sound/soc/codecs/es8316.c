@@ -477,8 +477,19 @@ static int es8316_pcm_hw_params(struct snd_pcm_substream *substream,
 	u8 bclk_divider;
 	u16 lrck_divider;
 	int i;
-	unsigned int clk = es8316->sysclk / 2;
+	unsigned int clk;
 	bool clk_valid = false;
+
+	if (es8316->sysclk == 0 && es8316->mclk) {
+		/* If the sysclk has not been set, try to get it from the MCLK */
+		es8316->sysclk = clk_get_rate(es8316->mclk);
+		if (es8316->sysclk == 0) {
+			dev_err(component->dev, "unable to get mclk rate\n");
+			return -EINVAL;
+		}
+	}
+
+	clk = es8316->sysclk / 2;
 
 	/* We will start with halved sysclk and see if we can use it
 	 * for proper clocking. This is to minimise the risk of running
