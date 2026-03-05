@@ -397,6 +397,8 @@ static void kho_update_memory_map(struct khoser_mem_chunk *first_chunk)
 	u64 phys;
 
 	ptr = fdt_getprop_w(kho_out.fdt, 0, KHO_FDT_MEMORY_MAP_PROP_NAME, NULL);
+	if (!ptr)
+		return;
 
 	/* Check and discard previous memory map */
 	phys = get_unaligned((u64 *)ptr);
