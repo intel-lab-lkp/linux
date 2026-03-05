@@ -7399,6 +7399,15 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 	return true;
 }
 
+int intel_dp_emp_as_sdp_tl(const struct intel_crtc_state *crtc_state)
+{
+	/*
+	 * EMP_AS_SDP_TL defines the T1 position : The default AS SDP position
+	 * that corresponds to the start of the Vsync pulse.
+	 */
+	return crtc_state->vrr.vsync_start;
+}
+
 void intel_dp_cmn_sdp_transmission_line_get_config(struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
