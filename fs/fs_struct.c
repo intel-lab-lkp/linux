@@ -61,6 +61,9 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 
 	read_lock(&tasklist_lock);
 	for_each_process_thread(g, p) {
+		if (p->flags & PF_KTHREAD)
+			continue;
+
 		task_lock(p);
 		fs = p->fs;
 		if (fs) {
