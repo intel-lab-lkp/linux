@@ -3050,6 +3050,69 @@ static int drm_dp_read_lttpr_regs(struct drm_dp_aux *aux,
 	return 0;
 }
 
+static bool drm_dp_valid_link_rate(u8 link_rate)
+{
+	switch (link_rate) {
+	case 0x06:
+	case 0x0a:
+	case 0x14:
+	case 0x1e:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/**
+ * drm_dp_read_lttpr_caps - read the LTTPR capabilities
+ * @aux: DisplayPort AUX channel
+ * @caps: buffer to return the capability info in
+ *
+ * Read capabilities common to all LTTPRs.
+ *
+ * Returns 0 on success or a negative error code on failure.
+ */
+int drm_dp_read_lttpr_caps(struct drm_dp_aux *aux,
+			   u8 caps[DP_LTTPR_COMMON_CAP_SIZE])
+{
+	/*
+	 * At least the DELL P2715Q monitor with a DPCD_REV < 0x14 returns
+	 * corrupted values when reading from the 0xF0000- range with a block
+	 * size bigger than 1.
+	 * For DP as per the spec DP2.1 section 3.6.8.6.1, section 2.12.1, section
+	 * 2.12.3 (Link Policy) the LTTPR caps is to be read first followed by the
+	 * DPRX capability.
+	 * So ideally we dont have DPCD_REV yet to check for the revision, instead
+	 * check for the correctness of the read value and in found corrupted read
+	 * block by block.
+	 */
+	int block_size;
+	int offset;
+	int ret;
+	int address = DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV;
+	int buf_size = DP_LTTPR_COMMON_CAP_SIZE;
+
+	ret = drm_dp_dpcd_read_data(aux, address, &caps, buf_size);
+	if (ret < 0)
+		return ret;
+
+	if (caps[0] == 0x14) {
+		if (!drm_dp_valid_link_rate(caps[1])) {
+			block_size = 1;
+			for (offset = 0; offset < buf_size; offset += block_size) {
+				ret = drm_dp_dpcd_read_data(aux,
+							    address + offset,
+							    &caps[offset],
+							    block_size);
+				if (ret < 0)
+					return ret;
+			}
+		}
+	}
+	return 0;
+}
+EXPORT_SYMBOL(drm_dp_read_lttpr_caps);
+
 /**
  * drm_dp_read_lttpr_common_caps - read the LTTPR common capabilities
  * @aux: DisplayPort AUX channel
