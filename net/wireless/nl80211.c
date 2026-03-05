@@ -975,6 +975,8 @@ static const struct nla_policy nl80211_key_policy[NL80211_KEY_MAX + 1] = {
 	[NL80211_KEY_TYPE] = NLA_POLICY_MAX(NLA_U32, NUM_NL80211_KEYTYPES - 1),
 	[NL80211_KEY_DEFAULT_TYPES] = { .type = NLA_NESTED },
 	[NL80211_KEY_MODE] = NLA_POLICY_RANGE(NLA_U8, 0, NL80211_KEY_SET_TX),
+	[NL80211_KEY_LTF_SEED] = { .type = NLA_BINARY,
+				   .len = WLAN_MAX_SECURE_LTF_KEYSEED_LEN },
 };
 
 /* policy for the key default flags */
@@ -1451,6 +1453,7 @@ struct key_parse {
 static int nl80211_parse_key_new(struct genl_info *info, struct nlattr *key,
 				 struct key_parse *k)
 {
+	struct cfg80211_registered_device *rdev = info->user_ptr[0];
 	struct nlattr *tb[NL80211_KEY_MAX + 1];
 	int err = nla_parse_nested_deprecated(tb, NL80211_KEY_MAX, key,
 					      nl80211_key_policy,
@@ -1505,6 +1508,16 @@ static int nl80211_parse_key_new(struct genl_info *info, struct nlattr *key,
 
 	if (tb[NL80211_KEY_MODE])
 		k->p.mode = nla_get_u8(tb[NL80211_KEY_MODE]);
+
+	if (tb[NL80211_KEY_LTF_SEED]) {
+		if (!wiphy_ext_feature_isset(&rdev->wiphy,
+					     NL80211_EXT_FEATURE_SECURE_LTF) ||
+		    !wiphy_ext_feature_isset(&rdev->wiphy,
+					     NL80211_EXT_FEATURE_SET_KEY_LTF_SEED))
+			return -EOPNOTSUPP;
+		k->p.ltf_keyseed = nla_data(tb[NL80211_KEY_LTF_SEED]);
+		k->p.ltf_keyseed_len = nla_len(tb[NL80211_KEY_LTF_SEED]);
+	}
 
 	return 0;
 }
