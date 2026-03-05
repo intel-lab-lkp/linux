@@ -387,6 +387,11 @@ xfsaild_push_item(
 		return XFS_ITEM_PINNED;
 	if (test_bit(XFS_LI_FAILED, &lip->li_flags))
 		return xfsaild_resubmit_item(lip, &ailp->ail_buf_list);
+
+	/*
+	 * Once iop_push() returns, the log item may have been freed
+	 * and must not be dereferenced.
+	 */
 	return lip->li_ops->iop_push(lip, &ailp->ail_buf_list);
 }
 
@@ -506,20 +511,35 @@ xfsaild_push(
 	lsn = lip->li_lsn;
 	while ((XFS_LSN_CMP(lip->li_lsn, ailp->ail_target) <= 0)) {
 		int	lock_result;
+		dev_t dev;
+		uint type;
+		unsigned long flags;
+		xfs_lsn_t item_lsn;
 
 		if (test_bit(XFS_LI_FLUSHING, &lip->li_flags))
 			goto next_item;
 
 		/*
+		 * Store log item information before pushing, as the item
+		 * may be freed after dropping the AIL lock.
+		 */
+		dev = lip->li_log->l_mp->m_super->s_dev;
+		type = lip->li_type;
+		flags = lip->li_flags;
+		item_lsn = lip->li_lsn;
+
+		/*
 		 * Note that iop_push may unlock and reacquire the AIL lock.  We
 		 * rely on the AIL cursor implementation to be able to deal with
 		 * the dropped lock.
+		 * After this call returns, the log item may have been freed and
+		 * must not be referenced.
 		 */
 		lock_result = xfsaild_push_item(ailp, lip);
 		switch (lock_result) {
 		case XFS_ITEM_SUCCESS:
 			XFS_STATS_INC(mp, xs_push_ail_success);
-			trace_xfs_ail_push(lip);
+			trace_xfs_ail_push(dev, type, flags, item_lsn);
 
 			ailp->ail_last_pushed_lsn = lsn;
 			break;
@@ -537,7 +557,7 @@ xfsaild_push(
 			 * AIL is being flushed.
 			 */
 			XFS_STATS_INC(mp, xs_push_ail_flushing);
-			trace_xfs_ail_flushing(lip);
+			trace_xfs_ail_flushing(dev, type, flags, item_lsn);
 
 			flushing++;
 			ailp->ail_last_pushed_lsn = lsn;
@@ -545,14 +565,14 @@ xfsaild_push(
 
 		case XFS_ITEM_PINNED:
 			XFS_STATS_INC(mp, xs_push_ail_pinned);
-			trace_xfs_ail_pinned(lip);
+			trace_xfs_ail_pinned(dev, type, flags, item_lsn);
 
 			stuck++;
 			ailp->ail_log_flush++;
 			break;
 		case XFS_ITEM_LOCKED:
 			XFS_STATS_INC(mp, xs_push_ail_locked);
-			trace_xfs_ail_locked(lip);
+			trace_xfs_ail_locked(dev, type, flags, item_lsn);
 
 			stuck++;
 			break;
