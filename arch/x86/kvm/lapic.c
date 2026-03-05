@@ -1946,6 +1946,15 @@ static void apic_update_apic_virt_timer(struct kvm_lapic *apic)
 		apic_cancel_apic_virt_timer(apic);
 }
 
+void kvm_update_apic_virt_timer(struct kvm_vcpu *vcpu)
+{
+	if (!lapic_in_kernel(vcpu))
+		return;
+
+	apic_update_apic_virt_timer(vcpu->arch.apic);
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_update_apic_virt_timer);
+
 static void apic_update_lvtt(struct kvm_lapic *apic)
 {
 	u32 timer_mode = kvm_lapic_get_reg(apic, APIC_LVTT) &

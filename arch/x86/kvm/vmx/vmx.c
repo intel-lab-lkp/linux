@@ -4591,6 +4591,8 @@ void vmx_refresh_apicv_exec_ctrl(struct kvm_vcpu *vcpu)
 						 kvm_vcpu_apicv_active(vcpu));
 
 	vmx_update_msr_bitmap_x2apic(vcpu);
+
+	kvm_update_apic_virt_timer(vcpu);
 }
 
 static u32 vmx_exec_control(struct vcpu_vmx *vmx)
