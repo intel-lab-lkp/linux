@@ -42,6 +42,16 @@ static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd)
 	read_sequnlock_excl(&fs->seq);
 }
 
+/* Borrow a pwd reference from the pool. Caller must hold fs->seq. */
+static inline void get_fs_pwd_pool_locked(struct fs_struct *fs, struct path *pwd)
+{
+	*pwd = fs->pwd;
+	if (fs->pwd_refs)
+		fs->pwd_refs--;
+	else
+		path_get(pwd);
+}
+
 /*
  * Acquire a pwd reference from the pwd_refs pool, if available.
  *
@@ -54,11 +64,7 @@ static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd)
 static inline void get_fs_pwd_pool(struct fs_struct *fs, struct path *pwd)
 {
 	read_seqlock_excl(&fs->seq);
-	*pwd = fs->pwd;
-	if (fs->pwd_refs)
-		fs->pwd_refs--;
-	else
-		path_get(pwd);
+	get_fs_pwd_pool_locked(fs, pwd);
 	read_sequnlock_excl(&fs->seq);
 }
 

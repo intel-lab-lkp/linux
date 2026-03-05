@@ -140,11 +140,7 @@ struct fs_struct *copy_fs_struct(struct fs_struct *old)
 		read_seqlock_excl(&old->seq);
 		fs->root = old->root;
 		path_get(&fs->root);
-		fs->pwd = old->pwd;
-		if (old->pwd_refs)
-			old->pwd_refs--;
-		else
-			path_get(&fs->pwd);
+		get_fs_pwd_pool_locked(old, &fs->pwd);
 		read_sequnlock_excl(&old->seq);
 	}
 	return fs;
