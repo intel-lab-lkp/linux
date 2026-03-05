@@ -24,6 +24,8 @@
 #define VMCS12_REVISION 0x11e57ed0
 
 bool have_evmcs;
+bool have_procbased_tertiary_ctls;
+bool have_apic_timer_virtualization;
 
 void test_nested_state(struct kvm_vcpu *vcpu, struct kvm_nested_state *state)
 {
@@ -82,6 +84,233 @@ void set_default_vmx_state(struct kvm_nested_state *state, int size)
 	state->hdr.vmx.vmcs12_pa = 0x2000;
 	state->hdr.vmx.smm.flags = 0;
 	set_revision_id_for_vmcs12(state, VMCS12_REVISION);
+}
+
+/* Those values are taken from arch/x86/kvm/vmx/vmcs12.h */
+#define VMCS_LINK_POINTER_OFFSET		176
+#define TERTIARY_VM_EXEC_CONTROL_OFFSET		336
+#define GUEST_CR0_OFFSET			424
+#define GUEST_CR4_OFFSET			440
+#define HOST_CR0_OFFSET				584
+#define HOST_CR4_OFFSET				600
+#define PIN_BASED_VM_EXEC_CONTROL_OFFSET	744
+#define CPU_BASED_VM_EXEC_CONTROL_OFFSET	748
+#define VM_EXIT_CONTROLS_OFFSET			768
+#define VM_ENTRY_CONTROLS_OFFSET		780
+#define SECONDARY_VM_EXEC_CONTROL_OFFSET	804
+#define HOST_CS_SELECTOR_OFFSET			984
+#define HOST_SS_SELECTOR_OFFSET			986
+#define HOST_TR_SELECTOR_OFFSET			994
+#define VIRTUAL_TIMER_VECTOR_OFFSET		998
+#define GUEST_DEADLINE_OFFSET			1000
+#define GUEST_DEADLINE_SHADOW_OFFSET		1008
+
+#define KERNEL_CS       0x8
+#define KERNEL_DS       0x10
+#define KERNEL_TSS      0x18
+
+/* vcpu with vmxon=false is needed to be able to set VMX MSRs. */
+static void nested_vmxoff(struct kvm_vcpu *vcpu, struct kvm_nested_state *state,
+			int state_sz)
+{
+	set_default_vmx_state(state, state_sz);
+	state->flags = 0;
+	state->hdr.vmx.vmxon_pa = -1ull;
+	state->hdr.vmx.vmcs12_pa = -1ull;
+	test_nested_state(vcpu, state);
+}
+
+static void get_control(struct kvm_vcpu *vcpu, uint32_t msr_index,
+			uint32_t *fixed0, uint32_t *fixed1)
+{
+	uint64_t ctls;
+
+	ctls = vcpu_get_msr(vcpu, msr_index);
+
+	*fixed0 = ctls & 0xffffffff;
+	*fixed1 = ctls >> 32;
+}
+
+static uint32_t *init_control(struct kvm_vcpu *vcpu,
+			      struct kvm_nested_state *state,
+			      uint32_t msr_index, size_t offset)
+{
+	uint32_t fixed0, fixed1, *vmcs32;
+
+	get_control(vcpu, msr_index, &fixed0, &fixed1);
+	vmcs32 = (uint32_t *)&state->data.vmx->vmcs12[offset];
+
+	*vmcs32 = fixed0;
+	*vmcs32 &= fixed1;
+
+	return vmcs32;
+}
+
+void set_guest_vmx_state(struct kvm_vcpu *vcpu, struct kvm_nested_state *state,
+			 int size)
+{
+	unsigned long cr0, cr4;
+	uint32_t *vmcs32;
+	uint64_t *vmcs64;
+
+	set_default_vmx_state(state, size);
+	state->flags |= KVM_STATE_NESTED_GUEST_MODE;
+
+	/* control */
+	init_control(vcpu, state, MSR_IA32_VMX_TRUE_PINBASED_CTLS,
+		     PIN_BASED_VM_EXEC_CONTROL_OFFSET);
+
+	vmcs32 = init_control(vcpu, state, MSR_IA32_VMX_TRUE_PROCBASED_CTLS,
+			      CPU_BASED_VM_EXEC_CONTROL_OFFSET);
+	*vmcs32 |= CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+	*vmcs32 &= ~CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+
+	init_control(vcpu, state, MSR_IA32_VMX_PROCBASED_CTLS2,
+		     SECONDARY_VM_EXEC_CONTROL_OFFSET);
+
+	vmcs32 = init_control(vcpu, state, MSR_IA32_VMX_TRUE_EXIT_CTLS,
+			      VM_EXIT_CONTROLS_OFFSET);
+	*vmcs32 |= VM_EXIT_HOST_ADDR_SPACE_SIZE;
+
+	init_control(vcpu, state, MSR_IA32_VMX_TRUE_ENTRY_CTLS,
+		     VM_ENTRY_CONTROLS_OFFSET);
+
+	vmcs64 = (uint64_t *)&state->data.vmx->vmcs12[VMCS_LINK_POINTER_OFFSET];
+	*vmcs64 = -1ull;
+
+	/* host state */
+	cr0 = vcpu_get_msr(vcpu, MSR_IA32_VMX_CR0_FIXED0);
+	cr0 &= vcpu_get_msr(vcpu, MSR_IA32_VMX_CR0_FIXED1);
+	cr0 |= X86_CR0_PG;
+	*(unsigned long *)&state->data.vmx->vmcs12[HOST_CR0_OFFSET] = cr0;
+
+	cr4 = vcpu_get_msr(vcpu, MSR_IA32_VMX_CR4_FIXED0);
+	cr4 &= vcpu_get_msr(vcpu, MSR_IA32_VMX_CR4_FIXED1);
+	cr4 |= X86_CR4_PAE | X86_CR4_VMXE;
+	*(unsigned long *)&state->data.vmx->vmcs12[HOST_CR4_OFFSET] = cr4;
+
+	*(unsigned long *)&state->data.vmx->vmcs12[HOST_CS_SELECTOR_OFFSET] = KERNEL_CS;
+	*(unsigned long *)&state->data.vmx->vmcs12[HOST_TR_SELECTOR_OFFSET] = KERNEL_TSS;
+	*(unsigned long *)&state->data.vmx->vmcs12[HOST_SS_SELECTOR_OFFSET] = KERNEL_DS;
+
+	/* guest state */
+	cr0 = vcpu_get_msr(vcpu, MSR_IA32_VMX_CR0_FIXED0);
+	cr0 &= vcpu_get_msr(vcpu, MSR_IA32_VMX_CR0_FIXED1);
+	*(unsigned long *)&state->data.vmx->vmcs12[GUEST_CR0_OFFSET] = cr0;
+
+	cr4 = vcpu_get_msr(vcpu, MSR_IA32_VMX_CR4_FIXED0);
+	cr4 &= vcpu_get_msr(vcpu, MSR_IA32_VMX_CR4_FIXED1);
+	*(unsigned long *)&state->data.vmx->vmcs12[GUEST_CR4_OFFSET] = cr4;
+
+}
+
+static void test_tertiary_ctls(struct kvm_vcpu *vcpu,
+			       struct kvm_nested_state *state,
+			       int state_sz)
+{
+	union vmx_ctrl_msr msr;
+	uint16_t *vmcs16;
+	uint32_t *vmcs32;
+	uint64_t *vmcs64;
+	uint64_t ctls;
+
+	nested_vmxoff(vcpu, state, state_sz);
+
+	msr.val = vcpu_get_msr(vcpu, MSR_IA32_VMX_TRUE_PROCBASED_CTLS);
+	msr.clr |= CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+	msr.clr |= CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+	vcpu_set_msr(vcpu, MSR_IA32_VMX_TRUE_PROCBASED_CTLS, msr.val);
+
+	ctls = vcpu_get_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3);
+	ctls |= TERTIARY_EXEC_GUEST_APIC_TIMER;
+	vcpu_set_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, ctls);
+
+	set_default_vmx_state(state, state_sz);
+	test_nested_state(vcpu, state);
+
+	vmcs32 = (uint32_t *)&state->data.vmx->vmcs12[PIN_BASED_VM_EXEC_CONTROL_OFFSET];
+	*vmcs32 |= PIN_BASED_EXT_INTR_MASK;
+
+	vmcs32 = (uint32_t *)&state->data.vmx->vmcs12[CPU_BASED_VM_EXEC_CONTROL_OFFSET];
+	*vmcs32 |= CPU_BASED_TPR_SHADOW | CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+
+	vmcs32 = (uint32_t *)&state->data.vmx->vmcs12[SECONDARY_VM_EXEC_CONTROL_OFFSET];
+	*vmcs32 |= SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY;
+
+	vmcs64 = (uint64_t *)&state->data.vmx->vmcs12[TERTIARY_VM_EXEC_CONTROL_OFFSET];
+	*vmcs64 |= TERTIARY_EXEC_GUEST_APIC_TIMER;
+
+	vmcs16 = (uint16_t *)&state->data.vmx->vmcs12[VIRTUAL_TIMER_VECTOR_OFFSET];
+	*vmcs16 = 128;
+
+	vmcs64 = (uint64_t *)&state->data.vmx->vmcs12[GUEST_DEADLINE_OFFSET];
+	/* random non-zero value */
+	*vmcs64 = 0xffff;
+
+	vmcs64 = (uint64_t *)&state->data.vmx->vmcs12[GUEST_DEADLINE_SHADOW_OFFSET];
+	*vmcs64 = 0xffff;
+
+	test_nested_state(vcpu, state);
+}
+
+static void test_tertiary_ctls_disabled(struct kvm_vcpu *vcpu,
+					struct kvm_nested_state *state,
+					int state_sz)
+{
+	union vmx_ctrl_msr msr;
+	uint16_t *vmcs16;
+	uint32_t *vmcs32;
+	uint64_t *vmcs64;
+
+	nested_vmxoff(vcpu, state, state_sz);
+
+	msr.val = kvm_get_feature_msr(MSR_IA32_VMX_TRUE_PROCBASED_CTLS);
+	if (msr.clr & CPU_BASED_ACTIVATE_TERTIARY_CONTROLS) {
+		msr.val = vcpu_get_msr(vcpu, MSR_IA32_VMX_TRUE_PROCBASED_CTLS);
+		msr.clr &= ~CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_TRUE_PROCBASED_CTLS, msr.val);
+		vcpu_set_msr(vcpu, MSR_IA32_VMX_PROCBASED_CTLS3, 0);
+	}
+
+	set_guest_vmx_state(vcpu, state, state_sz);
+	test_nested_state(vcpu, state);
+
+	set_guest_vmx_state(vcpu, state, state_sz);
+	vmcs32 = (uint32_t *)&state->data.vmx->vmcs12[CPU_BASED_VM_EXEC_CONTROL_OFFSET];
+	*vmcs32 |= CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+	test_nested_state_expect_einval(vcpu, state);
+
+	set_guest_vmx_state(vcpu, state, state_sz);
+	vmcs64 = (uint64_t *)&state->data.vmx->vmcs12[TERTIARY_VM_EXEC_CONTROL_OFFSET];
+	*vmcs64 |= TERTIARY_EXEC_GUEST_APIC_TIMER;
+	test_nested_state_expect_einval(vcpu, state);
+
+	set_guest_vmx_state(vcpu, state, state_sz);
+	vmcs16 = (uint16_t *)&state->data.vmx->vmcs12[VIRTUAL_TIMER_VECTOR_OFFSET];
+	*vmcs16 = 128;
+	test_nested_state_expect_einval(vcpu, state);
+
+	set_guest_vmx_state(vcpu, state, state_sz);
+	vmcs64 = (uint64_t *)&state->data.vmx->vmcs12[GUEST_DEADLINE_OFFSET];
+	*vmcs64 = 0xffff;
+	test_nested_state_expect_einval(vcpu, state);
+
+	set_guest_vmx_state(vcpu, state, state_sz);
+	vmcs64 = (uint64_t *)&state->data.vmx->vmcs12[GUEST_DEADLINE_SHADOW_OFFSET];
+	*vmcs64 = 0xffff;
+	test_nested_state_expect_einval(vcpu, state);
+}
+
+static void test_vmx_tertiary_ctls(struct kvm_vcpu *vcpu,
+				   struct kvm_nested_state *state,
+				   int state_sz)
+{
+	vcpu_set_cpuid_feature(vcpu, X86_FEATURE_VMX);
+
+	if (have_procbased_tertiary_ctls)
+		test_tertiary_ctls(vcpu, state, state_sz);
+
+	test_tertiary_ctls_disabled(vcpu, state, state_sz);
 }
 
 void test_vmx_nested_state(struct kvm_vcpu *vcpu)
@@ -343,6 +572,8 @@ void test_svm_nested_state(struct kvm_vcpu *vcpu)
 	TEST_ASSERT_EQ(state->hdr.svm.vmcb_pa, 0);
 	TEST_ASSERT_EQ(state->flags, KVM_STATE_NESTED_GIF_SET);
 
+	test_vmx_tertiary_ctls(vcpu, state, state_sz);
+
 	free(state);
 }
 
@@ -353,6 +584,12 @@ int main(int argc, char *argv[])
 	struct kvm_vcpu *vcpu;
 
 	have_evmcs = kvm_check_cap(KVM_CAP_HYPERV_ENLIGHTENED_VMCS);
+	have_procbased_tertiary_ctls =
+		(kvm_get_feature_msr(MSR_IA32_VMX_TRUE_PROCBASED_CTLS) >> 32) &
+		CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+	have_apic_timer_virtualization = have_procbased_tertiary_ctls &&
+		(kvm_get_feature_msr(MSR_IA32_VMX_PROCBASED_CTLS3) &
+		 TERTIARY_EXEC_GUEST_APIC_TIMER);
 
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_VMX) ||
 		     kvm_cpu_has(X86_FEATURE_SVM));
