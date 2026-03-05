@@ -918,8 +918,7 @@ static void flush_space(struct btrfs_space_info *space_info, u64 num_bytes,
 		if (btrfs_is_zoned(fs_info)) {
 			btrfs_reclaim_sweep(fs_info);
 			btrfs_delete_unused_bgs(fs_info);
-			btrfs_reclaim_bgs(fs_info);
-			flush_work(&fs_info->reclaim_bgs_work);
+			btrfs_reclaim_block_groups(fs_info, 5);
 			ASSERT(current->journal_info == NULL);
 			ret = btrfs_commit_current_transaction(root);
 		} else {
