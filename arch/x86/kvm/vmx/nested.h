@@ -291,6 +291,13 @@ static inline bool nested_cpu_has_encls_exit(struct vmcs12 *vmcs12)
 	return nested_cpu_has2(vmcs12, SECONDARY_EXEC_ENCLS_EXITING);
 }
 
+static inline bool nested_cpu_supports_guest_apic_timer(struct kvm_vcpu *vcpu)
+{
+	return nested_cpu_supports_tertiary_ctls(vcpu) &&
+		to_vmx(vcpu)->nested.msrs.tertiary_ctls &
+		TERTIARY_EXEC_GUEST_APIC_TIMER;
+}
+
 static inline bool nested_cpu_has_guest_apic_timer(struct vmcs12 *vmcs12)
 {
 	return nested_cpu_has3(vmcs12, TERTIARY_EXEC_GUEST_APIC_TIMER);

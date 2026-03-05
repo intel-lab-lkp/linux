@@ -5775,6 +5775,14 @@ static bool is_vmcs_field_valid(struct kvm_vcpu *vcpu, unsigned long field)
 	     field == TERTIARY_VM_EXEC_CONTROL_HIGH))
 		return false;
 
+	if (!nested_cpu_supports_guest_apic_timer(vcpu) &&
+	    (field == GUEST_APIC_TIMER_VECTOR ||
+	     field == GUEST_DEADLINE_VIR ||
+	     field == GUEST_DEADLINE_VIR_HIGH ||
+	     field == GUEST_DEADLINE_PHY ||
+	     field == GUEST_DEADLINE_PHY_HIGH))
+		return false;
+
 	return true;
 }
 
@@ -7188,6 +7196,12 @@ static int vmx_set_nested_state(struct kvm_vcpu *vcpu,
 
 	if (!nested_cpu_supports_tertiary_ctls(vcpu) &&
 	    vmcs12->tertiary_vm_exec_control)
+		goto error_guest_mode;
+
+	if (!nested_cpu_supports_guest_apic_timer(vcpu) &&
+	    (vmcs12->virtual_timer_vector ||
+	     vmcs12->guest_deadline ||
+	     vmcs12->guest_deadline_shadow))
 		goto error_guest_mode;
 
 	if (nested_vmx_check_controls(vcpu, vmcs12) ||
