@@ -38,6 +38,8 @@ properties:
 
   backlight: true
 
+  rotation: true
+
   port: true
 
 required:
