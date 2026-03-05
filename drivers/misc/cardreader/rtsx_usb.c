@@ -12,6 +12,7 @@
 #include <linux/usb.h>
 #include <linux/platform_device.h>
 #include <linux/mfd/core.h>
+#include <linux/pm_runtime.h>
 #include <linux/rtsx_usb.h>
 
 static int polling_pipe = 1;
@@ -65,19 +66,42 @@ static int rtsx_usb_bulk_transfer_sglist(struct rtsx_ucr *ucr,
 }
 
 int rtsx_usb_transfer_data(struct rtsx_ucr *ucr, unsigned int pipe,
-			      void *buf, unsigned int len, int num_sg,
-			      unsigned int *act_len, int timeout)
+				      void *buf, unsigned int len, int num_sg,
+				      unsigned int *act_len, int timeout)
 {
+	int ret;
+	struct device *dev = &ucr->pusb_intf->dev;
+
 	if (timeout < 600)
 		timeout = 600;
 
+	/*
+	 * During runtime suspend/resume callbacks, avoid forcing a runtime resume
+	 * from within the PM path. The device is still active when
+	 * rtsx_usb_suspend() runs, but usb_autopm_get_interface() can block when
+	 * runtime PM is already in progress.
+	 */
+	if (pm_runtime_status_suspended(dev)) {
+		ret = usb_autopm_get_interface(ucr->pusb_intf);
+	} else {
+		usb_autopm_get_interface_no_resume(ucr->pusb_intf);
+		ret = 0;
+	}
+	if (ret)
+		return ret;
+
 	if (num_sg)
-		return rtsx_usb_bulk_transfer_sglist(ucr, pipe,
-				(struct scatterlist *)buf, num_sg, len, act_len,
-				timeout);
+		ret = rtsx_usb_bulk_transfer_sglist(ucr, pipe,
+						    (struct scatterlist *)buf,
+						    num_sg, len, act_len,
+						    timeout);
 	else
-		return usb_bulk_msg(ucr->pusb_dev, pipe, buf, len, act_len,
-				timeout);
+		ret = usb_bulk_msg(ucr->pusb_dev, pipe, buf, len, act_len,
+				   timeout);
+
+	usb_mark_last_busy(ucr->pusb_dev);
+	usb_autopm_put_interface(ucr->pusb_intf);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(rtsx_usb_transfer_data);
 
