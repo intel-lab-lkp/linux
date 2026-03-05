@@ -810,10 +810,10 @@ static bool virtqueue_kick_prepare_split(struct vring_virtqueue *vq)
 
 	if (vq->event) {
 		needs_kick = vring_need_event(virtio16_to_cpu(vq->vq.vdev,
-					vring_avail_event(&vq->split.vring)),
+					READ_ONCE(vring_avail_event(&vq->split.vring))),
 					      new, old);
 	} else {
-		needs_kick = !(vq->split.vring.used->flags &
+		needs_kick = !(READ_ONCE(vq->split.vring.used->flags) &
 					cpu_to_virtio16(vq->vq.vdev,
 						VRING_USED_F_NO_NOTIFY));
 	}
@@ -940,9 +940,9 @@ static void *virtqueue_get_buf_ctx_split(struct vring_virtqueue *vq,
 
 	last_used = (vq->last_used_idx & (vq->split.vring.num - 1));
 	i = virtio32_to_cpu(vq->vq.vdev,
-			vq->split.vring.used->ring[last_used].id);
+			READ_ONCE(vq->split.vring.used->ring[last_used].id));
 	*len = virtio32_to_cpu(vq->vq.vdev,
-			vq->split.vring.used->ring[last_used].len);
+			READ_ONCE(vq->split.vring.used->ring[last_used].len));
 
 	if (unlikely(i >= vq->split.vring.num)) {
 		BAD_RING(vq, "id %u out of range\n", i);
@@ -1004,9 +1004,9 @@ static void *virtqueue_get_buf_ctx_split_in_order(struct vring_virtqueue *vq,
 		virtio_rmb(vq->weak_barriers);
 
 		vq->batch_last.id = virtio32_to_cpu(vq->vq.vdev,
-				    vq->split.vring.used->ring[last_used_idx].id);
+				    READ_ONCE(vq->split.vring.used->ring[last_used_idx].id));
 		vq->batch_last.len = virtio32_to_cpu(vq->vq.vdev,
-				     vq->split.vring.used->ring[last_used_idx].len);
+				     READ_ONCE(vq->split.vring.used->ring[last_used_idx].len));
 	}
 
 	if (vq->batch_last.id == last_used) {
@@ -1112,8 +1112,9 @@ static bool virtqueue_enable_cb_delayed_split(struct vring_virtqueue *vq)
 			&vring_used_event(&vq->split.vring),
 			cpu_to_virtio16(vq->vq.vdev, vq->last_used_idx + bufs));
 
-	if (unlikely((u16)(virtio16_to_cpu(vq->vq.vdev, vq->split.vring.used->idx)
-					- vq->last_used_idx) > bufs)) {
+	if (unlikely((u16)(virtio16_to_cpu(vq->vq.vdev,
+				READ_ONCE(vq->split.vring.used->idx))
+				- vq->last_used_idx) > bufs)) {
 		END_USE(vq);
 		return false;
 	}
