@@ -4369,6 +4369,19 @@ struct cfg80211_pmsr_result {
  * @bss_color: the bss color of the responder. Optional. Set to zero to
  *	indicate the driver should set the BSS color. Only valid if
  *	@non_trigger_based or @trigger_based is set.
+ * @min_time_between_measurements: minimum time between two consecutive range
+ *	measurements in units of 100 micro seconds, applicable for
+ *	non trigger based ranging. Only valid if @non_trigger_based is set.
+ * @max_time_between_measurements: maximum time between two consecutive range
+ *	measurements in units of 10 milli seconds, to avoid FTM negotiation
+ *	applicable for non trigger based ranging. Only valid
+ *	if @non_trigger_based is set.
+ * @availability_window: duration of the availability window (AW) in units of
+ *	1 millisecond (0-255 ms). Only valid if @non_trigger_based is set.
+ * @nominal_time: Nominal duration between adjacent availability windows
+ *	in units of milli seconds. Only valid if @non_trigger_based is set.
+ * @measurements_per_aw: number of measurement attempts per availability window
+ *	with a maximum value of 4. Only valid if @non_trigger_based is set.
  *
  * See also nl80211 for the respective attribute documentation.
  */
@@ -4388,6 +4401,11 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u8 ftms_per_burst;
 	u8 ftmr_retries;
 	u8 bss_color;
+	u32 min_time_between_measurements;
+	u32 max_time_between_measurements;
+	u32 availability_window;
+	u32 nominal_time;
+	u32 measurements_per_aw;
 };
 
 /**
@@ -4395,12 +4413,14 @@ struct cfg80211_pmsr_ftm_request_peer {
  * @addr: MAC address
  * @chandef: channel to use
  * @report_ap_tsf: report the associated AP's TSF
+ * @pd_request: indicates a peer-to-peer PD request
  * @ftm: FTM data, see &struct cfg80211_pmsr_ftm_request_peer
  */
 struct cfg80211_pmsr_request_peer {
 	u8 addr[ETH_ALEN];
 	struct cfg80211_chan_def chandef;
-	u8 report_ap_tsf:1;
+	u8 report_ap_tsf:1,
+	   pd_request:1;
 	struct cfg80211_pmsr_ftm_request_peer ftm;
 };
 
