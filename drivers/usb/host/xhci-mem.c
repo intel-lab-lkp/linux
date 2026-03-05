@@ -14,10 +14,16 @@
 #include <linux/slab.h>
 #include <linux/dmapool.h>
 #include <linux/dma-mapping.h>
+#include <linux/module.h>
+#include <linux/moduleparam.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"
 #include "xhci-debugfs.h"
+
+static bool xhci_secondary_intr __read_mostly;
+module_param_named(secondary_intr, xhci_secondary_intr, bool, 0444);
+MODULE_PARM_DESC(secondary_intr, "Enable xHCI secondary interrupters (default: N)");
 
 /*
  * Allocates a generic ring segment from the ring pool, sets the dma address,
@@ -1196,6 +1202,15 @@ int xhci_setup_addressable_virt_dev(struct xhci_hcd *xhci, struct usb_device *ud
 				   dev->eps[0].ring->cycle_state);
 
 	ep0_ctx->tx_info = cpu_to_le32(EP_AVG_TRB_LENGTH(8));
+
+	/* Match Slot Context interrupter target to vdev->interrupter. */
+	if (dev->interrupter) {
+		u32 tt = le32_to_cpu(slot_ctx->tt_info);
+
+		tt &= ~SLOT_INTR_TARGET_MASK;
+		tt |= SLOT_INTR_TARGET(dev->interrupter->intr_num);
+		slot_ctx->tt_info = cpu_to_le32(tt);
+	}
 
 	trace_xhci_setup_addressable_virt_device(dev);
 
@@ -2402,6 +2417,8 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 {
 	struct device	*dev = xhci_to_hcd(xhci)->self.sysdev;
 	dma_addr_t	dma;
+	unsigned int	secondary_intr_num = 0;
+	int		i;
 
 	/*
 	 * xHCI section 5.4.6 - Device Context array must be
@@ -2495,6 +2512,32 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	if (!xhci->interrupters[0])
 		goto fail;
 
+	xhci->secondary_irqs_alloc = 0;
+	if (!xhci_secondary_intr)
+		goto skip_secondary;
+
+	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "Allocating secondary event ring");
+	if (xhci->max_interrupters > 1)
+		secondary_intr_num = min_t(unsigned int,
+				xhci->max_interrupters - 1,
+				(unsigned int)MAX_SECONDARY_INTRNUM);
+
+	for (i = 1; i <= secondary_intr_num; i++) {
+		if (xhci->interrupters[i])
+			continue;
+		xhci->interrupters[i] = xhci_alloc_interrupter(xhci, i, flags);
+		if (!xhci->interrupters[i]) {
+			while (--i >= 1) {
+				xhci_free_interrupter(xhci, xhci->interrupters[i]);
+				xhci->interrupters[i] = NULL;
+			}
+			xhci->secondary_irqs_alloc = 0;
+			break;
+		}
+		xhci->secondary_irqs_alloc++;
+	}
+
+skip_secondary:
 	if (scratchpad_alloc(xhci, flags))
 		goto fail;
 
