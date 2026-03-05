@@ -356,7 +356,9 @@ void do_softirq_post_smp_call_flush(unsigned int was_pending)
 	unsigned int is_pending = local_softirq_pending();
 
 	if (unlikely(was_pending != is_pending)) {
-		WARN_ON_ONCE(was_pending != (is_pending & ~SCHED_SOFTIRQ_MASK));
+		WARN_ONCE(was_pending != (is_pending & ~SCHED_SOFTIRQ_MASK),
+			  "Sirq mask changed(#%x -> #%x) may delay preemption.",
+			  was_pending, is_pending);
 		invoke_softirq();
 	}
 }
