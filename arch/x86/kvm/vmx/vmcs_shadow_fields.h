@@ -34,6 +34,7 @@ BUILD_BUG_ON(1)
 /* 16-bits */
 SHADOW_FIELD_RW(GUEST_INTR_STATUS, guest_intr_status)
 SHADOW_FIELD_RW(GUEST_PML_INDEX, guest_pml_index)
+SHADOW_FIELD_RO(GUEST_APIC_TIMER_VECTOR, virtual_timer_vector)
 SHADOW_FIELD_RW(HOST_FS_SELECTOR, host_fs_selector)
 SHADOW_FIELD_RW(HOST_GS_SELECTOR, host_gs_selector)
 

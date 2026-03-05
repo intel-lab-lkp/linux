@@ -3,6 +3,8 @@
 
 #include "vmcs12.h"
 
+static_assert(sizeof(struct vmcs12) <= VMCS12_SIZE);
+
 #define VMCS12_OFFSET(x) offsetof(struct vmcs12, x)
 #define FIELD(number, name)	[ENC_TO_VMCS12_IDX(number)] = VMCS12_OFFSET(name)
 #define FIELD64(number, name)						\
@@ -22,6 +24,7 @@ static const u16 kvm_supported_vmcs12_field_offsets[] __initconst = {
 	FIELD(GUEST_TR_SELECTOR, guest_tr_selector),
 	FIELD(GUEST_INTR_STATUS, guest_intr_status),
 	FIELD(GUEST_PML_INDEX, guest_pml_index),
+	FIELD(GUEST_APIC_TIMER_VECTOR, virtual_timer_vector),
 	FIELD(HOST_ES_SELECTOR, host_es_selector),
 	FIELD(HOST_CS_SELECTOR, host_cs_selector),
 	FIELD(HOST_SS_SELECTOR, host_ss_selector),
@@ -204,6 +207,8 @@ static __init bool cpu_has_vmcs12_field(unsigned int idx)
 	case HOST_SSP:
 	case HOST_INTR_SSP_TABLE:
 		return cpu_has_load_cet_ctrl();
+	case GUEST_APIC_TIMER_VECTOR:
+		return cpu_has_vmx_apic_timer_virt();
 
 	/* KVM always emulates PML and the VMX preemption timer in software. */
 	case GUEST_PML_INDEX:

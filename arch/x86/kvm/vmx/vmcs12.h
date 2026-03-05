@@ -191,6 +191,7 @@ struct __packed vmcs12 {
 	u16 host_gs_selector;
 	u16 host_tr_selector;
 	u16 guest_pml_index;
+	u16 virtual_timer_vector;
 };
 
 /*
@@ -374,6 +375,7 @@ static inline void vmx_check_vmcs12_offsets(void)
 	CHECK_OFFSET(host_gs_selector, 992);
 	CHECK_OFFSET(host_tr_selector, 994);
 	CHECK_OFFSET(guest_pml_index, 996);
+	CHECK_OFFSET(virtual_timer_vector, 998);
 }
 
 extern u16 vmcs12_field_offsets[] __ro_after_init;

@@ -2540,7 +2540,8 @@ static void prepare_vmcs02_early(struct vcpu_vmx *vmx, struct loaded_vmcs *vmcs0
 	if (cpu_has_tertiary_exec_ctrls()) {
 		u64 ctls = 0;
 
-		/* guest apic timer virtualization will come */
+		if (nested_cpu_has_guest_apic_timer(vmcs12))
+			ctls |= TERTIARY_EXEC_GUEST_APIC_TIMER;
 
 		tertiary_exec_controls_set(vmx, ctls);
 	}
@@ -2733,6 +2734,9 @@ static void prepare_vmcs02_rare(struct vcpu_vmx *vmx, struct vmcs12 *vmcs12)
 		vmcs_write64(EOI_EXIT_BITMAP2, vmcs12->eoi_exit_bitmap2);
 		vmcs_write64(EOI_EXIT_BITMAP3, vmcs12->eoi_exit_bitmap3);
 	}
+
+	if (nested_cpu_has_guest_apic_timer(vmcs12))
+		vmcs_write16(GUEST_APIC_TIMER_VECTOR, vmcs12->virtual_timer_vector);
 
 	/*
 	 * If vmcs12 is configured to save TSC on exit via the auto-store list,
