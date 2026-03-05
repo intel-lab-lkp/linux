@@ -893,12 +893,36 @@ out_update_last:
 	update_ctx_last_info(vp9_ctx);
 }
 
+/* noinline to ensure clang's register allocator doesn't run out of registers */
+static noinline void
+rkvdec_init_v4l2_vp9_count_tbl_loop(struct rkvdec_vp9_ctx *vp9_ctx, int i, int j, int k, int l)
+{
+	struct rkvdec_vp9_intra_frame_symbol_counts *intra_cnts = vp9_ctx->count_tbl.cpu;
+	struct rkvdec_vp9_inter_frame_symbol_counts *inter_cnts = vp9_ctx->count_tbl.cpu;
+
+	for (int m = 0; m < ARRAY_SIZE(vp9_ctx->inter_cnts.coeff[0][0][0][0]); ++m) {
+		vp9_ctx->inter_cnts.coeff[i][j][k][l][m] =
+			&inter_cnts->ref_cnt[k][i][j][l][m].coeff;
+		vp9_ctx->inter_cnts.eob[i][j][k][l][m][0] =
+			&inter_cnts->ref_cnt[k][i][j][l][m].eob[0];
+		vp9_ctx->inter_cnts.eob[i][j][k][l][m][1] =
+			&inter_cnts->ref_cnt[k][i][j][l][m].eob[1];
+										\
+		vp9_ctx->intra_cnts.coeff[i][j][k][l][m] =
+			&intra_cnts->ref_cnt[k][i][j][l][m].coeff;
+		vp9_ctx->intra_cnts.eob[i][j][k][l][m][0] =
+			&intra_cnts->ref_cnt[k][i][j][l][m].eob[0];
+		vp9_ctx->intra_cnts.eob[i][j][k][l][m][1] =
+			&intra_cnts->ref_cnt[k][i][j][l][m].eob[1];
+	}
+}
+
 static void rkvdec_init_v4l2_vp9_count_tbl(struct rkvdec_ctx *ctx)
 {
 	struct rkvdec_vp9_ctx *vp9_ctx = ctx->priv;
 	struct rkvdec_vp9_intra_frame_symbol_counts *intra_cnts = vp9_ctx->count_tbl.cpu;
 	struct rkvdec_vp9_inter_frame_symbol_counts *inter_cnts = vp9_ctx->count_tbl.cpu;
-	int i, j, k, l, m;
+	int i, j, k, l;
 
 	vp9_ctx->inter_cnts.partition = &inter_cnts->partition;
 	vp9_ctx->inter_cnts.skip = &inter_cnts->skip;
@@ -936,31 +960,11 @@ static void rkvdec_init_v4l2_vp9_count_tbl(struct rkvdec_ctx *ctx)
 	vp9_ctx->inter_cnts.class0_hp = &inter_cnts->class0_hp;
 	vp9_ctx->inter_cnts.hp = &inter_cnts->hp;
 
-#define INNERMOST_LOOP \
-	do {										\
-		for (m = 0; m < ARRAY_SIZE(vp9_ctx->inter_cnts.coeff[0][0][0][0]); ++m) {\
-			vp9_ctx->inter_cnts.coeff[i][j][k][l][m] =			\
-				&inter_cnts->ref_cnt[k][i][j][l][m].coeff;		\
-			vp9_ctx->inter_cnts.eob[i][j][k][l][m][0] =			\
-				&inter_cnts->ref_cnt[k][i][j][l][m].eob[0];		\
-			vp9_ctx->inter_cnts.eob[i][j][k][l][m][1] =			\
-				&inter_cnts->ref_cnt[k][i][j][l][m].eob[1];		\
-											\
-			vp9_ctx->intra_cnts.coeff[i][j][k][l][m] =			\
-				&intra_cnts->ref_cnt[k][i][j][l][m].coeff;		\
-			vp9_ctx->intra_cnts.eob[i][j][k][l][m][0] =			\
-				&intra_cnts->ref_cnt[k][i][j][l][m].eob[0];		\
-			vp9_ctx->intra_cnts.eob[i][j][k][l][m][1] =			\
-				&intra_cnts->ref_cnt[k][i][j][l][m].eob[1];		\
-		}									\
-	} while (0)
-
 	for (i = 0; i < ARRAY_SIZE(vp9_ctx->inter_cnts.coeff); ++i)
 		for (j = 0; j < ARRAY_SIZE(vp9_ctx->inter_cnts.coeff[0]); ++j)
 			for (k = 0; k < ARRAY_SIZE(vp9_ctx->inter_cnts.coeff[0][0]); ++k)
 				for (l = 0; l < ARRAY_SIZE(vp9_ctx->inter_cnts.coeff[0][0][0]); ++l)
-					INNERMOST_LOOP;
-#undef INNERMOST_LOOP
+					rkvdec_init_v4l2_vp9_count_tbl_loop(vp9_ctx, i, j, k, l);
 }
 
 static int rkvdec_vp9_start(struct rkvdec_ctx *ctx)
