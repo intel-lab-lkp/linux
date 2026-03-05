@@ -152,6 +152,17 @@ static inline bool nested_cpu_has_vmx_shadow_vmcs(struct kvm_vcpu *vcpu)
 		SECONDARY_EXEC_SHADOW_VMCS;
 }
 
+static inline bool __nested_cpu_supports_tertiary_ctls(struct nested_vmx_msrs *msrs)
+{
+	return msrs->procbased_ctls_high & CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+}
+
+/* APIC TIMER VIRTUALIZATION requires in-kernel lapic. */
+static inline bool nested_cpu_can_support_apic_virt_timer(struct kvm_vcpu *vcpu)
+{
+	return cpu_has_vmx_apic_timer_virt() && lapic_in_kernel(vcpu);
+}
+
 static inline bool nested_cpu_has(struct vmcs12 *vmcs12, u32 bit)
 {
 	return vmcs12->cpu_based_vm_exec_control & bit;

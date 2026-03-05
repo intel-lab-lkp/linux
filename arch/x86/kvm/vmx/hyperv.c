@@ -141,6 +141,13 @@ void nested_evmcs_filter_control_msr(struct kvm_vcpu *vcpu, u32 msr_index, u64 *
 	case MSR_IA32_VMX_PROCBASED_CTLS2:
 		ctl_high &= evmcs_get_supported_ctls(EVMCS_2NDEXEC);
 		break;
+	case MSR_IA32_VMX_PROCBASED_CTLS3:
+		/*
+		 * tertiary procbased controls are 64-bit. 0 means unsupported,
+		 * 1 supported.
+		 */
+		*pdata &= evmcs_get_supported_ctls(EVMCS_3RDEXEC);
+		return;
 	case MSR_IA32_VMX_TRUE_PINBASED_CTLS:
 	case MSR_IA32_VMX_PINBASED_CTLS:
 		ctl_high &= evmcs_get_supported_ctls(EVMCS_PINCTRL);

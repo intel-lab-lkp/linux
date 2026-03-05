@@ -218,6 +218,11 @@ static inline bool vmx_control_verify(u32 control, u32 low, u32 high)
 	return fixed_bits_valid(control, low, high);
 }
 
+static inline bool vmx_control64_verify(u64 control, u64 msr)
+{
+	return !(control & ~msr);
+}
+
 static inline u64 vmx_control_msr(u32 low, u32 high)
 {
 	return low | ((u64)high << 32);
@@ -1511,6 +1516,25 @@ int vmx_set_vmx_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_IA32_VMX_TRUE_ENTRY_CTLS:
 	case MSR_IA32_VMX_PROCBASED_CTLS2:
 		return vmx_restore_control_msr(vmx, msr_index, data);
+	case MSR_IA32_VMX_PROCBASED_CTLS3: {
+		u64 ctls3;
+
+		if (!__nested_cpu_supports_tertiary_ctls(&vmcs_config.nested))
+			return -EINVAL;
+
+		/* read-only for guest. */
+		if (!msr_info->host_initiated)
+			return -EINVAL;
+
+		ctls3 = vmcs_config.nested.tertiary_ctls;
+		if (!nested_cpu_can_support_apic_virt_timer(vcpu))
+			ctls3 &= ~TERTIARY_EXEC_GUEST_APIC_TIMER;
+
+		if (!vmx_control64_verify(data, ctls3))
+			return -EINVAL;
+		vmx->nested.msrs.tertiary_ctls = data;
+		return 0;
+	}
 	case MSR_IA32_VMX_MISC:
 		return vmx_restore_vmx_misc(vmx, data);
 	case MSR_IA32_VMX_CR0_FIXED0:
@@ -1607,6 +1631,16 @@ int vmx_get_vmx_msr(struct nested_vmx_msrs *msrs, struct msr_data *msr_info)
 		*pdata = vmx_control_msr(
 			msrs->secondary_ctls_low,
 			msrs->secondary_ctls_high);
+		break;
+	case MSR_IA32_VMX_PROCBASED_CTLS3:
+		if (!__nested_cpu_supports_tertiary_ctls(&vmcs_config.nested))
+			return KVM_MSR_RET_UNSUPPORTED;
+
+		if (!msr_info->host_initiated &&
+		    !__nested_cpu_supports_tertiary_ctls(msrs))
+			return -EINVAL;
+
+		*pdata = msrs->tertiary_ctls;
 		break;
 	case MSR_IA32_VMX_EPT_VPID_CAP:
 		*pdata = msrs->ept_caps |
@@ -7285,6 +7319,18 @@ static void nested_vmx_setup_secondary_ctls(u32 ept_caps,
 		msrs->secondary_ctls_high |= SECONDARY_EXEC_ENCLS_EXITING;
 }
 
+static void nested_vmx_setup_tertiary_ctls(struct vmcs_config *vmcs_conf,
+					   struct nested_vmx_msrs *msrs)
+{
+	msrs->tertiary_ctls = vmcs_conf->cpu_based_3rd_exec_ctrl;
+
+	msrs->tertiary_ctls &= TERTIARY_EXEC_GUEST_APIC_TIMER;
+
+	if (msrs->tertiary_ctls)
+		msrs->procbased_ctls_high |=
+			CPU_BASED_ACTIVATE_TERTIARY_CONTROLS;
+}
+
 static void nested_vmx_setup_misc_data(struct vmcs_config *vmcs_conf,
 				       struct nested_vmx_msrs *msrs)
 {
@@ -7372,6 +7418,8 @@ void nested_vmx_setup_ctls_msrs(struct vmcs_config *vmcs_conf, u32 ept_caps)
 	nested_vmx_setup_cpubased_ctls(vmcs_conf, msrs);
 
 	nested_vmx_setup_secondary_ctls(ept_caps, vmcs_conf, msrs);
+
+	nested_vmx_setup_tertiary_ctls(vmcs_conf, msrs);
 
 	nested_vmx_setup_misc_data(vmcs_conf, msrs);
 

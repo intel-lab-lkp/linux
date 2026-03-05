@@ -4985,8 +4985,12 @@ static void __vmx_vcpu_reset(struct kvm_vcpu *vcpu)
 	init_vmcs(vmx);
 
 	if (nested &&
-	    kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_STUFF_FEATURE_MSRS))
+	    kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_STUFF_FEATURE_MSRS)) {
 		memcpy(&vmx->nested.msrs, &vmcs_config.nested, sizeof(vmx->nested.msrs));
+
+		if (!nested_cpu_can_support_apic_virt_timer(vcpu))
+			vmx->nested.msrs.tertiary_ctls &= ~TERTIARY_EXEC_GUEST_APIC_TIMER;
+	}
 
 	vcpu_setup_sgx_lepubkeyhash(vcpu);
 
