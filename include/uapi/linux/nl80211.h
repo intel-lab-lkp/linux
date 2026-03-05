@@ -1369,6 +1369,12 @@
  *	%NL80211_ATTR_INCUMBENT_SIGNAL_INTERFERENCE_BITMAP. The current channel
  *	definition is also sent.
  *
+ * @NL80211_CMD_START_PD: Start PD operation, identified by its
+ *	%NL80211_ATTR_WDEV interface. This interface must have been previously
+ *	created with %NL80211_CMD_NEW_INTERFACE.
+ * @NL80211_CMD_STOP_PD: Stop the PD operation, identified by
+ *	its %NL80211_ATTR_WDEV interface.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1633,6 +1639,9 @@ enum nl80211_commands {
 	NL80211_CMD_NAN_CLUSTER_JOINED,
 
 	NL80211_CMD_INCUMBENT_SIGNAL_DETECT,
+
+	NL80211_CMD_START_PD,
+	NL80211_CMD_STOP_PD,
 
 	/* add new commands above here */
 
