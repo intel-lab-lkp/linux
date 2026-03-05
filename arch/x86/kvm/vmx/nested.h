@@ -175,6 +175,13 @@ static inline bool nested_cpu_has2(struct vmcs12 *vmcs12, u32 bit)
 		(vmcs12->secondary_vm_exec_control & bit);
 }
 
+static inline bool nested_cpu_has3(struct vmcs12 *vmcs12, u64 bit)
+{
+	return (vmcs12->cpu_based_vm_exec_control &
+			CPU_BASED_ACTIVATE_TERTIARY_CONTROLS) &&
+		(vmcs12->tertiary_vm_exec_control & bit);
+}
+
 static inline bool nested_cpu_has_preemption_timer(struct vmcs12 *vmcs12)
 {
 	return vmcs12->pin_based_vm_exec_control &

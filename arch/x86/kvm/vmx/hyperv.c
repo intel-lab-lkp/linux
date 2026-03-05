@@ -166,6 +166,12 @@ static bool nested_evmcs_is_valid_controls(enum evmcs_ctrl_type ctrl_type,
 	return !(val & ~evmcs_get_supported_ctls(ctrl_type));
 }
 
+static bool nested_evmcs_is_valid_controls64(enum evmcs_ctrl_type ctrl_type,
+					     u64 val)
+{
+	return !(val & ~evmcs_get_supported_ctls(ctrl_type));
+}
+
 int nested_evmcs_check_controls(struct vmcs12 *vmcs12)
 {
 	if (CC(!nested_evmcs_is_valid_controls(EVMCS_PINCTRL,
@@ -186,6 +192,10 @@ int nested_evmcs_check_controls(struct vmcs12 *vmcs12)
 
 	if (CC(!nested_evmcs_is_valid_controls(EVMCS_ENTRY_CTRLS,
 					       vmcs12->vm_entry_controls)))
+		return -EINVAL;
+
+	if (CC(!nested_evmcs_is_valid_controls64(EVMCS_3RDEXEC,
+						 vmcs12->tertiary_vm_exec_control)))
 		return -EINVAL;
 
 	/*

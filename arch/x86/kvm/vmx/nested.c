@@ -1815,6 +1815,7 @@ static void copy_enlightened_to_vmcs12(struct vcpu_vmx *vmx, u32 hv_clean_fields
 		vmcs12->vm_exit_controls = evmcs->vm_exit_controls;
 		vmcs12->secondary_vm_exec_control =
 			evmcs->secondary_vm_exec_control;
+		vmcs12->tertiary_vm_exec_control = 0;
 	}
 
 	if (unlikely(!(hv_clean_fields &
@@ -2512,6 +2513,17 @@ static void prepare_vmcs02_early(struct vcpu_vmx *vmx, struct loaded_vmcs *vmcs0
 	}
 
 	/*
+	 * TERTIARY EXEC CONTROLS
+	 */
+	if (cpu_has_tertiary_exec_ctrls()) {
+		u64 ctls = 0;
+
+		/* guest apic timer virtualization will come */
+
+		tertiary_exec_controls_set(vmx, ctls);
+	}
+
+	/*
 	 * ENTRY CONTROLS
 	 *
 	 * vmcs12's VM_{ENTRY,EXIT}_LOAD_IA32_EFER and VM_ENTRY_IA32E_MODE
@@ -2967,6 +2979,11 @@ static int nested_check_vm_execution_controls(struct kvm_vcpu *vcpu,
 	    CC(!vmx_control_verify(vmcs12->secondary_vm_exec_control,
 				   vmx->nested.msrs.secondary_ctls_low,
 				   vmx->nested.msrs.secondary_ctls_high)))
+		return -EINVAL;
+
+	if (nested_cpu_has(vmcs12, CPU_BASED_ACTIVATE_TERTIARY_CONTROLS) &&
+	    CC(!vmx_control64_verify(vmcs12->tertiary_vm_exec_control,
+				     vmx->nested.msrs.tertiary_ctls)))
 		return -EINVAL;
 
 	if (CC(vmcs12->cr3_target_count > nested_cpu_vmx_misc_cr3_count(vcpu)) ||
