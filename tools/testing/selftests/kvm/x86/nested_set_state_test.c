@@ -401,6 +401,19 @@ int main(int argc, char *argv[])
 	else
 		test_svm_nested_state(vcpu);
 
+	if (kvm_cpu_has(X86_FEATURE_VMX) && have_evmcs) {
+		/*
+		 * KVM_CAP_HYPERV_ENLIGHTENED_VMCS can be only enabled.
+		 * Because There is no way to disable it, re-create vm and vcpu.
+		 */
+		have_evmcs = false;
+		kvm_vm_free(vm);
+		vm = vm_create_with_one_vcpu(&vcpu, NULL);
+		vcpu_clear_cpuid_feature(vcpu, X86_FEATURE_VMX);
+
+		test_vmx_nested_state(vcpu);
+	}
+
 	kvm_vm_free(vm);
 	return 0;
 }
