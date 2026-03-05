@@ -31,6 +31,7 @@ struct senary_spec {
 	unsigned int parse_flags; /* flag for snd_hda_parse_pin_defcfg() */
 
 	int mute_led_polarity;
+	unsigned char default_mic_boost[0x25];
 	unsigned int gpio_led;
 	unsigned int gpio_mute_led_mask;
 	unsigned int gpio_mic_led_mask;
@@ -162,6 +163,30 @@ static void senary_playback_hook(struct hda_pcm_stream *hinfo,
 	}
 }
 
+static void senary_fixed_mic_boost(struct hda_codec *codec, hda_nid_t nid)
+{
+	unsigned char value;
+	struct senary_spec *spec = codec->spec;
+
+	if (!spec->default_mic_boost[nid])
+		return;
+
+	value = snd_hda_codec_read(codec, nid, 0, AC_VERB_GET_AMP_GAIN_MUTE, 0);
+	if (value != spec->default_mic_boost[nid])
+		snd_hda_codec_amp_stereo(codec, nid, HDA_INPUT, 0,
+				HDA_AMP_VOLMASK, spec->default_mic_boost[nid]);
+}
+
+static void senary_cap_sync_hook(struct hda_codec *codec,
+		struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct senary_spec *spec = codec->spec;
+	hda_nid_t nid = spec->gen.imux_pins[spec->gen.cur_mux[0]];
+
+	senary_fixed_mic_boost(codec, nid);
+}
+
 static void senary_auto_turn_eapd(struct hda_codec *codec, int num_pins,
 			      const hda_nid_t *pins, bool on)
 {
@@ -251,6 +276,7 @@ static int senary_probe(struct hda_codec *codec, const struct hda_device_id *id)
 {
 	struct senary_spec *spec;
 	int err;
+	int i;
 
 	codec_info(codec, "%s: BIOS auto-probing.\n", codec->core.chip_name);
 
@@ -306,6 +332,13 @@ static int senary_probe(struct hda_codec *codec, const struct hda_device_id *id)
 	 */
 	if (codec->core.vendor_id == 0x1fa86186)
 		spec->gen.pcm_playback_hook = senary_playback_hook;
+
+	/* Initialize and fix mic boost */
+	for (i = 0; i < ARRAY_SIZE(spec->default_mic_boost); i++) {
+		spec->default_mic_boost[i] = snd_hda_codec_read(codec, i, 0,
+				AC_VERB_GET_AMP_GAIN_MUTE, 0);
+	}
+	spec->gen.cap_sync_hook = senary_cap_sync_hook;
 
 	/* Some laptops with Senary chips show stalls in S3 resume,
 	 * which falls into the single-cmd mode.
