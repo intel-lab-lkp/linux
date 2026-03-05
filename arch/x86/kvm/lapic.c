@@ -2802,6 +2802,10 @@ u64 kvm_get_lapic_tscdeadline_msr(struct kvm_vcpu *vcpu)
 	if (!kvm_apic_present(vcpu) || !apic_lvtt_tscdeadline(apic))
 		return 0;
 
+	if (apic->lapic_timer.apic_virt_timer_in_use)
+		apic->lapic_timer.tscdeadline =
+			kvm_x86_call(get_guest_tsc_deadline_virt)(vcpu);
+
 	return apic->lapic_timer.tscdeadline;
 }
 
@@ -2814,6 +2818,8 @@ void kvm_set_lapic_tscdeadline_msr(struct kvm_vcpu *vcpu, u64 data)
 
 	hrtimer_cancel(&apic->lapic_timer.timer);
 	apic->lapic_timer.tscdeadline = data;
+	if (apic->lapic_timer.apic_virt_timer_in_use)
+		kvm_x86_call(set_guest_tsc_deadline_virt)(vcpu, data);
 	start_apic_timer(apic);
 }
 
