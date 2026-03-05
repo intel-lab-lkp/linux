@@ -740,9 +740,7 @@ err_hclk:
 static void rockchip_sfc_remove(struct platform_device *pdev)
 {
 	struct rockchip_sfc *sfc = platform_get_drvdata(pdev);
-	struct spi_controller *host = sfc->host;
 
-	spi_unregister_controller(host);
 	dma_unmap_single(&pdev->dev, sfc->dma_buffer, sfc->max_iosize,
 			 DMA_BIDIRECTIONAL);
 	free_pages((unsigned long)sfc->buffer, get_order(sfc->max_iosize));
