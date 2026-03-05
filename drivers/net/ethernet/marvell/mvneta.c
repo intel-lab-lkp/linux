@@ -5620,6 +5620,8 @@ static int mvneta_probe(struct platform_device *pdev)
 	}
 
 	err = of_get_ethdev_address(dn, dev);
+	if (err == -EPROBE_DEFER)
+		goto err_free_ports;
 	if (!err) {
 		mac_from = "device tree";
 	} else {
