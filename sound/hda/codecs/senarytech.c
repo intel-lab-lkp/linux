@@ -205,6 +205,18 @@ static int senary_suspend(struct hda_codec *codec)
 	return 0;
 }
 
+static int senary_resume(struct hda_codec *codec)
+{
+	/* Re-sync registers */
+	regcache_sync(codec->core.regmap);
+
+	/* Re-run init verbs to restore hardware state */
+	senary_init_verb(codec);
+
+	snd_hda_jack_report_sync(codec);
+	return 0;
+}
+
 static int senary_probe(struct hda_codec *codec, const struct hda_device_id *id)
 {
 	struct senary_spec *spec;
@@ -286,6 +298,7 @@ static const struct hda_codec_ops senary_codec_ops = {
 	.init = senary_init,
 	.unsol_event = snd_hda_jack_unsol_event,
 	.suspend = senary_suspend,
+	.resume = senary_resume,
 	.check_power_status = snd_hda_gen_check_power_status,
 	.stream_pm = snd_hda_gen_stream_pm,
 };
