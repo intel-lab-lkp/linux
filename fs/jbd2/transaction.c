@@ -772,14 +772,25 @@ int jbd2__journal_restart(handle_t *handle, int nblocks, int revoke_records,
 	journal = transaction->t_journal;
 	tid = transaction->t_tid;
 
+	jbd2_debug(2, "restarting handle %p\n", handle);
+
+	/* Check if transaction is in invalid state */
+	if (transaction->t_state != T_RUNNING &&
+		transaction->t_state != T_LOCKED) {
+		if (current->journal_info == handle)
+			current->journal_info = NULL;
+		handle->h_transaction = NULL;
+		memalloc_nofs_restore(handle->saved_alloc_context);
+		goto skip_stop;
+	}
+
 	/*
 	 * First unlink the handle from its current transaction, and start the
 	 * commit on that.
 	 */
-	jbd2_debug(2, "restarting handle %p\n", handle);
 	stop_this_handle(handle);
 	handle->h_transaction = NULL;
-
+skip_stop:
 	/*
 	 * TODO: If we use READ_ONCE / WRITE_ONCE for j_commit_request we can
  	 * get rid of pointless j_state_lock traffic like this.
@@ -1856,6 +1867,16 @@ int jbd2_journal_stop(handle_t *handle)
 		memalloc_nofs_restore(handle->saved_alloc_context);
 		goto free_and_exit;
 	}
+	/* Check if transaction is in invalid state */
+	if (transaction->t_state != T_RUNNING &&
+		transaction->t_state != T_LOCKED) {
+		if (current->journal_info == handle)
+			current->journal_info = NULL;
+		handle->h_transaction = NULL;
+		memalloc_nofs_restore(handle->saved_alloc_context);
+		goto free_and_exit;
+	}
+
 	journal = transaction->t_journal;
 	tid = transaction->t_tid;
 
