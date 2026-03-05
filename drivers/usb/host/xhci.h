@@ -1443,6 +1443,13 @@ struct xhci_bus_state {
 	unsigned long		resuming_ports;
 };
 
+enum interrupter_type {
+	/* Normal interrupter, e.g. Primary */
+	INTR_DEFAULT,
+	/* Non-operational, e.g. xhci-sideband */
+	INTR_NOOP,
+};
+
 struct xhci_interrupter {
 	struct xhci_ring	*event_ring;
 	struct xhci_erst	erst;
@@ -1450,6 +1457,7 @@ struct xhci_interrupter {
 	unsigned int		intr_num;
 	bool			ip_autoclear;
 	u32			isoc_bei_interval;
+	enum interrupter_type	type;
 	/* For interrupter registers save and restore over suspend/resume */
 	u32	s3_iman;
 	u32	s3_imod;

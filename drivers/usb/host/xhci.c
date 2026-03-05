@@ -317,6 +317,9 @@ int xhci_enable_interrupter(struct xhci_interrupter *ir)
 	if (!ir || !ir->ir_set)
 		return -EINVAL;
 
+	if (ir->type == INTR_NOOP)
+		return 0;
+
 	iman = readl(&ir->ir_set->iman);
 	iman &= ~IMAN_IP;
 	iman |= IMAN_IE;
@@ -333,6 +336,9 @@ int xhci_disable_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir)
 
 	if (!ir || !ir->ir_set)
 		return -EINVAL;
+
+	if (ir->type == INTR_NOOP)
+		return 0;
 
 	iman = readl(&ir->ir_set->iman);
 	iman &= ~IMAN_IP;
