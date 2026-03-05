@@ -2440,10 +2440,7 @@ static int get_tree_block_key(struct btrfs_fs_info *fs_info,
 	eb = read_tree_block(fs_info, block->bytenr, &check);
 	if (IS_ERR(eb))
 		return PTR_ERR(eb);
-	if (unlikely(!extent_buffer_uptodate(eb))) {
-		free_extent_buffer(eb);
-		return -EIO;
-	}
+
 	if (block->level == 0)
 		btrfs_item_key_to_cpu(eb, &block->key, 0);
 	else
@@ -3645,12 +3642,7 @@ restart:
 	btrfs_block_rsv_release(fs_info, rc->block_rsv, (u64)-1, NULL);
 
 	/* get rid of pinned extents */
-	trans = btrfs_join_transaction(rc->extent_root);
-	if (IS_ERR(trans)) {
-		err = PTR_ERR(trans);
-		goto out_free;
-	}
-	ret = btrfs_commit_transaction(trans);
+	ret = btrfs_commit_current_transaction(rc->extent_root);
 	if (ret && !err)
 		err = ret;
 out_free:
@@ -4399,6 +4391,8 @@ static int move_existing_remaps(struct btrfs_fs_info *fs_info,
 
 				leaf = path->nodes[0];
 			}
+
+			btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 		}
 
 		remap = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_remap_item);
@@ -4723,6 +4717,7 @@ int btrfs_last_identity_remap_gone(struct btrfs_chunk_map *chunk_map,
 	ret = btrfs_remove_dev_extents(trans, chunk_map);
 	if (unlikely(ret)) {
 		btrfs_abort_transaction(trans, ret);
+		btrfs_end_transaction(trans);
 		return ret;
 	}
 
@@ -4732,6 +4727,7 @@ int btrfs_last_identity_remap_gone(struct btrfs_chunk_map *chunk_map,
 		if (unlikely(ret)) {
 			mutex_unlock(&trans->fs_info->chunk_mutex);
 			btrfs_abort_transaction(trans, ret);
+			btrfs_end_transaction(trans);
 			return ret;
 		}
 	}
@@ -4750,6 +4746,7 @@ int btrfs_last_identity_remap_gone(struct btrfs_chunk_map *chunk_map,
 	ret = remove_chunk_stripes(trans, chunk_map, path);
 	if (unlikely(ret)) {
 		btrfs_abort_transaction(trans, ret);
+		btrfs_end_transaction(trans);
 		return ret;
 	}
 
@@ -4949,6 +4946,12 @@ static int do_remap_reloc_trans(struct btrfs_fs_info *fs_info,
 	struct btrfs_space_info *sinfo = src_bg->space_info;
 
 	extent_root = btrfs_extent_root(fs_info, src_bg->start);
+	if (unlikely(!extent_root)) {
+		btrfs_err(fs_info,
+			  "missing extent root for block group at offset %llu",
+			  src_bg->start);
+		return -EUCLEAN;
+	}
 
 	trans = btrfs_start_transaction(extent_root, 0);
 	if (IS_ERR(trans))
@@ -5301,6 +5304,13 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start,
 	int ret;
 	bool bg_is_ro = false;
 
+	if (unlikely(!extent_root)) {
+		btrfs_err(fs_info,
+			  "missing extent root for block group at offset %llu",
+			  group_start);
+		return -EUCLEAN;
+	}
+
 	/*
 	 * This only gets set if we had a half-deleted snapshot on mount.  We
 	 * cannot allow relocation to start while we're still trying to clean up
@@ -5531,11 +5541,16 @@ int btrfs_recover_relocation(struct btrfs_fs_info *fs_info)
 		goto out;
 	}
 
+	rc->extent_root = btrfs_extent_root(fs_info, 0);
+	if (unlikely(!rc->extent_root)) {
+		btrfs_err(fs_info, "missing extent root for extent at bytenr 0");
+		ret = -EUCLEAN;
+		goto out;
+	}
+
 	ret = reloc_chunk_start(fs_info);
 	if (ret < 0)
 		goto out_end;
-
-	rc->extent_root = btrfs_extent_root(fs_info, 0);
 
 	set_reloc_control(rc);
 
@@ -5630,6 +5645,14 @@ int btrfs_reloc_clone_csums(struct btrfs_ordered_extent *ordered)
 	struct btrfs_root *csum_root = btrfs_csum_root(fs_info, disk_bytenr);
 	LIST_HEAD(list);
 	int ret;
+
+	if (unlikely(!csum_root)) {
+		btrfs_mark_ordered_extent_error(ordered);
+		btrfs_err(fs_info,
+			  "missing csum root for extent at bytenr %llu",
+			  disk_bytenr);
+		return -EUCLEAN;
+	}
 
 	ret = btrfs_lookup_csums_list(csum_root, disk_bytenr,
 				      disk_bytenr + ordered->num_bytes - 1,
@@ -5982,6 +6005,9 @@ static int remove_range_from_remap_tree(struct btrfs_trans_handle *trans,
 		struct btrfs_block_group *dest_bg;
 
 		dest_bg = btrfs_lookup_block_group(fs_info, new_addr);
+		if (unlikely(!dest_bg))
+			return -EUCLEAN;
+
 		adjust_block_group_remap_bytes(trans, dest_bg, -overlap_length);
 		btrfs_put_block_group(dest_bg);
 		ret = btrfs_add_to_free_space_tree(trans,
