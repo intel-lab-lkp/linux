@@ -1298,6 +1298,15 @@ struct intel_crtc_state {
 		struct drm_dp_as_sdp as_sdp;
 	} infoframes;
 
+	struct {
+		/* Common SDP Transmission line */
+		bool enable;
+		int transmission_line;
+		int vsc_ext_stagger;
+		int pps_stagger;
+		int gmp_stagger;
+	} cmn_sdp_tl;
+
 	u8 eld[MAX_ELD_BYTES];
 
 	/* HDMI scrambling status */
