@@ -38,6 +38,7 @@ properties:
       - edt,edt-ft5306
       - edt,edt-ft5406
       - edt,edt-ft5506
+      - edt,edt-ft5x06 # Deprecated, not use for new platform.
       - evervision,ev-ft5726
       - focaltech,ft3518
       - focaltech,ft5426
