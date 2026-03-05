@@ -1,0 +1,36 @@
+drm drm-fixes 681d787cb61f3616dde8d4b747bacf03b3e4d665
+	Merge tag 'amd-drm-fixes-7.0-2026-03-04' of https://gitlab.freedesktop.org/agd5f/linux into drm-fixes
+drm-misc drm-misc-fixes 91d7e9df42598af28ca440b95b16a4e51a408771
+	drm/ttm: Fix bo resource use-after-free
+drm-rust drm-rust-fixes 11439c4635edd669ae435eec308f4ab8a0804808
+	Linux 7.0-rc2
+drm-intel drm-intel-fixes a99cac460ddeb3705cb54a8421339f351586b25d
+	drm/i915/psr: Fix for Panel Replay X granularity DPCD register handling
+drm-xe drm-xe-fixes 0cfe9c4838f1147713f6b5c02094cd4dc0c598fa
+	drm/xe: Fix memory leak in xe_vm_madvise_ioctl
+drm drm-next 17b95278ae6adb9ea5b801fcd2ae5d182448e99d
+	Merge tag 'drm-xe-next-2026-03-02' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 777a02812f739af9e349cd0f695400a1d84053f4
+	drm/i915/dp: Add missing slice count check during mode validation
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 21613f67ede11e495281b4a6dde72cd7db3ada4e
+	drm/ttm: fix NULL deref in ttm_bo_flush_all_fences() after fence ops detach
+drm-rust drm-rust-next 15da5bc9f3adab7242867db0251fe451ac3ddb72
+	drm/tyr: Clarify driver/device type names
+drm-intel drm-intel-next 93f3a267c3dd4d811b224bb9e179a10d81456a74
+	drm/i915/vrr: Configure VRR timings after enabling TRANS_DDI_FUNC_CTL
+drm-intel drm-intel-gt-next 945d0fec02f6c22b182d51d8da39aa1b0df9f622
+	drm/i915: Test for imported buffers with drm_gem_is_imported()
+drm-xe drm-xe-next 724b4a12116fdb60130b89778611482bf8de0a6a
+	drm/xe: Add missing kernel docs in xe_exec_queue.c
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 06ad61b1f1955a3ff609b0530fb7a7077d425a39
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
