@@ -6200,6 +6200,36 @@ static void __init init_mount_tree(void)
 	ns_tree_add(&init_mnt_ns);
 }
 
+/*
+ * Allow to give a specific kthread a private mount namespace that is
+ * anchored in nullfs so it can mount.
+ */
+int __init kthread_mntns(void)
+{
+	struct mount *m;
+	struct path root;
+	int ret;
+
+	/* Only allowed for kthreads in the initial mount namespace. */
+	VFS_WARN_ON_ONCE(!(current->flags & PF_KTHREAD));
+	VFS_WARN_ON_ONCE(current->nsproxy->mnt_ns != &init_mnt_ns);
+
+	/*
+	 * TODO: switch to creating a completely empty mount namespace
+	 * once that series lands.
+	 */
+	ret = ksys_unshare(CLONE_NEWNS);
+	if (ret)
+		return ret;
+
+	m = current->nsproxy->mnt_ns->root;
+	root.mnt = &m->mnt;
+	root.dentry = root.mnt->mnt_root;
+	set_fs_pwd(current->fs, &root);
+	set_fs_root(current->fs, &root);
+	return 0;
+}
+
 void __init mnt_init(void)
 {
 	int err;
