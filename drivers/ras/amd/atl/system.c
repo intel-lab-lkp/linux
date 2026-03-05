@@ -300,7 +300,7 @@ int get_df_system_info(void)
 
 	ret = determine_df_rev();
 	if (ret) {
-		pr_warn("Failed to determine DF Revision");
+		pr_debug("Failed to determine DF Revision");
 		df_cfg.rev = UNKNOWN;
 		return ret;
 	}
