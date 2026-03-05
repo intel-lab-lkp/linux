@@ -112,8 +112,8 @@ struct fuse_ring {
 	/* number of ring queues */
 	size_t nr_queues;
 
-	/* maximum payload/arg size */
-	size_t max_payload_sz;
+	/* maximum request payload/arg size */
+	size_t max_req_payload_sz;
 
 	struct fuse_ring_queue **queues;
 

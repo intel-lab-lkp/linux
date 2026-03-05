@@ -229,7 +229,7 @@ static struct fuse_ring *fuse_uring_create(struct fuse_conn *fc)
 	struct fuse_ring *ring;
 	size_t nr_queues = num_possible_cpus();
 	struct fuse_ring *res = NULL;
-	size_t max_payload_size;
+	size_t max_req_payload_size;
 
 	ring = kzalloc_obj(*fc->ring, GFP_KERNEL_ACCOUNT);
 	if (!ring)
@@ -240,8 +240,8 @@ static struct fuse_ring *fuse_uring_create(struct fuse_conn *fc)
 	if (!ring->queues)
 		goto out_err;
 
-	max_payload_size = max(FUSE_MIN_READ_BUFFER, fc->max_write);
-	max_payload_size = max(max_payload_size, fc->max_pages * PAGE_SIZE);
+	max_req_payload_size = max(FUSE_MIN_READ_BUFFER, fc->max_write);
+	max_req_payload_size = max(max_req_payload_size, fc->max_pages * PAGE_SIZE);
 
 	spin_lock(&fc->lock);
 	if (fc->ring) {
@@ -255,7 +255,7 @@ static struct fuse_ring *fuse_uring_create(struct fuse_conn *fc)
 
 	ring->nr_queues = nr_queues;
 	ring->fc = fc;
-	ring->max_payload_sz = max_payload_size;
+	ring->max_req_payload_sz = max_req_payload_size;
 	smp_store_release(&fc->ring, ring);
 
 	spin_unlock(&fc->lock);
@@ -586,7 +586,7 @@ static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 	if (err)
 		return -EFAULT;
 
-	err = import_ubuf(ITER_SOURCE, ent->payload, ring->max_payload_sz,
+	err = import_ubuf(ITER_SOURCE, ent->payload, ring->max_req_payload_sz,
 			  &iter);
 	if (err)
 		return err;
@@ -617,7 +617,7 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 		.commit_id = req->in.h.unique,
 	};
 
-	err = import_ubuf(ITER_DEST, ent->payload, ring->max_payload_sz, &iter);
+	err = import_ubuf(ITER_DEST, ent->payload, ring->max_req_payload_sz, &iter);
 	if (err) {
 		pr_info_ratelimited("fuse: Import of user buffer failed\n");
 		return err;
@@ -1052,7 +1052,7 @@ fuse_uring_create_ring_ent(struct io_uring_cmd *cmd,
 	}
 
 	payload_size = iov[1].iov_len;
-	if (payload_size < ring->max_payload_sz) {
+	if (payload_size < ring->max_req_payload_sz) {
 		pr_info_ratelimited("Invalid req payload len %zu\n",
 				    payload_size);
 		return ERR_PTR(err);
