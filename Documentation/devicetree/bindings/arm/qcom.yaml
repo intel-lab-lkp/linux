@@ -201,6 +201,7 @@ properties:
           - enum:
               - xiaomi,riva
               - xiaomi,rolex
+              - xiaomi,tiare
           - const: qcom,msm8917
 
       - items:
