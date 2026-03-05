@@ -132,6 +132,36 @@ static void senary_init_verb(struct hda_codec *codec)
 	snd_hda_override_pin_caps(codec, 0x19, 0x2124);
 }
 
+static void senary_set_port_eapd(struct hda_codec *codec, hda_nid_t nid, bool enable)
+{
+	unsigned char port_eapd = 0, eapd_value = enable << 1;
+
+	port_eapd = snd_hda_codec_read(codec, nid, 0, 0xf0c, 0x0);
+	if (port_eapd != eapd_value)
+		snd_hda_codec_write(codec, nid, 0, 0x70c, eapd_value);
+}
+
+static void senary_playback_hook(struct hda_pcm_stream *hinfo,
+		struct hda_codec *codec,
+		struct snd_pcm_substream *substream,
+		int action)
+{
+	struct senary_spec *spec = codec->spec;
+	struct auto_pin_cfg *cfg = &spec->gen.autocfg;
+	int i;
+
+	switch (action) {
+	case HDA_GEN_PCM_ACT_PREPARE:
+		for (i = 0; i < cfg->speaker_outs; i++)
+			senary_set_port_eapd(codec, cfg->speaker_pins[i], true);
+		break;
+	case HDA_GEN_PCM_ACT_CLEANUP:
+		for (i = 0; i < cfg->speaker_outs; i++)
+			senary_set_port_eapd(codec, cfg->speaker_pins[i], false);
+		break;
+	}
+}
+
 static void senary_auto_turn_eapd(struct hda_codec *codec, int num_pins,
 			      const hda_nid_t *pins, bool on)
 {
@@ -269,6 +299,13 @@ static int senary_probe(struct hda_codec *codec, const struct hda_device_id *id)
 	err = snd_hda_gen_parse_auto_config(codec, &spec->gen.autocfg);
 	if (err < 0)
 		goto error;
+
+	/* Register playback hook for dynamic EAPD control.
+	 * Vendor driver applies this specifically for subsystem 0x14f10101,
+	 * but we apply it broadly for SN6186 to fix noise issues.
+	 */
+	if (codec->core.vendor_id == 0x1fa86186)
+		spec->gen.pcm_playback_hook = senary_playback_hook;
 
 	/* Some laptops with Senary chips show stalls in S3 resume,
 	 * which falls into the single-cmd mode.
