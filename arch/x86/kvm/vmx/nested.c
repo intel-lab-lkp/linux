@@ -3069,6 +3069,12 @@ static int nested_check_vm_execution_controls(struct kvm_vcpu *vcpu,
 	    CC(!vmcs12->tsc_multiplier))
 		return -EINVAL;
 
+	if (nested_cpu_has_guest_apic_timer(vmcs12) &&
+	    (CC(!nested_cpu_has_vid(vmcs12)) ||
+	     CC(nested_cpu_has(vmcs12, CPU_BASED_RDTSC_EXITING)) ||
+	     CC(vmcs12->virtual_timer_vector > 255)))
+		return -EINVAL;
+
 	return 0;
 }
 
