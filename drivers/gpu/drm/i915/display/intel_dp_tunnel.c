@@ -337,7 +337,6 @@ void intel_dp_tunnel_resume(struct intel_dp *intel_dp,
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_connector *connector = intel_dp->attached_connector;
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
-	u8 dpcd[DP_RECEIVER_CAP_SIZE];
 	u8 pipe_mask;
 	int err = 0;
 
@@ -360,7 +359,7 @@ void intel_dp_tunnel_resume(struct intel_dp *intel_dp,
 	 * capabilities were updated already during resume.
 	 */
 	if (!dpcd_updated) {
-		err = intel_dp_read_dprx_caps(intel_dp, dpcd);
+		err = intel_dp_init_lttpr_and_dprx_caps(intel_dp);
 
 		if (err) {
 			drm_dp_tunnel_set_io_error(intel_dp->tunnel);

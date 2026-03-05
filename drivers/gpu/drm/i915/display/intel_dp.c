@@ -6811,7 +6811,6 @@ intel_dp_hpd_pulse(struct intel_digital_port *dig_port, bool long_hpd)
 {
 	struct intel_display *display = to_intel_display(dig_port);
 	struct intel_dp *intel_dp = &dig_port->dp;
-	u8 dpcd[DP_RECEIVER_CAP_SIZE];
 
 	if (dig_port->base.type == INTEL_OUTPUT_EDP &&
 	    (long_hpd ||
@@ -6847,7 +6846,7 @@ intel_dp_hpd_pulse(struct intel_digital_port *dig_port, bool long_hpd)
 	if (long_hpd) {
 		intel_dp_dpcd_set_probe(intel_dp, true);
 
-		intel_dp_read_dprx_caps(intel_dp, dpcd);
+		intel_dp_init_lttpr_and_dprx_caps(intel_dp);
 
 		intel_dp->reset_link_params = true;
 		intel_dp_invalidate_source_oui(intel_dp);

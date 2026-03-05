@@ -205,7 +205,7 @@ static int intel_dp_init_lttpr_phys(struct intel_dp *intel_dp, int lttpr_count)
 	return 0;
 }
 
-int intel_dp_read_dprx_caps(struct intel_dp *intel_dp, u8 dpcd[DP_RECEIVER_CAP_SIZE])
+static int intel_dp_read_dprx_caps(struct intel_dp *intel_dp, u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 
