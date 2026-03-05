@@ -214,6 +214,7 @@ static int serial_8250_men_mcb_probe(struct mcb_device *mdev,
 		uart.port.iotype = UPIO_MEM;
 		uart.port.uartclk = men_lookup_uartclk(mdev);
 		uart.port.irq = mcb_get_irq(mdev);
+		uart.port.dev = &mdev->dev;
 		uart.port.mapbase = (unsigned long) mem->start
 					    + data->offset[i];
 
