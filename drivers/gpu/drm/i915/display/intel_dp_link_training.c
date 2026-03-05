@@ -250,6 +250,9 @@ int intel_dp_init_lttpr_and_dprx_caps(struct intel_dp *intel_dp)
 	struct intel_display *display = to_intel_display(intel_dp);
 	int lttpr_count = 0;
 
+	/* this function is meant to be called only once */
+	drm_WARN_ON(display->drm, intel_dp->dpcd[DP_DPCD_REV] != 0);
+
 	/*
 	 * Detecting LTTPRs must be avoided on platforms with an AUX timeout
 	 * period < 3.2ms. (see DP Standard v2.0, 2.11.2, 3.6.6.1).
