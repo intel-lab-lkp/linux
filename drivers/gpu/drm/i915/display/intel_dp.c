@@ -7301,6 +7301,68 @@ void intel_dp_mst_resume(struct intel_display *display)
 }
 
 static
+void intel_dp_cmn_sdp_tl_compute_config_late(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	bool as_sdp, gmp_sdp, pps_sdp, vsc_sdp, vsc_ext_sdp;
+
+	if (!HAS_CMN_SDP_TL(display))
+		return;
+
+	as_sdp = crtc_state->infoframes.enable &
+		 intel_hdmi_infoframe_enable(DP_SDP_ADAPTIVE_SYNC);
+
+	gmp_sdp = crtc_state->infoframes.enable &
+		  intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GAMUT_METADATA);
+
+	pps_sdp = crtc_state->infoframes.enable &
+		  intel_hdmi_infoframe_enable(DP_SDP_PPS);
+
+	vsc_sdp = crtc_state->infoframes.enable &
+		  intel_hdmi_infoframe_enable(DP_SDP_VSC);
+
+	vsc_ext_sdp = crtc_state->infoframes.enable &
+		      (intel_hdmi_infoframe_enable(DP_SDP_VSC_EXT_VESA) |
+		       intel_hdmi_infoframe_enable(DP_SDP_VSC_EXT_CEA));
+
+	if (!gmp_sdp && !pps_sdp && !vsc_sdp && !vsc_ext_sdp)
+		return;
+
+	crtc_state->cmn_sdp_tl.enable = true;
+
+	/*
+	 * When AS SDP is enabled :
+	 *  - The common SDP Transmission Line matches the EMP SDP Transmission Line.
+	 *
+	 * When AS SDP is disabled:
+	 *  - Bspec mentions the positions as lines of delayed vblank.
+	 *  - Guardband = 1st line of delayed vblank
+	 *  - Common SDP Transmission line is set to 2nd line of delayed vblank.
+	 */
+
+	if (as_sdp)
+		crtc_state->cmn_sdp_tl.transmission_line =
+			intel_dp_emp_as_sdp_tl(crtc_state);
+	else
+		crtc_state->cmn_sdp_tl.transmission_line =
+			crtc_state->vrr.guardband - 1;
+
+	/*
+	 * Currently we are programming the default stagger values, but these
+	 * can be optimized if required, based on number of SDPs enabled.
+	 *
+	 * Default values of the Transmission lines for SDPs other than AS SDP:
+	 * VSC : CMN SDP Transmission line
+	 * GMP : CMN SDP Transmission line
+	 * PPS : CMN SDP Transmission line + 1
+	 * VSC_EXT: CMN SDP Transmission line + 2
+	 */
+	crtc_state->cmn_sdp_tl.gmp_stagger = GMP_STAGGER_DEFAULT;
+	crtc_state->cmn_sdp_tl.pps_stagger = PPS_STAGGER_DEFAULT;
+	crtc_state->cmn_sdp_tl.vsc_ext_stagger = VSC_EXT_STAGGER_DEFAULT;
+}
+
+static
 int intel_dp_sdp_compute_config_late(struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -7312,6 +7374,8 @@ int intel_dp_sdp_compute_config_late(struct intel_crtc_state *crtc_state)
 			    guardband, min_sdp_guardband);
 		return -EINVAL;
 	}
+
+	intel_dp_cmn_sdp_tl_compute_config_late(crtc_state);
 
 	return 0;
 }
