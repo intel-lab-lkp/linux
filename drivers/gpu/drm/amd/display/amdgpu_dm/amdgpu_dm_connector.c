@@ -392,32 +392,31 @@ amdgpu_dm_find_first_crtc_matching_connector(struct drm_atomic_commit *state,
 	return NULL;
 }
 
-static void dm_set_panel_type(struct amdgpu_dm_connector *aconnector)
+static void amdgpu_dm_set_panel_type(struct amdgpu_dm_connector *aconnector)
 {
 	struct drm_connector *connector = &aconnector->base;
 	struct drm_display_info *display_info = &connector->display_info;
 	struct dc_link *link = aconnector->dc_link;
 	struct amdgpu_device *adev;
+	enum dc_panel_type panel_type = PANEL_TYPE_NONE;
 
 	adev = drm_to_adev(connector->dev);
 
-	link->panel_type = PANEL_TYPE_NONE;
-
 	switch (display_info->amd_vsdb.panel_type) {
 	case AMD_VSDB_PANEL_TYPE_OLED:
-		link->panel_type = PANEL_TYPE_OLED;
+		panel_type = PANEL_TYPE_OLED;
 		break;
 	case AMD_VSDB_PANEL_TYPE_MINILED:
-		link->panel_type = PANEL_TYPE_MINILED;
+		panel_type = PANEL_TYPE_MINILED;
 		break;
 	}
 
 	/* If VSDB didn't determine panel type, check DPCD ext caps */
-	if (link->panel_type == PANEL_TYPE_NONE) {
+	if (panel_type == PANEL_TYPE_NONE) {
 		if (link->dpcd_sink_ext_caps.bits.miniled == 1)
-			link->panel_type = PANEL_TYPE_MINILED;
+			panel_type = PANEL_TYPE_MINILED;
 		if (link->dpcd_sink_ext_caps.bits.oled == 1)
-			link->panel_type = PANEL_TYPE_OLED;
+			panel_type = PANEL_TYPE_OLED;
 	}
 
 	/* If VSDB and DPCD didn't determine panel type, check DID */
@@ -428,7 +427,7 @@ static void dm_set_panel_type(struct amdgpu_dm_connector *aconnector)
 			link->panel_type = PANEL_TYPE_OLED;
 	}
 
-	if (link->panel_type == PANEL_TYPE_NONE) {
+	if (panel_type == PANEL_TYPE_NONE) {
 		struct drm_amd_vsdb_info *vsdb = &display_info->amd_vsdb;
 		u32 lum1_max = vsdb->luminance_range1.max_luminance;
 		u32 lum2_max = vsdb->luminance_range2.max_luminance;
@@ -437,8 +436,13 @@ static void dm_set_panel_type(struct amdgpu_dm_connector *aconnector)
 		    link->local_sink->edid_caps.manufacturer_id ==
 		    DDC_MANUFACTURERNAME_SAMSUNG &&
 		    lum1_max >= ((lum2_max * 3) / 2))
-			link->panel_type = PANEL_TYPE_MINILED;
+			panel_type = PANEL_TYPE_MINILED;
 	}
+
+	if (panel_type != PANEL_TYPE_NONE)
+		link->panel_type = panel_type;
+	else
+		link->panel_type = PANEL_TYPE_LCD;
 
 	if (link->panel_type == PANEL_TYPE_OLED)
 		drm_object_property_set_value(&connector->base,
@@ -454,6 +458,32 @@ static void dm_set_panel_type(struct amdgpu_dm_connector *aconnector)
 		    DRM_MODE_PANEL_TYPE_UNKNOWN);
 
 	drm_dbg_kms(aconnector->base.dev, "Panel type: %d\n", link->panel_type);
+}
+
+static void amdgpu_dm_update_cacp_caps(struct amdgpu_dm_connector *aconnector)
+{
+	struct amdgpu_device *adev = drm_to_adev(aconnector->base.dev);
+	struct dc_link *link = aconnector->dc_link;
+
+	link->panel_config.cacp.cacp_supported = true;
+
+	if (amdgpu_ip_version(adev, DCE_HWIP, 0) < IP_VERSION(3, 1, 4) ||
+	    amdgpu_ip_version(adev, DCE_HWIP, 0) == IP_VERSION(3, 1, 6)) {
+		link->panel_config.cacp.cacp_supported = false;
+		return;
+	}
+
+	if (link->connector_signal != SIGNAL_TYPE_EDP &&
+	    link->connector_signal != SIGNAL_TYPE_LVDS) {
+		link->panel_config.cacp.cacp_supported = false;
+		return;
+	}
+
+	if (link->panel_type == PANEL_TYPE_LCD)
+		link->panel_config.cacp.cacp_supported = false;
+
+	drm_dbg_kms(aconnector->base.dev, "cacp_supported: %d\n",
+		    link->panel_config.cacp.cacp_supported);
 }
 
 DEFINE_FREE(sink_release, struct dc_sink *, if (_T) dc_sink_release(_T))
@@ -581,7 +611,8 @@ void amdgpu_dm_update_connector_after_detect(
 
 		amdgpu_dm_update_freesync_caps(connector, aconnector->drm_edid, true);
 		amdgpu_dm_update_connector_ext_caps(aconnector);
-		dm_set_panel_type(aconnector);
+		amdgpu_dm_set_panel_type(aconnector);
+		amdgpu_dm_update_cacp_caps(aconnector);
 
 		if (aconnector->hdmi_comp_auto) {
 			if (sink->sink_signal != SIGNAL_TYPE_HDMI_FRL)
