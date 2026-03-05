@@ -10,23 +10,25 @@
 
 #define L2_GUEST_STACK_SIZE 64
 
-#define SYNC_GP 101
-#define SYNC_L2_STARTED 102
+#define VMRUN_OPCODE 0x000f01d8
 
-u64 valid_vmcb12_gpa;
 int gp_triggered;
 
 static void guest_gp_handler(struct ex_regs *regs)
 {
+	unsigned char *insn = (unsigned char *)regs->rip;
+	u32 opcode = (insn[0] << 16) | (insn[1] << 8) | insn[2];
+
+	GUEST_ASSERT_EQ(opcode, VMRUN_OPCODE);
 	GUEST_ASSERT(!gp_triggered);
-	GUEST_SYNC(SYNC_GP);
+
 	gp_triggered = 1;
-	regs->rax = valid_vmcb12_gpa;
+	regs->rip += 3; /* Skip over VMRUN */
 }
 
 static void l2_guest_code(void)
 {
-	GUEST_SYNC(SYNC_L2_STARTED);
+	GUEST_SYNC(1);
 	vmcall();
 }
 
@@ -37,11 +39,12 @@ static void l1_guest_code(struct svm_test_data *svm, u64 invalid_vmcb12_gpa)
 	generic_svm_setup(svm, l2_guest_code,
 			  &l2_guest_stack[L2_GUEST_STACK_SIZE]);
 
-	valid_vmcb12_gpa = svm->vmcb_gpa;
+	asm volatile ("vmrun %[invalid_vmcb12_gpa]" :
+		      : [invalid_vmcb12_gpa] "a" (invalid_vmcb12_gpa)
+		      : "memory");
+	GUEST_ASSERT_EQ(gp_triggered, 1);
 
-	run_guest(svm->vmcb, invalid_vmcb12_gpa); /* #GP */
-
-	/* GP handler should jump here */
+	run_guest(svm->vmcb, svm->vmcb_gpa);
 	GUEST_ASSERT(svm->vmcb->control.exit_code == SVM_EXIT_VMMCALL);
 	GUEST_DONE();
 }
@@ -70,12 +73,6 @@ int main(int argc, char *argv[])
 	vcpu_alloc_svm(vm, &nested_gva);
 	vcpu_args_set(vcpu, 2, nested_gva, max_legal_gpa);
 
-	/* VMRUN with max_legal_gpa, KVM injects a #GP */
-	vcpu_run(vcpu);
-	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
-	TEST_ASSERT_EQ(get_ucall(vcpu, &uc), UCALL_SYNC);
-	TEST_ASSERT_EQ(uc.args[1], SYNC_GP);
-
 	/*
 	 * Enter L2 (with a legit vmcb12 GPA), then overwrite vmcb12 GPA with
 	 * max_legal_gpa. KVM will fail to map vmcb12 on nested VM-Exit and
@@ -84,7 +81,7 @@ int main(int argc, char *argv[])
 	vcpu_run(vcpu);
 	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
 	TEST_ASSERT_EQ(get_ucall(vcpu, &uc), UCALL_SYNC);
-	TEST_ASSERT_EQ(uc.args[1], SYNC_L2_STARTED);
+	TEST_ASSERT_EQ(uc.args[1], 1);
 
 	state = vcpu_save_state(vcpu);
 	state->nested.hdr.svm.vmcb_pa = max_legal_gpa;
