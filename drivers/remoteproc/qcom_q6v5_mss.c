@@ -2657,19 +2657,19 @@ static const struct rproc_hexagon_res msm8926_mss = {
 };
 
 static const struct of_device_id q6v5_of_match[] = {
-	{ .compatible = "qcom,q6v5-pil", .data = &msm8916_mss},
-	{ .compatible = "qcom,msm8226-mss-pil", .data = &msm8226_mss},
-	{ .compatible = "qcom,msm8909-mss-pil", .data = &msm8909_mss},
-	{ .compatible = "qcom,msm8916-mss-pil", .data = &msm8916_mss},
-	{ .compatible = "qcom,msm8926-mss-pil", .data = &msm8926_mss},
-	{ .compatible = "qcom,msm8953-mss-pil", .data = &msm8953_mss},
-	{ .compatible = "qcom,msm8974-mss-pil", .data = &msm8974_mss},
-	{ .compatible = "qcom,msm8996-mss-pil", .data = &msm8996_mss},
-	{ .compatible = "qcom,msm8998-mss-pil", .data = &msm8998_mss},
-	{ .compatible = "qcom,sc7180-mss-pil", .data = &sc7180_mss},
-	{ .compatible = "qcom,sc7280-mss-pil", .data = &sc7280_mss},
-	{ .compatible = "qcom,sdm660-mss-pil", .data = &sdm660_mss},
-	{ .compatible = "qcom,sdm845-mss-pil", .data = &sdm845_mss},
+	{ .compatible = "qcom,q6v5-pil", .data = &msm8916_mss },
+	{ .compatible = "qcom,msm8226-mss-pil", .data = &msm8226_mss },
+	{ .compatible = "qcom,msm8909-mss-pil", .data = &msm8909_mss },
+	{ .compatible = "qcom,msm8916-mss-pil", .data = &msm8916_mss },
+	{ .compatible = "qcom,msm8926-mss-pil", .data = &msm8926_mss },
+	{ .compatible = "qcom,msm8953-mss-pil", .data = &msm8953_mss },
+	{ .compatible = "qcom,msm8974-mss-pil", .data = &msm8974_mss },
+	{ .compatible = "qcom,msm8996-mss-pil", .data = &msm8996_mss },
+	{ .compatible = "qcom,msm8998-mss-pil", .data = &msm8998_mss },
+	{ .compatible = "qcom,sc7180-mss-pil", .data = &sc7180_mss },
+	{ .compatible = "qcom,sc7280-mss-pil", .data = &sc7280_mss },
+	{ .compatible = "qcom,sdm660-mss-pil", .data = &sdm660_mss },
+	{ .compatible = "qcom,sdm845-mss-pil", .data = &sdm845_mss },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, q6v5_of_match);
