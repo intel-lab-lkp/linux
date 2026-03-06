@@ -7,6 +7,7 @@
 #include <linux/iopoll.h>
 
 #include "neutron_device.h"
+#include "neutron_job.h"
 #include "neutron_mailbox.h"
 
 void neutron_enable_irq(struct neutron_device *ndev)
@@ -32,9 +33,14 @@ void neutron_handle_irq(struct neutron_device *ndev)
 	/* Write 1 to clear */
 	writel_relaxed(appstatus & APPSTATUS_CLEAR_MASK, NEUTRON_REG(ndev, APPSTATUS));
 
-	if (appstatus & APPSTATUS_FAULTCAUSE_MASK)
+	if (appstatus & APPSTATUS_FAULTCAUSE_MASK) {
 		dev_err(ndev->dev, "Neutron halted due to fault: 0x%lx\n",
 			FIELD_GET(APPSTATUS_FAULTCAUSE_MASK, appstatus));
+		return neutron_job_err_handler(ndev);
+	}
+
+	if (appstatus & APPSTATUS_INFDONE)
+		neutron_job_done_handler(ndev);
 }
 
 #define neutron_boot_done(appctrl) \

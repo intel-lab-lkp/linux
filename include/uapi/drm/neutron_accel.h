@@ -15,10 +15,12 @@ extern "C" {
  *
  * @DRM_NEUTRON_CREATE_BO: Create a buffer object
  * @DRM_NEUTRON_SYNC_BO: Sync (parts of) the buffer object memory
+ * @DRM_NEUTRON_SUBMIT_JOB: Submit a job to the device
  */
 enum drm_neutron_ioctl {
 	DRM_NEUTRON_CREATE_BO = 0,
 	DRM_NEUTRON_SYNC_BO,
+	DRM_NEUTRON_SUBMIT_JOB,
 };
 
 /**
@@ -64,6 +66,51 @@ struct drm_neutron_sync_bo {
 	__u64 offset;
 };
 
+/**
+ * enum drm_neutron_job_type - Type of job to submit to Neutron device
+ *
+ * @DRM_NEUTRON_JOB_INFERENCE: Inference job
+ */
+enum drm_neutron_job_type {
+	DRM_NEUTRON_JOB_INFERENCE = 0,
+};
+
+/**
+ * struct drm_neutron_inference_job - Inference job descriptor
+ *
+ * @tensor_offset: Offset of tensor array inside job BO
+ * @microcode_offset: Microcode offset inside BO
+ * @tensor_count: Number of valid tensors
+ * @pad: MBZ
+ */
+struct drm_neutron_inference_job {
+	__u32 tensor_offset;
+	__u32 microcode_offset;
+	__u32 tensor_count;
+	__u32 pad[5];
+};
+
+/**
+ * struct drm_neutron_submit_job - Submit a job to Neutron device
+ *
+ * @type: Job type, one of enum drm_neutron_job_type
+ * @bo_handle: BO handle for this job
+ * @inference: Inference job descriptor (when type is DRM_NEUTRON_JOB_INFERENCE)
+ * @reserved: Reserved for future job types
+ * @syncobj_handle: Handle of syncobj on which user waits for job completion
+ * @pad: MBZ
+ */
+struct drm_neutron_submit_job {
+	__u32 type;
+	__u32 bo_handle;
+	union {
+		struct drm_neutron_inference_job inference;
+		__u32 reserved[8];
+	};
+	__u32 syncobj_handle;
+	__u32 pad;
+};
+
 #define DRM_IOCTL_NEUTRON_CREATE_BO \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_NEUTRON_CREATE_BO, \
 		 struct drm_neutron_create_bo)
@@ -71,6 +118,10 @@ struct drm_neutron_sync_bo {
 #define DRM_IOCTL_NEUTRON_SYNC_BO \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_NEUTRON_SYNC_BO, \
 		 struct drm_neutron_sync_bo)
+
+#define DRM_IOCTL_NEUTRON_SUBMIT_JOB \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_NEUTRON_SUBMIT_JOB, \
+		 struct drm_neutron_submit_job)
 
 #if defined(__cplusplus)
 }

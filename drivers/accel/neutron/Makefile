@@ -6,4 +6,5 @@ neutron-y := \
 	neutron_driver.o \
 	neutron_device.o \
 	neutron_gem.o \
+	neutron_job.o \
 	neutron_mailbox.o

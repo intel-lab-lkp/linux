@@ -9,8 +9,10 @@
 #include <linux/spinlock.h>
 #include <linux/bits.h>
 #include <drm/drm_device.h>
+#include <drm/gpu_scheduler.h>
 
 struct clk_bulk_data;
+struct neutron_job;
 
 #define NEUTRON_FIRMWARE_NAME		"NeutronFirmware.elf"
 
@@ -92,6 +94,12 @@ enum neutron_mem_id {
  * @clks: Neutron clocks
  * @num_clks: Number of clocks
  * @flags: Software flags used by driver
+ * @sched: GPU scheduler
+ * @sched_lock: Scheduler lock, for neutron_push_job
+ * @fence_context: Fence context
+ * @job_seqno: Job sequence number
+ * @job_lock: Job lock, for active_job handling
+ * @active_job: Currently active job
  */
 struct neutron_device {
 	struct drm_device base;
@@ -103,6 +111,16 @@ struct neutron_device {
 	struct clk_bulk_data *clks;
 	int num_clks;
 	u32 flags;
+
+	struct drm_gpu_scheduler sched;
+	/* For neutron_push_job */
+	struct mutex sched_lock;
+	u64 fence_context;
+	u64 job_seqno;
+
+	/* For active_job handling */
+	struct mutex job_lock;
+	struct neutron_job *active_job;
 };
 
 #define to_neutron_device(drm) \

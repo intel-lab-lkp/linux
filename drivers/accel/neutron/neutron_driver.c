@@ -19,40 +19,53 @@
 #include "neutron_device.h"
 #include "neutron_driver.h"
 #include "neutron_gem.h"
+#include "neutron_job.h"
 
 #define NEUTRON_SUSPEND_DELAY_MS 1000
 
 static const struct drm_ioctl_desc neutron_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(NEUTRON_CREATE_BO, neutron_ioctl_create_bo, 0),
 	DRM_IOCTL_DEF_DRV(NEUTRON_SYNC_BO, neutron_ioctl_sync_bo, 0),
+	DRM_IOCTL_DEF_DRV(NEUTRON_SUBMIT_JOB, neutron_ioctl_submit_job, 0),
 };
 
 static int neutron_open(struct drm_device *drm, struct drm_file *file)
 {
 	struct neutron_device *ndev = to_neutron_device(drm);
 	struct neutron_file_priv *npriv;
+	int ret;
 
 	npriv = kzalloc_obj(*npriv);
 	if (!npriv)
 		return -ENOMEM;
 
 	npriv->ndev = ndev;
-	file->driver_priv = npriv;
 
+	ret = neutron_job_open(npriv);
+	if (ret)
+		goto err_free;
+
+	file->driver_priv = npriv;
 	return 0;
+
+err_free:
+	kfree(npriv);
+	return ret;
 }
 
 static void neutron_postclose(struct drm_device *drm, struct drm_file *file)
 {
 	struct neutron_file_priv *npriv = file->driver_priv;
 
+	neutron_job_close(npriv);
 	kfree(npriv);
 }
 
 DEFINE_DRM_ACCEL_FOPS(neutron_drm_driver_fops);
 
 static const struct drm_driver neutron_drm_driver = {
-	.driver_features	= DRIVER_COMPUTE_ACCEL | DRIVER_GEM,
+	.driver_features	= DRIVER_COMPUTE_ACCEL | DRIVER_GEM |
+				  DRIVER_SYNCOBJ,
 	.name			= "neutron",
 	.desc			= "NXP Neutron driver",
 	.major			= 1,
@@ -151,19 +164,25 @@ static int neutron_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = devm_pm_runtime_enable(dev);
+	ret = neutron_job_init(ndev);
 	if (ret)
 		goto free_reserved;
+
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		goto free_job;
 
 	pm_runtime_set_autosuspend_delay(dev, NEUTRON_SUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
 
 	ret = drm_dev_register(&ndev->base, 0);
 	if (ret)
-		goto free_reserved;
+		goto free_job;
 
 	return 0;
 
+free_job:
+	neutron_job_fini(ndev);
 free_reserved:
 	of_reserved_mem_device_release(&pdev->dev);
 
@@ -175,6 +194,7 @@ static void neutron_remove(struct platform_device *pdev)
 	struct neutron_device *ndev = platform_get_drvdata(pdev);
 
 	drm_dev_unregister(&ndev->base);
+	neutron_job_fini(ndev);
 	of_reserved_mem_device_release(&pdev->dev);
 }
 
