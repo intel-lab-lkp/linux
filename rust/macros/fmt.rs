@@ -50,6 +50,7 @@ pub(crate) fn fmt(input: TokenStream) -> TokenStream {
     let adapter = quote_spanned!(first_span => ::kernel::fmt::Adapter);
 
     let mut args = TokenStream::from_iter(first_opt);
+
     {
         let mut flush = |args: &mut TokenStream, current: &mut TokenStream| {
             let current = std::mem::take(current);
@@ -69,7 +70,7 @@ pub(crate) fn fmt(input: TokenStream) -> TokenStream {
                     }
                     (None, acc)
                 })();
-                args.extend(quote_spanned!(first_span => #lhs #adapter(&(#rhs))));
+                args.extend(quote_spanned!(first_span => , #lhs #adapter(&(#rhs))));
             }
         };
 
@@ -78,11 +79,9 @@ pub(crate) fn fmt(input: TokenStream) -> TokenStream {
             match &tt {
                 TokenTree::Punct(p) if p.as_char() == ',' => {
                     flush(&mut args, &mut current);
-                    &mut args
                 }
-                _ => &mut current,
-            }
-            .extend([tt]);
+                _ => current.extend([tt]),
+            };
         }
         flush(&mut args, &mut current);
     }
