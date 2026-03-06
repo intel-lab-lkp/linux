@@ -1602,7 +1602,9 @@ static const u8 rtw_channel_idx_5g[RTW_MAX_CHANNEL_NUM_5G] = {
 	36,  38,  40,  42,  44,  46,  48, /* Band 1 */
 	52,  54,  56,  58,  60,  62,  64, /* Band 2 */
 	100, 102, 104, 106, 108, 110, 112, /* Band 3 */
+	114, /* Compute from adjacent center frequencies */
 	116, 118, 120, 122, 124, 126, 128, /* Band 3 */
+	130, /* Compute from adjacent center frequencies */
 	132, 134, 136, 138, 140, 142, 144, /* Band 3 */
 	149, 151, 153, 155, 157, 159, 161, /* Band 4 */
 	165, 167, 169, 171, 173, 175, 177}; /* Band 4 */
@@ -1733,6 +1735,38 @@ static void rtw_xref_txpwr_lmt(struct rtw_dev *rtwdev)
 }
 
 static void
+__cfg_txpwr_lmt_extra_channels(struct rtw_hal *hal, u8 regd, u8 bw, u8 rs)
+{
+	u8 channels[] = { 114, 130 };
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(channels); i++) {
+		int idx, upper_idx, lower_idx;
+		int upper_limit, lower_limit;
+
+		idx = rtw_channel_to_idx(PHY_BAND_5G, channels[i]);
+		upper_idx = rtw_channel_to_idx(PHY_BAND_5G, channels[i] + 4);
+		lower_idx = rtw_channel_to_idx(PHY_BAND_5G, channels[i] - 4);
+		if (idx < 0 || upper_idx < 0 || lower_idx < 0)
+			WARN(1, "invalid channel index when computing TX power limit for extra channels");
+		upper_limit = hal->tx_pwr_limit_5g[regd][bw][rs][upper_idx];
+		lower_limit = hal->tx_pwr_limit_5g[regd][bw][rs][lower_idx];
+		hal->tx_pwr_limit_5g[regd][bw][rs][idx] = min(lower_limit, upper_limit);
+	}
+}
+
+static void
+rtw_cfg_twpwr_lmt_extra_channels(struct rtw_dev *rtwdev, u8 regd)
+{
+	u8 bw, rs;
+
+	for (bw = 0; bw < RTW_CHANNEL_WIDTH_MAX; bw++)
+		for (rs = 0; rs < RTW_RATE_SECTION_NUM; rs++)
+			__cfg_txpwr_lmt_extra_channels(&rtwdev->hal, regd,
+						       bw, rs);
+}
+
+static void
 __cfg_txpwr_lmt_by_alt(struct rtw_hal *hal, u8 regd, u8 regd_alt, u8 bw, u8 rs)
 {
 	u8 ch;
@@ -1773,6 +1807,8 @@ void rtw_parse_tbl_txpwr_lmt(struct rtw_dev *rtwdev,
 	}
 
 	for (i = 0; i < RTW_REGD_MAX; i++) {
+		rtw_cfg_twpwr_lmt_extra_channels(rtwdev, i);
+
 		if (i == RTW_REGD_WW)
 			continue;
 
