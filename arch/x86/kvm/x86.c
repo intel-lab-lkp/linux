@@ -1743,6 +1743,9 @@ static bool __kvm_valid_efer(struct kvm_vcpu *vcpu, u64 efer)
 	if (efer & EFER_NX && !guest_cpu_cap_has(vcpu, X86_FEATURE_NX))
 		return false;
 
+	if (efer & EFER_TCE && !guest_cpu_cap_has(vcpu, X86_FEATURE_TCE))
+		return false;
+
 	return true;
 
 }
