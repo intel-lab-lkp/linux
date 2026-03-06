@@ -101,4 +101,7 @@ static inline void devm_cxl_port_ras_setup(struct cxl_port *port)
 }
 #endif
 
+bool cxl_port_pm_init_is_complete(struct pci_dev *pdev);
+int cxl_port_retry_failed_pm_init(struct pci_dev *pdev);
+
 #endif /* __CXL_PCI_H__ */

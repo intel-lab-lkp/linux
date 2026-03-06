@@ -4880,7 +4880,7 @@ static u16 cxl_port_dvsec(struct pci_dev *dev)
 					 PCI_DVSEC_CXL_PORT);
 }
 
-static bool cxl_sbr_masked(struct pci_dev *dev)
+bool cxl_sbr_masked(struct pci_dev *dev)
 {
 	u16 dvsec, reg;
 	int rc;
@@ -4903,6 +4903,7 @@ static bool cxl_sbr_masked(struct pci_dev *dev)
 
 	return true;
 }
+EXPORT_SYMBOL_NS_GPL(cxl_sbr_masked, "CXL");
 
 static int pci_reset_bus_function(struct pci_dev *dev, bool probe)
 {
