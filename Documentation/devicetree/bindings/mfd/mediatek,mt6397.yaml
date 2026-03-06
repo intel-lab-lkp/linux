@@ -42,6 +42,10 @@ properties:
           - mediatek,mt6397
       - items:
           - enum:
+              - mediatek,mt6392
+          - const: mediatek,mt6323
+      - items:
+          - enum:
               - mediatek,mt6366
           - const: mediatek,mt6358
 
@@ -72,6 +76,10 @@ properties:
               - enum:
                   - mediatek,mt6366-rtc
               - const: mediatek,mt6358-rtc
+          - items:
+              - enum:
+                  - mediatek,mt6392-rtc
+              - const: mediatek,mt6397-rtc
 
       start-year: true
 
