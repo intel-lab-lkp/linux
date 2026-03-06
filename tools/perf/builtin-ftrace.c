@@ -18,6 +18,7 @@
 #include <poll.h>
 #include <ctype.h>
 #include <linux/capability.h>
+#include <linux/err.h>
 #include <linux/string.h>
 #include <sys/stat.h>
 
@@ -1369,17 +1370,17 @@ static int cmp_profile_data(const void *a, const void *b)
 
 static void print_profile_result(struct perf_ftrace *ftrace)
 {
-	struct hashmap_entry *entry, **profile;
+	struct hashmap_entry *entry, **profile = NULL;
 	size_t i, nr, bkt;
 
 	nr = hashmap__size(ftrace->profile_hash);
 	if (nr == 0)
-		return;
+		goto out;
 
 	profile = calloc(nr, sizeof(*profile));
 	if (profile == NULL) {
 		pr_err("failed to allocate memory for the result\n");
-		return;
+		goto out;
 	}
 
 	i = 0;
@@ -1403,6 +1404,7 @@ static void print_profile_result(struct perf_ftrace *ftrace)
 		       p->st.max / 1000, p->st.max % 1000, p->st.n, name);
 	}
 
+out:
 	free(profile);
 
 	hashmap__for_each_entry(ftrace->profile_hash, entry, bkt) {
