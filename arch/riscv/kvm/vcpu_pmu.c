@@ -224,6 +224,10 @@ static int pmu_fw_ctr_read_hi(struct kvm_vcpu *vcpu, unsigned long cidx,
 		return -EINVAL;
 
 	fevent_code = get_event_code(pmc->event_idx);
+	if (fevent_code >= SBI_PMU_FW_MAX) {
+		pr_warn("Invalid firmware event code [%d] for counter [%ld]\n", fevent_code, cidx);
+		return -EINVAL;
+	}
 	pmc->counter_val = kvpmu->fw_event[fevent_code].value;
 
 	*out_val = pmc->counter_val >> 32;
