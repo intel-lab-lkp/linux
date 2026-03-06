@@ -2656,6 +2656,7 @@ static int dsa_user_phy_setup(struct net_device *user_dev)
 {
 	struct dsa_port *dp = dsa_user_to_port(user_dev);
 	struct device_node *port_dn = dp->dn;
+	struct fwnode_handle *phy_fwnode;
 	struct dsa_switch *ds = dp->ds;
 	u32 phy_flags = 0;
 	int ret;
@@ -2682,9 +2683,18 @@ static int dsa_user_phy_setup(struct net_device *user_dev)
 	ret = phylink_of_phy_connect(dp->pl, port_dn, phy_flags);
 	if (ret == -ENODEV && ds->user_mii_bus) {
 		/* We could not connect to a designated PHY or SFP, so try to
-		 * use the switch internal MDIO bus instead
+		 * use the switch internal MDIO bus instead. Only fall back if
+		 * no phy-handle was specified in DT. If a phy-handle exists
+		 * but the PHY device is missing (e.g. not yet ready at
+		 * registration time), connecting to a PHY at dp->index would
+		 * attach the wrong PHY device.
 		 */
-		ret = dsa_user_phy_connect(user_dev, dp->index, phy_flags);
+		phy_fwnode = fwnode_get_phy_node(of_fwnode_handle(port_dn));
+		if (IS_ERR(phy_fwnode))
+			ret = dsa_user_phy_connect(user_dev, dp->index,
+						   phy_flags);
+		else
+			fwnode_handle_put(phy_fwnode);
 	}
 	if (ret) {
 		netdev_err(user_dev, "failed to connect to PHY: %pe\n",
