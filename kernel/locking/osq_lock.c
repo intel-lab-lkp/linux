@@ -15,7 +15,7 @@
 struct optimistic_spin_node {
 	struct optimistic_spin_node *next;
 	int locked; /* 1 if lock acquired */
-	int prev_cpu; /* encoded CPU # + 1 value */
+	unsigned int prev_cpu; /* encoded CPU # + 1 value */
 };
 
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
@@ -24,19 +24,19 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
  * We use the value 0 to represent "no CPU", thus the encoded value
  * will be the CPU number incremented by 1.
  */
-static inline int encode_cpu(int cpu_nr)
+static inline unsigned int encode_cpu(unsigned int cpu_nr)
 {
 	return cpu_nr + 1;
 }
 
-static inline int prev_cpu_nr(struct optimistic_spin_node *node)
+static inline unsigned int prev_cpu_nr(struct optimistic_spin_node *node)
 {
 	return READ_ONCE(node->prev_cpu) - 1;
 }
 
-static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
+static inline struct optimistic_spin_node *decode_cpu(unsigned int encoded_cpu_val)
 {
-	int cpu_nr = encoded_cpu_val - 1;
+	unsigned int cpu_nr = encoded_cpu_val - 1;
 
 	return per_cpu_ptr(&osq_node, cpu_nr);
 }
@@ -53,9 +53,9 @@ static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
 static inline struct optimistic_spin_node *
 osq_wait_next(struct optimistic_spin_queue *lock,
 	      struct optimistic_spin_node *node,
-	      int old_cpu)
+	      unsigned int old_cpu)
 {
-	int curr = encode_cpu(smp_processor_id());
+	unsigned int curr = encode_cpu(smp_processor_id());
 
 	for (;;) {
 		if (atomic_read(&lock->tail) == curr &&
@@ -94,8 +94,8 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
 	struct optimistic_spin_node *prev, *next;
-	int curr = encode_cpu(smp_processor_id());
-	int prev_cpu;
+	unsigned int curr = encode_cpu(smp_processor_id());
+	unsigned int prev_cpu;
 
 	node->next = NULL;
 
