@@ -86,10 +86,25 @@ enum neutron_mem_id {
 };
 
 /**
+ * struct neutron_log - Neutron log buffer descriptor
+ * @base: base address of the log buffer in device memory
+ * @size: Size of the log buffer
+ * @buf: Kernel buffer for log data
+ * @buf_count: Number of bytes available in the kernel buffer
+ */
+struct neutron_log {
+	void __iomem *base;
+	size_t size;
+	void *buf;
+	size_t buf_count;
+};
+
+/**
  * struct neutron_device - Neutron device structure
  * @base: Base DRM device
  * @dev: Pointer to underlying device
  * @mem_regions: Array of memory region descriptors
+ * @log: Log buffer descriptor
  * @irq: IRQ number
  * @clks: Neutron clocks
  * @num_clks: Number of clocks
@@ -106,6 +121,7 @@ struct neutron_device {
 	struct device *dev;
 
 	struct neutron_mem_region mem_regions[NEUTRON_MEM_MAX];
+	struct neutron_log log;
 
 	int irq;
 	struct clk_bulk_data *clks;
@@ -134,5 +150,6 @@ void neutron_shutdown(struct neutron_device *ndev);
 void neutron_enable_irq(struct neutron_device *ndev);
 void neutron_disable_irq(struct neutron_device *ndev);
 void neutron_handle_irq(struct neutron_device *ndev);
+void neutron_read_log(struct neutron_device *ndev, size_t bytes);
 
 #endif /* __NEUTRON_DEVICE_H__ */

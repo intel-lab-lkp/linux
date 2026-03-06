@@ -18,6 +18,7 @@
 
 #include "neutron_device.h"
 #include "neutron_driver.h"
+#include "neutron_debugfs.h"
 #include "neutron_gem.h"
 #include "neutron_job.h"
 
@@ -167,6 +168,8 @@ static int neutron_probe(struct platform_device *pdev)
 	ret = neutron_job_init(ndev);
 	if (ret)
 		goto free_reserved;
+
+	neutron_debugfs_init(ndev);
 
 	ret = devm_pm_runtime_enable(dev);
 	if (ret)
