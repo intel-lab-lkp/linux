@@ -968,6 +968,19 @@ enum drm_colorop_type {
 	 *         color = lut3d[index]
 	 */
 	DRM_COLOROP_3D_LUT,
+
+	/**
+	 * @DRM_COLOROP_CSC_FF:
+	 *
+	 * enum string "CSC Fixed-Function"
+	 *
+	 * A fixed-function Color Space Conversion block where the coefficients
+	 * are not programmable but selected from predefined hardware modes via
+	 * the CSC_FF_TYPE enum property. The driver advertises the supported
+	 * CSC modes through this property.
+	 */
+	DRM_COLOROP_CSC_FF,
+
 };
 
 /**

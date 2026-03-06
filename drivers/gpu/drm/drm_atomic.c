@@ -844,6 +844,10 @@ static void drm_atomic_colorop_print_state(struct drm_printer *p,
 			   drm_get_colorop_lut3d_interpolation_name(colorop->lut3d_interpolation));
 		drm_printf(p, "\tdata blob id=%d\n", state->data ? state->data->base.id : 0);
 		break;
+	case DRM_COLOROP_CSC_FF:
+		drm_printf(p, "\tcsc_ff_type=%s\n",
+			   drm_get_colorop_csc_ff_type_name(state->csc_ff_type));
+		break;
 	default:
 		break;
 	}

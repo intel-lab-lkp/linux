@@ -135,6 +135,60 @@ enum drm_colorop_curve_1d_type {
 };
 
 /**
+ * enum drm_colorop_csc_ff_type - type of CSC Fixed-Function
+ *
+ * Describes a CSC operation to be applied by the DRM_COLOROP_CSC_FF colorop.
+ */
+enum drm_colorop_csc_ff_type {
+	/**
+	 * @DRM_COLOROP_CSC_FF_YUV601_RGB601
+	 *
+	 * enum string "YUV601 to RGB601"
+	 *
+	 * Selects the fixed-function CSC preset that converts YUV
+	 * (BT.601) colorimetry to RGB (BT.601).
+	 */
+	DRM_COLOROP_CSC_FF_YUV601_RGB601,
+
+	/**
+	 * @DRM_COLOROP_CSC_FF_YUV709_RGB709:
+	 *
+	 * enum string "YUV709 to RGB709"
+	 *
+	 * Selects the fixed-function CSC preset that converts YUV
+	 * (BT.709) colorimetry to RGB (BT.709).
+	 */
+	DRM_COLOROP_CSC_FF_YUV709_RGB709,
+
+	/**
+	 * @DRM_COLOROP_CSC_FF_YUV2020_RGB2020:
+	 *
+	 * enum string "YUV2020 to RGB2020"
+	 *
+	 * Selects the fixed-function CSC preset that converts YUV
+	 * (BT.2020) colorimetry to RGB (BT.2020).
+	 */
+	DRM_COLOROP_CSC_FF_YUV2020_RGB2020,
+
+	/**
+	 * @DRM_COLOROP_CSC_FF_RGB709_RGB2020:
+	 *
+	 * enum string "RGB709 to RGB2020"
+	 *
+	 * Selects the fixed-function CSC preset that converts RGB
+	 * (BT.709) colorimetry to RGB (BT.2020).
+	 */
+	DRM_COLOROP_CSC_FF_RGB709_RGB2020,
+
+	/**
+	 * @DRM_COLOROP_CSC_FF_COUNT:
+	 *
+	 * enum value denoting the size of the enum
+	 */
+	DRM_COLOROP_CSC_FF_COUNT
+};
+
+/**
  * struct drm_colorop_state - mutable colorop state
  */
 struct drm_colorop_state {
@@ -182,6 +236,13 @@ struct drm_colorop_state {
 	 * out.
 	 */
 	struct drm_property_blob *data;
+
+	/**
+	 * @csc_ff_type:
+	 *
+	 * Type of Fixed function CSC.
+	 */
+	enum drm_colorop_csc_ff_type csc_ff_type;
 
 	/** @state: backpointer to global drm_atomic_state */
 	struct drm_atomic_state *state;
@@ -369,6 +430,13 @@ struct drm_colorop {
 	struct drm_property *data_property;
 
 	/**
+	 * @csc_ff_type_property:
+	 *
+	 * Sub-type for DRM_COLOROP_CSC_FF type.
+	 */
+	struct drm_property *csc_ff_type_property;
+
+	/**
 	 * @next_property:
 	 *
 	 * Read-only property to next colorop in the pipeline
@@ -424,6 +492,9 @@ int drm_plane_colorop_3dlut_init(struct drm_device *dev, struct drm_colorop *col
 				 uint32_t lut_size,
 				 enum drm_colorop_lut3d_interpolation_type interpolation,
 				 uint32_t flags);
+int drm_plane_colorop_csc_ff_init(struct drm_device *dev, struct drm_colorop *colorop,
+				  struct drm_plane *plane, const struct drm_colorop_funcs *funcs,
+				  u64 supported_csc_ff, uint32_t flags);
 
 struct drm_colorop_state *
 drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop);
@@ -480,6 +551,7 @@ drm_get_colorop_lut1d_interpolation_name(enum drm_colorop_lut1d_interpolation_ty
 
 const char *
 drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_interpolation_type type);
+const char *drm_get_colorop_csc_ff_type_name(enum drm_colorop_csc_ff_type type);
 
 void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next);
 
