@@ -6842,6 +6842,120 @@ out_put:
 	ring_buffer_put(rb); /* could be last */
 }
 
+static void perf_mmap_close_locked(struct vm_area_struct *vma)
+{
+	struct perf_event *event = vma->vm_file->private_data;
+	struct perf_event *iter_event;
+	mapped_f unmapped = get_mapped(event, event_unmapped);
+	struct perf_buffer *rb = ring_buffer_get(event);
+	struct user_struct *mmap_user = rb->mmap_user;
+	int mmap_locked = rb->mmap_locked;
+	unsigned long size = perf_data_size(rb);
+	bool detach_rest = false;
+
+	/* FIXIES vs perf_pmu_unregister() */
+	if (unmapped)
+		unmapped(event, vma->vm_mm);
+
+	/*
+	 * The AUX buffer is strictly a sub-buffer, serialize using aux_mutex
+	 * to avoid complications.
+	 */
+	if (rb_has_aux(rb) && vma->vm_pgoff == rb->aux_pgoff &&
+	    refcount_dec_and_mutex_lock(&rb->aux_mmap_count, &rb->aux_mutex)) {
+		/*
+		 * Stop all AUX events that are writing to this buffer,
+		 * so that we can free its AUX pages and corresponding PMU
+		 * data. Note that after rb::aux_mmap_count dropped to zero,
+		 * they won't start any more (see perf_aux_output_begin()).
+		 */
+		perf_pmu_output_stop(event);
+
+		/* now it's safe to free the pages */
+		atomic_long_sub(rb->aux_nr_pages - rb->aux_mmap_locked, &mmap_user->locked_vm);
+		atomic64_sub(rb->aux_mmap_locked, &vma->vm_mm->pinned_vm);
+
+		/* this has to be the last one */
+		rb_free_aux(rb);
+		WARN_ON_ONCE(refcount_read(&rb->aux_refcount));
+
+		mutex_unlock(&rb->aux_mutex);
+	}
+
+	if (refcount_dec_and_test(&rb->mmap_count))
+		detach_rest = true;
+
+	if (!refcount_dec_and_test(&event->mmap_count))
+		goto out_put;
+
+	ring_buffer_attach(event, NULL);
+
+	/* If there's still other mmap()s of this buffer, we're done. */
+	if (!detach_rest)
+		goto out_put;
+
+	/*
+	 * No other mmap()s, detach from all other events that might redirect
+	 * into the now unreachable buffer. Somewhat complicated by the
+	 * fact that rb::event_lock otherwise nests inside mmap_mutex.
+	 */
+again:
+	rcu_read_lock();
+	list_for_each_entry_rcu(iter_event, &rb->event_list, rb_entry) {
+		if (!atomic_long_inc_not_zero(&iter_event->refcount)) {
+			/*
+			 * This event is en-route to free_event() which will
+			 * detach it and remove it from the list.
+			 */
+			continue;
+		}
+		rcu_read_unlock();
+
+		if (iter_event != event) {
+			mutex_lock(&iter_event->mmap_mutex);
+			/*
+			 * Check we didn't race with perf_event_set_output() which can
+			 * swizzle the rb from under us while we were waiting to
+			 * acquire mmap_mutex.
+			 *
+			 * If we find a different rb; ignore this event, a next
+			 * iteration will no longer find it on the list. We have to
+			 * still restart the iteration to make sure we're not now
+			 * iterating the wrong list.
+			 */
+			if (iter_event->rb == rb)
+				ring_buffer_attach(iter_event, NULL);
+
+			mutex_unlock(&iter_event->mmap_mutex);
+		}
+		put_event(iter_event);
+
+		/*
+		 * Restart the iteration; either we're on the wrong list or
+		 * destroyed its integrity by doing a deletion.
+		 */
+		goto again;
+	}
+	rcu_read_unlock();
+
+	/*
+	 * It could be there's still a few 0-ref events on the list; they'll
+	 * get cleaned up by free_event() -- they'll also still have their
+	 * ref on the rb and will free it whenever they are done with it.
+	 *
+	 * Aside from that, this buffer is 'fully' detached and unmapped,
+	 * undo the VM accounting.
+	 */
+
+	atomic_long_sub((size >> PAGE_SHIFT) + 1 - mmap_locked,
+			&mmap_user->locked_vm);
+	atomic64_sub(mmap_locked, &vma->vm_mm->pinned_vm);
+	free_uid(mmap_user);
+
+out_put:
+	ring_buffer_put(rb); /* could be last */
+}
+
 static vm_fault_t perf_mmap_pfn_mkwrite(struct vm_fault *vmf)
 {
 	/* The first page is the user control page, others are read-only. */
@@ -7167,28 +7281,28 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 			ret = perf_mmap_aux(vma, event, nr_pages);
 		if (ret)
 			return ret;
+
+		/*
+		 * Since pinned accounting is per vm we cannot allow fork() to copy our
+		 * vma.
+		 */
+		vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP);
+		vma->vm_ops = &perf_mmap_vmops;
+
+		mapped = get_mapped(event, event_mapped);
+		if (mapped)
+			mapped(event, vma->vm_mm);
+
+		/*
+		 * Try to map it into the page table. On fail, invoke
+		 * perf_mmap_close() to undo the above, as the callsite expects
+		 * full cleanup in this case and therefore does not invoke
+		 * vmops::close().
+		 */
+		ret = map_range(event->rb, vma);
+		if (ret)
+			perf_mmap_close_locked(vma);
 	}
-
-	/*
-	 * Since pinned accounting is per vm we cannot allow fork() to copy our
-	 * vma.
-	 */
-	vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP);
-	vma->vm_ops = &perf_mmap_vmops;
-
-	mapped = get_mapped(event, event_mapped);
-	if (mapped)
-		mapped(event, vma->vm_mm);
-
-	/*
-	 * Try to map it into the page table. On fail, invoke
-	 * perf_mmap_close() to undo the above, as the callsite expects
-	 * full cleanup in this case and therefore does not invoke
-	 * vmops::close().
-	 */
-	ret = map_range(event->rb, vma);
-	if (ret)
-		perf_mmap_close(vma);
 
 	return ret;
 }
