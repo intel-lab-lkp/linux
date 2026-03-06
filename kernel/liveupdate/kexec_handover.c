@@ -768,6 +768,7 @@ int kho_add_subtree(const char *name, void *blob, size_t size)
 {
 	phys_addr_t phys = virt_to_phys(blob);
 	void *root_fdt = kho_out.fdt;
+	u64 size_u64 = size;
 	int err = -ENOMEM;
 	int off, fdt_err;
 
@@ -786,6 +787,11 @@ int kho_add_subtree(const char *name, void *blob, size_t size)
 
 	err = fdt_setprop(root_fdt, off, KHO_FDT_SUB_TREE_PROP_NAME,
 			  &phys, sizeof(phys));
+	if (err < 0)
+		goto out_pack;
+
+	err = fdt_setprop(root_fdt, off, KHO_FDT_SUB_TREE_SIZE_PROP_NAME,
+			  &size_u64, sizeof(size_u64));
 	if (err < 0)
 		goto out_pack;
 
@@ -1311,16 +1317,17 @@ bool is_kho_boot(void)
 EXPORT_SYMBOL_GPL(is_kho_boot);
 
 /**
- * kho_retrieve_subtree - retrieve a preserved sub FDT by its name.
- * @name: the name of the sub FDT passed to kho_add_subtree().
- * @phys: if found, the physical address of the sub FDT is stored in @phys.
+ * kho_retrieve_subtree - retrieve a preserved sub blob by its name.
+ * @name: the name of the sub blob passed to kho_add_subtree().
+ * @phys: if found, the physical address of the sub blob is stored in @phys.
+ * @size: if not NULL and found, the size of the sub blob is stored in @size.
  *
- * Retrieve a preserved sub FDT named @name and store its physical
- * address in @phys.
+ * Retrieve a preserved sub blob named @name and store its physical
+ * address in @phys and optionally its size in @size.
  *
  * Return: 0 on success, error code on failure
  */
-int kho_retrieve_subtree(const char *name, phys_addr_t *phys)
+int kho_retrieve_subtree(const char *name, phys_addr_t *phys, size_t *size)
 {
 	const void *fdt = kho_get_fdt();
 	const u64 *val;
@@ -1341,6 +1348,15 @@ int kho_retrieve_subtree(const char *name, phys_addr_t *phys)
 		return -EINVAL;
 
 	*phys = (phys_addr_t)*val;
+
+	if (size) {
+		val = fdt_getprop(fdt, offset, KHO_FDT_SUB_TREE_SIZE_PROP_NAME,
+				  &len);
+		if (val && len == sizeof(*val))
+			*size = (size_t)*val;
+		else
+			*size = 0;
+	}
 
 	return 0;
 }
