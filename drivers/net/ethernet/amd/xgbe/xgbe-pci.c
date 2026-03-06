@@ -360,14 +360,14 @@ static void xgbe_pci_remove(struct pci_dev *pdev)
 	xgbe_free_pdata(pdata);
 }
 
-static int __maybe_unused xgbe_pci_suspend(struct device *dev)
+static int xgbe_pci_suspend(struct device *dev)
 {
 	struct xgbe_prv_data *pdata = dev_get_drvdata(dev);
 	struct net_device *netdev = pdata->netdev;
 	int ret = 0;
 
 	if (netif_running(netdev))
-		ret = xgbe_powerdown(netdev, XGMAC_DRIVER_CONTEXT);
+		ret = xgbe_powerdown(netdev);
 
 	pdata->lpm_ctrl = XMDIO_READ(pdata, MDIO_MMD_PCS, MDIO_CTRL1);
 	pdata->lpm_ctrl |= MDIO_CTRL1_LPOWER;
@@ -376,7 +376,7 @@ static int __maybe_unused xgbe_pci_suspend(struct device *dev)
 	return ret;
 }
 
-static int __maybe_unused xgbe_pci_resume(struct device *dev)
+static int xgbe_pci_resume(struct device *dev)
 {
 	struct xgbe_prv_data *pdata = dev_get_drvdata(dev);
 	struct net_device *netdev = pdata->netdev;
@@ -388,7 +388,7 @@ static int __maybe_unused xgbe_pci_resume(struct device *dev)
 	XMDIO_WRITE(pdata, MDIO_MMD_PCS, MDIO_CTRL1, pdata->lpm_ctrl);
 
 	if (netif_running(netdev)) {
-		ret = xgbe_powerup(netdev, XGMAC_DRIVER_CONTEXT);
+		ret = xgbe_powerup(netdev);
 
 		/* Schedule a restart in case the link or phy state changed
 		 * while we were powered down.
