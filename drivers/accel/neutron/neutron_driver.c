@@ -14,11 +14,18 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_gem.h>
+#include <drm/neutron_accel.h>
 
 #include "neutron_device.h"
 #include "neutron_driver.h"
+#include "neutron_gem.h"
 
 #define NEUTRON_SUSPEND_DELAY_MS 1000
+
+static const struct drm_ioctl_desc neutron_drm_ioctls[] = {
+	DRM_IOCTL_DEF_DRV(NEUTRON_CREATE_BO, neutron_ioctl_create_bo, 0),
+	DRM_IOCTL_DEF_DRV(NEUTRON_SYNC_BO, neutron_ioctl_sync_bo, 0),
+};
 
 static int neutron_open(struct drm_device *drm, struct drm_file *file)
 {
@@ -45,7 +52,7 @@ static void neutron_postclose(struct drm_device *drm, struct drm_file *file)
 DEFINE_DRM_ACCEL_FOPS(neutron_drm_driver_fops);
 
 static const struct drm_driver neutron_drm_driver = {
-	.driver_features	= DRIVER_COMPUTE_ACCEL,
+	.driver_features	= DRIVER_COMPUTE_ACCEL | DRIVER_GEM,
 	.name			= "neutron",
 	.desc			= "NXP Neutron driver",
 	.major			= 1,
@@ -54,6 +61,10 @@ static const struct drm_driver neutron_drm_driver = {
 	.fops			= &neutron_drm_driver_fops,
 	.open			= neutron_open,
 	.postclose		= neutron_postclose,
+	.ioctls			= neutron_drm_ioctls,
+	.num_ioctls		= ARRAY_SIZE(neutron_drm_ioctls),
+
+	.gem_create_object      = neutron_gem_create_object,
 };
 
 static irqreturn_t neutron_irq_handler_thread(int irq, void *data)
