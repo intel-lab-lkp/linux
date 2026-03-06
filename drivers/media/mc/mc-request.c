@@ -192,6 +192,8 @@ static long media_request_ioctl_reinit(struct media_request *req)
 	struct media_device *mdev = req->mdev;
 	unsigned long flags;
 
+	guard(mutex)(&mdev->req_queue_mutex);
+
 	spin_lock_irqsave(&req->lock, flags);
 	if (req->state != MEDIA_REQUEST_STATE_IDLE &&
 	    req->state != MEDIA_REQUEST_STATE_COMPLETE) {
