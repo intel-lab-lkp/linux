@@ -2511,7 +2511,7 @@ struct dm_bufio_client *dm_bufio_client_create(struct block_device *bdev, unsign
 	}
 
 	num_locks = dm_num_hash_locks();
-	c = kzalloc(sizeof(*c) + (num_locks * sizeof(struct buffer_tree)), GFP_KERNEL);
+	c = kzalloc(struct_size(c, buffer_tree, num_locks), GFP_KERNEL);
 	if (!c) {
 		r = -ENOMEM;
 		goto bad_client;
