@@ -1710,6 +1710,12 @@ void *addr_gpa2alias(struct kvm_vm *vm, vm_paddr_t gpa)
 	return (void *) ((uintptr_t) region->host_alias + offset);
 }
 
+bool addr_gpa_has_hva(struct kvm_vm *vm, vm_paddr_t gpa)
+{
+	gpa = vm_untag_gpa(vm, gpa);
+	return !!userspace_mem_region_find(vm, gpa, gpa);
+}
+
 /* Create an interrupt controller chip for the specified VM. */
 void vm_create_irqchip(struct kvm_vm *vm)
 {
