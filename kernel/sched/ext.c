@@ -5259,9 +5259,9 @@ static int scx_enable(struct sched_ext_ops *ops, struct bpf_link *link)
 	if (!READ_ONCE(helper)) {
 		mutex_lock(&helper_mutex);
 		if (!helper) {
-			helper = kthread_run_worker(0, "scx_enable_helper");
+			WRITE_ONCE(helper, kthread_run_worker(0, "scx_enable_helper"));
 			if (IS_ERR_OR_NULL(helper)) {
-				helper = NULL;
+				WRITE_ONCE(helper, NULL);
 				mutex_unlock(&helper_mutex);
 				return -ENOMEM;
 			}
