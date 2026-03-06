@@ -10,7 +10,6 @@
 	SCX_ENUM_SET(skel, scx_public_consts, SCX_SLICE_INF); \
 	SCX_ENUM_SET(skel, scx_rq_flags, SCX_RQ_ONLINE); \
 	SCX_ENUM_SET(skel, scx_rq_flags, SCX_RQ_CAN_STOP_TICK); \
-	SCX_ENUM_SET(skel, scx_rq_flags, SCX_RQ_BAL_PENDING); \
 	SCX_ENUM_SET(skel, scx_rq_flags, SCX_RQ_BAL_KEEP); \
 	SCX_ENUM_SET(skel, scx_rq_flags, SCX_RQ_BYPASSING); \
 	SCX_ENUM_SET(skel, scx_rq_flags, SCX_RQ_CLK_VALID); \
@@ -46,5 +45,5 @@
 	SCX_ENUM_SET(skel, scx_enq_flags, SCX_ENQ_LAST); \
 	SCX_ENUM_SET(skel, scx_enq_flags, SCX_ENQ_CLEAR_OPSS); \
 	SCX_ENUM_SET(skel, scx_enq_flags, SCX_ENQ_DSQ_PRIQ); \
-	SCX_ENUM_SET(skel, scx_deq_flags, SCX_DEQ_SCHED_CHANGE); \
+	SCX_ENUM_SET(skel, scx_enq_flags, SCX_DEQ_SCHED_CHANGE); \
 } while (0)

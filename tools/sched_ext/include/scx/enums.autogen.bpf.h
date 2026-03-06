@@ -19,9 +19,6 @@ const volatile u64 __SCX_RQ_ONLINE __weak;
 const volatile u64 __SCX_RQ_CAN_STOP_TICK __weak;
 #define SCX_RQ_CAN_STOP_TICK __SCX_RQ_CAN_STOP_TICK
 
-const volatile u64 __SCX_RQ_BAL_PENDING __weak;
-#define SCX_RQ_BAL_PENDING __SCX_RQ_BAL_PENDING
-
 const volatile u64 __SCX_RQ_BAL_KEEP __weak;
 #define SCX_RQ_BAL_KEEP __SCX_RQ_BAL_KEEP
 
@@ -129,3 +126,4 @@ const volatile u64 __SCX_ENQ_DSQ_PRIQ __weak;
 
 const volatile u64 __SCX_DEQ_SCHED_CHANGE __weak;
 #define SCX_DEQ_SCHED_CHANGE __SCX_DEQ_SCHED_CHANGE
+
