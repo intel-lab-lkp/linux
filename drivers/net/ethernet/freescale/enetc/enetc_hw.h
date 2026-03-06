@@ -20,6 +20,8 @@
 #define ENETC_SIMR	0
 #define ENETC_SIMR_EN	BIT(31)
 #define ENETC_SIMR_RSSE	BIT(0)
+#define ENETC_SISR	4
+#define  SISR_TX_BUSY	BIT(0)
 #define ENETC_SICTR0	0x18
 #define ENETC_SICTR1	0x1c
 #define ENETC_SIPCAPR0	0x20
