@@ -514,6 +514,26 @@ int bnxt_xdp_rx_hash(const struct xdp_md *ctx, u32 *hash,
 		default:
 			break;
 		}
+	} else if (xdp->cmp_type == CMP_TYPE_RX_L2_V3_CMP) {
+		struct bnxt *bp = netdev_priv(xdp->xdp.rxq->dev);
+		u8 ext_op;
+
+		if (rxcmp1->rx_cmp_flags2 & cpu_to_le32(RX_CMP_FLAGS2_IP_TYPE))
+			hash_type |= XDP_RSS_TYPE_L3_IPV6;
+		else
+			hash_type |= XDP_RSS_TYPE_L3_IPV4;
+
+		ext_op = RX_CMP_V3_HASH_TYPE(bp, rxcmp);
+		switch (ext_op) {
+		case EXT_OP_INNER_4:
+		case EXT_OP_OUTER_4:
+		case EXT_OP_INNFL_3:
+		case EXT_OP_OUTFL_3:
+			hash_type |= XDP_RSS_L4;
+			break;
+		default:
+			break;
+		}
 	}
 
 	*rss_type = hash_type;
