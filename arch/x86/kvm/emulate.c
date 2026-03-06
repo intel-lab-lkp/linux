@@ -2188,17 +2188,18 @@ static int em_call_near_abs(struct x86_emulate_ctxt *ctxt)
 	return rc;
 }
 
-static int em_cmpxchg8b(struct x86_emulate_ctxt *ctxt)
+static int __handle_cmpxchg8b(struct x86_emulate_ctxt *ctxt)
 {
-	u64 old = ctxt->dst.orig_val64;
+	u64 old64 = ctxt->dst.orig_val64;
 
-	if (ctxt->dst.bytes == 16)
+	/* Use of the REX.W prefix promotes operation to 128 bits */
+	if (ctxt->rex_bits & REX_W)
 		return X86EMUL_UNHANDLEABLE;
 
-	if (((u32) (old >> 0) != (u32) reg_read(ctxt, VCPU_REGS_RAX)) ||
-	    ((u32) (old >> 32) != (u32) reg_read(ctxt, VCPU_REGS_RDX))) {
-		*reg_write(ctxt, VCPU_REGS_RAX) = (u32) (old >> 0);
-		*reg_write(ctxt, VCPU_REGS_RDX) = (u32) (old >> 32);
+	if (((u32) (old64 >> 0) != (u32) reg_read(ctxt, VCPU_REGS_RAX)) ||
+	    ((u32) (old64 >> 32) != (u32) reg_read(ctxt, VCPU_REGS_RDX))) {
+		*reg_write(ctxt, VCPU_REGS_RAX) = (u32) (old64 >> 0);
+		*reg_write(ctxt, VCPU_REGS_RDX) = (u32) (old64 >> 32);
 		ctxt->eflags &= ~X86_EFLAGS_ZF;
 	} else {
 		ctxt->dst.val64 = ((u64)reg_read(ctxt, VCPU_REGS_RCX) << 32) |
@@ -2207,6 +2208,37 @@ static int em_cmpxchg8b(struct x86_emulate_ctxt *ctxt)
 		ctxt->eflags |= X86_EFLAGS_ZF;
 	}
 	return X86EMUL_CONTINUE;
+}
+
+static int __handle_cmpxchg16b(struct x86_emulate_ctxt *ctxt)
+{
+	__uint128_t old128 = ctxt->dst.val128;
+
+	/* Use of the REX.W prefix promotes operation to 128 bits */
+	if (!(ctxt->rex_bits & REX_W))
+		return X86EMUL_UNHANDLEABLE;
+
+	if (((u64) (old128 >> 0) != (u64) reg_read(ctxt, VCPU_REGS_RAX)) ||
+	    ((u64) (old128 >> 64) != (u64) reg_read(ctxt, VCPU_REGS_RDX))) {
+		*reg_write(ctxt, VCPU_REGS_RAX) = (u64) (old128 >> 0);
+		*reg_write(ctxt, VCPU_REGS_RDX) = (u64) (old128 >> 64);
+		ctxt->eflags &= ~X86_EFLAGS_ZF;
+	} else {
+		ctxt->dst.val128 =
+			((__uint128_t) reg_read(ctxt, VCPU_REGS_RCX) << 64) |
+			(u64) reg_read(ctxt, VCPU_REGS_RBX);
+
+		ctxt->eflags |= X86_EFLAGS_ZF;
+	}
+	return X86EMUL_CONTINUE;
+}
+
+static int em_cmpxchgxb(struct x86_emulate_ctxt *ctxt)
+{
+	if (ctxt->dst.bytes == 16)
+		return __handle_cmpxchg16b(ctxt);
+
+	return __handle_cmpxchg8b(ctxt);
 }
 
 static int em_ret(struct x86_emulate_ctxt *ctxt)
@@ -4097,7 +4129,7 @@ static const struct gprefix pfx_0f_c7_7 = {
 
 
 static const struct group_dual group9 = { {
-	N, I(DstMem64 | Lock | PageTable, em_cmpxchg8b), N, N, N, N, N, N,
+	N, I(DstMem64 | Lock | PageTable, em_cmpxchgxb), N, N, N, N, N, N,
 }, {
 	N, N, N, N, N, N, N,
 	GP(0, &pfx_0f_c7_7),
