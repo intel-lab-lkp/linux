@@ -3280,12 +3280,14 @@ static int set_remap_table_entry_alias(struct pci_dev *pdev, u16 alias,
 	struct irq_remap_table *table = data;
 	struct amd_iommu_pci_seg *pci_seg;
 	struct amd_iommu *iommu = rlookup_amd_iommu(&pdev->dev);
+	u16 devid = pci_dev_id(pdev);
 
 	if (!iommu)
 		return -EINVAL;
 
 	pci_seg = iommu->pci_seg;
 	pci_seg->irq_lookup_table[alias] = table;
+	pci_seg->alias_table[alias] = devid;
 	set_dte_irq_entry(iommu, alias, table);
 	iommu_flush_dte(pci_seg->rlookup_table[alias], alias);
 
