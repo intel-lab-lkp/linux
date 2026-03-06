@@ -441,6 +441,8 @@ fib_rp_filter_test()
 	echo
 	echo "IPv4 rp_filter tests"
 
+	modprobe cls_basic || return $ksft_skip
+
 	setup
 
 	set -e
