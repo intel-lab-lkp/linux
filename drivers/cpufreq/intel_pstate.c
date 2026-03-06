@@ -2150,6 +2150,58 @@ static void atom_get_vid(struct cpudata *cpudata)
 	cpudata->vid.turbo = value & 0x7f;
 }
 
+static int lgm_get_max_pstate(int not_used)
+{
+	/* The Lightning Mountain hardware seems to be designed to run up to
+	 * P-state 32 (2496 MHz), which is what atom_get_max_pstate() will
+	 * return. But the Data Sheet shows a max. supported CPU freqency of
+	 * 2028 MHz and also the code from the MaxLinear SDK tells, that "the
+	 * max. P-state is currently not supported". So we have to manually
+	 * limit the P-state here to 26 (2028 MHz).
+	 */
+	return 26;
+}
+
+static u64 lgm_get_val(struct cpudata *cpudata, int pstate)
+{
+	u64 val;
+	int index;
+
+	static const u32 vid[] = {
+		2, 2, 2, 2, 3, 3, 3, 4, 5, 6, 7, 7, 7
+	};
+
+	pstate &= ~0x1;
+
+	val = (u64)pstate << 8;
+
+	index = (pstate - cpudata->pstate.min_pstate) >> 1;
+	WARN_ON(index >= ARRAY_SIZE(vid));
+	return val | vid[index];
+}
+
+static int lgm_get_scaling(void)
+{
+	u64 value;
+	int i, xtal, div, multi;
+
+	static const u32 freq[8] = {
+		26000, 25000, 19200, 38400,
+		40000, 40000, 40000, 40000
+	};
+
+	rdmsrq(MSR_FSB_FREQ, value);
+	i = value & 0x1f;
+	WARN_ON(i != 0x1f);
+
+	xtal = freq[(value >> 32) & 0x7];
+	div = (value >> 40) & 0xff;
+	WARN_ON(div == 0x0);
+	multi = (value >> 48) & 0xff;
+
+	return (xtal * multi) / div;
+}
+
 static int core_get_min_pstate(int cpu)
 {
 	u64 value;
@@ -2669,6 +2721,15 @@ static const struct pstate_funcs airmont_funcs = {
 	.get_vid = atom_get_vid,
 };
 
+static const struct pstate_funcs lgm_funcs = {
+	.get_max = lgm_get_max_pstate,
+	.get_max_physical = lgm_get_max_pstate,
+	.get_min = atom_get_min_pstate,
+	.get_turbo = atom_get_turbo_pstate,
+	.get_val = lgm_get_val,
+	.get_scaling = lgm_get_scaling,
+};
+
 static const struct pstate_funcs knl_funcs = {
 	.get_max = core_get_max_pstate,
 	.get_max_physical = core_get_max_pstate_physical,
@@ -2695,6 +2756,7 @@ static const struct x86_cpu_id intel_pstate_cpu_ids[] = {
 	X86_MATCH(INTEL_HASWELL_G,		core_funcs),
 	X86_MATCH(INTEL_BROADWELL_G,		core_funcs),
 	X86_MATCH(INTEL_ATOM_AIRMONT,		airmont_funcs),
+	X86_MATCH(INTEL_ATOM_AIRMONT_NP,	lgm_funcs),
 	X86_MATCH(INTEL_SKYLAKE_L,		core_funcs),
 	X86_MATCH(INTEL_BROADWELL_X,		core_funcs),
 	X86_MATCH(INTEL_SKYLAKE,		core_funcs),
