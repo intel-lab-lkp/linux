@@ -97,4 +97,13 @@ static inline void zone_unlock_irq(struct zone *zone)
 	spin_unlock_irq(&zone->_lock);
 }
 
+DEFINE_LOCK_GUARD_1(zone_lock_irqsave, struct zone,
+		zone_lock_irqsave(_T->lock, _T->flags),
+		zone_unlock_irqrestore(_T->lock, _T->flags),
+		unsigned long flags)
+DECLARE_LOCK_GUARD_1_ATTRS(zone_lock_irqsave,
+		__acquires(_T), __releases(*(struct zone **)_T))
+#define class_zone_lock_irqsave_constructor(_T) \
+	WITH_LOCK_GUARD_1_ATTRS(zone_lock_irqsave, _T)
+
 #endif /* _LINUX_MMZONE_LOCK_H */
