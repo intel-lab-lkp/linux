@@ -4229,6 +4229,14 @@ static void scx_bypass(bool bypass)
 	if (bypass) {
 		u32 intv_us;
 
+		/*
+		 * Increment bypass depth. Only the first caller (depth 0->1)
+		 * needs to set up the bypass state; subsequent callers just
+		 * increment the counter and return. The depth counter is
+		 * protected by bypass_lock but READ_ONCE/WRITE_ONCE are used
+		 * to communicate that the value can be observed locklessly
+		 * (e.g., from scx_bypass_lb_timerfn() in softirq context).
+		 */
 		WRITE_ONCE(scx_bypass_depth, scx_bypass_depth + 1);
 		WARN_ON_ONCE(scx_bypass_depth <= 0);
 		if (scx_bypass_depth != 1)
@@ -4263,6 +4271,10 @@ static void scx_bypass(bool bypass)
 	 *
 	 * This function can't trust the scheduler and thus can't use
 	 * cpus_read_lock(). Walk all possible CPUs instead of online.
+	 *
+	 * The dequeue/enqueue cycle forces tasks through the updated code
+	 * paths: in bypass mode, do_enqueue_task() routes to the per-CPU
+	 * bypass DSQ instead of calling ops.enqueue().
 	 */
 	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
