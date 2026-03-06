@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-CFLAGS = -Wall
+CFLAGS += -Wall
 CFLAGS += -Wno-nonnull
 CFLAGS += $(KHDR_INCLUDES)
 
