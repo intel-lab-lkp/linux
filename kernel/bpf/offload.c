@@ -383,7 +383,7 @@ void bpf_prog_dev_bound_destroy(struct bpf_prog *prog)
 		__bpf_prog_offload_destroy(prog);
 
 		ondev = bpf_offload_find_netdev(netdev);
-		if (!ondev->offdev && list_empty(&ondev->progs))
+		if (ondev && !ondev->offdev && list_empty(&ondev->progs))
 			__bpf_offload_dev_netdev_unregister(NULL, netdev);
 	}
 	up_write(&bpf_devs_lock);
