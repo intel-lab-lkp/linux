@@ -92,12 +92,9 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
-	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
-	struct optimistic_spin_node *prev, *next;
+	struct optimistic_spin_node *node, *prev, *next;
 	unsigned int curr = encode_cpu(smp_processor_id());
 	unsigned int prev_cpu;
-
-	node->next = NULL;
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -109,6 +106,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	if (prev_cpu == OSQ_UNLOCKED_VAL)
 		return true;
 
+	node = this_cpu_ptr(&osq_node);
 	WRITE_ONCE(node->prev_cpu, prev_cpu);
 	prev = decode_cpu(prev_cpu);
 	node->locked = 0;
