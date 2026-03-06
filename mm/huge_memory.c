@@ -4351,9 +4351,14 @@ void deferred_split_folio(struct folio *folio, bool partially_mapped)
 		memcg = folio_split_queue_memcg(folio, ds_queue);
 		list_add_tail(&folio->_deferred_list, &ds_queue->split_queue);
 		ds_queue->split_queue_len++;
-		if (memcg)
-			set_shrinker_bit(memcg, folio_nid(folio),
-					 shrinker_id(deferred_split_shrinker));
+		if (memcg) {
+			int id = deferred_split_shrinker->id;
+
+			if (!memcg_kmem_online() &&  memcg != root_mem_cgroup)
+				id = deferred_split_shrinker->nonslab_id;
+
+			set_shrinker_bit(memcg, folio_nid(folio), id);
+		}
 	}
 	split_queue_unlock_irqrestore(ds_queue, flags);
 }
@@ -4508,8 +4513,14 @@ void reparent_deferred_split_queue(struct mem_cgroup *memcg)
 	parent_ds_queue->split_queue_len += ds_queue->split_queue_len;
 	ds_queue->split_queue_len = 0;
 
-	for_each_node(nid)
-		set_shrinker_bit(parent, nid, shrinker_id(deferred_split_shrinker));
+	for_each_node(nid) {
+		int id = deferred_split_shrinker->id;
+
+		if (!memcg_kmem_online() && parent != root_mem_cgroup)
+			id = deferred_split_shrinker->nonslab_id;
+
+		set_shrinker_bit(parent, nid, id);
+	}
 
 unlock:
 	spin_unlock(&parent_ds_queue->split_queue_lock);
