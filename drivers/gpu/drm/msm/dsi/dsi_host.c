@@ -1822,12 +1822,9 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 
 	switch (dsc->bits_per_component) {
 	case 8:
-	case 10:
-	case 12:
 		/*
-		 * Only 8, 10, and 12 bpc are supported for DSC 1.1 block.
-		 * If additional bpc values need to be supported, update
-		 * this quard with the appropriate DSC version verification.
+		 * In the upstream msm, only 8 bpc is supported for DSC 1.1/1.2
+		 * block.
 		 */
 		break;
 	default:
