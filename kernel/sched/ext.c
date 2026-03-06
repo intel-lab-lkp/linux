@@ -33,6 +33,12 @@ static DEFINE_MUTEX(scx_enable_mutex);
 DEFINE_STATIC_KEY_FALSE(__scx_enabled);
 DEFINE_STATIC_PERCPU_RWSEM(scx_fork_rwsem);
 static atomic_t scx_enable_state_var = ATOMIC_INIT(SCX_DISABLED);
+/*
+ * Counts the number of active bypass requests. Protected by bypass_lock
+ * inside scx_bypass(), but read locklessly (e.g., from
+ * scx_bypass_lb_timerfn() in softirq context) using READ_ONCE(). Will
+ * be moved into struct scx_sched when multi-scheduler support lands.
+ */
 static int scx_bypass_depth;
 static cpumask_var_t scx_bypass_lb_donee_cpumask;
 static cpumask_var_t scx_bypass_lb_resched_cpumask;
