@@ -908,13 +908,14 @@ static void annotation_line__init(struct annotation_line *al,
 	al->offset = args->offset;
 	al->line = strdup(args->line);
 	al->line_nr = args->line_nr;
-	al->fileloc = args->fileloc;
+	al->fileloc = args->fileloc ? strdup(args->fileloc) : NULL;
 	al->data_nr = nr;
 }
 
 static void annotation_line__exit(struct annotation_line *al)
 {
 	zfree_srcline(&al->path);
+	zfree(&al->fileloc);
 	zfree(&al->line);
 	zfree(&al->cycles);
 	zfree(&al->br_cntr);
