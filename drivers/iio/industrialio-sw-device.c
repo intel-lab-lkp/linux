@@ -10,6 +10,7 @@
 #include <linux/kmod.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/cleanup.h>
 
 #include <linux/iio/sw_device.h>
 #include <linux/iio/configfs.h>
@@ -84,11 +85,10 @@ struct iio_sw_device_type *iio_get_sw_device_type(const char *name)
 {
 	struct iio_sw_device_type *dt;
 
-	mutex_lock(&iio_device_types_lock);
+	guard(mutex)(&iio_device_types_lock);
 	dt = __iio_find_sw_device_type(name, strlen(name));
 	if (dt && !try_module_get(dt->owner))
 		dt = NULL;
-	mutex_unlock(&iio_device_types_lock);
 
 	return dt;
 }
