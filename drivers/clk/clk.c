@@ -838,6 +838,111 @@ void clk_hw_set_rate_range(struct clk_hw *hw, unsigned long min_rate,
 }
 EXPORT_SYMBOL_GPL(clk_hw_set_rate_range);
 
+static int __clk_hw_get_v2_stable_clks(struct clk_hw *hw,
+				       struct clk_hw *requesting_hw,
+				       unsigned long requesting_rate,
+				       struct list_head *stable_clks)
+{
+	struct clk_core *child;
+	int ret;
+
+	if (hw->core->flags & CLK_V2_RATE_NEGOTIATION) {
+		struct clk_rate_change *clk_node;
+
+		clk_node = kzalloc_obj(*clk_node);
+		if (!clk_node)
+			return -ENOMEM;
+
+		clk_node->hw = hw;
+		clk_node->current_rate = clk_hw_get_rate(hw);
+
+		if (hw == requesting_hw)
+			clk_node->target_rate = requesting_rate;
+		else
+			clk_node->target_rate = clk_hw_get_rate(hw);
+
+		clk_node->new_parent_index = 0;
+		list_add_tail(&clk_node->node, stable_clks);
+	}
+
+	hlist_for_each_entry(child, &hw->core->children, child_node) {
+		ret = __clk_hw_get_v2_stable_clks(child->hw, requesting_hw,
+						  requesting_rate,
+						  stable_clks);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int clk_hw_get_v2_stable_clks(struct clk_rate_request *req, struct clk_hw *parent_hw,
+			      struct list_head *stable_clks)
+{
+	return __clk_hw_get_v2_stable_clks(parent_hw, req->core->hw, req->rate,
+					   stable_clks);
+}
+EXPORT_SYMBOL_GPL(clk_hw_get_v2_stable_clks);
+
+void clk_hw_free_rate_changes(struct list_head *stable_clks)
+{
+	struct clk_rate_change *clk_node, *tmp;
+
+	list_for_each_entry_safe(clk_node, tmp, stable_clks, node) {
+		list_del(&clk_node->node);
+		kfree(clk_node);
+	}
+}
+EXPORT_SYMBOL_GPL(clk_hw_free_rate_changes);
+
+static int clk_hw_add_rate_change(struct clk_rate_request *req, struct clk_hw *hw,
+				  unsigned long old_rate, unsigned long new_rate,
+				  u8 new_parent_index)
+{
+	struct clk_rate_change *change;
+
+	change = kzalloc_obj(*change);
+	if (!change)
+		return -ENOMEM;
+
+	change->hw = hw;
+	change->current_rate = old_rate;
+	change->target_rate = new_rate;
+	change->new_parent_index = new_parent_index;
+	list_add_tail(&change->node, &req->ordered_rate_changes);
+
+	return 0;
+}
+
+int clk_hw_add_coordinated_rate_changes(struct clk_rate_request *req,
+					struct clk_hw *parent_hw,
+					unsigned long parent_old_rate,
+					unsigned long parent_new_rate,
+					struct list_head *stable_clks)
+{
+	struct clk_rate_change *clk_node;
+	int ret;
+
+	ret = clk_hw_add_rate_change(req, parent_hw, parent_old_rate,
+				     parent_new_rate, 0);
+	if (ret)
+		goto out_free;
+
+	list_for_each_entry(clk_node, stable_clks, node) {
+		ret = clk_hw_add_rate_change(req, clk_node->hw,
+					     clk_node->current_rate,
+					     clk_node->target_rate, 0);
+		if (ret)
+			goto out_free;
+	}
+
+	ret = 0;
+out_free:
+	clk_hw_free_rate_changes(stable_clks);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(clk_hw_add_coordinated_rate_changes);
+
 /*
  * __clk_mux_determine_rate - clk_ops::determine_rate implementation for a mux type clk
  * @hw: mux type clk to determine rate on
@@ -1615,6 +1720,7 @@ static void clk_core_init_rate_req(struct clk_core * const core,
 		return;
 
 	memset(req, 0, sizeof(*req));
+	INIT_LIST_HEAD(&req->ordered_rate_changes);
 	req->max_rate = ULONG_MAX;
 
 	if (!core)
@@ -2268,7 +2374,8 @@ static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
  * changed.
  */
 static struct clk_core *clk_calc_new_rates(struct clk_core *core,
-					   unsigned long rate)
+					   unsigned long rate,
+					   struct list_head *ordered_rate_changes)
 {
 	struct clk_core *top = core;
 	struct clk_core *old_parent, *parent;
@@ -2308,6 +2415,12 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 		new_rate = req.rate;
 		parent = req.best_parent_hw ? req.best_parent_hw->core : NULL;
 
+		/* Clock provider populated coordinated rate changes */
+		if (ordered_rate_changes && !list_empty(&req.ordered_rate_changes)) {
+			/* Transfer ownership of the list to caller */
+			list_splice_init(&req.ordered_rate_changes, ordered_rate_changes);
+		}
+
 		if (new_rate < min_rate || new_rate > max_rate)
 			return NULL;
 	} else if (!parent || !(core->flags & CLK_SET_RATE_PARENT)) {
@@ -2316,7 +2429,7 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 		return NULL;
 	} else {
 		/* pass-through clock with adjustable parent */
-		top = clk_calc_new_rates(parent, rate);
+		top = clk_calc_new_rates(parent, rate, NULL);
 		new_rate = parent->new_rate;
 		goto out;
 	}
@@ -2341,7 +2454,7 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 
 	if ((core->flags & CLK_SET_RATE_PARENT) && parent &&
 	    best_parent_rate != parent->rate)
-		top = clk_calc_new_rates(parent, best_parent_rate);
+		top = clk_calc_new_rates(parent, best_parent_rate, NULL);
 
 out:
 	clk_calc_subtree(core, new_rate, parent, p_index);
@@ -2461,7 +2574,7 @@ static void clk_change_rate(struct clk_core *core)
 		__clk_notify(core, POST_RATE_CHANGE, old_rate, core->rate);
 
 	if (core->flags & CLK_RECALC_NEW_RATES)
-		(void)clk_calc_new_rates(core, core->new_rate);
+		(void)clk_calc_new_rates(core, core->new_rate, NULL);
 
 	/*
 	 * Use safe iteration, as change_rate can actually swap parents
@@ -2511,15 +2624,66 @@ static unsigned long clk_core_req_round_rate_nolock(struct clk_core *core,
 	return ret ? 0 : req.rate;
 }
 
+static int clk_apply_coordinated_rate_changes(struct clk_rate_request *req)
+{
+	struct clk_rate_change *change;
+	int ret;
+
+	/*
+	 * FIXME: There's currently no mechanism to roll back in case of an
+	 * error. This can leave the clock tree in an inconsistent state.
+	 */
+	list_for_each_entry(change, &req->ordered_rate_changes, node) {
+		struct clk_hw *hw = change->hw;
+
+		if (!hw || !hw->core)
+			continue;
+
+		if (change->new_parent_index && hw->core->ops->set_parent) {
+			ret = hw->core->ops->set_parent(hw, change->new_parent_index);
+			if (ret)
+				return ret;
+		}
+
+		if (hw->core->ops->set_rate) {
+			unsigned long parent_rate = 0;
+
+			if (hw->core->parent)
+				parent_rate = hw->core->parent->rate;
+
+			ret = hw->core->ops->set_rate(hw, change->target_rate, parent_rate);
+			if (ret)
+				return ret;
+
+			hw->core->rate = change->target_rate;
+		}
+	}
+
+	return 0;
+}
+
+static void clk_rate_request_cleanup(struct clk_rate_request *req)
+{
+	struct clk_rate_change *change, *tmp;
+
+	list_for_each_entry_safe(change, tmp, &req->ordered_rate_changes, node) {
+		list_del(&change->node);
+		kfree(change);
+	}
+}
+
 static int clk_core_set_rate_nolock(struct clk_core *core,
 				    unsigned long req_rate)
 {
+	struct clk_rate_request rate_req;
 	struct clk_core *top, *fail_clk;
 	unsigned long rate;
 	int ret;
 
 	if (!core)
 		return 0;
+
+	clk_core_init_rate_req(core, &rate_req, req_rate);
 
 	rate = clk_core_req_round_rate_nolock(core, req_rate);
 
@@ -2532,7 +2696,7 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 		return -EBUSY;
 
 	/* calculate new rates and get the topmost changed clock */
-	top = clk_calc_new_rates(core, req_rate);
+	top = clk_calc_new_rates(core, req_rate, &rate_req.ordered_rate_changes);
 	if (!top)
 		return -EINVAL;
 
@@ -2540,22 +2704,33 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 	if (ret)
 		return ret;
 
-	/* notify that we are about to change rates */
-	fail_clk = clk_propagate_rate_change(top, PRE_RATE_CHANGE);
-	if (fail_clk) {
-		pr_debug("%s: failed to set %s rate\n", __func__,
-				fail_clk->name);
-		clk_propagate_rate_change(top, ABORT_RATE_CHANGE);
-		ret = -EBUSY;
-		goto err;
-	}
+	if (!list_empty(&rate_req.ordered_rate_changes)) {
+		/* Apply coordinated rate changes in order */
+		ret = clk_apply_coordinated_rate_changes(&rate_req);
+		if (ret) {
+			pr_debug("%s: failed to apply coordinated rate changes\n", __func__);
+			goto err;
+		}
+	} else {
+		/* Use traditional rate change propagation */
+		/* notify that we are about to change rates */
+		fail_clk = clk_propagate_rate_change(top, PRE_RATE_CHANGE);
+		if (fail_clk) {
+			pr_debug("%s: failed to set %s rate\n", __func__,
+					fail_clk->name);
+			clk_propagate_rate_change(top, ABORT_RATE_CHANGE);
+			ret = -EBUSY;
+			goto err;
+		}
 
-	/* change the rates */
-	clk_change_rate(top);
+		/* change the rates */
+		clk_change_rate(top);
+	}
 
 	core->req_rate = req_rate;
 err:
 	clk_pm_runtime_put(core);
+	clk_rate_request_cleanup(&rate_req);
 
 	return ret;
 }

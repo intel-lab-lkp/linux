@@ -32,6 +32,8 @@
 #define CLK_OPS_PARENT_ENABLE	BIT(12)
 /* duty cycle call may be forwarded to the parent clock */
 #define CLK_DUTY_CYCLE_PARENT	BIT(13)
+/* clock participates in v2 rate negotiation */
+#define CLK_V2_RATE_NEGOTIATION	BIT(14)
 
 struct clk;
 struct clk_hw;
@@ -53,7 +55,10 @@ struct dentry;
  *			requested constraints.
  * @best_parent_hw:	The most appropriate parent clock that fulfills the
  *			requested constraints.
- *
+ * @ordered_rate_changes:	Execution list of rate changes for coordinated updates.
+ *				Clock providers populate this list when they need to
+ *				update multiple clocks in a specific order to maintain
+ *				rate stability for all consumers.
  */
 struct clk_rate_request {
 	struct clk_core *core;
@@ -62,6 +67,7 @@ struct clk_rate_request {
 	unsigned long max_rate;
 	unsigned long best_parent_rate;
 	struct clk_hw *best_parent_hw;
+	struct list_head ordered_rate_changes;
 };
 
 void clk_hw_init_rate_request(const struct clk_hw *hw,
@@ -1436,6 +1442,37 @@ static inline void __clk_hw_set_clk(struct clk_hw *dst, struct clk_hw *src)
 	dst->clk = src->clk;
 	dst->core = src->core;
 }
+
+/**
+ * struct clk_rate_change - Describes a clock rate change
+ *
+ * Used in both planning and execution phases of coordinated rate changes.
+ * During planning, collects information about sibling clocks. During execution,
+ * contains the final rate change instructions to apply.
+ *
+ * @hw:			The clock hardware that needs to change rate
+ * @current_rate:	The current rate of this clock
+ * @target_rate:	The target rate for this clock
+ * @new_parent_index:	The index of the new parent (for muxes), or 0
+ * @node:		List node for chaining entries
+ */
+struct clk_rate_change {
+	struct clk_hw *hw;
+	unsigned long current_rate;
+	unsigned long target_rate;
+	u8 new_parent_index;
+	struct list_head node;
+};
+
+int clk_hw_get_v2_stable_clks(struct clk_rate_request *req,
+			      struct clk_hw *parent_hw,
+			      struct list_head *stable_clks);
+void clk_hw_free_rate_changes(struct list_head *stable_clks);
+int clk_hw_add_coordinated_rate_changes(struct clk_rate_request *req,
+					struct clk_hw *parent_hw,
+					unsigned long parent_old_rate,
+					unsigned long parent_new_rate,
+					struct list_head *stable_clks);
 
 static inline long divider_round_rate(struct clk_hw *hw, unsigned long rate,
 				      unsigned long *prate,
