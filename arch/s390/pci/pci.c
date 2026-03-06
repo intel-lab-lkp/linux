@@ -632,10 +632,9 @@ void pcibios_release_device(struct pci_dev *pdev)
 {
 	struct zpci_dev *zdev = to_zpci(pdev);
 
-	pci_lock_rescan_remove();
+	guard(pci_rescan_remove)();
 	zpci_unmap_resources(pdev);
 	zpci_zdev_put(zdev);
-	pci_unlock_rescan_remove();
 }
 
 int pcibios_enable_device(struct pci_dev *pdev, int mask)
@@ -1213,9 +1212,8 @@ static int __init pci_base_init(void)
 	if (rc)
 		goto out_irq;
 
-	pci_lock_rescan_remove();
-	rc = zpci_scan_devices();
-	pci_unlock_rescan_remove();
+	scoped_guard(pci_rescan_remove)
+		rc = zpci_scan_devices();
 	if (rc)
 		goto out_find;
 

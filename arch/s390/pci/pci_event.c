@@ -342,9 +342,8 @@ static void __zpci_event_error(struct zpci_ccdf_err *ccdf)
 no_pdev:
 	if (zdev)
 		mutex_unlock(&zdev->state_lock);
-	pci_lock_rescan_remove();
+	guard(pci_rescan_remove)();
 	zpci_zdev_put(zdev);
-	pci_unlock_rescan_remove();
 }
 
 void zpci_event_error(void *data)
@@ -389,7 +388,6 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 	struct zpci_dev *zdev = get_zdev_by_fid(ccdf->fid);
 	bool existing_zdev = !!zdev;
 	enum zpci_state state;
-	int rc;
 
 	zpci_dbg(3, "avl fid:%x, fh:%x, pec:%x\n",
 		 ccdf->fid, ccdf->fh, ccdf->pec);
@@ -403,12 +401,11 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 			zdev = zpci_create_device(ccdf->fid, ccdf->fh, ZPCI_FN_STATE_CONFIGURED);
 			if (IS_ERR(zdev))
 				break;
-			pci_lock_rescan_remove();
-			rc = zpci_add_device(zdev);
-			pci_unlock_rescan_remove();
-			if (rc) {
-				kfree(zdev);
-				break;
+			scoped_guard(pci_rescan_remove) {
+				if (zpci_add_device(zdev)) {
+					kfree(zdev);
+					break;
+				}
 			}
 		} else {
 			if (zdev->state == ZPCI_FN_STATE_RESERVED)
@@ -425,12 +422,11 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 			zdev = zpci_create_device(ccdf->fid, ccdf->fh, ZPCI_FN_STATE_STANDBY);
 			if (IS_ERR(zdev))
 				break;
-			pci_lock_rescan_remove();
-			rc = zpci_add_device(zdev);
-			pci_unlock_rescan_remove();
-			if (rc) {
-				kfree(zdev);
-				break;
+			scoped_guard(pci_rescan_remove) {
+				if (zpci_add_device(zdev)) {
+					kfree(zdev);
+					break;
+				}
 			}
 		} else {
 			if (zdev->state == ZPCI_FN_STATE_RESERVED)
@@ -459,33 +455,30 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 			/* The 0x0304 event may immediately reserve the device */
 			if (!clp_get_state(zdev->fid, &state) &&
 			    state == ZPCI_FN_STATE_RESERVED) {
-				pci_lock_rescan_remove();
+				guard(pci_rescan_remove)();
 				zpci_device_reserved(zdev);
-				pci_unlock_rescan_remove();
 			}
 		}
 		break;
 	case 0x0306: /* 0x308 or 0x302 for multiple devices */
-		pci_lock_rescan_remove();
-		zpci_remove_reserved_devices();
-		zpci_scan_devices();
-		pci_unlock_rescan_remove();
+		scoped_guard(pci_rescan_remove) {
+			zpci_remove_reserved_devices();
+			zpci_scan_devices();
+		}
 		break;
 	case 0x0308: /* Standby -> Reserved */
 		if (!zdev)
 			break;
-		pci_lock_rescan_remove();
-		zpci_device_reserved(zdev);
-		pci_unlock_rescan_remove();
+		scoped_guard(pci_rescan_remove)
+			zpci_device_reserved(zdev);
 		break;
 	default:
 		break;
 	}
 	if (existing_zdev) {
 		mutex_unlock(&zdev->state_lock);
-		pci_lock_rescan_remove();
+		guard(pci_rescan_remove)();
 		zpci_zdev_put(zdev);
-		pci_unlock_rescan_remove();
 	}
 }
 
