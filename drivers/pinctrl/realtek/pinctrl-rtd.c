@@ -36,12 +36,12 @@ struct rtd_pinctrl {
 /* custom pinconf parameters */
 #define RTD_DRIVE_STRENGH_P (PIN_CONFIG_END + 1)
 #define RTD_DRIVE_STRENGH_N (PIN_CONFIG_END + 2)
-#define RTD_DUTY_CYCLE (PIN_CONFIG_END + 3)
+#define RTD_PULSE_WIDTH_ADJUST (PIN_CONFIG_END + 3)
 
 static const struct pinconf_generic_params rtd_custom_bindings[] = {
 	{"realtek,drive-strength-p", RTD_DRIVE_STRENGH_P, 0},
 	{"realtek,drive-strength-n", RTD_DRIVE_STRENGH_N, 0},
-	{"realtek,duty-cycle", RTD_DUTY_CYCLE, 0},
+	{"realtek,pulse-width-adjust", RTD_PULSE_WIDTH_ADJUST, 0},
 };
 
 static int rtd_pinctrl_get_groups_count(struct pinctrl_dev *pcdev)
@@ -443,10 +443,10 @@ static int rtd_pconf_parse_conf(struct rtd_pinctrl *data,
 		val = set_val << n_off;
 		break;
 
-	case RTD_DUTY_CYCLE:
+	case RTD_PULSE_WIDTH_ADJUST:
 		sconfig_desc = rtd_pinctrl_find_sconfig(data, pinnr);
 		if (!sconfig_desc || sconfig_desc->dcycle_offset == NA) {
-			dev_err(data->dev, "Duty cycle unsupported for pin: %s\n", name);
+			dev_err(data->dev, "Output pulse width adjustment unsupported for pin: %s\n", name);
 			return -ENOTSUPP;
 		}
 		set_val = arg;
