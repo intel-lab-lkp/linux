@@ -309,7 +309,7 @@ void led_trigger_set_default(struct led_classdev *led_cdev)
 	 * Once loaded it will re-probe with all led_cdev's.
 	 */
 	if (!found)
-		request_module_nowait("ledtrig:%s", led_cdev->default_trigger);
+		request_module_nowait("ledtrig-%s", led_cdev->default_trigger);
 }
 EXPORT_SYMBOL_GPL(led_trigger_set_default);
 
