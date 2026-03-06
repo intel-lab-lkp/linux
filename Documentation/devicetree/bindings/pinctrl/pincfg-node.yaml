@@ -162,6 +162,10 @@ properties:
       this affects the expected delay in ps before latching a value to
       an output pin.
 
+  input-voltage-microvolt:
+    description: Specifies the input voltage level of the pin in microvolts.
+      This defines the reference for VIH/VIL.
+
 if:
   required:
     - skew-delay
