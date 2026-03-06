@@ -1356,12 +1356,13 @@ static int cxl_mem_init(void)
 		pdev->dev.parent = &dport->dev;
 		set_dev_node(&pdev->dev, i % 2);
 
+		cxl_mem[i] = pdev;
 		rc = platform_device_add(pdev);
 		if (rc) {
 			platform_device_put(pdev);
+			cxl_mem[i] = NULL;
 			goto err_mem;
 		}
-		cxl_mem[i] = pdev;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(cxl_mem_single); i++) {
@@ -1374,12 +1375,13 @@ static int cxl_mem_init(void)
 		pdev->dev.parent = &dport->dev;
 		set_dev_node(&pdev->dev, i % 2);
 
+		cxl_mem_single[i] = pdev;
 		rc = platform_device_add(pdev);
 		if (rc) {
 			platform_device_put(pdev);
+			cxl_mem_single[i] = NULL;
 			goto err_single;
 		}
-		cxl_mem_single[i] = pdev;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(cxl_rcd); i++) {
@@ -1393,12 +1395,13 @@ static int cxl_mem_init(void)
 		pdev->dev.parent = &rch->dev;
 		set_dev_node(&pdev->dev, i % 2);
 
+		cxl_rcd[i] = pdev;
 		rc = platform_device_add(pdev);
 		if (rc) {
 			platform_device_put(pdev);
+			cxl_rcd[i] = NULL;
 			goto err_rcd;
 		}
-		cxl_rcd[i] = pdev;
 	}
 
 	return 0;
