@@ -9,6 +9,7 @@
 
 #include <linux/bits.h>
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/trigger.h>
@@ -263,12 +264,11 @@ static int adxl355_data_rdy_trigger_set_state(struct iio_trigger *trig,
 	struct adxl355_data *data = iio_priv(indio_dev);
 	int ret;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	ret = regmap_update_bits(data->regmap, ADXL355_POWER_CTL_REG,
 				 ADXL355_POWER_CTL_DRDY_MSK,
 				 FIELD_PREP(ADXL355_POWER_CTL_DRDY_MSK,
 					    state ? 0 : 1));
-	mutex_unlock(&data->lock);
 
 	return ret;
 }
@@ -409,16 +409,15 @@ static int adxl355_set_odr(struct adxl355_data *data,
 {
 	int ret;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	if (data->odr == odr) {
-		mutex_unlock(&data->lock);
 		return 0;
 	}
 
 	ret = adxl355_set_op_mode(data, ADXL355_STANDBY);
 	if (ret)
-		goto err_unlock;
+		return ret;
 
 	ret = regmap_update_bits(data->regmap, ADXL355_FILTER_REG,
 				 ADXL355_FILTER_ODR_MSK,
@@ -433,13 +432,10 @@ static int adxl355_set_odr(struct adxl355_data *data,
 	if (ret)
 		goto err_set_opmode;
 
-	mutex_unlock(&data->lock);
 	return 0;
 
 err_set_opmode:
 	adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-err_unlock:
-	mutex_unlock(&data->lock);
 	return ret;
 }
 
@@ -448,16 +444,15 @@ static int adxl355_set_hpf_3db(struct adxl355_data *data,
 {
 	int ret;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	if (data->hpf_3db == hpf) {
-		mutex_unlock(&data->lock);
 		return 0;
 	}
 
 	ret = adxl355_set_op_mode(data, ADXL355_STANDBY);
 	if (ret)
-		goto err_unlock;
+		return ret;
 
 	ret = regmap_update_bits(data->regmap, ADXL355_FILTER_REG,
 				 ADXL355_FILTER_HPF_MSK,
@@ -471,13 +466,10 @@ static int adxl355_set_hpf_3db(struct adxl355_data *data,
 	if (ret)
 		goto err_set_opmode;
 
-	mutex_unlock(&data->lock);
 	return 0;
 
 err_set_opmode:
 	adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-err_unlock:
-	mutex_unlock(&data->lock);
 	return ret;
 }
 
@@ -486,11 +478,11 @@ static int adxl355_set_calibbias(struct adxl355_data *data,
 {
 	int ret;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	ret = adxl355_set_op_mode(data, ADXL355_STANDBY);
 	if (ret)
-		goto err_unlock;
+		return ret;
 
 	put_unaligned_be16(calibbias, data->transf_buf);
 	ret = regmap_bulk_write(data->regmap,
@@ -505,13 +497,10 @@ static int adxl355_set_calibbias(struct adxl355_data *data,
 	if (ret)
 		goto err_set_opmode;
 
-	mutex_unlock(&data->lock);
 	return 0;
 
 err_set_opmode:
 	adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-err_unlock:
-	mutex_unlock(&data->lock);
 	return ret;
 }
 

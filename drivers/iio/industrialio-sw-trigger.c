@@ -10,6 +10,7 @@
 #include <linux/kmod.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/cleanup.h>
 
 #include <linux/iio/sw_trigger.h>
 #include <linux/iio/configfs.h>
@@ -88,11 +89,10 @@ struct iio_sw_trigger_type *iio_get_sw_trigger_type(const char *name)
 {
 	struct iio_sw_trigger_type *t;
 
-	mutex_lock(&iio_trigger_types_lock);
+	guard(mutex)(&iio_trigger_types_lock);
 	t = __iio_find_sw_trigger_type(name, strlen(name));
 	if (t && !try_module_get(t->owner))
 		t = NULL;
-	mutex_unlock(&iio_trigger_types_lock);
 
 	return t;
 }
