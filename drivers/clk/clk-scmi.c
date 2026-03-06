@@ -5,6 +5,7 @@
  * Copyright (C) 2018-2024 ARM Ltd.
  */
 
+#include <dt-bindings/clock/scmi.h>
 #include <linux/bits.h>
 #include <linux/clk-provider.h>
 #include <linux/device.h>
@@ -32,6 +33,8 @@ static const struct scmi_clk_proto_ops *scmi_proto_clk_ops;
 
 struct scmi_clk {
 	u32 id;
+	u32 round;
+	bool round_set;	/* policy latched once */
 	struct device *dev;
 	struct clk_hw hw;
 	const struct scmi_clock_info *info;
@@ -94,8 +97,20 @@ static int scmi_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 			     unsigned long parent_rate)
 {
 	struct scmi_clk *clk = to_scmi_clk(hw);
+	u32 round;
 
-	return scmi_proto_clk_ops->rate_set(clk->ph, clk->id, rate);
+	switch (clk->round) {
+	case ROUND_UP:
+		round = SCMI_CLOCK_ROUND_UP;
+		break;
+	case ROUND_AUTO:
+		round = SCMI_CLOCK_ROUND_AUTO;
+		break;
+	default:
+		round = SCMI_CLOCK_ROUND_DOWN;
+	}
+
+	return scmi_proto_clk_ops->rate_set(clk->ph, clk->id, round, rate);
 }
 
 static int scmi_clk_set_parent(struct clk_hw *hw, u8 parent_index)
@@ -396,6 +411,41 @@ scmi_clk_ops_select(struct scmi_clk *sclk, bool atomic_capable,
 	return ops;
 }
 
+static struct clk_hw *
+scmi_clk_two_cells_get(struct of_phandle_args *clkspec, void *data)
+{
+	struct clk_hw_onecell_data *hw_data = data;
+	unsigned int idx = clkspec->args[0];
+	u32 round = clkspec->args[1];
+	struct scmi_clk *clk;
+	struct clk_hw *hw;
+
+	if (idx >= hw_data->num) {
+		pr_err("%s: invalid index %u\n", __func__, idx);
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (round > ROUND_AUTO) {
+		pr_err("%s: invalid round method %u\n", __func__, round);
+		return ERR_PTR(-EINVAL);
+	}
+
+	hw = hw_data->hws[idx];
+	clk = to_scmi_clk(hw);
+
+	/* per-clock policy: latch on first use, refuse conflicts */
+	if (clk->round_set && clk->round != round) {
+		pr_warn("%s: conflicting rounding mode for clk idx %u: %u != %u\n",
+			__func__, idx, clk->round, round);
+		return ERR_PTR(-EINVAL);
+	}
+
+	clk->round = round;
+	clk->round_set = true;
+
+	return hw;
+}
+
 static int scmi_clocks_probe(struct scmi_device *sdev)
 {
 	int idx, count, err;
@@ -409,6 +459,7 @@ static int scmi_clocks_probe(struct scmi_device *sdev)
 	struct scmi_protocol_handle *ph;
 	const struct clk_ops *scmi_clk_ops_db[SCMI_MAX_CLK_OPS] = {};
 	struct scmi_clk *sclks;
+	u32 cells = 1;
 
 	if (!handle)
 		return -ENODEV;
@@ -456,6 +507,8 @@ static int scmi_clocks_probe(struct scmi_device *sdev)
 		sclk->id = idx;
 		sclk->ph = ph;
 		sclk->dev = dev;
+		sclk->round = ROUND_DOWN;
+		sclk->round_set = false;
 
 		/*
 		 * Note that the scmi_clk_ops_db is on the stack, not global,
@@ -495,8 +548,11 @@ static int scmi_clocks_probe(struct scmi_device *sdev)
 		}
 	}
 
-	return devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get,
-					   clk_data);
+	of_property_read_u32(np, "#clock-cells", &cells);
+	if (cells == 2)
+		return devm_of_clk_add_hw_provider(dev, scmi_clk_two_cells_get, clk_data);
+
+	return devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, clk_data);
 }
 
 static const struct scmi_device_id scmi_id_table[] = {

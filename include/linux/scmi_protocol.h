@@ -83,6 +83,12 @@ enum scmi_clock_oem_config {
 	SCMI_CLOCK_CFG_OEM_END = 0xFF,
 };
 
+enum scmi_clock_round {
+	SCMI_CLOCK_ROUND_DOWN = 0x0,
+	SCMI_CLOCK_ROUND_UP = 0x1,
+	SCMI_CLOCK_ROUND_AUTO = 0x2,
+};
+
 /**
  * struct scmi_clk_proto_ops - represents the various operations provided
  *	by SCMI Clock Protocol
@@ -107,7 +113,7 @@ struct scmi_clk_proto_ops {
 	int (*rate_get)(const struct scmi_protocol_handle *ph, u32 clk_id,
 			u64 *rate);
 	int (*rate_set)(const struct scmi_protocol_handle *ph, u32 clk_id,
-			u64 rate);
+			u32 round, u64 rate);
 	int (*enable)(const struct scmi_protocol_handle *ph, u32 clk_id,
 		      bool atomic);
 	int (*disable)(const struct scmi_protocol_handle *ph, u32 clk_id,

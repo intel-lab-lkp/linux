@@ -570,10 +570,10 @@ scmi_clock_rate_get(const struct scmi_protocol_handle *ph,
 }
 
 static int scmi_clock_rate_set(const struct scmi_protocol_handle *ph,
-			       u32 clk_id, u64 rate)
+			       u32 clk_id, u32 round, u64 rate)
 {
 	int ret;
-	u32 flags = 0;
+	u32 flags;
 	struct scmi_xfer *t;
 	struct scmi_clock_set_rate *cfg;
 	struct clock_info *ci = ph->get_priv(ph);
@@ -589,6 +589,17 @@ static int scmi_clock_rate_set(const struct scmi_protocol_handle *ph,
 	ret = ph->xops->xfer_get_init(ph, CLOCK_RATE_SET, sizeof(*cfg), 0, &t);
 	if (ret)
 		return ret;
+
+	switch (round) {
+	case SCMI_CLOCK_ROUND_UP:
+		flags = CLOCK_SET_ROUND_UP;
+		break;
+	case SCMI_CLOCK_ROUND_AUTO:
+		flags = CLOCK_SET_ROUND_AUTO;
+		break;
+	default:
+		flags = 0;
+	}
 
 	if (ci->max_async_req &&
 	    atomic_inc_return(&ci->cur_async_req) < ci->max_async_req)
