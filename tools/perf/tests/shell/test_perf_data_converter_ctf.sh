@@ -37,7 +37,7 @@ test_ctf_converter_file()
 {
 	echo "Testing Perf Data Conversion Command to CTF (File input)"
 	# Record some data
-	if ! perf record -o "$perfdata" -F 99 -g -- perf test -w noploop
+	if ! perf record -o "$perfdata" -e cpu-clock -F 99 -g -- perf test -w noploop
 	then
 		echo "Failed to record perf data"
 		err=1
@@ -73,7 +73,7 @@ test_ctf_converter_pipe()
 	rm -rf "${ctf_dir}"
 
 	# Record to stdout and pipe to $perfdata file
-	if ! perf record -o - -F 99 -g -- perf test -w noploop > "$perfdata"
+	if ! perf record -o - -e cpu-clock -F 99 -g -- perf test -w noploop > "$perfdata"
 	then
 		echo "Failed to record perf data"
 		err=1

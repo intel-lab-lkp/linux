@@ -31,7 +31,7 @@ trap trap_cleanup exit term int
 test_json_converter_command()
 {
 	echo "Testing Perf Data Conversion Command to JSON"
-	perf record -o "$perfdata" -F 99 -g -- perf test -w noploop
+	perf record -o "$perfdata" -e cpu-clock -F 99 -g -- perf test -w noploop
 	perf data convert --to-json "$result" --force -i "$perfdata"
 	if [ "$(cat ${result} | wc -l)" -gt "0" ] ; then
 		echo "Perf Data Converter Command to JSON [SUCCESS]"
@@ -44,7 +44,7 @@ test_json_converter_command()
 test_json_converter_pipe()
 {
 	echo "Testing Perf Data Conversion Command to JSON (Pipe mode)"
-	perf record -o - -F 99 -g -- perf test -w noploop > "$perfdata"
+	perf record -o - -e cpu-clock -F 99 -g -- perf test -w noploop > "$perfdata"
 	cat "$perfdata" | perf data convert --to-json "$result" --force -i -
 	if [ "$(cat ${result} | wc -l)" -gt "0" ] ; then
 		echo "Perf Data Converter Command to JSON (Pipe mode) [SUCCESS]"
