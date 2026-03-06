@@ -155,9 +155,12 @@
  * ADT7316 value masks
  */
 #define ADT7316_VALUE_MASK		0xfff
-#define ADT7316_T_VALUE_SIGN		0x400
 #define ADT7316_T_VALUE_FLOAT_OFFSET	2
-#define ADT7316_T_VALUE_FLOAT_MASK	0x2
+
+/*
+ * ADT7316 hardware constants
+ */
+#define ADT7316_TEMP_CENTIDEG_PER_BIT	25
 
 /*
  * Chip ID
@@ -1090,9 +1093,8 @@ static IIO_DEVICE_ATTR(DAC_internal_Vref, 0644,
 static ssize_t adt7316_show_ad(struct adt7316_chip_info *chip,
 			       int channel, char *buf)
 {
-	u16 data;
+	s32 data;
 	u8 msb, lsb;
-	char sign = ' ';
 	int ret;
 
 	if ((chip->config2 & ADT7316_AD_SINGLE_CH_MODE) &&
@@ -1151,15 +1153,13 @@ static ssize_t adt7316_show_ad(struct adt7316_chip_info *chip,
 		break;
 	}
 
-	if (data & ADT7316_T_VALUE_SIGN) {
-		/* convert supplement to positive value */
-		data = (ADT7316_T_VALUE_SIGN << 1) - data;
-		sign = '-';
-	}
+	data = sign_extend32(data, 9);
+	data *= ADT7316_TEMP_CENTIDEG_PER_BIT;
 
-	return sysfs_emit(buf, "%c%d.%.2d\n", sign,
-		(data >> ADT7316_T_VALUE_FLOAT_OFFSET),
-		(data & ADT7316_T_VALUE_FLOAT_MASK) * 25);
+	return sysfs_emit(buf, "%s%d.%02u\n",
+			  (data < 0 ? "-" : ""),
+			  abs(data / 100),
+			  abs(data % 100));
 }
 
 static ssize_t adt7316_show_VDD(struct device *dev,
