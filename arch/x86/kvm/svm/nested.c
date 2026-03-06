@@ -1107,15 +1107,14 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 	ret = nested_svm_copy_vmcb12_to_cache(vcpu, vmcb12_gpa);
 
 	/*
-	 * Advance RIP if #GP or #UD are not injected, but otherwise
-	 * stop if copying and checking vmcb12 failed.
+	 * Advance RIP if instruction emulation completes, whether it's a
+	 * successful VMRUN or a failed one with #VMEXIT(INVALID), but not if
+	 * #GP/#UD is injected, or if reading vmcb12 fails.
 	 */
-	if (ret == -EFAULT) {
-		kvm_inject_gp(vcpu, 0);
-		return 1;
-	} else if (ret) {
+	if (ret == -EFAULT)
+		return kvm_handle_memory_failure(vcpu, X86EMUL_IO_NEEDED, NULL);
+	else if (ret)
 		return kvm_skip_emulated_instruction(vcpu);
-	}
 
 	ret = kvm_skip_emulated_instruction(vcpu);
 
