@@ -732,16 +732,15 @@ static int os05b10_set_ctrl(struct v4l2_ctrl *ctrl)
 	if (ctrl->id == V4L2_CID_VBLANK) {
 		/* Honour the VBLANK limits when setting exposure. */
 		s64 max = fmt->height + ctrl->val - OS05B10_EXPOSURE_MARGIN;
-
+		s64 def = min_t (s64, max, os05b10->exposure->default_value);
 		ret = __v4l2_ctrl_modify_range(os05b10->exposure,
 					       os05b10->exposure->minimum, max,
-					       os05b10->exposure->step,
-					       os05b10->exposure->default_value);
+					       os05b10->exposure->step, def);
 		if (ret)
 			return ret;
 	}
 
-	if (pm_runtime_get_if_in_use(os05b10->dev) == 0)
+	if (pm_runtime_get_if_active(os05b10->dev) == 0)
 		return 0;
 
 	switch (ctrl->id) {
@@ -844,10 +843,18 @@ static int os05b10_set_framing_limits(struct os05b10 *os05b10,
 	if (ret)
 		return ret;
 
+	ret = __v4l2_ctrl_s_ctrl(os05b10->vblank, vblank);
+	if (ret)
+		return ret;
+
 	max_exp = mode->vts - OS05B10_EXPOSURE_MARGIN;
-	return __v4l2_ctrl_modify_range(os05b10->exposure,
-					OS05B10_EXPOSURE_MIN, max_exp,
-					OS05B10_EXPOSURE_STEP, mode->exp);
+	ret = __v4l2_ctrl_modify_range(os05b10->exposure,
+				       OS05B10_EXPOSURE_MIN, max_exp,
+				       OS05B10_EXPOSURE_STEP, mode->exp);
+	if (ret)
+		return ret;
+
+	return __v4l2_ctrl_s_ctrl(os05b10->exposure, mode->exp);
 }
 
 static inline void get_mode_table(unsigned int code,
