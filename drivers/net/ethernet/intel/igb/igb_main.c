@@ -2913,6 +2913,9 @@ static int igb_xdp_setup(struct net_device *dev, struct netdev_bpf *bpf)
 
 	/* device is up and bpf is added/removed, must setup the RX queues */
 	if (need_reset && running) {
+		if (!prog)
+			/* Wait for RCU readers (e.g. ndo_xsk_wakeup). */
+			synchronize_rcu();
 		igb_close(dev);
 	} else {
 		for (i = 0; i < adapter->num_rx_queues; i++)
@@ -2935,6 +2938,14 @@ static int igb_xdp_setup(struct net_device *dev, struct netdev_bpf *bpf)
 
 	if (running)
 		igb_open(dev);
+
+	/* Refresh watchdog timestamp after reopen and cancel any
+	 * reset task queued while the device was down.
+	 */
+	if (need_reset && running) {
+		netif_trans_update(dev);
+		cancel_work(&adapter->reset_task);
+	}
 
 	return 0;
 }
