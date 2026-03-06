@@ -9,6 +9,7 @@
 #include <linux/msi.h>
 #include <linux/irqdomain.h>
 #include <linux/export.h>
+#include <linux/dmi.h>
 
 #include <net/mana/mana.h>
 #include <net/mana/hw_channel.h>
@@ -1958,6 +1959,128 @@ static bool mana_is_pf(unsigned short dev_id)
 	return dev_id == MANA_PF_DEVICE_ID;
 }
 
+/*
+ * Table for Processor Version strings found from SMBIOS Type 4 information,
+ * for processors that needs to force single RX buffer per page quirk for
+ * meeting line rate performance with ARM64 + 4K pages.
+ * Note: These strings are exactly matched with version fetched from SMBIOS.
+ */
+static const char * const mana_single_rxbuf_per_page_quirk_tbl[] = {
+	"Cobalt 200",
+};
+
+/* On some systems with 4K PAGE_SIZE, page_pool RX fragments can
+ * trigger a throughput regression. Hence identify those processors
+ * from the extracted SMBIOS table and apply the quirk to forces one
+ * RX buffer per page to avoid the fragment allocation/refcounting
+ * overhead in the RX refill path for those processors only.
+ */
+static bool mana_needs_single_rxbuf_per_page(struct gdma_context *gc)
+{
+	int i = 0;
+	const char *ver = gc->processor_version;
+
+	if (!ver)
+		return false;
+
+	if (PAGE_SIZE != SZ_4K)
+		return false;
+
+	while (i < ARRAY_SIZE(mana_single_rxbuf_per_page_quirk_tbl)) {
+		if (!strcmp(ver, mana_single_rxbuf_per_page_quirk_tbl[i]))
+			return true;
+		i++;
+	}
+
+	return false;
+}
+
+static void mana_get_proc_ver_strno(const struct dmi_header *hdr, void *data)
+{
+	struct gdma_context *gc = data;
+	const u8 *d = (const u8 *)hdr;
+
+	/* We are only looking for Type 4: Processor Information */
+	if (hdr->type != SMBIOS_TYPE_4_PROCESSOR_INFO)
+		return;
+
+	/* Ensure the record is long enough to contain the Processor Version
+	 * field
+	 */
+	if (hdr->length <= SMBIOS_TYPE4_PROC_VERSION_OFFSET)
+		return;
+
+	/* The 'Processor Version' string is located at index pointed by
+	 * SMBIOS_TYPE4_PROC_VERSION_OFFSET.  Make a copy of the index.
+	 * There could be multiple Type 4 tables so read and store the
+	 * processor version index found the first time.
+	 */
+	if (gc->proc_ver_strno)
+		return;
+
+	gc->proc_ver_strno = d[SMBIOS_TYPE4_PROC_VERSION_OFFSET];
+}
+
+static const char *mana_dmi_string_nosave(const struct dmi_header *hdr, u8 s)
+{
+	const char *bp = (const char *)hdr + hdr->length;
+
+	if (!s)
+		return NULL;
+
+	/* String numbers start at 1 */
+	while (--s > 0 && *bp)
+		bp += strlen(bp) + 1;
+
+	if (!*bp)
+		return NULL;
+
+	return bp;
+}
+
+static void mana_fetch_proc_ver_string(const struct dmi_header *hdr,
+				       void *data)
+{
+	struct gdma_context *gc = data;
+	const char *ver;
+
+	/* We are only looking for Type 4: Processor Information */
+	if (hdr->type != SMBIOS_TYPE_4_PROCESSOR_INFO)
+		return;
+
+	/* Extract proc version found the first time only */
+	if (!gc->proc_ver_strno || gc->processor_version)
+		return;
+
+	ver = mana_dmi_string_nosave(hdr, gc->proc_ver_strno);
+	if (ver)
+		gc->processor_version = kstrdup(ver, GFP_KERNEL);
+}
+
+/* Check and initialize all processor optimizations/quirks here */
+static bool mana_init_processor_optimization(struct gdma_context *gc)
+{
+	bool opt_initialized = false;
+
+	gc->proc_ver_strno = 0;
+	gc->processor_version = NULL;
+
+	dmi_walk(mana_get_proc_ver_strno, gc);
+	if (!gc->proc_ver_strno)
+		return false;
+
+	dmi_walk(mana_fetch_proc_ver_string, gc);
+	if (!gc->processor_version)
+		return false;
+
+	if (mana_needs_single_rxbuf_per_page(gc)) {
+		gc->force_full_page_rx_buffer = true;
+		opt_initialized = true;
+	}
+
+	return opt_initialized;
+}
+
 static int mana_gd_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct gdma_context *gc;
@@ -2012,6 +2135,11 @@ static int mana_gd_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		gc->mana_pci_debugfs = debugfs_create_dir(pci_slot_name(pdev->slot),
 							  mana_debugfs_root);
 
+	if (mana_init_processor_optimization(gc))
+		dev_info(&pdev->dev,
+			 "Processor specific optimization initialized on: %s\n",
+			gc->processor_version);
+
 	err = mana_gd_setup(pdev);
 	if (err)
 		goto unmap_bar;
@@ -2054,6 +2182,8 @@ unmap_bar:
 	pci_iounmap(pdev, bar0_va);
 free_gc:
 	pci_set_drvdata(pdev, NULL);
+	kfree(gc->processor_version);
+	gc->processor_version = NULL;
 	vfree(gc);
 release_region:
 	pci_release_regions(pdev);
@@ -2108,6 +2238,9 @@ static void mana_gd_remove(struct pci_dev *pdev)
 	xa_destroy(&gc->irq_contexts);
 
 	pci_iounmap(pdev, gc->bar0_va);
+
+	kfree(gc->processor_version);
+	gc->processor_version = NULL;
 
 	vfree(gc);
 

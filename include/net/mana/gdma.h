@@ -9,6 +9,12 @@
 
 #include "shm_channel.h"
 
+/* SMBIOS Type 4: Processor Information table */
+#define SMBIOS_TYPE_4_PROCESSOR_INFO 4
+
+/* Byte offset containing the Processor Version string number.*/
+#define SMBIOS_TYPE4_PROC_VERSION_OFFSET 0x10
+
 #define GDMA_STATUS_MORE_ENTRIES	0x00000105
 #define GDMA_STATUS_CMD_UNSUPPORTED	0xffffffff
 
@@ -438,6 +444,9 @@ struct gdma_context {
 	struct workqueue_struct *service_wq;
 
 	unsigned long		flags;
+	u8			*processor_version;
+	u8			proc_ver_strno;
+	bool			force_full_page_rx_buffer;
 };
 
 static inline bool mana_gd_is_mana(struct gdma_dev *gd)
