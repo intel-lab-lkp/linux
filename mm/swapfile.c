@@ -1059,7 +1059,15 @@ static void swap_reclaim_work(struct work_struct *work)
 
 	si = container_of(work, struct swap_info_struct, reclaim_work);
 
+	local_lock(&percpu_swap_cluster.lock);
+	if (!(si->flags & SWP_SOLIDSTATE))
+		spin_lock(&si->global_cluster_lock);
+
 	swap_reclaim_full_clusters(si, true);
+
+	if (!(si->flags & SWP_SOLIDSTATE))
+		spin_unlock(&si->global_cluster_lock);
+	local_unlock(&percpu_swap_cluster.lock);
 }
 
 /*
