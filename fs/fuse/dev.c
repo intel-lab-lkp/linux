@@ -1438,8 +1438,8 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 	}
 
 	if (!fiq->connected) {
-		err = fc->aborted ? -ECONNABORTED : -ENODEV;
-		goto err_unlock;
+		spin_unlock(&fiq->lock);
+		return fc->aborted ? -ECONNABORTED : -ENODEV;
 	}
 
 	if (!list_empty(&fiq->interrupts)) {
@@ -1523,10 +1523,6 @@ out_end:
 		list_del_init(&req->list);
 	spin_unlock(&fpq->lock);
 	fuse_request_end(req);
-	return err;
-
- err_unlock:
-	spin_unlock(&fiq->lock);
 	return err;
 }
 
