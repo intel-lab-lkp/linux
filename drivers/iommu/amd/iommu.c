@@ -3166,6 +3166,31 @@ const struct iommu_ops amd_iommu_ops = {
 static struct irq_chip amd_ir_chip;
 static DEFINE_RAW_SPINLOCK(iommu_table_lock);
 
+static int iommu_flush_irt_for_aliases(struct amd_iommu *iommu,
+				       u16 alias)
+{
+	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
+	struct iommu_cmd cmd;
+	unsigned long flags;
+	u32 devid;
+	int ret = 0;
+
+	raw_spin_lock_irqsave(&iommu_table_lock, flags);
+
+	for (devid = 0; devid <= pci_seg->last_bdf; ++devid) {
+		if (pci_seg->alias_table[devid] != alias)
+			continue;
+
+		build_inv_irt(&cmd, devid);
+		ret = __iommu_queue_command_sync(iommu, &cmd, true);
+		if (ret)
+			goto out;
+	}
+
+out:
+	raw_spin_unlock_irqrestore(&iommu_table_lock, flags);
+	return ret;
+}
 
 static void iommu_flush_irt_and_complete(struct amd_iommu *iommu, u16 devid)
 {
@@ -3173,19 +3198,29 @@ static void iommu_flush_irt_and_complete(struct amd_iommu *iommu, u16 devid)
 	u64 data;
 	unsigned long flags;
 	struct iommu_cmd cmd, cmd2;
+	u16 alias;
 
 	if (iommu->irtcachedis_enabled)
 		return;
 
-	build_inv_irt(&cmd, devid);
+	raw_spin_lock_irqsave(&iommu_table_lock, flags);
+	alias = iommu->pci_seg->alias_table[devid];
+	raw_spin_unlock_irqrestore(&iommu_table_lock, flags);
 
 	raw_spin_lock_irqsave(&iommu->lock, flags);
 	data = get_cmdsem_val(iommu);
 	build_completion_wait(&cmd2, iommu, data);
 
-	ret = __iommu_queue_command_sync(iommu, &cmd, true);
+	if (alias == devid) {
+		build_inv_irt(&cmd, devid);
+		ret = __iommu_queue_command_sync(iommu, &cmd, true);
+	} else {
+		ret = iommu_flush_irt_for_aliases(iommu, alias);
+	}
+
 	if (ret)
 		goto out_err;
+
 	ret = __iommu_queue_command_sync(iommu, &cmd2, false);
 	if (ret)
 		goto out_err;
