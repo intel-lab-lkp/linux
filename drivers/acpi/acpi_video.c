@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/list.h>
+#include <linux/mfd/core.h>
 #include <linux/mutex.h>
 #include <linux/input.h>
 #include <linux/backlight.h>
@@ -1987,6 +1988,9 @@ static int acpi_video_bus_probe(struct platform_device *pdev)
 	bool auto_detect;
 	int error;
 	acpi_status status;
+
+	if (mfd_get_cell(pdev))
+		return -ENODEV;
 
 	status = acpi_walk_namespace(ACPI_TYPE_DEVICE,
 				acpi_dev_parent(device)->handle, 1,
