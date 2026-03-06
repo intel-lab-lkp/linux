@@ -1250,7 +1250,7 @@ static int request_pending(struct fuse_iqueue *fiq)
  */
 static int fuse_read_interrupt(struct fuse_iqueue *fiq,
 			       struct fuse_copy_state *cs,
-			       size_t nbytes, struct fuse_req *req)
+			       struct fuse_req *req)
 __releases(fiq->lock)
 {
 	struct fuse_in_header ih;
@@ -1267,8 +1267,6 @@ __releases(fiq->lock)
 	arg.unique = req->in.h.unique;
 
 	spin_unlock(&fiq->lock);
-	if (nbytes < reqsize)
-		return -EINVAL;
 
 	err = fuse_copy_one(cs, &ih, sizeof(ih));
 	if (!err)
@@ -1301,8 +1299,7 @@ static struct fuse_forget_link *fuse_dequeue_forget(struct fuse_iqueue *fiq,
 }
 
 static int fuse_read_single_forget(struct fuse_iqueue *fiq,
-				   struct fuse_copy_state *cs,
-				   size_t nbytes)
+				   struct fuse_copy_state *cs)
 __releases(fiq->lock)
 {
 	int err;
@@ -1319,8 +1316,6 @@ __releases(fiq->lock)
 
 	spin_unlock(&fiq->lock);
 	kfree(forget);
-	if (nbytes < ih.len)
-		return -EINVAL;
 
 	err = fuse_copy_one(cs, &ih, sizeof(ih));
 	if (!err)
@@ -1347,11 +1342,6 @@ __releases(fiq->lock)
 		.unique = fuse_get_unique_locked(fiq),
 		.len = sizeof(ih) + sizeof(arg),
 	};
-
-	if (nbytes < ih.len) {
-		spin_unlock(&fiq->lock);
-		return -EINVAL;
-	}
 
 	max_forgets = (nbytes - ih.len) / sizeof(struct fuse_forget_one);
 	head = fuse_dequeue_forget(fiq, max_forgets, &count);
@@ -1388,7 +1378,7 @@ static int fuse_read_forget(struct fuse_conn *fc, struct fuse_iqueue *fiq,
 __releases(fiq->lock)
 {
 	if (fc->minor < 16 || fiq->forget_list_head.next->next == NULL)
-		return fuse_read_single_forget(fiq, cs, nbytes);
+		return fuse_read_single_forget(fiq, cs);
 	else
 		return fuse_read_batch_forget(fiq, cs, nbytes);
 }
@@ -1455,7 +1445,7 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 	if (!list_empty(&fiq->interrupts)) {
 		req = list_entry(fiq->interrupts.next, struct fuse_req,
 				 intr_entry);
-		return fuse_read_interrupt(fiq, cs, nbytes, req);
+		return fuse_read_interrupt(fiq, cs, req);
 	}
 
 	if (forget_pending(fiq)) {
