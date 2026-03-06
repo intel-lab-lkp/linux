@@ -27,6 +27,7 @@ properties:
       - items:
           - enum:
               - mediatek,mt8195-ufsphy
+              - mediatek,mt8196-ufsphy
           - const: mediatek,mt8183-ufsphy
       - const: mediatek,mt8183-ufsphy
 
@@ -42,6 +43,10 @@ properties:
     items:
       - const: unipro
       - const: mp
+
+  resets:
+    items:
+      - description: Optional UFS M-PHY reset.
 
   "#phy-cells":
     const: 0
@@ -64,6 +69,17 @@ examples:
         clocks = <&infracfg CLK_INFRA_UNIPRO_SCK>,
                  <&infracfg CLK_INFRA_UFS_MP_SAP_BCLK>;
         clock-names = "unipro", "mp";
+        #phy-cells = <0>;
+    };
+  - |
+    #include <dt-bindings/reset/mediatek,mt8196-resets.h>
+    ufs-phy@16800000 {
+        compatible = "mediatek,mt8196-ufsphy", "mediatek,mt8183-ufsphy";
+        reg = <0x16800000 0x10000>;
+        clocks = <&ufs_ao_clk 3>,
+                 <&ufs_ao_clk 5>;
+        clock-names = "unipro", "mp";
+        resets = <&ufs_ao_clk MT8196_UFSAO_RST0_UFS_MPHY>;
         #phy-cells = <0>;
     };
 
