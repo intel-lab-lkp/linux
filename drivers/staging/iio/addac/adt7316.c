@@ -17,6 +17,7 @@
 #include <linux/i2c.h>
 #include <linux/rtc.h>
 #include <linux/module.h>
+#include <linux/bitfield.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/events.h>
@@ -31,10 +32,11 @@
 #define ADT7316_LSB_IN_TEMP_VDD		0x3
 #define ADT7316_LSB_IN_TEMP_MASK	0x3
 #define ADT7316_LSB_VDD_MASK		0xC
-#define ADT7316_LSB_VDD_OFFSET		2
 #define ADT7316_LSB_EX_TEMP_AIN		0x4
-#define ADT7316_LSB_EX_TEMP_MASK	0x3
-#define ADT7516_LSB_AIN_SHIFT		2
+#define ADT7316_LSB_EX_TEMP_AIN1_MASK	GENMASK_U32(1, 0)
+#define ADT7516_LSB_AIN2_MASK		GENMASK_U32(3, 2)
+#define ADT7516_LSB_AIN3_MASK		GENMASK_U32(5, 4)
+#define ADT7516_LSB_AIN4_MASK		GENMASK_U32(7, 6)
 #define ADT7316_AD_MSB_DATA_BASE        0x6
 #define ADT7316_AD_MSB_DATA_REGS        3
 #define ADT7516_AD_MSB_DATA_REGS        6
@@ -46,8 +48,8 @@
 #define ADT7516_MSB_AIN3		0xA
 #define ADT7516_MSB_AIN4		0xB
 #define ADT7316_DA_DATA_BASE		0x10
-#define ADT7316_DA_10_BIT_LSB_SHIFT	6
-#define ADT7316_DA_12_BIT_LSB_SHIFT	4
+#define ADT7316_DA_10_BIT_LSB_MASK	GENMASK_U32(7, 6)
+#define ADT7316_DA_12_BIT_LSB_MASK	GENMASK_U32(7, 4)
 #define ADT7316_DA_MSB_DATA_REGS	4
 #define ADT7316_LSB_DAC_A		0x10
 #define ADT7316_MSB_DAC_A		0x11
@@ -128,7 +130,6 @@
  */
 #define ADT7316_DA_2VREF_CH_MASK	0xF
 #define ADT7316_DA_EN_MODE_MASK		0x30
-#define ADT7316_DA_EN_MODE_SHIFT	4
 #define ADT7316_DA_EN_MODE_SINGLE	0x00
 #define ADT7316_DA_EN_MODE_AB_CD	0x10
 #define ADT7316_DA_EN_MODE_ABCD		0x20
@@ -143,7 +144,6 @@
 #define ADT7316_DAC_IN_VREF		0x10
 #define ADT7516_DAC_AB_IN_VREF		0x10
 #define ADT7516_DAC_CD_IN_VREF		0x20
-#define ADT7516_DAC_IN_VREF_OFFSET	4
 #define ADT7516_DAC_IN_VREF_MASK	0x30
 
 /*
@@ -155,7 +155,7 @@
  * ADT7316 value masks
  */
 #define ADT7316_VALUE_MASK		0xfff
-#define ADT7316_T_VALUE_FLOAT_OFFSET	2
+#define ADT7316_AD_MSB_MASK		GENMASK_U32(9, 2)
 
 /*
  * ADT7316 hardware constants
@@ -873,11 +873,11 @@ static ssize_t adt7316_store_DAC_update_mode(struct device *dev,
 		return -EPERM;
 
 	ret = kstrtou8(buf, 10, &data);
-	if (ret || data > (ADT7316_DA_EN_MODE_MASK >> ADT7316_DA_EN_MODE_SHIFT))
+	if (ret || !FIELD_FIT(ADT7316_DA_EN_MODE_MASK, data))
 		return -EINVAL;
 
 	dac_config = chip->dac_config & (~ADT7316_DA_EN_MODE_MASK);
-	dac_config |= data << ADT7316_DA_EN_MODE_SHIFT;
+	dac_config |= FIELD_PREP(ADT7316_DA_EN_MODE_MASK, data);
 
 	ret = chip->bus.write(chip->bus.client, ADT7316_DAC_CONFIG, dac_config);
 	if (ret)
@@ -1038,8 +1038,7 @@ static ssize_t adt7316_show_DAC_internal_Vref(struct device *dev,
 
 	if ((chip->id & ID_FAMILY_MASK) == ID_ADT75XX)
 		return sysfs_emit(buf, "0x%x\n",
-			(chip->ldac_config & ADT7516_DAC_IN_VREF_MASK) >>
-			ADT7516_DAC_IN_VREF_OFFSET);
+			FIELD_GET(ADT7516_DAC_IN_VREF_MASK, chip->ldac_config));
 	return sysfs_emit(buf, "%d\n",
 		       !!(chip->ldac_config & ADT7316_DAC_IN_VREF));
 }
@@ -1090,6 +1089,22 @@ static IIO_DEVICE_ATTR(DAC_internal_Vref, 0644,
 		       adt7316_store_DAC_internal_Vref,
 		       0);
 
+static u8 adt7316_extract_ad_lsb(u8 lsb, int channel)
+{
+	switch (channel) {
+	case ADT7316_AD_SINGLE_CH_EX:
+		return FIELD_GET(ADT7316_LSB_EX_TEMP_AIN1_MASK, lsb);
+	case ADT7516_AD_SINGLE_CH_AIN2:
+		return FIELD_GET(ADT7516_LSB_AIN2_MASK, lsb);
+	case ADT7516_AD_SINGLE_CH_AIN3:
+		return FIELD_GET(ADT7516_LSB_AIN3_MASK, lsb);
+	case ADT7516_AD_SINGLE_CH_AIN4:
+		return FIELD_GET(ADT7516_LSB_AIN4_MASK, lsb);
+	default:
+		return 0;
+	}
+}
+
 static ssize_t adt7316_show_ad(struct adt7316_chip_info *chip,
 			       int channel, char *buf)
 {
@@ -1113,7 +1128,7 @@ static ssize_t adt7316_show_ad(struct adt7316_chip_info *chip,
 		if (ret)
 			return -EIO;
 
-		data = msb << ADT7316_T_VALUE_FLOAT_OFFSET;
+		data = FIELD_PREP(ADT7316_AD_MSB_MASK, msb);
 		data |= lsb & ADT7316_LSB_IN_TEMP_MASK;
 		break;
 	case ADT7316_AD_SINGLE_CH_VDD:
@@ -1128,8 +1143,8 @@ static ssize_t adt7316_show_ad(struct adt7316_chip_info *chip,
 		if (ret)
 			return -EIO;
 
-		data = msb << ADT7316_T_VALUE_FLOAT_OFFSET;
-		data |= (lsb & ADT7316_LSB_VDD_MASK) >> ADT7316_LSB_VDD_OFFSET;
+		data = FIELD_PREP(ADT7316_AD_MSB_MASK, msb);
+		data |= FIELD_GET(ADT7316_LSB_VDD_MASK, lsb);
 		return sysfs_emit(buf, "%d\n", data);
 	default: /* ex_temp and ain */
 		ret = chip->bus.read(chip->bus.client,
@@ -1142,10 +1157,8 @@ static ssize_t adt7316_show_ad(struct adt7316_chip_info *chip,
 		if (ret)
 			return -EIO;
 
-		data = msb << ADT7316_T_VALUE_FLOAT_OFFSET;
-		data |= lsb & (ADT7316_LSB_EX_TEMP_MASK <<
-			(ADT7516_LSB_AIN_SHIFT * (channel -
-			(ADT7316_MSB_EX_TEMP - ADT7316_AD_MSB_DATA_BASE))));
+		data = FIELD_PREP(ADT7316_AD_MSB_MASK, msb);
+		data |= adt7316_extract_ad_lsb(lsb, channel);
 
 		if ((chip->id & ID_FAMILY_MASK) == ID_ADT75XX)
 			return sysfs_emit(buf, "%d\n", data);
@@ -1410,9 +1423,9 @@ static ssize_t adt7316_show_DAC(struct adt7316_chip_info *chip,
 		return -EIO;
 
 	if (chip->dac_bits == 12)
-		data = lsb >> ADT7316_DA_12_BIT_LSB_SHIFT;
+		data = FIELD_GET(ADT7316_DA_12_BIT_LSB_MASK, lsb);
 	else if (chip->dac_bits == 10)
-		data = lsb >> ADT7316_DA_10_BIT_LSB_SHIFT;
+		data = FIELD_GET(ADT7316_DA_10_BIT_LSB_MASK, lsb);
 	data |= msb << offset;
 
 	return sysfs_emit(buf, "%d\n", data);
@@ -1441,9 +1454,9 @@ static ssize_t adt7316_store_DAC(struct adt7316_chip_info *chip,
 	if (chip->dac_bits > 8) {
 		lsb = data & ((1 << offset) - 1);
 		if (chip->dac_bits == 12)
-			lsb_reg = lsb << ADT7316_DA_12_BIT_LSB_SHIFT;
+			lsb_reg = FIELD_PREP(ADT7316_DA_12_BIT_LSB_MASK, lsb);
 		else
-			lsb_reg = lsb << ADT7316_DA_10_BIT_LSB_SHIFT;
+			lsb_reg = FIELD_PREP(ADT7316_DA_10_BIT_LSB_MASK, lsb);
 		ret = chip->bus.write(chip->bus.client,
 			ADT7316_DA_DATA_BASE + channel * 2, lsb_reg);
 		if (ret)
