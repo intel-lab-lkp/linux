@@ -303,6 +303,7 @@ static void do_go_offline(struct work_struct *work_go_offline)
 		spin_unlock_irqrestore(&network->lock, flags);
 		mutex_unlock(&network->close_lock);
 		ppp_unregister_channel(channel);
+		kfree(channel);
 	} else {
 		spin_unlock_irqrestore(&network->lock, flags);
 		mutex_unlock(&network->close_lock);
