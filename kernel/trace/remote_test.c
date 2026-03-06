@@ -28,7 +28,7 @@ static int remote_test_load_simple_rb(int cpu, struct ring_buffer_desc *rb_desc)
 	struct simple_buffer_page *bpages;
 	int ret = -ENOMEM;
 
-	cpu_buffer = kmalloc(sizeof(*cpu_buffer), GFP_KERNEL);
+	cpu_buffer = kzalloc_obj(*cpu_buffer);
 	if (!cpu_buffer)
 		return ret;
 
