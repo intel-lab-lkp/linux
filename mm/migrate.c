@@ -1393,6 +1393,17 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 	if (old_page_state & PAGE_WAS_MAPPED)
 		remove_migration_ptes(src, dst, 0);
 
+	/*
+	 * Requeue the destination folio on the deferred split queue if
+	 * the source was a large folio that was on the queue. Without
+	 * this, NUMA migration causes underutilized THPs to escape
+	 * the shrinker since the source is unqueued in
+	 * __folio_migrate_mapping() and the destination is never
+	 * re-queued.
+	 */
+	if (folio_test_large(dst) && folio_test_large_rmappable(dst))
+		deferred_split_folio(dst, false);
+
 out_unlock_both:
 	folio_unlock(dst);
 	folio_set_owner_migrate_reason(dst, reason);
