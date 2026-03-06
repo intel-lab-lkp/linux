@@ -33,6 +33,34 @@ u8 camss_format_get_bpp(const struct camss_format_info *formats, unsigned int nf
 	return formats[0].mbus_bpp;
 }
 
+
+/*
+ * camss_format_get_bpl_alignment - Retrieve required BPL alignment for a given format.
+ * @format: a pointer to the format
+ *
+ * Return the required alignment, in bytes.
+ */
+unsigned int camss_format_get_bpl_alignment(const struct camss_format_info *format)
+{
+	switch (format->mbus_bpp) {
+	case 8: /* Plain 8-bit -> output must be a multiple of 1 pixel (1 byte) */
+		return 1;
+	case 10: /* Packed 10-bit -> output must be a multiple of 4 pixels (5 bytes) */
+		return 5;
+	case 12: /* Packed 12-bit -> output must be a multiple of 2 pixels (3 bytes) */
+		return 3;
+	case 14: /* Packed 14-bit -> output must be a multiple of 4 pixels (7 bytes) */
+		return 7;
+	case 16: /* 16-bit -> output must be a multiple of 1 pixel (2 bytes) */
+		return 2;
+	default:
+		WARN(1, "Unsupported format/bpp (%u)", format->mbus_bpp);
+	}
+
+	return 1;
+}
+
+
 /*
  * camss_format_find_code - Find a format code in an array
  * @code: a pointer to media bus format codes array
