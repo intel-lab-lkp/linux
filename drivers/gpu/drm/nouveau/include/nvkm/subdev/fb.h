@@ -38,7 +38,7 @@ struct nvkm_fb {
 
 	struct {
 		struct page *flush_page;
-		dma_addr_t flush_page_addr;
+		u64 flush_page_addr;
 	} sysmem;
 
 	struct nvkm_ram *ram;
