@@ -160,6 +160,9 @@ long dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff, long nr_pages,
 	if (nr_pages < 0)
 		return -EINVAL;
 
+	if (!dax_dev->ops || !dax_dev->ops->direct_access)
+		return -EOPNOTSUPP;
+
 	avail = dax_dev->ops->direct_access(dax_dev, pgoff, nr_pages,
 			mode, kaddr, pfn);
 	if (!avail)
