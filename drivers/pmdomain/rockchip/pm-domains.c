@@ -89,14 +89,18 @@ struct rockchip_pmu_info {
 #define QOS_BANDWIDTH		0x10
 #define QOS_SATURATION		0x14
 #define QOS_EXTCONTROL		0x18
+#define SHAPING_NBPKTMAX0	0x0
 
 struct rockchip_pm_domain {
 	struct generic_pm_domain genpd;
 	const struct rockchip_domain_info *info;
 	struct rockchip_pmu *pmu;
 	int num_qos;
+	int num_shaping;
 	struct regmap **qos_regmap;
+	struct regmap **shaping_regmap;
 	u32 *qos_save_regs[MAX_QOS_REGS_NUM];
+	u32 *shaping_save_regs;
 	int num_clks;
 	struct clk_bulk_data *clks;
 	struct device_node *node;
@@ -488,6 +492,28 @@ static int rockchip_pmu_restore_qos(struct rockchip_pm_domain *pd)
 	return 0;
 }
 
+static int rockchip_pmu_save_shaping(struct rockchip_pm_domain *pd)
+{
+	int i;
+
+	for (i = 0; i < pd->num_shaping; i++)
+		regmap_read(pd->shaping_regmap[i], SHAPING_NBPKTMAX0,
+			    &pd->shaping_save_regs[i]);
+
+	return 0;
+}
+
+static int rockchip_pmu_restore_shaping(struct rockchip_pm_domain *pd)
+{
+	int i;
+
+	for (i = 0; i < pd->num_shaping; i++)
+		regmap_write(pd->shaping_regmap[i], SHAPING_NBPKTMAX0,
+			     pd->shaping_save_regs[i]);
+
+	return 0;
+}
+
 static bool rockchip_pmu_domain_is_on(struct rockchip_pm_domain *pd)
 {
 	struct rockchip_pmu *pmu = pd->pmu;
@@ -650,6 +676,7 @@ static int rockchip_pd_power(struct rockchip_pm_domain *pd, bool power_on)
 
 	if (!power_on) {
 		rockchip_pmu_save_qos(pd);
+		rockchip_pmu_save_shaping(pd);
 
 		/* if powering down, idle request to NIU first */
 		ret = rockchip_pmu_set_idle_request(pd, true);
@@ -668,6 +695,7 @@ static int rockchip_pd_power(struct rockchip_pm_domain *pd, bool power_on)
 			goto out;
 
 		rockchip_pmu_restore_qos(pd);
+		rockchip_pmu_restore_shaping(pd);
 	}
 
 out:
@@ -766,6 +794,71 @@ static void rockchip_pd_detach_dev(struct generic_pm_domain *genpd,
 	dev_dbg(dev, "detaching from power domain '%s'\n", genpd->name);
 
 	pm_clk_destroy(dev);
+}
+
+static int rockchip_pd_of_get_shaping(struct rockchip_pm_domain *pd,
+				      struct device_node *node)
+{
+	struct rockchip_pmu *pmu = pd->pmu;
+	struct device_node *shaping_node;
+	int num_shaping = 0, num_shaping_reg = 0;
+	int error, i;
+
+	num_shaping = of_count_phandle_with_args(node, "pm_shaping", NULL);
+
+	/* Count the real available pm_shaping nodes */
+	for (i = 0; i < num_shaping; i++) {
+		shaping_node = of_parse_phandle(node, "pm_shaping", i);
+		if (shaping_node && of_device_is_available(shaping_node))
+			pd->num_shaping++;
+		of_node_put(shaping_node);
+	}
+
+	if (!pd->num_shaping)
+		return 0;
+
+	/* Allocate memory for them */
+	pd->shaping_regmap = devm_kcalloc(pmu->dev, pd->num_shaping,
+					  sizeof(*pd->shaping_regmap),
+					  GFP_KERNEL);
+	if (!pd->shaping_regmap)
+		return -ENOMEM;
+
+	pd->shaping_save_regs = devm_kmalloc(pmu->dev, sizeof(u32) *
+					     pd->num_shaping,
+					     GFP_KERNEL);
+	if (!pd->shaping_save_regs)
+		return -ENOMEM;
+
+	/* Record the real available pm_shaping nodes */
+	for (i = 0; i < num_shaping; i++) {
+		shaping_node = of_parse_phandle(node, "pm_shaping", i);
+		if (!shaping_node)
+			return -ENODEV;
+
+		if (of_device_is_available(shaping_node)) {
+			if (num_shaping_reg >= pd->num_shaping) {
+				error = -EINVAL;
+				goto err_put_node;
+			}
+
+			pd->shaping_regmap[num_shaping_reg] =
+				syscon_node_to_regmap(shaping_node);
+			if (IS_ERR(pd->shaping_regmap[num_shaping_reg])) {
+				error = -ENODEV;
+				goto err_put_node;
+			}
+
+			num_shaping_reg++;
+		}
+		of_node_put(shaping_node);
+	}
+
+	return 0;
+
+err_put_node:
+	of_node_put(shaping_node);
+	return error;
 }
 
 static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
@@ -874,6 +967,10 @@ static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
 			}
 		}
 	}
+
+	error = rockchip_pd_of_get_shaping(pd, node);
+	if (error)
+		dev_warn(pmu->dev, "%pOFn: failed to get shaping\n", node);
 
 	if (pd->info->name)
 		pd->genpd.name = pd->info->name;
