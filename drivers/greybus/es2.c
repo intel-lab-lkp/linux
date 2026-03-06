@@ -772,7 +772,6 @@ static int check_urb_status(struct urb *urb)
 
 static void es2_destroy(struct es2_ap_dev *es2)
 {
-	struct usb_device *udev;
 	struct urb *urb;
 	int i;
 
@@ -804,10 +803,7 @@ static void es2_destroy(struct es2_ap_dev *es2)
 	gb_hd_cport_release_reserved(es2->hd, ES2_CPORT_CDSI1);
 	gb_hd_cport_release_reserved(es2->hd, ES2_CPORT_CDSI0);
 
-	udev = es2->usb_dev;
 	gb_hd_put(es2->hd);
-
-	usb_put_dev(udev);
 }
 
 static void cport_in_callback(struct urb *urb)
@@ -1257,7 +1253,7 @@ static int ap_probe(struct usb_interface *interface,
 	bool bulk_in_found = false;
 	bool arpc_in_found = false;
 
-	udev = usb_get_dev(interface_to_usbdev(interface));
+	udev = interface_to_usbdev(interface);
 
 	num_cports = apb_get_cport_count(udev);
 	if (num_cports < 0) {
