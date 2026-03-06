@@ -10,10 +10,16 @@
 
 #ifdef CONFIG_PPC_SECURE_BOOT
 
+bool arch_get_secureboot(void);
 bool is_ppc_secureboot_enabled(void);
 bool is_ppc_trustedboot_enabled(void);
 
 #else
+
+static inline bool arch_get_secureboot(void)
+{
+	return false;
+}
 
 static inline bool is_ppc_secureboot_enabled(void)
 {

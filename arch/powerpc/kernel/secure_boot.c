@@ -7,7 +7,6 @@
 #include <linux/of.h>
 #include <linux/secure_boot.h>
 #include <linux/string_choices.h>
-#include <asm/secure_boot.h>
 
 static struct device_node *get_ppc_fw_sb_node(void)
 {

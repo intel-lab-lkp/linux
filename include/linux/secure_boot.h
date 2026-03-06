@@ -8,12 +8,6 @@
 #ifndef _LINUX_SECURE_BOOT_H
 #define _LINUX_SECURE_BOOT_H
 
-#include <linux/types.h>
-
-/*
- * Returns true if the platform secure boot is enabled.
- * Returns false if disabled or not supported.
- */
-bool arch_get_secureboot(void);
+#include <asm/secure_boot.h>
 
 #endif /* _LINUX_SECURE_BOOT_H */

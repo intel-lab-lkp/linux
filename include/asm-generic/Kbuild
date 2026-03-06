@@ -50,6 +50,7 @@ mandatory-y += rqspinlock.h
 mandatory-y += runtime-const.h
 mandatory-y += rwonce.h
 mandatory-y += sections.h
+mandatory-y += secure_boot.h
 mandatory-y += serial.h
 mandatory-y += shmparam.h
 mandatory-y += simd.h

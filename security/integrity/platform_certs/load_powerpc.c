@@ -10,7 +10,7 @@
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/slab.h>
-#include <asm/secure_boot.h>
+#include <linux/secure_boot.h>
 #include <asm/secvar.h>
 #include "keyring_handler.h"
 #include "../integrity.h"
