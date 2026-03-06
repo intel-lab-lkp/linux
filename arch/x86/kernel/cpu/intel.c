@@ -466,6 +466,29 @@ static void intel_workarounds(struct cpuinfo_x86 *c)
 #else
 static void intel_workarounds(struct cpuinfo_x86 *c)
 {
+	u64 misc_enable;
+
+	/*
+	 * Intel / MaxLinear Lightning Mountain workaround to enable Enhanced
+	 * Intel SpeedStep Technology (EIST) for each cpu. Otherwise, the
+	 * frequency on some cpus is locked to the minimum value of 624 MHz.
+	 * This usually would be the job of the BIOS / bootloader, but U-Boot
+	 * only enables it on the cpu on which it is running.
+	 */
+	if (c->x86_vfm == INTEL_ATOM_AIRMONT_NP) {
+		rdmsrq(MSR_IA32_MISC_ENABLE, misc_enable);
+		if (!(misc_enable & MSR_IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP)) {
+			misc_enable |= MSR_IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP;
+			wrmsrq(MSR_IA32_MISC_ENABLE, misc_enable);
+
+			/* check to see if it was enabled successfully */
+			rdmsrq(MSR_IA32_MISC_ENABLE, misc_enable);
+			if (!(misc_enable & MSR_IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP)) {
+				pr_info("CPU%d: Can't enable Enhanced SpeedStep\n",
+					c->cpu_index);
+			}
+		}
+	}
 }
 #endif
 
