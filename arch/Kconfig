@@ -861,7 +861,22 @@ config LTO_CLANG_THIN
 	    https://clang.llvm.org/docs/ThinLTO.html
 
 	  If unsure, say Y.
+
 endchoice
+
+config LTO_CLANG_THIN_SUFFIX_REDUCTION
+	bool "Clang ThinLTO Suffix Reduction (EXPERIMENTAL)"
+	depends on LTO_CLANG_THIN
+	depends on CLANG_VERSION >= 230000
+	default y
+	help
+	  This option allows to reduce the number of symbols with
+	  '.llvm.<hash' suffixes. This can help KLP (kernel living
+	  patch) as symbol name can stay stable in most cases.
+
+	  See https://github.com/llvm/llvm-project/pull/178587
+
+	  If unsure, say N.
 
 config ARCH_SUPPORTS_AUTOFDO_CLANG
 	bool

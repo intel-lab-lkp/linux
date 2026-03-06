@@ -1034,6 +1034,9 @@ endif
 ifdef CONFIG_LTO_CLANG
 ifdef CONFIG_LTO_CLANG_THIN
 CC_FLAGS_LTO	:= -flto=thin -fsplit-lto-unit
+ifdef CONFIG_LTO_CLANG_THIN_SUFFIX_REDUCTION
+KBUILD_LDFLAGS += --lto-whole-program-visibility -mllvm -always-rename-promoted-locals=false
+endif
 else
 CC_FLAGS_LTO	:= -flto
 endif
