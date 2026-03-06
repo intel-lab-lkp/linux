@@ -792,7 +792,7 @@ xfs_vm_readahead(
 {
 	struct iomap_read_folio_ctx	ctx = { .rac = rac };
 
-	ctx.ops = xfs_get_iomap_read_ops(rac->mapping),
+	ctx.ops = xfs_get_iomap_read_ops(rac->mapping);
 	iomap_readahead(&xfs_read_iomap_ops, &ctx, NULL);
 }
 
