@@ -1232,6 +1232,13 @@ dbAllocNear(struct bmap * bmp,
 		 * of the first block described by this dmap word.
 		 */
 		blkno = le64_to_cpu(dp->start) + (word << L2DBWORD);
+		if (blkno >= bmp->db_mapsize) {
+			jfs_error(bmp->db_ipbmap->i_sb,
+				  "blkno %lld from corrupt dmap (start %llu) out of range\n",
+				  (long long)blkno,
+				  (unsigned long long)le64_to_cpu(dp->start));
+			return -EIO;
+		}
 
 		/* if not all bits of the dmap word are free, get the
 		 * starting bit number within the dmap word of the required
@@ -1976,6 +1983,13 @@ dbAllocDmapLev(struct bmap * bmp,
 	 * to the leaf at which free space was found.
 	 */
 	blkno = le64_to_cpu(dp->start) + (leafidx << L2DBWORD);
+	if (blkno >= bmp->db_mapsize) {
+		jfs_error(bmp->db_ipbmap->i_sb,
+			  "blkno %lld from corrupt dmap (start %llu) out of range\n",
+			  (long long)blkno,
+			  (unsigned long long)le64_to_cpu(dp->start));
+		return -EIO;
+	}
 
 	/* if not all bits of the dmap word are free, get the starting
 	 * bit number within the dmap word of the required string of free
