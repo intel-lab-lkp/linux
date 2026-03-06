@@ -54,6 +54,11 @@ struct faux_device *faux_device_create_with_groups(const char *name,
 						   struct device *parent,
 						   const struct faux_device_ops *faux_ops,
 						   const struct attribute_group **groups);
+struct faux_device *faux_device_create_full(const char *name,
+					    struct device *parent,
+					    const struct faux_device_ops *faux_ops,
+					    const struct attribute_group **groups,
+					    struct fwnode_handle *fwnode);
 void faux_device_destroy(struct faux_device *faux_dev);
 
 static inline void *faux_device_get_drvdata(const struct faux_device *faux_dev)

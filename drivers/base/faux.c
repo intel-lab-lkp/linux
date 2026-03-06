@@ -10,12 +10,15 @@
  * intended to be very simple, with only a create and a destroy function
  * available.
  */
+
+#include <linux/container_of.h>
+#include <linux/device/faux.h>
 #include <linux/err.h>
+#include <linux/fwnode.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <linux/container_of.h>
-#include <linux/device/faux.h>
+
 #include "base.h"
 
 /*
@@ -95,6 +98,95 @@ static void faux_device_release(struct device *dev)
 }
 
 /**
+ * faux_device_create_full - Create and register with the driver
+ *		core a faux device described by the properties of the firmware
+ *		node and populate the device with an initial set of sysfs
+ *		attributes.
+ * @name:	The name of the device we are adding, must be unique for
+ *		all faux devices.
+ * @parent:	Pointer to a potential parent struct device.  If set to
+ *		NULL, the device will be created in the "root" of the faux
+ *		device tree in sysfs.
+ * @faux_ops:	struct faux_device_ops that the new device will call back
+ *		into, can be NULL.
+ * @groups:	The set of sysfs attributes that will be created for this
+ *		device when it is registered with the driver core.
+ * @fwnode:	Firmware node describing this device.
+ *
+ * Create a new faux device and register it in the driver core properly.
+ * If present, callbacks in @faux_ops will be called with the device that
+ * for the caller to do something with at the proper time given the
+ * device's lifecycle.
+ *
+ * Note, when this function is called, the functions specified in struct
+ * faux_ops can be called before the function returns, so be prepared for
+ * everything to be properly initialized before that point in time.  If the
+ * probe callback (if one is present) does NOT succeed, the creation of the
+ * device will fail and NULL will be returned.
+ *
+ * Return:
+ * * NULL if an error happened with creating the device
+ * * pointer to a valid struct faux_device that is registered with sysfs
+ */
+struct faux_device *faux_device_create_full(const char *name,
+					    struct device *parent,
+					    const struct faux_device_ops *faux_ops,
+					    const struct attribute_group **groups,
+					    struct fwnode_handle *fwnode)
+{
+	struct faux_object *faux_obj;
+	struct faux_device *faux_dev;
+	struct device *dev;
+	int ret;
+
+	faux_obj = kzalloc_obj(*faux_obj);
+	if (!faux_obj)
+		return NULL;
+
+	/* Save off the callbacks and groups so we can use them in the future */
+	faux_obj->faux_ops = faux_ops;
+	faux_obj->groups = groups;
+
+	/* Initialize the device portion and register it with the driver core */
+	faux_dev = &faux_obj->faux_dev;
+	dev = &faux_dev->dev;
+
+	device_initialize(dev);
+	dev->release = faux_device_release;
+	if (parent)
+		dev->parent = parent;
+	else
+		dev->parent = faux_bus_root;
+	dev->bus = &faux_bus_type;
+	dev_set_name(dev, "%s", name);
+	if (fwnode)
+		device_set_node(dev, fwnode);
+	device_set_pm_not_required(dev);
+
+	ret = device_add(dev);
+	if (ret) {
+		pr_err("%s: device_add for faux device '%s' failed with %d\n",
+		       __func__, name, ret);
+		put_device(dev);
+		return NULL;
+	}
+
+	/*
+	 * Verify that we did bind the driver to the device (i.e. probe worked),
+	 * if not, let's fail the creation as trying to guess if probe was
+	 * successful is almost impossible to determine by the caller.
+	 */
+	if (!dev->driver) {
+		dev_dbg(dev, "probe did not succeed, tearing down the device\n");
+		faux_device_destroy(faux_dev);
+		faux_dev = NULL;
+	}
+
+	return faux_dev;
+}
+EXPORT_SYMBOL_GPL(faux_device_create_full);
+
+/**
  * faux_device_create_with_groups - Create and register with the driver
  *		core a faux device and populate the device with an initial
  *		set of sysfs attributes.
@@ -128,53 +220,7 @@ struct faux_device *faux_device_create_with_groups(const char *name,
 						   const struct faux_device_ops *faux_ops,
 						   const struct attribute_group **groups)
 {
-	struct faux_object *faux_obj;
-	struct faux_device *faux_dev;
-	struct device *dev;
-	int ret;
-
-	faux_obj = kzalloc_obj(*faux_obj);
-	if (!faux_obj)
-		return NULL;
-
-	/* Save off the callbacks and groups so we can use them in the future */
-	faux_obj->faux_ops = faux_ops;
-	faux_obj->groups = groups;
-
-	/* Initialize the device portion and register it with the driver core */
-	faux_dev = &faux_obj->faux_dev;
-	dev = &faux_dev->dev;
-
-	device_initialize(dev);
-	dev->release = faux_device_release;
-	if (parent)
-		dev->parent = parent;
-	else
-		dev->parent = faux_bus_root;
-	dev->bus = &faux_bus_type;
-	dev_set_name(dev, "%s", name);
-	device_set_pm_not_required(dev);
-
-	ret = device_add(dev);
-	if (ret) {
-		pr_err("%s: device_add for faux device '%s' failed with %d\n",
-		       __func__, name, ret);
-		put_device(dev);
-		return NULL;
-	}
-
-	/*
-	 * Verify that we did bind the driver to the device (i.e. probe worked),
-	 * if not, let's fail the creation as trying to guess if probe was
-	 * successful is almost impossible to determine by the caller.
-	 */
-	if (!dev->driver) {
-		dev_dbg(dev, "probe did not succeed, tearing down the device\n");
-		faux_device_destroy(faux_dev);
-		faux_dev = NULL;
-	}
-
-	return faux_dev;
+	return faux_device_create_full(name, parent, faux_ops, groups, NULL);
 }
 EXPORT_SYMBOL_GPL(faux_device_create_with_groups);
 
