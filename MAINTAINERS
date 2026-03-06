@@ -19191,6 +19191,16 @@ S:	Orphan
 F:	Documentation/devicetree/bindings/net/nfc/nxp,nci.yaml
 F:	drivers/nfc/nxp-nci
 
+NXP Neutron NPU DRIVER
+M:	Ioana Ciocoi Radulescu <ruxandra.radulescu@nxp.com>
+M:	Jiwei Fu <jiwei.fu@nxp.com>
+L:	dri-devel@lists.freedesktop.org
+S:	Maintained
+T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
+F:	Documentation/accel/neutron/
+F:	drivers/accel/neutron/
+F:	include/uapi/drm/neutron_accel.h
+
 NXP/Goodix TFA989X (TFA1) DRIVER
 M:	Stephan Gerhold <stephan@gerhold.net>
 L:	linux-sound@vger.kernel.org
