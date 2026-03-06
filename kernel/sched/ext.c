@@ -4170,7 +4170,13 @@ static void scx_bypass_lb_timerfn(struct timer_list *timer)
 	int node;
 	u32 intv_us;
 
-	sch = rcu_dereference_all(scx_root);
+	/*
+	 * scx_bypass_lb_timer is a global timer that fires in softirq
+	 * context while bypass mode is active. Use rcu_dereference_bh()
+	 * matching the BH context. When multi-scheduler support lands,
+	 * this timer will become per-scheduler instance.
+	 */
+	sch = rcu_dereference_bh(scx_root);
 	if (unlikely(!sch) || !READ_ONCE(scx_bypass_depth))
 		return;
 
