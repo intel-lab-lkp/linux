@@ -1844,10 +1844,35 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 	drm_dsc_set_const_params(dsc);
 	drm_dsc_set_rc_buf_thresh(dsc);
 
-	/* DPU supports only pre-SCR panels */
-	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+	if (dsc->dsc_version_major != 1) {
+		DRM_DEV_ERROR(&msm_host->pdev->dev, "Unsupported DSC version: %x.%x\n",
+			      dsc->dsc_version_major, dsc->dsc_version_minor);
+		return -EOPNOTSUPP;
+	}
+
+	switch (dsc->dsc_version_minor) {
+	case 1:
+		/*
+		 * For DSC1.1. the upstream lacks SCR parameters, the downstream
+		 * parameters are unverified here, we support pre-SCR only.
+		 */
+		ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+		break;
+	case 2:
+		if (dsc->native_422)
+			ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_2_422);
+		else if (dsc->native_420)
+			ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_2_420);
+		else
+			ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_2_444);
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+	}
+
 	if (ret) {
-		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
+		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters for DSC version: %x.%x\n",
+			      dsc->dsc_version_major, dsc->dsc_version_minor);
 		return ret;
 	}
 
