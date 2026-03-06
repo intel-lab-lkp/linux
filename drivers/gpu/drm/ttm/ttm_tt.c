@@ -49,6 +49,11 @@
 #include "ttm_module.h"
 #include "ttm_pool_internal.h"
 
+#include <linux/sizes.h>
+#ifdef CONFIG_EFI
+#include <linux/efi.h>
+#endif
+
 static unsigned long ttm_pages_limit;
 
 MODULE_PARM_DESC(pages_limit, "Limit for the allocated pages");
@@ -464,6 +469,79 @@ DEFINE_SHOW_ATTRIBUTE(ttm_tt_debugfs_shrink);
 
 #endif
 
+#ifdef CONFIG_EFI
+/*
+ * EFI variable GUID for TTM page limit configuration
+ * GUID: 8be4df61-93ca-11ec-b909-0800200c9a66
+ */
+static const efi_guid_t TTM_EFI_GUID =
+	EFI_GUID(0x8be4df61, 0x93ca, 0x11ec, 0xb9, 0x09, 0x08, 0x00, 0x20, 0x0c, 0x9a, 0x66);
+
+/*
+ * ttm_read_efi_pages_limit - Read TTM page limit from EFI variable
+ *
+ * Attempts to read the TTMPageLimit EFI variable to get a platform-specific
+ * page limit configuration. This allows BIOS firmware or users
+ * to set persistent GPU memory limits without kernel command line modification.
+ *
+ * Returns: Page count on success, 0 on any error (triggers auto-calculation)
+ */
+static unsigned long ttm_read_efi_pages_limit(void)
+{
+	efi_char16_t efi_name[] = L"TTMPageLimit";
+	unsigned long size = sizeof(u64);
+	struct sysinfo si;
+	efi_status_t status;
+	u64 page_limit;
+
+	if (!efi_enabled(EFI_BOOT))
+		return 0;
+
+	if (efivar_lock())
+		return 0;
+
+	status = efivar_get_variable(efi_name, (efi_guid_t *)&TTM_EFI_GUID,
+				     NULL, &size, &page_limit);
+	efivar_unlock();
+
+	if (status == EFI_NOT_FOUND) {
+		pr_debug("TTMPageLimit EFI variable not found\n");
+		return 0;
+	}
+
+	if (status != EFI_SUCCESS) {
+		pr_debug("Failed to read TTMPageLimit EFI variable: %d\n",
+			 efi_status_to_err(status));
+		return 0;
+	}
+
+	if (size != sizeof(u64)) {
+		pr_warn("Invalid TTMPageLimit size: %lu bytes (expected %zu)\n",
+			size, sizeof(u64));
+		return 0;
+	}
+
+	page_limit = le64_to_cpu(page_limit);
+
+	if (page_limit == 0)
+		return 0;
+
+	si_meminfo(&si);
+	if (page_limit > si.totalram) {
+		pr_warn("TTMPageLimit (%llu pages) exceeds system RAM (%lu pages), capping to system RAM\n",
+			page_limit, si.totalram);
+		page_limit = si.totalram;
+	}
+
+	pr_info("Using TTMPageLimit from EFI: %llu pages\n", page_limit);
+	return (unsigned long)page_limit;
+}
+#else
+static unsigned long ttm_read_efi_pages_limit(void)
+{
+	return 0;
+}
+#endif /* CONFIG_EFI */
 
 /*
  * ttm_tt_mgr_init - register with the MM shrinker
@@ -472,13 +550,26 @@ DEFINE_SHOW_ATTRIBUTE(ttm_tt_debugfs_shrink);
  */
 void ttm_tt_mgr_init(unsigned long num_pages, unsigned long num_dma32_pages)
 {
+	unsigned long efi_limit;
+
 #ifdef CONFIG_DEBUG_FS
 	debugfs_create_file("tt_shrink", 0400, ttm_debugfs_root, NULL,
 			    &ttm_tt_debugfs_shrink_fops);
 #endif
 
-	if (!ttm_pages_limit)
-		ttm_pages_limit = num_pages;
+	/*
+	 * Priority chain for pages_limit:
+	 * 1. Module parameter (ttm.pages_limit) - highest priority
+	 * 2. EFI variable (TTMPageLimit) - middle priority
+	 * 3. Auto-calculation (50% of system RAM) - fallback
+	 */
+	if (!ttm_pages_limit) {
+		efi_limit = ttm_read_efi_pages_limit();
+		if (efi_limit > 0)
+			ttm_pages_limit = efi_limit;
+		else
+			ttm_pages_limit = num_pages;
+	}
 
 	if (!ttm_dma32_pages_limit)
 		ttm_dma32_pages_limit = num_dma32_pages;
