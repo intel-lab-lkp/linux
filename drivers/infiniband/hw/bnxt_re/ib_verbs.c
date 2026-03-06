@@ -3479,7 +3479,6 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	struct bnxt_re_ucontext *uctx =
 		rdma_udata_to_drv_context(udata, struct bnxt_re_ucontext, ib_uctx);
 	struct bnxt_qplib_dev_attr *dev_attr = rdev->dev_attr;
-	struct bnxt_qplib_chip_ctx *cctx;
 	int cqe = attr->cqe;
 	int rc, entries;
 	u32 active_cqs;
@@ -3497,7 +3496,6 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	}
 
 	cq->rdev = rdev;
-	cctx = rdev->chip_ctx;
 	cq->qplib_cq.cq_handle = (u64)(unsigned long)(&cq->qplib_cq);
 
 	entries = bnxt_re_init_depth(cqe + 1, uctx);
