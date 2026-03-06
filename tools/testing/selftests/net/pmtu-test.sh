@@ -976,7 +976,7 @@ setup_ovs_bridge() {
 	run_cmd ip link set ovs_br0 up
 
 	run_cmd ${ns_c} ip link add veth_C-A type veth peer name veth_A-C
-	run_cmd ${ns_c} ip link set veth_A-C netns 1
+	run_cmd ${ns_c} ip link set veth_A-C netns $$
 
 	run_cmd         ip link set veth_A-C up
 	run_cmd ${ns_c} ip link set veth_C-A up
@@ -985,7 +985,7 @@ setup_ovs_bridge() {
 	setup_ovs_add_if veth_A-C
 
 	# Move veth_A-R1 to init
-	run_cmd ${ns_a} ip link set veth_A-R1 netns 1
+	run_cmd ${ns_a} ip link set veth_A-R1 netns $$
 	run_cmd ip addr add ${prefix4}.${a_r1}.1/${veth4_mask} dev veth_A-R1
 	run_cmd ip addr add ${prefix6}:${a_r1}::1/${veth6_mask} dev veth_A-R1
 	run_cmd ip link set veth_A-R1 up
