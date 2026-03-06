@@ -2146,11 +2146,23 @@ static void mana_process_rx_cqe(struct mana_rxq *rxq, struct mana_cq *cq,
 	for (i = 0; i < MANA_RXCOMP_OOB_NUM_PPI; i++) {
 		pktlen = oob->ppi[i].pkt_len;
 		if (pktlen == 0) {
-			if (i == 0)
+			/* Collect coalesced CQE count based on packets processed.
+			 * Coalesced CQEs have at least 2 packets, so index is i - 2.
+			 */
+			if (i > 1) {
+				u64_stats_update_begin(&rxq->stats.syncp);
+				rxq->stats.coalesced_cqe[i - 2]++;
+				u64_stats_update_end(&rxq->stats.syncp);
+			} else if (i == 0) {
+				/* Error case stat */
+				u64_stats_update_begin(&rxq->stats.syncp);
+				rxq->stats.pkt_len0_err++;
+				u64_stats_update_end(&rxq->stats.syncp);
 				netdev_err_once(
 					ndev,
 					"RX pkt len=0, rq=%u, cq=%u, rxobj=0x%llx\n",
 					rxq->gdma_id, cq->gdma_id, rxq->rxobj);
+			}
 			break;
 		}
 
@@ -2172,6 +2184,13 @@ static void mana_process_rx_cqe(struct mana_rxq *rxq, struct mana_cq *cq,
 
 		if (!coalesced)
 			break;
+	}
+
+	/* Coalesced CQE with all 4 packets */
+	if (coalesced && i == MANA_RXCOMP_OOB_NUM_PPI) {
+		u64_stats_update_begin(&rxq->stats.syncp);
+		rxq->stats.coalesced_cqe[MANA_RXCOMP_OOB_NUM_PPI - 2]++;
+		u64_stats_update_end(&rxq->stats.syncp);
 	}
 }
 
