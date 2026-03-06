@@ -147,6 +147,14 @@ $defs:
           A number of phandles to qos blocks which need to be saved and restored
           while power domain switches state.
 
+      pm_shaping:
+        $ref: /schemas/types.yaml#/definitions/phandle-array
+        items:
+          maxItems: 1
+        description: |
+          A number of phandles to shaping blocks which need to be saved and restored
+          while power domain switches state.
+
       "#power-domain-cells":
         enum: [0, 1]
         description:
