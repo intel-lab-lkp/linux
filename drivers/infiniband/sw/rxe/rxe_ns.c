@@ -39,7 +39,9 @@ static int __net_init rxe_ns_init(struct net *net)
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
 
 	rcu_assign_pointer(ns_sk->rxe_sk4, NULL); /* initialize sock 4 socket */
+#if IS_ENABLED(CONFIG_IPV6)
 	rcu_assign_pointer(ns_sk->rxe_sk6, NULL); /* initialize sock 6 socket */
+#endif /* IPV6 */
 	synchronize_rcu();
 
 	return 0;
@@ -52,11 +54,15 @@ static void __net_exit rxe_ns_exit(struct net *net)
 	 */
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
 	struct sock *rxe_sk4 = NULL;
+#if IS_ENABLED(CONFIG_IPV6)
 	struct sock *rxe_sk6 = NULL;
+#endif
 
 	rcu_read_lock();
 	rxe_sk4 = rcu_dereference(ns_sk->rxe_sk4);
+#if IS_ENABLED(CONFIG_IPV6)
 	rxe_sk6 = rcu_dereference(ns_sk->rxe_sk6);
+#endif
 	rcu_read_unlock();
 
 	/* close socket */
@@ -66,11 +72,13 @@ static void __net_exit rxe_ns_exit(struct net *net)
 		synchronize_rcu();
 	}
 
+#if IS_ENABLED(CONFIG_IPV6)
 	if (rxe_sk6 && rxe_sk6->sk_socket) {
 		udp_tunnel_sock_release(rxe_sk6->sk_socket);
 		rcu_assign_pointer(ns_sk->rxe_sk6, NULL);
 		synchronize_rcu();
 	}
+#endif
 }
 
 /*
@@ -103,6 +111,7 @@ void rxe_ns_pernet_set_sk4(struct net *net, struct sock *sk)
 	synchronize_rcu();
 }
 
+#if IS_ENABLED(CONFIG_IPV6)
 struct sock *rxe_ns_pernet_sk6(struct net *net)
 {
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
@@ -122,6 +131,19 @@ void rxe_ns_pernet_set_sk6(struct net *net, struct sock *sk)
 	rcu_assign_pointer(ns_sk->rxe_sk6, sk);
 	synchronize_rcu();
 }
+
+#else /* IPV6 */
+
+struct sock *rxe_ns_pernet_sk6(struct net *net)
+{
+	return NULL;
+}
+
+void rxe_ns_pernet_set_sk6(struct net *net, struct sock *sk)
+{
+}
+
+#endif /* IPV6 */
 
 int __init rxe_namespace_init(void)
 {
