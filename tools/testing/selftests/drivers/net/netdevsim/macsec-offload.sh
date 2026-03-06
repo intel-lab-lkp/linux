@@ -108,6 +108,65 @@ TMP_FEATS_ON_3="$(ethtool -k $MACSEC_NETDEV)"
 check $?
 
 
+ip link del $MACSEC_NETDEV
+
+
+#
+# test VLAN filter propagation through macsec
+#
+
+VLAN_DFS="$NSIM_DEV_DFS/vlan"
+
+check_vid() {
+    local vid=$1
+    local expected=$2
+
+    if grep -q "ctag $vid" "$VLAN_DFS" 2>/dev/null; then
+	present=1
+    else
+	present=0
+    fi
+    [ "$present" -eq "$expected" ]
+}
+
+# Skip VLAN tests if nsim doesn't support VLANs
+if [ -f $VLAN_DFS ]; then
+    ip link add link $NSIM_NETDEV $MACSEC_NETDEV type macsec offload mac
+    check $?
+    ip link add link $MACSEC_NETDEV ${MACSEC_NETDEV}.10 type vlan id 10
+    check $?
+    check_vid 10 1
+    check $? || echo "VID 10 should be on $MACSEC_NETDEV with offload ON"
+
+    ip link add link $NSIM_NETDEV ${MACSEC_NETDEV}2 type macsec port 5
+    check $?
+    ip link add link ${MACSEC_NETDEV}2 ${MACSEC_NETDEV}2.20 type vlan id 20
+    check $?
+    check_vid 20 0
+    check $? || echo "VID 20 should NOT be on $MACSEC_NETDEV2 with offload OFF"
+
+    ip link set ${MACSEC_NETDEV}2 type macsec offload mac
+    check $?
+    check_vid 20 1
+    check $? || echo "VID 20 should appear after offload ON"
+
+    ip link set ${MACSEC_NETDEV}2 type macsec offload off
+    check $?
+    check_vid 20 0
+    check $? || echo "VID 20 should disappear after offload OFF"
+
+    ip link del ${MACSEC_NETDEV}.10
+    check $?
+    check_vid 10 0
+    check $? || echo "VID 10 should be gone after VLAN delete with offload ON"
+
+    ip link del ${MACSEC_NETDEV}2.20
+    ip link del ${MACSEC_NETDEV}2
+    ip link del $MACSEC_NETDEV
+else
+    echo "SKIP: macsec VLAN tests, no netdevsim support."
+fi
+
 if [ $num_errors -eq 0 ]; then
     echo "PASSED all $((num_passes)) checks"
     exit 0
