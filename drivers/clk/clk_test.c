@@ -5,6 +5,7 @@
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/clk/clk-conf.h>
+#include <linux/lcm.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 
@@ -177,6 +178,46 @@ static int clk_dummy_div_set_rate(struct clk_hw *hw, unsigned long rate,
 static const struct clk_ops clk_dummy_div_ops = {
 	.recalc_rate = clk_dummy_div_recalc_rate,
 	.determine_rate = clk_dummy_div_determine_rate,
+	.set_rate = clk_dummy_div_set_rate,
+};
+
+static int clk_dummy_div_coordinating_determine_rate(struct clk_hw *hw,
+						     struct clk_rate_request *req)
+{
+	struct clk_hw *parent_hw = clk_hw_get_parent(hw);
+	struct clk_rate_change *child_node;
+	unsigned long lcm_rate = 0;
+	LIST_HEAD(stable_clks);
+	int ret;
+
+	ret = clk_hw_get_v2_stable_clks(req, parent_hw, &stable_clks);
+	if (ret)
+		return ret;
+
+	list_for_each_entry(child_node, &stable_clks, node) {
+		if (child_node->target_rate == 0)
+			continue;
+		if (lcm_rate == 0)
+			lcm_rate = child_node->target_rate;
+		else
+			lcm_rate = lcm(lcm_rate, child_node->target_rate);
+	}
+
+	ret = clk_hw_add_coordinated_rate_changes(req, parent_hw,
+						  clk_hw_get_rate(parent_hw),
+						  lcm_rate, &stable_clks);
+	if (ret)
+		return ret;
+
+	req->best_parent_rate = lcm_rate;
+	req->best_parent_hw = parent_hw;
+
+	return 0;
+}
+
+static const struct clk_ops clk_dummy_div_coordinating_ops = {
+	.recalc_rate = clk_dummy_div_recalc_rate,
+	.determine_rate = clk_dummy_div_coordinating_determine_rate,
 	.set_rate = clk_dummy_div_set_rate,
 };
 
@@ -671,6 +712,14 @@ clk_rate_change_sibling_div_div_test_regular_ops_params[] = {
 KUNIT_ARRAY_PARAM_DESC(clk_rate_change_sibling_div_div_test_regular_ops,
 		       clk_rate_change_sibling_div_div_test_regular_ops_params, desc)
 
+static const struct clk_rate_change_sibling_div_div_test_param
+clk_rate_change_sibling_div_div_test_coord_ops_params[] = {
+	{ .desc = "coordinating_ops", .ops = &clk_dummy_div_coordinating_ops },
+};
+
+KUNIT_ARRAY_PARAM_DESC(clk_rate_change_sibling_div_div_test_coord_ops,
+		       clk_rate_change_sibling_div_div_test_coord_ops_params, desc)
+
 static int clk_rate_change_sibling_div_div_test_init(struct kunit *test)
 {
 	const struct clk_rate_change_sibling_div_div_test_param *param = test->param_value;
@@ -689,14 +738,16 @@ static int clk_rate_change_sibling_div_div_test_init(struct kunit *test)
 		return ret;
 
 	ctx->child1.hw.init = CLK_HW_INIT_HW("child1", &ctx->parent.hw,
-					     param->ops, CLK_SET_RATE_PARENT);
+					     param->ops,
+					     CLK_SET_RATE_PARENT | CLK_V2_RATE_NEGOTIATION);
 	ctx->child1.div = 1;
 	ret = clk_hw_register_kunit(test, NULL, &ctx->child1.hw);
 	if (ret)
 		return ret;
 
 	ctx->child2.hw.init = CLK_HW_INIT_HW("child2", &ctx->parent.hw,
-					     param->ops, CLK_SET_RATE_PARENT);
+					     param->ops,
+					     CLK_SET_RATE_PARENT | CLK_V2_RATE_NEGOTIATION);
 	ctx->child2.div = 1;
 	ret = clk_hw_register_kunit(test, NULL, &ctx->child2.hw);
 	if (ret)
@@ -803,6 +854,48 @@ static void clk_test_rate_change_sibling_div_div_3(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx->child2.div, 1);
 }
 
+static void clk_test_rate_change_sibling_div_div_4(struct kunit *test)
+{
+	struct clk_rate_change_sibling_div_div_context *ctx = test->priv;
+	int ret;
+
+	ret = clk_set_rate(ctx->child1_clk, 48 * HZ_PER_MHZ);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	/*
+	 * With coordinated rate changes, the parent should be at 48 MHz,
+	 * child1 at 48 MHz (div=1), and child2 at 24 MHz (div=2). Child2's
+	 * keeps the same frequency, and the divider is changed from 1 to 2.
+	 */
+	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->parent_clk), 48 * HZ_PER_MHZ);
+	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child1_clk), 48 * HZ_PER_MHZ);
+	KUNIT_EXPECT_EQ(test, ctx->child1.div, 1);
+	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 24 * HZ_PER_MHZ);
+	KUNIT_EXPECT_EQ(test, ctx->child2.div, 2);
+}
+
+static void clk_test_rate_change_sibling_div_div_5(struct kunit *test)
+{
+	struct clk_rate_change_sibling_div_div_context *ctx = test->priv;
+	int ret;
+
+	ret = clk_set_rate(ctx->child1_clk, 32 * HZ_PER_MHZ);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	ret = clk_set_rate(ctx->child2_clk, 48 * HZ_PER_MHZ);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	/*
+	 * With coordinated rate changes, the parent should be at 96 MHz,
+	 * child1 at 32 MHz (div=3), and child2 at 48 MHz (div=2).
+	 */
+	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->parent_clk), 96 * HZ_PER_MHZ);
+	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child1_clk), 32 * HZ_PER_MHZ);
+	KUNIT_EXPECT_EQ(test, ctx->child1.div, 3);
+	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 48 * HZ_PER_MHZ);
+	KUNIT_EXPECT_EQ(test, ctx->child2.div, 2);
+}
+
 static struct kunit_case clk_rate_change_sibling_div_div_cases[] = {
 	KUNIT_CASE_PARAM(clk_test_rate_change_sibling_div_div_1,
 			 clk_rate_change_sibling_div_div_test_regular_ops_gen_params),
@@ -810,6 +903,12 @@ static struct kunit_case clk_rate_change_sibling_div_div_cases[] = {
 			 clk_rate_change_sibling_div_div_test_regular_ops_gen_params),
 	KUNIT_CASE_PARAM(clk_test_rate_change_sibling_div_div_3,
 			 clk_rate_change_sibling_div_div_test_regular_ops_gen_params),
+	KUNIT_CASE_PARAM(clk_test_rate_change_sibling_div_div_1,
+			 clk_rate_change_sibling_div_div_test_coord_ops_gen_params),
+	KUNIT_CASE_PARAM(clk_test_rate_change_sibling_div_div_4,
+			 clk_rate_change_sibling_div_div_test_coord_ops_gen_params),
+	KUNIT_CASE_PARAM(clk_test_rate_change_sibling_div_div_5,
+			 clk_rate_change_sibling_div_div_test_coord_ops_gen_params),
 	{}
 };
 
