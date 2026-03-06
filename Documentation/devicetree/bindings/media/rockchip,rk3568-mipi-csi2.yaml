@@ -18,6 +18,7 @@ properties:
   compatible:
     enum:
       - rockchip,rk3568-mipi-csi2
+      - rockchip,rk3588-mipi-csi2
 
   reg:
     maxItems: 1
