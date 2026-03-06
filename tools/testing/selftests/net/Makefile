@@ -67,6 +67,10 @@ TEST_PROGS := \
 	psock_snd.sh \
 	reuseaddr_ports_exhausted.sh \
 	reuseport_addr_any.sh \
+	reuseport_bpf.sh \
+	reuseport_bpf_cpu.sh \
+	reuseport_bpf_numa.sh \
+	reuseport_dualstack.sh \
 	route_hint.sh \
 	route_localnet.sh \
 	rps_default_mask.sh \
@@ -145,6 +149,10 @@ TEST_GEN_FILES := \
 	psock_tpacket \
 	reuseaddr_ports_exhausted \
 	reuseport_addr_any \
+	reuseport_bpf \
+	reuseport_bpf_cpu \
+	reuseport_bpf_numa \
+	reuseport_dualstack \
 	rxtimestamp \
 	sctp_hello \
 	skf_net_off \
@@ -173,10 +181,6 @@ TEST_GEN_PROGS := \
 	ipv6_fragmentation \
 	proc_net_pktgen \
 	reuseaddr_conflict \
-	reuseport_bpf \
-	reuseport_bpf_cpu \
-	reuseport_bpf_numa \
-	reuseport_dualstack \
 	sk_bind_sendto_listen \
 	sk_connect_zero_addr \
 	sk_so_peek_off \
