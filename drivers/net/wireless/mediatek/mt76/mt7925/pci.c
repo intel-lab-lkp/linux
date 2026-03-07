@@ -516,7 +516,14 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		goto err_free_pci_vec;
 
-	if (mt7925_disable_aspm)
+	/* MT7927 CONNINFRA power domain and WFDMA register access are
+	 * unreliable with PCIe L1 active, causing throughput to drop
+	 * from 1+ Gbps to ~200 Mbps.  Disable ASPM unconditionally
+	 * rather than only L1, since L0s savings are negligible for
+	 * a PCIe WLAN card and mt76_pci_disable_aspm() already
+	 * handles both device and parent bridge in one call.
+	 */
+	if (mt7925_disable_aspm || is_mt7927_hw)
 		mt76_pci_disable_aspm(pdev);
 
 	ops = mt792x_get_mac80211_ops(&pdev->dev, &mt7925_ops,
