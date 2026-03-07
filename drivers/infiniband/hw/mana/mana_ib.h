@@ -94,6 +94,7 @@ struct mana_ib_wq {
 	int wqe;
 	u32 wq_buf_size;
 	mana_handle_t rx_object;
+	struct list_head ucontext_list;
 };
 
 struct mana_ib_pd {
@@ -207,6 +208,7 @@ struct mana_ib_ucontext {
 	struct mutex lock;
 	struct list_head pd_list;
 	struct list_head cq_list;
+	struct list_head wq_list;
 };
 
 struct mana_ib_rwq_ind_table {

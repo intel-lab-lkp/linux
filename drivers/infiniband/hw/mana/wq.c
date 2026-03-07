@@ -41,6 +41,17 @@ struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
 	wq->wqe = init_attr->max_wr;
 	wq->wq_buf_size = ucmd.wq_buf_size;
 	wq->rx_object = INVALID_MANA_HANDLE;
+
+	INIT_LIST_HEAD(&wq->ucontext_list);
+	if (udata) {
+		struct mana_ib_ucontext *mana_ucontext =
+			rdma_udata_to_drv_context(udata,
+				struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_add_tail(&wq->ucontext_list, &mana_ucontext->wq_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
+
 	return &wq->ibwq;
 
 err_free_wq:
@@ -63,6 +74,15 @@ int mana_ib_destroy_wq(struct ib_wq *ibwq, struct ib_udata *udata)
 	struct mana_ib_dev *mdev;
 
 	mdev = container_of(ib_dev, struct mana_ib_dev, ib_dev);
+
+	if (udata) {
+		struct mana_ib_ucontext *mana_ucontext =
+			rdma_udata_to_drv_context(udata,
+				struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_del_init(&wq->ucontext_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
 
 	mana_ib_destroy_queue(mdev, &wq->queue);
 
