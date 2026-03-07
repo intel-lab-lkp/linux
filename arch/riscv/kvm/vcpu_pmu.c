@@ -425,9 +425,10 @@ int kvm_riscv_vcpu_pmu_snapshot_set_shmem(struct kvm_vcpu *vcpu, unsigned long s
 	if (saddr_high != 0) {
 		if (IS_ENABLED(CONFIG_32BIT))
 			saddr |= ((gpa_t)saddr_high << 32);
-		else
+		else {
 			sbiret = SBI_ERR_INVALID_ADDRESS;
-		goto out;
+			goto out;
+		}
 	}
 
 	kvpmu->sdata = kzalloc(snapshot_area_size, GFP_ATOMIC);
