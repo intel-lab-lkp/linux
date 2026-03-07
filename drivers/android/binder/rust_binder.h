@@ -59,44 +59,52 @@ extern const struct rust_binder_layout RUST_BINDER_LAYOUT;
 
 static inline size_t rust_binder_transaction_debug_id(rust_binder_transaction t)
 {
-	return *(size_t *) (t + RUST_BINDER_LAYOUT.t.debug_id);
+	return *(size_t *)(t + RUST_BINDER_LAYOUT.t.debug_id);
 }
 
 static inline u32 rust_binder_transaction_code(rust_binder_transaction t)
 {
-	return *(u32 *) (t + RUST_BINDER_LAYOUT.t.code);
+	return *(u32 *)(t + RUST_BINDER_LAYOUT.t.code);
 }
 
 static inline u32 rust_binder_transaction_flags(rust_binder_transaction t)
 {
-	return *(u32 *) (t + RUST_BINDER_LAYOUT.t.flags);
+	return *(u32 *)(t + RUST_BINDER_LAYOUT.t.flags);
 }
 
 // Nullable!
-static inline rust_binder_node rust_binder_transaction_target_node(rust_binder_transaction t)
+static inline rust_binder_node
+rust_binder_transaction_target_node(rust_binder_transaction t)
 {
-	void *p = *(void **) (t + RUST_BINDER_LAYOUT.t.target_node);
+	void *p = *(void **)(t + RUST_BINDER_LAYOUT.t.target_node);
 
 	if (p)
 		p = p + RUST_BINDER_LAYOUT.n.arc_offset;
 	return p;
 }
 
-static inline rust_binder_process rust_binder_transaction_to_proc(rust_binder_transaction t)
+static inline rust_binder_process
+rust_binder_transaction_to_proc(rust_binder_transaction t)
 {
-	void *p = *(void **) (t + RUST_BINDER_LAYOUT.t.to_proc);
+	void *p = *(void **)(t + RUST_BINDER_LAYOUT.t.to_proc);
 
 	return p + RUST_BINDER_LAYOUT.p.arc_offset;
 }
 
-static inline struct task_struct *rust_binder_process_task(rust_binder_process t)
+static inline struct task_struct *
+rust_binder_process_task(rust_binder_process t)
 {
-	return *(struct task_struct **) (t + RUST_BINDER_LAYOUT.p.task);
+	return *(struct task_struct **)(t + RUST_BINDER_LAYOUT.p.task);
 }
 
 static inline size_t rust_binder_node_debug_id(rust_binder_node t)
 {
-	return *(size_t *) (t + RUST_BINDER_LAYOUT.n.debug_id);
+	return *(size_t *)(t + RUST_BINDER_LAYOUT.n.debug_id);
+}
+
+static inline binder_uintptr_t rust_binder_node_ptr(rust_binder_node t)
+{
+	return *(binder_uintptr_t *)(t + RUST_BINDER_LAYOUT.n.ptr);
 }
 
 #endif
