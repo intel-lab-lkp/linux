@@ -41,13 +41,17 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 			ibdev_dbg(ibdev, "CQE %d exceeding limit\n", attr->cqe);
 			return -EINVAL;
 		}
+	}
 
+	down_read(&mdev->reset_rwsem);
+
+	if (udata) {
 		cq->cqe = attr->cqe;
 		err = mana_ib_create_queue(mdev, ucmd.buf_addr, cq->cqe * COMP_ENTRY_SIZE,
 					   &cq->queue);
 		if (err) {
 			ibdev_dbg(ibdev, "Failed to create queue for create cq, %d\n", err);
-			return err;
+			goto err_unlock;
 		}
 
 		mana_ucontext = rdma_udata_to_drv_context(udata, struct mana_ib_ucontext,
@@ -56,14 +60,15 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	} else {
 		if (attr->cqe > U32_MAX / COMP_ENTRY_SIZE / 2 + 1) {
 			ibdev_dbg(ibdev, "CQE %d exceeding limit\n", attr->cqe);
-			return -EINVAL;
+			err = -EINVAL;
+			goto err_unlock;
 		}
 		buf_size = MANA_PAGE_ALIGN(roundup_pow_of_two(attr->cqe * COMP_ENTRY_SIZE));
 		cq->cqe = buf_size / COMP_ENTRY_SIZE;
 		err = mana_ib_create_kernel_queue(mdev, buf_size, GDMA_CQ, &cq->queue);
 		if (err) {
 			ibdev_dbg(ibdev, "Failed to create kernel queue for create cq, %d\n", err);
-			return err;
+			goto err_unlock;
 		}
 		doorbell = mdev->gdma_dev->doorbell;
 	}
@@ -105,6 +110,7 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		mutex_unlock(&mana_ucontext->lock);
 	}
 
+	up_read(&mdev->reset_rwsem);
 	return 0;
 
 err_remove_cq_cb:
@@ -113,7 +119,8 @@ err_destroy_rnic_cq:
 	mana_ib_gd_destroy_cq(mdev, cq);
 err_destroy_queue:
 	mana_ib_destroy_queue(mdev, &cq->queue);
-
+err_unlock:
+	up_read(&mdev->reset_rwsem);
 	return err;
 }
 

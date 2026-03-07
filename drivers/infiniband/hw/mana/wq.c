@@ -31,6 +31,8 @@ struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
 
 	ibdev_dbg(&mdev->ib_dev, "ucmd wq_buf_addr 0x%llx\n", ucmd.wq_buf_addr);
 
+	down_read(&mdev->reset_rwsem);
+
 	err = mana_ib_create_queue(mdev, ucmd.wq_buf_addr, ucmd.wq_buf_size, &wq->queue);
 	if (err) {
 		ibdev_dbg(&mdev->ib_dev,
@@ -52,9 +54,11 @@ struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
 		mutex_unlock(&mana_ucontext->lock);
 	}
 
+	up_read(&mdev->reset_rwsem);
 	return &wq->ibwq;
 
 err_free_wq:
+	up_read(&mdev->reset_rwsem);
 	kfree(wq);
 
 	return ERR_PTR(err);

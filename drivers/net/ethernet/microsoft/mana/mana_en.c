@@ -3652,15 +3652,19 @@ int mana_probe(struct gdma_dev *gd, bool resuming)
 		}
 	}
 
-	err = add_adev(gd, "eth");
+	if (!resuming)
+		err = add_adev(gd, "eth");
 
 	INIT_DELAYED_WORK(&ac->gf_stats_work, mana_gf_stats_work_handler);
 	schedule_delayed_work(&ac->gf_stats_work, MANA_GF_STATS_PERIOD);
-
 out:
 	if (err) {
 		mana_remove(gd, false);
 	} else {
+		/* Notify IB layer that ports are back up after reset */
+		if (resuming && gd->resume_notify)
+			gd->resume_notify(gd->reset_notify_ctx);
+
 		dev_dbg(dev, "gd=%p, id=%u, num_ports=%d, type=%u, instance=%u\n",
 			gd, gd->dev_id.as_uint32, ac->num_ports,
 			gd->dev_id.type, gd->dev_id.instance);
@@ -3684,8 +3688,12 @@ void mana_remove(struct gdma_dev *gd, bool suspending)
 	cancel_delayed_work_sync(&ac->gf_stats_work);
 
 	/* adev currently doesn't support suspending, always remove it */
-	if (gd->adev)
+	if (gd->adev && !suspending)
 		remove_adev(gd);
+
+	/* Notify IB layer before tearing down net devices during reset */
+	if (suspending && gd->reset_notify)
+		gd->reset_notify(gd->reset_notify_ctx);
 
 	for (i = 0; i < ac->num_ports; i++) {
 		ndev = ac->ports[i];

@@ -243,6 +243,12 @@ struct gdma_dev {
 	struct auxiliary_device *adev;
 	bool is_suspended;
 	bool rdma_teardown;
+
+	/* Called by mana_remove() during reset to notify IB layer */
+	void (*reset_notify)(void *ctx);
+	/* Called by mana_probe() during resume to notify IB layer */
+	void (*resume_notify)(void *ctx);
+	void *reset_notify_ctx;
 };
 
 /* MANA_PAGE_SIZE is the DMA unit */

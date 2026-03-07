@@ -86,6 +86,8 @@ struct mana_ib_dev {
 	/* Protects ucontext_list */
 	struct mutex ucontext_lock;
 	struct list_head ucontext_list;
+	/* Serializes resource create callbacks vs reset cleanup */
+	struct rw_semaphore reset_rwsem;
 };
 
 struct mana_ib_wq {

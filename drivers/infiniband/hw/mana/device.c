@@ -103,11 +103,99 @@ static int mana_ib_netdev_event(struct notifier_block *this,
 					netdev_put(ndev, &dev->dev_tracker);
 
 				return NOTIFY_OK;
+
 			default:
 				return NOTIFY_DONE;
 			}
 		}
 	return NOTIFY_DONE;
+}
+
+/*
+ * Reset cleanup: invalidate firmware handles for all tracked user objects.
+ *
+ * Called during service reset BEFORE dispatching IB_EVENT_PORT_ERR to
+ * user-mode.
+ *
+ * Only invalidates FW handles — does NOT free kernel resources (umem, queues)
+ * or remove objects from lists. The IB core's destroy callbacks handle full
+ * resource teardown when user-space closes the uverbs FD or ib_unregister_device
+ * is called. The destroy callbacks skip FW commands when the handle is already
+ * INVALID_MANA_HANDLE.
+ *
+ * For CQs, also removes the CQ callback to prevent stale completions.
+ */
+static void mana_ib_reset_notify(void *ctx)
+{
+	struct mana_ib_dev *mdev = ctx;
+	struct mana_ib_ucontext *uctx;
+	struct mana_ib_qp *qp;
+	struct mana_ib_wq *wq;
+	struct mana_ib_cq *cq;
+	struct mana_ib_mr *mr;
+	struct mana_ib_pd *pd;
+	struct ib_event ibev;
+	int i;
+
+	down_write(&mdev->reset_rwsem);
+
+	ibdev_dbg(&mdev->ib_dev, "reset cleanup starting\n");
+
+	mutex_lock(&mdev->ucontext_lock);
+	list_for_each_entry(uctx, &mdev->ucontext_list, dev_list) {
+		mutex_lock(&uctx->lock);
+
+		list_for_each_entry(qp, &uctx->qp_list, ucontext_list)
+			qp->qp_handle = INVALID_MANA_HANDLE;
+
+		list_for_each_entry(wq, &uctx->wq_list, ucontext_list)
+			wq->rx_object = INVALID_MANA_HANDLE;
+
+		list_for_each_entry(cq, &uctx->cq_list, ucontext_list) {
+			mana_ib_remove_cq_cb(mdev, cq);
+			cq->cq_handle = INVALID_MANA_HANDLE;
+		}
+
+		list_for_each_entry(mr, &uctx->mr_list, ucontext_list)
+			mr->mr_handle = INVALID_MANA_HANDLE;
+
+		list_for_each_entry(pd, &uctx->pd_list, ucontext_list)
+			pd->pd_handle = INVALID_MANA_HANDLE;
+
+		uctx->doorbell = INVALID_DOORBELL;
+
+		mutex_unlock(&uctx->lock);
+	}
+	mutex_unlock(&mdev->ucontext_lock);
+
+	up_write(&mdev->reset_rwsem);
+
+	/* Revoke user doorbell mappings so userspace cannot ring
+	 * stale doorbells after firmware handles are invalidated.
+	 */
+	rdma_user_mmap_disassociate(&mdev->ib_dev);
+
+	/* Notify userspace (e.g. DPDK) that the port is down */
+	for (i = 0; i < mdev->ib_dev.phys_port_cnt; i++) {
+		ibev.device = &mdev->ib_dev;
+		ibev.element.port_num = i + 1;
+		ibev.event = IB_EVENT_PORT_ERR;
+		ib_dispatch_event(&ibev);
+	}
+}
+
+static void mana_ib_resume_notify(void *ctx)
+{
+	struct mana_ib_dev *dev = ctx;
+	struct ib_event ibev;
+	int i;
+
+	for (i = 0; i < dev->ib_dev.phys_port_cnt; i++) {
+		ibev.device = &dev->ib_dev;
+		ibev.element.port_num = i + 1;
+		ibev.event = IB_EVENT_PORT_ACTIVE;
+		ib_dispatch_event(&ibev);
+	}
 }
 
 static int mana_ib_probe(struct auxiliary_device *adev,
@@ -134,6 +222,7 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	xa_init_flags(&dev->qp_table_wq, XA_FLAGS_LOCK_IRQ);
 	mutex_init(&dev->ucontext_lock);
 	INIT_LIST_HEAD(&dev->ucontext_list);
+	init_rwsem(&dev->reset_rwsem);
 
 	if (mana_ib_is_rnic(dev)) {
 		dev->ib_dev.phys_port_cnt = 1;
@@ -216,6 +305,15 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 
 	dev_set_drvdata(&adev->dev, dev);
 
+	/* ETH device persists across reset — use callback for cleanup.
+	 * RNIC device is removed/re-added, so its cleanup happens in remove.
+	 */
+	if (!mana_ib_is_rnic(dev)) {
+		mdev->reset_notify = mana_ib_reset_notify;
+		mdev->resume_notify = mana_ib_resume_notify;
+		mdev->reset_notify_ctx = dev;
+	}
+
 	return 0;
 
 deallocate_pool:
@@ -242,6 +340,11 @@ static void mana_ib_remove(struct auxiliary_device *adev)
 	if (mana_ib_is_rnic(dev))
 		mana_drain_gsi_sqs(dev);
 
+	if (!mana_ib_is_rnic(dev)) {
+		dev->gdma_dev->reset_notify = NULL;
+		dev->gdma_dev->resume_notify = NULL;
+		dev->gdma_dev->reset_notify_ctx = NULL;
+	}
 	ib_unregister_device(&dev->ib_dev);
 	dma_pool_destroy(dev->av_pool);
 	if (mana_ib_is_rnic(dev)) {

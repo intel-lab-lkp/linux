@@ -701,12 +701,16 @@ int mana_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 		      struct ib_udata *udata)
 {
 	struct mana_ib_qp *qp = container_of(ibqp, struct mana_ib_qp, ibqp);
+	struct mana_ib_dev *mdev =
+		container_of(ibqp->device, struct mana_ib_dev, ib_dev);
 	int err;
 
 	INIT_LIST_HEAD(&qp->ucontext_list);
 
 	switch (attr->qp_type) {
 	case IB_QPT_RAW_PACKET:
+		down_read(&mdev->reset_rwsem);
+
 		/* When rwq_ind_tbl is used, it's for creating WQs for RSS */
 		if (attr->rwq_ind_tbl)
 			err = mana_ib_create_qp_rss(ibqp, ibqp->pd, attr,
@@ -724,6 +728,7 @@ int mana_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 			mutex_unlock(&mana_ucontext->lock);
 		}
 
+		up_read(&mdev->reset_rwsem);
 		return err;
 	case IB_QPT_RC:
 		return mana_ib_create_rc_qp(ibqp, ibqp->pd, attr, udata);

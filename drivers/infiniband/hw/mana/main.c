@@ -81,6 +81,8 @@ int mana_ib_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 	gc = mdev_to_gc(dev);
 
+	down_read(&dev->reset_rwsem);
+
 	mana_gd_init_req_hdr(&req.hdr, GDMA_CREATE_PD, sizeof(req),
 			     sizeof(resp));
 
@@ -98,6 +100,7 @@ int mana_ib_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 		if (!err)
 			err = -EPROTO;
 
+		up_read(&dev->reset_rwsem);
 		return err;
 	}
 
@@ -118,6 +121,7 @@ int mana_ib_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 		mutex_unlock(&mana_ucontext->lock);
 	}
 
+	up_read(&dev->reset_rwsem);
 	return 0;
 }
 
@@ -230,10 +234,13 @@ int mana_ib_alloc_ucontext(struct ib_ucontext *ibcontext,
 	mdev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 	gc = mdev_to_gc(mdev);
 
+	down_read(&mdev->reset_rwsem);
+
 	/* Allocate a doorbell page index */
 	ret = mana_gd_allocate_doorbell_page(gc, &doorbell_page);
 	if (ret) {
 		ibdev_dbg(ibdev, "Failed to allocate doorbell page %d\n", ret);
+		up_read(&mdev->reset_rwsem);
 		return ret;
 	}
 
@@ -251,6 +258,8 @@ int mana_ib_alloc_ucontext(struct ib_ucontext *ibcontext,
 	mutex_lock(&mdev->ucontext_lock);
 	list_add_tail(&ucontext->dev_list, &mdev->ucontext_list);
 	mutex_unlock(&mdev->ucontext_lock);
+
+	up_read(&mdev->reset_rwsem);
 
 	return 0;
 }
