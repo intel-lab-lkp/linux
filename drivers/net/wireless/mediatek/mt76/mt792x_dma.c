@@ -168,7 +168,8 @@ int mt792x_dma_enable(struct mt792x_dev *dev)
 
 	if (is_mt7927(&dev->mt76)) {
 		mt76_set(dev, MT_WFDMA0_GLO_CFG,
-			 MT_WFDMA0_GLO_CFG_ADDR_EXT_EN);
+			 MT_WFDMA0_GLO_CFG_ADDR_EXT_EN |
+			 MT_WFDMA0_GLO_CFG_FW_DWLD_BYPASS_DMASHDL);
 		mt76_clear(dev, MT_WFDMA0_GLO_CFG,
 			   MT_WFDMA0_GLO_CFG_CSR_LBK_RX_Q_SEL_EN);
 	}
