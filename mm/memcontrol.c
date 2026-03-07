@@ -420,6 +420,26 @@ static const unsigned int memcg_node_stat_items[] = {
 	PGSCAN_ANON,
 	PGSCAN_FILE,
 	PGREFILL,
+#ifdef CONFIG_NUMA
+	NUMA_MPOL_LOCAL_HIT,
+	NUMA_MPOL_LOCAL_MISS,
+	NUMA_MPOL_LOCAL_FOREIGN,
+	NUMA_MPOL_PREFERRED_HIT,
+	NUMA_MPOL_PREFERRED_MISS,
+	NUMA_MPOL_PREFERRED_FOREIGN,
+	NUMA_MPOL_PREFERRED_MANY_HIT,
+	NUMA_MPOL_PREFERRED_MANY_MISS,
+	NUMA_MPOL_PREFERRED_MANY_FOREIGN,
+	NUMA_MPOL_BIND_HIT,
+	NUMA_MPOL_BIND_MISS,
+	NUMA_MPOL_BIND_FOREIGN,
+	NUMA_MPOL_INTERLEAVE_HIT,
+	NUMA_MPOL_INTERLEAVE_MISS,
+	NUMA_MPOL_INTERLEAVE_FOREIGN,
+	NUMA_MPOL_WEIGHTED_INTERLEAVE_HIT,
+	NUMA_MPOL_WEIGHTED_INTERLEAVE_MISS,
+	NUMA_MPOL_WEIGHTED_INTERLEAVE_FOREIGN,
+#endif
 #ifdef CONFIG_HUGETLB_PAGE
 	NR_HUGETLB,
 #endif
@@ -1591,6 +1611,26 @@ static const struct memory_stat memory_stats[] = {
 #ifdef CONFIG_NUMA_BALANCING
 	{ "pgpromote_success",		PGPROMOTE_SUCCESS	},
 #endif
+#ifdef CONFIG_NUMA
+	{ "numa_mpol_local_hit",		NUMA_MPOL_LOCAL_HIT		},
+	{ "numa_mpol_local_miss",		NUMA_MPOL_LOCAL_MISS		},
+	{ "numa_mpol_local_foreign",		NUMA_MPOL_LOCAL_FOREIGN		},
+	{ "numa_mpol_preferred_hit",		NUMA_MPOL_PREFERRED_HIT		},
+	{ "numa_mpol_preferred_miss",		NUMA_MPOL_PREFERRED_MISS	},
+	{ "numa_mpol_preferred_foreign",	NUMA_MPOL_PREFERRED_FOREIGN	},
+	{ "numa_mpol_preferred_many_hit",	NUMA_MPOL_PREFERRED_MANY_HIT	},
+	{ "numa_mpol_preferred_many_miss",	NUMA_MPOL_PREFERRED_MANY_MISS	},
+	{ "numa_mpol_preferred_many_foreign",	NUMA_MPOL_PREFERRED_MANY_FOREIGN },
+	{ "numa_mpol_bind_hit",			NUMA_MPOL_BIND_HIT		},
+	{ "numa_mpol_bind_miss",		NUMA_MPOL_BIND_MISS		},
+	{ "numa_mpol_bind_foreign",		NUMA_MPOL_BIND_FOREIGN		},
+	{ "numa_mpol_interleave_hit",		NUMA_MPOL_INTERLEAVE_HIT	},
+	{ "numa_mpol_interleave_miss",		NUMA_MPOL_INTERLEAVE_MISS	},
+	{ "numa_mpol_interleave_foreign",	NUMA_MPOL_INTERLEAVE_FOREIGN	},
+	{ "numa_mpol_weighted_interleave_hit",	NUMA_MPOL_WEIGHTED_INTERLEAVE_HIT },
+	{ "numa_mpol_weighted_interleave_miss",	NUMA_MPOL_WEIGHTED_INTERLEAVE_MISS },
+	{ "numa_mpol_weighted_interleave_foreign", NUMA_MPOL_WEIGHTED_INTERLEAVE_FOREIGN },
+#endif
 };
 
 /* The actual unit of the state item, not the same as the output unit */
@@ -1642,6 +1682,26 @@ static int memcg_page_state_output_unit(int item)
 	case PGREFILL:
 #ifdef CONFIG_NUMA_BALANCING
 	case PGPROMOTE_SUCCESS:
+#endif
+#ifdef CONFIG_NUMA
+	case NUMA_MPOL_LOCAL_HIT:
+	case NUMA_MPOL_LOCAL_MISS:
+	case NUMA_MPOL_LOCAL_FOREIGN:
+	case NUMA_MPOL_PREFERRED_HIT:
+	case NUMA_MPOL_PREFERRED_MISS:
+	case NUMA_MPOL_PREFERRED_FOREIGN:
+	case NUMA_MPOL_PREFERRED_MANY_HIT:
+	case NUMA_MPOL_PREFERRED_MANY_MISS:
+	case NUMA_MPOL_PREFERRED_MANY_FOREIGN:
+	case NUMA_MPOL_BIND_HIT:
+	case NUMA_MPOL_BIND_MISS:
+	case NUMA_MPOL_BIND_FOREIGN:
+	case NUMA_MPOL_INTERLEAVE_HIT:
+	case NUMA_MPOL_INTERLEAVE_MISS:
+	case NUMA_MPOL_INTERLEAVE_FOREIGN:
+	case NUMA_MPOL_WEIGHTED_INTERLEAVE_HIT:
+	case NUMA_MPOL_WEIGHTED_INTERLEAVE_MISS:
+	case NUMA_MPOL_WEIGHTED_INTERLEAVE_FOREIGN:
 #endif
 		return 1;
 	default:

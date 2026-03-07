@@ -117,6 +117,7 @@
 #include <asm/tlb.h>
 #include <linux/uaccess.h>
 #include <linux/memory.h>
+#include <linux/memcontrol.h>
 
 #include "internal.h"
 
@@ -2426,6 +2427,83 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 	return page;
 }
 
+/*
+ * Count a mempolicy allocation. Stats are tracked per-node and per-cgroup.
+ * The following numa_{hit/miss/foreign} pattern is used:
+ *
+ *   hit
+ *     - for BIND and PREFERRED_MANY, allocation succeeded on node in nodemask
+ *     - for other policies, allocation succeeded on intended node
+ *     - counted on the node of the allocation
+ *   miss
+ *     - allocation intended for other node, but happened on this one
+ *     - counted on other node
+ *   foreign
+ *     - allocation intended on this node, but happened on other node
+ *     - counted on this node
+ */
+static void mpol_count_numa_alloc(struct mempolicy *pol, int intended_nid,
+				  struct page *page, unsigned int order)
+{
+	int actual_nid = page_to_nid(page);
+	long nr_pages = 1L << order;
+	enum node_stat_item hit_idx;
+	struct mem_cgroup *memcg;
+	struct lruvec *lruvec;
+	bool is_hit;
+
+	if (!root_mem_cgroup || mem_cgroup_disabled())
+		return;
+
+	/*
+	 * Start with hit then use +1 or +2 later on to change to miss or
+	 * foreign respectively if needed.
+	 */
+	switch (pol->mode) {
+	case MPOL_PREFERRED:
+		hit_idx = NUMA_MPOL_PREFERRED_HIT;
+		break;
+	case MPOL_PREFERRED_MANY:
+		hit_idx = NUMA_MPOL_PREFERRED_MANY_HIT;
+		break;
+	case MPOL_BIND:
+		hit_idx = NUMA_MPOL_BIND_HIT;
+		break;
+	case MPOL_INTERLEAVE:
+		hit_idx = NUMA_MPOL_INTERLEAVE_HIT;
+		break;
+	case MPOL_WEIGHTED_INTERLEAVE:
+		hit_idx = NUMA_MPOL_WEIGHTED_INTERLEAVE_HIT;
+		break;
+	default:
+		hit_idx = NUMA_MPOL_LOCAL_HIT;
+		break;
+	}
+
+	if (pol->mode == MPOL_BIND || pol->mode == MPOL_PREFERRED_MANY)
+		is_hit = node_isset(actual_nid, pol->nodes);
+	else
+		is_hit = (actual_nid == intended_nid);
+
+	rcu_read_lock();
+	memcg = mem_cgroup_from_task(current);
+
+	if (is_hit) {
+		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(actual_nid));
+		mod_lruvec_state(lruvec, hit_idx, nr_pages);
+	} else {
+		/* account for miss on the fallback node */
+		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(actual_nid));
+		mod_lruvec_state(lruvec, hit_idx + 1, nr_pages);
+
+		/* account for foreign on the intended node */
+		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(intended_nid));
+		mod_lruvec_state(lruvec, hit_idx + 2, nr_pages);
+	}
+
+	rcu_read_unlock();
+}
+
 /**
  * alloc_pages_mpol - Allocate pages according to NUMA mempolicy.
  * @gfp: GFP flags.
@@ -2444,8 +2522,10 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
-	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+	if (pol->mode == MPOL_PREFERRED_MANY) {
+		page = alloc_pages_preferred_many(gfp, order, nid, nodemask);
+		goto out;
+	}
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -2471,7 +2551,7 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 				gfp | __GFP_THISNODE | __GFP_NORETRY, order,
 				nid, NULL);
 			if (page || !(gfp & __GFP_DIRECT_RECLAIM))
-				return page;
+				goto out;
 			/*
 			 * If hugepage allocations are configured to always
 			 * synchronous compact or the vma has been madvised
@@ -2493,6 +2573,10 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 			preempt_enable();
 		}
 	}
+
+out:
+	if (page)
+		mpol_count_numa_alloc(pol, nid, page, order);
 
 	return page;
 }
