@@ -131,7 +131,14 @@ static struct sock *smc_tcp_syn_recv_sock(const struct sock *sk,
 	struct smc_sock *smc;
 	struct sock *child;
 
+	read_lock_bh(&((struct sock *)sk)->sk_callback_lock);
 	smc = smc_clcsock_user_data(sk);
+	if (!smc) {
+		read_unlock_bh(&((struct sock *)sk)->sk_callback_lock);
+		return NULL;
+	}
+	sock_hold(&smc->sk);
+	read_unlock_bh(&((struct sock *)sk)->sk_callback_lock);
 
 	if (READ_ONCE(sk->sk_ack_backlog) + atomic_read(&smc->queued_smc_hs) >
 				sk->sk_max_ack_backlog)
@@ -153,11 +160,13 @@ static struct sock *smc_tcp_syn_recv_sock(const struct sock *sk,
 		if (inet_csk(child)->icsk_af_ops == inet_csk(sk)->icsk_af_ops)
 			inet_csk(child)->icsk_af_ops = smc->ori_af_ops;
 	}
+	sock_put(&smc->sk);
 	return child;
 
 drop:
 	dst_release(dst);
 	tcp_listendrop(sk);
+	sock_put(&smc->sk);
 	return NULL;
 }
 
