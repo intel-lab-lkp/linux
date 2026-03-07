@@ -83,6 +83,9 @@ struct mana_ib_dev {
 	struct dma_pool *av_pool;
 	netdevice_tracker dev_tracker;
 	struct notifier_block nb;
+	/* Protects ucontext_list */
+	struct mutex ucontext_lock;
+	struct list_head ucontext_list;
 };
 
 struct mana_ib_wq {
@@ -197,6 +200,9 @@ struct mana_ib_qp {
 struct mana_ib_ucontext {
 	struct ib_ucontext ibucontext;
 	u32 doorbell;
+	struct list_head dev_list;
+	/* Protects resource lists below */
+	struct mutex lock;
 };
 
 struct mana_ib_rwq_ind_table {

@@ -132,6 +132,8 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	dev->ib_dev.dev.parent = gc->dev;
 	dev->gdma_dev = mdev;
 	xa_init_flags(&dev->qp_table_wq, XA_FLAGS_LOCK_IRQ);
+	mutex_init(&dev->ucontext_lock);
+	INIT_LIST_HEAD(&dev->ucontext_list);
 
 	if (mana_ib_is_rnic(dev)) {
 		dev->ib_dev.phys_port_cnt = 1;

@@ -221,6 +221,12 @@ int mana_ib_alloc_ucontext(struct ib_ucontext *ibcontext,
 
 	ucontext->doorbell = doorbell_page;
 
+	mutex_init(&ucontext->lock);
+
+	mutex_lock(&mdev->ucontext_lock);
+	list_add_tail(&ucontext->dev_list, &mdev->ucontext_list);
+	mutex_unlock(&mdev->ucontext_lock);
+
 	return 0;
 }
 
@@ -235,6 +241,10 @@ void mana_ib_dealloc_ucontext(struct ib_ucontext *ibcontext)
 
 	mdev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 	gc = mdev_to_gc(mdev);
+
+	mutex_lock(&mdev->ucontext_lock);
+	list_del_init(&mana_ucontext->dev_list);
+	mutex_unlock(&mdev->ucontext_lock);
 
 	ret = mana_gd_destroy_doorbell_page(gc, mana_ucontext->doorbell);
 	if (ret)
