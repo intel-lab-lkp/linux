@@ -468,13 +468,20 @@ static int append_buildid(char *buffer,   const char *modname,
 #endif /* CONFIG_STACKTRACE_BUILD_ID */
 
 #ifdef CONFIG_KALLSYMS_LINEINFO
+#include <linux/mod_lineinfo.h>
+
 bool kallsyms_lookup_lineinfo(unsigned long addr, unsigned long sym_start,
 			      const char **file, unsigned int *line)
 {
 	unsigned long long raw_offset;
-	unsigned int offset, low, high, mid, file_id;
+	unsigned int offset, low, high, mid, block;
+	unsigned int cur_addr, cur_file_id, cur_line;
+	unsigned int best_file_id = 0, best_line = 0;
+	unsigned int block_entries, data_end;
+	bool found = false;
+	u32 pos;
 
-	if (!lineinfo_num_entries)
+	if (!lineinfo_num_entries || !lineinfo_num_blocks)
 		return false;
 
 	/* Compute offset from _text */
@@ -486,12 +493,12 @@ bool kallsyms_lookup_lineinfo(unsigned long addr, unsigned long sym_start,
 		return false;
 	offset = (unsigned int)raw_offset;
 
-	/* Binary search for largest entry <= offset */
+	/* Binary search on block_addrs[] to find the right block */
 	low = 0;
-	high = lineinfo_num_entries;
+	high = lineinfo_num_blocks;
 	while (low < high) {
 		mid = low + (high - low) / 2;
-		if (lineinfo_addrs[mid] <= offset)
+		if (lineinfo_block_addrs[mid] <= offset)
 			low = mid + 1;
 		else
 			high = mid;
@@ -499,18 +506,70 @@ bool kallsyms_lookup_lineinfo(unsigned long addr, unsigned long sym_start,
 
 	if (low == 0)
 		return false;
-	low--;
+	block = low - 1;
 
-	file_id = lineinfo_file_ids[low];
-	*line = lineinfo_lines[low];
+	/* How many entries in this block? */
+	block_entries = LINEINFO_BLOCK_ENTRIES;
+	if (block == lineinfo_num_blocks - 1) {
+		unsigned int remaining = lineinfo_num_entries - block * LINEINFO_BLOCK_ENTRIES;
 
-	if (file_id >= lineinfo_num_files)
+		if (remaining < block_entries)
+			block_entries = remaining;
+	}
+
+	/* Determine end of this block's data in the compressed stream */
+	if (block + 1 < lineinfo_num_blocks)
+		data_end = lineinfo_block_offsets[block + 1];
+	else
+		data_end = lineinfo_data_size;
+
+	/* Decode entry 0: addr from block_addrs, file_id and line from stream */
+	pos = lineinfo_block_offsets[block];
+	if (pos >= data_end)
+		return false;
+	cur_addr = lineinfo_block_addrs[block];
+	cur_file_id = lineinfo_read_uleb128(lineinfo_data, &pos, data_end);
+	cur_line = lineinfo_read_uleb128(lineinfo_data, &pos, data_end);
+
+	/* Check entry 0 */
+	if (cur_addr <= offset) {
+		best_file_id = cur_file_id;
+		best_line = cur_line;
+		found = true;
+	}
+
+	/* Decode entries 1..N */
+	for (unsigned int i = 1; i < block_entries; i++) {
+		unsigned int addr_delta;
+		int32_t file_delta, line_delta;
+
+		addr_delta = lineinfo_read_uleb128(lineinfo_data, &pos, data_end);
+		file_delta = zigzag_decode(lineinfo_read_uleb128(lineinfo_data, &pos, data_end));
+		line_delta = zigzag_decode(lineinfo_read_uleb128(lineinfo_data, &pos, data_end));
+
+		cur_addr += addr_delta;
+		cur_file_id = (unsigned int)((int32_t)cur_file_id + file_delta);
+		cur_line = (unsigned int)((int32_t)cur_line + line_delta);
+
+		if (cur_addr > offset)
+			break;
+
+		best_file_id = cur_file_id;
+		best_line = cur_line;
+		found = true;
+	}
+
+	if (!found)
 		return false;
 
-	if (lineinfo_file_offsets[file_id] >= lineinfo_filenames_size)
+	if (best_file_id >= lineinfo_num_files)
 		return false;
 
-	*file = &lineinfo_filenames[lineinfo_file_offsets[file_id]];
+	if (lineinfo_file_offsets[best_file_id] >= lineinfo_filenames_size)
+		return false;
+
+	*file = &lineinfo_filenames[lineinfo_file_offsets[best_file_id]];
+	*line = best_line;
 	return true;
 }
 #endif /* CONFIG_KALLSYMS_LINEINFO */
