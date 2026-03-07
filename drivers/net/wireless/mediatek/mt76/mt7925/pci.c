@@ -527,6 +527,16 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 		goto err_free_pci_vec;
 	}
 
+	/* MT7927 firmware lacks the connac2 feature trailer, so
+	 * mt792x_get_mac80211_ops() can't detect CNM support and
+	 * replaces chanctx/ROC/mgd_prepare_tx ops with stubs.
+	 * Force CNM and restore the original mt7925 ops. */
+	if ((pdev->device == 0x6639 || pdev->device == 0x7927) &&
+	    !(features & MT792x_FW_CAP_CNM)) {
+		features |= MT792x_FW_CAP_CNM;
+		memcpy(ops, &mt7925_ops, sizeof(*ops));
+	}
+
 	mdev = mt76_alloc_device(&pdev->dev, sizeof(*dev), ops, &drv_ops);
 	if (!mdev) {
 		ret = -ENOMEM;
