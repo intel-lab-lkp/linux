@@ -3808,7 +3808,12 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 		struct iphdr *iph = skb->encapsulation ?
 				    inner_ip_hdr(skb) : ip_hdr(skb);
 
-		if (!(iph->frag_off & htons(IP_DF)))
+		/* SKB_GSO_DODGY packets carry untrusted L3/L4 header metadata.
+		 * Avoid dereferencing IPv4 header fields and conservatively
+		 * clear mangleid support in that case.
+		 */
+		if ((skb_shinfo(skb)->gso_type & SKB_GSO_DODGY) ||
+		    !(iph->frag_off & htons(IP_DF)))
 			features &= ~dev->mangleid_features;
 	}
 
