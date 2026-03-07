@@ -95,6 +95,16 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	INIT_LIST_HEAD(&cq->list_send_qp);
 	INIT_LIST_HEAD(&cq->list_recv_qp);
 
+	INIT_LIST_HEAD(&cq->ucontext_list);
+	if (udata) {
+		struct mana_ib_ucontext *mana_ucontext =
+			rdma_udata_to_drv_context(udata,
+				struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_add_tail(&cq->ucontext_list, &mana_ucontext->cq_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
+
 	return 0;
 
 err_remove_cq_cb:
@@ -114,6 +124,15 @@ int mana_ib_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 	struct mana_ib_dev *mdev;
 
 	mdev = container_of(ibdev, struct mana_ib_dev, ib_dev);
+
+	if (udata) {
+		struct mana_ib_ucontext *mana_ucontext =
+			rdma_udata_to_drv_context(udata,
+				struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_del_init(&cq->ucontext_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
 
 	mana_ib_remove_cq_cb(mdev, cq);
 

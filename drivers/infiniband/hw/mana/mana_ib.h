@@ -150,6 +150,7 @@ struct mana_ib_cq {
 	int cqe;
 	u32 comp_vector;
 	mana_handle_t  cq_handle;
+	struct list_head ucontext_list;
 };
 
 enum mana_rc_queue_type {
@@ -205,6 +206,7 @@ struct mana_ib_ucontext {
 	/* Protects resource lists below */
 	struct mutex lock;
 	struct list_head pd_list;
+	struct list_head cq_list;
 };
 
 struct mana_ib_rwq_ind_table {
