@@ -313,6 +313,11 @@ static void hid_irq_in(struct urb *urb)
 	case -ETIME:		/* protocol error or unplug */
 	case -ETIMEDOUT:	/* Should never happen, but... */
 		usbhid_mark_busy(usbhid);
+		/* Tolerate intermittent protocol errors */
+		if (time_after(jiffies, usbhid->last_proto_error + msecs_to_jiffies(500))) {
+			usbhid->last_proto_error = jiffies;
+			break;
+		}
 		clear_bit(HID_IN_RUNNING, &usbhid->iofl);
 		hid_io_error(hid);
 		return;
