@@ -270,6 +270,60 @@ static int mt7925_dma_init(struct mt792x_dev *dev)
 	return mt792x_dma_enable(dev);
 }
 
+static int mt7927_chip_init(struct mt792x_dev *dev)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	u32 val;
+
+	/* EMI sleep protect */
+	mt76_rmw_field(dev, MT_HW_EMI_CTL, MT_HW_EMI_CTL_SLPPROT_EN, 1);
+
+	/* WF subsystem reset via CBInfra RGU */
+	mt76_set(dev, MT_CBINFRA_RGU_WF_RST, MT_CBINFRA_RGU_WF_RST_WF_SUBSYS);
+	msleep(1);
+	mt76_clear(dev, MT_CBINFRA_RGU_WF_RST,
+		   MT_CBINFRA_RGU_WF_RST_WF_SUBSYS);
+	msleep(5);
+
+	/* MCU ownership */
+	mt76_wr(dev, MT_CBINFRA_MCU_OWN_SET, BIT(0));
+
+	/* Poll ROMCODE_INDEX for MCU idle */
+	if (!__mt76_poll_msec(mdev, MT_ROMCODE_INDEX,
+			      0xffff, MT_MCU_IDLE_VALUE, 2000)) {
+		val = mt76_rr(dev, MT_ROMCODE_INDEX);
+		dev_err(mdev->dev,
+			"MT7927 MCU idle timeout (ROMCODE_INDEX=0x%04x)\n",
+			val & 0xffff);
+		return -ETIMEDOUT;
+	}
+
+	/* MCIF remap - MCU needs this to DMA to host memory */
+	mt76_wr(dev, MT_MCIF_REMAP_WF_1_BA, MT_MCIF_REMAP_WF_1_BA_VAL);
+
+	/* Disable PCIe sleep */
+	mt76_wr(dev, MT_CBINFRA_SLP_CTRL, 0xffffffff);
+
+	/* Clear CONNINFRA wakeup */
+	mt76_wr(dev, MT_CBINFRA_WAKEPU_TOP, 0x0);
+
+	return 0;
+}
+
+static void mt7927_cbtop_remap(struct mt792x_dev *dev)
+{
+	/* CONNINFRA wakeup - required before CBInfra register access */
+	mt76_wr(dev, MT_CBINFRA_WAKEPU_TOP, 0x1);
+	usleep_range(1000, 2000);
+
+	/* Configure CBTOP PCIe address remap for WF and BT */
+	mt76_wr(dev, MT_CBINFRA_MISC0_REMAP_WF, MT_CBINFRA_REMAP_WF_VAL);
+	mt76_wr(dev, MT_CBINFRA_MISC0_REMAP_BT, MT_CBINFRA_REMAP_BT_VAL);
+
+	/* Readback to push writes */
+	mt76_rr(dev, MT_CBINFRA_MISC0_REMAP_WF);
+}
+
 static int mt7925_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *id)
 {
@@ -314,6 +368,7 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 	struct mt76_bus_ops *bus_ops;
 	struct mt792x_dev *dev;
 	struct mt76_dev *mdev;
+	bool is_mt7927_hw;
 	u8 features;
 	int ret;
 	u16 cmd;
@@ -385,24 +440,45 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 	if (!mt7925_disable_aspm && mt76_pci_aspm_supported(pdev))
 		dev->aspm_supported = true;
 
+	is_mt7927_hw = (pdev->device == 0x6639 || pdev->device == 0x7927);
+
 	ret = __mt792x_mcu_fw_pmctrl(dev);
 	if (ret)
 		goto err_free_dev;
 
-	ret = __mt792xe_mcu_drv_pmctrl(dev);
-	if (ret)
-		goto err_free_dev;
+	if (!is_mt7927_hw) {
+		ret = __mt792xe_mcu_drv_pmctrl(dev);
+		if (ret)
+			goto err_free_dev;
+	}
+
+	if (is_mt7927_hw)
+		mt7927_cbtop_remap(dev);
 
 	mdev->rev = (mt76_rr(dev, MT_HW_CHIPID) << 16) |
 		    (mt76_rr(dev, MT_HW_REV) & 0xff);
 
 	dev_info(mdev->dev, "ASIC revision: %04x\n", mdev->rev);
 
-	mt76_rmw_field(dev, MT_HW_EMI_CTL, MT_HW_EMI_CTL_SLPPROT_EN, 1);
+	/* Force chip ID for MT7927 hardware if CHIPID read returns garbage */
+	if (is_mt7927_hw && (mdev->rev >> 16) != 0x7927) {
+		dev_info(mdev->dev,
+			 "MT7927 raw CHIPID=0x%04x, forcing chip=0x7927\n",
+			 (u16)(mdev->rev >> 16));
+		mdev->rev = (0x7927 << 16) | (mdev->rev & 0xff);
+	}
 
-	ret = mt792x_wfsys_reset(dev);
-	if (ret)
-		goto err_free_dev;
+	if (is_mt7927_hw) {
+		ret = mt7927_chip_init(dev);
+		if (ret)
+			goto err_free_dev;
+	} else {
+		mt76_rmw_field(dev, MT_HW_EMI_CTL,
+			       MT_HW_EMI_CTL_SLPPROT_EN, 1);
+		ret = mt792x_wfsys_reset(dev);
+		if (ret)
+			goto err_free_dev;
+	}
 
 	mt76_wr(dev, irq_map.host_irq_enable, 0);
 
