@@ -1743,6 +1743,9 @@ static bool __kvm_valid_efer(struct kvm_vcpu *vcpu, u64 efer)
 	if (efer & EFER_NX && !guest_cpu_cap_has(vcpu, X86_FEATURE_NX))
 		return false;
 
+	if (efer & EFER_TCE && !guest_cpu_cap_has(vcpu, X86_FEATURE_TCE))
+		return false;
+
 	return true;
 
 }
@@ -10035,6 +10038,9 @@ static void kvm_setup_efer_caps(void)
 
 	if (kvm_cpu_cap_has(X86_FEATURE_AUTOIBRS))
 		kvm_enable_efer_bits(EFER_AUTOIBRS);
+
+	if (kvm_cpu_cap_has(X86_FEATURE_TCE))
+		kvm_enable_efer_bits(EFER_TCE);
 }
 
 static inline void kvm_ops_update(struct kvm_x86_init_ops *ops)
