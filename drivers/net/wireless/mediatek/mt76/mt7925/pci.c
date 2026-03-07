@@ -416,8 +416,8 @@ static int mt7927_dma_init(struct mt792x_dev *dev)
 	napi_enable(&dev->mt76.tx_napi);
 
 	/* MT7927-specific GLO_CFG bits before DMA enable */
-	mt76_set(dev, MT_WFDMA0_GLO_CFG, BIT(26));   /* ADDR_EXT_EN */
-	mt76_clear(dev, MT_WFDMA0_GLO_CFG, BIT(20)); /* CSR_LBK_RX_Q_SEL_EN */
+	mt76_set(dev, MT_WFDMA0_GLO_CFG, MT_WFDMA0_GLO_CFG_ADDR_EXT_EN);
+	mt76_clear(dev, MT_WFDMA0_GLO_CFG, MT_WFDMA0_GLO_CFG_CSR_LBK_RX_Q_SEL_EN);
 	mt76_set(dev, MT_WFDMA0_GLO_CFG_EXT1, BIT(28));
 	mt76_set(dev, MT_WFDMA0_GLO_CFG,
 		 MT_WFDMA0_GLO_CFG_FW_DWLD_BYPASS_DMASHDL);
