@@ -1208,12 +1208,6 @@ static inline unsigned int huge_page_shift(struct hstate *h)
 	return PAGE_SHIFT;
 }
 
-static inline pgoff_t vma_hugecache_offset(struct hstate *h,
-		struct vm_area_struct *vma, unsigned long address)
-{
-	return linear_page_index(vma, address);
-}
-
 static inline bool hstate_is_gigantic(struct hstate *h)
 {
 	return false;
