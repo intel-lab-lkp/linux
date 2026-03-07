@@ -327,6 +327,8 @@ impl ShrinkablePageRange {
 
             // SAFETY: The pointer is valid, and we hold the lock so reading from the page is okay.
             if let Some(page) = unsafe { PageInfo::get_page(page_info) } {
+                crate::trace::trace_alloc_lru_start(self.pid, i);
+
                 // Since we're going to use the page, we should remove it from the lru list so that
                 // the shrinker will not free it.
                 //
@@ -335,9 +337,12 @@ impl ShrinkablePageRange {
                 // The shrinker can't free the page between the check and this call to
                 // `list_lru_del` because we hold the lock.
                 unsafe { PageInfo::list_lru_del(page_info, page.nid(), self.shrinker) };
+
+                crate::trace::trace_alloc_lru_end(self.pid, i);
             } else {
                 // We have to allocate a new page. Use the slow path.
                 drop(inner);
+                crate::trace::trace_alloc_page_start(self.pid, i);
                 // SAFETY: `i < end <= inner.size` so `i` is in bounds.
                 match unsafe { self.use_page_slow(i) } {
                     Ok(()) => {}
@@ -346,6 +351,7 @@ impl ShrinkablePageRange {
                         return Err(err);
                     }
                 }
+                crate::trace::trace_alloc_page_end(self.pid, i);
                 inner = self.lock.lock();
             }
         }
@@ -448,8 +454,12 @@ impl ShrinkablePageRange {
 
             // SAFETY: Okay for reading since we have the lock.
             if let Some(page) = unsafe { PageInfo::get_page(page_info) } {
+                crate::trace::trace_free_lru_start(self.pid, i);
+
                 // SAFETY: The pointer is valid, and it's the right shrinker.
                 unsafe { PageInfo::list_lru_add(page_info, page.nid(), self.shrinker) };
+
+                crate::trace::trace_free_lru_end(self.pid, i);
             }
         }
     }
@@ -667,6 +677,7 @@ unsafe extern "C" fn rust_shrink_free_page(
     let mmap_read;
     let mm_mutex;
     let vma_addr;
+    let pid;
 
     {
         // CAST: The `list_head` field is first in `PageInfo`.
@@ -700,7 +711,9 @@ unsafe extern "C" fn rust_shrink_free_page(
 
         // SAFETY: Both pointers are in bounds of the same allocation.
         page_index = unsafe { info.offset_from(inner.pages) } as usize;
+        pid = range.pid;
 
+        crate::trace::trace_unmap_kernel_start(pid, page_index);
         // SAFETY: We hold the spinlock, so we can take the page.
         //
         // This sets the page pointer to zero before we unmap it from the vma. However, we call
@@ -708,6 +721,8 @@ unsafe extern "C" fn rust_shrink_free_page(
         // insert a new page until after our call to `zap_page_range`.
         page = unsafe { PageInfo::take_page(info) };
         vma_addr = inner.vma_addr;
+
+        crate::trace::trace_unmap_kernel_end(pid, page_index);
 
         // From this point on, we don't access this PageInfo or ShrinkablePageRange again, because
         // they can be freed at any point after we unlock `lru_lock`. This is with the exception of
@@ -719,7 +734,9 @@ unsafe extern "C" fn rust_shrink_free_page(
 
     if let Some(vma) = mmap_read.vma_lookup(vma_addr) {
         let user_page_addr = vma_addr + (page_index << PAGE_SHIFT);
+        crate::trace::trace_unmap_user_start(pid, page_index);
         vma.zap_page_range_single(user_page_addr, PAGE_SIZE);
+        crate::trace::trace_unmap_user_end(pid, page_index);
     }
 
     drop(mmap_read);
