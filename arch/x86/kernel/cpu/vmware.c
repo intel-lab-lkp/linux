@@ -64,70 +64,140 @@ struct vmware_steal_time {
 };
 
 static unsigned long vmware_tsc_khz __ro_after_init;
-static u8 vmware_hypercall_mode     __ro_after_init;
+static u8 vmware_hypercall_mode     __initdata;
 
-unsigned long vmware_hypercall_slow(unsigned long cmd,
-				    unsigned long in1, unsigned long in3,
-				    unsigned long in4, unsigned long in5,
-				    u32 *out1, u32 *out2, u32 *out3,
-				    u32 *out4, u32 *out5)
+static unsigned long vmware_backdoor_hypercall(unsigned long cmd,
+			       unsigned long in1, unsigned long in3,
+			       unsigned long in4, unsigned long in5,
+			       u32 *out1, u32 *out2, u32 *out3,
+			       u32 *out4, u32 *out5)
 {
-	unsigned long out0, rbx, rcx, rdx, rsi, rdi;
+	unsigned long out0;
 
-	switch (vmware_hypercall_mode) {
-	case CPUID_VMWARE_FEATURES_ECX_VMCALL:
-		asm_inline volatile ("vmcall"
-				: "=a" (out0), "=b" (rbx), "=c" (rcx),
-				"=d" (rdx), "=S" (rsi), "=D" (rdi)
-				: "a" (VMWARE_HYPERVISOR_MAGIC),
-				"b" (in1),
-				"c" (cmd),
-				"d" (in3),
-				"S" (in4),
-				"D" (in5)
-				: "cc", "memory");
-		break;
-	case CPUID_VMWARE_FEATURES_ECX_VMMCALL:
-		asm_inline volatile ("vmmcall"
-				: "=a" (out0), "=b" (rbx), "=c" (rcx),
-				"=d" (rdx), "=S" (rsi), "=D" (rdi)
-				: "a" (VMWARE_HYPERVISOR_MAGIC),
-				"b" (in1),
-				"c" (cmd),
-				"d" (in3),
-				"S" (in4),
-				"D" (in5)
-				: "cc", "memory");
-		break;
-	default:
-		asm_inline volatile ("movw %[port], %%dx; inl (%%dx), %%eax"
-				: "=a" (out0), "=b" (rbx), "=c" (rcx),
-				"=d" (rdx), "=S" (rsi), "=D" (rdi)
-				: [port] "i" (VMWARE_HYPERVISOR_PORT),
-				"a" (VMWARE_HYPERVISOR_MAGIC),
-				"b" (in1),
-				"c" (cmd),
-				"d" (in3),
-				"S" (in4),
-				"D" (in5)
-				: "cc", "memory");
-		break;
-	}
+	/* The low word of in3(%edx) must have the backdoor port number */
+	in3 = (in3 & ~0xffff) | VMWARE_HYPERVISOR_PORT;
 
-	if (out1)
-		*out1 = rbx;
-	if (out2)
-		*out2 = rcx;
-	if (out3)
-		*out3 = rdx;
-	if (out4)
-		*out4 = rsi;
-	if (out5)
-		*out5 = rdi;
+	asm_inline volatile ("inl (%%dx), %%eax"
+		: "=a" (out0), "=b" (*out1), "=c" (*out2),
+		  "=d" (*out3), "=S" (*out4), "=D" (*out5)
+		: "a" (VMWARE_HYPERVISOR_MAGIC),
+		  "b" (in1),
+		  "c" (cmd),
+		  "d" (in3),
+		  "S" (in4),
+		  "D" (in5)
+		: "cc", "memory");
 
 	return out0;
 }
 
+static unsigned long vmware_vmcall_hypercall(unsigned long cmd,
+			       unsigned long in1, unsigned long in3,
+			       unsigned long in4, unsigned long in5,
+			       u32 *out1, u32 *out2, u32 *out3,
+			       u32 *out4, u32 *out5)
+{
+	unsigned long out0;
+
+	/* The low word of in3(%edx) must be zero: LB, IN */
+	in3 &= ~0xffff;
+
+	asm_inline volatile ("vmcall"
+		: "=a" (out0), "=b" (*out1), "=c" (*out2),
+		  "=d" (*out3), "=S" (*out4), "=D" (*out5)
+		: "a" (VMWARE_HYPERVISOR_MAGIC),
+		  "b" (in1),
+		  "c" (cmd),
+		  "d" (in3),
+		  "S" (in4),
+		  "D" (in5)
+		: "cc", "memory");
+
+	return out0;
+}
+
+static unsigned long vmware_vmmcall_hypercall(unsigned long cmd,
+			       unsigned long in1, unsigned long in3,
+			       unsigned long in4, unsigned long in5,
+			       u32 *out1, u32 *out2, u32 *out3,
+			       u32 *out4, u32 *out5)
+{
+	unsigned long out0;
+
+	/* The low word of in3(%edx) must be zero: LB, IN */
+	in3 &= ~0xffff;
+
+	asm_inline volatile ("vmmcall"
+		: "=a" (out0), "=b" (*out1), "=c" (*out2),
+		  "=d" (*out3), "=S" (*out4), "=D" (*out5)
+		: "a" (VMWARE_HYPERVISOR_MAGIC),
+		  "b" (in1),
+		  "c" (cmd),
+		  "d" (in3),
+		  "S" (in4),
+		  "D" (in5)
+		: "cc", "memory");
+
+	return out0;
+}
+
+/*
+ * TDCALL[TDG.VP.VMCALL] uses %rax (arg0) and %rcx (arg2). Therefore,
+ * we remap those registers to %r12 and %r13, respectively.
+ */
+static unsigned long vmware_tdx_hypercall(unsigned long cmd,
+				   unsigned long in1, unsigned long in3,
+				   unsigned long in4, unsigned long in5,
+				   u32 *out1, u32 *out2, u32 *out3,
+				   u32 *out4, u32 *out5)
+{
+#ifdef CONFIG_INTEL_TDX_GUEST
+	struct tdx_module_args args = {};
+
+	if (!hypervisor_is_type(X86_HYPER_VMWARE)) {
+		pr_warn_once("Incorrect usage\n");
+		return ULONG_MAX;
+	}
+
+	if (cmd & ~VMWARE_CMD_MASK) {
+		pr_warn_once("Out of range command %lx\n", cmd);
+		return ULONG_MAX;
+	}
+
+	args.rbx = in1;
+	/* The low word of in3(%rdx) must be zero: LB, IN */
+	args.rdx = in3 & ~0xffff;
+	args.rsi = in4;
+	args.rdi = in5;
+	args.r10 = VMWARE_TDX_VENDOR_LEAF;
+	args.r11 = VMWARE_TDX_HCALL_FUNC;
+	args.r12 = VMWARE_HYPERVISOR_MAGIC;
+	args.r13 = cmd;
+	/* CPL */
+	args.r15 = 0;
+
+	__tdx_hypercall(&args);
+
+	*out1 = args.rbx;
+	*out2 = args.r13;
+	*out3 = args.rdx;
+	*out4 = args.rsi;
+	*out5 = args.rdi;
+
+	return args.r12;
+#else
+	return ULONG_MAX;
+#endif
+}
+
+
+DEFINE_STATIC_CALL(vmware_hypercall, vmware_backdoor_hypercall);
+EXPORT_STATIC_CALL_GPL(vmware_hypercall);
+
+/*
+ * Perform backdoor probbing of the hypervisor when
+ * X86_FEATURE_HYPERVISOR bit is not set.
+ */
 static inline int __vmware_platform(void)
 {
 	u32 eax, ebx, ecx;
@@ -397,10 +467,34 @@ static void __init vmware_set_capabilities(void)
 		setup_force_cpu_cap(X86_FEATURE_VMW_VMMCALL);
 }
 
+static void __init vmware_select_hypercall(void)
+{
+	char *mode;
+
+	if (IS_ENABLED(CONFIG_INTEL_TDX_GUEST) &&
+	    cpu_feature_enabled(X86_FEATURE_TDX_GUEST)) {
+		static_call_update(vmware_hypercall, vmware_tdx_hypercall);
+		mode = "tdcall";
+	} else if (vmware_hypercall_mode == CPUID_VMWARE_FEATURES_ECX_VMCALL) {
+		static_call_update(vmware_hypercall, vmware_vmcall_hypercall);
+		mode = "vmcall";
+	} else if (vmware_hypercall_mode == CPUID_VMWARE_FEATURES_ECX_VMMCALL) {
+		static_call_update(vmware_hypercall, vmware_vmmcall_hypercall);
+		mode = "vmmcall";
+	} else {
+		mode = "backdoor";
+	}
+
+	pr_info("hypercall mode: %s\n", mode);
+}
+
 static void __init vmware_platform_setup(void)
 {
 	u32 eax, ebx, ecx;
 	u64 lpj, tsc_khz;
+
+	/* Update vmware_hypercall() before the first use. */
+	vmware_select_hypercall();
 
 	eax = vmware_hypercall3(VMWARE_CMD_GETHZ, UINT_MAX, &ebx, &ecx);
 
@@ -443,7 +537,7 @@ static void __init vmware_platform_setup(void)
 	vmware_set_capabilities();
 }
 
-static u8 __init vmware_select_hypercall(void)
+static u8 __init get_hypercall_mode(void)
 {
 	int eax, ebx, ecx, edx;
 
@@ -456,8 +550,8 @@ static u8 __init vmware_select_hypercall(void)
  * While checking the dmi string information, just checking the product
  * serial key should be enough, as this will always have a VMware
  * specific string when running under VMware hypervisor.
- * If !boot_cpu_has(X86_FEATURE_HYPERVISOR), vmware_hypercall_mode
- * intentionally defaults to 0.
+ * If !boot_cpu_has(X86_FEATURE_HYPERVISOR), __vmware_platform()
+ * intentionally defaults to backdoor hypercall.
  */
 static u32 __init vmware_platform(void)
 {
@@ -470,11 +564,7 @@ static u32 __init vmware_platform(void)
 		if (!memcmp(hyper_vendor_id, "VMwareVMware", 12)) {
 			if (eax >= CPUID_VMWARE_FEATURES_LEAF)
 				vmware_hypercall_mode =
-					vmware_select_hypercall();
-
-			pr_info("hypercall mode: 0x%02x\n",
-				(unsigned int) vmware_hypercall_mode);
-
+					get_hypercall_mode();
 			return CPUID_VMWARE_INFO_LEAF;
 		}
 	} else if (dmi_available && dmi_name_in_serial("VMware") &&
@@ -493,58 +583,6 @@ static bool __init vmware_legacy_x2apic_available(void)
 	return !(eax & GETVCPU_INFO_VCPU_RESERVED) &&
 		(eax & GETVCPU_INFO_LEGACY_X2APIC);
 }
-
-#ifdef CONFIG_INTEL_TDX_GUEST
-/*
- * TDCALL[TDG.VP.VMCALL] uses %rax (arg0) and %rcx (arg2). Therefore,
- * we remap those registers to %r12 and %r13, respectively.
- */
-unsigned long vmware_tdx_hypercall(unsigned long cmd,
-				   unsigned long in1, unsigned long in3,
-				   unsigned long in4, unsigned long in5,
-				   u32 *out1, u32 *out2, u32 *out3,
-				   u32 *out4, u32 *out5)
-{
-	struct tdx_module_args args = {};
-
-	if (!hypervisor_is_type(X86_HYPER_VMWARE)) {
-		pr_warn_once("Incorrect usage\n");
-		return ULONG_MAX;
-	}
-
-	if (cmd & ~VMWARE_CMD_MASK) {
-		pr_warn_once("Out of range command %lx\n", cmd);
-		return ULONG_MAX;
-	}
-
-	args.rbx = in1;
-	args.rdx = in3;
-	args.rsi = in4;
-	args.rdi = in5;
-	args.r10 = VMWARE_TDX_VENDOR_LEAF;
-	args.r11 = VMWARE_TDX_HCALL_FUNC;
-	args.r12 = VMWARE_HYPERVISOR_MAGIC;
-	args.r13 = cmd;
-	/* CPL */
-	args.r15 = 0;
-
-	__tdx_hypercall(&args);
-
-	if (out1)
-		*out1 = args.rbx;
-	if (out2)
-		*out2 = args.r13;
-	if (out3)
-		*out3 = args.rdx;
-	if (out4)
-		*out4 = args.rsi;
-	if (out5)
-		*out5 = args.rdi;
-
-	return args.r12;
-}
-EXPORT_SYMBOL_GPL(vmware_tdx_hypercall);
-#endif
 
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 static void vmware_sev_es_hcall_prepare(struct ghcb *ghcb,
