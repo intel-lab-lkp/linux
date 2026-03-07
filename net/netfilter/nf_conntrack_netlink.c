@@ -3167,6 +3167,7 @@ static int
 ctnetlink_exp_dump_table(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct net *net = sock_net(skb->sk);
+	struct nf_conn *master;
 	struct nfgenmsg *nfmsg = nlmsg_data(cb->nlh);
 	u_int8_t l3proto = nfmsg->nfgen_family;
 	unsigned long last_id = cb->args[1];
@@ -3180,12 +3181,20 @@ restart:
 			if (l3proto && exp->tuple.src.l3num != l3proto)
 				continue;
 
-			if (!net_eq(nf_ct_net(exp->master), net))
+			master = exp->master;
+			if (!refcount_inc_not_zero(&master->ct_general.use))
 				continue;
 
+			if (!net_eq(nf_ct_net(master), net)) {
+				nf_ct_put(master);
+				continue;
+			}
+
 			if (cb->args[1]) {
-				if (ctnetlink_exp_id(exp) != last_id)
+				if (ctnetlink_exp_id(exp) != last_id) {
+					nf_ct_put(master);
 					continue;
+				}
 				cb->args[1] = 0;
 			}
 			if (ctnetlink_exp_fill_info(skb,
@@ -3194,8 +3203,11 @@ restart:
 						    IPCTNL_MSG_EXP_NEW,
 						    exp) < 0) {
 				cb->args[1] = ctnetlink_exp_id(exp);
+				nf_ct_put(master);
 				goto out;
 			}
+
+			nf_ct_put(master);
 		}
 		if (cb->args[1]) {
 			cb->args[1] = 0;
