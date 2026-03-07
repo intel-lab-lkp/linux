@@ -143,10 +143,12 @@ int mana_ib_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 
 	mana_ib_remove_cq_cb(mdev, cq);
 
-	/* Ignore return code as there is not much we can do about it.
-	 * The error message is printed inside.
-	 */
-	mana_ib_gd_destroy_cq(mdev, cq);
+	if (cq->cq_handle != INVALID_MANA_HANDLE) {
+		/* Ignore return code as there is not much we can do about it.
+		 * The error message is printed inside.
+		 */
+		mana_ib_gd_destroy_cq(mdev, cq);
+	}
 
 	mana_ib_destroy_queue(mdev, &cq->queue);
 

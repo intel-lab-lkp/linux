@@ -846,9 +846,11 @@ static int mana_ib_destroy_qp_rss(struct mana_ib_qp *qp,
 	for (i = 0; i < (1 << ind_tbl->log_ind_tbl_size); i++) {
 		ibwq = ind_tbl->ind_tbl[i];
 		wq = container_of(ibwq, struct mana_ib_wq, ibwq);
-		ibdev_dbg(&mdev->ib_dev, "destroying wq->rx_object %llu\n",
+		ibdev_dbg(&mdev->ib_dev,
+			  "destroying wq->rx_object %llu\n",
 			  wq->rx_object);
-		mana_destroy_wq_obj(mpc, GDMA_RQ, wq->rx_object);
+		if (wq->rx_object != INVALID_MANA_HANDLE)
+			mana_destroy_wq_obj(mpc, GDMA_RQ, wq->rx_object);
 	}
 
 	return 0;
@@ -867,7 +869,8 @@ static int mana_ib_destroy_qp_raw(struct mana_ib_qp *qp, struct ib_udata *udata)
 	mpc = netdev_priv(ndev);
 	pd = container_of(ibpd, struct mana_ib_pd, ibpd);
 
-	mana_destroy_wq_obj(mpc, GDMA_SQ, qp->qp_handle);
+	if (qp->qp_handle != INVALID_MANA_HANDLE)
+		mana_destroy_wq_obj(mpc, GDMA_SQ, qp->qp_handle);
 
 	mana_ib_destroy_queue(mdev, &qp->raw_sq);
 

@@ -147,6 +147,9 @@ int mana_ib_dealloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 		mutex_unlock(&mana_ucontext->lock);
 	}
 
+	if (pd->pd_handle == INVALID_MANA_HANDLE)
+		return 0;
+
 	mana_gd_init_req_hdr(&req.hdr, GDMA_DESTROY_PD, sizeof(req),
 			     sizeof(resp));
 
@@ -280,9 +283,12 @@ void mana_ib_dealloc_ucontext(struct ib_ucontext *ibcontext)
 	list_del_init(&mana_ucontext->dev_list);
 	mutex_unlock(&mdev->ucontext_lock);
 
-	ret = mana_gd_destroy_doorbell_page(gc, mana_ucontext->doorbell);
-	if (ret)
-		ibdev_dbg(ibdev, "Failed to destroy doorbell page %d\n", ret);
+	if (mana_ucontext->doorbell != INVALID_DOORBELL) {
+		ret = mana_gd_destroy_doorbell_page(gc, mana_ucontext->doorbell);
+		if (ret)
+			ibdev_dbg(ibdev, "Failed to destroy doorbell page %d\n",
+				  ret);
+	}
 }
 
 int mana_ib_create_kernel_queue(struct mana_ib_dev *mdev, u32 size, enum gdma_queue_type type,
