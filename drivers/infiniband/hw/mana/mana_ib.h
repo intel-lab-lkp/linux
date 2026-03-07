@@ -107,6 +107,7 @@ struct mana_ib_pd {
 
 	bool tx_shortform_allowed;
 	u32 tx_vp_offset;
+	struct list_head ucontext_list;
 };
 
 struct mana_ib_av {
@@ -203,6 +204,7 @@ struct mana_ib_ucontext {
 	struct list_head dev_list;
 	/* Protects resource lists below */
 	struct mutex lock;
+	struct list_head pd_list;
 };
 
 struct mana_ib_rwq_ind_table {

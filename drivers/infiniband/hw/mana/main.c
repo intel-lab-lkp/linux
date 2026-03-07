@@ -72,6 +72,7 @@ int mana_ib_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	struct ib_device *ibdev = ibpd->device;
 	struct gdma_create_pd_resp resp = {};
 	struct gdma_create_pd_req req = {};
+	struct mana_ib_ucontext *mana_ucontext;
 	enum gdma_pd_flags flags = 0;
 	struct mana_ib_dev *dev;
 	struct gdma_context *gc;
@@ -107,6 +108,16 @@ int mana_ib_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 
 	mutex_init(&pd->vport_mutex);
 	pd->vport_use_count = 0;
+
+	INIT_LIST_HEAD(&pd->ucontext_list);
+	if (udata) {
+		mana_ucontext = rdma_udata_to_drv_context(udata,
+					struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_add_tail(&pd->ucontext_list, &mana_ucontext->pd_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
+
 	return 0;
 }
 
@@ -122,6 +133,15 @@ int mana_ib_dealloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 
 	dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 	gc = mdev_to_gc(dev);
+
+	if (udata) {
+		struct mana_ib_ucontext *mana_ucontext =
+			rdma_udata_to_drv_context(udata,
+				struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_del_init(&pd->ucontext_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
 
 	mana_gd_init_req_hdr(&req.hdr, GDMA_DESTROY_PD, sizeof(req),
 			     sizeof(resp));
@@ -222,6 +242,7 @@ int mana_ib_alloc_ucontext(struct ib_ucontext *ibcontext,
 	ucontext->doorbell = doorbell_page;
 
 	mutex_init(&ucontext->lock);
+	INIT_LIST_HEAD(&ucontext->pd_list);
 
 	mutex_lock(&mdev->ucontext_lock);
 	list_add_tail(&ucontext->dev_list, &mdev->ucontext_list);
