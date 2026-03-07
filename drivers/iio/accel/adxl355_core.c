@@ -9,6 +9,7 @@
 
 #include <linux/bits.h>
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/trigger.h>
@@ -261,16 +262,13 @@ static int adxl355_data_rdy_trigger_set_state(struct iio_trigger *trig,
 {
 	struct iio_dev *indio_dev = iio_trigger_get_drvdata(trig);
 	struct adxl355_data *data = iio_priv(indio_dev);
-	int ret;
 
-	mutex_lock(&data->lock);
-	ret = regmap_update_bits(data->regmap, ADXL355_POWER_CTL_REG,
+	guard(mutex)(&data->lock);
+	
+	return regmap_update_bits(data->regmap, ADXL355_POWER_CTL_REG,
 				 ADXL355_POWER_CTL_DRDY_MSK,
 				 FIELD_PREP(ADXL355_POWER_CTL_DRDY_MSK,
 					    state ? 0 : 1));
-	mutex_unlock(&data->lock);
-
-	return ret;
 }
 
 static void adxl355_fill_3db_frequency_table(struct adxl355_data *data)
@@ -409,38 +407,34 @@ static int adxl355_set_odr(struct adxl355_data *data,
 {
 	int ret;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	if (data->odr == odr) {
-		mutex_unlock(&data->lock);
 		return 0;
 	}
 
 	ret = adxl355_set_op_mode(data, ADXL355_STANDBY);
 	if (ret)
-		goto err_unlock;
+		return ret;
 
 	ret = regmap_update_bits(data->regmap, ADXL355_FILTER_REG,
 				 ADXL355_FILTER_ODR_MSK,
 				 FIELD_PREP(ADXL355_FILTER_ODR_MSK, odr));
-	if (ret)
-		goto err_set_opmode;
+	if (ret){
+		adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
+		return ret;
+	}
 
 	data->odr = odr;
 	adxl355_fill_3db_frequency_table(data);
 
 	ret = adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-	if (ret)
-		goto err_set_opmode;
+	if (ret){
+		adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
+		return ret;
+	}
 
-	mutex_unlock(&data->lock);
 	return 0;
-
-err_set_opmode:
-	adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-err_unlock:
-	mutex_unlock(&data->lock);
-	return ret;
 }
 
 static int adxl355_set_hpf_3db(struct adxl355_data *data,
@@ -448,37 +442,33 @@ static int adxl355_set_hpf_3db(struct adxl355_data *data,
 {
 	int ret;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	if (data->hpf_3db == hpf) {
-		mutex_unlock(&data->lock);
 		return 0;
 	}
 
 	ret = adxl355_set_op_mode(data, ADXL355_STANDBY);
 	if (ret)
-		goto err_unlock;
+		return ret;
 
 	ret = regmap_update_bits(data->regmap, ADXL355_FILTER_REG,
 				 ADXL355_FILTER_HPF_MSK,
 				 FIELD_PREP(ADXL355_FILTER_HPF_MSK, hpf));
-	if (ret)
-		goto err_set_opmode;
+	if (ret){
+		adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
+		return ret;
+	}
 
 	data->hpf_3db = hpf;
 
 	ret = adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-	if (ret)
-		goto err_set_opmode;
+	if (ret){
+		adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
+		return ret;
+	}
 
-	mutex_unlock(&data->lock);
 	return 0;
-
-err_set_opmode:
-	adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-err_unlock:
-	mutex_unlock(&data->lock);
-	return ret;
 }
 
 static int adxl355_set_calibbias(struct adxl355_data *data,
@@ -486,33 +476,30 @@ static int adxl355_set_calibbias(struct adxl355_data *data,
 {
 	int ret;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	ret = adxl355_set_op_mode(data, ADXL355_STANDBY);
 	if (ret)
-		goto err_unlock;
+		return ret;
 
 	put_unaligned_be16(calibbias, data->transf_buf);
 	ret = regmap_bulk_write(data->regmap,
 				adxl355_chans[chan].offset_reg,
 				data->transf_buf, 2);
-	if (ret)
-		goto err_set_opmode;
+	if (ret){
+		adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
+		return ret;
+	}
 
 	data->calibbias[chan] = calibbias;
 
 	ret = adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-	if (ret)
-		goto err_set_opmode;
+	if (ret){
+		adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
+		return ret;
+	}
 
-	mutex_unlock(&data->lock);
 	return 0;
-
-err_set_opmode:
-	adxl355_set_op_mode(data, ADXL355_MEASUREMENT);
-err_unlock:
-	mutex_unlock(&data->lock);
-	return ret;
 }
 
 static int adxl355_read_raw(struct iio_dev *indio_dev,
