@@ -2843,6 +2843,12 @@ static int arm_smmu_enable_iopf(struct arm_smmu_master *master,
 	if (master->iopf_refcount) {
 		master->iopf_refcount++;
 		master_domain->using_iopf = true;
+		/*
+		 * If the device is already on the IOPF queue (domain replace),
+		 * drain in-flight fault handlers so nothing will hold the old
+		 * domain when the core switches the attach handle.
+		 */
+		iopf_queue_flush_dev(master->dev);
 		return 0;
 	}
 
@@ -2866,8 +2872,11 @@ static void arm_smmu_disable_iopf(struct arm_smmu_master *master,
 		return;
 
 	master->iopf_refcount--;
-	if (master->iopf_refcount == 0)
+	if (master->iopf_refcount == 0) {
+		/* Drain in-flight fault handlers before removing device */
+		iopf_queue_flush_dev(master->dev);
 		iopf_queue_remove_device(master->smmu->evtq.iopf, master->dev);
+	}
 }
 
 static void arm_smmu_remove_master_domain(struct arm_smmu_master *master,
