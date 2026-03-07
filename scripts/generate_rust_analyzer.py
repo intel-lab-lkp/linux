@@ -52,9 +52,11 @@ class CrateWithGenerated(Crate):
     source: Source
 
 
-class RustProject(TypedDict):
+# TODO: use `typing.NotRequired` when Python 3.11 is adopted.
+class RustProject(TypedDict, total=False):
     crates: List[Crate]
     sysroot: str
+    sysroot_src: str
 
 
 Version = tuple[int, int, int]
@@ -79,6 +81,12 @@ BASELINES: List[RaVersionInfo] = [
         "release_date": datetime.strptime("2024-03-11", "%Y-%m-%d"),
         "ra_version": (0, 3, 1877),
         "rust_version": (1, 78, 0),
+    },
+    # v0.3.2727, released on 2025-12-22; v0.3.2743 is shipped with the rustup 1.94 toolchain.
+    {
+        "release_date": datetime.strptime("2025-12-22", "%Y-%m-%d"),
+        "ra_version": (0, 3, 2727),
+        "rust_version": (1, 94, 0),
     },
 ]
 
@@ -407,7 +415,7 @@ def generate_rust_project(
     cfgs: List[str],
     core_edition: str,
 ) -> RustProject:
-    assert len(BASELINES) == 1, "Exhaustiveness check: update if branches!"
+    assert len(BASELINES) == 2, "Exhaustiveness check: update if branches!"
 
     ctx: RaVersionCtx
 
@@ -421,6 +429,18 @@ def generate_rust_project(
                 ctx, srctree, objtree, sysroot_src, external_src, cfgs, core_edition
             ),
             "sysroot": str(sysroot),
+        }
+    elif version_info["ra_version"] == (0, 3, 2727):
+        ctx = {
+            "use_crate_attrs": True,
+            "manual_sysroot_crates": False,
+        }
+        return {
+            "crates": generate_crates(
+                ctx, srctree, objtree, sysroot_src, external_src, cfgs, core_edition
+            ),
+            "sysroot": str(sysroot),
+            "sysroot_src": str(sysroot_src),
         }
     else:
         assert False, "Unreachable!"
