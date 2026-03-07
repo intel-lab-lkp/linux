@@ -16,6 +16,7 @@
 #define __ASM_GENERIC_FIXMAP_H
 
 #include <linux/bug.h>
+#include <linux/compiler.h>
 #include <linux/mm_types.h>
 
 #define __fix_to_virt(x)	(FIXADDR_TOP - ((x) << PAGE_SHIFT))
@@ -71,13 +72,16 @@ static inline unsigned long virt_to_fix(const unsigned long vaddr)
 #endif
 
 /* Return a pointer with offset calculated */
-#define __set_fixmap_offset(idx, phys, flags)				\
-({									\
-	unsigned long ________addr;					\
-	__set_fixmap(idx, phys, flags);					\
-	________addr = fix_to_virt(idx) + ((phys) & (PAGE_SIZE - 1));	\
-	________addr;							\
+#define ___set_fixmap_offset(idx, phys, flags, uniq)            \
+({                                                              \
+	unsigned long uniq;                                         \
+	__set_fixmap(idx, phys, flags);                             \
+	uniq = fix_to_virt(idx) + ((phys) & (PAGE_SIZE - 1));       \
+	uniq;                                                       \
 })
+
+#define __set_fixmap_offset(idx, phys, flags)                   \
+	___set_fixmap_offset(idx, phys, flags, __UNIQUE_ID(addr))
 
 #define set_fixmap_offset(idx, phys) \
 	__set_fixmap_offset(idx, phys, FIXMAP_PAGE_NORMAL)
