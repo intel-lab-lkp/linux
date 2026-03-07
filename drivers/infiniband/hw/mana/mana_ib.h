@@ -134,6 +134,7 @@ struct mana_ib_mr {
 	struct ib_mr ibmr;
 	struct ib_umem *umem;
 	mana_handle_t mr_handle;
+	struct list_head ucontext_list;
 };
 
 struct mana_ib_dm {
@@ -208,6 +209,7 @@ struct mana_ib_ucontext {
 	/* Protects resource lists below */
 	struct mutex lock;
 	struct list_head pd_list;
+	struct list_head mr_list;
 	struct list_head cq_list;
 	struct list_head qp_list;
 	struct list_head wq_list;
@@ -665,6 +667,7 @@ struct ib_mr *mana_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 				  struct ib_udata *udata);
 
 int mana_ib_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata);
+int mana_ib_gd_destroy_mr(struct mana_ib_dev *dev, u64 mr_handle);
 
 int mana_ib_create_qp(struct ib_qp *qp, struct ib_qp_init_attr *qp_init_attr,
 		      struct ib_udata *udata);

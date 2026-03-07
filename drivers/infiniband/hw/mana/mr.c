@@ -87,7 +87,7 @@ static int mana_ib_gd_create_mr(struct mana_ib_dev *dev, struct mana_ib_mr *mr,
 	return 0;
 }
 
-static int mana_ib_gd_destroy_mr(struct mana_ib_dev *dev, u64 mr_handle)
+int mana_ib_gd_destroy_mr(struct mana_ib_dev *dev, u64 mr_handle)
 {
 	struct gdma_destroy_mr_response resp = {};
 	struct gdma_destroy_mr_request req = {};
@@ -184,6 +184,16 @@ struct ib_mr *mana_ib_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
 	 * successfully created. The dma_region_handle is tracked in the PF
 	 * as part of the lifecycle of this MR.
 	 */
+
+	INIT_LIST_HEAD(&mr->ucontext_list);
+	if (udata) {
+		struct mana_ib_ucontext *mana_ucontext =
+			rdma_udata_to_drv_context(udata,
+				struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_add_tail(&mr->ucontext_list, &mana_ucontext->mr_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
 
 	return &mr->ibmr;
 
@@ -312,6 +322,15 @@ int mana_ib_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 	int err;
 
 	dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
+
+	if (udata) {
+		struct mana_ib_ucontext *mana_ucontext =
+			rdma_udata_to_drv_context(udata,
+				struct mana_ib_ucontext, ibucontext);
+		mutex_lock(&mana_ucontext->lock);
+		list_del_init(&mr->ucontext_list);
+		mutex_unlock(&mana_ucontext->lock);
+	}
 
 	err = mana_ib_gd_destroy_mr(dev, mr->mr_handle);
 	if (err)
