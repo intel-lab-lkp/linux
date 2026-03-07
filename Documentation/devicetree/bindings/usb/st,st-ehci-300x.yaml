@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/st,st-ehci-300x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: STMicroelectronics USB EHCI Controller (ST EHCI 300x)
+
+maintainers:
+  - Peter Griffin <peter.griffin@linaro.org>
+
+description:
+  The STMicroelectronics EHCI 300x controller is a USB 2.0 Enhanced Host
+  Controller Interface used in several ST SoCs. It provides high-speed USB
+  host functionality and interfaces with an external USB PHY. The controller
+  requires clock, reset, interrupt, and pin control configuration along with
+  PHY connection information to operate correctly.
+
+allOf:
+  - $ref: usb-hcd.yaml#
+
+properties:
+  compatible:
+    const: st,st-ehci-300x
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  pinctrl-names:
+    const: default
+
+  pinctrl-0:
+    maxItems: 1
+
+  clocks:
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: ic
+      - const: clk48
+
+  phys:
+    maxItems: 1
+
+  phy-names:
+    const: usb
+
+  resets:
+    maxItems: 2
+
+  reset-names:
+    items:
+      - const: power
+      - const: softreset
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - pinctrl-names
+  - pinctrl-0
+  - clocks
+  - clock-names
+  - phys
+  - phy-names
+  - resets
+  - reset-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/clock/stih410-clks.h>
+    #include <dt-bindings/reset/stih407-resets.h>
+    usb@fe203e00 {
+        compatible = "st,st-ehci-300x";
+        reg = <0xfe203e00 0x100>;
+        interrupts = <GIC_SPI 148 IRQ_TYPE_NONE>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_usb1>;
+        clocks = <&clk_s_c0_flexgen CLK_TX_ICN_DISP_0>,
+                 <&clk_s_c0_flexgen CLK_RX_ICN_DISP_0>;
+        clock-names = "ic", "clk48";
+        phys = <&usb2_phy>;
+        phy-names = "usb";
+        resets = <&powerdown STIH407_USB2_PORT0_POWERDOWN>,
+                 <&softreset STIH407_USB2_PORT0_SOFTRESET>;
+        reset-names = "power", "softreset";
+    };
+...
