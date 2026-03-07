@@ -1782,14 +1782,8 @@ static struct cxl_dport *find_or_add_dport(struct cxl_port *port,
 	guard(device)(port_to_host(port));
 	guard(device)(&port->dev);
 	dport = cxl_find_dport_by_dev(port, dport_dev);
-	if (!dport) {
+	if (!dport)
 		dport = probe_dport(port, dport_dev);
-		if (IS_ERR(dport))
-			return dport;
-
-		/* New dport added, restart iteration */
-		return ERR_PTR(-EAGAIN);
-	}
 
 	return dport;
 }
@@ -1848,11 +1842,8 @@ retry:
 			 * have the dport added here.
 			 */
 			dport = find_or_add_dport(port, dport_dev);
-			if (IS_ERR(dport)) {
-				if (PTR_ERR(dport) == -EAGAIN)
-					goto retry;
+			if (IS_ERR(dport))
 				return PTR_ERR(dport);
-			}
 
 			rc = cxl_add_ep(dport, &cxlmd->dev);
 
