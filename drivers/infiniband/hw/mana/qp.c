@@ -700,14 +700,31 @@ destroy_queues:
 int mana_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 		      struct ib_udata *udata)
 {
+	struct mana_ib_qp *qp = container_of(ibqp, struct mana_ib_qp, ibqp);
+	int err;
+
+	INIT_LIST_HEAD(&qp->ucontext_list);
+
 	switch (attr->qp_type) {
 	case IB_QPT_RAW_PACKET:
 		/* When rwq_ind_tbl is used, it's for creating WQs for RSS */
 		if (attr->rwq_ind_tbl)
-			return mana_ib_create_qp_rss(ibqp, ibqp->pd, attr,
-						     udata);
+			err = mana_ib_create_qp_rss(ibqp, ibqp->pd, attr,
+						    udata);
+		else
+			err = mana_ib_create_qp_raw(ibqp, ibqp->pd, attr,
+						    udata);
 
-		return mana_ib_create_qp_raw(ibqp, ibqp->pd, attr, udata);
+		if (!err && udata) {
+			struct mana_ib_ucontext *mana_ucontext =
+				rdma_udata_to_drv_context(udata,
+					struct mana_ib_ucontext, ibucontext);
+			mutex_lock(&mana_ucontext->lock);
+			list_add_tail(&qp->ucontext_list, &mana_ucontext->qp_list);
+			mutex_unlock(&mana_ucontext->lock);
+		}
+
+		return err;
 	case IB_QPT_RC:
 		return mana_ib_create_rc_qp(ibqp, ibqp->pd, attr, udata);
 	case IB_QPT_UD:
@@ -716,9 +733,8 @@ int mana_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	default:
 		ibdev_dbg(ibqp->device, "Creating QP type %u not supported\n",
 			  attr->qp_type);
+		return -EINVAL;
 	}
-
-	return -EINVAL;
 }
 
 static int mana_ib_gd_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
@@ -898,14 +914,26 @@ static int mana_ib_destroy_ud_qp(struct mana_ib_qp *qp, struct ib_udata *udata)
 int mana_ib_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 {
 	struct mana_ib_qp *qp = container_of(ibqp, struct mana_ib_qp, ibqp);
+	int ret = -ENOENT;
 
 	switch (ibqp->qp_type) {
 	case IB_QPT_RAW_PACKET:
-		if (ibqp->rwq_ind_tbl)
-			return mana_ib_destroy_qp_rss(qp, ibqp->rwq_ind_tbl,
-						      udata);
+		if (udata) {
+			struct mana_ib_ucontext *mana_ucontext =
+				rdma_udata_to_drv_context(udata,
+					struct mana_ib_ucontext, ibucontext);
+			mutex_lock(&mana_ucontext->lock);
+			list_del_init(&qp->ucontext_list);
+			mutex_unlock(&mana_ucontext->lock);
+		}
 
-		return mana_ib_destroy_qp_raw(qp, udata);
+		if (ibqp->rwq_ind_tbl)
+			ret = mana_ib_destroy_qp_rss(qp, ibqp->rwq_ind_tbl,
+						     udata);
+		else
+			ret = mana_ib_destroy_qp_raw(qp, udata);
+
+		return ret;
 	case IB_QPT_RC:
 		return mana_ib_destroy_rc_qp(qp, udata);
 	case IB_QPT_UD:
@@ -914,7 +942,6 @@ int mana_ib_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 	default:
 		ibdev_dbg(ibqp->device, "Unexpected QP type %u\n",
 			  ibqp->qp_type);
+		return ret;
 	}
-
-	return -ENOENT;
 }

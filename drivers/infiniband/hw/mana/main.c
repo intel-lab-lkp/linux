@@ -244,6 +244,7 @@ int mana_ib_alloc_ucontext(struct ib_ucontext *ibcontext,
 	mutex_init(&ucontext->lock);
 	INIT_LIST_HEAD(&ucontext->pd_list);
 	INIT_LIST_HEAD(&ucontext->cq_list);
+	INIT_LIST_HEAD(&ucontext->qp_list);
 	INIT_LIST_HEAD(&ucontext->wq_list);
 
 	mutex_lock(&mdev->ucontext_lock);
