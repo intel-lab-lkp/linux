@@ -349,7 +349,7 @@ enum smca_bank_types {
 	 * Keep in alphanumeric order, numerals before letters.
 	 * Exception: Keep "V2, etc." with their originals.
 	 */
-	SMCA_CS,	/* Coherent Slave */
+	SMCA_CS,	/* Coherent Station */
 	SMCA_CS_V2,
 	SMCA_DE,	/* Decoder Unit */
 	SMCA_EX,	/* Execution Unit */
