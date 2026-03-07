@@ -126,6 +126,13 @@ enum mt7925_rxq_id {
 	MT7925_RXQ_MCU_WM2, /* for tx done */
 };
 
+/* MT7927 uses different RX ring indices than MT7925 */
+enum mt7927_rxq_id {
+	MT7927_RXQ_BAND0 = 4,
+	MT7927_RXQ_MCU_WM = 6,
+	MT7927_RXQ_DATA2 = 7,
+};
+
 enum {
 	MODE_OPEN = 0,
 	MODE_SHARED = 1,

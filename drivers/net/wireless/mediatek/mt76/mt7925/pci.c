@@ -324,6 +324,127 @@ static void mt7927_cbtop_remap(struct mt792x_dev *dev)
 	mt76_rr(dev, MT_CBINFRA_MISC0_REMAP_WF);
 }
 
+static int mt7927_dma_init(struct mt792x_dev *dev)
+{
+	int ret;
+
+	mt76_dma_attach(&dev->mt76);
+
+	/* Do SET_OWN -> CLR_OWN now that CBTOP and CBInfra are ready.
+	 * CLR_OWN triggers the ROM to initialize WFDMA properly. */
+	ret = mt792xe_mcu_fw_pmctrl(dev);
+	if (ret)
+		return ret;
+
+	ret = __mt792xe_mcu_drv_pmctrl(dev);
+	if (ret)
+		return ret;
+
+	/* Clear pending interrupts from previous state */
+	mt76_wr(dev, MT_WFDMA0_HOST_INT_STA, ~0);
+
+	/* Disable DMA */
+	mt76_clear(dev, MT_WFDMA0_GLO_CFG,
+		   MT_WFDMA0_GLO_CFG_TX_DMA_EN |
+		   MT_WFDMA0_GLO_CFG_RX_DMA_EN |
+		   MT_WFDMA0_GLO_CFG_CSR_DISP_BASE_PTR_CHAIN_EN |
+		   MT_WFDMA0_GLO_CFG_OMIT_TX_INFO |
+		   MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2);
+	wmb();
+
+	if (!mt76_poll_msec_tick(dev, MT_WFDMA0_GLO_CFG,
+				 MT_WFDMA0_GLO_CFG_TX_DMA_BUSY |
+				 MT_WFDMA0_GLO_CFG_RX_DMA_BUSY, 0, 100, 1))
+		return -ETIMEDOUT;
+
+	/* Reset DMA descriptor pointers */
+	mt76_wr(dev, MT_WFDMA0_RST_DTX_PTR, ~0);
+	mt76_wr(dev, MT_WFDMA0_RST_DRX_PTR, ~0);
+	wmb();
+	msleep(10);
+
+	/* init tx queue - ring 0 */
+	ret = mt76_connac_init_tx_queues(dev->phy.mt76, MT7925_TXQ_BAND0,
+					 MT7925_TX_RING_SIZE,
+					 MT_TX_RING_BASE, NULL, 0);
+	if (ret)
+		return ret;
+
+	mt76_wr(dev, MT_WFDMA0_TX_RING0_EXT_CTRL, 0x4);
+
+	/* command to WM - ring 15 */
+	ret = mt76_init_mcu_queue(&dev->mt76, MT_MCUQ_WM,
+				  MT7925_TXQ_MCU_WM,
+				  MT7925_TX_MCU_RING_SIZE, MT_TX_RING_BASE);
+	if (ret)
+		return ret;
+
+	/* firmware download - ring 16 */
+	ret = mt76_init_mcu_queue(&dev->mt76, MT_MCUQ_FWDL,
+				  MT7925_TXQ_FWDL,
+				  MT7925_TX_FWDL_RING_SIZE, MT_TX_RING_BASE);
+	if (ret)
+		return ret;
+
+	/* rx MCU events - ring 6 (MT7925 uses ring 0) */
+	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MCU],
+			       MT7927_RXQ_MCU_WM, MT7925_RX_MCU_RING_SIZE,
+			       MT_RX_BUF_SIZE, MT_RX_EVENT_RING_BASE);
+	if (ret)
+		return ret;
+
+	/* rx data - ring 4 (MT7925 uses ring 2) */
+	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MAIN],
+			       MT7927_RXQ_BAND0, MT7925_RX_RING_SIZE,
+			       MT_RX_BUF_SIZE, MT_RX_DATA_RING_BASE);
+	if (ret)
+		return ret;
+
+	/* rx auxiliary - ring 7: management frames */
+	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MCU_WA],
+			       MT7927_RXQ_DATA2, MT7925_RX_MCU_RING_SIZE,
+			       MT_RX_BUF_SIZE, MT_RX_DATA_RING_BASE);
+	if (ret)
+		return ret;
+
+	ret = mt76_init_queues(dev, mt792x_poll_rx);
+	if (ret < 0)
+		return ret;
+
+	netif_napi_add_tx(dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
+			  mt792x_poll_tx);
+	napi_enable(&dev->mt76.tx_napi);
+
+	/* MT7927-specific GLO_CFG bits before DMA enable */
+	mt76_set(dev, MT_WFDMA0_GLO_CFG, BIT(26));   /* ADDR_EXT_EN */
+	mt76_clear(dev, MT_WFDMA0_GLO_CFG, BIT(20)); /* CSR_LBK_RX_Q_SEL_EN */
+	mt76_set(dev, MT_WFDMA0_GLO_CFG_EXT1, BIT(28));
+	mt76_set(dev, MT_WFDMA0_GLO_CFG,
+		 MT_WFDMA0_GLO_CFG_FW_DWLD_BYPASS_DMASHDL);
+
+	ret = mt792x_dma_enable(dev);
+	if (ret)
+		return ret;
+
+	/* Enable interrupts synchronously */
+	mt76_wr(dev, MT_WFDMA0_HOST_INT_ENA, dev->mt76.mmio.irqmask);
+
+	return 0;
+}
+
+static const struct mt792x_irq_map mt7927_irq_map = {
+	.host_irq_enable = MT_WFDMA0_HOST_INT_ENA,
+	.tx = {
+		.all_complete_mask = MT_INT_TX_DONE_ALL,
+		.mcu_complete_mask = MT_INT_TX_DONE_MCU,
+	},
+	.rx = {
+		.data_complete_mask = HOST_RX_DONE_INT_ENA4,
+		.wm_complete_mask = HOST_RX_DONE_INT_ENA6,
+		.wm2_complete_mask = HOST_RX_DONE_INT_ENA7,
+	},
+};
+
 static int mt7925_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *id)
 {
@@ -417,7 +538,10 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 	dev = container_of(mdev, struct mt792x_dev, mt76);
 	dev->fw_features = features;
 	dev->hif_ops = &mt7925_pcie_ops;
-	dev->irq_map = &irq_map;
+	if (is_mt7927_hw)
+		dev->irq_map = &mt7927_irq_map;
+	else
+		dev->irq_map = &irq_map;
 	mt76_mmio_init(&dev->mt76, pcim_iomap_table(pdev)[0]);
 	tasklet_init(&mdev->irq_tasklet, mt792x_irq_tasklet, (unsigned long)dev);
 
@@ -489,7 +613,10 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		goto err_free_dev;
 
-	ret = mt7925_dma_init(dev);
+	if (is_mt7927_hw)
+		ret = mt7927_dma_init(dev);
+	else
+		ret = mt7925_dma_init(dev);
 	if (ret)
 		goto err_free_irq;
 

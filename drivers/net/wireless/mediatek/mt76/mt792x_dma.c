@@ -90,7 +90,23 @@ EXPORT_SYMBOL_GPL(mt792x_rx_poll_complete);
 #define PREFETCH(base, depth)	((base) << 16 | (depth))
 static void mt792x_dma_prefetch(struct mt792x_dev *dev)
 {
-	if (is_mt7925(&dev->mt76)) {
+	if (is_mt7927(&dev->mt76)) {
+		/* Trigger prefetch controller reset before reprogramming */
+		mt76_wr(dev, MT_WFDMA_PREFETCH_CTRL,
+			mt76_rr(dev, MT_WFDMA_PREFETCH_CTRL));
+		/* MT7927 uses packed prefetch registers */
+		mt76_wr(dev, MT_WFDMA_PREFETCH_CFG0, 0x660077);
+		mt76_wr(dev, MT_WFDMA_PREFETCH_CFG1, 0x1100);
+		mt76_wr(dev, MT_WFDMA_PREFETCH_CFG2, 0x30004f);
+		mt76_wr(dev, MT_WFDMA_PREFETCH_CFG3, 0x542200);
+		/* per-ring EXT_CTRL */
+		mt76_wr(dev, MT_WFDMA0_RX_RING4_EXT_CTRL, PREFETCH(0x0000, 0x8));
+		mt76_wr(dev, MT_WFDMA0_RX_RING6_EXT_CTRL, PREFETCH(0x0080, 0x8));
+		mt76_wr(dev, MT_WFDMA0_RX_RING7_EXT_CTRL, PREFETCH(0x0100, 0x4));
+		mt76_wr(dev, MT_WFDMA0_TX_RING16_EXT_CTRL, PREFETCH(0x0140, 0x4));
+		mt76_wr(dev, MT_WFDMA0_TX_RING15_EXT_CTRL, PREFETCH(0x0180, 0x10));
+		mt76_wr(dev, MT_WFDMA0_TX_RING0_EXT_CTRL, PREFETCH(0x0280, 0x4));
+	} else if (is_mt7925(&dev->mt76)) {
 		/* rx ring */
 		mt76_wr(dev, MT_WFDMA0_RX_RING0_EXT_CTRL, PREFETCH(0x0000, 0x4));
 		mt76_wr(dev, MT_WFDMA0_RX_RING1_EXT_CTRL, PREFETCH(0x0040, 0x4));
