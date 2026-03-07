@@ -3300,6 +3300,7 @@ static int ctnetlink_get_expect(struct sk_buff *skb,
 {
 	u_int8_t u3 = info->nfmsg->nfgen_family;
 	struct nf_conntrack_tuple tuple;
+	struct nf_conn *master;
 	struct nf_conntrack_expect *exp;
 	struct nf_conntrack_zone zone;
 	struct sk_buff *skb2;
@@ -3354,10 +3355,19 @@ static int ctnetlink_get_expect(struct sk_buff *skb,
 	}
 
 	rcu_read_lock();
+	master = exp->master;
+	if (!refcount_inc_not_zero(&master->ct_general.use)) {
+		rcu_read_unlock();
+		nf_ct_expect_put(exp);
+		kfree_skb(skb2);
+		return -ENOENT;
+	}
+
 	err = ctnetlink_exp_fill_info(skb2, NETLINK_CB(skb).portid,
 				      info->nlh->nlmsg_seq, IPCTNL_MSG_EXP_NEW,
 				      exp);
 	rcu_read_unlock();
+	nf_ct_put(master);
 	nf_ct_expect_put(exp);
 	if (err <= 0) {
 		kfree_skb(skb2);
