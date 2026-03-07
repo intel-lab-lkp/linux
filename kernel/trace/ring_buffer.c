@@ -2645,22 +2645,22 @@ struct trace_buffer *__ring_buffer_alloc_range(unsigned long size, unsigned flag
 			    scratch_size, key);
 }
 
-void *ring_buffer_meta_scratch(struct trace_buffer *buffer, unsigned int *size)
+void *ring_buffer_meta_scratch(struct trace_buffer *buffer, unsigned long *size)
 {
 	struct ring_buffer_meta *meta;
-	void *ptr;
+	unsigned long ptr;
 
 	if (!buffer || !buffer->meta)
 		return NULL;
 
 	meta = buffer->meta;
 
-	ptr = (void *)ALIGN((unsigned long)meta + sizeof(*meta), sizeof(long));
+	ptr = ALIGN((unsigned long)meta + sizeof(*meta), sizeof(unsigned long));
 
 	if (size)
-		*size = (void *)meta + meta->buffers_offset - ptr;
+		*size = (unsigned long)meta + meta->buffers_offset - ptr;
 
-	return ptr;
+	return (void *)ptr;
 }
 
 /**

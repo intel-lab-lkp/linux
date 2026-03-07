@@ -95,7 +95,8 @@ struct trace_buffer *__ring_buffer_alloc_range(unsigned long size, unsigned flag
 					       unsigned long scratch_size,
 					       struct lock_class_key *key);
 
-void *ring_buffer_meta_scratch(struct trace_buffer *buffer, unsigned int *size);
+void *ring_buffer_meta_scratch(struct trace_buffer *buffer,
+			       unsigned long *size);
 
 /*
  * Because the ring buffer is generic, if other users of the ring buffer get

@@ -9270,11 +9270,12 @@ static int mod_addr_comp(const void *a, const void *b, const void *data)
 }
 
 static void setup_trace_scratch(struct trace_array *tr,
-				struct trace_scratch *tscratch, unsigned int size)
+				struct trace_scratch *tscratch,
+				unsigned long size)
 {
 	struct trace_module_delta *module_delta;
 	struct trace_mod_entry *entry;
-	int i, nr_entries;
+	unsigned long i, nr_entries;
 
 	if (!tscratch)
 		return;
@@ -9338,11 +9339,11 @@ static void setup_trace_scratch(struct trace_array *tr,
 }
 
 static int
-allocate_trace_buffer(struct trace_array *tr, struct array_buffer *buf, int size)
+allocate_trace_buffer(struct trace_array *tr, struct array_buffer *buf, unsigned long size)
 {
 	enum ring_buffer_flags rb_flags;
 	struct trace_scratch *tscratch;
-	unsigned int scratch_size = 0;
+	unsigned long scratch_size = 0;
 
 	rb_flags = tr->trace_flags & TRACE_ITER(OVERWRITE) ? RB_FL_OVERWRITE : 0;
 
@@ -9393,7 +9394,7 @@ static void free_trace_buffer(struct array_buffer *buf)
 	}
 }
 
-static int allocate_trace_buffers(struct trace_array *tr, int size)
+static int allocate_trace_buffers(struct trace_array *tr, unsigned long size)
 {
 	int ret;
 
@@ -10757,7 +10758,7 @@ __init static void enable_instances(void)
 
 __init static int tracer_alloc_buffers(void)
 {
-	int ring_buf_size;
+	unsigned long ring_buf_size;
 	int ret = -ENOMEM;
 
 
