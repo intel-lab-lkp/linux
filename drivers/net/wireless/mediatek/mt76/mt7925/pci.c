@@ -418,7 +418,6 @@ static int mt7927_dma_init(struct mt792x_dev *dev)
 	/* MT7927-specific GLO_CFG bits before DMA enable */
 	mt76_set(dev, MT_WFDMA0_GLO_CFG, MT_WFDMA0_GLO_CFG_ADDR_EXT_EN);
 	mt76_clear(dev, MT_WFDMA0_GLO_CFG, MT_WFDMA0_GLO_CFG_CSR_LBK_RX_Q_SEL_EN);
-	mt76_set(dev, MT_WFDMA0_GLO_CFG_EXT1, BIT(28));
 	mt76_set(dev, MT_WFDMA0_GLO_CFG,
 		 MT_WFDMA0_GLO_CFG_FW_DWLD_BYPASS_DMASHDL);
 
@@ -489,7 +488,7 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 	struct mt76_bus_ops *bus_ops;
 	struct mt792x_dev *dev;
 	struct mt76_dev *mdev;
-	bool is_mt7927_hw;
+	bool is_mt7927_hw = (pdev->device == 0x6639 || pdev->device == 0x7927);
 	u8 features;
 	int ret;
 	u16 cmd;
@@ -573,8 +572,6 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 
 	if (!mt7925_disable_aspm && mt76_pci_aspm_supported(pdev))
 		dev->aspm_supported = true;
-
-	is_mt7927_hw = (pdev->device == 0x6639 || pdev->device == 0x7927);
 
 	ret = __mt792x_mcu_fw_pmctrl(dev);
 	if (ret)
