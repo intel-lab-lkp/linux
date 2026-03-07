@@ -1203,6 +1203,12 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q,
 		*parent = (*q)->handle;
 	} else {
 		*q = qdisc_lookup_rcu(dev, TC_H_MAJ(*parent));
+		if (IS_ERR(*q)) {
+			NL_SET_ERR_MSG(extack,
+				       "Parent Qdisc is being deleted in parallel");
+			err = PTR_ERR(*q);
+			goto errout_rcu;
+		}
 		if (!*q) {
 			NL_SET_ERR_MSG(extack, "Parent Qdisc doesn't exists");
 			err = -EINVAL;
@@ -2895,7 +2901,7 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 			q = rtnl_dereference(dev->qdisc);
 		else
 			q = qdisc_lookup(dev, TC_H_MAJ(tcm->tcm_parent));
-		if (!q)
+		if (IS_ERR_OR_NULL(q))
 			goto out;
 		cops = q->ops->cl_ops;
 		if (!cops)
@@ -3278,8 +3284,7 @@ static int tc_dump_chain(struct sk_buff *skb, struct netlink_callback *cb)
 			q = rtnl_dereference(dev->qdisc);
 		else
 			q = qdisc_lookup(dev, TC_H_MAJ(tcm->tcm_parent));
-
-		if (!q)
+		if (IS_ERR_OR_NULL(q))
 			goto out;
 		cops = q->ops->cl_ops;
 		if (!cops)

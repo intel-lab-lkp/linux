@@ -449,6 +449,13 @@ static void cbs_destroy(struct Qdisc *sch)
 	qdisc_put(q->qdisc);
 }
 
+static void cbs_mark_for_del(struct Qdisc *sch)
+{
+	struct cbs_sched_data *q = qdisc_priv(sch);
+
+	qdisc_mark_for_del(q->qdisc);
+}
+
 static int cbs_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
 	struct cbs_sched_data *q = qdisc_priv(sch);
@@ -544,6 +551,7 @@ static struct Qdisc_ops cbs_qdisc_ops __read_mostly = {
 	.destroy	=	cbs_destroy,
 	.change		=	cbs_change,
 	.dump		=	cbs_dump,
+	.mark_for_del	=	cbs_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("cbs");

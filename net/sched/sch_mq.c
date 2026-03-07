@@ -59,6 +59,19 @@ void mq_destroy_common(struct Qdisc *sch)
 }
 EXPORT_SYMBOL_NS_GPL(mq_destroy_common, "NET_SCHED_INTERNAL");
 
+void mq_mark_for_del_common(struct Qdisc *sch)
+{
+	struct mq_sched *priv = qdisc_priv(sch);
+	struct net_device *dev = qdisc_dev(sch);
+	unsigned int ntx;
+
+	if (!priv->qdiscs)
+		return;
+	for (ntx = 0; ntx < dev->num_tx_queues && priv->qdiscs[ntx]; ntx++)
+		qdisc_mark_for_del(priv->qdiscs[ntx]);
+}
+EXPORT_SYMBOL_NS_GPL(mq_mark_for_del_common, "NET_SCHED_INTERNAL");
+
 static void mq_destroy(struct Qdisc *sch)
 {
 	mq_offload(sch, TC_MQ_DESTROY);
@@ -297,5 +310,6 @@ struct Qdisc_ops mq_qdisc_ops __read_mostly = {
 	.attach		= mq_attach,
 	.change_real_num_tx = mq_change_real_num_tx,
 	.dump		= mq_dump,
+	.mark_for_del	= mq_mark_for_del_common,
 	.owner		= THIS_MODULE,
 };

@@ -458,6 +458,20 @@ static void drr_destroy_qdisc(struct Qdisc *sch)
 	qdisc_class_hash_destroy(&q->clhash);
 }
 
+static void drr_mark_qdisc_for_del(struct Qdisc *sch)
+{
+	struct drr_sched *q = qdisc_priv(sch);
+	struct hlist_node *next;
+	struct drr_class *cl;
+	int i;
+
+	for (i = 0; i < q->clhash.hashsize; i++) {
+		hlist_for_each_entry_safe(cl, next, &q->clhash.hash[i],
+					  common.hnode)
+			qdisc_mark_for_del(cl->qdisc);
+	}
+}
+
 static const struct Qdisc_class_ops drr_class_ops = {
 	.change		= drr_change_class,
 	.delete		= drr_delete_class,
@@ -483,6 +497,7 @@ static struct Qdisc_ops drr_qdisc_ops __read_mostly = {
 	.init		= drr_init_qdisc,
 	.reset		= drr_reset_qdisc,
 	.destroy	= drr_destroy_qdisc,
+	.mark_for_del	= drr_mark_qdisc_for_del,
 	.owner		= THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("drr");

@@ -507,6 +507,13 @@ static void tbf_destroy(struct Qdisc *sch)
 	qdisc_put(q->qdisc);
 }
 
+static void tbf_mark_for_del(struct Qdisc *sch)
+{
+	struct tbf_sched_data *q = qdisc_priv(sch);
+
+	qdisc_mark_for_del(q->qdisc);
+}
+
 static int tbf_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
 	struct tbf_sched_data *q = qdisc_priv(sch);
@@ -613,6 +620,7 @@ static struct Qdisc_ops tbf_qdisc_ops __read_mostly = {
 	.destroy	=	tbf_destroy,
 	.change		=	tbf_change,
 	.dump		=	tbf_dump,
+	.mark_for_del	=	tbf_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("tbf");

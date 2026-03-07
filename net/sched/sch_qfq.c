@@ -1510,6 +1510,19 @@ static void qfq_destroy_qdisc(struct Qdisc *sch)
 	qdisc_class_hash_destroy(&q->clhash);
 }
 
+static void qfq_mark_qdisc_for_del(struct Qdisc *sch)
+{
+	struct qfq_sched *q = qdisc_priv(sch);
+	struct qfq_class *cl;
+	unsigned int i;
+
+	for (i = 0; i < q->clhash.hashsize; i++) {
+		hlist_for_each_entry(cl, &q->clhash.hash[i],
+				     common.hnode)
+			qdisc_mark_for_del(cl->qdisc);
+	}
+}
+
 static const struct Qdisc_class_ops qfq_class_ops = {
 	.change		= qfq_change_class,
 	.delete		= qfq_delete_class,
@@ -1535,6 +1548,7 @@ static struct Qdisc_ops qfq_qdisc_ops __read_mostly = {
 	.init		= qfq_init_qdisc,
 	.reset		= qfq_reset_qdisc,
 	.destroy	= qfq_destroy_qdisc,
+	.mark_for_del	= qfq_mark_qdisc_for_del,
 	.owner		= THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("qfq");

@@ -223,6 +223,13 @@ static void red_destroy(struct Qdisc *sch)
 	qdisc_put(q->qdisc);
 }
 
+static void red_mark_for_del(struct Qdisc *sch)
+{
+	struct red_sched_data *q = qdisc_priv(sch);
+
+	qdisc_mark_for_del(q->qdisc);
+}
+
 static const struct nla_policy red_policy[TCA_RED_MAX + 1] = {
 	[TCA_RED_UNSPEC] = { .strict_start_type = TCA_RED_FLAGS },
 	[TCA_RED_PARMS]	= { .len = sizeof(struct tc_red_qopt) },
@@ -548,6 +555,7 @@ static struct Qdisc_ops red_qdisc_ops __read_mostly = {
 	.change		=	red_change,
 	.dump		=	red_dump,
 	.dump_stats	=	red_dump_stats,
+	.mark_for_del	=	red_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("red");

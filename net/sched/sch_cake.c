@@ -3341,6 +3341,7 @@ static struct Qdisc_ops cake_mq_qdisc_ops __read_mostly = {
 	.change		=	cake_mq_change,
 	.change_real_num_tx = mq_change_real_num_tx,
 	.dump		=	cake_mq_dump,
+	.mark_for_del	=	mq_mark_for_del_common,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("cake_mq");

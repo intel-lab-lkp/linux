@@ -173,6 +173,16 @@ prio_destroy(struct Qdisc *sch)
 		qdisc_put(q->queues[prio]);
 }
 
+static void
+prio_mark_for_del(struct Qdisc *sch)
+{
+	struct prio_sched_data *q = qdisc_priv(sch);
+	int prio;
+
+	for (prio = 0; prio < q->bands; prio++)
+		qdisc_mark_for_del(q->queues[prio]);
+}
+
 static int prio_tune(struct Qdisc *sch, struct nlattr *opt,
 		     struct netlink_ext_ack *extack)
 {
@@ -416,6 +426,7 @@ static struct Qdisc_ops prio_qdisc_ops __read_mostly = {
 	.destroy	=	prio_destroy,
 	.change		=	prio_tune,
 	.dump		=	prio_dump,
+	.mark_for_del	=	prio_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("prio");

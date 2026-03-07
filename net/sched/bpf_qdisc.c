@@ -246,6 +246,11 @@ __bpf_kfunc int bpf_qdisc_init_prologue(struct Qdisc *sch,
 		 * has not been added to qdisc_hash yet.
 		 */
 		p = qdisc_lookup(dev, TC_H_MAJ(sch->parent));
+		if (IS_ERR(p)) {
+			NL_SET_ERR_MSG(extack,
+				       "BPF Qdisc is being deleted in parallel");
+			return PTR_ERR(p);
+		}
 		if (p && !(p->flags & TCQ_F_MQROOT)) {
 			NL_SET_ERR_MSG(extack, "BPF qdisc only supported on root or mq");
 			return -EINVAL;

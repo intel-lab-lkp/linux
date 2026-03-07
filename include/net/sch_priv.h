@@ -12,6 +12,7 @@ int mq_init_common(struct Qdisc *sch, struct nlattr *opt,
 		   struct netlink_ext_ack *extack,
 		   const struct Qdisc_ops *qdisc_ops);
 void mq_destroy_common(struct Qdisc *sch);
+void mq_mark_for_del_common(struct Qdisc *sch);
 void mq_attach(struct Qdisc *sch);
 void mq_dump_common(struct Qdisc *sch, struct sk_buff *skb);
 struct netdev_queue *mq_select_queue(struct Qdisc *sch,

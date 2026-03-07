@@ -2059,6 +2059,17 @@ static void taprio_destroy(struct Qdisc *sch)
 	taprio_cleanup_broken_mqprio(q);
 }
 
+static void taprio_mark_for_del(struct Qdisc *sch)
+{
+	struct taprio_sched *q = qdisc_priv(sch);
+	struct net_device *dev = qdisc_dev(sch);
+	unsigned int i;
+
+	if (q->qdiscs)
+		for (i = 0; i < dev->num_tx_queues; i++)
+			qdisc_mark_for_del(q->qdiscs[i]);
+}
+
 static int taprio_init(struct Qdisc *sch, struct nlattr *opt,
 		       struct netlink_ext_ack *extack)
 {
@@ -2542,6 +2553,7 @@ static struct Qdisc_ops taprio_qdisc_ops __read_mostly = {
 	.enqueue	= taprio_enqueue,
 	.dump		= taprio_dump,
 	.dump_stats	= taprio_dump_stats,
+	.mark_for_del	= taprio_mark_for_del,
 	.owner		= THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("taprio");

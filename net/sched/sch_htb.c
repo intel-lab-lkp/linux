@@ -1689,6 +1689,27 @@ static void htb_destroy(struct Qdisc *sch)
 	kfree(q->direct_qdiscs);
 }
 
+static void htb_mark_for_del(struct Qdisc *sch)
+{
+	struct htb_sched *q = qdisc_priv(sch);
+	struct hlist_node *next;
+	struct htb_class *cl;
+	unsigned int i;
+
+	for (i = 0; i < q->clhash.hashsize; i++) {
+		hlist_for_each_entry_safe(cl, next, &q->clhash.hash[i],
+					  common.hnode)
+			if (!cl->level)
+				qdisc_mark_for_del(cl->leaf.q);
+	}
+
+	if (q->direct_qdiscs) {
+		for (i = 0; i < q->num_direct_qdiscs && q->direct_qdiscs[i];
+		     i++)
+			qdisc_mark_for_del(q->direct_qdiscs[i]);
+	}
+}
+
 static int htb_delete(struct Qdisc *sch, unsigned long arg,
 		      struct netlink_ext_ack *extack)
 {
@@ -2148,6 +2169,7 @@ static struct Qdisc_ops htb_qdisc_ops __read_mostly = {
 	.reset		=	htb_reset,
 	.destroy	=	htb_destroy,
 	.dump		=	htb_dump,
+	.mark_for_del	=	htb_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("htb");

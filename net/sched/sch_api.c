@@ -159,6 +159,12 @@ int register_qdisc(struct Qdisc_ops *qops)
 
 		if (cops->tcf_block && !(cops->bind_tcf && cops->unbind_tcf))
 			goto out_einval;
+
+		/* If a qdisc can have children, it might need to mark them
+		 * in case there are parallel classifier ops
+		 */
+		if (cops->graft && !(qops->mark_for_del))
+			goto out_einval;
 	}
 
 	qops->next = NULL;
@@ -264,17 +270,30 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 {
 	struct Qdisc *q;
 
-	if (!qdisc_dev(root))
-		return (root->handle == handle ? root : NULL);
+	if (!qdisc_dev(root)) {
+		if (root->handle == handle) {
+			if (root->flags & TCQ_F_MARK_FOR_DEL)
+				return ERR_PTR(-EBUSY);
+			return root;
+		}
+		return NULL;
+	}
 
 	if (!(root->flags & TCQ_F_BUILTIN) &&
-	    root->handle == handle)
+	    root->handle == handle) {
+		if (root->flags & TCQ_F_MARK_FOR_DEL)
+			return ERR_PTR(-EBUSY);
+
 		return root;
+	}
 
 	hash_for_each_possible_rcu(qdisc_dev(root)->qdisc_hash, q, hash, handle,
 				   lockdep_rtnl_is_held()) {
-		if (q->handle == handle)
+		if (q->handle == handle) {
+			if (q->flags & TCQ_F_MARK_FOR_DEL)
+				return ERR_PTR(-EBUSY);
 			return q;
+		}
 	}
 	return NULL;
 }
@@ -793,8 +812,8 @@ void qdisc_tree_reduce_backlog(struct Qdisc *sch, int n, int len)
 		notify = !sch->q.qlen;
 		/* TODO: perform the search on a per txq basis */
 		sch = qdisc_lookup_rcu(qdisc_dev(sch), TC_H_MAJ(parentid));
-		if (sch == NULL) {
-			WARN_ON_ONCE(parentid != TC_H_ROOT);
+		if (sch == NULL || IS_ERR(sch)) {
+			WARN_ON_ONCE(parentid != TC_H_ROOT && sch == NULL);
 			break;
 		}
 		cops = sch->ops->cl_ops;
@@ -985,6 +1004,8 @@ static bool tc_qdisc_dump_ignore(struct Qdisc *q, bool dump_invisible)
 		return true;
 	if ((q->flags & TCQ_F_INVISIBLE) && !dump_invisible)
 		return true;
+	if ((q->flags & TCQ_F_MARK_FOR_DEL))
+		return true;
 
 	return false;
 }
@@ -1050,6 +1071,17 @@ err_out:
 	return -EINVAL;
 }
 
+static void qdisc_put_mark_for_del(struct Qdisc *sch)
+{
+	if (sch->flags & TCQ_F_BUILTIN)
+		return;
+
+	if (refcount_dec_and_test(&sch->refcnt))
+		qdisc_destroy(sch);
+	else
+		qdisc_mark_for_del(sch);
+}
+
 static void notify_and_destroy(struct net *net, struct sk_buff *skb,
 			       struct nlmsghdr *n, u32 clid,
 			       struct Qdisc *old, struct Qdisc *new,
@@ -1059,7 +1091,7 @@ static void notify_and_destroy(struct net *net, struct sk_buff *skb,
 		qdisc_notify(net, skb, n, clid, old, new, extack);
 
 	if (old)
-		qdisc_put(old);
+		qdisc_put_mark_for_del(old);
 }
 
 static void qdisc_clear_nolock(struct Qdisc *sch)
@@ -1157,7 +1189,6 @@ skip:
 			rcu_assign_pointer(dev->qdisc, new ? : &noop_qdisc);
 
 			notify_and_destroy(net, skb, n, classid, old, new, extack);
-
 			if (new && new->ops->attach)
 				new->ops->attach(new);
 		}
@@ -1481,6 +1512,11 @@ static int __tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 		if (clid != TC_H_ROOT) {
 			if (TC_H_MAJ(clid) != TC_H_MAJ(TC_H_INGRESS)) {
 				p = qdisc_lookup(dev, TC_H_MAJ(clid));
+				if (IS_ERR(p)) {
+					NL_SET_ERR_MSG(extack,
+						       "Qdisc is being deleted in parallel");
+					return PTR_ERR(p);
+				}
 				if (!p) {
 					NL_SET_ERR_MSG(extack, "Failed to find qdisc with specified classid");
 					return -ENOENT;
@@ -1505,6 +1541,11 @@ static int __tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 		}
 	} else {
 		q = qdisc_lookup(dev, tcm->tcm_handle);
+		if (IS_ERR(q)) {
+			NL_SET_ERR_MSG(extack,
+				       "Qdisc is being deleted in parallel");
+			return PTR_ERR(q);
+		}
 		if (!q) {
 			NL_SET_ERR_MSG(extack, "Failed to find qdisc with specified handle");
 			return -ENOENT;
@@ -1595,6 +1636,11 @@ static int __tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 		if (clid != TC_H_ROOT) {
 			if (clid != TC_H_INGRESS) {
 				p = qdisc_lookup(dev, TC_H_MAJ(clid));
+				if (IS_ERR(p)) {
+					NL_SET_ERR_MSG(extack,
+						       "Qdisc is being deleted in parallel");
+					return PTR_ERR(p);
+				}
 				if (!p) {
 					NL_SET_ERR_MSG(extack, "Failed to find specified qdisc");
 					return -ENOENT;
@@ -1629,6 +1675,11 @@ static int __tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 					return -EINVAL;
 				}
 				q = qdisc_lookup(dev, tcm->tcm_handle);
+				if (IS_ERR(q)) {
+					NL_SET_ERR_MSG(extack,
+						       "Qdisc is being deleted in parallel");
+					return PTR_ERR(q);
+				}
 				if (!q)
 					goto create_n_graft;
 				if (q->parent != tcm->tcm_parent) {
@@ -1705,6 +1756,11 @@ static int __tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 			return -EINVAL;
 		}
 		q = qdisc_lookup(dev, tcm->tcm_handle);
+		if (IS_ERR(q)) {
+			NL_SET_ERR_MSG(extack,
+				       "Qdisc is being deleted in parallel");
+			return PTR_ERR(q);
+		}
 	}
 
 	/* Change qdisc parameters */
@@ -2218,6 +2274,11 @@ static int __tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 
 	/* OK. Locate qdisc */
 	q = qdisc_lookup(dev, qid);
+	if (IS_ERR(q)) {
+		NL_SET_ERR_MSG(extack,
+			       "Qdisc is being deleted in parallel");
+		return PTR_ERR(q);
+	}
 	if (!q)
 		return -ENOENT;
 
@@ -2375,6 +2436,8 @@ static int tc_dump_tclass_root(struct Qdisc *root, struct sk_buff *skb,
 
 	if (tcm->tcm_parent) {
 		q = qdisc_match_from_root(root, TC_H_MAJ(tcm->tcm_parent));
+		if (IS_ERR(q))
+			return 0;
 		if (q && q != root &&
 		    tc_dump_tclass_qdisc(q, skb, tcm, cb, t_p, s_t) < 0)
 			return -1;

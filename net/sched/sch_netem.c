@@ -1155,6 +1155,13 @@ static void netem_destroy(struct Qdisc *sch)
 	dist_free(q->slot_dist);
 }
 
+static void netem_mark_for_del(struct Qdisc *sch)
+{
+	struct netem_sched_data *q = qdisc_priv(sch);
+
+	qdisc_mark_for_del(q->qdisc);
+}
+
 static int dump_loss_model(const struct netem_sched_data *q,
 			   struct sk_buff *skb)
 {
@@ -1353,6 +1360,7 @@ static struct Qdisc_ops netem_qdisc_ops __read_mostly = {
 	.destroy	=	netem_destroy,
 	.change		=	netem_change,
 	.dump		=	netem_dump,
+	.mark_for_del	=	netem_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("netem");

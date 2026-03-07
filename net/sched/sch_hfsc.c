@@ -1517,6 +1517,19 @@ hfsc_destroy_qdisc(struct Qdisc *sch)
 	qdisc_watchdog_cancel(&q->watchdog);
 }
 
+static void
+hfsc_mark_qdisc_for_del(struct Qdisc *sch)
+{
+	struct hfsc_sched *q = qdisc_priv(sch);
+	struct hfsc_class *cl;
+	unsigned int i;
+
+	for (i = 0; i < q->clhash.hashsize; i++) {
+		hlist_for_each_entry(cl, &q->clhash.hash[i], cl_common.hnode)
+			qdisc_mark_for_del(cl->qdisc);
+	}
+}
+
 static int
 hfsc_dump_qdisc(struct Qdisc *sch, struct sk_buff *skb)
 {
@@ -1681,6 +1694,7 @@ static struct Qdisc_ops hfsc_qdisc_ops __read_mostly = {
 	.dequeue	= hfsc_dequeue,
 	.peek		= qdisc_peek_dequeued,
 	.cl_ops		= &hfsc_class_ops,
+	.mark_for_del	= hfsc_mark_qdisc_for_del,
 	.priv_size	= sizeof(struct hfsc_sched),
 	.owner		= THIS_MODULE
 };

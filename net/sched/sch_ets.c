@@ -742,6 +742,15 @@ static void ets_qdisc_destroy(struct Qdisc *sch)
 		qdisc_put(q->classes[band].qdisc);
 }
 
+static void ets_qdisc_mark_for_del(struct Qdisc *sch)
+{
+	struct ets_sched *q = qdisc_priv(sch);
+	int band;
+
+	for (band = 0; band < q->nbands; band++)
+		qdisc_mark_for_del(q->classes[band].qdisc);
+}
+
 static int ets_qdisc_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
 	struct ets_sched *q = qdisc_priv(sch);
@@ -827,6 +836,7 @@ static struct Qdisc_ops ets_qdisc_ops __read_mostly = {
 	.reset		= ets_qdisc_reset,
 	.destroy	= ets_qdisc_destroy,
 	.dump		= ets_qdisc_dump,
+	.mark_for_del	= ets_qdisc_mark_for_del,
 	.owner		= THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("ets");

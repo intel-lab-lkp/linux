@@ -168,6 +168,16 @@ multiq_destroy(struct Qdisc *sch)
 	kfree(q->queues);
 }
 
+static void
+multiq_mark_for_del(struct Qdisc *sch)
+{
+	struct multiq_sched_data *q = qdisc_priv(sch);
+	int band;
+
+	for (band = 0; band < q->bands; band++)
+		qdisc_mark_for_del(q->queues[band]);
+}
+
 static int multiq_tune(struct Qdisc *sch, struct nlattr *opt,
 		       struct netlink_ext_ack *extack)
 {
@@ -393,6 +403,7 @@ static struct Qdisc_ops multiq_qdisc_ops __read_mostly = {
 	.destroy	=	multiq_destroy,
 	.change		=	multiq_tune,
 	.dump		=	multiq_dump,
+	.mark_for_del	=	multiq_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("multiq");

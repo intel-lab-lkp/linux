@@ -473,6 +473,13 @@ static void sfb_destroy(struct Qdisc *sch)
 	qdisc_put(q->qdisc);
 }
 
+static void sfb_mark_for_del(struct Qdisc *sch)
+{
+	struct sfb_sched_data *q = qdisc_priv(sch);
+
+	qdisc_mark_for_del(q->qdisc);
+}
+
 static const struct nla_policy sfb_policy[TCA_SFB_MAX + 1] = {
 	[TCA_SFB_PARMS]	= { .len = sizeof(struct tc_sfb_qopt) },
 };
@@ -709,6 +716,7 @@ static struct Qdisc_ops sfb_qdisc_ops __read_mostly = {
 	.change		=	sfb_change,
 	.dump		=	sfb_dump,
 	.dump_stats	=	sfb_dump_stats,
+	.mark_for_del	=	sfb_mark_for_del,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("sfb");

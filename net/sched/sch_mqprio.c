@@ -112,6 +112,20 @@ static void mqprio_destroy(struct Qdisc *sch)
 		netdev_set_num_tc(dev, 0);
 }
 
+static void mqprio_mark_for_del(struct Qdisc *sch)
+{
+	struct net_device *dev = qdisc_dev(sch);
+	struct mqprio_sched *priv = qdisc_priv(sch);
+	unsigned int ntx;
+
+	if (priv->qdiscs) {
+		for (ntx = 0;
+		     ntx < dev->num_tx_queues && priv->qdiscs[ntx];
+		     ntx++)
+			qdisc_mark_for_del(priv->qdiscs[ntx]);
+	}
+}
+
 static int mqprio_parse_opt(struct net_device *dev, struct tc_mqprio_qopt *qopt,
 			    const struct tc_mqprio_caps *caps,
 			    struct netlink_ext_ack *extack)
@@ -769,6 +783,7 @@ static struct Qdisc_ops mqprio_qdisc_ops __read_mostly = {
 	.attach		= mqprio_attach,
 	.change_real_num_tx = mq_change_real_num_tx,
 	.dump		= mqprio_dump,
+	.mark_for_del	= mqprio_mark_for_del,
 	.owner		= THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("mqprio");

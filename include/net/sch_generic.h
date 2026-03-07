@@ -89,6 +89,7 @@ struct Qdisc {
 #define TCQ_F_NOLOCK		0x100 /* qdisc does not require locking */
 #define TCQ_F_OFFLOADED		0x200 /* qdisc is offloaded to HW */
 #define TCQ_F_DEQUEUE_DROPS	0x400 /* ->dequeue() can drop packets in q->to_free */
+#define TCQ_F_MARK_FOR_DEL	0x800 /* Is marked for deletion */
 
 	u32			limit;
 	const struct Qdisc_ops	*ops;
@@ -328,7 +329,7 @@ struct Qdisc_ops {
 
 	int			(*dump)(struct Qdisc *, struct sk_buff *);
 	int			(*dump_stats)(struct Qdisc *, struct gnet_dump *);
-
+	void			(*mark_for_del)(struct Qdisc *sch);
 	void			(*ingress_block_set)(struct Qdisc *sch,
 						     u32 block_index);
 	void			(*egress_block_set)(struct Qdisc *sch,
@@ -740,6 +741,17 @@ qdisc_offload_graft_helper(struct net_device *dev, struct Qdisc *sch,
 {
 }
 #endif
+
+static inline void qdisc_mark_for_del(struct Qdisc *sch)
+{
+	if (!sch)
+		return;
+
+	sch->flags |= TCQ_F_MARK_FOR_DEL;
+	if (sch->ops->mark_for_del)
+		sch->ops->mark_for_del(sch);
+}
+
 void qdisc_offload_query_caps(struct net_device *dev,
 			      enum tc_setup_type type,
 			      void *caps, size_t caps_len);
