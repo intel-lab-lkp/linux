@@ -986,12 +986,11 @@ void rtw_dev_unload(struct adapter *padapter)
 			rtw_stop_drv_threads(padapter);
 
 		while (atomic_read(&pcmdpriv->cmdthd_running)) {
-			if (cnt > 5) {
+			if (cnt > 5)
 				break;
-			} else {
-				cnt++;
-				msleep(10);
-			}
+
+			cnt++;
+			usleep_range(10000, 20000);
 		}
 
 		/* check the status of IPS */
