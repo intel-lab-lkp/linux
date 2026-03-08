@@ -421,6 +421,8 @@ ethnl_default_requests[__ETHTOOL_MSG_USER_CNT] = {
 	[ETHTOOL_MSG_TSCONFIG_SET]	= &ethnl_tsconfig_request_ops,
 	[ETHTOOL_MSG_PHY_GET]		= &ethnl_phy_request_ops,
 	[ETHTOOL_MSG_MSE_GET]		= &ethnl_mse_request_ops,
+	[ETHTOOL_MSG_LOOPBACK_GET]	= &ethnl_loopback_request_ops,
+	[ETHTOOL_MSG_LOOPBACK_SET]	= &ethnl_loopback_request_ops,
 };
 
 static struct ethnl_dump_ctx *ethnl_dump_context(struct netlink_callback *cb)
@@ -962,6 +964,7 @@ ethnl_default_notify_ops[ETHTOOL_MSG_KERNEL_MAX + 1] = {
 	[ETHTOOL_MSG_MM_NTF]		= &ethnl_mm_request_ops,
 	[ETHTOOL_MSG_RSS_NTF]		= &ethnl_rss_request_ops,
 	[ETHTOOL_MSG_RSS_CREATE_NTF]	= &ethnl_rss_request_ops,
+	[ETHTOOL_MSG_LOOPBACK_NTF]	= &ethnl_loopback_request_ops,
 };
 
 /* default notification handler */
@@ -1070,6 +1073,7 @@ static const ethnl_notify_handler_t ethnl_notify_handlers[] = {
 	[ETHTOOL_MSG_MM_NTF]		= ethnl_default_notify,
 	[ETHTOOL_MSG_RSS_NTF]		= ethnl_default_notify,
 	[ETHTOOL_MSG_RSS_CREATE_NTF]	= ethnl_default_notify,
+	[ETHTOOL_MSG_LOOPBACK_NTF]	= ethnl_default_notify,
 };
 
 void ethnl_notify(struct net_device *dev, unsigned int cmd,
@@ -1543,6 +1547,22 @@ static const struct genl_ops ethtool_genl_ops[] = {
 		.done	= ethnl_perphy_done,
 		.policy = ethnl_mse_get_policy,
 		.maxattr = ARRAY_SIZE(ethnl_mse_get_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_LOOPBACK_GET,
+		.doit	= ethnl_default_doit,
+		.start	= ethnl_default_start,
+		.dumpit	= ethnl_default_dumpit,
+		.done	= ethnl_default_done,
+		.policy = ethnl_loopback_get_policy,
+		.maxattr = ARRAY_SIZE(ethnl_loopback_get_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_LOOPBACK_SET,
+		.flags	= GENL_UNS_ADMIN_PERM,
+		.doit	= ethnl_default_set_doit,
+		.policy = ethnl_loopback_set_policy,
+		.maxattr = ARRAY_SIZE(ethnl_loopback_set_policy) - 1,
 	},
 };
 
