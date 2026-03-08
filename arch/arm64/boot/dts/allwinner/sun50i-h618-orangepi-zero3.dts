@@ -48,7 +48,7 @@
 		reg = <0x36>;
 		#interrupt-cells = <1>;
 		interrupt-controller;
-		interrupt-parent = <&pio>;
+		interrupt-parent = <&r_pio>;
 		interrupts = <2 9 IRQ_TYPE_LEVEL_LOW>;	/* PC9 */
 
 		vin1-supply = <&reg_vcc5v>;
