@@ -12,6 +12,17 @@
 #include "intel_dp.h"
 #include "intel_lt_phy.h"
 
+#define MTL_C10_VS_PE_DP14_RBR_HBR 0
+#define MTL_C10_VS_PE_DP14_HBR2_HBR3 1
+#define MTL_C10_VS_PE_EDP_NON_HBR3 2
+#define MTL_C10_VS_PE_EDP_HBR3 3
+
+#define MTL_C20_VS_PE_DP14 4
+#define MTL_C20_VS_PE_DP20 5
+
+#define MTL_CX0_VS_PE_COL 3
+#define MTL_CX0_VS_PE_ROW 16
+
 #define XE3P_VS_PE_EDP 3
 #define XE3P_VS_PE_DP14 4
 #define XE3P_VS_PE_DP21 5
@@ -1109,6 +1120,25 @@ static const union intel_ddi_buf_trans_entry _mtl_c20_trans_hdmi[] = {
 	{ .snps = { 32, 4, 12 } },      /* preset 4 */
 };
 
+static union intel_ddi_buf_trans_entry _mtl_cx0_trans_override[] = {
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+	{ .snps = { 0, 0, 0 } },
+};
+
 static const struct intel_ddi_buf_trans mtl_c20_trans_hdmi = {
 	.entries = _mtl_c20_trans_hdmi,
 	.num_entries = ARRAY_SIZE(_mtl_c20_trans_hdmi),
@@ -1124,6 +1154,11 @@ static const struct intel_ddi_buf_trans mtl_c20_trans_dp14 = {
 static const struct intel_ddi_buf_trans mtl_c20_trans_uhbr = {
 	.entries = _mtl_c20_trans_uhbr,
 	.num_entries = ARRAY_SIZE(_mtl_c20_trans_uhbr),
+};
+
+static struct intel_ddi_buf_trans mtl_cx0_trans_override = {
+	.entries = _mtl_cx0_trans_override,
+	.num_entries = ARRAY_SIZE(_mtl_cx0_trans_override),
 };
 
 /* DP1.4 */
@@ -1816,10 +1851,59 @@ dg2_get_snps_buf_trans(struct intel_encoder *encoder,
 }
 
 static const struct intel_ddi_buf_trans *
+mtl_set_cx0_buf_trans(struct intel_encoder *encoder,
+		      int idx,
+		      int *n_entries)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_ddi_buf_trans *buf_trans = &mtl_cx0_trans_override;
+	union intel_ddi_buf_trans_entry *entries, *entry;
+	const u32 *tables = display->vbt.override_vswing;
+	const u32 *vals;
+
+	entries = (union intel_ddi_buf_trans_entry *) buf_trans->entries;
+	for (int row = 0; row < MTL_CX0_VS_PE_ROW; row++) {
+		entry = &entries[row];
+		vals = find_row(tables,
+				idx,
+				row,
+				MTL_CX0_VS_PE_ROW,
+				MTL_CX0_VS_PE_COL);
+
+		entry->snps.vswing = LOW(vals[0]);
+		entry->snps.pre_cursor = LOW(vals[1]);
+		entry->snps.post_cursor = LOW(vals[2]);
+	}
+
+	return intel_get_buf_trans(&mtl_cx0_trans_override, n_entries);
+}
+
+static const struct intel_ddi_buf_trans *
 mtl_get_c10_buf_trans(struct intel_encoder *encoder,
 		      const struct intel_crtc_state *crtc_state,
 		      int *n_entries)
 {
+	if (intel_bios_encoder_overrides_vswing(encoder->devdata)) {
+		if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP)) {
+			if (intel_dp_above_hbr1(crtc_state))
+				return mtl_set_cx0_buf_trans(encoder,
+							     MTL_C10_VS_PE_DP14_HBR2_HBR3,
+							     n_entries);
+			else
+				return mtl_set_cx0_buf_trans(encoder,
+							     MTL_C10_VS_PE_DP14_RBR_HBR,
+							     n_entries);
+		} else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)){
+			if (intel_edp_above_hbr2(crtc_state))
+				return mtl_set_cx0_buf_trans(encoder,
+							     MTL_C10_VS_PE_EDP_HBR3,
+							     n_entries);
+			else
+				return mtl_set_cx0_buf_trans(encoder,
+							     MTL_C10_VS_PE_EDP_NON_HBR3,
+							     n_entries);
+		}
+	}
 	return intel_get_buf_trans(&mtl_c10_trans_dp14, n_entries);
 }
 
@@ -1828,12 +1912,21 @@ mtl_get_c20_buf_trans(struct intel_encoder *encoder,
 		      const struct intel_crtc_state *crtc_state,
 		      int *n_entries)
 {
-	if (intel_crtc_has_dp_encoder(crtc_state) && intel_dp_is_uhbr(crtc_state))
+	if (intel_crtc_has_dp_encoder(crtc_state) && intel_dp_is_uhbr(crtc_state)) {
+		if (intel_bios_encoder_overrides_vswing(encoder->devdata))
+			return mtl_set_cx0_buf_trans(encoder,
+						     MTL_C20_VS_PE_DP20,
+						     n_entries);
 		return intel_get_buf_trans(&mtl_c20_trans_uhbr, n_entries);
-	else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI))
+	} else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
 		return intel_get_buf_trans(&mtl_c20_trans_hdmi, n_entries);
-	else
+	} else {
+		if (intel_bios_encoder_overrides_vswing(encoder->devdata))
+			return mtl_set_cx0_buf_trans(encoder,
+						     MTL_C20_VS_PE_DP14,
+						     n_entries);
 		return intel_get_buf_trans(&mtl_c20_trans_dp14, n_entries);
+	}
 }
 
 static const struct intel_ddi_buf_trans *
