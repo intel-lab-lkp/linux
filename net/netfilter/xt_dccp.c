@@ -61,11 +61,14 @@ dccp_find_option(u_int8_t option,
 			spin_unlock_bh(&dccp_buflock);
 			return true;
 		}
-
-		if (op[i] < 2)
+		if (op[i] < 2) {
 			i++;
-		else
-			i += op[i+1]?:1;
+			continue;
+		}
+		if (i + 1 >= optlen)
+			break;
+
+		i += op[i + 1] ?: 1;
 	}
 
 	spin_unlock_bh(&dccp_buflock);

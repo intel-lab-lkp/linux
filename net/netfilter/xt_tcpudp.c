@@ -58,9 +58,17 @@ tcp_find_option(u_int8_t option,
 	}
 
 	for (i = 0; i < optlen; ) {
-		if (op[i] == option) return !invert;
-		if (op[i] < 2) i++;
-		else i += op[i+1]?:1;
+		if (op[i] == option)
+			return !invert;
+
+		if (op[i] < 2) {
+			i++;
+			continue;
+		}
+		if (i + 1 >= optlen)
+			break;
+
+		i += op[i + 1] ?: 1;
 	}
 
 	return invert;
