@@ -142,6 +142,7 @@ int pm_qos_update_target(struct pm_qos_constraints *c, struct plist_node *node,
 bool pm_qos_update_flags(struct pm_qos_flags *pqf,
 			 struct pm_qos_flags_request *req,
 			 enum pm_qos_req_action action, s32 val);
+s32 pm_qos_get_boot_cpu_latency_limit(unsigned int cpu);
 
 #ifdef CONFIG_CPU_IDLE
 s32 cpu_latency_qos_limit(void);
