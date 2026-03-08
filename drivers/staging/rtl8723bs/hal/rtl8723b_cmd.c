@@ -363,9 +363,9 @@ void rtl8723b_set_FwPwrMode_cmd(struct adapter *padapter, u8 psmode)
 	}
 
 	if (psmode > 0) {
-		if (hal_btcoex_IsBtControlLps(padapter) == true) {
+		if (hal_btcoex_is_bt_control_lps(padapter) == true) {
 			PowerState = hal_btcoex_RpwmVal(padapter);
-			byte5 = hal_btcoex_LpsVal(padapter);
+			byte5 = hal_btcoex_lps_val(padapter);
 
 			if ((rlbm == 2) && (byte5 & BIT(4))) {
 				/*  Keep awake interval to 1 to prevent from */

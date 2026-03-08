@@ -1006,7 +1006,7 @@ void rtw_dev_unload(struct adapter *padapter)
 		}
 
 		if (!padapter->surprise_removed) {
-			hal_btcoex_IpsNotify(padapter, pwrctl->ips_mode_req);
+			hal_btcoex_ips_notify(padapter, pwrctl->ips_mode_req);
 
 			/* amy modify 20120221 for power seq is different between driver open and ips */
 			rtw_hal_deinit(padapter);

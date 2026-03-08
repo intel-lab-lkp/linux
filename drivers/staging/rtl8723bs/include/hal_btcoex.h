@@ -22,7 +22,7 @@ struct bt_coexist {
 
 void hal_btcoex_SetBTCoexist(struct adapter *padapter, u8 bBtExist);
 bool hal_btcoex_IsBtExist(struct adapter *padapter);
-bool hal_btcoex_IsBtDisabled(struct adapter *);
+bool hal_btcoex_is_bt_disabled(struct adapter *);
 void hal_btcoex_SetPgAntNum(struct adapter *padapter, u8 antNum);
 void hal_btcoex_SetSingleAntPath(struct adapter *padapter, u8 singleAntPath);
 
@@ -30,8 +30,8 @@ void hal_btcoex_Initialize(void *padapter);
 void hal_btcoex_PowerOnSetting(struct adapter *padapter);
 void hal_btcoex_InitHwConfig(struct adapter *padapter, u8 bWifiOnly);
 
-void hal_btcoex_IpsNotify(struct adapter *padapter, u8 type);
-void hal_btcoex_LpsNotify(struct adapter *padapter, u8 type);
+void hal_btcoex_ips_notify(struct adapter *padapter, u8 type);
+void hal_btcoex_lps_notify(struct adapter *padapter, u8 type);
 void hal_btcoex_ScanNotify(struct adapter *padapter, u8 type);
 void hal_btcoex_ConnectNotify(struct adapter *padapter, u8 action);
 void hal_btcoex_MediaStatusNotify(struct adapter *padapter, u8 mediaStatus);
@@ -44,10 +44,10 @@ void hal_btcoex_HaltNotify(struct adapter *padapter);
 void hal_btcoex_Handler(struct adapter *padapter);
 
 s32 hal_btcoex_IsBTCoexCtrlAMPDUSize(struct adapter *padapter);
-bool hal_btcoex_IsBtControlLps(struct adapter *padapter);
-bool hal_btcoex_IsLpsOn(struct adapter *padapter);
+bool hal_btcoex_is_bt_control_lps(struct adapter *padapter);
+bool hal_btcoex_is_lps_on(struct adapter *padapter);
 u8 hal_btcoex_RpwmVal(struct adapter *);
-u8 hal_btcoex_LpsVal(struct adapter *);
+u8 hal_btcoex_lps_val(struct adapter *);
 u32 hal_btcoex_GetRaMask(struct adapter *);
 void hal_btcoex_RecordPwrMode(struct adapter *padapter, u8 *pCmdBuf, u8 cmdLen);
 

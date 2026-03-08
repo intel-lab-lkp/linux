@@ -1398,7 +1398,7 @@ static void rtw_lps_change_dtim_hdl(struct adapter *padapter, u8 dtim)
 	if (dtim <= 0 || dtim > 16)
 		return;
 
-	if (hal_btcoex_IsBtControlLps(padapter))
+	if (hal_btcoex_is_bt_control_lps(padapter))
 		return;
 
 	mutex_lock(&pwrpriv->lock);

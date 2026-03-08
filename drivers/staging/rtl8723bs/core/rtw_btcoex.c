@@ -58,7 +58,7 @@ void rtw_btcoex_LPS_Enter(struct adapter *padapter)
 	pwrpriv = adapter_to_pwrctl(padapter);
 
 	pwrpriv->bpower_saving = true;
-	lps_val = hal_btcoex_LpsVal(padapter);
+	lps_val = hal_btcoex_lps_val(padapter);
 	rtw_set_ps_mode(padapter, PS_MODE_MIN, 0, lps_val, "BTCOEX");
 }
 

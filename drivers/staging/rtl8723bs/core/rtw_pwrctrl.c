@@ -37,7 +37,7 @@ void ips_enter(struct adapter *padapter)
 	struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter);
 
 
-	hal_btcoex_IpsNotify(padapter, pwrpriv->ips_mode_req);
+	hal_btcoex_ips_notify(padapter, pwrpriv->ips_mode_req);
 
 	mutex_lock(&pwrpriv->lock);
 	_ips_enter(padapter);
@@ -76,7 +76,7 @@ int ips_leave(struct adapter *padapter)
 	mutex_unlock(&pwrpriv->lock);
 
 	if (ret == _SUCCESS)
-		hal_btcoex_IpsNotify(padapter, IPS_NONE);
+		hal_btcoex_ips_notify(padapter, IPS_NONE);
 
 	return ret;
 }
@@ -196,7 +196,7 @@ void traffic_check_for_leave_lps(struct adapter *padapter, u8 tx, u32 tx_packets
 			if (xmit_cnt > 8) {
 				if (adapter_to_pwrctl(padapter)->leisure_ps
 				    && (adapter_to_pwrctl(padapter)->pwr_mode != PS_MODE_ACTIVE)
-				    && !(hal_btcoex_IsBtControlLps(padapter))) {
+				    && !(hal_btcoex_is_bt_control_lps(padapter))) {
 					leave_lps = true;
 				}
 			}
@@ -209,7 +209,7 @@ void traffic_check_for_leave_lps(struct adapter *padapter, u8 tx, u32 tx_packets
 		if (pmlmepriv->link_detect_info.num_rx_unicast_ok_in_period > 4) {
 			if (adapter_to_pwrctl(padapter)->leisure_ps
 			    && (adapter_to_pwrctl(padapter)->pwr_mode != PS_MODE_ACTIVE)
-			    && !(hal_btcoex_IsBtControlLps(padapter)))
+			    && !(hal_btcoex_is_bt_control_lps(padapter)))
 				leave_lps = true;
 		}
 	}
@@ -347,24 +347,24 @@ void rtw_set_ps_mode(struct adapter *padapter, u8 ps_mode, u8 smart_ps, u8 bcn_a
 
 	/* if (pwrpriv->pwr_mode == PS_MODE_ACTIVE) */
 	if (ps_mode == PS_MODE_ACTIVE) {
-		if (!(hal_btcoex_IsBtControlLps(padapter))
-				|| (hal_btcoex_IsBtControlLps(padapter)
-					&& !(hal_btcoex_IsLpsOn(padapter)))) {
+		if (!(hal_btcoex_is_bt_control_lps(padapter))
+				|| (hal_btcoex_is_bt_control_lps(padapter)
+					&& !(hal_btcoex_is_lps_on(padapter)))) {
 			pwrpriv->pwr_mode = ps_mode;
 			rtw_set_rpwm(padapter, PS_STATE_S4);
 
 			rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
 			pwrpriv->fw_current_in_ps_mode = false;
 
-			hal_btcoex_LpsNotify(padapter, ps_mode);
+			hal_btcoex_lps_notify(padapter, ps_mode);
 		}
 	} else {
 		if ((PS_RDY_CHECK(padapter) && check_fwstate(&padapter->mlmepriv, WIFI_ASOC_STATE)) ||
-		    ((hal_btcoex_IsBtControlLps(padapter)) && (hal_btcoex_IsLpsOn(padapter)))
+		    ((hal_btcoex_is_bt_control_lps(padapter)) && (hal_btcoex_is_lps_on(padapter)))
 			) {
 			u8 pslv;
 
-			hal_btcoex_LpsNotify(padapter, ps_mode);
+			hal_btcoex_lps_notify(padapter, ps_mode);
 
 			pwrpriv->fw_current_in_ps_mode = true;
 			pwrpriv->pwr_mode = ps_mode;
@@ -376,11 +376,11 @@ void rtw_set_ps_mode(struct adapter *padapter, u8 ps_mode, u8 smart_ps, u8 bcn_a
 			if (pwrpriv->alives == 0)
 				pslv = PS_STATE_S0;
 
-			if (!(hal_btcoex_IsBtDisabled(padapter)) &&
-			    (hal_btcoex_IsBtControlLps(padapter))) {
+			if (!(hal_btcoex_is_bt_disabled(padapter)) &&
+			    (hal_btcoex_is_bt_control_lps(padapter))) {
 				u8 val8;
 
-				val8 = hal_btcoex_LpsVal(padapter);
+				val8 = hal_btcoex_lps_val(padapter);
 				if (val8 & BIT(4))
 					pslv = PS_STATE_S2;
 			}
@@ -434,7 +434,7 @@ void LPS_Enter(struct adapter *padapter, const char *msg)
 	int n_assoc_iface = 0;
 	char buf[32] = {0};
 
-	if (hal_btcoex_IsBtControlLps(padapter))
+	if (hal_btcoex_is_bt_control_lps(padapter))
 		return;
 
 	/* Skip lps enter request if number of associated adapters is not 1 */
@@ -468,7 +468,7 @@ void LPS_Leave(struct adapter *padapter, const char *msg)
 	struct pwrctrl_priv *pwrpriv = dvobj_to_pwrctl(dvobj);
 	char buf[32] = {0};
 
-	if (hal_btcoex_IsBtControlLps(padapter))
+	if (hal_btcoex_is_bt_control_lps(padapter))
 		return;
 
 	if (pwrpriv->leisure_ps) {
@@ -749,10 +749,10 @@ void rtw_unregister_task_alive(struct adapter *padapter, u32 task)
 	pwrctrl = adapter_to_pwrctl(padapter);
 	pslv = PS_STATE_S0;
 
-	if (!(hal_btcoex_IsBtDisabled(padapter)) && hal_btcoex_IsBtControlLps(padapter)) {
+	if (!(hal_btcoex_is_bt_disabled(padapter)) && hal_btcoex_is_bt_control_lps(padapter)) {
 		u8 val8;
 
-		val8 = hal_btcoex_LpsVal(padapter);
+		val8 = hal_btcoex_lps_val(padapter);
 		if (val8 & BIT(4))
 			pslv = PS_STATE_S2;
 	}
@@ -876,10 +876,10 @@ void rtw_unregister_tx_alive(struct adapter *padapter)
 	pwrctrl = adapter_to_pwrctl(padapter);
 	pslv = PS_STATE_S0;
 
-	if (!(hal_btcoex_IsBtDisabled(padapter)) && hal_btcoex_IsBtControlLps(padapter)) {
+	if (!(hal_btcoex_is_bt_disabled(padapter)) && hal_btcoex_is_bt_control_lps(padapter)) {
 		u8 val8;
 
-		val8 = hal_btcoex_LpsVal(padapter);
+		val8 = hal_btcoex_lps_val(padapter);
 		if (val8 & BIT(4))
 			pslv = PS_STATE_S2;
 	}
@@ -912,10 +912,10 @@ void rtw_unregister_cmd_alive(struct adapter *padapter)
 	pwrctrl = adapter_to_pwrctl(padapter);
 	pslv = PS_STATE_S0;
 
-	if (!(hal_btcoex_IsBtDisabled(padapter)) && hal_btcoex_IsBtControlLps(padapter)) {
+	if (!(hal_btcoex_is_bt_disabled(padapter)) && hal_btcoex_is_bt_control_lps(padapter)) {
 		u8 val8;
 
-		val8 = hal_btcoex_LpsVal(padapter);
+		val8 = hal_btcoex_lps_val(padapter);
 		if (val8 & BIT(4))
 			pslv = PS_STATE_S2;
 	}

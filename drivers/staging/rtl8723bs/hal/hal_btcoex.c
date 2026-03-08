@@ -1165,7 +1165,7 @@ bool hal_btcoex_IsBtExist(struct adapter *padapter)
 	return pHalData->bt_coexist.bBtExist;
 }
 
-bool hal_btcoex_IsBtDisabled(struct adapter *padapter)
+bool hal_btcoex_is_bt_disabled(struct adapter *padapter)
 {
 	if (!hal_btcoex_IsBtExist(padapter))
 		return true;
@@ -1206,12 +1206,12 @@ void hal_btcoex_InitHwConfig(struct adapter *padapter, u8 bWifiOnly)
 	EXhalbtcoutsrc_InitCoexDm(&GLBtCoexist);
 }
 
-void hal_btcoex_IpsNotify(struct adapter *padapter, u8 type)
+void hal_btcoex_ips_notify(struct adapter *padapter, u8 type)
 {
 	EXhalbtcoutsrc_IpsNotify(&GLBtCoexist, type);
 }
 
-void hal_btcoex_LpsNotify(struct adapter *padapter, u8 type)
+void hal_btcoex_lps_notify(struct adapter *padapter, u8 type)
 {
 	EXhalbtcoutsrc_LpsNotify(&GLBtCoexist, type);
 }
@@ -1274,7 +1274,7 @@ s32 hal_btcoex_IsBTCoexCtrlAMPDUSize(struct adapter *padapter)
 	return (s32)GLBtCoexist.btInfo.bBtCtrlAggBufSize;
 }
 
-bool hal_btcoex_IsBtControlLps(struct adapter *padapter)
+bool hal_btcoex_is_bt_control_lps(struct adapter *padapter)
 {
 	if (!hal_btcoex_IsBtExist(padapter))
 		return false;
@@ -1288,7 +1288,7 @@ bool hal_btcoex_IsBtControlLps(struct adapter *padapter)
 	return false;
 }
 
-bool hal_btcoex_IsLpsOn(struct adapter *padapter)
+bool hal_btcoex_is_lps_on(struct adapter *padapter)
 {
 	if (!hal_btcoex_IsBtExist(padapter))
 		return false;
@@ -1307,7 +1307,7 @@ u8 hal_btcoex_RpwmVal(struct adapter *padapter)
 	return GLBtCoexist.btInfo.rpwmVal;
 }
 
-u8 hal_btcoex_LpsVal(struct adapter *padapter)
+u8 hal_btcoex_lps_val(struct adapter *padapter)
 {
 	return GLBtCoexist.btInfo.lpsVal;
 }

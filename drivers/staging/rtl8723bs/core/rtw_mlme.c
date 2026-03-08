@@ -1641,7 +1641,7 @@ void rtw_dynamic_check_timer_handler(struct adapter *adapter)
 		return;
 
 	if ((adapter_to_pwrctl(adapter)->fw_current_in_ps_mode)
-		&& !(hal_btcoex_IsBtControlLps(adapter))
+		&& !(hal_btcoex_is_bt_control_lps(adapter))
 		) {
 		bool should_enter_ps;
 
