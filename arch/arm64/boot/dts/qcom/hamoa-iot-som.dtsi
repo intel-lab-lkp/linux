@@ -475,6 +475,12 @@
 &tlmm {
 	gpio-reserved-ranges = <34 2>; /* TPM LP & INT */
 
+	ec_int_n_default: ec-int-n-state {
+		pins = "gpio66";
+		function = "gpio";
+		bias-disable;
+	};
+
 	pcie3_default: pcie3-default-state {
 		clkreq-n-pins {
 			pins = "gpio144";
