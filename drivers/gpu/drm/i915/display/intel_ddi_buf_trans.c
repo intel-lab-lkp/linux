@@ -1191,6 +1191,13 @@ static bool intel_dp_above_hbr1(const struct intel_crtc_state *crtc_state)
 	return false;
 }
 
+static bool intel_edp_above_hbr2(const struct intel_crtc_state *crtc_state)
+{
+	if (crtc_state->port_clock > 540000)
+		return true;
+	return false;
+}
+
 static bool use_edp_hobl(struct intel_encoder *encoder)
 {
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
@@ -1374,7 +1381,7 @@ icl_get_combo_buf_trans_edp(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state,
 			    int *n_entries)
 {
-	if (crtc_state->port_clock > 540000) {
+	if (intel_edp_above_hbr2(crtc_state)) {
 		return intel_get_buf_trans(&icl_combo_phy_trans_dp_hbr2_edp_hbr3,
 					   n_entries);
 	} else if (use_edp_low_vswing(encoder)) {
@@ -1499,7 +1506,7 @@ tgl_get_combo_buf_trans_edp(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state,
 			    int *n_entries)
 {
-	if (crtc_state->port_clock > 540000) {
+	if (intel_edp_above_hbr2(crtc_state)) {
 		return intel_get_buf_trans(&icl_combo_phy_trans_dp_hbr2_edp_hbr3,
 					   n_entries);
 	} else if (use_edp_hobl(encoder)) {
@@ -1544,7 +1551,7 @@ dg1_get_combo_buf_trans_edp(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state,
 			    int *n_entries)
 {
-	if (crtc_state->port_clock > 540000)
+	if (intel_edp_above_hbr2(crtc_state))
 		return intel_get_buf_trans(&icl_combo_phy_trans_dp_hbr2_edp_hbr3,
 					   n_entries);
 	else if (use_edp_hobl(encoder))
@@ -1586,7 +1593,7 @@ rkl_get_combo_buf_trans_edp(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state,
 			    int *n_entries)
 {
-	if (crtc_state->port_clock > 540000) {
+	if (intel_edp_above_hbr2(crtc_state)) {
 		return intel_get_buf_trans(&icl_combo_phy_trans_dp_hbr2_edp_hbr3,
 					   n_entries);
 	} else if (use_edp_hobl(encoder)) {
@@ -1629,7 +1636,7 @@ adls_get_combo_buf_trans_edp(struct intel_encoder *encoder,
 			     const struct intel_crtc_state *crtc_state,
 			     int *n_entries)
 {
-	if (crtc_state->port_clock > 540000)
+	if (intel_edp_above_hbr2(crtc_state))
 		return intel_get_buf_trans(&adls_combo_phy_trans_edp_hbr3, n_entries);
 	else if (use_edp_hobl(encoder))
 		return intel_get_buf_trans(&tgl_combo_phy_trans_edp_hbr2_hobl, n_entries);
@@ -1668,7 +1675,7 @@ adlp_get_combo_buf_trans_edp(struct intel_encoder *encoder,
 			     const struct intel_crtc_state *crtc_state,
 			     int *n_entries)
 {
-	if (crtc_state->port_clock > 540000) {
+	if (intel_edp_above_hbr2(crtc_state)) {
 		return intel_get_buf_trans(&adlp_combo_phy_trans_edp_hbr3,
 					   n_entries);
 	} else if (use_edp_hobl(encoder)) {
