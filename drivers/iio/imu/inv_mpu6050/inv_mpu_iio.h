@@ -208,6 +208,7 @@ struct inv_mpu6050_state {
 	struct inv_sensors_timestamp timestamp;
 	struct regulator *vdd_supply;
 	struct regulator *vddio_supply;
+	bool vddio_supply_en;
 	bool magn_disabled;
 	s32 magn_raw_to_gauss[3];
 	struct iio_mount_matrix magn_orient;

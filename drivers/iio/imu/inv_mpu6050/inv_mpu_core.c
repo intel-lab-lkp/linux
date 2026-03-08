@@ -1843,6 +1843,7 @@ static int inv_mpu_core_enable_regulator_vddio(struct inv_mpu6050_state *st)
 		/* Give the device a little bit of time to start up. */
 		usleep_range(3000, 5000);
 	}
+	st->vddio_supply_en = !result;
 
 	return result;
 }
@@ -1851,10 +1852,14 @@ static int inv_mpu_core_disable_regulator_vddio(struct inv_mpu6050_state *st)
 {
 	int result;
 
+	if (!st->vddio_supply_en)
+		return 0;
+
 	result = regulator_disable(st->vddio_supply);
 	if (result)
 		dev_err(regmap_get_device(st->map),
 			"Failed to disable vddio regulator: %d\n", result);
+	st->vddio_supply_en = false;
 
 	return result;
 }
