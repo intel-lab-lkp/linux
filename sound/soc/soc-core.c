@@ -465,8 +465,7 @@ static void soc_free_pcm_runtime(struct snd_soc_pcm_runtime *rtd)
 
 	list_del(&rtd->list);
 
-	if (delayed_work_pending(&rtd->delayed_work))
-		flush_delayed_work(&rtd->delayed_work);
+	cancel_delayed_work_sync(&rtd->delayed_work);
 	snd_soc_pcm_component_free(rtd);
 
 	/*
@@ -617,6 +616,14 @@ static void snd_soc_flush_all_delayed_work(struct snd_soc_card *card)
 
 	for_each_card_rtds(card, rtd)
 		flush_delayed_work(&rtd->delayed_work);
+}
+
+static void snd_soc_cancel_all_delayed_work(struct snd_soc_card *card)
+{
+	struct snd_soc_pcm_runtime *rtd;
+
+	for_each_card_rtds(card, rtd)
+		cancel_delayed_work_sync(&rtd->delayed_work);
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -2148,7 +2155,7 @@ static void snd_soc_unbind_card(struct snd_soc_card *card)
 {
 	if (snd_soc_card_is_instantiated(card)) {
 		card->instantiated = false;
-		snd_soc_flush_all_delayed_work(card);
+		snd_soc_cancel_all_delayed_work(card);
 
 		soc_cleanup_card_resources(card);
 	}
