@@ -6,7 +6,7 @@
  * Author: Linus Walleij <linus.walleij@linaro.org>
  */
 #include <linux/io.h>
-#include <linux/init.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/stat.h>
@@ -121,17 +121,31 @@ static int syscon_led_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void syscon_led_remove(struct platform_device *pdev)
+{
+	struct syscon_led *sled = platform_get_drvdata(pdev);
+
+	led_classdev_unregister(&sled->cdev);
+	/* Turn it off */
+	regmap_update_bits(sled->map, sled->offset, sled->mask, 0);
+}
+
 static const struct of_device_id of_syscon_leds_match[] = {
 	{ .compatible = "register-bit-led", },
 	{},
 };
 
+MODULE_DEVICE_TABLE(of, of_syscon_leds_match);
+
 static struct platform_driver syscon_led_driver = {
 	.probe		= syscon_led_probe,
+	.remove		= syscon_led_remove,
 	.driver		= {
 		.name	= "leds-syscon",
 		.of_match_table = of_syscon_leds_match,
-		.suppress_bind_attrs = true,
 	},
 };
-builtin_platform_driver(syscon_led_driver);
+module_platform_driver(syscon_led_driver);
+
+MODULE_DESCRIPTION("SYSCON LED driver");
+MODULE_LICENSE("GPL");
