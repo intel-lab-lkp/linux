@@ -1804,6 +1804,10 @@ dg2_get_snps_buf_trans(struct intel_encoder *encoder,
 		       const struct intel_crtc_state *crtc_state,
 		       int *n_entries)
 {
+	drm_WARN(to_intel_display(encoder)->drm,
+		 intel_bios_encoder_overrides_vswing(encoder->devdata),
+		 "Port %s asks to override vswing/preemph tables [DG2]\n",
+		 port_name(intel_bios_encoder_port(encoder->devdata)));
 	if (intel_crtc_has_dp_encoder(crtc_state) &&
 	    intel_dp_is_uhbr(crtc_state))
 		return intel_get_buf_trans(&dg2_snps_trans_uhbr, n_entries);
