@@ -12,6 +12,16 @@
 #include "intel_dp.h"
 #include "intel_lt_phy.h"
 
+#define XE3P_VS_PE_EDP 3
+#define XE3P_VS_PE_DP14 4
+#define XE3P_VS_PE_DP21 5
+
+#define XE3P_VS_PE_COL 5
+#define XE3P_VS_PE_ROW 16
+
+#define VS_PE_MASK 0x000000ff
+
+#define LOW(x) ((x) & (VS_PE_MASK))
 /* HDMI/DVI modes ignore everything but the last 2 items. So we share
  * them for both DP and FDI transports, allowing those ports to
  * automatically adapt to HDMI connections as well
@@ -1164,6 +1174,25 @@ static const union intel_ddi_buf_trans_entry _xe3plpd_lt_trans_edp[] = {
 	{ .lt = { 26, 0, 0, 1, 3 } },
 };
 
+static union intel_ddi_buf_trans_entry _xe3plpd_lt_trans_override[] = {
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+	{ .lt = { 0, 0, 0, 0, 0 } },
+};
+
 static const struct intel_ddi_buf_trans xe3plpd_lt_trans_dp14 = {
 	.entries = _xe3plpd_lt_trans_dp14,
 	.num_entries = ARRAY_SIZE(_xe3plpd_lt_trans_dp14),
@@ -1179,9 +1208,27 @@ static const struct intel_ddi_buf_trans xe3plpd_lt_trans_edp = {
 	.num_entries = ARRAY_SIZE(_xe3plpd_lt_trans_edp),
 };
 
+static struct intel_ddi_buf_trans xe3plpd_lt_trans_override = {
+	.entries = _xe3plpd_lt_trans_override,
+	.num_entries = ARRAY_SIZE(_xe3plpd_lt_trans_override),
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table)
 {
 	return table == &tgl_combo_phy_trans_edp_hbr2_hobl;
+}
+
+static const u32 *find_row(const u32 *tables,
+			   int idx,
+			   int row,
+			   int row_no,
+			   int col_no)
+{
+	size_t ent_sz = sizeof(*tables);
+	size_t row_sz = col_no * ent_sz;
+	size_t tbl_sz = row_no * row_sz;
+	size_t offset = idx * tbl_sz + row * row_sz;
+	return &tables[offset];
 }
 
 static bool intel_dp_above_hbr1(const struct intel_crtc_state *crtc_state)
@@ -1786,16 +1833,65 @@ mtl_get_c20_buf_trans(struct intel_encoder *encoder,
 }
 
 static const struct intel_ddi_buf_trans *
+xe3plpd_set_lt_buf_trans(struct intel_encoder *encoder,
+			 int idx,
+			 int *n_entries)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_ddi_buf_trans *buf_trans = &xe3plpd_lt_trans_override;
+	union intel_ddi_buf_trans_entry *entries, *entry;
+	const u32 *tables = display->vbt.override_vswing;
+	const u32 *vals;
+
+	entries = (union intel_ddi_buf_trans_entry *) buf_trans->entries;
+	for (int row = 0; row < XE3P_VS_PE_ROW; row++) {
+		entry = &entries[row];
+		vals = find_row(tables,
+				idx,
+				row,
+				XE3P_VS_PE_ROW,
+				XE3P_VS_PE_COL);
+
+		entry->lt.main_cursor = LOW(vals[0]);
+		entry->lt.pre_cursor = LOW(vals[1]);
+		entry->lt.post_cursor = LOW(vals[2]);
+		entry->lt.txswing = LOW(vals[3]);
+		entry->lt.txswing_level = LOW(vals[4]);
+	}
+
+	return intel_get_buf_trans(&xe3plpd_lt_trans_override, n_entries);
+}
+
+static const struct intel_ddi_buf_trans *
 xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 			 const struct intel_crtc_state *crtc_state,
 			 int *n_entries)
 {
-	if (intel_crtc_has_dp_encoder(crtc_state) && intel_dp_is_uhbr(crtc_state))
+	if (intel_crtc_has_dp_encoder(crtc_state) && intel_dp_is_uhbr(crtc_state)) {
+		if (intel_bios_encoder_overrides_vswing(encoder->devdata))
+			return xe3plpd_set_lt_buf_trans(encoder,
+							XE3P_VS_PE_DP21,
+							n_entries);
 		return intel_get_buf_trans(&xe3plpd_lt_trans_uhbr, n_entries);
-	else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
+	} else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		 /* FIXME need to check correct parsing & table index should
+		 * this ever trigger.
+		 * return xe3plpd_set_lt_buf_trans(encoder,
+		 * 				   XE3P_VS_PE_EDP,
+		 *				   n_entries);
+		 */
+		drm_WARN(to_intel_display(encoder)->drm,
+			 intel_bios_encoder_overrides_vswing(encoder->devdata),
+			 "Port %s asks to override EDP's vswing/preemph tables\n",
+			 port_name(intel_bios_encoder_port(encoder->devdata)));
 		return intel_get_buf_trans(&xe3plpd_lt_trans_edp, n_entries);
-	else
+	} else {
+		if (intel_bios_encoder_overrides_vswing(encoder->devdata))
+			return xe3plpd_set_lt_buf_trans(encoder,
+							XE3P_VS_PE_DP14,
+							n_entries);
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
+	}
 }
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
