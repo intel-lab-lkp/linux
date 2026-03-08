@@ -188,13 +188,13 @@ struct drm_dp_tunnel_group {
 struct drm_dp_tunnel_mgr {
 	struct drm_device *dev;
 
-	int group_count;
-	struct drm_dp_tunnel_group *groups;
 	wait_queue_head_t bw_req_queue;
 
 #ifdef CONFIG_DRM_DISPLAY_DP_TUNNEL_STATE_DEBUG
 	struct ref_tracker_dir ref_tracker;
 #endif
+	int group_count;
+	struct drm_dp_tunnel_group groups[] __counted_by(group_count);
 };
 
 /*
@@ -1893,7 +1893,6 @@ static void destroy_mgr(struct drm_dp_tunnel_mgr *mgr)
 	ref_tracker_dir_exit(&mgr->ref_tracker);
 #endif
 
-	kfree(mgr->groups);
 	kfree(mgr);
 }
 
@@ -1913,33 +1912,20 @@ drm_dp_tunnel_mgr_create(struct drm_device *dev, int max_group_count)
 	struct drm_dp_tunnel_mgr *mgr;
 	int i;
 
-	mgr = kzalloc_obj(*mgr);
+	mgr = kzalloc_flex(*mgr, groups, max_group_count);
 	if (!mgr)
 		return ERR_PTR(-ENOMEM);
 
+	mgr->group_count = max_group_count;
 	mgr->dev = dev;
 	init_waitqueue_head(&mgr->bw_req_queue);
-
-	mgr->groups = kzalloc_objs(*mgr->groups, max_group_count);
-	if (!mgr->groups) {
-		kfree(mgr);
-
-		return ERR_PTR(-ENOMEM);
-	}
 
 #ifdef CONFIG_DRM_DISPLAY_DP_TUNNEL_STATE_DEBUG
 	ref_tracker_dir_init(&mgr->ref_tracker, 16, "drm_dptun");
 #endif
 
-	for (i = 0; i < max_group_count; i++) {
-		if (!init_group(mgr, &mgr->groups[i])) {
-			destroy_mgr(mgr);
-
-			return ERR_PTR(-ENOMEM);
-		}
-
-		mgr->group_count++;
-	}
+	for (i = 0; i < max_group_count; i++)
+		init_group(mgr, &mgr->groups[i]);
 
 	return mgr;
 }
