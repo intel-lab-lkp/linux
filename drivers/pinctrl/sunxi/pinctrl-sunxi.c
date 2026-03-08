@@ -971,7 +971,7 @@ static int sunxi_pinctrl_gpio_get_direction(struct gpio_chip *chip,
 
 	func = sunxi_pinctrl_desc_find_function_by_pin_and_mux(pctl, pin, muxval);
 	if (!func)
-		return -ENODEV;
+		return GPIO_LINE_DIRECTION_IN;
 
 	if (!strcmp(func->name, "gpio_out"))
 		return GPIO_LINE_DIRECTION_OUT;
