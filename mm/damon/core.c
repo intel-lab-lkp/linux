@@ -1363,7 +1363,7 @@ int damon_commit_ctx(struct damon_ctx *dst, struct damon_ctx *src)
 		if (err)
 			return err;
 	}
-	dst->paused = src->paused;
+	dst->pause = src->pause;
 	dst->ops = src->ops;
 	dst->addr_unit = src->addr_unit;
 	dst->min_region_sz = src->min_region_sz;
@@ -2985,9 +2985,9 @@ static int kdamond_fn(void *data)
 		unsigned long next_ops_update_sis = ctx->next_ops_update_sis;
 		unsigned long sample_interval = ctx->attrs.sample_interval;
 
-		if (ctx->paused) {
+		if (ctx->pause) {
 			kdamond_usleep(sample_interval);
-			/* allow caller resetting paused via damon_call() */
+			/* allow caller resetting pause via damon_call() */
 			kdamond_call(ctx, false);
 			continue;
 		}
