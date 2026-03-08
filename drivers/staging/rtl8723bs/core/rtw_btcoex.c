@@ -23,7 +23,7 @@ void rtw_btcoex_HaltNotify(struct adapter *padapter)
 	if (!padapter->bup)
 		return;
 
-	if (padapter->bSurpriseRemoved)
+	if (padapter->surprise_removed)
 		return;
 
 	hal_btcoex_HaltNotify(padapter);

@@ -164,7 +164,7 @@ struct pwrctrl_priv {
 	u8 ps_processing; /* temporarily used to mark whether in rtw_ps_processor */
 
 	u8 fw_psmode_iface_id;
-	u8 bLeisurePs;
+	u8 leisure_ps;
 	u8 LpsIdleCount;
 	u8 power_mgnt;
 	u8 org_power_mgnt;
@@ -174,8 +174,8 @@ struct pwrctrl_priv {
 	u8 pnp_bstop_trx;
 
 
-	u8 bInternalAutoSuspend;
-	u8 bInSuspend;
+	u8 internal_auto_suspend;
+	u8 in_suspend;
 
 	u8 bAutoResume;
 	u8 autopm_cnt;

@@ -126,7 +126,7 @@ struct security_priv {
 	struct arc4_ctx xmit_arc4_ctx;
 	struct arc4_ctx recv_arc4_ctx;
 
-	u8 binstallGrpkey;
+	u8 install_grpkey;
 	u8 binstallBIPkey;
 	u8 busetkipkey;
 	/* _timer tkip_timer; */

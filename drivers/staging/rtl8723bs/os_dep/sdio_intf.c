@@ -236,7 +236,7 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 	padapter->dvobj = dvobj;
 	dvobj->if1 = padapter;
 
-	padapter->bDriverStopped = true;
+	padapter->driver_stopped = true;
 
 	dvobj->padapters = padapter;
 	padapter->iface_id = 0;
@@ -388,7 +388,7 @@ static void rtw_dev_remove(struct sdio_func *func)
 
 	rtw_unregister_netdevs(dvobj);
 
-	if (!padapter->bSurpriseRemoved) {
+	if (!padapter->surprise_removed) {
 		int err;
 
 		/* test surprise remove */
@@ -396,7 +396,7 @@ static void rtw_dev_remove(struct sdio_func *func)
 		sdio_readb(func, 0, &err);
 		sdio_release_host(func);
 		if (err == -ENOMEDIUM)
-			padapter->bSurpriseRemoved = true;
+			padapter->surprise_removed = true;
 	}
 
 	rtw_ps_deny(padapter, PS_DENY_DRV_REMOVE);
@@ -420,10 +420,10 @@ static int rtw_sdio_suspend(struct device *dev)
 	struct pwrctrl_priv *pwrpriv = dvobj_to_pwrctl(psdpriv);
 	struct adapter *padapter = psdpriv->if1;
 
-	if (padapter->bDriverStopped)
+	if (padapter->driver_stopped)
 		return 0;
 
-	if (pwrpriv->bInSuspend)
+	if (pwrpriv->in_suspend)
 		return 0;
 
 	rtw_suspend_common(padapter);
@@ -435,7 +435,7 @@ static int rtw_resume_process(struct adapter *padapter)
 {
 	struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter);
 
-	if (!pwrpriv->bInSuspend)
+	if (!pwrpriv->in_suspend)
 		return -1;
 
 	return rtw_resume_common(padapter);

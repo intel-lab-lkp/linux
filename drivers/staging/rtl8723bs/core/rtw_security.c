@@ -525,7 +525,7 @@ u32 rtw_tkip_decrypt(struct adapter *padapter, u8 *precvframe)
 				static u32 no_gkey_bc_cnt;
 				static u32 no_gkey_mc_cnt;
 
-				if (!psecuritypriv->binstallGrpkey) {
+				if (!psecuritypriv->install_grpkey) {
 					res = _FAIL;
 
 					if (start == 0)
@@ -1217,7 +1217,7 @@ u32 rtw_aes_decrypt(struct adapter *padapter, u8 *precvframe)
 				static u32 no_gkey_bc_cnt;
 				static u32 no_gkey_mc_cnt;
 
-				if (!psecuritypriv->binstallGrpkey) {
+				if (!psecuritypriv->install_grpkey) {
 					res = _FAIL;
 
 					if (start == 0)

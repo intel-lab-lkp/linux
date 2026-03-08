@@ -297,8 +297,8 @@ struct adapter {
 	void *HalData;
 	u32 hal_data_sz;
 
-	s32	bDriverStopped;
-	s32	bSurpriseRemoved;
+	s32	driver_stopped;
+	s32	surprise_removed;
 	s32  bCardDisableWOHSM;
 
 	u32 IsrContent;
@@ -399,17 +399,17 @@ static inline void RTW_ENABLE_FUNC(struct adapter *padapter, int func_bit)
 #define RTW_IS_FUNC_DISABLED(padapter, func_bit) (atomic_read(&adapter_to_dvobj(padapter)->disable_func) & (func_bit))
 
 #define RTW_CANNOT_IO(padapter) \
-			((padapter)->bSurpriseRemoved || \
+			((padapter)->surprise_removed || \
 			 RTW_IS_FUNC_DISABLED((padapter), DF_IO_BIT))
 
 #define RTW_CANNOT_RX(padapter) \
-			((padapter)->bDriverStopped || \
-			 (padapter)->bSurpriseRemoved || \
+			((padapter)->driver_stopped || \
+			 (padapter)->surprise_removed || \
 			 RTW_IS_FUNC_DISABLED((padapter), DF_RX_BIT))
 
 #define RTW_CANNOT_TX(padapter) \
-			((padapter)->bDriverStopped || \
-			 (padapter)->bSurpriseRemoved || \
+			((padapter)->driver_stopped || \
+			 (padapter)->surprise_removed || \
 			 RTW_IS_FUNC_DISABLED((padapter), DF_TX_BIT))
 
 static inline u8 *myid(struct eeprom_priv *peepriv)
