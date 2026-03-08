@@ -2185,6 +2185,15 @@ parse_compression_parameters(struct intel_display *display)
 	}
 }
 
+static void
+cache_vswing_preemph_block(struct intel_display *display)
+{
+	const u32 *block;
+
+	block = bdb_find_section(display, BDB_VSWING_PREEMPH);
+	display->vbt.override_vswing = block;
+}
+
 static u8 translate_iboost(struct intel_display *display, u8 val)
 {
 	static const u8 mapping[] = { 1, 3, 7 }; /* See VBT spec */
@@ -3046,6 +3055,7 @@ init_vbt_missing_defaults(struct intel_display *display)
 			    child->device_type, port_name(port));
 	}
 
+	display->vbt.override_vswing = NULL;
 	/* Bypass some minimum baseline VBT version checks */
 	display->vbt.version = 155;
 }
@@ -3276,6 +3286,7 @@ void intel_bios_init(struct intel_display *display)
 
 	/* Depends on child device list */
 	parse_compression_parameters(display);
+	cache_vswing_preemph_block(display);
 
 out:
 	if (!vbt) {
