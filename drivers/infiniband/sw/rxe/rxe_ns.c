@@ -30,53 +30,41 @@ static unsigned int rxe_pernet_id;
 /*
  * Called for every existing and added network namespaces
  */
-static int __net_init rxe_ns_init(struct net *net)
+static int rxe_ns_init(struct net *net)
 {
-	/*
-	 * create (if not present) and access data item in network namespace
-	 * (net) using the id (net_id)
+	/* defer socket create in the namespace to the first
+	 * device create.
 	 */
-	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
-
-	rcu_assign_pointer(ns_sk->rxe_sk4, NULL); /* initialize sock 4 socket */
-	rcu_assign_pointer(ns_sk->rxe_sk6, NULL); /* initialize sock 6 socket */
-	synchronize_rcu();
 
 	return 0;
 }
 
-static void __net_exit rxe_ns_exit(struct net *net)
+static void rxe_ns_exit(struct net *net)
 {
-	/*
-	 * called when the network namespace is removed
+	/* called when the network namespace is removed
 	 */
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
-	struct sock *rxe_sk4 = NULL;
-	struct sock *rxe_sk6 = NULL;
+	struct sock *sk;
 
-	rcu_read_lock();
-	rxe_sk4 = rcu_dereference(ns_sk->rxe_sk4);
-	rxe_sk6 = rcu_dereference(ns_sk->rxe_sk6);
-	rcu_read_unlock();
-
-	/* close socket */
-	if (rxe_sk4 && rxe_sk4->sk_socket) {
-		udp_tunnel_sock_release(rxe_sk4->sk_socket);
+	sk = rcu_dereference(ns_sk->rxe_sk4);
+	if (sk) {
 		rcu_assign_pointer(ns_sk->rxe_sk4, NULL);
-		synchronize_rcu();
+		udp_tunnel_sock_release(sk->sk_socket);
 	}
 
-	if (rxe_sk6 && rxe_sk6->sk_socket) {
-		udp_tunnel_sock_release(rxe_sk6->sk_socket);
+#if IS_ENABLED(CONFIG_IPV6)
+	sk = rcu_dereference(ns_sk->rxe_sk6);
+	if (sk) {
 		rcu_assign_pointer(ns_sk->rxe_sk6, NULL);
-		synchronize_rcu();
+		udp_tunnel_sock_release(sk->sk_socket);
 	}
+#endif
 }
 
 /*
  * callback to make the module network namespace aware
  */
-static struct pernet_operations rxe_net_ops __net_initdata = {
+static struct pernet_operations rxe_net_ops = {
 	.init = rxe_ns_init,
 	.exit = rxe_ns_exit,
 	.id = &rxe_pernet_id,
@@ -103,6 +91,7 @@ void rxe_ns_pernet_set_sk4(struct net *net, struct sock *sk)
 	synchronize_rcu();
 }
 
+#if IS_ENABLED(CONFIG_IPV6)
 struct sock *rxe_ns_pernet_sk6(struct net *net)
 {
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
@@ -123,12 +112,25 @@ void rxe_ns_pernet_set_sk6(struct net *net, struct sock *sk)
 	synchronize_rcu();
 }
 
-int __init rxe_namespace_init(void)
+#else /* IPV6 */
+
+struct sock *rxe_ns_pernet_sk6(struct net *net)
+{
+	return NULL;
+}
+
+void rxe_ns_pernet_set_sk6(struct net *net, struct sock *sk)
+{
+}
+
+#endif /* IPV6 */
+
+int rxe_namespace_init(void)
 {
 	return register_pernet_subsys(&rxe_net_ops);
 }
 
-void __exit rxe_namespace_exit(void)
+void rxe_namespace_exit(void)
 {
 	unregister_pernet_subsys(&rxe_net_ops);
 }
