@@ -646,7 +646,12 @@ static int nft_array_may_resize(const struct nft_set *set)
 	struct nft_array *array;
 
 	if (!priv->array_next) {
-		array = nft_array_alloc(nelems + NFT_ARRAY_EXTRA_SIZE);
+		if (priv->array)
+			new_max_intervals = priv->array->max_intervals;
+		else
+			new_max_intervals = NFT_ARRAY_EXTRA_SIZE;
+
+		array = nft_array_alloc(new_max_intervals);
 		if (!array)
 			return -ENOMEM;
 
