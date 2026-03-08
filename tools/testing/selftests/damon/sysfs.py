@@ -192,11 +192,19 @@ def assert_ctx_committed(ctx, dump):
     assert_schemes_committed(ctx.schemes, dump['schemes'])
 
 def assert_ctxs_committed(kdamonds):
+    # pause the context to avoid race on dump
+    kdamonds.kdamonds[0].contexts[0].pause = True
+    kdamonds.kdamonds[0].commit()
+
     status, err = dump_damon_status_dict(kdamonds.kdamonds[0].pid)
     if err is not None:
         print(err)
         kdamonds.stop()
         exit(1)
+
+    # resume the context
+    kdamonds.kdamonds[0].contexts[0].pause = False
+    kdamonds.kdamonds[0].commit()
 
     ctxs = kdamonds.kdamonds[0].contexts
     dump = status['contexts']
