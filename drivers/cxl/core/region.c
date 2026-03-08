@@ -2745,12 +2745,19 @@ static ssize_t delete_region_store(struct device *dev,
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(dev);
 	struct cxl_port *port = to_cxl_port(dev->parent);
 	struct cxl_region *cxlr;
+	int err;
 
 	cxlr = cxl_find_region_by_name(cxlrd, buf);
 	if (IS_ERR(cxlr))
 		return PTR_ERR(cxlr);
 
-	devm_release_action(port->uport_dev, unregister_region, cxlr);
+	err = devm_remove_action_nowarn(port->uport_dev, unregister_region,
+				       cxlr);
+	if (err) {
+		put_device(&cxlr->dev);
+		return err;
+	}
+	unregister_region(cxlr);
 	put_device(&cxlr->dev);
 
 	return len;
