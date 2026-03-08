@@ -78,6 +78,12 @@ properties:
       - const: msg-rx-discarded
       - const: fr-swap
 
+  vbus-detect-gpios:
+    maxItems: 1
+    description:
+      GPIO used to detect VBUS presence when the PMIC's built-in VBUS
+      detection is unreliable.
+
   vdd-vbus-supply:
     description: VBUS power supply.
 
