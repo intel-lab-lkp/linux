@@ -97,6 +97,9 @@ static struct ts_config *kmp_init(const void *pattern, unsigned int len,
 	unsigned int prefix_tbl_len = len * sizeof(unsigned int);
 	size_t priv_size = sizeof(*kmp) + len + prefix_tbl_len;
 
+	if (unlikely(len == 0 || len > (UINT_MAX - sizeof(*kmp)) / (sizeof(unsigned int) + 1)))
+		return ERR_PTR(-EINVAL);
+
 	conf = alloc_ts_config(priv_size, gfp_mask);
 	if (IS_ERR(conf))
 		return conf;
