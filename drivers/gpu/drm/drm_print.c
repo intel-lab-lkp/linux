@@ -218,7 +218,7 @@ void __drm_printfn_dbg(struct drm_printer *p, struct va_format *vaf)
 	const struct device *dev = drm ? drm->dev : NULL;
 	enum drm_debug_category category = p->category;
 
-	if (!__drm_debug_enabled(category))
+	if (!drm_debug_enabled_instrumented(category))
 		return;
 
 	__drm_dev_vprintk(dev, KERN_DEBUG, p->origin, p->prefix, vaf);
@@ -335,7 +335,7 @@ void __drm_dev_dbg(struct _ddebug *desc, const struct device *dev,
 	struct va_format vaf;
 	va_list args;
 
-	if (!__drm_debug_enabled(category))
+	if (!drm_debug_enabled(category))
 		return;
 
 	/* we know we are printing for either syslog, tracefs, or both */
