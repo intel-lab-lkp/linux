@@ -2985,13 +2985,6 @@ static int kdamond_fn(void *data)
 		unsigned long next_ops_update_sis = ctx->next_ops_update_sis;
 		unsigned long sample_interval = ctx->attrs.sample_interval;
 
-		if (ctx->pause) {
-			kdamond_usleep(sample_interval);
-			/* allow caller resetting pause via damon_call() */
-			kdamond_call(ctx, false);
-			continue;
-		}
-
 		if (kdamond_wait_activation(ctx))
 			break;
 
@@ -3018,6 +3011,11 @@ static int kdamond_fn(void *data)
 		 * kdamond_merge_regions() if possible, to reduce overhead
 		 */
 		kdamond_call(ctx, false);
+		while (ctx->pause) {
+			kdamond_usleep(ctx->attrs.sample_interval);
+			/* allow caller unset pause via damon_call() */
+			kdamond_call(ctx, false);
+		}
 		if (!list_empty(&ctx->schemes))
 			kdamond_apply_schemes(ctx);
 		else
