@@ -17,6 +17,7 @@
  */
 
 #include <linux/cpuset.h>
+#include <linux/sched/isolation.h>
 #include <linux/sched/clock.h>
 #include <uapi/linux/sched/types.h>
 #include "sched.h"
