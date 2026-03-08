@@ -90,6 +90,13 @@ UNUSUAL_DEV(0x0bc2, 0x331a, 0x0000, 0x9999,
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_NO_REPORT_LUNS),
 
+/* Reported-by: Nils Reuter <nils.reuter@gmx.net> */
+UNUSUAL_DEV(0x0bda, 0x9210, 0xf001, 0xf001,
+		"Realtek",
+		"RTL9210B",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_IGNORE_UAS),
+
 /* Reported-by: Oliver Neukum <oneukum@suse.com> */
 UNUSUAL_DEV(0x125f, 0xa94a, 0x0160, 0x0160,
 		"ADATA",
