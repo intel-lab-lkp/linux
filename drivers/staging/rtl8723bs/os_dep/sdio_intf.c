@@ -404,7 +404,7 @@ static void rtw_dev_remove(struct sdio_func *func)
 	rtw_pm_set_ips(padapter, IPS_NONE);
 	rtw_pm_set_lps(padapter, PS_MODE_ACTIVE);
 
-	LeaveAllPowerSaveMode(padapter);
+	leave_all_power_save_mode(padapter);
 
 	rtw_btcoex_HaltNotify(padapter);
 

@@ -165,11 +165,11 @@ struct pwrctrl_priv {
 
 	u8 fw_psmode_iface_id;
 	u8 leisure_ps;
-	u8 LpsIdleCount;
+	u8 lps_idle_count;
 	u8 power_mgnt;
 	u8 org_power_mgnt;
 	bool fw_current_in_ps_mode;
-	unsigned long	DelayLPSLastTimeStamp;
+	unsigned long	delay_lps_last_timestamp;
 	s32		pnp_current_pwr_state;
 	u8 pnp_bstop_trx;
 
@@ -224,8 +224,8 @@ extern void rtw_unregister_cmd_alive(struct adapter *padapter);
 extern void cpwm_int_hdl(struct adapter *padapter, struct reportpwrstate_parm *preportpwrstate);
 extern void LPS_Leave_check(struct adapter *padapter);
 
-extern void LeaveAllPowerSaveMode(struct adapter *Adapter);
-extern void LeaveAllPowerSaveModeDirect(struct adapter *Adapter);
+extern void leave_all_power_save_mode(struct adapter *Adapter);
+extern void leave_all_power_save_mode_direct(struct adapter *Adapter);
 void _ips_enter(struct adapter *padapter);
 void ips_enter(struct adapter *padapter);
 int _ips_leave(struct adapter *padapter);

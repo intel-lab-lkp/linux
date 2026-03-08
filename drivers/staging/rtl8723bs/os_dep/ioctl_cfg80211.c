@@ -1606,7 +1606,7 @@ static int cfg80211_rtw_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 
 	if (check_fwstate(&padapter->mlmepriv, _FW_LINKED)) {
 		rtw_scan_abort(padapter);
-		LeaveAllPowerSaveMode(padapter);
+		leave_all_power_save_mode(padapter);
 
 		rtw_wdev->iftype = NL80211_IFTYPE_STATION;
 
@@ -1783,7 +1783,7 @@ static int cfg80211_rtw_disconnect(struct wiphy *wiphy, struct net_device *ndev,
 	rtw_set_to_roam(padapter, 0);
 
 	rtw_scan_abort(padapter);
-	LeaveAllPowerSaveMode(padapter);
+	leave_all_power_save_mode(padapter);
 	rtw_disassoc_cmd(padapter, 500, false);
 
 	rtw_indicate_disconnect(padapter);

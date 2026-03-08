@@ -948,7 +948,7 @@ static int netdev_close(struct net_device *pnetdev)
 		}
 
 		/* s2. */
-		LeaveAllPowerSaveMode(padapter);
+		leave_all_power_save_mode(padapter);
 		rtw_disassoc_cmd(padapter, 500, false);
 		/* s2-2.  indicate disconnect to os */
 		rtw_indicate_disconnect(padapter);
@@ -999,7 +999,7 @@ void rtw_dev_unload(struct adapter *padapter)
 			/* check HW status and SW state */
 			netdev_dbg(padapter->pnetdev,
 				   "%s: driver in IPS-FWLPS\n", __func__);
-			LeaveAllPowerSaveMode(padapter);
+			leave_all_power_save_mode(padapter);
 		} else {
 			netdev_dbg(padapter->pnetdev,
 				   "%s: driver not in IPS\n", __func__);
@@ -1100,7 +1100,7 @@ void rtw_suspend_common(struct adapter *padapter)
 
 	rtw_cancel_all_timer(padapter);
 
-	LeaveAllPowerSaveModeDirect(padapter);
+	leave_all_power_save_mode_direct(padapter);
 
 	rtw_stop_cmd_thread(padapter);
 

@@ -308,7 +308,7 @@ static u8 PS_RDY_CHECK(struct adapter *padapter)
 
 	curr_time = jiffies;
 
-	delta_time = curr_time - pwrpriv->DelayLPSLastTimeStamp;
+	delta_time = curr_time - pwrpriv->delay_lps_last_timestamp;
 
 	if (delta_time < LPS_DELAY_TIME)
 		return false;
@@ -448,14 +448,14 @@ void LPS_Enter(struct adapter *padapter, const char *msg)
 
 	if (pwrpriv->leisure_ps) {
 		/*  Idle for a while if we connect to AP a while ago. */
-		if (pwrpriv->LpsIdleCount >= 2) { /*   4 Sec */
+		if (pwrpriv->lps_idle_count >= 2) { /*   4 Sec */
 			if (pwrpriv->pwr_mode == PS_MODE_ACTIVE) {
 				scnprintf(buf, sizeof(buf), "WIFI-%s", msg);
 				pwrpriv->bpower_saving = true;
 				rtw_set_ps_mode(padapter, pwrpriv->power_mgnt, padapter->registrypriv.smart_ps, 0, buf);
 			}
 		} else
-			pwrpriv->LpsIdleCount++;
+			pwrpriv->lps_idle_count++;
 	}
 }
 
@@ -484,7 +484,7 @@ void LPS_Leave(struct adapter *padapter, const char *msg)
 	pwrpriv->bpower_saving = false;
 }
 
-void LeaveAllPowerSaveModeDirect(struct adapter *Adapter)
+void leave_all_power_save_mode_direct(struct adapter *Adapter)
 {
 	struct adapter *pri_padapter = GET_PRIMARY_ADAPTER(Adapter);
 	struct mlme_priv *pmlmepriv = &(Adapter->mlmepriv);
@@ -515,7 +515,7 @@ void LeaveAllPowerSaveModeDirect(struct adapter *Adapter)
 /*  Description: Leave all power save mode: LPS, FwLPS, IPS if needed. */
 /*  Move code to function by tynli. 2010.03.26. */
 /*  */
-void LeaveAllPowerSaveMode(struct adapter *Adapter)
+void leave_all_power_save_mode(struct adapter *Adapter)
 {
 	struct dvobj_priv *dvobj = adapter_to_dvobj(Adapter);
 	u8 enqueue = 0;
@@ -953,7 +953,7 @@ void rtw_init_pwrctrl_priv(struct adapter *padapter)
 	pwrctrlpriv->in_suspend = false;
 	pwrctrlpriv->bkeepfwalive = false;
 
-	pwrctrlpriv->LpsIdleCount = 0;
+	pwrctrlpriv->lps_idle_count = 0;
 	pwrctrlpriv->power_mgnt = padapter->registrypriv.power_mgnt;/*  PS_MODE_MIN; */
 	pwrctrlpriv->leisure_ps = pwrctrlpriv->power_mgnt != PS_MODE_ACTIVE;
 
@@ -1011,7 +1011,7 @@ int _rtw_pwr_wakeup(struct adapter *padapter, u32 ips_deffer_ms, const char *cal
 	unsigned long deny_time = jiffies + msecs_to_jiffies(ips_deffer_ms);
 
 	/* for LPS */
-	LeaveAllPowerSaveMode(padapter);
+	leave_all_power_save_mode(padapter);
 
 	/* IPS still bound with primary adapter */
 	padapter = GET_PRIMARY_ADAPTER(padapter);
@@ -1079,9 +1079,9 @@ int rtw_pm_set_lps(struct adapter *padapter, u8 mode)
 	if (mode < PS_MODE_NUM) {
 		if (pwrctrlpriv->power_mgnt != mode) {
 			if (mode == PS_MODE_ACTIVE)
-				LeaveAllPowerSaveMode(padapter);
+				leave_all_power_save_mode(padapter);
 			else
-				pwrctrlpriv->LpsIdleCount = 2;
+				pwrctrlpriv->lps_idle_count = 2;
 
 			pwrctrlpriv->power_mgnt = mode;
 			pwrctrlpriv->leisure_ps =
