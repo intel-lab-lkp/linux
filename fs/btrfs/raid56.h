@@ -194,12 +194,6 @@ struct btrfs_raid_bio {
 	 * allocated.
 	 */
 
-	/*
-	 * Pointers to pages that we allocated for reading/writing stripes
-	 * directly from the disk (including P/Q).
-	 */
-	struct page **stripe_pages;
-
 	/* Pointers to the sectors in the bio_list, for faster lookup */
 	phys_addr_t *bio_paddrs;
 
@@ -230,6 +224,12 @@ struct btrfs_raid_bio {
 	 * Should only cover data sectors (excluding P/Q sectors).
 	 */
 	unsigned long *csum_bitmap;
+
+	/*
+	 * Pointers to pages that we allocated for reading/writing stripes
+	 * directly from the disk (including P/Q).
+	 */
+	struct page *stripe_pages[] __counted_by(nr_pages);
 };
 
 /*

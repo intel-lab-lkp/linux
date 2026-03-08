@@ -151,7 +151,6 @@ static void free_raid_bio_pointers(struct btrfs_raid_bio *rbio)
 {
 	bitmap_free(rbio->error_bitmap);
 	bitmap_free(rbio->stripe_uptodate_bitmap);
-	kfree(rbio->stripe_pages);
 	kfree(rbio->bio_paddrs);
 	kfree(rbio->stripe_paddrs);
 	kfree(rbio->finish_pointers);
@@ -1090,10 +1089,11 @@ static struct btrfs_raid_bio *alloc_rbio(struct btrfs_fs_info *fs_info,
 	ASSERT(real_stripes >= 2);
 	ASSERT(real_stripes <= U8_MAX);
 
-	rbio = kzalloc_obj(*rbio, GFP_NOFS);
+	rbio = kzalloc_flex(*rbio, stripe_pages, num_pages, GFP_NOFS);
 	if (!rbio)
 		return ERR_PTR(-ENOMEM);
-	rbio->stripe_pages = kzalloc_objs(struct page *, num_pages, GFP_NOFS);
+
+	rbio->nr_pages = num_pages;
 	rbio->bio_paddrs = kzalloc_objs(phys_addr_t,
 					num_sectors * sector_nsteps, GFP_NOFS);
 	rbio->stripe_paddrs = kzalloc_objs(phys_addr_t,
@@ -1103,7 +1103,7 @@ static struct btrfs_raid_bio *alloc_rbio(struct btrfs_fs_info *fs_info,
 	rbio->error_bitmap = bitmap_zalloc(num_sectors, GFP_NOFS);
 	rbio->stripe_uptodate_bitmap = bitmap_zalloc(num_sectors, GFP_NOFS);
 
-	if (!rbio->stripe_pages || !rbio->bio_paddrs || !rbio->stripe_paddrs ||
+	if (!rbio->bio_paddrs || !rbio->stripe_paddrs ||
 	    !rbio->finish_pointers || !rbio->error_bitmap || !rbio->stripe_uptodate_bitmap) {
 		free_raid_bio_pointers(rbio);
 		kfree(rbio);
@@ -1122,7 +1122,6 @@ static struct btrfs_raid_bio *alloc_rbio(struct btrfs_fs_info *fs_info,
 	INIT_LIST_HEAD(&rbio->hash_list);
 	btrfs_get_bioc(bioc);
 	rbio->bioc = bioc;
-	rbio->nr_pages = num_pages;
 	rbio->nr_sectors = num_sectors;
 	rbio->real_stripes = real_stripes;
 	rbio->stripe_npages = stripe_npages;
