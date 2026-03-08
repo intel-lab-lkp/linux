@@ -5,6 +5,7 @@
 
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
@@ -176,6 +177,8 @@ struct pmic_typec_port {
 	bool				vbus_enabled;
 	struct mutex			vbus_lock;		/* VBUS state serialization */
 
+	struct gpio_desc		*vbus_detect_gpio;
+
 	int				cc;
 	bool				debouncing_cc;
 	struct delayed_work		cc_debounce_dwork;
@@ -277,7 +280,12 @@ static int qcom_pmic_typec_port_vbus_detect(struct pmic_typec_port *pmic_typec_p
 {
 	struct device *dev = pmic_typec_port->dev;
 	unsigned int misc;
-	int ret;
+	int ret, vbus;
+
+	if (pmic_typec_port->vbus_detect_gpio) {
+		vbus = gpiod_get_value_cansleep(pmic_typec_port->vbus_detect_gpio);
+		return vbus;
+	}
 
 	ret = regmap_read(pmic_typec_port->regmap,
 			  pmic_typec_port->base + TYPEC_MISC_STATUS_REG,
@@ -306,6 +314,13 @@ static int qcom_pmic_typec_port_vbus_toggle(struct pmic_typec_port *pmic_typec_p
 		ret = regulator_disable(pmic_typec_port->vdd_vbus);
 		if (ret)
 			return ret;
+
+		/*
+		 * On devices with multiple ports sharing USBIN, VBUS from another
+		 * port prevents VSAFE0V from being reached.
+		 */
+		if (pmic_typec_port->vbus_detect_gpio)
+			return 0;
 
 		val = TYPEC_SM_VBUS_VSAFE0V;
 	}
@@ -589,7 +604,14 @@ static int qcom_pmic_typec_port_start_toggling(struct tcpc_dev *tcpc,
 		mode = EN_SNK_ONLY;
 		break;
 	case TYPEC_PORT_DRP:
-		mode = EN_TRY_SNK;
+		/*
+		 * VBUS from another port makes EN_TRY_SNK falsely detect
+		 * a source. Start as Rp to reliably find sinks.
+		 */
+		if (pmic_typec_port->vbus_detect_gpio)
+			mode = EN_TRY_SRC;
+		else
+			mode = EN_TRY_SNK;
 		break;
 	}
 
@@ -677,6 +699,20 @@ static int qcom_pmic_typec_port_start(struct pmic_typec *tcpm,
 	if (ret)
 		goto done;
 
+	/*
+	 * On devices with multiple USB-C ports sharing USBIN, bypass
+	 * VSAFE0V so SRC attachment can complete despite VBUS being
+	 * present on USBIN from another port.
+	 */
+	if (pmic_typec_port->vbus_detect_gpio) {
+		ret = regmap_update_bits(pmic_typec_port->regmap,
+					 pmic_typec_port->base + TYPEC_EXIT_STATE_CFG_REG,
+					 BYPASS_VSAFE0V_DURING_ROLE_SWAP,
+					 BYPASS_VSAFE0V_DURING_ROLE_SWAP);
+		if (ret)
+			goto done;
+	}
+
 	pmic_typec_port->tcpm_port = tcpm_port;
 
 	for (i = 0; i < pmic_typec_port->nr_irqs; i++)
@@ -723,6 +759,12 @@ int qcom_pmic_typec_port_probe(struct platform_device *pdev,
 	pmic_typec_port->vdd_vbus = devm_regulator_get(dev, "vdd-vbus");
 	if (IS_ERR(pmic_typec_port->vdd_vbus))
 		return PTR_ERR(pmic_typec_port->vdd_vbus);
+
+	pmic_typec_port->vbus_detect_gpio = devm_gpiod_get_optional(dev, "vbus-detect",
+								 GPIOD_IN);
+	if (IS_ERR(pmic_typec_port->vbus_detect_gpio))
+		return dev_err_probe(dev, PTR_ERR(pmic_typec_port->vbus_detect_gpio),
+				     "failed to get vbus-detect GPIO\n");
 
 	pmic_typec_port->dev = dev;
 	pmic_typec_port->base = base;
