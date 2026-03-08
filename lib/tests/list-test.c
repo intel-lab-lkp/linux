@@ -765,6 +765,83 @@ static void list_test_list_for_each_entry_reverse(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, i, -1);
 }
 
+static void list_test_list_next_entry_circular(struct kunit *test)
+{
+	struct list_test_struct entries[3], *cur;
+	LIST_HEAD(list);
+	int i;
+
+	for (i = 0; i < 3; ++i) {
+		entries[i].data = i;
+		list_add_tail(&entries[i].list, &list);
+	}
+
+	/* Normal advance */
+	cur = &entries[0];
+	cur = list_next_entry_circular(cur, &list, list);
+	KUNIT_EXPECT_PTR_EQ(test, cur, &entries[1]);
+
+	/* Wraparound: next from last entry should return first */
+	cur = &entries[2];
+	cur = list_next_entry_circular(cur, &list, list);
+	KUNIT_EXPECT_PTR_EQ(test, cur, &entries[0]);
+}
+
+static void list_test_list_prev_entry_circular(struct kunit *test)
+{
+	struct list_test_struct entries[3], *cur;
+	LIST_HEAD(list);
+	int i;
+
+	for (i = 0; i < 3; ++i) {
+		entries[i].data = i;
+		list_add_tail(&entries[i].list, &list);
+	}
+
+	/* Normal retreat */
+	cur = &entries[2];
+	cur = list_prev_entry_circular(cur, &list, list);
+	KUNIT_EXPECT_PTR_EQ(test, cur, &entries[1]);
+
+	/* Wraparound: prev from first entry should return last */
+	cur = &entries[0];
+	cur = list_prev_entry_circular(cur, &list, list);
+	KUNIT_EXPECT_PTR_EQ(test, cur, &entries[2]);
+}
+
+static void list_test_list_prepare_entry(struct kunit *test)
+{
+	struct list_test_struct entries[3], *cur;
+	LIST_HEAD(list);
+	int i;
+
+	for (i = 0; i < 3; ++i) {
+		entries[i].data = i;
+		list_add_tail(&entries[i].list, &list);
+	}
+
+	/* With a valid pos, prepare_entry returns it unchanged */
+	cur = &entries[1];
+	cur = list_prepare_entry(cur, &list, list);
+	KUNIT_EXPECT_PTR_EQ(test, cur, &entries[1]);
+
+	/*
+	 * With NULL pos, prepare_entry returns the list head as an entry,
+	 * so that a subsequent list_for_each_entry_continue() starts from
+	 * the first real entry. This NULL case is the main reason the
+	 * macro exists and is worth testing explicitly.
+	 */
+	cur = NULL;
+	cur = list_prepare_entry(cur, &list, list);
+
+	i = 0;
+	list_for_each_entry_continue(cur, &list, list) {
+		KUNIT_EXPECT_EQ(test, cur->data, i);
+		i++;
+	}
+	KUNIT_EXPECT_EQ(test, i, 3);
+}
+
 static struct kunit_case list_test_cases[] = {
 	KUNIT_CASE(list_test_list_init),
 	KUNIT_CASE(list_test_list_add),
@@ -805,6 +882,9 @@ static struct kunit_case list_test_cases[] = {
 	KUNIT_CASE(list_test_list_for_each_prev_safe),
 	KUNIT_CASE(list_test_list_for_each_entry),
 	KUNIT_CASE(list_test_list_for_each_entry_reverse),
+	KUNIT_CASE(list_test_list_next_entry_circular),
+	KUNIT_CASE(list_test_list_prev_entry_circular),
+	KUNIT_CASE(list_test_list_prepare_entry),
 	{},
 };
 
@@ -1181,6 +1261,40 @@ static void hlist_test_for_each_entry_safe(struct kunit *test)
 }
 
 
+static void hlist_test_splice_init(struct kunit *test)
+{
+	struct hlist_node entries[4];
+	struct hlist_node *cur;
+	HLIST_HEAD(list1);
+	HLIST_HEAD(list2);
+	int count;
+
+	/* list1: entries[0] -> entries[1] */
+	hlist_add_head(&entries[0], &list1);
+	hlist_add_behind(&entries[1], &entries[0]);
+
+	/* list2: entries[2] -> entries[3] */
+	hlist_add_head(&entries[2], &list2);
+	hlist_add_behind(&entries[3], &entries[2]);
+
+	/*
+	 * Splice list1 (up to and including entries[1]) onto the front
+	 * of list2. list1 should be emptied.
+	 */
+	hlist_splice_init(&list1, &entries[1], &list2);
+
+	KUNIT_EXPECT_TRUE(test, hlist_empty(&list1));
+
+	/* list2 should now be: entries[0] -> entries[1] -> entries[2] -> entries[3] */
+	KUNIT_EXPECT_PTR_EQ(test, list2.first, &entries[0]);
+	KUNIT_EXPECT_PTR_EQ(test, entries[1].next, &entries[2]);
+
+	count = 0;
+	hlist_for_each(cur, &list2)
+		count++;
+	KUNIT_EXPECT_EQ(test, count, 4);
+}
+
 static struct kunit_case hlist_test_cases[] = {
 	KUNIT_CASE(hlist_test_init),
 	KUNIT_CASE(hlist_test_unhashed),
@@ -1200,6 +1314,7 @@ static struct kunit_case hlist_test_cases[] = {
 	KUNIT_CASE(hlist_test_for_each_entry_continue),
 	KUNIT_CASE(hlist_test_for_each_entry_from),
 	KUNIT_CASE(hlist_test_for_each_entry_safe),
+	KUNIT_CASE(hlist_test_splice_init),
 	{},
 };
 
