@@ -2513,6 +2513,8 @@
 
 			power-domains = <&gcc UFS_PHY_GDSC>;
 
+			qcom,ice = <&ice>;
+
 			iommus = <&apps_smmu 0x0e0 0>, <&apps_smmu 0x4e0 0>;
 
 			clock-names =
@@ -2590,6 +2592,13 @@
 			#phy-cells = <0>;
 
 			status = "disabled";
+		};
+
+		ice: crypto@1d90000 {
+			compatible = "qcom,sm8250-inline-crypto-engine",
+				     "qcom,inline-crypto-engine";
+			reg = <0 0x01d90000 0 0x8000>;
+			clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
 		};
 
 		cryptobam: dma-controller@1dc4000 {
