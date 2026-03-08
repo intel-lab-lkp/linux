@@ -96,6 +96,21 @@ static void dccg21_update_dpp_dto(struct dccg *dccg, int dpp_inst, int req_dppcl
 	dccg->pipe_dppclk_khz[dpp_inst] = req_dppclk;
 }
 
+void dccg21_init(struct dccg *dccg)
+{
+	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
+
+	/* Hardcoded register values for DCN21
+	 * These are specific to 100Mhz refclk
+	 * Different ASICs with different refclk may override this in their own init
+	 */
+	REG_WRITE(MICROSECOND_TIME_BASE_DIV, 0x00120464);
+	REG_WRITE(MILLISECOND_TIME_BASE_DIV, 0x001186a0);
+	REG_WRITE(DISPCLK_FREQ_CHANGE_CNTL, 0x0e01003c);
+
+	if (REG(REFCLK_CNTL))
+		REG_WRITE(REFCLK_CNTL, 0);
+}
 
 static const struct dccg_funcs dccg21_funcs = {
 	.update_dpp_dto = dccg21_update_dpp_dto,
@@ -103,7 +118,7 @@ static const struct dccg_funcs dccg21_funcs = {
 	.set_fifo_errdet_ovr_en = dccg2_set_fifo_errdet_ovr_en,
 	.otg_add_pixel = dccg2_otg_add_pixel,
 	.otg_drop_pixel = dccg2_otg_drop_pixel,
-	.dccg_init = dccg2_init,
+	.dccg_init = dccg21_init,
 	.refclk_setup = dccg2_refclk_setup, /* Deprecated - for backward compatibility only */
 	.allow_clock_gating = dccg2_allow_clock_gating,
 	.enable_memory_low_power = dccg2_enable_memory_low_power,

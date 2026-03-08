@@ -222,7 +222,8 @@ static const struct dce_audio_mask audio_mask = {
 };
 
 static const struct dccg_registers dccg_regs = {
-		DCCG_COMMON_REG_LIST_DCN_BASE()
+		DCCG_COMMON_REG_LIST_DCN_BASE(),
+		SR(MICROSECOND_TIME_BASE_DIV)
 };
 
 static const struct dccg_shift dccg_shift = {
