@@ -217,6 +217,10 @@ struct kvm_s2_mmu {
 	 */
 	bool	nested_stage2_enabled;
 
+#ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
+	struct dentry *shadow_pt_debugfs_dentry;
+#endif
+
 	/*
 	 * true when this MMU needs to be unmapped before being used for a new
 	 * purpose.
@@ -405,6 +409,9 @@ struct kvm_arch {
 	 * the associated pKVM instance in the hypervisor.
 	 */
 	struct kvm_protected_vm pkvm;
+
+	/* Nested virtualization info */
+	struct dentry *debugfs_nv_dentry;
 };
 
 struct kvm_vcpu_fault_info {
