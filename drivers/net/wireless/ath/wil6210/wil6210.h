@@ -659,7 +659,6 @@ struct pci_dev;
 /**
  * struct wil_tid_ampdu_rx - TID aggregation information (Rx).
  *
- * @reorder_buf: buffer to reorder incoming aggregated MPDUs
  * @last_rx: jiffies of last rx activity
  * @head_seq_num: head sequence number in reordering buffer.
  * @stored_mpdu_num: number of MPDUs in reordering buffer
@@ -672,9 +671,9 @@ struct pci_dev;
  * @first_time: true when this buffer used 1-st time
  * @mcast_last_seq: sequence number (SN) of last received multicast packet
  * @drop_dup_mcast: duplicate multicast frames dropped for this reorder buffer
+ * @reorder_buf: buffer to reorder incoming aggregated MPDUs
  */
 struct wil_tid_ampdu_rx {
-	struct sk_buff **reorder_buf;
 	unsigned long last_rx;
 	u16 head_seq_num;
 	u16 stored_mpdu_num;
@@ -687,6 +686,7 @@ struct wil_tid_ampdu_rx {
 	bool first_time; /* is it 1-st time this buffer used? */
 	u16 mcast_last_seq; /* multicast dup detection */
 	unsigned long long drop_dup_mcast;
+	struct sk_buff *reorder_buf[] __counted_by(buf_size);
 };
 
 /**

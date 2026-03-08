@@ -241,21 +241,15 @@ out:
 struct wil_tid_ampdu_rx *wil_tid_ampdu_rx_alloc(struct wil6210_priv *wil,
 						int size, u16 ssn)
 {
-	struct wil_tid_ampdu_rx *r = kzalloc_obj(*r);
+	struct wil_tid_ampdu_rx *r;
 
+	r = kzalloc_flex(*r, reorder_buf, size);
 	if (!r)
 		return NULL;
 
-	r->reorder_buf =
-		kzalloc_objs(struct sk_buff *, size);
-	if (!r->reorder_buf) {
-		kfree(r);
-		return NULL;
-	}
-
+	r->buf_size = size;
 	r->ssn = ssn;
 	r->head_seq_num = ssn;
-	r->buf_size = size;
 	r->stored_mpdu_num = 0;
 	r->first_time = true;
 	r->mcast_last_seq = U16_MAX;
@@ -278,7 +272,6 @@ void wil_tid_ampdu_rx_free(struct wil6210_priv *wil,
 	for (i = 0; i < r->buf_size; i++)
 		kfree_skb(r->reorder_buf[i]);
 
-	kfree(r->reorder_buf);
 	kfree(r);
 }
 
