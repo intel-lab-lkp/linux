@@ -58,10 +58,10 @@
 
 struct milbeaut_hdmac_desc {
 	struct virt_dma_desc vd;
-	struct scatterlist *sgl;
 	unsigned int sg_len;
 	unsigned int sg_cur;
 	enum dma_transfer_direction dir;
+	struct scatterlist sgl[] __counted_by(sg_len);
 };
 
 struct milbeaut_hdmac_chan {
@@ -260,25 +260,16 @@ milbeaut_hdmac_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 {
 	struct virt_dma_chan *vc = to_virt_chan(chan);
 	struct milbeaut_hdmac_desc *md;
-	int i;
 
 	if (!is_slave_direction(direction))
 		return NULL;
 
-	md = kzalloc_obj(*md, GFP_NOWAIT);
+	md = kzalloc_flex(*md, sgl, sg_len, GFP_NOWAIT);
 	if (!md)
 		return NULL;
 
-	md->sgl = kzalloc_objs(*sgl, sg_len, GFP_NOWAIT);
-	if (!md->sgl) {
-		kfree(md);
-		return NULL;
-	}
-
-	for (i = 0; i < sg_len; i++)
-		md->sgl[i] = sgl[i];
-
 	md->sg_len = sg_len;
+	memcpy(md->sgl, sgl, sg_len * sizeof(*sgl));
 	md->dir = direction;
 
 	return vchan_tx_prep(vc, &md->vd, flags);
@@ -395,7 +386,6 @@ static void milbeaut_hdmac_desc_free(struct virt_dma_desc *vd)
 {
 	struct milbeaut_hdmac_desc *md = to_milbeaut_hdmac_desc(vd);
 
-	kfree(md->sgl);
 	kfree(md);
 }
 
