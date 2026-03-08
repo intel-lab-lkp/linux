@@ -42,7 +42,7 @@
  */
 static int convert_prio(int prio)
 {
-	int cpupri;
+	int cpupri = CPUPRI_INVALID;
 
 	switch (prio) {
 	case CPUPRI_INVALID:
@@ -59,6 +59,10 @@ static int convert_prio(int prio)
 
 	case MAX_RT_PRIO:
 		cpupri = CPUPRI_HIGHER;		/* 100 */
+		break;
+
+	default:
+		WARN_ON_ONCE(prio < 0 || prio > MAX_RT_PRIO);
 		break;
 	}
 
