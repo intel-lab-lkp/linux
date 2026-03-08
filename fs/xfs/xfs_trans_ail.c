@@ -365,6 +365,12 @@ xfsaild_resubmit_item(
 	return XFS_ITEM_SUCCESS;
 }
 
+/*
+ * Push a single log item from the AIL.
+ *
+ * @lip may have been released and freed by the time this function returns,
+ * so callers must not dereference the log item afterwards.
+ */
 static inline uint
 xfsaild_push_item(
 	struct xfs_ail		*ailp,
@@ -462,11 +468,13 @@ static void
 xfsaild_process_logitem(
 	struct xfs_ail		*ailp,
 	struct xfs_log_item	*lip,
-	xfs_lsn_t		lsn,
 	int			*stuck,
 	int			*flushing)
 {
 	struct xfs_mount	*mp = ailp->ail_log->l_mp;
+	uint			type = lip->li_type;
+	unsigned long		flags = lip->li_flags;
+	xfs_lsn_t		item_lsn = lip->li_lsn;
 	int			lock_result;
 
 	/*
@@ -478,9 +486,9 @@ xfsaild_process_logitem(
 	switch (lock_result) {
 	case XFS_ITEM_SUCCESS:
 		XFS_STATS_INC(mp, xs_push_ail_success);
-		trace_xfs_ail_push(lip);
+		trace_xfs_ail_push(ailp, type, flags, item_lsn);
 
-		ailp->ail_last_pushed_lsn = lsn;
+		ailp->ail_last_pushed_lsn = item_lsn;
 		break;
 
 	case XFS_ITEM_FLUSHING:
@@ -496,22 +504,22 @@ xfsaild_process_logitem(
 		 * AIL is being flushed.
 		 */
 		XFS_STATS_INC(mp, xs_push_ail_flushing);
-		trace_xfs_ail_flushing(lip);
+		trace_xfs_ail_flushing(ailp, type, flags, item_lsn);
 
 		(*flushing)++;
-		ailp->ail_last_pushed_lsn = lsn;
+		ailp->ail_last_pushed_lsn = item_lsn;
 		break;
 
 	case XFS_ITEM_PINNED:
 		XFS_STATS_INC(mp, xs_push_ail_pinned);
-		trace_xfs_ail_pinned(lip);
+		trace_xfs_ail_pinned(ailp, type, flags, item_lsn);
 
 		(*stuck)++;
 		ailp->ail_log_flush++;
 		break;
 	case XFS_ITEM_LOCKED:
 		XFS_STATS_INC(mp, xs_push_ail_locked);
-		trace_xfs_ail_locked(lip);
+		trace_xfs_ail_locked(ailp, type, flags, item_lsn);
 
 		(*stuck)++;
 		break;
@@ -572,7 +580,7 @@ xfsaild_push(
 		if (test_bit(XFS_LI_FLUSHING, &lip->li_flags))
 			goto next_item;
 
-		xfsaild_process_logitem(ailp, lip, lsn, &stuck, &flushing);
+		xfsaild_process_logitem(ailp, lip, &stuck, &flushing);
 		count++;
 
 		/*
