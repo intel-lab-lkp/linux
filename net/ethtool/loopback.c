@@ -37,7 +37,7 @@ const struct nla_policy ethnl_loopback_get_policy[] = {
 static int loopback_get_entries(struct net_device *dev,
 				struct ethtool_loopback_cfg *cfg)
 {
-	return 0;
+	return ethtool_cmis_get_loopback(dev, cfg);
 }
 
 static int loopback_prepare_data(const struct ethnl_req_info *req_base,
@@ -181,6 +181,8 @@ static int loopback_set_one(struct net_device *dev,
 			    struct netlink_ext_ack *extack)
 {
 	switch (entry->component) {
+	case ETHTOOL_LOOPBACK_COMPONENT_MODULE:
+		return ethtool_cmis_set_loopback_one(dev, entry, extack);
 	default:
 		return -EOPNOTSUPP;
 	}
