@@ -288,6 +288,73 @@ struct ufs_pwr_mode_info {
 };
 
 /**
+ * struct tx_eqtr_iter - TX EQTR setting iterator
+ * @preshoot_bitmap: PreShoot bitmap
+ * @deemphasis_bitmap: DeEmphasis bitmap
+ * @num_lanes: number of active lanes
+ * @preshoot: PreShoot value
+ * @deemphasis: DeEmphasis value
+ * @fom: Figure-of-Merit read out from RX_FOM
+ * @is_new: Flag to indicate whether re-newed since previous iteration
+ */
+struct tx_eqtr_iter {
+	unsigned long preshoot_bitmap;
+	unsigned long deemphasis_bitmap;
+	u32 num_lanes;
+	u32 preshoot;
+	u32 deemphasis;
+	u32 fom[PA_MAXDATALANES];
+	bool is_new;
+};
+
+/**
+ * struct ufshcd_tx_eq_settings - TX Equalization settings
+ * @preshoot: PreShoot value
+ * @deemphasis: DeEmphasis value
+ * @fom: Figure-of-Merit read out from RX_FOM
+ * @precode_en: Flag to indicate whether need to enable pre-coding
+ */
+struct ufshcd_tx_eq_settings {
+	u32 preshoot;
+	u32 deemphasis;
+	u32 fom_val;
+	bool precode_en;
+};
+
+/**
+ * struct ufshcd_tx_eq_params - TX Equalization parameters structure
+ * @tx_lanes: Number of active TX lanes
+ * @rx_lanes: Number of active RX lanes
+ * @host: TX EQ settings for host TX lanes
+ * @device: TX EQ settings for device TX lanes
+ * @host_eqtr_record: last host TX EQTR record
+ * @device_eqtr_record: last device TX EQTR record
+ * @last_eqtr_ts: last TX EQTR timestamp
+ * @num_eqtr_records: number of TX EQTR happened
+ * @saved_adapt_eqtr: saved adaptation length setting for TX EQTR
+ * @is_valid: True if parameters contain valid/optimal settings
+ * @is_applied: True if settings have been applied to UniPro of both sides
+ */
+struct ufshcd_tx_eq_params {
+	u32 tx_lanes;
+	u32 rx_lanes;
+
+	struct ufshcd_tx_eq_settings host[PA_MAXDATALANES];
+	struct ufshcd_tx_eq_settings device[PA_MAXDATALANES];
+
+	u32 host_eqtr_record[PA_MAXDATALANES][TX_HS_NUM_PRESHOOT][TX_HS_NUM_DEEMPHASIS];
+	u32 device_eqtr_record[PA_MAXDATALANES][TX_HS_NUM_PRESHOOT][TX_HS_NUM_DEEMPHASIS];
+
+	ktime_t last_eqtr_ts;
+	int num_eqtr_records;
+
+	u32 saved_adapt_eqtr;
+
+	bool is_valid;
+	bool is_applied;
+};
+
+/**
  * struct ufs_hba_variant_ops - variant specific callbacks
  * @name: variant name
  * @max_num_rtt: maximum RTT supported by the host
@@ -330,6 +397,11 @@ struct ufs_pwr_mode_info {
  * @config_esi: called to config Event Specific Interrupt
  * @config_scsi_dev: called to configure SCSI device parameters
  * @freq_to_gear_speed: called to map clock frequency to the max supported gear speed
+ * @apply_tx_eqtr_settings: called to apply settings for TX Equalization
+ *	Training settings.
+ * @get_rx_fom: called to get Figure of Merit (FOM) value.
+ * @tx_eqtr_notify: called before and after TX Equalization Training procedure
+ *	to allow platform vendor specific configs to take place.
  */
 struct ufs_hba_variant_ops {
 	const char *name;
@@ -381,6 +453,17 @@ struct ufs_hba_variant_ops {
 	int	(*config_esi)(struct ufs_hba *hba);
 	void	(*config_scsi_dev)(struct scsi_device *sdev);
 	u32	(*freq_to_gear_speed)(struct ufs_hba *hba, unsigned long freq);
+	int	(*get_rx_fom)(struct ufs_hba *hba,
+			      struct ufs_pa_layer_attr *pwr_mode,
+			      struct tx_eqtr_iter *h_iter,
+			      struct tx_eqtr_iter *d_iter);
+	int	(*apply_tx_eqtr_settings)(struct ufs_hba *hba,
+					  struct ufs_pa_layer_attr *pwr_mode,
+					  struct tx_eqtr_iter *h_iter,
+					  struct tx_eqtr_iter *d_iter);
+	int	(*tx_eqtr_notify)(struct ufs_hba *hba,
+				  enum ufs_notify_change_status status,
+				  struct ufs_pa_layer_attr *pwr_mode);
 };
 
 /* clock gating state  */
@@ -779,6 +862,13 @@ enum ufshcd_caps {
 	 * WriteBooster when scaling the clock down.
 	 */
 	UFSHCD_CAP_WB_WITH_CLK_SCALING			= 1 << 12,
+
+	/*
+	 * This capability allows the host controller driver to apply TX
+	 * Equalization settings discovered from UFS attributes, variant
+	 * specific operations and TX Equaliztion Training procedure.
+	 */
+	UFSHCD_CAP_TX_EQUALIZATION			= 1 << 13,
 };
 
 struct ufs_hba_variant_params {
@@ -955,6 +1045,11 @@ enum ufshcd_mcq_opr {
  * @dev_lvl_exception_count: count of device level exceptions since last reset
  * @dev_lvl_exception_id: vendor specific information about the device level exception event.
  * @rpmbs: list of OP-TEE RPMB devices (one per RPMB region)
+ * @host_preshoot_cap: host TX PreShoot capability
+ * @host_deemphasis_cap: host TX DeEmphasis capability
+ * @device_preshoot_cap: device TX PreShoot capability
+ * @device_deemphasis_cap: device TX DeEmphasis capability
+ * @tx_eq_params: TX Equalization settings
  */
 struct ufs_hba {
 	void __iomem *mmio_base;
@@ -1128,6 +1223,12 @@ struct ufs_hba {
 	u64 dev_lvl_exception_id;
 	u32 vcc_off_delay_us;
 	struct list_head rpmbs;
+
+	u32 host_preshoot_cap;
+	u32 host_deemphasis_cap;
+	u32 device_preshoot_cap;
+	u32 device_deemphasis_cap;
+	struct ufshcd_tx_eq_params tx_eq_params[UFS_HS_GEAR_MAX - 1];
 };
 
 /**
@@ -1270,6 +1371,13 @@ static inline bool ufshcd_is_wb_allowed(struct ufs_hba *hba)
 static inline bool ufshcd_enable_wb_if_scaling_up(struct ufs_hba *hba)
 {
 	return hba->caps & UFSHCD_CAP_WB_WITH_CLK_SCALING;
+}
+
+static inline bool ufshcd_is_tx_eq_supported(struct ufs_hba *hba)
+{
+	return hba->caps & UFSHCD_CAP_TX_EQUALIZATION &&
+	       hba->ufs_version >= ufshci_version(5, 0) &&
+	       hba->dev_info.wspecversion >= 0x500;
 }
 
 #define ufsmcq_writel(hba, val, reg)	\
