@@ -2764,6 +2764,11 @@ static void print_ddi_port(const struct intel_bios_encoder_data *devdata)
 			    "Port %c supports dynamic DDI allocation in TCSS\n",
 			    port_name(port));
 
+	if (intel_bios_encoder_overrides_vswing(devdata))
+		drm_dbg_kms(display->drm,
+			    "Port %c overrides VBT vswing/preemphasis tables\n",
+			    port_name(port));
+
 	hdmi_level_shift = intel_bios_hdmi_level_shift(devdata);
 	if (hdmi_level_shift >= 0) {
 		drm_dbg_kms(display->drm,
@@ -3793,6 +3798,12 @@ bool intel_bios_encoder_supports_typec_usb(const struct intel_bios_encoder_data 
 bool intel_bios_encoder_supports_tbt(const struct intel_bios_encoder_data *devdata)
 {
 	return devdata->display->vbt.version >= 209 && devdata->child.tbt;
+}
+
+bool intel_bios_encoder_overrides_vswing(const struct intel_bios_encoder_data *devdata)
+{
+	return devdata->display->vbt.version >= 218 &&
+		devdata->child.use_vbt_vswing;
 }
 
 bool intel_bios_encoder_is_dedicated_external(const struct intel_bios_encoder_data *devdata)
