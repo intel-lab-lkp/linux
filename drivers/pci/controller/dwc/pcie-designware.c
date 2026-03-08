@@ -110,6 +110,33 @@ static int dw_pcie_get_resets(struct dw_pcie *pci)
 	return 0;
 }
 
+static void dw_pcie_get_link_speed(struct dw_pcie *pci)
+{
+	struct device_node *np = dev_of_node(pci->dev);
+	int max_speed;
+
+	max_speed = of_pci_get_max_link_speed(np);
+	if (max_speed < 0) {
+		dev_warn(pci->dev,
+			 "Failed to get max-link-speed, using default (Gen1)\n");
+		pci->max_link_speed = 1;
+		return;
+	}
+
+	/* Validate against known speeds in pcie_link_speed */
+	if (max_speed == 0 ||
+	    max_speed >= ARRAY_SIZE(pcie_link_speed) ||
+	    pcie_link_speed[max_speed] == PCI_SPEED_UNKNOWN) {
+		dev_warn(pci->dev,
+			 "Invalid max-link-speed %d, using default (Gen1)\n",
+			 max_speed);
+		pci->max_link_speed = 1;
+		return;
+	}
+
+	pci->max_link_speed = max_speed;
+}
+
 int dw_pcie_get_resources(struct dw_pcie *pci)
 {
 	struct platform_device *pdev = to_platform_device(pci->dev);
@@ -189,7 +216,7 @@ int dw_pcie_get_resources(struct dw_pcie *pci)
 	}
 
 	if (pci->max_link_speed < 1)
-		pci->max_link_speed = of_pci_get_max_link_speed(np);
+		dw_pcie_get_link_speed(pci);
 
 	of_property_read_u32(np, "num-lanes", &pci->num_lanes);
 
