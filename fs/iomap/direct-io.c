@@ -687,7 +687,8 @@ __iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	dio->i_size = i_size_read(inode);
 	dio->dops = dops;
 	dio->error = 0;
-	dio->flags = dio_flags & (IOMAP_DIO_FSBLOCK_ALIGNED | IOMAP_DIO_BOUNCE);
+	dio->flags = dio_flags & (IOMAP_DIO_FSBLOCK_ALIGNED | IOMAP_DIO_BOUNCE |
+				  IOMAP_DIO_BUF_WRITETHROUGH);
 	dio->done_before = done_before;
 
 	dio->submit.iter = iter;
@@ -721,8 +722,13 @@ __iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		if (iocb->ki_flags & IOCB_ATOMIC)
 			iomi.flags |= IOMAP_ATOMIC;
 
-		/* for data sync or sync, we need sync completion processing */
-		if (iocb_is_dsync(iocb)) {
+		/*
+		 * for data sync or sync, we need sync completion processing.
+		 * for buffered writethrough, sync is handled in buffered IO
+		 * path so not needed here
+		 */
+		if (iocb_is_dsync(iocb) &&
+		    !(dio->flags & IOMAP_DIO_BUF_WRITETHROUGH)) {
 			dio->flags |= IOMAP_DIO_NEED_SYNC;
 
 		       /*
@@ -739,35 +745,47 @@ __iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		}
 
 		/*
-		 * i_size updates must to happen from process context.
+		 * i_size updates must to happen from process context. For
+		 * buffered writetthrough, caller might have already changed the
+		 * i_size but still needs endio i_size handling. We can't detect
+		 * this here so just use process context unconditionally.
 		 */
-		if (iomi.pos + iomi.len > dio->i_size)
+		if ((iomi.pos + iomi.len > dio->i_size) ||
+		    dio_flags & IOMAP_DIO_BUF_WRITETHROUGH)
 			dio->flags |= IOMAP_DIO_COMP_WORK;
 
 		/*
 		 * Try to invalidate cache pages for the range we are writing.
 		 * If this invalidation fails, let the caller fall back to
 		 * buffered I/O.
+		 *
+		 * The execption is if we are using dio path for buffered
+		 * RWF_WRITETHROUGH in which case we cannot inavlidate the pages
+		 * as we are writing them through and already hold their
+		 * folio_lock. For the same reason, disable end of write invalidation
 		 */
-		ret = kiocb_invalidate_pages(iocb, iomi.len);
-		if (ret) {
-			if (ret != -EAGAIN) {
-				trace_iomap_dio_invalidate_fail(inode, iomi.pos,
-								iomi.len);
-				if (iocb->ki_flags & IOCB_ATOMIC) {
-					/*
-					 * folio invalidation failed, maybe
-					 * this is transient, unlock and see if
-					 * the caller tries again.
-					 */
-					ret = -EAGAIN;
-				} else {
-					/* fall back to buffered write */
-					ret = -ENOTBLK;
+		if (!(dio_flags & IOMAP_DIO_BUF_WRITETHROUGH)) {
+			ret = kiocb_invalidate_pages(iocb, iomi.len);
+			if (ret) {
+				if (ret != -EAGAIN) {
+					trace_iomap_dio_invalidate_fail(inode, iomi.pos,
+									iomi.len);
+					if (iocb->ki_flags & IOCB_ATOMIC) {
+						/*
+						* folio invalidation failed, maybe
+						* this is transient, unlock and see if
+						* the caller tries again.
+						*/
+						ret = -EAGAIN;
+					} else {
+						/* fall back to buffered write */
+						ret = -ENOTBLK;
+					}
 				}
+				goto out_free_dio;
 			}
-			goto out_free_dio;
-		}
+		} else
+			dio->flags |= IOMAP_DIO_NO_INVALIDATE;
 	}
 
 	if (!wait_for_completion && !inode->i_sb->s_dio_done_wq) {

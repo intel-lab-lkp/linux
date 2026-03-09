@@ -9,6 +9,7 @@
 #include <linux/swap.h>
 #include <linux/migrate.h>
 #include <linux/fserror.h>
+#include <linux/rmap.h>
 #include "internal.h"
 #include "trace.h"
 
@@ -1081,6 +1082,351 @@ static bool iomap_write_end(struct iomap_iter *iter, size_t len, size_t copied,
 	return __iomap_write_end(iter->inode, pos, len, copied, folio);
 }
 
+static void iomap_writethrough_endio(struct kiocb *iocb, long ret)
+{
+	struct iomap_writethrough_ctx *wt_ctx =
+		container_of(iocb, struct iomap_writethrough_ctx, iocb);
+	struct inode *inode = wt_ctx->inode;
+
+	/*
+	 * NOTE: Is ret always < 0 for short writes? ioend_writeback_end_io
+	 * seems to suggest so.
+	 */
+	if (ret < 0) {
+		mapping_set_error(inode->i_mapping, ret);
+		pr_err_ratelimited(
+			"%s: writeback error on inode %lu, offset %lld",
+			inode->i_sb->s_id, inode->i_ino, iocb->ki_pos);
+	}
+
+	fput(iocb->ki_filp);
+	folio_end_writeback(wt_ctx->folio);
+	kfree(wt_ctx->bvec);
+	kfree(wt_ctx);
+}
+
+/*
+ * Check the pos and length of writethrough satisfy the constraints.
+ * Returns false if checks fail, else true.
+ */
+static bool iomap_writethrough_checks(struct kiocb *iocb, size_t off, loff_t len,
+				      struct folio *folio)
+{
+	struct inode *inode = file_inode(iocb->ki_filp);
+	int bs = i_blocksize(inode);
+	loff_t start = iocb->ki_pos;
+	loff_t end = start + len;
+	loff_t folio_end = folio_pos(folio) + folio_size(folio);
+
+	/*
+	 * start and length should be algned to block size.
+	 */
+	if (WARN_ON((start | len) & (bs - 1)))
+		return false;
+
+	/*
+	 * We modified start as well as offset in folio, so make sure they are
+	 * still in sync
+	 */
+	if (WARN_ON(off != offset_in_folio(folio, start)))
+		return false;
+
+	/*
+	 * Range should be contained in folio
+	 */
+	if (WARN_ON(start < folio_pos(folio) || end > folio_end))
+		return false;
+
+	return true;
+}
+
+/*
+ * With writethrough, we might potentially be writing through a partial
+ * folio hence we don't clear the dirty bit (yet)
+ */
+static void folio_prepare_writethrough(struct folio *folio)
+{
+	if (folio_test_writeback(folio))
+		folio_wait_writeback(folio);
+
+	/*
+	 * TODO: We are trying to avoid folio_mkclean() usages but we need it
+	 * here to serialize against mmap writes. Is there a better way?
+	 */
+	if (folio_mkclean(folio))
+		/* Refer folio_clear_dirty_for_io() for why this is needed */
+		folio_mark_dirty(folio);
+
+}
+
+/**
+ * iomap_writethrough_begin - prepare the various structures for writethrough
+ * @iocb:
+ * @folio:
+ * @iter:
+ * @wt_ctx: holds context needed during IO and endio
+ * @iov_wt: (output) will hold the iov_iter that can be passed to dio
+ * @wt_off: (input/output) holds the offset of write. Upon return, will hold the
+ *          aligned offset
+ * @wt_len: (input/output) holds the len of write. Upon return, will hold the
+ *          aligned len
+ *
+ * This function does the major preparation work needed before starting the
+ * writethrough. The main task is to prepare folio for writeththrough (by
+ * setting writeback on it) and to ensure the offset and len are block aligned
+ * so that dio doesn't complain.
+ *
+ * In case an error is encountered, the folio writeback wont be started and the
+ * range under write through would still be dirty.
+ */
+static int iomap_writethrough_begin(struct kiocb *iocb, struct folio *folio,
+				    struct iomap_iter *iter,
+				    struct iomap_writethrough_ctx *wt_ctx,
+				    struct iov_iter *iov_wt, size_t offset,
+				    u64 len)
+{
+	int bs = i_blocksize(iter->inode);
+
+	size_t off_aligned = round_down(offset, bs);
+	u64 len_aligned = round_up(len, bs);
+	u64 pos_aligned = round_down(iter->pos, bs);
+	bool fully_written;
+	u64 zero = 0;
+
+	folio_prepare_writethrough(folio);
+
+	wt_ctx->bvec = kmalloc(sizeof(struct bio_vec), GFP_KERNEL | GFP_NOFS);
+	if (!wt_ctx->bvec)
+		return -ENOMEM;
+
+	bvec_set_folio(wt_ctx->bvec, folio, len_aligned, off_aligned);
+	iov_iter_bvec(iov_wt, ITER_SOURCE, wt_ctx->bvec, 1, len_aligned);
+
+	kiocb_clone(&wt_ctx->iocb, iocb, iocb->ki_filp);
+	wt_ctx->iocb.ki_pos = pos_aligned;
+	wt_ctx->iocb.ki_complete = iomap_writethrough_endio;
+	wt_ctx->folio = folio;
+	wt_ctx->inode = iter->inode;
+	wt_ctx->orig_pos = iter->pos;
+	wt_ctx->orig_len = len;
+
+	if (!iomap_writethrough_checks(
+			&wt_ctx->iocb, off_aligned,
+			iov_iter_count(iov_wt), folio)) {
+		/* This should never happen */
+		WARN_ON_ONCE(true);
+
+		kfree(wt_ctx->bvec);
+		return -EINVAL;
+	}
+
+	get_file(wt_ctx->iocb.ki_filp);
+
+	/*
+	 * We might either write through the complete folio or a partial folio
+	 * writethrough might result in all blocks becoming non-dirty, so we need to
+	 * check and mark the folio clean if that is the case.
+	 */
+	fully_written = (off_aligned == 0 && len_aligned == folio_size(folio));
+
+	iomap_clear_range_dirty(folio, off_aligned, len_aligned);
+	if (fully_written ||
+	    !iomap_find_dirty_range(folio, &zero, folio_size(folio)))
+		folio_clear_dirty(folio);
+
+	folio_start_writeback(folio);
+
+	return 0;
+}
+
+/**
+ * iomap_writethrough_iter - perform RWF_WRITETHROUGH buffered write
+ * @iocb: kernel iocb struct
+ * @iter: iomap iter holding mapping information
+ * @i: iov_iter for write
+ * @wt_ops: the fs callbacks needed for writethrough
+ *
+ * This function copies the user buffer to folio similar to usual buffered
+ * IO path, with the difference that we immediately issue the IO. For this we
+ * utilize the async dio machinery. While issuing the async IO, we need to be
+ * careful to clone the iocb so that it doesnt get destroyed underneath us
+ * incase the syscall exits before endio() is triggered.
+ *
+ * Folio handling note: We might be writing through a partial folio so we need
+ * to be careful to not clear the folio dirty bit unless there are no dirty blocks
+ * in the folio after the writethrough.
+ *
+ * TODO: Filesystem freezing during ongoing writethrough writes is currently
+ * buggy. We call file_start_write() once before taking any lock but we can't
+ * just simply call the corresponding file_end_write() in endio because single
+ * RWF_WRITETHROUGH might be split into many IOs leading to multiple endio()
+ * calls. Currently we are looking into the right way to synchronise with
+ * freeze_super().
+ */
+static int iomap_writethrough_iter(struct kiocb *iocb, struct iomap_iter *iter,
+				   struct iov_iter *i,
+				   const struct iomap_writethrough_ops *wt_ops)
+{
+	ssize_t total_written = 0;
+	int status = 0;
+	struct address_space *mapping = iter->inode->i_mapping;
+	size_t chunk = mapping_max_folio_size(mapping);
+	unsigned int bdp_flags = (iter->flags & IOMAP_NOWAIT) ? BDP_ASYNC : 0;
+
+	if (!(iter->flags & IOMAP_WRITETHROUGH))
+		return -EINVAL;
+
+	do {
+		struct folio *folio;
+		loff_t old_size;
+		size_t offset;		/* Offset into folio */
+		u64 bytes;		/* Bytes to write to folio */
+		size_t copied;		/* Bytes copied from user */
+		u64 written;		/* Bytes have been written */
+		loff_t pos;
+		bool noretry = false;
+
+		bytes = iov_iter_count(i);
+retry:
+		offset = iter->pos & (chunk - 1);
+		bytes = min(chunk - offset, bytes);
+		status = balance_dirty_pages_ratelimited_flags(mapping,
+							       bdp_flags);
+		if (unlikely(status))
+			break;
+
+		if (bytes > iomap_length(iter))
+			bytes = iomap_length(iter);
+
+		/*
+		 * Bring in the user page that we'll copy from _first_.
+		 * Otherwise there's a nasty deadlock on copying from the
+		 * same page as we're writing to, without it being marked
+		 * up-to-date.
+		 *
+		 * For async buffered writes the assumption is that the user
+		 * page has already been faulted in. This can be optimized by
+		 * faulting the user page.
+		 */
+		if (unlikely(fault_in_iov_iter_readable(i, bytes) == bytes)) {
+			status = -EFAULT;
+			break;
+		}
+
+		status = iomap_write_begin(iter, wt_ops->write_ops, &folio,
+					   &offset, &bytes);
+		if (unlikely(status)) {
+			iomap_write_failed(iter->inode, iter->pos, bytes);
+			break;
+		}
+		if (iter->iomap.flags & IOMAP_F_STALE)
+			break;
+
+		pos = iter->pos;
+
+		if (mapping_writably_mapped(mapping))
+			flush_dcache_folio(folio);
+
+		copied = copy_folio_from_iter_atomic(folio, offset, bytes, i);
+		written = iomap_write_end(iter, bytes, copied, folio) ?
+			  copied : 0;
+
+		/*
+		 * Update the in-memory inode size after copying the data into
+		 * the page cache.  It's up to the file system to write the
+		 * updated size to disk, preferably after I/O completion so that
+		 * no stale data is exposed.  Only once that's done can we
+		 * unlock and release the folio.
+		 */
+		old_size = iter->inode->i_size;
+		if (pos + written > old_size) {
+			i_size_write(iter->inode, pos + written);
+			iter->iomap.flags |= IOMAP_F_SIZE_CHANGED;
+		}
+
+		if (!written)
+			goto put_folio;
+
+		/*
+		 * The copy-to-folio operation succeeded. Lets use the dio
+		 * machinery to send the writethrough IO.
+		 */
+		if (written) {
+			struct iomap_writethrough_ctx *wt_ctx;
+			int dio_flags = IOMAP_DIO_BUF_WRITETHROUGH;
+			struct iov_iter iov_wt;
+
+			wt_ctx = kzalloc(sizeof(struct iomap_writethrough_ctx),
+					GFP_KERNEL | GFP_NOFS);
+			if (!wt_ctx) {
+				status = -ENOMEM;
+				written = 0;
+				goto put_folio;
+			}
+
+			status = iomap_writethrough_begin(iocb, folio, iter,
+							  wt_ctx, &iov_wt,
+							  offset, written);
+			if (status < 0) {
+				if (status != -ENOMEM)
+					noretry = true;
+				written = 0;
+				kfree(wt_ctx);
+				goto put_folio;
+			}
+
+			/* Dont retry for any failures in writethrough */
+			noretry = true;
+
+			status = iomap_dio_rw(&wt_ctx->iocb, &iov_wt,
+					      wt_ops->ops, wt_ops->dio_ops,
+					      dio_flags, NULL, 0);
+
+			/*
+			 * If IO is queued, then we will do all the cleanup
+			 * during ioend so just unlock the folio.
+			 */
+			if (status == -EIOCBQUEUED)
+				goto put_folio;
+
+			/*
+			 * We either encountered an error or IO completed. In
+			 * either case, it is now safe to free up resources and
+			 * end writeback.
+			 */
+			if (status < 0)
+				written = 0;
+
+			iomap_writethrough_endio(&wt_ctx->iocb, status);
+		}
+put_folio:
+		__iomap_put_folio(iter, wt_ops->write_ops, written, folio);
+
+		if (old_size < pos)
+			pagecache_isize_extended(iter->inode, old_size, pos);
+
+		cond_resched();
+		if (unlikely(written == 0)) {
+			iomap_write_failed(iter->inode, pos, bytes);
+			iov_iter_revert(i, copied);
+
+			if (noretry)
+				break;
+			if (chunk > PAGE_SIZE)
+				chunk /= 2;
+			if (copied) {
+				bytes = copied;
+				goto retry;
+			}
+		} else {
+			total_written += written;
+			iomap_iter_advance(iter, written);
+		}
+	} while (iov_iter_count(i) && iomap_length(iter));
+
+	return total_written ? 0 : status;
+}
+
 static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
 		const struct iomap_write_ops *write_ops)
 {
@@ -1216,6 +1562,43 @@ iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *i,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(iomap_file_buffered_write);
+
+ssize_t iomap_file_writethrough_write(struct kiocb *iocb, struct iov_iter *i,
+				      const struct iomap_writethrough_ops *wt_ops,
+				      void *private)
+{
+	struct iomap_iter iter = {
+		.inode		= iocb->ki_filp->f_mapping->host,
+		.pos		= iocb->ki_pos,
+		.len		= iov_iter_count(i),
+		.flags		= IOMAP_WRITE,
+		.private	= private,
+	};
+	ssize_t ret;
+
+	/*
+	 * For now we don't support any other flag with WRITETHROUGH
+	 */
+	if (!(iocb->ki_flags & IOCB_WRITETHROUGH))
+		return -EINVAL;
+	if (iocb->ki_flags & (IOCB_NOWAIT | IOCB_DONTCACHE))
+		return -EINVAL;
+
+	iter.flags |= IOMAP_WRITETHROUGH;
+
+	while ((ret = iomap_iter(&iter, wt_ops->ops)) > 0) {
+		WARN_ON(iter.iomap.type != IOMAP_UNWRITTEN &&
+			iter.iomap.type != IOMAP_MAPPED);
+		iter.status = iomap_writethrough_iter(iocb, &iter, i, wt_ops);
+	}
+
+	if (unlikely(iter.pos == iocb->ki_pos))
+		return ret;
+	ret = iter.pos - iocb->ki_pos;
+	iocb->ki_pos = iter.pos;
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iomap_file_writethrough_write);
 
 static void iomap_write_delalloc_ifs_punch(struct inode *inode,
 		struct folio *folio, loff_t start_byte, loff_t end_byte,
