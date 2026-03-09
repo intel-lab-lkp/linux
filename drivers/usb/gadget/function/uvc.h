@@ -155,6 +155,9 @@ struct uvc_device {
 	enum uvc_state state;
 	struct usb_function func;
 	struct uvc_video video;
+	struct kref kref;
+	struct mutex lock;
+	bool func_unbound;
 	bool func_connected;
 	wait_queue_head_t func_connected_queue;
 
@@ -209,5 +212,6 @@ static inline struct uvc_file_handle *file_to_uvc_file_handle(struct file *filp)
 extern void uvc_function_setup_continue(struct uvc_device *uvc, int disable_ep);
 extern void uvc_function_connect(struct uvc_device *uvc);
 extern void uvc_function_disconnect(struct uvc_device *uvc);
+extern void uvc_device_release(struct kref *kref);
 
 #endif /* _UVC_GADGET_H_ */

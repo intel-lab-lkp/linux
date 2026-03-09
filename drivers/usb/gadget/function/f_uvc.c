@@ -413,8 +413,17 @@ uvc_function_disconnect(struct uvc_device *uvc)
 {
 	int ret;
 
+	mutex_lock(&uvc->lock);
+	if (uvc->func_unbound) {
+		pr_info("uvc: unbound, skipping function deactivate\n");
+		goto unlock;
+	}
+
 	if ((ret = usb_function_deactivate(&uvc->func)) < 0)
 		uvcg_info(&uvc->func, "UVC disconnect failed with %d\n", ret);
+
+unlock:
+	mutex_unlock(&uvc->lock);
 }
 
 /* --------------------------------------------------------------------------
@@ -659,6 +668,9 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	int ret = -EINVAL;
 
 	uvcg_info(f, "%s()\n", __func__);
+	mutex_lock(&uvc->lock);
+	uvc->func_unbound = false;
+	mutex_unlock(&uvc->lock);
 
 	opts = fi_to_f_uvc_opts(f->fi);
 	/* Sanity check the streaming endpoint module parameters. */
@@ -974,6 +986,13 @@ static struct usb_function_instance *uvc_alloc_inst(void)
 	return &opts->func_inst;
 }
 
+void uvc_device_release(struct kref *kref)
+{
+	struct uvc_device *uvc = container_of(kref, struct uvc_device, kref);
+
+	kfree(uvc);
+}
+
 static void uvc_free(struct usb_function *f)
 {
 	struct uvc_device *uvc = to_uvc(f);
@@ -982,7 +1001,7 @@ static void uvc_free(struct usb_function *f)
 	if (!opts->header)
 		config_item_put(&uvc->header->item);
 	--opts->refcnt;
-	kfree(uvc);
+	kref_put(&uvc->kref, uvc_device_release);
 }
 
 static void uvc_function_unbind(struct usb_configuration *c,
@@ -994,6 +1013,9 @@ static void uvc_function_unbind(struct usb_configuration *c,
 	long wait_ret = 1;
 
 	uvcg_info(f, "%s()\n", __func__);
+	mutex_lock(&uvc->lock);
+	uvc->func_unbound = true;
+	mutex_unlock(&uvc->lock);
 
 	kthread_cancel_work_sync(&video->hw_submit);
 
@@ -1046,8 +1068,11 @@ static struct usb_function *uvc_alloc(struct usb_function_instance *fi)
 	if (uvc == NULL)
 		return ERR_PTR(-ENOMEM);
 
+	kref_init(&uvc->kref);
+	mutex_init(&uvc->lock);
 	mutex_init(&uvc->video.mutex);
 	uvc->state = UVC_STATE_DISCONNECTED;
+	uvc->func_unbound = true;
 	init_waitqueue_head(&uvc->func_connected_queue);
 	opts = fi_to_f_uvc_opts(fi);
 
