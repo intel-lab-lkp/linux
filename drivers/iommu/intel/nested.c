@@ -131,17 +131,6 @@ out:
 	return ret;
 }
 
-static int domain_setup_nested(struct intel_iommu *iommu,
-			       struct dmar_domain *domain,
-			       struct device *dev, ioasid_t pasid,
-			       struct iommu_domain *old)
-{
-	if (old)
-		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
-
-	return intel_pasid_setup_nested(iommu, dev, pasid, domain);
-}
-
 static int intel_nested_set_dev_pasid(struct iommu_domain *domain,
 				      struct device *dev, ioasid_t pasid,
 				      struct iommu_domain *old)
@@ -170,7 +159,7 @@ static int intel_nested_set_dev_pasid(struct iommu_domain *domain,
 	if (ret)
 		goto out_remove_dev_pasid;
 
-	ret = domain_setup_nested(iommu, dmar_domain, dev, pasid, old);
+	ret = intel_pasid_setup_nested(iommu, dev, pasid, dmar_domain);
 	if (ret)
 		goto out_unwind_iopf;
 

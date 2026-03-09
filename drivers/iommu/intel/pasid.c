@@ -754,11 +754,7 @@ static void pasid_pte_config_nestd(struct intel_iommu *iommu,
 {
 	struct pt_iommu_vtdss_hw_info pt_info;
 
-	lockdep_assert_held(&iommu->lock);
-
 	pt_iommu_vtdss_hw_info(&s2_domain->sspt, &pt_info);
-
-	pasid_clear_entry(pte);
 
 	if (s1_cfg->addr_width == ADDR_WIDTH_5LEVEL)
 		pasid_set_flpm(pte, 1);
@@ -806,7 +802,9 @@ int intel_pasid_setup_nested(struct intel_iommu *iommu, struct device *dev,
 	struct iommu_hwpt_vtd_s1 *s1_cfg = &domain->s1_cfg;
 	struct dmar_domain *s2_domain = domain->s2_domain;
 	u16 did = domain_id_iommu(domain, iommu);
-	struct pasid_entry *pte;
+	struct pasid_entry new_pte = {0};
+
+	iommu_group_mutex_assert(dev);
 
 	/* Address width should match the address width supported by hardware */
 	switch (s1_cfg->addr_width) {
@@ -837,23 +835,8 @@ int intel_pasid_setup_nested(struct intel_iommu *iommu, struct device *dev,
 		return -EINVAL;
 	}
 
-	spin_lock(&iommu->lock);
-	pte = intel_pasid_get_entry(dev, pasid);
-	if (!pte) {
-		spin_unlock(&iommu->lock);
-		return -ENODEV;
-	}
-	if (pasid_pte_is_present(pte)) {
-		spin_unlock(&iommu->lock);
-		return -EBUSY;
-	}
-
-	pasid_pte_config_nestd(iommu, pte, s1_cfg, s2_domain, did);
-	spin_unlock(&iommu->lock);
-
-	pasid_flush_caches(iommu, pte, pasid, did);
-
-	return 0;
+	pasid_pte_config_nestd(iommu, &new_pte, s1_cfg, s2_domain, did);
+	return intel_pasid_write(iommu, dev, pasid, (u128 *)&new_pte);
 }
 
 /*
