@@ -20,6 +20,7 @@
 #include "irq-riscv-aplic-main.h"
 
 static LIST_HEAD(aplics);
+static bool aplic_global_setup_done __ro_after_init;
 
 static void aplic_restore_states(struct aplic_priv *priv)
 {
@@ -375,8 +376,10 @@ static int aplic_probe(struct platform_device *pdev)
 	if (rc)
 		dev_err_probe(dev, rc, "failed to setup APLIC in %s mode\n",
 			      msi_mode ? "MSI" : "direct");
-	else
+	else if (!aplic_global_setup_done) {
 		register_syscore(&aplic_syscore);
+		aplic_global_setup_done = true;
+	}
 
 #ifdef CONFIG_ACPI
 	if (!acpi_disabled)
