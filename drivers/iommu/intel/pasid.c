@@ -590,10 +590,7 @@ static void pasid_pte_config_second_level(struct intel_iommu *iommu,
 {
 	struct pt_iommu_vtdss_hw_info pt_info;
 
-	lockdep_assert_held(&iommu->lock);
-
 	pt_iommu_vtdss_hw_info(&domain->sspt, &pt_info);
-	pasid_clear_entry(pte);
 	pasid_set_domain_id(pte, did);
 	pasid_set_slptr(pte, pt_info.ssptptr);
 	pasid_set_address_width(pte, pt_info.aw);
@@ -611,9 +608,10 @@ int intel_pasid_setup_second_level(struct intel_iommu *iommu,
 				   struct dmar_domain *domain,
 				   struct device *dev, u32 pasid)
 {
-	struct pasid_entry *pte;
+	struct pasid_entry new_pte = {0};
 	u16 did;
 
+	iommu_group_mutex_assert(dev);
 
 	/*
 	 * If hardware advertises no support for second level
@@ -626,25 +624,9 @@ int intel_pasid_setup_second_level(struct intel_iommu *iommu,
 	}
 
 	did = domain_id_iommu(domain, iommu);
+	pasid_pte_config_second_level(iommu, &new_pte, domain, did);
 
-	spin_lock(&iommu->lock);
-	pte = intel_pasid_get_entry(dev, pasid);
-	if (!pte) {
-		spin_unlock(&iommu->lock);
-		return -ENODEV;
-	}
-
-	if (pasid_pte_is_present(pte)) {
-		spin_unlock(&iommu->lock);
-		return -EBUSY;
-	}
-
-	pasid_pte_config_second_level(iommu, pte, domain, did);
-	spin_unlock(&iommu->lock);
-
-	pasid_flush_caches(iommu, pte, pasid, did);
-
-	return 0;
+	return intel_pasid_write(iommu, dev, pasid, (u128 *)&new_pte);
 }
 
 /*

@@ -1248,17 +1248,6 @@ static void domain_context_clear_one(struct device_domain_info *info, u8 bus, u8
 	__iommu_flush_cache(iommu, context, sizeof(*context));
 }
 
-static int domain_setup_second_level(struct intel_iommu *iommu,
-				     struct dmar_domain *domain,
-				     struct device *dev, ioasid_t pasid,
-				     struct iommu_domain *old)
-{
-	if (old)
-		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
-
-	return intel_pasid_setup_second_level(iommu, domain, dev, pasid);
-}
-
 static int domain_setup_passthrough(struct intel_iommu *iommu,
 				    struct device *dev, ioasid_t pasid,
 				    struct iommu_domain *old)
@@ -1323,8 +1312,8 @@ static int dmar_domain_attach_device(struct dmar_domain *domain,
 		ret = domain_setup_first_level(iommu, domain, dev,
 					       IOMMU_NO_PASID, NULL);
 	else if (intel_domain_is_ss_paging(domain))
-		ret = domain_setup_second_level(iommu, domain, dev,
-						IOMMU_NO_PASID, NULL);
+		ret = intel_pasid_setup_second_level(iommu, domain,
+						     dev, IOMMU_NO_PASID);
 	else if (WARN_ON(true))
 		ret = -EINVAL;
 
@@ -3634,8 +3623,8 @@ static int intel_iommu_set_dev_pasid(struct iommu_domain *domain,
 		ret = domain_setup_first_level(iommu, dmar_domain,
 					       dev, pasid, old);
 	else if (intel_domain_is_ss_paging(dmar_domain))
-		ret = domain_setup_second_level(iommu, dmar_domain,
-						dev, pasid, old);
+		ret = intel_pasid_setup_second_level(iommu, dmar_domain,
+						     dev, pasid);
 	else if (WARN_ON(true))
 		ret = -EINVAL;
 
