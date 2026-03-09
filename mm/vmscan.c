@@ -1240,6 +1240,48 @@ keepit:
 	VM_BUG_ON_FOLIO(folio_test_lru(folio) ||
 			folio_test_unevictable(folio), folio);
 }
+
+static void pageout_batch(struct folio_batch *fbatch,
+			  struct list_head *ret_folios,
+			  struct folio_batch *free_folios,
+			  struct scan_control *sc, struct reclaim_stat *stat,
+			  struct swap_iocb **plug, struct list_head *folio_list)
+{
+	int i = 0, count = folio_batch_count(fbatch);
+	struct folio *folio;
+
+	folio_batch_reinit(fbatch);
+	do {
+		folio = fbatch->folios[i];
+		if (!folio_trylock(folio)) {
+			list_add(&folio->lru, ret_folios);
+			continue;
+		}
+
+		if (folio_test_writeback(folio) || folio_test_lru(folio) ||
+		    folio_mapped(folio))
+			goto next;
+		folio_batch_add(fbatch, folio);
+		continue;
+next:
+		folio_unlock(folio);
+		list_add(&folio->lru, ret_folios);
+	} while (++i != count);
+
+	i = 0;
+	count = folio_batch_count(fbatch);
+	if (!count)
+		return;
+	/* One TLB flush for the batch */
+	try_to_unmap_flush_dirty();
+	do {
+		folio = fbatch->folios[i];
+		pageout_one(folio, ret_folios, free_folios, sc, stat, plug,
+			    folio_list);
+	} while (++i != count);
+	folio_batch_reinit(fbatch);
+}
+
 /*
  * Reclaimed folios are counted in stat->nr_reclaimed.
  */
@@ -1249,6 +1291,8 @@ static void shrink_folio_list(struct list_head *folio_list,
 		struct mem_cgroup *memcg)
 {
 	struct folio_batch free_folios;
+	struct folio_batch flush_folios;
+
 	LIST_HEAD(ret_folios);
 	LIST_HEAD(demote_folios);
 	unsigned int nr_demoted = 0;
@@ -1257,6 +1301,8 @@ static void shrink_folio_list(struct list_head *folio_list,
 	struct swap_iocb *plug = NULL;
 
 	folio_batch_init(&free_folios);
+	folio_batch_init(&flush_folios);
+
 	memset(stat, 0, sizeof(*stat));
 	cond_resched();
 	do_demote_pass = can_demote(pgdat->node_id, sc, memcg);
@@ -1578,15 +1624,19 @@ retry:
 				goto keep_locked;
 			if (!sc->may_writepage)
 				goto keep_locked;
-
 			/*
-			 * Folio is dirty. Flush the TLB if a writable entry
-			 * potentially exists to avoid CPU writes after I/O
-			 * starts and then write it out here.
+			 * For anon, we should only see swap cache (anon) and
+			 * the list pinning the page. For file page, the filemap
+			 * and the list pins it. Combined with the page_ref_freeze
+			 * in pageout_batch ensure nothing else touches the page
+			 * during lock unlocked.
 			 */
-			try_to_unmap_flush_dirty();
-			pageout_one(folio, &ret_folios, &free_folios, sc, stat,
-				&plug, folio_list);
+			folio_unlock(folio);
+			if (!folio_batch_add(&flush_folios, folio))
+				pageout_batch(&flush_folios,
+							&ret_folios, &free_folios,
+							sc, stat, &plug,
+							folio_list);
 			goto next;
 		}
 
@@ -1613,6 +1663,10 @@ keep:
 				folio_test_unevictable(folio), folio);
 next:
 		continue;
+	}
+	if (folio_batch_count(&flush_folios)) {
+		pageout_batch(&flush_folios, &ret_folios, &free_folios, sc,
+			      stat, &plug, folio_list);
 	}
 	/* 'folio_list' is always empty here */
 
