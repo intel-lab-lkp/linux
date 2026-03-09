@@ -2332,4 +2332,6 @@ enum nvme_pr_change_ptpl {
 
 #define NVME_PR_IGNORE_KEY (1 << 3)
 
+#define DH_GID_LIST_OFFSET 30
+
 #endif /* _LINUX_NVME_H */
