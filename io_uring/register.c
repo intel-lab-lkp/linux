@@ -577,6 +577,14 @@ static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 	 */
 	mutex_lock(&ctx->mmap_lock);
 	spin_lock(&ctx->completion_lock);
+	/*
+	 * Disable IRQs to prevent any IRQ/bottom half execution from triggering
+	 * task work additions that attempt to access ctx->rings to set the
+	 * IORING_SQ_TASKRUN flag. This prevents NULL pointer dereference when
+	 * ctx->rings is temporarily NULL during the ring resize.
+	 */
+	local_irq_disable();
+
 	o.rings = ctx->rings;
 	ctx->rings = NULL;
 	o.sq_sqes = ctx->sq_sqes;
@@ -640,6 +648,7 @@ overflow:
 	to_free = &o;
 	ret = 0;
 out:
+	local_irq_enable();
 	spin_unlock(&ctx->completion_lock);
 	mutex_unlock(&ctx->mmap_lock);
 	io_register_free_rings(ctx, to_free);
