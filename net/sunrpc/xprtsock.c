@@ -1362,6 +1362,10 @@ static void xs_destroy(struct rpc_xprt *xprt)
 	dprintk("RPC:       xs_destroy xprt %p\n", xprt);
 
 	cancel_delayed_work_sync(&transport->connect_worker);
+	if (transport->clnt != NULL) {
+		rpc_release_client(transport->clnt);
+		transport->clnt = NULL;
+	}
 	xs_close(xprt);
 	cancel_work_sync(&transport->recv_worker);
 	cancel_work_sync(&transport->error_worker);
@@ -2758,6 +2762,8 @@ static void xs_tcp_tls_setup_socket(struct work_struct *work)
 out_unlock:
 	current_restore_flags(pflags, PF_MEMALLOC);
 	upper_transport->clnt = NULL;
+	if (upper_clnt != NULL)
+		rpc_release_client(upper_clnt);
 	xprt_unlock_connect(upper_xprt, upper_transport);
 	return;
 
@@ -2805,7 +2811,11 @@ static void xs_connect(struct rpc_xprt *xprt, struct rpc_task *task)
 	} else
 		dprintk("RPC:       xs_connect scheduled xprt %p\n", xprt);
 
-	transport->clnt = task->tk_client;
+	if (transport->connect_worker.work.func == xs_tcp_tls_setup_socket) {
+		WARN_ON_ONCE(transport->clnt != NULL);
+		refcount_inc(&task->tk_client->cl_count);
+		transport->clnt = task->tk_client;
+	}
 	queue_delayed_work(xprtiod_workqueue,
 			&transport->connect_worker,
 			delay);
