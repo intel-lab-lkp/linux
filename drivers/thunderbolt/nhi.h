@@ -29,6 +29,9 @@ enum nhi_mailbox_cmd {
 
 int nhi_mailbox_cmd(struct tb_nhi *nhi, enum nhi_mailbox_cmd cmd, u32 data);
 enum nhi_fw_mode nhi_mailbox_mode(struct tb_nhi *nhi);
+bool tb_apple_add_links(struct tb_nhi *nhi);
+void nhi_pci_start_dma_port(struct tb_nhi *nhi);
+void nhi_pci_complete_dma_port(struct tb_nhi *nhi);
 
 /**
  * struct tb_nhi_ops - NHI specific optional operations
@@ -38,6 +41,10 @@ enum nhi_fw_mode nhi_mailbox_mode(struct tb_nhi *nhi);
  * @runtime_suspend: NHI specific runtime_suspend hook
  * @runtime_resume: NHI specific runtime_resume hook
  * @shutdown: NHI specific shutdown
+ * @pre_nvm_auth: hook to run before TBT3 NVM authentication
+ * @post_nvm_auth: hook to run after TBT3 NVM authentication
+ * @request_ring_irq: NHI specific interrupt retrieval function pointer
+ * @release_ring_irq: NHI specific interrupt release function pointer
  */
 struct tb_nhi_ops {
 	int (*init)(struct tb_nhi *nhi);
@@ -46,6 +53,10 @@ struct tb_nhi_ops {
 	int (*runtime_suspend)(struct tb_nhi *nhi);
 	int (*runtime_resume)(struct tb_nhi *nhi);
 	void (*shutdown)(struct tb_nhi *nhi);
+	void (*pre_nvm_auth)(struct tb_nhi *nhi);
+	void (*post_nvm_auth)(struct tb_nhi *nhi);
+	int (*request_ring_irq)(struct tb_ring *ring, bool no_suspend);
+	void (*release_ring_irq)(struct tb_ring *ring);
 };
 
 extern const struct tb_nhi_ops icl_nhi_ops;
