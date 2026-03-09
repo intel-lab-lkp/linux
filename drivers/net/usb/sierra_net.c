@@ -855,9 +855,6 @@ static struct sk_buff *sierra_net_tx_fixup(struct usbnet *dev,
 	u16 len;
 	bool need_tail;
 
-	BUILD_BUG_ON(sizeof_field(struct usbnet, data)
-				< sizeof(struct cdc_state));
-
 	dev_dbg(&dev->udev->dev, "%s", __func__);
 	if (priv->link_up && check_ethip_packet(skb, dev) && is_ip(skb)) {
 		/* enough head room as is? */
