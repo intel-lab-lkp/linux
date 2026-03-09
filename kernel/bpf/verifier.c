@@ -7027,7 +7027,7 @@ static void coerce_reg_to_size_sx(struct bpf_reg_state *reg, int size)
 	if (top_smax_value != top_smin_value)
 		goto out;
 
-	/* find the s64_min and s64_min after sign extension */
+	/* find the s64_max and s64_min after sign extension */
 	if (size == 1) {
 		init_s64_max = (s8)reg->smax_value;
 		init_s64_min = (s8)reg->smin_value;
@@ -7096,7 +7096,7 @@ static void coerce_subreg_to_size_sx(struct bpf_reg_state *reg, int size)
 	if (top_smax_value != top_smin_value)
 		goto out;
 
-	/* find the s32_min and s32_min after sign extension */
+	/* find the s32_max and s32_min after sign extension */
 	if (size == 1) {
 		init_s32_max = (s8)reg->s32_max_value;
 		init_s32_min = (s8)reg->s32_min_value;
