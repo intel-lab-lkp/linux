@@ -126,6 +126,8 @@ ssize_t iomap_dio_complete(struct iomap_dio *dio)
 		kiocb_invalidate_post_direct_write(iocb, dio->size);
 
 	inode_dio_end(file_inode(iocb->ki_filp));
+	if (dio->flags & IOMAP_DIO_BUF_WRITETHROUGH)
+		inode_writethrough_end(file_inode(iocb->ki_filp));
 
 	if (ret > 0) {
 		iocb->ki_pos += ret;

@@ -615,6 +615,8 @@ struct iomap_writethrough_ops {
 ssize_t iomap_file_writethrough_write(struct kiocb *iocb, struct iov_iter *i,
 				      const struct iomap_writethrough_ops *wt_ops,
 				      void *private);
+inline void inode_writethrough_begin(struct inode *inode);
+inline void inode_writethrough_end(struct inode *inode);
 
 #ifdef CONFIG_SWAP
 struct file;

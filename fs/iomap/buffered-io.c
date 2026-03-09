@@ -1140,11 +1140,41 @@ static bool iomap_writethrough_checks(struct kiocb *iocb, size_t off, loff_t len
 	return true;
 }
 
+/**
+ * inode_writethrough_begin - signal start of a RWF_WRITETHROUGH request
+ * @inode: inode the writethrough happens on
+ *
+ * This is called when we are about to start a writethrough on an inode.
+ * If it is the first writethrough, set the mapping as stable to ensure
+ * other folio operations wait for writeback to finish.
+ *
+ * To avoid a race, just set the mapping stable first and then increment
+ * writethrough count, so that the stable writes are enforced as soon as
+ * writethrough count becomes non zero.
+ */
+inline void inode_writethrough_begin(struct inode *inode)
+{
+	mapping_set_stable_writes(inode->i_mapping);
+	atomic_inc(&inode->i_mapping->i_wt_count);
+}
+
+/**
+ * inode_writethrough_end - signal finish of a RWF_WRITETHROUGH request
+ * @inode: inode the writethrough I/O happened on
+ *
+ * This is called once we've finished processing a writethrough request
+ */
+inline void inode_writethrough_end(struct inode *inode)
+{
+	if (atomic_dec_and_test(&inode->i_mapping->i_wt_count))
+		mapping_clear_stable_writes(inode->i_mapping);
+}
+
 /*
  * With writethrough, we might potentially be writing through a partial
  * folio hence we don't clear the dirty bit (yet)
  */
-static void folio_prepare_writethrough(struct folio *folio)
+static void folio_prepare_writethrough(struct inode *inode, struct folio *folio)
 {
 	if (folio_test_writeback(folio))
 		folio_wait_writeback(folio);
@@ -1157,6 +1187,7 @@ static void folio_prepare_writethrough(struct folio *folio)
 		/* Refer folio_clear_dirty_for_io() for why this is needed */
 		folio_mark_dirty(folio);
 
+	inode_writethrough_begin(inode);
 }
 
 /**
@@ -1193,7 +1224,7 @@ static int iomap_writethrough_begin(struct kiocb *iocb, struct folio *folio,
 	bool fully_written;
 	u64 zero = 0;
 
-	folio_prepare_writethrough(folio);
+	folio_prepare_writethrough(iter->inode, folio);
 
 	wt_ctx->bvec = kmalloc(sizeof(struct bio_vec), GFP_KERNEL | GFP_NOFS);
 	if (!wt_ctx->bvec)
