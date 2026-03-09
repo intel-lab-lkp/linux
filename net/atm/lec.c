@@ -131,6 +131,7 @@ static void lec_handle_bridge(struct sk_buff *skb, struct net_device *dev)
 {
 	char *buff;
 	struct lec_priv *priv;
+	unsigned long flags;
 
 	/*
 	 * Check if this is a BPDU. If so, ask zeppelin to send
@@ -154,10 +155,19 @@ static void lec_handle_bridge(struct sk_buff *skb, struct net_device *dev)
 					/* 0x01 is topology change */
 
 		priv = netdev_priv(dev);
-		atm_force_charge(priv->lecd, skb2->truesize);
+		spin_lock_irqsave(&priv->lec_arp_lock, flags);
+		if (!priv->lecd) {
+			spin_unlock_irqrestore(&priv->lec_arp_lock, flags);
+			kfree_skb(skb2);
+			return;
+		}
 		sk = sk_atm(priv->lecd);
+		sock_hold(sk);
+		spin_unlock_irqrestore(&priv->lec_arp_lock, flags);
+		atm_force_charge(priv->lecd, skb2->truesize);
 		skb_queue_tail(&sk->sk_receive_queue, skb2);
 		sk->sk_data_ready(sk);
+		sock_put(sk);
 	}
 }
 #endif /* IS_ENABLED(CONFIG_BRIDGE) */
@@ -441,7 +451,7 @@ static int lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
 			/* hit from bridge table, send LE_ARP_RESPONSE */
 			struct sk_buff *skb2;
 			struct sock *sk;
-
+			unsigned long flags;
 			pr_debug("%s: entry found, responding to zeppelin\n",
 				 dev->name);
 			skb2 = alloc_skb(sizeof(struct atmlec_msg), GFP_ATOMIC);
@@ -449,10 +459,19 @@ static int lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
 				break;
 			skb2->len = sizeof(struct atmlec_msg);
 			skb_copy_to_linear_data(skb2, mesg, sizeof(*mesg));
-			atm_force_charge(priv->lecd, skb2->truesize);
+			spin_lock_irqsave(&priv->lec_arp_lock, flags);
+			if (!priv->lecd) {
+				spin_unlock_irqrestore(&priv->lec_arp_lock, flags);
+				kfree_skb(skb2);
+				break;
+			}
 			sk = sk_atm(priv->lecd);
+			sock_hold(sk);
+			spin_unlock_irqrestore(&priv->lec_arp_lock, flags);
+			atm_force_charge(priv->lecd, skb2->truesize);
 			skb_queue_tail(&sk->sk_receive_queue, skb2);
 			sk->sk_data_ready(sk);
+			sock_put(sk);
 		}
 	}
 #endif /* IS_ENABLED(CONFIG_BRIDGE) */
@@ -471,8 +490,11 @@ static void lec_atm_close(struct atm_vcc *vcc)
 	struct sk_buff *skb;
 	struct net_device *dev = (struct net_device *)vcc->proto_data;
 	struct lec_priv *priv = netdev_priv(dev);
+	unsigned long flags;
 
+	spin_lock_irqsave(&priv->lec_arp_lock, flags);
 	priv->lecd = NULL;
+	spin_unlock_irqrestore(&priv->lec_arp_lock, flags);
 	/* Do something needful? */
 
 	netif_stop_queue(dev);
@@ -534,6 +556,7 @@ send_to_lecd(struct lec_priv *priv, atmlec_msg_type type,
 
 	atm_force_charge(priv->lecd, skb->truesize);
 	sk = sk_atm(priv->lecd);
+	sock_hold(sk);
 	skb_queue_tail(&sk->sk_receive_queue, skb);
 	sk->sk_data_ready(sk);
 
@@ -543,7 +566,7 @@ send_to_lecd(struct lec_priv *priv, atmlec_msg_type type,
 		skb_queue_tail(&sk->sk_receive_queue, data);
 		sk->sk_data_ready(sk);
 	}
-
+	sock_put(sk);
 	return 0;
 }
 
