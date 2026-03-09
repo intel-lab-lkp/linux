@@ -5896,7 +5896,10 @@ sub process {
 #(ie: max_uV, regulator_min_uA_show, RANGE_mA_VALUE)
 			    $var !~ /^(?:[a-z0-9_]*|[A-Z0-9_]*)?_?[a-z][A-Z](?:_[a-z0-9_]+|_[A-Z0-9_]+)?$/ &&
 #Ignore some three character SI units explicitly, like MiB and KHz
-			    $var !~ /^(?:[a-z_]*?)_?(?:[KMGT]iB|[KMGT]?Hz)(?:_[a-z_]+)?$/) {
+			    $var !~ /^(?:[a-z_]*?)_?(?:[KMGT]iB|[KMGT]?Hz)(?:_[a-z_]+)?$/ &&
+#Ignore memory attribute macros that end with nGnRnE, nGnRE, or nGRE
+#(ie: PROT_DEVICE_<foo>, FFA_DEV_<foo> MT_S2_DEVICE_<foo> ...)
+			    $var !~/^[A-Z0-9_]+_(?:nGnRnE|nGnRE|nGRE)$/) {
 				while ($var =~ m{\b($Ident)}g) {
 					my $word = $1;
 					next if ($word !~ /[A-Z][a-z]|[a-z][A-Z]/);
