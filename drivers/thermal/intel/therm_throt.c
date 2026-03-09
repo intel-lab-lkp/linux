@@ -14,6 +14,7 @@
  * Credits: Adapted from Zwane Mwaikambo's original code in mce_intel.c.
  *          Inspired by Ross Biro's and Al Borchers' counter code.
  */
+#include <linux/syscore_ops.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 #include <linux/jiffies.h>
@@ -730,6 +731,32 @@ static int thermal_throttle_offline(unsigned int cpu)
 	return 0;
 }
 
+static void directed_pkg_intr_syscore_resume(void *data)
+{
+	/* We resume from the suspend on CPU0. */
+	enable_directed_thermal_pkg_intr(0);
+}
+
+static int directed_pkg_intr_syscore_suspend(void *data)
+{
+	/*
+	 * We suspend from CPU0. The interrupt will not be redirected since all
+	 * CPUs in the package are offline at this point.
+	 */
+	disable_directed_thermal_pkg_intr(0);
+
+	return 0;
+}
+
+static struct syscore_ops directed_pkg_intr_pm_ops = {
+	.resume = directed_pkg_intr_syscore_resume,
+	.suspend = directed_pkg_intr_syscore_suspend,
+};
+
+static struct syscore directed_pkg_intr_pm = {
+	.ops = &directed_pkg_intr_pm_ops,
+};
+
 static __init void init_directed_pkg_intr(void)
 {
 	int i;
@@ -745,6 +772,8 @@ static __init void init_directed_pkg_intr(void)
 
 	for (i = 0; i < topology_max_packages(); i++)
 		directed_intr_handler_cpus[i] = nr_cpu_ids;
+
+	register_syscore(&directed_pkg_intr_pm);
 }
 
 static __init int thermal_throttle_init_device(void)
