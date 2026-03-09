@@ -1280,8 +1280,11 @@ static int tcp_server(const char *cgroup, void *arg)
 	saddr.sin6_port = htons(srv_args->port);
 
 	sk = socket(AF_INET6, SOCK_STREAM, 0);
-	if (sk < 0)
+	if (sk < 0) {
+		/* Pass back errno to the ctl_fd */
+		write(ctl_fd, &errno, sizeof(errno));
 		return ret;
+	}
 
 	if (setsockopt(sk, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0)
 		goto cleanup;
@@ -1414,6 +1417,9 @@ static int test_memcg_sock(const char *root)
 
 		if (!err)
 			break;
+		if (err == EAFNOSUPPORT)
+			/* Skip if address family not supported by protocol */
+			goto skip;
 		if (err != EADDRINUSE)
 			goto cleanup;
 
@@ -1460,6 +1466,9 @@ cleanup:
 	free(memcg);
 
 	return ret;
+skip:
+	ret = KSFT_SKIP;
+	goto cleanup;
 }
 
 /*
