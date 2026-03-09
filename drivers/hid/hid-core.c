@@ -2490,8 +2490,17 @@ int __hid_hw_raw_request(struct hid_device *hdev,
 	if (ret)
 		return ret;
 
-	return hdev->ll_driver->raw_request(hdev, reportnum, buf, len,
-					    rtype, reqtype);
+	ret = hdev->ll_driver->raw_request(hdev, reportnum, buf, len,
+					   rtype, reqtype);
+	if (ret)
+		return ret;
+
+	if (reportnum != buf[0]) {
+		hid_err(hdev, "Returned feature report did not match the request\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 /**
