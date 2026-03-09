@@ -16,6 +16,7 @@
 #include "cgx.h"
 #include "lmac_common.h"
 #include "rvu_npc_hash.h"
+#include "cn20k/npc.h"
 
 static void nix_free_tx_vtag_entries(struct rvu *rvu, u16 pcifunc);
 static int rvu_nix_get_bpid(struct rvu *rvu, struct nix_bp_cfg_req *req,
@@ -1684,10 +1685,16 @@ int rvu_mbox_handler_nix_lf_alloc(struct rvu *rvu,
 	if (is_sdp_pfvf(rvu, pcifunc))
 		intf = NIX_INTF_TYPE_SDP;
 
+	if (is_cn20k(rvu->pdev)) {
+		rc = npc_cn20k_dft_rules_alloc(rvu, pcifunc);
+		if (rc)
+			goto free_mem;
+	}
+
 	err = nix_interface_init(rvu, pcifunc, intf, nixlf, rsp,
 				 !!(req->flags & NIX_LF_LBK_BLK_SEL));
 	if (err)
-		goto free_mem;
+		goto free_dft;
 
 	/* Disable NPC entries as NIXLF's contexts are not initialized yet */
 	rvu_npc_disable_default_entries(rvu, pcifunc, nixlf);
@@ -1698,6 +1705,10 @@ int rvu_mbox_handler_nix_lf_alloc(struct rvu *rvu,
 		    VTAGSIZE_T4 | VTAG_STRIP);
 
 	goto exit;
+
+free_dft:
+	if (is_cn20k(rvu->pdev))
+		npc_cn20k_dft_rules_free(rvu, pcifunc);
 
 free_mem:
 	nix_ctx_free(rvu, pfvf);
@@ -1774,6 +1785,9 @@ free_lf:
 	}
 
 	nix_ctx_free(rvu, pfvf);
+
+	if (is_cn20k(rvu->pdev) && !(req->flags & NIX_LF_DONT_FREE_DFT_IDXS))
+		npc_cn20k_dft_rules_free(rvu, pcifunc);
 
 	return 0;
 }
