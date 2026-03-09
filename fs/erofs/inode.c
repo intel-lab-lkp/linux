@@ -254,7 +254,8 @@ static int erofs_fill_inode(struct inode *inode)
 		return 0;
 	}
 
-	mapping_set_large_folios(inode->i_mapping);
+	if (!test_opt(&EROFS_SB(inode->i_sb)->opt, NO_LARGE_FOLIO))
+		mapping_set_large_folios(inode->i_mapping);
 	aops = erofs_get_aops(inode, false);
 	if (IS_ERR(aops))
 		return PTR_ERR(aops);

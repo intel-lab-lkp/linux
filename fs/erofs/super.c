@@ -390,7 +390,7 @@ static void erofs_default_options(struct erofs_sb_info *sbi)
 enum {
 	Opt_user_xattr, Opt_acl, Opt_cache_strategy, Opt_dax, Opt_dax_enum,
 	Opt_device, Opt_fsid, Opt_domain_id, Opt_directio, Opt_fsoffset,
-	Opt_inode_share,
+	Opt_inode_share, Opt_nolargefolio,
 };
 
 static const struct constant_table erofs_param_cache_strategy[] = {
@@ -419,6 +419,7 @@ static const struct fs_parameter_spec erofs_fs_parameters[] = {
 	fsparam_flag_no("directio",	Opt_directio),
 	fsparam_u64("fsoffset",		Opt_fsoffset),
 	fsparam_flag("inode_share",	Opt_inode_share),
+	fsparam_flag("nolargefolio",	Opt_nolargefolio),
 	{}
 };
 
@@ -540,6 +541,9 @@ static int erofs_fc_parse_param(struct fs_context *fc,
 			errorfc(fc, "%s option not supported", erofs_fs_parameters[opt].name);
 		else
 			set_opt(&sbi->opt, INODE_SHARE);
+		break;
+	case Opt_nolargefolio:
+		set_opt(&sbi->opt, NO_LARGE_FOLIO);
 		break;
 	}
 	return 0;
@@ -1105,6 +1109,8 @@ static int erofs_show_options(struct seq_file *seq, struct dentry *root)
 		seq_printf(seq, ",fsoffset=%llu", sbi->dif0.fsoff);
 	if (test_opt(opt, INODE_SHARE))
 		seq_puts(seq, ",inode_share");
+	if (test_opt(opt, NO_LARGE_FOLIO))
+		seq_puts(seq, ",nolargefolio");
 	return 0;
 }
 

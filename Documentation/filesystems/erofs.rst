@@ -137,6 +137,7 @@ fsoffset=%llu          Specify block-aligned filesystem offset for the primary d
 inode_share            Enable inode page sharing for this filesystem.  Inodes with
                        identical content within the same domain ID can share the
                        page cache.
+nolargefolio           Disable large folio support for all files.
 ===================    =========================================================
 
 Sysfs Entries
