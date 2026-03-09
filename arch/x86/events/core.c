@@ -1655,6 +1655,9 @@ static void x86_pmu_del(struct perf_event *event, int flags)
 	if (cpuc->txn_flags & PERF_PMU_TXN_ADD)
 		goto do_del;
 
+	if (event->hw.idx < 0)
+		goto remove_from_list;
+
 	__set_bit(event->hw.idx, cpuc->dirty);
 
 	/*
@@ -1662,6 +1665,8 @@ static void x86_pmu_del(struct perf_event *event, int flags)
 	 */
 	x86_pmu_stop(event, PERF_EF_UPDATE);
 	cpuc->events[event->hw.idx] = NULL;
+
+remove_from_list:
 
 	for (i = 0; i < cpuc->n_events; i++) {
 		if (event == cpuc->event_list[i])
