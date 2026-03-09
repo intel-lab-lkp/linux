@@ -4290,9 +4290,11 @@ static int bond_open(struct net_device *bond_dev)
 	struct slave *slave;
 
 	if (BOND_MODE(bond) == BOND_MODE_ROUNDROBIN && !bond->rr_tx_counter) {
-		bond->rr_tx_counter = alloc_percpu(u32);
-		if (!bond->rr_tx_counter)
+		u32 __percpu *rr_tx_tmp = alloc_percpu(u32);
+
+		if (!rr_tx_tmp)
 			return -ENOMEM;
+		WRITE_ONCE(bond->rr_tx_counter, rr_tx_tmp);
 	}
 
 	/* reset slave->backup and slave->inactive */
@@ -4882,6 +4884,9 @@ static u32 bond_rr_gen_slave_id(struct bonding *bond)
 	u32 slave_id;
 	struct reciprocal_value reciprocal_packets_per_slave;
 	int packets_per_slave = bond->params.packets_per_slave;
+
+	if (unlikely(!READ_ONCE(bond->rr_tx_counter)))
+		return get_random_u32();
 
 	switch (packets_per_slave) {
 	case 0:
