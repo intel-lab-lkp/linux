@@ -9393,6 +9393,15 @@ int snd_scarlett2_init(struct usb_mixer_interface *mixer)
 		return 0;
 	}
 
+	if (get_iface_desc(mixer->hostif)->bNumEndpoints == 0) {
+		usb_audio_err(chip,
+			"%s: There are no endpoints for %04x:%04x\n",
+			__func__,
+			USB_ID_VENDOR(chip->usb_id),
+			USB_ID_PRODUCT(chip->usb_id));
+		return 0;
+	}
+
 	usb_audio_info(chip,
 		"Focusrite %s Mixer Driver enabled (pid=0x%04x); "
 		"report any issues to "
