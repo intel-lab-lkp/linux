@@ -44,3 +44,17 @@ config AMD_ISP_PLATFORM
 
 	  This driver can also be built as a module. If so, the module
 	  will be called amd_isp4.
+
+config AMD_DPTC
+	tristate "AMD Dynamic Power and Thermal Configuration Interface (DPTCi)"
+	depends on X86_64 && ACPI && DMI
+	select FIRMWARE_ATTRIBUTES_CLASS
+	help
+	  Driver for AMD AGESA ALIB Function 0x0C, the Dynamic Power and
+	  Thermal Configuration Interface (DPTCi). Exposes TDP and thermal
+	  parameters for AMD APU-based handheld devices via the
+	  firmware-attributes sysfs ABI, allowing userspace tools to stage
+	  and atomically commit power limit settings. Requires a DMI match
+	  for the device and a recognized AMD SoC.
+
+	  If built as a module, the module will be called amd_dptc.

@@ -1103,6 +1103,12 @@ S:	Supported
 F:	drivers/gpu/drm/amd/display/dc/dml/
 F:	drivers/gpu/drm/amd/display/dc/dml2_0/
 
+AMD DPTC DRIVER
+M:	Antheas Kapenekakis <lkml@antheas.dev>
+L:	platform-driver-x86@vger.kernel.org
+S:	Maintained
+F:	drivers/platform/x86/amd/dptc.c
+
 AMD FAM15H PROCESSOR POWER MONITORING DRIVER
 M:	Huang Rui <ray.huang@amd.com>
 L:	linux-hwmon@vger.kernel.org
