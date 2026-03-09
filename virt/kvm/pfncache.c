@@ -60,8 +60,16 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 static bool kvm_gpc_is_valid_len(gpa_t gpa, unsigned long uhva,
 				 unsigned long len)
 {
-	unsigned long offset = kvm_is_error_gpa(gpa) ? offset_in_page(uhva) :
-						       offset_in_page(gpa);
+	unsigned long offset;
+
+	if (kvm_is_error_gpa(gpa)) {
+		if (kvm_is_error_hva(uhva))
+			return false;
+
+		offset = offset_in_page(uhva);
+	} else {
+		offset = offset_in_page(gpa);
+	}
 
 	/*
 	 * The cached access must fit within a single page. The 'len' argument
