@@ -202,7 +202,7 @@ static int io_register_restrictions_task(void __user *arg, unsigned int nr_args)
 		return -EPERM;
 	/*
 	 * Similar to seccomp, disallow setting a filter if task_no_new_privs
-	 * is true and we're not CAP_SYS_ADMIN.
+	 * is false and we're not CAP_SYS_ADMIN.
 	 */
 	if (!task_no_new_privs(current) &&
 	    !ns_capable_noaudit(current_user_ns(), CAP_SYS_ADMIN))
@@ -238,7 +238,7 @@ static int io_register_bpf_filter_task(void __user *arg, unsigned int nr_args)
 
 	/*
 	 * Similar to seccomp, disallow setting a filter if task_no_new_privs
-	 * is true and we're not CAP_SYS_ADMIN.
+	 * is false and we're not CAP_SYS_ADMIN.
 	 */
 	if (!task_no_new_privs(current) &&
 	    !ns_capable_noaudit(current_user_ns(), CAP_SYS_ADMIN))
@@ -487,6 +487,18 @@ static void io_register_free_rings(struct io_ring_ctx *ctx,
 			 IORING_SETUP_CQE32 | IORING_SETUP_NO_MMAP | \
 			 IORING_SETUP_CQE_MIXED | IORING_SETUP_SQE_MIXED)
 
+static void io_resize_assign_rings(struct io_ring_ctx *ctx, struct io_rings *rings)
+{
+	/*
+	 * Just mark any flag we may have missed and that the application
+	 * should act on unconditionally. Worst case it'll be an extra
+	 * syscall.
+	 */
+	atomic_or(IORING_SQ_TASKRUN | IORING_SQ_NEED_WAKEUP, &rings->sq_flags);
+	ctx->rings = rings;
+	rcu_assign_pointer(ctx->rings_rcu, rings);
+}
+
 static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 {
 	struct io_ctx_config config;
@@ -579,6 +591,7 @@ static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 	spin_lock(&ctx->completion_lock);
 	o.rings = ctx->rings;
 	ctx->rings = NULL;
+	RCU_INIT_POINTER(ctx->rings_rcu, NULL);
 	o.sq_sqes = ctx->sq_sqes;
 	ctx->sq_sqes = NULL;
 
@@ -604,7 +617,7 @@ static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 	if (tail - old_head > p->cq_entries) {
 overflow:
 		/* restore old rings, and return -EOVERFLOW via cleanup path */
-		ctx->rings = o.rings;
+		io_resize_assign_rings(ctx, o.rings);
 		ctx->sq_sqes = o.sq_sqes;
 		to_free = &n;
 		ret = -EOVERFLOW;
@@ -633,7 +646,7 @@ overflow:
 	ctx->sq_entries = p->sq_entries;
 	ctx->cq_entries = p->cq_entries;
 
-	ctx->rings = n.rings;
+	io_resize_assign_rings(ctx, n.rings);
 	ctx->sq_sqes = n.sq_sqes;
 	swap_old(ctx, o, n, ring_region);
 	swap_old(ctx, o, n, sq_region);
@@ -642,6 +655,9 @@ overflow:
 out:
 	spin_unlock(&ctx->completion_lock);
 	mutex_unlock(&ctx->mmap_lock);
+	/* Wait for concurrent io_ctx_mark_taskrun() */
+	if (to_free == &o)
+		synchronize_rcu();
 	io_register_free_rings(ctx, to_free);
 
 	if (ctx->sq_data)
