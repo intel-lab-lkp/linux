@@ -260,7 +260,7 @@ static void ax88172a_unbind(struct usbnet *dev, struct usb_interface *intf)
 
 static int ax88172a_reset(struct usbnet *dev)
 {
-	struct asix_data *data = (struct asix_data *)&dev->data;
+	struct asix_data *data = usbnet_priv(dev);
 	struct ax88172a_private *priv = dev->driver_priv;
 	int ret;
 	u16 rx_ctl;
