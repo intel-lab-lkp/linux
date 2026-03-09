@@ -2997,6 +2997,51 @@ TEST(tls_12_tx_max_payload_len_open_rec)
 	close(fd);
 }
 
+TEST(tls_13_tx_record_zero_padding)
+{
+	struct tls_crypto_info_keys tls13;
+	char const *tx = "how much wood could a woodchuck chuck";
+	int tx_len = strlen(tx) + 1;
+	__u8 rx[4096];
+	__u16 opt, zpad = 2048;
+	unsigned int optlen = sizeof(opt);
+	bool notls;
+	int ret, tx_fd, rx_fd;
+
+	tls_crypto_info_init(TLS_1_3_VERSION, TLS_CIPHER_AES_GCM_128,
+			     &tls13, 1);
+
+	ulp_sock_pair(_metadata, &rx_fd, &tx_fd, &notls);
+	if (notls)
+		exit(KSFT_SKIP);
+
+	/* Setup Keys */
+	ret = setsockopt(tx_fd, SOL_TLS, TLS_TX, &tls13, tls13.len);
+	ASSERT_EQ(ret, 0);
+
+	ret = setsockopt(rx_fd, SOL_TLS, TLS_RX, &tls13, tls13.len);
+	ASSERT_EQ(ret, 0);
+
+	ret = setsockopt(tx_fd, SOL_TLS, TLS_TX_RANDOM_PAD, &zpad,
+			 sizeof(zpad));
+	ASSERT_EQ(ret, 0);
+
+	ret = getsockopt(tx_fd, SOL_TLS, TLS_TX_RANDOM_PAD, &opt, &optlen);
+	EXPECT_EQ(ret, 0);
+	EXPECT_EQ(zpad, opt);
+	EXPECT_EQ(optlen, sizeof(zpad));
+
+	ASSERT_EQ(send(tx_fd, tx, tx_len, MSG_EOR), tx_len);
+	close(tx_fd);
+
+	ret = recv(rx_fd, rx, sizeof(rx), 0);
+	ASSERT_GE(ret, 0);
+	ASSERT_LE(tx_len, ret);
+	EXPECT_EQ(memcmp(rx, tx, tx_len), 0);
+
+	close(rx_fd);
+}
+
 TEST(non_established) {
 	struct tls12_crypto_info_aes_gcm_256 tls12;
 	struct sockaddr_in addr;
