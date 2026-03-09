@@ -1546,6 +1546,11 @@ static void x86_pmu_start(struct perf_event *event, int flags)
 
 	event->hw.state = 0;
 
+	/*
+	 * Ensure events[idx] is set before active_mask, so NMI handlers
+	 * never see an active counter with a NULL event pointer.
+	 */
+	cpuc->events[idx] = event;
 	__set_bit(idx, cpuc->active_mask);
 	static_call(x86_pmu_enable)(event);
 	perf_event_update_userpage(event);
