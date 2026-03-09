@@ -1498,6 +1498,27 @@ int blkcg_init_disk(struct gendisk *disk)
 	struct blkcg_gq *new_blkg, *blkg;
 	bool preloaded;
 
+	/*
+	 * If the queue is shared across disk rebind (e.g., SCSI), the
+	 * previous disk's blkcg state is cleaned up asynchronously via
+	 * disk_release() -> blkcg_exit_disk(). Wait for that cleanup to
+	 * finish (indicated by root_blkg becoming NULL) before setting up
+	 * new blkcg state. Otherwise, we may overwrite q->root_blkg while
+	 * the old one is still alive, and radix_tree_insert() in
+	 * blkg_create() will fail with -EEXIST because the old entries
+	 * still occupy the same queue id slot in blkcg->blkg_tree.
+	 */
+	if (READ_ONCE(q->root_blkg)) {
+		/* 20s is a random timeout, disk_release() should be done well before */
+		unsigned long end = jiffies + msecs_to_jiffies(20000);
+
+		while (READ_ONCE(q->root_blkg) &&
+				time_before(jiffies, end))
+			msleep(1);
+		if (READ_ONCE(q->root_blkg))
+			return -EEXIST;
+	}
+
 	new_blkg = blkg_alloc(&blkcg_root, disk, GFP_KERNEL);
 	if (!new_blkg)
 		return -ENOMEM;
