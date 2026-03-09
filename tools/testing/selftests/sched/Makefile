@@ -6,9 +6,9 @@ endif
 
 CFLAGS += -O2 -Wall -g -I./ $(KHDR_INCLUDES) -Wl,-rpath=./ \
 	  $(CLANG_FLAGS)
-LDLIBS += -lpthread
+LDLIBS += -lpthread -lrt
 
-TEST_GEN_FILES := cs_prctl_test
-TEST_PROGS := cs_prctl_test
+TEST_GEN_FILES := cs_prctl_test pe_mutex_test
+TEST_PROGS := cs_prctl_test pe_mutex_test
 
 include ../lib.mk
