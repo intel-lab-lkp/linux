@@ -23,6 +23,7 @@
 
 struct net_shaper_hierarchy {
 	struct xarray shapers;
+	struct rcu_head rcu;
 };
 
 struct net_shaper_nl_ctx {
@@ -1352,23 +1353,28 @@ int net_shaper_nl_cap_get_dumpit(struct sk_buff *skb,
 
 static void net_shaper_flush(struct net_shaper_binding *binding)
 {
-	struct net_shaper_hierarchy *hierarchy = net_shaper_hierarchy(binding);
+	struct net_shaper_hierarchy *hierarchy;
 	struct net_shaper *cur;
 	unsigned long index;
 
-	if (!hierarchy)
-		return;
-
 	net_shaper_lock(binding);
+	hierarchy = net_shaper_hierarchy(binding);
+	if (!hierarchy) {
+		net_shaper_unlock(binding);
+		return;
+	}
+
+	WRITE_ONCE(binding->netdev->net_shaper_hierarchy, NULL);
+
 	xa_lock(&hierarchy->shapers);
 	xa_for_each(&hierarchy->shapers, index, cur) {
 		__xa_erase(&hierarchy->shapers, index);
-		kfree(cur);
+		kfree_rcu(cur, rcu);
 	}
 	xa_unlock(&hierarchy->shapers);
 	net_shaper_unlock(binding);
 
-	kfree(hierarchy);
+	kfree_rcu(hierarchy, rcu);
 }
 
 void net_shaper_flush_netdev(struct net_device *dev)
