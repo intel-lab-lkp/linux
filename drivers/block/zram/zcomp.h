@@ -38,13 +38,14 @@ struct zcomp_ctx {
 };
 
 struct zcomp_strm {
-	struct mutex lock;
 	/* compression buffer */
 	void *buffer;
 	/* local copy of handle memory */
 	void *local_copy;
 	struct zcomp_ctx ctx;
 };
+
+struct percpu_zstrm;
 
 struct zcomp_req {
 	const unsigned char *src;
@@ -71,7 +72,7 @@ struct zcomp_ops {
 
 /* dynamic per-device compression frontend */
 struct zcomp {
-	struct zcomp_strm __percpu *stream;
+	struct percpu_zstrm __percpu *stream;
 	const struct zcomp_ops *ops;
 	struct zcomp_params *params;
 	struct hlist_node node;

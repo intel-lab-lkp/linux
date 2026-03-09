@@ -43,17 +43,32 @@ static const struct zcomp_ops *backends[] = {
 	NULL
 };
 
-static void zcomp_strm_free_percpu(struct zcomp *comp, struct zcomp_strm *zstrm)
+struct percpu_zstrm {
+	struct zcomp_strm strm;
+	struct mutex lock;
+};
+
+static struct percpu_zstrm *zstrm_to_pcpu(struct zcomp_strm *zstrm)
 {
+	return container_of(zstrm, struct percpu_zstrm, strm);
+}
+
+static void zcomp_strm_free_percpu(struct zcomp *comp,
+				   struct percpu_zstrm *zstrm_pcpu)
+{
+	struct zcomp_strm *zstrm = &zstrm_pcpu->strm;
+
 	comp->ops->destroy_ctx(&zstrm->ctx);
 	vfree(zstrm->local_copy);
 	vfree(zstrm->buffer);
 	zstrm->buffer = NULL;
 }
 
-static int zcomp_strm_init_percpu(struct zcomp *comp, struct zcomp_strm *zstrm)
+static int zcomp_strm_init_percpu(struct zcomp *comp,
+				  struct percpu_zstrm *zstrm_pcpu)
 {
 	int ret;
+	struct zcomp_strm *zstrm = &zstrm_pcpu->strm;
 
 	ret = comp->ops->create_ctx(comp->params, &zstrm->ctx);
 	if (ret)
@@ -66,7 +81,7 @@ static int zcomp_strm_init_percpu(struct zcomp *comp, struct zcomp_strm *zstrm)
 	 */
 	zstrm->buffer = vzalloc(2 * PAGE_SIZE);
 	if (!zstrm->buffer || !zstrm->local_copy) {
-		zcomp_strm_free_percpu(comp, zstrm);
+		zcomp_strm_free_percpu(comp, zstrm_pcpu);
 		return -ENOMEM;
 	}
 	return 0;
@@ -110,7 +125,7 @@ ssize_t zcomp_available_show(const char *comp, char *buf, ssize_t at)
 struct zcomp_strm *zcomp_stream_get(struct zcomp *comp)
 {
 	for (;;) {
-		struct zcomp_strm *zstrm = raw_cpu_ptr(comp->stream);
+		struct percpu_zstrm *zstrm_pcpu = raw_cpu_ptr(comp->stream);
 
 		/*
 		 * Inspired by zswap
@@ -122,16 +137,16 @@ struct zcomp_strm *zcomp_stream_get(struct zcomp *comp)
 		 * from a CPU that has already destroyed its stream.  If
 		 * so then unlock and re-try on the current CPU.
 		 */
-		mutex_lock(&zstrm->lock);
-		if (likely(zstrm->buffer))
-			return zstrm;
-		mutex_unlock(&zstrm->lock);
+		mutex_lock(&zstrm_pcpu->lock);
+		if (likely(zstrm_pcpu->strm.buffer))
+			return &zstrm_pcpu->strm;
+		mutex_unlock(&zstrm_pcpu->lock);
 	}
 }
 
 void zcomp_stream_put(struct zcomp_strm *zstrm)
 {
-	mutex_unlock(&zstrm->lock);
+	mutex_unlock(&zstrm_to_pcpu(zstrm)->lock);
 }
 
 int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
@@ -169,7 +184,7 @@ int zcomp_decompress(struct zcomp *comp, struct zcomp_strm *zstrm,
 int zcomp_cpu_up_prepare(unsigned int cpu, struct hlist_node *node)
 {
 	struct zcomp *comp = hlist_entry(node, struct zcomp, node);
-	struct zcomp_strm *zstrm = per_cpu_ptr(comp->stream, cpu);
+	struct percpu_zstrm *zstrm = per_cpu_ptr(comp->stream, cpu);
 	int ret;
 
 	ret = zcomp_strm_init_percpu(comp, zstrm);
@@ -181,11 +196,10 @@ int zcomp_cpu_up_prepare(unsigned int cpu, struct hlist_node *node)
 int zcomp_cpu_dead(unsigned int cpu, struct hlist_node *node)
 {
 	struct zcomp *comp = hlist_entry(node, struct zcomp, node);
-	struct zcomp_strm *zstrm = per_cpu_ptr(comp->stream, cpu);
+	struct percpu_zstrm *zstrm_pcpu = per_cpu_ptr(comp->stream, cpu);
 
-	mutex_lock(&zstrm->lock);
-	zcomp_strm_free_percpu(comp, zstrm);
-	mutex_unlock(&zstrm->lock);
+	guard(mutex)(&zstrm_pcpu->lock);
+	zcomp_strm_free_percpu(comp, zstrm_pcpu);
 	return 0;
 }
 
@@ -193,7 +207,7 @@ static int zcomp_init(struct zcomp *comp, struct zcomp_params *params)
 {
 	int ret, cpu;
 
-	comp->stream = alloc_percpu(struct zcomp_strm);
+	comp->stream = alloc_percpu(struct percpu_zstrm);
 	if (!comp->stream)
 		return -ENOMEM;
 
