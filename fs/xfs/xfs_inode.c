@@ -47,6 +47,52 @@
 
 struct kmem_cache *xfs_inode_cache;
 
+int
+xfs_inode_max_write_streams(
+	struct xfs_inode	*ip)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	struct block_device	*bdev;
+
+	if (XFS_IS_REALTIME_INODE(ip))
+		bdev = mp->m_rtdev_targp ? mp->m_rtdev_targp->bt_bdev : NULL;
+	else
+		bdev = mp->m_ddev_targp->bt_bdev;
+
+	if (!bdev)
+		return 0;
+
+	return bdev_max_write_streams(bdev);
+}
+
+uint8_t
+xfs_inode_get_write_stream(
+	struct xfs_inode	*ip)
+{
+	uint8_t		stream_id;
+
+	xfs_ilock(ip, XFS_ILOCK_SHARED);
+	stream_id = ip->i_write_stream;
+	xfs_iunlock(ip, XFS_ILOCK_SHARED);
+
+	return stream_id;
+}
+
+int
+xfs_inode_set_write_stream(
+	struct xfs_inode	*ip,
+	uint8_t			stream_id)
+{
+	if (stream_id > xfs_inode_max_write_streams(ip))
+		return -EINVAL;
+
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	ip->i_write_stream =  stream_id;
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+
+	return 0;
+}
+
 /*
  * These two are wrapper routines around the xfs_ilock() routine used to
  * centralize some grungy code.  They are used in places that wish to lock the

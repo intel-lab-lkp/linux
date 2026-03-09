@@ -1160,6 +1160,38 @@ xfs_ioctl_fs_counts(
 	return 0;
 }
 
+static int
+xfs_ioc_write_stream(
+	struct file		*filp,
+	void __user		*arg)
+{
+	struct inode		*inode = file_inode(filp);
+	struct xfs_inode	*ip = XFS_I(inode);
+	struct fs_write_stream	ws = { };
+
+	if (copy_from_user(&ws, arg, sizeof(ws)))
+		return -EFAULT;
+
+	switch (ws.op_flags) {
+	case FS_WRITE_STREAM_OP_GET_MAX:
+		ws.max_streams = xfs_inode_max_write_streams(ip);
+		goto copy_out;
+	case FS_WRITE_STREAM_OP_GET:
+		ws.stream_id = xfs_inode_get_write_stream(ip);
+		goto copy_out;
+	case FS_WRITE_STREAM_OP_SET:
+		return xfs_inode_set_write_stream(ip, ws.stream_id);
+	default:
+		return -EINVAL;
+	}
+	return 0;
+
+copy_out:
+	if (copy_to_user(arg, &ws, sizeof(ws)))
+		return -EFAULT;
+	return 0;
+}
+
 /*
  * These long-unused ioctls were removed from the official ioctl API in 5.17,
  * but retain these definitions so that we can log warnings about them.
@@ -1425,6 +1457,8 @@ xfs_file_ioctl(
 		return xfs_ioc_health_monitor(filp, arg);
 	case XFS_IOC_VERIFY_MEDIA:
 		return xfs_ioc_verify_media(filp, arg);
+	case FS_IOC_WRITE_STREAM:
+		return xfs_ioc_write_stream(filp, arg);
 
 	default:
 		return -ENOTTY;
