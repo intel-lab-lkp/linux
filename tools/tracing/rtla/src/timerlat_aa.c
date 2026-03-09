@@ -455,9 +455,9 @@ static int timerlat_aa_thread_handler(struct trace_seq *s, struct tep_record *re
 		taa_data->thread_blocking_duration = duration;
 
 		if (comm)
-			strncpy(taa_data->run_thread_comm, comm, MAX_COMM);
+			strscpy(taa_data->run_thread_comm, comm, sizeof(taa_data->run_thread_comm));
 		else
-			sprintf(taa_data->run_thread_comm, "<...>");
+			strscpy(taa_data->run_thread_comm, "<...>", sizeof(taa_data->run_thread_comm));
 
 	} else {
 		taa_data->thread_thread_sum += duration;
@@ -519,7 +519,7 @@ static int timerlat_aa_sched_switch_handler(struct trace_seq *s, struct tep_reco
 	tep_get_field_val(s, event, "next_pid", record, &taa_data->current_pid, 1);
 	comm = tep_get_field_raw(s, event, "next_comm", record, &val, 1);
 
-	strncpy(taa_data->current_comm, comm, MAX_COMM);
+	strscpy(taa_data->current_comm, comm, sizeof(taa_data->current_comm));
 
 	/*
 	 * If this was a kworker, clean the last kworkers that ran.
