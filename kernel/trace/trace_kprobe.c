@@ -29,9 +29,30 @@
 /* Kprobe early definition from command line */
 static char kprobe_boot_events_buf[COMMAND_LINE_SIZE] __initdata;
 
+static void __init append_kprobe_boot_event(const char *str)
+{
+	size_t len, str_len;
+
+	if (kprobe_boot_events_buf[0] == '\0') {
+		strscpy(kprobe_boot_events_buf, str, COMMAND_LINE_SIZE);
+		return;
+	}
+
+	len = strlen(kprobe_boot_events_buf);
+	str_len = strlen(str);
+	if (!str_len)
+		return;
+	if (str_len >= COMMAND_LINE_SIZE - len - 1)
+		return;
+
+	kprobe_boot_events_buf[len] = ';';
+	strscpy(kprobe_boot_events_buf + len + 1, str,
+		COMMAND_LINE_SIZE - len - 1);
+}
+
 static int __init set_kprobe_boot_events(char *str)
 {
-	strscpy(kprobe_boot_events_buf, str, COMMAND_LINE_SIZE);
+	append_kprobe_boot_event(str);
 	disable_tracing_selftest("running kprobe events");
 
 	return 1;

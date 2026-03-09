@@ -6474,13 +6474,34 @@ EXPORT_SYMBOL_GPL(ftrace_set_global_notrace);
 static char ftrace_notrace_buf[FTRACE_FILTER_SIZE] __initdata;
 static char ftrace_filter_buf[FTRACE_FILTER_SIZE] __initdata;
 
+static void __init append_ftrace_boot_param(char *buf, const char *str,
+					    char sep)
+{
+	size_t len, str_len;
+
+	if (buf[0] == '\0') {
+		strscpy(buf, str, FTRACE_FILTER_SIZE);
+		return;
+	}
+
+	len = strlen(buf);
+	str_len = strlen(str);
+	if (!str_len)
+		return;
+	if (str_len >= FTRACE_FILTER_SIZE - len - 1)
+		return;
+
+	buf[len] = sep;
+	strscpy(buf + len + 1, str, FTRACE_FILTER_SIZE - len - 1);
+}
+
 /* Used by function selftest to not test if filter is set */
 bool ftrace_filter_param __initdata;
 
 static int __init set_ftrace_notrace(char *str)
 {
 	ftrace_filter_param = true;
-	strscpy(ftrace_notrace_buf, str, FTRACE_FILTER_SIZE);
+	append_ftrace_boot_param(ftrace_notrace_buf, str, ',');
 	return 1;
 }
 __setup("ftrace_notrace=", set_ftrace_notrace);
@@ -6488,7 +6509,7 @@ __setup("ftrace_notrace=", set_ftrace_notrace);
 static int __init set_ftrace_filter(char *str)
 {
 	ftrace_filter_param = true;
-	strscpy(ftrace_filter_buf, str, FTRACE_FILTER_SIZE);
+	append_ftrace_boot_param(ftrace_filter_buf, str, ',');
 	return 1;
 }
 __setup("ftrace_filter=", set_ftrace_filter);
@@ -6500,14 +6521,14 @@ static int ftrace_graph_set_hash(struct ftrace_hash *hash, char *buffer);
 
 static int __init set_graph_function(char *str)
 {
-	strscpy(ftrace_graph_buf, str, FTRACE_FILTER_SIZE);
+	append_ftrace_boot_param(ftrace_graph_buf, str, ',');
 	return 1;
 }
 __setup("ftrace_graph_filter=", set_graph_function);
 
 static int __init set_graph_notrace_function(char *str)
 {
-	strscpy(ftrace_graph_notrace_buf, str, FTRACE_FILTER_SIZE);
+	append_ftrace_boot_param(ftrace_graph_notrace_buf, str, ',');
 	return 1;
 }
 __setup("ftrace_graph_notrace=", set_graph_notrace_function);
