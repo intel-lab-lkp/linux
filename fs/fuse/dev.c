@@ -654,8 +654,15 @@ static void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
 	req->in.h.opcode = args->opcode;
 	req->in.h.nodeid = args->nodeid;
 	req->args = args;
-	if (args->is_ext)
-		req->in.h.total_extlen = args->in_args[args->ext_idx].size / 8;
+	if (args->has_ext) {
+		int i;
+
+		req->in.h.total_extlen =
+			sizeof(struct fuse_ext_header) * args->numext;
+		for (i = 0; i < args->numext; i++)
+			req->in.h.total_extlen += args->ext_args[i].size;
+		req->in.h.total_extlen /= 8;
+	}
 	if (args->end)
 		__set_bit(FR_ASYNC, &req->flags);
 }
@@ -1229,6 +1236,28 @@ int fuse_copy_args(struct fuse_copy_state *cs, unsigned numargs,
 	return err;
 }
 
+static int fuse_copy_extensions(struct fuse_copy_state *cs,
+				struct fuse_args *args)
+{
+	struct fuse_ext_header xh;
+	struct fuse_ext_arg *arg;
+	int err = 0;
+	int i;
+
+	for (i = 0; !err && i < args->numext; i++) {
+		arg = &args->ext_args[i];
+		xh.size = arg->size;
+		xh.type = arg->type;
+		/* Copy extension header... */
+		err = fuse_copy_one(cs, &xh, sizeof(xh));
+		if (!err)
+			/* ... and payload */
+			err = fuse_copy_one(cs, arg->value, arg->size);
+	}
+
+	return err;
+}
+
 static int forget_pending(struct fuse_iqueue *fiq)
 {
 	return fiq->forget_list_head.next != NULL;
@@ -1500,6 +1529,8 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 	if (!err)
 		err = fuse_copy_args(cs, args->in_numargs, args->in_pages,
 				     (struct fuse_arg *) args->in_args, 0);
+	if (!err)
+		err = fuse_copy_extensions(cs, args);
 	fuse_copy_finish(cs);
 	spin_lock(&fpq->lock);
 	clear_bit(FR_LOCKED, &req->flags);
