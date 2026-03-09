@@ -84,8 +84,8 @@ struct usbhid_device {
 	spinlock_t lock;						/* fifo spinlock */
 	unsigned long iofl;                                             /* I/O flags (CTRL_RUNNING, OUT_RUNNING) */
 	struct timer_list io_retry;                                     /* Retry timer */
-	unsigned long stop_retry;                                       /* Time to give up, in jiffies */
-	unsigned int retry_delay;                                       /* Delay length in ms */
+	unsigned int error_count;                                       /* Number of consecutive errors */
+	unsigned long last_in;                                          /* Time of last in URB submission */
 	struct work_struct reset_work;                                  /* Task context for resets */
 	wait_queue_head_t wait;						/* For sleeping */
 };

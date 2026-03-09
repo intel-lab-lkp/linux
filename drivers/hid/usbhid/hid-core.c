@@ -70,6 +70,12 @@ MODULE_PARM_DESC(quirks, "Add/modify USB HID quirks by specifying "
 		" quirks=vendorID:productID:quirks"
 		" where vendorID, productID, and quirks are all in"
 		" 0x-prefixed hex");
+
+/* Threshold at which we can assume a device is working correctly.
+ * A disconnected device should fail within 3 polling intervals.
+ * Most HID devices poll 8ms or faster. */
+#define HID_ASSUME_WORKING msecs_to_jiffies(100)
+
 /*
  * Input submission and I/O error handler.
  */
@@ -90,6 +96,7 @@ static int hid_start_in(struct hid_device *hid)
 	    !test_bit(HID_DISCONNECTED, &usbhid->iofl) &&
 	    !test_bit(HID_SUSPENDED, &usbhid->iofl) &&
 	    !test_and_set_bit(HID_IN_RUNNING, &usbhid->iofl)) {
+		usbhid->last_in = jiffies;
 		rc = usb_submit_urb(usbhid->urbin, GFP_ATOMIC);
 		if (rc != 0) {
 			clear_bit(HID_IN_RUNNING, &usbhid->iofl);
@@ -154,19 +161,13 @@ static void hid_io_error(struct hid_device *hid)
 		goto done;
 
 	/* If it has been a while since the last error, we'll assume
-	 * this a brand new error and reset the retry timeout. */
-	if (time_after(jiffies, usbhid->stop_retry + HZ/2))
-		usbhid->retry_delay = 0;
+	 * this a brand new error and reset the error count. */
+	if (time_after(jiffies, usbhid->last_in + HID_ASSUME_WORKING))
+		usbhid->error_count = 0;
 
-	/* When an error occurs, retry at increasing intervals */
-	if (usbhid->retry_delay == 0) {
-		usbhid->retry_delay = 13;	/* Then 26, 52, 104, 104, ... */
-		usbhid->stop_retry = jiffies + msecs_to_jiffies(1000);
-	} else if (usbhid->retry_delay < 100)
-		usbhid->retry_delay *= 2;
+	usbhid->error_count++;
 
-	if (time_after(jiffies, usbhid->stop_retry)) {
-
+	if (usbhid->error_count >= 20) {
 		/* Retries failed, so do a port reset unless we lack bandwidth*/
 		if (!test_bit(HID_NO_BANDWIDTH, &usbhid->iofl)
 		     && !test_and_set_bit(HID_RESET_PENDING, &usbhid->iofl)) {
@@ -176,8 +177,13 @@ static void hid_io_error(struct hid_device *hid)
 		}
 	}
 
-	mod_timer(&usbhid->io_retry,
-			jiffies + msecs_to_jiffies(usbhid->retry_delay));
+	/* Retry time is relative to the last start time and increases
+	 * with error count: 1, 2, 4, 8, 16, 32, 64, 128, 128... ms.
+	 * By including running time in the backoff, it should be possible
+	 * to retry many intermittent errors in the next tick. */
+	mod_timer(&usbhid->io_retry, usbhid->last_in +
+			msecs_to_jiffies(1U << (min(usbhid->error_count, 8U) - 1)));
+
 done:
 	spin_unlock_irqrestore(&usbhid->lock, flags);
 }
@@ -278,7 +284,7 @@ static void hid_irq_in(struct urb *urb)
 
 	switch (urb->status) {
 	case 0:			/* success */
-		usbhid->retry_delay = 0;
+		usbhid->error_count = 0;
 		if (!test_bit(HID_OPENED, &usbhid->iofl))
 			break;
 		usbhid_mark_busy(usbhid);
@@ -312,6 +318,13 @@ static void hid_irq_in(struct urb *urb)
 	case -EPROTO:		/* protocol error or unplug */
 	case -ETIME:		/* protocol error or unplug */
 	case -ETIMEDOUT:	/* Should never happen, but... */
+		/* Allow first error to retry immediately */
+		if (usbhid->error_count == 0 ||
+		    time_after(jiffies, usbhid->last_in + HID_ASSUME_WORKING)) {
+			dev_dbg(&usbhid->intf->dev, "retrying intr urb immediately\n");
+			usbhid->error_count = 1;
+			break;
+		}
 		usbhid_mark_busy(usbhid);
 		clear_bit(HID_IN_RUNNING, &usbhid->iofl);
 		hid_io_error(hid);
@@ -321,6 +334,7 @@ static void hid_irq_in(struct urb *urb)
 			 urb->status);
 	}
 
+	usbhid->last_in = jiffies;
 	status = usb_submit_urb(urb, GFP_ATOMIC);
 	if (status) {
 		clear_bit(HID_IN_RUNNING, &usbhid->iofl);
@@ -1504,7 +1518,7 @@ static void hid_restart_io(struct hid_device *hid)
 
 	if (clear_halt || reset_pending)
 		schedule_work(&usbhid->reset_work);
-	usbhid->retry_delay = 0;
+	usbhid->error_count = 0;
 	spin_unlock_irq(&usbhid->lock);
 
 	if (reset_pending || !test_bit(HID_STARTED, &usbhid->iofl))
