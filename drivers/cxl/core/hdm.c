@@ -509,13 +509,20 @@ int devm_cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 	struct cxl_port *port = cxled_to_port(cxled);
 	int rc;
 
-	scoped_guard(rwsem_write, &cxl_rwsem.dpa)
-		rc = __cxl_dpa_reserve(cxled, base, len, skipped);
+	guard(rwsem_write)(&cxl_rwsem.dpa);
+	rc = __cxl_dpa_reserve(cxled, base, len, skipped);
 
 	if (rc)
 		return rc;
 
-	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
+	/* See comments in cxl_dpa_alloc()*/
+	rc = devm_add_action(&port->dev, cxl_dpa_release, cxled);
+	if (rc) {
+		__cxl_dpa_release(cxled);
+		return rc;
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_dpa_reserve, "CXL");
 
@@ -613,7 +620,7 @@ static int __cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 	struct resource *p, *last;
 	int part;
 
-	guard(rwsem_write)(&cxl_rwsem.dpa);
+	lockdep_assert_held_write(&cxl_rwsem.dpa);
 	if (cxled->cxld.region) {
 		dev_dbg(dev, "decoder attached to %s\n",
 			dev_name(&cxled->cxld.region->dev));
@@ -679,11 +686,28 @@ int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 	struct cxl_port *port = cxled_to_port(cxled);
 	int rc;
 
+	guard(rwsem_write)(&cxl_rwsem.dpa);
 	rc = __cxl_dpa_alloc(cxled, size);
 	if (rc)
 		return rc;
 
-	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
+	/*
+	 * Add the devres action while still holding cxl_rwsem.dpa to prevent
+	 * a race with cxl_dpa_free(). Without this, a concurrent cxl_dpa_free()
+	 * can observe dpa_res set (by __cxl_dpa_reserve()) and attempt
+	 * devm_remove_action() before devm_add_action() has been called,
+	 * triggering a WARN_ON in devm_remove_action().
+	 * Also, devm_add_action_or_reset() cannot be used here because
+	 * cxl_dpa_release() tries to hold the dpa lock that is already held,
+	 * causing a self deadlock.
+	 */
+	rc = devm_add_action(&port->dev, cxl_dpa_release, cxled);
+	if (rc) {
+		__cxl_dpa_release(cxled);
+		return rc;
+	}
+
+	return 0;
 }
 
 static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
