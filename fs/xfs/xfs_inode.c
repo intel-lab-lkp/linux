@@ -44,7 +44,7 @@
 #include "xfs_xattr.h"
 #include "xfs_inode_util.h"
 #include "xfs_metafile.h"
-
+#define XFS_MAX_WRITE_STREAMS			(32)
 struct kmem_cache *xfs_inode_cache;
 
 int
@@ -53,6 +53,8 @@ xfs_inode_max_write_streams(
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	struct block_device	*bdev;
+	int			hw_streams, sw_streams;
+	xfs_agnumber_t		nr_ags;
 
 	if (XFS_IS_REALTIME_INODE(ip))
 		bdev = mp->m_rtdev_targp ? mp->m_rtdev_targp->bt_bdev : NULL;
@@ -62,7 +64,22 @@ xfs_inode_max_write_streams(
 	if (!bdev)
 		return 0;
 
-	return bdev_max_write_streams(bdev);
+	hw_streams = bdev_max_write_streams(bdev);
+	if (hw_streams > 0)
+		return hw_streams;
+	/* fallback to software-only write streams, excluding some cases */
+	if (bdev_rot(bdev) || XFS_IS_REALTIME_INODE(ip))
+		return 0;
+	nr_ags = mp->m_sb.sb_agcount;
+	/* heuristic: 3-tier (large/mid/small) split of AGs into streams */
+	if (nr_ags >= 32)
+		sw_streams = nr_ags / 4;
+	else if (nr_ags >= 8)
+		sw_streams = nr_ags / 2;
+	else
+		sw_streams = nr_ags;
+
+	return min_t(int, sw_streams, XFS_MAX_WRITE_STREAMS);
 }
 
 uint8_t
