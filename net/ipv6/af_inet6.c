@@ -460,6 +460,12 @@ int inet6_bind_sk(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len)
 	return __inet6_bind(sk, uaddr, addr_len, flags);
 }
 
+int inet6_bind_flags(struct sock *sk, struct sockaddr_unsized *uaddr,
+		     int addr_len, u32 flags)
+{
+	return __inet6_bind(sk, uaddr, addr_len, flags);
+}
+
 /* bind for INET6 API */
 int inet6_bind(struct socket *sock, struct sockaddr_unsized *uaddr, int addr_len)
 {
@@ -1050,14 +1056,6 @@ static const struct ipv6_stub ipv6_stub_impl = {
 	.ip6_xmit = ip6_xmit,
 };
 
-static const struct ipv6_bpf_stub ipv6_bpf_stub_impl = {
-	.inet6_bind = __inet6_bind,
-	.udp6_lib_lookup = __udp6_lib_lookup,
-	.ipv6_setsockopt = do_ipv6_setsockopt,
-	.ipv6_getsockopt = do_ipv6_getsockopt,
-	.ipv6_dev_get_saddr = ipv6_dev_get_saddr,
-};
-
 static int __init inet6_init(void)
 {
 	struct list_head *r;
@@ -1227,7 +1225,6 @@ static int __init inet6_init(void)
 	/* ensure that ipv6 stubs are visible only after ipv6 is ready */
 	wmb();
 	ipv6_stub = &ipv6_stub_impl;
-	ipv6_bpf_stub = &ipv6_bpf_stub_impl;
 out:
 	return err;
 
