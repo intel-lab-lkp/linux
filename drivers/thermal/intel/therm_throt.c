@@ -748,9 +748,25 @@ static int directed_pkg_intr_syscore_suspend(void *data)
 	return 0;
 }
 
+static void directed_pkg_intr_syscore_shutdown(void *data)
+{
+	bool enable = false;
+	int i;
+
+	for (i = 0; i < topology_max_packages(); i++) {
+		if (directed_intr_handler_cpus[i] == nr_cpu_ids)
+			continue;
+
+		smp_call_function_single(directed_intr_handler_cpus[i],
+					 config_directed_thermal_pkg_intr,
+					 &enable, true);
+	}
+}
+
 static struct syscore_ops directed_pkg_intr_pm_ops = {
 	.resume = directed_pkg_intr_syscore_resume,
 	.suspend = directed_pkg_intr_syscore_suspend,
+	.shutdown = directed_pkg_intr_syscore_shutdown,
 };
 
 static struct syscore directed_pkg_intr_pm = {
