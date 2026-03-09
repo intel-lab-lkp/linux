@@ -2468,19 +2468,6 @@ static void amdgpu_vm_destroy_task_info(struct kref *kref)
 	kfree(ti);
 }
 
-static inline struct amdgpu_vm *
-amdgpu_vm_get_vm_from_pasid(struct amdgpu_device *adev, u32 pasid)
-{
-	struct amdgpu_vm *vm;
-	unsigned long flags;
-
-	xa_lock_irqsave(&adev->vm_manager.pasids, flags);
-	vm = xa_load(&adev->vm_manager.pasids, pasid);
-	xa_unlock_irqrestore(&adev->vm_manager.pasids, flags);
-
-	return vm;
-}
-
 /**
  * amdgpu_vm_put_task_info - reference down the vm task_info ptr
  *
@@ -2527,8 +2514,31 @@ amdgpu_vm_get_task_info_vm(struct amdgpu_vm *vm)
 struct amdgpu_task_info *
 amdgpu_vm_get_task_info_pasid(struct amdgpu_device *adev, u32 pasid)
 {
-	return amdgpu_vm_get_task_info_vm(
-			amdgpu_vm_get_vm_from_pasid(adev, pasid));
+	struct amdgpu_vm *vm;
+	unsigned long flags;
+	struct amdgpu_task_info *ti = NULL;
+
+	/*
+	 * Acquire the task_info reference while holding the pasids xarray
+	 * lock to prevent a race with amdgpu_vm_fini() which removes the
+	 * PASID mapping before freeing the VM (embedded in struct amdgpu_fpriv).
+	 * Without this, the VM could be freed between xa_load() return and
+	 * the task_info dereference.
+	 */
+	xa_lock_irqsave(&adev->vm_manager.pasids, flags);
+	vm = xa_load(&adev->vm_manager.pasids, pasid);
+	if (vm) {
+		/*
+		 * Cache vm->task_info in a local variable before
+		 * attempting to take a reference.
+		 */
+		ti = vm->task_info;
+		if (ti && !kref_get_unless_zero(&ti->refcount))
+			ti = NULL;
+	}
+	xa_unlock_irqrestore(&adev->vm_manager.pasids, flags);
+
+	return ti;
 }
 
 static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
