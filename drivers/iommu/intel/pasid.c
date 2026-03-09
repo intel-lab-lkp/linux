@@ -172,9 +172,8 @@ static const struct entry_sync_writer_ops128 writer_ops128 = {
 
 #define INTEL_PASID_SYNC_MEM_COUNT	12
 
-static int __maybe_unused intel_pasid_write(struct intel_iommu *iommu,
-					    struct device *dev, u32 pasid,
-					    u128 *target)
+static int intel_pasid_write(struct intel_iommu *iommu, struct device *dev,
+			     u32 pasid, u128 *target)
 {
 	struct pasid_entry *pte = intel_pasid_get_entry(dev, pasid);
 	struct intel_pasid_writer p_writer = {
@@ -531,17 +530,14 @@ static void intel_pasid_flush_present(struct intel_iommu *iommu,
 
 /*
  * Set up the scalable mode pasid table entry for first only
- * translation type.
+ * translation type. Caller should zero out the entry before
+ * calling.
  */
 static void pasid_pte_config_first_level(struct intel_iommu *iommu,
 					 struct pasid_entry *pte,
 					 phys_addr_t fsptptr, u16 did,
 					 int flags)
 {
-	lockdep_assert_held(&iommu->lock);
-
-	pasid_clear_entry(pte);
-
 	/* Setup the first level page table pointer: */
 	pasid_set_flptr(pte, fsptptr);
 
@@ -564,7 +560,9 @@ int intel_pasid_setup_first_level(struct intel_iommu *iommu, struct device *dev,
 				  phys_addr_t fsptptr, u32 pasid, u16 did,
 				  int flags)
 {
-	struct pasid_entry *pte;
+	struct pasid_entry new_pte = {0};
+
+	iommu_group_mutex_assert(dev);
 
 	if (!ecap_flts(iommu->ecap)) {
 		pr_err("No first level translation support on %s\n",
@@ -578,25 +576,9 @@ int intel_pasid_setup_first_level(struct intel_iommu *iommu, struct device *dev,
 		return -EINVAL;
 	}
 
-	spin_lock(&iommu->lock);
-	pte = intel_pasid_get_entry(dev, pasid);
-	if (!pte) {
-		spin_unlock(&iommu->lock);
-		return -ENODEV;
-	}
+	pasid_pte_config_first_level(iommu, &new_pte, fsptptr, did, flags);
 
-	if (pasid_pte_is_present(pte)) {
-		spin_unlock(&iommu->lock);
-		return -EBUSY;
-	}
-
-	pasid_pte_config_first_level(iommu, pte, fsptptr, did, flags);
-
-	spin_unlock(&iommu->lock);
-
-	pasid_flush_caches(iommu, pte, pasid, did);
-
-	return 0;
+	return intel_pasid_write(iommu, dev, pasid, (u128 *)&new_pte);
 }
 
 /*

@@ -1248,16 +1248,6 @@ static void domain_context_clear_one(struct device_domain_info *info, u8 bus, u8
 	__iommu_flush_cache(iommu, context, sizeof(*context));
 }
 
-int __domain_setup_first_level(struct intel_iommu *iommu, struct device *dev,
-			       ioasid_t pasid, u16 did, phys_addr_t fsptptr,
-			       int flags, struct iommu_domain *old)
-{
-	if (old)
-		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
-
-	return intel_pasid_setup_first_level(iommu, dev, fsptptr, pasid, did, flags);
-}
-
 static int domain_setup_second_level(struct intel_iommu *iommu,
 				     struct dmar_domain *domain,
 				     struct device *dev, ioasid_t pasid,
@@ -1301,9 +1291,9 @@ static int domain_setup_first_level(struct intel_iommu *iommu,
 	      BIT(PT_FEAT_DMA_INCOHERENT)))
 		flags |= PASID_FLAG_PWSNP;
 
-	return __domain_setup_first_level(iommu, dev, pasid,
-					  domain_id_iommu(domain, iommu),
-					  pt_info.gcr3_pt, flags, old);
+	return intel_pasid_setup_first_level(iommu, dev, pt_info.gcr3_pt, pasid,
+					     domain_id_iommu(domain, iommu),
+					     flags);
 }
 
 static int dmar_domain_attach_device(struct dmar_domain *domain,
