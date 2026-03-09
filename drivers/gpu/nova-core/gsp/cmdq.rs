@@ -202,7 +202,20 @@ impl DmaGspMem {
 
         let gsp_mem =
             CoherentAllocation::<GspMem>::alloc_coherent(dev, 1, GFP_KERNEL | __GFP_ZERO)?;
-        dma_write!(gsp_mem, [0]?.ptes, PteArray::new(gsp_mem.dma_handle())?);
+
+        const NUM_PTES: usize = GSP_PAGE_SIZE / size_of::<u64>();
+
+        let start = gsp_mem.dma_handle();
+        // One by one GSP Page write to the memory to avoid stack overflow when allocating
+        // the whole array at once.
+        for i in 0..NUM_PTES {
+            dma_write!(
+                gsp_mem,
+                [0]?.ptes.0[i],
+                PteArray::<NUM_PTES>::entry(start, i)?
+            );
+        }
+
         dma_write!(
             gsp_mem,
             [0]?.cpuq.tx,
