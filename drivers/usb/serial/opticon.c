@@ -370,6 +370,7 @@ static void opticon_port_remove(struct usb_serial_port *port)
 {
 	struct opticon_private *priv = usb_get_serial_port_data(port);
 
+	usb_kill_anchored_urbs(&priv->anchor);
 	kfree(priv);
 }
 
