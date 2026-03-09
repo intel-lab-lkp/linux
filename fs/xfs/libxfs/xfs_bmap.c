@@ -3591,6 +3591,15 @@ xfs_bmap_btalloc_best_length(
 	int			error;
 
 	ap->blkno = XFS_INO_TO_FSB(args->mp, ap->ip->i_ino);
+
+	/* override the default allocation heuristic if write stream is set */
+	if (ap->ip->i_write_stream && ap->datatype & XFS_ALLOC_USERDATA) {
+		xfs_agnumber_t stream_ag = xfs_inode_write_stream_to_ag(ap->ip);
+
+		if (stream_ag != NULLAGNUMBER)
+			ap->blkno = XFS_AGB_TO_FSB(args->mp, stream_ag, 0);
+	}
+
 	if (!xfs_bmap_adjacent(ap))
 		ap->eof = false;
 

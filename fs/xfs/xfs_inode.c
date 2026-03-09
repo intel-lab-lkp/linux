@@ -93,6 +93,39 @@ xfs_inode_set_write_stream(
 	return 0;
 }
 
+xfs_agnumber_t
+xfs_inode_write_stream_to_ag(
+	struct xfs_inode	*ip)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	uint8_t			stream_id = ip->i_write_stream;
+	uint32_t		max_streams = xfs_inode_max_write_streams(ip);
+	uint32_t		nr_ags;
+	xfs_agnumber_t		start_ag, ags_per_stream;
+
+	if (XFS_IS_REALTIME_INODE(ip) || !max_streams)
+		return NULLAGNUMBER;
+
+	stream_id -= 1; /* for 0-based math, stream-ids are 1-based */
+
+	nr_ags = mp->m_sb.sb_agcount;
+	ags_per_stream = nr_ags / max_streams;
+
+	/* for the case when we have fewer AGs than streams */
+	if (ags_per_stream == 0) {
+		start_ag = stream_id % nr_ags;
+		ags_per_stream = 1;
+	} else {
+		/* otherwise AGs are partitioned into N streams */
+		start_ag = stream_id * ags_per_stream;
+		/* uneven distribution case: last stream may contain extra */
+		if (stream_id == max_streams-1)
+			ags_per_stream = nr_ags - start_ag;
+	}
+	/* intra-stream concurrency: hash inode to choose AG within partition */
+	return start_ag + (ip->i_ino % ags_per_stream);
+}
+
 /*
  * These two are wrapper routines around the xfs_ilock() routine used to
  * centralize some grungy code.  They are used in places that wish to lock the

@@ -682,4 +682,5 @@ int xfs_icreate_dqalloc(const struct xfs_icreate_args *args,
 int xfs_inode_max_write_streams(struct xfs_inode *ip);
 uint8_t xfs_inode_get_write_stream(struct xfs_inode *ip);
 int xfs_inode_set_write_stream(struct xfs_inode *ip, uint8_t stream_id);
+xfs_agnumber_t xfs_inode_write_stream_to_ag(struct xfs_inode *ip);
 #endif	/* __XFS_INODE_H__ */
