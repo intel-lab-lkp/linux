@@ -153,7 +153,10 @@ static int amd_isp_dw_i2c_plat_runtime_resume(struct device *dev)
 		return -ENODEV;
 
 	i2c_dw_prepare_clk(i_dev, true);
-	i2c_dw_init(i_dev);
+
+	/* Skip i2c_dw_init if regmap not yet created by i2c_dw_probe */
+	if (i_dev->map)
+		i2c_dw_init(i_dev);
 
 	return 0;
 }
