@@ -229,6 +229,7 @@ struct tls_context {
 	u8 zerocopy_sendfile:1;
 	u8 rx_no_pad:1;
 	u16 tx_max_payload_len;
+	u16 tx_record_zero_pad;
 
 	int (*push_pending_record)(struct sock *sk, int flags);
 	void (*sk_write_space)(struct sock *sk);

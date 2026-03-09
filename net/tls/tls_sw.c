@@ -389,6 +389,7 @@ static void tls_free_rec(struct sock *sk, struct tls_rec *rec)
 {
 	sk_msg_free(sk, &rec->msg_encrypted);
 	sk_msg_free(sk, &rec->msg_plaintext);
+	kfree(rec->zero_padding);
 	kfree(rec);
 }
 
@@ -430,6 +431,7 @@ int tls_tx_records(struct sock *sk, int flags)
 		 */
 		list_del(&rec->list);
 		sk_msg_free(sk, &rec->msg_plaintext);
+		kfree(rec->zero_padding);
 		kfree(rec);
 	}
 
@@ -450,6 +452,7 @@ int tls_tx_records(struct sock *sk, int flags)
 
 			list_del(&rec->list);
 			sk_msg_free(sk, &rec->msg_plaintext);
+			kfree(rec->zero_padding);
 			kfree(rec);
 		} else {
 			break;
@@ -779,12 +782,29 @@ static int tls_push_record(struct sock *sk, int flags,
 	sk_msg_iter_var_prev(i);
 
 	rec->content_type = record_type;
+
 	if (prot->version == TLS_1_3_VERSION) {
-		/* Add content type to end of message.  No padding added */
-		sg_set_buf(&rec->sg_content_type, &rec->content_type, 1);
-		sg_mark_end(&rec->sg_content_type);
+		/*
+		 * Add content type to end of message with zero padding
+		 * if available.
+		 */
+		sg_init_table(rec->sg_content_trail, 2);
+		sg_set_buf(&rec->sg_content_trail[0], &rec->content_type, 1);
+		if (rec->zero_padding_len) {
+			rec->zero_padding = kzalloc(rec->zero_padding_len,
+						    sk->sk_allocation);
+			if (!rec->zero_padding)
+				return -ENOMEM;
+
+			sg_set_buf(&rec->sg_content_trail[1],
+				   rec->zero_padding, rec->zero_padding_len);
+			sg_mark_end(&rec->sg_content_trail[1]);
+		} else {
+			sg_mark_end(&rec->sg_content_trail[0]);
+		}
+
 		sg_chain(msg_pl->sg.data, msg_pl->sg.end + 1,
-			 &rec->sg_content_type);
+			 rec->sg_content_trail);
 	} else {
 		sg_mark_end(sk_msg_elem(msg_pl, i));
 	}
@@ -805,19 +825,21 @@ static int tls_push_record(struct sock *sk, int flags,
 	i = msg_en->sg.start;
 	sg_chain(rec->sg_aead_out, 2, &msg_en->sg.data[i]);
 
-	tls_make_aad(rec->aad_space, msg_pl->sg.size + prot->tail_size,
-		     tls_ctx->tx.rec_seq, record_type, prot);
+	tls_make_aad(rec->aad_space, msg_pl->sg.size + prot->tail_size +
+		     rec->zero_padding_len, tls_ctx->tx.rec_seq,
+		     record_type, prot);
 
 	tls_fill_prepend(tls_ctx,
 			 page_address(sg_page(&msg_en->sg.data[i])) +
 			 msg_en->sg.data[i].offset,
-			 msg_pl->sg.size + prot->tail_size,
-			 record_type);
+			 msg_pl->sg.size + prot->tail_size +
+			 rec->zero_padding_len, record_type);
 
 	tls_ctx->pending_open_record_frags = false;
 
 	rc = tls_do_encryption(sk, tls_ctx, ctx, req,
-			       msg_pl->sg.size + prot->tail_size, i);
+			       msg_pl->sg.size + prot->tail_size +
+			       rec->zero_padding_len, i);
 	if (rc < 0) {
 		if (rc != -EINPROGRESS) {
 			tls_err_abort(sk, -EBADMSG);
@@ -1033,6 +1055,8 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 	unsigned char record_type = TLS_RECORD_TYPE_DATA;
 	bool is_kvec = iov_iter_is_kvec(&msg->msg_iter);
 	bool eor = !(msg->msg_flags & MSG_MORE);
+	bool tls_13 = (prot->version == TLS_1_3_VERSION);
+	bool rec_zero_pad = eor && tls_13 && tls_ctx->tx_record_zero_pad;
 	size_t try_to_copy;
 	ssize_t copied = 0;
 	struct sk_msg *msg_pl, *msg_en;
@@ -1043,6 +1067,7 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 	int record_room;
 	int num_zc = 0;
 	int orig_size;
+	int max_zero_pad_len, zero_pad_len = 0;
 	int ret = 0;
 
 	if (!eor && (msg->msg_flags & MSG_EOR))
@@ -1085,8 +1110,19 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 			full_record = true;
 		}
 
+		if (rec_zero_pad && !full_record)
+			zero_pad_len = record_room - try_to_copy;
+
+		if (zero_pad_len > prot->tail_size) {
+			max_zero_pad_len = min(zero_pad_len,
+					       tls_ctx->tx_record_zero_pad);
+			zero_pad_len =
+				get_random_u32_inclusive(0, max_zero_pad_len);
+			rec->zero_padding_len = zero_pad_len;
+		}
+
 		required_size = msg_pl->sg.size + try_to_copy +
-				prot->overhead_size;
+				prot->overhead_size + rec->zero_padding_len;
 
 		if (!sk_stream_memory_free(sk))
 			goto wait_for_sndbuf;
@@ -2555,6 +2591,7 @@ void tls_sw_release_resources_tx(struct sock *sk)
 				       struct tls_rec, list);
 		list_del(&rec->list);
 		sk_msg_free(sk, &rec->msg_plaintext);
+		kfree(rec->zero_padding);
 		kfree(rec);
 	}
 
@@ -2562,6 +2599,7 @@ void tls_sw_release_resources_tx(struct sock *sk)
 		list_del(&rec->list);
 		sk_msg_free(sk, &rec->msg_encrypted);
 		sk_msg_free(sk, &rec->msg_plaintext);
+		kfree(rec->zero_padding);
 		kfree(rec);
 	}
 
