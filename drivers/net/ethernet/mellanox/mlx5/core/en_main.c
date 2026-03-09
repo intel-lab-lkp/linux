@@ -5466,6 +5466,14 @@ static void mlx5e_get_queue_stats_rx(struct net_device *dev, int i,
 	stats->hw_gro_wire_packets =
 		rq_stats->gro_packets + xskrq_stats->gro_packets;
 	stats->hw_gro_wire_bytes = rq_stats->gro_bytes + xskrq_stats->gro_bytes;
+
+	stats->csum_complete =
+		rq_stats->csum_complete + xskrq_stats->csum_complete;
+	stats->csum_unnecessary = rq_stats->csum_unnecessary +
+				  xskrq_stats->csum_unnecessary +
+				  rq_stats->csum_unnecessary_inner +
+				  xskrq_stats->csum_unnecessary_inner;
+	stats->csum_none = rq_stats->csum_none + xskrq_stats->csum_none;
 }
 
 static void mlx5e_get_queue_stats_tx(struct net_device *dev, int i,
@@ -5509,6 +5517,9 @@ static void mlx5e_get_base_stats(struct net_device *dev,
 		rx->hw_gro_packets = 0;
 		rx->hw_gro_wire_packets = 0;
 		rx->hw_gro_wire_bytes = 0;
+		rx->csum_complete = 0;
+		rx->csum_unnecessary = 0;
+		rx->csum_none = 0;
 
 		for (i = priv->channels.params.num_channels; i < priv->stats_nch; i++) {
 			struct netdev_queue_stats_rx rx_i = {0};
@@ -5521,6 +5532,9 @@ static void mlx5e_get_base_stats(struct net_device *dev,
 			rx->hw_gro_packets += rx_i.hw_gro_packets;
 			rx->hw_gro_wire_packets += rx_i.hw_gro_wire_packets;
 			rx->hw_gro_wire_bytes += rx_i.hw_gro_wire_bytes;
+			rx->csum_complete += rx_i.csum_complete;
+			rx->csum_unnecessary += rx_i.csum_unnecessary;
+			rx->csum_none += rx_i.csum_none;
 		}
 
 		/* always report PTP RX stats from base as there is no
@@ -5535,6 +5549,11 @@ static void mlx5e_get_base_stats(struct net_device *dev,
 			rx->hw_gro_packets += rq_stats->gro_skbs;
 			rx->hw_gro_wire_packets += rq_stats->gro_packets;
 			rx->hw_gro_wire_bytes += rq_stats->gro_bytes;
+			rx->csum_complete += rq_stats->csum_complete;
+			rx->csum_unnecessary +=
+				rq_stats->csum_unnecessary +
+				rq_stats->csum_unnecessary_inner;
+			rx->csum_none += rq_stats->csum_none;
 		}
 	}
 
