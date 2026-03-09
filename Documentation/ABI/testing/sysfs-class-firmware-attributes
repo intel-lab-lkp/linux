@@ -388,31 +388,42 @@ What:		/sys/class/firmware-attributes/*/attributes/save_settings
 Date:		August 2023
 KernelVersion:	6.6
 Contact:	Mark Pearson <mpearson-lenovo@squebb.ca>
+		Antheas Kapenekakis <lkml@antheas.dev>
 Description:
-		On Lenovo platforms there is a limitation in the number of times an attribute can be
-		saved. This is an architectural limitation and it limits the number of attributes
-		that can be modified to 48.
-		A solution for this is instead of the attribute being saved after every modification,
-		to allow a user to bulk set the attributes, and then trigger a final save. This allows
-		unlimited attributes.
+		Controls how writes to current_value are applied to the hardware.
 
 		Read the attribute to check what save mode is enabled (single or bulk).
 		E.g:
-		# cat /sys/class/firmware-attributes/thinklmi/attributes/save_settings
+		# cat /sys/class/firmware-attributes/*/attributes/save_settings
 		single
 
 		Write the attribute with 'bulk' to enable bulk save mode.
-		Write the attribute with 'single' to enable saving, after every attribute set.
-		The default setting is single mode.
+		Write the attribute with 'single' to enable saving, after every
+		attribute set. The default setting is single mode.
 		E.g:
-		# echo bulk > /sys/class/firmware-attributes/thinklmi/attributes/save_settings
+		# echo bulk > /sys/class/firmware-attributes/*/attributes/save_settings
 
-		When in bulk mode write 'save' to trigger a save of all currently modified attributes.
-		Note, once a save has been triggered, in bulk mode, attributes can no longer be set and
-		will return a permissions error. This is to prevent users hitting the 48+ save limitation
-		(which requires entering the BIOS to clear the error condition)
+		When in bulk mode write 'save' to trigger an apply of all
+		currently staged attributes.
 		E.g:
-		# echo save > /sys/class/firmware-attributes/thinklmi/attributes/save_settings
+		# echo save > /sys/class/firmware-attributes/*/attributes/save_settings
+
+		Driver-specific notes:
+
+		thinklmi (Lenovo): On Lenovo platforms there is a limitation in
+		the number of times an attribute can be saved. This is an
+		architectural limitation and it limits the number of attributes
+		that can be modified to 48.
+
+		Once a save has been triggered in bulk mode, attributes can no
+		longer be set and will return a permissions error. This is to
+		prevent users hitting the 48+ save limitation (which requires
+		entering the BIOS to clear the error condition).
+
+		amd-dptc (AMD DPTC): No save-count limitation. 'save' can be
+		called any number of times. Returns -ENOENT if no values have
+		been staged. In addition, when in 'single' mode, the driver
+		uses pm ops to trigger a save of staged attributes on resume.
 
 What:		/sys/class/firmware-attributes/*/attributes/debug_cmd
 Date:		July 2021
