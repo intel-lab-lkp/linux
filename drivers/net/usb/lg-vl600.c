@@ -56,18 +56,10 @@ struct vl600_state {
 static int vl600_bind(struct usbnet *dev, struct usb_interface *intf)
 {
 	int ret;
-	struct vl600_state *s = kzalloc_obj(struct vl600_state);
-
-	if (!s)
-		return -ENOMEM;
 
 	ret = usbnet_cdc_bind(dev, intf);
-	if (ret) {
-		kfree(s);
+	if (ret)
 		return ret;
-	}
-
-	dev->driver_priv = s;
 
 	/* ARP packets don't go through, but they're also of no use.  The
 	 * subnet has only two hosts anyway: us and the gateway / DHCP
@@ -85,10 +77,9 @@ static int vl600_bind(struct usbnet *dev, struct usb_interface *intf)
 
 static void vl600_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct vl600_state *s = dev->driver_priv;
+	struct vl600_state *s = usbnet_priv(dev);
 
 	dev_kfree_skb(s->current_rx_buf);
-	kfree(s);
 
 	return usbnet_cdc_unbind(dev, intf);
 }
@@ -101,7 +92,7 @@ static int vl600_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 	int packet_len, count;
 	struct sk_buff *buf = skb;
 	struct sk_buff *clone;
-	struct vl600_state *s = dev->driver_priv;
+	struct vl600_state *s = usbnet_priv(dev);
 
 	/* Frame lengths are generally 4B multiplies but every couple of
 	 * hours there's an odd number of bytes sized yet correct frame,
@@ -306,6 +297,7 @@ static const struct driver_info	vl600_info = {
 	.status		= usbnet_cdc_status,
 	.rx_fixup	= vl600_rx_fixup,
 	.tx_fixup	= vl600_tx_fixup,
+	.required_room	= sizeof(struct vl600_state),
 };
 
 static const struct usb_device_id products[] = {
