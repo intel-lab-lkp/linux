@@ -764,6 +764,8 @@
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#power-domain-cells = <1>;
+			power-domains = <&rpmhpd RPMHPD_CX>;
+			required-opps = <&rpmhpd_opp_nom>;
 		};
 
 		gpi_dma2: dma-controller@800000 {
