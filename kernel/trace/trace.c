@@ -327,9 +327,30 @@ __setup("trace_instance=", boot_instance);
 
 static char trace_boot_options_buf[MAX_TRACER_SIZE] __initdata;
 
+static void __init append_trace_boot_options(const char *str)
+{
+	size_t len, str_len;
+
+	if (trace_boot_options_buf[0] == '\0') {
+		strscpy(trace_boot_options_buf, str, MAX_TRACER_SIZE);
+		return;
+	}
+
+	len = strlen(trace_boot_options_buf);
+	str_len = strlen(str);
+	if (!str_len)
+		return;
+	if (str_len >= MAX_TRACER_SIZE - len - 1)
+		return;
+
+	trace_boot_options_buf[len] = ',';
+	strscpy(trace_boot_options_buf + len + 1, str,
+		MAX_TRACER_SIZE - len - 1);
+}
+
 static int __init set_trace_boot_options(char *str)
 {
-	strscpy(trace_boot_options_buf, str, MAX_TRACER_SIZE);
+	append_trace_boot_options(str);
 	return 1;
 }
 __setup("trace_options=", set_trace_boot_options);
