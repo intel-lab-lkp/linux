@@ -16,7 +16,8 @@
 #include "ia_css_debug.h"
 
 /* TODO: enable for other memory aswell
-	 now only for ia_css_ptr */
+ * now only for ia_css_ptr
+ */
 struct ia_css_refcount_entry {
 	u32 count;
 	ia_css_ptr data;
@@ -93,14 +94,15 @@ void ia_css_refcount_uninit(void)
 			    "%s() entry\n", __func__);
 	for (i = 0; i < myrefcount.size; i++) {
 		/* driver verifier tool has issues with &arr[i]
-		   and prefers arr + i; as these are actually equivalent
-		   the line below uses + i
-		*/
+		 * and prefers arr + i; as these are actually equivalent
+		 * the line below uses + i
+		 */
 		entry = myrefcount.items + i;
 		if (entry->data != mmgr_NULL) {
 			/*	ia_css_debug_dtrace(IA_CSS_DBG_TRACE,
-				"ia_css_refcount_uninit: freeing (%x)\n",
-				entry->data);*/
+			 *	"ia_css_refcount_uninit: freeing (%x)\n",
+			 *	entry->data);
+			 */
 			hmm_free(entry->data);
 			entry->data = mmgr_NULL;
 			entry->count = 0;
@@ -173,7 +175,8 @@ bool ia_css_refcount_decrement(s32 id, ia_css_ptr ptr)
 			entry->count -= 1;
 			if (entry->count == 0) {
 				/* ia_css_debug_dtrace(IA_CSS_DBEUG_TRACE,
-				   "ia_css_refcount_decrement: freeing\n");*/
+				 * "ia_css_refcount_decrement: freeing\n");
+				 */
 				hmm_free(ptr);
 				entry->data = mmgr_NULL;
 				entry->id = 0;
@@ -183,7 +186,8 @@ bool ia_css_refcount_decrement(s32 id, ia_css_ptr ptr)
 	}
 
 	/* SHOULD NOT HAPPEN: ptr not managed by refcount, or not
-	   valid anymore */
+	 * valid anymore
+	 */
 	if (entry)
 		IA_CSS_ERROR("id %x, ptr 0x%x entry %p entry->id %x entry->count %d\n",
 			     id, ptr, entry, entry->id, entry->count);
@@ -221,9 +225,9 @@ void ia_css_refcount_clear(s32 id, clear_func clear_func_ptr)
 
 	for (i = 0; i < myrefcount.size; i++) {
 		/* driver verifier tool has issues with &arr[i]
-		   and prefers arr + i; as these are actually equivalent
-		   the line below uses + i
-		*/
+		 * and prefers arr + i; as these are actually equivalent
+		 * the line below uses + i
+		 */
 		entry = myrefcount.items + i;
 		if ((entry->data != mmgr_NULL) && (entry->id == id)) {
 			ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
@@ -238,9 +242,8 @@ void ia_css_refcount_clear(s32 id, clear_func clear_func_ptr)
 				hmm_free(entry->data);
 			}
 
-			if (entry->count != 0) {
+			if (entry->count != 0)
 				IA_CSS_WARNING("Ref count for entry %x is not zero!", entry->id);
-			}
 
 			assert(entry->count == 0);
 
