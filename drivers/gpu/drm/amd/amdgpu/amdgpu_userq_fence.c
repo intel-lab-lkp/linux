@@ -926,8 +926,10 @@ int amdgpu_userq_wait_ioctl(struct drm_device *dev, void *data,
 		 */
 		num_fences = dma_fence_dedup_array(fences, num_fences);
 
+		mutex_lock(&userq_mgr->userq_mutex);
 		waitq = xa_load(&userq_mgr->userq_xa, wait_info->waitq_id);
 		if (!waitq) {
+			mutex_unlock(&userq_mgr->userq_mutex);
 			r = -EINVAL;
 			goto free_fences;
 		}
@@ -946,6 +948,7 @@ int amdgpu_userq_wait_ioctl(struct drm_device *dev, void *data,
 				r = dma_fence_wait(fences[i], true);
 				if (r) {
 					dma_fence_put(fences[i]);
+					mutex_unlock(&userq_mgr->userq_mutex);
 					goto free_fences;
 				}
 
@@ -962,8 +965,10 @@ int amdgpu_userq_wait_ioctl(struct drm_device *dev, void *data,
 			 */
 			r = xa_alloc(&waitq->fence_drv_xa, &index, fence_drv,
 				     xa_limit_32b, GFP_KERNEL);
-			if (r)
+			if (r) {
+				mutex_unlock(&userq_mgr->userq_mutex);
 				goto free_fences;
+			}
 
 			amdgpu_userq_fence_driver_get(fence_drv);
 
@@ -975,6 +980,7 @@ int amdgpu_userq_wait_ioctl(struct drm_device *dev, void *data,
 			/* Increment the actual userq fence count */
 			cnt++;
 		}
+		mutex_unlock(&userq_mgr->userq_mutex);
 
 		wait_info->num_fences = cnt;
 		/* Copy userq fence info to user space */
