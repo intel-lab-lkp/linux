@@ -338,6 +338,18 @@ struct file_attr {
 /* Get logical block metadata capability details */
 #define FS_IOC_GETLBMD_CAP		_IOWR(0x15, 2, struct logical_block_metadata_cap)
 
+struct fs_write_stream {
+	__u32		op_flags;	/* IN: operation flags */
+	__u32		stream_id;	/* IN/OUT:  stream value to assign/guery */
+	__u32		max_streams;	/* OUT: max streams values supported */
+	__u32		rsvd;
+};
+
+#define FS_WRITE_STREAM_OP_GET_MAX		(1 << 0)
+#define FS_WRITE_STREAM_OP_GET			(1 << 1)
+#define FS_WRITE_STREAM_OP_SET			(1 << 2)
+
+#define FS_IOC_WRITE_STREAM		_IOWR('f', 43, struct fs_write_stream)
 /*
  * Inode flags (FS_IOC_GETFLAGS / FS_IOC_SETFLAGS)
  *
