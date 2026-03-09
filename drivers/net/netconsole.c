@@ -1494,17 +1494,30 @@ static void populate_configfs_item(struct netconsole_target *nt,
 static int sysdata_append_cpu_nr(struct netconsole_target *nt, int offset,
 				 struct nbcon_write_context *wctxt)
 {
+	int cpu;
+#ifdef CONFIG_PRINTK_EXECUTION_CTX
+	cpu = wctxt->cpu;
+#else
+	cpu = raw_smp_processor_id();
+#endif
+
 	return scnprintf(&nt->sysdata[offset],
 			 MAX_EXTRADATA_ENTRY_LEN, " cpu=%u\n",
-			 wctxt->cpu);
+			 cpu);
 }
 
 static int sysdata_append_taskname(struct netconsole_target *nt, int offset,
 				   struct nbcon_write_context *wctxt)
 {
+	const char *comm;
+#ifdef CONFIG_PRINTK_EXECUTION_CTX
+	comm = wctxt->comm;
+#else
+	comm = current->comm;
+#endif
 	return scnprintf(&nt->sysdata[offset],
 			 MAX_EXTRADATA_ENTRY_LEN, " taskname=%s\n",
-			 wctxt->comm);
+			 comm);
 }
 
 static int sysdata_append_release(struct netconsole_target *nt, int offset)
