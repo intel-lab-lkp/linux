@@ -535,7 +535,8 @@ enum {
 
 #define sm_supported(iommu)	(intel_iommu_sm && ecap_smts((iommu)->ecap))
 #define pasid_supported(iommu)	(sm_supported(iommu) &&			\
-				 ecap_pasid((iommu)->ecap))
+				 ecap_pasid((iommu)->ecap) &&		\
+				 boot_cpu_has(X86_FEATURE_CX16))
 #define ssads_supported(iommu) (sm_supported(iommu) &&                 \
 				ecap_slads((iommu)->ecap) &&           \
 				ecap_smpwc(iommu->ecap))

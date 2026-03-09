@@ -2647,6 +2647,10 @@ int __init intel_iommu_init(void)
 			pr_info_once("IOMMU batching disallowed due to virtualization\n");
 			iommu_set_dma_strict();
 		}
+
+		if (ecap_pasid(iommu->ecap) && !boot_cpu_has(X86_FEATURE_CX16))
+			pr_info_once("PASID disabled due to lack of CMPXCHG16B support.\n");
+
 		iommu_device_sysfs_add(&iommu->iommu, NULL,
 				       intel_iommu_groups,
 				       "%s", iommu->name);
