@@ -24,6 +24,7 @@ struct zcomp_params {
 	union {
 		struct deflate_params deflate;
 	};
+	bool zstrm_mgmt;
 
 	void *drv_data;
 };
@@ -31,13 +32,14 @@ struct zcomp_params {
 /*
  * Run-time driver context - scratch buffers, etc. It is modified during
  * request execution (compression/decompression), cannot be shared, so
- * it's in per-CPU area.
+ * it's in per-CPU area or managed by the backend.
  */
 struct zcomp_ctx {
 	void *context;
 };
 
 struct zcomp_strm {
+	bool zcomp_managed;
 	/* compression buffer */
 	void *buffer;
 	/* local copy of handle memory */
@@ -47,12 +49,22 @@ struct zcomp_strm {
 
 struct percpu_zstrm;
 
+struct managed_zstrm {
+	struct zcomp *comp;
+	struct zcomp_strm strm;
+};
+
 struct zcomp_req {
 	const unsigned char *src;
 	const size_t src_len;
 
 	unsigned char *dst;
 	size_t dst_len;
+};
+
+enum zstrm_pref {
+	ZSTRM_DEFAULT, /* always use the generic per-CPU stream */
+	ZSTRM_PREFER_MGMT, /* try managed stream; fallback to per-CPU */
 };
 
 struct zcomp_ops {
@@ -66,6 +78,15 @@ struct zcomp_ops {
 
 	int (*setup_params)(struct zcomp_params *params);
 	void (*release_params)(struct zcomp_params *params);
+
+	/*
+	 * get_stream() needs to prepare zstrm->ctx. The backend must ensure
+	 * returned stream has zcomp_managed set and matches the per-cpu
+	 * stream sizing: local_copy >= PAGE_SIZE, buffer >= 2 * PAGE_SIZE.
+	 */
+	struct managed_zstrm *(*get_stream)(struct zcomp_params *params);
+	void (*put_stream)(struct zcomp_params *params,
+			   struct managed_zstrm *zstrm);
 
 	const char *name;
 };
@@ -86,12 +107,17 @@ bool zcomp_available_algorithm(const char *comp);
 struct zcomp *zcomp_create(const char *alg, struct zcomp_params *params);
 void zcomp_destroy(struct zcomp *comp);
 
-struct zcomp_strm *zcomp_stream_get(struct zcomp *comp);
+struct zcomp_strm *zcomp_stream_get(struct zcomp *comp, enum zstrm_pref pref);
 void zcomp_stream_put(struct zcomp_strm *zstrm);
 
 int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
 		   const void *src, unsigned int *dst_len);
 int zcomp_decompress(struct zcomp *comp, struct zcomp_strm *zstrm,
 		     const void *src, unsigned int src_len, void *dst);
+
+static inline struct managed_zstrm *zstrm_to_managed(struct zcomp_strm *zstrm)
+{
+	return container_of(zstrm, struct managed_zstrm, strm);
+}
 
 #endif /* _ZCOMP_H_ */

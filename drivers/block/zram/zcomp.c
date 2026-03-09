@@ -84,6 +84,7 @@ static int zcomp_strm_init_percpu(struct zcomp *comp,
 		zcomp_strm_free_percpu(comp, zstrm_pcpu);
 		return -ENOMEM;
 	}
+	zstrm->zcomp_managed = false;
 	return 0;
 }
 
@@ -122,7 +123,7 @@ ssize_t zcomp_available_show(const char *comp, char *buf, ssize_t at)
 	return at;
 }
 
-struct zcomp_strm *zcomp_stream_get(struct zcomp *comp)
+static inline struct zcomp_strm *zcomp_stream_pcpu_get(struct zcomp *comp)
 {
 	for (;;) {
 		struct percpu_zstrm *zstrm_pcpu = raw_cpu_ptr(comp->stream);
@@ -144,9 +145,37 @@ struct zcomp_strm *zcomp_stream_get(struct zcomp *comp)
 	}
 }
 
+struct zcomp_strm *zcomp_stream_get(struct zcomp *comp, enum zstrm_pref pref)
+{
+	if (comp->params->zstrm_mgmt && pref == ZSTRM_PREFER_MGMT) {
+		struct managed_zstrm *zstrm_managed =
+			comp->ops->get_stream(comp->params);
+
+		if (zstrm_managed) {
+			zstrm_managed->comp = comp;
+			return &zstrm_managed->strm;
+		}
+	}
+
+	return zcomp_stream_pcpu_get(comp);
+}
+
+static inline void zcomp_stream_pcpu_put(struct percpu_zstrm *zstrm)
+{
+	mutex_unlock(&zstrm->lock);
+}
+
 void zcomp_stream_put(struct zcomp_strm *zstrm)
 {
-	mutex_unlock(&zstrm_to_pcpu(zstrm)->lock);
+	if (zstrm->zcomp_managed) {
+		struct managed_zstrm *zstrm_managed =
+			zstrm_to_managed(zstrm);
+
+		zstrm_managed->comp->ops->put_stream(
+			zstrm_managed->comp->params, zstrm_managed);
+	} else {
+		zcomp_stream_pcpu_put(zstrm_to_pcpu(zstrm));
+	}
 }
 
 int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
@@ -211,10 +240,18 @@ static int zcomp_init(struct zcomp *comp, struct zcomp_params *params)
 	if (!comp->stream)
 		return -ENOMEM;
 
+	params->zstrm_mgmt = false;
 	comp->params = params;
 	ret = comp->ops->setup_params(comp->params);
 	if (ret)
 		goto cleanup;
+
+	if (params->zstrm_mgmt &&
+	    !(comp->ops->get_stream && comp->ops->put_stream)) {
+		params->zstrm_mgmt = false;
+		pr_warn("Missing managed stream ops in %s, managed stream disabled\n",
+			comp->ops->name);
+	}
 
 	for_each_possible_cpu(cpu)
 		mutex_init(&per_cpu_ptr(comp->stream, cpu)->lock);
