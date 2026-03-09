@@ -317,9 +317,6 @@ static void brcms_free(struct brcms_info *wl)
 	/* free timers */
 	for (t = wl->timers; t; t = next) {
 		next = t->next;
-#ifdef DEBUG
-		kfree(t->name);
-#endif
 		kfree(t);
 	}
 }
@@ -1499,7 +1496,11 @@ struct brcms_timer *brcms_init_timer(struct brcms_info *wl,
 {
 	struct brcms_timer *t;
 
+#ifdef DEBUG
+	t = kzalloc_flex(*t, name, strlen(name) + 1, GFP_ATOMIC);
+#else
 	t = kzalloc_obj(*t, GFP_ATOMIC);
+#endif
 	if (!t)
 		return NULL;
 
@@ -1511,7 +1512,7 @@ struct brcms_timer *brcms_init_timer(struct brcms_info *wl,
 	wl->timers = t;
 
 #ifdef DEBUG
-	t->name = kstrdup(name, GFP_ATOMIC);
+	strcpy(t->name, name);
 #endif
 
 	return t;
@@ -1574,9 +1575,6 @@ void brcms_free_timer(struct brcms_timer *t)
 
 	if (wl->timers == t) {
 		wl->timers = wl->timers->next;
-#ifdef DEBUG
-		kfree(t->name);
-#endif
 		kfree(t);
 		return;
 
@@ -1586,9 +1584,6 @@ void brcms_free_timer(struct brcms_timer *t)
 	while (tmp) {
 		if (tmp->next == t) {
 			tmp->next = t->next;
-#ifdef DEBUG
-			kfree(t->name);
-#endif
 			kfree(t);
 			return;
 		}
