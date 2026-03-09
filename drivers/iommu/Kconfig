@@ -145,6 +145,20 @@ config IOMMU_DEFAULT_PASSTHROUGH
 
 endchoice
 
+config IOMMU_ENTRY_SYNC
+	bool
+	default n
+
+config IOMMU_ENTRY_SYNC64
+	bool
+	select IOMMU_ENTRY_SYNC
+	default n
+
+config IOMMU_ENTRY_SYNC128
+	bool
+	select IOMMU_ENTRY_SYNC
+	default n
+
 config OF_IOMMU
 	def_bool y
 	depends on OF && IOMMU_API
