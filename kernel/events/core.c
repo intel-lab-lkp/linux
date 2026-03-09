@@ -7485,9 +7485,12 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 		 */
 		ret = map_range(event->rb, vma);
 		if (ret)
-			perf_mmap_close(vma);
+			goto out_close;
 	}
+	return 0;
 
+out_close:
+	perf_mmap_close(vma);
 	return ret;
 }
 
