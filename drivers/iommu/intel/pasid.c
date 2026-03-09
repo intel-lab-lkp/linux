@@ -704,9 +704,6 @@ int intel_pasid_setup_dirty_tracking(struct intel_iommu *iommu,
 static void pasid_pte_config_pass_through(struct intel_iommu *iommu,
 					  struct pasid_entry *pte, u16 did)
 {
-	lockdep_assert_held(&iommu->lock);
-
-	pasid_clear_entry(pte);
 	pasid_set_domain_id(pte, did);
 	pasid_set_address_width(pte, iommu->agaw);
 	pasid_set_translation_type(pte, PASID_ENTRY_PGTT_PT);
@@ -718,27 +715,12 @@ static void pasid_pte_config_pass_through(struct intel_iommu *iommu,
 int intel_pasid_setup_pass_through(struct intel_iommu *iommu,
 				   struct device *dev, u32 pasid)
 {
-	u16 did = FLPT_DEFAULT_DID;
-	struct pasid_entry *pte;
+	struct pasid_entry new_pte = {0};
 
-	spin_lock(&iommu->lock);
-	pte = intel_pasid_get_entry(dev, pasid);
-	if (!pte) {
-		spin_unlock(&iommu->lock);
-		return -ENODEV;
-	}
+	iommu_group_mutex_assert(dev);
+	pasid_pte_config_pass_through(iommu, &new_pte, FLPT_DEFAULT_DID);
 
-	if (pasid_pte_is_present(pte)) {
-		spin_unlock(&iommu->lock);
-		return -EBUSY;
-	}
-
-	pasid_pte_config_pass_through(iommu, pte, did);
-	spin_unlock(&iommu->lock);
-
-	pasid_flush_caches(iommu, pte, pasid, did);
-
-	return 0;
+	return intel_pasid_write(iommu, dev, pasid, (u128 *)&new_pte);
 }
 
 /*

@@ -1248,16 +1248,6 @@ static void domain_context_clear_one(struct device_domain_info *info, u8 bus, u8
 	__iommu_flush_cache(iommu, context, sizeof(*context));
 }
 
-static int domain_setup_passthrough(struct intel_iommu *iommu,
-				    struct device *dev, ioasid_t pasid,
-				    struct iommu_domain *old)
-{
-	if (old)
-		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
-
-	return intel_pasid_setup_pass_through(iommu, dev, pasid);
-}
-
 static int domain_setup_first_level(struct intel_iommu *iommu,
 				    struct dmar_domain *domain,
 				    struct device *dev,
@@ -3848,7 +3838,7 @@ static int identity_domain_set_dev_pasid(struct iommu_domain *domain,
 	if (ret)
 		return ret;
 
-	ret = domain_setup_passthrough(iommu, dev, pasid, old);
+	ret = intel_pasid_setup_pass_through(iommu, dev, pasid);
 	if (ret) {
 		iopf_for_domain_replace(old, domain, dev);
 		return ret;
