@@ -43,6 +43,11 @@
 #define PRESERVED_MEMFD_TOKEN 1
 #define PRESERVED_BUFFER_SIZE SZ_1M
 
+#define FALLOCATE_SESSION_NAME "fallocate_session"
+#define FALLOCATE_MEMFD_TOKEN 1
+#define FALLOCATE_BUFFER_SIZE SZ_1M
+#define RANDOM_DATA_FILE_FALLOCATE "luo_random_data_fallocate.bin"
+
 #define LIVEUPDATE_DEV "/dev/liveupdate"
 static int luo_fd = -1, stage;
 
@@ -191,6 +196,65 @@ TEST(preserved_ops)
 	/* Try to shrink the file using truncate. This should also fail. */
 	ASSERT_LT(ftruncate(fd, PRESERVED_BUFFER_SIZE / 2), 0);
 	ASSERT_EQ(lseek(fd, 0, SEEK_END), PRESERVED_BUFFER_SIZE);
+}
+
+/*
+ * Test that an fallocated memfd is preserved across live update and can be
+ * written to after being preserved.
+ */
+TEST(fallocate_memfd)
+{
+	int fd, session;
+	char *buffer;
+	struct liveupdate_session_preserve_fd preserve_arg = { .size = sizeof(preserve_arg) };
+	struct liveupdate_session_retrieve_fd retrieve_arg = { .size = sizeof(retrieve_arg) };
+
+	buffer = malloc(FALLOCATE_BUFFER_SIZE);
+	ASSERT_NE(buffer, NULL);
+
+	switch (stage) {
+	case 1:
+		session = luo_create_session(luo_fd, FALLOCATE_SESSION_NAME);
+		ASSERT_GE(session, 0);
+
+		fd = memfd_create("fallocate_memfd", 0);
+		ASSERT_GE(fd, 0);
+
+		/* Fallocate memory but do not write to it yet */
+		ASSERT_EQ(fallocate(fd, 0, 0, FALLOCATE_BUFFER_SIZE), 0);
+
+		preserve_arg.fd = fd;
+		preserve_arg.token = FALLOCATE_MEMFD_TOKEN;
+		ASSERT_GE(ioctl(session, LIVEUPDATE_SESSION_PRESERVE_FD, &preserve_arg), 0);
+
+		/* Now write to it after preserving */
+		ASSERT_GE(generate_random_data(buffer, FALLOCATE_BUFFER_SIZE), 0);
+		ASSERT_EQ(save_test_data(RANDOM_DATA_FILE_FALLOCATE, buffer, FALLOCATE_BUFFER_SIZE), 0);
+
+		ASSERT_GE(lseek(fd, 0, SEEK_SET), 0);
+		ASSERT_EQ(write_size(fd, buffer, FALLOCATE_BUFFER_SIZE), 0);
+
+		daemonize_and_wait();
+		break;
+	case 2:
+		session = luo_retrieve_session(luo_fd, FALLOCATE_SESSION_NAME);
+		ASSERT_GE(session, 0);
+
+		ASSERT_EQ(load_test_data(RANDOM_DATA_FILE_FALLOCATE, buffer, FALLOCATE_BUFFER_SIZE), 0);
+
+		retrieve_arg.token = FALLOCATE_MEMFD_TOKEN;
+		ASSERT_GE(ioctl(session, LIVEUPDATE_SESSION_RETRIEVE_FD, &retrieve_arg), 0);
+		fd = retrieve_arg.fd;
+		ASSERT_GE(fd, 0);
+
+		ASSERT_EQ(verify_fd_content(fd, buffer, FALLOCATE_BUFFER_SIZE), 0);
+
+		ASSERT_EQ(luo_session_finish(session), 0);
+		break;
+	default:
+		TH_LOG("Unknown stage %d\n", stage);
+		ASSERT_FALSE(true);
+	}
 }
 
 int main(int argc, char *argv[])
