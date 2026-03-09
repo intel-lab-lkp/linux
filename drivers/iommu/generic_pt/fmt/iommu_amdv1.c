@@ -9,7 +9,7 @@
 	 BIT(PT_FEAT_AMDV1_ENCRYPT_TABLES) |                           \
 	 BIT(PT_FEAT_AMDV1_FORCE_COHERENCE))
 #define PT_FORCE_ENABLED_FEATURES                                       \
-	(BIT(PT_FEAT_DYNAMIC_TOP) | BIT(PT_FEAT_AMDV1_ENCRYPT_TABLES) | \
+	(BIT(PT_FEAT_AMDV1_ENCRYPT_TABLES) |				\
 	 BIT(PT_FEAT_AMDV1_FORCE_COHERENCE))
 
 #include "iommu_template.h"
