@@ -30,6 +30,7 @@ properties:
               - mediatek,mt8183-pericfg
               - mediatek,mt8186-pericfg
               - mediatek,mt8188-pericfg
+              - mediatek,mt8189-peri-ao
               - mediatek,mt8195-pericfg
               - mediatek,mt8516-pericfg
           - const: syscon
