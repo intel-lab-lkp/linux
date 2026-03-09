@@ -3,48 +3,84 @@
 #define _ASM_X86_VMWARE_H
 
 #include <asm/cpufeatures.h>
-#include <asm/alternative.h>
 #include <linux/stringify.h>
+#include <linux/static_call.h>
 
 /*
  * VMware hypercall ABI.
  *
- * - Low bandwidth (LB) hypercalls (I/O port based, vmcall and vmmcall)
- * have up to 6 input and 6 output arguments passed and returned using
- * registers: %eax (arg0), %ebx (arg1), %ecx (arg2), %edx (arg3),
- * %esi (arg4), %edi (arg5).
- * The following input arguments must be initialized by the caller:
- * arg0 - VMWARE_HYPERVISOR_MAGIC
- * arg2 - Hypercall command
- * arg3 bits [15:0] - Port number, LB and direction flags
+ * - Low bandwidth (LB) hypercalls: I/O port based (aka backdoor), vmcall and
+ * vmmcall have up to 6 input and 6 output on registers arguments, with the
+ * register mapping:
+ *  +------+----------------------------------------+-----------------+
+ *  | Reg  | Input argument                         | Output argument |
+ *  +======+========================================+=================+
+ *  | %eax | VMWARE_HYPERVISOR_MAGIC                | out0            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %ebx | (in1)                                  | out1            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %ecx | (cmd) - Hypercall command              | out2            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %edx | Bits [15:0] - Port number for backdoor | out3            |
+ *  |      |               Zero for vmcall/vmmcall  |                 |
+ *  |      | Bits [31:16] - (in3)                   |                 |
+ *  +------+----------------------------------------+-----------------+
+ *  | %esi | (in4)                                  | out4            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %edi | (in5)                                  | out5            |
+ *  +------+----------------------------------------+-----------------+
  *
- * - Low bandwidth TDX hypercalls (x86_64 only) are similar to LB
- * hypercalls. They also have up to 6 input and 6 output on registers
- * arguments, with different argument to register mapping:
- * %r12 (arg0), %rbx (arg1), %r13 (arg2), %rdx (arg3),
- * %rsi (arg4), %rdi (arg5).
+ * - Low bandwidth TDX hypercalls (x86_64 only) are similar to LB hypercalls.
+ * They also have up to 6 input and 6 output on registers arguments, with
+ * different argument to register mapping:
+ *  +------+----------------------------------------+-----------------+
+ *  | Reg  | Input argument                         | Output argument |
+ *  +======+========================================+=================+
+ *  | %r12 | VMWARE_HYPERVISOR_MAGIC                | out0            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %ebx | (in1)                                  | out1            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %r13 | (cmd) - Hypercall command              | out2            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %edx | Bits [15:0] - Must be zero             | out3            |
+ *  |      | Bits [31:16] - (in3)                   |                 |
+ *  +------+----------------------------------------+-----------------+
+ *  | %esi | (in4)                                  | out4            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %edi | (in5)                                  | out5            |
+ *  +------+----------------------------------------+-----------------+
  *
- * - High bandwidth (HB) hypercalls are I/O port based only. They have
- * up to 7 input and 7 output arguments passed and returned using
- * registers: %eax (arg0), %ebx (arg1), %ecx (arg2), %edx (arg3),
- * %esi (arg4), %edi (arg5), %ebp (arg6).
- * The following input arguments must be initialized by the caller:
- * arg0 - VMWARE_HYPERVISOR_MAGIC
- * arg1 - Hypercall command
- * arg3 bits [15:0] - Port number, HB and direction flags
+ * - High bandwidth (HB) hypercalls are I/O port based only. They have up to 7
+ * input and 7 output on reegister arguments with the following mapping:
+ *  +------+----------------------------------------+-----------------+
+ *  | Reg  | Input argument                         | Output argument |
+ *  +======+========================================+=================+
+ *  | %eax | VMWARE_HYPERVISOR_MAGIC                | out0            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %ebx | (cmd) - Hypercall command              | out1            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %ebx | (in2)                                  | out2            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %edx | Bits [15:0] - Port number and HB flag  | out3            |
+ *  |      | Bits [31:16] - (in3)                   |                 |
+ *  +------+----------------------------------------+-----------------+
+ *  | %esi | (in4)                                  | out4            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %edi | (in5)                                  | out5            |
+ *  +------+----------------------------------------+-----------------+
+ *  | %ebp | (in6)                                  | out6            |
+ *  +------+----------------------------------------+-----------------+
  *
- * For compatibility purposes, x86_64 systems use only lower 32 bits
- * for input and output arguments.
+ * For compatibility purposes, x86_64 systems use only lower 32 bits for input
+ * and output arguments.
  *
- * The hypercall definitions differ in the low word of the %edx (arg3)
- * in the following way: the old I/O port based interface uses the port
- * number to distinguish between high- and low bandwidth versions, and
- * uses IN/OUT instructions to define transfer direction.
+ * The hypercall definitions differ in the low word of the %edx (arg3) in the
+ * following way: the old I/O port based interface uses the port number, the
+ * bandwidth mode flag, and uses IN/OUT instructions to define transfer
+ * direction.
  *
- * The new vmcall interface instead uses a set of flags to select
- * bandwidth mode and transfer direction. The flags should be loaded
- * into arg3 by any user and are automatically replaced by the port
- * number if the I/O port method is used.
+ * The new vmcall interface instead uses a set of flags to select bandwidth
+ * mode and transfer direction.
  */
 
 #define VMWARE_HYPERVISOR_HB		BIT(0)
@@ -70,103 +106,64 @@
 #define CPUID_VMWARE_FEATURES_ECX_VMMCALL	BIT(0)
 #define CPUID_VMWARE_FEATURES_ECX_VMCALL	BIT(1)
 
-extern unsigned long vmware_hypercall_slow(unsigned long cmd,
-					   unsigned long in1, unsigned long in3,
-					   unsigned long in4, unsigned long in5,
-					   u32 *out1, u32 *out2, u32 *out3,
-					   u32 *out4, u32 *out5);
-
 #define VMWARE_TDX_VENDOR_LEAF 0x1af7e4909ULL
 #define VMWARE_TDX_HCALL_FUNC  1
 
-extern unsigned long vmware_tdx_hypercall(unsigned long cmd,
-					  unsigned long in1, unsigned long in3,
-					  unsigned long in4, unsigned long in5,
-					  u32 *out1, u32 *out2, u32 *out3,
-					  u32 *out4, u32 *out5);
+unsigned long dummy_vmware_hypercall(unsigned long cmd,
+				     unsigned long in1, unsigned long in3,
+				     unsigned long in4, unsigned long in5,
+				     u32 *out1, u32 *out2, u32 *out3,
+				     u32 *out4, u32 *out5);
 
 /*
- * The low bandwidth call. The low word of %edx is presumed to have OUT bit
- * set. The high word of %edx may contain input data from the caller.
+ * Low bandwidth (LB) VMware hypercall.
+ *
+ * It is backed by the backdoor, vmcall, vmmcall or tdx call implementation.
+ *
+ * Use inX/outX arguments naming as the register mappings vary between
+ * different implementations. See VMware hypercall ABI above.
+ * These 10 arguments could be nicely wrapped in in/out structures, but it
+ * will introduce unnecessary structs copy in vmware_tdx_hypercall().
+ *
+ * NOTE:
+ * Do not merge vmware_{backdoor,vmcall,vmmcall}_hypercall implementations
+ * using alternative instructions. Such patching mechanism can not be used
+ * in vmware_hypercall path, as the first hypercall will be called much
+ * before the apply_alternatives(). See vmware_platform_setup().
  */
-#define VMWARE_HYPERCALL					\
-	ALTERNATIVE_2("movw %[port], %%dx\n\t"			\
-		      "inl (%%dx), %%eax",			\
-		      "vmcall", X86_FEATURE_VMCALL,		\
-		      "vmmcall", X86_FEATURE_VMW_VMMCALL)
+DECLARE_STATIC_CALL(vmware_hypercall, dummy_vmware_hypercall);
 
+/*
+ * Set of commonly used vmware_hypercallX functions - wrappers on top of the
+ * vmware_hypercall.
+ */
 static inline
 unsigned long vmware_hypercall1(unsigned long cmd, unsigned long in1)
 {
-	unsigned long out0;
+	u32 out1, out2, out3, out4, out5;
 
-	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
-		return vmware_tdx_hypercall(cmd, in1, 0, 0, 0,
-					    NULL, NULL, NULL, NULL, NULL);
-
-	if (unlikely(!alternatives_patched) && !__is_defined(MODULE))
-		return vmware_hypercall_slow(cmd, in1, 0, 0, 0,
-					     NULL, NULL, NULL, NULL, NULL);
-
-	asm_inline volatile (VMWARE_HYPERCALL
-		: "=a" (out0)
-		: [port] "i" (VMWARE_HYPERVISOR_PORT),
-		  "a" (VMWARE_HYPERVISOR_MAGIC),
-		  "b" (in1),
-		  "c" (cmd),
-		  "d" (0)
-		: "cc", "memory");
-	return out0;
+	return static_call_mod(vmware_hypercall)(cmd, in1, 0, 0, 0,
+			       &out1, &out2, &out3, &out4, &out5);
 }
 
 static inline
 unsigned long vmware_hypercall3(unsigned long cmd, unsigned long in1,
 				u32 *out1, u32 *out2)
 {
-	unsigned long out0;
+	u32 out3, out4, out5;
 
-	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
-		return vmware_tdx_hypercall(cmd, in1, 0, 0, 0,
-					    out1, out2, NULL, NULL, NULL);
-
-	if (unlikely(!alternatives_patched) && !__is_defined(MODULE))
-		return vmware_hypercall_slow(cmd, in1, 0, 0, 0,
-					     out1, out2, NULL, NULL, NULL);
-
-	asm_inline volatile (VMWARE_HYPERCALL
-		: "=a" (out0), "=b" (*out1), "=c" (*out2)
-		: [port] "i" (VMWARE_HYPERVISOR_PORT),
-		  "a" (VMWARE_HYPERVISOR_MAGIC),
-		  "b" (in1),
-		  "c" (cmd),
-		  "d" (0)
-		: "di", "si", "cc", "memory");
-	return out0;
+	return static_call_mod(vmware_hypercall)(cmd, in1, 0, 0, 0,
+			       out1, out2, &out3, &out4, &out5);
 }
 
 static inline
 unsigned long vmware_hypercall4(unsigned long cmd, unsigned long in1,
 				u32 *out1, u32 *out2, u32 *out3)
 {
-	unsigned long out0;
+	u32 out4, out5;
 
-	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
-		return vmware_tdx_hypercall(cmd, in1, 0, 0, 0,
-					    out1, out2, out3, NULL, NULL);
-
-	if (unlikely(!alternatives_patched) && !__is_defined(MODULE))
-		return vmware_hypercall_slow(cmd, in1, 0, 0, 0,
-					     out1, out2, out3, NULL, NULL);
-
-	asm_inline volatile (VMWARE_HYPERCALL
-		: "=a" (out0), "=b" (*out1), "=c" (*out2), "=d" (*out3)
-		: [port] "i" (VMWARE_HYPERVISOR_PORT),
-		  "a" (VMWARE_HYPERVISOR_MAGIC),
-		  "b" (in1),
-		  "c" (cmd),
-		  "d" (0)
-		: "di", "si", "cc", "memory");
-	return out0;
+	return static_call_mod(vmware_hypercall)(cmd, in1, 0, 0, 0,
+			       out1, out2, out3, &out4, &out5);
 }
 
 static inline
@@ -174,27 +171,10 @@ unsigned long vmware_hypercall5(unsigned long cmd, unsigned long in1,
 				unsigned long in3, unsigned long in4,
 				unsigned long in5, u32 *out2)
 {
-	unsigned long out0;
+	u32 out1, out3, out4, out5;
 
-	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
-		return vmware_tdx_hypercall(cmd, in1, in3, in4, in5,
-					    NULL, out2, NULL, NULL, NULL);
-
-	if (unlikely(!alternatives_patched) && !__is_defined(MODULE))
-		return vmware_hypercall_slow(cmd, in1, in3, in4, in5,
-					     NULL, out2, NULL, NULL, NULL);
-
-	asm_inline volatile (VMWARE_HYPERCALL
-		: "=a" (out0), "=c" (*out2)
-		: [port] "i" (VMWARE_HYPERVISOR_PORT),
-		  "a" (VMWARE_HYPERVISOR_MAGIC),
-		  "b" (in1),
-		  "c" (cmd),
-		  "d" (in3),
-		  "S" (in4),
-		  "D" (in5)
-		: "cc", "memory");
-	return out0;
+	return static_call_mod(vmware_hypercall)(cmd, in1, in3, in4, in5,
+			       &out1, out2, &out3, &out4, &out5);
 }
 
 static inline
@@ -202,26 +182,10 @@ unsigned long vmware_hypercall6(unsigned long cmd, unsigned long in1,
 				unsigned long in3, u32 *out2,
 				u32 *out3, u32 *out4, u32 *out5)
 {
-	unsigned long out0;
+	u32 out1;
 
-	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
-		return vmware_tdx_hypercall(cmd, in1, in3, 0, 0,
-					    NULL, out2, out3, out4, out5);
-
-	if (unlikely(!alternatives_patched) && !__is_defined(MODULE))
-		return vmware_hypercall_slow(cmd, in1, in3, 0, 0,
-					     NULL, out2, out3, out4, out5);
-
-	asm_inline volatile (VMWARE_HYPERCALL
-		: "=a" (out0), "=c" (*out2), "=d" (*out3), "=S" (*out4),
-		  "=D" (*out5)
-		: [port] "i" (VMWARE_HYPERVISOR_PORT),
-		  "a" (VMWARE_HYPERVISOR_MAGIC),
-		  "b" (in1),
-		  "c" (cmd),
-		  "d" (in3)
-		: "cc", "memory");
-	return out0;
+	return static_call_mod(vmware_hypercall)(cmd, in1, in3, 0, 0,
+			       &out1, out2, out3, out4, out5);
 }
 
 static inline
@@ -230,27 +194,10 @@ unsigned long vmware_hypercall7(unsigned long cmd, unsigned long in1,
 				unsigned long in5, u32 *out1,
 				u32 *out2, u32 *out3)
 {
-	unsigned long out0;
+	u32 out4, out5;
 
-	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
-		return vmware_tdx_hypercall(cmd, in1, in3, in4, in5,
-					    out1, out2, out3, NULL, NULL);
-
-	if (unlikely(!alternatives_patched) && !__is_defined(MODULE))
-		return vmware_hypercall_slow(cmd, in1, in3, in4, in5,
-					     out1, out2, out3, NULL, NULL);
-
-	asm_inline volatile (VMWARE_HYPERCALL
-		: "=a" (out0), "=b" (*out1), "=c" (*out2), "=d" (*out3)
-		: [port] "i" (VMWARE_HYPERVISOR_PORT),
-		  "a" (VMWARE_HYPERVISOR_MAGIC),
-		  "b" (in1),
-		  "c" (cmd),
-		  "d" (in3),
-		  "S" (in4),
-		  "D" (in5)
-		: "cc", "memory");
-	return out0;
+	return static_call_mod(vmware_hypercall)(cmd, in1, in3, in4, in5,
+			       out1, out2, out3, &out4, &out5);
 }
 
 #ifdef CONFIG_X86_64
@@ -322,6 +269,5 @@ unsigned long vmware_hypercall_hb_in(unsigned long cmd, unsigned long in2,
 	return out0;
 }
 #undef VMW_BP_CONSTRAINT
-#undef VMWARE_HYPERCALL
 
 #endif
