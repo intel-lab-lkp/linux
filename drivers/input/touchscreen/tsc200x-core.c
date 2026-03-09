@@ -465,6 +465,7 @@ int tsc200x_probe(struct device *dev, int irq, const struct input_id *tsc_id,
 	ts->idev = input_dev;
 	ts->regmap = regmap;
 	ts->tsc200x_cmd = tsc200x_cmd;
+	ts->bustype = tsc_id->bustype;
 
 	error = device_property_read_u32(dev, "ti,x-plate-ohms", &x_plate_ohm);
 	ts->x_plate_ohm = error ? TSC200X_DEF_RESISTOR : x_plate_ohm;
@@ -547,8 +548,9 @@ int tsc200x_probe(struct device *dev, int irq, const struct input_id *tsc_id,
 		return error;
 	}
 
-	device_init_wakeup(dev,
-			   device_property_read_bool(dev, "wakeup-source"));
+	if (ts->bustype == BUS_SPI)
+		device_init_wakeup(dev,
+				 device_property_read_bool(dev, "wakeup-source"));
 
 	return 0;
 }
@@ -565,8 +567,13 @@ static int tsc200x_suspend(struct device *dev)
 
 	ts->suspended = true;
 
-	if (device_may_wakeup(dev))
-		ts->wake_irq_enabled = enable_irq_wake(ts->irq) == 0;
+	if (device_may_wakeup(dev)) {
+		if (ts->bustype == BUS_SPI)
+			ts->wake_irq_enabled = enable_irq_wake(ts->irq) == 0;
+		else
+			ts->wake_irq_enabled = true;
+	} else
+		ts->wake_irq_enabled = false;
 
 	return 0;
 }
@@ -578,7 +585,8 @@ static int tsc200x_resume(struct device *dev)
 	guard(mutex)(&ts->mutex);
 
 	if (ts->wake_irq_enabled) {
-		disable_irq_wake(ts->irq);
+		if (ts->bustype == BUS_SPI)
+			disable_irq_wake(ts->irq);
 		ts->wake_irq_enabled = false;
 	}
 
