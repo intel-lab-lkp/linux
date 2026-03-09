@@ -1318,7 +1318,7 @@ static int copy_to_user_encap(struct xfrm_encap_tmpl *ep, struct sk_buff *skb)
 	return 0;
 }
 
-static int xfrm_smark_put(struct sk_buff *skb, struct xfrm_mark *m)
+static int xfrm_smark_put(struct sk_buff *skb, const struct xfrm_mark *m)
 {
 	int ret = 0;
 
@@ -3059,6 +3059,22 @@ nomem:
 }
 
 #ifdef CONFIG_XFRM_MIGRATE
+static void copy_from_user_migrate_state(struct xfrm_migrate *ma,
+					 const struct xfrm_user_migrate_state *um)
+{
+	memcpy(&ma->old_daddr, &um->id.daddr, sizeof(ma->old_daddr));
+	memcpy(&ma->new_daddr, &um->new_daddr, sizeof(ma->new_daddr));
+	memcpy(&ma->new_saddr, &um->new_saddr, sizeof(ma->new_saddr));
+
+	ma->proto = um->id.proto;
+	ma->new_reqid = um->new_reqid;
+
+	ma->old_family = um->id.family;
+	ma->new_family = um->new_family;
+
+	ma->old_mark = um->old_mark;
+}
+
 static int copy_from_user_migrate(struct xfrm_migrate *ma,
 				  struct xfrm_kmaddress *k,
 				  struct nlattr **attrs, int *num,
@@ -3161,7 +3177,238 @@ error:
 	kfree(xuo);
 	return err;
 }
+
+static int build_migrate_state(struct sk_buff *skb,
+			       const struct xfrm_user_migrate_state *um,
+			       const struct xfrm_migrate *m,
+			       bool new_mark_set, bool offload_set,
+			       u8 dir, u32 portid, u32 seq)
+{
+	int err;
+	struct nlmsghdr *nlh;
+	struct xfrm_user_migrate_state *hdr;
+
+	nlh = nlmsg_put(skb, portid, seq, XFRM_MSG_MIGRATE_STATE,
+			sizeof(struct xfrm_user_migrate_state), 0);
+	if (!nlh)
+		return -EMSGSIZE;
+
+	hdr = nlmsg_data(nlh);
+	*hdr = *um;
+
+	if (m->encap) {
+		err = nla_put(skb, XFRMA_ENCAP, sizeof(*m->encap), m->encap);
+		if (err)
+			goto out_cancel;
+	}
+
+	if (offload_set || m->xuo.ifindex) {
+		err = nla_put(skb, XFRMA_OFFLOAD_DEV, sizeof(m->xuo), &m->xuo);
+		if (err)
+			goto out_cancel;
+	}
+
+	if (new_mark_set) {
+		err = nla_put(skb, XFRMA_MARK, sizeof(m->new_mark),
+			      &m->new_mark);
+		if (err)
+			goto out_cancel;
+	}
+
+	err = xfrm_smark_put(skb, &m->smark);
+	if (err)
+		goto out_cancel;
+
+	if (m->mapping_maxage) {
+		err = nla_put_u32(skb, XFRMA_MTIMER_THRESH, m->mapping_maxage);
+		if (err)
+			goto out_cancel;
+	}
+
+	if (m->nat_keepalive_interval) {
+		err = nla_put_u32(skb, XFRMA_NAT_KEEPALIVE_INTERVAL,
+				  m->nat_keepalive_interval);
+		if (err)
+			goto out_cancel;
+	}
+
+	if (dir) {
+		err = nla_put_u8(skb, XFRMA_SA_DIR, dir);
+		if (err)
+			goto out_cancel;
+	}
+
+	nlmsg_end(skb, nlh);
+	return 0;
+
+out_cancel:
+	nlmsg_cancel(skb, nlh);
+	return err;
+}
+
+static unsigned int xfrm_migrate_state_msgsize(const struct xfrm_migrate *m,
+					       u8 dir)
+{
+	return NLMSG_ALIGN(sizeof(struct xfrm_user_migrate_state)) +
+		(m->encap ? nla_total_size(sizeof(struct xfrm_encap_tmpl)) : 0) +
+		nla_total_size(sizeof(struct xfrm_user_offload)) +
+		nla_total_size(sizeof(struct xfrm_mark)) +
+		nla_total_size(sizeof(u32)) * 2 + /* SET_MARK + SET_MARK_MASK */
+		(m->mapping_maxage ? nla_total_size(sizeof(u32)) : 0) +
+		(m->nat_keepalive_interval ? nla_total_size(sizeof(u32)) : 0) +
+		(dir ? nla_total_size(sizeof(u8)) : 0); /* XFRMA_SA_DIR */
+}
+
+static int xfrm_send_migrate_state(const struct xfrm_user_migrate_state *um,
+				   const struct xfrm_migrate *m,
+				   bool new_mark_set, bool offload_set,
+				   u8 dir, u32 portid, u32 seq)
+{
+	int err;
+	struct sk_buff *skb;
+	struct net *net = &init_net;
+
+	skb = nlmsg_new(xfrm_migrate_state_msgsize(m, dir), GFP_ATOMIC);
+	if (!skb)
+		return -ENOMEM;
+
+	err = build_migrate_state(skb, um, m, new_mark_set, offload_set,
+				  dir, portid, seq);
+	if (err < 0) {
+		kfree_skb(skb);
+		return err;
+	}
+
+	return xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_MIGRATE);
+}
+
+static int xfrm_do_migrate_state(struct sk_buff *skb, struct nlmsghdr *nlh,
+				 struct nlattr **attrs, struct netlink_ext_ack *extack)
+{
+	struct xfrm_user_migrate_state *um = nlmsg_data(nlh);
+	struct net *net = sock_net(skb->sk);
+	struct xfrm_migrate m = {};
+	struct xfrm_state *xc;
+	struct xfrm_state *x;
+	int err;
+
+	if (!um->id.spi) {
+		NL_SET_ERR_MSG(extack, "Invalid SPI 0x0");
+		return -EINVAL;
+	}
+
+	copy_from_user_migrate_state(&m, um);
+
+	x = xfrm_state_lookup(net, m.old_mark.v & m.old_mark.m,
+			      &um->id.daddr, um->id.spi,
+			      um->id.proto, um->id.family);
+	if (!x) {
+		NL_SET_ERR_MSG(extack, "Can not find state");
+		return -ESRCH;
+	}
+
+	if (attrs[XFRMA_ENCAP]) {
+		m.encap = nla_data(attrs[XFRMA_ENCAP]);
+		if (m.encap->encap_type == 0) {
+			m.encap = NULL; /* sentinel: remove encap */
+		} else if (m.encap->encap_type != UDP_ENCAP_ESPINUDP) {
+			NL_SET_ERR_MSG(extack, "Unsupported encapsulation type");
+			err = -EINVAL;
+			goto out;
+		}
+	} else {
+		m.encap = x->encap; /* omit-to-inherit */
+	}
+
+	if (attrs[XFRMA_MTIMER_THRESH]) {
+		err = verify_mtimer_thresh(!!m.encap, x->dir, extack);
+		if (err)
+			goto out;
+	}
+
+	if (attrs[XFRMA_NAT_KEEPALIVE_INTERVAL] &&
+	    nla_get_u32(attrs[XFRMA_NAT_KEEPALIVE_INTERVAL]) && !m.encap) {
+		NL_SET_ERR_MSG(extack,
+			       "NAT_KEEPALIVE_INTERVAL requires encapsulation");
+		err = -EINVAL;
+		goto out;
+	}
+
+	/* absent copies offload; ifindex=0 removes it */
+	if (attrs[XFRMA_OFFLOAD_DEV]) {
+		nla_memcpy(&m.xuo, attrs[XFRMA_OFFLOAD_DEV], sizeof(m.xuo));
+	} else if (x->xso.dev) {
+		m.xuo.ifindex = x->xso.dev->ifindex;
+		if (x->xso.dir == XFRM_DEV_OFFLOAD_IN)
+			m.xuo.flags = XFRM_OFFLOAD_INBOUND;
+		if (x->xso.type == XFRM_DEV_OFFLOAD_PACKET)
+			m.xuo.flags |= XFRM_OFFLOAD_PACKET;
+	}
+
+	if (attrs[XFRMA_MARK])
+		m.new_mark = *(struct xfrm_mark *)nla_data(attrs[XFRMA_MARK]);
+	else
+		m.new_mark = m.old_mark;
+
+	if (attrs[XFRMA_SET_MARK])
+		xfrm_smark_init(attrs, &m.smark);
+	else
+		m.smark = x->props.smark;
+
+	m.mapping_maxage = attrs[XFRMA_MTIMER_THRESH] ?
+		nla_get_u32(attrs[XFRMA_MTIMER_THRESH]) : x->mapping_maxage;
+	m.nat_keepalive_interval = attrs[XFRMA_NAT_KEEPALIVE_INTERVAL] ?
+		nla_get_u32(attrs[XFRMA_NAT_KEEPALIVE_INTERVAL]) :
+		x->nat_keepalive_interval;
+
+	xc = xfrm_state_migrate_create(x, &m, net, extack);
+	if (!xc) {
+		NL_SET_ERR_MSG_WEAK(extack, "State migration clone failed");
+		err = -EINVAL;
+		goto out;
+	}
+
+	spin_lock_bh(&x->lock);
+	xfrm_migrate_sync(xc, x); /* to prevent SN/IV reuse */
+	__xfrm_state_delete(x);
+	spin_unlock_bh(&x->lock);
+
+	err = xfrm_state_migrate_install(x, xc, &m, extack);
+	if (err < 0) {
+		/*
+		 * In this rare case both the old SA and the new SA
+		 * will disappear.
+		 * Alternatives risk duplicate SN/IV usage which must not occur.
+		 * Userspace must handle this error, -EEXIST.
+		 */
+		goto out;
+	}
+
+	/* Restore encap cleared by sentinel (type=0) during migration. */
+	if (attrs[XFRMA_ENCAP])
+		m.encap = nla_data(attrs[XFRMA_ENCAP]);
+
+	err = xfrm_send_migrate_state(um, &m, !!attrs[XFRMA_MARK],
+				      !!attrs[XFRMA_OFFLOAD_DEV],
+				      xc->dir, nlh->nlmsg_pid, nlh->nlmsg_seq);
+	if (err < 0) {
+		NL_SET_ERR_MSG(extack, "Failed to send migration notification");
+		err = 0;
+	}
+
+out:
+	xfrm_state_put(x);
+	return err;
+}
+
 #else
+static int xfrm_do_migrate_state(struct sk_buff *skb, struct nlmsghdr *nlh,
+				 struct nlattr **attrs, struct netlink_ext_ack *extack)
+{
+	NL_SET_ERR_MSG(extack, "XFRM_MSG_MIGRATE_STATE is not supported");
+	return -ENOPROTOOPT;
+}
+
 static int xfrm_do_migrate(struct sk_buff *skb, struct nlmsghdr *nlh,
 			   struct nlattr **attrs, struct netlink_ext_ack *extack)
 {
@@ -3314,6 +3561,7 @@ const int xfrm_msg_min[XFRM_NR_MSGTYPES] = {
 	[XFRM_MSG_GETSPDINFO  - XFRM_MSG_BASE] = sizeof(u32),
 	[XFRM_MSG_SETDEFAULT  - XFRM_MSG_BASE] = XMSGSIZE(xfrm_userpolicy_default),
 	[XFRM_MSG_GETDEFAULT  - XFRM_MSG_BASE] = XMSGSIZE(xfrm_userpolicy_default),
+	[XFRM_MSG_MIGRATE_STATE - XFRM_MSG_BASE] = XMSGSIZE(xfrm_user_migrate_state),
 };
 EXPORT_SYMBOL_GPL(xfrm_msg_min);
 
@@ -3407,6 +3655,7 @@ static const struct xfrm_link {
 	[XFRM_MSG_GETSPDINFO  - XFRM_MSG_BASE] = { .doit = xfrm_get_spdinfo   },
 	[XFRM_MSG_SETDEFAULT  - XFRM_MSG_BASE] = { .doit = xfrm_set_default   },
 	[XFRM_MSG_GETDEFAULT  - XFRM_MSG_BASE] = { .doit = xfrm_get_default   },
+	[XFRM_MSG_MIGRATE_STATE - XFRM_MSG_BASE] = { .doit = xfrm_do_migrate_state },
 };
 
 static int xfrm_reject_unused_attr(int type, struct nlattr **attrs,
