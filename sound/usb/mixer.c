@@ -3617,8 +3617,12 @@ static int snd_usb_mixer_status_create(struct usb_mixer_interface *mixer)
 	int buffer_length;
 	unsigned int epnum;
 
+	epnum = get_iface_desc(mixer->hostif)->bNumEndpoints;
+	if (epnum == 0)
+		return -EINVAL;
+
 	/* we need one interrupt input endpoint */
-	if (get_iface_desc(mixer->hostif)->bNumEndpoints < 1)
+	if (epnum < 1)
 		return 0;
 	ep = get_endpoint(mixer->hostif, 0);
 	if (!usb_endpoint_dir_in(ep) || !usb_endpoint_xfer_int(ep))
