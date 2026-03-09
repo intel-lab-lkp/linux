@@ -351,7 +351,7 @@ enum {
 #define VM_LOCKED_MASK	(VM_LOCKED | VM_LOCKONFAULT)
 
 /* This mask prevents VMAs from being mlock'd */
-#define VM_NO_MLOCK_MASK       (VM_SPECIAL | VM_DROPPABLE)
+#define VM_NO_MLOCK_MASK	(VM_SPECIAL | VM_DROPPABLE)
 
 #define TASK_EXEC ((current->personality & READ_IMPLIES_EXEC) ? VM_EXEC : 0)
 
