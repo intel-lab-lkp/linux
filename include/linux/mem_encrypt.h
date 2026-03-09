@@ -54,6 +54,18 @@
 #define dma_addr_canonical(x)		(x)
 #endif
 
+#ifndef mem_decrypt_granule_size
+static inline size_t mem_decrypt_granule_size(void)
+{
+	return PAGE_SIZE;
+}
+#endif
+
+static inline size_t mem_decrypt_align(size_t size)
+{
+	return ALIGN(size, mem_decrypt_granule_size());
+}
+
 #endif	/* __ASSEMBLY__ */
 
 #endif	/* __MEM_ENCRYPT_H__ */
