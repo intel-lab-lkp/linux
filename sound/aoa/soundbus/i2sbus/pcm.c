@@ -314,7 +314,7 @@ static int i2sbus_pcm_prepare(struct i2sbus_dev *i2sdev, int in)
 	int i, periodsize, nperiods;
 	dma_addr_t offset;
 	struct bus_info bi;
-	struct codec_info_item *cii;
+	struct codec_info_item *cii = NULL;
 	int sfr = 0;		/* serial format register */
 	int dws = 0;		/* data word sizes reg */
 	int input_16bit;
@@ -390,13 +390,11 @@ static int i2sbus_pcm_prepare(struct i2sbus_dev *i2sdev, int in)
 	case SNDRV_PCM_FORMAT_U16_BE:
 		/* FIXME: if we add different bus factors we need to
 		 * do more here!! */
-		bi.bus_factor = 0;
-		list_for_each_entry(cii, &i2sdev->sound.codec_list, list) {
-			bi.bus_factor = cii->codec->bus_factor;
-			break;
-		}
-		if (!bi.bus_factor)
+		cii = list_first_entry_or_null(&i2sdev->sound.codec_list,
+					       struct codec_info_item, list);
+		if (!cii)
 			return -ENODEV;
+		bi.bus_factor = cii->codec->bus_factor;
 		input_16bit = 1;
 		break;
 	case SNDRV_PCM_FORMAT_S32_BE:
@@ -410,10 +408,12 @@ static int i2sbus_pcm_prepare(struct i2sbus_dev *i2sdev, int in)
 		return -EINVAL;
 	}
 	/* we assume all sysclocks are the same! */
-	list_for_each_entry(cii, &i2sdev->sound.codec_list, list) {
-		bi.sysclock_factor = cii->codec->sysclock_factor;
-		break;
-	}
+	if (!cii)
+		cii = list_first_entry_or_null(&i2sdev->sound.codec_list,
+					       struct codec_info_item, list);
+	if (!cii)
+		return -ENODEV;
+	bi.sysclock_factor = cii->codec->sysclock_factor;
 
 	if (clock_and_divisors(bi.sysclock_factor,
 			       bi.bus_factor,
