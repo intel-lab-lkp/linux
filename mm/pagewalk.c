@@ -146,10 +146,18 @@ again:
 				continue;
 		}
 
-		if (walk->vma)
+		if (walk->vma) {
+			/*
+			 * Don't descend into device-backed pfnmaps,
+			 * they might refault the PMD entry.
+			 */
+			if (unlikely(pmd_special(*pmd)))
+				continue;
+
 			split_huge_pmd(walk->vma, pmd, addr);
-		else if (pmd_leaf(*pmd) || !pmd_present(*pmd))
+		} else if (pmd_leaf(*pmd) || !pmd_present(*pmd)) {
 			continue; /* Nothing to do. */
+		}
 
 		err = walk_pte_range(pmd, addr, next, walk);
 		if (err)
@@ -212,10 +220,18 @@ static int walk_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 				continue;
 		}
 
-		if (walk->vma)
+		if (walk->vma) {
+			/*
+			 * Don't descend into device-backed pfnmaps,
+			 * they might refault the PUD entry.
+			 */
+			if (unlikely(pud_special(*pud)))
+				continue;
+
 			split_huge_pud(walk->vma, pud, addr);
-		else if (pud_leaf(*pud) || !pud_present(*pud))
+		} else if (pud_leaf(*pud) || !pud_present(*pud)) {
 			continue; /* Nothing to do. */
+		}
 
 		if (pud_none(*pud))
 			goto again;
