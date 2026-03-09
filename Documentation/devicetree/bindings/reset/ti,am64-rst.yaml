@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reset/ti,am64-rst.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments K3 Multicore SoC platforms reset module
+
+maintainers:
+  - Alexander Sverdlin <alexander.sverdlin@gmail.com>
+
+description: |
+  Texas Instruments (ARM64) K3 Multicore SoC platforms reset module is present
+  on AM64x and newer members of the K3 family and consists of the RST_CTRL,
+  RST_STAT, RST_SRC and RST_MAGIC_WORD registers.
+
+properties:
+  $nodename:
+    pattern: "^rst@[0-9a-f]+$"
+
+  compatible:
+    items:
+      - const: ti,am64-rst
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    rst@43018170 {
+        compatible = "ti,am64-rst";
+        reg = <0x43018170 0x10>;
+    };
