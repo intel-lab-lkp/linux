@@ -19,6 +19,7 @@
 #include <linux/average.h>
 #include <linux/of.h>
 #include <linux/rhashtable.h>
+#include <linux/percpu.h>
 #include "qmi.h"
 #include "htc.h"
 #include "wmi.h"
@@ -937,6 +938,7 @@ struct ath12k_base {
 	struct device *dev;
 	struct ath12k_qmi qmi;
 	struct ath12k_wmi_base wmi_ab;
+	void __percpu *wmi_tb;
 	struct completion fw_ready;
 	u8 device_id;
 	int num_radios;

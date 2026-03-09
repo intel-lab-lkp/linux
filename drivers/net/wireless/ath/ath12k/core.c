@@ -2258,6 +2258,7 @@ void ath12k_core_free(struct ath12k_base *ab)
 	timer_delete_sync(&ab->rx_replenish_retry);
 	destroy_workqueue(ab->workqueue_aux);
 	destroy_workqueue(ab->workqueue);
+	free_percpu(ab->wmi_tb);
 	kfree(ab);
 }
 
@@ -2269,6 +2270,11 @@ struct ath12k_base *ath12k_core_alloc(struct device *dev, size_t priv_size,
 	ab = kzalloc(sizeof(*ab) + priv_size, GFP_KERNEL);
 	if (!ab)
 		return NULL;
+
+	ab->wmi_tb = __alloc_percpu(WMI_TAG_MAX * sizeof(void *),
+				    __alignof__(void *));
+	if (!ab->wmi_tb)
+		goto err_sc_free;
 
 	init_completion(&ab->driver_recovery);
 
@@ -2317,6 +2323,7 @@ struct ath12k_base *ath12k_core_alloc(struct device *dev, size_t priv_size,
 err_free_wq:
 	destroy_workqueue(ab->workqueue);
 err_sc_free:
+	free_percpu(ab->wmi_tb);
 	kfree(ab);
 	return NULL;
 }
