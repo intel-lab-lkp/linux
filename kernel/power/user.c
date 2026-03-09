@@ -319,6 +319,14 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SNAPSHOT_ATOMIC_RESTORE:
+		/*
+		 * We need to call snapshot_write_next() one last time
+		 * before finalizing in order to process any trailing
+		 * zero pages.
+		 */
+		error = snapshot_write_next(&data->handle);
+		if (error < 0)
+			break;
 		error = snapshot_write_finalize(&data->handle);
 		if (error)
 			break;
