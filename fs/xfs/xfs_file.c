@@ -657,6 +657,55 @@ static const struct iomap_dio_ops xfs_dio_write_ops = {
 	.end_io		= xfs_dio_write_end_io,
 };
 
+/*
+ * *Note on EOF edge case*
+ *
+ * Buffered writethrough IO uses dio path but allows non block aligned
+ * writes. The IO we submit is later rounded to block size boundary.
+ * However, for end io processing, we must pass the original range to
+ * xfs_dio_write_end_io(). This is important for non block-aligned EOF
+ * writes because otherwise XFS might update the i_size to more than what
+ * the user originally wrote, exposing stale data.
+ *
+ * Hence, modify iocb->ki_pos and the size of IO to correspond to the original
+ * range, so that our extent conversion and i_size updates are correct.
+ */
+static int
+xfs_writethrough_end_io(
+	struct kiocb		*iocb,
+	ssize_t			size,
+	int			error,
+	unsigned		flags)
+{
+	struct iomap_writethrough_ctx *wt_ctx =
+		container_of(iocb, struct iomap_writethrough_ctx, iocb);
+	loff_t len = wt_ctx->orig_len;
+	loff_t end  = iocb->ki_pos + size;
+	loff_t orig_end  = wt_ctx->orig_pos + wt_ctx->orig_len;
+
+	/*
+	 * We have a short write that didn't even cover the original range.
+	 * Nothing to do
+	 */
+	if (end <= wt_ctx->orig_pos)
+		return 0;
+
+	/*
+	 * Short write partially covers original range. Trim the range to short
+	 * write's end.
+	 */
+	if (end < orig_end)
+		len = end - wt_ctx->orig_pos;
+
+	iocb->ki_pos = wt_ctx->orig_pos;
+
+	return xfs_dio_write_end_io(iocb, len, error, flags);
+}
+
+static const struct iomap_dio_ops xfs_dio_writethrough_ops = {
+	.end_io		= xfs_writethrough_end_io,
+};
+
 static void
 xfs_dio_zoned_submit_io(
 	const struct iomap_iter	*iter,
@@ -988,6 +1037,13 @@ out:
 	return ret;
 }
 
+const struct iomap_writethrough_ops xfs_writethrough_ops = {
+	.ops			= &xfs_direct_write_iomap_ops,
+	.write_ops		= &xfs_iomap_write_ops,
+	.dio_ops		= &xfs_dio_writethrough_ops,
+};
+
+
 STATIC ssize_t
 xfs_file_buffered_write(
 	struct kiocb		*iocb,
@@ -1010,9 +1066,13 @@ write_retry:
 		goto out;
 
 	trace_xfs_file_buffered_write(iocb, from);
-	ret = iomap_file_buffered_write(iocb, from,
-			&xfs_buffered_write_iomap_ops, &xfs_iomap_write_ops,
-			NULL);
+	if (iocb->ki_flags & IOCB_WRITETHROUGH) {
+		ret = iomap_file_writethrough_write(iocb, from,
+						    &xfs_writethrough_ops, NULL);
+	} else
+		ret = iomap_file_buffered_write(iocb, from,
+						&xfs_buffered_write_iomap_ops,
+						&xfs_iomap_write_ops, NULL);
 
 	/*
 	 * If we hit a space limit, try to free up some lingering preallocated
@@ -2042,7 +2102,7 @@ const struct file_operations xfs_file_operations = {
 	.remap_file_range = xfs_file_remap_range,
 	.fop_flags	= FOP_MMAP_SYNC | FOP_BUFFER_RASYNC |
 			  FOP_BUFFER_WASYNC | FOP_DIO_PARALLEL_WRITE |
-			  FOP_DONTCACHE,
+			  FOP_DONTCACHE | FOP_WRITETHROUGH,
 	.setlease	= generic_setlease,
 };
 
