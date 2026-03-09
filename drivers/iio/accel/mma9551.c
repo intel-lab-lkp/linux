@@ -4,17 +4,21 @@
  * Copyright (c) 2014, Intel Corporation.
  */
 
+#include <linux/cleanup.h>
+#include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
-#include <linux/delay.h>
+
 #include <linux/gpio/consumer.h>
+
+#include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-#include <linux/iio/events.h>
-#include <linux/pm_runtime.h>
+
 #include "mma9551_core.h"
 
 #define MMA9551_GPIO_COUNT		4
@@ -337,7 +341,7 @@ static irqreturn_t mma9551_event_handler(int irq, void *private)
 	u16 reg;
 	u8 val;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	for (i = 0; i < 3; i++)
 		if (irq == data->irqs[i]) {
@@ -349,7 +353,7 @@ static irqreturn_t mma9551_event_handler(int irq, void *private)
 		/* IRQ was triggered on 4th line, which we don't use. */
 		dev_warn(&data->client->dev,
 			 "irq triggered on unused line %d\n", data->irqs[3]);
-		goto out;
+		return IRQ_HANDLED;
 	}
 
 	switch (mma_axis) {
@@ -373,16 +377,13 @@ static irqreturn_t mma9551_event_handler(int irq, void *private)
 	if (ret < 0) {
 		dev_err(&data->client->dev,
 			"error %d reading tilt register in IRQ\n", ret);
-		goto out;
+		return IRQ_HANDLED;
 	}
 
 	iio_push_event(indio_dev,
 		       IIO_MOD_EVENT_CODE(IIO_INCLI, 0, (mma_axis + 1),
 					  IIO_EV_TYPE_ROC, IIO_EV_DIR_RISING),
 		       iio_get_time_ns(indio_dev));
-
-out:
-	mutex_unlock(&data->mutex);
 
 	return IRQ_HANDLED;
 }
