@@ -181,6 +181,113 @@ DEFINE_EVENT(cache_tag_flush, cache_tag_flush_range_np,
 		 unsigned long addr, unsigned long pages, unsigned long mask),
 	TP_ARGS(tag, start, end, addr, pages, mask)
 );
+
+DECLARE_EVENT_CLASS(entry_write,
+	TP_PROTO(struct device *dev, u32 pasid, u128 *target, u128 *curr),
+	TP_ARGS(dev, pasid, target, curr),
+
+	TP_STRUCT__entry(
+		__string(dev, dev_name(dev))
+		__field(u32, pasid)
+		__field(u64, t_w3)
+		__field(u64, t_w2)
+		__field(u64, t_w1)
+		__field(u64, t_w0)
+		__field(u64, c_w3)
+		__field(u64, c_w2)
+		__field(u64, c_w1)
+		__field(u64, c_w0)
+	),
+
+	TP_fast_assign(
+		__assign_str(dev);
+		__entry->pasid = pasid;
+		/* Target Entry */
+		__entry->t_w0 = (u64)target[0];
+		__entry->t_w1 = (u64)(target[0] >> 64);
+		__entry->t_w2 = (u64)target[1];
+		__entry->t_w3 = (u64)(target[1] >> 64);
+		/* Current Entry */
+		__entry->c_w0 = (u64)curr[0];
+		__entry->c_w1 = (u64)(curr[0] >> 64);
+		__entry->c_w2 = (u64)curr[1];
+		__entry->c_w3 = (u64)(curr[1] >> 64);
+	),
+
+	TP_printk("%s[%u] target %016llx:%016llx:%016llx:%016llx, current %016llx:%016llx:%016llx:%016llx",
+		  __get_str(dev), __entry->pasid,
+		  __entry->t_w3, __entry->t_w2, __entry->t_w1, __entry->t_w0,
+		  __entry->c_w3, __entry->c_w2, __entry->c_w1, __entry->c_w0
+	)
+);
+
+DEFINE_EVENT(entry_write, entry_write_start,
+	TP_PROTO(struct device *dev, u32 pasid, u128 *target, u128 *curr),
+	TP_ARGS(dev, pasid, target, curr)
+);
+
+DEFINE_EVENT(entry_write, entry_write_complete,
+	TP_PROTO(struct device *dev, u32 pasid, u128 *target, u128 *curr),
+	TP_ARGS(dev, pasid, target, curr)
+);
+
+TRACE_EVENT(entry_get_used,
+	TP_PROTO(const u128 *pe, u128 *used),
+	TP_ARGS(pe, used),
+
+	TP_STRUCT__entry(
+		__field(u64, e_w3)
+		__field(u64, e_w2)
+		__field(u64, e_w1)
+		__field(u64, e_w0)
+		__field(u64, u_w3)
+		__field(u64, u_w2)
+		__field(u64, u_w1)
+		__field(u64, u_w0)
+	),
+
+	TP_fast_assign(
+		__entry->e_w0 = (u64)pe[0];
+		__entry->e_w1 = (u64)(pe[0] >> 64);
+		__entry->e_w2 = (u64)pe[1];
+		__entry->e_w3 = (u64)(pe[1] >> 64);
+
+		__entry->u_w0 = (u64)used[0];
+		__entry->u_w1 = (u64)(used[0] >> 64);
+		__entry->u_w2 = (u64)used[1];
+		__entry->u_w3 = (u64)(used[1] >> 64);
+	),
+
+	TP_printk("entry %016llx:%016llx:%016llx:%016llx, used %016llx:%016llx:%016llx:%016llx",
+		  __entry->e_w3, __entry->e_w2, __entry->e_w1, __entry->e_w0,
+		  __entry->u_w3, __entry->u_w2, __entry->u_w1, __entry->u_w0
+	)
+);
+
+TRACE_EVENT(entry_sync,
+	TP_PROTO(struct device *dev, u32 pasid, bool was_present, bool is_present),
+	TP_ARGS(dev, pasid, was_present, is_present),
+
+	TP_STRUCT__entry(
+		__string(dev, dev_name(dev))
+		__field(u32, pasid)
+		__field(bool, was_present)
+		__field(bool, is_present)
+	),
+
+	TP_fast_assign(
+		__assign_str(dev);
+		__entry->pasid = pasid;
+		__entry->was_present = was_present;
+		__entry->is_present = is_present;
+	),
+
+	TP_printk("%s[%u] was %s, is now %s",
+		  __get_str(dev), __entry->pasid,
+		  __entry->was_present ? "present" : "non-present",
+		  __entry->is_present ? "present" : "non-present"
+	)
+);
 #endif /* _TRACE_INTEL_IOMMU_H */
 
 /* This part must be outside protection */
