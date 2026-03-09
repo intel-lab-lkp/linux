@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
+#include <linux/platform_profile.h>
 #include <linux/processor.h>
 #include <linux/sysfs.h>
 #include <linux/unaligned.h>
@@ -56,8 +57,13 @@ struct dptc_param_limits {
 	u32 expanded_max;
 };
 
+struct dptc_profile {
+	u32 vals[DPTC_NUM_PARAMS];	/* 0 = don't set / unstage this param */
+};
+
 struct dptc_device_limits {
 	struct dptc_param_limits params[DPTC_NUM_PARAMS];
+	struct dptc_profile profiles[PLATFORM_PROFILE_LAST];
 };
 
 struct dptc_param_desc {
@@ -87,6 +93,11 @@ static const struct dptc_device_limits limits_maxhh = {
 		[DPTC_PPT_PL2_SPPT] = {  1,  4, 27,  82, 100 },
 		[DPTC_PPT_PL3_FPPT] = {  1,  4, 40,  85, 100 },
 		[DPTC_CPU_TEMP]     = { 60, 70, 95,  95, 100 },
+	},
+	.profiles = {
+		[PLATFORM_PROFILE_LOW_POWER]   = { .vals = { 15, 15, 25, 0 } },
+		[PLATFORM_PROFILE_BALANCED]    = { .vals = { 25, 27, 40, 0 } },
+		[PLATFORM_PROFILE_PERFORMANCE] = { .vals = { 60, 63, 85, 0 } },
 	},
 };
 
@@ -139,11 +150,14 @@ struct dptc_priv {
 
 	bool expanded;
 
+	enum platform_profile_option profile;
+	struct device *ppdev;
+
 	enum dptc_save_mode save_mode;
 
 	u32 staged[DPTC_NUM_PARAMS];
 
-	/* Protects staged, expanded, and save_mode */
+	/* Protects staged, expanded, save_mode, and profile */
 	struct mutex lock;
 
 	struct dptc_attr_sysfs params[DPTC_NUM_PARAMS];
@@ -271,6 +285,14 @@ static ssize_t dptc_current_value_show(struct kobject *kobj,
 
 	guard(mutex)(&dptc->lock);
 
+	if (dptc->profile != PLATFORM_PROFILE_CUSTOM) {
+		u32 val = dptc->dev_limits->profiles[dptc->profile].vals[ps->idx];
+
+		if (!val)
+			return sysfs_emit(buf, "\n");
+		return sysfs_emit(buf, "%u\n", val);
+	}
+
 	if (!dptc->staged[ps->idx])
 		return sysfs_emit(buf, "\n");
 	return sysfs_emit(buf, "%u\n", dptc->staged[ps->idx]);
@@ -287,6 +309,9 @@ static ssize_t dptc_current_value_store(struct kobject *kobj,
 	int ret;
 
 	guard(mutex)(&dptc->lock);
+
+	if (dptc->profile != PLATFORM_PROFILE_CUSTOM)
+		return -EBUSY;
 
 	if (count == 1 && buf[0] == '\n') {
 		dptc->staged[ps->idx] = 0;
@@ -424,6 +449,9 @@ static ssize_t dptc_expanded_current_value_store(struct kobject *kobj,
 		return ret;
 
 	guard(mutex)(&dptc->lock);
+
+	if (dptc->profile != PLATFORM_PROFILE_CUSTOM)
+		return -EBUSY;
 
 	dptc->expanded = val;
 	/* Clear staged values: limits changed, old values may be out of range */
@@ -593,6 +621,75 @@ static void dptc_kset_unregister(void *data)
 	kset_unregister(data);
 }
 
+/* Platform profile */
+
+static int dptc_apply_profile(struct dptc_priv *dptc,
+			      enum platform_profile_option profile)
+{
+	const struct dptc_profile *pp;
+	int i;
+
+	memset(dptc->staged, 0, sizeof(dptc->staged));
+
+	if (profile == PLATFORM_PROFILE_CUSTOM)
+		return 0;
+
+	pp = &dptc->dev_limits->profiles[profile];
+	for (i = 0; i < DPTC_NUM_PARAMS; i++) {
+		if (!pp->vals[i])
+			continue;
+		dptc->staged[i] = pp->vals[i];
+	}
+
+	return dptc_alib_save(dptc);
+}
+
+static int dptc_pp_probe(void *drvdata, unsigned long *choices)
+{
+	struct dptc_priv *dptc = drvdata;
+	int i, j;
+
+	set_bit(PLATFORM_PROFILE_CUSTOM, choices);
+	for (i = 0; i < PLATFORM_PROFILE_LAST; i++) {
+		for (j = 0; j < DPTC_NUM_PARAMS; j++) {
+			if (dptc->dev_limits->profiles[i].vals[j]) {
+				set_bit(i, choices);
+				break;
+			}
+		}
+	}
+	return 0;
+}
+
+static int dptc_pp_get(struct device *dev,
+		       enum platform_profile_option *profile)
+{
+	struct dptc_priv *dptc = dev_get_drvdata(dev);
+
+	guard(mutex)(&dptc->lock);
+
+	*profile = dptc->profile;
+	return 0;
+}
+
+static int dptc_pp_set(struct device *dev,
+		       enum platform_profile_option profile)
+{
+	struct dptc_priv *dptc = dev_get_drvdata(dev);
+
+	guard(mutex)(&dptc->lock);
+
+	dptc->profile = profile;
+
+	return dptc_apply_profile(dptc, profile);
+}
+
+static const struct platform_profile_ops dptc_pp_ops = {
+	.probe       = dptc_pp_probe,
+	.profile_get = dptc_pp_get,
+	.profile_set = dptc_pp_set,
+};
+
 static int dptc_resume(struct device *dev)
 {
 	struct dptc_priv *dptc = dev_get_drvdata(dev);
@@ -601,7 +698,9 @@ static int dptc_resume(struct device *dev)
 	guard(mutex)(&dptc->lock);
 
 	/* In bulk mode, do not use pm ops for userspace flexibility. */
-	if (dptc->save_mode == SAVE_SINGLE)
+	if (dptc->profile != PLATFORM_PROFILE_CUSTOM)
+		ret = dptc_apply_profile(dptc, dptc->profile);
+	else if (dptc->save_mode == SAVE_SINGLE)
 		ret = dptc_alib_save(dptc);
 	else
 		ret = 0;
@@ -678,6 +777,12 @@ static int dptc_probe(struct platform_device *pdev)
 				&dptc->save_settings_attr.attr);
 	if (ret)
 		return ret;
+
+	dptc->profile = PLATFORM_PROFILE_CUSTOM;
+	dptc->ppdev = devm_platform_profile_register(dev, "amd-dptc", dptc,
+						     &dptc_pp_ops);
+	if (IS_ERR(dptc->ppdev))
+		return PTR_ERR(dptc->ppdev);
 
 	return 0;
 }

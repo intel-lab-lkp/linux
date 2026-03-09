@@ -48,6 +48,7 @@ config AMD_ISP_PLATFORM
 config AMD_DPTC
 	tristate "AMD Dynamic Power and Thermal Configuration Interface (DPTCi)"
 	depends on X86_64 && ACPI && DMI
+	select ACPI_PLATFORM_PROFILE
 	select FIRMWARE_ATTRIBUTES_CLASS
 	help
 	  Driver for AMD AGESA ALIB Function 0x0C, the Dynamic Power and
