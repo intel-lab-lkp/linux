@@ -699,6 +699,7 @@ static void uaudio_event_ring_cleanup_free(struct uaudio_dev *dev)
 		uaudio_iommu_unmap(MEM_EVENT_RING, IOVA_BASE, PAGE_SIZE,
 				   PAGE_SIZE);
 		xhci_sideband_remove_interrupter(uadev[dev->chip->card->number].sb);
+		usb_offload_put(dev->udev);
 	}
 }
 
@@ -750,6 +751,7 @@ static void qmi_stop_session(void)
 	struct snd_usb_substream *subs;
 	struct usb_host_endpoint *ep;
 	struct snd_usb_audio *chip;
+	struct usb_device *udev;
 	struct intf_info *info;
 	int pcm_card_num;
 	int if_idx;
@@ -791,8 +793,13 @@ static void qmi_stop_session(void)
 			disable_audio_stream(subs);
 		}
 		atomic_set(&uadev[idx].in_use, 0);
-		guard(mutex)(&chip->mutex);
-		uaudio_dev_cleanup(&uadev[idx]);
+
+		udev = uadev[idx].udev;
+		if (udev) {
+			guard(device)(&udev->dev);
+			guard(mutex)(&chip->mutex);
+			uaudio_dev_cleanup(&uadev[idx]);
+		}
 	}
 }
 
@@ -1183,11 +1190,15 @@ static int uaudio_event_ring_setup(struct snd_usb_substream *subs,
 	er_pa = 0;
 
 	/* event ring */
+	ret = usb_offload_get(subs->dev);
+	if (ret < 0)
+		goto exit;
+
 	ret = xhci_sideband_create_interrupter(uadev[card_num].sb, 1, false,
 					       0, uaudio_qdev->data->intr_num);
 	if (ret < 0) {
 		dev_err(&subs->dev->dev, "failed to fetch interrupter\n");
-		goto exit;
+		goto put_offload;
 	}
 
 	sgt = xhci_sideband_get_event_buffer(uadev[card_num].sb);
@@ -1219,6 +1230,8 @@ clear_pa:
 	mem_info->dma = 0;
 remove_interrupter:
 	xhci_sideband_remove_interrupter(uadev[card_num].sb);
+put_offload:
+	usb_offload_put(subs->dev);
 exit:
 	return ret;
 }
@@ -1482,6 +1495,7 @@ unmap_er:
 	uaudio_iommu_unmap(MEM_EVENT_RING, IOVA_BASE, PAGE_SIZE, PAGE_SIZE);
 free_sec_ring:
 	xhci_sideband_remove_interrupter(uadev[card_num].sb);
+	usb_offload_put(subs->dev);
 drop_sync_ep:
 	if (subs->sync_endpoint) {
 		uaudio_iommu_unmap(MEM_XFER_RING,
@@ -1527,6 +1541,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 	u8 pcm_card_num;
 	u8 pcm_dev_num;
 	u8 direction;
+	struct usb_device *udev = NULL;
 	int ret = 0;
 
 	if (!svc->client_connected) {
@@ -1596,50 +1611,53 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 
 	uadev[pcm_card_num].ctrl_intf = chip->ctrl_intf;
 
-	if (req_msg->enable) {
-		ret = enable_audio_stream(subs,
-					  map_pcm_format(req_msg->audio_format),
-					  req_msg->number_of_ch, req_msg->bit_rate,
-					  datainterval);
+	udev = subs->dev;
+	scoped_guard(device, &udev->dev) {
+		if (req_msg->enable) {
+			ret = enable_audio_stream(subs,
+						map_pcm_format(req_msg->audio_format),
+						req_msg->number_of_ch, req_msg->bit_rate,
+						datainterval);
 
-		if (!ret)
-			ret = prepare_qmi_response(subs, req_msg, &resp,
-						   info_idx);
-		if (ret < 0) {
+			if (!ret)
+				ret = prepare_qmi_response(subs, req_msg, &resp,
+							info_idx);
+			if (ret < 0) {
+				guard(mutex)(&chip->mutex);
+				subs->opened = 0;
+			}
+		} else {
+			info = &uadev[pcm_card_num].info[info_idx];
+			if (info->data_ep_pipe) {
+				ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
+							info->data_ep_pipe);
+				if (ep) {
+					xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
+									ep);
+					xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb,
+									ep);
+				}
+
+				info->data_ep_pipe = 0;
+			}
+
+			if (info->sync_ep_pipe) {
+				ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
+							info->sync_ep_pipe);
+				if (ep) {
+					xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
+									ep);
+					xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb,
+									ep);
+				}
+
+				info->sync_ep_pipe = 0;
+			}
+
+			disable_audio_stream(subs);
 			guard(mutex)(&chip->mutex);
 			subs->opened = 0;
 		}
-	} else {
-		info = &uadev[pcm_card_num].info[info_idx];
-		if (info->data_ep_pipe) {
-			ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
-					       info->data_ep_pipe);
-			if (ep) {
-				xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
-							    ep);
-				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb,
-							      ep);
-			}
-
-			info->data_ep_pipe = 0;
-		}
-
-		if (info->sync_ep_pipe) {
-			ep = usb_pipe_endpoint(uadev[pcm_card_num].udev,
-					       info->sync_ep_pipe);
-			if (ep) {
-				xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
-							    ep);
-				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb,
-							      ep);
-			}
-
-			info->sync_ep_pipe = 0;
-		}
-
-		disable_audio_stream(subs);
-		guard(mutex)(&chip->mutex);
-		subs->opened = 0;
 	}
 
 response:
