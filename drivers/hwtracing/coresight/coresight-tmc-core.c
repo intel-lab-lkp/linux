@@ -293,7 +293,10 @@ static ssize_t tmc_read(struct file *file, char __user *data, size_t len,
 		return -EFAULT;
 	}
 
-	*ppos += actual;
+	if (drvdata->buf_node)
+		drvdata->buf_node->pos += actual;
+	else
+		*ppos += actual;
 	dev_dbg(&drvdata->csdev->dev, "%zu bytes copied\n", actual);
 
 	return actual;
@@ -748,11 +751,12 @@ static const struct tmc_sysfs_ops etb_sysfs_ops = {
 	.get_trace_data	= tmc_etb_get_sysfs_trace,
 };
 
-static const struct tmc_sysfs_ops etr_sysfs_ops = {
+const struct tmc_sysfs_ops etr_sysfs_ops = {
 	.read_prepare	= tmc_read_prepare_etr,
 	.read_unprepare	= tmc_read_unprepare_etr,
 	.get_trace_data	= tmc_etr_get_sysfs_trace,
 };
+EXPORT_SYMBOL_GPL(etr_sysfs_ops);
 
 static int __tmc_probe(struct device *dev, struct resource *res)
 {
