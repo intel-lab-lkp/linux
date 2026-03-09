@@ -32,6 +32,14 @@ enum nhi_fw_mode nhi_mailbox_mode(struct tb_nhi *nhi);
 bool tb_apple_add_links(struct tb_nhi *nhi);
 void nhi_pci_start_dma_port(struct tb_nhi *nhi);
 void nhi_pci_complete_dma_port(struct tb_nhi *nhi);
+void nhi_enable_int_throttling(struct tb_nhi *nhi);
+void nhi_disable_interrupts(struct tb_nhi *nhi);
+void nhi_interrupt_work(struct work_struct *work);
+irqreturn_t nhi_msi(int irq, void *data);
+irqreturn_t ring_msix(int irq, void *data);
+int nhi_probe_common(struct tb_nhi *nhi);
+void nhi_shutdown(struct tb_nhi *nhi);
+extern const struct dev_pm_ops nhi_pm_ops;
 
 /**
  * struct tb_nhi_ops - NHI specific optional operations
@@ -45,6 +53,7 @@ void nhi_pci_complete_dma_port(struct tb_nhi *nhi);
  * @post_nvm_auth: hook to run after TBT3 NVM authentication
  * @request_ring_irq: NHI specific interrupt retrieval function pointer
  * @release_ring_irq: NHI specific interrupt release function pointer
+ * @is_present: Whether the device is currently present on the parent bus
  */
 struct tb_nhi_ops {
 	int (*init)(struct tb_nhi *nhi);
@@ -57,6 +66,7 @@ struct tb_nhi_ops {
 	void (*post_nvm_auth)(struct tb_nhi *nhi);
 	int (*request_ring_irq)(struct tb_ring *ring, bool no_suspend);
 	void (*release_ring_irq)(struct tb_ring *ring);
+	bool (*is_present)(struct tb_nhi *nhi);
 };
 
 extern const struct tb_nhi_ops icl_nhi_ops;
@@ -110,5 +120,16 @@ extern const struct tb_nhi_ops icl_nhi_ops;
 #define PCI_DEVICE_ID_INTEL_PTL_P_NHI1			0xe434
 
 #define PCI_CLASS_SERIAL_USB_USB4			0x0c0340
+
+/* Host interface quirks */
+#define QUIRK_AUTO_CLEAR_INT	BIT(0)
+#define QUIRK_E2E		BIT(1)
+
+/*
+ * Minimal number of vectors when we use MSI-X. Two for control channel
+ * Rx/Tx and the rest four are for cross domain DMA paths.
+ */
+#define MSIX_MIN_VECS		6
+#define MSIX_MAX_VECS		16
 
 #endif

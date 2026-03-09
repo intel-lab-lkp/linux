@@ -177,6 +177,8 @@ static int icl_nhi_resume(struct tb_nhi *nhi)
 
 static void icl_nhi_shutdown(struct tb_nhi *nhi)
 {
+	nhi_pci_shutdown(nhi);
+
 	icl_nhi_force_power(nhi, false);
 }
 

@@ -12,6 +12,8 @@ struct tb_nhi_pci {
 	struct tb_nhi nhi;
 };
 
+void nhi_pci_shutdown(struct tb_nhi *nhi);
+
 static inline struct tb_nhi_pci *nhi_to_pci(struct tb_nhi *nhi)
 {
 	return container_of(nhi, struct tb_nhi_pci, nhi);
