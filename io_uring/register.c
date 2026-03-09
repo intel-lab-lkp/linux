@@ -576,7 +576,7 @@ static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 	 * duration of the actual swap.
 	 */
 	mutex_lock(&ctx->mmap_lock);
-	spin_lock(&ctx->completion_lock);
+	spin_lock_irq(&ctx->completion_lock);
 	o.rings = ctx->rings;
 	ctx->rings = NULL;
 	o.sq_sqes = ctx->sq_sqes;
@@ -640,7 +640,7 @@ overflow:
 	to_free = &o;
 	ret = 0;
 out:
-	spin_unlock(&ctx->completion_lock);
+	spin_unlock_irq(&ctx->completion_lock);
 	mutex_unlock(&ctx->mmap_lock);
 	io_register_free_rings(ctx, to_free);
 
