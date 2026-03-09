@@ -552,23 +552,28 @@ int amdgpu_userq_signal_ioctl(struct drm_device *dev, void *data,
 		}
 	}
 
-	/* Retrieve the user queue */
+	/* We are here means UQ is active, make sure the eviction fence is valid */
+	amdgpu_userq_ensure_ev_fence(&fpriv->userq_mgr, &fpriv->evf_mgr);
+
+	/* Retrieve the user queue under userq_mutex (held by ensure_ev_fence) */
 	queue = xa_load(&userq_mgr->userq_xa, args->queue_id);
 	if (!queue) {
+		mutex_unlock(&userq_mgr->userq_mutex);
 		r = -ENOENT;
 		goto put_gobj_write;
 	}
 
 	r = amdgpu_userq_fence_read_wptr(adev, queue, &wptr);
-	if (r)
+	if (r) {
+		mutex_unlock(&userq_mgr->userq_mutex);
 		goto put_gobj_write;
+	}
 
 	r = amdgpu_userq_fence_alloc(&userq_fence);
-	if (r)
+	if (r) {
+		mutex_unlock(&userq_mgr->userq_mutex);
 		goto put_gobj_write;
-
-	/* We are here means UQ is active, make sure the eviction fence is valid */
-	amdgpu_userq_ensure_ev_fence(&fpriv->userq_mgr, &fpriv->evf_mgr);
+	}
 
 	/* Create a new fence */
 	r = amdgpu_userq_fence_create(queue, userq_fence, wptr, &fence);
