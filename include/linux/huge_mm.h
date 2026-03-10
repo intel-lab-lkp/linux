@@ -570,6 +570,16 @@ void map_anon_folio_pmd_nopf(struct folio *folio, pmd_t *pmd,
 
 #else /* CONFIG_TRANSPARENT_HUGEPAGE */
 
+static inline bool hugepage_global_enabled(void)
+{
+	return false;
+}
+
+static inline bool hugepage_global_always(void)
+{
+	return false;
+}
+
 static inline bool folio_test_pmd_mappable(struct folio *folio)
 {
 	return false;
