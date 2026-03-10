@@ -31,6 +31,7 @@ TEST_PROGS = \
 	iou-zcrx.py \
 	irq.py \
 	loopback.sh \
+	loopback_drv.py \
 	nic_timestamp.py \
 	nk_netns.py \
 	pp_alloc_fail.py \
