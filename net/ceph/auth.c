@@ -205,9 +205,9 @@ int ceph_handle_auth_reply(struct ceph_auth_client *ac,
 	s32 result;
 	u64 global_id;
 	void *payload, *payload_end;
-	int payload_len;
+	u32 payload_len;
 	char *result_msg;
-	int result_msg_len;
+	u32 result_msg_len;
 	int ret = -EINVAL;
 
 	mutex_lock(&ac->mutex);
@@ -217,10 +217,14 @@ int ceph_handle_auth_reply(struct ceph_auth_client *ac,
 	result = ceph_decode_32(&p);
 	global_id = ceph_decode_64(&p);
 	payload_len = ceph_decode_32(&p);
+	if (payload_len > len)
+		goto bad;
 	payload = p;
 	p += payload_len;
 	ceph_decode_need(&p, end, sizeof(u32), bad);
 	result_msg_len = ceph_decode_32(&p);
+	if (result_msg_len > len)
+		goto bad;
 	result_msg = p;
 	p += result_msg_len;
 	if (p != end)
