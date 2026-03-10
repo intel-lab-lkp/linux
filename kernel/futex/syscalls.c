@@ -158,31 +158,6 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 	return -ENOSYS;
 }
 
-static __always_inline bool futex_cmd_has_timeout(u32 cmd)
-{
-	switch (cmd) {
-	case FUTEX_WAIT:
-	case FUTEX_LOCK_PI:
-	case FUTEX_LOCK_PI2:
-	case FUTEX_WAIT_BITSET:
-	case FUTEX_WAIT_REQUEUE_PI:
-		return true;
-	}
-	return false;
-}
-
-static __always_inline bool futex_cmd_has_addr2(u32 cmd)
-{
-	switch (cmd) {
-	case FUTEX_REQUEUE:
-	case FUTEX_CMP_REQUEUE:
-	case FUTEX_WAKE_OP:
-	case FUTEX_WAIT_REQUEUE_PI:
-		return true;
-	}
-	return false;
-}
-
 static __always_inline int
 futex_init_timeout(u32 cmd, u32 op, struct timespec64 *ts, ktime_t *t)
 {
@@ -229,7 +204,9 @@ static const char * __futex_cmds[] =
 	"FUTEX_LOCK_PI2",
 };
 
-void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args, u32 *ptr)
+void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args,
+			 u32 *ptr1, u32 *ptr2, unsigned long *ts1,
+			 unsigned long *ts2)
 {
 	unsigned int op, cmd;
 	bool done = false;
@@ -242,8 +219,8 @@ void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args, u3
 		switch (i) {
 		case 0:
 			seq_buf_printf(s, "uaddr: 0x%lx", args[i]);
-			if (ptr) {
-				u32 val = *ptr;
+			if (ptr1) {
+				u32 val = *ptr1;
 				if (val < 10)
 					seq_buf_printf(s, " (%u)", val);
 				else
@@ -279,6 +256,15 @@ void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args, u3
 				continue;
 
 			seq_buf_printf(s, ", timespec: 0x%lx", args[i]);
+
+			if (!ts1 || !ts2)
+				continue;
+
+			if (!*ts1 && !*ts2) {
+				seq_buf_puts(s, " (0)");
+				continue;
+			}
+			seq_buf_printf(s, " (%lu.%09lu)", *ts1, *ts2);
 			continue;
 		case 4:
 			if (!futex_cmd_has_addr2(cmd)) {
@@ -286,6 +272,12 @@ void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args, u3
 				continue;
 			}
 			seq_buf_printf(s, ", uaddr2: 0x%lx", args[i]);
+
+			if (!ptr2)
+				continue;
+
+			seq_buf_printf(s, " (%x)", *ptr2);
+
 			continue;
 		case 5:
 			seq_buf_printf(s, ", val3: %lu", args[i]);

@@ -82,8 +82,35 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 	      u32 __user *uaddr2, u32 val2, u32 val3);
 int futex_hash_prctl(unsigned long arg2, unsigned long arg3, unsigned long arg4);
 
+static __always_inline bool futex_cmd_has_timeout(u32 cmd)
+{
+	switch (cmd) {
+	case FUTEX_WAIT:
+	case FUTEX_LOCK_PI:
+	case FUTEX_LOCK_PI2:
+	case FUTEX_WAIT_BITSET:
+	case FUTEX_WAIT_REQUEUE_PI:
+		return true;
+	}
+	return false;
+}
+
+static __always_inline bool futex_cmd_has_addr2(u32 cmd)
+{
+	switch (cmd) {
+	case FUTEX_REQUEUE:
+	case FUTEX_CMP_REQUEUE:
+	case FUTEX_WAKE_OP:
+	case FUTEX_WAIT_REQUEUE_PI:
+		return true;
+	}
+	return false;
+}
+
 #ifdef CONFIG_FTRACE_SYSCALLS
-void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args, u32 *ptr);
+void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args,
+			 u32 *ptr1, u32 *ptr2, unsigned long *ts1,
+			 unsigned long *ts2);
 #endif
 
 #ifdef CONFIG_FUTEX_PRIVATE_HASH
@@ -119,7 +146,11 @@ static inline int futex_hash_allocate_default(void)
 static inline int futex_hash_free(struct mm_struct *mm) { return 0; }
 static inline int futex_mm_init(struct mm_struct *mm) { return 0; }
 static inline void futex_print_syscall(struct seq_buf *s, int nr_args,
-				       unsigned long *args, u32 *ptr) { }
+				       unsigned long *args, u32 *ptr1,
+				       u32 *ptr2, unsigned long *ts1,
+				       unsigned long *ts2) { }
+static __always_inline bool futex_cmd_has_timeout(u32 cmd) { return false; }
+static __always_inline bool futex_cmd_has_addr2(u32 cmd) { return false; }
 #endif
 
 #endif

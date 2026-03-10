@@ -239,21 +239,35 @@ end:
 	return trace_handle_return(s);
 }
 
+struct futex_data {
+	u32		val1;
+	u32		val2;
+	unsigned long	ts1;
+	unsigned long	ts2;
+};
+
 static enum print_line_t
 sys_enter_futex_print(struct syscall_trace_enter *trace, struct syscall_metadata *entry,
 		      struct trace_seq *s, struct trace_event *event, int ent_size)
 {
+	struct futex_data *data;
 	void *end = (void *)trace + ent_size;
-	void *ptr;
+	unsigned long *ts1 = NULL, *ts2 = NULL;
+	u32 *ptr1 = NULL, *ptr2 = NULL;
 
 	/* Set ptr to the user space copied area */
-	ptr = (void *)trace->args + sizeof(unsigned long) * entry->nb_args;
-	if (ptr + 4 > end)
-		ptr = NULL;
+	data = (void *)trace->args + sizeof(unsigned long) * entry->nb_args;
+	if ((void *)data + sizeof(*data) <= end) {
+		ptr1 = &data->val1;
+		ptr2 = &data->val2;
+		ts1 = &data->ts1;
+		ts2 = &data->ts2;
+	}
 
 	trace_seq_printf(s, "%s(", entry->name);
 
-	futex_print_syscall(&s->seq, entry->nb_args, trace->args, ptr);
+	futex_print_syscall(&s->seq, entry->nb_args, trace->args, ptr1, ptr2,
+			    ts1, ts2);
 
 	trace_seq_puts(s, ")\n");
 
@@ -472,9 +486,9 @@ sys_enter_futex_print_fmt(struct syscall_metadata *entry, char *buf, int len)
 	pos += snprintf(buf + pos, LEN_OR_ZERO,
 			"\"uaddr: 0x%%lx (0x%%lx) cmd=%%s%%s%%s");
 	pos += snprintf(buf + pos, LEN_OR_ZERO,
-			"  val: 0x%%x timeout/val2: 0x%%llx");
+			"  val: 0x%%x timeout/val2: 0x%%llx (%%lu.%%lu)");
 	pos += snprintf(buf + pos, LEN_OR_ZERO,
-			" uaddr2: 0x%%lx val3: 0x%%x\", ");
+			" uaddr2: 0x%%lx (0x%%lx) val3: 0x%%x\", ");
 
 	pos += snprintf(buf + pos, LEN_OR_ZERO,
 			" REC->uaddr,");
@@ -520,10 +534,12 @@ sys_enter_futex_print_fmt(struct syscall_metadata *entry, char *buf, int len)
 			FUTEX_CLOCK_REALTIME);
 
 	pos += snprintf(buf + pos, LEN_OR_ZERO,
-			" REC->val, REC->utime,");
+			" REC->val, REC->utime, REC->__ts1, REC->__ts2,");
 
 	pos += snprintf(buf + pos, LEN_OR_ZERO,
-			" REC->uaddr, REC->val3");
+			" REC->uaddr,");
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" REC->__value2, REC->val3");
 	return pos;
 }
 
@@ -626,7 +642,39 @@ static int __init futex_fields(struct trace_event_call *call, int offset)
 	ret = trace_define_field(call, "u32", arg, offset, sizeof(int), 0,
 				 FILTER_OTHER);
 	if (ret)
-		kfree(arg);
+		goto free;
+	offset += sizeof(int);
+
+	arg = kstrdup("__value2", GFP_KERNEL);
+	if (WARN_ON_ONCE(!arg))
+		return -ENOMEM;
+	ret = trace_define_field(call, "u32", arg, offset, sizeof(int), 0,
+				 FILTER_OTHER);
+	if (ret)
+		goto free;
+	offset += sizeof(int);
+
+	arg = kstrdup("__ts1", GFP_KERNEL);
+	if (WARN_ON_ONCE(!arg))
+		return -ENOMEM;
+	ret = trace_define_field(call, "unsigned long", arg, offset,
+				 sizeof(unsigned long), 0, FILTER_OTHER);
+	if (ret)
+		goto free;
+	offset += sizeof(long);
+
+	arg = kstrdup("__ts2", GFP_KERNEL);
+	if (WARN_ON_ONCE(!arg))
+		return -ENOMEM;
+	ret = trace_define_field(call, "unsigned long", arg, offset,
+				 sizeof(unsigned long), 0, FILTER_OTHER);
+	if (ret)
+		goto free;
+
+	return 0;
+
+free:
+	kfree(arg);
 	return ret;
 }
 
@@ -799,11 +847,51 @@ static int syscall_copy_user_array(char *buf, const char __user *ptr,
 	return 0;
 }
 
+struct tp_futex_data {
+	u32			cmd;
+	const u32		__user *val1;
+	const u32 		__user *val2;
+	void			__user *timeout;
+};
+
+static int syscall_copy_futex(char *buf, const char __user *ptr,
+			      size_t size, void *data)
+{
+	struct tp_futex_data *tp_data = data;
+	struct futex_data *fdata = (void *)buf;
+	int cmd = tp_data->cmd & FUTEX_CMD_MASK;
+	int ret;
+
+	memset(fdata, 0, sizeof(*fdata));
+
+	if (tp_data->val1) {
+		ret = __copy_from_user(&fdata->val1, tp_data->val1, 4);
+		if (ret)
+			return -1;
+	}
+
+	if (tp_data->val2 && futex_cmd_has_addr2(cmd)) {
+		ret = __copy_from_user(&fdata->val2, tp_data->val2, 4);
+		if (ret)
+			return -1;
+	}
+
+	if (tp_data->timeout && futex_cmd_has_timeout(cmd)) {
+		/* Copies both ts1 and ts2 */
+		ret = __copy_from_user(&fdata->ts1, tp_data->timeout,
+				       sizeof(long) * 2);
+		if (ret)
+			return -1;
+	}
+
+	return 0;
+}
+
 static int
 syscall_get_futex(unsigned long *args, char **buffer, int *size, int buf_size)
 {
 	struct syscall_user_buffer *sbuf;
-	const char __user *ptr;
+	struct tp_futex_data tp_data;
 	char *buf;
 
 	/* buf_size of zero means user doesn't want user space read */
@@ -815,14 +903,18 @@ syscall_get_futex(unsigned long *args, char **buffer, int *size, int buf_size)
 	if (!sbuf)
 		return -1;
 
-	ptr = (char __user *)args[0];
+	tp_data.cmd = args[1];
+	tp_data.val1 = (u32 __user *)args[0];
+	tp_data.val2 = (u32 __user *)args[4];
+	tp_data.timeout = (u64 __user *)args[3];
 
-	*buffer = trace_user_fault_read(&sbuf->buf, ptr, 4, NULL, NULL);
+	*buffer = trace_user_fault_read(&sbuf->buf, NULL, 0,
+					syscall_copy_futex, &tp_data);
 	if (!*buffer)
 		return -1;
 
-	/* Add room for the value */
-	*size += 4;
+	/* Add room for values */
+	*size += sizeof(struct futex_data);
 
 	buf = *buffer;
 
@@ -833,12 +925,13 @@ static void syscall_put_futex(struct syscall_metadata *sys_data,
 			      struct syscall_trace_enter *entry,
 			      char *buffer)
 {
-	u32 *ptr;
+	struct futex_data *fdata = (void *)buffer;
+	struct futex_data *data;
 
 	/* Place the futex key into the storage */
-	ptr = (void *)entry->args + sizeof(unsigned long) * sys_data->nb_args;
+	data = (void *)entry->args + sizeof(unsigned long) * sys_data->nb_args;
 
-	*ptr = *(u32 *)buffer;
+	*data = *fdata;
 }
 
 static char *sys_fault_user(unsigned int buf_size,
