@@ -1014,7 +1014,7 @@ static int _mlx5r_umr_zap_mkey(struct mlx5_ib_mr *mr,
 		 MLX5_IB_UPD_XLT_ATOMIC;
 	max_log_size = get_max_log_entity_size_cap(dev, access_mode);
 	max_page_shift = order_base_2(mr->ibmr.length);
-	max_page_shift = min(max(max_page_shift, page_shift), max_log_size);
+	max_page_shift = clamp(max_page_shift, page_shift, max_log_size);
 	/* Count blocks in units of max_page_shift, we will zap exactly this
 	 * many to make the whole MR non-present.
 	 * Block size must be aligned to MLX5_UMR_FLEX_ALIGNMENT since it may
