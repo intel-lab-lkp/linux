@@ -14,6 +14,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/memblock.h>
 #include <linux/kmemleak.h>
+#include <linux/meminspect.h>
 
 #include <asm/page.h>
 #include <asm/sections.h>
@@ -248,6 +249,9 @@ static int __init crash_save_vmcoreinfo_init(void)
 
 	arch_crash_save_vmcoreinfo();
 	update_vmcoreinfo_note();
+
+	meminspect_register_id_va(MEMINSPECT_ID_VMCOREINFO,
+				  (void *)vmcoreinfo_data, vmcoreinfo_size);
 
 	return 0;
 }
