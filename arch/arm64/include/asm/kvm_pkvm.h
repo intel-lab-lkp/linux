@@ -19,9 +19,15 @@
 
 #define PKVM_PROTECTED_REGS_NUM	8
 
+struct pkvm_protected_reg;
+
+typedef void (pkvm_emulate_handler)(struct pkvm_protected_reg *region, u64 offset, bool write,
+				    u64 *reg, u8 reg_size);
+
 struct pkvm_protected_reg {
 	u64 start_pfn;
 	size_t num_pages;
+	pkvm_emulate_handler *cb;
 };
 
 extern struct pkvm_protected_reg kvm_nvhe_sym(pkvm_protected_regs)[];

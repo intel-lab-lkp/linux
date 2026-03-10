@@ -296,6 +296,9 @@ static int unmap_protected_regions(void)
 			if (ret)
 				goto err_setup;
 		}
+
+		if (reg->cb)
+			reg->cb = kern_hyp_va(reg->cb);
 	}
 
 	return 0;
