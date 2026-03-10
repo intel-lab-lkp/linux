@@ -9,6 +9,7 @@
 
 #include <crypto/internal/acompress.h>
 #include <crypto/scatterwalk.h>
+#include <linux/container_of.h>
 #include <linux/cryptouser.h>
 #include <linux/cpumask.h>
 #include <linux/err.h>
@@ -251,7 +252,7 @@ static int acomp_reqchain_finish(struct acomp_req *req, int err)
 
 static void acomp_reqchain_done(void *data, int err)
 {
-	struct acomp_req *req = data;
+	struct acomp_req *req = container_of(data, struct acomp_req, chain);
 	crypto_completion_t compl;
 
 	compl = req->chain.compl;
