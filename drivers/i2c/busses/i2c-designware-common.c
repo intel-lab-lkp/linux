@@ -29,6 +29,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/reset.h>
 #include <linux/swab.h>
 #include <linux/types.h>
 #include <linux/units.h>
@@ -967,6 +968,7 @@ int i2c_dw_probe(struct dw_i2c_dev *dev)
 }
 EXPORT_SYMBOL_GPL(i2c_dw_probe);
 
+#ifdef CONFIG_ACPI
 static int i2c_dw_prepare(struct device *device)
 {
 	/*
@@ -977,18 +979,23 @@ static int i2c_dw_prepare(struct device *device)
 	 */
 	return !has_acpi_companion(device);
 }
+#endif
 
 static int i2c_dw_runtime_suspend(struct device *device)
 {
 	struct dw_i2c_dev *dev = dev_get_drvdata(device);
+	int ret;
 
 	if (dev->shared_with_punit)
 		return 0;
 
 	i2c_dw_disable(dev);
-	i2c_dw_prepare_clk(dev, false);
 
-	return 0;
+	ret = reset_control_assert(dev->rst);
+	if (ret)
+		return ret;
+
+	return i2c_dw_prepare_clk(dev, false);
 }
 
 static int i2c_dw_suspend(struct device *device)
@@ -997,15 +1004,28 @@ static int i2c_dw_suspend(struct device *device)
 
 	i2c_mark_adapter_suspended(&dev->adapter);
 
-	return i2c_dw_runtime_suspend(device);
+	if (!pm_runtime_status_suspended(device))
+		return i2c_dw_runtime_suspend(device);
+
+	return 0;
 }
 
 static int i2c_dw_runtime_resume(struct device *device)
 {
 	struct dw_i2c_dev *dev = dev_get_drvdata(device);
+	int ret;
 
-	if (!dev->shared_with_punit)
-		i2c_dw_prepare_clk(dev, true);
+	if (!dev->shared_with_punit) {
+		ret = i2c_dw_prepare_clk(dev, true);
+		if (ret)
+			return ret;
+
+		ret = reset_control_deassert(dev->rst);
+		if (ret) {
+			i2c_dw_prepare_clk(dev, false);
+			return ret;
+		}
+	}
 
 	i2c_dw_init(dev);
 
@@ -1015,16 +1035,24 @@ static int i2c_dw_runtime_resume(struct device *device)
 static int i2c_dw_resume(struct device *device)
 {
 	struct dw_i2c_dev *dev = dev_get_drvdata(device);
+	int ret;
 
-	i2c_dw_runtime_resume(device);
+	ret = i2c_dw_runtime_resume(device);
+	if (ret)
+		return ret;
+
 	i2c_mark_adapter_resumed(&dev->adapter);
 
 	return 0;
 }
 
 EXPORT_GPL_DEV_PM_OPS(i2c_dw_dev_pm_ops) = {
+#ifdef CONFIG_ACPI
 	.prepare = pm_sleep_ptr(i2c_dw_prepare),
 	LATE_SYSTEM_SLEEP_PM_OPS(i2c_dw_suspend, i2c_dw_resume)
+#else
+	SYSTEM_SLEEP_PM_OPS(i2c_dw_suspend, i2c_dw_resume)
+#endif
 	RUNTIME_PM_OPS(i2c_dw_runtime_suspend, i2c_dw_runtime_resume, NULL)
 };
 
