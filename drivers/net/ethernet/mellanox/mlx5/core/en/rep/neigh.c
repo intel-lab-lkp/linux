@@ -10,6 +10,7 @@
 #include <linux/notifier.h>
 #include <net/netevent.h>
 #include <net/arp.h>
+#include <net/ndisc.h>
 #include "neigh.h"
 #include "tc.h"
 #include "en_rep.h"
@@ -18,8 +19,10 @@
 
 static unsigned long mlx5e_rep_ipv6_interval(void)
 {
-	if (IS_ENABLED(CONFIG_IPV6) && ipv6_stub->nd_tbl)
-		return NEIGH_VAR(&ipv6_stub->nd_tbl->parms, DELAY_PROBE_TIME);
+	struct neigh_table *tbl = ipv6_get_nd_tbl();
+
+	if (IS_ENABLED(CONFIG_IPV6) && ipv6_mod_enabled())
+		return NEIGH_VAR(&tbl->parms, DELAY_PROBE_TIME);
 
 	return ~0UL;
 }
@@ -217,7 +220,7 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 	case NETEVENT_NEIGH_UPDATE:
 		n = ptr;
 #if IS_ENABLED(CONFIG_IPV6)
-		if (n->tbl != ipv6_stub->nd_tbl && n->tbl != &arp_tbl)
+		if (n->tbl != ipv6_get_nd_tbl() && n->tbl != &arp_tbl)
 #else
 		if (n->tbl != &arp_tbl)
 #endif
@@ -238,7 +241,8 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 		 * done per device delay prob time parameter.
 		 */
 #if IS_ENABLED(CONFIG_IPV6)
-		if (!p->dev || (p->tbl != ipv6_stub->nd_tbl && p->tbl != &arp_tbl))
+		if (!p->dev ||
+		    (p->tbl != ipv6_get_nd_tbl() && p->tbl != &arp_tbl))
 #else
 		if (!p->dev || p->tbl != &arp_tbl)
 #endif
