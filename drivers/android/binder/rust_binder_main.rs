@@ -2,7 +2,9 @@
 
 // Copyright (C) 2025 Google LLC.
 
+#![crate_name = "rust_binder"]
 //! Binder -- the Android IPC mechanism.
+
 #![recursion_limit = "256"]
 #![allow(
     clippy::as_underscore,
