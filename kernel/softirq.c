@@ -173,7 +173,7 @@ void __local_bh_disable_ip(unsigned long ip, unsigned int cnt)
 			/* Required to meet the RCU bottomhalf requirements. */
 			rcu_read_lock();
 		} else {
-			DEBUG_LOCKS_WARN_ON(this_cpu_read(softirq_ctrl.cnt));
+			DEBUG_LOCKS_WARN_ON(system_state != SYSTEM_BOOTING);
 		}
 	}
 
