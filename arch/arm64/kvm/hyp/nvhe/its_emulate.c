@@ -274,6 +274,23 @@ static void cwriter_read(struct its_priv_state *its, u64 offset, u64 *read)
 	*read = readq_relaxed(its->base + GITS_CWRITER);
 }
 
+static void ctlr_read(struct its_priv_state *its, u64 offset, u64 *read)
+{
+	*read = readq_relaxed(its->base + GITS_CTLR);
+}
+
+static void ctlr_write(struct its_priv_state *its, u64 offset, u64 value)
+{
+	u64 ctlr = readq_relaxed(its->base + GITS_CTLR);
+	bool is_quiescent = !!(ctlr & GITS_CTLR_QUIESCENT);
+	bool is_enabled = !!(ctlr & GITS_CTLR_ENABLE);
+
+	if (!is_enabled && (value & GITS_CTLR_ENABLE) && !is_quiescent)
+		return;
+
+	writeq_relaxed(value, its->base + GITS_CTLR);
+}
+
 #define ITS_HANDLER(off, sz, write_cb, read_cb)	\
 {							\
 	.offset = (off),				\
@@ -284,6 +301,7 @@ static void cwriter_read(struct its_priv_state *its, u64 offset, u64 *read)
 
 static struct its_handler its_handlers[] = {
 	ITS_HANDLER(GITS_CWRITER, sizeof(u64), cwriter_write, cwriter_read),
+	ITS_HANDLER(GITS_CTLR, sizeof(u64), ctlr_write, ctlr_read),
 	{},
 };
 
