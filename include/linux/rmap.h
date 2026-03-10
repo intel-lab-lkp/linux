@@ -892,6 +892,16 @@ static inline void page_vma_mapped_walk_done(struct page_vma_mapped_walk *pvmw)
 		spin_unlock(pvmw->ptl);
 }
 
+static inline void page_vma_mapped_walk_jump(struct page_vma_mapped_walk *pvmw,
+		unsigned int nr)
+{
+	pvmw->pfn += nr;
+	pvmw->nr_pages -= nr;
+	pvmw->pgoff += nr;
+	pvmw->pte += nr;
+	pvmw->address += nr * PAGE_SIZE;
+}
+
 /**
  * page_vma_mapped_walk_restart - Restart the page table walk.
  * @pvmw: Pointer to struct page_vma_mapped_walk.

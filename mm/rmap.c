@@ -1953,9 +1953,6 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 	if (pte_unused(pte))
 		return 1;
 
-	if (userfaultfd_wp(vma))
-		return 1;
-
 	/*
 	 * If unmap fails, we need to restore the ptes. To avoid accidentally
 	 * upgrading write permissions for ptes that were not originally
@@ -2235,7 +2232,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		 * we may want to replace a none pte with a marker pte if
 		 * it's file-backed, so we don't lose the tracking info.
 		 */
-		install_uffd_wp_ptes_if_needed(vma, address, pvmw.pte, pteval, 1);
+		install_uffd_wp_ptes_if_needed(vma, address, pvmw.pte, pteval, nr_pages);
 
 		/* Update high watermark before we lower rss */
 		update_hiwater_rss(mm);
@@ -2359,8 +2356,9 @@ discard:
 		 * If we are sure that we batched the entire folio and cleared
 		 * all PTEs, we can just optimize and stop right here.
 		 */
-		if (nr_pages == folio_nr_pages(folio))
+		if (likely(nr_pages == folio_nr_pages(folio)))
 			goto walk_done;
+		page_vma_mapped_walk_jump(&pvmw, nr_pages - 1);
 		continue;
 walk_abort:
 		ret = false;
