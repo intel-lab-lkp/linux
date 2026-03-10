@@ -8382,6 +8382,12 @@ F:	Documentation/devicetree/bindings/display/rockchip/rockchip,dw-dp.yaml
 F:	drivers/gpu/drm/bridge/synopsys/dw-dp.c
 F:	include/drm/bridge/dw_dp.h
 
+DRM DRIVER FOR TIANMA TA066VVHM03 PANELS
+M:	Alexander Koskovich <akoskovich@pm.me>
+S:	Maintained
+F:	Documentation/devicetree/bindings/display/panel/tianma,ta066vvhm03.yaml
+F:	drivers/gpu/drm/panel/panel-tianma-ta066vvhm03.c
+
 DRM DRIVER FOR TI DLPC3433 MIPI DSI TO DMD BRIDGE
 M:	Jagan Teki <jagan@amarulasolutions.com>
 S:	Maintained
