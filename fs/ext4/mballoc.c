@@ -7189,9 +7189,6 @@ out_unload:
 }
 
 #if IS_ENABLED(CONFIG_EXT4_KUNIT_TESTS)
-#define EXPORT_SYMBOL_FOR_EXT4_TEST(sym) \
-	EXPORT_SYMBOL_FOR_MODULES(sym, "ext4-test")
-
 void mb_clear_bits_test(void *bm, int cur, int len)
 {
 	 mb_clear_bits(bm, cur, len);
