@@ -244,6 +244,7 @@ static const char *const rqf_name[] = {
 	RQF_NAME(ZONE_WRITE_PLUGGING),
 	RQF_NAME(TIMED_OUT),
 	RQF_NAME(RESV),
+	RQF_NAME(XFER_SINGLE_BLK),
 };
 #undef RQF_NAME
 

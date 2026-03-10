@@ -64,6 +64,7 @@ enum rqf_flags {
 	/* ->timeout has been called, don't expire again */
 	__RQF_TIMED_OUT,
 	__RQF_RESV,
+	__RQF_XFER_SINGLE_BLK,
 	__RQF_BITS
 };
 
@@ -85,6 +86,8 @@ enum rqf_flags {
 			((__force req_flags_t)(1 << __RQF_ZONE_WRITE_PLUGGING))
 #define RQF_TIMED_OUT		((__force req_flags_t)(1 << __RQF_TIMED_OUT))
 #define RQF_RESV		((__force req_flags_t)(1 << __RQF_RESV))
+#define RQF_XFER_SINGLE_BLK	\
+			((__force req_flags_t)(1 << __RQF_XFER_SINGLE_BLK))
 
 /* flags that prevent us from merging requests: */
 #define RQF_NOMERGE_FLAGS \
