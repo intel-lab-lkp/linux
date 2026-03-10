@@ -12,7 +12,12 @@ struct its_priv_state {
 	void *cmd_host_cwriter;
 	struct its_shadow_tables *shadow;
 	hyp_spinlock_t its_lock;
+	u16 empty_idx;
+	u64 tracked_pfns[];
 };
+
+#define MAX_TRACKED_PFNS	((PAGE_SIZE - offsetof(struct its_priv_state, \
+				  tracked_pfns)) / sizeof(u64))
 
 struct its_handler {
 	u64 offset;
@@ -22,6 +27,178 @@ struct its_handler {
 };
 
 DEFINE_HYP_SPINLOCK(its_setup_lock);
+
+static int track_pfn_add(struct its_priv_state *its, u64 pfn)
+{
+	int ret, i;
+
+	if (its->empty_idx + 1 >= MAX_TRACKED_PFNS)
+		return -ENOSPC;
+
+	ret = __pkvm_host_share_hyp(pfn);
+	if (ret)
+		return ret;
+
+	its->tracked_pfns[its->empty_idx] = pfn;
+	for (i = 0; i < MAX_TRACKED_PFNS; i++) {
+		if (!its->tracked_pfns[i])
+			break;
+	}
+
+	its->empty_idx = i;
+	return 0;
+}
+
+static int track_pfn_remove(struct its_priv_state *its, u64 pfn)
+{
+	int i, ret;
+
+	for (i = 0; i < MAX_TRACKED_PFNS; i++) {
+		if (its->tracked_pfns[i] != pfn)
+			continue;
+
+		ret = __pkvm_host_unshare_hyp(pfn);
+		if (ret)
+			return ret;
+
+		its->tracked_pfns[i] = 0;
+		its->empty_idx = i;
+	}
+
+	return 0;
+}
+
+static int get_num_itt_pages(struct its_priv_state *its, u8 num_bits)
+{
+	int nr_ites = 1 << (num_bits + 1);
+	u64 size, gits_typer = readq_relaxed(its->base + GITS_TYPER);
+
+	size = nr_ites * (FIELD_GET(GITS_TYPER_ITT_ENTRY_SIZE, gits_typer) + 1);
+	size = max(size, ITS_ITT_ALIGN) + ITS_ITT_ALIGN - 1;
+
+	return PAGE_ALIGN(size) >> PAGE_SHIFT;
+}
+
+static int track_pfn(struct its_priv_state *its, u64 start_pfn, int num_pages, bool remove)
+{
+	int i, ret;
+
+	for (i = 0; i < num_pages; i++) {
+		if (remove)
+			ret = track_pfn_remove(its, start_pfn + i);
+		else
+			ret = track_pfn_add(its, start_pfn + i);
+
+		if (ret)
+			goto err_track;
+	}
+
+	return 0;
+err_track:
+	for (i = i - 1; i >= 0; i--) {
+		if (remove)
+			track_pfn_add(its, start_pfn + i);
+		else
+			track_pfn_remove(its, start_pfn + i);
+	}
+
+	return ret;
+}
+
+static struct its_baser *get_table(struct its_priv_state *its, u64 type)
+{
+	int i;
+	struct its_shadow_tables *shadow = its->shadow;
+
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		if (GITS_BASER_TYPE(shadow->tables[i].val) == type)
+			return &shadow->tables[i];
+	}
+
+	return NULL;
+}
+
+static int check_table_update(struct its_priv_state *its, u32 id, u64 type)
+{
+	u32 lvl1_idx;
+	u64 esz, *host_table, *hyp_table, new_entry, update;
+	struct its_baser *table = get_table(its, type);
+	int ret;
+	phys_addr_t new_lvl2_table, lvl2_table;
+
+	if (!table)
+		return -EINVAL;
+
+	if (!(table->val & GITS_BASER_INDIRECT))
+		return 0;
+
+	esz = GITS_BASER_ENTRY_SIZE(table->val);
+	lvl1_idx = id / (table->psz / esz);
+
+	host_table = kern_hyp_va(table->shadow);
+	hyp_table = kern_hyp_va(table->base);
+
+	new_entry = host_table[id];
+	update = new_entry ^ hyp_table[id];
+	if (!update || !(update & GITS_BASER_VALID))
+		return 0;
+
+	new_lvl2_table = hyp_phys_to_pfn(new_entry & PHYS_MASK_SHIFT);
+	lvl2_table = hyp_phys_to_pfn(hyp_table[id] & PHYS_MASK_SHIFT);
+	if (new_entry & GITS_BASER_VALID)
+		ret = __pkvm_host_donate_hyp(new_lvl2_table, table->psz >> PAGE_SHIFT);
+	else
+		ret = __pkvm_hyp_donate_host(lvl2_table, table->psz >> PAGE_SHIFT);
+	if (ret)
+		return ret;
+
+	hyp_table[id] = new_entry;
+	return 0;
+}
+
+static int process_its_mapd(struct its_priv_state *its, struct its_cmd_block *cmd)
+{
+	phys_addr_t itt_addr = cmd->raw_cmd[2] & GENMASK(51, 8);
+	u8 size = cmd->raw_cmd[1] & GENMASK(4, 0);
+	bool remove = !(cmd->raw_cmd[2] & BIT(63));
+	u32 device_id = cmd->raw_cmd[0] >> 32;
+	int num_pages, ret;
+	u64 base_pfn;
+
+	if (PAGE_ALIGNED(itt_addr))
+		return -EINVAL;
+
+	base_pfn = hyp_phys_to_pfn(itt_addr);
+	num_pages = get_num_itt_pages(its, size);
+
+	ret = check_table_update(its, device_id, GITS_BASER_TYPE_DEVICE);
+	if (ret)
+		return ret;
+
+	return track_pfn(its, base_pfn, num_pages, remove);
+}
+
+static int parse_its_cmdq(struct its_priv_state *its, int offset, ssize_t len)
+{
+	struct its_cmd_block *cmd = its->cmd_hyp_base + offset;
+	u8 req_type;
+	int ret = 0;
+
+	while (len > 0 && !ret) {
+		req_type = cmd->raw_cmd[0] & GENMASK(7, 0);
+
+		switch (req_type) {
+		case GITS_CMD_MAPD:
+			ret = process_its_mapd(its, cmd);
+			break;
+		}
+
+		cmd++;
+		len -= sizeof(struct its_cmd_block);
+	}
+
+	return ret;
+}
 
 static void cwriter_write(struct its_priv_state *its, u64 offset, u64 value)
 {
@@ -41,11 +218,15 @@ static void cwriter_write(struct its_priv_state *its, u64 offset, u64 value)
 		return;
 
 	memcpy(its->cmd_hyp_base + cmd_offset, its->cmd_host_cwriter, cmd_len);
+	if (parse_its_cmdq(its, cmd_offset, cmd_len))
+		return;
 
 	its->cmd_host_cwriter = its->cmd_host_base +
 		(cmd_offset + cmd_len) % cmdq_sz;
 	if (its->cmd_host_cwriter == its->cmd_host_base) {
 		memcpy(its->cmd_hyp_base, its->cmd_host_base, cwriter_offset);
+		if (parse_its_cmdq(its, cmd_offset, cmd_len))
+			return;
 
 		its->cmd_host_cwriter = its->cmd_host_base + cwriter_offset;
 	}
@@ -357,6 +538,7 @@ int pkvm_init_gic_its_emulation(phys_addr_t dev_addr, void *host_priv_state,
 	priv_state->cmd_hyp_base = kern_hyp_va(shadow->cmd_original);
 	priv_state->cmd_host_base = kern_hyp_va(shadow->cmd_shadow);
 	priv_state->cmd_host_cwriter = priv_state->cmd_host_base;
+	priv_state->empty_idx = 0;
 
 	hyp_spin_unlock(&its_setup_lock);
 

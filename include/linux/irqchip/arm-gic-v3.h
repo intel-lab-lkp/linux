@@ -611,6 +611,8 @@
  */
 #define GIC_IRQ_TYPE_LPI		0xa110c8ed
 
+#define ITS_ITT_ALIGN			SZ_256
+
 struct rdists {
 	struct {
 		raw_spinlock_t	rd_lock;
@@ -631,6 +633,16 @@ struct rdists {
 	bool			has_rvpeid;
 	bool			has_direct_lpi;
 	bool			has_vpend_valid_dirty;
+};
+
+/*
+ * The ITS command block, which is what the ITS actually parses.
+ */
+struct its_cmd_block {
+	union {
+		u64	raw_cmd[4];
+		__le64	raw_cmd_le[4];
+	};
 };
 
 struct irq_domain;
