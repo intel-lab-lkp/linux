@@ -1582,100 +1582,6 @@ static inline void mem_cgroup_flush_foreign(struct bdi_writeback *wb)
 
 #endif	/* CONFIG_CGROUP_WRITEBACK */
 
-struct sock;
-#ifdef CONFIG_MEMCG
-extern struct static_key_false memcg_sockets_enabled_key;
-#define mem_cgroup_sockets_enabled static_branch_unlikely(&memcg_sockets_enabled_key)
-
-void mem_cgroup_sk_alloc(struct sock *sk);
-void mem_cgroup_sk_free(struct sock *sk);
-void mem_cgroup_sk_inherit(const struct sock *sk, struct sock *newsk);
-bool mem_cgroup_sk_charge(const struct sock *sk, unsigned int nr_pages,
-			  gfp_t gfp_mask);
-void mem_cgroup_sk_uncharge(const struct sock *sk, unsigned int nr_pages);
-
-#if BITS_PER_LONG < 64
-static inline void mem_cgroup_set_socket_pressure(struct mem_cgroup *memcg)
-{
-	u64 val = get_jiffies_64() + HZ;
-	unsigned long flags;
-
-	write_seqlock_irqsave(&memcg->socket_pressure_seqlock, flags);
-	memcg->socket_pressure = val;
-	write_sequnlock_irqrestore(&memcg->socket_pressure_seqlock, flags);
-}
-
-static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
-{
-	unsigned int seq;
-	u64 val;
-
-	do {
-		seq = read_seqbegin(&memcg->socket_pressure_seqlock);
-		val = memcg->socket_pressure;
-	} while (read_seqretry(&memcg->socket_pressure_seqlock, seq));
-
-	return val;
-}
-#else
-static inline void mem_cgroup_set_socket_pressure(struct mem_cgroup *memcg)
-{
-	WRITE_ONCE(memcg->socket_pressure, jiffies + HZ);
-}
-
-static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
-{
-	return READ_ONCE(memcg->socket_pressure);
-}
-#endif
-
-int alloc_shrinker_info(struct mem_cgroup *memcg);
-void free_shrinker_info(struct mem_cgroup *memcg);
-void set_shrinker_bit(struct mem_cgroup *memcg, int nid, int shrinker_id);
-void reparent_shrinker_deferred(struct mem_cgroup *memcg);
-
-static inline int shrinker_id(struct mem_cgroup *memcg, struct shrinker *shrinker)
-{
-	return shrinker->id;
-}
-#else
-#define mem_cgroup_sockets_enabled 0
-
-static inline void mem_cgroup_sk_alloc(struct sock *sk)
-{
-}
-
-static inline void mem_cgroup_sk_free(struct sock *sk)
-{
-}
-
-static inline void mem_cgroup_sk_inherit(const struct sock *sk, struct sock *newsk)
-{
-}
-
-static inline bool mem_cgroup_sk_charge(const struct sock *sk,
-					unsigned int nr_pages,
-					gfp_t gfp_mask)
-{
-	return false;
-}
-
-static inline void mem_cgroup_sk_uncharge(const struct sock *sk,
-					  unsigned int nr_pages)
-{
-}
-
-static inline void set_shrinker_bit(struct mem_cgroup *memcg,
-				    int nid, int shrinker_id)
-{
-}
-
-static inline int shrinker_id(struct mem_cgroup *memcg, struct shrinker *shrinker)
-{
-	return -1;
-}
-#endif
-
 #ifdef CONFIG_MEMCG
 bool mem_cgroup_kmem_disabled(void);
 int __memcg_kmem_charge_page(struct page *page, gfp_t gfp, int order);
@@ -1843,6 +1749,100 @@ static inline bool memcg_is_dying(struct mem_cgroup *memcg)
 	return false;
 }
 #endif /* CONFIG_MEMCG */
+
+struct sock;
+#ifdef CONFIG_MEMCG
+extern struct static_key_false memcg_sockets_enabled_key;
+#define mem_cgroup_sockets_enabled static_branch_unlikely(&memcg_sockets_enabled_key)
+
+void mem_cgroup_sk_alloc(struct sock *sk);
+void mem_cgroup_sk_free(struct sock *sk);
+void mem_cgroup_sk_inherit(const struct sock *sk, struct sock *newsk);
+bool mem_cgroup_sk_charge(const struct sock *sk, unsigned int nr_pages,
+			  gfp_t gfp_mask);
+void mem_cgroup_sk_uncharge(const struct sock *sk, unsigned int nr_pages);
+
+#if BITS_PER_LONG < 64
+static inline void mem_cgroup_set_socket_pressure(struct mem_cgroup *memcg)
+{
+	u64 val = get_jiffies_64() + HZ;
+	unsigned long flags;
+
+	write_seqlock_irqsave(&memcg->socket_pressure_seqlock, flags);
+	memcg->socket_pressure = val;
+	write_sequnlock_irqrestore(&memcg->socket_pressure_seqlock, flags);
+}
+
+static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
+{
+	unsigned int seq;
+	u64 val;
+
+	do {
+		seq = read_seqbegin(&memcg->socket_pressure_seqlock);
+		val = memcg->socket_pressure;
+	} while (read_seqretry(&memcg->socket_pressure_seqlock, seq));
+
+	return val;
+}
+#else
+static inline void mem_cgroup_set_socket_pressure(struct mem_cgroup *memcg)
+{
+	WRITE_ONCE(memcg->socket_pressure, jiffies + HZ);
+}
+
+static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
+{
+	return READ_ONCE(memcg->socket_pressure);
+}
+#endif
+
+int alloc_shrinker_info(struct mem_cgroup *memcg);
+void free_shrinker_info(struct mem_cgroup *memcg);
+void set_shrinker_bit(struct mem_cgroup *memcg, int nid, int shrinker_id);
+void reparent_shrinker_deferred(struct mem_cgroup *memcg);
+
+static inline int shrinker_id(struct mem_cgroup *memcg, struct shrinker *shrinker)
+{
+	return shrinker->id;
+}
+#else
+#define mem_cgroup_sockets_enabled 0
+
+static inline void mem_cgroup_sk_alloc(struct sock *sk)
+{
+}
+
+static inline void mem_cgroup_sk_free(struct sock *sk)
+{
+}
+
+static inline void mem_cgroup_sk_inherit(const struct sock *sk, struct sock *newsk)
+{
+}
+
+static inline bool mem_cgroup_sk_charge(const struct sock *sk,
+					unsigned int nr_pages,
+					gfp_t gfp_mask)
+{
+	return false;
+}
+
+static inline void mem_cgroup_sk_uncharge(const struct sock *sk,
+					  unsigned int nr_pages)
+{
+}
+
+static inline void set_shrinker_bit(struct mem_cgroup *memcg,
+				    int nid, int shrinker_id)
+{
+}
+
+static inline int shrinker_id(struct mem_cgroup *memcg, struct shrinker *shrinker)
+{
+	return -1;
+}
+#endif
 
 #if defined(CONFIG_MEMCG) && defined(CONFIG_ZSWAP)
 bool obj_cgroup_may_zswap(struct obj_cgroup *objcg);
