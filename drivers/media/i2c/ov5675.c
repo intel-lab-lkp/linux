@@ -1181,6 +1181,13 @@ static int ov5675_get_hwcfg(struct ov5675 *ov5675)
 	if (!fwnode)
 		return -ENXIO;
 
+	ep = fwnode_graph_get_endpoint_by_id(fwnode, 0, 0,
+					     FWNODE_GRAPH_ENDPOINT_NEXT);
+	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	fwnode_handle_put(ep);
+	if (ret)
+		return ret;
+
 	ov5675->xvclk = devm_v4l2_sensor_clk_get(dev, NULL);
 	if (IS_ERR(ov5675->xvclk))
 		return dev_err_probe(dev, PTR_ERR(ov5675->xvclk),
@@ -1207,15 +1214,6 @@ static int ov5675_get_hwcfg(struct ov5675 *ov5675)
 
 	ret = devm_regulator_bulk_get(dev, OV5675_NUM_SUPPLIES,
 				      ov5675->supplies);
-	if (ret)
-		return ret;
-
-	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
-	if (!ep)
-		return -ENXIO;
-
-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
-	fwnode_handle_put(ep);
 	if (ret)
 		return ret;
 
