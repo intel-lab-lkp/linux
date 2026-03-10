@@ -284,6 +284,27 @@ static int fix_hyp_pgtable_refcnt(void)
 				&walker);
 }
 
+static int unmap_protected_regions(void)
+{
+	struct pkvm_protected_reg *reg;
+	int i, ret, j = 0;
+
+	for (i = 0; i < num_protected_reg; i++) {
+		reg = &pkvm_protected_regs[i];
+		for (j = 0; j < reg->num_pages; j++) {
+			ret = __pkvm_host_donate_hyp_mmio(reg->start_pfn + j);
+			if (ret)
+				goto err_setup;
+		}
+	}
+
+	return 0;
+err_setup:
+	for (j = j - 1; j >= 0; j--)
+		__pkvm_hyp_donate_host_mmio(reg->start_pfn + j);
+	return ret;
+}
+
 void __noreturn __pkvm_init_finalise(void)
 {
 	struct kvm_cpu_context *host_ctxt = host_data_ptr(host_ctxt);
@@ -321,6 +342,10 @@ void __noreturn __pkvm_init_finalise(void)
 		goto out;
 
 	ret = hyp_create_fixmap();
+	if (ret)
+		goto out;
+
+	ret = unmap_protected_regions();
 	if (ret)
 		goto out;
 

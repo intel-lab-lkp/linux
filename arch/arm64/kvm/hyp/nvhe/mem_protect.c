@@ -23,6 +23,9 @@
 
 struct host_mmu host_mmu;
 
+struct pkvm_protected_reg pkvm_protected_regs[PKVM_PROTECTED_REGS_NUM];
+unsigned int num_protected_reg;
+
 static struct hyp_pool host_s2_pool;
 
 static DEFINE_PER_CPU(struct pkvm_hyp_vm *, __current_vm);
