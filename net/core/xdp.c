@@ -101,7 +101,7 @@ static void mem_allocator_disconnect(void *allocator)
 	do {
 		rhashtable_walk_start(&iter);
 
-		while ((xa = rhashtable_walk_next(&iter)) && !IS_ERR(xa)) {
+		while (!IS_ERR_OR_NULL((xa = rhashtable_walk_next(&iter)))) {
 			if (xa->allocator == allocator)
 				mem_xa_remove(xa);
 		}
