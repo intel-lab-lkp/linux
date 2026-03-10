@@ -214,13 +214,14 @@ amdv1pt_install_leaf_entry(struct pt_state *pts, pt_oaddr_t oa,
 	} else {
 		unsigned int num_contig_lg2 = oasz_lg2 - isz_lg2;
 		u64 *end = tablep + log2_to_int(num_contig_lg2);
+		pt_oaddr_t contig_oa = oalog2_to_int(oasz_lg2 - PT_GRANULE_LG2SZ - 1) - 1;
+
+		if (PT_WARN_ON(!FIELD_FIT(AMDV1PT_FMT_OA, contig_oa)))
+			return;
 
 		entry |= FIELD_PREP(AMDV1PT_FMT_NEXT_LEVEL,
 				    AMDV1PT_FMT_NL_SIZE) |
-			 FIELD_PREP(AMDV1PT_FMT_OA,
-				    oalog2_to_int(oasz_lg2 - PT_GRANULE_LG2SZ -
-						  1) -
-					    1);
+			 (((u64)contig_oa << __bf_shf(AMDV1PT_FMT_OA)) & AMDV1PT_FMT_OA);
 
 		/* See amdv1pt_clear_entries() */
 		if (num_contig_lg2 <= ilog2(32)) {
