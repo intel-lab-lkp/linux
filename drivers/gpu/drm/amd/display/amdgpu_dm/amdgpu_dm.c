@@ -3134,12 +3134,11 @@ static int dm_cache_state(struct amdgpu_device *adev)
 	int r;
 
 	adev->dm.cached_state = drm_atomic_helper_suspend(adev_to_drm(adev));
-	if (IS_ERR(adev->dm.cached_state)) {
-		r = PTR_ERR(adev->dm.cached_state);
+	r = PTR_ERR_OR_ZERO(adev->dm.cached_state);
+	if (r)
 		adev->dm.cached_state = NULL;
-	}
 
-	return adev->dm.cached_state ? 0 : r;
+	return r;
 }
 
 static void dm_destroy_cached_state(struct amdgpu_device *adev)
