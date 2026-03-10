@@ -133,9 +133,13 @@ out:
 
 static int ibmpex_ver_check(struct ibmpex_bmc_data *data)
 {
+	int err;
+
 	data->tx_msg_data[0] = PEX_GET_VERSION;
 	data->tx_message.data_len = 1;
-	ibmpex_send_message(data);
+	err = ibmpex_send_message(data);
+	if (err)
+		return err;
 
 	wait_for_completion(&data->read_complete);
 
@@ -159,9 +163,13 @@ static int ibmpex_ver_check(struct ibmpex_bmc_data *data)
 
 static int ibmpex_query_sensor_count(struct ibmpex_bmc_data *data)
 {
+	int err;
+
 	data->tx_msg_data[0] = PEX_GET_SENSOR_COUNT;
 	data->tx_message.data_len = 1;
-	ibmpex_send_message(data);
+	err = ibmpex_send_message(data);
+	if (err)
+		return err;
 
 	wait_for_completion(&data->read_complete);
 
@@ -173,10 +181,14 @@ static int ibmpex_query_sensor_count(struct ibmpex_bmc_data *data)
 
 static int ibmpex_query_sensor_name(struct ibmpex_bmc_data *data, int sensor)
 {
+	int err;
+
 	data->tx_msg_data[0] = PEX_GET_SENSOR_NAME;
 	data->tx_msg_data[1] = sensor;
 	data->tx_message.data_len = 2;
-	ibmpex_send_message(data);
+	err = ibmpex_send_message(data);
+	if (err)
+		return err;
 
 	wait_for_completion(&data->read_complete);
 
@@ -188,10 +200,14 @@ static int ibmpex_query_sensor_name(struct ibmpex_bmc_data *data, int sensor)
 
 static int ibmpex_query_sensor_data(struct ibmpex_bmc_data *data, int sensor)
 {
+	int err;
+
 	data->tx_msg_data[0] = PEX_GET_SENSOR_DATA;
 	data->tx_msg_data[1] = sensor;
 	data->tx_message.data_len = 2;
-	ibmpex_send_message(data);
+	err = ibmpex_send_message(data);
+	if (err)
+		return err;
 
 	wait_for_completion(&data->read_complete);
 
@@ -206,9 +222,13 @@ static int ibmpex_query_sensor_data(struct ibmpex_bmc_data *data, int sensor)
 
 static int ibmpex_reset_high_low_data(struct ibmpex_bmc_data *data)
 {
+	int err;
+
 	data->tx_msg_data[0] = PEX_RESET_HIGH_LOW;
 	data->tx_message.data_len = 1;
-	ibmpex_send_message(data);
+	err = ibmpex_send_message(data);
+	if (err)
+		return err;
 
 	wait_for_completion(&data->read_complete);
 
@@ -276,8 +296,11 @@ static ssize_t ibmpex_high_low_store(struct device *dev,
 				     const char *buf, size_t count)
 {
 	struct ibmpex_bmc_data *data = dev_get_drvdata(dev);
+	int err;
 
-	ibmpex_reset_high_low_data(data);
+	err = ibmpex_reset_high_low_data(data);
+	if (err)
+		return err;
 
 	return count;
 }
