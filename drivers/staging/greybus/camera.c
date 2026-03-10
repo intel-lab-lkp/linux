@@ -519,8 +519,6 @@ static int gb_camera_configure_streams(struct gb_camera *gcam,
 				       struct gb_camera_stream_config *streams,
 				       struct gb_camera_csi_params *csi_params)
 {
-	struct gb_camera_configure_streams_request *req;
-	struct gb_camera_configure_streams_response *resp;
 	unsigned int nstreams = *num_streams;
 	unsigned int i;
 	size_t req_size;
@@ -533,11 +531,11 @@ static int gb_camera_configure_streams(struct gb_camera *gcam,
 	req_size = sizeof(*req) + nstreams * sizeof(req->config[0]);
 	resp_size = sizeof(*resp) + nstreams * sizeof(resp->config[0]);
 
-	req = kmalloc(req_size, GFP_KERNEL);
-	resp = kmalloc(resp_size, GFP_KERNEL);
+	struct gb_camera_configure_streams_request *req __free(kfree) =
+	    kmalloc(req_size, GFP_KERNEL);
+	struct gb_camera_configure_streams_response *resp __free(kfree) =
+	    kmalloc(resp_size, GFP_KERNEL);
 	if (!req || !resp) {
-		kfree(req);
-		kfree(resp);
 		return -ENOMEM;
 	}
 
@@ -641,8 +639,6 @@ done:
 
 done_skip_pm_put:
 	mutex_unlock(&gcam->mutex);
-	kfree(req);
-	kfree(resp);
 	return ret;
 }
 
@@ -650,7 +646,6 @@ static int gb_camera_capture(struct gb_camera *gcam, u32 request_id,
 			     unsigned int streams, unsigned int num_frames,
 			     size_t settings_size, const void *settings)
 {
-	struct gb_camera_capture_request *req;
 	size_t req_size;
 	int ret;
 
@@ -658,7 +653,8 @@ static int gb_camera_capture(struct gb_camera *gcam, u32 request_id,
 		return -EINVAL;
 
 	req_size = sizeof(*req) + settings_size;
-	req = kmalloc(req_size, GFP_KERNEL);
+	struct gb_camera_capture_request *req __free(kfree) =
+	    kmalloc(req_size, GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
 
@@ -679,8 +675,6 @@ static int gb_camera_capture(struct gb_camera *gcam, u32 request_id,
 				req, req_size, NULL, 0);
 done:
 	mutex_unlock(&gcam->mutex);
-
-	kfree(req);
 
 	return ret;
 }
@@ -870,16 +864,15 @@ static ssize_t gb_camera_debugfs_capabilities(struct gb_camera *gcam,
 		&gcam->debugfs.buffers[GB_CAMERA_DEBUGFS_BUFFER_CAPABILITIES];
 	size_t size = 1024;
 	unsigned int i;
-	u8 *caps;
 	int ret;
 
-	caps = kmalloc(size, GFP_KERNEL);
+	u8 *caps __free(kfree) = kmalloc(size, GFP_KERNEL);
 	if (!caps)
 		return -ENOMEM;
 
 	ret = gb_camera_capabilities(gcam, caps, &size);
 	if (ret < 0)
-		goto done;
+		return ret;
 
 	/*
 	 * hex_dump_to_buffer() doesn't return the number of bytes dumped prior
@@ -893,10 +886,6 @@ static ssize_t gb_camera_debugfs_capabilities(struct gb_camera *gcam,
 		buffer->length += sprintf(buffer->data + buffer->length,
 					  "%*ph\n", nbytes, caps + i);
 	}
-
-done:
-	kfree(caps);
-	return ret;
 }
 
 static ssize_t gb_camera_debugfs_configure_streams(struct gb_camera *gcam,

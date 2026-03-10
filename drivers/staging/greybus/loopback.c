@@ -508,10 +508,10 @@ static int gb_loopback_async_operation(struct gb_loopback *gb, int type,
 
 static int gb_loopback_sync_sink(struct gb_loopback *gb, u32 len)
 {
-	struct gb_loopback_transfer_request *request;
 	int retval;
 
-	request = kmalloc(len + sizeof(*request), GFP_KERNEL);
+	struct gb_loopback_transfer_request *request __free(kfree) =
+		kmalloc(len + sizeof(*request), GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
 
@@ -519,25 +519,24 @@ static int gb_loopback_sync_sink(struct gb_loopback *gb, u32 len)
 	retval = gb_loopback_operation_sync(gb, GB_LOOPBACK_TYPE_SINK,
 					    request, len + sizeof(*request),
 					    NULL, 0);
-	kfree(request);
 	return retval;
 }
 
 static int gb_loopback_sync_transfer(struct gb_loopback *gb, u32 len)
 {
-	struct gb_loopback_transfer_request *request;
-	struct gb_loopback_transfer_response *response;
 	int retval;
 
 	gb->apbridge_latency_ts = 0;
 	gb->gbphy_latency_ts = 0;
 
-	request = kmalloc(len + sizeof(*request), GFP_KERNEL);
+	struct gb_loopback_transfer_request *request __free(kfree) =
+		kmalloc(len + sizeof(*request), GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
-	response = kmalloc(len + sizeof(*response), GFP_KERNEL);
+
+	struct gb_loopback_transfer_response *response __free(kfree) =
+		kmalloc(len + sizeof(*response), GFP_KERNEL);
 	if (!response) {
-		kfree(request);
 		return -ENOMEM;
 	}
 
@@ -548,7 +547,7 @@ static int gb_loopback_sync_transfer(struct gb_loopback *gb, u32 len)
 					    request, len + sizeof(*request),
 					    response, len + sizeof(*response));
 	if (retval)
-		goto gb_error;
+		return retval;
 
 	if (memcmp(request->data, response->data, len)) {
 		dev_err(&gb->connection->bundle->dev,
@@ -557,10 +556,6 @@ static int gb_loopback_sync_transfer(struct gb_loopback *gb, u32 len)
 	}
 	gb->apbridge_latency_ts = (u32)__le32_to_cpu(response->reserved0);
 	gb->gbphy_latency_ts = (u32)__le32_to_cpu(response->reserved1);
-
-gb_error:
-	kfree(request);
-	kfree(response);
 
 	return retval;
 }
@@ -573,10 +568,10 @@ static int gb_loopback_sync_ping(struct gb_loopback *gb)
 
 static int gb_loopback_async_sink(struct gb_loopback *gb, u32 len)
 {
-	struct gb_loopback_transfer_request *request;
 	int retval;
 
-	request = kmalloc(len + sizeof(*request), GFP_KERNEL);
+	struct gb_loopback_transfer_request *request __free(kfree) =
+		kmalloc(len + sizeof(*request), GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
 
@@ -584,7 +579,6 @@ static int gb_loopback_async_sink(struct gb_loopback *gb, u32 len)
 	retval = gb_loopback_async_operation(gb, GB_LOOPBACK_TYPE_SINK,
 					     request, len + sizeof(*request),
 					     0, NULL);
-	kfree(request);
 	return retval;
 }
 
@@ -621,10 +615,10 @@ static int gb_loopback_async_transfer_complete(
 
 static int gb_loopback_async_transfer(struct gb_loopback *gb, u32 len)
 {
-	struct gb_loopback_transfer_request *request;
 	int retval, response_len;
 
-	request = kmalloc(len + sizeof(*request), GFP_KERNEL);
+	struct gb_loopback_transfer_request *request __free(kfree) =
+		kmalloc(len + sizeof(*request), GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
 
@@ -636,11 +630,6 @@ static int gb_loopback_async_transfer(struct gb_loopback *gb, u32 len)
 					     request, len + sizeof(*request),
 					     len + response_len,
 					     gb_loopback_async_transfer_complete);
-	if (retval)
-		goto gb_error;
-
-gb_error:
-	kfree(request);
 	return retval;
 }
 

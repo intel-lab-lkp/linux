@@ -126,15 +126,14 @@ static int gb_raw_request_handler(struct gb_operation *op)
 static int gb_raw_send(struct gb_raw *raw, u32 len, const char __user *data)
 {
 	struct gb_connection *connection = raw->connection;
-	struct gb_raw_send_request *request;
 	int retval;
 
-	request = kmalloc(len + sizeof(*request), GFP_KERNEL);
+	struct gb_raw_send_request *request __free(kfree) =
+	    kmalloc(len + sizeof(*request), GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
 
 	if (copy_from_user(&request->data[0], data, len)) {
-		kfree(request);
 		return -EFAULT;
 	}
 
@@ -144,7 +143,6 @@ static int gb_raw_send(struct gb_raw *raw, u32 len, const char __user *data)
 				   request, len + sizeof(*request),
 				   NULL, 0);
 
-	kfree(request);
 	return retval;
 }
 
