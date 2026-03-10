@@ -192,9 +192,9 @@ uint32_t ia_css_circbuf_peek_from_start(ia_css_circbuf_t *cb, int offset)
  * Please refer to "ia_css_circbuf.h" for details.
  */
 bool ia_css_circbuf_increase_size(
-    ia_css_circbuf_t *cb,
-    unsigned int sz_delta,
-    ia_css_circbuf_elem_t *elems)
+	ia_css_circbuf_t *cb,
+	unsigned int sz_delta,
+	ia_css_circbuf_elem_t *elems)
 {
 	u8 curr_size;
 	u8 curr_end;
@@ -206,7 +206,8 @@ bool ia_css_circbuf_increase_size(
 	curr_size = cb->desc->size;
 	curr_end = cb->desc->end;
 	/* We assume cb was pre defined as global to allow
-	 * increase in size */
+	 * increase in size
+	 */
 	/* FM: are we sure this cannot cause size to become too big? */
 	if (((uint8_t)(cb->desc->size + (uint8_t)sz_delta) > cb->desc->size) &&
 	    ((uint8_t)sz_delta == sz_delta))
@@ -215,12 +216,14 @@ bool ia_css_circbuf_increase_size(
 		return false; /* overflow in size */
 
 	/* If elems are passed update them else we assume its been taken
-	 * care before calling this function */
+	 * care before calling this function
+	 */
 	if (elems) {
 		/* cb element array size will not be increased dynamically,
 		 * but pointers to new elements can be added at the end
 		 * of existing pre defined cb element array of
-		 * size >= new size if not already added */
+		 * size >= new size if not already added
+		 */
 		for (i = curr_size; i <  cb->desc->size; i++)
 			cb->elems[i] = elems[i - curr_size];
 	}
