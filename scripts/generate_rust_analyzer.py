@@ -194,6 +194,12 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
         except FileNotFoundError:
             return False
 
+    def get_crate_name(path):
+        return subprocess.check_output(
+            [os.environ["RUSTC"], "--print", "crate-name", path],
+            stdin=subprocess.DEVNULL,
+        ).decode('utf-8').strip()
+
     # Then, the rest outside of `rust/`.
     #
     # We explicitly mention the top-level folders we want to cover.
@@ -212,7 +218,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
 
             logging.info("Adding %s", name)
             append_crate(
-                name,
+                get_crate_name(path),
                 path,
                 ["core", "kernel", "pin_init"],
                 cfg=cfg,
