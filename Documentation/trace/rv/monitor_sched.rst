@@ -66,21 +66,32 @@ Monitor snroc
 
 The set non runnable on its own context (snroc) monitor ensures changes in a
 task state happens only in the respective task's context. This is a per-task
-monitor::
+monitor.
+The monitor also includes enqueue/dequeue events to validate they alternate
+each other without duplication. Although they are not necessary to define the
+context, adding the check here saves from adding another simple per-task monitor::
 
-                        |
-                        |
-                        v
-                      +------------------+
-                      |  other_context   | <+
-                      +------------------+  |
-                        |                   |
-                        | sched_switch_in   | sched_switch_out
-                        v                   |
-    sched_set_state                         |
-  +------------------                       |
-  |                       own_context       |
-  +----------------->                      -+
+              |
+              |
+              v
+         #===============================================================#
+ +------ H                           enqueued                            H <--+
+ |       #===============================================================#    |
+ |         |                  ^                       sched_set_state         |
+ |  sched_switch_in   sched_switch_out                +--------------+        |
+ |         v                  |                       v              |        |
+ |      +-----------------------+   sched_dequeue    +-------------------+    |
+ |      |                       | -----------------> |                   |    |
+ |      |     own_context       |                    | dequeued_running  |    |
+ |      |                       | <----------------- |                   |    |
+ |      +-----------------------+   sched_enqueue    +-------------------+    |
+ |          ^   |           |                                                 |
+ |          +---+           | sched_switch_out                                |
+ |    sched_set_state       v                                                 |
+ |                      +-------------------------------------+               |
+ +--------------------> |              dequeued               | --------------+
+       sched_dequeue    +-------------------------------------+  sched_enqueue
+
 
 Monitor scpd
 ~~~~~~~~~~~~

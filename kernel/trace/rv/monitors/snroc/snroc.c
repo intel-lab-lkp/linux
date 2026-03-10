@@ -17,6 +17,16 @@
 #include "snroc.h"
 #include <rv/da_monitor.h>
 
+static void handle_sched_dequeue(void *data, struct task_struct *tsk, int cpu)
+{
+	da_handle_event(tsk, sched_dequeue_snroc);
+}
+
+static void handle_sched_enqueue(void *data, struct task_struct *tsk, int cpu)
+{
+	da_handle_event(tsk, sched_enqueue_snroc);
+}
+
 static void handle_sched_set_state(void *data, struct task_struct *tsk, int state)
 {
 	da_handle_event(tsk, sched_set_state_snroc);
@@ -27,8 +37,8 @@ static void handle_sched_switch(void *data, bool preempt,
 				struct task_struct *next,
 				unsigned int prev_state)
 {
-	da_handle_start_event(prev, sched_switch_out_snroc);
-	da_handle_event(next, sched_switch_in_snroc);
+	da_handle_event(prev, sched_switch_out_snroc);
+	da_handle_start_run_event(next, sched_switch_in_snroc);
 }
 
 static int enable_snroc(void)
@@ -39,6 +49,8 @@ static int enable_snroc(void)
 	if (retval)
 		return retval;
 
+	rv_attach_trace_probe("snroc", sched_dequeue_tp, handle_sched_dequeue);
+	rv_attach_trace_probe("snroc", sched_enqueue_tp, handle_sched_enqueue);
 	rv_attach_trace_probe("snroc", sched_set_state_tp, handle_sched_set_state);
 	rv_attach_trace_probe("snroc", sched_switch, handle_sched_switch);
 
@@ -49,6 +61,8 @@ static void disable_snroc(void)
 {
 	rv_this.enabled = 0;
 
+	rv_detach_trace_probe("snroc", sched_dequeue_tp, handle_sched_dequeue);
+	rv_detach_trace_probe("snroc", sched_enqueue_tp, handle_sched_enqueue);
 	rv_detach_trace_probe("snroc", sched_set_state_tp, handle_sched_set_state);
 	rv_detach_trace_probe("snroc", sched_switch, handle_sched_switch);
 
