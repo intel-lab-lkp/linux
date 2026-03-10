@@ -267,6 +267,14 @@ static void loongarch_set_csr(struct kvm_vcpu *vcpu, uint64_t id, uint64_t val)
 	__vcpu_set_reg(vcpu, csrid, val);
 }
 
+static void loongarch_set_cpucfg(struct kvm_vcpu *vcpu, uint64_t id, uint64_t val)
+{
+	uint64_t cfgid;
+
+	cfgid = KVM_REG_LOONGARCH_CPUCFG | KVM_REG_SIZE_U64 | 8 * id;
+	__vcpu_set_reg(vcpu, cfgid, val);
+}
+
 static void loongarch_vcpu_setup(struct kvm_vcpu *vcpu)
 {
 	int width;

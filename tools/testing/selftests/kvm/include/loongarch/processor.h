@@ -150,6 +150,17 @@
 	__v;					\
 })
 
+#define read_cpucfg(reg)			\
+({						\
+	register unsigned long __v;		\
+	__asm__ __volatile__(			\
+		"cpucfg %0, %1\n\t"		\
+		: "=r" (__v)			\
+		: "r" (reg)			\
+		: "memory");			\
+	 __v;					\
+})
+
 #define EXREGS_GPRS			(32)
 
 #ifndef __ASSEMBLER__
