@@ -4074,10 +4074,32 @@ static int validate_region_offset(struct cxl_region *cxlr, u64 offset)
 	return 0;
 }
 
-static int cxl_region_debugfs_poison_inject(void *data, u64 offset)
+static int cxl_region_poison_lookup_locked(struct cxl_region *cxlr, u64 offset,
+					   struct dpa_result *res)
 {
-	struct dpa_result result = { .dpa = ULLONG_MAX, .cxlmd = NULL };
-	struct cxl_region *cxlr = data;
+	int rc;
+
+	*res = (struct dpa_result){ .dpa = ULLONG_MAX, .cxlmd = NULL };
+
+	if (validate_region_offset(cxlr, offset))
+		return -EINVAL;
+
+	offset -= cxlr->params.cache_size;
+	rc = region_offset_to_dpa_result(cxlr, offset, res);
+	if (rc || !res->cxlmd || res->dpa == ULLONG_MAX) {
+		dev_dbg(&cxlr->dev,
+			"Failed to resolve DPA for region offset %#llx rc %d\n",
+			offset, rc);
+
+		return rc ? rc : -EINVAL;
+	}
+
+	return 0;
+}
+
+static int cxl_region_poison_lookup(struct cxl_region *cxlr, u64 offset,
+				    struct dpa_result *res)
+{
 	int rc;
 
 	ACQUIRE(rwsem_read_intr, region_rwsem)(&cxl_rwsem.region);
@@ -4088,20 +4110,44 @@ static int cxl_region_debugfs_poison_inject(void *data, u64 offset)
 	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &dpa_rwsem)))
 		return rc;
 
-	if (validate_region_offset(cxlr, offset))
-		return -EINVAL;
+	return cxl_region_poison_lookup_locked(cxlr, offset, res);
+}
 
-	offset -= cxlr->params.cache_size;
-	rc = region_offset_to_dpa_result(cxlr, offset, &result);
-	if (rc || !result.cxlmd || result.dpa == ULLONG_MAX) {
+static int cxl_region_debugfs_poison_inject(void *data, u64 offset)
+{
+	struct cxl_region *cxlr = data;
+	struct dpa_result res1, res2;
+	int rc;
+
+	/* To retrieve the correct memdev */
+	rc = cxl_region_poison_lookup(cxlr, offset, &res1);
+	if (rc)
+		return rc;
+
+	ACQUIRE(device_intr, devlock)(&res1.cxlmd->dev);
+	if ((rc = ACQUIRE_ERR(device_intr, &devlock)))
+		return rc;
+
+	ACQUIRE(rwsem_read_intr, region_rwsem)(&cxl_rwsem.region);
+	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &region_rwsem)))
+		return rc;
+
+	ACQUIRE(rwsem_read_intr, dpa_rwsem)(&cxl_rwsem.dpa);
+	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &dpa_rwsem)))
+		return rc;
+
+	/*
+	 * Retrieve memdev and DPA data again in case that the data
+	 * has been changed before holding locks.
+	 */
+	rc = cxl_region_poison_lookup_locked(cxlr, offset, &res2);
+	if (rc || res2.cxlmd != res1.cxlmd || res2.dpa != res1.dpa) {
 		dev_dbg(&cxlr->dev,
-			"Failed to resolve DPA for region offset %#llx rc %d\n",
-			offset, rc);
-
-		return rc ? rc : -EINVAL;
+			"Error injection raced region reconfiguration: %d", rc);
+		return -ENXIO;
 	}
 
-	return cxl_inject_poison_locked(result.cxlmd, result.dpa);
+	return cxl_inject_poison_locked(res2.cxlmd, res2.dpa);
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_inject_fops, NULL,
@@ -4109,9 +4155,18 @@ DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_inject_fops, NULL,
 
 static int cxl_region_debugfs_poison_clear(void *data, u64 offset)
 {
-	struct dpa_result result = { .dpa = ULLONG_MAX, .cxlmd = NULL };
 	struct cxl_region *cxlr = data;
+	struct dpa_result res1, res2;
 	int rc;
+
+	/* To retrieve the correct memdev */
+	rc = cxl_region_poison_lookup(cxlr, offset, &res1);
+	if (rc)
+		return rc;
+
+	ACQUIRE(device_intr, devlock)(&res1.cxlmd->dev);
+	if ((rc = ACQUIRE_ERR(device_intr, &devlock)))
+		return rc;
 
 	ACQUIRE(rwsem_read_intr, region_rwsem)(&cxl_rwsem.region);
 	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &region_rwsem)))
@@ -4121,20 +4176,18 @@ static int cxl_region_debugfs_poison_clear(void *data, u64 offset)
 	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &dpa_rwsem)))
 		return rc;
 
-	if (validate_region_offset(cxlr, offset))
-		return -EINVAL;
-
-	offset -= cxlr->params.cache_size;
-	rc = region_offset_to_dpa_result(cxlr, offset, &result);
-	if (rc || !result.cxlmd || result.dpa == ULLONG_MAX) {
+	/*
+	 * Retrieve memdev and DPA data again in case that the data
+	 * has been changed before holding locks.
+	 */
+	rc = cxl_region_poison_lookup_locked(cxlr, offset, &res2);
+	if (rc || res2.cxlmd != res1.cxlmd || res2.dpa != res1.dpa) {
 		dev_dbg(&cxlr->dev,
-			"Failed to resolve DPA for region offset %#llx rc %d\n",
-			offset, rc);
-
-		return rc ? rc : -EINVAL;
+			"Error clearing raced region reconfiguration: %d", rc);
+		return -ENXIO;
 	}
 
-	return cxl_clear_poison_locked(result.cxlmd, result.dpa);
+	return cxl_clear_poison_locked(res2.cxlmd, res2.dpa);
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_clear_fops, NULL,
