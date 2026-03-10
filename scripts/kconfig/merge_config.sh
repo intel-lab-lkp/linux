@@ -123,6 +123,7 @@ fi
 MERGE_LIST=$*
 
 TMP_FILE=$(mktemp ./.tmp.config.XXXXXXXXXX)
+touch "$TMP_FILE.new"
 
 echo "Using $INITFILE as base"
 
