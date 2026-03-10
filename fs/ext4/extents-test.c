@@ -144,7 +144,7 @@ static void extents_kunit_exit(struct kunit *test)
 {
 	struct ext4_sb_info *sbi = k_ctx.k_ei->vfs_inode.i_sb->s_fs_info;
 
-	kfree(sbi);
+	deactivate_super(sbi->s_sb);
 	kfree(k_ctx.k_ei);
 	kfree(k_ctx.k_data);
 }
