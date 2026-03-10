@@ -36,4 +36,5 @@ config I3C_HUB
 
 	  Say Y here if your platform includes an I3C hub device
 
+source "drivers/i3c/hub/Kconfig"
 endif # I3C
