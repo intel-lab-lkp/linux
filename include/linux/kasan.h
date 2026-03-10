@@ -527,6 +527,11 @@ static inline void *kasan_reset_tag(const void *addr)
 	return (void *)arch_kasan_reset_tag(addr);
 }
 
+static inline void *kasan_set_tag(const void *addr, u8 tag)
+{
+	return (void *)arch_kasan_set_tag(addr, tag);
+}
+
 /**
  * kasan_report - print a report about a bad memory access detected by KASAN
  * @addr: address of the bad access
@@ -540,6 +545,11 @@ bool kasan_report(const void *addr, size_t size,
 #else /* CONFIG_KASAN_SW_TAGS || CONFIG_KASAN_HW_TAGS */
 
 static inline void *kasan_reset_tag(const void *addr)
+{
+	return (void *)addr;
+}
+
+static inline void *kasan_set_tag(const void *addr, u8 tag)
 {
 	return (void *)addr;
 }

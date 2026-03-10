@@ -117,7 +117,10 @@ extern int mmap_rnd_compat_bits __read_mostly;
 #endif
 
 #ifndef page_to_virt
-#define page_to_virt(x)	__va(PFN_PHYS(page_to_pfn(x)))
+#define page_to_virt(x) ({							\
+	void *__addr = __va(PFN_PHYS(page_to_pfn((struct page *)x)));		\
+	kasan_set_tag(__addr, page_kasan_tag(x));				\
+})
 #endif
 
 #ifndef lm_alias
