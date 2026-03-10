@@ -601,6 +601,21 @@ static inline struct slabobj_ext *slab_obj_ext(struct slab *slab,
 	return kasan_reset_tag(obj_ext);
 }
 
+static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
+{
+	unsigned long obj_exts;
+	unsigned long start;
+	unsigned long end;
+
+	obj_exts = slab_obj_exts(slab);
+	if (!obj_exts)
+		return false;
+
+	start = (unsigned long)slab_address(slab);
+	end = start + slab_size(slab);
+	return (obj_exts >= start) && (obj_exts < end);
+}
+
 int alloc_slab_obj_exts(struct slab *slab, struct kmem_cache *s,
                         gfp_t gfp, bool new_slab);
 
@@ -621,6 +636,10 @@ static inline struct slabobj_ext *slab_obj_ext(struct slab *slab,
 static inline void slab_set_stride(struct slab *slab, unsigned int stride) { }
 static inline unsigned int slab_get_stride(struct slab *slab) { return 0; }
 
+static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
+{
+	return false;
+}
 
 #endif /* CONFIG_SLAB_OBJ_EXT */
 

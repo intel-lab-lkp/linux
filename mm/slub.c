@@ -808,20 +808,6 @@ static inline bool obj_exts_fit_within_slab_leftover(struct kmem_cache *s,
 	return objext_offset + objext_size <= slab_size(slab);
 }
 
-static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
-{
-	unsigned long obj_exts;
-	unsigned long start;
-	unsigned long end;
-
-	obj_exts = slab_obj_exts(slab);
-	if (!obj_exts)
-		return false;
-
-	start = (unsigned long)slab_address(slab);
-	end = start + slab_size(slab);
-	return (obj_exts >= start) && (obj_exts < end);
-}
 #else
 static inline bool need_slab_obj_exts(struct kmem_cache *s)
 {
@@ -841,11 +827,6 @@ static inline unsigned long obj_exts_offset_in_slab(struct kmem_cache *s,
 
 static inline bool obj_exts_fit_within_slab_leftover(struct kmem_cache *s,
 						     struct slab *slab)
-{
-	return false;
-}
-
-static inline bool obj_exts_in_slab(struct kmem_cache *s, struct slab *slab)
 {
 	return false;
 }
