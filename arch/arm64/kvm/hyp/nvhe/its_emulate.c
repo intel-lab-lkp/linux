@@ -198,6 +198,13 @@ static int process_its_vmapp(struct its_priv_state *its, struct its_cmd_block *c
 	return track_pfn(its, base_pfn, num_pages, remove);
 }
 
+static int process_its_mapc(struct its_priv_state *its, struct its_cmd_block *cmd)
+{
+	u32 icid = cmd->raw_cmd[2] & GENMASK(15, 0);
+
+	return check_table_update(its, icid, GITS_BASER_TYPE_COLLECTION);
+}
+
 static int parse_its_cmdq(struct its_priv_state *its, int offset, ssize_t len)
 {
 	struct its_cmd_block *cmd = its->cmd_hyp_base + offset;
@@ -214,6 +221,10 @@ static int parse_its_cmdq(struct its_priv_state *its, int offset, ssize_t len)
 
 		case GITS_CMD_VMAPP:
 			ret = process_its_vmapp(its, cmd);
+			break;
+
+		case GITS_CMD_MAPC:
+			ret = process_its_mapc(its, cmd);
 			break;
 		}
 
