@@ -732,6 +732,118 @@ int svc_rdma_prepare_reply_chunk(struct svcxprt_rdma *rdma,
 	return xdr->len;
 }
 
+#define SVC_RDMA_COMPOUND_MAX_ORDER	4	/* 64KB max */
+
+/**
+ * svc_rdma_alloc_read_pages - Allocate physically contiguous pages
+ * @nr_pages: number of pages needed
+ * @order: on success, set to the allocation order
+ *
+ * Attempts a higher-order allocation, falling back to smaller orders.
+ * The returned pages are split immediately so each sub-page has its
+ * own refcount and can be freed independently.
+ *
+ * Returns a pointer to the first page on success, or NULL if even
+ * order-1 allocation fails.
+ */
+static struct page *
+svc_rdma_alloc_read_pages(unsigned int nr_pages, unsigned int *order)
+{
+	unsigned int o;
+	struct page *page;
+
+	o = get_order(nr_pages << PAGE_SHIFT);
+	if (o > SVC_RDMA_COMPOUND_MAX_ORDER)
+		o = SVC_RDMA_COMPOUND_MAX_ORDER;
+
+	while (o >= 1) {
+		page = alloc_pages(GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN,
+				   o);
+		if (page) {
+			split_page(page, o);
+			*order = o;
+			return page;
+		}
+		o--;
+	}
+	return NULL;
+}
+
+/**
+ * svc_rdma_build_read_segment_compound - Build a single RDMA Read WR using compound pages
+ * @rqstp: RPC transaction context
+ * @head: context for ongoing I/O
+ * @segment: co-ordinates of remote memory to be read
+ *
+ * Allocates a higher-order page and splits it, then builds a single
+ * bvec spanning the contiguous physical range. The split sub-pages
+ * replace entries in rq_pages[] so downstream cleanup is unchanged.
+ *
+ * Returns:
+ *   %0: the Read WR was constructed successfully
+ *   %-EINVAL: not enough rq_pages slots
+ *   %-ENOMEM: compound allocation or rw_ctxt allocation failed
+ *   %-EIO: a DMA mapping error occurred
+ */
+static int svc_rdma_build_read_segment_compound(struct svc_rqst *rqstp,
+						struct svc_rdma_recv_ctxt *head,
+						const struct svc_rdma_segment *segment)
+{
+	struct svcxprt_rdma *rdma = svc_rdma_rqst_rdma(rqstp);
+	struct svc_rdma_chunk_ctxt *cc = &head->rc_cc;
+	unsigned int order, alloc_nr, nr_data_pages, i;
+	struct svc_rdma_rw_ctxt *ctxt;
+	struct page *page;
+	int ret;
+
+	nr_data_pages = PAGE_ALIGN(segment->rs_length) >> PAGE_SHIFT;
+
+	page = svc_rdma_alloc_read_pages(nr_data_pages, &order);
+	if (!page)
+		return -ENOMEM;
+	alloc_nr = 1 << order;
+
+	if (alloc_nr < nr_data_pages ||
+	    head->rc_curpage + alloc_nr > rqstp->rq_maxpages) {
+		for (i = 0; i < alloc_nr; i++)
+			__free_page(page + i);
+		return -ENOMEM;
+	}
+
+	ctxt = svc_rdma_get_rw_ctxt(rdma, 1);
+	if (!ctxt) {
+		for (i = 0; i < alloc_nr; i++)
+			__free_page(page + i);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < alloc_nr; i++) {
+		put_page(rqstp->rq_pages[head->rc_curpage + i]);
+		rqstp->rq_pages[head->rc_curpage + i] = page + i;
+	}
+
+	bvec_set_page(&ctxt->rw_bvec[0], page, segment->rs_length, 0);
+	ctxt->rw_nents = 1;
+
+	head->rc_page_count += nr_data_pages;
+	head->rc_pageoff = offset_in_page(segment->rs_length);
+	if (head->rc_pageoff)
+		head->rc_curpage += nr_data_pages - 1;
+	else
+		head->rc_curpage += nr_data_pages;
+
+	ret = svc_rdma_rw_ctx_init(rdma, ctxt, segment->rs_offset,
+				   segment->rs_handle, segment->rs_length,
+				   DMA_FROM_DEVICE);
+	if (ret < 0)
+		return -EIO;
+	percpu_counter_inc(&svcrdma_stat_read);
+
+	list_add(&ctxt->rw_list, &cc->cc_rwctxts);
+	cc->cc_sqecount += ret;
+	return 0;
+}
+
 /**
  * svc_rdma_build_read_segment - Build RDMA Read WQEs to pull one RDMA segment
  * @rqstp: RPC transaction context
@@ -758,6 +870,14 @@ static int svc_rdma_build_read_segment(struct svc_rqst *rqstp,
 	if (check_add_overflow(head->rc_pageoff, len, &total))
 		return -EINVAL;
 	nr_bvec = PAGE_ALIGN(total) >> PAGE_SHIFT;
+
+	if (head->rc_pageoff == 0 && nr_bvec >= 2) {
+		ret = svc_rdma_build_read_segment_compound(rqstp, head,
+							   segment);
+		if (ret != -ENOMEM)
+			return ret;
+	}
+
 	ctxt = svc_rdma_get_rw_ctxt(rdma, nr_bvec);
 	if (!ctxt)
 		return -ENOMEM;
