@@ -7,6 +7,7 @@
 use crate::{
     alloc::{Allocator, Flags},
     bindings,
+    dma::CoherentAllocation,
     error::Result,
     ffi::{c_char, c_void},
     fs::file,
@@ -459,26 +460,89 @@ impl UserSliceWriter {
         self.length == 0
     }
 
-    /// Writes raw data to this user pointer from a kernel buffer.
+    /// Low-level write from a raw pointer.
     ///
-    /// Fails with [`EFAULT`] if the write happens on a bad address, or if the write goes out of
-    /// bounds of this [`UserSliceWriter`]. This call may modify the associated userspace slice even
-    /// if it returns an error.
-    pub fn write_slice(&mut self, data: &[u8]) -> Result {
-        let len = data.len();
-        let data_ptr = data.as_ptr().cast::<c_void>();
+    /// # Safety
+    ///
+    /// The caller must ensure that `ptr` points to a valid slice of `len` bytes (i.e., it is
+    /// valid for reads of `len` bytes and is properly aligned).
+    unsafe fn write_raw(&mut self, ptr: *const u8, len: usize) -> Result {
         if len > self.length {
             return Err(EFAULT);
         }
-        // SAFETY: `data_ptr` points into an immutable slice of length `len`, so we may read
-        // that many bytes from it.
-        let res = unsafe { bindings::copy_to_user(self.ptr.as_mut_ptr(), data_ptr, len) };
+        // SAFETY:
+        // - `self.ptr` is a userspace pointer, and `len <= self.length` is checked above to
+        //   ensure we don't exceed the caller-specified bounds.
+        // - `ptr` is valid for reading `len` bytes as required by this function's safety contract.
+        // - `copy_to_user` validates the userspace address at runtime and returns non-zero on
+        //   failure (e.g., bad address or unmapped memory).
+        let res = unsafe {
+            bindings::copy_to_user(self.ptr.as_mut_ptr(), ptr.cast::<c_void>(), len)
+        };
         if res != 0 {
             return Err(EFAULT);
         }
         self.ptr = self.ptr.wrapping_byte_add(len);
         self.length -= len;
         Ok(())
+    }
+
+    /// Writes raw data to this user pointer from a kernel buffer.
+    ///
+    /// Fails with [`EFAULT`] if the write happens on a bad address, or if the write goes out of
+    /// bounds of this [`UserSliceWriter`]. This call may modify the associated userspace slice even
+    /// if it returns an error.
+    pub fn write_slice(&mut self, data: &[u8]) -> Result {
+        // SAFETY: `data` is a valid slice, so `data.as_ptr()` is valid for
+        // reading `data.len()` bytes.
+        unsafe { self.write_raw(data.as_ptr(), data.len()) }
+    }
+
+    /// Writes raw data to this user pointer from a DMA coherent allocation.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The DMA coherent allocation to copy from.
+    /// * `offset` - The byte offset into `data` to start copying from.
+    /// * `count` - The number of bytes to copy.
+    ///
+    /// # Errors
+    /// Returns [`EOVERFLOW`] if `offset + count` overflows.
+    /// Returns [`ERANGE`] if `offset + count` exceeds the size of `data`, or `count` exceeds
+    ///     the size of the user-space buffer.
+    /// Returns [`EFAULT`] if the write happens on a bad address, or if the write goes out of
+    ///     bounds of this [`UserSliceWriter`].
+    ///
+    /// This call may modify the associated userspace slice even if it returns an error.
+    ///
+    /// Note: The memory may be concurrently modified by hardware (e.g., DMA). In such cases,
+    /// the copied data may be inconsistent, but this does not cause undefined behavior.
+    pub fn write_dma(
+        &mut self,
+        alloc: &CoherentAllocation<u8>,
+        offset: usize,
+        count: usize,
+    ) -> Result {
+        let len = alloc.size();
+        if offset.checked_add(count).ok_or(EOVERFLOW)? > len {
+            return Err(ERANGE);
+        }
+
+        if count > self.len() {
+            return Err(ERANGE);
+        }
+
+        // SAFETY: `start_ptr()` returns a valid pointer to a memory region of `count()` bytes,
+        // as guaranteed by the `CoherentAllocation` invariants. The check above ensures
+        // `offset + count <= len`.
+        let src_ptr = unsafe { alloc.start_ptr().add(offset) };
+
+        // Note: Use `write_raw` instead of `write_slice` because the allocation is coherent
+        // memory that hardware may modify (e.g., DMA); we cannot form a `&[u8]` slice over
+        // such volatile memory.
+        //
+        // SAFETY: `src_ptr` points into the allocation and is valid for `count` bytes (see above).
+        unsafe { self.write_raw(src_ptr, count) }
     }
 
     /// Writes raw data to this user pointer from a kernel buffer partially.
