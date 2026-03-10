@@ -284,9 +284,16 @@ static int hga_card_detect(void)
 
 	hga_vram_len  = 0x08000;
 
+	if (!request_mem_region(0xb0000, hga_vram_len, "hgafb")) {
+		pr_err("hgafb: cannot reserve video memory at 0xb0000\n");
+		return -EBUSY;
+	}
+
 	hga_vram = ioremap(0xb0000, hga_vram_len);
-	if (!hga_vram)
+	if (!hga_vram) {
+		release_mem_region(0xb0000, hga_vram_len);
 		return -ENOMEM;
+	}
 
 	if (request_region(0x3b0, 12, "hgafb"))
 		release_io_ports = 1;
@@ -348,6 +355,7 @@ static int hga_card_detect(void)
 	}
 	return 0;
 error:
+	release_mem_region(0xb0000, hga_vram_len);
 	if (release_io_ports)
 		release_region(0x3b0, 12);
 	if (release_io_port)
@@ -619,6 +627,7 @@ static void hgafb_remove(struct platform_device *pdev)
 	}
 
 	iounmap(hga_vram);
+	release_mem_region(0xb0000, hga_vram_len);
 
 	if (release_io_ports)
 		release_region(0x3b0, 12);
