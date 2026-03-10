@@ -834,11 +834,14 @@ static int cxl_port_add(struct cxl_port *port,
 			struct cxl_dport *parent_dport)
 {
 	struct device *dev __free(put_device) = &port->dev;
+	struct cxl_memdev *cxlmd = NULL;
 	int rc;
 
 	if (is_cxl_memdev(port->uport_dev)) {
-		struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
-		struct cxl_dev_state *cxlds = cxlmd->cxlds;
+		struct cxl_dev_state *cxlds;
+
+		cxlmd = to_cxl_memdev(port->uport_dev);
+		cxlds = cxlmd->cxlds;
 
 		rc = dev_set_name(dev, "endpoint%d", port->id);
 		if (rc)
@@ -865,8 +868,11 @@ static int cxl_port_add(struct cxl_port *port,
 	}
 
 	rc = device_add(dev);
-	if (rc)
+	if (rc) {
+		if (cxlmd)
+			cxlmd->endpoint = ERR_PTR(-ENXIO);
 		return rc;
+	}
 
 	/* Inhibit the cleanup function invoked */
 	dev = NULL;
@@ -1425,7 +1431,7 @@ static void delete_endpoint(void *data)
 			devm_release_action(host, cxl_unlink_uport, endpoint);
 			devm_release_action(host, unregister_port, endpoint);
 		}
-		cxlmd->endpoint = NULL;
+		cxlmd->endpoint = ERR_PTR(-ENXIO);
 	}
 	put_device(&endpoint->dev);
 	put_device(host);
