@@ -26,6 +26,26 @@ properties:
 
   timeout-sec: true
 
+  renesas,reset-line:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    description: |
+      The watchdog reset line (dt-bindings/watchdog/renesas,rzn1-wdt.h defines
+      these values). A wachdog timeout asserts this reset line to perform a
+      hardware system reset. Two watchdogs are present in the RZ/N1 SoC and
+      each of them has a dedicated reset line.
+
+        - 0: RZN1_WDT_A7_0
+          This reset line can be asserted only by the A7 0 watchdog. This
+          watchdog is the one mapped at 0x40008000 on RZ/N1 SoCs.
+
+        - 1: RZN1_WDT_A7_1
+          This reset line can be asserted only by the A7 1 watchdog. This
+          watchdog is the one mapped at 0x40009000 on RZ/N1 SoCs.
+
+      If the renesas,reset-line property is not present, the watchdog timeout
+      only triggers an interrupt.
+
 required:
   - compatible
   - reg
@@ -41,10 +61,12 @@ examples:
   - |
     #include <dt-bindings/clock/r9a06g032-sysctrl.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/watchdog/renesas,rzn1-wdt.h>
 
     watchdog@40008000 {
             compatible = "renesas,r9a06g032-wdt", "renesas,rzn1-wdt";
             reg = <0x40008000 0x1000>;
             interrupts = <GIC_SPI 73 IRQ_TYPE_EDGE_RISING>;
             clocks = <&sysctrl R9A06G032_CLK_WATCHDOG>;
+            renesas,reset-line = <RZN1_WDT_A7_0>;
     };
