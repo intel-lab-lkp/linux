@@ -295,6 +295,7 @@ int cxl_inject_poison_locked(struct cxl_memdev *cxlmd, u64 dpa)
 	if (!IS_ENABLED(CONFIG_DEBUG_FS))
 		return 0;
 
+	device_lock_assert(&cxlmd->dev);
 	lockdep_assert_held(&cxl_rwsem.dpa);
 	lockdep_assert_held(&cxl_rwsem.region);
 
@@ -331,6 +332,10 @@ int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa)
 {
 	int rc;
 
+	ACQUIRE(device_intr, devlock)(&cxlmd->dev);
+	if ((rc = ACQUIRE_ERR(device_intr, &devlock)))
+		return rc;
+
 	ACQUIRE(rwsem_read_intr, region_rwsem)(&cxl_rwsem.region);
 	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &region_rwsem)))
 		return rc;
@@ -355,6 +360,7 @@ int cxl_clear_poison_locked(struct cxl_memdev *cxlmd, u64 dpa)
 	if (!IS_ENABLED(CONFIG_DEBUG_FS))
 		return 0;
 
+	device_lock_assert(&cxlmd->dev);
 	lockdep_assert_held(&cxl_rwsem.dpa);
 	lockdep_assert_held(&cxl_rwsem.region);
 
@@ -399,6 +405,10 @@ int cxl_clear_poison_locked(struct cxl_memdev *cxlmd, u64 dpa)
 int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa)
 {
 	int rc;
+
+	ACQUIRE(device_intr, devlock)(&cxlmd->dev);
+	if ((rc = ACQUIRE_ERR(device_intr, &devlock)))
+		return rc;
 
 	ACQUIRE(rwsem_read_intr, region_rwsem)(&cxl_rwsem.region);
 	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &region_rwsem)))
