@@ -628,7 +628,7 @@ static void bL_switcher_disable(void)
 		t = &bL_threads[cpu];
 		task = t->task;
 		t->task = NULL;
-		if (!task || IS_ERR(task))
+		if (IS_ERR_OR_NULL(task))
 			continue;
 		kthread_stop(task);
 		/* no more switch may happen on this CPU at this point */
