@@ -116,7 +116,7 @@ Ccache
 KBUILD_BUILD_TIMESTAMP_ 应设置为同一确定值，以避免 100% 的缓存未命中，
 详见 Reproducible_builds_ 获取更多信息）::
 
-	KBUILD_BUILD_TIMESTAMP='' make LLVM=1 CC="ccache clang"
+	KBUILD_BUILD_TIMESTAMP="Sun Aug 25 20:57:08 UTC 1991" make LLVM=1 CC="ccache clang"
 
 .. _KBUILD_BUILD_TIMESTAMP: kbuild.html#kbuild-build-timestamp
 .. _Reproducible_builds: reproducible-builds.html#timestamps

@@ -128,7 +128,7 @@ Ccache
 KBUILD_BUILD_TIMESTAMP_ should be set to a deterministic value between builds
 in order to avoid 100% cache misses, see Reproducible_builds_ for more info)::
 
-	KBUILD_BUILD_TIMESTAMP='' make LLVM=1 CC="ccache clang"
+	KBUILD_BUILD_TIMESTAMP="Sun Aug 25 20:57:08 UTC 1991" make LLVM=1 CC="ccache clang"
 
 .. _KBUILD_BUILD_TIMESTAMP: kbuild.html#kbuild-build-timestamp
 .. _Reproducible_builds: reproducible-builds.html#timestamps
