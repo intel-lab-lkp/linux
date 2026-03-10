@@ -1534,7 +1534,8 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 {
 	struct tcphdr *th, _tcph;
 	unsigned int dataoff, datalen;
-	unsigned int matchoff, matchlen, clen;
+	unsigned int matchoff, matchlen;
+	unsigned long clen;
 	unsigned int msglen, origlen;
 	const char *dptr, *end;
 	s16 diff, tdiff = 0;
@@ -1571,6 +1572,9 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 
 		clen = simple_strtoul(dptr + matchoff, (char **)&end, 10);
 		if (dptr + matchoff == end)
+			break;
+
+		if (clen > datalen)
 			break;
 
 		term = false;
