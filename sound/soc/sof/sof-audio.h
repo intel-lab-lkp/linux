@@ -641,7 +641,8 @@ void snd_sof_pcm_init_elapsed_work(struct work_struct *work);
  */
 #define spcm_dbg(__spcm, __dir, __fmt, ...)					\
 	dev_dbg((__spcm)->scomp->dev, "pcm%u (%s), dir %d: " __fmt,		\
-		(__spcm)->pcm.pcm_id, (__spcm)->pcm.pcm_name, __dir,		\
+		le32_to_cpu((__spcm)->pcm.pcm_id),				\
+		(__spcm)->pcm.pcm_name, __dir,					\
 		##__VA_ARGS__)
 
 #define spcm_dbg_ratelimited(__spcm, __dir, __fmt, ...)				\
