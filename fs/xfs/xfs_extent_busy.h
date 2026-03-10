@@ -43,6 +43,23 @@ struct xfs_busy_extents {
 	void			*owner;
 };
 
+static inline struct xfs_busy_extents *
+xfs_busy_extents_alloc(gfp_t flags)
+{
+	struct xfs_busy_extents *e;
+	e = kzalloc_obj(*e, flags);
+
+	if (e)
+		INIT_LIST_HEAD(&e->extent_list);
+	return e;
+}
+
+static inline void xfs_busy_extents_free(
+	struct xfs_busy_extents *e)
+{
+	kfree(e);
+}
+
 void xfs_extent_busy_insert(struct xfs_trans *tp, struct xfs_group *xg,
 		xfs_agblock_t bno, xfs_extlen_t len, unsigned int flags);
 void xfs_extent_busy_insert_discard(struct xfs_group *xg, xfs_agblock_t bno,

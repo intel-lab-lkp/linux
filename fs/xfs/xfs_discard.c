@@ -349,18 +349,17 @@ xfs_trim_perag_extents(
 	do {
 		struct xfs_busy_extents	*extents;
 
-		extents = kzalloc_obj(*extents);
+		extents = xfs_busy_extents_alloc(GFP_KERNEL);
 		if (!extents) {
 			error = -ENOMEM;
 			break;
 		}
 
 		extents->owner = extents;
-		INIT_LIST_HEAD(&extents->extent_list);
 
 		error = xfs_trim_gather_extents(pag, &tcur, extents);
 		if (error) {
-			kfree(extents);
+			xfs_busy_extents_free(extents);
 			break;
 		}
 
@@ -689,7 +688,7 @@ xfs_trim_rtgroup_extents(
 	 * trims the extents returned.
 	 */
 	do {
-		tr.extents = kzalloc_obj(*tr.extents);
+		tr.extents = xfs_busy_extents_alloc(GFP_KERNEL);
 		if (!tr.extents) {
 			error = -ENOMEM;
 			break;
@@ -698,7 +697,6 @@ xfs_trim_rtgroup_extents(
 		tr.queued = 0;
 		tr.batch = XFS_DISCARD_MAX_EXAMINE;
 		tr.extents->owner = tr.extents;
-		INIT_LIST_HEAD(&tr.extents->extent_list);
 
 		xfs_rtgroup_lock(rtg, XFS_RTGLOCK_BITMAP_SHARED);
 		error = xfs_rtalloc_query_range(rtg, tp, low, high,
@@ -707,12 +705,12 @@ xfs_trim_rtgroup_extents(
 		if (error == -ECANCELED)
 			error = 0;
 		if (error) {
-			kfree(tr.extents);
+			xfs_busy_extents_free(tr.extents);
 			break;
 		}
 
 		if (!tr.queued) {
-			kfree(tr.extents);
+			xfs_busy_extents_free(tr.extents);
 			break;
 		}
 
