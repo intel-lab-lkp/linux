@@ -904,6 +904,32 @@ DECLARE_TRACE(sched_dequeue,
 	TP_PROTO(struct task_struct *tsk, int cpu),
 	TP_ARGS(tsk, cpu));
 
+#define DL_OTHER 0
+#define DL_TASK 1
+#define DL_SERVER_FAIR 2
+#define DL_SERVER_EXT 3
+
+DECLARE_TRACE(sched_dl_throttle,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, uint8_t type),
+	TP_ARGS(dl_se, cpu, type));
+
+DECLARE_TRACE(sched_dl_replenish,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, uint8_t type),
+	TP_ARGS(dl_se, cpu, type));
+
+/* Call to update_curr_dl_se not involving throttle or replenish */
+DECLARE_TRACE(sched_dl_update,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, uint8_t type),
+	TP_ARGS(dl_se, cpu, type));
+
+DECLARE_TRACE(sched_dl_server_start,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, uint8_t type),
+	TP_ARGS(dl_se, cpu, type));
+
+DECLARE_TRACE(sched_dl_server_stop,
+	TP_PROTO(struct sched_dl_entity *dl_se, int cpu, uint8_t type),
+	TP_ARGS(dl_se, cpu, type));
+
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */
