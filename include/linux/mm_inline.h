@@ -560,21 +560,30 @@ static inline pte_marker copy_pte_marker(
 	return dstm;
 }
 
-/*
- * If this pte is wr-protected by uffd-wp in any form, arm the special pte to
- * replace a none pte.  NOTE!  This should only be called when *pte is already
+/**
+ * install_uffd_wp_ptes_if_needed - install uffd-wp marker on PTEs that map
+ *				    consecutive pages of the same large folio.
+ * @vma: The VMA the pages are mapped into.
+ * @addr: Address the first page of this batch is mapped at.
+ * @ptep: Page table pointer for the first entry of this batch.
+ * @pteval: old value of the entry pointed to by ptep.
+ * @nr: Number of entries to clear (batch size).
+ *
+ * If the ptes were wr-protected by uffd-wp in any form, arm special ptes to
+ * replace none ptes.  NOTE!  This should only be called when *pte is already
  * cleared so we will never accidentally replace something valuable.  Meanwhile
  * none pte also means we are not demoting the pte so tlb flushed is not needed.
  * E.g., when pte cleared the caller should have taken care of the tlb flush.
  *
- * Must be called with pgtable lock held so that no thread will see the none
- * pte, and if they see it, they'll fault and serialize at the pgtable lock.
+ * Context: The caller holds the page table lock.  The PTEs map consecutive
+ * pages that belong to the same folio.  The PTEs are all in the same PMD
+ * and the same VMA.
  *
- * Returns true if an uffd-wp pte was installed, false otherwise.
+ * Returns true if uffd-wp ptes were installed, false otherwise.
  */
 static inline bool
-pte_install_uffd_wp_if_needed(struct vm_area_struct *vma, unsigned long addr,
-			      pte_t *pte, pte_t pteval)
+install_uffd_wp_ptes_if_needed(struct vm_area_struct *vma, unsigned long addr,
+			      pte_t *pte, pte_t pteval, unsigned int nr)
 {
 	bool arm_uffd_pte = false;
 
@@ -604,13 +613,13 @@ pte_install_uffd_wp_if_needed(struct vm_area_struct *vma, unsigned long addr,
 	if (unlikely(pte_swp_uffd_wp_any(pteval)))
 		arm_uffd_pte = true;
 
-	if (unlikely(arm_uffd_pte)) {
-		set_pte_at(vma->vm_mm, addr, pte,
-			   make_pte_marker(PTE_MARKER_UFFD_WP));
-		return true;
-	}
+	if (likely(!arm_uffd_pte))
+		return false;
 
-	return false;
+	for (int i = 0; i < nr; ++i, ++pte, addr += PAGE_SIZE)
+		set_pte_at(vma->vm_mm, addr, pte, make_pte_marker(PTE_MARKER_UFFD_WP));
+
+	return true;
 }
 
 static inline bool vma_has_recency(const struct vm_area_struct *vma)
