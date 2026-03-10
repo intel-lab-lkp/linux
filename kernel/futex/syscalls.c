@@ -211,6 +211,9 @@ void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args,
 	unsigned int op, cmd;
 	bool done = false;
 
+	op = args[1];
+	cmd = op & FUTEX_CMD_MASK;
+
 	for (int i = 0; !done && i < nr_args; i++) {
 
 		if (seq_buf_has_overflowed(s))
@@ -225,11 +228,30 @@ void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args,
 					seq_buf_printf(s, " (%u)", val);
 				else
 					seq_buf_printf(s, " (0x%x)", val);
+
+				switch(cmd) {
+				case FUTEX_LOCK_PI:
+				case FUTEX_UNLOCK_PI:
+					seq_buf_printf(s, " tid: %d",
+						       val & FUTEX_TID_MASK);
+
+					if (!(val & (FUTEX_OWNER_DIED|FUTEX_WAITERS)))
+						break;
+
+					seq_buf_puts(s, " (");
+					if (val & FUTEX_WAITERS)
+						seq_buf_puts(s, "WAITERS");
+					if (val & FUTEX_OWNER_DIED) {
+						if (op & FUTEX_WAITERS)
+							seq_buf_putc(s, '|');
+						seq_buf_puts(s, "DIED");
+					}
+					seq_buf_putc(s, ')');
+					break;
+				}
 			}
 			continue;
 		case 1:
-			op = args[i];
-			cmd = op & FUTEX_CMD_MASK;
 			if (cmd <= FUTEX_LOCK_PI2)
 				seq_buf_printf(s, ", %s", __futex_cmds[cmd]);
 			else
