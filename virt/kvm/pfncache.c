@@ -147,26 +147,24 @@ static void gpc_unmap(kvm_pfn_t pfn, void *khva)
 static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_seq)
 {
 	/*
-	 * mn_active_invalidate_count acts for all intents and purposes
-	 * like mmu_invalidate_in_progress here; but the latter cannot
-	 * be used here because the invalidation of caches in the
-	 * mmu_notifier event occurs _before_ mmu_invalidate_in_progress
-	 * is elevated.
+	 * active_invalidate_count acts for all intents and purposes like
+	 * mmu_invalidate_in_progress here; but the latter cannot be used here
+	 * because the invalidation of caches in the mmu_notifier event occurs
+	 * _before_ mmu_invalidate_in_progress is elevated.
 	 *
-	 * Note, it does not matter that mn_active_invalidate_count
-	 * is not protected by gpc->lock.  It is guaranteed to
-	 * be elevated before the mmu_notifier acquires gpc->lock, and
-	 * isn't dropped until after mmu_invalidate_seq is updated.
+	 * Note, it does not matter that active_invalidate_count is not
+	 * protected by gpc->lock.  It is guaranteed to be elevated before the
+	 * mmu_notifier acquires gpc->lock, and isn't dropped until after
+	 * mmu_invalidate_seq is updated.
 	 */
-	if (kvm->mn_active_invalidate_count)
+	if (kvm->active_invalidate_count)
 		return true;
 
 	/*
-	 * Ensure mn_active_invalidate_count is read before
-	 * mmu_invalidate_seq.  This pairs with the smp_wmb() in
-	 * mmu_notifier_invalidate_range_end() to guarantee either the
-	 * old (non-zero) value of mn_active_invalidate_count or the
-	 * new (incremented) value of mmu_invalidate_seq is observed.
+	 * Ensure active_invalidate_count is read before mmu_invalidate_seq.
+	 * This pairs with the smp_wmb() in kvm_mmu_invalidate_end() to
+	 * guarantee either the old (non-zero) value of active_invalidate_count
+	 * or the new (incremented) value of mmu_invalidate_seq is observed.
 	 */
 	smp_rmb();
 	return kvm->mmu_invalidate_seq != mmu_seq;

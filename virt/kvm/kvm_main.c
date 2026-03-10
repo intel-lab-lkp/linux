@@ -747,9 +747,9 @@ static int kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	 *
 	 * Pairs with the decrement in range_end().
 	 */
-	spin_lock(&kvm->mn_invalidate_lock);
-	kvm->mn_active_invalidate_count++;
-	spin_unlock(&kvm->mn_invalidate_lock);
+	spin_lock(&kvm->invalidate_lock);
+	kvm->active_invalidate_count++;
+	spin_unlock(&kvm->invalidate_lock);
 
 	/*
 	 * Invalidate pfn caches _before_ invalidating the secondary MMUs, i.e.
@@ -758,7 +758,7 @@ static int kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	 * any given time, and the caches themselves can check for hva overlap,
 	 * i.e. don't need to rely on memslot overlap checks for performance.
 	 * Because this runs without holding mmu_lock, the pfn caches must use
-	 * mn_active_invalidate_count (see above) instead of
+	 * active_invalidate_count (see above) instead of
 	 * mmu_invalidate_in_progress.
 	 */
 	gpc_invalidate_hva_range_start(kvm, range->start, range->end);
@@ -817,18 +817,18 @@ static void kvm_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
 	kvm_handle_hva_range(kvm, &hva_range);
 
 	/* Pairs with the increment in range_start(). */
-	spin_lock(&kvm->mn_invalidate_lock);
-	if (!WARN_ON_ONCE(!kvm->mn_active_invalidate_count))
-		--kvm->mn_active_invalidate_count;
-	wake = !kvm->mn_active_invalidate_count;
-	spin_unlock(&kvm->mn_invalidate_lock);
+	spin_lock(&kvm->invalidate_lock);
+	if (!WARN_ON_ONCE(!kvm->active_invalidate_count))
+		--kvm->active_invalidate_count;
+	wake = !kvm->active_invalidate_count;
+	spin_unlock(&kvm->invalidate_lock);
 
 	/*
 	 * There can only be one waiter, since the wait happens under
 	 * slots_lock.
 	 */
 	if (wake)
-		rcuwait_wake_up(&kvm->mn_memslots_update_rcuwait);
+		rcuwait_wake_up(&kvm->memslots_update_rcuwait);
 }
 
 static int kvm_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
@@ -1129,8 +1129,8 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 	mutex_init(&kvm->irq_lock);
 	mutex_init(&kvm->slots_lock);
 	mutex_init(&kvm->slots_arch_lock);
-	spin_lock_init(&kvm->mn_invalidate_lock);
-	rcuwait_init(&kvm->mn_memslots_update_rcuwait);
+	spin_lock_init(&kvm->invalidate_lock);
+	rcuwait_init(&kvm->memslots_update_rcuwait);
 	xa_init(&kvm->vcpu_array);
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 	xa_init(&kvm->mem_attr_array);
@@ -1297,7 +1297,7 @@ static void kvm_destroy_vm(struct kvm *kvm)
 	/*
 	 * At this point, pending calls to invalidate_range_start()
 	 * have completed but no more MMU notifiers will run, so
-	 * mn_active_invalidate_count may remain unbalanced.
+	 * active_invalidate_count may remain unbalanced.
 	 * No threads can be waiting in kvm_swap_active_memslots() as the
 	 * last reference on KVM has been dropped, but freeing
 	 * memslots would deadlock without this manual intervention.
@@ -1306,9 +1306,9 @@ static void kvm_destroy_vm(struct kvm *kvm)
 	 * notifier between a start() and end(), then there shouldn't be any
 	 * in-progress invalidations.
 	 */
-	WARN_ON(rcuwait_active(&kvm->mn_memslots_update_rcuwait));
-	if (kvm->mn_active_invalidate_count)
-		kvm->mn_active_invalidate_count = 0;
+	WARN_ON(rcuwait_active(&kvm->memslots_update_rcuwait));
+	if (kvm->active_invalidate_count)
+		kvm->active_invalidate_count = 0;
 	else
 		WARN_ON(kvm->mmu_invalidate_in_progress);
 #else
@@ -1635,17 +1635,17 @@ static void kvm_swap_active_memslots(struct kvm *kvm, int as_id)
 	 * progress, otherwise the locking in invalidate_range_start and
 	 * invalidate_range_end will be unbalanced.
 	 */
-	spin_lock(&kvm->mn_invalidate_lock);
-	prepare_to_rcuwait(&kvm->mn_memslots_update_rcuwait);
-	while (kvm->mn_active_invalidate_count) {
+	spin_lock(&kvm->invalidate_lock);
+	prepare_to_rcuwait(&kvm->memslots_update_rcuwait);
+	while (kvm->active_invalidate_count) {
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		spin_unlock(&kvm->mn_invalidate_lock);
+		spin_unlock(&kvm->invalidate_lock);
 		schedule();
-		spin_lock(&kvm->mn_invalidate_lock);
+		spin_lock(&kvm->invalidate_lock);
 	}
-	finish_rcuwait(&kvm->mn_memslots_update_rcuwait);
+	finish_rcuwait(&kvm->memslots_update_rcuwait);
 	rcu_assign_pointer(kvm->memslots[as_id], slots);
-	spin_unlock(&kvm->mn_invalidate_lock);
+	spin_unlock(&kvm->invalidate_lock);
 
 	/*
 	 * Acquired in kvm_set_memslot. Must be released before synchronize

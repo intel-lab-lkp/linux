@@ -20,7 +20,7 @@ The acquisition orders for mutexes are as follows:
 - kvm->slots_lock is taken outside kvm->irq_lock, though acquiring
   them together is quite rare.
 
-- kvm->mn_active_invalidate_count ensures that pairs of
+- kvm->active_invalidate_count ensures that pairs of MMU notifier's
   invalidate_range_start() and invalidate_range_end() callbacks
   use the same memslots array.  kvm->slots_lock and kvm->slots_arch_lock
   are taken on the waiting side when modifying memslots, so MMU notifiers
@@ -249,12 +249,12 @@ time it will be set using the Dirty tracking mechanism described above.
 :Comment:	Exists to allow taking cpus_read_lock() while kvm_usage_count is
 		protected, which simplifies the virtualization enabling logic.
 
-``kvm->mn_invalidate_lock``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``kvm->invalidate_lock``
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 :Type:          spinlock_t
 :Arch:          any
-:Protects:      mn_active_invalidate_count, mn_memslots_update_rcuwait
+:Protects:      active_invalidate_count, memslots_update_rcuwait
 
 ``kvm_arch::tsc_write_lock``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
