@@ -107,6 +107,9 @@ struct shrinker {
 #ifdef CONFIG_MEMCG
 	/* ID in shrinker_idr */
 	int id;
+
+	/* ID in shrinker_nonslab_idr */
+	int nonslab_id;
 #endif
 #ifdef CONFIG_SHRINKER_DEBUG
 	int debugfs_id;

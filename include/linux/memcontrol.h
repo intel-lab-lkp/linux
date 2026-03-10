@@ -1804,7 +1804,13 @@ void reparent_shrinker_deferred(struct mem_cgroup *memcg);
 
 static inline int shrinker_id(struct mem_cgroup *memcg, struct shrinker *shrinker)
 {
-	return shrinker->id;
+	int id = shrinker->id;
+
+	if (!memcg_kmem_online() && (shrinker->flags & SHRINKER_NONSLAB) &&
+	    memcg != root_mem_cgroup)
+		id = shrinker->nonslab_id;
+
+	return id;
 }
 #else
 #define mem_cgroup_sockets_enabled 0
