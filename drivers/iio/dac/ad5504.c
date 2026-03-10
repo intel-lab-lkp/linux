@@ -7,7 +7,9 @@
 
 #include <linux/bits.h>
 #include <linux/device.h>
+#include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
@@ -48,6 +50,8 @@
  * @vref_mv:		actual reference voltage used
  * @pwr_down_mask:	power down mask
  * @pwr_down_mode:	current power down mode
+ * @gpio_clear:	GPIO descriptor for the /CLR pin
+ * @gpio_ldac:		GPIO descriptor for the /LDAC pin
  * @data:		transfer buffer
  */
 struct ad5504_state {
@@ -56,6 +60,8 @@ struct ad5504_state {
 	unsigned short			vref_mv;
 	unsigned			pwr_down_mask;
 	unsigned			pwr_down_mode;
+	struct gpio_desc		*gpio_clear;
+	struct gpio_desc		*gpio_ldac;
 
 	__be16				data[2] __aligned(IIO_DMA_MINALIGN);
 };
@@ -298,6 +304,14 @@ static int ad5504_probe(struct spi_device *spi)
 
 	if (pdata && pdata->vref_mv)
 		st->vref_mv = pdata->vref_mv;
+
+	st->gpio_clear = devm_gpiod_get_optional(dev, "clear", GPIOD_OUT_LOW);
+	if (IS_ERR(st->gpio_clear))
+		return PTR_ERR(st->gpio_clear);
+
+	st->gpio_ldac = devm_gpiod_get_optional(dev, "ldac", GPIOD_OUT_LOW);
+	if (IS_ERR(st->gpio_ldac))
+		return PTR_ERR(st->gpio_ldac);
 
 	st->spi = spi;
 	indio_dev->name = spi_get_device_id(st->spi)->name;
