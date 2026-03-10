@@ -2655,6 +2655,7 @@ void ip6_route_input(struct sk_buff *skb)
 	skb_dst_set_noref(skb, ip6_route_input_lookup(net, skb->dev,
 						      &fl6, skb, flags));
 }
+EXPORT_SYMBOL_GPL(ip6_route_input);
 
 INDIRECT_CALLABLE_SCOPE struct rt6_info *ip6_pol_route_output(struct net *net,
 					     struct fib6_table *table,

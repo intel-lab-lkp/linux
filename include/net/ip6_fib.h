@@ -486,11 +486,29 @@ void rt6_get_prefsrc(const struct rt6_info *rt, struct in6_addr *addr)
 	rcu_read_unlock();
 }
 
+#if IS_ENABLED(CONFIG_IPV6)
 int fib6_nh_init(struct net *net, struct fib6_nh *fib6_nh,
 		 struct fib6_config *cfg, gfp_t gfp_flags,
 		 struct netlink_ext_ack *extack);
 void fib6_nh_release(struct fib6_nh *fib6_nh);
 void fib6_nh_release_dsts(struct fib6_nh *fib6_nh);
+#else
+static inline int fib6_nh_init(struct net *net, struct fib6_nh *fib6_nh,
+			       struct fib6_config *cfg, gfp_t gfp_flags,
+			       struct netlink_ext_ack *extack)
+{
+	return -EAFNOSUPPORT;
+}
+
+static inline void fib6_nh_release(struct fib6_nh *fib6_nh)
+{
+}
+
+static inline void fib6_nh_release_dsts(struct fib6_nh *fib6_nh)
+{
+}
+#endif
+
 
 int call_fib6_entry_notifiers(struct net *net,
 			      enum fib_event_type event_type,
@@ -502,8 +520,15 @@ int call_fib6_multipath_entry_notifiers(struct net *net,
 					unsigned int nsiblings,
 					struct netlink_ext_ack *extack);
 int call_fib6_entry_notifiers_replace(struct net *net, struct fib6_info *rt);
+#if IS_ENABLED(CONFIG_IPV6)
 void fib6_rt_update(struct net *net, struct fib6_info *rt,
 		    struct nl_info *info);
+#else
+static inline void fib6_rt_update(struct net *net, struct fib6_info *rt,
+				  struct nl_info *info)
+{
+}
+#endif
 void inet6_rt_notify(int event, struct fib6_info *rt, struct nl_info *info,
 		     unsigned int flags);
 
@@ -568,7 +593,13 @@ unsigned int fib6_tables_seq_read(const struct net *net);
 int fib6_tables_dump(struct net *net, struct notifier_block *nb,
 		     struct netlink_ext_ack *extack);
 
+#if IS_ENABLED(CONFIG_IPV6)
 void fib6_update_sernum(struct net *net, struct fib6_info *rt);
+#else
+static inline void fib6_update_sernum(struct net *net, struct fib6_info *rt)
+{
+}
+#endif
 void fib6_update_sernum_upto_root(struct net *net, struct fib6_info *rt);
 void fib6_update_sernum_stub(struct net *net, struct fib6_info *f6i);
 
