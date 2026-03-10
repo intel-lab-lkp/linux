@@ -15,6 +15,10 @@
 	#address-cells = <0x02>;
 	#size-cells = <0x02>;
 
+	aliases {
+		rtc0 = &rtc0;
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;

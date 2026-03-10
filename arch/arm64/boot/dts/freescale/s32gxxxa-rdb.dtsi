@@ -7,6 +7,12 @@
  *          Larisa Grigore <larisa.grigore@nxp.com>
  */
 
+/ {
+	aliases {
+		rtc1 = &pca85073a;
+	};
+};
+
 &pinctrl {
 	can0_pins: can0-pins {
 		can0-grp0 {
