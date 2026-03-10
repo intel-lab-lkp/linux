@@ -810,7 +810,7 @@ static int __aq_ring_xdp_clean(struct aq_ring_s *rx_ring,
 		}
 
 		skb = aq_xdp_run_prog(aq_nic, &xdp, rx_ring, buff);
-		if (IS_ERR(skb) || !skb)
+		if (IS_ERR_OR_NULL(skb))
 			continue;
 
 		if (ptp_hwtstamp_len > 0)

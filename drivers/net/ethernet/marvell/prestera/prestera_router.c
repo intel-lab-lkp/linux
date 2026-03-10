@@ -1061,7 +1061,7 @@ static void __prestera_k_arb_hw_state_upd(struct prestera_switch *sw,
 		n = NULL;
 	}
 
-	if (!IS_ERR(n) && n) {
+	if (!IS_ERR_OR_NULL(n)) {
 		neigh_event_send(n, NULL);
 		neigh_release(n);
 	} else {

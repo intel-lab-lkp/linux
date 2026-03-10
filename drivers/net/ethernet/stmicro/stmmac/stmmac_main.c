@@ -1275,7 +1275,7 @@ static int stmmac_init_phy(struct net_device *dev)
 	/* Some DT bindings do not set-up the PHY handle. Let's try to
 	 * manually parse it
 	 */
-	if (!phy_fwnode || IS_ERR(phy_fwnode)) {
+	if (IS_ERR_OR_NULL(phy_fwnode)) {
 		int addr = priv->plat->phy_addr;
 		struct phy_device *phydev;
 

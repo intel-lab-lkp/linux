@@ -265,7 +265,7 @@ struct phy_device *xgene_enet_phy_register(struct mii_bus *bus, int phy_addr)
 	struct phy_device *phy_dev;
 
 	phy_dev = get_phy_device(bus, phy_addr, false);
-	if (!phy_dev || IS_ERR(phy_dev))
+	if (IS_ERR_OR_NULL(phy_dev))
 		return NULL;
 
 	if (phy_device_register(phy_dev))

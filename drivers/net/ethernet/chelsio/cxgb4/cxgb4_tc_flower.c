@@ -1032,8 +1032,7 @@ static void ch_flower_stats_handler(struct work_struct *work)
 	do {
 		rhashtable_walk_start(&iter);
 
-		while ((flower_entry = rhashtable_walk_next(&iter)) &&
-		       !IS_ERR(flower_entry)) {
+		while (!IS_ERR_OR_NULL((flower_entry = rhashtable_walk_next(&iter)))) {
 			ret = cxgb4_get_filter_counters(adap->port[0],
 							flower_entry->filter_id,
 							&packets, &bytes,

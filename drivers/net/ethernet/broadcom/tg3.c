@@ -7943,7 +7943,7 @@ static int tg3_tso_bug(struct tg3 *tp, struct tg3_napi *tnapi,
 
 	segs = skb_gso_segment(skb, tp->dev->features &
 				    ~(NETIF_F_TSO | NETIF_F_TSO6));
-	if (IS_ERR(segs) || !segs) {
+	if (IS_ERR_OR_NULL(segs)) {
 		tnapi->tx_dropped++;
 		goto tg3_tso_bug_end;
 	}

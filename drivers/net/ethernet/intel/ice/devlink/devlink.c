@@ -791,7 +791,7 @@ static void ice_traverse_tx_tree(struct devlink *devlink, struct ice_sched_node 
 						  node->parent->rate_node);
 	}
 
-	if (rate_node && !IS_ERR(rate_node))
+	if (!IS_ERR_OR_NULL(rate_node))
 		node->rate_node = rate_node;
 
 traverse_children:

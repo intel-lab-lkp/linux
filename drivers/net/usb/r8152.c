@@ -2218,7 +2218,7 @@ static void r8152_csum_workaround(struct r8152 *tp, struct sk_buff *skb,
 
 		features &= ~(NETIF_F_SG | NETIF_F_IPV6_CSUM | NETIF_F_TSO6);
 		segs = skb_gso_segment(skb, features);
-		if (IS_ERR(segs) || !segs)
+		if (IS_ERR_OR_NULL(segs))
 			goto drop;
 
 		__skb_queue_head_init(&seg_list);
