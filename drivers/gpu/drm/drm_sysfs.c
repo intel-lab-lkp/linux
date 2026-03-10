@@ -600,7 +600,7 @@ err_free:
  */
 int drm_class_device_register(struct device *dev)
 {
-	if (!drm_class || IS_ERR(drm_class))
+	if (IS_ERR_OR_NULL(drm_class))
 		return -ENOENT;
 
 	dev->class = drm_class;

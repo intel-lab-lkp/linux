@@ -1095,7 +1095,7 @@ static int dw_mipi_dsi_rockchip_host_detach(void *priv_data,
 	struct device *second;
 
 	second = dw_mipi_dsi_rockchip_find_second(dsi);
-	if (second && !IS_ERR(second))
+	if (!IS_ERR_OR_NULL(second))
 		component_del(second, &dw_mipi_dsi_rockchip_ops);
 
 	component_del(dsi->dev, &dw_mipi_dsi_rockchip_ops);

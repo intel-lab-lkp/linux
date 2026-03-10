@@ -234,7 +234,7 @@ out_lclean:
 			radeon_bo_unreserve(gtt_obj[i]);
 			radeon_bo_unref(&gtt_obj[i]);
 		}
-		if (fence && !IS_ERR(fence))
+		if (!IS_ERR_OR_NULL(fence))
 			radeon_fence_unref(&fence);
 		break;
 	}
