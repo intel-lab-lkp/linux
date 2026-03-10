@@ -1321,6 +1321,13 @@ struct ethtool_ops {
 	int	(*set_mm)(struct net_device *dev, struct ethtool_mm_cfg *cfg,
 			  struct netlink_ext_ack *extack);
 	void	(*get_mm_stats)(struct net_device *dev, struct ethtool_mm_stats *stats);
+	int	(*get_loopback)(struct net_device *dev, const char *name,
+				u32 id, struct ethtool_loopback_entry *entry);
+	int	(*get_loopback_by_index)(struct net_device *dev, u32 index,
+					 struct ethtool_loopback_entry *entry);
+	int	(*set_loopback)(struct net_device *dev,
+				const struct ethtool_loopback_entry *entry,
+				struct netlink_ext_ack *extack);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);
