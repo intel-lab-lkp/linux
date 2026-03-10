@@ -2571,6 +2571,9 @@ static int vmbus_acpi_add(struct platform_device *pdev)
 	struct acpi_device *ancestor;
 	struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
 
+	if (!device)
+		return -ENODEV;
+
 	vmbus_root_device = &device->dev;
 
 	/*
