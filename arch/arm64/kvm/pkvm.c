@@ -11,6 +11,9 @@
 #include <asm/kvm_mmu.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
+#include <linux/of_address.h>
+#include <linux/of_reserved_mem.h>
+#include <linux/platform_device.h>
 
 #include <asm/kvm_pkvm.h>
 
@@ -18,6 +21,7 @@
 
 DEFINE_STATIC_KEY_FALSE(kvm_protected_mode_initialized);
 
+static struct pkvm_protected_reg *pkvm_protected_regs = kvm_nvhe_sym(pkvm_protected_regs);
 static struct memblock_region *hyp_memory = kvm_nvhe_sym(hyp_memory);
 static unsigned int *hyp_memblock_nr_ptr = &kvm_nvhe_sym(hyp_memblock_nr);
 
@@ -39,6 +43,34 @@ static int __init register_memblock_regions(void)
 	return 0;
 }
 
+static int __init register_protected_regions(void)
+{
+	int i = 0, ret;
+	struct device_node *np;
+	struct resource res;
+
+	for_each_compatible_node(np, NULL, "arm,gic-v3-its") {
+		ret = of_address_to_resource(np, i, &res);
+		if (ret)
+			return ret;
+
+		if (i >= PKVM_PROTECTED_REGS_NUM)
+			return -ENOMEM;
+
+		if (!PAGE_ALIGNED(res.start) || !PAGE_ALIGNED(resource_size(&res)))
+			return -EINVAL;
+
+		pkvm_protected_regs[i].start_pfn = res.start >> PAGE_SHIFT;
+		pkvm_protected_regs[i].num_pages = resource_size(&res) >> PAGE_SHIFT;
+		pkvm_protected_regs[i].cb = lm_alias(&kvm_nvhe_sym(pkvm_handle_forward_req));
+		i++;
+	}
+
+	kvm_nvhe_sym(num_protected_reg) = i;
+
+	return 0;
+}
+
 void __init kvm_hyp_reserve(void)
 {
 	u64 hyp_mem_pages = 0;
@@ -54,6 +86,12 @@ void __init kvm_hyp_reserve(void)
 	if (ret) {
 		*hyp_memblock_nr_ptr = 0;
 		kvm_err("Failed to register hyp memblocks: %d\n", ret);
+		return;
+	}
+
+	ret = register_protected_regions();
+	if (ret) {
+		kvm_err("Failed to register protected reg: %d\n", ret);
 		return;
 	}
 
