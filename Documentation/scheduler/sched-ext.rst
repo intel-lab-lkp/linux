@@ -43,7 +43,6 @@ options should be enabled to use sched_ext:
     CONFIG_DEBUG_INFO_BTF=y
     CONFIG_BPF_JIT_ALWAYS_ON=y
     CONFIG_BPF_JIT_DEFAULT_ON=y
-    CONFIG_PAHOLE_HAS_SPLIT_BTF=y
     CONFIG_PAHOLE_HAS_BTF_TAG=y
 
 sched_ext is used only when the BPF scheduler is loaded and running.
@@ -313,16 +312,21 @@ by a sched_ext scheduler:
         ops.runnable();         /* Task becomes ready to run */
 
         while (task is runnable) {
-            if (task is not in a DSQ) {
+            if (task is not in a DSQ && task->scx.slice == 0) {
                 ops.enqueue();  /* Task can be added to a DSQ */
 
-                /* A CPU becomes available */
+                /* Any usable CPU becomes available */
 
                 ops.dispatch(); /* Task is moved to a local DSQ */
             }
             ops.running();      /* Task starts running on its assigned CPU */
-            ops.tick();         /* Called every 1/HZ seconds */
+            while (task->scx.slice > 0 && task is runnable)
+                ops.tick();     /* Called every 1/HZ seconds */
             ops.stopping();     /* Task stops running (time slice expires or wait) */
+
+            /* Task's CPU becomes available */
+
+            ops.dispatch();     /* task->scx.slice can be refilled */
         }
 
         ops.quiescent();        /* Task releases its assigned CPU (wait) */

@@ -4,7 +4,7 @@
  * Copyright (c) 2008 Dave Chinner
  * All Rights Reserved.
  */
-#include "xfs.h"
+#include "xfs_platform.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -374,7 +374,7 @@ xfsaild_push_item(
 	 * If log item pinning is enabled, skip the push and track the item as
 	 * pinned. This can help induce head-behind-tail conditions.
 	 */
-	if (XFS_TEST_ERROR(false, ailp->ail_log->l_mp, XFS_ERRTAG_LOG_ITEM_PIN))
+	if (XFS_TEST_ERROR(ailp->ail_log->l_mp, XFS_ERRTAG_LOG_ITEM_PIN))
 		return XFS_ITEM_PINNED;
 
 	/*
@@ -922,8 +922,7 @@ xfs_trans_ail_init(
 {
 	struct xfs_ail	*ailp;
 
-	ailp = kzalloc(sizeof(struct xfs_ail),
-			GFP_KERNEL | __GFP_RETRY_MAYFAIL);
+	ailp = kzalloc_obj(struct xfs_ail, GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!ailp)
 		return -ENOMEM;
 

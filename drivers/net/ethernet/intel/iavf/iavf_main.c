@@ -50,6 +50,7 @@ MODULE_ALIAS("i40evf");
 MODULE_DESCRIPTION("Intel(R) Ethernet Adaptive Virtual Function Network Driver");
 MODULE_IMPORT_NS("LIBETH");
 MODULE_IMPORT_NS("LIBIE");
+MODULE_IMPORT_NS("LIBIE_ADMINQ");
 MODULE_LICENSE("GPL v2");
 
 static const struct net_device_ops iavf_netdev_ops;
@@ -770,7 +771,7 @@ iavf_vlan_filter *iavf_add_vlan(struct iavf_adapter *adapter,
 
 	f = iavf_find_vlan(adapter, vlan);
 	if (!f) {
-		f = kzalloc(sizeof(*f), GFP_ATOMIC);
+		f = kzalloc_obj(*f, GFP_ATOMIC);
 		if (!f)
 			goto clearout;
 
@@ -977,7 +978,7 @@ struct iavf_mac_filter *iavf_add_filter(struct iavf_adapter *adapter,
 
 	f = iavf_find_filter(adapter, macaddr);
 	if (!f) {
-		f = kzalloc(sizeof(*f), GFP_ATOMIC);
+		f = kzalloc_obj(*f, GFP_ATOMIC);
 		if (!f)
 			return f;
 
@@ -1584,12 +1585,10 @@ static int iavf_alloc_queues(struct iavf_adapter *adapter)
 					  (int)(num_online_cpus()));
 
 
-	adapter->tx_rings = kcalloc(num_active_queues,
-				    sizeof(struct iavf_ring), GFP_KERNEL);
+	adapter->tx_rings = kzalloc_objs(struct iavf_ring, num_active_queues);
 	if (!adapter->tx_rings)
 		goto err_out;
-	adapter->rx_rings = kcalloc(num_active_queues,
-				    sizeof(struct iavf_ring), GFP_KERNEL);
+	adapter->rx_rings = kzalloc_objs(struct iavf_ring, num_active_queues);
 	if (!adapter->rx_rings)
 		goto err_out;
 
@@ -1652,8 +1651,7 @@ static int iavf_set_interrupt_capability(struct iavf_adapter *adapter)
 	v_budget = min_t(int, pairs + NONQ_VECS,
 			 (int)adapter->vf_res->max_vectors);
 
-	adapter->msix_entries = kcalloc(v_budget,
-					sizeof(struct msix_entry), GFP_KERNEL);
+	adapter->msix_entries = kzalloc_objs(struct msix_entry, v_budget);
 	if (!adapter->msix_entries) {
 		err = -ENOMEM;
 		goto out;
@@ -1694,7 +1692,7 @@ static int iavf_config_rss_aq(struct iavf_adapter *adapter)
 	if (status) {
 		dev_err(&adapter->pdev->dev, "Cannot set RSS key, err %s aq_err %s\n",
 			iavf_stat_str(hw, status),
-			iavf_aq_str(hw, hw->aq.asq_last_status));
+			libie_aq_str(hw->aq.asq_last_status));
 		return iavf_status_to_errno(status);
 
 	}
@@ -1704,7 +1702,7 @@ static int iavf_config_rss_aq(struct iavf_adapter *adapter)
 	if (status) {
 		dev_err(&adapter->pdev->dev, "Cannot set RSS lut, err %s aq_err %s\n",
 			iavf_stat_str(hw, status),
-			iavf_aq_str(hw, hw->aq.asq_last_status));
+			libie_aq_str(hw->aq.asq_last_status));
 		return iavf_status_to_errno(status);
 	}
 
@@ -1725,11 +1723,11 @@ static int iavf_config_rss_reg(struct iavf_adapter *adapter)
 	u16 i;
 
 	dw = (u32 *)adapter->rss_key;
-	for (i = 0; i <= adapter->rss_key_size / 4; i++)
+	for (i = 0; i < adapter->rss_key_size / 4; i++)
 		wr32(hw, IAVF_VFQF_HKEY(i), dw[i]);
 
 	dw = (u32 *)adapter->rss_lut;
-	for (i = 0; i <= adapter->rss_lut_size / 4; i++)
+	for (i = 0; i < adapter->rss_lut_size / 4; i++)
 		wr32(hw, IAVF_VFQF_HLUT(i), dw[i]);
 
 	iavf_flush(hw);
@@ -1811,8 +1809,7 @@ static int iavf_alloc_q_vectors(struct iavf_adapter *adapter)
 	struct iavf_q_vector *q_vector;
 
 	num_q_vectors = adapter->num_msix_vectors - NONQ_VECS;
-	adapter->q_vectors = kcalloc(num_q_vectors, sizeof(*q_vector),
-				     GFP_KERNEL);
+	adapter->q_vectors = kzalloc_objs(*q_vector, num_q_vectors);
 	if (!adapter->q_vectors)
 		return -ENOMEM;
 
@@ -4118,7 +4115,7 @@ static int iavf_configure_clsflower(struct iavf_adapter *adapter,
 		return -EINVAL;
 	}
 
-	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
+	filter = kzalloc_obj(*filter);
 	if (!filter)
 		return -ENOMEM;
 	filter->cookie = cls_flower->cookie;
@@ -4233,7 +4230,7 @@ static int iavf_add_cls_u32(struct iavf_adapter *adapter,
 		return -EOPNOTSUPP;
 	}
 
-	fltr = kzalloc(sizeof(*fltr), GFP_KERNEL);
+	fltr = kzalloc_obj(*fltr);
 	if (!fltr)
 		return -ENOMEM;
 
@@ -5490,7 +5487,7 @@ static int iavf_resume(struct device *dev_d)
 {
 	struct pci_dev *pdev = to_pci_dev(dev_d);
 	struct iavf_adapter *adapter;
-	u32 err;
+	int err;
 
 	adapter = iavf_pdev_to_adapter(pdev);
 
