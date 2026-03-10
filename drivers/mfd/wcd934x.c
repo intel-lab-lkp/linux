@@ -170,27 +170,54 @@ static int wcd934x_slim_status_up(struct slim_device *sdev)
 	ret = wcd934x_bring_up(ddata);
 	if (ret) {
 		dev_err(dev, "Failed to bring up WCD934X: err = %d\n", ret);
-		return ret;
+		goto err_regmap_exit;
 	}
 
-	ret = devm_regmap_add_irq_chip(dev, ddata->regmap, ddata->irq,
-				       IRQF_TRIGGER_HIGH, 0,
-				       &wcd934x_regmap_irq_chip,
-				       &ddata->irq_data);
+	ret = regmap_add_irq_chip(ddata->regmap, ddata->irq,
+				  IRQF_TRIGGER_HIGH, 0,
+				  &wcd934x_regmap_irq_chip,
+				  &ddata->irq_data);
 	if (ret) {
 		dev_err(dev, "Failed to add IRQ chip: err = %d\n", ret);
-		return ret;
+		goto err_regmap_exit;
 	}
 
 	ret = mfd_add_devices(dev, PLATFORM_DEVID_AUTO, wcd934x_devices,
 			      ARRAY_SIZE(wcd934x_devices), NULL, 0, NULL);
 	if (ret) {
-		dev_err(dev, "Failed to add child devices: err = %d\n",
-			ret);
-		return ret;
+		dev_err(dev, "Failed to add child devices: err = %d\n", ret);
+		goto err_del_irq_chip;
 	}
 
+	return 0;
+
+err_del_irq_chip:
+	regmap_del_irq_chip(ddata->irq, ddata->irq_data);
+	ddata->irq_data = NULL;
+err_regmap_exit:
+	regmap_exit(ddata->regmap);
+	ddata->regmap = NULL;
 	return ret;
+}
+
+static void wcd934x_slim_status_down(struct slim_device *sdev)
+{
+	struct device *dev = &sdev->dev;
+	struct wcd934x_ddata *ddata;
+
+	ddata = dev_get_drvdata(dev);
+
+	mfd_remove_devices(&sdev->dev);
+
+	if (ddata->irq_data) {
+		regmap_del_irq_chip(ddata->irq, ddata->irq_data);
+		ddata->irq_data = NULL;
+	}
+
+	if (ddata->regmap) {
+		regmap_exit(ddata->regmap);
+		ddata->regmap = NULL;
+	}
 }
 
 static int wcd934x_slim_status(struct slim_device *sdev,
@@ -200,7 +227,7 @@ static int wcd934x_slim_status(struct slim_device *sdev,
 	case SLIM_DEVICE_STATUS_UP:
 		return wcd934x_slim_status_up(sdev);
 	case SLIM_DEVICE_STATUS_DOWN:
-		mfd_remove_devices(&sdev->dev);
+		wcd934x_slim_status_down(sdev);
 		break;
 	default:
 		return -EINVAL;
@@ -276,7 +303,7 @@ static void wcd934x_slim_remove(struct slim_device *sdev)
 	struct wcd934x_ddata *ddata = dev_get_drvdata(&sdev->dev);
 
 	regulator_bulk_disable(WCD934X_MAX_SUPPLY, ddata->supplies);
-	mfd_remove_devices(&sdev->dev);
+	wcd934x_slim_status_down(sdev);
 }
 
 static const struct slim_device_id wcd934x_slim_id[] = {
