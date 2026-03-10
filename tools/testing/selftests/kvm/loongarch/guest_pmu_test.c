@@ -11,6 +11,7 @@
 #include "pmu.h"
 #include <linux/bitops.h>
 
+static int pmu_irq_count;
 /* Guest test code - runs inside VM */
 static void guest_pmu_base_test(void)
 {
@@ -66,10 +67,40 @@ static void guest_pmu_base_test(void)
 
 }
 
+static void guest_pmu_interrupt_test(void)
+{
+	uint64_t cnt;
+
+	csr_write(PMU_OVERFLOW - 1, LOONGARCH_CSR_PERFCNTR0);
+	csr_write(PMU_ENVENT_ENABLED  | CSR_PERFCTRL_PMIE |
+	LOONGARCH_PMU_EVENT_CYCLES, LOONGARCH_CSR_PERFCTRL0);
+
+	cpu_relax();
+
+	GUEST_ASSERT_EQ(pmu_irq_count, 1);
+	cnt = csr_read(LOONGARCH_CSR_PERFCNTR0);
+	GUEST_PRINTF("PMU interrupt test success\n");
+	GUEST_PRINTF("csr_perfcntr0 is %lx\n", cnt);
+
+}
+
+static void  guest_irq_handler(struct ex_regs *regs)
+{
+	unsigned int intid;
+
+	intid = !!(regs->estat & BIT(INT_PMI));
+	GUEST_ASSERT_EQ(intid, 1);
+	GUEST_PRINTF("get PMU interrupt\n");
+	WRITE_ONCE(pmu_irq_count, pmu_irq_count + 1);
+	pmu_irq_disable();
+}
+
 static void guest_code(void)
 {
 	guest_pmu_base_test();
-
+	pmu_irq_enable();
+	local_irq_enable();
+	guest_pmu_interrupt_test();
 	GUEST_DONE();
 }
 
@@ -131,6 +162,9 @@ int main(int argc, char *argv[])
 
 	vm_init_descriptor_tables(vm);
 	loongarch_vcpu_setup(vcpu);
+	vm_install_exception_handler(vm, EXCCODE_INT, guest_irq_handler);
+	pmu_irq_count = 0;
+	sync_global_to_guest(vm, pmu_irq_count);
 
 	attr.group = KVM_LOONGARCH_VM_FEAT_CTRL,
 	attr.attr = KVM_LOONGARCH_VM_FEAT_PMU,
