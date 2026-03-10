@@ -237,7 +237,7 @@ int ntfs_extend_init(struct ntfs_sb_info *sbi)
 
 	/* Try to find $ObjId */
 	inode2 = dir_search_u(inode, &NAME_OBJID, NULL);
-	if (inode2 && !IS_ERR(inode2)) {
+	if (!IS_ERR_OR_NULL(inode2)) {
 		if (is_bad_inode(inode2)) {
 			iput(inode2);
 		} else {
@@ -248,21 +248,21 @@ int ntfs_extend_init(struct ntfs_sb_info *sbi)
 
 	/* Try to find $Quota */
 	inode2 = dir_search_u(inode, &NAME_QUOTA, NULL);
-	if (inode2 && !IS_ERR(inode2)) {
+	if (!IS_ERR_OR_NULL(inode2)) {
 		sbi->quota_no = inode2->i_ino;
 		iput(inode2);
 	}
 
 	/* Try to find $Reparse */
 	inode2 = dir_search_u(inode, &NAME_REPARSE, NULL);
-	if (inode2 && !IS_ERR(inode2)) {
+	if (!IS_ERR_OR_NULL(inode2)) {
 		sbi->reparse.ni = ntfs_i(inode2);
 		sbi->reparse_no = inode2->i_ino;
 	}
 
 	/* Try to find $UsnJrnl */
 	inode2 = dir_search_u(inode, &NAME_USNJRNL, NULL);
-	if (inode2 && !IS_ERR(inode2)) {
+	if (!IS_ERR_OR_NULL(inode2)) {
 		sbi->usn_jrnl_no = inode2->i_ino;
 		iput(inode2);
 	}
