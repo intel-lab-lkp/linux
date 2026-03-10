@@ -9,6 +9,8 @@
 #include <linux/percpu.h>
 #include <asm/ibt.h>
 
+#define X86_CAP_BUF_SIZE			16
+
 #ifndef CONFIG_SMP
 #define cpu_physical_id(cpu)			boot_cpu_physical_apicid
 #define cpu_acpi_id(cpu)			0
@@ -66,5 +68,7 @@ bool intel_find_matching_signature(void *mc, struct cpu_signature *sig);
 int intel_microcode_sanity_check(void *mc, bool print_err, int hdr_type);
 
 extern struct cpumask cpus_stop_mask;
+
+const char *x86_cap_name(unsigned int bit, char *buf);
 
 #endif /* _ASM_X86_CPU_H */
