@@ -790,7 +790,7 @@ void icc_put(struct icc_path *path)
 	size_t i;
 	int ret;
 
-	if (!path || WARN_ON(IS_ERR(path)))
+	if (WARN_ON(IS_ERR_OR_NULL(path)))
 		return;
 
 	ret = icc_set_bw(path, 0, 0);
