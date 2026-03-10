@@ -656,6 +656,30 @@ static inline bool gic_enable_sre(void)
 	return !!(val & ICC_SRE_EL1_SRE);
 }
 
+/*
+ * The ITS_BASER structure - contains memory information, cached
+ * value of BASER register configuration and ITS page size.
+ */
+struct its_baser {
+	void		*base;
+	void		*shadow;
+	u64		val;
+	u32		order;
+	u32		psz;
+};
+
+struct its_shadow_tables {
+	struct its_baser	tables[GITS_BASER_NR_REGS];
+	void			*cmd_shadow;
+	void			*cmd_original;
+	size_t			cmdq_len;
+};
+
+typedef int (*its_init_emulate)(phys_addr_t its_phys_base, struct its_shadow_tables *shadow);
+
+void *its_start_depriviledge(void);
+int its_end_depriviledge(int ret, unsigned long *flags, its_init_emulate cb);
+
 #endif
 
 #endif
