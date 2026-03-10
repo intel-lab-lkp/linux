@@ -617,6 +617,18 @@ config MFD_MX25_TSADC
 	  i.MX25 processors. They consist of a conversion queue for general
 	  purpose ADC and a queue for Touchscreens.
 
+config MFD_P3H2X4X
+       tristate "NXP P3H2X4X I3C Hub Device"
+       depends on I3C
+       select MFD_CORE
+       select REGMAP_I3C
+       help
+         Enable Support for NXP P3H244x/P3H284x I3C HUB device using I3C/I2c
+         communication interface.
+
+         This driver provides support for I3C Hub and regulator, additional
+         drivers must be enabled in order to use the functionality of the device.
+
 config MFD_PF1550
 	tristate "NXP PF1550 PMIC Support"
 	depends on I2C=y && OF
