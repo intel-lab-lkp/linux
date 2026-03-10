@@ -2,6 +2,7 @@
 
 #include <linux/netdevice.h>
 #include <net/pkt_sched.h>
+#include <net/pkt_cls.h>
 
 #include "netdevsim.h"
 
@@ -16,6 +17,8 @@ static LIST_HEAD(nsim_block_cb_list);
 #define QDISC_OFFLOAD_HANDLERS(X)					\
 	X(taprio, tc_taprio_qopt_offload, cmd, TAPRIO_CMD_REPLACE,	\
 	  TAPRIO_CMD_DESTROY, TAPRIO_CMD_STATS, stats)			\
+	X(ets, tc_ets_qopt_offload, command, TC_ETS_REPLACE, TC_ETS_DESTROY, \
+	  TC_ETS_STATS, stats)						\
 
 #define QH(NAME, OL_TYPE, CMD_FLD, O_REPLACE, O_DESTROY, O_STATS, STATS_FLD) \
 static int handle_##NAME(struct net_device *dev, struct OL_TYPE *offload) \
@@ -45,6 +48,7 @@ nsim_setup_tc(struct net_device *dev, enum tc_setup_type type, void *type_data)
 	switch (type) {
 #define TC_QDISC_SETUP_CASES(X)						\
 	X(TC_SETUP_QDISC_TAPRIO, tc_taprio_qopt_offload, taprio)	\
+	X(TC_SETUP_QDISC_ETS, tc_ets_qopt_offload, ets)			\
 
 #define SC(SETUP_LABEL, OL_TYPE, NAME)					\
 	case SETUP_LABEL:						\
