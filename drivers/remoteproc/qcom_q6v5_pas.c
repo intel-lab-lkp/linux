@@ -138,6 +138,13 @@ static void qcom_pas_segment_dump(struct rproc *rproc,
 		return;
 	}
 
+	pas->mem_region = ioremap_wc(pas->mem_phys, pas->mem_size);
+	if (!pas->mem_region) {
+		dev_err(pas->dev, "unable to map memory region: %pa+%zx\n",
+			&pas->mem_phys, pas->mem_size);
+		return;
+	}
+
 	memcpy_fromio(dest, pas->mem_region + total_offset, size);
 }
 
@@ -240,9 +247,18 @@ static int qcom_pas_load(struct rproc *rproc, const struct firmware *fw)
 			return ret;
 		}
 
+		pas->dtb_mem_region = ioremap_wc(pas->dtb_mem_phys, pas->dtb_mem_size);
+		if (!pas->dtb_mem_region) {
+			dev_err(pas->dev, "unable to map dtb memory region: %pa+%zx\n",
+				&pas->dtb_mem_phys, pas->dtb_mem_size);
+			goto release_dtb_metadata;
+		}
+
 		ret = qcom_mdt_pas_load(pas->dtb_pas_ctx, pas->dtb_firmware,
 					pas->dtb_firmware_name, pas->dtb_mem_region,
 					&pas->dtb_mem_reloc);
+		iounmap(pas->dtb_mem_region);
+		pas->dtb_mem_region = NULL;
 		if (ret)
 			goto release_dtb_metadata;
 	}
@@ -320,8 +336,23 @@ static int qcom_pas_start(struct rproc *rproc)
 		}
 	}
 
+	/*
+	 * During subsystem restart, when coredump is enabled, region is mapped but
+	 * not unmapped there, NULL check to reuse the mapping if its already mapped.
+	 */
+	if (!pas->mem_region) {
+		pas->mem_region = ioremap_wc(pas->mem_phys, pas->mem_size);
+		if (!pas->mem_region) {
+			dev_err(pas->dev, "unable to map memory region: %pa+%zx\n",
+				&pas->mem_phys, pas->mem_size);
+			goto release_pas_metadata;
+		}
+	}
+
 	ret = qcom_mdt_pas_load(pas->pas_ctx, pas->firmware, rproc->firmware,
 				pas->mem_region, &pas->mem_reloc);
+	iounmap(pas->mem_region);
+	pas->mem_region = NULL;
 	if (ret)
 		goto release_pas_metadata;
 
@@ -446,6 +477,13 @@ static void *qcom_pas_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is
 
 	if (is_iomem)
 		*is_iomem = true;
+
+	pas->mem_region = ioremap_wc(pas->mem_phys, pas->mem_size);
+	if (!pas->mem_region) {
+		dev_err(pas->dev, "unable to map memory region: %pa+%zx\n",
+			&pas->mem_phys, pas->mem_size);
+		return NULL;
+	}
 
 	return pas->mem_region + offset;
 }
@@ -637,11 +675,6 @@ static int qcom_pas_alloc_memory_region(struct qcom_pas *pas)
 
 	pas->mem_phys = pas->mem_reloc = res.start;
 	pas->mem_size = resource_size(&res);
-	pas->mem_region = devm_ioremap_resource_wc(pas->dev, &res);
-	if (IS_ERR(pas->mem_region)) {
-		dev_err(pas->dev, "unable to map memory region: %pR\n", &res);
-		return PTR_ERR(pas->mem_region);
-	}
 
 	pas->pas_ctx = devm_qcom_scm_pas_context_alloc(pas->dev, pas->pas_id,
 						       pas->mem_phys, pas->mem_size);
@@ -660,11 +693,6 @@ static int qcom_pas_alloc_memory_region(struct qcom_pas *pas)
 
 	pas->dtb_mem_phys = pas->dtb_mem_reloc = res.start;
 	pas->dtb_mem_size = resource_size(&res);
-	pas->dtb_mem_region = devm_ioremap_resource_wc(pas->dev, &res);
-	if (IS_ERR(pas->dtb_mem_region)) {
-		dev_err(pas->dev, "unable to map dtb memory region: %pR\n", &res);
-		return PTR_ERR(pas->dtb_mem_region);
-	}
 
 	pas->dtb_pas_ctx = devm_qcom_scm_pas_context_alloc(pas->dev, pas->dtb_pas_id,
 							   pas->dtb_mem_phys,
