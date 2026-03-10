@@ -34,13 +34,6 @@ struct xfs_extent_busy {
 struct xfs_busy_extents {
 	struct list_head	extent_list;
 	struct work_struct	endio_work;
-
-	/*
-	 * Owner is the object containing the struct xfs_busy_extents to free
-	 * once the busy extents have been processed. If only the
-	 * xfs_busy_extents object needs freeing, then point this at itself.
-	 */
-	void			*owner;
 };
 
 static inline struct xfs_busy_extents *

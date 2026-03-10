@@ -85,7 +85,6 @@ xfs_discard_endio_work(
 		container_of(work, struct xfs_busy_extents, endio_work);
 
 	xfs_extent_busy_clear(&extents->extent_list, false);
-	kfree(extents->owner);
 	xfs_busy_extents_free(extents);
 }
 
@@ -355,8 +354,6 @@ xfs_trim_perag_extents(
 			error = -ENOMEM;
 			break;
 		}
-
-		extents->owner = extents;
 
 		error = xfs_trim_gather_extents(pag, &tcur, extents);
 		if (error) {
@@ -697,7 +694,6 @@ xfs_trim_rtgroup_extents(
 
 		tr.queued = 0;
 		tr.batch = XFS_DISCARD_MAX_EXAMINE;
-		tr.extents->owner = tr.extents;
 
 		xfs_rtgroup_lock(rtg, XFS_RTGLOCK_BITMAP_SHARED);
 		error = xfs_rtalloc_query_range(rtg, tp, low, high,
