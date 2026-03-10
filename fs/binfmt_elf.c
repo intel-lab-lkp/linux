@@ -49,6 +49,7 @@
 #include <uapi/linux/rseq.h>
 #include <asm/param.h>
 #include <asm/page.h>
+#include <linux/pgtable.h>
 
 #ifndef ELF_COMPAT
 #define ELF_COMPAT 0
@@ -1105,6 +1106,20 @@ out_free_interp:
 
 			/* Calculate any requested alignment. */
 			alignment = maximum_alignment(elf_phdata, elf_ex->e_phnum);
+
+			/*
+			 * If the arch requested large folios for exec
+			 * memory via exec_folio_order(), ensure the
+			 * binary is mapped with sufficient alignment so
+			 * that virtual addresses of exec pages are
+			 * aligned to the folio boundary. Without this,
+			 * the hardware cannot coalesce PTEs (e.g. arm64
+			 * contpte) even though the physical memory and
+			 * file offset are correctly aligned.
+			 */
+			if (exec_folio_order())
+				alignment = max(alignment,
+					(unsigned long)PAGE_SIZE << exec_folio_order());
 
 			/**
 			 * DOC: PIE handling
