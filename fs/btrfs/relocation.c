@@ -1485,7 +1485,8 @@ static int clean_dirty_subvols(struct reloc_control *rc)
 			}
 			btrfs_put_root(root);
 		} else {
-			/* Orphan reloc tree, just clean it up */
+			/* Orphan reloc tree, unlink it first and clean it up */
+			list_del_init(&root->reloc_dirty_list);
 			ret2 = btrfs_drop_snapshot(root, false, true);
 			if (ret2 < 0) {
 				btrfs_put_root(root);
