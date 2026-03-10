@@ -22,7 +22,7 @@ pub(crate) const MODULE_NAME: &core::ffi::CStr = <LocalModule as kernel::ModuleM
 
 kernel::module_pci_driver! {
     type: driver::NovaCore,
-    name: "NovaCore",
+    name: "nova-core",
     authors: ["Danilo Krummrich"],
     description: "Nova Core GPU driver",
     license: "GPL v2",
