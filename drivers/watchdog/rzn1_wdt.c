@@ -17,7 +17,9 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
+#include <linux/soc/renesas/r9a06g032-sysctrl.h>
 #include <linux/watchdog.h>
+#include <dt-bindings/watchdog/renesas,rzn1-wdt.h>
 
 #define DEFAULT_TIMEOUT		60
 
@@ -98,6 +100,41 @@ static const struct watchdog_ops rzn1_wdt_ops = {
 	.ping = rzn1_wdt_ping,
 };
 
+static int rzn1_wdt_setup_rst_line(struct device *dev)
+{
+	enum r9a06g032_sysctrl_rst_src rst_src;
+	u32 reset_line;
+	int ret;
+
+	ret = of_property_read_u32(dev->of_node, "renesas,reset-line", &reset_line);
+	if (ret) {
+		if (ret == -EINVAL)
+			return 0; /* Property not present -> Ok, nothing to do */
+
+		return dev_err_probe(dev, ret, "Read 'renesas,reset-line' failed\n");
+	}
+
+	switch (reset_line) {
+	case RZN1_WDT_A7_0:
+		rst_src = R9A06G032_RST_WATCHDOG_CA7_0;
+		break;
+	case RZN1_WDT_A7_1:
+		rst_src = R9A06G032_RST_WATCHDOG_CA7_1;
+		break;
+
+	default:
+		return dev_err_probe(dev, -EINVAL,
+				     "Invalid 'renesas,reset-line' (%u)\n",
+				     reset_line);
+	}
+
+	ret = r9a06g032_sysctrl_enable_rst(rst_src);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to enable reset\n");
+
+	return 0;
+}
+
 static int rzn1_wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -115,6 +152,10 @@ static int rzn1_wdt_probe(struct platform_device *pdev)
 	wdt->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(wdt->base))
 		return PTR_ERR(wdt->base);
+
+	ret = rzn1_wdt_setup_rst_line(dev);
+	if (ret)
+		return ret;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
