@@ -26,6 +26,11 @@ properties:
     $ref: /schemas/connector/usb-connector.yaml#
     unevaluatedProperties: false
 
+  orientation-gpio:
+    description: Optional orientation select control if the chip doesn't
+      present "Connector Orientation" bit[0] in STANDARD_OUTPUT_CAPABILITIES
+      register.
+
 required:
   - compatible
   - reg
