@@ -7,6 +7,7 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "ucall_common.h"
+#include "pmu.h"
 
 #define LOONGARCH_PAGE_TABLE_PHYS_MIN		0x200000
 #define LOONGARCH_GUEST_STACK_VADDR_MIN		0x200000
@@ -275,11 +276,12 @@ static void loongarch_set_cpucfg(struct kvm_vcpu *vcpu, uint64_t id, uint64_t va
 	__vcpu_set_reg(vcpu, cfgid, val);
 }
 
-static void loongarch_vcpu_setup(struct kvm_vcpu *vcpu)
+void loongarch_vcpu_setup(struct kvm_vcpu *vcpu)
 {
 	int width;
 	unsigned long val;
 	struct kvm_vm *vm = vcpu->vm;
+	uint32_t cfg6;
 
 	switch (vm->mode) {
 	case VM_MODE_P36V47_16K:
@@ -290,6 +292,8 @@ static void loongarch_vcpu_setup(struct kvm_vcpu *vcpu)
 		TEST_FAIL("Unknown guest mode, mode: 0x%x", vm->mode);
 	}
 
+	cfg6 = read_cpucfg(LOONGARCH_CPUCFG6);
+	loongarch_set_cpucfg(vcpu, LOONGARCH_CPUCFG6, cfg6);
 	/* kernel mode and page enable mode */
 	val = PLV_KERN | CSR_CRMD_PG;
 	loongarch_set_csr(vcpu, LOONGARCH_CSR_CRMD, val);
