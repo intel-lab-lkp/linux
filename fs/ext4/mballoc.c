@@ -915,13 +915,17 @@ static int ext4_mb_scan_groups_xa_range(struct ext4_allocation_context *ac,
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	enum criteria cr = ac->ac_criteria;
 	ext4_group_t ngroups = ext4_get_allocation_groups_count(ac);
-	unsigned long group = start;
+	unsigned long group, end_range;
 	struct ext4_group_info *grp;
 
-	if (WARN_ON_ONCE(end > ngroups || start >= end))
-		return 0;
-
-	xa_for_each_range(xa, group, grp, start, end - 1) {
+	if (start >= ngroups)
+		start = 0;
+	group = start;
+wrap_around:
+	end_range = end;
+	if (end_range > ngroups)
+		end_range = ngroups;
+	xa_for_each_range(xa, group, grp, start, end_range - 1) {
 		int err;
 
 		if (sbi->s_mb_stats)
@@ -933,7 +937,11 @@ static int ext4_mb_scan_groups_xa_range(struct ext4_allocation_context *ac,
 
 		cond_resched();
 	}
-
+	if (start) {
+		end = start;
+		start = 0;
+		goto wrap_around;
+	}
 	return 0;
 }
 
@@ -967,6 +975,8 @@ static int ext4_mb_scan_groups_p2_aligned(struct ext4_allocation_context *ac,
 
 	start = group;
 	end = ext4_get_allocation_groups_count(ac);
+	if (start >= end)
+		return 0;
 wrap_around:
 	for (i = ac->ac_2order; i < MB_NUM_ORDERS(ac->ac_sb); i++) {
 		ret = ext4_mb_scan_groups_largest_free_order_range(ac, i,
@@ -1099,6 +1109,8 @@ static int ext4_mb_scan_groups_best_avail(struct ext4_allocation_context *ac,
 
 	start = group;
 	end = ext4_get_allocation_groups_count(ac);
+	if (start >= end)
+		start = 0;
 wrap_around:
 	for (i = order; i >= min_order; i--) {
 		int frag_order;
@@ -1199,6 +1211,8 @@ static int ext4_mb_scan_groups(struct ext4_allocation_context *ac)
 
 	/* searching for the right group start from the goal value specified */
 	start = ac->ac_g_ex.fe_group;
+	if (start >= ngroups)
+		start = 0;
 	ac->ac_prefetch_grp = start;
 	ac->ac_prefetch_nr = 0;
 
