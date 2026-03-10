@@ -90,6 +90,10 @@ struct nsim_ethtool {
 	struct ethtool_coalesce coalesce;
 	struct ethtool_ringparam ring;
 	struct ethtool_fecparam fec;
+	struct {
+		u32 supported;
+		u32 direction;
+	} mac_lb;
 };
 
 struct nsim_rq {
