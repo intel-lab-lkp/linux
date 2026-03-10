@@ -162,4 +162,5 @@ const struct ethnl_request_ops ethnl_phy_request_ops = {
 	.reply_size		= phy_reply_size,
 	.fill_reply		= phy_fill_reply,
 	.cleanup_data		= phy_cleanup_data,
+	.dump_one_dev		= ethnl_perphy_dump_one_dev,
 };

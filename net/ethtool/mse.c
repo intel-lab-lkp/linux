@@ -325,4 +325,5 @@ const struct ethnl_request_ops ethnl_mse_request_ops = {
 	.cleanup_data = mse_cleanup_data,
 	.reply_size = mse_reply_size,
 	.fill_reply = mse_fill_reply,
+	.dump_one_dev = ethnl_perphy_dump_one_dev,
 };
