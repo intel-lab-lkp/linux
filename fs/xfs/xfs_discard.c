@@ -86,6 +86,7 @@ xfs_discard_endio_work(
 
 	xfs_extent_busy_clear(&extents->extent_list, false);
 	kfree(extents->owner);
+	xfs_busy_extents_free(extents);
 }
 
 /*
