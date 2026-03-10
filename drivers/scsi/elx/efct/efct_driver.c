@@ -522,6 +522,11 @@ efct_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		if (pci_resource_flags(pdev, i) & IORESOURCE_MEM) {
 			efct->reg[r] = ioremap(pci_resource_start(pdev, i),
 					       pci_resource_len(pdev, i));
+			if (!efct->reg[r]) {
+				dev_err(&pdev->dev, "Failed to ioremap BAR %d\n", i);
+				rc = -EIO;
+				goto dma_mask_out;
+			}
 			r++;
 		}
 
