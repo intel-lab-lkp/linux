@@ -23,6 +23,7 @@
 #include <linux/once_lite.h>
 #include <linux/ftrace_regs.h>
 #include <linux/llist.h>
+#include <linux/string.h>
 
 #include "pid_list.h"
 
@@ -257,6 +258,34 @@ static inline bool still_need_pid_events(int type, struct trace_pid_list *pid_li
 	 */
 	return (!(type & TRACE_PIDS) && pid_list) ||
 		(!(type & TRACE_NO_PIDS) && no_pid_list);
+}
+
+/*
+ * Repeated boot parameters, including Bootconfig array expansions, need
+ * to stay in the delimiter form that the existing parser consumes.
+ */
+static inline void __init trace_append_boot_param(char *buf, const char *str,
+						  char sep, size_t size)
+{
+	size_t len, str_len;
+
+	if (buf[0] == '\0') {
+		strscpy(buf, str, size);
+		return;
+	}
+
+	str_len = strlen(str);
+	if (!str_len)
+		return;
+
+	len = strlen(buf);
+	if (len >= size - 1)
+		return;
+	if (str_len >= size - len - 1)
+		return;
+
+	buf[len] = sep;
+	strscpy(buf + len + 1, str, size - len - 1);
 }
 
 typedef bool (*cond_update_fn_t)(struct trace_array *tr, void *cond_data);

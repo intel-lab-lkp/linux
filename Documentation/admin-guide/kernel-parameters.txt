@@ -1793,13 +1793,15 @@ Kernel parameters
 			tracer at boot up. function-list is a comma-separated
 			list of functions. This list can be changed at run
 			time by the set_ftrace_filter file in the debugfs
-			tracing directory.
+			tracing directory. Repeated instances append more
+			functions to the same list.
 
 	ftrace_notrace=[function-list]
 			[FTRACE] Do not trace the functions specified in
 			function-list. This list can be changed at run time
 			by the set_ftrace_notrace file in the debugfs
-			tracing directory.
+			tracing directory. Repeated instances append more
+			functions to the same list.
 
 	ftrace_graph_filter=[function-list]
 			[FTRACE] Limit the top level callers functions traced
@@ -1807,12 +1809,16 @@ Kernel parameters
 			function-list is a comma-separated list of functions
 			that can be changed at run time by the
 			set_graph_function file in the debugfs tracing directory.
+			Repeated instances append more functions to the same
+			list.
 
 	ftrace_graph_notrace=[function-list]
 			[FTRACE] Do not trace from the functions specified in
 			function-list.  This list is a comma-separated list of
 			functions that can be changed at run time by the
 			set_graph_notrace file in the debugfs tracing directory.
+			Repeated instances append more functions to the same
+			list.
 
 	ftrace_graph_max_depth=<uint>
 			[FTRACE] Used with the function graph tracer. This is
@@ -3031,6 +3037,8 @@ Kernel parameters
 			The probe-list is a semicolon delimited list of probe
 			definitions. Each definition is same as kprobe_events
 			interface, but the parameters are comma delimited.
+			Repeated instances append more probe definitions to
+			the same boot-time list.
 			For example, to add a kprobe event on vfs_read with
 			arg1 and arg2, add to the command line;
 
@@ -7710,6 +7718,9 @@ Kernel parameters
 
 			    /sys/kernel/tracing/trace_options
 
+			Repeated instances append more options to the same
+			boot-time list.
+
 			For example, to enable stacktrace option (to dump the
 			stack trace of each event), add to the command line:
 
@@ -7721,7 +7732,8 @@ Kernel parameters
 	trace_trigger=[trigger-list]
 			[FTRACE] Add an event trigger on specific events.
 			Set a trigger on top of a specific event, with an optional
-			filter.
+			filter. Repeated instances append more triggers to
+			the same boot-time list.
 
 			The format is "trace_trigger=<event>.<trigger>[ if <filter>],..."
 			Where more than one trigger may be specified that are comma delimited.
