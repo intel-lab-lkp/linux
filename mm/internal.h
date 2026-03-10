@@ -395,6 +395,32 @@ unsigned int folio_pte_batch(struct folio *folio, pte_t *ptep, pte_t pte,
 		unsigned int max_nr);
 
 /**
+ * page_anon_exclusive_sub_batch - Determine length of consecutive exclusive
+ * or maybe shared pages
+ * @start_idx: Starting index of the page array to scan from
+ * @max_len: Maximum length to look at
+ * @first_page: First page of the page array
+ * @expected_anon_exclusive: Whether to look for exclusive or !exclusive pages
+ *
+ * Determines length of consecutive ptes, pointing to pages being the same
+ * w.r.t the PageAnonExclusive bit.
+ *
+ * Context: The ptes point to consecutive pages of the same large folio. The
+ * ptes belong to the same PMD and VMA.
+ */
+static inline int page_anon_exclusive_sub_batch(int start_idx, int max_len,
+		struct page *first_page, bool expected_anon_exclusive)
+{
+	int idx;
+
+	for (idx = start_idx + 1; idx < start_idx + max_len; ++idx) {
+		if (expected_anon_exclusive != PageAnonExclusive(first_page + idx))
+			break;
+	}
+	return idx - start_idx;
+}
+
+/**
  * pte_move_swp_offset - Move the swap entry offset field of a swap pte
  *	 forward or backward by delta
  * @pte: The initial pte state; must be a swap entry
