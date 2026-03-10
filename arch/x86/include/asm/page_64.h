@@ -7,6 +7,7 @@
 #ifndef __ASSEMBLER__
 #include <asm/cpufeatures.h>
 #include <asm/alternative.h>
+#include <asm/kasan.h>
 
 #include <linux/kmsan-checks.h>
 #include <linux/mmdebug.h>
@@ -20,9 +21,15 @@ extern unsigned long vmalloc_base;
 extern unsigned long vmemmap_base;
 extern unsigned long direct_map_physmem_end;
 
+static __always_inline unsigned long __phys_addr_kernel_start(unsigned long x)
+{
+	x = __tag_reset(x);
+	return x - __START_KERNEL_map;
+}
+
 static __always_inline unsigned long __phys_addr_nodebug(unsigned long x)
 {
-	unsigned long y = x - __START_KERNEL_map;
+	unsigned long y = __phys_addr_kernel_start(x);
 
 	/* use the carry flag to determine if x was < __START_KERNEL_map */
 	x = y + ((x > y) ? phys_base : (__START_KERNEL_map - PAGE_OFFSET));
@@ -38,7 +45,7 @@ extern unsigned long __phys_addr(unsigned long);
 
 static inline unsigned long __phys_addr_symbol(unsigned long x)
 {
-	unsigned long y = x - __START_KERNEL_map;
+	unsigned long y = __phys_addr_kernel_start(x);
 
 	/* only check upper bounds since lower bounds will trigger carry */
 	VIRTUAL_BUG_ON(y >= KERNEL_IMAGE_SIZE);
