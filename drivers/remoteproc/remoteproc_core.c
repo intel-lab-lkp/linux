@@ -2286,7 +2286,10 @@ int rproc_add(struct rproc *rproc)
 {
 	struct device *dev = &rproc->dev;
 	int ret;
+	bool rproc_recovery_save;
 
+	rproc_recovery_save  = rproc->recovery_disabled;
+	rproc->recovery_disabled = true;
 	ret = rproc_validate(rproc);
 	if (ret < 0)
 		return ret;
@@ -2319,6 +2322,7 @@ int rproc_add(struct rproc *rproc)
 	list_add_rcu(&rproc->node, &rproc_list);
 	mutex_unlock(&rproc_list_mutex);
 
+	rproc->recovery_disabled = rproc_recovery_save;
 	return 0;
 
 rproc_remove_dev:
