@@ -712,9 +712,13 @@ static __always_inline int __folio_try_share_anon_rmap(struct folio *folio,
 	VM_WARN_ON_FOLIO(!PageAnonExclusive(page), folio);
 	__folio_rmap_sanity_checks(folio, page, nr_pages, level);
 
+	/* We only clear anon-exclusive from head page of PMD folio */
+	if (level == PGTABLE_LEVEL_PMD)
+		nr_pages = 1;
+
 	/* device private folios cannot get pinned via GUP. */
 	if (unlikely(folio_is_device_private(folio))) {
-		ClearPageAnonExclusive(page);
+		ClearPagesAnonExclusive(page, nr_pages);
 		return 0;
 	}
 
@@ -766,7 +770,7 @@ static __always_inline int __folio_try_share_anon_rmap(struct folio *folio,
 
 	if (unlikely(folio_maybe_dma_pinned(folio)))
 		return -EBUSY;
-	ClearPageAnonExclusive(page);
+	ClearPagesAnonExclusive(page, nr_pages);
 
 	/*
 	 * This is conceptually a smp_wmb() paired with the smp_rmb() in
@@ -802,6 +806,26 @@ static inline int folio_try_share_anon_rmap_pte(struct folio *folio,
 		struct page *page)
 {
 	return __folio_try_share_anon_rmap(folio, page, 1, PGTABLE_LEVEL_PTE);
+}
+
+/**
+ * folio_try_share_anon_rmap_ptes - try marking exclusive anonymous pages
+ *				    mapped by PTEs possibly shared to prepare
+ *				   for KSM or temporary unmapping
+ * @folio:	The folio to share a mapping of
+ * @page:	The first mapped exclusive page of the batch
+ * @nr_pages:	The number of pages to share (batch size)
+ *
+ * See folio_try_share_anon_rmap_pte for full description.
+ *
+ * Context: The caller needs to hold the page table lock and has to have the
+ * page table entries cleared/invalidated. Those PTEs used to map consecutive
+ * pages of the folio passed here. The PTEs are all in the same PMD and VMA.
+ */
+static inline int folio_try_share_anon_rmap_ptes(struct folio *folio,
+		struct page *page, unsigned int nr)
+{
+	return __folio_try_share_anon_rmap(folio, page, nr, PGTABLE_LEVEL_PTE);
 }
 
 /**

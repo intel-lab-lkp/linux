@@ -1178,6 +1178,17 @@ static __always_inline void __ClearPageAnonExclusive(struct page *page)
 	__clear_bit(PG_anon_exclusive, &PF_ANY(page, 1)->flags.f);
 }
 
+static __always_inline void ClearPagesAnonExclusive(struct page *page,
+		unsigned int nr)
+{
+	for (;;) {
+		ClearPageAnonExclusive(page);
+		if (--nr == 0)
+			break;
+		++page;
+	}
+}
+
 #ifdef CONFIG_MMU
 #define __PG_MLOCKED		(1UL << PG_mlocked)
 #else
