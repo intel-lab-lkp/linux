@@ -651,7 +651,7 @@ static void trf7970a_send_upstream(struct trf7970a *trf)
 	dev_kfree_skb_any(trf->tx_skb);
 	trf->tx_skb = NULL;
 
-	if (trf->rx_skb && !IS_ERR(trf->rx_skb) && !trf->aborting)
+	if (!IS_ERR_OR_NULL(trf->rx_skb) && !trf->aborting)
 		print_hex_dump_debug("trf7970a rx data: ", DUMP_PREFIX_NONE,
 				     16, 1, trf->rx_skb->data, trf->rx_skb->len,
 				     false);
