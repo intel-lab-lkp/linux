@@ -12090,6 +12090,17 @@ ath12k_mac_op_assign_vif_chanctx(struct ieee80211_hw *hw,
 		return -EINVAL;
 	}
 
+	/* ath12k_mac_assign_vif_to_vdev() may free and reassign arvif
+	 * internally when switching radios (ar != arvif->ar). Refresh
+	 * arvif from ahvif->link[].
+	 */
+	arvif = wiphy_dereference(hw->wiphy, ahvif->link[link_id]);
+	if (!arvif) {
+		ath12k_hw_warn(ah, "failed to get arvif for link %u after vdev assignment",
+			       link_id);
+		return -ENOENT;
+	}
+
 	ab = ar->ab;
 
 	ath12k_dbg(ab, ATH12K_DBG_MAC,
