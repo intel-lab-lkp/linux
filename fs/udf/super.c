@@ -1694,7 +1694,8 @@ static struct udf_vds_record *handle_partition_descriptor(
 			return &(data->part_descs_loc[i].rec);
 	if (data->num_part_descs >= data->size_part_descs) {
 		struct part_desc_seq_scan_data *new_loc;
-		unsigned int new_size = ALIGN(partnum, PART_DESC_ALLOC_STEP);
+		unsigned int need = data->num_part_descs + 1;
+		unsigned int new_size = ALIGN(need, PART_DESC_ALLOC_STEP);
 
 		new_loc = kzalloc_objs(*new_loc, new_size);
 		if (!new_loc)
@@ -1705,6 +1706,7 @@ static struct udf_vds_record *handle_partition_descriptor(
 		data->part_descs_loc = new_loc;
 		data->size_part_descs = new_size;
 	}
+	data->part_descs_loc[data->num_part_descs].partnum = partnum;
 	return &(data->part_descs_loc[data->num_part_descs++].rec);
 }
 
