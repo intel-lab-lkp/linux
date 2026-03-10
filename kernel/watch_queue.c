@@ -445,11 +445,17 @@ static void put_watch(struct watch *watch)
 }
 
 /**
- * init_watch - Initialise a watch
+ * init_watch() - Initialise a watch subscription
  * @watch: The watch to initialise.
- * @wqueue: The queue to assign.
+ * @wqueue: The watch queue (notification pipe) to associate with the watch.
  *
- * Initialise a watch and set the watch queue.
+ * Initialise a newly allocated watch object and associate it with @wqueue.
+ * The caller must subsequently set @watch->id and @watch->info_id before
+ * calling add_watch_to_object() to subscribe the watch to a notification
+ * source.
+ *
+ * The watch queue reference is held internally; call put_watch_queue() if
+ * the watch is not successfully passed to add_watch_to_object().
  */
 void init_watch(struct watch *watch, struct watch_queue *wqueue)
 {
@@ -458,6 +464,7 @@ void init_watch(struct watch *watch, struct watch_queue *wqueue)
 	INIT_HLIST_NODE(&watch->queue_node);
 	rcu_assign_pointer(watch->queue, wqueue);
 }
+EXPORT_SYMBOL(init_watch);
 
 static int add_one_watch(struct watch *watch, struct watch_list *wlist, struct watch_queue *wqueue)
 {
