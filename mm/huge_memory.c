@@ -1311,6 +1311,23 @@ unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long add
 	if (ret)
 		return ret;
 
+	/*
+	 * If the arch requested large folios for exec memory, try to align
+	 * to the folio size as a fallback. This is much smaller than PMD_SIZE
+	 * (e.g. 2M vs 512M on arm64 64K pages), so it succeeds for mappings
+	 * that are too small for PMD alignment. Proper alignment ensures that
+	 * the hardware can coalesce PTEs (e.g. arm64 contpte) when large
+	 * folios are mapped.
+	 */
+	if (exec_folio_order()) {
+		unsigned long folio_size = PAGE_SIZE << exec_folio_order();
+
+		ret = __thp_get_unmapped_area(filp, addr, len, off, flags,
+					      folio_size, vm_flags);
+		if (ret)
+			return ret;
+	}
+
 	return mm_get_unmapped_area_vmflags(filp, addr, len, pgoff, flags,
 					    vm_flags);
 }
