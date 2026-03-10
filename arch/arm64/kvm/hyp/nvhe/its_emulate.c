@@ -22,6 +22,7 @@ struct its_priv_state {
 struct its_handler {
 	u64 offset;
 	u8 access_size;
+	u8 num_registers;
 	void (*write)(struct its_priv_state *its, u64 offset, u64 value);
 	void (*read)(struct its_priv_state *its, u64 offset, u64 *read);
 };
@@ -315,18 +316,48 @@ static void cbaser_read(struct its_priv_state *its, u64 offset, u64 *read)
 	*read = readq_relaxed(its->base + GITS_CBASER);
 }
 
-#define ITS_HANDLER(off, sz, write_cb, read_cb)	\
+static void baser_write(struct its_priv_state *its, u64 offset, u64 value)
+{
+	u64 baser, ctlr = readq_relaxed(its->base + GITS_CTLR);
+	int baser_idx;
+
+	if ((ctlr & GITS_CTLR_ENABLE) ||
+	    !(ctlr & GITS_CTLR_QUIESCENT))
+		return;
+
+	baser_idx = (offset - GITS_BASER) >> 3;
+	baser = its->shadow->tables[baser_idx].val;
+	if ((value & GITS_BASER_INDIRECT) != (baser & GITS_BASER_INDIRECT))
+		return;
+
+	value &= ~GENMASK(47, 12) | ~GENMASK(9, 0);
+	value |= (baser & GENMASK(47, 12)) | (baser & GENMASK(9, 0));
+
+	writeq_relaxed(value, its->base + offset);
+}
+
+static void baser_read(struct its_priv_state *its, u64 offset, u64 *read)
+{
+	*read = readq_relaxed(its->base + offset);
+}
+
+#define ITS_HANDLER(off, sz, num, write_cb, read_cb)	\
 {							\
 	.offset = (off),				\
 	.access_size = (sz),				\
+	.num_registers = (num),				\
 	.write = (write_cb),				\
 	.read = (read_cb),				\
 }
 
+#define ITS_REG(off, sz, write_cb, read_cb)	\
+	ITS_HANDLER(off, sz, 1, write_cb, read_cb)
+
 static struct its_handler its_handlers[] = {
-	ITS_HANDLER(GITS_CWRITER, sizeof(u64), cwriter_write, cwriter_read),
-	ITS_HANDLER(GITS_CTLR, sizeof(u64), ctlr_write, ctlr_read),
-	ITS_HANDLER(GITS_CBASER, sizeof(u64), cbaser_write, cbaser_read),
+	ITS_REG(GITS_CWRITER, sizeof(u64), cwriter_write, cwriter_read),
+	ITS_REG(GITS_CTLR, sizeof(u64), ctlr_write, ctlr_read),
+	ITS_REG(GITS_CBASER, sizeof(u64), cbaser_write, cbaser_read),
+	ITS_HANDLER(GITS_BASER, sizeof(u64), 8, baser_write, baser_read),
 	{},
 };
 
@@ -354,14 +385,16 @@ void pkvm_handle_gic_emulation(struct pkvm_protected_reg *region, u64 offset, bo
 	struct its_priv_state *its_priv = region->priv;
 	void __iomem *addr;
 	struct its_handler *reg_handler;
+	u64 end;
 
 	if (!its_priv)
 		return;
 
 	addr = its_priv->base + offset;
 	for (reg_handler = its_handlers; reg_handler->access_size; reg_handler++) {
-		if (reg_handler->offset > offset ||
-		    reg_handler->offset + reg_handler->access_size <= offset)
+		end = reg_handler->offset + reg_handler->access_size * reg_handler->num_registers;
+
+		if (reg_handler->offset > offset || end <= offset)
 			continue;
 
 		if (reg_handler->access_size & (reg_size - 1))
