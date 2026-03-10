@@ -1979,9 +1979,10 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	struct page *subpage;
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
-	unsigned long nr_pages = 1, end_addr;
+	unsigned long end_addr;
 	unsigned long pfn;
 	unsigned long hsz = 0;
+	long nr_pages = 1;
 	int ptes = 0;
 
 	/*
