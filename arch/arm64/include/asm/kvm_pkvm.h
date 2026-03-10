@@ -35,7 +35,8 @@ extern struct pkvm_protected_reg kvm_nvhe_sym(pkvm_protected_regs)[];
 extern unsigned int kvm_nvhe_sym(num_protected_reg);
 extern void kvm_nvhe_sym(pkvm_handle_forward_req)(struct pkvm_protected_reg *region, u64 offset,
 						  bool write, u64 *reg, u8 reg_size);
-
+extern void kvm_nvhe_sym(pkvm_handle_gic_emulation)(struct pkvm_protected_reg *region, u64 offset,
+						    bool write, u64 *reg, u8 reg_size);
 int pkvm_init_host_vm(struct kvm *kvm);
 int pkvm_create_hyp_vm(struct kvm *kvm);
 bool pkvm_hyp_vm_is_created(struct kvm *kvm);

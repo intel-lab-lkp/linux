@@ -6,6 +6,7 @@
 
 #include <linux/init.h>
 #include <linux/interval_tree_generic.h>
+#include <linux/irqchip/arm-gic-v3.h>
 #include <linux/kmemleak.h>
 #include <linux/kvm_host.h>
 #include <asm/kvm_mmu.h>
@@ -62,7 +63,7 @@ static int __init register_protected_regions(void)
 
 		pkvm_protected_regs[i].start_pfn = res.start >> PAGE_SHIFT;
 		pkvm_protected_regs[i].num_pages = resource_size(&res) >> PAGE_SHIFT;
-		pkvm_protected_regs[i].cb = lm_alias(&kvm_nvhe_sym(pkvm_handle_forward_req));
+		pkvm_protected_regs[i].cb = lm_alias(&kvm_nvhe_sym(pkvm_handle_gic_emulation));
 		i++;
 	}
 
@@ -286,16 +287,37 @@ static void __init _kvm_host_prot_finalize(void *arg)
 		WRITE_ONCE(*err, -EINVAL);
 }
 
+static int pkvm_init_its_emulation(phys_addr_t dev_addr, struct its_shadow_tables *shadow)
+{
+	void *its_state;
+	int ret;
+
+	its_state = (void *)__get_free_page(GFP_KERNEL_ACCOUNT);
+	if (!its_state)
+		return -ENOMEM;
+
+	ret = kvm_call_hyp_nvhe(__pkvm_init_its_emulation, dev_addr, its_state, shadow);
+	if (ret)
+		free_page((unsigned long)its_state);
+
+	return ret;
+}
+
 static int __init pkvm_drop_host_privileges(void)
 {
 	int ret = 0;
+	void *flags;
 
 	/*
 	 * Flip the static key upfront as that may no longer be possible
 	 * once the host stage 2 is installed.
 	 */
 	static_branch_enable(&kvm_protected_mode_initialized);
+
+	flags = its_start_depriviledge();
 	on_each_cpu(_kvm_host_prot_finalize, &ret, 1);
+	its_end_depriviledge(ret, flags, &pkvm_init_its_emulation);
+
 	return ret;
 }
 
