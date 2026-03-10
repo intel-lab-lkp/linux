@@ -715,7 +715,7 @@ EXPORT_SYMBOL_GPL(reset_control_bulk_acquire);
  */
 void reset_control_release(struct reset_control *rstc)
 {
-	if (!rstc || WARN_ON(IS_ERR(rstc)))
+	if (WARN_ON(IS_ERR_OR_NULL(rstc)))
 		return;
 
 	if (reset_control_is_array(rstc))
