@@ -1551,7 +1551,7 @@ static int simplify_symbols(struct module *mod, const struct load_info *info)
 		case SHN_UNDEF:
 			ksym = resolve_symbol_wait(mod, info, name);
 			/* Ok if resolved.  */
-			if (ksym && !IS_ERR(ksym)) {
+			if (!IS_ERR_OR_NULL(ksym)) {
 				sym[i].st_value = kernel_symbol_value(ksym);
 				break;
 			}
