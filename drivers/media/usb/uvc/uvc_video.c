@@ -1176,6 +1176,14 @@ static int uvc_video_decode_start(struct uvc_streaming *stream,
 		stream->sequence++;
 		if (stream->sequence)
 			uvc_video_stats_update(stream);
+
+		/*
+		 * If we have not received any data and FID flips, update the
+		 * sequence number of the buffer to tell userspace exactly
+		 * where the frame gap is.
+		 */
+		if (buf && !buf->bytesused)
+			buf->buf.sequence = stream->sequence;
 	}
 
 	uvc_video_clock_decode(stream, buf, data, len);
