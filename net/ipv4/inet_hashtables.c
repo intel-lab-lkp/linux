@@ -30,12 +30,16 @@
 #include <net/sock_reuseport.h>
 #include <net/tcp.h>
 
+static void inet_init_ehash_secret(void)
+{
+	net_get_random_sleepable_once(&inet_ehash_secret,
+				      sizeof(inet_ehash_secret));
+}
+
 u32 inet_ehashfn(const struct net *net, const __be32 laddr,
 		 const __u16 lport, const __be32 faddr,
 		 const __be16 fport)
 {
-	net_get_random_once(&inet_ehash_secret, sizeof(inet_ehash_secret));
-
 	return lport + __inet_ehashfn(laddr, 0, faddr, fport,
 				      inet_ehash_secret + net_hash_mix(net));
 }
@@ -793,6 +797,13 @@ int inet_hash(struct sock *sk)
 		local_bh_enable();
 		return 0;
 	}
+
+#if IS_ENABLED(CONFIG_IPV6)
+	if (sk->sk_family == AF_INET6)
+		inet6_init_ehash_secret();
+#endif
+	inet_init_ehash_secret();
+
 	WARN_ON(!sk_unhashed(sk));
 	ilb2 = inet_lhash2_bucket_sk(hashinfo, sk);
 
@@ -1239,6 +1250,8 @@ int inet_hash_connect(struct inet_timewait_death_row *death_row,
 	if (!inet_sk(sk)->inet_num)
 		port_offset = inet_sk_port_offset(sk);
 
+	inet_init_ehash_secret();
+
 	hash_port0 = inet_ehashfn(net, inet->inet_rcv_saddr, 0,
 				  inet->inet_daddr, inet->inet_dport);
 
@@ -1246,22 +1259,13 @@ int inet_hash_connect(struct inet_timewait_death_row *death_row,
 				   __inet_check_established);
 }
 
-static void init_hashinfo_lhash2(struct inet_hashinfo *h)
-{
-	int i;
-
-	for (i = 0; i <= h->lhash2_mask; i++) {
-		spin_lock_init(&h->lhash2[i].lock);
-		INIT_HLIST_NULLS_HEAD(&h->lhash2[i].nulls_head,
-				      i + LISTENING_NULLS_BASE);
-	}
-}
-
 void __init inet_hashinfo2_init(struct inet_hashinfo *h, const char *name,
 				unsigned long numentries, int scale,
 				unsigned long low_limit,
 				unsigned long high_limit)
 {
+	unsigned int i;
+
 	h->lhash2 = alloc_large_system_hash(name,
 					    sizeof(*h->lhash2),
 					    numentries,
@@ -1271,7 +1275,12 @@ void __init inet_hashinfo2_init(struct inet_hashinfo *h, const char *name,
 					    &h->lhash2_mask,
 					    low_limit,
 					    high_limit);
-	init_hashinfo_lhash2(h);
+
+	for (i = 0; i <= h->lhash2_mask; i++) {
+		spin_lock_init(&h->lhash2[i].lock);
+		INIT_HLIST_NULLS_HEAD(&h->lhash2[i].nulls_head,
+				      i + LISTENING_NULLS_BASE);
+	}
 
 	/* this one is used for source ports of outgoing connections */
 	table_perturb = alloc_large_system_hash("Table-perturb",
@@ -1280,20 +1289,6 @@ void __init inet_hashinfo2_init(struct inet_hashinfo *h, const char *name,
 						0, 0, NULL, NULL,
 						INET_TABLE_PERTURB_SIZE,
 						INET_TABLE_PERTURB_SIZE);
-}
-
-int inet_hashinfo2_init_mod(struct inet_hashinfo *h)
-{
-	h->lhash2 = kmalloc_objs(*h->lhash2, INET_LHTABLE_SIZE);
-	if (!h->lhash2)
-		return -ENOMEM;
-
-	h->lhash2_mask = INET_LHTABLE_SIZE - 1;
-	/* INET_LHTABLE_SIZE must be a power of 2 */
-	BUG_ON(INET_LHTABLE_SIZE & h->lhash2_mask);
-
-	init_hashinfo_lhash2(h);
-	return 0;
 }
 
 int inet_ehash_locks_alloc(struct inet_hashinfo *hashinfo)
