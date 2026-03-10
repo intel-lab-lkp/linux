@@ -638,11 +638,6 @@ again:
 			}
 			rcu_read_unlock();
 
-			/* Call non-slab shrinkers even though kmem is disabled */
-			if (!memcg_kmem_online() &&
-			    !(shrinker->flags & SHRINKER_NONSLAB))
-				continue;
-
 			ret = do_shrink_slab(&sc, shrinker, priority);
 			if (ret == SHRINK_EMPTY) {
 				clear_bit(offset, unit->map);
