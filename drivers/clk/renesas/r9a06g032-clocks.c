@@ -705,6 +705,38 @@ int r9a06g032_sysctrl_set_dmamux(u32 mask, u32 val)
 }
 EXPORT_SYMBOL_GPL(r9a06g032_sysctrl_set_dmamux);
 
+int r9a06g032_sysctrl_enable_rst(enum r9a06g032_sysctrl_rst_src rst_src)
+{
+	unsigned long flags;
+	u32 rsten;
+	u32 val;
+
+	switch (rst_src) {
+	case R9A06G032_RST_WATCHDOG_CA7_0:
+		val = R9A06G032_SYSCTRL_WDA7RST_0;
+		break;
+
+	case R9A06G032_RST_WATCHDOG_CA7_1:
+		val = R9A06G032_SYSCTRL_WDA7RST_1;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (!sysctrl_priv)
+		return -EPROBE_DEFER;
+
+	spin_lock_irqsave(&sysctrl_priv->lock, flags);
+
+	rsten = readl(sysctrl_priv->reg + R9A06G032_SYSCTRL_RSTEN);
+	writel(rsten | val, sysctrl_priv->reg + R9A06G032_SYSCTRL_RSTEN);
+
+	spin_unlock_irqrestore(&sysctrl_priv->lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(r9a06g032_sysctrl_enable_rst);
+
 static void clk_rdesc_set(struct r9a06g032_priv *clocks,
 			  struct regbit rb, unsigned int on)
 {
