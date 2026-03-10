@@ -755,7 +755,7 @@ static void vrf_rt6_release(struct net_device *dev, struct net_vrf *vrf)
 	struct dst_entry *dst;
 
 	RCU_INIT_POINTER(vrf->rt6, NULL);
-	synchronize_rcu();
+	synchronize_net();
 
 	/* move dev in dst's to loopback so this VRF device can be deleted
 	 * - based on dst_ifdown
@@ -1002,7 +1002,7 @@ static void vrf_rtable_release(struct net_device *dev, struct net_vrf *vrf)
 	struct dst_entry *dst;
 
 	RCU_INIT_POINTER(vrf->rth, NULL);
-	synchronize_rcu();
+	synchronize_net();
 
 	/* move dev in dst's to loopback so this VRF device can be deleted
 	 * - based on dst_ifdown
