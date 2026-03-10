@@ -110,7 +110,7 @@ struct tlb_state {
 	/*
 	 * Active LAM mode.
 	 *
-	 * X86_CR3_LAM_U57/U48 shifted right by X86_CR3_LAM_U57_BIT or 0 if LAM
+	 * X86_CR3_LAM_U57 shifted right by X86_CR3_LAM_U57_BIT or 0 if LAM
 	 * disabled.
 	 */
 	u8 lam;
