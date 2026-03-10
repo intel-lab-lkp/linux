@@ -29,6 +29,7 @@
 #include <linux/utsname.h>
 #include <linux/efi.h>
 
+#include <asm/acpi.h>
 #include <asm/alternative.h>
 #include <asm/cmdline.h>
 #include <asm/cpuid/api.h>
@@ -57,6 +58,7 @@
 #include <asm/asm.h>
 #include <asm/bugs.h>
 #include <asm/cpu.h>
+#include <asm/smp.h>
 #include <asm/mce.h>
 #include <asm/msr.h>
 #include <asm/cacheinfo.h>
@@ -2635,3 +2637,13 @@ void __init arch_cpu_finalize_init(void)
 	 */
 	mem_encrypt_init();
 }
+
+u32 acpi_get_cpu_acpi_id(unsigned int cpu)
+{
+#ifndef CONFIG_SMP
+	return 0;
+#else
+	return per_cpu(x86_cpu_to_acpiid, cpu);
+#endif
+}
+EXPORT_SYMBOL_GPL(acpi_get_cpu_acpi_id);
