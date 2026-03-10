@@ -686,14 +686,15 @@ int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 		return ret;
 
 	/*
-	 * IOVA mapping not available. Check if MR registration provides
-	 * better performance than multiple SGE entries.
+	 * IOVA not available; map each bvec individually. Do not
+	 * check max_sgl_rd here: nr_bvec is a raw page count that
+	 * overstates DMA entry demand and exhausts the MR pool.
+	 *
+	 * TODO: A bulk DMA mapping API for bvecs analogous to
+	 * dma_map_sgtable() would provide a proper post-DMA-
+	 * coalescing segment count here, enabling the map_wrs
+	 * path in more cases.
 	 */
-	if (rdma_rw_io_needs_mr(dev, port_num, dir, nr_bvec))
-		return rdma_rw_init_mr_wrs_bvec(ctx, qp, port_num, bvecs,
-						nr_bvec, &iter, remote_addr,
-						rkey, dir);
-
 	return rdma_rw_init_map_wrs_bvec(ctx, qp, bvecs, nr_bvec, &iter,
 			remote_addr, rkey, dir);
 }
