@@ -97,7 +97,7 @@ void __iomem __ref *ioremap_prot(phys_addr_t phys_addr, size_t size,
 	 */
 	mapped = pmb_remap_caller(phys_addr, size, pgprot,
 			__builtin_return_address(0));
-	if (mapped && !IS_ERR(mapped))
+	if (!IS_ERR_OR_NULL(mapped))
 		return mapped;
 
 	return generic_ioremap_prot(phys_addr, size, pgprot);
