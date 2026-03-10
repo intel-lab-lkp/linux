@@ -291,6 +291,30 @@ static void ctlr_write(struct its_priv_state *its, u64 offset, u64 value)
 	writeq_relaxed(value, its->base + GITS_CTLR);
 }
 
+static void cbaser_write(struct its_priv_state *its, u64 offset, u64 value)
+{
+	u64 ctlr = readq_relaxed(its->base + GITS_CTLR);
+	int num_pages;
+
+	if ((ctlr & GITS_CTLR_ENABLE) ||
+	    !(ctlr & GITS_CTLR_QUIESCENT))
+		return;
+
+	num_pages = its->shadow->cmdq_len / SZ_4K;
+	value &= ~GENMASK(7, 0) | ~GENMASK_ULL(51, 12);
+
+	value |= (num_pages - 1) & GENMASK(7, 0);
+	value |= __hyp_pa(its->cmd_hyp_base) & GENMASK_ULL(51, 12);
+
+	its->cmd_host_cwriter = its->cmd_host_base;
+	writeq_relaxed(value, its->base + GITS_CBASER);
+}
+
+static void cbaser_read(struct its_priv_state *its, u64 offset, u64 *read)
+{
+	*read = readq_relaxed(its->base + GITS_CBASER);
+}
+
 #define ITS_HANDLER(off, sz, write_cb, read_cb)	\
 {							\
 	.offset = (off),				\
@@ -302,6 +326,7 @@ static void ctlr_write(struct its_priv_state *its, u64 offset, u64 value)
 static struct its_handler its_handlers[] = {
 	ITS_HANDLER(GITS_CWRITER, sizeof(u64), cwriter_write, cwriter_read),
 	ITS_HANDLER(GITS_CTLR, sizeof(u64), ctlr_write, ctlr_read),
+	ITS_HANDLER(GITS_CBASER, sizeof(u64), cbaser_write, cbaser_read),
 	{},
 };
 
