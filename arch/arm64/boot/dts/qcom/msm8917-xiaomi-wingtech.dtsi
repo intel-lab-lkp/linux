@@ -13,12 +13,9 @@
 /delete-node/ &qseecom_mem;
 
 / {
-	model = "Xiaomi Redmi 5A (riva)";
-	compatible = "xiaomi,riva", "qcom,msm8917";
 	chassis-type = "handset";
 
 	qcom,msm-id = <QCOM_ID_MSM8917 0>;
-	qcom,board-id = <0x1000b 1>, <0x1000b 2>;
 
 	pwm_backlight: backlight {
 		compatible = "pwm-backlight";
@@ -26,17 +23,6 @@
 		brightness-levels = <0 255>;
 		num-interpolated-steps = <255>;
 		default-brightness-level = <128>;
-	};
-
-	battery: battery {
-		compatible = "simple-battery";
-		charge-full-design-microamp-hours = <3000000>;
-		energy-full-design-microwatt-hours = <11500000>;
-		constant-charge-current-max-microamp = <1000000>;
-		constant-charge-voltage-max-microvolt = <4400000>;
-		precharge-current-microamp = <256000>;
-		charge-term-current-microamp = <60000>;
-		voltage-min-design-microvolt = <3400000>;
 	};
 
 	chosen {
@@ -104,7 +90,7 @@
 &blsp1_i2c3 {
 	status = "okay";
 
-	touchscreen@38 {
+	edt_ft5306: touchscreen@38 {
 		compatible = "edt,edt-ft5306";
 		reg = <0x38>;
 		interrupts-extended = <&tlmm 65 IRQ_TYPE_LEVEL_LOW>;
@@ -115,27 +101,8 @@
 		iovcc-supply = <&pm8937_l5>;
 		touchscreen-size-x = <720>;
 		touchscreen-size-y = <1280>;
-	};
-};
 
-&blsp2_i2c1 {
-	status = "okay";
-
-	bq27426@55 {
-		compatible = "ti,bq27426";
-		reg = <0x55>;
-		monitored-battery = <&battery>;
-	};
-
-	bq25601@6b {
-		compatible = "ti,bq25601";
-		reg = <0x6b>;
-		interrupts-extended = <&tlmm 61 IRQ_TYPE_EDGE_FALLING>;
-		pinctrl-0 = <&bq25601_int_default>;
-		pinctrl-names = "default";
-		input-voltage-limit-microvolt = <4400000>;
-		input-current-limit-microamp = <1000000>;
-		monitored-battery = <&battery>;
+		status = "disabled";
 	};
 };
 
@@ -280,7 +247,6 @@
 			regulator-max-microvolt = <1200000>;
 		};
 	};
-
 };
 
 &sdhc_1 {
@@ -306,13 +272,6 @@
 };
 
 &tlmm {
-	bq25601_int_default: bq25601-int-default-state {
-		pins = "gpio61";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-up;
-	};
-
 	gpio_keys_default: gpio-keys-default-state {
 		pins = "gpio91";
 		function = "gpio";
