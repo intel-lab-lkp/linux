@@ -923,7 +923,7 @@ vfio_ioctl_device_feature_mig_device_state(struct vfio_device *device,
 
 	/* Handle the VFIO_DEVICE_FEATURE_SET */
 	filp = device->mig_ops->migration_set_state(device, mig.device_state);
-	if (IS_ERR(filp) || !filp)
+	if (IS_ERR_OR_NULL(filp))
 		goto out_copy;
 
 	return vfio_ioct_mig_return_fd(filp, arg, &mig);
