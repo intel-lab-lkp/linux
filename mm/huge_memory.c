@@ -354,10 +354,10 @@ static bool set_global_enabled_mode(enum global_enabled_mode mode)
 	for (m = 0; m < ARRAY_SIZE(thp_flags); m++) {
 		if (m == mode)
 			changed |= !__test_and_set_bit(thp_flags[m],
-						       &transparent_hugepage_flags);
+						&transparent_hugepage_flags);
 		else
 			changed |= __test_and_clear_bit(thp_flags[m],
-						        &transparent_hugepage_flags);
+						&transparent_hugepage_flags);
 	}
 
 	return changed;
