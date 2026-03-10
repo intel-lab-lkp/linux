@@ -165,9 +165,6 @@ static int try_start_dim_transfer(struct hdm_channel *hdm_ch)
 	unsigned long flags;
 	struct dim_ch_state st;
 
-	BUG_ON(!hdm_ch);
-	BUG_ON(!hdm_ch->is_initialized);
-
 	spin_lock_irqsave(&dim_lock, flags);
 	if (list_empty(head)) {
 		spin_unlock_irqrestore(&dim_lock, flags);
@@ -187,7 +184,6 @@ static int try_start_dim_transfer(struct hdm_channel *hdm_ch)
 		return -EAGAIN;
 	}
 
-	BUG_ON(mbo->bus_address == 0);
 	if (!dim_enqueue_buffer(&hdm_ch->ch, mbo->bus_address, buf_size)) {
 		list_del(head->next);
 		spin_unlock_irqrestore(&dim_lock, flags);
@@ -267,9 +263,6 @@ static void service_done_flag(struct dim2_hdm *dev, int ch_idx)
 	int done_buffers;
 	unsigned long flags;
 	u8 *data;
-
-	BUG_ON(!hdm_ch);
-	BUG_ON(!hdm_ch->is_initialized);
 
 	spin_lock_irqsave(&dim_lock, flags);
 
@@ -454,8 +447,6 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 	int const ch_addr = ch_idx * 2 + 2;
 	struct hdm_channel *const hdm_ch = dev->hch + ch_idx;
 
-	BUG_ON(ch_idx < 0 || ch_idx >= DMA_CHANNELS);
-
 	if (hdm_ch->is_initialized)
 		return -EPERM;
 
@@ -566,8 +557,6 @@ static int enqueue(struct most_interface *most_iface, int ch_idx,
 	struct hdm_channel *hdm_ch = dev->hch + ch_idx;
 	unsigned long flags;
 
-	BUG_ON(ch_idx < 0 || ch_idx >= DMA_CHANNELS);
-
 	if (!hdm_ch->is_initialized)
 		return -EPERM;
 
@@ -641,8 +630,6 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
 	unsigned long flags;
 	u8 hal_ret;
 	int ret = 0;
-
-	BUG_ON(ch_idx < 0 || ch_idx >= DMA_CHANNELS);
 
 	if (!hdm_ch->is_initialized)
 		return -EPERM;
