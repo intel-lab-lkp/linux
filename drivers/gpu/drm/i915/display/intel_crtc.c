@@ -638,7 +638,7 @@ static void dbg_vblank_evade(struct intel_crtc *crtc, ktime_t end)
 static void dbg_vblank_evade(struct intel_crtc *crtc, ktime_t end) {}
 #endif
 
-void intel_crtc_arm_vblank_event(struct intel_crtc_state *crtc_state)
+static void intel_crtc_arm_vblank_event(struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	unsigned long irqflags;
