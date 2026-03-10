@@ -524,12 +524,6 @@ static void add_victim_entry(struct f2fs_sb_info *sbi,
 	struct sit_info *sit_i = SIT_I(sbi);
 	unsigned long long mtime = 0;
 
-	if (unlikely(is_sbi_flag_set(sbi, SBI_CP_DISABLED))) {
-		if (p->gc_mode == GC_AT &&
-			get_valid_blocks(sbi, segno, true) == 0)
-			return;
-	}
-
 	mtime = f2fs_get_section_mtime(sbi, segno);
 	f2fs_bug_on(sbi, mtime == INVALID_MTIME);
 
@@ -890,6 +884,9 @@ retry:
 		secno = GET_SEC_FROM_SEG(sbi, segno);
 
 		if (sec_usage_check(sbi, secno))
+			goto next;
+
+		if (!get_valid_blocks(sbi, segno, true))
 			goto next;
 
 		/* Don't touch checkpointed data */
