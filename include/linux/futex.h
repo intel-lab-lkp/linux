@@ -82,6 +82,10 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 	      u32 __user *uaddr2, u32 val2, u32 val3);
 int futex_hash_prctl(unsigned long arg2, unsigned long arg3, unsigned long arg4);
 
+#ifdef CONFIG_FTRACE_SYSCALLS
+void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args, u32 *ptr);
+#endif
+
 #ifdef CONFIG_FUTEX_PRIVATE_HASH
 int futex_hash_allocate_default(void);
 void futex_hash_free(struct mm_struct *mm);
@@ -114,7 +118,8 @@ static inline int futex_hash_allocate_default(void)
 }
 static inline int futex_hash_free(struct mm_struct *mm) { return 0; }
 static inline int futex_mm_init(struct mm_struct *mm) { return 0; }
-
+static inline void futex_print_syscall(struct seq_buf *s, int nr_args,
+				       unsigned long *args, u32 *ptr) { }
 #endif
 
 #endif

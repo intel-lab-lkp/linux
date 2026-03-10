@@ -6,10 +6,12 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/module.h>	/* for MODULE_NAME_LEN via KSYM_SYMBOL_LEN */
+#include <linux/futex.h>
 #include <linux/ftrace.h>
 #include <linux/perf_event.h>
 #include <linux/xarray.h>
 #include <asm/syscall.h>
+
 
 #include "trace_output.h"
 #include "trace.h"
@@ -238,6 +240,27 @@ end:
 }
 
 static enum print_line_t
+sys_enter_futex_print(struct syscall_trace_enter *trace, struct syscall_metadata *entry,
+		      struct trace_seq *s, struct trace_event *event, int ent_size)
+{
+	void *end = (void *)trace + ent_size;
+	void *ptr;
+
+	/* Set ptr to the user space copied area */
+	ptr = (void *)trace->args + sizeof(unsigned long) * entry->nb_args;
+	if (ptr + 4 > end)
+		ptr = NULL;
+
+	trace_seq_printf(s, "%s(", entry->name);
+
+	futex_print_syscall(&s->seq, entry->nb_args, trace->args, ptr);
+
+	trace_seq_puts(s, ")\n");
+
+	return trace_handle_return(s);
+}
+
+static enum print_line_t
 print_syscall_enter(struct trace_iterator *iter, int flags,
 		    struct trace_event *event)
 {
@@ -266,6 +289,10 @@ print_syscall_enter(struct trace_iterator *iter, int flags,
 	case __NR_openat:
 		if (!tr || !(tr->trace_flags & TRACE_ITER(VERBOSE)))
 			return sys_enter_openat_print(trace, entry, s, event);
+		break;
+	case __NR_futex:
+		if (!tr || !(tr->trace_flags & TRACE_ITER(VERBOSE)))
+			return sys_enter_futex_print(trace, entry, s, event, iter->ent_size);
 		break;
 	default:
 		break;
@@ -438,6 +465,69 @@ sys_enter_openat_print_fmt(struct syscall_metadata *entry, char *buf, int len)
 }
 
 static int __init
+sys_enter_futex_print_fmt(struct syscall_metadata *entry, char *buf, int len)
+{
+	int pos = 0;
+
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"\"uaddr: 0x%%lx (0x%%lx) cmd=%%s%%s%%s");
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"  val: 0x%%x timeout/val2: 0x%%llx");
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" uaddr2: 0x%%lx val3: 0x%%x\", ");
+
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" REC->uaddr,");
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" REC->__value,");
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"  __print_symbolic(REC->op & 0x%x, ", FUTEX_CMD_MASK);
+
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_WAIT\"}, ", FUTEX_WAIT);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_WAKE\"}, ", FUTEX_WAKE);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_FD\"}, ", FUTEX_FD);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_REQUEUE\"}, ", FUTEX_REQUEUE);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_CMP_REQUEUE\"}, ", FUTEX_CMP_REQUEUE);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_WAKE_OP\"}, ", FUTEX_WAKE_OP);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_LOCK_PI\"}, ", FUTEX_LOCK_PI);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_UNLOCK_PI\"}, ", FUTEX_UNLOCK_PI);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_TRYLOCK_PI\"}, ", FUTEX_TRYLOCK_PI);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_WAIT_BITSET\"}, ", FUTEX_WAIT_BITSET);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_WAKE_BITSET\"}, ", FUTEX_WAKE_BITSET);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_WAIT_REQUEUE_PI\"}, ", FUTEX_WAIT_REQUEUE_PI);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_CMP_REQUEUE_PI\"}, ", FUTEX_CMP_REQUEUE_PI);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			"{%d, \"FUTEX_LOCK_PI2\"}),", FUTEX_LOCK_PI2);
+
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" (REC->op & %d) ? \"|FUTEX_PRIVATE_FLAG\" : \"\",",
+			FUTEX_PRIVATE_FLAG);
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" (REC->op & %d) ? \"|FUTEX_CLOCK_REALTIME\" : \"\",",
+			FUTEX_CLOCK_REALTIME);
+
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" REC->val, REC->utime,");
+
+	pos += snprintf(buf + pos, LEN_OR_ZERO,
+			" REC->uaddr, REC->val3");
+	return pos;
+}
+
+static int __init
 __set_enter_print_fmt(struct syscall_metadata *entry, char *buf, int len)
 {
 	bool is_string = entry->user_arg_is_str;
@@ -447,6 +537,8 @@ __set_enter_print_fmt(struct syscall_metadata *entry, char *buf, int len)
 	switch (entry->syscall_nr) {
 	case __NR_openat:
 		return sys_enter_openat_print_fmt(entry, buf, len);
+	case __NR_futex:
+		return sys_enter_futex_print_fmt(entry, buf, len);
 	default:
 		break;
 	}
@@ -523,6 +615,21 @@ static void __init free_syscall_print_fmt(struct trace_event_call *call)
 		kfree(call->print_fmt);
 }
 
+static int __init futex_fields(struct trace_event_call *call, int offset)
+{
+	char *arg;
+	int ret;
+
+	arg = kstrdup("__value", GFP_KERNEL);
+	if (WARN_ON_ONCE(!arg))
+		return -ENOMEM;
+	ret = trace_define_field(call, "u32", arg, offset, sizeof(int), 0,
+				 FILTER_OTHER);
+	if (ret)
+		kfree(arg);
+	return ret;
+}
+
 static int __init syscall_enter_define_fields(struct trace_event_call *call)
 {
 	struct syscall_trace_enter trace;
@@ -543,6 +650,9 @@ static int __init syscall_enter_define_fields(struct trace_event_call *call)
 			break;
 		offset += sizeof(unsigned long);
 	}
+
+	if (!ret && meta->syscall_nr == __NR_futex)
+		return futex_fields(call, offset);
 
 	if (ret || !meta->user_mask)
 		return ret;
@@ -687,6 +797,48 @@ static int syscall_copy_user_array(char *buf, const char __user *ptr,
 		args->read[i] = ret ? -1 : size;
 	}
 	return 0;
+}
+
+static int
+syscall_get_futex(unsigned long *args, char **buffer, int *size, int buf_size)
+{
+	struct syscall_user_buffer *sbuf;
+	const char __user *ptr;
+	char *buf;
+
+	/* buf_size of zero means user doesn't want user space read */
+	if (!buf_size)
+		return -1;
+
+	/* If the syscall_buffer is NULL, tracing is being shutdown */
+	sbuf = READ_ONCE(syscall_buffer);
+	if (!sbuf)
+		return -1;
+
+	ptr = (char __user *)args[0];
+
+	*buffer = trace_user_fault_read(&sbuf->buf, ptr, 4, NULL, NULL);
+	if (!*buffer)
+		return -1;
+
+	/* Add room for the value */
+	*size += 4;
+
+	buf = *buffer;
+
+	return 0;
+}
+
+static void syscall_put_futex(struct syscall_metadata *sys_data,
+			      struct syscall_trace_enter *entry,
+			      char *buffer)
+{
+	u32 *ptr;
+
+	/* Place the futex key into the storage */
+	ptr = (void *)entry->args + sizeof(unsigned long) * sys_data->nb_args;
+
+	*ptr = *(u32 *)buffer;
 }
 
 static char *sys_fault_user(unsigned int buf_size,
@@ -905,6 +1057,9 @@ static void ftrace_syscall_enter(void *data, struct pt_regs *regs, long id)
 		if (syscall_get_data(sys_data, args, &user_ptr,
 				     &size, user_sizes, &uargs, tr->syscall_buf_sz) < 0)
 			return;
+	} else if (syscall_nr == __NR_futex) {
+		if (syscall_get_futex(args, &user_ptr, &size, tr->syscall_buf_sz) < 0)
+			return;
 	}
 
 	size += sizeof(*entry) + sizeof(unsigned long) * sys_data->nb_args;
@@ -920,6 +1075,9 @@ static void ftrace_syscall_enter(void *data, struct pt_regs *regs, long id)
 
 	if (mayfault)
 		syscall_put_data(sys_data, entry, user_ptr, size, user_sizes, uargs);
+
+	else if (syscall_nr == __NR_futex)
+		syscall_put_futex(sys_data, entry, user_ptr);
 
 	trace_event_buffer_commit(&fbuffer);
 }
@@ -971,14 +1129,18 @@ static int reg_event_syscall_enter(struct trace_event_file *file,
 {
 	struct syscall_metadata *sys_data = call->data;
 	struct trace_array *tr = file->tr;
+	bool enable_faults;
 	int ret = 0;
 	int num;
 
 	num = sys_data->syscall_nr;
 	if (WARN_ON_ONCE(num < 0 || num >= NR_syscalls))
 		return -ENOSYS;
+
+	enable_faults = sys_data->user_mask || num == __NR_futex;
+
 	guard(mutex)(&syscall_trace_lock);
-	if (sys_data->user_mask) {
+	if (enable_faults) {
 		ret = syscall_fault_buffer_enable();
 		if (ret < 0)
 			return ret;
@@ -986,7 +1148,7 @@ static int reg_event_syscall_enter(struct trace_event_file *file,
 	if (!tr->sys_refcount_enter) {
 		ret = register_trace_sys_enter(ftrace_syscall_enter, tr);
 		if (ret < 0) {
-			if (sys_data->user_mask)
+			if (enable_faults)
 				syscall_fault_buffer_disable();
 			return ret;
 		}
@@ -1011,7 +1173,7 @@ static void unreg_event_syscall_enter(struct trace_event_file *file,
 	WRITE_ONCE(tr->enter_syscall_files[num], NULL);
 	if (!tr->sys_refcount_enter)
 		unregister_trace_sys_enter(ftrace_syscall_enter, tr);
-	if (sys_data->user_mask)
+	if (sys_data->user_mask || num == __NR_futex)
 		syscall_fault_buffer_disable();
 }
 

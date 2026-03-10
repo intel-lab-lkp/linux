@@ -171,6 +171,18 @@ static __always_inline bool futex_cmd_has_timeout(u32 cmd)
 	return false;
 }
 
+static __always_inline bool futex_cmd_has_addr2(u32 cmd)
+{
+	switch (cmd) {
+	case FUTEX_REQUEUE:
+	case FUTEX_CMP_REQUEUE:
+	case FUTEX_WAKE_OP:
+	case FUTEX_WAIT_REQUEUE_PI:
+		return true;
+	}
+	return false;
+}
+
 static __always_inline int
 futex_init_timeout(u32 cmd, u32 op, struct timespec64 *ts, ktime_t *t)
 {
@@ -206,6 +218,83 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 
 	return do_futex(uaddr, op, val, tp, uaddr2, (unsigned long)utime, val3);
 }
+
+#ifdef CONFIG_FTRACE_SYSCALLS
+static const char * __futex_cmds[] =
+{
+	"FUTEX_WAIT", "FUTEX_WAKE", "FUTEX_FD", "FUTEX_REQUEUE",
+	"FUTEX_CMP_REQUEUE", "FUTEX_WAKE_OP", "FUTEX_LOCK_PI",
+	"FUTEX_UNLOCK_PI", "FUTEX_TRYLOCK_PI", "FUTEX_WAIT_BITSET",
+	"FUTEX_WAKE_BITSET", "FUTEX_WAIT_REQUEUE_PI", "FUTEX_CMP_REQUEUE_PI",
+	"FUTEX_LOCK_PI2",
+};
+
+void futex_print_syscall(struct seq_buf *s, int nr_args, unsigned long *args, u32 *ptr)
+{
+	unsigned int op, cmd;
+	bool done = false;
+
+	for (int i = 0; !done && i < nr_args; i++) {
+
+		if (seq_buf_has_overflowed(s))
+			break;
+
+		switch (i) {
+		case 0:
+			seq_buf_printf(s, "uaddr: 0x%lx", args[i]);
+			if (ptr) {
+				u32 val = *ptr;
+				if (val < 10)
+					seq_buf_printf(s, " (%u)", val);
+				else
+					seq_buf_printf(s, " (0x%x)", val);
+			}
+			continue;
+		case 1:
+			op = args[i];
+			cmd = op & FUTEX_CMD_MASK;
+			if (cmd <= FUTEX_LOCK_PI2)
+				seq_buf_printf(s, ", %s", __futex_cmds[cmd]);
+			else
+				seq_buf_puts(s, ", UNKNOWN");
+
+			if (op & FUTEX_PRIVATE_FLAG)
+				seq_buf_puts(s, "|FUTEX_PRIVATE_FLAG");
+			if (op & FUTEX_CLOCK_REALTIME)
+				seq_buf_puts(s, "|FUTEX_CLOCK_REALTIME");
+			continue;
+		case 3:
+			if (!futex_cmd_has_timeout(cmd)) {
+
+				if (!futex_cmd_has_addr2(cmd)) {
+					done = true;
+					continue;
+				}
+
+				seq_buf_printf(s, ", val2: 0x%x", (u32)(long)args[i]);
+				continue;
+			}
+
+			if (!args[i])
+				continue;
+
+			seq_buf_printf(s, ", timespec: 0x%lx", args[i]);
+			continue;
+		case 4:
+			if (!futex_cmd_has_addr2(cmd)) {
+				done = true;
+				continue;
+			}
+			seq_buf_printf(s, ", uaddr2: 0x%lx", args[i]);
+			continue;
+		case 5:
+			seq_buf_printf(s, ", val3: %lu", args[i]);
+			done = true;
+			continue;
+		}
+	}
+}
+#endif
 
 /**
  * futex_parse_waitv - Parse a waitv array from userspace
