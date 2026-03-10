@@ -755,8 +755,9 @@ static int hi3110_open(struct net_device *net)
 		return ret;
 
 	mutex_lock(&priv->hi3110_lock);
-	hi3110_power_enable(priv->transceiver, 1);
-
+	ret = hi3110_power_enable(priv->transceiver, 1);
+	if (ret)
+		goto out_disable;
 	priv->force_quit = 0;
 	priv->tx_skb = NULL;
 	priv->tx_busy = false;
@@ -790,6 +791,7 @@ static int hi3110_open(struct net_device *net)
 	hi3110_hw_sleep(spi);
  out_close:
 	hi3110_power_enable(priv->transceiver, 0);
+ out_disable:
 	close_candev(net);
 	mutex_unlock(&priv->hi3110_lock);
 	return ret;
