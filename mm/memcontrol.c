@@ -3175,11 +3175,20 @@ void obj_cgroup_uncharge(struct obj_cgroup *objcg, size_t size)
 	refill_obj_stock(objcg, size, true, 0, NULL, 0);
 }
 
-static inline size_t obj_full_size(struct kmem_cache *s)
+static inline size_t obj_full_size(struct kmem_cache *s, struct slab *slab)
 {
+	if (obj_exts_in_slab(s, slab)) {
+		/*
+		 * If obj_exts array uses slab leftover space or is embedded
+		 * in object, no extra space is allocated, just charge the
+		 * object size.
+		 */
+		return s->size;
+	}
+
 	/*
-	 * For each accounted object there is an extra space which is used
-	 * to store obj_cgroup membership. Charge it too.
+	 * For caches whose obj_exts array is allocated separately
+	 * outside of slab, also charge the objcg pointer.
 	 */
 	return s->size + sizeof(struct obj_cgroup *);
 }
@@ -3246,7 +3255,7 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		 * TODO: we could batch this until slab_pgdat(slab) changes
 		 * between iterations, with a more complicated undo
 		 */
-		if (obj_cgroup_charge_account(objcg, flags, obj_full_size(s),
+		if (obj_cgroup_charge_account(objcg, flags, obj_full_size(s, slab),
 					slab_pgdat(slab), cache_vmstat_idx(s)))
 			return false;
 
@@ -3265,7 +3274,7 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
 			    void **p, int objects, unsigned long obj_exts)
 {
-	size_t obj_size = obj_full_size(s);
+	size_t obj_size = obj_full_size(s, slab);
 
 	for (int i = 0; i < objects; i++) {
 		struct obj_cgroup *objcg;
