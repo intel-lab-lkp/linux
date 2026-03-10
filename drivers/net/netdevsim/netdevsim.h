@@ -470,3 +470,6 @@ struct nsim_bus_dev {
 
 int nsim_bus_init(void);
 void nsim_bus_exit(void);
+
+int nsim_setup_tc(struct net_device *dev, enum tc_setup_type type,
+		  void *type_data);
