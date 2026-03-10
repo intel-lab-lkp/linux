@@ -1227,7 +1227,7 @@ static int z_erofs_parse_in_bvecs(struct z_erofs_backend *be, bool *overlapped)
 		struct page *page = bvec->page;
 
 		/* compressed data ought to be valid when decompressing */
-		if (IS_ERR(page) || !page) {
+		if (IS_ERR_OR_NULL(page)) {
 			bvec->page = NULL;	/* clear the failure reason */
 			err = page ? PTR_ERR(page) : -EIO;
 			continue;
