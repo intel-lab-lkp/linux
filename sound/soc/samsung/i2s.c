@@ -559,7 +559,7 @@ static int i2s_set_sysclk(struct snd_soc_dai *dai, int clk_id, unsigned int rfs,
 			clk_id = 1;
 
 		if (!any_active(i2s)) {
-			if (priv->op_clk && !IS_ERR(priv->op_clk)) {
+			if (!IS_ERR_OR_NULL(priv->op_clk)) {
 				if ((clk_id && !(mod & rsrc_mask)) ||
 					(!clk_id && (mod & rsrc_mask))) {
 					clk_disable_unprepare(priv->op_clk);
@@ -812,7 +812,7 @@ static int i2s_hw_params(struct snd_pcm_substream *substream,
 	i2s->frmclk = params_rate(params);
 
 	rclksrc = priv->clk_table[CLK_I2S_RCLK_SRC];
-	if (rclksrc && !IS_ERR(rclksrc))
+	if (!IS_ERR_OR_NULL(rclksrc))
 		priv->rclk_srcrate = clk_get_rate(rclksrc);
 
 	return 0;
