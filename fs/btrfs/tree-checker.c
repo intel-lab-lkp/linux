@@ -1928,6 +1928,42 @@ static int check_dev_extent_item(const struct extent_buffer *leaf,
 	return 0;
 }
 
+static int check_free_space_bitmap(struct extent_buffer *leaf,
+				   struct btrfs_key *key, int slot)
+{
+	struct btrfs_fs_info *fs_info = leaf->fs_info;
+	const u32 blocksize = fs_info->sectorsize;
+	u32 expected_item_size;
+
+	if (unlikely(!IS_ALIGNED(key->objectid, blocksize) ||
+		     !IS_ALIGNED(key->offset, blocksize))) {
+		generic_err(leaf, slot,
+			    "free space bitmap key range is not aligned to %u, has (%llu %u %llu)",
+			    blocksize, key->objectid, key->type, key->offset);
+		return -EUCLEAN;
+	}
+	if (unlikely(key->offset == 0)) {
+		generic_err(leaf, slot,
+			    "free space bitmap range is 0");
+		return -EUCLEAN;
+	}
+	/*
+	 * The item must hold exactly the right number of bitmap bytes for the
+	 * range described by key->offset.  A mismatch means the item was
+	 * truncated or the key is corrupt; either way the bitmap data is not
+	 * safe to access.
+	 */
+	expected_item_size = DIV_ROUND_UP(key->offset >> fs_info->sectorsize_bits,
+					  BITS_PER_BYTE);
+	if (unlikely(btrfs_item_size(leaf, slot) != expected_item_size)) {
+		generic_err(leaf, slot,
+			    "invalid item size for free space bitmap, has %u expect %u",
+			    btrfs_item_size(leaf, slot), expected_item_size);
+		return -EUCLEAN;
+	}
+	return 0;
+}
+
 /*
  * Common point to switch the item-specific validation.
  */
@@ -1990,6 +2026,9 @@ static enum btrfs_tree_block_status check_leaf_item(struct extent_buffer *leaf,
 		break;
 	case BTRFS_RAID_STRIPE_KEY:
 		ret = check_raid_stripe_extent(leaf, key, slot);
+		break;
+	case BTRFS_FREE_SPACE_BITMAP_KEY:
+		ret = check_free_space_bitmap(leaf, key, slot);
 		break;
 	}
 
