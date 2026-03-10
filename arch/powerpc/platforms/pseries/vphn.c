@@ -39,7 +39,22 @@ static int vphn_unpack_associativity(const long *packed, __be32 *unpacked)
 		be_packed[i] = cpu_to_be64(packed[i]);
 
 	for (i = 1; i < VPHN_ASSOC_BUFSIZE; i++) {
+/*
+ * When this function is called from hcall_vphn(), GCC 15 seems to consider
+ * 'retbuf' always populated from the hypervisor which is eventually referred by
+ * 'be_packed'. However, GCC 15's dataflow analysis can’t prove the same before
+ * the first dereference when this function is called from test_one() with
+ * pre-initialized array of 'struct test'. This results in a false positive
+ * '-Wmaybe-uninitialized' warning which is promoted to an error under
+ * '-Werror'. This problem is not seen when the compilation is performed with
+ * older GCC versions.
+ */
+#pragma GCC diagnostic push
+#if defined(__GNUC__) && __GNUC__ >= 15
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 		u16 new = be16_to_cpup(field++);
+#pragma GCC diagnostic pop
 
 		if (is_32bit) {
 			/*
