@@ -9,6 +9,7 @@
 bool copy_from_kernel_nofault_allowed(const void *unsafe_src, size_t size)
 {
 	unsigned long vaddr = (unsigned long)unsafe_src;
+	vaddr = __tag_reset(vaddr);
 
 	/*
 	 * Do not allow userspace addresses.  This disallows
