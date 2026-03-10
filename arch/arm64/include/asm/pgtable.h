@@ -1593,12 +1593,11 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 #define arch_wants_old_prefaulted_pte	cpu_has_hw_af
 
 /*
- * Request exec memory is read into pagecache in at least 64K folios. This size
- * can be contpte-mapped when 4K base pages are in use (16 pages into 1 iTLB
- * entry), and HPA can coalesce it (4 pages into 1 TLB entry) when 16K base
- * pages are in use.
+ * Request exec memory is read into pagecache in contpte-sized folios. The
+ * contpte size is the number of contiguous PTEs that the hardware can coalesce
+ * into a single iTLB entry: 64K for 4K pages, 2M for 16K and 64K pages.
  */
-#define exec_folio_order() ilog2(SZ_64K >> PAGE_SHIFT)
+#define exec_folio_order() ilog2(CONT_PTES)
 
 static inline bool pud_sect_supported(void)
 {
