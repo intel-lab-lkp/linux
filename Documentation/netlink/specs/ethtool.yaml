@@ -211,6 +211,49 @@ definitions:
         name: discard
         value: 31
 
+  -
+    name: loopback-component
+    type: enum
+    doc: |
+      Loopback component. Identifies where in the network path the
+      loopback is applied.
+    entries:
+      -
+        name: mac
+        doc: MAC loopback. Loops traffic at the MAC block.
+      -
+        name: pcs
+        doc: |
+          PCS loopback. Loops traffic at the PCS sublayer between the
+          MAC and the PHY.
+      -
+        name: phy
+        doc: |
+          Ethernet PHY loopback. This refers to the Ethernet PHY managed
+          by phylib, not generic PHY drivers. A Base-T SFP module
+          containing an Ethernet PHY driven by Linux should report
+          loopback under this component, not module.
+      -
+        name: module
+        doc: |
+          Pluggable module (e.g. CMIS (Q)SFP) loopback. Covers loopback
+          modes controlled via module firmware or EEPROM registers. When
+          Linux drives an Ethernet PHY inside the module via phylib, use
+          the phy component instead.
+  -
+    name: loopback-direction
+    type: flags
+    doc: |
+      Loopback direction flags. Used as a bitmask in supported, and as
+      a single value in direction.
+    entries:
+      -
+        name: near-end
+        doc: Near-end loopback; host-loop-host
+      -
+        name: far-end
+        doc: Far-end loopback; line-loop-line
+
 attribute-sets:
   -
     name: header
@@ -1903,6 +1946,58 @@ attribute-sets:
         name: link
         type: nest
         nested-attributes: mse-snapshot
+  -
+    name: loopback-entry
+    doc: Per-component loopback configuration entry.
+    attr-cnt-name: __ethtool-a-loopback-entry-cnt
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: component
+        type: u32
+        enum: loopback-component
+        doc: Loopback component
+      -
+        name: id
+        type: u32
+        doc: Optional component instance identifier.
+      -
+        name: name
+        type: string
+        doc: |
+          Subsystem-specific name for the loopback point within the
+          component.
+      -
+        name: supported
+        type: u8
+        enum: loopback-direction
+        enum-as-flags: true
+        doc: Bitmask of supported loopback directions
+      -
+        name: direction
+        type: u8
+        enum: loopback-direction
+        doc: Current loopback direction, 0 means disabled
+  -
+    name: loopback
+    attr-cnt-name: __ethtool-a-loopback-cnt
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: entry
+        type: nest
+        multi-attr: true
+        nested-attributes: loopback-entry
 
 operations:
   enum-model: directional
@@ -2855,6 +2950,34 @@ operations:
             - worst-channel
             - link
       dump: *mse-get-op
+    -
+      name: loopback-get
+      doc: Get loopback configuration and capabilities.
+
+      attribute-set: loopback
+
+      do: &loopback-get-op
+        request:
+          attributes:
+            - header
+        reply:
+          attributes: &loopback
+            - header
+            - entry
+      dump: *loopback-get-op
+    -
+      name: loopback-set
+      doc: Set loopback configuration.
+
+      attribute-set: loopback
+
+      do:
+        request:
+          attributes: *loopback
+    -
+      name: loopback-ntf
+      doc: Notification for change in loopback configuration.
+      notify: loopback-get
 
 mcast-groups:
   list:

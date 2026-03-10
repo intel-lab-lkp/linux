@@ -78,6 +78,40 @@ enum ethtool_pse_event {
 	ETHTOOL_PSE_EVENT_SW_PW_CONTROL_ERROR = 64,
 };
 
+/**
+ * enum ethtool_loopback_component - Loopback component. Identifies where in
+ *   the network path the loopback is applied.
+ * @ETHTOOL_LOOPBACK_COMPONENT_MAC: MAC loopback. Loops traffic at the MAC
+ *   block.
+ * @ETHTOOL_LOOPBACK_COMPONENT_PCS: PCS loopback. Loops traffic at the PCS
+ *   sublayer between the MAC and the PHY.
+ * @ETHTOOL_LOOPBACK_COMPONENT_PHY: Ethernet PHY loopback. This refers to the
+ *   Ethernet PHY managed by phylib, not generic PHY drivers. A Base-T SFP
+ *   module containing an Ethernet PHY driven by Linux should report loopback
+ *   under this component, not module.
+ * @ETHTOOL_LOOPBACK_COMPONENT_MODULE: Pluggable module (e.g. CMIS (Q)SFP)
+ *   loopback. Covers loopback modes controlled via module firmware or EEPROM
+ *   registers. When Linux drives an Ethernet PHY inside the module via phylib,
+ *   use the phy component instead.
+ */
+enum ethtool_loopback_component {
+	ETHTOOL_LOOPBACK_COMPONENT_MAC,
+	ETHTOOL_LOOPBACK_COMPONENT_PCS,
+	ETHTOOL_LOOPBACK_COMPONENT_PHY,
+	ETHTOOL_LOOPBACK_COMPONENT_MODULE,
+};
+
+/**
+ * enum ethtool_loopback_direction - Loopback direction flags. Used as a
+ *   bitmask in supported, and as a single value in direction.
+ * @ETHTOOL_LOOPBACK_DIRECTION_NEAR_END: Near-end loopback; host-loop-host
+ * @ETHTOOL_LOOPBACK_DIRECTION_FAR_END: Far-end loopback; line-loop-line
+ */
+enum ethtool_loopback_direction {
+	ETHTOOL_LOOPBACK_DIRECTION_NEAR_END = 1,
+	ETHTOOL_LOOPBACK_DIRECTION_FAR_END = 2,
+};
+
 enum {
 	ETHTOOL_A_HEADER_UNSPEC,
 	ETHTOOL_A_HEADER_DEV_INDEX,
@@ -839,6 +873,27 @@ enum {
 };
 
 enum {
+	ETHTOOL_A_LOOPBACK_ENTRY_UNSPEC,
+	ETHTOOL_A_LOOPBACK_ENTRY_COMPONENT,
+	ETHTOOL_A_LOOPBACK_ENTRY_ID,
+	ETHTOOL_A_LOOPBACK_ENTRY_NAME,
+	ETHTOOL_A_LOOPBACK_ENTRY_SUPPORTED,
+	ETHTOOL_A_LOOPBACK_ENTRY_DIRECTION,
+
+	__ETHTOOL_A_LOOPBACK_ENTRY_CNT,
+	ETHTOOL_A_LOOPBACK_ENTRY_MAX = (__ETHTOOL_A_LOOPBACK_ENTRY_CNT - 1)
+};
+
+enum {
+	ETHTOOL_A_LOOPBACK_UNSPEC,
+	ETHTOOL_A_LOOPBACK_HEADER,
+	ETHTOOL_A_LOOPBACK_ENTRY,
+
+	__ETHTOOL_A_LOOPBACK_CNT,
+	ETHTOOL_A_LOOPBACK_MAX = (__ETHTOOL_A_LOOPBACK_CNT - 1)
+};
+
+enum {
 	ETHTOOL_MSG_USER_NONE = 0,
 	ETHTOOL_MSG_STRSET_GET = 1,
 	ETHTOOL_MSG_LINKINFO_GET,
@@ -891,6 +946,8 @@ enum {
 	ETHTOOL_MSG_RSS_CREATE_ACT,
 	ETHTOOL_MSG_RSS_DELETE_ACT,
 	ETHTOOL_MSG_MSE_GET,
+	ETHTOOL_MSG_LOOPBACK_GET,
+	ETHTOOL_MSG_LOOPBACK_SET,
 
 	__ETHTOOL_MSG_USER_CNT,
 	ETHTOOL_MSG_USER_MAX = (__ETHTOOL_MSG_USER_CNT - 1)
@@ -952,6 +1009,8 @@ enum {
 	ETHTOOL_MSG_RSS_CREATE_NTF,
 	ETHTOOL_MSG_RSS_DELETE_NTF,
 	ETHTOOL_MSG_MSE_GET_REPLY,
+	ETHTOOL_MSG_LOOPBACK_GET_REPLY,
+	ETHTOOL_MSG_LOOPBACK_NTF,
 
 	__ETHTOOL_MSG_KERNEL_CNT,
 	ETHTOOL_MSG_KERNEL_MAX = (__ETHTOOL_MSG_KERNEL_CNT - 1)
