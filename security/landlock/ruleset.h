@@ -37,6 +37,14 @@ struct landlock_layer {
 	access_mask_t access;
 };
 
+/*
+ * Flexible array of Landlock layers, used for pointer-to-array function
+ * parameters that reference either a stack-allocated layer array or a rule's
+ * flexible array member (struct landlock_rule.layers).  This typedef avoids
+ * the complex (*const name)[] syntax that the kernel-doc parser cannot handle.
+ */
+typedef struct landlock_layer landlock_layer_array_t[];
+
 /**
  * union landlock_key - Key of a ruleset's red-black tree
  */
@@ -224,7 +232,7 @@ static inline void landlock_get_ruleset(struct landlock_ruleset *const ruleset)
  *
  * @domain: Landlock ruleset (used as a domain)
  *
- * Returns: an access_masks result of the OR of all the domain's access masks.
+ * Return: An access_masks result of the OR of all the domain's access masks.
  */
 static inline struct access_masks
 landlock_union_access_masks(const struct landlock_ruleset *const domain)
