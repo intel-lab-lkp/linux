@@ -56,13 +56,13 @@ struct kvm_follow_pfn {
 kvm_pfn_t hva_to_pfn(struct kvm_follow_pfn *kfp);
 
 #ifdef CONFIG_HAVE_KVM_PFNCACHE
-void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm,
-				       unsigned long start,
-				       unsigned long end);
+void gpc_invalidate_hva_range_start(struct kvm *kvm,
+				    unsigned long start,
+				    unsigned long end);
 #else
-static inline void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm,
-						     unsigned long start,
-						     unsigned long end)
+static inline void gpc_invalidate_hva_range_start(struct kvm *kvm,
+						  unsigned long start,
+						  unsigned long end)
 {
 }
 #endif /* HAVE_KVM_PFNCACHE */
