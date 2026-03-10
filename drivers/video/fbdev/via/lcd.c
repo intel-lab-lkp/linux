@@ -954,6 +954,10 @@ bool viafb_lcd_get_mobile_state(bool *mobile)
 	u16 start_pattern;
 
 	biosptr = ioremap(romaddr, 0x10000);
+	if (!biosptr) {
+		DEBUG_MSG(KERN_ERR " Failed to remap BIOS memory\n");
+		return false;
+	}
 	start_pattern = readw(biosptr);
 
 	/* Compare pattern */
