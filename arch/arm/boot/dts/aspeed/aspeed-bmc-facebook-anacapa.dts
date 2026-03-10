@@ -880,9 +880,9 @@
 	"Channel7_leakage_EAM2", "",
 
 	/* C0-C7 line 32-47 */
-	"RSVD_RMC_GPIO3", "", "", "",
+	"RSVD_RMC_GPIO3", "", "LEAK_DETECT_RMC_N", "",
 	"", "", "", "",
-	"LEAK_DETECT_RMC_N", "", "", "",
+	"", "", "", "",
 	"", "", "", "",
 
 	/* D0-D7 line 48-63 */
