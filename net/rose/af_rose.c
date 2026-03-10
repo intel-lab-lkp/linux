@@ -814,6 +814,14 @@ static int rose_connect(struct socket *sock, struct sockaddr_unsized *uaddr, int
 	sk->sk_state   = TCP_CLOSE;
 	sock->state = SS_UNCONNECTED;
 
+	/* Release previous neighbour ref if reconnecting */
+	if (rose->neighbour) {
+		rose_neigh_put(rose->neighbour);
+		rose->neighbour = NULL;
+	}
+
+	rose->state = ROSE_STATE_0;
+
 	rose->neighbour = rose_get_neigh(&addr->srose_addr, &cause,
 					 &diagnostic, 0);
 	if (!rose->neighbour) {
@@ -825,6 +833,7 @@ static int rose_connect(struct socket *sock, struct sockaddr_unsized *uaddr, int
 	if (!rose->lci) {
 		err = -ENETUNREACH;
 		rose_neigh_put(rose->neighbour);
+		rose->neighbour = NULL;
 		goto out_release;
 	}
 
@@ -837,6 +846,7 @@ static int rose_connect(struct socket *sock, struct sockaddr_unsized *uaddr, int
 		if (!dev) {
 			err = -ENETUNREACH;
 			rose_neigh_put(rose->neighbour);
+			rose->neighbour = NULL;
 			goto out_release;
 		}
 
@@ -844,6 +854,7 @@ static int rose_connect(struct socket *sock, struct sockaddr_unsized *uaddr, int
 		if (!user) {
 			err = -EINVAL;
 			rose_neigh_put(rose->neighbour);
+			rose->neighbour = NULL;
 			dev_put(dev);
 			goto out_release;
 		}
