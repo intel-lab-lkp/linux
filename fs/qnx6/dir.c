@@ -139,8 +139,8 @@ static int qnx6_readdir(struct file *file, struct dir_context *ctx)
 			ctx->pos = (n + 1) << PAGE_SHIFT;
 			return PTR_ERR(kaddr);
 		}
-		de = (struct qnx6_dir_entry *)(kaddr + offset);
-		limit = kaddr + last_entry(inode, n);
+		de = (struct qnx6_dir_entry *)(kaddr + (offset * QNX6_DIR_ENTRY_SIZE));
+		limit = kaddr + (last_entry(inode, n) * QNX6_DIR_ENTRY_SIZE);
 		for (; (char *)de < limit; de++, ctx->pos += QNX6_DIR_ENTRY_SIZE) {
 			int size = de->de_size;
 			u32 no_inode = fs32_to_cpu(sbi, de->de_inode);
