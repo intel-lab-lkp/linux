@@ -965,7 +965,7 @@ SYSCALL_DEFINE4(quotactl, unsigned int, cmd, const char __user *, special,
 	else
 		drop_super_exclusive(sb);
 out:
-	if (pathp && !IS_ERR(pathp))
+	if (!IS_ERR_OR_NULL(pathp))
 		path_put(pathp);
 	return ret;
 }
