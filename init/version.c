@@ -16,6 +16,7 @@
 #include <linux/uts.h>
 #include <linux/utsname.h>
 #include <linux/proc_ns.h>
+#include <linux/meminspect.h>
 
 static int __init early_hostname(char *arg)
 {
@@ -50,5 +51,7 @@ struct uts_namespace init_uts_ns __weak;
 const char linux_banner[] __weak;
 
 #include "version-timestamp.c"
+
+MEMINSPECT_SIMPLE_ENTRY(init_uts_ns);
 
 EXPORT_SYMBOL_GPL(init_uts_ns);
