@@ -665,6 +665,11 @@
 			opp-hz = /bits/ 64 <2841600000>;
 			opp-peak-kBps = <8368000 51609600>;
 		};
+
+		cpu7_opp21: opp-3091200000 {
+			opp-hz = /bits/ 64 <3091200000>;
+			opp-peak-kBps = <8368000 51609600>;
+		};
 	};
 
 	firmware {
@@ -3928,6 +3933,7 @@
 			#phy-cells = <1>;
 
 			orientation-switch;
+			mode-switch;
 
 			ports {
 				#address-cells = <1>;
@@ -3949,7 +3955,9 @@
 				port@2 {
 					reg = <2>;
 
-					usb_1_qmpphy_dp_in: endpoint {};
+					usb_1_qmpphy_dp_in: endpoint {
+						remote-endpoint = <&mdss_dp_out>;
+					};
 				};
 			};
 		};
@@ -4223,6 +4231,7 @@
 				snps,dis-u2-entry-quirk;
 				phys = <&usb_1_hsphy>, <&usb_1_qmpphy QMP_USB43DP_USB3_PHY>;
 				phy-names = "usb2-phy", "usb3-phy";
+				usb-role-switch;
 
 				ports {
 					#address-cells = <1>;
@@ -4312,6 +4321,7 @@
 				snps,dis-u2-entry-quirk;
 				phys = <&usb_2_hsphy>, <&usb_2_qmpphy>;
 				phy-names = "usb2-phy", "usb3-phy";
+				usb-role-switch;
 			};
 		};
 
@@ -4819,6 +4829,7 @@
 						reg = <1>;
 
 						mdss_dp_out: endpoint {
+							remote-endpoint = <&usb_1_qmpphy_dp_in>;
 						};
 					};
 				};
