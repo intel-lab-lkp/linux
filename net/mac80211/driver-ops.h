@@ -300,6 +300,14 @@ static inline void drv_cancel_hw_scan(struct ieee80211_local *local,
 	trace_drv_return_void(local);
 }
 
+static inline void
+drv_force_cleanup(struct ieee80211_local *local)
+{
+	lockdep_assert_wiphy(local->hw.wiphy);
+	if (local->ops->force_cleanup)
+		local->ops->force_cleanup(&local->hw);
+}
+
 static inline int
 drv_sched_scan_start(struct ieee80211_local *local,
 		     struct ieee80211_sub_if_data *sdata,
