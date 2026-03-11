@@ -1832,6 +1832,17 @@ static int tls_rx_one_record(struct sock *sk, struct msghdr *msg,
 	return tls_check_pending_rekey(sk, tls_ctx, darg->skb);
 }
 
+/* Decrypt one record and abort the connection on failure. */
+static int tls_rx_decrypt_record(struct sock *sk, struct msghdr *msg,
+				 struct tls_decrypt_arg *darg)
+{
+	int err = tls_rx_one_record(sk, msg, darg);
+
+	if (err < 0)
+		tls_err_abort(sk, -EBADMSG);
+	return err;
+}
+
 int decrypt_skb(struct sock *sk, struct scatterlist *sgout)
 {
 	struct tls_decrypt_arg darg = { .zc = true, };
@@ -2133,11 +2144,9 @@ int tls_sw_recvmsg(struct sock *sk,
 		else
 			darg.async = false;
 
-		err = tls_rx_one_record(sk, msg, &darg);
-		if (err < 0) {
-			tls_err_abort(sk, -EBADMSG);
+		err = tls_rx_decrypt_record(sk, msg, &darg);
+		if (err < 0)
 			goto recv_end;
-		}
 
 		async |= darg.async;
 
@@ -2295,11 +2304,9 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 
 		memset(&darg.inargs, 0, sizeof(darg.inargs));
 
-		err = tls_rx_one_record(sk, NULL, &darg);
-		if (err < 0) {
-			tls_err_abort(sk, -EBADMSG);
+		err = tls_rx_decrypt_record(sk, NULL, &darg);
+		if (err < 0)
 			goto splice_read_end;
-		}
 
 		tls_rx_rec_done(ctx);
 		skb = darg.skb;
@@ -2381,11 +2388,9 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 
 			memset(&darg.inargs, 0, sizeof(darg.inargs));
 
-			err = tls_rx_one_record(sk, NULL, &darg);
-			if (err < 0) {
-				tls_err_abort(sk, -EBADMSG);
+			err = tls_rx_decrypt_record(sk, NULL, &darg);
+			if (err < 0)
 				goto read_sock_end;
-			}
 
 			released = tls_read_flush_backlog(sk, prot, INT_MAX,
 							  0, decrypted,
