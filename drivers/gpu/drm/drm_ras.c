@@ -41,6 +41,10 @@
  *    Userspace must provide Node ID, Error ID.
  *    Clears specific error counter of a node if supported.
  *
+ * 4. ERROR_EVENT: Notify userspace of an error event.
+ *    The event includes the error-id and node-id of the error
+ *    that triggered the event.
+ *
  * Node registration:
  *
  * - drm_ras_node_register(): Registers a new node and assigns
@@ -354,6 +358,50 @@ int drm_ras_nl_clear_error_counter_doit(struct sk_buff *skb,
 
 	return node->clear_error_counter(node, error_id);
 }
+
+/**
+ * drm_ras_error_notify() - Notify userspace of an error event
+ * @node: Node structure
+ * @error_id: ID of the error counter that triggered the event
+ * @flags: GFP flags for memory allocation
+ *
+ * Notifies userspace of an error event related to a specific RAS node and error counter.
+ */
+void drm_ras_error_notify(struct drm_ras_node *node, u32 error_id, gfp_t flags)
+{
+	struct genl_info info;
+	struct sk_buff *msg;
+	struct nlattr *hdr;
+	int ret;
+
+	genl_info_init_ntf(&info, &drm_ras_nl_family, DRM_RAS_CMD_ERROR_EVENT);
+
+	msg = genlmsg_new(NLMSG_GOODSIZE, flags);
+	if (!msg)
+		return;
+
+	hdr = genlmsg_iput(msg, &info);
+	if (!hdr)
+		goto err_free;
+
+	ret = nla_put_u32(msg, DRM_RAS_A_ERROR_COUNTER_ATTRS_NODE_ID, node->id);
+	if (ret)
+		goto err_cancel;
+
+	ret = nla_put_u32(msg, DRM_RAS_A_ERROR_COUNTER_ATTRS_ERROR_ID, error_id);
+	if (ret)
+		goto err_cancel;
+
+	genlmsg_end(msg, hdr);
+	genlmsg_multicast(&drm_ras_nl_family, msg, 0, DRM_RAS_NLGRP_ERROR_NOTIFY, flags);
+	return;
+
+err_cancel:
+	genlmsg_cancel(msg, hdr);
+err_free:
+	nlmsg_free(msg);
+}
+EXPORT_SYMBOL(drm_ras_error_notify);
 
 /**
  * drm_ras_node_register() - Register a new RAS node

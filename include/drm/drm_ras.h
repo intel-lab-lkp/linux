@@ -78,9 +78,11 @@ struct drm_device;
 #if IS_ENABLED(CONFIG_DRM_RAS)
 int drm_ras_node_register(struct drm_ras_node *node);
 void drm_ras_node_unregister(struct drm_ras_node *node);
+void drm_ras_error_notify(struct drm_ras_node *node, u32 error_id, gfp_t flags);
 #else
 static inline int drm_ras_node_register(struct drm_ras_node *node) { return 0; }
 static inline void drm_ras_node_unregister(struct drm_ras_node *node) { }
+static inline void drm_ras_error_notify(struct drm_ras_node *node, u32 error_id, gfp_t flags) { }
 #endif
 
 #endif

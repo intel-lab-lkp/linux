@@ -124,3 +124,17 @@ operations:
       do:
         request:
           attributes: *id-attrs
+    -
+      name: error-event
+      doc: >-
+           Notify userspace of an error event.
+           The event includes the error-id and node-id of the error
+           that triggered the event.
+      attribute-set: error-counter-attrs
+      event:
+        attributes: *id-attrs
+
+mcast-groups:
+  list:
+    -
+      name: error-notify

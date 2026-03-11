@@ -54,6 +54,8 @@ User space tools can:
   ``node-id`` and ``error-id`` as parameters.
 * Clear specific error counters with the ``clear-error-counter`` command, using both
   ``node-id`` and ``error-id`` as parameters.
+* Listen to ``error-event`` notifications for error events by subscribing to the
+  ``error-notify`` multicast group.
 
 YAML-based Interface
 --------------------
@@ -109,3 +111,10 @@ Example: Clear an error counter for a given node
 
     sudo ynl --family drm_ras --do clear-error-counter --json '{"node-id":0, "error-id":1}'
     None
+
+Example: Listen to error events
+
+.. code-block:: bash
+
+    sudo ynl --family drm_ras --subscribe error-notify
+    {'msg': {'error-id': 1, 'node-id': 1}, 'name': 'error-event'}
