@@ -410,6 +410,7 @@ Code  Seq#    Include File                                             Comments
                                                                        <mailto:nchatrad@amd.com>
 0xF9  00-0F  uapi/misc/amd-apml.h                                      AMD side band system management interface driver
                                                                        <mailto:naveenkrishna.chatradhi@amd.com>
+0xEF  00-0F  uapi/linux/exfat.h and uapi/linux/ntfs3.h
 0xFD  all    linux/dm-ioctl.h
 0xFE  all    linux/isst_if.h
 ====  =====  ========================================================= ================================================================

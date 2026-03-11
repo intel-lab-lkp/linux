@@ -26,6 +26,7 @@
 #include <linux/time64.h>
 #include <linux/types.h>
 #include <linux/uidgid.h>
+#include <uapi/linux/ntfs.h>
 #include <asm/div64.h>
 #include <asm/page.h>
 

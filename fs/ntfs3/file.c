@@ -22,12 +22,6 @@
 #include "ntfs_fs.h"
 
 /*
- * cifx, btrfs, exfat, ext4, f2fs use this constant.
- * Hope this value will become common to all fs.
- */
-#define NTFS3_IOC_SHUTDOWN _IOR('X', 125, __u32)
-
-/*
  * Helper for ntfs_should_use_dio.
  */
 static u32 ntfs_dio_alignment(struct inode *inode)

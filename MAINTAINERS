@@ -9593,6 +9593,7 @@ L:	linux-fsdevel@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/linkinjeon/exfat.git
 F:	fs/exfat/
+F:	include/uapi/linux/exfat.h
 
 EXPRESSWIRE PROTOCOL LIBRARY
 M:	Duje Mihanović <duje.mihanovic@skole.hr>
@@ -18865,6 +18866,7 @@ W:	http://www.paragon-software.com/
 T:	git https://github.com/Paragon-Software-Group/linux-ntfs3.git
 F:	Documentation/filesystems/ntfs3.rst
 F:	fs/ntfs3/
+F:	include/uapi/linux/ntfs.h
 
 NTSYNC SYNCHRONIZATION PRIMITIVE DRIVER
 M:	Elizabeth Figura <zfigura@codeweavers.com>

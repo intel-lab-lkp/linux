@@ -12,7 +12,8 @@
  * exfat-specific ioctl commands
  */
 
-#define EXFAT_IOC_SHUTDOWN _IOR('X', 125, __u32)
+#define EXFAT_IOCTL_MAGIC	0xEF			/* shared with ntfs3 */
+#define EXFAT_IOC_SHUTDOWN	_IOR('X', 125, __u32)
 
 /*
  * Flags used by EXFAT_IOC_SHUTDOWN
