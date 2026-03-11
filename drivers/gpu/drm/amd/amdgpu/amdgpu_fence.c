@@ -664,9 +664,8 @@ void amdgpu_fence_driver_hw_init(struct amdgpu_device *adev)
 void amdgpu_fence_driver_set_error(struct amdgpu_ring *ring, int error)
 {
 	struct amdgpu_fence_driver *drv = &ring->fence_drv;
-	unsigned long flags;
 
-	spin_lock_irqsave(&drv->lock, flags);
+	guard(spinlock_irqsave)(&drv->lock);
 	for (unsigned int i = 0; i <= drv->num_fences_mask; ++i) {
 		struct dma_fence *fence;
 
@@ -675,7 +674,6 @@ void amdgpu_fence_driver_set_error(struct amdgpu_ring *ring, int error)
 		if (fence && !dma_fence_is_signaled_locked(fence))
 			dma_fence_set_error(fence, error);
 	}
-	spin_unlock_irqrestore(&drv->lock, flags);
 }
 
 /**
@@ -719,7 +717,6 @@ void amdgpu_fence_driver_update_timedout_fence_state(struct amdgpu_fence *af)
 	struct dma_fence __rcu **ptr;
 	struct amdgpu_fence *fence;
 	struct amdgpu_ring *ring = af->ring;
-	unsigned long flags;
 	u32 seq, last_seq;
 	bool reemitted = false;
 
@@ -727,7 +724,7 @@ void amdgpu_fence_driver_update_timedout_fence_state(struct amdgpu_fence *af)
 	seq = ring->fence_drv.sync_seq & ring->fence_drv.num_fences_mask;
 
 	/* mark all fences from the guilty context with an error */
-	spin_lock_irqsave(&ring->fence_drv.lock, flags);
+	guard(spinlock_irqsave)(&ring->fence_drv.lock);
 	do {
 		last_seq++;
 		last_seq &= ring->fence_drv.num_fences_mask;
@@ -748,7 +745,6 @@ void amdgpu_fence_driver_update_timedout_fence_state(struct amdgpu_fence *af)
 		}
 		rcu_read_unlock();
 	} while (last_seq != seq);
-	spin_unlock_irqrestore(&ring->fence_drv.lock, flags);
 
 	if (reemitted) {
 		/* if we've already reemitted once then just cancel everything */

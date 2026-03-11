@@ -708,7 +708,6 @@ bool amdgpu_device_supports_smart_shift(struct amdgpu_device *adev)
 void amdgpu_device_mm_access(struct amdgpu_device *adev, loff_t pos,
 			     void *buf, size_t size, bool write)
 {
-	unsigned long flags;
 	uint32_t hi = ~0, tmp = 0;
 	uint32_t *data = buf;
 	uint64_t last;
@@ -719,7 +718,7 @@ void amdgpu_device_mm_access(struct amdgpu_device *adev, loff_t pos,
 
 	BUG_ON(!IS_ALIGNED(pos, 4) || !IS_ALIGNED(size, 4));
 
-	spin_lock_irqsave(&adev->mmio_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->mmio_idx_lock);
 	for (last = pos + size; pos < last; pos += 4) {
 		tmp = pos >> 31;
 
@@ -734,7 +733,6 @@ void amdgpu_device_mm_access(struct amdgpu_device *adev, loff_t pos,
 			*data++ = RREG32_NO_KIQ(mmMM_DATA);
 	}
 
-	spin_unlock_irqrestore(&adev->mmio_idx_lock, flags);
 	drm_dev_exit(idx);
 }
 
@@ -1087,7 +1085,7 @@ void amdgpu_device_xcc_wreg(struct amdgpu_device *adev,
 u32 amdgpu_device_indirect_rreg(struct amdgpu_device *adev,
 				u32 reg_addr)
 {
-	unsigned long flags, pcie_index, pcie_data;
+	unsigned long pcie_index, pcie_data;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_data_offset;
 	u32 r;
@@ -1095,14 +1093,13 @@ u32 amdgpu_device_indirect_rreg(struct amdgpu_device *adev,
 	pcie_index = adev->nbio.funcs->get_pcie_index_offset(adev);
 	pcie_data = adev->nbio.funcs->get_pcie_data_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 
 	writel(reg_addr, pcie_index_offset);
 	readl(pcie_index_offset);
 	r = readl(pcie_data_offset);
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 
 	return r;
 }
@@ -1110,7 +1107,7 @@ u32 amdgpu_device_indirect_rreg(struct amdgpu_device *adev,
 u32 amdgpu_device_indirect_rreg_ext(struct amdgpu_device *adev,
 				    u64 reg_addr)
 {
-	unsigned long flags, pcie_index, pcie_index_hi, pcie_data;
+	unsigned long pcie_index, pcie_index_hi, pcie_data;
 	u32 r;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_index_hi_offset;
@@ -1133,7 +1130,7 @@ u32 amdgpu_device_indirect_rreg_ext(struct amdgpu_device *adev,
 		pcie_index_hi = 0;
 	}
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 	if (pcie_index_hi != 0)
@@ -1154,8 +1151,6 @@ u32 amdgpu_device_indirect_rreg_ext(struct amdgpu_device *adev,
 		readl(pcie_index_hi_offset);
 	}
 
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
-
 	return r;
 }
 
@@ -1170,7 +1165,7 @@ u32 amdgpu_device_indirect_rreg_ext(struct amdgpu_device *adev,
 u64 amdgpu_device_indirect_rreg64(struct amdgpu_device *adev,
 				  u32 reg_addr)
 {
-	unsigned long flags, pcie_index, pcie_data;
+	unsigned long pcie_index, pcie_data;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_data_offset;
 	u64 r;
@@ -1178,7 +1173,7 @@ u64 amdgpu_device_indirect_rreg64(struct amdgpu_device *adev,
 	pcie_index = adev->nbio.funcs->get_pcie_index_offset(adev);
 	pcie_data = adev->nbio.funcs->get_pcie_data_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 
@@ -1190,7 +1185,6 @@ u64 amdgpu_device_indirect_rreg64(struct amdgpu_device *adev,
 	writel(reg_addr + 4, pcie_index_offset);
 	readl(pcie_index_offset);
 	r |= ((u64)readl(pcie_data_offset) << 32);
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 
 	return r;
 }
@@ -1198,7 +1192,7 @@ u64 amdgpu_device_indirect_rreg64(struct amdgpu_device *adev,
 u64 amdgpu_device_indirect_rreg64_ext(struct amdgpu_device *adev,
 				  u64 reg_addr)
 {
-	unsigned long flags, pcie_index, pcie_data;
+	unsigned long pcie_index, pcie_data;
 	unsigned long pcie_index_hi = 0;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_index_hi_offset;
@@ -1210,7 +1204,7 @@ u64 amdgpu_device_indirect_rreg64_ext(struct amdgpu_device *adev,
 	if ((reg_addr >> 32) && (adev->nbio.funcs->get_pcie_index_hi_offset))
 		pcie_index_hi = adev->nbio.funcs->get_pcie_index_hi_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 	if (pcie_index_hi != 0)
@@ -1240,8 +1234,6 @@ u64 amdgpu_device_indirect_rreg64_ext(struct amdgpu_device *adev,
 		readl(pcie_index_hi_offset);
 	}
 
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
-
 	return r;
 }
 
@@ -1256,14 +1248,14 @@ u64 amdgpu_device_indirect_rreg64_ext(struct amdgpu_device *adev,
 void amdgpu_device_indirect_wreg(struct amdgpu_device *adev,
 				 u32 reg_addr, u32 reg_data)
 {
-	unsigned long flags, pcie_index, pcie_data;
+	unsigned long pcie_index, pcie_data;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_data_offset;
 
 	pcie_index = adev->nbio.funcs->get_pcie_index_offset(adev);
 	pcie_data = adev->nbio.funcs->get_pcie_data_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 
@@ -1271,13 +1263,12 @@ void amdgpu_device_indirect_wreg(struct amdgpu_device *adev,
 	readl(pcie_index_offset);
 	writel(reg_data, pcie_data_offset);
 	readl(pcie_data_offset);
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 }
 
 void amdgpu_device_indirect_wreg_ext(struct amdgpu_device *adev,
 				     u64 reg_addr, u32 reg_data)
 {
-	unsigned long flags, pcie_index, pcie_index_hi, pcie_data;
+	unsigned long pcie_index, pcie_index_hi, pcie_data;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_index_hi_offset;
 	void __iomem *pcie_data_offset;
@@ -1289,7 +1280,7 @@ void amdgpu_device_indirect_wreg_ext(struct amdgpu_device *adev,
 	else
 		pcie_index_hi = 0;
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 	if (pcie_index_hi != 0)
@@ -1311,7 +1302,6 @@ void amdgpu_device_indirect_wreg_ext(struct amdgpu_device *adev,
 		readl(pcie_index_hi_offset);
 	}
 
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 }
 
 /**
@@ -1325,14 +1315,14 @@ void amdgpu_device_indirect_wreg_ext(struct amdgpu_device *adev,
 void amdgpu_device_indirect_wreg64(struct amdgpu_device *adev,
 				   u32 reg_addr, u64 reg_data)
 {
-	unsigned long flags, pcie_index, pcie_data;
+	unsigned long pcie_index, pcie_data;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_data_offset;
 
 	pcie_index = adev->nbio.funcs->get_pcie_index_offset(adev);
 	pcie_data = adev->nbio.funcs->get_pcie_data_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 
@@ -1346,13 +1336,12 @@ void amdgpu_device_indirect_wreg64(struct amdgpu_device *adev,
 	readl(pcie_index_offset);
 	writel((u32)(reg_data >> 32), pcie_data_offset);
 	readl(pcie_data_offset);
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 }
 
 void amdgpu_device_indirect_wreg64_ext(struct amdgpu_device *adev,
 				   u64 reg_addr, u64 reg_data)
 {
-	unsigned long flags, pcie_index, pcie_data;
+	unsigned long pcie_index, pcie_data;
 	unsigned long pcie_index_hi = 0;
 	void __iomem *pcie_index_offset;
 	void __iomem *pcie_index_hi_offset;
@@ -1363,7 +1352,7 @@ void amdgpu_device_indirect_wreg64_ext(struct amdgpu_device *adev,
 	if ((reg_addr >> 32) && (adev->nbio.funcs->get_pcie_index_hi_offset))
 		pcie_index_hi = adev->nbio.funcs->get_pcie_index_hi_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	pcie_index_offset = (void __iomem *)adev->rmmio + pcie_index * 4;
 	pcie_data_offset = (void __iomem *)adev->rmmio + pcie_data * 4;
 	if (pcie_index_hi != 0)
@@ -1395,7 +1384,6 @@ void amdgpu_device_indirect_wreg64_ext(struct amdgpu_device *adev,
 		readl(pcie_index_hi_offset);
 	}
 
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 }
 
 /**
@@ -1764,17 +1752,15 @@ static int amdgpu_device_wb_init(struct amdgpu_device *adev)
  */
 int amdgpu_device_wb_get(struct amdgpu_device *adev, u32 *wb)
 {
-	unsigned long flags, offset;
+	unsigned long offset;
 
-	spin_lock_irqsave(&adev->wb.lock, flags);
+	guard(spinlock_irqsave)(&adev->wb.lock);
 	offset = find_first_zero_bit(adev->wb.used, adev->wb.num_wb);
 	if (offset < adev->wb.num_wb) {
 		__set_bit(offset, adev->wb.used);
-		spin_unlock_irqrestore(&adev->wb.lock, flags);
 		*wb = offset << 3; /* convert to dw offset */
 		return 0;
 	} else {
-		spin_unlock_irqrestore(&adev->wb.lock, flags);
 		return -EINVAL;
 	}
 }
@@ -1789,13 +1775,11 @@ int amdgpu_device_wb_get(struct amdgpu_device *adev, u32 *wb)
  */
 void amdgpu_device_wb_free(struct amdgpu_device *adev, u32 wb)
 {
-	unsigned long flags;
 
 	wb >>= 3;
-	spin_lock_irqsave(&adev->wb.lock, flags);
+	guard(spinlock_irqsave)(&adev->wb.lock);
 	if (wb < adev->wb.num_wb)
 		__clear_bit(wb, adev->wb.used);
-	spin_unlock_irqrestore(&adev->wb.lock, flags);
 }
 
 /**
@@ -7379,34 +7363,31 @@ void amdgpu_device_halt(struct amdgpu_device *adev)
 u32 amdgpu_device_pcie_port_rreg(struct amdgpu_device *adev,
 				u32 reg)
 {
-	unsigned long flags, address, data;
-	u32 r;
+	unsigned long address, data;
 
 	address = adev->nbio.funcs->get_pcie_port_index_offset(adev);
 	data = adev->nbio.funcs->get_pcie_port_data_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	WREG32(address, reg * 4);
 	(void)RREG32(address);
-	r = RREG32(data);
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
-	return r;
+
+	return RREG32(data);
 }
 
 void amdgpu_device_pcie_port_wreg(struct amdgpu_device *adev,
 				u32 reg, u32 v)
 {
-	unsigned long flags, address, data;
+	unsigned long address, data;
 
 	address = adev->nbio.funcs->get_pcie_port_index_offset(adev);
 	data = adev->nbio.funcs->get_pcie_port_data_offset(adev);
 
-	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
+	guard(spinlock_irqsave)(&adev->pcie_idx_lock);
 	WREG32(address, reg * 4);
 	(void)RREG32(address);
 	WREG32(data, v);
 	(void)RREG32(data);
-	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 }
 
 /**
