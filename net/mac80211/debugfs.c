@@ -680,6 +680,12 @@ void debugfs_hw_add(struct ieee80211_local *local)
 		return;
 
 	local->debugfs.keys = debugfs_create_dir("keys", phyd);
+	if (IS_ERR(local->debugfs.keys)) {
+		pr_err("Failed to create local keys debugfs dir, rv: %ld phyd: 0x%px\n",
+		       (long)(local->debugfs.keys), phyd);
+		local->debugfs.keys = NULL;
+		return;
+	}
 
 	DEBUGFS_ADD(total_ps_buffered);
 	DEBUGFS_ADD(wep_iv);
@@ -705,6 +711,11 @@ void debugfs_hw_add(struct ieee80211_local *local)
 			   phyd, &local->aql_threshold);
 
 	statsd = debugfs_create_dir("statistics", phyd);
+	if (IS_ERR(statsd)) {
+		pr_err("Failed to create local stats debugfs dir, rv: %ld phyd: 0x%px\n",
+		       (long)(statsd), phyd);
+		return;
+	}
 
 #ifdef CONFIG_MAC80211_DEBUG_COUNTERS
 	DEBUGFS_STATS_ADD(dot11TransmittedFragmentCount);

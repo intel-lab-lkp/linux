@@ -1250,6 +1250,12 @@ void ieee80211_sta_debugfs_add(struct sta_info *sta)
 	 * dir might still be around.
 	 */
 	sta->debugfs_dir = debugfs_create_dir(mac, stations_dir);
+	if (IS_ERR(sta->debugfs_dir)) {
+		sdata_err(sdata, "Failed to create sta debugfs dir, rv: %ld name: %s stations dir: 0x%px\n",
+			  (long)(sta->debugfs_dir), mac, stations_dir);
+		sta->debugfs_dir = NULL;
+		return;
+	}
 
 	DEBUGFS_ADD(flags);
 	DEBUGFS_ADD(aid);
@@ -1302,6 +1308,15 @@ void ieee80211_link_sta_debugfs_add(struct link_sta_info *link_sta)
 		link_sta->debugfs_dir =
 			debugfs_create_dir(link_dir_name,
 					   link_sta->sta->debugfs_dir);
+
+		if (IS_ERR(link_sta->debugfs_dir)) {
+			sdata_err(link_sta->sta->sdata,
+				  "Failed to create link-sta debugfs dir, rv: %ld name: %s stations dir: 0x%px\n",
+				  (long)(link_sta->debugfs_dir), link_dir_name,
+				  link_sta->sta->debugfs_dir);
+			link_sta->debugfs_dir = NULL;
+			return;
+		}
 
 		DEBUGFS_ADD(addr);
 	} else {
