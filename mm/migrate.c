@@ -2190,12 +2190,12 @@ struct folio *alloc_migration_target(struct folio *src, unsigned long private)
 	}
 
 	if (folio_test_large(src)) {
+		gfp_mask |= GFP_TRANSHUGE;
 		/*
 		 * clear __GFP_RECLAIM to make the migration callback
 		 * consistent with regular THP allocations.
 		 */
 		gfp_mask &= ~__GFP_RECLAIM;
-		gfp_mask |= GFP_TRANSHUGE;
 		order = folio_order(src);
 	}
 	zidx = folio_zonenum(src);
