@@ -98,9 +98,9 @@ static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
 	WARN_ON_ONCE(!kn);
 
 	/* Device needs to be configured and state must not change */
-	mutex_lock(&zdev->state_lock);
+	guard(mutex)(&zdev->state_lock);
 	if (zdev->state != ZPCI_FN_STATE_CONFIGURED)
-		goto out;
+		return count;
 
 	/* device_remove_file() serializes concurrent calls ignoring all but
 	 * the first
@@ -112,15 +112,12 @@ static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
 	 * Once it unblocks from pci_lock_rescan_remove() the original pdev
 	 * will already be removed.
 	 */
-	pci_lock_rescan_remove();
+	guard(pci_rescan_remove)();
 	if (pci_dev_is_added(pdev)) {
 		ret = _do_recover(pdev, zdev);
 	}
 	pci_rescan_bus(zdev->zbus->bus);
-	pci_unlock_rescan_remove();
 
-out:
-	mutex_unlock(&zdev->state_lock);
 	if (kn)
 		sysfs_unbreak_active_protection(kn);
 	return ret ? ret : count;
