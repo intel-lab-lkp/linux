@@ -1076,6 +1076,7 @@ static enum scan_result alloc_charge_folio(struct folio **foliop, struct mm_stru
 	}
 
 	count_vm_event(THP_COLLAPSE_ALLOC);
+
 	if (unlikely(mem_cgroup_charge(folio, mm, gfp))) {
 		folio_put(folio);
 		*foliop = NULL;
@@ -1083,6 +1084,12 @@ static enum scan_result alloc_charge_folio(struct folio **foliop, struct mm_stru
 	}
 
 	count_memcg_folio_events(folio, THP_COLLAPSE_ALLOC, 1);
+
+	if (memcg_list_lru_alloc_folio(folio, &deferred_split_lru, gfp)) {
+		folio_put(folio);
+		*foliop = NULL;
+		return SCAN_CGROUP_CHARGE_FAIL;
+	}
 
 	*foliop = folio;
 	return SCAN_SUCCEED;
