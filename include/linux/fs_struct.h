@@ -6,6 +6,7 @@
 #include <linux/path.h>
 #include <linux/spinlock.h>
 #include <linux/seqlock.h>
+#include <linux/vfsdebug.h>
 
 struct fs_struct {
 	int users;
@@ -48,5 +49,35 @@ static inline int current_umask(void)
 {
 	return current->fs->umask;
 }
+
+/*
+ * Temporarily use userspace_init_fs for path resolution in kthreads.
+ * Callers should use scoped_with_init_fs() which automatically
+ * restores the original fs_struct at scope exit.
+ */
+static inline struct fs_struct *__override_init_fs(void)
+{
+	struct fs_struct *fs;
+
+	fs = current->fs;
+	WRITE_ONCE(current->fs, fs);
+	return fs;
+}
+
+static inline void __revert_init_fs(struct fs_struct *revert_fs)
+{
+	VFS_WARN_ON_ONCE(current->fs != revert_fs);
+	WRITE_ONCE(current->fs, revert_fs);
+}
+
+DEFINE_CLASS(__override_init_fs,
+	     struct fs_struct *,
+	     __revert_init_fs(_T),
+	     __override_init_fs(), void)
+
+#define scoped_with_init_fs() \
+	scoped_class(__override_init_fs, __UNIQUE_ID(label))
+
+void __init init_userspace_fs(void);
 
 #endif /* _LINUX_FS_STRUCT_H */
