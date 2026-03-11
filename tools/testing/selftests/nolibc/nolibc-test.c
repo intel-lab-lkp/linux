@@ -754,6 +754,8 @@ int run_startup(int min, int max)
 		CASE_TEST(constructor);      EXPECT_EQ(is_nolibc, constructor_test_value, 0x3); break;
 		CASE_TEST(linkage_errno);    EXPECT_PTREQ(1, linkage_test_errno_addr(), &errno); break;
 		CASE_TEST(linkage_constr);   EXPECT_EQ(1, linkage_test_constructor_test_value, 0x3); break;
+		CASE_TEST(prog_name_nolibc); EXPECT_STREQ(is_nolibc, program_invocation_short_name, "nolibc-test"); break;
+		CASE_TEST(prog_name_libc);   EXPECT_STREQ(!is_nolibc, program_invocation_short_name, "libc-test"); break;
 		case __LINE__:
 			return ret; /* must be last */
 		/* note: do not set any defaults so as to permit holes above */
