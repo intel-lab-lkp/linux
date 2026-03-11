@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/hpe,gsc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: HPE BMC GSC platforms
+
+maintainers:
+  - Nick Hawkins <nick.hawkins@hpe.com>
+
+description:
+  The HPE GSC is an ARM64 BMC SoC used on HPE ProLiant servers.
+  It is the successor to the HPE GXP (ARM32) BMC.
+
+properties:
+  compatible:
+    oneOf:
+      - description: GSC Based Boards
+        items:
+          - enum:
+              - hpe,gsc-dl380gen12
+          - const: hpe,gsc
+
+required:
+  - compatible
+
+additionalProperties: true
+
+...
