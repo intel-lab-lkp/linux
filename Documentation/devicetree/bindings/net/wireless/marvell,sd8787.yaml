@@ -37,6 +37,7 @@ properties:
   marvell,caldata-txpwrlimit-2g:
     $ref: /schemas/types.yaml#/definitions/uint8-array
     description: Calibration data for the 2GHz band.
+    minItems: 508
     maxItems: 566
 
   marvell,caldata-txpwrlimit-5g-sub0:
@@ -52,6 +53,7 @@ properties:
   marvell,caldata-txpwrlimit-5g-sub2:
     $ref: /schemas/types.yaml#/definitions/uint8-array
     description: Calibration data for sub-band 2 in the 5GHz band.
+    minItems: 316
     maxItems: 750
 
   marvell,caldata-txpwrlimit-5g-sub3:
