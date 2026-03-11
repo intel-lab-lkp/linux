@@ -983,84 +983,6 @@ static void folio_check_dirty_writeback(struct folio *folio,
 		mapping->a_ops->is_dirty_writeback(folio, dirty, writeback);
 }
 
-static struct folio *alloc_demote_folio(struct folio *src,
-		unsigned long private)
-{
-	struct folio *dst;
-	nodemask_t *allowed_mask;
-	struct migration_target_control *mtc;
-
-	mtc = (struct migration_target_control *)private;
-
-	allowed_mask = mtc->nmask;
-	/*
-	 * make sure we allocate from the target node first also trying to
-	 * demote or reclaim pages from the target node via kswapd if we are
-	 * low on free memory on target node. If we don't do this and if
-	 * we have free memory on the slower(lower) memtier, we would start
-	 * allocating pages from slower(lower) memory tiers without even forcing
-	 * a demotion of cold pages from the target memtier. This can result
-	 * in the kernel placing hot pages in slower(lower) memory tiers.
-	 */
-	mtc->nmask = NULL;
-	mtc->gfp_mask |= __GFP_THISNODE;
-	dst = alloc_migration_target(src, (unsigned long)mtc);
-	if (dst)
-		return dst;
-
-	mtc->gfp_mask &= ~__GFP_THISNODE;
-	mtc->nmask = allowed_mask;
-
-	return alloc_migration_target(src, (unsigned long)mtc);
-}
-
-/*
- * Take folios on @demote_folios and attempt to demote them to another node.
- * Folios which are not demoted are left on @demote_folios.
- */
-static unsigned int demote_folio_list(struct list_head *demote_folios,
-				      struct pglist_data *pgdat,
-				      struct mem_cgroup *memcg)
-{
-	int target_nid;
-	unsigned int nr_succeeded;
-	nodemask_t allowed_mask;
-
-	struct migration_target_control mtc = {
-		/*
-		 * Allocate from 'node', or fail quickly and quietly.
-		 * When this happens, 'page' will likely just be discarded
-		 * instead of migrated.
-		 */
-		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) |
-			__GFP_NOMEMALLOC | GFP_NOWAIT,
-		.nmask = &allowed_mask,
-		.reason = MR_DEMOTION,
-	};
-
-	if (list_empty(demote_folios))
-		return 0;
-
-	node_get_allowed_targets(pgdat, &allowed_mask);
-	mem_cgroup_node_filter_allowed(memcg, &allowed_mask);
-	if (nodes_empty(allowed_mask))
-		return 0;
-
-	target_nid = next_demotion_node(pgdat->node_id, &allowed_mask);
-	if (target_nid == NUMA_NO_NODE)
-		/* No lower-tier nodes or nodes were hot-unplugged. */
-		return 0;
-
-	mtc.nid = target_nid;
-
-	/* Demotion ignores all cpuset and mempolicy settings */
-	migrate_pages(demote_folios, alloc_demote_folio, NULL,
-		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DEMOTION,
-		      &nr_succeeded);
-
-	return nr_succeeded;
-}
-
 static bool may_enter_fs(struct folio *folio, gfp_t gfp_mask)
 {
 	if (gfp_mask & __GFP_FS)
@@ -1573,7 +1495,7 @@ keep:
 	/* 'folio_list' is always empty here */
 
 	/* Migrate folios selected for demotion */
-	nr_demoted = demote_folio_list(&demote_folios, pgdat, memcg);
+	nr_demoted = mt_demote_folios(&demote_folios, pgdat, memcg);
 	nr_reclaimed += nr_demoted;
 	stat->nr_demoted += nr_demoted;
 	/* Folios that could not be demoted are still in @demote_folios */

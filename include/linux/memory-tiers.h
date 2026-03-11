@@ -56,6 +56,9 @@ void mt_put_memory_types(struct list_head *memory_types);
 int next_demotion_node(int node, const nodemask_t *allowed_mask);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
 bool node_is_toptier(int node);
+unsigned int mt_demote_folios(struct list_head *demote_folios,
+			      struct pglist_data *pgdat,
+			      struct mem_cgroup *memcg);
 #else
 static inline int next_demotion_node(int node, const nodemask_t *allowed_mask)
 {
@@ -71,6 +74,14 @@ static inline bool node_is_toptier(int node)
 {
 	return true;
 }
+
+static inline unsigned int mt_demote_folios(struct list_head *demote_folios,
+					    struct pglist_data *pgdat,
+					    struct mem_cgroup *memcg)
+{
+	return 0;
+}
+
 #endif
 
 #else
@@ -114,6 +125,13 @@ static inline void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *target
 static inline bool node_is_toptier(int node)
 {
 	return true;
+}
+
+static inline unsigned int mt_demote_folios(struct list_head *demote_folios,
+					    struct pglist_data *pgdat,
+					    struct mem_cgroup *memcg)
+{
+	return 0;
 }
 
 static inline int register_mt_adistance_algorithm(struct notifier_block *nb)
