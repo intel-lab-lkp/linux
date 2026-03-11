@@ -1542,31 +1542,23 @@ out_end:
 
 static int fuse_dev_open(struct inode *inode, struct file *file)
 {
-	/*
-	 * The fuse device's file's private_data is used to hold
-	 * the fuse_conn(ection) when it is mounted, and is used to
-	 * keep track of whether the file has been mounted already.
-	 */
-	file->private_data = NULL;
+	struct fuse_dev *fud = fuse_dev_alloc();
+
+	if (!fud)
+		return -ENOMEM;
+
+	file->private_data = fud;
 	return 0;
 }
 
 struct fuse_dev *fuse_get_dev(struct file *file)
 {
-	struct fuse_dev *fud = __fuse_get_dev(file);
+	struct fuse_dev *fud = file->private_data;
 	int err;
 
-	if (likely(fud))
-		return fud;
-
-	err = wait_event_interruptible(fuse_dev_waitq,
-				       READ_ONCE(file->private_data) != FUSE_DEV_SYNC_INIT);
+	err = wait_event_interruptible(fuse_dev_waitq, smp_load_acquire(&fud->fc));
 	if (err)
 		return ERR_PTR(err);
-
-	fud = __fuse_get_dev(file);
-	if (!fud)
-		return ERR_PTR(-EPERM);
 
 	return fud;
 }
@@ -2534,10 +2526,10 @@ void fuse_wait_aborted(struct fuse_conn *fc)
 
 int fuse_dev_release(struct inode *inode, struct file *file)
 {
-	struct fuse_dev *fud = __fuse_get_dev(file);
+	struct fuse_dev *fud = file->private_data;
+	struct fuse_conn *fc = smp_load_acquire(&fud->fc);
 
-	if (fud) {
-		struct fuse_conn *fc = fud->fc;
+	if (fc) {
 		struct fuse_pqueue *fpq = &fud->pq;
 		LIST_HEAD(to_end);
 		unsigned int i;
@@ -2555,8 +2547,8 @@ int fuse_dev_release(struct inode *inode, struct file *file)
 			WARN_ON(fc->iq.fasync != NULL);
 			fuse_abort_conn(fc);
 		}
-		fuse_dev_free(fud);
 	}
+	fuse_dev_free(fud);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(fuse_dev_release);
@@ -2574,16 +2566,13 @@ static int fuse_dev_fasync(int fd, struct file *file, int on)
 
 static int fuse_device_clone(struct fuse_conn *fc, struct file *new)
 {
-	struct fuse_dev *fud;
+	struct fuse_dev *fud = new->private_data;
 
-	if (__fuse_get_dev(new))
+	if (fud->fc)
 		return -EINVAL;
 
-	fud = fuse_dev_alloc_install(fc);
-	if (!fud)
-		return -ENOMEM;
-
-	new->private_data = fud;
+	fuse_dev_install(fud, fc);
+	smp_store_release(&fud->fc, fc);
 	atomic_inc(&fc->dev_count);
 
 	return 0;
@@ -2657,10 +2646,11 @@ static long fuse_dev_ioctl_backing_close(struct file *file, __u32 __user *argp)
 static long fuse_dev_ioctl_sync_init(struct file *file)
 {
 	int err = -EINVAL;
+	struct fuse_dev *fud = file->private_data;
 
 	mutex_lock(&fuse_mutex);
-	if (!__fuse_get_dev(file)) {
-		WRITE_ONCE(file->private_data, FUSE_DEV_SYNC_INIT);
+	if (!fud->fc) {
+		fud->sync_init = true;
 		err = 0;
 	}
 	mutex_unlock(&fuse_mutex);
