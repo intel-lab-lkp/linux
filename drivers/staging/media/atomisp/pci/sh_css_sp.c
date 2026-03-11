@@ -983,7 +983,9 @@ sh_css_sp_init_stage(struct ia_css_binary *binary,
 						    IA_CSS_BUFFER_TYPE_DIS_STATISTICS);
 	}
 	ia_css_query_internal_queue_id(IA_CSS_BUFFER_TYPE_METADATA, thread_id, &queue_id);
-	sh_css_copy_buffer_attr_to_spbuffer(&sh_css_sp_stage.frames.metadata_buf, queue_id, mmgr_EXCEPTION, IA_CSS_BUFFER_TYPE_METADATA);
+	sh_css_copy_buffer_attr_to_spbuffer(&sh_css_sp_stage.frames.metadata_buf, queue_id,
+					    mmgr_EXCEPTION,
+					    IA_CSS_BUFFER_TYPE_METADATA);
 	if (err)
 		return err;
 
