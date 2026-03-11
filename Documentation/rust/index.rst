@@ -37,6 +37,7 @@ more details.
     coding-guidelines
     arch-support
     testing
+    lsm
 
 You can also find learning materials for Rust in its section in
 :doc:`../process/kernel-docs`.
