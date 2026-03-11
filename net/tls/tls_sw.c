@@ -249,6 +249,18 @@ static int tls_decrypt_async_wait(struct tls_sw_context_rx *ctx)
 	return ctx->async_wait.err;
 }
 
+/* Collect all pending async AEAD completions and release the
+ * skbs held for them.  Returns the crypto error if any
+ * operation failed, zero otherwise.
+ */
+static int tls_decrypt_async_drain(struct tls_sw_context_rx *ctx)
+{
+	int ret = tls_decrypt_async_wait(ctx);
+
+	__skb_queue_purge(&ctx->async_hold);
+	return ret;
+}
+
 static int tls_do_decryption(struct sock *sk,
 			     struct scatterlist *sgin,
 			     struct scatterlist *sgout,
@@ -2224,8 +2236,7 @@ recv_end:
 		int ret;
 
 		/* Wait for all previously submitted records to be decrypted */
-		ret = tls_decrypt_async_wait(ctx);
-		__skb_queue_purge(&ctx->async_hold);
+		ret = tls_decrypt_async_drain(ctx);
 
 		if (ret) {
 			if (err >= 0 || err == -EINPROGRESS)
