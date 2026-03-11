@@ -231,13 +231,14 @@ int radeon_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	struct radeon_device *rdev = dev->dev_private;
 	struct drm_radeon_info *info = data;
 	struct radeon_mode_info *minfo = &rdev->mode_info;
-	uint32_t *value, value_tmp, *value_ptr, value_size;
+	uint32_t *value, value_tmp, value_size;
+	uint32_t __user *value_ptr;
 	struct ttm_resource_manager *man;
 	uint64_t value64;
 	struct drm_crtc *crtc;
 	int i, found;
 
-	value_ptr = (uint32_t *)((unsigned long)info->value);
+	value_ptr = (uint32_t __user *)((unsigned long)info->value);
 	value = &value_tmp;
 	value_size = sizeof(uint32_t);
 
