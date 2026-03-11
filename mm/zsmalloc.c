@@ -1932,6 +1932,94 @@ static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 	return page_zpdesc(page)->zspage;
 }
 
+#ifdef CONFIG_MEMCG
+static void zs_migrate_lruvec(struct zs_pool *pool, struct obj_cgroup *objcg,
+			      int old_nid, int new_nid, int charge,
+			      int obj_size)
+{
+	struct mem_cgroup *memcg;
+	struct lruvec *old_lruvec, *new_lruvec;
+	int partial;
+
+	if (old_nid == new_nid || !objcg)
+		return;
+
+	/* Proportional (partial) uncompressed share for this portion */
+	partial = (PAGE_SIZE * charge) / obj_size;
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	old_lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(old_nid));
+	new_lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(new_nid));
+
+	mod_memcg_lruvec_state(old_lruvec, pool->compressed_stat, -charge);
+	mod_memcg_lruvec_state(new_lruvec, pool->compressed_stat, charge);
+
+	mod_memcg_lruvec_state(old_lruvec, pool->uncompressed_stat, -partial);
+	mod_memcg_lruvec_state(new_lruvec, pool->uncompressed_stat, partial);
+	rcu_read_unlock();
+}
+
+/*
+ * Transfer per-lruvec and node-level stats when a zspage replaces a zpdesc
+ * with one from a different NUMA node. Must be called while old_zpdesc is
+ * still linked to the zspage. memcg-level charges are unchanged.
+ */
+static void zs_page_migrate_lruvec(struct zs_pool *pool, struct zspage *zspage,
+				   struct zpdesc *old_zpdesc,
+				   struct zpdesc *new_zpdesc,
+				   struct size_class *class)
+{
+	int size = class->size;
+	int old_nid = page_to_nid(zpdesc_page(old_zpdesc));
+	int new_nid = page_to_nid(zpdesc_page(new_zpdesc));
+	unsigned int off, first_obj_offset, page_offset = 0;
+	unsigned int idx;
+	struct zpdesc *cursor = zspage->first_zpdesc;
+
+	if (old_nid == new_nid)
+		return;
+
+	while (cursor != old_zpdesc) {
+		cursor = get_next_zpdesc(cursor);
+		page_offset += PAGE_SIZE;
+	}
+
+	first_obj_offset = get_first_obj_offset(old_zpdesc);
+	idx = (page_offset + first_obj_offset) / size;
+
+	/* Boundary object spaning from the previous zpdesc*/
+	if (idx > 0 && zspage->objcgs[idx - 1])
+		zs_migrate_lruvec(pool, zspage->objcgs[idx - 1],
+				  old_nid, new_nid, first_obj_offset, size);
+
+	for (off = first_obj_offset;
+			off < PAGE_SIZE && idx < class->objs_per_zspage;
+			idx++, off += size) {
+		struct obj_cgroup *objcg = zspage->objcgs[idx];
+		int bytes_on_page = min_t(int, size, PAGE_SIZE - off);
+
+		if (!objcg)
+			continue;
+
+		zs_migrate_lruvec(pool, objcg, old_nid, new_nid,
+				  bytes_on_page, size);
+
+		dec_node_page_state(zpdesc_page(old_zpdesc),
+				    pool->uncompressed_stat);
+		inc_node_page_state(zpdesc_page(new_zpdesc),
+				    pool->uncompressed_stat);
+	}
+}
+#else
+static void zs_page_migrate_lruvec(struct zs_pool *pool, struct zspage *zspage,
+				   struct zpdesc *old_zpdesc,
+				   struct zpdesc *new_zpdesc,
+				   struct size_class *class)
+{
+}
+#endif
+
 static int zs_page_migrate(struct page *newpage, struct page *page,
 		enum migrate_mode mode)
 {
@@ -2003,6 +2091,10 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 		}
 	}
 	kunmap_local(s_addr);
+
+	/* Transfer lruvec/node stats while old zpdesc is still linked */
+	if (pool->memcg_aware)
+		zs_page_migrate_lruvec(pool, zspage, zpdesc, newzpdesc, class);
 
 	replace_sub_page(class, zspage, newzpdesc, zpdesc);
 	/*
