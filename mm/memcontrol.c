@@ -333,6 +333,8 @@ static const unsigned int memcg_node_stat_items[] = {
 #ifdef CONFIG_HUGETLB_PAGE
 	NR_HUGETLB,
 #endif
+	NR_ZSWAP_B,
+	NR_ZSWAPPED_B,
 };
 
 static const unsigned int memcg_stat_items[] = {
@@ -341,8 +343,6 @@ static const unsigned int memcg_stat_items[] = {
 	MEMCG_PERCPU_B,
 	MEMCG_VMALLOC,
 	MEMCG_KMEM,
-	MEMCG_ZSWAP_B,
-	MEMCG_ZSWAPPED_B,
 };
 
 #define NR_MEMCG_NODE_STAT_ITEMS ARRAY_SIZE(memcg_node_stat_items)
@@ -737,9 +737,8 @@ unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
 }
 #endif
 
-static void mod_memcg_lruvec_state(struct lruvec *lruvec,
-				     enum node_stat_item idx,
-				     int val)
+void mod_memcg_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
+			    int val)
 {
 	struct mem_cgroup_per_node *pn;
 	struct mem_cgroup *memcg;
@@ -766,6 +765,7 @@ static void mod_memcg_lruvec_state(struct lruvec *lruvec,
 
 	put_cpu();
 }
+EXPORT_SYMBOL(mod_memcg_lruvec_state);
 
 /**
  * mod_lruvec_state - update lruvec memory statistics
@@ -1363,8 +1363,8 @@ static const struct memory_stat memory_stats[] = {
 	{ "vmalloc",			MEMCG_VMALLOC			},
 	{ "shmem",			NR_SHMEM			},
 #ifdef CONFIG_ZSWAP
-	{ "zswap",			MEMCG_ZSWAP_B			},
-	{ "zswapped",			MEMCG_ZSWAPPED_B		},
+	{ "zswap",			NR_ZSWAP_B			},
+	{ "zswapped",			NR_ZSWAPPED_B			},
 #endif
 	{ "file_mapped",		NR_FILE_MAPPED			},
 	{ "file_dirty",			NR_FILE_DIRTY			},
@@ -1411,8 +1411,8 @@ static int memcg_page_state_unit(int item)
 {
 	switch (item) {
 	case MEMCG_PERCPU_B:
-	case MEMCG_ZSWAP_B:
-	case MEMCG_ZSWAPPED_B:
+	case NR_ZSWAP_B:
+	case NR_ZSWAPPED_B:
 	case NR_SLAB_RECLAIMABLE_B:
 	case NR_SLAB_UNRECLAIMABLE_B:
 		return 1;
@@ -5482,7 +5482,7 @@ bool obj_cgroup_may_zswap(struct obj_cgroup *objcg)
 
 		/* Force flush to get accurate stats for charging */
 		__mem_cgroup_flush_stats(memcg, true);
-		pages = memcg_page_state(memcg, MEMCG_ZSWAP_B) / PAGE_SIZE;
+		pages = memcg_page_state(memcg, NR_ZSWAP_B) / PAGE_SIZE;
 		if (pages < max)
 			continue;
 		ret = false;
@@ -5511,7 +5511,7 @@ static u64 zswap_current_read(struct cgroup_subsys_state *css,
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
 	mem_cgroup_flush_stats(memcg);
-	return memcg_page_state(memcg, MEMCG_ZSWAP_B);
+	return memcg_page_state(memcg, NR_ZSWAP_B);
 }
 
 static int zswap_max_show(struct seq_file *m, void *v)

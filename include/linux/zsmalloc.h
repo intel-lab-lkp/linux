@@ -24,11 +24,11 @@ struct zs_pool_stats {
 struct zs_pool;
 struct scatterlist;
 struct obj_cgroup;
-enum memcg_stat_item;
+enum node_stat_item;
 
 struct zs_pool *zs_create_pool(const char *name, bool memcg_aware,
-			       enum memcg_stat_item compressed_stat,
-			       enum memcg_stat_item uncompressed_stat);
+			       enum node_stat_item compressed_stat,
+			       enum node_stat_item uncompressed_stat);
 void zs_destroy_pool(struct zs_pool *pool);
 
 unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t flags,

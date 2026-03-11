@@ -216,8 +216,8 @@ struct zs_pool {
 	struct work_struct free_work;
 #endif
 	bool memcg_aware;
-	enum memcg_stat_item compressed_stat;
-	enum memcg_stat_item uncompressed_stat;
+	enum node_stat_item compressed_stat;
+	enum node_stat_item uncompressed_stat;
 	/* protect zspage migration/compaction */
 	rwlock_t lock;
 	atomic_t compaction_in_progress;
@@ -823,6 +823,9 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 		reset_zpdesc(zpdesc);
 		zpdesc_unlock(zpdesc);
 		zpdesc_dec_zone_page_state(zpdesc);
+		if (pool->memcg_aware)
+			dec_node_page_state(zpdesc_page(zpdesc),
+					    pool->compressed_stat);
 		zpdesc_put(zpdesc);
 		zpdesc = next;
 	} while (zpdesc != NULL);
@@ -974,6 +977,9 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		__zpdesc_set_zsmalloc(zpdesc);
 
 		zpdesc_inc_zone_page_state(zpdesc);
+		if (pool->memcg_aware)
+			inc_node_page_state(zpdesc_page(zpdesc),
+					    pool->compressed_stat);
 		zpdescs[i] = zpdesc;
 	}
 
@@ -985,6 +991,9 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 err:
 	while (--i >= 0) {
 		zpdesc_dec_zone_page_state(zpdescs[i]);
+		if (pool->memcg_aware)
+			dec_node_page_state(zpdesc_page(zpdescs[i]),
+					    pool->compressed_stat);
 		free_zpdesc(zpdescs[i]);
 	}
 	if (pool->memcg_aware)
@@ -1029,10 +1038,48 @@ static bool zspage_empty(struct zspage *zspage)
 }
 
 #ifdef CONFIG_MEMCG
-static void zs_charge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
-			    int size)
+static void __zs_mod_memcg_lruvec(struct zs_pool *pool, struct zpdesc *zpdesc,
+				  struct obj_cgroup *objcg, int size,
+				  int sign, unsigned long offset)
 {
 	struct mem_cgroup *memcg;
+	struct lruvec *lruvec;
+	int compressed_size = size, original_size = PAGE_SIZE;
+	int nid = page_to_nid(zpdesc_page(zpdesc));
+	int next_nid = nid;
+
+	if (offset + size > PAGE_SIZE) {
+		struct zpdesc *next_zpdesc = get_next_zpdesc(zpdesc);
+
+		next_nid = page_to_nid(zpdesc_page(next_zpdesc));
+		if (nid != next_nid) {
+			compressed_size = PAGE_SIZE - offset;
+			original_size = (PAGE_SIZE * compressed_size) / size;
+		}
+	}
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+	mod_memcg_lruvec_state(lruvec, pool->compressed_stat,
+			       sign * compressed_size);
+	mod_memcg_lruvec_state(lruvec, pool->uncompressed_stat,
+			       sign * original_size);
+
+	if (nid != next_nid) {
+		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(next_nid));
+		mod_memcg_lruvec_state(lruvec, pool->compressed_stat,
+				       sign * (size - compressed_size));
+		mod_memcg_lruvec_state(lruvec, pool->uncompressed_stat,
+				       sign * (PAGE_SIZE - original_size));
+	}
+	rcu_read_unlock();
+}
+
+static void zs_charge_objcg(struct zs_pool *pool, struct zpdesc *zpdesc,
+			    struct obj_cgroup *objcg, int size,
+			    unsigned long offset)
+{
 
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return;
@@ -1044,18 +1091,19 @@ static void zs_charge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
 	if (obj_cgroup_charge(objcg, GFP_KERNEL, size))
 		VM_WARN_ON_ONCE(1);
 
-	rcu_read_lock();
-	memcg = obj_cgroup_memcg(objcg);
-	mod_memcg_state(memcg, pool->compressed_stat, size);
-	mod_memcg_state(memcg, pool->uncompressed_stat, PAGE_SIZE);
-	rcu_read_unlock();
+	__zs_mod_memcg_lruvec(pool, zpdesc, objcg, size, 1, offset);
+
+	/*
+	 * Node-level vmstats are charged in PAGE_SIZE units. As a best-effort,
+	 * always charge the uncompressed stats to the first zpdesc.
+	 */
+	inc_node_page_state(zpdesc_page(zpdesc), pool->uncompressed_stat);
 }
 
-static void zs_uncharge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
-			      int size)
+static void zs_uncharge_objcg(struct zs_pool *pool, struct zpdesc *zpdesc,
+			      struct obj_cgroup *objcg, int size,
+			      unsigned long offset)
 {
-	struct mem_cgroup *memcg;
-
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return;
 
@@ -1063,20 +1111,24 @@ static void zs_uncharge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
 
 	obj_cgroup_uncharge(objcg, size);
 
-	rcu_read_lock();
-	memcg = obj_cgroup_memcg(objcg);
-	mod_memcg_state(memcg, pool->compressed_stat, -size);
-	mod_memcg_state(memcg, pool->uncompressed_stat, -(int)PAGE_SIZE);
-	rcu_read_unlock();
+	__zs_mod_memcg_lruvec(pool, zpdesc, objcg, size, -1, offset);
+
+	/*
+	 * Node-level vmstats are charged in PAGE_SIZE units. As a best-effort,
+	 * always uncharged the uncompressed stats from the first zpdesc.
+	 */
+	dec_node_page_state(zpdesc_page(zpdesc), pool->uncompressed_stat);
 }
 #else
-static void zs_charge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
-			    int size)
+static void zs_charge_objcg(struct zs_pool *pool, struct zpdesc *zpdesc,
+			    struct obj_cgroup *objcg, int size,
+			    unsigned long offset)
 {
 }
 
-static void zs_uncharge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
-			      int size)
+static void zs_uncharge_objcg(struct zs_pool *pool, struct zpdesc *zpdesc,
+			      struct obj_cgroup *objcg, int size,
+			      unsigned long offset)
 {
 }
 #endif
@@ -1298,7 +1350,7 @@ void zs_obj_write(struct zs_pool *pool, unsigned long handle,
 		WARN_ON_ONCE(!pool->memcg_aware);
 		zspage->objcgs[obj_idx] = objcg;
 		obj_cgroup_get(objcg);
-		zs_charge_objcg(pool, objcg, class->size);
+		zs_charge_objcg(pool, zpdesc, objcg, class->size, off);
 	}
 
 	if (!ZsHugePage(zspage))
@@ -1477,7 +1529,7 @@ static void obj_free(int class_size, unsigned long obj)
 	if (pool->memcg_aware && zspage->objcgs[f_objidx]) {
 		struct obj_cgroup *objcg = zspage->objcgs[f_objidx];
 
-		zs_uncharge_objcg(pool, objcg, class_size);
+		zs_uncharge_objcg(pool, f_zpdesc, objcg, class_size, f_offset);
 		obj_cgroup_put(objcg);
 		zspage->objcgs[f_objidx] = NULL;
 	}
@@ -2191,8 +2243,8 @@ static int calculate_zspage_chain_size(int class_size)
  * otherwise NULL.
  */
 struct zs_pool *zs_create_pool(const char *name, bool memcg_aware,
-			       enum memcg_stat_item compressed_stat,
-			       enum memcg_stat_item uncompressed_stat)
+			       enum node_stat_item compressed_stat,
+			       enum node_stat_item uncompressed_stat)
 {
 	int i;
 	struct zs_pool *pool;
