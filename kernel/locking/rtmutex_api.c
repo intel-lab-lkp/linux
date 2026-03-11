@@ -37,21 +37,29 @@ subsys_initcall(init_rtmutex_sysctl);
  * The atomic acquire/release ops are compiled away, when either the
  * architecture does not support cmpxchg or when debugging is enabled.
  */
-static __always_inline int __rt_mutex_lock_common(struct rt_mutex *lock,
+static __always_inline int ___rt_mutex_lock_common(struct rt_mutex *lock,
 						  unsigned int state,
 						  struct lockdep_map *nest_lock,
-						  unsigned int subclass)
+						  unsigned int subclass,
+						  const bool slow)
 {
 	int ret;
 
 	might_sleep();
 	mutex_acquire_nest(&lock->dep_map, subclass, 0, nest_lock, _RET_IP_);
-	ret = __rt_mutex_lock(&lock->rtmutex, state);
+	ret = __rt_mutex_lock(&lock->rtmutex, state, slow);
 	if (ret)
 		mutex_release(&lock->dep_map, _RET_IP_);
 	return ret;
 }
 
+static __always_inline int __rt_mutex_lock_common(struct rt_mutex *lock,
+						  unsigned int state,
+						  struct lockdep_map *nest_lock,
+						  unsigned int subclass)
+{
+	return ___rt_mutex_lock_common(lock, state, nest_lock, subclass, false);
+}
 void rt_mutex_base_init(struct rt_mutex_base *rtb)
 {
 	__rt_mutex_base_init(rtb);
@@ -77,6 +85,11 @@ void __sched _rt_mutex_lock_nest_lock(struct rt_mutex *lock, struct lockdep_map 
 }
 EXPORT_SYMBOL_GPL(_rt_mutex_lock_nest_lock);
 
+void __sched slow_rt_mutex_lock_nested(struct rt_mutex *lock, unsigned int subclass)
+{
+	___rt_mutex_lock_common(lock, TASK_UNINTERRUPTIBLE, NULL, subclass, true);
+}
+
 #else /* !CONFIG_DEBUG_LOCK_ALLOC */
 
 /**
@@ -89,6 +102,11 @@ void __sched rt_mutex_lock(struct rt_mutex *lock)
 	__rt_mutex_lock_common(lock, TASK_UNINTERRUPTIBLE, NULL, 0);
 }
 EXPORT_SYMBOL_GPL(rt_mutex_lock);
+
+void __sched slow_rt_mutex_lock(struct rt_mutex *lock)
+{
+	___rt_mutex_lock_common(lock, TASK_UNINTERRUPTIBLE, NULL, 0, true);
+}
 #endif
 
 /**
@@ -401,7 +419,7 @@ int __sched rt_mutex_wait_proxy_lock(struct rt_mutex_base *lock,
 	raw_spin_lock_irq(&lock->wait_lock);
 	/* sleep on the mutex */
 	set_current_state(TASK_INTERRUPTIBLE);
-	ret = rt_mutex_slowlock_block(lock, NULL, TASK_INTERRUPTIBLE, to, waiter, NULL);
+	ret = rt_mutex_slowlock_block(lock, NULL, TASK_INTERRUPTIBLE, to, waiter, NULL, false);
 	/*
 	 * try_to_take_rt_mutex() sets the waiter bit unconditionally. We might
 	 * have to fix that up.
@@ -521,22 +539,32 @@ static void __mutex_rt_init_generic(struct mutex *mutex)
 	debug_check_no_locks_freed((void *)mutex, sizeof(*mutex));
 }
 
+static __always_inline int ___mutex_lock_common(struct mutex *lock,
+					       unsigned int state,
+					       unsigned int subclass,
+					       struct lockdep_map *nest_lock,
+					       unsigned long ip,
+					       const bool slow)
+{
+	int ret;
+
+	might_sleep();
+	mutex_acquire_nest(&lock->dep_map, subclass, 0, nest_lock, ip);
+	ret = __rt_mutex_lock(&lock->rtmutex, state, slow);
+	if (ret)
+		mutex_release(&lock->dep_map, ip);
+	else
+		lock_acquired(&lock->dep_map, ip);
+	return ret;
+}
+
 static __always_inline int __mutex_lock_common(struct mutex *lock,
 					       unsigned int state,
 					       unsigned int subclass,
 					       struct lockdep_map *nest_lock,
 					       unsigned long ip)
 {
-	int ret;
-
-	might_sleep();
-	mutex_acquire_nest(&lock->dep_map, subclass, 0, nest_lock, ip);
-	ret = __rt_mutex_lock(&lock->rtmutex, state);
-	if (ret)
-		mutex_release(&lock->dep_map, ip);
-	else
-		lock_acquired(&lock->dep_map, ip);
-	return ret;
+	___mutex_lock_common(lock, state, subclass, nest_lock, ip, false);
 }
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
@@ -644,6 +672,11 @@ int __sched mutex_trylock(struct mutex *lock)
 	return __rt_mutex_trylock(&lock->rtmutex);
 }
 EXPORT_SYMBOL(mutex_trylock);
+
+void __sched slow_mutex_lock(struct mutex *lock)
+{
+	___mutex_lock_common(lock, state, subclass, nest_lock, ip, true);
+}
 #endif /* !CONFIG_DEBUG_LOCK_ALLOC */
 
 void __sched mutex_unlock(struct mutex *lock)

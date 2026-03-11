@@ -109,6 +109,7 @@ extern void __rt_mutex_init(struct rt_mutex *lock, const char *name, struct lock
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 extern void rt_mutex_lock_nested(struct rt_mutex *lock, unsigned int subclass);
+extern void slow_rt_mutex_lock_nested(struct rt_mutex *lock, unsigned int subclass);
 extern void _rt_mutex_lock_nest_lock(struct rt_mutex *lock, struct lockdep_map *nest_lock);
 #define rt_mutex_lock(lock) rt_mutex_lock_nested(lock, 0)
 #define rt_mutex_lock_nest_lock(lock, nest_lock)			\
@@ -116,9 +117,11 @@ extern void _rt_mutex_lock_nest_lock(struct rt_mutex *lock, struct lockdep_map *
 		typecheck(struct lockdep_map *, &(nest_lock)->dep_map);	\
 		_rt_mutex_lock_nest_lock(lock, &(nest_lock)->dep_map);	\
 	} while (0)
+#define slow_rt_mutex_lock(lock) slow_rt_mutex_lock_nested(lock, 0)
 
 #else
 extern void rt_mutex_lock(struct rt_mutex *lock);
+extern void slow_rt_mutex_lock(struct rt_mutex *lock);
 #define rt_mutex_lock_nested(lock, subclass) rt_mutex_lock(lock)
 #define rt_mutex_lock_nest_lock(lock, nest_lock) rt_mutex_lock(lock)
 #endif
