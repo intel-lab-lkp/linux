@@ -190,6 +190,9 @@ static void __show_trace_log_lvl(struct task_struct *task, struct pt_regs *regs,
 	int graph_idx = 0;
 	bool partial = false;
 
+	if (!try_get_task_stack(task))
+		return;
+
 	printk("%sCall Trace:\n", log_lvl);
 
 	unwind_start(&state, task, regs, stack);
@@ -301,6 +304,8 @@ next:
 		if (stack_name)
 			printk("%s </%s>\n", log_lvl, stack_name);
 	}
+
+	put_task_stack(task);
 }
 
 static void show_trace_log_lvl(struct task_struct *task, struct pt_regs *regs,
