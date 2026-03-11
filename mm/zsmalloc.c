@@ -1684,15 +1684,81 @@ static unsigned long find_alloced_obj(struct size_class *class,
 	return handle;
 }
 
+#ifdef CONFIG_MEMCG
 static void zs_migrate_objcg(struct zspage *s_zspage, struct zspage *d_zspage,
-			     unsigned long used_obj, unsigned long free_obj)
+			     unsigned long used_obj, unsigned long free_obj,
+			     struct zs_pool *pool, int size)
 {
-	unsigned int s_idx = used_obj & OBJ_INDEX_MASK;
-	unsigned int d_idx = free_obj & OBJ_INDEX_MASK;
+	struct zpdesc *s_zpdesc, *d_zpdesc;
+	struct obj_cgroup *objcg;
+	struct mem_cgroup *memcg;
+	struct lruvec *l;
+	unsigned int s_idx, d_idx;
+	unsigned int s_off, d_off;
+	int charges[4], nids[4], partial;
+	int s_bytes_in_page, d_bytes_in_page;
+	int i;
 
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		goto out;
+
+	obj_to_location(used_obj, &s_zpdesc, &s_idx);
+	obj_to_location(free_obj, &d_zpdesc, &d_idx);
+
+	objcg = s_zspage->objcgs[s_idx];
+	if (!objcg)
+		goto out;
+
+	/*
+	 * The object migration here can touch up to 4 nodes.
+	 * Instead of breaking down all possible combinations of node changes,
+	 * just uncharge entirely from the source and charge entirely to the
+	 * destination, even if there is are node overlaps between src and dst.
+	 */
+	s_off = (s_idx * size) % PAGE_SIZE;
+	d_off = (d_idx * size) % PAGE_SIZE;
+	s_bytes_in_page = min_t(int, size, PAGE_SIZE - s_off);
+	d_bytes_in_page = min_t(int, size, PAGE_SIZE - d_off);
+
+	charges[0] = -s_bytes_in_page;
+	nids[0] = page_to_nid(zpdesc_page(s_zpdesc));
+	charges[1] = -(size - s_bytes_in_page); /* 0 if object doesn't span */
+	if (charges[1])
+		nids[1] = page_to_nid(zpdesc_page(get_next_zpdesc(s_zpdesc)));
+
+	charges[2] = d_bytes_in_page;
+	nids[2] = page_to_nid(zpdesc_page(d_zpdesc));
+	charges[3] = size - d_bytes_in_page; /* 0 if object doesn't span */
+	if (charges[3])
+		nids[3] = page_to_nid(zpdesc_page(get_next_zpdesc(d_zpdesc)));
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	for (i = 0; i < 4; i++) {
+		if (!charges[i])
+			continue;
+
+		l = mem_cgroup_lruvec(memcg, NODE_DATA(nids[i]));
+		partial = (PAGE_SIZE * charges[i]) / size;
+		mod_memcg_lruvec_state(l, pool->compressed_stat, charges[i]);
+		mod_memcg_lruvec_state(l, pool->uncompressed_stat, partial);
+	}
+	rcu_read_unlock();
+
+	dec_node_page_state(zpdesc_page(s_zpdesc), pool->uncompressed_stat);
+	inc_node_page_state(zpdesc_page(d_zpdesc), pool->uncompressed_stat);
+
+out:
 	d_zspage->objcgs[d_idx] = s_zspage->objcgs[s_idx];
 	s_zspage->objcgs[s_idx] = NULL;
 }
+#else
+static void zs_migrate_objcg(struct zspage *s_zspage, struct zspage *d_zspage,
+			     unsigned long used_obj, unsigned long free_obj,
+			     struct zs_pool *pool, int size)
+{
+}
+#endif
 
 static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 			   struct zspage *dst_zspage)
@@ -1719,7 +1785,7 @@ static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 
 		if (pool->memcg_aware)
 			zs_migrate_objcg(src_zspage, dst_zspage,
-					 used_obj, free_obj);
+					 used_obj, free_obj, pool, class->size);
 
 		obj_idx++;
 		obj_free(class->size, used_obj);
