@@ -350,9 +350,8 @@ static int sysc_add_named_clock_from_child(struct sysc *ddata,
 		return PTR_ERR(clock);
 
 	/*
-	 * Use clkdev_add() instead of clkdev_alloc() to avoid the MAX_DEV_ID
-	 * limit for clk_get(). If cl ever needs to be freed, it should be done
-	 * with clkdev_drop().
+	 * Use clkdev_add() to avoid the MAX_DEV_ID limit for clk_get().
+	 * If cl ever needs to be freed, it should be done with clkdev_drop().
 	 */
 	cl = kzalloc_obj(*cl);
 	if (!cl)
