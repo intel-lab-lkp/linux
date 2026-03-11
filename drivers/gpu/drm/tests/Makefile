@@ -23,6 +23,7 @@ obj-$(CONFIG_DRM_KUNIT_TEST) += \
 	drm_plane_helper_test.o \
 	drm_probe_helper_test.o \
 	drm_rect_test.o \
+	drm_suballoc_test.o \
 	drm_sysfb_modeset_test.o \
 	drm_fixp_test.o
 
