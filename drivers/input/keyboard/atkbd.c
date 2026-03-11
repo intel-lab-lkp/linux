@@ -958,6 +958,9 @@ static void atkbd_cleanup(struct serio *serio)
 {
 	struct atkbd *atkbd = atkbd_from_serio(serio);
 
+	if (device_may_wakeup(&serio->dev))
+		return;
+
 	atkbd_disable(atkbd);
 	ps2_command(&atkbd->ps2dev, NULL, ATKBD_CMD_RESET_DEF);
 }
