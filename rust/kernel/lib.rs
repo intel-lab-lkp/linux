@@ -112,6 +112,8 @@ pub mod jump_label;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
 pub mod list;
+#[cfg(CONFIG_SECURITY)]
+pub mod lsm;
 pub mod maple_tree;
 pub mod miscdevice;
 pub mod mm;
