@@ -1,0 +1,36 @@
+drm drm-fixes 96bfe9ff7e88f0541002640acbcb3ec63c9d0130
+	Merge tag 'drm-xe-fixes-2026-03-05' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-fixes
+drm-misc drm-misc-fixes 49973e2a4156a88e46ba1c1c484b7c214199a181
+	drm/loongson: Mark driver as orphaned
+drm-rust drm-rust-fixes c7940c8bf215b9dc6211781c77ce80e76982a723
+	gpu: nova-core: fix stack overflow in GSP memory allocation
+drm-intel drm-intel-fixes 335b237d902c7362cb7228802e68374406b24acf
+	drm/i915/dp: Read ALPM caps after DPCD init
+drm-xe drm-xe-fixes 1f318b96cc84d7c2ab792fcc0bfd42a7ca890681
+	Linux 7.0-rc3
+drm drm-next 58351f46de26bcc4403f9972f7aed430d15cbd03
+	Merge v7.0-rc3 into drm-next
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 777a02812f739af9e349cd0f695400a1d84053f4
+	drm/i915/dp: Add missing slice count check during mode validation
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 252b0e790d22dfef8c4d0c39a5bfc04e40b615ad
+	dma-buf: heaps: Clear CMA highages using helper
+drm-rust drm-rust-next a544873ce0575b2fd8285a1364d3e09929d9a3ba
+	gpu: nova-core: apply the one "use" item per line policy to commands.rs
+drm-intel drm-intel-next 382db565d7a2cc732ea78edd147b0ed76f00080c
+	drm/i915/frontbuffer: reduce fb for frontbuffer abbreviation usage
+drm-intel drm-intel-gt-next 06249b4e691a75694c014a61708c007fb5755f60
+	drm/i915: Fix potential overflow of shmem scatterlist length
+drm-xe drm-xe-next f7093ebf612f45544600f06681d6fb7be7d0649a
+	drm/xe/userptr: Defer Waiting for TLB invalidation to the second pass if possible
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 06ad61b1f1955a3ff609b0530fb7a7077d425a39
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
