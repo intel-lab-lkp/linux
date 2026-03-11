@@ -147,6 +147,30 @@ int unshare_fs_struct(void)
 }
 EXPORT_SYMBOL_GPL(unshare_fs_struct);
 
+/*
+ * PID 1 may choose to stop sharing fs_struct state with us.
+ * Either via unshare(CLONE_FS) or unshare(CLONE_NEWNS). Of
+ * course, PID 1 could have chosen to create arbitrary process
+ * trees that all share fs_struct state via CLONE_FS. This is a
+ * strong statement: We only care about PID 1 aka the thread-group
+ * leader so subthread's fs_struct state doesn't matter.
+ *
+ * PID 1 unsharing fs_struct state is a bug. PID 1 relies on
+ * various kthreads to be able to perform work based on its
+ * fs_struct state. Breaking that contract sucks for both sides.
+ * So just don't bother with extra work for this. No sane init
+ * system should ever do this.
+ */
+static inline void validate_fs_switch(struct fs_struct *old_fs)
+{
+	if (likely(current->pid != 1))
+		return;
+	/* @old_fs may be dangling but for comparison it's fine */
+	if (old_fs != &init_fs)
+		return;
+	pr_warn("VFS: Pid 1 stopped sharing filesystem state\n");
+}
+
 struct fs_struct *switch_fs_struct(struct fs_struct *new_fs)
 {
 	struct fs_struct *fs;
@@ -162,6 +186,7 @@ struct fs_struct *switch_fs_struct(struct fs_struct *new_fs)
 		read_sequnlock_excl(&fs->seq);
 	}
 
+	validate_fs_switch(fs);
 	return new_fs;
 }
 
