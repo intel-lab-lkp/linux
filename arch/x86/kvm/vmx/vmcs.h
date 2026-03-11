@@ -18,7 +18,8 @@
  * wasting too much memory, while the "algorithm" is fast enough to be used to
  * lookup vmcs12 fields on-demand, e.g. for emulation.
  */
-#define ROL16(val, n) ((u16)(((u16)(val) << (n)) | ((u16)(val) >> (16 - (n)))))
+#define ROL16(val, n) ((u16)((((u16)(val) << (n)) & GENMASK_U16(15, 0)) | \
+			     ((u16)(val) >> (16 - (n)))))
 #define VMCS12_IDX_TO_ENC(idx) ROL16(idx, 10)
 #define ENC_TO_VMCS12_IDX(enc) ROL16(enc, 6)
 
