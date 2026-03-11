@@ -311,7 +311,6 @@ static void adp_crtc_atomic_flush(struct drm_crtc *crtc,
 				  struct drm_atomic_state *state)
 {
 	u32 frame_num = 1;
-	unsigned long flags;
 	struct adp_drv_private *adp = crtc_to_adp(crtc);
 	struct drm_crtc_state *new_state = drm_atomic_get_new_crtc_state(state, crtc);
 	u64 new_size = ALIGN(new_state->mode.hdisplay *
@@ -336,14 +335,13 @@ static void adp_crtc_atomic_flush(struct drm_crtc *crtc,
 		struct drm_pending_vblank_event *event = crtc->state->event;
 
 		crtc->state->event = NULL;
-		spin_lock_irqsave(&crtc->dev->event_lock, flags);
+		guard(spinlock_irqsave)(&crtc->dev->event_lock);
 
 		if (drm_crtc_vblank_get(crtc) != 0)
 			drm_crtc_send_vblank_event(crtc, event);
 		else
 			adp->event = event;
 
-		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 	}
 }
 
@@ -493,7 +491,7 @@ static irqreturn_t adp_fe_irq(int irq, void *arg)
 	int_status = readl(adp->fe + ADP_INT_STATUS);
 	if (int_status & ADP_INT_STATUS_VBLANK) {
 		drm_crtc_handle_vblank(&adp->crtc);
-		spin_lock(&adp->crtc.dev->event_lock);
+		guard(spinlock)(&adp->crtc.dev->event_lock);
 		if (adp->event) {
 			int_ctl = readl(adp->fe + ADP_CTRL);
 			if ((int_ctl & 0xF00) == 0x600) {
@@ -502,7 +500,6 @@ static irqreturn_t adp_fe_irq(int irq, void *arg)
 				drm_crtc_vblank_put(&adp->crtc);
 			}
 		}
-		spin_unlock(&adp->crtc.dev->event_lock);
 	}
 
 	writel(int_status, adp->fe + ADP_INT_STATUS);
