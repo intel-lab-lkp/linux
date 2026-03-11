@@ -7443,12 +7443,12 @@ EXPORT_SYMBOL(__cond_resched);
 #ifdef CONFIG_PREEMPT_DYNAMIC
 # ifdef CONFIG_HAVE_PREEMPT_DYNAMIC_CALL
 #  define cond_resched_dynamic_enabled	__cond_resched
-#  define cond_resched_dynamic_disabled	((void *)&__static_call_return0)
+#  define cond_resched_dynamic_disabled	STATIC_CALL_STUB_RET0(cond_resched)
 DEFINE_STATIC_CALL_RET0(cond_resched, __cond_resched);
 EXPORT_STATIC_CALL_TRAMP(cond_resched);
 
 #  define might_resched_dynamic_enabled	__cond_resched
-#  define might_resched_dynamic_disabled ((void *)&__static_call_return0)
+#  define might_resched_dynamic_disabled STATIC_CALL_STUB_RET0(might_resched)
 DEFINE_STATIC_CALL_RET0(might_resched, __cond_resched);
 EXPORT_STATIC_CALL_TRAMP(might_resched);
 # elif defined(CONFIG_HAVE_PREEMPT_DYNAMIC_KEY)

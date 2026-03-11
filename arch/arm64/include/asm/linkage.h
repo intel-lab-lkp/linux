@@ -4,9 +4,10 @@
 #ifdef __ASSEMBLER__
 #include <asm/assembler.h>
 #endif
+#include <linux/stringify.h>
 
 #define __ALIGN		.balign CONFIG_FUNCTION_ALIGNMENT
-#define __ALIGN_STR	".balign " #CONFIG_FUNCTION_ALIGNMENT
+#define __ALIGN_STR	__stringify(__ALIGN)
 
 /*
  * When using in-kernel BTI we need to ensure that PCS-conformant

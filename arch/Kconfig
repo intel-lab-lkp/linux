@@ -1678,6 +1678,10 @@ config HAVE_STATIC_CALL_INLINE
 	depends on HAVE_STATIC_CALL
 	select OBJTOOL
 
+config HAVE_STATIC_CALL_TYPED_STUBS
+	bool
+	depends on !HAVE_STATIC_CALL
+
 config HAVE_PREEMPT_DYNAMIC
 	bool
 

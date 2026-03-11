@@ -7695,16 +7695,19 @@ void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 }
 EXPORT_SYMBOL_GPL(perf_register_guest_info_callbacks);
 
+#define static_call_disable(name) \
+	static_call_update(name, STATIC_CALL_STUB_RET0(name))
+
 void perf_unregister_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 {
 	if (WARN_ON_ONCE(rcu_access_pointer(perf_guest_cbs) != cbs))
 		return;
 
 	rcu_assign_pointer(perf_guest_cbs, NULL);
-	static_call_update(__perf_guest_state, (void *)&__static_call_return0);
-	static_call_update(__perf_guest_get_ip, (void *)&__static_call_return0);
-	static_call_update(__perf_guest_handle_intel_pt_intr, (void *)&__static_call_return0);
-	static_call_update(__perf_guest_handle_mediated_pmi, (void *)&__static_call_return0);
+	static_call_disable(__perf_guest_state);
+	static_call_disable(__perf_guest_get_ip);
+	static_call_disable(__perf_guest_handle_intel_pt_intr);
+	static_call_disable(__perf_guest_handle_mediated_pmi);
 	synchronize_rcu();
 }
 EXPORT_SYMBOL_GPL(perf_unregister_guest_info_callbacks);
