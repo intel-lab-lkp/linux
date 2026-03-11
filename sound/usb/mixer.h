@@ -19,8 +19,6 @@ struct usb_mixer_interface {
 	struct list_head list;
 	unsigned int ignore_ctl_error;
 	struct urb *urb;
-	/* array[MAX_ID_ELEMS], indexed by unit id */
-	struct usb_mixer_elem_list **id_elems;
 
 	/* the usb audio specification version this interface complies to */
 	int protocol;
@@ -42,6 +40,9 @@ struct usb_mixer_interface {
 	void *private_data;
 	void (*private_free)(struct usb_mixer_interface *mixer);
 	void (*private_suspend)(struct usb_mixer_interface *mixer);
+
+	/* array[MAX_ID_ELEMS], indexed by unit id */
+	struct usb_mixer_elem_list *id_elems[];
 };
 
 #define MAX_CHANNELS	16	/* max logical channels */

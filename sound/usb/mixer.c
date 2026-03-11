@@ -1393,7 +1393,7 @@ static int mixer_ctl_feature_info(struct snd_kcontrol *kcontrol,
 		if (!cval->initialized) {
 			get_min_max_with_quirks(cval, 0, kcontrol);
 			if (cval->initialized && cval->dBmin >= cval->dBmax) {
-				kcontrol->vd[0].access &= 
+				kcontrol->vd[0].access &=
 					~(SNDRV_CTL_ELEM_ACCESS_TLV_READ |
 					  SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK);
 				snd_ctl_notify(cval->head.mixer->chip->card,
@@ -3006,15 +3006,12 @@ static void snd_usb_mixer_free(struct usb_mixer_interface *mixer)
 	snd_usb_mixer_disconnect(mixer);
 
 	/* Unregister controls first, snd_ctl_remove() frees the element */
-	if (mixer->id_elems) {
-		for (id = 0; id < MAX_ID_ELEMS; id++) {
-			for (list = mixer->id_elems[id]; list; list = next) {
-				next = list->next_id_elem;
-				if (list->kctl)
-					snd_ctl_remove(mixer->chip->card, list->kctl);
-			}
+	for (id = 0; id < MAX_ID_ELEMS; id++) {
+		for (list = mixer->id_elems[id]; list; list = next) {
+			next = list->next_id_elem;
+			if (list->kctl)
+				snd_ctl_remove(mixer->chip->card, list->kctl);
 		}
-		kfree(mixer->id_elems);
 	}
 	if (mixer->urb) {
 		kfree(mixer->urb->transfer_buffer);
@@ -3652,16 +3649,11 @@ int snd_usb_create_mixer(struct snd_usb_audio *chip, int ctrlif)
 
 	strscpy(chip->card->mixername, "USB Mixer");
 
-	mixer = kzalloc_obj(*mixer);
+	mixer = kzalloc_flex(*mixer, id_elems, MAX_ID_ELEMS);
 	if (!mixer)
 		return -ENOMEM;
 	mixer->chip = chip;
 	mixer->ignore_ctl_error = !!(chip->quirk_flags & QUIRK_FLAG_IGNORE_CTL_ERROR);
-	mixer->id_elems = kzalloc_objs(*mixer->id_elems, MAX_ID_ELEMS);
-	if (!mixer->id_elems) {
-		kfree(mixer);
-		return -ENOMEM;
-	}
 
 	mixer->hostif = &usb_ifnum_to_if(chip->dev, ctrlif)->altsetting[0];
 	switch (get_iface_desc(mixer->hostif)->bInterfaceProtocol) {
