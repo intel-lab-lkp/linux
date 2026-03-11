@@ -2169,13 +2169,13 @@ out:
 struct folio *alloc_migration_target(struct folio *src, unsigned long private)
 {
 	struct migration_target_control *mtc;
-	gfp_t gfp_mask;
+	gfp_t gfp_mask, gfp_entry;
 	unsigned int order = 0;
 	int nid;
 	enum zone_type zidx;
 
 	mtc = (struct migration_target_control *)private;
-	gfp_mask = mtc->gfp_mask;
+	gfp_mask = gfp_entry = mtc->gfp_mask;
 	nid = mtc->nid;
 	if (nid == NUMA_NO_NODE)
 		nid = folio_nid(src);
@@ -2184,6 +2184,8 @@ struct folio *alloc_migration_target(struct folio *src, unsigned long private)
 		struct hstate *h = folio_hstate(src);
 
 		gfp_mask = htlb_modify_alloc_mask(h, gfp_mask);
+		gfp_mask = (gfp_mask & ~__GFP_RECLAIM) | (gfp_entry & __GFP_RECLAIM);
+
 		return alloc_hugetlb_folio_nodemask(h, nid,
 						mtc->nmask, gfp_mask,
 						htlb_allow_alloc_fallback(mtc->reason));
