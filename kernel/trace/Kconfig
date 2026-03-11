@@ -410,10 +410,10 @@ config STACK_TRACER
 	  Say N if unsure.
 
 config TRACE_PREEMPT_TOGGLE
-	bool
+	bool "Preempt disable/enable tracing hooks"
 	help
-	  Enables hooks which will be called when preemption is first disabled,
-	  and last enabled.
+	  Enables hooks into preemption disable and enable paths for
+	  tracing or latency measurement.
 
 config IRQSOFF_TRACER
 	bool "Interrupts-off Latency Tracer"
