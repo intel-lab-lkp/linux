@@ -189,15 +189,58 @@ static __always_inline unsigned char interrupt_context_level(void)
  */
 #define in_atomic_preempt_off() (preempt_count() != PREEMPT_DISABLE_OFFSET)
 
-#if defined(CONFIG_DEBUG_PREEMPT) || defined(CONFIG_TRACE_PREEMPT_TOGGLE)
+#if defined(CONFIG_DEBUG_PREEMPT) || defined(CONFIG_PREEMPT_TRACER)
 extern void preempt_count_add(int val);
 extern void preempt_count_sub(int val);
-#define preempt_count_dec_and_test() \
-	({ preempt_count_sub(1); should_resched(0); })
+#elif defined(CONFIG_TRACE_PREEMPT_TOGGLE)
+/*
+ * Avoid the circular dependency on architectures where asm/irqflags.h
+ * includes linux/preempt.h (e.g. m68k):
+ *
+ * preempt.h <--------------------+
+ *  tracepoint-defs.h             |
+ *   static_key.h                 |
+ *    jump_label.h                |
+ *     atomic.h                   |
+ *      irqflags.h                |
+ *       asm/irqflags.h           |
+ *        preempt.h --------------+
+ */
+#include <linux/tracepoint-defs.h>
+
+extern void __trace_preempt_on(void);
+extern void __trace_preempt_off(void);
+
+DECLARE_TRACEPOINT(preempt_enable);
+DECLARE_TRACEPOINT(preempt_disable);
+
+#define __preempt_trace_enabled(type, val) \
+	(tracepoint_enabled(preempt_##type) && preempt_count() == (val))
+
+static __always_inline void preempt_count_add(int val)
+{
+	__preempt_count_add(val);
+
+	if (__preempt_trace_enabled(disable, val))
+		__trace_preempt_off();
+}
+
+static __always_inline void preempt_count_sub(int val)
+{
+	if (__preempt_trace_enabled(enable, val))
+		__trace_preempt_on();
+
+	__preempt_count_sub(val);
+}
 #else
 #define preempt_count_add(val)	__preempt_count_add(val)
 #define preempt_count_sub(val)	__preempt_count_sub(val)
 #define preempt_count_dec_and_test() __preempt_count_dec_and_test()
+#endif
+
+#if defined(CONFIG_DEBUG_PREEMPT) || defined(CONFIG_TRACE_PREEMPT_TOGGLE)
+#define preempt_count_dec_and_test() \
+	({ preempt_count_sub(1); should_resched(0); })
 #endif
 
 #define __preempt_count_inc() __preempt_count_add(1)
