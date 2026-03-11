@@ -1112,8 +1112,9 @@ static bool virtqueue_enable_cb_delayed_split(struct vring_virtqueue *vq)
 			&vring_used_event(&vq->split.vring),
 			cpu_to_virtio16(vq->vq.vdev, vq->last_used_idx + bufs));
 
-	if (unlikely((u16)(virtio16_to_cpu(vq->vq.vdev, vq->split.vring.used->idx)
-					- vq->last_used_idx) > bufs)) {
+	if (unlikely((u16)(virtio16_to_cpu(vq->vq.vdev,
+				READ_ONCE(vq->split.vring.used->idx))
+				- vq->last_used_idx) > bufs)) {
 		END_USE(vq);
 		return false;
 	}
