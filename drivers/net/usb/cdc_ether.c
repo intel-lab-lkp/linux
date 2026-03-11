@@ -115,7 +115,7 @@ int usbnet_generic_cdc_bind(struct usbnet *dev, struct usb_interface *intf)
 	int				len = intf->cur_altsetting->extralen;
 	struct usb_interface_descriptor	*d;
 	struct cdc_state		*info = (void *) &dev->data;
-	int				status;
+	int				status = -ENODEV;
 	int				rndis;
 	bool				android_rndis_quirk = false;
 	struct usb_driver		*driver = driver_of(intf);
@@ -288,16 +288,11 @@ skip:
 	if (info->data != info->control) {
 		status = usb_driver_claim_interface(driver, info->data, dev);
 		if (status < 0)
-			return status;
+			goto bad_desc;
 	}
 	status = usbnet_get_endpoints(dev, info->data);
-	if (status < 0) {
-		/* ensure immediate exit from usbnet_disconnect */
-		usb_set_intfdata(info->data, NULL);
-		if (info->data != info->control)
-			usb_driver_release_interface(driver, info->data);
-		return status;
-	}
+	if (status < 0)
+		goto bail_out_and_release;
 
 	/* status endpoint: optional for CDC Ethernet, not RNDIS (or ACM) */
 	if (info->data != info->control)
@@ -317,9 +312,8 @@ skip:
 	}
 	if (rndis && !dev->status) {
 		dev_dbg(&intf->dev, "missing RNDIS status endpoint\n");
-		usb_set_intfdata(info->data, NULL);
-		usb_driver_release_interface(driver, info->data);
-		return -ENODEV;
+		status = -ENODEV;
+		goto bail_out_and_release;
 	}
 
 	/* override ethtool_ops */
@@ -327,9 +321,13 @@ skip:
 
 	return 0;
 
+bail_out_and_release:
+	usb_set_intfdata(info->data, NULL);
+	if (info->data != info->control)
+		usb_driver_release_interface(driver, info->data);
 bad_desc:
 	dev_info(&dev->udev->dev, "bad CDC descriptors\n");
-	return -ENODEV;
+	return status;
 }
 EXPORT_SYMBOL_GPL(usbnet_generic_cdc_bind);
 
