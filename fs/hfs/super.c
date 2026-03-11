@@ -369,7 +369,7 @@ static int hfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	res = -EINVAL;
 	root_inode = hfs_iget(sb, &fd.search_key->cat, &rec);
 	hfs_find_exit(&fd);
-	if (!root_inode)
+	if (!root_inode || is_bad_inode(root_inode))
 		goto bail_no_root;
 
 	set_default_d_op(sb, &hfs_dentry_operations);
