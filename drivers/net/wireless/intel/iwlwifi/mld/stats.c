@@ -415,7 +415,7 @@ iwl_mld_process_per_link_stats(struct iwl_mld *mld,
 
 		bss_conf = wiphy_dereference(mld->wiphy,
 					     mld->fw_id_to_bss_conf[fw_id]);
-		if (!bss_conf || bss_conf->vif->type != NL80211_IFTYPE_STATION)
+		if (!bss_conf || !bss_conf->vif || bss_conf->vif->type != NL80211_IFTYPE_STATION)
 			continue;
 
 		link_stats = &per_link[fw_id];
