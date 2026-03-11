@@ -1516,7 +1516,7 @@ static void context_close(struct i915_gem_context *ctx)
 {
 	struct i915_drm_client *client;
 
-	/* Flush any concurrent set_engines() */
+	/* Serialize against concurrent access to the context's engines */
 	mutex_lock(&ctx->engines_mutex);
 	unpin_engines(__context_engines_static(ctx));
 	engines_idle_release(ctx, rcu_replace_pointer(ctx->engines, NULL, 1));
