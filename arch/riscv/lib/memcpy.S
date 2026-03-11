@@ -10,13 +10,14 @@
 SYM_FUNC_START(__memcpy)
 	move t6, a0  /* Preserve return value */
 
-	/* Defer to byte-oriented copy for small sizes */
-	sltiu a3, a2, 128
-	bnez a3, 4f
-	/* Use word-oriented copy only if low-order bits match */
+	/* Check alignment first */
 	andi a3, t6, SZREG-1
 	andi a4, a1, SZREG-1
-	bne a3, a4, 4f
+	bne a3, a4, .Lshifted_copy
+
+	/* Aligned path: defer to byte-oriented copy for small sizes */
+	sltiu a5, a2, 128
+	bnez a5, 4f
 
 	beqz a3, 2f  /* Skip if already aligned */
 	/*
@@ -76,6 +77,79 @@ SYM_FUNC_START(__memcpy)
 	addi t6, t6, 16*SZREG
 	bltu a1, a3, 3b
 	andi a2, a2, (16*SZREG)-1  /* Update count */
+	j 4f			/* Skip shifted copy section */
+
+.Lshifted_copy:
+	/*
+	 * Source and dest have different alignments.
+	 * a3 = dest & (SZREG-1), a4 = src & (SZREG-1)
+	 * Align destination first, then use shifted word copy.
+	 */
+
+	/* For small sizes, just use byte copy */
+	sltiu a5, a2, 16
+	bnez a5, 4f
+
+	/* If dest is already aligned, skip to shifted loop setup */
+	beqz a3, .Ldest_aligned
+
+	/* Calculate bytes needed to align dest: SZREG - a3 */
+	neg a5, a3
+	addi a5, a5, SZREG
+	sub a2, a2, a5		/* Update count */
+
+.Lalign_dest_loop:
+	lb a4, 0(a1)
+	addi a1, a1, 1
+	sb a4, 0(t6)
+	addi t6, t6, 1
+	addi a5, a5, -1
+	bnez a5, .Lalign_dest_loop
+
+.Ldest_aligned:
+	/*
+	 * Dest is now aligned. Check if we have enough bytes
+	 * remaining for word-oriented copy.
+	 */
+	sltiu a3, a2, SZREG
+	bnez a3, 4f
+
+	/*
+	 * Calculate shift amounts based on source alignment (distance).
+	 * distance = src & (SZREG-1), guaranteed non-zero since we only
+	 * reach here when src and dest had different alignments.
+	 */
+	andi a3, a1, SZREG-1	/* a3 = distance */
+	slli a4, a3, 3		/* a4 = distance * 8 (right shift amount) */
+	li a5, SZREG*8
+	sub a5, a5, a4		/* a5 = SZREG*8 - distance*8 (left shift) */
+
+	/* Align src backwards to word boundary */
+	sub a1, a1, a3
+
+	/* Calculate end address: dest + (count rounded down to words) */
+	andi a6, a2, ~(SZREG-1)
+	add a6, t6, a6		/* a6 = loop end address for dest */
+
+	/* Load first aligned word from source */
+	REG_L t0, 0(a1)
+
+.Lshifted_loop:
+	REG_L t1, SZREG(a1)	/* Load next aligned word */
+	srl t2, t0, a4		/* Shift right: low part from current word */
+	mv t0, t1		/* Current = next for next iteration */
+	addi a1, a1, SZREG
+	addi t6, t6, SZREG
+	sll t3, t0, a5		/* Shift left: high part from next word */
+	or t2, t2, t3		/* Combine to form output word */
+	REG_S t2, -SZREG(t6)	/* Store to aligned dest */
+	bltu t6, a6, .Lshifted_loop
+
+	/* Restore src to correct unaligned position */
+	add a1, a1, a3
+	/* Calculate remaining byte count */
+	andi a2, a2, SZREG-1
+	/* Fall through to label 4 for remaining bytes */
 
 4:
 	/* Handle trailing misalignment */
