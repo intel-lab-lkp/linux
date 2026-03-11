@@ -180,8 +180,10 @@
  * refault distance will immediately activate the refaulting page.
  */
 
+#define WORKINGSET_MGLRU_SHIFT  1
 #define WORKINGSET_SHIFT 1
 #define EVICTION_SHIFT	((BITS_PER_LONG - BITS_PER_XA_VALUE) +	\
+			 WORKINGSET_MGLRU_SHIFT + \
 			 WORKINGSET_SHIFT + NODES_SHIFT + \
 			 MEM_CGROUP_ID_SHIFT)
 #define EVICTION_MASK	(~0UL >> EVICTION_SHIFT)
@@ -197,12 +199,13 @@
 static unsigned int bucket_order __read_mostly;
 
 static void *pack_shadow(int memcgid, pg_data_t *pgdat, unsigned long eviction,
-			 bool workingset)
+			 bool workingset, bool is_mglru)
 {
 	eviction &= EVICTION_MASK;
 	eviction = (eviction << MEM_CGROUP_ID_SHIFT) | memcgid;
 	eviction = (eviction << NODES_SHIFT) | pgdat->node_id;
 	eviction = (eviction << WORKINGSET_SHIFT) | workingset;
+	eviction = (eviction << WORKINGSET_MGLRU_SHIFT) | is_mglru;
 
 	return xa_mk_value(eviction);
 }
@@ -214,6 +217,7 @@ static void unpack_shadow(void *shadow, int *memcgidp, pg_data_t **pgdat,
 	int memcgid, nid;
 	bool workingset;
 
+	entry >>= WORKINGSET_MGLRU_SHIFT;
 	workingset = entry & ((1UL << WORKINGSET_SHIFT) - 1);
 	entry >>= WORKINGSET_SHIFT;
 	nid = entry & ((1UL << NODES_SHIFT) - 1);
@@ -254,7 +258,7 @@ static void *lru_gen_eviction(struct folio *folio)
 	hist = lru_hist_from_seq(min_seq);
 	atomic_long_add(delta, &lrugen->evicted[hist][type][tier]);
 
-	return pack_shadow(mem_cgroup_private_id(memcg), pgdat, token, workingset);
+	return pack_shadow(mem_cgroup_private_id(memcg), pgdat, token, workingset, true);
 }
 
 /*
@@ -390,7 +394,7 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
 	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 
-	if (lru_gen_enabled())
+	if (folio_lru_gen(folio) != -1)
 		return lru_gen_eviction(folio);
 
 	lruvec = mem_cgroup_lruvec(target_memcg, pgdat);
@@ -400,7 +404,7 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
 	eviction >>= bucket_order;
 	workingset_age_nonresident(lruvec, folio_nr_pages(folio));
 	return pack_shadow(memcgid, pgdat, eviction,
-				folio_test_workingset(folio));
+				folio_test_workingset(folio), false);
 }
 
 /**
@@ -426,8 +430,10 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
 	int memcgid;
 	struct pglist_data *pgdat;
 	unsigned long eviction;
+	unsigned long entry = xa_to_value(shadow);
+	bool is_mglru = !!(entry & WORKINGSET_MGLRU_SHIFT);
 
-	if (lru_gen_enabled()) {
+	if (is_mglru) {
 		bool recent;
 
 		rcu_read_lock();
@@ -539,10 +545,11 @@ void workingset_refault(struct folio *folio, void *shadow)
 	struct lruvec *lruvec;
 	bool workingset;
 	long nr;
+	unsigned long entry = xa_to_value(shadow);
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 
-	if (lru_gen_enabled()) {
+	if (entry & ((1UL << WORKINGSET_MGLRU_SHIFT) - 1)) {
 		lru_gen_refault(folio, shadow);
 		return;
 	}
