@@ -1047,7 +1047,7 @@ static void zs_charge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
 	rcu_read_lock();
 	memcg = obj_cgroup_memcg(objcg);
 	mod_memcg_state(memcg, pool->compressed_stat, size);
-	mod_memcg_state(memcg, pool->uncompressed_stat, 1);
+	mod_memcg_state(memcg, pool->uncompressed_stat, PAGE_SIZE);
 	rcu_read_unlock();
 }
 
@@ -1066,7 +1066,7 @@ static void zs_uncharge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
 	rcu_read_lock();
 	memcg = obj_cgroup_memcg(objcg);
 	mod_memcg_state(memcg, pool->compressed_stat, -size);
-	mod_memcg_state(memcg, pool->uncompressed_stat, -1);
+	mod_memcg_state(memcg, pool->uncompressed_stat, -(int)PAGE_SIZE);
 	rcu_read_unlock();
 }
 #else
