@@ -38,8 +38,10 @@ void drv_stop(struct ieee80211_local *local, bool suspend)
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	if (WARN_ON(!local->started))
+	if (WARN_ON_ONCE(!local->started)) {
+		pr_err("mac80211: drv-stop called but local is not started.\n");
 		return;
+	}
 
 	trace_drv_stop(local, suspend);
 	local->ops->stop(&local->hw, suspend);
