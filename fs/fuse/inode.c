@@ -1622,6 +1622,7 @@ struct fuse_dev *fuse_dev_alloc(void)
 	if (!fud)
 		return NULL;
 
+	refcount_set(&fud->ref, 1);
 	pq = kzalloc_objs(struct list_head, FUSE_PQ_HASH_SIZE);
 	if (!pq) {
 		kfree(fud);
@@ -1657,10 +1658,14 @@ struct fuse_dev *fuse_dev_alloc_install(struct fuse_conn *fc)
 }
 EXPORT_SYMBOL_GPL(fuse_dev_alloc_install);
 
-void fuse_dev_free(struct fuse_dev *fud)
+void fuse_dev_put(struct fuse_dev *fud)
 {
-	struct fuse_conn *fc = fud->fc;
+	struct fuse_conn *fc;
 
+	if (!refcount_dec_and_test(&fud->ref))
+		return;
+
+	fc = smp_load_acquire(&fud->fc);
 	if (fc) {
 		spin_lock(&fc->lock);
 		list_del(&fud->entry);
@@ -1671,7 +1676,7 @@ void fuse_dev_free(struct fuse_dev *fud)
 	kfree(fud->pq.processing);
 	kfree(fud);
 }
-EXPORT_SYMBOL_GPL(fuse_dev_free);
+EXPORT_SYMBOL_GPL(fuse_dev_put);
 
 static void fuse_fill_attr_from_inode(struct fuse_attr *attr,
 				      const struct fuse_inode *fi)

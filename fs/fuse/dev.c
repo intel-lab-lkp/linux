@@ -2548,7 +2548,7 @@ int fuse_dev_release(struct inode *inode, struct file *file)
 			fuse_abort_conn(fc);
 		}
 	}
-	fuse_dev_free(fud);
+	fuse_dev_put(fud);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(fuse_dev_release);
