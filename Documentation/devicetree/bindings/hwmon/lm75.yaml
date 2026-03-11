@@ -87,6 +87,7 @@ examples:
         compatible = "st,stlm75";
         reg = <0x48>;
         vs-supply = <&vs>;
+        label = "somelabel";
       };
     };
   - |
@@ -101,5 +102,6 @@ examples:
         vs-supply = <&vs>;
         interrupt-parent = <&gpio1>;
         interrupts = <17 IRQ_TYPE_EDGE_BOTH>;
+        label = "somelabel";
       };
     };
