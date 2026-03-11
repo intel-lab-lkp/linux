@@ -2232,7 +2232,7 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 	}
 
 	src = kmap_local_page(page);
-	zs_obj_write(zram->mem_pool, handle, src, PAGE_SIZE);
+	zs_obj_write(zram->mem_pool, handle, src, PAGE_SIZE, NULL);
 	kunmap_local(src);
 
 	slot_lock(zram, index);
@@ -2297,7 +2297,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 		return -ENOMEM;
 	}
 
-	zs_obj_write(zram->mem_pool, handle, zstrm->buffer, comp_len);
+	zs_obj_write(zram->mem_pool, handle, zstrm->buffer, comp_len, NULL);
 	zcomp_stream_put(zstrm);
 
 	slot_lock(zram, index);
@@ -2521,7 +2521,8 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 		return PTR_ERR((void *)handle_new);
 	}
 
-	zs_obj_write(zram->mem_pool, handle_new, zstrm->buffer, comp_len_new);
+	zs_obj_write(zram->mem_pool, handle_new, zstrm->buffer,
+		     comp_len_new, NULL);
 	zcomp_stream_put(zstrm);
 
 	slot_free(zram, index);

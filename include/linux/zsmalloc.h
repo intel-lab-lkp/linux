@@ -23,6 +23,7 @@ struct zs_pool_stats {
 
 struct zs_pool;
 struct scatterlist;
+struct obj_cgroup;
 enum memcg_stat_item;
 
 struct zs_pool *zs_create_pool(const char *name, bool memcg_aware,
@@ -51,7 +52,7 @@ void zs_obj_read_sg_begin(struct zs_pool *pool, unsigned long handle,
 			  struct scatterlist *sg, size_t mem_len);
 void zs_obj_read_sg_end(struct zs_pool *pool, unsigned long handle);
 void zs_obj_write(struct zs_pool *pool, unsigned long handle,
-		  void *handle_mem, size_t mem_len);
+		  void *handle_mem, size_t mem_len, struct obj_cgroup *objcg);
 
 extern const struct movable_operations zsmalloc_mops;
 

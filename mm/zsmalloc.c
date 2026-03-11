@@ -1195,7 +1195,7 @@ void zs_obj_read_sg_end(struct zs_pool *pool, unsigned long handle)
 EXPORT_SYMBOL_GPL(zs_obj_read_sg_end);
 
 void zs_obj_write(struct zs_pool *pool, unsigned long handle,
-		  void *handle_mem, size_t mem_len)
+		  void *handle_mem, size_t mem_len, struct obj_cgroup *objcg)
 {
 	struct zspage *zspage;
 	struct zpdesc *zpdesc;
@@ -1215,6 +1215,11 @@ void zs_obj_write(struct zs_pool *pool, unsigned long handle,
 
 	class = zspage_class(pool, zspage);
 	off = offset_in_page(class->size * obj_idx);
+
+	if (objcg) {
+		WARN_ON_ONCE(!pool->memcg_aware);
+		zspage->objcgs[obj_idx] = objcg;
+	}
 
 	if (!ZsHugePage(zspage))
 		off += ZS_HANDLE_SIZE;
@@ -1388,6 +1393,9 @@ static void obj_free(int class_size, unsigned long obj)
 	f_offset = offset_in_page(class_size * f_objidx);
 	zspage = get_zspage(f_zpdesc);
 
+	if (zspage->pool->memcg_aware)
+		zspage->objcgs[f_objidx] = NULL;
+
 	vaddr = kmap_local_zpdesc(f_zpdesc);
 	link = (struct link_free *)(vaddr + f_offset);
 
@@ -1538,6 +1546,16 @@ static unsigned long find_alloced_obj(struct size_class *class,
 	return handle;
 }
 
+static void zs_migrate_objcg(struct zspage *s_zspage, struct zspage *d_zspage,
+			     unsigned long used_obj, unsigned long free_obj)
+{
+	unsigned int s_idx = used_obj & OBJ_INDEX_MASK;
+	unsigned int d_idx = free_obj & OBJ_INDEX_MASK;
+
+	d_zspage->objcgs[d_idx] = s_zspage->objcgs[s_idx];
+	s_zspage->objcgs[s_idx] = NULL;
+}
+
 static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 			   struct zspage *dst_zspage)
 {
@@ -1560,6 +1578,11 @@ static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 		used_obj = handle_to_obj(handle);
 		free_obj = obj_malloc(pool, dst_zspage, handle);
 		zs_obj_copy(class, free_obj, used_obj);
+
+		if (pool->memcg_aware)
+			zs_migrate_objcg(src_zspage, dst_zspage,
+					 used_obj, free_obj);
+
 		obj_idx++;
 		obj_free(class->size, used_obj);
 
