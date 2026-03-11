@@ -786,13 +786,14 @@ static void mxc_isi_video_queue_first_buffers(struct mxc_isi_video *video)
 		: list_is_singular(&video->out_pending) ? 1
 		: 0;
 
+	/* Queue buffers: prioritize pending buffers, then discard buffers */
 	for (i = 0; i < 2; ++i) {
 		enum mxc_isi_buf_id buf_id = i == 0 ? MXC_ISI_BUF1
 					   : MXC_ISI_BUF2;
 		struct mxc_isi_buffer *buf;
 		struct list_head *list;
 
-		list = i < discard ? &video->out_discard : &video->out_pending;
+		list = (i < 2 - discard) ? &video->out_pending : &video->out_discard;
 		buf = list_first_entry(list, struct mxc_isi_buffer, list);
 
 		mxc_isi_channel_set_outbuf(video->pipe, buf->dma_addrs, buf_id);
