@@ -189,11 +189,13 @@ extern int __must_check mutex_lock_interruptible_nested(struct mutex *lock,
 extern int __must_check _mutex_lock_killable(struct mutex *lock,
 		unsigned int subclass, struct lockdep_map *nest_lock) __cond_acquires(0, lock);
 extern void mutex_lock_io_nested(struct mutex *lock, unsigned int subclass) __acquires(lock);
+extern void slow_mutex_lock_nested(struct mutex *lock, unsigned int subclass);
 
 #define mutex_lock(lock) mutex_lock_nested(lock, 0)
 #define mutex_lock_interruptible(lock) mutex_lock_interruptible_nested(lock, 0)
 #define mutex_lock_killable(lock) _mutex_lock_killable(lock, 0, NULL)
 #define mutex_lock_io(lock) mutex_lock_io_nested(lock, 0)
+#define slow_mutex_lock(lock) slow_mutex_lock_nested(lock, 0)
 
 #define mutex_lock_nest_lock(lock, nest_lock)				\
 do {									\
@@ -215,6 +217,7 @@ extern void mutex_lock(struct mutex *lock) __acquires(lock);
 extern int __must_check mutex_lock_interruptible(struct mutex *lock) __cond_acquires(0, lock);
 extern int __must_check mutex_lock_killable(struct mutex *lock) __cond_acquires(0, lock);
 extern void mutex_lock_io(struct mutex *lock) __acquires(lock);
+extern void slow_mutex_lock(struct mutex *lock) __acquires(lock);
 
 # define mutex_lock_nested(lock, subclass) mutex_lock(lock)
 # define mutex_lock_interruptible_nested(lock, subclass) mutex_lock_interruptible(lock)
@@ -247,6 +250,7 @@ extern int mutex_trylock(struct mutex *lock) __cond_acquires(true, lock);
 #endif
 
 extern void mutex_unlock(struct mutex *lock) __releases(lock);
+#define slow_mutex_unlock(lock) mutex_unlock(lock)
 
 extern int atomic_dec_and_mutex_lock(atomic_t *cnt, struct mutex *lock) __cond_acquires(true, lock);
 
