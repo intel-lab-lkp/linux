@@ -12,6 +12,7 @@ DEFINE_MUTEX(shrinker_mutex);
 
 #ifdef CONFIG_MEMCG
 static int shrinker_nr_max;
+static int shrinker_nonslab_nr_max;
 
 static inline int shrinker_unit_size(int nr_items)
 {
@@ -78,15 +79,26 @@ int alloc_shrinker_info(struct mem_cgroup *memcg)
 {
 	int nid, ret = 0;
 	int array_size = 0;
+	int alloc_nr_max;
 
 	mutex_lock(&shrinker_mutex);
-	array_size = shrinker_unit_size(shrinker_nr_max);
+
+	if (memcg_kmem_online()) {
+		alloc_nr_max = shrinker_nr_max;
+	} else {
+		if (memcg == root_mem_cgroup)
+			alloc_nr_max = shrinker_nr_max;
+		else
+			alloc_nr_max = shrinker_nonslab_nr_max;
+	}
+
+	array_size = shrinker_unit_size(alloc_nr_max);
 	for_each_node(nid) {
 		struct shrinker_info *info = kvzalloc_node(sizeof(*info) + array_size,
 							   GFP_KERNEL, nid);
 		if (!info)
 			goto err;
-		info->map_nr_max = shrinker_nr_max;
+		info->map_nr_max = alloc_nr_max;
 		if (shrinker_unit_alloc(info, NULL, nid)) {
 			kvfree(info);
 			goto err;
@@ -147,33 +159,47 @@ static int expand_one_shrinker_info(struct mem_cgroup *memcg, int new_size,
 	return 0;
 }
 
-static int expand_shrinker_info(int new_id)
+static int expand_shrinker_info(int new_id, bool full, bool root)
 {
 	int ret = 0;
 	int new_nr_max = round_up(new_id + 1, SHRINKER_UNIT_BITS);
 	int new_size, old_size = 0;
 	struct mem_cgroup *memcg;
+	struct mem_cgroup *start = NULL;
+	int old_nr_max = shrinker_nr_max;
 
 	if (!root_mem_cgroup)
 		goto out;
 
 	lockdep_assert_held(&shrinker_mutex);
 
-	new_size = shrinker_unit_size(new_nr_max);
-	old_size = shrinker_unit_size(shrinker_nr_max);
+	if (!full && !root) {
+		start = root_mem_cgroup;
+		old_nr_max = shrinker_nonslab_nr_max;
+	}
 
-	memcg = mem_cgroup_iter(NULL, NULL, NULL);
+	new_size = shrinker_unit_size(new_nr_max);
+	old_size = shrinker_unit_size(old_nr_max);
+
+	memcg = mem_cgroup_iter(NULL, start, NULL);
+	if (!memcg)
+		goto out;
+
 	do {
 		ret = expand_one_shrinker_info(memcg, new_size, old_size,
 					       new_nr_max);
-		if (ret) {
+		if (ret || (root && memcg == root_mem_cgroup)) {
 			mem_cgroup_iter_break(NULL, memcg);
 			goto out;
 		}
 	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)) != NULL);
 out:
-	if (!ret)
-		shrinker_nr_max = new_nr_max;
+	if (!ret) {
+		if (!full && !root)
+			shrinker_nonslab_nr_max = new_nr_max;
+		else
+			shrinker_nr_max = new_nr_max;
+	}
 
 	return ret;
 }
@@ -212,25 +238,58 @@ void set_shrinker_bit(struct mem_cgroup *memcg, int nid, int shrinker_id)
 }
 
 static DEFINE_IDR(shrinker_idr);
+static DEFINE_IDR(shrinker_nonslab_idr);
 
 static int shrinker_memcg_alloc(struct shrinker *shrinker)
 {
 	int id, ret = -ENOMEM;
+	bool kmem_online;
 
 	if (mem_cgroup_disabled())
 		return -ENOSYS;
 
+	kmem_online = memcg_kmem_online();
 	mutex_lock(&shrinker_mutex);
 	id = idr_alloc(&shrinker_idr, shrinker, 0, 0, GFP_KERNEL);
 	if (id < 0)
 		goto unlock;
 
 	if (id >= shrinker_nr_max) {
-		if (expand_shrinker_info(id)) {
+		/* If memcg_kmem_online() returns true, expand shrinker
+		 * info for all memcgs, otherwise, expand shrinker info
+		 * for root memcg only
+		 */
+		if (expand_shrinker_info(id, kmem_online, !kmem_online)) {
 			idr_remove(&shrinker_idr, id);
 			goto unlock;
 		}
 	}
+
+	shrinker->nonslab_id = -1;
+	/*
+	 * If cgroup_memory_nokmem is set, record shrinkers with SHRINKER_NONSLAB
+	 * because memcg slab shrink only call non-slab shrinkers.
+	 */
+	if (!kmem_online && shrinker->flags & SHRINKER_NONSLAB) {
+		int nonslab_id;
+
+		nonslab_id = idr_alloc(&shrinker_nonslab_idr, shrinker, 0, 0, GFP_KERNEL);
+		if (nonslab_id < 0) {
+			idr_remove(&shrinker_idr, id);
+			goto unlock;
+		}
+
+		if (nonslab_id >= shrinker_nonslab_nr_max) {
+			/* expand shrinker info for non-root memcgs */
+			if (expand_shrinker_info(nonslab_id, false, false)) {
+				idr_remove(&shrinker_idr, id);
+				idr_remove(&shrinker_nonslab_idr, nonslab_id);
+				goto unlock;
+			}
+		}
+		shrinker->nonslab_id = nonslab_id;
+	}
+
 	shrinker->id = id;
 	ret = 0;
 unlock:
@@ -247,6 +306,12 @@ static void shrinker_memcg_remove(struct shrinker *shrinker)
 	lockdep_assert_held(&shrinker_mutex);
 
 	idr_remove(&shrinker_idr, id);
+
+	if (shrinker->flags & SHRINKER_NONSLAB) {
+		id = shrinker->nonslab_id;
+		if (id >= 0)
+			idr_remove(&shrinker_nonslab_idr, id);
+	}
 }
 
 static long xchg_nr_deferred_memcg(int nid, struct shrinker *shrinker,
@@ -305,10 +370,33 @@ void reparent_shrinker_deferred(struct mem_cgroup *memcg)
 		parent_info = shrinker_info_protected(parent, nid);
 		for (index = 0; index < shrinker_id_to_index(child_info->map_nr_max); index++) {
 			child_unit = child_info->unit[index];
-			parent_unit = parent_info->unit[index];
 			for (offset = 0; offset < SHRINKER_UNIT_BITS; offset++) {
 				nr = atomic_long_read(&child_unit->nr_deferred[offset]);
-				atomic_long_add(nr, &parent_unit->nr_deferred[offset]);
+
+				/*
+				 * If memcg_kmem_online() is false, the non-root memcgs use
+				 * nonslab_id but root memory cgroup use id. When reparenting
+				 * shrinker info to it, must convert the nonslab_id to id.
+				 */
+				if (!memcg_kmem_online() &&  parent == root_mem_cgroup) {
+					int id, p_index, p_off;
+					struct shrinker *shrinker;
+
+					id = calc_shrinker_id(index, offset);
+					shrinker = idr_find(&shrinker_nonslab_idr, id);
+					if (shrinker) {
+						id = shrinker->id;
+						p_index = shrinker_id_to_index(id);
+						p_off = shrinker_id_to_offset(id);
+
+						parent_unit = parent_info->unit[p_index];
+						atomic_long_add(nr,
+								&parent_unit->nr_deferred[p_off]);
+					}
+				} else {
+					parent_unit = parent_info->unit[index];
+					atomic_long_add(nr, &parent_unit->nr_deferred[offset]);
+				}
 			}
 		}
 	}
@@ -538,7 +626,12 @@ again:
 			int shrinker_id = calc_shrinker_id(index, offset);
 
 			rcu_read_lock();
-			shrinker = idr_find(&shrinker_idr, shrinker_id);
+
+			if (memcg_kmem_online())
+				shrinker = idr_find(&shrinker_idr, shrinker_id);
+			else
+				shrinker = idr_find(&shrinker_nonslab_idr, shrinker_id);
+
 			if (unlikely(!shrinker || !shrinker_try_get(shrinker))) {
 				clear_bit(offset, unit->map);
 				rcu_read_unlock();
