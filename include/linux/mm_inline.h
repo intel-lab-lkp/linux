@@ -321,6 +321,11 @@ static inline bool lru_gen_in_fault(void)
 	return false;
 }
 
+static inline int folio_lru_gen(const struct folio *folio)
+{
+	return -1;
+}
+
 static inline bool lru_gen_add_folio(struct lruvec *lruvec, struct folio *folio, bool reclaiming)
 {
 	return false;
