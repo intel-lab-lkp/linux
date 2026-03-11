@@ -781,7 +781,8 @@ static void _panel_replay_enable_sink(struct intel_dp *intel_dp,
 		DP_PANEL_REPLAY_RFB_STORAGE_ERROR_EN |
 		DP_PANEL_REPLAY_ACTIVE_FRAME_CRC_ERROR_EN;
 	u8 panel_replay_config2 = DP_PANEL_REPLAY_CRC_VERIFICATION;
-	u8 buf[2];
+	u8 panel_replay_config3 = DP_PR_AS_SDP_SETUP_TIME(intel_dp_as_sdp_transmission_time());
+	u8 buf[3];
 	int ret;
 
 	if (crtc_state->has_sel_update)
@@ -796,6 +797,7 @@ static void _panel_replay_enable_sink(struct intel_dp *intel_dp,
 
 	buf[0] = panel_replay_config;
 	buf[1] = panel_replay_config2;
+	buf[2] = panel_replay_config3;
 
 	ret = drm_dp_dpcd_write(&intel_dp->aux, PANEL_REPLAY_CONFIG, buf, sizeof(buf));
 
