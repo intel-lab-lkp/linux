@@ -39,6 +39,7 @@
 #include <linux/zsmalloc.h>
 #include <linux/fs.h>
 #include <linux/workqueue.h>
+#include <linux/memcontrol.h>
 #include "zpdesc.h"
 
 #define ZSPAGE_MAGIC	0x58
@@ -273,6 +274,7 @@ struct zspage {
 	struct zpdesc *first_zpdesc;
 	struct list_head list; /* fullness list */
 	struct zs_pool *pool;
+	struct obj_cgroup **objcgs;
 	struct zspage_lock zsl;
 };
 
@@ -825,6 +827,8 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 		zpdesc = next;
 	} while (zpdesc != NULL);
 
+	if (pool->memcg_aware)
+		kfree(zspage->objcgs);
 	cache_free_zspage(zspage);
 
 	class_stat_sub(class, ZS_OBJS_ALLOCATED, class->objs_per_zspage);
@@ -946,6 +950,16 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 	if (!IS_ENABLED(CONFIG_COMPACTION))
 		gfp &= ~__GFP_MOVABLE;
 
+	if (pool->memcg_aware) {
+		zspage->objcgs = kcalloc(class->objs_per_zspage,
+					 sizeof(struct obj_cgroup *),
+					 gfp & ~__GFP_HIGHMEM);
+		if (!zspage->objcgs) {
+			cache_free_zspage(zspage);
+			return NULL;
+		}
+	}
+
 	zspage->magic = ZSPAGE_MAGIC;
 	zspage->pool = pool;
 	zspage->class = class->index;
@@ -955,14 +969,8 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		struct zpdesc *zpdesc;
 
 		zpdesc = alloc_zpdesc(gfp, nid);
-		if (!zpdesc) {
-			while (--i >= 0) {
-				zpdesc_dec_zone_page_state(zpdescs[i]);
-				free_zpdesc(zpdescs[i]);
-			}
-			cache_free_zspage(zspage);
-			return NULL;
-		}
+		if (!zpdesc)
+			goto err;
 		__zpdesc_set_zsmalloc(zpdesc);
 
 		zpdesc_inc_zone_page_state(zpdesc);
@@ -973,6 +981,16 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 	init_zspage(class, zspage);
 
 	return zspage;
+
+err:
+	while (--i >= 0) {
+		zpdesc_dec_zone_page_state(zpdescs[i]);
+		free_zpdesc(zpdescs[i]);
+	}
+	if (pool->memcg_aware)
+		kfree(zspage->objcgs);
+	cache_free_zspage(zspage);
+	return NULL;
 }
 
 static struct zspage *find_get_zspage(struct size_class *class)
