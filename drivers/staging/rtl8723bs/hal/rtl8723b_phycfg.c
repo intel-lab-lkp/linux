@@ -122,11 +122,7 @@ static u32 phy_RFSerialRead_8723B(
 	PHY_SetBBReg(Adapter, rFPGA0_XA_HSSIParameter2|MaskforPhySet, bMaskDWord, tmplong2 & (~bLSSIReadEdge));
 	PHY_SetBBReg(Adapter, rFPGA0_XA_HSSIParameter2|MaskforPhySet, bMaskDWord, tmplong2 | bLSSIReadEdge);
 
-	udelay(10);
-
-	for (i = 0; i < 2; i++)
-		udelay(MAX_STALL_TIME);
-	udelay(10);
+	usleep_range((MAX_STALL_TIME * 2) + 10, MAX_STALL_TIME * 3);
 
 	if (eRFPath == RF_PATH_A)
 		RfPiEnable = (u8)PHY_QueryBBReg(Adapter, rFPGA0_XA_HSSIParameter1|MaskforPhySet, BIT8);
@@ -391,7 +387,7 @@ int PHY_BBConfig8723B(struct adapter *Adapter)
 
 	rtw_write8(Adapter, REG_RF_CTRL, RF_EN|RF_RSTB|RF_SDMRSTB);
 
-	msleep(1);
+	usleep_range(1000, 1100);
 
 	PHY_SetRFReg(Adapter, RF_PATH_A, 0x1, 0xfffff, 0x780);
 

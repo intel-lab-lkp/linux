@@ -273,7 +273,7 @@ void rtl8723b_FirmwareSelfReset(struct adapter *padapter)
 			Delay--;
 			if (Delay == 0)
 				break;
-			udelay(50);
+			usleep_range(50, 60);
 			val = rtw_read8(padapter, REG_SYS_FUNC_EN + 1);
 		}
 

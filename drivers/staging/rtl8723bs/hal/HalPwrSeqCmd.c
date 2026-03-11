@@ -4,25 +4,21 @@
  * Copyright(c) 2007 - 2011 Realtek Corporation. All rights reserved.
  *
  ******************************************************************************/
-/*++
-Copyright (c) Realtek Semiconductor Corp. All rights reserved.
-
-Module Name:
-	HalPwrSeqCmd.c
-
-Abstract:
-	Implement HW Power sequence configuration CMD handling routine for Realtek devices.
-
-Major Change History:
-	When       Who               What
-	---------- ---------------   -------------------------------
-	2011-10-26 Lucas            Modify to be compatible with SD4-CE driver.
-	2011-07-07 Roger            Create.
-
---*/
+/**
+ * Copyright (c) Realtek Semiconductor Corp. All rights reserved.
+ *
+ * Module Name: HalPwrSeqCmd.c
+ *
+ * Implement HW Power sequence configuration CMD handling routine for Realtek devices.
+ *
+ * Major Change History:
+ *  When       Who               What
+ *  ---------- ---------------   -------------------------------
+ *  2011-10-26 Lucas            Modify to be compatible with SD4-CE driver.
+ *  2011-07-07 Roger            Create.
+ */
 #include <drv_types.h>
 #include <HalPwrSeqCmd.h>
-
 
 /*  */
 /*  Description: */
@@ -113,7 +109,7 @@ u8 HalPwrSeqCmdParsing(
 					)
 						bPollingBit = true;
 					else
-						udelay(10);
+						usleep_range(10, 20);
 
 					if (pollingCount++ > maxPollingCnt)
 						return false;
@@ -124,9 +120,9 @@ u8 HalPwrSeqCmdParsing(
 
 			case PWR_CMD_DELAY:
 				if (GET_PWR_CFG_VALUE(PwrCfgCmd) == PWRSEQ_DELAY_US)
-					udelay(GET_PWR_CFG_OFFSET(PwrCfgCmd));
+					usleep_range(GET_PWR_CFG_OFFSET(PwrCfgCmd), GET_PWR_CFG_OFFSET(PwrCfgCmd) + 10);
 				else
-					udelay(GET_PWR_CFG_OFFSET(PwrCfgCmd)*1000);
+					usleep_range(GET_PWR_CFG_OFFSET(PwrCfgCmd) * 1000, GET_PWR_CFG_OFFSET(PwrCfgCmd) 1000 + 10);
 				break;
 
 			case PWR_CMD_END:
