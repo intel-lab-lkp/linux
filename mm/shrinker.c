@@ -255,11 +255,13 @@ static long xchg_nr_deferred_memcg(int nid, struct shrinker *shrinker,
 	struct shrinker_info *info;
 	struct shrinker_info_unit *unit;
 	long nr_deferred;
+	int id;
 
 	rcu_read_lock();
+	id = shrinker_id(memcg, shrinker);
 	info = rcu_dereference(memcg->nodeinfo[nid]->shrinker_info);
-	unit = info->unit[shrinker_id_to_index(shrinker->id)];
-	nr_deferred = atomic_long_xchg(&unit->nr_deferred[shrinker_id_to_offset(shrinker->id)], 0);
+	unit = info->unit[shrinker_id_to_index(id)];
+	nr_deferred = atomic_long_xchg(&unit->nr_deferred[shrinker_id_to_offset(id)], 0);
 	rcu_read_unlock();
 
 	return nr_deferred;
@@ -271,12 +273,14 @@ static long add_nr_deferred_memcg(long nr, int nid, struct shrinker *shrinker,
 	struct shrinker_info *info;
 	struct shrinker_info_unit *unit;
 	long nr_deferred;
+	int id;
 
 	rcu_read_lock();
+	id = shrinker_id(memcg, shrinker);
 	info = rcu_dereference(memcg->nodeinfo[nid]->shrinker_info);
-	unit = info->unit[shrinker_id_to_index(shrinker->id)];
+	unit = info->unit[shrinker_id_to_index(id)];
 	nr_deferred =
-		atomic_long_add_return(nr, &unit->nr_deferred[shrinker_id_to_offset(shrinker->id)]);
+		atomic_long_add_return(nr, &unit->nr_deferred[shrinker_id_to_offset(id)]);
 	rcu_read_unlock();
 
 	return nr_deferred;

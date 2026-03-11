@@ -4358,7 +4358,7 @@ void deferred_split_folio(struct folio *folio, bool partially_mapped)
 		ds_queue->split_queue_len++;
 		if (memcg)
 			set_shrinker_bit(memcg, folio_nid(folio),
-					 shrinker_id(deferred_split_shrinker));
+					 shrinker_id(memcg, deferred_split_shrinker));
 	}
 	split_queue_unlock_irqrestore(ds_queue, flags);
 }
@@ -4514,7 +4514,7 @@ void reparent_deferred_split_queue(struct mem_cgroup *memcg)
 	ds_queue->split_queue_len = 0;
 
 	for_each_node(nid)
-		set_shrinker_bit(parent, nid, shrinker_id(deferred_split_shrinker));
+		set_shrinker_bit(parent, nid, shrinker_id(parent, deferred_split_shrinker));
 
 unlock:
 	spin_unlock(&parent_ds_queue->split_queue_lock);
