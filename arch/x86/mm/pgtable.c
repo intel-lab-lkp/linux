@@ -55,6 +55,16 @@ void ___p4d_free_tlb(struct mmu_gather *tlb, p4d_t *p4d)
 #endif	/* CONFIG_PGTABLE_LEVELS > 3 */
 #endif	/* CONFIG_PGTABLE_LEVELS > 2 */
 
+/*
+ * List of all pgd's needed for non-PAE so it can invalidate entries
+ * in both cached and uncached pgd's; not needed for PAE since the
+ * kernel pmd is shared. If PAE were not to share the pmd a similar
+ * tactic would be needed. This is essentially codepath-based locking
+ * against pageattr.c; it is the unique case in which a valid change
+ * of kernel pagetables can't be lazily synchronized by vmalloc faults.
+ * vmalloc faults work because attached pagetables are never freed.
+ * -- nyc
+ */
 static inline void pgd_list_add(pgd_t *pgd)
 {
 	struct ptdesc *ptdesc = virt_to_ptdesc(pgd);
@@ -98,17 +108,6 @@ static void pgd_dtor(pgd_t *pgd)
 	pgd_list_del(pgd);
 	spin_unlock(&pgd_lock);
 }
-
-/*
- * List of all pgd's needed for non-PAE so it can invalidate entries
- * in both cached and uncached pgd's; not needed for PAE since the
- * kernel pmd is shared. If PAE were not to share the pmd a similar
- * tactic would be needed. This is essentially codepath-based locking
- * against pageattr.c; it is the unique case in which a valid change
- * of kernel pagetables can't be lazily synchronized by vmalloc faults.
- * vmalloc faults work because attached pagetables are never freed.
- * -- nyc
- */
 
 #ifdef CONFIG_X86_PAE
 /*
