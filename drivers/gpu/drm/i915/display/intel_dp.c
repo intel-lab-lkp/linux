@@ -3136,7 +3136,7 @@ static bool intel_dp_can_use_as_sdp(struct intel_dp *intel_dp,
 	if (drm_dp_is_branch(intel_dp->dpcd))
 		return false;
 
-	return crtc_state->vrr.enable;
+	return true;
 }
 
 static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
