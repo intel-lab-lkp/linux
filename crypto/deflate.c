@@ -203,7 +203,7 @@ static int deflate_decompress(struct acomp_req *req)
 	s = crypto_acomp_lock_stream_bh(&deflate_streams);
 	ds = s->ctx;
 
-	err = zlib_inflateInit2(&ds->stream, -DEFLATE_DEF_WINBITS);
+	err = zlib_inflateInit2(&ds->stream, -MAX_WBITS);
 	if (err != Z_OK) {
 		err = -EINVAL;
 		goto out;
