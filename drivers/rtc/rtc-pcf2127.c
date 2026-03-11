@@ -364,18 +364,26 @@ static int pcf2127_param_get(struct device *dev, struct rtc_param *param)
 	u8 value;
 	int ret;
 
+	ret = pcf2127_pwrmng_get(dev, &value);
+	if (ret < 0)
+		return ret;
+
 	switch (param->param) {
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		ret = pcf2127_pwrmng_get(dev, &value);
-		if (ret < 0)
-			return ret;
-
 		if (value < 0x3)
 			param->uvalue = RTC_BSM_LEVEL;
 		else if (value < 0x6)
 			param->uvalue = RTC_BSM_DIRECT;
 		else
 			param->uvalue = RTC_BSM_DISABLED;
+
+		break;
+
+	case RTC_PARAM_BATTERY_LOW_DETECT:
+		if (value == 0x0 || value == 0x3)
+			param->uvalue = RTC_BATTERY_LOW_DETECT_ENABLED;
+		else
+			param->uvalue = RTC_BATTERY_LOW_DETECT_DISABLED;
 
 		break;
 
@@ -392,12 +400,12 @@ static int pcf2127_param_set(struct device *dev, struct rtc_param *param)
 	u8 value;
 	int ret;
 
+	ret = pcf2127_pwrmng_get(dev, &value);
+	if (ret < 0)
+		return ret;
+
 	switch (param->param) {
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		ret = pcf2127_pwrmng_get(dev, &value);
-		if (ret < 0)
-			return ret;
-
 		if (value > 5)
 			value -= 5;
 		else if (value > 2)
@@ -418,13 +426,45 @@ static int pcf2127_param_set(struct device *dev, struct rtc_param *param)
 			return -EINVAL;
 		}
 
-		return pcf2127_pwrmng_set(dev, mode + value);
+		break;
+
+	case RTC_PARAM_BATTERY_LOW_DETECT:
+		if (value > 5) {
+			value -= 5;
+			mode = 5;
+		} else if (value > 2) {
+			value -= 3;
+			mode = 3;
+		}
+
+		switch (param->uvalue) {
+		case RTC_BATTERY_LOW_DETECT_DISABLED:
+			if (mode != 5)
+				if (value == 0)
+					value = 1;
+
+			break;
+		case RTC_BATTERY_LOW_DETECT_ENABLED:
+			if (mode != 5)
+				value = 0; /* Enable battery low detection. */
+			else
+				return -EINVAL; /*
+						 * battery low detection can't be enabled if
+						 * battery switch over is disabled.
+						 */
+			break;
+
+		default:
+			return -EINVAL;
+		}
+
+		break;
 
 	default:
 		return -EINVAL;
 	}
 
-	return 0;
+	return pcf2127_pwrmng_set(dev, mode + value);
 }
 
 static int pcf2127_rtc_ioctl(struct device *dev,
