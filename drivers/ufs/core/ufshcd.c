@@ -5031,6 +5031,42 @@ void ufshcd_update_evt_hist(struct ufs_hba *hba, u32 id, u32 val)
 }
 EXPORT_SYMBOL_GPL(ufshcd_update_evt_hist);
 
+static int ufshcd_get_connected_tx_lanes(struct ufs_hba *hba, u32 *tx_lanes)
+{
+	return ufshcd_dme_get(hba,
+			      UIC_ARG_MIB(PA_CONNECTEDTXDATALANES), tx_lanes);
+}
+
+static int ufshcd_get_connected_rx_lanes(struct ufs_hba *hba, u32 *rx_lanes)
+{
+	return ufshcd_dme_get(hba,
+			      UIC_ARG_MIB(PA_CONNECTEDRXDATALANES), rx_lanes);
+}
+
+static void ufshcd_validate_link_params(struct ufs_hba *hba)
+{
+	int val = 0;
+
+	if (ufshcd_get_connected_tx_lanes(hba, &val))
+		return;
+
+	if (val != hba->lanes_per_direction) {
+		dev_err(hba->dev, "Tx lane mismatch [config,reported] [%d,%d]\n",
+			hba->lanes_per_direction, val);
+		return;
+	}
+
+	val = 0;
+
+	if (ufshcd_get_connected_rx_lanes(hba, &val))
+		return;
+
+	if (val != hba->lanes_per_direction) {
+		dev_err(hba->dev, "Rx lane mismatch [config,reported] [%d,%d]\n",
+			hba->lanes_per_direction, val);
+	}
+}
+
 /**
  * ufshcd_link_startup - Initialize unipro link startup
  * @hba: per adapter instance
@@ -5103,6 +5139,9 @@ link_startup:
 		if (ret)
 			goto out;
 	}
+
+	/* Check successfully detected lanes */
+	ufshcd_validate_link_params(hba);
 
 	/* Include any host controller configuration via UIC commands */
 	ret = ufshcd_vops_link_startup_notify(hba, POST_CHANGE);
