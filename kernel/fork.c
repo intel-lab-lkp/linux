@@ -3123,7 +3123,7 @@ static int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp
  */
 int ksys_unshare(unsigned long unshare_flags)
 {
-	struct fs_struct *fs, *new_fs = NULL;
+	struct fs_struct *new_fs = NULL;
 	struct files_struct *new_fd = NULL;
 	struct cred *new_cred = NULL;
 	struct nsproxy *new_nsproxy = NULL;
@@ -3198,23 +3198,13 @@ int ksys_unshare(unsigned long unshare_flags)
 		if (new_nsproxy)
 			switch_task_namespaces(current, new_nsproxy);
 
-		task_lock(current);
+		if (new_fs)
+			new_fs = switch_fs_struct(new_fs);
 
-		if (new_fs) {
-			fs = current->fs;
-			read_seqlock_excl(&fs->seq);
-			current->fs = new_fs;
-			if (--fs->users)
-				new_fs = NULL;
-			else
-				new_fs = fs;
-			read_sequnlock_excl(&fs->seq);
-		}
-
-		if (new_fd)
+		if (new_fd) {
+			guard(task_lock)(current);
 			swap(current->files, new_fd);
-
-		task_unlock(current);
+		}
 
 		if (new_cred) {
 			/* Install the new user namespace */

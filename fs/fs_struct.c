@@ -147,6 +147,24 @@ int unshare_fs_struct(void)
 }
 EXPORT_SYMBOL_GPL(unshare_fs_struct);
 
+struct fs_struct *switch_fs_struct(struct fs_struct *new_fs)
+{
+	struct fs_struct *fs;
+
+	scoped_guard(task_lock, current) {
+		fs = current->fs;
+		read_seqlock_excl(&fs->seq);
+		current->fs = new_fs;
+		if (--fs->users)
+			new_fs = NULL;
+		else
+			new_fs = fs;
+		read_sequnlock_excl(&fs->seq);
+	}
+
+	return new_fs;
+}
+
 /* to be mentioned only in INIT_TASK */
 struct fs_struct init_fs = {
 	.users		= 1,
