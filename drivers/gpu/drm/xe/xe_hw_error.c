@@ -332,6 +332,8 @@ static void gt_hw_error_handler(struct xe_tile *tile, const enum hardware_error 
 
 		xe_mmio_write32(mmio, ERR_STAT_GT_VECTOR_REG(hw_err, i), vector);
 	}
+
+	xe_drm_ras_notify(ras, error_id, severity, GFP_ATOMIC);
 }
 
 static void soc_slave_ieh_handler(struct xe_tile *tile, const enum hardware_error hw_err, u32 error_id)
@@ -368,6 +370,7 @@ static void soc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
 {
 	const enum drm_xe_ras_error_severity severity = hw_err_to_severity(hw_err);
 	struct xe_device *xe = tile_to_xe(tile);
+	struct xe_drm_ras *ras = &xe->ras;
 	struct xe_mmio *mmio = &tile->mmio;
 	unsigned long master_global_errstat, master_local_errstat;
 	u32 master, slave, regbit;
@@ -418,6 +421,8 @@ unmask_gsysevtctl:
 	for (i = 0; i < XE_SOC_NUM_IEH; i++)
 		xe_mmio_write32(mmio, SOC_GSYSEVTCTL_REG(master, slave, i),
 				(HARDWARE_ERROR_MAX << 1) + 1);
+
+	xe_drm_ras_notify(ras, error_id, severity, GFP_ATOMIC);
 }
 
 static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_error hw_err)

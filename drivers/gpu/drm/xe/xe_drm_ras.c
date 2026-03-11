@@ -182,6 +182,23 @@ static void xe_drm_ras_unregister_nodes(struct drm_device *device, void *arg)
 }
 
 /**
+ * xe_drm_ras_notify() - Notify userspace of an error event
+ * @ras:  ras structure
+ * @error_id: error id
+ * @severity: error severity
+ * @flags: flags for allocation
+ *
+ * Notifies userspace of an error.
+ */
+void xe_drm_ras_notify(struct xe_drm_ras *ras, u32 error_id,
+		       const enum drm_xe_ras_error_severity severity, gfp_t flags)
+{
+	struct drm_ras_node *node = &ras->node[severity];
+
+	drm_ras_error_notify(node, error_id, flags);
+}
+
+/**
  * xe_drm_ras_init() - Initialize DRM RAS
  * @xe: xe device instance
  *
