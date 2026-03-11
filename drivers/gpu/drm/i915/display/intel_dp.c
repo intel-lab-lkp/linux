@@ -7439,3 +7439,12 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 
 	return true;
 }
+
+int intel_dp_as_sdp_transmission_time(void)
+{
+	/*
+	 * For now we use T1 as the transmission time.
+	 * This can be later changed as per requirements.
+	 */
+	return DP_PR_AS_SDP_SETUP_TIME_T1;
+}
