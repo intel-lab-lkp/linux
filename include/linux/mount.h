@@ -106,6 +106,7 @@ int do_mount(const char *, const char __user *,
 extern const struct path *collect_paths(const struct path *, struct path *, unsigned);
 extern void drop_collected_paths(const struct path *, const struct path *);
 extern void kern_unmount_array(struct vfsmount *mnt[], unsigned int num);
+int __init kthread_mntns(void);
 
 extern int cifs_root_data(char **dev, char **opts);
 
