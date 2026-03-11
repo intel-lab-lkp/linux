@@ -257,7 +257,8 @@ static struct zswap_pool *zswap_pool_create(char *compressor)
 
 	/* unique name for each pool specifically required by zsmalloc */
 	snprintf(name, 38, "zswap%x", atomic_inc_return(&zswap_pools_count));
-	pool->zs_pool = zs_create_pool(name);
+	pool->zs_pool = zs_create_pool(name, true, MEMCG_ZSWAP_B,
+				       MEMCG_ZSWAPPED);
 	if (!pool->zs_pool)
 		goto error;
 

@@ -214,6 +214,9 @@ struct zs_pool {
 #ifdef CONFIG_COMPACTION
 	struct work_struct free_work;
 #endif
+	bool memcg_aware;
+	enum memcg_stat_item compressed_stat;
+	enum memcg_stat_item uncompressed_stat;
 	/* protect zspage migration/compaction */
 	rwlock_t lock;
 	atomic_t compaction_in_progress;
@@ -2050,6 +2053,9 @@ static int calculate_zspage_chain_size(int class_size)
 /**
  * zs_create_pool - Creates an allocation pool to work from.
  * @name: pool name to be created
+ * @memcg_aware: whether the consumer of this pool will account memcg stats
+ * @compressed_stat: compressed memcontrol stat item to account
+ * @uncompressed_stat: uncompressed memcontrol stat item to account
  *
  * This function must be called before anything when using
  * the zsmalloc allocator.
@@ -2057,7 +2063,9 @@ static int calculate_zspage_chain_size(int class_size)
  * On success, a pointer to the newly created pool is returned,
  * otherwise NULL.
  */
-struct zs_pool *zs_create_pool(const char *name)
+struct zs_pool *zs_create_pool(const char *name, bool memcg_aware,
+			       enum memcg_stat_item compressed_stat,
+			       enum memcg_stat_item uncompressed_stat)
 {
 	int i;
 	struct zs_pool *pool;
@@ -2071,6 +2079,9 @@ struct zs_pool *zs_create_pool(const char *name)
 	rwlock_init(&pool->lock);
 	atomic_set(&pool->compaction_in_progress, 0);
 
+	pool->memcg_aware = memcg_aware;
+	pool->compressed_stat = compressed_stat;
+	pool->uncompressed_stat = uncompressed_stat;
 	pool->name = kstrdup(name, GFP_KERNEL);
 	if (!pool->name)
 		goto err;

@@ -1980,7 +1980,8 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	if (!zram->table)
 		return false;
 
-	zram->mem_pool = zs_create_pool(zram->disk->disk_name);
+	/* zram does not support memcg accounting */
+	zram->mem_pool = zs_create_pool(zram->disk->disk_name, false, 0, 0);
 	if (!zram->mem_pool) {
 		vfree(zram->table);
 		zram->table = NULL;
