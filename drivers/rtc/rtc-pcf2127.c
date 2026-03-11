@@ -213,6 +213,30 @@ struct pcf2127 {
 	bool ts_valid[PCF2127_MAX_TS_SUPPORTED];  /* Timestamp valid indication. */
 };
 
+static int pcf2127_pwrmng_get(struct device *dev, u8 *pwrmng)
+{
+	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
+	u32 value;
+	int ret;
+
+	ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL3, &value);
+	if (ret < 0)
+		return ret;
+
+	*pwrmng = FIELD_GET(PCF2127_CTRL3_PM, value);
+
+	return 0;
+}
+
+static int pcf2127_pwrmng_set(struct device *dev, u8 pwrmng)
+{
+	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
+
+	return regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				  PCF2127_CTRL3_PM,
+				  FIELD_PREP(PCF2127_CTRL3_PM, pwrmng));
+}
+
 /*
  * In the routines that deal directly with the pcf2127 hardware, we use
  * rtc_time -- month 0-11, hour 0-23, yr = calendar year-epoch.
@@ -337,17 +361,14 @@ static int pcf2127_rtc_set_time(struct device *dev, struct rtc_time *tm)
 
 static int pcf2127_param_get(struct device *dev, struct rtc_param *param)
 {
-	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
-	u32 value;
+	u8 value;
 	int ret;
 
 	switch (param->param) {
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL3, &value);
+		ret = pcf2127_pwrmng_get(dev, &value);
 		if (ret < 0)
 			return ret;
-
-		value = FIELD_GET(PCF2127_CTRL3_PM, value);
 
 		if (value < 0x3)
 			param->uvalue = RTC_BSM_LEVEL;
@@ -367,18 +388,15 @@ static int pcf2127_param_get(struct device *dev, struct rtc_param *param)
 
 static int pcf2127_param_set(struct device *dev, struct rtc_param *param)
 {
-	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
 	u8 mode = 0;
-	u32 value;
+	u8 value;
 	int ret;
 
 	switch (param->param) {
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL3, &value);
+		ret = pcf2127_pwrmng_get(dev, &value);
 		if (ret < 0)
 			return ret;
-
-		value = FIELD_GET(PCF2127_CTRL3_PM, value);
 
 		if (value > 5)
 			value -= 5;
@@ -400,9 +418,7 @@ static int pcf2127_param_set(struct device *dev, struct rtc_param *param)
 			return -EINVAL;
 		}
 
-		return regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
-					  PCF2127_CTRL3_PM,
-					  FIELD_PREP(PCF2127_CTRL3_PM, mode + value));
+		return pcf2127_pwrmng_set(dev, mode + value);
 
 	default:
 		return -EINVAL;
