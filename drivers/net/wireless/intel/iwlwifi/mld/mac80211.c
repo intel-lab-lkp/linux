@@ -2519,7 +2519,7 @@ iwl_mld_change_vif_links(struct ieee80211_hw *hw,
 	struct ieee80211_bss_conf *link_conf;
 	u16 removed = old_links & ~new_links;
 	u16 added = new_links & ~old_links;
-	int err;
+	int err = -EINVAL;
 
 	lockdep_assert_wiphy(mld->wiphy);
 
