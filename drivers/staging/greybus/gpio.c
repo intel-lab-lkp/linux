@@ -39,7 +39,7 @@ struct gb_gpio_controller {
 
 	struct gpio_chip	chip;
 	struct irq_chip		irqc;
-	struct mutex		irq_lock;
+	struct mutex		irq_lock;	/* protects irq bus operations */
 };
 
 static struct gpio_chip *irq_data_to_gpio_chip(struct irq_data *d)
