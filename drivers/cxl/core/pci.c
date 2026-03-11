@@ -869,3 +869,173 @@ int cxl_port_get_possible_dports(struct cxl_port *port)
 
 	return ctx.count;
 }
+
+struct pci_saved_flags {
+	u16 pci_command;
+	u16 acs_ctrl;
+};
+
+/*
+ * pci_disable_acs_bme - disable ACS Source Validation and BME
+ * @pdev: downstream port
+ * @saved: pointer to pci_saved_acs_bme struct, for saving bit values
+ *
+ * Save the current ACS Source Validation and Bus Master Enable (BME)
+ * bits before disabling them.
+ */
+static void pci_disable_acs_bme(struct pci_dev *pdev,
+				struct pci_saved_flags *saved)
+{
+	int pos;
+	u16 field;
+
+	pos = pdev->acs_cap;
+	if (!pos)
+		return;
+
+	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &field);
+	saved->acs_ctrl = field;
+
+	if (field & PCI_ACS_SV)
+		pci_write_config_word(pdev, pos + PCI_ACS_CTRL,
+				      field & ~PCI_ACS_SV);
+
+	pci_read_config_word(pdev, PCI_COMMAND, &field);
+	saved->pci_command = field;
+
+	if (field & PCI_COMMAND_MASTER)
+		pci_clear_master(pdev);
+}
+
+/*
+ * pci_enable_acs_bme - enable ACS Source Validation and BME
+ * @pdev: downstream port
+ * @saved: pointer to pci_saved_acs_bme struct, for restoring bit values
+ *
+ * Restore the previously saved ACS Source Validation and Bus Master
+ * Enable (BME) bits.
+ */
+static void pci_enable_acs_bme(struct pci_dev *pdev,
+			       struct pci_saved_flags *saved)
+{
+	int pos;
+	u16 field;
+
+	pos = pdev->acs_cap;
+	if (!pos)
+		return;
+
+	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &field);
+	if (saved->acs_ctrl & PCI_ACS_SV)
+		pci_write_config_word(pdev, pos + PCI_ACS_CTRL,
+				      field | PCI_ACS_SV);
+
+	pci_read_config_word(pdev, PCI_COMMAND, &field);
+	if (saved->pci_command & PCI_COMMAND_MASTER)
+		pci_set_master(pdev);
+}
+
+/**
+ * cxl_port_pm_init_is_complete - check if the downstream port has completed PM
+ * init
+ *
+ * @pdev: downstream port
+ *
+ * Check if the Port Power Management Initialization Complete bit is set in the
+ * Downstream Port's CXL DVSEC Port Extended Status register.
+ *
+ * Returns true if PM init is complete, false otherwise.
+ */
+bool cxl_port_pm_init_is_complete(struct pci_dev *pdev)
+{
+	int pm_init_complete;
+	u16 status;
+	u16 dvsec;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_PORT);
+	if (!dvsec)
+		return false;
+
+	pci_read_config_word(pdev, dvsec + CXL_DVSEC_PORT_EXT_STATUS, &status);
+	pm_init_complete = FIELD_GET(CXL_DVSEC_PORT_EXT_STATUS_PM_INIT_COMP_MASK,
+				     status);
+
+	return !!pm_init_complete;
+}
+
+static void mask_sbr(struct pci_dev *pdev)
+{
+	int dvsec;
+	u16 reg;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_PORT);
+	if (!dvsec)
+		return;
+
+	pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_PORT_CTL, &reg);
+
+	pci_write_config_word(pdev, dvsec + PCI_DVSEC_CXL_PORT_CTL,
+			      reg & ~PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR);
+}
+
+static void unmask_sbr(struct pci_dev *pdev)
+{
+	int dvsec;
+	u16 reg;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_PORT);
+	if (!dvsec)
+		return;
+
+	pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_PORT_CTL, &reg);
+
+	pci_write_config_word(pdev, dvsec + PCI_DVSEC_CXL_PORT_CTL,
+			      reg | PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR);
+}
+
+/**
+ * cxl_port_retry_failed_pm_init - retry a downstream port's failed PM init
+ *
+ * @pdev: downstream port
+ *
+ * Retry a downstream CXL port's failed PM init according to CXL Erratum for
+ * Section 8.1.5.1 - Port Power Management Initialization Complete.
+ *
+ * This entails saving and disabling the ACS Source Validation and Bus Master
+ * enable bits, and unmasking and masking the SBR, before doing a secondary bus
+ * reset and then restoring and re-enabling those bits.
+ *
+ * return: 0 on success, errors otherwise.
+ */
+int cxl_port_retry_failed_pm_init(struct pci_dev *pdev)
+{
+	struct pci_saved_flags saved;
+	int ret;
+
+	if (!is_cxl_port(pdev->dev.parent))
+		return -EINVAL;
+
+	pci_disable_acs_bme(pdev, &saved);
+	unmask_sbr(pdev);
+
+	/* Generate Secondary Bus Reset */
+	ret = pci_reset_bus(pdev);
+	if (ret)
+		dev_dbg(&pdev->dev, "Bus reset failed: %d\n", ret);
+
+	/*
+	 * Wait until the Port Power Management Initialization
+	 * Complete bit is set in the Downstream Port. CXL Spec 4.0
+	 * Section 8.1.5.1 of the CXL spec specifies 100 ms as the
+	 * max time needed for the PM Init Complete bit to be set.
+	 */
+	msleep(100);
+
+	mask_sbr(pdev);
+	pci_enable_acs_bme(pdev, &saved);
+
+	return ret;
+}
