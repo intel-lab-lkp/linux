@@ -2181,7 +2181,14 @@ static void __init spectre_v2_select_mitigation(void)
 			break;
 		fallthrough;
 	case SPECTRE_V2_CMD_FORCE:
-		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED)) {
+		/*
+		 * Unless forced, don't use AutoIBRS when SNP is enabled
+		 * because it degrades host userspace indirect branch performance.
+		 */
+		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED) &&
+		    (!boot_cpu_has(X86_FEATURE_SEV_SNP) ||
+		     (boot_cpu_has(X86_FEATURE_SEV_SNP) &&
+		      spectre_v2_cmd == SPECTRE_V2_CMD_FORCE))) {
 			spectre_v2_enabled = SPECTRE_V2_EIBRS;
 			break;
 		}
@@ -2261,7 +2268,8 @@ static void __init spectre_v2_apply_mitigation(void)
 
 	case SPECTRE_V2_IBRS:
 		setup_force_cpu_cap(X86_FEATURE_KERNEL_IBRS);
-		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED))
+		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED) &&
+		    !boot_cpu_has(X86_FEATURE_SEV_SNP))
 			pr_warn(SPECTRE_V2_IBRS_PERF_MSG);
 		break;
 
