@@ -163,3 +163,15 @@ data corruption.
 
 All mappings that share a cache line must set this attribute to suppress DMA
 debug warnings about overlapping mappings.
+
+DMA_ATTR_REQUIRE_COHERENT
+-------------------------
+
+The mapping buffers which carry this attribute require DMA coherent system. This means
+that they can't take SWIOTLB path, can perform CPU cache overlap and doesn't perform
+cache flushing.
+
+If the mapping has this attribute then it is prevented from running on systems
+where these cache artifacts can cause corruption, and as such doesn't need
+cache overlapping debugging code (same behavior as for
+DMA_ATTR_DEBUGGING_IGNORE_CACHELINES).
