@@ -1911,6 +1911,7 @@ static void iwl_mld_mac80211_flush(struct ieee80211_hw *hw,
 	iwl_mld_add_txq_list(mld);
 
 	for (int i = 0; i < mld->fw->ucode_capa.num_stations; i++) {
+		struct iwl_mld_sta *mld_sta;
 		struct ieee80211_link_sta *link_sta =
 			wiphy_dereference(mld->wiphy,
 					  mld->fw_id_to_link_sta[i]);
@@ -1919,7 +1920,8 @@ static void iwl_mld_mac80211_flush(struct ieee80211_hw *hw,
 			continue;
 
 		/* Check that the sta belongs to the given vif */
-		if (vif && vif != iwl_mld_sta_from_mac80211(link_sta->sta)->vif)
+		mld_sta = iwl_mld_sta_from_mac80211(link_sta->sta);
+		if (vif && (!mld_sta || vif != mld_sta->vif))
 			continue;
 
 		if (drop)
