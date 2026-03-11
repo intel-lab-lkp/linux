@@ -32,6 +32,12 @@ void cfg80211_chandef_create(struct cfg80211_chan_def *chandef,
 		.freq1_offset = chan->freq_offset,
 	};
 
+	if (cfg80211_chandef_is_s1g(chandef)) {
+		chandef->width = NL80211_CHAN_WIDTH_1;
+		chandef->center_freq1 = chan->center_freq;
+		return;
+	}
+
 	switch (chan_type) {
 	case NL80211_CHAN_NO_HT:
 		chandef->width = NL80211_CHAN_WIDTH_20_NOHT;
