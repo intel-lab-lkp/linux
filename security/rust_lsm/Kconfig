@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0
+config SECURITY_RUST_LSM
+	bool "Rust LSM sample"
+	depends on SECURITY && RUST
+	help
+	  A minimal Linux Security Module written in Rust that demonstrates
+	  the kernel::lsm abstractions.  It logs file_open, task_alloc, and
+	  task_free events via pr_info().
+
+	  This module serves as a reference implementation and compile-test
+	  vehicle for the Rust LSM abstraction layer.  It imposes no policy
+	  — all hook implementations return 0 (allow) after logging.
+
+	  If unsure, say N.

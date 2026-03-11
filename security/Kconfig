@@ -301,6 +301,8 @@ config SECURITY_COMMONCAP_KUNIT_TEST
 
 	  If unsure, say N.
 
+source "security/rust_lsm/Kconfig"
+
 source "security/Kconfig.hardening"
 
 endmenu
