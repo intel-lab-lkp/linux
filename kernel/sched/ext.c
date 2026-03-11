@@ -275,9 +275,10 @@ static const struct sched_class *scx_setscheduler_class(struct task_struct *p)
 static __always_inline void scx_kf_allow(u32 mask)
 {
 	/* nesting is allowed only in increasing scx_kf_mask order */
-	WARN_ONCE((mask | higher_bits(mask)) & current->scx.kf_mask,
-		  "invalid nesting current->scx.kf_mask=0x%x mask=0x%x\n",
-		  current->scx.kf_mask, mask);
+	if (!in_interrupt())
+		WARN_ONCE((mask | higher_bits(mask)) & current->scx.kf_mask,
+			  "invalid nesting current->scx.kf_mask=0x%x mask=0x%x\n",
+			  current->scx.kf_mask, mask);
 	current->scx.kf_mask |= mask;
 	barrier();
 }
@@ -2968,7 +2969,8 @@ static void scx_disable_task(struct task_struct *p)
 	scx_set_task_state(p, SCX_TASK_READY);
 }
 
-static void scx_exit_task(struct task_struct *p)
+static void scx_exit_task(struct task_struct *p, struct rq **rq,
+			 struct rq_flags *rf)
 {
 	struct scx_sched *sch = scx_root;
 	struct scx_exit_task_args args = {
@@ -2993,9 +2995,17 @@ static void scx_exit_task(struct task_struct *p)
 		return;
 	}
 
-	if (SCX_HAS_OP(sch, exit_task))
-		SCX_CALL_OP_TASK(sch, SCX_KF_REST, exit_task, task_rq(p),
-				 p, &args);
+	if (SCX_HAS_OP(sch, exit_task)) {
+		if (rq && rf) {
+			task_rq_unlock(*rq, p, rf);
+			SCX_CALL_OP_TASK(sch, SCX_KF_REST, exit_task, NULL, p, &args);
+			*rq = task_rq_lock(p, rf);
+		} else {
+			SCX_CALL_OP_TASK(sch, SCX_KF_REST, exit_task, task_rq(p),
+					 p, &args);
+		}
+	}
+
 	scx_set_task_state(p, SCX_TASK_NONE);
 }
 
@@ -3068,7 +3078,7 @@ void scx_cancel_fork(struct task_struct *p)
 
 		rq = task_rq_lock(p, &rf);
 		WARN_ON_ONCE(scx_get_task_state(p) >= SCX_TASK_READY);
-		scx_exit_task(p);
+		scx_exit_task(p, &rq, &rf);
 		task_rq_unlock(rq, p, &rf);
 	}
 
@@ -3127,7 +3137,7 @@ void sched_ext_dead(struct task_struct *p)
 		struct rq *rq;
 
 		rq = task_rq_lock(p, &rf);
-		scx_exit_task(p);
+		scx_exit_task(p, &rq, &rf);
 		task_rq_unlock(rq, p, &rf);
 	}
 }
@@ -4359,7 +4369,7 @@ static void scx_disable_workfn(struct kthread_work *work)
 			p->sched_class = new_class;
 		}
 
-		scx_exit_task(p);
+		scx_exit_task(p, NULL, NULL);
 	}
 	scx_task_iter_stop(&sti);
 	percpu_up_write(&scx_fork_rwsem);
