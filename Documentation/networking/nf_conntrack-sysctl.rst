@@ -64,6 +64,17 @@ nf_conntrack_frag6_timeout - INTEGER (seconds)
 
 	Time to keep an IPv6 fragment in memory.
 
+nf_conntrack_gc_scan_interval_max - INTEGER (seconds)
+	default 60
+
+	Maximum interval between garbage collection scans of the connection
+	tracking table. The GC worker uses an adaptive algorithm that adjusts
+	the scan interval based on average entry timeouts; this parameter caps
+	the upper bound. Lower values cause expired entries (e.g. connections
+	in CLOSE state) to be cleaned up faster, at the cost of slightly more
+	CPU usage. Minimum value is 1.
+	This sysctl is only writeable in the initial net namespace.
+
 nf_conntrack_generic_timeout - INTEGER (seconds)
 	default 600
 

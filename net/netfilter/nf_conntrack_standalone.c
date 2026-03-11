@@ -637,6 +637,7 @@ enum nf_ct_sysctl_index {
 	NF_SYSCTL_CT_PROTO_TIMEOUT_GRE,
 	NF_SYSCTL_CT_PROTO_TIMEOUT_GRE_STREAM,
 #endif
+	NF_SYSCTL_CT_GC_SCAN_INTERVAL_MAX,
 
 	NF_SYSCTL_CT_LAST_SYSCTL,
 };
@@ -920,6 +921,14 @@ static struct ctl_table nf_ct_sysctl_table[] = {
 		.proc_handler   = proc_dointvec_jiffies,
 	},
 #endif
+	[NF_SYSCTL_CT_GC_SCAN_INTERVAL_MAX] = {
+		.procname	= "nf_conntrack_gc_scan_interval_max",
+		.data		= &nf_conntrack_gc_scan_interval_max,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_jiffies,
+		.extra1		= SYSCTL_ONE,
+	},
 };
 
 static struct ctl_table nf_ct_netfilter_table[] = {
@@ -1043,6 +1052,7 @@ static int nf_conntrack_standalone_init_sysctl(struct net *net)
 		table[NF_SYSCTL_CT_MAX].mode = 0444;
 		table[NF_SYSCTL_CT_EXPECT_MAX].mode = 0444;
 		table[NF_SYSCTL_CT_BUCKETS].mode = 0444;
+		table[NF_SYSCTL_CT_GC_SCAN_INTERVAL_MAX].mode = 0444;
 	}
 
 	cnet->sysctl_header = register_net_sysctl_sz(net, "net/netfilter",

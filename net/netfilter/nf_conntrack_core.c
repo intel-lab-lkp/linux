@@ -91,7 +91,7 @@ static DEFINE_MUTEX(nf_conntrack_mutex);
  * allowing non-idle machines to wakeup more often when needed.
  */
 #define GC_SCAN_INITIAL_COUNT	100
-#define GC_SCAN_INTERVAL_INIT	GC_SCAN_INTERVAL_MAX
+#define GC_SCAN_INTERVAL_INIT	nf_conntrack_gc_scan_interval_max
 
 #define GC_SCAN_MAX_DURATION	msecs_to_jiffies(10)
 #define GC_SCAN_EXPIRED_MAX	(64000u / HZ)
@@ -204,6 +204,9 @@ EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
 
 unsigned int nf_conntrack_max __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_max);
+
+unsigned int nf_conntrack_gc_scan_interval_max __read_mostly = GC_SCAN_INTERVAL_MAX;
+
 seqcount_spinlock_t nf_conntrack_generation __read_mostly;
 static siphash_aligned_key_t nf_conntrack_hash_rnd;
 
@@ -1568,7 +1571,7 @@ static void gc_worker(struct work_struct *work)
 				delta_time = nfct_time_stamp - gc_work->start_time;
 
 				/* re-sched immediately if total cycle time is exceeded */
-				next_run = delta_time < (s32)GC_SCAN_INTERVAL_MAX;
+				next_run = delta_time < (s32)nf_conntrack_gc_scan_interval_max;
 				goto early_exit;
 			}
 
@@ -1630,7 +1633,7 @@ static void gc_worker(struct work_struct *work)
 
 	gc_work->next_bucket = 0;
 
-	next_run = clamp(next_run, GC_SCAN_INTERVAL_MIN, GC_SCAN_INTERVAL_MAX);
+	next_run = clamp(next_run, GC_SCAN_INTERVAL_MIN, nf_conntrack_gc_scan_interval_max);
 
 	delta_time = max_t(s32, nfct_time_stamp - gc_work->start_time, 1);
 	if (next_run > (unsigned long)delta_time)
