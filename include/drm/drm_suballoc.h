@@ -20,6 +20,7 @@
  * @flist: Array[fence context hash] of queues of fenced allocated ranges.
  * @size: Size of the managed range.
  * @align: Default alignment for the managed range.
+ * @fence_disable: Fences are disabled for this SA manager.
  */
 struct drm_suballoc_manager {
 	wait_queue_head_t wq;
@@ -28,6 +29,7 @@ struct drm_suballoc_manager {
 	struct list_head flist[DRM_SUBALLOC_MAX_QUEUES];
 	size_t size;
 	size_t align;
+	bool fence_disable;
 };
 
 /**
@@ -50,6 +52,9 @@ struct drm_suballoc {
 
 void drm_suballoc_manager_init(struct drm_suballoc_manager *sa_manager,
 			       size_t size, size_t align);
+
+void drm_suballoc_manager_fence_disable(struct drm_suballoc_manager
+					*sa_manager, bool fence_disable);
 
 void drm_suballoc_manager_fini(struct drm_suballoc_manager *sa_manager);
 

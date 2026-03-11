@@ -78,11 +78,32 @@ void drm_suballoc_manager_init(struct drm_suballoc_manager *sa_manager,
 	sa_manager->size = size;
 	sa_manager->align = align;
 	sa_manager->hole = &sa_manager->olist;
+	sa_manager->fence_disable = false;
 	INIT_LIST_HEAD(&sa_manager->olist);
 	for (i = 0; i < DRM_SUBALLOC_MAX_QUEUES; ++i)
 		INIT_LIST_HEAD(&sa_manager->flist[i]);
 }
 EXPORT_SYMBOL(drm_suballoc_manager_init);
+
+/**
+ * drm_suballoc_manager_fence_disable() - Enable or disable fence tracking.
+ * @sa_manager: Pointer to the suballocation manager.
+ * @fence_disable: Whether to disable fence tracking for free suballocations.
+ *
+ * When @fence_disable is true allocation scans all holes without waiting on
+ * fences. When false, the manager tracks free suballocations behind fences and
+ * reuses them only after the fence signals.
+ *
+ * This should be called immediately after creating the suballocator and before
+ * any allocations are made. The behaviour is undefined if this is called after
+ * allocations have been made.
+ */
+void drm_suballoc_manager_fence_disable(struct drm_suballoc_manager *sa_manager,
+					bool fence_disable)
+{
+	sa_manager->fence_disable = fence_disable;
+}
+EXPORT_SYMBOL(drm_suballoc_manager_fence_disable);
 
 /**
  * drm_suballoc_manager_fini() - Destroy the drm_suballoc_manager
@@ -110,6 +131,7 @@ void drm_suballoc_manager_fini(struct drm_suballoc_manager *sa_manager)
 	}
 
 	sa_manager->size = 0;
+	sa_manager->fence_disable = false;
 }
 EXPORT_SYMBOL(drm_suballoc_manager_fini);
 
@@ -161,6 +183,69 @@ static size_t drm_suballoc_hole_eoffset(struct drm_suballoc_manager *sa_manager)
 	return sa_manager->size;
 }
 
+/**
+ * drm_suballoc_hole_soffset_eoffset() - Find a hole fitting size and alignment.
+ * @sa_manager: Suballocator manager.
+ * @soffset: Start offset of the selected hole.
+ * @eoffset: End offset of the selected hole.
+ * @size: Size to be allocated.
+ * @align: Allocation alignment.
+ *
+ * This function is used when fences are disabled. It scans the holes starting
+ * at the current hole pointer and selects the first one that can satisfy @size
+ * once @align padding is applied. We may need to scan the entire list of holes
+ * and update soffset and eoffset for each hole to find a suitable one, as the
+ * current hole pointer may not be the same as sa_manager->hole.
+ *
+ * Return: true if a suitable hole is found, false otherwise.
+ */
+static bool drm_suballoc_hole_soffset_eoffset(struct drm_suballoc_manager *sa_manager,
+					      size_t *soffset, size_t *eoffset,
+					      size_t size, size_t align)
+{
+	struct list_head *start, *hole;
+
+	if (!sa_manager->fence_disable)
+		return true;
+
+	start = sa_manager->hole;
+	hole = start;
+
+	do {
+		size_t s, e, wasted;
+
+		/*
+		 * We can't use drm_suballoc_hole_soffset() and
+		 * drm_suballoc_hole_eoffset() here as the hole may not be same
+		 * as sa_manager->hole.
+		 */
+		if (hole != &sa_manager->olist)
+			s = list_entry(hole, struct drm_suballoc, olist)->eoffset;
+		else
+			s = 0;
+
+		if (hole->next != &sa_manager->olist)
+			e = list_entry(hole->next, struct drm_suballoc, olist)->soffset;
+		else
+			e = sa_manager->size;
+
+		if (e < s || e == s || (e - s) < size) {
+			hole = hole->next;
+			continue;
+		}
+
+		wasted = round_up(s, align) - s;
+		if ((e - s) >= (size + wasted)) {
+			*soffset = s;
+			*eoffset = e;
+			sa_manager->hole = hole;
+			return true;
+		}
+	} while (hole != start);
+
+	return false;
+}
+
 static bool drm_suballoc_try_alloc(struct drm_suballoc_manager *sa_manager,
 				   struct drm_suballoc *sa,
 				   size_t size, size_t align)
@@ -169,6 +254,11 @@ static bool drm_suballoc_try_alloc(struct drm_suballoc_manager *sa_manager,
 
 	soffset = drm_suballoc_hole_soffset(sa_manager);
 	eoffset = drm_suballoc_hole_eoffset(sa_manager);
+
+	if (!drm_suballoc_hole_soffset_eoffset(sa_manager, &soffset,
+					       &eoffset, size, align))
+		return false;
+
 	wasted = round_up(soffset, align) - soffset;
 
 	if ((eoffset - soffset) >= (size + wasted)) {
