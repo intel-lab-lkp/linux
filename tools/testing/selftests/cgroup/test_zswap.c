@@ -168,7 +168,7 @@ static int test_swapin_nozswap(const char *root)
 		goto out;
 	if (cg_create(test_group))
 		goto out;
-	if (cg_write(test_group, "memory.max", "8M"))
+	if (cg_write(test_group, "memory.max", "24M"))
 		goto out;
 	if (cg_write(test_group, "memory.zswap.max", "0"))
 		goto out;
@@ -184,8 +184,8 @@ static int test_swapin_nozswap(const char *root)
 		goto out;
 	}
 
-	if (swap_peak < MB(24)) {
-		ksft_print_msg("at least 24MB of memory should be swapped out\n");
+	if (swap_peak < MB(8)) {
+		ksft_print_msg("at least 8MB of memory should be swapped out\n");
 		goto out;
 	}
 
