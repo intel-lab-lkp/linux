@@ -193,7 +193,6 @@ struct zswap_entry {
 	bool referenced;
 	struct zswap_pool *pool;
 	unsigned long handle;
-	struct obj_cgroup *objcg;
 	struct list_head lru;
 };
 
@@ -602,25 +601,13 @@ static int zswap_enabled_param_set(const char *val,
 * lru functions
 **********************************/
 
-/* should be called under RCU */
-#ifdef CONFIG_MEMCG
-static inline struct mem_cgroup *mem_cgroup_from_entry(struct zswap_entry *entry)
-{
-	return entry->objcg ? obj_cgroup_memcg(entry->objcg) : NULL;
-}
-#else
-static inline struct mem_cgroup *mem_cgroup_from_entry(struct zswap_entry *entry)
-{
-	return NULL;
-}
-#endif
-
 static inline int entry_to_nid(struct zswap_entry *entry)
 {
 	return page_to_nid(virt_to_page(entry));
 }
 
-static void zswap_lru_add(struct list_lru *list_lru, struct zswap_entry *entry)
+static void zswap_lru_add(struct list_lru *list_lru, struct zswap_entry *entry,
+			  struct obj_cgroup *objcg)
 {
 	int nid = entry_to_nid(entry);
 	struct mem_cgroup *memcg;
@@ -637,19 +624,20 @@ static void zswap_lru_add(struct list_lru *list_lru, struct zswap_entry *entry)
 	 * Similar reasoning holds for list_lru_del().
 	 */
 	rcu_read_lock();
-	memcg = mem_cgroup_from_entry(entry);
+	memcg = objcg ? obj_cgroup_memcg(objcg) : NULL;
 	/* will always succeed */
 	list_lru_add(list_lru, &entry->lru, nid, memcg);
 	rcu_read_unlock();
 }
 
-static void zswap_lru_del(struct list_lru *list_lru, struct zswap_entry *entry)
+static void zswap_lru_del(struct list_lru *list_lru, struct zswap_entry *entry,
+			  struct obj_cgroup *objcg)
 {
 	int nid = entry_to_nid(entry);
 	struct mem_cgroup *memcg;
 
 	rcu_read_lock();
-	memcg = mem_cgroup_from_entry(entry);
+	memcg = objcg ? obj_cgroup_memcg(objcg) : NULL;
 	/* will always succeed */
 	list_lru_del(list_lru, &entry->lru, nid, memcg);
 	rcu_read_unlock();
@@ -717,12 +705,15 @@ static void zswap_entry_cache_free(struct zswap_entry *entry)
  */
 static void zswap_entry_free(struct zswap_entry *entry)
 {
-	zswap_lru_del(&zswap_list_lru, entry);
+	struct obj_cgroup *objcg = zs_lookup_objcg(entry->pool->zs_pool,
+						   entry->handle);
+
+	zswap_lru_del(&zswap_list_lru, entry, objcg);
 	zs_free(entry->pool->zs_pool, entry->handle);
 	zswap_pool_put(entry->pool);
-	if (entry->objcg) {
-		obj_cgroup_uncharge_zswap(entry->objcg, entry->length);
-		obj_cgroup_put(entry->objcg);
+	if (objcg) {
+		obj_cgroup_uncharge_zswap(objcg, entry->length);
+		obj_cgroup_put(objcg);
 	}
 	if (entry->length == PAGE_SIZE)
 		atomic_long_dec(&zswap_stored_incompressible_pages);
@@ -995,6 +986,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	struct mempolicy *mpol;
 	bool folio_was_allocated;
 	struct swap_info_struct *si;
+	struct obj_cgroup *objcg;
 	int ret = 0;
 
 	/* try to allocate swap cache folio */
@@ -1044,8 +1036,9 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	xa_erase(tree, offset);
 
 	count_vm_event(ZSWPWB);
-	if (entry->objcg)
-		count_objcg_events(entry->objcg, ZSWPWB, 1);
+	objcg = zs_lookup_objcg(entry->pool->zs_pool, entry->handle);
+	if (objcg)
+		count_objcg_events(objcg, ZSWPWB, 1);
 
 	zswap_entry_free(entry);
 
@@ -1464,11 +1457,10 @@ static bool zswap_store_page(struct page *page,
 	 */
 	entry->pool = pool;
 	entry->swpentry = page_swpentry;
-	entry->objcg = objcg;
 	entry->referenced = true;
 	if (entry->length) {
 		INIT_LIST_HEAD(&entry->lru);
-		zswap_lru_add(&zswap_list_lru, entry);
+		zswap_lru_add(&zswap_list_lru, entry, objcg);
 	}
 
 	return true;
@@ -1593,6 +1585,7 @@ int zswap_load(struct folio *folio)
 	bool swapcache = folio_test_swapcache(folio);
 	struct xarray *tree = swap_zswap_tree(swp);
 	struct zswap_entry *entry;
+	struct obj_cgroup *objcg;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 
@@ -1621,8 +1614,9 @@ int zswap_load(struct folio *folio)
 	folio_mark_uptodate(folio);
 
 	count_vm_event(ZSWPIN);
-	if (entry->objcg)
-		count_objcg_events(entry->objcg, ZSWPIN, 1);
+	objcg = zs_lookup_objcg(entry->pool->zs_pool, entry->handle);
+	if (objcg)
+		count_objcg_events(objcg, ZSWPIN, 1);
 
 	/*
 	 * When reading into the swapcache, invalidate our entry. The

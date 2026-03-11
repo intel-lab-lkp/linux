@@ -1049,6 +1049,31 @@ unsigned int zs_lookup_class_index(struct zs_pool *pool, unsigned int size)
 }
 EXPORT_SYMBOL_GPL(zs_lookup_class_index);
 
+struct obj_cgroup *zs_lookup_objcg(struct zs_pool *pool, unsigned long handle)
+{
+	unsigned long obj;
+	struct zpdesc *zpdesc;
+	struct zspage *zspage;
+	struct obj_cgroup *objcg;
+	unsigned int obj_idx;
+
+	if (!pool->memcg_aware)
+		return NULL;
+
+	read_lock(&pool->lock);
+	obj = handle_to_obj(handle);
+	obj_to_location(obj, &zpdesc, &obj_idx);
+
+	zspage = get_zspage(zpdesc);
+	zspage_read_lock(zspage);
+	read_unlock(&pool->lock);
+
+	objcg = zspage->objcgs[obj_idx];
+	zspage_read_unlock(zspage);
+
+	return objcg;
+}
+
 unsigned long zs_get_total_pages(struct zs_pool *pool)
 {
 	return atomic_long_read(&pool->pages_allocated);
