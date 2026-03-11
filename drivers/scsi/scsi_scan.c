@@ -519,6 +519,7 @@ static struct scsi_target *scsi_alloc_target(struct device *parent,
 	dev->bus = &scsi_bus_type;
 	dev->type = &scsi_target_type;
 	scsi_enable_async_suspend(dev);
+	device_enable_async_shutdown(dev);
 	starget->id = id;
 	starget->channel = channel;
 	starget->can_queue = 0;
