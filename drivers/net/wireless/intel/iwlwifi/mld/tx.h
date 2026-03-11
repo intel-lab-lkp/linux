@@ -45,6 +45,8 @@ static inline void iwl_mld_init_txq(struct iwl_mld_txq *mld_txq)
 static inline struct iwl_mld_txq *
 iwl_mld_txq_from_mac80211(struct ieee80211_txq *txq)
 {
+	if (!txq)
+		return NULL;
 	return (void *)txq->drv_priv;
 }
 
