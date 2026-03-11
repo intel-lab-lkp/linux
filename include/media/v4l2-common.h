@@ -17,6 +17,9 @@
 #include <linux/time.h>
 #include <media/v4l2-dev.h>
 
+struct v4l2_ctrl;
+struct v4l2_mbus_framefmt;
+
 /* Common printk constructs for v4l-i2c drivers. These macros create a unique
    prefix consisting of the driver name, the adapter number and the i2c
    address. */
