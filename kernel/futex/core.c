@@ -48,6 +48,10 @@
 #include "futex.h"
 #include "../locking/rtmutex_common.h"
 
+#define FUTEX_UADDR_PI		(1UL << 0)
+#define FUTEX_UADDR_NEED_WAKEUP	(1UL << 1)
+#define FUTEX_UADDR_MASK	(~(FUTEX_UADDR_PI | FUTEX_UADDR_NEED_WAKEUP))
+
 /*
  * The base of the bucket array and its size are always used together
  * (after initialization only in futex_hash()), so ensure that they
@@ -1004,6 +1008,77 @@ void futex_unqueue_pi(struct futex_q *q)
 	q->pi_state = NULL;
 }
 
+/*
+ * Transfer the need wakeup state from vDSO stack to the
+ * FUTEX_UADDR_NEED_WAKEUP list_op_pending bit so it's observed if the
+ * program is terminated while executing the signal handler.
+ */
+static void signal_delivery_fixup_robust_list(struct task_struct *curr, struct pt_regs *regs)
+{
+	struct robust_list_head __user *head = curr->robust_list;
+	bool in_futex_vdso, need_wakeup;
+	unsigned long pending;
+
+	if (!head)
+		return;
+	futex_vdso_exception(regs, &in_futex_vdso, &need_wakeup);
+	if (!in_futex_vdso)
+		return;
+	if (need_wakeup) {
+		if (get_user(pending, (unsigned long __user *)&head->list_op_pending))
+			goto fault;
+		pending |= FUTEX_UADDR_NEED_WAKEUP;
+		if (put_user(pending, (unsigned long __user *)&head->list_op_pending))
+			goto fault;
+	} else {
+		if (put_user(0UL, (unsigned long __user *)&head->list_op_pending))
+			goto fault;
+	}
+	return;
+fault:
+	force_sig(SIGSEGV);
+}
+
+#ifdef CONFIG_COMPAT
+static void compat_signal_delivery_fixup_robust_list(struct task_struct *curr, struct pt_regs *regs)
+{
+	struct compat_robust_list_head __user *head = curr->compat_robust_list;
+	bool in_futex_vdso, need_wakeup;
+	unsigned int pending;
+
+	if (!head)
+		return;
+	futex_vdso_exception(regs, &in_futex_vdso, &need_wakeup);
+	if (!in_futex_vdso)
+		return;
+	if (need_wakeup) {
+		if (get_user(pending, (compat_uptr_t __user *)&head->list_op_pending))
+			goto fault;
+		pending |= FUTEX_UADDR_NEED_WAKEUP;
+		if (put_user(pending, (compat_uptr_t __user *)&head->list_op_pending))
+			goto fault;
+	} else {
+		if (put_user(0U, (compat_uptr_t __user *)&head->list_op_pending))
+			goto fault;
+	}
+	return;
+fault:
+	force_sig(SIGSEGV);
+}
+#endif
+
+void futex_signal_deliver(struct ksignal *ksig, struct pt_regs *regs)
+{
+	struct task_struct *tsk = current;
+
+	if (unlikely(tsk->robust_list))
+		signal_delivery_fixup_robust_list(tsk, regs);
+#ifdef CONFIG_COMPAT
+	if (unlikely(tsk->compat_robust_list))
+		compat_signal_delivery_fixup_robust_list(tsk, regs);
+#endif
+}
+
 /* Constants for the pending_op argument of handle_futex_death */
 #define HANDLE_DEATH_PENDING	true
 #define HANDLE_DEATH_LIST	false
@@ -1013,11 +1088,30 @@ void futex_unqueue_pi(struct futex_q *q)
  * dying task, and do notification if so:
  */
 static int handle_futex_death(u32 __user *uaddr, struct task_struct *curr,
-			      bool pi, bool pending_op)
+			      bool pi, bool pending_op, bool need_wakeup)
 {
+	bool unlock_store_done = false;
 	u32 uval, nval, mval;
 	pid_t owner;
 	int err;
+
+	/*
+	 * Process dies after the store unlocking futex, before clearing
+	 * the pending ops. Wake up one waiter if needed. Prevent
+	 * storing to the futex after it was unlocked. Only handle
+	 * non-PI futex.
+	 */
+	if (pending_op && !pi) {
+		bool in_futex_vdso, vdso_need_wakeup;
+
+		futex_vdso_exception(task_pt_regs(curr), &in_futex_vdso, &vdso_need_wakeup);
+		if (need_wakeup || vdso_need_wakeup) {
+			futex_wake(uaddr, FLAGS_SIZE_32 | FLAGS_SHARED, 1,
+				   FUTEX_BITSET_MATCH_ANY);
+		}
+		if (need_wakeup || in_futex_vdso)
+			return 0;
+	}
 
 	/* Futex address must be 32bit aligned */
 	if ((((unsigned long)uaddr) % sizeof(*uaddr)) != 0)
@@ -1070,6 +1164,13 @@ retry:
 			   FUTEX_BITSET_MATCH_ANY);
 		return 0;
 	}
+
+	/*
+	 * Terminated after the unlock store is done. Wake up waiters,
+	 * but do not change the lock state.
+	 */
+	if (unlock_store_done)
+		return 0;
 
 	if (owner != task_pid_vnr(curr))
 		return 0;
@@ -1128,19 +1229,23 @@ retry:
 }
 
 /*
- * Fetch a robust-list pointer. Bit 0 signals PI futexes:
+ * Fetch a robust-list pointer. Bit 0 signals PI futexes, bit 1 signals
+ * need wakeup:
  */
 static inline int fetch_robust_entry(struct robust_list __user **entry,
 				     struct robust_list __user * __user *head,
-				     unsigned int *pi)
+				     unsigned int *pi,
+				     unsigned int *need_wakeup)
 {
 	unsigned long uentry;
 
 	if (get_user(uentry, (unsigned long __user *)head))
 		return -EFAULT;
 
-	*entry = (void __user *)(uentry & ~1UL);
-	*pi = uentry & 1;
+	*entry = (void __user *)(uentry & FUTEX_UADDR_MASK);
+	*pi = uentry & FUTEX_UADDR_PI;
+	if (need_wakeup)
+		*need_wakeup = uentry & FUTEX_UADDR_NEED_WAKEUP;
 
 	return 0;
 }
@@ -1155,7 +1260,7 @@ static void exit_robust_list(struct task_struct *curr)
 {
 	struct robust_list_head __user *head = curr->robust_list;
 	struct robust_list __user *entry, *next_entry, *pending;
-	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
+	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip, need_wakeup;
 	unsigned int next_pi;
 	unsigned long futex_offset;
 	int rc;
@@ -1164,7 +1269,7 @@ static void exit_robust_list(struct task_struct *curr)
 	 * Fetch the list head (which was registered earlier, via
 	 * sys_set_robust_list()):
 	 */
-	if (fetch_robust_entry(&entry, &head->list.next, &pi))
+	if (fetch_robust_entry(&entry, &head->list.next, &pi, NULL))
 		return;
 	/*
 	 * Fetch the relative futex offset:
@@ -1175,7 +1280,7 @@ static void exit_robust_list(struct task_struct *curr)
 	 * Fetch any possibly pending lock-add first, and handle it
 	 * if it exists:
 	 */
-	if (fetch_robust_entry(&pending, &head->list_op_pending, &pip))
+	if (fetch_robust_entry(&pending, &head->list_op_pending, &pip, &need_wakeup))
 		return;
 
 	next_entry = NULL;	/* avoid warning with gcc */
@@ -1184,14 +1289,14 @@ static void exit_robust_list(struct task_struct *curr)
 		 * Fetch the next entry in the list before calling
 		 * handle_futex_death:
 		 */
-		rc = fetch_robust_entry(&next_entry, &entry->next, &next_pi);
+		rc = fetch_robust_entry(&next_entry, &entry->next, &next_pi, NULL);
 		/*
 		 * A pending lock might already be on the list, so
 		 * don't process it twice:
 		 */
 		if (entry != pending) {
 			if (handle_futex_death((void __user *)entry + futex_offset,
-						curr, pi, HANDLE_DEATH_LIST))
+						curr, pi, HANDLE_DEATH_LIST, false))
 				return;
 		}
 		if (rc)
@@ -1209,7 +1314,7 @@ static void exit_robust_list(struct task_struct *curr)
 
 	if (pending) {
 		handle_futex_death((void __user *)pending + futex_offset,
-				   curr, pip, HANDLE_DEATH_PENDING);
+				   curr, pip, HANDLE_DEATH_PENDING, need_wakeup);
 	}
 }
 
@@ -1224,17 +1329,20 @@ static void __user *futex_uaddr(struct robust_list __user *entry,
 }
 
 /*
- * Fetch a robust-list pointer. Bit 0 signals PI futexes:
+ * Fetch a robust-list pointer. Bit 0 signals PI futexes, bit 1 signals
+ * need wakeup:
  */
 static inline int
 compat_fetch_robust_entry(compat_uptr_t *uentry, struct robust_list __user **entry,
-		   compat_uptr_t __user *head, unsigned int *pi)
+		   compat_uptr_t __user *head, unsigned int *pi, unsigned int *need_wakeup)
 {
 	if (get_user(*uentry, head))
 		return -EFAULT;
 
-	*entry = compat_ptr((*uentry) & ~1);
-	*pi = (unsigned int)(*uentry) & 1;
+	*entry = compat_ptr((*uentry) & FUTEX_UADDR_MASK);
+	*pi = (unsigned int)(*uentry) & FUTEX_UADDR_PI;
+	if (need_wakeup)
+		*need_wakeup = (unsigned int)(*uentry) & FUTEX_UADDR_NEED_WAKEUP;
 
 	return 0;
 }
@@ -1249,7 +1357,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 {
 	struct compat_robust_list_head __user *head = curr->compat_robust_list;
 	struct robust_list __user *entry, *next_entry, *pending;
-	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
+	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip, need_wakeup;
 	unsigned int next_pi;
 	compat_uptr_t uentry, next_uentry, upending;
 	compat_long_t futex_offset;
@@ -1259,7 +1367,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 	 * Fetch the list head (which was registered earlier, via
 	 * sys_set_robust_list()):
 	 */
-	if (compat_fetch_robust_entry(&uentry, &entry, &head->list.next, &pi))
+	if (compat_fetch_robust_entry(&uentry, &entry, &head->list.next, &pi, NULL))
 		return;
 	/*
 	 * Fetch the relative futex offset:
@@ -1271,7 +1379,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 	 * if it exists:
 	 */
 	if (compat_fetch_robust_entry(&upending, &pending,
-			       &head->list_op_pending, &pip))
+			       &head->list_op_pending, &pip, &need_wakeup))
 		return;
 
 	next_entry = NULL;	/* avoid warning with gcc */
@@ -1281,7 +1389,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 		 * handle_futex_death:
 		 */
 		rc = compat_fetch_robust_entry(&next_uentry, &next_entry,
-			(compat_uptr_t __user *)&entry->next, &next_pi);
+			(compat_uptr_t __user *)&entry->next, &next_pi, NULL);
 		/*
 		 * A pending lock might already be on the list, so
 		 * dont process it twice:
@@ -1289,8 +1397,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 		if (entry != pending) {
 			void __user *uaddr = futex_uaddr(entry, futex_offset);
 
-			if (handle_futex_death(uaddr, curr, pi,
-					       HANDLE_DEATH_LIST))
+			if (handle_futex_death(uaddr, curr, pi, HANDLE_DEATH_LIST, false))
 				return;
 		}
 		if (rc)
@@ -1309,7 +1416,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 	if (pending) {
 		void __user *uaddr = futex_uaddr(pending, futex_offset);
 
-		handle_futex_death(uaddr, curr, pip, HANDLE_DEATH_PENDING);
+		handle_futex_death(uaddr, curr, pip, HANDLE_DEATH_PENDING, need_wakeup);
 	}
 }
 #endif
