@@ -300,8 +300,7 @@ class KernelEntry:
         """Returns a string with all content texts that were added."""
         return '\n'.join(self._contents) + '\n'
 
-    # TODO: rename to emit_message after removal of kernel-doc.pl
-    def emit_msg(self, ln, msg, *, warning=True):
+    def emit_message(self, ln, msg, *, warning=True):
         """Emit a message."""
 
         log_msg = f"{self.fname}:{ln} {msg}"
@@ -350,7 +349,7 @@ class KernelEntry:
             if name in self.sections and self.sections[name] != "":
                 # Only warn on user-specified duplicate section names
                 if name != SECTION_DEFAULT:
-                    self.emit_msg(self.new_start_line,
+                    self.emit_message(self.new_start_line,
                                   f"duplicate section name '{name}'")
                 # Treat as a new paragraph - add a blank line
                 self.sections[name] += '\n' + contents
@@ -405,15 +404,15 @@ class KernelDoc:
         if (not python_warning and
             sys.version_info.major == 3 and sys.version_info.minor < 7):
 
-            self.emit_msg(0,
+            self.emit_message(0,
                           'Python 3.7 or later is required for correct results')
             python_warning = True
 
-    def emit_msg(self, ln, msg, *, warning=True):
+    def emit_message(self, ln, msg, *, warning=True):
         """Emit a message"""
 
         if self.entry:
-            self.entry.emit_msg(ln, msg, warning=warning)
+            self.entry.emit_message(ln, msg, warning=warning)
             return
 
         log_msg = f"{self.fname}:{ln} {msg}"
@@ -431,8 +430,7 @@ class KernelDoc:
         if self.entry:
             self.entry.dump_section(start_new)
 
-    # TODO: rename it to store_declaration after removal of kernel-doc.pl
-    def output_declaration(self, dtype, name, **args):
+    def store_declaration(self, dtype, name, **args):
         """
         Store the entry into an entry array.
 
@@ -540,7 +538,7 @@ class KernelDoc:
                 else:
                     dname = f"{decl_type} member"
 
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"{dname} '{param}' not described in '{declaration_name}'")
 
         # Strip spaces from param so that it is one continuous string on
@@ -594,7 +592,7 @@ class KernelDoc:
                 if r.match(arg):
                     param = r.group(1)
                 else:
-                    self.emit_msg(ln, f"Invalid param: {arg}")
+                    self.emit_message(ln, f"Invalid param: {arg}")
                     param = arg
                 dtype = arg.replace(param, '')
                 self.push_parameter(ln, decl_type, param, dtype, arg, declaration_name)
@@ -609,7 +607,7 @@ class KernelDoc:
                 if r.match(arg):
                     param = r.group(1)
                 else:
-                    self.emit_msg(ln, f"Invalid param: {arg}")
+                    self.emit_message(ln, f"Invalid param: {arg}")
                     param = arg
                 dtype = arg.replace(param, '')
                 self.push_parameter(ln, decl_type, param, dtype, arg, declaration_name)
@@ -670,7 +668,7 @@ class KernelDoc:
                     dname = f"{decl_type} parameter"
                 else:
                     dname = f"{decl_type} member"
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"Excess {dname} '{section}' description in '{decl_name}'")
 
     def check_return_section(self, ln, declaration_name, return_type):
@@ -688,7 +686,7 @@ class KernelDoc:
             return
 
         if not self.entry.sections.get("Return", None):
-            self.emit_msg(ln,
+            self.emit_message(ln,
                           f"No description found for return value of '{declaration_name}'")
 
     def split_struct_proto(self, proto):
@@ -858,12 +856,12 @@ class KernelDoc:
         #
         struct_parts = self.split_struct_proto(proto)
         if not struct_parts:
-            self.emit_msg(ln, f"{proto} error: Cannot parse struct or union!")
+            self.emit_message(ln, f"{proto} error: Cannot parse struct or union!")
             return
         decl_type, declaration_name, members = struct_parts
 
         if self.entry.identifier != declaration_name:
-            self.emit_msg(ln, f"expecting prototype for {decl_type} {self.entry.identifier}. "
+            self.emit_message(ln, f"expecting prototype for {decl_type} {self.entry.identifier}. "
                           f"Prototype was for {decl_type} {declaration_name} instead\n")
             return
         #
@@ -887,7 +885,7 @@ class KernelDoc:
         self.create_parameter_list(ln, decl_type, members, ';',
                                    declaration_name)
         self.check_sections(ln, declaration_name, decl_type)
-        self.output_declaration(decl_type, declaration_name,
+        self.store_declaration(decl_type, declaration_name,
                                 definition=self.format_struct_decl(declaration),
                                 purpose=self.entry.declaration_purpose)
 
@@ -919,17 +917,17 @@ class KernelDoc:
         # OK, this isn't going to work.
         #
             else:
-                self.emit_msg(ln, f"{proto}: error: Cannot parse enum!")
+                self.emit_message(ln, f"{proto}: error: Cannot parse enum!")
                 return
         #
         # Make sure we found what we were expecting.
         #
         if self.entry.identifier != declaration_name:
             if self.entry.identifier == "":
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"{proto}: wrong kernel-doc identifier on prototype")
             else:
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"expecting prototype for enum {self.entry.identifier}. "
                               f"Prototype was for enum {declaration_name} instead")
             return
@@ -949,7 +947,7 @@ class KernelDoc:
             self.entry.parameterlist.append(arg)
             if arg not in self.entry.parameterdescs:
                 self.entry.parameterdescs[arg] = self.undescribed
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"Enum value '{arg}' not described in enum '{declaration_name}'")
             member_set.add(arg)
         #
@@ -957,10 +955,10 @@ class KernelDoc:
         #
         for k in self.entry.parameterdescs:
             if k not in member_set:
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"Excess enum value '@{k}' description in '{declaration_name}'")
 
-        self.output_declaration('enum', declaration_name,
+        self.store_declaration('enum', declaration_name,
                                 purpose=self.entry.declaration_purpose)
 
     def dump_var(self, ln, proto):
@@ -1027,13 +1025,13 @@ class KernelDoc:
             default_val = r.group(1)
 
         if not declaration_name:
-           self.emit_msg(ln,f"{proto}: can't parse variable")
+           self.emit_message(ln,f"{proto}: can't parse variable")
            return
 
         if default_val:
             default_val = default_val.lstrip("=").strip()
 
-        self.output_declaration("var", declaration_name,
+        self.store_declaration("var", declaration_name,
                                 full_proto=full_proto,
                                 default_val=default_val,
                                 purpose=self.entry.declaration_purpose)
@@ -1137,11 +1135,11 @@ class KernelDoc:
         # Parsing done; make sure that things are as we expect.
         #
         if not found:
-            self.emit_msg(ln,
+            self.emit_message(ln,
                           f"cannot understand function prototype: '{prototype}'")
             return
         if self.entry.identifier != declaration_name:
-            self.emit_msg(ln, f"expecting prototype for {self.entry.identifier}(). "
+            self.emit_message(ln, f"expecting prototype for {self.entry.identifier}(). "
                           f"Prototype was for {declaration_name}() instead")
             return
         self.check_sections(ln, declaration_name, "function")
@@ -1149,7 +1147,7 @@ class KernelDoc:
         #
         # Store the result.
         #
-        self.output_declaration(decl_type, declaration_name,
+        self.store_declaration(decl_type, declaration_name,
                                 typedef=('typedef' in return_type),
                                 functiontype=return_type,
                                 purpose=self.entry.declaration_purpose,
@@ -1180,13 +1178,13 @@ class KernelDoc:
             args = r.group(3)
 
             if self.entry.identifier != declaration_name:
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"expecting prototype for typedef {self.entry.identifier}. Prototype was for typedef {declaration_name} instead\n")
                 return
 
             self.create_parameter_list(ln, 'function', args, ',', declaration_name)
 
-            self.output_declaration('function', declaration_name,
+            self.store_declaration('function', declaration_name,
                                     typedef=True,
                                     functiontype=return_type,
                                     purpose=self.entry.declaration_purpose)
@@ -1199,15 +1197,15 @@ class KernelDoc:
             declaration_name = r.group(1)
 
             if self.entry.identifier != declaration_name:
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"expecting prototype for typedef {self.entry.identifier}. Prototype was for typedef {declaration_name} instead\n")
                 return
 
-            self.output_declaration('typedef', declaration_name,
+            self.store_declaration('typedef', declaration_name,
                                     purpose=self.entry.declaration_purpose)
             return
 
-        self.emit_msg(ln, "error: Cannot parse typedef!")
+        self.emit_message(ln, "error: Cannot parse typedef!")
 
     @staticmethod
     def process_export(function_set, line):
@@ -1291,7 +1289,7 @@ class KernelDoc:
             # We struck out.
             #
             else:
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"This comment starts with '/**', but isn't a kernel-doc comment. Refer to Documentation/doc-guide/kernel-doc.rst\n{line}")
                 self.state = state.NORMAL
                 return
@@ -1315,23 +1313,23 @@ class KernelDoc:
                 self.entry.declaration_purpose = ""
 
             if not self.entry.declaration_purpose and self.config.wshort_desc:
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"missing initial short description on line:\n{line}")
 
             if not self.entry.identifier and self.entry.decl_type != "enum":
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"wrong kernel-doc identifier on line:\n{line}")
                 self.state = state.NORMAL
 
             if self.config.verbose:
-                self.emit_msg(ln,
+                self.emit_message(ln,
                               f"Scanning doc for {self.entry.decl_type} {self.entry.identifier}",
                                   warning=False)
         #
         # Failed to find an identifier. Emit a warning
         #
         else:
-            self.emit_msg(ln, f"Cannot find identifier on line:\n{line}")
+            self.emit_message(ln, f"Cannot find identifier on line:\n{line}")
 
     def is_new_section(self, ln, line):
         """
@@ -1378,7 +1376,7 @@ class KernelDoc:
             # Look for doc_com + <text> + doc_end:
             r = KernRe(r'\s*\*\s*[a-zA-Z_0-9:.]+\*/')
             if r.match(line):
-                self.emit_msg(ln, f"suspicious ending line: {line}")
+                self.emit_message(ln, f"suspicious ending line: {line}")
 
             self.entry.prototype = ""
             self.entry.new_start_line = ln + 1
@@ -1414,7 +1412,7 @@ class KernelDoc:
                     trim_whitespace(self.entry.declaration_purpose + ' ' + cont)
         else:
             # Unknown line, ignore
-            self.emit_msg(ln, f"bad line: {line}")
+            self.emit_message(ln, f"bad line: {line}")
 
 
     def process_special(self, ln, line):
@@ -1466,7 +1464,7 @@ class KernelDoc:
             self.entry.add_text(cont[self.entry.leading_space:])
         else:
             # Unknown line, ignore
-            self.emit_msg(ln, f"bad line: {line}")
+            self.emit_message(ln, f"bad line: {line}")
 
     def process_body(self, ln, line):
         """
@@ -1480,7 +1478,7 @@ class KernelDoc:
             self.entry.add_text(cont)
         else:
             # Unknown line, ignore
-            self.emit_msg(ln, f"bad line: {line}")
+            self.emit_message(ln, f"bad line: {line}")
 
     def process_inline_name(self, ln, line):
         """STATE_INLINE_NAME: beginning of docbook comments within a prototype."""
@@ -1493,7 +1491,7 @@ class KernelDoc:
             self.dump_section()
             self.state = state.PROTO
         elif doc_content.search(line):
-            self.emit_msg(ln, f"Incorrect use of kernel-doc format: {line}")
+            self.emit_message(ln, f"Incorrect use of kernel-doc format: {line}")
             self.state = state.PROTO
         # else ... ??
 
@@ -1575,7 +1573,7 @@ class KernelDoc:
             tracepointargs = r.group(1)
 
         if not tracepointname or not tracepointargs:
-            self.emit_msg(ln,
+            self.emit_message(ln,
                           f"Unrecognized tracepoint format:\n{proto}\n")
         else:
             proto = f"static inline void trace_{tracepointname}({tracepointargs})"
@@ -1689,7 +1687,7 @@ class KernelDoc:
 
         if doc_end.search(line):
             self.dump_section()
-            self.output_declaration("doc", self.entry.identifier)
+            self.store_declaration("doc", self.entry.identifier)
             self.reset_state(ln)
 
         elif doc_content.search(line):
