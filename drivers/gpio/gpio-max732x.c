@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
 #include <linux/platform_data/max732x.h>
+#include <linux/cleanup.h>
 
 /*
  * Each port of MAX732x (including MAX7319) falls into one of the
@@ -207,22 +208,20 @@ static void max732x_gpio_set_mask(struct gpio_chip *gc, unsigned off, int mask,
 	uint8_t reg_out;
 	int ret;
 
-	mutex_lock(&chip->lock);
+	guard(mutex)(&chip->lock);
 
 	reg_out = (off > 7) ? chip->reg_out[1] : chip->reg_out[0];
 	reg_out = (reg_out & ~mask) | (val & mask);
 
 	ret = max732x_writeb(chip, is_group_a(chip, off), reg_out);
 	if (ret < 0)
-		goto out;
+		return;
 
 	/* update the shadow register then */
 	if (off > 7)
 		chip->reg_out[1] = reg_out;
 	else
 		chip->reg_out[0] = reg_out;
-out:
-	mutex_unlock(&chip->lock);
 }
 
 static int max732x_gpio_set_value(struct gpio_chip *gc, unsigned int off,
@@ -329,7 +328,7 @@ static void max732x_irq_update_mask(struct max732x_chip *chip)
 	if (chip->irq_features == INT_NO_MASK)
 		return;
 
-	mutex_lock(&chip->lock);
+	guard(mutex)(&chip->lock);
 
 	switch (chip->irq_features) {
 	case INT_INDEP_MASK:
@@ -342,8 +341,6 @@ static void max732x_irq_update_mask(struct max732x_chip *chip)
 		max732x_writeb(chip, 1, (uint8_t)msg);
 		break;
 	}
-
-	mutex_unlock(&chip->lock);
 }
 
 static void max732x_irq_mask(struct irq_data *d)
