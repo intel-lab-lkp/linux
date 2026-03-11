@@ -3923,7 +3923,7 @@ static int cik_cp_gfx_load_microcode(struct radeon_device *rdev)
 		WREG32(CP_CE_UCODE_ADDR, le32_to_cpu(ce_hdr->header.ucode_version));
 
 		/* ME */
-		fw_data = (const __be32 *)
+		fw_data = (const __le32 *)
 			(rdev->me_fw->data + le32_to_cpu(me_hdr->header.ucode_array_offset_bytes));
 		fw_size = le32_to_cpu(me_hdr->header.ucode_size_bytes) / 4;
 		WREG32(CP_ME_RAM_WADDR, 0);
