@@ -375,8 +375,6 @@ static int aplic_probe(struct platform_device *pdev)
 	if (rc)
 		dev_err_probe(dev, rc, "failed to setup APLIC in %s mode\n",
 			      msi_mode ? "MSI" : "direct");
-	else
-		register_syscore(&aplic_syscore);
 
 #ifdef CONFIG_ACPI
 	if (!acpi_disabled)
@@ -399,4 +397,10 @@ static struct platform_driver aplic_driver = {
 	},
 	.probe = aplic_probe,
 };
-builtin_platform_driver(aplic_driver);
+
+static int __init aplic_driver_init(void)
+{
+	register_syscore(&aplic_syscore);
+	return platform_driver_register(&aplic_driver);
+}
+device_initcall(aplic_driver_init);
