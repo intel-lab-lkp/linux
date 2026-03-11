@@ -1539,7 +1539,7 @@ static int i2c_imx_xfer_common(struct i2c_adapter *adapter,
 
 	/* Start I2C transfer */
 	result = i2c_imx_start(i2c_imx, atomic);
-	if (result) {
+	if (result && result != -EAGAIN) {
 		/*
 		 * Bus recovery uses gpiod_get_value_cansleep() which is not
 		 * allowed within atomic context.
