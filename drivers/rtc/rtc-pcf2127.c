@@ -404,8 +404,6 @@ static int pcf2127_param_set(struct device *dev, struct rtc_param *param)
 					  PCF2127_CTRL3_PM,
 					  FIELD_PREP(PCF2127_CTRL3_PM, mode + value));
 
-		break;
-
 	default:
 		return -EINVAL;
 	}
