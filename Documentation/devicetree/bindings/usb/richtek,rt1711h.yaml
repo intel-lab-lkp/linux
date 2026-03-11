@@ -21,8 +21,10 @@ properties:
     enum:
       - richtek,rt1711h
       - richtek,rt1715
+      - hynetek,husb311
     description:
       RT1711H support PD20, RT1715 support PD30 except Fast Role Swap.
+      HUSB311 is a rebrand of RT1711H which is pin and register compatible.
 
   reg:
     maxItems: 1
