@@ -61,6 +61,45 @@
 #include "socklib.h"
 #include "sunrpc.h"
 
+/* Helper macro to define repetitive rpc_version structures */
+#define RPC_VERSION_DEFINE(prog, v_num)                 \
+static const struct rpc_version rpc_##prog##_version##v_num = { \
+    .number     = v_num,                                \
+    .nrprocs    = ARRAY_SIZE(rpc_##prog##_procs),       \
+    .procs      = rpc_##prog##_procs,                   \
+    .counts     = rpc_##prog##_counts,                  \
+}
+
+static struct rpc_stat rpc_tls_dummy_stats;
+
+static const struct rpc_procinfo rpc_tls_dummy_procs[] = {
+    [0] = {
+        .p_encode   = NULL,
+        .p_decode   = NULL,
+    },
+};
+
+static unsigned int rpc_tls_dummy_counts[ARRAY_SIZE(rpc_tls_dummy_procs)];
+
+/* Generate the structures for versions 2, 3, and 4 */
+RPC_VERSION_DEFINE(tls_dummy, 2);
+RPC_VERSION_DEFINE(tls_dummy, 3);
+RPC_VERSION_DEFINE(tls_dummy, 4);
+
+static const struct rpc_version *rpc_tls_dummy_versions[5] = {
+    [2] = &rpc_tls_dummy_version2,
+    [3] = &rpc_tls_dummy_version3,
+    [4] = &rpc_tls_dummy_version4,
+};
+
+static const struct rpc_program rpc_tls_dummy_program = {
+    .name       = "tls_probe",
+    .number     = 0,
+    .nrvers     = ARRAY_SIZE(rpc_tls_dummy_versions),
+    .version    = rpc_tls_dummy_versions,
+    .stats      = &rpc_tls_dummy_stats,
+};
+
 static void xs_close(struct rpc_xprt *xprt);
 static void xs_reset_srcport(struct sock_xprt *transport);
 static void xs_set_srcport(struct sock_xprt *transport, struct socket *sock);
@@ -2687,24 +2726,21 @@ static void xs_tcp_tls_setup_socket(struct work_struct *work)
 {
 	struct sock_xprt *upper_transport =
 		container_of(work, struct sock_xprt, connect_worker.work);
-	struct rpc_clnt *upper_clnt = upper_transport->clnt;
 	struct rpc_xprt *upper_xprt = &upper_transport->xprt;
 	struct rpc_create_args args = {
 		.net		= upper_xprt->xprt_net,
 		.protocol	= upper_xprt->prot,
 		.address	= (struct sockaddr *)&upper_xprt->addr,
 		.addrsize	= upper_xprt->addrlen,
-		.timeout	= upper_clnt->cl_timeout,
+		.timeout	= upper_xprt->timeout,
 		.servername	= upper_xprt->servername,
-		.program	= upper_clnt->cl_program,
-		.prognumber	= upper_clnt->cl_prog,
-		.version	= upper_clnt->cl_vers,
+		.prognumber = upper_transport->connect_prog,
+		.version	= upper_transport->connect_vers,
+		.program	= &rpc_tls_dummy_program,
 		.authflavor	= RPC_AUTH_TLS,
-		.cred		= upper_clnt->cl_cred,
 		.xprtsec	= {
 			.policy		= RPC_XPRTSEC_NONE,
 		},
-		.stats		= upper_clnt->cl_stats,
 	};
 	unsigned int pflags = current->flags;
 	struct rpc_clnt *lower_clnt;
@@ -2719,7 +2755,7 @@ static void xs_tcp_tls_setup_socket(struct work_struct *work)
 	/* This implicitly sends an RPC_AUTH_TLS probe */
 	lower_clnt = rpc_create(&args);
 	if (IS_ERR(lower_clnt)) {
-		trace_rpc_tls_unavailable(upper_clnt, upper_xprt);
+		trace_rpc_tls_unavailable(upper_xprt);
 		clear_bit(XPRT_SOCK_CONNECTING, &upper_transport->sock_state);
 		xprt_clear_connecting(upper_xprt);
 		xprt_wake_pending_tasks(upper_xprt, PTR_ERR(lower_clnt));
@@ -2739,7 +2775,7 @@ static void xs_tcp_tls_setup_socket(struct work_struct *work)
 
 	status = xs_tls_handshake_sync(lower_xprt, &upper_xprt->xprtsec);
 	if (status) {
-		trace_rpc_tls_not_started(upper_clnt, upper_xprt);
+		trace_rpc_tls_not_started(upper_xprt);
 		goto out_close;
 	}
 
@@ -2757,7 +2793,6 @@ static void xs_tcp_tls_setup_socket(struct work_struct *work)
 
 out_unlock:
 	current_restore_flags(pflags, PF_MEMALLOC);
-	upper_transport->clnt = NULL;
 	xprt_unlock_connect(upper_xprt, upper_transport);
 	return;
 
@@ -2805,7 +2840,9 @@ static void xs_connect(struct rpc_xprt *xprt, struct rpc_task *task)
 	} else
 		dprintk("RPC:       xs_connect scheduled xprt %p\n", xprt);
 
-	transport->clnt = task->tk_client;
+	transport->connect_prog = task->tk_client->cl_prog;
+	transport->connect_vers = task->tk_client->cl_vers;
+
 	queue_delayed_work(xprtiod_workqueue,
 			&transport->connect_worker,
 			delay);

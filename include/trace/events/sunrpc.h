@@ -1528,28 +1528,23 @@ TRACE_EVENT(rpcb_unregister,
 
 DECLARE_EVENT_CLASS(rpc_tls_class,
 	TP_PROTO(
-		const struct rpc_clnt *clnt,
 		const struct rpc_xprt *xprt
 	),
 
-	TP_ARGS(clnt, xprt),
+	TP_ARGS(xprt),
 
 	TP_STRUCT__entry(
 		__field(unsigned long, requested_policy)
-		__field(u32, version)
 		__string(servername, xprt->servername)
-		__string(progname, clnt->cl_program->name)
 	),
 
 	TP_fast_assign(
-		__entry->requested_policy = clnt->cl_xprtsec.policy;
-		__entry->version = clnt->cl_vers;
+		__entry->requested_policy = xprt->xprtsec.policy;
 		__assign_str(servername);
-		__assign_str(progname);
 	),
 
-	TP_printk("server=%s %sv%u requested_policy=%s",
-		__get_str(servername), __get_str(progname), __entry->version,
+	TP_printk("server=%s requested_policy=%s",
+		__get_str(servername),
 		rpc_show_xprtsec_policy(__entry->requested_policy)
 	)
 );
@@ -1557,10 +1552,9 @@ DECLARE_EVENT_CLASS(rpc_tls_class,
 #define DEFINE_RPC_TLS_EVENT(name) \
 	DEFINE_EVENT(rpc_tls_class, rpc_tls_##name, \
 			TP_PROTO( \
-				const struct rpc_clnt *clnt, \
 				const struct rpc_xprt *xprt \
 			), \
-			TP_ARGS(clnt, xprt))
+			TP_ARGS(xprt))
 
 DEFINE_RPC_TLS_EVENT(unavailable);
 DEFINE_RPC_TLS_EVENT(not_started);

@@ -61,7 +61,8 @@ struct sock_xprt {
 	struct sockaddr_storage	srcaddr;
 	unsigned short		srcport;
 	int			xprt_err;
-	struct rpc_clnt		*clnt;
+	u32			connect_prog;
+	u32			connect_vers;
 
 	/*
 	 * UDP socket buffer size parameters
