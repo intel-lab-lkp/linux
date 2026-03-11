@@ -351,7 +351,7 @@ static bool can_demote(int nid, struct scan_control *sc,
 	if (sc && sc->no_demotion)
 		return false;
 
-	node_get_allowed_targets(pgdat, &allowed_mask);
+	node_get_allowed_demotion_targets(pgdat, &allowed_mask);
 	if (nodes_empty(allowed_mask))
 		return false;
 

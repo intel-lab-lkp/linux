@@ -300,7 +300,7 @@ out:
 	return toptier;
 }
 
-void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
+void node_get_allowed_demotion_targets(pg_data_t *pgdat, nodemask_t *targets)
 {
 	struct memory_tier *memtier;
 
@@ -428,7 +428,7 @@ unsigned int mt_demote_folios(struct list_head *demote_folios,
 	if (list_empty(demote_folios))
 		return 0;
 
-	node_get_allowed_targets(pgdat, &allowed_mask);
+	node_get_allowed_demotion_targets(pgdat, &allowed_mask);
 	mem_cgroup_node_filter_allowed(memcg, &allowed_mask);
 	if (nodes_empty(allowed_mask))
 		return 0;
