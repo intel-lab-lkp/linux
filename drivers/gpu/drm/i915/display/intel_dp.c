@@ -5109,6 +5109,10 @@ static ssize_t intel_dp_as_sdp_pack(const struct drm_dp_as_sdp *as_sdp,
 	sdp->sdp_header.HB2 = as_sdp->revision;
 	sdp->sdp_header.HB3 = as_sdp->length;
 
+	/* No Payload Data bytes for Version 1 */
+	if (as_sdp->revision == 0x1)
+		return length;
+
 	/* Fill AS (Adaptive Sync) SDP Payload */
 	sdp->db[0] = as_sdp->mode;
 	sdp->db[1] = as_sdp->vtotal & 0xFF;
@@ -7330,6 +7334,19 @@ void intel_dp_mst_resume(struct intel_display *display)
 	}
 }
 
+static bool intel_dp_get_as_sdp_revision(struct intel_dp *intel_dp,
+					 struct intel_crtc_state *crtc_state)
+{
+	if (crtc_state->has_panel_replay &&
+	    !intel_alpm_is_alpm_aux_less(intel_dp, crtc_state))
+		return 1;
+
+	if (intel_dp->as_sdp_v2_supported)
+		return 2;
+
+	return 1;
+}
+
 static
 void intel_dp_as_sdp_compute_config_late(struct intel_dp *intel_dp,
 					 struct intel_crtc_state *crtc_state)
@@ -7345,7 +7362,12 @@ void intel_dp_as_sdp_compute_config_late(struct intel_dp *intel_dp,
 	as_sdp->sdp_type = DP_SDP_ADAPTIVE_SYNC;
 	as_sdp->length = 0x9;
 	as_sdp->duration_incr_ms = 0;
-	as_sdp->revision = 0x2;
+	as_sdp->revision = intel_dp_get_as_sdp_revision(intel_dp, crtc_state);
+
+	/* No payload data bytes for Version 1 */
+	if (as_sdp->revision == 1)
+		return;
+
 	as_sdp->vtotal = intel_vrr_vmin_vtotal(crtc_state);
 
 	if (crtc_state->cmrr.enable) {
