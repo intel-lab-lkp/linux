@@ -17,6 +17,8 @@
 #include <linux/err.h>
 #include <linux/gcd.h>
 #include <linux/gpio/consumer.h>
+#include <linux/log2.h>
+#include <linux/math64.h>
 #include <asm/div64.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
@@ -149,18 +151,12 @@ static int adf4350_set_freq(struct adf4350_state *st, unsigned long long freq)
 	if (freq > ADF4350_MAX_OUT_FREQ || freq < st->min_out_freq)
 		return -EINVAL;
 
-	st->r4_rf_div_sel = 0;
-
 	/*
-	 * !\TODO: The below computation is making sure we get a power of 2
-	 * shift (st->r4_rf_div_sel) so that freq becomes higher or equal to
-	 * ADF4350_MIN_VCO_FREQ. This might be simplified with fls()/fls_long()
-	 * and friends.
+	 * Calculate the required RF divider selection (power of 2 shift)
+	 * to ensure the VCO frequency is >= ADF4350_MIN_VCO_FREQ.
 	 */
-	while (freq < ADF4350_MIN_VCO_FREQ) {
-		freq <<= 1;
-		st->r4_rf_div_sel++;
-	}
+	st->r4_rf_div_sel = order_base_2(DIV_ROUND_UP_ULL(ADF4350_MIN_VCO_FREQ, freq));
+	freq <<= st->r4_rf_div_sel;
 
 	if (freq > ADF4350_MAX_FREQ_45_PRESC) {
 		prescaler = ADF4350_REG1_PRESCALER;
