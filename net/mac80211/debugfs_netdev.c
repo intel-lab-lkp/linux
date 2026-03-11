@@ -1037,9 +1037,33 @@ static void ieee80211_debugfs_add_netdev(struct ieee80211_sub_if_data *sdata,
 		add_link_files(&sdata->deflink, sdata->vif.debugfs_dir);
 }
 
+static void
+ieee80211_debugfs_clear_link_ptr(struct ieee80211_sub_if_data *sdata,
+				 struct dentry *dir)
+{
+	struct ieee80211_link_data *link;
+	int i;
+
+	rcu_read_lock();
+
+	if (sdata->vif.debugfs_dir == dir)
+		sdata->vif.debugfs_dir = NULL;
+
+	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+		link = rcu_access_pointer(sdata->link[i]);
+		if (!link)
+			continue;
+
+		if (dir == link->debugfs_dir)
+			link->debugfs_dir = NULL;
+	}
+	rcu_read_unlock();
+}
+
 void ieee80211_debugfs_remove_netdev(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_link_data *link;
+	struct dentry *dir;
 	int i;
 
 	if (!sdata->vif.debugfs_dir)
@@ -1061,8 +1085,10 @@ void ieee80211_debugfs_remove_netdev(struct ieee80211_sub_if_data *sdata)
 	}
 	rcu_read_unlock();
 
-	debugfs_remove_recursive(sdata->vif.debugfs_dir);
+	dir = sdata->vif.debugfs_dir;
+	debugfs_remove_recursive(dir);
 	sdata->vif.debugfs_dir = NULL;
+	ieee80211_debugfs_clear_link_ptr(sdata, dir);
 	sdata->debugfs.subdir_stations = NULL;
 }
 
@@ -1151,7 +1177,7 @@ void ieee80211_link_debugfs_drv_remove(struct ieee80211_link_data *link)
 
 	/* Recreate the directory excluding the driver data */
 	debugfs_remove_recursive(link->debugfs_dir);
-	link->debugfs_dir = NULL;
+	ieee80211_debugfs_clear_link_ptr(link->sdata, link->debugfs_dir);
 
 	ieee80211_link_debugfs_add(link);
 }
