@@ -194,7 +194,7 @@ iwl_mld_reorder(struct iwl_mld *mld, struct napi_struct *napi,
 	struct iwl_mld_baid_data *baid_data;
 	struct iwl_mld_reorder_buffer *buffer;
 	struct iwl_mld_reorder_buf_entry *entries;
-	struct iwl_mld_sta *mld_sta = iwl_mld_sta_from_mac80211(sta);
+	struct iwl_mld_sta *mld_sta;
 	struct iwl_mld_link_sta *mld_link_sta;
 	u32 reorder = le32_to_cpu(desc->reorder_data);
 	bool amsdu, last_subframe, is_old_sn, is_dup;
@@ -220,6 +220,8 @@ iwl_mld_reorder(struct iwl_mld *mld, struct napi_struct *napi,
 	if (WARN_ONCE(!sta,
 		      "Got valid BAID without a valid station assigned\n"))
 		return IWL_MLD_PASS_SKB;
+
+	mld_sta = iwl_mld_sta_from_mac80211(sta);
 
 	/* not a data packet */
 	if (!ieee80211_is_data_qos(hdr->frame_control) ||
