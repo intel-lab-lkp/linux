@@ -170,7 +170,7 @@ iwl_mld_cleanup_sta(void *data, struct ieee80211_sta *sta)
 			continue;
 
 		/* Should not happen as link removal should always succeed */
-		WARN_ON(1);
+		WARN_ON_ONCE(1);
 		RCU_INIT_POINTER(mld_sta->link[link_id], NULL);
 		RCU_INIT_POINTER(mld_sta->mld->fw_id_to_link_sta[mld_link_sta->fw_id],
 				 NULL);
