@@ -18,6 +18,19 @@
 #include <asm/irqflags.h>
 #include <asm/percpu.h>
 
+/*
+ * Avoid the circular dependency
+ * irqflags.h <-----------------+
+ *   tracepoint_defs.h          |
+ *     static_key.h             |
+ *       jump_label.h           |
+ *         atomic.h             |
+ *           cmpxchg.h ---------+
+ */
+#ifdef CONFIG_TRACE_IRQFLAGS_TOGGLE
+#include <linux/tracepoint-defs.h>
+#endif
+
 struct task_struct;
 
 /* Currently lockdep_softirqs_on/off is used only by lockdep */
@@ -232,7 +245,54 @@ extern void warn_bogus_irq_restore(void);
 	} while (0)
 
 
-#else /* !CONFIG_TRACE_IRQFLAGS */
+#elif defined(CONFIG_TRACE_IRQFLAGS_TOGGLE) /* !CONFIG_TRACE_IRQFLAGS */
+
+DECLARE_TRACEPOINT(irq_enable);
+DECLARE_TRACEPOINT(irq_disable);
+
+void trace_local_irq_enable(void);
+void trace_local_irq_disable(void);
+void trace_local_irq_save(unsigned long flags);
+void trace_local_irq_restore(unsigned long flags);
+void trace_safe_halt(void);
+
+#define local_irq_enable()				\
+	do {						\
+		if (tracepoint_enabled(irq_enable))	\
+			trace_local_irq_enable();	\
+		raw_local_irq_enable();			\
+	} while (0)
+
+#define local_irq_disable()				\
+	do {						\
+		if (tracepoint_enabled(irq_disable))	\
+			trace_local_irq_disable();	\
+		else					\
+			raw_local_irq_disable();	\
+	} while (0)
+
+#define local_irq_save(flags)				\
+	do {						\
+		raw_local_irq_save(flags);		\
+		if (tracepoint_enabled(irq_disable))	\
+			trace_local_irq_save(flags);	\
+	} while (0)
+
+#define local_irq_restore(flags)			\
+	do {						\
+		if (tracepoint_enabled(irq_enable))	\
+			trace_local_irq_restore(flags); \
+		raw_local_irq_restore(flags);		\
+	} while (0)
+
+#define safe_halt()					\
+	do {						\
+		if (tracepoint_enabled(irq_enable))	\
+			trace_safe_halt();		\
+		raw_safe_halt();			\
+	} while (0)
+
+#else /* !CONFIG_TRACE_IRQFLAGS_TOGGLE */
 
 #define local_irq_enable()	do { raw_local_irq_enable(); } while (0)
 #define local_irq_disable()	do { raw_local_irq_disable(); } while (0)

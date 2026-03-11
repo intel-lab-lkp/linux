@@ -111,7 +111,56 @@ void trace_hardirqs_off(void)
 }
 EXPORT_SYMBOL(trace_hardirqs_off);
 NOKPROBE_SYMBOL(trace_hardirqs_off);
+
 #endif /* CONFIG_TRACE_IRQFLAGS */
+
+#ifdef CONFIG_TRACE_IRQFLAGS_TOGGLE
+EXPORT_TRACEPOINT_SYMBOL(irq_disable);
+EXPORT_TRACEPOINT_SYMBOL(irq_enable);
+
+void trace_local_irq_enable(void)
+{
+	if (raw_irqs_disabled())
+		trace(irq_enable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
+}
+EXPORT_SYMBOL(trace_local_irq_enable);
+NOKPROBE_SYMBOL(trace_local_irq_enable);
+
+void trace_local_irq_disable(void)
+{
+	const bool was_disabled = raw_irqs_disabled();
+
+	raw_local_irq_disable();
+	if (!was_disabled)
+		trace(irq_disable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
+}
+EXPORT_SYMBOL(trace_local_irq_disable);
+NOKPROBE_SYMBOL(trace_local_irq_disable);
+
+void trace_local_irq_save(unsigned long flags)
+{
+	if (!raw_irqs_disabled_flags(flags))
+		trace(irq_disable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
+}
+EXPORT_SYMBOL(trace_local_irq_save);
+NOKPROBE_SYMBOL(trace_local_irq_save);
+
+void trace_local_irq_restore(unsigned long flags)
+{
+	if (!raw_irqs_disabled_flags(flags) && raw_irqs_disabled())
+		trace(irq_enable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
+}
+EXPORT_SYMBOL(trace_local_irq_restore);
+NOKPROBE_SYMBOL(trace_local_irq_restore);
+
+void trace_safe_halt(void)
+{
+	if (raw_irqs_disabled())
+		trace(irq_enable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
+}
+EXPORT_SYMBOL(trace_safe_halt);
+NOKPROBE_SYMBOL(trace_safe_halt);
+#endif /* CONFIG_TRACE_IRQFLAGS_TOGGLE */
 
 #ifdef CONFIG_TRACE_PREEMPT_TOGGLE
 
