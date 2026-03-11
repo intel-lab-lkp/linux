@@ -264,7 +264,7 @@ out:
 static int attempt_writeback(const char *cgroup, void *arg)
 {
 	long pagesize = sysconf(_SC_PAGESIZE);
-	size_t memsize = MB(4);
+	size_t memsize = pagesize > 4096 ? MB(64): MB(4);
 	char buf[pagesize];
 	long zswap_usage;
 	bool wb_enabled = *(bool *) arg;
