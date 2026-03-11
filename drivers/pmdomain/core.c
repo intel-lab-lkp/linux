@@ -2910,6 +2910,175 @@ static struct generic_pm_domain *genpd_get_from_provider(
 }
 
 /**
+ * of_genpd_add_child_ids() - Parse power-domains-child-ids property
+ * @np: Device node pointer associated with the PM domain provider.
+ * @data: Pointer to the onecell data associated with the PM domain provider.
+ *
+ * Parse the power-domains and power-domains-child-ids properties to establish
+ * parent-child relationships for PM domains. The power-domains property lists
+ * parent domains, and power-domains-child-ids lists which child domain IDs
+ * should be associated with each parent.
+ *
+ * Returns 0 on success, -ENOENT if properties don't exist, or negative error code.
+ */
+int of_genpd_add_child_ids(struct device_node *np,
+			   struct genpd_onecell_data *data)
+{
+	struct of_phandle_args parent_args;
+	struct generic_pm_domain *parent_genpd, *child_genpd;
+	struct of_phandle_iterator it;
+	const struct property *prop;
+	const __be32 *item;
+	u32 child_id;
+	int ret;
+
+	/* Check if both properties exist */
+	if (of_count_phandle_with_args(np, "power-domains", "#power-domain-cells") <= 0)
+		return -ENOENT;
+
+	prop = of_find_property(np, "power-domains-child-ids", NULL);
+	if (!prop)
+		return -ENOENT;
+
+	item = of_prop_next_u32(prop, NULL, &child_id);
+
+	/* Iterate over power-domains phandles and power-domains-child-ids in lockstep */
+	of_for_each_phandle(&it, ret, np, "power-domains", "#power-domain-cells", 0) {
+		if (!item) {
+			pr_err("power-domains-child-ids shorter than power-domains for %pOF\n", np);
+			ret = -EINVAL;
+			goto err_put_node;
+		}
+
+		/*
+		 * Fill parent_args from the iterator. it.node is released by
+		 * the next of_phandle_iterator_next() call at the top of the
+		 * loop, or by the of_node_put() on the error path below.
+		 */
+		parent_args.np = it.node;
+		parent_args.args_count = of_phandle_iterator_args(&it, parent_args.args,
+								  MAX_PHANDLE_ARGS);
+
+		/* Get the parent domain */
+		parent_genpd = genpd_get_from_provider(&parent_args);
+		if (IS_ERR(parent_genpd)) {
+			pr_err("Failed to get parent domain for %pOF: %ld\n",
+			       np, PTR_ERR(parent_genpd));
+			ret = PTR_ERR(parent_genpd);
+			goto err_put_node;
+		}
+
+		/* Validate child ID is within bounds */
+		if (child_id >= data->num_domains) {
+			pr_err("Child ID %u out of bounds (max %u) for %pOF\n",
+			       child_id, data->num_domains - 1, np);
+			ret = -EINVAL;
+			goto err_put_node;
+		}
+
+		/* Get the child domain */
+		child_genpd = data->domains[child_id];
+		if (!child_genpd) {
+			pr_err("Child domain %u is NULL for %pOF\n", child_id, np);
+			ret = -EINVAL;
+			goto err_put_node;
+		}
+
+		/* Establish parent-child relationship */
+		ret = genpd_add_subdomain(parent_genpd, child_genpd);
+		if (ret) {
+			pr_err("Failed to add child domain %u to parent in %pOF: %d\n",
+			       child_id, np, ret);
+			goto err_put_node;
+		}
+
+		pr_debug("Added child domain %u (%s) to parent %s for %pOF\n",
+			 child_id, child_genpd->name, parent_genpd->name, np);
+
+		item = of_prop_next_u32(prop, item, &child_id);
+	}
+
+	/* of_for_each_phandle returns -ENOENT at natural end-of-list */
+	if (ret && ret != -ENOENT)
+		return ret;
+
+	/* All power-domains phandles were consumed; check for trailing child IDs */
+	if (item) {
+		pr_err("power-domains-child-ids longer than power-domains for %pOF\n", np);
+		return -EINVAL;
+	}
+
+	return 0;
+
+err_put_node:
+	of_node_put(it.node);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(of_genpd_add_child_ids);
+
+/**
+ * of_genpd_remove_child_ids() - Remove parent-child PM domain relationships
+ * @np: Device node pointer associated with the PM domain provider.
+ * @data: Pointer to the onecell data associated with the PM domain provider.
+ *
+ * Reverses the effect of of_genpd_add_child_ids() by parsing the same
+ * power-domains and power-domains-child-ids properties and calling
+ * pm_genpd_remove_subdomain() for each established relationship.
+ *
+ * Returns 0 on success, -ENOENT if properties don't exist, or negative error
+ * code on failure.
+ */
+int of_genpd_remove_child_ids(struct device_node *np,
+			   struct genpd_onecell_data *data)
+{
+	struct of_phandle_args parent_args;
+	struct generic_pm_domain *parent_genpd, *child_genpd;
+	struct of_phandle_iterator it;
+	const struct property *prop;
+	const __be32 *item;
+	u32 child_id;
+	int ret;
+
+	/* Check if both properties exist */
+	if (of_count_phandle_with_args(np, "power-domains", "#power-domain-cells") <= 0)
+		return -ENOENT;
+
+	prop = of_find_property(np, "power-domains-child-ids", NULL);
+	if (!prop)
+		return -ENOENT;
+
+	item = of_prop_next_u32(prop, NULL, &child_id);
+
+	of_for_each_phandle(&it, ret, np, "power-domains", "#power-domain-cells", 0) {
+		if (!item)
+			break;
+
+		parent_args.np = it.node;
+		parent_args.args_count = of_phandle_iterator_args(&it, parent_args.args,
+								  MAX_PHANDLE_ARGS);
+
+		if (child_id >= data->num_domains || !data->domains[child_id]) {
+			item = of_prop_next_u32(prop, item, &child_id);
+			continue;
+		}
+
+		parent_genpd = genpd_get_from_provider(&parent_args);
+		if (IS_ERR(parent_genpd)) {
+			item = of_prop_next_u32(prop, item, &child_id);
+			continue;
+		}
+
+		child_genpd = data->domains[child_id];
+		pm_genpd_remove_subdomain(parent_genpd, child_genpd);
+
+		item = of_prop_next_u32(prop, item, &child_id);
+	}
+
+	return (ret == -ENOENT) ? 0 : ret;
+}
+EXPORT_SYMBOL_GPL(of_genpd_remove_child_ids);
+
+/**
  * of_genpd_add_device() - Add a device to an I/O PM domain
  * @genpdspec: OF phandle args to use for look-up PM domain
  * @dev: Device to be added.
