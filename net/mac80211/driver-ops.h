@@ -1035,8 +1035,10 @@ static inline void drv_remove_chanctx(struct ieee80211_local *local,
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	if (WARN_ON(!ctx->driver_present))
+	if (WARN_ON_ONCE(!ctx->driver_present)) {
+		pr_err("drv-remove-chanctx, NOT driver_present, not sending request to driver.");
 		return;
+	}
 
 	trace_drv_remove_chanctx(local, ctx);
 	if (local->ops->remove_chanctx)
