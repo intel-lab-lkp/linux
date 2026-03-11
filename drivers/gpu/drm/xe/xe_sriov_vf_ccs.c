@@ -152,13 +152,14 @@ static int alloc_bb_pool(struct xe_tile *tile, struct xe_sriov_vf_ccs_ctx *ctx)
 
 	sa_manager = __xe_sa_bo_manager_init(tile, bb_pool_size, SZ_4K, SZ_16,
 					     XE_SA_BO_MANAGER_FLAG_SHADOW);
-
 	if (IS_ERR(sa_manager)) {
 		xe_sriov_err(xe, "Suballocator init failed with error: %pe\n",
 			     sa_manager);
 		err = PTR_ERR(sa_manager);
 		return err;
 	}
+
+	xe_sa_bo_manager_fence_disable(sa_manager, true);
 
 	offset = 0;
 	xe_map_memset(xe, &sa_manager->bo->vmap, offset, MI_NOOP,

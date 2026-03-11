@@ -17,6 +17,7 @@ struct xe_tile;
 #define XE_SA_BO_MANAGER_FLAG_SHADOW	BIT(0)
 struct xe_sa_manager *__xe_sa_bo_manager_init(struct xe_tile *tile, u32 size,
 					      u32 guard, u32 align, u32 flags);
+void xe_sa_bo_manager_fence_disable(struct xe_sa_manager *sa_manager, bool disable);
 struct drm_suballoc *__xe_sa_bo_new(struct xe_sa_manager *sa_manager, u32 size, gfp_t gfp);
 
 static inline struct xe_sa_manager *xe_sa_bo_manager_init(struct xe_tile *tile, u32 size, u32 align)

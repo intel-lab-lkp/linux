@@ -118,6 +118,26 @@ struct xe_sa_manager *__xe_sa_bo_manager_init(struct xe_tile *tile, u32 size,
 }
 
 /**
+ * xe_sa_bo_manager_fence_disable() - Set the suballocator to disable fencing.
+ * @sa_manager: the XE sub allocator manager
+ * @disable: Disable fences
+ *
+ * When @fence_disabled is true allocation scans all holes without waiting on
+ * fences. When false, the manager tracks free suballocations behind fences
+ * and reuses them only after the fence signals.
+ *
+ * This should be called immediately after creating the suballocator and before
+ * any allocations are made. The behaviour is undefined if this is called after
+ * allocations have been made.
+ *
+ * Return: None.
+ */
+void xe_sa_bo_manager_fence_disable(struct xe_sa_manager *sa_manager, bool disable)
+{
+	drm_suballoc_manager_fence_disable(&sa_manager->base, disable);
+}
+
+/**
  * xe_sa_bo_swap_shadow() - Swap the SA BO with shadow BO.
  * @sa_manager: the XE sub allocator manager
  *
