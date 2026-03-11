@@ -594,18 +594,88 @@ static bool zswap_configured(void)
 	return access("/sys/module/zswap", F_OK) == 0;
 }
 
+static int zswap_enabled_state(void)
+{
+	char buf[16];
+	ssize_t n;
+
+	if (!zswap_configured())
+		return -1;
+
+	n = read_text("/sys/module/zswap/parameters/enabled", buf, sizeof(buf));
+	if (n < 0 || n == 0)
+		return -1;
+
+	switch (buf[0]) {
+	case 'Y':
+	case 'y':
+	case '1':
+		return 1;
+	case 'N':
+	case 'n':
+	case '0':
+		return 0;
+	default:
+		return -1;
+	}
+}
+
+static bool enable_zswap(void)
+{
+	int st;
+	char y[] = "Y\n";
+
+	st = zswap_enabled_state();
+	if (st == 1)
+		return true;
+	if (st < 0)
+		return false;
+
+	if (write_text("/sys/module/zswap/parameters/enabled", y, strlen(y)) >= 0) {
+		if (zswap_enabled_state() == 1)
+			return true;
+	}
+
+	ksft_print_msg("Failed to enable zswap\n");
+	return false;
+}
+
+static bool disable_zswap(void)
+{
+	int st;
+	char n[] = "N\n";
+
+	st = zswap_enabled_state();
+	if (st == 0)
+		return true;
+	if (st < 0)
+		return false;
+
+	if (write_text("/sys/module/zswap/parameters/enabled", n, strlen(n)) >= 0) {
+		if (zswap_enabled_state() == 0)
+			return true;
+	}
+
+	ksft_print_msg("Failed to disable zswap\n");
+	return false;
+}
+
 int main(int argc, char **argv)
 {
 	char root[PATH_MAX];
-	int i;
+	int i, orig_zswap_state;
 
 	ksft_print_header();
 	ksft_set_plan(ARRAY_SIZE(tests));
 	if (cg_find_unified_root(root, sizeof(root), NULL))
 		ksft_exit_skip("cgroup v2 isn't mounted\n");
 
-	if (!zswap_configured())
+	orig_zswap_state = zswap_enabled_state();
+
+	if (orig_zswap_state == -1)
 		ksft_exit_skip("zswap isn't configured\n");
+	else if (orig_zswap_state == 0 && !enable_zswap())
+		ksft_exit_skip("zswap is disabled and cannot be enabled\n");
 
 	/*
 	 * Check that memory controller is available:
@@ -631,6 +701,9 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
+
+	if (orig_zswap_state == 0)
+		disable_zswap();
 
 	ksft_finished();
 }
