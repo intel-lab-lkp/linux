@@ -809,7 +809,6 @@ out:
 
 	hl_fence_put(cs->fence);
 
-	kfree(cs->jobs_in_queue_cnt);
 	kfree(cs);
 }
 
@@ -907,9 +906,9 @@ static int allocate_cs(struct hl_device *hdev, struct hl_ctx *ctx,
 
 	cntr = &hdev->aggregated_cs_counters;
 
-	cs = kzalloc_obj(*cs, GFP_ATOMIC);
+	cs = kzalloc_flex(*cs, jobs_in_queue_cnt, hdev->asic_prop.max_queues, GFP_ATOMIC);
 	if (!cs)
-		cs = kzalloc_obj(*cs);
+		cs = kzalloc_flex(*cs, jobs_in_queue_cnt, hdev->asic_prop.max_queues);
 
 	if (!cs) {
 		atomic64_inc(&ctx->cs_counters.out_of_mem_drop_cnt);
@@ -945,19 +944,6 @@ static int allocate_cs(struct hl_device *hdev, struct hl_ctx *ctx,
 		atomic64_inc(&cntr->out_of_mem_drop_cnt);
 		rc = -ENOMEM;
 		goto free_cs;
-	}
-
-	cs->jobs_in_queue_cnt = kcalloc(hdev->asic_prop.max_queues,
-			sizeof(*cs->jobs_in_queue_cnt), GFP_ATOMIC);
-	if (!cs->jobs_in_queue_cnt)
-		cs->jobs_in_queue_cnt = kcalloc(hdev->asic_prop.max_queues,
-				sizeof(*cs->jobs_in_queue_cnt), GFP_KERNEL);
-
-	if (!cs->jobs_in_queue_cnt) {
-		atomic64_inc(&ctx->cs_counters.out_of_mem_drop_cnt);
-		atomic64_inc(&cntr->out_of_mem_drop_cnt);
-		rc = -ENOMEM;
-		goto free_cs_cmpl;
 	}
 
 	cs_cmpl->hdev = hdev;
@@ -1014,8 +1000,6 @@ static int allocate_cs(struct hl_device *hdev, struct hl_ctx *ctx,
 
 free_fence:
 	spin_unlock(&ctx->cs_lock);
-	kfree(cs->jobs_in_queue_cnt);
-free_cs_cmpl:
 	kfree(cs_cmpl);
 free_cs:
 	kfree(cs);

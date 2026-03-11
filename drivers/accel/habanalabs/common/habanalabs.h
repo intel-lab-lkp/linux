@@ -2046,7 +2046,6 @@ struct hl_userptr {
  * @encaps_signals: true if this CS has encaps reserved signals.
  */
 struct hl_cs {
-	u16			*jobs_in_queue_cnt;
 	struct hl_ctx		*ctx;
 	struct list_head	job_list;
 	spinlock_t		job_lock;
@@ -2080,6 +2079,7 @@ struct hl_cs {
 	u8			staged_cs;
 	u8			skip_reset_on_timeout;
 	u8			encaps_signals;
+	u16			jobs_in_queue_cnt[];
 };
 
 /**
