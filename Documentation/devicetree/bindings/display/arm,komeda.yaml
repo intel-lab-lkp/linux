@@ -21,6 +21,9 @@ properties:
       - items:
           - const: arm,mali-d32
           - const: arm,mali-d71
+      - items:
+          - const: armchina,linlon-d6
+          - const: arm,mali-d71
       - const: arm,mali-d71
 
   reg:
