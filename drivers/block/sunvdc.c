@@ -1008,7 +1008,7 @@ static int vdc_port_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 			 VDCBLK_NAME "%c", 'a' + ((int)vdev->dev_no % 26));
 	port->vdisk_size = -1;
 
-	/* Actual wall time may be double due to do_generic_file_read() doing
+	/* Actual wall time may be double due to filemap_read() doing
 	 * a readahead I/O first, and once that fails it will try to read a
 	 * single page.
 	 */
