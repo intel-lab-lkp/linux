@@ -110,14 +110,25 @@ void ieee80211_link_init(struct ieee80211_sub_if_data *sdata,
 	link->user_power_level = sdata->local->user_power_level;
 	link_conf->txpower = INT_MIN;
 
-	wiphy_work_init(&link->csa.finalize_work,
-			ieee80211_csa_finalize_work);
-	wiphy_work_init(&link->color_change_finalize_work,
-			ieee80211_color_change_finalize_work);
-	wiphy_delayed_work_init(&link->color_collision_detect_work,
-				ieee80211_color_collision_detection_work);
-	wiphy_hrtimer_work_init(&link->dfs_cac_timer_work,
-				ieee80211_dfs_cac_timer_work);
+	if (link->already_initialized) {
+		wiphy_delayed_work_cancel(link->sdata->local->hw.wiphy,
+					  &link->color_collision_detect_work);
+		wiphy_work_cancel(link->sdata->local->hw.wiphy,
+				  &link->color_change_finalize_work);
+		wiphy_work_cancel(link->sdata->local->hw.wiphy,
+				  &link->csa.finalize_work);
+		wiphy_hrtimer_work_cancel(link->sdata->local->hw.wiphy,
+					  &link->dfs_cac_timer_work);
+	} else {
+		wiphy_work_init(&link->csa.finalize_work,
+				ieee80211_csa_finalize_work);
+		wiphy_work_init(&link->color_change_finalize_work,
+				ieee80211_color_change_finalize_work);
+		wiphy_delayed_work_init(&link->color_collision_detect_work,
+					ieee80211_color_collision_detection_work);
+		wiphy_hrtimer_work_init(&link->dfs_cac_timer_work,
+					ieee80211_dfs_cac_timer_work);
+	}
 
 	if (!deflink) {
 		switch (sdata->vif.type) {
@@ -138,6 +149,7 @@ void ieee80211_link_init(struct ieee80211_sub_if_data *sdata,
 		ieee80211_link_debugfs_add(link);
 	}
 
+	link->already_initialized = true;
 	rcu_assign_pointer(sdata->vif.link_conf[link_id], link_conf);
 	rcu_assign_pointer(sdata->link[link_id], link);
 }
