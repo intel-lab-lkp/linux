@@ -1028,6 +1028,59 @@ static bool zspage_empty(struct zspage *zspage)
 	return get_zspage_inuse(zspage) == 0;
 }
 
+#ifdef CONFIG_MEMCG
+static void zs_charge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
+			    int size)
+{
+	struct mem_cgroup *memcg;
+
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return;
+
+	VM_WARN_ON_ONCE(!(current->flags & PF_MEMALLOC));
+	WARN_ON_ONCE(!pool->memcg_aware);
+
+	/* PF_MEMALLOC context, charging must succeed */
+	if (obj_cgroup_charge(objcg, GFP_KERNEL, size))
+		VM_WARN_ON_ONCE(1);
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	mod_memcg_state(memcg, pool->compressed_stat, size);
+	mod_memcg_state(memcg, pool->uncompressed_stat, 1);
+	rcu_read_unlock();
+}
+
+static void zs_uncharge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
+			      int size)
+{
+	struct mem_cgroup *memcg;
+
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return;
+
+	WARN_ON_ONCE(!pool->memcg_aware);
+
+	obj_cgroup_uncharge(objcg, size);
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	mod_memcg_state(memcg, pool->compressed_stat, -size);
+	mod_memcg_state(memcg, pool->uncompressed_stat, -1);
+	rcu_read_unlock();
+}
+#else
+static void zs_charge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
+			    int size)
+{
+}
+
+static void zs_uncharge_objcg(struct zs_pool *pool, struct obj_cgroup *objcg,
+			      int size)
+{
+}
+#endif
+
 /**
  * zs_lookup_class_index() - Returns index of the zsmalloc &size_class
  * that hold objects of the provided size.
@@ -1244,6 +1297,8 @@ void zs_obj_write(struct zs_pool *pool, unsigned long handle,
 	if (objcg) {
 		WARN_ON_ONCE(!pool->memcg_aware);
 		zspage->objcgs[obj_idx] = objcg;
+		obj_cgroup_get(objcg);
+		zs_charge_objcg(pool, objcg, class->size);
 	}
 
 	if (!ZsHugePage(zspage))
@@ -1409,17 +1464,23 @@ static void obj_free(int class_size, unsigned long obj)
 	struct link_free *link;
 	struct zspage *zspage;
 	struct zpdesc *f_zpdesc;
+	struct zs_pool *pool;
 	unsigned long f_offset;
 	unsigned int f_objidx;
 	void *vaddr;
 
-
 	obj_to_location(obj, &f_zpdesc, &f_objidx);
 	f_offset = offset_in_page(class_size * f_objidx);
 	zspage = get_zspage(f_zpdesc);
+	pool = zspage->pool;
 
-	if (zspage->pool->memcg_aware)
+	if (pool->memcg_aware && zspage->objcgs[f_objidx]) {
+		struct obj_cgroup *objcg = zspage->objcgs[f_objidx];
+
+		zs_uncharge_objcg(pool, objcg, class_size);
+		obj_cgroup_put(objcg);
 		zspage->objcgs[f_objidx] = NULL;
+	}
 
 	vaddr = kmap_local_zpdesc(f_zpdesc);
 	link = (struct link_free *)(vaddr + f_offset);

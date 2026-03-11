@@ -711,10 +711,6 @@ static void zswap_entry_free(struct zswap_entry *entry)
 	zswap_lru_del(&zswap_list_lru, entry, objcg);
 	zs_free(entry->pool->zs_pool, entry->handle);
 	zswap_pool_put(entry->pool);
-	if (objcg) {
-		obj_cgroup_uncharge_zswap(objcg, entry->length);
-		obj_cgroup_put(objcg);
-	}
 	if (entry->length == PAGE_SIZE)
 		atomic_long_dec(&zswap_stored_incompressible_pages);
 	zswap_entry_cache_free(entry);
@@ -1437,10 +1433,6 @@ static bool zswap_store_page(struct page *page,
 	 * when the entry is removed from the tree.
 	 */
 	zswap_pool_get(pool);
-	if (objcg) {
-		obj_cgroup_get(objcg);
-		obj_cgroup_charge_zswap(objcg, entry->length);
-	}
 	atomic_long_inc(&zswap_stored_pages);
 	if (entry->length == PAGE_SIZE)
 		atomic_long_inc(&zswap_stored_incompressible_pages);
