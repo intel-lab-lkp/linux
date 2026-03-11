@@ -1292,6 +1292,7 @@ err1:
 
 static const struct nla_policy ppp_nl_policy[IFLA_PPP_MAX + 1] = {
 	[IFLA_PPP_DEV_FD]	= { .type = NLA_S32 },
+	[IFLA_PPP_UNIT]		= { .type = NLA_S32 },
 };
 
 static int ppp_nl_validate(struct nlattr *tb[], struct nlattr *data[],
@@ -1304,6 +1305,9 @@ static int ppp_nl_validate(struct nlattr *tb[], struct nlattr *data[],
 		return -EINVAL;
 	if (nla_get_s32(data[IFLA_PPP_DEV_FD]) < 0)
 		return -EBADF;
+
+	if (data[IFLA_PPP_UNIT] && nla_get_s32(data[IFLA_PPP_UNIT]) < 0)
+		return -EINVAL;
 
 	return 0;
 }
@@ -1325,6 +1329,9 @@ static int ppp_nl_newlink(struct net_device *dev,
 	file = fget(nla_get_s32(data[IFLA_PPP_DEV_FD]));
 	if (!file)
 		return -EBADF;
+
+	if (data[IFLA_PPP_UNIT])
+		conf.unit = nla_get_s32(data[IFLA_PPP_UNIT]);
 
 	/* rtnl_lock is already held here, but ppp_create_interface() locks
 	 * ppp_mutex before holding rtnl_lock. Using mutex_trylock() avoids
