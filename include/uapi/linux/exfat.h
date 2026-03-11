@@ -12,8 +12,10 @@
  * exfat-specific ioctl commands
  */
 
-#define EXFAT_IOCTL_MAGIC	0xEF			/* shared with ntfs3 */
-#define EXFAT_IOC_SHUTDOWN	_IOR('X', 125, __u32)
+#define EXFAT_IOCTL_MAGIC		0xEF			/* shared with ntfs */
+#define EXFAT_IOC_SHUTDOWN		_IOR('X', 125, __u32)
+/* Get the current valid data length(VDL) of a file */
+#define EXFAT_IOC_GET_VALID_DATA	_IOR(EXFAT_IOCTL_MAGIC, 0x01, __u64)
 
 /*
  * Flags used by EXFAT_IOC_SHUTDOWN
