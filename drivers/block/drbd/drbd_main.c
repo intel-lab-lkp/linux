@@ -1685,7 +1685,7 @@ int drbd_send_dblock(struct drbd_peer_device *peer_device, struct drbd_request *
 
 	if (dp_flags & (DP_DISCARD|DP_ZEROES)) {
 		enum drbd_packet cmd = (dp_flags & DP_ZEROES) ? P_ZEROES : P_TRIM;
-		struct p_trim *t = (struct p_trim*)p;
+		struct p_trim *t = (struct p_trim *)p;
 		t->size = cpu_to_be32(req->i.size);
 		err = __send_command(peer_device->connection, device->vnr, sock, cmd, sizeof(*t), NULL, 0);
 		goto out;
