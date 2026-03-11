@@ -544,7 +544,6 @@ static int _ieee80211_set_active_links(struct ieee80211_sub_if_data *sdata,
 		ret = drv_change_sta_links(local, sdata, &sta->sta,
 					   old_active | active_links,
 					   active_links);
-		WARN_ON_ONCE(ret);
 
 		/*
 		 * Do it again, just in case - the driver might very
