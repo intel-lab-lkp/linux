@@ -37,7 +37,7 @@
 #define FC_DISC_RETRY_LIMIT	3	/* max retries */
 #define FC_DISC_RETRY_DELAY	500UL	/* (msecs) delay */
 
-static void fc_disc_gpn_ft_req(struct fc_disc *);
+static void fc_disc_gpn_ft_req(struct fc_disc *disc) __must_hold(disc->disc_mutex);
 static void fc_disc_gpn_ft_resp(struct fc_seq *, struct fc_frame *, void *);
 static void fc_disc_done(struct fc_disc *, enum fc_disc_event);
 static void fc_disc_timeout(struct work_struct *);
@@ -200,6 +200,7 @@ static void fc_disc_recv_req(struct fc_lport *lport, struct fc_frame *fp)
  * @disc: The discovery object to be restarted
  */
 static void fc_disc_restart(struct fc_disc *disc)
+	__must_hold(disc->disc_mutex)
 {
 	lockdep_assert_held(&disc->disc_mutex);
 
@@ -250,6 +251,7 @@ static void fc_disc_start(void (*disc_callback)(struct fc_lport *,
  * @event: The discovery completion status
  */
 static void fc_disc_done(struct fc_disc *disc, enum fc_disc_event event)
+	__must_hold(disc->disc_mutex)
 {
 	struct fc_lport *lport = fc_disc_lport(disc);
 	struct fc_rport_priv *rdata;
@@ -294,6 +296,7 @@ static void fc_disc_done(struct fc_disc *disc, enum fc_disc_event event)
  * @fp:	  The error code encoded as a frame pointer
  */
 static void fc_disc_error(struct fc_disc *disc, struct fc_frame *fp)
+	__must_hold(disc->disc_mutex)
 {
 	struct fc_lport *lport = fc_disc_lport(disc);
 	unsigned long delay = 0;
@@ -374,6 +377,7 @@ err:
  * Goes through the list of IDs and names resulting from a request.
  */
 static int fc_disc_gpn_ft_parse(struct fc_disc *disc, void *buf, size_t len)
+	__must_hold(disc->disc_mutex)
 {
 	struct fc_lport *lport;
 	struct fc_gpn_ft_resp *np;

@@ -207,6 +207,7 @@ static void fc_fcp_pkt_destroy(struct fc_seq *seq, void *fsp)
  * needed.
  */
 static inline int fc_fcp_lock_pkt(struct fc_fcp_pkt *fsp)
+	__cond_acquires(0, &fsp->scsi_pkt_lock)
 {
 	spin_lock_bh(&fsp->scsi_pkt_lock);
 	if (fsp->state & FC_SRB_COMPL) {
@@ -224,6 +225,7 @@ static inline int fc_fcp_lock_pkt(struct fc_fcp_pkt *fsp)
  * @fsp: The FCP packet to be unlocked and decremented
  */
 static inline void fc_fcp_unlock_pkt(struct fc_fcp_pkt *fsp)
+	__releases(&fsp->scsi_pkt_lock)
 {
 	spin_unlock_bh(&fsp->scsi_pkt_lock);
 	fc_fcp_pkt_release(fsp);
@@ -1242,6 +1244,7 @@ unlock:
  * Called to send an abort and then wait for abort completion
  */
 static int fc_fcp_pkt_abort(struct fc_fcp_pkt *fsp)
+	__must_hold(&fsp->scsi_pkt_lock)
 {
 	int rc = FAILED;
 	unsigned long ticks_left;
@@ -1950,6 +1953,7 @@ EXPORT_SYMBOL(fc_queuecommand);
  * The fcp packet lock must be held when calling.
  */
 static void fc_io_compl(struct fc_fcp_pkt *fsp)
+	__must_hold(&fsp->scsi_pkt_lock)
 {
 	struct fc_fcp_internal *si;
 	struct scsi_cmnd *sc_cmd;
