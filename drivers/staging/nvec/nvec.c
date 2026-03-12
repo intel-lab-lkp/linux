@@ -408,14 +408,14 @@ static void nvec_request_master(struct work_struct *work)
 }
 
 /**
- * parse_msg - Print some information and call the notifiers on an RX message
+ * nvec_msg_parse - Print some information and call the notifiers on an RX message
  * @nvec: A &struct nvec_chip
  * @msg: A message received by @nvec
  *
  * Paarse some pieces of the message and then call the chain of notifiers
  * registered via nvec_register_notifier.
  */
-static int parse_msg(struct nvec_chip *nvec, struct nvec_msg *msg)
+int nvec_msg_parse(struct nvec_chip *nvec, struct nvec_msg *msg)
 {
 	if ((msg->data[0] & 1 << 7) == 0 && msg->data[3]) {
 		dev_err(nvec->dev, "ec responded %*ph\n", 4, msg->data);
@@ -432,6 +432,7 @@ static int parse_msg(struct nvec_chip *nvec, struct nvec_msg *msg)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(nvec_msg_parse);
 
 /**
  * nvec_dispatch - Process messages received from the EC
@@ -459,7 +460,7 @@ static void nvec_dispatch(struct work_struct *work)
 			nvec->last_sync_msg = msg;
 			complete(&nvec->sync_write);
 		} else {
-			parse_msg(nvec, msg);
+			nvec_msg_parse(nvec, msg);
 			nvec_msg_free(nvec, msg);
 		}
 		spin_lock_irqsave(&nvec->rx_lock, flags);

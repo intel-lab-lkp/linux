@@ -23,6 +23,7 @@
 struct nvec_power {
 	struct notifier_block notifier;
 	struct delayed_work poller;
+	struct work_struct bat_init;
 	struct nvec_chip *nvec;
 	int on;
 	int bat_present;
@@ -106,14 +107,38 @@ static const int bat_init[] = {
 	MANUFACTURER, MODEL, TYPE,
 };
 
-static void get_bat_mfg_data(struct nvec_power *power)
+static int nvec_power_write_sync(struct nvec_power *power,
+				 unsigned char *buf, short size)
 {
+	struct nvec_msg *msg;
+	int ret;
+
+	ret = nvec_write_sync(power->nvec, buf, size, &msg);
+	if (ret < 0)
+		return ret;
+
+	nvec_msg_parse(power->nvec, msg);
+	nvec_msg_free(power->nvec, msg);
+
+	return 0;
+}
+
+static void nvec_power_bat_init(struct work_struct *work)
+{
+	struct nvec_power *power = container_of(work, struct nvec_power,
+						 bat_init);
+	unsigned char buf[] = { NVEC_BAT, 0 };
 	int i;
-	char buf[] = { NVEC_BAT, SLOT_STATUS };
+	int ret;
 
 	for (i = 0; i < ARRAY_SIZE(bat_init); i++) {
 		buf[1] = bat_init[i];
-		nvec_write_async(power->nvec, buf, 2);
+
+		ret = nvec_power_write_sync(power, buf, sizeof(buf));
+		if (ret < 0)
+			dev_warn(power->nvec->dev,
+				 "failed to query battery data %u: %d\n",
+				 bat_init[i], ret);
 	}
 }
 
@@ -133,7 +158,7 @@ static int nvec_power_bat_notifier(struct notifier_block *nb,
 		if (res->plc[0] & 1) {
 			if (power->bat_present == 0) {
 				status_changed = 1;
-				get_bat_mfg_data(power);
+				schedule_work(&power->bat_init);
 			}
 
 			power->bat_present = 1;
@@ -347,15 +372,19 @@ static const int bat_iter[] = {
 
 static void nvec_power_poll(struct work_struct *work)
 {
-	char buf[] = { NVEC_SYS, GET_SYSTEM_STATUS };
+	unsigned char buf[] = { NVEC_SYS, GET_SYSTEM_STATUS };
 	struct nvec_power *power = container_of(work, struct nvec_power,
-						poller.work);
+							poller.work);
+	int ret;
 
 	if (counter >= ARRAY_SIZE(bat_iter))
 		counter = 0;
 
 	/* AC status via sys req */
-	nvec_write_async(power->nvec, buf, 2);
+	ret = nvec_power_write_sync(power, buf, sizeof(buf));
+	if (ret < 0)
+		dev_warn(power->nvec->dev,
+			 "failed to query AC status: %d\n", ret);
 	msleep(100);
 
 	/*
@@ -364,7 +393,10 @@ static void nvec_power_poll(struct work_struct *work)
 	 */
 	buf[0] = NVEC_BAT;
 	buf[1] = bat_iter[counter++];
-	nvec_write_async(power->nvec, buf, 2);
+	ret = nvec_power_write_sync(power, buf, sizeof(buf));
+	if (ret < 0)
+		dev_warn(power->nvec->dev,
+			 "failed to query battery status: %d\n", ret);
 
 	schedule_delayed_work(to_delayed_work(work), msecs_to_jiffies(5000));
 };
@@ -394,13 +426,13 @@ static int nvec_power_probe(struct platform_device *pdev)
 		power->notifier.notifier_call = nvec_power_notifier;
 
 		INIT_DELAYED_WORK(&power->poller, nvec_power_poll);
-		schedule_delayed_work(&power->poller, msecs_to_jiffies(5000));
 		break;
 	case BAT:
 		psy = &nvec_bat_psy;
 		psy_desc = &nvec_bat_psy_desc;
 
 		power->notifier.notifier_call = nvec_power_bat_notifier;
+		INIT_WORK(&power->bat_init, nvec_power_bat_init);
 		break;
 	default:
 		return -ENODEV;
@@ -408,25 +440,33 @@ static int nvec_power_probe(struct platform_device *pdev)
 
 	nvec_register_notifier(nvec, &power->notifier, NVEC_SYS);
 
-	if (pdev->id == BAT)
-		get_bat_mfg_data(power);
-
 	*psy = power_supply_register(&pdev->dev, psy_desc, &psy_cfg);
 
-	return PTR_ERR_OR_ZERO(*psy);
+	if (IS_ERR(*psy)) {
+		nvec_unregister_notifier(nvec, &power->notifier);
+		return PTR_ERR(*psy);
+	}
+
+	if (pdev->id == AC)
+		schedule_delayed_work(&power->poller, msecs_to_jiffies(5000));
+	else
+		schedule_work(&power->bat_init);
+
+	return 0;
 }
 
 static void nvec_power_remove(struct platform_device *pdev)
 {
 	struct nvec_power *power = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&power->poller);
 	nvec_unregister_notifier(power->nvec, &power->notifier);
 	switch (pdev->id) {
 	case AC:
+		cancel_delayed_work_sync(&power->poller);
 		power_supply_unregister(nvec_psy);
 		break;
 	case BAT:
+		cancel_work_sync(&power->bat_init);
 		power_supply_unregister(nvec_bat_psy);
 	}
 }
@@ -435,7 +475,7 @@ static struct platform_driver nvec_power_driver = {
 	.probe = nvec_power_probe,
 	.remove = nvec_power_remove,
 	.driver = {
-		   .name = "nvec-power",
+		.name = "nvec-power",
 	}
 };
 

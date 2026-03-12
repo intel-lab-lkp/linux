@@ -168,6 +168,8 @@ int nvec_write_sync(struct nvec_chip *nvec,
 		    const unsigned char *data, short size,
 		    struct nvec_msg **msg);
 
+int nvec_msg_parse(struct nvec_chip *nvec, struct nvec_msg *msg);
+
 int nvec_register_notifier(struct nvec_chip *nvec,
 			   struct notifier_block *nb,
 			   unsigned int events);
