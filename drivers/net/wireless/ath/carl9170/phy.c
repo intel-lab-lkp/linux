@@ -536,6 +536,31 @@ static int carl9170_init_phy_from_eeprom(struct ar9170 *ar,
 	carl9170_regwrite(AR9170_PHY_REG_RX_CHAINMASK, ar->eeprom.rx_mask);
 	carl9170_regwrite(AR9170_PHY_REG_CAL_CHAINMASK, ar->eeprom.rx_mask);
 
+	/*
+	 * Enable fast antenna diversity for 2-chain devices.
+	 * Configure main/alt LNA with both chains for best
+	 * multipath performance.
+	 */
+	if (ar->eeprom.rx_mask == 3) {
+		val = carl9170_def_val(AR9170_PHY_REG_MULTICHAIN_GAIN_CTL,
+				       is_2ghz, is_40mhz);
+		val |= AR9170_PHY_9285_ANT_DIV_CTL;
+		SET_VAL(AR9170_PHY_9285_ANT_DIV_ALT_LNACONF, val,
+			AR9170_PHY_9285_ANT_DIV_LNA1_PLUS_LNA2);
+		SET_VAL(AR9170_PHY_9285_ANT_DIV_MAIN_LNACONF, val,
+			AR9170_PHY_9285_ANT_DIV_LNA1);
+		SET_VAL(AR9170_PHY_9285_ANT_DIV_ALT_GAINTB, val,
+			AR9170_PHY_9285_ANT_DIV_GAINTB_0);
+		SET_VAL(AR9170_PHY_9285_ANT_DIV_MAIN_GAINTB, val,
+			AR9170_PHY_9285_ANT_DIV_GAINTB_0);
+		carl9170_regwrite(AR9170_PHY_REG_MULTICHAIN_GAIN_CTL, val);
+
+		val = carl9170_def_val(AR9170_PHY_REG_CCK_DETECT,
+				       is_2ghz, is_40mhz);
+		val |= AR9170_PHY_CCK_DETECT_BB_ENABLE_ANT_FAST_DIV;
+		carl9170_regwrite(AR9170_PHY_REG_CCK_DETECT, val);
+	}
+
 	carl9170_regwrite_finish();
 	return carl9170_regwrite_result();
 }
