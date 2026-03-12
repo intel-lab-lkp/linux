@@ -543,6 +543,7 @@ void user_ida_checks(void)
 	ida_check_nomem();
 	ida_check_conv_user();
 	ida_check_random();
+	ida_check_leak();
 	ida_alloc_free_test();
 
 	radix_tree_cpu_dead(1);
@@ -554,6 +555,22 @@ static void *ida_random_fn(void *arg)
 	ida_check_random();
 	rcu_unregister_thread();
 	return NULL;
+}
+
+/*
+ * Check that an XArray error does not leak the allocated bitmap.
+ */
+static void ida_check_leak(void)
+{
+	DEFINE_IDA(ida);
+
+	/* Allocate up to 128 to ensure we need a new bitmap */
+	ida_alloc_range(&ida, 0, 128, GFP_KERNEL);
+	
+	/* Force a failure by providing an invalid range */
+	ida_alloc_range(&ida, 0, 0, GFP_KERNEL);
+	
+	ida_destroy(&ida);
 }
 
 static void *ida_leak_fn(void *arg)
