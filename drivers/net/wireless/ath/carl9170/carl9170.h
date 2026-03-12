@@ -301,6 +301,8 @@ struct ar9170 {
 	bool needs_full_reset;
 	bool force_usb_reset;
 	atomic_t pending_restarts;
+	unsigned long last_restart_jiffies;
+	unsigned int restart_backoff_ms;
 
 	/* interface mode settings */
 	struct list_head vif_list;

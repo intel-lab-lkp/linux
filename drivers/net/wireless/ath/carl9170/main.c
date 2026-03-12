@@ -492,6 +492,7 @@ static void carl9170_restart_work(struct work_struct *work)
 	if (!err && !ar->force_usb_reset) {
 		ar->restart_counter++;
 		atomic_set(&ar->pending_restarts, 0);
+		ar->restart_backoff_ms = 0;
 
 		ieee80211_restart_hw(ar->hw);
 	} else {
@@ -504,6 +505,9 @@ static void carl9170_restart_work(struct work_struct *work)
 		carl9170_usb_reset(ar);
 	}
 }
+
+#define CARL9170_RESTART_BACKOFF_INIT_MS	500
+#define CARL9170_RESTART_BACKOFF_MAX_MS		30000
 
 void carl9170_restart(struct ar9170 *ar, const enum carl9170_restart_reasons r)
 {
@@ -518,6 +522,29 @@ void carl9170_restart(struct ar9170 *ar, const enum carl9170_restart_reasons r)
 		dev_dbg(&ar->udev->dev, "ignoring restart (%d)\n", r);
 		return;
 	}
+
+	/*
+	 * Exponential backoff: if restarts are happening too frequently,
+	 * increase the delay before accepting the next one.  This prevents
+	 * restart storms when the device is in a bad state.
+	 */
+	if (ar->last_restart_jiffies &&
+	    time_before(jiffies, ar->last_restart_jiffies +
+			msecs_to_jiffies(ar->restart_backoff_ms))) {
+		dev_warn(&ar->udev->dev,
+			 "restart (%d) throttled (backoff %u ms)\n",
+			 r, ar->restart_backoff_ms);
+		atomic_dec(&ar->pending_restarts);
+		return;
+	}
+
+	ar->last_restart_jiffies = jiffies;
+	if (ar->restart_backoff_ms == 0)
+		ar->restart_backoff_ms = CARL9170_RESTART_BACKOFF_INIT_MS;
+	else
+		ar->restart_backoff_ms = min(ar->restart_backoff_ms * 2,
+					     (unsigned int)
+					     CARL9170_RESTART_BACKOFF_MAX_MS);
 
 	ieee80211_stop_queues(ar->hw);
 

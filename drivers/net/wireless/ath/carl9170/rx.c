@@ -46,6 +46,14 @@
 #include "hw.h"
 #include "cmd.h"
 
+/*
+ * Time window for firmware error counting.  Sporadic errors are
+ * normal over long uptimes; only a burst of errors within a short
+ * window warrants a restart.
+ */
+#define CARL9170_FW_ERROR_WINDOW_MS	10000
+#define CARL9170_FW_ERROR_THRESHOLD	3
+
 static void carl9170_dbg_message(struct ar9170 *ar, const char *buf, u32 len)
 {
 	bool restart = false;
@@ -54,7 +62,7 @@ static void carl9170_dbg_message(struct ar9170 *ar, const char *buf, u32 len)
 	if (len > 3) {
 		if (memcmp(buf, CARL9170_ERR_MAGIC, 3) == 0) {
 			ar->fw.err_counter++;
-			if (ar->fw.err_counter > 3) {
+			if (ar->fw.err_counter >= CARL9170_FW_ERROR_THRESHOLD) {
 				restart = true;
 				reason = CARL9170_RR_TOO_MANY_FIRMWARE_ERRORS;
 			}
