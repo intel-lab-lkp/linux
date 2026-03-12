@@ -1050,6 +1050,7 @@ static bool amt_send_membership_update(struct amt_dev *amt,
 			    false,
 			    false,
 			    0);
+	ip_rt_put(rt);
 	amt_update_gw_status(amt, AMT_STATUS_SENT_UPDATE, true);
 	return false;
 }
@@ -1108,6 +1109,7 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 			    false,
 			    false,
 			    0);
+	ip_rt_put(rt);
 }
 
 static bool amt_send_membership_query(struct amt_dev *amt,
@@ -1167,6 +1169,7 @@ static bool amt_send_membership_query(struct amt_dev *amt,
 			    false,
 			    false,
 			    0);
+	ip_rt_put(rt);
 	amt_update_relay_status(tunnel, AMT_STATUS_SENT_QUERY, true);
 	return false;
 }

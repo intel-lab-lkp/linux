@@ -198,6 +198,7 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 		udp_tunnel_xmit_skb(rt, ub->ubsock->sk, skb, src->ipv4.s_addr,
 				    dst->ipv4.s_addr, 0, ttl, 0, src->port,
 				    dst->port, false, true, 0);
+		ip_rt_put(rt);
 #if IS_ENABLED(CONFIG_IPV6)
 	} else {
 		if (!ndst) {
@@ -220,6 +221,7 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 		udp_tunnel6_xmit_skb(ndst, ub->ubsock->sk, skb, NULL,
 				     &src->ipv6, &dst->ipv6, 0, ttl, 0,
 				     src->port, dst->port, false, 0);
+		dst_release(ndst);
 #endif
 	}
 	local_bh_enable();
