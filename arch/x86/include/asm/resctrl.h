@@ -21,9 +21,13 @@
 /**
  * struct resctrl_pqr_state - State cache for the PQR MSR
  * @cur_rmid:		The cached Resource Monitoring ID
- * @cur_closid:	The cached Class Of Service ID
+ * @cur_closid:		The cached Class Of Service ID
  * @default_rmid:	The user assigned Resource Monitoring ID
  * @default_closid:	The user assigned cached Class Of Service ID
+ * @cur_kmode:		Currently active kernel mode (PLZA) bits for this CPU
+ * @default_kmode:	Default kernel mode bits for this CPU (e.g. from resctrl mount)
+ * @kmode_rmid:		RMID used when executing in kernel mode (PLZA)
+ * @kmode_closid:	CLOSID used when executing in kernel mode (PLZA)
  *
  * The upper 32 bits of MSR_IA32_PQR_ASSOC contain closid and the
  * lower 10 bits rmid. The update to MSR_IA32_PQR_ASSOC always
@@ -32,12 +36,20 @@
  *
  * The cache also helps to avoid pointless updates if the value does
  * not change.
+ *
+ * Kernel mode (e.g. PLZA) state: cur_kmode/default_kmode hold the active
+ * and default mode bits; kmode_rmid and kmode_closid are the association
+ * used when the thread is in privilege level zero.
  */
 struct resctrl_pqr_state {
 	u32			cur_rmid;
 	u32			cur_closid;
 	u32			default_rmid;
 	u32			default_closid;
+	u32			cur_kmode;
+	u32			default_kmode;
+	u32			kmode_rmid;
+	u32			kmode_closid;
 };
 
 DECLARE_PER_CPU(struct resctrl_pqr_state, pqr_state);

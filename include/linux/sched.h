@@ -1328,6 +1328,8 @@ struct task_struct {
 #ifdef CONFIG_X86_CPU_RESCTRL
 	u32				closid;
 	u32				rmid;
+	/* Resctrl kernel mode (e.g. PLZA) bits for this task */
+	u32				kmode;
 #endif
 #ifdef CONFIG_FUTEX
 	struct robust_list_head __user	*robust_list;
