@@ -599,7 +599,8 @@ int mana_ib_query_device(struct ib_device *ibdev, struct ib_device_attr *props,
 	props->max_mr = dev->adapter_caps.max_mr_count;
 	props->max_pd = dev->adapter_caps.max_pd_count;
 	props->max_qp_rd_atom = dev->adapter_caps.max_inbound_read_limit;
-	props->max_res_rd_atom = props->max_qp_rd_atom * props->max_qp;
+	props->max_res_rd_atom =
+		min_t(s64, (s64)props->max_qp_rd_atom * props->max_qp, INT_MAX);
 	props->max_qp_init_rd_atom = dev->adapter_caps.max_outbound_read_limit;
 	props->atomic_cap = IB_ATOMIC_NONE;
 	props->masked_atomic_cap = IB_ATOMIC_NONE;
@@ -694,20 +695,22 @@ int mana_ib_gd_query_adapter_caps(struct mana_ib_dev *dev)
 	caps->max_sq_id = resp.max_sq_id;
 	caps->max_rq_id = resp.max_rq_id;
 	caps->max_cq_id = resp.max_cq_id;
-	caps->max_qp_count = resp.max_qp_count;
-	caps->max_cq_count = resp.max_cq_count;
-	caps->max_mr_count = resp.max_mr_count;
-	caps->max_pd_count = resp.max_pd_count;
-	caps->max_inbound_read_limit = resp.max_inbound_read_limit;
-	caps->max_outbound_read_limit = resp.max_outbound_read_limit;
+	caps->max_qp_count = min_t(u32, resp.max_qp_count, INT_MAX);
+	caps->max_cq_count = min_t(u32, resp.max_cq_count, INT_MAX);
+	caps->max_mr_count = min_t(u32, resp.max_mr_count, INT_MAX);
+	caps->max_pd_count = min_t(u32, resp.max_pd_count, INT_MAX);
+	caps->max_inbound_read_limit = min_t(u32, resp.max_inbound_read_limit,
+					     INT_MAX);
+	caps->max_outbound_read_limit = min_t(u32, resp.max_outbound_read_limit,
+					      INT_MAX);
 	caps->mw_count = resp.mw_count;
 	caps->max_srq_count = resp.max_srq_count;
 	caps->max_qp_wr = min_t(u32,
 				resp.max_requester_sq_size / GDMA_MAX_SQE_SIZE,
 				resp.max_requester_rq_size / GDMA_MAX_RQE_SIZE);
 	caps->max_inline_data_size = resp.max_inline_data_size;
-	caps->max_send_sge_count = resp.max_send_sge_count;
-	caps->max_recv_sge_count = resp.max_recv_sge_count;
+	caps->max_send_sge_count = min_t(u32, resp.max_send_sge_count, INT_MAX);
+	caps->max_recv_sge_count = min_t(u32, resp.max_recv_sge_count, INT_MAX);
 	caps->feature_flags = resp.feature_flags;
 
 	caps->page_size_cap = PAGE_SZ_BM;
