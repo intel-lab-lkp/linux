@@ -2538,9 +2538,6 @@ static struct clk_branch cam_cc_mclk7_clk = {
 
 static struct gdsc titan_top_gdsc = {
 	.gdscr = 0xc1bc,
-	.en_rest_wait_val = 0x2,
-	.en_few_wait_val = 0x2,
-	.clk_dis_wait_val = 0xf,
 	.pd = {
 		.name = "titan_top_gdsc",
 	},
