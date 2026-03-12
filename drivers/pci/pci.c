@@ -344,7 +344,7 @@ free_and_exit:
  * pci_dev_str_match - test if a string matches a device
  * @dev: the PCI device to test
  * @p: string to match the device against
- * @endptr: pointer to the string after the match
+ * @endptr: pointer to the string after the match, with the delimiter skipped
  *
  * Test if a string (typically from a kernel parameter) matches a specified
  * PCI device. The string may be of one of the following formats:
@@ -384,8 +384,10 @@ static int pci_dev_str_match(struct pci_dev *dev, const char *p,
 			     &subsystem_vendor, &subsystem_device, &count);
 		if (ret != 4) {
 			ret = sscanf(p, "%hx:%hx%n", &vendor, &device, &count);
-			if (ret != 2)
-				return -EINVAL;
+			if (ret != 2) {
+				ret = -EINVAL;
+				goto not_found;
+			}
 
 			subsystem_vendor = 0;
 			subsystem_device = 0;
@@ -400,6 +402,9 @@ static int pci_dev_str_match(struct pci_dev *dev, const char *p,
 		    (!subsystem_device ||
 			    subsystem_device == dev->subsystem_device))
 			goto found;
+
+		/* No matching string found */
+		ret = 0;
 	} else {
 		/*
 		 * PCI Bus, Device, Function IDs are specified
@@ -407,16 +412,28 @@ static int pci_dev_str_match(struct pci_dev *dev, const char *p,
 		 */
 		ret = pci_dev_str_match_path(dev, p, &p);
 		if (ret < 0)
-			return ret;
+			goto not_found;
 		else if (ret)
 			goto found;
 	}
 
-	*endptr = p;
-	return 0;
+not_found:
+	if (ret < 0)
+		pr_err("PCI: Can't parse parameter: %s\n", p);
+
+	if (*p != ';' && *p != ',') {
+		/*
+		 * End of param or invalid format. Return -ENODEV so the caller
+		 * stops parsing.
+		 */
+		return -ENODEV;
+	}
+
+	*endptr = p + 1;
+	return ret;
 
 found:
-	*endptr = p;
+	*endptr = *p == '\0' ? p : p + 1;
 	return 1;
 }
 
@@ -943,18 +960,11 @@ static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 
 		ret = pci_dev_str_match(dev, p, &p);
 		if (ret < 0) {
-			pr_info_once("PCI: Can't parse ACS command line parameter\n");
 			break;
 		} else if (ret == 1) {
 			/* Found a match */
 			break;
 		}
-
-		if (*p != ';' && *p != ',') {
-			/* End of param or invalid format */
-			break;
-		}
-		p++;
 	}
 
 	if (ret != 1)
@@ -6392,16 +6402,8 @@ static resource_size_t pci_specified_resource_alignment(struct pci_dev *dev,
 			align = 1ULL << align_order;
 			break;
 		} else if (ret < 0) {
-			pr_err("PCI: Can't parse resource_alignment parameter: %s\n",
-			       p);
 			break;
 		}
-
-		if (*p != ';' && *p != ',') {
-			/* End of param or invalid format */
-			break;
-		}
-		p++;
 	}
 out:
 	spin_unlock(&resource_alignment_lock);
