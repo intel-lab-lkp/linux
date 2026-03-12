@@ -456,6 +456,150 @@ static void cpumask_rdtgrp_clear(struct rdtgroup *r, struct cpumask *m)
 		cpumask_and(&crgrp->cpu_mask, &r->cpu_mask, &crgrp->cpu_mask);
 }
 
+/**
+ * cpus_mon_write_kmode() - Update per-CPU kmode when a MON group's cpu_mask changes
+ * @rdtgrp:	The MON group whose cpu_mask is being updated.
+ * @newmask:	The new CPU mask requested by the user.
+ * @tmpmask:	Temporary mask for computing CPU set differences.
+ *
+ * When CPUs are dropped from the group, disables kmode on those CPUs and
+ * returns them to the parent. When CPUs are added, removes them from sibling
+ * MON groups and enables kmode on them. Caller must hold rdtgroup_mutex.
+ *
+ * Return: 0 on success, or -EINVAL if newmask contains CPUs outside the parent.
+ */
+static int cpus_mon_write_kmode(struct rdtgroup *rdtgrp, cpumask_var_t newmask,
+				cpumask_var_t tmpmask)
+{
+	struct rdtgroup *prgrp = rdtgrp->mon.parent, *crgrp;
+	struct list_head *head;
+
+	/* Check whether cpus belong to parent ctrl group */
+	cpumask_andnot(tmpmask, newmask, &prgrp->cpu_mask);
+	if (!cpumask_empty(tmpmask)) {
+		rdt_last_cmd_puts("Can only add CPUs to mongroup that belong to parent\n");
+		return -EINVAL;
+	}
+
+	/* Check whether cpus are dropped from this group */
+	cpumask_andnot(tmpmask, &rdtgrp->cpu_mask, newmask);
+	if (!cpumask_empty(tmpmask)) {
+		/* Give any dropped cpus to parent rdtgroup */
+		cpumask_or(&prgrp->cpu_mask, &prgrp->cpu_mask, tmpmask);
+
+		/* Disable kmode on the dropped CPUs */
+		resctrl_arch_set_kmode(tmpmask, &resctrl_kcfg, prgrp->closid,
+				       rdtgrp->mon.rmid, false);
+	}
+
+	/*
+	 * If we added cpus, remove them from previous group that owned them
+	 * and enable kmode on added CPUs.
+	 */
+	cpumask_andnot(tmpmask, newmask, &rdtgrp->cpu_mask);
+	if (!cpumask_empty(tmpmask)) {
+		head = &prgrp->mon.crdtgrp_list;
+		list_for_each_entry(crgrp, head, mon.crdtgrp_list) {
+			if (crgrp == rdtgrp)
+				continue;
+			cpumask_andnot(&crgrp->cpu_mask, &crgrp->cpu_mask, tmpmask);
+		}
+		resctrl_arch_set_kmode(tmpmask, &resctrl_kcfg, prgrp->closid,
+				       rdtgrp->mon.rmid, true);
+	}
+
+	/* Done pushing/pulling - update this group with new mask */
+	cpumask_copy(&rdtgrp->cpu_mask, newmask);
+
+	return 0;
+}
+
+/**
+ * cpus_ctrl_write_kmode() - Update per-CPU kmode when a CTRL group's cpu_mask changes
+ * @rdtgrp:	The CTRL_MON group whose cpu_mask is being updated.
+ * @newmask:	The new CPU mask requested by the user.
+ * @tmpmask:	Temporary mask for computing CPU set differences.
+ * @tmpmask1:	Second temporary mask (e.g. for cpumask_rdtgrp_clear).
+ *
+ * When CPUs are dropped from the group, disables kmode on those CPUs (cannot
+ * drop from default group). When CPUs are added, clears them from child groups
+ * that owned them and enables kmode on them. Updates this group's cpu_mask and
+ * intersects child MON group masks with the new parent mask. Caller must hold
+ * rdtgroup_mutex.
+ *
+ * Return: 0 on success, or -EINVAL if dropping CPUs from the default group.
+ */
+static int cpus_ctrl_write_kmode(struct rdtgroup *rdtgrp, cpumask_var_t newmask,
+				 cpumask_var_t tmpmask, cpumask_var_t tmpmask1)
+{
+	struct rdtgroup *crgrp;
+	struct list_head *head;
+
+	/* Check whether cpus are dropped from this group */
+	cpumask_andnot(tmpmask, &rdtgrp->cpu_mask, newmask);
+	if (!cpumask_empty(tmpmask)) {
+		/* Can't drop from default group */
+		if (rdtgrp == &rdtgroup_default) {
+			rdt_last_cmd_puts("Can't drop CPUs from default group\n");
+			return -EINVAL;
+		}
+		/* Disable kmode on the dropped CPUs */
+		resctrl_arch_set_kmode(tmpmask, &resctrl_kcfg, rdtgrp->closid,
+				       rdtgrp->mon.rmid, false);
+	}
+
+	/*
+	 * If we added cpus, remove them from child groups that owned them
+	 * previously.
+	 */
+	cpumask_andnot(tmpmask, newmask, &rdtgrp->cpu_mask);
+	if (!cpumask_empty(tmpmask)) {
+		cpumask_rdtgrp_clear(rdtgrp, tmpmask1);
+		/* Enable kmode on the added CPUs */
+		resctrl_arch_set_kmode(tmpmask, &resctrl_kcfg, rdtgrp->closid,
+				       rdtgrp->mon.rmid, true);
+	}
+
+	/* Done pushing/pulling - update this group with new mask */
+	cpumask_copy(&rdtgrp->cpu_mask, newmask);
+
+	/* Clear child mon group masks since there is a new parent mask now */
+	head = &rdtgrp->mon.crdtgrp_list;
+	list_for_each_entry(crgrp, head, mon.crdtgrp_list) {
+		cpumask_and(tmpmask, &rdtgrp->cpu_mask, &crgrp->cpu_mask);
+	}
+
+	return 0;
+}
+
+/**
+ * cpus_write_kmode() - Update per-CPU kmode for a group's new cpu_mask
+ * @rdtgrp:	The group (CTRL_MON or MON) whose cpu_mask is being updated.
+ * @newmask:	The new CPU mask requested by the user.
+ * @tmpmask:	Temporary mask for computing CPU set differences.
+ * @tmpmask1:	Second temporary mask (only used for CTRL_MON groups).
+ *
+ * Dispatches to cpus_ctrl_write_kmode() or cpus_mon_write_kmode() based on
+ * group type. Used when the group has kmode enabled and the user writes to
+ * the cpus file.
+ *
+ * Return: 0 on success, or -EINVAL on error.
+ */
+static int cpus_write_kmode(struct rdtgroup *rdtgrp, cpumask_var_t newmask,
+			    cpumask_var_t tmpmask, cpumask_var_t tmpmask1)
+{
+	int ret;
+
+	if (rdtgrp->type == RDTCTRL_GROUP)
+		ret = cpus_ctrl_write_kmode(rdtgrp, newmask, tmpmask, tmpmask1);
+	else if (rdtgrp->type == RDTMON_GROUP)
+		ret = cpus_mon_write_kmode(rdtgrp, newmask, tmpmask);
+	else
+		ret = -EINVAL;
+
+	return ret;
+}
+
 static int cpus_ctrl_write(struct rdtgroup *rdtgrp, cpumask_var_t newmask,
 			   cpumask_var_t tmpmask, cpumask_var_t tmpmask1)
 {
@@ -566,7 +710,10 @@ static ssize_t rdtgroup_cpus_write(struct kernfs_open_file *of,
 		goto unlock;
 	}
 
-	if (rdtgrp->type == RDTCTRL_GROUP)
+	/* Group has kernel mode: update per-CPU kmode state for new mask. */
+	if (rdtgrp->kmode)
+		ret = cpus_write_kmode(rdtgrp, newmask, tmpmask, tmpmask1);
+	else if (rdtgrp->type == RDTCTRL_GROUP)
 		ret = cpus_ctrl_write(rdtgrp, newmask, tmpmask, tmpmask1);
 	else if (rdtgrp->type == RDTMON_GROUP)
 		ret = cpus_mon_write(rdtgrp, newmask, tmpmask);
