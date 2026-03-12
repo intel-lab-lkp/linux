@@ -898,6 +898,9 @@ void resctrl_arch_get_kmode_cfg(struct resctrl_kmode_cfg *kcfg)
 {
 	kcfg->kmode = INHERIT_CTRL_AND_MON;
 	kcfg->kmode_cur = INHERIT_CTRL_AND_MON;
+	if (rdt_cpu_has(X86_FEATURE_PLZA))
+		kcfg->kmode |= GLOBAL_ASSIGN_CTRL_INHERIT_MON |
+				GLOBAL_ASSIGN_CTRL_ASSIGN_MON;
 	kcfg->k_rdtgrp = NULL;
 }
 
