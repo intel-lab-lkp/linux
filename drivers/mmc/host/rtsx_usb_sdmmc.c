@@ -1231,6 +1231,8 @@ static int sd_set_timing(struct rtsx_usb_sdmmc *host,
 
 	switch (timing) {
 	case MMC_TIMING_UHS_SDR104:
+	case MMC_TIMING_UHS_SDR12:
+	case MMC_TIMING_UHS_SDR25:
 	case MMC_TIMING_UHS_SDR50:
 		rtsx_usb_add_cmd(ucr, WRITE_REG_CMD, SD_CFG1,
 				0x0C | SD_ASYNC_FIFO_RST,
@@ -1298,13 +1300,14 @@ static void sdmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	switch (ios->timing) {
 	case MMC_TIMING_UHS_SDR104:
+	case MMC_TIMING_UHS_SDR12:
+	case MMC_TIMING_UHS_SDR25:
 	case MMC_TIMING_UHS_SDR50:
 		host->ssc_depth = SSC_DEPTH_2M;
 		host->vpclk = true;
 		host->double_clk = false;
 		break;
 	case MMC_TIMING_UHS_DDR50:
-	case MMC_TIMING_UHS_SDR25:
 		host->ssc_depth = SSC_DEPTH_1M;
 		break;
 	default:
