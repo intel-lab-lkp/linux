@@ -831,8 +831,12 @@ ethtool_std_stats_get()
 	local name=$1; shift
 	local src=$1; shift
 
-	ethtool --json -S $dev --groups $grp -- --src $src | \
-		jq '.[]."'"$grp"'"."'$name'"'
+	if [[ "$grp" == "pause" ]]; then
+		ethtool -I --json -a "$dev" | jq --arg name "$name" '.[].statistics[$name]'
+	else
+		ethtool --json -S "$dev" --groups "$grp" -- --src "$src" | \
+			jq --arg grp "$grp" --arg name "$name" '.[][$grp][$name]'
+	fi
 }
 
 qdisc_stats_get()
