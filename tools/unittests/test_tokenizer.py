@@ -30,8 +30,7 @@ def tokens_to_list(tokens):
         if tok.kind == CToken.SPACE:
             continue
 
-        tuples += [(tok.kind, tok.value,
-                    tok.brace_level, tok.paren_level, tok.bracket_level)]
+        tuples += [(tok.kind, tok.value, tok.level)]
 
     return tuples
 

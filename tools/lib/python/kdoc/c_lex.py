@@ -58,14 +58,13 @@ class CToken():
 
         return CToken.MISMATCH
 
+
     def __init__(self, kind, value=None, pos=0,
                  brace_level=0, paren_level=0, bracket_level=0):
         self.kind = kind
         self.value = value
         self.pos = pos
-        self.brace_level = brace_level
-        self.paren_level = paren_level
-        self.bracket_level = bracket_level
+        self.level = (bracket_level, paren_level, brace_level)
 
     def __repr__(self):
         name = self.to_name(self.kind)
@@ -74,8 +73,7 @@ class CToken():
         else:
             value = self.value
 
-        return f"CToken({name}, {value}, {self.pos}, " \
-               f"{self.brace_level}, {self.paren_level}, {self.bracket_level})"
+        return f"CToken(CToken.{name}, {value}, {self.pos}, {self.level})"
 
 #: Tokens to parse C code.
 TOKEN_LIST = [
@@ -105,12 +103,22 @@ TOKEN_LIST = [
     (CToken.ENUM,    r"\benum\b"),
     (CToken.TYPEDEF, r"\bkinddef\b"),
 
-    (CToken.NAME,      r"[A-Za-z_][A-Za-z0-9_]*"),
+    (CToken.NAME,    r"[A-Za-z_][A-Za-z0-9_]*"),
 
     (CToken.SPACE,   r"[\s]+"),
 
     (CToken.MISMATCH,r"."),
 ]
+
+def fill_re_scanner(token_list):
+    """Ancillary routine to convert TOKEN_LIST into a finditer regex"""
+    re_tokens = []
+
+    for kind, pattern in token_list:
+        name = CToken.to_name(kind)
+        re_tokens.append(f"(?P<{name}>{pattern})")
+
+    return KernRe("|".join(re_tokens), re.MULTILINE | re.DOTALL)
 
 #: Handle C continuation lines.
 RE_CONT = KernRe(r"\\\n")
@@ -118,7 +126,7 @@ RE_CONT = KernRe(r"\\\n")
 RE_COMMENT_START = KernRe(r'/\*\s*')
 
 #: tokenizer regex. Will be filled at the first CTokenizer usage.
-re_scanner = None
+RE_SCANNER = fill_re_scanner(TOKEN_LIST)
 
 class CTokenizer():
     """
@@ -149,7 +157,7 @@ class CTokenizer():
         paren_level = 0
         bracket_level = 0
 
-        for match in re_scanner.finditer(source):
+        for match in RE_SCANNER.finditer(source):
             kind = CToken.from_name(match.lastgroup)
             pos = match.start()
             value = match.group()
@@ -175,7 +183,7 @@ class CTokenizer():
             yield CToken(kind, value, pos,
                          brace_level, paren_level, bracket_level)
 
-    def __init__(self, source):
+    def __init__(self, source=None):
         """
         Create a regular expression to handle TOKEN_LIST.
 
@@ -183,20 +191,18 @@ class CTokenizer():
             (?P<name>...)
 
         in this particular case, it makes sense, as we can pick the name
-        when matching a code via re_scanner().
+        when matching a code via RE_SCANNER.
         """
-        global re_scanner
-
-        if not re_scanner:
-            re_tokens = []
-
-            for kind, pattern in TOKEN_LIST:
-                name = CToken.to_name(kind)
-                re_tokens.append(f"(?P<{name}>{pattern})")
-
-            re_scanner = KernRe("|".join(re_tokens), re.MULTILINE | re.DOTALL)
 
         self.tokens = []
+
+        if not source:
+            return
+
+        if isinstance(source, list):
+            self.tokens = source
+            return
+
         for tok in self._tokenize(source):
             self.tokens.append(tok)
 
@@ -237,3 +243,179 @@ class CTokenizer():
                     out += str(tok.value)
 
         return out
+
+
+class CMatch:
+    """
+    Finding nested delimiters is hard with regular expressions. It is
+    even harder on Python with its normal re module, as there are several
+    advanced regular expressions that are missing.
+
+    This is the case of this pattern::
+
+            '\\bSTRUCT_GROUP(\\(((?:(?>[^)(]+)|(?1))*)\\))[^;]*;'
+
+    which is used to properly match open/close parentheses of the
+    string search STRUCT_GROUP(),
+
+    Add a class that counts pairs of delimiters, using it to match and
+    replace nested expressions.
+
+    The original approach was suggested by:
+
+        https://stackoverflow.com/questions/5454322/python-how-to-match-nested-parentheses-with-regex
+
+    Although I re-implemented it to make it more generic and match 3 types
+    of delimiters. The logic checks if delimiters are paired. If not, it
+    will ignore the search string.
+    """
+
+    # TODO: make CMatch handle multiple match groups
+    #
+    # Right now, regular expressions to match it are defined only up to
+    #       the start delimiter, e.g.:
+    #
+    #       \bSTRUCT_GROUP\(
+    #
+    # is similar to: STRUCT_GROUP\((.*)\)
+    # except that the content inside the match group is delimiter-aligned.
+    #
+    # The content inside parentheses is converted into a single replace
+    # group (e.g. r`\0').
+    #
+    # It would be nice to change such definition to support multiple
+    # match groups, allowing a regex equivalent to:
+    #
+    #   FOO\((.*), (.*), (.*)\)
+    #
+    # it is probably easier to define it not as a regular expression, but
+    # with some lexical definition like:
+    #
+    #   FOO(arg1, arg2, arg3)
+
+    def __init__(self, regex):
+        self.regex = KernRe(regex)
+
+    def _search(self, tokenizer):
+        """
+        Finds paired blocks for a regex that ends with a delimiter.
+
+        The suggestion of using finditer to match pairs came from:
+        https://stackoverflow.com/questions/5454322/python-how-to-match-nested-parentheses-with-regex
+        but I ended using a different implementation to align all three types
+        of delimiters and seek for an initial regular expression.
+
+        The algorithm seeks for open/close paired delimiters and places them
+        into a stack, yielding a start/stop position of each match when the
+        stack is zeroed.
+
+        The algorithm should work fine for properly paired lines, but will
+        silently ignore end delimiters that precede a start delimiter.
+        This should be OK for kernel-doc parser, as unaligned delimiters
+        would cause compilation errors. So, we don't need to raise exceptions
+        to cover such issues.
+        """
+
+        start = None
+        offset = -1
+        started = False
+
+        import sys
+
+        stack = []
+
+        for i, tok in enumerate(tokenizer.tokens):
+            if start is None:
+                if tok.kind == CToken.NAME and self.regex.match(tok.value):
+                    start = i
+                    stack.append((start, tok.level))
+                    started = False
+
+                continue
+
+            if not started and tok.kind == CToken.BEGIN:
+                started = True
+                continue
+
+            if tok.kind == CToken.END and tok.level == stack[-1][1]:
+                start, level = stack.pop()
+                offset = i
+
+                yield CTokenizer(tokenizer.tokens[start:offset + 1])
+                start = None
+
+        #
+        # If an END zeroing levels is not there, return remaining stuff
+        # This is meant to solve cases where the caller logic might be
+        # picking an incomplete block.
+        #
+        if start and offset < 0:
+            print("WARNING: can't find an end", file=sys.stderr)
+            yield CTokenizer(tokenizer.tokens[start:])
+
+    def search(self, source):
+        """
+        This is similar to re.search:
+
+        It matches a regex that it is followed by a delimiter,
+        returning occurrences only if all delimiters are paired.
+        """
+
+        if isinstance(source, CTokenizer):
+            tokenizer = source
+            is_token = True
+        else:
+            tokenizer = CTokenizer(source)
+            is_token = False
+
+        for new_tokenizer in self._search(tokenizer):
+            if is_token:
+                yield new_tokenizer
+            else:
+                yield str(new_tokenizer)
+
+    def sub(self, sub, line, count=0):
+        """
+        This is similar to re.sub:
+
+        It matches a regex that it is followed by a delimiter,
+        replacing occurrences only if all delimiters are paired.
+
+        if the sub argument contains::
+
+            r'\0'
+
+        it will work just like re: it places there the matched paired data
+        with the delimiter stripped.
+
+        If count is different than zero, it will replace at most count
+        items.
+        """
+        if isinstance(source, CTokenizer):
+            is_token = True
+            tokenizer = source
+        else:
+            is_token = False
+            tokenizer = CTokenizer(source)
+
+        new_tokenizer = CTokenizer()
+        cur_pos = 0
+        for start, end in self._search(tokenizer):
+            new_tokenizer.tokens += tokenizer.tokens[cur_pos:start]
+#            new_tokenizer.tokens += [sub_str]
+
+            cur_pos = end + 1
+
+        if cur_pos:
+            new_tokenizer.tokens += tokenizer.tokens[cur_pos:]
+
+        print(new_tokenizer.tokens)
+
+        return str(new_tokenizer)
+
+    def __repr__(self):
+        """
+        Returns a displayable version of the class init.
+        """
+
+        return f'CMatch("{self.regex.regex.pattern}")'
