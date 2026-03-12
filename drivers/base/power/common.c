@@ -12,6 +12,7 @@
 #include <linux/acpi.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
+#include <linux/pm_runtime.h>
 
 #include "power.h"
 
@@ -183,9 +184,6 @@ EXPORT_SYMBOL_GPL(dev_pm_domain_attach_by_name);
  * may also provide an empty list, in case the attach should be done for all of
  * the available PM domains.
  *
- * Callers must ensure proper synchronization of this function with power
- * management callbacks.
- *
  * Returns the number of attached PM domains or a negative error code in case of
  * a failure. Note that, to detach the list of PM domains, the driver shall call
  * dev_pm_domain_detach_list(), typically during the remove phase.
@@ -240,6 +238,7 @@ int dev_pm_domain_attach_list(struct device *dev,
 		link_flags |= DL_FLAG_RPM_ACTIVE;
 
 	for (i = 0; i < num_pds; i++) {
+		pm_runtime_barrier(dev);
 		if (by_id)
 			pd_dev = dev_pm_domain_attach_by_id(dev, i);
 		else
@@ -284,12 +283,14 @@ int dev_pm_domain_attach_list(struct device *dev,
 
 err_link:
 	dev_pm_opp_clear_config(pds->opp_tokens[i]);
+	pm_runtime_barrier(pd_dev);
 	dev_pm_domain_detach(pd_dev, true);
 err_attach:
 	while (--i >= 0) {
 		dev_pm_opp_clear_config(pds->opp_tokens[i]);
 		if (pds->pd_links[i])
 			device_link_del(pds->pd_links[i]);
+		pm_runtime_barrier(pds->pd_devs[i]);
 		dev_pm_domain_detach(pds->pd_devs[i], true);
 	}
 	kfree(pds->pd_devs);
@@ -370,9 +371,6 @@ EXPORT_SYMBOL_GPL(dev_pm_domain_detach);
  *
  * This function reverse the actions from dev_pm_domain_attach_list().
  * Typically it should be invoked during the remove phase from drivers.
- *
- * Callers must ensure proper synchronization of this function with power
- * management callbacks.
  */
 void dev_pm_domain_detach_list(struct dev_pm_domain_list *list)
 {
@@ -385,6 +383,7 @@ void dev_pm_domain_detach_list(struct dev_pm_domain_list *list)
 		dev_pm_opp_clear_config(list->opp_tokens[i]);
 		if (list->pd_links[i])
 			device_link_del(list->pd_links[i]);
+		pm_runtime_barrier(list->pd_devs[i]);
 		dev_pm_domain_detach(list->pd_devs[i], true);
 	}
 
