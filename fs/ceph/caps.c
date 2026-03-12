@@ -3055,7 +3055,10 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_fs_client *fsc = ceph_inode_to_fs_client(inode);
+	struct ceph_client *cl = fsc->client;
+	unsigned long timeout = ceph_timeout_jiffies(cl->options->mount_timeout);
 	int ret, _got, flags;
+	bool warned = false;
 
 	ret = ceph_pool_perm_check(inode, need);
 	if (ret < 0)
@@ -3104,7 +3107,18 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 					ret = -ERESTARTSYS;
 					break;
 				}
-				wait_woken(&wait, TASK_INTERRUPTIBLE, MAX_SCHEDULE_TIMEOUT);
+				if (!wait_woken(&wait, TASK_INTERRUPTIBLE, timeout)) {
+					if (!warned) {
+						pr_warn_ratelimited_client(cl,
+							"%p %llx.%llx caps wait timed out (need %s want %s)\n",
+							inode, ceph_vinop(inode),
+							ceph_cap_string(need),
+							ceph_cap_string(want));
+						warned = true;
+					}
+					ret = -ETIMEDOUT;
+					break;
+				}
 			}
 
 			remove_wait_queue(&ci->i_cap_wq, &wait);
