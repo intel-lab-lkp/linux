@@ -241,7 +241,7 @@ class CTokenizer():
         out=""
         show_stack = [True]
 
-        for tok in self.tokens:
+        for i, tok in enumerate(self.tokens):
             if tok.kind == CToken.BEGIN:
                 show_stack.append(show_stack[-1])
 
@@ -270,8 +270,29 @@ class CTokenizer():
 
                 continue
 
-            if show_stack[-1]:
-                    out += str(tok.value)
+            if not show_stack[-1]:
+                continue
+
+            if i < len(self.tokens) - 1:
+                next_tok = self.tokens[i + 1]
+
+                # Do some cleanups before ";"
+
+                if (tok.kind == CToken.SPACE and
+                    next_tok.kind == CToken.PUNC and
+                    next_tok.value == ";"):
+
+                    continue
+
+                if (tok.kind == CToken.PUNC and
+                    next_tok.kind == CToken.PUNC and
+                    tok.value == ";" and
+                    next_tok.kind == CToken.PUNC and
+                    next_tok.value == ";"):
+
+                    continue
+
+            out += str(tok.value)
 
         return out
 
