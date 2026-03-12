@@ -1117,6 +1117,45 @@ out_unlock:
 	return ret ?: nbytes;
 }
 
+/**
+ * resctrl_kernel_mode_assignment_show() - Show rdtgroup assigned to kernel mode
+ * @of:	kernfs file handle.
+ * @s:	seq_file to write to.
+ * @v:	unused.
+ *
+ * Prints the rdtgroup (resctrl_kcfg.k_rdtgrp) used for kernel work when a
+ * kernel mode is active (e.g. PLZA).
+ * Format: "CTRL_MON/MON/\n"
+ * "//" for default CTRL_MON,
+ * "ctrl_name//" for a CTRL_MON group,
+ * "/mon_name/" for a MON group under default,
+ * "ctrl_name/mon_name/" otherwise.
+ *
+ * Prints "Kmode is not configured" if no rdtgroup is assigned.
+ */
+static int resctrl_kernel_mode_assignment_show(struct kernfs_open_file *of,
+					       struct seq_file *s, void *v)
+{
+	mutex_lock(&rdtgroup_mutex);
+	if (!resctrl_kcfg.k_rdtgrp) {
+		seq_puts(s, "Kmode is not configured");
+	} else if (resctrl_kcfg.k_rdtgrp == &rdtgroup_default) {
+		seq_puts(s, "//");
+	} else if (resctrl_kcfg.k_rdtgrp->type == RDTCTRL_GROUP) {
+		seq_printf(s, "%s//", rdt_kn_name(resctrl_kcfg.k_rdtgrp->kn));
+	} else if (resctrl_kcfg.k_rdtgrp->type == RDTMON_GROUP) {
+		if (resctrl_kcfg.k_rdtgrp->mon.parent == &rdtgroup_default)
+			seq_printf(s, "/%s/", rdt_kn_name(resctrl_kcfg.k_rdtgrp->kn));
+		else
+			seq_printf(s, "%s/%s/",
+				   rdt_kn_name(resctrl_kcfg.k_rdtgrp->mon.parent->kn),
+				   rdt_kn_name(resctrl_kcfg.k_rdtgrp->kn));
+	}
+	seq_puts(s, "\n");
+	mutex_unlock(&rdtgroup_mutex);
+	return 0;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -2024,6 +2063,13 @@ static struct rftype res_common_files[] = {
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_kernel_mode_show,
 		.write		= resctrl_kernel_mode_write,
+		.fflags		= RFTYPE_TOP_INFO,
+	},
+	{
+		.name		= "kernel_mode_assignment",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_kernel_mode_assignment_show,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
