@@ -1394,6 +1394,8 @@ int mmap_action_prepare(struct vm_area_desc *desc,
 		return remap_pfn_range_prepare(desc, action);
 	case MMAP_IO_REMAP_PFN:
 		return io_remap_pfn_range_prepare(desc, action);
+	case MMAP_SIMPLE_IO_REMAP:
+		return simple_ioremap_prepare(desc, action);
 	}
 }
 EXPORT_SYMBOL(mmap_action_prepare);
@@ -1422,6 +1424,14 @@ int mmap_action_complete(struct vm_area_struct *vma,
 	case MMAP_IO_REMAP_PFN:
 		err = io_remap_pfn_range_complete(vma, action);
 		break;
+	case MMAP_SIMPLE_IO_REMAP:
+		/*
+		 * The simple I/O remap should have been delegated to an I/O
+		 * remap.
+		 */
+		WARN_ON_ONCE(1);
+		err = -EINVAL;
+		break;
 	}
 
 	return mmap_action_finish(vma, action, err);
@@ -1436,6 +1446,7 @@ int mmap_action_prepare(struct vm_area_desc *desc,
 		break;
 	case MMAP_REMAP_PFN:
 	case MMAP_IO_REMAP_PFN:
+	case MMAP_SIMPLE_IO_REMAP:
 		WARN_ON_ONCE(1); /* nommu cannot handle these. */
 		break;
 	}
@@ -1454,6 +1465,7 @@ int mmap_action_complete(struct vm_area_struct *vma,
 		break;
 	case MMAP_REMAP_PFN:
 	case MMAP_IO_REMAP_PFN:
+	case MMAP_SIMPLE_IO_REMAP:
 		WARN_ON_ONCE(1); /* nommu cannot handle this. */
 
 		err = -EINVAL;
