@@ -1013,6 +1013,26 @@ static struct btrfs_root *read_tree_root_path(struct btrfs_root *tree_root,
 		ret = -EUCLEAN;
 		goto fail;
 	}
+	/*
+	 * Verify that the root node's on-disk level matches root_item.level.
+	 * These can diverge when the root item in the root tree was corrupted
+	 * (e.g. a bit flip changing level) while the actual tree block is
+	 * already cached in memory at its real level. In that case
+	 * read_tree_block() returns the cached buffer without re-running
+	 * btrfs_validate_extent_buffer(), silently bypassing the level check.
+	 * The mismatch would later cause a null-ptr-deref in backref walking
+	 * (handle_indirect_tree_backref) when the commit root's real height is
+	 * lower than what root_item.level claims.
+	 */
+	if (unlikely(btrfs_header_level(root->node) != level)) {
+		btrfs_crit(fs_info,
+           "root=%llu block=%llu, root item level mismatch: "
+           "root_item.level=%d block.level=%u",
+           btrfs_root_id(root), root->node->start,
+           level, btrfs_header_level(root->node));
+		ret = -EUCLEAN;
+		goto fail;
+	}
 	root->commit_root = btrfs_root_node(root);
 	return root;
 fail:
