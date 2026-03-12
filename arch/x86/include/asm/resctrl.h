@@ -57,6 +57,9 @@ DECLARE_PER_CPU(struct resctrl_pqr_state, pqr_state);
 extern bool rdt_alloc_capable;
 extern bool rdt_mon_capable;
 
+/* Global kernel mode config; used by resctrl_kmode_mon_en(). */
+extern struct resctrl_kmode_cfg resctrl_kcfg;
+
 DECLARE_STATIC_KEY_FALSE(rdt_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_mon_enable_key);
@@ -108,6 +111,17 @@ static inline void resctrl_arch_disable_kmode(void)
 	static_branch_dec_cpuslocked(&rdt_enable_key);
 }
 
+/**
+ * resctrl_kmode_mon_en() - True when kernel mode requires RMID in PLZA MSR
+ *
+ * When GLOBAL_ASSIGN_CTRL_ASSIGN_MON is active, MSR_IA32_PQR_PLZA_ASSOC must
+ * program both CLOSID and RMID for kernel work; otherwise only CLOSID is used.
+ */
+static bool resctrl_kmode_mon_en(void)
+{
+	return resctrl_kcfg.kmode_cur & GLOBAL_ASSIGN_CTRL_ASSIGN_MON;
+}
+
 /*
  * __resctrl_sched_in() - Writes the task's CLOSid/RMID to IA32_PQR_MSR
  *
@@ -127,6 +141,7 @@ static inline void __resctrl_sched_in(struct task_struct *tsk)
 	struct resctrl_pqr_state *state = this_cpu_ptr(&pqr_state);
 	u32 closid = READ_ONCE(state->default_closid);
 	u32 rmid = READ_ONCE(state->default_rmid);
+	u32 kmode = READ_ONCE(state->default_kmode);
 	u32 tmp;
 
 	/*
@@ -149,6 +164,24 @@ static inline void __resctrl_sched_in(struct task_struct *tsk)
 		state->cur_closid = closid;
 		state->cur_rmid = rmid;
 		wrmsr(MSR_IA32_PQR_ASSOC, rmid, closid);
+	}
+
+	/*
+	 * When kernel mode (e.g. PLZA) is enabled, program MSR_IA32_PQR_PLZA_ASSOC.
+	 * Task's kmode overrides per-CPU default_kmode. Only write the MSR when
+	 * kmode has changed to avoid unnecessary writes on the scheduler hot path.
+	 */
+	if (static_branch_likely(&rdt_kmode_enable_key)) {
+		tmp = READ_ONCE(tsk->kmode);
+		if (tmp)
+			kmode = tmp;
+
+		if (kmode != state->cur_kmode) {
+			state->cur_kmode = kmode;
+			wrmsr(MSR_IA32_PQR_PLZA_ASSOC,
+			      resctrl_kmode_mon_en() ? (RMID_EN | state->kmode_rmid) : 0,
+			      (kmode ? PLZA_EN : 0) | (CLOSID_EN | state->kmode_closid));
+		}
 	}
 }
 
