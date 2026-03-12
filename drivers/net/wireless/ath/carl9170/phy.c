@@ -1524,6 +1524,94 @@ static void carl9170_set_power_cal(struct ar9170 *ar, u32 freq,
 	carl9170_calc_ctl(ar, freq, bw);
 }
 
+static u8 carl9170_get_max_tgt_power(struct ar9170 *ar, u32 freq)
+{
+	struct ar9170_calibration_target_power_legacy *ctpl;
+	int ntargets, idx, n, i;
+	u8 f, max_power = 0;
+	u8 pwr_freqs[AR5416_MAX_NUM_TGT_PWRS];
+
+	if (freq < 3000)
+		f = freq - 2300;
+	else
+		f = (freq - 4800) / 5;
+
+	/* check legacy target powers (OFDM for 2G, 5G leg) */
+	for (i = 0; i < 2; i++) {
+		switch (i) {
+		case 0:
+			if (freq >= 3000) {
+				ctpl = &ar->eeprom.cal_tgt_pwr_5G[0];
+				ntargets = AR5416_NUM_5G_TARGET_PWRS;
+			} else {
+				ctpl = &ar->eeprom.cal_tgt_pwr_2G_ofdm[0];
+				ntargets = AR5416_NUM_2G_OFDM_TARGET_PWRS;
+			}
+			break;
+		case 1:
+			if (freq < 3000) {
+				ctpl = &ar->eeprom.cal_tgt_pwr_2G_cck[0];
+				ntargets = AR5416_NUM_2G_CCK_TARGET_PWRS;
+			} else {
+				continue;
+			}
+			break;
+		default:
+			continue;
+		}
+
+		for (n = 0; n < ntargets; n++) {
+			if (ctpl[n].freq == 0xff)
+				break;
+			pwr_freqs[n] = ctpl[n].freq;
+		}
+		ntargets = n;
+		if (ntargets < 2)
+			continue;
+
+		idx = carl9170_find_freq_idx(ntargets, pwr_freqs, f);
+		for (n = 0; n < 4; n++) {
+			u8 pwr;
+
+			pwr = carl9170_interpolate_u8(f,
+						     ctpl[idx + 0].freq,
+						     ctpl[idx + 0].power[n],
+						     ctpl[idx + 1].freq,
+						     ctpl[idx + 1].power[n]);
+			max_power = max(max_power, pwr);
+		}
+	}
+
+	/* target power is in half-dBm, max_power is in dBm */
+	return max_power / 2;
+}
+
+void carl9170_update_channel_maxpower(struct ar9170 *ar)
+{
+	struct ieee80211_supported_band *band;
+	int i;
+
+	band = ar->hw->wiphy->bands[NL80211_BAND_2GHZ];
+	if (band) {
+		for (i = 0; i < band->n_channels; i++) {
+			u8 pwr = carl9170_get_max_tgt_power(ar,
+				band->channels[i].center_freq);
+			if (pwr)
+				band->channels[i].max_power = pwr;
+		}
+	}
+
+	band = ar->hw->wiphy->bands[NL80211_BAND_5GHZ];
+	if (band) {
+		for (i = 0; i < band->n_channels; i++) {
+			u8 pwr = carl9170_get_max_tgt_power(ar,
+				band->channels[i].center_freq);
+			if (pwr)
+				band->channels[i].max_power = pwr;
+		}
+	}
+}
+
 int carl9170_get_noisefloor(struct ar9170 *ar)
 {
 	static const u32 phy_regs[] = {

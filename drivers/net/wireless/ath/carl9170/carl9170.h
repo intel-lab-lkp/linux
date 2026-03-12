@@ -604,6 +604,7 @@ int carl9170_led_set_state(struct ar9170 *ar, const u32 led_state);
 int carl9170_set_channel(struct ar9170 *ar, struct ieee80211_channel *channel,
 			 enum nl80211_channel_type bw);
 int carl9170_get_noisefloor(struct ar9170 *ar);
+void carl9170_update_channel_maxpower(struct ar9170 *ar);
 
 /* FW */
 int carl9170_parse_firmware(struct ar9170 *ar);

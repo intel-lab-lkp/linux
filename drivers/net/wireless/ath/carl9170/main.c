@@ -89,7 +89,7 @@ struct ieee80211_rate __carl9170_ratetable[] = {
 #define CHAN(_freq, _idx) {		\
 	.center_freq	= (_freq),	\
 	.hw_value	= (_idx),	\
-	.max_power	= 18, /* XXX */	\
+	.max_power	= 18,		\
 }
 
 static struct ieee80211_channel carl9170_2ghz_chantable[] = {
@@ -1928,6 +1928,8 @@ static int carl9170_parse_eeprom(struct ar9170 *ar)
 
 	if (!bands)
 		return -EINVAL;
+
+	carl9170_update_channel_maxpower(ar);
 
 	ar->survey = devm_kcalloc(&ar->udev->dev, chans,
 				  sizeof(struct survey_info), GFP_KERNEL);
