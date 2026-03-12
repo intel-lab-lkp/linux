@@ -4687,12 +4687,11 @@ static int nand_suspend(struct mtd_info *mtd)
 	struct nand_chip *chip = mtd_to_nand(mtd);
 	int ret = 0;
 
-	mutex_lock(&chip->lock);
+	guard(mutex)(&chip->lock);
 	if (chip->ops.suspend)
 		ret = chip->ops.suspend(chip);
 	if (!ret)
 		chip->suspended = 1;
-	mutex_unlock(&chip->lock);
 
 	return ret;
 }
