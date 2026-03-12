@@ -676,6 +676,14 @@ static int carl9170_handle_mpdu(struct ar9170 *ar, u8 *buf, int len,
 
 	carl9170_ba_check(ar, buf, len);
 
+	/*
+	 * Do not deliver data frames to mac80211 unless the device is
+	 * fully started.  After carl9170_op_stop() the state drops to
+	 * IDLE, preventing a use-after-free when sta_info_destroy_part2()
+	 * races with ieee80211_rx() during interface teardown.
+	 */
+	if (!IS_STARTED(ar))
+		return 0;
 	skb = carl9170_rx_copy_data(buf, len);
 	if (!skb)
 		return -ENOMEM;
