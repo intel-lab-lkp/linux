@@ -1796,6 +1796,13 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 	crtc_state->link_off_after_as_sdp_when_pr_active = compute_link_off_after_as_sdp_when_pr_active(connector);
 	crtc_state->disable_as_sdp_when_pr_active = compute_disable_as_sdp_when_pr_active(connector);
 
+	if (intel_dp_tunnel_bw_alloc_is_enabled(intel_dp) &&
+	    !intel_dp_tunnel_pr_optimization_supported(intel_dp)) {
+		drm_dbg_kms(display->drm,
+			    "Panel Replay is disabled as DP tunelling enabled without optimization\n");
+		return false;
+	}
+
 	if (!intel_dp_is_edp(intel_dp))
 		return true;
 
