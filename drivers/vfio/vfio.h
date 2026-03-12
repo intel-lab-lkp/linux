@@ -113,6 +113,18 @@ bool vfio_device_has_container(struct vfio_device *device);
 int __init vfio_group_init(void);
 void vfio_group_cleanup(void);
 
+/*
+ * With noiommu enabled and no containers are supported, allow devices that
+ * don't have a dummy group.
+ */
+static inline bool vfio_null_group_allowed(void)
+{
+	if (vfio_noiommu && (!IS_ENABLED(CONFIG_VFIO_CONTAINER) && !IS_ENABLED(CONFIG_IOMMUFD_VFIO_CONTAINER)))
+		return true;
+
+	return false;
+}
+
 static inline bool vfio_device_is_noiommu(struct vfio_device *vdev)
 {
 	return IS_ENABLED(CONFIG_VFIO_NOIOMMU) &&
@@ -187,6 +199,11 @@ static inline int __init vfio_group_init(void)
 
 static inline void vfio_group_cleanup(void)
 {
+}
+
+static inline bool vfio_null_group_allowed(void)
+{
+	return false;
 }
 
 static inline bool vfio_device_is_noiommu(struct vfio_device *vdev)
