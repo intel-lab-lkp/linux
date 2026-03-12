@@ -1076,6 +1076,12 @@ static void __evsel__config_callchain(struct evsel *evsel, struct record_opts *o
 		attr->exclude_callchain_user = 1;
 	}
 
+	if (EM_HOST == EM_S390 && (evsel->core.attr.sample_type & PERF_SAMPLE_CALLCHAIN) &&
+	    !evsel->core.attr.exclude_callchain_user) {
+		pr_warning("Excluding user callchains that are not supported on s390. Try '--call-graph dwarf'\n");
+		evsel->core.attr.exclude_callchain_user = 1;
+	}
+
 	if (param->defer && !attr->exclude_callchain_user)
 		attr->defer_callchain = 1;
 }
