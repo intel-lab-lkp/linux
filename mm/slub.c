@@ -5091,14 +5091,23 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 }
 
 /*
- * refill a sheaf previously returned by kmem_cache_prefill_sheaf to at least
- * the given size
+ * Refill a sheaf previously returned by kmem_cache_prefill_sheaf to at least
+ * the given size.
  *
- * the sheaf might be replaced by a new one when requesting more than
- * s->sheaf_capacity objects if such replacement is necessary, but the refill
- * fails (returning -ENOMEM), the existing sheaf is left intact
+ * On success, the sheaf will contain at least @size objects.
  *
- * In practice we always refill to full sheaf's capacity.
+ * On failure, there are two cases:
+ *
+ *     1. If the requested size fits within the current sheaf's capacity, the
+ *     refill is done in place. In that case, a failed refill may still fill
+ *     some additional objects into the existing sheaf before returning -ENOMEM.
+ *
+ *     2. If the requested size exceeds the current sheaf's capacity, a new
+ *     larger sheaf may be allocated to replace the original one. In that case,
+ *     if allocation of the replacement sheaf fails, the original sheaf is left
+ *     unchanged.
+ *
+ * In practice we usually refill to the sheaf's full capacity.
  */
 int kmem_cache_refill_sheaf(struct kmem_cache *s, gfp_t gfp,
 			    struct slab_sheaf **sheafp, unsigned int size)
