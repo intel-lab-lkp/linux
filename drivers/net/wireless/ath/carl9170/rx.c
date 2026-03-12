@@ -340,7 +340,7 @@ static int carl9170_rx_mac_status(struct ar9170 *ar,
 
 	/* drop any other error frames */
 	if (unlikely(error)) {
-		/* TODO: update netdevice's RX dropped/errors statistics */
+		ar->rx_dropped++;
 
 		if (net_ratelimit())
 			wiphy_dbg(ar->hw->wiphy, "received frame with "
