@@ -540,8 +540,10 @@ iwl_mld_add_link_sta(struct iwl_mld *mld, struct ieee80211_link_sta *link_sta)
 		mld_link_sta = &mld_sta->deflink;
 	} else {
 		mld_link_sta = kzalloc_obj(*mld_link_sta);
-		if (!mld_link_sta)
+		if (!mld_link_sta) {
+			RCU_INIT_POINTER(mld->fw_id_to_link_sta[fw_id], NULL);
 			return -ENOMEM;
+		}
 	}
 
 	mld_link_sta->fw_id = fw_id;
