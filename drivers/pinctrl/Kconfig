@@ -550,9 +550,10 @@ config PINCTRL_STMFX
 	tristate "STMicroelectronics STMFX GPIO expander pinctrl driver"
 	depends on I2C
 	depends on HAS_IOMEM
+	depends on MFD_STMFX
+	default MFD_STMFX
 	select GENERIC_PINCONF
 	select GPIOLIB_IRQCHIP
-	select MFD_STMFX
 	help
 	  Driver for STMicroelectronics Multi-Function eXpander (STMFX)
 	  GPIO expander.
