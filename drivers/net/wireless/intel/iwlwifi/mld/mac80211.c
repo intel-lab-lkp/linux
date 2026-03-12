@@ -647,7 +647,7 @@ void iwl_mld_mac80211_stop(struct ieee80211_hw *hw, bool suspend)
 	 */
 	for (int i = 0; i < ARRAY_SIZE(mld->scan.uid_status); i++)
 		if (WARN_ONCE(mld->scan.uid_status[i],
-			      "UMAC scan UID %d status was not cleaned (0x%x 0x%x)\n",
+			      "mac80211-stop: UMAC scan UID %d status was not cleaned (0x%x 0x%x), forcing to 0\n",
 			      i, mld->scan.uid_status[i], mld->scan.status))
 			mld->scan.uid_status[i] = 0;
 }
