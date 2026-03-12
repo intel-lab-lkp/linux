@@ -644,11 +644,10 @@ static void input_key(struct system76_data *data, unsigned int code)
 }
 
 // Handle ACPI notification
-static void system76_notify(struct acpi_device *acpi_dev, u32 event)
+static void system76_notify(acpi_handle handle, u32 event, void *context)
 {
-	struct system76_data *data;
+	struct system76_data *data = context;
 
-	data = acpi_driver_data(acpi_dev);
 	switch (event) {
 	case 0x80:
 		kb_led_hotkey_hardware(data);
@@ -777,6 +776,15 @@ static int system76_add(struct acpi_device *acpi_dev)
 		system76_battery_init();
 	}
 
+	err = acpi_dev_install_notify_handler(acpi_dev, ACPI_DEVICE_NOTIFY,
+					      system76_notify, data);
+	if (err) {
+		if (data->has_open_ec)
+			system76_battery_exit();
+
+		goto error;
+	}
+
 	return 0;
 
 error:
@@ -791,6 +799,8 @@ error:
 static void system76_remove(struct acpi_device *acpi_dev)
 {
 	struct system76_data *data;
+
+	acpi_dev_remove_notify_handler(acpi_dev, ACPI_DEVICE_NOTIFY, system76_notify);
 
 	data = acpi_driver_data(acpi_dev);
 
@@ -813,7 +823,6 @@ static struct acpi_driver system76_driver = {
 	.ops = {
 		.add = system76_add,
 		.remove = system76_remove,
-		.notify = system76_notify,
 	},
 };
 module_acpi_driver(system76_driver);
