@@ -38,6 +38,9 @@ extern int map_vdso_once(const struct vdso_image *image, unsigned long addr);
 extern bool fixup_vdso_exception(struct pt_regs *regs, int trapnr,
 				 unsigned long error_code,
 				 unsigned long fault_addr);
+extern void futex_vdso_exception(struct pt_regs *regs,
+				 bool *in_futex_vdso,
+				 bool *need_action);
 #endif /* __ASSEMBLER__ */
 
 #endif /* _ASM_X86_VDSO_H */

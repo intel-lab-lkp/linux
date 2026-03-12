@@ -145,6 +145,6 @@ SYM_FUNC_START(__vdso_sgx_enter_enclave)
 
 	.cfi_endproc
 
-_ASM_VDSO_EXTABLE_HANDLE(.Lenclu_eenter_eresume, .Lhandle_exception)
+_ASM_VDSO_EXTABLE_FIXUP_HANDLE(.Lenclu_eenter_eresume, .Lhandle_exception)
 
 SYM_FUNC_END(__vdso_sgx_enter_enclave)
