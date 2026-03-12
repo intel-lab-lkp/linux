@@ -306,12 +306,14 @@ static inline void pqi_save_fw_triage_setting(struct pqi_ctrl_info *ctrl_info, b
 }
 
 static inline void pqi_ctrl_block_scan(struct pqi_ctrl_info *ctrl_info)
+	__acquires(ctrl_info->scan_mutex)
 {
 	ctrl_info->scan_blocked = true;
 	mutex_lock(&ctrl_info->scan_mutex);
 }
 
 static inline void pqi_ctrl_unblock_scan(struct pqi_ctrl_info *ctrl_info)
+	__releases(ctrl_info->scan_mutex)
 {
 	ctrl_info->scan_blocked = false;
 	mutex_unlock(&ctrl_info->scan_mutex);
@@ -323,11 +325,13 @@ static inline bool pqi_ctrl_scan_blocked(struct pqi_ctrl_info *ctrl_info)
 }
 
 static inline void pqi_ctrl_block_device_reset(struct pqi_ctrl_info *ctrl_info)
+	__acquires(ctrl_info->lun_reset_mutex)
 {
 	mutex_lock(&ctrl_info->lun_reset_mutex);
 }
 
 static inline void pqi_ctrl_unblock_device_reset(struct pqi_ctrl_info *ctrl_info)
+	__releases(ctrl_info->lun_reset_mutex)
 {
 	mutex_unlock(&ctrl_info->lun_reset_mutex);
 }
@@ -430,11 +434,13 @@ static inline bool pqi_device_offline(struct pqi_scsi_dev *device)
 }
 
 static inline void pqi_ctrl_ofa_start(struct pqi_ctrl_info *ctrl_info)
+	__acquires(ctrl_info->ofa_mutex)
 {
 	mutex_lock(&ctrl_info->ofa_mutex);
 }
 
 static inline void pqi_ctrl_ofa_done(struct pqi_ctrl_info *ctrl_info)
+	__releases(ctrl_info->ofa_mutex)
 {
 	mutex_unlock(&ctrl_info->ofa_mutex);
 }
@@ -2210,6 +2216,7 @@ static inline bool pqi_volume_rescan_needed(struct pqi_scsi_dev *device)
 
 static void pqi_update_device_list(struct pqi_ctrl_info *ctrl_info,
 	struct pqi_scsi_dev *new_device_list[], unsigned int num_new_devices)
+	__no_context_analysis /* conditional locking */
 {
 	int rc;
 	unsigned int i;
@@ -3635,6 +3642,7 @@ static enum pqi_soft_reset_status pqi_poll_for_soft_reset_status(
 }
 
 static void pqi_process_soft_reset(struct pqi_ctrl_info *ctrl_info)
+	__no_context_analysis /* conditional locking */
 {
 	int rc;
 	unsigned int delay_secs;
@@ -3690,6 +3698,7 @@ static void pqi_process_soft_reset(struct pqi_ctrl_info *ctrl_info)
 }
 
 static void pqi_ofa_memory_alloc_worker(struct work_struct *work)
+	__no_context_analysis /* conditional locking */
 {
 	struct pqi_ctrl_info *ctrl_info;
 
@@ -3716,6 +3725,7 @@ static void pqi_ofa_quiesce_worker(struct work_struct *work)
 
 static bool pqi_ofa_process_event(struct pqi_ctrl_info *ctrl_info,
 	struct pqi_event *event)
+	__no_context_analysis /* conditional locking */
 {
 	bool ack_event;
 
@@ -3780,6 +3790,7 @@ static void pqi_disable_raid_bypass(struct pqi_ctrl_info *ctrl_info)
 }
 
 static void pqi_event_worker(struct work_struct *work)
+	__no_context_analysis /* conditional locking */
 {
 	unsigned int i;
 	bool rescan_needed;
@@ -8603,6 +8614,7 @@ static void pqi_reinit_queues(struct pqi_ctrl_info *ctrl_info)
 }
 
 static int pqi_ctrl_init_resume(struct pqi_ctrl_info *ctrl_info)
+	__no_context_analysis /* conditional locking */
 {
 	int rc;
 
@@ -8938,6 +8950,7 @@ static void pqi_remove_ctrl(struct pqi_ctrl_info *ctrl_info)
 }
 
 static void pqi_ofa_ctrl_quiesce(struct pqi_ctrl_info *ctrl_info)
+	__no_context_analysis /* conditional locking */
 {
 	pqi_ctrl_block_scan(ctrl_info);
 	pqi_scsi_block_requests(ctrl_info);
@@ -8948,6 +8961,7 @@ static void pqi_ofa_ctrl_quiesce(struct pqi_ctrl_info *ctrl_info)
 }
 
 static void pqi_ofa_ctrl_unquiesce(struct pqi_ctrl_info *ctrl_info)
+	__no_context_analysis /* conditional locking */
 {
 	pqi_start_heartbeat_timer(ctrl_info);
 	pqi_ctrl_unblock_requests(ctrl_info);
@@ -9392,6 +9406,7 @@ static void pqi_crash_if_pending_command(struct pqi_ctrl_info *ctrl_info)
 }
 
 static void pqi_shutdown(struct pci_dev *pci_dev)
+	__no_context_analysis /* conditional locking */
 {
 	int rc;
 	struct pqi_ctrl_info *ctrl_info;
@@ -9486,6 +9501,7 @@ static inline enum bmic_flush_cache_shutdown_event pqi_get_flush_cache_shutdown_
 }
 
 static int pqi_suspend_or_freeze(struct device *dev, bool suspend)
+	__no_context_analysis /* conditional locking */
 {
 	struct pci_dev *pci_dev;
 	struct pqi_ctrl_info *ctrl_info;
@@ -9524,6 +9540,7 @@ static __maybe_unused int pqi_suspend(struct device *dev)
 }
 
 static int pqi_resume_or_restore(struct device *dev)
+	__no_context_analysis /* conditional locking */
 {
 	int rc;
 	struct pci_dev *pci_dev;
@@ -9552,6 +9569,7 @@ static int pqi_freeze(struct device *dev)
 }
 
 static int pqi_thaw(struct device *dev)
+	__no_context_analysis /* conditional locking */
 {
 	int rc;
 	struct pci_dev *pci_dev;
