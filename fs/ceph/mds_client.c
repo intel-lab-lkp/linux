@@ -66,6 +66,12 @@ static void ceph_cap_release_work(struct work_struct *work);
 static void ceph_cap_reclaim_work(struct work_struct *work);
 
 static const struct ceph_connection_operations mds_con_ops;
+/*
+ * Number of consecutive MDS connection failures before forcing
+ * a fresh mdsmap subscription. This handles stale mdsmap scenarios
+ * during rolling upgrades where MDS addresses change.
+ */
+#define MDS_CON_FAIL_REFRESH_MDSMAP	10
 
 
 /*
@@ -997,6 +1003,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_mdsc = mdsc;
 	s->s_mds = mds;
 	s->s_state = CEPH_MDS_SESSION_NEW;
+	s->s_con_failures = 0;
 	mutex_init(&s->s_mutex);
 
 	ceph_con_init(&s->s_con, s, &mds_con_ops, &mdsc->fsc->client->msgr);
@@ -4341,6 +4348,9 @@ skip_cap_auths:
 	      ceph_session_op_name(op), session,
 	      ceph_session_state_name(session->s_state), seq);
 
+	/* Reset connection failure counter on successful session message */
+	session->s_con_failures = 0;
+
 	if (session->s_state == CEPH_MDS_SESSION_HUNG) {
 		session->s_state = CEPH_MDS_SESSION_OPEN;
 		pr_info_client(cl, "mds%d came back\n", session->s_mds);
@@ -5427,6 +5437,22 @@ bool check_session_state(struct ceph_mds_session *s)
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
 			s->s_state = CEPH_MDS_SESSION_HUNG;
 			pr_info_client(cl, "mds%d hung\n", s->s_mds);
+
+			/*
+			 * Force a fresh mdsmap subscription when a session
+			 * becomes hung. The MDS may have restarted with a
+			 * new address during a rolling upgrade, and the
+			 * connection may have entered STANDBY state (no
+			 * .fault callback) rather than generating connect
+			 * errors. Requesting mdsmap from epoch 0 ensures
+			 * we get the current map with updated addresses.
+			 */
+			pr_warn_client(cl,
+				"mds%d hung, requesting fresh mdsmap\n",
+				s->s_mds);
+			if (ceph_monc_want_map(&s->s_mdsc->fsc->client->monc,
+					       CEPH_SUB_MDSMAP, 0, true))
+				ceph_monc_renew_subs(&s->s_mdsc->fsc->client->monc);
 		}
 		break;
 	case CEPH_MDS_SESSION_CLOSING:
@@ -6528,12 +6554,59 @@ static int mds_check_message_signature(struct ceph_msg *msg)
        return ceph_auth_check_message_signature(auth, msg);
 }
 
+/*
+ * Handle MDS connection fault.
+ *
+ * Track consecutive connection failures and force a fresh mdsmap
+ * subscription when failures exceed the threshold. This handles the
+ * case where the MDS address has changed (e.g., during a rolling
+ * upgrade) but the client has a stale mdsmap and keeps retrying
+ * on the old address.
+ */
+static void mds_fault(struct ceph_connection *con)
+{
+	struct ceph_mds_session *s = con->private;
+	struct ceph_mds_client *mdsc = s->s_mdsc;
+	struct ceph_client *cl = mdsc->fsc->client;
+	int failures;
+
+	failures = ++s->s_con_failures;
+
+	if (failures == MDS_CON_FAIL_REFRESH_MDSMAP) {
+		pr_warn_client(cl,
+			"mds%d connection failed %d times, requesting fresh mdsmap\n",
+			s->s_mds, failures);
+
+		/*
+		 * Force a fresh mdsmap subscription by requesting from
+		 * epoch 0. This ensures we get the complete current map
+		 * with up-to-date MDS addresses, rather than waiting for
+		 * an incremental update that may never arrive if our
+		 * subscription was lost during a monitor reconnection.
+		 */
+		if (ceph_monc_want_map(&mdsc->fsc->client->monc,
+				       CEPH_SUB_MDSMAP, 0, true))
+			ceph_monc_renew_subs(&mdsc->fsc->client->monc);
+	} else if (failures > MDS_CON_FAIL_REFRESH_MDSMAP &&
+		   failures % MDS_CON_FAIL_REFRESH_MDSMAP == 0) {
+		/*
+		 * Periodically retry the fresh mdsmap request in case
+		 * the previous one was lost or the monitor was also
+		 * temporarily unavailable.
+		 */
+		if (ceph_monc_want_map(&mdsc->fsc->client->monc,
+				       CEPH_SUB_MDSMAP, 0, true))
+			ceph_monc_renew_subs(&mdsc->fsc->client->monc);
+	}
+}
+
 static const struct ceph_connection_operations mds_con_ops = {
 	.get = mds_get_con,
 	.put = mds_put_con,
 	.alloc_msg = mds_alloc_msg,
 	.dispatch = mds_dispatch,
 	.peer_reset = mds_peer_reset,
+	.fault = mds_fault,
 	.get_authorizer = mds_get_authorizer,
 	.add_authorizer_challenge = mds_add_authorizer_challenge,
 	.verify_authorizer_reply = mds_verify_authorizer_reply,

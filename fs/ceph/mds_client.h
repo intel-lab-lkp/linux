@@ -251,6 +251,8 @@ struct ceph_mds_session {
 	struct list_head  s_waiting;  /* waiting requests */
 	struct list_head  s_unsafe;   /* unsafe requests */
 	struct xarray	  s_delegated_inos;
+
+	int		  s_con_failures; /* consecutive connection failures */
 };
 
 /*
