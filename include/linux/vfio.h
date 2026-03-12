@@ -72,6 +72,7 @@ struct vfio_device {
 	u8 iommufd_attached:1;
 #endif
 	u8 cdev_opened:1;
+	u8 noiommu:1;
 #ifdef CONFIG_DEBUG_FS
 	/*
 	 * debug_root is a static property of the vfio_device
