@@ -1867,6 +1867,8 @@ struct rtl8xxxu_fileops rtl8188eu_fops = {
 	.init_reg_pkt_life_time = 1,
 	.gen2_thermal_meter = 1,
 	.max_sec_cam_num = 32,
+	.supports_ap = 1,
+	.max_macid_num = 16,
 	.adda_1t_init = 0x0b1b25a0,
 	.adda_1t_path_on = 0x0bdb25a0,
 	/*
