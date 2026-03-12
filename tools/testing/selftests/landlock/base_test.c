@@ -142,6 +142,24 @@ TEST(errata)
 	ASSERT_EQ(EINVAL, errno);
 }
 
+#define PERM_LAST LANDLOCK_PERM_CAPABILITY_USE
+
+TEST(ruleset_with_unknown_perm)
+{
+	__u64 perm_mask;
+
+	for (perm_mask = 1ULL << 63; perm_mask != PERM_LAST; perm_mask >>= 1) {
+		struct landlock_ruleset_attr ruleset_attr = {
+			.handled_perm = perm_mask,
+		};
+
+		/* Unknown handled_perm values must be rejected. */
+		ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr,
+						      sizeof(ruleset_attr), 0));
+		ASSERT_EQ(EINVAL, errno);
+	}
+}
+
 /* Tests ordering of syscall argument checks. */
 TEST(create_ruleset_checks_ordering)
 {
