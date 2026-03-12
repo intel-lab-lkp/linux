@@ -1918,13 +1918,13 @@ int efa_alloc_ucontext(struct ib_ucontext *ibucontext, struct ib_udata *udata)
 	 * it's fine if the driver does not know all request fields,
 	 * we will ack input fields in our response.
 	 */
-
-	err = ib_copy_from_udata(&cmd, udata,
-				 min(sizeof(cmd), udata->inlen));
-	if (err) {
-		ibdev_dbg(&dev->ibdev,
-			  "Cannot copy udata for alloc_ucontext\n");
-		goto err_out;
+	if (udata->inlen) {
+		err = ib_copy_validate_udata_in_cm(
+			udata, cmd, comp_mask,
+			EFA_ALLOC_UCONTEXT_CMD_COMP_TX_BATCH |
+				EFA_ALLOC_UCONTEXT_CMD_COMP_MIN_SQ_WR);
+		if (err)
+			goto err_out;
 	}
 
 	err = efa_user_comp_handshake(ibucontext, &cmd);
