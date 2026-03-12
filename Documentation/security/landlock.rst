@@ -7,7 +7,7 @@ Landlock LSM: kernel documentation
 ==================================
 
 :Author: Mickaël Salaün
-:Date: September 2025
+:Date: March 2026
 
 Landlock's goal is to create scoped access-control (i.e. sandboxing).  To
 harden a whole system, this feature should be available to any process,
@@ -89,6 +89,72 @@ this is required to keep access controls consistent over the whole system, and
 this avoids unattended bypasses through file descriptor passing (i.e. confused
 deputy attack).
 
+Composability with user namespaces
+----------------------------------
+
+Landlock domain-based scoping and the kernel's user namespace-based capability
+scoping enforce isolation over independent hierarchies.  Landlock checks domain
+ancestry; the kernel's ``ns_capable()`` checks user namespace ancestry.  These
+hierarchies are orthogonal: Landlock enforcement is deterministic with respect
+to its own configuration, regardless of namespace or capability state, and vice
+versa.  This orthogonality is a design invariant that must hold for all new
+scoped features.
+
+Ruleset restriction models
+--------------------------
+
+Landlock provides three restriction models, each with different coverage
+and compatibility properties.
+
+Access rights (``handled_access_*``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Access rights control **enumerated operations on kernel objects**
+identified by a rule key (a file hierarchy or a network port).  Each
+``handled_access_*`` field declares a set of access rights that the
+ruleset restricts.  Multiple access rights share a single rule type.
+Operations for which no access right exists yet remain uncontrolled;
+new rights are added incrementally across ABI versions.
+
+Permissions (``handled_perm``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Permissions control **broad operations enforced at single kernel
+chokepoints**, achieving complete deny-by-default coverage.  Each
+``LANDLOCK_PERM_*`` flag maps to its own rule type.  When a ruleset
+handles a permission, all instances of that operation are denied unless
+explicitly allowed by a rule.  New kernel values (new ``CAP_*``
+capabilities, new ``CLONE_NEW*`` namespace types) are automatically
+denied without any Landlock update.
+
+Each permission flag names a single gateway operation whose control
+transitively covers an open-ended set of downstream operations: for
+example, exercising a capability enables privileged operations across
+many subsystems; entering a namespace enables gaining capabilities in a
+new context.
+
+Permission rules identify what to allow using constants defined by other
+kernel subsystems (``CAP_*``, ``CLONE_NEW*``).  Unknown values are
+silently ignored because deny-by-default ensures they are denied anyway.
+In contrast, unknown ``LANDLOCK_PERM_*`` flags in ``handled_perm`` are
+rejected (``-EINVAL``), since Landlock owns that namespace.
+
+Scopes (``scoped``)
+~~~~~~~~~~~~~~~~~~~~
+
+Scopes restrict **cross-domain interactions** categorically, without
+rules.  Setting a scope flag (e.g. ``LANDLOCK_SCOPE_SIGNAL``) denies the
+operation to targets outside the Landlock domain or its children.  Like
+permissions, scopes provide complete coverage of the controlled
+operation.
+
+When adding new Landlock features, new operations on existing rule types
+extend the corresponding ``handled_access_*`` field (e.g. a new
+filesystem operation extends ``handled_access_fs``).  A new object
+category with multiple fine-grained operations would use a new
+``handled_access_*`` field.  New rule types that control a single
+chokepoint operation use ``handled_perm``.
+
 Tests
 =====
 
@@ -108,6 +174,18 @@ Filesystem
 ----------
 
 .. kernel-doc:: security/landlock/fs.h
+    :identifiers:
+
+Namespace
+---------
+
+.. kernel-doc:: security/landlock/ns.h
+    :identifiers:
+
+Capability
+----------
+
+.. kernel-doc:: security/landlock/cap.h
     :identifiers:
 
 Process credential
