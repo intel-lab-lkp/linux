@@ -1468,9 +1468,8 @@ static void rtl8188e_reset_ra_counter(struct rtl8xxxu_ra_info *ra)
 	ra->nsc_down = (n_threshold_high[rate_id] + n_threshold_low[rate_id]) >> 1;
 }
 
-static void rtl8188e_rate_decision(struct rtl8xxxu_ra_info *ra)
+static void rtl8188e_rate_decision(struct rtl8xxxu_priv *priv, struct rtl8xxxu_ra_info *ra)
 {
-	struct rtl8xxxu_priv *priv = container_of(ra, struct rtl8xxxu_priv, ra_info);
 	const u8 *retry_penalty_idx_0;
 	const u8 *retry_penalty_idx_1;
 	const u8 *retry_penalty_up_idx;
@@ -1669,7 +1668,7 @@ void rtl8188e_handle_ra_tx_report2(struct rtl8xxxu_priv *priv, struct sk_buff *s
 	u32 *_rx_desc = (u32 *)(skb->data - sizeof(struct rtl8xxxu_rxdesc16));
 	struct rtl8xxxu_rxdesc16 *rx_desc = (struct rtl8xxxu_rxdesc16 *)_rx_desc;
 	struct device *dev = &priv->udev->dev;
-	struct rtl8xxxu_ra_info *ra = &priv->ra_info;
+	struct rtl8xxxu_ra_info *ra;
 	u32 tx_rpt_len = rx_desc->pktlen & 0x3ff;
 	u32 items = tx_rpt_len / TX_RPT2_ITEM_SIZE;
 	u64 macid_valid = ((u64)_rx_desc[5] << 32) | _rx_desc[4];
@@ -1688,6 +1687,7 @@ void rtl8188e_handle_ra_tx_report2(struct rtl8xxxu_priv *priv, struct sk_buff *s
 
 	for (macid = 0; macid < items; macid++) {
 		valid = false;
+		 ra = &priv->ra_info[macid];
 
 		if (macid < 64)
 			valid = macid_valid & BIT(macid);
@@ -1704,7 +1704,7 @@ void rtl8188e_handle_ra_tx_report2(struct rtl8xxxu_priv *priv, struct sk_buff *s
 
 			if (ra->total > 0) {
 				if (ra->ra_stage < 5)
-					rtl8188e_rate_decision(ra);
+					rtl8188e_rate_decision(priv, ra);
 				else if (ra->ra_stage == 5)
 					rtl8188e_power_training_try_state(ra);
 				else /* ra->ra_stage == 6 */
@@ -1781,7 +1781,7 @@ rtl8188e_update_rate_mask(struct rtl8xxxu_priv *priv,
 			  u32 ramask, u8 rateid, int sgi, int txbw_40mhz,
 			  u8 macid)
 {
-	struct rtl8xxxu_ra_info *ra = &priv->ra_info;
+	struct rtl8xxxu_ra_info *ra = &priv->ra_info[macid];
 
 	ra->rate_id = rateid;
 	ra->rate_mask = ramask;
@@ -1792,7 +1792,7 @@ rtl8188e_update_rate_mask(struct rtl8xxxu_priv *priv,
 
 static void rtl8188e_ra_set_rssi(struct rtl8xxxu_priv *priv, u8 macid, u8 rssi)
 {
-	priv->ra_info.rssi_sta_ra = rssi;
+	priv->ra_info[macid].rssi_sta_ra = rssi;
 }
 
 void rtl8188e_ra_info_init_all(struct rtl8xxxu_ra_info *ra)
