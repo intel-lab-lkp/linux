@@ -463,8 +463,9 @@ class CMatch:
     """
 
 
-    def __init__(self, regex):
+    def __init__(self, regex, delim="("):
         self.regex = KernRe("^" + regex + r"\b")
+        self.start_delim = delim
 
     def _search(self, tokenizer):
         """
@@ -506,15 +507,15 @@ class CMatch:
                 if tok.kind == CToken.SPACE:
                     continue
 
-                if tok.kind == CToken.BEGIN:
+                if tok.kind == CToken.BEGIN and tok.value == self.start_delim:
                     started = True
                     continue
-                else:
-                    # Name only token without BEGIN/END
-                    if i > start:
-                        i -= 1
-                    yield start, i
-                    start = None
+
+                # Name only token without BEGIN/END
+                if i > start:
+                    i -= 1
+                yield start, i
+                start = None
 
             if tok.kind == CToken.END and tok.level == stack[-1][1]:
                 start, level = stack.pop()
@@ -528,8 +529,10 @@ class CMatch:
         # picking an incomplete block.
         #
         if start and stack:
-            s = str(tokenizer)
-            log.warning(f"can't find a final end at {s}")
+            if started:
+                s = str(tokenizer)
+                log.warning(f"can't find a final end at {s}")
+
             yield start, len(tokenizer.tokens)
 
     def search(self, source):
