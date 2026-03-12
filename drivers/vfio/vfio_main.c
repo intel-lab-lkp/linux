@@ -331,13 +331,15 @@ static int __vfio_register_dev(struct vfio_device *device,
 	if (!device->dev_set)
 		vfio_assign_device_set(device, device);
 
-	ret = dev_set_name(&device->device, "vfio%d", device->index);
-	if (ret)
-		return ret;
-
 	ret = vfio_device_set_group(device, type);
 	if (ret)
 		return ret;
+
+	/* Just to be safe, expose to user explicitly noiommu cdev node */
+	ret = dev_set_name(&device->device, "%svfio%d",
+					   device->noiommu ? "noiommu-" : "", device->index);
+	if (ret)
+		goto err_out;
 
 	/*
 	 * VFIO always sets IOMMU_CACHE because we offer no way for userspace to
@@ -356,6 +358,10 @@ static int __vfio_register_dev(struct vfio_device *device,
 
 	/* Refcounting can't start until the driver calls register */
 	refcount_set(&device->refcount, 1);
+
+	/* noiommu device w/o container may have NULL group */
+	if (vfio_device_is_noiommu(device) && !vfio_device_has_group(device))
+		return 0;
 
 	vfio_device_group_register(device);
 	vfio_device_debugfs_init(device);
@@ -390,6 +396,16 @@ void vfio_unregister_group_dev(struct vfio_device *device)
 	unsigned int i = 0;
 	bool interrupted = false;
 	long rc;
+
+	/*
+	 * For noiommu devices without a container, thus no dummy group,
+	 * simply delete and unregister to balance refcount.
+	 */
+	if (device->noiommu && !vfio_device_has_group(device)) {
+		vfio_device_del(device);
+		vfio_device_put_registration(device);
+		return;
+	}
 
 	/*
 	 * Prevent new device opened by userspace via the

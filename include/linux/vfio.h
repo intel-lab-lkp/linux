@@ -327,6 +327,10 @@ struct iommu_group *vfio_file_iommu_group(struct file *file);
 #if IS_ENABLED(CONFIG_VFIO_GROUP)
 bool vfio_file_is_group(struct file *file);
 bool vfio_file_has_dev(struct file *file, struct vfio_device *device);
+static inline bool vfio_device_has_group(struct vfio_device *device)
+{
+	return device->group;
+}
 #else
 static inline bool vfio_file_is_group(struct file *file)
 {
@@ -334,6 +338,11 @@ static inline bool vfio_file_is_group(struct file *file)
 }
 
 static inline bool vfio_file_has_dev(struct file *file, struct vfio_device *device)
+{
+	return false;
+}
+
+static inline bool vfio_device_has_group(struct vfio_device *device)
 {
 	return false;
 }

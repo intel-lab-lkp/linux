@@ -25,10 +25,6 @@ int vfio_df_iommufd_bind(struct vfio_device_file *df)
 
 	lockdep_assert_held(&vdev->dev_set->lock);
 
-	/* Returns 0 to permit device opening under noiommu mode */
-	if (vfio_device_is_noiommu(vdev))
-		return 0;
-
 	return vdev->ops->bind_iommufd(vdev, ictx, &df->devid);
 }
 
@@ -57,9 +53,6 @@ void vfio_df_iommufd_unbind(struct vfio_device_file *df)
 	struct vfio_device *vdev = df->device;
 
 	lockdep_assert_held(&vdev->dev_set->lock);
-
-	if (vfio_device_is_noiommu(vdev))
-		return;
 
 	if (vdev->ops->unbind_iommufd)
 		vdev->ops->unbind_iommufd(vdev);
