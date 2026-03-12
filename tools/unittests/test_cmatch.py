@@ -416,7 +416,6 @@ class TestSubWithLocalXforms(TestCaseDiff):
             struct tx_pkt_info {
                     struct tx_sop_header sop;
                     struct tx_segment_header seg;
-                    ;
                     struct tx_eop_header eop;
                     u16 pkt_len;
                     u16 seq_num;
@@ -490,7 +489,6 @@ class TestSubWithLocalXforms(TestCaseDiff):
                 __le64 LastWriteTime;
                 __le64 ChangeTime;
                 __le32 FileAttributes;
-                ;
                 __le64 AllocationSize;
                 __le64 EndOfFile;
                 __le16 FileType;
@@ -504,7 +502,6 @@ class TestSubWithLocalXforms(TestCaseDiff):
             __le64 LastWriteTime;
             __le64 ChangeTime;
             __le32 Attributes;
-            ;
             __u32 Pad1;
             __le64 AllocationSize;
             __le64 EndOfFile;
@@ -543,7 +540,6 @@ class TestSubWithLocalXforms(TestCaseDiff):
                 __le16 num_entries;
                 __le16 supported_feats;
                 __u8 reserved[4];
-                ;
                 struct cxl_feat_entry ents[];
             };
         """
@@ -605,23 +601,23 @@ class TestSubWithLocalXforms(TestCaseDiff):
             struct cxl_component_regs {
                 void __iomem *hdm_decoder;
                 void __iomem *ras;
-            } component;;
+            } component;
 
             struct cxl_device_regs {
                 void __iomem *status, *mbox, *memdev;
-            } device_regs;;
+            } device_regs;
 
             struct cxl_pmu_regs {
                 void __iomem *pmu;
-            } pmu_regs;;
+            } pmu_regs;
 
             struct cxl_rch_regs {
                 void __iomem *dport_aer;
-            } rch_regs;;
+            } rch_regs;
 
             struct cxl_rcd_regs {
                 void __iomem *rcd_pcie_cap;
-            } rcd_regs;;
+            } rcd_regs;
         };
         """
 
@@ -667,7 +663,7 @@ class TestSubWithLocalXforms(TestCaseDiff):
                     struct net_device *netdev;
                     unsigned int queue_idx;
                     unsigned int    flags;
-                } slow;;
+                } slow;
                 struct page_pool_params_fast {
                     unsigned int order;
                     unsigned int    pool_size;
@@ -677,7 +673,7 @@ class TestSubWithLocalXforms(TestCaseDiff):
                     enum dma_data_direction dma_dir;
                     unsigned int    max_len;
                     unsigned int    offset;
-                } fast;;
+                } fast;
             };
         """
 
