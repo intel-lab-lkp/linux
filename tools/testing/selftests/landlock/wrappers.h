@@ -9,6 +9,7 @@
 
 #define _GNU_SOURCE
 #include <linux/landlock.h>
+#include <linux/sched.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -44,4 +45,9 @@ static inline int landlock_restrict_self(const int ruleset_fd,
 static inline pid_t sys_gettid(void)
 {
 	return syscall(__NR_gettid);
+}
+
+static inline pid_t sys_clone3(struct clone_args *args, size_t size)
+{
+	return syscall(__NR_clone3, args, size);
 }

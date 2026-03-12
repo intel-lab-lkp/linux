@@ -128,6 +128,29 @@ static void __maybe_unused clear_ambient_cap(
 	EXPECT_EQ(0, cap_get_ambient(cap));
 }
 
+/*
+ * Returns true if the current process is in the initial user namespace.
+ * Compares the readlink targets of /proc/self/ns/user and /proc/1/ns/user.
+ */
+static bool __maybe_unused is_in_init_user_ns(void)
+{
+	char self_buf[64], init_buf[64];
+	ssize_t self_len, init_len;
+
+	self_len = readlink("/proc/self/ns/user", self_buf, sizeof(self_buf));
+	if (self_len <= 0 || self_len >= (ssize_t)sizeof(self_buf))
+		return false;
+
+	init_len = readlink("/proc/1/ns/user", init_buf, sizeof(init_buf));
+	if (init_len <= 0 || init_len >= (ssize_t)sizeof(init_buf))
+		return false;
+
+	if (self_len != init_len)
+		return false;
+
+	return memcmp(self_buf, init_buf, self_len) == 0;
+}
+
 /* Receives an FD from a UNIX socket. Returns the received FD, or -errno. */
 static int __maybe_unused recv_fd(int usock)
 {
