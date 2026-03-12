@@ -324,7 +324,6 @@ int acpi_unmap_cpu(int cpu);
 
 acpi_handle acpi_get_processor_handle(int cpu);
 
-#ifndef CONFIG_X86
 /*
  * acpi_get_cpu_uid() - Get ACPI Processor UID of a specified CPU from MADT table
  * @cpu: Logical CPU number (0-based)
@@ -335,7 +334,6 @@ acpi_handle acpi_get_processor_handle(int cpu);
  *         -ENODEV if the ACPI Processor UID for the specified CPU is not found.
  */
 int acpi_get_cpu_uid(unsigned int cpu, u32 *uid);
-#endif
 
 #ifdef CONFIG_ACPI_HOTPLUG_IOAPIC
 int acpi_get_ioapic_id(acpi_handle handle, u32 gsi_base, u64 *phys_addr);
