@@ -160,6 +160,8 @@ static int ceph_lock_wait_for_completion(struct ceph_mds_client *mdsc,
                                          struct ceph_mds_request *req)
 {
 	struct ceph_client *cl = mdsc->fsc->client;
+	struct ceph_options *opts = mdsc->fsc->client->options;
+	unsigned long timeout = ceph_timeout_jiffies(opts->mount_timeout);
 	struct ceph_mds_request *intr_req;
 	struct inode *inode = req->r_inode;
 	int err, lock_type;
@@ -221,7 +223,17 @@ static int ceph_lock_wait_for_completion(struct ceph_mds_client *mdsc,
 	if (err && err != -ERESTARTSYS)
 		return err;
 
-	wait_for_completion_killable(&req->r_safe_completion);
+	err = wait_for_completion_killable_timeout(&req->r_safe_completion,
+						   timeout);
+	if (err == -ERESTARTSYS) {
+		/* Interrupted again, just return the error */
+		return err;
+	}
+	if (err == 0) {
+		pr_warn_client(cl, "lock request tid %llu safe completion timed out\n",
+			       req->r_tid);
+		return -ETIMEDOUT;
+	}
 	return 0;
 }
 
