@@ -1567,14 +1567,18 @@ void devm_drm_put_bridge(struct device *dev, struct drm_bridge *bridge)
 }
 EXPORT_SYMBOL(devm_drm_put_bridge);
 
-static void drm_bridge_debugfs_show_bridge(struct drm_printer *p,
-					   struct drm_bridge *bridge,
-					   unsigned int idx,
-					   bool lingering)
+static void __drm_bridge_debugfs_show_bridge(struct drm_printer *p,
+					     struct drm_bridge *bridge,
+					     unsigned int idx,
+					     bool lingering,
+					     bool scoped)
 {
+	unsigned int refcount = kref_read(&bridge->refcount);
+
 	drm_printf(p, "bridge[%u]: %ps\n", idx, bridge->funcs);
 
-	drm_printf(p, "\trefcount: %u%s\n", kref_read(&bridge->refcount),
+	drm_printf(p, "\trefcount: %u%s\n",
+		   scoped ? --refcount : refcount,
 		   lingering ? " [lingering]" : "");
 
 	drm_printf(p, "\ttype: [%d] %s\n",
@@ -1597,6 +1601,22 @@ static void drm_bridge_debugfs_show_bridge(struct drm_printer *p,
 	if (bridge->ops & DRM_BRIDGE_OP_HDMI)
 		drm_puts(p, " hdmi");
 	drm_puts(p, "\n");
+}
+
+static void drm_bridge_debugfs_show_bridge(struct drm_printer *p,
+					   struct drm_bridge *bridge,
+					   unsigned int idx,
+					   bool lingering)
+{
+	__drm_bridge_debugfs_show_bridge(p, bridge, idx, lingering, false);
+}
+
+static void drm_bridge_debugfs_show_bridge_scoped(struct drm_printer *p,
+						  struct drm_bridge *bridge,
+						  unsigned int idx,
+						  bool lingering)
+{
+	__drm_bridge_debugfs_show_bridge(p, bridge, idx, lingering, true);
 }
 
 static int allbridges_show(struct seq_file *m, void *data)
@@ -1626,7 +1646,7 @@ static int encoder_bridges_show(struct seq_file *m, void *data)
 	unsigned int idx = 0;
 
 	drm_for_each_bridge_in_chain_scoped(encoder, bridge)
-		drm_bridge_debugfs_show_bridge(&p, bridge, idx++, false);
+		drm_bridge_debugfs_show_bridge_scoped(&p, bridge, idx++, false);
 
 	return 0;
 }
