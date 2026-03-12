@@ -961,7 +961,7 @@ static irqreturn_t __maybe_unused NCR5380_intr(int irq, void *dev_id)
  */
 
 static bool NCR5380_select(struct Scsi_Host *instance, struct scsi_cmnd *cmd)
-	__releases(&hostdata->lock) __acquires(&hostdata->lock)
+	__must_hold(&((struct NCR5380_hostdata *)shost_priv(instance))->lock)
 {
 	struct NCR5380_hostdata *hostdata = shost_priv(instance);
 	unsigned char tmp[3], phase;
@@ -1657,7 +1657,7 @@ static int NCR5380_transfer_dma(struct Scsi_Host *instance,
  */
 
 static void NCR5380_information_transfer(struct Scsi_Host *instance)
-	__releases(&hostdata->lock) __acquires(&hostdata->lock)
+	__must_hold(&((struct NCR5380_hostdata *)shost_priv(instance))->lock)
 {
 	struct NCR5380_hostdata *hostdata = shost_priv(instance);
 	unsigned char msgout = NOP;
