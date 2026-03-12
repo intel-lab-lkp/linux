@@ -164,6 +164,7 @@ struct sn65dsi83 {
 	int				irq;
 	struct delayed_work		monitor_work;
 	struct work_struct		reset_work;
+	bool				dual_link_video_mode;
 };
 
 static const struct regmap_range sn65dsi83_readable_ranges[] = {
@@ -667,8 +668,43 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 		     mode->hsync_start - mode->hdisplay);
 	regmap_write(ctx->regmap, REG_VID_CHA_VERTICAL_FRONT_PORCH,
 		     mode->vsync_start - mode->vdisplay);
-	regmap_write(ctx->regmap, REG_VID_CHA_TEST_PATTERN, 0x00);
 
+	/*
+	 * In dual-link LVDS mode, the SN65DSI84 requires the horizontal
+	 * timing parameters to be adjusted before being programmed into
+	 * the device. According to TI documentation, the horizontal timing
+	 * values must be divided by two when operating in dual-link mode.
+	 * Without this adjustment, the connected panel may fail to light up
+	 * or display corrupted output.
+	 *
+	 * TI also provides recommended register settings for this mode,
+	 * which were derived using the TI DSI-Tuner tool. When the optional
+	 * DT property "ti,dual-link-video-mode" is present, apply these
+	 * configuration settings to ensure correct dual-link LVDS operation.
+	 */
+	if (ctx->dual_link_video_mode) {
+		regmap_write(ctx->regmap, REG_RC_LVDS_PLL, 0x05);
+		regmap_write(ctx->regmap, REG_RC_PLL_EN, 0x00);
+		regmap_write(ctx->regmap, REG_DSI_CLK, 0x53);
+		regmap_write(ctx->regmap, REG_LVDS_FMT, 0x6f);
+		regmap_write(ctx->regmap, REG_LVDS_VCOM, 0x00);
+		regmap_write(ctx->regmap,
+			     REG_VID_CHA_VERTICAL_DISPLAY_SIZE_LOW, 0x00);
+		regmap_write(ctx->regmap,
+			     REG_VID_CHA_VERTICAL_DISPLAY_SIZE_HIGH, 0x00);
+		regmap_write(ctx->regmap,
+			     REG_VID_CHA_HSYNC_PULSE_WIDTH_LOW, 0x10);
+		regmap_write(ctx->regmap,
+			     REG_VID_CHA_HORIZONTAL_BACK_PORCH, 0x28);
+		regmap_write(ctx->regmap,
+			     REG_VID_CHA_VERTICAL_BACK_PORCH, 0x00);
+		regmap_write(ctx->regmap,
+			     REG_VID_CHA_HORIZONTAL_FRONT_PORCH, 0x00);
+		regmap_write(ctx->regmap,
+			     REG_VID_CHA_VERTICAL_FRONT_PORCH, 0x00);
+	}
+
+	regmap_write(ctx->regmap, REG_VID_CHA_TEST_PATTERN, 0x00);
 	/* Enable PLL */
 	regmap_write(ctx->regmap, REG_RC_PLL_EN, REG_RC_PLL_EN_PLL_EN);
 	usleep_range(3000, 4000);
@@ -965,9 +1001,15 @@ static int sn65dsi83_host_attach(struct sn65dsi83 *ctx)
 
 	dsi->lanes = dsi_lanes;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
-			  MIPI_DSI_MODE_VIDEO_NO_HFP | MIPI_DSI_MODE_VIDEO_NO_HBP |
-			  MIPI_DSI_MODE_VIDEO_NO_HSA | MIPI_DSI_MODE_NO_EOT_PACKET;
+	if (ctx->dual_link_video_mode)
+		dsi->mode_flags = MIPI_DSI_MODE_VIDEO;
+	else
+		dsi->mode_flags = MIPI_DSI_MODE_VIDEO |
+				  MIPI_DSI_MODE_VIDEO_BURST |
+				  MIPI_DSI_MODE_VIDEO_NO_HFP |
+				  MIPI_DSI_MODE_VIDEO_NO_HBP |
+				  MIPI_DSI_MODE_VIDEO_NO_HSA |
+				  MIPI_DSI_MODE_NO_EOT_PACKET;
 
 	ret = devm_mipi_dsi_attach(dev, dsi);
 	if (ret < 0) {
@@ -1021,6 +1063,8 @@ static int sn65dsi83_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
+	ctx->dual_link_video_mode =
+		of_property_read_bool(dev->of_node, "ti,dual-link-video-mode");
 	ctx->regmap = devm_regmap_init_i2c(client, &sn65dsi83_regmap_config);
 	if (IS_ERR(ctx->regmap))
 		return dev_err_probe(dev, PTR_ERR(ctx->regmap), "failed to get regmap\n");
