@@ -21,6 +21,7 @@
 #include <time.h>
 #include "vm_util.h"
 #include "kselftest.h"
+#include "thp_settings.h"
 
 uint64_t pagesize;
 unsigned int pageshift;
@@ -255,7 +256,7 @@ static int check_after_split_folio_orders(char *vaddr_start, size_t len,
 	return status;
 }
 
-static void write_file(const char *path, const char *buf, size_t buflen)
+static void safe_write_file(const char *path, const char *buf, size_t buflen)
 {
 	int fd;
 	ssize_t numwritten;
@@ -283,7 +284,7 @@ static void write_debugfs(const char *fmt, ...)
 	if (ret >= INPUT_MAX)
 		ksft_exit_fail_msg("%s: Debugfs input is too long\n", __func__);
 
-	write_file(SPLIT_DEBUGFS, input, ret + 1);
+	safe_write_file(SPLIT_DEBUGFS, input, ret + 1);
 }
 
 static char *allocate_zero_filled_hugepage(size_t len)
@@ -770,6 +771,10 @@ int main(int argc, char **argv)
 	if (geteuid() != 0) {
 		ksft_print_msg("Please run the benchmark as root\n");
 		ksft_finished();
+	}
+
+	if (!thp_is_enabled()) {
+		ksft_exit_skip("Transparent Hugepages not available\n");
 	}
 
 	if (argc > 1)
