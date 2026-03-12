@@ -164,7 +164,10 @@ static void iwl_mld_check_emlsr_prevention(struct iwl_mld *mld,
 		 * The timeouts are chosen so that this will not happen, i.e.
 		 * IWL_MLD_EMLSR_PREVENT_LONG > IWL_MLD_PREVENT_EMLSR_TIMEOUT
 		 */
-		WARN_ON(mld_vif->emlsr.exit_repeat_count > 3);
+		if (WARN_ON_ONCE(mld_vif->emlsr.exit_repeat_count > 3)) {
+			IWL_ERR(mld, "check-emlsr-prevention exit repeats: %d > 3, blocked-reasons: 0x%x\n",
+				mld_vif->emlsr.exit_repeat_count, mld_vif->emlsr.blocked_reasons);
+		}
 	}
 
 	IWL_DEBUG_EHT(mld,
