@@ -58,8 +58,8 @@ class CToken():
 
         return CToken.MISMATCH
 
-    def __init__(self, kind, value, pos,
-                 brace_level, paren_level, bracket_level):
+    def __init__(self, kind, value=None, pos=0,
+                 brace_level=0, paren_level=0, bracket_level=0):
         self.kind = kind
         self.value = value
         self.pos = pos
