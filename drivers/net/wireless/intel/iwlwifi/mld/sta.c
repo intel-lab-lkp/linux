@@ -789,7 +789,7 @@ void iwl_mld_wait_sta_txqs_empty(struct iwl_mld *mld, struct ieee80211_sta *sta)
 		struct iwl_mld_txq *mld_txq =
 			iwl_mld_txq_from_mac80211(sta->txq[i]);
 
-		if (!mld_txq->status.allocated)
+		if (!mld_txq || !mld_txq->status.allocated)
 			continue;
 
 		iwl_trans_wait_txq_empty(mld->trans, mld_txq->fw_id);
