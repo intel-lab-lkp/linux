@@ -1100,6 +1100,9 @@ static int dlm_query_region_handler(struct o2net_msg *msg, u32 len,
 	char *local = NULL;
 	int status = 0;
 
+	if (len < sizeof(struct o2net_msg) + sizeof(struct dlm_query_region))
+		return -EINVAL;
+
 	qr = (struct dlm_query_region *) msg->buf;
 
 	mlog(0, "Node %u queries hb regions on domain %s\n", qr->qr_node,
@@ -1275,6 +1278,9 @@ static int dlm_query_nodeinfo_handler(struct o2net_msg *msg, u32 len,
 	struct dlm_query_nodeinfo *qn;
 	struct dlm_ctxt *dlm = NULL;
 	int status = -EINVAL;
+
+	if (len < sizeof(struct o2net_msg) + sizeof(struct dlm_query_nodeinfo))
+		return -EINVAL;
 
 	qn = (struct dlm_query_nodeinfo *) msg->buf;
 
