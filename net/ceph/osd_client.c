@@ -4734,10 +4734,13 @@ EXPORT_SYMBOL(ceph_osdc_wait_request);
 /*
  * sync - wait for all in-flight requests to flush.  avoid starvation.
  */
-void ceph_osdc_sync(struct ceph_osd_client *osdc)
+int ceph_osdc_sync(struct ceph_osd_client *osdc)
 {
+	struct ceph_options *opts = osdc->client->options;
+	unsigned long timeout = ceph_timeout_jiffies(opts->mount_timeout);
 	struct rb_node *n, *p;
 	u64 last_tid = atomic64_read(&osdc->last_tid);
+	unsigned long left;
 
 again:
 	down_read(&osdc->lock);
@@ -4760,7 +4763,14 @@ again:
 			up_read(&osdc->lock);
 			dout("%s waiting on req %p tid %llu last_tid %llu\n",
 			     __func__, req, req->r_tid, last_tid);
-			wait_for_completion(&req->r_completion);
+			left = wait_for_completion_timeout(&req->r_completion,
+							   timeout);
+			if (!left) {
+				pr_warn("ceph: osd sync request tid %llu timed out\n",
+					req->r_tid);
+				ceph_osdc_put_request(req);
+				return -ETIMEDOUT;
+			}
 			ceph_osdc_put_request(req);
 			goto again;
 		}
@@ -4770,6 +4780,7 @@ again:
 
 	up_read(&osdc->lock);
 	dout("%s done last_tid %llu\n", __func__, last_tid);
+	return 0;
 }
 EXPORT_SYMBOL(ceph_osdc_sync);
 
