@@ -585,6 +585,17 @@ config PINCTRL_SX150X
 	  - 8 bits:  sx1508q, sx1502q
 	  - 16 bits: sx1509q, sx1506q
 
+config PINCTRL_TI_TAC5X1X
+	tristate "TAC5X1X pin control driver"
+	depends on OF && (MFD_TAC5X1X || COMPILE_TEST)
+	select GENERIC_PINCTRL_GROUPS
+	select GENERIC_PINMUX_FUNCTIONS
+	select GENERIC_PINCONF
+	help
+	  TAC5X1X family may have 1 or more configurable GPIO pins
+	  which can be grouped and configured to function as PDM, GPIOs
+	  or interrupt outputs.
+
 config PINCTRL_TB10X
 	bool "Pinctrl for TB10X" if COMPILE_TEST
 	depends on OF && ARC_PLAT_TB10X || COMPILE_TEST
