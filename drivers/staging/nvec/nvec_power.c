@@ -25,6 +25,7 @@ struct nvec_power {
 	struct delayed_work poller;
 	struct work_struct bat_init;
 	struct nvec_chip *nvec;
+	bool suspended;
 	int on;
 	int bat_present;
 	int bat_status;
@@ -158,7 +159,8 @@ static int nvec_power_bat_notifier(struct notifier_block *nb,
 		if (res->plc[0] & 1) {
 			if (power->bat_present == 0) {
 				status_changed = 1;
-				schedule_work(&power->bat_init);
+				if (!READ_ONCE(power->suspended))
+					schedule_work(&power->bat_init);
 			}
 
 			power->bat_present = 1;
@@ -398,7 +400,9 @@ static void nvec_power_poll(struct work_struct *work)
 		dev_warn(power->nvec->dev,
 			 "failed to query battery status: %d\n", ret);
 
-	schedule_delayed_work(to_delayed_work(work), msecs_to_jiffies(5000));
+	if (!READ_ONCE(power->suspended))
+		schedule_delayed_work(to_delayed_work(work),
+				      msecs_to_jiffies(5000));
 };
 
 static int nvec_power_probe(struct platform_device *pdev)
@@ -471,11 +475,55 @@ static void nvec_power_remove(struct platform_device *pdev)
 	}
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int nvec_power_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct nvec_power *power = dev_get_drvdata(dev);
+
+	WRITE_ONCE(power->suspended, true);
+
+	switch (pdev->id) {
+	case AC:
+		cancel_delayed_work_sync(&power->poller);
+		break;
+	case BAT:
+		cancel_work_sync(&power->bat_init);
+		break;
+	}
+
+	return 0;
+}
+
+static int nvec_power_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct nvec_power *power = dev_get_drvdata(dev);
+
+	WRITE_ONCE(power->suspended, false);
+
+	switch (pdev->id) {
+	case AC:
+		schedule_delayed_work(&power->poller, msecs_to_jiffies(5000));
+		break;
+	case BAT:
+		schedule_work(&power->bat_init);
+		break;
+	}
+
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(nvec_power_pm_ops, nvec_power_suspend,
+			 nvec_power_resume);
+
 static struct platform_driver nvec_power_driver = {
 	.probe = nvec_power_probe,
 	.remove = nvec_power_remove,
 	.driver = {
 		.name = "nvec-power",
+		.pm = &nvec_power_pm_ops,
 	}
 };
 
