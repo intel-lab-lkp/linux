@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/ti,tac5x1x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI TAC5x1x Audio Codec
+
+maintainers:
+  - Niranjan H Y <niranjan.hy@ti.com>
+
+description: |
+  The TAC5x1x codec provides audio playback and capture functionality
+  with support for various audio formats and sample rates.
+
+  This binding describes the codec functionality of the TAC5x1x device,
+  which is instantiated as a child device of the main TAC5x1x MFD described
+  in Documentation/devicetree/bindings/mfd/ti,tac5x1x.yaml
+
+properties:
+  compatible:
+    const: ti,tac5x1x-codec
+
+  '#sound-dai-cells':
+    const: 0
+
+  clocks:
+    maxItems: 1
+    description: Master clock for audio processing
+
+  clock-names:
+    items:
+      - const: mclk
+
+required:
+  - compatible
+  - '#sound-dai-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    codec {
+        compatible = "ti,tac5x1x-codec";
+        #sound-dai-cells = <0>;
+        clocks = <&audio_mclk>;
+        clock-names = "mclk";
+    };
+
