@@ -44,11 +44,12 @@ def make_tokenizer_test(name, data):
         """In-lined lambda-like function to run the test"""
 
         #
-        # Check if exceptions are properly handled
+        # Check if logger is working
         #
-        if "raises" in data:
-            with self.assertRaises(data["raises"]):
-                CTokenizer(data["source"])
+        if "log_level" in data:
+            with self.assertLogs('kdoc.c_lex', level='ERROR') as cm:
+                tokenizer = CTokenizer(data["source"])
+
             return
 
         #
@@ -123,7 +124,7 @@ TESTS_TOKENIZER = {
 
     "mismatch_error": {
         "source": "int a$ = 5;",          # $ is illegal
-        "raises": RuntimeError,
+        "log_level": "ERROR",
     },
 }
 

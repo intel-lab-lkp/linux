@@ -288,6 +288,19 @@ class TestSubSimple(TestCaseDiff):
 
         self.assertLogicallyEqual(result, "int foo;")
 
+    def test_rise_early_greedy(self):
+        line = f"{self.MACRO}(a, b, c, d);"
+        sub = r"\1, \2+, \3"
+
+        with self.assertRaises(ValueError):
+            result = self.matcher.sub(sub, line)
+
+    def test_rise_multiple_greedy(self):
+        line = f"{self.MACRO}(a, b, c, d);"
+        sub = r"\1, \2+, \3+"
+
+        with self.assertRaises(ValueError):
+            result = self.matcher.sub(sub, line)
 
 #
 # Test replacements with slashrefs
@@ -539,7 +552,7 @@ class TestSubWithLocalXforms(TestCaseDiff):
         self.assertLogicallyEqual(result, expected)
 
     def test_raw_struct_group_tagged(self):
-        """
+        r"""
         Test cxl_regs with struct_group_tagged patterns from drivers/cxl/cxl.h.
 
         NOTE:

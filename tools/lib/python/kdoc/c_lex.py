@@ -194,7 +194,7 @@ class CTokenizer():
             value = match.group()
 
             if kind == CToken.MISMATCH:
-                log.error(f"Unexpected token '{value}' on {pos}:\n\t{source}")
+                log.error(f"Unexpected token '{value}' on pos {pos}:\n\t'{source}'")
             elif kind == CToken.BEGIN:
                 if value == '(':
                     paren_level += 1
