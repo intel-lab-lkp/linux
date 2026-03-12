@@ -85,6 +85,12 @@ properties:
       This property is to specify the resource id of the remote processor in SoC
       which supports SCFW
 
+  fsl,reset-vector-mask:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      This property is to specify the reset vector mask which is used
+      to mask off unused bits from ELF entry address.
+
 required:
   - compatible
 
