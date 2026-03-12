@@ -709,6 +709,36 @@ bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
  */
 void resctrl_arch_get_kmode_cfg(struct resctrl_kmode_cfg *kcfg);
 
+/**
+ * resctrl_arch_configure_kmode() - Program kernel mode (e.g. PLZA) for all domains
+ * @r:          The resctrl resource (scope for control domains).
+ * @kcfg:       Current kernel mode configuration.
+ * @closid:     CLOSID to use for kernel work when a global assign mode is active.
+ * @rmid:       RMID to use for kernel work when GLOBAL_ASSIGN_CTRL_ASSIGN_MON is active.
+ *
+ * Programs each control domain so that kernel work uses the given CLOSID/RMID
+ * per the active kernel mode (e.g. MSR_IA32_PQR_PLZA_ASSOC on x86). No-op when
+ * kmode_cur is INHERIT_CTRL_AND_MON. May be called from any CPU.
+ */
+void resctrl_arch_configure_kmode(struct rdt_resource *r, struct resctrl_kmode_cfg *kcfg,
+				  u32 closid, u32 rmid);
+
+/**
+ * resctrl_arch_set_kmode() - Set kernel mode (e.g. PLZA) on a set of CPUs
+ * @cpu_mask:	CPUs to update (e.g. a control domain's cpu_mask).
+ * @kcfg:	Current kernel mode configuration.
+ * @closid:	CLOSID to use for kernel work when a global assign mode is active.
+ * @rmid:	RMID to use for kernel work when GLOBAL_ASSIGN_CTRL_ASSIGN_MON is active.
+ * @enable:	True to set MSR_IA32_PQR_PLZA_ASSOC.PLZA_EN on the CPUs; false to clear it.
+ *
+ * Writes MSR_IA32_PQR_PLZA_ASSOC on each CPU in @cpu_mask and updates per-CPU
+ * state. No-op when kmode_cur is INHERIT_CTRL_AND_MON. Call after
+ * resctrl_arch_configure_kmode() so that closid/rmid are programmed before
+ * PLZA_EN is set. May be called from any CPU.
+ */
+void resctrl_arch_set_kmode(cpumask_var_t cpu_mask, struct resctrl_kmode_cfg *kcfg,
+			    u32 closid, u32 rmid, bool enable);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 

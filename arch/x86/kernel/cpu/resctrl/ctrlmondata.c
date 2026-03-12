@@ -131,3 +131,80 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable)
 
 	return 0;
 }
+
+/*
+ * IPI callback: write MSR_IA32_PQR_PLZA_ASSOC on this CPU (AMD PLZA).
+ */
+static void resctrl_kmode_set_one_amd(void *arg)
+{
+	union qos_pqr_plza_assoc *plza = arg;
+
+	wrmsrl(MSR_IA32_PQR_PLZA_ASSOC, plza->full);
+}
+
+/**
+ * resctrl_arch_configure_kmode() - x86/AMD: program PLZA per control domain
+ *
+ * For each control domain, first sets per-CPU state (closid, rmid, enable=0)
+ * on all CPUs in the domain, then writes MSR_IA32_PQR_PLZA_ASSOC on each CPU
+ * so that closid/closid_en (and optionally rmid/rmid_en) are programmed
+ * before PLZA_EN is set, per the PLZA programming sequence.
+ */
+void resctrl_arch_configure_kmode(struct rdt_resource *r, struct resctrl_kmode_cfg *kcfg,
+				  u32 closid, u32 rmid)
+{
+	union qos_pqr_plza_assoc plza = { 0 };
+	struct rdt_ctrl_domain *d;
+	int cpu;
+
+	if (kcfg->kmode_cur & INHERIT_CTRL_AND_MON)
+		return;
+
+	if (kcfg->kmode_cur & GLOBAL_ASSIGN_CTRL_ASSIGN_MON) {
+		plza.split.rmid = rmid;
+		plza.split.rmid_en = 1;
+	}
+	plza.split.closid = closid;
+	plza.split.closid_en = 1;
+
+	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
+		for_each_cpu(cpu, &d->hdr.cpu_mask)
+			resctrl_arch_set_cpu_kmode(cpu, closid, rmid, 0);
+		on_each_cpu_mask(&d->hdr.cpu_mask, resctrl_kmode_set_one_amd, &plza, 1);
+	}
+}
+
+/**
+ * resctrl_arch_set_kmode() - x86/AMD: set PLZA enable/disable on a set of CPUs
+ * @cpu_mask:	CPUs to update (e.g. a control domain's cpu_mask).
+ * @kcfg:	Current kernel mode configuration.
+ * @closid:	CLOSID to use for kernel work when a global assign mode is active.
+ * @rmid:	RMID to use for kernel work when GLOBAL_ASSIGN_CTRL_ASSIGN_MON is active.
+ * @enable:	True to set MSR_IA32_PQR_PLZA_ASSOC.PLZA_EN; false to clear it.
+ *
+ * Writes MSR_IA32_PQR_PLZA_ASSOC on each CPU in @cpu_mask (via IPI) and updates
+ * per-CPU state. No-op when kmode_cur is INHERIT_CTRL_AND_MON. Call after
+ * resctrl_arch_configure_kmode() so that closid/rmid are programmed before
+ * PLZA_EN is set.
+ */
+void resctrl_arch_set_kmode(cpumask_var_t cpu_mask, struct resctrl_kmode_cfg *kcfg,
+			    u32 closid, u32 rmid, bool enable)
+{
+	int cpu;
+	union qos_pqr_plza_assoc plza = { 0 };
+
+	if (kcfg->kmode_cur & INHERIT_CTRL_AND_MON)
+		return;
+
+	if (kcfg->kmode_cur & GLOBAL_ASSIGN_CTRL_ASSIGN_MON) {
+		plza.split.rmid = rmid;
+		plza.split.rmid_en = 1;
+	}
+	plza.split.closid = closid;
+	plza.split.closid_en = 1;
+	plza.split.plza_en = enable;
+
+	on_each_cpu_mask(cpu_mask, resctrl_kmode_set_one_amd, &plza, 1);
+	for_each_cpu(cpu, cpu_mask)
+		resctrl_arch_set_cpu_kmode(cpu, closid, rmid, enable);
+}

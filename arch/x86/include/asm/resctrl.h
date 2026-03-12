@@ -186,6 +186,25 @@ static inline bool resctrl_arch_match_rmid(struct task_struct *tsk, u32 ignored,
 	return READ_ONCE(tsk->rmid) == rmid;
 }
 
+/**
+ * resctrl_arch_set_cpu_kmode() - Set per-CPU kernel mode state for PLZA programming
+ * @cpu:	Logical CPU to update.
+ * @closid:	CLOSID to use for kernel work on this CPU when kmode is enabled.
+ * @rmid:	RMID to use for kernel work on this CPU when kmode is enabled.
+ * @enable:	1 to enable PLZA on this CPU; 0 to leave disabled. Stored in default_kmode.
+ *
+ * Stores the given CLOSID, RMID, and enable value in per-CPU state (kmode_closid,
+ * kmode_rmid, default_kmode). The actual MSR_IA32_PQR_PLZA_ASSOC write is done
+ * separately (e.g. via on_each_cpu_mask) so that closid/rmid are set on all CPUs
+ * in the domain before PLZA_EN is set, per the PLZA programming sequence.
+ */
+static inline void resctrl_arch_set_cpu_kmode(int cpu, u32 closid, u32 rmid, u32 enable)
+{
+	WRITE_ONCE(per_cpu(pqr_state.default_kmode, cpu), enable);
+	WRITE_ONCE(per_cpu(pqr_state.kmode_closid, cpu), closid);
+	WRITE_ONCE(per_cpu(pqr_state.kmode_rmid, cpu), rmid);
+}
+
 static inline void resctrl_arch_sched_in(struct task_struct *tsk)
 {
 	if (static_branch_likely(&rdt_enable_key))
