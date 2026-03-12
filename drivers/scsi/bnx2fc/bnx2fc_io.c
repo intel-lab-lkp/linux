@@ -1080,7 +1080,7 @@ int bnx2fc_eh_device_reset(struct scsi_cmnd *sc_cmd)
 }
 
 static int bnx2fc_abts_cleanup(struct bnx2fc_cmd *io_req)
-	__must_hold(&tgt->tgt_lock)
+	__must_hold(&io_req->tgt->tgt_lock)
 {
 	struct bnx2fc_rport *tgt = io_req->tgt;
 	unsigned int time_left;
@@ -1207,6 +1207,8 @@ int bnx2fc_eh_abort(struct scsi_cmnd *sc_cmd)
 		if (cancel_delayed_work(&io_req->timeout_work))
 			kref_put(&io_req->refcount,
 				 bnx2fc_cmd_release); /* drop timer hold */
+		/* Tell the compiler that io_req->tgt == tgt. */
+		__assume_ctx_lock(&io_req->tgt->tgt_lock);
 		/*
 		 * We don't want to hold off the upper layer timer so simply
 		 * cleanup the command and return that I/O was successfully
@@ -1258,6 +1260,8 @@ int bnx2fc_eh_abort(struct scsi_cmnd *sc_cmd)
 		/* Let the scsi-ml try to recover this command */
 		printk(KERN_ERR PFX "abort failed, xid = 0x%x\n",
 		       io_req->xid);
+		/* Tell the compiler that io_req->tgt == tgt. */
+		__assume_ctx_lock(&io_req->tgt->tgt_lock);
 		/*
 		 * Cleanup firmware residuals before returning control back
 		 * to SCSI ML.
