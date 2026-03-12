@@ -215,6 +215,9 @@ static void carl9170_fw_set_if_combinations(struct ar9170 *ar,
 	ar->if_combs[0].max_interfaces = ar->fw.vif_num;
 	ar->if_combs[0].limits = ar->if_comb_limits;
 	ar->if_combs[0].n_limits = ARRAY_SIZE(ar->if_comb_limits);
+	ar->if_combs[0].radar_detect_widths = BIT(NL80211_CHAN_WIDTH_20_NOHT) |
+					      BIT(NL80211_CHAN_WIDTH_20) |
+					      BIT(NL80211_CHAN_WIDTH_40);
 
 	ar->hw->wiphy->iface_combinations = ar->if_combs;
 	ar->hw->wiphy->n_iface_combinations = ARRAY_SIZE(ar->if_combs);

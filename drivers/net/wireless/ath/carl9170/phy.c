@@ -1637,6 +1637,47 @@ void carl9170_update_channel_maxpower(struct ar9170 *ar)
 	}
 }
 
+static int carl9170_set_radar_detection(struct ar9170 *ar,
+					struct ieee80211_channel *channel)
+{
+	bool enable = channel->flags & IEEE80211_CHAN_RADAR;
+
+	carl9170_regwrite_begin(ar);
+
+	if (enable) {
+		/*
+		 * Configure radar detection pulse parameters.
+		 * Values based on ath9k's defaults for FCC/ETSI.
+		 */
+		carl9170_regwrite(AR9170_PHY_REG_RADAR_0,
+				  AR9170_PHY_RADAR_0_ENA |
+				  AR9170_PHY_RADAR_0_FFT_ENA |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_0_INBAND, 5) |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_0_PRSSI, 1) |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_0_HEIGHT, 6) |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_0_RRSSI, 12) |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_0_FIRPWR, 33));
+
+		carl9170_regwrite(AR9170_PHY_REG_RADAR_1,
+				  AR9170_PHY_RADAR_1_MAX_RRSSI |
+				  AR9170_PHY_RADAR_1_BLOCK_CHECK |
+				  AR9170_PHY_RADAR_1_RELSTEP_CHECK |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_1_RELSTEP_THRESH, 8) |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_1_RELPWR_THRESH, 12) |
+				  SET_CONSTVAL(AR9170_PHY_RADAR_1_MAXLEN, 255));
+
+		carl9170_regwrite(AR9170_PHY_REG_RADAR_EXT,
+				  AR9170_PHY_RADAR_EXT_ENA);
+	} else {
+		carl9170_regwrite(AR9170_PHY_REG_RADAR_0, 0);
+		carl9170_regwrite(AR9170_PHY_REG_RADAR_1, 0);
+		carl9170_regwrite(AR9170_PHY_REG_RADAR_EXT, 0);
+	}
+
+	carl9170_regwrite_finish();
+	return carl9170_regwrite_result();
+}
+
 int carl9170_get_noisefloor(struct ar9170 *ar)
 {
 	static const u32 phy_regs[] = {
@@ -1736,6 +1777,10 @@ int carl9170_set_channel(struct ar9170 *ar, struct ieee80211_channel *channel,
 	err = carl9170_init_rf_bank4_pwr(ar,
 					 channel->band == NL80211_BAND_5GHZ,
 					 channel->center_freq, bw);
+	if (err)
+		return err;
+
+	err = carl9170_set_radar_detection(ar, channel);
 	if (err)
 		return err;
 

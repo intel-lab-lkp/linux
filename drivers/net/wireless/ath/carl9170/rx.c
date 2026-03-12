@@ -259,11 +259,8 @@ void carl9170_handle_command_response(struct ar9170 *ar, void *buf, u32 len)
 		break;
 
 	case CARL9170_RSP_RADAR:
-		if (!net_ratelimit())
-			break;
-
-		wiphy_info(ar->hw->wiphy, "FW: RADAR! Please report this "
-		       "incident to linux-wireless@vger.kernel.org !\n");
+		wiphy_info(ar->hw->wiphy, "FW: radar pulse detected\n");
+		ieee80211_radar_detected(ar->hw, NULL);
 		break;
 
 	case CARL9170_RSP_GPIO:
