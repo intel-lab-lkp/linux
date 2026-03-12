@@ -1774,11 +1774,11 @@ int mlx5_ib_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 		__u32	response_length;
 	} resp = {};
 
-	err = ib_copy_validate_udata_in(udata, req, reserved2);
+	err = ib_copy_validate_udata_in_cm(udata, req, reserved2, 0);
 	if (err)
 		return err;
 
-	if (req.comp_mask || req.reserved1 || req.reserved2)
+	if (req.reserved1 || req.reserved2)
 		return -EOPNOTSUPP;
 
 	ndescs = req.num_klms ? roundup(req.num_klms, 4) : roundup(1, 4);
