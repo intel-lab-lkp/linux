@@ -548,6 +548,41 @@ conveyed in the error returns from file operations. E.g.
 	- "global_assign_ctrl_assign_mon": One resource group (CLOSID and RMID)
 	  is assigned for all kernel work.
 
+"kernel_mode_assignment":
+	In the top level of the "info" directory, "kernel_mode_assignment" shows
+	and (when a global-assign kernel mode is active) sets which resctrl group
+	is used for kernel mode. It is only relevant when "kernel_mode" is not
+        "inherit_ctrl_and_mon".
+
+	Reading the file shows the currently assigned group in the form
+	"CTRL_MON/MON/" with a newline::
+
+	  # cat info/kernel_mode_assignment
+	  //
+
+	Possible read formats:
+
+	- "//": Default CTRL_MON group is assigned.
+	- "ctrl_name//": A CTRL_MON group named "ctrl_name" is assigned.
+	- "/mon_name/": A MON group named "mon_name" under the default CTRL_MON
+	  group is assigned.
+	- "ctrl_name/mon_name/": A MON group named "mon_name" under the CTRL_MON
+	  group "ctrl_name" is assigned.
+	- "Kmode is not configured": No group is assigned for kernel mode.
+
+	Writing assigns a group for kernel mode. The write is only allowed when
+	the current kernel mode is not "inherit_ctrl_and_mon". Input format is
+	one or more lines, each of the form "CTRL_MON/MON/" (same as the read
+	format). Examples::
+
+	  # echo "//" > info/kernel_mode_assignment
+	  # echo "mydir//" > info/kernel_mode_assignment
+	  # echo "mydir/mon1/" > info/kernel_mode_assignment
+
+	An empty write (e.g. ``echo >> info/kernel_mode_assignment``) clears the
+	assignment. Only one group can be assigned at a time. Pseudo-locked
+	groups cannot be assigned. Errors are reported in "info/last_cmd_status".
+
 Resource alloc and monitor groups
 =================================
 

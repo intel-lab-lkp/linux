@@ -1156,6 +1156,137 @@ static int resctrl_kernel_mode_assignment_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/**
+ * rdtgroup_find_grp_by_name() - Find an rdtgroup by type and parent/child names
+ * @rtype:	RDTCTRL_GROUP or RDTMON_GROUP.
+ * @p_grp:	Parent CTRL_MON group name, or "" for the default group.
+ * @c_grp:	Child MON group name (only used when rtype is RDTMON_GROUP).
+ *
+ * Return: The rdtgroup, or NULL if not found.
+ */
+static struct rdtgroup *rdtgroup_find_grp_by_name(enum rdt_group_type rtype,
+						  char *p_grp, char *c_grp)
+{
+	struct rdtgroup *rdtg, *crg;
+
+	if (rtype == RDTCTRL_GROUP && *p_grp == '\0') {
+		return &rdtgroup_default;
+	} else if (rtype == RDTCTRL_GROUP) {
+		list_for_each_entry(rdtg, &rdt_all_groups, rdtgroup_list)
+			if (rdtg->type == RDTCTRL_GROUP && !strcmp(p_grp, rdtg->kn->name))
+				return rdtg;
+	} else if (rtype == RDTMON_GROUP) {
+		list_for_each_entry(rdtg, &rdt_all_groups, rdtgroup_list) {
+			if (rdtg->type == RDTCTRL_GROUP && !strcmp(p_grp, rdtg->kn->name)) {
+				list_for_each_entry(crg, &rdtg->mon.crdtgrp_list,
+						    mon.crdtgrp_list) {
+					if (!strcmp(c_grp, crg->kn->name))
+						return crg;
+				}
+			}
+		}
+	}
+
+	return NULL;
+}
+
+/**
+ * resctrl_kernel_mode_assignment_write() - Set rdtgroup for kernel mode via info file
+ * @of:	kernfs file handle.
+ * @buf:	Input: "CTRL_MON/MON/" per line (e.g. "//" for default,
+ *		"ctrl1//" or "ctrl1/mon1/"); empty string clears the assignment.
+ * @nbytes:	Length of buf.
+ * @off:	File offset (unused).
+ *
+ * Only valid when kernel mode is not inherit_ctrl_and_mon. Empty write clears
+ * the current assignment. Parses lines as "parent/child/"; empty child means
+ * CTRL_MON group. Errors are reported in last_cmd_status.
+ *
+ * Return: nbytes on success, or -EINVAL with last_cmd_status set on error.
+ */
+static ssize_t resctrl_kernel_mode_assignment_write(struct kernfs_open_file *of,
+						    char *buf, size_t nbytes, loff_t off)
+{
+	struct rdtgroup *rdtgrp;
+	char *token, *cmon_grp, *mon_grp;
+	enum rdt_group_type rtype;
+	int ret = 0;
+
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+	buf[nbytes - 1] = '\0';
+	buf = strim(buf);
+
+	mutex_lock(&rdtgroup_mutex);
+	rdt_last_cmd_clear();
+
+	if (resctrl_kcfg.kmode_cur & INHERIT_CTRL_AND_MON) {
+		rdt_last_cmd_puts("Cannot change kmode in inherit_ctrl_and_mon\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	/*
+	 * Group can be deleted from Kmode by empty write: e.g.
+	 * "echo >> /sys/fs/resctrl/info/kernel_mode_assignment"
+	 */
+	if (*buf == '\0') {
+		if (resctrl_kcfg.k_rdtgrp) {
+			ret = rdtgroup_config_kmode(resctrl_kcfg.k_rdtgrp, false);
+			if (ret)
+				rdt_last_cmd_printf("Kernel mode disable failed on group %s\n",
+						    rdt_kn_name(resctrl_kcfg.k_rdtgrp->kn));
+		}
+		goto out_unlock;
+	}
+
+	/* Only one group can be assigned for kernel mode at a time. */
+	if (resctrl_kcfg.k_rdtgrp) {
+		rdt_last_cmd_printf("Kernel mode already configured on group %s\n",
+				    rdt_kn_name(resctrl_kcfg.k_rdtgrp->kn));
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	while ((token = strsep(&buf, "\n")) != NULL) {
+		/*
+		 * Each line has the format "<CTRL_MON group>/<MON group>/".
+		 * Extract the CTRL_MON group name.
+		 */
+		cmon_grp = strsep(&token, "/");
+
+		/*
+		 * Extract the MON_GROUP.
+		 * strsep returns empty string for contiguous delimiters.
+		 * Empty mon_grp here means it is a RDTCTRL_GROUP.
+		 */
+		mon_grp = strsep(&token, "/");
+
+		if (*mon_grp == '\0')
+			rtype = RDTCTRL_GROUP;
+		else
+			rtype = RDTMON_GROUP;
+
+		rdtgrp = rdtgroup_find_grp_by_name(rtype, cmon_grp, mon_grp);
+
+		if (!rdtgrp) {
+			rdt_last_cmd_puts("Not a valid resctrl group\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+
+		if (!rdtgrp->kmode) {
+			ret = rdtgroup_config_kmode(rdtgrp, true);
+			if (ret)
+				break;
+		}
+	}
+
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+	return ret ?: nbytes;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -2067,9 +2198,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "kernel_mode_assignment",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_kernel_mode_assignment_show,
+		.write		= resctrl_kernel_mode_assignment_write,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
@@ -3248,6 +3380,10 @@ static void rmdir_all_sub(void)
 	rdt_move_group_tasks(NULL, &rdtgroup_default, NULL);
 
 	list_for_each_entry_safe(rdtgrp, tmp, &rdt_all_groups, rdtgroup_list) {
+		/* Disable Kmode if configured */
+		if (rdtgrp->kmode)
+			rdtgroup_config_kmode(rdtgrp, false);
+
 		/* Free any child rmids */
 		free_all_child_rdtgrp(rdtgrp);
 
@@ -3358,6 +3494,8 @@ static void resctrl_fs_teardown(void)
 	mon_put_kn_priv();
 	rdt_pseudo_lock_release();
 	rdtgroup_default.mode = RDT_MODE_SHAREABLE;
+	resctrl_kcfg.k_rdtgrp = NULL;
+	resctrl_kcfg.kmode_cur = INHERIT_CTRL_AND_MON;
 	closid_exit();
 	schemata_list_destroy();
 	rdtgroup_destroy_root();
@@ -4156,6 +4294,10 @@ static int rdtgroup_rmdir_mon(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 	u32 closid, rmid;
 	int cpu;
 
+	/* Disable Kmode if configured */
+	if (rdtgrp->kmode)
+		rdtgroup_config_kmode(rdtgrp, false);
+
 	/* Give any tasks back to the parent group */
 	rdt_move_group_tasks(rdtgrp, prdtgrp, tmpmask);
 
@@ -4205,6 +4347,10 @@ static int rdtgroup_rmdir_ctrl(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 {
 	u32 closid, rmid;
 	int cpu;
+
+	/* Disable Kmode if configured */
+	if (rdtgrp->kmode)
+		rdtgroup_config_kmode(rdtgrp, false);
 
 	/* Give any tasks back to the default group */
 	rdt_move_group_tasks(rdtgrp, &rdtgroup_default, tmpmask);
