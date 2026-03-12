@@ -238,6 +238,19 @@ static inline void resctrl_arch_set_cpu_kmode(int cpu, u32 closid, u32 rmid, u32
 	WRITE_ONCE(per_cpu(pqr_state.kmode_rmid, cpu), rmid);
 }
 
+/**
+ * resctrl_arch_set_task_kmode() - Set per-task kernel mode (e.g. PLZA) flag
+ * @tsk:	Task to update.
+ * @enable:	1 to enable kmode for this task; 0 to disable.
+ *
+ * When enabled, the task will use the group's CLOSID/RMID for kernel mode
+ * on context switch (see __resctrl_sched_in()).
+ */
+static inline void resctrl_arch_set_task_kmode(struct task_struct *tsk, u32 enable)
+{
+	WRITE_ONCE(tsk->kmode, enable);
+}
+
 static inline void resctrl_arch_sched_in(struct task_struct *tsk)
 {
 	if (static_branch_likely(&rdt_enable_key))

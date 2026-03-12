@@ -827,6 +827,31 @@ static int __rdtgroup_move_task(struct task_struct *tsk,
 	return 0;
 }
 
+/**
+ * __rdtgroup_task_kmode() - Enable kernel mode (e.g. PLZA) for a single task
+ * @tsk:	Task to enable kmode for.
+ * @rdtgrp:	Rdtgroup with kmode enabled (used for context; CLOSID/RMID applied on sched-in).
+ *
+ * Sets t->kmode so that the task uses the group's CLOSID/RMID on context
+ * switch. Memory ordering ensures the store is visible before we check if
+ * the task is current (and thus before any sched-in that may observe it).
+ *
+ * Return: 0.
+ */
+static int __rdtgroup_task_kmode(struct task_struct *tsk, struct rdtgroup *rdtgrp)
+{
+	resctrl_arch_set_task_kmode(tsk, true);
+
+	/*
+	 * Order the task's kmode state stores above before the loads in
+	 * task_curr(). This pairs with the full barrier between the
+	 * rq->curr update and resctrl_arch_sched_in() during context switch.
+	 */
+	smp_mb();
+
+	return 0;
+}
+
 static bool is_closid_match(struct task_struct *t, struct rdtgroup *r)
 {
 	return (resctrl_arch_alloc_capable() && (r->type == RDTCTRL_GROUP) &&
@@ -916,6 +941,48 @@ static int rdtgroup_move_task(pid_t pid, struct rdtgroup *rdtgrp,
 	return ret;
 }
 
+/**
+ * rdtgroup_task_kmode() - Enable kernel mode for a task added to a kmode group
+ * @pid:	PID of the task (0 for current).
+ * @rdtgrp:	Rdtgroup with kmode enabled.
+ * @of:		kernfs file (for permission check).
+ *
+ * Called when a task is written to the "tasks" file of a group that has
+ * kernel mode enabled. Enables kmode for that task so it uses the group's
+ * CLOSID/RMID on context switch. If the task is currently running, MSRs are
+ * updated on next sched-in.
+ *
+ * Return: 0 on success, or -ESRCH/-EPERM on error.
+ */
+static int rdtgroup_task_kmode(pid_t pid, struct rdtgroup *rdtgrp,
+			       struct kernfs_open_file *of)
+{
+	struct task_struct *tsk;
+	int ret;
+
+	rcu_read_lock();
+	if (pid) {
+		tsk = find_task_by_vpid(pid);
+		if (!tsk) {
+			rcu_read_unlock();
+			rdt_last_cmd_printf("No task %d\n", pid);
+			return -ESRCH;
+		}
+	} else {
+		tsk = current;
+	}
+
+	get_task_struct(tsk);
+	rcu_read_unlock();
+
+	ret = rdtgroup_task_write_permission(tsk, of);
+	if (!ret)
+		ret = __rdtgroup_task_kmode(tsk, rdtgrp);
+
+	put_task_struct(tsk);
+	return ret;
+}
+
 static ssize_t rdtgroup_tasks_write(struct kernfs_open_file *of,
 				    char *buf, size_t nbytes, loff_t off)
 {
@@ -953,7 +1020,11 @@ static ssize_t rdtgroup_tasks_write(struct kernfs_open_file *of,
 			break;
 		}
 
-		ret = rdtgroup_move_task(pid, rdtgrp, of);
+		/* Group has kmode: set task kmode; else move task CLOSID/RMID. */
+		if (rdtgrp->kmode)
+			ret = rdtgroup_task_kmode(pid, rdtgrp, of);
+		else
+			ret = rdtgroup_move_task(pid, rdtgrp, of);
 		if (ret) {
 			rdt_last_cmd_printf("Error while processing task %d\n", pid);
 			break;
@@ -1007,6 +1078,28 @@ static void show_rdt_tasks(struct rdtgroup *r, struct seq_file *s)
 		pid = task_pid_vnr(t);
 		if (pid)
 			seq_printf(s, "%d\n", pid);
+	}
+	rcu_read_unlock();
+}
+
+/**
+ * rdt_task_set_kmode() - Set or clear kmode for all tasks in the rdtgroup
+ * @r:		Rdtgroup (must have r->kmode set for matching).
+ * @kmode:	True to set t->kmode for each matching task; false to clear.
+ *
+ * Walks all tasks that belong to @r (via rdt_task_match) and updates their
+ * per-task kmode flag. Used when enabling or disabling kernel mode for the
+ * group so existing members get the new state.
+ */
+static void rdt_task_set_kmode(struct rdtgroup *r, bool kmode)
+{
+	struct task_struct *p, *t;
+
+	rcu_read_lock();
+	for_each_process_thread(p, t) {
+		if (!rdt_task_match(t, r, r->kmode))
+			continue;
+		resctrl_arch_set_task_kmode(t, kmode);
 	}
 	rcu_read_unlock();
 }
@@ -1225,6 +1318,9 @@ static int rdtgroup_config_kmode(struct rdtgroup *rdtgrp, bool enable)
 
 	resctrl_arch_set_kmode(&rdtgrp->cpu_mask, &resctrl_kcfg, closid,
 			       rdtgrp->mon.rmid, enable);
+
+	rdt_task_set_kmode(rdtgrp, enable);
+
 	rdtgrp->kmode = enable;
 	if (enable)
 		resctrl_kcfg.k_rdtgrp = rdtgrp;
