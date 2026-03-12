@@ -76,6 +76,41 @@ impl Alignment {
         }
     }
 
+    /// Creates an [`Alignment`] from a [`u64`] value.
+    ///
+    /// This is useful when the alignment comes from a [`DeviceSize`] constant
+    /// rather than a [`usize`] literal.
+    ///
+    /// A build error is triggered if `align` is not a power of two, or if it
+    /// exceeds [`usize::MAX`].
+    ///
+    /// [`DeviceSize`]: crate::sizes::DeviceSize
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::ptr::Alignment;
+    /// use kernel::sizes::DeviceSize;
+    ///
+    /// let v = Alignment::from_u64(u64::SZ_128K);
+    /// assert_eq!(v.as_usize(), 0x0002_0000);
+    /// ```
+    #[inline(always)]
+    pub const fn from_u64(align: u64) -> Self {
+        assert!(
+            align.is_power_of_two(),
+            "Provided alignment is not a power of two."
+        );
+        assert!(
+            align <= usize::MAX as u64,
+            "Provided alignment exceeds usize::MAX."
+        );
+
+        // INVARIANT: `align` is a power of two.
+        // SAFETY: `align` is a power of two, fits in usize, and thus non-zero.
+        Self(unsafe { NonZero::new_unchecked(align as usize) })
+    }
+
     /// Returns the alignment of `T`.
     ///
     /// This is equivalent to [`align_of`], but with the return value provided as an [`Alignment`].
