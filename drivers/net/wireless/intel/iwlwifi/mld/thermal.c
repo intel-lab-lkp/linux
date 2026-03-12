@@ -5,6 +5,7 @@
 #ifdef CONFIG_THERMAL
 #include <linux/sort.h>
 #include <linux/thermal.h>
+#include "iwl-utils.h"
 #endif
 
 #include "fw/api/phy.h"
@@ -243,7 +244,6 @@ static void iwl_mld_thermal_zone_register(struct iwl_mld *mld)
 {
 	int ret;
 	char name[16];
-	static atomic_t counter = ATOMIC_INIT(0);
 	struct thermal_trip trips[IWL_MAX_DTS_TRIPS] = {
 		[0 ... IWL_MAX_DTS_TRIPS - 1] = {
 			.temperature = THERMAL_TEMP_INVALID,
@@ -254,7 +254,7 @@ static void iwl_mld_thermal_zone_register(struct iwl_mld *mld)
 
 	BUILD_BUG_ON(ARRAY_SIZE(name) >= THERMAL_NAME_LENGTH);
 
-	sprintf(name, "iwlwifi_%u", atomic_inc_return(&counter) & 0xFF);
+	sprintf(name, "iwlwifi_%u", iwl_thermal_zone_get_id());
 	mld->tzone =
 		thermal_zone_device_register_with_trips(name, trips,
 							IWL_MAX_DTS_TRIPS,

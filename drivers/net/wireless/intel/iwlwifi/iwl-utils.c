@@ -193,3 +193,13 @@ s8 iwl_average_neg_dbm(const u8 *neg_dbm_values, u8 len)
 	return clamp(average_magnitude - i, -128, 0);
 }
 IWL_EXPORT_SYMBOL(iwl_average_neg_dbm);
+
+#ifdef CONFIG_THERMAL
+u8 iwl_thermal_zone_get_id(void)
+{
+	static atomic_t counter = ATOMIC_INIT(0);
+
+	return atomic_inc_return(&counter) & 0xFF;
+}
+IWL_EXPORT_SYMBOL(iwl_thermal_zone_get_id);
+#endif

@@ -7,6 +7,9 @@
 #include <linux/sort.h>
 
 #include "mvm.h"
+#ifdef CONFIG_THERMAL
+#include "iwl-utils.h"
+#endif
 
 #define IWL_MVM_NUM_CTDP_STEPS		20
 #define IWL_MVM_MIN_CTDP_BUDGET_MW	150
@@ -652,7 +655,6 @@ static void iwl_mvm_thermal_zone_register(struct iwl_mvm *mvm)
 {
 	int i, ret;
 	char name[16];
-	static atomic_t counter = ATOMIC_INIT(0);
 
 	if (!iwl_mvm_is_tt_in_fw(mvm)) {
 		mvm->tz_device.tzone = NULL;
@@ -662,7 +664,7 @@ static void iwl_mvm_thermal_zone_register(struct iwl_mvm *mvm)
 
 	BUILD_BUG_ON(ARRAY_SIZE(name) >= THERMAL_NAME_LENGTH);
 
-	sprintf(name, "iwlwifi_%u", atomic_inc_return(&counter) & 0xFF);
+	sprintf(name, "iwlwifi_%u", iwl_thermal_zone_get_id());
 	/*
 	 * 0 is a valid temperature,
 	 * so initialize the array with S16_MIN which invalid temperature

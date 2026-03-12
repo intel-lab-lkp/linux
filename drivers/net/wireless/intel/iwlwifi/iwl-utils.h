@@ -55,4 +55,8 @@ u32 iwl_find_ie_offset(u8 *beacon, u8 eid, u32 frame_size)
 
 s8 iwl_average_neg_dbm(const u8 *neg_dbm_values, u8 len);
 
+#ifdef CONFIG_THERMAL
+u8 iwl_thermal_zone_get_id(void);
+#endif
+
 #endif /* __iwl_utils_h__ */
