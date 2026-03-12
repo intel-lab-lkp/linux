@@ -51,6 +51,14 @@ struct landlock_ruleset_attr {
 	 * resources (e.g. IPCs).
 	 */
 	__u64 scoped;
+	/**
+	 * @handled_perm: Bitmask of permissions (cf. `Permission flags`_)
+	 * that this ruleset handles.  Each permission controls a broad
+	 * operation enforced at a kernel chokepoint: all instances of
+	 * that operation are denied unless explicitly allowed by a rule.
+	 * See Documentation/security/landlock.rst for the rationale.
+	 */
+	__u64 handled_perm;
 };
 
 /**
@@ -153,6 +161,11 @@ enum landlock_rule_type {
 	 * landlock_net_port_attr .
 	 */
 	LANDLOCK_RULE_NET_PORT,
+	/**
+	 * @LANDLOCK_RULE_NAMESPACE: Type of a &struct
+	 * landlock_namespace_attr .
+	 */
+	LANDLOCK_RULE_NAMESPACE,
 };
 
 /**
@@ -204,6 +217,24 @@ struct landlock_net_port_attr {
 	 * port.
 	 */
 	__u64 port;
+};
+
+/**
+ * struct landlock_namespace_attr - Namespace type definition
+ *
+ * Argument of sys_landlock_add_rule() with %LANDLOCK_RULE_NAMESPACE.
+ */
+struct landlock_namespace_attr {
+	/**
+	 * @allowed_perm: Must be set to %LANDLOCK_PERM_NAMESPACE_ENTER.
+	 */
+	__u64 allowed_perm;
+	/**
+	 * @namespace_types: Bitmask of namespace types (``CLONE_NEW*`` flags)
+	 * that should be allowed to be entered under this rule.  Unknown bits
+	 * are silently ignored for forward compatibility.
+	 */
+	__u64 namespace_types;
 };
 
 /**
@@ -379,6 +410,31 @@ struct landlock_net_port_attr {
 /* clang-format off */
 #define LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET		(1ULL << 0)
 #define LANDLOCK_SCOPE_SIGNAL		                (1ULL << 1)
-/* clang-format on*/
+/* clang-format on */
+
+/**
+ * DOC: perm
+ *
+ * Permission flags
+ * ~~~~~~~~~~~~~~~~
+ *
+ * These flags restrict broad operations enforced at kernel chokepoints.
+ * Each flag names a gateway operation whose control transitively covers
+ * an open-ended set of downstream operations.  Handled permissions that
+ * are not explicitly allowed by a rule are denied by default.  Rule
+ * values reference constants from other kernel subsystems; unknown values
+ * are silently accepted for forward compatibility since the allow-list
+ * denies them by default.
+ * See Documentation/security/landlock.rst for design details.
+ *
+ * - %LANDLOCK_PERM_NAMESPACE_ENTER: Restrict entering (creating or joining
+ *   via :manpage:`setns(2)`) specific namespace types.  A process in a
+ *   Landlock domain that handles this permission is denied from entering
+ *   namespace types that are not explicitly allowed by a
+ *   %LANDLOCK_RULE_NAMESPACE rule.
+ */
+/* clang-format off */
+#define LANDLOCK_PERM_NAMESPACE_ENTER			(1ULL << 0)
+/* clang-format on */
 
 #endif /* _UAPI_LINUX_LANDLOCK_H */

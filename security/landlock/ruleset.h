@@ -190,10 +190,9 @@ struct landlock_ruleset {
 	};
 };
 
-struct landlock_ruleset *
-landlock_create_ruleset(const access_mask_t access_mask_fs,
-			const access_mask_t access_mask_net,
-			const access_mask_t scope_mask);
+struct landlock_ruleset *landlock_create_ruleset(
+	const access_mask_t access_mask_fs, const access_mask_t access_mask_net,
+	const access_mask_t scope_mask, const access_mask_t perm_mask);
 
 void landlock_put_ruleset(struct landlock_ruleset *const ruleset);
 void landlock_put_ruleset_deferred(struct landlock_ruleset *const ruleset);
@@ -301,6 +300,24 @@ landlock_get_scope_mask(const struct landlock_ruleset *const ruleset,
 			const u16 layer_level)
 {
 	return ruleset->layers[layer_level].handled.scope;
+}
+
+static inline void
+landlock_add_perm_mask(struct landlock_ruleset *const ruleset,
+		       const access_mask_t perm_mask, const u16 layer_level)
+{
+	access_mask_t mask = perm_mask & LANDLOCK_MASK_PERM;
+
+	/* Should already be checked in sys_landlock_create_ruleset(). */
+	WARN_ON_ONCE(perm_mask != mask);
+	ruleset->layers[layer_level].handled.perm |= mask;
+}
+
+static inline access_mask_t
+landlock_get_perm_mask(const struct landlock_ruleset *const ruleset,
+		       const u16 layer_level)
+{
+	return ruleset->layers[layer_level].handled.perm;
 }
 
 bool landlock_unmask_layers(const struct landlock_rule *const rule,

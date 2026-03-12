@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <linux/limits.h>
 #include <linux/mount.h>
+#include <linux/ns/ns_common_types.h>
 #include <linux/path.h>
 #include <linux/sched.h>
 #include <linux/security.h>
@@ -34,6 +35,7 @@
 #include "fs.h"
 #include "limits.h"
 #include "net.h"
+#include "ns.h"
 #include "ruleset.h"
 #include "setup.h"
 #include "tsync.h"
@@ -95,7 +97,9 @@ static void build_check_abi(void)
 	struct landlock_ruleset_attr ruleset_attr;
 	struct landlock_path_beneath_attr path_beneath_attr;
 	struct landlock_net_port_attr net_port_attr;
+	struct landlock_namespace_attr namespace_attr;
 	size_t ruleset_size, path_beneath_size, net_port_size;
+	size_t namespace_size;
 
 	/*
 	 * For each user space ABI structures, first checks that there is no
@@ -105,8 +109,9 @@ static void build_check_abi(void)
 	ruleset_size = sizeof(ruleset_attr.handled_access_fs);
 	ruleset_size += sizeof(ruleset_attr.handled_access_net);
 	ruleset_size += sizeof(ruleset_attr.scoped);
+	ruleset_size += sizeof(ruleset_attr.handled_perm);
 	BUILD_BUG_ON(sizeof(ruleset_attr) != ruleset_size);
-	BUILD_BUG_ON(sizeof(ruleset_attr) != 24);
+	BUILD_BUG_ON(sizeof(ruleset_attr) != 32);
 
 	path_beneath_size = sizeof(path_beneath_attr.allowed_access);
 	path_beneath_size += sizeof(path_beneath_attr.parent_fd);
@@ -117,6 +122,11 @@ static void build_check_abi(void)
 	net_port_size += sizeof(net_port_attr.port);
 	BUILD_BUG_ON(sizeof(net_port_attr) != net_port_size);
 	BUILD_BUG_ON(sizeof(net_port_attr) != 16);
+
+	namespace_size = sizeof(namespace_attr.allowed_perm);
+	namespace_size += sizeof(namespace_attr.namespace_types);
+	BUILD_BUG_ON(sizeof(namespace_attr) != namespace_size);
+	BUILD_BUG_ON(sizeof(namespace_attr) != 16);
 }
 
 /* Ruleset handling */
@@ -166,7 +176,7 @@ static const struct file_operations ruleset_fops = {
  * If the change involves a fix that requires userspace awareness, also update
  * the errata documentation in Documentation/userspace-api/landlock.rst .
  */
-const int landlock_abi_version = 8;
+const int landlock_abi_version = 9;
 
 /**
  * sys_landlock_create_ruleset - Create a new ruleset
@@ -249,10 +259,16 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 	if ((ruleset_attr.scoped | LANDLOCK_MASK_SCOPE) != LANDLOCK_MASK_SCOPE)
 		return -EINVAL;
 
+	/* Checks permission content (and 32-bits cast). */
+	if ((ruleset_attr.handled_perm | LANDLOCK_MASK_PERM) !=
+	    LANDLOCK_MASK_PERM)
+		return -EINVAL;
+
 	/* Checks arguments and transforms to kernel struct. */
 	ruleset = landlock_create_ruleset(ruleset_attr.handled_access_fs,
 					  ruleset_attr.handled_access_net,
-					  ruleset_attr.scoped);
+					  ruleset_attr.scoped,
+					  ruleset_attr.handled_perm);
 	if (IS_ERR(ruleset))
 		return PTR_ERR(ruleset);
 
@@ -390,13 +406,57 @@ static int add_rule_net_port(struct landlock_ruleset *ruleset,
 					net_port_attr.allowed_access);
 }
 
+static int add_rule_namespace(struct landlock_ruleset *const ruleset,
+			      const void __user *const rule_attr)
+{
+	struct landlock_namespace_attr ns_attr;
+	int res;
+	access_mask_t mask;
+
+	/* Copies raw user space buffer. */
+	res = copy_from_user(&ns_attr, rule_attr, sizeof(ns_attr));
+	if (res)
+		return -EFAULT;
+
+	/* Informs about useless rule: empty allowed_perm. */
+	if (!ns_attr.allowed_perm)
+		return -ENOMSG;
+
+	/* The allowed_perm must match LANDLOCK_PERM_NAMESPACE_ENTER. */
+	if (ns_attr.allowed_perm != LANDLOCK_PERM_NAMESPACE_ENTER)
+		return -EINVAL;
+
+	/* Checks that allowed_perm matches the @ruleset constraints. */
+	mask = landlock_get_perm_mask(ruleset, 0);
+	if (!(mask & LANDLOCK_PERM_NAMESPACE_ENTER))
+		return -EINVAL;
+
+	/* Informs about useless rule: empty namespace_types. */
+	if (!ns_attr.namespace_types)
+		return -ENOMSG;
+
+	/*
+	 * Stores only the namespace types this kernel knows about.
+	 * Unknown bits are silently accepted for forward compatibility:
+	 * user space compiled against newer headers can pass new
+	 * CLONE_NEW* flags without getting EINVAL on older kernels.
+	 * Unknown bits have no effect because no hook checks them.
+	 */
+	mutex_lock(&ruleset->lock);
+	ruleset->layers[0].allowed.ns |= landlock_ns_types_to_bits(
+		ns_attr.namespace_types & CLONE_NS_ALL);
+	mutex_unlock(&ruleset->lock);
+	return 0;
+}
+
 /**
  * sys_landlock_add_rule - Add a new rule to a ruleset
  *
  * @ruleset_fd: File descriptor tied to the ruleset that should be extended
  *		with the new rule.
  * @rule_type: Identify the structure type pointed to by @rule_attr:
- *             %LANDLOCK_RULE_PATH_BENEATH or %LANDLOCK_RULE_NET_PORT.
+ *             %LANDLOCK_RULE_PATH_BENEATH, %LANDLOCK_RULE_NET_PORT, or
+ *             %LANDLOCK_RULE_NAMESPACE.
  * @rule_attr: Pointer to a rule (matching the @rule_type).
  * @flags: Must be 0.
  *
@@ -446,6 +506,8 @@ SYSCALL_DEFINE4(landlock_add_rule, const int, ruleset_fd,
 		return add_rule_path_beneath(ruleset, rule_attr);
 	case LANDLOCK_RULE_NET_PORT:
 		return add_rule_net_port(ruleset, rule_attr);
+	case LANDLOCK_RULE_NAMESPACE:
+		return add_rule_namespace(ruleset, rule_attr);
 	default:
 		return -EINVAL;
 	}

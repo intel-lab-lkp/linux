@@ -153,6 +153,48 @@ landlock_get_applicable_subject(const struct cred *const cred,
 	return NULL;
 }
 
+/**
+ * landlock_perm_is_denied - Check if a permission bitmask request is denied
+ *
+ * @domain: The enforced domain.
+ * @perm_bit: The LANDLOCK_PERM_* flag to check.
+ * @request_value: Compact bitmask to look for (e.g. result of
+ *                 ``landlock_ns_type_to_bit(CLONE_NEWNET)``).
+ *
+ * Iterate from the youngest layer to the oldest.  For each layer that
+ * handles @perm_bit, check whether @request_value is present in the
+ * layer's allowed bitmask.  Return on the first (youngest) denying
+ * layer.
+ *
+ * Return: The youngest denying layer + 1, or 0 if allowed.
+ */
+static inline size_t
+landlock_perm_is_denied(const struct landlock_ruleset *const domain,
+			const access_mask_t perm_bit, const u64 request_value)
+{
+	ssize_t layer;
+
+	for (layer = domain->num_layers - 1; layer >= 0; layer--) {
+		u64 allowed;
+
+		if (!(domain->layers[layer].handled.perm & perm_bit))
+			continue;
+
+		switch (perm_bit) {
+		case LANDLOCK_PERM_NAMESPACE_ENTER:
+			allowed = domain->layers[layer].allowed.ns;
+			break;
+		default:
+			WARN_ON_ONCE(1);
+			return layer + 1;
+		}
+
+		if (!(allowed & request_value))
+			return layer + 1;
+	}
+	return 0;
+}
+
 __init void landlock_add_cred_hooks(void);
 
 #endif /* _SECURITY_LANDLOCK_CRED_H */

@@ -42,6 +42,8 @@ static_assert(BITS_PER_TYPE(access_mask_t) >= LANDLOCK_NUM_ACCESS_FS);
 static_assert(BITS_PER_TYPE(access_mask_t) >= LANDLOCK_NUM_ACCESS_NET);
 /* Makes sure all scoped rights can be stored. */
 static_assert(BITS_PER_TYPE(access_mask_t) >= LANDLOCK_NUM_SCOPE);
+/* Makes sure all permission types can be stored. */
+static_assert(BITS_PER_TYPE(access_mask_t) >= LANDLOCK_NUM_PERM);
 /* Makes sure for_each_set_bit() and for_each_clear_bit() calls are OK. */
 static_assert(sizeof(unsigned long) >= sizeof(access_mask_t));
 
@@ -50,6 +52,7 @@ struct access_masks {
 	access_mask_t fs : LANDLOCK_NUM_ACCESS_FS;
 	access_mask_t net : LANDLOCK_NUM_ACCESS_NET;
 	access_mask_t scope : LANDLOCK_NUM_SCOPE;
+	access_mask_t perm : LANDLOCK_NUM_PERM;
 };
 
 union access_masks_all {
@@ -62,13 +65,46 @@ static_assert(sizeof(typeof_member(union access_masks_all, masks)) ==
 	      sizeof(typeof_member(union access_masks_all, all)));
 
 /**
+ * struct perm_rules - Per-layer allowed bitmasks for permission types
+ *
+ * Compact bitfield struct holding the allowed bitmasks for permission
+ * types that use flat (non-tree) per-layer storage.  All fields share
+ * a single 64-bit storage unit.
+ */
+struct perm_rules {
+	/**
+	 * @ns: Allowed namespace types.  Each bit corresponds to a
+	 * sequential index assigned by the ``_LANDLOCK_NS_*`` enum
+	 * (derived from ``FOR_EACH_NS_TYPE``).  Bits are converted from
+	 * ``CLONE_NEW*`` flags at rule-add time via
+	 * ``landlock_ns_types_to_bits()`` and at enforcement time via
+	 * ``landlock_ns_type_to_bit()``.
+	 */
+	u64 ns : LANDLOCK_NUM_PERM_NS;
+};
+
+static_assert(sizeof(struct perm_rules) == sizeof(u64));
+
+/**
  * struct layer_rights - Per-layer access configuration
  *
- * Wraps the handled-access bitfields together with any additional per-layer
- * data (e.g. allowed bitmasks added by future patches).  This is the element
- * type of the &struct landlock_ruleset.layers FAM.
+ * Wraps the handled-access bitfields together with per-layer allowed
+ * bitmasks.  This is the element type of the &struct
+ * landlock_ruleset.layers FAM.
+ *
+ * Unlike filesystem and network access rights, which are tracked per-object
+ * in red-black trees, namespace types use a flat bitmask because their
+ * keyspace is small and bounded (~8 namespace types).  A single rule adds
+ * to the allowed set via bitwise OR; at enforcement time each layer is
+ * checked directly (no tree lookup needed).
  */
 struct layer_rights {
+	/**
+	 * @allowed: Per-layer allowed bitmasks for permission types.
+	 * Placed before @handled to avoid an internal padding hole
+	 * (8-byte perm_rules followed by 4-byte access_masks).
+	 */
+	struct perm_rules allowed;
 	/**
 	 * @handled: Bitmask of access rights handled (i.e. restricted) by
 	 * this layer.
