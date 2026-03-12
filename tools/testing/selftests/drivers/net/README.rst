@@ -26,6 +26,9 @@ The netdevice against which tests will be run must exist, be running
 Refer to list of :ref:`Variables` later in this file to set up running
 the tests against a real device.
 
+Also, make sure that if you are using a remote machine for traffic injection,
+the local and remote interfaces have different names.
+
 Both modes required
 ~~~~~~~~~~~~~~~~~~~
 
