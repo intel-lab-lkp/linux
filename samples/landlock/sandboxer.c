@@ -14,6 +14,8 @@
 #include <fcntl.h>
 #include <linux/landlock.h>
 #include <linux/socket.h>
+#include <sched.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,10 +24,14 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
-#include <stdbool.h>
 
 #if defined(__GLIBC__)
 #include <linux/prctl.h>
+#endif
+
+/* From include/linux/bits.h, not available in userspace. */
+#ifndef BITS_PER_TYPE
+#define BITS_PER_TYPE(type) (sizeof(type) * 8)
 #endif
 
 #ifndef landlock_create_ruleset
@@ -60,6 +66,8 @@ static inline int landlock_restrict_self(const int ruleset_fd,
 #define ENV_FS_RW_NAME "LL_FS_RW"
 #define ENV_TCP_BIND_NAME "LL_TCP_BIND"
 #define ENV_TCP_CONNECT_NAME "LL_TCP_CONNECT"
+#define ENV_CAPS_NAME "LL_CAPS"
+#define ENV_NS_NAME "LL_NS"
 #define ENV_SCOPED_NAME "LL_SCOPED"
 #define ENV_FORCE_LOG_NAME "LL_FORCE_LOG"
 #define ENV_DELIMITER ":"
@@ -226,11 +234,125 @@ out_free_name:
 	return ret;
 }
 
+static __u64 str2ns(const char *const name)
+{
+	static const struct {
+		const char *name;
+		__u64 value;
+	} ns_map[] = {
+		/* clang-format off */
+		{ "cgroup",	CLONE_NEWCGROUP },
+		{ "ipc",	CLONE_NEWIPC },
+		{ "mnt",	CLONE_NEWNS },
+		{ "net",	CLONE_NEWNET },
+		{ "pid",	CLONE_NEWPID },
+		{ "time",	CLONE_NEWTIME },
+		{ "user",	CLONE_NEWUSER },
+		{ "uts",	CLONE_NEWUTS },
+		/* clang-format on */
+	};
+	size_t i;
+
+	for (i = 0; i < sizeof(ns_map) / sizeof(ns_map[0]); i++) {
+		if (strcmp(name, ns_map[i].name) == 0)
+			return ns_map[i].value;
+	}
+	return 0;
+}
+
+static int populate_ruleset_caps(const char *const env_var,
+				 const int ruleset_fd)
+{
+	int ret = 1;
+	char *env_cap_name, *env_cap_name_next, *strcap;
+	struct landlock_capability_attr cap_attr = {
+		.allowed_perm = LANDLOCK_PERM_CAPABILITY_USE,
+	};
+
+	env_cap_name = getenv(env_var);
+	if (!env_cap_name)
+		return 0;
+	env_cap_name = strdup(env_cap_name);
+	unsetenv(env_var);
+
+	env_cap_name_next = env_cap_name;
+	while ((strcap = strsep(&env_cap_name_next, ENV_DELIMITER))) {
+		__u64 cap;
+
+		if (strcmp(strcap, "") == 0)
+			continue;
+
+		if (str2num(strcap, &cap) ||
+		    cap >= BITS_PER_TYPE(cap_attr.capabilities)) {
+			fprintf(stderr,
+				"Failed to parse capability at \"%s\"\n",
+				strcap);
+			goto out_free_name;
+		}
+		cap_attr.capabilities = 1ULL << cap;
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_CAPABILITY,
+				      &cap_attr, 0)) {
+			fprintf(stderr,
+				"Failed to update the ruleset with capability \"%llu\": %s\n",
+				(unsigned long long)cap, strerror(errno));
+			goto out_free_name;
+		}
+	}
+	ret = 0;
+
+out_free_name:
+	free(env_cap_name);
+	return ret;
+}
+
+static int populate_ruleset_ns(const char *const env_var, const int ruleset_fd)
+{
+	int ret = 1;
+	char *env_ns_name, *env_ns_name_next, *strns;
+	struct landlock_namespace_attr ns_attr = {
+		.allowed_perm = LANDLOCK_PERM_NAMESPACE_ENTER,
+	};
+
+	env_ns_name = getenv(env_var);
+	if (!env_ns_name)
+		return 0;
+	env_ns_name = strdup(env_ns_name);
+	unsetenv(env_var);
+
+	env_ns_name_next = env_ns_name;
+	while ((strns = strsep(&env_ns_name_next, ENV_DELIMITER))) {
+		__u64 ns_type;
+
+		if (strcmp(strns, "") == 0)
+			continue;
+
+		ns_type = str2ns(strns);
+		if (!ns_type) {
+			fprintf(stderr, "Unknown namespace type \"%s\"\n",
+				strns);
+			goto out_free_name;
+		}
+		ns_attr.namespace_types = ns_type;
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NAMESPACE,
+				      &ns_attr, 0)) {
+			fprintf(stderr,
+				"Failed to update the ruleset with namespace \"%s\": %s\n",
+				strns, strerror(errno));
+			goto out_free_name;
+		}
+	}
+	ret = 0;
+
+out_free_name:
+	free(env_ns_name);
+	return ret;
+}
+
 /* Returns true on error, false otherwise. */
 static bool check_ruleset_scope(const char *const env_var,
 				struct landlock_ruleset_attr *ruleset_attr)
 {
-	char *env_type_scope, *env_type_scope_next, *ipc_scoping_name;
+	char *env_type_scope, *env_type_scope_next, *scope_name;
 	bool error = false;
 	bool abstract_scoping = false;
 	bool signal_scoping = false;
@@ -247,16 +369,14 @@ static bool check_ruleset_scope(const char *const env_var,
 
 	env_type_scope = strdup(env_type_scope);
 	env_type_scope_next = env_type_scope;
-	while ((ipc_scoping_name =
-			strsep(&env_type_scope_next, ENV_DELIMITER))) {
-		if (strcmp("a", ipc_scoping_name) == 0 && !abstract_scoping) {
+	while ((scope_name = strsep(&env_type_scope_next, ENV_DELIMITER))) {
+		if (strcmp("a", scope_name) == 0 && !abstract_scoping) {
 			abstract_scoping = true;
-		} else if (strcmp("s", ipc_scoping_name) == 0 &&
-			   !signal_scoping) {
+		} else if (strcmp("s", scope_name) == 0 && !signal_scoping) {
 			signal_scoping = true;
 		} else {
 			fprintf(stderr, "Unknown or duplicate scope \"%s\"\n",
-				ipc_scoping_name);
+				scope_name);
 			error = true;
 			goto out_free_name;
 		}
@@ -299,7 +419,7 @@ out_unset:
 
 /* clang-format on */
 
-#define LANDLOCK_ABI_LAST 8
+#define LANDLOCK_ABI_LAST 9
 
 #define XSTR(s) #s
 #define STR(s) XSTR(s)
@@ -322,6 +442,10 @@ static const char help[] =
 	"means an empty list):\n"
 	"* " ENV_TCP_BIND_NAME ": ports allowed to bind (server)\n"
 	"* " ENV_TCP_CONNECT_NAME ": ports allowed to connect (client)\n"
+	"* " ENV_CAPS_NAME ": capability numbers allowed to use "
+	"(e.g. 10 for CAP_NET_BIND_SERVICE, 21 for CAP_SYS_ADMIN)\n"
+	"* " ENV_NS_NAME ": namespace types allowed to enter "
+	"(cgroup, ipc, mnt, net, pid, time, user, uts)\n"
 	"* " ENV_SCOPED_NAME ": actions denied on the outside of the landlock domain\n"
 	"  - \"a\" to restrict opening abstract unix sockets\n"
 	"  - \"s\" to restrict sending signals\n"
@@ -334,6 +458,8 @@ static const char help[] =
 	ENV_FS_RW_NAME "=\"/dev/null:/dev/full:/dev/zero:/dev/pts:/tmp\" "
 	ENV_TCP_BIND_NAME "=\"9418\" "
 	ENV_TCP_CONNECT_NAME "=\"80:443\" "
+	ENV_CAPS_NAME "=\"21\" "
+	ENV_NS_NAME "=\"user:uts:net\" "
 	ENV_SCOPED_NAME "=\"a:s\" "
 	"%1$s bash -i\n"
 	"\n"
@@ -357,6 +483,8 @@ int main(const int argc, char *const argv[], char *const *const envp)
 				      LANDLOCK_ACCESS_NET_CONNECT_TCP,
 		.scoped = LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET |
 			  LANDLOCK_SCOPE_SIGNAL,
+		.handled_perm = LANDLOCK_PERM_CAPABILITY_USE |
+				LANDLOCK_PERM_NAMESPACE_ENTER,
 	};
 	int supported_restrict_flags = LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON;
 	int set_restrict_flags = 0;
@@ -438,6 +566,10 @@ int main(const int argc, char *const argv[], char *const *const envp)
 			~LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON;
 		__attribute__((fallthrough));
 	case 7:
+		__attribute__((fallthrough));
+	case 8:
+		/* Removes permission support for ABI < 9 */
+		ruleset_attr.handled_perm = 0;
 		/* Must be printed for any ABI < LANDLOCK_ABI_LAST. */
 		fprintf(stderr,
 			"Hint: You should update the running kernel "
@@ -469,6 +601,14 @@ int main(const int argc, char *const argv[], char *const *const envp)
 		ruleset_attr.handled_access_net &=
 			~LANDLOCK_ACCESS_NET_CONNECT_TCP;
 	}
+
+	/* Removes capability handling if not set by a user. */
+	if (!getenv(ENV_CAPS_NAME))
+		ruleset_attr.handled_perm &= ~LANDLOCK_PERM_CAPABILITY_USE;
+
+	/* Removes namespace handling if not set by a user. */
+	if (!getenv(ENV_NS_NAME))
+		ruleset_attr.handled_perm &= ~LANDLOCK_PERM_NAMESPACE_ENTER;
 
 	if (check_ruleset_scope(ENV_SCOPED_NAME, &ruleset_attr))
 		return 1;
@@ -513,6 +653,12 @@ int main(const int argc, char *const argv[], char *const *const envp)
 				 LANDLOCK_ACCESS_NET_CONNECT_TCP)) {
 		goto err_close_ruleset;
 	}
+
+	if (populate_ruleset_caps(ENV_CAPS_NAME, ruleset_fd))
+		goto err_close_ruleset;
+
+	if (populate_ruleset_ns(ENV_NS_NAME, ruleset_fd))
+		goto err_close_ruleset;
 
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
 		perror("Failed to restrict privileges");
