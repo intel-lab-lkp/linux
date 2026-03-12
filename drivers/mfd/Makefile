@@ -69,6 +69,10 @@ obj-$(CONFIG_MFD_WM8350)	+= wm8350.o
 obj-$(CONFIG_MFD_WM8350_I2C)	+= wm8350-i2c.o
 wm8994-objs			:= wm8994-core.o wm8994-irq.o wm8994-regmap.o
 obj-$(CONFIG_MFD_WM8994)	+= wm8994.o
+
+tac5x1x-objs			:= tac5x1x-core.o
+obj-$(CONFIG_MFD_TAC5X1X)	+= tac5x1x.o
+
 obj-$(CONFIG_MFD_WM97xx)	+= wm97xx-core.o
 
 madera-objs			:= madera-core.o

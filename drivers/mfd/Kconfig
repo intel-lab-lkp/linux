@@ -1551,6 +1551,14 @@ config MFD_SC27XX_PMIC
 	  This driver provides common support for accessing the SC27xx PMICs,
 	  and it also adds the irq_chip parts for handling the PMIC chip events.
 
+config MFD_TAC5X1X
+	tristate "Texas Instruments tac5x1x core driver"
+	select MFD_CORE
+	help
+	  Select this option to enable tac5x1x multi function
+	  diver which is required for audio codec functionality and gpio
+	  pincontrol configuration for the device.
+
 config RZ_MTU3
 	tristate "Renesas RZ/G2L MTU3a core driver"
 	depends on (ARCH_RZG2L && OF) || COMPILE_TEST
