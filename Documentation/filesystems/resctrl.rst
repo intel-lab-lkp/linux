@@ -514,6 +514,40 @@ conveyed in the error returns from file operations. E.g.
 	# cat info/last_cmd_status
 	mask f7 has non-consecutive 1-bits
 
+"kernel_mode":
+	In the top level of the "info" directory, "kernel_mode" controls how
+	resource allocation and monitoring work in kernel mode. This is used on
+	some platforms to assign a dedicated CLOSID and/or RMID to kernel threads.
+
+	Reading the file lists supported kernel modes, one per line. The
+	currently active mode is shown in square brackets; other modes supported
+	by the platform are shown without brackets. Example::
+
+	  # cat info/kernel_mode
+	  [inherit_ctrl_and_mon]
+	  global_assign_ctrl_inherit_mon
+	  global_assign_ctrl_assign_mon
+
+	Writing a mode name (followed by a newline) sets the current kernel mode.
+	The name must match one of the supported mode names exactly. Modes not
+	supported by the platform (e.g. not advertised when reading the file)
+	cannot be set. Errors are reported in "info/last_cmd_status". Example::
+
+	  # echo "global_assign_ctrl_assign_mon" > info/kernel_mode
+	  # cat info/kernel_mode
+	  inherit_ctrl_and_mon
+	  global_assign_ctrl_inherit_mon
+	  [global_assign_ctrl_assign_mon]
+
+	Modes:
+
+	- "inherit_ctrl_and_mon": Kernel uses the same CLOSID and RMID as the
+	  current user-space task (default).
+	- "global_assign_ctrl_inherit_mon": One CLOSID is assigned for all
+	  kernel work; RMID is still inherited from user space.
+	- "global_assign_ctrl_assign_mon": One resource group (CLOSID and RMID)
+	  is assigned for all kernel work.
+
 Resource alloc and monitor groups
 =================================
 

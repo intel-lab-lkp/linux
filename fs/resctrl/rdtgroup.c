@@ -1019,6 +1019,104 @@ static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/**
+ * rdtgroup_config_kmode() - Enable or disable kernel mode (e.g. PLZA) for a group
+ * @rdtgrp:	The rdtgroup to assign or unassign for kernel work.
+ * @enable:	True to assign this group for kernel mode; false to clear.
+ *
+ * Programs arch state via resctrl_arch_configure_kmode() and
+ * resctrl_arch_set_kmode(), and updates resctrl_kcfg.k_rdtgrp. Only one group
+ * may have kmode at a time. Pseudo-locked groups cannot be used for kernel mode.
+ *
+ * Return: 0 on success, or -EINVAL if the group is pseudo-locked.
+ */
+static int rdtgroup_config_kmode(struct rdtgroup *rdtgrp, bool enable)
+{
+	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
+	u32 closid;
+
+	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKED) {
+		rdt_last_cmd_puts("Resource group is pseudo-locked\n");
+		return -EINVAL;
+	}
+
+	if (rdtgrp->type == RDTMON_GROUP)
+		closid = rdtgrp->mon.parent->closid;
+	else
+		closid = rdtgrp->closid;
+
+	resctrl_arch_configure_kmode(r, &resctrl_kcfg, closid, rdtgrp->mon.rmid);
+
+	resctrl_arch_set_kmode(&rdtgrp->cpu_mask, &resctrl_kcfg, closid,
+			       rdtgrp->mon.rmid, enable);
+	rdtgrp->kmode = enable;
+	if (enable)
+		resctrl_kcfg.k_rdtgrp = rdtgrp;
+	else
+		resctrl_kcfg.k_rdtgrp = NULL;
+
+	return 0;
+}
+
+/**
+ * resctrl_kernel_mode_write() - Set current kernel mode via info/kernel_mode
+ * @of:	kernfs file handle.
+ * @buf:	Mode name string (e.g. "inherit_ctrl_and_mon"); must end with newline.
+ * @nbytes:	Length of buf.
+ * @off:	File offset (unused).
+ *
+ * Accepts one of the names in kmodes[]. The mode must be supported by the
+ * platform (resctrl_kcfg.kmode). On success updates resctrl_kcfg.kmode_cur.
+ * Errors are reported in last_cmd_status.
+ *
+ * Return: nbytes on success, or -EINVAL with last_cmd_status set on error.
+ */
+static ssize_t resctrl_kernel_mode_write(struct kernfs_open_file *of,
+					 char *buf, size_t nbytes, loff_t off)
+{
+	int ret = 0;
+	u32 kmode;
+	int i;
+
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+	buf[nbytes - 1] = '\0';
+
+	mutex_lock(&rdtgroup_mutex);
+	rdt_last_cmd_clear();
+
+	for (i = 0; i < RESCTRL_KERNEL_MODES_NUM; i++) {
+		if (strcmp(buf, kmodes[i].name) != 0)
+			continue;
+		/* Mode name matched; reject if not supported by this platform. */
+		if (!(resctrl_kcfg.kmode & kmodes[i].val)) {
+			rdt_last_cmd_puts("Kernel mode not available\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+		if (resctrl_kcfg.kmode_cur != kmodes[i].val) {
+			kmode = resctrl_kcfg.kmode_cur;
+			resctrl_kcfg.kmode_cur = kmodes[i].val;
+			if (resctrl_kcfg.k_rdtgrp) {
+				ret = rdtgroup_config_kmode(resctrl_kcfg.k_rdtgrp, true);
+				if (ret) {
+					/* Revert to the previous mode. */
+					resctrl_kcfg.kmode_cur = kmode;
+					rdt_last_cmd_puts("Kernel mode change failed\n");
+				}
+			}
+			goto out_unlock;
+		}
+	}
+
+	rdt_last_cmd_puts("Unknown or unsupported kernel mode\n");
+	ret = -EINVAL;
+
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+	return ret ?: nbytes;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -1922,9 +2020,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "kernel_mode",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_kernel_mode_show,
+		.write		= resctrl_kernel_mode_write,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
