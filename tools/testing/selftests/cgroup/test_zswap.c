@@ -589,23 +589,41 @@ struct zswap_test {
 };
 #undef T
 
-static bool zswap_configured(void)
+static int zswap_enabled(void)
 {
-	return access("/sys/module/zswap", F_OK) == 0;
+	char buf[16];
+	ssize_t n;
+
+	if (access("/sys/module/zswap", F_OK))
+		ksft_exit_skip("zswap isn't configured\n");
+
+	n = read_text("/sys/module/zswap/parameters/enabled", buf, sizeof(buf));
+	if (n <= 0)
+		return -1;
+
+	if (buf[0] == 'Y')
+		return 1;
+	else if (buf[0] == 'N')
+		return 0;
+
+	return -1;
 }
 
 int main(int argc, char **argv)
 {
 	char root[PATH_MAX];
-	int i;
+	int i, state;
 
 	ksft_print_header();
 	ksft_set_plan(ARRAY_SIZE(tests));
 	if (cg_find_unified_root(root, sizeof(root), NULL))
 		ksft_exit_skip("cgroup v2 isn't mounted\n");
 
-	if (!zswap_configured())
-		ksft_exit_skip("zswap isn't configured\n");
+	state = zswap_enabled();
+	if (state == 0)
+		ksft_exit_skip("zswap is disabled (hint: echo 1 > /sys/module/zswap/parameters/enabled)\n");
+	else if (state < 0)
+		ksft_exit_fail_msg("Failed to read zswap state\n");
 
 	/*
 	 * Check that memory controller is available:
