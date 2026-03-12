@@ -2359,8 +2359,13 @@ static ssize_t ceph_write_iter(struct kiocb *iocb, struct iov_iter *from)
 retry_snap:
 	if (direct_lock)
 		ceph_start_io_direct(inode);
-	else
-		ceph_start_io_write(inode);
+	else {
+		err = ceph_start_io_write(inode);
+		if (err) {
+			ceph_free_cap_flush(prealloc_cf);
+			return err;
+		}
+	}
 
 	if (iocb->ki_flags & IOCB_APPEND) {
 		err = ceph_do_getattr(inode, CEPH_STAT_CAP_SIZE, false);

@@ -83,11 +83,16 @@ ceph_end_io_read(struct inode *inode)
  * Declare that a buffered write operation is about to start, and ensure
  * that we block all direct I/O.
  */
-void
+int
 ceph_start_io_write(struct inode *inode)
 {
-	down_write(&inode->i_rwsem);
+	int ret;
+
+	ret = down_write_killable(&inode->i_rwsem);
+	if (ret)
+		return ret;
 	ceph_block_o_direct(ceph_inode(inode), inode);
+	return 0;
 }
 
 /**

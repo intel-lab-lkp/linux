@@ -4,7 +4,7 @@
 
 void ceph_start_io_read(struct inode *inode);
 void ceph_end_io_read(struct inode *inode);
-void ceph_start_io_write(struct inode *inode);
+int ceph_start_io_write(struct inode *inode);
 void ceph_end_io_write(struct inode *inode);
 void ceph_start_io_direct(struct inode *inode);
 void ceph_end_io_direct(struct inode *inode);
