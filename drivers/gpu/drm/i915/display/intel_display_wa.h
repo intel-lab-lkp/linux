@@ -60,11 +60,14 @@ enum intel_display_wa {
 	INTEL_DISPLAY_WA_22012358565,
 	INTEL_DISPLAY_WA_22014263786,
 	INTEL_DISPLAY_WA_22021048059,
+
+	INTEL_DISPLAY_WA_COUNT
 };
 
 bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa, const char *name);
 
-#define intel_display_wa(__display, __wa) \
-	__intel_display_wa((__display), __wa, __stringify(__wa))
-
+#define intel_display_wa(__display, __wa) ({				  \
+		BUILD_BUG_ON(__wa >= INTEL_DISPLAY_WA_COUNT);		  \
+		__intel_display_wa((__display), __wa, __stringify(__wa)); \
+	})
 #endif
