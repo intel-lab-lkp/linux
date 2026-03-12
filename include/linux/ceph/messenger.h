@@ -320,6 +320,13 @@ struct ceph_msg {
 /* ceph connection fault delay defaults, for exponential backoff */
 #define BASE_DELAY_INTERVAL	(HZ / 4)
 #define MAX_DELAY_INTERVAL	(15 * HZ)
+/*
+ * Shorter retry delay for EADDRNOTAVAIL. This error typically indicates
+ * a transient condition (IPv6 DAD in progress, address reconfiguration,
+ * temporary route issue) that resolves in 1-2 seconds. Fast retries
+ * allow quick recovery without exponential backoff delays.
+ */
+#define ADDRNOTAVAIL_DELAY	(HZ / 10)
 
 struct ceph_connection_v1_info {
 	struct kvec out_kvec[8],         /* sending header/footer data */
@@ -360,6 +367,8 @@ struct ceph_connection_v1_info {
 	u32 connect_seq;      /* identify the most recent connection
 				 attempt for this session */
 	u32 peer_global_seq;  /* peer's global seq for this connection */
+
+	bool addr_notavail;  /* address not available (transient) */
 };
 
 #define CEPH_CRC_LEN			4
@@ -429,6 +438,8 @@ struct ceph_connection_v2_info {
 	int out_enc_i;
 
 	int con_mode;  /* CEPH_CON_MODE_* */
+
+	bool addr_notavail;  /* address not available (transient) */
 
 	void *conn_bufs[16];
 	int conn_buf_cnt;
