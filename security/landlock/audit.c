@@ -82,6 +82,10 @@ get_blocker(const enum landlock_request_type type,
 	case LANDLOCK_REQUEST_NAMESPACE:
 		WARN_ON_ONCE(access_bit != -1);
 		return "perm.namespace_enter";
+
+	case LANDLOCK_REQUEST_CAPABILITY:
+		WARN_ON_ONCE(access_bit != -1);
+		return "perm.capability_use";
 	}
 
 	WARN_ON_ONCE(1);

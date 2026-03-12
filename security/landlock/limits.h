@@ -11,6 +11,7 @@
 #define _SECURITY_LANDLOCK_LIMITS_H
 
 #include <linux/bitops.h>
+#include <linux/capability.h>
 #include <linux/limits.h>
 #include <linux/ns/ns_common_types.h>
 #include <uapi/linux/landlock.h>
@@ -32,11 +33,12 @@
 #define LANDLOCK_MASK_SCOPE		((LANDLOCK_LAST_SCOPE << 1) - 1)
 #define LANDLOCK_NUM_SCOPE		__const_hweight64(LANDLOCK_MASK_SCOPE)
 
-#define LANDLOCK_LAST_PERM		LANDLOCK_PERM_NAMESPACE_ENTER
+#define LANDLOCK_LAST_PERM		LANDLOCK_PERM_CAPABILITY_USE
 #define LANDLOCK_MASK_PERM		((LANDLOCK_LAST_PERM << 1) - 1)
 #define LANDLOCK_NUM_PERM		__const_hweight64(LANDLOCK_MASK_PERM)
 
 #define LANDLOCK_NUM_PERM_NS		__const_hweight64((u64)(CLONE_NS_ALL))
+#define LANDLOCK_NUM_PERM_CAP		(CAP_LAST_CAP + 1)
 
 #define LANDLOCK_LAST_RESTRICT_SELF	LANDLOCK_RESTRICT_SELF_TSYNC
 #define LANDLOCK_MASK_RESTRICT_SELF	((LANDLOCK_LAST_RESTRICT_SELF << 1) - 1)

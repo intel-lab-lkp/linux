@@ -166,6 +166,11 @@ enum landlock_rule_type {
 	 * landlock_namespace_attr .
 	 */
 	LANDLOCK_RULE_NAMESPACE,
+	/**
+	 * @LANDLOCK_RULE_CAPABILITY: Type of a &struct
+	 * landlock_capability_attr .
+	 */
+	LANDLOCK_RULE_CAPABILITY,
 };
 
 /**
@@ -235,6 +240,24 @@ struct landlock_namespace_attr {
 	 * are silently ignored for forward compatibility.
 	 */
 	__u64 namespace_types;
+};
+
+/**
+ * struct landlock_capability_attr - Capability definition
+ *
+ * Argument of sys_landlock_add_rule() with %LANDLOCK_RULE_CAPABILITY.
+ */
+struct landlock_capability_attr {
+	/**
+	 * @allowed_perm: Must be set to %LANDLOCK_PERM_CAPABILITY_USE.
+	 */
+	__u64 allowed_perm;
+	/**
+	 * @capabilities: Bitmask of capabilities (``1ULL << CAP_*``) that
+	 * should be allowed for use under this rule.  Bits above
+	 * ``CAP_LAST_CAP`` are silently ignored for forward compatibility.
+	 */
+	__u64 capabilities;
 };
 
 /**
@@ -432,9 +455,17 @@ struct landlock_namespace_attr {
  *   Landlock domain that handles this permission is denied from entering
  *   namespace types that are not explicitly allowed by a
  *   %LANDLOCK_RULE_NAMESPACE rule.
+ * - %LANDLOCK_PERM_CAPABILITY_USE: Restrict the use of specific Linux
+ *   capabilities.  A process in a Landlock domain that handles this
+ *   permission is denied from exercising capabilities that are not
+ *   explicitly allowed by a %LANDLOCK_RULE_CAPABILITY rule.  This hook
+ *   is purely restrictive: it can deny capabilities that the kernel
+ *   would otherwise grant, but it can never grant capabilities that the
+ *   kernel already denied.
  */
 /* clang-format off */
 #define LANDLOCK_PERM_NAMESPACE_ENTER			(1ULL << 0)
+#define LANDLOCK_PERM_CAPABILITY_USE			(1ULL << 1)
 /* clang-format on */
 
 #endif /* _UAPI_LINUX_LANDLOCK_H */

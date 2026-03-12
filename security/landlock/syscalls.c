@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <uapi/linux/landlock.h>
 
+#include "cap.h"
 #include "cred.h"
 #include "domain.h"
 #include "fs.h"
@@ -98,8 +99,9 @@ static void build_check_abi(void)
 	struct landlock_path_beneath_attr path_beneath_attr;
 	struct landlock_net_port_attr net_port_attr;
 	struct landlock_namespace_attr namespace_attr;
+	struct landlock_capability_attr capability_attr;
 	size_t ruleset_size, path_beneath_size, net_port_size;
-	size_t namespace_size;
+	size_t namespace_size, capability_size;
 
 	/*
 	 * For each user space ABI structures, first checks that there is no
@@ -127,6 +129,11 @@ static void build_check_abi(void)
 	namespace_size += sizeof(namespace_attr.namespace_types);
 	BUILD_BUG_ON(sizeof(namespace_attr) != namespace_size);
 	BUILD_BUG_ON(sizeof(namespace_attr) != 16);
+
+	capability_size = sizeof(capability_attr.allowed_perm);
+	capability_size += sizeof(capability_attr.capabilities);
+	BUILD_BUG_ON(sizeof(capability_attr) != capability_size);
+	BUILD_BUG_ON(sizeof(capability_attr) != 16);
 }
 
 /* Ruleset handling */
@@ -449,14 +456,57 @@ static int add_rule_namespace(struct landlock_ruleset *const ruleset,
 	return 0;
 }
 
+static int add_rule_capability(struct landlock_ruleset *const ruleset,
+			       const void __user *const rule_attr)
+{
+	struct landlock_capability_attr cap_attr;
+	int res;
+	access_mask_t mask;
+
+	/* Copies raw user space buffer. */
+	res = copy_from_user(&cap_attr, rule_attr, sizeof(cap_attr));
+	if (res)
+		return -EFAULT;
+
+	/* Informs about useless rule: empty allowed_perm. */
+	if (!cap_attr.allowed_perm)
+		return -ENOMSG;
+
+	/* The allowed_perm must match LANDLOCK_PERM_CAPABILITY_USE. */
+	if (cap_attr.allowed_perm != LANDLOCK_PERM_CAPABILITY_USE)
+		return -EINVAL;
+
+	/* Checks that allowed_perm matches the @ruleset constraints. */
+	mask = landlock_get_perm_mask(ruleset, 0);
+	if (!(mask & LANDLOCK_PERM_CAPABILITY_USE))
+		return -EINVAL;
+
+	/* Informs about useless rule: empty capabilities. */
+	if (!cap_attr.capabilities)
+		return -ENOMSG;
+
+	/*
+	 * Stores only the capabilities this kernel knows about.
+	 * Unknown bits are silently accepted for forward compatibility:
+	 * user space compiled against newer headers can pass new
+	 * CAP_* bits without getting EINVAL on older kernels.
+	 * Unknown bits have no effect because no hook checks them.
+	 */
+	mutex_lock(&ruleset->lock);
+	ruleset->layers[0].allowed.caps |=
+		landlock_caps_to_bits(cap_attr.capabilities & CAP_VALID_MASK);
+	mutex_unlock(&ruleset->lock);
+	return 0;
+}
+
 /**
  * sys_landlock_add_rule - Add a new rule to a ruleset
  *
  * @ruleset_fd: File descriptor tied to the ruleset that should be extended
  *		with the new rule.
  * @rule_type: Identify the structure type pointed to by @rule_attr:
- *             %LANDLOCK_RULE_PATH_BENEATH, %LANDLOCK_RULE_NET_PORT, or
- *             %LANDLOCK_RULE_NAMESPACE.
+ *             %LANDLOCK_RULE_PATH_BENEATH, %LANDLOCK_RULE_NET_PORT,
+ *             %LANDLOCK_RULE_NAMESPACE, or %LANDLOCK_RULE_CAPABILITY.
  * @rule_attr: Pointer to a rule (matching the @rule_type).
  * @flags: Must be 0.
  *
@@ -508,6 +558,8 @@ SYSCALL_DEFINE4(landlock_add_rule, const int, ruleset_fd,
 		return add_rule_net_port(ruleset, rule_attr);
 	case LANDLOCK_RULE_NAMESPACE:
 		return add_rule_namespace(ruleset, rule_attr);
+	case LANDLOCK_RULE_CAPABILITY:
+		return add_rule_capability(ruleset, rule_attr);
 	default:
 		return -EINVAL;
 	}

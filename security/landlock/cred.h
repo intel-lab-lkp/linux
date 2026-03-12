@@ -184,6 +184,9 @@ landlock_perm_is_denied(const struct landlock_ruleset *const domain,
 		case LANDLOCK_PERM_NAMESPACE_ENTER:
 			allowed = domain->layers[layer].allowed.ns;
 			break;
+		case LANDLOCK_PERM_CAPABILITY_USE:
+			allowed = domain->layers[layer].allowed.caps;
+			break;
 		default:
 			WARN_ON_ONCE(1);
 			return layer + 1;
