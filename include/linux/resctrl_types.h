@@ -65,7 +65,37 @@ enum resctrl_event_id {
 	QOS_NUM_EVENTS,
 };
 
+/**
+ * struct resctrl_kmode - Resctrl kernel mode descriptor
+ * @name:	Human-readable name of the kernel mode.
+ * @val:	Bitmask value for the kernel mode (e.g. INHERIT_CTRL_AND_MON).
+ */
+struct resctrl_kmode {
+	char    name[32];
+	u32     val;
+};
+
+/**
+ * struct resctrl_kmode_cfg - Resctrl kernel mode configuration
+ * @kmode:	Requested kernel mode.
+ * @kmode_cur:	Currently active kernel mode.
+ * @k_rdtgrp:	Resource control structure in use, or NULL otherwise.
+ */
+struct resctrl_kmode_cfg {
+	u32 kmode;
+	u32 kmode_cur;
+	struct rdtgroup *k_rdtgrp;
+};
+
 #define QOS_NUM_L3_MBM_EVENTS	(QOS_L3_MBM_LOCAL_EVENT_ID - QOS_L3_MBM_TOTAL_EVENT_ID + 1)
 #define MBM_STATE_IDX(evt)	((evt) - QOS_L3_MBM_TOTAL_EVENT_ID)
+
+/* Resctrl kernel mode bits (e.g. for PLZA). */
+#define INHERIT_CTRL_AND_MON		BIT(0)	/* Kernel uses same CLOSID/RMID as user. */
+/* One CLOSID for all kernel work; RMID inherited from user. */
+#define GLOBAL_ASSIGN_CTRL_INHERIT_MON	BIT(1)
+/* One resource group (CLOSID+RMID) for all kernel work. */
+#define GLOBAL_ASSIGN_CTRL_ASSIGN_MON	BIT(2)
+#define RESCTRL_KERNEL_MODES_NUM	3
 
 #endif /* __LINUX_RESCTRL_TYPES_H */

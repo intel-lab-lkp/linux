@@ -699,6 +699,16 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable);
  */
 bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
 
+/**
+ * resctrl_arch_get_kmode_cfg() - Get resctrl kernel mode configuration
+ * @kcfg:	Filled with current kernel mode config (kmode, kmode_cur, k_rdtgrp).
+ *
+ * Used by the arch (e.g. x86) to report which kernel mode is active and,
+ * when a global assign mode is in use, which rdtgroup is assigned to
+ * kernel work.
+ */
+void resctrl_arch_get_kmode_cfg(struct resctrl_kmode_cfg *kcfg);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
