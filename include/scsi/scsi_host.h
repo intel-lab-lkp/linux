@@ -534,6 +534,8 @@ struct scsi_host_template {
 		enum scsi_qc_status rc;					\
 									\
 		spin_lock_irqsave(shost->host_lock, irq_flags);		\
+		/* Tell the compiler that cmd->device->host == shost. */\
+		__assume_ctx_lock(cmd->device->host->host_lock);	\
 		rc = func_name##_lck(cmd);				\
 		spin_unlock_irqrestore(shost->host_lock, irq_flags);	\
 		return rc;						\
