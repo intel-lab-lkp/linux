@@ -3934,6 +3934,12 @@ struct ieee80211_prep_tx_info {
  *	you should ensure to cancel it on this callback.
  *	Must be implemented and can sleep.
  *
+ * @force_cleanup: Called after mac80211 determines the
+ *      driver/firmware/hardware has failed and cannot
+ *      be restarted.  SDATA_IN_DRIVER is false at this point,
+ *      so normal cleanup will not happen.  This force_cleanup
+ *      operation lets the driver do any needed houskeeping.
+ *
  * @suspend: Suspend the device; mac80211 itself will quiesce before and
  *	stop transmitting and doing any other configuration, and then
  *	ask the device to suspend. This is only invoked when WoWLAN is
@@ -4569,6 +4575,7 @@ struct ieee80211_ops {
 		   struct sk_buff *skb);
 	int (*start)(struct ieee80211_hw *hw);
 	void (*stop)(struct ieee80211_hw *hw, bool suspend);
+	void (*force_cleanup)(struct ieee80211_hw *hw);
 #ifdef CONFIG_PM
 	int (*suspend)(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan);
 	int (*resume)(struct ieee80211_hw *hw);

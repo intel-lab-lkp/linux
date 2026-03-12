@@ -1692,6 +1692,11 @@ static void ieee80211_handle_reconfig_failure(struct ieee80211_local *local)
 	 */
 	list_for_each_entry(ctx, &local->chanctx_list, list)
 		ctx->driver_present = false;
+
+	/* Tell driver to purge any remaining configuration it may have
+	 * lingering around.
+	 */
+	drv_force_cleanup(local);
 }
 
 static void ieee80211_assign_chanctx(struct ieee80211_local *local,
