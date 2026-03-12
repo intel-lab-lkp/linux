@@ -1706,7 +1706,7 @@ nfsd4_interssc_connect(struct nl4_server *nss, struct svc_rqst *rqstp,
 	struct sockaddr_storage tmp_addr;
 	size_t tmp_addrlen, match_netid_len = 3;
 	char *startsep = "", *endsep = "", *match_netid = "tcp";
-	char *ipaddr, *dev_name, *raw_data;
+	char ipaddr[RPC_MAX_ADDRBUFLEN + 1], *dev_name, *raw_data;
 	int len, raw_len;
 	__be32 status = nfserr_inval;
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
@@ -1732,19 +1732,15 @@ nfsd4_interssc_connect(struct nl4_server *nss, struct svc_rqst *rqstp,
 		goto out_err;
 
 	/* Construct the raw data for the vfs_kern_mount call */
-	len = RPC_MAX_ADDRBUFLEN + 1;
-	ipaddr = kzalloc(len, GFP_KERNEL);
-	if (!ipaddr)
-		goto out_err;
 
-	rpc_ntop((struct sockaddr *)&tmp_addr, ipaddr, len);
+	len = rpc_ntop((struct sockaddr *)&tmp_addr, ipaddr, sizeof(ipaddr));
 
 	/* 2 for ipv6 endsep and startsep. 3 for ":/" and trailing '/0'*/
 
-	raw_len = strlen(NFSD42_INTERSSC_MOUNTOPS) + strlen(ipaddr);
+	raw_len = strlen(NFSD42_INTERSSC_MOUNTOPS) + len;
 	raw_data = kzalloc(raw_len, GFP_KERNEL);
 	if (!raw_data)
-		goto out_free_ipaddr;
+		goto out_err;
 
 	snprintf(raw_data, raw_len, NFSD42_INTERSSC_MOUNTOPS, ipaddr);
 
@@ -1781,8 +1777,6 @@ out_free_devname:
 	kfree(dev_name);
 out_free_rawdata:
 	kfree(raw_data);
-out_free_ipaddr:
-	kfree(ipaddr);
 out_err:
 	return status;
 }
