@@ -6,13 +6,38 @@
 Regular expression ancillary classes.
 
 Those help caching regular expressions and do matching for kernel-doc.
+
+Please notice that the code here may rise exceptions to indicate bad
+usage inside kdoc to indicate problems at the replace pattern.
+
+Other errors are logged via log instance.
 """
 
+import logging
 import re
 
 from copy import copy
 
 from .kdoc_re import KernRe
+
+log = logging.getLogger(__name__)
+
+def tokenizer_set_log(logger, prefix = ""):
+    """
+    Replace the module‑level logger with a LoggerAdapter that
+    prepends *prefix* to every message.
+    """
+    global log
+
+    class PrefixAdapter(logging.LoggerAdapter):
+        """
+        Ancillary class to set prefix on all message logs.
+        """
+        def process(self, msg, kwargs):
+            return f"{prefix}{msg}", kwargs
+
+    # Wrap the provided logger in our adapter
+    log = PrefixAdapter(logger, {"prefix": prefix})
 
 class CToken():
     """
@@ -169,7 +194,7 @@ class CTokenizer():
             value = match.group()
 
             if kind == CToken.MISMATCH:
-                raise RuntimeError(f"Unexpected token '{value}' on {pos}:\n\t{source}")
+                log.error(f"Unexpected token '{value}' on {pos}:\n\t{source}")
             elif kind == CToken.BEGIN:
                 if value == '(':
                     paren_level += 1
@@ -189,7 +214,7 @@ class CTokenizer():
             yield CToken(kind, value, pos,
                          brace_level, paren_level, bracket_level)
 
-    def __init__(self, source=None):
+    def __init__(self, source=None, log=None):
         """
         Create a regular expression to handle TOKEN_LIST.
 
@@ -349,7 +374,7 @@ class CTokenArgs:
                 elif tok.value == "(":
                     delim = ","
                 else:
-                    raise ValueError(fr"Can't handle \1..\n on {sub_str}")
+                    self.log.error(fr"Can't handle \1..\n on {sub_str}")
 
                 level = tok.level
                 break
@@ -383,7 +408,7 @@ class CTokenArgs:
             groups_list[pos].append(tok)
 
         if pos < self.max_group:
-            raise ValueError(fr"{self.sub_str} groups are up to {pos} instead of {self.max_group}")
+            log.error(fr"{self.sub_str} groups are up to {pos} instead of {self.max_group}")
 
         return level, groups_list
 
@@ -503,7 +528,8 @@ class CMatch:
         # picking an incomplete block.
         #
         if start and stack:
-            print("WARNING: can't find an end", file=sys.stderr)
+            s = str(tokenizer)
+            log.warning(f"can't find a final end at {s}")
             yield start, len(tokenizer.tokens)
 
     def search(self, source):
