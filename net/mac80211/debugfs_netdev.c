@@ -882,6 +882,11 @@ static void add_mesh_stats(struct ieee80211_sub_if_data *sdata)
 {
 	struct dentry *dir = debugfs_create_dir("mesh_stats",
 						sdata->vif.debugfs_dir);
+	if (IS_ERR(dir)) {
+		sdata_err(sdata, "Failed to create mesh stats dir, rv: %ld vif dir: 0x%px\n",
+			  (long)(dir), sdata->vif.debugfs_dir);
+		return;
+	}
 #define MESHSTATS_ADD(name)\
 	debugfs_create_file(#name, 0400, dir, sdata, &name##_ops)
 
@@ -897,6 +902,11 @@ static void add_mesh_config(struct ieee80211_sub_if_data *sdata)
 {
 	struct dentry *dir = debugfs_create_dir("mesh_config",
 						sdata->vif.debugfs_dir);
+	if (IS_ERR(dir)) {
+		sdata_err(sdata, "Failed to create mesh config dir, rv: %ld vif dir: 0x%px\n",
+			  (long)(dir), sdata->vif.debugfs_dir);
+		return;
+	}
 
 #define MESHPARAMS_ADD(name) \
 	debugfs_create_file(#name, 0600, dir, sdata, &name##_ops)
@@ -1003,10 +1013,25 @@ static void ieee80211_debugfs_add_netdev(struct ieee80211_sub_if_data *sdata,
 	sprintf(buf, "netdev:%s", sdata->name);
 	sdata->vif.debugfs_dir = debugfs_create_dir(buf,
 		sdata->local->hw.wiphy->debugfsdir);
+
+	if (IS_ERR(sdata->vif.debugfs_dir)) {
+		sdata_err(sdata, "Failed to create netdev dir, rv: %ld name: %s wiphy dir: 0x%px\n",
+			  (long)(sdata->vif.debugfs_dir), buf, sdata->local->hw.wiphy->debugfsdir);
+		sdata->vif.debugfs_dir = NULL;
+		return;
+	}
+
 	/* deflink also has this */
 	sdata->deflink.debugfs_dir = sdata->vif.debugfs_dir;
+
 	sdata->debugfs.subdir_stations = debugfs_create_dir("stations",
 							sdata->vif.debugfs_dir);
+	if (IS_ERR(sdata->debugfs.subdir_stations)) {
+		sdata_err(sdata, "Failed to create netdev subdir-stations dir, rv: %ld wiphy dir: 0x%px\n",
+			  (long)(sdata->debugfs.subdir_stations), sdata->vif.debugfs_dir);
+		sdata->debugfs.subdir_stations = NULL;
+		return;
+	}
 	add_files(sdata);
 	if (!mld_vif)
 		add_link_files(&sdata->deflink, sdata->vif.debugfs_dir);
@@ -1057,6 +1082,14 @@ void ieee80211_link_debugfs_add(struct ieee80211_link_data *link)
 	link->debugfs_dir =
 		debugfs_create_dir(link_dir_name,
 				   link->sdata->vif.debugfs_dir);
+
+	if (IS_ERR(link->debugfs_dir)) {
+		sdata_err(link->sdata, "Failed to create debugfs dir, rv: %ld  link-dir-name: %s vif dir: 0x%px\n",
+			  (long)(link->debugfs_dir), link_dir_name,
+			  link->sdata->vif.debugfs_dir);
+		link->debugfs_dir = NULL;
+		return;
+	}
 
 	DEBUGFS_ADD(link->debugfs_dir, addr);
 	add_link_files(link, link->debugfs_dir);

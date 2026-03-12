@@ -335,6 +335,12 @@ void ieee80211_debugfs_key_add(struct ieee80211_key *key)
 	keycount++;
 	key->debugfs.dir = debugfs_create_dir(buf,
 					key->local->debugfs.keys);
+	if (IS_ERR(key->debugfs.dir)) {
+		pr_err("Failed to create key debugfs dir, rv: %ld phyd: 0x%px\n",
+		       (long)(key->debugfs.dir), key->local->debugfs.keys);
+		key->debugfs.dir = NULL;
+		return;
+	}
 
 	sta = key->sta;
 	if (sta) {
