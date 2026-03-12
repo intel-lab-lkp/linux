@@ -2260,6 +2260,18 @@ static int process_hello(struct ceph_connection *con, void *p, void *end)
 		dout("%s con %p set my addr %s, as seen by peer %s\n",
 		     __func__, con, ceph_pr_addr(my_addr),
 		     ceph_pr_addr(&con->peer_addr));
+
+		/*
+		 * If we re-learned the address after a reset due to
+		 * persistent EADDRNOTAVAIL, log it and clear the
+		 * failure counter.
+		 */
+		if (atomic_read(&con->msgr->addr_notavail_count) > 0) {
+			pr_info("libceph: re-learned source address %s from monitor %s\n",
+				ceph_pr_addr(my_addr),
+				ceph_pr_addr(&con->peer_addr));
+			atomic_set(&con->msgr->addr_notavail_count, 0);
+		}
 	} else {
 		dout("%s con %p my addr already set %s\n",
 		     __func__, con, ceph_pr_addr(my_addr));

@@ -497,6 +497,10 @@ int ceph_tcp_connect(struct ceph_connection *con)
 	else
 		con->v1.addr_notavail = false;
 
+	/* Reset the persistent EADDRNOTAVAIL counter on success */
+	if (atomic_read(&con->msgr->addr_notavail_count) > 0)
+		atomic_set(&con->msgr->addr_notavail_count, 0);
+
 	return 0;
 }
 
@@ -1663,6 +1667,52 @@ static void con_fault(struct ceph_connection *con)
 		}
 	}
 
+	/*
+	 * Track persistent EADDRNOTAVAIL across all connections.
+	 * If the source address stored in msgr->inst.addr is no longer
+	 * valid (e.g., it was a transient CNI pod address that has been
+	 * removed), all connections will fail with EADDRNOTAVAIL at
+	 * ip6_dst_lookup_flow() before even sending a SYN.
+	 *
+	 * After ADDRNOTAVAIL_RESET_THRESHOLD consecutive failures,
+	 * reset inst.addr to blank so that process_hello() will
+	 * re-learn the source address from the next successful
+	 * monitor connection. The nonce is preserved.
+	 */
+	if (addr_issue) {
+		int count = atomic_inc_return(&con->msgr->addr_notavail_count);
+
+		if (count == ADDRNOTAVAIL_RESET_THRESHOLD) {
+			struct ceph_entity_addr *my_addr =
+				&con->msgr->inst.addr;
+
+			pr_warn("libceph: %d consecutive EADDRNOTAVAIL errors, resetting source address %s (will re-learn from monitor)\n",
+				count, ceph_pr_addr(my_addr));
+
+			/*
+			 * Zero out the address portion of in_addr but
+			 * preserve ss_family, nonce, and type so the
+			 * client identity is maintained and debug output
+			 * remains readable. process_hello() checks
+			 * ceph_addr_is_blank() and will fill in the new
+			 * address from the monitor's addr_for_me response.
+			 *
+			 * We preserve ss_family so that ceph_pr_addr()
+			 * shows e.g. "[::]:0" instead of
+			 * "(unknown sockaddr family 0)".
+			 */
+			{
+				sa_family_t family =
+					get_unaligned(&my_addr->in_addr.ss_family);
+				memset(&my_addr->in_addr, 0,
+				       sizeof(my_addr->in_addr));
+				put_unaligned(family,
+					      &my_addr->in_addr.ss_family);
+			}
+			ceph_encode_my_addr(con->msgr);
+		}
+	}
+
 	WARN_ON(con->state == CEPH_CON_S_STANDBY ||
 		con->state == CEPH_CON_S_CLOSED);
 
@@ -1740,6 +1790,7 @@ void ceph_messenger_init(struct ceph_messenger *msgr,
 	ceph_encode_my_addr(msgr);
 
 	atomic_set(&msgr->stopping, 0);
+	atomic_set(&msgr->addr_notavail_count, 0);
 	write_pnet(&msgr->net, get_net(current->nsproxy->net_ns));
 
 	dout("%s %p\n", __func__, msgr);

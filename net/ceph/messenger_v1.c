@@ -736,6 +736,13 @@ static int process_banner(struct ceph_connection *con)
 		ceph_encode_my_addr(con->msgr);
 		dout("process_banner learned my addr is %s\n",
 		     ceph_pr_addr(my_addr));
+
+		if (atomic_read(&con->msgr->addr_notavail_count) > 0) {
+			pr_info("libceph: re-learned source address %s from peer %s\n",
+				ceph_pr_addr(my_addr),
+				ceph_pr_addr(&con->peer_addr));
+			atomic_set(&con->msgr->addr_notavail_count, 0);
+		}
 	}
 
 	return 0;

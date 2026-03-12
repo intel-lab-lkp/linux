@@ -113,6 +113,17 @@ struct ceph_messenger {
 	 */
 	u32 global_seq;
 	spinlock_t global_seq_lock;
+
+	/*
+	 * Track consecutive EADDRNOTAVAIL failures across all
+	 * connections. When this exceeds a threshold, the client's
+	 * inst.addr is reset to blank so that process_hello() will
+	 * re-learn the source address from the next successful
+	 * monitor connection. This handles the case where the
+	 * original source address was a transient CNI pod address
+	 * that no longer exists.
+	 */
+	atomic_t addr_notavail_count;
 };
 
 enum ceph_msg_data_type {
@@ -327,6 +338,15 @@ struct ceph_msg {
  * allow quick recovery without exponential backoff delays.
  */
 #define ADDRNOTAVAIL_DELAY	(HZ / 10)
+
+/*
+ * Number of consecutive EADDRNOTAVAIL failures (across all connections)
+ * before resetting the messenger's source address. At ~100ms per retry,
+ * 30 failures means ~3 seconds of persistent EADDRNOTAVAIL before we
+ * conclude the source address is permanently gone (e.g., a CNI pod
+ * address that was removed) and needs to be re-learned.
+ */
+#define ADDRNOTAVAIL_RESET_THRESHOLD	30
 
 struct ceph_connection_v1_info {
 	struct kvec out_kvec[8],         /* sending header/footer data */
