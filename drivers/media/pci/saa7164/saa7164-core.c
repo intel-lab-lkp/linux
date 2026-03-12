@@ -998,9 +998,21 @@ static int saa7164_dev_setup(struct saa7164_dev *dev)
 	/* PCI/e allocations */
 	dev->lmmio = ioremap(pci_resource_start(dev->pci, 0),
 			     pci_resource_len(dev->pci, 0));
+	if (!dev->lmmio) {
+		dev_err(&dev->pci->dev,
+				"failed to remap MMIO memory @ 0x%llx\n",
+			(u64)pci_resource_start(dev->pci, 0));
+		goto err_ioremap;
+	}
 
 	dev->lmmio2 = ioremap(pci_resource_start(dev->pci, 2),
 			     pci_resource_len(dev->pci, 2));
+	if (!dev->lmmio2) {
+		dev_err(&dev->pci->dev,
+				"failed to remap MMIO memory @ 0x%llx\n",
+			(u64)pci_resource_start(dev->pci, 2));
+		goto err_ioremap2;
+	}
 
 	dev->bmmio = (u8 __iomem *)dev->lmmio;
 	dev->bmmio2 = (u8 __iomem *)dev->lmmio2;
@@ -1019,6 +1031,23 @@ static int saa7164_dev_setup(struct saa7164_dev *dev)
 	saa7164_pci_quirks(dev);
 
 	return 0;
+
+err_ioremap2:
+	iounmap(dev->lmmio);
+err_ioremap:
+	/* Release the PCI memory regions allocated in get_resources() */
+	release_mem_region(pci_resource_start(dev->pci, 0),
+					   pci_resource_len(dev->pci, 0));
+	release_mem_region(pci_resource_start(dev->pci, 2),
+					   pci_resource_len(dev->pci, 2));
+
+	/* Remove from device list and decrement count */
+	mutex_lock(&devlist);
+	list_del(&dev->devlist);
+	mutex_unlock(&devlist);
+	saa7164_devcount--;
+
+	return -ENODEV;
 }
 
 static void saa7164_dev_unregister(struct saa7164_dev *dev)
