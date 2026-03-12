@@ -226,6 +226,7 @@ int mempolicy_set_node_perf(unsigned int node, struct access_coordinate *coords)
 
 	bw_val = min(coords->read_bandwidth, coords->write_bandwidth);
 	new_bw = kcalloc(nr_node_ids, sizeof(unsigned int), GFP_KERNEL);
+
 	if (!new_bw)
 		return -ENOMEM;
 
@@ -3612,6 +3613,9 @@ struct iw_node_attr {
 struct sysfs_wi_group {
 	struct kobject wi_kobj;
 	struct mutex kobj_lock;
+#ifdef CONFIG_NUMA_BW_MANUAL_OVERRIDE
+	struct iw_node_attr *bw_attrs[MAX_NUMNODES];
+#endif
 	struct iw_node_attr *nattrs[];
 };
 
@@ -3851,6 +3855,128 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_NUMA_BW_MANUAL_OVERRIDE
+static ssize_t bw_node_show(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    char *buf)
+{
+	struct iw_node_attr *node_attr;
+
+	node_attr = container_of(attr, struct iw_node_attr, kobj_attr);
+
+	/*A Node without CDAT or HMAT*/
+	if (!node_bw_table)
+		return sprintf(buf, "N/A\n");
+
+	if (!node_bw_table[node_attr->nid])
+		return sprintf(buf, "0\n");
+
+	return sprintf(buf, "%u(MB/s)\n", node_bw_table[node_attr->nid]);
+}
+
+static ssize_t bw_node_store(struct kobject *kobj,
+			     struct kobj_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct iw_node_attr *node_attr;
+	unsigned long val = 0;
+	int ret;
+	struct access_coordinate coords = {
+		.read_bandwidth = 0,
+		.write_bandwidth = 0,
+	};
+
+	node_attr = container_of(attr, struct iw_node_attr, kobj_attr);
+
+	ret = kstrtoul(buf, 0, &val);
+
+	coords.read_bandwidth = val;
+	coords.write_bandwidth = val;
+
+	if (ret)
+		return ret;
+
+	if (val > UINT_MAX)
+		return -EINVAL;
+
+	ret = mempolicy_set_node_perf(node_attr->nid, &coords);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static int sysfs_bw_node_add(int nid)
+{
+	int ret;
+	char *name;
+	struct iw_node_attr *new_attr;
+
+	if (nid < 0 || nid >= nr_node_ids) {
+		pr_err("invalid node id: %d\n", nid);
+		return -EINVAL;
+	}
+
+	new_attr = kzalloc(sizeof(*new_attr), GFP_KERNEL);
+	if (!new_attr)
+		return -ENOMEM;
+
+	name = kasprintf(GFP_KERNEL, "bw_node%d", nid);
+	if (!name) {
+		kfree(new_attr);
+		return -ENOMEM;
+	}
+
+	sysfs_attr_init(&new_attr->kobj_attr.attr);
+	new_attr->kobj_attr.attr.name = name;
+	new_attr->kobj_attr.attr.mode = 0644;
+	new_attr->kobj_attr.show = bw_node_show;
+	new_attr->kobj_attr.store = bw_node_store;
+	new_attr->nid = nid;
+
+	mutex_lock(&wi_group->kobj_lock);
+	if (wi_group->bw_attrs[nid]) {
+		mutex_unlock(&wi_group->kobj_lock);
+		ret = -EEXIST;
+		goto out;
+	}
+
+	ret = sysfs_create_file(&wi_group->wi_kobj, &new_attr->kobj_attr.attr);
+
+	if (ret) {
+		mutex_unlock(&wi_group->kobj_lock);
+		goto out;
+	}
+	wi_group->bw_attrs[nid] = new_attr;
+	mutex_unlock(&wi_group->kobj_lock);
+	return 0;
+
+out:
+	kfree(new_attr->kobj_attr.attr.name);
+	kfree(new_attr);
+	return ret;
+}
+
+static void sysfs_bw_node_delete(int nid)
+{
+	struct iw_node_attr *attr;
+
+	if (nid < 0 || nid >= nr_node_ids)
+		return;
+
+	mutex_lock(&wi_group->kobj_lock);
+	attr = wi_group->bw_attrs[nid];
+
+	if (attr) {
+		sysfs_remove_file(&wi_group->wi_kobj, &attr->kobj_attr.attr);
+		kfree(attr->kobj_attr.attr.name);
+		kfree(attr);
+		wi_group->nattrs[nid] = NULL;
+	}
+	mutex_unlock(&wi_group->kobj_lock);
+}
+#endif
+
 static int wi_node_notifier(struct notifier_block *nb,
 			       unsigned long action, void *data)
 {
@@ -3864,9 +3990,22 @@ static int wi_node_notifier(struct notifier_block *nb,
 		if (err)
 			pr_err("failed to add sysfs for node%d during hotplug: %d\n",
 			       nid, err);
+
+#ifdef CONFIG_NUMA_BW_MANUAL_OVERRIDE
+		err = sysfs_bw_node_add(nid);
+		if (err)
+			pr_err("failed to add sysfs bw_node%d: %d\n",
+			       nid, err);
+#endif
 		break;
+
 	case NODE_REMOVED_LAST_MEMORY:
 		sysfs_wi_node_delete(nid);
+
+#ifdef CONFIG_NUMA_BW_MANUAL_OVERRIDE
+		sysfs_bw_node_delete(nid);
+#endif
+
 		break;
 	}
 
@@ -3901,6 +4040,15 @@ static int __init add_weighted_interleave_group(struct kobject *mempolicy_kobj)
 			       nid, err);
 			goto err_cleanup_kobj;
 		}
+
+#ifdef CONFIG_NUMA_BW_MANUAL_OVERRIDE
+		err = sysfs_bw_node_add(nid);
+		if (err) {
+			pr_err("failed to add sysfs bw_node%d during init: %d\n", nid, err);
+			goto err_cleanup_kobj;
+		}
+#endif
+
 	}
 
 	hotplug_node_notifier(wi_node_notifier, DEFAULT_CALLBACK_PRI);

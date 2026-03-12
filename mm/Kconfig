@@ -1431,6 +1431,26 @@ config NUMA_EMU
 	  into virtual nodes when booted with "numa=fake=N", where N is the
 	  number of nodes. This is only useful for debugging.
 
+config NUMA_BW_MANUAL_OVERRIDE
+	bool "Allow manual override of per-NUMA-node bandwidth for weighted interleave"
+	depends on NUMA && SYSFS
+	default n
+	help
+	  This option exposes writable sysfs attributes under
+	  /sys/kernel/mm/mempolicy/weighted_interleave/bw_nodeN, allowing
+	  userspace to manually set read/write bandwidth values for each NUMA node.
+
+	  These values update the internal node_bw_table and can influence
+	  weighted interleave auto-tuning (if enabled).
+
+	  WARNING: This is intended for debugging, development, or platforms
+	  with incorrect HMAT/CDAT firmware data. Overriding hardware-reported
+	  bandwidth can lead to suboptimal performance, instability, or
+	  incorrect resource allocation decisions.
+
+	  Say N unless you are actively developing or debugging bandwidth-aware
+	  memory policies.
+
 config ARCH_HAS_USER_SHADOW_STACK
 	bool
 	help
