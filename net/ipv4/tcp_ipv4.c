@@ -726,10 +726,10 @@ static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb,
 	struct {
 		struct tcphdr th;
 		__be32 opt[REPLY_OPTIONS_LEN];
-	} rep;
+	} rep = {0};
 	const __u8 *md5_hash_location = NULL;
 	const struct tcp_ao_hdr *aoh;
-	struct ip_reply_arg arg;
+	struct ip_reply_arg arg = {0};
 #ifdef CONFIG_TCP_MD5SIG
 	struct tcp_md5sig_key *key = NULL;
 	unsigned char newhash[16];
@@ -751,7 +751,6 @@ static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb,
 		return;
 
 	/* Swap the send and the receive. */
-	memset(&rep, 0, sizeof(rep));
 	rep.th.dest   = th->source;
 	rep.th.source = th->dest;
 	rep.th.doff   = sizeof(struct tcphdr) / 4;
@@ -765,7 +764,6 @@ static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb,
 				       skb->len - (th->doff << 2));
 	}
 
-	memset(&arg, 0, sizeof(arg));
 	arg.iov[0].iov_base = (unsigned char *)&rep;
 	arg.iov[0].iov_len  = sizeof(rep.th);
 
@@ -921,14 +919,11 @@ static void tcp_v4_send_ack(const struct sock *sk,
 	struct {
 		struct tcphdr th;
 		__be32 opt[(MAX_TCP_OPTION_SPACE  >> 2)];
-	} rep;
+	} rep = {0};
 	struct net *net = sock_net(sk);
-	struct ip_reply_arg arg;
+	struct ip_reply_arg arg = {0};
 	struct sock *ctl_sk;
 	u64 transmit_time;
-
-	memset(&rep.th, 0, sizeof(struct tcphdr));
-	memset(&arg, 0, sizeof(arg));
 
 	arg.iov[0].iov_base = (unsigned char *)&rep;
 	arg.iov[0].iov_len  = sizeof(rep.th);

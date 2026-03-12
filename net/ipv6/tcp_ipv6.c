@@ -847,7 +847,7 @@ static void tcp_v6_send_response(const struct sock *sk, struct sk_buff *skb, u32
 	struct dst_entry *dst;
 	struct sk_buff *buff;
 	struct tcphdr *t1;
-	struct flowi6 fl6;
+	struct flowi6 fl6 = {0};
 	u32 mark = 0;
 
 	if (tsecr)
@@ -922,7 +922,6 @@ static void tcp_v6_send_response(const struct sock *sk, struct sk_buff *skb, u32
 	}
 #endif
 
-	memset(&fl6, 0, sizeof(fl6));
 	fl6.daddr = ipv6_hdr(skb)->saddr;
 	fl6.saddr = ipv6_hdr(skb)->daddr;
 	fl6.flowlabel = label;
