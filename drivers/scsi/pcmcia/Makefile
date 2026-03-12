@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
+CONTEXT_ANALYSIS := 1
+
 ccflags-y		:= -I $(srctree)/drivers/scsi
 
 # 16-bit client drivers

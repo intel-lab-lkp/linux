@@ -4,6 +4,7 @@
 # * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 # */
 
+CONTEXT_ANALYSIS := 1
 
 obj-$(CONFIG_SCSI_EFCT) := efct.o
 

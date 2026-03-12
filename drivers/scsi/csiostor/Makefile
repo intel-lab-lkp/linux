@@ -4,6 +4,8 @@
 #
 ##
 
+CONTEXT_ANALYSIS := 1
+
 ccflags-y += -I$(srctree)/drivers/net/ethernet/chelsio/cxgb4
 
 obj-$(CONFIG_SCSI_CHELSIO_FCOE) += csiostor.o
