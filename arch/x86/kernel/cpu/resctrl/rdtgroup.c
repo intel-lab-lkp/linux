@@ -38,6 +38,8 @@ DEFINE_STATIC_KEY_FALSE(rdt_mon_enable_key);
 
 DEFINE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
 
+DEFINE_STATIC_KEY_FALSE(rdt_kmode_enable_key);
+
 /*
  * This is safe against resctrl_arch_sched_in() called from __switch_to()
  * because __switch_to() is executed with interrupts disabled. A local call

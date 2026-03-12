@@ -48,6 +48,7 @@ extern bool rdt_mon_capable;
 DECLARE_STATIC_KEY_FALSE(rdt_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_mon_enable_key);
+DECLARE_STATIC_KEY_FALSE(rdt_kmode_enable_key);
 
 static inline bool resctrl_arch_alloc_capable(void)
 {
@@ -80,6 +81,18 @@ static inline void resctrl_arch_enable_mon(void)
 static inline void resctrl_arch_disable_mon(void)
 {
 	static_branch_disable_cpuslocked(&rdt_mon_enable_key);
+	static_branch_dec_cpuslocked(&rdt_enable_key);
+}
+
+static inline void resctrl_arch_enable_kmode(void)
+{
+	static_branch_enable_cpuslocked(&rdt_kmode_enable_key);
+	static_branch_inc_cpuslocked(&rdt_enable_key);
+}
+
+static inline void resctrl_arch_disable_kmode(void)
+{
+	static_branch_disable_cpuslocked(&rdt_kmode_enable_key);
 	static_branch_dec_cpuslocked(&rdt_enable_key);
 }
 

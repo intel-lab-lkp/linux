@@ -2911,6 +2911,9 @@ static int rdt_get_tree(struct fs_context *fc)
 		resctrl_arch_enable_alloc();
 	if (resctrl_arch_mon_capable())
 		resctrl_arch_enable_mon();
+	if (resctrl_kcfg.kmode & (GLOBAL_ASSIGN_CTRL_INHERIT_MON |
+				  GLOBAL_ASSIGN_CTRL_ASSIGN_MON))
+		resctrl_arch_enable_kmode();
 
 	if (resctrl_arch_alloc_capable() || resctrl_arch_mon_capable())
 		resctrl_mounted = true;
@@ -3233,6 +3236,9 @@ static void rdt_kill_sb(struct super_block *sb)
 		resctrl_arch_disable_alloc();
 	if (resctrl_arch_mon_capable())
 		resctrl_arch_disable_mon();
+	if (resctrl_kcfg.kmode & (GLOBAL_ASSIGN_CTRL_INHERIT_MON |
+				  GLOBAL_ASSIGN_CTRL_ASSIGN_MON))
+		resctrl_arch_disable_kmode();
 	resctrl_mounted = false;
 	kernfs_kill_sb(sb);
 	mutex_unlock(&rdtgroup_mutex);
