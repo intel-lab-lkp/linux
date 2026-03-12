@@ -86,7 +86,10 @@ static int lwq_exercise(void *qv)
 	struct tnode *t;
 
 	for (cnt = 0; cnt < 10000; cnt++) {
-		wait_var_event(q, (t = lwq_dequeue(q, struct tnode, n)) != NULL);
+		wait_var_event(q, (t = lwq_dequeue(q, struct tnode, n)) != NULL ||
+			       kthread_should_stop());
+		if (!t)
+			break;
 		t->c++;
 		if (lwq_enqueue(&t->n, q))
 			wake_up_var(q);
