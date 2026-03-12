@@ -401,6 +401,7 @@ impl TableBuilder {
 /// ```
 /// use kernel::cpufreq::{DEFAULT_TRANSITION_LATENCY_NS, Policy};
 ///
+/// #[allow(clippy::double_parens, reason = "false positive before 1.92")]
 /// fn update_policy(policy: &mut Policy) {
 ///     policy
 ///         .set_dvfs_possible_from_any_cpu(true)
