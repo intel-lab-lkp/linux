@@ -130,6 +130,8 @@ EXPORT_SYMBOL_GPL(udp_tunnel6_xmit_skb);
  *
  *      It returns a valid dst pointer and stores src address to be used in
  *      tunnel in param saddr on success, else a pointer encoded error code.
+ *      The returned dst pointer is noref and must only be used in the RCU
+ *      read-side critical section in which it was queried.
  */
 
 struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
@@ -147,7 +149,7 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
-		dst = dst_cache_get_ip6(dst_cache, saddr);
+		dst = dst_cache_get_ip6_rcu(dst_cache, saddr);
 		if (dst)
 			return dst;
 	}
@@ -175,8 +177,10 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 	}
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache)
-		dst_cache_set_ip6(dst_cache, dst, &fl6.saddr);
+		dst_cache_steal_ip6(dst_cache, dst, &fl6.saddr);
+	else
 #endif
+		dst_release(dst);
 	*saddr = fl6.saddr;
 	return dst;
 }

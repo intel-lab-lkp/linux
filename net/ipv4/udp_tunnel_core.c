@@ -240,7 +240,7 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
-		rt = dst_cache_get_ip4(dst_cache, saddr);
+		rt = dst_cache_get_ip4_rcu(dst_cache, saddr);
 		if (rt)
 			return rt;
 	}
@@ -269,8 +269,10 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 	}
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache)
-		dst_cache_set_ip4(dst_cache, &rt->dst, fl4.saddr);
+		dst_cache_steal_ip4(dst_cache, &rt->dst, fl4.saddr);
+	else
 #endif
+		ip_rt_put(rt);
 	*saddr = fl4.saddr;
 	return rt;
 }

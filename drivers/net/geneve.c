@@ -1268,7 +1268,6 @@ static int geneve_build_skb(struct dst_entry *dst, struct sk_buff *skb,
 	return 0;
 
 free_dst:
-	dst_release(dst);
 	return err;
 }
 
@@ -1327,7 +1326,6 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 				    geneve_build_gro_hint_opt(geneve, skb),
 				    netif_is_any_bridge_port(dev));
 	if (err < 0) {
-		dst_release(&rt->dst);
 		return err;
 	} else if (err) {
 		struct ip_tunnel_info *info;
@@ -1338,7 +1336,6 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 
 			unclone = skb_tunnel_info_unclone(skb);
 			if (unlikely(!unclone)) {
-				dst_release(&rt->dst);
 				return -ENOMEM;
 			}
 
@@ -1347,13 +1344,11 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 		}
 
 		if (!pskb_may_pull(skb, ETH_HLEN)) {
-			dst_release(&rt->dst);
 			return -EINVAL;
 		}
 
 		skb->protocol = eth_type_trans(skb, geneve->dev);
 		__netif_rx(skb);
-		dst_release(&rt->dst);
 		return -EMSGSIZE;
 	}
 
@@ -1396,7 +1391,6 @@ static int geneve_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 			    !net_eq(geneve->net, dev_net(geneve->dev)),
 			    !test_bit(IP_TUNNEL_CSUM_BIT, info->key.tun_flags),
 			    0);
-	ip_rt_put(rt);
 	return 0;
 }
 
@@ -1439,7 +1433,6 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 				    geneve_build_gro_hint_opt(geneve, skb),
 				    netif_is_any_bridge_port(dev));
 	if (err < 0) {
-		dst_release(dst);
 		return err;
 	} else if (err) {
 		struct ip_tunnel_info *info = skb_tunnel_info(skb);
@@ -1449,7 +1442,6 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 
 			unclone = skb_tunnel_info_unclone(skb);
 			if (unlikely(!unclone)) {
-				dst_release(dst);
 				return -ENOMEM;
 			}
 
@@ -1458,13 +1450,11 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 		}
 
 		if (!pskb_may_pull(skb, ETH_HLEN)) {
-			dst_release(dst);
 			return -EINVAL;
 		}
 
 		skb->protocol = eth_type_trans(skb, geneve->dev);
 		__netif_rx(skb);
-		dst_release(dst);
 		return -EMSGSIZE;
 	}
 
@@ -1488,7 +1478,6 @@ static int geneve6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 			     !test_bit(IP_TUNNEL_CSUM_BIT,
 				       info->key.tun_flags),
 			     0);
-	dst_release(dst);
 	return 0;
 }
 #endif
@@ -1576,7 +1565,6 @@ static int geneve_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 		if (IS_ERR(rt))
 			return PTR_ERR(rt);
 
-		ip_rt_put(rt);
 		info->key.u.ipv4.src = saddr;
 #if IS_ENABLED(CONFIG_IPV6)
 	} else if (ip_tunnel_info_af(info) == AF_INET6) {
@@ -1602,7 +1590,6 @@ static int geneve_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 		if (IS_ERR(dst))
 			return PTR_ERR(dst);
 
-		dst_release(dst);
 		info->key.u.ipv6.src = saddr;
 #endif
 	} else {

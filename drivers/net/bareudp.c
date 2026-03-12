@@ -364,11 +364,9 @@ static int bareudp_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 			    !net_eq(bareudp->net, dev_net(bareudp->dev)),
 			    !test_bit(IP_TUNNEL_CSUM_BIT, info->key.tun_flags),
 			    0);
-	ip_rt_put(rt);
 	return 0;
 
 free_dst:
-	dst_release(&rt->dst);
 	return err;
 }
 
@@ -434,11 +432,9 @@ static int bareudp6_xmit_skb(struct sk_buff *skb, struct net_device *dev,
 			     !test_bit(IP_TUNNEL_CSUM_BIT,
 				       info->key.tun_flags),
 			     0);
-	dst_release(dst);
 	return 0;
 
 free_dst:
-	dst_release(dst);
 	return err;
 }
 
@@ -524,7 +520,6 @@ static int bareudp_fill_metadata_dst(struct net_device *dev,
 		if (IS_ERR(rt))
 			return PTR_ERR(rt);
 
-		ip_rt_put(rt);
 		info->key.u.ipv4.src = saddr;
 	} else if (ip_tunnel_info_af(info) == AF_INET6) {
 		struct dst_entry *dst;
@@ -538,7 +533,6 @@ static int bareudp_fill_metadata_dst(struct net_device *dev,
 		if (IS_ERR(dst))
 			return PTR_ERR(dst);
 
-		dst_release(dst);
 		info->key.u.ipv6.src = saddr;
 	} else {
 		return -EINVAL;
