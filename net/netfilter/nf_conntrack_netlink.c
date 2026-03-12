@@ -3497,6 +3497,8 @@ ctnetlink_parse_expect_nat(const struct nlattr *attr,
 	exp->saved_addr = nat_tuple.src.u3;
 	exp->saved_proto = nat_tuple.src.u;
 	exp->dir = ntohl(nla_get_be32(tb[CTA_EXPECT_NAT_DIR]));
+	if (exp->dir >= IP_CT_DIR_MAX)
+		return -EINVAL;
 
 	return 0;
 #else
