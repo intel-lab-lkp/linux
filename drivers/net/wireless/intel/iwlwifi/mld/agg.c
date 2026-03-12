@@ -216,10 +216,16 @@ iwl_mld_reorder(struct iwl_mld *mld, struct napi_struct *napi,
 	if (baid == IWL_RX_REORDER_DATA_INVALID_BAID)
 		return IWL_MLD_PASS_SKB;
 
-	/* no sta yet */
-	if (WARN_ONCE(!sta,
-		      "Got valid BAID without a valid station assigned\n"))
+	/* no sta yet.  This happens fairly often, don't WARN_ON about it. */
+	if (!sta) {
+		static bool done_once;
+
+		if (!done_once) {
+			IWL_ERR(mld, "Got valid BAID without a valid station assigned, will not log again.\n");
+			done_once = true;
+		}
 		return IWL_MLD_PASS_SKB;
+	}
 
 	mld_sta = iwl_mld_sta_from_mac80211(sta);
 
