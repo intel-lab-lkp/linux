@@ -42,6 +42,9 @@ static int check_quotactl_permission(struct super_block *sb, int type, int cmd,
 		if ((type == USRQUOTA && uid_eq(current_euid(), make_kuid(current_user_ns(), id))) ||
 		    (type == GRPQUOTA && in_egroup_p(make_kgid(current_user_ns(), id))))
 			break;
+		 /* Allow unprivileged read of ID 0 (default quota limits) */
+		if (id == 0)
+			break;
 		fallthrough;
 	default:
 		if (!capable(CAP_SYS_ADMIN))
