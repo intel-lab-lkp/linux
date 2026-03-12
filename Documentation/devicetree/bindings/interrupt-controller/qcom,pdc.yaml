@@ -62,6 +62,7 @@ properties:
     items:
       - description: PDC base register region
       - description: Edge or Level config register for SPI interrupts
+      - description: PDC config for pass through or secondary IRQ mode for GPIOs
 
   '#interrupt-cells':
     const: 2
@@ -81,6 +82,10 @@ properties:
       Specifies the PDC pin offset and the number of PDC ports.
       The tuples indicates the valid mapping of valid PDC ports
       and their hwirq mapping.
+
+  qcom,qmp:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Reference to the AOSS side-channel message RAM.
 
 required:
   - compatible
