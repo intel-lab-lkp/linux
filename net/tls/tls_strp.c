@@ -368,7 +368,6 @@ static int tls_strp_copyin(read_descriptor_t *desc, struct sk_buff *in_skb,
 		desc->count = 0;
 
 		WRITE_ONCE(strp->msg_ready, 1);
-		tls_rx_msg_ready(strp);
 	}
 
 	return ret;
@@ -539,9 +538,25 @@ static int tls_strp_read_sock(struct tls_strparser *strp)
 		return tls_strp_read_copy(strp, false);
 
 	WRITE_ONCE(strp->msg_ready, 1);
-	tls_rx_msg_ready(strp);
 
 	return 0;
+}
+
+/**
+ * tls_strp_check_rcv_quiet - parse without consumer notification
+ * @strp: TLS stream parser instance
+ *
+ * Parse queued data without firing the consumer notification. A subsequent
+ * tls_strp_check_rcv() is required before the socket lock is released;
+ * otherwise queued data stalls until the next tls_strp_data_ready() event.
+ */
+void tls_strp_check_rcv_quiet(struct tls_strparser *strp)
+{
+	if (unlikely(strp->stopped) || strp->msg_ready)
+		return;
+
+	if (tls_strp_read_sock(strp) == -ENOMEM)
+		queue_work(tls_strp_wq, &strp->work);
 }
 
 void tls_strp_check_rcv(struct tls_strparser *strp)
@@ -551,6 +566,8 @@ void tls_strp_check_rcv(struct tls_strparser *strp)
 
 	if (tls_strp_read_sock(strp) == -ENOMEM)
 		queue_work(tls_strp_wq, &strp->work);
+	else if (strp->msg_ready)
+		tls_rx_msg_ready(strp);
 }
 
 /* Lower sock lock held */
@@ -601,12 +618,6 @@ void tls_strp_msg_release(struct tls_strparser *strp)
 
 	WRITE_ONCE(strp->msg_ready, 0);
 	memset(&strp->stm, 0, sizeof(strp->stm));
-}
-
-void tls_strp_msg_done(struct tls_strparser *strp)
-{
-	tls_strp_msg_release(strp);
-	tls_strp_check_rcv(strp);
 }
 
 void tls_strp_stop(struct tls_strparser *strp)
