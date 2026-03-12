@@ -13,7 +13,7 @@ import sys
 import re
 from pprint import pformat
 
-from kdoc.kdoc_re import NestedMatch, KernRe
+from kdoc.kdoc_re import KernRe
 from kdoc.c_lex import CTokenizer
 from kdoc.kdoc_item import KdocItem
 
