@@ -38,6 +38,15 @@ properties:
   interrupts:
     maxItems: 1
 
+  ti,dual-link-video-mode:
+    type: boolean
+    description: |
+      Enables configuration settings required for correct dual-link
+      LVDS operation. Some panels require the horizontal timing
+      parameters to be adjusted before being programmed into the
+      device. The horizontal timing values must be divided by
+      two when operating in dual-link mode.
+
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
