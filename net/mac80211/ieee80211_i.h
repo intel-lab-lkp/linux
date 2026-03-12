@@ -1079,6 +1079,7 @@ struct ieee80211_link_data {
 
 
 	bool operating_11g_mode;
+	bool already_initialized; /* has ieee80211_link_init been called? */
 
 	struct {
 		struct wiphy_work finalize_work;
