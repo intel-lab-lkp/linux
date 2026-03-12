@@ -110,6 +110,9 @@ struct pcie_tlp_log;
 extern const unsigned char pcie_link_speed[];
 extern bool pci_early_dump;
 
+int pci_set_vga_state_arch(struct pci_dev *dev, bool decode, unsigned int
+			   command, u32 flags);
+
 extern struct mutex pci_rescan_remove_lock;
 
 bool pcie_cap_has_lnkctl(const struct pci_dev *dev);
