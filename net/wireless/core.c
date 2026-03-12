@@ -1041,6 +1041,12 @@ int wiphy_register(struct wiphy *wiphy)
 	/* add to debugfs */
 	rdev->wiphy.debugfsdir = debugfs_create_dir(wiphy_name(&rdev->wiphy),
 						    ieee80211_debugfs_dir);
+	if (IS_ERR(rdev->wiphy.debugfsdir)) {
+		pr_err("Failed to create wiphy.debugfsdir, rv: %ld phyd: 0x%px\n",
+		       (long)(rdev->wiphy.debugfsdir), ieee80211_debugfs_dir);
+		rdev->wiphy.debugfsdir = NULL;
+	}
+
 	if (wiphy->n_radio > 0) {
 		int idx;
 		char radio_name[RADIO_DEBUGFSDIR_MAX_LEN];
@@ -1887,6 +1893,11 @@ static int __init cfg80211_init(void)
 		goto out_fail_nl80211;
 
 	ieee80211_debugfs_dir = debugfs_create_dir("ieee80211", NULL);
+	if (IS_ERR(ieee80211_debugfs_dir)) {
+		pr_info("Failed to create ieee80211 debugfs dir, rv: %ld\n",
+		       (long)(ieee80211_debugfs_dir));
+		ieee80211_debugfs_dir = NULL;
+	}
 
 	err = regulatory_init();
 	if (err)
