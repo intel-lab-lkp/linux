@@ -486,6 +486,8 @@ class CMatch:
                     continue
                 else:
                     # Name only token without BEGIN/END
+                    if i > start:
+                        i -= 1
                     yield start, i
                     start = None
 
