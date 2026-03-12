@@ -1,0 +1,163 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/ti,tac5x1x-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI TAC5x1x Pin Controller
+
+maintainers:
+  - Niranjan H Y <niranjan.hy@ti.com>
+
+description: |
+  The TAC5x1x devices have 5 configurable pins that can be used for GPIO
+  or alternate functions like PDM (Pulse Density Modulation) and interrupt
+  generation. A subset of pins can be present in any variant of the HW.
+
+  This binding is used as a child node of the main TAC5x1x MFD device
+  described in Documentation/devicetree/bindings/mfd/ti,tac5x1x.yaml
+
+  Pin capabilities:
+  - GPIO1, GPIO2: Bidirectional, configurable as GPIO, PDM clock, or IRQ output
+  - GPO1: Output only, configurable as GPIO, PDM clock, or IRQ output.
+          Some variants use different name GPO1A.
+  - GPI1: Input only, configurable as GPIO or PDM data input
+          Some variants use different name GPI1A.
+  - GPI2A: Input only, configurable as GPIO or PDM data input
+
+properties:
+  compatible:
+    const: ti,tac5x1x-pinctrl
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+    description: |
+      First cell is the pin number (0-4 corresponding to GPIO1, GPIO2, GPO1, GPI1, GPI2A)
+      Second cell is flags (GPIO_ACTIVE_HIGH or GPIO_ACTIVE_LOW)
+
+  gpio-ranges:
+    maxItems: 1
+    description: GPIO range mapping to pin controller
+
+  gpio-line-names:
+    minItems: 1
+    maxItems: 5
+    description: Names for the GPIO lines
+
+patternProperties:
+  '-state$':
+    type: object
+    description: Pin configuration state
+    $ref: /schemas/pinctrl/pinmux-node.yaml#
+
+    patternProperties:
+      '^.*$':
+        type: object
+        $ref: /schemas/pinctrl/pincfg-node.yaml#
+
+        properties:
+          groups:
+            description: Pin groups to configure
+            items:
+              enum:
+                - gpio1
+                - gpio2
+                - gpo1
+                - gpi1
+                - gpi2a
+                - pdm_gpio1_gpio2
+                - pdm_gpio1_gpi1
+                - pdm_gpio1_gpi2a
+                - pdm_gpio2_gpio1
+                - pdm_gpio2_gpi1
+                - pdm_gpio2_gpi2a
+                - pdm_gpo1_gpio1
+                - pdm_gpo1_gpio2
+                - pdm_gpo1_gpi1
+                - pdm_gpo1_gpi2a
+
+          function:
+            description: Function to assign
+            enum:
+              - gpio
+              - pdm
+              - irq
+
+          drive-push-pull:
+            type: boolean
+            description: Enable push-pull drive mode
+
+          drive-open-drain:
+            type: boolean
+            description: Enable open-drain drive mode
+
+          drive-open-source:
+            type: boolean
+            description: Enable open-source drive mode
+
+          bias-pull-up:
+            type: boolean
+            description: Enable pull-up bias
+
+          bias-pull-down:
+            type: boolean
+            description: Enable pull-down bias
+
+          bias-high-impedance:
+            type: boolean
+            description: Set pin to high impedance
+
+          input-enable:
+            type: boolean
+            description: Enable input buffer
+
+          output-enable:
+            type: boolean
+            description: Enable output buffer
+
+        required:
+          - groups
+          - function
+
+        additionalProperties: false
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - gpio-controller
+  - '#gpio-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    pinctrl {
+        compatible = "ti,tac5x1x-pinctrl";
+        gpio-controller;
+        #gpio-cells = <2>;
+        gpio-ranges = <&pinctrl 0 0 5>;
+        gpio-line-names = "GPIO1", "GPIO2", "GPO1", "GPI1", "GPI2A";
+
+        default_state: default-state {
+            pdm_config {
+                groups = "pdm_gpo1_gpi1";
+                function = "pdm";
+                drive-push-pull;
+            };
+
+            gpio_config {
+                groups = "gpio1", "gpio2";
+                function = "gpio";
+                bias-pull-up;
+            };
+
+            irq_config {
+                groups = "gpo1";
+                function = "irq";
+                drive-open-drain;
+            };
+        };
+    };
