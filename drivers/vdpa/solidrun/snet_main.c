@@ -87,7 +87,7 @@ static int snet_set_vq_address(struct vdpa_device *vdev, u16 idx, u64 desc_area,
 			       u64 driver_area, u64 device_area)
 {
 	struct snet *snet = vdpa_to_snet(vdev);
-	/* save received parameters in vqueue sturct */
+	/* save received parameters in vqueue struct */
 	snet->vqs[idx]->desc_area = desc_area;
 	snet->vqs[idx]->driver_area = driver_area;
 	snet->vqs[idx]->device_area = device_area;

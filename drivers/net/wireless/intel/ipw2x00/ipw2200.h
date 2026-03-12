@@ -344,7 +344,7 @@ enum connection_manager_assoc_states {
 #define IPW_TX_QUEUE_3        3
 #define IPW_TX_QUEUE_4        4
 
-/* QoS sturctures */
+/* QoS structures */
 struct ipw_qos_info {
 	int qos_enable;
 	struct libipw_qos_parameters *def_qos_parm_OFDM;

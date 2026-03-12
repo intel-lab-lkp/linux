@@ -1542,6 +1542,7 @@ stoping||stopping
 stoppped||stopped
 straming||streaming
 struc||struct
+sturct||struct
 structres||structures
 stuct||struct
 strucuture||structure

@@ -46,7 +46,7 @@ struct pstore_blk_config {
 /**
  * pstore_blk_get_config - get a copy of the pstore_blk backend configuration
  *
- * @info:	The sturct pstore_blk_config to be filled in
+ * @info:	The struct pstore_blk_config to be filled in
  *
  * Failure returns negative error code, and success returns 0.
  */
