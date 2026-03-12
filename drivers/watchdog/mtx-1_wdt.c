@@ -33,7 +33,6 @@
 #include <linux/fs.h>
 #include <linux/ioport.h>
 #include <linux/timer.h>
-#include <linux/completion.h>
 #include <linux/jiffies.h>
 #include <linux/watchdog.h>
 #include <linux/platform_device.h>
@@ -46,7 +45,6 @@
 static int ticks = 100 * HZ;
 
 static struct {
-	struct completion stop;
 	spinlock_t lock;
 	int running;
 	struct timer_list timer;
@@ -69,8 +67,6 @@ static void mtx1_wdt_trigger(struct timer_list *unused)
 
 	if (mtx1_wdt_device.queue && ticks)
 		mod_timer(&mtx1_wdt_device.timer, jiffies + MTX1_WDT_INTERVAL);
-	else
-		complete(&mtx1_wdt_device.stop);
 	spin_unlock(&mtx1_wdt_device.lock);
 }
 
@@ -204,7 +200,6 @@ static int mtx1_wdt_probe(struct platform_device *pdev)
 	}
 
 	spin_lock_init(&mtx1_wdt_device.lock);
-	init_completion(&mtx1_wdt_device.stop);
 	mtx1_wdt_device.queue = 0;
 	clear_bit(0, &mtx1_wdt_device.inuse);
 	timer_setup(&mtx1_wdt_device.timer, mtx1_wdt_trigger, 0);
@@ -222,11 +217,8 @@ static int mtx1_wdt_probe(struct platform_device *pdev)
 
 static void mtx1_wdt_remove(struct platform_device *pdev)
 {
-	/* FIXME: do we need to lock this test ? */
-	if (mtx1_wdt_device.queue) {
-		mtx1_wdt_device.queue = 0;
-		wait_for_completion(&mtx1_wdt_device.stop);
-	}
+	mtx1_wdt_stop();
+	timer_delete_sync(&mtx1_wdt_device.timer);
 
 	misc_deregister(&mtx1_wdt_misc);
 }
