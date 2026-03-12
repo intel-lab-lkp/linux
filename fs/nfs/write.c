@@ -1554,6 +1554,7 @@ static void nfs_writeback_result(struct rpc_task *task,
 	if (resp->count < argp->count) {
 		static unsigned long    complain;
 
+		set_bit(PG_SYNC, &hdr->req->wb_flags);
 		/* This a short write! */
 		nfs_inc_stats(hdr->inode, NFSIOS_SHORTWRITE);
 
@@ -1837,6 +1838,7 @@ static void nfs_commit_release_pages(struct nfs_commit_data *data)
 		/* We have a mismatch. Write the page again */
 		dprintk(" mismatch\n");
 		nfs_mark_request_dirty(req);
+		set_bit(PG_SYNC, &req->wb_flags);
 		atomic_long_inc(&NFS_I(data->inode)->redirtied_pages);
 	next:
 		nfs_unlock_and_release_request(req);
