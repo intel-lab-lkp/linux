@@ -1063,6 +1063,8 @@ ieee80211_debugfs_clear_link_ptr(struct ieee80211_sub_if_data *sdata,
 void ieee80211_debugfs_remove_netdev(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_link_data *link;
+	struct rhashtable_iter hti;
+	struct sta_info *sta;
 	struct dentry *dir;
 	int i;
 
@@ -1083,6 +1085,28 @@ void ieee80211_debugfs_remove_netdev(struct ieee80211_sub_if_data *sdata)
 
 		link->debugfs_dir = NULL;
 	}
+
+	/* And, same for all stations.  See ieee80211_sta_debugfs_add where
+	 * they are added to the sdata->debugfs.subdir_stations directory
+	 */
+	rhashtable_walk_enter(&sdata->local->sta_hash.ht, &hti);
+	rhashtable_walk_start(&hti);
+
+	while ((sta = rhashtable_walk_next(&hti))) {
+		if (IS_ERR(sta)) {
+			if (PTR_ERR(sta) != -EAGAIN)
+				break;
+			continue;
+		}
+		if (sta->sdata != sdata)
+			continue;
+
+		sta->debugfs_dir = NULL;
+	}
+
+	rhashtable_walk_stop(&hti);
+	rhashtable_walk_exit(&hti);
+
 	rcu_read_unlock();
 
 	dir = sdata->vif.debugfs_dir;
