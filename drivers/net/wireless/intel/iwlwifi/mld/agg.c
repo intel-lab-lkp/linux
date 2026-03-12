@@ -496,7 +496,9 @@ static void iwl_mld_free_reorder_buffer(struct iwl_mld *mld,
 		 * sync internal DELBA notification should trigger a release
 		 * of all frames in the reorder buffer.
 		 */
-		WARN_ON(1);
+		WARN_ON_ONCE(1);
+		IWL_ERR(mld, "free-reorder-buffer problem, rxq: %d  num-stored: %d, will purge frames\n",
+			i, reorder_buf->num_stored);
 
 		for (int j = 0; j < data->buf_size; j++)
 			__skb_queue_purge(&entries[j].frames);
