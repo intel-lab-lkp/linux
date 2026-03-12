@@ -574,7 +574,8 @@ static int iwl_mld_rm_sta_from_fw(struct iwl_mld *mld, u8 fw_sta_id)
 				   WIDE_ID(MAC_CONF_GROUP, STA_REMOVE_CMD),
 				   &cmd);
 	if (ret)
-		IWL_ERR(mld, "Failed to remove station. Id=%d\n", fw_sta_id);
+		IWL_ERR(mld, "Failed to remove station. Id=%d ret: %d\n",
+			fw_sta_id, ret);
 
 	return ret;
 }
@@ -735,8 +736,10 @@ int iwl_mld_add_sta(struct iwl_mld *mld, struct ieee80211_sta *sta,
 	int ret;
 
 	ret = iwl_mld_init_sta(mld, sta, vif, type);
-	if (ret)
+	if (ret) {
+		IWL_ERR(mld, "iwl-mld-add-sta, mld-init-sta failed. ret=%d\n", ret);
 		return ret;
+	}
 
 	/* We could have add only the deflink link_sta, but it will not work
 	 * in the restart case if the single link that is active during
@@ -744,8 +747,10 @@ int iwl_mld_add_sta(struct iwl_mld *mld, struct ieee80211_sta *sta,
 	 */
 	for_each_sta_active_link(mld_sta->vif, sta, link_sta, link_id) {
 		ret = iwl_mld_add_link_sta(mld, link_sta);
-		if (ret)
+		if (ret) {
+			IWL_ERR(mld, "iwl-mld-add-sta, mld-add-link-sta failed. ret=%d\n", ret);
 			goto destroy_sta;
+		}
 	}
 
 	return 0;
