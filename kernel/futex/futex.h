@@ -396,6 +396,8 @@ double_unlock_hb(struct futex_hash_bucket *hb1, struct futex_hash_bucket *hb2)
 		spin_unlock(&hb2->lock);
 }
 
+extern void clear_robust_list_pending_op(struct task_struct *curr);
+
 /* syscalls */
 
 extern int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags, u32

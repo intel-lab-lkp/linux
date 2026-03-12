@@ -28,6 +28,7 @@
 #include <linux/entry-common.h>
 #include <linux/syscalls.h>
 #include <linux/rseq.h>
+#include <linux/futex.h>
 
 #include <asm/processor.h>
 #include <asm/ucontext.h>
@@ -235,6 +236,9 @@ unsigned long get_sigframe_size(void)
 static int
 setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs)
 {
+	/* Handle futex robust list fixup. */
+	futex_signal_deliver(ksig, regs);
+
 	/* Perform fixup for the pre-signal frame. */
 	rseq_signal_deliver(ksig, regs);
 
