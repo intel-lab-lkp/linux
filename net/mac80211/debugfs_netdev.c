@@ -1039,8 +1039,27 @@ static void ieee80211_debugfs_add_netdev(struct ieee80211_sub_if_data *sdata,
 
 void ieee80211_debugfs_remove_netdev(struct ieee80211_sub_if_data *sdata)
 {
+	struct ieee80211_link_data *link;
+	int i;
+
 	if (!sdata->vif.debugfs_dir)
 		return;
+
+	/* In case where there were errors on station creation and maybe
+	 * teardown, we may get here with some links still active.  We are
+	 * about to recursively delete debugfs, so remove any pointers the
+	 * links may have.
+	 */
+	rcu_read_lock();
+
+	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+		link = rcu_access_pointer(sdata->link[i]);
+		if (!link)
+			continue;
+
+		link->debugfs_dir = NULL;
+	}
+	rcu_read_unlock();
 
 	debugfs_remove_recursive(sdata->vif.debugfs_dir);
 	sdata->vif.debugfs_dir = NULL;
