@@ -5521,6 +5521,7 @@ void lpfc_vmid_vport_cleanup(struct lpfc_vport *vport)
  **/
 static int
 lpfc_abort_handler(struct scsi_cmnd *cmnd)
+	__no_context_analysis /* conditional locking */
 {
 	struct Scsi_Host  *shost = cmnd->device->host;
 	struct fc_rport *rport = starget_to_rport(scsi_target(cmnd->device));

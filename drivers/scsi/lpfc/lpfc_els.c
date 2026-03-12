@@ -9587,6 +9587,7 @@ lpfc_els_timeout(struct timer_list *t)
  **/
 void
 lpfc_els_timeout_handler(struct lpfc_vport *vport)
+	__no_context_analysis /* conditional locking */
 {
 	struct lpfc_hba  *phba = vport->phba;
 	struct lpfc_sli_ring *pring;
@@ -9709,6 +9710,7 @@ lpfc_els_timeout_handler(struct lpfc_vport *vport)
  **/
 void
 lpfc_els_flush_cmd(struct lpfc_vport *vport)
+	__no_context_analysis /* conditional locking */
 {
 	LIST_HEAD(abort_list);
 	LIST_HEAD(cancel_list);
