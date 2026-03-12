@@ -213,7 +213,7 @@ void idr_u32_test1(struct idr *idr, u32 handle)
 	ptr = idr_get_next(idr, &sid);
 	if (id > INT_MAX) {
 		BUG_ON(ptr != NULL);
-		BUG_ON(sid != 0);
+		BUG_ON(sid != INT_MAX);
 	} else {
 		BUG_ON(ptr != DUMMY_PTR);
 		BUG_ON(sid != id);
