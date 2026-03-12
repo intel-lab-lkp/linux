@@ -290,6 +290,24 @@ static void vfio_pci_device_setup(struct vfio_pci_device *device)
 		device->msi_eventfds[i] = -1;
 }
 
+
+static int is_unsafe_noiommu_mode_enabled(void)
+{
+	const char *path = "/sys/module/vfio/parameters/enable_unsafe_noiommu_mode";
+	FILE *f;
+	int c;
+
+	f = fopen(path, "re");
+	if (!f)
+		return 0;
+
+	c = fgetc(f);
+	fclose(f);
+	if (c == 'Y' || c == 'y')
+		return 1;
+	return 0;
+}
+
 const char *vfio_pci_get_cdev_path(const char *bdf)
 {
 	char dir_path[PATH_MAX];
@@ -306,8 +324,11 @@ const char *vfio_pci_get_cdev_path(const char *bdf)
 	VFIO_ASSERT_NOT_NULL(dir, "Failed to open directory %s\n", dir_path);
 
 	while ((entry = readdir(dir)) != NULL) {
-		/* Find the file that starts with "vfio" */
-		if (strncmp("vfio", entry->d_name, 4))
+		/* Find the file that starts with "noiommu-vfio" or "vfio" */
+		if (is_unsafe_noiommu_mode_enabled()) {
+			if (strncmp("noiommu-vfio", entry->d_name, strlen("noiommu-vfio")))
+				continue;
+		} else if (strncmp("vfio", entry->d_name, 4))
 			continue;
 
 		snprintf(cdev_path, PATH_MAX, "/dev/vfio/devices/%s", entry->d_name);
