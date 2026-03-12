@@ -1674,6 +1674,18 @@ static void ieee80211_handle_reconfig_failure(struct ieee80211_local *local)
 
 	local->resuming = false;
 	local->suspended = false;
+
+	/*
+	 * Stop the hardware before clearing IN_DRIVER state. Without this,
+	 * cfg80211_shutdown_all_interfaces() tears down stations via
+	 * sta_info_flush() while the driver's RX path may still deliver
+	 * frames referencing station data being freed, causing use-after-free.
+	 * Guard with local->started since this function can be reached when
+	 * drv_start() itself failed (hardware never started).
+	 */
+	if (local->started)
+		drv_stop(local, false);
+
 	local->in_reconfig = false;
 	local->reconfig_failure = true;
 
