@@ -63,6 +63,7 @@ config E1000E
 	depends on PCI && (!SPARC32 || BROKEN)
 	depends on PTP_1588_CLOCK_OPTIONAL
 	select CRC32
+	select PAGE_POOL
 	help
 	  This driver supports the PCI-Express Intel(R) PRO/1000 gigabit
 	  ethernet family of adapters. For PCI or PCI-X e1000 adapters,
