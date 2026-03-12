@@ -2506,6 +2506,7 @@ ips_hainit(ips_ha_t * ha)
 /****************************************************************************/
 static void
 ips_next(ips_ha_t * ha, int intr)
+	__no_context_analysis /* conditional locking */
 {
 	ips_scb_t *scb;
 	struct scsi_cmnd *SC;
