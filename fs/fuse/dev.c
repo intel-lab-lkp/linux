@@ -1542,7 +1542,7 @@ out_end:
 
 static int fuse_dev_open(struct inode *inode, struct file *file)
 {
-	struct fuse_dev *fud = fuse_dev_alloc();
+	struct fuse_dev *fud = fuse_dev_alloc(false);
 
 	if (!fud)
 		return -ENOMEM;
@@ -2574,6 +2574,7 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 {
 	int oldfd;
 	struct fuse_dev *fud, *new_fud;
+	struct list_head *pq;
 
 	if (get_user(oldfd, argp))
 		return -EFAULT;
@@ -2593,8 +2594,12 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 	if (!fud)
 		return -EINVAL;
 
+	pq = fuse_pqueue_alloc();
+	if (!pq)
+		return -ENOMEM;
+
 	new_fud = fuse_file_to_fud(file);
-	if (!fuse_dev_install(new_fud, fud->fc))
+	if (!fuse_dev_install(new_fud, fud->fc, pq))
 		return -EINVAL;
 
 	return 0;

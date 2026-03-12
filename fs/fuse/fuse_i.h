@@ -1337,8 +1337,9 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 void fuse_conn_put(struct fuse_conn *fc);
 
 struct fuse_dev *fuse_dev_alloc_install(struct fuse_conn *fc);
-struct fuse_dev *fuse_dev_alloc(void);
-bool fuse_dev_install(struct fuse_dev *fud, struct fuse_conn *fc);
+struct list_head *fuse_pqueue_alloc(void);
+struct fuse_dev *fuse_dev_alloc(bool alloc_pq);
+bool fuse_dev_install(struct fuse_dev *fud, struct fuse_conn *fc, struct list_head *pq);
 void fuse_dev_put(struct fuse_dev *fud);
 int fuse_send_init(struct fuse_mount *fm);
 
