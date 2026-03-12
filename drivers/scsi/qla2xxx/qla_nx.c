@@ -431,6 +431,7 @@ static int qla82xx_crb_win_lock(struct qla_hw_data *ha)
 
 int
 qla82xx_wr_32(struct qla_hw_data *ha, ulong off_in, u32 data)
+	__no_context_analysis /* conditional locking */
 {
 	void __iomem *off;
 	unsigned long flags = 0;
@@ -461,6 +462,7 @@ qla82xx_wr_32(struct qla_hw_data *ha, ulong off_in, u32 data)
 
 int
 qla82xx_rd_32(struct qla_hw_data *ha, ulong off_in)
+	__no_context_analysis /* conditional locking */
 {
 	void __iomem *off;
 	unsigned long flags = 0;
