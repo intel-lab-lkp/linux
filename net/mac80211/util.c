@@ -1879,7 +1879,8 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 		if (suspended)
 			WARN(1, "Hardware became unavailable upon resume. This could be a software issue prior to suspend or a hardware issue.\n");
 		else
-			WARN(1, "Hardware became unavailable during restart.\n");
+			WARN_ONCE(1, "Hardware became unavailable during restart: %d\n", res);
+
 		ieee80211_wake_queues_by_reason(hw, IEEE80211_MAX_QUEUE_MAP,
 						IEEE80211_QUEUE_STOP_REASON_SUSPEND,
 						false);
