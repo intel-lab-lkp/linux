@@ -398,7 +398,7 @@
 		};
 	};
 
-	touchscreen@49 {
+	touch: touchscreen@49 {
 		compatible = "ti,tsc2004";
 		reg = <0x49>;
 		interrupts-extended = <&gpio4 0 IRQ_TYPE_EDGE_FALLING>;

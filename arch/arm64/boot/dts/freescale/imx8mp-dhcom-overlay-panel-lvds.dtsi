@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2023 Marek Vasut
+ */
+
+#include "imx8mp-dhcom-overlay-panel-common.dtsi"
+
+&lcdif2 {
+	status = "okay";
+};
+
+&ldb_lvds_ch0 {
+	remote-endpoint = <&panel_in>;
+};
+
+&lvds_bridge {
+	status = "okay";
+};
+
+&panel_in {
+	remote-endpoint = <&ldb_lvds_ch0>;
+};
