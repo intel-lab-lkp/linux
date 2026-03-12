@@ -1791,7 +1791,32 @@ void ceph_messenger_init(struct ceph_messenger *msgr,
 
 	atomic_set(&msgr->stopping, 0);
 	atomic_set(&msgr->addr_notavail_count, 0);
-	write_pnet(&msgr->net, get_net(current->nsproxy->net_ns));
+
+	/*
+	 * Use the initial (host) network namespace instead of the
+	 * caller's current namespace. In containerized environments
+	 * (e.g., Rook-Ceph CSI with forcecephkernelclient=true), the
+	 * mount() syscall may be invoked from a pod's network namespace
+	 * even when the CSI plugin runs with hostNetwork: true (race
+	 * conditions during kubelet restart, pod scheduling, etc.).
+	 *
+	 * If the pod NS is captured here, all kernel ceph sockets will
+	 * be created in that NS, which typically lacks routes to the
+	 * Ceph monitors (e.g., fd04:: ClusterIP addresses). This causes
+	 * permanent EADDRNOTAVAIL on every connection attempt with no
+	 * possibility of recovery short of force-unmount + remount.
+	 *
+	 * The kernel CephFS client always needs host-level network
+	 * access to reach Ceph monitors, OSDs, and MDS daemons, so
+	 * using init_net is the correct choice. The previous behavior
+	 * of capturing current->nsproxy->net_ns was inherited from
+	 * generic socket code but is wrong for a kernel filesystem
+	 * client that must survive beyond the lifetime of the mounting
+	 * process's network namespace.
+	 */
+	if (current->nsproxy->net_ns != &init_net)
+		pr_warn("libceph: mount from non-init network namespace detected, using host namespace instead\n");
+	write_pnet(&msgr->net, get_net(&init_net));
 
 	dout("%s %p\n", __func__, msgr);
 }
