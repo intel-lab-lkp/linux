@@ -1637,6 +1637,42 @@ void carl9170_update_channel_maxpower(struct ar9170 *ar)
 	}
 }
 
+int carl9170_run_iq_calibration(struct ar9170 *ar)
+{
+	u32 val;
+	int err;
+
+	if (!ar->channel)
+		return 0;
+
+	/*
+	 * Trigger runtime IQ calibration.  The hardware measures
+	 * I/Q imbalance and updates the correction coefficients
+	 * automatically when DO_IQCAL is set.  We trigger on both
+	 * chains and re-enable the IQ correction afterwards.
+	 */
+	err = carl9170_read_reg(ar, AR9170_PHY_REG_TIMING_CTRL4(0), &val);
+	if (err)
+		return err;
+
+	val |= AR9170_PHY_TIMING_CTRL4_DO_IQCAL;
+	err = carl9170_write_reg(ar, AR9170_PHY_REG_TIMING_CTRL4(0), val);
+	if (err)
+		return err;
+
+	/* chain 2 */
+	err = carl9170_read_reg(ar, AR9170_PHY_REG_TIMING_CTRL4(2), &val);
+	if (err)
+		return err;
+
+	val |= AR9170_PHY_TIMING_CTRL4_DO_IQCAL;
+	err = carl9170_write_reg(ar, AR9170_PHY_REG_TIMING_CTRL4(2), val);
+	if (err)
+		return err;
+
+	return 0;
+}
+
 static int carl9170_set_radar_detection(struct ar9170 *ar,
 					struct ieee80211_channel *channel)
 {

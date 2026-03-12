@@ -910,6 +910,8 @@ static void carl9170_stat_work(struct work_struct *work)
 
 	mutex_lock(&ar->mutex);
 	err = carl9170_update_survey(ar, false, true);
+	if (!err)
+		carl9170_run_iq_calibration(ar);
 	mutex_unlock(&ar->mutex);
 
 	if (err)
