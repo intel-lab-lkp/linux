@@ -458,10 +458,12 @@ out:
 		bit = min % IDA_BITMAP_BITS;
 		goto retry;
 	}
+	if (xas_error(&xas)) {
+		kfree(alloc);
+		return xas_error(&xas);
+	}
 	if (bitmap != alloc)
 		kfree(alloc);
-	if (xas_error(&xas))
-		return xas_error(&xas);
 	return xas.xa_index * IDA_BITMAP_BITS + bit;
 alloc:
 	xas_unlock_irqrestore(&xas, flags);
