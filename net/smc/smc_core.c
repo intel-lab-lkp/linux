@@ -2314,6 +2314,10 @@ int smcr_buf_reg_lgr(struct smc_link *lnk)
 	return rc;
 }
 
+/*
+ * smcr_new_buf_create may allocate a buffer smaller than the requested
+ * bufsize. Use buf_desc->len to determine the actual allocated size.
+ */
 static struct smc_buf_desc *smcr_new_buf_create(struct smc_link_group *lgr,
 						int bufsize)
 {
@@ -2326,18 +2330,22 @@ static struct smc_buf_desc *smcr_new_buf_create(struct smc_link_group *lgr,
 
 	switch (lgr->buf_type) {
 	case SMCR_PHYS_CONT_BUFS:
+		bufsize = min(bufsize, (int)PAGE_SIZE << MAX_PAGE_ORDER);
+		fallthrough;
 	case SMCR_MIXED_BUFS:
 		buf_desc->order = get_order(bufsize);
-		buf_desc->pages = alloc_pages(GFP_KERNEL | __GFP_NOWARN |
-					      __GFP_NOMEMALLOC | __GFP_COMP |
-					      __GFP_NORETRY | __GFP_ZERO,
-					      buf_desc->order);
-		if (buf_desc->pages) {
-			buf_desc->cpu_addr =
-				(void *)page_address(buf_desc->pages);
-			buf_desc->len = bufsize;
-			buf_desc->is_vm = false;
-			break;
+		if (buf_desc->order <= MAX_PAGE_ORDER) {
+			buf_desc->pages = alloc_pages(GFP_KERNEL | __GFP_NOWARN |
+						      __GFP_NOMEMALLOC | __GFP_COMP |
+						      __GFP_NORETRY | __GFP_ZERO,
+						      buf_desc->order);
+			if (buf_desc->pages) {
+				buf_desc->cpu_addr =
+					(void *)page_address(buf_desc->pages);
+				buf_desc->len = bufsize;
+				buf_desc->is_vm = false;
+				break;
+			}
 		}
 		if (lgr->buf_type == SMCR_PHYS_CONT_BUFS)
 			goto out;
@@ -2476,7 +2484,7 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 		}
 
 		SMC_STAT_RMB_ALLOC(smc, is_smcd, is_rmb);
-		SMC_STAT_RMB_SIZE(smc, is_smcd, is_rmb, true, bufsize);
+		SMC_STAT_RMB_SIZE(smc, is_smcd, is_rmb, true, buf_desc->len);
 		buf_desc->used = 1;
 		down_write(lock);
 		smc_lgr_buf_list_add(lgr, is_rmb, buf_list, buf_desc);
