@@ -47,20 +47,26 @@ static void ceph_block_o_direct(struct ceph_inode_info *ci, struct inode *inode)
  * Note that buffered writes and truncates both take a write lock on
  * inode->i_rwsem, meaning that those are serialised w.r.t. the reads.
  */
-void
+int
 ceph_start_io_read(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	int ret;
 
 	/* Be an optimist! */
-	down_read(&inode->i_rwsem);
+	ret = down_read_killable(&inode->i_rwsem);
+	if (ret)
+		return ret;
 	if (!(READ_ONCE(ci->i_ceph_flags) & CEPH_I_ODIRECT))
-		return;
+		return 0;
 	up_read(&inode->i_rwsem);
 	/* Slow path.... */
-	down_write(&inode->i_rwsem);
+	ret = down_write_killable(&inode->i_rwsem);
+	if (ret)
+		return ret;
 	ceph_block_o_direct(ci, inode);
 	downgrade_write(&inode->i_rwsem);
+	return 0;
 }
 
 /**
@@ -138,20 +144,26 @@ static void ceph_block_buffered(struct ceph_inode_info *ci, struct inode *inode)
  * Note that buffered writes and truncates both take a write lock on
  * inode->i_rwsem, meaning that those are serialised w.r.t. O_DIRECT.
  */
-void
+int
 ceph_start_io_direct(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	int ret;
 
 	/* Be an optimist! */
-	down_read(&inode->i_rwsem);
+	ret = down_read_killable(&inode->i_rwsem);
+	if (ret)
+		return ret;
 	if (READ_ONCE(ci->i_ceph_flags) & CEPH_I_ODIRECT)
-		return;
+		return 0;
 	up_read(&inode->i_rwsem);
 	/* Slow path.... */
-	down_write(&inode->i_rwsem);
+	ret = down_write_killable(&inode->i_rwsem);
+	if (ret)
+		return ret;
 	ceph_block_buffered(ci, inode);
 	downgrade_write(&inode->i_rwsem);
+	return 0;
 }
 
 /**

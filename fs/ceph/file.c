@@ -2122,10 +2122,15 @@ again:
 	if (ceph_inode_is_shutdown(inode))
 		return -ESTALE;
 
-	if (direct_lock)
-		ceph_start_io_direct(inode);
-	else
-		ceph_start_io_read(inode);
+	if (direct_lock) {
+		ret = ceph_start_io_direct(inode);
+		if (ret)
+			return ret;
+	} else {
+		ret = ceph_start_io_read(inode);
+		if (ret)
+			return ret;
+	}
 
 	if (!(fi->flags & CEPH_F_SYNC) && !direct_lock)
 		want |= CEPH_CAP_FILE_CACHE;
@@ -2278,7 +2283,9 @@ static ssize_t ceph_splice_read(struct file *in, loff_t *ppos,
 	    (fi->flags & CEPH_F_SYNC))
 		return copy_splice_read(in, ppos, pipe, len, flags);
 
-	ceph_start_io_read(inode);
+	ret = ceph_start_io_read(inode);
+	if (ret)
+		return ret;
 
 	want = CEPH_CAP_FILE_CACHE;
 	if (fi->fmode & CEPH_FILE_MODE_LAZY)
@@ -2357,9 +2364,13 @@ static ssize_t ceph_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		direct_lock = true;
 
 retry_snap:
-	if (direct_lock)
-		ceph_start_io_direct(inode);
-	else {
+	if (direct_lock) {
+		err = ceph_start_io_direct(inode);
+		if (err) {
+			ceph_free_cap_flush(prealloc_cf);
+			return err;
+		}
+	} else {
 		err = ceph_start_io_write(inode);
 		if (err) {
 			ceph_free_cap_flush(prealloc_cf);
