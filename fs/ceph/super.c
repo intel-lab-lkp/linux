@@ -122,6 +122,7 @@ static int ceph_sync_fs(struct super_block *sb, int wait)
 {
 	struct ceph_fs_client *fsc = ceph_sb_to_fs_client(sb);
 	struct ceph_client *cl = fsc->client;
+	int ret;
 
 	if (!wait) {
 		doutc(cl, "(non-blocking)\n");
@@ -133,9 +134,9 @@ static int ceph_sync_fs(struct super_block *sb, int wait)
 
 	doutc(cl, "(blocking)\n");
 	ceph_osdc_sync(&fsc->client->osdc);
-	ceph_mdsc_sync(fsc->mdsc);
+	ret = ceph_mdsc_sync(fsc->mdsc);
 	doutc(cl, "(blocking) done\n");
-	return 0;
+	return ret;
 }
 
 /*
