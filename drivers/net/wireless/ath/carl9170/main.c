@@ -154,6 +154,7 @@ static struct ieee80211_channel carl9170_5ghz_chantable[] = {
 	.cap		= IEEE80211_HT_CAP_MAX_AMSDU |			\
 			  IEEE80211_HT_CAP_SUP_WIDTH_20_40 |		\
 			  IEEE80211_HT_CAP_SGI_40 |			\
+			  IEEE80211_HT_CAP_SGI_20 |			\
 			  IEEE80211_HT_CAP_DSSSCCK40 |			\
 			  IEEE80211_HT_CAP_SM_PS,			\
 	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_64K,			\
