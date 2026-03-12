@@ -25,9 +25,9 @@ ensure_mtu()
 	local required=$((len - ETH_HLEN - ETH_FCS_LEN))
 	local current
 
-	current=$(ip -j link show dev "$iface" | jq -r '.[0].mtu')
+	current=$(run_on "$iface" ip -j link show dev "$iface" | jq -r '.[0].mtu')
 	if [ "$current" -lt "$required" ]; then
-		ip link set dev "$iface" mtu "$required" || return 1
+		run_on "$iface" ip link set dev "$iface" mtu "$required" || return 1
 	fi
 }
 
@@ -50,13 +50,13 @@ bucket_test()
 	len=$((len - ETH_FCS_LEN))
 	len=$((len > 0 ? len : 0))
 
-	before=$(ethtool --json -S "$iface" --groups rmon | \
+	before=$(run_on "$iface" ethtool --json -S "$iface" --groups rmon | \
 		jq -r ".[0].rmon[\"${set}-pktsNtoM\"][$bucket].val")
 
 	# Send 10k one way and 20k in the other, to detect counters
 	# mapped to the wrong direction
-	"$MZ" "$neigh" -q -c "$num_rx" -p "$len" -a own -b bcast -d 10us
-	"$MZ" "$iface" -q -c "$num_tx" -p "$len" -a own -b bcast -d 10us
+	run_on "$neigh" "$MZ" "$neigh" -q -c "$num_rx" -p "$len" -a own -b bcast -d 10us
+	run_on "$iface" "$MZ" "$iface" -q -c "$num_tx" -p "$len" -a own -b bcast -d 10us
 
 	after=$(ethtool --json -S "$iface" --groups rmon | \
 		jq -r ".[0].rmon[\"${set}-pktsNtoM\"][$bucket].val")
@@ -94,7 +94,7 @@ rmon_histogram()
 		fi
 		log_test "$step"
 		nbuckets=$((nbuckets + 1))
-	done < <(ethtool --json -S "$iface" --groups rmon | \
+	done < <(run_on "$iface" ethtool --json -S "$iface" --groups rmon | \
 		jq -r ".[0].rmon[\"${set}-pktsNtoM\"][]|[.low, .high]|@tsv" 2>/dev/null)
 
 	if [ "$nbuckets" -eq 0 ]; then
@@ -119,8 +119,8 @@ setup_prepare()
 	h2=${NETIFS[p2]}
 
 	for iface in "$h1" "$h2"; do
-		netif_mtu["$iface"]=$(ip -j link show dev "$iface" | jq -r '.[0].mtu')
-		ip link set dev "$iface" up
+		netif_mtu["$iface"]=$(run_on "$iface" ip -j link show dev "$iface" | \
+			jq -r '.[0].mtu')
 	done
 }
 
@@ -128,10 +128,10 @@ cleanup()
 {
 	pre_cleanup
 
+	# Do not bring down the interfaces, just configure the initial MTU
 	for iface in "$h2" "$h1"; do
-		ip link set dev "$iface" \
-			mtu "${netif_mtu[$iface]}" \
-			down
+		run_on "$iface" ip link set dev "$iface" \
+			mtu "${netif_mtu[$iface]}"
 	done
 }
 
