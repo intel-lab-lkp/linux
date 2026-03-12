@@ -23,10 +23,10 @@
 static const isp2400_ib_buffer_t   IB_BUFFER_NULL = {0, 0, 0 };
 
 static input_system_err_t input_system_configure_channel(
-    const channel_cfg_t		channel);
+	const channel_cfg_t		channel);
 
 static input_system_err_t input_system_configure_channel_sensor(
-    const channel_cfg_t		channel);
+	const channel_cfg_t		channel);
 
 static input_system_err_t input_buffer_configuration(void);
 
@@ -36,39 +36,39 @@ static void receiver_rst(const rx_ID_t ID);
 static void input_system_network_rst(const input_system_ID_t ID);
 
 static void capture_unit_configure(
-    const input_system_ID_t			ID,
-    const sub_system_ID_t			sub_id,
-    const isp2400_ib_buffer_t *const cfg);
+	const input_system_ID_t			ID,
+	const sub_system_ID_t			sub_id,
+	const isp2400_ib_buffer_t *const cfg);
 
 static void acquisition_unit_configure(
-    const input_system_ID_t			ID,
-    const sub_system_ID_t			sub_id,
-    const isp2400_ib_buffer_t *const cfg);
+	const input_system_ID_t			ID,
+	const sub_system_ID_t			sub_id,
+	const isp2400_ib_buffer_t *const cfg);
 
 static void ctrl_unit_configure(
-    const input_system_ID_t			ID,
-    const sub_system_ID_t			sub_id,
-    const ctrl_unit_cfg_t *const cfg);
+	const input_system_ID_t			ID,
+	const sub_system_ID_t			sub_id,
+	const ctrl_unit_cfg_t *const cfg);
 
 static void input_system_network_configure(
-    const input_system_ID_t			ID,
-    const input_system_network_cfg_t *const cfg);
+	const input_system_ID_t			ID,
+	const input_system_network_cfg_t *const cfg);
 
 // MW: CSI is previously named as "rx" short for "receiver"
 static input_system_err_t set_csi_cfg(
-    csi_cfg_t *const lhs,
-    const csi_cfg_t *const rhs,
-    input_system_config_flags_t *const flags);
+	csi_cfg_t *const lhs,
+	const csi_cfg_t *const rhs,
+	input_system_config_flags_t *const flags);
 
 static input_system_err_t set_source_type(
-    input_system_source_t *const lhs,
-    const input_system_source_t				rhs,
-    input_system_config_flags_t *const flags);
+	input_system_source_t *const lhs,
+	const input_system_source_t				rhs,
+	input_system_config_flags_t *const flags);
 
 static input_system_err_t input_system_multiplexer_cfg(
-    input_system_multiplex_t *const lhs,
-    const input_system_multiplex_t			rhs,
-    input_system_config_flags_t *const flags);
+	input_system_multiplex_t *const lhs,
+	const input_system_multiplex_t			rhs,
+	input_system_config_flags_t *const flags);
 
 static void gp_device_rst(const gp_device_ID_t		ID);
 
@@ -77,15 +77,15 @@ static void input_selector_cfg_for_sensor(const gp_device_ID_t	ID);
 static void input_switch_rst(const gp_device_ID_t	ID);
 
 static void input_switch_cfg(
-    const gp_device_ID_t				ID,
-    const input_switch_cfg_t *const cfg
+	const gp_device_ID_t				ID,
+	const input_switch_cfg_t *const cfg
 );
 
 void receiver_set_compression(
-    const rx_ID_t			ID,
-    const unsigned int		cfg_ID,
-    const mipi_compressor_t		comp,
-    const mipi_predictor_t		pred)
+	const rx_ID_t			ID,
+	const unsigned int		cfg_ID,
+	const mipi_compressor_t		comp,
+	const mipi_predictor_t		pred)
 {
 	const unsigned int		field_id = cfg_ID % N_MIPI_FORMAT_CUSTOM;
 	const unsigned int		ch_id = cfg_ID / N_MIPI_FORMAT_CUSTOM;
@@ -131,9 +131,9 @@ void receiver_set_compression(
 }
 
 void receiver_port_enable(
-    const rx_ID_t			ID,
-    const enum mipi_port_id		port_ID,
-    const bool			cnd)
+	const rx_ID_t			ID,
+	const enum mipi_port_id		port_ID,
+	const bool			cnd)
 {
 	hrt_data	reg = receiver_port_reg_load(ID, port_ID,
 			  _HRT_CSS_RECEIVER_DEVICE_READY_REG_IDX);
@@ -149,8 +149,8 @@ void receiver_port_enable(
 }
 
 bool is_receiver_port_enabled(
-    const rx_ID_t			ID,
-    const enum mipi_port_id		port_ID)
+	const rx_ID_t			ID,
+	const enum mipi_port_id		port_ID)
 {
 	hrt_data	reg = receiver_port_reg_load(ID, port_ID,
 			  _HRT_CSS_RECEIVER_DEVICE_READY_REG_IDX);
@@ -158,26 +158,26 @@ bool is_receiver_port_enabled(
 }
 
 void receiver_irq_enable(
-    const rx_ID_t			ID,
-    const enum mipi_port_id		port_ID,
-    const rx_irq_info_t		irq_info)
+	const rx_ID_t			ID,
+	const enum mipi_port_id		port_ID,
+	const rx_irq_info_t		irq_info)
 {
 	receiver_port_reg_store(ID,
 				port_ID, _HRT_CSS_RECEIVER_IRQ_ENABLE_REG_IDX, irq_info);
 }
 
 rx_irq_info_t receiver_get_irq_info(
-    const rx_ID_t			ID,
-    const enum mipi_port_id		port_ID)
+	const rx_ID_t			ID,
+	const enum mipi_port_id		port_ID)
 {
 	return receiver_port_reg_load(ID,
 				      port_ID, _HRT_CSS_RECEIVER_IRQ_STATUS_REG_IDX);
 }
 
 void receiver_irq_clear(
-    const rx_ID_t			ID,
-    const enum mipi_port_id		port_ID,
-    const rx_irq_info_t		irq_info)
+	const rx_ID_t			ID,
+	const enum mipi_port_id		port_ID,
+	const rx_irq_info_t		irq_info)
 {
 	receiver_port_reg_store(ID,
 				port_ID, _HRT_CSS_RECEIVER_IRQ_STATUS_REG_IDX, irq_info);
@@ -187,7 +187,7 @@ void receiver_irq_clear(
 static input_system_cfg2400_t config;
 
 static void receiver_rst(
-    const rx_ID_t				ID)
+	const rx_ID_t				ID)
 {
 	enum mipi_port_id		port_id;
 
@@ -284,8 +284,8 @@ static void input_switch_rst(const gp_device_ID_t ID)
 }
 
 static void input_switch_cfg(
-    const gp_device_ID_t			ID,
-    const input_switch_cfg_t *const cfg)
+	const gp_device_ID_t			ID,
+	const input_switch_cfg_t *const cfg)
 {
 	int addr_offset;
 
@@ -406,7 +406,7 @@ input_system_err_t input_system_configuration_reset(void)
 // MW: Comments are good, but doxygen is required, place it at the declaration
 // Function that appends the channel to current configuration.
 static input_system_err_t input_system_configure_channel(
-    const channel_cfg_t		channel)
+	const channel_cfg_t		channel)
 {
 	input_system_err_t error = INPUT_SYSTEM_ERR_NO_ERROR;
 	// Check if channel is not already configured.
@@ -565,9 +565,9 @@ static input_system_err_t input_buffer_configuration(void)
 }
 
 static void capture_unit_configure(
-    const input_system_ID_t			ID,
-    const sub_system_ID_t			sub_id,
-    const isp2400_ib_buffer_t *const cfg)
+	const input_system_ID_t			ID,
+	const sub_system_ID_t			sub_id,
+	const isp2400_ib_buffer_t *const cfg)
 {
 	assert(ID < N_INPUT_SYSTEM_ID);
 	assert(/*(sub_id >= CAPTURE_UNIT0_ID) &&*/ (sub_id <=
@@ -589,9 +589,9 @@ static void capture_unit_configure(
 }
 
 static void acquisition_unit_configure(
-    const input_system_ID_t			ID,
-    const sub_system_ID_t			sub_id,
-    const isp2400_ib_buffer_t *const cfg)
+	const input_system_ID_t			ID,
+	const sub_system_ID_t			sub_id,
+	const isp2400_ib_buffer_t *const cfg)
 {
 	assert(ID < N_INPUT_SYSTEM_ID);
 	assert(sub_id == ACQUISITION_UNIT0_ID);
@@ -612,9 +612,9 @@ static void acquisition_unit_configure(
 }
 
 static void ctrl_unit_configure(
-    const input_system_ID_t			ID,
-    const sub_system_ID_t			sub_id,
-    const ctrl_unit_cfg_t *const cfg)
+	const input_system_ID_t			ID,
+	const sub_system_ID_t			sub_id,
+	const ctrl_unit_cfg_t *const cfg)
 {
 	assert(ID < N_INPUT_SYSTEM_ID);
 	assert(sub_id == CTRL_UNIT0_ID);
@@ -678,8 +678,8 @@ static void ctrl_unit_configure(
 }
 
 static void input_system_network_configure(
-    const input_system_ID_t				ID,
-    const input_system_network_cfg_t *const cfg)
+	const input_system_ID_t				ID,
+	const input_system_network_cfg_t *const cfg)
 {
 	u32 sub_id;
 
@@ -848,10 +848,10 @@ input_system_err_t input_system_configuration_commit(void)
 // FIFO
 
 input_system_err_t	input_system_csi_fifo_channel_cfg(
-    u32		ch_id,
-    input_system_csi_port_t	port,
-    backend_channel_cfg_t	backend_ch,
-    target_cfg2400_t	target
+	u32		ch_id,
+	input_system_csi_port_t	port,
+	backend_channel_cfg_t	backend_ch,
+	target_cfg2400_t	target
 )
 {
 	channel_cfg_t channel;
@@ -871,13 +871,13 @@ input_system_err_t	input_system_csi_fifo_channel_cfg(
 }
 
 input_system_err_t	input_system_csi_fifo_channel_with_counting_cfg(
-    u32				ch_id,
-    u32				nof_frames,
-    input_system_csi_port_t			port,
-    backend_channel_cfg_t			backend_ch,
-    u32				csi_mem_reg_size,
-    u32				csi_nof_mem_regs,
-    target_cfg2400_t			target
+	u32				ch_id,
+	u32				nof_frames,
+	input_system_csi_port_t			port,
+	backend_channel_cfg_t			backend_ch,
+	u32				csi_mem_reg_size,
+	u32				csi_nof_mem_regs,
+	target_cfg2400_t			target
 )
 {
 	channel_cfg_t channel;
@@ -902,14 +902,14 @@ input_system_err_t	input_system_csi_fifo_channel_with_counting_cfg(
 // SRAM
 
 input_system_err_t	input_system_csi_sram_channel_cfg(
-    u32				ch_id,
-    input_system_csi_port_t			port,
-    backend_channel_cfg_t			backend_ch,
-    u32				csi_mem_reg_size,
-    u32				csi_nof_mem_regs,
-    //	uint32_t				acq_mem_reg_size,
-    //	uint32_t				acq_nof_mem_regs,
-    target_cfg2400_t			target
+	u32				ch_id,
+	input_system_csi_port_t			port,
+	backend_channel_cfg_t			backend_ch,
+	u32				csi_mem_reg_size,
+	u32				csi_nof_mem_regs,
+	//	uint32_t				acq_mem_reg_size,
+	//	uint32_t				acq_nof_mem_regs,
+	target_cfg2400_t			target
 )
 {
 	channel_cfg_t channel;
@@ -934,15 +934,15 @@ input_system_err_t	input_system_csi_sram_channel_cfg(
 
 // Collects all parameters and puts them in channel_cfg_t.
 input_system_err_t	input_system_csi_xmem_channel_cfg(
-    u32				ch_id,
-    input_system_csi_port_t			port,
-    backend_channel_cfg_t			backend_ch,
-    u32				csi_mem_reg_size,
-    u32				csi_nof_mem_regs,
-    u32				acq_mem_reg_size,
-    u32				acq_nof_mem_regs,
-    target_cfg2400_t			target,
-    uint32_t				nof_xmem_buffers
+	u32				ch_id,
+	input_system_csi_port_t			port,
+	backend_channel_cfg_t			backend_ch,
+	u32				csi_mem_reg_size,
+	u32				csi_nof_mem_regs,
+	u32				acq_mem_reg_size,
+	u32				acq_nof_mem_regs,
+	target_cfg2400_t			target,
+	uint32_t				nof_xmem_buffers
 )
 {
 	channel_cfg_t channel;
@@ -966,13 +966,13 @@ input_system_err_t	input_system_csi_xmem_channel_cfg(
 }
 
 input_system_err_t	input_system_csi_xmem_acquire_only_channel_cfg(
-    u32				ch_id,
-    u32				nof_frames,
-    input_system_csi_port_t			port,
-    backend_channel_cfg_t			backend_ch,
-    u32				acq_mem_reg_size,
-    u32				acq_nof_mem_regs,
-    target_cfg2400_t			target)
+	u32				ch_id,
+	u32				nof_frames,
+	input_system_csi_port_t			port,
+	backend_channel_cfg_t			backend_ch,
+	u32				acq_mem_reg_size,
+	u32				acq_nof_mem_regs,
+	target_cfg2400_t			target)
 {
 	channel_cfg_t channel;
 
@@ -993,14 +993,14 @@ input_system_err_t	input_system_csi_xmem_acquire_only_channel_cfg(
 }
 
 input_system_err_t	input_system_csi_xmem_capture_only_channel_cfg(
-    u32				ch_id,
-    u32				nof_frames,
-    input_system_csi_port_t			port,
-    u32				csi_mem_reg_size,
-    u32				csi_nof_mem_regs,
-    u32				acq_mem_reg_size,
-    u32				acq_nof_mem_regs,
-    target_cfg2400_t			target)
+	u32				ch_id,
+	u32				nof_frames,
+	input_system_csi_port_t			port,
+	u32				csi_mem_reg_size,
+	u32				csi_nof_mem_regs,
+	u32				acq_mem_reg_size,
+	u32				acq_nof_mem_regs,
+	target_cfg2400_t			target)
 {
 	channel_cfg_t channel;
 
@@ -1026,14 +1026,14 @@ input_system_err_t	input_system_csi_xmem_capture_only_channel_cfg(
 // Non - CSI
 
 input_system_err_t	input_system_prbs_channel_cfg(
-    u32		ch_id,
-    u32		nof_frames,//not used yet
-    u32		seed,
-    u32		sync_gen_width,
-    u32		sync_gen_height,
-    u32		sync_gen_hblank_cycles,
-    u32		sync_gen_vblank_cycles,
-    target_cfg2400_t	target
+	u32		ch_id,
+	u32		nof_frames,//not used yet
+	u32		seed,
+	u32		sync_gen_width,
+	u32		sync_gen_height,
+	u32		sync_gen_hblank_cycles,
+	u32		sync_gen_vblank_cycles,
+	target_cfg2400_t	target
 )
 {
 	channel_cfg_t channel;
@@ -1056,10 +1056,10 @@ input_system_err_t	input_system_prbs_channel_cfg(
 
 // MW: Don't use system specific names, (even in system specific files) "cfg2400" -> cfg
 input_system_err_t	input_system_gpfifo_channel_cfg(
-    u32		ch_id,
-    u32		nof_frames, //not used yet
+	u32		ch_id,
+	u32		nof_frames, //not used yet
 
-    target_cfg2400_t	target)
+	target_cfg2400_t	target)
 {
 	channel_cfg_t channel;
 
@@ -1080,7 +1080,7 @@ input_system_err_t	input_system_gpfifo_channel_cfg(
 
 // Fills the parameters to config.csi_value[port]
 static input_system_err_t input_system_configure_channel_sensor(
-    const channel_cfg_t channel)
+	const channel_cfg_t channel)
 {
 	const u32 port = channel.source_cfg.csi_cfg.csi_port;
 	input_system_err_t status = INPUT_SYSTEM_ERR_NO_ERROR;
@@ -1160,9 +1160,9 @@ static input_system_err_t input_system_configure_channel_sensor(
 
 // Test flags and set structure.
 static input_system_err_t set_source_type(
-    input_system_source_t *const lhs,
-    const input_system_source_t			rhs,
-    input_system_config_flags_t *const flags)
+	input_system_source_t *const lhs,
+	const input_system_source_t			rhs,
+	input_system_config_flags_t *const flags)
 {
 	// MW: Not enough asserts
 	assert(lhs);
@@ -1196,9 +1196,9 @@ static input_system_err_t set_source_type(
 
 // Test flags and set structure.
 static input_system_err_t set_csi_cfg(
-    csi_cfg_t *const lhs,
-    const csi_cfg_t *const rhs,
-    input_system_config_flags_t *const flags)
+	csi_cfg_t *const lhs,
+	const csi_cfg_t *const rhs,
+	input_system_config_flags_t *const flags)
 {
 	u32 memory_required;
 	u32 acq_memory_required;
@@ -1263,9 +1263,9 @@ static input_system_err_t set_csi_cfg(
 
 // Test flags and set structure.
 static input_system_err_t input_system_multiplexer_cfg(
-    input_system_multiplex_t *const lhs,
-    const input_system_multiplex_t		rhs,
-    input_system_config_flags_t *const flags)
+	input_system_multiplex_t *const lhs,
+	const input_system_multiplex_t		rhs,
+	input_system_config_flags_t *const flags)
 {
 	assert(lhs);
 	assert(flags);
