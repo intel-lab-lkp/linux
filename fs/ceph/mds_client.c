@@ -1792,6 +1792,8 @@ static void cleanup_session_requests(struct ceph_mds_client *mdsc,
 
 	doutc(cl, "mds%d\n", session->s_mds);
 	mutex_lock(&mdsc->mutex);
+
+	/* First, handle requests on the unsafe list */
 	while (!list_empty(&session->s_unsafe)) {
 		req = list_first_entry(&session->s_unsafe,
 				       struct ceph_mds_request, r_unsafe_item);
@@ -1803,14 +1805,30 @@ static void cleanup_session_requests(struct ceph_mds_client *mdsc,
 			mapping_set_error(req->r_unsafe_dir->i_mapping, -EIO);
 		__unregister_request(mdsc, req);
 	}
-	/* zero r_attempts, so kick_requests() will re-send requests */
+
+	/*
+	 * Iterate through all pending requests for this session.
+	 * Requests that haven't received an unsafe reply yet will never
+	 * complete on this session - unregister them to signal waiters.
+	 * Requests that got unsafe but not safe are handled above via
+	 * s_unsafe list; for any remaining, reset r_attempts to allow
+	 * re-sending when session reconnects.
+	 */
 	p = rb_first(&mdsc->request_tree);
 	while (p) {
 		req = rb_entry(p, struct ceph_mds_request, r_node);
 		p = rb_next(p);
 		if (req->r_session &&
-		    req->r_session->s_mds == session->s_mds)
-			req->r_attempts = 0;
+		    req->r_session->s_mds == session->s_mds) {
+			if (!test_bit(CEPH_MDS_R_GOT_UNSAFE, &req->r_req_flags) &&
+			    !test_bit(CEPH_MDS_R_GOT_SAFE, &req->r_req_flags)) {
+				doutc(cl, " dropping pending request %llu\n",
+				      req->r_tid);
+				__unregister_request(mdsc, req);
+			} else {
+				req->r_attempts = 0;
+			}
+		}
 	}
 	mutex_unlock(&mdsc->mutex);
 }
