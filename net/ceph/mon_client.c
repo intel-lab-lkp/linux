@@ -1084,6 +1084,7 @@ static void delayed_work(struct work_struct *work)
 {
 	struct ceph_mon_client *monc =
 		container_of(work, struct ceph_mon_client, delayed_work.work);
+	int notavail_count;
 
 	mutex_lock(&monc->mutex);
 	dout("%s mon%d\n", __func__, monc->cur_mon);
@@ -1094,6 +1095,22 @@ static void delayed_work(struct work_struct *work)
 	if (monc->hunting) {
 		dout("%s continuing hunt\n", __func__);
 		reopen_session(monc);
+
+		/*
+		 * If we're hunting and EADDRNOTAVAIL has been persistent,
+		 * reset the backoff multiplier so we recover quickly once
+		 * the network issue resolves. Without this, hunt_mult can
+		 * grow large during extended EADDRNOTAVAIL periods, causing
+		 * the client to take minutes to reconnect even after the
+		 * underlying issue is fixed.
+		 */
+		notavail_count =
+			atomic_read(&monc->client->msgr.addr_notavail_count);
+		if (notavail_count >= ADDRNOTAVAIL_RESET_THRESHOLD) {
+			dout("%s addr_notavail_count %d, resetting hunt_mult\n",
+			     __func__, notavail_count);
+			monc->hunt_mult = 1;
+		}
 	} else {
 		int is_auth = ceph_auth_is_authenticated(monc->auth);
 
@@ -1554,6 +1571,7 @@ static struct ceph_msg *mon_alloc_msg(struct ceph_connection *con,
 static void mon_fault(struct ceph_connection *con)
 {
 	struct ceph_mon_client *monc = con->private;
+	int notavail_count;
 
 	mutex_lock(&monc->mutex);
 	dout("%s mon%d\n", __func__, monc->cur_mon);
@@ -1563,7 +1581,26 @@ static void mon_fault(struct ceph_connection *con)
 			reopen_session(monc);
 			__schedule_delayed(monc);
 		} else {
-			dout("%s already hunting\n", __func__);
+			/*
+			 * Already hunting. Normally we just wait for
+			 * delayed_work() to retry. But if EADDRNOTAVAIL
+			 * is persistent, force an immediate reconnect to
+			 * a different monitor. This avoids getting stuck
+			 * retrying the same monitor that keeps failing.
+			 * Also reset hunt_mult so we don't accumulate
+			 * excessive backoff during the outage.
+			 */
+			notavail_count =
+				atomic_read(&con->msgr->addr_notavail_count);
+			if (notavail_count > 0) {
+				dout("%s addr_notavail %d, forcing reopen\n",
+				     __func__, notavail_count);
+				monc->hunt_mult = 1;
+				reopen_session(monc);
+				__schedule_delayed(monc);
+			} else {
+				dout("%s already hunting\n", __func__);
+			}
 		}
 	}
 	mutex_unlock(&monc->mutex);
