@@ -984,6 +984,41 @@ static int rdt_last_cmd_status_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/*
+ * Supported resctrl kernel modes for info/kernel_mode. Names match
+ * user-visible strings.
+ */
+static struct resctrl_kmode kmodes[RESCTRL_KERNEL_MODES_NUM] = {
+	{"inherit_ctrl_and_mon", INHERIT_CTRL_AND_MON},
+	{"global_assign_ctrl_inherit_mon", GLOBAL_ASSIGN_CTRL_INHERIT_MON},
+	{"global_assign_ctrl_assign_mon", GLOBAL_ASSIGN_CTRL_ASSIGN_MON},
+};
+
+/**
+ * resctrl_kernel_mode_show() - Show supported and current resctrl kernel modes
+ * @of:	kernfs file handle.
+ * @s:	seq_file to write to.
+ * @v:	unused.
+ *
+ * Writes one line per supported mode. The currently active mode is shown as
+ * [name]; other supported modes are shown as name.
+ */
+static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
+				    struct seq_file *s, void *v)
+{
+	int i;
+
+	mutex_lock(&rdtgroup_mutex);
+	for (i = 0; i < RESCTRL_KERNEL_MODES_NUM; i++) {
+		if (resctrl_kcfg.kmode_cur & kmodes[i].val)
+			seq_printf(s, "[%s]\n", kmodes[i].name);
+		else if (resctrl_kcfg.kmode & kmodes[i].val)
+			seq_printf(s, "%s\n", kmodes[i].name);
+	}
+	mutex_unlock(&rdtgroup_mutex);
+	return 0;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -1883,6 +1918,13 @@ static struct rftype res_common_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_last_cmd_status_show,
+		.fflags		= RFTYPE_TOP_INFO,
+	},
+	{
+		.name		= "kernel_mode",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_kernel_mode_show,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
