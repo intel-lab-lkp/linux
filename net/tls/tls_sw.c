@@ -2355,8 +2355,8 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
 	struct tls_sw_context_rx *ctx = tls_sw_ctx_rx(tls_ctx);
 	struct tls_prot_info *prot = &tls_ctx->prot_info;
-	struct strp_msg *rxm = NULL;
 	struct sk_buff *skb = NULL;
+	struct strp_msg *rxm;
 	struct sk_psock *psock;
 	size_t flushed_at = 0;
 	bool released = true;
@@ -2381,17 +2381,15 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 
 	decrypted = 0;
 	for (;;) {
-		if (!skb_queue_empty(&ctx->rx_list)) {
-			skb = __skb_dequeue(&ctx->rx_list);
-			rxm = strp_msg(skb);
-			tlm = tls_msg(skb);
-		} else {
-			struct tls_decrypt_arg darg;
+		struct tls_decrypt_arg darg;
 
-			/* Drain backlog so segments that arrived while the
-			 * lock was held appear on sk_receive_queue before
-			 * tls_rx_rec_wait waits for a new record.
-			 */
+		/* Phase 1: Submit -- decrypt one record onto rx_list.
+		 * Flush the backlog first so that segments that
+		 * arrived while the lock was held appear on
+		 * sk_receive_queue before tls_rx_rec_wait waits
+		 * for a new record.
+		 */
+		if (skb_queue_empty(&ctx->rx_list)) {
 			sk_flush_backlog(sk);
 			err = tls_rx_rec_wait(sk, NULL, true, released);
 			if (err <= 0)
@@ -2406,38 +2404,43 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 			released = tls_read_flush_backlog(sk, prot, INT_MAX,
 							  0, decrypted,
 							  &flushed_at);
-			skb = darg.skb;
+			decrypted += strp_msg(darg.skb)->full_len;
+			tls_rx_rec_release(ctx);
+			__skb_queue_tail(&ctx->rx_list, darg.skb);
+		}
+
+		/* Phase 2: Deliver -- drain rx_list to read_actor */
+		while ((skb = __skb_dequeue(&ctx->rx_list)) != NULL) {
 			rxm = strp_msg(skb);
 			tlm = tls_msg(skb);
-			decrypted += rxm->full_len;
 
-			tls_rx_rec_release(ctx);
-		}
-
-		/* read_sock does not support reading control messages */
-		if (tlm->control != TLS_RECORD_TYPE_DATA) {
-			err = -EINVAL;
-			goto read_sock_requeue;
-		}
-
-		used = read_actor(desc, skb, rxm->offset, rxm->full_len);
-		if (used <= 0) {
-			if (!copied)
-				err = used;
-			goto read_sock_requeue;
-		}
-		copied += used;
-		if (used < rxm->full_len) {
-			rxm->offset += used;
-			rxm->full_len -= used;
-			if (!desc->count)
+			/* read_sock does not support reading control messages */
+			if (tlm->control != TLS_RECORD_TYPE_DATA) {
+				err = -EINVAL;
 				goto read_sock_requeue;
-		} else {
-			consume_skb(skb);
-			skb = NULL;
-			if (!desc->count)
-				break;
+			}
+
+			used = read_actor(desc, skb, rxm->offset,
+					  rxm->full_len);
+			if (used <= 0) {
+				if (!copied)
+					err = used;
+				goto read_sock_requeue;
+			}
+			copied += used;
+			if (used < rxm->full_len) {
+				rxm->offset += used;
+				rxm->full_len -= used;
+				if (!desc->count)
+					goto read_sock_requeue;
+			} else {
+				consume_skb(skb);
+				skb = NULL;
+			}
 		}
+		/* Drain all of rx_list before honoring !desc->count */
+		if (!desc->count)
+			break;
 	}
 
 read_sock_end:
