@@ -477,9 +477,17 @@ class CMatch:
 
                 continue
 
-            if not started and tok.kind == CToken.BEGIN:
-                started = True
-                continue
+            if not started:
+                if tok.kind == CToken.SPACE:
+                    continue
+
+                if tok.kind == CToken.BEGIN:
+                    started = True
+                    continue
+                else:
+                    # Name only token without BEGIN/END
+                    yield start, i
+                    start = None
 
             if tok.kind == CToken.END and tok.level == stack[-1][1]:
                 start, level = stack.pop()
