@@ -1768,7 +1768,7 @@ int mlx5_ib_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 	u32 *in = NULL;
 	void *mkc;
 	int err;
-	struct mlx5_ib_alloc_mw req = {};
+	struct mlx5_ib_alloc_mw req;
 	struct {
 		__u32	comp_mask;
 		__u32	response_length;
