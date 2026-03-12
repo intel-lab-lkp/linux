@@ -59,6 +59,9 @@ struct rtsx_ucr {
 	struct usb_interface	*pusb_intf;
 	struct usb_sg_request	current_sg;
 
+	u16			card_status_cache;
+	bool			card_status_valid;
+
 	struct timer_list	sg_timer;
 	struct mutex		dev_mutex;
 };
