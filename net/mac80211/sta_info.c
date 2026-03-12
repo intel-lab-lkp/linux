@@ -836,17 +836,17 @@ static int sta_info_insert_drv_state(struct ieee80211_local *local,
 		err = drv_sta_state(local, sdata, sta, state, state + 1);
 		if (err)
 			break;
-	}
-
-	if (!err) {
 		/*
 		 * Drivers using legacy sta_add/sta_remove callbacks only
 		 * get uploaded set to true after sta_add is called.
+		 * We are at least somewhat added now.
 		 */
 		if (!local->ops->sta_add)
 			sta->uploaded = true;
-		return 0;
 	}
+
+	if (!err)
+		return 0;
 
 	if (sdata->vif.type == NL80211_IFTYPE_ADHOC) {
 		sdata_info(sdata,
