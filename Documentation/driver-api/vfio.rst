@@ -275,8 +275,6 @@ in a VFIO group.
 With CONFIG_VFIO_DEVICE_CDEV=y the user can now acquire a device fd
 by directly opening a character device /dev/vfio/devices/vfioX where
 "X" is the number allocated uniquely by VFIO for registered devices.
-cdev interface does not support noiommu devices, so user should use
-the legacy group interface if noiommu is wanted.
 
 The cdev only works with IOMMUFD.  Both VFIO drivers and applications
 must adapt to the new cdev security model which requires using
@@ -369,6 +367,48 @@ IOMMUFD IOAS/HWPT to enable userspace DMA::
 	ioctl(iommufd, IOMMU_IOAS_MAP, &map);
 
 	/* Other device operations as stated in "VFIO Usage Example" */
+
+VFIO NOIOMMU mode
+-------------------------------------------------------------------------------
+VFIO also supports a no-IOMMU mode, intended for usages where unsafe DMA can
+be performed by userspace drivers w/o physical IOMMU protection. This mode
+is controlled by the parameter:
+
+/sys/module/vfio/parameters/enable_unsafe_noiommu_mode
+
+Upon enabling this mode, with an assigned device, the user will be presented
+with a VFIO group and device file, e.g.
+
+/dev/vfio/
+|-- devices
+|   `-- noiommu-vfio0	/* VFIO device cdev */
+|-- noiommu-0		/* VFIO group */
+`-- vfio
+
+The capabilities vary depending on the device programming interface and kernel
+configuration used. The following table summarizes the differences:
+
++-------------------+---------------------+---------------------+
+| Feature           | VFIO group          | VFIO device cdev   |
++===================+=====================+=====================+
+| VFIO device UAPI  | Yes                 | Yes                |
++-------------------+---------------------+---------------------+
+| VFIO container    | No                  | No                 |
++-------------------+---------------------+---------------------+
+| IOMMUFD IOAS      | No                  | Yes*               |
++-------------------+---------------------+---------------------+
+Note that the VFIO container case includes IOMMUFD provided VFIO compatibility
+interfaces when either CONFIG_VFIO_CONTAINER or CONFIG_IOMMUFD_VFIO_CONTAINER is
+enabled.
+
+* IOMMUFD UAPI is available for VFIO device cdev to pin and map user memory with
+the ability to retrieve physical addresses for DMA command submission.
+
+A new IOMMUFD ioctl IOMMU_IOAS_GET_PA is added to retrieve the physical address
+for a given user virtual address. Note that IOMMU_IOAS_MAP_FIXED_IOVA flag is
+ignored in no-IOMMU mode since there is no physical DMA remapping hardware.
+tools/testing/selftests/vfio/vfio_iommufd_noiommu_test.c provides an example of
+using this ioctl in no-IOMMU mode.
 
 VFIO User API
 -------------------------------------------------------------------------------
