@@ -504,23 +504,49 @@ void iwl_mld_remove_link(struct iwl_mld *mld,
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(bss_conf->vif);
 	struct iwl_mld_link *link = iwl_mld_link_from_mac80211(bss_conf);
 	bool is_deflink = link == &mld_vif->deflink;
-	u8 fw_id = link->fw_id;
+	u16 fw_id;
 
-	if (WARN_ON(!link || link->active))
-		return;
+	if (WARN_ON_ONCE(!link)) {
+		IWL_ERR(mld, "Remove nonexistent link, bss_conf: 0x%px link-id: %d\n",
+			bss_conf, bss_conf->link_id);
+		fw_id = 0xffff;
+	} else {
+		fw_id  = link->fw_id;
+	}
+
+	/* Not cleaning it up seems worse than cleaning up an active link,
+	 * so continue on even in warning case.
+	 */
+	if (link && WARN_ON_ONCE(link->active))
+		IWL_ERR(mld, "Removing active link, id: %d\n",
+			bss_conf->link_id);
 
 	iwl_mld_rm_link_from_fw(mld, bss_conf);
 	/* Continue cleanup on failure */
 
-	if (!is_deflink)
+	if (link && !is_deflink)
 		kfree_rcu(link, rcu_head);
 
+	rcu_read_lock();
 	RCU_INIT_POINTER(mld_vif->link[bss_conf->link_id], NULL);
 
-	if (WARN_ON(fw_id >= mld->fw->ucode_capa.num_links))
-		return;
+	if (fw_id >= mld->fw->ucode_capa.num_links) {
+		struct ieee80211_bss_conf *tmp_bss_conf;
+		int i;
 
-	RCU_INIT_POINTER(mld->fw_id_to_bss_conf[fw_id], NULL);
+		/* Search for any existing back-pointer */
+		for (i = 0; i < ARRAY_SIZE(mld->fw_id_to_bss_conf); i++) {
+			tmp_bss_conf = rcu_dereference(mld->fw_id_to_bss_conf[i]);
+			if (tmp_bss_conf == bss_conf) {
+				IWL_ERR(mld, "WARNING: Found bss_conf in fw_id_to_bss_conf[%i], Nulling pointer.\n",
+					i);
+				RCU_INIT_POINTER(mld->fw_id_to_bss_conf[i], NULL);
+			}
+		}
+	} else {
+		RCU_INIT_POINTER(mld->fw_id_to_bss_conf[fw_id], NULL);
+	}
+	rcu_read_unlock();
 }
 
 void iwl_mld_handle_missed_beacon_notif(struct iwl_mld *mld,
