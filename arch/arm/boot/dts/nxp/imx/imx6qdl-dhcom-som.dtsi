@@ -303,7 +303,7 @@
 		};
 	};
 
-	touchscreen@49 { /* TSC2004 */
+	touch_i2c: touchscreen@49 { /* TSC2004 */
 		compatible = "ti,tsc2004";
 		interrupts-extended = <&gpio4 14 IRQ_TYPE_EDGE_FALLING>;
 		pinctrl-0 = <&pinctrl_tsc2004>;
