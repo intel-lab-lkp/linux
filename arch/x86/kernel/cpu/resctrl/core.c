@@ -892,6 +892,13 @@ bool resctrl_arch_is_evt_configurable(enum resctrl_event_id evt)
 	}
 }
 
+void resctrl_arch_get_kmode_cfg(struct resctrl_kmode_cfg *kcfg)
+{
+	kcfg->kmode = INHERIT_CTRL_AND_MON;
+	kcfg->kmode_cur = INHERIT_CTRL_AND_MON;
+	kcfg->k_rdtgrp = NULL;
+}
+
 static __init bool get_mem_config(void)
 {
 	struct rdt_hw_resource *hw_res = &rdt_resources_all[RDT_RESOURCE_MBA];

@@ -76,6 +76,9 @@ static void rdtgroup_destroy_root(void);
 
 struct dentry *debugfs_resctrl;
 
+/* Current resctrl kernel mode config (kmode, kmode_cur, k_rdtgrp). */
+struct resctrl_kmode_cfg resctrl_kcfg;
+
 /*
  * Memory bandwidth monitoring event to use for the default CTRL_MON group
  * and each new CTRL_MON group created by the user.  Only relevant when
@@ -2202,6 +2205,11 @@ static void io_alloc_init(void)
 		resctrl_file_fflags_init("io_alloc_cbm",
 					 RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE);
 	}
+}
+
+static void resctrl_kmode_init(void)
+{
+	resctrl_arch_get_kmode_cfg(&resctrl_kcfg);
 }
 
 void resctrl_file_fflags_init(const char *config, unsigned long fflags)
@@ -4553,6 +4561,8 @@ int resctrl_init(void)
 	thread_throttle_mode_init();
 
 	io_alloc_init();
+
+	resctrl_kmode_init();
 
 	ret = resctrl_l3_mon_resource_init();
 	if (ret)
