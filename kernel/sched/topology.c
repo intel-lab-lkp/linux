@@ -1645,8 +1645,6 @@ sd_init(struct sched_domain_topology_level *tl,
 	struct cpumask *sd_span;
 	u64 now = sched_clock();
 
-	sd_weight = cpumask_weight(tl->mask(tl, cpu));
-
 	if (tl->sd_flags)
 		sd_flags = (*tl->sd_flags)();
 	if (WARN_ONCE(sd_flags & ~TOPOLOGY_SD_FLAGS,
@@ -1654,8 +1652,6 @@ sd_init(struct sched_domain_topology_level *tl,
 		sd_flags &= TOPOLOGY_SD_FLAGS;
 
 	*sd = (struct sched_domain){
-		.min_interval		= sd_weight,
-		.max_interval		= 2*sd_weight,
 		.busy_factor		= 16,
 		.imbalance_pct		= 117,
 
@@ -1675,7 +1671,6 @@ sd_init(struct sched_domain_topology_level *tl,
 					,
 
 		.last_balance		= jiffies,
-		.balance_interval	= sd_weight,
 
 		/* 50% success rate */
 		.newidle_call		= 512,
@@ -1692,6 +1687,11 @@ sd_init(struct sched_domain_topology_level *tl,
 	sd_span = sched_domain_span(sd);
 	cpumask_and(sd_span, cpu_map, tl->mask(tl, cpu));
 	sd_id = cpumask_first(sd_span);
+
+	sd_weight = cpumask_weight(sd_span);
+	sd->min_interval = sd_weight;
+	sd->max_interval = 2 * sd_weight;
+	sd->balance_interval = sd_weight;
 
 	sd->flags |= asym_cpu_capacity_classify(sd_span, cpu_map);
 
