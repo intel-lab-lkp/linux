@@ -1021,6 +1021,11 @@ static void __evsel__config_callchain(struct evsel *evsel, struct record_opts *o
 	bool function = evsel__is_function_event(evsel);
 	struct perf_event_attr *attr = &evsel->core.attr;
 
+	if (EM_HOST == EM_S390 && param->record_mode == CALLCHAIN_FP) {
+		pr_warning("Framepointer unwinding not supported on s390, option ignored. Try '--call-graph dwarf'\n");
+		return;
+	}
+
 	evsel__set_sample_bit(evsel, CALLCHAIN);
 
 	attr->sample_max_stack = param->max_stack;
