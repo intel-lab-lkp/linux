@@ -2543,14 +2543,15 @@ int fuse_dev_release(struct inode *inode, struct file *file)
 
 		fuse_dev_end_requests(&to_end);
 
-		/* Are we the last open device? */
-		if (atomic_dec_and_test(&fc->dev_count)) {
-			WARN_ON(fc->iq.fasync != NULL);
-			fuse_abort_conn(fc);
-		}
 		spin_lock(&fc->lock);
 		list_del(&fud->entry);
 		spin_unlock(&fc->lock);
+
+		/* Are we the last open device? */
+		if (list_empty(&fc->devices)) {
+			WARN_ON(fc->iq.fasync != NULL);
+			fuse_abort_conn(fc);
+		}
 		fuse_conn_put(fc);
 	}
 	fuse_dev_put(fud);
@@ -2569,24 +2570,10 @@ static int fuse_dev_fasync(int fd, struct file *file, int on)
 	return fasync_helper(fd, file, on, &fud->fc->iq.fasync);
 }
 
-static int fuse_device_clone(struct fuse_conn *fc, struct file *new)
-{
-	struct fuse_dev *new_fud = fuse_file_to_fud(new);
-
-	if (fuse_dev_fc_get(new_fud))
-		return -EINVAL;
-
-	fuse_dev_install(new_fud, fc);
-	atomic_inc(&fc->dev_count);
-
-	return 0;
-}
-
 static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 {
-	int res;
 	int oldfd;
-	struct fuse_dev *fud = NULL;
+	struct fuse_dev *fud, *new_fud;
 
 	if (get_user(oldfd, argp))
 		return -EFAULT;
@@ -2599,17 +2586,18 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 	 * Check against file->f_op because CUSE
 	 * uses the same ioctl handler.
 	 */
-	if (fd_file(f)->f_op == file->f_op)
-		fud = __fuse_get_dev(fd_file(f));
+	if (fd_file(f)->f_op != file->f_op)
+		return -EINVAL;
 
-	res = -EINVAL;
-	if (fud) {
-		mutex_lock(&fuse_mutex);
-		res = fuse_device_clone(fud->fc, file);
-		mutex_unlock(&fuse_mutex);
-	}
+	fud = __fuse_get_dev(fd_file(f));
+	if (!fud)
+		return -EINVAL;
 
-	return res;
+	new_fud = fuse_file_to_fud(file);
+	if (!fuse_dev_install(new_fud, fud->fc))
+		return -EINVAL;
+
+	return 0;
 }
 
 static long fuse_dev_ioctl_backing_open(struct file *file,
