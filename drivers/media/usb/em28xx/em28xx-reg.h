@@ -167,6 +167,8 @@
 #define EM28XX_R26_COMPR	0x26
 #define EM28XX_R27_OUTFMT	0x27
 
+#define LOCK_STATUS_DEFAULT    0x00
+
 /* em28xx Output Format Register (0x27) */
 #define EM28XX_OUTFMT_RGB_8_RGRG	0x00
 #define EM28XX_OUTFMT_RGB_8_GRGR	0x01
@@ -283,6 +285,7 @@ enum em28xx_chip_id {
 	CHIP_ID_EM2884 = 68,
 	CHIP_ID_EM28174 = 113,
 	CHIP_ID_EM28178 = 114,
+	CHIP_ID_EM2828X = 148,
 };
 
 /*
