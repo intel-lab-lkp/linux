@@ -966,6 +966,34 @@ unlock:
 	return ret ?: nbytes;
 }
 
+/**
+ * rdt_task_match() - Decide if a task belongs to an rdtgroup for display
+ * @t:		Task to check.
+ * @r:		Rdtgroup (for CLOSID/RMID matching when not kmode).
+ * @kmode:	True if @r has kernel mode (e.g. PLZA) enabled.
+ *
+ * When @kmode is true, matches tasks that have kernel mode set (they are
+ * associated with this group via PLZA). Otherwise matches by CLOSID or RMID.
+ *
+ * Return: true if @t should be shown as belonging to @r.
+ */
+static inline bool rdt_task_match(struct task_struct *t,
+				  struct rdtgroup *r, bool kmode)
+{
+	if (kmode)
+		return t->kmode;
+
+	return is_closid_match(t, r) || is_rmid_match(t, r);
+}
+
+/**
+ * show_rdt_tasks() - List task PIDs that belong to the rdtgroup
+ * @r:		Rdtgroup whose tasks to list.
+ * @s:		seq_file to write PIDs to.
+ *
+ * Uses rdt_task_match() so that when the group has kernel mode (e.g. PLZA)
+ * enabled, tasks are matched by t->kmode; otherwise by CLOSID/RMID.
+ */
 static void show_rdt_tasks(struct rdtgroup *r, struct seq_file *s)
 {
 	struct task_struct *p, *t;
@@ -973,11 +1001,12 @@ static void show_rdt_tasks(struct rdtgroup *r, struct seq_file *s)
 
 	rcu_read_lock();
 	for_each_process_thread(p, t) {
-		if (is_closid_match(t, r) || is_rmid_match(t, r)) {
-			pid = task_pid_vnr(t);
-			if (pid)
-				seq_printf(s, "%d\n", pid);
-		}
+		if (!rdt_task_match(t, r, r->kmode))
+			continue;
+
+		pid = task_pid_vnr(t);
+		if (pid)
+			seq_printf(s, "%d\n", pid);
 	}
 	rcu_read_unlock();
 }
