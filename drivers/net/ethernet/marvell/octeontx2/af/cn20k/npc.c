@@ -521,13 +521,17 @@ npc_program_single_kpm_profile(struct rvu *rvu, int blkaddr,
 			       int kpm, int start_entry,
 			       const struct npc_kpu_profile *profile)
 {
+	int num_cam_entries, num_action_entries;
 	int entry, num_entries, max_entries;
 	u64 idx;
 
-	if (profile->cam_entries != profile->action_entries) {
+	num_cam_entries = npc_get_num_kpu_cam_entries(rvu, profile);
+	num_action_entries = npc_get_num_kpu_action_entries(rvu, profile);
+
+	if (num_cam_entries != num_action_entries) {
 		dev_err(rvu->dev,
 			"kpm%d: CAM and action entries [%d != %d] not equal\n",
-			kpm, profile->cam_entries, profile->action_entries);
+			kpm, num_cam_entries, num_action_entries);
 
 		WARN(1, "Fatal error\n");
 		return;
@@ -536,16 +540,18 @@ npc_program_single_kpm_profile(struct rvu *rvu, int blkaddr,
 	max_entries = rvu->hw->npc_kpu_entries / 2;
 	entry = start_entry;
 	/* Program CAM match entries for previous kpm extracted data */
-	num_entries = min_t(int, profile->cam_entries, max_entries);
+	num_entries = min_t(int, num_cam_entries, max_entries);
 	for (idx = 0; entry < num_entries + start_entry; entry++, idx++)
-		npc_config_kpmcam(rvu, blkaddr, &profile->cam[idx],
+		npc_config_kpmcam(rvu, blkaddr,
+				  npc_get_kpu_cam_nth_entry(rvu, profile, idx),
 				  kpm, entry);
 
 	entry = start_entry;
 	/* Program this kpm's actions */
-	num_entries = min_t(int, profile->action_entries, max_entries);
+	num_entries = min_t(int, num_action_entries, max_entries);
 	for (idx = 0; entry < num_entries + start_entry; entry++, idx++)
-		npc_config_kpmaction(rvu, blkaddr, &profile->action[idx],
+		npc_config_kpmaction(rvu, blkaddr,
+				     npc_get_kpu_action_nth_entry(rvu, profile, idx),
 				     kpm, entry, false);
 }
 
@@ -666,7 +672,8 @@ void npc_cn20k_parser_profile_init(struct rvu *rvu, int blkaddr)
 	num_pkinds = min_t(int, hw->npc_pkinds, num_pkinds);
 
 	for (idx = 0; idx < num_pkinds; idx++)
-		npc_config_kpmaction(rvu, blkaddr, &rvu->kpu.ikpu[idx],
+		npc_config_kpmaction(rvu, blkaddr,
+				     npc_get_ikpu_nth_entry(rvu, idx),
 				     0, idx, true);
 
 	/* Program KPM CAM and Action profiles */
