@@ -14,3 +14,17 @@ config IO_URING_BPF
 	def_bool y
 	depends on BPF
 	depends on NET
+
+config IO_URING_IPC
+	bool "io_uring IPC support"
+	depends on IO_URING
+	default y
+	help
+	  Enable io_uring-based inter-process communication.
+
+	  This provides high-performance IPC channels that leverage
+	  io_uring's shared memory infrastructure and async notification
+	  model. Supports broadcast and multicast patterns with
+	  zero-copy capabilities.
+
+	  If unsure, say Y.

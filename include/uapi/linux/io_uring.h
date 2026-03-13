@@ -318,6 +318,8 @@ enum io_uring_op {
 	IORING_OP_PIPE,
 	IORING_OP_NOP128,
 	IORING_OP_URING_CMD128,
+	IORING_OP_IPC_SEND,
+	IORING_OP_IPC_RECV,
 
 	/* this goes last, obviously */
 	IORING_OP_LAST,
@@ -723,6 +725,12 @@ enum io_uring_register_op {
 	/* register bpf filtering programs */
 	IORING_REGISTER_BPF_FILTER		= 37,
 
+	/* IPC channel operations */
+	IORING_REGISTER_IPC_CHANNEL_CREATE	= 38,
+	IORING_REGISTER_IPC_CHANNEL_ATTACH	= 39,
+	IORING_REGISTER_IPC_CHANNEL_DETACH	= 40,
+	IORING_REGISTER_IPC_CHANNEL_DESTROY	= 41,
+
 	/* this goes last */
 	IORING_REGISTER_LAST,
 
@@ -1055,6 +1063,72 @@ enum io_uring_socket_op {
 struct io_timespec {
 	__u64		tv_sec;
 	__u64		tv_nsec;
+};
+
+/*
+ * IPC channel support
+ */
+
+/* Flags for IPC channel creation */
+#define IOIPC_F_BROADCAST	(1U << 0)  /* Broadcast mode (all subscribers receive) */
+#define IOIPC_F_MULTICAST	(1U << 1)  /* Multicast mode (round-robin delivery) */
+#define IOIPC_F_PRIVATE		(1U << 2)  /* Private (permissions enforced strictly) */
+
+/* Flags for subscriber attachment */
+#define IOIPC_SUB_SEND		(1U << 0)  /* Can send to channel */
+#define IOIPC_SUB_RECV		(1U << 1)  /* Can receive from channel */
+#define IOIPC_SUB_BOTH		(IOIPC_SUB_SEND | IOIPC_SUB_RECV)
+
+/* Create IPC channel */
+struct io_uring_ipc_channel_create {
+	__u32	flags;			/* IOIPC_F_BROADCAST, IOIPC_F_PRIVATE */
+	__u32	ring_entries;		/* Number of message slots */
+	__u32	max_msg_size;		/* Maximum message size */
+	__u32	mode;			/* Permission bits (like chmod) */
+	__u64	key;			/* Unique key for channel (like ftok()) */
+	__u32	channel_id_out;		/* Returned channel ID */
+	__u32	reserved[3];
+};
+
+/* Attach to existing channel */
+struct io_uring_ipc_channel_attach {
+	__u32	channel_id;		/* Attach by channel ID (when key == 0) */
+	__u32	flags;			/* IOIPC_SUB_SEND, IOIPC_SUB_RECV, IOIPC_SUB_BOTH */
+	__u64	key;			/* Non-zero: attach by key instead of channel_id */
+	__s32	channel_fd;		/* Output: fd for mmap */
+	__u32	local_id_out;		/* Output: local subscriber ID */
+	__u64	mmap_offset_out;	/* Output: offset for mmap() */
+	__u32	region_size;		/* Output: size of shared region */
+	__u32	reserved[3];
+};
+
+/* Message descriptor in the ring */
+struct io_uring_ipc_msg_desc {
+	__u64	offset;			/* Offset in data region for message payload */
+	__u32	len;			/* Message length */
+	__u32	msg_id;			/* Unique message ID */
+	__u64	sender_data;		/* Sender's user_data for context */
+};
+
+/* Shared ring structure (mmap'd to userspace) */
+struct io_uring_ipc_ring {
+	/* Cache-aligned producer/consumer positions */
+	struct {
+		__u32	head __attribute__((aligned(64)));
+		__u32	tail;
+	} producer;
+
+	struct {
+		__u32	head __attribute__((aligned(64)));
+	} consumer;
+
+	/* Ring parameters */
+	__u32	ring_mask;
+	__u32	ring_entries;
+	__u32	max_msg_size;
+
+	/* Array of message descriptors follows */
+	struct io_uring_ipc_msg_desc msgs[];
 };
 
 #ifdef __cplusplus

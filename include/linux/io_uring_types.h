@@ -435,6 +435,13 @@ struct io_ring_ctx {
 	u32			pers_next;
 	struct xarray		personalities;
 
+#ifdef CONFIG_IO_URING_IPC
+	/* IPC subscriber tracking - keyed by subscriber_id */
+	struct xarray		ipc_subscribers;
+	/* IPC channels created by this ring - keyed by channel_id */
+	struct xarray		ipc_channels;
+#endif
+
 	/* hashed buffered write serialization */
 	struct io_wq_hash		*hash_map;
 
