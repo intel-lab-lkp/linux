@@ -1434,6 +1434,10 @@ struct intel_crtc_state {
 
 	/* to track changes in plane color blocks */
 	bool plane_color_changed;
+
+	struct {
+		bool enable;
+	} dc3co;
 };
 
 enum intel_pipe_crc_source {
