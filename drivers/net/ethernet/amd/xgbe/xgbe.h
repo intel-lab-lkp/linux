@@ -1315,6 +1315,9 @@ void xgbe_init_tx_coalesce(struct xgbe_prv_data *);
 void xgbe_restart_dev(struct xgbe_prv_data *pdata);
 void xgbe_full_restart_dev(struct xgbe_prv_data *pdata);
 
+/* TX queue reset for link-down cleanup*/
+void xgbe_reset_tx_queues(struct xgbe_prv_data *pdata);
+
 /* For Timestamp config */
 void xgbe_config_tstamp(struct xgbe_prv_data *pdata, unsigned int mac_tscr);
 u64 xgbe_get_tstamp_time(struct xgbe_prv_data *pdata);
