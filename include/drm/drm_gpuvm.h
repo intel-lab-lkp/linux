@@ -63,6 +63,8 @@ enum drm_gpuva_flags {
 	DRM_GPUVA_USERBITS = (1 << 2),
 };
 
+#define VA_MERGE_MUST_MATCH_FLAGS (DRM_GPUVA_SPARSE)
+
 /**
  * struct drm_gpuva - structure to track a GPU VA mapping
  *
@@ -886,6 +888,11 @@ struct drm_gpuva_op_map {
 		 */
 		struct drm_gem_object *obj;
 	} gem;
+
+	/**
+	 * @flags: requested flags for the &drm_gpuva for this mapping
+	 */
+	enum drm_gpuva_flags flags;
 };
 
 /**
@@ -1124,6 +1131,7 @@ void drm_gpuva_ops_free(struct drm_gpuvm *gpuvm,
 static inline void drm_gpuva_init_from_op(struct drm_gpuva *va,
 					  const struct drm_gpuva_op_map *op)
 {
+	va->flags = op->flags;
 	va->va.addr = op->va.addr;
 	va->va.range = op->va.range;
 	va->gem.obj = op->gem.obj;
@@ -1249,6 +1257,16 @@ struct drm_gpuvm_ops {
 	 * used.
 	 */
 	int (*sm_step_unmap)(struct drm_gpuva_op *op, void *priv);
+
+	/**
+	 * @sm_can_merge_flags: called during &drm_gpuvm_sm_map
+	 *
+	 * This callback is called to determine whether two va ranges can be merged,
+	 * based on their flags.
+	 *
+	 * If NULL, va ranges can only be merged if their flags are equal.
+	 */
+	bool (*sm_can_merge_flags)(enum drm_gpuva_flags a, enum drm_gpuva_flags b);
 };
 
 int drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm, void *priv,

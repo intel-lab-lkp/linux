@@ -2386,6 +2386,7 @@ static bool can_merge(struct drm_gpuvm *gpuvm, const struct drm_gpuva *va,
 		.va.range = va->va.range,
 		.gem.offset = va->gem.offset,
 		.gem.obj = va->gem.obj,
+		.flags = va->flags,
 	};
 	const struct drm_gpuva_op_map *a = new_map, *b = &existing_map;
 
@@ -2393,6 +2394,10 @@ static bool can_merge(struct drm_gpuvm *gpuvm, const struct drm_gpuva *va,
 	 * the same GEM object.
 	 */
 	if (a->gem.obj != b->gem.obj || !a->gem.obj)
+		return false;
+
+	/* For two VAs to be merged, their flags must be compatible */
+	if ((a->flags & VA_MERGE_MUST_MATCH_FLAGS) != (b->flags & VA_MERGE_MUST_MATCH_FLAGS))
 		return false;
 
 	/* Order VAs for the rest of the checks. */
@@ -2459,6 +2464,7 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 					.va.range = range - req_range,
 					.gem.obj = obj,
 					.gem.offset = offset + req_range,
+					.flags = va->flags,
 				};
 				struct drm_gpuva_op_unmap u = {
 					.va = va,
@@ -2480,6 +2486,7 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 				.va.range = ls_range,
 				.gem.obj = obj,
 				.gem.offset = offset,
+				.flags = va->flags,
 			};
 			struct drm_gpuva_op_unmap u = { .va = va };
 
@@ -2519,8 +2526,8 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 					.va.addr = req_end,
 					.va.range = end - req_end,
 					.gem.obj = obj,
-					.gem.offset = offset + ls_range +
-						      req_range,
+					.gem.offset = offset + ls_range + req_range,
+					.flags = va->flags,
 				};
 
 				ret = op_remap_cb(ops, priv, &p, &n, &u);
@@ -2554,6 +2561,7 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 					.va.range = end - req_end,
 					.gem.obj = obj,
 					.gem.offset = offset + req_end - addr,
+					.flags = va->flags,
 				};
 				struct drm_gpuva_op_unmap u = {
 					.va = va,
@@ -2605,6 +2613,7 @@ __drm_gpuvm_sm_unmap(struct drm_gpuvm *gpuvm,
 			prev.va.range = req_addr - addr;
 			prev.gem.obj = obj;
 			prev.gem.offset = offset;
+			prev.flags = va->flags;
 
 			prev_split = true;
 		}
@@ -2614,6 +2623,7 @@ __drm_gpuvm_sm_unmap(struct drm_gpuvm *gpuvm,
 			next.va.range = end - req_end;
 			next.gem.obj = obj;
 			next.gem.offset = offset + (req_end - addr);
+			next.flags = va->flags;
 
 			next_split = true;
 		}
