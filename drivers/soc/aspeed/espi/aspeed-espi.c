@@ -12,12 +12,224 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+#include <linux/kstrtox.h>
+#include <linux/slab.h>
+#include <linux/string.h>
 
 #include "aspeed-espi.h"
 #include "aspeed-espi-comm.h"
 #include "ast2600-espi.h"
 #include "espi_storage.h"
 
+static ssize_t flash_lun_path_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct aspeed_espi_flash *flash;
+	struct aspeed_espi *espi;
+	ssize_t rc;
+
+	espi = dev_get_drvdata(dev);
+
+	if (!espi)
+		return -ENODEV;
+
+	flash = &espi->flash;
+
+	mutex_lock(&flash->lun_mtx);
+	rc = scnprintf(buf, PAGE_SIZE, "%s\n", flash->lun_path);
+	mutex_unlock(&flash->lun_mtx);
+
+	return rc;
+}
+
+static ssize_t flash_lun_path_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	char tmp[ASPEED_ESPI_LUN_PATH_MAX];
+	struct aspeed_espi_flash *flash;
+	struct aspeed_espi *espi;
+	size_t len;
+
+	espi = dev_get_drvdata(dev);
+	if (!espi)
+		return -ENODEV;
+
+	flash = &espi->flash;
+
+	len = strnlen(buf, count);
+	if (len && buf[len - 1] == '\n')
+		len--;
+
+	if (len >= sizeof(tmp))
+		return -ENAMETOOLONG;
+
+	memcpy(tmp, buf, len);
+	tmp[len] = '\0';
+
+	mutex_lock(&flash->lun_mtx);
+	if (flash->lun && flash->lun->filp) {
+		mutex_unlock(&flash->lun_mtx);
+		return -EBUSY;
+	}
+
+	strscpy(flash->lun_path, tmp, sizeof(flash->lun_path));
+	dev_info(dev, "flash lun path set to %s\n", flash->lun_path);
+	mutex_unlock(&flash->lun_mtx);
+
+	return count;
+}
+
+static ssize_t flash_lun_readonly_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct aspeed_espi_flash *flash;
+	struct aspeed_espi *espi;
+	ssize_t rc;
+
+	espi = dev_get_drvdata(dev);
+	if (!espi)
+		return -ENODEV;
+
+	flash = &espi->flash;
+
+	mutex_lock(&flash->lun_mtx);
+	rc = scnprintf(buf, PAGE_SIZE, "%u\n", flash->lun_ro);
+	mutex_unlock(&flash->lun_mtx);
+
+	return rc;
+}
+
+static ssize_t flash_lun_readonly_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct aspeed_espi_flash *flash;
+	struct aspeed_espi *espi;
+	bool ro;
+	int rc;
+
+	espi = dev_get_drvdata(dev);
+	if (!espi)
+		return -ENODEV;
+
+	flash = &espi->flash;
+
+	rc = kstrtobool(buf, &ro);
+	if (rc)
+		return rc;
+
+	mutex_lock(&flash->lun_mtx);
+	if (flash->lun && flash->lun->filp) {
+		mutex_unlock(&flash->lun_mtx);
+		return -EBUSY;
+	}
+
+	flash->lun_ro = ro;
+	dev_info(dev, "flash lun readonly set to %u\n", flash->lun_ro);
+	mutex_unlock(&flash->lun_mtx);
+
+	return count;
+}
+
+static ssize_t flash_lun_enable_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct aspeed_espi_flash *flash;
+	struct aspeed_espi *espi;
+	bool enabled;
+	ssize_t rc;
+
+	espi = dev_get_drvdata(dev);
+	if (!espi)
+		return -ENODEV;
+
+	flash = &espi->flash;
+
+	mutex_lock(&flash->lun_mtx);
+	enabled = flash->lun && flash->lun->filp;
+	mutex_unlock(&flash->lun_mtx);
+
+	rc = scnprintf(buf, PAGE_SIZE, "%u\n", enabled);
+	return rc;
+}
+
+static ssize_t flash_lun_enable_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct aspeed_espi_flash *flash;
+	struct aspeed_espi *espi;
+	bool enable;
+	int rc = 0;
+
+	espi = dev_get_drvdata(dev);
+	if (!espi)
+		return -ENODEV;
+
+	flash = &espi->flash;
+
+	rc = kstrtobool(buf, &enable);
+	if (rc)
+		return rc;
+
+	mutex_lock(&flash->lun_mtx);
+	if (!flash->lun) {
+		flash->lun = devm_kzalloc(dev, sizeof(*flash->lun), GFP_KERNEL);
+		if (!flash->lun) {
+			rc = -ENOMEM;
+			goto out_unlock;
+		}
+	}
+
+	if (enable) {
+		if (flash->lun->filp)
+			goto out_unlock;
+		if (!flash->lun_path[0]) {
+			rc = -EINVAL;
+			goto out_unlock;
+		}
+
+		dev_info(dev, "flash lun enable: path=%s ro=%u\n",
+			 flash->lun_path, flash->lun_ro);
+		mutex_lock(&flash->tx_mtx);
+		rc = aspeed_espi_lun_open(flash->lun, flash->lun_path,
+					  flash->lun_ro, false);
+		mutex_unlock(&flash->tx_mtx);
+	} else {
+		if (!flash->lun->filp)
+			goto out_unlock;
+
+		dev_info(dev, "flash lun disable\n");
+		mutex_lock(&flash->tx_mtx);
+		aspeed_espi_lun_close(flash->lun);
+		mutex_unlock(&flash->tx_mtx);
+	}
+
+out_unlock:
+	mutex_unlock(&flash->lun_mtx);
+	if (rc) {
+		dev_err(dev, "flash lun enable=%u failed: %d\n", enable, rc);
+		return rc;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(flash_lun_path);
+static DEVICE_ATTR_RW(flash_lun_readonly);
+static DEVICE_ATTR_RW(flash_lun_enable);
+
+static struct attribute *aspeed_espi_flash_attrs[] = {
+	&dev_attr_flash_lun_path.attr,
+	&dev_attr_flash_lun_readonly.attr,
+	&dev_attr_flash_lun_enable.attr,
+	NULL,
+};
+
+static const struct attribute_group aspeed_espi_flash_attr_group = {
+	.attrs = aspeed_espi_flash_attrs,
+};
 
 struct aspeed_espi_ops {
 	void (*espi_pre_init)(struct aspeed_espi *espi);
@@ -334,6 +546,12 @@ static int aspeed_espi_probe(struct platform_device *pdev)
 	if (rc) {
 		dev_err(dev, "cannot init flash channel, rc=%d\n", rc);
 		goto err_remove_perif;
+	}
+
+	rc = devm_device_add_group(dev, &aspeed_espi_flash_attr_group);
+	if (rc) {
+		dev_err(dev, "cannot add flash LUN sysfs group, rc=%d\n", rc);
+		goto err_remove_flash;
 	}
 
 	rc = devm_request_irq(dev, espi->irq, espi->ops->espi_isr, 0,
