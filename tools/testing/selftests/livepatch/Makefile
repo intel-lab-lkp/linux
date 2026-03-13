@@ -10,6 +10,7 @@ TEST_PROGS := \
 	test-state.sh \
 	test-ftrace.sh \
 	test-sysfs.sh \
+	test-sysfs-replace-attr.sh \
 	test-syscall.sh \
 	test-kprobe.sh
 
