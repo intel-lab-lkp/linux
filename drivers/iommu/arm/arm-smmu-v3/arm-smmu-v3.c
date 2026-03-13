@@ -33,6 +33,10 @@
 #include "arm-smmu-v3.h"
 #include "../../dma-iommu.h"
 
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+static unsigned int arm_smmu_present;
+#endif
+
 static bool disable_msipolling;
 module_param(disable_msipolling, bool, 0444);
 MODULE_PARM_DESC(disable_msipolling,
@@ -4908,6 +4912,12 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	ret = arm_smmu_device_reset(smmu);
 	if (ret)
 		goto err_disable;
+
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+	ret = arm_smmu_debugfs_setup(smmu, ioaddr);
+	if (ret)
+		dev_warn(dev, "Failed to create debugfs!\n");
+#endif
 
 	/* And we're up. Go go go! */
 	ret = iommu_device_sysfs_add(&smmu->iommu, dev, NULL,
