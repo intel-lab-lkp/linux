@@ -3883,17 +3883,6 @@ static int check_svme(struct x86_emulate_ctxt *ctxt)
 	return X86EMUL_CONTINUE;
 }
 
-static int check_svme_pa(struct x86_emulate_ctxt *ctxt)
-{
-	u64 rax = reg_read(ctxt, VCPU_REGS_RAX);
-
-	/* Valid physical address? */
-	if (rax & 0xffff000000000000ULL)
-		return emulate_gp(ctxt, 0);
-
-	return check_svme(ctxt);
-}
-
 static int check_rdtsc(struct x86_emulate_ctxt *ctxt)
 {
 	u64 cr4 = ctxt->ops->get_cr(ctxt, 4);
@@ -3997,10 +3986,10 @@ static const struct opcode group7_rm2[] = {
 };
 
 static const struct opcode group7_rm3[] = {
-	DIP(SrcNone | Prot | Priv,		vmrun,		check_svme_pa),
+	DIP(SrcNone | Prot | Priv,		vmrun,		check_svme),
 	II(SrcNone  | Prot | EmulateOnUD,	em_hypercall,	vmmcall),
-	DIP(SrcNone | Prot | Priv,		vmload,		check_svme_pa),
-	DIP(SrcNone | Prot | Priv,		vmsave,		check_svme_pa),
+	DIP(SrcNone | Prot | Priv,		vmload,		check_svme),
+	DIP(SrcNone | Prot | Priv,		vmsave,		check_svme),
 	DIP(SrcNone | Prot | Priv,		stgi,		check_svme),
 	DIP(SrcNone | Prot | Priv,		clgi,		check_svme),
 	DIP(SrcNone | Prot | Priv,		skinit,		check_svme),
