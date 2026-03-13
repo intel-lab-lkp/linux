@@ -459,13 +459,14 @@ static inline void vm_set_memory_attributes(struct kvm_vm *vm, uint64_t gpa,
 static inline int __gmem_set_memory_attributes(int fd, loff_t offset,
 					       uint64_t size,
 					       uint64_t attributes,
-					       loff_t *error_offset)
+					       loff_t *error_offset,
+					       u64 flags)
 {
 	struct kvm_memory_attributes2 attr = {
 		.attributes = attributes,
 		.offset = offset,
 		.size = size,
-		.flags = 0,
+		.flags = flags,
 	};
 	int r;
 
@@ -478,27 +479,30 @@ static inline int __gmem_set_memory_attributes(int fd, loff_t offset,
 }
 
 static inline int __gmem_set_private(int fd, loff_t offset, uint64_t size,
-				     loff_t *error_offset)
+				     loff_t *error_offset, u64 flags)
 {
 	return __gmem_set_memory_attributes(fd, offset, size,
 					    KVM_MEMORY_ATTRIBUTE_PRIVATE,
-					    error_offset);
+					    error_offset, flags);
 }
 
 static inline int __gmem_set_shared(int fd, loff_t offset, uint64_t size,
-				    loff_t *error_offset)
+				    loff_t *error_offset, u64 flags)
 {
-	return __gmem_set_memory_attributes(fd, offset, size, 0, error_offset);
+	return __gmem_set_memory_attributes(fd, offset, size, 0,
+					    error_offset, flags);
 }
 
 static inline void gmem_set_memory_attributes(int fd, loff_t offset,
-					      uint64_t size, uint64_t attributes)
+					      uint64_t size,
+					      uint64_t attributes,
+					      u64 flags)
 {
 	struct kvm_memory_attributes2 attr = {
 		.attributes = attributes,
 		.offset = offset,
 		.size = size,
-		.flags = 0,
+		.flags = flags,
 	};
 
 	TEST_ASSERT_SUPPORTED_ATTRIBUTES(attributes);
@@ -511,16 +515,19 @@ static inline void gmem_set_memory_attributes(int fd, loff_t offset,
 
 static inline void gmem_set_private(int fd, loff_t offset, uint64_t size)
 {
-	gmem_set_memory_attributes(fd, offset, size, KVM_MEMORY_ATTRIBUTE_PRIVATE);
+	gmem_set_memory_attributes(fd, offset, size, KVM_MEMORY_ATTRIBUTE_PRIVATE,
+				   KVM_SET_MEMORY_ATTRIBUTES2_ZERO);
 }
 
 static inline void gmem_set_shared(int fd, loff_t offset, uint64_t size)
 {
-	gmem_set_memory_attributes(fd, offset, size, 0);
+	gmem_set_memory_attributes(fd, offset, size, 0,
+				   KVM_SET_MEMORY_ATTRIBUTES2_ZERO);
 }
 
 static inline void vm_mem_set_memory_attributes(struct kvm_vm *vm, uint64_t gpa,
-						uint64_t size, uint64_t attrs)
+						uint64_t size, uint64_t attrs,
+						u64 flags)
 {
 	if (kvm_has_gmem_attributes) {
 		uint64_t end = gpa + size;
@@ -532,9 +539,10 @@ static inline void vm_mem_set_memory_attributes(struct kvm_vm *vm, uint64_t gpa,
 			fd = kvm_gpa_to_guest_memfd(vm, addr, &fd_offset, &len);
 			len = min(end - addr, len);
 
-			gmem_set_memory_attributes(fd, fd_offset, len, attrs);
+			gmem_set_memory_attributes(fd, fd_offset, len, attrs, flags);
 		}
 	} else {
+		TEST_ASSERT(!flags, "Flags are not supported.");
 		vm_set_memory_attributes(vm, gpa, size, attrs);
 	}
 }
@@ -542,13 +550,13 @@ static inline void vm_mem_set_memory_attributes(struct kvm_vm *vm, uint64_t gpa,
 static inline void vm_mem_set_private(struct kvm_vm *vm, uint64_t gpa,
 				      uint64_t size)
 {
-	vm_mem_set_memory_attributes(vm, gpa, size, KVM_MEMORY_ATTRIBUTE_PRIVATE);
+	vm_mem_set_memory_attributes(vm, gpa, size, KVM_MEMORY_ATTRIBUTE_PRIVATE, 0);
 }
 
 static inline void vm_mem_set_shared(struct kvm_vm *vm, uint64_t gpa,
 				     uint64_t size)
 {
-	vm_mem_set_memory_attributes(vm, gpa, size, 0);
+	vm_mem_set_memory_attributes(vm, gpa, size, 0, 0);
 }
 
 void vm_guest_mem_fallocate(struct kvm_vm *vm, uint64_t gpa, uint64_t size,
