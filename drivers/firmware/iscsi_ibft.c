@@ -220,7 +220,21 @@ static ssize_t sprintf_ipaddr(char *buf, u8 *ip)
 
 static ssize_t sprintf_string(char *str, int len, char *buf)
 {
+	if (!buf)
+		return 0;
 	return sprintf(str, "%.*s\n", len, buf);
+}
+
+/*
+ * Validate that a string field described by (off, len) lies entirely within
+ * the iBFT table, then return a pointer to it.  Returns NULL if the field
+ * is absent (off == 0 or len == 0) or would read past the table boundary.
+ */
+static char *ibft_str_ptr(struct acpi_table_ibft *header, u16 off, u16 len)
+{
+	if (!off || !len || (u32)off + len > header->header.length)
+		return NULL;
+	return (char *)header + off;
 }
 
 /*
@@ -251,7 +265,6 @@ static ssize_t ibft_attr_show_initiator(void *data, int type, char *buf)
 {
 	struct ibft_kobject *entry = data;
 	struct ibft_initiator *initiator = entry->initiator;
-	void *ibft_loc = entry->header;
 	char *str = buf;
 
 	if (!initiator)
@@ -278,8 +291,9 @@ static ssize_t ibft_attr_show_initiator(void *data, int type, char *buf)
 		break;
 	case ISCSI_BOOT_INI_INITIATOR_NAME:
 		str += sprintf_string(str, initiator->initiator_name_len,
-				      (char *)ibft_loc +
-				      initiator->initiator_name_off);
+				      ibft_str_ptr(entry->header,
+						   initiator->initiator_name_off,
+						   initiator->initiator_name_len));
 		break;
 	default:
 		break;
@@ -292,7 +306,6 @@ static ssize_t ibft_attr_show_nic(void *data, int type, char *buf)
 {
 	struct ibft_kobject *entry = data;
 	struct ibft_nic *nic = entry->nic;
-	void *ibft_loc = entry->header;
 	char *str = buf;
 	__be32 val;
 
@@ -342,7 +355,9 @@ static ssize_t ibft_attr_show_nic(void *data, int type, char *buf)
 		break;
 	case ISCSI_BOOT_ETH_HOSTNAME:
 		str += sprintf_string(str, nic->hostname_len,
-				      (char *)ibft_loc + nic->hostname_off);
+				      ibft_str_ptr(entry->header,
+						   nic->hostname_off,
+						   nic->hostname_len));
 		break;
 	default:
 		break;
@@ -355,7 +370,6 @@ static ssize_t ibft_attr_show_target(void *data, int type, char *buf)
 {
 	struct ibft_kobject *entry = data;
 	struct ibft_tgt *tgt = entry->tgt;
-	void *ibft_loc = entry->header;
 	char *str = buf;
 	int i;
 
@@ -388,25 +402,33 @@ static ssize_t ibft_attr_show_target(void *data, int type, char *buf)
 		break;
 	case ISCSI_BOOT_TGT_NAME:
 		str += sprintf_string(str, tgt->tgt_name_len,
-				      (char *)ibft_loc + tgt->tgt_name_off);
+				      ibft_str_ptr(entry->header,
+						   tgt->tgt_name_off,
+						   tgt->tgt_name_len));
 		break;
 	case ISCSI_BOOT_TGT_CHAP_NAME:
 		str += sprintf_string(str, tgt->chap_name_len,
-				      (char *)ibft_loc + tgt->chap_name_off);
+				      ibft_str_ptr(entry->header,
+						   tgt->chap_name_off,
+						   tgt->chap_name_len));
 		break;
 	case ISCSI_BOOT_TGT_CHAP_SECRET:
 		str += sprintf_string(str, tgt->chap_secret_len,
-				      (char *)ibft_loc + tgt->chap_secret_off);
+				      ibft_str_ptr(entry->header,
+						   tgt->chap_secret_off,
+						   tgt->chap_secret_len));
 		break;
 	case ISCSI_BOOT_TGT_REV_CHAP_NAME:
 		str += sprintf_string(str, tgt->rev_chap_name_len,
-				      (char *)ibft_loc +
-				      tgt->rev_chap_name_off);
+				      ibft_str_ptr(entry->header,
+						   tgt->rev_chap_name_off,
+						   tgt->rev_chap_name_len));
 		break;
 	case ISCSI_BOOT_TGT_REV_CHAP_SECRET:
 		str += sprintf_string(str, tgt->rev_chap_secret_len,
-				      (char *)ibft_loc +
-				      tgt->rev_chap_secret_off);
+				      ibft_str_ptr(entry->header,
+						   tgt->rev_chap_secret_off,
+						   tgt->rev_chap_secret_len));
 		break;
 	default:
 		break;
@@ -447,6 +469,20 @@ static int __init ibft_check_device(void)
 	u8 csum = 0;
 
 	len = ibft_addr->header.length;
+
+#ifdef CONFIG_ISCSI_IBFT_FIND
+	/*
+	 * For the ISA path, header.length is re-read from physical memory
+	 * that memblock_reserve() does not write-protect.  Re-validate the
+	 * same physical bound that reserve_ibft_region() checked at scan
+	 * time: the table must fit entirely within [ibft_phys_addr, IBFT_END).
+	 */
+	if (ibft_phys_addr &&
+	    (len < sizeof(*ibft_addr) || len > IBFT_END - ibft_phys_addr)) {
+		printk(KERN_ERR "iBFT error: table length %d out of valid ISA range.\n", len);
+		return -ENOENT;
+	}
+#endif
 
 	/* Sanity checking of iBFT. */
 	if (ibft_addr->header.revision != 1) {
