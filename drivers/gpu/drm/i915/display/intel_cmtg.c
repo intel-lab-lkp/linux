@@ -16,6 +16,7 @@
 #include "intel_display_power.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_vrr_regs.h"
 
 /**
  * DOC: Common Primary Timing Generator (CMTG)
@@ -268,4 +269,36 @@ void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state, bool lrr)
 		       VSYNC_END(adjusted_mode->crtc_vsync_end - 1));
 	intel_de_write(display, TRANS_SET_CTX_LATENCY_CMTG(cpu_transcoder),
 		       crtc_state->set_context_latency);
+}
+
+void intel_cmtg_set_vrr_timings(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	if (!intel_cmtg_is_allowed(crtc_state))
+		return;
+
+	intel_de_write(display, TRANS_VRR_VMIN_CMTG(cpu_transcoder), crtc_state->vrr.vmin);
+	intel_de_write(display, TRANS_VRR_VMAX_CMTG(cpu_transcoder), crtc_state->vrr.vmax);
+	intel_de_write(display, TRANS_VRR_FLIPLINE_CMTG(cpu_transcoder), crtc_state->vrr.flipline);
+}
+
+void intel_cmtg_set_vrr_ctl(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	u32 vrr_ctl;
+
+	if (!intel_cmtg_is_allowed(crtc_state))
+		return;
+
+	vrr_ctl = VRR_CTL_VRR_ENABLE | VRR_CTL_FLIP_LINE_EN |
+		  XELPD_VRR_CTL_VRR_GUARDBAND(crtc_state->vrr.guardband);
+
+	/* TODO: The code below may need to be revisited once CMRR is enabled */
+	if (crtc_state->cmrr.enable)
+		vrr_ctl |= VRR_CTL_CMRR_ENABLE;
+
+	intel_de_write(display, TRANS_VRR_CTL_CMTG(cpu_transcoder), vrr_ctl);
 }

@@ -29,4 +29,9 @@
 
 #define TRANS_SET_CTX_LATENCY_CMTG(trans)	_MMIO(0x6F07C + (trans) * 0x100)
 
+#define TRANS_VRR_CTL_CMTG(trans)	_MMIO(0x6F420 + (trans) * 0x100)
+#define TRANS_VRR_VMAX_CMTG(trans)	_MMIO(0x6F424 + (trans) * 0x100)
+#define TRANS_VRR_VMIN_CMTG(trans)	_MMIO(0x6F434 + (trans) * 0x100)
+#define TRANS_VRR_FLIPLINE_CMTG(trans)	_MMIO(0x6F438 + (trans) * 0x100)
+
 #endif /* __INTEL_CMTG_REGS_H__ */
