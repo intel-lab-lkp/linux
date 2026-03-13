@@ -2095,11 +2095,56 @@ static void xgbe_phy_pll_ctrl(struct xgbe_prv_data *pdata, bool enable)
 	usleep_range(100, 200);
 }
 
+static bool xgbe_phy_port_is_inphi(struct xgbe_prv_data *pdata)
+{
+	struct xgbe_phy_data *phy_data = pdata->phy_data;
+
+	/* Re-driver models 4223 && 4227 are supported Inphi models */
+	return phy_data->redrv &&
+	       (phy_data->redrv_model == XGBE_PHY_REDRV_MODEL_4223 ||
+		phy_data->redrv_model == XGBE_PHY_REDRV_MODEL_4227);
+}
+
+void xgbe_check_kr_training_in_progress(struct xgbe_prv_data *pdata)
+{
+	struct xgbe_phy_data *phy_data = pdata->phy_data;
+	unsigned long kr_timeout;
+	int wait;
+
+	/* Only wait for KR training in specific conditions:
+	 *  - Inphi re-driver is present, OR
+	 *  - Currently in KR mode with autoneg enabled
+	 */
+	if (!xgbe_phy_port_is_inphi(pdata) &&
+	    !(phy_data->cur_mode == XGBE_MODE_KR &&
+	      pdata->phy.autoneg == AUTONEG_ENABLE))
+		return;
+
+	wait = XGBE_KR_TRAINING_WAIT_ITER;
+	while (wait--) {
+		/* Check if we've exceeded the AN timeout window */
+		kr_timeout = pdata->kr_start_time +
+			msecs_to_jiffies(XGBE_AN_MS_TIMEOUT +
+					XGBE_KR_TRAINING_WAIT_MS);
+		if (time_after(jiffies, kr_timeout))
+			break;
+
+		/* Training is complete - no need to wait */
+		if (pdata->an_result == XGBE_AN_COMPLETE)
+			return;
+
+		usleep_range(10000, 11000);
+	}
+}
+
 static void xgbe_phy_perform_ratechange(struct xgbe_prv_data *pdata,
-					enum xgbe_mb_cmd cmd, enum xgbe_mb_subcmd sub_cmd)
+					enum xgbe_mb_cmd cmd,
+					enum xgbe_mb_subcmd sub_cmd)
 {
 	unsigned int s0 = 0;
 	unsigned int wait;
+
+	xgbe_check_kr_training_in_progress(pdata);
 
 	/* Disable PLL re-initialization during FW command processing */
 	xgbe_phy_pll_ctrl(pdata, false);
@@ -2115,7 +2160,9 @@ static void xgbe_phy_perform_ratechange(struct xgbe_prv_data *pdata,
 	XP_SET_BITS(s0, XP_DRIVER_SCRATCH_0, COMMAND, cmd);
 	XP_SET_BITS(s0, XP_DRIVER_SCRATCH_0, SUB_COMMAND, sub_cmd);
 
-	/* Issue the command */
+	/* Acquire mailbox lock for firmware command */
+	guard(mutex)(&pdata->mailbox_lock);
+
 	XP_IOWRITE(pdata, XP_DRIVER_SCRATCH_0, s0);
 	XP_IOWRITE(pdata, XP_DRIVER_SCRATCH_1, 0);
 	XP_IOWRITE_BITS(pdata, XP_DRIVER_INT_REQ, REQUEST, 1);
