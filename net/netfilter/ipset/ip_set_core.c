@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/ip.h>
+#include <linux/overflow.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
 #include <linux/rculist.h>
@@ -1763,12 +1764,17 @@ call_ad(struct net *net, struct sock *ctnl, struct sk_buff *skb,
 		struct nlmsghdr *rep, *nlh = nlmsg_hdr(skb);
 		struct sk_buff *skb2;
 		struct nlmsgerr *errmsg;
-		size_t payload = min(SIZE_MAX,
-				     sizeof(*errmsg) + nlmsg_len(nlh));
+		int nlmsg_payload_len = nlmsg_len(nlh);
+		size_t payload;
 		int min_len = nlmsg_total_size(sizeof(struct nfgenmsg));
 		struct nlattr *cda[IPSET_ATTR_CMD_MAX + 1];
 		struct nlattr *cmdattr;
 		u32 *errline;
+
+		if (nlmsg_payload_len < 0 ||
+		    check_add_overflow(sizeof(*errmsg),
+				       (size_t)nlmsg_payload_len, &payload))
+			return -ENOMEM;
 
 		skb2 = nlmsg_new(payload, GFP_KERNEL);
 		if (!skb2)
