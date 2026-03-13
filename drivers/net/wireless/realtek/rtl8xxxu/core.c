@@ -3921,6 +3921,7 @@ static int rtl8xxxu_init_device(struct ieee80211_hw *hw)
 	struct device *dev = &priv->udev->dev;
 	struct rtl8xxxu_fileops *fops = priv->fops;
 	bool macpower;
+	u16 mac_id;
 	int ret;
 	u8 val8;
 	u16 val16;
@@ -4393,9 +4394,16 @@ static int rtl8xxxu_init_device(struct ieee80211_hw *hw)
 		priv->cfo_tracking.crystal_cap = priv->default_crystal_cap;
 	}
 
-	if (priv->rtl_chip == RTL8188E)
-		rtl8188e_ra_info_init_all(&priv->ra_info);
-
+	if (priv->rtl_chip == RTL8188E)	{
+		priv->ra_info = kmalloc_array(RTL8188E_MAX_MAC_ID_NUM, sizeof(*priv->ra_info), GFP_KERNEL);
+		if (!priv->ra_info) {
+			ret = -ENOMEM;
+			goto exit;
+		}
+		for (mac_id = 0; mac_id < RTL8188E_MAX_MAC_ID_NUM; mac_id++) {
+			rtl8188e_ra_info_init_all(&priv->ra_info[mac_id]);
+		}
+	}
 	set_bit(RTL8XXXU_BC_MC_MACID, priv->mac_id_map);
 	set_bit(RTL8XXXU_BC_MC_MACID1, priv->mac_id_map);
 
@@ -5338,7 +5346,7 @@ rtl8xxxu_fill_txdesc_v3(struct ieee80211_hw *hw, struct ieee80211_hdr *hdr,
 {
 	struct rtl8xxxu_priv *priv = hw->priv;
 	struct device *dev = &priv->udev->dev;
-	struct rtl8xxxu_ra_info *ra = &priv->ra_info;
+	struct rtl8xxxu_ra_info *ra = &priv->ra_info[macid];
 	u8 *qc = ieee80211_get_qos_ctl(hdr);
 	u8 tid = qc[0] & IEEE80211_QOS_CTL_TID_MASK;
 	u32 rate = 0;
@@ -7895,6 +7903,7 @@ static int rtl8xxxu_probe(struct usb_interface *interface,
 err_set_intfdata:
 	usb_set_intfdata(interface, NULL);
 
+	kfree(priv->ra_info);
 	kfree(priv->fw_data);
 	mutex_destroy(&priv->usb_buf_mutex);
 	mutex_destroy(&priv->syson_indirect_access_mutex);
@@ -7924,7 +7933,7 @@ static void rtl8xxxu_disconnect(struct usb_interface *interface)
 	usb_set_intfdata(interface, NULL);
 
 	dev_info(&priv->udev->dev, "disconnecting\n");
-
+	kfree(priv->ra_info);
 	kfree(priv->fw_data);
 	mutex_destroy(&priv->usb_buf_mutex);
 	mutex_destroy(&priv->syson_indirect_access_mutex);
