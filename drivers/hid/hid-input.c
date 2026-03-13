@@ -1853,11 +1853,6 @@ static void hidinput_led_worker(struct work_struct *work)
 
 	report = field->report;
 
-	/* use custom SET_REPORT request if possible (asynchronous) */
-	if (hid->ll_driver->request)
-		return hid->ll_driver->request(hid, report, HID_REQ_SET_REPORT);
-
-	/* fall back to generic raw-output-report */
 	len = hid_report_len(report);
 	buf = hid_alloc_report_buf(report, GFP_KERNEL);
 	if (!buf)
