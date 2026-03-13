@@ -306,9 +306,13 @@ static void handle_exit_hypercall(struct kvm_vcpu *vcpu)
 	if (do_fallocate)
 		vm_guest_mem_fallocate(vm, gpa, size, map_shared);
 
-	if (set_attributes)
-		vm_mem_set_memory_attributes(vm, gpa, size,
-					     map_shared ? 0 : KVM_MEMORY_ATTRIBUTE_PRIVATE);
+	if (set_attributes) {
+		u64 attrs = map_shared ? 0 : KVM_MEMORY_ATTRIBUTE_PRIVATE;
+
+		vm_mem_set_memory_attributes(vm, gpa, size, attrs,
+					     KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE);
+	}
+
 	run->hypercall.ret = 0;
 }
 

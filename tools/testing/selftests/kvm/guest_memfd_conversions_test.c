@@ -27,6 +27,7 @@ typedef FIXTURE_DATA(gmem_conversions) test_data_t;
 FIXTURE_SETUP(gmem_conversions) { }
 
 static uint64_t page_size;
+static u64 content_mode;
 
 static void guest_do_rmw(void);
 #define GUEST_MEMFD_SHARING_TEST_GVA 0x90000000ULL
@@ -192,7 +193,9 @@ static void test_private(test_data_t *t, loff_t pgoff, char starting_val,
 static void test_convert_to_private(test_data_t *t, loff_t pgoff,
 				    char starting_val, char write_val)
 {
-	gmem_set_private(t->gmem_fd, pgoff * page_size, page_size);
+	gmem_set_memory_attributes(t->gmem_fd, pgoff * page_size, page_size,
+				   KVM_MEMORY_ATTRIBUTE_PRIVATE,
+				   content_mode);
 	test_private(t, pgoff, starting_val, write_val);
 }
 
@@ -208,7 +211,8 @@ static void test_convert_to_shared(test_data_t *t, loff_t pgoff,
 				   char starting_val, char host_write_val,
 				   char write_val)
 {
-	gmem_set_shared(t->gmem_fd, pgoff * page_size, page_size);
+	gmem_set_memory_attributes(t->gmem_fd, pgoff * page_size, page_size,
+				   0, content_mode);
 	test_shared(t, pgoff, starting_val, host_write_val, write_val);
 }
 
@@ -298,7 +302,9 @@ GMEM_CONVERSION_MULTIPAGE_TEST_INIT_SHARED(unallocated_folios, 8)
 	if (test_page != second_page_to_fault)
 		host_do_rmw(t->mem, second_page_to_fault, 0, 'A');
 
-	gmem_set_private(t->gmem_fd, 0, nr_pages * page_size);
+	gmem_set_memory_attributes(t->gmem_fd, 0, nr_pages * page_size,
+				   KVM_MEMORY_ATTRIBUTE_PRIVATE,
+				   content_mode);
 	for (i = 0; i < nr_pages; ++i) {
 		char expected = (i == test_page || i == second_page_to_fault) ? 'A' : 0;
 
@@ -429,7 +435,8 @@ static void test_convert_to_private_fails(test_data_t *t, loff_t pgoff,
 
 	do {
 		ret = __gmem_set_private(t->gmem_fd, offset,
-					 nr_pages * page_size, &error_offset);
+					 nr_pages * page_size, &error_offset,
+					 content_mode);
 	} while (ret == -1 && errno == EINTR);
 	TEST_ASSERT(ret == -1 && errno == EAGAIN,
 		    "Wanted EAGAIN on page %lu, got %d (ret = %d)", pgoff,
@@ -465,7 +472,9 @@ GMEM_CONVERSION_MULTIPAGE_TEST_INIT_SHARED(elevated_refcount, 4)
 
 	unpin_pages();
 
-	gmem_set_private(t->gmem_fd, 0, nr_pages * page_size);
+	gmem_set_memory_attributes(t->gmem_fd, 0, nr_pages * page_size,
+				   KVM_MEMORY_ATTRIBUTE_PRIVATE,
+				   content_mode);
 
 	for (i = 0; i < nr_pages; i++) {
 		char expected = i == test_page ? 'B' : 'C';
@@ -481,6 +490,7 @@ int main(int argc, char *argv[])
 		     KVM_MEMORY_ATTRIBUTE_PRIVATE);
 
 	page_size = getpagesize();
+	content_mode = KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE;
 
 	return test_harness_run(argc, argv);
 }
