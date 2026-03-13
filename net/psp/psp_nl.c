@@ -515,6 +515,13 @@ int psp_nl_dev_assoc_doit(struct sk_buff *skb, struct genl_info *info)
 
 	psp_nl_notify_dev(psd, PSP_CMD_DEV_CHANGE_NTF);
 
+	/* Register netdev notifier for assoc cleanup on success.
+	 * Must drop psd->lock to ensure lock ordering: rtnl_lock -> psd->lock
+	 */
+	mutex_unlock(&psd->lock);
+	psp_attach_netdev_notifier();
+	mutex_lock(&psd->lock);
+
 	return psp_nl_reply_send(rsp, info);
 }
 
