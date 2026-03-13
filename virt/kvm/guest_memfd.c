@@ -638,6 +638,42 @@ static int kvm_gmem_mas_preallocate(struct ma_state *mas, u64 attributes,
 	return mas_preallocate(mas, xa_mk_value(attributes), GFP_KERNEL);
 }
 
+u64 __weak kvm_arch_gmem_supported_content_modes(struct kvm *kvm)
+{
+	/* Architectures must override with supported modes. */
+	return 0;
+}
+
+static u64 kvm_gmem_supported_content_modes(struct kvm *kvm)
+{
+	return kvm_arch_gmem_supported_content_modes(kvm);
+}
+
+int kvm_gmem_apply_content_mode_zero(struct folio *folio)
+{
+	folio_zero_segment(folio, 0, folio_size(folio));
+
+	return 0;
+}
+
+int __weak kvm_arch_gmem_apply_content_mode_unspecified(struct kvm *kvm,
+							struct folio *folio)
+{
+	return 0;
+}
+
+int __weak kvm_arch_gmem_apply_content_mode_zero(struct kvm *kvm,
+						 struct folio *folio)
+{
+	return kvm_gmem_apply_content_mode_zero(folio);
+}
+
+int __weak kvm_arch_gmem_apply_content_mode_preserve(struct kvm *kvm,
+						     struct folio *folio)
+{
+	return -EOPNOTSUPP;
+}
+
 static int __kvm_gmem_set_attributes(struct inode *inode, pgoff_t start,
 				     size_t nr_pages, uint64_t attrs,
 				     pgoff_t *err_index)
