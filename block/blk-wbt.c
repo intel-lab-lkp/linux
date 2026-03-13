@@ -740,29 +740,29 @@ static bool __wbt_enable_default(struct gendisk *disk)
 {
 	struct request_queue *q = disk->queue;
 	struct rq_qos *rqos;
-	bool enable = IS_ENABLED(CONFIG_BLK_WBT_MQ);
+
+	if (!IS_ENABLED(CONFIG_BLK_WBT_MQ))
+		return false;
 
 	mutex_lock(&disk->rqos_state_mutex);
 
 	if (blk_queue_disable_wbt(q))
-		enable = false;
+		goto out_false;
 
 	/* Throttling already enabled? */
 	rqos = wbt_rq_qos(q);
 	if (rqos) {
-		if (enable && RQWB(rqos)->enable_state == WBT_STATE_OFF_DEFAULT)
+		if (RQWB(rqos)->enable_state == WBT_STATE_OFF_DEFAULT)
 			RQWB(rqos)->enable_state = WBT_STATE_ON_DEFAULT;
-		mutex_unlock(&disk->rqos_state_mutex);
-		return false;
+		goto out_false;
 	}
 	mutex_unlock(&disk->rqos_state_mutex);
 
 	/* Queue not registered? Maybe shutting down... */
-	if (!blk_queue_registered(q))
-		return false;
+	return blk_queue_registered(q) && queue_is_mq(q);
 
-	if (queue_is_mq(q) && enable)
-		return true;
+out_false:
+	mutex_unlock(&disk->rqos_state_mutex);
 	return false;
 }
 
