@@ -59,6 +59,7 @@ TEST_PROGS := \
 	ndisc_unsolicited_na_test.sh \
 	netdev-l2addr.sh \
 	netdevice.sh \
+	netem.sh \
 	netns-name.sh \
 	netns-sysctl.sh \
 	nl_netdev.py \

@@ -18238,6 +18238,7 @@ M:	Stephen Hemminger <stephen@networkplumber.org>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	net/sched/sch_netem.c
+F:	tools/testing/selftests/net/netem*
 
 NETFILTER
 M:	Pablo Neira Ayuso <pablo@netfilter.org>
