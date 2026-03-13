@@ -189,6 +189,7 @@
 /* Stage-2 translation */
 .macro __init_el2_stage2
 	msr	vttbr_el2, xzr
+	msr	vtcr_el2, xzr
 .endm
 
 /* GICv3 system register access */
