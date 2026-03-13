@@ -108,9 +108,9 @@ void BPF_PROG(bpf_cubic_init, struct sock *sk)
 }
 
 SEC("struct_ops")
-void BPF_PROG(bpf_cubic_cwnd_event, struct sock *sk, enum tcp_ca_event event)
+void BPF_PROG(bpf_cubic_cwnd_event_tx_start, struct sock *sk)
 {
-	cubictcp_cwnd_event(sk, event);
+	cubictcp_cwnd_event_tx_start(sk);
 }
 
 SEC("struct_ops")
@@ -172,7 +172,7 @@ struct tcp_congestion_ops cc_cubic = {
 	.cong_control	= (void *)bpf_cubic_cong_control,
 	.set_state	= (void *)bpf_cubic_state,
 	.undo_cwnd	= (void *)bpf_cubic_undo_cwnd,
-	.cwnd_event	= (void *)bpf_cubic_cwnd_event,
+	.cwnd_event_tx_start	= (void *)bpf_cubic_cwnd_event_tx_start,
 	.pkts_acked     = (void *)bpf_cubic_acked,
 	.name		= "bpf_cc_cubic",
 };
