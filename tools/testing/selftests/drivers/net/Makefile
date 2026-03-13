@@ -10,9 +10,14 @@ TEST_GEN_FILES := \
 	napi_id_helper \
 # end of TEST_GEN_FILES
 
+TEST_FILES := \
+	macsec_lib.py \
+# end of TEST_FILES
+
 TEST_PROGS := \
 	gro.py \
 	hds.py \
+	macsec_api.py \
 	napi_id.py \
 	napi_threaded.py \
 	netpoll_basic.py \
