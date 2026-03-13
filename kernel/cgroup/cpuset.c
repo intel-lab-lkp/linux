@@ -3937,7 +3937,7 @@ static void cpuset_handle_hotplug(void)
 	 * item at all, this is not a problem.
 	 */
 	if (update_housekeeping || force_sd_rebuild)
-		queue_work(system_unbound_wq, &hk_sd_work);
+		queue_work(system_dfl_wq, &hk_sd_work);
 
 	free_tmpmasks(ptmp);
 }
