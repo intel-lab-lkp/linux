@@ -8,9 +8,11 @@
 /* "undefine" structs and enums in vmlinux.h, because we "override" them below */
 #define hid_bpf_ctx hid_bpf_ctx___not_used
 #define hid_bpf_ops hid_bpf_ops___not_used
+#define hid_device hid_device___not_used
 #define hid_report_type hid_report_type___not_used
 #define hid_class_request hid_class_request___not_used
 #define hid_bpf_attach_flags hid_bpf_attach_flags___not_used
+#define bpf_wq bpf_wq___not_used
 #define HID_INPUT_REPORT         HID_INPUT_REPORT___not_used
 #define HID_OUTPUT_REPORT        HID_OUTPUT_REPORT___not_used
 #define HID_FEATURE_REPORT       HID_FEATURE_REPORT___not_used
@@ -29,9 +31,11 @@
 
 #undef hid_bpf_ctx
 #undef hid_bpf_ops
+#undef hid_device
 #undef hid_report_type
 #undef hid_class_request
 #undef hid_bpf_attach_flags
+#undef bpf_wq
 #undef HID_INPUT_REPORT
 #undef HID_OUTPUT_REPORT
 #undef HID_FEATURE_REPORT
@@ -53,6 +57,14 @@ enum hid_report_type {
 	HID_FEATURE_REPORT		= 2,
 
 	HID_REPORT_TYPES,
+};
+
+struct hid_device {
+	unsigned int id;
+} __attribute__((preserve_access_index));
+
+struct bpf_wq {
+	__u64 __opaque[2];
 };
 
 struct hid_bpf_ctx {
