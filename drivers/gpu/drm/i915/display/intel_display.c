@@ -1084,6 +1084,7 @@ static void intel_post_plane_update(struct intel_atomic_state *state,
 	if (!crtc->cmtg.enabled && intel_vrr_is_fixed_rr(new_crtc_state)) {
 		intel_cmtg_enable_sync(new_crtc_state);
 		intel_cmtg_enable_ddi(new_crtc_state);
+		intel_cmtg_unmask_interrupt(new_crtc_state);
 	}
 }
 
@@ -6925,8 +6926,10 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	    old_crtc_state->inherited)
 		intel_crtc_arm_fifo_underrun(crtc, new_crtc_state);
 
-	if (crtc->cmtg.enabled && intel_crtc_vrr_enabling(state, crtc))
+	if (crtc->cmtg.enabled && intel_crtc_vrr_enabling(state, crtc)) {
 		intel_cmtg_disable(new_crtc_state);
+		intel_cmtg_mask_interrupt(new_crtc_state);
+	}
 }
 
 static void intel_old_crtc_state_disables(struct intel_atomic_state *state,
