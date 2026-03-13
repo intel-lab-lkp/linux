@@ -966,6 +966,25 @@ static int pending_subdevs_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(pending_subdevs);
 
+static int registered_subdevs_show(struct seq_file *s, void *data)
+{
+	struct v4l2_subdev *sd;
+
+	mutex_lock(&list_lock);
+
+	list_for_each_entry(sd, &subdev_list, async_list) {
+		seq_printf(s, "%s", sd->name);
+		if (sd->dev)
+			seq_printf(s, " (dev: %s)", dev_name(sd->dev));
+		seq_putc(s, '\n');
+	}
+
+	mutex_unlock(&list_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(registered_subdevs);
+
 static struct dentry *v4l2_async_debugfs_dir;
 
 static int __init v4l2_async_init(void)
@@ -974,6 +993,9 @@ static int __init v4l2_async_init(void)
 	debugfs_create_file("pending_async_subdevices", 0444,
 			    v4l2_async_debugfs_dir, NULL,
 			    &pending_subdevs_fops);
+	debugfs_create_file("registered_subdevices", 0444,
+			    v4l2_async_debugfs_dir, NULL,
+			    &registered_subdevs_fops);
 
 	return 0;
 }
