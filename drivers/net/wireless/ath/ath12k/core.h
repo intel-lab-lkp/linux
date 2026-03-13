@@ -19,6 +19,7 @@
 #include <linux/average.h>
 #include <linux/of.h>
 #include <linux/rhashtable.h>
+#include <linux/percpu.h>
 #include "qmi.h"
 #include "htc.h"
 #include "wmi.h"

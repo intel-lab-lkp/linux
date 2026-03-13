@@ -34,6 +34,8 @@ module_param_named(ftm_mode, ath12k_ftm_mode, bool, 0444);
 MODULE_PARM_DESC(ftm_mode, "Boots up in factory test mode");
 EXPORT_SYMBOL(ath12k_ftm_mode);
 
+void __percpu * ath12k_wmi_tb;
+
 /* protected with ath12k_hw_group_mutex */
 static struct list_head ath12k_hw_group_list = LIST_HEAD_INIT(ath12k_hw_group_list);
 
@@ -2320,6 +2322,26 @@ err_sc_free:
 	kfree(ab);
 	return NULL;
 }
+
+static int ath12k_init(void)
+{
+	ath12k_wmi_tb = __alloc_percpu(WMI_TAG_MAX * sizeof(void *),
+				       __alignof__(void *));
+	if (!ath12k_wmi_tb) {
+		pr_warn("Failed to alloc ath12k WMI tb\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void ath12k_exit(void)
+{
+	free_percpu(ath12k_wmi_tb);
+}
+
+module_init(ath12k_init);
+module_exit(ath12k_exit);
 
 MODULE_DESCRIPTION("Driver support for Qualcomm Technologies WLAN devices");
 MODULE_LICENSE("Dual BSD/GPL");
