@@ -21,6 +21,12 @@
  * - CMDQ_PROD/CONS: Command queue producer and consumer pointers
  * - EVTQ_PROD/CONS: Event queue producer and consumer pointers
  *
+ * STE Information Displayed:
+ * - Validity: Whether the STE is currently active and valid
+ * - Configuration: Translation mode (bypass/abort/S1/S2)
+ * - Context Pointers: Stage 1 and Stage 2 translation context addresses
+ * - Raw Data: Complete 64-bit STE words in hexadecimal
+ *
  * Directory Structure:
  * /sys/kernel/debug/iommu/arm_smmu_v3/
  * └── smmu0/
@@ -43,6 +49,8 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/pci.h>
+#include <linux/iommu.h>
 #include "arm-smmu-v3.h"
 
 static struct dentry *smmuv3_root_dir;
@@ -196,3 +204,125 @@ err_free:
 	smmu->debugfs = NULL;
 	return ret;
 }
+
+/**
+ * smmu_get_ste() - Get Stream Table Entry for a given Stream ID
+ * @smmu: SMMU device
+ * @sid: Stream ID
+ *
+ * Return: Pointer to STE if found, NULL otherwise
+ */
+static struct arm_smmu_ste *smmu_get_ste(struct arm_smmu_device *smmu, u32 sid)
+{
+	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+
+	if (sid >= (1 << smmu->sid_bits))
+		return NULL;
+
+	if (smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB) {
+		u32 l1_idx = arm_smmu_strtab_l1_idx(sid);
+		u32 l2_idx = arm_smmu_strtab_l2_idx(sid);
+
+		if (l1_idx >= cfg->l2.num_l1_ents || !cfg->l2.l2ptrs[l1_idx])
+			return NULL;
+
+		return &cfg->l2.l2ptrs[l1_idx]->stes[l2_idx];
+	}
+
+	return &cfg->linear.table[sid];
+}
+
+/**
+ * smmu_debug_dump_ste() - Dump STE details to seq_file
+ * @seq: seq_file to write to
+ * @dev: device associated with the STE
+ */
+static void smmu_debug_dump_ste(struct seq_file *seq, struct device *dev)
+{
+	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
+	struct arm_smmu_device *smmu;
+	struct arm_smmu_ste *ste;
+	u32 sid, cfg;
+	int i;
+
+	if (!master || !master->smmu) {
+		seq_puts(seq, "No SMMU master data\n");
+		return;
+	}
+
+	smmu = master->smmu;
+
+	/* Use first stream ID for debug */
+	if (master->num_streams == 0) {
+		seq_puts(seq, "No streams configured for device\n");
+		return;
+	}
+	sid = master->streams[0].id;
+
+	if (sid >= (1 << smmu->sid_bits)) {
+		seq_printf(seq, "Invalid Stream ID: %u (max %u)\n",
+			   sid, (1 << smmu->sid_bits) - 1);
+		return;
+	}
+
+	ste = smmu_get_ste(smmu, sid);
+	if (!ste) {
+		seq_printf(seq, "STE not available for SID %u\n", sid);
+		return;
+	}
+
+	seq_printf(seq, "STE for Stream ID %u\n", sid);
+	seq_printf(seq, "  Valid: %s\n",
+		   ste->data[0] & STRTAB_STE_0_V ? "Yes" : "No");
+
+	seq_puts(seq, "  Config: ");
+
+	cfg = FIELD_GET(STRTAB_STE_0_CFG, ste->data[0]);
+
+	switch (cfg) {
+	case STRTAB_STE_0_CFG_BYPASS:
+		seq_puts(seq, "BYPASS\n");
+		break;
+	case STRTAB_STE_0_CFG_S1_TRANS:
+		seq_puts(seq, "only S1_TRANS\n");
+		break;
+	case STRTAB_STE_0_CFG_S2_TRANS:
+		seq_puts(seq, "only S2_TRANS\n");
+		break;
+	case STRTAB_STE_0_CFG_NESTED:
+		seq_puts(seq, "S1+S2_TRANS\n");
+		break;
+	case STRTAB_STE_0_CFG_ABORT:
+		seq_puts(seq, "ABORT\n");
+		break;
+	default:
+		seq_puts(seq, "UNKNOWN\n");
+	}
+
+	if (ste->data[0] & STRTAB_STE_0_CFG_S1_TRANS) {
+		seq_printf(seq, "  S1ContextPtr: 0x%016llx\n",
+			   le64_to_cpu(ste->data[1]) & STRTAB_STE_0_S1CTXPTR_MASK);
+	}
+
+	if (ste->data[0] & STRTAB_STE_0_CFG_S2_TRANS) {
+		seq_printf(seq, "  S2ContextPtr: 0x%016llx\n",
+			   le64_to_cpu(ste->data[3]) & STRTAB_STE_3_S2TTB_MASK);
+	}
+
+	/* Display raw STE data */
+	seq_puts(seq, "  Raw Data:\n");
+	for (i = 0; i < STRTAB_STE_DWORDS; i++)
+		seq_printf(seq, "    STE[%d]: 0x%016llx\n", i,
+			   le64_to_cpu(ste->data[i]));
+}
+
+/* STE debugfs file operations */
+static int smmu_debugfs_ste_show(struct seq_file *seq, void *v)
+{
+	struct device *dev = seq->private;
+
+	smmu_debug_dump_ste(seq, dev);
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(smmu_debugfs_ste);
