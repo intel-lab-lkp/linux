@@ -2183,6 +2183,7 @@ static int intr_interception(struct kvm_vcpu *vcpu)
 static int vmload_vmsave_interception(struct kvm_vcpu *vcpu, bool vmload)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	u64 vmcb12_gpa = svm->vmcb->save.rax;
 	struct vmcb *vmcb12;
 	struct kvm_host_map map;
 	int ret;
@@ -2190,7 +2191,12 @@ static int vmload_vmsave_interception(struct kvm_vcpu *vcpu, bool vmload)
 	if (nested_svm_check_permissions(vcpu))
 		return 1;
 
-	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(svm->vmcb->save.rax), &map);
+	if (!page_address_valid(vcpu, vmcb12_gpa)) {
+		kvm_inject_gp(vcpu, 0);
+		return 1;
+	}
+
+	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(vmcb12_gpa), &map);
 	if (ret) {
 		if (ret == -EINVAL)
 			kvm_inject_gp(vcpu, 0);
@@ -2306,24 +2312,18 @@ static int gp_interception(struct kvm_vcpu *vcpu)
 		goto reinject;
 
 	opcode = svm_instr_opcode(vcpu);
-
-	if (opcode == NONE_SVM_INSTR) {
-		if (!enable_vmware_backdoor)
-			goto reinject;
-
-		/*
-		 * VMware backdoor emulation on #GP interception only handles
-		 * IN{S}, OUT{S}, and RDPMC.
-		 */
-		if (!is_guest_mode(vcpu))
-			return kvm_emulate_instruction(vcpu,
-				EMULTYPE_VMWARE_GP | EMULTYPE_NO_DECODE);
-	} else {
-		if (!page_address_valid(vcpu, svm->vmcb->save.rax))
-			goto reinject;
-
+	if (opcode != NONE_SVM_INSTR)
 		return emulate_svm_instr(vcpu, opcode);
-	}
+
+	if (!enable_vmware_backdoor)
+		goto reinject;
+
+	/*
+	 * VMware backdoor emulation on #GP interception only handles
+	 * IN{S}, OUT{S}, and RDPMC.
+	 */
+	if (!is_guest_mode(vcpu))
+		return kvm_emulate_instruction(vcpu, EMULTYPE_VMWARE_GP | EMULTYPE_NO_DECODE);
 
 reinject:
 	kvm_queue_exception_e(vcpu, GP_VECTOR, error_code);

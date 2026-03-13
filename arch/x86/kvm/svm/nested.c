@@ -1115,6 +1115,11 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 
 	vmcb12_gpa = svm->vmcb->save.rax;
 
+	if (!page_address_valid(vcpu, vmcb12_gpa)) {
+		kvm_inject_gp(vcpu, 0);
+		return 1;
+	}
+
 	ret = nested_svm_copy_vmcb12_to_cache(vcpu, vmcb12_gpa);
 	if (ret) {
 		if (ret == -EFAULT) {
