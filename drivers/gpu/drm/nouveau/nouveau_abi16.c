@@ -456,10 +456,10 @@ nouveau_abi16_ioctl_channel_alloc(ABI16_IOCTL_ARGS)
 		init->pushbuf_domains = NOUVEAU_GEM_DOMAIN_VRAM |
 					NOUVEAU_GEM_DOMAIN_GART;
 	else
-	if (chan->chan->push.buffer->bo.resource->mem_type == TTM_PL_VRAM)
-		init->pushbuf_domains = NOUVEAU_GEM_DOMAIN_VRAM;
-	else
-		init->pushbuf_domains = NOUVEAU_GEM_DOMAIN_GART;
+		if (chan->chan->push.buffer->bo.resource->mem_type == TTM_PL_VRAM)
+			init->pushbuf_domains = NOUVEAU_GEM_DOMAIN_VRAM;
+		else
+			init->pushbuf_domains = NOUVEAU_GEM_DOMAIN_GART;
 
 	if (device->info.family < NV_DEVICE_INFO_V0_CELSIUS) {
 		init->subchan[0].handle = 0x00000000;
@@ -610,17 +610,16 @@ nouveau_abi16_ioctl_grobj_alloc(ABI16_IOCTL_ARGS)
 			}
 		}
 	} else
-	if ((init->class & 0x00ff) == 0x00b3) { /* msppp */
-		/* msppp: compatibility with incorrect version exposure */
-		for (i = 0; i < ret; i++) {
-			if ((sclass[i].oclass & 0x00ff) == 0x00b3) {
-				oclass = sclass[i].oclass;
-				break;
+		if ((init->class & 0x00ff) == 0x00b3) { /* msppp */
+			/* msppp: compatibility with incorrect version exposure */
+			for (i = 0; i < ret; i++) {
+				if ((sclass[i].oclass & 0x00ff) == 0x00b3) {
+					oclass = sclass[i].oclass;
+					break;
+				}
 			}
-		}
-	} else {
-		oclass = init->class;
-	}
+		} else
+			oclass = init->class;
 
 	nvif_object_sclass_put(&sclass);
 	if (!oclass)
@@ -683,17 +682,17 @@ nouveau_abi16_ioctl_notifierobj_alloc(ABI16_IOCTL_ARGS)
 		args.start += chan->ntfy_vma->addr;
 		args.limit += chan->ntfy_vma->addr;
 	} else
-	if (drm->agp.bridge) {
-		args.target = NV_DMA_V0_TARGET_AGP;
-		args.access = NV_DMA_V0_ACCESS_RDWR;
-		args.start += drm->agp.base + chan->ntfy->offset;
-		args.limit += drm->agp.base + chan->ntfy->offset;
-	} else {
-		args.target = NV_DMA_V0_TARGET_VM;
-		args.access = NV_DMA_V0_ACCESS_RDWR;
-		args.start += chan->ntfy->offset;
-		args.limit += chan->ntfy->offset;
-	}
+		if (drm->agp.bridge) {
+			args.target = NV_DMA_V0_TARGET_AGP;
+			args.access = NV_DMA_V0_ACCESS_RDWR;
+			args.start += drm->agp.base + chan->ntfy->offset;
+			args.limit += drm->agp.base + chan->ntfy->offset;
+		} else {
+			args.target = NV_DMA_V0_TARGET_VM;
+			args.access = NV_DMA_V0_ACCESS_RDWR;
+			args.start += chan->ntfy->offset;
+			args.limit += chan->ntfy->offset;
+		}
 
 	ret = nvif_object_ctor(&chan->chan->user, "abi16Ntfy", info->handle,
 			       NV_DMA_IN_MEMORY, &args, sizeof(args),
