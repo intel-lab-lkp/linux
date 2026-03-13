@@ -638,6 +638,16 @@ int ext4_register_sysfs(struct super_block *sb)
 	return 0;
 }
 
+void ext4_sb_release_proc(struct super_block *sb)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+
+	if (sbi->s_proc) {
+		remove_proc_subtree(sb->s_id, ext4_proc_root);
+		sbi->s_proc = NULL;
+	}
+}
+
 void ext4_unregister_sysfs(struct super_block *sb)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);

@@ -430,32 +430,43 @@ static inline int ext4_should_dioread_nolock(struct inode *inode)
 }
 
 /*
- * Pass journal explicitly as it may not be cached in the sbi->s_journal in some
- * cases
+ * Stop new s_sb_upd_work from being queued and flush any pending work.
+ *
+ * At this point only two things can be operating on the journal:
+ * JBD2 thread performing transaction commit and s_sb_upd_work
+ * issuing sb update through the journal. Once we set
+ * EXT4_MF_JOURNAL_DESTROY, new ext4_handle_error() calls will not
+ * queue s_sb_upd_work and ext4_force_commit() makes sure any
+ * ext4_handle_error() calls from the running transaction commit are
+ * finished. Hence no new s_sb_upd_work can be queued after we
+ * flush it here.
  */
-static inline int ext4_journal_destroy(struct ext4_sb_info *sbi, journal_t *journal)
+static inline void ext4_journal_stop_work(struct ext4_sb_info *sbi)
 {
-	int err = 0;
-
-	/*
-	 * At this point only two things can be operating on the journal.
-	 * JBD2 thread performing transaction commit and s_sb_upd_work
-	 * issuing sb update through the journal. Once we set
-	 * EXT4_JOURNAL_DESTROY, new ext4_handle_error() calls will not
-	 * queue s_sb_upd_work and ext4_force_commit() makes sure any
-	 * ext4_handle_error() calls from the running transaction commit are
-	 * finished. Hence no new s_sb_upd_work can be queued after we
-	 * flush it here.
-	 */
 	ext4_set_mount_flag(sbi->s_sb, EXT4_MF_JOURNAL_DESTROY);
-
 	ext4_force_commit(sbi->s_sb);
 	flush_work(&sbi->s_sb_upd_work);
+}
+
+/*
+ * Destroy the journal. Must be called after ext4_journal_stop_work().
+ * Pass journal explicitly as it may not be cached in the sbi->s_journal
+ * in some cases.
+ */
+static inline int ext4_journal_finish(struct ext4_sb_info *sbi,
+				      journal_t *journal)
+{
+	int err;
 
 	err = jbd2_journal_destroy(journal);
 	sbi->s_journal = NULL;
-
 	return err;
+}
+
+static inline int ext4_journal_destroy(struct ext4_sb_info *sbi, journal_t *journal)
+{
+	ext4_journal_stop_work(sbi);
+	return ext4_journal_finish(sbi, journal);
 }
 
 #endif	/* _EXT4_JBD2_H */

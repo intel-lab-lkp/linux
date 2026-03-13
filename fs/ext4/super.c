@@ -1280,16 +1280,12 @@ static void ext4_put_super(struct super_block *sb)
 	int err;
 
 	/*
-	 * Unregister sysfs before destroying jbd2 journal.
-	 * Since we could still access attr_journal_task attribute via sysfs
-	 * path which could have sbi->s_journal->j_task as NULL
-	 * Unregister sysfs before flush sbi->s_sb_upd_work.
-	 * Since user may read /proc/fs/ext4/xx/mb_groups during umount, If
-	 * read metadata verify failed then will queue error work.
-	 * update_super_work will call start_this_handle may trigger
-	 * BUG_ON.
+	 * Remove procfs entries before flush s_sb_upd_work. Since user may
+	 * read /proc/fs/ext4/xx/mb_groups during umount, if read metadata
+	 * verify failed then will queue error work. update_super_work will
+	 * call start_this_handle which may trigger BUG_ON.
 	 */
-	ext4_unregister_sysfs(sb);
+	ext4_sb_release_proc(sb);
 
 	if (___ratelimit(&ext4_mount_msg_ratelimit, "EXT4-fs unmount"))
 		ext4_msg(sb, KERN_INFO, "unmounting filesystem %pU.",
@@ -1301,14 +1297,30 @@ static void ext4_put_super(struct super_block *sb)
 	destroy_workqueue(sbi->rsv_conversion_wq);
 	ext4_release_orphan_info(sb);
 
+	/*
+	 * Flush s_sb_upd_work before unregistering sysfs, since
+	 * update_super_work calls ext4_notify_error_sysfs() which accesses
+	 * the kobject's kernfs_node via sysfs_notify(). Unregistering sysfs
+	 * before the flush could lead to a use-after-free on the
+	 * kernfs_node.
+	 *
+	 * Also unregister sysfs before destroying jbd2 journal, since
+	 * userspace could read the journal_task sysfs attribute while
+	 * jbd2_journal_destroy() is killing the journal thread, leading to
+	 * a NULL pointer dereference of j_task in journal_task_show().
+	 */
 	if (sbi->s_journal) {
 		aborted = is_journal_aborted(sbi->s_journal);
-		err = ext4_journal_destroy(sbi, sbi->s_journal);
+		ext4_journal_stop_work(sbi);
+		ext4_unregister_sysfs(sb);
+		err = ext4_journal_finish(sbi, sbi->s_journal);
 		if ((err < 0) && !aborted) {
 			ext4_abort(sb, -err, "Couldn't clean up the journal");
 		}
-	} else
+	} else {
 		flush_work(&sbi->s_sb_upd_work);
+		ext4_unregister_sysfs(sb);
+	}
 
 	ext4_es_unregister_shrinker(sbi);
 	timer_shutdown_sync(&sbi->s_err_report);
