@@ -14088,8 +14088,9 @@ u64 kvm_arch_gmem_supported_content_modes(struct kvm *kvm)
 	case KVM_X86_SEV_VM:
 	case KVM_X86_SEV_ES_VM:
 	case KVM_X86_SNP_VM:
-	case KVM_X86_TDX_VM:
 		return 0;
+	case KVM_X86_TDX_VM:
+		return KVM_SET_MEMORY_ATTRIBUTES2_ZERO;
 	case KVM_X86_DEFAULT_VM:
 	default:
 		WARN_ONCE(1, "Unexpected conversion request for vm_type.");
@@ -14103,6 +14104,9 @@ int kvm_arch_gmem_apply_content_mode_zero(struct kvm *kvm,
 	switch (kvm->arch.vm_type) {
 	case KVM_X86_SW_PROTECTED_VM:
 		return kvm_gmem_apply_content_mode_zero(folio);
+	case KVM_X86_TDX_VM:
+		/* Rely on TDX firmware to do zeroing. */
+		return 0;
 	default:
 		WARN_ONCE(1, "Unexpected request to zero for vm_type.");
 		return -EOPNOTSUPP;
