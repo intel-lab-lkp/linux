@@ -52,12 +52,23 @@ static int mux_gpio_probe(struct platform_device *pdev)
 	int pins;
 	s32 idle_state;
 	int ret;
+	u32 cells;
+	int i;
 
 	pins = gpiod_count(dev, "mux");
 	if (pins < 0)
 		return pins;
 
-	mux_chip = devm_mux_chip_alloc(dev, 1, sizeof(*mux_gpio));
+	ret = device_property_read_u32(dev, "#mux-control-cells", &cells);
+	if (ret < 0)
+		cells = 0;
+
+	if (cells >= 2) {
+		dev_err(dev, "invalid control-cells %u\n", cells);
+		return -EINVAL;
+	}
+
+	mux_chip = devm_mux_chip_alloc(dev, cells + 1, sizeof(*mux_gpio));
 	if (IS_ERR(mux_chip))
 		return PTR_ERR(mux_chip);
 
@@ -69,7 +80,9 @@ static int mux_gpio_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(mux_gpio->gpios),
 				     "failed to get gpios\n");
 	WARN_ON(pins != mux_gpio->gpios->ndescs);
-	mux_chip->mux->states = BIT(pins);
+
+	for (i = 0; i < mux_chip->controllers; ++i)
+		mux_chip->mux[i].states = BIT(pins);
 
 	ret = device_property_read_u32(dev, "idle-state", (u32 *)&idle_state);
 	if (ret >= 0 && idle_state != MUX_IDLE_AS_IS) {
