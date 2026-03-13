@@ -441,6 +441,12 @@ vm_start() {
 
 	if [[ "${BUILD}" -eq 1 ]]; then
 		kernel_opt="${KERNEL_CHECKOUT}"
+	elif vng --run --dry-run &>/dev/null; then
+		kernel_opt=""
+	elif vng --run "${KERNEL_CHECKOUT}" --dry-run &>/dev/null; then
+		kernel_opt="${KERNEL_CHECKOUT}"
+	else
+		die "No suitable kernel found"
 	fi
 
 	if [[ "${ns}" != "init_ns" ]]; then
