@@ -22,6 +22,7 @@
 DEFINE_STATIC_KEY_FALSE(use_asid_allocator);
 
 static unsigned long num_asids;
+static unsigned long asid_bits;
 
 static atomic_long_t current_version;
 
@@ -224,16 +225,16 @@ static inline void set_mm(struct mm_struct *prev,
 	}
 }
 
-static int __init asids_init(void)
+static unsigned long get_cpu_asid_bits(void)
 {
-	unsigned long asid_bits, old;
+	unsigned long asid_bit_count, old;
 
 	/* Figure-out number of ASID bits in HW */
 	old = csr_read(CSR_SATP);
-	asid_bits = old | (SATP_ASID_MASK << SATP_ASID_SHIFT);
-	csr_write(CSR_SATP, asid_bits);
-	asid_bits = (csr_read(CSR_SATP) >> SATP_ASID_SHIFT)  & SATP_ASID_MASK;
-	asid_bits = fls_long(asid_bits);
+	asid_bit_count = old | (SATP_ASID_MASK << SATP_ASID_SHIFT);
+	csr_write(CSR_SATP, asid_bit_count);
+	asid_bit_count = (csr_read(CSR_SATP) >> SATP_ASID_SHIFT)  & SATP_ASID_MASK;
+	asid_bit_count = fls_long(asid_bit_count);
 	csr_write(CSR_SATP, old);
 
 	/*
@@ -242,6 +243,30 @@ static int __init asids_init(void)
 	 * to remove unwanted TLB enteries.
 	 */
 	local_flush_tlb_all();
+	return asid_bit_count;
+}
+
+int verify_cpu_asid_bits(void)
+{
+	unsigned long cpu_asid_bits = get_cpu_asid_bits();
+
+	if (cpu_asid_bits < asid_bits) {
+		/*
+		 * The ASID allocator is initialized using the boot CPU's ASID width.
+		 * We cannot safely shrink the system-wide ASID space at runtime, so
+		 * reject secondary CPU bringup if it supports fewer ASID bits than
+		 * the boot CPU.
+		 */
+		pr_crit("CPU%d: ASID bits (%lu) smaller than boot CPU (%lu), refusing to online\n",
+			smp_processor_id(), cpu_asid_bits, asid_bits);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int __init asids_init(void)
+{
+	asid_bits = get_cpu_asid_bits();
 
 	/* Pre-compute ASID details */
 	if (asid_bits) {
@@ -278,6 +303,11 @@ static inline void set_mm(struct mm_struct *prev,
 			  struct mm_struct *next, unsigned int cpu)
 {
 	/* Nothing to do here when there is no MMU */
+}
+
+int verify_cpu_asid_bits(void)
+{
+	return 0;
 }
 #endif
 
