@@ -11,6 +11,7 @@ tda998x-y := tda998x_drv.o
 obj-$(CONFIG_DRM_I2C_NXP_TDA998X) += tda998x.o
 
 obj-$(CONFIG_DRM_INNO_HDMI) += inno-hdmi.o
+obj-$(CONFIG_DRM_ITE_IT6162) += ite-it6162.o
 obj-$(CONFIG_DRM_ITE_IT6263) += ite-it6263.o
 obj-$(CONFIG_DRM_ITE_IT6505) += ite-it6505.o
 obj-$(CONFIG_DRM_LONTIUM_LT8912B) += lontium-lt8912b.o

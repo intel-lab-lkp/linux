@@ -13640,6 +13640,13 @@ W:	https://linuxtv.org
 Q:	http://patchwork.linuxtv.org/project/linux-media/list/
 F:	drivers/media/tuners/it913x*
 
+ITE IT6162 MIPI DSI TO HDMI BRIDGE DRIVER
+M:	Hermes Wu <Hermes.wu@ite.com.tw>
+L:	dri-devel@lists.freedesktop.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/display/bridge/ite,it6162.yaml
+F:	drivers/gpu/drm/bridge/ite-it6162.c
+
 ITE IT6263 LVDS TO HDMI BRIDGE DRIVER
 M:	Liu Ying <victor.liu@nxp.com>
 L:	dri-devel@lists.freedesktop.org

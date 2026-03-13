@@ -107,6 +107,23 @@ config DRM_INNO_HDMI
 	select DRM_DISPLAY_HELPER
 	select DRM_KMS_HELPER
 
+config DRM_ITE_IT6162
+	tristate "iTE IT6162 DSI to HDMI bridge"
+	depends on OF
+	select REGMAP_I2C
+	select DRM_MIPI_DSI
+	select DRM_PANEL_BRIDGE
+	select DRM_KMS_HELPER
+	select DRM_HDMI_HELPER
+	select DRM_DISPLAY_HDMI_HELPER
+	select DRM_DISPLAY_HDCP_HELPER
+	select DRM_DISPLAY_HELPER
+	help
+	  Driver for iTE IT6162 DSI to HDMI bridge
+	  chip driver that converts DSI to HDMI signals
+	  support up to 4k60 with 2 MIPI DSI
+	  Please say Y if you have such hardware.
+
 config DRM_ITE_IT6263
 	tristate "ITE IT6263 LVDS/HDMI bridge"
 	depends on OF
