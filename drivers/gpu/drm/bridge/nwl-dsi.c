@@ -9,6 +9,7 @@
 #include <linux/bitfield.h>
 #include <linux/bits.h>
 #include <linux/clk.h>
+#include <linux/dev_printk.h>
 #include <linux/irq.h>
 #include <linux/math64.h>
 #include <linux/mfd/syscon.h>
@@ -975,68 +976,46 @@ static int nwl_dsi_parse_dt(struct nwl_dsi *dsi)
 	struct platform_device *pdev = to_platform_device(dsi->dev);
 	struct clk *clk;
 	void __iomem *base;
-	int ret;
 
 	dsi->phy = devm_phy_get(dsi->dev, "dphy");
-	if (IS_ERR(dsi->phy)) {
-		ret = PTR_ERR(dsi->phy);
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dsi->dev, "Could not get PHY: %d\n", ret);
-		return ret;
-	}
+	if (IS_ERR(dsi->phy))
+		return dev_err_probe(dsi->dev, PTR_ERR(dsi->phy),
+				     "Could not get PHY\n");
 
 	clk = devm_clk_get(dsi->dev, "lcdif");
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		DRM_DEV_ERROR(dsi->dev, "Failed to get lcdif clock: %d\n",
-			      ret);
-		return ret;
-	}
+	if (IS_ERR(clk))
+		return dev_err_probe(dsi->dev, PTR_ERR(clk),
+				     "Failed to get lcdif clock\n");
 	dsi->lcdif_clk = clk;
 
 	clk = devm_clk_get(dsi->dev, "core");
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		DRM_DEV_ERROR(dsi->dev, "Failed to get core clock: %d\n",
-			      ret);
-		return ret;
-	}
+	if (IS_ERR(clk))
+		return dev_err_probe(dsi->dev, PTR_ERR(clk),
+				     "Failed to get core clock\n");
 	dsi->core_clk = clk;
 
 	clk = devm_clk_get(dsi->dev, "phy_ref");
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		DRM_DEV_ERROR(dsi->dev, "Failed to get phy_ref clock: %d\n",
-			      ret);
-		return ret;
-	}
+	if (IS_ERR(clk))
+		return dev_err_probe(dsi->dev, PTR_ERR(clk),
+				     "Failed to get phy_ref clock\n");
 	dsi->phy_ref_clk = clk;
 
 	clk = devm_clk_get(dsi->dev, "rx_esc");
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		DRM_DEV_ERROR(dsi->dev, "Failed to get rx_esc clock: %d\n",
-			      ret);
-		return ret;
-	}
+	if (IS_ERR(clk))
+		return dev_err_probe(dsi->dev, PTR_ERR(clk),
+				     "Failed to get rx_esc clock\n");
 	dsi->rx_esc_clk = clk;
 
 	clk = devm_clk_get(dsi->dev, "tx_esc");
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		DRM_DEV_ERROR(dsi->dev, "Failed to get tx_esc clock: %d\n",
-			      ret);
-		return ret;
-	}
+	if (IS_ERR(clk))
+		return dev_err_probe(dsi->dev, PTR_ERR(clk),
+				     "Failed to get tx_esc clock\n");
 	dsi->tx_esc_clk = clk;
 
 	dsi->mux = devm_mux_control_get(dsi->dev, NULL);
-	if (IS_ERR(dsi->mux)) {
-		ret = PTR_ERR(dsi->mux);
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dsi->dev, "Failed to get mux: %d\n", ret);
-		return ret;
-	}
+	if (IS_ERR(dsi->mux))
+		return dev_err_probe(dsi->dev, PTR_ERR(dsi->mux),
+				     "Failed to get mux\n");
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -1044,44 +1023,31 @@ static int nwl_dsi_parse_dt(struct nwl_dsi *dsi)
 
 	dsi->regmap =
 		devm_regmap_init_mmio(dsi->dev, base, &nwl_dsi_regmap_config);
-	if (IS_ERR(dsi->regmap)) {
-		ret = PTR_ERR(dsi->regmap);
-		DRM_DEV_ERROR(dsi->dev, "Failed to create NWL DSI regmap: %d\n",
-			      ret);
-		return ret;
-	}
+	if (IS_ERR(dsi->regmap))
+		return dev_err_probe(dsi->dev, PTR_ERR(dsi->regmap),
+				     "Failed to create NWL DSI regmap\n");
 
 	dsi->irq = platform_get_irq(pdev, 0);
-	if (dsi->irq < 0) {
-		DRM_DEV_ERROR(dsi->dev, "Failed to get device IRQ: %d\n",
-			      dsi->irq);
-		return dsi->irq;
-	}
+	if (dsi->irq < 0)
+		return dev_err_probe(dsi->dev, dsi->irq,
+				     "Failed to get device IRQ\n");
 
 	dsi->rst_pclk = devm_reset_control_get_exclusive(dsi->dev, "pclk");
-	if (IS_ERR(dsi->rst_pclk)) {
-		DRM_DEV_ERROR(dsi->dev, "Failed to get pclk reset: %ld\n",
-			      PTR_ERR(dsi->rst_pclk));
-		return PTR_ERR(dsi->rst_pclk);
-	}
+	if (IS_ERR(dsi->rst_pclk))
+		return dev_err_probe(dsi->dev, PTR_ERR(dsi->rst_pclk),
+				     "Failed to get pclk reset\n");
 	dsi->rst_byte = devm_reset_control_get_exclusive(dsi->dev, "byte");
-	if (IS_ERR(dsi->rst_byte)) {
-		DRM_DEV_ERROR(dsi->dev, "Failed to get byte reset: %ld\n",
-			      PTR_ERR(dsi->rst_byte));
-		return PTR_ERR(dsi->rst_byte);
-	}
+	if (IS_ERR(dsi->rst_byte))
+		return dev_err_probe(dsi->dev, PTR_ERR(dsi->rst_byte),
+				     "Failed to get byte reset\n");
 	dsi->rst_esc = devm_reset_control_get_exclusive(dsi->dev, "esc");
-	if (IS_ERR(dsi->rst_esc)) {
-		DRM_DEV_ERROR(dsi->dev, "Failed to get esc reset: %ld\n",
-			      PTR_ERR(dsi->rst_esc));
-		return PTR_ERR(dsi->rst_esc);
-	}
+	if (IS_ERR(dsi->rst_esc))
+		return dev_err_probe(dsi->dev, PTR_ERR(dsi->rst_esc),
+				     "Failed to get esc reset\n");
 	dsi->rst_dpi = devm_reset_control_get_exclusive(dsi->dev, "dpi");
-	if (IS_ERR(dsi->rst_dpi)) {
-		DRM_DEV_ERROR(dsi->dev, "Failed to get dpi reset: %ld\n",
-			      PTR_ERR(dsi->rst_dpi));
-		return PTR_ERR(dsi->rst_dpi);
-	}
+	if (IS_ERR(dsi->rst_dpi))
+		return dev_err_probe(dsi->dev, PTR_ERR(dsi->rst_dpi),
+				     "Failed to get dpi reset\n");
 	return 0;
 }
 
