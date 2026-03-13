@@ -326,6 +326,9 @@ static void nf_nat_sip_expected(struct nf_conn *ct,
 	/* This must be a fresh one. */
 	BUG_ON(ct->status & IPS_NAT_DONE_MASK);
 
+	if (exp->dir >= IP_CT_DIR_MAX)
+		return;
+
 	/* For DST manip, map port here to where it's expected. */
 	range.flags = (NF_NAT_RANGE_MAP_IPS | NF_NAT_RANGE_PROTO_SPECIFIED);
 	range.min_proto = range.max_proto = exp->saved_proto;
