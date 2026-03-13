@@ -1341,10 +1341,6 @@
 	status = "okay";
 };
 
-&usb_0_dwc3 {
-	dr_mode = "host";
-};
-
 &usb_0_dwc3_hs {
 	remote-endpoint = <&pmic_glink_con0_hs>;
 };
@@ -1377,10 +1373,6 @@
 
 &usb_1 {
 	status = "okay";
-};
-
-&usb_1_dwc3 {
-	dr_mode = "host";
 };
 
 &usb_1_dwc3_hs {

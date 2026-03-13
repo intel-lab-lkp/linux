@@ -4080,6 +4080,8 @@
 				snps,dis-u1-entry-quirk;
 				snps,dis-u2-entry-quirk;
 
+				usb-role-switch;
+
 				ports {
 					#address-cells = <1>;
 					#size-cells = <0>;
@@ -4158,6 +4160,8 @@
 				phy-names = "usb2-phy", "usb3-phy";
 				snps,dis-u1-entry-quirk;
 				snps,dis-u2-entry-quirk;
+
+				usb-role-switch;
 
 				ports {
 					#address-cells = <1>;

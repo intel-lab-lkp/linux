@@ -1132,10 +1132,6 @@
 	status = "okay";
 };
 
-&usb_0_dwc3 {
-	dr_mode = "host";
-};
-
 &usb_0_dwc3_hs {
 	remote-endpoint = <&ucsi0_hs_in>;
 };
@@ -1167,10 +1163,6 @@
 
 &usb_1 {
 	status = "okay";
-};
-
-&usb_1_dwc3 {
-	dr_mode = "host";
 };
 
 &usb_1_dwc3_hs {
