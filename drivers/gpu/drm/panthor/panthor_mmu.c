@@ -1206,10 +1206,7 @@ panthor_vm_op_ctx_prealloc_vmas(struct panthor_vm_op_ctx *op_ctx)
 static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 					 struct panthor_vm *vm,
 					 struct panthor_gem_object *bo,
-					 u64 offset,
-					 u64 repeat_range,
-					 u64 size, u64 va,
-					 u32 flags)
+					 const struct drm_panthor_vm_bind_op *op)
 {
 	struct drm_gpuvm_bo *preallocated_vm_bo;
 	struct sg_table *sgt = NULL;
@@ -1219,30 +1216,32 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 	if (!bo)
 		return -EINVAL;
 
-	if ((flags & ~PANTHOR_VM_BIND_OP_MAP_FLAGS) ||
-	    (flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK) != DRM_PANTHOR_VM_BIND_OP_TYPE_MAP)
+	if ((op->flags & ~PANTHOR_VM_BIND_OP_MAP_FLAGS) ||
+	    (op->flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK) != DRM_PANTHOR_VM_BIND_OP_TYPE_MAP)
 		return -EINVAL;
 
-	if (!(flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT)) {
+	if (!(op->flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT)) {
 		/* Make sure the VA and size are in-bounds. */
-		if (size > bo->base.base.size || offset > bo->base.base.size - size)
+		if (op->size > bo->base.base.size || op->bo_offset > bo->base.base.size - op->size)
 			return -EINVAL;
 	} else {
 		/* Current drm api uses 32-bit for repeat range, */
-		if (repeat_range > U32_MAX)
+		if (op->bo_repeat_range > U32_MAX)
 			return -EINVAL;
 
 		/* Make sure the repeat_range is in-bounds. */
-		if (repeat_range > bo->base.base.size || offset > bo->base.base.size - repeat_range)
+		if (op->bo_repeat_range > bo->base.base.size ||
+		    op->bo_offset > bo->base.base.size - op->bo_repeat_range)
 			return -EINVAL;
 
 		/* Repeat range must a multiple of the minimum GPU page size */
-		if (repeat_range & ((1u << (ffs(vm->ptdev->mmu_info.page_size_bitmap) - 1)) - 1))
+		if (op->bo_repeat_range &
+		    ((1u << (ffs(vm->ptdev->mmu_info.page_size_bitmap) - 1)) - 1))
 			return -EINVAL;
 
-		u64 repeat_count = size;
+		u64 repeat_count = op->size;
 
-		if (do_div(repeat_count, repeat_range))
+		if (do_div(repeat_count, op->bo_repeat_range))
 			return -EINVAL;
 	}
 
@@ -1252,9 +1251,9 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 		return -EINVAL;
 
 	memset(op_ctx, 0, sizeof(*op_ctx));
-	op_ctx->flags = flags;
-	op_ctx->va.range = size;
-	op_ctx->va.addr = va;
+	op_ctx->flags = op->flags;
+	op_ctx->va.range = op->size;
+	op_ctx->va.addr = op->va;
 
 	ret = panthor_vm_op_ctx_prealloc_vmas(op_ctx);
 	if (ret)
@@ -1293,17 +1292,17 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 
 	op_ctx->map.vm_bo = drm_gpuvm_bo_obtain_prealloc(preallocated_vm_bo);
 
-	op_ctx->map.bo_offset = offset;
-	op_ctx->map.bo_repeat_range = repeat_range;
+	op_ctx->map.bo_offset = op->bo_offset;
+	op_ctx->map.bo_repeat_range = op->bo_repeat_range;
 
 	/* L1, L2 and L3 page tables.
 	 * We could optimize L3 allocation by iterating over the sgt and merging
 	 * 2M contiguous blocks, but it's simpler to over-provision and return
 	 * the pages if they're not used.
 	 */
-	pt_count = ((ALIGN(va + size, 1ull << 39) - ALIGN_DOWN(va, 1ull << 39)) >> 39) +
-		   ((ALIGN(va + size, 1ull << 30) - ALIGN_DOWN(va, 1ull << 30)) >> 30) +
-		   ((ALIGN(va + size, 1ull << 21) - ALIGN_DOWN(va, 1ull << 21)) >> 21);
+	pt_count = ((ALIGN(op->va + op->size, 1ull << 39) - ALIGN_DOWN(op->va, 1ull << 39)) >> 39) +
+		   ((ALIGN(op->va + op->size, 1ull << 30) - ALIGN_DOWN(op->va, 1ull << 30)) >> 30) +
+		   ((ALIGN(op->va + op->size, 1ull << 21) - ALIGN_DOWN(op->va, 1ull << 21)) >> 21);
 
 	op_ctx->rsvd_page_tables.pages = kcalloc(pt_count,
 						 sizeof(*op_ctx->rsvd_page_tables.pages),
@@ -2644,11 +2643,7 @@ panthor_vm_bind_prepare_op_ctx(struct drm_file *file,
 		gem = drm_gem_object_lookup(file, op->bo_handle);
 		ret = panthor_vm_prepare_map_op_ctx(op_ctx, vm,
 						    gem ? to_panthor_bo(gem) : NULL,
-						    op->bo_offset,
-						    op->bo_repeat_range,
-						    op->size,
-						    op->va,
-						    op->flags);
+						    op);
 		drm_gem_object_put(gem);
 		return ret;
 
@@ -2844,13 +2839,21 @@ int panthor_vm_bind_exec_sync_op(struct drm_file *file,
 int panthor_vm_map_bo_range(struct panthor_vm *vm, struct panthor_gem_object *bo,
 			    u64 offset, u64 size, u64 va, u32 flags)
 {
+	struct drm_panthor_vm_bind_op op = {0};
 	struct panthor_vm_op_ctx op_ctx;
 	int ret;
 
 	if (drm_WARN_ON(&vm->ptdev->base, flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT))
 		return -EINVAL;
 
-	ret = panthor_vm_prepare_map_op_ctx(&op_ctx, vm, bo, offset, 0, size, va, flags);
+	op = (struct drm_panthor_vm_bind_op){
+		.bo_offset = offset,
+		.size = size,
+		.va = va,
+		.flags = flags,
+	};
+
+	ret = panthor_vm_prepare_map_op_ctx(&op_ctx, vm, bo, &op);
 	if (ret)
 		return ret;
 
