@@ -487,7 +487,7 @@ void __mpol_put(struct mempolicy *pol)
 {
 	if (!atomic_dec_and_test(&pol->refcnt))
 		return;
-	kmem_cache_free(policy_cache, pol);
+	kfree_rcu(pol, rcu);
 }
 EXPORT_SYMBOL_FOR_MODULES(__mpol_put, "kvm");
 
