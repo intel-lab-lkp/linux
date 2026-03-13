@@ -682,7 +682,8 @@ size_t iov_iter_single_seg_count(const struct iov_iter *i)
 	}
 	if (unlikely(iov_iter_is_folioq(i)))
 		return !i->count ? 0 :
-			umin(folioq_folio_size(i->folioq, i->folioq_slot), i->count);
+			umin(folioq_folio_size(i->folioq, i->folioq_slot) - i->iov_offset,
+			     i->count);
 	return i->count;
 }
 EXPORT_SYMBOL(iov_iter_single_seg_count);
