@@ -1020,6 +1020,13 @@ static void __evsel__config_callchain(struct evsel *evsel, struct record_opts *o
 {
 	bool function = evsel__is_function_event(evsel);
 	struct perf_event_attr *attr = &evsel->core.attr;
+	enum perf_call_graph_mode record_mode = param->record_mode;
+
+	if (EM_HOST == EM_S390 && param->record_mode == CALLCHAIN_FP) {
+		pr_warning("Framepointer unwinding switched to dwarf due to a lack of kernel support.\n"
+			   "Use '--call-graph dwarf' to silence this warning.\n");
+		record_mode = CALLCHAIN_DWARF;
+	}
 
 	evsel__set_sample_bit(evsel, CALLCHAIN);
 
@@ -1029,7 +1036,7 @@ static void __evsel__config_callchain(struct evsel *evsel, struct record_opts *o
 		attr->exclude_callchain_user = 1;
 	if (opts->user_callchains)
 		attr->exclude_callchain_kernel = 1;
-	if (param->record_mode == CALLCHAIN_LBR) {
+	if (record_mode == CALLCHAIN_LBR) {
 		if (!opts->branch_stack) {
 			if (attr->exclude_user) {
 				pr_warning("LBR callstack option is only available "
@@ -1048,7 +1055,7 @@ static void __evsel__config_callchain(struct evsel *evsel, struct record_opts *o
 				    "Falling back to framepointers.\n");
 	}
 
-	if (param->record_mode == CALLCHAIN_DWARF) {
+	if (record_mode == CALLCHAIN_DWARF) {
 		if (!function) {
 			uint16_t e_machine = evsel__e_machine(evsel, /*e_flags=*/NULL);
 
