@@ -488,6 +488,32 @@ static int elf_read(struct file *file, void *buf, size_t len, loff_t pos)
 	return 0;
 }
 
+static inline bool should_align_to_pmd(const struct elf_phdr *cmd)
+{
+	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
+		return false;
+
+	/*
+	 * Avoid excessive virtual address space padding when PMD_SIZE is very
+	 * large, since this function increases PT_LOAD alignment.
+	 * This threshold roughly matches the largest commonly used hugepage
+	 * sizes on current architectures (e.g. x86 2M, arm64 32M with 16K pages).
+	 */
+	if (PMD_SIZE > SZ_32M)
+		return false;
+
+	if (!IS_ALIGNED(cmd->p_vaddr | cmd->p_offset, PMD_SIZE))
+		return false;
+
+	if (cmd->p_filesz < PMD_SIZE)
+		return false;
+
+	if (cmd->p_flags & PF_W)
+		return false;
+
+	return true;
+}
+
 static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
 {
 	unsigned long alignment = 0;
@@ -500,6 +526,10 @@ static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
 			/* skip non-power of two alignments as invalid */
 			if (!is_power_of_2(p_align))
 				continue;
+
+			if (p_align < PMD_SIZE && should_align_to_pmd(&cmds[i]))
+				p_align = PMD_SIZE;
+
 			alignment = max(alignment, p_align);
 		}
 	}
