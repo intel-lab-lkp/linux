@@ -14,6 +14,7 @@
 #define __PINCTRL_SUNXI_H
 
 #include <linux/kernel.h>
+#include <linux/gpio/generic.h>
 #include <linux/spinlock.h>
 
 #define PA_BASE	0
@@ -159,9 +160,17 @@ struct sunxi_pinctrl_regulator {
 	refcount_t		refcount;
 };
 
+struct sunxi_pinctrl;
+
+struct sunxi_gpio_bank {
+	struct gpio_generic_chip chip;
+	struct sunxi_pinctrl *pctl;
+	void __iomem *base;
+};
+
 struct sunxi_pinctrl {
 	void __iomem			*membase;
-	struct gpio_chip		*chip;
+	struct sunxi_gpio_bank		banks[SUNXI_PINCTRL_MAX_BANKS];
 	const struct sunxi_pinctrl_desc	*desc;
 	struct device			*dev;
 	struct sunxi_pinctrl_regulator	regulators[11];

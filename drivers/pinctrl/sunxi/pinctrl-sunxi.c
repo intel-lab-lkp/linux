@@ -13,6 +13,7 @@
 #include <linux/clk.h>
 #include <linux/export.h>
 #include <linux/gpio/driver.h>
+#include <linux/gpio/generic.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irqchip/chained_irq.h>
@@ -84,17 +85,6 @@ static void sunxi_mux_reg(const struct sunxi_pinctrl *pctl,
 		 offset / BITS_PER_TYPE(u32) * sizeof(u32);
 	*shift = offset % BITS_PER_TYPE(u32);
 	*mask  = (BIT(MUX_FIELD_WIDTH) - 1) << *shift;
-}
-
-static void sunxi_data_reg(const struct sunxi_pinctrl *pctl,
-			   u32 pin, u32 *reg, u32 *shift, u32 *mask)
-{
-	u32 offset = pin % PINS_PER_BANK * DATA_FIELD_WIDTH;
-
-	*reg   = sunxi_bank_offset(pctl, pin) + DATA_REGS_OFFSET +
-		 offset / BITS_PER_TYPE(u32) * sizeof(u32);
-	*shift = offset % BITS_PER_TYPE(u32);
-	*mask  = (BIT(DATA_FIELD_WIDTH) - 1) << *shift;
 }
 
 static void sunxi_dlevel_reg(const struct sunxi_pinctrl *pctl,
@@ -930,98 +920,21 @@ static const struct pinmux_ops sunxi_pmx_ops = {
 	.strict			= true,
 };
 
-static int sunxi_pinctrl_gpio_direction_input(struct gpio_chip *chip,
-					unsigned offset)
-{
-	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
-
-	return sunxi_pmx_gpio_set_direction(pctl->pctl_dev, NULL,
-					    chip->base + offset, true);
-}
-
-static int sunxi_pinctrl_gpio_get(struct gpio_chip *chip, unsigned offset)
-{
-	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
-	bool set_mux = pctl->desc->irq_read_needs_mux &&
-		gpiochip_line_is_irq(chip, offset);
-	u32 pin = offset + chip->base;
-	u32 reg, shift, mask, val;
-
-	sunxi_data_reg(pctl, offset, &reg, &shift, &mask);
-
-	if (set_mux)
-		sunxi_pmx_set(pctl->pctl_dev, pin, SUN4I_FUNC_INPUT);
-
-	val = (readl(pctl->membase + reg) & mask) >> shift;
-
-	if (set_mux)
-		sunxi_pmx_set(pctl->pctl_dev, pin, SUN4I_FUNC_IRQ);
-
-	return val;
-}
-
-static int sunxi_pinctrl_gpio_set(struct gpio_chip *chip, unsigned int offset,
-				  int value)
-{
-	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
-	u32 reg, shift, mask, val;
-	unsigned long flags;
-
-	sunxi_data_reg(pctl, offset, &reg, &shift, &mask);
-
-	raw_spin_lock_irqsave(&pctl->lock, flags);
-
-	val = readl(pctl->membase + reg);
-
-	if (value)
-		val |= mask;
-	else
-		val &= ~mask;
-
-	writel(val, pctl->membase + reg);
-
-	raw_spin_unlock_irqrestore(&pctl->lock, flags);
-
-	return 0;
-}
-
-static int sunxi_pinctrl_gpio_direction_output(struct gpio_chip *chip,
-					unsigned offset, int value)
-{
-	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
-
-	sunxi_pinctrl_gpio_set(chip, offset, value);
-	return sunxi_pmx_gpio_set_direction(pctl->pctl_dev, NULL,
-					    chip->base + offset, false);
-}
-
-static int sunxi_pinctrl_gpio_of_xlate(struct gpio_chip *gc,
-				const struct of_phandle_args *gpiospec,
-				u32 *flags)
-{
-	int pin, base;
-
-	base = PINS_PER_BANK * gpiospec->args[0];
-	pin = base + gpiospec->args[1];
-
-	if (pin > gc->ngpio)
-		return -EINVAL;
-
-	if (flags)
-		*flags = gpiospec->args[2];
-
-	return pin;
-}
-
 static int sunxi_pinctrl_gpio_to_irq(struct gpio_chip *chip, unsigned offset)
 {
 	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
 	struct sunxi_desc_function *desc;
-	unsigned pinnum = pctl->desc->pin_base + offset;
-	unsigned irqnum;
+	unsigned int pinnum, irqnum, i;
 
 	if (offset >= chip->ngpio)
 		return -ENXIO;
+
+	for (i = 0; i < SUNXI_PINCTRL_MAX_BANKS; i++)
+		if (pctl->banks[i].chip.gc.base == chip->base)
+			break;
+	if (i == SUNXI_PINCTRL_MAX_BANKS)
+		return -EINVAL;
+	pinnum = pctl->desc->pin_base + i * PINS_PER_BANK + offset;
 
 	desc = sunxi_pinctrl_desc_find_function_by_pin(pctl, pinnum, "irq");
 	if (!desc)
@@ -1039,18 +952,19 @@ static int sunxi_pinctrl_irq_request_resources(struct irq_data *d)
 {
 	struct sunxi_pinctrl *pctl = irq_data_get_irq_chip_data(d);
 	struct sunxi_desc_function *func;
-	int ret;
+	int pinnum = pctl->irq_array[d->hwirq], ret;
+	int bank = (pinnum - pctl->desc->pin_base) / PINS_PER_BANK;
 
-	func = sunxi_pinctrl_desc_find_function_by_pin(pctl,
-					pctl->irq_array[d->hwirq], "irq");
+	func = sunxi_pinctrl_desc_find_function_by_pin(pctl, pinnum, "irq");
 	if (!func)
 		return -EINVAL;
 
-	ret = gpiochip_lock_as_irq(pctl->chip,
-			pctl->irq_array[d->hwirq] - pctl->desc->pin_base);
+	ret = gpiochip_lock_as_irq(&pctl->banks[bank].chip.gc,
+				   d->hwirq % IRQ_PER_BANK);
 	if (ret) {
 		dev_err(pctl->dev, "unable to lock HW IRQ %lu for IRQ\n",
 			irqd_to_hwirq(d));
+
 		return ret;
 	}
 
@@ -1063,9 +977,10 @@ static int sunxi_pinctrl_irq_request_resources(struct irq_data *d)
 static void sunxi_pinctrl_irq_release_resources(struct irq_data *d)
 {
 	struct sunxi_pinctrl *pctl = irq_data_get_irq_chip_data(d);
+	int pinnum = pctl->irq_array[d->hwirq] - pctl->desc->pin_base;
+	struct gpio_chip *gc = &pctl->banks[pinnum / PINS_PER_BANK].chip.gc;
 
-	gpiochip_unlock_as_irq(pctl->chip,
-			      pctl->irq_array[d->hwirq] - pctl->desc->pin_base);
+	gpiochip_unlock_as_irq(gc, pinnum);
 }
 
 static int sunxi_pinctrl_irq_set_type(struct irq_data *d, unsigned int type)
@@ -1493,6 +1408,84 @@ static int sunxi_pinctrl_setup_debounce(struct sunxi_pinctrl *pctl,
 	return 0;
 }
 
+static bool sunxi_of_node_instance_match(struct gpio_chip *chip, unsigned int i)
+{
+	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
+
+	if (i >= SUNXI_PINCTRL_MAX_BANKS)
+		return false;
+
+	return (chip->base == pctl->banks[i].chip.gc.base);
+}
+
+static int sunxi_num_pins_of_bank(struct sunxi_pinctrl *pctl, int bank)
+{
+	int max = -1, i;
+
+	for (i = 0; i < pctl->desc->npins; i++) {
+		int pinnum = pctl->desc->pins[i].pin.number - pctl->desc->pin_base;
+
+		if (pinnum / PINS_PER_BANK < bank)
+			continue;
+		if (pinnum / PINS_PER_BANK > bank)
+			break;
+		if (pinnum % PINS_PER_BANK > max)
+			max = pinnum % PINS_PER_BANK;
+	}
+
+	return max + 1;
+}
+
+static int sunxi_gpio_add_bank(struct sunxi_pinctrl *pctl, int index)
+{
+	char bank_name = 'A' + index + pctl->desc->pin_base / PINS_PER_BANK;
+	struct sunxi_gpio_bank *bank = &pctl->banks[index];
+	struct gpio_generic_chip_config config;
+	struct gpio_chip *gc = &bank->chip.gc;
+	int ngpio, ret;
+
+	ngpio = sunxi_num_pins_of_bank(pctl, index);
+	bank->pctl = pctl;
+	bank->base = pctl->membase + index * pctl->bank_mem_size;
+	if (!ngpio) {
+		gc->owner = THIS_MODULE;
+		gc->ngpio = 0;
+		gc->base = -1;
+		gc->of_gpio_n_cells = 3;
+
+		return 0;
+	}
+
+	config = (struct gpio_generic_chip_config) {
+		.dev = pctl->dev,
+		.sz = 4,
+		.dat = bank->base + DATA_REGS_OFFSET,
+		.set = bank->base + DATA_REGS_OFFSET,
+		.clr = NULL,
+		.flags = GPIO_GENERIC_READ_OUTPUT_REG_SET |
+			 GPIO_GENERIC_PINCTRL_BACKEND,
+	};
+
+	ret = gpio_generic_chip_init(&bank->chip, &config);
+	if (ret)
+		return dev_err_probe(pctl->dev, ret,
+				     "failed to init generic gpio chip\n");
+
+	gc->owner		= THIS_MODULE;
+	gc->label		= devm_kasprintf(pctl->dev, GFP_KERNEL,
+						 "%s-P%c", gc->label,
+						 bank_name);
+	gc->ngpio		= ngpio;
+	gc->base		= -1;
+	gc->of_gpio_n_cells	= 3;
+	gc->of_node_instance_match = sunxi_of_node_instance_match;
+	gc->set_config		= gpiochip_generic_config;
+	gc->to_irq		= sunxi_pinctrl_gpio_to_irq;
+	gc->can_sleep		= false;
+
+	return gpiochip_add_data(gc, pctl);
+}
+
 int sunxi_pinctrl_init_with_flags(struct platform_device *pdev,
 				  const struct sunxi_pinctrl_desc *desc,
 				  unsigned long flags)
@@ -1503,6 +1496,7 @@ int sunxi_pinctrl_init_with_flags(struct platform_device *pdev,
 	struct sunxi_pinctrl *pctl;
 	struct pinmux_ops *pmxops;
 	int i, ret, last_pin, pin_idx;
+	int gpio_banks;
 	struct clk *clk;
 
 	pctl = devm_kzalloc(&pdev->dev, sizeof(*pctl), GFP_KERNEL);
@@ -1590,38 +1584,23 @@ int sunxi_pinctrl_init_with_flags(struct platform_device *pdev,
 		return PTR_ERR(pctl->pctl_dev);
 	}
 
-	pctl->chip = devm_kzalloc(&pdev->dev, sizeof(*pctl->chip), GFP_KERNEL);
-	if (!pctl->chip)
-		return -ENOMEM;
-
-	last_pin = pctl->desc->pins[pctl->desc->npins - 1].pin.number;
-	pctl->chip->owner = THIS_MODULE;
-	pctl->chip->request = gpiochip_generic_request;
-	pctl->chip->free = gpiochip_generic_free;
-	pctl->chip->set_config = gpiochip_generic_config;
-	pctl->chip->direction_input = sunxi_pinctrl_gpio_direction_input;
-	pctl->chip->direction_output = sunxi_pinctrl_gpio_direction_output;
-	pctl->chip->get = sunxi_pinctrl_gpio_get;
-	pctl->chip->set = sunxi_pinctrl_gpio_set;
-	pctl->chip->of_xlate = sunxi_pinctrl_gpio_of_xlate;
-	pctl->chip->to_irq = sunxi_pinctrl_gpio_to_irq;
-	pctl->chip->of_gpio_n_cells = 3;
-	pctl->chip->can_sleep = false;
-	pctl->chip->ngpio = round_up(last_pin, PINS_PER_BANK) -
-			    pctl->desc->pin_base;
-	pctl->chip->label = dev_name(&pdev->dev);
-	pctl->chip->parent = &pdev->dev;
-	pctl->chip->base = pctl->desc->pin_base;
-
-	ret = gpiochip_add_data(pctl->chip, pctl);
-	if (ret)
-		return ret;
+	last_pin = pctl->desc->pins[pctl->desc->npins - 1].pin.number -
+		   pctl->desc->pin_base;
+	for (gpio_banks = 0;
+	     gpio_banks <= last_pin / PINS_PER_BANK;
+	     gpio_banks++) {
+		ret = sunxi_gpio_add_bank(pctl, gpio_banks);
+		if (ret)
+			goto gpiochip_error;
+	}
 
 	for (i = 0; i < pctl->desc->npins; i++) {
 		const struct sunxi_desc_pin *pin = pctl->desc->pins + i;
+		int bank = (pin->pin.number - pctl->desc->pin_base) / PINS_PER_BANK;
+		struct gpio_chip *gc = &pctl->banks[bank].chip.gc;
 
-		ret = gpiochip_add_pin_range(pctl->chip, dev_name(&pdev->dev),
-					     pin->pin.number - pctl->desc->pin_base,
+		ret = gpiochip_add_pin_range(gc, dev_name(&pdev->dev),
+					     pin->pin.number % PINS_PER_BANK,
 					     pin->pin.number, 1);
 		if (ret)
 			goto gpiochip_error;
@@ -1690,6 +1669,8 @@ int sunxi_pinctrl_init_with_flags(struct platform_device *pdev,
 	return 0;
 
 gpiochip_error:
-	gpiochip_remove(pctl->chip);
+	while (--gpio_banks >= 0)
+		gpiochip_remove(&pctl->banks[gpio_banks].chip.gc);
+
 	return ret;
 }

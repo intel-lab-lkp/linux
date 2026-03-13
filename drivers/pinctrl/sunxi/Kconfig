@@ -4,6 +4,7 @@ if ARCH_SUNXI
 config PINCTRL_SUNXI
 	bool
 	select PINMUX
+	select GPIO_GENERIC
 	select GENERIC_PINCONF
 	select GPIOLIB
 
