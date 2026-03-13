@@ -737,9 +737,13 @@ struct arm_smmu_impl_ops {
 struct arm_smmu_debugfs {
 	struct dentry *root_dir;
 	struct dentry *smmu_dir;
+	struct dentry *stream_dir;
 	struct arm_smmu_device *smmu;
 };
+
 int arm_smmu_debugfs_setup(struct arm_smmu_device *smmu, phys_addr_t ioaddr);
+int smmu_debugfs_create_stream_table(struct device *dev,
+					struct arm_smmu_device *smmu);
 #endif
 
 /* An SMMUv3 instance */

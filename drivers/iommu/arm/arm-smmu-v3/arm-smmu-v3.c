@@ -3133,6 +3133,9 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev,
 
 	arm_smmu_attach_commit(&state);
 	mutex_unlock(&arm_smmu_asid_lock);
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+	smmu_debugfs_create_stream_table(dev, smmu);
+#endif
 	return 0;
 }
 

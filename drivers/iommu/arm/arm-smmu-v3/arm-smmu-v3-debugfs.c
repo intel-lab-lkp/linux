@@ -31,7 +31,10 @@
  * /sys/kernel/debug/iommu/arm_smmu_v3/
  * └── smmu0/
  *     ├── capabilities    # SMMU feature capabilities and configuration
- *     └── registers	   # SMMU Key registers
+ *     ├── registers	   # SMMU Key registers
+ *     └── stream_table
+ *	   └── 0000:01:00.0:0/                    # PCI device with Stream ID 0
+ *             ├── ste                           # Stream Table Entry
  *
  * The capabilities file provides detailed information about:
  * - Architecture version and translation stage support (Stage1/Stage2)
@@ -324,5 +327,78 @@ static int smmu_debugfs_ste_show(struct seq_file *seq, void *v)
 	smmu_debug_dump_ste(seq, dev);
 	return 0;
 }
-
 DEFINE_SHOW_ATTRIBUTE(smmu_debugfs_ste);
+
+/**
+ * smmu_debugfs_create_stream_table() - Create debugfs entries for stream table
+ * @dev: device to create entries for
+ * @smmu: SMMU device
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int smmu_debugfs_create_stream_table(struct device *dev,
+				     struct arm_smmu_device *smmu)
+{
+	struct dentry *stream_dir, *cd_dir, *dev_dir;
+	struct dentry *ste_file, *all_cds_file;
+	struct iommu_fwspec *fwspec;
+	char name[64];
+	int i, ret = 0;
+
+	if (!smmu->debugfs->stream_dir) {
+		stream_dir = debugfs_create_dir("stream_table",
+						smmu->debugfs->smmu_dir);
+		if (!stream_dir)
+			return -ENOMEM;
+		smmu->debugfs->stream_dir = stream_dir;
+	} else {
+		stream_dir = smmu->debugfs->stream_dir;
+	}
+
+	fwspec = dev_iommu_fwspec_get(dev);
+	if (!fwspec)
+		return -ENODEV;
+
+	for (i = 0; i < fwspec->num_ids; i++) {
+		u32 sid = fwspec->ids[i];
+
+		if (dev_is_pci(dev)) {
+			struct pci_dev *pdev = to_pci_dev(dev);
+
+			snprintf(name, sizeof(name), "%04x:%02x:%02x.%d:%u",
+				 pci_domain_nr(pdev->bus), pdev->bus->number,
+				 PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn),
+				 sid);
+		} else {
+			snprintf(name, sizeof(name), "%s:%u", dev_name(dev),
+				 sid);
+		}
+
+		dev_dir = debugfs_create_dir(name, stream_dir);
+		if (!dev_dir) {
+			ret = -ENOMEM;
+			goto cleanup;
+		}
+
+		/* Create STE file */
+		ste_file = debugfs_create_file("ste", 0444, dev_dir, dev,
+					       &smmu_debugfs_ste_fops);
+		if (!ste_file) {
+			ret = -ENOMEM;
+			goto cleanup_dev;
+		}
+
+		/* Success for this stream ID, continue to next */
+		continue;
+
+cleanup_dev:
+		debugfs_remove_recursive(dev_dir);
+cleanup:
+		if (ret) {
+			debugfs_remove_recursive(stream_dir);
+			break;
+		}
+	}
+
+	return ret;
+}
