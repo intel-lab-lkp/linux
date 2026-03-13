@@ -24,6 +24,7 @@ struct x86_exception {
 	bool error_code_valid;
 	u64 error_code;
 	bool nested_page_fault;
+	bool hardware_nested_page_fault;
 	u64 address; /* cr2 or nested page fault gpa */
 	u8 async_page_fault;
 	unsigned long exit_qualification;
