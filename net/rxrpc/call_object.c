@@ -227,6 +227,7 @@ static struct rxrpc_call *rxrpc_alloc_client_call(struct rxrpc_sock *rx,
 
 	ret = rxrpc_init_client_call_security(call);
 	if (ret < 0) {
+		key_put(call->key);
 		rxrpc_prefail_call(call, RXRPC_CALL_LOCAL_ERROR, ret);
 		rxrpc_put_call(call, rxrpc_call_put_discard_error);
 		return ERR_PTR(ret);
