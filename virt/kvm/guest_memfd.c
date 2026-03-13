@@ -674,8 +674,50 @@ int __weak kvm_arch_gmem_apply_content_mode_preserve(struct kvm *kvm,
 	return -EOPNOTSUPP;
 }
 
+static int kvm_gmem_apply_content_mode_folio(struct kvm *kvm,
+					     struct folio *folio,
+					     uint64_t content_mode)
+{
+	switch (content_mode) {
+	case KVM_SET_MEMORY_ATTRIBUTES2_MODE_UNSPECIFIED:
+		return kvm_arch_gmem_apply_content_mode_unspecified(kvm, folio);
+	case KVM_SET_MEMORY_ATTRIBUTES2_ZERO:
+		return kvm_arch_gmem_apply_content_mode_zero(kvm, folio);
+	case KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE:
+		return kvm_arch_gmem_apply_content_mode_preserve(kvm, folio);
+	default:
+		WARN_ONCE(1, "Unexpected policy requested.");
+		return -EOPNOTSUPP;
+	}
+}
+
+static void kvm_gmem_apply_content_mode(struct inode *inode, pgoff_t start,
+					pgoff_t end, struct kvm *kvm,
+					uint64_t content_mode)
+{
+	struct address_space *mapping = inode->i_mapping;
+	struct folio_batch fbatch;
+	int i;
+
+	folio_batch_init(&fbatch);
+	while (filemap_get_folios(mapping, &start, end - 1, &fbatch)) {
+
+		for (i = 0; i < folio_batch_count(&fbatch); ++i) {
+			struct folio *folio = fbatch.folios[i];
+			int ret;
+
+			ret = kvm_gmem_apply_content_mode_folio(kvm, folio,
+								content_mode);
+			WARN_ON_ONCE(ret);
+		}
+
+		folio_batch_release(&fbatch);
+	}
+}
+
 static int __kvm_gmem_set_attributes(struct inode *inode, pgoff_t start,
 				     size_t nr_pages, uint64_t attrs,
+				     struct kvm *kvm, uint64_t content_mode,
 				     pgoff_t *err_index)
 {
 	struct address_space *mapping = inode->i_mapping;
@@ -688,6 +730,12 @@ static int __kvm_gmem_set_attributes(struct inode *inode, pgoff_t start,
 	mt = &gi->attributes;
 
 	filemap_invalidate_lock(mapping);
+
+	if (content_mode &&
+	    !(kvm_gmem_supported_content_modes(kvm) & content_mode)) {
+		r = -EOPNOTSUPP;
+		goto out;
+	}
 
 	mas_init(&mas, mt, start);
 
@@ -715,6 +763,8 @@ static int __kvm_gmem_set_attributes(struct inode *inode, pgoff_t start,
 
 	kvm_gmem_invalidate_begin(inode, start, end);
 
+	kvm_gmem_apply_content_mode(inode, start, end, kvm, content_mode);
+
 	mas_store_prealloc(&mas, xa_mk_value(attrs));
 
 	kvm_gmem_invalidate_end(inode, start, end);
@@ -736,7 +786,11 @@ static long kvm_gmem_set_attributes(struct file *file, void __user *argp)
 	if (copy_from_user(&attrs, argp, sizeof(attrs)))
 		return -EFAULT;
 
-	if (attrs.flags)
+	if (attrs.flags & ~(KVM_SET_MEMORY_ATTRIBUTES2_ZERO |
+			    KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE))
+		return -EINVAL;
+	if ((attrs.flags & KVM_SET_MEMORY_ATTRIBUTES2_ZERO) &&
+	    (attrs.flags & KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE))
 		return -EINVAL;
 	if (attrs.error_offset)
 		return -EINVAL;
@@ -758,7 +812,7 @@ static long kvm_gmem_set_attributes(struct file *file, void __user *argp)
 	nr_pages = attrs.size >> PAGE_SHIFT;
 	index = attrs.offset >> PAGE_SHIFT;
 	r = __kvm_gmem_set_attributes(inode, index, nr_pages, attrs.attributes,
-				      &err_index);
+				      f->kvm, attrs.flags, &err_index);
 	if (r) {
 		attrs.error_offset = err_index << PAGE_SHIFT;
 
