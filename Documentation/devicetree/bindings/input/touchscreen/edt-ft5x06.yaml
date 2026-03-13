@@ -40,6 +40,7 @@ properties:
       - edt,edt-ft5506
       - evervision,ev-ft5726
       - focaltech,ft3518
+      - focaltech,ft3519
       - focaltech,ft5426
       - focaltech,ft5452
       - focaltech,ft6236
