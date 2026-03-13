@@ -231,9 +231,14 @@ enum drm_gpuvm_flags {
 	DRM_GPUVM_IMMEDIATE_MODE = BIT(1),
 
 	/**
+	 * @DRM_GPUVM_HAS_REPEAT_MAPS: There are repeated VAs in the GPUVM
+	 */
+	DRM_GPUVM_HAS_REPEAT_MAPS = BIT(2),
+
+	/**
 	 * @DRM_GPUVM_USERBITS: user defined bits
 	 */
-	DRM_GPUVM_USERBITS = BIT(2),
+	DRM_GPUVM_USERBITS = BIT(3),
 };
 
 /**

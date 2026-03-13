@@ -2463,6 +2463,65 @@ static int validate_map_request(struct drm_gpuvm *gpuvm,
 }
 
 static int
+validate_repeated_unmap_request(struct drm_gpuvm *gpuvm,
+				u64 req_addr, u64 req_end)
+{
+	struct drm_gpuva *first, *last, *va;
+	u64 multiple;
+
+	if (!(gpuvm->flags & DRM_GPUVM_HAS_REPEAT_MAPS))
+		return 0;
+
+	/* Find the first and last VAs the map request intersects with */
+	first = last = NULL;
+	drm_gpuvm_for_each_va_range(va, gpuvm, req_addr, req_end) {
+		if (!first)
+			first = va;
+		last = va;
+	}
+
+	if (!first)
+		return 0;
+
+	if (first->flags & DRM_GPUVA_REPEAT) {
+		u64 addr = first->va.addr;
+		u64 range = first->va.range;
+		u64 end = addr + range;
+
+		drm_WARN_ON(gpuvm->drm, first->gem.repeat_range == 0);
+
+		if (addr < req_addr) {
+			multiple = req_addr;
+			if (do_div(multiple, first->gem.repeat_range))
+				return -EINVAL;
+		}
+
+		if (end > req_end) {
+			multiple = req_end;
+			if (do_div(multiple, first->gem.repeat_range))
+				return -EINVAL;
+			return 0;
+		}
+	}
+
+	if ((first != last) && (last->flags & DRM_GPUVA_REPEAT)) {
+		u64 addr = last->va.addr;
+		u64 range = last->va.range;
+		u64 end = addr + range;
+
+		drm_WARN_ON(last->vm->drm, last->gem.repeat_range == 0);
+
+		if (end > req_end) {
+			multiple = req_end;
+			if (do_div(multiple, last->gem.repeat_range))
+				return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int
 __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 		   const struct drm_gpuvm_ops *ops, void *priv,
 		   const struct drm_gpuvm_map_req *req,
@@ -2478,6 +2537,10 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 	ret = validate_map_request(gpuvm, &req->map);
 	if (unlikely(ret))
 		return -EINVAL;
+
+	ret = validate_repeated_unmap_request(gpuvm, req_addr, req_end);
+	if (ret)
+		return ret;
 
 	drm_gpuvm_for_each_va_range_safe(va, next, gpuvm, req_addr, req_end) {
 		struct drm_gem_object *obj = va->gem.obj;
@@ -2652,6 +2715,10 @@ __drm_gpuvm_sm_unmap(struct drm_gpuvm *gpuvm,
 
 	if (unlikely(!drm_gpuvm_range_valid(gpuvm, req_addr, req_range)))
 		return -EINVAL;
+
+	ret = validate_repeated_unmap_request(gpuvm, req_addr, req_end);
+	if (ret)
+		return ret;
 
 	drm_gpuvm_for_each_va_range_safe(va, next, gpuvm, req_addr, req_end) {
 		struct drm_gpuva_op_map prev = {}, next = {};
