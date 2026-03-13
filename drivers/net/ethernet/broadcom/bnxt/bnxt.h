@@ -2146,7 +2146,7 @@ enum board_idx {
 };
 
 #define BNXT_TRACE_BUF_MAGIC_BYTE ((u8)0xbc)
-#define BNXT_TRACE_MAX 11
+#define BNXT_TRACE_MAX 13
 
 struct bnxt_bs_trace_info {
 	u8 *magic_byte;
