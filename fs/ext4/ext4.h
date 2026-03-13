@@ -380,6 +380,12 @@ struct ext4_io_submit {
 #define EXT4_B2C(sbi, blk)	((blk) >> (sbi)->s_cluster_bits)
 /* Translate a cluster number to a block number */
 #define EXT4_C2B(sbi, cluster)	((cluster) << (sbi)->s_cluster_bits)
+/* Translate a block to cluster using mballoc's cluster definition */
+#define EXT4_MB_B2C(sbi, blk) (EXT4_B2C((sbi), (blk) - \
+		le32_to_cpu((sbi)->s_es->s_first_data_block)))
+/* Translate a cluster to block using mballoc's cluster definition */
+#define EXT4_MB_C2B(sbi, cluster) (EXT4_C2B((sbi), (cluster)) + \
+		le32_to_cpu((sbi)->s_es->s_first_data_block))
 /* Translate # of blks to # of clusters */
 #define EXT4_NUM_B2C(sbi, blks)	(((blks) + (sbi)->s_cluster_ratio - 1) >> \
 				 (sbi)->s_cluster_bits)
@@ -396,6 +402,9 @@ struct ext4_io_submit {
 				 ((ext4_fsblk_t) (s)->s_cluster_ratio - 1))
 #define EXT4_LBLK_COFF(s, lblk) ((lblk) &				\
 				 ((ext4_lblk_t) (s)->s_cluster_ratio - 1))
+/* Get the cluster offset using mballoc's cluster definition */
+#define EXT4_MB_PBLK_COFF(s, pblk) (EXT4_PBLK_COFF((s), (pblk) - \
+		le32_to_cpu((s)->s_es->s_first_data_block)))
 
 /*
  * Structure of a blocks group descriptor

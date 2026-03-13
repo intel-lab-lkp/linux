@@ -2504,13 +2504,13 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	last_pblk = ext4_ext_pblock(ex) + ee_len - 1;
 
 	if (partial->state != initial &&
-	    partial->pclu != EXT4_B2C(sbi, last_pblk)) {
+	    partial->pclu != EXT4_MB_B2C(sbi, last_pblk)) {
 		if (partial->state == tofree) {
 			flags = get_default_free_blocks_flags(inode);
 			if (ext4_is_pending(inode, partial->lblk))
 				flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
 			ext4_free_blocks(handle, inode, NULL,
-					 EXT4_C2B(sbi, partial->pclu),
+					 EXT4_MB_C2B(sbi, partial->pclu),
 					 sbi->s_cluster_ratio, flags);
 			if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER)
 				ext4_rereserve_cluster(inode, partial->lblk);
@@ -2556,7 +2556,7 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	ext4_free_blocks(handle, inode, NULL, pblk, num, flags);
 
 	/* reset the partial cluster if we've freed past it */
-	if (partial->state != initial && partial->pclu != EXT4_B2C(sbi, pblk))
+	if (partial->state != initial && partial->pclu != EXT4_MB_B2C(sbi, pblk))
 		partial->state = initial;
 
 	/*
@@ -2571,7 +2571,7 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	 */
 	if (EXT4_LBLK_COFF(sbi, from) && num == ee_len) {
 		if (partial->state == initial) {
-			partial->pclu = EXT4_B2C(sbi, pblk);
+			partial->pclu = EXT4_MB_B2C(sbi, pblk);
 			partial->lblk = from;
 			partial->state = tofree;
 		}
@@ -2662,7 +2662,7 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 			 */
 			if (sbi->s_cluster_ratio > 1) {
 				pblk = ext4_ext_pblock(ex);
-				partial->pclu = EXT4_B2C(sbi, pblk);
+				partial->pclu = EXT4_MB_B2C(sbi, pblk);
 				partial->state = nofree;
 			}
 			ex--;
@@ -2777,13 +2777,13 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 	 */
 	if (partial->state == tofree && ex >= EXT_FIRST_EXTENT(eh)) {
 		pblk = ext4_ext_pblock(ex) + ex_ee_len - 1;
-		if (partial->pclu != EXT4_B2C(sbi, pblk)) {
+		if (partial->pclu != EXT4_MB_B2C(sbi, pblk)) {
 			int flags = get_default_free_blocks_flags(inode);
 
 			if (ext4_is_pending(inode, partial->lblk))
 				flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
 			ext4_free_blocks(handle, inode, NULL,
-					 EXT4_C2B(sbi, partial->pclu),
+					 EXT4_MB_C2B(sbi, partial->pclu),
 					 sbi->s_cluster_ratio, flags);
 			if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER)
 				ext4_rereserve_cluster(inode, partial->lblk);
@@ -2897,7 +2897,7 @@ again:
 			 */
 			if (sbi->s_cluster_ratio > 1) {
 				pblk = ext4_ext_pblock(ex) + end - ee_block + 1;
-				partial.pclu = EXT4_B2C(sbi, pblk);
+				partial.pclu = EXT4_MB_B2C(sbi, pblk);
 				partial.state = nofree;
 			}
 
@@ -2931,7 +2931,7 @@ again:
 			if (err < 0)
 				goto out;
 			if (pblk) {
-				partial.pclu = EXT4_B2C(sbi, pblk);
+				partial.pclu = EXT4_MB_B2C(sbi, pblk);
 				partial.state = nofree;
 			}
 		}
@@ -3046,7 +3046,7 @@ again:
 		if (ext4_is_pending(inode, partial.lblk))
 			flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
 		ext4_free_blocks(handle, inode, NULL,
-				 EXT4_C2B(sbi, partial.pclu),
+				 EXT4_MB_C2B(sbi, partial.pclu),
 				 sbi->s_cluster_ratio, flags);
 		if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER)
 			ext4_rereserve_cluster(inode, partial.lblk);
