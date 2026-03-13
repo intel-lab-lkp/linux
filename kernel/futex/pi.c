@@ -1148,6 +1148,9 @@ retry:
 	if ((uval & FUTEX_TID_MASK) != vpid)
 		return -EPERM;
 
+	/* Clear the pending_op_list. */
+	clear_robust_list_pending_op(current);
+
 	ret = get_futex_key(uaddr, flags, &key, FUTEX_WRITE);
 	if (ret)
 		return ret;

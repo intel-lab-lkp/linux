@@ -10,6 +10,7 @@ vdsos-$(CONFIG_X86_X32_ABI)	+= x32
 # Files to link into the vDSO:
 vobjs-y				:= note.o vclock_gettime.o vgetcpu.o
 vobjs-y				+= vgetrandom.o vgetrandom-chacha.o
+vobjs-y				+= vfutex.o
 vobjs-$(CONFIG_X86_SGX)		+= vsgx.o
 
 # Compilation flags

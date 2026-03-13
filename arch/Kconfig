@@ -1670,6 +1670,9 @@ config ARCH_HAS_VDSO_ARCH_DATA
 config ARCH_HAS_VDSO_TIME_DATA
 	bool
 
+config ARCH_HAS_VDSO_FUTEX
+	bool
+
 config HAVE_STATIC_CALL
 	bool
 
