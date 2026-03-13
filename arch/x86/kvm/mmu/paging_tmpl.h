@@ -386,9 +386,15 @@ retry_walk:
 					     nested_access, &walker->fault);
 
 		if (unlikely(real_gpa == INVALID_GPA)) {
-#if PTTYPE != PTTYPE_EPT
-			walker->fault.error_code |= PFERR_GUEST_PAGE_MASK;
-#endif
+			/*
+			 * Set EPT Violation flags even if the fault is an
+			 * EPT Misconfig, fault.exit_qualification is ignored
+			 * for EPT Misconfigs.
+			 */
+			if (kvm_nested_fault_is_ept(vcpu, &walker->fault))
+				walker->fault.exit_qualification |= EPT_VIOLATION_GVA_IS_VALID;
+			else
+				walker->fault.error_code |= PFERR_GUEST_PAGE_MASK;
 			return 0;
 		}
 
@@ -447,9 +453,11 @@ retry_walk:
 
 	real_gpa = kvm_translate_gpa(vcpu, mmu, gfn_to_gpa(gfn), access, &walker->fault);
 	if (real_gpa == INVALID_GPA) {
-#if PTTYPE != PTTYPE_EPT
-		walker->fault.error_code |= PFERR_GUEST_FINAL_MASK;
-#endif
+		if (kvm_nested_fault_is_ept(vcpu, &walker->fault))
+			walker->fault.exit_qualification |= EPT_VIOLATION_GVA_IS_VALID |
+							    EPT_VIOLATION_GVA_TRANSLATED;
+		else
+			walker->fault.error_code |= PFERR_GUEST_FINAL_MASK;
 		return 0;
 	}
 
@@ -496,7 +504,7 @@ error:
 	 * [2:0] - Derive from the access bits. The exit_qualification might be
 	 *         out of date if it is serving an EPT misconfiguration.
 	 * [5:3] - Calculated by the page walk of the guest EPT page tables
-	 * [7:8] - Derived from [7:8] of real exit_qualification
+	 * [7:8] - Set at the kvm_translate_gpa() call sites above
 	 *
 	 * The other bits are set to 0.
 	 */

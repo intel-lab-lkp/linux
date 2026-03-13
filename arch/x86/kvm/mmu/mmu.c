@@ -5272,6 +5272,9 @@ static bool sync_mmio_spte(struct kvm_vcpu *vcpu, u64 *sptep, gfn_t gfn,
 	return false;
 }
 
+static bool kvm_nested_fault_is_ept(struct kvm_vcpu *vcpu,
+				    struct x86_exception *exception);
+
 #define PTTYPE_EPT 18 /* arbitrary */
 #define PTTYPE PTTYPE_EPT
 #include "paging_tmpl.h"
@@ -5284,6 +5287,13 @@ static bool sync_mmio_spte(struct kvm_vcpu *vcpu, u64 *sptep, gfn_t gfn,
 #define PTTYPE 32
 #include "paging_tmpl.h"
 #undef PTTYPE
+
+static bool kvm_nested_fault_is_ept(struct kvm_vcpu *vcpu,
+				    struct x86_exception *exception)
+{
+	WARN_ON_ONCE(!exception->nested_page_fault);
+	return vcpu->arch.guest_mmu.page_fault == ept_page_fault;
+}
 
 static void __reset_rsvds_bits_mask(struct rsvd_bits_validate *rsvd_check,
 				    u64 pa_bits_rsvd, int level, bool nx,

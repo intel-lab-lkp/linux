@@ -443,11 +443,12 @@ static void nested_ept_inject_page_fault(struct kvm_vcpu *vcpu,
 			vm_exit_reason = EXIT_REASON_EPT_MISCONFIG;
 			exit_qualification = 0;
 		} else {
-			exit_qualification = fault->exit_qualification;
-			exit_qualification |= vmx_get_exit_qual(vcpu) &
-					      (EPT_VIOLATION_GVA_IS_VALID |
-					       EPT_VIOLATION_GVA_TRANSLATED);
 			vm_exit_reason = EXIT_REASON_EPT_VIOLATION;
+			exit_qualification = fault->exit_qualification;
+			if (fault->hardware_nested_page_fault)
+				exit_qualification |= vmx_get_exit_qual(vcpu) &
+						      (EPT_VIOLATION_GVA_IS_VALID |
+						       EPT_VIOLATION_GVA_TRANSLATED);
 		}
 
 		/*
