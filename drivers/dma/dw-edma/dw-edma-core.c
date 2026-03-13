@@ -411,6 +411,9 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer)
 			return NULL;
 		if (!xfer->xfer.il->src_inc || !xfer->xfer.il->dst_inc)
 			return NULL;
+	} else if (xfer->type == EDMA_XFER_DUAL_ADDR_SG) {
+		if (xfer->xfer.sg.len < 1)
+			return NULL;
 	} else {
 		return NULL;
 	}
@@ -438,7 +441,7 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer)
 
 	if (xfer->type == EDMA_XFER_CYCLIC) {
 		cnt = xfer->xfer.cyclic.cnt;
-	} else if (xfer->type == EDMA_XFER_SCATTER_GATHER) {
+	} else if (xfer->type == EDMA_XFER_SCATTER_GATHER || xfer->type == EDMA_XFER_DUAL_ADDR_SG) {
 		cnt = xfer->xfer.sg.len;
 		sg = xfer->xfer.sg.sgl;
 	} else if (xfer->type == EDMA_XFER_INTERLEAVED) {
@@ -447,7 +450,8 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer)
 	}
 
 	for (i = 0; i < cnt; i++) {
-		if (xfer->type == EDMA_XFER_SCATTER_GATHER && !sg)
+		if ((xfer->type == EDMA_XFER_SCATTER_GATHER ||
+		     xfer->type == EDMA_XFER_DUAL_ADDR_SG) && !sg)
 			break;
 
 		if (chunk->bursts_alloc == chan->ll_max) {
@@ -462,7 +466,8 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer)
 
 		if (xfer->type == EDMA_XFER_CYCLIC)
 			burst->sz = xfer->xfer.cyclic.len;
-		else if (xfer->type == EDMA_XFER_SCATTER_GATHER)
+		else if (xfer->type == EDMA_XFER_SCATTER_GATHER ||
+			 xfer->type == EDMA_XFER_DUAL_ADDR_SG)
 			burst->sz = sg_dma_len(sg);
 		else if (xfer->type == EDMA_XFER_INTERLEAVED)
 			burst->sz = xfer->xfer.il->sgl[i % fsz].size;
@@ -486,6 +491,9 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer)
 				 */
 			} else if (xfer->type == EDMA_XFER_INTERLEAVED) {
 				burst->dar = dst_addr;
+			} else if (xfer->type == EDMA_XFER_DUAL_ADDR_SG) {
+				burst->sar = dw_edma_get_pci_address(chan, sg_dma_address(sg));
+				burst->dar = sg_dma_dst_address(sg);
 			}
 		} else {
 			burst->dar = dst_addr;
@@ -503,10 +511,14 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer)
 				 */
 			}  else if (xfer->type == EDMA_XFER_INTERLEAVED) {
 				burst->sar = src_addr;
+			} else if (xfer->type == EDMA_XFER_DUAL_ADDR_SG) {
+				burst->sar = sg_dma_address(sg);
+				burst->dar = dw_edma_get_pci_address(chan, sg_dma_dst_address(sg));
 			}
 		}
 
-		if (xfer->type == EDMA_XFER_SCATTER_GATHER) {
+		if (xfer->type == EDMA_XFER_SCATTER_GATHER ||
+		    xfer->type == EDMA_XFER_DUAL_ADDR_SG) {
 			sg = sg_next(sg);
 		} else if (xfer->type == EDMA_XFER_INTERLEAVED) {
 			struct dma_interleaved_template *il = xfer->xfer.il;
@@ -601,6 +613,25 @@ static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
 	res = &vd->tx_result;
 	res->result = result;
 	res->residue = residue;
+}
+
+static struct dma_async_tx_descriptor *
+dw_edma_device_prep_batch_sg_dma(struct dma_chan *dchan,
+				 struct scatterlist *sg,
+				 unsigned int nents,
+				 enum dma_transfer_direction direction,
+				 unsigned long flags)
+{
+	struct dw_edma_transfer xfer;
+
+	xfer.dchan = dchan;
+	xfer.direction = direction;
+	xfer.xfer.sg.sgl = sg;
+	xfer.xfer.sg.len = nents;
+	xfer.flags = flags;
+	xfer.type = EDMA_XFER_DUAL_ADDR_SG;
+
+	return dw_edma_device_transfer(&xfer);
 }
 
 static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
@@ -818,6 +849,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 	dma->device_prep_slave_sg = dw_edma_device_prep_slave_sg;
 	dma->device_prep_dma_cyclic = dw_edma_device_prep_dma_cyclic;
 	dma->device_prep_interleaved_dma = dw_edma_device_prep_interleaved_dma;
+	dma->device_prep_batch_sg_dma = dw_edma_device_prep_batch_sg_dma;
 
 	dma_set_max_seg_size(dma->dev, U32_MAX);
 

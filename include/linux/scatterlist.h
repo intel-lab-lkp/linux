@@ -19,6 +19,9 @@ struct scatterlist {
 #ifdef CONFIG_NEED_SG_DMA_FLAGS
 	unsigned int    dma_flags;
 #endif
+#ifdef CONFIG_NEED_SG_DMA_DST_ADDR
+	dma_addr_t	dma_dst_address;
+#endif
 };
 
 /*
@@ -34,6 +37,10 @@ struct scatterlist {
 #define sg_dma_len(sg)		((sg)->dma_length)
 #else
 #define sg_dma_len(sg)		((sg)->length)
+#endif
+
+#ifdef CONFIG_NEED_SG_DMA_DST_ADDR
+#define sg_dma_dst_address(sg)	((sg)->dma_dst_address)
 #endif
 
 struct sg_table {

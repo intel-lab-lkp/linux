@@ -5,6 +5,7 @@ config DW_EDMA
 	depends on PCI && PCI_MSI
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
+	select NEED_SG_DMA_DST_ADDR
 	help
 	  Support the Synopsys DesignWare eDMA controller, normally
 	  implemented on endpoints SoCs.

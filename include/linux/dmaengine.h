@@ -939,7 +939,11 @@ struct dma_device {
 		size_t period_len, enum dma_transfer_direction direction,
 		unsigned long flags);
 	struct dma_async_tx_descriptor *(*device_prep_interleaved_dma)(
-		struct dma_chan *chan, struct dma_interleaved_template *xt,
+	    struct dma_chan *chan, struct dma_interleaved_template *xt,
+		unsigned long flags);
+	struct dma_async_tx_descriptor *(*device_prep_batch_sg_dma)
+	    (struct dma_chan *chan, struct scatterlist *sg, unsigned int nents,
+	    enum dma_transfer_direction direction,
 		unsigned long flags);
 
 	void (*device_caps)(struct dma_chan *chan, struct dma_slave_caps *caps);
@@ -1058,6 +1062,29 @@ static inline struct dma_async_tx_descriptor *dmaengine_prep_interleaved_dma(
 		return NULL;
 
 	return chan->device->device_prep_interleaved_dma(chan, xt, flags);
+}
+
+/**
+ * dmaengine_prep_batch_sg_dma() - Prepare single DMA transfer for multiple independent buffers.
+ * @chan: DMA channel
+ * @sg: Scatter-gather list with both source (dma_address) and destination (dma_dst_address)
+ * @nents: Number of entries in the list
+ * @direction: Transfer direction (DMA_MEM_TO_MEM, DMA_DEV_TO_MEM, DMA_MEM_TO_DEV)
+ * @flags: DMA engine flags
+ *
+ * Each SG entry contains both source (sg_dma_address) and destination (sg_dma_dst_address).
+ * This allows multiple independent transfers in a single DMA transaction.
+ * Requires CONFIG_NEED_SG_DMA_DST_ADDR to be enabled.
+ */
+static inline struct dma_async_tx_descriptor *dmaengine_prep_batch_sg_dma
+		(struct dma_chan *chan, struct scatterlist *sg, unsigned int nents,
+		enum dma_transfer_direction direction, unsigned long flags)
+{
+	if (!chan || !chan->device || !chan->device->device_prep_batch_sg_dma ||
+	    !sg || !nents)
+		return NULL;
+
+	return chan->device->device_prep_batch_sg_dma(chan, sg, nents, direction, flags);
 }
 
 /**
