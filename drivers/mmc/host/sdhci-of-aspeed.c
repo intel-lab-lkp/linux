@@ -520,6 +520,7 @@ static int aspeed_sdc_probe(struct platform_device *pdev)
 
 {
 	struct device_node *parent, *child;
+	struct reset_control *reset;
 	struct aspeed_sdc *sdc;
 	int ret;
 
@@ -528,6 +529,15 @@ static int aspeed_sdc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	spin_lock_init(&sdc->lock);
+
+	reset = reset_control_get_optional_exclusive(&pdev->dev, NULL);
+	if (IS_ERR(reset))
+		return dev_err_probe(&pdev->dev, PTR_ERR(reset),
+				     "unable to acquire reset\n");
+	ret = reset_control_deassert(sdc->rst);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "reset deassert failed\n");
 
 	sdc->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(sdc->clk))
@@ -577,6 +587,7 @@ static const struct of_device_id aspeed_sdc_of_match[] = {
 	{ .compatible = "aspeed,ast2400-sd-controller", },
 	{ .compatible = "aspeed,ast2500-sd-controller", },
 	{ .compatible = "aspeed,ast2600-sd-controller", },
+	{ .compatible = "aspeed,ast2700-sd-controller", },
 	{ }
 };
 
