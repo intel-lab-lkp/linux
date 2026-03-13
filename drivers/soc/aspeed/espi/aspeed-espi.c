@@ -13,15 +13,28 @@
 #include <linux/reset.h>
 
 #include "aspeed-espi.h"
+#include "ast2600-espi.h"
 
 struct aspeed_espi_ops {
 	void (*espi_pre_init)(struct aspeed_espi *espi);
 	void (*espi_post_init)(struct aspeed_espi *espi);
 	void (*espi_deinit)(struct aspeed_espi *espi);
+	int (*espi_perif_probe)(struct aspeed_espi *espi);
+	int (*espi_perif_remove)(struct aspeed_espi *espi);
 	irqreturn_t (*espi_isr)(int irq, void *espi);
 };
 
+static const struct aspeed_espi_ops aspeed_espi_ast2600_ops = {
+	.espi_pre_init = ast2600_espi_pre_init,
+	.espi_post_init = ast2600_espi_post_init,
+	.espi_deinit = ast2600_espi_deinit,
+	.espi_perif_probe = ast2600_espi_perif_probe,
+	.espi_perif_remove = ast2600_espi_perif_remove,
+	.espi_isr = ast2600_espi_isr,
+};
+
 static const struct of_device_id aspeed_espi_of_matches[] = {
+	{ .compatible = "aspeed,ast2600-espi", .data = &aspeed_espi_ast2600_ops },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, aspeed_espi_of_matches);
@@ -88,6 +101,14 @@ static int aspeed_espi_probe(struct platform_device *pdev)
 	if (espi->ops->espi_pre_init)
 		espi->ops->espi_pre_init(espi);
 
+	if (espi->ops->espi_perif_probe) {
+		rc = espi->ops->espi_perif_probe(espi);
+		if (rc) {
+			dev_err(dev, "cannot init peripheral channel, rc=%d\n", rc);
+			goto err_deinit;
+		}
+	}
+
 	rc = devm_request_irq(dev, espi->irq, espi->ops->espi_isr, 0,
 			      dev_name(dev), espi);
 	if (rc) {
@@ -120,6 +141,9 @@ static void aspeed_espi_remove(struct platform_device *pdev)
 
 	if (!espi)
 		return;
+
+	if (espi->ops->espi_perif_remove)
+		espi->ops->espi_perif_remove(espi);
 
 	if (espi->ops->espi_deinit)
 		espi->ops->espi_deinit(espi);
