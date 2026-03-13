@@ -72,6 +72,14 @@ static u8 nvmet_auth_negotiate(struct nvmet_req *req, void *d)
 	    NVME_AUTH_DHCHAP_AUTH_ID)
 		return NVME_AUTH_DHCHAP_FAILURE_INCORRECT_PAYLOAD;
 
+	/*
+	 * idlist[0..29]: hash IDs
+	 * idlist[30..59]: DH group IDs
+	 */
+	if (data->auth_protocol[0].dhchap.halen > NVME_AUTH_DHCHAP_MAX_HASH_IDS ||
+	    data->auth_protocol[0].dhchap.dhlen > NVME_AUTH_DHCHAP_MAX_DH_IDS)
+		return NVME_AUTH_DHCHAP_FAILURE_INCORRECT_PAYLOAD;
+
 	for (i = 0; i < data->auth_protocol[0].dhchap.halen; i++) {
 		u8 host_hmac_id = data->auth_protocol[0].dhchap.idlist[i];
 
@@ -98,7 +106,8 @@ static u8 nvmet_auth_negotiate(struct nvmet_req *req, void *d)
 	dhgid = -1;
 	fallback_dhgid = -1;
 	for (i = 0; i < data->auth_protocol[0].dhchap.dhlen; i++) {
-		int tmp_dhgid = data->auth_protocol[0].dhchap.idlist[i + 30];
+		int tmp_dhgid =
+			data->auth_protocol[0].dhchap.idlist[i + NVME_AUTH_DHCHAP_MAX_HASH_IDS];
 
 		if (tmp_dhgid != ctrl->dh_gid) {
 			dhgid = tmp_dhgid;

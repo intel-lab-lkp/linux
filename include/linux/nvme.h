@@ -1824,6 +1824,8 @@ struct nvmf_auth_dhchap_protocol_descriptor {
 	__u8		dhlen;
 	__u8		idlist[60];
 };
+#define NVME_AUTH_DHCHAP_MAX_HASH_IDS 30
+#define NVME_AUTH_DHCHAP_MAX_DH_IDS 30
 
 enum {
 	NVME_AUTH_DHCHAP_AUTH_ID	= 0x01,
