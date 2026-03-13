@@ -448,6 +448,124 @@ err_unlock:
 	return ret;
 }
 
+static int pci_epf_mhi_iatu_read_batch(struct mhi_ep_cntrl *mhi_cntrl,
+				       struct mhi_ep_buf_info *buf_info_array,
+				       u32 num_buffers)
+{
+	int ret;
+	u32 i;
+
+	for (i = 0; i < num_buffers; i++) {
+		ret = pci_epf_mhi_iatu_read(mhi_cntrl, &buf_info_array[i]);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int pci_epf_mhi_edma_read_batch(struct mhi_ep_cntrl *mhi_cntrl,
+				       struct mhi_ep_buf_info *buf_info_array,
+				       u32 num_buffers)
+{
+	struct pci_epf_mhi *epf_mhi = to_epf_mhi(mhi_cntrl);
+	struct device *dma_dev = epf_mhi->epf->epc->dev.parent;
+	struct dma_chan *chan = epf_mhi->dma_chan_rx;
+	struct device *dev = &epf_mhi->epf->dev;
+	struct dma_async_tx_descriptor *desc;
+	struct dma_slave_config config = {};
+	DECLARE_COMPLETION_ONSTACK(complete);
+	struct scatterlist *sg;
+	dma_addr_t *dst_addrs;
+	dma_cookie_t cookie;
+	int ret;
+	u32 i;
+
+	if (num_buffers == 0)
+		return -EINVAL;
+
+	mutex_lock(&epf_mhi->lock);
+
+	sg = kcalloc(num_buffers, sizeof(*sg), GFP_KERNEL);
+	if (!sg) {
+		ret = -ENOMEM;
+		goto err_unlock;
+	}
+
+	dst_addrs = kcalloc(num_buffers, sizeof(*dst_addrs), GFP_KERNEL);
+	if (!dst_addrs) {
+		ret = -ENOMEM;
+		goto err_free_sg;
+	}
+
+	sg_init_table(sg, num_buffers);
+
+	for (i = 0; i < num_buffers; i++) {
+		dst_addrs[i] = dma_map_single(dma_dev, buf_info_array[i].dev_addr,
+					      buf_info_array[i].size, DMA_FROM_DEVICE);
+		ret = dma_mapping_error(dma_dev, dst_addrs[i]);
+		if (ret) {
+			dev_err(dev, "Failed to map buffer %u\n", i);
+			goto err_unmap;
+		}
+
+		sg_dma_address(&sg[i]) = buf_info_array[i].host_addr;
+		sg_dma_dst_address(&sg[i]) = dst_addrs[i];
+		sg_dma_len(&sg[i]) = buf_info_array[i].size;
+	}
+
+	config.direction = DMA_DEV_TO_MEM;
+	ret = dmaengine_slave_config(chan, &config);
+	if (ret) {
+		dev_err(dev, "Failed to configure DMA channel\n");
+		goto err_unmap;
+	}
+
+	desc = dmaengine_prep_batch_sg_dma(chan, sg, num_buffers,
+					   DMA_DEV_TO_MEM,
+					   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
+	if (!desc) {
+		dev_err(dev, "Failed to prepare batch sg DMA\n");
+		ret = -EIO;
+		goto err_unmap;
+	}
+
+	desc->callback = pci_epf_mhi_dma_callback;
+	desc->callback_param = &complete;
+
+	cookie = dmaengine_submit(desc);
+	ret = dma_submit_error(cookie);
+	if (ret) {
+		dev_err(dev, "Failed to submit DMA\n");
+		goto err_unmap;
+	}
+
+	dma_async_issue_pending(chan);
+
+	ret = wait_for_completion_timeout(&complete, msecs_to_jiffies(1000));
+	if (!ret) {
+		dev_err(dev, "DMA transfer timeout\n");
+		dmaengine_terminate_sync(chan);
+		ret = -ETIMEDOUT;
+		goto err_unmap;
+	}
+
+	ret = 0;
+
+err_unmap:
+	for (i = 0; i < num_buffers; i++) {
+		if (dst_addrs[i])
+			dma_unmap_single(dma_dev, dst_addrs[i],
+					 buf_info_array[i].size, DMA_FROM_DEVICE);
+	}
+	kfree(dst_addrs);
+err_free_sg:
+	kfree(sg);
+err_unlock:
+	mutex_unlock(&epf_mhi->lock);
+	return ret;
+}
+
 static void pci_epf_mhi_dma_worker(struct work_struct *work)
 {
 	struct pci_epf_mhi *epf_mhi = container_of(work, struct pci_epf_mhi, dma_work);
@@ -803,11 +921,13 @@ static int pci_epf_mhi_link_up(struct pci_epf *epf)
 	mhi_cntrl->unmap_free = pci_epf_mhi_unmap_free;
 	mhi_cntrl->read_sync = mhi_cntrl->read_async = pci_epf_mhi_iatu_read;
 	mhi_cntrl->write_sync = mhi_cntrl->write_async = pci_epf_mhi_iatu_write;
+	mhi_cntrl->read_batch = pci_epf_mhi_iatu_read_batch;
 	if (info->flags & MHI_EPF_USE_DMA) {
 		mhi_cntrl->read_sync = pci_epf_mhi_edma_read;
 		mhi_cntrl->write_sync = pci_epf_mhi_edma_write;
 		mhi_cntrl->read_async = pci_epf_mhi_edma_read_async;
 		mhi_cntrl->write_async = pci_epf_mhi_edma_write_async;
+		mhi_cntrl->read_batch = pci_epf_mhi_edma_read_batch;
 	}
 
 	/* Register the MHI EP controller */

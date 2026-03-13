@@ -41,6 +41,7 @@ config PCI_EPF_VNTB
 config PCI_EPF_MHI
 	tristate "PCI Endpoint driver for MHI bus"
 	depends on PCI_ENDPOINT && MHI_BUS_EP
+	select NEED_SG_DMA_DST_ADDR
 	help
 	   Enable this configuration option to enable the PCI Endpoint
 	   driver for Modem Host Interface (MHI) bus in Qualcomm Endpoint
