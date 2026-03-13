@@ -68,8 +68,7 @@
 		reset-post-delay-us = <4000>;
 
 		tsn0_phy: ethernet-phy@0 {
-			compatible = "ethernet-phy-id002b.0980",
-				     "ethernet-phy-ieee802.3-c22";
+			compatible = "ethernet-phy-id002b.0980";
 			reg = <0>;
 			interrupts-extended = <&gpio4 3 IRQ_TYPE_LEVEL_LOW>;
 		};

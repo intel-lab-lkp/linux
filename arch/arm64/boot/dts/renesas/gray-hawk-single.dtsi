@@ -207,8 +207,7 @@
 		#size-cells = <0>;
 
 		avb0_phy: ethernet-phy@0 {
-			compatible = "ethernet-phy-id0022.1622",
-				"ethernet-phy-ieee802.3-c22";
+			compatible = "ethernet-phy-id0022.1622";
 				rxc-skew-ps = <1500>;
 				reg = <0>;
 				interrupts-extended = <&gpio7 5 IRQ_TYPE_LEVEL_LOW>;

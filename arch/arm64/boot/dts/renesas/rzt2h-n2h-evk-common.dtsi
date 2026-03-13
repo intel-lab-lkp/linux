@@ -197,7 +197,7 @@
 
 &mdio1 {
 	mdio1_phy: ethernet-phy@3 {
-		compatible = "ethernet-phy-id0007.0772", "ethernet-phy-ieee802.3-c22";
+		compatible = "ethernet-phy-id0007.0772";
 		reg = <3>;
 		vsc8531,led-0-mode = <VSC8531_ACTIVITY>;
 		vsc8531,led-1-mode = <VSC8531_LINK_ACTIVITY>;
@@ -208,7 +208,7 @@
 
 &mdio2 {
 	mdio2_phy: ethernet-phy@2 {
-		compatible = "ethernet-phy-id0007.0772", "ethernet-phy-ieee802.3-c22";
+		compatible = "ethernet-phy-id0007.0772";
 		reg = <2>;
 		vsc8531,led-0-mode = <VSC8531_ACTIVITY>;
 		vsc8531,led-1-mode = <VSC8531_LINK_ACTIVITY>;

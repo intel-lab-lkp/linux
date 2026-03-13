@@ -242,8 +242,7 @@
 		#size-cells = <0>;
 
 		avb0_phy: ethernet-phy@0 {	/* KSZ9031RNXVB */
-			compatible = "ethernet-phy-id0022.1622",
-				     "ethernet-phy-ieee802.3-c22";
+			compatible = "ethernet-phy-id0022.1622";
 			rxc-skew-ps = <1500>;
 			reg = <0>;
 			/* AVB0_PHY_INT_V */
