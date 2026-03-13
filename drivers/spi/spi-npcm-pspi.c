@@ -361,27 +361,23 @@ static int npcm_pspi_probe(struct platform_device *pdev)
 		goto out_host_put;
 	}
 
-	priv->clk = devm_clk_get(&pdev->dev, NULL);
+	priv->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(priv->clk)) {
-		dev_err(&pdev->dev, "failed to get clock\n");
+		dev_err(&pdev->dev, "failed to enable clock\n");
 		ret = PTR_ERR(priv->clk);
 		goto out_host_put;
 	}
 
-	ret = clk_prepare_enable(priv->clk);
-	if (ret)
-		goto out_host_put;
-
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		ret = irq;
-		goto out_disable_clk;
+		goto out_host_put;
 	}
 
 	priv->reset = devm_reset_control_get(&pdev->dev, NULL);
 	if (IS_ERR(priv->reset)) {
 		ret = PTR_ERR(priv->reset);
-		goto out_disable_clk;
+		goto out_host_put;
 	}
 
 	/* reset SPI-HW block */
@@ -391,7 +387,7 @@ static int npcm_pspi_probe(struct platform_device *pdev)
 			       "npcm-pspi", priv);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request IRQ\n");
-		goto out_disable_clk;
+		goto out_host_put;
 	}
 
 	init_completion(&priv->xfer_done);
@@ -415,14 +411,11 @@ static int npcm_pspi_probe(struct platform_device *pdev)
 
 	ret = devm_spi_register_controller(&pdev->dev, host);
 	if (ret)
-		goto out_disable_clk;
+		goto out_host_put;
 
 	pr_info("NPCM Peripheral SPI %d probed\n", host->bus_num);
 
 	return 0;
-
-out_disable_clk:
-	clk_disable_unprepare(priv->clk);
 
 out_host_put:
 	spi_controller_put(host);
