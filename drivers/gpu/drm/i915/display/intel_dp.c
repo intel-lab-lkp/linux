@@ -7337,6 +7337,7 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 				 struct intel_crtc_state *crtc_state,
 				 struct drm_connector_state *conn_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	int ret;
 
@@ -7347,6 +7348,13 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 		return ret;
 
 	intel_alpm_lobf_compute_config_late(intel_dp, crtc_state);
+
+	if (HAS_DC3CO(display) && intel_dp_is_edp(intel_dp) &&
+	    (crtc_state->has_lobf || crtc_state->has_sel_update ||
+	     crtc_state->has_panel_replay))
+		crtc_state->dc3co.enable = true;
+	else
+		crtc_state->dc3co.enable = false;
 
 	return 0;
 }
