@@ -765,6 +765,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	case PHY_INTERFACE_MODE_SGMII:
 		ethqos->configure_func = ethqos_configure_sgmii;
 		plat_dat->mac_finish = ethqos_mac_finish_serdes;
+		plat_dat->mdio_bus_data->default_an_inband = true;
 		break;
 	default:
 		dev_err(dev, "Unsupported phy mode %s\n",
