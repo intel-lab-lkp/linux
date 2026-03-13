@@ -883,14 +883,16 @@ unsigned long iov_iter_gap_alignment(const struct iov_iter *i)
 
 	for (k = 0; k < i->nr_segs; k++) {
 		const struct iovec *iov = iter_iov(i) + k;
-		if (iov->iov_len) {
-			unsigned long base = (unsigned long)iov->iov_base;
+		size_t skip = k ? 0 : i->iov_offset;
+		size_t len = iov->iov_len - skip;
+		if (len) {
+			unsigned long base = (unsigned long)iov->iov_base + skip;
 			if (v) // if not the first one
 				res |= base | v; // this start | previous end
-			v = base + iov->iov_len;
-			if (size <= iov->iov_len)
+			v = base + len;
+			if (size <= len)
 				break;
-			size -= iov->iov_len;
+			size -= len;
 		}
 	}
 	return res;
