@@ -52,7 +52,7 @@ void CI_handle(struct av7110 *av7110, u8 *data, u16 len)
 		}
 		break;
 	case CI_SWITCH_PRG_REPLY:
-		//av7110->ci_stat=data[1];
+		/* av7110->ci_stat=data[1]; */
 		break;
 	default:
 		break;

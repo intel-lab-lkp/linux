@@ -13,7 +13,7 @@
  */
 
 /* for debugging ARM communication: */
-//#define COM_DEBUG
+/* #define COM_DEBUG */
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -232,8 +232,8 @@ int av7110_bootarm(struct av7110 *av7110)
 	/* boot */
 	dprintk(1, "load boot code\n");
 	saa7146_setgpio(dev, ARM_IRQ_LINE, SAA7146_GPIO_IRQLO);
-	//saa7146_setgpio(dev, DEBI_DONE_LINE, SAA7146_GPIO_INPUT);
-	//saa7146_setgpio(dev, 3, SAA7146_GPIO_INPUT);
+	/* saa7146_setgpio(dev, DEBI_DONE_LINE, SAA7146_GPIO_INPUT); */
+	/* saa7146_setgpio(dev, 3, SAA7146_GPIO_INPUT); */
 
 	ret = request_firmware(&fw, fw_name, &dev->pci->dev);
 	if (ret) {
@@ -271,7 +271,7 @@ int av7110_bootarm(struct av7110 *av7110)
 	saa7146_setgpio(dev, RESET_LINE, SAA7146_GPIO_OUTHI);
 	msleep(30);	/* the firmware needs some time to initialize */
 
-	//ARM_ClearIrq(av7110);
+	/* ARM_ClearIrq(av7110); */
 	ARM_ResetMailBox(av7110);
 	SAA7146_ISR_CLEAR(av7110->dev, MASK_19 | MASK_03);
 	SAA7146_IER_ENABLE(av7110->dev, MASK_03);
@@ -326,7 +326,7 @@ static int __av7110_send_fw_cmd(struct av7110 *av7110, u16 *buf, int length)
 	u32 stat;
 	int err;
 
-//	dprintk(4, "%p\n", av7110);
+	/* dprintk(4, "%p\n", av7110); */
 
 	if (!av7110->arm_ready) {
 		dprintk(1, "arm not ready.\n");
@@ -453,7 +453,7 @@ static int av7110_send_fw_cmd(struct av7110 *av7110, u16 *buf, int length)
 {
 	int ret;
 
-//	dprintk(4, "%p\n", av7110);
+	/* dprintk(4, "%p\n", av7110); */
 
 	if (!av7110->arm_ready) {
 		dprintk(1, "arm not ready.\n");
@@ -475,7 +475,7 @@ int av7110_fw_cmd(struct av7110 *av7110, int type, int com, int num, ...)
 	u16 buf[MAX_XFER_SIZE];
 	int i, ret;
 
-//	dprintk(4, "%p\n", av7110);
+	/* dprintk(4, "%p\n", av7110); */
 
 	if (2 + num > ARRAY_SIZE(buf)) {
 		pr_warn("%s(): len=%d is too big!\n", __func__, num);

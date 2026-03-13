@@ -146,7 +146,7 @@ static void init_av7110_av(struct av7110 *av7110)
 	av7110->analog_tuner_flags = 0;
 	av7110->current_input = 0;
 	if (dev->pci->subsystem_vendor == 0x13c2 && dev->pci->subsystem_device == 0x000a)
-		av7110_fw_cmd(av7110, COMTYPE_AUDIODAC, ADSwitch, 1, 0); // SPDIF on
+		av7110_fw_cmd(av7110, COMTYPE_AUDIODAC, ADSwitch, 1, 0); /* SPDIF on */
 	if (i2c_writereg(av7110, 0x20, 0x00, 0x00) == 1) {
 		pr_info("Crystal audio DAC @ card %d detected\n", av7110->dvb_adapter.num);
 		av7110->adac_type = DVB_ADAC_CRYSTAL;
@@ -169,7 +169,7 @@ static void init_av7110_av(struct av7110 *av7110)
 	}
 
 	if (av7110->adac_type == DVB_ADAC_NONE || av7110->adac_type == DVB_ADAC_MSP34x0) {
-		// switch DVB SCART on
+		/* switch DVB SCART on */
 		ret = av7110_fw_cmd(av7110, COMTYPE_AUDIODAC, MainSwitch, 1, 0);
 		if (ret < 0)
 			pr_err("cannot switch on SCART(Main):%d\n", ret);
@@ -180,13 +180,13 @@ static void init_av7110_av(struct av7110 *av7110)
 		    ((av7110->dev->pci->subsystem_vendor == 0x110a) ||
 		     (av7110->dev->pci->subsystem_vendor == 0x13c2)) &&
 		     (av7110->dev->pci->subsystem_device == 0x0000)) {
-			saa7146_setgpio(dev, 1, SAA7146_GPIO_OUTHI); // RGB on, SCART pin 16
-			//saa7146_setgpio(dev, 3, SAA7146_GPIO_OUTLO); // SCARTpin 8
+			saa7146_setgpio(dev, 1, SAA7146_GPIO_OUTHI); /* RGB on, SCART pin 16 */
+			/* saa7146_setgpio(dev, 3, SAA7146_GPIO_OUTLO); SCARTpin 8 */
 		}
 	}
 
 	if (dev->pci->subsystem_vendor == 0x13c2 && dev->pci->subsystem_device == 0x000e)
-		av7110_fw_cmd(av7110, COMTYPE_AUDIODAC, SpdifSwitch, 1, 0); // SPDIF on
+		av7110_fw_cmd(av7110, COMTYPE_AUDIODAC, SpdifSwitch, 1, 0); /* SPDIF on */
 
 	ret = av7110_set_volume(av7110, av7110->mixer.volume_left, av7110->mixer.volume_right);
 	if (ret < 0)
@@ -314,7 +314,7 @@ static int DvbDmxFilterCallback(u8 *buffer1, size_t buffer1_len,
 	}
 }
 
-//#define DEBUG_TIMING
+/* #define DEBUG_TIMING */
 static inline void print_time(char *s)
 {
 #ifdef DEBUG_TIMING
@@ -762,7 +762,7 @@ static int StartHWFilter(struct dvb_demux_filter *dvbdmxfilter)
 	u16 buf[20];
 	int ret, i;
 	u16 handle;
-//	u16 mode = 0x0320;
+	/* u16 mode = 0x0320; */
 	u16 mode = 0xb96a;
 
 	dprintk(4, "%p\n", av7110);
@@ -914,7 +914,7 @@ static int dvb_feed_stop_pid(struct dvb_demux_feed *dvbdmxfeed)
 	npids[4] = 0xffff;
 	i = dvbdmxfeed->pes_type;
 	switch (i) {
-	case 2: //teletext
+	case 2: /* teletext */
 		if (dvbdmxfeed->ts_type & TS_PACKET)
 			ret = StopHWFilter(dvbdmxfeed->filter);
 		npids[2] = 0;
@@ -1550,8 +1550,8 @@ static int alps_bsrv2_tuner_set_params(struct dvb_frontend *fe)
 	buf[2] = ((div & 0x18000) >> 10) | 0x95;
 	buf[3] = (pwr << 6) | 0x30;
 
-	// NOTE: since we're using a prescaler of 2, we set the
-	// divisor frequency to 62.5kHz and divide by 125 above
+	/* NOTE: since we're using a prescaler of 2, we set the */
+	/* divisor frequency to 62.5kHz and divide by 125 above */
 
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 1);
@@ -1820,7 +1820,7 @@ static int nexusca_stv0297_tuner_set_params(struct dvb_frontend *fe)
 		return -EIO;
 	}
 
-	// wait for PLL lock
+	/* wait for PLL lock */
 	for (i = 0; i < 20; i++) {
 		if (fe->ops.i2c_gate_ctrl)
 			fe->ops.i2c_gate_ctrl(fe, 1);
@@ -2079,7 +2079,7 @@ static int frontend_init(struct av7110 *av7110)
 
 	if (av7110->dev->pci->subsystem_vendor == 0x110a) {
 		switch (av7110->dev->pci->subsystem_device) {
-		case 0x0000: // Fujitsu/Siemens DVB-Cable (ves1820/Philips CD1516(??))
+		case 0x0000: /* Fujitsu/Siemens DVB-Cable (ves1820/Philips CD1516(??)) */
 			av7110->fe = dvb_attach(ves1820_attach, &philips_cd1516_config,
 						&av7110->i2c_adap, read_pwm(av7110));
 			if (av7110->fe)
@@ -2089,11 +2089,11 @@ static int frontend_init(struct av7110 *av7110)
 
 	} else if (av7110->dev->pci->subsystem_vendor == 0x13c2) {
 		switch (av7110->dev->pci->subsystem_device) {
-		case 0x0000: // Hauppauge/TT WinTV DVB-S rev1.X
-		case 0x0003: // Hauppauge/TT WinTV Nexus-S Rev 2.X
-		case 0x1002: // Hauppauge/TT WinTV DVB-S rev1.3SE
+		case 0x0000: /* Hauppauge/TT WinTV DVB-S rev1.X */
+		case 0x0003: /* Hauppauge/TT WinTV Nexus-S Rev 2.X */
+		case 0x1002: /* Hauppauge/TT WinTV DVB-S rev1.3SE */
 
-			// try the ALPS BSRV2 first of all
+			/* try the ALPS BSRV2 first of all */
 			av7110->fe = dvb_attach(ves1x93_attach, &alps_bsrv2_config, &av7110->i2c_adap);
 			if (av7110->fe) {
 				av7110->fe->ops.tuner_ops.set_params = alps_bsrv2_tuner_set_params;
@@ -2104,7 +2104,7 @@ static int frontend_init(struct av7110 *av7110)
 				break;
 			}
 
-			// try the ALPS BSRU6 now
+			/* try the ALPS BSRU6 now */
 			av7110->fe = dvb_attach(stv0299_attach, &alps_bsru6_config, &av7110->i2c_adap);
 			if (av7110->fe) {
 				av7110->fe->ops.tuner_ops.set_params = alps_bsru6_tuner_set_params;
@@ -2117,7 +2117,7 @@ static int frontend_init(struct av7110 *av7110)
 				break;
 			}
 
-			// Try the grundig 29504-451
+			/* Try the grundig 29504-451 */
 			av7110->fe = dvb_attach(tda8083_attach, &grundig_29504_451_config, &av7110->i2c_adap);
 			if (av7110->fe) {
 				av7110->fe->ops.tuner_ops.set_params = grundig_29504_451_tuner_set_params;
@@ -2147,11 +2147,11 @@ static int frontend_init(struct av7110 *av7110)
 			}
 			break;
 
-		case 0x0001: // Hauppauge/TT Nexus-T premium rev1.X
+		case 0x0001: /* Hauppauge/TT Nexus-T premium rev1.X */
 		{
 			struct dvb_frontend *fe;
 
-			// try ALPS TDLB7 first, then Grundig 29504-401
+			/* try ALPS TDLB7 first, then Grundig 29504-401 */
 			fe = dvb_attach(sp8870_attach, &alps_tdlb7_config, &av7110->i2c_adap);
 			if (fe) {
 				fe->ops.tuner_ops.set_params = alps_tdlb7_tuner_set_params;
@@ -2161,21 +2161,21 @@ static int frontend_init(struct av7110 *av7110)
 		}
 			fallthrough;
 
-		case 0x0008: // Hauppauge/TT DVB-T
-			// Grundig 29504-401
+		case 0x0008: /* Hauppauge/TT DVB-T */
+			/* Grundig 29504-401 */
 			av7110->fe = dvb_attach(l64781_attach, &grundig_29504_401_config, &av7110->i2c_adap);
 			if (av7110->fe)
 				av7110->fe->ops.tuner_ops.set_params = grundig_29504_401_tuner_set_params;
 			break;
 
-		case 0x0002: // Hauppauge/TT DVB-C premium rev2.X
+		case 0x0002: /* Hauppauge/TT DVB-C premium rev2.X */
 
 			av7110->fe = dvb_attach(ves1820_attach, &alps_tdbe2_config, &av7110->i2c_adap, read_pwm(av7110));
 			if (av7110->fe)
 				av7110->fe->ops.tuner_ops.set_params = alps_tdbe2_tuner_set_params;
 			break;
 
-		case 0x0004: // Galaxis DVB-S rev1.3
+		case 0x0004: /* Galaxis DVB-S rev1.3 */
 			/* ALPS BSRV2 */
 			av7110->fe = dvb_attach(ves1x93_attach, &alps_bsrv2_config, &av7110->i2c_adap);
 			if (av7110->fe) {
@@ -2199,15 +2199,15 @@ static int frontend_init(struct av7110 *av7110)
 			}
 			break;
 
-		case 0x000A: // Hauppauge/TT Nexus-CA rev1.X
+		case 0x000A: /* Hauppauge/TT Nexus-CA rev1.X */
 
 			av7110->fe = dvb_attach(stv0297_attach, &nexusca_stv0297_config, &av7110->i2c_adap);
 			if (av7110->fe) {
 				av7110->fe->ops.tuner_ops.set_params = nexusca_stv0297_tuner_set_params;
 
 				/* set TDA9819 into DVB mode */
-				saa7146_setgpio(av7110->dev, 1, SAA7146_GPIO_OUTLO); // TDA9819 pin9(STD)
-				saa7146_setgpio(av7110->dev, 3, SAA7146_GPIO_OUTLO); // TDA9819 pin30(VIF)
+				saa7146_setgpio(av7110->dev, 1, SAA7146_GPIO_OUTLO); /* TDA9819 pin9(STD) */
+				saa7146_setgpio(av7110->dev, 3, SAA7146_GPIO_OUTLO); /* TDA9819 pin30(VIF) */
 
 				/* tuner on this needs a slower i2c bus speed */
 				av7110->dev->i2c_bitrate = SAA7146_I2C_BUS_BIT_RATE_240;
@@ -2362,14 +2362,14 @@ static int av7110_attach(struct saa7146_dev *dev,
 		saa7146_write(dev, DD1_STREAM_B, 0);
 		/* port B VSYNC at rising edge */
 		saa7146_write(dev, DD1_INIT, 0x00000200);
-		saa7146_write(dev, BRS_CTRL, 0x00000000);  // VBI
+		saa7146_write(dev, BRS_CTRL, 0x00000000);  /* VBI */
 		saa7146_write(dev, MC2,
-			      1 * (MASK_08 | MASK_24)  |   // BRS control
-			      0 * (MASK_09 | MASK_25)  |   // a
-			      1 * (MASK_10 | MASK_26)  |   // b
-			      0 * (MASK_06 | MASK_22)  |   // HPS_CTRL1
-			      0 * (MASK_05 | MASK_21)  |   // HPS_CTRL2
-			      0 * (MASK_01 | MASK_15)      // DEBI
+			      1 * (MASK_08 | MASK_24)  |   /* BRS control */
+			      0 * (MASK_09 | MASK_25)  |   /* a */
+			      1 * (MASK_10 | MASK_26)  |   /* b */
+			      0 * (MASK_06 | MASK_22)  |   /* HPS_CTRL1 */
+			      0 * (MASK_05 | MASK_21)  |   /* HPS_CTRL2 */
+			      0 * (MASK_01 | MASK_15)      /* DEBI */
 		);
 
 		/* start writing RPS1 code from beginning */
@@ -2785,14 +2785,14 @@ static void av7110_irq(struct saa7146_dev *dev, u32 *isr)
 {
 	struct av7110 *av7110 = dev->ext_priv;
 
-	//print_time("av7110_irq");
+	/* print_time("av7110_irq"); */
 
 	/* Note: Don't try to handle the DEBI error irq (MASK_18), in
 	 * intel mode the timeout is asserted all the time...
 	 */
 
 	if (*isr & MASK_19) {
-		//printk("av7110_irq: DEBI\n");
+		/* printk("av7110_irq: DEBI\n"); */
 		/* Note 1: The DEBI irq is level triggered: We must enable it
 		 * only after we started a DMA xfer, and disable it here
 		 * immediately, or it will be signalled all the time while
@@ -2814,7 +2814,7 @@ static void av7110_irq(struct saa7146_dev *dev, u32 *isr)
 	}
 
 	if (*isr & MASK_03) {
-		//printk("av7110_irq: GPIO\n");
+		/* printk("av7110_irq: GPIO\n"); */
 		tasklet_schedule(&av7110->gpio_tasklet);
 	}
 
@@ -2854,8 +2854,8 @@ static const struct pci_device_id pci_tbl[] = {
 	MAKE_EXTENSION_PCI(tts_2_3,     0x13c2, 0x000e),
 	MAKE_EXTENSION_PCI(tts_1_3se,   0x13c2, 0x1002),
 
-//	MAKE_EXTENSION_PCI(???, 0x13c2, 0x0005), UNDEFINED CARD  // Technisat SkyStar1
-//	MAKE_EXTENSION_PCI(???, 0x13c2, 0x0009), UNDEFINED CARD  // TT/Hauppauge WinTV Nexus-CA v???
+	/* MAKE_EXTENSION_PCI(???, 0x13c2, 0x0005), UNDEFINED CARD - Technisat SkyStar1 */
+	/* MAKE_EXTENSION_PCI(???, 0x13c2, 0x0009), UNDEFINED CARD - TT/Hauppauge WinTV Nexus-CA v??? */
 
 	{
 		.vendor    = 0,
