@@ -142,9 +142,9 @@ in primary usage, and people would like to assign it as the first
 appearing card. They can do it by specifying "index=1,0" module
 parameter, which will swap the assignment slots.
 
-Today, with the sound backend like PulseAudio and PipeWire which
-supports dynamic configuration, it's of little use, but that was a
-help for static configuration in the past.
+Today, sound servers such as PulseAudio and PipeWire support dynamic
+configuration, so this feature is rarely needed. However, it was
+useful in the past when audio setups relied on static configuration.
 
 Module snd-adlib
 ----------------
