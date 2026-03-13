@@ -2123,6 +2123,36 @@ static void panthor_vma_init(struct panthor_vma *vma, u32 flags)
 	 DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC | \
 	 DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED)
 
+static int
+panthor_vm_map_range(struct panthor_vm *vm, bool repeat, struct sg_table *sgt,
+		     u64 addr, u64 offset, u64 size, u32 repeat_range, int prot)
+{
+	int ret;
+
+	if (!size)
+		return 0;
+
+	if (repeat) {
+		u64 repeat_count = size;
+
+		do_div(repeat_count, repeat_range);
+
+		if (drm_WARN_ON(&vm->ptdev->base, !repeat_count))
+			return -EINVAL;
+
+		ret = panthor_vm_repeated_map_pages(vm, addr, prot, sgt,
+						    offset, repeat_range,
+						    repeat_count);
+		if (!ret)
+			vm->base.flags |= DRM_GPUVM_HAS_REPEAT_MAPS;
+	} else {
+		ret = panthor_vm_map_pages(vm, addr, prot, sgt,
+					   offset, size);
+	}
+
+	return ret;
+}
+
 static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 {
 	struct panthor_vm *vm = priv;
@@ -2135,29 +2165,10 @@ static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 
 	panthor_vma_init(vma, op_ctx->flags & PANTHOR_VM_MAP_FLAGS);
 
-	if (op_ctx->flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT) {
-		u64 repeat_count = op->map.va.range;
-
-		do_div(repeat_count, op->map.gem.repeat_range);
-
-		if (drm_WARN_ON(&vm->ptdev->base, !repeat_count))
-			return -EINVAL;
-
-		ret = panthor_vm_repeated_map_pages(vm, op->map.va.addr,
-						    flags_to_prot(vma->flags),
-						    op_ctx->map.sgt,
-						    op->map.gem.offset,
-						    op->map.gem.repeat_range,
-						    repeat_count);
-		if (!ret)
-			vm->base.flags |= DRM_GPUVM_HAS_REPEAT_MAPS;
-	} else {
-		ret = panthor_vm_map_pages(vm, op->map.va.addr,
-					   flags_to_prot(vma->flags),
-					   op_ctx->map.sgt, op->map.gem.offset,
-					   op->map.va.range);
-	}
-
+	ret = panthor_vm_map_range(vm, op_ctx->flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT,
+				   op_ctx->map.sgt, op->map.va.addr, op->map.gem.offset,
+				   op->map.va.range, op->map.gem.repeat_range,
+				   flags_to_prot(vma->flags));
 	if (ret) {
 		panthor_vm_op_ctx_return_vma(op_ctx, vma);
 		return ret;
@@ -2261,8 +2272,10 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 		u64 offset = op->remap.prev->gem.offset + unmap_start - op->remap.prev->va.addr;
 		u64 size = op->remap.prev->va.addr + op->remap.prev->va.range - unmap_start;
 
-		ret = panthor_vm_map_pages(vm, unmap_start, flags_to_prot(unmap_vma->flags),
-					   bo->base.sgt, offset, size);
+		ret = panthor_vm_map_range(vm, op->remap.prev->flags & DRM_GPUVA_REPEAT,
+					   bo->base.sgt, op->remap.prev->va.addr, offset,
+					   size, op->remap.prev->gem.repeat_range,
+					   flags_to_prot(unmap_vma->flags));
 		if (ret)
 			return ret;
 
@@ -2275,8 +2288,10 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 		u64 addr = op->remap.next->va.addr;
 		u64 size = unmap_start + unmap_range - op->remap.next->va.addr;
 
-		ret = panthor_vm_map_pages(vm, addr, flags_to_prot(unmap_vma->flags),
-					   bo->base.sgt, op->remap.next->gem.offset, size);
+		ret = panthor_vm_map_range(vm, op->remap.next->flags & DRM_GPUVA_REPEAT,
+					   bo->base.sgt, addr, op->remap.next->gem.offset,
+					   size, op->remap.next->gem.repeat_range,
+					   flags_to_prot(unmap_vma->flags));
 		if (ret)
 			return ret;
 
