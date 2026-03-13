@@ -1080,6 +1080,11 @@ static void intel_post_plane_update(struct intel_atomic_state *state,
 		intel_alpm_lobf_enable(new_crtc_state);
 
 	intel_psr_post_plane_update(state, crtc);
+
+	if (!crtc->cmtg.enabled && intel_vrr_is_fixed_rr(new_crtc_state)) {
+		intel_cmtg_enable_sync(new_crtc_state);
+		intel_cmtg_enable_ddi(new_crtc_state);
+	}
 }
 
 static void intel_post_plane_update_after_readout(struct intel_atomic_state *state,
@@ -1793,6 +1798,8 @@ static void hsw_crtc_disable(struct intel_atomic_state *state,
 	struct intel_crtc *pipe_crtc;
 	int i;
 
+	if (crtc->cmtg.enabled)
+		intel_cmtg_disable(old_crtc_state);
 	/*
 	 * FIXME collapse everything to one hook.
 	 * Need care with mst->ddi interactions.
@@ -6917,6 +6924,9 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	if (intel_crtc_needs_fastset(new_crtc_state) &&
 	    old_crtc_state->inherited)
 		intel_crtc_arm_fifo_underrun(crtc, new_crtc_state);
+
+	if (crtc->cmtg.enabled && intel_crtc_vrr_enabling(state, crtc))
+		intel_cmtg_disable(new_crtc_state);
 }
 
 static void intel_old_crtc_state_disables(struct intel_atomic_state *state,
