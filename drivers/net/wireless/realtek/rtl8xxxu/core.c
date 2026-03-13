@@ -3884,6 +3884,15 @@ void rtl8xxxu_init_burst(struct rtl8xxxu_priv *priv)
 	rtl8xxxu_write8(priv, REG_RSV_CTRL, val8);
 }
 
+static u8 rtl8xxxu_max_acquired_macid(struct rtl8xxxu_priv *priv)
+{
+	u8 macid;
+
+	macid = find_last_bit(priv->mac_id_map, RTL8XXXU_MAX_MAC_ID_NUM);
+
+	return macid;
+}
+
 static u8 rtl8xxxu_acquire_macid(struct rtl8xxxu_priv *priv)
 {
 	u8 macid;
@@ -7499,6 +7508,7 @@ static int rtl8xxxu_sta_add(struct ieee80211_hw *hw,
 	struct rtl8xxxu_sta_info *sta_info = (struct rtl8xxxu_sta_info *)sta->drv_priv;
 	struct rtl8xxxu_vif *rtlvif = (struct rtl8xxxu_vif *)vif->drv_priv;
 	struct rtl8xxxu_priv *priv = hw->priv;
+	u8 max_mac_id;
 
 	mutex_lock(&priv->sta_mutex);
 	ewma_rssi_init(&sta_info->avg_rssi);
@@ -7508,6 +7518,11 @@ static int rtl8xxxu_sta_add(struct ieee80211_hw *hw,
 		if (sta_info->macid >= RTL8XXXU_MAX_MAC_ID_NUM) {
 			mutex_unlock(&priv->sta_mutex);
 			return -ENOSPC;
+		}
+
+		if (priv->rtl_chip == RTL8188E) {
+			max_mac_id = rtl8xxxu_max_acquired_macid(priv);
+			rtl8xxxu_write8(priv, REG_TX_REPORT_CTRL + 1, max_mac_id + 1);
 		}
 
 		rtl8xxxu_refresh_rate_mask(priv, 0, sta, true);
@@ -7535,10 +7550,16 @@ static int rtl8xxxu_sta_remove(struct ieee80211_hw *hw,
 {
 	struct rtl8xxxu_sta_info *sta_info = (struct rtl8xxxu_sta_info *)sta->drv_priv;
 	struct rtl8xxxu_priv *priv = hw->priv;
+	u8 max_mac_id;
 
 	mutex_lock(&priv->sta_mutex);
-	if (vif->type == NL80211_IFTYPE_AP)
+	if (vif->type == NL80211_IFTYPE_AP) {
 		rtl8xxxu_release_macid(priv, sta_info->macid);
+		if (priv->rtl_chip == RTL8188E) {
+			max_mac_id = rtl8xxxu_max_acquired_macid(priv);
+			rtl8xxxu_write8(priv, REG_TX_REPORT_CTRL + 1, max_mac_id + 1);
+		}
+	}
 	mutex_unlock(&priv->sta_mutex);
 
 	return 0;
