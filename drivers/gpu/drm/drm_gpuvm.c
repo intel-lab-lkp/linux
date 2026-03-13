@@ -2378,16 +2378,47 @@ op_unmap_cb(const struct drm_gpuvm_ops *fn, void *priv,
 	return fn->sm_step_unmap(&op, priv);
 }
 
+static bool can_merge(struct drm_gpuvm *gpuvm, const struct drm_gpuva *va,
+		      const struct drm_gpuva_op_map *new_map)
+{
+	struct drm_gpuva_op_map existing_map = {
+		.va.addr = va->va.addr,
+		.va.range = va->va.range,
+		.gem.offset = va->gem.offset,
+		.gem.obj = va->gem.obj,
+	};
+	const struct drm_gpuva_op_map *a = new_map, *b = &existing_map;
+
+	/* Only GEM-based mappings can be merged, and they must point to
+	 * the same GEM object.
+	 */
+	if (a->gem.obj != b->gem.obj || !a->gem.obj)
+		return false;
+
+	/* Order VAs for the rest of the checks. */
+	if (a->va.addr > b->va.addr)
+		swap(a, b);
+
+	/* We assume the caller already checked that VAs overlap or are
+	 * contiguous.
+	 */
+	if (drm_WARN_ON(gpuvm->drm, b->va.addr > a->va.addr + a->va.range))
+		return false;
+
+	/* We intentionally ignore u64 underflows because all we care about
+	 * here is whether the VA diff matches the GEM offset diff.
+	 */
+	return b->va.addr - a->va.addr == b->gem.offset - a->gem.offset;
+}
+
 static int
 __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 		   const struct drm_gpuvm_ops *ops, void *priv,
 		   const struct drm_gpuvm_map_req *req,
 		   bool madvise)
 {
-	struct drm_gem_object *req_obj = req->map.gem.obj;
 	const struct drm_gpuvm_map_req *op_map = madvise ? NULL : req;
 	struct drm_gpuva *va, *next;
-	u64 req_offset = req->map.gem.offset;
 	u64 req_range = req->map.va.range;
 	u64 req_addr = req->map.va.addr;
 	u64 req_end = req_addr + req_range;
@@ -2402,15 +2433,12 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 		u64 addr = va->va.addr;
 		u64 range = va->va.range;
 		u64 end = addr + range;
-		bool merge = !!va->gem.obj;
+		bool merge = can_merge(gpuvm, va, &req->map);
 
 		if (madvise && obj)
 			continue;
 
 		if (addr == req_addr) {
-			merge &= obj == req_obj &&
-				 offset == req_offset;
-
 			if (end == req_end) {
 				ret = op_unmap_cb(ops, priv, va, merge, madvise);
 				if (ret)
@@ -2455,8 +2483,6 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 			};
 			struct drm_gpuva_op_unmap u = { .va = va };
 
-			merge &= obj == req_obj &&
-				 offset + ls_range == req_offset;
 			u.keep = merge;
 
 			if (end == req_end) {
@@ -2506,10 +2532,6 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 				break;
 			}
 		} else if (addr > req_addr) {
-			merge &= obj == req_obj &&
-				 offset == req_offset +
-					   (addr - req_addr);
-
 			if (end == req_end) {
 				ret = op_unmap_cb(ops, priv, va, merge, madvise);
 				if (ret)
