@@ -1342,8 +1342,9 @@ static int __init r9a06g032_clocks_probe(struct platform_device *pdev)
 	/* Clear potentially pending resets */
 	writel(R9A06G032_SYSCTRL_WDA7RST_0 | R9A06G032_SYSCTRL_WDA7RST_1,
 	       clocks->reg + R9A06G032_SYSCTRL_RSTCTRL);
-	/* Allow software reset */
-	writel(R9A06G032_SYSCTRL_SWRST | R9A06G032_SYSCTRL_RSTEN_MRESET_EN,
+	/* Allow software reset and watchdog resets */
+	writel(R9A06G032_SYSCTRL_SWRST | R9A06G032_SYSCTRL_RSTEN_MRESET_EN |
+	       R9A06G032_SYSCTRL_WDA7RST_0 | R9A06G032_SYSCTRL_WDA7RST_1,
 	       clocks->reg + R9A06G032_SYSCTRL_RSTEN);
 
 	error = devm_register_sys_off_handler(dev, SYS_OFF_MODE_RESTART, SYS_OFF_PRIO_HIGH,
