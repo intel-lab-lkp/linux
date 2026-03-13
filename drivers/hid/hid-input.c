@@ -1830,9 +1830,9 @@ static void hidinput_led_worker(struct work_struct *work)
 					      led_work);
 	struct hid_field *field;
 	struct hid_report *report;
+	__u8 *buf, *data;
 	int ret;
 	u32 len;
-	__u8 *buf;
 
 	field = hidinput_get_led_field(hid);
 	if (!field)
@@ -1863,7 +1863,14 @@ static void hidinput_led_worker(struct work_struct *work)
 	if (!buf)
 		return;
 
-	hid_output_report(report, buf);
+	data = buf;
+	if (!report->id) {
+		data = &buf[1];
+		len++;
+	}
+
+	hid_output_report(report, data);
+
 	/* synchronous output report */
 	ret = hid_hw_output_report(hid, buf, len);
 	if (ret == -ENOSYS)
