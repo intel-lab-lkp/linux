@@ -1636,6 +1636,7 @@ static void hsw_configure_cpu_transcoder(const struct intel_crtc_state *crtc_sta
 		intel_cpu_transcoder_set_m2_n2(crtc, cpu_transcoder,
 					       &crtc_state->dp_m2_n2);
 	}
+	intel_cmtg_set_m_n(crtc_state);
 
 	intel_set_transcoder_timings(crtc_state);
 
