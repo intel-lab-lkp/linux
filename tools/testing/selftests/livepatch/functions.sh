@@ -339,6 +339,20 @@ function check_result {
 	fi
 }
 
+# check_sysfs_exists(modname, attr) - check sysfs attribute existence
+#	modname - livepatch module creating the sysfs interface
+#	attr - attribute name to be checked
+function check_sysfs_exists() {
+	local mod="$1"; shift
+	local attr="$1"; shift
+
+	if [[ ! -f "$SYSFS_KLP_DIR/$mod/$attr" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
 # check_sysfs_rights(modname, rel_path, expected_rights) - check sysfs
 # path permissions
 #	modname - livepatch module creating the sysfs interface
