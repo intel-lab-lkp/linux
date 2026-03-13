@@ -964,7 +964,7 @@ static int vmci_transport_recv_listen(struct sock *sk,
 	 */
 	pending = vmci_transport_get_pending(sk, pkt);
 	if (pending) {
-		lock_sock(pending);
+		lock_sock_nested(pending, SINGLE_DEPTH_NESTING);
 
 		/* The local context ID may be out of date. */
 		vsock_sk(pending)->local_addr.svm_cid = pkt->dg.dst.context;
