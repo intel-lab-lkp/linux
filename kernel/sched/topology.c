@@ -1111,6 +1111,10 @@ build_overlap_sched_groups(struct sched_domain *sd, int cpu)
 		last = sg;
 		last->next = first;
 	}
+
+	if (WARN_ON_ONCE(!first))
+		return -EINVAL;
+
 	sd->groups = first;
 
 	return 0;
