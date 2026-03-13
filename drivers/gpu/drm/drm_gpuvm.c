@@ -2340,6 +2340,8 @@ op_map_cb(const struct drm_gpuvm_ops *fn, void *priv,
 	op.map.va.range = req->map.va.range;
 	op.map.gem.obj = req->map.gem.obj;
 	op.map.gem.offset = req->map.gem.offset;
+	op.map.gem.repeat_range = req->map.gem.repeat_range;
+	op.map.flags = req->map.flags;
 
 	return fn->sm_step_map(&op, priv);
 }
@@ -2410,10 +2412,54 @@ static bool can_merge(struct drm_gpuvm *gpuvm, const struct drm_gpuva *va,
 	if (drm_WARN_ON(gpuvm->drm, b->va.addr > a->va.addr + a->va.range))
 		return false;
 
+	if (a->flags & DRM_GPUVA_REPEAT) {
+		u64 va_diff = b->va.addr - a->va.addr;
+
+		/* If this is a repeated mapping, both the GEM range
+		 * and offset must match.
+		 */
+		if (a->gem.repeat_range != b->gem.repeat_range ||
+		    a->gem.offset != b->gem.offset)
+			return false;
+
+		/* The difference between the VA addresses must be a
+		 * multiple of the repeated range, otherwise there's
+		 * a shift.
+		 */
+		if (do_div(va_diff, a->gem.repeat_range))
+			return false;
+
+		return true;
+	}
+
 	/* We intentionally ignore u64 underflows because all we care about
 	 * here is whether the VA diff matches the GEM offset diff.
 	 */
 	return b->va.addr - a->va.addr == b->gem.offset - a->gem.offset;
+}
+
+static int validate_map_request(struct drm_gpuvm *gpuvm,
+				const struct drm_gpuva_op_map *op)
+{
+	if (unlikely(!drm_gpuvm_range_valid(gpuvm, op->va.addr, op->va.range)))
+		return -EINVAL;
+
+	if (op->flags & DRM_GPUVA_REPEAT) {
+		u64 va_range = op->va.range;
+
+		/* For a repeated mapping, GEM range must be > 0
+		 * and a multiple of the VA range.
+		 */
+		if (unlikely(!op->gem.repeat_range ||
+			     va_range < op->gem.repeat_range ||
+			     do_div(va_range, op->gem.repeat_range)))
+			return -EINVAL;
+	}
+
+	if (op->flags & DRM_GPUVA_INVALIDATED)
+		return -EINVAL;
+
+	return 0;
 }
 
 static int
@@ -2429,7 +2475,8 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 	u64 req_end = req_addr + req_range;
 	int ret;
 
-	if (unlikely(!drm_gpuvm_range_valid(gpuvm, req_addr, req_range)))
+	ret = validate_map_request(gpuvm, &req->map);
+	if (unlikely(ret))
 		return -EINVAL;
 
 	drm_gpuvm_for_each_va_range_safe(va, next, gpuvm, req_addr, req_end) {
@@ -2463,7 +2510,9 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 					.va.addr = req_end,
 					.va.range = range - req_range,
 					.gem.obj = obj,
-					.gem.offset = offset + req_range,
+					.gem.repeat_range = va->gem.repeat_range,
+					.gem.offset = offset +
+						(va->flags & DRM_GPUVA_REPEAT ? 0 : req_range),
 					.flags = va->flags,
 				};
 				struct drm_gpuva_op_unmap u = {
@@ -2485,6 +2534,7 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 				.va.addr = addr,
 				.va.range = ls_range,
 				.gem.obj = obj,
+				.gem.repeat_range = va->gem.repeat_range,
 				.gem.offset = offset,
 				.flags = va->flags,
 			};
@@ -2526,7 +2576,9 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 					.va.addr = req_end,
 					.va.range = end - req_end,
 					.gem.obj = obj,
-					.gem.offset = offset + ls_range + req_range,
+					.gem.repeat_range = va->gem.repeat_range,
+					.gem.offset = offset + (va->flags & DRM_GPUVA_REPEAT ?
+								0 : ls_range + req_range),
 					.flags = va->flags,
 				};
 
@@ -2560,7 +2612,9 @@ __drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm,
 					.va.addr = req_end,
 					.va.range = end - req_end,
 					.gem.obj = obj,
-					.gem.offset = offset + req_end - addr,
+					.gem.repeat_range = va->gem.repeat_range,
+					.gem.offset = offset +
+						(va->flags & DRM_GPUVA_REPEAT ? 0 : req_end - addr),
 					.flags = va->flags,
 				};
 				struct drm_gpuva_op_unmap u = {
@@ -2612,6 +2666,7 @@ __drm_gpuvm_sm_unmap(struct drm_gpuvm *gpuvm,
 			prev.va.addr = addr;
 			prev.va.range = req_addr - addr;
 			prev.gem.obj = obj;
+			prev.gem.repeat_range = va->gem.repeat_range;
 			prev.gem.offset = offset;
 			prev.flags = va->flags;
 
@@ -2622,7 +2677,9 @@ __drm_gpuvm_sm_unmap(struct drm_gpuvm *gpuvm,
 			next.va.addr = req_end;
 			next.va.range = end - req_end;
 			next.gem.obj = obj;
-			next.gem.offset = offset + (req_end - addr);
+			next.gem.repeat_range = va->gem.repeat_range;
+			next.gem.offset = offset +
+				(va->flags & DRM_GPUVA_REPEAT ? 0 : req_end - addr);
 			next.flags = va->flags;
 
 			next_split = true;
