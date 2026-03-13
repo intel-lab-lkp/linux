@@ -181,6 +181,18 @@ static struct timbgpio_platform_data
 	.irq_base = 200,
 };
 
+static const struct property_entry timberdale_gpio_properties[] = {
+	PROPERTY_ENTRY_U32("ngpios", GPIO_NR_PINS),
+	PROPERTY_ENTRY_U32("intel,gpio-base", 0),
+	PROPERTY_ENTRY_U32("intel,irq-base", 200),
+	{ }
+};
+
+static const struct software_node timberdale_gpio_swnode = {
+	.name = "timb-gpio",
+	.properties = timberdale_gpio_properties,
+};
+
 static const struct resource timberdale_gpio_resources[] = {
 	{
 		.start	= GPIOOFFSET,
@@ -392,6 +404,7 @@ static const struct mfd_cell timberdale_cells_bar0_cfg0[] = {
 		.resources = timberdale_gpio_resources,
 		.platform_data = &timberdale_gpio_platform_data,
 		.pdata_size = sizeof(timberdale_gpio_platform_data),
+		.swnode = &timberdale_gpio_swnode,
 	},
 	{
 		.name = "timb-video",
@@ -454,6 +467,7 @@ static const struct mfd_cell timberdale_cells_bar0_cfg1[] = {
 		.resources = timberdale_gpio_resources,
 		.platform_data = &timberdale_gpio_platform_data,
 		.pdata_size = sizeof(timberdale_gpio_platform_data),
+		.swnode = &timberdale_gpio_swnode,
 	},
 	{
 		.name = "timb-mlogicore",
@@ -516,6 +530,7 @@ static const struct mfd_cell timberdale_cells_bar0_cfg2[] = {
 		.resources = timberdale_gpio_resources,
 		.platform_data = &timberdale_gpio_platform_data,
 		.pdata_size = sizeof(timberdale_gpio_platform_data),
+		.swnode = &timberdale_gpio_swnode,
 	},
 	{
 		.name = "timb-video",
@@ -566,6 +581,7 @@ static const struct mfd_cell timberdale_cells_bar0_cfg3[] = {
 		.resources = timberdale_gpio_resources,
 		.platform_data = &timberdale_gpio_platform_data,
 		.pdata_size = sizeof(timberdale_gpio_platform_data),
+		.swnode = &timberdale_gpio_swnode,
 	},
 	{
 		.name = "timb-video",
