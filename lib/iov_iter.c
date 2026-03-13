@@ -853,10 +853,10 @@ unsigned long iov_iter_alignment(const struct iov_iter *i)
 
 	/* iovec and kvec have identical layouts */
 	if (likely(iter_is_iovec(i) || iov_iter_is_kvec(i)))
-		return iov_iter_alignment_iovec(i);
+		return i->count ? iov_iter_alignment_iovec(i) : 0;
 
 	if (iov_iter_is_bvec(i))
-		return iov_iter_alignment_bvec(i);
+		return i->count ? iov_iter_alignment_bvec(i) : 0;
 
 	/* With both xarray and folioq types, we're dealing with whole folios. */
 	if (iov_iter_is_folioq(i))
