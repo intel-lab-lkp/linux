@@ -378,11 +378,13 @@ static ssize_t numa_node_store(struct device *dev,
 	if (node != NUMA_NO_NODE && !node_online(node))
 		return -EINVAL;
 
-	add_taint(TAINT_FIRMWARE_WORKAROUND, LOCKDEP_STILL_OK);
-	pci_alert(pdev, FW_BUG "Overriding NUMA node to %d.  Contact your vendor for updates.",
-		  node);
+	if (node != dev->numa_node) {
+		add_taint(TAINT_FIRMWARE_WORKAROUND, LOCKDEP_STILL_OK);
+		pci_alert(pdev, FW_BUG "Overriding NUMA node to %d.  Contact your vendor for updates.",
+			  node);
+		dev->numa_node = node;
+	}
 
-	dev->numa_node = node;
 	return count;
 }
 
