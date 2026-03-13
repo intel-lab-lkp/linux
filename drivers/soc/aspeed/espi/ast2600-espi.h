@@ -9,6 +9,7 @@
 #include <linux/bits.h>
 #include <linux/irqreturn.h>
 #include "aspeed-espi.h"
+#include "aspeed-espi-comm.h"
 
 /* registers */
 #define ESPI_CTRL				0x000
@@ -27,13 +28,15 @@
 #define   ESPI_CTRL_PERIF_NP_TX_DMA_EN		BIT(19)
 #define   ESPI_CTRL_PERIF_PC_TX_DMA_EN		BIT(17)
 #define   ESPI_CTRL_PERIF_PC_RX_DMA_EN		BIT(16)
-#define   ESPI_CTRL_FLASH_EDAF_MODE		GENMASK(11, 10)
+#define   ESPI_CTRL_FLASH_TAFS_MODE		GENMASK(11, 10)
 #define   ESPI_CTRL_VW_GPIO_SW			BIT(9)
 #define   ESPI_CTRL_FLASH_SW_RDY		BIT(7)
 #define   ESPI_CTRL_OOB_SW_RDY			BIT(4)
 #define   ESPI_CTRL_VW_SW_RDY			BIT(3)
 #define   ESPI_CTRL_PERIF_SW_RDY		BIT(1)
 #define ESPI_STS				0x004
+#define   ESPI_STS_FLASH_TX_BUSY		BIT(23)
+#define   ESPI_STS_FLASH_RX_BUSY		BIT(22)
 #define ESPI_INT_STS				0x008
 #define   ESPI_INT_STS_RST_DEASSERT		BIT(31)
 #define   ESPI_INT_STS_OOB_RX_TMOUT		BIT(23)
@@ -147,9 +150,9 @@
 #define ESPI_PERIF_MMBI_TADDR			ESPI_PERIF_MCYC_TADDR
 #define ESPI_PERIF_MCYC_MASK			0x08c
 #define ESPI_PERIF_MMBI_MASK			ESPI_PERIF_MCYC_MASK
-#define ESPI_FLASH_EDAF_TADDR			0x090
-#define   ESPI_FLASH_EDAF_TADDR_BASE		GENMASK(31, 24)
-#define   ESPI_FLASH_EDAF_TADDR_MASK		GENMASK(15, 8)
+#define ESPI_FLASH_TAFS_TADDR			0x090
+#define   ESPI_FLASH_TAFS_TADDR_BASE		GENMASK(31, 24)
+#define   ESPI_FLASH_TAFS_TADDR_MASK		GENMASK(15, 8)
 #define ESPI_VW_SYSEVT_INT_EN			0x094
 #define ESPI_VW_SYSEVT				0x098
 #define   ESPI_VW_SYSEVT_HOST_RST_ACK		BIT(27)
@@ -287,5 +290,13 @@ int ast2600_espi_oob_probe(struct aspeed_espi *espi);
 int ast2600_espi_oob_remove(struct aspeed_espi *espi);
 int ast2600_espi_flash_probe(struct aspeed_espi *espi);
 int ast2600_espi_flash_remove(struct aspeed_espi *espi);
+int ast2600_espi_flash_get_hdr(struct aspeed_espi *espi,
+			       struct espi_comm_hdr *hdr);
+int ast2600_espi_flash_get_pkt(struct aspeed_espi *espi, void *pkt_buf,
+			       size_t pkt_size);
+int ast2600_espi_flash_put_pkt(struct aspeed_espi *espi,
+			       struct espi_flash_cmplt hdr, void *pkt_buf,
+			       size_t pkt_size);
+void ast2600_espi_flash_clr_pkt(struct aspeed_espi *espi);
 irqreturn_t ast2600_espi_isr(int irq, void *arg);
 #endif

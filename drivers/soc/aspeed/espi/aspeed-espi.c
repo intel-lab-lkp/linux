@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/device/devres.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -13,7 +14,10 @@
 #include <linux/reset.h>
 
 #include "aspeed-espi.h"
+#include "aspeed-espi-comm.h"
 #include "ast2600-espi.h"
+#include "espi_storage.h"
+
 
 struct aspeed_espi_ops {
 	void (*espi_pre_init)(struct aspeed_espi *espi);
@@ -21,6 +25,16 @@ struct aspeed_espi_ops {
 	void (*espi_deinit)(struct aspeed_espi *espi);
 	int (*espi_perif_probe)(struct aspeed_espi *espi);
 	int (*espi_perif_remove)(struct aspeed_espi *espi);
+	int (*espi_flash_probe)(struct aspeed_espi *espi);
+	int (*espi_flash_remove)(struct aspeed_espi *espi);
+	int (*espi_flash_get_hdr)(struct aspeed_espi *espi,
+				  struct espi_comm_hdr *hdr);
+	int (*espi_flash_get_pkt)(struct aspeed_espi *espi, void *pkt_buf,
+				  size_t pkt_size);
+	int (*espi_flash_put_pkt)(struct aspeed_espi *espi,
+				  struct espi_flash_cmplt hdr, void *pkt_buf,
+				  size_t pkt_size);
+	void (*espi_flash_clr_pkt)(struct aspeed_espi *espi);
 	irqreturn_t (*espi_isr)(int irq, void *espi);
 };
 
@@ -30,6 +44,12 @@ static const struct aspeed_espi_ops aspeed_espi_ast2600_ops = {
 	.espi_deinit = ast2600_espi_deinit,
 	.espi_perif_probe = ast2600_espi_perif_probe,
 	.espi_perif_remove = ast2600_espi_perif_remove,
+	.espi_flash_probe = ast2600_espi_flash_probe,
+	.espi_flash_remove = ast2600_espi_flash_remove,
+	.espi_flash_get_hdr = ast2600_espi_flash_get_hdr,
+	.espi_flash_get_pkt = ast2600_espi_flash_get_pkt,
+	.espi_flash_put_pkt = ast2600_espi_flash_put_pkt,
+	.espi_flash_clr_pkt = ast2600_espi_flash_clr_pkt,
 	.espi_isr = ast2600_espi_isr,
 };
 
@@ -38,6 +58,207 @@ static const struct of_device_id aspeed_espi_of_matches[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(of, aspeed_espi_of_matches);
+
+static void aspeed_espi_flash_handle_lun(struct aspeed_espi *espi)
+{
+	u32 cyc, len, tag, pkt_len, addr, offset;
+	struct espi_flash_cmplt resp_pkt;
+	struct aspeed_espi_flash *flash;
+	struct espi_flash_rwe *req_pkt;
+	struct espi_comm_hdr hdr;
+	u8 *payload;
+	u8 *buf;
+	int rc;
+
+	payload = NULL;
+	buf = NULL;
+
+	flash = &espi->flash;
+	if (!flash->lun || !flash->lun->filp)
+		return;
+
+	rc = espi->ops->espi_flash_get_hdr(espi, &hdr);
+	if (rc) {
+		dev_err(espi->dev, "espi_flash_handle_lun: get_hdr failed rc=%d\n", rc);
+		return;
+	}
+
+	if (hdr.cyc != ESPI_FLASH_WRITE && hdr.cyc != ESPI_FLASH_READ &&
+	    hdr.cyc != ESPI_FLASH_ERASE) {
+		dev_err(espi->dev, "espi_flash_handle_lun: invalid cyc=0x%x\n",
+			hdr.cyc);
+		return;
+	}
+
+	cyc = hdr.cyc;
+	len = (hdr.len_h << 8) | hdr.len_l;
+	tag = hdr.tag;
+
+	len = len ? len : ESPI_MAX_PLD_LEN;
+	pkt_len = len + sizeof(struct espi_flash_rwe);
+
+	payload = kzalloc(pkt_len, GFP_KERNEL);
+	if (!payload)
+		return;
+
+	rc = espi->ops->espi_flash_get_pkt(espi, payload + sizeof(hdr), pkt_len - sizeof(hdr));
+	if (rc) {
+		dev_err(espi->dev, "espi_flash_handle_lun: get_pkt failed rc=%d\n", rc);
+		goto out_free;
+	}
+
+	req_pkt = (struct espi_flash_rwe *)payload;
+	req_pkt->cyc = hdr.cyc;
+	req_pkt->len_h = hdr.len_h;
+	req_pkt->len_l = hdr.len_l;
+	req_pkt->tag = hdr.tag;
+
+	addr = be32_to_cpu(req_pkt->addr_be);
+
+	switch (cyc) {
+	case ESPI_FLASH_ERASE:
+		rc = aspeed_espi_lun_erase_bytes(flash->lun, addr, len);
+		resp_pkt.cyc = (rc) ? ESPI_FLASH_UNSUC_CMPLT : ESPI_FLASH_SUC_CMPLT;
+		resp_pkt.len_h = 0;
+		resp_pkt.len_l = 0;
+		resp_pkt.tag = tag;
+		espi->ops->espi_flash_put_pkt(espi, resp_pkt, NULL, 0);
+		break;
+	case ESPI_FLASH_WRITE:
+		rc = aspeed_espi_lun_rw_bytes(flash->lun, true, addr, len,
+					      &payload[sizeof(struct espi_flash_rwe)]);
+
+		resp_pkt.cyc = (rc) ? ESPI_FLASH_UNSUC_CMPLT : ESPI_FLASH_SUC_CMPLT;
+		resp_pkt.len_h = 0;
+		resp_pkt.len_l = 0;
+		resp_pkt.tag = tag;
+		espi->ops->espi_flash_put_pkt(espi, resp_pkt, NULL, 0);
+		break;
+	case ESPI_FLASH_READ:
+		buf = kzalloc(len, GFP_KERNEL);
+		if (!buf)
+			goto out_free;
+
+		rc = aspeed_espi_lun_rw_bytes(flash->lun, false, addr, len, buf);
+		if (rc) {
+			resp_pkt.cyc = ESPI_FLASH_UNSUC_CMPLT;
+			resp_pkt.len_h = 0;
+			resp_pkt.len_l = 0;
+			resp_pkt.tag = tag;
+			espi->ops->espi_flash_put_pkt(espi, resp_pkt, NULL, 0);
+		} else {
+			if (len <= ESPI_PLD_LEN_MIN) {
+				resp_pkt.cyc = ESPI_FLASH_SUC_CMPLT_D_ONLY;
+				resp_pkt.tag = tag;
+				resp_pkt.len_h = (len >> 8) & 0xff;
+				resp_pkt.len_l = len & 0xff;
+				espi->ops->espi_flash_put_pkt(espi, resp_pkt, buf, len);
+			} else {
+				resp_pkt.cyc = ESPI_FLASH_SUC_CMPLT_D_FIRST;
+				resp_pkt.tag = tag;
+				resp_pkt.len_h = (ESPI_PLD_LEN_MIN >> 8) & 0xff;
+				resp_pkt.len_l = ESPI_PLD_LEN_MIN & 0xff;
+				espi->ops->espi_flash_put_pkt(espi, resp_pkt, buf,
+							      ESPI_PLD_LEN_MIN);
+				offset = ESPI_PLD_LEN_MIN;
+				len -= ESPI_PLD_LEN_MIN;
+
+				while (len > ESPI_PLD_LEN_MIN) {
+					resp_pkt.cyc = ESPI_FLASH_SUC_CMPLT_D_MIDDLE;
+					espi->ops->espi_flash_put_pkt(espi, resp_pkt,
+								     &buf[offset],
+								     ESPI_PLD_LEN_MIN);
+					offset += ESPI_PLD_LEN_MIN;
+					len -= ESPI_PLD_LEN_MIN;
+				}
+
+				resp_pkt.cyc = ESPI_FLASH_SUC_CMPLT_D_LAST;
+				resp_pkt.len_h = (len >> 8) & 0xff;
+				resp_pkt.len_l = len & 0xff;
+				espi->ops->espi_flash_put_pkt(espi, resp_pkt,
+							     &buf[offset], len);
+			}
+		}
+		break;
+	default:
+		dev_err(espi->dev, "espi_flash_handle_lun: unsupported cyc=0x%x\n", cyc);
+		break;
+	}
+	espi->ops->espi_flash_clr_pkt(espi);
+out_free:
+	kfree(buf);
+	kfree(payload);
+}
+
+static void aspeed_espi_flash_rx_work(struct work_struct *work)
+{
+	struct aspeed_espi_flash *flash = container_of(work, struct aspeed_espi_flash, rx_work);
+	struct aspeed_espi *espi = container_of(flash, struct aspeed_espi, flash);
+
+	mutex_lock(&flash->tx_mtx);
+	aspeed_espi_flash_handle_lun(espi);
+	mutex_unlock(&flash->tx_mtx);
+}
+
+static int aspeed_espi_flash_probe(struct aspeed_espi *espi)
+{
+	struct aspeed_espi_flash *flash;
+	struct device *dev;
+
+	flash = &espi->flash;
+	dev = espi->dev;
+
+	flash->dma.enable = of_property_read_bool(dev->of_node, "aspeed,flash-dma-mode");
+	if (flash->dma.enable) {
+		flash->dma.tx_virt = dmam_alloc_coherent(dev, PAGE_SIZE, &flash->dma.tx_addr,
+							 GFP_KERNEL);
+		if (!flash->dma.tx_virt) {
+			dev_err(dev, "cannot allocate DMA TX buffer\n");
+			return -ENOMEM;
+		}
+
+		flash->dma.rx_virt = dmam_alloc_coherent(dev, PAGE_SIZE, &flash->dma.rx_addr,
+							 GFP_KERNEL);
+		if (!flash->dma.rx_virt) {
+			dev_err(dev, "cannot allocate DMA RX buffer\n");
+			return -ENOMEM;
+		}
+	}
+
+	mutex_init(&flash->tx_mtx);
+	INIT_WORK(&flash->rx_work, aspeed_espi_flash_rx_work);
+
+	mutex_init(&espi->flash.lun_mtx);
+	espi->flash.lun = NULL;
+	espi->flash.lun_path[0] = '\0';
+	espi->flash.lun_ro = false;
+
+	return espi->ops->espi_flash_probe(espi);
+}
+
+static void aspeed_espi_flash_remove(struct aspeed_espi *espi)
+{
+	struct aspeed_espi_flash *flash;
+
+	flash = &espi->flash;
+
+	if (espi->ops->espi_flash_remove)
+		espi->ops->espi_flash_remove(espi);
+
+	cancel_work_sync(&flash->rx_work);
+
+	if (flash->dma.enable) {
+		dmam_free_coherent(espi->dev, PAGE_SIZE, flash->dma.tx_virt, flash->dma.tx_addr);
+		dmam_free_coherent(espi->dev, PAGE_SIZE, flash->dma.rx_virt, flash->dma.rx_addr);
+	}
+
+	mutex_destroy(&flash->lun_mtx);
+	mutex_destroy(&flash->tx_mtx);
+
+	flash->lun = NULL;
+	flash->lun_path[0] = '\0';
+	flash->lun_ro = false;
+}
 
 static int aspeed_espi_probe(struct platform_device *pdev)
 {
@@ -109,11 +330,17 @@ static int aspeed_espi_probe(struct platform_device *pdev)
 		}
 	}
 
+	rc = aspeed_espi_flash_probe(espi);
+	if (rc) {
+		dev_err(dev, "cannot init flash channel, rc=%d\n", rc);
+		goto err_remove_perif;
+	}
+
 	rc = devm_request_irq(dev, espi->irq, espi->ops->espi_isr, 0,
 			      dev_name(dev), espi);
 	if (rc) {
 		dev_err(dev, "cannot request IRQ\n");
-		goto err_deinit;
+		goto err_remove_flash;
 	}
 
 	if (espi->ops->espi_post_init)
@@ -125,12 +352,16 @@ static int aspeed_espi_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_remove_flash:
+	aspeed_espi_flash_remove(espi);
+err_remove_perif:
+	if (espi->ops->espi_perif_remove)
+		espi->ops->espi_perif_remove(espi);
 err_deinit:
 	if (espi->ops->espi_deinit)
 		espi->ops->espi_deinit(espi);
 	clk_disable_unprepare(espi->clk);
-
-	return rc;
+	return dev_err_probe(dev, rc, "%s failed\n", __func__);
 }
 
 static void aspeed_espi_remove(struct platform_device *pdev)
@@ -141,6 +372,8 @@ static void aspeed_espi_remove(struct platform_device *pdev)
 
 	if (!espi)
 		return;
+
+	aspeed_espi_flash_remove(espi);
 
 	if (espi->ops->espi_perif_remove)
 		espi->ops->espi_perif_remove(espi);
