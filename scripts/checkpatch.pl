@@ -2705,6 +2705,7 @@ sub process {
 	my $comment_edge = 0;
 	my $first_line = 0;
 	my $p1_prefix = '';
+	my $skip_residual_file = 0;
 
 	my $prev_values = 'E';
 
@@ -2885,6 +2886,7 @@ sub process {
 			$realfile = $1;
 			$realfile =~ s@^([^/]*)/@@ if (!$file);
 			$in_commit_log = 0;
+			$skip_residual_file = 0;
 			$found_file = 1;
 		} elsif ($line =~ /^\+\+\+\s+(\S+)/) {
 			$realfile = $1;
@@ -2917,6 +2919,15 @@ sub process {
 		}
 
 		if ($found_file) {
+			if ($realfile =~ /\.(orig|rej)$/) {
+				if (!$skip_residual_file) {
+					ERROR("RESIDUAL_FILE",
+					      "patch modifies a .$1 file: '$realfile', likely leftover from a failed patch application\n");
+				}
+				$skip_residual_file = 1;
+				next;
+			}
+			$skip_residual_file = 0;
 			if (is_maintained_obsolete($realfile)) {
 				WARN("OBSOLETE",
 				     "$realfile is marked as 'obsolete' in the MAINTAINERS hierarchy.  No unnecessary modifications please.\n");
@@ -2942,6 +2953,8 @@ sub process {
 
 			next;
 		}
+
+		next if ($skip_residual_file);
 
 		$here .= "FILE: $realfile:$realline:" if ($realcnt != 0);
 
