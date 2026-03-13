@@ -12,17 +12,31 @@
  * - Capability reporting covering all major SMMU features and configuration
  * - Extensible architecture designed for adding future debug functionality
  * - Comprehensive error handling and resource cleanup
+ * - Display of control registers (CR0, CR1, CR2) with bitfield decoding
+ * - Command and Event queue pointer monitoring (PROD/CONS)
+ *
+ * Register Information Displayed:
+ * - CR0: SMMU global control with enable states and queue enables
+ * - CR1/CR2: Additional control and configuration registers
+ * - CMDQ_PROD/CONS: Command queue producer and consumer pointers
+ * - EVTQ_PROD/CONS: Event queue producer and consumer pointers
  *
  * Directory Structure:
  * /sys/kernel/debug/iommu/arm_smmu_v3/
  * └── smmu0/
- *     └── capabilities    # SMMU feature capabilities and configuration
+ *     ├── capabilities    # SMMU feature capabilities and configuration
+ *     └── registers	   # SMMU Key registers
  *
  * The capabilities file provides detailed information about:
  * - Architecture version and translation stage support (Stage1/Stage2)
  * - System coherency, ATS, and PRI feature availability
  * - Stream table size and command/event queue depths
  * - All feature bits from the SMMU device structure
+ *
+ * The register display provides crucial visibility into:
+ * - SMMU operational state (enabled/disabled)
+ * - Queue operation and potential stalls
+ * - Configuration settings affecting all streams
  *
  * Copyright (C) 2025 HiSilicon Limited.
  * Author: Qinxin Xia <xiaqinxin@huawei.com>
@@ -68,6 +82,54 @@ static int smmu_debugfs_capabilities_show(struct seq_file *seq, void *v)
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(smmu_debugfs_capabilities);
+
+/**
+ * smmu_debugfs_registers_show() - Display SMMU register values
+ * @seq: seq_file to write to
+ * @v: private data (SMMU device)
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int smmu_debugfs_registers_show(struct seq_file *seq, void *v)
+{
+	struct arm_smmu_device *smmu = seq->private;
+	void __iomem *base;
+
+	if (!smmu || !smmu->base) {
+		seq_puts(seq, "SMMU not available\n");
+		return 0;
+	}
+
+	base = smmu->base;
+
+	seq_puts(seq, "SMMUv3 Key Registers:\n");
+
+	/* 32-bit control registers */
+	seq_printf(seq, "CR0: 0x%08x [%s%s%s]\n",
+		   readl_relaxed(base + ARM_SMMU_CR0),
+		   readl_relaxed(base + ARM_SMMU_CR0) & CR0_SMMUEN ?
+		   "Enabled " : "Disabled ",
+		   readl_relaxed(base + ARM_SMMU_CR0) & CR0_EVTQEN ?
+		   "EventQ " : "",
+		   readl_relaxed(base + ARM_SMMU_CR0) & CR0_CMDQEN ?
+		   "CmdQ " : "");
+
+	seq_printf(seq, "CR1: 0x%08x\n", readl_relaxed(base + ARM_SMMU_CR1));
+	seq_printf(seq, "CR2: 0x%08x\n", readl_relaxed(base + ARM_SMMU_CR2));
+
+	/* 32-bit queue pointer registers */
+	seq_printf(seq, "CMDQ_PROD: 0x%08x\n",
+		   readl_relaxed(base + ARM_SMMU_CMDQ_PROD));
+	seq_printf(seq, "CMDQ_CONS: 0x%08x\n",
+		   readl_relaxed(base + ARM_SMMU_CMDQ_CONS));
+	seq_printf(seq, "EVTQ_PROD: 0x%08x\n",
+		   readl_relaxed(base + ARM_SMMU_EVTQ_PROD));
+	seq_printf(seq, "EVTQ_CONS: 0x%08x\n",
+		   readl_relaxed(base + ARM_SMMU_EVTQ_CONS));
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(smmu_debugfs_registers);
 
 /**
  * arm_smmu_debugfs_setup() - Initialize debugfs for SMMU device
@@ -118,6 +180,10 @@ int arm_smmu_debugfs_setup(struct arm_smmu_device *smmu, phys_addr_t ioaddr)
 	/* Create capabilities file */
 	if (!debugfs_create_file("capabilities", 0444, smmu_dir, smmu,
 				 &smmu_debugfs_capabilities_fops))
+		goto err_cleanup;
+
+	if (!debugfs_create_file("registers", 0444, smmu_dir, smmu,
+				 &smmu_debugfs_registers_fops))
 		goto err_cleanup;
 
 	pr_info("SMMUv3 debugfs initialized for smmu%pa\n", &ioaddr);
