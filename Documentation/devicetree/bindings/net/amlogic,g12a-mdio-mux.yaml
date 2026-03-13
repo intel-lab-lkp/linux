@@ -69,8 +69,7 @@ examples:
             #size-cells = <0>;
 
             ethernet-phy@8 {
-                compatible = "ethernet-phy-id0180.3301",
-                             "ethernet-phy-ieee802.3-c22";
+                compatible = "ethernet-phy-id0180.3301";
                 interrupts = <GIC_SPI 9 IRQ_TYPE_LEVEL_HIGH>;
                 reg = <8>;
                 max-speed = <100>;

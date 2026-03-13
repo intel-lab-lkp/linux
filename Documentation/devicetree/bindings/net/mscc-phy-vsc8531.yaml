@@ -32,7 +32,6 @@ properties:
       - enum:
           - ethernet-phy-id0007.0570 # VSC8531
           - ethernet-phy-id0007.0772 # VSC8541
-      - const: ethernet-phy-ieee802.3-c22
 
   vsc8531,vddmac:
     $ref: /schemas/types.yaml#/definitions/uint32
@@ -120,7 +119,7 @@ examples:
         #size-cells = <0>;
 
         ethernet-phy@0 {
-            compatible = "ethernet-phy-id0007.0772", "ethernet-phy-ieee802.3-c22";
+            compatible = "ethernet-phy-id0007.0772";
             reg = <0>;
             vsc8531,vddmac = <3300>;
             vsc8531,edge-slowdown = <7>;
