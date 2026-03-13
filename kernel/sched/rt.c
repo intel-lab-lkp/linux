@@ -2876,6 +2876,7 @@ static int sched_rt_handler(const struct ctl_table *table, int write, void *buff
 {
 	int old_period, old_runtime;
 	static DEFINE_MUTEX(mutex);
+	bool rebuild = false;
 	int ret;
 
 	mutex_lock(&mutex);
@@ -2900,6 +2901,7 @@ static int sched_rt_handler(const struct ctl_table *table, int write, void *buff
 
 		sched_rt_do_global();
 		sched_dl_do_global();
+		rebuild = true;
 	}
 	if (0) {
 undo:
@@ -2913,7 +2915,8 @@ undo:
 	 * After changing maximum available bandwidth for DEADLINE, we need to
 	 * recompute per root domain and per cpus variables accordingly.
 	 */
-	rebuild_sched_domains();
+	if (rebuild)
+		rebuild_sched_domains();
 
 	return ret;
 }
