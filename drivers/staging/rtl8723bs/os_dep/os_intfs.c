@@ -1124,35 +1124,28 @@ static int rtw_resume_process_normal(struct adapter *padapter)
 	struct pwrctrl_priv *pwrpriv;
 	struct mlme_priv *pmlmepriv;
 
-	int ret = _SUCCESS;
-
-	if (!padapter) {
-		ret = -1;
-		goto exit;
-	}
+	if (!padapter)
+		return -1;
 
 	pnetdev = padapter->pnetdev;
 	pwrpriv = adapter_to_pwrctl(padapter);
 	pmlmepriv = &padapter->mlmepriv;
 	/*  interface init */
 	/* if (sdio_init(adapter_to_dvobj(padapter)) != _SUCCESS) */
-	if ((padapter->intf_init) && (padapter->intf_init(adapter_to_dvobj(padapter)) != _SUCCESS)) {
-		ret = -1;
-		goto exit;
-	}
+	if ((padapter->intf_init) && (padapter->intf_init(adapter_to_dvobj(padapter)) != _SUCCESS))
+		return -1;
+
 	rtw_hal_disable_interrupt(padapter);
 	/* if (sdio_alloc_irq(adapter_to_dvobj(padapter)) != _SUCCESS) */
-	if ((padapter->intf_alloc_irq) && (padapter->intf_alloc_irq(adapter_to_dvobj(padapter)) != _SUCCESS)) {
-		ret = -1;
-		goto exit;
-	}
+	if ((padapter->intf_alloc_irq) && (padapter->intf_alloc_irq(adapter_to_dvobj(padapter)) != _SUCCESS))
+		return -1;
 
 	rtw_reset_drv_sw(padapter);
 	pwrpriv->bkeepfwalive = false;
 
 	if (pm_netdev_open(pnetdev, true) != 0) {
-		ret = -1;
-		goto exit;
+		padapter->intf_free_irq(adapter_to_dvobj(padapter));
+		return -1;
 	}
 
 	netif_device_attach(pnetdev);
@@ -1168,8 +1161,7 @@ static int rtw_resume_process_normal(struct adapter *padapter)
 		rtw_ap_restore_network(padapter);
 	}
 
-exit:
-	return ret;
+	return _SUCCESS;
 }
 
 int rtw_resume_common(struct adapter *padapter)
