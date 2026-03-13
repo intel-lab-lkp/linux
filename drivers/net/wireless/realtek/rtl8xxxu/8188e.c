@@ -1550,14 +1550,14 @@ static void rtl8188e_rate_decision(struct rtl8xxxu_ra_info *ra)
 	}
 
 	if (ra->decision_rate == ra->pre_rate)
-		ra->dynamic_tx_rpt_timing_counter++;
+		priv->dynamic_tx_rpt_timing_counter++;
 	else
-		ra->dynamic_tx_rpt_timing_counter = 0;
+		priv->dynamic_tx_rpt_timing_counter = 0;
 
-	if (ra->dynamic_tx_rpt_timing_counter >= 4) {
+	if (priv->dynamic_tx_rpt_timing_counter >= 4) {
 		/* Rate didn't change 4 times, extend RPT timing */
 		rtl8188e_set_tx_rpt_timing(ra, INCREASE_TIMING);
-		ra->dynamic_tx_rpt_timing_counter = 0;
+		priv->dynamic_tx_rpt_timing_counter = 0;
 	}
 
 	ra->pre_rate = ra->decision_rate;

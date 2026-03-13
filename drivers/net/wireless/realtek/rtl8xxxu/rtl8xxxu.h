@@ -1756,7 +1756,6 @@ struct rtl8xxxu_ra_info {
 	u16 drop;
 	u16 rpt_time;
 	u16 pre_min_rpt_time;
-	u8 dynamic_tx_rpt_timing_counter;
 	u8 ra_waiting_counter;
 	u8 ra_pending_counter;
 	u8 ra_drop_after_down;
@@ -1917,6 +1916,7 @@ struct rtl8xxxu_priv {
 	struct rtl8xxxu_ra_report ra_report;
 	struct rtl8xxxu_cfo_tracking cfo_tracking;
 	struct rtl8xxxu_ra_info ra_info;
+	u8 dynamic_tx_rpt_timing_counter; // 8188e specific
 
 	bool led_registered;
 	char led_name[32];
