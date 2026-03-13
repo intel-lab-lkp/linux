@@ -825,6 +825,14 @@ enum drm_dp_quirk {
 	 */
 	DP_DPCD_QUIRK_NO_PSR,
 	/**
+	 * @DP_DPCD_QUIRK_NO_PANEL_REPLAY:
+	 *
+	 * The device does not support Panel Replay even if reports
+	 * that it supports or driver still need to implement proper
+	 * handling for such device.
+	 */
+	DP_DPCD_QUIRK_NO_PANEL_REPLAY,
+	/**
 	 * @DP_DPCD_QUIRK_NO_SINK_COUNT:
 	 *
 	 * The device does not set SINK_COUNT to a non-zero value.
