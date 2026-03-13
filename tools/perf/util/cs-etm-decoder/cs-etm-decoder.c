@@ -739,7 +739,8 @@ cs_etm_decoder__new(int decoders, struct cs_etm_decoder_params *d_params,
 		goto err_free_decoder;
 
 	/* init raw frame logging if required */
-	cs_etm_decoder__init_raw_frame_logging(d_params, decoder);
+	if (format == OCSD_TRC_SRC_FRAME_FORMATTED)
+		cs_etm_decoder__init_raw_frame_logging(d_params, decoder);
 
 	for (i = 0; i < decoders; i++) {
 		ret = cs_etm_decoder__create_etm_decoder(d_params,
