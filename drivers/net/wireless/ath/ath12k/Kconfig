@@ -18,6 +18,7 @@ config ATH12K
 config ATH12K_AHB
 	bool "QTI ath12k AHB support"
 	depends on ATH12K && REMOTEPROC
+	depends on QCOM_RPROC_COMMON=y || ATH12K=m
 	select QCOM_MDT_LOADER
 	select QCOM_SCM
 	help
