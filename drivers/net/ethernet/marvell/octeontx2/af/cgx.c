@@ -1725,14 +1725,10 @@ static int cgx_lmac_init(struct cgx *cgx)
 		cgx->lmac_count = cgx->max_lmac_per_mac;
 
 	for (i = 0; i < cgx->lmac_count; i++) {
-		lmac = kzalloc_obj(struct lmac);
+		lmac = kzalloc_flex(struct lmac, name, sizeof("cgx_fwi_xxx_yyy"));
 		if (!lmac)
 			return -ENOMEM;
-		lmac->name = kcalloc(1, sizeof("cgx_fwi_xxx_yyy"), GFP_KERNEL);
-		if (!lmac->name) {
-			err = -ENOMEM;
-			goto err_lmac_free;
-		}
+
 		sprintf(lmac->name, "cgx_fwi_%u_%u", cgx->cgx_id, i);
 		if (cgx->mac_ops->non_contiguous_serdes_lane) {
 			lmac->lmac_id = __ffs64(lmac_list);
@@ -1750,7 +1746,7 @@ static int cgx_lmac_init(struct cgx *cgx)
 
 		err = rvu_alloc_bitmap(&lmac->mac_to_index_bmap);
 		if (err)
-			goto err_name_free;
+			goto err_lmac_free;
 
 		/* Reserve first entry for default MAC address */
 		set_bit(0, lmac->mac_to_index_bmap.bmap);
@@ -1798,8 +1794,6 @@ err_rx_fc_bmap_free:
 	rvu_free_bitmap(&lmac->rx_fc_pfvf_bmap);
 err_dmac_bmap_free:
 	rvu_free_bitmap(&lmac->mac_to_index_bmap);
-err_name_free:
-	kfree(lmac->name);
 err_lmac_free:
 	kfree(lmac);
 	return err;
@@ -1825,7 +1819,6 @@ static int cgx_lmac_exit(struct cgx *cgx)
 		rvu_free_bitmap(&lmac->mac_to_index_bmap);
 		rvu_free_bitmap(&lmac->rx_fc_pfvf_bmap);
 		rvu_free_bitmap(&lmac->tx_fc_pfvf_bmap);
-		kfree(lmac->name);
 		kfree(lmac);
 	}
 
