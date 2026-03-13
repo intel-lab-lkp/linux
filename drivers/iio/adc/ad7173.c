@@ -367,7 +367,7 @@ static int ad7173_get_syscalib_mode(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad7173_write_syscalib(struct iio_dev *indio_dev,
-				     uintptr_t private,
+				     unsigned long private,
 				     const struct iio_chan_spec *chan,
 				     const char *buf, size_t len)
 {

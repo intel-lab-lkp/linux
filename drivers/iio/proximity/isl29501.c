@@ -256,7 +256,7 @@ err:
 }
 
 static ssize_t isl29501_read_ext(struct iio_dev *indio_dev,
-				 uintptr_t private,
+				 unsigned long private,
 				 const struct iio_chan_spec *chan,
 				 char *buf)
 {
@@ -378,7 +378,7 @@ static unsigned int isl29501_find_corr_exp(unsigned int val,
 }
 
 static ssize_t isl29501_write_ext(struct iio_dev *indio_dev,
-				  uintptr_t private,
+				  unsigned long private,
 				  const struct iio_chan_spec *chan,
 				  const char *buf, size_t len)
 {

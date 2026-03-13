@@ -487,7 +487,7 @@ static int ad5755_write_raw(struct iio_dev *indio_dev,
 	return ad5755_write(indio_dev, reg, val);
 }
 
-static ssize_t ad5755_read_powerdown(struct iio_dev *indio_dev, uintptr_t priv,
+static ssize_t ad5755_read_powerdown(struct iio_dev *indio_dev, unsigned long priv,
 	const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad5755_state *st = iio_priv(indio_dev);
@@ -496,7 +496,7 @@ static ssize_t ad5755_read_powerdown(struct iio_dev *indio_dev, uintptr_t priv,
 			  (bool)(st->pwr_down & (1 << chan->channel)));
 }
 
-static ssize_t ad5755_write_powerdown(struct iio_dev *indio_dev, uintptr_t priv,
+static ssize_t ad5755_write_powerdown(struct iio_dev *indio_dev, unsigned long priv,
 	struct iio_chan_spec const *chan, const char *buf, size_t len)
 {
 	bool pwr_down;

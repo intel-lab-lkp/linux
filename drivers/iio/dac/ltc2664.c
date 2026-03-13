@@ -284,7 +284,7 @@ static int ltc2664_write_raw(struct iio_dev *indio_dev,
 }
 
 static ssize_t ltc2664_reg_bool_get(struct iio_dev *indio_dev,
-				    uintptr_t private,
+				    unsigned long private,
 				    const struct iio_chan_spec *chan,
 				    char *buf)
 {
@@ -313,7 +313,7 @@ static ssize_t ltc2664_reg_bool_get(struct iio_dev *indio_dev,
 }
 
 static ssize_t ltc2664_reg_bool_set(struct iio_dev *indio_dev,
-				    uintptr_t private,
+				    unsigned long private,
 				    const struct iio_chan_spec *chan,
 				    const char *buf, size_t len)
 {
@@ -363,7 +363,7 @@ static ssize_t ltc2664_reg_bool_set(struct iio_dev *indio_dev,
 }
 
 static ssize_t ltc2664_dac_input_read(struct iio_dev *indio_dev,
-				      uintptr_t private,
+				      unsigned long private,
 				      const struct iio_chan_spec *chan,
 				      char *buf)
 {
@@ -381,7 +381,7 @@ static ssize_t ltc2664_dac_input_read(struct iio_dev *indio_dev,
 }
 
 static ssize_t ltc2664_dac_input_write(struct iio_dev *indio_dev,
-				       uintptr_t private,
+				       unsigned long private,
 				       const struct iio_chan_spec *chan,
 				       const char *buf, size_t len)
 {

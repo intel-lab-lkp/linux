@@ -1587,7 +1587,7 @@ static irqreturn_t vcnl4040_irq_thread(int irq, void *p)
 }
 
 static ssize_t vcnl4000_read_near_level(struct iio_dev *indio_dev,
-					uintptr_t priv,
+					unsigned long priv,
 					const struct iio_chan_spec *chan,
 					char *buf)
 {

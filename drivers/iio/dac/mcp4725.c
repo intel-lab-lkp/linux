@@ -179,7 +179,7 @@ static int mcp4725_set_powerdown_mode(struct iio_dev *indio_dev,
 }
 
 static ssize_t mcp4725_read_powerdown(struct iio_dev *indio_dev,
-	uintptr_t private, const struct iio_chan_spec *chan, char *buf)
+	unsigned long private, const struct iio_chan_spec *chan, char *buf)
 {
 	struct mcp4725_data *data = iio_priv(indio_dev);
 
@@ -187,7 +187,7 @@ static ssize_t mcp4725_read_powerdown(struct iio_dev *indio_dev,
 }
 
 static ssize_t mcp4725_write_powerdown(struct iio_dev *indio_dev,
-	 uintptr_t private, const struct iio_chan_spec *chan,
+	 unsigned long private, const struct iio_chan_spec *chan,
 	 const char *buf, size_t len)
 {
 	struct mcp4725_data *data = iio_priv(indio_dev);

@@ -148,7 +148,7 @@ static const struct iio_event_spec stk3310_events[] = {
 };
 
 static ssize_t stk3310_read_near_level(struct iio_dev *indio_dev,
-				       uintptr_t priv,
+				       unsigned long priv,
 				       const struct iio_chan_spec *chan,
 				       char *buf)
 {

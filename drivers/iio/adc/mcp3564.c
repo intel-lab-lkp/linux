@@ -533,7 +533,7 @@ static const struct iio_chan_spec_ext_info mcp3564_ext_info[] = {
 		.name = "boost_current_gain_available",
 		.shared = IIO_SHARED_BY_ALL,
 		.read = iio_enum_available_read,
-		.private = (uintptr_t)&mcp3564_current_boost_mode_enum,
+		.private = (unsigned long)&mcp3564_current_boost_mode_enum,
 	},
 	{ }
 };

@@ -368,7 +368,7 @@ static const struct iio_info scmi_iio_info = {
 };
 
 static ssize_t scmi_iio_get_raw_available(struct iio_dev *iio_dev,
-					  uintptr_t private,
+					  unsigned long private,
 					  const struct iio_chan_spec *chan,
 					  char *buf)
 {

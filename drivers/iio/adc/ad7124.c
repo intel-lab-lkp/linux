@@ -1054,7 +1054,7 @@ static int ad7124_syscalib_locked(struct ad7124_state *st, const struct iio_chan
 }
 
 static ssize_t ad7124_write_syscalib(struct iio_dev *indio_dev,
-				     uintptr_t private,
+				     unsigned long private,
 				     const struct iio_chan_spec *chan,
 				     const char *buf, size_t len)
 {

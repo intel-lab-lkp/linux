@@ -50,12 +50,12 @@ struct iio_dev;
 struct iio_chan_spec_ext_info {
 	const char *name;
 	enum iio_shared_by shared;
-	ssize_t (*read)(struct iio_dev *, uintptr_t private,
+	ssize_t (*read)(struct iio_dev *, unsigned long private,
 			struct iio_chan_spec const *, char *buf);
-	ssize_t (*write)(struct iio_dev *, uintptr_t private,
+	ssize_t (*write)(struct iio_dev *, unsigned long private,
 			 struct iio_chan_spec const *, const char *buf,
 			 size_t len);
-	uintptr_t private;
+	unsigned long private;
 };
 
 /**
@@ -82,11 +82,11 @@ struct iio_enum {
 };
 
 ssize_t iio_enum_available_read(struct iio_dev *indio_dev,
-	uintptr_t priv, const struct iio_chan_spec *chan, char *buf);
+	unsigned long priv, const struct iio_chan_spec *chan, char *buf);
 ssize_t iio_enum_read(struct iio_dev *indio_dev,
-	uintptr_t priv, const struct iio_chan_spec *chan, char *buf);
+	unsigned long priv, const struct iio_chan_spec *chan, char *buf);
 ssize_t iio_enum_write(struct iio_dev *indio_dev,
-	uintptr_t priv, const struct iio_chan_spec *chan, const char *buf,
+	unsigned long priv, const struct iio_chan_spec *chan, const char *buf,
 	size_t len);
 
 /**
@@ -103,7 +103,7 @@ ssize_t iio_enum_write(struct iio_dev *indio_dev,
 	.shared = (_shared), \
 	.read = iio_enum_read, \
 	.write = iio_enum_write, \
-	.private = (uintptr_t)(_e), \
+	.private = (unsigned long)(_e), \
 }
 
 /**
@@ -120,7 +120,7 @@ ssize_t iio_enum_write(struct iio_dev *indio_dev,
 	.name = (_name "_available"), \
 	.shared = _shared, \
 	.read = iio_enum_available_read, \
-	.private = (uintptr_t)(_e), \
+	.private = (unsigned long)(_e), \
 }
 
 /**
@@ -132,7 +132,7 @@ struct iio_mount_matrix {
 	const char *rotation[9];
 };
 
-ssize_t iio_show_mount_matrix(struct iio_dev *indio_dev, uintptr_t priv,
+ssize_t iio_show_mount_matrix(struct iio_dev *indio_dev, unsigned long priv,
 			      const struct iio_chan_spec *chan, char *buf);
 int iio_read_mount_matrix(struct device *dev, struct iio_mount_matrix *matrix);
 
@@ -150,7 +150,7 @@ typedef const struct iio_mount_matrix *
 	.name = "mount_matrix", \
 	.shared = (_shared), \
 	.read = iio_show_mount_matrix, \
-	.private = (uintptr_t)(_get), \
+	.private = (unsigned long)(_get), \
 }
 
 /**

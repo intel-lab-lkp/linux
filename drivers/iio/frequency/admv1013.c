@@ -257,7 +257,7 @@ static int admv1013_write_raw(struct iio_dev *indio_dev,
 }
 
 static ssize_t admv1013_read(struct iio_dev *indio_dev,
-			     uintptr_t private,
+			     unsigned long private,
 			     const struct iio_chan_spec *chan,
 			     char *buf)
 {
@@ -286,7 +286,7 @@ static ssize_t admv1013_read(struct iio_dev *indio_dev,
 }
 
 static ssize_t admv1013_write(struct iio_dev *indio_dev,
-			      uintptr_t private,
+			      unsigned long private,
 			      const struct iio_chan_spec *chan,
 			      const char *buf, size_t len)
 {

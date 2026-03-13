@@ -175,7 +175,7 @@ static const struct iio_info mux_info = {
 	.write_raw = mux_write_raw,
 };
 
-static ssize_t mux_read_ext_info(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t mux_read_ext_info(struct iio_dev *indio_dev, unsigned long private,
 				 struct iio_chan_spec const *chan, char *buf)
 {
 	struct mux *mux = iio_priv(indio_dev);
@@ -195,7 +195,7 @@ static ssize_t mux_read_ext_info(struct iio_dev *indio_dev, uintptr_t private,
 	return ret;
 }
 
-static ssize_t mux_write_ext_info(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t mux_write_ext_info(struct iio_dev *indio_dev, unsigned long private,
 				  struct iio_chan_spec const *chan,
 				  const char *buf, size_t len)
 {

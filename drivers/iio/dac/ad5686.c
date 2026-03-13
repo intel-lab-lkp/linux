@@ -53,7 +53,7 @@ static const struct iio_enum ad5686_powerdown_mode_enum = {
 };
 
 static ssize_t ad5686_read_dac_powerdown(struct iio_dev *indio_dev,
-		uintptr_t private, const struct iio_chan_spec *chan, char *buf)
+		unsigned long private, const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad5686_state *st = iio_priv(indio_dev);
 
@@ -62,7 +62,7 @@ static ssize_t ad5686_read_dac_powerdown(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad5686_write_dac_powerdown(struct iio_dev *indio_dev,
-					  uintptr_t private,
+					  unsigned long private,
 					  const struct iio_chan_spec *chan,
 					  const char *buf,
 					  size_t len)

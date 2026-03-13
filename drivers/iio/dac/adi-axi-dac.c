@@ -433,7 +433,7 @@ static int axi_dac_phase_set(struct axi_dac_state *st,
 	return len;
 }
 
-static int axi_dac_ext_info_set(struct iio_backend *back, uintptr_t private,
+static int axi_dac_ext_info_set(struct iio_backend *back, unsigned long private,
 				const struct iio_chan_spec *chan,
 				const char *buf, size_t len)
 {
@@ -457,7 +457,7 @@ static int axi_dac_ext_info_set(struct iio_backend *back, uintptr_t private,
 	}
 }
 
-static int axi_dac_ext_info_get(struct iio_backend *back, uintptr_t private,
+static int axi_dac_ext_info_get(struct iio_backend *back, unsigned long private,
 				const struct iio_chan_spec *chan, char *buf)
 {
 	struct axi_dac_state *st = iio_backend_get_priv(back);

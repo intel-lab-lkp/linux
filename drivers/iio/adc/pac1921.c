@@ -768,7 +768,7 @@ static const struct iio_info pac1921_iio = {
 };
 
 static ssize_t pac1921_read_shunt_resistor(struct iio_dev *indio_dev,
-					    uintptr_t private,
+					    unsigned long private,
 					    const struct iio_chan_spec *chan,
 					    char *buf)
 {
@@ -787,7 +787,7 @@ static ssize_t pac1921_read_shunt_resistor(struct iio_dev *indio_dev,
 }
 
 static ssize_t pac1921_write_shunt_resistor(struct iio_dev *indio_dev,
-					    uintptr_t private,
+					    unsigned long private,
 					    const struct iio_chan_spec *chan,
 					    const char *buf, size_t len)
 {
@@ -862,7 +862,7 @@ static ssize_t pac1921_format_scale_avail(const int (*const scales_tbl)[2],
  * instead.
  */
 static ssize_t pac1921_read_scale_avail(struct iio_dev *indio_dev,
-					uintptr_t private,
+					unsigned long private,
 					const struct iio_chan_spec *chan,
 					char *buf)
 {

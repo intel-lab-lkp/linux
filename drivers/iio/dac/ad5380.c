@@ -77,7 +77,7 @@ enum ad5380_type {
 };
 
 static ssize_t ad5380_read_dac_powerdown(struct iio_dev *indio_dev,
-	uintptr_t private, const struct iio_chan_spec *chan, char *buf)
+	unsigned long private, const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad5380_state *st = iio_priv(indio_dev);
 
@@ -85,7 +85,7 @@ static ssize_t ad5380_read_dac_powerdown(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad5380_write_dac_powerdown(struct iio_dev *indio_dev,
-	 uintptr_t private, const struct iio_chan_spec *chan, const char *buf,
+	 unsigned long private, const struct iio_chan_spec *chan, const char *buf,
 	 size_t len)
 {
 	struct ad5380_state *st = iio_priv(indio_dev);

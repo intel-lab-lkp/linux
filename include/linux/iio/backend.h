@@ -167,10 +167,10 @@ struct iio_backend_ops {
 			    struct iio_buffer *buffer);
 	int (*extend_chan_spec)(struct iio_backend *back,
 				struct iio_chan_spec *chan);
-	int (*ext_info_set)(struct iio_backend *back, uintptr_t private,
+	int (*ext_info_set)(struct iio_backend *back, unsigned long private,
 			    const struct iio_chan_spec *chan,
 			    const char *buf, size_t len);
-	int (*ext_info_get)(struct iio_backend *back, uintptr_t private,
+	int (*ext_info_get)(struct iio_backend *back, unsigned long private,
 			    const struct iio_chan_spec *chan, char *buf);
 	int (*interface_type_get)(struct iio_backend *back,
 				  enum iio_backend_interface_type *type);
@@ -242,10 +242,10 @@ int iio_backend_ddr_disable(struct iio_backend *back);
 int iio_backend_data_stream_enable(struct iio_backend *back);
 int iio_backend_data_stream_disable(struct iio_backend *back);
 int iio_backend_data_transfer_addr(struct iio_backend *back, u32 address);
-ssize_t iio_backend_ext_info_set(struct iio_dev *indio_dev, uintptr_t private,
+ssize_t iio_backend_ext_info_set(struct iio_dev *indio_dev, unsigned long private,
 				 const struct iio_chan_spec *chan,
 				 const char *buf, size_t len);
-ssize_t iio_backend_ext_info_get(struct iio_dev *indio_dev, uintptr_t private,
+ssize_t iio_backend_ext_info_get(struct iio_dev *indio_dev, unsigned long private,
 				 const struct iio_chan_spec *chan, char *buf);
 int iio_backend_interface_type_get(struct iio_backend *back,
 				   enum iio_backend_interface_type *type);

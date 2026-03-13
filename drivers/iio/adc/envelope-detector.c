@@ -228,7 +228,7 @@ err_unlock:
 }
 
 static ssize_t envelope_show_invert(struct iio_dev *indio_dev,
-				    uintptr_t private,
+				    unsigned long private,
 				    struct iio_chan_spec const *ch, char *buf)
 {
 	struct envelope *env = iio_priv(indio_dev);
@@ -237,7 +237,7 @@ static ssize_t envelope_show_invert(struct iio_dev *indio_dev,
 }
 
 static ssize_t envelope_store_invert(struct iio_dev *indio_dev,
-				     uintptr_t private,
+				     unsigned long private,
 				     struct iio_chan_spec const *ch,
 				     const char *buf, size_t len)
 {
@@ -267,7 +267,7 @@ static ssize_t envelope_store_invert(struct iio_dev *indio_dev,
 }
 
 static ssize_t envelope_show_comp_interval(struct iio_dev *indio_dev,
-					   uintptr_t private,
+					   unsigned long private,
 					   struct iio_chan_spec const *ch,
 					   char *buf)
 {
@@ -277,7 +277,7 @@ static ssize_t envelope_show_comp_interval(struct iio_dev *indio_dev,
 }
 
 static ssize_t envelope_store_comp_interval(struct iio_dev *indio_dev,
-					    uintptr_t private,
+					    unsigned long private,
 					    struct iio_chan_spec const *ch,
 					    const char *buf, size_t len)
 {

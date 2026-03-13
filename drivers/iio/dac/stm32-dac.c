@@ -195,7 +195,7 @@ static int stm32_dac_set_powerdown_mode(struct iio_dev *indio_dev,
 }
 
 static ssize_t stm32_dac_read_powerdown(struct iio_dev *indio_dev,
-					uintptr_t private,
+					unsigned long private,
 					const struct iio_chan_spec *chan,
 					char *buf)
 {
@@ -208,7 +208,7 @@ static ssize_t stm32_dac_read_powerdown(struct iio_dev *indio_dev,
 }
 
 static ssize_t stm32_dac_write_powerdown(struct iio_dev *indio_dev,
-					 uintptr_t private,
+					 unsigned long private,
 					 const struct iio_chan_spec *chan,
 					 const char *buf, size_t len)
 {

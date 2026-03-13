@@ -174,7 +174,7 @@
 static const char * const sx9324_cs_pin_usage[] = { "HZ", "MI", "DS", "GD" };
 
 static ssize_t sx9324_phase_configuration_show(struct iio_dev *indio_dev,
-					       uintptr_t private,
+					       unsigned long private,
 					       const struct iio_chan_spec *chan,
 					       char *buf)
 {

@@ -234,7 +234,7 @@ static int sunrise_calibrate(struct sunrise_dev *sunrise,
 }
 
 static ssize_t sunrise_cal_factory_write(struct iio_dev *iiodev,
-					 uintptr_t private,
+					 unsigned long private,
 					 const struct iio_chan_spec *chan,
 					 const char *buf, size_t len)
 {
@@ -259,7 +259,7 @@ static ssize_t sunrise_cal_factory_write(struct iio_dev *iiodev,
 }
 
 static ssize_t sunrise_cal_background_write(struct iio_dev *iiodev,
-					    uintptr_t private,
+					    unsigned long private,
 					    const struct iio_chan_spec *chan,
 					    const char *buf, size_t len)
 {
@@ -316,7 +316,7 @@ static const struct iio_enum sunrise_error_statuses_enum = {
 };
 
 static ssize_t sunrise_error_status_read(struct iio_dev *iiodev,
-					 uintptr_t private,
+					 unsigned long private,
 					 const struct iio_chan_spec *chan,
 					 char *buf)
 {
@@ -369,7 +369,7 @@ static const struct iio_chan_spec_ext_info sunrise_concentration_ext_info[] = {
 		.name = "error_status_available",
 		.shared = IIO_SHARED_BY_ALL,
 		.read = iio_enum_available_read,
-		.private = (uintptr_t)&sunrise_error_statuses_enum,
+		.private = (unsigned long)&sunrise_error_statuses_enum,
 	},
 	{ }
 };

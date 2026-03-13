@@ -2008,7 +2008,7 @@ static const struct iio_chan_spec_ext_info stm32_adc_ext_info[] = {
 		.name = "trigger_polarity_available",
 		.shared = IIO_SHARED_BY_ALL,
 		.read = iio_enum_available_read,
-		.private = (uintptr_t)&stm32_adc_trig_pol,
+		.private = (unsigned long)&stm32_adc_trig_pol,
 	},
 	{ }
 };

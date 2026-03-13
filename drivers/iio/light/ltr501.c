@@ -522,7 +522,7 @@ static int ltr501_write_intr_prst(struct ltr501_data *data,
 }
 
 static ssize_t ltr501_read_near_level(struct iio_dev *indio_dev,
-				      uintptr_t priv,
+				      unsigned long priv,
 				      const struct iio_chan_spec *chan,
 				      char *buf)
 {

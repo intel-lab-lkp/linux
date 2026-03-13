@@ -620,7 +620,7 @@ static struct iio_backend *iio_backend_from_indio_dev_parent(const struct device
  * RETURNS:
  * Number of bytes written to buf, negative error number on failure.
  */
-ssize_t iio_backend_ext_info_get(struct iio_dev *indio_dev, uintptr_t private,
+ssize_t iio_backend_ext_info_get(struct iio_dev *indio_dev, unsigned long private,
 				 const struct iio_chan_spec *chan, char *buf)
 {
 	struct iio_backend *back;
@@ -656,7 +656,7 @@ EXPORT_SYMBOL_NS_GPL(iio_backend_ext_info_get, "IIO_BACKEND");
  * RETURNS:
  * Buffer length on success, negative error number on failure.
  */
-ssize_t iio_backend_ext_info_set(struct iio_dev *indio_dev, uintptr_t private,
+ssize_t iio_backend_ext_info_set(struct iio_dev *indio_dev, unsigned long private,
 				 const struct iio_chan_spec *chan,
 				 const char *buf, size_t len)
 {

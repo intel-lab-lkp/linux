@@ -255,7 +255,7 @@ static const struct iio_info rescale_info = {
 };
 
 static ssize_t rescale_read_ext_info(struct iio_dev *indio_dev,
-				     uintptr_t private,
+				     unsigned long private,
 				     struct iio_chan_spec const *chan,
 				     char *buf)
 {
@@ -267,7 +267,7 @@ static ssize_t rescale_read_ext_info(struct iio_dev *indio_dev,
 }
 
 static ssize_t rescale_write_ext_info(struct iio_dev *indio_dev,
-				      uintptr_t private,
+				      unsigned long private,
 				      struct iio_chan_spec const *chan,
 				      const char *buf, size_t len)
 {

@@ -626,7 +626,7 @@ static int mcp47feb02_set_powerdown_mode(struct iio_dev *indio_dev, const struct
 	return 0;
 }
 
-static ssize_t mcp47feb02_read_powerdown(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t mcp47feb02_read_powerdown(struct iio_dev *indio_dev, unsigned long private,
 					 const struct iio_chan_spec *ch, char *buf)
 {
 	struct mcp47feb02_data *data = iio_priv(indio_dev);
@@ -635,7 +635,7 @@ static ssize_t mcp47feb02_read_powerdown(struct iio_dev *indio_dev, uintptr_t pr
 	return sysfs_emit(buf, "%d\n", data->chdata[ch->address].powerdown);
 }
 
-static ssize_t mcp47feb02_write_powerdown(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t mcp47feb02_write_powerdown(struct iio_dev *indio_dev, unsigned long private,
 					  const struct iio_chan_spec *ch, const char *buf,
 					  size_t len)
 {

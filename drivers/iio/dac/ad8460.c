@@ -173,7 +173,7 @@ static int ad8460_set_hvdac_word(struct ad8460_state *state, int index, int val)
 				 &state->spi_tx_buf, AD8460_DATA_BYTE_WORD_LENGTH);
 }
 
-static ssize_t ad8460_dac_input_read(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_dac_input_read(struct iio_dev *indio_dev, unsigned long private,
 				     const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad8460_state *state = iio_priv(indio_dev);
@@ -187,7 +187,7 @@ static ssize_t ad8460_dac_input_read(struct iio_dev *indio_dev, uintptr_t privat
 	return sysfs_emit(buf, "%u\n", reg);
 }
 
-static ssize_t ad8460_dac_input_write(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_dac_input_write(struct iio_dev *indio_dev, unsigned long private,
 				      const struct iio_chan_spec *chan,
 				      const char *buf, size_t len)
 {
@@ -204,7 +204,7 @@ static ssize_t ad8460_dac_input_write(struct iio_dev *indio_dev, uintptr_t priva
 	return ad8460_set_hvdac_word(state, private, reg);
 }
 
-static ssize_t ad8460_read_symbol(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_read_symbol(struct iio_dev *indio_dev, unsigned long private,
 				  const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad8460_state *state = iio_priv(indio_dev);
@@ -218,7 +218,7 @@ static ssize_t ad8460_read_symbol(struct iio_dev *indio_dev, uintptr_t private,
 	return sysfs_emit(buf, "%lu\n", FIELD_GET(AD8460_PATTERN_DEPTH_MSK, reg));
 }
 
-static ssize_t ad8460_write_symbol(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_write_symbol(struct iio_dev *indio_dev, unsigned long private,
 				   const struct iio_chan_spec *chan,
 				   const char *buf, size_t len)
 {
@@ -238,7 +238,7 @@ static ssize_t ad8460_write_symbol(struct iio_dev *indio_dev, uintptr_t private,
 				  FIELD_PREP(AD8460_PATTERN_DEPTH_MSK, sym));
 }
 
-static ssize_t ad8460_read_toggle_en(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_read_toggle_en(struct iio_dev *indio_dev, unsigned long private,
 				     const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad8460_state *state = iio_priv(indio_dev);
@@ -252,7 +252,7 @@ static ssize_t ad8460_read_toggle_en(struct iio_dev *indio_dev, uintptr_t privat
 	return sysfs_emit(buf, "%ld\n", FIELD_GET(AD8460_APG_MODE_ENABLE_MSK, reg));
 }
 
-static ssize_t ad8460_write_toggle_en(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_write_toggle_en(struct iio_dev *indio_dev, unsigned long private,
 				      const struct iio_chan_spec *chan,
 				      const char *buf, size_t len)
 {
@@ -272,7 +272,7 @@ static ssize_t ad8460_write_toggle_en(struct iio_dev *indio_dev, uintptr_t priva
 	return ret;
 }
 
-static ssize_t ad8460_read_powerdown(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_read_powerdown(struct iio_dev *indio_dev, unsigned long private,
 				     const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad8460_state *state = iio_priv(indio_dev);
@@ -286,7 +286,7 @@ static ssize_t ad8460_read_powerdown(struct iio_dev *indio_dev, uintptr_t privat
 	return sysfs_emit(buf, "%ld\n", FIELD_GET(AD8460_HVDAC_SLEEP_MSK, reg));
 }
 
-static ssize_t ad8460_write_powerdown(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t ad8460_write_powerdown(struct iio_dev *indio_dev, unsigned long private,
 				      const struct iio_chan_spec *chan,
 				      const char *buf, size_t len)
 {

@@ -260,7 +260,7 @@ static int adf4350_set_freq(struct adf4350_state *st, unsigned long long freq)
 }
 
 static ssize_t adf4350_write(struct iio_dev *indio_dev,
-				    uintptr_t private,
+				    unsigned long private,
 				    const struct iio_chan_spec *chan,
 				    const char *buf, size_t len)
 {
@@ -320,7 +320,7 @@ static ssize_t adf4350_write(struct iio_dev *indio_dev,
 }
 
 static ssize_t adf4350_read(struct iio_dev *indio_dev,
-				   uintptr_t private,
+				   unsigned long private,
 				   const struct iio_chan_spec *chan,
 				   char *buf)
 {

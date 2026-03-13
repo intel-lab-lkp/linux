@@ -567,7 +567,7 @@ static int ad5758_write_raw(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad5758_read_powerdown(struct iio_dev *indio_dev,
-				     uintptr_t priv,
+				     unsigned long priv,
 				     const struct iio_chan_spec *chan,
 				     char *buf)
 {
@@ -577,7 +577,7 @@ static ssize_t ad5758_read_powerdown(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad5758_write_powerdown(struct iio_dev *indio_dev,
-				      uintptr_t priv,
+				      unsigned long priv,
 				      struct iio_chan_spec const *chan,
 				      const char *buf, size_t len)
 {

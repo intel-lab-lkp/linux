@@ -804,7 +804,7 @@ static int adf4377_init(struct adf4377_state *st)
 	return 0;
 }
 
-static ssize_t adf4377_read(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t adf4377_read(struct iio_dev *indio_dev, unsigned long private,
 			    const struct iio_chan_spec *chan, char *buf)
 {
 	struct adf4377_state *st = iio_priv(indio_dev);
@@ -823,7 +823,7 @@ static ssize_t adf4377_read(struct iio_dev *indio_dev, uintptr_t private,
 	}
 }
 
-static ssize_t adf4377_write(struct iio_dev *indio_dev, uintptr_t private,
+static ssize_t adf4377_write(struct iio_dev *indio_dev, unsigned long private,
 			     const struct iio_chan_spec *chan, const char *buf,
 			     size_t len)
 {

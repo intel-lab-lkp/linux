@@ -431,7 +431,7 @@ int cros_ec_motion_send_host_cmd(struct cros_ec_sensors_core_state *state,
 EXPORT_SYMBOL_GPL(cros_ec_motion_send_host_cmd);
 
 static ssize_t cros_ec_sensors_calibrate(struct iio_dev *indio_dev,
-		uintptr_t private, const struct iio_chan_spec *chan,
+		unsigned long private, const struct iio_chan_spec *chan,
 		const char *buf, size_t len)
 {
 	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);
@@ -460,7 +460,7 @@ static ssize_t cros_ec_sensors_calibrate(struct iio_dev *indio_dev,
 }
 
 static ssize_t cros_ec_sensors_id(struct iio_dev *indio_dev,
-				  uintptr_t private,
+				  unsigned long private,
 				  const struct iio_chan_spec *chan, char *buf)
 {
 	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);

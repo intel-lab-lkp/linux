@@ -451,7 +451,7 @@ static const struct iio_info ad5592r_info = {
 };
 
 static ssize_t ad5592r_show_scale_available(struct iio_dev *iio_dev,
-					   uintptr_t private,
+					   unsigned long private,
 					   const struct iio_chan_spec *chan,
 					   char *buf)
 {

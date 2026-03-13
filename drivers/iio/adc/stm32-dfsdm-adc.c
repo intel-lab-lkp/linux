@@ -740,7 +740,7 @@ static int stm32_dfsdm_generic_channel_parse_of(struct stm32_dfsdm *dfsdm,
 }
 
 static ssize_t dfsdm_adc_audio_get_spiclk(struct iio_dev *indio_dev,
-					  uintptr_t priv,
+					  unsigned long priv,
 					  const struct iio_chan_spec *chan,
 					  char *buf)
 {
@@ -774,7 +774,7 @@ static int dfsdm_adc_set_samp_freq(struct iio_dev *indio_dev,
 }
 
 static ssize_t dfsdm_adc_audio_set_spiclk(struct iio_dev *indio_dev,
-					  uintptr_t priv,
+					  unsigned long priv,
 					  const struct iio_chan_spec *chan,
 					  const char *buf, size_t len)
 {

@@ -469,7 +469,7 @@ error_power_down:
 }
 
 static ssize_t ad7280_show_balance_sw(struct iio_dev *indio_dev,
-				      uintptr_t private,
+				      unsigned long private,
 				      const struct iio_chan_spec *chan, char *buf)
 {
 	struct ad7280_state *st = iio_priv(indio_dev);
@@ -480,7 +480,7 @@ static ssize_t ad7280_show_balance_sw(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad7280_store_balance_sw(struct iio_dev *indio_dev,
-				       uintptr_t private,
+				       unsigned long private,
 				       const struct iio_chan_spec *chan,
 				       const char *buf, size_t len)
 {
@@ -511,7 +511,7 @@ static ssize_t ad7280_store_balance_sw(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad7280_show_balance_timer(struct iio_dev *indio_dev,
-					 uintptr_t private,
+					 unsigned long private,
 					 const struct iio_chan_spec *chan,
 					 char *buf)
 {
@@ -533,7 +533,7 @@ static ssize_t ad7280_show_balance_timer(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad7280_store_balance_timer(struct iio_dev *indio_dev,
-					  uintptr_t private,
+					  unsigned long private,
 					  const struct iio_chan_spec *chan,
 					  const char *buf, size_t len)
 {

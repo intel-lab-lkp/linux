@@ -426,7 +426,7 @@ static int ad5770r_store_output_range(struct ad5770r_state *st,
 }
 
 static ssize_t ad5770r_read_dac_powerdown(struct iio_dev *indio_dev,
-					  uintptr_t private,
+					  unsigned long private,
 					  const struct iio_chan_spec *chan,
 					  char *buf)
 {
@@ -436,7 +436,7 @@ static ssize_t ad5770r_read_dac_powerdown(struct iio_dev *indio_dev,
 }
 
 static ssize_t ad5770r_write_dac_powerdown(struct iio_dev *indio_dev,
-					   uintptr_t private,
+					   unsigned long private,
 					   const struct iio_chan_spec *chan,
 					   const char *buf, size_t len)
 {

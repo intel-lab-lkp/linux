@@ -522,7 +522,7 @@ static ssize_t iio_write_channel_ext_info(struct device *dev,
 }
 
 ssize_t iio_enum_available_read(struct iio_dev *indio_dev,
-	uintptr_t priv, const struct iio_chan_spec *chan, char *buf)
+	unsigned long priv, const struct iio_chan_spec *chan, char *buf)
 {
 	const struct iio_enum *e = (const struct iio_enum *)priv;
 	unsigned int i;
@@ -545,7 +545,7 @@ ssize_t iio_enum_available_read(struct iio_dev *indio_dev,
 EXPORT_SYMBOL_GPL(iio_enum_available_read);
 
 ssize_t iio_enum_read(struct iio_dev *indio_dev,
-	uintptr_t priv, const struct iio_chan_spec *chan, char *buf)
+	unsigned long priv, const struct iio_chan_spec *chan, char *buf)
 {
 	const struct iio_enum *e = (const struct iio_enum *)priv;
 	int i;
@@ -564,7 +564,7 @@ ssize_t iio_enum_read(struct iio_dev *indio_dev,
 EXPORT_SYMBOL_GPL(iio_enum_read);
 
 ssize_t iio_enum_write(struct iio_dev *indio_dev,
-	uintptr_t priv, const struct iio_chan_spec *chan, const char *buf,
+	unsigned long priv, const struct iio_chan_spec *chan, const char *buf,
 	size_t len)
 {
 	const struct iio_enum *e = (const struct iio_enum *)priv;
@@ -598,7 +598,7 @@ static int iio_setup_mount_idmatrix(const struct device *dev,
 	return 0;
 }
 
-ssize_t iio_show_mount_matrix(struct iio_dev *indio_dev, uintptr_t priv,
+ssize_t iio_show_mount_matrix(struct iio_dev *indio_dev, unsigned long priv,
 			      const struct iio_chan_spec *chan, char *buf)
 {
 	const struct iio_mount_matrix *mtx;
