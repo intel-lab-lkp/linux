@@ -1029,6 +1029,15 @@ static bool intel_crtc_lobf_disabling(const struct intel_crtc_state *old_crtc_st
 		 (new_crtc_state->update_lrr || new_crtc_state->update_m_n));
 }
 
+static bool intel_crtc_dc3co_disabling(const struct intel_crtc_state *old_crtc_state,
+				       const struct intel_crtc_state *new_crtc_state)
+{
+	if (!old_crtc_state->hw.active)
+		return false;
+
+	return is_disabling(dc3co.enable, old_crtc_state, new_crtc_state);
+}
+
 #undef is_disabling
 #undef is_enabling
 
@@ -6926,7 +6935,8 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	    old_crtc_state->inherited)
 		intel_crtc_arm_fifo_underrun(crtc, new_crtc_state);
 
-	if (crtc->cmtg.enabled && intel_crtc_vrr_enabling(state, crtc)) {
+	if (crtc->cmtg.enabled && (intel_crtc_vrr_enabling(state, crtc) ||
+				   intel_crtc_dc3co_disabling(old_crtc_state, new_crtc_state))) {
 		intel_cmtg_disable(new_crtc_state);
 		intel_cmtg_mask_interrupt(new_crtc_state);
 	}
