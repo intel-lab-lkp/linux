@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bus/ti,da850-mstpri.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+title: Texas Instruments DA850 Master Peripheral Priority
+maintainers:
+  - Bartosz Golaszewski <bartosz.golaszewski@oss.qualcomm.com>
+description: |
+  DA8XX SoCs feature a set of registers allowing to change the priority of all
+  peripherals classified as masters.
+properties:
+  compatible:
+    const: ti,da850-mstpri
+  reg:
+    maxItems: 1
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    mstpri@14110 {
+        compatible = "ti,da850-mstpri";
+        reg = <0x14110 0x0c>;
+    };
