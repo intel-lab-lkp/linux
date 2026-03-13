@@ -12,6 +12,7 @@ TEST_PROGS := \
 	test-sysfs.sh \
 	test-sysfs-replace-attr.sh \
 	test-sysfs-stack-attr.sh \
+	test-sysfs-patched-attr.sh \
 	test-syscall.sh \
 	test-kprobe.sh
 
