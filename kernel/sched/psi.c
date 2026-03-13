@@ -384,6 +384,13 @@ static void collect_percpu_times(struct psi_group *group,
 
 		get_recent_times(group, cpu, aggregator, times,
 				&cpu_changed_states);
+		/*
+		 * Skip CPUs with no non-idle time. These CPUs do not contribute
+		 * to the weighted per-CPU aggregation, so we can avoid unnecessary
+		 * calculations for them by checking cpu_changed_states.
+		 */
+		if (!(cpu_changed_states & (1 << PSI_NONIDLE)))
+			continue;
 		changed_states |= cpu_changed_states;
 
 		nonidle = nsecs_to_jiffies(times[PSI_NONIDLE]);
