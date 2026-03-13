@@ -929,6 +929,8 @@ struct drm_gpuva_op_unmap {
  * If either a new mapping's start address is aligned with the start address
  * of the old mapping or the new mapping's end address is aligned with the
  * end address of the old mapping, either @prev or @next is NULL.
+ * This might also be the case when the requested mapping extends over the
+ * lower and upper boundaries of the intersecting GPU VA.
  *
  * Note, the reason for a dedicated remap operation, rather than arbitrary
  * unmap and map operations, is to give drivers the chance of extracting driver
