@@ -13432,6 +13432,7 @@ F:	include/trace/events/io_uring.h
 F:	include/uapi/linux/io_uring.h
 F:	include/uapi/linux/io_uring/
 F:	io_uring/
+F:	tools/testing/selftests/ipc/io_uring_ipc*
 
 IO_URING ZCRX
 M:	Pavel Begunkov <asml.silence@gmail.com>
