@@ -88,7 +88,7 @@ static int ast_astdp_read_edid_block(void *data, u8 *buf, unsigned int block, si
 	int ret = 0;
 	unsigned int i;
 
-	if (block > 0)
+	if (block > 1)
 		return -EIO; /* extension headers not supported */
 
 	/*
