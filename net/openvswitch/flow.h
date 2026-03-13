@@ -23,6 +23,7 @@
 #include <net/dst_metadata.h>
 #include <net/nsh.h>
 
+struct flow_table;
 struct sk_buff;
 
 enum sw_flow_mac_proto {
@@ -280,9 +281,11 @@ static inline bool ovs_identifier_is_key(const struct sw_flow_id *sfid)
 
 void ovs_flow_stats_update(struct sw_flow *, __be16 tcp_flags,
 			   const struct sk_buff *);
-void ovs_flow_stats_get(const struct sw_flow *, struct ovs_flow_stats *,
-			unsigned long *used, __be16 *tcp_flags);
-void ovs_flow_stats_clear(struct sw_flow *);
+void ovs_flow_stats_get(const struct sw_flow *flow,
+			const struct flow_table *table,
+			struct ovs_flow_stats *stats, unsigned long *used,
+			__be16 *tcp_flags);
+void ovs_flow_stats_clear(struct sw_flow *flow, struct flow_table *table);
 u64 ovs_flow_used_time(unsigned long flow_jiffies);
 
 int ovs_flow_key_update(struct sk_buff *skb, struct sw_flow_key *key);
