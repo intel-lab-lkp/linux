@@ -246,6 +246,19 @@ int hinic3_set_port_mtu(struct net_device *netdev, u16 new_mtu)
 	struct l2nic_func_tbl_cfg func_tbl_cfg = {};
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 
+	if (new_mtu < HINIC3_MIN_MTU_SIZE) {
+		dev_err(hwdev->dev,
+			"Invalid mtu size: %ubytes, mtu size < %ubytes\n",
+			new_mtu, HINIC3_MIN_MTU_SIZE);
+		return -EINVAL;
+	}
+
+	if (new_mtu > HINIC3_MAX_JUMBO_FRAME_SIZE) {
+		dev_err(hwdev->dev, "Invalid mtu size: %ubytes, mtu size > %ubytes\n",
+			new_mtu, HINIC3_MAX_JUMBO_FRAME_SIZE);
+		return -EINVAL;
+	}
+
 	func_tbl_cfg.mtu = new_mtu;
 
 	return hinic3_set_function_table(hwdev, BIT(L2NIC_FUNC_TBL_CFG_MTU),
