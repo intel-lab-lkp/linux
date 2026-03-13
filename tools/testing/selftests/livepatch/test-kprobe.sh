@@ -16,30 +16,19 @@ setup_config
 # when it uses a post_handler since only one IPMODIFY maybe be registered
 # to any given function at a time.
 
-start_test "livepatch interaction with kprobed function with post_handler"
-
-echo 1 > "$SYSFS_KPROBES_DIR/enabled"
-
-load_mod $MOD_KPROBE has_post_handler=1
-load_failing_mod $MOD_LIVEPATCH
-unload_mod $MOD_KPROBE
-
-check_result "% insmod test_modules/test_klp_kprobe.ko has_post_handler=1
-% insmod test_modules/$MOD_LIVEPATCH.ko
-livepatch: enabling patch '$MOD_LIVEPATCH'
-livepatch: '$MOD_LIVEPATCH': initializing patching transition
-livepatch: failed to register ftrace handler for function 'cmdline_proc_show' (-16)
-livepatch: failed to patch object 'vmlinux'
-livepatch: failed to enable patch '$MOD_LIVEPATCH'
-livepatch: '$MOD_LIVEPATCH': canceling patching transition, going to unpatch
-livepatch: '$MOD_LIVEPATCH': completing unpatching transition
-livepatch: '$MOD_LIVEPATCH': unpatching complete
-insmod: ERROR: could not insert module test_modules/$MOD_LIVEPATCH.ko: Device or resource busy
-% rmmod test_klp_kprobe"
-
 start_test "livepatch interaction with kprobed function without post_handler"
 
 load_mod $MOD_KPROBE has_post_handler=0
+
+# Check if commit 0bc11ed5ab60c ("kprobes: Allow kprobes coexist with livepatch")
+# is missing, meaning that livepatches and kprobes can't be used together.
+# When the commit is missing, kprobes always set IPMODIFY (the I flag), even
+# when the post handler is missing.
+if grep --quiet ") R I" "$SYSFS_DEBUG_DIR/tracing/enabled_functions"; then
+	unload_mod $MOD_KPROBE
+	skip "Running kernel doesn't support kprobes along livepatches"
+fi
+
 load_lp $MOD_LIVEPATCH
 
 unload_mod $MOD_KPROBE
@@ -60,5 +49,26 @@ livepatch: '$MOD_LIVEPATCH': starting unpatching transition
 livepatch: '$MOD_LIVEPATCH': completing unpatching transition
 livepatch: '$MOD_LIVEPATCH': unpatching complete
 % rmmod $MOD_LIVEPATCH"
+
+start_test "livepatch interaction with kprobed function with post_handler"
+
+echo 1 > "$SYSFS_KPROBES_DIR/enabled"
+
+load_mod $MOD_KPROBE has_post_handler=1
+load_failing_mod $MOD_LIVEPATCH
+unload_mod $MOD_KPROBE
+
+check_result "% insmod test_modules/test_klp_kprobe.ko has_post_handler=1
+% insmod test_modules/$MOD_LIVEPATCH.ko
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+livepatch: failed to register ftrace handler for function 'cmdline_proc_show' (-16)
+livepatch: failed to patch object 'vmlinux'
+livepatch: failed to enable patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': canceling patching transition, going to unpatch
+livepatch: '$MOD_LIVEPATCH': completing unpatching transition
+livepatch: '$MOD_LIVEPATCH': unpatching complete
+insmod: ERROR: could not insert module test_modules/$MOD_LIVEPATCH.ko: Device or resource busy
+% rmmod test_klp_kprobe"
 
 exit 0
