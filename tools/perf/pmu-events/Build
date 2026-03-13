@@ -209,12 +209,17 @@ endif
 ifneq ($(strip $(ORPHAN_FILES)),)
 .PHONY: prune_orphans
 
+# Store ORPHAN_FILES in a file to avoid argument list too long errors
+ORPHAN_LIST_FILE := $(OUTPUT)pmu-events/.orphan_list
+$(file >$(ORPHAN_LIST_FILE),$(ORPHAN_FILES))
+
 # Message for $(call echo-cmd,rm). Generally cleaning files isn't part
 # of a build step.
 quiet_cmd_rm  = RM      $^
 
-prune_orphans: $(ORPHAN_FILES)
-	$(Q)$(call echo-cmd,rm)rm -f $^
+prune_orphans: $(ORPHAN_LIST_FILE)
+	$(Q)$(call echo-cmd,rm)cat $^ | xargs rm -f
+	$(Q)rm -f $(ORPHAN_LIST_FILE)
 
 JEVENTS_DEPS += prune_orphans
 endif
