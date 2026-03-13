@@ -380,6 +380,17 @@ struct ext4_io_submit {
 #define EXT4_B2C(sbi, blk)	((blk) >> (sbi)->s_cluster_bits)
 /* Translate a cluster number to a block number */
 #define EXT4_C2B(sbi, cluster)	((cluster) << (sbi)->s_cluster_bits)
+/*
+ * Translate a physical block number to a cluster number using mballoc's
+ * cluster definition, which accounts for s_first_data_block.  Use these
+ * when tracking partial->pclu so that the cluster numbers are consistent
+ * with what ext4_get_group_no_and_offset() (and thus ext4_free_blocks())
+ * expects.
+ */
+#define EXT4_MB_B2C(sbi, nr) \
+	(((nr) - le32_to_cpu((sbi)->s_es->s_first_data_block)) >> (sbi)->s_cluster_bits)
+#define EXT4_MB_C2B(sbi, cluster) \
+	(((cluster) << (sbi)->s_cluster_bits) + le32_to_cpu((sbi)->s_es->s_first_data_block))
 /* Translate # of blks to # of clusters */
 #define EXT4_NUM_B2C(sbi, blks)	(((blks) + (sbi)->s_cluster_ratio - 1) >> \
 				 (sbi)->s_cluster_bits)
@@ -396,6 +407,16 @@ struct ext4_io_submit {
 				 ((ext4_fsblk_t) (s)->s_cluster_ratio - 1))
 #define EXT4_LBLK_COFF(s, lblk) ((lblk) &				\
 				 ((ext4_lblk_t) (s)->s_cluster_ratio - 1))
+/*
+ * Cluster-offset macros that account for s_first_data_block, consistent
+ * with mballoc's cluster numbering.  Use EXT4_MB_PBLK_COFF when aligning a
+ * physical block number and EXT4_MB_LBLK_COFF when aligning a block count.
+ */
+#define EXT4_MB_PBLK_COFF(sbi, pblk) \
+	(((pblk) - le32_to_cpu((sbi)->s_es->s_first_data_block)) & \
+	 ((ext4_fsblk_t)(sbi)->s_cluster_ratio - 1))
+#define EXT4_MB_LBLK_COFF(sbi, lblk) \
+	((lblk) & ((ext4_lblk_t)(sbi)->s_cluster_ratio - 1))
 
 /*
  * Structure of a blocks group descriptor
