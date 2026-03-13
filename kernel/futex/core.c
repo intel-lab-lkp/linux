@@ -362,31 +362,8 @@ static int __futex_key_to_node(struct mm_struct *mm, unsigned long addr)
 	return node;
 }
 
-static int futex_key_to_node_opt(struct mm_struct *mm, unsigned long addr)
-{
-	int seq, node;
-
-	guard(rcu)();
-
-	if (!mmap_lock_speculate_try_begin(mm, &seq))
-		return -EBUSY;
-
-	node = __futex_key_to_node(mm, addr);
-
-	if (mmap_lock_speculate_retry(mm, seq))
-		return -EAGAIN;
-
-	return node;
-}
-
 static int futex_mpol(struct mm_struct *mm, unsigned long addr)
 {
-	int node;
-
-	node = futex_key_to_node_opt(mm, addr);
-	if (node >= FUTEX_NO_NODE)
-		return node;
-
 	guard(mmap_read_lock)(mm);
 	return __futex_key_to_node(mm, addr);
 }
