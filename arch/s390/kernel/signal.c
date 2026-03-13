@@ -423,7 +423,7 @@ static void handle_signal(struct ksignal *ksig, sigset_t *oldset,
 	else
 		ret = setup_frame(ksig->sig, &ksig->ka, oldset, regs);
 
-	signal_setup_done(ret, ksig, test_thread_flag(TIF_SINGLE_STEP));
+	signal_setup_done(ret, ksig, test_thread_flag(TIF_SINGLESTEP));
 }
 
 /*
@@ -491,7 +491,7 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 			regs->gprs[2] = regs->orig_gpr2;
 			current->restart_block.arch_data = regs->psw.addr;
 			regs->psw.addr = VDSO_SYMBOL(current, restart_syscall);
-			if (test_thread_flag(TIF_SINGLE_STEP))
+			if (test_thread_flag(TIF_SINGLESTEP))
 				clear_thread_flag(TIF_PER_TRAP);
 			break;
 		case -ERESTARTNOHAND:
@@ -499,7 +499,7 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 		case -ERESTARTNOINTR:
 			regs->gprs[2] = regs->orig_gpr2;
 			regs->psw.addr = __rewind_psw(regs->psw, regs->int_code >> 16);
-			if (test_thread_flag(TIF_SINGLE_STEP))
+			if (test_thread_flag(TIF_SINGLESTEP))
 				clear_thread_flag(TIF_PER_TRAP);
 			break;
 		}

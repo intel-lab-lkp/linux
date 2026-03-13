@@ -90,8 +90,8 @@ void update_cr_regs(struct task_struct *task)
 	new.start.val = thread->per_user.start;
 	new.end.val = thread->per_user.end;
 
-	/* merge TIF_SINGLE_STEP into user specified PER registers. */
-	if (test_tsk_thread_flag(task, TIF_SINGLE_STEP) ||
+	/* merge TIF_SINGLESTEP into user specified PER registers. */
+	if (test_tsk_thread_flag(task, TIF_SINGLESTEP) ||
 	    test_tsk_thread_flag(task, TIF_UPROBE_SINGLESTEP)) {
 		if (test_tsk_thread_flag(task, TIF_BLOCK_STEP))
 			new.control.val |= PER_EVENT_BRANCH;
@@ -119,18 +119,18 @@ void update_cr_regs(struct task_struct *task)
 void user_enable_single_step(struct task_struct *task)
 {
 	clear_tsk_thread_flag(task, TIF_BLOCK_STEP);
-	set_tsk_thread_flag(task, TIF_SINGLE_STEP);
+	set_tsk_thread_flag(task, TIF_SINGLESTEP);
 }
 
 void user_disable_single_step(struct task_struct *task)
 {
 	clear_tsk_thread_flag(task, TIF_BLOCK_STEP);
-	clear_tsk_thread_flag(task, TIF_SINGLE_STEP);
+	clear_tsk_thread_flag(task, TIF_SINGLESTEP);
 }
 
 void user_enable_block_step(struct task_struct *task)
 {
-	set_tsk_thread_flag(task, TIF_SINGLE_STEP);
+	set_tsk_thread_flag(task, TIF_SINGLESTEP);
 	set_tsk_thread_flag(task, TIF_BLOCK_STEP);
 }
 
@@ -143,7 +143,7 @@ void ptrace_disable(struct task_struct *task)
 {
 	memset(&task->thread.per_user, 0, sizeof(task->thread.per_user));
 	memset(&task->thread.per_event, 0, sizeof(task->thread.per_event));
-	clear_tsk_thread_flag(task, TIF_SINGLE_STEP);
+	clear_tsk_thread_flag(task, TIF_SINGLESTEP);
 	clear_tsk_thread_flag(task, TIF_PER_TRAP);
 	task->thread.per_flags = 0;
 }
@@ -155,19 +155,19 @@ static inline unsigned long __peek_user_per(struct task_struct *child,
 {
 	if (addr == offsetof(struct per_struct_kernel, cr9))
 		/* Control bits of the active per set. */
-		return test_thread_flag(TIF_SINGLE_STEP) ?
+		return test_thread_flag(TIF_SINGLESTEP) ?
 			PER_EVENT_IFETCH : child->thread.per_user.control;
 	else if (addr == offsetof(struct per_struct_kernel, cr10))
 		/* Start address of the active per set. */
-		return test_thread_flag(TIF_SINGLE_STEP) ?
+		return test_thread_flag(TIF_SINGLESTEP) ?
 			0 : child->thread.per_user.start;
 	else if (addr == offsetof(struct per_struct_kernel, cr11))
 		/* End address of the active per set. */
-		return test_thread_flag(TIF_SINGLE_STEP) ?
+		return test_thread_flag(TIF_SINGLESTEP) ?
 			-1UL : child->thread.per_user.end;
 	else if (addr == offsetof(struct per_struct_kernel, bits))
 		/* Single-step bit. */
-		return test_thread_flag(TIF_SINGLE_STEP) ?
+		return test_thread_flag(TIF_SINGLESTEP) ?
 			(1UL << (BITS_PER_LONG - 1)) : 0;
 	else if (addr == offsetof(struct per_struct_kernel, starting_addr))
 		/* Start address of the user specified per set. */
