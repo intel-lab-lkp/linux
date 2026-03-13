@@ -18,6 +18,7 @@ TEST_PROGS := \
 	gro.py \
 	hds.py \
 	macsec_api.py \
+	macsec_traffic.py \
 	napi_id.py \
 	napi_threaded.py \
 	netpoll_basic.py \
