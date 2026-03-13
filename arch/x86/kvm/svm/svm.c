@@ -2319,8 +2319,7 @@ static int gp_interception(struct kvm_vcpu *vcpu)
 			return kvm_emulate_instruction(vcpu,
 				EMULTYPE_VMWARE_GP | EMULTYPE_NO_DECODE);
 	} else {
-		/* All SVM instructions expect page aligned RAX */
-		if (svm->vmcb->save.rax & ~PAGE_MASK)
+		if (!page_address_valid(vcpu, svm->vmcb->save.rax))
 			goto reinject;
 
 		return emulate_svm_instr(vcpu, opcode);
