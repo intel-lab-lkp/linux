@@ -600,6 +600,8 @@ static void iov_iter_folioq_revert(struct iov_iter *i, size_t unroll)
 		size_t fsize;
 
 		if (slot == 0) {
+			if (!folioq->prev)
+				return;
 			folioq = folioq->prev;
 			slot = folioq_nr_slots(folioq);
 		}
