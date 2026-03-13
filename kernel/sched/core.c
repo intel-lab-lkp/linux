@@ -132,7 +132,7 @@ static int __init setup_proxy_exec(char *str)
 {
 	bool proxy_enable = true;
 
-	if (*str && kstrtobool(str + 1, &proxy_enable)) {
+	if (*str && (*str != '=' || kstrtobool(str + 1, &proxy_enable))) {
 		pr_warn("Unable to parse sched_proxy_exec=\n");
 		return 0;
 	}
