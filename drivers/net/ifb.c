@@ -18,11 +18,9 @@
 	You need the tc action  mirror or redirect to feed this device
 	packets.
 
-
 	Authors:	Jamal Hadi Salim (2005)
 
 */
-
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -148,7 +146,6 @@ resched:
 		txp->tasklet_pending = 1;
 		tasklet_schedule(&txp->ifb_tasklet);
 	}
-
 }
 
 static void ifb_stats64(struct net_device *dev,
@@ -160,7 +157,7 @@ static void ifb_stats64(struct net_device *dev,
 	u64 packets, bytes;
 	int i;
 
-	for (i = 0; i < dev->num_tx_queues; i++,txp++) {
+	for (i = 0; i < dev->num_tx_queues; i++, txp++) {
 		do {
 			start = u64_stats_fetch_begin(&txp->rx_stats.sync);
 			packets = u64_stats_read(&txp->rx_stats.packets);
@@ -191,7 +188,7 @@ static int ifb_dev_init(struct net_device *dev)
 	if (!txp)
 		return -ENOMEM;
 	dp->tx_private = txp;
-	for (i = 0; i < dev->num_tx_queues; i++,txp++) {
+	for (i = 0; i < dev->num_tx_queues; i++, txp++) {
 		txp->txqnum = i;
 		txp->dev = dev;
 		__skb_queue_head_init(&txp->rq);
@@ -299,7 +296,7 @@ static void ifb_dev_free(struct net_device *dev)
 	struct ifb_q_private *txp = dp->tx_private;
 	int i;
 
-	for (i = 0; i < dev->num_tx_queues; i++,txp++) {
+	for (i = 0; i < dev->num_tx_queues; i++, txp++) {
 		tasklet_kill(&txp->ifb_tasklet);
 		__skb_queue_purge(&txp->rq);
 		__skb_queue_purge(&txp->tq);
