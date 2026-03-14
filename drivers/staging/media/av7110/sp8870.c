@@ -109,21 +109,21 @@ static int sp8870_firmware_upload(struct sp8870_state *state, const struct firmw
 	if (fw->size < SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET)
 		return -EINVAL;
 
-	// system controller stop
+	/* system controller stop */
 	sp8870_writereg(state, 0x0F00, 0x0000);
 
-	// instruction RAM register hiword
+	/* instruction RAM register hiword */
 	sp8870_writereg(state, 0x8F08, ((SP8870_FIRMWARE_SIZE / 2) & 0xFFFF));
 
-	// instruction RAM MWR
+	/* instruction RAM MWR */
 	sp8870_writereg(state, 0x8F0A, ((SP8870_FIRMWARE_SIZE / 2) >> 16));
 
-	// do firmware upload
+	/* do firmware upload */
 	fw_pos = SP8870_FIRMWARE_OFFSET;
 	while (fw_pos < SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET) {
 		tx_len = (fw_pos <= SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET - 252) ? 252 :
 			 SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET - fw_pos;
-		// write register 0xCF0A
+		/* write register 0xCF0A */
 		tx_buf[0] = 0xCF;
 		tx_buf[1] = 0x0A;
 		memcpy(&tx_buf[2], fw_buf + fw_pos, tx_len);
@@ -149,7 +149,7 @@ static void sp8870_microcontroller_stop(struct sp8870_state *state)
 	sp8870_writereg(state, 0x0F08, 0x000);
 	sp8870_writereg(state, 0x0F09, 0x000);
 
-	// microcontroller STOP
+	/* microcontroller STOP */
 	sp8870_writereg(state, 0x0F00, 0x000);
 }
 
@@ -158,10 +158,12 @@ static void sp8870_microcontroller_start(struct sp8870_state *state)
 	sp8870_writereg(state, 0x0F08, 0x000);
 	sp8870_writereg(state, 0x0F09, 0x000);
 
-	// microcontroller START
+	/* microcontroller START */
 	sp8870_writereg(state, 0x0F00, 0x001);
-	// not documented but if we don't read 0x0D01 out here
-	// we don't get a correct data valid signal
+	/*
+	 * not documented but if we don't read 0x0D01 out here
+	 * we don't get a correct data valid signal
+	 */
 	sp8870_readreg(state, 0x0D01);
 }
 
@@ -243,7 +245,7 @@ static int configure_reg0xc05(struct dtv_frontend_properties *p, u16 *reg0xc05)
 
 static int sp8870_wake_up(struct sp8870_state *state)
 {
-	// enable TS output and interface pins
+	/* enable TS output and interface pins */
 	return sp8870_writereg(state, 0xC18, 0x00D);
 }
 
@@ -258,29 +260,29 @@ static int sp8870_set_frontend_parameters(struct dvb_frontend *fe)
 	if (err)
 		return err;
 
-	// system controller stop
+	/* system controller stop */
 	sp8870_microcontroller_stop(state);
 
-	// set tuner parameters
+	/* set tuner parameters */
 	if (fe->ops.tuner_ops.set_params) {
 		fe->ops.tuner_ops.set_params(fe);
 		if (fe->ops.i2c_gate_ctrl)
 			fe->ops.i2c_gate_ctrl(fe, 0);
 	}
 
-	// sample rate correction bit [23..17]
+	/* sample rate correction bit [23..17] */
 	sp8870_writereg(state, 0x0319, 0x000A);
 
-	// sample rate correction bit [16..0]
+	/* sample rate correction bit [16..0] */
 	sp8870_writereg(state, 0x031A, 0x0AAB);
 
-	// integer carrier offset
+	/* integer carrier offset */
 	sp8870_writereg(state, 0x0309, 0x0400);
 
-	// fractional carrier offset
+	/* fractional carrier offset */
 	sp8870_writereg(state, 0x030A, 0x0000);
 
-	// filter for 6/7/8 Mhz channel
+	/* filter for 6/7/8 Mhz channel */
 	if (p->bandwidth_hz == 6000000)
 		sp8870_writereg(state, 0x0311, 0x0002);
 	else if (p->bandwidth_hz == 7000000)
@@ -288,7 +290,7 @@ static int sp8870_set_frontend_parameters(struct dvb_frontend *fe)
 	else
 		sp8870_writereg(state, 0x0311, 0x0000);
 
-	// scan order: 2k first = 0x0000, 8k first = 0x0001
+	/* scan order: 2k first = 0x0000, 8k first = 0x0001 */
 	if (p->transmission_mode == TRANSMISSION_MODE_2K)
 		sp8870_writereg(state, 0x0338, 0x0000);
 	else
@@ -296,12 +298,12 @@ static int sp8870_set_frontend_parameters(struct dvb_frontend *fe)
 
 	sp8870_writereg(state, 0xc05, reg0xc05);
 
-	// read status reg in order to clear pending irqs
+	/* read status reg in order to clear pending irqs */
 	err = sp8870_readreg(state, 0x200);
 	if (err < 0)
 		return err;
 
-	// system controller start
+	/* system controller start */
 	sp8870_microcontroller_start(state);
 
 	return 0;
@@ -337,16 +339,16 @@ static int sp8870_init(struct dvb_frontend *fe)
 	/* enable TS output and interface pins */
 	sp8870_writereg(state, 0xc18, 0x00d);
 
-	// system controller stop
+	/* system controller stop */
 	sp8870_microcontroller_stop(state);
 
-	// ADC mode
+	/* ADC mode */
 	sp8870_writereg(state, 0x0301, 0x0003);
 
-	// Reed Solomon parity bytes passed to output
+	/* Reed Solomon parity bytes passed to output */
 	sp8870_writereg(state, 0x0C13, 0x0001);
 
-	// MPEG clock is suppressed if no valid data
+	/* MPEG clock is suppressed if no valid data */
 	sp8870_writereg(state, 0x0C14, 0x0001);
 
 	/* bit 0x010: enable data valid signal */
@@ -490,7 +492,7 @@ static int sp8870_set_frontend(struct dvb_frontend *fe)
 			return err;
 
 		for (check_count = 0; check_count < MAXCHECKS; check_count++) {
-//			valid = ((sp8870_readreg(i2c, 0x0200) & 4) == 0);
+			/* valid = ((sp8870_readreg(i2c, 0x0200) & 4) == 0); */
 			valid = sp8870_read_data_valid_signal(state);
 			if (valid) {
 				dprintk("delay = %i usec\n", check_count * 10);
@@ -526,7 +528,7 @@ static int sp8870_sleep(struct dvb_frontend *fe)
 {
 	struct sp8870_state *state = fe->demodulator_priv;
 
-	// tristate TS output and disable interface pins
+	/* tristate TS output and disable interface pins */
 	return sp8870_writereg(state, 0xC18, 0x000);
 }
 
