@@ -39,7 +39,18 @@ add_probe_vfs_getname() {
 }
 
 skip_if_no_debuginfo() {
-	add_probe_vfs_getname -v 2>&1 | grep -E -q "^(Failed to find the path for the kernel|Debuginfo-analysis is not supported)|(file has no debug information)" && return 2
+	no_line_check=$1
+	debug_str="^(Failed to find the path for the kernel|Debuginfo-analysis is not supported)|(file has no debug information)"
+
+	# search for debug_str using simple perf probe if the
+	# test only needs to check for debuginfo, and not specifically
+	# line number.
+	if [ $no_line_check -eq 1 ]; then
+		perf probe -v -L getname_flags 2>&1 | grep -E -q "$debug_str" && return 2
+	else
+		add_probe_vfs_getname -v 2>&1 | grep -E -q "$debug_str" && return 2
+	fi
+
 	return 1
 }
 
