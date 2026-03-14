@@ -99,6 +99,7 @@ static void e1000_clean_tx_ring(struct e1000_adapter *adapter,
 static void e1000_clean_rx_ring(struct e1000_adapter *adapter,
 				struct e1000_rx_ring *rx_ring);
 static void e1000_set_rx_mode(struct net_device *netdev);
+static void e1000_set_rx_mode_async(struct net_device *netdev);
 static void e1000_update_phy_info_task(struct work_struct *work);
 static void e1000_watchdog(struct work_struct *work);
 static void e1000_82547_tx_fifo_stall_task(struct work_struct *work);
@@ -359,7 +360,7 @@ static void e1000_configure(struct e1000_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	int i;
 
-	e1000_set_rx_mode(netdev);
+	netif_set_rx_mode(netdev);
 
 	e1000_restore_vlan(adapter);
 	e1000_init_manageability(adapter);
@@ -823,6 +824,7 @@ static const struct net_device_ops e1000_netdev_ops = {
 	.ndo_stop		= e1000_close,
 	.ndo_start_xmit		= e1000_xmit_frame,
 	.ndo_set_rx_mode	= e1000_set_rx_mode,
+	.ndo_set_rx_mode_async	= e1000_set_rx_mode_async,
 	.ndo_set_mac_address	= e1000_set_mac,
 	.ndo_tx_timeout		= e1000_tx_timeout,
 	.ndo_change_mtu		= e1000_change_mtu,
@@ -2223,23 +2225,44 @@ static int e1000_set_mac(struct net_device *netdev, void *p)
 }
 
 /**
- * e1000_set_rx_mode - Secondary Unicast, Multicast and Promiscuous mode set
+ * e1000_set_rx_mode - Secondary Unicast, Multicast and Promiscuous mode
+ * config.
  * @netdev: network interface device structure
  *
  * The set_rx_mode entry point is called whenever the unicast or multicast
  * address lists or the network interface flags are updated. This routine is
- * responsible for configuring the hardware for proper unicast, multicast,
- * promiscuous mode, and all-multi behavior.
+ * responsible for preparing the rx mode config and scheduling the rx_mode
+ * work which invokes the set_rx_mode_async callback.
  **/
 static void e1000_set_rx_mode(struct net_device *netdev)
 {
+	bool allmulti = !!(netdev->flags & IFF_ALLMULTI);
+	bool promisc = !!(netdev->flags & IFF_PROMISC);
+
+	netif_set_rx_mode_flag(netdev, NETIF_RX_MODE_UC_SKIP, promisc);
+
+	netif_set_rx_mode_cfg(netdev, NETIF_RX_MODE_CFG_ALLMULTI, allmulti);
+	netif_set_rx_mode_cfg(netdev, NETIF_RX_MODE_CFG_PROMISC, promisc);
+}
+
+/**
+ * e1000_set_rx_mode_async - Secondary Unicast, Multicast and Promiscuous mode
+ * confirm.
+ * @netdev: network interface device structure
+ *
+ * The set_rx_mode_async callback is responsible for actually updating the
+ * hardware. This routine is responsible for configuring the hardware for
+ * proper unicast, multicast, promiscuous mode, and all-multi behavior.
+ **/
+static void e1000_set_rx_mode_async(struct net_device *netdev)
+{
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
-	struct netdev_hw_addr *ha;
 	bool use_uc = false;
+	char *ha_addr;
 	u32 rctl;
 	u32 hash_value;
-	int i, rar_entries = E1000_RAR_ENTRIES;
+	int i, rar_entries = E1000_RAR_ENTRIES, ni;
 	int mta_reg_count = E1000_NUM_MTA_REGISTERS;
 	u32 *mcarray = kcalloc(mta_reg_count, sizeof(u32), GFP_ATOMIC);
 
@@ -2250,11 +2273,11 @@ static void e1000_set_rx_mode(struct net_device *netdev)
 
 	rctl = er32(RCTL);
 
-	if (netdev->flags & IFF_PROMISC) {
+	if (netif_get_rx_mode_cfg(netdev, NETIF_RX_MODE_CFG_PROMISC)) {
 		rctl |= (E1000_RCTL_UPE | E1000_RCTL_MPE);
 		rctl &= ~E1000_RCTL_VFE;
 	} else {
-		if (netdev->flags & IFF_ALLMULTI)
+		if (netif_get_rx_mode_cfg(netdev, NETIF_RX_MODE_CFG_ALLMULTI))
 			rctl |= E1000_RCTL_MPE;
 		else
 			rctl &= ~E1000_RCTL_MPE;
@@ -2263,9 +2286,9 @@ static void e1000_set_rx_mode(struct net_device *netdev)
 			rctl |= E1000_RCTL_VFE;
 	}
 
-	if (netdev_uc_count(netdev) > rar_entries - 1) {
+	if (netif_rx_mode_uc_count(netdev) > rar_entries - 1) {
 		rctl |= E1000_RCTL_UPE;
-	} else if (!(netdev->flags & IFF_PROMISC)) {
+	} else if (!netif_get_rx_mode_cfg(netdev, NETIF_RX_MODE_CFG_PROMISC)) {
 		rctl &= ~E1000_RCTL_UPE;
 		use_uc = true;
 	}
@@ -2286,23 +2309,23 @@ static void e1000_set_rx_mode(struct net_device *netdev)
 	 */
 	i = 1;
 	if (use_uc)
-		netdev_for_each_uc_addr(ha, netdev) {
+		netif_rx_mode_for_each_uc_addr(ha_addr, netdev, ni) {
 			if (i == rar_entries)
 				break;
-			e1000_rar_set(hw, ha->addr, i++);
+			e1000_rar_set(hw, ha_addr, i++);
 		}
 
-	netdev_for_each_mc_addr(ha, netdev) {
+	netif_rx_mode_for_each_mc_addr(ha_addr, netdev, ni) {
 		if (i == rar_entries) {
 			/* load any remaining addresses into the hash table */
 			u32 hash_reg, hash_bit, mta;
-			hash_value = e1000_hash_mc_addr(hw, ha->addr);
+			hash_value = e1000_hash_mc_addr(hw, ha_addr);
 			hash_reg = (hash_value >> 5) & 0x7F;
 			hash_bit = hash_value & 0x1F;
 			mta = (1 << hash_bit);
 			mcarray[hash_reg] |= mta;
 		} else {
-			e1000_rar_set(hw, ha->addr, i++);
+			e1000_rar_set(hw, ha_addr, i++);
 		}
 	}
 
@@ -5092,7 +5115,10 @@ static int __e1000_shutdown(struct pci_dev *pdev, bool *enable_wake)
 
 	if (wufc) {
 		e1000_setup_rctl(adapter);
-		e1000_set_rx_mode(netdev);
+
+		rtnl_lock();
+		netif_set_rx_mode(netdev);
+		rtnl_unlock();
 
 		rctl = er32(RCTL);
 
@@ -5150,11 +5176,13 @@ static int e1000_suspend(struct device *dev)
 {
 	int retval;
 	struct pci_dev *pdev = to_pci_dev(dev);
+	struct net_device *netdev = pci_get_drvdata(pdev);
 	bool wake;
 
 	retval = __e1000_shutdown(pdev, &wake);
 	device_set_wakeup_enable(dev, wake);
 
+	netif_disable_async_ops(netdev);
 	return retval;
 }
 
@@ -5165,6 +5193,8 @@ static int e1000_resume(struct device *dev)
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
 	u32 err;
+
+	netif_enable_async_ops(netdev);
 
 	if (adapter->need_ioport)
 		err = pci_enable_device(pdev);
@@ -5195,8 +5225,11 @@ static int e1000_resume(struct device *dev)
 
 	e1000_init_manageability(adapter);
 
-	if (netif_running(netdev))
+	if (netif_running(netdev)) {
+		rtnl_lock();
 		e1000_up(adapter);
+		rtnl_unlock();
+	}
 
 	netif_device_attach(netdev);
 
@@ -5205,6 +5238,7 @@ static int e1000_resume(struct device *dev)
 
 static void e1000_shutdown(struct pci_dev *pdev)
 {
+	struct net_device *netdev = pci_get_drvdata(pdev);
 	bool wake;
 
 	__e1000_shutdown(pdev, &wake);
@@ -5213,6 +5247,8 @@ static void e1000_shutdown(struct pci_dev *pdev)
 		pci_wake_from_d3(pdev, wake);
 		pci_set_power_state(pdev, PCI_D3hot);
 	}
+
+	netif_disable_async_ops(netdev);
 }
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
@@ -5312,11 +5348,16 @@ static void e1000_io_resume(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct e1000_adapter *adapter = netdev_priv(netdev);
+	int rc;
 
 	e1000_init_manageability(adapter);
 
 	if (netif_running(netdev)) {
-		if (e1000_up(adapter)) {
+		rtnl_lock();
+		rc = e1000_up(adapter);
+		rtnl_unlock();
+
+		if (rc) {
 			pr_info("can't bring device back up after reset\n");
 			return;
 		}
