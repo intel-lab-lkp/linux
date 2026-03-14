@@ -10170,6 +10170,28 @@ static int rtl_ops_init(struct r8152 *tp)
 		r8152_desc_init(tp);
 		break;
 
+	case RTL_VER_16:
+		tp->eee_en		= true;
+		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
+		tp->eee_adv2		= MDIO_EEE_2_5GT | MDIO_EEE_5GT;
+		ops->init		= r8156_init;
+		ops->enable		= rtl8156_enable;
+		ops->disable		= rtl8153_disable;
+		ops->up			= rtl8156_up;
+		ops->down		= rtl8156_down;
+		ops->unload		= rtl8153_unload;
+		ops->eee_get		= r8153_get_eee;
+		ops->eee_set		= r8152_set_eee;
+		ops->in_nway		= rtl8153_in_nway;
+		ops->hw_phy_cfg		= r8157_hw_phy_cfg;
+		ops->autosuspend_en	= rtl8157_runtime_enable;
+		ops->change_mtu		= rtl8156_change_mtu;
+		tp->rx_buf_sz		= 32 * 1024;
+		tp->support_2500full	= 1;
+		tp->support_5000full	= 1;
+		r8157_desc_init(tp);
+		break;
+
 	default:
 		ret = -ENODEV;
 		dev_err(&tp->intf->dev, "Unknown Device\n");
@@ -10319,6 +10341,9 @@ static u8 __rtl_get_hw_ver(struct usb_device *udev)
 		break;
 	case 0x7420:
 		version = RTL_VER_15;
+		break;
+	case 0x1030:
+		version = RTL_VER_16;
 		break;
 	default:
 		version = RTL_VER_UNKNOWN;
@@ -10631,6 +10656,7 @@ static const struct usb_device_id rtl8152_table[] = {
 	{ USB_DEVICE(VENDOR_ID_REALTEK, 0x8153) },
 	{ USB_DEVICE(VENDOR_ID_REALTEK, 0x8155) },
 	{ USB_DEVICE(VENDOR_ID_REALTEK, 0x8156) },
+	{ USB_DEVICE(VENDOR_ID_REALTEK, 0x8157) },
 
 	/* Microsoft */
 	{ USB_DEVICE(VENDOR_ID_MICROSOFT, 0x07ab) },
