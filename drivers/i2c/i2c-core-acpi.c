@@ -137,6 +137,17 @@ static const struct acpi_device_id i2c_acpi_ignored_device_ids[] = {
 	{}
 };
 
+/*
+ * Generic I2C device IDs that may be duplicated by vendor-specific devices.
+ * When a vendor-specific sibling exists at the same address, the generic
+ * device is skipped to avoid -EBUSY address conflicts.
+ */
+static const struct acpi_device_id i2c_acpi_generic_device_ids[] = {
+	/* Microsoft UCSI - often paired with vendor-specific UCSI device */
+	{ "MSFT8000" },
+	{}
+};
+
 struct i2c_acpi_irq_context {
 	int irq;
 	bool wake_capable;
@@ -274,6 +285,76 @@ static int i2c_acpi_get_info(struct acpi_device *adev,
 	return 0;
 }
 
+struct i2c_acpi_sibling_check {
+	struct acpi_device *self;
+	struct i2c_adapter *adapter;
+	unsigned short addr;
+	bool found;
+};
+
+static int i2c_acpi_check_sibling_addr(struct acpi_device *adev, void *data)
+{
+	struct i2c_acpi_sibling_check *check = data;
+	struct i2c_acpi_lookup lookup;
+	struct i2c_board_info info;
+
+	if (adev == check->self)
+		return 0;
+
+	/* Only yield to vendor-specific devices, not other generic ones */
+	if (!acpi_match_device_ids(adev, i2c_acpi_generic_device_ids))
+		return 0;
+
+	memset(&lookup, 0, sizeof(lookup));
+	lookup.info = &info;
+	lookup.index = -1;
+
+	if (i2c_acpi_do_lookup(adev, &lookup))
+		return 0;
+
+	if (!device_match_acpi_handle(&check->adapter->dev,
+				      lookup.adapter_handle))
+		return 0;
+
+	if (info.addr == check->addr) {
+		check->found = true;
+		return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * Check whether this generic ACPI device has a vendor-specific sibling at the
+ * same I2C address. Some BIOS implementations (e.g., ASUS Z690/Z790/X670E)
+ * declare both a generic UCSI device (MSFT8000) and a vendor-specific device
+ * (e.g., ITE8853) at the same address. Skip the generic one so the vendor
+ * driver can bind with proper interrupt and device-specific resources.
+ */
+static bool i2c_acpi_has_vendor_sibling(struct acpi_device *adev,
+					struct i2c_adapter *adapter,
+					struct i2c_board_info *info)
+{
+	struct acpi_device *parent;
+	struct i2c_acpi_sibling_check check;
+
+	if (acpi_match_device_ids(adev, i2c_acpi_generic_device_ids))
+		return false;
+
+	parent = acpi_dev_parent(adev);
+	if (!parent)
+		return false;
+
+	check.self = adev;
+	check.adapter = adapter;
+	check.addr = info->addr;
+	check.found = false;
+
+	acpi_dev_for_each_child(parent, i2c_acpi_check_sibling_addr, &check);
+
+	return check.found;
+}
+
 static void i2c_acpi_register_device(struct i2c_adapter *adapter,
 				     struct acpi_device *adev,
 				     struct i2c_board_info *info)
@@ -301,6 +382,13 @@ static acpi_status i2c_acpi_add_device(acpi_handle handle, u32 level,
 
 	if (!adev || i2c_acpi_get_info(adev, &info, adapter, NULL))
 		return AE_OK;
+
+	if (i2c_acpi_has_vendor_sibling(adev, adapter, &info)) {
+		dev_info(&adapter->dev,
+			 "skipping %s in favor of vendor-specific device at 0x%02x\n",
+			 dev_name(&adev->dev), info.addr);
+		return AE_OK;
+	}
 
 	i2c_acpi_register_device(adapter, adev, &info);
 
