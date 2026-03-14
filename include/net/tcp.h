@@ -947,13 +947,21 @@ static inline u32 tcp_max_receive_window(const struct tcp_sock *tp)
 	return (u32) win;
 }
 
+static inline void tcp_init_max_rcv_wnd_seq(struct tcp_sock *tp)
+{
+	tp->rcv_mwnd_seq = tp->rcv_wup + tp->rcv_wnd;
+	tp->rcv_mwnd_scaling_ratio = tp->rcv_wnd_scaling_ratio;
+}
+
 /* Check if we need to update the maximum receive window sequence number */
 static inline void tcp_update_max_rcv_wnd_seq(struct tcp_sock *tp)
 {
 	u32 wre = tp->rcv_wup + tp->rcv_wnd;
 
-	if (after(wre, tp->rcv_mwnd_seq))
+	if (after(wre, tp->rcv_mwnd_seq)) {
 		tp->rcv_mwnd_seq = wre;
+		tp->rcv_mwnd_scaling_ratio = tp->rcv_wnd_scaling_ratio;
+	}
 }
 
 /* Choose a new window, without checks for shrinking, and without
@@ -1766,6 +1774,16 @@ static inline bool tcp_space_from_rcv_wnd(const struct tcp_sock *tp, int win,
 					   space);
 }
 
+/* Same as tcp_space_from_rcv_wnd(), but for the remembered maximum
+ * sender-visible receive window.
+ */
+static inline bool tcp_space_from_rcv_mwnd(const struct tcp_sock *tp, int win,
+					   int *space)
+{
+	return tcp_space_from_wnd_snapshot(tp->rcv_mwnd_scaling_ratio, win,
+					   space);
+}
+
 /* Assume a 50% default for skb->len/skb->truesize ratio.
  * This may be adjusted later in tcp_measure_rcv_mss().
  */
@@ -1776,6 +1794,7 @@ static inline void tcp_scaling_ratio_init(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	tp->scaling_ratio = TCP_DEFAULT_SCALING_RATIO;
+	tp->rcv_mwnd_scaling_ratio = TCP_DEFAULT_SCALING_RATIO;
 	tp->rcv_wnd_scaling_ratio = TCP_DEFAULT_SCALING_RATIO;
 }
 

@@ -4171,7 +4171,7 @@ static void tcp_connect_init(struct sock *sk)
 	else
 		tp->rcv_tstamp = tcp_jiffies32;
 	tp->rcv_wup = tp->rcv_nxt;
-	tp->rcv_mwnd_seq = tp->rcv_nxt + tp->rcv_wnd;
+	tcp_init_max_rcv_wnd_seq(tp);
 	WRITE_ONCE(tp->copied_seq, tp->rcv_nxt);
 
 	inet_csk(sk)->icsk_rto = tcp_timeout_init(sk);
