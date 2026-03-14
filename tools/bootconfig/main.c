@@ -162,8 +162,10 @@ static int load_xbc_file(const char *path, char **buf)
 	if (fd < 0)
 		return -errno;
 	ret = fstat(fd, &stat);
-	if (ret < 0)
+	if (ret < 0) {
+		close(fd);
 		return -errno;
+	}
 
 	ret = load_xbc_fd(fd, buf, stat.st_size);
 
