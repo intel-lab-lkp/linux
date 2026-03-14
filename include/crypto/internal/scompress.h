@@ -21,7 +21,8 @@ struct crypto_scomp {
  * @compress:	Function performs a compress operation
  * @decompress:	Function performs a de-compress operation
  * @streams:	Per-cpu memory for algorithm
- * @calg:	Cmonn algorithm data structure shared with acomp
+ * @calg:	Common algorithm data structure shared with acomp
+ * @COMP_ALG_COMMON: see struct comp_alg_common in crypto/acompress.h
  */
 struct scomp_alg {
 	int (*compress)(struct crypto_scomp *tfm, const u8 *src,
