@@ -22,6 +22,21 @@ The boot config syntax is a simple structured key-value. Each key consists
 of dot-connected-words, and key and value are connected by ``=``. The value
 string has to be terminated by the following delimiters described below.
 
+The syntax is defined in EBNF as follows::
+
+  Config = { Statement }
+  Statement = [ Key [ Assignment | Block ] | Comment ] ( "\n" | ";" )
+  Assignment = ( "=" | "+=" | ":=" ) ValueList
+  ValueList = [ Value { "," [ { ( Comment | "\n" ) } ] Value } ]
+  Block = "{" { Statement } "}"
+  Key = Word { "." Word }
+  Word = [a-zA-Z0-9_-]+
+  Value = QuotedValue | UnquotedValue
+  QuotedValue = "\"" { any_character_except_double_quote } "\""
+              | "'" { any_character_except_single_quote } "'"
+  UnquotedValue = { any_printable_character_except_delimiters }
+  Comment = "#" { any_character_except_newline }
+
 Each key word must contain only alphabets, numbers, dash (``-``) or underscore
 (``_``). And each value only contains printable characters or spaces except
 for delimiters such as semi-colon (``;``), new-line (``\n``), comma (``,``),
