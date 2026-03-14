@@ -6869,6 +6869,9 @@ static int stmmac_vlan_restore(struct stmmac_priv *priv)
 	if (priv->hw->num_vlan)
 		stmmac_restore_hw_vlan_rx_fltr(priv, priv->dev, priv->hw);
 
+	if (!priv->hw->vlan || !priv->hw->vlan->update_vlan_hash)
+		return 0;
+
 	ret = stmmac_vlan_update(priv, priv->num_double_vlans);
 	if (ret)
 		netdev_err(priv->dev, "Failed to restore VLANs\n");
