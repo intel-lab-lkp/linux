@@ -233,7 +233,7 @@ static void aw96103_parsing_bin_file(struct aw_bin *bin)
 {
 	bin->valid_data_addr = AW96103_BIN_VALID_DATA_OFFSET;
 	bin->valid_data_len =
-		*(unsigned int *)(bin->data + AW96103_BIN_DATA_LEN_OFFSET) -
+		get_unaligned_le32(bin->data + AW96103_BIN_DATA_LEN_OFFSET) -
 		AW96103_BIN_DATA_REG_NUM_SIZE;
 	memcpy(bin->chip_type, bin->data + AW96103_BIN_CHIP_TYPE_OFFSET,
 	       AW96103_BIN_CHIP_TYPE_SIZE);
