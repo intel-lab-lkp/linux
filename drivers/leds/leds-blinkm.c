@@ -694,8 +694,11 @@ static int register_multicolor(struct i2c_client *client, struct blinkm_data *da
 		return -ENOMEM;
 
 	mc_led_info[RED].color_index = LED_COLOR_ID_RED;
+	mc_led_info[RED].max_intensity = LED_USE_MAX_BRIGHTNESS;
 	mc_led_info[GREEN].color_index = LED_COLOR_ID_GREEN;
+	mc_led_info[GREEN].max_intensity = LED_USE_MAX_BRIGHTNESS;
 	mc_led_info[BLUE].color_index = LED_COLOR_ID_BLUE;
+	mc_led_info[BLUE].max_intensity = LED_USE_MAX_BRIGHTNESS;
 
 	mc_led->cdev.mcled_cdev.subled_info = mc_led_info;
 	mc_led->cdev.mcled_cdev.num_colors = NUM_LEDS;

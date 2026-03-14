@@ -233,6 +233,7 @@ static int omnia_led_register(struct i2c_client *client, struct omnia_led *led,
 	/* Initial color is white */
 	for (int i = 0; i < OMNIA_LED_NUM_CHANNELS; ++i) {
 		led->subled_info[i].intensity = 255;
+		led->subled_info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		led->subled_info[i].brightness = 255;
 		led->subled_info[i].channel = i;
 	}

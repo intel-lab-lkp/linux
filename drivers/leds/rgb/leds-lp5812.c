@@ -353,6 +353,7 @@ static int lp5812_init_led(struct lp5812_led *led, struct lp5812_chip *chip, int
 		for (i = 0; i < led->mc_cdev.num_colors; i++) {
 			mc_led_info[i].color_index = chip->led_config[chan].color_id[i];
 			mc_led_info[i].channel = chip->led_config[chan].led_id[i];
+			mc_led_info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		}
 
 		led->mc_cdev.subled_info = mc_led_info;

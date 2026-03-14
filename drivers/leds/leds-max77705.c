@@ -149,6 +149,7 @@ static int max77705_parse_subled(struct device *dev, struct fwnode_handle *np,
 				     "failed to parse \"color\" of %pOF\n", np);
 
 	info->color_index = color;
+	info->max_intensity = LED_USE_MAX_BRIGHTNESS;
 
 	return 0;
 }

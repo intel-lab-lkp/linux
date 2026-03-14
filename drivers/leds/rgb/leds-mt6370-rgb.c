@@ -437,10 +437,7 @@ static int mt6370_mc_brightness_set(struct led_classdev *lcdev, enum led_brightn
 	disable = enable;
 
 	for (i = 0; i < mccdev->num_colors; i++) {
-		u32 brightness;
-
 		subled = mccdev->subled_info + i;
-		brightness = min(subled->brightness, lcdev->max_brightness);
 		disable &= ~MT6370_CHEN_BIT(subled->channel);
 
 		if (level == 0) {
@@ -453,14 +450,14 @@ static int mt6370_mc_brightness_set(struct led_classdev *lcdev, enum led_brightn
 			continue;
 		}
 
-		if (brightness == 0) {
+		if (subled->brightness == 0) {
 			enable &= ~MT6370_CHEN_BIT(subled->channel);
 			continue;
 		}
 
 		enable |= MT6370_CHEN_BIT(subled->channel);
 
-		ret = mt6370_set_led_brightness(priv, subled->channel, brightness);
+		ret = mt6370_set_led_brightness(priv, subled->channel, subled->brightness);
 		if (ret)
 			goto out_unlock;
 	}
@@ -742,6 +739,7 @@ static int mt6370_assign_multicolor_info(struct device *dev, struct mt6370_led *
 		sub_led[num_color].color_index = color;
 		sub_led[num_color].channel = reg;
 		sub_led[num_color].intensity = 0;
+		sub_led[num_color].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		num_color++;
 	}
 

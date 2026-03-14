@@ -423,6 +423,7 @@ static int ktd202x_setup_led_rgb(struct ktd202x *chip, struct fwnode_handle *fwn
 		info[i].color_index = mono_color;
 		info[i].channel = reg;
 		info[i].intensity = KTD202X_MAX_BRIGHTNESS;
+		info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		i++;
 	}
 

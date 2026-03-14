@@ -100,7 +100,7 @@ static int mt6360_mc_brightness_set(struct led_classdev *lcdev,
 	struct led_classdev_mc *mccdev = lcdev_to_mccdev(lcdev);
 	struct mt6360_led *led = container_of(mccdev, struct mt6360_led, mc);
 	struct mt6360_priv *priv = led->priv;
-	u32 real_bright, enable_mask = 0, enable = 0;
+	u32 enable_mask = 0, enable = 0;
 	int i, ret;
 
 	mutex_lock(&priv->lock);
@@ -110,14 +110,13 @@ static int mt6360_mc_brightness_set(struct led_classdev *lcdev,
 	for (i = 0; i < mccdev->num_colors; i++) {
 		struct mc_subled *subled = mccdev->subled_info + i;
 
-		real_bright = min(lcdev->max_brightness, subled->brightness);
 		ret = regmap_update_bits(priv->regmap, MT6360_REG_ISNK(i),
-					 MT6360_ISNK_MASK, real_bright);
+					 MT6360_ISNK_MASK, subled->brightness);
 		if (ret)
 			goto out;
 
 		enable_mask |= MT6360_ISNK_ENMASK(subled->channel);
-		if (real_bright)
+		if (subled->brightness)
 			enable |= MT6360_ISNK_ENMASK(subled->channel);
 	}
 
@@ -660,6 +659,7 @@ static int mt6360_init_isnk_properties(struct mt6360_led *led,
 			priv->leds_active |= BIT(reg);
 			sub_led[num_color].color_index = color;
 			sub_led[num_color].channel = reg;
+			sub_led[num_color].max_intensity = LED_USE_MAX_BRIGHTNESS;
 			num_color++;
 		}
 

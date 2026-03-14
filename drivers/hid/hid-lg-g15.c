@@ -975,14 +975,17 @@ static void lg_g15_setup_led_rgb(struct lg_g15_data *g15, int index)
 		case LED_COLOR_ID_RED:
 			subled_info[i].color_index = LED_COLOR_ID_RED;
 			subled_info[i].intensity = gled->red;
+			subled_info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 			break;
 		case LED_COLOR_ID_GREEN:
 			subled_info[i].color_index = LED_COLOR_ID_GREEN;
 			subled_info[i].intensity = gled->green;
+			subled_info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 			break;
 		case LED_COLOR_ID_BLUE:
 			subled_info[i].color_index = LED_COLOR_ID_BLUE;
 			subled_info[i].intensity = gled->blue;
+			subled_info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 			break;
 		}
 		subled_info[i].channel = i;

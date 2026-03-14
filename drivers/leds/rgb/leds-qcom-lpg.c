@@ -1411,6 +1411,7 @@ static int lpg_add_led(struct lpg *lpg, struct device_node *np)
 
 			info[i].color_index = led->channels[i]->color;
 			info[i].intensity = 0;
+			info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 			i++;
 		}
 

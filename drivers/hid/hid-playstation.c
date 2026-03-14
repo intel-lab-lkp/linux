@@ -874,8 +874,11 @@ static int ps_lightbar_register(struct ps_device *ps_dev, struct led_classdev_mc
 		return -ENOMEM;
 
 	mc_led_info[0].color_index = LED_COLOR_ID_RED;
+	mc_led_info[0].max_intensity = LED_USE_MAX_BRIGHTNESS;
 	mc_led_info[1].color_index = LED_COLOR_ID_GREEN;
+	mc_led_info[1].max_intensity = LED_USE_MAX_BRIGHTNESS;
 	mc_led_info[2].color_index = LED_COLOR_ID_BLUE;
+	mc_led_info[2].max_intensity = LED_USE_MAX_BRIGHTNESS;
 
 	lightbar_mc_dev->subled_info = mc_led_info;
 	lightbar_mc_dev->num_colors = 3;

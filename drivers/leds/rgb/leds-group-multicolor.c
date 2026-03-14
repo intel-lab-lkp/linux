@@ -111,6 +111,7 @@ static int leds_gmc_probe(struct platform_device *pdev)
 
 		/* Configure the LED intensity to its maximum */
 		subled[i].intensity = max_brightness;
+		subled[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 	}
 
 	/* Initialise the multicolor's LED class device */

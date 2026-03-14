@@ -95,6 +95,7 @@ static int iterate_subleds(struct device *dev, struct pwm_mc_led *priv,
 		}
 
 		subled[priv->mc_cdev.num_colors].color_index = color;
+		subled[priv->mc_cdev.num_colors].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		priv->mc_cdev.num_colors++;
 	}
 

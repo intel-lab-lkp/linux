@@ -202,6 +202,7 @@ static int cros_ec_led_probe_one(struct device *dev, struct cros_ec_device *cros
 			continue;
 
 		subleds[subled].color_index = cros_ec_led_to_linux_id[i];
+		subleds[subled].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		if (subled == 0)
 			subleds[subled].intensity = 100;
 		subled++;

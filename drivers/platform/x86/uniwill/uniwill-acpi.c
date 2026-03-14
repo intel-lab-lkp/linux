@@ -1082,8 +1082,7 @@ static int uniwill_led_brightness_set(struct led_classdev *led_cdev, enum led_br
 	guard(mutex)(&data->led_lock);
 
 	for (int i = 0; i < LED_CHANNELS; i++) {
-		/* Prevent the brightness values from overflowing */
-		value = min(LED_MAX_BRIGHTNESS, data->led_mc_subled_info[i].brightness);
+		value = data->led_mc_subled_info[i].brightness;
 		ret = regmap_write(data->regmap, uniwill_led_channel_to_ac_reg[i], value);
 		if (ret < 0)
 			return ret;
@@ -1182,6 +1181,7 @@ static int uniwill_led_init(struct uniwill_data *data)
 			return ret;
 
 		data->led_mc_subled_info[i].intensity = value;
+		data->led_mc_subled_info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		data->led_mc_subled_info[i].channel = i;
 	}
 

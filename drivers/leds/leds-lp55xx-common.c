@@ -495,10 +495,9 @@ static int lp55xx_init_led(struct lp55xx_led *led,
 		led_cdev->brightness_set_blocking = lp55xx_set_mc_brightness;
 		led->mc_cdev.num_colors = pdata->led_config[chan].num_colors;
 		for (i = 0; i < led->mc_cdev.num_colors; i++) {
-			mc_led_info[i].color_index =
-				pdata->led_config[chan].color_id[i];
-			mc_led_info[i].channel =
-					pdata->led_config[chan].output_num[i];
+			mc_led_info[i].color_index = pdata->led_config[chan].color_id[i];
+			mc_led_info[i].channel = pdata->led_config[chan].output_num[i];
+			mc_led_info[i].max_intensity = LED_USE_MAX_BRIGHTNESS;
 		}
 
 		led->mc_cdev.subled_info = mc_led_info;
