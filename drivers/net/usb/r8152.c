@@ -743,8 +743,6 @@ enum rtl_register_content {
 #define RTL8152_MAX_TX		4
 #define RTL8152_MAX_RX		10
 #define INTBUFSIZE		2
-#define TX_ALIGN		4
-#define RX_ALIGN		8
 
 #define RTL8152_RX_MAX_PENDING	4096
 #define RTL8152_RXFG_HEADSZ	256
@@ -756,7 +754,6 @@ enum rtl_register_content {
 #define RTL8152_TX_TIMEOUT	(5 * HZ)
 #define mtu_to_size(m)		((m) + VLAN_ETH_HLEN + ETH_FCS_LEN)
 #define size_to_mtu(s)		((s) - VLAN_ETH_HLEN - ETH_FCS_LEN)
-#define rx_reserved_size(x)	(mtu_to_size(x) + sizeof(struct rx_desc) + RX_ALIGN)
 
 /* rtl8152 flags */
 enum rtl8152_flags {
@@ -841,6 +838,40 @@ struct tx_desc {
 #define TX_VLAN_TAG		BIT(16)
 };
 
+struct rx_desc_v2 {
+	__le32 opts1;
+#define RX_LEN_MASK_2			0xfffe0000
+#define rx_v2_get_len(x)		(((x) & RX_LEN_MASK_2) >> 17)
+#define RX_VLAN_TAG_2			BIT(3)
+#define RX_VER_MASK			0x3
+
+	__le32 opts2;
+
+	__le32 opts3;
+#define IPF_2				BIT(26) /* IP checksum fail */
+#define UDPF_2				BIT(25) /* UDP checksum fail */
+#define TCPF_2				BIT(24) /* TCP checksum fail */
+#define RD_IPV6_CS_2			BIT(15)
+#define RD_IPV4_CS_2			BIT(14)
+#define RD_UDP_CS_2			BIT(11)
+#define RD_TCP_CS_2			BIT(10)
+
+	__le32 opts4;
+};
+
+struct tx_desc_v2 {
+	__le32 opts1;
+
+	__le32 opts2;
+#define TCPHO_MAX_2		0x3ffU
+
+	__le32 opts3;
+#define tx_v2_set_len(x)	((x) << 4)
+
+	__le32 opts4;
+#define TX_SIG			(0x15 << 27)
+};
+
 struct r8152;
 
 struct rx_agg {
@@ -913,6 +944,19 @@ struct r8152 {
 		u32 flow_control:1;
 		u32 ctap_short_off:1;
 	} ups_info;
+
+	struct desc_info {
+		void (*vlan_tag)(void *desc, struct sk_buff *skb);
+		u8 align;
+		u8 size;
+	} rx_desc, tx_desc;
+
+	struct desc_ops {
+		void (*tx_len)(struct r8152 *tp, void *desc, u32 len);
+		u32 (*rx_len)(struct r8152 *tp, void *desc);
+		u8 (*rx_csum)(struct r8152 *tp, void *desc);
+		int (*tx_csum)(struct r8152 *tp, void *desc, struct sk_buff *skb, u32 len);
+	} desc_ops;
 
 #define RTL_VER_SIZE		32
 
@@ -1201,7 +1245,7 @@ enum tx_csum_stat {
 static const int multicast_filter_limit = 32;
 static unsigned int agg_buf_sz = 16384;
 
-#define RTL_LIMITED_TSO_SIZE	(size_to_mtu(agg_buf_sz) - sizeof(struct tx_desc))
+#define RTL_LIMITED_TSO_SIZE	(size_to_mtu(agg_buf_sz) - tp->tx_desc.size)
 
 /* If register access fails then we block access and issue a reset. If this
  * happens too many times in a row without a successful access then we stop
@@ -2017,14 +2061,14 @@ resubmit:
 	}
 }
 
-static inline void *rx_agg_align(void *data)
+static inline void *rx_agg_align(struct r8152 *tp, void *data)
 {
-	return (void *)ALIGN((uintptr_t)data, RX_ALIGN);
+	return (void *)ALIGN((uintptr_t)data, tp->rx_desc.align);
 }
 
-static inline void *tx_agg_align(void *data)
+static inline void *tx_agg_align(struct r8152 *tp, void *data)
 {
-	return (void *)ALIGN((uintptr_t)data, TX_ALIGN);
+	return (void *)ALIGN((uintptr_t)data, tp->tx_desc.align);
 }
 
 static void free_rx_agg(struct r8152 *tp, struct rx_agg *agg)
@@ -2142,9 +2186,9 @@ static int alloc_all_mem(struct r8152 *tp)
 		if (!buf)
 			goto err1;
 
-		if (buf != tx_agg_align(buf)) {
+		if (buf != tx_agg_align(tp, buf)) {
 			kfree(buf);
-			buf = kmalloc_node(agg_buf_sz + TX_ALIGN, GFP_KERNEL,
+			buf = kmalloc_node(agg_buf_sz + tp->tx_desc.align, GFP_KERNEL,
 					   node);
 			if (!buf)
 				goto err1;
@@ -2160,7 +2204,7 @@ static int alloc_all_mem(struct r8152 *tp)
 		tp->tx_info[i].context = tp;
 		tp->tx_info[i].urb = urb;
 		tp->tx_info[i].buffer = buf;
-		tp->tx_info[i].head = tx_agg_align(buf);
+		tp->tx_info[i].head = tx_agg_align(tp, buf);
 
 		list_add_tail(&tp->tx_info[i].list, &tp->tx_free);
 	}
@@ -2247,8 +2291,17 @@ drop:
 	}
 }
 
-static inline void rtl_tx_vlan_tag(struct tx_desc *desc, struct sk_buff *skb)
+static void r8152_tx_len(struct r8152 *tp, void *tx_desc, u32 len)
 {
+	struct tx_desc *desc = tx_desc;
+
+	desc->opts1 |= cpu_to_le32(len);
+}
+
+static void r8152_tx_vlan_tag(void *d, struct sk_buff *skb)
+{
+	struct tx_desc *desc = d;
+
 	if (skb_vlan_tag_present(skb)) {
 		u32 opts2;
 
@@ -2257,8 +2310,10 @@ static inline void rtl_tx_vlan_tag(struct tx_desc *desc, struct sk_buff *skb)
 	}
 }
 
-static inline void rtl_rx_vlan_tag(struct rx_desc *desc, struct sk_buff *skb)
+static void r8152_rx_vlan_tag(void *d, struct sk_buff *skb)
 {
+	struct rx_desc *desc = d;
+
 	u32 opts2 = le32_to_cpu(desc->opts2);
 
 	if (opts2 & RX_VLAN_TAG)
@@ -2266,9 +2321,10 @@ static inline void rtl_rx_vlan_tag(struct rx_desc *desc, struct sk_buff *skb)
 				       swab16(opts2 & 0xffff));
 }
 
-static int r8152_tx_csum(struct r8152 *tp, struct tx_desc *desc,
+static int r8152_tx_csum(struct r8152 *tp, void *d,
 			 struct sk_buff *skb, u32 len)
 {
+	struct rx_desc *desc = d;
 	u32 mss = skb_shinfo(skb)->gso_size;
 	u32 opts1, opts2 = 0;
 	int ret = TX_CSUM_SUCCESS;
@@ -2354,6 +2410,73 @@ unavailable:
 	return ret;
 }
 
+static u32 r8152_rx_len(struct r8152 *tp, void *d)
+{
+	struct rx_desc *desc = d;
+
+	return le32_to_cpu(desc->opts1) & RX_LEN_MASK;
+}
+
+static u32 r8157_rx_len(struct r8152 *tp, void *d)
+{
+	struct rx_desc_v2 *desc = d;
+
+	return rx_v2_get_len(le32_to_cpu(desc->opts1));
+}
+
+static void r8157_rx_vlan_tag(void *desc, struct sk_buff *skb)
+{
+	struct rx_desc_v2 *d = desc;
+	u32 opts1 = le32_to_cpu(d->opts1);
+
+	if (opts1 & RX_VLAN_TAG_2) {
+		u32 opts2 = le32_to_cpu(d->opts2);
+
+		__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q),
+				       swab16((opts2 >> 16) & 0xffff));
+	}
+}
+
+static int r8157_tx_csum(struct r8152 *tp, void *tx_desc, struct sk_buff *skb, u32 len)
+{
+	u32 mss = skb_shinfo(skb)->gso_size;
+
+	if (!mss && skb->ip_summed == CHECKSUM_PARTIAL) {
+		u32 transport_offset = (u32)skb_transport_offset(skb);
+
+		if (transport_offset > TCPHO_MAX_2) {
+			netif_warn(tp, tx_err, tp->netdev,
+				   "Invalid transport offset 0x%x\n",
+				   transport_offset);
+			return TX_CSUM_NONE;
+		}
+	}
+
+	return r8152_tx_csum(tp, tx_desc, skb, len);
+}
+
+static void r8157_tx_len(struct r8152 *tp, void *tx_desc, u32 len)
+{
+	struct tx_desc_v2 *desc = tx_desc;
+
+	desc->opts3 = cpu_to_le32(tx_v2_set_len(len));
+	desc->opts4 = cpu_to_le32(TX_SIG);
+}
+
+static int rtl_tx_csum(struct r8152 *tp, void *desc, struct sk_buff *skb,
+		       u32 len)
+{
+	int ret = TX_CSUM_SUCCESS;
+
+	WARN_ON_ONCE(len > TX_LEN_MAX);
+
+	ret = tp->desc_ops.tx_csum(tp, desc, skb, len);
+	if (!ret)
+		tp->desc_ops.tx_len(tp, desc, len);
+
+	return ret;
+}
+
 static int r8152_tx_agg_fill(struct r8152 *tp, struct tx_agg *agg)
 {
 	struct sk_buff_head skb_head, *tx_queue = &tp->tx_queue;
@@ -2370,33 +2493,33 @@ static int r8152_tx_agg_fill(struct r8152 *tp, struct tx_agg *agg)
 	agg->skb_len = 0;
 	remain = agg_buf_sz;
 
-	while (remain >= ETH_ZLEN + sizeof(struct tx_desc)) {
-		struct tx_desc *tx_desc;
+	while (remain >= ETH_ZLEN + tp->tx_desc.size) {
 		struct sk_buff *skb;
 		unsigned int len;
+		void *tx_desc;
 
 		skb = __skb_dequeue(&skb_head);
 		if (!skb)
 			break;
 
-		len = skb->len + sizeof(*tx_desc);
+		len = skb->len + tp->tx_desc.size;
 
 		if (len > remain) {
 			__skb_queue_head(&skb_head, skb);
 			break;
 		}
 
-		tx_data = tx_agg_align(tx_data);
-		tx_desc = (struct tx_desc *)tx_data;
+		tx_data = tx_agg_align(tp, tx_data);
+		tx_desc = (void *)tx_data;
 
-		if (r8152_tx_csum(tp, tx_desc, skb, skb->len)) {
+		if (rtl_tx_csum(tp, tx_desc, skb, skb->len)) {
 			r8152_csum_workaround(tp, skb, &skb_head);
 			continue;
 		}
 
-		rtl_tx_vlan_tag(tx_desc, skb);
+		tp->tx_desc.vlan_tag(tx_desc, skb);
 
-		tx_data += sizeof(*tx_desc);
+		tx_data += tp->tx_desc.size;
 
 		len = skb->len;
 		if (skb_copy_bits(skb, 0, tx_data, len) < 0) {
@@ -2404,7 +2527,7 @@ static int r8152_tx_agg_fill(struct r8152 *tp, struct tx_agg *agg)
 
 			stats->tx_dropped++;
 			dev_kfree_skb_any(skb);
-			tx_data -= sizeof(*tx_desc);
+			tx_data -= tp->tx_desc.size;
 			continue;
 		}
 
@@ -2414,7 +2537,7 @@ static int r8152_tx_agg_fill(struct r8152 *tp, struct tx_agg *agg)
 
 		dev_kfree_skb_any(skb);
 
-		remain = agg_buf_sz - (int)(tx_agg_align(tx_data) - agg->head);
+		remain = agg_buf_sz - (int)(tx_agg_align(tp, tx_data) - agg->head);
 
 		if (tp->dell_tb_rx_agg_bug)
 			break;
@@ -2452,8 +2575,9 @@ out_tx_fill:
 	return ret;
 }
 
-static u8 r8152_rx_csum(struct r8152 *tp, struct rx_desc *rx_desc)
+static u8 r8152_rx_csum(struct r8152 *tp, void *d)
 {
+	struct rx_desc *rx_desc = d;
 	u8 checksum = CHECKSUM_NONE;
 	u32 opts2, opts3;
 
@@ -2479,6 +2603,30 @@ static u8 r8152_rx_csum(struct r8152 *tp, struct rx_desc *rx_desc)
 
 return_result:
 	return checksum;
+}
+
+static u8 r8157_rx_csum(struct r8152 *tp, void *desc)
+{
+	struct rx_desc_v2 *d = desc;
+	u8 checksum = CHECKSUM_NONE;
+	u32 opts3;
+
+	if (!(tp->netdev->features & NETIF_F_RXCSUM))
+		goto return_result;
+
+	opts3 = le32_to_cpu(d->opts3);
+
+	if ((opts3 & (RD_IPV4_CS_2 | IPF_2)) == (RD_IPV4_CS_2 | IPF_2)) {
+		checksum = CHECKSUM_NONE;
+	} else if (opts3 & (RD_IPV4_CS_2 | RD_IPV6_CS_2)) {
+		if ((opts3 & (RD_UDP_CS_2 | UDPF_2)) ==  RD_UDP_CS_2)
+			checksum = CHECKSUM_UNNECESSARY;
+		else if ((opts3 & (RD_TCP_CS_2 | TCPF_2)) == RD_TCP_CS_2)
+			checksum = CHECKSUM_UNNECESSARY;
+	}
+
+return_result:
+	return  checksum;
 }
 
 static inline bool rx_count_exceed(struct r8152 *tp)
@@ -2556,10 +2704,10 @@ static int rx_bottom(struct r8152 *tp, int budget)
 	spin_unlock_irqrestore(&tp->rx_lock, flags);
 
 	list_for_each_safe(cursor, next, &rx_queue) {
-		struct rx_desc *rx_desc;
 		struct rx_agg *agg, *agg_free;
 		int len_used = 0;
 		struct urb *urb;
+		void *rx_desc;
 		u8 *rx_data;
 
 		/* A bulk transfer of USB may contain may packets, so the
@@ -2582,7 +2730,7 @@ static int rx_bottom(struct r8152 *tp, int budget)
 
 		rx_desc = agg->buffer;
 		rx_data = agg->buffer;
-		len_used += sizeof(struct rx_desc);
+		len_used += tp->rx_desc.size;
 
 		while (urb->actual_length > len_used) {
 			struct net_device *netdev = tp->netdev;
@@ -2593,7 +2741,7 @@ static int rx_bottom(struct r8152 *tp, int budget)
 
 			WARN_ON_ONCE(skb_queue_len(&tp->rx_queue) >= 1000);
 
-			pkt_len = le32_to_cpu(rx_desc->opts1) & RX_LEN_MASK;
+			pkt_len = tp->desc_ops.rx_len(tp, rx_desc);
 			if (pkt_len < ETH_ZLEN)
 				break;
 
@@ -2603,7 +2751,7 @@ static int rx_bottom(struct r8152 *tp, int budget)
 
 			pkt_len -= ETH_FCS_LEN;
 			len = pkt_len;
-			rx_data += sizeof(struct rx_desc);
+			rx_data += tp->rx_desc.size;
 
 			if (!agg_free || tp->rx_copybreak > len)
 				use_frags = false;
@@ -2634,8 +2782,8 @@ static int rx_bottom(struct r8152 *tp, int budget)
 				goto find_next_rx;
 			}
 
-			skb->ip_summed = r8152_rx_csum(tp, rx_desc);
-			rtl_rx_vlan_tag(rx_desc, skb);
+			skb->ip_summed = tp->desc_ops.rx_csum(tp, rx_desc);
+			tp->rx_desc.vlan_tag(rx_desc, skb);
 
 			if (use_frags) {
 				if (rx_frag_head_sz) {
@@ -2672,10 +2820,10 @@ static int rx_bottom(struct r8152 *tp, int budget)
 			}
 
 find_next_rx:
-			rx_data = rx_agg_align(rx_data + len + ETH_FCS_LEN);
-			rx_desc = (struct rx_desc *)rx_data;
+			rx_data = rx_agg_align(tp, rx_data + len + ETH_FCS_LEN);
+			rx_desc = rx_data;
 			len_used = agg_offset(agg, rx_data);
-			len_used += sizeof(struct rx_desc);
+			len_used += tp->rx_desc.size;
 		}
 
 		WARN_ON(!agg_free && page_count(agg->page) > 1);
@@ -2918,13 +3066,14 @@ static netdev_features_t
 rtl8152_features_check(struct sk_buff *skb, struct net_device *dev,
 		       netdev_features_t features)
 {
+	struct r8152 *tp = netdev_priv(dev);
 	u32 mss = skb_shinfo(skb)->gso_size;
 	int max_offset = mss ? GTTCPHO_MAX : TCPHO_MAX;
 
 	if ((mss || skb->ip_summed == CHECKSUM_PARTIAL) &&
 	    skb_transport_offset(skb) > max_offset)
 		features &= ~(NETIF_F_CSUM_MASK | NETIF_F_GSO_MASK);
-	else if ((skb->len + sizeof(struct tx_desc)) > agg_buf_sz)
+	else if ((skb->len + tp->tx_desc.size) > agg_buf_sz)
 		features &= ~NETIF_F_GSO_MASK;
 
 	return features;
@@ -3015,7 +3164,7 @@ static void rtl8152_nic_reset(struct r8152 *tp)
 
 static void set_tx_qlen(struct r8152 *tp)
 {
-	tp->tx_qlen = agg_buf_sz / (mtu_to_size(tp->netdev->mtu) + sizeof(struct tx_desc));
+	tp->tx_qlen = agg_buf_sz / (mtu_to_size(tp->netdev->mtu) + tp->tx_desc.size);
 }
 
 static inline u16 rtl8152_get_speed(struct r8152 *tp)
@@ -3248,9 +3397,14 @@ static void r8153_set_rx_early_timeout(struct r8152 *tp)
 	}
 }
 
+static u32 rx_reserved_size(struct r8152 *tp, u32 mtu)
+{
+	return mtu_to_size(mtu) + tp->rx_desc.size + tp->rx_desc.align;
+}
+
 static void r8153_set_rx_early_size(struct r8152 *tp)
 {
-	u32 ocp_data = tp->rx_buf_sz - rx_reserved_size(tp->netdev->mtu);
+	u32 ocp_data = tp->rx_buf_sz - rx_reserved_size(tp, tp->netdev->mtu);
 
 	switch (tp->version) {
 	case RTL_VER_03:
@@ -6603,7 +6757,7 @@ static void rtl8156_change_mtu(struct r8152 *tp)
 	/* TX share fifo free credit full threshold */
 	ocp_write_word(tp, MCU_TYPE_PLA, PLA_TXFIFO_CTRL, 512 / 64);
 	ocp_write_word(tp, MCU_TYPE_PLA, PLA_TXFIFO_FULL,
-		       ALIGN(rx_max_size + sizeof(struct tx_desc), 1024) / 16);
+		       ALIGN(rx_max_size + tp->tx_desc.size, 1024) / 16);
 }
 
 static void rtl8156_up(struct r8152 *tp)
@@ -9473,6 +9627,38 @@ static void rtl8153b_unload(struct r8152 *tp)
 	r8153b_power_cut_en(tp, false);
 }
 
+static int r8152_desc_init(struct r8152 *tp)
+{
+	tp->rx_desc.size = sizeof(struct rx_desc);
+	tp->rx_desc.align = 8;
+	tp->rx_desc.vlan_tag = r8152_rx_vlan_tag;
+	tp->desc_ops.rx_csum = r8152_rx_csum;
+	tp->desc_ops.rx_len = r8152_rx_len;
+	tp->tx_desc.size = sizeof(struct tx_desc);
+	tp->tx_desc.align = 4;
+	tp->tx_desc.vlan_tag = r8152_tx_vlan_tag;
+	tp->desc_ops.tx_csum = r8152_tx_csum;
+	tp->desc_ops.tx_len = r8152_tx_len;
+
+	return 0;
+}
+
+static int r8157_desc_init(struct r8152 *tp)
+{
+	tp->rx_desc.size = sizeof(struct rx_desc_v2);
+	tp->rx_desc.align = 16;
+	tp->rx_desc.vlan_tag = r8157_rx_vlan_tag;
+	tp->desc_ops.rx_csum = r8157_rx_csum;
+	tp->desc_ops.rx_len = r8157_rx_len;
+	tp->tx_desc.size = sizeof(struct tx_desc_v2);
+	tp->tx_desc.align = 16;
+	tp->tx_desc.vlan_tag = r8152_tx_vlan_tag;
+	tp->desc_ops.tx_csum = r8157_tx_csum;
+	tp->desc_ops.tx_len = r8157_tx_len;
+
+	return 0;
+}
+
 static int rtl_ops_init(struct r8152 *tp)
 {
 	struct rtl_ops *ops = &tp->rtl_ops;
@@ -9496,6 +9682,7 @@ static int rtl_ops_init(struct r8152 *tp)
 		tp->rx_buf_sz		= 16 * 1024;
 		tp->eee_en		= true;
 		tp->eee_adv		= MDIO_EEE_100TX;
+		r8152_desc_init(tp);
 		break;
 
 	case RTL_VER_03:
@@ -9520,6 +9707,7 @@ static int rtl_ops_init(struct r8152 *tp)
 			tp->rx_buf_sz	= 32 * 1024;
 		tp->eee_en		= true;
 		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
+		r8152_desc_init(tp);
 		break;
 
 	case RTL_VER_08:
@@ -9539,6 +9727,7 @@ static int rtl_ops_init(struct r8152 *tp)
 		tp->rx_buf_sz		= 32 * 1024;
 		tp->eee_en		= true;
 		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
+		r8152_desc_init(tp);
 		break;
 
 	case RTL_VER_11:
@@ -9561,6 +9750,7 @@ static int rtl_ops_init(struct r8152 *tp)
 		ops->change_mtu		= rtl8156_change_mtu;
 		tp->rx_buf_sz		= 48 * 1024;
 		tp->support_2500full	= 1;
+		r8152_desc_init(tp);
 		break;
 
 	case RTL_VER_12:
@@ -9584,6 +9774,7 @@ static int rtl_ops_init(struct r8152 *tp)
 		ops->autosuspend_en	= rtl8156_runtime_enable;
 		ops->change_mtu		= rtl8156_change_mtu;
 		tp->rx_buf_sz		= 48 * 1024;
+		r8152_desc_init(tp);
 		break;
 
 	case RTL_VER_14:
@@ -9602,6 +9793,7 @@ static int rtl_ops_init(struct r8152 *tp)
 		tp->rx_buf_sz		= 32 * 1024;
 		tp->eee_en		= true;
 		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
+		r8152_desc_init(tp);
 		break;
 
 	default:
