@@ -15,6 +15,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/rtnetlink.h>
 #include <net/net_trackers.h>
+#include <linux/leds.h>
 
 #define PSE_PW_D_LIMIT INT_MAX
 
@@ -1030,6 +1031,122 @@ static void pse_send_ntf_worker(struct work_struct *work)
 	}
 }
 
+#if IS_ENABLED(CONFIG_LEDS_TRIGGERS)
+static void pse_led_poll_work(struct work_struct *work)
+{
+	struct pse_controller_dev *pcdev =
+		container_of(work, struct pse_controller_dev,
+			     led_poll_work.work);
+	int i;
+
+	mutex_lock(&pcdev->lock);
+	for (i = 0; i < pcdev->nr_lines; i++) {
+		struct pse_pi_led_triggers *trigs = &pcdev->pi_led_trigs[i];
+		struct pse_pw_status pw_status = {};
+		struct pse_admin_state admin_state = {};
+		bool delivering, enabled;
+
+		if (!pcdev->pi[i].rdev)
+			continue;
+
+		if (pcdev->ops->pi_get_pw_status(pcdev, i, &pw_status))
+			continue;
+		if (pcdev->ops->pi_get_admin_state(pcdev, i, &admin_state))
+			continue;
+
+		delivering = pw_status.c33_pw_status ==
+			ETHTOOL_C33_PSE_PW_D_STATUS_DELIVERING;
+		enabled = admin_state.c33_admin_state ==
+			ETHTOOL_C33_PSE_ADMIN_STATE_ENABLED;
+
+		if (trigs->last_delivering != delivering) {
+			trigs->last_delivering = delivering;
+			led_trigger_event(&trigs->delivering,
+					  delivering ? LED_FULL : LED_OFF);
+		}
+
+		if (trigs->last_enabled != enabled) {
+			trigs->last_enabled = enabled;
+			led_trigger_event(&trigs->enabled,
+					  enabled ? LED_FULL : LED_OFF);
+		}
+	}
+	mutex_unlock(&pcdev->lock);
+
+	schedule_delayed_work(&pcdev->led_poll_work,
+			      msecs_to_jiffies(pcdev->led_poll_interval_ms));
+}
+
+static int pse_led_triggers_register(struct pse_controller_dev *pcdev)
+{
+	struct device *dev = pcdev->dev;
+	const char *node_name;
+	int i, ret;
+
+	node_name = dev->of_node ? dev->of_node->name : dev_name(dev);
+
+	of_property_read_u32(dev->of_node, "led-poll-interval-ms",
+			     &pcdev->led_poll_interval_ms);
+	if (!pcdev->led_poll_interval_ms)
+		pcdev->led_poll_interval_ms = 500;
+
+	pcdev->pi_led_trigs = devm_kcalloc(dev, pcdev->nr_lines,
+					   sizeof(*pcdev->pi_led_trigs),
+					   GFP_KERNEL);
+	if (!pcdev->pi_led_trigs)
+		return -ENOMEM;
+
+	INIT_DELAYED_WORK(&pcdev->led_poll_work, pse_led_poll_work);
+
+	for (i = 0; i < pcdev->nr_lines; i++) {
+		struct pse_pi_led_triggers *trigs = &pcdev->pi_led_trigs[i];
+
+		if (!pcdev->pi[i].rdev)
+			continue;
+
+		trigs->delivering.name = devm_kasprintf(dev, GFP_KERNEL,
+							"%s:port%d:delivering",
+							node_name, i);
+		if (!trigs->delivering.name)
+			return -ENOMEM;
+
+		ret = devm_led_trigger_register(dev, &trigs->delivering);
+		if (ret)
+			return ret;
+
+		trigs->enabled.name = devm_kasprintf(dev, GFP_KERNEL,
+						     "%s:port%d:enabled",
+						     node_name, i);
+		if (!trigs->enabled.name)
+			return -ENOMEM;
+
+		ret = devm_led_trigger_register(dev, &trigs->enabled);
+		if (ret)
+			return ret;
+	}
+
+	schedule_delayed_work(&pcdev->led_poll_work,
+			      msecs_to_jiffies(pcdev->led_poll_interval_ms));
+
+	return 0;
+}
+
+static void pse_led_triggers_cancel(struct pse_controller_dev *pcdev)
+{
+	if (pcdev->pi_led_trigs)
+		cancel_delayed_work_sync(&pcdev->led_poll_work);
+}
+#else
+static int pse_led_triggers_register(struct pse_controller_dev *pcdev)
+{
+	return 0;
+}
+
+static void pse_led_triggers_cancel(struct pse_controller_dev *pcdev)
+{
+}
+#endif /* CONFIG_LEDS_TRIGGERS */
+
 /**
  * pse_controller_register - register a PSE controller device
  * @pcdev: a pointer to the initialized PSE controller device
@@ -1104,6 +1221,11 @@ int pse_controller_register(struct pse_controller_dev *pcdev)
 	list_add(&pcdev->list, &pse_controller_list);
 	mutex_unlock(&pse_list_mutex);
 
+	ret = pse_led_triggers_register(pcdev);
+	if (ret)
+		dev_warn(pcdev->dev, "Failed to register LED triggers: %d\n",
+			 ret);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pse_controller_register);
@@ -1114,6 +1236,7 @@ EXPORT_SYMBOL_GPL(pse_controller_register);
  */
 void pse_controller_unregister(struct pse_controller_dev *pcdev)
 {
+	pse_led_triggers_cancel(pcdev);
 	pse_flush_pw_ds(pcdev);
 	pse_release_pis(pcdev);
 	if (pcdev->irq)
