@@ -4,6 +4,14 @@
 #include "aolib.h"
 
 static union tcp_addr local_addr;
+static bool checked_repair_window_lens;
+
+enum repair_window_mode {
+	REPAIR_WINDOW_CURRENT,
+	REPAIR_WINDOW_LEGACY,
+	REPAIR_WINDOW_V1,
+	REPAIR_WINDOW_RETRACTED,
+};
 
 static void __setup_lo_intf(const char *lo_intf,
 			    const char *addr_str, uint8_t prefix)
@@ -30,8 +38,157 @@ static void setup_lo_intf(const char *lo_intf)
 #endif
 }
 
+/* The repair ABI accepts the legacy, v1, and current layouts. */
+static void test_repair_window_len_contract(int sk)
+{
+	struct tcp_repair_window trw = {};
+	socklen_t len = test_tcp_repair_window_exact_size();
+	socklen_t v1_len = test_tcp_repair_window_v1_size();
+	socklen_t bad_len = test_tcp_repair_window_legacy_size() + 1;
+	int ret;
+
+	if (checked_repair_window_lens)
+		return;
+
+	checked_repair_window_lens = true;
+
+	ret = getsockopt(sk, SOL_TCP, TCP_REPAIR_WINDOW, &trw, &len);
+	if (ret || len != test_tcp_repair_window_exact_size())
+		test_error("getsockopt(TCP_REPAIR_WINDOW): %d", (int)len);
+
+	len = v1_len;
+	ret = getsockopt(sk, SOL_TCP, TCP_REPAIR_WINDOW, &trw, &len);
+	if (ret || len != v1_len)
+		test_fail("repair-window get accepts v1 len");
+	else
+		test_ok("repair-window get accepts v1 len");
+
+	len = bad_len;
+	ret = getsockopt(sk, SOL_TCP, TCP_REPAIR_WINDOW, &trw, &len);
+	if (ret == 0 || errno != EINVAL)
+		test_fail("repair-window get rejects invalid len");
+	else
+		test_ok("repair-window get rejects invalid len");
+
+	ret = setsockopt(sk, SOL_TCP, TCP_REPAIR_WINDOW, &trw, bad_len);
+	if (ret == 0 || errno != EINVAL)
+		test_fail("repair-window set rejects invalid len");
+	else
+		test_ok("repair-window set rejects invalid len");
+
+	ret = setsockopt(sk, SOL_TCP, TCP_REPAIR_WINDOW, &trw, v1_len + 1);
+	if (ret == 0 || errno != EINVAL)
+		test_fail("repair-window set rejects invalid v1+1 len");
+	else
+		test_ok("repair-window set rejects invalid v1+1 len");
+}
+
+static void test_retracted_repair_window_state(int sk,
+					       struct tcp_sock_state *img)
+{
+	struct tcp_repair_window trw = {};
+	socklen_t len = sizeof(trw);
+	int ret;
+
+	ret = getsockopt(sk, SOL_TCP, TCP_REPAIR_WINDOW, &trw, &len);
+	if (ret || len != sizeof(trw))
+		test_error("getsockopt(TCP_REPAIR_WINDOW): %d", (int)len);
+
+	if (trw.rcv_mwnd_seq != img->trw.rcv_mwnd_seq ||
+	    trw.rcv_mwnd_scaling_ratio != img->trw.rcv_mwnd_scaling_ratio ||
+	    trw.rcv_wnd != img->trw.rcv_wnd ||
+	    trw.rcv_wup != img->trw.rcv_wup ||
+	    trw.rcv_wnd_scaling_ratio != img->trw.rcv_wnd_scaling_ratio)
+		test_fail("repair-window restore preserves retracted state");
+	else
+		test_ok("repair-window restore preserves retracted state");
+}
+
+static void test_v1_repair_window_state(int sk, struct tcp_sock_state *img)
+{
+	struct tcp_repair_window trw = {};
+	socklen_t len = sizeof(trw);
+	__u32 max_right = img->trw.rcv_wup + img->trw.rcv_wnd;
+	int ret;
+
+	ret = getsockopt(sk, SOL_TCP, TCP_REPAIR_WINDOW, &trw, &len);
+	if (ret || len != sizeof(trw))
+		test_error("getsockopt(TCP_REPAIR_WINDOW): %d", (int)len);
+
+	if (trw.rcv_mwnd_seq != max_right ||
+	    trw.rcv_mwnd_scaling_ratio != img->trw.rcv_wnd_scaling_ratio ||
+	    trw.rcv_wnd != img->trw.rcv_wnd ||
+	    trw.rcv_wup != img->trw.rcv_wup ||
+	    trw.rcv_wnd_scaling_ratio != img->trw.rcv_wnd_scaling_ratio)
+		test_fail("repair-window v1 restore rebuilds max-window state");
+	else
+		test_ok("repair-window v1 restore rebuilds max-window state");
+}
+
+/* Synthesize a repair image whose live rwnd was retracted after a larger
+ * right edge had already been advertised, so restore testing can validate
+ * snapshot preservation without depending on the live receive path.
+ */
+static bool make_retracted_repair_window_state(struct tcp_sock_state *img)
+{
+	__u32 gran = 1U << img->info.tcpi_rcv_wscale;
+	__u32 max_right;
+	__u32 shrink;
+
+	if (!(img->info.tcpi_options & TCPI_OPT_WSCALE))
+		return false;
+
+	max_right = img->trw.rcv_wup + img->trw.rcv_wnd;
+	shrink = img->trw.rcv_wnd / 4;
+	if (shrink < gran)
+		shrink = gran;
+	if (shrink >= img->trw.rcv_wnd)
+		shrink = img->trw.rcv_wnd >> 1;
+	if (shrink == 0 || shrink >= img->trw.rcv_wnd)
+		return false;
+
+	img->trw.rcv_wnd -= shrink;
+	img->trw.rcv_mwnd_seq = max_right;
+	img->trw.rcv_mwnd_scaling_ratio = img->trw.rcv_wnd_scaling_ratio;
+	return true;
+}
+
+static socklen_t repair_window_len(enum repair_window_mode mode)
+{
+	switch (mode) {
+	case REPAIR_WINDOW_LEGACY:
+		return test_tcp_repair_window_legacy_size();
+	case REPAIR_WINDOW_V1:
+		return test_tcp_repair_window_v1_size();
+	case REPAIR_WINDOW_CURRENT:
+	case REPAIR_WINDOW_RETRACTED:
+		return test_tcp_repair_window_exact_size();
+	}
+
+	return test_tcp_repair_window_exact_size();
+}
+
+static void test_sock_checkpoint_mode(enum repair_window_mode mode, int sk,
+				      struct tcp_sock_state *img,
+				      sockaddr_af *addr)
+{
+	switch (mode) {
+	case REPAIR_WINDOW_LEGACY:
+		test_sock_checkpoint_legacy(sk, img, addr);
+		break;
+	case REPAIR_WINDOW_V1:
+		test_sock_checkpoint_v1(sk, img, addr);
+		break;
+	case REPAIR_WINDOW_CURRENT:
+	case REPAIR_WINDOW_RETRACTED:
+		test_sock_checkpoint(sk, img, addr);
+		break;
+	}
+}
+
 static void tcp_self_connect(const char *tst, unsigned int port,
-			     bool different_keyids, bool check_restore)
+			     bool different_keyids, bool check_restore,
+			     enum repair_window_mode repair_window_mode)
 {
 	struct tcp_counters before, after;
 	uint64_t before_aogood, after_aogood;
@@ -109,7 +266,16 @@ static void tcp_self_connect(const char *tst, unsigned int port,
 	}
 
 	test_enable_repair(sk);
-	test_sock_checkpoint(sk, &img, &addr);
+	test_repair_window_len_contract(sk);
+	test_sock_checkpoint_mode(repair_window_mode, sk, &img, &addr);
+	if (repair_window_mode == REPAIR_WINDOW_RETRACTED &&
+	    !make_retracted_repair_window_state(&img)) {
+		test_sock_state_free(&img);
+		netstat_free(ns_before);
+		close(sk);
+		test_skip("%s: no scaled repair window to retract", tst);
+		return;
+	}
 #ifdef IPV6_TEST
 	addr.sin6_port = htons(port + 1);
 #else
@@ -123,7 +289,9 @@ static void tcp_self_connect(const char *tst, unsigned int port,
 		test_error("socket()");
 
 	test_enable_repair(sk);
-	__test_sock_restore(sk, "lo", &img, &addr, &addr, sizeof(addr));
+	__test_sock_restore_opt(sk, "lo", &img,
+				repair_window_len(repair_window_mode),
+				&addr, &addr, sizeof(addr));
 	if (different_keyids) {
 		if (test_add_repaired_key(sk, DEFAULT_TEST_PASSWORD, 0,
 					  local_addr, -1, 7, 5))
@@ -137,6 +305,10 @@ static void tcp_self_connect(const char *tst, unsigned int port,
 			test_error("setsockopt(TCP_AO_ADD_KEY)");
 	}
 	test_ao_restore(sk, &ao_img);
+	if (repair_window_mode == REPAIR_WINDOW_V1)
+		test_v1_repair_window_state(sk, &img);
+	if (repair_window_mode == REPAIR_WINDOW_RETRACTED)
+		test_retracted_repair_window_state(sk, &img);
 	test_disable_repair(sk);
 	test_sock_state_free(&img);
 	if (test_client_verify(sk, 100, nr_packets)) {
@@ -165,20 +337,33 @@ static void *client_fn(void *arg)
 
 	setup_lo_intf("lo");
 
-	tcp_self_connect("self-connect(same keyids)", port++, false, false);
+	tcp_self_connect("self-connect(same keyids)", port++, false, false,
+			 REPAIR_WINDOW_CURRENT);
 
 	/* expecting rnext to change based on the first segment RNext != Current */
 	trace_ao_event_expect(TCP_AO_RNEXT_REQUEST, local_addr, local_addr,
 			      port, port, 0, -1, -1, -1, -1, -1, 7, 5, -1);
-	tcp_self_connect("self-connect(different keyids)", port++, true, false);
-	tcp_self_connect("self-connect(restore)", port, false, true);
+	tcp_self_connect("self-connect(different keyids)", port++, true, false,
+			 REPAIR_WINDOW_CURRENT);
+	tcp_self_connect("self-connect(restore)", port, false, true,
+			 REPAIR_WINDOW_CURRENT);
+	port += 2; /* restore test restores over different port */
+	tcp_self_connect("self-connect(restore, legacy repair window)", port,
+			 false, true, REPAIR_WINDOW_LEGACY);
+	port += 2; /* restore test restores over different port */
+	tcp_self_connect("self-connect(restore, v1 repair window)", port,
+			 false, true, REPAIR_WINDOW_V1);
+	port += 2; /* restore test restores over different port */
+	tcp_self_connect("self-connect(restore, retracted repair window)", port,
+			 false, true, REPAIR_WINDOW_RETRACTED);
 	port += 2; /* restore test restores over different port */
 	trace_ao_event_expect(TCP_AO_RNEXT_REQUEST, local_addr, local_addr,
 			      port, port, 0, -1, -1, -1, -1, -1, 7, 5, -1);
 	/* intentionally on restore they are added to the socket in different order */
 	trace_ao_event_expect(TCP_AO_RNEXT_REQUEST, local_addr, local_addr,
 			      port + 1, port + 1, 0, -1, -1, -1, -1, -1, 5, 7, -1);
-	tcp_self_connect("self-connect(restore, different keyids)", port, true, true);
+	tcp_self_connect("self-connect(restore, different keyids)",
+			 port, true, true, REPAIR_WINDOW_CURRENT);
 	port += 2; /* restore test restores over different port */
 
 	return NULL;
@@ -186,6 +371,6 @@ static void *client_fn(void *arg)
 
 int main(int argc, char *argv[])
 {
-	test_init(5, client_fn, NULL);
+	test_init(14, client_fn, NULL);
 	return 0;
 }
