@@ -1483,20 +1483,20 @@ static int bmc150_accel_buffer_preenable(struct iio_dev *indio_dev)
 static int bmc150_accel_buffer_postenable(struct iio_dev *indio_dev)
 {
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
-	int ret = 0;
+	int ret;
 
 	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED)
 		return 0;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	if (!data->watermark)
-		goto out;
+		return 0;
 
 	ret = bmc150_accel_set_interrupt(data, BMC150_ACCEL_INT_WATERMARK,
 					 true);
 	if (ret)
-		goto out;
+		return ret;
 
 	data->fifo_mode = BMC150_ACCEL_FIFO_MODE_FIFO;
 
@@ -1505,12 +1505,10 @@ static int bmc150_accel_buffer_postenable(struct iio_dev *indio_dev)
 		data->fifo_mode = 0;
 		bmc150_accel_set_interrupt(data, BMC150_ACCEL_INT_WATERMARK,
 					   false);
+		return ret;
 	}
 
-out:
-	mutex_unlock(&data->mutex);
-
-	return ret;
+	return 0;
 }
 
 static int bmc150_accel_buffer_predisable(struct iio_dev *indio_dev)
@@ -1520,18 +1518,15 @@ static int bmc150_accel_buffer_predisable(struct iio_dev *indio_dev)
 	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED)
 		return 0;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	if (!data->fifo_mode)
-		goto out;
+		return 0;
 
 	bmc150_accel_set_interrupt(data, BMC150_ACCEL_INT_WATERMARK, false);
 	__bmc150_accel_fifo_flush(indio_dev, BMC150_ACCEL_FIFO_LENGTH, false);
 	data->fifo_mode = 0;
 	bmc150_accel_fifo_set_mode(data);
-
-out:
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
