@@ -2232,7 +2232,7 @@ static ssize_t n_tty_read(struct tty_struct *tty, struct file *file, u8 *kbuf,
 	add_wait_queue(&tty->read_wait, &wait);
 	while (nr) {
 		/* First test for status change. */
-		if (packet && tty->link->ctrl.pktstatus) {
+		if (packet && tty->link && tty->link->ctrl.pktstatus) {
 			u8 cs;
 			if (kb != kbuf)
 				break;
@@ -2444,7 +2444,7 @@ static __poll_t n_tty_poll(struct tty_struct *tty, struct file *file,
 		if (input_available_p(tty, 1))
 			mask |= EPOLLIN | EPOLLRDNORM;
 	}
-	if (tty->ctrl.packet && tty->link->ctrl.pktstatus)
+	if (tty->ctrl.packet && tty->link && tty->link->ctrl.pktstatus)
 		mask |= EPOLLPRI | EPOLLIN | EPOLLRDNORM;
 	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
 		mask |= EPOLLHUP;
