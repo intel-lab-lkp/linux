@@ -70,6 +70,13 @@ config NET_DSA_MV88E6060
 	  This enables support for the Marvell 88E6060 ethernet switch
 	  chip.
 
+config NET_DSA_MT7628
+	tristate "MT7628 Embedded ethernet switch support"
+	select NET_DSA_TAG_MT7628
+	select MEDIATEK_FE_SOC_PHY
+	help
+	  This enables support for the switch in the MT7628 SoC.
+
 source "drivers/net/dsa/microchip/Kconfig"
 
 source "drivers/net/dsa/mv88e6xxx/Kconfig"
