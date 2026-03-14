@@ -17,6 +17,7 @@
 #include <linux/err.h>
 #include <linux/gcd.h>
 #include <linux/gpio/consumer.h>
+#include <linux/bitops.h>
 #include <asm/div64.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
@@ -151,16 +152,13 @@ static int adf4350_set_freq(struct adf4350_state *st, unsigned long long freq)
 
 	st->r4_rf_div_sel = 0;
 
-	/*
-	 * !\TODO: The below computation is making sure we get a power of 2
-	 * shift (st->r4_rf_div_sel) so that freq becomes higher or equal to
-	 * ADF4350_MIN_VCO_FREQ. This might be simplified with fls()/fls_long()
-	 * and friends.
-	 */
-	while (freq < ADF4350_MIN_VCO_FREQ) {
-		freq <<= 1;
-		st->r4_rf_div_sel++;
+	if (freq < ADF4350_MIN_VCO_FREQ) {
+		st->r4_rf_div_sel = fls_long(ADF4350_MIN_VCO_FREQ - 1) - fls_long(freq);
+		if ((freq << st->r4_rf_div_sel) < ADF4350_MIN_VCO_FREQ)
+			st->r4_rf_div_sel++;
 	}
+
+	freq <<= st->r4_rf_div_sel;
 
 	if (freq > ADF4350_MAX_FREQ_45_PRESC) {
 		prescaler = ADF4350_REG1_PRESCALER;
