@@ -2033,6 +2033,7 @@ static struct damos_sysfs_action_name damos_sysfs_action_names[] = {
 		.action = DAMOS_PAGEOUT,
 		.name = "pageout",
 	},
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	{
 		.action = DAMOS_HUGEPAGE,
 		.name = "hugepage",
@@ -2041,6 +2042,7 @@ static struct damos_sysfs_action_name damos_sysfs_action_names[] = {
 		.action = DAMOS_NOHUGEPAGE,
 		.name = "nohugepage",
 	},
+#endif
 	{
 		.action = DAMOS_LRU_PRIO,
 		.name = "lru_prio",

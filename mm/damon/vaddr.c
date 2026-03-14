@@ -897,12 +897,14 @@ static unsigned long damon_va_apply_scheme(struct damon_ctx *ctx,
 	case DAMOS_PAGEOUT:
 		madv_action = MADV_PAGEOUT;
 		break;
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	case DAMOS_HUGEPAGE:
 		madv_action = MADV_HUGEPAGE;
 		break;
 	case DAMOS_NOHUGEPAGE:
 		madv_action = MADV_NOHUGEPAGE;
 		break;
+#endif
 	case DAMOS_MIGRATE_HOT:
 	case DAMOS_MIGRATE_COLD:
 		return damos_va_migrate(t, r, scheme, sz_filter_passed);
