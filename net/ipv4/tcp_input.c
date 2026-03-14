@@ -5376,24 +5376,86 @@ static void tcp_ofo_queue(struct sock *sk)
 static bool tcp_prune_ofo_queue(struct sock *sk, const struct sk_buff *in_skb);
 static int tcp_prune_queue(struct sock *sk, const struct sk_buff *in_skb);
 
-static bool tcp_can_ingest(const struct sock *sk, const struct sk_buff *skb)
+/* Sequence checks run against the sender-visible receive window before this
+ * point. If later receive-side accounting retracts the live receive window
+ * below the maximum right edge we already advertised, allow one in-order skb
+ * which still fits inside that sender-visible bound to reach the normal
+ * receive queue path.
+ *
+ * Keep receive-memory admission itself on the legacy hard-cap path so prune
+ * and collapse behavior stay aligned with the established retracted-window
+ * handling.
+ */
+static bool tcp_skb_in_retracted_window(const struct tcp_sock *tp,
+					const struct sk_buff *skb)
 {
-	unsigned int rmem = atomic_read(&sk->sk_rmem_alloc);
+	u32 live_end = tp->rcv_nxt + tcp_receive_window(tp);
+	u32 max_end = tp->rcv_nxt + tcp_max_receive_window(tp);
 
-	return rmem <= sk->sk_rcvbuf;
+	return after(max_end, live_end) &&
+	       after(TCP_SKB_CB(skb)->end_seq, live_end) &&
+	       !after(TCP_SKB_CB(skb)->end_seq, max_end);
 }
 
+static bool tcp_can_ingest(const struct sock *sk, const struct sk_buff *skb)
+{
+	return tcp_rmem_used(sk) <= READ_ONCE(sk->sk_rcvbuf);
+}
+
+/* Caller already established that @skb extends into the retracted-but-still-
+ * valid sender-visible window. For in-order progress, regrow sk_rcvbuf before
+ * falling into prune/forced-mem handling.
+ *
+ * This path intentionally repairs backing for one in-order skb that is already
+ * within sender-visible sequence space, rather than treating it like ordinary
+ * receive-buffer autotuning.
+ *
+ * Keep this rescue bounded to the span accepted by this skb instead of the
+ * full historical tp->rcv_mwnd_seq. However, never grow below skb->truesize,
+ * because sk_rmem_schedule() still charges hard memory, not sender-visible
+ * window bytes.
+ */
+static void tcp_try_grow_retracted_skb(struct sock *sk,
+				       const struct sk_buff *skb)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+	int needed = skb->truesize;
+	int span_space;
+	u32 span_win;
+
+	if (TCP_SKB_CB(skb)->seq != tp->rcv_nxt)
+		return;
+
+	span_win = TCP_SKB_CB(skb)->end_seq - tp->rcv_nxt;
+	if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+		span_win--;
+
+	if (tcp_space_from_rcv_mwnd(tp, span_win, &span_space))
+		needed = max_t(int, needed, span_space);
+
+	tcp_try_grow_rcvbuf(sk, needed);
+}
+
+/* Sender-visible window rescue does not relax hard receive-memory admission.
+ * If growth did not make room, fall back to the established prune/collapse
+ * path.
+ */
 static int tcp_try_rmem_schedule(struct sock *sk, const struct sk_buff *skb,
 				 unsigned int size)
 {
-	if (!tcp_can_ingest(sk, skb) ||
-	    !sk_rmem_schedule(sk, skb, size)) {
+	bool can_ingest = tcp_can_ingest(sk, skb);
+	bool scheduled = can_ingest && sk_rmem_schedule(sk, skb, size);
 
-		if (tcp_prune_queue(sk, skb) < 0)
+	if (!scheduled) {
+		int pruned = tcp_prune_queue(sk, skb);
+
+		if (pruned < 0)
 			return -1;
 
 		while (!sk_rmem_schedule(sk, skb, size)) {
-			if (!tcp_prune_ofo_queue(sk, skb))
+			bool pruned_ofo = tcp_prune_ofo_queue(sk, skb);
+
+			if (!pruned_ofo)
 				return -1;
 		}
 	}
@@ -5629,6 +5691,7 @@ void tcp_data_ready(struct sock *sk)
 static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
+	bool retracted;
 	enum skb_drop_reason reason;
 	bool fragstolen;
 	int eaten;
@@ -5647,6 +5710,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	}
 	tcp_cleanup_skb(skb);
 	__skb_pull(skb, tcp_hdr(skb)->doff * 4);
+	retracted = skb->len && tcp_skb_in_retracted_window(tp, skb);
 
 	reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	tp->rx_opt.dsack = 0;
@@ -5667,6 +5731,9 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			    (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN))
 				goto queue_and_out;
 
+			if (retracted)
+				goto queue_and_out;
+
 			reason = SKB_DROP_REASON_TCP_ZEROWINDOW;
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPZEROWINDOWDROP);
 			goto out_of_window;
@@ -5674,7 +5741,20 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 
 		/* Ok. In sequence. In window. */
 queue_and_out:
+		if (unlikely(retracted))
+			tcp_try_grow_retracted_skb(sk, skb);
+
 		if (tcp_try_rmem_schedule(sk, skb, skb->truesize)) {
+			/* If the live rwnd collapsed to zero while rescuing an
+			 * skb that still fit in sender-visible sequence space,
+			 * report zero-window rather than generic proto-mem.
+			 */
+			if (unlikely(!tcp_receive_window(tp) && retracted)) {
+				reason = SKB_DROP_REASON_TCP_ZEROWINDOW;
+				NET_INC_STATS(sock_net(sk),
+					      LINUX_MIB_TCPZEROWINDOWDROP);
+				goto out_of_window;
+			}
 			/* TODO: maybe ratelimit these WIN 0 ACK ? */
 			inet_csk(sk)->icsk_ack.pending |=
 					(ICSK_ACK_NOMEM | ICSK_ACK_NOW);
