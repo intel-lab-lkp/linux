@@ -36,5 +36,11 @@ config MEDIATEK_GE_SOC_PHY
 	  present in the SoCs efuse and will dynamically calibrate VCM
 	  (common-mode voltage) during startup.
 
+config MEDIATEK_FE_SOC_PHY
+	tristate "MediaTek MT7628 SoC Ethernet PHYs"
+	select PHY_PACKAGE
+	help
+	  Support for MediaTek MT7628 built-in Fast Ethernet PHYs.
+
 config MTK_NET_PHYLIB
 	tristate
