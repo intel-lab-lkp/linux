@@ -75,6 +75,8 @@ struct nsim_macsec {
 	u8 nsim_secy_count;
 };
 
+struct nsim_rx_truesize;
+
 struct nsim_ethtool_pauseparam {
 	bool rx;
 	bool tx;
@@ -144,6 +146,8 @@ struct netdevsim {
 	} udp_ports;
 
 	struct page *page;
+	struct nsim_rx_truesize *rx_truesize;
+	struct dentry *rx_truesize_dfs;
 	struct dentry *pp_dfs;
 	struct dentry *qr_dfs;
 

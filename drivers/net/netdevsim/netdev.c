@@ -17,8 +17,10 @@
 #include <linux/etherdevice.h>
 #include <linux/ethtool_netlink.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/refcount.h>
 #include <linux/slab.h>
 #include <net/netdev_queues.h>
 #include <net/netdev_rx_queue.h>
@@ -36,6 +38,91 @@
 MODULE_IMPORT_NS("NETDEV_INTERNAL");
 
 #define NSIM_RING_SIZE		256
+
+struct nsim_rx_truesize {
+	refcount_t refs;
+	u32 value;
+};
+
+static struct nsim_rx_truesize *
+nsim_rx_truesize_get(struct nsim_rx_truesize *rx_truesize)
+{
+	if (!rx_truesize)
+		return NULL;
+
+	if (!refcount_inc_not_zero(&rx_truesize->refs))
+		return NULL;
+
+	return rx_truesize;
+}
+
+static void nsim_rx_truesize_put(struct nsim_rx_truesize *rx_truesize)
+{
+	if (!rx_truesize)
+		return;
+
+	if (refcount_dec_and_test(&rx_truesize->refs))
+		kfree(rx_truesize);
+}
+
+static ssize_t nsim_rx_truesize_read(struct file *file, char __user *user_buf,
+				     size_t count, loff_t *ppos)
+{
+	struct nsim_rx_truesize *rx_truesize = file->private_data;
+	char buf[24];
+	int len;
+
+	len = scnprintf(buf, sizeof(buf), "%u\n",
+			READ_ONCE(rx_truesize->value));
+
+	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
+}
+
+static ssize_t nsim_rx_truesize_write(struct file *file,
+				      const char __user *user_buf,
+				      size_t count, loff_t *ppos)
+{
+	struct nsim_rx_truesize *rx_truesize = file->private_data;
+	u32 value;
+	int err;
+
+	err = kstrtou32_from_user(user_buf, count, 0, &value);
+	if (err)
+		return err;
+
+	WRITE_ONCE(rx_truesize->value, value);
+
+	return count;
+}
+
+static int nsim_rx_truesize_open(struct inode *inode, struct file *file)
+{
+	struct nsim_rx_truesize *rx_truesize;
+
+	rx_truesize = nsim_rx_truesize_get(inode->i_private);
+	if (!rx_truesize)
+		return -ENODEV;
+
+	file->private_data = rx_truesize;
+
+	return nonseekable_open(inode, file);
+}
+
+static int nsim_rx_truesize_release(struct inode *inode, struct file *file)
+{
+	nsim_rx_truesize_put(file->private_data);
+
+	return 0;
+}
+
+static const struct file_operations nsim_rx_truesize_fops = {
+	.owner		= THIS_MODULE,
+	.open		= nsim_rx_truesize_open,
+	.read		= nsim_rx_truesize_read,
+	.write		= nsim_rx_truesize_write,
+	.release	= nsim_rx_truesize_release,
+	.llseek		= noop_llseek,
+};
 
 static void nsim_start_peer_tx_queue(struct net_device *dev, struct nsim_rq *rq)
 {
@@ -117,6 +204,28 @@ static int nsim_forward_skb(struct net_device *tx_dev,
 	return nsim_napi_rx(tx_dev, rx_dev, rq, skb);
 }
 
+/* Tests can inflate peer RX skb->truesize to exercise receiver-side TCP
+ * accounting under scaling-ratio drift without perturbing sender-side skb
+ * ownership.
+ */
+static void nsim_rx_update_truesize(struct sk_buff *skb, u32 extra)
+{
+	unsigned int truesize;
+
+	if (!extra)
+		return;
+
+	if (check_add_overflow(skb->truesize, extra, &truesize))
+		truesize = UINT_MAX;
+
+	skb->truesize = truesize;
+}
+
+static u32 nsim_rx_extra_truesize(const struct netdevsim *ns)
+{
+	return READ_ONCE(ns->rx_truesize->value);
+}
+
 static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct netdevsim *ns = netdev_priv(dev);
@@ -125,7 +234,9 @@ static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned int len = skb->len;
 	struct netdevsim *peer_ns;
 	struct netdev_config *cfg;
+	struct sk_buff *nskb;
 	struct nsim_rq *rq;
+	u32 extra;
 	int rxq;
 	int dr;
 
@@ -160,7 +271,24 @@ static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	      cfg->hds_thresh > len)))
 		skb_linearize(skb);
 
+	extra = nsim_rx_extra_truesize(peer_ns);
 	skb_tx_timestamp(skb);
+	if (extra) {
+		/* Clone before inflating truesize so only the peer RX path sees
+		 * the synthetic cost; sender-side skb accounting stays put.
+		 */
+		nskb = skb_clone(skb, GFP_ATOMIC);
+		if (!nskb) {
+			if (psp_ext)
+				__skb_ext_put(psp_ext);
+			goto out_drop_free;
+		}
+
+		consume_skb(skb);
+		skb = nskb;
+		nsim_rx_update_truesize(skb, extra);
+	}
+
 	if (unlikely(nsim_forward_skb(dev, peer_dev,
 				      skb, rq, psp_ext) == NET_RX_DROP))
 		goto out_drop_cnt;
@@ -1121,6 +1249,7 @@ struct netdevsim *nsim_create(struct nsim_dev *nsim_dev,
 			      u8 perm_addr[ETH_ALEN])
 {
 	struct net_device *dev;
+	struct nsim_rx_truesize *rx_truesize;
 	struct netdevsim *ns;
 	int err;
 
@@ -1140,6 +1269,13 @@ struct netdevsim *nsim_create(struct nsim_dev *nsim_dev,
 	ns->nsim_bus_dev = nsim_dev->nsim_bus_dev;
 	SET_NETDEV_DEV(dev, &ns->nsim_bus_dev->dev);
 	SET_NETDEV_DEVLINK_PORT(dev, &nsim_dev_port->devlink_port);
+	rx_truesize = kzalloc_obj(*rx_truesize);
+	if (!rx_truesize) {
+		err = -ENOMEM;
+		goto err_free_netdev;
+	}
+	refcount_set(&rx_truesize->refs, 1);
+	ns->rx_truesize = rx_truesize;
 	nsim_ethtool_init(ns);
 	if (nsim_dev_port_is_pf(nsim_dev_port))
 		err = nsim_init_netdevsim(ns);
@@ -1153,21 +1289,27 @@ struct netdevsim *nsim_create(struct nsim_dev *nsim_dev,
 	ns->qr_dfs = debugfs_create_file("queue_reset", 0200,
 					 nsim_dev_port->ddir, ns,
 					 &nsim_qreset_fops);
+	ns->rx_truesize_dfs = debugfs_create_file("rx_extra_truesize", 0600,
+						  nsim_dev_port->ddir,
+						  ns->rx_truesize,
+						  &nsim_rx_truesize_fops);
 	return ns;
 
 err_free_netdev:
+	nsim_rx_truesize_put(ns->rx_truesize);
 	free_netdev(dev);
 	return ERR_PTR(err);
 }
 
 void nsim_destroy(struct netdevsim *ns)
 {
+	struct nsim_rx_truesize *rx_truesize = ns->rx_truesize;
 	struct net_device *dev = ns->netdev;
 	struct netdevsim *peer;
 
+	debugfs_remove(ns->rx_truesize_dfs);
 	debugfs_remove(ns->qr_dfs);
 	debugfs_remove(ns->pp_dfs);
-
 	if (ns->nb.notifier_call)
 		unregister_netdevice_notifier_dev_net(ns->netdev, &ns->nb,
 						      &ns->nn);
@@ -1198,6 +1340,7 @@ void nsim_destroy(struct netdevsim *ns)
 	}
 
 	free_netdev(dev);
+	nsim_rx_truesize_put(rx_truesize);
 }
 
 bool netdev_is_nsim(struct net_device *dev)

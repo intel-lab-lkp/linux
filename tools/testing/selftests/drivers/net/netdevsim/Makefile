@@ -14,6 +14,7 @@ TEST_PROGS := \
 	macsec-offload.sh \
 	nexthop.sh \
 	peer.sh \
+	peer-rx-truesize.sh \
 	psample.sh \
 	tc-mq-visibility.sh \
 	udp_tunnel_nic.sh \
