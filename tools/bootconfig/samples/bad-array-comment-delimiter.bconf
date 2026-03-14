@@ -1,0 +1,2 @@
+key = 1 # comment
+      , 2 # Error: comment between value and its comma delimiter
