@@ -13,38 +13,39 @@
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
+#include <media/v4l2-cci.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 
 /* Streaming Mode */
-#define IMX412_REG_MODE_SELECT	0x0100
+#define IMX412_REG_MODE_SELECT	CCI_REG8(0x0100)
 #define IMX412_MODE_STANDBY	0x00
 #define IMX412_MODE_STREAMING	0x01
 
 /* Lines per frame */
-#define IMX412_REG_LPFR		0x0340
+#define IMX412_REG_LPFR		CCI_REG16(0x0340)
 
 /* Chip ID */
-#define IMX412_REG_ID		0x0016
+#define IMX412_REG_ID		CCI_REG16(0x0016)
 #define IMX412_ID		0x577
 
 /* Exposure control */
-#define IMX412_REG_EXPOSURE_CIT	0x0202
+#define IMX412_REG_EXPOSURE_CIT	CCI_REG16(0x0202)
 #define IMX412_EXPOSURE_MIN	8
 #define IMX412_EXPOSURE_OFFSET	22
 #define IMX412_EXPOSURE_STEP	1
 #define IMX412_EXPOSURE_DEFAULT	0x0648
 
 /* Analog gain control */
-#define IMX412_REG_AGAIN	0x0204
+#define IMX412_REG_AGAIN	CCI_REG16(0x0204)
 #define IMX412_AGAIN_MIN	0
 #define IMX412_AGAIN_MAX	978
 #define IMX412_AGAIN_STEP	1
 #define IMX412_AGAIN_DEFAULT	0
 
 /* Group hold register */
-#define IMX412_REG_HOLD		0x0104
+#define IMX412_REG_HOLD		CCI_REG8(0x0104)
 
 /* Input clock rate */
 #define IMX412_INCLK_RATE	24000000
@@ -57,23 +58,13 @@
 #define IMX412_REG_MAX		0xffff
 
 /**
- * struct imx412_reg - imx412 sensor register
- * @address: Register address
- * @val: Register value
- */
-struct imx412_reg {
-	u16 address;
-	u8 val;
-};
-
-/**
  * struct imx412_reg_list - imx412 sensor register list
  * @num_of_regs: Number of registers in the list
  * @regs: Pointer to register list
  */
 struct imx412_reg_list {
 	u32 num_of_regs;
-	const struct imx412_reg *regs;
+	const struct cci_reg_sequence *regs;
 };
 
 /**
@@ -111,6 +102,7 @@ static const char * const imx412_supply_names[] = {
 /**
  * struct imx412 - imx412 sensor device structure
  * @dev: Pointer to generic device
+ * @cci: CCI register map
  * @client: Pointer to i2c client
  * @sd: V4L2 sub-device
  * @pad: Media pad. Only one pad supported
@@ -130,6 +122,7 @@ static const char * const imx412_supply_names[] = {
  */
 struct imx412 {
 	struct device *dev;
+	struct regmap *cci;
 	struct i2c_client *client;
 	struct v4l2_subdev sd;
 	struct media_pad pad;
@@ -155,238 +148,238 @@ static const s64 link_freq[] = {
 };
 
 /* Sensor mode registers */
-static const struct imx412_reg mode_4056x3040_regs[] = {
-	{0x0136, 0x18},
-	{0x0137, 0x00},
-	{0x3c7e, 0x08},
-	{0x3c7f, 0x02},
-	{0x38a8, 0x1f},
-	{0x38a9, 0xff},
-	{0x38aa, 0x1f},
-	{0x38ab, 0xff},
-	{0x55d4, 0x00},
-	{0x55d5, 0x00},
-	{0x55d6, 0x07},
-	{0x55d7, 0xff},
-	{0x55e8, 0x07},
-	{0x55e9, 0xff},
-	{0x55ea, 0x00},
-	{0x55eb, 0x00},
-	{0x575c, 0x07},
-	{0x575d, 0xff},
-	{0x575e, 0x00},
-	{0x575f, 0x00},
-	{0x5764, 0x00},
-	{0x5765, 0x00},
-	{0x5766, 0x07},
-	{0x5767, 0xff},
-	{0x5974, 0x04},
-	{0x5975, 0x01},
-	{0x5f10, 0x09},
-	{0x5f11, 0x92},
-	{0x5f12, 0x32},
-	{0x5f13, 0x72},
-	{0x5f14, 0x16},
-	{0x5f15, 0xba},
-	{0x5f17, 0x13},
-	{0x5f18, 0x24},
-	{0x5f19, 0x60},
-	{0x5f1a, 0xe3},
-	{0x5f1b, 0xad},
-	{0x5f1c, 0x74},
-	{0x5f2d, 0x25},
-	{0x5f5c, 0xd0},
-	{0x6a22, 0x00},
-	{0x6a23, 0x1d},
-	{0x7ba8, 0x00},
-	{0x7ba9, 0x00},
-	{0x886b, 0x00},
-	{0x9002, 0x0a},
-	{0x9004, 0x1a},
-	{0x9214, 0x93},
-	{0x9215, 0x69},
-	{0x9216, 0x93},
-	{0x9217, 0x6b},
-	{0x9218, 0x93},
-	{0x9219, 0x6d},
-	{0x921a, 0x57},
-	{0x921b, 0x58},
-	{0x921c, 0x57},
-	{0x921d, 0x59},
-	{0x921e, 0x57},
-	{0x921f, 0x5a},
-	{0x9220, 0x57},
-	{0x9221, 0x5b},
-	{0x9222, 0x93},
-	{0x9223, 0x02},
-	{0x9224, 0x93},
-	{0x9225, 0x03},
-	{0x9226, 0x93},
-	{0x9227, 0x04},
-	{0x9228, 0x93},
-	{0x9229, 0x05},
-	{0x922a, 0x98},
-	{0x922b, 0x21},
-	{0x922c, 0xb2},
-	{0x922d, 0xdb},
-	{0x922e, 0xb2},
-	{0x922f, 0xdc},
-	{0x9230, 0xb2},
-	{0x9231, 0xdd},
-	{0x9232, 0xe2},
-	{0x9233, 0xe1},
-	{0x9234, 0xb2},
-	{0x9235, 0xe2},
-	{0x9236, 0xb2},
-	{0x9237, 0xe3},
-	{0x9238, 0xb7},
-	{0x9239, 0xb9},
-	{0x923a, 0xb7},
-	{0x923b, 0xbb},
-	{0x923c, 0xb7},
-	{0x923d, 0xbc},
-	{0x923e, 0xb7},
-	{0x923f, 0xc5},
-	{0x9240, 0xb7},
-	{0x9241, 0xc7},
-	{0x9242, 0xb7},
-	{0x9243, 0xc9},
-	{0x9244, 0x98},
-	{0x9245, 0x56},
-	{0x9246, 0x98},
-	{0x9247, 0x55},
-	{0x9380, 0x00},
-	{0x9381, 0x62},
-	{0x9382, 0x00},
-	{0x9383, 0x56},
-	{0x9384, 0x00},
-	{0x9385, 0x52},
-	{0x9388, 0x00},
-	{0x9389, 0x55},
-	{0x938a, 0x00},
-	{0x938b, 0x55},
-	{0x938c, 0x00},
-	{0x938d, 0x41},
-	{0x5078, 0x01},
-	{0x0112, 0x0a},
-	{0x0113, 0x0a},
-	{0x0114, 0x03},
-	{0x0342, 0x11},
-	{0x0343, 0xa0},
-	{0x0340, 0x0d},
-	{0x0341, 0xda},
-	{0x3210, 0x00},
-	{0x0344, 0x00},
-	{0x0345, 0x00},
-	{0x0346, 0x00},
-	{0x0347, 0x00},
-	{0x0348, 0x0f},
-	{0x0349, 0xd7},
-	{0x034a, 0x0b},
-	{0x034b, 0xdf},
-	{0x00e3, 0x00},
-	{0x00e4, 0x00},
-	{0x00e5, 0x01},
-	{0x00fc, 0x0a},
-	{0x00fd, 0x0a},
-	{0x00fe, 0x0a},
-	{0x00ff, 0x0a},
-	{0xe013, 0x00},
-	{0x0220, 0x00},
-	{0x0221, 0x11},
-	{0x0381, 0x01},
-	{0x0383, 0x01},
-	{0x0385, 0x01},
-	{0x0387, 0x01},
-	{0x0900, 0x00},
-	{0x0901, 0x11},
-	{0x0902, 0x00},
-	{0x3140, 0x02},
-	{0x3241, 0x11},
-	{0x3250, 0x03},
-	{0x3e10, 0x00},
-	{0x3e11, 0x00},
-	{0x3f0d, 0x00},
-	{0x3f42, 0x00},
-	{0x3f43, 0x00},
-	{0x0401, 0x00},
-	{0x0404, 0x00},
-	{0x0405, 0x10},
-	{0x0408, 0x00},
-	{0x0409, 0x00},
-	{0x040a, 0x00},
-	{0x040b, 0x00},
-	{0x040c, 0x0f},
-	{0x040d, 0xd8},
-	{0x040e, 0x0b},
-	{0x040f, 0xe0},
-	{0x034c, 0x0f},
-	{0x034d, 0xd8},
-	{0x034e, 0x0b},
-	{0x034f, 0xe0},
-	{0x0301, 0x05},
-	{0x0303, 0x02},
-	{0x0305, 0x04},
-	{0x0306, 0x00},
-	{0x0307, 0xc8},
-	{0x0309, 0x0a},
-	{0x030b, 0x01},
-	{0x030d, 0x02},
-	{0x030e, 0x01},
-	{0x030f, 0x5e},
-	{0x0310, 0x00},
-	{0x0820, 0x12},
-	{0x0821, 0xc0},
-	{0x0822, 0x00},
-	{0x0823, 0x00},
-	{0x3e20, 0x01},
-	{0x3e37, 0x00},
-	{0x3f50, 0x00},
-	{0x3f56, 0x00},
-	{0x3f57, 0xe2},
-	{0x3c0a, 0x5a},
-	{0x3c0b, 0x55},
-	{0x3c0c, 0x28},
-	{0x3c0d, 0x07},
-	{0x3c0e, 0xff},
-	{0x3c0f, 0x00},
-	{0x3c10, 0x00},
-	{0x3c11, 0x02},
-	{0x3c12, 0x00},
-	{0x3c13, 0x03},
-	{0x3c14, 0x00},
-	{0x3c15, 0x00},
-	{0x3c16, 0x0c},
-	{0x3c17, 0x0c},
-	{0x3c18, 0x0c},
-	{0x3c19, 0x0a},
-	{0x3c1a, 0x0a},
-	{0x3c1b, 0x0a},
-	{0x3c1c, 0x00},
-	{0x3c1d, 0x00},
-	{0x3c1e, 0x00},
-	{0x3c1f, 0x00},
-	{0x3c20, 0x00},
-	{0x3c21, 0x00},
-	{0x3c22, 0x3f},
-	{0x3c23, 0x0a},
-	{0x3e35, 0x01},
-	{0x3f4a, 0x03},
-	{0x3f4b, 0xbf},
-	{0x3f26, 0x00},
-	{0x0202, 0x0d},
-	{0x0203, 0xc4},
-	{0x0204, 0x00},
-	{0x0205, 0x00},
-	{0x020e, 0x01},
-	{0x020f, 0x00},
-	{0x0210, 0x01},
-	{0x0211, 0x00},
-	{0x0212, 0x01},
-	{0x0213, 0x00},
-	{0x0214, 0x01},
-	{0x0215, 0x00},
-	{0xbcf1, 0x00},
+static const struct cci_reg_sequence mode_4056x3040_regs[] = {
+	{ CCI_REG8(0x0136), 0x18 },
+	{ CCI_REG8(0x0137), 0x00 },
+	{ CCI_REG8(0x3c7e), 0x08 },
+	{ CCI_REG8(0x3c7f), 0x02 },
+	{ CCI_REG8(0x38a8), 0x1f },
+	{ CCI_REG8(0x38a9), 0xff },
+	{ CCI_REG8(0x38aa), 0x1f },
+	{ CCI_REG8(0x38ab), 0xff },
+	{ CCI_REG8(0x55d4), 0x00 },
+	{ CCI_REG8(0x55d5), 0x00 },
+	{ CCI_REG8(0x55d6), 0x07 },
+	{ CCI_REG8(0x55d7), 0xff },
+	{ CCI_REG8(0x55e8), 0x07 },
+	{ CCI_REG8(0x55e9), 0xff },
+	{ CCI_REG8(0x55ea), 0x00 },
+	{ CCI_REG8(0x55eb), 0x00 },
+	{ CCI_REG8(0x575c), 0x07 },
+	{ CCI_REG8(0x575d), 0xff },
+	{ CCI_REG8(0x575e), 0x00 },
+	{ CCI_REG8(0x575f), 0x00 },
+	{ CCI_REG8(0x5764), 0x00 },
+	{ CCI_REG8(0x5765), 0x00 },
+	{ CCI_REG8(0x5766), 0x07 },
+	{ CCI_REG8(0x5767), 0xff },
+	{ CCI_REG8(0x5974), 0x04 },
+	{ CCI_REG8(0x5975), 0x01 },
+	{ CCI_REG8(0x5f10), 0x09 },
+	{ CCI_REG8(0x5f11), 0x92 },
+	{ CCI_REG8(0x5f12), 0x32 },
+	{ CCI_REG8(0x5f13), 0x72 },
+	{ CCI_REG8(0x5f14), 0x16 },
+	{ CCI_REG8(0x5f15), 0xba },
+	{ CCI_REG8(0x5f17), 0x13 },
+	{ CCI_REG8(0x5f18), 0x24 },
+	{ CCI_REG8(0x5f19), 0x60 },
+	{ CCI_REG8(0x5f1a), 0xe3 },
+	{ CCI_REG8(0x5f1b), 0xad },
+	{ CCI_REG8(0x5f1c), 0x74 },
+	{ CCI_REG8(0x5f2d), 0x25 },
+	{ CCI_REG8(0x5f5c), 0xd0 },
+	{ CCI_REG8(0x6a22), 0x00 },
+	{ CCI_REG8(0x6a23), 0x1d },
+	{ CCI_REG8(0x7ba8), 0x00 },
+	{ CCI_REG8(0x7ba9), 0x00 },
+	{ CCI_REG8(0x886b), 0x00 },
+	{ CCI_REG8(0x9002), 0x0a },
+	{ CCI_REG8(0x9004), 0x1a },
+	{ CCI_REG8(0x9214), 0x93 },
+	{ CCI_REG8(0x9215), 0x69 },
+	{ CCI_REG8(0x9216), 0x93 },
+	{ CCI_REG8(0x9217), 0x6b },
+	{ CCI_REG8(0x9218), 0x93 },
+	{ CCI_REG8(0x9219), 0x6d },
+	{ CCI_REG8(0x921a), 0x57 },
+	{ CCI_REG8(0x921b), 0x58 },
+	{ CCI_REG8(0x921c), 0x57 },
+	{ CCI_REG8(0x921d), 0x59 },
+	{ CCI_REG8(0x921e), 0x57 },
+	{ CCI_REG8(0x921f), 0x5a },
+	{ CCI_REG8(0x9220), 0x57 },
+	{ CCI_REG8(0x9221), 0x5b },
+	{ CCI_REG8(0x9222), 0x93 },
+	{ CCI_REG8(0x9223), 0x02 },
+	{ CCI_REG8(0x9224), 0x93 },
+	{ CCI_REG8(0x9225), 0x03 },
+	{ CCI_REG8(0x9226), 0x93 },
+	{ CCI_REG8(0x9227), 0x04 },
+	{ CCI_REG8(0x9228), 0x93 },
+	{ CCI_REG8(0x9229), 0x05 },
+	{ CCI_REG8(0x922a), 0x98 },
+	{ CCI_REG8(0x922b), 0x21 },
+	{ CCI_REG8(0x922c), 0xb2 },
+	{ CCI_REG8(0x922d), 0xdb },
+	{ CCI_REG8(0x922e), 0xb2 },
+	{ CCI_REG8(0x922f), 0xdc },
+	{ CCI_REG8(0x9230), 0xb2 },
+	{ CCI_REG8(0x9231), 0xdd },
+	{ CCI_REG8(0x9232), 0xe2 },
+	{ CCI_REG8(0x9233), 0xe1 },
+	{ CCI_REG8(0x9234), 0xb2 },
+	{ CCI_REG8(0x9235), 0xe2 },
+	{ CCI_REG8(0x9236), 0xb2 },
+	{ CCI_REG8(0x9237), 0xe3 },
+	{ CCI_REG8(0x9238), 0xb7 },
+	{ CCI_REG8(0x9239), 0xb9 },
+	{ CCI_REG8(0x923a), 0xb7 },
+	{ CCI_REG8(0x923b), 0xbb },
+	{ CCI_REG8(0x923c), 0xb7 },
+	{ CCI_REG8(0x923d), 0xbc },
+	{ CCI_REG8(0x923e), 0xb7 },
+	{ CCI_REG8(0x923f), 0xc5 },
+	{ CCI_REG8(0x9240), 0xb7 },
+	{ CCI_REG8(0x9241), 0xc7 },
+	{ CCI_REG8(0x9242), 0xb7 },
+	{ CCI_REG8(0x9243), 0xc9 },
+	{ CCI_REG8(0x9244), 0x98 },
+	{ CCI_REG8(0x9245), 0x56 },
+	{ CCI_REG8(0x9246), 0x98 },
+	{ CCI_REG8(0x9247), 0x55 },
+	{ CCI_REG8(0x9380), 0x00 },
+	{ CCI_REG8(0x9381), 0x62 },
+	{ CCI_REG8(0x9382), 0x00 },
+	{ CCI_REG8(0x9383), 0x56 },
+	{ CCI_REG8(0x9384), 0x00 },
+	{ CCI_REG8(0x9385), 0x52 },
+	{ CCI_REG8(0x9388), 0x00 },
+	{ CCI_REG8(0x9389), 0x55 },
+	{ CCI_REG8(0x938a), 0x00 },
+	{ CCI_REG8(0x938b), 0x55 },
+	{ CCI_REG8(0x938c), 0x00 },
+	{ CCI_REG8(0x938d), 0x41 },
+	{ CCI_REG8(0x5078), 0x01 },
+	{ CCI_REG8(0x0112), 0x0a },
+	{ CCI_REG8(0x0113), 0x0a },
+	{ CCI_REG8(0x0114), 0x03 },
+	{ CCI_REG8(0x0342), 0x11 },
+	{ CCI_REG8(0x0343), 0xa0 },
+	{ CCI_REG8(0x0340), 0x0d },
+	{ CCI_REG8(0x0341), 0xda },
+	{ CCI_REG8(0x3210), 0x00 },
+	{ CCI_REG8(0x0344), 0x00 },
+	{ CCI_REG8(0x0345), 0x00 },
+	{ CCI_REG8(0x0346), 0x00 },
+	{ CCI_REG8(0x0347), 0x00 },
+	{ CCI_REG8(0x0348), 0x0f },
+	{ CCI_REG8(0x0349), 0xd7 },
+	{ CCI_REG8(0x034a), 0x0b },
+	{ CCI_REG8(0x034b), 0xdf },
+	{ CCI_REG8(0x00e3), 0x00 },
+	{ CCI_REG8(0x00e4), 0x00 },
+	{ CCI_REG8(0x00e5), 0x01 },
+	{ CCI_REG8(0x00fc), 0x0a },
+	{ CCI_REG8(0x00fd), 0x0a },
+	{ CCI_REG8(0x00fe), 0x0a },
+	{ CCI_REG8(0x00ff), 0x0a },
+	{ CCI_REG8(0xe013), 0x00 },
+	{ CCI_REG8(0x0220), 0x00 },
+	{ CCI_REG8(0x0221), 0x11 },
+	{ CCI_REG8(0x0381), 0x01 },
+	{ CCI_REG8(0x0383), 0x01 },
+	{ CCI_REG8(0x0385), 0x01 },
+	{ CCI_REG8(0x0387), 0x01 },
+	{ CCI_REG8(0x0900), 0x00 },
+	{ CCI_REG8(0x0901), 0x11 },
+	{ CCI_REG8(0x0902), 0x00 },
+	{ CCI_REG8(0x3140), 0x02 },
+	{ CCI_REG8(0x3241), 0x11 },
+	{ CCI_REG8(0x3250), 0x03 },
+	{ CCI_REG8(0x3e10), 0x00 },
+	{ CCI_REG8(0x3e11), 0x00 },
+	{ CCI_REG8(0x3f0d), 0x00 },
+	{ CCI_REG8(0x3f42), 0x00 },
+	{ CCI_REG8(0x3f43), 0x00 },
+	{ CCI_REG8(0x0401), 0x00 },
+	{ CCI_REG8(0x0404), 0x00 },
+	{ CCI_REG8(0x0405), 0x10 },
+	{ CCI_REG8(0x0408), 0x00 },
+	{ CCI_REG8(0x0409), 0x00 },
+	{ CCI_REG8(0x040a), 0x00 },
+	{ CCI_REG8(0x040b), 0x00 },
+	{ CCI_REG8(0x040c), 0x0f },
+	{ CCI_REG8(0x040d), 0xd8 },
+	{ CCI_REG8(0x040e), 0x0b },
+	{ CCI_REG8(0x040f), 0xe0 },
+	{ CCI_REG8(0x034c), 0x0f },
+	{ CCI_REG8(0x034d), 0xd8 },
+	{ CCI_REG8(0x034e), 0x0b },
+	{ CCI_REG8(0x034f), 0xe0 },
+	{ CCI_REG8(0x0301), 0x05 },
+	{ CCI_REG8(0x0303), 0x02 },
+	{ CCI_REG8(0x0305), 0x04 },
+	{ CCI_REG8(0x0306), 0x00 },
+	{ CCI_REG8(0x0307), 0xc8 },
+	{ CCI_REG8(0x0309), 0x0a },
+	{ CCI_REG8(0x030b), 0x01 },
+	{ CCI_REG8(0x030d), 0x02 },
+	{ CCI_REG8(0x030e), 0x01 },
+	{ CCI_REG8(0x030f), 0x5e },
+	{ CCI_REG8(0x0310), 0x00 },
+	{ CCI_REG8(0x0820), 0x12 },
+	{ CCI_REG8(0x0821), 0xc0 },
+	{ CCI_REG8(0x0822), 0x00 },
+	{ CCI_REG8(0x0823), 0x00 },
+	{ CCI_REG8(0x3e20), 0x01 },
+	{ CCI_REG8(0x3e37), 0x00 },
+	{ CCI_REG8(0x3f50), 0x00 },
+	{ CCI_REG8(0x3f56), 0x00 },
+	{ CCI_REG8(0x3f57), 0xe2 },
+	{ CCI_REG8(0x3c0a), 0x5a },
+	{ CCI_REG8(0x3c0b), 0x55 },
+	{ CCI_REG8(0x3c0c), 0x28 },
+	{ CCI_REG8(0x3c0d), 0x07 },
+	{ CCI_REG8(0x3c0e), 0xff },
+	{ CCI_REG8(0x3c0f), 0x00 },
+	{ CCI_REG8(0x3c10), 0x00 },
+	{ CCI_REG8(0x3c11), 0x02 },
+	{ CCI_REG8(0x3c12), 0x00 },
+	{ CCI_REG8(0x3c13), 0x03 },
+	{ CCI_REG8(0x3c14), 0x00 },
+	{ CCI_REG8(0x3c15), 0x00 },
+	{ CCI_REG8(0x3c16), 0x0c },
+	{ CCI_REG8(0x3c17), 0x0c },
+	{ CCI_REG8(0x3c18), 0x0c },
+	{ CCI_REG8(0x3c19), 0x0a },
+	{ CCI_REG8(0x3c1a), 0x0a },
+	{ CCI_REG8(0x3c1b), 0x0a },
+	{ CCI_REG8(0x3c1c), 0x00 },
+	{ CCI_REG8(0x3c1d), 0x00 },
+	{ CCI_REG8(0x3c1e), 0x00 },
+	{ CCI_REG8(0x3c1f), 0x00 },
+	{ CCI_REG8(0x3c20), 0x00 },
+	{ CCI_REG8(0x3c21), 0x00 },
+	{ CCI_REG8(0x3c22), 0x3f },
+	{ CCI_REG8(0x3c23), 0x0a },
+	{ CCI_REG8(0x3e35), 0x01 },
+	{ CCI_REG8(0x3f4a), 0x03 },
+	{ CCI_REG8(0x3f4b), 0xbf },
+	{ CCI_REG8(0x3f26), 0x00 },
+	{ CCI_REG8(0x0202), 0x0d },
+	{ CCI_REG8(0x0203), 0xc4 },
+	{ CCI_REG8(0x0204), 0x00 },
+	{ CCI_REG8(0x0205), 0x00 },
+	{ CCI_REG8(0x020e), 0x01 },
+	{ CCI_REG8(0x020f), 0x00 },
+	{ CCI_REG8(0x0210), 0x01 },
+	{ CCI_REG8(0x0211), 0x00 },
+	{ CCI_REG8(0x0212), 0x01 },
+	{ CCI_REG8(0x0213), 0x00 },
+	{ CCI_REG8(0x0214), 0x01 },
+	{ CCI_REG8(0x0215), 0x00 },
+	{ CCI_REG8(0xbcf1), 0x00 },
 };
 
 /* Supported sensor mode configurations */
@@ -415,97 +408,6 @@ static const struct imx412_mode supported_mode = {
 static inline struct imx412 *to_imx412(struct v4l2_subdev *subdev)
 {
 	return container_of(subdev, struct imx412, sd);
-}
-
-/**
- * imx412_read_reg() - Read registers.
- * @imx412: pointer to imx412 device
- * @reg: register address
- * @len: length of bytes to read. Max supported bytes is 4
- * @val: pointer to register value to be filled.
- *
- * Return: 0 if successful, error code otherwise.
- */
-static int imx412_read_reg(struct imx412 *imx412, u16 reg, u32 len, u32 *val)
-{
-	struct i2c_client *client = v4l2_get_subdevdata(&imx412->sd);
-	struct i2c_msg msgs[2] = {0};
-	u8 addr_buf[2] = {0};
-	u8 data_buf[4] = {0};
-	int ret;
-
-	if (WARN_ON(len > 4))
-		return -EINVAL;
-
-	put_unaligned_be16(reg, addr_buf);
-
-	/* Write register address */
-	msgs[0].addr = client->addr;
-	msgs[0].flags = 0;
-	msgs[0].len = ARRAY_SIZE(addr_buf);
-	msgs[0].buf = addr_buf;
-
-	/* Read data from register */
-	msgs[1].addr = client->addr;
-	msgs[1].flags = I2C_M_RD;
-	msgs[1].len = len;
-	msgs[1].buf = &data_buf[4 - len];
-
-	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
-	if (ret != ARRAY_SIZE(msgs))
-		return -EIO;
-
-	*val = get_unaligned_be32(data_buf);
-
-	return 0;
-}
-
-/**
- * imx412_write_reg() - Write register
- * @imx412: pointer to imx412 device
- * @reg: register address
- * @len: length of bytes. Max supported bytes is 4
- * @val: register value
- *
- * Return: 0 if successful, error code otherwise.
- */
-static int imx412_write_reg(struct imx412 *imx412, u16 reg, u32 len, u32 val)
-{
-	struct i2c_client *client = v4l2_get_subdevdata(&imx412->sd);
-	u8 buf[6] = {0};
-
-	if (WARN_ON(len > 4))
-		return -EINVAL;
-
-	put_unaligned_be16(reg, buf);
-	put_unaligned_be32(val << (8 * (4 - len)), buf + 2);
-	if (i2c_master_send(client, buf, len + 2) != len + 2)
-		return -EIO;
-
-	return 0;
-}
-
-/**
- * imx412_write_regs() - Write a list of registers
- * @imx412: pointer to imx412 device
- * @regs: list of registers to be written
- * @len: length of registers array
- *
- * Return: 0 if successful, error code otherwise.
- */
-static int imx412_write_regs(struct imx412 *imx412,
-			     const struct imx412_reg *regs, u32 len)
-{
-	unsigned int i;
-	int ret;
-
-	for (i = 0; i < len; i++) {
-		ret = imx412_write_reg(imx412, regs[i].address, 1, regs[i].val);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
 }
 
 /**
@@ -543,29 +445,25 @@ static int imx412_update_controls(struct imx412 *imx412,
 static int imx412_update_exp_gain(struct imx412 *imx412, u32 exposure, u32 gain)
 {
 	u32 lpfr;
-	int ret;
+	int ret = 0;
+	int ret_hold;
 
 	lpfr = imx412->vblank + imx412->cur_mode->height;
 
 	dev_dbg(imx412->dev, "Set exp %u, analog gain %u, lpfr %u\n",
 		exposure, gain, lpfr);
 
-	ret = imx412_write_reg(imx412, IMX412_REG_HOLD, 1, 1);
-	if (ret)
-		return ret;
+	cci_write(imx412->cci, IMX412_REG_HOLD, 1, &ret);
 
-	ret = imx412_write_reg(imx412, IMX412_REG_LPFR, 2, lpfr);
-	if (ret)
-		goto error_release_group_hold;
+	cci_write(imx412->cci, IMX412_REG_LPFR, lpfr, &ret);
 
-	ret = imx412_write_reg(imx412, IMX412_REG_EXPOSURE_CIT, 2, exposure);
-	if (ret)
-		goto error_release_group_hold;
+	cci_write(imx412->cci, IMX412_REG_EXPOSURE_CIT, exposure, &ret);
 
-	ret = imx412_write_reg(imx412, IMX412_REG_AGAIN, 2, gain);
+	cci_write(imx412->cci, IMX412_REG_AGAIN, gain, &ret);
 
-error_release_group_hold:
-	imx412_write_reg(imx412, IMX412_REG_HOLD, 1, 0);
+	ret_hold = cci_write(imx412->cci, IMX412_REG_HOLD, 0, NULL);
+	if (ret_hold)
+		return ret_hold;
 
 	return ret;
 }
@@ -800,8 +698,8 @@ static int imx412_start_streaming(struct imx412 *imx412)
 
 	/* Write sensor mode registers */
 	reg_list = &imx412->cur_mode->reg_list;
-	ret = imx412_write_regs(imx412, reg_list->regs,
-				reg_list->num_of_regs);
+	ret = cci_multi_reg_write(imx412->cci, reg_list->regs,
+				  reg_list->num_of_regs, NULL);
 	if (ret) {
 		dev_err(imx412->dev, "fail to write initial registers\n");
 		return ret;
@@ -818,8 +716,8 @@ static int imx412_start_streaming(struct imx412 *imx412)
 	usleep_range(7400, 8000);
 
 	/* Start streaming */
-	ret = imx412_write_reg(imx412, IMX412_REG_MODE_SELECT,
-			       1, IMX412_MODE_STREAMING);
+	ret = cci_write(imx412->cci, IMX412_REG_MODE_SELECT,
+			IMX412_MODE_STREAMING, NULL);
 	if (ret) {
 		dev_err(imx412->dev, "fail to start streaming\n");
 		return ret;
@@ -836,8 +734,8 @@ static int imx412_start_streaming(struct imx412 *imx412)
  */
 static int imx412_stop_streaming(struct imx412 *imx412)
 {
-	return imx412_write_reg(imx412, IMX412_REG_MODE_SELECT,
-				1, IMX412_MODE_STANDBY);
+	return cci_write(imx412->cci, IMX412_REG_MODE_SELECT,
+			 IMX412_MODE_STANDBY, NULL);
 }
 
 /**
@@ -888,16 +786,18 @@ error_unlock:
 static int imx412_detect(struct imx412 *imx412)
 {
 	int ret;
-	u32 val;
+	u64 val;
 
-	ret = imx412_read_reg(imx412, IMX412_REG_ID, 2, &val);
+	ret = cci_read(imx412->cci, IMX412_REG_ID, &val, NULL);
 	if (ret)
-		return ret;
+		return dev_err_probe(imx412->dev, ret,
+				     "failed to read chip id %x\n",
+				     IMX412_ID);
 
 	if (val != IMX412_ID) {
-		dev_err(imx412->dev, "chip id mismatch: %x!=%x\n",
-			IMX412_ID, val);
-		return -ENXIO;
+		return dev_err_probe(imx412->dev, -ENODEV,
+				     "chip id mismatch: %x!=%llx",
+				     IMX412_ID, val);
 	}
 
 	return 0;
@@ -1175,6 +1075,11 @@ static int imx412_probe(struct i2c_client *client)
 	name = device_get_match_data(&client->dev);
 	if (!name)
 		return -ENODEV;
+
+	imx412->cci = devm_cci_regmap_init_i2c(client, 16);
+	if (IS_ERR(imx412->cci))
+		return dev_err_probe(imx412->dev, PTR_ERR(imx412->cci),
+				     "Failed to init CCI\n");
 
 	/* Initialize subdev */
 	v4l2_i2c_subdev_init(&imx412->sd, client, &imx412_subdev_ops);
