@@ -179,14 +179,14 @@ struct xbc_node * __init xbc_node_get_next(struct xbc_node *node)
  * @node: An XBC node.
  *
  * Return the data (which is always a null terminated string) of @node.
- * If the node has invalid data, warn and return NULL.
+ * If the node has invalid data, warn and return an empty string.
  */
 const char * __init xbc_node_get_data(struct xbc_node *node)
 {
 	int offset = node->data & ~XBC_VALUE;
 
 	if (WARN_ON(offset >= xbc_data_size))
-		return NULL;
+		return "";
 
 	return xbc_data + offset;
 }
