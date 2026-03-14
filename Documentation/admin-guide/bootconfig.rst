@@ -152,6 +152,23 @@ Note that you can NOT put a comment or a newline between value and delimiter
  key = 1 # comment
        ,2
 
+EBNF definition
+===============
+
+The syntax is defined in EBNF as follows::
+
+  Config = { Statement }
+  Statement = [ Key [ Assignment | Block ] | Comment ] ( "\n" | ";" )
+  Assignment = ( "=" | "+=" | ":=" ) ValueList
+  ValueList = [ Value { "," [ { ( Comment | "\n" ) } ] Value } ]
+  Block = "{" { Statement } "}"
+  Key = Word { "." Word }
+  Word = [a-zA-Z0-9_-]+
+  Value = QuotedValue | UnquotedValue
+  QuotedValue = "\"" { any_character_except_double_quote } "\""
+              | "'" { any_character_except_single_quote } "'"
+  UnquotedValue = { any_printable_character_except_delimiters }
+  Comment = "#" { any_character_except_newline }
 
 /proc/bootconfig
 ================
