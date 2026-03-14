@@ -7,7 +7,26 @@
 #ifndef __RTL8723B_RECV_H__
 #define __RTL8723B_RECV_H__
 
-#include <rtl8192c_recv.h>
+#define MAX_RECVBUF_SZ (10240)
+#define	Rx_Smooth_Factor (20)
+
+struct phy_stat {
+	unsigned int phydw0;
+
+	unsigned int phydw1;
+
+	unsigned int phydw2;
+
+	unsigned int phydw3;
+
+	unsigned int phydw4;
+
+	unsigned int phydw5;
+
+	unsigned int phydw6;
+
+	unsigned int phydw7;
+};
 
 struct rxreport_8723b {
 	/* DWORD 0 */
