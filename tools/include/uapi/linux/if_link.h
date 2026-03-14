@@ -1465,6 +1465,7 @@ enum {
 enum {
 	IFLA_PPP_UNSPEC,
 	IFLA_PPP_DEV_FD,
+	IFLA_PPP_UNIT,
 	__IFLA_PPP_MAX
 };
 #define IFLA_PPP_MAX (__IFLA_PPP_MAX - 1)
