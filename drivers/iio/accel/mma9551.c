@@ -4,17 +4,21 @@
  * Copyright (c) 2014, Intel Corporation.
  */
 
+#include <linux/cleanup.h>
+#include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
-#include <linux/delay.h>
+
 #include <linux/gpio/consumer.h>
+
+#include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-#include <linux/iio/events.h>
-#include <linux/pm_runtime.h>
+
 #include "mma9551_core.h"
 
 #define MMA9551_GPIO_COUNT		4
