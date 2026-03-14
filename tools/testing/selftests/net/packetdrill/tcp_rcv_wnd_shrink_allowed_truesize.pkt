@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: GPL-2.0
+
+--mss=1000
+
+`./defaults.sh
+sysctl -q net.ipv4.tcp_shrink_window=1
+sysctl -q net.ipv4.tcp_rmem="4096 32768 $((32*1024*1024))"`
+
+   0 `nstat -n`
+
+// Establish a connection. After the first payload we know the peer has seen a
+// scaled receive window reaching sequence 25361. Inflate later TUN skbs in two
+// steps so the live scaling_ratio drops more than once, then verify that:
+//   1) a segment one byte beyond the max advertised window is still dropped,
+//   2) a segment exactly using the previously advertised max window is still
+//      accepted even though the current live ratio no longer matches that
+//      original advertisement basis.
+  +0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+  +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+  +0 bind(3, ..., ...) = 0
+  +0 listen(3, 1) = 0
+
+  +0 < S 0:0(0) win 32792 <mss 1000,nop,wscale 7>
+  +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 10>
+  +0 < . 1:1(0) ack 1 win 257
+
+  +0 accept(3, ..., ...) = 4
+
+  +0 < P. 1:10001(10000) ack 1 win 257
+   * > .  1:1(0) ack 10001 win 15
+
+// Max window seq advertised here is 10001 + 15*1024 = 25361.
+  +0 `../tun --set-rx-truesize tun0 4096`
+
+  +0 < P. 10001:11024(1023) ack 1 win 257
+   * > .  1:1(0) ack 11024
+
+  +0 `../tun --set-rx-truesize tun0 65536`
+
+// Segment beyond the max window stays invalid even after ratio drift.
+  +0 < P. 11024:25362(14338) ack 1 win 257
+   * > .  1:1(0) ack 11024
+
+// Segment exactly using the max window must still be accepted.
+  +0 < P. 11024:25361(14337) ack 1 win 257
+   * > .  1:1(0) ack 25361
+
+// Check LINUX_MIB_BEYOND_WINDOW has been incremented once.
+  +0 `nstat | grep TcpExtBeyondWindow | grep -q " 1 "`

@@ -2,14 +2,17 @@
 
 #define _GNU_SOURCE
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <linux/if_tun.h>
 #include <sys/ioctl.h>
+#include <sys/syscall.h>
 #include <sys/socket.h>
 
 #include "kselftest_harness.h"
@@ -172,6 +175,135 @@ static int tun_alloc(char *dev)
 static int tun_delete(char *dev)
 {
 	return ip_link_del(dev);
+}
+
+static bool is_numeric_name(const char *name)
+{
+	for (; *name; name++) {
+		if (*name < '0' || *name > '9')
+			return false;
+	}
+
+	return true;
+}
+
+static int packetdrill_dup_fd(int pidfd, const char *fd_name)
+{
+	char *end;
+	unsigned long tmp;
+
+	errno = 0;
+	tmp = strtoul(fd_name, &end, 10);
+	if (errno || *end || tmp > INT_MAX) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	return syscall(SYS_pidfd_getfd, pidfd, (int)tmp, 0);
+}
+
+static int open_packetdrill_tunfd(pid_t pid, const char *ifname)
+{
+	char fd_dir[PATH_MAX];
+	struct dirent *dent;
+	struct ifreq ifr = {};
+	int pidfd;
+	int saved_errno = ENOENT;
+	DIR *dir;
+
+	snprintf(fd_dir, sizeof(fd_dir), "/proc/%ld/fd", (long)pid);
+
+	pidfd = syscall(SYS_pidfd_open, pid, 0);
+	if (pidfd < 0)
+		return -1;
+
+	dir = opendir(fd_dir);
+	if (!dir) {
+		close(pidfd);
+		return -1;
+	}
+
+	while ((dent = readdir(dir))) {
+		int fd;
+
+		if (!is_numeric_name(dent->d_name))
+			continue;
+
+		/* Reopen via pidfd_getfd() so we duplicate packetdrill's attached
+		 * queue file, instead of opening a fresh /dev/net/tun instance.
+		 */
+		fd = packetdrill_dup_fd(pidfd, dent->d_name);
+		if (fd < 0) {
+			saved_errno = errno;
+			continue;
+		}
+
+		memset(&ifr, 0, sizeof(ifr));
+		if (!ioctl(fd, TUNGETIFF, &ifr) &&
+		    !strncmp(ifr.ifr_name, ifname, IFNAMSIZ)) {
+			close(pidfd);
+			closedir(dir);
+			return fd;
+		}
+
+		if (errno)
+			saved_errno = errno;
+		close(fd);
+	}
+
+	close(pidfd);
+	closedir(dir);
+	errno = saved_errno;
+	return -1;
+}
+
+/* Packetdrill owns the TUN queue fd, so drive the test ioctl through that
+ * exact file descriptor found under /proc/$PACKETDRILL_PID/fd.
+ */
+static int packetdrill_set_rx_truesize(const char *ifname, const char *value)
+{
+	char *packetdrill_pid, *end;
+	unsigned long long tmp;
+	unsigned int extra;
+	pid_t pid;
+	int fd;
+
+	packetdrill_pid = getenv("PACKETDRILL_PID");
+	if (!packetdrill_pid || !*packetdrill_pid) {
+		fprintf(stderr, "PACKETDRILL_PID is not set\n");
+		return 1;
+	}
+
+	errno = 0;
+	tmp = strtoull(packetdrill_pid, &end, 10);
+	if (errno || *end || !tmp || tmp > INT_MAX) {
+		fprintf(stderr, "invalid PACKETDRILL_PID: %s\n", packetdrill_pid);
+		return 1;
+	}
+	pid = (pid_t)tmp;
+
+	errno = 0;
+	tmp = strtoull(value, &end, 0);
+	if (errno || *end || tmp > UINT_MAX) {
+		fprintf(stderr, "invalid truesize value: %s\n", value);
+		return 1;
+	}
+	extra = (unsigned int)tmp;
+
+	fd = open_packetdrill_tunfd(pid, ifname);
+	if (fd < 0) {
+		perror("open_packetdrill_tunfd");
+		return 1;
+	}
+
+	if (ioctl(fd, TUNSETTRUESIZE, (unsigned long)extra)) {
+		perror("ioctl(TUNSETTRUESIZE)");
+		close(fd);
+		return 1;
+	}
+
+	close(fd);
+	return 0;
 }
 
 static int tun_open(char *dev, const int flags, const int hdrlen,
@@ -985,4 +1117,10 @@ XFAIL_ADD(tun_vnet_udptnl, 6in4_over_maxbytes, recv_gso_packet);
 XFAIL_ADD(tun_vnet_udptnl, 4in6_over_maxbytes, recv_gso_packet);
 XFAIL_ADD(tun_vnet_udptnl, 6in6_over_maxbytes, recv_gso_packet);
 
-TEST_HARNESS_MAIN
+int main(int argc, char **argv)
+{
+	if (argc == 4 && !strcmp(argv[1], "--set-rx-truesize"))
+		return packetdrill_set_rx_truesize(argv[2], argv[3]);
+
+	return test_harness_run(argc, argv);
+}

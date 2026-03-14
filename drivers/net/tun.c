@@ -53,6 +53,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_tun.h>
 #include <linux/if_vlan.h>
+#include <linux/overflow.h>
 #include <linux/crc32.h>
 #include <linux/math.h>
 #include <linux/nsproxy.h>
@@ -85,8 +86,13 @@
 
 #include "tun_vnet.h"
 
+struct tun_file;
+
+#define TUNSETTRUESIZE_OLD _IOW('T', 228, unsigned int)
+
 static void tun_default_link_ksettings(struct net_device *dev,
 				       struct ethtool_link_ksettings *cmd);
+static void tun_rx_update_truesize(struct tun_file *tfile, struct sk_buff *skb);
 
 #define TUN_RX_PAD (NET_IP_ALIGN + NET_SKB_PAD)
 
@@ -138,6 +144,7 @@ struct tun_file {
 		u16 queue_index;
 		unsigned int ifindex;
 	};
+	u32 rx_extra_truesize;
 	struct napi_struct napi;
 	bool napi_enabled;
 	bool napi_frags_enabled;
@@ -1817,6 +1824,7 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 		goto free_skb;
 	}
 
+	tun_rx_update_truesize(tfile, skb);
 	switch (tun->flags & TUN_TYPE_MASK) {
 	case IFF_TUN:
 		if (tun->flags & IFF_NO_PI) {
@@ -2373,6 +2381,25 @@ static void tun_put_page(struct tun_page *tpage)
 		__page_frag_cache_drain(tpage->page, tpage->count);
 }
 
+/* Tests can inflate skb->truesize on ingress to exercise receive-memory
+ * accounting against a scaling_ratio that drifts after a window was
+ * advertised. The knob is per queue file, defaults to zero, and only changes
+ * behavior when explicitly enabled through the TUN fd.
+ */
+static void tun_rx_update_truesize(struct tun_file *tfile, struct sk_buff *skb)
+{
+	u32 extra = READ_ONCE(tfile->rx_extra_truesize);
+	unsigned int truesize;
+
+	if (!extra)
+		return;
+
+	if (check_add_overflow(skb->truesize, extra, &truesize))
+		truesize = UINT_MAX;
+
+	skb->truesize = truesize;
+}
+
 static int tun_xdp_one(struct tun_struct *tun,
 		       struct tun_file *tfile,
 		       struct xdp_buff *xdp, int *flush,
@@ -2459,6 +2486,7 @@ build:
 		goto out;
 	}
 
+	tun_rx_update_truesize(tfile, skb);
 	skb->protocol = eth_type_trans(skb, tun->dev);
 	skb_reset_network_header(skb);
 	skb_probe_transport_header(skb);
@@ -3045,6 +3073,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 	struct tun_struct *tun;
 	void __user* argp = (void __user*)arg;
 	unsigned int carrier;
+	unsigned int extra_truesize;
 	struct ifreq ifr;
 	kuid_t owner;
 	kgid_t group;
@@ -3309,6 +3338,40 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		ret = tun_net_change_carrier(tun->dev, (bool)carrier);
 		break;
 
+	/* Support both the legacy pointer-payload form and the scalar form
+	 * used by the selftest helper when injecting truesize from
+	 * packetdrill shell commands.
+	 */
+	case TUNSETTRUESIZE:
+	case TUNSETTRUESIZE_OLD:
+		ret = -EPERM;
+		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+			goto unlock;
+
+		if (cmd == TUNSETTRUESIZE_OLD) {
+			ret = -EFAULT;
+			if (copy_from_user(&extra_truesize, argp,
+					   sizeof(extra_truesize))) {
+				ret = -EINVAL;
+				if (arg > U32_MAX)
+					goto unlock;
+
+				extra_truesize = arg;
+			}
+		} else {
+			ret = -EINVAL;
+			if (arg > U32_MAX)
+				goto unlock;
+
+			extra_truesize = arg;
+		}
+
+		WRITE_ONCE(tfile->rx_extra_truesize, extra_truesize);
+		netif_info(tun, drv, tun->dev,
+			   "rx extra truesize set to %u\n", extra_truesize);
+		ret = 0;
+		break;
+
 	case TUNGETDEVNETNS:
 		ret = -EPERM;
 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
@@ -3348,6 +3411,7 @@ static long tun_chr_compat_ioctl(struct file *file,
 	case TUNGETSNDBUF:
 	case TUNSETSNDBUF:
 	case SIOCGIFHWADDR:
+	case TUNSETTRUESIZE_OLD:
 	case SIOCSIFHWADDR:
 		arg = (unsigned long)compat_ptr(arg);
 		break;
@@ -3408,6 +3472,7 @@ static int tun_chr_open(struct inode *inode, struct file * file)
 	RCU_INIT_POINTER(tfile->tun, NULL);
 	tfile->flags = 0;
 	tfile->ifindex = 0;
+	tfile->rx_extra_truesize = 0;
 
 	init_waitqueue_head(&tfile->socket.wq.wait);
 
