@@ -274,7 +274,7 @@ static int max30100_led_init(struct max30100_data *data)
 	int reg, ret;
 
 	ret = device_property_read_u32_array(dev, "maxim,led-current-microamp",
-					(unsigned int *) &val, 2);
+					     val, 2);
 	if (ret) {
 		/* Default to 24 mA RED LED, 50 mA IR LED */
 		reg = (MAX30100_REG_LED_CONFIG_24MA <<
