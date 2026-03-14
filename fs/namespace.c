@@ -1359,6 +1359,11 @@ static void noinline mntput_no_expire_slowpath(struct mount *mnt)
 	rcu_read_unlock();
 
 	mnt_del_instance(mnt);
+
+	/* Remove from peer group / slave list before freeing */
+	if (unlikely(IS_MNT_SHARED(mnt) || IS_MNT_SLAVE(mnt)))
+		change_mnt_propagation(mnt, MS_PRIVATE);
+
 	if (unlikely(!list_empty(&mnt->mnt_expire)))
 		list_del(&mnt->mnt_expire);
 
