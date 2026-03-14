@@ -1766,13 +1766,14 @@ static inline bool tcp_space_from_wnd_snapshot(u8 scaling_ratio, int win,
 }
 
 /* Rebuild hard receive-memory units for data already covered by tp->rcv_wnd if
- * the advertise-time basis is known.
+ * the advertise-time basis is known. Legacy TCP_REPAIR restores can only
+ * recover tp->rcv_wnd itself; callers must fall back when the snapshot is
+ * unknown.
  */
 static inline bool tcp_space_from_rcv_wnd(const struct tcp_sock *tp, int win,
 					  int *space)
 {
-	return tcp_space_from_wnd_snapshot(tp->rcv_wnd_scaling_ratio, win,
-					   space);
+	return tcp_space_from_wnd_snapshot(tp->rcv_wnd_scaling_ratio, win, space);
 }
 
 /* Same as tcp_space_from_rcv_wnd(), but for the remembered maximum
@@ -1800,9 +1801,9 @@ static inline void tcp_scaling_ratio_init(struct sock *sk)
 }
 
 /* tp->rcv_wnd is paired with the scaling_ratio that was in force when that
- * window was last advertised. Callers can leave a zero snapshot when the
- * advertise-time basis is unknown and refresh the pair on the next local
- * window update.
+ * window was last advertised. Legacy TCP_REPAIR restores can only recover the
+ * window value itself and use a zero snapshot until a fresh local window
+ * advertisement refreshes the pair.
  */
 static inline void tcp_set_rcv_wnd_snapshot(struct tcp_sock *tp, u32 win,
 					    u8 scaling_ratio)

@@ -3533,17 +3533,31 @@ static inline bool tcp_can_repair_sock(const struct sock *sk)
 		(sk->sk_state != TCP_LISTEN);
 }
 
+/* Keep accepting the pre-extension TCP_REPAIR_WINDOW layout so legacy
+ * userspace can restore sockets without fabricating a snapshot basis.
+ */
+static inline int tcp_repair_window_legacy_size(void)
+{
+	return offsetof(struct tcp_repair_window, rcv_wnd_scaling_ratio);
+}
+
+static inline int tcp_repair_window_v1_size(void)
+{
+	return offsetof(struct tcp_repair_window, rcv_mwnd_seq);
+}
+
 static int tcp_repair_set_window(struct tcp_sock *tp, sockptr_t optbuf, int len)
 {
-	struct tcp_repair_window opt;
+	struct tcp_repair_window opt = {};
 
 	if (!tp->repair)
 		return -EPERM;
 
-	if (len != sizeof(opt))
+	if (len != tcp_repair_window_legacy_size() &&
+	    len != tcp_repair_window_v1_size() && len != sizeof(opt))
 		return -EINVAL;
 
-	if (copy_from_sockptr(&opt, optbuf, sizeof(opt)))
+	if (copy_from_sockptr(&opt, optbuf, len))
 		return -EFAULT;
 
 	if (opt.max_window < opt.snd_wnd)
@@ -3559,9 +3573,47 @@ static int tcp_repair_set_window(struct tcp_sock *tp, sockptr_t optbuf, int len)
 	tp->snd_wnd	= opt.snd_wnd;
 	tp->max_window	= opt.max_window;
 
-	tp->rcv_wnd	= opt.rcv_wnd;
+	if (len == tcp_repair_window_legacy_size()) {
+		/* Legacy repair UAPI has no advertise-time basis for tp->rcv_wnd.
+		 * Mark the snapshot unknown until a fresh local advertisement
+		 * re-establishes the pair.
+		 */
+		tcp_set_rcv_wnd_unknown(tp, opt.rcv_wnd);
+		tp->rcv_wup	= opt.rcv_wup;
+		tcp_init_max_rcv_wnd_seq(tp);
+		return 0;
+	}
+
+	if (opt.rcv_wnd_scaling_ratio > U8_MAX)
+		return -EINVAL;
+
+	tcp_set_rcv_wnd_snapshot(tp, opt.rcv_wnd, opt.rcv_wnd_scaling_ratio);
 	tp->rcv_wup	= opt.rcv_wup;
-	tp->rcv_mwnd_seq = opt.rcv_wup + opt.rcv_wnd;
+
+	if (len == tcp_repair_window_v1_size()) {
+		/* v1 repair can restore the live-window snapshot, but not a
+		 * retracted max-window snapshot. Rebuild it from the live pair
+		 * until a fresh local advertisement updates it again.
+		 */
+		tcp_init_max_rcv_wnd_seq(tp);
+		return 0;
+	}
+
+	if (opt.rcv_mwnd_scaling_ratio > U8_MAX)
+		return -EINVAL;
+
+	/* Userspace may repair sequence-space values after checkpoint without
+	 * also rebasing the remembered max advertised right edge. If the exact
+	 * snapshot no longer covers the restored live window, treat it like
+	 * v1 and rebuild the max-window side from the live pair.
+	 */
+	if (after(opt.rcv_wup + opt.rcv_wnd, opt.rcv_mwnd_seq)) {
+		tcp_init_max_rcv_wnd_seq(tp);
+		return 0;
+	}
+
+	tp->rcv_mwnd_seq = opt.rcv_mwnd_seq;
+	tp->rcv_mwnd_scaling_ratio = opt.rcv_mwnd_scaling_ratio;
 
 	return 0;
 }
@@ -4650,12 +4702,16 @@ int do_tcp_getsockopt(struct sock *sk, int level,
 		break;
 
 	case TCP_REPAIR_WINDOW: {
-		struct tcp_repair_window opt;
+		struct tcp_repair_window opt = {};
 
 		if (copy_from_sockptr(&len, optlen, sizeof(int)))
 			return -EFAULT;
 
-		if (len != sizeof(opt))
+		/* Mirror the accepted set-side prefix lengths so checkpoint
+		 * tools can round-trip exactly the layout version they know.
+		 */
+		if (len != tcp_repair_window_legacy_size() &&
+		    len != tcp_repair_window_v1_size() && len != sizeof(opt))
 			return -EINVAL;
 
 		if (!tp->repair)
@@ -4666,6 +4722,9 @@ int do_tcp_getsockopt(struct sock *sk, int level,
 		opt.max_window	= tp->max_window;
 		opt.rcv_wnd	= tp->rcv_wnd;
 		opt.rcv_wup	= tp->rcv_wup;
+		opt.rcv_wnd_scaling_ratio = tp->rcv_wnd_scaling_ratio;
+		opt.rcv_mwnd_seq = tp->rcv_mwnd_seq;
+		opt.rcv_mwnd_scaling_ratio = tp->rcv_mwnd_scaling_ratio;
 
 		if (copy_to_sockptr(optval, &opt, len))
 			return -EFAULT;

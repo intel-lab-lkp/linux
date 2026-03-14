@@ -152,6 +152,11 @@ struct tcp_repair_opt {
 	__u32	opt_val;
 };
 
+/* Append-only repair ABI.
+ * Older userspace may stop at rcv_wup or rcv_wnd_scaling_ratio.
+ * The kernel accepts those prefix lengths and rebuilds any missing
+ * receive-window snapshot state on restore.
+ */
 struct tcp_repair_window {
 	__u32	snd_wl1;
 	__u32	snd_wnd;
@@ -159,6 +164,9 @@ struct tcp_repair_window {
 
 	__u32	rcv_wnd;
 	__u32	rcv_wup;
+	__u32	rcv_wnd_scaling_ratio;  /* 0 means live-window basis unknown */
+	__u32	rcv_mwnd_seq;
+	__u32	rcv_mwnd_scaling_ratio; /* 0 means max-window basis unknown */
 };
 
 enum {
