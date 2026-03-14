@@ -123,6 +123,7 @@
 #define USB_CSR_DUMMY1		0xb464
 #define USB_CSR_DUMMY2		0xb466
 #define USB_DEV_STAT		0xb808
+#define USB_U2P3_V2_CTRL	0xc2c0
 #define USB_CONNECT_TIMER	0xcbf8
 #define USB_MSC_TIMER		0xcbfc
 #define USB_BURST_SIZE		0xcfc0
@@ -540,10 +541,14 @@
 #define CDC_ECM_EN		BIT(3)
 #define RX_AGG_DISABLE		0x0010
 #define RX_ZERO_EN		0x0080
+#define RX_DESC_16B		0x0400
 
 /* USB_U2P3_CTRL */
 #define U2P3_ENABLE		0x0001
 #define RX_DETECT8		BIT(3)
+
+/* USB_U2P3_V2_CTRL */
+#define U2P3_V2_ENABLE		BIT(29)
 
 /* USB_POWER_CUT */
 #define PWR_EN			0x0001
@@ -1644,6 +1649,22 @@ static void ocp_write_byte(struct r8152 *tp, u16 type, u16 index, u32 data)
 	tmp = __cpu_to_le32(data);
 
 	generic_ocp_write(tp, index, byen, sizeof(tmp), &tmp, type);
+}
+
+static void ocp_byte_clr_bits(struct r8152 *tp, u16 type, u16 index, u32 bits)
+{
+	u8 ocp_data = ocp_read_byte(tp, type, index);
+
+	ocp_data &= ~bits;
+	ocp_write_byte(tp, type, index, ocp_data);
+}
+
+static void ocp_byte_set_bits(struct r8152 *tp, u16 type, u16 index, u8 bits)
+{
+	u8 ocp_data = ocp_read_byte(tp, type, index);
+
+	ocp_data |= bits;
+	ocp_write_byte(tp, type, index, ocp_data);
 }
 
 static u16 ocp_reg_read(struct r8152 *tp, u16 addr)
@@ -3928,6 +3949,14 @@ static void r8153_u2p3en(struct r8152 *tp, bool enable)
 	ocp_write_word(tp, MCU_TYPE_USB, USB_U2P3_CTRL, ocp_data);
 }
 
+static int r8157_u2p3en(struct r8152 *tp, bool enable)
+{
+	if (enable)
+		return rtl_ip_set_bits(tp, USB_U2P3_V2_CTRL, U2P3_V2_ENABLE);
+	else
+		return rtl_ip_clr_bits(tp, USB_U2P3_V2_CTRL, U2P3_V2_ENABLE);
+}
+
 static void r8153b_ups_flags(struct r8152 *tp)
 {
 	u32 ups_flags = 0;
@@ -4281,9 +4310,7 @@ static void r8153_power_cut_en(struct r8152 *tp, bool enable)
 		ocp_data &= ~(PWR_EN | PHASE2_EN);
 	ocp_write_word(tp, MCU_TYPE_USB, USB_POWER_CUT, ocp_data);
 
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_MISC_0);
-	ocp_data &= ~PCUT_STATUS;
-	ocp_write_word(tp, MCU_TYPE_USB, USB_MISC_0, ocp_data);
+	ocp_word_clr_bits(tp, MCU_TYPE_USB, USB_MISC_0, PCUT_STATUS);
 }
 
 static void r8153b_power_cut_en(struct r8152 *tp, bool enable)
@@ -4297,9 +4324,19 @@ static void r8153b_power_cut_en(struct r8152 *tp, bool enable)
 		ocp_data &= ~PWR_EN;
 	ocp_write_word(tp, MCU_TYPE_USB, USB_POWER_CUT, ocp_data);
 
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_MISC_0);
-	ocp_data &= ~PCUT_STATUS;
-	ocp_write_word(tp, MCU_TYPE_USB, USB_MISC_0, ocp_data);
+	ocp_word_clr_bits(tp, MCU_TYPE_USB, USB_MISC_0, PCUT_STATUS);
+}
+
+static void r8157_power_cut_en(struct r8152 *tp, bool enable)
+{
+	if (enable) {
+		ocp_word_set_bits(tp, MCU_TYPE_USB, USB_POWER_CUT, PWR_EN | PHASE2_EN);
+		ocp_byte_set_bits(tp, MCU_TYPE_USB, USB_MISC_2, BIT(1));
+	} else {
+		ocp_word_clr_bits(tp, MCU_TYPE_USB, USB_POWER_CUT, PWR_EN);
+		ocp_word_clr_bits(tp, MCU_TYPE_USB, USB_MISC_0, PCUT_STATUS);
+		ocp_byte_clr_bits(tp, MCU_TYPE_USB, USB_MISC_2, BIT(1));
+	}
 }
 
 static void r8153_queue_wake(struct r8152 *tp, bool enable)
@@ -8702,121 +8739,27 @@ static void r8156_init(struct r8152 *tp)
 	if (test_bit(RTL8152_INACCESSIBLE, &tp->flags))
 		return;
 
-	ocp_data = ocp_read_byte(tp, MCU_TYPE_USB, USB_ECM_OP);
-	ocp_data &= ~EN_ALL_SPEED;
-	ocp_write_byte(tp, MCU_TYPE_USB, USB_ECM_OP, ocp_data);
-
-	ocp_write_word(tp, MCU_TYPE_USB, USB_SPEED_OPTION, 0);
-
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_ECM_OPTION);
-	ocp_data |= BYPASS_MAC_RESET;
-	ocp_write_word(tp, MCU_TYPE_USB, USB_ECM_OPTION, ocp_data);
-
-	r8153b_u1u2en(tp, false);
-
-	for (i = 0; i < 500; i++) {
-		if (ocp_read_word(tp, MCU_TYPE_PLA, PLA_BOOT_CTRL) &
-		    AUTOLOAD_DONE)
-			break;
-
-		msleep(20);
-		if (test_bit(RTL8152_INACCESSIBLE, &tp->flags))
-			return;
+	if (tp->version == RTL_VER_16) {
+		ocp_byte_set_bits(tp, MCU_TYPE_USB, 0xcffe, BIT(3));
+		ocp_byte_clr_bits(tp, MCU_TYPE_USB, 0xd3ca, BIT(0));
 	}
 
-	data = r8153_phy_status(tp, 0);
-	if (data == PHY_STAT_EXT_INIT) {
-		data = ocp_reg_read(tp, 0xa468);
-		data &= ~(BIT(3) | BIT(1));
-		ocp_reg_write(tp, 0xa468, data);
-	}
+	ocp_byte_clr_bits(tp, MCU_TYPE_USB, USB_ECM_OP, EN_ALL_SPEED);
 
-	data = r8152_mdio_read(tp, MII_BMCR);
-	if (data & BMCR_PDOWN) {
-		data &= ~BMCR_PDOWN;
-		r8152_mdio_write(tp, MII_BMCR, data);
-	}
+	if (tp->version != RTL_VER_16)
+		ocp_write_word(tp, MCU_TYPE_USB, USB_SPEED_OPTION, 0);
 
-	data = r8153_phy_status(tp, PHY_STAT_LAN_ON);
-	WARN_ON_ONCE(data != PHY_STAT_LAN_ON);
+	ocp_word_set_bits(tp, MCU_TYPE_USB, USB_ECM_OPTION, BYPASS_MAC_RESET);
 
-	r8153_u2p3en(tp, false);
-
-	/* MSC timer = 0xfff * 8ms = 32760 ms */
-	ocp_write_word(tp, MCU_TYPE_USB, USB_MSC_TIMER, 0x0fff);
-
-	/* U1/U2/L1 idle timer. 500 us */
-	ocp_write_word(tp, MCU_TYPE_USB, USB_U1U2_TIMER, 500);
-
-	r8153b_power_cut_en(tp, false);
-	r8156_ups_en(tp, false);
-	r8153_queue_wake(tp, false);
-	rtl_runtime_suspend_enable(tp, false);
-
-	if (tp->udev->speed >= USB_SPEED_SUPER)
-		r8153b_u1u2en(tp, true);
-
-	usb_enable_lpm(tp->udev);
-
-	r8156_mac_clk_spd(tp, true);
-
-	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_MAC_PWR_CTRL3);
-	ocp_data &= ~PLA_MCU_SPDWN_EN;
-	ocp_write_word(tp, MCU_TYPE_PLA, PLA_MAC_PWR_CTRL3, ocp_data);
-
-	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_EXTRA_STATUS);
-	if (rtl8152_get_speed(tp) & LINK_STATUS)
-		ocp_data |= CUR_LINK_OK;
-	else
-		ocp_data &= ~CUR_LINK_OK;
-	ocp_data |= POLL_LINK_CHG;
-	ocp_write_word(tp, MCU_TYPE_PLA, PLA_EXTRA_STATUS, ocp_data);
-
-	set_bit(GREEN_ETHERNET, &tp->flags);
-
-	/* rx aggregation */
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_USB_CTRL);
-	ocp_data &= ~(RX_AGG_DISABLE | RX_ZERO_EN);
-	ocp_write_word(tp, MCU_TYPE_USB, USB_USB_CTRL, ocp_data);
-
-	ocp_data = ocp_read_byte(tp, MCU_TYPE_USB, USB_BMU_CONFIG);
-	ocp_data |= ACT_ODMA;
-	ocp_write_byte(tp, MCU_TYPE_USB, USB_BMU_CONFIG, ocp_data);
-
-	r8156_mdio_force_mode(tp);
-	rtl_tally_reset(tp);
-
-	tp->coalesce = 15000;	/* 15 us */
-}
-
-static void r8156b_init(struct r8152 *tp)
-{
-	u32 ocp_data;
-	u16 data;
-	int i;
-
-	if (test_bit(RTL8152_INACCESSIBLE, &tp->flags))
-		return;
-
-	ocp_data = ocp_read_byte(tp, MCU_TYPE_USB, USB_ECM_OP);
-	ocp_data &= ~EN_ALL_SPEED;
-	ocp_write_byte(tp, MCU_TYPE_USB, USB_ECM_OP, ocp_data);
-
-	ocp_write_word(tp, MCU_TYPE_USB, USB_SPEED_OPTION, 0);
-
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_ECM_OPTION);
-	ocp_data |= BYPASS_MAC_RESET;
-	ocp_write_word(tp, MCU_TYPE_USB, USB_ECM_OPTION, ocp_data);
-
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_U2P3_CTRL);
-	ocp_data |= RX_DETECT8;
-	ocp_write_word(tp, MCU_TYPE_USB, USB_U2P3_CTRL, ocp_data);
+	if (tp->version >= RTL_VER_13 && tp->version <= RTL_VER_15)
+		ocp_word_set_bits(tp, MCU_TYPE_USB, USB_U2P3_CTRL, RX_DETECT8);
 
 	r8153b_u1u2en(tp, false);
 
 	switch (tp->version) {
 	case RTL_VER_13:
 	case RTL_VER_15:
+	case RTL_VER_16:
 		r8156b_wait_loading_flash(tp);
 		break;
 	default:
@@ -8835,13 +8778,9 @@ static void r8156b_init(struct r8152 *tp)
 
 	data = r8153_phy_status(tp, 0);
 	if (data == PHY_STAT_EXT_INIT) {
-		data = ocp_reg_read(tp, 0xa468);
-		data &= ~(BIT(3) | BIT(1));
-		ocp_reg_write(tp, 0xa468, data);
-
-		data = ocp_reg_read(tp, 0xa466);
-		data &= ~BIT(0);
-		ocp_reg_write(tp, 0xa466, data);
+		ocp_reg_clr_bits(tp, 0xa468, BIT(3) | BIT(1));
+		if (tp->version >= RTL_VER_13)
+			ocp_reg_clr_bits(tp, 0xa466, BIT(0));
 	}
 
 	data = r8152_mdio_read(tp, MII_BMCR);
@@ -8852,7 +8791,10 @@ static void r8156b_init(struct r8152 *tp)
 
 	data = r8153_phy_status(tp, PHY_STAT_LAN_ON);
 
-	r8153_u2p3en(tp, false);
+	if (tp->version == RTL_VER_16)
+		r8157_u2p3en(tp, false);
+	else
+		r8153_u2p3en(tp, false);
 
 	/* MSC timer = 0xfff * 8ms = 32760 ms */
 	ocp_write_word(tp, MCU_TYPE_USB, USB_MSC_TIMER, 0x0fff);
@@ -8860,7 +8802,11 @@ static void r8156b_init(struct r8152 *tp)
 	/* U1/U2/L1 idle timer. 500 us */
 	ocp_write_word(tp, MCU_TYPE_USB, USB_U1U2_TIMER, 500);
 
-	r8153b_power_cut_en(tp, false);
+	if (tp->version == RTL_VER_16)
+		r8157_power_cut_en(tp, false);
+	else
+		r8153b_power_cut_en(tp, false);
+
 	r8156_ups_en(tp, false);
 	r8153_queue_wake(tp, false);
 	rtl_runtime_suspend_enable(tp, false);
@@ -8870,33 +8816,27 @@ static void r8156b_init(struct r8152 *tp)
 
 	usb_enable_lpm(tp->udev);
 
-	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_RCR);
-	ocp_data &= ~SLOT_EN;
-	ocp_write_word(tp, MCU_TYPE_PLA, PLA_RCR, ocp_data);
+	if (tp->version >= RTL_VER_13 && tp->version <= RTL_VER_15) {
+		ocp_word_clr_bits(tp, MCU_TYPE_PLA, PLA_RCR, SLOT_EN);
 
-	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_CPCR);
-	ocp_data |= FLOW_CTRL_EN;
-	ocp_write_word(tp, MCU_TYPE_PLA, PLA_CPCR, ocp_data);
+		ocp_word_set_bits(tp, MCU_TYPE_PLA, PLA_CPCR, FLOW_CTRL_EN);
 
-	/* enable fc timer and set timer to 600 ms. */
-	ocp_write_word(tp, MCU_TYPE_USB, USB_FC_TIMER,
-		       CTRL_TIMER_EN | (600 / 8));
+		/* enable fc timer and set timer to 600 ms. */
+		ocp_write_word(tp, MCU_TYPE_USB, USB_FC_TIMER, CTRL_TIMER_EN | (600 / 8));
 
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_FW_CTRL);
-	if (!(ocp_read_word(tp, MCU_TYPE_PLA, PLA_POL_GPIO_CTRL) & DACK_DET_EN))
-		ocp_data |= FLOW_CTRL_PATCH_2;
-	ocp_data &= ~AUTO_SPEEDUP;
-	ocp_write_word(tp, MCU_TYPE_USB, USB_FW_CTRL, ocp_data);
+		ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_FW_CTRL);
+		if (!(ocp_read_word(tp, MCU_TYPE_PLA, PLA_POL_GPIO_CTRL) & DACK_DET_EN))
+			ocp_data |= FLOW_CTRL_PATCH_2;
+		ocp_data &= ~AUTO_SPEEDUP;
+		ocp_write_word(tp, MCU_TYPE_USB, USB_FW_CTRL, ocp_data);
 
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_FW_TASK);
-	ocp_data |= FC_PATCH_TASK;
-	ocp_write_word(tp, MCU_TYPE_USB, USB_FW_TASK, ocp_data);
+		ocp_word_set_bits(tp, MCU_TYPE_USB, USB_FW_TASK, FC_PATCH_TASK);
+	}
 
 	r8156_mac_clk_spd(tp, true);
 
-	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_MAC_PWR_CTRL3);
-	ocp_data &= ~PLA_MCU_SPDWN_EN;
-	ocp_write_word(tp, MCU_TYPE_PLA, PLA_MAC_PWR_CTRL3, ocp_data);
+	if (tp->version != RTL_VER_16)
+		ocp_byte_clr_bits(tp, MCU_TYPE_PLA, PLA_MAC_PWR_CTRL3, PLA_MCU_SPDWN_EN);
 
 	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_EXTRA_STATUS);
 	if (rtl8152_get_speed(tp) & LINK_STATUS)
@@ -8908,10 +8848,21 @@ static void r8156b_init(struct r8152 *tp)
 
 	set_bit(GREEN_ETHERNET, &tp->flags);
 
-	/* rx aggregation */
-	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_USB_CTRL);
-	ocp_data &= ~(RX_AGG_DISABLE | RX_ZERO_EN);
-	ocp_write_word(tp, MCU_TYPE_USB, USB_USB_CTRL, ocp_data);
+	/* rx aggregation / 16 bytes Rx descriptor */
+	if (tp->version == RTL_VER_16)
+		ocp_word_clr_bits(tp, MCU_TYPE_USB, USB_USB_CTRL, RX_AGG_DISABLE | RX_DESC_16B);
+	else
+		ocp_word_clr_bits(tp, MCU_TYPE_USB, USB_USB_CTRL, RX_AGG_DISABLE | RX_ZERO_EN);
+
+	if (tp->version < RTL_VER_13)
+		ocp_byte_set_bits(tp, MCU_TYPE_USB, USB_BMU_CONFIG, ACT_ODMA);
+
+	if (tp->version == RTL_VER_16) {
+		/* Disable Rx Zero Len */
+		rtl_bmu_clr_bits(tp, 0x2300, BIT(3));
+		/* TX descriptor Signature */
+		ocp_byte_clr_bits(tp, MCU_TYPE_USB, 0xd4ae, BIT(1));
+	}
 
 	r8156_mdio_force_mode(tp);
 	rtl_tally_reset(tp);
@@ -10171,7 +10122,7 @@ static int rtl_ops_init(struct r8152 *tp)
 		tp->eee_en		= true;
 		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
 		tp->eee_adv2		= MDIO_EEE_2_5GT;
-		ops->init		= r8156b_init;
+		ops->init		= r8156_init;
 		ops->enable		= rtl8156b_enable;
 		ops->disable		= rtl8153_disable;
 		ops->up			= rtl8156_up;
