@@ -1068,7 +1068,36 @@ enum netif_async_state {
 	NETIF_ASYNC_INACTIVE
 };
 
+enum netif_rx_mode_cfg {
+	NETIF_RX_MODE_CFG_ALLMULTI,
+	NETIF_RX_MODE_CFG_PROMISC,
+	NETIF_RX_MODE_CFG_BROADCAST
+};
+
+enum netif_rx_mode_flags {
+	NETIF_RX_MODE_READY,
+	NETIF_RX_MODE_UC_SKIP,
+	NETIF_RX_MODE_MC_SKIP
+};
+
+struct netif_rx_mode_config {
+	char    *uc_addrs;
+	char    *mc_addrs;
+	int     uc_count;
+	int     mc_count;
+	int     cfg;
+};
+
+struct netif_rx_mode_work {
+	struct netif_rx_mode_config *pending;
+	struct netif_rx_mode_config *ready;
+	struct work_struct work;
+	struct net_device *dev;
+	int flags;
+};
+
 struct netif_async_ctx {
+	struct netif_rx_mode_work *rx_mode_work;
 	enum netif_async_state state;
 };
 
@@ -1124,9 +1153,15 @@ struct netif_async_ctx {
  *	changes to configuration when multicast or promiscuous is enabled.
  *
  * void (*ndo_set_rx_mode)(struct net_device *dev);
- *	This function is called device changes address list filtering.
+ *	This function is called when device changes address list filtering.
  *	If driver handles unicast address filtering, it should set
- *	IFF_UNICAST_FLT in its priv_flags.
+ *	IFF_UNICAST_FLT in its priv_flags. If the ndo_set_rx_mode_async
+ *	callback is provided, This would be used to set up the
+ *	rx mode snapshot that will be committed by ndo_set_rx_mode_async.
+ *
+ * void (*ndo_set_rx_mode_async)(struct net_device *dev);
+ *	This function will be scheduled by dev_set_rx_mode and is
+ *	responsible for committing the rx_mode snapshot to the hardware.
  *
  * int (*ndo_set_mac_address)(struct net_device *dev, void *addr);
  *	This function  is called when the Media Access Control address
@@ -1447,6 +1482,7 @@ struct net_device_ops {
 	void			(*ndo_change_rx_flags)(struct net_device *dev,
 						       int flags);
 	void			(*ndo_set_rx_mode)(struct net_device *dev);
+	void			(*ndo_set_rx_mode_async)(struct net_device *dev);
 	int			(*ndo_set_mac_address)(struct net_device *dev,
 						       void *addr);
 	int			(*ndo_validate_addr)(struct net_device *dev);
@@ -3404,6 +3440,60 @@ netif_get_async_state(struct net_device *dev)
 {
 	return dev->async_ctx->state;
 }
+
+void netif_set_rx_mode(struct net_device *dev);
+
+/* Helpers to be used in the set_rx_mode callback */
+static inline void netif_set_rx_mode_cfg(struct net_device *dev, int b,
+					 bool val)
+{
+	if (val)
+		dev->async_ctx->rx_mode_work->pending->cfg |= BIT(b);
+	else
+		dev->async_ctx->rx_mode_work->pending->cfg &= ~BIT(b);
+}
+
+static inline void netif_set_rx_mode_flag(struct net_device *dev, int b,
+					  bool val)
+{
+	if (val)
+		dev->async_ctx->rx_mode_work->flags |= BIT(b);
+	else
+		dev->async_ctx->rx_mode_work->flags &= ~BIT(b);
+}
+
+/* Helpers to be used in the set_rx_mode_async callback */
+static inline bool netif_get_rx_mode_cfg(struct net_device *dev, int b)
+{
+	return !!(dev->async_ctx->rx_mode_work->ready->cfg & BIT(b));
+}
+
+static inline bool netif_get_rx_mode_flag(struct net_device *dev, int b)
+{
+	return !!(dev->async_ctx->rx_mode_work->flags & BIT(b));
+}
+
+static inline int netif_rx_mode_uc_count(struct net_device *dev)
+{
+	return dev->async_ctx->rx_mode_work->ready->uc_count;
+}
+
+static inline int netif_rx_mode_mc_count(struct net_device *dev)
+{
+	return dev->async_ctx->rx_mode_work->ready->mc_count;
+}
+
+#define netif_rx_mode_for_each_uc_addr(ha_addr, dev, __i) \
+	for (__i = 0, \
+	     ha_addr = (dev)->async_ctx->rx_mode_work->ready->uc_addrs; \
+	     __i < (dev)->async_ctx->rx_mode_work->ready->uc_count; \
+	     __i++, ha_addr += (dev)->addr_len)
+
+#define netif_rx_mode_for_each_mc_addr(ha_addr, dev, __i) \
+	for (__i = 0, \
+	     ha_addr = (dev)->async_ctx->rx_mode_work->ready->mc_addrs; \
+	     __i < (dev)->async_ctx->rx_mode_work->ready->mc_count; \
+	     __i++, ha_addr += (dev)->addr_len)
 
 int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev);
 int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id);

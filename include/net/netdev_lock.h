@@ -80,6 +80,14 @@ netdev_ops_assert_locked_or_invisible(const struct net_device *dev)
 		netdev_ops_assert_locked(dev);
 }
 
+static inline bool netdev_trylock_ops_compat(struct net_device *dev)
+{
+	if (netdev_need_ops_lock(dev))
+		return netdev_trylock(dev);
+	else
+		return rtnl_trylock();
+}
+
 static inline void netdev_lock_ops_compat(struct net_device *dev)
 {
 	if (netdev_need_ops_lock(dev))

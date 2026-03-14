@@ -1664,6 +1664,92 @@ static int napi_kthread_create(struct napi_struct *n)
 	return err;
 }
 
+static void dev_set_rx_mode_async(struct work_struct *param)
+{
+	struct netif_rx_mode_work *ctx;
+	struct net_device *dev;
+
+	ctx = container_of(param, struct netif_rx_mode_work, work);
+	dev = ctx->dev;
+
+	/* This handler requires the instance lock and we cancel this work
+	 * in dev_close where it is already held, resulting in a deadlock.
+	 * Avoid that scenario by trying to acquire the lock and bailing
+	 * out when we are in teardown.
+	 */
+	while (!netdev_trylock_ops_compat(dev)) {
+		if (netif_get_async_state(dev) == NETIF_ASYNC_DOWN)
+			return;
+
+		msleep(20);
+	}
+
+	/* We could introduce a new lock for this but reusing the addr
+	 * lock works well enough
+	 */
+	netif_addr_lock_bh(dev);
+	if (!netif_get_rx_mode_flag(dev, NETIF_RX_MODE_READY)) {
+		netif_addr_unlock_bh(dev);
+		goto out;
+	}
+	swap(ctx->ready, ctx->pending);
+	netif_set_rx_mode_flag(dev, NETIF_RX_MODE_READY, false);
+	netif_addr_unlock_bh(dev);
+
+	dev->netdev_ops->ndo_set_rx_mode_async(dev);
+out:
+	netdev_unlock_ops_compat(dev);
+}
+
+static int netif_alloc_rx_mode_ctx(struct net_device *dev)
+{
+	struct netif_rx_mode_work *rx_mode_work;
+
+	rx_mode_work = kzalloc_obj(*rx_mode_work);
+	if (!rx_mode_work)
+		goto fail;
+
+	rx_mode_work->ready = kzalloc_obj(*rx_mode_work->ready);
+	if (!rx_mode_work->ready)
+		goto fail_ready;
+
+	rx_mode_work->pending = kzalloc_obj(*rx_mode_work->pending);
+	if (!rx_mode_work->pending)
+		goto fail_pending;
+
+	INIT_WORK(&rx_mode_work->work, dev_set_rx_mode_async);
+	rx_mode_work->dev = dev;
+
+	dev->async_ctx->rx_mode_work = rx_mode_work;
+	return 0;
+
+fail_pending:
+	kfree(rx_mode_work->ready);
+fail_ready:
+	kfree(rx_mode_work);
+fail:
+	return -ENOMEM;
+}
+
+static void netif_free_rx_mode_ctx(struct net_device *dev)
+{
+	if (!dev->async_ctx->rx_mode_work)
+		return;
+
+	cancel_work_sync(&dev->async_ctx->rx_mode_work->work);
+
+	kfree(dev->async_ctx->rx_mode_work->ready->uc_addrs);
+	kfree(dev->async_ctx->rx_mode_work->ready->mc_addrs);
+	kfree(dev->async_ctx->rx_mode_work->ready);
+
+	kfree(dev->async_ctx->rx_mode_work->pending->uc_addrs);
+	kfree(dev->async_ctx->rx_mode_work->pending->mc_addrs);
+	kfree(dev->async_ctx->rx_mode_work->pending);
+
+	kfree(dev->async_ctx->rx_mode_work);
+	dev->async_ctx->rx_mode_work = NULL;
+}
+
 static int __netif_alloc_async_ctx(struct net_device *dev)
 {
 	dev->async_ctx = kzalloc_obj(*dev->async_ctx);
@@ -1676,16 +1762,26 @@ static int __netif_alloc_async_ctx(struct net_device *dev)
 
 static int netif_alloc_async_ctx(struct net_device *dev)
 {
+	const struct net_device_ops *ops = dev->netdev_ops;
 	int ret;
 
 	ret = __netif_alloc_async_ctx(dev);
+
+	if (!ret && ops->ndo_set_rx_mode_async)
+		ret = netif_alloc_rx_mode_ctx(dev);
+
 	return ret;
 }
 
 static void netif_free_async_ctx(struct net_device *dev)
 {
+	const struct net_device_ops *ops = dev->netdev_ops;
+
 	if (!dev->async_ctx)
 		return;
+
+	if (ops->ndo_set_rx_mode_async)
+		netif_free_rx_mode_ctx(dev);
 
 	kfree(dev->async_ctx);
 	dev->async_ctx = NULL;
@@ -1868,6 +1964,8 @@ EXPORT_SYMBOL(netif_close);
  */
 void netif_disable_async_ops(struct net_device *dev)
 {
+	const struct net_device_ops *ops = dev->netdev_ops;
+
 	netdev_lock_ops_compat(dev);
 
 	if (!dev->needs_async_ctx || !netif_running(dev)) {
@@ -1877,6 +1975,9 @@ void netif_disable_async_ops(struct net_device *dev)
 
 	netif_set_async_state(dev, NETIF_ASYNC_INACTIVE);
 	netdev_unlock_ops_compat(dev);
+
+	if (ops->ndo_set_rx_mode_async)
+		cancel_work_sync(&dev->async_ctx->rx_mode_work->work);
 }
 EXPORT_SYMBOL(netif_disable_async_ops);
 
@@ -9749,6 +9850,88 @@ int netif_set_allmulti(struct net_device *dev, int inc, bool notify)
 	return 0;
 }
 
+static int __netif_prepare_rx_mode(struct net_device *dev)
+{
+	bool skip_uc = false, skip_mc = false;
+	struct netif_rx_mode_config *pending;
+	int uc_count = 0, mc_count = 0;
+	struct netdev_hw_addr *ha;
+	char *tmp;
+	int i;
+
+	pending = dev->async_ctx->rx_mode_work->pending;
+
+	skip_uc = netif_get_rx_mode_flag(dev, NETIF_RX_MODE_UC_SKIP);
+	skip_mc = netif_get_rx_mode_flag(dev, NETIF_RX_MODE_MC_SKIP);
+
+	/* The allocations need to be atomic since this will be called under
+	 * netif_addr_lock_bh()
+	 */
+	if (!skip_uc) {
+		uc_count = netdev_uc_count(dev);
+		tmp = krealloc(pending->uc_addrs, uc_count * dev->addr_len,
+			       GFP_ATOMIC);
+		if (!tmp)
+			return -ENOMEM;
+
+		i = 0;
+		pending->uc_addrs = tmp;
+		pending->uc_count = uc_count;
+		netdev_for_each_uc_addr(ha, dev)
+			memcpy(pending->uc_addrs + (i++) * dev->addr_len,
+			       ha->addr, dev->addr_len);
+	}
+
+	if (!skip_mc) {
+		mc_count = netdev_mc_count(dev);
+		tmp = krealloc(pending->mc_addrs, mc_count * dev->addr_len,
+			       GFP_ATOMIC);
+		if (!tmp)
+			return -ENOMEM;
+
+		i = 0;
+		pending->mc_addrs = tmp;
+		pending->mc_count = mc_count;
+		netdev_for_each_mc_addr(ha, dev)
+			memcpy(pending->mc_addrs + (i++) * dev->addr_len,
+			       ha->addr, dev->addr_len);
+	}
+
+	return 0;
+}
+
+/* Attempt to prepare the rx_mode snapshot and if successful,
+ * signal that it's ready.
+ */
+static int netif_prepare_rx_mode(struct net_device *dev)
+{
+	int rc;
+
+	lockdep_assert_held(&dev->addr_list_lock);
+	rc = __netif_prepare_rx_mode(dev);
+	netif_set_rx_mode_flag(dev, NETIF_RX_MODE_READY, (rc == 0));
+	return rc;
+}
+
+static void netif_schedule_rx_mode_work(struct net_device *dev)
+{
+	const struct net_device_ops *ops = dev->netdev_ops;
+
+	if (ops->ndo_set_rx_mode)
+		ops->ndo_set_rx_mode(dev);
+
+	if (!ops->ndo_set_rx_mode_async)
+		return;
+
+	if (netif_get_async_state(dev) == NETIF_ASYNC_INACTIVE)
+		return;
+
+	if (netif_prepare_rx_mode(dev))
+		return;
+
+	schedule_work(&dev->async_ctx->rx_mode_work->work);
+}
+
 /*
  *	Upload unicast and multicast address lists to device and
  *	configure RX filtering. When the device doesn't support unicast
@@ -9757,8 +9940,6 @@ int netif_set_allmulti(struct net_device *dev, int inc, bool notify)
  */
 void __dev_set_rx_mode(struct net_device *dev)
 {
-	const struct net_device_ops *ops = dev->netdev_ops;
-
 	/* dev_open will call this function so the list will stay sane. */
 	if (!(dev->flags&IFF_UP))
 		return;
@@ -9779,8 +9960,7 @@ void __dev_set_rx_mode(struct net_device *dev)
 		}
 	}
 
-	if (ops->ndo_set_rx_mode)
-		ops->ndo_set_rx_mode(dev);
+	netif_schedule_rx_mode_work(dev);
 }
 
 void dev_set_rx_mode(struct net_device *dev)
@@ -9789,6 +9969,66 @@ void dev_set_rx_mode(struct net_device *dev)
 	__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
 }
+
+/* netif_set_rx_mode() - Helper to centralize RX mode requests in core.
+ *
+ * If ndo_set_rx_mode_async is provided, perform the required
+ * setup and invoke ndo_set_rx_mode_async callback. Otherwise this is the
+ * same as invoking the ndo_set_rx_mode callback.
+ *
+ * If ndo_set_rx_mode_async is implemented, the driver must perform all
+ * RX mode updates via this function and invoking the set_rx_mode callback
+ * directly is a bug.
+ */
+void netif_set_rx_mode(struct net_device *dev)
+{
+	const struct net_device_ops *ops = dev->netdev_ops;
+	struct netif_rx_mode_work *ctx;
+	bool netif_down;
+	int rc = 0;
+
+	if (WARN_ON(!ops->ndo_set_rx_mode))
+		return;
+
+	if (!ops->ndo_set_rx_mode_async) {
+		ops->ndo_set_rx_mode(dev);
+		return;
+	}
+
+	netdev_ops_assert_locked(dev);
+
+	netif_down = !netif_running(dev);
+	if (netif_down) {
+		rc = __netif_alloc_async_ctx(dev);
+		if (!rc)
+			rc = netif_alloc_rx_mode_ctx(dev);
+		if (rc)
+			goto out;
+	}
+
+	netif_addr_lock_bh(dev);
+	ops->ndo_set_rx_mode(dev);
+	rc = netif_prepare_rx_mode(dev);
+	if (rc) {
+		netif_addr_unlock_bh(dev);
+		goto out;
+	}
+
+	/* There might be a work scheduled by dev_set_rx_mode before
+	 * this function's execution that could be using outdated
+	 * config. Clear the ready bit to prevent that work's execution.
+	 */
+	ctx = dev->async_ctx->rx_mode_work;
+	swap(ctx->ready, ctx->pending);
+	netif_set_rx_mode_flag(dev, NETIF_RX_MODE_READY, false);
+	netif_addr_unlock_bh(dev);
+
+	ops->ndo_set_rx_mode_async(dev);
+out:
+	if (netif_down)
+		netif_free_async_ctx(dev);
+}
+EXPORT_SYMBOL(netif_set_rx_mode);
 
 /**
  * netif_get_flags() - get flags reported to userspace
@@ -11450,6 +11690,9 @@ int register_netdevice(struct net_device *dev)
 			goto err_free_name;
 		}
 	}
+
+	if (dev->netdev_ops->ndo_set_rx_mode_async)
+		dev->needs_async_ctx = true;
 
 	if (((dev->hw_features | dev->features) &
 	     NETIF_F_HW_VLAN_CTAG_FILTER) &&
