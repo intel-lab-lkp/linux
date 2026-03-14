@@ -5,6 +5,7 @@ TEST_PROGS := \
 	bond-arp-interval-causes-panic.sh \
 	bond-break-lacpdu-tx.sh \
 	bond-eth-type-change.sh \
+	bond-stacked-header-parse.sh \
 	bond-lladdr-target.sh \
 	bond_ipsec_offload.sh \
 	bond_lacp_prio.sh \
