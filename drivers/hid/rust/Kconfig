@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menu "Rust HID support"
+
+config RUST_HID_ABSTRACTIONS
+	bool "Rust HID abstractions support"
+	depends on RUST
+	depends on HID=y
+	help
+	  Adds support needed for HID drivers written in Rust. It provides a
+	  wrapper around the C hid core.
+
+endmenu # Rust HID support

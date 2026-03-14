@@ -102,6 +102,8 @@ pub mod i2c;
 pub mod id_pool;
 #[doc(hidden)]
 pub mod impl_flags;
+#[cfg(CONFIG_RUST_HID_ABSTRACTIONS)]
+pub mod hid;
 pub mod init;
 pub mod io;
 pub mod ioctl;
