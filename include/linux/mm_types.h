@@ -22,6 +22,7 @@
 #include <linux/types.h>
 #include <linux/rseq_types.h>
 #include <linux/bitmap.h>
+#include <linux/futex_types.h>
 
 #include <asm/mmu.h>
 

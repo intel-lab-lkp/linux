@@ -31,6 +31,20 @@ struct futex_sched_data {
 };
 
 /**
+ * struct futex_unlock_cs_range - Range for the VDSO unlock critical section
+ * @start_ip:	The start IP of the robust futex unlock critical section (inclusive)
+ * @end_ip:	The end IP of the robust futex unlock critical section (exclusive)
+ * @pop_size32:	Pending OP pointer size indicator. 0 == 64-bit, 1 == 32-bit
+ */
+struct futex_unlock_cs_range {
+	unsigned long	       start_ip;
+	unsigned long	       end_ip;
+	unsigned int	       pop_size32;
+};
+
+#define FUTEX_ROBUST_MAX_CS_RANGES	2
+
+/**
  * struct futex_mm_data - Futex related per MM data
  * @phash_lock:			Mutex to protect the private hash operations
  * @phash:			RCU managed pointer to the private hash
@@ -39,6 +53,10 @@ struct futex_sched_data {
  * @phash_rcu:			RCU head for call_rcu()
  * @phash_atomic:		Aggregate value for @phash_ref
  * @phash_ref:			Per CPU reference counter for a private hash
+ *
+ * @unlock_cs_num_ranges:	The number of critical section ranges for VDSO assisted unlock
+ *				of robust futexes.
+ * @unlock_cs_ranges:		The critical section ranges for VDSO assisted unlock
  */
 struct futex_mm_data {
 #ifdef CONFIG_FUTEX_PRIVATE_HASH
@@ -49,6 +67,10 @@ struct futex_mm_data {
 	struct rcu_head			phash_rcu;
 	atomic_long_t			phash_atomic;
 	unsigned int			__percpu *phash_ref;
+#endif
+#ifdef CONFIG_FUTEX_ROBUST_UNLOCK
+	unsigned int			unlock_cs_num_ranges;
+	struct futex_unlock_cs_range	unlock_cs_ranges[FUTEX_ROBUST_MAX_CS_RANGES];
 #endif
 };
 
