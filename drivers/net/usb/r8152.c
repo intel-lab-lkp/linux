@@ -1232,6 +1232,7 @@ enum rtl_version {
 	RTL_VER_13,
 	RTL_VER_14,
 	RTL_VER_15,
+	RTL_VER_16,
 
 	RTL_VER_MAX
 };
@@ -1591,6 +1592,22 @@ static void ocp_write_word(struct r8152 *tp, u16 type, u16 index, u32 data)
 	generic_ocp_write(tp, index, byen, sizeof(tmp), &tmp, type);
 }
 
+static void ocp_word_set_bits(struct r8152 *tp, u16 type, u16 index, u32 bits)
+{
+	u32 ocp_data = ocp_read_word(tp, type, index);
+
+	ocp_data |= bits;
+	ocp_write_word(tp, type, index, ocp_data);
+}
+
+static void ocp_word_clr_bits(struct r8152 *tp, u16 type, u16 index, u32 bits)
+{
+	u32 ocp_data = ocp_read_word(tp, type, index);
+
+	ocp_data &= ~bits;
+	ocp_write_word(tp, type, index, ocp_data);
+}
+
 static u8 ocp_read_byte(struct r8152 *tp, u16 type, u16 index)
 {
 	u32 data;
@@ -1655,6 +1672,30 @@ static void ocp_reg_write(struct r8152 *tp, u16 addr, u16 data)
 
 	ocp_index = (addr & 0x0fff) | 0xb000;
 	ocp_write_word(tp, MCU_TYPE_PLA, ocp_index, data);
+}
+
+static void ocp_reg_w0w1(struct r8152 *tp, u16 addr, u16 clear, u16 set)
+{
+	u16 data = ocp_reg_read(tp, addr);
+
+	data = (data & ~clear) | set;
+	ocp_reg_write(tp, addr, data);
+}
+
+static void ocp_reg_clr_bits(struct r8152 *tp, u16 addr, u16 bits)
+{
+	u16 data = ocp_reg_read(tp, addr);
+
+	data &= ~bits;
+	ocp_reg_write(tp, addr, data);
+}
+
+static void ocp_reg_set_bits(struct r8152 *tp, u16 addr, u16 bits)
+{
+	u16 data = ocp_reg_read(tp, addr);
+
+	data |= bits;
+	ocp_reg_write(tp, addr, data);
 }
 
 static inline void r8152_mdio_write(struct r8152 *tp, u32 reg_addr, u32 value)
@@ -8440,6 +8481,214 @@ static void r8156b_hw_phy_cfg(struct r8152 *tp)
 	r8153_aldps_en(tp, true);
 	r8152b_enable_fc(tp);
 	r8153_u2p3en(tp, true);
+
+	set_bit(PHY_RESET, &tp->flags);
+}
+
+static void r8157_hw_phy_cfg(struct r8152 *tp)
+{
+	u32 ocp_data;
+	u16 data;
+	int ret;
+
+	r8156b_wait_loading_flash(tp);
+
+	ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_MISC_0);
+	if (ocp_data & PCUT_STATUS) {
+		ocp_data &= ~PCUT_STATUS;
+		ocp_write_word(tp, MCU_TYPE_USB, USB_MISC_0, ocp_data);
+	}
+
+	ret = r8153_phy_status(tp, 0);
+	if (ret < 0)
+		return;
+
+	switch (ret) {
+	case PHY_STAT_EXT_INIT:
+		ocp_reg_clr_bits(tp, 0xa466, BIT(0));
+		ocp_reg_clr_bits(tp, 0xa468, BIT(3) | BIT(1));
+		break;
+	case PHY_STAT_LAN_ON:
+	case PHY_STAT_PWRDN:
+	default:
+		break;
+	}
+
+	data = r8152_mdio_read(tp, MII_BMCR);
+	if (data & BMCR_PDOWN) {
+		data &= ~BMCR_PDOWN;
+		r8152_mdio_write(tp, MII_BMCR, data);
+	}
+
+	r8153_aldps_en(tp, false);
+	rtl_eee_enable(tp, false);
+
+	ret = r8153_phy_status(tp, PHY_STAT_LAN_ON);
+	if (ret < 0)
+		return;
+	WARN_ON_ONCE(ret != PHY_STAT_LAN_ON);
+
+	/* PFM mode */
+	ocp_word_clr_bits(tp, MCU_TYPE_PLA, PLA_PHY_PWR, PFM_PWM_SWITCH);
+
+	/* Advanced Power Saving parameter */
+	ocp_reg_set_bits(tp, 0xa430, BIT(0) | BIT(1));
+
+	/* aldpsce force mode */
+	ocp_reg_clr_bits(tp, 0xa44a, BIT(2));
+
+	switch (tp->version) {
+	case RTL_VER_16:
+		/* XG_INRX parameter */
+		sram_write_w0w1(tp, 0x8183, 0xff00, 0x5900);
+		ocp_reg_set_bits(tp, 0xa654, BIT(11));
+		ocp_reg_set_bits(tp, 0xb648, BIT(14));
+		ocp_reg_clr_bits(tp, 0xad2c, BIT(15));
+		ocp_reg_set_bits(tp, 0xad94, BIT(5));
+		ocp_reg_set_bits(tp, 0xada0, BIT(1));
+		ocp_reg_w0w1(tp, 0xae06, 0xfc00, 0x7c00);
+		sram2_write_w0w1(tp, 0x8647, 0xff00, 0xe600);
+		sram2_write_w0w1(tp, 0x8036, 0xff00, 0x3000);
+		sram2_write_w0w1(tp, 0x8078, 0xff00, 0x3000);
+
+		/* green mode */
+		sram2_write_w0w1(tp, 0x89e9, 0xff00, 0);
+		sram2_write_w0w1(tp, 0x8ffd, 0xff00, 0x0100);
+		sram2_write_w0w1(tp, 0x8ffe, 0xff00, 0x0200);
+		sram2_write_w0w1(tp, 0x8fff, 0xff00, 0x0400);
+
+		/* recognize AQC/Bcom function */
+		sram_write_w0w1(tp, 0x8018, 0xff00, 0x7700);
+		ocp_reg_write(tp, OCP_SRAM_ADDR, 0x8f9c);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0005);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0000);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x00ed);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0502);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0b00);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0xd401);
+		sram_write_w0w1(tp, 0x8fa8, 0xff00, 0x2900);
+
+		/* RFI_corr_thd 5g */
+		sram2_write_w0w1(tp, 0x814b, 0xff00, 0x1100);
+		sram2_write_w0w1(tp, 0x814d, 0xff00, 0x1100);
+		sram2_write_w0w1(tp, 0x814f, 0xff00, 0x0b00);
+		sram2_write_w0w1(tp, 0x8142, 0xff00, 0x0100);
+		sram2_write_w0w1(tp, 0x8144, 0xff00, 0x0100);
+		sram2_write_w0w1(tp, 0x8150, 0xff00, 0x0100);
+
+		/* RFI_corr_thd 2p5g */
+		sram2_write_w0w1(tp, 0x8118, 0xff00, 0x0700);
+		sram2_write_w0w1(tp, 0x811a, 0xff00, 0x0700);
+		sram2_write_w0w1(tp, 0x811c, 0xff00, 0x0500);
+		sram2_write_w0w1(tp, 0x810f, 0xff00, 0x0100);
+		sram2_write_w0w1(tp, 0x8111, 0xff00, 0x0100);
+		sram2_write_w0w1(tp, 0x811d, 0xff00, 0x0100);
+
+		/* RFI parameter */
+		ocp_reg_clr_bits(tp, 0xad1c, BIT(8));
+		ocp_reg_w0w1(tp, 0xade8, 0xffc0, 0x1400);
+		sram2_write_w0w1(tp, 0x864b, 0xff00, 0x9d00);
+		sram2_write_w0w1(tp, 0x862c, 0xff00, 0x1200);
+		ocp_reg_write(tp, OCP_SRAM_ADDR, 0x8566);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x003f);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x3f02);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x023c);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x3b0a);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x1c00);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0000);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0000);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0000);
+		ocp_reg_write(tp, OCP_SRAM_DATA, 0x0000);
+
+		/* RFI-color noise gen parameter 5g */
+		ocp_reg_set_bits(tp, 0xad9c, BIT(5));
+		sram2_write_w0w1(tp, 0x8122, 0xff00, 0x0c00);
+		ocp_reg_write(tp, OCP_SRAM2_ADDR, 0x82c8);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03ed);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03ff);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0009);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03fe);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x000b);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0021);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03f7);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03b8);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03e0);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0049);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0049);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03e0);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03b8);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03f7);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0021);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x000b);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03fe);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0009);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03ff);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03ed);
+
+		/* RFI-color noise gen parameter 2p5g */
+		sram2_write_w0w1(tp, 0x80ef, 0xff00, 0x0c00);
+		ocp_reg_write(tp, OCP_SRAM2_ADDR, 0x82a0);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x000e);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03fe);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03ed);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0006);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x001a);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03f1);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03d8);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0023);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0054);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0322);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x00dd);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03ab);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03dc);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0027);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x000e);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03e5);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03f9);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0012);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x0001);
+		ocp_reg_write(tp, OCP_SRAM2_DATA, 0x03f1);
+
+		/* modify thermal speed down threshold */
+		ocp_reg_w0w1(tp, 0xb54c, 0xffc0, 0x3700);
+
+		/* XG compatibility modification */
+		ocp_reg_set_bits(tp, 0xb648, BIT(6));
+		sram2_write_w0w1(tp, 0x8082, 0xff00, 0x5d00);
+		sram2_write_w0w1(tp, 0x807c, 0xff00, 0x5000);
+		sram2_write_w0w1(tp, 0x809d, 0xff00, 0x5000);
+		break;
+	default:
+		break;
+	}
+
+	if (rtl_phy_patch_request(tp, true, true))
+		return;
+
+	ocp_word_set_bits(tp, MCU_TYPE_PLA, PLA_MAC_PWR_CTRL4, EEE_SPDWN_EN);
+
+	ocp_reg_w0w1(tp, OCP_DOWN_SPEED, EN_EEE_100 | EN_EEE_1000, EN_10M_CLKDIV);
+
+	tp->ups_info._10m_ckdiv = true;
+	tp->ups_info.eee_plloff_100 = false;
+	tp->ups_info.eee_plloff_giga = false;
+
+	ocp_reg_set_bits(tp, OCP_POWER_CFG, EEE_CLKDIV_EN);
+	tp->ups_info.eee_ckdiv = true;
+
+	rtl_phy_patch_request(tp, false, true);
+
+	rtl_green_en(tp, test_bit(GREEN_ETHERNET, &tp->flags));
+
+	ocp_reg_clr_bits(tp, 0xa428, BIT(9));
+	ocp_reg_clr_bits(tp, 0xa5ea, BIT(0) | BIT(1));
+	tp->ups_info.lite_mode = 0;
+
+	if (tp->eee_en)
+		rtl_eee_enable(tp, true);
+
+	r8153_aldps_en(tp, true);
+	r8152b_enable_fc(tp);
 
 	set_bit(PHY_RESET, &tp->flags);
 }
