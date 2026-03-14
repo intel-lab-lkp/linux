@@ -1069,7 +1069,7 @@ static void wmi_dev_shutdown(struct device *dev)
 	}
 }
 
-static struct class wmi_bus_class = {
+static const struct class wmi_bus_class = {
 	.name = "wmi_bus",
 };
 
