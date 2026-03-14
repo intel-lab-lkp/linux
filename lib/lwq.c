@@ -157,5 +157,10 @@ static int lwq_test(void)
 	return 0;
 }
 
+static void lwq_test_exit(void)
+{
+}
+
 module_init(lwq_test);
+module_exit(lwq_test_exit);
 #endif /* CONFIG_LWQ_TEST*/
