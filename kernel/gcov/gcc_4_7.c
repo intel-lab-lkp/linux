@@ -18,6 +18,8 @@
 #include <linux/mm.h>
 #include "gcov.h"
 
+extern void __gcov_merge_ior(gcov_type *, unsigned int);
+
 #if (__GNUC__ >= 15)
 #define GCOV_COUNTERS			10
 #elif (__GNUC__ >= 14)
@@ -187,6 +189,15 @@ static int counter_active(struct gcov_info *info, unsigned int type)
 	return info->merge[type] ? 1 : 0;
 }
 
+/*
+ * Determine whether a counter uses IOR merge semantics (bitwise OR of
+ * bitsets). Used for condition coverage (MC/DC) and other IOR-based counters.
+ */
+static bool counter_is_ior(struct gcov_info *info, unsigned int type)
+{
+	return info->merge[type] == __gcov_merge_ior;
+}
+
 /* Determine number of active counters. Based on gcc magic. */
 static unsigned int num_counter_active(struct gcov_info *info)
 {
@@ -259,9 +270,17 @@ void gcov_info_add(struct gcov_info *dst, struct gcov_info *src)
 			if (!counter_active(src, ct_idx))
 				continue;
 
-			for (val_idx = 0; val_idx < sci_ptr->num; val_idx++)
-				dci_ptr->values[val_idx] +=
-					sci_ptr->values[val_idx];
+			if (counter_is_ior(src, ct_idx)) {
+				for (val_idx = 0; val_idx < sci_ptr->num;
+				     val_idx++)
+					dci_ptr->values[val_idx] |=
+						sci_ptr->values[val_idx];
+			} else {
+				for (val_idx = 0; val_idx < sci_ptr->num;
+				     val_idx++)
+					dci_ptr->values[val_idx] +=
+						sci_ptr->values[val_idx];
+			}
 
 			dci_ptr++;
 			sci_ptr++;
