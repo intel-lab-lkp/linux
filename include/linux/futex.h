@@ -110,7 +110,47 @@ static inline int futex_hash_allocate_default(void)
 }
 static inline int futex_hash_free(struct mm_struct *mm) { return 0; }
 static inline int futex_mm_init(struct mm_struct *mm) { return 0; }
+#endif /* !CONFIG_FUTEX */
 
-#endif
+#ifdef CONFIG_FUTEX_ROBUST_UNLOCK
+#include <asm/futex_robust.h>
+
+void __futex_fixup_robust_unlock(struct pt_regs *regs, struct futex_unlock_cs_range *csr);
+
+static inline bool futex_within_robust_unlock(struct pt_regs *regs,
+					      struct futex_unlock_cs_range *csr)
+{
+	unsigned long ip = instruction_pointer(regs);
+
+	return ip >= csr->start_ip && ip < csr->end_ip;
+}
+
+static inline void futex_fixup_robust_unlock(struct pt_regs *regs)
+{
+	struct futex_unlock_cs_range *csr;
+
+	/*
+	 * Avoid dereferencing current->mm if not returning from interrupt.
+	 * current->rseq.event is going to be used anyway in the exit to user
+	 * code, so bringing it in is not a big deal.
+	 */
+	if (!current->rseq.event.user_irq)
+		return;
+
+	csr = current->mm->futex.unlock_cs_ranges;
+	if (unlikely(futex_within_robust_unlock(regs, csr))) {
+		__futex_fixup_robust_unlock(regs, csr);
+		return;
+	}
+
+	/* Multi sized robust lists are only supported with CONFIG_COMPAT */
+	if (IS_ENABLED(CONFIG_COMPAT) && current->mm->futex.unlock_cs_num_ranges == 2) {
+		if (unlikely(futex_within_robust_unlock(regs, ++csr)))
+			__futex_fixup_robust_unlock(regs, csr);
+	}
+}
+#else /* CONFIG_FUTEX_ROBUST_UNLOCK */
+static inline void futex_fixup_robust_unlock(struct pt_regs *regs) {}
+#endif /* !CONFIG_FUTEX_ROBUST_UNLOCK */
 
 #endif
