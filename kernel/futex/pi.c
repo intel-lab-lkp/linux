@@ -1129,7 +1129,7 @@ out:
  * This is the in-kernel slowpath: we look up the PI state (if any),
  * and do the rt-mutex unlock.
  */
-int futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
+static int __futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
 {
 	u32 curval, uval, vpid = task_pid_vnr(current);
 	union futex_key key = FUTEX_KEY_INIT;
@@ -1138,7 +1138,6 @@ int futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
 
 	if (!IS_ENABLED(CONFIG_FUTEX_PI))
 		return -ENOSYS;
-
 retry:
 	if (get_user(uval, uaddr))
 		return -EFAULT;
@@ -1292,3 +1291,15 @@ pi_faulted:
 	return ret;
 }
 
+int futex_unlock_pi(u32 __user *uaddr, unsigned int flags, void __user *pop)
+{
+	int ret = __futex_unlock_pi(uaddr, flags);
+
+	if (ret || !(flags & FLAGS_UNLOCK_ROBUST))
+		return ret;
+
+	if (!futex_robust_list_clear_pending(pop, flags))
+		return -EFAULT;
+
+	return 0;
+}
