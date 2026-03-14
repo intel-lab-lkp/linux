@@ -52,4 +52,19 @@ config GCOV_PROFILE_ALL
 	larger and run slower. Also be sure to exclude files from profiling
 	which are not linked to the kernel image to prevent linker errors.
 
+config GCOV_CONDITION_COVERAGE
+	bool "Enable MC/DC condition coverage instrumentation"
+	depends on GCOV_KERNEL
+	depends on CC_HAS_CONDITION_COVERAGE
+	default n
+	help
+	This option adds Modified Condition/Decision Coverage (MC/DC)
+	instrumentation using GCC's -fcondition-coverage flag. MC/DC
+	coverage data can be viewed using gcov --conditions.
+
+	MC/DC is required by safety standards such as DO-178C (avionics)
+	and ISO 26262 (automotive).
+
+	This increases instrumentation overhead. If unsure, say N.
+
 endmenu

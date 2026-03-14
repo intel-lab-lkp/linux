@@ -807,6 +807,9 @@ CFLAGS_GCOV	:= -fprofile-arcs -ftest-coverage
 ifdef CONFIG_CC_IS_GCC
 CFLAGS_GCOV	+= -fno-tree-loop-im
 endif
+ifdef CONFIG_GCOV_CONDITION_COVERAGE
+CFLAGS_GCOV	+= -fcondition-coverage -Wno-error=coverage-too-many-conditions
+endif
 export CFLAGS_GCOV
 
 # The arch Makefiles can override CC_FLAGS_FTRACE. We may also append it later.
