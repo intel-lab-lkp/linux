@@ -1664,6 +1664,33 @@ static int napi_kthread_create(struct napi_struct *n)
 	return err;
 }
 
+static int __netif_alloc_async_ctx(struct net_device *dev)
+{
+	dev->async_ctx = kzalloc_obj(*dev->async_ctx);
+	if (!dev->async_ctx)
+		return -ENOMEM;
+
+	netif_set_async_state(dev, NETIF_ASYNC_ACTIVE);
+	return 0;
+}
+
+static int netif_alloc_async_ctx(struct net_device *dev)
+{
+	int ret;
+
+	ret = __netif_alloc_async_ctx(dev);
+	return ret;
+}
+
+static void netif_free_async_ctx(struct net_device *dev)
+{
+	if (!dev->async_ctx)
+		return;
+
+	kfree(dev->async_ctx);
+	dev->async_ctx = NULL;
+}
+
 static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
@@ -1698,14 +1725,18 @@ static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 	if (ops->ndo_validate_addr)
 		ret = ops->ndo_validate_addr(dev);
 
+	if (!ret && dev->needs_async_ctx)
+		ret = netif_alloc_async_ctx(dev);
+
 	if (!ret && ops->ndo_open)
 		ret = ops->ndo_open(dev);
 
 	netpoll_poll_enable(dev);
 
-	if (ret)
+	if (ret) {
 		clear_bit(__LINK_STATE_START, &dev->state);
-	else {
+		netif_free_async_ctx(dev);
+	} else {
 		netif_set_up(dev, true);
 		dev_set_rx_mode(dev);
 		dev_activate(dev);
@@ -1772,6 +1803,11 @@ static void __dev_close_many(struct list_head *head)
 
 		netdev_ops_assert_locked(dev);
 
+		if (dev->needs_async_ctx) {
+			netif_set_async_state(dev, NETIF_ASYNC_DOWN);
+			netif_free_async_ctx(dev);
+		}
+
 		if (ops->ndo_stop)
 			ops->ndo_stop(dev);
 
@@ -1820,6 +1856,50 @@ void netif_close(struct net_device *dev)
 	}
 }
 EXPORT_SYMBOL(netif_close);
+
+/* netif_disable_async_ops - disable execution of async NDOs.
+ *
+ * To be used in cases of the device shutting down, suspending or
+ * failing to resume.
+ *
+ * Should be called in the shutdown callback and in the PM suspend
+ * callbacks: @suspend(), @freeze(), @poweroff() and in the error
+ * path of PM resume callbacks.
+ */
+void netif_disable_async_ops(struct net_device *dev)
+{
+	netdev_lock_ops_compat(dev);
+
+	if (!dev->needs_async_ctx || !netif_running(dev)) {
+		netdev_unlock_ops_compat(dev);
+		return;
+	}
+
+	netif_set_async_state(dev, NETIF_ASYNC_INACTIVE);
+	netdev_unlock_ops_compat(dev);
+}
+EXPORT_SYMBOL(netif_disable_async_ops);
+
+/* netif_enable_async_ops - enable execution of async NDOs.
+ *
+ * To be used when the device attempts to resume or fails to suspend.
+ *
+ * Should be called in the PM resume callbacks: @resume(), @thaw(),
+ * @restore() and in the error path of PM suspend callbacks.
+ */
+void netif_enable_async_ops(struct net_device *dev)
+{
+	netdev_lock_ops_compat(dev);
+
+	if (!dev->needs_async_ctx || !netif_running(dev)) {
+		netdev_unlock_ops_compat(dev);
+		return;
+	}
+
+	netif_set_async_state(dev, NETIF_ASYNC_ACTIVE);
+	netdev_unlock_ops_compat(dev);
+}
+EXPORT_SYMBOL(netif_enable_async_ops);
 
 void netif_disable_lro(struct net_device *dev)
 {

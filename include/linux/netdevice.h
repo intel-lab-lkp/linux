@@ -1062,6 +1062,16 @@ struct netdev_net_notifier {
 	struct notifier_block *nb;
 };
 
+enum netif_async_state {
+	NETIF_ASYNC_ACTIVE,
+	NETIF_ASYNC_DOWN,
+	NETIF_ASYNC_INACTIVE
+};
+
+struct netif_async_ctx {
+	enum netif_async_state state;
+};
+
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -2027,6 +2037,8 @@ enum netdev_reg_state {
  *	@sfp_bus:	attached &struct sfp_bus structure.
  *
  *	@qdisc_tx_busylock: lockdep class annotating Qdisc->busylock spinlock
+ *	@async_ctx	  : Context required for async ops
+ *	@needs_async_ctx  : Does dev need async op context?
  *
  *	@proto_down:	protocol port state information can be sent to the
  *			switch driver and used to set the phys state of the
@@ -2454,6 +2466,8 @@ struct net_device {
 	struct phy_device	*phydev;
 	struct sfp_bus		*sfp_bus;
 	struct lock_class_key	*qdisc_tx_busylock;
+	struct netif_async_ctx  *async_ctx;
+	bool			needs_async_ctx;
 	bool			proto_down;
 	bool			irq_affinity_auto;
 	bool			rx_cpu_rmap_auto;
@@ -3375,6 +3389,21 @@ void dev_disable_lro(struct net_device *dev);
 int dev_loopback_xmit(struct net *net, struct sock *sk, struct sk_buff *newskb);
 u16 dev_pick_tx_zero(struct net_device *dev, struct sk_buff *skb,
 		     struct net_device *sb_dev);
+
+void netif_disable_async_ops(struct net_device *dev);
+void netif_enable_async_ops(struct net_device *dev);
+
+static inline void netif_set_async_state(struct net_device *dev,
+					 enum netif_async_state state)
+{
+	dev->async_ctx->state = state;
+}
+
+static inline enum netif_async_state
+netif_get_async_state(struct net_device *dev)
+{
+	return dev->async_ctx->state;
+}
 
 int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev);
 int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id);
