@@ -6230,8 +6230,12 @@ static struct scx_sched *scx_alloc_and_add_sched(struct sched_ext_ops *ops,
 		ret = kobject_init_and_add(&sch->kobj, &scx_ktype, NULL, "root");
 
 	if (ret < 0) {
-		kfree(sch->cgrp_path);
-		goto err_stop_helper;
+		/*
+		 * kobject was initialized, kobject_put() needed for cleanup,
+		 * see Documentation/core-api/kobject.rst
+		 */
+		kobject_put(&sch->kobj);
+		return ERR_PTR(ret);
 	}
 
 	if (ops->sub_attach) {
@@ -6244,8 +6248,14 @@ static struct scx_sched *scx_alloc_and_add_sched(struct sched_ext_ops *ops,
 
 #else	/* CONFIG_EXT_SUB_SCHED */
 	ret = kobject_init_and_add(&sch->kobj, &scx_ktype, NULL, "root");
-	if (ret < 0)
-		goto err_stop_helper;
+	if (ret < 0) {
+		/*
+		 * kobject was initialized, kobject_put() needed for cleanup,
+		 * see Documentation/core-api/kobject.rst
+		 */
+		kobject_put(&sch->kobj);
+		return ERR_PTR(ret);
+	}
 #endif	/* CONFIG_EXT_SUB_SCHED */
 	return sch;
 
