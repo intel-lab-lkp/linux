@@ -36,6 +36,35 @@ static void ax25_t2timer_expiry(struct timer_list *);
 static void ax25_t3timer_expiry(struct timer_list *);
 static void ax25_idletimer_expiry(struct timer_list *);
 
+static void ax25_mod_timer(struct timer_list *timer, ax25_cb *ax25,
+			   unsigned long expires)
+{
+	if (!mod_timer(timer, expires))
+		ax25_cb_hold(ax25);
+}
+
+static void ax25_del_timer(struct timer_list *timer, ax25_cb *ax25)
+{
+	if (timer_delete(timer))
+		ax25_cb_put(ax25);
+}
+
+static void ax25_timer_expiry_start(ax25_cb *ax25)
+{
+	/*
+	 * A pending timer holds one reference to the control block. Once the
+	 * timer callback starts running that reference no longer belongs to a
+	 * queued timer, so turn it into a temporary execution reference.
+	 */
+	ax25_cb_hold(ax25);
+	ax25_cb_put(ax25);
+}
+
+static void ax25_timer_expiry_stop(ax25_cb *ax25)
+{
+	ax25_cb_put(ax25);
+}
+
 void ax25_setup_timers(ax25_cb *ax25)
 {
 	timer_setup(&ax25->timer, ax25_heartbeat_expiry, 0);
@@ -47,58 +76,60 @@ void ax25_setup_timers(ax25_cb *ax25)
 
 void ax25_start_heartbeat(ax25_cb *ax25)
 {
-	mod_timer(&ax25->timer, jiffies + 5 * HZ);
+	ax25_mod_timer(&ax25->timer, ax25, jiffies + 5 * HZ);
 }
 
 void ax25_start_t1timer(ax25_cb *ax25)
 {
-	mod_timer(&ax25->t1timer, jiffies + ax25->t1);
+	ax25_mod_timer(&ax25->t1timer, ax25, jiffies + ax25->t1);
 }
 
 void ax25_start_t2timer(ax25_cb *ax25)
 {
-	mod_timer(&ax25->t2timer, jiffies + ax25->t2);
+	ax25_mod_timer(&ax25->t2timer, ax25, jiffies + ax25->t2);
 }
 
 void ax25_start_t3timer(ax25_cb *ax25)
 {
 	if (ax25->t3 > 0)
-		mod_timer(&ax25->t3timer, jiffies + ax25->t3);
+		ax25_mod_timer(&ax25->t3timer, ax25,
+			       jiffies + ax25->t3);
 	else
-		timer_delete(&ax25->t3timer);
+		ax25_del_timer(&ax25->t3timer, ax25);
 }
 
 void ax25_start_idletimer(ax25_cb *ax25)
 {
 	if (ax25->idle > 0)
-		mod_timer(&ax25->idletimer, jiffies + ax25->idle);
+		ax25_mod_timer(&ax25->idletimer, ax25,
+			       jiffies + ax25->idle);
 	else
-		timer_delete(&ax25->idletimer);
+		ax25_del_timer(&ax25->idletimer, ax25);
 }
 
 void ax25_stop_heartbeat(ax25_cb *ax25)
 {
-	timer_delete(&ax25->timer);
+	ax25_del_timer(&ax25->timer, ax25);
 }
 
 void ax25_stop_t1timer(ax25_cb *ax25)
 {
-	timer_delete(&ax25->t1timer);
+	ax25_del_timer(&ax25->t1timer, ax25);
 }
 
 void ax25_stop_t2timer(ax25_cb *ax25)
 {
-	timer_delete(&ax25->t2timer);
+	ax25_del_timer(&ax25->t2timer, ax25);
 }
 
 void ax25_stop_t3timer(ax25_cb *ax25)
 {
-	timer_delete(&ax25->t3timer);
+	ax25_del_timer(&ax25->t3timer, ax25);
 }
 
 void ax25_stop_idletimer(ax25_cb *ax25)
 {
-	timer_delete(&ax25->idletimer);
+	ax25_del_timer(&ax25->idletimer, ax25);
 }
 
 int ax25_t1timer_running(ax25_cb *ax25)
@@ -123,6 +154,8 @@ static void ax25_heartbeat_expiry(struct timer_list *t)
 	int proto = AX25_PROTO_STD_SIMPLEX;
 	ax25_cb *ax25 = timer_container_of(ax25, t, timer);
 
+	ax25_timer_expiry_start(ax25);
+
 	if (ax25->ax25_dev)
 		proto = ax25->ax25_dev->values[AX25_VALUES_PROTOCOL];
 
@@ -141,11 +174,15 @@ static void ax25_heartbeat_expiry(struct timer_list *t)
 		break;
 #endif
 	}
+
+	ax25_timer_expiry_stop(ax25);
 }
 
 static void ax25_t1timer_expiry(struct timer_list *t)
 {
 	ax25_cb *ax25 = timer_container_of(ax25, t, t1timer);
+
+	ax25_timer_expiry_start(ax25);
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
 	case AX25_PROTO_STD_SIMPLEX:
@@ -160,11 +197,15 @@ static void ax25_t1timer_expiry(struct timer_list *t)
 		break;
 #endif
 	}
+
+	ax25_timer_expiry_stop(ax25);
 }
 
 static void ax25_t2timer_expiry(struct timer_list *t)
 {
 	ax25_cb *ax25 = timer_container_of(ax25, t, t2timer);
+
+	ax25_timer_expiry_start(ax25);
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
 	case AX25_PROTO_STD_SIMPLEX:
@@ -179,11 +220,15 @@ static void ax25_t2timer_expiry(struct timer_list *t)
 		break;
 #endif
 	}
+
+	ax25_timer_expiry_stop(ax25);
 }
 
 static void ax25_t3timer_expiry(struct timer_list *t)
 {
 	ax25_cb *ax25 = timer_container_of(ax25, t, t3timer);
+
+	ax25_timer_expiry_start(ax25);
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
 	case AX25_PROTO_STD_SIMPLEX:
@@ -200,11 +245,15 @@ static void ax25_t3timer_expiry(struct timer_list *t)
 		break;
 #endif
 	}
+
+	ax25_timer_expiry_stop(ax25);
 }
 
 static void ax25_idletimer_expiry(struct timer_list *t)
 {
 	ax25_cb *ax25 = timer_container_of(ax25, t, idletimer);
+
+	ax25_timer_expiry_start(ax25);
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
 	case AX25_PROTO_STD_SIMPLEX:
@@ -221,4 +270,6 @@ static void ax25_idletimer_expiry(struct timer_list *t)
 		break;
 #endif
 	}
+
+	ax25_timer_expiry_stop(ax25);
 }

@@ -290,6 +290,9 @@ static void ax25_destroy_timer(struct timer_list *t)
 	ax25_cb *ax25 = timer_container_of(ax25, t, dtimer);
 	struct sock *sk;
 
+	ax25_cb_hold(ax25);
+	ax25_cb_put(ax25);
+
 	sk=ax25->sk;
 
 	bh_lock_sock(sk);
@@ -297,6 +300,13 @@ static void ax25_destroy_timer(struct timer_list *t)
 	ax25_destroy_socket(ax25);
 	bh_unlock_sock(sk);
 	sock_put(sk);
+	ax25_cb_put(ax25);
+}
+
+static void ax25_start_destroy_timer(ax25_cb *ax25)
+{
+	if (!mod_timer(&ax25->dtimer, jiffies + 2 * HZ))
+		ax25_cb_hold(ax25);
 }
 
 /*
@@ -343,9 +353,7 @@ void ax25_destroy_socket(ax25_cb *ax25)
 	if (ax25->sk != NULL) {
 		if (sk_has_allocations(ax25->sk)) {
 			/* Defer: outstanding buffers */
-			timer_setup(&ax25->dtimer, ax25_destroy_timer, 0);
-			ax25->dtimer.expires  = jiffies + 2 * HZ;
-			add_timer(&ax25->dtimer);
+			ax25_start_destroy_timer(ax25);
 		} else {
 			struct sock *sk=ax25->sk;
 			ax25->sk=NULL;
@@ -537,6 +545,7 @@ ax25_cb *ax25_create_cb(void)
 	skb_queue_head_init(&ax25->frag_queue);
 	skb_queue_head_init(&ax25->ack_queue);
 	skb_queue_head_init(&ax25->reseq_queue);
+	timer_setup(&ax25->dtimer, ax25_destroy_timer, 0);
 
 	ax25_setup_timers(ax25);
 
