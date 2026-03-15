@@ -96,7 +96,7 @@ struct ddebug_class_map {
 /**
  * DECLARE_DYNDBG_CLASSMAP - declare classnames known by a module
  * @_var:   a struct ddebug_class_map, passed to module_param_cb
- * @_type:  enum class_map_type, chooses bits/verbose, numeric/symbolic
+ * @_maptype: enum class_map_type, chooses bits/verbose, numeric/symbolic
  * @_base:  offset of 1st class-name. splits .class_id space
  * @classes: class-names used to control class'd prdbgs
  */
