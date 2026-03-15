@@ -87,6 +87,8 @@ enum clock_event_state {
  * @set_state_shutdown:	switch state to shutdown
  * @tick_resume:	resume clkevt device
  * @broadcast:		function to broadcast events
+ * @suspend:		low level suspend callback for the clockevent device
+ * @resume:		low level resume callback for the clockevent device
  * @min_delta_ticks:	minimum delta value in ticks stored for reconfiguration
  * @max_delta_ticks:	maximum delta value in ticks stored for reconfiguration
  * @name:		ptr to clock event name
