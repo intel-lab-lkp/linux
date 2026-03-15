@@ -726,7 +726,6 @@ static struct sk_buff *netem_dequeue(struct Qdisc *sch)
 	struct netem_sched_data *q = qdisc_priv(sch);
 	struct sk_buff *skb;
 
-tfifo_dequeue:
 	skb = __qdisc_dequeue_head(&sch->q);
 	if (skb) {
 deliver:
@@ -734,24 +733,28 @@ deliver:
 		qdisc_bstats_update(sch, skb);
 		return skb;
 	}
-	skb = netem_peek(q);
-	if (skb) {
-		u64 time_to_send;
+
+	/* If we have a child qdisc, transfer all time-ready packets
+	 * from the tfifo into the child, then dequeue from the child.
+	 * This avoids enqueueing into the child during the parent's
+	 * dequeue callback, which can confuse parents that track
+	 * active/inactive state based on qlen transitions (HFSC).
+	 */
+	if (q->qdisc) {
 		u64 now = ktime_get_ns();
 
-		/* if more time remaining? */
-		time_to_send = netem_skb_cb(skb)->time_to_send;
-		if (q->slot.slot_next && q->slot.slot_next < time_to_send)
-			get_slot_next(q, now);
+		while ((skb = netem_peek(q)) != NULL) {
+			u64 t = netem_skb_cb(skb)->time_to_send;
 
-		if (time_to_send <= now && q->slot.slot_next <= now) {
+			if (t > now)
+				break;
+			if (q->slot.slot_next && q->slot.slot_next > now)
+				break;
+
 			netem_erase_head(q, skb);
 			q->t_len--;
 			skb->next = NULL;
 			skb->prev = NULL;
-			/* skb->dev shares skb->rbnode area,
-			 * we need to restore its value.
-			 */
 			skb->dev = qdisc_dev(sch);
 
 			if (q->slot.slot_next) {
@@ -762,7 +765,7 @@ deliver:
 					get_slot_next(q, now);
 			}
 
-			if (q->qdisc) {
+			{
 				unsigned int pkt_len = qdisc_pkt_len(skb);
 				struct sk_buff *to_free = NULL;
 				int err;
@@ -776,32 +779,58 @@ deliver:
 					sch->q.qlen--;
 					qdisc_tree_reduce_backlog(sch, 1, pkt_len);
 				}
-				goto tfifo_dequeue;
 			}
+		}
+
+		skb = q->qdisc->ops->dequeue(q->qdisc);
+		if (skb) {
 			sch->q.qlen--;
 			goto deliver;
 		}
+	} else {
+		/* No child qdisc: dequeue directly from tfifo */
+		skb = netem_peek(q);
+		if (skb) {
+			u64 time_to_send;
+			u64 now = ktime_get_ns();
 
-		if (q->qdisc) {
-			skb = q->qdisc->ops->dequeue(q->qdisc);
-			if (skb) {
+			time_to_send = netem_skb_cb(skb)->time_to_send;
+			if (q->slot.slot_next &&
+			    q->slot.slot_next < time_to_send)
+				get_slot_next(q, now);
+
+			if (time_to_send <= now &&
+			    q->slot.slot_next <= now) {
+				netem_erase_head(q, skb);
+				q->t_len--;
+				skb->next = NULL;
+				skb->prev = NULL;
+				skb->dev = qdisc_dev(sch);
+
+				if (q->slot.slot_next) {
+					q->slot.packets_left--;
+					q->slot.bytes_left -=
+						qdisc_pkt_len(skb);
+					if (q->slot.packets_left <= 0 ||
+					    q->slot.bytes_left <= 0)
+						get_slot_next(q, now);
+				}
 				sch->q.qlen--;
 				goto deliver;
 			}
 		}
+	}
+
+	/* Schedule watchdog for next time-ready packet */
+	skb = netem_peek(q);
+	if (skb) {
+		u64 time_to_send = netem_skb_cb(skb)->time_to_send;
 
 		qdisc_watchdog_schedule_ns(&q->watchdog,
 					   max(time_to_send,
 					       q->slot.slot_next));
 	}
 
-	if (q->qdisc) {
-		skb = q->qdisc->ops->dequeue(q->qdisc);
-		if (skb) {
-			sch->q.qlen--;
-			goto deliver;
-		}
-	}
 	return NULL;
 }
 
