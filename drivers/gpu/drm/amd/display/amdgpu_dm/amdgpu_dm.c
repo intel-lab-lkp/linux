@@ -6616,7 +6616,8 @@ static bool adjust_colour_depth_from_display_info(
 			/* The above depths are the only ones valid for HDMI. */
 			return false;
 		}
-		if (normalized_clk <= info->max_tmds_clock) {
+		if (info->max_tmds_clock == 0 ||
+		    normalized_clk <= info->max_tmds_clock) {
 			timing_out->display_color_depth = depth;
 			return true;
 		}
