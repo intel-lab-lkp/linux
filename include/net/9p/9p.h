@@ -24,6 +24,8 @@
  * @P9_DEBUG_PKT: packet marshalling/unmarshalling
  * @P9_DEBUG_FSC: FS-cache tracing
  * @P9_DEBUG_VPKT: Verbose packet debugging (full packet dump)
+ * @P9_DEBUG_CACHE: cache operations tracing
+ * @P9_DEBUG_MMAP: memory-mapped I/O tracing
  *
  * These flags are passed at mount time to turn on various levels of
  * verbosity and tracing which will be output to the system logs.
@@ -68,10 +70,36 @@ void _p9_debug(enum p9_debug_flags level, const char *func,
  * @P9_RSYMLINK: make symlink response
  * @P9_TMKNOD: create a special file object request
  * @P9_RMKNOD: create a special file object response
+ * @P9_TLOPEN: open a file for I/O (9P2000.L)
+ * @P9_RLOPEN: response with file access information (9P2000.L)
  * @P9_TLCREATE: prepare a handle for I/O on an new file for 9P2000.L
  * @P9_RLCREATE: response with file access information for 9P2000.L
  * @P9_TRENAME: rename request
  * @P9_RRENAME: rename response
+ * @P9_TREADLINK: read symbolic link request
+ * @P9_RREADLINK: read symbolic link response
+ * @P9_TGETATTR: get file attributes request (9P2000.L)
+ * @P9_RGETATTR: get file attributes response (9P2000.L)
+ * @P9_TSETATTR: set file attributes request (9P2000.L)
+ * @P9_RSETATTR: set file attributes response (9P2000.L)
+ * @P9_TXATTRWALK: walk to an extended attribute
+ * @P9_RXATTRWALK: response with extended attribute handle
+ * @P9_TXATTRCREATE: create an extended attribute
+ * @P9_RXATTRCREATE: response for extended attribute creation
+ * @P9_TREADDIR: read directory entries request
+ * @P9_RREADDIR: read directory entries response
+ * @P9_TFSYNC: flush file data to storage request
+ * @P9_RFSYNC: flush file data to storage response
+ * @P9_TLOCK: acquire or test a POSIX lock
+ * @P9_RLOCK: lock acquisition response
+ * @P9_TGETLOCK: get lock information
+ * @P9_RGETLOCK: lock information response
+ * @P9_TLINK: create a hard link
+ * @P9_RLINK: hard link response
+ * @P9_TRENAMEAT: rename using directory fids
+ * @P9_RRENAMEAT: rename response
+ * @P9_TUNLINKAT: unlink using directory fid
+ * @P9_RUNLINKAT: unlink response
  * @P9_TMKDIR: create a directory request
  * @P9_RMKDIR: create a directory response
  * @P9_TVERSION: version handshake request
@@ -194,6 +222,10 @@ enum p9_msg_t {
  * @P9_ORCLOSE: remove the file when the file is closed
  * @P9_OAPPEND: open the file and seek to the end
  * @P9_OEXCL: only create a file, do not open it
+ * @P9L_MODE_MASK: mask for protocol mode bits (client-side only)
+ * @P9L_DIRECT: disable client-side caching for this file
+ * @P9L_NOWRITECACHE: disable write caching for this file
+ * @P9L_LOOSE: enable loose cache consistency
  *
  * 9P open modes differ slightly from Posix standard modes.
  * In particular, there are extra modes which specify different
