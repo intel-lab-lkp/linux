@@ -199,7 +199,7 @@ struct mchp_rds_ptp_clock {
 	u8 mmd;
 	int mchp_rds_ptp_event;
 	int event_pin;
-	struct ptp_pin_desc *pin_config;
+	struct ptp_pin_desc pin_config[];
 };
 
 struct mchp_rds_ptp_rx_ts {
