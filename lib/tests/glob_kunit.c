@@ -80,6 +80,53 @@ static const struct glob_test_case glob_test_cases[] = {
 	{ .pat = "*bc", .str = "bc", .expected = true },
 	{ .pat = "*bc", .str = "bbc", .expected = true },
 	{ .pat = "*bc", .str = "bcbc", .expected = true },
+	/* Backslash escape sequences */
+	{ .pat = "\\*", .str = "*", .expected = true },
+	{ .pat = "\\*", .str = "a", .expected = false },
+	{ .pat = "\\?", .str = "?", .expected = true },
+	{ .pat = "\\?", .str = "a", .expected = false },
+	{ .pat = "\\[", .str = "[", .expected = true },
+	{ .pat = "\\[", .str = "a", .expected = false },
+	{ .pat = "a\\bc", .str = "abc", .expected = true },
+	{ .pat = "\\\\", .str = "\\", .expected = true },
+	{ .pat = "\\\\", .str = "a", .expected = false },
+	/* Trailing backslash (matches literal backslash) */
+	{ .pat = "a\\", .str = "a\\", .expected = true },
+	{ .pat = "a\\", .str = "a", .expected = false },
+	/* Wildcards matching special characters in string */
+	{ .pat = "?", .str = "*", .expected = true },
+	{ .pat = "?", .str = "[", .expected = true },
+	{ .pat = "?", .str = "\\", .expected = true },
+	{ .pat = "?", .str = "?", .expected = true },
+	/* Wildcards with empty strings */
+	{ .pat = "*", .str = "", .expected = true },
+	{ .pat = "*", .str = "a", .expected = true },
+	{ .pat = "**", .str = "", .expected = true },
+	{ .pat = "**", .str = "abc", .expected = true },
+	{ .pat = "?", .str = "", .expected = false },
+	/* Inverted (backwards) ranges */
+	{ .pat = "[z-a]", .str = "m", .expected = true },
+	{ .pat = "[z-a]", .str = "z", .expected = true },
+	{ .pat = "[z-a]", .str = "a", .expected = true },
+	{ .pat = "[9-0]", .str = "5", .expected = true },
+	{ .pat = "[9-0]", .str = "a", .expected = false },
+	/* Single-character range */
+	{ .pat = "[a-a]", .str = "a", .expected = true },
+	{ .pat = "[a-a]", .str = "b", .expected = false },
+	/* Caret negation syntax */
+	{ .pat = "[^a]", .str = "b", .expected = true },
+	{ .pat = "[^a]", .str = "a", .expected = false },
+	{ .pat = "[^a-z]", .str = "0", .expected = true },
+	{ .pat = "[^a-z]", .str = "m", .expected = false },
+	/* Unclosed bracket (treated as literal) */
+	{ .pat = "[", .str = "[", .expected = true },
+	{ .pat = "[", .str = "a", .expected = false },
+	{ .pat = "[abc", .str = "[abc", .expected = true },
+	/* Consecutive wildcards */
+	{ .pat = "***a", .str = "a", .expected = true },
+	{ .pat = "*?*", .str = "a", .expected = true },
+	{ .pat = "*?*?*", .str = "ab", .expected = true },
+	{ .pat = "*?*?*", .str = "a", .expected = false },
 	/* Multiple asterisks (complex backtracking) */
 	{ .pat = "*ac*", .str = "abacadaeafag", .expected = true },
 	{ .pat = "*ac*ae*ag*", .str = "abacadaeafag", .expected = true },
