@@ -171,6 +171,7 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 
 /**
  * data_race - mark an expression as containing intentional data races
+ * @expr: the expression to execute with data race checking disabled
  *
  * This data_race() macro is useful for situations in which data races
  * should be forgiven.  One example is diagnostic code that accesses
