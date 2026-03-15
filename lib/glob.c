@@ -94,7 +94,13 @@ bool __pure glob_match(char const *pat, char const *str)
 						goto literal;
 
 					class += 2;
-					/* Any special action if a > b? */
+					/* Normalize inverted ranges like [z-a] */
+					if (a > b) {
+						unsigned char tmp = a;
+
+						a = b;
+						b = tmp;
+					}
 				}
 				if (a <= c && c <= b)
 					match = true;
