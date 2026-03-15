@@ -12,6 +12,7 @@
  *
  * fpga: for FPGA configuration
  * rsu: for remote status update
+ * fcs: for fpga crypto services
  * hwmon: for hardware monitoring (voltage and temperature)
  */
 #define SVC_CLIENT_FPGA			"fpga"
