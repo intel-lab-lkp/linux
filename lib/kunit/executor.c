@@ -91,6 +91,8 @@ static int kunit_parse_glob_filter(struct kunit_glob_filter *parsed,
 	const char *period = strchr(filter_glob, '.');
 
 	if (!period) {
+		if (!glob_validate(filter_glob))
+			return -EINVAL;
 		parsed->suite_glob = kstrdup(filter_glob, GFP_KERNEL);
 		if (!parsed->suite_glob)
 			return -ENOMEM;
@@ -102,10 +104,21 @@ static int kunit_parse_glob_filter(struct kunit_glob_filter *parsed,
 	if (!parsed->suite_glob)
 		return -ENOMEM;
 
+	if (!glob_validate(parsed->suite_glob)) {
+		kfree(parsed->suite_glob);
+		return -EINVAL;
+	}
+
 	parsed->test_glob = kstrdup(period + 1, GFP_KERNEL);
 	if (!parsed->test_glob) {
 		kfree(parsed->suite_glob);
 		return -ENOMEM;
+	}
+
+	if (!glob_validate(parsed->test_glob)) {
+		kfree(parsed->test_glob);
+		kfree(parsed->suite_glob);
+		return -EINVAL;
 	}
 
 	return 0;
