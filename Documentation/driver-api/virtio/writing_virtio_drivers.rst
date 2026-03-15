@@ -187,6 +187,78 @@ certain scenarios. The way to disable callbacks reliably is to reset the
 device or the virtqueue (virtio_reset_device()).
 
 
+Buffer mapping
+==============
+
+Virtio devices need to map buffers so they can be accessed by the device.
+Historically, virtio relied exclusively on the kernel DMA API for this,
+which works well for hardware devices that perform real DMA. However, some
+virtio backends (such as VDUSE, a user-space vDPA device) do not perform
+DMA at all and previously had to abuse the DMA API with custom
+``dma_ops`` to make things work.
+
+The virtio map API, introduced via ``struct virtio_map_ops``, solves
+this by allowing transports and devices to provide their own mapping
+logic. When a device supplies custom map ops, those are used instead of
+the DMA API. When no custom ops are provided, the standard DMA API path
+is used as before, so existing drivers require no changes.
+
+Map operations
+--------------
+
+A transport or device that needs custom mapping implements
+``struct virtio_map_ops`` and assigns it to the ``map`` field of
+``struct virtio_device``. The ``vmap`` field carries opaque mapping
+metadata (a ``union virtio_map``) that is passed through to every map
+operation:
+
+.. kernel-doc:: include/linux/virtio_config.h
+    :identifiers: struct virtio_map_ops
+
+The ``union virtio_map`` holds the mapping token -- for DMA-capable
+devices this is a ``struct device *`` pointer, while for devices like
+VDUSE it can be a pointer to their own mapping context (e.g. an IOVA
+domain):
+
+.. kernel-doc:: include/linux/virtio.h
+    :identifiers: union virtio_map
+
+Driver-facing helpers
+---------------------
+
+Most virtio drivers do not need to call the map API directly -- the
+virtqueue helpers (``virtqueue_add_inbuf()``, ``virtqueue_add_outbuf()``,
+etc.) handle mapping internally. However, drivers that perform their own
+pre-mapping or need coherent allocations can use the following helpers:
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_map_single_attrs
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_unmap_single_attrs
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_map_page_attrs
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_unmap_page_attrs
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_map_alloc_coherent
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_map_free_coherent
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_map_mapping_error
+
+.. kernel-doc:: drivers/virtio/virtio_ring.c
+    :identifiers: virtqueue_map_need_sync
+
+After mapping a buffer, always check the returned address with
+``virtqueue_map_mapping_error()`` before using it.
+
+
 References
 ==========
 
