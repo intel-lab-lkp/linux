@@ -33,8 +33,8 @@ struct mux {
 	struct iio_channel *parent;
 	struct iio_chan_spec *chan;
 	struct iio_chan_spec_ext_info *ext_info;
-	struct mux_child *child;
 	u32 delay_us;
+	struct mux_child child[];
 };
 
 static int iio_mux_select(struct mux *mux, int idx)
@@ -380,8 +380,7 @@ static int mux_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	sizeof_priv = sizeof(*mux);
-	sizeof_priv += sizeof(*mux->child) * children;
+	sizeof_priv = struct_size(mux, child, children);
 	sizeof_priv += sizeof(*mux->chan) * children;
 	sizeof_priv += sizeof_ext_info;
 
@@ -390,7 +389,6 @@ static int mux_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	mux = iio_priv(indio_dev);
-	mux->child = (struct mux_child *)(mux + 1);
 	mux->chan = (struct iio_chan_spec *)(mux->child + children);
 
 	platform_set_drvdata(pdev, indio_dev);
