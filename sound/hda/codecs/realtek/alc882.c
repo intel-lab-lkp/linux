@@ -60,6 +60,7 @@ enum {
 	ALC887_FIXUP_ASUS_AUDIO,
 	ALC887_FIXUP_ASUS_HMIC,
 	ALCS1200A_FIXUP_MIC_VREF,
+	ALCS1200A_FIXUP_MSI_EC79,
 	ALC888VD_FIXUP_MIC_100VREF,
 };
 
@@ -259,6 +260,36 @@ static void alc887_fixup_asus_jack(struct hda_codec *codec,
 		return;
 	snd_hda_set_pin_ctl_cache(codec, 0x1b, PIN_HP);
 	spec->gen.hp_automute_hook = alc887_asus_hp_automute_hook;
+}
+
+static void alcs1200a_fixup_msi_ec79(struct hda_codec *codec,
+				     const struct hda_fixup *fix, int action)
+{
+	struct alc_spec *spec = codec->spec;
+
+	if (action == HDA_FIXUP_ACT_PRE_PROBE) {
+		spec->gen.automute_lo = 0;
+		spec->gen.automute_speaker = 0;
+		return;
+	}
+
+	if (action != HDA_FIXUP_ACT_INIT)
+		return;
+
+	/* Front / Surround / CLFE line-out pins */
+	snd_hda_set_pin_ctl(codec, 0x14, PIN_OUT);
+	snd_hda_set_pin_ctl(codec, 0x15, PIN_OUT);
+	snd_hda_set_pin_ctl(codec, 0x16, PIN_OUT);
+
+	/* Unmute both output amp channels on all three pins */
+	snd_hda_codec_amp_update(codec, 0x14, 0, HDA_OUTPUT, 0, 0x80, 0);
+	snd_hda_codec_amp_update(codec, 0x14, 1, HDA_OUTPUT, 0, 0x80, 0);
+
+	snd_hda_codec_amp_update(codec, 0x15, 0, HDA_OUTPUT, 0, 0x80, 0);
+	snd_hda_codec_amp_update(codec, 0x15, 1, HDA_OUTPUT, 0, 0x80, 0);
+
+	snd_hda_codec_amp_update(codec, 0x16, 0, HDA_OUTPUT, 0, 0x80, 0);
+	snd_hda_codec_amp_update(codec, 0x16, 1, HDA_OUTPUT, 0, 0x80, 0);
 }
 
 static const struct hda_fixup alc882_fixups[] = {
@@ -553,6 +584,12 @@ static const struct hda_fixup alc882_fixups[] = {
 			{}
 		}
 	},
+	[ALCS1200A_FIXUP_MSI_EC79] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alcs1200a_fixup_msi_ec79,
+		.chained = true,
+		.chain_id = ALCS1200A_FIXUP_MIC_VREF,
+	},
 	[ALC888VD_FIXUP_MIC_100VREF] = {
 		.type = HDA_FIXUP_PINCTLS,
 		.v.pins = (const struct hda_pintbl[]) {
@@ -636,6 +673,7 @@ static const struct hda_quirk alc882_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1458, 0xa0cd, "Gigabyte X570 Aorus Master", ALC1220_FIXUP_GB_X570),
 	SND_PCI_QUIRK(0x1458, 0xa0ce, "Gigabyte X570 Aorus Xtreme", ALC1220_FIXUP_GB_X570),
 	SND_PCI_QUIRK(0x1458, 0xa0d5, "Gigabyte X570S Aorus Master", ALC1220_FIXUP_GB_X570),
+	SND_PCI_QUIRK(0x1462, 0xec79, "MSI ALCS1200A", ALCS1200A_FIXUP_MSI_EC79),
 	SND_PCI_QUIRK(0x1462, 0x11f7, "MSI-GE63", ALC1220_FIXUP_CLEVO_P950),
 	SND_PCI_QUIRK(0x1462, 0x1228, "MSI-GP63", ALC1220_FIXUP_CLEVO_P950),
 	SND_PCI_QUIRK(0x1462, 0x1229, "MSI-GP73", ALC1220_FIXUP_CLEVO_P950),
