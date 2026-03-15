@@ -26,7 +26,7 @@ struct tegra_pmx {
 	void __iomem **regs;
 	u32 *backup_regs;
 	/* Array of size soc->ngroups */
-	struct tegra_pingroup_config *pingroup_configs;
+	struct tegra_pingroup_config pingroup_configs[];
 };
 
 enum tegra_pinconf_param {
