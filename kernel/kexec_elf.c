@@ -58,6 +58,7 @@ static uint16_t elf16_to_cpu(const struct elfhdr *ehdr, uint16_t value)
 
 /**
  * elf_is_ehdr_sane - check that it is safe to use the ELF header
+ * @ehdr:	pointer to the ELF header to check.
  * @buf_len:	size of the buffer in which the ELF file is loaded.
  */
 static bool elf_is_ehdr_sane(const struct elfhdr *ehdr, size_t buf_len)
@@ -180,6 +181,7 @@ static int elf_read_ehdr(const char *buf, size_t len, struct elfhdr *ehdr)
 
 /**
  * elf_is_phdr_sane - check that it is safe to use the program header
+ * @phdr:	pointer to the ELF program header to check.
  * @buf_len:	size of the buffer in which the ELF file is loaded.
  */
 static bool elf_is_phdr_sane(const struct elf_phdr *phdr, size_t buf_len)
@@ -244,6 +246,9 @@ static int elf_read_phdr(const char *buf, size_t len,
 
 /**
  * elf_read_phdrs - read the program headers from the buffer
+ * @buf:	buffer to read ELF file from.
+ * @len:	size of @buf.
+ * @elf_info:	pointer to existing struct which will be populated.
  *
  * This function assumes that the program header table was checked for sanity.
  * Use elf_is_ehdr_sane() if it wasn't.
@@ -315,6 +320,7 @@ static int elf_read_from_buffer(const char *buf, size_t len,
 
 /**
  * kexec_free_elf_info - free memory allocated by elf_read_from_buffer
+ * @elf_info:	ELF info struct to free.
  */
 void kexec_free_elf_info(struct kexec_elf_info *elf_info)
 {
@@ -323,6 +329,10 @@ void kexec_free_elf_info(struct kexec_elf_info *elf_info)
 }
 /**
  * kexec_build_elf_info - read ELF executable and check that we can use it
+ * @buf:	buffer to read ELF file from.
+ * @len:	size of @buf.
+ * @ehdr:	pointer to existing struct which will be populated.
+ * @elf_info:	pointer to existing struct which will be populated.
  */
 int kexec_build_elf_info(const char *buf, size_t len, struct elfhdr *ehdr,
 			       struct kexec_elf_info *elf_info)
@@ -379,7 +389,11 @@ int kexec_elf_probe(const char *buf, unsigned long len)
 
 /**
  * kexec_elf_load - load ELF executable image
- * @lowest_load_addr:	On return, will be the address where the first PT_LOAD
+ * @image:		pointer to the kexec image being loaded.
+ * @ehdr:		pointer to the ELF header of the executable.
+ * @elf_info:		pointer to the ELF info struct with program headers.
+ * @kbuf:		pointer to the kexec buffer used for segment loading.
+ * @lowest_load_addr:	on return, will be the address where the first PT_LOAD
  *			section will be loaded in memory.
  *
  * Return:
