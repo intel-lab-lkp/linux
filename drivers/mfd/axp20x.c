@@ -172,6 +172,18 @@ static const struct regmap_range axp288_volatile_ranges[] = {
 	regmap_reg_range(AXP20X_FG_RES, AXP288_FG_CC_CAP_REG),
 };
 
+static const struct regmap_range axp803_volatile_ranges[] = {
+	regmap_reg_range(AXP20X_PWR_INPUT_STATUS, AXP288_POWER_REASON),
+	regmap_reg_range(AXP288_BC_GLOBAL, AXP288_BC_GLOBAL),
+	regmap_reg_range(AXP288_BC_DET_STAT, AXP20X_VBUS_IPSOUT_MGMT),
+	regmap_reg_range(AXP20X_CHRG_BAK_CTRL, AXP20X_CHRG_BAK_CTRL),
+	regmap_reg_range(AXP20X_IRQ1_EN, AXP20X_IPSOUT_V_HIGH_L),
+	regmap_reg_range(AXP20X_TIMER_CTRL, AXP20X_TIMER_CTRL),
+	regmap_reg_range(AXP20X_GPIO1_CTRL, AXP22X_GPIO_STATE),
+	regmap_reg_range(AXP288_RT_BATT_V_H, AXP288_RT_BATT_V_L),
+	regmap_reg_range(AXP20X_FG_RES, AXP288_FG_CC_CAP_REG),
+};
+
 static const struct regmap_access_table axp288_writeable_table = {
 	.yes_ranges	= axp288_writeable_ranges,
 	.n_yes_ranges	= ARRAY_SIZE(axp288_writeable_ranges),
@@ -180,6 +192,11 @@ static const struct regmap_access_table axp288_writeable_table = {
 static const struct regmap_access_table axp288_volatile_table = {
 	.yes_ranges	= axp288_volatile_ranges,
 	.n_yes_ranges	= ARRAY_SIZE(axp288_volatile_ranges),
+};
+
+static const struct regmap_access_table axp803_volatile_table = {
+	.yes_ranges	= axp803_volatile_ranges,
+	.n_yes_ranges	= ARRAY_SIZE(axp803_volatile_ranges),
 };
 
 static const struct regmap_range axp806_writeable_ranges[] = {
@@ -426,6 +443,15 @@ static const struct regmap_config axp22x_regmap_config = {
 	.wr_table	= &axp22x_writeable_table,
 	.volatile_table	= &axp22x_volatile_table,
 	.max_register	= AXP22X_BATLOW_THRES1,
+	.cache_type	= REGCACHE_MAPLE,
+};
+
+static const struct regmap_config axp803_regmap_config = {
+	.reg_bits	= 8,
+	.val_bits	= 8,
+	.wr_table	= &axp288_writeable_table,
+	.volatile_table	= &axp803_volatile_table,
+	.max_register	= AXP288_FG_TUNE5,
 	.cache_type	= REGCACHE_MAPLE,
 };
 
@@ -1328,7 +1354,7 @@ int axp20x_match_device(struct axp20x_dev *axp20x)
 	case AXP803_ID:
 		axp20x->nr_cells = ARRAY_SIZE(axp803_cells);
 		axp20x->cells = axp803_cells;
-		axp20x->regmap_cfg = &axp288_regmap_config;
+		axp20x->regmap_cfg = &axp803_regmap_config;
 		axp20x->regmap_irq_chip = &axp803_regmap_irq_chip;
 		break;
 	case AXP806_ID:
