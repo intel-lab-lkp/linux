@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
+#include <linux/ctype.h>
 #include <linux/module.h>
 #include <linux/glob.h>
 #include <linux/export.h>
@@ -11,8 +12,8 @@
 MODULE_DESCRIPTION("glob(7) matching");
 MODULE_LICENSE("Dual MIT/GPL");
 
-/**
- * glob_match - Shell-style pattern matching, like !fnmatch(pat, str, 0)
+/*
+ * __glob_match - Shell-style pattern matching, like !fnmatch(pat, str, 0)
  * @pat: Shell-style pattern to match, e.g. "*.[ch]".
  * @str: String to match.  The pattern must match the entire string.
  *
@@ -20,7 +21,7 @@ MODULE_LICENSE("Dual MIT/GPL");
  * succeeds, or false (0) if it fails.  Equivalent to !fnmatch(@pat, @str, 0).
  *
  * Pattern metacharacters are ?, *, [ and \.
- * (And, inside character classes, !, - and ].)
+ * (And, inside character classes, !, ^ - and ].)
  *
  * This is a small and simple implementation intended for device denylists
  * where a string is matched against a number of patterns.  Thus, it
@@ -39,7 +40,7 @@ MODULE_LICENSE("Dual MIT/GPL");
  *
  * An opening bracket without a matching close is matched literally.
  */
-bool __pure glob_match(char const *pat, char const *str)
+static bool __pure __glob_match(char const *pat, char const *str, bool nocase)
 {
 	/*
 	 * Backtrack to previous * on mismatch and retry starting one
@@ -57,6 +58,11 @@ bool __pure glob_match(char const *pat, char const *str)
 	for (;;) {
 		unsigned char c = *str++;
 		unsigned char d = *pat++;
+
+		if (nocase) {
+			c = tolower(c);
+			d = tolower(d);
+		}
 
 		switch (d) {
 		case '?':	/* Wildcard: anything but nul */
@@ -94,13 +100,17 @@ bool __pure glob_match(char const *pat, char const *str)
 						goto literal;
 
 					class += 2;
-					/* Normalize inverted ranges like [z-a] */
-					if (a > b) {
-						unsigned char tmp = a;
+				}
+				if (nocase) {
+					a = tolower(a);
+					b = tolower(b);
+				}
+				/* Normalize inverted ranges like [z-a] */
+				if (a > b) {
+					unsigned char tmp = a;
 
-						a = b;
-						b = tmp;
-					}
+					a = b;
+					b = tmp;
 				}
 				if (a <= c && c <= b)
 					match = true;
@@ -112,8 +122,11 @@ bool __pure glob_match(char const *pat, char const *str)
 			}
 			break;
 		case '\\':
-			if (*pat != '\0')
+			if (*pat != '\0') {
 				d = *pat++;
+				if (nocase)
+					d = tolower(d);
+			}
 			fallthrough;
 		default:	/* Literal character */
 literal:
@@ -132,4 +145,44 @@ backtrack:
 		}
 	}
 }
+
+/**
+ * glob_match - Shell-style pattern matching, like !fnmatch(pat, str, 0)
+ * @pat: Shell-style pattern to match, e.g. "*.[ch]".
+ * @str: String to match.  The pattern must match the entire string.
+ *
+ * Perform shell-style glob matching, returning true (1) if the match
+ * succeeds, or false (0) if it fails.  Equivalent to !fnmatch(@pat, @str, 0).
+ *
+ * Pattern metacharacters are ?, *, [ and \.
+ * (And, inside character classes, !, ^ - and ].)
+ *
+ * This is small and simple and non-recursive, with run-time at most
+ * quadratic: strlen(@str)*strlen(@pat).  It does not preprocess the
+ * patterns.  An opening bracket without a matching close is matched
+ * literally.
+ *
+ * Return: true if @str matches @pat, false otherwise.
+ */
+bool __pure glob_match(char const *pat, char const *str)
+{
+	return __glob_match(pat, str, false);
+}
 EXPORT_SYMBOL(glob_match);
+
+/**
+ * glob_match_nocase - Case-insensitive shell-style pattern matching
+ * @pat: Shell-style pattern to match.
+ * @str: String to match.  The pattern must match the entire string.
+ *
+ * Identical to glob_match(), but performs case-insensitive comparisons
+ * for literal characters and character class contents using tolower().
+ * Metacharacters (?, *, [, ]) are not affected by case folding.
+ *
+ * Return: true if @str matches @pat (case-insensitive), false otherwise.
+ */
+bool __pure glob_match_nocase(char const *pat, char const *str)
+{
+	return __glob_match(pat, str, true);
+}
+EXPORT_SYMBOL(glob_match_nocase);
