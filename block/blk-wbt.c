@@ -782,10 +782,10 @@ void wbt_init_enable_default(struct gendisk *disk)
 		return;
 
 	rwb = wbt_alloc();
-	if (WARN_ON_ONCE(!rwb))
+	if (!rwb)
 		return;
 
-	if (WARN_ON_ONCE(wbt_init(disk, rwb))) {
+	if (wbt_init(disk, rwb)) {
 		wbt_free(rwb);
 		return;
 	}
