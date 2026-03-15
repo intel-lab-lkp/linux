@@ -219,6 +219,14 @@ void nf_hook_slow_list(struct list_head *head, struct nf_hook_state *state,
 		       const struct nf_hook_entries *e);
 /**
  *	nf_hook - call a netfilter hook
+ *	@pf:	protocol family (e.g. NFPROTO_IPV4)
+ *	@hook:	hook number (e.g. NF_INET_PRE_ROUTING)
+ *	@net:	network namespace
+ *	@sk:	socket associated with the packet, or NULL
+ *	@skb:	socket buffer holding the packet
+ *	@indev:	input network device, or NULL
+ *	@outdev: output network device, or NULL
+ *	@okfn:	function to call if the hook allows the packet to pass
  *
  *	Returns 1 if the hook has allowed the packet to pass.  The function
  *	okfn must be invoked by the caller in this case.  Any other return
