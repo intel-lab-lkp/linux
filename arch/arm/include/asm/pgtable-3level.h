@@ -120,15 +120,15 @@
 						 PMD_TYPE_SECT)
 #define pmd_leaf(pmd)		pmd_sect(pmd)
 
-#define pud_clear(pudp)			\
-	do {				\
-		*pudp = __pud(0);	\
-		clean_pmd_entry(pudp);	\
+#define pud_clear(pudp)				\
+	do {					\
+		WRITE_ONCE(*pudp, __pud(0));	\
+		clean_pmd_entry(pudp);		\
 	} while (0)
 
 #define set_pud(pudp, pud)		\
 	do {				\
-		*pudp = pud;		\
+		WRITE_ONCE(*pudp, pud);	\
 		flush_pmd_entry(pudp);	\
 	} while (0)
 
@@ -139,16 +139,16 @@ static inline pmd_t *pud_pgtable(pud_t pud)
 
 #define pmd_bad(pmd)		(!(pmd_val(pmd) & PMD_TABLE_BIT))
 
-#define copy_pmd(pmdpd,pmdps)		\
-	do {				\
-		*pmdpd = *pmdps;	\
-		flush_pmd_entry(pmdpd);	\
+#define copy_pmd(pmdpd, pmdps)				\
+	do {						\
+		WRITE_ONCE(*pmdpd, READ_ONCE(*pmdps));	\
+		flush_pmd_entry(pmdpd);			\
 	} while (0)
 
-#define pmd_clear(pmdp)			\
-	do {				\
-		*pmdp = __pmd(0);	\
-		clean_pmd_entry(pmdp);	\
+#define pmd_clear(pmdp)				\
+	do {					\
+		WRITE_ONCE(*pmdp, __pmd(0));	\
+		clean_pmd_entry(pmdp);		\
 	} while (0)
 
 /*
@@ -241,7 +241,7 @@ static inline void set_pmd_at(struct mm_struct *mm, unsigned long addr,
 	else
 		pmd_val(pmd) |= PMD_SECT_AP2;
 
-	*pmdp = __pmd(pmd_val(pmd) | PMD_SECT_nG);
+	WRITE_ONCE(*pmdp,  __pmd(pmd_val(pmd) | PMD_SECT_nG));
 	flush_pmd_entry(pmdp);
 }
 
