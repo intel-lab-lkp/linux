@@ -48,6 +48,8 @@
 #include <linux/rculist.h>
 #include <linux/ftrace.h>
 #include <linux/context_tracking.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
 
 extern struct bug_entry __start___bug_table[], __stop___bug_table[];
 
@@ -311,3 +313,68 @@ void generic_bug_clear_once(void)
 
 	clear_once_table(__start___bug_table, __stop___bug_table);
 }
+
+#ifdef CONFIG_DEBUG_FS
+static void bug_show_entry(struct seq_file *m, const struct bug_entry *bug,
+			   const char *modname)
+{
+	const char *file;
+	unsigned int line;
+	unsigned short flags = READ_ONCE(bug->flags);
+
+	bug_get_file_line(bug, &file, &line);
+
+	seq_printf(m, "%pS\t", (void *)bug_addr(bug));
+
+	if (file)
+		seq_printf(m, "%s:%u\t", file, line);
+	else
+		seq_puts(m, "-\t");
+
+	if (flags & BUGFLAG_WARNING)
+		seq_puts(m, "warn");
+	else
+		seq_puts(m, "bug");
+	if (flags & BUGFLAG_ONCE)
+		seq_puts(m, ",once");
+	if (flags & BUGFLAG_DONE)
+		seq_puts(m, ",done");
+
+	if (modname)
+		seq_printf(m, "\t[%s]", modname);
+
+	seq_putc(m, '\n');
+}
+
+static int bug_sites_show(struct seq_file *m, void *v)
+{
+	struct bug_entry *bug;
+
+	for (bug = __start___bug_table; bug < __stop___bug_table; bug++)
+		bug_show_entry(m, bug, NULL);
+
+#ifdef CONFIG_MODULES
+	{
+		struct module *mod;
+		unsigned int i;
+
+		rcu_read_lock();
+		list_for_each_entry_rcu(mod, &module_bug_list, bug_list)
+			for (i = 0; i < mod->num_bugs; i++)
+				bug_show_entry(m, &mod->bug_table[i],
+					       mod->name);
+		rcu_read_unlock();
+	}
+#endif
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(bug_sites);
+
+static int __init bug_debugfs_init(void)
+{
+	debugfs_create_file("bug_sites", 0444, NULL, NULL, &bug_sites_fops);
+	return 0;
+}
+device_initcall(bug_debugfs_init);
+#endif /* CONFIG_DEBUG_FS */
