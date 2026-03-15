@@ -201,6 +201,7 @@ static enum bug_trap_type __report_bug(struct bug_entry *bug, unsigned long buga
 {
 	bool warning, once, done, no_cut, has_args;
 	const char *file, *fmt;
+	unsigned short flags;
 	unsigned line;
 
 	if (!bug) {
@@ -217,20 +218,24 @@ static enum bug_trap_type __report_bug(struct bug_entry *bug, unsigned long buga
 	bug_get_file_line(bug, &file, &line);
 	fmt = bug_get_format(bug);
 
-	warning  = bug->flags & BUGFLAG_WARNING;
-	once     = bug->flags & BUGFLAG_ONCE;
-	done     = bug->flags & BUGFLAG_DONE;
-	no_cut   = bug->flags & BUGFLAG_NO_CUT_HERE;
-	has_args = bug->flags & BUGFLAG_ARGS;
+	flags    = READ_ONCE(bug->flags);
+	warning  = flags & BUGFLAG_WARNING;
+	once     = flags & BUGFLAG_ONCE;
+	done     = flags & BUGFLAG_DONE;
+	no_cut   = flags & BUGFLAG_NO_CUT_HERE;
+	has_args = flags & BUGFLAG_ARGS;
 
 	if (warning && once) {
 		if (done)
 			return BUG_TRAP_TYPE_WARN;
 
 		/*
-		 * Since this is the only store, concurrency is not an issue.
+		 * Multiple CPUs can hit a WARN_ON_ONCE at the same time
+		 * and both read done == false.  The race is benign: setting
+		 * BUGFLAG_DONE is idempotent, and the worst case is that
+		 * the warning prints a few extra times.
 		 */
-		bug->flags |= BUGFLAG_DONE;
+		WRITE_ONCE(bug->flags, flags | BUGFLAG_DONE);
 	}
 
 	/*
@@ -289,7 +294,7 @@ static void clear_once_table(struct bug_entry *start, struct bug_entry *end)
 	struct bug_entry *bug;
 
 	for (bug = start; bug < end; bug++)
-		bug->flags &= ~BUGFLAG_DONE;
+		WRITE_ONCE(bug->flags, READ_ONCE(bug->flags) & ~BUGFLAG_DONE);
 }
 
 void generic_bug_clear_once(void)
