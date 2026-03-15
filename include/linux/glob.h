@@ -7,5 +7,6 @@
 
 bool __pure glob_match(char const *pat, char const *str);
 bool __pure glob_match_nocase(char const *pat, char const *str);
+bool __pure glob_validate(char const *pat);
 
 #endif	/* _LINUX_GLOB_H */
