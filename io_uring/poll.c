@@ -303,6 +303,7 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 				io_req_set_res(req, mask, 0);
 				return IOU_POLL_REMOVE_POLL_USE_RES;
 			}
+			v &= IO_POLL_REF_MASK;
 		} else {
 			int ret = io_poll_issue(req, tw);
 
@@ -312,6 +313,11 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 				return IOU_POLL_REQUEUE;
 			if (ret != IOU_RETRY && ret < 0)
 				return ret;
+			/*
+			 * One event consumed, but additional wakes may have
+			 * raced. Only drain a single ref.
+			 */
+			v = 1;
 		}
 
 		/* force the next iteration to vfs_poll() */
@@ -321,7 +327,6 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 		 * Release all references, retry if someone tried to restart
 		 * task_work while we were executing it.
 		 */
-		v &= IO_POLL_REF_MASK;
 	} while (atomic_sub_return(v, &req->poll_refs) & IO_POLL_REF_MASK);
 
 	io_napi_add(req);
