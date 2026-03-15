@@ -462,7 +462,7 @@ void folio_mark_accessed(struct folio *folio)
 {
 	if (folio_test_dropbehind(folio))
 		return;
-	if (lru_gen_enabled()) {
+	if (folio_lru_gen(folio) != -1) {
 		lru_gen_inc_refs(folio);
 		return;
 	}
@@ -559,7 +559,7 @@ void folio_add_lru_vma(struct folio *folio, struct vm_area_struct *vma)
  */
 static void lru_deactivate_file(struct lruvec *lruvec, struct folio *folio)
 {
-	bool active = folio_test_active(folio) || lru_gen_enabled();
+	bool active = folio_test_active(folio) || (folio_lru_gen(folio) != -1);
 	long nr_pages = folio_nr_pages(folio);
 
 	if (folio_test_unevictable(folio))
@@ -602,7 +602,9 @@ static void lru_deactivate(struct lruvec *lruvec, struct folio *folio)
 {
 	long nr_pages = folio_nr_pages(folio);
 
-	if (folio_test_unevictable(folio) || !(folio_test_active(folio) || lru_gen_enabled()))
+	if (folio_test_unevictable(folio) ||
+		!(folio_test_active(folio) ||
+		(folio_lru_gen(folio) != -1)))
 		return;
 
 	lruvec_del_folio(lruvec, folio);
@@ -617,6 +619,7 @@ static void lru_deactivate(struct lruvec *lruvec, struct folio *folio)
 static void lru_lazyfree(struct lruvec *lruvec, struct folio *folio)
 {
 	long nr_pages = folio_nr_pages(folio);
+	int gen = folio_lru_gen(folio);
 
 	if (!folio_test_anon(folio) || !folio_test_swapbacked(folio) ||
 	    folio_test_swapcache(folio) || folio_test_unevictable(folio))
@@ -624,7 +627,7 @@ static void lru_lazyfree(struct lruvec *lruvec, struct folio *folio)
 
 	lruvec_del_folio(lruvec, folio);
 	folio_clear_active(folio);
-	if (lru_gen_enabled())
+	if (gen != -1)
 		lru_gen_clear_refs(folio);
 	else
 		folio_clear_referenced(folio);
@@ -695,7 +698,7 @@ void deactivate_file_folio(struct folio *folio)
 	if (folio_test_unevictable(folio) || !folio_test_lru(folio))
 		return;
 
-	if (lru_gen_enabled() && lru_gen_clear_refs(folio))
+	if ((folio_lru_gen(folio) != -1) && lru_gen_clear_refs(folio))
 		return;
 
 	folio_batch_add_and_move(folio, lru_deactivate_file);
@@ -714,7 +717,7 @@ void folio_deactivate(struct folio *folio)
 	if (folio_test_unevictable(folio) || !folio_test_lru(folio))
 		return;
 
-	if (lru_gen_enabled() ? lru_gen_clear_refs(folio) : !folio_test_active(folio))
+	if ((folio_lru_gen(folio) != -1) ? lru_gen_clear_refs(folio) : !folio_test_active(folio))
 		return;
 
 	folio_batch_add_and_move(folio, lru_deactivate);
