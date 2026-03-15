@@ -329,7 +329,7 @@ static int apply_replay_list(struct ubifs_info *c)
 	struct replay_entry *r;
 	int err;
 
-	list_sort(c, &c->replay_list, &replay_entries_cmp);
+	list_sort_nonatomic(c, &c->replay_list, &replay_entries_cmp);
 
 	list_for_each_entry(r, &c->replay_list, list) {
 		cond_resched();

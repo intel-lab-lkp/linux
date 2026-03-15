@@ -3,6 +3,7 @@
 #include <linux/export.h>
 #include <linux/list_sort.h>
 #include <linux/list.h>
+#include <linux/sched.h>
 
 /*
  * Returns a list organized in an intermediate format suited
@@ -47,7 +48,7 @@ static struct list_head *merge(void *priv, list_cmp_func_t cmp,
  */
 __attribute__((nonnull(2,3,4,5)))
 static void merge_final(void *priv, list_cmp_func_t cmp, struct list_head *head,
-			struct list_head *a, struct list_head *b)
+			struct list_head *a, struct list_head *b, bool may_schedule)
 {
 	struct list_head *tail = head;
 	u8 count = 0;
@@ -79,12 +80,11 @@ static void merge_final(void *priv, list_cmp_func_t cmp, struct list_head *head,
 		/*
 		 * If the merge is highly unbalanced (e.g. the input is
 		 * already sorted), this loop may run many iterations.
-		 * Continue callbacks to the client even though no
-		 * element comparison is needed, so the client's cmp()
-		 * routine can invoke cond_resched() periodically.
+		 * If may_schedule is true, periodically invoke cond_resched()
+		 * to avoid soft lockups.
 		 */
-		if (unlikely(!++count))
-			cmp(priv, b, b);
+		if (may_schedule && unlikely(!++count))
+			cond_resched();
 		b->prev = tail;
 		tail = b;
 		b = b->next;
@@ -93,6 +93,75 @@ static void merge_final(void *priv, list_cmp_func_t cmp, struct list_head *head,
 	/* And the final links to make a circular doubly-linked list */
 	tail->next = head;
 	head->prev = tail;
+}
+
+static void __list_sort(void *priv, struct list_head *head, list_cmp_func_t cmp, bool may_schedule)
+{
+	struct list_head *list = head->next, *pending = NULL;
+	size_t count = 0;	/* Count of pending */
+
+	if (list == head->prev)	/* Zero or one elements */
+		return;
+
+	/* Convert to a null-terminated singly-linked list. */
+	head->prev->next = NULL;
+
+	/*
+	 * Data structure invariants:
+	 * - All lists are singly linked and null-terminated; prev
+	 *   pointers are not maintained.
+	 * - pending is a prev-linked "list of lists" of sorted
+	 *   sublists awaiting further merging.
+	 * - Each of the sorted sublists is power-of-two in size.
+	 * - Sublists are sorted by size and age, smallest & newest at front.
+	 * - There are zero to two sublists of each size.
+	 * - A pair of pending sublists are merged as soon as the number
+	 *   of following pending elements equals their size (i.e.
+	 *   each time count reaches an odd multiple of that size).
+	 *   That ensures each later final merge will be at worst 2:1.
+	 * - Each round consists of:
+	 *   - Merging the two sublists selected by the highest bit
+	 *     which flips when count is incremented, and
+	 *   - Adding an element from the input as a size-1 sublist.
+	 */
+	do {
+		size_t bits;
+		struct list_head **tail = &pending;
+
+		/* Find the least-significant clear bit in count */
+		for (bits = count; bits & 1; bits >>= 1)
+			tail = &(*tail)->prev;
+		/* Do the indicated merge */
+		if (likely(bits)) {
+			struct list_head *a = *tail, *b = a->prev;
+
+			a = merge(priv, cmp, b, a);
+			/* Install the merged result in place of the inputs */
+			a->prev = b->prev;
+			*tail = a;
+		}
+
+		/* Move one element from input list to pending */
+		list->prev = pending;
+		pending = list;
+		list = list->next;
+		pending->next = NULL;
+		count++;
+	} while (list);
+
+	/* End of input; merge together all the pending lists. */
+	list = pending;
+	pending = pending->prev;
+	for (;;) {
+		struct list_head *next = pending->prev;
+
+		if (!next)
+			break;
+		list = merge(priv, cmp, pending, list);
+		pending = next;
+	}
+	/* The final merge, rebuilding prev links */
+	merge_final(priv, cmp, head, pending, list, may_schedule);
 }
 
 /**
@@ -185,73 +254,26 @@ static void merge_final(void *priv, list_cmp_func_t cmp, struct list_head *head,
  * of size 2^k varies from 2^(k-1) (cases 3 and 5 when x == 0) to
  * 2^(k+1) - 1 (second merge of case 5 when x == 2^(k-1) - 1).
  */
-__attribute__((nonnull(2,3)))
+__attribute__((nonnull(2, 3)))
 void list_sort(void *priv, struct list_head *head, list_cmp_func_t cmp)
 {
-	struct list_head *list = head->next, *pending = NULL;
-	size_t count = 0;	/* Count of pending */
-
-	if (list == head->prev)	/* Zero or one elements */
-		return;
-
-	/* Convert to a null-terminated singly-linked list. */
-	head->prev->next = NULL;
-
-	/*
-	 * Data structure invariants:
-	 * - All lists are singly linked and null-terminated; prev
-	 *   pointers are not maintained.
-	 * - pending is a prev-linked "list of lists" of sorted
-	 *   sublists awaiting further merging.
-	 * - Each of the sorted sublists is power-of-two in size.
-	 * - Sublists are sorted by size and age, smallest & newest at front.
-	 * - There are zero to two sublists of each size.
-	 * - A pair of pending sublists are merged as soon as the number
-	 *   of following pending elements equals their size (i.e.
-	 *   each time count reaches an odd multiple of that size).
-	 *   That ensures each later final merge will be at worst 2:1.
-	 * - Each round consists of:
-	 *   - Merging the two sublists selected by the highest bit
-	 *     which flips when count is incremented, and
-	 *   - Adding an element from the input as a size-1 sublist.
-	 */
-	do {
-		size_t bits;
-		struct list_head **tail = &pending;
-
-		/* Find the least-significant clear bit in count */
-		for (bits = count; bits & 1; bits >>= 1)
-			tail = &(*tail)->prev;
-		/* Do the indicated merge */
-		if (likely(bits)) {
-			struct list_head *a = *tail, *b = a->prev;
-
-			a = merge(priv, cmp, b, a);
-			/* Install the merged result in place of the inputs */
-			a->prev = b->prev;
-			*tail = a;
-		}
-
-		/* Move one element from input list to pending */
-		list->prev = pending;
-		pending = list;
-		list = list->next;
-		pending->next = NULL;
-		count++;
-	} while (list);
-
-	/* End of input; merge together all the pending lists. */
-	list = pending;
-	pending = pending->prev;
-	for (;;) {
-		struct list_head *next = pending->prev;
-
-		if (!next)
-			break;
-		list = merge(priv, cmp, pending, list);
-		pending = next;
-	}
-	/* The final merge, rebuilding prev links */
-	merge_final(priv, cmp, head, pending, list);
+	__list_sort(priv, head, cmp, false);
 }
 EXPORT_SYMBOL(list_sort);
+
+/**
+ * list_sort_nonatomic - sort a list with conditional rescheduling
+ * @priv: private data, opaque to list_sort(), passed to @cmp
+ * @head: the list to sort
+ * @cmp: the elements comparison function
+ *
+ * This variant of list_sort() periodically invokes cond_resched()
+ * during the sorting process. It should be used for sorting very
+ * long lists where the operation might otherwise cause soft lockups.
+ */
+__attribute__((nonnull(2, 3)))
+void list_sort_nonatomic(void *priv, struct list_head *head, list_cmp_func_t cmp)
+{
+	__list_sort(priv, head, cmp, true);
+}
+EXPORT_SYMBOL(list_sort_nonatomic);

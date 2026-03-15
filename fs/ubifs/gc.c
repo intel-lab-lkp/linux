@@ -277,8 +277,8 @@ static int sort_nodes(struct ubifs_info *c, struct ubifs_scan_leb *sleb,
 	}
 
 	/* Sort data and non-data nodes */
-	list_sort(c, &sleb->nodes, &data_nodes_cmp);
-	list_sort(c, nondata, &nondata_nodes_cmp);
+	list_sort_nonatomic(c, &sleb->nodes, &data_nodes_cmp);
+	list_sort_nonatomic(c, nondata, &nondata_nodes_cmp);
 
 	err = dbg_check_data_nodes_order(c, &sleb->nodes);
 	if (err)
