@@ -36,7 +36,7 @@ static inline int is_warning_bug(const struct bug_entry *bug)
 	return bug->flags & BUGFLAG_WARNING;
 }
 
-void bug_get_file_line(struct bug_entry *bug, const char **file,
+void bug_get_file_line(const struct bug_entry *bug, const char **file,
 		       unsigned int *line);
 
 struct bug_entry *find_bug(unsigned long bugaddr);
@@ -70,8 +70,8 @@ report_bug_entry(struct bug_entry *bug, struct pt_regs *regs)
 	return BUG_TRAP_TYPE_BUG;
 }
 
-static inline void bug_get_file_line(struct bug_entry *bug, const char **file,
-				     unsigned int *line)
+static inline void bug_get_file_line(const struct bug_entry *bug,
+				     const char **file, unsigned int *line)
 {
 	*file = NULL;
 	*line = 0;

@@ -71,7 +71,7 @@ static struct bug_entry *module_find_bug(unsigned long bugaddr)
 
 	guard(rcu)();
 	list_for_each_entry_rcu(mod, &module_bug_list, bug_list) {
-		unsigned i;
+		unsigned int i;
 
 		bug = mod->bug_table;
 		for (i = 0; i < mod->num_bugs; ++i, ++bug)
@@ -123,7 +123,7 @@ static inline struct bug_entry *module_find_bug(unsigned long bugaddr)
 }
 #endif
 
-void bug_get_file_line(struct bug_entry *bug, const char **file,
+void bug_get_file_line(const struct bug_entry *bug, const char **file,
 		       unsigned int *line)
 {
 #ifdef CONFIG_DEBUG_BUGVERBOSE
@@ -139,7 +139,7 @@ void bug_get_file_line(struct bug_entry *bug, const char **file,
 #endif
 }
 
-static const char *bug_get_format(struct bug_entry *bug)
+static const char *bug_get_format(const struct bug_entry *bug)
 {
 	const char *format = NULL;
 #ifdef HAVE_ARCH_BUG_FORMAT
@@ -202,7 +202,7 @@ static enum bug_trap_type __report_bug(struct bug_entry *bug, unsigned long buga
 	bool warning, once, done, no_cut, has_args;
 	const char *file, *fmt;
 	unsigned short flags;
-	unsigned line;
+	unsigned int line;
 
 	if (!bug) {
 		if (!is_valid_bugaddr(bugaddr))
