@@ -21,6 +21,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/reciprocal_div.h>
 #include <linux/rbtree.h>
+#include <linux/percpu.h>
 
 #include <net/gso.h>
 #include <net/netlink.h>
@@ -28,6 +29,15 @@
 #include <net/inet_ecn.h>
 
 #define VERSION "1.3"
+
+/*
+ * Limit for recursion from duplication.
+ * Duplicated packets are re-enqueued at the root qdisc, which may
+ * reach this or another netem instance, causing nested calls to
+ * netem_enqueue(). This per-CPU counter limits the total depth.
+ */
+static DEFINE_PER_CPU(unsigned int, netem_enqueue_depth);
+#define NETEM_RECURSION_LIMIT	4
 
 /*	Network Emulation Queuing algorithm.
 	====================================
@@ -460,6 +470,14 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	/* Do not fool qdisc_drop_all() */
 	skb->prev = NULL;
 
+	/* Guard against recursion from duplication re-injection. */
+	if (unlikely(this_cpu_inc_return(netem_enqueue_depth) >
+		     NETEM_RECURSION_LIMIT)) {
+		this_cpu_dec(netem_enqueue_depth);
+		qdisc_drop(skb, sch, to_free);
+		return NET_XMIT_DROP;
+	}
+
 	/* Random duplication */
 	if (q->duplicate && q->duplicate >= get_crandom(&q->dup_cor, &q->prng))
 		++count;
@@ -474,6 +492,7 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	if (count == 0) {
 		qdisc_qstats_drop(sch);
 		__qdisc_drop(skb, to_free);
+		this_cpu_dec(netem_enqueue_depth);
 		return NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 	}
 
@@ -529,6 +548,7 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		qdisc_drop_all(skb, sch, to_free);
 		if (skb2)
 			__qdisc_drop(skb2, to_free);
+		this_cpu_dec(netem_enqueue_depth);
 		return NET_XMIT_DROP;
 	}
 
@@ -643,8 +663,10 @@ finish_segs:
 		/* Parent qdiscs accounted for 1 skb of size @prev_len */
 		qdisc_tree_reduce_backlog(sch, -(nb - 1), -(len - prev_len));
 	} else if (!skb) {
+		this_cpu_dec(netem_enqueue_depth);
 		return NET_XMIT_DROP;
 	}
+	this_cpu_dec(netem_enqueue_depth);
 	return NET_XMIT_SUCCESS;
 }
 
