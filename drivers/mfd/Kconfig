@@ -2127,6 +2127,7 @@ config MFD_WM8400
 	select MFD_CORE
 	depends on I2C=y
 	select REGMAP_I2C
+	select SND_SOC_WM8400
 	help
 	  Support for the Wolfson Microelecronics WM8400 PMIC and audio
 	  CODEC.  This driver provides common support for accessing

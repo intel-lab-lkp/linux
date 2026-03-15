@@ -2508,7 +2508,6 @@ config SND_SOC_WM8350
 
 config SND_SOC_WM8400
 	tristate
-	# FIXME nothing selects SND_SOC_WM8400??
 	depends on MFD_WM8400
 
 config SND_SOC_WM8510
