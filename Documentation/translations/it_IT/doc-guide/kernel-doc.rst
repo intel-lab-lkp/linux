@@ -558,7 +558,7 @@ internal: *[source-pattern ...]*
 
   Esempio::
 
-    .. kernel-doc:: drivers/gpu/drm/i915/intel_audio.c
+    .. kernel-doc:: drivers/gpu/drm/i915/display/intel_audio.c
        :internal:
 
 identifiers: *[ function/type ...]*
@@ -587,7 +587,7 @@ doc: *title*
 
   Esempio::
 
-    .. kernel-doc:: drivers/gpu/drm/i915/intel_audio.c
+    .. kernel-doc:: drivers/gpu/drm/i915/display/intel_audio.c
        :doc: High Definition Audio over HDMI and Display Port
 
 Senza alcuna opzione, la direttiva kernel-doc include tutti i commenti di
