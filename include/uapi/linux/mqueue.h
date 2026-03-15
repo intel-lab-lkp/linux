@@ -18,7 +18,6 @@
 
 #ifndef _LINUX_MQUEUE_H
 #define _LINUX_MQUEUE_H
-
 #include <linux/types.h>
 
 #define MQ_PRIO_MAX 	32768
@@ -32,6 +31,23 @@ struct mq_attr {
 	__kernel_long_t	mq_curmsgs;	/* number of messages currently queued	*/
 	__kernel_long_t	__reserved[4];	/* ignored for input, zeroed for output */
 };
+
+struct mq_timedreceive2_args {
+	size_t msg_len;
+	unsigned int  *msg_prio;
+	char  *msg_ptr;
+};
+
+#ifdef CONFIG_COMPAT
+#include <asm/compat.h>
+
+struct compat_mq_timedreceive2_args {
+	compat_size_t msg_len;
+	compat_uptr_t msg_prio;
+	compat_uptr_t msg_ptr;
+};
+
+#endif
 
 /*
  * SIGEV_THREAD implementation:
