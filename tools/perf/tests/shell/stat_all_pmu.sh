@@ -53,6 +53,26 @@ do
     continue
   fi
 
+  # check with system wide if it is supported.
+  output=$(perf stat -a -e "$p" true 2>&1)
+  stat_result=$?
+  if echo "$output" | grep -q "not supported"
+  then
+    # Event not supported, so ignore.
+    echo "not supported"
+    continue
+  fi
+
+  # checked through possible access limitations and permissions.
+  # At this step, non-zero return code from "perf stat" needs to
+  # reported as fail for the user to investigate
+  if [ $stat_result -ne 0 ]
+  then
+    echo "perf stat failed with non-zero return code"
+    err=1
+    continue
+  fi
+
   # We failed to see the event and it is supported. Possibly the workload was
   # too small so retry with something longer.
   output=$(perf stat -e "$p" perf bench internals synthesize 2>&1)
