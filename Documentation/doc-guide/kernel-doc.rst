@@ -550,7 +550,7 @@ internal: *[source-pattern ...]*
 
   Example::
 
-    .. kernel-doc:: drivers/gpu/drm/i915/intel_audio.c
+    .. kernel-doc:: drivers/gpu/drm/i915/display/intel_audio.c
        :internal:
 
 identifiers: *[ function/type ...]*
@@ -588,7 +588,7 @@ doc: *title*
 
   Example::
 
-    .. kernel-doc:: drivers/gpu/drm/i915/intel_audio.c
+    .. kernel-doc:: drivers/gpu/drm/i915/display/intel_audio.c
        :doc: High Definition Audio over HDMI and Display Port
 
 Without options, the kernel-doc directive includes all documentation comments

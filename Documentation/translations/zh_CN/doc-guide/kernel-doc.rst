@@ -434,7 +434,7 @@ internal: *[source-pattern ...]*
 
   例子::
 
-    .. kernel-doc:: drivers/gpu/drm/i915/intel_audio.c
+    .. kernel-doc:: drivers/gpu/drm/i915/display/intel_audio.c
        :internal:
 
 identifiers: *[ function/type ...]*
@@ -467,7 +467,7 @@ doc: *title*
 
   例子::
 
-    .. kernel-doc:: drivers/gpu/drm/i915/intel_audio.c
+    .. kernel-doc:: drivers/gpu/drm/i915/display/intel_audio.c
        :doc: High Definition Audio over HDMI and Display Port
 
 如果没有选项，kernel-doc指令将包含源文件中的所有文档注释。
