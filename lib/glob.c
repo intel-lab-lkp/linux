@@ -33,9 +33,9 @@ MODULE_LICENSE("Dual MIT/GPL");
  * Like !fnmatch(@pat, @str, 0) and unlike the shell, this does NOT
  * treat / or leading . specially; it isn't actually used for pathnames.
  *
- * Note that according to glob(7) (and unlike bash), character classes
- * are complemented by a leading !; this does not support the regex-style
- * [^a-z] syntax.
+ * Note that according to glob(7), character classes are complemented by
+ * a leading !.  The regex-style [^a-z] syntax is also accepted as an
+ * alias.
  *
  * An opening bracket without a matching close is matched literally.
  */
@@ -72,7 +72,7 @@ bool __pure glob_match(char const *pat, char const *str)
 		case '[': {	/* Character class */
 			if (c == '\0')	/* No possible match */
 				return false;
-			bool match = false, inverted = (*pat == '!');
+			bool match = false, inverted = (*pat == '!' || *pat == '^');
 			char const *class = inverted ? pat + 1 : pat;
 			unsigned char a = *class++;
 
