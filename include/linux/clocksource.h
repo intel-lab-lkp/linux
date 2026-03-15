@@ -72,6 +72,8 @@ struct module;
  *			in certain snapshot functions to allow callers to
  *			validate the clocksource from which the snapshot was
  *			taken.
+ * @vdso_clock_mode:	VDSO clock mode, used to map the clocksource to
+ *			a VDSO-capable clock for userspace fast paths.
  * @flags:		Flags describing special properties
  * @base:		Hardware abstraction for clock on which a clocksource
  *			is based
