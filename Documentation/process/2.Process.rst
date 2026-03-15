@@ -63,7 +63,7 @@ As fixes make their way into the mainline, the patch rate will slow over
 time.  Linus releases new -rc kernels about once a week; a normal series
 will get up to somewhere between -rc6 and -rc9 before the kernel is
 considered to be sufficiently stable and the final release is made.
-At that point the whole process starts over again.
+At that point, the whole process starts over again.
 
 As an example, here is how the 5.4 development cycle went (all dates in
 2019):
@@ -156,7 +156,7 @@ The stages that a patch goes through are, generally:
  - Design.  This is where the real requirements for the patch - and the way
    those requirements will be met - are laid out.  Design work is often
    done without involving the community, but it is better to do this work
-   in the open if at all possible; it can save a lot of time redesigning
+   in the open, if at all possible; it can save a lot of time redesigning
    things later.
 
  - Early review.  Patches are posted to the relevant mailing list, and
@@ -164,12 +164,12 @@ The stages that a patch goes through are, generally:
    process should turn up any major problems with a patch if all goes
    well.
 
- - Wider review.  When the patch is getting close to ready for mainline
+ - Wider review.  When the patch is getting close to being ready for mainline
    inclusion, it should be accepted by a relevant subsystem maintainer -
    though this acceptance is not a guarantee that the patch will make it
    all the way to the mainline.  The patch will show up in the maintainer's
    subsystem tree and into the -next trees (described below).  When the
-   process works, this step leads to more extensive review of the patch and
+   process works, this step leads to a more extensive review of the patch and
    the discovery of any problems resulting from the integration of this
    patch with work being done by others.
 
@@ -398,7 +398,7 @@ There are lists hosted elsewhere; please check the MAINTAINERS file for
 the list relevant for any particular subsystem.
 
 The core mailing list for kernel development is, of course, linux-kernel.
-This list is an intimidating place to be; volume can reach 500 messages per
+This list is an intimidating place to be; the volume can reach 500 messages per
 day, the amount of noise is high, the conversation can be severely
 technical, and participants are not always concerned with showing a high
 degree of politeness.  But there is no other place where the kernel
