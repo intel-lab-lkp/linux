@@ -1618,6 +1618,7 @@ static void __hrtimer_setup(struct hrtimer *timer,
 {
 	bool softtimer = !!(mode & HRTIMER_MODE_SOFT);
 	struct hrtimer_cpu_base *cpu_base;
+	enum hrtimer_mode effective_mode = mode;
 	int base;
 
 	/*
@@ -1628,6 +1629,9 @@ static void __hrtimer_setup(struct hrtimer *timer,
 	 */
 	if (IS_ENABLED(CONFIG_PREEMPT_RT) && !(mode & HRTIMER_MODE_HARD))
 		softtimer = true;
+	else if (!IS_ENABLED(CONFIG_PREEMPT_RT) && !(mode & HRTIMER_MODE_HARD) &&
+		 !(mode & HRTIMER_MODE_SOFT))
+		effective_mode |= HRTIMER_MODE_HARD;
 
 	memset(timer, 0, sizeof(struct hrtimer));
 
@@ -1644,7 +1648,7 @@ static void __hrtimer_setup(struct hrtimer *timer,
 	base = softtimer ? HRTIMER_MAX_CLOCK_BASES / 2 : 0;
 	base += hrtimer_clockid_to_base(clock_id);
 	timer->is_soft = softtimer;
-	timer->is_hard = !!(mode & HRTIMER_MODE_HARD);
+	timer->is_hard = !!(effective_mode & HRTIMER_MODE_HARD);
 	timer->base = &cpu_base->clock_base[base];
 	timerqueue_init(&timer->node);
 
