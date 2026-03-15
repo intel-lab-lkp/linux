@@ -43,6 +43,7 @@ help:
 	@echo '  wmi			- WMI interface examples'
 	@echo '  x86_energy_perf_policy - Intel energy policy tool'
 	@echo '  ynl			- ynl headers, library, and python tool'
+	@echo '  nvmem                  - NVMEM tools'
 	@echo ''
 	@echo 'You can do:'
 	@echo ' $$ make -C tools/ <tool>_install'
@@ -123,11 +124,14 @@ kvm_stat: FORCE
 ynl: FORCE
 	$(call descend,net/ynl)
 
+nvmem: FORCE
+	$(call descend,nvmem)
+
 all: acpi counter cpupower dma gpio hv firewire \
 		perf selftests bootconfig spi turbostat usb \
 		virtio mm bpf x86_energy_perf_policy \
 		tmon freefall iio objtool kvm_stat wmi \
-		debugging tracing thermal thermometer thermal-engine ynl
+		debugging tracing thermal thermometer thermal-engine ynl nvmem
 
 acpi_install:
 	$(call descend,power/$(@:_install=),install)
@@ -165,13 +169,17 @@ kvm_stat_install:
 ynl_install:
 	$(call descend,net/$(@:_install=),install)
 
+nvmem_install:
+	$(call descend,nvmem,install)
+
 install: acpi_install counter_install cpupower_install dma_install gpio_install \
 		hv_install firewire_install iio_install \
 		perf_install selftests_install turbostat_install usb_install \
 		virtio_install mm_install bpf_install x86_energy_perf_policy_install \
 		tmon_install freefall_install objtool_install kvm_stat_install \
 		wmi_install debugging_install intel-speed-select_install \
-		tracing_install thermometer_install thermal-engine_install ynl_install
+		tracing_install thermometer_install thermal-engine_install ynl_install \
+		nvmem_install
 
 acpi_clean:
 	$(call descend,power/acpi,clean)
@@ -225,12 +233,15 @@ build_clean:
 ynl_clean:
 	$(call descend,net/$(@:_clean=),clean)
 
+nvmem_clean:
+	$(call descend,nvmem,clean)
+
 clean: acpi_clean counter_clean cpupower_clean dma_clean hv_clean firewire_clean \
 		perf_clean selftests_clean turbostat_clean bootconfig_clean spi_clean usb_clean virtio_clean \
 		mm_clean bpf_clean iio_clean x86_energy_perf_policy_clean tmon_clean \
 		freefall_clean build_clean libbpf_clean libsubcmd_clean \
 		gpio_clean objtool_clean leds_clean wmi_clean firmware_clean debugging_clean \
 		intel-speed-select_clean tracing_clean thermal_clean thermometer_clean thermal-engine_clean \
-		sched_ext_clean ynl_clean
+		sched_ext_clean ynl_clean nvmem_clean
 
 .PHONY: FORCE
