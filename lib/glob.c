@@ -186,3 +186,46 @@ bool __pure glob_match_nocase(char const *pat, char const *str)
 	return __glob_match(pat, str, true);
 }
 EXPORT_SYMBOL(glob_match_nocase);
+
+/**
+ * glob_validate - Check whether a glob pattern is well-formed
+ * @pat: Shell-style pattern to validate.
+ *
+ * Return: true if @pat is a syntactically valid glob pattern, false
+ * if it contains malformed constructs.  The following are considered
+ * invalid:
+ *
+ *  - An opening '[' with no matching ']' (unclosed character class).
+ *  - A trailing '\' with no character following it.
+ *
+ * Note that glob_match() handles these gracefully (an unclosed bracket
+ * is matched literally, a trailing backslash matches itself), but
+ * callers that accept patterns from user input may wish to reject
+ * malformed patterns early with a clear error.
+ */
+bool __pure glob_validate(char const *pat)
+{
+	while (*pat) {
+		switch (*pat++) {
+		case '\\':
+			if (*pat == '\0')
+				return false;
+			pat++;
+			break;
+		case '[':
+			if (*pat == '!' || *pat == '^')
+				pat++;
+			/* ] as first character is literal, not end of class */
+			if (*pat == ']')
+				pat++;
+			while (*pat && *pat != ']')
+				pat++;
+			if (*pat == '\0')
+				return false;
+			pat++;	/* skip ']' */
+			break;
+		}
+	}
+	return true;
+}
+EXPORT_SYMBOL(glob_validate);
