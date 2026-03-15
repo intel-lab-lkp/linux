@@ -417,5 +417,595 @@
         "teardown": [
             "$TC qdisc del dev $DUMMY handle 1:0 root"
         ]
+    },
+    {
+        "id": "a1b2",
+        "name": "NETEM with pfifo child qdisc",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: netem delay 10ms"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:1 handle 10: pfifo limit 50",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc pfifo 10:",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "c2d3",
+        "name": "NETEM under HTB with two netem leaves",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: htb default 10",
+            "$TC class add dev $DUMMY parent 1: classid 1:10 htb rate 10mbit",
+            "$TC class add dev $DUMMY parent 1: classid 1:20 htb rate 10mbit",
+            "$TC qdisc add dev $DUMMY parent 1:10 handle 10: netem delay 10ms"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:20 handle 20: netem delay 20ms",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "d4e5",
+        "name": "NETEM under HTB with duplication on one leaf",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: htb default 10",
+            "$TC class add dev $DUMMY parent 1: classid 1:10 htb rate 10mbit",
+            "$TC class add dev $DUMMY parent 1: classid 1:20 htb rate 10mbit",
+            "$TC qdisc add dev $DUMMY parent 1:10 handle 10: netem delay 10ms duplicate 25%"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:20 handle 20: netem delay 20ms",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "e5f6",
+        "name": "NETEM under HTB with duplication on both leaves",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: htb default 10",
+            "$TC class add dev $DUMMY parent 1: classid 1:10 htb rate 10mbit",
+            "$TC class add dev $DUMMY parent 1: classid 1:20 htb rate 10mbit",
+            "$TC qdisc add dev $DUMMY parent 1:10 handle 10: netem delay 10ms duplicate 25%"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:20 handle 20: netem delay 10ms duplicate 25%",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "f6a7",
+        "name": "NETEM under HFSC class",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: hfsc default 1",
+            "$TC class add dev $DUMMY parent 1: classid 1:1 hfsc rt m2 10mbit"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:1 handle 10: netem delay 10ms",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem 10:",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "a7b8",
+        "name": "NETEM with duplication under HFSC class",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: hfsc default 1",
+            "$TC class add dev $DUMMY parent 1: classid 1:1 hfsc rt m2 10mbit"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:1 handle 10: netem delay 10ms duplicate 50%",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem 10:.*duplicate 50%",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "b8c9",
+        "name": "NETEM under two HFSC classes",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: hfsc default 1",
+            "$TC class add dev $DUMMY parent 1: classid 1:1 hfsc rt m2 10mbit",
+            "$TC class add dev $DUMMY parent 1: classid 1:2 hfsc rt m2 10mbit",
+            "$TC qdisc add dev $DUMMY parent 1:1 handle 10: netem delay 10ms"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:2 handle 20: netem delay 20ms duplicate 25%",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "c9d0",
+        "name": "NETEM with TBF child qdisc",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: netem delay 10ms"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:1 handle 10: tbf rate 1mbit burst 10kb latency 50ms",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc tbf 10:",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "d0e1",
+        "name": "NETEM with SFQ child qdisc",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: netem delay 10ms"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:1 handle 10: sfq perturb 10",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc sfq 10:",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "e1f2",
+        "name": "NETEM under HTB with TBF chain",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: htb default 10",
+            "$TC class add dev $DUMMY parent 1: classid 1:10 htb rate 10mbit",
+            "$TC qdisc add dev $DUMMY parent 1:10 handle 10: netem delay 10ms"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 10:1 handle 100: tbf rate 1mbit burst 10kb latency 50ms",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc tbf 100:",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "f2a3",
+        "name": "NETEM nested inside netem",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY root handle 1: netem delay 10ms"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY parent 1:1 handle 10: netem delay 5ms duplicate 10%",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "a3b4",
+        "name": "NETEM with all impairments combined",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY handle 1: root netem delay 50ms 10ms distribution normal loss 5% duplicate 10% corrupt 1% reorder 25% 50% gap 5 rate 10mbit",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc netem 1: root refcnt [0-9]+ .*delay 50ms",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "7a01",
+        "name": "NETEM passes traffic with delay",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 1ms"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7b02",
+        "name": "NETEM passes traffic with duplication",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 1ms duplicate 50%"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7c03",
+        "name": "NETEM passes traffic with loss",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 1ms loss 30%"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7d04",
+        "name": "NETEM passes traffic with corrupt",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 1ms corrupt 10%"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7e05",
+        "name": "NETEM passes traffic under HTB with two netem leaves",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 root handle 1: htb default 10",
+            "$TC class add dev $DEV1 parent 1: classid 1:10 htb rate 10mbit",
+            "$TC class add dev $DEV1 parent 1: classid 1:20 htb rate 10mbit",
+            "$TC qdisc add dev $DEV1 parent 1:10 handle 10: netem delay 1ms duplicate 25%",
+            "$TC qdisc add dev $DEV1 parent 1:20 handle 20: netem delay 1ms duplicate 25%"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7f06",
+        "name": "NETEM passes traffic under HFSC with duplication",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 root handle 1: hfsc default 1",
+            "$TC class add dev $DEV1 parent 1: classid 1:1 hfsc rt m2 10mbit",
+            "$TC qdisc add dev $DEV1 parent 1:1 handle 10: netem delay 1ms duplicate 25%"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7a07",
+        "name": "NETEM passes traffic with nested netem",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 root handle 1: netem delay 1ms",
+            "$TC qdisc add dev $DEV1 parent 1:1 handle 10: netem delay 1ms duplicate 10%"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7b08",
+        "name": "NETEM passes traffic with TBF child",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 root handle 1: netem delay 1ms",
+            "$TC qdisc add dev $DEV1 parent 1:1 handle 10: tbf rate 1mbit burst 10kb latency 50ms"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7c09",
+        "name": "NETEM passes traffic with all impairments",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 1ms 500us distribution normal loss 5% duplicate 10% corrupt 1% reorder 25% 50% gap 5"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 50,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7d0a",
+        "name": "NETEM passes traffic with reorder",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 10ms reorder 25% 50% gap 5"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 30,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7e0b",
+        "name": "NETEM passes traffic with slot pacing",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 1ms slot 20ms 40ms packets 5 bytes 1500"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 1",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7f0c",
+        "name": "NETEM passes traffic with rate limiting",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 handle 1: root netem delay 1ms rate 1mbit"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
+    },
+    {
+        "id": "7a0d",
+        "name": "NETEM passes traffic with SFQ child",
+        "category": ["qdisc", "netem"],
+        "plugins": {
+            "requires": ["nsPlugin", "scapyPlugin"]
+        },
+        "setup": [
+            "$TC qdisc add dev $DEV1 root handle 1: netem delay 1ms",
+            "$TC qdisc add dev $DEV1 parent 1:1 handle 10: sfq perturb 10"
+        ],
+        "scapy": [
+            {
+                "iface": "$DEV0",
+                "count": 20,
+                "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/UDP(sport=5000,dport=5001)/Raw('X'*64)"
+            }
+        ],
+        "cmdUnderTest": "sleep 0.5",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s qdisc show dev $DEV1",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "2",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 handle 1: root"
+        ]
     }
 ]
