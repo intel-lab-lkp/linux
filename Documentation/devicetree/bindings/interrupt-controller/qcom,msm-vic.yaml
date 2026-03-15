@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: GPL-2.0
+# qualcomm,msm-vic.yaml - Device Tree binding for Qualcomm MSM VIC interrupt controller
+
+description: >
+  Qualcomm MSM VIC (Vector Interrupt Controller). This interrupt controller
+  handles normal and wakeup interrupts and supports mapping to the
+  Qualcomm SMSM system.
+
+compatible: ["qcom,msm-vic"]
+
+properties:
+  interrupt-controller:
+    description: "Identifies this node as an interrupt controller"
+    required: true
+    type: boolean
+
+  #interrupt-cells:
+    description: "Specifies the number of cells needed to encode an interrupt"
+    required: true
+    type: integer
+    default: 1
+
+  reg:
+    description: "Base address and size of the VIC registers"
+    required: true
+    type: reg
+
+  num-irqs:
+    description: "Total number of interrupts supported by this VIC"
+    required: true
+    type: integer
+
+  num-gpio-irqs:
+    description: "Number of GPIO interrupts routed through this VIC"
+    required: true
+    type: integer
+
+  vic-num-regs:
+    description: "Number of VIC register banks"
+    required: true
+    type: integer
+
+  irq-mapping:
+    description:
+      Mapping of VIC IRQ numbers to SMSM wakeup channels. Each mapping
+      consists of two integers: <VIC IRQ> <SMSM channel>.  
+      "SMSM_FAKE_IRQ" can be used for virtual/fake wakeup interrupts.
+    required: true
+    type: list
+    items:
+      - vic-irq: integer
+        smsm-channel: integer
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/qcom-vic.h>
+    intc: interrupt-controller@ac000000 {
+        compatible = "qcom,msm-vic";
+        interrupt-controller;
+        #interrupt-cells = <1>;
+        reg = <0xac000000 0x1000>;
+        num-irqs = <64>;
+        num-gpio-irqs = <165>;
+        vic-num-regs = <2>;
+        irq-mapping = <
+            17 1   /* INT_MDDI_EXT -> SMSM 1 */
+            16 2   /* INT_MDDI_PRI -> SMSM 2 */
+            18 3   /* INT_MDDI_CLIENT -> SMSM 3 */
+            15 4   /* INT_USB_OTG -> SMSM 4 */
+            0 SMSM_FAKE_IRQ   /* INT_A9_M2A_0 -> SMSM_FAKE_IRQ */
+        >;
+    }
