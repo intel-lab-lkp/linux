@@ -21892,6 +21892,12 @@ S:	Supported
 W:	https://wireless.wiki.kernel.org/en/users/Drivers/wcn36xx
 F:	drivers/net/wireless/ath/wcn36xx/
 
+QUALCOMM VECTORED INTERRUPT CONTROLLER (VIC) DRIVER
+M:	j0sh1x <aljoshua.hell@gmail.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/interrupt-controller/qcom,msm-vic.yaml
+F:	drivers/irqchip/irq-msm-vic.c
+
 QUANTENNA QTNFMAC WIRELESS DRIVER
 M:	Igor Mitsyanko <imitsyanko@quantenna.com>
 R:	Sergey Matyukevich <geomatsi@gmail.com>
