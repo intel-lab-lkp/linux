@@ -180,6 +180,9 @@ struct scan_control {
 
 	/* for recording the reclaimed slab by now */
 	struct reclaim_state reclaim_state;
+
+	/* whether in lru gen scan context */
+	unsigned int lru_gen:1;
 };
 
 #ifdef ARCH_HAS_PREFETCHW
@@ -685,7 +688,7 @@ static pageout_t pageout(struct folio *folio, struct address_space *mapping,
  * gets returned with a refcount of 0.
  */
 static int __remove_mapping(struct address_space *mapping, struct folio *folio,
-			    bool reclaimed, struct mem_cgroup *target_memcg)
+	bool reclaimed, struct mem_cgroup *target_memcg, struct scan_control *sc)
 {
 	int refcount;
 	void *shadow = NULL;
@@ -739,7 +742,7 @@ static int __remove_mapping(struct address_space *mapping, struct folio *folio,
 		swp_entry_t swap = folio->swap;
 
 		if (reclaimed && !mapping_exiting(mapping))
-			shadow = workingset_eviction(folio, target_memcg);
+			shadow = workingset_eviction(folio, target_memcg, sc->lru_gen);
 		memcg1_swapout(folio, swap);
 		__swap_cache_del_folio(ci, folio, swap, shadow);
 		swap_cluster_unlock_irq(ci);
@@ -765,7 +768,7 @@ static int __remove_mapping(struct address_space *mapping, struct folio *folio,
 		 */
 		if (reclaimed && folio_is_file_lru(folio) &&
 		    !mapping_exiting(mapping) && !dax_mapping(mapping))
-			shadow = workingset_eviction(folio, target_memcg);
+			shadow = workingset_eviction(folio, target_memcg, sc->lru_gen);
 		__filemap_remove_folio(folio, shadow);
 		xa_unlock_irq(&mapping->i_pages);
 		if (mapping_shrinkable(mapping))
@@ -802,7 +805,7 @@ cannot_free:
  */
 long remove_mapping(struct address_space *mapping, struct folio *folio)
 {
-	if (__remove_mapping(mapping, folio, false, NULL)) {
+	if (__remove_mapping(mapping, folio, false, NULL, NULL)) {
 		/*
 		 * Unfreezing the refcount with 1 effectively
 		 * drops the pagecache ref for us without requiring another
@@ -1499,7 +1502,7 @@ retry:
 			count_vm_events(PGLAZYFREED, nr_pages);
 			count_memcg_folio_events(folio, PGLAZYFREED, nr_pages);
 		} else if (!mapping || !__remove_mapping(mapping, folio, true,
-							 sc->target_mem_cgroup))
+							 sc->target_mem_cgroup, sc))
 			goto keep_locked;
 
 		folio_unlock(folio);
@@ -1599,6 +1602,7 @@ unsigned int reclaim_clean_pages_from_list(struct zone *zone,
 	struct scan_control sc = {
 		.gfp_mask = GFP_KERNEL,
 		.may_unmap = 1,
+		.lru_gen = lru_gen_enabled(),
 	};
 	struct reclaim_stat stat;
 	unsigned int nr_reclaimed;
@@ -1993,6 +1997,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	if (nr_taken == 0)
 		return 0;
 
+	sc->lru_gen = 0;
 	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false,
 					 lruvec_memcg(lruvec));
 
@@ -2167,6 +2172,7 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
 		.may_unmap = 1,
 		.may_swap = 1,
 		.no_demotion = 1,
+		.lru_gen = lru_gen_enabled(),
 	};
 
 	nr_reclaimed = shrink_folio_list(folio_list, pgdat, &sc, &stat, true, NULL);
@@ -4864,6 +4870,7 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	if (list_empty(&list))
 		return scanned;
 retry:
+	sc->lru_gen = 1;
 	reclaimed = shrink_folio_list(&list, pgdat, sc, &stat, false, memcg);
 	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
 	sc->nr_reclaimed += reclaimed;
