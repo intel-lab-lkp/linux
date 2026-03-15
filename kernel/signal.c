@@ -386,8 +386,8 @@ static bool task_participate_group_stop(struct task_struct *task)
 
 void task_join_group_stop(struct task_struct *task)
 {
-	unsigned long mask = current->jobctl & JOBCTL_STOP_SIGMASK;
-	struct signal_struct *sig = current->signal;
+	unsigned long mask = task->jobctl & JOBCTL_STOP_SIGMASK;
+	struct signal_struct *sig = task->signal;
 
 	if (sig->group_stop_count) {
 		sig->group_stop_count++;
