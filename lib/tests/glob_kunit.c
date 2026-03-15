@@ -157,8 +157,85 @@ static void glob_test_match(struct kunit *test)
 			    params->pat, params->str, params->expected);
 }
 
+/* Case-insensitive matching tests */
+static const struct glob_test_case glob_nocase_test_cases[] = {
+	{ .pat = "abc", .str = "ABC", .expected = true },
+	{ .pat = "ABC", .str = "abc", .expected = true },
+	{ .pat = "aBc", .str = "AbC", .expected = true },
+	{ .pat = "a*c", .str = "ABC", .expected = true },
+	{ .pat = "A?C", .str = "abc", .expected = true },
+	{ .pat = "[A-Z]", .str = "m", .expected = true },
+	{ .pat = "[a-z]", .str = "M", .expected = true },
+	{ .pat = "abc", .str = "abd", .expected = false },
+	{ .pat = "ABC", .str = "ABD", .expected = false },
+	{ .pat = "a*z", .str = "ABZ", .expected = true },
+	{ .pat = "\\A", .str = "a", .expected = true },
+};
+
+KUNIT_ARRAY_PARAM(glob_nocase, glob_nocase_test_cases, glob_case_to_desc);
+
+static void glob_test_match_nocase(struct kunit *test)
+{
+	const struct glob_test_case *params = test->param_value;
+
+	KUNIT_EXPECT_EQ_MSG(test,
+			    glob_match_nocase(params->pat, params->str),
+			    params->expected,
+			    "nocase Pattern: \"%s\", String: \"%s\", Expected: %d",
+			    params->pat, params->str, params->expected);
+}
+
+/* Pattern validation tests */
+struct glob_validate_case {
+	const char *pat;
+	bool expected;
+};
+
+static const struct glob_validate_case glob_validate_test_cases[] = {
+	{ .pat = "abc", .expected = true },
+	{ .pat = "*", .expected = true },
+	{ .pat = "?", .expected = true },
+	{ .pat = "[abc]", .expected = true },
+	{ .pat = "[!abc]", .expected = true },
+	{ .pat = "[^abc]", .expected = true },
+	{ .pat = "[a-z]", .expected = true },
+	{ .pat = "[]abc]", .expected = true },
+	{ .pat = "\\*", .expected = true },
+	{ .pat = "\\\\", .expected = true },
+	{ .pat = "", .expected = true },
+	/* Invalid patterns */
+	{ .pat = "[", .expected = false },
+	{ .pat = "[abc", .expected = false },
+	{ .pat = "[!abc", .expected = false },
+	{ .pat = "abc\\", .expected = false },
+	{ .pat = "\\", .expected = false },
+	{ .pat = "abc[def", .expected = false },
+};
+
+static void glob_validate_case_to_desc(const struct glob_validate_case *t,
+				       char *desc)
+{
+	snprintf(desc, KUNIT_PARAM_DESC_SIZE, "pat:\"%s\"", t->pat);
+}
+
+KUNIT_ARRAY_PARAM(glob_validate, glob_validate_test_cases,
+		  glob_validate_case_to_desc);
+
+static void glob_test_validate(struct kunit *test)
+{
+	const struct glob_validate_case *params = test->param_value;
+
+	KUNIT_EXPECT_EQ_MSG(test,
+			    glob_validate(params->pat),
+			    params->expected,
+			    "validate Pattern: \"%s\", Expected: %d",
+			    params->pat, params->expected);
+}
+
 static struct kunit_case glob_kunit_test_cases[] = {
 	KUNIT_CASE_PARAM(glob_test_match, glob_gen_params),
+	KUNIT_CASE_PARAM(glob_test_match_nocase, glob_nocase_gen_params),
+	KUNIT_CASE_PARAM(glob_test_validate, glob_validate_gen_params),
 	{}
 };
 
