@@ -180,7 +180,8 @@ static inline unsigned closure_nr_remaining(struct closure *cl)
 }
 
 /**
- * closure_sync - sleep until a closure a closure has nothing left to wait on
+ * closure_sync - sleep until a closure has nothing left to wait on
+ * @cl: closure to wait on
  *
  * Sleeps until the refcount hits 1 - the thread that's running the closure owns
  * the last refcount.
@@ -272,6 +273,7 @@ static inline void closure_queue(struct closure *cl)
 
 /**
  * closure_get - increment a closure's refcount
+ * @cl: closure to increment the refcount of
  */
 static inline void closure_get(struct closure *cl)
 {
@@ -286,7 +288,8 @@ static inline void closure_get(struct closure *cl)
 }
 
 /**
- * closure_get_not_zero
+ * closure_get_not_zero - increment a closure's refcount if non-zero
+ * @cl: closure to increment the refcount of
  */
 static inline bool closure_get_not_zero(struct closure *cl)
 {
@@ -341,6 +344,7 @@ static inline void closure_init_stack_release(struct closure *cl)
 /**
  * closure_wake_up - wake up all closures on a wait list,
  *		     with memory barrier
+ * @list: wait list to wake up
  */
 static inline void closure_wake_up(struct closure_waitlist *list)
 {
@@ -356,8 +360,11 @@ static inline void closure_wake_up(struct closure_waitlist *list)
 
 /**
  * continue_at - jump to another function with barrier
+ * @_cl: closure to set the continuation on
+ * @_fn: function to resume execution at
+ * @_wq: workqueue to run @_fn out of (or NULL for synchronous)
  *
- * After @cl is no longer waiting on anything (i.e. all outstanding refs have
+ * After @_cl is no longer waiting on anything (i.e. all outstanding refs have
  * been dropped with closure_put()), it will resume execution at @fn running out
  * of @wq (or, if @wq is NULL, @fn will be called by closure_put() directly).
  *
@@ -375,8 +382,9 @@ do {									\
 
 /**
  * closure_return - finish execution of a closure
+ * @_cl: closure to return from
  *
- * This is used to indicate that @cl is finished: when all outstanding refs on
+ * This is used to indicate that @_cl is finished: when all outstanding refs on
  * @cl have been dropped @cl's ref on its parent closure (as passed to
  * closure_init()) will be dropped, if one was specified - thus this can be
  * thought of as returning to the parent closure.
@@ -387,8 +395,11 @@ void closure_return_sync(struct closure *cl);
 
 /**
  * continue_at_nobarrier - jump to another function without barrier
+ * @_cl: closure to set the continuation on
+ * @_fn: function to resume execution at
+ * @_wq: workqueue to run @_fn out of (or NULL for synchronous)
  *
- * Causes @fn to be executed out of @cl, in @wq context (or called directly if
+ * Causes @_fn to be executed out of @_cl, in @_wq context (or called directly if
  * @wq is NULL).
  *
  * The ref the caller of continue_at_nobarrier() had on @cl is now owned by @fn,
@@ -404,8 +415,10 @@ do {									\
 /**
  * closure_return_with_destructor - finish execution of a closure,
  *				    with destructor
+ * @_cl: closure to return from
+ * @_destructor: function to call when all refs are dropped
  *
- * Works like closure_return(), except @destructor will be called when all
+ * Works like closure_return(), except @_destructor will be called when all
  * outstanding refs on @cl have been dropped; @destructor may be used to safely
  * free the memory occupied by @cl, and it is called with the ref on the parent
  * closure still held - so @destructor could safely return an item to a
@@ -419,6 +432,10 @@ do {									\
 
 /**
  * closure_call - execute @fn out of a new, uninitialized closure
+ * @cl: closure to initialize and run
+ * @fn: function to execute
+ * @wq: workqueue to run @fn out of (or NULL for synchronous)
+ * @parent: parent closure, @cl will take a refcount on it (may be NULL)
  *
  * Typically used when running out of one closure, and we want to run @fn
  * asynchronously out of a new closure - @parent will then wait for @cl to
