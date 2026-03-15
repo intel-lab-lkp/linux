@@ -75,13 +75,19 @@ struct vdso_sym {
 };
 
 struct vdso_sym required_syms[] = {
-	{"VDSO32_NOTE_MASK", true},
-	{"__kernel_vsyscall", true},
-	{"__kernel_sigreturn", true},
-	{"__kernel_rt_sigreturn", true},
-	{"int80_landing_pad", true},
-	{"vdso32_rt_sigreturn_landing_pad", true},
-	{"vdso32_sigreturn_landing_pad", true},
+	{"VDSO32_NOTE_MASK",				true},
+	{"__kernel_vsyscall",				true},
+	{"__kernel_sigreturn",				true},
+	{"__kernel_rt_sigreturn",			true},
+	{"int80_landing_pad",				true},
+	{"vdso32_rt_sigreturn_landing_pad",		true},
+	{"vdso32_sigreturn_landing_pad",		true},
+	{"x86_64_futex_try_unlock_cs_start",		true},
+	{"x86_64_futex_try_unlock_cs_end",		true},
+	{"x86_64_compat_futex_try_unlock_cs_start",	true},
+	{"x86_64_compat_futex_try_unlock_cs_end",	true},
+	{"x86_32_futex_try_unlock_cs_start",		true},
+	{"x86_32_futex_try_unlock_cs_end",		true},
 };
 
 __attribute__((format(printf, 1, 2))) __attribute__((noreturn))

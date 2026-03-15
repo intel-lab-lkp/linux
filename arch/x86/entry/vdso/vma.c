@@ -73,6 +73,38 @@ static void vdso_fix_landing(const struct vdso_image *image,
 		regs->ip = new_vma->vm_start + ipoffset;
 }
 
+#ifdef CONFIG_FUTEX_ROBUST_UNLOCK
+static void vdso_futex_robust_unlock_update_ips(void)
+{
+	const struct vdso_image *image = current->mm->context.vdso_image;
+	unsigned long vdso = (unsigned long) current->mm->context.vdso;
+	struct futex_mm_data *fd = &current->mm->futex;
+	struct futex_unlock_cs_range *csr = fd->unlock_cs_ranges;
+
+	fd->unlock_cs_num_ranges = 0;
+#ifdef CONFIG_X86_64
+	if (image->sym_x86_64_futex_try_unlock_cs_start) {
+		csr->start_ip = vdso + image->sym_x86_64_futex_try_unlock_cs_start;
+		csr->end_ip = vdso + image->sym_x86_64_futex_try_unlock_cs_end;
+		csr->pop_size32 = 0;
+		csr++;
+		fd->unlock_cs_num_ranges++;
+	}
+#endif /* CONFIG_X86_64 */
+
+#if defined(CONFIG_X86_32) || defined(CONFIG_COMPAT)
+	if (image->sym_x86_32_futex_try_unlock_cs_start) {
+		csr->start_ip = vdso + image->sym_x86_32_futex_try_unlock_cs_start;
+		csr->end_ip = vdso + image->sym_x86_32_futex_try_unlock_cs_end;
+		csr->pop_size32 = 1;
+		fd->unlock_cs_num_ranges++;
+	}
+#endif /* CONFIG_X86_32 || CONFIG_COMPAT */
+}
+#else
+static inline void vdso_futex_robust_unlock_update_ips(void) { }
+#endif
+
 static int vdso_mremap(const struct vm_special_mapping *sm,
 		struct vm_area_struct *new_vma)
 {
@@ -80,6 +112,7 @@ static int vdso_mremap(const struct vm_special_mapping *sm,
 
 	vdso_fix_landing(image, new_vma);
 	current->mm->context.vdso = (void __user *)new_vma->vm_start;
+	vdso_futex_robust_unlock_update_ips();
 
 	return 0;
 }
@@ -188,6 +221,8 @@ static int map_vdso(const struct vdso_image *image, unsigned long addr)
 
 	current->mm->context.vdso = (void __user *)text_start;
 	current->mm->context.vdso_image = image;
+
+	vdso_futex_robust_unlock_update_ips();
 
 up_fail:
 	mmap_write_unlock(mm);
