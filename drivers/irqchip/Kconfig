@@ -522,6 +522,12 @@ config QCOM_MPM
 	  MSM Power Manager driver to manage and configure wakeup
 	  IRQs for Qualcomm Technologies Inc (QTI) mobile chips.
 
+config ARM_MSM_VIC
+	tristate "QCOM ARM VIC"
+	select IRQ_DOMAIN
+	help
+	  QCOM Vectored Interrupt Controller driver for MSM platforms.
+
 config CSKY_MPINTC
 	bool
 	depends on CSKY
