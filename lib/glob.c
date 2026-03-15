@@ -112,7 +112,8 @@ bool __pure glob_match(char const *pat, char const *str)
 			}
 			break;
 		case '\\':
-			d = *pat++;
+			if (*pat != '\0')
+				d = *pat++;
 			fallthrough;
 		default:	/* Literal character */
 literal:
