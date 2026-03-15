@@ -190,8 +190,8 @@ of idleness (busy, idle and newly idle):
 /proc/<pid>/schedstat
 ---------------------
 schedstats also adds a new /proc/<pid>/schedstat file to include some of
-the same information on a per-process level.  There are three fields in
-this file correlating for that process to:
+the same information on a per-task level.  There are three fields in
+this file correlating for that task to:
 
      1) time spent on the cpu (in nanoseconds)
      2) time spent waiting on a runqueue (in nanoseconds)
