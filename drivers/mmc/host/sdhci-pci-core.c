@@ -916,6 +916,13 @@ static bool jsl_broken_hs400es(struct sdhci_pci_slot *slot)
 			dmi_match(DMI_BIOS_VENDOR, "ASUSTeK COMPUTER INC.");
 }
 
+static bool sdhci_pci_is_lenovo_n22_bsw_sd(struct sdhci_pci_slot *slot)
+{
+	return slot->chip->pdev->device == PCI_DEVICE_ID_INTEL_BSW_SD &&
+	       dmi_match(DMI_SYS_VENDOR, "LENOVO") &&
+	       dmi_match(DMI_BOARD_NAME, "N22");
+}
+
 static int glk_emmc_probe_slot(struct sdhci_pci_slot *slot)
 {
 	int ret = byt_emmc_probe_slot(slot);
@@ -1113,9 +1120,13 @@ static void byt_needs_pwr_off(struct sdhci_pci_slot *slot)
 
 static int byt_sd_probe_slot(struct sdhci_pci_slot *slot)
 {
+	bool runtime_pm_ok = !sdhci_pci_is_lenovo_n22_bsw_sd(slot);
+
 	byt_probe_slot(slot);
-	slot->host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY |
-				 MMC_CAP_AGGRESSIVE_PM | MMC_CAP_CD_WAKE;
+	slot->host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY;
+	if (runtime_pm_ok)
+		slot->host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM |
+					 MMC_CAP_CD_WAKE;
 	slot->cd_idx = 0;
 	slot->cd_override_level = true;
 	if (slot->chip->pdev->device == PCI_DEVICE_ID_INTEL_BXT_SD ||
@@ -1128,7 +1139,10 @@ static int byt_sd_probe_slot(struct sdhci_pci_slot *slot)
 	    slot->chip->pdev->subsystem_device == PCI_SUBDEVICE_ID_NI_78E3)
 		slot->host->mmc->caps2 |= MMC_CAP2_AVOID_3_3V;
 
-	byt_needs_pwr_off(slot);
+	if (runtime_pm_ok)
+		byt_needs_pwr_off(slot);
+	else
+		slot->chip->allow_runtime_pm = false;
 
 	return 0;
 }
