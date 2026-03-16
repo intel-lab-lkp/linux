@@ -35,12 +35,6 @@ properties:
         $ref: video-interfaces.yaml#
         unevaluatedProperties: false
 
-        properties:
-          hsync-active: true
-          vsync-active: true
-          pclk-sample: true
-          bus-type: true
-
   clocks:
     minItems: 1
     items:

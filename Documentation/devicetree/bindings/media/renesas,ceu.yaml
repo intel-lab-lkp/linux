@@ -43,9 +43,6 @@ properties:
         unevaluatedProperties: false
 
         properties:
-          hsync-active: true
-          vsync-active: true
-          field-even-active: false
           bus-width:
             enum: [8, 16]
             default: 8

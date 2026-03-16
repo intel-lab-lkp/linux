@@ -95,12 +95,6 @@ properties:
             $ref: video-interfaces.yaml#
             unevaluatedProperties: false
 
-            properties:
-              hsync-active: true
-              vsync-active: true
-              bus-width: true
-              data-shift: true
-
       port@1:
         $ref: /schemas/graph.yaml#/properties/port
         description:
