@@ -75,7 +75,7 @@ static irqreturn_t qcom_ipcc_irq_fn(int irq, void *data)
 {
 	struct qcom_ipcc *ipcc = data;
 	u32 hwirq;
-	int virq;
+	int virq, ret;
 
 	for (;;) {
 		hwirq = readl(ipcc->base + IPCC_REG_RECV_ID);
@@ -83,8 +83,14 @@ static irqreturn_t qcom_ipcc_irq_fn(int irq, void *data)
 			break;
 
 		virq = irq_find_mapping(ipcc->irq_domain, hwirq);
+		if (unlikely(!virq))
+			return IRQ_NONE;
+
 		writel(hwirq, ipcc->base + IPCC_REG_RECV_SIGNAL_CLEAR);
-		generic_handle_irq(virq);
+
+		ret = generic_handle_irq(virq);
+		if (unlikely(ret))
+			return IRQ_NONE;
 	}
 
 	return IRQ_HANDLED;
