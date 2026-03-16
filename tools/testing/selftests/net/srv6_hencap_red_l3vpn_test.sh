@@ -345,6 +345,10 @@ setup_rt_networking()
 		ip -netns "${nsname}" addr \
 			add "${net_prefix}::${rt}/64" dev "${devname}" nodad
 
+		ip -netns "${nsname}" addr \
+			add "${net_prefix}::dead:${rt}/64" dev "${devname}" \
+			nodad preferred_lft 0
+
 		ip -netns "${nsname}" link set "${devname}" up
 	done
 
@@ -419,7 +423,8 @@ setup_rt_local_sids()
 #  $4 - SRv6 router configured for removing the SRv6 Policy (router connected
 #       to the destination host)
 #  $5 - encap mode (full or red)
-#  $6 - traffic type (IPv6 or IPv4)
+#  $6 - force tunsrc (true or false)
+#  $7 - traffic type (IPv6 or IPv4)
 __setup_rt_policy()
 {
 	local dst="$1"
@@ -427,10 +432,39 @@ __setup_rt_policy()
 	local end_rts="$3"
 	local dec_rt="$4"
 	local mode="$5"
-	local traffic="$6"
+	local with_tunsrc="$6"
+	local traffic="$7"
 	local nsname
 	local policy=''
+	local tunsrc=''
 	local n
+
+	if [ "$with_tunsrc" = "true" ]; then
+		local net_prefix
+		local drule
+		local nxt
+
+		[ "$end_rts" = "" ] && nxt="${dec_rt}" || nxt="${end_rts%% *}"
+
+		net_prefix="$(get_network_prefix "${encap_rt}" "${nxt}")"
+		tunsrc="tunsrc ${net_prefix}::dead:${encap_rt}"
+
+		eval nsname=\${$(get_rtname "${dec_rt}")}
+
+		drule="PREROUTING \
+		       -d ${VPN_LOCATOR_SERVICE}:${dec_rt}::${DT46_FUNC} \
+		       -j DROP"
+
+		if ! ip netns exec "${nsname}" \
+			ip6tables -t raw -C ${drule} &>/dev/null; then
+			ip netns exec "${nsname}" ip6tables -t raw -A ${drule}
+		fi
+
+		ip netns exec "${nsname}" ip6tables -t raw -I PREROUTING 1 \
+			-s "${net_prefix}::dead:${encap_rt}" \
+			-d ${VPN_LOCATOR_SERVICE}:${dec_rt}::${DT46_FUNC} \
+			-j ACCEPT
+	fi
 
 	eval nsname=\${$(get_rtname "${encap_rt}")}
 
@@ -444,7 +478,7 @@ __setup_rt_policy()
 	if [ "${traffic}" -eq 6 ]; then
 		ip -netns "${nsname}" -6 route \
 			add "${IPv6_HS_NETWORK}::${dst}" vrf "${VRF_DEVNAME}" \
-			encap seg6 mode "${mode}" segs "${policy}" \
+			encap seg6 mode "${mode}" ${tunsrc} segs "${policy}" \
 			dev "${VRF_DEVNAME}"
 
 		ip -netns "${nsname}" -6 neigh \
@@ -455,7 +489,7 @@ __setup_rt_policy()
 		# received, otherwise the proxy arp does not work.
 		ip -netns "${nsname}" -4 route \
 			add "${IPv4_HS_NETWORK}.${dst}" vrf "${VRF_DEVNAME}" \
-			encap seg6 mode "${mode}" segs "${policy}" \
+			encap seg6 mode "${mode}" ${tunsrc} segs "${policy}" \
 			dev "${VRF_DEVNAME}"
 	fi
 }
@@ -463,13 +497,13 @@ __setup_rt_policy()
 # see __setup_rt_policy
 setup_rt_policy_ipv6()
 {
-	__setup_rt_policy "$1" "$2" "$3" "$4" "$5" 6
+	__setup_rt_policy "$1" "$2" "$3" "$4" "$5" "$6" 6
 }
 
 #see __setup_rt_policy
 setup_rt_policy_ipv4()
 {
-	__setup_rt_policy "$1" "$2" "$3" "$4" "$5" 4
+	__setup_rt_policy "$1" "$2" "$3" "$4" "$5" "$6" 4
 }
 
 setup_hs()
@@ -567,41 +601,41 @@ setup()
 	# the network path between hs-1 and hs-2 traverses several routers
 	# depending on the direction of traffic.
 	#
-	# Direction hs-1 -> hs-2 (H.Encaps.Red)
+	# Direction hs-1 -> hs-2 (H.Encaps.Red + tunsrc)
 	#  - rt-3,rt-4 (SRv6 End behaviors)
 	#  - rt-2 (SRv6 End.DT46 behavior)
 	#
 	# Direction hs-2 -> hs-1 (H.Encaps.Red)
 	#  - rt-1 (SRv6 End.DT46 behavior)
-	setup_rt_policy_ipv6 2 1 "3 4" 2 encap.red
-	setup_rt_policy_ipv6 1 2 "" 1 encap.red
+	setup_rt_policy_ipv6 2 1 "3 4" 2 encap.red true
+	setup_rt_policy_ipv6 1 2 "" 1 encap.red false
 
 	# create an IPv4 VPN between hosts hs-1 and hs-2
 	# the network path between hs-1 and hs-2 traverses several routers
 	# depending on the direction of traffic.
 	#
-	# Direction hs-1 -> hs-2 (H.Encaps.Red)
+	# Direction hs-1 -> hs-2 (H.Encaps.Red + tunsrc)
 	# - rt-2 (SRv6 End.DT46 behavior)
 	#
 	# Direction hs-2 -> hs-1 (H.Encaps.Red)
 	#  - rt-4,rt-3 (SRv6 End behaviors)
 	#  - rt-1 (SRv6 End.DT46 behavior)
-	setup_rt_policy_ipv4 2 1 "" 2 encap.red
-	setup_rt_policy_ipv4 1 2 "4 3" 1 encap.red
+	setup_rt_policy_ipv4 2 1 "" 2 encap.red true
+	setup_rt_policy_ipv4 1 2 "4 3" 1 encap.red false
 
 	# create an IPv6 VPN between hosts hs-3 and hs-4
 	# the network path between hs-3 and hs-4 traverses several routers
 	# depending on the direction of traffic.
 	#
-	# Direction hs-3 -> hs-4 (H.Encaps.Red)
+	# Direction hs-3 -> hs-4 (H.Encaps.Red + tunsrc)
 	# - rt-2 (SRv6 End Behavior)
 	# - rt-4 (SRv6 End.DT46 behavior)
 	#
 	# Direction hs-4 -> hs-3 (H.Encaps.Red)
 	#  - rt-1 (SRv6 End behavior)
 	#  - rt-3 (SRv6 End.DT46 behavior)
-	setup_rt_policy_ipv6 4 3 "2" 4 encap.red
-	setup_rt_policy_ipv6 3 4 "1" 3 encap.red
+	setup_rt_policy_ipv6 4 3 "2" 4 encap.red true
+	setup_rt_policy_ipv6 3 4 "1" 3 encap.red false
 
 	# testing environment was set up successfully
 	SETUP_ERR=0
@@ -819,6 +853,7 @@ test_command_or_ksft_skip ip
 test_command_or_ksft_skip ping
 test_command_or_ksft_skip sysctl
 test_command_or_ksft_skip grep
+test_command_or_ksft_skip ip6tables
 
 test_iproute2_supp_or_ksft_skip
 test_vrf_or_ksft_skip
