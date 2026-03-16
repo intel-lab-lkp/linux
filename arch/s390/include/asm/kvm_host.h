@@ -516,6 +516,8 @@ struct kvm_s390_crypto {
 	__u8 apie;
 };
 
+#define APCB_NUM_MASKS 3
+
 #define APCB0_MASK_SIZE 1
 struct kvm_s390_apcb0 {
 	__u64 apm[APCB0_MASK_SIZE];		/* 0x0000 */
@@ -539,6 +541,10 @@ struct kvm_s390_crypto_cb {
 	__u8   aes_wrapping_key_mask[32];	/* 0x0060 */
 	struct kvm_s390_apcb1 apcb1;		/* 0x0080 */
 };
+
+#define APCB_KEY_MASK_SIZE \
+	(sizeof_field(struct kvm_s390_crypto_cb, dea_wrapping_key_mask) + \
+	 sizeof_field(struct kvm_s390_crypto_cb, aes_wrapping_key_mask))
 
 struct kvm_s390_gisa {
 	union {

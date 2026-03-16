@@ -155,17 +155,17 @@ static int prepare_cpuflags(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 	atomic_set(&scb_s->cpuflags, newflags);
 	return 0;
 }
+
 /* Copy to APCB FORMAT1 from APCB FORMAT0 */
 static int setup_apcb10(struct kvm_vcpu *vcpu, struct kvm_s390_apcb1 *apcb_s,
-			unsigned long crycb_gpa, struct kvm_s390_apcb1 *apcb_h)
+			gpa_t crycb_gpa, struct kvm_s390_apcb1 *apcb_h)
 {
 	struct kvm_s390_apcb0 tmp;
-	unsigned long apcb_gpa;
+	gpa_t apcb_gpa;
 
 	apcb_gpa = crycb_gpa + offsetof(struct kvm_s390_crypto_cb, apcb0);
 
-	if (read_guest_real(vcpu, apcb_gpa, &tmp,
-			    sizeof(struct kvm_s390_apcb0)))
+	if (read_guest_abs(vcpu, apcb_gpa, &tmp, sizeof(tmp)))
 		return -EFAULT;
 
 	apcb_s->apm[0] = apcb_h->apm[0] & tmp.apm[0];
@@ -173,7 +173,6 @@ static int setup_apcb10(struct kvm_vcpu *vcpu, struct kvm_s390_apcb1 *apcb_s,
 	apcb_s->adm[0] = apcb_h->adm[0] & tmp.adm[0] & 0xffff000000000000UL;
 
 	return 0;
-
 }
 
 /**
@@ -186,18 +185,18 @@ static int setup_apcb10(struct kvm_vcpu *vcpu, struct kvm_s390_apcb1 *apcb_s,
  * Returns 0 and -EFAULT on error reading guest apcb
  */
 static int setup_apcb00(struct kvm_vcpu *vcpu, unsigned long *apcb_s,
-			unsigned long crycb_gpa, unsigned long *apcb_h)
+			gpa_t crycb_gpa, unsigned long *apcb_h)
 {
-	unsigned long apcb_gpa;
+	/* sizeof() would include reserved fields which we do not need/want */
+	unsigned long len = APCB_NUM_MASKS * APCB0_MASK_SIZE * sizeof(u64);
+	gpa_t apcb_gpa;
 
 	apcb_gpa = crycb_gpa + offsetof(struct kvm_s390_crypto_cb, apcb0);
 
-	if (read_guest_real(vcpu, apcb_gpa, apcb_s,
-			    sizeof(struct kvm_s390_apcb0)))
+	if (read_guest_abs(vcpu, apcb_gpa, apcb_s, len))
 		return -EFAULT;
 
-	bitmap_and(apcb_s, apcb_s, apcb_h,
-		   BITS_PER_BYTE * sizeof(struct kvm_s390_apcb0));
+	bitmap_and(apcb_s, apcb_s, apcb_h, BITS_PER_BYTE * len);
 
 	return 0;
 }
@@ -212,19 +211,18 @@ static int setup_apcb00(struct kvm_vcpu *vcpu, unsigned long *apcb_s,
  * Returns 0 and -EFAULT on error reading guest apcb
  */
 static int setup_apcb11(struct kvm_vcpu *vcpu, unsigned long *apcb_s,
-			unsigned long crycb_gpa,
-			unsigned long *apcb_h)
+			gpa_t crycb_gpa, unsigned long *apcb_h)
 {
-	unsigned long apcb_gpa;
+	/* sizeof() would include reserved fields which we do not need/want */
+	unsigned long len = APCB_NUM_MASKS * APCB1_MASK_SIZE * sizeof(u64);
+	gpa_t apcb_gpa;
 
 	apcb_gpa = crycb_gpa + offsetof(struct kvm_s390_crypto_cb, apcb1);
 
-	if (read_guest_real(vcpu, apcb_gpa, apcb_s,
-			    sizeof(struct kvm_s390_apcb1)))
+	if (read_guest_abs(vcpu, apcb_gpa, apcb_s, len))
 		return -EFAULT;
 
-	bitmap_and(apcb_s, apcb_s, apcb_h,
-		   BITS_PER_BYTE * sizeof(struct kvm_s390_apcb1));
+	bitmap_and(apcb_s, apcb_s, apcb_h, BITS_PER_BYTE * len);
 
 	return 0;
 }
@@ -244,8 +242,7 @@ static int setup_apcb11(struct kvm_vcpu *vcpu, unsigned long *apcb_s,
  * Return 0 or an error number if the guest and host crycb are incompatible.
  */
 static int setup_apcb(struct kvm_vcpu *vcpu, struct kvm_s390_crypto_cb *crycb_s,
-	       const u32 crycb_gpa,
-	       struct kvm_s390_crypto_cb *crycb_h,
+	       const gpa_t crycb_gpa, struct kvm_s390_crypto_cb *crycb_h,
 	       int fmt_o, int fmt_h)
 {
 	switch (fmt_o) {
@@ -315,7 +312,8 @@ static int shadow_crycb(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 	struct kvm_s390_sie_block *scb_s = &vsie_page->scb_s;
 	struct kvm_s390_sie_block *scb_o = vsie_page->scb_o;
 	const uint32_t crycbd_o = READ_ONCE(scb_o->crycbd);
-	const u32 crycb_addr = crycbd_o & 0x7ffffff8U;
+	/* CRYCB origin is a 31 bit absolute address with a bit of masking */
+	const gpa_t crycb_addr = crycbd_o & 0x7ffffff8U;
 	unsigned long *b1, *b2;
 	u8 ecb3_flags;
 	u32 ecd_flags;
@@ -359,8 +357,9 @@ static int shadow_crycb(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 		goto end;
 
 	/* copy only the wrapping keys */
-	if (read_guest_real(vcpu, crycb_addr + 72,
-			    vsie_page->crycb.dea_wrapping_key_mask, 56))
+	if (read_guest_abs(vcpu,
+			   crycb_addr + offsetof(struct kvm_s390_crypto_cb, dea_wrapping_key_mask),
+			   vsie_page->crycb.dea_wrapping_key_mask, APCB_KEY_MASK_SIZE))
 		return set_validity_icpt(scb_s, 0x0035U);
 
 	scb_s->ecb3 |= ecb3_flags;
@@ -368,10 +367,9 @@ static int shadow_crycb(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 
 	/* xor both blocks in one run */
 	b1 = (unsigned long *) vsie_page->crycb.dea_wrapping_key_mask;
-	b2 = (unsigned long *)
-			    vcpu->kvm->arch.crypto.crycb->dea_wrapping_key_mask;
+	b2 = (unsigned long *) vcpu->kvm->arch.crypto.crycb->dea_wrapping_key_mask;
 	/* as 56%8 == 0, bitmap_xor won't overwrite any data */
-	bitmap_xor(b1, b1, b2, BITS_PER_BYTE * 56);
+	bitmap_xor(b1, b1, b2, BITS_PER_BYTE * APCB_KEY_MASK_SIZE);
 end:
 	switch (ret) {
 	case -EINVAL:
