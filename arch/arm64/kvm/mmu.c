@@ -388,13 +388,12 @@ static void stage2_flush_vm(struct kvm *kvm)
  */
 void __init free_hyp_pgds(void)
 {
-	mutex_lock(&kvm_hyp_pgd_mutex);
+	guard(mutex)(&kvm_hyp_pgd_mutex);
 	if (hyp_pgtable) {
 		kvm_pgtable_hyp_destroy(hyp_pgtable);
 		kfree(hyp_pgtable);
 		hyp_pgtable = NULL;
 	}
-	mutex_unlock(&kvm_hyp_pgd_mutex);
 }
 
 static bool kvm_host_owns_hyp_mappings(void)
@@ -421,16 +420,11 @@ static bool kvm_host_owns_hyp_mappings(void)
 int __create_hyp_mappings(unsigned long start, unsigned long size,
 			  unsigned long phys, enum kvm_pgtable_prot prot)
 {
-	int err;
-
 	if (WARN_ON(!kvm_host_owns_hyp_mappings()))
 		return -EINVAL;
 
-	mutex_lock(&kvm_hyp_pgd_mutex);
-	err = kvm_pgtable_hyp_map(hyp_pgtable, start, size, phys, prot);
-	mutex_unlock(&kvm_hyp_pgd_mutex);
-
-	return err;
+	guard(mutex)(&kvm_hyp_pgd_mutex);
+	return kvm_pgtable_hyp_map(hyp_pgtable, start, size, phys, prot);
 }
 
 static phys_addr_t kvm_kaddr_to_phys(void *kaddr)
@@ -478,56 +472,42 @@ static int share_pfn_hyp(u64 pfn)
 {
 	struct rb_node **node, *parent;
 	struct hyp_shared_pfn *this;
-	int ret = 0;
 
-	mutex_lock(&hyp_shared_pfns_lock);
+	guard(mutex)(&hyp_shared_pfns_lock);
 	this = find_shared_pfn(pfn, &node, &parent);
 	if (this) {
 		this->count++;
-		goto unlock;
+		return 0;
 	}
 
 	this = kzalloc_obj(*this);
-	if (!this) {
-		ret = -ENOMEM;
-		goto unlock;
-	}
+	if (!this)
+		return -ENOMEM;
 
 	this->pfn = pfn;
 	this->count = 1;
 	rb_link_node(&this->node, parent, node);
 	rb_insert_color(&this->node, &hyp_shared_pfns);
-	ret = kvm_call_hyp_nvhe(__pkvm_host_share_hyp, pfn);
-unlock:
-	mutex_unlock(&hyp_shared_pfns_lock);
-
-	return ret;
+	return kvm_call_hyp_nvhe(__pkvm_host_share_hyp, pfn);
 }
 
 static int unshare_pfn_hyp(u64 pfn)
 {
 	struct rb_node **node, *parent;
 	struct hyp_shared_pfn *this;
-	int ret = 0;
 
-	mutex_lock(&hyp_shared_pfns_lock);
+	guard(mutex)(&hyp_shared_pfns_lock);
 	this = find_shared_pfn(pfn, &node, &parent);
-	if (WARN_ON(!this)) {
-		ret = -ENOENT;
-		goto unlock;
-	}
+	if (WARN_ON(!this))
+		return -ENOENT;
 
 	this->count--;
 	if (this->count)
-		goto unlock;
+		return 0;
 
 	rb_erase(&this->node, &hyp_shared_pfns);
 	kfree(this);
-	ret = kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp, pfn);
-unlock:
-	mutex_unlock(&hyp_shared_pfns_lock);
-
-	return ret;
+	return kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp, pfn);
 }
 
 int kvm_share_hyp(void *from, void *to)
@@ -652,22 +632,20 @@ int hyp_alloc_private_va_range(size_t size, unsigned long *haddr)
 	unsigned long base;
 	int ret = 0;
 
-	mutex_lock(&kvm_hyp_pgd_mutex);
-
-	/*
-	 * This assumes that we have enough space below the idmap
-	 * page to allocate our VAs. If not, the check in
-	 * __hyp_alloc_private_va_range() will kick. A potential
-	 * alternative would be to detect that overflow and switch
-	 * to an allocation above the idmap.
-	 *
-	 * The allocated size is always a multiple of PAGE_SIZE.
-	 */
-	size = PAGE_ALIGN(size);
-	base = io_map_base - size;
-	ret = __hyp_alloc_private_va_range(base);
-
-	mutex_unlock(&kvm_hyp_pgd_mutex);
+	scoped_guard(mutex, &kvm_hyp_pgd_mutex) {
+		/*
+		 * This assumes that we have enough space below the idmap
+		 * page to allocate our VAs. If not, the check in
+		 * __hyp_alloc_private_va_range() will kick. A potential
+		 * alternative would be to detect that overflow and switch
+		 * to an allocation above the idmap.
+		 *
+		 * The allocated size is always a multiple of PAGE_SIZE.
+		 */
+		size = PAGE_ALIGN(size);
+		base = io_map_base - size;
+		ret = __hyp_alloc_private_va_range(base);
+	}
 
 	if (!ret)
 		*haddr = base;
@@ -711,17 +689,16 @@ int create_hyp_stack(phys_addr_t phys_addr, unsigned long *haddr)
 	size_t size;
 	int ret;
 
-	mutex_lock(&kvm_hyp_pgd_mutex);
-	/*
-	 * Efficient stack verification using the NVHE_STACK_SHIFT bit implies
-	 * an alignment of our allocation on the order of the size.
-	 */
-	size = NVHE_STACK_SIZE * 2;
-	base = ALIGN_DOWN(io_map_base - size, size);
+	scoped_guard(mutex, &kvm_hyp_pgd_mutex) {
+		/*
+		 * Efficient stack verification using the NVHE_STACK_SHIFT bit implies
+		 * an alignment of our allocation on the order of the size.
+		 */
+		size = NVHE_STACK_SIZE * 2;
+		base = ALIGN_DOWN(io_map_base - size, size);
 
-	ret = __hyp_alloc_private_va_range(base);
-
-	mutex_unlock(&kvm_hyp_pgd_mutex);
+		ret = __hyp_alloc_private_va_range(base);
+	}
 
 	if (ret) {
 		kvm_err("Cannot allocate hyp stack guard page\n");
