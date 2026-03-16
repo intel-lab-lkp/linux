@@ -18,6 +18,9 @@ description: |
   GPIO interfaces and is typically complemented by S2MPG10 PMIC in a main/sub
   configuration as the main PMIC.
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     const: samsung,s2mpg10-pmic
@@ -35,8 +38,6 @@ properties:
     $ref: /schemas/regulator/samsung,s2mpg10-regulator.yaml
     description:
       List of child nodes that specify the regulators.
-
-  system-power-controller: true
 
   wakeup-source: true
 
@@ -71,7 +72,7 @@ required:
   - interrupts
   - regulators
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
