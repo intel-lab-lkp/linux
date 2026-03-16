@@ -4,7 +4,7 @@
  * Portions Copyright (C) 2000-2008 Silicon Graphics, Inc.
  */
 
-#include "xfs.h"
+#include "xfs_platform.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
 #include "xfs_log_format.h"
@@ -243,7 +243,7 @@ __xfs_xattr_put_listent(
 	offset = context->buffer + context->count;
 	memcpy(offset, prefix, prefix_len);
 	offset += prefix_len;
-	strncpy(offset, (char *)name, namelen);			/* real name */
+	memcpy(offset, (char *)name, namelen);			/* real name */
 	offset += namelen;
 	*offset = '\0';
 

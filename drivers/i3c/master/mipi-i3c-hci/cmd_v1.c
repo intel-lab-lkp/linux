@@ -15,7 +15,6 @@
 #include "dat.h"
 #include "dct.h"
 
-
 /*
  * Address Assignment Command
  */
@@ -99,7 +98,6 @@
 #define CMD_M0_MIPI_CMD				   W0_MASK(11,  8)
 #define CMD_M0_VENDOR_INFO_PRESENT		   W0_BIT_( 7)
 #define CMD_M0_TID(v)			FIELD_PREP(W0_MASK( 6,  3), v)
-
 
 /* Data Transfer Speed and Mode */
 enum hci_cmd_mode {
@@ -317,7 +315,9 @@ static int hci_cmd_v1_daa(struct i3c_hci *hci)
 			break;
 		next_addr = ret;
 
-		DBG("next_addr = 0x%02x, DAA using DAT %d", next_addr, dat_idx);
+		dev_dbg(&hci->master.dev,
+			"next_addr = 0x%02x, DAA using DAT %d",
+			next_addr, dat_idx);
 		mipi_i3c_hci_dat_v1.set_dynamic_addr(hci, dat_idx, next_addr);
 		mipi_i3c_hci_dct_index_reset(hci);
 
@@ -349,8 +349,9 @@ static int hci_cmd_v1_daa(struct i3c_hci *hci)
 		}
 
 		i3c_hci_dct_get_val(hci, 0, &pid, &dcr, &bcr);
-		DBG("assigned address %#x to device PID=0x%llx DCR=%#x BCR=%#x",
-		    next_addr, pid, dcr, bcr);
+		dev_dbg(&hci->master.dev,
+			"assigned address %#x to device PID=0x%llx DCR=%#x BCR=%#x",
+			next_addr, pid, dcr, bcr);
 
 		mipi_i3c_hci_dat_v1.free_entry(hci, dat_idx);
 		dat_idx = -1;

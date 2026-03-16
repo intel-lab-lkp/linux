@@ -60,7 +60,7 @@ enum iwl_legacy_cmds {
 	 * @UCODE_ALIVE_NTFY:
 	 * Alive data from the firmware, as described in
 	 * &struct iwl_alive_ntf_v3 or &struct iwl_alive_ntf_v4 or
-	 * &struct iwl_alive_ntf_v5 or &struct iwl_alive_ntf_v6.
+	 * &struct iwl_alive_ntf_v5 or &struct iwl_alive_ntf_v7.
 	 */
 	UCODE_ALIVE_NTFY = 0x1,
 
@@ -573,9 +573,8 @@ enum iwl_legacy_cmds {
 	WOWLAN_KEK_KCK_MATERIAL = 0xe4,
 
 	/**
-	 * @WOWLAN_GET_STATUSES: response in &struct iwl_wowlan_status_v6,
-	 *	&struct iwl_wowlan_status_v7, &struct iwl_wowlan_status_v9 or
-	 *	&struct iwl_wowlan_status_v12
+	 * @WOWLAN_GET_STATUSES: response in &struct iwl_wowlan_status_v6 or
+	 *	&struct iwl_wowlan_status_v7
 	 */
 	WOWLAN_GET_STATUSES = 0xe5,
 

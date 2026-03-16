@@ -17,6 +17,9 @@ static bool nbp_switchdev_can_offload_tx_fwd(const struct net_bridge_port *p,
 	if (!static_branch_unlikely(&br_switchdev_tx_fwd_offload))
 		return false;
 
+	if (br_multicast_igmp_type(skb))
+		return false;
+
 	return (p->flags & BR_TX_FWD_OFFLOAD) &&
 	       (p->hwdom != BR_INPUT_SKB_CB(skb)->src_hwdom);
 }
@@ -658,7 +661,7 @@ void br_switchdev_mdb_notify(struct net_device *dev,
 	mdb.obj.orig_dev = pg->key.port->dev;
 	switch (type) {
 	case RTM_NEWMDB:
-		complete_info = kmalloc(sizeof(*complete_info), GFP_ATOMIC);
+		complete_info = kmalloc_obj(*complete_info, GFP_ATOMIC);
 		if (!complete_info)
 			break;
 		complete_info->port = pg->key.port;
@@ -834,7 +837,7 @@ int br_switchdev_port_offload(struct net_bridge_port *p,
 	struct netdev_phys_item_id ppid;
 	int err;
 
-	err = dev_get_port_parent_id(dev, &ppid, false);
+	err = netif_get_port_parent_id(dev, &ppid, false);
 	if (err)
 		return err;
 

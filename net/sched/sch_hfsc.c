@@ -835,22 +835,6 @@ update_vf(struct hfsc_class *cl, unsigned int len, u64 cur_time)
 	}
 }
 
-static unsigned int
-qdisc_peek_len(struct Qdisc *sch)
-{
-	struct sk_buff *skb;
-	unsigned int len;
-
-	skb = sch->ops->peek(sch);
-	if (unlikely(skb == NULL)) {
-		qdisc_warn_nonwc("qdisc_peek_len", sch);
-		return 0;
-	}
-	len = qdisc_pkt_len(skb);
-
-	return len;
-}
-
 static void
 hfsc_adjust_levels(struct hfsc_class *cl)
 {
@@ -1041,7 +1025,7 @@ hfsc_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 	if (rsc == NULL && fsc == NULL)
 		return -EINVAL;
 
-	cl = kzalloc(sizeof(struct hfsc_class), GFP_KERNEL);
+	cl = kzalloc_obj(struct hfsc_class);
 	if (cl == NULL)
 		return -ENOBUFS;
 

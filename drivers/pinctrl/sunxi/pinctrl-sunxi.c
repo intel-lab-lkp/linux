@@ -408,6 +408,7 @@ static int sunxi_pctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
 	const char *function, *pin_prop;
 	const char *group;
 	int ret, npins, nmaps, configlen = 0, i = 0;
+	struct pinctrl_map *new_map;
 
 	*map = NULL;
 	*num_maps = 0;
@@ -434,7 +435,7 @@ static int sunxi_pctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
 	 * any configuration.
 	 */
 	nmaps = npins * 2;
-	*map = kmalloc_array(nmaps, sizeof(struct pinctrl_map), GFP_KERNEL);
+	*map = kmalloc_objs(struct pinctrl_map, nmaps);
 	if (!*map)
 		return -ENOMEM;
 
@@ -482,9 +483,13 @@ static int sunxi_pctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
 	 * We know have the number of maps we need, we can resize our
 	 * map array
 	 */
-	*map = krealloc(*map, i * sizeof(struct pinctrl_map), GFP_KERNEL);
-	if (!*map)
-		return -ENOMEM;
+	new_map = krealloc(*map, i * sizeof(struct pinctrl_map), GFP_KERNEL);
+	if (!new_map) {
+		ret = -ENOMEM;
+		goto err_free_map;
+	}
+
+	*map = new_map;
 
 	return 0;
 
@@ -955,8 +960,8 @@ static int sunxi_pinctrl_gpio_get(struct gpio_chip *chip, unsigned offset)
 	return val;
 }
 
-static void sunxi_pinctrl_gpio_set(struct gpio_chip *chip,
-				unsigned offset, int value)
+static int sunxi_pinctrl_gpio_set(struct gpio_chip *chip, unsigned int offset,
+				  int value)
 {
 	struct sunxi_pinctrl *pctl = gpiochip_get_data(chip);
 	u32 reg, shift, mask, val;
@@ -976,6 +981,8 @@ static void sunxi_pinctrl_gpio_set(struct gpio_chip *chip,
 	writel(val, pctl->membase + reg);
 
 	raw_spin_unlock_irqrestore(&pctl->lock, flags);
+
+	return 0;
 }
 
 static int sunxi_pinctrl_gpio_direction_output(struct gpio_chip *chip,
@@ -1321,9 +1328,7 @@ static int sunxi_pinctrl_build_state(struct platform_device *pdev)
 	 * special functions per pin, plus one entry for the sentinel.
 	 * We'll reallocate that later anyway.
 	 */
-	pctl->functions = kcalloc(7 * pctl->ngroups + 4,
-				  sizeof(*pctl->functions),
-				  GFP_KERNEL);
+	pctl->functions = kzalloc_objs(*pctl->functions, 7 * pctl->ngroups + 4);
 	if (!pctl->functions)
 		return -ENOMEM;
 
@@ -1646,7 +1651,7 @@ int sunxi_pinctrl_init_with_flags(struct platform_device *pdev,
 		}
 	}
 
-	pctl->domain = irq_domain_create_linear(of_fwnode_handle(node),
+	pctl->domain = irq_domain_create_linear(dev_fwnode(&pdev->dev),
 						pctl->desc->irq_banks * IRQ_PER_BANK,
 						&sunxi_pinctrl_irq_domain_ops, pctl);
 	if (!pctl->domain) {

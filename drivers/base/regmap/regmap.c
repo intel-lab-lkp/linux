@@ -408,9 +408,11 @@ static void regmap_lock_hwlock_irq(void *__map)
 static void regmap_lock_hwlock_irqsave(void *__map)
 {
 	struct regmap *map = __map;
+	unsigned long flags = 0;
 
 	hwspin_lock_timeout_irqsave(map->hwlock, UINT_MAX,
-				    &map->spinlock_flags);
+				    &flags);
+	map->spinlock_flags = flags;
 }
 
 static void regmap_unlock_hwlock(void *__map)
@@ -687,7 +689,7 @@ struct regmap *__regmap_init(struct device *dev,
 	if (!config)
 		goto err;
 
-	map = kzalloc(sizeof(*map), GFP_KERNEL);
+	map = kzalloc_obj(*map);
 	if (map == NULL) {
 		ret = -ENOMEM;
 		goto err;
@@ -811,6 +813,7 @@ struct regmap *__regmap_init(struct device *dev,
 	map->precious_reg = config->precious_reg;
 	map->writeable_noinc_reg = config->writeable_noinc_reg;
 	map->readable_noinc_reg = config->readable_noinc_reg;
+	map->reg_default_cb = config->reg_default_cb;
 	map->cache_type = config->cache_type;
 
 	spin_lock_init(&map->async_lock);
@@ -827,7 +830,7 @@ struct regmap *__regmap_init(struct device *dev,
 		map->read_flag_mask = bus->read_flag_mask;
 	}
 
-	if (config && config->read && config->write) {
+	if (config->read && config->write) {
 		map->reg_read  = _regmap_bus_read;
 		if (config->reg_update_bits)
 			map->reg_update_bits = config->reg_update_bits;
@@ -1114,7 +1117,7 @@ skip_format_initialization:
 			}
 		}
 
-		new = kzalloc(sizeof(*new), GFP_KERNEL);
+		new = kzalloc_obj(*new);
 		if (new == NULL) {
 			ret = -ENOMEM;
 			goto err_range;
@@ -1173,6 +1176,8 @@ err_name:
 err_map:
 	kfree(map);
 err:
+	if (bus && bus->free_on_exit)
+		kfree(bus);
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(__regmap_init);
@@ -1269,7 +1274,7 @@ int regmap_field_bulk_alloc(struct regmap *regmap,
 	struct regmap_field *rf;
 	int i;
 
-	rf = kcalloc(num_fields, sizeof(*rf), GFP_KERNEL);
+	rf = kzalloc_objs(*rf, num_fields);
 	if (!rf)
 		return -ENOMEM;
 
@@ -1379,7 +1384,7 @@ EXPORT_SYMBOL_GPL(devm_regmap_field_free);
 struct regmap_field *regmap_field_alloc(struct regmap *regmap,
 		struct reg_field reg_field)
 {
-	struct regmap_field *rm_field = kzalloc(sizeof(*rm_field), GFP_KERNEL);
+	struct regmap_field *rm_field = kzalloc_obj(*rm_field);
 
 	if (!rm_field)
 		return ERR_PTR(-ENOMEM);
@@ -1431,6 +1436,7 @@ int regmap_reinit_cache(struct regmap *map, const struct regmap_config *config)
 	map->precious_reg = config->precious_reg;
 	map->writeable_noinc_reg = config->writeable_noinc_reg;
 	map->readable_noinc_reg = config->readable_noinc_reg;
+	map->reg_default_cb = config->reg_default_cb;
 	map->cache_type = config->cache_type;
 
 	ret = regmap_set_name(map, config);
@@ -2256,12 +2262,14 @@ EXPORT_SYMBOL_GPL(regmap_field_update_bits_base);
  * @field: Register field to operate on
  * @bits: Bits to test
  *
- * Returns -1 if the underlying regmap_field_read() fails, 0 if at least one of the
- * tested bits is not set and 1 if all tested bits are set.
+ * Returns negative errno if the underlying regmap_field_read() fails,
+ * 0 if at least one of the tested bits is not set and 1 if all tested
+ * bits are set.
  */
 int regmap_field_test_bits(struct regmap_field *field, unsigned int bits)
 {
-	unsigned int val, ret;
+	unsigned int val;
+	int ret;
 
 	ret = regmap_field_read(field, &val);
 	if (ret)
@@ -3307,7 +3315,8 @@ EXPORT_SYMBOL_GPL(regmap_update_bits_base);
  */
 int regmap_test_bits(struct regmap *map, unsigned int reg, unsigned int bits)
 {
-	unsigned int val, ret;
+	unsigned int val;
+	int ret;
 
 	ret = regmap_read(map, reg, &val);
 	if (ret)
