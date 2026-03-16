@@ -116,12 +116,20 @@ static struct irq_chip qcom_ipcc_irq_chip = {
 static int qcom_ipcc_domain_map(struct irq_domain *d, unsigned int irq,
 				irq_hw_number_t hw)
 {
+	int ret;
 	struct qcom_ipcc *ipcc = d->host_data;
 
-	irq_set_chip_and_handler(irq, &qcom_ipcc_irq_chip, handle_level_irq);
-	irq_set_chip_data(irq, ipcc);
-	irq_set_noprobe(irq);
+	ret = irq_set_chip(irq, &qcom_ipcc_irq_chip);
+	if (ret)
+		return ret;
 
+	irq_set_handler(irq, handle_level_irq);
+
+	ret = irq_set_chip_data(irq, ipcc);
+	if (ret)
+		return ret;
+
+	irq_set_noprobe(irq);
 	return 0;
 }
 
