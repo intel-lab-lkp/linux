@@ -401,12 +401,18 @@ do_unlock:
  * idpf_vc_xn_push_free - Push a free transaction to free list
  * @vcxn_mngr: transaction manager to push to
  * @xn: transaction to push
+ *
+ * Callers must ensure idpf_vc_xn_release_bufs() has been called (under
+ * idpf_vc_xn_lock) before invoking this function. This function must
+ * be called without holding idpf_vc_xn_lock to avoid nesting a sleepable
+ * spinlock inside a raw_spinlock on PREEMPT_RT kernels.
  */
 static void idpf_vc_xn_push_free(struct idpf_vc_xn_manager *vcxn_mngr,
 				 struct idpf_vc_xn *xn)
 {
-	idpf_vc_xn_release_bufs(xn);
+	spin_lock_bh(&vcxn_mngr->xn_bm_lock);
 	set_bit(xn->idx, vcxn_mngr->free_xn_bm);
+	spin_unlock_bh(&vcxn_mngr->xn_bm_lock);
 }
 
 /**
@@ -428,6 +434,7 @@ ssize_t idpf_vc_xn_exec(struct idpf_adapter *adapter,
 			const struct idpf_vc_xn_params *params)
 {
 	const struct kvec *send_buf = &params->send_buf;
+	bool push_free = false;
 	struct idpf_vc_xn *xn;
 	ssize_t retval;
 	u16 cookie;
@@ -514,10 +521,13 @@ ssize_t idpf_vc_xn_exec(struct idpf_adapter *adapter,
 	}
 
 release_and_unlock:
-	idpf_vc_xn_push_free(adapter->vcxn_mngr, xn);
+	idpf_vc_xn_release_bufs(xn);
+	push_free = true;
 	/* If we receive a VC reply after here, it will be dropped. */
 only_unlock:
 	idpf_vc_xn_unlock(xn);
+	if (push_free)
+		idpf_vc_xn_push_free(adapter->vcxn_mngr, xn);
 
 	return retval;
 }
@@ -559,7 +569,7 @@ idpf_vc_xn_forward_async(struct idpf_adapter *adapter, struct idpf_vc_xn *xn,
 	}
 
 release_bufs:
-	idpf_vc_xn_push_free(adapter->vcxn_mngr, xn);
+	idpf_vc_xn_release_bufs(xn);
 
 	return err;
 }
@@ -619,6 +629,7 @@ idpf_vc_xn_forward_reply(struct idpf_adapter *adapter,
 	case IDPF_VC_XN_ASYNC:
 		err = idpf_vc_xn_forward_async(adapter, xn, ctlq_msg);
 		idpf_vc_xn_unlock(xn);
+		idpf_vc_xn_push_free(adapter->vcxn_mngr, xn);
 		return err;
 	default:
 		dev_err_ratelimited(&adapter->pdev->dev, "Overwriting VC reply (op %d)\n",
