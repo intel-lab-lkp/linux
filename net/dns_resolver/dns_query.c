@@ -66,43 +66,33 @@ int dns_query(struct net *net,
 {
 	struct key *rkey;
 	struct user_key_payload *upayload;
-	size_t typelen, desclen;
-	char *desc, *cp;
+	char *desc;
 	int ret, len;
 
 	kenter("%s,%*.*s,%zu,%s",
 	       type, (int)namelen, (int)namelen, name, namelen, options);
 
-	if (!name || namelen == 0)
+	if (!name || namelen < 3 || namelen > 255)
 		return -EINVAL;
 
 	/* construct the query key description as "[<type>:]<name>" */
-	typelen = 0;
-	desclen = 0;
-	if (type) {
-		typelen = strlen(type);
-		if (typelen < 1)
+	if (!type) {
+		desc = kmemdup_nul(name, namelen, GFP_KERNEL);
+		if (!desc)
+			return -ENOMEM;
+	} else {
+		size_t desclen = strlen(type);
+
+		if (desclen == 0)
 			return -EINVAL;
-		desclen += typelen + 1;
+
+		desclen += 1 + namelen + 1;
+		desc = kmalloc(desclen, GFP_KERNEL);
+		if (!desc)
+			return -ENOMEM;
+
+		snprintf(desc, desclen, "%s:%.*s", type, (int)namelen, name);
 	}
-
-	if (namelen < 3 || namelen > 255)
-		return -EINVAL;
-	desclen += namelen + 1;
-
-	desc = kmalloc(desclen, GFP_KERNEL);
-	if (!desc)
-		return -ENOMEM;
-
-	cp = desc;
-	if (type) {
-		memcpy(cp, type, typelen);
-		cp += typelen;
-		*cp++ = ':';
-	}
-	memcpy(cp, name, namelen);
-	cp += namelen;
-	*cp = '\0';
 
 	if (!options)
 		options = "";
