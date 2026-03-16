@@ -379,6 +379,7 @@ static void zloop_rw_complete(struct kiocb *iocb, long ret)
 }
 
 static void zloop_rw(struct zloop_cmd *cmd)
+	__no_context_analysis /* conditional locking */
 {
 	struct request *rq = blk_mq_rq_from_pdu(cmd);
 	struct zloop_device *zlo = rq->q->queuedata;
