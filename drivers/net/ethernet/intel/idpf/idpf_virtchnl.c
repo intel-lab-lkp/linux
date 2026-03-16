@@ -546,32 +546,24 @@ static int
 idpf_vc_xn_forward_async(struct idpf_adapter *adapter, struct idpf_vc_xn *xn,
 			 const struct idpf_ctlq_msg *ctlq_msg)
 {
-	int err = 0;
-
 	if (ctlq_msg->cookie.mbx.chnl_opcode != xn->vc_op) {
 		dev_err_ratelimited(&adapter->pdev->dev, "Async message opcode does not match transaction opcode (msg: %d) (xn: %d)\n",
 				    ctlq_msg->cookie.mbx.chnl_opcode, xn->vc_op);
 		xn->reply_sz = 0;
-		err = -EINVAL;
-		goto release_bufs;
+		return -EINVAL;
 	}
 
-	if (xn->async_handler) {
-		err = xn->async_handler(adapter, xn, ctlq_msg);
-		goto release_bufs;
-	}
+	if (xn->async_handler)
+		return xn->async_handler(adapter, xn, ctlq_msg);
 
 	if (ctlq_msg->cookie.mbx.chnl_retval) {
 		xn->reply_sz = 0;
 		dev_err_ratelimited(&adapter->pdev->dev, "Async message failure (op %d)\n",
 				    ctlq_msg->cookie.mbx.chnl_opcode);
-		err = -EINVAL;
+		return -EINVAL;
 	}
 
-release_bufs:
-	idpf_vc_xn_release_bufs(xn);
-
-	return err;
+	return 0;
 }
 
 /**
@@ -631,7 +623,10 @@ idpf_vc_xn_forward_reply(struct idpf_adapter *adapter,
 		 * can evaluate the response.
 		 */
 		xn->reply_sz = ctlq_msg->data_len;
+		idpf_vc_xn_unlock(xn);
 		err = idpf_vc_xn_forward_async(adapter, xn, ctlq_msg);
+		idpf_vc_xn_lock(xn);
+		idpf_vc_xn_release_bufs(xn);
 		idpf_vc_xn_unlock(xn);
 		idpf_vc_xn_push_free(adapter->vcxn_mngr, xn);
 		return err;
