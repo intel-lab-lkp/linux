@@ -261,13 +261,20 @@ static bool pme_is_native(struct pcie_device *dev)
 	return pcie_ports_native || host->native_pme;
 }
 
+static bool pme_is_broken(struct pcie_device *pcie)
+{
+	struct pci_dev *pdev = pcie->port;
+
+	return !!(pdev->dev_flags & PCI_DEV_FLAGS_PME_UNRELIABLE);
+}
+
 static void pciehp_disable_interrupt(struct pcie_device *dev)
 {
 	/*
 	 * Disable hotplug interrupt so that it does not trigger
 	 * immediately when the downstream link goes down.
 	 */
-	if (pme_is_native(dev))
+	if (pme_is_native(dev) && !pme_is_broken(dev))
 		pcie_disable_interrupt(get_service_data(dev));
 }
 
@@ -319,7 +326,7 @@ static int pciehp_resume(struct pcie_device *dev)
 {
 	struct controller *ctrl = get_service_data(dev);
 
-	if (pme_is_native(dev))
+	if (pme_is_native(dev) && !pme_is_broken(dev))
 		pcie_enable_interrupt(ctrl);
 
 	pciehp_check_presence(ctrl);

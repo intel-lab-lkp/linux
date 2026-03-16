@@ -6383,3 +6383,63 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+/*
+ * Some PCIe root ports have a hardware issue where PME-based wakeup
+ * from D3hot is unreliable. This can manifest as either PME interrupts
+ * not being delivered, or PME status registers (PME Status and PME
+ * Requester_ID in Root Status) not being reliably updated even when
+ * interrupts are delivered.
+ *
+ * When a hotplug event occurs while the port is in D3hot, the system
+ * relies on PME to wake the port back to D0. If PME notification or
+ * status updates are unreliable, the PME handler either doesn't get
+ * invoked or cannot identify the event source. This leaves the port in
+ * D3hot with hotplug interrupts disabled, causing hotplug events to be
+ * missed.
+ *
+ * Mark affected ports with PCI_DEV_FLAGS_PME_UNRELIABLE to keep
+ * hotplug interrupts (HPIE) enabled during D3hot instead of relying on
+ * PME-based wakeup. This allows hotplug events to be delivered via
+ * direct interrupts while still permitting the port to enter D3hot for
+ * power savings.
+ *
+ * Known affected hardware:
+ * - Intel Catlow Lake PCH PCIe root ports: PME status registers are
+ *   not updated during D3hot to D0 transitions, even though PME
+ *   interrupts are delivered correctly.
+ */
+static void quirk_pcie_pme_unreliable(struct pci_dev *dev)
+{
+	dev->dev_flags |= PCI_DEV_FLAGS_PME_UNRELIABLE;
+	pci_info(dev, "PME status unreliable, keeping hotplug interrupts enabled in D3hot\n");
+}
+/* Apply quirk to Catlow Lake PCH root ports (0x7a30 - 0x7a4b) */
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a30, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a31, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a32, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a33, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a34, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a35, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a36, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a37, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a38, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a39, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a3a, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a3b, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a3c, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a3d, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a3e, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a3f, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a40, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a41, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a42, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a43, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a44, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a45, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a46, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a47, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a48, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a49, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a4a, quirk_pcie_pme_unreliable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x7a4b, quirk_pcie_pme_unreliable);
