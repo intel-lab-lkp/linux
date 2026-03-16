@@ -38,7 +38,11 @@ struct genl_info;
  * struct genl_family - generic netlink family
  * @hdrsize: length of user specific header in bytes
  * @name: name of family
- * @version: protocol version
+ * @version: Only supported version (alias of min_version)
+ * @min_version: lowest protocol version supported
+ * @max_version: highest protocol version supported; when set and
+ *	greater than @min_version the family accepts versions
+ *	[@min_version, @max_version] from userspace
  * @maxattr: maximum number of attributes supported
  * @policy: netlink policy
  * @netnsok: set to true if the family can handle network
@@ -78,7 +82,11 @@ struct genl_info;
 struct genl_family {
 	unsigned int		hdrsize;
 	char			name[GENL_NAMSIZ];
-	unsigned int		version;
+	union {
+		unsigned int	version;
+		unsigned int	min_version;
+	};
+	unsigned int		max_version;
 	unsigned int		maxattr;
 	u8			netnsok:1;
 	u8			parallel_ops:1;
@@ -335,12 +343,19 @@ void genl_notify(const struct genl_family *family, struct sk_buff *skb,
 
 void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
 		  const struct genl_family *family, int flags, u8 cmd);
+void *genlmsg_put_ver(struct sk_buff *skb, u32 portid, u32 seq,
+		      const struct genl_family *family, int flags,
+		      u8 cmd, u8 version);
 
 static inline void *
 __genlmsg_iput(struct sk_buff *skb, const struct genl_info *info, int flags)
 {
-	return genlmsg_put(skb, info->snd_portid, info->snd_seq, info->family,
-			   flags, info->genlhdr->cmd);
+	u8 version = info->nlhdr ? info->genlhdr->version
+				 : info->family->version;
+
+	return genlmsg_put_ver(skb, info->snd_portid, info->snd_seq,
+			       info->family, flags, info->genlhdr->cmd,
+			       version);
 }
 
 /**
@@ -442,8 +457,8 @@ static inline void *genlmsg_put_reply(struct sk_buff *skb,
 				      const struct genl_family *family,
 				      int flags, u8 cmd)
 {
-	return genlmsg_put(skb, info->snd_portid, info->snd_seq, family,
-			   flags, cmd);
+	return genlmsg_put_ver(skb, info->snd_portid, info->snd_seq, family,
+			       flags, cmd, info->genlhdr->version);
 }
 
 /**

@@ -880,6 +880,43 @@ int genl_unregister_family(const struct genl_family *family)
 EXPORT_SYMBOL(genl_unregister_family);
 
 /**
+ * genlmsg_put_ver - Add generic netlink header with explicit version
+ * @skb: socket buffer holding the message
+ * @portid: netlink portid the message is addressed to
+ * @seq: sequence number (usually the one of the sender)
+ * @family: generic netlink family
+ * @flags: netlink message flags
+ * @cmd: generic netlink command
+ * @version: protocol version to stamp on the message
+ *
+ * Like genlmsg_put() but allows the caller to specify the version field
+ * in the genetlink header.  Useful for families that support multiple
+ * protocol versions and need to send notifications in a specific version.
+ *
+ * Returns: pointer to user specific header, or %NULL on failure.
+ */
+void *genlmsg_put_ver(struct sk_buff *skb, u32 portid, u32 seq,
+		      const struct genl_family *family, int flags,
+		      u8 cmd, u8 version)
+{
+	struct nlmsghdr *nlh;
+	struct genlmsghdr *hdr;
+
+	nlh = nlmsg_put(skb, portid, seq, family->id, GENL_HDRLEN +
+			family->hdrsize, flags);
+	if (nlh == NULL)
+		return NULL;
+
+	hdr = nlmsg_data(nlh);
+	hdr->cmd = cmd;
+	hdr->version = version;
+	hdr->reserved = 0;
+
+	return (char *) hdr + GENL_HDRLEN;
+}
+EXPORT_SYMBOL(genlmsg_put_ver);
+
+/**
  * genlmsg_put - Add generic netlink header to netlink message
  * @skb: socket buffer holding the message
  * @portid: netlink portid the message is addressed to
@@ -893,20 +930,8 @@ EXPORT_SYMBOL(genl_unregister_family);
 void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
 		  const struct genl_family *family, int flags, u8 cmd)
 {
-	struct nlmsghdr *nlh;
-	struct genlmsghdr *hdr;
-
-	nlh = nlmsg_put(skb, portid, seq, family->id, GENL_HDRLEN +
-			family->hdrsize, flags);
-	if (nlh == NULL)
-		return NULL;
-
-	hdr = nlmsg_data(nlh);
-	hdr->cmd = cmd;
-	hdr->version = family->version;
-	hdr->reserved = 0;
-
-	return (char *) hdr + GENL_HDRLEN;
+	return genlmsg_put_ver(skb, portid, seq, family, flags, cmd,
+			       family->version);
 }
 EXPORT_SYMBOL(genlmsg_put);
 
@@ -1237,7 +1262,9 @@ static int ctrl_fill_info(const struct genl_family *family, u32 portid, u32 seq,
 
 	if (nla_put_string(skb, CTRL_ATTR_FAMILY_NAME, family->name) ||
 	    nla_put_u16(skb, CTRL_ATTR_FAMILY_ID, family->id) ||
-	    nla_put_u32(skb, CTRL_ATTR_VERSION, family->version) ||
+	    nla_put_u32(skb, CTRL_ATTR_VERSION, family->min_version) ||
+	    (family->max_version > family->min_version &&
+	     nla_put_u32(skb, CTRL_ATTR_MAX_VERSION, family->max_version)) ||
 	    nla_put_u32(skb, CTRL_ATTR_HDRSIZE, family->hdrsize) ||
 	    nla_put_u32(skb, CTRL_ATTR_MAXATTR, family->maxattr))
 		goto nla_put_failure;
