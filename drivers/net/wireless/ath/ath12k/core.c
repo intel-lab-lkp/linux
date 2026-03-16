@@ -2321,5 +2321,24 @@ err_sc_free:
 	return NULL;
 }
 
+static int ath12k_init(void)
+{
+	int ret;
+
+	ret = ath12k_wmi_alloc();
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static void ath12k_exit(void)
+{
+	ath12k_wmi_free();
+}
+
+module_init(ath12k_init);
+module_exit(ath12k_exit);
+
 MODULE_DESCRIPTION("Driver support for Qualcomm Technologies WLAN devices");
 MODULE_LICENSE("Dual BSD/GPL");
