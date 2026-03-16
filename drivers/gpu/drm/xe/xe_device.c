@@ -415,6 +415,8 @@ static struct drm_driver driver = {
 	.patchlevel = DRIVER_PATCHLEVEL,
 };
 
+static atomic_t xe_device_count;
+
 static void xe_device_destroy(struct drm_device *dev, void *dummy)
 {
 	struct xe_device *xe = to_xe_device(dev);
@@ -434,6 +436,9 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
 		destroy_workqueue(xe->destroy_wq);
 
 	ttm_device_fini(&xe->ttm);
+
+	if (atomic_dec_and_test(&xe_device_count))
+		wake_up_var(&xe_device_count);
 }
 
 struct xe_device *xe_device_create(struct pci_dev *pdev,
@@ -459,6 +464,7 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
 		return ERR_PTR(err);
 
 	xe_bo_dev_init(&xe->bo_device);
+	atomic_inc(&xe_device_count);
 	err = drmm_add_action_or_reset(&xe->drm, xe_device_destroy, NULL);
 	if (err)
 		return ERR_PTR(err);
@@ -1393,4 +1399,17 @@ struct xe_vm *xe_device_asid_to_vm(struct xe_device *xe, u32 asid)
 	up_read(&xe->usm.lock);
 
 	return vm;
+}
+
+/**
+ * xe_device_exit() - Device subsystem exit function.
+ *
+ * Exit function to be called at module unload time.
+ */
+void xe_device_exit(void)
+{
+	/* Wait for all devices to be freed. */
+	wait_var_event(&xe_device_count, !atomic_read(&xe_device_count));
+	/* Wait for any driver release callbacks to complete */
+	drm_dev_release_barrier();
 }
