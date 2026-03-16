@@ -35,13 +35,8 @@ static DEFINE_PER_CPU(struct hyp_fixmap_slot, fixmap_slots);
 static int __pkvm_create_mappings(unsigned long start, unsigned long size,
 				  unsigned long phys, enum kvm_pgtable_prot prot)
 {
-	int err;
-
-	hyp_spin_lock(&pkvm_pgd_lock);
-	err = kvm_pgtable_hyp_map(&pkvm_pgtable, start, size, phys, prot);
-	hyp_spin_unlock(&pkvm_pgd_lock);
-
-	return err;
+	guard(hyp_spinlock)(&pkvm_pgd_lock);
+	return kvm_pgtable_hyp_map(&pkvm_pgtable, start, size, phys, prot);
 }
 
 static int __pkvm_alloc_private_va_range(unsigned long start, size_t size)
@@ -80,10 +75,9 @@ int pkvm_alloc_private_va_range(size_t size, unsigned long *haddr)
 	unsigned long addr;
 	int ret;
 
-	hyp_spin_lock(&pkvm_pgd_lock);
+	guard(hyp_spinlock)(&pkvm_pgd_lock);
 	addr = __io_map_base;
 	ret = __pkvm_alloc_private_va_range(addr, size);
-	hyp_spin_unlock(&pkvm_pgd_lock);
 
 	*haddr = addr;
 
@@ -137,13 +131,8 @@ int pkvm_create_mappings_locked(void *from, void *to, enum kvm_pgtable_prot prot
 
 int pkvm_create_mappings(void *from, void *to, enum kvm_pgtable_prot prot)
 {
-	int ret;
-
-	hyp_spin_lock(&pkvm_pgd_lock);
-	ret = pkvm_create_mappings_locked(from, to, prot);
-	hyp_spin_unlock(&pkvm_pgd_lock);
-
-	return ret;
+	guard(hyp_spinlock)(&pkvm_pgd_lock);
+	return pkvm_create_mappings_locked(from, to, prot);
 }
 
 int hyp_back_vmemmap(phys_addr_t back)
@@ -340,22 +329,17 @@ static int create_fixblock(void)
 	if (i >= hyp_memblock_nr)
 		return -EINVAL;
 
-	hyp_spin_lock(&pkvm_pgd_lock);
+	guard(hyp_spinlock)(&pkvm_pgd_lock);
 	addr = ALIGN(__io_map_base, PMD_SIZE);
 	ret = __pkvm_alloc_private_va_range(addr, PMD_SIZE);
 	if (ret)
-		goto unlock;
+		return ret;
 
 	ret = kvm_pgtable_hyp_map(&pkvm_pgtable, addr, PMD_SIZE, phys, PAGE_HYP);
 	if (ret)
-		goto unlock;
+		return ret;
 
-	ret = kvm_pgtable_walk(&pkvm_pgtable, addr, PMD_SIZE, &walker);
-
-unlock:
-	hyp_spin_unlock(&pkvm_pgd_lock);
-
-	return ret;
+	return kvm_pgtable_walk(&pkvm_pgtable, addr, PMD_SIZE, &walker);
 #else
 	return 0;
 #endif
@@ -437,7 +421,7 @@ int pkvm_create_stack(phys_addr_t phys, unsigned long *haddr)
 	size_t size;
 	int ret;
 
-	hyp_spin_lock(&pkvm_pgd_lock);
+	guard(hyp_spinlock)(&pkvm_pgd_lock);
 
 	prev_base = __io_map_base;
 	/*
@@ -463,7 +447,6 @@ int pkvm_create_stack(phys_addr_t phys, unsigned long *haddr)
 		if (ret)
 			__io_map_base = prev_base;
 	}
-	hyp_spin_unlock(&pkvm_pgd_lock);
 
 	*haddr = addr + size;
 
