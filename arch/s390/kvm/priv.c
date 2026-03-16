@@ -1151,7 +1151,7 @@ static inline int __do_essa(struct kvm_vcpu *vcpu, const int orc)
 	 */
 
 	kvm_s390_get_regs_rre(vcpu, &r1, &r2);
-	gfn = vcpu->run->s.regs.gprs[r2] >> PAGE_SHIFT;
+	gfn = gpa_to_gfn(vcpu->run->s.regs.gprs[r2]);
 	entries = (vcpu->arch.sie_block->cbrlo & ~PAGE_MASK) >> 3;
 
 	nappended = dat_perform_essa(vcpu->arch.gmap->asce, gfn, orc, &state, &dirtied);

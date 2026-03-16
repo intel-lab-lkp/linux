@@ -2768,13 +2768,13 @@ static int adapter_indicators_set(struct kvm *kvm,
 	bit = get_ind_bit(adapter_int->ind_addr,
 			  adapter_int->ind_offset, adapter->swap);
 	set_bit(bit, map);
-	mark_page_dirty(kvm, adapter_int->ind_gaddr >> PAGE_SHIFT);
+	mark_page_dirty(kvm, gpa_to_gfn(adapter_int->ind_gaddr));
 	set_page_dirty_lock(ind_page);
 	map = page_address(summary_page);
 	bit = get_ind_bit(adapter_int->summary_addr,
 			  adapter_int->summary_offset, adapter->swap);
 	summary_set = test_and_set_bit(bit, map);
-	mark_page_dirty(kvm, adapter_int->summary_gaddr >> PAGE_SHIFT);
+	mark_page_dirty(kvm, gpa_to_gfn(adapter_int->summary_gaddr));
 	set_page_dirty_lock(summary_page);
 	srcu_read_unlock(&kvm->srcu, idx);
 
