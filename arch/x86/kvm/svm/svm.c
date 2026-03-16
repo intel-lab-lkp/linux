@@ -1052,6 +1052,11 @@ static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu)
 	 * No need to toggle any of the vgif/vls/etc. enable bits here, as they
 	 * are set when the VMCB is initialized and never cleared (if the
 	 * relevant intercepts are set, the enablements are meaningless anyway).
+	 *
+	 * FIXME: When #GP is not intercepted, a #GP on these instructions (e.g.
+	 * due to CPL > 0) could be injected by hardware before the instruction
+	 * is intercepted, leading to #GP taking precedence over #UD from the
+	 * guest's perspective.
 	 */
 	if (!(vcpu->arch.efer & EFER_SVME)) {
 		svm_set_intercept(svm, INTERCEPT_VMLOAD);
@@ -2289,6 +2294,9 @@ static int gp_interception(struct kvm_vcpu *vcpu)
 		unsigned long rax = kvm_register_read(vcpu, VCPU_REGS_RAX);
 
 		if (is_guest_mode(vcpu)) {
+			if (nested_svm_check_permissions(vcpu))
+				return 1;
+
 			if (!page_address_valid(vcpu, rax))
 				goto reinject;
 
