@@ -3007,15 +3007,15 @@ int jfs_txstats_proc_show(struct seq_file *m, void *v)
 		       "txBeginAnon blocked by tlocks low = %d\n"
 		       "calls to txLockAlloc = %d\n"
 		       "tLockAlloc blocked by no free lock = %d\n",
-		       TxStat.txBegin,
-		       TxStat.txBegin_barrier,
-		       TxStat.txBegin_lockslow,
-		       TxStat.txBegin_freetid,
-		       TxStat.txBeginAnon,
-		       TxStat.txBeginAnon_barrier,
-		       TxStat.txBeginAnon_lockslow,
-		       TxStat.txLockAlloc,
-		       TxStat.txLockAlloc_freelock);
+		       data_race(TxStat.txBegin),
+		       data_race(TxStat.txBegin_barrier),
+		       data_race(TxStat.txBegin_lockslow),
+		       data_race(TxStat.txBegin_freetid),
+		       data_race(TxStat.txBeginAnon),
+		       data_race(TxStat.txBeginAnon_barrier),
+		       data_race(TxStat.txBeginAnon_lockslow),
+		       data_race(TxStat.txLockAlloc),
+		       data_race(TxStat.txLockAlloc_freelock));
 	return 0;
 }
 #endif

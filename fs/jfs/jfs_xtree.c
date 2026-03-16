@@ -2922,9 +2922,9 @@ int jfs_xtstat_proc_show(struct seq_file *m, void *v)
 		       "searches = %d\n"
 		       "fast searches = %d\n"
 		       "splits = %d\n",
-		       xtStat.search,
-		       xtStat.fastSearch,
-		       xtStat.split);
+		       data_race(xtStat.search),
+		       data_race(xtStat.fastSearch),
+		       data_race(xtStat.split));
 	return 0;
 }
 #endif

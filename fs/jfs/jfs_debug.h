@@ -97,13 +97,13 @@ int jfs_txstats_proc_show(struct seq_file *m, void *v);
 int jfs_mpstat_proc_show(struct seq_file *m, void *v);
 int jfs_xtstat_proc_show(struct seq_file *m, void *v);
 
-#define	INCREMENT(x)		((x)++)
-#define	DECREMENT(x)		((x)--)
-#define	HIGHWATERMARK(x,y)	((x) = max((x), (y)))
+#define	INCREMENT(x)		(data_race((x)++))
+#define	DECREMENT(x)		(data_race((x)--))
+#define	HIGHWATERMARK(x, y)	(data_race((x) = max(data_race(x), (y))))
 #else
 #define	INCREMENT(x)
 #define	DECREMENT(x)
-#define	HIGHWATERMARK(x,y)
+#define	HIGHWATERMARK(x, y)
 #endif				/* CONFIG_JFS_STATISTICS */
 
 #endif				/* _H_JFS_DEBUG */

@@ -945,9 +945,9 @@ int jfs_mpstat_proc_show(struct seq_file *m, void *v)
 		       "page allocations = %d\n"
 		       "page frees = %d\n"
 		       "lock waits = %d\n",
-		       mpStat.pagealloc,
-		       mpStat.pagefree,
-		       mpStat.lockwait);
+		       data_race(mpStat.pagealloc),
+		       data_race(mpStat.pagefree),
+		       data_race(mpStat.lockwait));
 	return 0;
 }
 #endif

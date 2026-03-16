@@ -2475,11 +2475,11 @@ int jfs_lmstats_proc_show(struct seq_file *m, void *v)
 		       "writes completed = %d\n"
 		       "full pages submitted = %d\n"
 		       "partial pages submitted = %d\n",
-		       lmStat.commit,
-		       lmStat.submitted,
-		       lmStat.pagedone,
-		       lmStat.full_page,
-		       lmStat.partial_page);
+		       data_race(lmStat.commit),
+		       data_race(lmStat.submitted),
+		       data_race(lmStat.pagedone),
+		       data_race(lmStat.full_page),
+		       data_race(lmStat.partial_page));
 	return 0;
 }
 #endif /* CONFIG_JFS_STATISTICS */
