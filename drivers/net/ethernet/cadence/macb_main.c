@@ -3262,10 +3262,15 @@ static int macb_close(struct net_device *dev)
 
 static int macb_change_mtu(struct net_device *dev, int new_mtu)
 {
-	if (netif_running(dev))
-		return -EBUSY;
+	bool was_running = netif_running(dev);
+
+	if (was_running)
+		macb_close(dev);
 
 	WRITE_ONCE(dev->mtu, new_mtu);
+
+	if (was_running)
+		return macb_open(dev);
 
 	return 0;
 }
