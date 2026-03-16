@@ -1909,7 +1909,8 @@ static inline int input_available_p(const struct tty_struct *tty, int poll)
 	const struct n_tty_data *ldata = tty->disc_data;
 	int amt = poll && !TIME_CHAR(tty) && MIN_CHAR(tty) ? MIN_CHAR(tty) : 1;
 
-	if (ldata->icanon && !L_EXTPROC(tty))
+	/* data_race: benign race, poll readiness is best-effort */
+	if (data_race(ldata->icanon) && !L_EXTPROC(tty))
 		return ldata->canon_head != ldata->read_tail;
 	else
 		return ldata->commit_head - ldata->read_tail >= amt;
