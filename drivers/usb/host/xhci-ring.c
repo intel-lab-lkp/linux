@@ -499,7 +499,12 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 	/* Preserve RsvdP (5:4), other writable bits read 0. */
 	crcr_lo = readl(&xhci->op_regs->cmd_ring);
 	crcr_lo |= CMD_RING_ABORT;
+
+#ifdef CONFIG_64BIT
+	writeq(crcr_lo, &xhci->op_regs->cmd_ring);
+#else
 	writel(crcr_lo, &xhci->op_regs->cmd_ring);
+#endif
 
 	/* In the future we should try to recover a -ETIMEDOUT with a host controller reset */
 	ret = xhci_handshake(&xhci->op_regs->cmd_ring, CMD_RING_RUNNING, 0, 3 * USEC_PER_SEC);
