@@ -2182,6 +2182,7 @@ static int intr_interception(struct kvm_vcpu *vcpu)
 
 static int vmload_vmsave_interception(struct kvm_vcpu *vcpu, bool vmload)
 {
+	u64 vmcb12_gpa = kvm_register_read(vcpu, VCPU_REGS_RAX);
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct vmcb *vmcb12;
 	struct kvm_host_map map;
@@ -2190,7 +2191,12 @@ static int vmload_vmsave_interception(struct kvm_vcpu *vcpu, bool vmload)
 	if (nested_svm_check_permissions(vcpu))
 		return 1;
 
-	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(svm->vmcb->save.rax), &map);
+	if (!page_address_valid(vcpu, vmcb12_gpa)) {
+		kvm_inject_gp(vcpu, 0);
+		return 1;
+	}
+
+	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(vmcb12_gpa), &map);
 	if (ret) {
 		if (ret == -EINVAL)
 			kvm_inject_gp(vcpu, 0);
@@ -2282,10 +2288,17 @@ static int gp_interception(struct kvm_vcpu *vcpu)
 	if (svm_exit_code) {
 		unsigned long rax = kvm_register_read(vcpu, VCPU_REGS_RAX);
 
-		if (!page_address_valid(vcpu, rax))
-			goto reinject;
-
 		if (is_guest_mode(vcpu)) {
+			if (!page_address_valid(vcpu, rax))
+				goto reinject;
+
+			/*
+			 * FIXME: Only synthesize a #VMEXIT if L1 sets the
+			 * intercept, but only after the VMLOAD/VMSAVE exit
+			 * handlers can properly handle VMLOAD/VMSAVE from L2
+			 * with VLS enabled in L1 (i.e. RAX is an L2 GPA that
+			 * needs translation through L1's NPT).
+			 */
 			nested_svm_simple_vmexit(svm, svm_exit_code);
 			return 1;
 		}
