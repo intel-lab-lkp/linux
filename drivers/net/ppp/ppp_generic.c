@@ -2995,6 +2995,7 @@ int ppp_unit_number(struct ppp_channel *chan)
 
 /*
  * Return the PPP device interface name of a channel.
+ * Caller must hold RCU read lock.
  */
 char *ppp_dev_name(struct ppp_channel *chan)
 {
@@ -3003,11 +3004,9 @@ char *ppp_dev_name(struct ppp_channel *chan)
 	struct ppp *ppp;
 
 	if (pch) {
-		rcu_read_lock();
 		ppp = rcu_dereference(pch->ppp);
 		if (ppp && ppp->dev)
 			name = ppp->dev->name;
-		rcu_read_unlock();
 	}
 	return name;
 }
