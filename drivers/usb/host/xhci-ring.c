@@ -489,38 +489,32 @@ static void xhci_handle_stopped_cmd_ring(struct xhci_hcd *xhci,
 /* Must be called with xhci->lock held, releases and acquires lock back */
 static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 {
-	struct xhci_segment *new_seg	= xhci->cmd_ring->deq_seg;
-	union xhci_trb *new_deq		= xhci->cmd_ring->dequeue;
-	u64 crcr;
+	u32 crcr_lo;
 	int ret;
 
 	xhci_dbg(xhci, "Abort command ring\n");
 
 	reinit_completion(&xhci->cmd_ring_stop_completion);
 
-	/*
-	 * The control bits like command stop, abort are located in lower
-	 * dword of the command ring control register.
-	 * Some controllers require all 64 bits to be written to abort the ring.
-	 * Make sure the upper dword is valid, pointing to the next command,
-	 * avoiding corrupting the command ring pointer in case the command ring
-	 * is stopped by the time the upper dword is written.
-	 */
-	next_trb(&new_seg, &new_deq);
-	if (trb_is_link(new_deq))
-		next_trb(&new_seg, &new_deq);
+	/* Preserve RsvdP (5:4), other writable bits read 0. */
+	crcr_lo = readl(&xhci->op_regs->cmd_ring);
+	crcr_lo |= CMD_RING_ABORT;
+	writel(crcr_lo, &xhci->op_regs->cmd_ring);
 
-	crcr = xhci_trb_virt_to_dma(new_seg, new_deq);
-	xhci_write_64(xhci, crcr | CMD_RING_ABORT, &xhci->op_regs->cmd_ring);
+	/* In the future we should try to recover a -ETIMEDOUT with a host controller reset */
+	ret = xhci_handshake(&xhci->op_regs->cmd_ring, CMD_RING_RUNNING, 0, 3 * USEC_PER_SEC);
+	if (ret == -ETIMEDOUT) {
+		/*
+		 * Some controllers only latch 64-bit registers when the upper (63:32) bits
+		 * are written.
+		 * While the ring is running, writes to bits 63:6 and bit 0 are ignored.
+		 */
+		xhci_dbg(xhci, "Ring still running, checking if HC needs full 64-bit CRCR write\n");
+		writel(0, (void __iomem *)(&xhci->op_regs->cmd_ring) + 4);
+		ret = xhci_handshake(&xhci->op_regs->cmd_ring, CMD_RING_RUNNING, 0,
+				     3 * USEC_PER_SEC);
+	}
 
-	/* Section 4.6.1.2 of xHCI 1.0 spec says software should also time the
-	 * completion of the Command Abort operation. If CRR is not negated in 5
-	 * seconds then driver handles it as if host died (-ENODEV).
-	 * In the future we should distinguish between -ENODEV and -ETIMEDOUT
-	 * and try to recover a -ETIMEDOUT with a host controller reset.
-	 */
-	ret = xhci_handshake(&xhci->op_regs->cmd_ring,
-			CMD_RING_RUNNING, 0, 5 * 1000 * 1000);
 	if (ret < 0) {
 		xhci_err(xhci, "Abort failed to stop command ring: %d\n", ret);
 		xhci_halt(xhci);
