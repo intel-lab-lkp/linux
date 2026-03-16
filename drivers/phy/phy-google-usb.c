@@ -251,7 +251,9 @@ static int google_usb_phy_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(phy_provider),
 				     "failed to register phy provider\n");
 
-	pm_runtime_enable(dev);
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to enable runtime PM\n");
 
 	sw_desc.fwnode = dev_fwnode(dev);
 	sw_desc.drvdata = gphy;
@@ -271,7 +273,6 @@ static void google_usb_phy_remove(struct platform_device *pdev)
 	struct google_usb_phy *gphy = dev_get_drvdata(&pdev->dev);
 
 	typec_switch_unregister(gphy->sw);
-	pm_runtime_disable(&pdev->dev);
 }
 
 static const struct of_device_id google_usb_phy_of_match[] = {
