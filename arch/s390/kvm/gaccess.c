@@ -441,7 +441,7 @@ static int get_vcpu_asce(struct kvm_vcpu *vcpu, union asce *asce,
 	return 0;
 }
 
-static int deref_table(struct kvm *kvm, unsigned long gpa, unsigned long *val)
+static int deref_table(struct kvm *kvm, gpa_t gpa, unsigned long *val)
 {
 	return kvm_read_guest(kvm, gpa, val, sizeof(*val));
 }
@@ -467,8 +467,8 @@ static int deref_table(struct kvm *kvm, unsigned long gpa, unsigned long *val)
  *	      the returned value is the program interruption code as defined
  *	      by the architecture
  */
-static unsigned long guest_translate_gva(struct kvm_vcpu *vcpu, unsigned long gva,
-					 unsigned long *gpa, const union asce asce,
+static unsigned long guest_translate_gva(struct kvm_vcpu *vcpu, gva_t gva,
+					 gpa_t *gpa, const union asce asce,
 					 enum gacc_mode mode, enum prot_type *prot)
 {
 	union vaddress vaddr = {.addr = gva};
@@ -477,8 +477,8 @@ static unsigned long guest_translate_gva(struct kvm_vcpu *vcpu, unsigned long gv
 	int dat_protection = 0;
 	int iep_protection = 0;
 	union ctlreg0 ctlreg0;
-	unsigned long ptr;
 	int edat1, edat2, iep;
+	gpa_t ptr;
 
 	ctlreg0.val = vcpu->arch.sie_block->gcr[0];
 	edat1 = ctlreg0.edat && test_kvm_facility(vcpu->kvm, 8);
@@ -772,7 +772,7 @@ static int vcpu_check_access_key_gpa(struct kvm_vcpu *vcpu, u8 access_key,
  *		  be used to inject an exception into the guest.
  */
 static int guest_range_to_gpas(struct kvm_vcpu *vcpu, unsigned long ga, u8 ar,
-			       unsigned long *gpas, unsigned long len,
+			       gpa_t *gpas, unsigned long len,
 			       const union asce asce, enum gacc_mode mode,
 			       u8 access_key)
 {
@@ -781,7 +781,7 @@ static int guest_range_to_gpas(struct kvm_vcpu *vcpu, unsigned long ga, u8 ar,
 	unsigned int fragment_len;
 	int lap_enabled, rc = 0;
 	enum prot_type prot;
-	unsigned long gpa;
+	gpa_t gpa;
 
 	lap_enabled = low_address_protection_enabled(vcpu, asce);
 	while (min(PAGE_SIZE - offset, len) > 0) {
@@ -932,11 +932,11 @@ int access_guest_with_key(struct kvm_vcpu *vcpu, unsigned long ga, u8 ar,
 {
 	psw_t *psw = &vcpu->arch.sie_block->gpsw;
 	unsigned long nr_pages, idx;
-	unsigned long gpa_array[2];
 	unsigned int fragment_len;
-	unsigned long *gpas;
 	enum prot_type prot;
+	gpa_t gpa_array[2];
 	int need_ipte_lock;
+	gpa_t *gpas;
 	union asce asce;
 	bool try_storage_prot_override;
 	bool try_fetch_prot_override;
@@ -1182,7 +1182,7 @@ int cmpxchg_guest_abs_with_key(struct kvm *kvm, gpa_t gpa, int len, union kvm_s3
  * has to take care of this.
  */
 int guest_translate_address_with_key(struct kvm_vcpu *vcpu, unsigned long gva, u8 ar,
-				     unsigned long *gpa, enum gacc_mode mode,
+				     gpa_t *gpa, enum gacc_mode mode,
 				     u8 access_key)
 {
 	union asce asce;
@@ -1282,9 +1282,9 @@ static int walk_guest_tables(struct gmap *sg, unsigned long saddr, struct pgtwal
 	struct guest_fault *entries;
 	union dat_table_entry table;
 	union vaddress vaddr;
-	unsigned long ptr;
 	struct kvm *kvm;
 	union asce asce;
+	gpa_t ptr;
 	int rc;
 
 	if (!parent)
