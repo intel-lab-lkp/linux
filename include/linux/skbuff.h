@@ -848,6 +848,7 @@ enum skb_tstamp_type {
  *		CHECKSUM_UNNECESSARY (max 3)
  *	@unreadable: indicates that at least 1 of the fragments in this skb is
  *		unreadable.
+ *	@ttl: time to live counter for packet loops.
  *	@dst_pending_confirm: need to confirm neighbour
  *	@decrypted: Decrypted SKB
  *	@slow_gro: state present at GRO time, slower prepare step required
@@ -1030,6 +1031,7 @@ struct sk_buff {
 	__u8			csum_not_inet:1;
 #endif
 	__u8			unreadable:1;
+	__u8			ttl:2;
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
 	__u16			tc_index;	/* traffic control index */
 #endif
