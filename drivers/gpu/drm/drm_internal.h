@@ -67,6 +67,17 @@ static inline void drm_client_sysrq_unregister(struct drm_device *dev)
 { }
 #endif
 
+/* drm_dev_sysrq.c */
+#ifdef CONFIG_MAGIC_SYSRQ
+void drm_dev_sysrq_register(struct drm_device *dev);
+void drm_dev_sysrq_unregister(struct drm_device *dev);
+#else
+static inline void drm_dev_sysrq_register(struct drm_device *dev)
+{ }
+static inline void drm_dev_sysrq_unregister(struct drm_device *dev)
+{ }
+#endif
+
 /* drm_file.c */
 extern struct mutex drm_global_mutex;
 bool drm_dev_needs_global_mutex(struct drm_device *dev);

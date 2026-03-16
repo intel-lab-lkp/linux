@@ -262,6 +262,14 @@ struct drm_device {
 	struct list_head client_sysrq_list;
 
 	/**
+	 * @dev_sysrq_list:
+	 *
+	 * Entry into list of devices registered for sysrq to kill current
+	 * GPU job.
+	 */
+	struct list_head dev_sysrq_list;
+
+	/**
 	 * @vblank_disable_immediate:
 	 *
 	 * If true, vblank interrupt will be disabled immediately when the

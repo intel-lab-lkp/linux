@@ -386,6 +386,13 @@ struct drm_driver {
 			   struct drm_fb_helper_surface_size *sizes);
 
 	/**
+	 * @sysrq_kill:
+	 *
+	 * Handler for magic sysrq key to kill current job on the GPU.
+	 */
+	void (*sysrq_kill)(struct drm_device *dev);
+
+	/**
 	 * @show_fdinfo:
 	 *
 	 * Print device specific fdinfo.  See Documentation/gpu/drm-usage-stats.rst.
