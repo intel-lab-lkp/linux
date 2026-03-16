@@ -1510,15 +1510,12 @@ static void link_nv12_planes(struct intel_crtc_state *crtc_state,
 static void unlink_nv12_plane(struct intel_crtc_state *crtc_state,
 			      struct intel_plane_state *plane_state)
 {
-	struct intel_display *display = to_intel_display(plane_state);
 	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
 
 	plane_state->planar_linked_plane = NULL;
 
 	if (!plane_state->is_y_plane)
 		return;
-
-	drm_WARN_ON(display->drm, plane_state->uapi.visible);
 
 	plane_state->is_y_plane = false;
 
