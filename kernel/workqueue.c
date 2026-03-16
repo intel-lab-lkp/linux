@@ -2507,7 +2507,6 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	struct timer_list *timer = &dwork->timer;
 	struct work_struct *work = &dwork->work;
 
-	WARN_ON_ONCE(!wq);
 	WARN_ON_ONCE(timer->function != delayed_work_timer_fn);
 	WARN_ON_ONCE(timer_pending(timer));
 	WARN_ON_ONCE(!list_empty(&work->entry));
@@ -2565,6 +2564,14 @@ bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
 	struct work_struct *work = &dwork->work;
 	bool ret = false;
 	unsigned long irq_flags;
+
+	if (unlikely(!wq)) {
+		WARN_ON_ONCE(1);
+		pr_warn("workqueue: %s() called with NULL wq, dumping stack:\n",
+			__func__);
+		dump_stack();
+		return false;
+	}
 
 	/* read the comment in __queue_work() */
 	local_irq_save(irq_flags);
