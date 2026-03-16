@@ -5116,8 +5116,8 @@ static int irdma_create_hw_ah(struct irdma_device *iwdev, struct irdma_ah *ah, b
 
 		if (poll_timeout_us_atomic(irdma_cqp_ce_handler(rf,
 								&rf->ccq.sc_cq),
-					   ah->sc_ah.ah_info.ah_valid, 1,
-					   tmout_ms * USEC_PER_MSEC, false)) {
+					   atomic_read(&ah->sc_ah.ah_info.ah_valid),
+					   1, tmout_ms * USEC_PER_MSEC, false)) {
 			ibdev_dbg(&iwdev->ibdev,
 				  "VERBS: CQP create AH timed out");
 			err = -ETIMEDOUT;
@@ -5236,7 +5236,8 @@ static bool irdma_ah_exists(struct irdma_device *iwdev,
 	hash_for_each_possible(iwdev->rf->ah_hash_tbl, ah, list, key) {
 		/* Set ah_valid and ah_id the same so memcmp can work */
 		new_ah->sc_ah.ah_info.ah_idx = ah->sc_ah.ah_info.ah_idx;
-		new_ah->sc_ah.ah_info.ah_valid = ah->sc_ah.ah_info.ah_valid;
+		atomic_set(&new_ah->sc_ah.ah_info.ah_valid,
+			   atomic_read(&ah->sc_ah.ah_info.ah_valid));
 		if (!memcmp(&ah->sc_ah.ah_info, &new_ah->sc_ah.ah_info,
 			    sizeof(ah->sc_ah.ah_info))) {
 			refcount_inc(&ah->refcnt);

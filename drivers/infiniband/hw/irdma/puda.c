@@ -1652,7 +1652,7 @@ static void irdma_ieq_handle_exception(struct irdma_puda_rsrc *ieq,
 	}
 	if (hw_rev == IRDMA_GEN_1)
 		irdma_ieq_process_fpdus(qp, ieq);
-	else if (pfpdu->ah && pfpdu->ah->ah_info.ah_valid)
+	else if (pfpdu->ah && atomic_read(&pfpdu->ah->ah_info.ah_valid))
 		irdma_ieq_process_fpdus(qp, ieq);
 exit:
 	spin_unlock_irqrestore(&pfpdu->lock, flags);

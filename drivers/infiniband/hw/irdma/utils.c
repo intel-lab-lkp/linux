@@ -1967,7 +1967,8 @@ int irdma_ah_cqp_op(struct irdma_pci_f *rf, struct irdma_sc_ah *sc_ah, u8 cmd,
 		return -ENOMEM;
 
 	if (wait)
-		sc_ah->ah_info.ah_valid = (cmd == IRDMA_OP_AH_CREATE);
+		atomic_set(&sc_ah->ah_info.ah_valid,
+			   (cmd == IRDMA_OP_AH_CREATE));
 
 	return 0;
 }
@@ -1984,10 +1985,10 @@ static void irdma_ieq_ah_cb(struct irdma_cqp_request *cqp_request)
 
 	spin_lock_irqsave(&qp->pfpdu.lock, flags);
 	if (!cqp_request->compl_info.op_ret_val) {
-		sc_ah->ah_info.ah_valid = true;
+		atomic_set(&sc_ah->ah_info.ah_valid, true);
 		irdma_ieq_process_fpdus(qp, qp->vsi->ieq);
 	} else {
-		sc_ah->ah_info.ah_valid = false;
+		atomic_set(&sc_ah->ah_info.ah_valid, false);
 		irdma_ieq_cleanup_qp(qp->vsi->ieq, qp);
 	}
 	spin_unlock_irqrestore(&qp->pfpdu.lock, flags);
@@ -2002,7 +2003,8 @@ static void irdma_ilq_ah_cb(struct irdma_cqp_request *cqp_request)
 	struct irdma_cm_node *cm_node = cqp_request->param;
 	struct irdma_sc_ah *sc_ah = cm_node->ah;
 
-	sc_ah->ah_info.ah_valid = !cqp_request->compl_info.op_ret_val;
+	atomic_set(&sc_ah->ah_info.ah_valid,
+		   !cqp_request->compl_info.op_ret_val);
 	irdma_add_conn_est_qh(cm_node);
 }
 
@@ -2069,7 +2071,7 @@ void irdma_puda_free_ah(struct irdma_sc_dev *dev, struct irdma_sc_ah *ah)
 	if (!ah)
 		return;
 
-	if (ah->ah_info.ah_valid) {
+	if (atomic_read(&ah->ah_info.ah_valid)) {
 		irdma_ah_cqp_op(rf, ah, IRDMA_OP_AH_DESTROY, false, NULL, NULL);
 		irdma_free_rsrc(rf, rf->allocated_ahs, ah->ah_info.ah_idx);
 	}
@@ -2086,9 +2088,9 @@ void irdma_gsi_ud_qp_ah_cb(struct irdma_cqp_request *cqp_request)
 	struct irdma_sc_ah *sc_ah = cqp_request->param;
 
 	if (!cqp_request->compl_info.op_ret_val)
-		sc_ah->ah_info.ah_valid = true;
+		atomic_set(&sc_ah->ah_info.ah_valid, true);
 	else
-		sc_ah->ah_info.ah_valid = false;
+		atomic_set(&sc_ah->ah_info.ah_valid, false);
 }
 
 /**

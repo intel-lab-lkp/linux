@@ -22,7 +22,7 @@ struct irdma_ah_info {
 	u8 tc_tos;
 	u8 hop_ttl;
 	u8 mac_addr[ETH_ALEN];
-	bool ah_valid:1;
+	atomic_t ah_valid;
 	bool ipv4_valid:1;
 	bool do_lpbk:1;
 };

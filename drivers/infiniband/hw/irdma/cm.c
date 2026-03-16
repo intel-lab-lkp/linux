@@ -313,7 +313,7 @@ static struct irdma_puda_buf *irdma_form_ah_cm_frame(struct irdma_cm_node *cm_no
 	u32 pd_len = 0;
 	u32 hdr_len = 0;
 
-	if (!cm_node->ah || !cm_node->ah->ah_info.ah_valid) {
+	if (!cm_node->ah || !atomic_read(&cm_node->ah->ah_info.ah_valid)) {
 		ibdev_dbg(&cm_node->iwdev->ibdev, "CM: AH invalid\n");
 		return NULL;
 	}
