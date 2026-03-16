@@ -64,6 +64,7 @@ static const struct ftr_set_desc mmfr1 __prel64_initconst = {
 	.override	= &id_aa64mmfr1_override,
 	.fields		= {
 		FIELD("vh", ID_AA64MMFR1_EL1_VH_SHIFT, mmfr1_vh_filter),
+		FIELD("pan", ID_AA64MMFR1_EL1_PAN_SHIFT, NULL),
 		{}
 	},
 };
@@ -249,6 +250,7 @@ static const struct {
 	{ "arm64.nolva",		"id_aa64mmfr2.varange=0" },
 	{ "arm64.no32bit_el0",		"id_aa64pfr0.el0=1" },
 	{ "arm64.nompam",		"id_aa64pfr0.mpam=0 id_aa64pfr1.mpam_frac=0" },
+	{ "arm64.nopan",		"id_aa64mmfr1.pan=0" },
 };
 
 static int __init parse_hexdigit(const char *p, u64 *v)

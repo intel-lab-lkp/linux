@@ -97,14 +97,20 @@ alternative_else_nop_endif
 	cmp	tmp1w, #0x20
 	b.eq	1f
 	b.lt	2f
-	ldp1	A_l, A_h, src, #16
-	stp1	A_l, A_h, dst, #16
+	ldp_unpriv	A_l, A_h, src, #0
+	stp_unpriv	A_l, A_h, dst, #0
+	add	src, src, #16
+	add	dst, dst, #16
 1:
-	ldp1	A_l, A_h, src, #16
-	stp1	A_l, A_h, dst, #16
+	ldp_unpriv	A_l, A_h, src, #0
+	stp_unpriv	A_l, A_h, dst, #0
+	add	src, src, #16
+	add	dst, dst, #16
 2:
-	ldp1	A_l, A_h, src, #16
-	stp1	A_l, A_h, dst, #16
+	ldp_unpriv	A_l, A_h, src, #0
+	stp_unpriv	A_l, A_h, dst, #0
+	add	src, src, #16
+	add	dst, dst, #16
 .Ltiny15:
 	/*
 	* Prefer to break one ldp/stp into several load/store to access
@@ -142,14 +148,16 @@ alternative_else_nop_endif
 	* Less than 128 bytes to copy, so handle 64 here and then jump
 	* to the tail.
 	*/
-	ldp1	A_l, A_h, src, #16
-	stp1	A_l, A_h, dst, #16
-	ldp1	B_l, B_h, src, #16
-	ldp1	C_l, C_h, src, #16
-	stp1	B_l, B_h, dst, #16
-	stp1	C_l, C_h, dst, #16
-	ldp1	D_l, D_h, src, #16
-	stp1	D_l, D_h, dst, #16
+	ldp_unpriv	A_l, A_h, src, #0
+	stp_unpriv	A_l, A_h, dst, #0
+	ldp_unpriv	B_l, B_h, src, #16
+	ldp_unpriv	C_l, C_h, src, #32
+	stp_unpriv	B_l, B_h, dst, #16
+	stp_unpriv	C_l, C_h, dst, #32
+	ldp_unpriv	D_l, D_h, src, #48
+	stp_unpriv	D_l, D_h, dst, #48
+	add	src, src, #64
+	add	dst, dst, #64
 
 	tst	count, #0x3f
 	b.ne	.Ltail63
@@ -161,30 +169,70 @@ alternative_else_nop_endif
 	*/
 	.p2align	L1_CACHE_SHIFT
 .Lcpy_body_large:
+	/* Runtime PAN decision for large copies */
+	ALTERNATIVE("b .Llarge_pan_disabled", "b .Llarge_pan_enabled", ARM64_HAS_PAN)
+
+.Llarge_pan_enabled:
+	/* PAN enabled version - use unprivileged loads (ldp_unpriv) */
 	/* pre-get 64 bytes data. */
-	ldp1	A_l, A_h, src, #16
-	ldp1	B_l, B_h, src, #16
-	ldp1	C_l, C_h, src, #16
-	ldp1	D_l, D_h, src, #16
+	ldp_unpriv	A_l, A_h, src, #0
+	ldp_unpriv	B_l, B_h, src, #16
+	ldp_unpriv	C_l, C_h, src, #32
+	ldp_unpriv	D_l, D_h, src, #48
+	add	src, src, #64
 1:
 	/*
 	* interlace the load of next 64 bytes data block with store of the last
 	* loaded 64 bytes data.
 	*/
-	stp1	A_l, A_h, dst, #16
-	ldp1	A_l, A_h, src, #16
-	stp1	B_l, B_h, dst, #16
-	ldp1	B_l, B_h, src, #16
-	stp1	C_l, C_h, dst, #16
-	ldp1	C_l, C_h, src, #16
-	stp1	D_l, D_h, dst, #16
-	ldp1	D_l, D_h, src, #16
+	stp_unpriv	A_l, A_h, dst, #0
+	ldp_unpriv	A_l, A_h, src, #0
+	stp_unpriv	B_l, B_h, dst, #16
+	ldp_unpriv	B_l, B_h, src, #16
+	stp_unpriv	C_l, C_h, dst, #32
+	ldp_unpriv	C_l, C_h, src, #32
+	stp_unpriv	D_l, D_h, dst, #48
+	ldp_unpriv	D_l, D_h, src, #48
+	add	dst, dst, #64
+	add	src, src, #64
 	subs	count, count, #64
 	b.ge	1b
-	stp1	A_l, A_h, dst, #16
-	stp1	B_l, B_h, dst, #16
-	stp1	C_l, C_h, dst, #16
-	stp1	D_l, D_h, dst, #16
+	b	.Llarge_done
+
+.Llarge_pan_disabled:
+	/* PAN disabled version - use normal loads without post-increment */
+	/* pre-get 64 bytes data using normal loads */
+	ldp_priv	A_l, A_h, src, #0
+	ldp_priv	B_l, B_h, src, #16
+	ldp_priv	C_l, C_h, src, #32
+	ldp_priv	D_l, D_h, src, #48
+	add	src, src, #64
+1:
+	/*
+	* interlace the load of next 64 bytes data block with store of the last
+	* loaded 64 bytes data.
+	*/
+	stp_priv	A_l, A_h, dst, #0
+	ldp_priv	A_l, A_h, src, #0
+	stp_priv	B_l, B_h, dst, #16
+	ldp_priv	B_l, B_h, src, #16
+	stp_priv	C_l, C_h, dst, #32
+	ldp_priv	C_l, C_h, src, #32
+	stp_priv	D_l, D_h, dst, #48
+	ldp_priv	D_l, D_h, src, #48
+	add	dst, dst, #64
+	add	src, src, #64
+	subs	count, count, #64
+	b.ge	1b
+
+.Llarge_done:
+	/* Post-loop: store the last block of data using stp_unpriv */
+	/* (without post-increment) */
+	stp_unpriv	A_l, A_h, dst, #0
+	stp_unpriv	B_l, B_h, dst, #16
+	stp_unpriv	C_l, C_h, dst, #32
+	stp_unpriv	D_l, D_h, dst, #48
+	add	dst, dst, #64
 
 	tst	count, #0x3f
 	b.ne	.Ltail63

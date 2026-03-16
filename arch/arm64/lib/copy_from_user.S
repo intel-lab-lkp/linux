@@ -44,12 +44,21 @@
 	str \reg, [\ptr], \val
 	.endm
 
-	.macro ldp1 reg1, reg2, ptr, val
-	user_ldp 9997f, \reg1, \reg2, \ptr, \val
+	.macro ldp_unpriv reg1, reg2, ptr, val
+	user_ldst_index 9997f, ldtr, \reg1, \ptr, \val
+	user_ldst_index 9997f, ldtr, \reg2, \ptr, \val + 8
 	.endm
 
-	.macro stp1 reg1, reg2, ptr, val
-	stp \reg1, \reg2, [\ptr], \val
+	.macro stp_unpriv reg1, reg2, ptr, val
+	stp \reg1, \reg2, [\ptr, \val]
+	.endm
+
+	.macro ldp_priv reg1, reg2, ptr, val
+	user_ldst_pair_index 9997f, ldp, \reg1, \reg2, \ptr, \val
+	.endm
+
+	.macro stp_priv reg1, reg2, ptr, val
+	stp \reg1, \reg2, [\ptr, \val]
 	.endm
 
 	.macro cpy1 dst, src, count
