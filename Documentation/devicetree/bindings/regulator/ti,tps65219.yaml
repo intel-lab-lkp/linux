@@ -31,11 +31,6 @@ properties:
   reg:
     maxItems: 1
 
-  system-power-controller:
-    type: boolean
-    description: Optional property that indicates that this device is
-      controlling system power.
-
   interrupts:
     description: Short-circuit, over-current, under-voltage for regulators, PB interrupts.
     maxItems: 1
@@ -99,9 +94,10 @@ required:
   - interrupts
   - regulators
 
-additionalProperties: false
+unevaluatedProperties: false
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - if:
       properties:
         compatible:
