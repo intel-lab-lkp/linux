@@ -958,8 +958,7 @@ static int av7110_start_feed(struct dvb_demux_feed *feed)
 						dvb_ringbuffer_flush_spinlock_wakeup(&av7110->avout);
 						dvb_ringbuffer_flush_spinlock_wakeup(&av7110->aout);
 						ret = av7110_av_start_play(av7110, RP_AV);
-						if (!ret)
-							demux->playing = 1;
+						demux->playing = (ret) ? true : false
 					}
 				break;
 			default:
