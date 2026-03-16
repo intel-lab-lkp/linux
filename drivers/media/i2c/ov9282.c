@@ -104,6 +104,12 @@
 #define OV9282_REG_STROBE_FRAME_SPAN		CCI_REG32(0x3925)
 #define OV9282_STROBE_FRAME_SPAN_DEFAULT	0x0000001a
 
+/* Test Pattern registers */
+#define OV9282_REG_TEST_PATTERN_BAR	CCI_REG8(0x5e00)
+#define OV9282_TEST_PATTERN_BAR_EN	BIT(7)
+#define OV9282_REG_TEST_PATTERN_SOLID	CCI_REG8(0x4320)
+#define OV9282_TEST_PATTERN_SOLID_EN	BIT(1)
+
 /* Input clock rate */
 #define OV9282_INCLK_RATE	24000000
 
@@ -462,6 +468,18 @@ static const struct ov9282_mode supported_modes[] = {
 	},
 };
 
+enum {
+	OV9282_TEST_PATTERN_DISABLED,
+	OV9282_TEST_PATTERN_COLOR_BAR,
+	OV9282_TEST_PATTERN_SOLID_COLOR,
+};
+
+static const char * const ov9282_test_pattern_menu[] = {
+	"Disabled",
+	"Color Bar",
+	"Solid Color",
+};
+
 /**
  * to_ov9282() - ov9282 V4L2 sub-device to ov9282 device.
  * @subdev: pointer to ov9282 V4L2 sub-device
@@ -586,6 +604,23 @@ static u32 ov9282_flash_duration_to_us(struct ov9282 *ov9282, u32 value)
 	return DIV_ROUND_UP(value * frame_width, OV9282_STROBE_SPAN_FACTOR);
 }
 
+static int ov9282_set_ctrl_test_pattern(struct ov9282 *ov9282, int pattern)
+{
+	int ret;
+
+	ret = cci_update_bits(ov9282->regmap, OV9282_REG_TEST_PATTERN_BAR,
+			      OV9282_TEST_PATTERN_BAR_EN,
+			      pattern == OV9282_TEST_PATTERN_COLOR_BAR ?
+			      OV9282_TEST_PATTERN_BAR_EN : 0, NULL);
+	if (ret)
+		return ret;
+
+	return cci_update_bits(ov9282->regmap, OV9282_REG_TEST_PATTERN_SOLID,
+			       OV9282_TEST_PATTERN_SOLID_EN,
+			       pattern == OV9282_TEST_PATTERN_SOLID_COLOR ?
+			       OV9282_TEST_PATTERN_SOLID_EN : 0, NULL);
+}
+
 /**
  * ov9282_set_ctrl() - Set subdevice control
  * @ctrl: pointer to v4l2_ctrl structure
@@ -662,6 +697,11 @@ static int ov9282_set_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_FLASH_DURATION:
 		ret = cci_write(ov9282->regmap, OV9282_REG_STROBE_FRAME_SPAN, ctrl->val, NULL);
 		break;
+
+	case V4L2_CID_TEST_PATTERN:
+		ret = ov9282_set_ctrl_test_pattern(ov9282, ctrl->val);
+		break;
+
 	default:
 		dev_err(ov9282->dev, "Invalid control %d", ctrl->id);
 		ret = -EINVAL;
@@ -1242,7 +1282,7 @@ static int ov9282_init_controls(struct ov9282 *ov9282)
 	u32 lpfr;
 	int ret;
 
-	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 12);
+	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 13);
 	if (ret)
 		return ret;
 
@@ -1313,6 +1353,11 @@ static int ov9282_init_controls(struct ov9282 *ov9282)
 		v4l2_ctrl_new_std(ctrl_hdlr, &ov9282_ctrl_ops,
 				  V4L2_CID_FLASH_DURATION, 0, exposure_us, 1,
 				  OV9282_STROBE_FRAME_SPAN_DEFAULT);
+
+	v4l2_ctrl_new_std_menu_items(ctrl_hdlr, &ov9282_ctrl_ops,
+				     V4L2_CID_TEST_PATTERN,
+				     ARRAY_SIZE(ov9282_test_pattern_menu) - 1,
+				     0, 0, ov9282_test_pattern_menu);
 
 	ret = v4l2_fwnode_device_parse(ov9282->dev, &props);
 	if (!ret) {
