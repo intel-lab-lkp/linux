@@ -24,7 +24,7 @@
  * Returns the guest absolute address that corresponds to the passed guest real
  * address @gra of by applying the given prefix.
  */
-static inline unsigned long _kvm_s390_real_to_abs(u32 prefix, unsigned long gra)
+static inline gpa_t _kvm_s390_real_to_abs(u32 prefix, unsigned long gra)
 {
 	if (gra < 2 * PAGE_SIZE)
 		gra += prefix;
@@ -41,8 +41,8 @@ static inline unsigned long _kvm_s390_real_to_abs(u32 prefix, unsigned long gra)
  * Returns the guest absolute address that corresponds to the passed guest real
  * address @gra of a virtual guest cpu by applying its prefix.
  */
-static inline unsigned long kvm_s390_real_to_abs(struct kvm_vcpu *vcpu,
-						 unsigned long gra)
+static inline gpa_t kvm_s390_real_to_abs(struct kvm_vcpu *vcpu,
+					 unsigned long gra)
 {
 	return _kvm_s390_real_to_abs(kvm_s390_get_prefix(vcpu), gra);
 }
