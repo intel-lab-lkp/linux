@@ -89,6 +89,13 @@ static inline unsigned long kvm_s390_logical_to_effective(struct kvm_vcpu *vcpu,
 	return _kvm_s390_logical_to_effective(&vcpu->arch.sie_block->gpsw, ga);
 }
 
+static inline gpa_t lc_addr_from_offset(struct kvm_vcpu *vcpu, unsigned int off)
+{
+	gpa_t addr = kvm_s390_get_prefix(vcpu);
+
+	return addr + off;
+}
+
 /*
  * put_guest_lc, read_guest_lc and write_guest_lc are guest access functions
  * which shall only be used to access the lowcore of a vcpu.
@@ -117,13 +124,14 @@ static inline unsigned long kvm_s390_logical_to_effective(struct kvm_vcpu *vcpu,
  *	 would be to terminate the guest.
  *	 It is wrong to inject a guest exception.
  */
-#define put_guest_lc(vcpu, x, gra)				\
+#define put_guest_lc(vcpu, x, off)				\
 ({								\
 	struct kvm_vcpu *__vcpu = (vcpu);			\
-	__typeof__(*(gra)) __x = (x);				\
-	unsigned long __gpa;					\
+	__typeof__(*(off)) __x = (x);				\
+	gpa_t __gpa;						\
 								\
-	__gpa = (unsigned long)(gra);				\
+	BUILD_BUG_ON(!__builtin_constant_p(off));		\
+	__gpa = (unsigned long)(off);				\
 	__gpa += kvm_s390_get_prefix(__vcpu);			\
 	kvm_write_guest(__vcpu->kvm, __gpa, &__x, sizeof(__x));	\
 })
@@ -131,7 +139,7 @@ static inline unsigned long kvm_s390_logical_to_effective(struct kvm_vcpu *vcpu,
 /**
  * write_guest_lc - copy data from kernel space to guest vcpu's lowcore
  * @vcpu: virtual cpu
- * @gra: vcpu's source guest real address
+ * @off: offset into the lowcore
  * @data: source address in kernel space
  * @len: number of bytes to copy
  *
@@ -146,18 +154,20 @@ static inline unsigned long kvm_s390_logical_to_effective(struct kvm_vcpu *vcpu,
  *	 It is wrong to inject a guest exception.
  */
 static inline __must_check
-int write_guest_lc(struct kvm_vcpu *vcpu, unsigned long gra, void *data,
+int write_guest_lc(struct kvm_vcpu *vcpu, unsigned int off, void *data,
 		   unsigned long len)
 {
-	unsigned long gpa = gra + kvm_s390_get_prefix(vcpu);
+	gpa_t gpa = lc_addr_from_offset(vcpu, off);
 
+	BUILD_BUG_ON(!__builtin_constant_p(off) || !__builtin_constant_p(len));
+	BUILD_BUG_ON(off + len >= 2 * PAGE_SIZE);
 	return kvm_write_guest(vcpu->kvm, gpa, data, len);
 }
 
 /**
  * read_guest_lc - copy data from guest vcpu's lowcore to kernel space
  * @vcpu: virtual cpu
- * @gra: vcpu's source guest real address
+ * @off: offset into the lowcore
  * @data: destination address in kernel space
  * @len: number of bytes to copy
  *
@@ -172,11 +182,13 @@ int write_guest_lc(struct kvm_vcpu *vcpu, unsigned long gra, void *data,
  *	 It is wrong to inject a guest exception.
  */
 static inline __must_check
-int read_guest_lc(struct kvm_vcpu *vcpu, unsigned long gra, void *data,
+int read_guest_lc(struct kvm_vcpu *vcpu, unsigned int off, void *data,
 		  unsigned long len)
 {
-	unsigned long gpa = gra + kvm_s390_get_prefix(vcpu);
+	gpa_t gpa = lc_addr_from_offset(vcpu, off);
 
+	BUILD_BUG_ON(!__builtin_constant_p(off) || !__builtin_constant_p(len));
+	BUILD_BUG_ON(off + len >= 2 * PAGE_SIZE);
 	return kvm_read_guest(vcpu->kvm, gpa, data, len);
 }
 
