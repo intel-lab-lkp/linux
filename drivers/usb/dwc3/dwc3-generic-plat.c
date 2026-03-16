@@ -12,6 +12,7 @@
 #include <linux/reset.h>
 #include <linux/regmap.h>
 #include <linux/mfd/syscon.h>
+#include <linux/regulator/consumer.h>
 #include "glue.h"
 
 #define EIC7700_HSP_BUS_FILTER_EN	BIT(0)
@@ -112,6 +113,10 @@ static int dwc3_generic_probe(struct platform_device *pdev)
 	ret = devm_clk_bulk_get_all_enabled(dwc3g->dev, &dwc3g->clks);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "failed to get clocks\n");
+
+	ret = devm_regulator_get_enable_optional(dev, "vbus");
+	if (ret && ret != -ENODEV)
+		return dev_err_probe(dev, ret, "failed to enable VBUS\n");
 
 	dwc3g->num_clocks = ret;
 	dwc3g->dwc.dev = dev;
