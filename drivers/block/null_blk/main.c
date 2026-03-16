@@ -1004,8 +1004,7 @@ static struct nullb_page *null_lookup_page(struct nullb *nullb,
 
 static struct nullb_page *null_insert_page(struct nullb *nullb,
 					   sector_t sector, bool ignore_cache)
-	__releases(&nullb->lock)
-	__acquires(&nullb->lock)
+	__must_hold(&nullb->lock)
 {
 	u64 idx;
 	struct nullb_page *t_page;
@@ -1038,6 +1037,7 @@ out_lock:
 }
 
 static int null_flush_cache_page(struct nullb *nullb, struct nullb_page *c_page)
+	__must_hold(&nullb->lock)
 {
 	int i;
 	unsigned int offset;
@@ -1087,6 +1087,7 @@ static int null_flush_cache_page(struct nullb *nullb, struct nullb_page *c_page)
 }
 
 static int null_make_cache_space(struct nullb *nullb, unsigned long n)
+	__must_hold(&nullb->lock)
 {
 	int i, err, nr_pages;
 	struct nullb_page *c_pages[FREE_BATCH];
@@ -1141,6 +1142,7 @@ again:
 
 static blk_status_t copy_to_nullb(struct nullb *nullb, void *source,
 				  loff_t pos, size_t n, bool is_fua)
+	__must_hold(&nullb->lock)
 {
 	size_t temp, count = 0;
 	struct nullb_page *t_page;
@@ -1242,6 +1244,7 @@ static blk_status_t null_handle_flush(struct nullb *nullb)
 static blk_status_t null_transfer(struct nullb *nullb, struct page *page,
 	unsigned int len, unsigned int off, bool is_write, loff_t pos,
 	bool is_fua)
+	__must_hold(&nullb->lock)
 {
 	struct nullb_device *dev = nullb->dev;
 	blk_status_t err = BLK_STS_OK;
