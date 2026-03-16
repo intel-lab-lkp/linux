@@ -2384,7 +2384,7 @@ static void vms_abort_munmap_vmas(struct vma_munmap_struct *vms,
 
 static void update_ksm_flags(struct mmap_state *map)
 {
-	map->vm_flags = ksm_vma_flags(map->mm, map->file, map->vm_flags);
+	map->vma_flags = ksm_vma_flags(map->mm, map->file, map->vma_flags);
 }
 
 static void set_desc_from_map(struct vm_area_desc *desc,
@@ -2445,7 +2445,7 @@ static int __mmap_setup(struct mmap_state *map, struct vm_area_desc *desc,
 	}
 
 	/* Check against address space limit. */
-	if (!may_expand_vm(map->mm, map->vm_flags, map->pglen - vms->nr_pages))
+	if (!may_expand_vm(map->mm, &map->vma_flags, map->pglen - vms->nr_pages))
 		return -ENOMEM;
 
 	/* Private writable mapping: check memory availability. */
@@ -2865,20 +2865,22 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	return ret;
 }
 
-/*
+/**
  * do_brk_flags() - Increase the brk vma if the flags match.
  * @vmi: The vma iterator
  * @addr: The start address
  * @len: The length of the increase
  * @vma: The vma,
- * @vm_flags: The VMA Flags
+ * @vma_flags: The VMA Flags
  *
  * Extend the brk VMA from addr to addr + len.  If the VMA is NULL or the flags
  * do not match then create a new anonymous VMA.  Eventually we may be able to
  * do some brk-specific accounting here.
+ *
+ * Returns: %0 on success, or otherwise an error.
  */
 int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *vma,
-		 unsigned long addr, unsigned long len, vm_flags_t vm_flags)
+		 unsigned long addr, unsigned long len, vma_flags_t vma_flags)
 {
 	struct mm_struct *mm = current->mm;
 
@@ -2886,9 +2888,12 @@ int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	 * Check against address space limits by the changed size
 	 * Note: This happens *after* clearing old mappings in some code paths.
 	 */
-	vm_flags |= VM_DATA_DEFAULT_FLAGS | VM_ACCOUNT | mm->def_flags;
-	vm_flags = ksm_vma_flags(mm, NULL, vm_flags);
-	if (!may_expand_vm(mm, vm_flags, len >> PAGE_SHIFT))
+	vma_flags_set_mask(&vma_flags, VMA_DATA_DEFAULT_FLAGS);
+	vma_flags_set(&vma_flags, VMA_ACCOUNT_BIT);
+	vma_flags_set_mask(&vma_flags, mm->def_vma_flags);
+
+	vma_flags = ksm_vma_flags(mm, NULL, vma_flags);
+	if (!may_expand_vm(mm, &vma_flags, len >> PAGE_SHIFT))
 		return -ENOMEM;
 
 	if (mm->map_count > get_sysctl_max_map_count())
@@ -2902,7 +2907,7 @@ int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	 * occur after forking, so the expand will only happen on new VMAs.
 	 */
 	if (vma && vma->vm_end == addr) {
-		VMG_STATE(vmg, mm, vmi, addr, addr + len, vm_flags, PHYS_PFN(addr));
+		VMG_STATE(vmg, mm, vmi, addr, addr + len, vma_flags, PHYS_PFN(addr));
 
 		vmg.prev = vma;
 		/* vmi is positioned at prev, which this mode expects. */
@@ -2923,8 +2928,8 @@ int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	vma_set_anonymous(vma);
 	vma_set_range(vma, addr, addr + len, addr >> PAGE_SHIFT);
-	vm_flags_init(vma, vm_flags);
-	vma->vm_page_prot = vm_get_page_prot(vm_flags);
+	vma->flags = vma_flags;
+	vma->vm_page_prot = vm_get_page_prot(vma_flags_to_legacy(vma_flags));
 	vma_start_write(vma);
 	if (vma_iter_store_gfp(vmi, vma, GFP_KERNEL))
 		goto mas_store_fail;
@@ -2935,10 +2940,10 @@ out:
 	perf_event_mmap(vma);
 	mm->total_vm += len >> PAGE_SHIFT;
 	mm->data_vm += len >> PAGE_SHIFT;
-	if (vm_flags & VM_LOCKED)
+	if (vma_flags_test(&vma_flags, VMA_LOCKED_BIT))
 		mm->locked_vm += (len >> PAGE_SHIFT);
 	if (pgtable_supports_soft_dirty())
-		vm_flags_set(vma, VM_SOFTDIRTY);
+		vma_flags_set(&vma_flags, VMA_SOFTDIRTY_BIT);
 	return 0;
 
 mas_store_fail:
@@ -3069,7 +3074,7 @@ static int acct_stack_growth(struct vm_area_struct *vma,
 	unsigned long new_start;
 
 	/* address space limit tests */
-	if (!may_expand_vm(mm, vma->vm_flags, grow))
+	if (!may_expand_vm(mm, &vma->flags, grow))
 		return -ENOMEM;
 
 	/* Stack limit test */
@@ -3287,7 +3292,6 @@ int __vm_munmap(unsigned long start, size_t len, bool unlock)
 int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 {
 	unsigned long charged = vma_pages(vma);
-
 
 	if (find_vma_intersection(mm, vma->vm_start, vma->vm_end))
 		return -ENOMEM;
