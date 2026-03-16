@@ -228,6 +228,16 @@ static inline void io_poll_execute(struct io_kiocb *req, int res)
 		__io_poll_execute(req, res);
 }
 
+static inline bool io_poll_loop_retry(struct io_kiocb *req, int v)
+{
+	if (req->opcode == IORING_OP_POLL_ADD)
+		return false;
+	/* multiple refs and HUP, ensure we loop once more */
+	if (v != 1 && req->cqe.res & (POLLHUP | POLLRDHUP))
+		return true;
+	return false;
+}
+
 /*
  * All poll tw should go through this. Checks for poll events, manages
  * references, does rewait, etc.
@@ -246,8 +256,9 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 		return -ECANCELED;
 
 	do {
-		v = atomic_read(&req->poll_refs);
+		bool retry = false;
 
+		v = atomic_read(&req->poll_refs);
 		if (unlikely(v != 1)) {
 			/* tw should be the owner and so have some refs */
 			if (WARN_ON_ONCE(!(v & IO_POLL_REF_MASK)))
@@ -287,12 +298,14 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 			if (unlikely(!req->cqe.res)) {
 				/* Multishot armed need not reissue */
 				if (!(req->apoll_events & EPOLLONESHOT))
-					continue;
+					goto finish;
 				return IOU_POLL_REISSUE;
 			}
 		}
 		if (req->apoll_events & EPOLLONESHOT)
 			return IOU_POLL_DONE;
+
+		retry = io_poll_loop_retry(req, v);
 
 		/* multishot, just fill a CQE and proceed */
 		if (!(req->flags & REQ_F_APOLL_MULTISHOT)) {
@@ -317,12 +330,17 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 		/* force the next iteration to vfs_poll() */
 		req->cqe.res = 0;
 
+		if (retry)
+			continue;
 		/*
 		 * Release all references, retry if someone tried to restart
 		 * task_work while we were executing it.
 		 */
+finish:
 		v &= IO_POLL_REF_MASK;
-	} while (atomic_sub_return(v, &req->poll_refs) & IO_POLL_REF_MASK);
+		if (!(atomic_sub_return(v, &req->poll_refs) & IO_POLL_REF_MASK))
+			break;
+	} while (1);
 
 	io_napi_add(req);
 	return IOU_POLL_NO_ACTION;
