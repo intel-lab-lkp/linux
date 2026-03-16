@@ -253,18 +253,13 @@ size_t strlcat(char *dest, const char *src, size_t count)
 {
 	size_t dsize = strlen(dest);
 	size_t len = strlen(src);
-	size_t res = dsize + len;
 
-	/* This would be a bug */
-	BUG_ON(dsize >= count);
+	if (dsize >= count)
+		return count + len;
 
-	dest += dsize;
-	count -= dsize;
-	if (len >= count)
-		len = count-1;
-	__builtin_memcpy(dest, src, len);
-	dest[len] = 0;
-	return res;
+	sized_strscpy(dest + dsize, src, count - dsize);
+
+	return dsize + len;
 }
 EXPORT_SYMBOL(strlcat);
 #endif
