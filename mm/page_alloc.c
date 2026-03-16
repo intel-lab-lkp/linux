@@ -91,6 +91,13 @@ typedef int __bitwise fpi_t;
 /* Free the page without taking locks. Rely on trylock only. */
 #define FPI_TRYLOCK		((__force fpi_t)BIT(2))
 
+/*
+ * free_pages_prepare() has already been called for page(s) being freed.
+ * TODO: Perform per-subpage free_pages_prepare() checks for order > 0 pages
+ * (HWPoison, PageNetpp, bad free page).
+ */
+#define FPI_PREPARED		((__force fpi_t)BIT(3))
+
 /* prevent >1 _updater_ of zone percpu pageset ->high and ->batch fields */
 static DEFINE_MUTEX(pcp_batch_high_lock);
 #define MIN_PERCPU_PAGELIST_HIGH_FRACTION (8)
@@ -1310,6 +1317,9 @@ __always_inline bool __free_pages_prepare(struct page *page,
 	bool compound = PageCompound(page);
 	struct folio *folio = page_folio(page);
 
+	if (fpi_flags & FPI_PREPARED)
+		return true;
+
 	VM_BUG_ON_PAGE(PageTail(page), page);
 
 	trace_mm_page_free(page, order);
@@ -1579,8 +1589,10 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 	unsigned long pfn = page_to_pfn(page);
 	struct zone *zone = page_zone(page);
 
-	if (__free_pages_prepare(page, order, fpi_flags))
-		free_one_page(zone, page, pfn, order, fpi_flags);
+	if (!__free_pages_prepare(page, order, fpi_flags))
+		return;
+
+	free_one_page(zone, page, pfn, order, fpi_flags);
 }
 
 void __meminit __free_pages_core(struct page *page, unsigned int order,
@@ -6784,6 +6796,93 @@ void __init page_alloc_sysctl_init(void)
 	register_sysctl_init("vm", page_alloc_sysctl_table);
 }
 
+static void free_prepared_contig_range(struct page *page,
+				       unsigned long nr_pages)
+{
+	while (nr_pages) {
+		unsigned int order;
+		unsigned long pfn;
+
+		pfn = page_to_pfn(page);
+		/* We are limited by the largest buddy order. */
+		order = pfn ? __ffs(pfn) : MAX_PAGE_ORDER;
+		/* Don't exceed the number of pages to free. */
+		order = min(order, ilog2(nr_pages));
+		order = min_t(unsigned int, order, MAX_PAGE_ORDER);
+
+		/*
+		 * Free the chunk as a single block. Our caller has already
+		 * called free_pages_prepare() for each order-0 page.
+		 */
+		__free_frozen_pages(page, order, FPI_PREPARED);
+
+		page += 1UL << order;
+		nr_pages -= 1UL << order;
+	}
+}
+
+/**
+ * __free_contig_range - Free contiguous range of order-0 pages.
+ * @pfn: Page frame number of the first page in the range.
+ * @nr_pages: Number of pages to free.
+ *
+ * For each order-0 struct page in the physically contiguous range, put a
+ * reference. Free any page who's reference count falls to zero. The
+ * implementation is functionally equivalent to, but significantly faster than
+ * calling __free_page() for each struct page in a loop.
+ *
+ * Memory allocated with alloc_pages(order>=1) then subsequently split to
+ * order-0 with split_page() is an example of appropriate contiguous pages that
+ * can be freed with this API.
+ *
+ * Returns the number of pages which were not freed, because their reference
+ * count did not fall to zero.
+ *
+ * Context: May be called in interrupt context or while holding a normal
+ * spinlock, but not in NMI context or while holding a raw spinlock.
+ */
+unsigned long __free_contig_range(unsigned long pfn, unsigned long nr_pages)
+{
+	struct page *page = pfn_to_page(pfn);
+	unsigned long not_freed = 0;
+	struct page *start = NULL;
+	unsigned long i;
+	bool can_free;
+
+	/*
+	 * Chunk the range into contiguous runs of pages for which the refcount
+	 * went to zero and for which free_pages_prepare() succeeded. If
+	 * free_pages_prepare() fails we consider the page to have been freed;
+	 * deliberately leak it.
+	 *
+	 * Code assumes contiguous PFNs have contiguous struct pages, but not
+	 * vice versa.
+	 */
+	for (i = 0; i < nr_pages; i++, page++) {
+		VM_WARN_ON_ONCE(PageHead(page));
+		VM_WARN_ON_ONCE(PageTail(page));
+
+		can_free = put_page_testzero(page);
+		if (!can_free)
+			not_freed++;
+		else if (!free_pages_prepare(page, 0))
+			can_free = false;
+
+		if (!can_free && start) {
+			free_prepared_contig_range(start, page - start);
+			start = NULL;
+		} else if (can_free && !start) {
+			start = page;
+		}
+	}
+
+	if (start)
+		free_prepared_contig_range(start, page - start);
+
+	return not_freed;
+}
+EXPORT_SYMBOL(__free_contig_range);
+
 #ifdef CONFIG_CONTIG_ALLOC
 /* Usage: See admin-guide/dynamic-debug-howto.rst */
 static void alloc_contig_dump_pages(struct list_head *page_list)
@@ -7327,11 +7426,14 @@ EXPORT_SYMBOL(free_contig_frozen_range);
  */
 void free_contig_range(unsigned long pfn, unsigned long nr_pages)
 {
+	unsigned long count;
+
 	if (WARN_ON_ONCE(PageHead(pfn_to_page(pfn))))
 		return;
 
-	for (; nr_pages--; pfn++)
-		__free_page(pfn_to_page(pfn));
+	count = __free_contig_range(pfn, nr_pages);
+	WARN(count != 0, "%lu pages are still in use!\n", count);
+
 }
 EXPORT_SYMBOL(free_contig_range);
 #endif /* CONFIG_CONTIG_ALLOC */
