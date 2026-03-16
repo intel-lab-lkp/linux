@@ -16,6 +16,7 @@ description: |
   These chips are connected to an I2C bus.
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - if:
       properties:
         compatible:
@@ -204,8 +205,6 @@ properties:
     maxItems: 1
 
   interrupt-controller: true
-
-  system-power-controller: true
 
   "#interrupt-cells":
     const: 1
