@@ -3459,18 +3459,34 @@ void vfree(const void *addr)
 
 	if (unlikely(vm->flags & VM_FLUSH_RESET_PERMS))
 		vm_reset_perms(vm);
-	for (i = 0; i < vm->nr_pages; i++) {
-		struct page *page = vm->pages[i];
+
+	if (vm->nr_pages) {
+		bool account = !(vm->flags & VM_MAP_PUT_PAGES);
+		unsigned long start_pfn, pfn;
+		struct page *page = vm->pages[0];
+		int nr = 1;
 
 		BUG_ON(!page);
-		/*
-		 * High-order allocs for huge vmallocs are split, so
-		 * can be freed as an array of order-0 allocations
-		 */
-		if (!(vm->flags & VM_MAP_PUT_PAGES))
+		start_pfn = page_to_pfn(page);
+		if (account)
 			mod_lruvec_page_state(page, NR_VMALLOC, -1);
-		__free_page(page);
-		cond_resched();
+
+		for (i = 1; i < vm->nr_pages; i++) {
+			page = vm->pages[i];
+			BUG_ON(!page);
+			if (account)
+				mod_lruvec_page_state(page, NR_VMALLOC, -1);
+			pfn = page_to_pfn(page);
+			if (start_pfn + nr == pfn) {
+				nr++;
+				continue;
+			}
+			__free_contig_range(start_pfn, nr);
+			start_pfn = pfn;
+			nr = 1;
+			cond_resched();
+		}
+		__free_contig_range(start_pfn, nr);
 	}
 	kvfree(vm->pages);
 	kfree(vm);
