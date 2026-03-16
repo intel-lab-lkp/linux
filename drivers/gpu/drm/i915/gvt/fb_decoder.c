@@ -48,13 +48,13 @@
 #include "i915_reg.h"
 
 #define PRIMARY_FORMAT_NUM	16
-struct pixel_format {
+struct gvt_pixel_format {
 	int drm_format;	/* Pixel format in DRM definition */
 	int bpp; /* Bits per pixel, 0 indicates invalid */
 	const char *desc; /* The description */
 };
 
-static const struct pixel_format bdw_pixel_formats[] = {
+static const struct gvt_pixel_format bdw_pixel_formats[] = {
 	{DRM_FORMAT_C8, 8, "8-bit Indexed"},
 	{DRM_FORMAT_RGB565, 16, "16-bit BGRX (5:6:5 MSB-R:G:B)"},
 	{DRM_FORMAT_XRGB8888, 32, "32-bit BGRX (8:8:8:8 MSB-X:R:G:B)"},
@@ -67,7 +67,7 @@ static const struct pixel_format bdw_pixel_formats[] = {
 	{}
 };
 
-static const struct pixel_format skl_pixel_formats[] = {
+static const struct gvt_pixel_format skl_pixel_formats[] = {
 	{DRM_FORMAT_YUYV, 16, "16-bit packed YUYV (8:8:8:8 MSB-V:Y2:U:Y1)"},
 	{DRM_FORMAT_UYVY, 16, "16-bit packed UYVY (8:8:8:8 MSB-Y2:V:Y1:U)"},
 	{DRM_FORMAT_YVYU, 16, "16-bit packed YVYU (8:8:8:8 MSB-U:Y2:V:Y1)"},
