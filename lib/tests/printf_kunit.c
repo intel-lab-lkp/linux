@@ -509,6 +509,13 @@ time_and_date(struct kunit *kunittest)
 	struct timespec64 ts = { .tv_sec = t, .tv_nsec = 11235813 };
 
 	test("(%pt?)", "%pt", &tm);
+
+	/* %ptT and %ptS reject bad pointers before dereference. */
+	test("(null)", "%ptT", NULL);
+	test("(efault)", "%ptT", PTR_INVALID);
+	test("(null)", "%ptS", NULL);
+	test("(efault)", "%ptS", PTR_INVALID);
+
 	test("2018-11-26T05:35:43", "%ptR", &tm);
 	test("0118-10-26T05:35:43", "%ptRr", &tm);
 	test("05:35:43|2018-11-26", "%ptRt|%ptRd", &tm, &tm);
