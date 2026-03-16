@@ -35,8 +35,6 @@ properties:
         unevaluatedProperties: false
 
         properties:
-          link-frequencies: true
-
           data-lanes:
             minItems: 1
             items:

@@ -53,14 +53,6 @@ properties:
         $ref: /schemas/media/video-interfaces.yaml#
         unevaluatedProperties: false
 
-        properties:
-          bus-width: true
-          data-shift: true
-          hsync-active: true
-          vsync-active: true
-          data-active: true
-          pclk-sample: true
-
         required:
           - bus-width
 

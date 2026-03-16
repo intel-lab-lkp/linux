@@ -63,8 +63,6 @@ properties:
           data-lanes:
             maxItems: 1
 
-          link-frequencies: true
-
         required:
           - data-lanes
           - link-frequencies

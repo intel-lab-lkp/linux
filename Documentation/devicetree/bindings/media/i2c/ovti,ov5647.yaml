@@ -51,9 +51,6 @@ properties:
         $ref: /schemas/media/video-interfaces.yaml#
         unevaluatedProperties: false
 
-        properties:
-          clock-noncontinuous: true
-
 required:
   - compatible
   - reg

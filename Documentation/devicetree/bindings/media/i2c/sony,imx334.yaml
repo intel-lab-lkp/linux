@@ -40,10 +40,6 @@ properties:
         $ref: /schemas/media/video-interfaces.yaml#
         unevaluatedProperties: false
 
-        properties:
-          data-lanes: true
-          link-frequencies: true
-
         required:
           - data-lanes
           - link-frequencies

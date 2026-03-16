@@ -48,8 +48,6 @@ properties:
         unevaluatedProperties: false
 
         properties:
-          link-frequencies: true
-
           data-lanes:
             minItems: 1
             maxItems: 4

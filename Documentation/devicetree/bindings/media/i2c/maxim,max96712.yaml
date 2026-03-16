@@ -67,7 +67,6 @@ properties:
             unevaluatedProperties: false
 
             properties:
-              data-lanes: true
               bus-type:
                 enum:
                   - 1 # MEDIA_BUS_TYPE_CSI2_CPHY

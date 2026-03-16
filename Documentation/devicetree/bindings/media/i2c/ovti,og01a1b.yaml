@@ -64,8 +64,6 @@ properties:
             items:
               enum: [1, 2]
 
-          link-frequencies: true
-
         required:
           - data-lanes
           - link-frequencies

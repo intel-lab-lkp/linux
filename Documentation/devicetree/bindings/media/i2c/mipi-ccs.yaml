@@ -78,8 +78,6 @@ properties:
         unevaluatedProperties: false
 
         properties:
-          link-frequencies: true
-          data-lanes: true
           bus-type:
             enum:
               - 1 # CSI-2 C-PHY
