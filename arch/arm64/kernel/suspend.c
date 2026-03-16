@@ -144,15 +144,14 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 		ret = fn(arg);
 
 		/*
-		 * Never gets here, unless the suspend finisher fails.
-		 * Successful cpu_suspend() should return from cpu_resume(),
-		 * returning through this code path is considered an error
-		 * If the return value is set to 0 force ret = -EOPNOTSUPP
-		 * to make sure a proper error condition is propagated
+		 * Successful HW power down should return at cpu_resume()
+		 * however successful SW power down may still want to
+		 * return here to save the work and latency involved in
+		 * restoring the context when the HW never lost it.
+		 *
+		 * If the return value is set to 0 do not force failure
+		 * from here.
 		 */
-		if (!ret)
-			ret = -EOPNOTSUPP;
-
 		ct_cpuidle_exit();
 	} else {
 		ct_cpuidle_exit();
