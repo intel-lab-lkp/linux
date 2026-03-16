@@ -760,7 +760,7 @@ static unsigned long tg_within_iops_limit(struct throtl_grp *tg, struct bio *bio
 				 u32 iops_limit)
 {
 	bool rw = bio_data_dir(bio);
-	int io_allowed;
+	unsigned int io_allowed;
 	unsigned long jiffy_elapsed, jiffy_wait, jiffy_elapsed_rnd;
 
 	jiffy_elapsed = jiffies - tg->slice_start[rw];
@@ -768,7 +768,7 @@ static unsigned long tg_within_iops_limit(struct throtl_grp *tg, struct bio *bio
 	/* Round up to the next throttle slice, wait time must be nonzero */
 	jiffy_elapsed_rnd = roundup(jiffy_elapsed + 1, DFL_THROTL_SLICE);
 	io_allowed = calculate_io_allowed(iops_limit, jiffy_elapsed_rnd);
-	if (io_allowed > 0 && tg->io_disp[rw] + 1 <= io_allowed)
+	if (tg->io_disp[rw] + 1 <= io_allowed)
 		return 0;
 
 	/* Calc approx time to dispatch */
@@ -783,8 +783,7 @@ static unsigned long tg_within_bps_limit(struct throtl_grp *tg, struct bio *bio,
 				u64 bps_limit)
 {
 	bool rw = bio_data_dir(bio);
-	long long bytes_allowed;
-	u64 extra_bytes;
+	u64 bytes_allowed, extra_bytes;
 	unsigned long jiffy_elapsed, jiffy_wait, jiffy_elapsed_rnd;
 	unsigned int bio_size = throtl_bio_data_size(bio);
 
@@ -796,9 +795,7 @@ static unsigned long tg_within_bps_limit(struct throtl_grp *tg, struct bio *bio,
 
 	jiffy_elapsed_rnd = roundup(jiffy_elapsed_rnd, DFL_THROTL_SLICE);
 	bytes_allowed = calculate_bytes_allowed(bps_limit, jiffy_elapsed_rnd);
-	/* Need to consider the case of bytes_allowed overflow. */
-	if ((bytes_allowed > 0 && tg->bytes_disp[rw] + bio_size <= bytes_allowed)
-	    || bytes_allowed < 0)
+	if (tg->bytes_disp[rw] + bio_size <= bytes_allowed)
 		return 0;
 
 	/* Calc approx time to dispatch */
