@@ -1767,6 +1767,7 @@ int dm_calculate_queue_limits(struct dm_table *t,
 	bool zoned = false;
 
 	dm_set_stacking_limits(limits);
+	limits->dma_alignment = 0;
 
 	t->integrity_supported = true;
 	for (unsigned int i = 0; i < t->num_targets; i++) {

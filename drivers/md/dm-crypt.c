@@ -150,6 +150,7 @@ enum cipher_flags {
 	CRYPT_IV_LARGE_SECTORS,		/* Calculate IV from sector_size, not 512B sectors */
 	CRYPT_ENCRYPT_PREPROCESS,	/* Must preprocess data for encryption (elephant) */
 	CRYPT_KEY_MAC_SIZE_SET,		/* The integrity_key_size option was used */
+	CRYPT_DISCONTIGUOUS_SEGS,	/* Can use partial sector segments */
 };
 
 /*
@@ -215,6 +216,7 @@ struct crypt_config {
 	unsigned int key_extra_size; /* additional keys length */
 	unsigned int key_mac_size;   /* MAC key size for authenc(...) */
 
+	unsigned int io_alignment;
 	unsigned int integrity_tag_size;
 	unsigned int integrity_iv_size;
 	unsigned int used_tag_size;
@@ -1384,22 +1386,48 @@ static int crypt_convert_block_aead(struct crypt_config *cc,
 	return r;
 }
 
+static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist *sg,
+			   struct bvec_iter *iter, struct bio *bio,
+			   int max_segs)
+{
+	unsigned int bytes = cc->sector_size;
+	struct bvec_iter tmp = *iter;
+	int segs, i = 0;
+
+	bio_advance_iter(bio, &tmp, bytes);
+	segs = tmp.bi_idx - iter->bi_idx + !!tmp.bi_bvec_done;
+	if (segs > max_segs)
+		return -EIO;
+
+	sg_init_table(sg, segs);
+	do {
+		struct bio_vec bv = mp_bvec_iter_bvec(bio->bi_io_vec, *iter);
+		int len = min(bytes, bv.bv_len);
+
+		/* Reject unexpected unaligned bio. */
+		if (unlikely((len | bv.bv_offset) & cc->io_alignment))
+			return -EIO;
+
+		sg_set_page(&sg[i++], bv.bv_page, len, bv.bv_offset);
+		bio_advance_iter_single(bio, iter, len);
+		bytes -= len;
+	} while (bytes);
+
+	if (WARN_ON_ONCE(i != segs))
+		return -EIO;
+	return 0;
+}
+
 static int crypt_convert_block_skcipher(struct crypt_config *cc,
 					struct convert_context *ctx,
 					struct skcipher_request *req,
 					unsigned int tag_offset)
 {
-	struct bio_vec bv_in = bio_iter_iovec(ctx->bio_in, ctx->iter_in);
-	struct bio_vec bv_out = bio_iter_iovec(ctx->bio_out, ctx->iter_out);
 	struct scatterlist *sg_in, *sg_out;
 	struct dm_crypt_request *dmreq;
 	u8 *iv, *org_iv, *tag_iv;
 	__le64 *sector;
-	int r = 0;
-
-	/* Reject unexpected unaligned bio. */
-	if (unlikely(bv_in.bv_len & (cc->sector_size - 1)))
-		return -EIO;
+	int r;
 
 	dmreq = dmreq_of_req(cc, req);
 	dmreq->iv_sector = ctx->cc_sector;
@@ -1416,15 +1444,18 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	sector = org_sector_of_dmreq(cc, dmreq);
 	*sector = cpu_to_le64(ctx->cc_sector - cc->iv_offset);
 
-	/* For skcipher we use only the first sg item */
 	sg_in  = &dmreq->sg_in[0];
 	sg_out = &dmreq->sg_out[0];
 
-	sg_init_table(sg_in, 1);
-	sg_set_page(sg_in, bv_in.bv_page, cc->sector_size, bv_in.bv_offset);
+	r = crypt_build_sgl(cc, sg_in, &ctx->iter_in, ctx->bio_in,
+			    ARRAY_SIZE(dmreq->sg_in));
+	if (r < 0)
+		return r;
 
-	sg_init_table(sg_out, 1);
-	sg_set_page(sg_out, bv_out.bv_page, cc->sector_size, bv_out.bv_offset);
+	r = crypt_build_sgl(cc, sg_out, &ctx->iter_out, ctx->bio_out,
+			    ARRAY_SIZE(dmreq->sg_out));
+	if (r < 0)
+		return r;
 
 	if (cc->iv_gen_ops) {
 		/* For READs use IV stored in integrity metadata */
@@ -1454,9 +1485,6 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 
 	if (!r && cc->iv_gen_ops && cc->iv_gen_ops->post)
 		r = cc->iv_gen_ops->post(cc, org_iv, dmreq);
-
-	bio_advance_iter(ctx->bio_in, &ctx->iter_in, cc->sector_size);
-	bio_advance_iter(ctx->bio_out, &ctx->iter_out, cc->sector_size);
 
 	return r;
 }
@@ -2788,10 +2816,12 @@ static void crypt_dtr(struct dm_target *ti)
 static int crypt_ctr_ivmode(struct dm_target *ti, const char *ivmode)
 {
 	struct crypt_config *cc = ti->private;
+	bool unaligned_allowed = true;
 
-	if (crypt_integrity_aead(cc))
+	if (crypt_integrity_aead(cc)) {
 		cc->iv_size = crypto_aead_ivsize(any_tfm_aead(cc));
-	else
+		unaligned_allowed = false;
+	} else
 		cc->iv_size = crypto_skcipher_ivsize(any_tfm(cc));
 
 	if (cc->iv_size)
@@ -2827,6 +2857,7 @@ static int crypt_ctr_ivmode(struct dm_target *ti, const char *ivmode)
 		if (cc->key_extra_size > ELEPHANT_MAX_KEY_SIZE)
 			return -EINVAL;
 		set_bit(CRYPT_ENCRYPT_PREPROCESS, &cc->cipher_flags);
+		unaligned_allowed = false;
 	} else if (strcmp(ivmode, "lmk") == 0) {
 		cc->iv_gen_ops = &crypt_iv_lmk_ops;
 		/*
@@ -2839,10 +2870,12 @@ static int crypt_ctr_ivmode(struct dm_target *ti, const char *ivmode)
 			cc->key_parts++;
 			cc->key_extra_size = cc->key_size / cc->key_parts;
 		}
+		unaligned_allowed = false;
 	} else if (strcmp(ivmode, "tcw") == 0) {
 		cc->iv_gen_ops = &crypt_iv_tcw_ops;
 		cc->key_parts += 2; /* IV + whitening */
 		cc->key_extra_size = cc->iv_size + TCW_WHITENING_SIZE;
+		unaligned_allowed = false;
 	} else if (strcmp(ivmode, "random") == 0) {
 		cc->iv_gen_ops = &crypt_iv_random_ops;
 		/* Need storage space in integrity fields. */
@@ -2852,6 +2885,12 @@ static int crypt_ctr_ivmode(struct dm_target *ti, const char *ivmode)
 		return -EINVAL;
 	}
 
+	if (!unaligned_allowed) {
+		cc->io_alignment = cc->sector_size - 1;
+	} else {
+		set_bit(CRYPT_DISCONTIGUOUS_SEGS, &cc->cipher_flags);
+		cc->io_alignment = 3;
+	}
 	return 0;
 }
 
@@ -3722,7 +3761,11 @@ static void crypt_io_hints(struct dm_target *ti, struct queue_limits *limits)
 	limits->physical_block_size =
 		max_t(unsigned int, limits->physical_block_size, cc->sector_size);
 	limits->io_min = max_t(unsigned int, limits->io_min, cc->sector_size);
-	limits->dma_alignment = limits->logical_block_size - 1;
+
+	if (test_bit(CRYPT_DISCONTIGUOUS_SEGS, &cc->cipher_flags))
+		limits->dma_alignment = cc->io_alignment;
+	else
+		limits->dma_alignment = limits->logical_block_size - 1;
 
 	/*
 	 * For zoned dm-crypt targets, there will be no internal splitting of
