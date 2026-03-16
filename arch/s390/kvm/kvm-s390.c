@@ -4995,11 +4995,12 @@ out:
 
 /*
  * store status at address
- * we use have two special cases:
- * KVM_S390_STORE_STATUS_NOADDR: -> 0x1200 on 64 bit
- * KVM_S390_STORE_STATUS_PREFIXED: -> prefix
+ *
+ * We have two special cases:
+ * - KVM_S390_STORE_STATUS_NOADDR: -> 0x1200 on 64 bit
+ * - KVM_S390_STORE_STATUS_PREFIXED: -> prefix
  */
-int kvm_s390_store_status_unloaded(struct kvm_vcpu *vcpu, unsigned long gpa)
+int kvm_s390_store_status_unloaded(struct kvm_vcpu *vcpu, gpa_t gpa)
 {
 	unsigned char archmode = 1;
 	freg_t fprs[NUM_FPRS];
@@ -5009,15 +5010,22 @@ int kvm_s390_store_status_unloaded(struct kvm_vcpu *vcpu, unsigned long gpa)
 
 	px = kvm_s390_get_prefix(vcpu);
 	if (gpa == KVM_S390_STORE_STATUS_NOADDR) {
-		if (write_guest_abs(vcpu, 163, &archmode, 1))
+		if (write_guest_abs(vcpu, __LC_AR_MODE_ID, &archmode, 1))
 			return -EFAULT;
 		gpa = 0;
 	} else if (gpa == KVM_S390_STORE_STATUS_PREFIXED) {
-		if (write_guest_real(vcpu, 163, &archmode, 1))
+		if (write_guest_real(vcpu, __LC_AR_MODE_ID, &archmode, 1))
 			return -EFAULT;
 		gpa = px;
-	} else
+	} else {
+		/*
+		 * Store status at address does NOT store vrs and arch
+		 * indication. Since we add __LC_FPREGS_SAVE_AREA to
+		 * the address when writing, we need to subtract it
+		 * here.
+		 */
 		gpa -= __LC_FPREGS_SAVE_AREA;
+	}
 
 	/* manually convert vector registers if necessary */
 	if (cpu_has_vx()) {
@@ -5051,7 +5059,7 @@ int kvm_s390_store_status_unloaded(struct kvm_vcpu *vcpu, unsigned long gpa)
 	return rc ? -EFAULT : 0;
 }
 
-int kvm_s390_vcpu_store_status(struct kvm_vcpu *vcpu, unsigned long addr)
+int kvm_s390_vcpu_store_status(struct kvm_vcpu *vcpu, gpa_t addr)
 {
 	/*
 	 * The guest FPRS and ACRS are in the host FPRS/ACRS due to the lazy
