@@ -167,18 +167,16 @@ void hyp_put_page(struct hyp_pool *pool, void *addr)
 {
 	struct hyp_page *p = hyp_virt_to_page(addr);
 
-	hyp_spin_lock(&pool->lock);
+	guard(hyp_spinlock)(&pool->lock);
 	__hyp_put_page(pool, p);
-	hyp_spin_unlock(&pool->lock);
 }
 
 void hyp_get_page(struct hyp_pool *pool, void *addr)
 {
 	struct hyp_page *p = hyp_virt_to_page(addr);
 
-	hyp_spin_lock(&pool->lock);
+	guard(hyp_spinlock)(&pool->lock);
 	hyp_page_ref_inc(p);
-	hyp_spin_unlock(&pool->lock);
 }
 
 void hyp_split_page(struct hyp_page *p)
@@ -200,22 +198,19 @@ void *hyp_alloc_pages(struct hyp_pool *pool, u8 order)
 	struct hyp_page *p;
 	u8 i = order;
 
-	hyp_spin_lock(&pool->lock);
+	guard(hyp_spinlock)(&pool->lock);
 
 	/* Look for a high-enough-order page */
 	while (i <= pool->max_order && list_empty(&pool->free_area[i]))
 		i++;
-	if (i > pool->max_order) {
-		hyp_spin_unlock(&pool->lock);
+	if (i > pool->max_order)
 		return NULL;
-	}
 
 	/* Extract it from the tree at the right order */
 	p = node_to_page(pool->free_area[i].next);
 	p = __hyp_extract_page(pool, p, order);
 
 	hyp_set_page_refcounted(p);
-	hyp_spin_unlock(&pool->lock);
 
 	return hyp_page_to_virt(p);
 }
