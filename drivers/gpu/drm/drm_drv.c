@@ -899,20 +899,45 @@ struct drm_device *drm_dev_alloc(const struct drm_driver *driver,
 }
 EXPORT_SYMBOL(drm_dev_alloc);
 
+DEFINE_STATIC_SRCU(drm_dev_release_srcu);
+
 static void drm_dev_release(struct kref *ref)
 {
 	struct drm_device *dev = container_of(ref, struct drm_device, ref);
+	int idx;
 
 	/* Just in case register/unregister was never called */
 	drm_debugfs_dev_fini(dev);
 
+	idx = srcu_read_lock(&drm_dev_release_srcu);
 	if (dev->driver->release)
 		dev->driver->release(dev);
 
 	drm_managed_release(dev);
+	srcu_read_unlock(&drm_dev_release_srcu, idx);
 
 	kfree(dev->managed.final_kfree);
 }
+
+/**
+ * drm_dev_release_barrier() - Ensure drm device release callbacks are finished
+ *
+ * If a device release method or any of the drm managed release callbacks
+ * have been called for a device, wait until all of them have finished
+ * executing. This function can be used to help determine whether it's safe
+ * to unload a driver module.
+ *
+ * Assume for example the driver maintains a device count which is decremented
+ * using a drmm callback or a device release callback. From a drm device
+ * lifetime POV, it's then safe to unload the driver when that device-count
+ * has reached zero and drm_dev_release_barrier() has been called.
+ */
+void drm_dev_release_barrier(void)
+{
+	synchronize_srcu(&drm_dev_release_srcu);
+}
+EXPORT_SYMBOL(drm_dev_release_barrier);
+
 
 /**
  * drm_dev_get - Take reference of a DRM device
