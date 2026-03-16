@@ -1508,10 +1508,21 @@ unlock_out:
 		clk_core_disable_unprepare(core->parent);
 }
 
-static bool clk_ignore_unused __initdata;
-static int __init clk_ignore_unused_setup(char *__unused)
+static bool clk_ignore_unused __initdata = IS_ENABLED(CONFIG_COMMON_CLK_DISABLE_UNUSED);
+static int __init clk_ignore_unused_setup(char *str)
 {
-	clk_ignore_unused = true;
+	if (!str) {
+		clk_ignore_unused = true;
+	} else {
+		/*
+		 * Typically the equals is added to the __setup below, however we
+		 * need to be able to support clk_ignore_unused without an equals
+		 * since tons of systems just pass clk_ignore_unused. So look for
+		 * the equals here.
+		 */
+		clk_ignore_unused = strcmp(str, "=0") != 0;
+	}
+
 	return 1;
 }
 __setup("clk_ignore_unused", clk_ignore_unused_setup);

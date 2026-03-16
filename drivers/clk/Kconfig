@@ -33,6 +33,22 @@ menuconfig COMMON_CLK
 
 if COMMON_CLK
 
+config COMMON_CLK_DISABLE_UNUSED
+	bool "Do not automatically disable unused clocks"
+	help
+	  Say Y here if you want to prevent the clock framework from
+	  automatically disabling unused clocks at late initialization time.
+	  This keeps clocks running even if no driver is using them, which
+	  may be necessary for certain hardware configurations or debugging.
+
+	  By default (N), the kernel will automatically disable unused clocks
+	  to save power.
+
+	  This behavior can be overridden at boot time on the kernel command
+	  line with the parameter clk_ignore_unused.
+
+	  If unsure, say N.
+
 config COMMON_CLK_WM831X
 	tristate "Clock driver for WM831x/2x PMICs"
 	depends on MFD_WM831X

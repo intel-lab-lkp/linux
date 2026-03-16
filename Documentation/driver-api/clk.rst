@@ -266,6 +266,13 @@ parameters::
 To bypass this disabling, include "clk_ignore_unused" in the bootargs to the
 kernel.
 
+Alternatively, you can enable CONFIG_COMMON_CLK_DISABLE_UNUSED at compile time
+to prevent the automatic disabling of unused clocks by default. When this
+option is enabled, unused clocks will remain enabled unless you explicitly
+force their disabling by passing "clk_ignore_unused=0" on the kernel command
+line. This can be useful for platforms that require certain clocks to remain
+enabled for proper operation, or for debugging purposes.
+
 Locking
 =======
 

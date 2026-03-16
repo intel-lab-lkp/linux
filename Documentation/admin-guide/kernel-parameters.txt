@@ -830,6 +830,15 @@ Kernel parameters
 			platform with proper driver support.  For more
 			information, see Documentation/driver-api/clk.rst.
 
+	clk_ignore_unused=0
+			[CLK]
+			Force the clock framework to automatically gate unused
+			clocks at late init, even if CONFIG_COMMON_CLK_DISABLE_UNUSED
+			is enabled. This overrides the compile-time configuration
+			to re-enable power saving by disabling unused clocks.
+
+			For more information, see Documentation/driver-api/clk.rst.
+
 	clock=		[BUGS=X86-32, HW] gettimeofday clocksource override.
 			[Deprecated]
 			Forces specified clocksource (if available) to be used
