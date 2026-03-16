@@ -716,6 +716,8 @@ static int __agg_ports_are_ready(struct aggregator *aggregator)
 		for (port = aggregator->lag_ports;
 		     port;
 		     port = port->next_port_in_aggregator) {
+			if (!port->is_enabled)
+				continue;
 			if (!(port->sm_vars & AD_PORT_READY_N)) {
 				retval = 0;
 				break;
@@ -1569,6 +1571,9 @@ static void ad_port_selection_logic(struct port *port, bool *update_slave_arr)
 	struct bonding *bond;
 	struct slave *slave;
 	int found = 0;
+
+	if (!port->is_enabled)
+		return;
 
 	/* if the port is already Selected, do nothing */
 	if (port->sm_vars & AD_PORT_SELECTED)
@@ -2794,6 +2799,7 @@ void bond_3ad_handle_link_change(struct slave *slave, char link)
 		/* link has failed */
 		port->is_enabled = false;
 		ad_update_actor_keys(port, true);
+		port->sm_vars &= ~AD_PORT_SELECTED;
 	}
 	agg = __get_first_agg(port);
 	ad_agg_selection_logic(agg, &dummy);
