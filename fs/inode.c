@@ -1037,20 +1037,19 @@ long prune_icache_sb(struct super_block *sb, struct shrink_control *sc)
 	return freed;
 }
 
-static void __wait_on_freeing_inode(struct inode *inode, bool hash_locked, bool rcu_locked);
-
+static void __wait_on_freeing_inode(struct inode *inode, bool is_inode_hash_locked);
 /*
  * Called with the inode lock held.
  */
 static struct inode *find_inode(struct super_block *sb,
 				struct hlist_head *head,
 				int (*test)(struct inode *, void *),
-				void *data, bool hash_locked,
+				void *data, bool is_inode_hash_locked,
 				bool *isnew)
 {
 	struct inode *inode = NULL;
 
-	if (hash_locked)
+	if (is_inode_hash_locked)
 		lockdep_assert_held(&inode_hash_lock);
 	else
 		lockdep_assert_not_held(&inode_hash_lock);
@@ -1064,7 +1063,7 @@ repeat:
 			continue;
 		spin_lock(&inode->i_lock);
 		if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE)) {
-			__wait_on_freeing_inode(inode, hash_locked, true);
+			__wait_on_freeing_inode(inode, is_inode_hash_locked);
 			goto repeat;
 		}
 		if (unlikely(inode_state_read(inode) & I_CREATING)) {
@@ -1088,11 +1087,11 @@ repeat:
  */
 static struct inode *find_inode_fast(struct super_block *sb,
 				struct hlist_head *head, unsigned long ino,
-				bool hash_locked, bool *isnew)
+				bool is_inode_hash_locked, bool *isnew)
 {
 	struct inode *inode = NULL;
 
-	if (hash_locked)
+	if (is_inode_hash_locked)
 		lockdep_assert_held(&inode_hash_lock);
 	else
 		lockdep_assert_not_held(&inode_hash_lock);
@@ -1106,7 +1105,7 @@ repeat:
 			continue;
 		spin_lock(&inode->i_lock);
 		if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE)) {
-			__wait_on_freeing_inode(inode, hash_locked, true);
+			__wait_on_freeing_inode(inode, is_inode_hash_locked);
 			goto repeat;
 		}
 		if (unlikely(inode_state_read(inode) & I_CREATING)) {
@@ -1842,13 +1841,28 @@ int insert_inode_locked(struct inode *inode)
 	while (1) {
 		struct inode *old = NULL;
 		spin_lock(&inode_hash_lock);
-repeat:
 		hlist_for_each_entry(old, head, i_hash) {
 			if (old->i_ino != ino)
 				continue;
 			if (old->i_sb != sb)
 				continue;
 			spin_lock(&old->i_lock);
+			/*
+			 * FIXME: inodes awaiting eviction don't get waited for
+			 *
+			 * This is a bug because the hash can temporarily end up with duplicate inodes.
+			 * It happens to work becuase new inodes are inserted at the beginning of the
+			 * chain, meaning they will be found first should anyone do a lookup.
+			 *
+			 * Fixing the above results in deadlocks in ext4 due to journal handling during
+			 * inode creation and eviction -- the eviction side waits for creation side to
+			 * finish. Adding __wait_on_freeing_inode results in both sides waiting on each
+			 * other.
+			 */
+			if (inode_state_read(old) & (I_FREEING | I_WILL_FREE)) {
+				spin_unlock(&old->i_lock);
+				continue;
+			}
 			break;
 		}
 		if (likely(!old)) {
@@ -1858,11 +1872,6 @@ repeat:
 			spin_unlock(&inode->i_lock);
 			spin_unlock(&inode_hash_lock);
 			return 0;
-		}
-		if (inode_state_read(old) & (I_FREEING | I_WILL_FREE)) {
-			__wait_on_freeing_inode(old, true, false);
-			old = NULL;
-			goto repeat;
 		}
 		if (unlikely(inode_state_read(old) & I_CREATING)) {
 			spin_unlock(&old->i_lock);
@@ -2534,18 +2543,16 @@ EXPORT_SYMBOL(inode_needs_sync);
  * wake_up_bit(&inode->i_state, __I_NEW) after removing from the hash list
  * will DTRT.
  */
-static void __wait_on_freeing_inode(struct inode *inode, bool hash_locked, bool rcu_locked)
+static void __wait_on_freeing_inode(struct inode *inode, bool is_inode_hash_locked)
 {
 	struct wait_bit_queue_entry wqe;
 	struct wait_queue_head *wq_head;
-
-	VFS_BUG_ON(!hash_locked && !rcu_locked);
 
 	/*
 	 * Handle racing against evict(), see that routine for more details.
 	 */
 	if (unlikely(inode_unhashed(inode))) {
-		WARN_ON(hash_locked);
+		WARN_ON(is_inode_hash_locked);
 		spin_unlock(&inode->i_lock);
 		return;
 	}
@@ -2553,16 +2560,14 @@ static void __wait_on_freeing_inode(struct inode *inode, bool hash_locked, bool 
 	wq_head = inode_bit_waitqueue(&wqe, inode, __I_NEW);
 	prepare_to_wait_event(wq_head, &wqe.wq_entry, TASK_UNINTERRUPTIBLE);
 	spin_unlock(&inode->i_lock);
-	if (rcu_locked)
-		rcu_read_unlock();
-	if (hash_locked)
+	rcu_read_unlock();
+	if (is_inode_hash_locked)
 		spin_unlock(&inode_hash_lock);
 	schedule();
 	finish_wait(wq_head, &wqe.wq_entry);
-	if (hash_locked)
+	if (is_inode_hash_locked)
 		spin_lock(&inode_hash_lock);
-	if (rcu_locked)
-		rcu_read_lock();
+	rcu_read_lock();
 }
 
 static __initdata unsigned long ihash_entries;
