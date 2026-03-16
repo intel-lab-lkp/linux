@@ -676,15 +676,25 @@ static int imx412_init_state(struct v4l2_subdev *sd,
 }
 
 /**
- * imx412_start_streaming() - Start sensor stream
- * @imx412: pointer to imx412 device
+ * imx412_enable_streams() - Enable specified streams for the sensor
+ * @sd: pointer to the V4L2 subdevice
+ * @state: pointer to the subdevice state
+ * @pad: pad number for which streams are enabled
+ * @streams_mask: bitmask specifying the streams to enable
  *
  * Return: 0 if successful, error code otherwise.
  */
-static int imx412_start_streaming(struct imx412 *imx412)
+static int imx412_enable_streams(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *state,
+				 u32 pad, u64 streams_mask)
 {
 	const struct imx412_reg_list *reg_list;
+	struct imx412 *imx412 = to_imx412(sd);
 	int ret;
+
+	ret = pm_runtime_resume_and_get(imx412->dev);
+	if (ret < 0)
+		return ret;
 
 	/* Write sensor mode registers */
 	reg_list = &imx412->cur_mode->reg_list;
@@ -692,14 +702,14 @@ static int imx412_start_streaming(struct imx412 *imx412)
 				  reg_list->num_of_regs, NULL);
 	if (ret) {
 		dev_err(imx412->dev, "fail to write initial registers\n");
-		return ret;
+		goto err_rpm_put;
 	}
 
 	/* Setup handler will write actual exposure and gain */
 	ret =  __v4l2_ctrl_handler_setup(imx412->sd.ctrl_handler);
 	if (ret) {
 		dev_err(imx412->dev, "fail to setup handler\n");
-		return ret;
+		goto err_rpm_put;
 	}
 
 	/* Delay is required before streaming*/
@@ -710,62 +720,42 @@ static int imx412_start_streaming(struct imx412 *imx412)
 			IMX412_MODE_STREAMING, NULL);
 	if (ret) {
 		dev_err(imx412->dev, "fail to start streaming\n");
-		return ret;
+		goto err_rpm_put;
 	}
 
 	return 0;
-}
 
-/**
- * imx412_stop_streaming() - Stop sensor stream
- * @imx412: pointer to imx412 device
- *
- * Return: 0 if successful, error code otherwise.
- */
-static int imx412_stop_streaming(struct imx412 *imx412)
-{
-	return cci_write(imx412->cci, IMX412_REG_MODE_SELECT,
-			 IMX412_MODE_STANDBY, NULL);
-}
-
-/**
- * imx412_set_stream() - Enable sensor streaming
- * @sd: pointer to imx412 subdevice
- * @enable: set to enable sensor streaming
- *
- * Return: 0 if successful, error code otherwise.
- */
-static int imx412_set_stream(struct v4l2_subdev *sd, int enable)
-{
-	struct imx412 *imx412 = to_imx412(sd);
-	struct v4l2_subdev_state *state;
-	int ret;
-
-	state = v4l2_subdev_lock_and_get_active_state(sd);
-
-	if (enable) {
-		ret = pm_runtime_resume_and_get(imx412->dev);
-		if (ret)
-			goto error_unlock;
-
-		ret = imx412_start_streaming(imx412);
-		if (ret)
-			goto error_power_off;
-	} else {
-		imx412_stop_streaming(imx412);
-		pm_runtime_put(imx412->dev);
-	}
-
-	v4l2_subdev_unlock_state(state);
-
-	return 0;
-
-error_power_off:
+err_rpm_put:
 	pm_runtime_put(imx412->dev);
-error_unlock:
-	v4l2_subdev_unlock_state(state);
 
 	return ret;
+}
+
+/**
+ * imx412_disable_streams() - Enable specified streams for the sensor
+ * @sd: pointer to the V4L2 subdevice
+ * @state: pointer to the subdevice state
+ * @pad: pad number for which streams are disabled
+ * @streams_mask: bitmask specifying the streams to disable
+ *
+ * Return: 0 if successful, error code otherwise.
+ */
+static int imx412_disable_streams(struct v4l2_subdev *sd,
+				  struct v4l2_subdev_state *state,
+				  u32 pad, u64 streams_mask)
+{
+	struct imx412 *imx412 = to_imx412(sd);
+	int ret;
+
+	ret = cci_write(imx412->cci, IMX412_REG_MODE_SELECT,
+			IMX412_MODE_STANDBY, NULL);
+
+	if (ret)
+		dev_err(imx412->dev, "failed to set stream off\n");
+
+	pm_runtime_put(imx412->dev);
+
+	return 0;
 }
 
 /**
@@ -882,7 +872,7 @@ done_endpoint_free:
 
 /* V4l2 subdevice ops */
 static const struct v4l2_subdev_video_ops imx412_video_ops = {
-	.s_stream = imx412_set_stream,
+	.s_stream = v4l2_subdev_s_stream_helper,
 };
 
 static const struct v4l2_subdev_pad_ops imx412_pad_ops = {
@@ -890,6 +880,8 @@ static const struct v4l2_subdev_pad_ops imx412_pad_ops = {
 	.enum_frame_size = imx412_enum_frame_size,
 	.get_fmt = imx412_get_pad_format,
 	.set_fmt = imx412_set_pad_format,
+	.enable_streams = imx412_enable_streams,
+	.disable_streams = imx412_disable_streams,
 };
 
 static const struct v4l2_subdev_ops imx412_subdev_ops = {
