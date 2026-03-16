@@ -1105,11 +1105,14 @@ int intel_plane_check_src_coordinates(struct intel_plane_state *plane_state)
 		hsub = 1;
 		vsub = 1;
 
-		/* Wa_16023981245 */
+		/*
+		 * Wa_16023981245, applied to odd Xpan and even Xsize for UV
+		 * Plane due to HW issue which is fixed since Xe3p DE IP.
+		 */
 		if ((DISPLAY_VERx100(display) == 2000 ||
 		     DISPLAY_VERx100(display) == 3000 ||
 		     DISPLAY_VERx100(display) == 3002) &&
-		     src_x % 2 != 0)
+		     (src_x & 1) && !(src_w & 1))
 			hsub = 2;
 
 		if (DISPLAY_VER(display) == 35)
