@@ -74,6 +74,11 @@
 			reg = <0x4130 0x4>;
 			#clock-cells = <1>;
 		};
+
+		rst@18170 {
+			compatible = "ti,am64-rst";
+			reg = <0x18170 0x10>;
+		};
 	};
 
 	gic500: interrupt-controller@1800000 {
