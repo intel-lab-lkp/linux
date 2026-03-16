@@ -798,7 +798,7 @@ static const struct elv_fs_entry deadline_attrs[] = {
 #define DEADLINE_DEBUGFS_DDIR_ATTRS(prio, data_dir, name)		\
 static void *deadline_##name##_fifo_start(struct seq_file *m,		\
 					  loff_t *pos)			\
-	__acquires(&dd->lock)						\
+	__acquires(&((struct deadline_data *)((struct request_queue *)m->private)->elevator->elevator_data)->lock)						\
 {									\
 	struct request_queue *q = m->private;				\
 	struct deadline_data *dd = q->elevator->elevator_data;		\
@@ -819,7 +819,7 @@ static void *deadline_##name##_fifo_next(struct seq_file *m, void *v,	\
 }									\
 									\
 static void deadline_##name##_fifo_stop(struct seq_file *m, void *v)	\
-	__releases(&dd->lock)						\
+	__releases(&((struct deadline_data *)((struct request_queue *)m->private)->elevator->elevator_data)->lock)						\
 {									\
 	struct request_queue *q = m->private;				\
 	struct deadline_data *dd = q->elevator->elevator_data;		\
@@ -921,7 +921,7 @@ static int dd_owned_by_driver_show(void *data, struct seq_file *m)
 }
 
 static void *deadline_dispatch_start(struct seq_file *m, loff_t *pos)
-	__acquires(&dd->lock)
+	__acquires(&((struct deadline_data *)((struct request_queue *)m->private)->elevator->elevator_data)->lock)
 {
 	struct request_queue *q = m->private;
 	struct deadline_data *dd = q->elevator->elevator_data;
@@ -939,7 +939,7 @@ static void *deadline_dispatch_next(struct seq_file *m, void *v, loff_t *pos)
 }
 
 static void deadline_dispatch_stop(struct seq_file *m, void *v)
-	__releases(&dd->lock)
+	__releases(&((struct deadline_data *)((struct request_queue *)m->private)->elevator->elevator_data)->lock)
 {
 	struct request_queue *q = m->private;
 	struct deadline_data *dd = q->elevator->elevator_data;

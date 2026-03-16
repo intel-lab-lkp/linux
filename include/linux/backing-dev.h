@@ -273,6 +273,7 @@ static inline struct bdi_writeback *inode_to_wb_wbc(
  */
 static inline struct bdi_writeback *
 unlocked_inode_to_wb_begin(struct inode *inode, struct wb_lock_cookie *cookie)
+	__no_context_analysis /* conditional locking */
 {
 	rcu_read_lock();
 
@@ -300,6 +301,7 @@ unlocked_inode_to_wb_begin(struct inode *inode, struct wb_lock_cookie *cookie)
  */
 static inline void unlocked_inode_to_wb_end(struct inode *inode,
 					    struct wb_lock_cookie *cookie)
+	__no_context_analysis /* conditional locking */
 {
 	if (unlikely(cookie->locked))
 		xa_unlock_irqrestore(&inode->i_mapping->i_pages, cookie->flags);
