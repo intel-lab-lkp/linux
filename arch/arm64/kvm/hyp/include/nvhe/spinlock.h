@@ -16,6 +16,7 @@
 #include <asm/alternative.h>
 #include <asm/lse.h>
 #include <asm/rwonce.h>
+#include <linux/cleanup.h>
 
 typedef union hyp_spinlock {
 	u32	__val;
@@ -97,6 +98,10 @@ static inline void hyp_spin_unlock(hyp_spinlock_t *lock)
 	:
 	: "memory");
 }
+
+DEFINE_LOCK_GUARD_1(hyp_spinlock, hyp_spinlock_t,
+		    hyp_spin_lock(_T->lock),
+		    hyp_spin_unlock(_T->lock))
 
 static inline bool hyp_spin_is_locked(hyp_spinlock_t *lock)
 {
