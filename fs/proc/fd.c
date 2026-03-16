@@ -86,13 +86,34 @@ static int proc_fdinfo_permission(struct mnt_idmap *idmap, struct inode *inode,
 				  int mask)
 {
 	bool allowed = false;
+	struct file *file = NULL;
+	struct files_struct *files = NULL;
 	struct task_struct *task = get_proc_task(inode);
 
 	if (!task)
 		return -ESRCH;
 
-	allowed = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
+	task_lock(task);
+	files = task->files;
+	if (files) {
+		unsigned int fd = proc_fd(inode);
+
+		spin_lock(&files->file_lock);
+		file = files_lookup_fd_locked(files, fd);
+		if (file)
+			get_file(file);
+		spin_unlock(&files->file_lock);
+	}
+	task_unlock(task);
+
+	if (file)
+		allowed = file->f_op->fop_flags & FOP_PUBLIC_FDINFO;
+
+	if (!allowed)
+		allowed = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
+
 	put_task_struct(task);
+	fput(file);
 
 	if (!allowed)
 		return -EACCES;
@@ -401,7 +422,6 @@ static int proc_fdinfo_iterate(struct file *file, struct dir_context *ctx)
 
 const struct inode_operations proc_fdinfo_inode_operations = {
 	.lookup		= proc_lookupfdinfo,
-	.permission	= proc_fdinfo_permission,
 	.setattr	= proc_setattr,
 };
 
