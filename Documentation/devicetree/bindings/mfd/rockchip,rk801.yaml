@@ -13,6 +13,9 @@ description: |
   Rockchip RK801 series PMIC. This device consists of an i2c controlled MFD
   that includes multiple switchable regulators.
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     enum:
@@ -23,11 +26,6 @@ properties:
 
   interrupts:
     maxItems: 1
-
-  system-power-controller:
-    type: boolean
-    description:
-      Telling whether or not this PMIC is controlling the system power.
 
   wakeup-source:
     type: boolean
@@ -76,7 +74,7 @@ required:
   - reg
   - interrupts
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |

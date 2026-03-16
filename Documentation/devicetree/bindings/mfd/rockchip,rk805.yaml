@@ -46,8 +46,6 @@ properties:
     description:
       Telling whether or not this PMIC is controlling the system power.
 
-  system-power-controller: true
-
   wakeup-source:
     type: boolean
     description:
@@ -87,6 +85,7 @@ properties:
     unevaluatedProperties: false
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - if:
       properties:
         '#clock-cells':
@@ -108,7 +107,7 @@ required:
   - interrupts
   - "#clock-cells"
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
@@ -126,7 +125,7 @@ examples:
             interrupts = <RK_PA6 IRQ_TYPE_LEVEL_LOW>;
             pinctrl-names = "default";
             pinctrl-0 = <&pmic_int_l>;
-            rockchip,system-power-controller;
+            system-power-controller;
             wakeup-source;
             #clock-cells = <0>;
 
