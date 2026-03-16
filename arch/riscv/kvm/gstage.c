@@ -163,6 +163,21 @@ int kvm_riscv_gstage_set_pte(struct kvm_gstage *gstage,
 	return 0;
 }
 
+static int kvm_riscv_gstage_update_pte_prot(pte_t *ptep, pgprot_t prot)
+{
+	pte_t new_pte;
+
+	if (pgprot_val(pte_pgprot(ptep_get(ptep))) == pgprot_val(prot))
+		return 0;
+
+	new_pte = pfn_pte(pte_pfn(ptep_get(ptep)), prot);
+	new_pte = pte_mkdirty(new_pte);
+
+	set_pte(ptep, new_pte);
+
+	return 1;
+}
+
 int kvm_riscv_gstage_map_page(struct kvm_gstage *gstage,
 			      struct kvm_mmu_memory_cache *pcache,
 			      gpa_t gpa, phys_addr_t hpa, unsigned long page_size,
@@ -171,6 +186,9 @@ int kvm_riscv_gstage_map_page(struct kvm_gstage *gstage,
 {
 	pgprot_t prot;
 	int ret;
+	pte_t *ptep;
+	u32 ptep_level;
+	bool found_leaf;
 
 	out_map->addr = gpa;
 	out_map->level = 0;
@@ -203,6 +221,44 @@ int kvm_riscv_gstage_map_page(struct kvm_gstage *gstage,
 		else
 			prot = PAGE_WRITE;
 	}
+
+	found_leaf = kvm_riscv_gstage_get_leaf(gstage, gpa, &ptep, &ptep_level);
+	if (found_leaf) {
+		/*
+		 * ptep_level is the current gstage mapping level of addr, out_map->level
+		 * is the required mapping level during fault handling.
+		 *
+		 * 1) ptep_level > out_map->level
+		 * This happens when dirty logging is enabled and huge pages are used.
+		 * KVM must track the pages at 4K level, and split the huge mapping
+		 * into 4K mappings.
+		 *
+		 * 2) ptep_level < out_map->level
+		 * This happens when dirty logging is disabled and huge pages are used.
+		 * The gstage is split into 4K mappings, but the out_map level is now
+		 * back to the huge page level. Ignore the out_map level this time, and
+		 * just update the pte prot here. Otherwise, we would fall back to mapping
+		 * the gstage at huge page level in `kvm_riscv_gstage_set_pte`, with the
+		 * overhead of freeing the page tables(not support now), which would slow
+		 * down the vCPUs' performance.
+		 *
+		 * It is better to recover the huge page mapping in the ioctl context when
+		 * disabling dirty logging.
+		 *
+		 * 3) ptep_level == out_map->level
+		 * We already have the ptep, just update the pte prot if the pfn not change.
+		 * There is no need to invoke `kvm_riscv_gstage_set_pte` again.
+		 */
+		if (ptep_level > out_map->level) {
+			kvm_riscv_gstage_split_huge(gstage, pcache, gpa,
+						    out_map->level, true);
+		} else if (ALIGN_DOWN(PFN_PHYS(pte_pfn(ptep_get(ptep))), page_size) == hpa) {
+			if (kvm_riscv_gstage_update_pte_prot(ptep, prot))
+				gstage_tlb_flush(gstage, ptep_level, out_map->addr);
+			return 0;
+		}
+	}
+
 	out_map->pte = pfn_pte(PFN_DOWN(hpa), prot);
 	out_map->pte = pte_mkdirty(out_map->pte);
 
