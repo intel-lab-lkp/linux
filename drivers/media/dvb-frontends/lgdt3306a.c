@@ -387,6 +387,8 @@ static int lgdt3306a_set_vsb(struct lgdt3306a_state *state)
 
 	/* 0. Spectrum inversion detection manual; spectrum inverted */
 	ret = lgdt3306a_read_reg(state, 0x0002, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xf7; /* SPECINVAUTO Off */
 	val |= 0x04; /* SPECINV On */
 	ret = lgdt3306a_write_reg(state, 0x0002, val);
@@ -400,6 +402,8 @@ static int lgdt3306a_set_vsb(struct lgdt3306a_state *state)
 
 	/* 2. Bandwidth mode for VSB(6MHz) */
 	ret = lgdt3306a_read_reg(state, 0x0009, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xe3;
 	val |= 0x0c; /* STDOPDETTMODE[2:0]=3 */
 	ret = lgdt3306a_write_reg(state, 0x0009, val);
@@ -408,6 +412,8 @@ static int lgdt3306a_set_vsb(struct lgdt3306a_state *state)
 
 	/* 3. QAM mode detection mode(None) */
 	ret = lgdt3306a_read_reg(state, 0x0009, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xfc; /* STDOPDETCMODE[1:0]=0 */
 	ret = lgdt3306a_write_reg(state, 0x0009, val);
 	if (lg_chkerr(ret))
@@ -415,6 +421,8 @@ static int lgdt3306a_set_vsb(struct lgdt3306a_state *state)
 
 	/* 4. ADC sampling frequency rate(2x sampling) */
 	ret = lgdt3306a_read_reg(state, 0x000d, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xbf; /* SAMPLING4XFEN=0 */
 	ret = lgdt3306a_write_reg(state, 0x000d, val);
 	if (lg_chkerr(ret))
@@ -477,6 +485,8 @@ static int lgdt3306a_set_vsb(struct lgdt3306a_state *state)
 #endif
 
 	ret = lgdt3306a_read_reg(state, 0x001e, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0x0f;
 	val |= 0xa0;
 	ret = lgdt3306a_write_reg(state, 0x001e, val);
@@ -486,45 +496,63 @@ static int lgdt3306a_set_vsb(struct lgdt3306a_state *state)
 	ret = lgdt3306a_write_reg(state, 0x0023, 0xFF);
 
 	ret = lgdt3306a_read_reg(state, 0x211f, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xef;
 	ret = lgdt3306a_write_reg(state, 0x211f, val);
 
 	ret = lgdt3306a_write_reg(state, 0x2173, 0x01);
 
 	ret = lgdt3306a_read_reg(state, 0x1061, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xf8;
 	val |= 0x04;
 	ret = lgdt3306a_write_reg(state, 0x1061, val);
 
 	ret = lgdt3306a_read_reg(state, 0x103d, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xcf;
 	ret = lgdt3306a_write_reg(state, 0x103d, val);
 
 	ret = lgdt3306a_write_reg(state, 0x2122, 0x40);
 
 	ret = lgdt3306a_read_reg(state, 0x2141, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0x3f;
 	ret = lgdt3306a_write_reg(state, 0x2141, val);
 
 	ret = lgdt3306a_read_reg(state, 0x2135, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0x0f;
 	val |= 0x70;
 	ret = lgdt3306a_write_reg(state, 0x2135, val);
 
 	ret = lgdt3306a_read_reg(state, 0x0003, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xf7;
 	ret = lgdt3306a_write_reg(state, 0x0003, val);
 
 	ret = lgdt3306a_read_reg(state, 0x001c, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0x7f;
 	ret = lgdt3306a_write_reg(state, 0x001c, val);
 
 	/* 6. EQ step size */
 	ret = lgdt3306a_read_reg(state, 0x2179, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xf8;
 	ret = lgdt3306a_write_reg(state, 0x2179, val);
 
 	ret = lgdt3306a_read_reg(state, 0x217a, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xf8;
 	ret = lgdt3306a_write_reg(state, 0x217a, val);
 
@@ -552,6 +580,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 1a. Spectrum inversion detection to Auto */
 	ret = lgdt3306a_read_reg(state, 0x0002, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xfb; /* SPECINV Off */
 	val |= 0x08; /* SPECINVAUTO On */
 	ret = lgdt3306a_write_reg(state, 0x0002, val);
@@ -560,6 +590,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 2. Bandwidth mode for QAM */
 	ret = lgdt3306a_read_reg(state, 0x0009, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xe3; /* STDOPDETTMODE[2:0]=0 VSB Off */
 	ret = lgdt3306a_write_reg(state, 0x0009, val);
 	if (lg_chkerr(ret))
@@ -567,6 +599,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 3. : 64QAM/256QAM detection(manual, auto) */
 	ret = lgdt3306a_read_reg(state, 0x0009, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xfc;
 	/* Check for forced Manual modulation modes; otherwise always "auto" */
 	if(forced_manual && (modulation != QAM_AUTO)){
@@ -580,6 +614,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 3a. : 64QAM/256QAM selection for manual */
 	ret = lgdt3306a_read_reg(state, 0x101a, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xf8;
 	if (modulation == QAM_64)
 		val |= 0x02; /* QMDQMODE[2:0]=2=QAM64 */
@@ -592,6 +628,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 4. ADC sampling frequency rate(4x sampling) */
 	ret = lgdt3306a_read_reg(state, 0x000d, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xbf;
 	val |= 0x40; /* SAMPLING4XFEN=1 */
 	ret = lgdt3306a_write_reg(state, 0x000d, val);
@@ -600,6 +638,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 5. No AICC operation in QAM mode */
 	ret = lgdt3306a_read_reg(state, 0x0024, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0x00;
 	ret = lgdt3306a_write_reg(state, 0x0024, val);
 	if (lg_chkerr(ret))
@@ -607,6 +647,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 5.1 V0.36 SRDCHKALWAYS : For better QAM detection */
 	ret = lgdt3306a_read_reg(state, 0x000a, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xfd;
 	val |= 0x02;
 	ret = lgdt3306a_write_reg(state, 0x000a, val);
@@ -615,6 +657,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 5.2 V0.36 Control of "no signal" detector function */
 	ret = lgdt3306a_read_reg(state, 0x2849, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xdf;
 	ret = lgdt3306a_write_reg(state, 0x2849, val);
 	if (lg_chkerr(ret))
@@ -622,6 +666,8 @@ static int lgdt3306a_set_qam(struct lgdt3306a_state *state, int modulation)
 
 	/* 5.3 Fix for Blonder Tongue HDE-2H-QAM and AQM modulators */
 	ret = lgdt3306a_read_reg(state, 0x302b, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0x7f;  /* SELFSYNCFINDEN_CQS=0; disable auto reset */
 	ret = lgdt3306a_write_reg(state, 0x302b, val);
 	if (lg_chkerr(ret))
@@ -926,29 +972,39 @@ static int lgdt3306a_init(struct dvb_frontend *fe)
 
 	/* 10a. VSB TR BW gear shift initial step */
 	ret = lgdt3306a_read_reg(state, 0x103c, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0x0f;
 	val |= 0x20; /* SAMGSAUTOSTL_V[3:0] = 2 */
 	ret = lgdt3306a_write_reg(state, 0x103c, val);
 
 	/* 10b. Timing offset calibration in low temperature for VSB */
 	ret = lgdt3306a_read_reg(state, 0x103d, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xfc;
 	val |= 0x03;
 	ret = lgdt3306a_write_reg(state, 0x103d, val);
 
 	/* 10c. Timing offset calibration in low temperature for QAM */
 	ret = lgdt3306a_read_reg(state, 0x1036, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xf0;
 	val |= 0x0c;
 	ret = lgdt3306a_write_reg(state, 0x1036, val);
 
 	/* 11. Using the imaginary part of CIR in CIR loading */
 	ret = lgdt3306a_read_reg(state, 0x211f, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xef; /* do not use imaginary of CIR */
 	ret = lgdt3306a_write_reg(state, 0x211f, val);
 
 	/* 12. Control of no signal detector function */
 	ret = lgdt3306a_read_reg(state, 0x2849, &val);
+	if (lg_chkerr(ret))
+		goto fail;
 	val &= 0xef; /* NOUSENOSIGDET=0, enable no signal detector */
 	ret = lgdt3306a_write_reg(state, 0x2849, val);
 
