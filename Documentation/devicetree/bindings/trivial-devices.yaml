@@ -432,6 +432,8 @@ properties:
           - socionext,uniphier-smpctrl
             # SparkFun Qwiic Joystick (COM-15168) with i2c interface
           - sparkfun,qwiic-joystick
+            # Single wire loopback between SPI MISO and MOSI signals
+          - spi-miso-mosi-loopback
             # STMicroelectronics Hot-swap controller stef48h28
           - st,stef48h28
             # Sierra Wireless mangOH Green SPI IoT interface
