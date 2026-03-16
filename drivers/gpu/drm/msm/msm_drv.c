@@ -812,6 +812,16 @@ static void msm_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 	drm_show_memory_stats(p, file);
 }
 
+static void msm_sysrq_kill(struct drm_device *dev)
+{
+	struct msm_drm_private *priv = dev->dev_private;
+
+	if (!priv->gpu)
+		return;
+
+	msm_gpu_sysrq_kill(priv->gpu);
+}
+
 static const struct file_operations fops = {
 	.owner = THIS_MODULE,
 	DRM_GEM_FOPS,
@@ -846,6 +856,7 @@ static const struct drm_driver msm_driver = {
 #endif
 	MSM_FBDEV_DRIVER_OPS,
 	.show_fdinfo        = msm_show_fdinfo,
+	.sysrq_kill         = msm_sysrq_kill,
 	.ioctls             = msm_ioctls,
 	.num_ioctls         = ARRAY_SIZE(msm_ioctls),
 	.fops               = &fops,
@@ -885,6 +896,7 @@ static const struct drm_driver msm_gpu_driver = {
 	.debugfs_init       = msm_debugfs_init,
 #endif
 	.show_fdinfo        = msm_show_fdinfo,
+	.sysrq_kill         = msm_sysrq_kill,
 	.ioctls             = msm_ioctls,
 	.num_ioctls         = ARRAY_SIZE(msm_ioctls),
 	.fops               = &fops,

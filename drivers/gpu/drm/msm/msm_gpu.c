@@ -672,6 +672,24 @@ static void hangcheck_handler(struct timer_list *t)
 	msm_gpu_retire(gpu);
 }
 
+void msm_gpu_sysrq_kill(struct msm_gpu *gpu)
+{
+	struct msm_ringbuffer *ring = gpu->funcs->active_ring(gpu);
+	uint32_t fence = ring->memptrs->fence;
+	struct drm_device *dev = gpu->dev;
+
+	if (fence_before(fence, ring->fctx->last_fence)) {
+		DRM_DEV_ERROR(dev->dev, "%s: sysrq kill job, rb %d!\n",
+				gpu->name, ring->id);
+		DRM_DEV_ERROR(dev->dev, "%s:     completed fence: %u\n",
+				gpu->name, fence);
+		DRM_DEV_ERROR(dev->dev, "%s:     submitted fence: %u\n",
+				gpu->name, ring->fctx->last_fence);
+
+		kthread_queue_work(gpu->worker, &gpu->recover_work);
+	}
+}
+
 /*
  * Performance Counters:
  */
