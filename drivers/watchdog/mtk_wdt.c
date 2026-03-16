@@ -507,8 +507,8 @@ static const struct of_device_id mtk_wdt_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, mtk_wdt_dt_ids);
 
-static DEFINE_SIMPLE_DEV_PM_OPS(mtk_wdt_pm_ops,
-				mtk_wdt_suspend, mtk_wdt_resume);
+static DEFINE_NOIRQ_DEV_PM_OPS(mtk_wdt_pm_ops,
+			       mtk_wdt_suspend, mtk_wdt_resume);
 
 static struct platform_driver mtk_wdt_driver = {
 	.probe		= mtk_wdt_probe,
