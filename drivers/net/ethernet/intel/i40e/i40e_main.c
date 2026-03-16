@@ -3621,9 +3621,11 @@ static int i40e_configure_rx_ring(struct i40e_ring *ring)
 skip:
 	xdp_init_buff(&ring->xdp, xdp_frame_sz, &ring->xdp_rxq);
 
-	rx_ctx.dbuff = DIV_ROUND_UP(ring->rx_buf_len,
-				    BIT_ULL(I40E_RXQ_CTX_DBUFF_SHIFT));
-
+	if (ring->xsk_pool)
+		rx_ctx.dbuff = ring->rx_buf_len / BIT_ULL(I40E_RXQ_CTX_DBUFF_SHIFT);
+	else
+		rx_ctx.dbuff = DIV_ROUND_UP(ring->rx_buf_len,
+					    BIT_ULL(I40E_RXQ_CTX_DBUFF_SHIFT));
 	rx_ctx.base = (ring->dma / 128);
 	rx_ctx.qlen = ring->count;
 
