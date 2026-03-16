@@ -375,8 +375,11 @@ static inline u32 stmmac_rx_dirty(struct stmmac_priv *priv, u32 queue)
 {
 	struct stmmac_rx_queue *rx_q = &priv->dma_conf.rx_queue[queue];
 	u32 dirty;
+	struct stmmac_rx_buffer *buf = &rx_q->buf_pool[rx_q->cur_rx];
 
-	if (rx_q->dirty_rx <= rx_q->cur_rx)
+	if (!buf->page || (priv->sph_active && !buf->sec_page))
+		dirty = priv->dma_conf.dma_rx_size;
+	else if (rx_q->dirty_rx <= rx_q->cur_rx)
 		dirty = rx_q->cur_rx - rx_q->dirty_rx;
 	else
 		dirty = priv->dma_conf.dma_rx_size - rx_q->dirty_rx + rx_q->cur_rx;
@@ -5593,7 +5596,6 @@ read_again:
  */
 static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 {
-	int budget = limit;
 	u32 rx_errors = 0, rx_dropped = 0, rx_bytes = 0, rx_packets = 0;
 	struct stmmac_rxq_stats *rxq_stats = &priv->xstats.rxq_stats[queue];
 	struct stmmac_rx_queue *rx_q = &priv->dma_conf.rx_queue[queue];
@@ -5610,8 +5612,6 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 
 	dma_dir = page_pool_get_dma_dir(rx_q->page_pool);
 	bufsz = DIV_ROUND_UP(priv->dma_conf.dma_buf_sz, PAGE_SIZE) * PAGE_SIZE;
-	limit = min(priv->dma_conf.dma_rx_size - stmmac_rx_dirty(priv, queue) - 1,
-		    (unsigned int)limit);
 
 	if (netif_msg_rx_status(priv)) {
 		void *rx_head;
@@ -5655,6 +5655,10 @@ read_again:
 		buf2_len = 0;
 		entry = next_entry;
 		buf = &rx_q->buf_pool[entry];
+
+		/* don't eat our own tail */
+		if (unlikely(!buf->page || (priv->sph_active && !buf->sec_page)))
+			break;
 
 		if (priv->extend_desc)
 			p = (struct dma_desc *)(rx_q->dma_erx + entry);
@@ -5874,8 +5878,8 @@ drain_data:
 	/* If the RX queue is completely dirty, we can't expect a future
 	 * interrupt; tell NAPI to keep polling.
 	 */
-	if (unlikely(stmmac_rx_dirty(priv, queue) == priv->dma_conf.dma_rx_size - 1))
-		return budget;
+	if (unlikely(stmmac_rx_dirty(priv, queue) == priv->dma_conf.dma_rx_size))
+		return limit;
 
 	return count;
 }
