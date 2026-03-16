@@ -338,6 +338,47 @@ int nearest_node_nodemask(int node, nodemask_t *mask)
 }
 EXPORT_SYMBOL_GPL(nearest_node_nodemask);
 
+/**
+ * nearest_nodes_nodemask - Find all nodes in @mask that are nearest to @node
+ * @node: The reference node ID to measure distance from
+ * @mask: The set of candidate nodes to compare against
+ * @out:  Pointer to a nodemask that will store the nearest node(s)
+ *
+ * This function iterates over all nodes in @mask and measures the distance
+ * between each candidate node and the given @node using node_distance().
+ * It finds the minimum distance and then records all nodes in @mask that
+ * share that same minimum distance into the output mask @out.
+ *
+ * For example, if multiple nodes have equal minimal distance to @node, all
+ * of them are included in @out.
+ *
+ * Return: 0 on success, or -EINVAL if @out is NULL.
+ */
+int nearest_nodes_nodemask(int node, const nodemask_t *mask, nodemask_t *out)
+{
+	int dist, n, min_dist = INT_MAX;
+
+	if (!out)
+		return -EINVAL;
+
+	nodes_clear(*out);
+
+	for_each_node_mask(n, *mask) {
+		dist = node_distance(node, n);
+
+		if (dist < min_dist) {
+			min_dist = dist;
+			nodes_clear(*out);
+			node_set(n, *out);
+		} else if (dist == min_dist) {
+			node_set(n, *out);
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nearest_nodes_nodemask);
+
 struct mempolicy *get_task_policy(struct task_struct *p)
 {
 	struct mempolicy *pol = p->mempolicy;
