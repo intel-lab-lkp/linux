@@ -725,7 +725,7 @@ static inline int snd_pcm_running(struct snd_pcm_substream *substream)
 static inline void __snd_pcm_set_state(struct snd_pcm_runtime *runtime,
 				       snd_pcm_state_t state)
 {
-	runtime->state = state;
+	WRITE_ONCE(runtime->state, state);
 	runtime->status->state = state; /* copy for mmap */
 }
 
