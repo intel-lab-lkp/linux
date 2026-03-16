@@ -13,6 +13,7 @@ struct opts {
 	bool checksum;
 	bool dump_orc;
 	bool hack_jump_label;
+	bool ftr_fixup;
 	bool hack_noinstr;
 	bool hack_skylake;
 	bool ibt;
