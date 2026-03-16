@@ -243,26 +243,6 @@ static DEFINE_IDA(extcon_dev_ids);
 static LIST_HEAD(extcon_dev_list);
 static DEFINE_MUTEX(extcon_dev_list_lock);
 
-static int check_mutually_exclusive(struct extcon_dev *edev, u32 new_state)
-{
-	int i;
-
-	if (!edev->mutually_exclusive)
-		return 0;
-
-	for (i = 0; edev->mutually_exclusive[i]; i++) {
-		int weight;
-		u32 correspondants = new_state & edev->mutually_exclusive[i];
-
-		/* calculate the total number of bits set */
-		weight = hweight32(correspondants);
-		if (weight > 1)
-			return i + 1;
-	}
-
-	return 0;
-}
-
 static int find_cable_index_by_id(struct extcon_dev *edev, const unsigned int id)
 {
 	int i;
@@ -557,12 +537,6 @@ int extcon_set_state(struct extcon_dev *edev, unsigned int id, bool state)
 	/* Check whether the external connector's state is changed. */
 	if (!is_extcon_changed(edev, index, state))
 		goto out;
-
-	if (check_mutually_exclusive(edev,
-		(edev->state & ~BIT(index)) | (state & BIT(index)))) {
-		ret = -EPERM;
-		goto out;
-	}
 
 	/*
 	 * Initialize the value of extcon property before setting
@@ -1037,7 +1011,6 @@ static void extcon_dev_release(struct device *dev)
 {
 }
 
-static const char *muex_name = "mutually_exclusive";
 static void dummy_sysfs_dev_release(struct device *dev)
 {
 }
@@ -1139,59 +1112,6 @@ static int extcon_alloc_cables(struct extcon_dev *edev)
 }
 
 /**
- * extcon_alloc_muex() - alloc the mutual exclusive for extcon device
- * @edev:	extcon device
- *
- * Returns 0 if success or error number if fail.
- */
-static int extcon_alloc_muex(struct extcon_dev *edev)
-{
-	char *name;
-	int index;
-
-	if (!edev)
-		return -EINVAL;
-
-	if (!(edev->max_supported && edev->mutually_exclusive))
-		return 0;
-
-	/* Count the size of mutually_exclusive array */
-	for (index = 0; edev->mutually_exclusive[index]; index++)
-		;
-
-	edev->attrs_muex = kzalloc_objs(*edev->attrs_muex, index + 1);
-	if (!edev->attrs_muex)
-		return -ENOMEM;
-
-	edev->d_attrs_muex = kzalloc_objs(*edev->d_attrs_muex, index);
-	if (!edev->d_attrs_muex) {
-		kfree(edev->attrs_muex);
-		return -ENOMEM;
-	}
-
-	for (index = 0; edev->mutually_exclusive[index]; index++) {
-		name = kasprintf(GFP_KERNEL, "0x%x",
-				 edev->mutually_exclusive[index]);
-		if (!name) {
-			for (index--; index >= 0; index--)
-				kfree(edev->d_attrs_muex[index].attr.name);
-
-			kfree(edev->d_attrs_muex);
-			kfree(edev->attrs_muex);
-			return -ENOMEM;
-		}
-		sysfs_attr_init(&edev->d_attrs_muex[index].attr);
-		edev->d_attrs_muex[index].attr.name = name;
-		edev->d_attrs_muex[index].attr.mode = 0000;
-		edev->attrs_muex[index] = &edev->d_attrs_muex[index].attr;
-	}
-	edev->attr_g_muex.name = muex_name;
-	edev->attr_g_muex.attrs = edev->attrs_muex;
-
-	return 0;
-}
-
-/**
  * extcon_alloc_groups() - alloc the groups for extcon device
  * @edev:	extcon device
  *
@@ -1217,9 +1137,6 @@ static int extcon_alloc_groups(struct extcon_dev *edev)
 
 	for (index = 0; index < edev->max_supported; index++)
 		edev->extcon_dev_type.groups[index] = &edev->cables[index].attr_g;
-
-	if (edev->mutually_exclusive)
-		edev->extcon_dev_type.groups[index] = &edev->attr_g_muex;
 
 	edev->dev.type = &edev->extcon_dev_type;
 
@@ -1280,10 +1197,6 @@ int extcon_dev_register(struct extcon_dev *edev)
 	if (ret < 0)
 		goto err_alloc_cables;
 
-	ret = extcon_alloc_muex(edev);
-	if (ret < 0)
-		goto err_alloc_muex;
-
 	ret = extcon_alloc_groups(edev);
 	if (ret < 0)
 		goto err_alloc_groups;
@@ -1325,13 +1238,6 @@ err_alloc_nh:
 	if (edev->max_supported)
 		kfree(edev->extcon_dev_type.groups);
 err_alloc_groups:
-	if (edev->max_supported && edev->mutually_exclusive) {
-		for (index = 0; edev->mutually_exclusive[index]; index++)
-			kfree(edev->d_attrs_muex[index].attr.name);
-		kfree(edev->d_attrs_muex);
-		kfree(edev->attrs_muex);
-	}
-err_alloc_muex:
 	for (index = 0; index < edev->max_supported; index++)
 		kfree(edev->cables[index].attr_g.name);
 	if (edev->max_supported)
@@ -1369,14 +1275,6 @@ void extcon_dev_unregister(struct extcon_dev *edev)
 	device_unregister(&edev->dev);
 
 	ida_free(&extcon_dev_ids, edev->id);
-
-	if (edev->mutually_exclusive && edev->max_supported) {
-		for (index = 0; edev->mutually_exclusive[index];
-				index++)
-			kfree(edev->d_attrs_muex[index].attr.name);
-		kfree(edev->d_attrs_muex);
-		kfree(edev->attrs_muex);
-	}
 
 	for (index = 0; index < edev->max_supported; index++)
 		kfree(edev->cables[index].attr_g.name);
