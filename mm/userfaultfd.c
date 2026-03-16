@@ -910,6 +910,22 @@ static __always_inline ssize_t mfill_atomic(struct userfaultfd_ctx *ctx,
 
 	while (state.src_addr < src_start + len) {
 		VM_WARN_ON_ONCE(state.dst_addr >= dst_start + len);
+	       /*
+		* Under CONFIG_PER_VMA_LOCK, a concurrent UFFDIO_UNREGISTER can
+		* split state.vma while we hold only the per-VMA read lock. The
+		* split shrinks vma->vm_end in place, causing dst_addr to fall
+		* outside the VMA bounds. Re-validate dst_addr on each iteration
+		* and re-lookup the vma if it has been split.
+		*/
+		if (state.dst_addr < state.vma->vm_start ||
+		    state.dst_addr >= state.vma->vm_end) {
+			mfill_put_vma(&state);
+			state.dst_start = state.dst_addr;
+			state.len = dst_start + len - state.dst_addr;
+			err = mfill_get_vma(&state);
+			if (err)
+				break;
+		}
 
 		err = mfill_get_pmd(&state);
 		if (err)
