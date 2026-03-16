@@ -984,14 +984,17 @@ EXPORT_SYMBOL_GPL(dma_max_mapping_size);
 size_t dma_opt_mapping_size(struct device *dev)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
-	size_t size = SIZE_MAX;
 
 	if (use_dma_iommu(dev))
-		size = iommu_dma_opt_mapping_size();
-	else if (ops && ops->opt_mapping_size)
-		size = ops->opt_mapping_size();
+		return iommu_dma_opt_mapping_size();
+	if (ops && ops->opt_mapping_size)
+		return ops->opt_mapping_size();
 
-	return min(dma_max_mapping_size(dev), size);
+	/*
+	 * No backend provided an optimal size hint. Return 0 so that
+	 * callers can distinguish "no hint" from a real value.
+	 */
+	return 0;
 }
 EXPORT_SYMBOL_GPL(dma_opt_mapping_size);
 
