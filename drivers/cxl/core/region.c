@@ -2570,6 +2570,47 @@ static int cxl_region_calculate_adistance(struct notifier_block *nb,
 	return NOTIFY_STOP;
 }
 
+static int cxl_region_find_nearest_node(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	struct cxl_endpoint_decoder *cxled = NULL;
+	struct cxl_memdev *cxlmd = NULL;
+	int i, numa_node;
+
+	for (i = 0; i < p->nr_targets; i++) {
+		cxled = p->targets[i];
+		cxlmd = cxled_to_memdev(cxled);
+		numa_node = dev_to_node(&cxlmd->dev);
+		if (numa_node != NUMA_NO_NODE)
+			return numa_node;
+	}
+	return NUMA_NO_NODE;
+}
+
+static int cxl_region_add_package_node(struct notifier_block *nb,
+				       unsigned long dax_nid, void *data)
+{
+	int region_nid, nearest_nid, ret;
+	struct cxl_region *cxlr = container_of(nb, struct cxl_region, package_notifier);
+
+	region_nid = phys_to_target_node(cxlr->params.res->start);
+	if (region_nid != dax_nid)
+		return NOTIFY_DONE;
+
+	nearest_nid = cxl_region_find_nearest_node(cxlr);
+	if (nearest_nid == NUMA_NO_NODE)
+		return NOTIFY_DONE;
+
+	ret = mp_add_package_node_by_initiator(dax_nid, nearest_nid);
+	if (ret) {
+		dev_info(&cxlr->dev, "failed add package node (%lu), nearest_nid (%d)\n",
+			 dax_nid, nearest_nid);
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+
 /**
  * devm_cxl_add_region - Adds a region to a decoder
  * @cxlrd: root decoder
@@ -3788,6 +3829,7 @@ static void shutdown_notifiers(void *_cxlr)
 
 	unregister_node_notifier(&cxlr->node_notifier);
 	unregister_mt_adistance_algorithm(&cxlr->adist_notifier);
+	unregister_mp_package_notifier(&cxlr->package_notifier);
 }
 
 static void remove_debugfs(void *dentry)
@@ -3939,6 +3981,10 @@ static int cxl_region_probe(struct device *dev)
 	cxlr->adist_notifier.notifier_call = cxl_region_calculate_adistance;
 	cxlr->adist_notifier.priority = 100;
 	register_mt_adistance_algorithm(&cxlr->adist_notifier);
+
+	cxlr->package_notifier.notifier_call = cxl_region_add_package_node;
+	cxlr->package_notifier.priority = 100;
+	register_mp_package_notifier(&cxlr->package_notifier);
 
 	rc = devm_add_action_or_reset(&cxlr->dev, shutdown_notifiers, cxlr);
 	if (rc)

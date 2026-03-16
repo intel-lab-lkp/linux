@@ -94,6 +94,8 @@ static int dev_dax_kmem_probe(struct dev_dax *dev_dax)
 	if (IS_ERR(mtype))
 		return PTR_ERR(mtype);
 
+	mp_probe_package_id(numa_node);
+
 	for (i = 0; i < dev_dax->nr_range; i++) {
 		struct range range;
 

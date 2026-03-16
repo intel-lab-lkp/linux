@@ -551,6 +551,7 @@ struct cxl_region {
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
 	struct notifier_block node_notifier;
 	struct notifier_block adist_notifier;
+	struct notifier_block package_notifier;
 };
 
 struct cxl_nvdimm_bridge {
