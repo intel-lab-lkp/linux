@@ -218,6 +218,7 @@ static int mfill_get_vma(struct mfill_state *state)
 	if (IS_ERR(dst_vma))
 		return PTR_ERR(dst_vma);
 
+	state->vma = dst_vma;
 	/*
 	 * If memory mappings are changing because of non-cooperative
 	 * operation (e.g. mremap) running in parallel, bail out and
@@ -257,7 +258,6 @@ static int mfill_get_vma(struct mfill_state *state)
 		goto out_unlock;
 
 out:
-	state->vma = dst_vma;
 	return 0;
 
 out_unlock:
