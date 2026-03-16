@@ -34,8 +34,6 @@ properties:
 
   spi-cs-high: true
 
-  system-power-controller: true
-
   interrupts:
     maxItems: 1
 
@@ -176,6 +174,7 @@ required:
   - reg
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - if:
       properties:
         compatible:
@@ -235,7 +234,7 @@ allOf:
               minItems: 1
               maxItems: 1
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
