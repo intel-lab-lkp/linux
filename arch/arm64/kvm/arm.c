@@ -274,17 +274,15 @@ static void kvm_destroy_mpidr_data(struct kvm *kvm)
 {
 	struct kvm_mpidr_data *data;
 
-	mutex_lock(&kvm->arch.config_lock);
-
-	data = rcu_dereference_protected(kvm->arch.mpidr_data,
-					 lockdep_is_held(&kvm->arch.config_lock));
-	if (data) {
-		rcu_assign_pointer(kvm->arch.mpidr_data, NULL);
-		synchronize_rcu();
-		kfree(data);
+	scoped_guard(mutex, &kvm->arch.config_lock) {
+		data = rcu_dereference_protected(kvm->arch.mpidr_data,
+						 lockdep_is_held(&kvm->arch.config_lock));
+		if (data) {
+			rcu_assign_pointer(kvm->arch.mpidr_data, NULL);
+			synchronize_rcu();
+			kfree(data);
+		}
 	}
-
-	mutex_unlock(&kvm->arch.config_lock);
 }
 
 /**
@@ -738,9 +736,8 @@ static void __kvm_arm_vcpu_power_off(struct kvm_vcpu *vcpu)
 
 void kvm_arm_vcpu_power_off(struct kvm_vcpu *vcpu)
 {
-	spin_lock(&vcpu->arch.mp_state_lock);
+	guard(spinlock)(&vcpu->arch.mp_state_lock);
 	__kvm_arm_vcpu_power_off(vcpu);
-	spin_unlock(&vcpu->arch.mp_state_lock);
 }
 
 bool kvm_arm_vcpu_stopped(struct kvm_vcpu *vcpu)
@@ -773,7 +770,7 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 {
 	int ret = 0;
 
-	spin_lock(&vcpu->arch.mp_state_lock);
+	guard(spinlock)(&vcpu->arch.mp_state_lock);
 
 	switch (mp_state->mp_state) {
 	case KVM_MP_STATE_RUNNABLE:
@@ -788,8 +785,6 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 	default:
 		ret = -EINVAL;
 	}
-
-	spin_unlock(&vcpu->arch.mp_state_lock);
 
 	return ret;
 }
@@ -828,11 +823,11 @@ static void kvm_init_mpidr_data(struct kvm *kvm)
 	u64 aff_set = 0, aff_clr = ~0UL;
 	struct kvm_vcpu *vcpu;
 
-	mutex_lock(&kvm->arch.config_lock);
+	guard(mutex)(&kvm->arch.config_lock);
 
 	if (rcu_access_pointer(kvm->arch.mpidr_data) ||
 	    atomic_read(&kvm->online_vcpus) == 1)
-		goto out;
+		return;
 
 	kvm_for_each_vcpu(c, vcpu, kvm) {
 		u64 aff = kvm_vcpu_get_mpidr_aff(vcpu);
@@ -857,7 +852,7 @@ static void kvm_init_mpidr_data(struct kvm *kvm)
 				    GFP_KERNEL_ACCOUNT);
 
 	if (!data)
-		goto out;
+		return;
 
 	data->mpidr_mask = mask;
 
@@ -869,8 +864,6 @@ static void kvm_init_mpidr_data(struct kvm *kvm)
 	}
 
 	rcu_assign_pointer(kvm->arch.mpidr_data, data);
-out:
-	mutex_unlock(&kvm->arch.config_lock);
 }
 
 /*
@@ -944,9 +937,8 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 			return ret;
 	}
 
-	mutex_lock(&kvm->arch.config_lock);
+	guard(mutex)(&kvm->arch.config_lock);
 	set_bit(KVM_ARCH_FLAG_HAS_RAN_ONCE, &kvm->arch.flags);
-	mutex_unlock(&kvm->arch.config_lock);
 
 	return ret;
 }
@@ -1585,29 +1577,26 @@ static int __kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 {
 	unsigned long features = init->features[0];
 	struct kvm *kvm = vcpu->kvm;
-	int ret = -EINVAL;
+	int ret;
 
-	mutex_lock(&kvm->arch.config_lock);
+	guard(mutex)(&kvm->arch.config_lock);
 
 	if (test_bit(KVM_ARCH_FLAG_VCPU_FEATURES_CONFIGURED, &kvm->arch.flags) &&
 	    kvm_vcpu_init_changed(vcpu, init))
-		goto out_unlock;
+		return -EINVAL;
 
 	bitmap_copy(kvm->arch.vcpu_features, &features, KVM_VCPU_MAX_FEATURES);
 
 	ret = kvm_setup_vcpu(vcpu);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
 	/* Now we know what it is, we can reset it. */
 	kvm_reset_vcpu(vcpu);
 
 	set_bit(KVM_ARCH_FLAG_VCPU_FEATURES_CONFIGURED, &kvm->arch.flags);
 	vcpu_set_flag(vcpu, VCPU_INITIALIZED);
-	ret = 0;
-out_unlock:
-	mutex_unlock(&kvm->arch.config_lock);
-	return ret;
+	return 0;
 }
 
 static int kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
@@ -1674,14 +1663,12 @@ static int kvm_arch_vcpu_ioctl_vcpu_init(struct kvm_vcpu *vcpu,
 	/*
 	 * Handle the "start in power-off" case.
 	 */
-	spin_lock(&vcpu->arch.mp_state_lock);
+	guard(spinlock)(&vcpu->arch.mp_state_lock);
 
 	if (power_off)
 		__kvm_arm_vcpu_power_off(vcpu);
 	else
 		WRITE_ONCE(vcpu->arch.mp_state.mp_state, KVM_MP_STATE_RUNNABLE);
-
-	spin_unlock(&vcpu->arch.mp_state_lock);
 
 	return 0;
 }
