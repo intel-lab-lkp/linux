@@ -2277,10 +2277,12 @@ static int gp_interception(struct kvm_vcpu *vcpu)
 	if (x86_decode_emulated_instruction(vcpu, 0, NULL, 0) != EMULATION_OK)
 		goto reinject;
 
+	/* FIXME: Handle SVM instructions through the emulator */
 	svm_exit_code = svm_instr_exit_code(vcpu);
 	if (svm_exit_code) {
-		/* All SVM instructions expect page aligned RAX */
-		if (svm->vmcb->save.rax & ~PAGE_MASK)
+		unsigned long rax = kvm_register_read(vcpu, VCPU_REGS_RAX);
+
+		if (!page_address_valid(vcpu, rax))
 			goto reinject;
 
 		if (is_guest_mode(vcpu)) {
