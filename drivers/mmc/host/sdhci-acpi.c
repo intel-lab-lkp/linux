@@ -814,6 +814,12 @@ static const struct sdhci_acpi_slot *sdhci_acpi_get_slot(struct acpi_device *ade
 	return NULL;
 }
 
+static bool sdhci_acpi_is_lenovo_n22(void)
+{
+	return dmi_match(DMI_SYS_VENDOR, "LENOVO") &&
+	       dmi_match(DMI_BOARD_NAME, "N22");
+}
+
 static int sdhci_acpi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -835,6 +841,10 @@ static int sdhci_acpi_probe(struct platform_device *pdev)
 	id = dmi_first_match(sdhci_acpi_quirks);
 	if (id)
 		quirks = (long)id->driver_data;
+
+	if (sdhci_acpi_is_lenovo_n22() &&
+	    acpi_dev_hid_uid_match(device, "INT33BB", "2"))
+		return -ENODEV;
 
 	slot = sdhci_acpi_get_slot(device);
 
