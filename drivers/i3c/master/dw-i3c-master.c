@@ -1690,6 +1690,8 @@ void dw_i3c_common_remove(struct dw_i3c_master *master)
 	pm_runtime_disable(master->dev);
 	pm_runtime_set_suspended(master->dev);
 	pm_runtime_dont_use_autosuspend(master->dev);
+
+	reset_control_assert(master->core_rst);
 }
 EXPORT_SYMBOL_GPL(dw_i3c_common_remove);
 
