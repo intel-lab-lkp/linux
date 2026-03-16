@@ -6,7 +6,10 @@
 #include <net/netns/generic.h>
 #include <net/bonding.h>
 
+#include <generated/utsrelease.h>
 #include "bonding_priv.h"
+
+#define bond_version DRV_DESCRIPTION ": v" UTS_RELEASE "\n"
 
 static void *bond_info_seq_start(struct seq_file *seq, loff_t *pos)
 	__acquires(RCU)
