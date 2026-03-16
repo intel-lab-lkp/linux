@@ -86,6 +86,12 @@ patternProperties:
     description:
       This is the DSS OLDI CTRL region.
 
+  "^rst@[0-9a-f]+$":
+    type: object
+    $ref: /schemas/mfd/syscon.yaml#
+    description:
+      The node corresponding to SoC reset registers block.
+
 required:
   - compatible
   - reg
@@ -132,6 +138,11 @@ examples:
         pcie0_ctrl: pcie-ctrl@4070 {
             compatible = "ti,j784s4-pcie-ctrl", "syscon";
             reg = <0x4070 0x4>;
+        };
+
+        rst@18170 {
+            compatible = "ti,am64-rst";
+            reg = <0x18170 0x10>;
         };
     };
 ...

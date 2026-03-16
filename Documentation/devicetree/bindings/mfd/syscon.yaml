@@ -240,6 +240,7 @@ properties:
               - ti,am62-usb-phy-ctrl
               - ti,am625-dss-oldi-io-ctrl
               - ti,am62p-cpsw-mac-efuse
+              - ti,am64-rst
               - ti,am654-dss-oldi-io-ctrl
               - ti,j784s4-acspcie-proxy-ctrl
               - ti,j784s4-pcie-ctrl
