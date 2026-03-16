@@ -24,7 +24,7 @@ while getopts "g" opt; do
   esac
 done
 
-CONF_FILE="tools/testing/selftests/net/config"
+CONF_FILE="tools/testing/selftests/net/rds/config"
 
 # no modules
 scripts/config --file "$CONF_FILE" --disable CONFIG_MODULES
