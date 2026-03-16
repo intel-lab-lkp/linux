@@ -691,6 +691,59 @@ plane_switching_crtc(const struct drm_plane_state *old_plane_state,
 }
 
 /**
+ * drm_atomic_plane_state_reset - reset plane state
+ * @plane: plane to reset
+ * @plane_state: plane state to reset
+ *
+ * This function resets the plane state to its default values, after
+ * the plane is disabled or when the plane state is no longer valid.
+ */
+static int drm_atomic_plane_state_reset(struct drm_plane *plane,
+				      struct drm_plane_state *plane_state)
+{
+	int ret;
+
+	ret = drm_atomic_set_crtc_for_plane(plane_state, NULL);
+	if (ret != 0)
+		return ret;
+
+	drm_atomic_set_fb_for_plane(plane_state, NULL);
+
+	plane_state->crtc_x = 0;
+	plane_state->crtc_y = 0;
+	plane_state->crtc_w = 0;
+	plane_state->crtc_h = 0;
+	plane_state->src_x = 0;
+	plane_state->src_y = 0;
+	plane_state->src_w = 0;
+	plane_state->src_h = 0;
+
+	plane_state->alpha = 0;
+	plane_state->pixel_blend_mode = 0;
+	plane_state->rotation = 0;
+	plane_state->zpos = 0;
+	plane_state->color_encoding = 0;
+	plane_state->color_range = 0;
+
+	drm_atomic_set_colorop_for_plane(plane_state, NULL);
+
+	bool replaced = false;
+
+	ret = drm_property_replace_blob_from_id(
+		plane->dev, &plane_state->fb_damage_clips, 0, -1, -1,
+		sizeof(struct drm_mode_rect), &replaced);
+	if (ret)
+		return ret;
+
+	plane_state->scaling_filter = 0;
+	plane_state->hotspot_x = 0;
+	plane_state->hotspot_y = 0;
+	plane_state->visible = false;
+
+	return 0;
+}
+
+/**
  * drm_atomic_plane_check - check plane state
  * @old_plane_state: old plane state to check
  * @new_plane_state: new plane state to check
@@ -701,7 +754,7 @@ plane_switching_crtc(const struct drm_plane_state *old_plane_state,
  * Zero on success, error code on failure
  */
 static int drm_atomic_plane_check(const struct drm_plane_state *old_plane_state,
-				  const struct drm_plane_state *new_plane_state)
+				  struct drm_plane_state *new_plane_state)
 {
 	struct drm_plane *plane = new_plane_state->plane;
 	struct drm_crtc *crtc = new_plane_state->crtc;
@@ -721,9 +774,12 @@ static int drm_atomic_plane_check(const struct drm_plane_state *old_plane_state,
 		return -EINVAL;
 	}
 
-	/* if disabled, we don't care about the rest of the state: */
+	/*
+	 * if disabled, we don't care about the rest of the state:
+	 * but clear the plane state.
+	 */
 	if (!crtc)
-		return 0;
+		return drm_atomic_plane_state_reset(plane, new_plane_state);
 
 	/* Check whether this plane is usable on this CRTC */
 	if (!(plane->possible_crtcs & drm_crtc_mask(crtc))) {
