@@ -1742,7 +1742,13 @@ static noinline_for_stack int extent_writepage_io(struct btrfs_inode *inode,
 	if (ret == -EAGAIN) {
 		/* Fixup worker will requeue */
 		folio_redirty_for_writepage(bio_ctrl->wbc, folio);
-		folio_unlock(folio);
+		/*
+		 * For subpage case, writepage_delalloc() may have set locked
+		 * bitmap bits for this folio.  We need to clear them or
+		 * btrfs_folio_set_lock() will ASSERT when writeback retries.
+		 */
+		btrfs_folio_end_lock_bitmap(fs_info, folio,
+					    bio_ctrl->submit_bitmap);
 		return 1;
 	}
 	if (ret < 0) {
