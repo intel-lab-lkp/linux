@@ -29,7 +29,8 @@ pub use macros::{export, fmt, kunit_tests, module, vtable};
 
 pub use pin_init::{init, pin_data, pin_init, pinned_drop, InPlaceWrite, Init, PinInit, Zeroable};
 
-pub use super::{
+#[doc(no_inline)]
+pub use crate::build_assert::{
     build_assert,
     build_error,
     const_assert,
