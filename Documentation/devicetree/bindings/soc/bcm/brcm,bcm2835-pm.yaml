@@ -50,9 +50,6 @@ properties:
       - const: h264
       - const: isp
 
-  system-power-controller:
-    type: boolean
-
   timeout-sec: true
 
 required:
@@ -62,6 +59,7 @@ required:
   - "#reset-cells"
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - $ref: /schemas/watchdog/watchdog.yaml#
 
   - if:
@@ -90,7 +88,7 @@ allOf:
         reg-names:
           maxItems: 1
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
