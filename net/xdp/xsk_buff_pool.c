@@ -213,6 +213,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 	bpf.command = XDP_SETUP_XSK_POOL;
 	bpf.xsk.pool = pool;
 	bpf.xsk.queue_id = queue_id;
+	pool->umem->zc = true;
 
 	netdev_ops_assert_locked(netdev);
 	err = netdev->netdev_ops->ndo_bpf(netdev, &bpf);
@@ -224,13 +225,13 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 		err = -EINVAL;
 		goto err_unreg_xsk;
 	}
-	pool->umem->zc = true;
 	pool->xdp_zc_max_segs = netdev->xdp_zc_max_segs;
 	return 0;
 
 err_unreg_xsk:
 	xp_disable_drv_zc(pool);
 err_unreg_pool:
+	pool->umem->zc = false;
 	if (!force_zc)
 		err = 0; /* fallback to copy mode */
 	if (err) {
