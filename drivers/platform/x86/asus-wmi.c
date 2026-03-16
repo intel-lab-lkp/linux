@@ -70,6 +70,7 @@ module_param(fnlock_default, bool, 0444);
 #define NOTIFY_KBD_TTP			0xae
 #define NOTIFY_LID_FLIP			0xfa
 #define NOTIFY_LID_FLIP_ROG		0xbd
+#define NOTIFY_THERMAL			0x6d
 
 #define ASUS_WMI_FNLOCK_BIOS_DISABLED	BIT(0)
 
@@ -4590,7 +4591,6 @@ static void asus_wmi_handle_event_code(int code, struct asus_wmi *asus)
 		if (asus->throttle_thermal_policy_dev)
 			platform_profile_cycle();
 		return;
-
 	}
 
 	if (is_display_toggle(code) && asus->driver->quirks->no_display_toggle)
@@ -4598,7 +4598,10 @@ static void asus_wmi_handle_event_code(int code, struct asus_wmi *asus)
 
 	if (!sparse_keymap_report_event(asus->inputdev, code,
 					key_value, autorelease))
-		pr_info("Unknown key code 0x%x\n", code);
+		if (code == NOTIFY_THERMAL)
+			pr_info("Thermal state change\n");
+		else
+			pr_info("Unknown key code 0x%x\n", code);
 }
 
 static void asus_wmi_notify(union acpi_object *obj, void *context)
