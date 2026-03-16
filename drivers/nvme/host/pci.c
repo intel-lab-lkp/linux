@@ -3640,6 +3640,7 @@ static struct nvme_dev *nvme_pci_alloc_dev(struct pci_dev *pdev,
 {
 	unsigned long quirks = id->driver_data;
 	int node = dev_to_node(&pdev->dev);
+	size_t dma_opt;
 	struct nvme_dev *dev;
 	struct quirk_entry *qentry;
 	int ret = -ENOMEM;
@@ -3691,12 +3692,16 @@ static struct nvme_dev *nvme_pci_alloc_dev(struct pci_dev *pdev,
 	dma_set_max_seg_size(&pdev->dev, 0xffffffff);
 
 	/*
-	 * Limit the max command size to prevent iod->sg allocations going
-	 * over a single page.
+	 * Limit the max command size to prevent iod->sg allocations
+	 * going over a single page.  Only apply the DMA optimal mapping
+	 * size limit when the DMA layer actually provides one (non-zero
+	 * return from dma_opt_mapping_size()).
 	 */
-	dev->ctrl.max_hw_sectors = min_t(u32,
-			NVME_MAX_BYTES >> SECTOR_SHIFT,
-			dma_opt_mapping_size(&pdev->dev) >> 9);
+	dev->ctrl.max_hw_sectors = NVME_MAX_BYTES >> SECTOR_SHIFT;
+	dma_opt = dma_opt_mapping_size(&pdev->dev);
+	if (dma_opt)
+		dev->ctrl.max_hw_sectors =
+			min_t(u32, dev->ctrl.max_hw_sectors, dma_opt >> 9);
 	dev->ctrl.max_segments = NVME_MAX_SEGS;
 	dev->ctrl.max_integrity_segments = 1;
 	return dev;
