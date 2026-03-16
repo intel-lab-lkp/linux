@@ -15,6 +15,7 @@ struct {
 	__uint(value_size, sizeof(int));
 } xsk SEC(".maps");
 
+static unsigned int drop_idx;
 static unsigned int idx;
 int adjust_value = 0;
 int count = 0;
@@ -27,7 +28,7 @@ SEC("xdp.frags") int xsk_def_prog(struct xdp_md *xdp)
 SEC("xdp.frags") int xsk_xdp_drop(struct xdp_md *xdp)
 {
 	/* Drop every other packet */
-	if (idx++ % 2)
+	if (drop_idx++ % 2)
 		return XDP_DROP;
 
 	return bpf_redirect_map(&xsk, 0, XDP_DROP);
