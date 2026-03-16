@@ -1254,6 +1254,12 @@ static int uvc_video_decode_start(struct uvc_streaming *stream,
 		uvc_dbg(stream->dev, FRAME,
 			"Frame complete (FID bit toggled)\n");
 		buf->state = UVC_BUF_STATE_READY;
+
+		/*
+		 * If the EOF detection has failed, we need to save the last_fid
+		 * to avoid increasing the sequence number twice.
+		 */
+		stream->last_fid = fid;
 		return -EAGAIN;
 	}
 
