@@ -89,6 +89,14 @@ static inline unsigned long kvm_s390_logical_to_effective(struct kvm_vcpu *vcpu,
 	return _kvm_s390_logical_to_effective(&vcpu->arch.sie_block->gpsw, ga);
 }
 
+static inline gpa_t kvm_s390_real_to_abs_effective(struct kvm_vcpu *vcpu,
+						   unsigned long gra)
+{
+	gra = kvm_s390_logical_to_effective(vcpu, gra);
+
+	return kvm_s390_real_to_abs(vcpu, gra);
+}
+
 static inline gpa_t lc_addr_from_offset(struct kvm_vcpu *vcpu, unsigned int off)
 {
 	gpa_t addr = kvm_s390_get_prefix(vcpu);

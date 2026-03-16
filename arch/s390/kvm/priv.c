@@ -256,9 +256,9 @@ static int try_handle_skey(struct kvm_vcpu *vcpu)
 
 static int handle_iske(struct kvm_vcpu *vcpu)
 {
-	unsigned long gaddr;
 	int reg1, reg2;
 	union skey key;
+	gpa_t gpa;
 	int rc;
 
 	vcpu->stat.instruction_iske++;
@@ -271,12 +271,10 @@ static int handle_iske(struct kvm_vcpu *vcpu)
 		return rc != -EAGAIN ? rc : 0;
 
 	kvm_s390_get_regs_rre(vcpu, &reg1, &reg2);
+	gpa = kvm_s390_real_to_abs_effective(vcpu, vcpu->run->s.regs.gprs[reg2] & PAGE_MASK);
 
-	gaddr = vcpu->run->s.regs.gprs[reg2] & PAGE_MASK;
-	gaddr = kvm_s390_logical_to_effective(vcpu, gaddr);
-	gaddr = kvm_s390_real_to_abs(vcpu, gaddr);
 	scoped_guard(read_lock, &vcpu->kvm->mmu_lock)
-		rc = dat_get_storage_key(vcpu->arch.gmap->asce, gpa_to_gfn(gaddr), &key);
+		rc = dat_get_storage_key(vcpu->arch.gmap->asce, gpa_to_gfn(gpa), &key);
 	if (rc > 0)
 		return kvm_s390_inject_program_int(vcpu, rc);
 	if (rc < 0)
@@ -288,8 +286,8 @@ static int handle_iske(struct kvm_vcpu *vcpu)
 
 static int handle_rrbe(struct kvm_vcpu *vcpu)
 {
-	unsigned long gaddr;
 	int reg1, reg2;
+	gpa_t gpa;
 	int rc;
 
 	vcpu->stat.instruction_rrbe++;
@@ -302,12 +300,10 @@ static int handle_rrbe(struct kvm_vcpu *vcpu)
 		return rc != -EAGAIN ? rc : 0;
 
 	kvm_s390_get_regs_rre(vcpu, &reg1, &reg2);
+	gpa = kvm_s390_real_to_abs_effective(vcpu, vcpu->run->s.regs.gprs[reg2] & PAGE_MASK);
 
-	gaddr = vcpu->run->s.regs.gprs[reg2] & PAGE_MASK;
-	gaddr = kvm_s390_logical_to_effective(vcpu, gaddr);
-	gaddr = kvm_s390_real_to_abs(vcpu, gaddr);
 	scoped_guard(read_lock, &vcpu->kvm->mmu_lock)
-		rc = dat_reset_reference_bit(vcpu->arch.gmap->asce, gpa_to_gfn(gaddr));
+		rc = dat_reset_reference_bit(vcpu->arch.gmap->asce, gpa_to_gfn(gpa));
 	if (rc > 0)
 		return kvm_s390_inject_program_int(vcpu, rc);
 	if (rc < 0)
@@ -1142,8 +1138,8 @@ static inline int __do_essa(struct kvm_vcpu *vcpu, const int orc)
 	int r1, r2, nappended, entries;
 	union essa_state state;
 	unsigned long *cbrlo;
-	unsigned long gfn;
 	bool dirtied;
+	gpa_t gpa;
 
 	/*
 	 * We don't need to set SD.FPF.SK to 1 here, because if we have a
@@ -1151,10 +1147,11 @@ static inline int __do_essa(struct kvm_vcpu *vcpu, const int orc)
 	 */
 
 	kvm_s390_get_regs_rre(vcpu, &r1, &r2);
-	gfn = gpa_to_gfn(vcpu->run->s.regs.gprs[r2]);
+	gpa = vcpu->run->s.regs.gprs[r2];
 	entries = (vcpu->arch.sie_block->cbrlo & ~PAGE_MASK) >> 3;
 
-	nappended = dat_perform_essa(vcpu->arch.gmap->asce, gfn, orc, &state, &dirtied);
+	nappended = dat_perform_essa(vcpu->arch.gmap->asce, gpa_to_gfn(gpa),
+				     orc, &state, &dirtied);
 	vcpu->run->s.regs.gprs[r1] = state.val;
 	if (nappended < 0)
 		return 0;
@@ -1166,7 +1163,7 @@ static inline int __do_essa(struct kvm_vcpu *vcpu, const int orc)
 	 */
 	if (nappended > 0) {
 		cbrlo = phys_to_virt(vcpu->arch.sie_block->cbrlo & PAGE_MASK);
-		cbrlo[entries] = gfn << PAGE_SHIFT;
+		cbrlo[entries] = gpa;
 	}
 
 	if (dirtied)
@@ -1447,10 +1444,10 @@ int kvm_s390_handle_eb(struct kvm_vcpu *vcpu)
 static int handle_tprot(struct kvm_vcpu *vcpu)
 {
 	u64 address, operand2;
-	unsigned long gpa;
 	u8 access_key;
 	bool writable;
 	int ret, cc;
+	gpa_t gpa;
 	u8 ar;
 
 	vcpu->stat.instruction_tprot++;
