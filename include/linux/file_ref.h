@@ -51,16 +51,6 @@ typedef struct {
 #endif
 } file_ref_t;
 
-/**
- * file_ref_init - Initialize a file reference count
- * @ref: Pointer to the reference count
- * @cnt: The initial reference count typically '1'
- */
-static inline void file_ref_init(file_ref_t *ref, unsigned long cnt)
-{
-	atomic_long_set(&ref->refcnt, cnt - 1);
-}
-
 bool __file_ref_put(file_ref_t *ref, unsigned long cnt);
 
 /**
