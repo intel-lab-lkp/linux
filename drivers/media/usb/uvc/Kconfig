@@ -20,3 +20,14 @@ config USB_VIDEO_CLASS_INPUT_EVDEV
 	  to report button events.
 
 	  If you are in doubt, say Y.
+
+config USB_VIDEO_CLASS_ALLOW_PRIVACY_OVERRIDE
+	bool "Allow overriding the privacy controls"
+	default n
+	depends on USB_VIDEO_CLASS && BROKEN
+	help
+	  If this option is enabled, the privacy related controls, such as
+	  the ones controlling the privacy LED will be accessible from
+	  userspace.
+
+	  If you are in doubt, say N.
