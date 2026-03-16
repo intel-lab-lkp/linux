@@ -60,7 +60,7 @@
 #define	FSP_REG_SN1		(0x41)
 #define	FSP_REG_SN2		(0x42)
 
-/* Finger-sensing Pad packet formating related definitions */
+/* Finger-sensing Pad packet formatting related definitions */
 
 /* absolute packet type */
 #define	FSP_PKT_TYPE_NORMAL	(0x00)
