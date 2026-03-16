@@ -255,8 +255,9 @@ size_t strlcat(char *dest, const char *src, size_t count)
 	size_t len = strlen(src);
 	size_t res = dsize + len;
 
-	/* This would be a bug */
-	BUG_ON(dsize >= count);
+	/* This would be a caller bug */
+	if (WARN_ON_ONCE(dsize >= count))
+		return count;
 
 	dest += dsize;
 	count -= dsize;
