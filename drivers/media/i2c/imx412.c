@@ -118,7 +118,6 @@ static const char * const imx412_supply_names[] = {
  * @again_ctrl: Pointer to analog gain control
  * @vblank: Vertical blanking in lines
  * @cur_mode: Pointer to current selected sensor mode
- * @mutex: Mutex for serializing sensor controls
  */
 struct imx412 {
 	struct device *dev;
@@ -140,7 +139,6 @@ struct imx412 {
 	};
 	u32 vblank;
 	const struct imx412_mode *cur_mode;
-	struct mutex mutex;
 };
 
 static const s64 link_freq[] = {
@@ -613,8 +611,6 @@ static int imx412_get_pad_format(struct v4l2_subdev *sd,
 {
 	struct imx412 *imx412 = to_imx412(sd);
 
-	mutex_lock(&imx412->mutex);
-
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
 		struct v4l2_mbus_framefmt *framefmt;
 
@@ -623,8 +619,6 @@ static int imx412_get_pad_format(struct v4l2_subdev *sd,
 	} else {
 		imx412_fill_pad_format(imx412, imx412->cur_mode, fmt);
 	}
-
-	mutex_unlock(&imx412->mutex);
 
 	return 0;
 }
@@ -645,8 +639,6 @@ static int imx412_set_pad_format(struct v4l2_subdev *sd,
 	const struct imx412_mode *mode;
 	int ret = 0;
 
-	mutex_lock(&imx412->mutex);
-
 	mode = &supported_mode;
 	imx412_fill_pad_format(imx412, mode, fmt);
 
@@ -660,8 +652,6 @@ static int imx412_set_pad_format(struct v4l2_subdev *sd,
 		if (!ret)
 			imx412->cur_mode = mode;
 	}
-
-	mutex_unlock(&imx412->mutex);
 
 	return ret;
 }
@@ -748,9 +738,10 @@ static int imx412_stop_streaming(struct imx412 *imx412)
 static int imx412_set_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct imx412 *imx412 = to_imx412(sd);
+	struct v4l2_subdev_state *state;
 	int ret;
 
-	mutex_lock(&imx412->mutex);
+	state = v4l2_subdev_lock_and_get_active_state(sd);
 
 	if (enable) {
 		ret = pm_runtime_resume_and_get(imx412->dev);
@@ -765,14 +756,14 @@ static int imx412_set_stream(struct v4l2_subdev *sd, int enable)
 		pm_runtime_put(imx412->dev);
 	}
 
-	mutex_unlock(&imx412->mutex);
+	v4l2_subdev_unlock_state(state);
 
 	return 0;
 
 error_power_off:
 	pm_runtime_put(imx412->dev);
 error_unlock:
-	mutex_unlock(&imx412->mutex);
+	v4l2_subdev_unlock_state(state);
 
 	return ret;
 }
@@ -987,9 +978,6 @@ static int imx412_init_controls(struct imx412 *imx412)
 	if (ret)
 		return ret;
 
-	/* Serialize controls with sensor device */
-	ctrl_hdlr->lock = &imx412->mutex;
-
 	/* Initialize exposure and gain */
 	lpfr = mode->vblank + mode->height;
 	imx412->exp_ctrl = v4l2_ctrl_new_std(ctrl_hdlr,
@@ -1091,13 +1079,10 @@ static int imx412_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	mutex_init(&imx412->mutex);
-
 	ret = imx412_power_on(imx412->dev);
-	if (ret) {
-		dev_err(imx412->dev, "failed to power-on the sensor\n");
-		goto error_mutex_destroy;
-	}
+	if (ret)
+		return dev_err_probe(imx412->dev, ret,
+				     "failed to power-on the sensor\n");
 
 	/* Check module identity */
 	ret = imx412_detect(imx412);
@@ -1130,27 +1115,37 @@ static int imx412_probe(struct i2c_client *client)
 		goto error_handler_free;
 	}
 
-	ret = v4l2_async_register_subdev_sensor(&imx412->sd);
+	imx412->sd.state_lock = imx412->ctrl_handler.lock;
+	ret = v4l2_subdev_init_finalize(&imx412->sd);
 	if (ret < 0) {
-		dev_err(imx412->dev,
-			"failed to register async subdev: %d\n", ret);
+		dev_err_probe(imx412->dev, ret, "subdev init error\n");
 		goto error_media_entity;
 	}
 
 	pm_runtime_set_active(imx412->dev);
 	pm_runtime_enable(imx412->dev);
+
+	ret = v4l2_async_register_subdev_sensor(&imx412->sd);
+	if (ret < 0) {
+		dev_err_probe(imx412->dev, ret,
+			      "failed to register sub-device\n");
+		goto error_subdev_cleanup;
+	}
+
 	pm_runtime_idle(imx412->dev);
 
 	return 0;
 
+error_subdev_cleanup:
+	v4l2_subdev_cleanup(&imx412->sd);
+	pm_runtime_disable(imx412->dev);
+	pm_runtime_set_suspended(imx412->dev);
 error_media_entity:
 	media_entity_cleanup(&imx412->sd.entity);
 error_handler_free:
 	v4l2_ctrl_handler_free(imx412->sd.ctrl_handler);
 error_power_off:
 	imx412_power_off(imx412->dev);
-error_mutex_destroy:
-	mutex_destroy(&imx412->mutex);
 
 	return ret;
 }
@@ -1164,9 +1159,9 @@ error_mutex_destroy:
 static void imx412_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
-	struct imx412 *imx412 = to_imx412(sd);
 
 	v4l2_async_unregister_subdev(sd);
+	v4l2_subdev_cleanup(sd);
 	media_entity_cleanup(&sd->entity);
 	v4l2_ctrl_handler_free(sd->ctrl_handler);
 
@@ -1174,8 +1169,6 @@ static void imx412_remove(struct i2c_client *client)
 	if (!pm_runtime_status_suspended(&client->dev))
 		imx412_power_off(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
-
-	mutex_destroy(&imx412->mutex);
 }
 
 static const struct dev_pm_ops imx412_pm_ops = {
