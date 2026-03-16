@@ -30,8 +30,10 @@
 static void vfio_pci_irq_set(struct vfio_pci_device *device,
 			     u32 index, u32 vector, u32 count, int *fds)
 {
-	u8 buf[sizeof(struct vfio_irq_set) + sizeof(int) * count] = {};
+	u8 buf[sizeof(struct vfio_irq_set) + sizeof(int) * count];
 	struct vfio_irq_set *irq = (void *)&buf;
+
+	memset(buf, 0, sizeof(buf));
 	int *irq_fds = (void *)&irq->data;
 
 	irq->argsz = sizeof(buf);
