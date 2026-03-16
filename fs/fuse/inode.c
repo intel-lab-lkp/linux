@@ -977,13 +977,20 @@ static void fuse_iqueue_init(struct fuse_iqueue *fiq,
 
 void fuse_pqueue_init(struct fuse_pqueue *fpq)
 {
-	unsigned int i;
-
 	spin_lock_init(&fpq->lock);
-	for (i = 0; i < FUSE_PQ_HASH_SIZE; i++)
-		INIT_LIST_HEAD(&fpq->processing[i]);
 	INIT_LIST_HEAD(&fpq->io);
 	fpq->connected = 1;
+}
+
+struct list_head *fuse_pqueue_alloc(void)
+{
+	struct list_head *pq = kzalloc_objs(struct list_head, FUSE_PQ_HASH_SIZE);
+
+	if (pq) {
+		for (int i = 0; i < FUSE_PQ_HASH_SIZE; i++)
+			INIT_LIST_HEAD(&pq[i]);
+	}
+	return pq;
 }
 
 void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
@@ -1633,32 +1640,37 @@ static int fuse_bdi_init(struct fuse_conn *fc, struct super_block *sb)
 	return 0;
 }
 
-struct fuse_dev *fuse_dev_alloc(void)
+struct fuse_dev *fuse_dev_alloc(bool alloc_pq)
 {
 	struct fuse_dev *fud;
-	struct list_head *pq;
+	struct list_head *pq __free(kfree) = NULL;
+
+	if (alloc_pq) {
+		pq = fuse_pqueue_alloc();
+		if (!pq)
+			return NULL;
+	}
 
 	fud = kzalloc_obj(struct fuse_dev);
 	if (!fud)
 		return NULL;
 
 	refcount_set(&fud->ref, 1);
-	pq = kzalloc_objs(struct list_head, FUSE_PQ_HASH_SIZE);
-	if (!pq) {
-		kfree(fud);
-		return NULL;
-	}
-
-	fud->pq.processing = pq;
+	fud->pq.processing = no_free_ptr(pq);
 	fuse_pqueue_init(&fud->pq);
 
 	return fud;
 }
 EXPORT_SYMBOL_GPL(fuse_dev_alloc);
 
-bool fuse_dev_install(struct fuse_dev *fud, struct fuse_conn *fc)
+bool fuse_dev_install(struct fuse_dev *fud, struct fuse_conn *fc, struct list_head *pq)
 {
 	struct fuse_conn *old_fc;
+
+	if (!pq)
+		WARN_ON(!fud->pq.processing);
+	else if (cmpxchg(&fud->pq.processing, NULL, pq))
+		kfree(pq);
 
 	fuse_conn_get(fc);
 	spin_lock(&fc->lock);
@@ -1687,13 +1699,12 @@ EXPORT_SYMBOL_GPL(fuse_dev_install);
 
 struct fuse_dev *fuse_dev_alloc_install(struct fuse_conn *fc)
 {
-	struct fuse_dev *fud;
+	struct fuse_dev *fud = fuse_dev_alloc(true);
 
-	fud = fuse_dev_alloc();
 	if (!fud)
 		return NULL;
 
-	fuse_dev_install(fud, fc);
+	fuse_dev_install(fud, fc, NULL);
 	return fud;
 }
 EXPORT_SYMBOL_GPL(fuse_dev_alloc_install);
@@ -1871,9 +1882,13 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	struct fuse_dev *fud = ctx->fud;
 	struct fuse_mount *fm = get_fuse_mount_super(sb);
 	struct fuse_conn *fc = fm->fc;
+	struct list_head *pq __free(kfree) = fuse_pqueue_alloc();
 	struct inode *root;
 	struct dentry *root_dentry;
 	int err;
+
+	if (!pq)
+		return -ENOMEM;
 
 	err = -EINVAL;
 	if (sb->s_flags & SB_MANDLOCK)
@@ -1946,7 +1961,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	list_add_tail(&fc->entry, &fuse_conn_list);
 	sb->s_root = root_dentry;
 	if (fud) {
-		if (!fuse_dev_install(fud, fc))
+		if (!fuse_dev_install(fud, fc, no_free_ptr(pq)))
 			fc->connected = 0; /* device file got closed */
 		else
 			wake_up_all(&fuse_dev_waitq);
