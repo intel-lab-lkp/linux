@@ -125,7 +125,7 @@ static void _kvm_s390_pv_make_secure(struct guest_fault *f)
  * Context: needs to be called with kvm->srcu held.
  * Return: 0 on success, < 0 in case of error.
  */
-int kvm_s390_pv_make_secure(struct kvm *kvm, unsigned long gaddr, void *uvcb)
+int kvm_s390_pv_make_secure(struct kvm *kvm, gpa_t gaddr, void *uvcb)
 {
 	struct pv_make_secure priv = { .uvcb = uvcb };
 	struct guest_fault f = {
@@ -157,7 +157,7 @@ int kvm_s390_pv_make_secure(struct kvm *kvm, unsigned long gaddr, void *uvcb)
 	return rc;
 }
 
-int kvm_s390_pv_convert_to_secure(struct kvm *kvm, unsigned long gaddr)
+int kvm_s390_pv_convert_to_secure(struct kvm *kvm, gpa_t gaddr)
 {
 	struct uv_cb_cts uvcb = {
 		.header.cmd = UVC_CMD_CONV_TO_SEC_STOR,
@@ -765,7 +765,7 @@ int kvm_s390_pv_set_sec_parms(struct kvm *kvm, void *hdr, u64 length, u16 *rc,
 	return cc ? -EINVAL : 0;
 }
 
-static int unpack_one(struct kvm *kvm, unsigned long addr, u64 tweak,
+static int unpack_one(struct kvm *kvm, gpa_t addr, u64 tweak,
 		      u64 offset, u16 *rc, u16 *rrc)
 {
 	struct uv_cb_unp uvcb = {
@@ -793,7 +793,7 @@ static int unpack_one(struct kvm *kvm, unsigned long addr, u64 tweak,
 	return ret;
 }
 
-int kvm_s390_pv_unpack(struct kvm *kvm, unsigned long addr, unsigned long size,
+int kvm_s390_pv_unpack(struct kvm *kvm, gpa_t addr, unsigned long size,
 		       unsigned long tweak, u16 *rc, u16 *rrc)
 {
 	u64 offset = 0;
@@ -802,7 +802,7 @@ int kvm_s390_pv_unpack(struct kvm *kvm, unsigned long addr, unsigned long size,
 	if (addr & ~PAGE_MASK || !size || size & ~PAGE_MASK)
 		return -EINVAL;
 
-	KVM_UV_EVENT(kvm, 3, "PROTVIRT VM UNPACK: start addr %lx size %lx",
+	KVM_UV_EVENT(kvm, 3, "PROTVIRT VM UNPACK: start addr %llx size %lx",
 		     addr, size);
 
 	guard(srcu)(&kvm->srcu);
@@ -891,7 +891,7 @@ int kvm_s390_pv_dump_cpu(struct kvm_vcpu *vcpu, void *buff, u16 *rc, u16 *rrc)
  *  -EFAULT if copying the result to buff_user failed
  */
 int kvm_s390_pv_dump_stor_state(struct kvm *kvm, void __user *buff_user,
-				u64 *gaddr, u64 buff_user_len, u16 *rc, u16 *rrc)
+				gpa_t *gaddr, u64 buff_user_len, u16 *rc, u16 *rrc)
 {
 	struct uv_cb_dump_stor_state uvcb = {
 		.header.cmd = UVC_CMD_DUMP_CONF_STOR_STATE,

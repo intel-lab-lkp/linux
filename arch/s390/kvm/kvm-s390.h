@@ -308,17 +308,17 @@ int kvm_s390_pv_deinit_vm(struct kvm *kvm, u16 *rc, u16 *rrc);
 int kvm_s390_pv_init_vm(struct kvm *kvm, u16 *rc, u16 *rrc);
 int kvm_s390_pv_set_sec_parms(struct kvm *kvm, void *hdr, u64 length, u16 *rc,
 			      u16 *rrc);
-int kvm_s390_pv_unpack(struct kvm *kvm, unsigned long addr, unsigned long size,
+int kvm_s390_pv_unpack(struct kvm *kvm, gpa_t addr, unsigned long size,
 		       unsigned long tweak, u16 *rc, u16 *rrc);
 int kvm_s390_pv_set_cpu_state(struct kvm_vcpu *vcpu, u8 state);
 int kvm_s390_pv_dump_cpu(struct kvm_vcpu *vcpu, void *buff, u16 *rc, u16 *rrc);
 int kvm_s390_pv_dump_stor_state(struct kvm *kvm, void __user *buff_user,
-				u64 *gaddr, u64 buff_user_len, u16 *rc, u16 *rrc);
+				gpa_t *gaddr, u64 buff_user_len, u16 *rc, u16 *rrc);
 int kvm_s390_pv_dump_complete(struct kvm *kvm, void __user *buff_user,
 			      u16 *rc, u16 *rrc);
 int kvm_s390_pv_destroy_page(struct kvm *kvm, unsigned long gaddr);
-int kvm_s390_pv_convert_to_secure(struct kvm *kvm, unsigned long gaddr);
-int kvm_s390_pv_make_secure(struct kvm *kvm, unsigned long gaddr, void *uvcb);
+int kvm_s390_pv_convert_to_secure(struct kvm *kvm, gpa_t gaddr);
+int kvm_s390_pv_make_secure(struct kvm *kvm, gpa_t gaddr, void *uvcb);
 
 static inline u64 kvm_s390_pv_get_handle(struct kvm *kvm)
 {
