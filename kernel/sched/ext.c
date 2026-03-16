@@ -90,6 +90,19 @@ struct scx_kick_syncs {
 static DEFINE_PER_CPU(struct scx_kick_syncs __rcu *, scx_kick_syncs);
 
 /*
+ * Serialize %SCX_KICK_WAIT processing across CPUs to avoid wait cycles.
+ * Callers failing to acquire @scx_kick_wait_lock defer by recording
+ * themselves in @scx_kick_wait_pending and are retriggered when the active
+ * waiter completes.
+ *
+ * Lock ordering: @scx_kick_wait_lock is always acquired before
+ * @scx_kick_wait_pending_lock; the two are never taken in the opposite order.
+ */
+static DEFINE_RAW_SPINLOCK(scx_kick_wait_lock);
+static DEFINE_RAW_SPINLOCK(scx_kick_wait_pending_lock);
+static cpumask_t scx_kick_wait_pending;
+
+/*
  * Direct dispatch marker.
  *
  * Non-NULL values are used for direct dispatch from enqueue path. A valid
@@ -4273,6 +4286,13 @@ static void free_kick_syncs(void)
 		if (to_free)
 			kvfree_rcu(to_free, rcu);
 	}
+
+	/*
+	 * Clear any CPUs that were waiting for the lock when the scheduler
+	 * exited.  Their irq_work has already returned so no in-flight
+	 * waiter can observe the stale bits on the next enable.
+	 */
+	cpumask_clear(&scx_kick_wait_pending);
 }
 
 static void scx_disable_workfn(struct kthread_work *work)
@@ -5582,8 +5602,9 @@ static void kick_cpus_irq_workfn(struct irq_work *irq_work)
 	struct rq *this_rq = this_rq();
 	struct scx_rq *this_scx = &this_rq->scx;
 	struct scx_kick_syncs __rcu *ksyncs_pcpu = __this_cpu_read(scx_kick_syncs);
-	bool should_wait = false;
+	bool should_wait = !cpumask_empty(this_scx->cpus_to_wait);
 	unsigned long *ksyncs;
+	s32 this_cpu = cpu_of(this_rq);
 	s32 cpu;
 
 	if (unlikely(!ksyncs_pcpu)) {
@@ -5607,6 +5628,17 @@ static void kick_cpus_irq_workfn(struct irq_work *irq_work)
 	if (!should_wait)
 		return;
 
+	if (!raw_spin_trylock(&scx_kick_wait_lock)) {
+		raw_spin_lock(&scx_kick_wait_pending_lock);
+		cpumask_set_cpu(this_cpu, &scx_kick_wait_pending);
+		raw_spin_unlock(&scx_kick_wait_pending_lock);
+		return;
+	}
+
+	raw_spin_lock(&scx_kick_wait_pending_lock);
+	cpumask_clear_cpu(this_cpu, &scx_kick_wait_pending);
+	raw_spin_unlock(&scx_kick_wait_pending_lock);
+
 	for_each_cpu(cpu, this_scx->cpus_to_wait) {
 		unsigned long *wait_kick_sync = &cpu_rq(cpu)->scx.kick_sync;
 
@@ -5621,11 +5653,20 @@ static void kick_cpus_irq_workfn(struct irq_work *irq_work)
 		 * task is picked subsequently. The latter is necessary to break
 		 * the wait when $cpu is taken by a higher sched class.
 		 */
-		if (cpu != cpu_of(this_rq))
+		if (cpu != this_cpu)
 			smp_cond_load_acquire(wait_kick_sync, VAL != ksyncs[cpu]);
 
 		cpumask_clear_cpu(cpu, this_scx->cpus_to_wait);
 	}
+
+	raw_spin_unlock(&scx_kick_wait_lock);
+
+	raw_spin_lock(&scx_kick_wait_pending_lock);
+	for_each_cpu(cpu, &scx_kick_wait_pending) {
+		cpumask_clear_cpu(cpu, &scx_kick_wait_pending);
+		irq_work_queue(&cpu_rq(cpu)->scx.kick_cpus_irq_work);
+	}
+	raw_spin_unlock(&scx_kick_wait_pending_lock);
 }
 
 /**
