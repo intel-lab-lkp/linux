@@ -11011,6 +11011,9 @@ int __netdev_update_features(struct net_device *dev)
 	ASSERT_RTNL();
 	netdev_ops_assert_locked(dev);
 
+	if (dev->netdev_ops->ndo_update_offloads)
+		dev->netdev_ops->ndo_update_offloads(dev);
+
 	features = netdev_get_wanted_features(dev);
 
 	if (dev->netdev_ops->ndo_fix_features)
