@@ -52,10 +52,24 @@ int mt_perf_to_adistance(struct access_coordinate *perf, int *adist);
 struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 						  struct list_head *memory_types);
 void mt_put_memory_types(struct list_head *memory_types);
+
+int register_mp_package_notifier(struct notifier_block *notifier);
+void unregister_mp_package_notifier(struct notifier_block *notifier);
+int mp_probe_package_id(int nid);
+int mp_add_package_node_by_initiator(int nid, int initiator_nid);
+int mp_add_package_node(int nid);
+int mp_get_package_nodes(int nid, nodemask_t *out);
+int mp_get_package_cpu_nodes(int nid, nodemask_t *out);
+int mp_get_package_memory_only_nodes(int nid, nodemask_t *out);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
 bool node_is_toptier(int node);
+
+int mp_next_demotion_nodemask(int nid, nodemask_t *out);
+int mp_next_demotion_node(int nid);
+int mp_next_promotion_nodemask(int nid, nodemask_t *out);
+int mp_next_promotion_node(int nid);
 #else
 static inline int next_demotion_node(int node)
 {
@@ -70,6 +84,26 @@ static inline void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *target
 static inline bool node_is_toptier(int node)
 {
 	return true;
+}
+
+static inline int mp_next_demotion_nodemask(int nid, nodemask_t *out)
+{
+	return 0;
+}
+
+static inline int mp_next_demotion_node(int nid)
+{
+	return 0;
+}
+
+static inline int mp_next_promotion_nodemask(int nid, nodemask_t *out)
+{
+	return 0;
+}
+
+static inline int mp_next_promotion_node(int nid)
+{
+	return 0;
 }
 #endif
 
@@ -150,6 +184,65 @@ static inline struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 
 static inline void mt_put_memory_types(struct list_head *memory_types)
 {
+}
+
+static inline int register_mp_package_notifier(struct notifier_block *notifier)
+{
+	return 0;
+}
+
+static inline void unregister_mp_package_notifier(struct notifier_block *notifier)
+{
+}
+
+static inline int mp_probe_package_id(int nid)
+{
+	return NOTIFY_DONE;
+}
+
+static inline int mp_add_package_node_by_initiator(int nid, int initiator_nid)
+{
+	return 0;
+}
+
+static inline int mp_add_package_node(int nid)
+{
+	return 0;
+}
+
+static inline int mp_get_package_nodes(int nid, nodemask_t *out)
+{
+	return 0;
+}
+
+static inline int mp_get_package_cpu_nodes(int nid, nodemask_t *out)
+{
+	return 0;
+}
+
+static inline int mp_get_package_memory_only_nodes(int nid, nodemask_t *out)
+{
+	return 0;
+}
+
+static inline int mp_next_demotion_nodemask(int nid, nodemask_t *out)
+{
+	return 0;
+}
+
+static inline int mp_next_demotion_node(int nid)
+{
+	return 0;
+}
+
+static inline int mp_next_promotion_nodemask(int nid, nodemask_t *out)
+{
+	return 0;
+}
+
+static inline int mp_next_promotion_node(int nid)
+{
+	return 0;
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */
