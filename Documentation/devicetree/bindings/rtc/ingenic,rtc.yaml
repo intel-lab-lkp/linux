@@ -11,6 +11,7 @@ maintainers:
 
 allOf:
   - $ref: rtc.yaml#
+  - $ref: /schemas/power/power-controller.yaml#
   - if:
       not:
         properties:
@@ -52,12 +53,6 @@ properties:
 
   "#clock-cells":
     const: 0
-
-  system-power-controller:
-    description: |
-      Indicates that the RTC is responsible for powering OFF
-      the system.
-    type: boolean
 
   ingenic,reset-pin-assert-time-ms:
     minimum: 0
