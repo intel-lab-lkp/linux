@@ -1251,9 +1251,11 @@ static void ext4_group_desc_free(struct ext4_sb_info *sbi)
 
 	rcu_read_lock();
 	group_desc = rcu_dereference(sbi->s_group_desc);
-	for (i = 0; i < sbi->s_gdb_count; i++)
-		brelse(group_desc[i]);
-	kvfree(group_desc);
+	if (group_desc) {
+		for (i = 0; i < sbi->s_gdb_count; i++)
+			brelse(group_desc[i]);
+		kvfree(group_desc);
+	}
 	rcu_read_unlock();
 }
 
