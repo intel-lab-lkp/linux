@@ -45,6 +45,8 @@
 #define JTAG_ID_PARTNO_J722S		0xBBA0
 #define JTAG_ID_PARTNO_AM62LX		0xBBA7
 
+#define CTRL_MMR_RST_SRC		8
+
 static const struct k3_soc_id {
 	unsigned int id;
 	const char *family_name;
@@ -123,6 +125,90 @@ static const struct regmap_config k3_chipinfo_regmap_cfg = {
 	.reg_stride = 4,
 };
 
+static u32 k3_reset_source;
+static const char *const k3_reset_sources[] = {
+	[0]	= "Reset Caused by MCU Reset Pin",
+	[1]	= "Power On Reset",			/* Reserved in HW */
+	[2]	= "Main Reset Pin",
+	[4]	= "Thermal Reset",
+	[8]	= "Debug Subsystem Initiated Reset",
+	[12]	= "SMS Cold Reset",
+	[13]	= "SMS Warm Reset",
+	[16]	= "Software Warm Reset",
+	[20]	= "Software Main Warm Reset From MCU CTRL MMR",
+	[21]	= "Software Main Warm Reset from MAIN CTRL MMR",
+	[22]	= "Watchdog Initiated Reset",
+	[24]	= "Software Main Power On Reset From MCU CTRL MMR",
+	[25]	= "Software Main Power On Reset From MAIN CTRL MMR",
+	[30]	= "Reset Caused by Main ESM Error",
+	[31]	= "Reset Caused by MCU ESM Error",
+};
+
+static ssize_t reset_reason_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret, i;
+	int total = 0;
+
+	for (i = ARRAY_SIZE(k3_reset_sources); i >= 0; i--) {
+		if (!k3_reset_sources[i] || !(k3_reset_source & BIT(i)))
+			continue;
+
+		ret = sprintf(buf + total, "%s\n", k3_reset_sources[i]);
+		if (ret < 0)
+			return ret;
+		total += ret;
+		/* Note that several reset sources may be active simultaneously */
+	}
+
+	return total;
+}
+
+static DEVICE_ATTR_RO(reset_reason);
+
+static struct attribute *k3_soc_attrs[] = {
+	&dev_attr_reset_reason.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(k3_soc);
+
+static const struct of_device_id k3_rst_id_table[] = {
+	{
+		.compatible	= "ti,am64-rst",
+	},
+	{}
+};
+
+static void k3_reset_reason_read(struct soc_device_attribute *soc_dev_attr)
+{
+	struct device_node *node = of_find_matching_node(NULL, k3_rst_id_table);
+	struct regmap *regmap;
+
+	/* AM65x/J721E do not have similar registers */
+	if (!node)
+		return;
+
+	regmap = device_node_to_regmap(node);
+	of_node_put(node);
+	if (IS_ERR(regmap)) {
+		pr_err("Cannot obtain %s regmap\n", k3_rst_id_table[0].compatible);
+		return;
+	}
+
+	regmap_read(regmap, CTRL_MMR_RST_SRC, &k3_reset_source);
+	/*
+	 * The register is only being cleared on POR, so we have to clear reset
+	 * source of the current boot manually
+	 */
+	regmap_write(regmap, CTRL_MMR_RST_SRC, k3_reset_source);
+
+	/* Simplify the code a bit and use HW-reserved bit for POR indication */
+	if (!k3_reset_source)
+		k3_reset_source |= BIT(1);
+
+	soc_dev_attr->custom_attr_group = k3_soc_groups[0];
+}
+
 static int k3_chipinfo_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
@@ -182,6 +268,8 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 	node = of_find_node_by_path("/");
 	of_property_read_string(node, "model", &soc_dev_attr->machine);
 	of_node_put(node);
+
+	k3_reset_reason_read(soc_dev_attr);
 
 	soc_dev = soc_device_register(soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
