@@ -277,7 +277,7 @@ static struct fuse_ring_queue *fuse_uring_create_queue(struct fuse_ring *ring,
 	queue = kzalloc_obj(*queue, GFP_KERNEL_ACCOUNT);
 	if (!queue)
 		return NULL;
-	pq = kzalloc_objs(struct list_head, FUSE_PQ_HASH_SIZE);
+	pq = fuse_pqueue_alloc();
 	if (!pq) {
 		kfree(queue);
 		return NULL;
@@ -397,6 +397,20 @@ static void fuse_uring_teardown_entries(struct fuse_ring_queue *queue)
 				     FRRS_AVAILABLE);
 }
 
+static void fuse_uring_teardown_all_queues(struct fuse_ring *ring)
+{
+	int qid;
+
+	for (qid = 0; qid < ring->nr_queues; qid++) {
+		struct fuse_ring_queue *queue = READ_ONCE(ring->queues[qid]);
+
+		if (!queue)
+			continue;
+
+		fuse_uring_teardown_entries(queue);
+	}
+}
+
 /*
  * Log state debug info
  */
@@ -431,19 +445,10 @@ static void fuse_uring_log_ent_state(struct fuse_ring *ring)
 
 static void fuse_uring_async_stop_queues(struct work_struct *work)
 {
-	int qid;
 	struct fuse_ring *ring =
 		container_of(work, struct fuse_ring, async_teardown_work.work);
 
-	/* XXX code dup */
-	for (qid = 0; qid < ring->nr_queues; qid++) {
-		struct fuse_ring_queue *queue = READ_ONCE(ring->queues[qid]);
-
-		if (!queue)
-			continue;
-
-		fuse_uring_teardown_entries(queue);
-	}
+	fuse_uring_teardown_all_queues(ring);
 
 	/*
 	 * Some ring entries might be in the middle of IO operations,
@@ -469,16 +474,7 @@ static void fuse_uring_async_stop_queues(struct work_struct *work)
  */
 void fuse_uring_stop_queues(struct fuse_ring *ring)
 {
-	int qid;
-
-	for (qid = 0; qid < ring->nr_queues; qid++) {
-		struct fuse_ring_queue *queue = READ_ONCE(ring->queues[qid]);
-
-		if (!queue)
-			continue;
-
-		fuse_uring_teardown_entries(queue);
-	}
+	fuse_uring_teardown_all_queues(ring);
 
 	if (atomic_read(&ring->queue_refs) > 0) {
 		ring->teardown_time = jiffies;
