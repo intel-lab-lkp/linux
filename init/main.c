@@ -1648,7 +1648,18 @@ static int __ref kernel_init(void *unused)
 /* Open /dev/console, for stdin/stdout/stderr, this should never fail */
 void __init console_on_rootfs(void)
 {
-	struct file *file = filp_open("/dev/console", O_RDWR, 0);
+	struct file *file = NULL;
+	int i = 0;
+
+	/* Wait for up to 10 seconds for a console to appear. This makes it
+	 * possible to reliably use USB-backed TTY consoles as system consoles
+	 * (ie. `console=ttyUSB0,115200`).
+	 */
+	do {
+		file = filp_open("/dev/console", O_RDWR, 0);
+		if (IS_ERR(file))
+			msleep(100);
+	} while (IS_ERR(file) && ++i < 100);
 
 	if (IS_ERR(file)) {
 		pr_err("Warning: unable to open an initial console.\n");
