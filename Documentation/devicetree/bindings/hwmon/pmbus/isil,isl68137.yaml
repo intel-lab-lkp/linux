@@ -56,6 +56,8 @@ properties:
       - renesas,raa228228
       - renesas,raa228244
       - renesas,raa228246
+      - renesas,raa228942
+      - renesas,raa228943
       - renesas,raa229001
       - renesas,raa229004
       - renesas,raa229621
