@@ -632,6 +632,11 @@ struct vm_area_struct {
 } __randomize_layout;
 
 struct vm_operations_struct {
+	/**
+	 * @open: Called when a VMA is remapped, split or forked. Not called
+	 * upon first mapping a VMA.
+	 * Context: User context.  May sleep.  Caller holds mmap_lock.
+	 */
 	void (*open)(struct vm_area_struct * area);
 	/**
 	 * @close: Called when the VMA is being removed from the MM.
