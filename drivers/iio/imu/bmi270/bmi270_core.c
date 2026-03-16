@@ -1473,7 +1473,7 @@ static int bmi270_validate_chip_id(struct bmi270_data *data)
 		return -ENODEV;
 
 	if (chip_id != data->chip_info->chip_id)
-		dev_info(dev, "Unexpected chip id 0x%x", chip_id);
+		dev_warn(dev, "Unexpected chip id 0x%x", chip_id);
 
 	if (chip_id == bmi260_chip_info.chip_id)
 		data->chip_info = &bmi260_chip_info;
