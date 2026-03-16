@@ -788,7 +788,7 @@ enum {
 
 static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	fsparam_string	("source",		OPT_SOURCE),
-	fsparam_u32	("fd",			OPT_FD),
+	fsparam_fd	("fd",			OPT_FD),
 	fsparam_u32oct	("rootmode",		OPT_ROOTMODE),
 	fsparam_uid	("user_id",		OPT_USER_ID),
 	fsparam_gid	("group_id",		OPT_GROUP_ID),
@@ -800,9 +800,8 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	{}
 };
 
-static int fuse_opt_fd(struct fs_context *fsc, int fd)
+static int fuse_opt_fd(struct fs_context *fsc, struct file *file)
 {
-	struct file *file __free(fput) = fget(fd);
 	struct fuse_fs_context *ctx = fsc->fs_private;
 
 	if (file->f_op != &fuse_dev_operations)
@@ -859,7 +858,12 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		return 0;
 
 	case OPT_FD:
-		return fuse_opt_fd(fsc, result.uint_32);
+		if (param->type == fs_value_is_file) {
+			return fuse_opt_fd(fsc, param->file);
+		} else {
+			struct file *file __free(fput) = fget(result.uint_32);
+			return fuse_opt_fd(fsc, file);
+		}
 
 	case OPT_ROOTMODE:
 		if (!fuse_valid_type(result.uint_32))
