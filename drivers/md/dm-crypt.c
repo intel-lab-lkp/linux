@@ -100,6 +100,8 @@ struct dm_crypt_request {
 	struct scatterlist sg_in[4];
 	struct scatterlist sg_out[4];
 	u64 iv_sector;
+	struct scatterlist *__sg_in;
+	struct scatterlist *__sg_out;
 };
 
 struct crypt_config;
@@ -1386,18 +1388,32 @@ static int crypt_convert_block_aead(struct crypt_config *cc,
 	return r;
 }
 
-static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist *sg,
+static void crypt_free_sgls(struct dm_crypt_request *dmreq)
+{
+	if (dmreq->__sg_in != dmreq->sg_in)
+		kfree(dmreq->__sg_in);
+	if (dmreq->__sg_out != dmreq->sg_out)
+		kfree(dmreq->__sg_out);
+	dmreq->__sg_in = NULL;
+	dmreq->__sg_out = NULL;
+}
+
+static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist **psg,
 			   struct bvec_iter *iter, struct bio *bio,
 			   int max_segs)
 {
 	unsigned int bytes = cc->sector_size;
+	struct scatterlist *sg = *psg;
 	struct bvec_iter tmp = *iter;
 	int segs, i = 0;
 
 	bio_advance_iter(bio, &tmp, bytes);
 	segs = tmp.bi_idx - iter->bi_idx + !!tmp.bi_bvec_done;
-	if (segs > max_segs)
-		return -EIO;
+	if (segs > max_segs) {
+		sg = kmalloc_array(segs, sizeof(struct scatterlist), GFP_NOIO);
+		if (!sg)
+			return -ENOMEM;
+	}
 
 	sg_init_table(sg, segs);
 	do {
@@ -1406,7 +1422,7 @@ static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist *sg,
 
 		/* Reject unexpected unaligned bio. */
 		if (unlikely((len | bv.bv_offset) & cc->io_alignment))
-			return -EIO;
+			goto error;
 
 		sg_set_page(&sg[i++], bv.bv_page, len, bv.bv_offset);
 		bio_advance_iter_single(bio, iter, len);
@@ -1414,8 +1430,13 @@ static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist *sg,
 	} while (bytes);
 
 	if (WARN_ON_ONCE(i != segs))
-		return -EIO;
+		goto error;
+	*psg = sg;
 	return 0;
+error:
+	if (sg != *psg)
+		kfree(sg);
+	return -EIO;
 }
 
 static int crypt_convert_block_skcipher(struct crypt_config *cc,
@@ -1444,18 +1465,21 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	sector = org_sector_of_dmreq(cc, dmreq);
 	*sector = cpu_to_le64(ctx->cc_sector - cc->iv_offset);
 
-	sg_in  = &dmreq->sg_in[0];
-	sg_out = &dmreq->sg_out[0];
+	dmreq->__sg_in = &dmreq->sg_in[0];
+	dmreq->__sg_out = &dmreq->sg_out[0];
 
-	r = crypt_build_sgl(cc, sg_in, &ctx->iter_in, ctx->bio_in,
+	r = crypt_build_sgl(cc, &dmreq->__sg_in, &ctx->iter_in, ctx->bio_in,
 			    ARRAY_SIZE(dmreq->sg_in));
 	if (r < 0)
 		return r;
 
-	r = crypt_build_sgl(cc, sg_out, &ctx->iter_out, ctx->bio_out,
+	r = crypt_build_sgl(cc, &dmreq->__sg_out, &ctx->iter_out, ctx->bio_out,
 			    ARRAY_SIZE(dmreq->sg_out));
 	if (r < 0)
-		return r;
+		goto out;
+
+	sg_in = dmreq->__sg_in;
+	sg_out = dmreq->__sg_out;
 
 	if (cc->iv_gen_ops) {
 		/* For READs use IV stored in integrity metadata */
@@ -1464,7 +1488,7 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 		} else {
 			r = cc->iv_gen_ops->generator(cc, org_iv, dmreq);
 			if (r < 0)
-				return r;
+				goto out;
 			/* Data can be already preprocessed in generator */
 			if (test_bit(CRYPT_ENCRYPT_PREPROCESS, &cc->cipher_flags))
 				sg_in = sg_out;
@@ -1485,6 +1509,9 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 
 	if (!r && cc->iv_gen_ops && cc->iv_gen_ops->post)
 		r = cc->iv_gen_ops->post(cc, org_iv, dmreq);
+out:
+	if (r != -EINPROGRESS && r != -EBUSY)
+		crypt_free_sgls(dmreq);
 
 	return r;
 }
@@ -1550,7 +1577,9 @@ static void crypt_free_req_skcipher(struct crypt_config *cc,
 				    struct skcipher_request *req, struct bio *base_bio)
 {
 	struct dm_crypt_io *io = dm_per_bio_data(base_bio, cc->per_bio_data_size);
+	struct dm_crypt_request *dmreq = dmreq_of_req(cc, req);
 
+	crypt_free_sgls(dmreq);
 	if ((struct skcipher_request *)(io + 1) != req)
 		mempool_free(req, &cc->req_pool);
 }
