@@ -11,4 +11,7 @@ typedef int __attribute__((nonnull(2,3))) (*list_cmp_func_t)(void *,
 
 __attribute__((nonnull(2,3)))
 void list_sort(void *priv, struct list_head *head, list_cmp_func_t cmp);
+
+__attribute__((nonnull(2, 3)))
+void list_sort_nonatomic(void *priv, struct list_head *head, list_cmp_func_t cmp);
 #endif
