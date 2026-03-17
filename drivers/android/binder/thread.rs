@@ -1482,6 +1482,7 @@ impl Thread {
         let mut ret = Ok(());
         if req.write_size > 0 {
             ret = self.write(&mut req);
+            crate::trace::trace_write_done(ret);
             if let Err(err) = ret {
                 pr_warn!(
                     "Write failure {:?} in pid:{}",
@@ -1498,6 +1499,7 @@ impl Thread {
         // Go through the work queue.
         if req.read_size > 0 {
             ret = self.read(&mut req, wait);
+            crate::trace::trace_read_done(ret);
             if ret.is_err() && ret != Err(EINTR) {
                 pr_warn!(
                     "Read failure {:?} in pid:{}",
