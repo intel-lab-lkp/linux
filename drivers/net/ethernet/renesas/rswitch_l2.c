@@ -93,10 +93,36 @@ static void rswitch_update_l2_hw_forwarding(struct rswitch_private *priv)
 	}
 }
 
+static void rswitch_update_l2_hw_forwarding_gwca(struct rswitch_private *priv)
+{
+	struct rswitch_device *rdev;
+
+	if (priv->offload_brdev) {
+		rswitch_modify(priv->addr, FWPC0(AGENT_INDEX_GWCA),
+			       0, FWPC0_MACSSA | FWPC0_MACDSA | FWPC0_MACRUDA);
+
+		rswitch_for_all_ports(priv, rdev) {
+			rswitch_modify(priv->addr, FWPC2(rdev->etha->index),
+				       FIELD_PREP(FWPC2_LTWFW, BIT(AGENT_INDEX_GWCA)),
+				       0);
+		}
+	} else {
+		rswitch_modify(priv->addr, FWPC0(AGENT_INDEX_GWCA),
+			       FWPC0_MACSSA | FWPC0_MACDSA | FWPC0_MACRUDA,
+			       0);
+		rswitch_for_all_ports(priv, rdev) {
+			rswitch_modify(priv->addr, FWPC2(rdev->etha->index),
+				       0,
+				       FIELD_PREP(FWPC2_LTWFW, BIT(AGENT_INDEX_GWCA)));
+		}
+	}
+}
+
 void rswitch_update_l2_offload(struct rswitch_private *priv)
 {
 	rswitch_update_l2_hw_learning(priv);
 	rswitch_update_l2_hw_forwarding(priv);
+	rswitch_update_l2_hw_forwarding_gwca(priv);
 }
 
 static void rswitch_update_offload_brdev(struct rswitch_private *priv)
