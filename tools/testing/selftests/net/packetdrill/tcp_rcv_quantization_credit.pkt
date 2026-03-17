@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-2.0
+
+--ip_version=ipv4
+--mss=1000
+
+`./defaults.sh
+sysctl -q net.ipv4.tcp_moderate_rcvbuf=0
+sysctl -q net.ipv4.tcp_shrink_window=0
+sysctl -q net.ipv4.tcp_rmem="4096 131072 $((32*1024*1024))"`
+
+// Exercise the scaled no-shrink path in __tcp_select_window().
+// The sequence below leaves slightly more than 84 scaled units of backed
+// credit after one skb is drained. The buggy ALIGN() path rounds that up and
+// exposes a fresh extra unit; the fixed path keeps the sender-visible window
+// at 84. Then queue a tiny OOO skb so the next ACK re-runs the no-shrink
+// path after a small receive-memory change without advancing rcv_nxt.
+   +0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 10>
+   +0 < . 1:1(0) ack 1 win 257
+
+   +0 accept(3, ..., ...) = 4
+
+   +0 < P. 1:10001(10000) ack 1 win 257
+   * > .  1:1(0) ack 10001
+
+   +0 < P. 10001:11024(1023) ack 1 win 257
+   * > .  1:1(0) ack 11024
+
+// Free one skb, then force an outbound packet so the current advertised
+// window is observable both on the wire and via TCP_INFO.
+   +0 read(4, ..., 10000) = 10000
+   +0 write(4, ..., 1) = 1
+   * > P. 1:2(1) ack 11024 win 84
+   +0 %{ assert (tcpi_rcv_wnd >> 10) == 84, tcpi_rcv_wnd }%
+
+// Queue a tiny OOO skb. This should not create fresh sender-visible credit
+// on the next ACK after the first post-drain window update.
+   +0 < P. 12024:12025(1) ack 2 win 257
+   * > .  2:2(0) ack 11024 win 84
+   +0 %{ assert (tcpi_rcv_wnd >> 10) == 84, tcpi_rcv_wnd }%
