@@ -860,17 +860,15 @@ static void ma_put(struct ifmcaddr6 *mc)
 	}
 }
 
-static struct ifmcaddr6 *mca_alloc(struct inet6_dev *idev,
-				   const struct in6_addr *addr,
-				   unsigned int mode)
+static struct ifmcaddr6 *mca_alloc(void)
 {
-	struct ifmcaddr6 *mc;
+	return kzalloc_obj(struct ifmcaddr6);
+}
 
+static void mca_init(struct inet6_dev *idev, const struct in6_addr *addr,
+		     unsigned int mode, struct ifmcaddr6 *mc)
+{
 	mc_assert_locked(idev);
-
-	mc = kzalloc_obj(*mc);
-	if (!mc)
-		return NULL;
 
 	INIT_DELAYED_WORK(&mc->mca_work, mld_mca_work);
 
@@ -887,8 +885,6 @@ static struct ifmcaddr6 *mca_alloc(struct inet6_dev *idev,
 	if (ipv6_addr_is_ll_all_nodes(&mc->mca_addr) ||
 	    IPV6_ADDR_MC_SCOPE(&mc->mca_addr) < IPV6_ADDR_SCOPE_LINKLOCAL)
 		mc->mca_flags |= MAF_NOREPORT;
-
-	return mc;
 }
 
 static void inet6_ifmcaddr_notify(struct net_device *dev,
@@ -932,6 +928,7 @@ error:
 static int __ipv6_dev_mc_inc(struct net_device *dev,
 			     const struct in6_addr *addr, unsigned int mode)
 {
+	struct ifmcaddr6 *mc_alloced;
 	struct inet6_dev *idev;
 	struct ifmcaddr6 *mc;
 
@@ -940,10 +937,17 @@ static int __ipv6_dev_mc_inc(struct net_device *dev,
 	if (!idev)
 		return -EINVAL;
 
+	mc_alloced = mca_alloc();
+	if (!mc_alloced) {
+		in6_dev_put(idev);
+		return -ENOMEM;
+	}
+
 	mutex_lock(&idev->mc_lock);
 
 	if (READ_ONCE(idev->dead)) {
 		mutex_unlock(&idev->mc_lock);
+		kfree(mc_alloced);
 		in6_dev_put(idev);
 		return -ENODEV;
 	}
@@ -953,25 +957,23 @@ static int __ipv6_dev_mc_inc(struct net_device *dev,
 			mc->mca_users++;
 			ip6_mc_add_src(idev, &mc->mca_addr, mode, 0, NULL, 0);
 			mutex_unlock(&idev->mc_lock);
+			kfree(mc_alloced);
 			in6_dev_put(idev);
 			return 0;
 		}
 	}
 
-	mc = mca_alloc(idev, addr, mode);
-	if (!mc) {
-		mutex_unlock(&idev->mc_lock);
-		in6_dev_put(idev);
-		return -ENOMEM;
-	}
+	mca_init(idev, addr, mode, mc_alloced);
+	mc = mc_alloced;
 
 	rcu_assign_pointer(mc->next, idev->mc_list);
 	rcu_assign_pointer(idev->mc_list, mc);
 
 	mld_del_delrec(idev, mc);
 	igmp6_group_added(mc);
-	inet6_ifmcaddr_notify(dev, mc, RTM_NEWMULTICAST);
 	mutex_unlock(&idev->mc_lock);
+
+	inet6_ifmcaddr_notify(dev, mc, RTM_NEWMULTICAST);
 
 	return 0;
 }
