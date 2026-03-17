@@ -515,9 +515,9 @@ struct lkdtm_extra {
 struct lkdtm_cb_ptr {
 	int a, b, c;
 	int nr_extra;
-	char *buf __counted_by_ptr(len);
 	size_t len;
 	struct lkdtm_extra *extra __counted_by_ptr(nr_extra);
+	char buf[] __counted_by(len);
 };
 
 static noinline void check_ptr_len(struct lkdtm_cb_ptr *p, size_t len)
@@ -533,17 +533,12 @@ static void lkdtm_PTR_BOUNDS(void)
 {
 	struct lkdtm_cb_ptr *inst;
 
-	inst = kzalloc_obj(*inst);
+	inst = kzalloc_flex(*inst, buf, element_count);
 	if (!inst) {
 		pr_err("FAIL: could not allocate struct lkdtm_cb_ptr!\n");
 		return;
 	}
 
-	inst->buf = kzalloc(element_count, GFP_KERNEL);
-	if (!inst->buf) {
-		pr_err("FAIL: could not allocate inst->buf!\n");
-		return;
-	}
 	inst->len = element_count;
 
 	/* Double element_count */
@@ -564,7 +559,6 @@ static void lkdtm_PTR_BOUNDS(void)
 	ignored = inst->extra[inst->nr_extra].b;
 
 	kfree(inst->extra);
-	kfree(inst->buf);
 	kfree(inst);
 
 	pr_err("FAIL: survived access of invalid pointer member offset!\n");
