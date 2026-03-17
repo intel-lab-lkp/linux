@@ -2518,9 +2518,11 @@ int nilfs_clean_segments(struct super_block *sb, struct nilfs_argv *argv,
 
 	nilfs_transaction_lock(sb, &ti, 1);
 
-	err = nilfs_mdt_save_to_shadow_map(nilfs->ns_dat);
-	if (unlikely(err))
-		goto out_unlock;
+	if (argv[0].v_nmembs > 0) {
+		err = nilfs_mdt_save_to_shadow_map(nilfs->ns_dat);
+		if (unlikely(err))
+			goto out_unlock;
+	}
 
 	err = nilfs_ioctl_prepare_clean_segments(nilfs, argv, kbufs);
 	if (unlikely(err)) {
