@@ -1030,6 +1030,20 @@ static void cxl_error_resume(struct pci_dev *pdev)
 		 dev->driver ? "successful" : "failed");
 }
 
+static int cxl_decoder_clear_flags(struct device *dev, void *data)
+{
+	struct cxl_endpoint_decoder *cxled;
+	unsigned long *flags = data;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	cxled->cxld.flags &= ~(*flags);
+
+	return 0;
+}
+
 static void cxl_reset_done(struct pci_dev *pdev)
 {
 	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
@@ -1045,6 +1059,11 @@ static void cxl_reset_done(struct pci_dev *pdev)
 	guard(device)(&cxlmd->dev);
 	if (cxlmd->endpoint &&
 	    cxl_endpoint_decoder_reset_detected(cxlmd->endpoint)) {
+		unsigned long flags = CXL_DECODER_F_RESET_MASK;
+
+		device_for_each_child(&cxlmd->endpoint->dev, &flags,
+				      cxl_decoder_clear_flags);
+
 		dev_crit(dev, "SBR happened without memory regions removal.\n");
 		dev_crit(dev, "System may be unstable if regions hosted system memory.\n");
 		add_taint(TAINT_USER, LOCKDEP_STILL_OK);
