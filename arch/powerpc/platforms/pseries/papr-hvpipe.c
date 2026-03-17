@@ -509,7 +509,6 @@ static int papr_hvpipe_dev_create_handle(u32 srcID)
 	if (fdf.err)
 		return fdf.err;
 
-	retain_and_null_ptr(src_info);
 	spin_lock(&hvpipe_src_list_lock);
 	/*
 	 * If two processes are executing ioctl() for the same
@@ -522,6 +521,7 @@ static int papr_hvpipe_dev_create_handle(u32 srcID)
 	}
 	list_add(&src_info->list, &hvpipe_src_list);
 	spin_unlock(&hvpipe_src_list_lock);
+	retain_and_null_ptr(src_info);
 	return fd_publish(fdf);
 }
 
