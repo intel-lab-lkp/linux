@@ -228,6 +228,19 @@ static inline void io_poll_execute(struct io_kiocb *req, int res)
 		__io_poll_execute(req, res);
 }
 
+static inline void io_mshot_check_retry(struct io_kiocb *req, int *v)
+{
+	/*
+	 * Release all references, retry if someone tried to restart
+	 * task_work while we were executing it.
+	 */
+	*v &= IO_POLL_REF_MASK;
+
+	/* multiple refs and HUP, ensure we loop once more */
+	if ((req->cqe.res & (POLLHUP | POLLRDHUP)) && *v != 1)
+		(*v)--;
+}
+
 /*
  * All poll tw should go through this. Checks for poll events, manages
  * references, does rewait, etc.
@@ -303,6 +316,7 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 				io_req_set_res(req, mask, 0);
 				return IOU_POLL_REMOVE_POLL_USE_RES;
 			}
+			v &= IO_POLL_REF_MASK;
 		} else {
 			int ret = io_poll_issue(req, tw);
 
@@ -312,16 +326,11 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 				return IOU_POLL_REQUEUE;
 			if (ret != IOU_RETRY && ret < 0)
 				return ret;
+			io_mshot_check_retry(req, &v);
 		}
 
 		/* force the next iteration to vfs_poll() */
 		req->cqe.res = 0;
-
-		/*
-		 * Release all references, retry if someone tried to restart
-		 * task_work while we were executing it.
-		 */
-		v &= IO_POLL_REF_MASK;
 	} while (atomic_sub_return(v, &req->poll_refs) & IO_POLL_REF_MASK);
 
 	io_napi_add(req);
