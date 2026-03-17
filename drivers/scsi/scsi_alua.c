@@ -428,7 +428,6 @@ EXPORT_SYMBOL_GPL(scsi_alua_rtpg_run);
  * a re-evaluation of the target group state or SCSI_DH_OK
  * if no further action needs to be taken.
  */
-__maybe_unused
 static int scsi_alua_stpg(struct scsi_device *sdev, bool optimize)
 {
 	struct alua_data *alua = sdev->alua;
@@ -479,6 +478,25 @@ static int scsi_alua_stpg(struct scsi_device *sdev, bool optimize)
 	/* Retry RTPG */
 	return -EAGAIN;//SCSI_DH_RETRY;
 }
+
+int scsi_alua_stpg_run(struct scsi_device *sdev, bool optimize)
+{
+	struct alua_data *alua = sdev->alua;
+	unsigned long flags;
+	int err;
+
+	err = scsi_alua_stpg(sdev, optimize);
+	spin_lock_irqsave(&alua->lock, flags);
+	if (err == EAGAIN) {
+		alua->interval = 0;
+		spin_unlock_irqrestore(&alua->lock, flags);
+		return -EAGAIN;
+	}
+	spin_unlock_irqrestore(&alua->lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(scsi_alua_stpg_run);
 
 int scsi_alua_sdev_init(struct scsi_device *sdev)
 {
