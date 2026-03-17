@@ -56,6 +56,7 @@
 #include "util/debug.h"
 #include "util/ordered-events.h"
 #include "util/pfm.h"
+#include "dwarf-regs.h"
 
 #include <assert.h>
 #include <elf.h>
@@ -1409,7 +1410,7 @@ parse_callchain_opt(const struct option *opt, const char *arg, int unset)
 static int
 callchain_opt(const struct option *opt, const char *arg __maybe_unused, int unset)
 {
-	return parse_callchain_opt(opt, "fp", unset);
+	return parse_callchain_opt(opt, EM_HOST != EM_S390 ? "fp" : "dwarf", unset);
 }
 
 
@@ -1695,7 +1696,7 @@ int cmd_top(int argc, const char **argv)
 		goto out_delete_evlist;
 
 	if (!top.evlist->core.nr_entries) {
-		struct evlist *def_evlist = evlist__new_default();
+		struct evlist *def_evlist = evlist__new_default(target, callchain_param.enabled);
 
 		if (!def_evlist)
 			goto out_delete_evlist;
