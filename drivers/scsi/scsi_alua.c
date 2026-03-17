@@ -48,7 +48,6 @@ static struct workqueue_struct *kalua_wq;
  * Returns SCSI_DH_RETRY if the sense code is NOT READY/ALUA TRANSITIONING,
  * SCSI_DH_OK if no error occurred, and SCSI_DH_IO otherwise.
  */
-__maybe_unused
 static int scsi_alua_tur(struct scsi_device *sdev)
 {
 	struct scsi_sense_hdr sense_hdr;
@@ -159,7 +158,6 @@ static char print_alua_state(unsigned char state)
  * Returns -ENODEV if the path is
  * found to be unusable.
  */
-__maybe_unused
 static int scsi_alua_rtpg(struct scsi_device *sdev)
 {
 	struct alua_data *alua = sdev->alua;
@@ -390,6 +388,37 @@ static int scsi_alua_rtpg(struct scsi_device *sdev)
 	return err;
 }
 
+int scsi_alua_rtpg_run(struct scsi_device *sdev)
+{
+	struct alua_data *alua = sdev->alua;
+	unsigned long flags;
+	int state, err;
+
+	spin_lock_irqsave(&alua->lock, flags);
+	state = alua->state;
+	spin_unlock_irqrestore(&alua->lock, flags);
+
+	if (state == SCSI_ACCESS_STATE_TRANSITIONING) {
+		if (scsi_alua_tur(sdev) == -EAGAIN) {
+			spin_lock_irqsave(&alua->lock, flags);
+			alua->interval = ALUA_RTPG_RETRY_DELAY;
+			spin_unlock_irqrestore(&alua->lock, flags);
+			return -EAGAIN;
+		}
+		/* Send RTPG on failure or if TUR indicates SUCCESS */
+	}
+
+	err = scsi_alua_rtpg(sdev);
+	spin_lock_irqsave(&alua->lock, flags);
+	if (err == -EAGAIN) {
+		alua->interval = ALUA_RTPG_RETRY_DELAY;
+		spin_unlock_irqrestore(&alua->lock, flags);
+		return -EAGAIN;
+	}
+	spin_unlock_irqrestore(&alua->lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(scsi_alua_rtpg_run);
 
 /*
  * scsi_alua_stpg - Issue a SET TARGET PORT GROUP command
