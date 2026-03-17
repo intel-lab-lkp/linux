@@ -6,10 +6,12 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
+#include <drm/drm_fixed.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_print.h>
+#include <drm/drm_colorop.h>
 
 #include "vkms_drv.h"
 #include "vkms_formats.h"
@@ -148,8 +150,27 @@ static void vkms_plane_atomic_update(struct drm_plane *plane,
 	frame_info->rotation = new_state->rotation;
 
 	vkms_plane_state->pixel_read_line = get_pixel_read_line_function(fmt);
-	get_conversion_matrix_to_argb_u16(fmt, new_state->color_encoding, new_state->color_range,
-					  &vkms_plane_state->conversion_matrix);
+
+	if (!new_state->color_pipeline) {
+		get_conversion_matrix_to_argb_u16(fmt, new_state->color_encoding,
+						  new_state->color_range,
+						  &vkms_plane_state->conversion_matrix);
+	} else {
+		struct drm_colorop *colorop = new_state->color_pipeline;
+		struct drm_colorop_state *colorop_state = NULL;
+
+		if (colorop && colorop->type == DRM_COLOROP_CSC) {
+			colorop_state = drm_atomic_get_new_colorop_state(state,
+									  colorop);
+		}
+
+		if (colorop_state && !colorop_state->bypass) {
+			get_conversion_matrix_to_argb_u16(fmt,
+							  colorop_state->color_encoding,
+							  colorop_state->color_range,
+							  &vkms_plane_state->conversion_matrix);
+		}
+	}
 }
 
 static int vkms_plane_atomic_check(struct drm_plane *plane,
@@ -174,6 +195,31 @@ static int vkms_plane_atomic_check(struct drm_plane *plane,
 						  true, true);
 	if (ret != 0)
 		return ret;
+
+	if (new_plane_state->color_pipeline) {
+		const struct drm_format_info *info = new_plane_state->fb->format;
+
+		if (info->is_yuv) {
+			struct drm_colorop *colorop = new_plane_state->color_pipeline;
+			struct drm_colorop_state *colorop_state = NULL;
+
+			if (!colorop || colorop->type != DRM_COLOROP_CSC) {
+				DRM_DEBUG_ATOMIC("YUV format requires CSC as first colorop\n");
+				return -EINVAL;
+			}
+
+			colorop_state = drm_atomic_get_new_colorop_state(state, colorop);
+			if (!colorop_state) {
+				DRM_DEBUG_ATOMIC("Failed to get CSC colorop state\n");
+				return -EINVAL;
+			}
+
+			if (colorop_state->bypass) {
+				DRM_DEBUG_ATOMIC("YUV format requires active CSC colorop (not bypassed)\n");
+				return -EINVAL;
+			}
+		}
+	}
 
 	return 0;
 }
