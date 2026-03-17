@@ -41,6 +41,32 @@ static struct workqueue_struct *kalua_wq;
 #define ALUA_RTPG_RETRY_DELAY		2
 
 /*
+ * alua_tur - Send a TEST UNIT READY
+ * @sdev: device to which the TEST UNIT READY command should be send
+ *
+ * Send a TEST UNIT READY to @sdev to figure out the device state
+ * Returns SCSI_DH_RETRY if the sense code is NOT READY/ALUA TRANSITIONING,
+ * SCSI_DH_OK if no error occurred, and SCSI_DH_IO otherwise.
+ */
+__maybe_unused
+static int scsi_alua_tur(struct scsi_device *sdev)
+{
+	struct scsi_sense_hdr sense_hdr;
+	int retval;
+
+	retval = scsi_test_unit_ready(sdev, ALUA_FAILOVER_TIMEOUT * HZ,
+				      ALUA_FAILOVER_RETRIES, &sense_hdr);
+	if ((sense_hdr.sense_key == NOT_READY ||
+	     sense_hdr.sense_key == UNIT_ATTENTION) &&
+	    sense_hdr.asc == 0x04 && sense_hdr.ascq == 0x0a)
+		return -EAGAIN;//SCSI_DH_RETRY;
+	else if (retval)
+		return -EIO;//SCSI_DH_IO;
+	else
+		return 0;//SCSI_DH_OK;
+}
+
+/*
  * submit_rtpg - Issue a REPORT TARGET GROUP STATES command
  * @sdev: sdev the command should be sent to
  */
