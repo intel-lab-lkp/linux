@@ -1473,6 +1473,7 @@ static struct usb_driver usblp_driver = {
 	.disconnect =	usblp_disconnect,
 	.suspend =	usblp_suspend,
 	.resume =	usblp_resume,
+	.reset_resume =	usblp_resume,
 	.id_table =	usblp_ids,
 	.dev_groups =	usblp_groups,
 	.supports_autosuspend =	1,
