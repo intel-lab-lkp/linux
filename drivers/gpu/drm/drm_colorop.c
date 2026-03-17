@@ -620,6 +620,95 @@ const char *drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_inte
 }
 
 /**
+ * drm_plane_colorop_csc_init - Initialize a CSC colorop
+ * @dev: DRM device
+ * @colorop: the color operation to initialize
+ * @plane: plane object that this colorop will belong to
+ * @supported_encodings: Bitmask of supported encodings (BIT(DRM_COLOR_YCBCR_*))
+ * @supported_ranges: Bitmask of supported ranges (BIT(DRM_COLOR_YCBCR_*_RANGE))
+ * @default_encoding: Default COLOR_ENCODING value
+ * @default_range: Default COLOR_RANGE value
+ * @flags: Flags for this colorop (DRM_COLOROP_FLAG_*)
+ *
+ * Initializes a CSC (Color Space Conversion) colorop suitable for YUV to RGB
+ * conversion. Creates COLOR_ENCODING and COLOR_RANGE properties that control
+ * which conversion matrix is used.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
+ */
+int drm_plane_colorop_csc_init(struct drm_device *dev, struct drm_colorop *colorop,
+			       struct drm_plane *plane, const struct drm_colorop_funcs *funcs,
+			       u32 supported_encodings, u32 supported_ranges,
+			       enum drm_color_encoding default_encoding,
+			       enum drm_color_range default_range,
+			       uint32_t flags)
+{
+	struct drm_property *prop;
+	struct drm_prop_enum_list enum_list[max_t(int, DRM_COLOR_ENCODING_MAX,
+						       DRM_COLOR_RANGE_MAX)];
+	int i, len, ret;
+
+	ret = drm_plane_colorop_init(dev, colorop, plane, funcs, DRM_COLOROP_CSC, flags);
+	if (ret)
+		return ret;
+
+
+	if (WARN_ON(supported_encodings == 0 ||
+		    (supported_encodings & -BIT(DRM_COLOR_ENCODING_MAX)) != 0 ||
+		    (supported_encodings & BIT(default_encoding)) == 0))
+		return -EINVAL;
+
+	if (WARN_ON(supported_ranges == 0 ||
+		    (supported_ranges & -BIT(DRM_COLOR_RANGE_MAX)) != 0 ||
+		    (supported_ranges & BIT(default_range)) == 0))
+		return -EINVAL;
+
+	len = 0;
+	for (i = 0; i < DRM_COLOR_ENCODING_MAX; i++) {
+		if ((supported_encodings & BIT(i)) == 0)
+			continue;
+
+		enum_list[len].type = i;
+		enum_list[len].name = drm_get_color_encoding_name(i);
+		len++;
+	}
+
+	prop = drm_property_create_enum(dev, 0, "COLOR_ENCODING",
+					enum_list, len);
+	if (!prop)
+		return -ENOMEM;
+	colorop->color_encoding_property = prop;
+	drm_object_attach_property(&colorop->base, prop, default_encoding);
+	if (colorop->state)
+		colorop->state->color_encoding = default_encoding;
+
+	len = 0;
+	for (i = 0; i < DRM_COLOR_RANGE_MAX; i++) {
+		if ((supported_ranges & BIT(i)) == 0)
+			continue;
+
+		enum_list[len].type = i;
+		enum_list[len].name = drm_get_color_range_name(i);
+		len++;
+	}
+
+	prop = drm_property_create_enum(dev, 0, "COLOR_RANGE",
+					enum_list, len);
+	if (!prop)
+		return -ENOMEM;
+	colorop->color_range_property = prop;
+	drm_object_attach_property(&colorop->base, prop, default_range);
+	if (colorop->state)
+		colorop->state->color_range = default_range;
+
+	drm_colorop_reset(colorop);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_colorop_csc_init);
+
+/**
  * drm_colorop_set_next_property - sets the next pointer
  * @colorop: drm colorop
  * @next: next colorop

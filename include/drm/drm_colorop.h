@@ -30,6 +30,8 @@
 #include <drm/drm_mode_object.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_property.h>
+#include <drm/drm_color_mgmt.h>
+
 
 /* DRM colorop flags */
 #define DRM_COLOROP_FLAG_ALLOW_BYPASS	(1<<0)	/* Allow bypass on the drm_colorop */
@@ -182,6 +184,20 @@ struct drm_colorop_state {
 	 * out.
 	 */
 	struct drm_property_blob *data;
+
+	/**
+	 * @color_encoding:
+	 *
+	 * Color encoding for YUV-to-RGB conversion
+	 */
+	enum drm_color_encoding color_encoding;
+
+	/**
+	 * @color_range:
+	 *
+	 * Color range
+	 */
+	enum drm_color_range color_range;
 
 	/** @state: backpointer to global drm_atomic_state */
 	struct drm_atomic_state *state;
@@ -358,6 +374,23 @@ struct drm_colorop {
 	struct drm_property *lut3d_interpolation_property;
 
 	/**
+	 * @color_encoding_property:
+	 *
+	 * "COLOR_ENCODING" enum property for specifying the YUV-to-RGB
+	 * conversion matrix on a DRM_COLOROP_CSC.
+	 */
+
+	struct drm_property *color_encoding_property;
+
+	/**
+	 * @color_range_property:
+	 *
+	 * "COLOR_RANGE" enum property for specifying color range
+	 * for a YUV-to-RGB conversion matrix on DRM_COLOROP_CSC.
+	 */
+	struct drm_property *color_range_property;
+
+	/**
 	 * @data_property:
 	 *
 	 * blob property for any TYPE that requires a blob of data,
@@ -424,6 +457,12 @@ int drm_plane_colorop_3dlut_init(struct drm_device *dev, struct drm_colorop *col
 				 uint32_t lut_size,
 				 enum drm_colorop_lut3d_interpolation_type interpolation,
 				 uint32_t flags);
+int drm_plane_colorop_csc_init(struct drm_device *dev, struct drm_colorop *colorop,
+			       struct drm_plane *plane, const struct drm_colorop_funcs *funcs,
+			       u32 supported_encodings, u32 supported_ranges,
+			       enum drm_color_encoding default_encoding,
+			       enum drm_color_range default_range,
+			       uint32_t flags);
 
 struct drm_colorop_state *
 drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop);
