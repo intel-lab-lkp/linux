@@ -4,17 +4,12 @@ use kernel::prelude::*;
 
 use crate::{
     driver::Bar0,
-    fb::hal::FbHal,
-    regs, //
+    fb::hal::FbHal, //
 };
 
-pub(super) fn vidmem_size_ga102(bar: &Bar0) -> u64 {
-    regs::NV_USABLE_FB_SIZE_IN_MB::read(bar).usable_fb_size()
-}
+struct Gb100;
 
-struct Ga102;
-
-impl FbHal for Ga102 {
+impl FbHal for Gb100 {
     fn read_sysmem_flush_page(&self, bar: &Bar0) -> u64 {
         super::ga100::read_sysmem_flush_page_ga100(bar)
     }
@@ -30,9 +25,14 @@ impl FbHal for Ga102 {
     }
 
     fn vidmem_size(&self, bar: &Bar0) -> u64 {
-        vidmem_size_ga102(bar)
+        super::ga102::vidmem_size_ga102(bar)
+    }
+
+    fn non_wpr_heap_size(&self) -> Option<u32> {
+        // 2 MiB + 128 KiB non-WPR heap for Blackwell (see Open RM: kgspCalculateFbLayout_GB100).
+        Some(0x220000)
     }
 }
 
-const GA102: Ga102 = Ga102;
-pub(super) const GA102_HAL: &dyn FbHal = &GA102;
+const GB100: Gb100 = Gb100;
+pub(super) const GB100_HAL: &dyn FbHal = &GB100;
