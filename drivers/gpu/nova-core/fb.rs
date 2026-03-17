@@ -10,6 +10,7 @@ use kernel::{
     fmt,
     prelude::*,
     ptr::{
+        const_align_up,
         Alignable,
         Alignment, //
     },
@@ -270,3 +271,10 @@ impl FbLayout {
         })
     }
 }
+
+/// PMU reserved size, aligned to 128KB.
+pub(crate) const PMU_RESERVED_SIZE: u32 =
+    match const_align_up(SZ_8M + SZ_16M + SZ_4K, Alignment::new::<SZ_128K>()) {
+        Some(v) => v as u32,
+        None => panic!("PMU_RESERVED_SIZE: alignment overflow"),
+    };
