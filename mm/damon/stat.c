@@ -188,6 +188,8 @@ static int damon_stat_set_monitoring_region(struct damon_target *t,
 			arg.res.start, addr_unit);
 	addr_range.end = damon_stat_res_to_core_addr(
 			arg.res.end + 1, addr_unit);
+	if (addr_range.end <= addr_range.start)
+		return -EINVAL;
 	return damon_set_regions(t, &addr_range, 1, min_region_sz);
 }
 
