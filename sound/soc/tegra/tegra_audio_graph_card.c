@@ -209,6 +209,7 @@ static int tegra_audio_graph_probe(struct platform_device *pdev)
 	card->component_chaining = 1;
 	priv->simple.ops = &tegra_audio_graph_ops;
 	priv->simple.force_dpcm = 1;
+	priv->simple.ignore_zero_sysclk = 1;
 
 	return audio_graph_parse_of(&priv->simple, dev);
 }
