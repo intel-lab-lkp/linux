@@ -205,9 +205,9 @@ struct scmi_chan_info {
  * @poll_done: Callback to poll transfer status
  */
 struct scmi_transport_ops {
-	bool (*chan_available)(struct device_node *of_node, int idx);
+	bool (*chan_available)(struct device_node *of_node, int idx, void *hndl);
 	int (*chan_setup)(struct scmi_chan_info *cinfo, struct device *dev,
-			  bool tx);
+			  bool tx, void *hndl);
 	int (*chan_free)(int id, void *p, void *data);
 	unsigned int (*get_max_msg)(struct scmi_chan_info *base_cinfo);
 	int (*send_message)(struct scmi_chan_info *cinfo,

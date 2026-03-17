@@ -84,7 +84,7 @@ static irqreturn_t smc_msg_done_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static bool smc_chan_available(struct device_node *of_node, int idx)
+static bool smc_chan_available(struct device_node *of_node, int idx, void *hndl)
 {
 	struct device_node *np __free(device_node) =
 					of_parse_phandle(of_node, "shmem", 0);
@@ -130,7 +130,7 @@ static inline void smc_channel_lock_release(struct scmi_smc *scmi_info)
 }
 
 static int smc_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
-			  bool tx)
+			  bool tx, void *hndl)
 {
 	struct device *cdev = cinfo->dev;
 	unsigned long cap_id = ULONG_MAX;
