@@ -758,6 +758,10 @@ static int drm_atomic_colorop_set_property(struct drm_colorop *colorop,
 		state->multiplier = val;
 	} else if (property == colorop->lut3d_interpolation_property) {
 		colorop->lut3d_interpolation = val;
+	} else if (property == colorop->color_encoding_property) {
+		state->color_encoding = val;
+	} else if (property == colorop->color_range_property) {
+		state->color_range = val;
 	} else if (property == colorop->data_property) {
 		return drm_atomic_color_set_data_property(colorop, state,
 							  property, val);
@@ -791,6 +795,10 @@ drm_atomic_colorop_get_property(struct drm_colorop *colorop,
 		*val = colorop->size;
 	else if (property == colorop->lut3d_interpolation_property)
 		*val = colorop->lut3d_interpolation;
+	else if (property == colorop->color_encoding_property)
+		*val = state->color_encoding;
+	else if (property == colorop->color_range_property)
+		*val = state->color_range;
 	else if (property == colorop->data_property)
 		*val = (state->data) ? state->data->base.id : 0;
 	else

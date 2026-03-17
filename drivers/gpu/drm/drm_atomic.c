@@ -845,6 +845,12 @@ static void drm_atomic_colorop_print_state(struct drm_printer *p,
 			   drm_get_colorop_lut3d_interpolation_name(colorop->lut3d_interpolation));
 		drm_printf(p, "\tdata blob id=%d\n", state->data ? state->data->base.id : 0);
 		break;
+	case DRM_COLOROP_CSC:
+		drm_printf(p, "\tcolor-encoding=%s\n",
+			drm_get_color_encoding_name(state->color_encoding));
+		drm_printf(p, "\tcolor-range=%s\n",
+			drm_get_color_range_name(state->color_range));
+		break;
 	default:
 		break;
 	}
