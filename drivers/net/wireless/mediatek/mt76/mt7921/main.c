@@ -640,7 +640,8 @@ static int mt7921_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 
 	mt792x_mutex_acquire(dev);
 
-	if (changed & IEEE80211_CONF_CHANGE_POWER) {
+	if (changed & (IEEE80211_CONF_CHANGE_POWER |
+		       IEEE80211_CONF_CHANGE_CHANNEL)) {
 		ret = mt7921_set_tx_sar_pwr(hw, NULL);
 		if (ret)
 			goto out;
@@ -720,6 +721,14 @@ static void mt7921_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_CQM)
 		mt7921_mcu_set_rssimonitor(dev, vif);
+
+	if (changed & BSS_CHANGED_TXPOWER) {
+		int tx_power = info->txpower;
+
+		if (tx_power != INT_MIN && tx_power > 0)
+			hw->conf.power_level = tx_power;
+		mt7921_set_tx_sar_pwr(hw, NULL);
+	}
 
 	if (changed & BSS_CHANGED_ASSOC) {
 		mt7921_mcu_sta_update(dev, NULL, vif, true,
@@ -1362,8 +1371,15 @@ mt7921_add_chanctx(struct ieee80211_hw *hw,
 		   struct ieee80211_chanctx_conf *ctx)
 {
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
+	struct mt76_phy *mphy = hw->priv;
 
 	dev->new_ctx = ctx;
+	mphy->chandef = ctx->def;
+
+	mt792x_mutex_acquire(dev);
+	mt7921_set_tx_sar_pwr(hw, NULL);
+	mt792x_mutex_release(dev);
+
 	return 0;
 }
 
@@ -1398,6 +1414,10 @@ mt7921_change_chanctx(struct ieee80211_hw *hw,
 		mt7921_mcu_config_sniffer(mvif, ctx);
 	else
 		mt76_connac_mcu_uni_set_chctx(mvif->phy->mt76, &mvif->bss_conf.mt76, ctx);
+
+	phy->mt76->chandef = ctx->def;
+	mt7921_set_tx_sar_pwr(hw, NULL);
+
 	mt792x_mutex_release(phy->dev);
 }
 
