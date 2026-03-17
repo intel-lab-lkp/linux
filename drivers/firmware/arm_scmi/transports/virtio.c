@@ -4,7 +4,7 @@
  * (SCMI).
  *
  * Copyright (C) 2020-2022 OpenSynergy.
- * Copyright (C) 2021-2024 ARM Ltd.
+ * Copyright (C) 2021-2026 ARM Ltd.
  */
 
 /**
@@ -113,8 +113,12 @@ struct scmi_vio_msg {
 
 static struct scmi_transport_core_operations *core;
 
-/* Only one SCMI VirtIO device can possibly exist */
-static struct virtio_device *scmi_vdev;
+struct scmi_virtio_device {
+	struct virtio_device *vdev;
+	struct list_head node;
+};
+
+static DEFINE_SCMI_TRANSPORT_INSTANCE_QUEUE(scmi_available_vdevs);
 
 static void scmi_vio_channel_ready(struct scmi_vio_channel *vioch,
 				   struct scmi_chan_info *cinfo)
@@ -376,23 +380,27 @@ static unsigned int virtio_get_max_msg(struct scmi_chan_info *base_cinfo)
 static bool virtio_chan_available(struct device_node *of_node, int idx, void *hndl)
 {
 	struct scmi_vio_channel *channels, *vioch = NULL;
+	struct scmi_virtio_device *sdev;
 
-	if (WARN_ON_ONCE(!scmi_vdev))
-		return false;
+	sdev = list_entry(hndl, struct scmi_virtio_device, node);
 
-	channels = (struct scmi_vio_channel *)scmi_vdev->priv;
+	channels = (struct scmi_vio_channel *)sdev->vdev->priv;
 
 	switch (idx) {
 	case VIRTIO_SCMI_VQ_TX:
 		vioch = &channels[VIRTIO_SCMI_VQ_TX];
 		break;
 	case VIRTIO_SCMI_VQ_RX:
-		if (scmi_vio_have_vq_rx(scmi_vdev))
+		if (scmi_vio_have_vq_rx(sdev->vdev))
 			vioch = &channels[VIRTIO_SCMI_VQ_RX];
 		break;
 	default:
 		return false;
 	}
+
+	dev_dbg(&sdev->vdev->dev, "%s Channel %sAVAILABLE on SCMI Virtio device.\n",
+		idx == VIRTIO_SCMI_VQ_TX ? "TX" : "RX",
+		(vioch && !vioch->cinfo) ? "" : "NOT ");
 
 	return vioch && !vioch->cinfo;
 }
@@ -405,21 +413,20 @@ static void scmi_destroy_tx_workqueue(void *deferred_tx_wq)
 static int
 virtio_chan_setup(struct scmi_chan_info *cinfo, struct device *dev, bool tx, void *hndl)
 {
+	struct scmi_virtio_device *sdev;
 	struct scmi_vio_channel *vioch;
 	int index = tx ? VIRTIO_SCMI_VQ_TX : VIRTIO_SCMI_VQ_RX;
 	int i;
 
-	if (!scmi_vdev)
-		return -EPROBE_DEFER;
-
-	vioch = &((struct scmi_vio_channel *)scmi_vdev->priv)[index];
+	sdev = list_entry(hndl, struct scmi_virtio_device, node);
+	vioch = &((struct scmi_vio_channel *)sdev->vdev->priv)[index];
 
 	/* Setup a deferred worker for polling. */
 	if (tx && !vioch->deferred_tx_wq) {
 		int ret;
 
 		vioch->deferred_tx_wq =
-			alloc_workqueue(dev_name(&scmi_vdev->dev),
+			alloc_workqueue(dev_name(&sdev->vdev->dev),
 					WQ_UNBOUND | WQ_FREEZABLE | WQ_SYSFS,
 					0);
 		if (!vioch->deferred_tx_wq)
@@ -459,6 +466,9 @@ virtio_chan_setup(struct scmi_chan_info *cinfo, struct device *dev, bool tx, voi
 	}
 
 	scmi_vio_channel_ready(vioch, cinfo);
+
+	dev_dbg(&sdev->vdev->dev, "%s Channel SETUP on SCMI Virtio device.\n",
+		tx ? "TX" : "RX");
 
 	return 0;
 }
@@ -801,7 +811,7 @@ static struct scmi_desc scmi_virtio_desc = {
 };
 
 static const struct of_device_id scmi_of_match[] = {
-	{ .compatible = "arm,scmi-virtio" },
+	{ .compatible = "arm,scmi-virtio", .data = &scmi_available_vdevs},
 	{ /* Sentinel */ },
 };
 
@@ -812,21 +822,19 @@ static int scmi_vio_probe(struct virtio_device *vdev)
 {
 	struct device *dev = &vdev->dev;
 	struct scmi_vio_channel *channels;
+	struct scmi_virtio_device *sdev;
 	bool have_vq_rx;
 	int vq_cnt;
 	int i;
 	int ret;
 	struct virtqueue *vqs[VIRTIO_SCMI_VQ_MAX_CNT];
 
-	/* Only one SCMI VirtiO device allowed */
-	if (scmi_vdev) {
-		dev_err(dev,
-			"One SCMI Virtio device was already initialized: only one allowed.\n");
-		return -EBUSY;
-	}
-
 	have_vq_rx = scmi_vio_have_vq_rx(vdev);
 	vq_cnt = have_vq_rx ? VIRTIO_SCMI_VQ_MAX_CNT : 1;
+
+	sdev = devm_kzalloc(dev, sizeof(*sdev), GFP_KERNEL);
+	if (!sdev)
+		return -ENOMEM;
 
 	channels = devm_kcalloc(dev, vq_cnt, sizeof(*channels), GFP_KERNEL);
 	if (!channels)
@@ -864,33 +872,25 @@ static int scmi_vio_probe(struct virtio_device *vdev)
 			sz = MSG_TOKEN_MAX;
 		}
 		channels[i].max_msg = sz;
+		dev_info(dev, "VQ%d initialized with max_msg: %d\n", i, sz);
 	}
 
 	vdev->priv = channels;
 
-	/* Ensure initialized scmi_vdev is visible */
-	smp_store_mb(scmi_vdev, vdev);
+	/* Ensure initialized vdev is visible */
+	smp_store_mb(sdev->vdev, vdev);
+	SCMI_TRANSPORT_INSTANCE_REGISTER(sdev->node, scmi_available_vdevs);
 
 	/* Set device ready */
 	virtio_device_ready(vdev);
 
-	ret = platform_driver_register(&scmi_virtio_driver);
-	if (ret) {
-		vdev->priv = NULL;
-		vdev->config->del_vqs(vdev);
-		/* Ensure NULLified scmi_vdev is visible */
-		smp_store_mb(scmi_vdev, NULL);
-
-		return ret;
-	}
+	dev_info(dev, "Probed and initialized SCMI Virtio device.\n");
 
 	return 0;
 }
 
 static void scmi_vio_remove(struct virtio_device *vdev)
 {
-	platform_driver_unregister(&scmi_virtio_driver);
-
 	/*
 	 * Once we get here, virtio_chan_free() will have already been called by
 	 * the SCMI core for any existing channel and, as a consequence, all the
@@ -900,8 +900,6 @@ static void scmi_vio_remove(struct virtio_device *vdev)
 	 */
 	virtio_reset_device(vdev);
 	vdev->config->del_vqs(vdev);
-	/* Ensure scmi_vdev is visible as NULL */
-	smp_store_mb(scmi_vdev, NULL);
 }
 
 static int scmi_vio_validate(struct virtio_device *vdev)
@@ -936,7 +934,30 @@ static struct virtio_driver virtio_scmi_driver = {
 	.validate = scmi_vio_validate,
 };
 
-module_virtio_driver(virtio_scmi_driver);
+static int __init scmi_transport_virtio_init(void)
+{
+	int ret;
+
+	ret = register_virtio_driver(&virtio_scmi_driver);
+	if (ret)
+		return ret;
+
+	ret = platform_driver_register(&scmi_virtio_driver);
+	if (ret) {
+		unregister_virtio_driver(&virtio_scmi_driver);
+		return ret;
+	}
+
+	return ret;
+}
+module_init(scmi_transport_virtio_init);
+
+static void __exit scmi_transport_virtio_exit(void)
+{
+	platform_driver_unregister(&scmi_virtio_driver);
+	unregister_virtio_driver(&virtio_scmi_driver);
+}
+module_exit(scmi_transport_virtio_exit);
 
 MODULE_AUTHOR("Igor Skalkin <igor.skalkin@opensynergy.com>");
 MODULE_AUTHOR("Peter Hilber <peter.hilber@opensynergy.com>");
