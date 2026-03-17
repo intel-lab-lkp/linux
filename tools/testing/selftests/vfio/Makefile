@@ -1,4 +1,4 @@
-ARCH ?= $(shell uname -m)
+ARCH ?= $(shell uname -m | sed -e 's/aarch64.*/arm64/')
 
 ifeq (,$(filter $(ARCH),arm64 x86_64))
 # Do nothing on unsupported architectures
