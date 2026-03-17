@@ -101,6 +101,9 @@ static void hpcc_test_compare_value_boundaries(struct kunit *test)
 	percpu_counter_tree_set(&pct, 0);
 	percpu_counter_tree_approximate_accuracy_range(&pct, &under, &over);
 
+	if (!under && !over)
+		kunit_skip(test, "no approximation accuracy on single-CPU topology");
+
 	/*
 	 * With approx_sum = precise_sum = 0, from the accuracy invariant:
 	 *   approx_sum - over <= precise_sum <= approx_sum + under
@@ -213,6 +216,9 @@ static void hpcc_test_compare_counter_boundaries(struct kunit *test)
 	 *   accuracy_pos = over + under = under + over = accuracy_neg
 	 */
 	combined = under + over;
+
+	if (!combined)
+		kunit_skip(test, "no approximation accuracy on single-CPU topology");
 
 	/* --- percpu_counter_tree_approximate_compare --- */
 
