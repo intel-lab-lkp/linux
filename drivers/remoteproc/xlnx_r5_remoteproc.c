@@ -5,6 +5,7 @@
  */
 
 #include <dt-bindings/power/xlnx-zynqmp-power.h>
+#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/firmware/xlnx-zynqmp.h>
 #include <linux/kernel.h>
@@ -28,6 +29,8 @@
 
 #define RSC_TBL_XLNX_MAGIC	((uint32_t)'x' << 24 | (uint32_t)'a' << 16 | \
 				 (uint32_t)'m' << 8 | (uint32_t)'p')
+
+#define RPROC_ATTACH_TIMEOUT_US (100 * 1000)
 
 /*
  * settings for RPU cluster mode which
@@ -865,6 +868,49 @@ static int zynqmp_r5_get_rsc_table_va(struct zynqmp_r5_core *r5_core)
 
 static int zynqmp_r5_attach(struct rproc *rproc)
 {
+	struct device *dev = &rproc->dev;
+	bool wait_for_remote = false;
+	struct fw_rsc_vdev *rsc;
+	struct fw_rsc_hdr *hdr;
+	int i, offset, avail;
+
+	if (!rproc->table_ptr)
+		goto attach_success;
+
+	for (i = 0; i < rproc->table_ptr->num; i++) {
+		offset = rproc->table_ptr->offset[i];
+		hdr = (void *)rproc->table_ptr + offset;
+		avail = rproc->table_sz - offset - sizeof(*hdr);
+		rsc = (void *)hdr + sizeof(*hdr);
+
+		/* make sure table isn't truncated */
+		if (avail < 0) {
+			dev_err(dev, "rsc table is truncated\n");
+			return -EINVAL;
+		}
+
+		if (hdr->type != RSC_VDEV)
+			continue;
+
+		/*
+		 * reset vdev status, in case previous run didn't leave it in
+		 * a clean state.
+		 */
+		if (rsc->status) {
+			rsc->status = 0;
+			wait_for_remote = true;
+			break;
+		}
+	}
+
+	/* kick remote to notify about attach */
+	rproc->ops->kick(rproc, 0);
+
+	/* wait for sometime until remote is ready */
+	if (wait_for_remote)
+		usleep_range(100, RPROC_ATTACH_TIMEOUT_US);
+
+attach_success:
 	dev_dbg(&rproc->dev, "rproc %d attached\n", rproc->index);
 
 	return 0;
