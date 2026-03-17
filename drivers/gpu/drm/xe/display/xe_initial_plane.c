@@ -19,6 +19,7 @@
 #include "intel_fb.h"
 #include "intel_fb_pin.h"
 #include "xe_bo.h"
+#include "xe_ttm_stolen_mgr.h"
 #include "xe_vram_types.h"
 #include "xe_wa.h"
 
@@ -87,7 +88,26 @@ initial_plane_bo(struct xe_device *xe,
 
 		if (!stolen)
 			return NULL;
-		phys_base = base;
+
+		/* Read PTE to find physical address backing the GGTT address */
+		u64 pte = xe_ggtt_read_pte(tile0->mem.ggtt, base);
+		u64 phys_addr = pte & ~(page_size - 1);
+
+		u64 stolen_base = xe_ttm_stolen_gpu_offset(xe);
+
+		drm_dbg_kms(&xe->drm,
+				"Stolen Framebuffer base=%x pte=%llx phys_addr=%llx stolen_base=%llx\n",
+				base, pte, phys_addr, stolen_base);
+
+		/* Make sure that the physical address is in the range of stolen memory */
+		if (phys_addr >= stolen_base) {
+			phys_base = phys_addr - stolen_base;
+		} else {
+			drm_err(&xe->drm, "Stolen memory outside of stolen range phys_base=%pa\n",
+					&phys_base);
+			return NULL;
+		}
+
 		flags |= XE_BO_FLAG_STOLEN;
 
 		if (XE_DEVICE_WA(xe, 22019338487_display))
