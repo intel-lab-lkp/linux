@@ -631,6 +631,13 @@ blk_status_t scsi_alua_prep_fn(struct scsi_device *sdev, struct request *req)
 }
 EXPORT_SYMBOL_GPL(scsi_alua_prep_fn);
 
+bool scsi_device_alua_implicit(struct scsi_device *sdev)
+{
+	if (!sdev->alua)
+		return false;
+	return sdev->alua->tpgs & TPGS_MODE_IMPLICIT;
+}
+
 int scsi_alua_init(void)
 {
 	kalua_wq = alloc_workqueue("kalua", WQ_MEM_RECLAIM | WQ_PERCPU, 0);
