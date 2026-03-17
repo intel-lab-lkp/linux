@@ -862,6 +862,9 @@ static noinline_for_stack
 char *restricted_pointer(char *buf, char *end, const void *ptr,
 			 struct printf_spec spec)
 {
+	/* Only usable from task context, The call to has_capability_noaudit() might sleep. */
+	might_sleep();
+
 	switch (kptr_restrict) {
 	case 0:
 		/* Handle as %p, hash and do _not_ leak addresses. */
