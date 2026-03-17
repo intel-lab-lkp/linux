@@ -23,6 +23,8 @@ use crate::{
     regs,
 };
 
+mod hal;
+
 macro_rules! define_chipset {
     ({ $($variant:ident = $value:expr),* $(,)* }) =>
     {
@@ -309,13 +311,17 @@ impl Gpu {
         spec: Spec,
     ) -> impl PinInit<Self, Error> + 'a {
         let chipset = spec.chipset();
+        let hal = hal::gpu_hal(chipset);
 
         try_pin_init!(Self {
-            // We must wait for GFW_BOOT completion before doing any significant setup
-            // on the GPU.
             _: {
-                gfw::wait_gfw_boot_completion(bar)
-                    .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
+                // GFW_BOOT is the "GPU firmware boot complete" signal for the
+                // legacy devinit/FWSEC path. Pre-Hopper GPUs must wait for it
+                // before most GPU initialization. Hopper and later boot via FSP.
+                if hal.needs_gfw_boot() {
+                    gfw::wait_gfw_boot_completion(bar)
+                        .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
+                }
             },
 
             sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, chipset)?,
