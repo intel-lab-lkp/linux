@@ -738,6 +738,9 @@ static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 	if (!kvm || kvm_arch_supports_gmem_init_shared(kvm))
 		flags |= GUEST_MEMFD_FLAG_INIT_SHARED;
 
+	if (!kvm || kvm_arch_gmem_supports_no_direct_map(kvm))
+		flags |= GUEST_MEMFD_FLAG_NO_DIRECT_MAP;
+
 	return flags;
 }
 #endif
