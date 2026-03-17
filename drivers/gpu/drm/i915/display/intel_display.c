@@ -6397,6 +6397,71 @@ static int intel_atomic_check_config_and_link(struct intel_atomic_state *state)
 
 	return ret;
 }
+
+// Helper function to sanitize pll state
+static void intel_sanitize_pll_state(struct intel_crtc_state *old_crtc_state,
+		struct intel_crtc_state *new_crtc_state)
+{
+	int j;
+
+	for (j = 4; j < 9; j++) {
+		if (new_crtc_state->dpll_hw_state.cx0pll.c10.pll[j] !=
+				old_crtc_state->dpll_hw_state.cx0pll.c10.pll[j]) {
+			new_crtc_state->dpll_hw_state.cx0pll.c10.pll[j] =
+				old_crtc_state->dpll_hw_state.cx0pll.c10.pll[j];
+		}
+	}
+}
+
+/*
+ * intel_dp_sanitize_seamless_boot - Snap driver state to BIOS state for seamless handoff.
+ * @state: the atomic state to sanitize
+ *
+ * This function compares the driver's calculated new_state with the inherited BIOS state
+ * (old_state). If they are within a small threshold (e.g., 0.5% for clock), it "snaps"
+ * the new_state to match the BIOS state exactly. This prevents minor state mismatches
+ * that would otherwise force a full modeset (and a screen flicker) during the initial
+ * kernel handoff.
+ */
+static void intel_dp_sanitize_seamless_boot(struct intel_atomic_state *state)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_crtc_state *new_crtc_state, *old_crtc_state;
+	struct intel_crtc *crtc;
+	struct intel_encoder *encoder;
+	int i;
+
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+		/*
+		 * We must check old_crtc_state->inherited because new_crtc_state->inherited
+		 * is cleared at the start of intel_atomic_check for userspace commits.
+		 */
+		if (!old_crtc_state->inherited || !new_crtc_state->hw.active)
+			continue;
+
+		if (intel_crtc_has_dp_encoder(new_crtc_state)) {
+			int old_clock = old_crtc_state->hw.adjusted_mode.crtc_clock;
+			int new_clock = new_crtc_state->hw.adjusted_mode.crtc_clock;
+			int threshold = old_clock / 200; /* 0.5% */
+
+			if (abs(new_clock - old_clock) <= threshold) {
+				new_crtc_state->hw.pipe_mode.crtc_clock = old_clock;
+				new_crtc_state->hw.adjusted_mode.crtc_clock = old_clock;
+				new_crtc_state->pixel_rate = old_crtc_state->pixel_rate;
+				new_crtc_state->dp_m_n = old_crtc_state->dp_m_n;
+			}
+		}
+
+		for_each_intel_encoder_mask(display->drm, encoder,
+				new_crtc_state->uapi.encoder_mask) {
+			if (intel_encoder_is_c10phy(encoder)) {
+				if (!new_crtc_state->dpll_hw_state.cx0pll.ssc_enabled)
+					intel_sanitize_pll_state(old_crtc_state, new_crtc_state);
+			}
+		}
+	}
+}
+
 /**
  * intel_atomic_check - validate state object
  * @dev: drm device
@@ -6446,6 +6511,8 @@ int intel_atomic_check(struct drm_device *dev,
 	ret = intel_atomic_check_config_and_link(state);
 	if (ret)
 		goto fail;
+
+	intel_dp_sanitize_seamless_boot(state);
 
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
 		if (!intel_crtc_needs_modeset(new_crtc_state))
