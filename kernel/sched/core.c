@@ -5546,7 +5546,7 @@ void sched_tick(void)
 	struct task_struct *donor;
 	struct rq_flags rf;
 	unsigned long hw_pressure;
-	u64 resched_latency;
+	u64 resched_latency = 0;
 
 	if (housekeeping_cpu(cpu, HK_TYPE_KERNEL_NOISE))
 		arch_scale_freq_tick();
