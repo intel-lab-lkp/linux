@@ -9213,7 +9213,7 @@ err3:
 err2:
 	kfree(flowtable->name);
 err1:
-	kfree(flowtable);
+	kfree_rcu(flowtable, rcu_head);
 flowtable_alloc:
 	nft_use_dec_restore(&table->use);
 

@@ -1479,6 +1479,7 @@ void nft_unregister_obj(struct nft_object_type *obj_type);
  *	@genmask: generation mask
  *	@use: number of references to this flow table
  * 	@handle: unique object handle
+ *	@rcu_head: deferred release for error path
  *	@hook_list: hook list for hooks per net_device in flowtables
  *	@data: rhashtable and garbage collector
  */
@@ -1491,6 +1492,7 @@ struct nft_flowtable {
 	u32				genmask:2;
 	u32				use;
 	u64				handle;
+	struct rcu_head			rcu_head;
 	/* runtime data below here */
 	struct list_head		hook_list ____cacheline_aligned;
 	struct nf_flowtable		data;
