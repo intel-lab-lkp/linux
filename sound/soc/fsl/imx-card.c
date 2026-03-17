@@ -544,7 +544,7 @@ static int imx_card_parse_of(struct imx_card_data *data)
 	struct snd_soc_dai_link *link;
 	struct dai_link_data *link_data;
 	struct of_phandle_args args;
-	bool playback_only, capture_only;
+	bool playback_only = false, capture_only = false;
 	int ret, num_links;
 	u32 asrc_fmt = 0;
 	u32 width;
