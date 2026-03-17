@@ -1758,6 +1758,11 @@ static int ext4_xattr_set_entry(struct ext4_xattr_info *i,
 		size_t size = EXT4_XATTR_LEN(name_len);
 
 		last = ENTRY((void *)last - size);
+		if ((void *)last < (void *)here) {
+			EXT4_ERROR_INODE(inode, "corrupted xattr entries: last before here");
+			ret = -EFSCORRUPTED;
+			goto out;
+		}
 		memmove(here, (void *)here + size,
 			(void *)last - (void *)here + sizeof(__u32));
 		memset(last, 0, size);
