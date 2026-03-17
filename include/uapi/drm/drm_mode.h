@@ -971,6 +971,7 @@ enum drm_colorop_type {
 	 *         color = lut3d[index]
 	 */
 	DRM_COLOROP_3D_LUT,
+	DRM_COLOROP_CSC,
 };
 
 /**
