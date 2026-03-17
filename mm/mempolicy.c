@@ -2426,6 +2426,47 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 	return page;
 }
 
+/*
+ * Count a user-defined mempolicy allocation. Stats are tracked per-node.
+ * The following numa_mpol_{hit/miss/foreign} pattern is used:
+ *
+ *   hit
+ *     - for nodemask-based policies, allocation succeeded within nodemask
+ *     - for other policies, allocation succeeded on intended node
+ *     - counted on the node of the allocation
+ *   miss
+ *     - allocation intended for other node, but happened on this one
+ *     - counted on other node
+ *   foreign
+ *     - allocation intended for this node, but happened on other node
+ *     - counted on this node
+ */
+static void mpol_count_numa_alloc(struct mempolicy *pol, int intended_nid,
+				  struct page *page, unsigned int order)
+{
+	int actual_nid = page_to_nid(page);
+	long nr_pages = 1L << order;
+	bool is_hit;
+
+	if (!current->mempolicy)
+		return;
+
+	if (pol->mode == MPOL_BIND || pol->mode == MPOL_PREFERRED_MANY)
+		is_hit = node_isset(actual_nid, pol->nodes);
+	else
+		is_hit = (actual_nid == intended_nid);
+
+	if (is_hit) {
+		mod_node_page_state(NODE_DATA(actual_nid), NUMA_MPOL_HIT, nr_pages);
+	} else {
+		/* account for miss on the fallback node */
+		mod_node_page_state(NODE_DATA(actual_nid), NUMA_MPOL_MISS, nr_pages);
+
+		/* account for foreign on the intended node */
+		mod_node_page_state(NODE_DATA(intended_nid), NUMA_MPOL_FOREIGN, nr_pages);
+	}
+}
+
 /**
  * alloc_pages_mpol - Allocate pages according to NUMA mempolicy.
  * @gfp: GFP flags.
@@ -2444,8 +2485,10 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
-	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+	if (pol->mode == MPOL_PREFERRED_MANY) {
+		page = alloc_pages_preferred_many(gfp, order, nid, nodemask);
+		goto out;
+	}
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -2471,7 +2514,7 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 				gfp | __GFP_THISNODE | __GFP_NORETRY, order,
 				nid, NULL);
 			if (page || !(gfp & __GFP_DIRECT_RECLAIM))
-				return page;
+				goto out;
 			/*
 			 * If hugepage allocations are configured to always
 			 * synchronous compact or the vma has been madvised
@@ -2493,6 +2536,10 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 			preempt_enable();
 		}
 	}
+
+out:
+	if (page)
+		mpol_count_numa_alloc(pol, nid, page, order);
 
 	return page;
 }
