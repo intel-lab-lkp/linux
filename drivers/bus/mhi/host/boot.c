@@ -308,7 +308,6 @@ static void mhi_free_bhi_buffer(struct mhi_controller *mhi_cntrl,
 	struct mhi_buf *mhi_buf = image_info->mhi_buf;
 
 	dma_free_coherent(mhi_cntrl->cntrl_dev, mhi_buf->len, mhi_buf->buf, mhi_buf->dma_addr);
-	kfree(image_info->mhi_buf);
 	kfree(image_info);
 }
 
@@ -322,7 +321,6 @@ void mhi_free_bhie_table(struct mhi_controller *mhi_cntrl,
 		dma_free_coherent(mhi_cntrl->cntrl_dev, mhi_buf->len,
 				  mhi_buf->buf, mhi_buf->dma_addr);
 
-	kfree(image_info->mhi_buf);
 	kfree(image_info);
 }
 
