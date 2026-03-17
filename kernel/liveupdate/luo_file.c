@@ -253,6 +253,7 @@ static bool luo_token_is_used(struct luo_file_set *file_set, u64 token)
  *         -ENOSPC if the file_set is full.
  *         -ENOENT if no compatible handler is found.
  *         -ENOMEM on memory allocation failure.
+ *         -ENODEV if the file handler's module is unloading.
  *         Other erros might be returned by .preserve().
  */
 int luo_preserve_file(struct luo_file_set *file_set, u64 token, int fd)
@@ -281,7 +282,10 @@ int luo_preserve_file(struct luo_file_set *file_set, u64 token, int fd)
 	scoped_guard(rwsem_read, &luo_file_handler_lock) {
 		list_private_for_each_entry(fh, &luo_file_handler_list, list) {
 			if (fh->ops->can_preserve(fh, file)) {
-				err = 0;
+				if (try_module_get(fh->ops->owner))
+					err = 0;
+				else
+					err = -ENODEV;
 				break;
 			}
 		}
@@ -293,7 +297,7 @@ int luo_preserve_file(struct luo_file_set *file_set, u64 token, int fd)
 
 	err = luo_flb_file_preserve(fh);
 	if (err)
-		goto err_free_files_mem;
+		goto err_module_put;
 
 	luo_file = kzalloc_obj(*luo_file);
 	if (!luo_file) {
@@ -323,6 +327,8 @@ err_kfree:
 	kfree(luo_file);
 err_flb_unpreserve:
 	luo_flb_file_unpreserve(fh);
+err_module_put:
+	module_put(fh->ops->owner);
 err_free_files_mem:
 	luo_free_files_mem(file_set);
 err_fput:
@@ -365,6 +371,7 @@ void luo_file_unpreserve_files(struct luo_file_set *file_set)
 		args.private_data = luo_file->private_data;
 		luo_file->fh->ops->unpreserve(&args);
 		luo_flb_file_unpreserve(luo_file->fh);
+		module_put(luo_file->fh->ops->owner);
 
 		list_del(&luo_file->list);
 		file_set->count--;
@@ -649,6 +656,7 @@ static void luo_file_finish_one(struct luo_file_set *file_set,
 
 	luo_file->fh->ops->finish(&args);
 	luo_flb_file_finish(luo_file->fh);
+	module_put(luo_file->fh->ops->owner);
 }
 
 /**
@@ -783,7 +791,8 @@ int luo_file_deserialize(struct luo_file_set *file_set,
 		scoped_guard(rwsem_read, &luo_file_handler_lock) {
 			list_private_for_each_entry(fh, &luo_file_handler_list, list) {
 				if (!strcmp(fh->compatible, file_ser[i].compatible)) {
-					handler_found = true;
+					if (try_module_get(fh->ops->owner))
+						handler_found = true;
 					break;
 				}
 			}
@@ -796,8 +805,10 @@ int luo_file_deserialize(struct luo_file_set *file_set,
 		}
 
 		luo_file = kzalloc_obj(*luo_file);
-		if (!luo_file)
+		if (!luo_file) {
+			module_put(fh->ops->owner);
 			return -ENOMEM;
+		}
 
 		luo_file->fh = fh;
 		luo_file->file = NULL;
@@ -873,6 +884,7 @@ int liveupdate_register_file_handler(struct liveupdate_file_handler *fh)
 		}
 
 		INIT_LIST_HEAD(&ACCESS_PRIVATE(fh, flb_list));
+		init_rwsem(&ACCESS_PRIVATE(fh, flb_lock));
 		INIT_LIST_HEAD(&ACCESS_PRIVATE(fh, list));
 		list_add_tail(&ACCESS_PRIVATE(fh, list), &luo_file_handler_list);
 	}
@@ -922,7 +934,6 @@ int liveupdate_unregister_file_handler(struct liveupdate_file_handler *fh)
 
 		list_del(&ACCESS_PRIVATE(fh, list));
 	}
-	module_put(fh->ops->owner);
 	luo_session_resume();
 
 	return 0;
