@@ -618,7 +618,7 @@ ethnl_rss_set_validate(struct ethnl_req_info *req_info, struct genl_info *info)
 static int
 rss_set_prep_indir(struct net_device *dev, struct genl_info *info,
 		   struct rss_reply_data *data, struct ethtool_rxfh_param *rxfh,
-		   bool *reset, bool *mod)
+		   bool *reset, bool *mod, u32 *user_sizep)
 {
 	struct netlink_ext_ack *extack = info->extack;
 	struct nlattr **tb = info->attrs;
@@ -685,6 +685,7 @@ rss_set_prep_indir(struct net_device *dev, struct genl_info *info,
 	}
 
 	*mod |= memcmp(rxfh->indir, data->indir_table, data->indir_size);
+	*user_sizep = user_size;
 
 	return 0;
 
@@ -833,6 +834,7 @@ ethnl_rss_set(struct ethnl_req_info *req_info, struct genl_info *info)
 	struct nlattr **tb = info->attrs;
 	struct rss_reply_data data = {};
 	const struct ethtool_ops *ops;
+	u32 indir_user_size = 0;
 	int ret;
 
 	ops = dev->ethtool_ops;
@@ -844,7 +846,8 @@ ethnl_rss_set(struct ethnl_req_info *req_info, struct genl_info *info)
 
 	rxfh.rss_context = request->rss_context;
 
-	ret = rss_set_prep_indir(dev, info, &data, &rxfh, &indir_reset, &mod);
+	ret = rss_set_prep_indir(dev, info, &data, &rxfh, &indir_reset, &mod,
+				 &indir_user_size);
 	if (ret)
 		goto exit_clean_data;
 	indir_mod = !!tb[ETHTOOL_A_RSS_INDIR];
@@ -889,12 +892,17 @@ ethnl_rss_set(struct ethnl_req_info *req_info, struct genl_info *info)
 	if (ret)
 		goto exit_unlock;
 
-	if (ctx)
+	if (ctx) {
 		rss_set_ctx_update(ctx, tb, &data, &rxfh);
-	else if (indir_reset)
+		if (indir_user_size)
+			ctx->indir_user_size = indir_user_size;
+	} else if (indir_reset) {
 		dev->priv_flags &= ~IFF_RXFH_CONFIGURED;
-	else if (indir_mod)
+		dev->ethtool->rss_indir_user_size = 0;
+	} else if (indir_mod) {
 		dev->priv_flags |= IFF_RXFH_CONFIGURED;
+		dev->ethtool->rss_indir_user_size = indir_user_size;
+	}
 
 exit_unlock:
 	mutex_unlock(&dev->ethtool->rss_lock);
@@ -998,6 +1006,7 @@ int ethnl_rss_create_doit(struct sk_buff *skb, struct genl_info *info)
 	struct rss_reply_data data = {};
 	const struct ethtool_ops *ops;
 	struct rss_req_info req = {};
+	u32 indir_user_size = 0;
 	struct net_device *dev;
 	struct sk_buff *rsp;
 	void *hdr;
@@ -1034,7 +1043,8 @@ int ethnl_rss_create_doit(struct sk_buff *skb, struct genl_info *info)
 	if (ret)
 		goto exit_ops;
 
-	ret = rss_set_prep_indir(dev, info, &data, &rxfh, &indir_dflt, &mod);
+	ret = rss_set_prep_indir(dev, info, &data, &rxfh, &indir_dflt, &mod,
+				 &indir_user_size);
 	if (ret)
 		goto exit_clean_data;
 
@@ -1080,6 +1090,8 @@ int ethnl_rss_create_doit(struct sk_buff *skb, struct genl_info *info)
 
 	/* Store the config from rxfh to Xarray.. */
 	rss_set_ctx_update(ctx, tb, &data, &rxfh);
+	if (indir_user_size)
+		ctx->indir_user_size = indir_user_size;
 	/* .. copy from Xarray to data. */
 	__rss_prepare_ctx(dev, &data, ctx);
 
