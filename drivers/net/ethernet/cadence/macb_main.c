@@ -3749,7 +3749,7 @@ static int macb_set_ringparam(struct net_device *netdev,
 	bp->tx_ring_size = new_tx_size;
 
 	if (reset)
-		macb_open(bp->dev);
+		return macb_open(bp->dev);
 
 	return 0;
 }
