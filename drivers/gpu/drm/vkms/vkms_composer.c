@@ -15,6 +15,7 @@
 #include <kunit/visibility.h>
 
 #include "vkms_composer.h"
+#include "vkms_formats.h"
 #include "vkms_luts.h"
 
 static u16 pre_mul_blend_channel(u16 src, u16 dst, u16 alpha)
@@ -187,6 +188,10 @@ static void apply_colorop(struct pixel_argb_s32 *pixel, struct drm_colorop *colo
 		if (colorop_state->data)
 			apply_3x4_matrix(pixel,
 					 (struct drm_color_ctm_3x4 *)colorop_state->data->data);
+	} else if (colorop->type == DRM_COLOROP_CSC) {
+		/* CSC conversion already handled by YUV read functions via conversion_matrix.
+		 * By the time we reach this colorop, pixels are already in RGB.
+		 */
 	}
 }
 
