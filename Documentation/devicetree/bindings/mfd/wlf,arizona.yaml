@@ -194,6 +194,15 @@ properties:
   reset-gpios:
     maxItems: 1
 
+  irq-gpios:
+    maxItems: 1
+    description:
+      Nominally a functional IRQ should be provided in the interrupts
+      property. However due to glitches in the hardware, the GPIO line
+      corresponding to the IRQ sometimes need to be iteratively polled to
+      check for the triggering edge. If this bug is present, the GPIO line
+      should be passed here.
+
   wlf,reset:
     description:
       GPIO specifier for the GPIO controlling RESET
