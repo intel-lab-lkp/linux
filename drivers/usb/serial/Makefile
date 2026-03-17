@@ -41,6 +41,7 @@ obj-$(CONFIG_USB_SERIAL_MOS7720)		+= mos7720.o
 obj-$(CONFIG_USB_SERIAL_MOS7840)		+= mos7840.o
 obj-$(CONFIG_USB_SERIAL_MXUPORT)		+= mxuport.o
 obj-$(CONFIG_USB_SERIAL_NAVMAN)			+= navman.o
+obj-$(CONFIG_USB_SERIAL_NUV_MULTI_UART)		+= nct_usb_serial.o
 obj-$(CONFIG_USB_SERIAL_OMNINET)		+= omninet.o
 obj-$(CONFIG_USB_SERIAL_OPTICON)		+= opticon.o
 obj-$(CONFIG_USB_SERIAL_OPTION)			+= option.o
