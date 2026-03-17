@@ -310,6 +310,9 @@ int __init xbc_node_compose_key_after(struct xbc_node *root,
 	if (!node && root)
 		return -EINVAL;
 
+	if (WARN_ON_ONCE(size > INT_MAX))
+		return -EINVAL;
+
 	while (--depth >= 0) {
 		node = xbc_nodes + keys[depth];
 		ret = snprintf(buf, size, "%s%s", xbc_node_get_data(node),
