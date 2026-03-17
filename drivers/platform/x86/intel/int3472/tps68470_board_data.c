@@ -150,8 +150,6 @@ static const struct regulator_init_data dell_7212_tps68470_core_reg_init_data = 
 		.apply_uV = 1,
 		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
 	},
-	.num_consumer_supplies = 0,
-	.consumer_supplies = NULL,
 };
 
 static const struct regulator_init_data dell_7212_tps68470_ana_reg_init_data = {
@@ -161,8 +159,6 @@ static const struct regulator_init_data dell_7212_tps68470_ana_reg_init_data = {
 		.apply_uV = 1,
 		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
 	},
-	.num_consumer_supplies = 0,
-	.consumer_supplies = NULL,
 };
 
 static const struct regulator_init_data dell_7212_tps68470_vcm_reg_init_data = {
@@ -172,8 +168,6 @@ static const struct regulator_init_data dell_7212_tps68470_vcm_reg_init_data = {
 		.apply_uV = 1,
 		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
 	},
-	.num_consumer_supplies = 0,
-	.consumer_supplies = NULL,
 };
 
 static const struct regulator_init_data dell_7212_tps68470_vio_reg_init_data = {
@@ -183,8 +177,6 @@ static const struct regulator_init_data dell_7212_tps68470_vio_reg_init_data = {
 		.apply_uV = 1,
 		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
 	},
-	.num_consumer_supplies = 0,
-	.consumer_supplies = NULL,
 };
 
 static const struct regulator_init_data dell_7212_tps68470_vsio_reg_init_data = {
