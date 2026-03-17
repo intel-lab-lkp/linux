@@ -907,21 +907,17 @@ err_resume:
  * reverses the operations of liveupdate_register_file_handler().
  *
  * It ensures safe removal by checking that:
- * No live update session is currently in progress.
  * No FLB registered with this file handler.
  *
  * If the unregistration fails, the internal test state is reverted.
  *
- * Return: 0 Success. -EOPNOTSUPP when live update is not enabled. -EBUSY A live
- * update is in progress, can't quiesce live update or FLB is registred with
- * this file handler.
  */
-int liveupdate_unregister_file_handler(struct liveupdate_file_handler *fh)
+void liveupdate_unregister_file_handler(struct liveupdate_file_handler *fh)
 {
-	int err = -EBUSY;
+	bool is_empty;
 
 	if (!liveupdate_enabled())
-		return -EOPNOTSUPP;
+		return;
 
 	liveupdate_test_unregister(fh);
 
@@ -929,18 +925,19 @@ int liveupdate_unregister_file_handler(struct liveupdate_file_handler *fh)
 		goto err_register;
 
 	scoped_guard(rwsem_write, &luo_file_handler_lock) {
-		if (!list_empty(&ACCESS_PRIVATE(fh, flb_list)))
-			goto err_resume;
-
-		list_del(&ACCESS_PRIVATE(fh, list));
+		is_empty = list_empty(&ACCESS_PRIVATE(fh, flb_list));
+		if (is_empty)
+			list_del(&ACCESS_PRIVATE(fh, list));
 	}
 	luo_session_resume();
 
-	return 0;
+	if (!is_empty) {
+		pr_warn("Failed to unregister file handler '%s': FLB list not empty\n",
+			fh->compatible);
+		liveupdate_test_register(fh);
+	}
+	return;
 
-err_resume:
-	luo_session_resume();
 err_register:
 	liveupdate_test_register(fh);
-	return err;
 }

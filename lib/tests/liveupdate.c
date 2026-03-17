@@ -137,16 +137,12 @@ void liveupdate_test_register(struct liveupdate_file_handler *fh)
 
 void liveupdate_test_unregister(struct liveupdate_file_handler *fh)
 {
-	int err, i;
+	int i;
 
 	for (i = 0; i < TEST_NFLBS; i++) {
 		struct liveupdate_flb *flb = &test_flbs[i];
 
-		err = liveupdate_unregister_flb(fh, flb);
-		if (err) {
-			pr_err("Failed to unregister %s %pe\n",
-			       flb->compatible, ERR_PTR(err));
-		}
+		liveupdate_unregister_flb(fh, flb);
 	}
 
 	pr_info("Unregistered %d FLBs from file handler: [%s]\n",

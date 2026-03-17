@@ -436,31 +436,17 @@ err_resume:
  * the FLB is removed from the global registry and the reference to its
  * owner module (acquired during registration) is released.
  *
- * Context: This function ensures the session is quiesced (no active FDs
- *          being created) during the update. It is typically called from a
- *          subsystem's module exit function.
- * Return: 0 on success.
- *         -EOPNOTSUPP if live update is disabled.
- *         -EBUSY if the live update session is active and cannot be quiesced.
- *         -ENOENT if the FLB was not found in the file handler's list.
  */
-int liveupdate_unregister_flb(struct liveupdate_file_handler *fh,
-			      struct liveupdate_flb *flb)
+void liveupdate_unregister_flb(struct liveupdate_file_handler *fh,
+			       struct liveupdate_flb *flb)
 {
 	struct luo_flb_private *private = luo_flb_get_private(flb);
 	struct list_head *flb_list = &ACCESS_PRIVATE(fh, flb_list);
 	struct luo_flb_link *iter;
-	int err = -ENOENT;
+	bool found = false;
 
 	if (!liveupdate_enabled())
-		return -EOPNOTSUPP;
-
-	/*
-	 * Ensure the system is quiescent (no active sessions).
-	 * This acts as a global lock for unregistration.
-	 */
-	if (!luo_session_quiesce())
-		return -EBUSY;
+		return;
 
 	guard(rwsem_write)(&luo_flb_lock);
 	guard(rwsem_write)(&ACCESS_PRIVATE(fh, flb_lock));
@@ -470,15 +456,19 @@ int liveupdate_unregister_flb(struct liveupdate_file_handler *fh,
 		if (iter->flb == flb) {
 			list_del(&iter->list);
 			kfree(iter);
-			err = 0;
+			found = true;
 			break;
 		}
 	}
 
-	if (err)
-		goto err_resume;
+	if (!found) {
+		pr_warn("Failed to unregister FLB '%s': not found in file handler '%s'\n",
+			flb->compatible, fh->compatible);
+		return;
+	}
 
 	private->users--;
+
 	/*
 	 * If this is the last file-handler with which we are registred, remove
 	 * from the global list, and relese module reference.
@@ -487,14 +477,6 @@ int liveupdate_unregister_flb(struct liveupdate_file_handler *fh,
 		list_del_init(&private->list);
 		luo_flb_global.count--;
 	}
-
-	luo_session_resume();
-
-	return 0;
-
-err_resume:
-	luo_session_resume();
-	return err;
 }
 
 /**
