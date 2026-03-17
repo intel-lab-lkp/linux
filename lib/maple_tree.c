@@ -2390,8 +2390,8 @@ static inline void mas_topiary_replace(struct ma_state *mas,
 				if (!mas_find_child(&tmp[i], &tmp_next[n]))
 					break;
 
-				if ((tmp_next[n].min >= tmp_next->index) &&
-				    (tmp_next[n].max <= tmp_next->last)) {
+				if ((tmp_next[n].min >= mas->index) &&
+				    (tmp_next[n].max <= mas->last)) {
 					mat_add(&subtrees, tmp_next[n].node);
 					tmp_next[n].status = ma_none;
 				} else {
