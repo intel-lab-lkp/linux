@@ -76,8 +76,16 @@ config SCSI_LIB_KUNIT_TEST
 
 	  If unsure say N.
 
-comment "SCSI support type (disk, tape, CD-ROM)"
+config SCSI_ALUA
+	tristate "SPC-3 ALUA support"
 	depends on SCSI
+	help
+	  SCSI support for generic SPC-3 Asymmetric Logical Unit
+	  Access (ALUA).
+
+	  If unsure, say Y.
+
+comment "SCSI support type (disk, tape, CD-ROM)"
 
 config BLK_DEV_SD
 	tristate "SCSI disk support"

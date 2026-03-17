@@ -35,6 +35,7 @@ config SCSI_DH_EMC
 config SCSI_DH_ALUA
 	tristate "SPC-3 ALUA Device Handler"
 	depends on SCSI_DH && SCSI
+	select SCSI_ALUA
 	help
 	  SCSI Device handler for generic SPC-3 Asymmetric Logical Unit
 	  Access (ALUA).

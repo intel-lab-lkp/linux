@@ -16,6 +16,7 @@
 #include <linux/bsg.h>
 
 #include <scsi/scsi.h>
+#include <scsi/scsi_alua.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tcq.h>
@@ -479,6 +480,8 @@ static void scsi_device_dev_release(struct device *dev)
 	sdev->request_queue = NULL;
 
 	sbitmap_free(&sdev->budget_map);
+
+	scsi_alua_sdev_exit(sdev);
 
 	mutex_lock(&sdev->inquiry_mutex);
 	vpd_pg0 = rcu_replace_pointer(sdev->vpd_pg0, vpd_pg0,
