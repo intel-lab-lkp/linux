@@ -17,6 +17,8 @@
 #include <linux/hashtable.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/refcount.h>
 #include <linux/scmi_protocol.h>
 #include <linux/spinlock.h>
@@ -459,6 +461,31 @@ struct scmi_transport_core_operations {
 };
 
 /**
+ * struct scmi_transport_instance_queue  - Transport instance queue descriptor
+ * @mtx: A mutex to protect the list
+ * @head: A list head to propagate per-instance and transport specific item
+ *	  descriptors to the SCMI core in an common way
+ */
+struct scmi_transport_instance_queue {
+	/* Protect the list */
+	struct mutex mtx;
+	struct list_head head;
+};
+
+#define DEFINE_SCMI_TRANSPORT_INSTANCE_QUEUE(_instaq)			\
+struct scmi_transport_instance_queue _instaq = {			\
+	__MUTEX_INITIALIZER(_instaq.mtx),				\
+	LIST_HEAD_INIT(_instaq.head),					\
+}
+
+#define SCMI_TRANSPORT_INSTANCE_REGISTER(_item, _instaq)	\
+do {								\
+	mutex_lock(&_instaq.mtx);				\
+	list_add_tail(&(_item), &_instaq.head);			\
+	mutex_unlock(&_instaq.mtx);				\
+} while (0)
+
+/**
  * struct scmi_transport  - A structure representing a configured transport
  *
  * @supplier: Device representing the transport and acting as a supplier for
@@ -466,11 +493,13 @@ struct scmi_transport_core_operations {
  * @desc: Transport descriptor
  * @core_ops: A pointer to a pointer used by the core SCMI stack to make the
  *	      core transport operations accessible to the transports.
+ * @hndl: An optional handle to the initialized transport instance.
  */
 struct scmi_transport {
 	struct device *supplier;
 	struct scmi_desc desc;
 	struct scmi_transport_core_operations **core_ops;
+	void *hndl;
 };
 
 #define DEFINE_SCMI_TRANSPORT_DRIVER(__tag, __drv, __desc, __match, __core_ops)\
@@ -483,10 +512,21 @@ static void __tag##_dev_free(void *data)				       \
 									       \
 static int __tag##_probe(struct platform_device *pdev)			       \
 {									       \
+	struct scmi_transport_instance_queue *tq;			       \
+	struct scmi_transport strans = {};				       \
 	struct device *dev = &pdev->dev;				       \
 	struct platform_device *spdev;					       \
-	struct scmi_transport strans;					       \
 	int ret;							       \
+									       \
+	tq = (void *)device_get_match_data(dev);			       \
+	if (tq) {							       \
+		scoped_guard(mutex, &tq->mtx) {				       \
+			if (list_empty(&tq->head))			       \
+				return -EPROBE_DEFER;			       \
+			strans.hndl = tq->head.next;			       \
+			list_del_init(tq->head.next);			       \
+		}							       \
+	}								       \
 									       \
 	spdev = platform_device_alloc("arm-scmi", PLATFORM_DEVID_AUTO);	       \
 	if (!spdev)							       \

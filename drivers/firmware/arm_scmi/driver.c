@@ -121,6 +121,7 @@ struct scmi_protocol_instance {
  * @id: A sequence number starting from zero identifying this instance
  * @dev: Device pointer
  * @desc: SoC description for this instance
+ * @thndl: Optional transport instance handle
  * @version: SCMI revision information containing protocol version,
  *	implementation version and (sub-)vendor identification.
  * @handle: Instance of SCMI handle to send to clients
@@ -151,6 +152,7 @@ struct scmi_info {
 	int id;
 	struct device *dev;
 	const struct scmi_desc *desc;
+	void *thndl;
 	struct scmi_revision_info version;
 	struct scmi_handle handle;
 	struct scmi_xfers_info tx_minfo;
@@ -3115,7 +3117,8 @@ static int scmi_debugfs_raw_mode_setup(struct scmi_info *info)
 	return ret;
 }
 
-static const struct scmi_desc *scmi_transport_setup(struct device *dev)
+static const struct scmi_desc *
+scmi_transport_setup(struct device *dev, void **thndl)
 {
 	struct scmi_transport *trans;
 	int ret;
@@ -3162,6 +3165,8 @@ static const struct scmi_desc *scmi_transport_setup(struct device *dev)
 			 "SCMI System wide atomic threshold set to %u us\n",
 			 trans->desc.atomic_threshold);
 
+	*thndl = trans->hndl;
+
 	return &trans->desc;
 }
 
@@ -3180,6 +3185,7 @@ static void scmi_enable_matching_quirks(struct scmi_info *info)
 static int scmi_probe(struct platform_device *pdev)
 {
 	int ret;
+	void *thndl;
 	char *err_str = "probe failure\n";
 	struct scmi_handle *handle;
 	const struct scmi_desc *desc;
@@ -3188,7 +3194,7 @@ static int scmi_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *child, *np = dev->of_node;
 
-	desc = scmi_transport_setup(dev);
+	desc = scmi_transport_setup(dev, &thndl);
 	if (!desc) {
 		err_str = "transport invalid\n";
 		ret = -EINVAL;
@@ -3205,6 +3211,7 @@ static int scmi_probe(struct platform_device *pdev)
 
 	info->dev = dev;
 	info->desc = desc;
+	info->thndl = thndl;
 	info->bus_nb.notifier_call = scmi_bus_notifier;
 	info->dev_req_nb.notifier_call = scmi_device_request_notifier;
 	INIT_LIST_HEAD(&info->node);
