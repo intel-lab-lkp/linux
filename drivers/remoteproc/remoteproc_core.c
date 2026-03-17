@@ -1852,6 +1852,8 @@ static int rproc_boot_recovery(struct rproc *rproc)
 
 	/* boot the remote processor up again */
 	ret = rproc_start(rproc, firmware_p);
+	if (ret)
+		rproc_release_fw(rproc);
 
 	release_firmware(firmware_p);
 
@@ -1993,6 +1995,8 @@ int rproc_boot(struct rproc *rproc)
 		}
 
 		ret = rproc_fw_boot(rproc, firmware_p);
+		if (ret)
+			rproc_release_fw(rproc);
 
 		release_firmware(firmware_p);
 	}
@@ -2061,6 +2065,8 @@ int rproc_shutdown(struct rproc *rproc)
 	rproc_unprepare_device(rproc);
 
 	rproc_disable_iommu(rproc);
+
+	rproc_release_fw(rproc);
 
 	/* Free the copy of the resource table */
 	kfree(rproc->cached_table);
