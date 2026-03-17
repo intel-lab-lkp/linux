@@ -111,7 +111,7 @@ static int heci_gsc_irq_setup(struct xe_device *xe)
 	struct xe_heci_gsc *heci_gsc = &xe->heci_gsc;
 	int ret;
 
-	heci_gsc->irq = irq_alloc_desc(0);
+	heci_gsc->irq = irq_alloc_desc(dev_to_node(xe->drm.dev));
 	if (heci_gsc->irq < 0) {
 		drm_err(&xe->drm, "gsc irq error %d\n", heci_gsc->irq);
 		return heci_gsc->irq;
