@@ -5427,7 +5427,8 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 {
 	struct pci_dev *pdev = tp->pci_dev;
 	struct mii_bus *new_bus;
-	int ret;
+	struct phy_device *phydev;
+	int ret, addr;
 
 	/* On some boards with this chip version the BIOS is buggy and misses
 	 * to reset the PHY page selector. This results in the PHY ID read
@@ -5462,18 +5463,31 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 	if (ret)
 		return ret;
 
-	tp->phydev = mdiobus_get_phy(new_bus, 0);
-	if (!tp->phydev) {
+	/* find the first (lowest address) PHY on the current MAC's MII bus */
+	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
+		struct phy_device *tmp = mdiobus_get_phy(new_bus, addr);
+
+		if (tmp) {
+			phydev = tmp;
+			break;
+		}
+	}
+
+	if (!phydev) {
+		dev_err(&pdev->dev, "no PHY found on bus\n");
 		return -ENODEV;
-	} else if (!tp->phydev->drv) {
-		/* Most chip versions fail with the genphy driver.
-		 * Therefore ensure that the dedicated PHY driver is loaded.
-		 */
+	}
+
+	/* Most chip versions fail with the genphy driver.
+	 * Therefore ensure that the dedicated PHY driver is loaded.
+	 */
+	if (!phydev->drv) {
 		dev_err(&pdev->dev, "no dedicated PHY driver found for PHY ID 0x%08x, maybe realtek.ko needs to be added to initramfs?\n",
-			tp->phydev->phy_id);
+			phydev->phy_id);
 		return -EUNATCH;
 	}
 
+	tp->phydev = phydev;
 	tp->phydev->mac_managed_pm = true;
 	if (rtl_supports_eee(tp))
 		phy_support_eee(tp->phydev);
@@ -5790,11 +5804,11 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	rc = r8169_mdio_register(tp);
 	if (rc)
-		return rc;
+		return dev_err_probe(&pdev->dev, rc, "mdio register failure\n");
 
 	rc = register_netdev(dev);
 	if (rc)
-		return rc;
+		return dev_err_probe(&pdev->dev, rc, "register newdev failure\n");
 
 	if (IS_ENABLED(CONFIG_R8169_LEDS)) {
 		if (rtl_is_8125(tp))
