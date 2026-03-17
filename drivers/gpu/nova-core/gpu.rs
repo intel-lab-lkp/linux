@@ -102,7 +102,7 @@ define_chipset!({
 });
 
 impl Chipset {
-    pub(crate) const fn arch(self) -> Architecture {
+    pub(crate) const fn arch(&self) -> Architecture {
         match self {
             Self::TU102 | Self::TU104 | Self::TU106 | Self::TU117 | Self::TU116 => {
                 Architecture::Turing
@@ -241,6 +241,10 @@ impl Spec {
             dev_err!(dev, "Unsupported chipset: {}\n", boot42);
         })
     }
+
+    pub(crate) fn chipset(&self) -> Chipset {
+        self.chipset
+    }
 }
 
 impl TryFrom<regs::NV_PMC_BOOT_42> for Spec {
@@ -289,32 +293,37 @@ impl Gpu {
         devres_bar: Arc<Devres<Bar0>>,
         bar: &'a Bar0,
     ) -> impl PinInit<Self, Error> + 'a {
-        try_pin_init!(Self {
-            spec: Spec::new(pdev.as_ref(), bar).inspect(|spec| {
-                dev_info!(pdev,"NVIDIA ({})\n", spec);
-            })?,
+        pin_init::pin_init_scope(move || {
+            let spec = Spec::new(pdev.as_ref(), bar)?;
+            dev_info!(pdev, "NVIDIA ({})\n", spec);
 
-            // We must wait for GFW_BOOT completion before doing any significant setup on the GPU.
-            _: {
-                gfw::wait_gfw_boot_completion(bar)
-                    .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
-            },
+            let chipset = spec.chipset();
 
-            sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, spec.chipset)?,
+            Ok(try_pin_init!(Self {
+                // We must wait for GFW_BOOT completion before doing any significant setup
+                // on the GPU.
+                _: {
+                    gfw::wait_gfw_boot_completion(bar)
+                        .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
+                },
 
-            gsp_falcon: Falcon::new(
-                pdev.as_ref(),
-                spec.chipset,
-            )
-            .inspect(|falcon| falcon.clear_swgen0_intr(bar))?,
+                sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, chipset)?,
 
-            sec2_falcon: Falcon::new(pdev.as_ref(), spec.chipset)?,
+                gsp_falcon: Falcon::new(
+                    pdev.as_ref(),
+                    chipset,
+                )
+                .inspect(|falcon| falcon.clear_swgen0_intr(bar))?,
 
-            gsp <- Gsp::new(pdev),
+                sec2_falcon: Falcon::new(pdev.as_ref(), chipset)?,
 
-            _: { gsp.boot(pdev, bar, spec.chipset, gsp_falcon, sec2_falcon)? },
+                gsp <- Gsp::new(pdev),
 
-            bar: devres_bar,
+                _: { gsp.boot(pdev, bar, chipset, gsp_falcon, sec2_falcon)? },
+
+                bar: devres_bar,
+                spec,
+            }))
         })
     }
 
