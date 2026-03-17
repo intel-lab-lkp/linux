@@ -58,42 +58,34 @@ void arch_setup_new_exec(void);
 
 #endif
 
-#define TIF_SIGPENDING		0	/* signal pending */
-#define TIF_NEED_RESCHED	1	/* rescheduling necessary */
-#define TIF_NEED_RESCHED_LAZY	2	/* Lazy rescheduling needed */
-#define TIF_NOTIFY_RESUME	3	/* callback before returning to user */
-#define TIF_FOREIGN_FPSTATE	4	/* CPU's FP state is not current's */
-#define TIF_UPROBE		5	/* uprobe breakpoint or singlestep */
-#define TIF_MTE_ASYNC_FAULT	6	/* MTE Asynchronous Tag Check Fault */
-#define TIF_NOTIFY_SIGNAL	7	/* signal notifications exist */
-#define TIF_PATCH_PENDING	13	/* pending live patching update */
-#define TIF_MEMDIE		18	/* is terminating due to OOM killer */
-#define TIF_FREEZE		19
-#define TIF_RESTORE_SIGMASK	20
-#define TIF_SINGLESTEP		21
-#define TIF_32BIT		22	/* 32bit process */
-#define TIF_SVE			23	/* Scalable Vector Extension in use */
-#define TIF_SVE_VL_INHERIT	24	/* Inherit SVE vl_onexec across exec */
-#define TIF_SSBD		25	/* Wants SSB mitigation */
-#define TIF_TAGGED_ADDR		26	/* Allow tagged user addresses */
-#define TIF_SME			27	/* SME in use */
-#define TIF_SME_VL_INHERIT	28	/* Inherit SME vl_onexec across exec */
-#define TIF_KERNEL_FPSTATE	29	/* Task is in a kernel mode FPSIMD section */
-#define TIF_TSC_SIGSEGV		30	/* SIGSEGV on counter-timer access */
-#define TIF_LAZY_MMU_PENDING	31	/* Ops pending for lazy mmu mode exit */
+/*
+ * Tell the generic TIF infrastructure which bits arm64 supports
+ */
+#define HAVE_TIF_NEED_RESCHED_LAZY
+#define HAVE_TIF_RESTORE_SIGMASK
+#define HAVE_TIF_SINGLESTEP
 
-#define _TIF_SIGPENDING		(1 << TIF_SIGPENDING)
-#define _TIF_NEED_RESCHED	(1 << TIF_NEED_RESCHED)
-#define _TIF_NEED_RESCHED_LAZY	(1 << TIF_NEED_RESCHED_LAZY)
-#define _TIF_NOTIFY_RESUME	(1 << TIF_NOTIFY_RESUME)
-#define _TIF_FOREIGN_FPSTATE	(1 << TIF_FOREIGN_FPSTATE)
-#define _TIF_PATCH_PENDING	(1 << TIF_PATCH_PENDING)
-#define _TIF_UPROBE		(1 << TIF_UPROBE)
-#define _TIF_32BIT		(1 << TIF_32BIT)
-#define _TIF_SVE		(1 << TIF_SVE)
-#define _TIF_MTE_ASYNC_FAULT	(1 << TIF_MTE_ASYNC_FAULT)
-#define _TIF_NOTIFY_SIGNAL	(1 << TIF_NOTIFY_SIGNAL)
-#define _TIF_TSC_SIGSEGV	(1 << TIF_TSC_SIGSEGV)
+#include <asm-generic/thread_info_tif.h>
+
+#define TIF_FOREIGN_FPSTATE	16	/* CPU's FP state is not current's */
+#define TIF_MTE_ASYNC_FAULT	17	/* MTE Asynchronous Tag Check Fault */
+#define TIF_FREEZE		18
+#define TIF_32BIT		19      /* 32bit process */
+#define TIF_SVE			20	/* Scalable Vector Extension in use */
+#define TIF_SVE_VL_INHERIT	21	/* Inherit SVE vl_onexec across exec */
+#define TIF_SSBD		22	/* Wants SSB mitigation */
+#define TIF_TAGGED_ADDR		23	/* Allow tagged user addresses */
+#define TIF_SME			24	/* SME in use */
+#define TIF_SME_VL_INHERIT	25	/* Inherit SME vl_onexec across exec */
+#define TIF_KERNEL_FPSTATE	26	/* Task is in a kernel mode FPSIMD section */
+#define TIF_TSC_SIGSEGV		27	/* SIGSEGV on counter-timer access */
+#define TIF_LAZY_MMU_PENDING	28	/* Ops pending for lazy mmu mode exit */
+
+#define _TIF_FOREIGN_FPSTATE	BIT(TIF_FOREIGN_FPSTATE)
+#define _TIF_32BIT		BIT(TIF_32BIT)
+#define _TIF_SVE		BIT(TIF_SVE)
+#define _TIF_MTE_ASYNC_FAULT	BIT(TIF_MTE_ASYNC_FAULT)
+#define _TIF_TSC_SIGSEGV	BIT(TIF_TSC_SIGSEGV)
 
 #ifdef CONFIG_SHADOW_CALL_STACK
 #define INIT_SCS							\
