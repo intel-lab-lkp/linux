@@ -467,11 +467,13 @@ static int aer_inject(struct aer_error_inj *einj)
 		if (!get_service_data(edev)) {
 			pci_warn(edev->port, "AER service is not initialized\n");
 			ret = -EPROTONOSUPPORT;
+			put_device(device);
 			goto out_put;
 		}
 		pci_info(edev->port, "Injecting errors %08x/%08x into device %s\n",
 			 einj->cor_status, einj->uncor_status, pci_name(dev));
 		ret = irq_inject_interrupt(edev->irq);
+		put_device(device);
 	} else {
 		pci_err(rpdev, "AER device not found\n");
 		ret = -ENODEV;
