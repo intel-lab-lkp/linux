@@ -30,6 +30,9 @@ static struct workqueue_struct *kalua_wq;
 
 #define RTPG_FMT_MASK			0x70
 #define RTPG_FMT_EXT_HDR		0x10
+#define TPGS_MODE_NONE			0x0
+#define TPGS_MODE_IMPLICIT		0x1
+#define TPGS_MODE_EXPLICIT		0x2
 
 #define ALUA_RTPG_SIZE			128
 #define ALUA_FAILOVER_TIMEOUT		60
@@ -62,6 +65,41 @@ static int submit_rtpg(struct scsi_device *sdev, unsigned char *buff,
 
 	return scsi_execute_cmd(sdev, cdb, opf, buff, bufflen,
 				ALUA_FAILOVER_TIMEOUT * HZ,
+				ALUA_FAILOVER_RETRIES, &exec_args);
+}
+
+/*
+ * submit_stpg - Issue a SET TARGET PORT GROUP command
+ *
+ * Currently we're only setting the current target port group state
+ * to 'active/optimized' and let the array firmware figure out
+ * the states of the remaining groups.
+ */
+static int submit_stpg(struct scsi_device *sdev,
+				struct scsi_sense_hdr *sshdr)
+{
+	u8 cdb[MAX_COMMAND_SIZE];
+	unsigned char stpg_data[8];
+	int stpg_len = 8;
+	blk_opf_t opf = REQ_OP_DRV_OUT | REQ_FAILFAST_DEV |
+				REQ_FAILFAST_TRANSPORT | REQ_FAILFAST_DRIVER;
+	const struct scsi_exec_args exec_args = {
+		.sshdr = sshdr,
+	};
+
+	/* Prepare the data buffer */
+	memset(stpg_data, 0, stpg_len);
+	stpg_data[4] = SCSI_ACCESS_STATE_OPTIMAL;
+	put_unaligned_be16(sdev->alua->group_id, &stpg_data[6]);
+
+	/* Prepare the command. */
+	memset(cdb, 0x0, MAX_COMMAND_SIZE);
+	cdb[0] = MAINTENANCE_OUT;
+	cdb[1] = MO_SET_TARGET_PGS;
+	put_unaligned_be32(stpg_len, &cdb[6]);
+
+	return scsi_execute_cmd(sdev, cdb, opf, stpg_data,
+				stpg_len, ALUA_FAILOVER_TIMEOUT * HZ,
 				ALUA_FAILOVER_RETRIES, &exec_args);
 }
 
@@ -324,6 +362,67 @@ static int scsi_alua_rtpg(struct scsi_device *sdev)
 	spin_unlock_irqrestore(&alua->lock, flags);
 	kfree(buff);
 	return err;
+}
+
+
+/*
+ * scsi_alua_stpg - Issue a SET TARGET PORT GROUP command
+ *
+ * Issue a SET TARGET PORT GROUP command and evaluate the
+ * response. Returns SCSI_DH_RETRY per default to trigger
+ * a re-evaluation of the target group state or SCSI_DH_OK
+ * if no further action needs to be taken.
+ */
+__maybe_unused
+static int scsi_alua_stpg(struct scsi_device *sdev, bool optimize)
+{
+	struct alua_data *alua = sdev->alua;
+	int retval;
+	struct scsi_sense_hdr sense_hdr;
+
+	if (!(alua->tpgs & TPGS_MODE_EXPLICIT)) {
+		/* Only implicit ALUA supported, retry */
+		return -EAGAIN;//SCSI_DH_RETRY;
+	}
+	switch (alua->state) {
+	case SCSI_ACCESS_STATE_OPTIMAL:
+		return 0;//SCSI_DH_OK;
+	case SCSI_ACCESS_STATE_ACTIVE:
+		if (optimize &&
+		    !alua->pref &&
+		    (alua->tpgs & TPGS_MODE_IMPLICIT))
+			return 0;//SCSI_DH_OK;
+		break;
+	case SCSI_ACCESS_STATE_STANDBY:
+	case SCSI_ACCESS_STATE_UNAVAILABLE:
+		break;
+	case SCSI_ACCESS_STATE_OFFLINE:
+		return -EIO;//SCSI_DH_IO;
+	case SCSI_ACCESS_STATE_TRANSITIONING:
+		break;
+	default:
+		sdev_printk(KERN_INFO, sdev,
+			    "%s: stpg failed, unhandled TPGS state %d",
+			    DRV_NAME, alua->state);
+		return -ENOSYS ;//SCSI_DH_NOSYS;
+	}
+	retval = submit_stpg(sdev, &sense_hdr);
+
+	if (retval) {
+		if (retval < 0 || !scsi_sense_valid(&sense_hdr)) {
+			sdev_printk(KERN_INFO, sdev,
+				    "%s: stpg failed, result %d",
+				    DRV_NAME, retval);
+			if (retval < 0)
+				return -EBUSY;//SCSI_DH_DEV_TEMP_BUSY;
+		} else {
+			sdev_printk(KERN_INFO, sdev, "%s: stpg failed\n",
+				    DRV_NAME);
+			scsi_print_sense_hdr(sdev, DRV_NAME, &sense_hdr);
+		}
+	}
+	/* Retry RTPG */
+	return -EAGAIN;//SCSI_DH_RETRY;
 }
 
 int scsi_alua_sdev_init(struct scsi_device *sdev)
