@@ -227,6 +227,13 @@ c_id_attributes = [
     "__bpf_kfunc",
 ]
 
+# Since Sphinx 3.0, parameterized macros must be escaped using
+# c_paren_attributes to prevent C domain parser crashes.
+c_paren_attributes = [
+    #include/linux/compiler-context-analysis.h
+    "__cond_acquires",
+]
+
 # Ensure that autosectionlabel will produce unique names
 autosectionlabel_prefix_document = True
 autosectionlabel_maxdepth = 2
