@@ -150,7 +150,7 @@ static unsigned int max_nr_fru;
 /* Total length of record including headers and list of descriptor entries. */
 static size_t max_rec_len;
 
-#define FMPM_MAX_REC_LEN (sizeof(struct fru_rec) + (sizeof(struct cper_fru_poison_desc) * 255))
+#define FMPM_MAX_REC_LEN struct_size_t(struct fru_rec, entries, 255)
 
 /* Total number of SPA entries across all FRUs. */
 static unsigned int spa_nr_entries;
@@ -794,8 +794,7 @@ static int get_system_info(void)
 
 	spa_nr_entries = max_nr_fru * max_nr_entries;
 
-	max_rec_len  = sizeof(struct fru_rec);
-	max_rec_len += sizeof(struct cper_fru_poison_desc) * max_nr_entries;
+	max_rec_len = struct_size_t(struct fru_rec, entries, max_nr_entries);
 
 	pr_info("max FRUs: %u, max entries: %u, max record length: %lu\n",
 		 max_nr_fru, max_nr_entries, max_rec_len);
@@ -826,7 +825,7 @@ static int allocate_records(void)
 	}
 
 	for (i = 0; i < max_nr_fru; i++) {
-		fru_records[i] = kzalloc(max_rec_len, GFP_KERNEL);
+		fru_records[i] = kzalloc_flex(*fru_records[i], entries, max_nr_entries);
 		if (!fru_records[i]) {
 			ret = -ENOMEM;
 			goto out_free;
