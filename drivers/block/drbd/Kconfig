@@ -71,3 +71,14 @@ config DRBD_FAULT_INJECTION
 		echo 5 > /sys/module/drbd/parameters/fault_rate
 
 	  If unsure, say N.
+
+config DRBD_COMPAT_84
+	bool "DRBD 8.4 compatibility"
+	depends on BLK_DEV_DRBD
+	default y
+	help
+
+	  Enable backward compatibility with DRBD 8.4 peers. This allows
+	  a DRBD 9 node to replicate with peers still running DRBD 8.4.
+
+	  If unsure, say Y.
