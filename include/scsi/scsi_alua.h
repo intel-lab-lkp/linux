@@ -30,6 +30,8 @@ struct alua_data {
 int scsi_alua_sdev_init(struct scsi_device *sdev);
 void scsi_alua_sdev_exit(struct scsi_device *sdev);
 
+void scsi_alua_handle_state_transition(struct scsi_device *sdev);
+
 int scsi_alua_check_tpgs(struct scsi_device *sdev);
 
 int scsi_alua_rtpg_run(struct scsi_device *sdev);
@@ -39,6 +41,9 @@ int scsi_alua_init(void);
 void scsi_exit_alua(void);
 #else //CONFIG_SCSI_ALUA
 
+static inline void scsi_alua_handle_state_transition(struct scsi_device *sdev)
+{
+}
 static inline int scsi_alua_check_tpgs(struct scsi_device *sdev)
 {
 	return 0;

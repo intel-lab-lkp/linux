@@ -40,6 +40,17 @@ static struct workqueue_struct *kalua_wq;
 #define ALUA_RTPG_DELAY_MSECS		5
 #define ALUA_RTPG_RETRY_DELAY		2
 
+void scsi_alua_handle_state_transition(struct scsi_device *sdev)
+{
+	struct alua_data *alua = sdev->alua;
+	unsigned long flags;
+
+	spin_lock_irqsave(&alua->lock, flags);
+	alua->state = SCSI_ACCESS_STATE_TRANSITIONING;
+	spin_unlock_irqrestore(&alua->lock, flags);
+}
+EXPORT_SYMBOL_GPL(scsi_alua_handle_state_transition);
+
 /*
  * alua_tur - Send a TEST UNIT READY
  * @sdev: device to which the TEST UNIT READY command should be send
