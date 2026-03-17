@@ -11,12 +11,14 @@
 #include <linux/gpio/driver.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/regmap.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
 
@@ -151,6 +153,26 @@
 	(FIELD_PREP_CONST(VARIABLE_PIN_CFG_PIN_MASK, (pin)) | \
 	 FIELD_PREP_CONST(VARIABLE_PIN_CFG_PORT_MASK, (port)) | \
 	 FIELD_PREP_CONST(PIN_CFG_MASK, (cfg)))
+
+#define RZG3L_CLONE_CHANNEL_CFG_PIN_START_MASK	GENMASK(31, 29)
+#define RZG3L_CLONE_CHANNEL_CFG_PIN_END_MASK	GENMASK(28, 26)
+#define RZG3L_CLONE_CHANNEL_CFG_PORT_MASK	GENMASK(25, 21)
+#define RZG3L_CLONE_CHANNEL_CFG_DATA_MASK	GENMASK(9, 0)
+#define RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(port, start_pin, end_pin, cfg) \
+	(FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_CFG_PIN_START_MASK, (start_pin)) | \
+	 FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_CFG_PIN_END_MASK, (end_pin)) | \
+	 FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_CFG_PORT_MASK, (port)) | \
+	 FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_CFG_DATA_MASK, (cfg)))
+
+#define RZG3L_CLONE_CHANNEL_BIT_MASK		GENMASK(9, 6)
+#define RZG3L_CLONE_CHANNEL_VAL_MASK		BIT(5)
+#define RZG3L_CLONE_CHANNEL_SHARED_PIN_MASK	BIT(4)
+#define RZG3L_CLONE_CHANNEL_PFC_MASK		GENMASK(3, 0)
+#define RZG3L_CLONE_CHANNEL_PACK(bit, val, shared_pin, pfc) \
+	(FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_BIT_MASK, (bit)) | \
+	 FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_VAL_MASK, (val)) | \
+	 FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_SHARED_PIN_MASK, (shared_pin)) | \
+	 FIELD_PREP_CONST(RZG3L_CLONE_CHANNEL_PFC_MASK, (pfc)))
 
 #define P(off)			(0x0000 + (off))
 #define PM(off)			(0x0100 + (off) * 2)
@@ -311,6 +333,8 @@ struct rzg2l_pinctrl_data {
 	const struct rzg2l_dedicated_configs *dedicated_pins;
 	unsigned int n_port_pins;
 	unsigned int n_dedicated_pins;
+	const u32 *clone_pin_configs;
+	unsigned int n_clone_pins;
 	const struct rzg2l_hwcfg *hwcfg;
 	const u64 *variable_pin_cfg;
 	unsigned int n_variable_pin_cfg;
@@ -346,6 +370,7 @@ struct rzg2l_pinctrl_pin_settings {
  * @pupd: PUPD registers cache
  * @ien: IEN registers cache
  * @smt: SMT registers cache
+ * @clone: Clone registers cache
  * @sd_ch: SD_CH registers cache
  * @eth_poc: ET_POC registers cache
  * @other_poc: OTHER_POC register cache
@@ -361,6 +386,7 @@ struct rzg2l_pinctrl_reg_cache {
 	u32	*ien[2];
 	u32	*pupd[2];
 	u32	*smt;
+	u32	*clone;
 	u8	sd_ch[2];
 	u8	eth_poc[2];
 	u8	oen;
@@ -379,6 +405,8 @@ struct rzg2l_pinctrl {
 
 	struct clk			*clk;
 
+	struct regmap			*syscon;
+
 	struct gpio_chip		gpio_chip;
 	struct pinctrl_gpio_range	gpio_range;
 	DECLARE_BITMAP(tint_slot, RZG2L_TINT_MAX_INTERRUPT);
@@ -392,6 +420,7 @@ struct rzg2l_pinctrl {
 	struct rzg2l_pinctrl_reg_cache	*cache;
 	struct rzg2l_pinctrl_reg_cache	*dedicated_cache;
 	atomic_t			wakeup_path;
+	u32				clone_offset;
 };
 
 static const u16 available_ps[] = { 1800, 2500, 3300 };
@@ -617,6 +646,54 @@ static int rzg2l_validate_pin(struct rzg2l_pinctrl *pctrl,
 	return 0;
 }
 
+static int rzg2l_pinctrl_set_clone_mode(struct rzg2l_pinctrl *pctrl,
+					u8 port, u8 pin, u8 func)
+{
+	static const u8 pfc_table_lut[] = { 2, 4, 5, 6, 7 };
+	u8 start_pin, end_pin;
+	unsigned int i;
+
+	if (!pctrl->data->clone_pin_configs)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(pfc_table_lut); i++)
+		if (pfc_table_lut[i] == func)
+			break;
+
+	if (i == ARRAY_SIZE(pfc_table_lut))
+		return 0;
+
+	for (i = 0; i < pctrl->data->n_clone_pins; i++) {
+		u32 pin_data = pctrl->data->clone_pin_configs[i];
+		bool is_shared_pin = FIELD_GET(RZG3L_CLONE_CHANNEL_SHARED_PIN_MASK, pin_data);
+		u8 pin_func = FIELD_GET(RZG3L_CLONE_CHANNEL_PFC_MASK, pin_data);
+		unsigned int j, num_pins;
+
+		if ((pin_func != func && !(is_shared_pin && (pin_func + 1) == func)) ||
+		    FIELD_GET(RZG3L_CLONE_CHANNEL_CFG_PORT_MASK, pin_data) != port)
+			continue;
+
+		start_pin = FIELD_GET(RZG3L_CLONE_CHANNEL_CFG_PIN_START_MASK, pin_data);
+		end_pin = FIELD_GET(RZG3L_CLONE_CHANNEL_CFG_PIN_END_MASK, pin_data);
+		num_pins = end_pin - start_pin + 1;
+
+		for (j = 0; j < num_pins; j++) {
+			u32 bit, val;
+
+			if ((start_pin + j) != pin)
+				continue;
+
+			bit = FIELD_GET(RZG3L_CLONE_CHANNEL_BIT_MASK, pin_data);
+			val = FIELD_GET(RZG3L_CLONE_CHANNEL_VAL_MASK, pin_data);
+
+			return regmap_update_bits(pctrl->syscon, pctrl->clone_offset,
+						  BIT(bit), field_prep(BIT(bit), val));
+		}
+	}
+
+	return 0;
+}
+
 static void rzg2l_pinctrl_set_pfc_mode(struct rzg2l_pinctrl *pctrl,
 				       u8 pin, u8 off, u8 func)
 {
@@ -691,6 +768,10 @@ static int rzg2l_pinctrl_set_mux(struct pinctrl_dev *pctldev,
 
 		func = psel_val[i] - hwcfg->func_base;
 		dev_dbg(pctrl->dev, "port:%u pin: %u off:%x PSEL:%u\n", port, pin, off, func);
+
+		ret = rzg2l_pinctrl_set_clone_mode(pctrl, port, pin, func);
+		if (ret)
+			return ret;
 
 		rzg2l_pinctrl_set_pfc_mode(pctrl, pin, off, func);
 	}
@@ -2647,6 +2728,110 @@ static const struct rzg2l_dedicated_configs rzg3l_dedicated_pins[] = {
 	  (PIN_CFG_IOLH_B | PIN_CFG_IEN | PIN_CFG_PUPD)) },
 };
 
+static const u32 r9a08g046_clone_channel_pin_cfg[] = {
+	/* I2C ch2 Bit:0 Value:0 PFC:4 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PG, 6, 7, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PH, 2, 3, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PK, 0, 1, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PA, 0, 1, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PA, 4, 5, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PB, 0, 1, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PB, 4, 5, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PC, 0, 1, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PD, 2, 3, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PD, 6, 7, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 2, 3, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 6, 7, RZG3L_CLONE_CHANNEL_PACK(0, 0, 0, 4)),
+	/* I2C ch2 Bit:0 Value:1 PFC:4 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 0, 1, RZG3L_CLONE_CHANNEL_PACK(0, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 4, 5, RZG3L_CLONE_CHANNEL_PACK(0, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 1, 2, RZG3L_CLONE_CHANNEL_PACK(0, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 5, 6, RZG3L_CLONE_CHANNEL_PACK(0, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P8, 0, 1, RZG3L_CLONE_CHANNEL_PACK(0, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P8, 4, 5, RZG3L_CLONE_CHANNEL_PACK(0, 1, 0, 4)),
+	/* I2C ch3 Bit:1 Value:0 PFC:4 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PF, 0, 1, RZG3L_CLONE_CHANNEL_PACK(1, 0, 0, 4)),
+	/* I2C ch3 Bit:1 Value:1 PFC:4 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P2, 0, 1, RZG3L_CLONE_CHANNEL_PACK(1, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 2, 3, RZG3L_CLONE_CHANNEL_PACK(1, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 6, 6, RZG3L_CLONE_CHANNEL_PACK(1, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 0, 0, RZG3L_CLONE_CHANNEL_PACK(1, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 3, 4, RZG3L_CLONE_CHANNEL_PACK(1, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 6, 7, RZG3L_CLONE_CHANNEL_PACK(1, 1, 0, 4)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P8, 2, 3, RZG3L_CLONE_CHANNEL_PACK(1, 1, 0, 4)),
+	/* SCIF ch3 Bit:4 Value:0 PFC:{6,7} */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PG, 4, 6, RZG3L_CLONE_CHANNEL_PACK(4, 0, 0, 6)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PH, 3, 5, RZG3L_CLONE_CHANNEL_PACK(4, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PA, 2, 4, RZG3L_CLONE_CHANNEL_PACK(4, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PB, 3, 5, RZG3L_CLONE_CHANNEL_PACK(4, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PD, 0, 2, RZG3L_CLONE_CHANNEL_PACK(4, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 1, 3, RZG3L_CLONE_CHANNEL_PACK(4, 0, 0, 7)),
+	/* SCIF ch3 Bit:4 Value:1 PFC:7 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 0, 2, RZG3L_CLONE_CHANNEL_PACK(4, 1, 0, 7)),
+	/* SCIF ch4 Bit:5 Value:0 PFC:7 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PK, 0, 2, RZG3L_CLONE_CHANNEL_PACK(5, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PA, 5, 7, RZG3L_CLONE_CHANNEL_PACK(5, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PB, 6, 7, RZG3L_CLONE_CHANNEL_PACK(5, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PC, 0, 0, RZG3L_CLONE_CHANNEL_PACK(5, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PD, 3, 5, RZG3L_CLONE_CHANNEL_PACK(5, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 4, 6, RZG3L_CLONE_CHANNEL_PACK(5, 0, 0, 7)),
+	/* SCIF ch4 Bit:5 Value:1 PFC:7 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 3, 5, RZG3L_CLONE_CHANNEL_PACK(5, 1, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 2, 4, RZG3L_CLONE_CHANNEL_PACK(5, 1, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 5, 7, RZG3L_CLONE_CHANNEL_PACK(5, 1, 0, 7)),
+	/* SCIF ch5 Bit:6 Value:0 PFC:7 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 7, 7, RZG3L_CLONE_CHANNEL_PACK(6, 0, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PF, 0, 1, RZG3L_CLONE_CHANNEL_PACK(6, 0, 0, 7)),
+	/* SCIF ch5 Bit:6 Value:1 PFC:7 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 6, 6, RZG3L_CLONE_CHANNEL_PACK(6, 1, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 0, 1, RZG3L_CLONE_CHANNEL_PACK(6, 1, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 5, 6, RZG3L_CLONE_CHANNEL_PACK(6, 1, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 0, 0, RZG3L_CLONE_CHANNEL_PACK(6, 1, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 2, 4, RZG3L_CLONE_CHANNEL_PACK(6, 1, 0, 7)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P8, 0, 2, RZG3L_CLONE_CHANNEL_PACK(6, 1, 0, 7)),
+	/* RSPI ch1 Bit:8 Value:0 PFC:2 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PH, 0, 5, RZG3L_CLONE_CHANNEL_PACK(8, 0, 0, 2)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PD, 5, 7, RZG3L_CLONE_CHANNEL_PACK(8, 0, 0, 2)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 0, 3, RZG3L_CLONE_CHANNEL_PACK(8, 0, 0, 2)),
+	/* RSPI ch1 Bit:8 Value:1 PFC:2 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 0, 6, RZG3L_CLONE_CHANNEL_PACK(8, 1, 0, 2)),
+	/* RSPI ch2 Bit:9 Value:0 PFC:2 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 4, 7, RZG3L_CLONE_CHANNEL_PACK(9, 0, 0, 2)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PF, 0, 2, RZG3L_CLONE_CHANNEL_PACK(9, 0, 0, 2)),
+	/* RSPI ch2 Bit:9 Value:1 PFC:2 */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 0, 6, RZG3L_CLONE_CHANNEL_PACK(9, 1, 0, 2)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 7, 7, RZG3L_CLONE_CHANNEL_PACK(9, 1, 0, 2)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P8, 0, 5, RZG3L_CLONE_CHANNEL_PACK(9, 1, 0, 2)),
+	/* RSCI ch1 Bit:12 Value:0 PFC:{5,6} shared pins based on RSCI mode */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PG, 0, 3, RZG3L_CLONE_CHANNEL_PACK(12, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PA, 0, 3, RZG3L_CLONE_CHANNEL_PACK(12, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PB, 6, 7, RZG3L_CLONE_CHANNEL_PACK(12, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PC, 0, 1, RZG3L_CLONE_CHANNEL_PACK(12, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PD, 4, 7, RZG3L_CLONE_CHANNEL_PACK(12, 0, 1, 5)),
+	/* RSCI ch1 Bit:12 Value:1 PFC:{5,6} shared pins based on RSCI mode */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 0, 3, RZG3L_CLONE_CHANNEL_PACK(12, 1, 1, 5)),
+	/* RSCI ch2 Bit:13 Value:0 PFC:{5,6} shared pins based on RSCI mode */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PH, 0, 3, RZG3L_CLONE_CHANNEL_PACK(13, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PK, 0, 3, RZG3L_CLONE_CHANNEL_PACK(13, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PA, 4, 7, RZG3L_CLONE_CHANNEL_PACK(13, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PD, 0, 3, RZG3L_CLONE_CHANNEL_PACK(13, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 0, 3, RZG3L_CLONE_CHANNEL_PACK(13, 0, 1, 5)),
+	/* RSCI ch2 Bit:13 Value:1 PFC:{5,6} shared pins based on RSCI mode */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P5, 4, 6, RZG3L_CLONE_CHANNEL_PACK(13, 1, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 0, 0, RZG3L_CLONE_CHANNEL_PACK(13, 1, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 5, 6, RZG3L_CLONE_CHANNEL_PACK(13, 1, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 0, 1, RZG3L_CLONE_CHANNEL_PACK(13, 1, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 6, 7, RZG3L_CLONE_CHANNEL_PACK(13, 1, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P8, 0, 1, RZG3L_CLONE_CHANNEL_PACK(13, 1, 1, 5)),
+	/* RSCI ch3 Bit:14 Value:0 PFC:{5,6} shared pins based on RSCI mode */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PE, 6, 7, RZG3L_CLONE_CHANNEL_PACK(14, 0, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_PF, 0, 1, RZG3L_CLONE_CHANNEL_PACK(14, 0, 1, 5)),
+	/* RSCI ch3 Bit:14 Value:1 PFC:{5,6} shared pins based on RSCI mode */
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P6, 1, 4, RZG3L_CLONE_CHANNEL_PACK(14, 1, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P7, 2, 5, RZG3L_CLONE_CHANNEL_PACK(14, 1, 1, 5)),
+	RZG3L_CLONE_CHANNEL_PIN_CFG_PACK(RZG3L_P8, 2, 5, RZG3L_CLONE_CHANNEL_PACK(14, 1, 1, 5)),
+};
+
 static int rzg2l_gpio_get_gpioint(unsigned int virq, struct rzg2l_pinctrl *pctrl)
 {
 	const struct pinctrl_pin_desc *pin_desc = &pctrl->desc.pins[virq];
@@ -2961,6 +3146,10 @@ static int rzg2l_pinctrl_reg_cache_alloc(struct rzg2l_pinctrl *pctrl)
 	if (!cache->smt)
 		return -ENOMEM;
 
+	cache->clone = devm_kzalloc(pctrl->dev, sizeof(*cache->clone), GFP_KERNEL);
+	if (!cache->clone)
+		return -ENOMEM;
+
 	for (u8 i = 0; i < 2; i++) {
 		u32 n_dedicated_pins = pctrl->data->n_dedicated_pins;
 
@@ -3204,6 +3393,19 @@ static int rzg2l_pinctrl_probe(struct platform_device *pdev)
 				     "failed to enable GPIO clk\n");
 	}
 
+	if (pctrl->data->clone_pin_configs) {
+		struct device_node *np = pctrl->dev->of_node;
+		u32 offset;
+
+		pctrl->syscon = syscon_regmap_lookup_by_phandle_args(np, "renesas,clonech",
+								     1, &offset);
+		if (IS_ERR(pctrl->syscon))
+			return dev_err_probe(pctrl->dev, PTR_ERR(pctrl->syscon),
+					     "Failed to parse renesas,clonech\n");
+
+		pctrl->clone_offset = offset;
+	}
+
 	raw_spin_lock_init(&pctrl->lock);
 	spin_lock_init(&pctrl->bitmap_lock);
 	mutex_init(&pctrl->mutex);
@@ -3428,6 +3630,14 @@ static int rzg2l_pinctrl_suspend_noirq(struct device *dev)
 	if (regs->other_poc)
 		cache->other_poc = readb(pctrl->base + regs->other_poc);
 
+	if (pctrl->syscon) {
+		int ret;
+
+		ret = regmap_read(pctrl->syscon, pctrl->clone_offset, cache->clone);
+		if (ret)
+			return ret;
+	}
+
 	if (!atomic_read(&pctrl->wakeup_path))
 		clk_disable_unprepare(pctrl->clk);
 	else
@@ -3444,6 +3654,12 @@ static int rzg2l_pinctrl_resume_noirq(struct device *dev)
 	struct rzg2l_pinctrl_reg_cache *cache = pctrl->cache;
 	unsigned long flags;
 	int ret;
+
+	if (pctrl->syscon) {
+		ret = regmap_write(pctrl->syscon, pctrl->clone_offset, *cache->clone);
+		if (ret)
+			return ret;
+	}
 
 	if (!atomic_read(&pctrl->wakeup_path)) {
 		ret = clk_prepare_enable(pctrl->clk);
@@ -3658,6 +3874,8 @@ static struct rzg2l_pinctrl_data r9a08g046_data = {
 	.dedicated_pins = rzg3l_dedicated_pins,
 	.n_port_pins = ARRAY_SIZE(r9a08g046_gpio_configs) * RZG2L_PINS_PER_PORT,
 	.n_dedicated_pins = ARRAY_SIZE(rzg3l_dedicated_pins),
+	.clone_pin_configs = r9a08g046_clone_channel_pin_cfg,
+	.n_clone_pins = ARRAY_SIZE(r9a08g046_clone_channel_pin_cfg),
 	.hwcfg = &rzg3l_hwcfg,
 	.pwpr_pfc_lock_unlock = &rzg2l_pwpr_pfc_lock_unlock,
 	.pmc_writeb = &rzg2l_pmc_writeb,
