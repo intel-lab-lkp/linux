@@ -7737,11 +7737,13 @@ static unsigned long __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask,
 enum {
 	MEMORY_RECLAIM_SWAPPINESS = 0,
 	MEMORY_RECLAIM_SWAPPINESS_MAX,
+	MEMORY_RECLAIM_ALLOW_DEMOTION,
 	MEMORY_RECLAIM_NULL,
 };
 static const match_table_t tokens = {
 	{ MEMORY_RECLAIM_SWAPPINESS, "swappiness=%d"},
 	{ MEMORY_RECLAIM_SWAPPINESS_MAX, "swappiness=max"},
+	{ MEMORY_RECLAIM_ALLOW_DEMOTION, "demote=%u"},
 	{ MEMORY_RECLAIM_NULL, NULL },
 };
 
@@ -7749,6 +7751,7 @@ int user_proactive_reclaim(char *buf,
 			   struct mem_cgroup *memcg, pg_data_t *pgdat)
 {
 	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
+	unsigned int allow_demotion = 0;
 	unsigned long nr_to_reclaim, nr_reclaimed = 0;
 	int swappiness = -1;
 	char *old_buf, *start;
@@ -7781,6 +7784,10 @@ int user_proactive_reclaim(char *buf,
 		case MEMORY_RECLAIM_SWAPPINESS_MAX:
 			swappiness = SWAPPINESS_ANON_ONLY;
 			break;
+		case MEMORY_RECLAIM_ALLOW_DEMOTION:
+			if (match_uint(&args[0], &allow_demotion))
+				return -EINVAL;
+			break;
 		default:
 			return -EINVAL;
 		}
@@ -7806,6 +7813,8 @@ int user_proactive_reclaim(char *buf,
 
 			reclaim_options = MEMCG_RECLAIM_MAY_SWAP |
 					  MEMCG_RECLAIM_PROACTIVE;
+			if (!allow_demotion)
+				reclaim_options |= MEMCG_RECLAIM_NO_DEMOTION;
 			reclaimed = try_to_free_mem_cgroup_pages(memcg,
 						 batch_size, gfp_mask,
 						 reclaim_options,
@@ -7821,6 +7830,7 @@ int user_proactive_reclaim(char *buf,
 				.may_unmap = 1,
 				.may_swap = 1,
 				.proactive = 1,
+				.no_demotion = !(allow_demotion),
 			};
 
 			if (test_and_set_bit_lock(PGDAT_RECLAIM_LOCKED,
