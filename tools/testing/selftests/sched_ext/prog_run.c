@@ -53,10 +53,10 @@ static enum scx_test_status run(void *ctx)
 	while (skel->data->uei.kind == EXIT_KIND(SCX_EXIT_NONE))
 		sched_yield();
 
-	SCX_EQ(skel->data->uei.kind, EXIT_KIND(SCX_EXIT_UNREG_BPF));
-	SCX_EQ(skel->data->uei.exit_code, 0xdeadbeef);
 	close(prog_fd);
 	bpf_link__destroy(link);
+	SCX_EQ(skel->data->uei.kind, EXIT_KIND(SCX_EXIT_UNREG_BPF));
+	SCX_EQ(skel->data->uei.exit_code, 0xdeadbeef);
 
 	return SCX_TEST_PASS;
 }

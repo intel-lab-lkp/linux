@@ -45,11 +45,11 @@ static enum scx_test_status run(void *ctx)
 		while (skel->data->uei.kind == EXIT_KIND(SCX_EXIT_NONE))
 			sched_yield();
 
+		bpf_link__destroy(link);
 		SCX_EQ(skel->data->uei.kind, EXIT_KIND(SCX_EXIT_UNREG_BPF));
 		SCX_EQ(skel->data->uei.exit_code, tc);
 		sprintf(buf, "%d", tc);
 		SCX_ASSERT(!strcmp(skel->data->uei.msg, buf));
-		bpf_link__destroy(link);
 		exit__destroy(skel);
 	}
 

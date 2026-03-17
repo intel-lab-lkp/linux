@@ -37,9 +37,8 @@ static enum scx_test_status run(void *ctx)
 
 	sleep(1);
 
-	SCX_ASSERT(skel->bss->consumed);
-
 	bpf_link__destroy(link);
+	SCX_ASSERT(skel->bss->consumed);
 
 	return SCX_TEST_PASS;
 }

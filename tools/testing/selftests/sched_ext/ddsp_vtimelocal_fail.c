@@ -34,8 +34,8 @@ static enum scx_test_status run(void *ctx)
 
 	sleep(1);
 
-	SCX_EQ(skel->data->uei.kind, EXIT_KIND(SCX_EXIT_ERROR));
 	bpf_link__destroy(link);
+	SCX_EQ(skel->data->uei.kind, EXIT_KIND(SCX_EXIT_ERROR));
 
 	return SCX_TEST_PASS;
 }

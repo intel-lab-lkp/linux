@@ -261,8 +261,8 @@ static enum scx_test_status run(void *ctx)
 		}
 		res = sched_stress_test(is_ext);
 		if (is_ext) {
-			SCX_EQ(skel->data->uei.kind, EXIT_KIND(SCX_EXIT_NONE));
 			bpf_link__destroy(link);
+			SCX_EQ(skel->data->uei.kind, EXIT_KIND(SCX_EXIT_NONE));
 		}
 
 		if (!res)
