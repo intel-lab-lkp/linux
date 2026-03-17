@@ -55,6 +55,7 @@ __param(int, run_test_mask, 7,
 		"\t\tid: 512,  name: kvfree_rcu_2_arg_vmalloc_test\n"
 		"\t\tid: 1024, name: vm_map_ram_test\n"
 		"\t\tid: 2048, name: no_block_alloc_test\n"
+		"\t\tid: 4096, name: vrealloc_test\n"
 		/* Add a new test case description here. */
 );
 
@@ -421,6 +422,56 @@ cleanup:
 	return nr_allocated != map_nr_pages;
 }
 
+static int vrealloc_test(void)
+{
+	void *ptr;
+	int i;
+
+	for (i = 0; i < test_loop_count; i++) {
+		ptr = vmalloc(PAGE_SIZE);
+		if (!ptr)
+			return -1;
+
+		*((__u8 *)ptr) = 'a';
+
+		/* Grow: beyond allocated pages, triggers full realloc. */
+		ptr = vrealloc(ptr, 4 * PAGE_SIZE, GFP_KERNEL);
+		if (!ptr)
+			return -1;
+
+		if (*((__u8 *)ptr) != 'a')
+			return -1;
+
+		/* Shrink: crosses page boundary, frees tail pages. */
+		ptr = vrealloc(ptr, PAGE_SIZE, GFP_KERNEL);
+		if (!ptr)
+			return -1;
+
+		if (*((__u8 *)ptr) != 'a')
+			return -1;
+
+		/* Shrink: within same page, no page freeing. */
+		ptr = vrealloc(ptr, PAGE_SIZE / 2, GFP_KERNEL);
+		if (!ptr)
+			return -1;
+
+		if (*((__u8 *)ptr) != 'a')
+			return -1;
+
+		/* Grow: within allocated page, in-place, no realloc. */
+		ptr = vrealloc(ptr, PAGE_SIZE, GFP_KERNEL);
+		if (!ptr)
+			return -1;
+
+		if (*((__u8 *)ptr) != 'a')
+			return -1;
+
+		vfree(ptr);
+	}
+
+	return 0;
+}
+
 struct test_case_desc {
 	const char *test_name;
 	int (*test_func)(void);
@@ -440,6 +491,7 @@ static struct test_case_desc test_case_array[] = {
 	{ "kvfree_rcu_2_arg_vmalloc_test", kvfree_rcu_2_arg_vmalloc_test, },
 	{ "vm_map_ram_test", vm_map_ram_test, },
 	{ "no_block_alloc_test", no_block_alloc_test, true },
+	{ "vrealloc_test", vrealloc_test, },
 	/* Add a new test case here. */
 };
 
