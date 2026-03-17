@@ -2737,17 +2737,8 @@ EXPORT_SYMBOL(get_user_pages_unlocked);
  */
 static bool gup_fast_folio_allowed(struct folio *folio, unsigned int flags)
 {
-	bool reject_file_backed = false;
 	struct address_space *mapping;
 	unsigned long mapping_flags;
-
-	/*
-	 * If we aren't pinning then no problematic write can occur. A long term
-	 * pin is the most egregious case so this is the one we disallow.
-	 */
-	if ((flags & (FOLL_PIN | FOLL_LONGTERM | FOLL_WRITE)) ==
-	    (FOLL_PIN | FOLL_LONGTERM | FOLL_WRITE))
-		reject_file_backed = true;
 
 	/* We hold a folio reference, so we can safely access folio fields. */
 	if (WARN_ON_ONCE(folio_test_slab(folio)))
@@ -2793,8 +2784,18 @@ static bool gup_fast_folio_allowed(struct folio *folio, unsigned int flags)
 	 */
 	if (secretmem_mapping(mapping))
 		return false;
-	/* The only remaining allowed file system is shmem. */
-	return !reject_file_backed || shmem_mapping(mapping);
+
+	/*
+	 * If we aren't pinning then no problematic write can occur. A writable
+	 * long term pin is the most egregious case, so this is the one we
+	 * allow only for ...
+	 */
+	if ((flags & (FOLL_PIN | FOLL_LONGTERM | FOLL_WRITE)) !=
+	    (FOLL_PIN | FOLL_LONGTERM | FOLL_WRITE))
+		return true;
+
+	/* ... hugetlb (which we allowed above already) and shared memory. */
+	return shmem_mapping(mapping);
 }
 
 #ifdef CONFIG_ARCH_HAS_PTE_SPECIAL
