@@ -41,6 +41,15 @@ static inline int set_direct_map_valid_noflush(const void *addr,
 	return 0;
 }
 
+static inline int folio_zap_direct_map(struct folio *folio)
+{
+	return 0;
+}
+
+static inline void folio_restore_direct_map(struct folio *folio)
+{
+}
+
 static inline bool kernel_page_present(struct page *page)
 {
 	return true;
@@ -57,6 +66,10 @@ static inline bool can_set_direct_map(void)
 }
 #define can_set_direct_map can_set_direct_map
 #endif
+
+int folio_zap_direct_map(struct folio *folio);
+void folio_restore_direct_map(struct folio *folio);
+
 #endif /* CONFIG_ARCH_HAS_SET_DIRECT_MAP */
 
 #ifdef CONFIG_X86_64
