@@ -559,9 +559,17 @@ static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
 		if (ret)
 			return ret;
 
+		/*
+		 * follow_pfnmap_start() returns -EINVAL for
+		 * invalid parameters and non-present entries.
+		 * If that happens here after a successful
+		 * fixup_user_fault(), it is likely that the
+		 * pfnmap has been zapped. Retry instead of
+		 * failing.
+		 */
 		ret = follow_pfnmap_start(&args);
 		if (ret)
-			return ret;
+			return -EAGAIN;
 	}
 
 	if (write_fault && !args.writable) {
