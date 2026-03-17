@@ -57,7 +57,8 @@ static long __sh_cpufreq_target(void *arg)
 	/* Convert target_freq from kHz to Hz */
 	freq = clk_round_rate(cpuclk, target->freq * 1000);
 
-	if (freq < (policy->min * 1000) || freq > (policy->max * 1000))
+	if (freq < (policy->cpuinfo.min_freq * 1000) ||
+	    freq > (policy->cpuinfo.max_freq * 1000))
 		return -EINVAL;
 
 	dev_dbg(dev, "requested frequency %u Hz\n", target->freq * 1000);
@@ -124,9 +125,9 @@ static int sh_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		dev_notice(dev, "no frequency table found, falling back "
 			   "to rate rounding.\n");
 
-		policy->min = policy->cpuinfo.min_freq =
+		policy->cpuinfo.min_freq =
 			(clk_round_rate(cpuclk, 1) + 500) / 1000;
-		policy->max = policy->cpuinfo.max_freq =
+		policy->cpuinfo.max_freq =
 			(clk_round_rate(cpuclk, ~0UL) + 500) / 1000;
 	}
 
