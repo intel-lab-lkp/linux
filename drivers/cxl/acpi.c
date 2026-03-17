@@ -395,9 +395,16 @@ static void cxl_setup_extended_linear_cache(struct cxl_root_decoder *cxlrd)
 	cxlrd->cache_size = cache_size;
 }
 
-DEFINE_FREE(put_cxlrd, struct cxl_root_decoder *,
-	    if (!IS_ERR_OR_NULL(_T)) put_device(&_T->cxlsd.cxld.dev))
-DEFINE_FREE(del_cxl_resource, struct resource *, if (_T) del_cxl_resource(_T))
+DEFINE_FREE
+(put_cxlrd, struct cxl_root_decoder *,
+if (!IS_ERR_OR_NULL(_T))
+	put_device(&_T->cxlsd.cxld.dev))
+
+DEFINE_FREE
+(del_cxl_resource, struct resource *,
+if (_T)
+	del_cxl_resource(_T))
+
 static int __cxl_parse_cfmws(struct acpi_cedt_cfmws *cfmws,
 			     struct cxl_cfmws_context *ctx)
 {
@@ -419,8 +426,8 @@ static int __cxl_parse_cfmws(struct acpi_cedt_cfmws *cfmws,
 	if (rc)
 		return rc;
 
-	struct resource *res __free(del_cxl_resource) = alloc_cxl_resource(
-		cfmws->base_hpa, cfmws->window_size, ctx->id++);
+	struct resource *res __free(del_cxl_resource) =
+		alloc_cxl_resource(cfmws->base_hpa, cfmws->window_size, ctx->id++);
 	if (!res)
 		return -ENOMEM;
 
@@ -542,7 +549,7 @@ static int cxl_get_chbs_iter(union acpi_subtable_headers *header, void *arg,
 	struct cxl_chbs_context *ctx = arg;
 	struct acpi_cedt_chbs *chbs;
 
-	chbs = (struct acpi_cedt_chbs *) header;
+	chbs = (struct acpi_cedt_chbs *)header;
 
 	if (chbs->cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11 &&
 	    chbs->length != ACPI_CEDT_CHBS_LENGTH_CXL11)
@@ -774,12 +781,12 @@ static void cxl_acpi_lock_reset_class(void *dev)
 
 static void cxl_set_public_resource(struct resource *priv, struct resource *pub)
 {
-	priv->desc = (unsigned long) pub;
+	priv->desc = (unsigned long)pub;
 }
 
 static struct resource *cxl_get_public_resource(struct resource *priv)
 {
-	return (struct resource *) priv->desc;
+	return (struct resource *)(priv->desc);
 }
 
 static void remove_cxl_resources(void *data)
@@ -850,8 +857,9 @@ static int add_cxl_resources(struct resource *cxl_res)
 				remove_resource(next);
 				del_cxl_resource(next);
 				next = _next;
-			} else
+			} else {
 				next->start = new->end + 1;
+			}
 		}
 	}
 	return 0;
