@@ -1821,6 +1821,7 @@ static int imx_pcie_probe(struct platform_device *pdev)
 		if (imx_check_flag(imx_pcie, IMX_PCIE_FLAG_SKIP_L23_READY))
 			pci->pp.skip_l23_ready = true;
 		pci->pp.use_atu_msg = true;
+		pci->pp.force_l2_suspend = true;
 		ret = dw_pcie_host_init(&pci->pp);
 		if (ret < 0)
 			return ret;
