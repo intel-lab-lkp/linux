@@ -3410,14 +3410,18 @@ static void adev_release(struct device *dev)
 
 static void remove_adev(struct gdma_dev *gd)
 {
-	struct auxiliary_device *adev = gd->adev;
-	int id = adev->id;
+	struct auxiliary_device *adev = xchg(&gd->adev, NULL);
+	int id;
+
+	if (!adev)
+		return;
+
+	id = adev->id;
 
 	auxiliary_device_delete(adev);
 	auxiliary_device_uninit(adev);
 
 	mana_adev_idx_free(id);
-	gd->adev = NULL;
 }
 
 static int add_adev(struct gdma_dev *gd, const char *name)
@@ -3481,7 +3485,7 @@ static void mana_rdma_service_handle(struct work_struct *work)
 
 	switch (serv_work->event) {
 	case GDMA_SERVICE_TYPE_RDMA_SUSPEND:
-		if (!gd->adev || gd->is_suspended)
+		if (gd->is_suspended)
 			break;
 
 		remove_adev(gd);
@@ -3684,8 +3688,7 @@ void mana_remove(struct gdma_dev *gd, bool suspending)
 	cancel_delayed_work_sync(&ac->gf_stats_work);
 
 	/* adev currently doesn't support suspending, always remove it */
-	if (gd->adev)
-		remove_adev(gd);
+	remove_adev(gd);
 
 	for (i = 0; i < ac->num_ports; i++) {
 		ndev = ac->ports[i];
@@ -3774,8 +3777,7 @@ void mana_rdma_remove(struct gdma_dev *gd)
 	if (gc->service_wq)
 		flush_workqueue(gc->service_wq);
 
-	if (gd->adev)
-		remove_adev(gd);
+	remove_adev(gd);
 
 	mana_gd_deregister_device(gd);
 }
