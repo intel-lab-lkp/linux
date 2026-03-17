@@ -48,4 +48,9 @@
 #define TIF_RSEQ		11	// Run RSEQ fast path
 #define _TIF_RSEQ		BIT(TIF_RSEQ)
 
+#ifdef HAVE_TIF_SINGLESTEP
+#define TIF_SINGLESTEP		12	/* reenable singlestep on user return*/
+#define _TIF_SINGLESTEP		BIT(TIF_SINGLESTEP)
+#endif
+
 #endif /* _ASM_GENERIC_THREAD_INFO_TIF_H_ */

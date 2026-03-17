@@ -70,6 +70,7 @@ register unsigned long current_stack_pointer __asm__("$sp");
  */
 #define HAVE_TIF_NEED_RESCHED_LAZY
 #define HAVE_TIF_RESTORE_SIGMASK
+#define HAVE_TIF_SINGLESTEP
 
 #include <asm-generic/thread_info_tif.h>
 
@@ -82,11 +83,10 @@ register unsigned long current_stack_pointer __asm__("$sp");
 #define TIF_32BIT_REGS		21	/* 32-bit general purpose registers */
 #define TIF_32BIT_ADDR		22	/* 32-bit address space */
 #define TIF_LOAD_WATCH		23	/* If set, load watch registers */
-#define TIF_SINGLESTEP		24	/* Single Step */
-#define TIF_LSX_CTX_LIVE	25	/* LSX context must be preserved */
-#define TIF_LASX_CTX_LIVE	26	/* LASX context must be preserved */
-#define TIF_USEDLBT		27	/* LBT was used by this task this quantum (SMP) */
-#define TIF_LBT_CTX_LIVE	28	/* LBT context must be preserved */
+#define TIF_LSX_CTX_LIVE	24	/* LSX context must be preserved */
+#define TIF_LASX_CTX_LIVE	25	/* LASX context must be preserved */
+#define TIF_USEDLBT		26	/* LBT was used by this task this quantum (SMP) */
+#define TIF_LBT_CTX_LIVE	27	/* LBT context must be preserved */
 
 #define _TIF_NOHZ		BIT(TIF_NOHZ)
 #define _TIF_USEDFPU		BIT(TIF_USEDFPU)
@@ -96,7 +96,6 @@ register unsigned long current_stack_pointer __asm__("$sp");
 #define _TIF_32BIT_REGS		BIT(TIF_32BIT_REGS)
 #define _TIF_32BIT_ADDR		BIT(TIF_32BIT_ADDR)
 #define _TIF_LOAD_WATCH		BIT(TIF_LOAD_WATCH)
-#define _TIF_SINGLESTEP		BIT(TIF_SINGLESTEP)
 #define _TIF_LSX_CTX_LIVE	BIT(TIF_LSX_CTX_LIVE)
 #define _TIF_LASX_CTX_LIVE	BIT(TIF_LASX_CTX_LIVE)
 #define _TIF_USEDLBT		BIT(TIF_USEDLBT)
