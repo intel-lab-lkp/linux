@@ -593,14 +593,24 @@ void dma_fence_release(struct kref *kref)
 		/*
 		 * Failed to signal before release, likely a refcounting issue.
 		 *
-		 * This should never happen, but if it does make sure that we
-		 * don't leave chains dangling. We set the error flag first
-		 * so that the callbacks know this signal is due to an error.
+		 * This should never happen, but if try to be defensive and take
+		 * the lesser evil. Initialize the refcount to something large,
+		 * but not so large that it can overflow.
+		 *
+		 * That will leak memory and could deadlock if the fence never
+		 * signals, but at least it doesn't cause an use after free or
+		 * random memory corruption.
+		 *
+		 * Also taint the kernel to note that it is rather unreliable to
+		 * continue.
 		 */
 		dma_fence_lock_irqsave(fence, flags);
 		fence->error = -EDEADLK;
-		dma_fence_signal_locked(fence);
+		refcount_set(&fence->refcount.refcount, INT_MAX);
 		dma_fence_unlock_irqrestore(fence, flags);
+		rcu_read_unlock();
+		add_taint(TAINT_SOFTLOCKUP, LOCKDEP_STILL_OK);
+		return;
 	}
 
 	ops = rcu_dereference(fence->ops);
