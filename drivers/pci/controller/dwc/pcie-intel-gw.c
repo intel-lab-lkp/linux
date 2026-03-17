@@ -311,8 +311,6 @@ static int intel_pcie_host_setup(struct intel_pcie *pcie)
 		goto clk_err;
 	}
 
-	pci->atu_base = pci->dbi_base + 0xC0000;
-
 	ret = phy_init(pcie->phy);
 	if (ret)
 		goto phy_err;
