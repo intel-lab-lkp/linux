@@ -1978,6 +1978,29 @@ static unsigned long clk_core_get_rate_recalc(struct clk_core *core)
 }
 
 /**
+ * clk_hw_recalc_rate - trigger rate recalculation for clk_hw
+ * @hw: clk_hw associated with the clk to recalculate for
+ *
+ * Use clk_hw_recalc_rate() for the hw clk where the rate
+ * entirely depend on register configuration and doesn't have
+ * a .set_rate() OP. In such case, after modifying the register
+ * that would change the rate for the hw clk, call
+ * clk_hw_recalc_rate() to sync the CCF with the new clk rate.
+ */
+void clk_hw_recalc_rate(const struct clk_hw *hw)
+{
+	struct clk_core *core = hw->core;
+
+	if (!core || !(core->flags & CLK_GET_RATE_NOCACHE))
+		return;
+
+	clk_prepare_lock();
+	__clk_recalc_rates(core, false, 0);
+	clk_prepare_unlock();
+}
+EXPORT_SYMBOL_GPL(clk_hw_recalc_rate);
+
+/**
  * clk_get_rate - return the rate of clk
  * @clk: the clk whose rate is being returned
  *
