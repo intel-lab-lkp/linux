@@ -847,7 +847,6 @@ void luo_file_set_destroy(struct luo_file_set *file_set)
 int liveupdate_register_file_handler(struct liveupdate_file_handler *fh)
 {
 	struct liveupdate_file_handler *fh_iter;
-	int err;
 
 	if (!liveupdate_enabled())
 		return -EOPNOTSUPP;
@@ -858,45 +857,29 @@ int liveupdate_register_file_handler(struct liveupdate_file_handler *fh)
 		return -EINVAL;
 	}
 
-	/*
-	 * Ensure the system is quiescent (no active sessions).
-	 * This prevents registering new handlers while sessions are active or
-	 * while deserialization is in progress.
-	 */
-	if (!luo_session_quiesce())
-		return -EBUSY;
-
 	scoped_guard(rwsem_write, &luo_file_handler_lock) {
 		/* Check for duplicate compatible strings */
 		list_private_for_each_entry(fh_iter, &luo_file_handler_list, list) {
 			if (!strcmp(fh_iter->compatible, fh->compatible)) {
 				pr_err("File handler registration failed: Compatible string '%s' already registered.\n",
 				       fh->compatible);
-				err = -EEXIST;
-				goto err_resume;
+				return -EEXIST;
 			}
 		}
 
 		/* Pin the module implementing the handler */
-		if (!try_module_get(fh->ops->owner)) {
-			err = -EAGAIN;
-			goto err_resume;
-		}
+		if (!try_module_get(fh->ops->owner))
+			return -EAGAIN;
 
 		INIT_LIST_HEAD(&ACCESS_PRIVATE(fh, flb_list));
 		init_rwsem(&ACCESS_PRIVATE(fh, flb_lock));
 		INIT_LIST_HEAD(&ACCESS_PRIVATE(fh, list));
 		list_add_tail(&ACCESS_PRIVATE(fh, list), &luo_file_handler_list);
 	}
-	luo_session_resume();
 
 	liveupdate_test_register(fh);
 
 	return 0;
-
-err_resume:
-	luo_session_resume();
-	return err;
 }
 
 /**
@@ -921,23 +904,15 @@ void liveupdate_unregister_file_handler(struct liveupdate_file_handler *fh)
 
 	liveupdate_test_unregister(fh);
 
-	if (!luo_session_quiesce())
-		goto err_register;
-
 	scoped_guard(rwsem_write, &luo_file_handler_lock) {
 		is_empty = list_empty(&ACCESS_PRIVATE(fh, flb_list));
 		if (is_empty)
 			list_del(&ACCESS_PRIVATE(fh, list));
 	}
-	luo_session_resume();
 
 	if (!is_empty) {
 		pr_warn("Failed to unregister file handler '%s': FLB list not empty\n",
 			fh->compatible);
 		liveupdate_test_register(fh);
 	}
-	return;
-
-err_register:
-	liveupdate_test_register(fh);
 }
