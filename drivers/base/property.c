@@ -38,6 +38,8 @@ EXPORT_SYMBOL_GPL(__dev_fwnode_const);
  * @propname: Name of the property
  *
  * Check if property @propname is present in the device firmware description.
+ * This function is the correct way to check that given property is present
+ * in the device firmware description.
  *
  * Return: true if property @propname is present. Otherwise, returns false.
  */
@@ -51,6 +53,10 @@ EXPORT_SYMBOL_GPL(device_property_present);
  * fwnode_property_present - check if a property of a firmware node is present
  * @fwnode: Firmware node whose property to check
  * @propname: Name of the property
+ *
+ * Check if property @propname is present in the firmware node description.
+ * This function is the correct way to check that given property is present
+ * in the firmware node description.
  *
  * Return: true if property @propname is present. Otherwise, returns false.
  */
@@ -75,9 +81,9 @@ EXPORT_SYMBOL_GPL(fwnode_property_present);
  * @dev: Device whose property is being checked
  * @propname: Name of the property
  *
- * Return if property @propname is true or false in the device firmware description.
+ * Use device_property_present() to check for the property presence.
  *
- * Return: true if property @propname is present. Otherwise, returns false.
+ * Return: if property @propname is true or false in the device firmware description.
  */
 bool device_property_read_bool(const struct device *dev, const char *propname)
 {
@@ -90,7 +96,9 @@ EXPORT_SYMBOL_GPL(device_property_read_bool);
  * @fwnode: Firmware node whose property to check
  * @propname: Name of the property
  *
- * Return if property @propname is true or false in the firmware description.
+ * Use fwnode_property_present() to check for the property presence.
+ *
+ * Return: if property @propname is true or false in the firmware node description.
  */
 bool fwnode_property_read_bool(const struct fwnode_handle *fwnode,
 			     const char *propname)
@@ -121,6 +129,8 @@ EXPORT_SYMBOL_GPL(fwnode_property_read_bool);
  * It's recommended to call device_property_count_u8() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
  *
+ * In order to check for the property presence, use device_property_present().
+ *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
  *	   %-EINVAL if given arguments are not valid,
@@ -148,6 +158,8 @@ EXPORT_SYMBOL_GPL(device_property_read_u8_array);
  *
  * It's recommended to call device_property_count_u16() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
+ *
+ * In order to check for the property presence, use device_property_present().
  *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
@@ -177,6 +189,8 @@ EXPORT_SYMBOL_GPL(device_property_read_u16_array);
  * It's recommended to call device_property_count_u32() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
  *
+ * In order to check for the property presence, use device_property_present().
+ *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
  *	   %-EINVAL if given arguments are not valid,
@@ -204,6 +218,8 @@ EXPORT_SYMBOL_GPL(device_property_read_u32_array);
  *
  * It's recommended to call device_property_count_u64() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
+ *
+ * In order to check for the property presence, use device_property_present().
  *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
@@ -233,6 +249,8 @@ EXPORT_SYMBOL_GPL(device_property_read_u64_array);
  * It's recommended to call device_property_string_array_count() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
  *
+ * In order to check for the property presence, use device_property_present().
+ *
  * Return: number of values read on success if @val is non-NULL,
  *	   number of values available on success if @val is NULL,
  *	   %-EINVAL if given arguments are not valid,
@@ -256,6 +274,8 @@ EXPORT_SYMBOL_GPL(device_property_read_string_array);
  *
  * Function reads property @propname from the device firmware description and
  * stores the value into @val if found. The value is checked to be a string.
+ *
+ * In order to check for the property presence, use device_property_present().
  *
  * Return: %0 if the property was found (success),
  *	   %-EINVAL if given arguments are not valid,
@@ -324,6 +344,8 @@ static int fwnode_property_read_int_array(const struct fwnode_handle *fwnode,
  * It's recommended to call fwnode_property_count_u8() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
  *
+ * In order to check for the property presence, use fwnode_property_present().
+ *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
  *	   %-EINVAL if given arguments are not valid,
@@ -352,6 +374,8 @@ EXPORT_SYMBOL_GPL(fwnode_property_read_u8_array);
  *
  * It's recommended to call fwnode_property_count_u16() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
+ *
+ * In order to check for the property presence, use fwnode_property_present().
  *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
@@ -382,6 +406,8 @@ EXPORT_SYMBOL_GPL(fwnode_property_read_u16_array);
  * It's recommended to call fwnode_property_count_u32() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
  *
+ * In order to check for the property presence, use fwnode_property_present().
+ *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
  *	   %-EINVAL if given arguments are not valid,
@@ -411,6 +437,8 @@ EXPORT_SYMBOL_GPL(fwnode_property_read_u32_array);
  * It's recommended to call fwnode_property_count_u64() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
  *
+ * In order to check for the property presence, use fwnode_property_present().
+ *
  * Return: number of values if @val was %NULL,
  *         %0 if the property was found (success),
  *	   %-EINVAL if given arguments are not valid,
@@ -439,6 +467,8 @@ EXPORT_SYMBOL_GPL(fwnode_property_read_u64_array);
  *
  * It's recommended to call fwnode_property_string_array_count() instead of calling
  * this function with @val equals %NULL and @nval equals 0.
+ *
+ * In order to check for the property presence, use fwnode_property_present().
  *
  * Return: number of values read on success if @val is non-NULL,
  *	   number of values available on success if @val is NULL,
@@ -475,6 +505,8 @@ EXPORT_SYMBOL_GPL(fwnode_property_read_string_array);
  *
  * Read property @propname from the given firmware node and store the value into
  * @val if found.  The value is checked to be a string.
+ *
+ * In order to check for the property presence, use fwnode_property_present().
  *
  * Return: %0 if the property was found (success),
  *	   %-EINVAL if given arguments are not valid,
