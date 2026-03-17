@@ -54,9 +54,11 @@ class CrateWithGenerated(Crate):
     source: Source
 
 
-class RustProject(TypedDict):
+class RustProject(TypedDict, total=False):
     crates: List[Crate]
     sysroot: str
+    # TODO: use `typing.NotRequired` when Python 3.11 is adopted.
+    sysroot_src: str
 
 
 @dataclass(frozen=True)
@@ -372,6 +374,7 @@ def generate_crates(
                 path,
                 sysroot_deps(core) + [kernel, pin_init],
                 cfg=generated_cfg,
+                crate_attrs=["no_std"],
             )
 
     return crates
@@ -431,6 +434,18 @@ def generate_rust_project(
                 ctx, srctree, objtree, sysroot_src, external_src, cfgs, core_edition
             ),
             "sysroot": str(sysroot),
+        }
+    elif version_info == RaVersionInfo.SUPPORTS_CRATE_ATTRS:
+        ctx = RaVersionCtx(
+            use_crate_attrs=True,
+            manual_sysroot_crates=False,
+        )
+        return {
+            "crates": generate_crates(
+                ctx, srctree, objtree, sysroot_src, external_src, cfgs, core_edition
+            ),
+            "sysroot": str(sysroot),
+            "sysroot_src": str(sysroot_src),
         }
     else:
         assert_never(version_info)
