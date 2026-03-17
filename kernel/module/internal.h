@@ -73,6 +73,7 @@ struct load_info {
 	bool sig_ok;
 #ifdef CONFIG_KALLSYMS
 	unsigned long mod_kallsyms_init_off;
+	unsigned long num_func_syms;
 #endif
 #ifdef CONFIG_MODULE_DECOMPRESS
 #ifdef CONFIG_MODULE_STATS

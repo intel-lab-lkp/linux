@@ -373,8 +373,14 @@ struct module_memory {
 struct mod_kallsyms {
 	Elf_Sym *symtab;
 	unsigned int num_symtab;
+	unsigned int num_func_syms;
 	char *strtab;
 	char *typetab;
+
+	unsigned int (*search)(struct mod_kallsyms *kallsyms,
+			       struct module_memory *mod_mem,
+			       unsigned long addr, unsigned long *bestval,
+			       unsigned long *nextval);
 };
 
 #ifdef CONFIG_LIVEPATCH
