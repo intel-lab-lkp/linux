@@ -1,0 +1,34 @@
+soc/arm
+
+soc/dt
+	patch
+		ARM: dts: arm: Use lowercase hex
+	renesas/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dts-for-v7.1-tag1
+		contains renesas/fixes
+
+soc/drivers
+	renesas/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-drivers-for-v7.1-tag1
+	renesas/drivers-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dt-bindings-for-v7.1-tag1
+
+soc/defconfig
+	renesas/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-defconfig-for-v7.1-tag1
+
+soc/late
+
+arm/fixes
+	riscv/soc-fixes
+		https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux tags/riscv-soc-fixes-for-v7.0-rc1
+	fsl/soc-driver-fixes
+		https://git.kernel.org/pub/scm/linux/kernel/git/chleroy/linux tags/soc_fsl-7.0-2
+	reset/fixes
+		https://git.pengutronix.de/git/pza/linux tags/reset-fixes-for-v7.0
+	renesas/fixes
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-fixes-for-v7.0-tag1
+	patch
+		ARM: multi_v7_defconfig: Drop duplicate CONFIG_TI_PRUSS=m
+	rockchip/fixes
+		ssh://gitolite.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v7.0-rockchip-drvfixes1
