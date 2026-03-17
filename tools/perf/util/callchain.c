@@ -30,6 +30,7 @@
 #include "machine.h"
 #include "map.h"
 #include "callchain.h"
+#include "dwarf-regs.h"
 #include "branch.h"
 #include "record.h"
 #include "symbol.h"
@@ -378,14 +379,13 @@ int record_callchain_opt(const struct option *opt,
 			 const char *arg __maybe_unused,
 			 int unset __maybe_unused)
 {
-	struct callchain_param *callchain = opt->value;
-
-	callchain->enabled = true;
-
-	if (callchain->record_mode == CALLCHAIN_NONE)
-		callchain->record_mode = CALLCHAIN_FP;
-
-	callchain_debug(callchain);
+	callchain_param.enabled = true;
+	if (callchain_param.record_mode == CALLCHAIN_NONE) {
+		/* s390 lacks kernel framepoint unwinding. */
+		record_opts__parse_callchain(opt->value, &callchain_param,
+					     EM_HOST != EM_S390 ? "fp" : "dwarf",
+					     /*unset=*/0);
+	}
 	return 0;
 }
 
