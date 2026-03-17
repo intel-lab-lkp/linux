@@ -1931,6 +1931,12 @@ __set_dm_plane_colorop_csc(struct drm_plane_state *plane_state,
 	if (IS_ERR(colorop_state))
 		return PTR_ERR(colorop_state);
 
+	/* If CSC is in bypass, reset color_space to unknown (no conversion) */
+	if (colorop_state->bypass) {
+		dc_plane_state->color_space = COLOR_SPACE_UNKNOWN;
+		return 0;
+	}
+
 	encoding = colorop_state->color_encoding;
 	range = colorop_state->color_range;
 	full_range = (range == DRM_COLOR_YCBCR_FULL_RANGE);
