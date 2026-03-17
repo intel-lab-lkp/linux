@@ -14,30 +14,32 @@ use crate::{
     gpu::Chipset, //
 };
 
-#[expect(unused)]
+#[expect(dead_code)]
 pub(crate) struct FspFirmware {
     /// FMC firmware image data (only the "image" ELF section).
-    fmc_image: DmaObject,
+    pub(crate) fmc_image: DmaObject,
     /// Full FMC ELF data (for signature extraction).
     pub(crate) fmc_full: KVec<u8>,
 }
 
 impl FspFirmware {
-    #[expect(unused)]
+    #[expect(dead_code)]
     pub(crate) fn new(
         dev: &device::Device<device::Bound>,
         chipset: Chipset,
         ver: &str,
     ) -> Result<Self> {
         let fw = super::request_firmware(dev, chipset, "fmc", ver)?;
-        let mut fmc_full = KVec::with_capacity(fw.data().len(), GFP_KERNEL)?;
-        fmc_full.extend_from_slice(fw.data(), GFP_KERNEL)?;
 
         // FSP expects only the "image" section, not the entire ELF file.
         let fmc_image_data = elf::elf_section(fw.data(), "image").ok_or_else(|| {
             dev_err!(dev, "FMC ELF file missing 'image' section\n");
             EINVAL
         })?;
+
+        // Copy the full ELF into a kernel vector for CPU-side signature extraction.
+        let mut fmc_full = KVec::with_capacity(fw.data().len(), GFP_KERNEL)?;
+        fmc_full.extend_from_slice(fw.data(), GFP_KERNEL)?;
 
         Ok(Self {
             fmc_image: DmaObject::from_data(dev, fmc_image_data)?,
