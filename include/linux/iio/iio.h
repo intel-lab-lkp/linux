@@ -180,9 +180,11 @@ struct iio_event_spec {
  * Format values in scan type
  * @IIO_SCAN_FORMAT_SIGNED_INT: Signed integer (two's complement).
  * @IIO_SCAN_FORMAT_UNSIGNED_INT: Unsigned integer.
+ * @IIO_SCAN_FORMAT_FLOAT: Floating point.
  */
 #define IIO_SCAN_FORMAT_SIGNED_INT	's'
 #define IIO_SCAN_FORMAT_UNSIGNED_INT	'u'
+#define IIO_SCAN_FORMAT_FLOAT		'f'
 
 /**
  * struct iio_scan_type - specification for channel data format in buffer
