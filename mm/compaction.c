@@ -1134,8 +1134,22 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		is_unevictable = folio_test_unevictable(folio);
 
 		/* Compaction might skip unevictable pages but CMA takes them */
-		if (!(mode & ISOLATE_UNEVICTABLE) && is_unevictable)
-			goto isolate_fail_put;
+		if (is_unevictable) {
+			if (mode & ISOLATE_UNEVICTABLE_CHECK_MEMCG) {
+				struct mem_cgroup *memcg;
+
+				rcu_read_lock();
+				memcg = folio_memcg_check(folio);
+
+				if (!mem_cgroup_compact_unevictable_allowed(memcg)) {
+					rcu_read_unlock();
+					goto isolate_fail_put;
+				}
+
+				rcu_read_unlock();
+			} else if (!(mode & ISOLATE_UNEVICTABLE))
+				goto isolate_fail_put;
+		}
 
 		/*
 		 * To minimise LRU disruption, the caller can indicate with
@@ -2084,7 +2098,8 @@ static isolate_migrate_t isolate_migratepages(struct compact_control *cc)
 	unsigned long low_pfn;
 	struct page *page;
 	const isolate_mode_t isolate_mode =
-		(sysctl_compact_unevictable_allowed ? ISOLATE_UNEVICTABLE : 0) |
+		(sysctl_compact_unevictable_allowed ?
+			ISOLATE_UNEVICTABLE_CHECK_MEMCG : 0) |
 		(cc->mode != MIGRATE_SYNC ? ISOLATE_ASYNC_MIGRATE : 0);
 	bool fast_find_block;
 

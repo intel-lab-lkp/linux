@@ -4049,6 +4049,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	WRITE_ONCE(memcg->zswap_writeback, true);
 #endif
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
+	WRITE_ONCE(memcg->compact_unevictable_allowed,
+		mem_cgroup_compact_unevictable_allowed(parent));
 	if (parent) {
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
 
@@ -4853,6 +4855,37 @@ static ssize_t memory_oom_group_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+static int memory_compact_unevictable_allowed_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	seq_printf(m, "%d\n", READ_ONCE(memcg->compact_unevictable_allowed));
+
+	return 0;
+}
+
+static ssize_t memory_compact_unevictable_allowed_write(
+	struct kernfs_open_file *of, char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	int ret, allowed;
+
+	buf = strstrip(buf);
+	if (!buf)
+		return -EINVAL;
+
+	ret = kstrtoint(buf, 0, &allowed);
+	if (ret)
+		return ret;
+
+	if (allowed != 0 && allowed != 1)
+		return -EINVAL;
+
+	WRITE_ONCE(memcg->compact_unevictable_allowed, allowed);
+
+	return nbytes;
+}
+
 static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 			      size_t nbytes, loff_t off)
 {
@@ -4936,6 +4969,13 @@ static struct cftype memory_files[] = {
 		.name = "reclaim",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
+	},
+	{
+		.name = "compact_unevictable_allowed",
+		/* For root use /proc/sys/vm/compact_unevictable_allowed */
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_compact_unevictable_allowed_show,
+		.write = memory_compact_unevictable_allowed_write,
 	},
 	{ }	/* terminate */
 };

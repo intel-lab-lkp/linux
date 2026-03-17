@@ -238,6 +238,12 @@ struct mem_cgroup {
 	 */
 	bool oom_group;
 
+	/*
+	 * Is compaction allowed to take unevictable pages accounted to
+	 * this cgroup?
+	 */
+	bool compact_unevictable_allowed;
+
 	int swappiness;
 
 	/* memory.events and memory.events.local */
@@ -618,6 +624,14 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 
 	return READ_ONCE(memcg->memory.emin) >=
 		page_counter_read(&memcg->memory);
+}
+
+static inline bool mem_cgroup_compact_unevictable_allowed(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled() || !memcg)
+		return true;
+
+	return READ_ONCE(memcg->compact_unevictable_allowed);
 }
 
 int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp);
@@ -1080,6 +1094,11 @@ static inline bool obj_cgroup_is_root(const struct obj_cgroup *objcg)
 }
 
 static inline bool mem_cgroup_disabled(void)
+{
+	return true;
+}
+
+static inline bool mem_cgroup_compact_unevictable_allowed(struct mem_cgroup *memcg)
 {
 	return true;
 }

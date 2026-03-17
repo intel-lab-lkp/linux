@@ -787,6 +787,11 @@ struct lruvec {
 #define ISOLATE_ASYNC_MIGRATE	((__force isolate_mode_t)0x4)
 /* Isolate unevictable pages */
 #define ISOLATE_UNEVICTABLE	((__force isolate_mode_t)0x8)
+/*
+ * Isolate unevictable pages, but honor the page's cgroup settings if it
+ * explicitly disallows unevictable isolation.
+ */
+#define ISOLATE_UNEVICTABLE_CHECK_MEMCG ((__force isolate_mode_t)0x10)
 
 /* LRU Isolation modes. */
 typedef unsigned __bitwise isolate_mode_t;
