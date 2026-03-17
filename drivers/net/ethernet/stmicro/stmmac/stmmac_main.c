@@ -4202,6 +4202,15 @@ static void __stmmac_release(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u8 chan;
 
+	/* Free the IRQ lines */
+	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
+
+	/* Stop TX/RX DMA and clear the descriptors */
+	stmmac_stop_all_dma(priv);
+
+	/* Release and free the Rx/Tx resources */
+	free_dma_desc_resources(priv, &priv->dma_conf);
+
 	/* Stop and disconnect the PHY */
 	phylink_stop(priv->phylink);
 
@@ -4211,15 +4220,6 @@ static void __stmmac_release(struct net_device *dev)
 		hrtimer_cancel(&priv->dma_conf.tx_queue[chan].txtimer);
 
 	netif_tx_disable(dev);
-
-	/* Free the IRQ lines */
-	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
-
-	/* Stop TX/RX DMA and clear the descriptors */
-	stmmac_stop_all_dma(priv);
-
-	/* Release and free the Rx/Tx resources */
-	free_dma_desc_resources(priv, &priv->dma_conf);
 
 	stmmac_release_ptp(priv);
 
@@ -7330,6 +7330,9 @@ static void stmmac_reset_subtask(struct stmmac_priv *priv)
 	netif_trans_update(priv->dev);
 	while (test_and_set_bit(STMMAC_RESETING, &priv->state))
 		usleep_range(1000, 2000);
+
+	/* Close IRQ entry as early as possible before DOWN short-circuit path. */
+	disable_irq_nosync(priv->dev->irq);
 
 	set_bit(STMMAC_DOWN, &priv->state);
 	dev_close(priv->dev);
