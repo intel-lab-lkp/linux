@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/via,vt8500-fb.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: VIA VT8500 Framebuffer Controller
+
+maintainers:
+  - Kalyani Patra <kalyanipatra2003@gmail.com>
+
+description:
+  Framebuffer controller present on VIA VT8500 SoCs.
+
+properties:
+  compatible:
+    const: via,vt8500-fb
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  bits-per-pixel:
+    description: Framebuffer bit depth
+    enum: [16, 32]
+
+  display-timings:
+    $ref: /schemas/display/panel/display-timings.yaml#
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - bits-per-pixel
+  - display-timings
+
+additionalProperties: false
+
+examples:
+  - |
+    fb@d8050800 {
+        compatible = "via,vt8500-fb";
+        reg = <0xd800e400 0x400>;
+        interrupts = <12>;
+        bits-per-pixel = <16>;
+
+        display-timings {
+            native-mode = <&timing0>;
+            timing0: timing0 {
+                clock-frequency = <0>;
+                hactive = <800>;
+                vactive = <480>;
+                hfront-porch = <40>;
+                hback-porch = <88>;
+                hsync-len = <0>;
+                vback-porch = <32>;
+                vfront-porch = <11>;
+                vsync-len = <1>;
+            };
+        };
+    };
