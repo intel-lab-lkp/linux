@@ -70,6 +70,29 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 
 	memset(ops, 0, sizeof(ops));
 
+	/* CSC - Color Space Conversion (YUV to RGB) */
+	ops[i] = kzalloc(sizeof(struct drm_colorop), GFP_KERNEL);
+	if (!ops[i]) {
+		ret = -ENOMEM;
+		goto cleanup;
+	}
+
+	ret = drm_plane_colorop_csc_init(dev, ops[i], plane, &dm_colorop_funcs,
+				  BIT(DRM_COLOR_YCBCR_BT601) |
+				  BIT(DRM_COLOR_YCBCR_BT709) |
+				  BIT(DRM_COLOR_YCBCR_BT2020),
+				  BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) |
+				  BIT(DRM_COLOR_YCBCR_FULL_RANGE),
+				  DRM_COLOR_YCBCR_BT709,
+				  DRM_COLOR_YCBCR_LIMITED_RANGE,
+				  DRM_COLOROP_FLAG_ALLOW_BYPASS);
+	if (ret)
+		goto cleanup;
+
+	list->type = ops[i]->base.id;
+
+	i++;
+
 	/* 1D curve - DEGAM TF */
 	ops[i] = kzalloc_obj(*ops[0]);
 	if (!ops[i]) {
@@ -83,7 +106,7 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 	if (ret)
 		goto cleanup;
 
-	list->type = ops[i]->base.id;
+	drm_colorop_set_next_property(ops[i-1], ops[i]);
 
 	i++;
 

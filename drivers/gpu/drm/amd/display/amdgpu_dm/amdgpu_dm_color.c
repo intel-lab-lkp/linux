@@ -1869,6 +1869,65 @@ amdgpu_dm_plane_set_color_properties(struct drm_plane_state *plane_state,
 	return 0;
 }
 
+/**
+ * __set_dm_plane_colorop_csc - Handle CSC colorop for YUV to RGB conversion
+ * @plane_state: DRM plane state
+ * @dc_plane_state: DC plane state to update
+ * @colorop: The CSC colorop
+ *
+ * Reads COLOR_ENCODING and COLOR_RANGE from the CSC colorop state and maps
+ * them to DC's color_space enum, which controls the YUV→RGB conversion matrix.
+ *
+ * Returns:
+ * 0 on success, negative error code on failure
+ */
+static int
+__set_dm_plane_colorop_csc(struct drm_plane_state *plane_state,
+			   struct dc_plane_state *dc_plane_state,
+			   struct drm_colorop *colorop)
+{
+	struct drm_colorop_state *colorop_state;
+	enum drm_color_encoding encoding;
+	enum drm_color_range range;
+	enum dc_color_space dc_color_space;
+	bool full_range;
+
+	if (colorop->type != DRM_COLOROP_CSC)
+		return -EINVAL;
+
+	colorop_state = drm_atomic_get_colorop_state(plane_state->state, colorop);
+	if (IS_ERR(colorop_state))
+		return PTR_ERR(colorop_state);
+
+	encoding = colorop_state->color_encoding;
+	range = colorop_state->color_range;
+	full_range = (range == DRM_COLOR_YCBCR_FULL_RANGE);
+
+	switch (encoding) {
+	case DRM_COLOR_YCBCR_BT601:
+		dc_color_space = full_range ? COLOR_SPACE_YCBCR601
+					    : COLOR_SPACE_YCBCR601_LIMITED;
+		break;
+	case DRM_COLOR_YCBCR_BT709:
+		dc_color_space = full_range ? COLOR_SPACE_YCBCR709
+					    : COLOR_SPACE_YCBCR709_LIMITED;
+		break;
+	case DRM_COLOR_YCBCR_BT2020:
+		dc_color_space = full_range ? COLOR_SPACE_2020_YCBCR_FULL
+					    : COLOR_SPACE_2020_YCBCR_LIMITED;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	dc_plane_state->color_space = dc_color_space;
+
+	/* Force full update to ensure DPP gets reprogrammed with new CSC matrix */
+	dc_plane_state->update_flags.bits.full_update = 1;
+
+	return 0;
+}
+
 static int
 amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 				       struct dc_plane_state *dc_plane_state)
@@ -1879,10 +1938,24 @@ amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 	bool has_3dlut = adev->dm.dc->caps.color.dpp.hw_3d_lut || adev->dm.dc->caps.color.mpc.preblend;
 	int ret;
 
-	/* 1D Curve - DEGAM TF */
+	/* CSC - Color Space Conversion (YUV to RGB) */
 	if (!colorop)
 		return -EINVAL;
 
+	if (colorop->type == DRM_COLOROP_CSC) {
+		ret = __set_dm_plane_colorop_csc(plane_state, dc_plane_state, colorop);
+		if (ret)
+			return ret;
+
+		/* Move to next colorop */
+		colorop = colorop->next;
+		if (!colorop) {
+			drm_dbg(dev, "no colorop after CSC found\n");
+			return -EINVAL;
+		}
+	}
+
+	/* 1D Curve - DEGAM TF */
 	ret = __set_dm_plane_colorop_degamma(plane_state, dc_plane_state, colorop);
 	if (ret)
 		return ret;
