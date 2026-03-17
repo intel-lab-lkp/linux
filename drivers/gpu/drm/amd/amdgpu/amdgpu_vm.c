@@ -43,6 +43,7 @@
 #include "amdgpu_xgmi.h"
 #include "amdgpu_dma_buf.h"
 #include "amdgpu_res_cursor.h"
+#include "amdgpu_svm.h"
 #include "kfd_svm.h"
 
 /**
@@ -2564,6 +2565,7 @@ int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	int r, i;
 
 	vm->va = RB_ROOT_CACHED;
+	vm->svm = NULL;
 	for (i = 0; i < AMDGPU_MAX_VMHUBS; i++)
 		vm->reserved_vmid[i] = NULL;
 	INIT_LIST_HEAD(&vm->evicted);
@@ -2722,6 +2724,10 @@ int amdgpu_vm_make_compute(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 	vm->last_update = dma_fence_get_stub();
 	vm->is_compute_context = true;
 
+	r = amdgpu_svm_init(adev, vm);
+	if (r)
+		goto unreserve_bo;
+
 unreserve_bo:
 	amdgpu_bo_unreserve(vm->root.bo);
 	return r;
@@ -2753,6 +2759,9 @@ void amdgpu_vm_fini(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 	struct amdgpu_bo *root;
 	unsigned long flags;
 	int i;
+
+	amdgpu_svm_close(vm);
+	amdgpu_svm_fini(vm);
 
 	amdgpu_amdkfd_gpuvm_destroy_cb(adev, vm);
 
@@ -2939,8 +2948,10 @@ bool amdgpu_vm_handle_fault(struct amdgpu_device *adev, u32 pasid,
 			    bool write_fault)
 {
 	bool is_compute_context = false;
+	bool has_svm = false;
 	struct amdgpu_bo *root;
 	unsigned long irqflags;
+	uint64_t fault_addr = addr;
 	uint64_t value, flags;
 	struct amdgpu_vm *vm;
 	int r;
@@ -2950,6 +2961,7 @@ bool amdgpu_vm_handle_fault(struct amdgpu_device *adev, u32 pasid,
 	if (vm) {
 		root = amdgpu_bo_ref(vm->root.bo);
 		is_compute_context = vm->is_compute_context;
+		has_svm = !!vm->svm;
 	} else {
 		root = NULL;
 	}
@@ -2960,11 +2972,29 @@ bool amdgpu_vm_handle_fault(struct amdgpu_device *adev, u32 pasid,
 
 	addr /= AMDGPU_GPU_PAGE_SIZE;
 
-	if (is_compute_context && !svm_range_restore_pages(adev, pasid, vmid,
-	    node_id, addr, ts, write_fault)) {
-		amdgpu_bo_unref(&root);
-		return true;
+	pr_debug("vm_handle_fault: pasid=%u addr=0x%llx compute=%d has_svm=%d write=%d\n",
+		 pasid, fault_addr, is_compute_context, has_svm, write_fault);
+
+	if (is_compute_context && has_svm) {
+		r = amdgpu_svm_handle_fault(adev, pasid, fault_addr, write_fault);
+		pr_debug("vm_handle_fault: svm_handle_fault returned %d\n", r);
+		if (!r) {
+			amdgpu_bo_unref(&root);
+			return true;
+		}
 	}
+
+	if (is_compute_context && !has_svm) {
+		r = svm_range_restore_pages(adev, pasid, vmid,
+					    node_id, addr, ts, write_fault);
+		pr_debug("vm_handle_fault: kfd svm_range_restore_pages returned %d\n", r);
+		if (!r) {
+			amdgpu_bo_unref(&root);
+			return true;
+		}
+	}
+
+	pr_debug("vm_handle_fault: SVM paths exhausted, falling through to NORETRY path\n");
 
 	r = amdgpu_bo_reserve(root, true);
 	if (r)
@@ -3020,6 +3050,8 @@ error_unlock:
 error_unref:
 	amdgpu_bo_unref(&root);
 
+	pr_debug("vm_handle_fault: returning false (unhandled) pasid=%u addr=0x%llx\n",
+		 pasid, fault_addr);
 	return false;
 }
 
