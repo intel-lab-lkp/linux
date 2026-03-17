@@ -310,6 +310,14 @@ int __init xbc_node_compose_key_after(struct xbc_node *root,
 	if (!node && root)
 		return -EINVAL;
 
+	/*
+	 * Bootconfig strings never need multi-GB buffers. Reject sizes
+	 * above INT_MAX so snprintf()'s int return value cannot overflow
+	 * the truncation check below.
+	 */
+	if (WARN_ON_ONCE(size > INT_MAX))
+		return -EINVAL;
+
 	while (--depth >= 0) {
 		node = xbc_nodes + keys[depth];
 		ret = snprintf(buf, size, "%s%s", xbc_node_get_data(node),

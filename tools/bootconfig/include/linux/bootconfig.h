@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <string.h>
 
 
@@ -18,6 +19,10 @@
 #define WARN_ON(cond)	\
 	((cond) ? printf("Internal warning(%s:%d, %s): %s\n",	\
 			__FILE__, __LINE__, __func__, #cond) : 0)
+
+#ifndef WARN_ON_ONCE
+#define WARN_ON_ONCE(cond)	WARN_ON(cond)
+#endif
 
 #define unlikely(cond)	(cond)
 
