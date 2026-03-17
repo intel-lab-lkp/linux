@@ -1291,8 +1291,17 @@ set_lev:
 	set_oplock_level(opinfo, req_op_level, lctx);
 
 out:
-	opinfo_count_inc(fp);
-	opinfo_add(opinfo, fp);
+	/*
+	 * Set o_fp before any publication so that concurrent readers
+	 * (e.g. find_same_lease_key() on the lease list) that
+	 * dereference opinfo->o_fp don't hit a NULL pointer.
+	 *
+	 * Add to lease global list before publishing on the inode
+	 * op list.  add_lease_global_list() can fail on allocation
+	 * and we must not leave a freed opinfo linked in ci->m_op_list
+	 * where concurrent opinfo_get_list() readers could find it.
+	 */
+	opinfo->o_fp = fp;
 
 	if (opinfo->is_lease) {
 		err = add_lease_global_list(opinfo);
@@ -1300,8 +1309,10 @@ out:
 			goto err_out;
 	}
 
+	opinfo_count_inc(fp);
+	opinfo_add(opinfo, fp);
+
 	rcu_assign_pointer(fp->f_opinfo, opinfo);
-	opinfo->o_fp = fp;
 
 	return 0;
 err_out:
