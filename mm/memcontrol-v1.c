@@ -1466,6 +1466,10 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 	int ret;
 	bool limits_invariant;
 	struct page_counter *counter = memsw ? &memcg->memsw : &memcg->memory;
+	unsigned int reclaim_options = MEMCG_RECLAIM_NO_DEMOTION;
+
+	if (!memsw)
+		reclaim_options |= MEMCG_RECLAIM_MAY_SWAP;
 
 	do {
 		if (signal_pending(current)) {
@@ -1500,7 +1504,7 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 		}
 
 		if (!try_to_free_mem_cgroup_pages(memcg, 1, GFP_KERNEL,
-				memsw ? 0 : MEMCG_RECLAIM_MAY_SWAP, NULL)) {
+						 reclaim_options, NULL)) {
 			ret = -EBUSY;
 			break;
 		}
@@ -1520,6 +1524,8 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 static int mem_cgroup_force_empty(struct mem_cgroup *memcg)
 {
 	int nr_retries = MAX_RECLAIM_RETRIES;
+	unsigned int reclaim_options = MEMCG_RECLAIM_MAY_SWAP |
+				       MEMCG_RECLAIM_NO_DEMOTION;
 
 	/* we call try-to-free pages for make this cgroup empty */
 	lru_add_drain_all();
@@ -1532,7 +1538,7 @@ static int mem_cgroup_force_empty(struct mem_cgroup *memcg)
 			return -EINTR;
 
 		if (!try_to_free_mem_cgroup_pages(memcg, 1, GFP_KERNEL,
-						  MEMCG_RECLAIM_MAY_SWAP, NULL))
+						  reclaim_options, NULL))
 			nr_retries--;
 	}
 
