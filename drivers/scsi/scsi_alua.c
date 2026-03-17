@@ -608,6 +608,29 @@ void scsi_alua_sdev_exit(struct scsi_device *sdev)
 	sdev->alua = NULL;
 }
 
+blk_status_t scsi_alua_prep_fn(struct scsi_device *sdev, struct request *req)
+{
+	struct alua_data *alua = sdev->alua;
+	unsigned long flags;
+	unsigned char state;
+
+	spin_lock_irqsave(&alua->lock, flags);
+	state = alua->state;
+	spin_unlock_irqrestore(&alua->lock, flags);
+
+	switch (state) {
+	case SCSI_ACCESS_STATE_OPTIMAL:
+	case SCSI_ACCESS_STATE_ACTIVE:
+	case SCSI_ACCESS_STATE_LBA:
+	case SCSI_ACCESS_STATE_TRANSITIONING:
+		return BLK_STS_OK;
+	default:
+		req->rq_flags |= RQF_QUIET;
+		return BLK_STS_IOERR;
+	}
+}
+EXPORT_SYMBOL_GPL(scsi_alua_prep_fn);
+
 int scsi_alua_init(void)
 {
 	kalua_wq = alloc_workqueue("kalua", WQ_MEM_RECLAIM | WQ_PERCPU, 0);
