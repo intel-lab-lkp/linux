@@ -108,6 +108,13 @@ static const struct onboard_dev_pdata genesys_gl852g_data = {
 	.is_hub = true,
 };
 
+static const struct onboard_dev_pdata terminus_fe11s_data = {
+	.reset_us = 10,
+	.num_supplies = 1,
+	.supply_names = { "vdd" },
+	.is_hub = true,
+};
+
 static const struct onboard_dev_pdata vialab_vl817_data = {
 	.reset_us = 10,
 	.num_supplies = 1,
@@ -153,6 +160,7 @@ static const struct of_device_id onboard_dev_match[] = {
 	{ .compatible = "usbbda,5411", .data = &realtek_rts5411_data, },
 	{ .compatible = "usbbda,414", .data = &realtek_rts5411_data, },
 	{ .compatible = "usbbda,5414", .data = &realtek_rts5411_data, },
+	{ .compatible = "usb1a40,0101", .data = &terminus_fe11s_data, },
 	{ .compatible = "usb1a86,8091", .data = &wch_ch334_data, },
 	{ .compatible = "usb1da0,5511", .data = &parade_ps5511_data, },
 	{ .compatible = "usb1da0,55a1", .data = &parade_ps5511_data, },
