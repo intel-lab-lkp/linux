@@ -446,7 +446,7 @@ bool ia_css_pipeline_has_stopped(struct ia_css_pipeline *pipeline)
 
 struct sh_css_sp_pipeline_io_status *ia_css_pipeline_get_pipe_io_status(void)
 {
-	return(&sh_css_sp_group.pipe_io_status);
+	return &sh_css_sp_group.pipe_io_status;
 }
 
 bool ia_css_pipeline_is_mapped(unsigned int key)
