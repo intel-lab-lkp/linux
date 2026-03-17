@@ -51,15 +51,6 @@
 	new__;								\
 })
 
-#define this_cpu_add_1(pcp, val)	arch_this_cpu_to_op_simple(pcp, val, +)
-#define this_cpu_add_2(pcp, val)	arch_this_cpu_to_op_simple(pcp, val, +)
-#define this_cpu_add_return_1(pcp, val) arch_this_cpu_to_op_simple(pcp, val, +)
-#define this_cpu_add_return_2(pcp, val) arch_this_cpu_to_op_simple(pcp, val, +)
-#define this_cpu_and_1(pcp, val)	arch_this_cpu_to_op_simple(pcp, val, &)
-#define this_cpu_and_2(pcp, val)	arch_this_cpu_to_op_simple(pcp, val, &)
-#define this_cpu_or_1(pcp, val)		arch_this_cpu_to_op_simple(pcp, val, |)
-#define this_cpu_or_2(pcp, val)		arch_this_cpu_to_op_simple(pcp, val, |)
-
 /*
  * Macros to be used for percpu code section based on atomic instructions.
  *
