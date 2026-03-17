@@ -227,6 +227,42 @@ DECLARE_EVENT_CLASS(block_rq,
 );
 
 /**
+ * block_rq_tag_wait - triggered when an I/O request is starved of a tag
+ * @q: queue containing the request
+ * @hctx: hardware context (queue) experiencing starvation
+ *
+ * Called immediately before the submitting thread is forced to block due
+ * to the exhaustion of available hardware tags. This tracepoint indicates
+ * that the thread will be placed into an uninterruptible state via
+ * io_schedule() until an active block I/O operation completes and
+ * relinquishes its assigned tag.
+ */
+TRACE_EVENT(block_rq_tag_wait,
+
+	TP_PROTO(struct request_queue *q, struct blk_mq_hw_ctx *hctx),
+
+	TP_ARGS(q, hctx),
+
+	TP_STRUCT__entry(
+		__field( dev_t,		dev			)
+		__field( u32,		hctx_id			)
+		__field( u32,		nr_tags			)
+		__field( u32,		active_requests		)
+	),
+
+	TP_fast_assign(
+		__entry->dev		  = q->disk ? disk_devt(q->disk) : 0;
+		__entry->hctx_id	  = hctx ? hctx->queue_num : 0;
+		__entry->nr_tags	  = hctx && hctx->tags ? hctx->tags->nr_tags : 0;
+		__entry->active_requests  = hctx ? atomic_read(&hctx->nr_active) : 0;
+	),
+
+	TP_printk("%d,%d hctx=%u starved (active=%u/%u)",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->hctx_id, __entry->active_requests, __entry->nr_tags)
+);
+
+/**
  * block_rq_insert - insert block operation request into queue
  * @rq: block IO operation request
  *
