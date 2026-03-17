@@ -27,6 +27,7 @@
 #endif /* WARN_CONDITION_STR */
 
 #ifndef __ASSEMBLY__
+#include <kunit/bug.h>
 #include <linux/panic.h>
 #include <linux/printk.h>
 
@@ -71,9 +72,13 @@ struct bug_entry {
  */
 #ifndef HAVE_ARCH_BUG
 #define BUG() do { \
-	printk("BUG: failure at %s:%d/%s()!\n", __FILE__, __LINE__, __func__); \
-	barrier_before_unreachable(); \
-	panic("BUG!"); \
+	if (!unlikely(KUNIT_IS_SUPPRESSED_WARNING(__func__))) {		\
+		printk("BUG: failure at %s:%d/%s()!\n", __FILE__,	\
+			__LINE__, __func__);				\
+		barrier_before_unreachable();				\
+		panic("BUG!");						\
+	}								\
+	__builtin_unreachable();					\
 } while (0)
 #endif
 
@@ -129,18 +134,23 @@ extern __printf(1, 2) void __warn_printk(const char *fmt, ...);
 
 #if defined(__WARN_FLAGS) && !defined(__WARN_printf)
 #define __WARN_printf(taint, arg...) do {				\
-		instrumentation_begin();				\
-		__warn_printk(arg);					\
-		__WARN_FLAGS("", BUGFLAG_NO_CUT_HERE | BUGFLAG_TAINT(taint));\
-		instrumentation_end();					\
+		if (!unlikely(KUNIT_IS_SUPPRESSED_WARNING(__func__))) {	\
+			instrumentation_begin();			\
+			__warn_printk(arg);				\
+			__WARN_FLAGS("", BUGFLAG_NO_CUT_HERE |		\
+				     BUGFLAG_TAINT(taint));		\
+			instrumentation_end();				\
+		}							\
 	} while (0)
 #endif
 
 #ifndef __WARN_printf
-#define __WARN_printf(taint, arg...) do {				\
-		instrumentation_begin();				\
-		warn_slowpath_fmt(__FILE__, __LINE__, taint, arg);	\
-		instrumentation_end();					\
+#define __WARN_printf(taint, arg...) do {					\
+		if (!unlikely(KUNIT_IS_SUPPRESSED_WARNING(__func__))) {		\
+			instrumentation_begin();				\
+			warn_slowpath_fmt(__FILE__, __LINE__, taint, arg);	\
+			instrumentation_end();					\
+		}								\
 	} while (0)
 #endif
 
@@ -153,7 +163,8 @@ extern __printf(1, 2) void __warn_printk(const char *fmt, ...);
 #ifndef WARN_ON
 #define WARN_ON(condition) ({						\
 	int __ret_warn_on = !!(condition);				\
-	if (unlikely(__ret_warn_on))					\
+	if (unlikely(__ret_warn_on) &&					\
+	    !unlikely(KUNIT_IS_SUPPRESSED_WARNING(__func__)))		\
 		__WARN();						\
 	unlikely(__ret_warn_on);					\
 })
@@ -170,7 +181,8 @@ extern __printf(1, 2) void __warn_printk(const char *fmt, ...);
 
 #define WARN_TAINT(condition, taint, format...) ({			\
 	int __ret_warn_on = !!(condition);				\
-	if (unlikely(__ret_warn_on))					\
+	if (unlikely(__ret_warn_on) &&					\
+	    !unlikely(KUNIT_IS_SUPPRESSED_WARNING(__func__)))		\
 		__WARN_printf(taint, format);				\
 	unlikely(__ret_warn_on);					\
 })
@@ -191,8 +203,10 @@ extern __printf(1, 2) void __warn_printk(const char *fmt, ...);
 #else /* !CONFIG_BUG */
 #ifndef HAVE_ARCH_BUG
 #define BUG() do {		\
-	do {} while (1);	\
-	unreachable();		\
+	if (!unlikely(KUNIT_IS_SUPPRESSED_WARNING(__func__))) {	\
+		do {} while (1);				\
+	}							\
+	unreachable();						\
 } while (0)
 #endif
 
