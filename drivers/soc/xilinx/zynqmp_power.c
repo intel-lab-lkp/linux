@@ -400,7 +400,7 @@ static void zynqmp_pm_remove(struct platform_device *pdev)
 {
 	sysfs_remove_file(&pdev->dev.kobj, &dev_attr_suspend_mode.attr);
 
-	if (!rx_chan)
+	if (rx_chan)
 		mbox_free_channel(rx_chan);
 }
 
