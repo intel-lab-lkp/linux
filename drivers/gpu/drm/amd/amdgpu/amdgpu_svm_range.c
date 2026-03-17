@@ -114,6 +114,57 @@ range_pages_valid(struct amdgpu_svm *svm,
 	return drm_gpusvm_range_pages_valid(&svm->gpusvm, range);
 }
 
+static int
+amdgpu_svm_range_gpu_unmap_in_notifier(struct amdgpu_svm *svm,
+				      struct drm_gpusvm_range *range,
+				      const struct mmu_notifier_range *mmu_range)
+{
+	struct dma_fence *fence = NULL;
+	unsigned long start = max(drm_gpusvm_range_start(range), mmu_range->start);
+	unsigned long end = min(drm_gpusvm_range_end(range), mmu_range->end);
+	unsigned int flags;
+	int ret;
+
+	if (end <= start)
+		return 0;
+
+	start >>= PAGE_SHIFT;
+	end = (end - 1) >> PAGE_SHIFT;
+
+	flags = memalloc_noreclaim_save();
+	ret = amdgpu_vm_update_range(svm->adev, svm->vm, false, true, true, false,
+				     NULL, start, end, 0, 0, 0, NULL,
+				     NULL, &fence);
+	memalloc_noreclaim_restore(flags);
+
+	if (!ret && fence) {
+		ret = dma_fence_wait(fence, false);
+		if (ret < 0)
+			AMDGPU_SVM_TRACE("notifier unmap fence wait failed: ret=%d [0x%lx-0x%lx]-0x%lx\n",
+					 ret, start, end,
+					 end - start + 1);
+	}
+
+	dma_fence_put(fence);
+	return ret;
+}
+
+static bool
+has_always_mapped_range(
+			struct drm_gpusvm_notifier *notifier,
+			const struct mmu_notifier_range *mmu_range)
+{
+	struct drm_gpusvm_range *range = NULL;
+
+	drm_gpusvm_for_each_range(range, notifier, mmu_range->start, mmu_range->end) {
+		if (READ_ONCE(to_amdgpu_svm_range(range)->attr_flags) &
+		    AMDGPU_SVM_FLAG_GPU_ALWAYS_MAPPED)
+			return true;
+	}
+
+	return false;
+}
+
 static uint64_t
 amdgpu_svm_range_attr_pte_flags(struct amdgpu_svm *svm,
 			    const struct amdgpu_svm_attrs *attrs)
@@ -487,6 +538,163 @@ amdgpu_svm_range_map_attr_ranges(struct amdgpu_svm *svm,
 	return 0;
 }
 
+static void amdgpu_svm_range_remove(struct amdgpu_svm *svm,
+						   struct drm_gpusvm_range *range,
+						   struct drm_gpusvm_ctx *ctx)
+{
+	lockdep_assert_held_write(&svm->svm_lock);
+
+	if (!range->pages.flags.unmapped && !range->pages.flags.partial_unmap)
+		drm_gpusvm_range_unmap_pages(&svm->gpusvm, range, ctx);
+
+	range_invalidate_gpu_mapping(range);
+	drm_gpusvm_range_remove(&svm->gpusvm, range);
+}
+
+static bool
+amdgpu_svm_range_remove_overlaps(struct amdgpu_svm *svm, unsigned long start_page,
+				      unsigned long last_page,
+				      unsigned long *rebuild_start,
+				      unsigned long *rebuild_last)
+{
+	lockdep_assert_held_write(&svm->svm_lock);
+
+	struct drm_gpusvm_ctx ctx = {
+		.in_notifier = false,
+	};
+	unsigned long start = start_page << PAGE_SHIFT;
+	unsigned long end = (last_page + 1) << PAGE_SHIFT;
+	struct drm_gpusvm_notifier *notifier, *next_notifier;
+	bool removed = false;
+
+	if (rebuild_start && rebuild_last) {
+		*rebuild_start = ULONG_MAX;
+		*rebuild_last = 0;
+	}
+
+	/* remove overlap ranges, need to remove entire range */
+	drm_gpusvm_for_each_notifier_safe(notifier, next_notifier, &svm->gpusvm,
+					  start, end) {
+		struct drm_gpusvm_range *range, *next_range;
+
+		drm_gpusvm_for_each_range_safe(range, next_range, notifier, start,
+					       end) {
+			unsigned long rs = drm_gpusvm_range_start(range) >> PAGE_SHIFT;
+			unsigned long rl = (drm_gpusvm_range_end(range) >> PAGE_SHIFT) - 1;
+
+			removed = true;
+			/* record rebuild start end, first range start and last range end */
+			if (rebuild_start && rebuild_last) {
+				*rebuild_start = min(*rebuild_start, rs);
+				*rebuild_last = max(*rebuild_last, rl);
+			}
+			amdgpu_svm_range_remove(svm, range, &ctx);
+		}
+	}
+
+	return removed;
+}
+
+static int amdgpu_svm_range_rebuild_locked(struct amdgpu_svm *svm,
+				  unsigned long start_page,
+				  unsigned long last_page,
+				  bool rebuild)
+{
+	unsigned long rebuild_start = start_page;
+	unsigned long rebuild_last = last_page;
+	bool removed;
+	int ret;
+
+	lockdep_assert_held_write(&svm->svm_lock);
+
+	AMDGPU_SVM_TRACE("remove and rebuild: [0x%lx-0x%lx] rebuild=%d\n",
+			 start_page, last_page, rebuild ? 1 : 0);
+
+	removed = amdgpu_svm_range_remove_overlaps(svm, start_page, last_page,
+						   &rebuild_start,
+						   &rebuild_last);
+	if (!removed)
+		return 0;
+
+	/* scan rebuild start end to build the extra removed ranges */
+	if (rebuild)
+		return amdgpu_svm_range_map_attr_ranges(svm, rebuild_start,
+							rebuild_last);
+
+	ret = amdgpu_svm_range_update_gpu(svm, rebuild_start, rebuild_last,
+					  0, NULL, true, true, true);
+	if (!ret)
+		svm->flush_tlb(svm);
+
+	return ret;
+}
+
+static void
+amdgpu_svm_range_process_notifier_ranges(struct amdgpu_svm *svm,
+					 struct drm_gpusvm_notifier *notifier,
+					 const struct mmu_notifier_range *mmu_range,
+					 uint32_t notifier_op,
+					 enum amdgpu_svm_range_queue_op queue_op)
+{
+	struct drm_gpusvm_ctx ctx = {
+		.in_notifier = true,
+	};
+	struct drm_gpusvm_range *range = NULL;
+	bool queue_ranges = notifier_op & AMDGPU_SVM_RANGE_NOTIFIER_QUEUE_INTERVAL;
+	bool clear_pte = notifier_op & AMDGPU_SVM_RANGE_NOTIFIER_CLEAR_PTE;
+	bool is_unmap = mmu_range->event == MMU_NOTIFY_UNMAP;
+	bool has_range = false;
+
+	lockdep_assert_held(&svm->gpusvm.notifier_lock);
+
+	drm_gpusvm_for_each_range(range, notifier, mmu_range->start, mmu_range->end) {
+		has_range = true;
+		if (clear_pte) {
+			amdgpu_svm_range_gpu_unmap_in_notifier(svm, range,
+									   mmu_range);
+			range_invalidate_gpu_mapping(range);
+		}
+
+		drm_gpusvm_range_unmap_pages(&svm->gpusvm, range, &ctx);
+		if (is_unmap)
+			drm_gpusvm_range_set_unmapped(range, mmu_range);
+
+		if (queue_ranges) {
+			unsigned long start = max(drm_gpusvm_range_start(range),
+						  mmu_range->start) >> PAGE_SHIFT;
+			unsigned long last = (min(drm_gpusvm_range_end(range),
+						  mmu_range->end) - 1) >> PAGE_SHIFT;
+
+			amdgpu_svm_range_enqueue(svm, to_amdgpu_svm_range(range),
+						 start, last, queue_op);
+		}
+	}
+
+	if (has_range && clear_pte)
+		svm->flush_tlb(svm);
+}
+
+static bool
+amdgpu_svm_range_interval_has_range(struct amdgpu_svm *svm,
+					     unsigned long start_page,
+					     unsigned long last_page)
+{
+	lockdep_assert_held(&svm->svm_lock);
+
+	unsigned long start = start_page << PAGE_SHIFT;
+	unsigned long end = (last_page + 1) << PAGE_SHIFT;
+	struct drm_gpusvm_notifier *notifier;
+
+	drm_gpusvm_for_each_notifier(notifier, &svm->gpusvm, start, end) {
+		struct drm_gpusvm_range *range = NULL;
+
+		drm_gpusvm_for_each_range(range, notifier, start, end)
+			return true;
+	}
+
+	return false;
+}
+
 int amdgpu_svm_range_apply_attr_change(struct amdgpu_svm *svm,
 				       unsigned long start,
 				       unsigned long last,
@@ -536,4 +744,49 @@ int amdgpu_svm_range_apply_attr_change(struct amdgpu_svm *svm,
 	AMDGPU_SVM_TRACE("mapping update: remap interval [0x%lx-0x%lx]-0x%lx\n",
 			 start, last, last - start + 1);
 	return amdgpu_svm_range_map_interval(svm, start, last, new_attrs);
+}
+
+static void amdgpu_svm_range_begin_restore(struct amdgpu_svm *svm)
+{
+	if (atomic_inc_return(&svm->evicted_ranges) != 1)
+		return;
+
+	svm->begin_restore(svm);
+}
+
+void amdgpu_svm_range_invalidate(struct amdgpu_svm *svm,
+				 struct drm_gpusvm_notifier *notifier,
+				 const struct mmu_notifier_range *mmu_range)
+{
+	bool is_unmap = mmu_range->event == MMU_NOTIFY_UNMAP;
+	uint32_t op;
+	enum amdgpu_svm_range_queue_op queue_op;
+
+	if (mmu_range->event == MMU_NOTIFY_RELEASE)
+		return;
+	if (atomic_read(&svm->exiting))
+		return;
+
+	if (!drm_gpusvm_range_find(notifier, mmu_range->start,
+				    mmu_range->end))
+		return;
+
+	if (is_unmap) {
+		op = AMDGPU_SVM_RANGE_NOTIFIER_CLEAR_PTE |
+			 AMDGPU_SVM_RANGE_NOTIFIER_QUEUE_INTERVAL;
+		queue_op = AMDGPU_SVM_RANGE_OP_UNMAP;
+		if (NEED_REBUILD(svm))
+			amdgpu_svm_range_begin_restore(svm);
+	} else if (NEED_REBUILD(svm) ||
+		   has_always_mapped_range(notifier, mmu_range)) {
+		op = AMDGPU_SVM_RANGE_NOTIFIER_QUEUE_INTERVAL;
+		queue_op = AMDGPU_SVM_RANGE_OP_RESTORE;
+		amdgpu_svm_range_begin_restore(svm);
+	} else {
+		op = AMDGPU_SVM_RANGE_NOTIFIER_CLEAR_PTE;
+		queue_op = AMDGPU_SVM_RANGE_OP_RESTORE;
+	}
+
+	amdgpu_svm_range_process_notifier_ranges(svm, notifier, mmu_range,
+						 op, queue_op);
 }
