@@ -1361,8 +1361,6 @@ static void __vmbus_isr(void)
 
 	vmbus_message_sched(hv_cpu, hv_cpu->hyp_synic_message_page);
 	vmbus_message_sched(hv_cpu, hv_cpu->para_synic_message_page);
-
-	add_interrupt_randomness(vmbus_interrupt);
 }
 
 static DEFINE_PER_CPU(bool, vmbus_irq_pending);
@@ -1410,6 +1408,8 @@ void vmbus_isr(void)
 		lockdep_hardirq_threaded();
 		__vmbus_isr();
 	}
+
+	add_interrupt_randomness(vmbus_interrupt);
 }
 EXPORT_SYMBOL_FOR_MODULES(vmbus_isr, "mshv_vtl");
 
