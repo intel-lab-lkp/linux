@@ -1383,6 +1383,7 @@ tls_rx_rec_wait(struct sock *sk, struct sk_psock *psock, bool nonblock,
 		if (ret < 0)
 			return ret;
 
+		sk_flush_backlog(sk);
 		if (!skb_queue_empty(&sk->sk_receive_queue)) {
 			/* tls_strp_check_rcv() is called at each receive
 			 * path's exit before the socket lock is released.
