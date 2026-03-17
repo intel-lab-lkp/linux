@@ -14,6 +14,8 @@ static const char *device_bdf;
 #define ASSERT_NO_MSI(_eventfd) do {			\
 	u64 __value;					\
 							\
+	if (_eventfd == -1)				\
+		break;					\
 	ASSERT_EQ(-1, read(_eventfd, &__value, 8));	\
 	ASSERT_EQ(EAGAIN, errno);			\
 } while (0)
@@ -175,6 +177,9 @@ TEST_F(vfio_pci_driver_test, send_msi)
 {
 	u64 value;
 
+	if (self->device->driver.ops->send_msi == NULL)
+		SKIP(return, "Device does not support MSI\n");
+
 	vfio_pci_driver_send_msi(self->device);
 	ASSERT_EQ(8, read(self->msi_fd, &value, 8));
 	ASSERT_EQ(1, value);
@@ -200,6 +205,9 @@ TEST_F(vfio_pci_driver_test, mix_and_match)
 				       self->unmapped_iova,
 				       self->dst_iova,
 				       self->size);
+
+		if (self->device->driver.ops->send_msi == NULL)
+			continue;
 
 		vfio_pci_driver_send_msi(self->device);
 		ASSERT_EQ(8, read(self->msi_fd, &value, 8));

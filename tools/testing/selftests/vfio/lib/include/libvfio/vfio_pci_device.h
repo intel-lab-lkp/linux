@@ -74,6 +74,9 @@ static inline void fcntl_set_nonblock(int fd)
 {
 	int r;
 
+	if (fd == -1)
+		return;
+
 	r = fcntl(fd, F_GETFL, 0);
 	VFIO_ASSERT_NE(r, -1, "F_GETFL failed for fd %d\n", fd);
 
