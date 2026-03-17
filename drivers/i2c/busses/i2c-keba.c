@@ -51,8 +51,8 @@ struct ki2c {
 	void __iomem *base;
 	struct i2c_adapter adapter;
 
-	struct i2c_client **client;
 	int client_size;
+	struct i2c_client *client[] __counted_by(client_size);
 };
 
 static int ki2c_inuse_lock(struct ki2c *ki2c)
@@ -508,19 +508,18 @@ static int ki2c_probe(struct auxiliary_device *auxdev,
 		      const struct auxiliary_device_id *id)
 {
 	struct device *dev = &auxdev->dev;
+	struct keba_i2c_auxdev *adev;
 	struct i2c_adapter *adap;
 	struct ki2c *ki2c;
 	int ret;
 
-	ki2c = devm_kzalloc(dev, sizeof(*ki2c), GFP_KERNEL);
+	adev = container_of(auxdev, struct keba_i2c_auxdev, auxdev);
+	ki2c = devm_kzalloc(dev, struct_size(ki2c, client, adev->info_size), GFP_KERNEL);
 	if (!ki2c)
 		return -ENOMEM;
-	ki2c->auxdev = container_of(auxdev, struct keba_i2c_auxdev, auxdev);
-	ki2c->client = devm_kcalloc(dev, ki2c->auxdev->info_size,
-				    sizeof(*ki2c->client), GFP_KERNEL);
-	if (!ki2c->client)
-		return -ENOMEM;
-	ki2c->client_size = ki2c->auxdev->info_size;
+
+	ki2c->client_size = adev->info_size;
+	ki2c->auxdev = adev;
 	auxiliary_set_drvdata(auxdev, ki2c);
 
 	ki2c->base = devm_ioremap_resource(dev, &ki2c->auxdev->io);
