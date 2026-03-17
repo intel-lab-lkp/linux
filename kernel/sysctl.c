@@ -29,6 +29,8 @@ EXPORT_SYMBOL(sysctl_vals);
 const unsigned long sysctl_long_vals[] = { 0, 1, LONG_MAX };
 EXPORT_SYMBOL_GPL(sysctl_long_vals);
 
+const struct _sysctl_null_type _sysctl_null_marker;
+
 #if defined(CONFIG_SYSCTL)
 
 /* Constants used for minimum and maximum */
