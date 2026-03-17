@@ -16,7 +16,15 @@
 struct alua_data {
 	int			group_id;
 	int			tpgs;
+	int			state;
+	int			pref;
+	int			valid_states;
+	bool			rtpg_ext_hdr_unsupp;
+	unsigned char		transition_tmo;
+	unsigned long		expiry;
+	unsigned long		interval;
 	struct scsi_device	*sdev;
+	spinlock_t		lock;
 };
 
 int scsi_alua_sdev_init(struct scsi_device *sdev);
