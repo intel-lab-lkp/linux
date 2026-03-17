@@ -7583,6 +7583,9 @@ skip:
 				ksmbd_debug(SMB, "File unlocked\n");
 			} else if (rc == -ENOENT) {
 				rsp->hdr.Status = STATUS_NOT_LOCKED;
+				locks_free_lock(flock);
+				kfree(smb_lock);
+				err = -ENOENT;
 				goto out;
 			}
 			locks_free_lock(flock);
@@ -7655,6 +7658,9 @@ skip:
 				spin_unlock(&work->conn->llist_lock);
 				ksmbd_debug(SMB, "successful in taking lock\n");
 			} else {
+				locks_free_lock(flock);
+				kfree(smb_lock);
+				err = rc;
 				goto out;
 			}
 		}
@@ -7685,6 +7691,19 @@ out:
 		struct file_lock *rlock = NULL;
 
 		rlock = smb_flock_init(filp);
+		if (!rlock) {
+			pr_err("rollback unlock alloc failed\n");
+			list_del(&smb_lock->llist);
+			spin_lock(&work->conn->llist_lock);
+			if (!list_empty(&smb_lock->flist))
+				list_del(&smb_lock->flist);
+			list_del(&smb_lock->clist);
+			spin_unlock(&work->conn->llist_lock);
+
+			locks_free_lock(smb_lock->fl);
+			kfree(smb_lock);
+			continue;
+		}
 		rlock->c.flc_type = F_UNLCK;
 		rlock->fl_start = smb_lock->start;
 		rlock->fl_end = smb_lock->end;
