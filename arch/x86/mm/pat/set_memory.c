@@ -2587,9 +2587,9 @@ int set_pages_rw(struct page *page, int numpages)
 	return set_memory_rw(addr, numpages);
 }
 
-static int __set_pages_p(struct page *page, int numpages)
+static int __set_pages_p(const void *addr, int numpages)
 {
-	unsigned long tempaddr = (unsigned long) page_address(page);
+	unsigned long tempaddr = (unsigned long)addr;
 	struct cpa_data cpa = { .vaddr = &tempaddr,
 				.pgd = NULL,
 				.numpages = numpages,
@@ -2606,9 +2606,9 @@ static int __set_pages_p(struct page *page, int numpages)
 	return __change_page_attr_set_clr(&cpa, 1);
 }
 
-static int __set_pages_np(struct page *page, int numpages)
+static int __set_pages_np(const void *addr, int numpages)
 {
-	unsigned long tempaddr = (unsigned long) page_address(page);
+	unsigned long tempaddr = (unsigned long)addr;
 	struct cpa_data cpa = { .vaddr = &tempaddr,
 				.pgd = NULL,
 				.numpages = numpages,
@@ -2625,22 +2625,23 @@ static int __set_pages_np(struct page *page, int numpages)
 	return __change_page_attr_set_clr(&cpa, 1);
 }
 
-int set_direct_map_invalid_noflush(struct page *page)
+int set_direct_map_invalid_noflush(const void *addr)
 {
-	return __set_pages_np(page, 1);
+	return __set_pages_np(addr, 1);
 }
 
-int set_direct_map_default_noflush(struct page *page)
+int set_direct_map_default_noflush(const void *addr)
 {
-	return __set_pages_p(page, 1);
+	return __set_pages_p(addr, 1);
 }
 
-int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
+int set_direct_map_valid_noflush(const void *addr, unsigned long numpages,
+				 bool valid)
 {
 	if (valid)
-		return __set_pages_p(page, nr);
+		return __set_pages_p(addr, numpages);
 
-	return __set_pages_np(page, nr);
+	return __set_pages_np(addr, numpages);
 }
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
