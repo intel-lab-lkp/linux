@@ -1167,7 +1167,7 @@ sdev_show_access_state(struct device *dev,
 	unsigned char access_state;
 	const char *access_state_name;
 
-	if (!sdev->handler)
+	if (!sdev->handler && !scsi_device_alua_implicit(sdev))
 		return -EINVAL;
 
 	access_state = (sdev->access_state & SCSI_ACCESS_STATE_MASK);
@@ -1425,6 +1425,8 @@ int scsi_sysfs_add_sdev(struct scsi_device *sdev)
 	scsi_autopm_get_device(sdev);
 
 	scsi_dh_add_device(sdev);
+	if (!sdev->handler && scsi_device_alua_implicit(sdev))
+		scsi_device_alua_rescan(sdev);
 
 	error = device_add(&sdev->sdev_gendev);
 	if (error) {

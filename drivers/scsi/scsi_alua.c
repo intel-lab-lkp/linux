@@ -562,6 +562,90 @@ int scsi_alua_stpg_run(struct scsi_device *sdev, bool optimize)
 }
 EXPORT_SYMBOL_GPL(scsi_alua_stpg_run);
 
+enum scsi_disposition scsi_alua_check_sense(struct scsi_device *sdev,
+					      struct scsi_sense_hdr *sense_hdr)
+{
+	switch (sense_hdr->sense_key) {
+	case NOT_READY:
+		if (sense_hdr->asc == 0x04 && sense_hdr->ascq == 0x0a) {
+			/*
+			 * LUN Not Accessible - ALUA state transition
+			 */
+			scsi_alua_handle_state_transition(sdev);
+			return NEEDS_RETRY;
+		}
+		break;
+	case UNIT_ATTENTION:
+		if (sense_hdr->asc == 0x04 && sense_hdr->ascq == 0x0a) {
+			/*
+			 * LUN Not Accessible - ALUA state transition
+			 */
+			scsi_alua_handle_state_transition(sdev);
+			return NEEDS_RETRY;
+		}
+		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x00) {
+			/*
+			 * Power On, Reset, or Bus Device Reset.
+			 * Might have obscured a state transition,
+			 * so schedule a recheck.
+			 */
+			scsi_device_alua_rescan(sdev);
+			return ADD_TO_MLQUEUE;
+		}
+		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x04)
+			/*
+			 * Device internal reset
+			 */
+			return ADD_TO_MLQUEUE;
+		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x01)
+			/*
+			 * Mode Parameters Changed
+			 */
+			return ADD_TO_MLQUEUE;
+		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x06) {
+			/*
+			 * ALUA state changed
+			 */
+			scsi_device_alua_rescan(sdev);
+			return ADD_TO_MLQUEUE;
+		}
+		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x07) {
+			/*
+			 * Implicit ALUA state transition failed
+			 */
+			scsi_device_alua_rescan(sdev);
+			return ADD_TO_MLQUEUE;
+		}
+		if (sense_hdr->asc == 0x3f && sense_hdr->ascq == 0x03)
+			/*
+			 * Inquiry data has changed
+			 */
+			return ADD_TO_MLQUEUE;
+		if (sense_hdr->asc == 0x3f && sense_hdr->ascq == 0x0e)
+			/*
+			 * REPORTED_LUNS_DATA_HAS_CHANGED is reported
+			 * when switching controllers on targets like
+			 * Intel Multi-Flex. We can just retry.
+			 */
+			return ADD_TO_MLQUEUE;
+		break;
+	}
+
+	return SCSI_RETURN_NOT_HANDLED;
+}
+
+static void alua_rtpg_work(struct work_struct *work)
+{
+	struct alua_data *alua =
+		container_of(work, struct alua_data, work.work);
+	int ret;
+
+	ret = scsi_alua_rtpg_run(alua->sdev);
+
+	if (ret == -EAGAIN)
+		queue_delayed_work(kalua_wq, &alua->work, alua->interval * HZ);
+}
+
 int scsi_alua_sdev_init(struct scsi_device *sdev)
 {
 	int rel_port, ret, tpgs;
@@ -591,6 +675,7 @@ int scsi_alua_sdev_init(struct scsi_device *sdev)
 		goto out_free_data;
 	}
 
+	INIT_DELAYED_WORK(&sdev->alua->work, alua_rtpg_work);
 	sdev->alua->sdev = sdev;
 	sdev->alua->tpgs = tpgs;
 	spin_lock_init(&sdev->alua->lock);
@@ -636,6 +721,14 @@ bool scsi_device_alua_implicit(struct scsi_device *sdev)
 	if (!sdev->alua)
 		return false;
 	return sdev->alua->tpgs & TPGS_MODE_IMPLICIT;
+}
+
+void scsi_device_alua_rescan(struct scsi_device *sdev)
+{
+	struct alua_data *alua = sdev->alua;
+
+	queue_delayed_work(kalua_wq, &alua->work,
+				msecs_to_jiffies(ALUA_RTPG_DELAY_MSECS));
 }
 
 int scsi_alua_init(void)

@@ -1743,6 +1743,8 @@ int scsi_rescan_device(struct scsi_device *sdev)
 
 	if (sdev->handler && sdev->handler->rescan)
 		sdev->handler->rescan(sdev);
+	else if (scsi_device_alua_implicit(sdev))
+		scsi_device_alua_rescan(sdev);
 
 	if (dev->driver && try_module_get(dev->driver->owner)) {
 		struct scsi_driver *drv = to_scsi_driver(dev->driver);
