@@ -204,7 +204,7 @@ static ssize_t min_tx_pkt_show(struct device *d,
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
 
-	return sprintf(buf, "%u\n", ctx->min_tx_pkt);
+	return sysfs_emit(buf, "%u\n", ctx->min_tx_pkt);
 }
 
 static ssize_t rx_max_show(struct device *d,
@@ -213,7 +213,7 @@ static ssize_t rx_max_show(struct device *d,
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
 
-	return sprintf(buf, "%u\n", ctx->rx_max);
+	return sysfs_emit(buf, "%u\n", ctx->rx_max);
 }
 
 static ssize_t tx_max_show(struct device *d,
@@ -222,7 +222,7 @@ static ssize_t tx_max_show(struct device *d,
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
 
-	return sprintf(buf, "%u\n", ctx->tx_max);
+	return sysfs_emit(buf, "%u\n", ctx->tx_max);
 }
 
 static ssize_t tx_timer_usecs_show(struct device *d,
@@ -231,7 +231,7 @@ static ssize_t tx_timer_usecs_show(struct device *d,
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
 
-	return sprintf(buf, "%u\n", ctx->timer_interval / (u32)NSEC_PER_USEC);
+	return sysfs_emit(buf, "%u\n", ctx->timer_interval / (u32)NSEC_PER_USEC);
 }
 
 static ssize_t min_tx_pkt_store(struct device *d,
@@ -313,7 +313,7 @@ static ssize_t ndp_to_end_show(struct device *d, struct device_attribute *attr, 
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
 
-	return sprintf(buf, "%c\n", ctx->drvflags & CDC_NCM_FLAG_NDP_TO_END ? 'Y' : 'N');
+	return sysfs_emit(buf, "%c\n", ctx->drvflags & CDC_NCM_FLAG_NDP_TO_END ? 'Y' : 'N');
 }
 
 static ssize_t ndp_to_end_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
@@ -362,7 +362,7 @@ static ssize_t cdc_ncm_show_##name(struct device *d, struct device_attribute *at
 { \
 	struct usbnet *dev = netdev_priv(to_net_dev(d)); \
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0]; \
-	return sprintf(buf, format "\n", tocpu(ctx->ncm_parm.name));	\
+	return sysfs_emit(buf, format "\n", tocpu(ctx->ncm_parm.name));	\
 } \
 static DEVICE_ATTR(name, 0444, cdc_ncm_show_##name, NULL)
 
