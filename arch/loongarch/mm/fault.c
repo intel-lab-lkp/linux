@@ -182,6 +182,7 @@ static void __kprobes __do_page_fault(struct pt_regs *regs,
 	struct vm_area_struct *vma = NULL;
 	vm_fault_t fault;
 
+	current->thread.trap_nr = read_csr_excode();
 	if (kprobe_page_fault(regs, current->thread.trap_nr))
 		return;
 
