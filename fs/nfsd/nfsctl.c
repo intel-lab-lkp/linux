@@ -2180,7 +2180,44 @@ static int nfsd_nl_unlock_by_ip(struct genl_info *info)
 }
 
 /**
- * nfsd_nl_unlock_doit - release NLM locks by scope
+ * nfsd_nl_unlock_by_filesystem - release locks and state on a filesystem
+ * @info: netlink metadata and command arguments
+ *
+ * Return: 0 on success or a negative errno.
+ */
+static int nfsd_nl_unlock_by_filesystem(struct genl_info *info)
+{
+	struct net *net = genl_info_net(info);
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct path path;
+	int error;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_UNLOCK_PATH))
+		return -EINVAL;
+
+	trace_nfsd_ctl_unlock_fs(net,
+				 nla_data(info->attrs[NFSD_A_UNLOCK_PATH]));
+	error = kern_path(nla_data(info->attrs[NFSD_A_UNLOCK_PATH]),
+			  0, &path);
+	if (error)
+		return error;
+
+	nfsd4_cancel_copy_by_sb(net, path.dentry->d_sb);
+	error = nlmsvc_unlock_all_by_sb(path.dentry->d_sb);
+
+	mutex_lock(&nfsd_mutex);
+	if (nn->nfsd_serv)
+		nfsd4_revoke_states(nn, path.dentry->d_sb);
+	else
+		error = -EINVAL;
+	mutex_unlock(&nfsd_mutex);
+
+	path_put(&path);
+	return error;
+}
+
+/**
+ * nfsd_nl_unlock_doit - release locks or revoke NFS state
  * @skb: reply buffer
  * @info: netlink metadata and command arguments
  *
@@ -2198,6 +2235,8 @@ int nfsd_nl_unlock_doit(struct sk_buff *skb, struct genl_info *info)
 	switch (type) {
 	case NFSD_UNLOCK_TYPE_IP:
 		return nfsd_nl_unlock_by_ip(info);
+	case NFSD_UNLOCK_TYPE_FILESYSTEM:
+		return nfsd_nl_unlock_by_filesystem(info);
 	default:
 		return -EINVAL;
 	}

@@ -12,6 +12,7 @@
 
 enum nfsd_unlock_type {
 	NFSD_UNLOCK_TYPE_IP,
+	NFSD_UNLOCK_TYPE_FILESYSTEM,
 
 	/* private: */
 	__NFSD_UNLOCK_TYPE_MAX,
@@ -91,6 +92,7 @@ enum {
 enum {
 	NFSD_A_UNLOCK_TYPE = 1,
 	NFSD_A_UNLOCK_ADDRESS,
+	NFSD_A_UNLOCK_PATH,
 
 	__NFSD_A_UNLOCK_MAX,
 	NFSD_A_UNLOCK_MAX = (__NFSD_A_UNLOCK_MAX - 1)

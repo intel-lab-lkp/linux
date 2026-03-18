@@ -11,7 +11,7 @@ definitions:
     type: enum
     name: unlock-type
     render-max: true
-    entries: [ip]
+    entries: [ip, filesystem]
 
 attribute-sets:
   -
@@ -149,6 +149,12 @@ attribute-sets:
           Required when type is ip.
         checks:
           min-len: 16
+      -
+        name: path
+        type: string
+        doc: >-
+          Filesystem path whose state should be released.
+          Required when type is filesystem.
 
 operations:
   list:
@@ -251,7 +257,7 @@ operations:
             - npools
     -
       name: unlock
-      doc: release NLM locks by scope
+      doc: release locks or revoke NFS state by scope
       attribute-set: unlock
       flags: [admin-perm]
       do:
@@ -259,3 +265,4 @@ operations:
           attributes:
             - type
             - address
+            - path
