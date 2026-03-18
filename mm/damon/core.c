@@ -1066,6 +1066,7 @@ static int damos_commit_dests(struct damos_migrate_dests *dst,
 	if (dst->nr_dests != src->nr_dests) {
 		kfree(dst->node_id_arr);
 		kfree(dst->weight_arr);
+		dst->nr_dests = 0;
 
 		dst->node_id_arr = kmalloc_array(src->nr_dests,
 			sizeof(*dst->node_id_arr), GFP_KERNEL);
