@@ -32,8 +32,7 @@
 /**
  * BUILD_BUG_ON_MSG - break compile if a condition is true & emit supplied
  *		      error message.
- * @cond: the condition which the compiler should know is false.
- * @msg: build-time error message
+ * @condition: the condition which the compiler should know is false.
  *
  * See BUILD_BUG_ON for description.
  */
@@ -61,7 +60,6 @@
 
 /**
  * static_assert - check integer constant expression at build time
- * @expr: expression to be checked
  *
  * static_assert() is a wrapper for the C11 _Static_assert, with a
  * little macro magic to make the message optional (defaulting to the
