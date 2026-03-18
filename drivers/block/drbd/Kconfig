@@ -11,6 +11,7 @@ config BLK_DEV_DRBD
 	depends on PROC_FS && INET
 	select LRU_CACHE
 	select CRC32
+	select NET_HANDSHAKE
 	help
 
 	  NOTE: In order to authenticate connections you have to select
