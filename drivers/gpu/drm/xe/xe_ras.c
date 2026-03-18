@@ -10,6 +10,7 @@
 #include "xe_survivability_mode.h"
 #include "xe_sysctrl_mailbox.h"
 #include "xe_sysctrl_mailbox_types.h"
+#include "xe_hw_error.h"
 
 #define COMPUTE_ERROR_SEVERITY_MASK		GENMASK(26, 25)
 #define GLOBAL_UNCORR_ERROR			2
@@ -148,7 +149,7 @@ static enum xe_ras_recovery_action handle_soc_internal_errors(struct xe_device *
 			xe_err(xe, "[RAS]: PUNIT %s error detected: 0x%x\n",
 			       severity_to_str(xe, common_info.severity),
 			       ieh_error->error_sources_ieh0.punit);
-			/** TODO: Add PUNIT error handling */
+			xe_punit_error_handler(xe);
 			action = XE_RAS_RECOVERY_ACTION_DISCONNECT;
 		}
 	}

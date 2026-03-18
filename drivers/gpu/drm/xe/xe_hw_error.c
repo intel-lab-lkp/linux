@@ -5,6 +5,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/fault-inject.h>
+#include <drm/drm_drv.h>
 
 #include "regs/xe_gsc_regs.h"
 #include "regs/xe_hw_error_regs.h"
@@ -539,6 +540,32 @@ static void process_hw_errors(struct xe_device *xe)
 		master_ctl = xe_mmio_read32(&tile->mmio, GFX_MSTR_IRQ);
 		xe_hw_error_irq_handler(tile, master_ctl);
 		xe_mmio_write32(&tile->mmio, GFX_MSTR_IRQ, master_ctl);
+	}
+}
+
+/**
+ * xe_punit_error_handler - Handler for power management unit errors
+ * @xe: device instance
+ *
+ * Handles power management unit errors that affect the device and cannot
+ * be recovered through driver reload, PCIe reset, etc.
+ *
+ * Marks the device as wedged with DRM_WEDGE_RECOVERY_COLD_RESET method
+ * and notifies userspace that a complete device power cycle is required.
+ */
+void xe_punit_error_handler(struct xe_device *xe)
+{
+	drm_err(&xe->drm, "CRITICAL: PMU error detected\n");
+	drm_err(&xe->drm, "Recovery: Device cold reset required\n");
+
+	/* Set cold reset recovery method */
+	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
+
+	if (xe_device_wedged(xe)) {
+		drm_dev_wedged_event(&xe->drm, xe->wedged.method, NULL);
+	} else {
+		/* Declare device wedged - will trigger uevent with cold reset method */
+		xe_device_declare_wedged(xe);
 	}
 }
 
