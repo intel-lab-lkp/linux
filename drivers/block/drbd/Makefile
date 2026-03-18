@@ -13,4 +13,4 @@ obj-$(CONFIG_BLK_DEV_DRBD)     += drbd.o
 
 obj-$(CONFIG_BLK_DEV_DRBD)     += drbd_transport_tcp.o
 obj-$(CONFIG_BLK_DEV_DRBD)     += drbd_transport_lb-tcp.o
-obj-$(if $(CONFIG_BLK_DEV_DRBD),$(if $(CONFIG_INFINIBAND),m)) += drbd_transport_rdma.o
+obj-$(CONFIG_DRBD_TRANSPORT_RDMA) += drbd_transport_rdma.o

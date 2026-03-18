@@ -39,6 +39,11 @@ config BLK_DEV_DRBD
 
 	  If unsure, say N.
 
+config DRBD_TRANSPORT_RDMA
+	tristate
+	depends on RDMA=y || (BLK_DEV_DRBD=RDMA)
+	default BLK_DEV_DRBD
+
 config DRBD_FAULT_INJECTION
 	bool "DRBD fault injection"
 	depends on BLK_DEV_DRBD
