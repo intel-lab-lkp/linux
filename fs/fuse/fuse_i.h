@@ -945,6 +945,9 @@ struct fuse_conn {
 	/** Version counter for attribute changes */
 	atomic64_t attr_version;
 
+	/** Waitqueue for attr_version initialization */
+	wait_queue_head_t attr_version_waitq;
+
 	/** Version counter for evict inode */
 	atomic64_t evict_ctr;
 
