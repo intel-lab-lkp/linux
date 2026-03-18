@@ -921,7 +921,8 @@ static __cpuidle void mwait_idle(void)
 	if (!current_set_polling_and_test()) {
 		const void *addr = &current_thread_info()->flags;
 
-		alternative_input("", "clflush (%[addr])", X86_BUG_CLFLUSH_MONITOR, [addr] "a" (addr));
+		alternative_input("", "clflush %a[addr]",
+				  X86_BUG_CLFLUSH_MONITOR, [addr] "r" (addr));
 		__monitor(addr, 0, 0);
 		if (need_resched())
 			goto out;
