@@ -55,6 +55,7 @@ properties:
       - ti,am654-phy-gmii-sel
       - ti,j7200-cpsw5g-phy-gmii-sel
       - ti,j721e-cpsw9g-phy-gmii-sel
+      - ti,j722s-phy-gmii-sel
       - ti,j784s4-cpsw9g-phy-gmii-sel
 
   reg:
