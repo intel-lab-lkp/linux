@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 
 SYSFS=
@@ -10,7 +10,7 @@ prerequisite()
 {
 	msg="skip all tests:"
 
-	if [ $UID != 0 ]; then
+	if [ $(id -u) -ne 0 ]; then
 		echo $msg must be run as root >&2
 		exit $ksft_skip
 	fi
@@ -99,6 +99,7 @@ offline_cpu()
 
 online_cpu_expect_success()
 {
+	FUNCNAME="online_cpu_expect_success()"
 	local cpu=$1
 
 	if ! online_cpu $cpu; then
@@ -112,6 +113,8 @@ online_cpu_expect_success()
 
 online_cpu_expect_fail()
 {
+
+	FUNCNAME="online_cpu_expect_fail()"
 	local cpu=$1
 
 	if online_cpu $cpu 2> /dev/null; then
@@ -125,6 +128,8 @@ online_cpu_expect_fail()
 
 offline_cpu_expect_success()
 {
+
+	FUNCNAME="offline_cpu_expect_success()"
 	local cpu=$1
 
 	if ! offline_cpu $cpu; then
@@ -139,6 +144,7 @@ offline_cpu_expect_success()
 offline_cpu_expect_fail()
 {
 	local cpu=$1
+	FUNCNAME="offline_cpu_expect_fail()"
 
 	if offline_cpu $cpu 2> /dev/null; then
 		echo $FUNCNAME $cpu: unexpected success >&2
