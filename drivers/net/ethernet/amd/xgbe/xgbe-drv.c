@@ -1321,6 +1321,8 @@ static void xgbe_stop(struct xgbe_prv_data *pdata)
 
 	DBGPR("-->xgbe_stop\n");
 
+	xgbe_check_kr_training_in_progress(pdata);
+
 	if (test_bit(XGBE_STOPPED, &pdata->dev_state))
 		return;
 

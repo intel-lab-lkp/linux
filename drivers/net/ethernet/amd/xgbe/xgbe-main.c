@@ -78,6 +78,7 @@ struct xgbe_prv_data *xgbe_alloc_pdata(struct device *dev)
 
 	spin_lock_init(&pdata->xpcs_lock);
 	mutex_init(&pdata->rss_mutex);
+	mutex_init(&pdata->mailbox_lock);
 	spin_lock_init(&pdata->tstamp_lock);
 	mutex_init(&pdata->i2c_mutex);
 	init_completion(&pdata->i2c_complete);

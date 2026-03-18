@@ -202,6 +202,7 @@
 #define XGBE_AN_MS_TIMEOUT		500
 #define XGBE_LINK_TIMEOUT		5
 #define XGBE_KR_TRAINING_WAIT_ITER	50
+#define XGBE_KR_TRAINING_WAIT_MS	100
 
 #define XGBE_SGMII_AN_LINK_DUPLEX	BIT(1)
 #define XGBE_SGMII_AN_LINK_SPEED	(BIT(2) | BIT(3))
@@ -1015,6 +1016,9 @@ struct xgbe_prv_data {
 	/* RSS addressing mutex */
 	struct mutex rss_mutex;
 
+	/* Firmware mailbox mutex */
+	struct mutex mailbox_lock;
+
 	/* Flags representing xgbe_state */
 	unsigned long dev_state;
 
@@ -1252,6 +1256,7 @@ struct xgbe_prv_data {
 };
 
 /* Function prototypes*/
+void xgbe_check_kr_training_in_progress(struct xgbe_prv_data *pdata);
 struct xgbe_prv_data *xgbe_alloc_pdata(struct device *);
 void xgbe_free_pdata(struct xgbe_prv_data *);
 void xgbe_set_counts(struct xgbe_prv_data *);
