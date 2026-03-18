@@ -1727,7 +1727,7 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	if (!zspage_write_trylock(zspage)) {
 		spin_unlock(&class->lock);
 		write_unlock(&pool->lock);
-		return -EINVAL;
+		return -EAGAIN;
 	}
 
 	/* We're committed, tell the world that this is a Zsmalloc page. */
