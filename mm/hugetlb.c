@@ -4119,6 +4119,9 @@ static unsigned long hugepage_shrinker_count(struct shrinker *s,
 	if (sc->priority >= DEF_PRIORITY - 6)
 		return 0;
 
+	if (sc->proactive)
+		return 0;
+
 	if (!gigantic_page_runtime_supported())
 		return 0;
 
@@ -4165,6 +4168,9 @@ static unsigned long hugepage_shrinker_scan(struct shrinker *s,
 		return SHRINK_STOP;
 
 	if (sc->nr_to_scan == 0)
+		return SHRINK_STOP;
+
+	if (sc->proactive)
 		return SHRINK_STOP;
 
 	if (!gigantic_page_runtime_supported())

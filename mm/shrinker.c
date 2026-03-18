@@ -467,7 +467,7 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 
 #ifdef CONFIG_MEMCG
 static unsigned long shrink_slab_memcg(gfp_t gfp_mask, int nid,
-			struct mem_cgroup *memcg, int priority)
+			struct mem_cgroup *memcg, int priority, bool proactive)
 {
 	struct shrinker_info *info;
 	unsigned long ret, freed = 0;
@@ -530,6 +530,7 @@ again:
 				.nid = nid,
 				.memcg = memcg,
 				.priority = priority,
+				.proactive = proactive,
 			};
 			struct shrinker *shrinker;
 			int shrinker_id = calc_shrinker_id(index, offset);
@@ -589,7 +590,7 @@ unlock:
 }
 #else /* !CONFIG_MEMCG */
 static unsigned long shrink_slab_memcg(gfp_t gfp_mask, int nid,
-			struct mem_cgroup *memcg, int priority)
+			struct mem_cgroup *memcg, int priority, bool proactive)
 {
 	return 0;
 }
@@ -616,7 +617,7 @@ static unsigned long shrink_slab_memcg(gfp_t gfp_mask, int nid,
  * Returns the number of reclaimed slab objects.
  */
 unsigned long shrink_slab(gfp_t gfp_mask, int nid, struct mem_cgroup *memcg,
-			  int priority)
+			  int priority, bool proactive)
 {
 	unsigned long ret, freed = 0;
 	struct shrinker *shrinker;
@@ -629,7 +630,7 @@ unsigned long shrink_slab(gfp_t gfp_mask, int nid, struct mem_cgroup *memcg,
 	 * oom.
 	 */
 	if (!mem_cgroup_disabled() && !mem_cgroup_is_root(memcg))
-		return shrink_slab_memcg(gfp_mask, nid, memcg, priority);
+		return shrink_slab_memcg(gfp_mask, nid, memcg, priority, proactive);
 
 	/*
 	 * lockless algorithm of global shrink.
@@ -659,6 +660,7 @@ unsigned long shrink_slab(gfp_t gfp_mask, int nid, struct mem_cgroup *memcg,
 			.nid = nid,
 			.memcg = memcg,
 			.priority = priority,
+			.proactive = proactive,
 		};
 
 		if (!shrinker_try_get(shrinker))
