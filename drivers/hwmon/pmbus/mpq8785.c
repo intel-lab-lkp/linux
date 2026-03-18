@@ -12,13 +12,15 @@
 
 #define MPM82504_READ_TEMPERATURE_1_SIGN_POS	9
 
-enum chips { mpm3695, mpm3695_25, mpm82504, mpq8785 };
+enum chips { mpm3695, mpm3695_25, mpm82504, mpq8785, mpm3695_20, mpm3690s_15 };
 
 static u16 voltage_scale_loop_max_val[] = {
 	[mpm3695] = GENMASK(9, 0),
 	[mpm3695_25] = GENMASK(11, 0),
 	[mpm82504] = GENMASK(9, 0),
 	[mpq8785] = GENMASK(10, 0),
+	[mpm3695_20] = GENMASK(9, 0),
+	[mpm3690s_15] = GENMASK(9, 0),
 };
 
 static int mpq8785_identify(struct i2c_client *client,
@@ -114,6 +116,8 @@ static const struct i2c_device_id mpq8785_id[] = {
 	{ "mpm3695-25", mpm3695_25 },
 	{ "mpm82504", mpm82504 },
 	{ "mpq8785", mpq8785 },
+	{ "mpm3695-20", mpm3695_20 },
+	{ "mpm3690s-15", mpm3690s_15 },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, mpq8785_id);
@@ -123,6 +127,8 @@ static const struct of_device_id __maybe_unused mpq8785_of_match[] = {
 	{ .compatible = "mps,mpm3695-25", .data = (void *)mpm3695_25 },
 	{ .compatible = "mps,mpm82504", .data = (void *)mpm82504 },
 	{ .compatible = "mps,mpq8785", .data = (void *)mpq8785 },
+	{ .compatible = "mps,mpm3695-20", .data = (void *)mpm3695_20 },
+	{ .compatible = "mps,mpm3690s-15", .data = (void *)mpm3690s_15 },
 	{}
 };
 MODULE_DEVICE_TABLE(of, mpq8785_of_match);
@@ -148,6 +154,8 @@ static int mpq8785_probe(struct i2c_client *client)
 	case mpm3695:
 	case mpm3695_25:
 	case mpm82504:
+	case mpm3695_20:
+	case mpm3690s_15:
 		info->format[PSC_VOLTAGE_OUT] = direct;
 		info->m[PSC_VOLTAGE_OUT] = 8;
 		info->b[PSC_VOLTAGE_OUT] = 0;
