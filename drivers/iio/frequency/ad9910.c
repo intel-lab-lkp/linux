@@ -1965,10 +1965,29 @@ static const struct fw_upload_ops ad9910_ram_fwu_ops = {
 	.cancel = ad9910_ram_fwu_cancel
 };
 
+static const char * const ad9910_channel_str[] = {
+	[AD9910_CHAN_IDX_PHY] = "phy",
+	[AD9910_CHAN_IDX_SINGLE_TONE] = "single_tone",
+	[AD9910_CHAN_IDX_PARALLEL_PORT] = "parallel_port",
+	[AD9910_CHAN_IDX_DRG] = "digital_ramp_generator",
+	[AD9910_CHAN_IDX_DRG_RAMP_UP] = "digital_ramp_up",
+	[AD9910_CHAN_IDX_DRG_RAMP_DOWN] = "digital_ramp_down",
+	[AD9910_CHAN_IDX_RAM] = "ram_control",
+	[AD9910_CHAN_IDX_OSK] = "output_shift_keying",
+};
+
+static int ad9910_read_label(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan,
+			     char *label)
+{
+	return sysfs_emit(label, "%s\n", ad9910_channel_str[chan->address]);
+}
+
 static const struct iio_info ad9910_info = {
 	.read_raw = ad9910_read_raw,
 	.write_raw = ad9910_write_raw,
 	.write_raw_get_fmt = ad9910_write_raw_get_fmt,
+	.read_label = ad9910_read_label,
 	.debugfs_reg_access = &ad9910_reg_access,
 };
 
