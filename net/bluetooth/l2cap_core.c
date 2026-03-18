@@ -926,16 +926,39 @@ int l2cap_chan_check_security(struct l2cap_chan *chan, bool initiator)
 
 static int l2cap_get_ident(struct l2cap_conn *conn)
 {
-	/* LE link does not support tools like l2ping so use the full range */
-	if (conn->hcon->type == LE_LINK)
-		return ida_alloc_range(&conn->tx_ida, 1, 255, GFP_ATOMIC);
+	int ident;
 
-	/* Get next available identificator.
-	 *    1 - 128 are used by kernel.
-	 *  129 - 199 are reserved.
-	 *  200 - 254 are used by utilities like l2ping, etc.
-	 */
-	return ida_alloc_range(&conn->tx_ida, 1, 128, GFP_ATOMIC);
+	/* LE link does not support tools like l2ping so use the full range */
+	if (conn->hcon->type == LE_LINK) {
+		/* Allocate ident using min as last used + 1 (cyclic) */
+		ident = ida_alloc_range(&conn->tx_ida, conn->tx_ident + 1,
+					255, GFP_ATOMIC);
+		/* Force min 1 to start over */
+		if (ident <= 0)
+			ident = ida_alloc_range(&conn->tx_ida, 1, 255,
+						GFP_ATOMIC);
+	} else {
+		/* Get next available identificator.
+		 *    1 - 128 are used by kernel.
+		 *  129 - 199 are reserved.
+		 *  200 - 254 are used by utilities like l2ping, etc.
+		 */
+
+		/* Allocate ident using min as last used + 1 (cyclic) */
+		ident = ida_alloc_range(&conn->tx_ida, conn->tx_ident + 1,
+					128, GFP_ATOMIC);
+		/* Force min 1 to start over */
+		if (ident <= 0)
+			ident = ida_alloc_range(&conn->tx_ida, 1, 128,
+						GFP_ATOMIC);
+	}
+
+	if (ident > 0)
+		conn->tx_ident = ident;
+	else
+		BT_ERR("Uanble to allocate ident: %d", ident);
+
+	return conn->tx_ident;
 }
 
 static void l2cap_send_acl(struct l2cap_conn *conn, struct sk_buff *skb,
