@@ -105,6 +105,7 @@ properties:
         items:
           - enum:
               - compulab,cm-t335
+              - kam,am335x-emperor
               - moxa,uc-8100-me-t
               - novatech,am335x-lxm
               - seeed,am335x-bone-green-eco
