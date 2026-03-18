@@ -261,30 +261,31 @@ int mana_ib_create_kernel_queue(struct mana_ib_dev *mdev, u32 size, enum gdma_qu
 	return 0;
 }
 
+int mana_ib_create_queue_from_umem(struct mana_ib_dev *mdev, struct ib_umem *umem,
+				   struct mana_ib_queue *queue)
+{
+	queue->umem = NULL;
+	queue->id = INVALID_QUEUE_ID;
+	queue->gdma_region = GDMA_INVALID_DMA_REGION;
+
+	return mana_ib_create_zero_offset_dma_region(mdev, umem, &queue->gdma_region);
+}
+
 int mana_ib_create_queue(struct mana_ib_dev *mdev, u64 addr, u32 size,
 			 struct mana_ib_queue *queue)
 {
 	struct ib_umem *umem;
 	int err;
 
-	queue->umem = NULL;
-	queue->id = INVALID_QUEUE_ID;
-	queue->gdma_region = GDMA_INVALID_DMA_REGION;
-
 	umem = ib_umem_get(&mdev->ib_dev, addr, size, IB_ACCESS_LOCAL_WRITE);
-	if (IS_ERR(umem)) {
-		ibdev_dbg(&mdev->ib_dev, "Failed to get umem, %pe\n", umem);
+	if (IS_ERR(umem))
 		return PTR_ERR(umem);
-	}
 
-	err = mana_ib_create_zero_offset_dma_region(mdev, umem, &queue->gdma_region);
-	if (err) {
-		ibdev_dbg(&mdev->ib_dev, "Failed to create dma region, %d\n", err);
+	err = mana_ib_create_queue_from_umem(mdev, umem, queue);
+	if (err)
 		goto free_umem;
-	}
-	queue->umem = umem;
 
-	ibdev_dbg(&mdev->ib_dev, "created dma region 0x%llx\n", queue->gdma_region);
+	queue->umem = umem;
 
 	return 0;
 free_umem:
