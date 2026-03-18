@@ -58,22 +58,24 @@
 #define FLEXCAN_QUIRK_SUPPORT_ECC BIT(10)
 /* Setup stop mode with SCU firmware to support wakeup */
 #define FLEXCAN_QUIRK_SETUP_STOP_MODE_SCFW BIT(11)
+/* Setup 2 separate interrupts, main and err */
+#define FLEXCAN_QUIRK_NR_IRQ_2 BIT(12)
 /* Setup 3 separate interrupts, main, boff and err */
-#define FLEXCAN_QUIRK_NR_IRQ_3 BIT(12)
+#define FLEXCAN_QUIRK_NR_IRQ_3 BIT(13)
 /* Setup 16 mailboxes */
-#define FLEXCAN_QUIRK_NR_MB_16 BIT(13)
+#define FLEXCAN_QUIRK_NR_MB_16 BIT(14)
 /* Device supports RX via mailboxes */
-#define FLEXCAN_QUIRK_SUPPORT_RX_MAILBOX BIT(14)
+#define FLEXCAN_QUIRK_SUPPORT_RX_MAILBOX BIT(15)
 /* Device supports RTR reception via mailboxes */
-#define FLEXCAN_QUIRK_SUPPORT_RX_MAILBOX_RTR BIT(15)
+#define FLEXCAN_QUIRK_SUPPORT_RX_MAILBOX_RTR BIT(16)
 /* Device supports RX via FIFO */
-#define FLEXCAN_QUIRK_SUPPORT_RX_FIFO BIT(16)
+#define FLEXCAN_QUIRK_SUPPORT_RX_FIFO BIT(17)
 /* Setup stop mode with ATF SCMI protocol to support wakeup */
-#define FLEXCAN_QUIRK_SETUP_STOP_MODE_SCMI BIT(17)
+#define FLEXCAN_QUIRK_SETUP_STOP_MODE_SCMI BIT(18)
 /* Device has two separate interrupt lines for two mailbox ranges, which
  * both need to have an interrupt handler registered.
  */
-#define FLEXCAN_QUIRK_SECONDARY_MB_IRQ	BIT(18)
+#define FLEXCAN_QUIRK_SECONDARY_MB_IRQ	BIT(19)
 
 struct flexcan_devtype_data {
 	u32 quirks;		/* quirks needed for different IP cores */
