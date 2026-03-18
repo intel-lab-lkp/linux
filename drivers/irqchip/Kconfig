@@ -826,4 +826,16 @@ config SUNPLUS_SP7021_INTC
 	  chained controller, routing all interrupt source in P-Chip to
 	  the primary controller on C-Chip.
 
+config INTEL_SOC_MSI
+	bool "Intel Lightning Mountain SoC MSI Support"
+	depends on OF && HAS_IOMEM
+	depends on ARCH_X86_64 || COMPILE_TEST
+	select GENERIC_MSI_IRQ_DOMAIN
+	help
+	  Support for the Intel Lightning Mountain (LGM) SoC interrupt
+	  controller. This is used as a chained controller. It´s parent is
+	  the x86 vector domain.
+
+	  If unsure, say N
+
 endmenu
