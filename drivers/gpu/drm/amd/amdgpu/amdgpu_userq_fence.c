@@ -484,6 +484,16 @@ int amdgpu_userq_signal_ioctl(struct drm_device *dev, void *data,
 	    args->num_bo_read_handles > AMDGPU_USERQ_MAX_HANDLES)
 		return -EINVAL;
 
+	/* Reject non-NULL pointers paired with a zero count. */
+	if (!args->num_syncobj_handles && args->syncobj_handles)
+		return -EINVAL;
+
+	if (!args->num_bo_read_handles && args->bo_read_handles)
+		return -EINVAL;
+
+	if (!args->num_bo_write_handles && args->bo_write_handles)
+		return -EINVAL;
+
 	num_syncobj_handles = args->num_syncobj_handles;
 	syncobj_handles = memdup_array_user(u64_to_user_ptr(args->syncobj_handles),
 					    num_syncobj_handles, sizeof(u32));
@@ -938,6 +948,25 @@ int amdgpu_userq_wait_ioctl(struct drm_device *dev, void *data,
 
 	if (wait_info->num_bo_write_handles > AMDGPU_USERQ_MAX_HANDLES ||
 	    wait_info->num_bo_read_handles > AMDGPU_USERQ_MAX_HANDLES)
+		return -EINVAL;
+
+	/* Reject non-NULL pointers paired with a zero count: the pointer
+	 * is meaningless and indicates inconsistent input from userspace.
+	 */
+	if (!wait_info->num_syncobj_handles && wait_info->syncobj_handles)
+		return -EINVAL;
+
+	if (!wait_info->num_syncobj_timeline_handles &&
+	    (wait_info->syncobj_timeline_handles || wait_info->syncobj_timeline_points))
+		return -EINVAL;
+
+	if (!wait_info->num_bo_read_handles && wait_info->bo_read_handles)
+		return -EINVAL;
+
+	if (!wait_info->num_bo_write_handles && wait_info->bo_write_handles)
+		return -EINVAL;
+
+	if (!wait_info->num_fences && wait_info->out_fences)
 		return -EINVAL;
 
 	num_syncobj = wait_info->num_syncobj_handles;
