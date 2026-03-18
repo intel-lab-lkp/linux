@@ -986,8 +986,10 @@ int tegra210_mbdrc_regmap_init(struct platform_device *pdev)
 	int err;
 
 	child = of_get_child_by_name(dev->of_node, "dynamic-range-compressor");
-	if (!child)
+	if (!child) {
+		dev_err(dev, "missing 'dynamic-range-compressor' DT child node\n");
 		return -ENODEV;
+	}
 
 	err = of_address_to_resource(child, 0, &mem);
 	of_node_put(child);
@@ -998,13 +1000,15 @@ int tegra210_mbdrc_regmap_init(struct platform_device *pdev)
 
 	mem.flags = IORESOURCE_MEM;
 	regs = devm_ioremap_resource(dev, &mem);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map MBDRC registers\n");
 		return PTR_ERR(regs);
+	}
 
 	ope->mbdrc_regmap = devm_regmap_init_mmio(dev, regs,
 						  &tegra210_mbdrc_regmap_cfg);
 	if (IS_ERR(ope->mbdrc_regmap)) {
-		dev_err(dev, "regmap init failed\n");
+		dev_err(dev, "MBDRC regmap init failed\n");
 		return PTR_ERR(ope->mbdrc_regmap);
 	}
 

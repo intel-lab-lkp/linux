@@ -312,8 +312,10 @@ static int tegra210_ope_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map registers\n");
 		return PTR_ERR(regs);
+	}
 
 	ope->regmap = devm_regmap_init_mmio(dev, regs,
 					    &tegra210_ope_regmap_config);
@@ -328,23 +330,22 @@ static int tegra210_ope_probe(struct platform_device *pdev)
 
 	err = tegra210_peq_regmap_init(pdev);
 	if (err < 0) {
-		dev_err(dev, "PEQ init failed\n");
+		dev_err(dev, "PEQ init failed: %d\n", err);
 		return err;
 	}
 
 	err = tegra210_mbdrc_regmap_init(pdev);
 	if (err < 0) {
-		dev_err(dev, "MBDRC init failed\n");
+		dev_err(dev, "MBDRC init failed: %d\n", err);
 		return err;
 	}
 
 	err = devm_snd_soc_register_component(dev, &tegra210_ope_cmpnt,
 					      tegra210_ope_dais,
 					      ARRAY_SIZE(tegra210_ope_dais));
-	if (err) {
-		dev_err(dev, "can't register OPE component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register OPE component\n");
 
 	pm_runtime_enable(dev);
 

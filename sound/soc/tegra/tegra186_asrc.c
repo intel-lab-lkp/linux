@@ -983,8 +983,10 @@ static int tegra186_asrc_platform_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, asrc);
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map registers\n");
 		return PTR_ERR(regs);
+	}
 
 	asrc->regmap = devm_regmap_init_mmio(dev, regs,
 					     &tegra186_asrc_regmap_config);
@@ -1015,10 +1017,9 @@ static int tegra186_asrc_platform_probe(struct platform_device *pdev)
 	err = devm_snd_soc_register_component(dev, &tegra186_asrc_cmpnt,
 					      tegra186_asrc_dais,
 					      ARRAY_SIZE(tegra186_asrc_dais));
-	if (err) {
-		dev_err(dev, "can't register ASRC component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register ASRC component\n");
 
 	pm_runtime_enable(dev);
 

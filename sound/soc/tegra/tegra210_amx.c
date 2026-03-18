@@ -163,6 +163,8 @@ static int tegra210_amx_set_audio_cif(struct snd_soc_dai *dai,
 		audio_bits = TEGRA_ACIF_BITS_32;
 		break;
 	default:
+		dev_err(dai->dev, "unsupported format: %d\n",
+			params_format(params));
 		return -EINVAL;
 	}
 
@@ -735,8 +737,10 @@ static int tegra210_amx_platform_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, amx);
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map registers\n");
 		return PTR_ERR(regs);
+	}
 
 	amx->regmap = devm_regmap_init_mmio(dev, regs,
 					    amx->soc_data->regmap_conf);
@@ -764,10 +768,9 @@ static int tegra210_amx_platform_probe(struct platform_device *pdev)
 	err = devm_snd_soc_register_component(dev, &tegra210_amx_cmpnt,
 					      tegra210_amx_dais,
 					      ARRAY_SIZE(tegra210_amx_dais));
-	if (err) {
-		dev_err(dev, "can't register AMX component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register AMX component\n");
 
 	pm_runtime_enable(dev);
 

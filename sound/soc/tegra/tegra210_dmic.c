@@ -506,14 +506,15 @@ static int tegra210_dmic_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, dmic);
 
 	dmic->clk_dmic = devm_clk_get(dev, "dmic");
-	if (IS_ERR(dmic->clk_dmic)) {
-		dev_err(dev, "can't retrieve DMIC clock\n");
-		return PTR_ERR(dmic->clk_dmic);
-	}
+	if (IS_ERR(dmic->clk_dmic))
+		return dev_err_probe(dev, PTR_ERR(dmic->clk_dmic),
+				     "can't retrieve DMIC clock\n");
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map registers\n");
 		return PTR_ERR(regs);
+	}
 
 	dmic->regmap = devm_regmap_init_mmio(dev, regs,
 					     &tegra210_dmic_regmap_config);
@@ -527,10 +528,9 @@ static int tegra210_dmic_probe(struct platform_device *pdev)
 	err = devm_snd_soc_register_component(dev, &tegra210_dmic_compnt,
 					      tegra210_dmic_dais,
 					      ARRAY_SIZE(tegra210_dmic_dais));
-	if (err) {
-		dev_err(dev, "can't register DMIC component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register DMIC component\n");
 
 	pm_runtime_enable(dev);
 

@@ -134,8 +134,11 @@ static int tegra210_adx_set_audio_cif(struct snd_soc_dai *dai,
 
 	memset(&cif_conf, 0, sizeof(struct tegra_cif_conf));
 
-	if (channels < 1 || channels > adx->soc_data->max_ch)
+	if (channels < 1 || channels > adx->soc_data->max_ch) {
+		dev_err(dai->dev, "invalid channels: %u (max %u)\n",
+			channels, adx->soc_data->max_ch);
 		return -EINVAL;
+	}
 
 	switch (format) {
 	case SNDRV_PCM_FORMAT_S8:
@@ -149,6 +152,7 @@ static int tegra210_adx_set_audio_cif(struct snd_soc_dai *dai,
 		audio_bits = TEGRA_ACIF_BITS_32;
 		break;
 	default:
+		dev_err(dai->dev, "unsupported format: %d\n", format);
 		return -EINVAL;
 	}
 
@@ -686,8 +690,10 @@ static int tegra210_adx_platform_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, adx);
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map registers\n");
 		return PTR_ERR(regs);
+	}
 
 	adx->regmap = devm_regmap_init_mmio(dev, regs,
 					    soc_data->regmap_conf);
@@ -715,10 +721,9 @@ static int tegra210_adx_platform_probe(struct platform_device *pdev)
 	err = devm_snd_soc_register_component(dev, &tegra210_adx_cmpnt,
 					      tegra210_adx_dais,
 					      ARRAY_SIZE(tegra210_adx_dais));
-	if (err) {
-		dev_err(dev, "can't register ADX component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register ADX component\n");
 
 	pm_runtime_enable(dev);
 

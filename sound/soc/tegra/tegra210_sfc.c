@@ -3592,8 +3592,10 @@ static int tegra210_sfc_platform_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, sfc);
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map registers\n");
 		return PTR_ERR(regs);
+	}
 
 	sfc->regmap = devm_regmap_init_mmio(dev, regs,
 					    &tegra210_sfc_regmap_config);
@@ -3607,10 +3609,9 @@ static int tegra210_sfc_platform_probe(struct platform_device *pdev)
 	err = devm_snd_soc_register_component(dev, &tegra210_sfc_cmpnt,
 					      tegra210_sfc_dais,
 					      ARRAY_SIZE(tegra210_sfc_dais));
-	if (err) {
-		dev_err(dev, "can't register SFC component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register SFC component\n");
 
 	pm_runtime_enable(&pdev->dev);
 

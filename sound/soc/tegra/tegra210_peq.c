@@ -406,8 +406,10 @@ int tegra210_peq_regmap_init(struct platform_device *pdev)
 	int err;
 
 	child = of_get_child_by_name(dev->of_node, "equalizer");
-	if (!child)
+	if (!child) {
+		dev_err(dev, "missing 'equalizer' DT child node\n");
 		return -ENODEV;
+	}
 
 	err = of_address_to_resource(child, 0, &mem);
 	of_node_put(child);
@@ -418,12 +420,14 @@ int tegra210_peq_regmap_init(struct platform_device *pdev)
 
 	mem.flags = IORESOURCE_MEM;
 	regs = devm_ioremap_resource(dev, &mem);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map PEQ registers\n");
 		return PTR_ERR(regs);
+	}
 	ope->peq_regmap = devm_regmap_init_mmio(dev, regs,
 						&tegra210_peq_regmap_config);
 	if (IS_ERR(ope->peq_regmap)) {
-		dev_err(dev, "regmap init failed\n");
+		dev_err(dev, "PEQ regmap init failed\n");
 		return PTR_ERR(ope->peq_regmap);
 	}
 

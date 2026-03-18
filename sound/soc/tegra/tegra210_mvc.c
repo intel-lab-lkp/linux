@@ -725,8 +725,10 @@ static int tegra210_mvc_platform_probe(struct platform_device *pdev)
 	mvc->ctrl_value = TEGRA210_MVC_CTRL_DEFAULT;
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
+	if (IS_ERR(regs)) {
+		dev_err(dev, "failed to map registers\n");
 		return PTR_ERR(regs);
+	}
 
 	mvc->regmap = devm_regmap_init_mmio(dev, regs,
 					    &tegra210_mvc_regmap_config);
@@ -740,10 +742,9 @@ static int tegra210_mvc_platform_probe(struct platform_device *pdev)
 	err = devm_snd_soc_register_component(dev, &tegra210_mvc_cmpnt,
 					      tegra210_mvc_dais,
 					      ARRAY_SIZE(tegra210_mvc_dais));
-	if (err) {
-		dev_err(dev, "can't register MVC component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register MVC component\n");
 
 	pm_runtime_enable(dev);
 
