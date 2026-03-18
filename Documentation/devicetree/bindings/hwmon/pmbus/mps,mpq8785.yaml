@@ -19,6 +19,8 @@ properties:
       - mps,mpm3695-25
       - mps,mpm82504
       - mps,mpq8785
+      - mps,mpm3695-20
+      - mps,mpm3690s-15
 
   reg:
     maxItems: 1
