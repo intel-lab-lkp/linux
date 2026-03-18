@@ -59,6 +59,7 @@ properties:
       - ti,j7200-cpswxg-nuss
       - ti,j721e-cpsw-nuss
       - ti,j721e-cpswxg-nuss
+      - ti,j722s-cpsw-nuss
       - ti,j784s4-cpswxg-nuss
 
   reg:
