@@ -36,6 +36,7 @@ int rxe_alloc_wq(void);
 
 void rxe_destroy_wq(void);
 
+void rxe_queue_work(struct work_struct *work);
 /*
  * init rxe_task structure
  *	qp  => parameter to pass to func

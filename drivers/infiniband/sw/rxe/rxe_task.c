@@ -10,7 +10,8 @@ static struct workqueue_struct *rxe_wq;
 
 int rxe_alloc_wq(void)
 {
-	rxe_wq = alloc_workqueue("rxe_wq", WQ_UNBOUND, WQ_MAX_ACTIVE);
+	rxe_wq = alloc_workqueue("rxe_wq", WQ_UNBOUND | WQ_MEM_RECLAIM,
+				WQ_MAX_ACTIVE);
 	if (!rxe_wq)
 		return -ENOMEM;
 
@@ -252,6 +253,13 @@ void rxe_sched_task(struct rxe_task *task)
 	if (__reserve_if_idle(task))
 		queue_work(rxe_wq, &task->work);
 	spin_unlock_irqrestore(&task->lock, flags);
+}
+
+/* Helper to queue auxiliary tasks into rxe_wq.
+ */
+void rxe_queue_work(struct work_struct *work)
+{
+	queue_work(rxe_wq, work);
 }
 
 /* rxe_disable/enable_task are only called from
