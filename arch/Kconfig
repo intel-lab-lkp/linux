@@ -403,6 +403,10 @@ config ARCH_32BIT_OFF_T
 config ARCH_32BIT_USTAT_F_TINODE
 	bool
 
+# Selected by architectures with Total Store Order (TOS)
+config ARCH_MEMORY_ORDER_TOS
+	bool
+
 config HAVE_ASM_MODVERSIONS
 	bool
 	help
