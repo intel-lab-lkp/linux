@@ -140,6 +140,9 @@ extern const struct raid6_calls raid6_neonx1;
 extern const struct raid6_calls raid6_neonx2;
 extern const struct raid6_calls raid6_neonx4;
 extern const struct raid6_calls raid6_neonx8;
+extern const struct raid6_calls raid6_svex1;
+extern const struct raid6_calls raid6_svex2;
+extern const struct raid6_calls raid6_svex4;
 
 /* Algorithm list */
 extern const struct raid6_calls * const raid6_algos[];
