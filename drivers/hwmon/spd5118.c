@@ -18,6 +18,7 @@
 #include <linux/bits.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
+#include <linux/i3c/device.h>
 #include <linux/hwmon.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -482,6 +483,25 @@ static const struct regmap_config spd5118_regmap16_config = {
 	.cache_type = REGCACHE_MAPLE,
 };
 
+/*
+ * I3C uses 2-byte register addressing -
+ *   Byte 1: MemReg | BlkAddr[0] | Address[5:0]
+ *   Byte 2: 0000   | BlkAddr[4:1]
+ *
+ * The low byte carries the register/NVM address and the high byte carries the
+ * upper block address bits, so little-endian format is required. No range
+ * config is needed since I3C does not use MR11 page switching.
+ */
+static const struct regmap_config spd5118_regmap_i3c_config = {
+	.reg_bits = 16,
+	.val_bits = 8,
+	.max_register = 0x7ff,
+	.reg_format_endian = REGMAP_ENDIAN_LITTLE,
+	.writeable_reg = spd5118_writeable_reg,
+	.volatile_reg = spd5118_volatile_reg,
+	.cache_type = REGCACHE_MAPLE,
+};
+
 static int spd5118_suspend(struct device *dev)
 {
 	struct spd5118_data *data = dev_get_drvdata(dev);
@@ -770,7 +790,51 @@ static struct i2c_driver spd5118_i2c_driver = {
 	.address_list	= IS_ENABLED(CONFIG_SENSORS_SPD5118_DETECT) ? normal_i2c : NULL,
 };
 
-module_i2c_driver(spd5118_i2c_driver);
+/* I3C */
+
+static int spd5118_i3c_probe(struct i3c_device *i3cdev)
+{
+	struct device *dev = i3cdev_to_dev(i3cdev);
+	struct regmap *regmap;
+	unsigned int regval;
+	int err;
+
+	regmap = devm_regmap_init_i3c(i3cdev, &spd5118_regmap_i3c_config);
+	if (IS_ERR(regmap))
+		return dev_err_probe(dev, PTR_ERR(regmap), "regmap init failed\n");
+
+	/* Verify this is a SPD5118 device */
+	err = regmap_read(regmap, SPD5118_REG_TYPE, &regval);
+	if (err)
+		return err;
+
+	if (regval != 0x51) {
+		dev_err(dev, "unexpected device type 0x%02x, expected 0x51\n", regval);
+		return -ENODEV;
+	}
+
+	err = regmap_read(regmap, SPD5118_REG_TYPE + 1, &regval);
+	if (err)
+		return err;
+
+	if (regval != 0x18) {
+		dev_err(dev, "unexpected device type 0x%02x, expected 0x18\n", regval);
+		return -ENODEV;
+	}
+
+	return spd5118_common_probe(dev, regmap, false);
+}
+
+static struct i3c_driver spd5118_i3c_driver = {
+	.driver = {
+		.name	= "spd5118_i3c",
+		.of_match_table = spd5118_of_ids,
+		.pm = pm_sleep_ptr(&spd5118_pm_ops),
+	},
+	.probe		= spd5118_i3c_probe,
+};
+
+module_i3c_i2c_driver(spd5118_i3c_driver, &spd5118_i2c_driver);
 
 MODULE_AUTHOR("René Rebe <rene@exactcode.de>");
 MODULE_AUTHOR("Guenter Roeck <linux@roeck-us.net>");
