@@ -6,6 +6,9 @@
 #include <asm/ptrace.h>
 #include <linux/kprobes.h>
 
+#define EXC_PIF	3  /* Page Invalid Fetch */
+#define EXC_PNX	6  /* Page Non-eXecutable */
+
 extern void *exception_table[];
 
 void show_registers(struct pt_regs *regs);
