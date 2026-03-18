@@ -843,9 +843,16 @@ struct nfsd_file *find_any_file(struct nfs4_file *f);
 
 #ifdef CONFIG_NFSD_V4
 void nfsd4_revoke_states(struct nfsd_net *nn, struct super_block *sb);
+void nfsd4_revoke_export_states(struct nfsd_net *nn, struct super_block *sb,
+				struct dentry *root_dentry);
 void nfsd4_cancel_copy_by_sb(struct net *net, struct super_block *sb);
 #else
 static inline void nfsd4_revoke_states(struct nfsd_net *nn, struct super_block *sb)
+{
+}
+static inline void nfsd4_revoke_export_states(struct nfsd_net *nn,
+					      struct super_block *sb,
+					      struct dentry *root_dentry)
 {
 }
 static inline void nfsd4_cancel_copy_by_sb(struct net *net, struct super_block *sb)

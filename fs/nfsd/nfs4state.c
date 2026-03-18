@@ -1763,15 +1763,6 @@ static struct nfs4_stid *find_next_sb_stid(struct nfs4_client *clp,
 	return stid;
 }
 
-static struct nfs4_stid *find_one_sb_stid(struct nfs4_client *clp,
-					  struct super_block *sb,
-					  unsigned int sc_types)
-{
-	unsigned long id = 0;
-
-	return find_next_sb_stid(clp, sb, sc_types, &id);
-}
-
 static void revoke_ol_stid(struct nfs4_client *clp,
 			   struct nfs4_ol_stateid *stp)
 {
@@ -1835,20 +1826,19 @@ static void revoke_one_stid(struct nfs4_client *clp, struct nfs4_stid *stid)
 }
 
 /**
- * nfsd4_revoke_states - revoke all nfsv4 states associated with given filesystem
- * @nn:   used to identify instance of nfsd (there is one per net namespace)
- * @sb:   super_block used to identify target filesystem
+ * nfsd4_revoke_export_states - revoke states associated with a given export
+ * @nn:           nfsd_net identifying the nfsd instance (one per net namespace)
+ * @sb:           super_block of the export's filesystem
+ * @root_dentry:  dentry of the export root directory
  *
  * All nfs4 states (open, lock, delegation, layout) held by the server instance
- * and associated with a file on the given filesystem will be revoked resulting
- * in any files being closed and so all references from nfsd to the filesystem
- * being released.  Thus nfsd will no longer prevent the filesystem from being
- * unmounted.
- *
- * The clients which own the states will subsequently being notified that the
- * states have been "admin-revoked".
+ * and associated with files under the given export will be revoked.  When
+ * @root_dentry is the filesystem root, all state on @sb is revoked (equivalent
+ * to nfsd4_revoke_states).  When @root_dentry is a subdirectory, only state on
+ * files within that subtree is revoked.
  */
-void nfsd4_revoke_states(struct nfsd_net *nn, struct super_block *sb)
+void nfsd4_revoke_export_states(struct nfsd_net *nn, struct super_block *sb,
+				struct dentry *root_dentry)
 {
 	unsigned int idhashval;
 	unsigned int sc_types;
@@ -1861,18 +1851,53 @@ void nfsd4_revoke_states(struct nfsd_net *nn, struct super_block *sb)
 		struct nfs4_client *clp;
 	retry:
 		list_for_each_entry(clp, head, cl_idhash) {
-			struct nfs4_stid *stid = find_one_sb_stid(clp, sb,
-								  sc_types);
-			if (stid) {
-				spin_unlock(&nn->client_lock);
+			struct nfs4_stid *stid;
+			/* Resets to zero on each retry; revocation may
+			 * alter the IDR, so a stale cursor is unsafe.
+			 */
+			unsigned long id = 0;
+
+			while ((stid = find_next_sb_stid(clp, sb,
+						sc_types, &id)) != NULL) {
+				if (root_dentry != sb->s_root) {
+					bool match;
+
+					/* Bare inc to pin clp; get_client_locked() is
+					 * not used because its courtesy-to-active
+					 * transition is unwanted during revocation.
+					 */
+					atomic_inc(&clp->cl_rpc_users);
+					spin_unlock(&nn->client_lock);
+					match = nfsd_file_inode_is_in_subtree(
+							stid->sc_file->fi_inode,
+							root_dentry);
+					if (!match) {
+						nfs4_put_stid(stid);
+						spin_lock(&nn->client_lock);
+						put_client_renew_locked(clp);
+						id++;
+						continue;
+					}
+				} else {
+					/* Whole-sb: goto retry restarts the
+					 * client list immediately after
+					 * revocation, so clp needs no pin.
+					 */
+					spin_unlock(&nn->client_lock);
+				}
+
 				revoke_one_stid(clp, stid);
 				nfs4_put_stid(stid);
 				spin_lock(&nn->client_lock);
+				if (root_dentry != sb->s_root)
+					put_client_renew_locked(clp);
 				if (clp->cl_minorversion == 0)
 					/* Allow cleanup after a lease period.
-					 * store_release ensures cleanup will
-					 * see any newly revoked states if it
-					 * sees the time updated.
+					 * The lock/unlock pair orders this
+					 * store after revoke_one_stid(), so
+					 * nfs40_clean_admin_revoked() sees
+					 * newly revoked states if it sees
+					 * the updated time.
 					 */
 					nn->nfs40_last_revoke =
 						ktime_get_boottime_seconds();
@@ -1881,6 +1906,19 @@ void nfsd4_revoke_states(struct nfsd_net *nn, struct super_block *sb)
 		}
 	}
 	spin_unlock(&nn->client_lock);
+}
+
+/**
+ * nfsd4_revoke_states - revoke all nfsv4 states associated with given filesystem
+ * @nn:   nfsd_net identifying the nfsd instance
+ * @sb:   super_block used to identify target filesystem
+ *
+ * Convenience wrapper around nfsd4_revoke_export_states() that revokes
+ * all state on @sb by passing sb->s_root as the export root.
+ */
+void nfsd4_revoke_states(struct nfsd_net *nn, struct super_block *sb)
+{
+	nfsd4_revoke_export_states(nn, sb, sb->s_root);
 }
 
 static inline int

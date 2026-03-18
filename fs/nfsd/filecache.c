@@ -894,6 +894,38 @@ __nfsd_file_cache_purge(struct net *net)
 	nfsd_file_dispose_list(&dispose);
 }
 
+/**
+ * nfsd_file_inode_is_in_subtree - check whether an inode is under a subtree
+ * @inode:        inode to test
+ * @root_dentry:  dentry of the subtree root
+ *
+ * Check whether @inode has any dentry alias that falls within the
+ * subtree rooted at @root_dentry.  Hard-linked files can have aliases
+ * in multiple directories, so all aliases must be tested.
+ *
+ * Return: %true if any dentry alias of @inode is at or below
+ * @root_dentry, %false otherwise.
+ */
+bool nfsd_file_inode_is_in_subtree(struct inode *inode,
+				   struct dentry *root_dentry)
+{
+	struct dentry *alias;
+	bool found = false;
+
+	/* i_lock stabilizes the alias list; is_subdir() nests
+	 * rename_lock (a seqlock) beneath it but does not sleep.
+	 */
+	spin_lock(&inode->i_lock);
+	hlist_for_each_entry(alias, &inode->i_dentry, d_u.d_alias) {
+		if (is_subdir(alias, root_dentry)) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock(&inode->i_lock);
+	return found;
+}
+
 static struct nfsd_fcache_disposal *
 nfsd_alloc_fcache_disposal(void)
 {

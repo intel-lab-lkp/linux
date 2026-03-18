@@ -2207,7 +2207,8 @@ static int nfsd_nl_unlock_by_filesystem(struct genl_info *info)
 
 	mutex_lock(&nfsd_mutex);
 	if (nn->nfsd_serv)
-		nfsd4_revoke_states(nn, path.dentry->d_sb);
+		nfsd4_revoke_export_states(nn, path.dentry->d_sb,
+					   path.dentry);
 	else
 		error = -EINVAL;
 	mutex_unlock(&nfsd_mutex);
