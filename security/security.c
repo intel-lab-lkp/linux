@@ -2529,6 +2529,7 @@ int security_mmap_backing_file(struct vm_area_struct *vma,
 
 	return call_int_hook(mmap_backing_file, vma, backing_file, user_file);
 }
+EXPORT_SYMBOL_GPL(security_mmap_backing_file);
 
 /**
  * security_mmap_addr() - Check if mmap'ing an address is allowed
