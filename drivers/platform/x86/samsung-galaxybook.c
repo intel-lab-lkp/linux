@@ -54,6 +54,7 @@ struct samsung_galaxybook {
 
 	struct work_struct block_recording_hotkey_work;
 	struct input_dev *camera_lens_cover_switch;
+	struct input_dev *hotkey_dev;
 
 	struct acpi_battery_hook battery_hook;
 
@@ -197,6 +198,9 @@ static const guid_t performance_mode_guid =
 #define GB_ACPI_NOTIFY_DEVICE_ON_TABLE          0x6c
 #define GB_ACPI_NOTIFY_DEVICE_OFF_TABLE         0x6d
 #define GB_ACPI_NOTIFY_HOTKEY_PERFORMANCE_MODE  0x70
+#define GB_ACPI_NOTIFY_HOTKEY_KBD_BACKLIGHT  	0x7d
+#define GB_ACPI_NOTIFY_HOTKEY_CAMERA         	0x6f
+#define GB_ACPI_NOTIFY_HOTKEY_MICMUTE        	0x6e
 
 #define GB_KEY_KBD_BACKLIGHT_KEYDOWN    0x2c
 #define GB_KEY_KBD_BACKLIGHT_KEYUP      0xac
@@ -1223,6 +1227,22 @@ static void galaxybook_i8042_filter_remove(void *data)
 	cancel_work_sync(&galaxybook->block_recording_hotkey_work);
 }
 
+static int galaxybook_hotkey_init(struct samsung_galaxybook *galaxybook)
+{
+	galaxybook->hotkey_dev = devm_input_allocate_device(&galaxybook->platform->dev);
+	if (!galaxybook->hotkey_dev)
+		return -ENOMEM;
+
+	galaxybook->hotkey_dev->name = "Samsung Galaxy Book hotkeys";
+	galaxybook->hotkey_dev->phys = DRIVER_NAME "/input1";
+	galaxybook->hotkey_dev->id.bustype = BUS_HOST;
+
+	input_set_capability(galaxybook->hotkey_dev, EV_KEY, KEY_MICMUTE);
+	input_set_capability(galaxybook->hotkey_dev, EV_KEY, KEY_CAMERA);
+
+	return input_register_device(galaxybook->hotkey_dev);
+}
+
 static int galaxybook_i8042_filter_install(struct samsung_galaxybook *galaxybook)
 {
 	int err;
@@ -1259,6 +1279,28 @@ static void galaxybook_acpi_notify(acpi_handle handle, u32 event, void *data)
 	case GB_ACPI_NOTIFY_HOTKEY_PERFORMANCE_MODE:
 		if (galaxybook->has_performance_mode)
 			platform_profile_cycle();
+		break;
+	case GB_ACPI_NOTIFY_HOTKEY_KBD_BACKLIGHT:
+		if (galaxybook->has_kbd_backlight)
+			schedule_work(&galaxybook->kbd_backlight_hotkey_work);
+		break;
+	case GB_ACPI_NOTIFY_HOTKEY_MICMUTE:
+		if (galaxybook->hotkey_dev) {
+			input_report_key(galaxybook->hotkey_dev, KEY_MICMUTE, 1);
+			input_sync(galaxybook->hotkey_dev);
+			input_report_key(galaxybook->hotkey_dev, KEY_MICMUTE, 0);
+			input_sync(galaxybook->hotkey_dev);
+		}
+		break;
+	case GB_ACPI_NOTIFY_HOTKEY_CAMERA:
+		if (galaxybook->has_block_recording)
+			schedule_work(&galaxybook->block_recording_hotkey_work);
+		else if (galaxybook->hotkey_dev) {
+			input_report_key(galaxybook->hotkey_dev, KEY_CAMERA, 1);
+			input_sync(galaxybook->hotkey_dev);
+			input_report_key(galaxybook->hotkey_dev, KEY_CAMERA, 0);
+			input_sync(galaxybook->hotkey_dev);
+		}
 		break;
 	default:
 		dev_warn(&galaxybook->platform->dev,
@@ -1396,6 +1438,11 @@ static int galaxybook_probe(struct platform_device *pdev)
 	if (err)
 		return dev_err_probe(&galaxybook->platform->dev, err,
 				     "failed to initialize firmware-attributes\n");
+
+	err = galaxybook_hotkey_init(galaxybook);
+	if (err)
+		return dev_err_probe(&galaxybook->platform->dev, err,
+					 "failed to initialize hotkey input device\n");
 
 	err = galaxybook_i8042_filter_install(galaxybook);
 	if (err)
