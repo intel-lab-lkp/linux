@@ -545,7 +545,7 @@ static int fec_ptp_enable(struct ptp_clock_info *ptp,
 		if (rq->perout.flags)
 			return -EOPNOTSUPP;
 
-		if (rq->perout.index != fep->pps_channel)
+		if (rq->perout.index != 0)
 			return -EOPNOTSUPP;
 
 		period.tv_sec = rq->perout.period.sec;
