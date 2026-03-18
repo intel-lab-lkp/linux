@@ -18895,6 +18895,13 @@ F:	drivers/nubus/
 F:	include/linux/nubus.h
 F:	include/uapi/linux/nubus.h
 
+NUVOTON NPCM OTP NVMEM DRIVER
+M:	Kuan-Wei Chiu <visitorckw@gmail.com>
+L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
+S:	Maintained
+F:	Documentation/devicetree/bindings/nvmem/nuvoton,npcm750-otp.yaml
+F:	drivers/nvmem/npcm-otp.c
+
 NUVOTON NCT6694 MFD DRIVER
 M:	Ming Yu <tmyu0@nuvoton.com>
 S:	Supported
