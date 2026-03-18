@@ -603,6 +603,7 @@ DRM specific patterns. Note that ENOTTY has the slightly unintuitive meaning of
 
 .. kernel-doc:: include/drm/drm_ioctl.h
    :internal:
+   :no-identifiers: drm_ioctl_flags
 
 .. kernel-doc:: drivers/gpu/drm/drm_ioctl.c
    :export:
