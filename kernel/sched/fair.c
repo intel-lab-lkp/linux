@@ -7945,9 +7945,13 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
  * Scan the asym_capacity domain for idle CPUs; pick the first idle one on which
  * the task fits. If no CPU is big enough, but there are idle ones, try to
  * maximize capacity.
+ *
+ * When @smt_idle_only is true (asym + SMT), only consider CPUs on cores whose
+ * SMT siblings are all idle, to avoid stacking and sharing SMT resources.
  */
 static int
-select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
+select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target,
+		     bool smt_idle_only)
 {
 	unsigned long task_util, util_min, util_max, best_cap = 0;
 	int fits, best_fits = 0;
@@ -7965,6 +7969,9 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 		unsigned long cpu_cap = capacity_of(cpu);
 
 		if (!choose_idle_cpu(cpu, p))
+			continue;
+
+		if (smt_idle_only && !is_core_idle(cpu))
 			continue;
 
 		fits = util_fits_cpu(task_util, util_min, util_max, cpu);
@@ -8102,8 +8109,19 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		 * capacity path.
 		 */
 		if (sd) {
-			i = select_idle_capacity(p, sd, target);
-			return ((unsigned)i < nr_cpumask_bits) ? i : target;
+			/*
+			 * When asym + SMT and the hint says idle cores exist,
+			 * try idle cores first to avoid stacking on SMT; else
+			 * scan all idle CPUs.
+			 */
+			if (sched_smt_active() && test_idle_cores(target)) {
+				i = select_idle_capacity(p, sd, target, true);
+				if ((unsigned int)i >= nr_cpumask_bits)
+					i = select_idle_capacity(p, sd, target, false);
+			} else {
+				i = select_idle_capacity(p, sd, target, false);
+			}
+			return ((unsigned int)i < nr_cpumask_bits) ? i : target;
 		}
 	}
 
