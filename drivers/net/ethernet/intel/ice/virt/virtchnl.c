@@ -1702,6 +1702,9 @@ static bool ice_vc_validate_vlan_tpid(u16 filtering_caps, u16 tpid)
 	case ETH_P_QINQ1:
 		vlan_ethertype = VIRTCHNL_VLAN_ETHERTYPE_9100;
 		break;
+	case ETH_P_8021AH:
+		vlan_ethertype = VIRTCHNL_VLAN_ETHERTYPE_88E7;
+		break;
 	}
 
 	if (!(filtering_caps & vlan_ethertype))
@@ -2135,6 +2138,9 @@ static int ice_vc_get_tpid(u32 ethertype_setting, u16 *tpid)
 		break;
 	case VIRTCHNL_VLAN_ETHERTYPE_9100:
 		*tpid = ETH_P_QINQ1;
+		break;
+	case VIRTCHNL_VLAN_ETHERTYPE_88E7:
+		*tpid = ETH_P_8021AH;
 		break;
 	default:
 		*tpid = 0;
