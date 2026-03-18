@@ -13,7 +13,7 @@
 	compatible = "realtek,krypton", "realtek,rtd1861b";
 	model = "Realtek Krypton EVB (8GB)";
 
-	memory@40000 {
+	memory@50000 {
 		device_type = "memory";
 		reg = <0x0 0x50000 0x0 0x7ffb0000>,
 		      <0x0 0x8a100000 0x0 0xdef0000>,
