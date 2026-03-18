@@ -38,13 +38,13 @@ static u8 uniphier_clk_mux_get_parent(struct clk_hw *hw)
 
 	ret = regmap_read(mux->regmap, mux->reg, &val);
 	if (ret)
-		return ret;
+		return 0; /* fallback to parent 0 on error */
 
 	for (i = 0; i < num_parents; i++)
 		if ((mux->masks[i] & val) == mux->vals[i])
 			return i;
 
-	return -EINVAL;
+	return 0; /* default fallback */
 }
 
 static const struct clk_ops uniphier_clk_mux_ops = {
