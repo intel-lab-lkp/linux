@@ -2465,7 +2465,7 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 
 	/* After this point, we may free va at any time */
 	if (unlikely(nr_lazy > nr_lazy_max))
-		schedule_work(&drain_vmap_work);
+		queue_work(system_unbound_wq, &drain_vmap_work);
 }
 
 /*
