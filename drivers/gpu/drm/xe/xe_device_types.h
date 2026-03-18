@@ -26,6 +26,7 @@
 #include "xe_sriov_vf_types.h"
 #include "xe_sriov_vf_ccs_types.h"
 #include "xe_step_types.h"
+#include "xe_sysctrl_types.h"
 #include "xe_survivability_mode_types.h"
 #include "xe_tile_types.h"
 #include "xe_validation.h"
@@ -196,6 +197,8 @@ struct xe_device {
 		u8 has_soc_remapper_telem:1;
 		/** @info.has_sriov: Supports SR-IOV */
 		u8 has_sriov:1;
+		/** @info.has_sysctrl: Supports System Controller */
+		u8 has_sysctrl:1;
 		/** @info.has_usm: Device has unified shared memory support */
 		u8 has_usm:1;
 		/** @info.has_64bit_timestamp: Device supports 64-bit timestamps */
@@ -464,6 +467,9 @@ struct xe_device {
 	/** @heci_gsc: graphics security controller */
 	struct xe_heci_gsc heci_gsc;
 
+	/** @sc: System Controller */
+	struct xe_sysctrl sc;
+
 	/** @nvm: discrete graphics non-volatile memory */
 	struct intel_dg_nvm_dev *nvm;
 
@@ -490,6 +496,12 @@ struct xe_device {
 		/** @wedged.inconsistent_reset: Inconsistent reset policy state between GTs */
 		bool inconsistent_reset;
 	} wedged;
+
+	/** @in_recovery: Indicates if device is in recovery */
+	atomic_t in_recovery;
+
+	/** @devres_group_id: id for devres group */
+	void *devres_group_id;
 
 	/** @bo_device: Struct to control async free of BOs */
 	struct xe_bo_dev {
