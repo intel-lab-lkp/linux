@@ -3973,6 +3973,7 @@ static int reset_ivb_igd(struct pci_dev *dev, bool probe)
 	void __iomem *mmio_base;
 	unsigned long timeout;
 	u32 val;
+	int ret;
 
 	if (probe)
 		return 0;
@@ -3980,6 +3981,12 @@ static int reset_ivb_igd(struct pci_dev *dev, bool probe)
 	mmio_base = pci_iomap(dev, 0, 0);
 	if (!mmio_base)
 		return -ENOMEM;
+
+	ret = pci_dev_reset_iommu_prepare(dev);
+	if (ret) {
+		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
+		goto out_iounmap;
+	}
 
 	iowrite32(0x00000002, mmio_base + MSG_CTL);
 
@@ -4006,8 +4013,10 @@ static int reset_ivb_igd(struct pci_dev *dev, bool probe)
 reset_complete:
 	iowrite32(0x00000002, mmio_base + NSDE_PWR_STATE);
 
+	pci_dev_reset_iommu_done(dev);
+out_iounmap:
 	pci_iounmap(dev, mmio_base);
-	return 0;
+	return ret;
 }
 
 /* Device-specific reset method for Chelsio T4-based adapters */
@@ -4257,22 +4266,6 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ 0 }
 };
 
-static int __pci_dev_specific_reset(struct pci_dev *dev, bool probe,
-				    const struct pci_dev_reset_methods *i)
-{
-	int ret;
-
-	ret = pci_dev_reset_iommu_prepare(dev);
-	if (ret) {
-		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
-		return ret;
-	}
-
-	ret = i->reset(dev, probe);
-	pci_dev_reset_iommu_done(dev);
-	return ret;
-}
-
 /*
  * These device-specific reset methods are here rather than in a driver
  * because when a host assigns a device to a guest VM, the host may need
@@ -4287,7 +4280,7 @@ int pci_dev_specific_reset(struct pci_dev *dev, bool probe)
 		     i->vendor == (u16)PCI_ANY_ID) &&
 		    (i->device == dev->device ||
 		     i->device == (u16)PCI_ANY_ID))
-			return __pci_dev_specific_reset(dev, probe, i);
+			return i->reset(dev, probe);
 	}
 
 	return -ENOTTY;
