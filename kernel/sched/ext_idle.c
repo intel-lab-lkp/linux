@@ -617,6 +617,18 @@ s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 	}
 
 	/*
+	 * Use @prev_cpu's sibling if it's idle.
+	 */
+	if (sched_smt_active()) {
+		for_each_cpu_and(cpu, cpu_smt_mask(prev_cpu), allowed) {
+			if (cpu == prev_cpu)
+				continue;
+			if (scx_idle_test_and_clear_cpu(cpu))
+				goto out_unlock;
+		}
+	}
+
+	/*
 	 * Search for any idle CPU in the same LLC domain.
 	 */
 	if (llc_cpus) {
