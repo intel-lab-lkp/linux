@@ -6,7 +6,7 @@
 #ifndef _COMMON_H
 #define _COMMON_H
 
-#include <rdma/hfi/hfi1_user.h>
+#include "hfi1_user_compat.h"
 
 /*
  * This file contains defines, structures, etc. that are used

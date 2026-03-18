@@ -62,7 +62,7 @@ TRACE_EVENT(hfi1_uctxtdata,
 
 #define CINFO_FMT \
 	"egrtids:%u, egr_size:%u, hdrq_cnt:%u, hdrq_size:%u, sdma_ring_size:%u"
-TRACE_EVENT(hfi1_ctxt_info,
+TRACE_EVENT(hfi_ctxt_info,
 	    TP_PROTO(struct hfi1_devdata *dd, unsigned int ctxt,
 		     unsigned int subctxt,
 		     struct hfi1_ctxt_info *cinfo),
