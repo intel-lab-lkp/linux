@@ -77,7 +77,12 @@ static inline int cxl_hdm_decoder_count(u32 cap_hdr)
 {
 	int val = FIELD_GET(CXL_HDM_DECODER_COUNT_MASK, cap_hdr);
 
-	return val ? val * 2 : 1;
+	if (!val)
+		return 1;
+	else if (val <= 8)
+		return val * 2;
+	else
+		return 4 * (val - 4);
 }
 
 /* Encode defined in CXL 2.0 8.2.5.12.7 HDM Decoder Control Register */
