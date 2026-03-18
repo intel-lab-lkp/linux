@@ -549,7 +549,7 @@ fail:
 	if (size)
 		buf[min(pos, size-1)] = '\0';
 
-	return pos;
+	return (pos > INT_MAX) ? INT_MAX : pos;
 }
 
 int snprintf(char *buf, size_t size, const char *fmt, ...)
