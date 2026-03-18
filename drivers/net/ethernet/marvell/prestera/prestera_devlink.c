@@ -125,8 +125,8 @@ struct prestera_trap_item {
 
 struct prestera_trap_data {
 	struct prestera_switch *sw;
-	struct prestera_trap_item *trap_items_arr;
 	u32 traps_count;
+	struct prestera_trap_item trap_items_arr[] __counted_by(traps_count);
 };
 
 #define PRESTERA_TRAP_METADATA DEVLINK_TRAP_METADATA_TYPE_F_IN_PORT
@@ -451,19 +451,12 @@ int prestera_devlink_traps_register(struct prestera_switch *sw)
 	struct prestera_trap *prestera_trap;
 	int err, i;
 
-	trap_data = kzalloc_obj(*trap_data);
+	trap_data = kzalloc_flex(*trap_data, trap_items_arr, traps_count);
 	if (!trap_data)
 		return -ENOMEM;
 
-	trap_data->trap_items_arr = kzalloc_objs(struct prestera_trap_item,
-						 traps_count);
-	if (!trap_data->trap_items_arr) {
-		err = -ENOMEM;
-		goto err_trap_items_alloc;
-	}
-
-	trap_data->sw = sw;
 	trap_data->traps_count = traps_count;
+	trap_data->sw = sw;
 	sw->trap_data = trap_data;
 
 	err = devlink_trap_groups_register(devlink, prestera_trap_groups_arr,
@@ -489,8 +482,6 @@ err_trap_register:
 	devlink_trap_groups_unregister(devlink, prestera_trap_groups_arr,
 				       groups_count);
 err_groups_register:
-	kfree(trap_data->trap_items_arr);
-err_trap_items_alloc:
 	kfree(trap_data);
 	return err;
 }
@@ -594,6 +585,5 @@ void prestera_devlink_traps_unregister(struct prestera_switch *sw)
 
 	devlink_trap_groups_unregister(dl, prestera_trap_groups_arr,
 				       ARRAY_SIZE(prestera_trap_groups_arr));
-	kfree(trap_data->trap_items_arr);
 	kfree(trap_data);
 }
