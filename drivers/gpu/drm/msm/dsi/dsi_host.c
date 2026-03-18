@@ -1713,7 +1713,7 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
 	int ret;
 
-	if (!msg || !msm_host->power_on)
+	if (!msg || !msm_host->enabled)
 		return -EINVAL;
 
 	mutex_lock(&msm_host->cmd_mutex);
