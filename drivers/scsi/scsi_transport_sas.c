@@ -240,8 +240,20 @@ static int sas_host_setup(struct transport_container *tc, struct device *dev,
 			   shost->host_no);
 
 	if (dma_dev->dma_mask) {
-		shost->opt_sectors = min_t(unsigned int, shost->max_sectors,
-				dma_opt_mapping_size(dma_dev) >> SECTOR_SHIFT);
+		size_t opt = dma_opt_mapping_size(dma_dev);
+
+		/*
+		 * Only set opt_sectors when the DMA layer reports a
+		 * genuine optimization constraint.  When opt equals
+		 * dma_max_mapping_size() no backend provided a real
+		 * hint — the value is just the DMA maximum, which is
+		 * not useful as an optimal I/O size and can cause
+		 * mkfs.xfs to compute invalid stripe geometry.
+		 */
+		if (opt < dma_max_mapping_size(dma_dev))
+			shost->opt_sectors = min_t(unsigned int,
+					shost->max_sectors,
+					opt >> SECTOR_SHIFT);
 	}
 
 	return 0;
