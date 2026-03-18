@@ -1713,7 +1713,6 @@ static struct security_hook_list apparmor_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(capget, apparmor_capget),
 	LSM_HOOK_INIT(capable, apparmor_capable),
 
-	LSM_HOOK_INIT(move_mount, apparmor_move_mount),
 	LSM_HOOK_INIT(mount_bind, apparmor_mount_bind),
 	LSM_HOOK_INIT(mount_new, apparmor_mount_new),
 	LSM_HOOK_INIT(mount_remount, apparmor_mount_remount),

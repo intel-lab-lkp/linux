@@ -1857,7 +1857,6 @@ static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(mount_reconfigure, hook_mount_reconfigure),
 	LSM_HOOK_INIT(mount_change_type, hook_mount_change_type),
 	LSM_HOOK_INIT(mount_move, hook_move_mount),
-	LSM_HOOK_INIT(move_mount, hook_move_mount),
 	LSM_HOOK_INIT(sb_umount, hook_sb_umount),
 	LSM_HOOK_INIT(sb_remount, hook_sb_remount),
 	LSM_HOOK_INIT(sb_pivotroot, hook_sb_pivotroot),
