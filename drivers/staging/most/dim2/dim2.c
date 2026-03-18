@@ -97,6 +97,7 @@ struct dim2_hdm {
 	void (*on_netinfo)(struct most_interface *most_iface,
 			   unsigned char link_state, unsigned char *addrs);
 	void (*disable_platform)(struct platform_device *pdev);
+	bool is_netinfo_pending;
 };
 
 struct dim2_platform_data {
@@ -212,20 +213,29 @@ static int try_start_dim_transfer(struct hdm_channel *hdm_ch)
 static int deliver_netinfo_thread(void *data)
 {
 	struct dim2_hdm *dev = data;
+	unsigned long flags;
+	unsigned char local_mac_addrs[6];
+	unsigned char local_link_state;
 
 	while (!kthread_should_stop()) {
 		wait_event_interruptible(dev->netinfo_waitq,
 					 dev->deliver_netinfo ||
 					 kthread_should_stop());
 
+		spin_lock_irqsave(&dim_lock, flags);
 		if (dev->deliver_netinfo) {
 			dev->deliver_netinfo--;
+			memcpy(local_mac_addrs, dev->mac_addrs, 6);
+			local_link_state = dev->link_state;
+			dev->is_netinfo_pending = false;
+			spin_unlock_irqrestore(&dim_lock, flags);
 			if (dev->on_netinfo) {
 				dev->on_netinfo(&dev->most_iface,
-						dev->link_state,
-						dev->mac_addrs);
+						local_link_state,
+						local_mac_addrs);
 			}
-		}
+		} else
+			spin_unlock_irqrestore(&dim_lock, flags);
 	}
 
 	return 0;
@@ -242,12 +252,24 @@ static int deliver_netinfo_thread(void *data)
 static void retrieve_netinfo(struct dim2_hdm *dev, struct mbo *mbo)
 {
 	u8 *data = mbo->virt_address;
+	unsigned long flags;
 
 	dev_dbg(&dev->dev, "Node Address: 0x%03x\n", (u16)data[16] << 8 | data[17]);
+
+	spin_lock_irqsave(&dim_lock, flags);
+
 	dev->link_state = data[18];
-	dev_dbg(&dev->dev, "NIState: %d\n", dev->link_state);
 	memcpy(dev->mac_addrs, data + 19, 6);
+	if (dev->is_netinfo_pending) {
+		spin_unlock_irqrestore(&dim_lock, flags);
+		return;
+	}
+
+	dev->is_netinfo_pending = true;
 	dev->deliver_netinfo++;
+	spin_unlock_irqrestore(&dim_lock, flags);
+
+	dev_dbg(&dev->dev, "NIState: %d\n", dev->link_state);
 	wake_up_interruptible(&dev->netinfo_waitq);
 }
 
