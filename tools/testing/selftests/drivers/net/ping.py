@@ -64,7 +64,10 @@ def _set_offload_checksum(cfg, netnl, on) -> None:
     try:
         ethtool(f" -K {cfg.ifname} rx {on} tx {on} ")
     except:
-        return
+        pass
+
+    if no_sleep != True:
+        time.sleep(10)
 
 def _set_xdp_generic_sb_on(cfg) -> None:
     prog = cfg.net_lib_dir / "xdp_dummy.bpf.o"
