@@ -897,15 +897,15 @@ static int pcc_register_optd_notifier(struct pcc_acpi *pcc, char *node)
 	acpi_handle handle;
 
 	status = acpi_get_handle(NULL, node, &handle);
-
-	if (ACPI_SUCCESS(status)) {
-		status = acpi_install_notify_handler(handle,
-				ACPI_SYSTEM_NOTIFY,
-				pcc_optd_notify, pcc);
-		if (ACPI_FAILURE(status))
-			pr_err("Failed to register notify on %s\n", node);
-	} else
+	if (ACPI_FAILURE(status))
 		return -ENODEV;
+
+	status = acpi_install_notify_handler(handle, ACPI_SYSTEM_NOTIFY,
+					     pcc_optd_notify, pcc);
+	if (ACPI_FAILURE(status)) {
+		pr_err("Failed to register notify on %s\n", node);
+		return -ENODEV;
+	}
 
 	return 0;
 }
@@ -1093,9 +1093,12 @@ static int acpi_pcc_hotkey_add(struct acpi_device *device)
 		}
 		result = device_create_file(&pcc->platform->dev,
 			&dev_attr_cdpower);
-		pcc_register_optd_notifier(pcc, "\\_SB.PCI0.EHCI.ERHB.OPTD");
 		if (result)
 			goto out_platform;
+
+		result = pcc_register_optd_notifier(pcc, "\\_SB.PCI0.EHCI.ERHB.OPTD");
+		if (result)
+			goto out_cdpower;
 	} else {
 		pcc->platform = NULL;
 	}
@@ -1103,6 +1106,8 @@ static int acpi_pcc_hotkey_add(struct acpi_device *device)
 	i8042_install_filter(panasonic_i8042_filter, NULL);
 	return 0;
 
+out_cdpower:
+	device_remove_file(&pcc->platform->dev, &dev_attr_cdpower);
 out_platform:
 	platform_device_unregister(pcc->platform);
 out_sysfs:
@@ -1129,10 +1134,10 @@ static void acpi_pcc_hotkey_remove(struct acpi_device *device)
 	i8042_remove_filter(panasonic_i8042_filter);
 
 	if (pcc->platform) {
+		pcc_unregister_optd_notifier(pcc, "\\_SB.PCI0.EHCI.ERHB.OPTD");
 		device_remove_file(&pcc->platform->dev, &dev_attr_cdpower);
 		platform_device_unregister(pcc->platform);
 	}
-	pcc_unregister_optd_notifier(pcc, "\\_SB.PCI0.EHCI.ERHB.OPTD");
 
 	sysfs_remove_group(&device->dev.kobj, &pcc_attr_group);
 
