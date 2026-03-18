@@ -6,6 +6,13 @@ uapi-header: linux/nfsd_netlink.h
 
 doc: NFSD configuration over generic netlink.
 
+definitions:
+  -
+    type: enum
+    name: unlock-type
+    render-max: true
+    entries: [ip]
+
 attribute-sets:
   -
     name: rpc-status
@@ -127,6 +134,21 @@ attribute-sets:
       -
         name: npools
         type: u32
+  -
+    name: unlock
+    attributes:
+      -
+        name: type
+        type: u32
+        enum: unlock-type
+      -
+        name: address
+        type: binary
+        doc: >-
+          struct sockaddr_in or struct sockaddr_in6.
+          Required when type is ip.
+        checks:
+          min-len: 16
 
 operations:
   list:
@@ -227,3 +249,13 @@ operations:
           attributes:
             - mode
             - npools
+    -
+      name: unlock
+      doc: release NLM locks by scope
+      attribute-set: unlock
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - type
+            - address

@@ -236,7 +236,7 @@ static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
 	if (rpc_pton(net, fo_path, size, sap, salen) == 0)
 		return -EINVAL;
 
-	trace_nfsd_ctl_unlock_ip(net, buf);
+	trace_nfsd_ctl_unlock_ip(net, sap, svc_addr_len(sap));
 	return nlmsvc_unlock_all_by_ip(sap);
 }
 
@@ -2140,6 +2140,67 @@ int nfsd_nl_pool_mode_get_doit(struct sk_buff *skb, struct genl_info *info)
 err_free_msg:
 	nlmsg_free(skb);
 	return err;
+}
+
+/**
+ * nfsd_nl_unlock_by_ip - release NLM locks held by an IP address
+ * @info: netlink metadata and command arguments
+ *
+ * Return: 0 on success or a negative errno.
+ */
+static int nfsd_nl_unlock_by_ip(struct genl_info *info)
+{
+	struct sockaddr *sap;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_UNLOCK_ADDRESS))
+		return -EINVAL;
+	sap = nla_data(info->attrs[NFSD_A_UNLOCK_ADDRESS]);
+	switch (sap->sa_family) {
+	case AF_INET:
+		if (nla_len(info->attrs[NFSD_A_UNLOCK_ADDRESS]) <
+		    sizeof(struct sockaddr_in))
+			return -EINVAL;
+		break;
+	case AF_INET6:
+		if (nla_len(info->attrs[NFSD_A_UNLOCK_ADDRESS]) <
+		    sizeof(struct sockaddr_in6))
+			return -EINVAL;
+		break;
+	default:
+		return -EAFNOSUPPORT;
+	}
+	/*
+	 * nlmsvc_unlock_all_by_ip() releases matching locks
+	 * across all network namespaces because lockd operates
+	 * a single global instance.
+	 */
+	trace_nfsd_ctl_unlock_ip(genl_info_net(info), sap,
+				 svc_addr_len(sap));
+	return nlmsvc_unlock_all_by_ip(sap);
+}
+
+/**
+ * nfsd_nl_unlock_doit - release NLM locks by scope
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return: 0 on success or a negative errno.
+ */
+int nfsd_nl_unlock_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	u32 type;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_UNLOCK_TYPE))
+		return -EINVAL;
+
+	type = nla_get_u32(info->attrs[NFSD_A_UNLOCK_TYPE]);
+
+	switch (type) {
+	case NFSD_UNLOCK_TYPE_IP:
+		return nfsd_nl_unlock_by_ip(info);
+	default:
+		return -EINVAL;
+	}
 }
 
 /**

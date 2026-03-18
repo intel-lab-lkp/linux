@@ -47,6 +47,12 @@ static const struct nla_policy nfsd_pool_mode_set_nl_policy[NFSD_A_POOL_MODE_MOD
 	[NFSD_A_POOL_MODE_MODE] = { .type = NLA_NUL_STRING, },
 };
 
+/* NFSD_CMD_UNLOCK - do */
+static const struct nla_policy nfsd_unlock_nl_policy[NFSD_A_UNLOCK_ADDRESS + 1] = {
+	[NFSD_A_UNLOCK_TYPE] = NLA_POLICY_MAX(NLA_U32, 0),
+	[NFSD_A_UNLOCK_ADDRESS] = NLA_POLICY_MIN_LEN(16),
+};
+
 /* Ops table for nfsd */
 static const struct genl_split_ops nfsd_nl_ops[] = {
 	{
@@ -101,6 +107,13 @@ static const struct genl_split_ops nfsd_nl_ops[] = {
 		.cmd	= NFSD_CMD_POOL_MODE_GET,
 		.doit	= nfsd_nl_pool_mode_get_doit,
 		.flags	= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= NFSD_CMD_UNLOCK,
+		.doit		= nfsd_nl_unlock_doit,
+		.policy		= nfsd_unlock_nl_policy,
+		.maxattr	= NFSD_A_UNLOCK_ADDRESS,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
 	},
 };
 
