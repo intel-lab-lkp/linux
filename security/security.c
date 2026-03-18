@@ -4991,10 +4991,7 @@ int security_xfrm_decode_session(struct sk_buff *skb, u32 *secid)
 
 void security_skb_classify_flow(struct sk_buff *skb, struct flowi_common *flic)
 {
-	int rc = call_int_hook(xfrm_decode_session, skb, &flic->flowic_secid,
-			       0);
-
-	BUG_ON(rc);
+	call_int_hook(xfrm_decode_session, skb, &flic->flowic_secid, 0);
 }
 EXPORT_SYMBOL(security_skb_classify_flow);
 #endif	/* CONFIG_SECURITY_NETWORK_XFRM */
