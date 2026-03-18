@@ -190,6 +190,7 @@ Hardware Monitoring Kernel Drivers
    mp5990
    mp9941
    mp9945
+   mpm369x
    mpq8785
    nct6683
    nct6775
