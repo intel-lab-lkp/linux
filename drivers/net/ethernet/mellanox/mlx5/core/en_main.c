@@ -6488,7 +6488,7 @@ int mlx5e_attach_netdev(struct mlx5e_priv *priv)
 		/* Reducing the number of channels - RXFH has to be reset, and
 		 * mlx5e_num_channels_changed below will build the RQT.
 		 */
-		priv->netdev->priv_flags &= ~IFF_RXFH_CONFIGURED;
+		ethtool_rxfh_indir_clear(priv->netdev);
 		priv->channels.params.num_channels = max_nch;
 		if (priv->channels.params.mqprio.mode == TC_MQPRIO_MODE_CHANNEL) {
 			mlx5_core_warn(priv->mdev, "MLX5E: Disabling MQPRIO channel mode\n");

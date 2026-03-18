@@ -1204,6 +1204,26 @@ void ethtool_rxfh_context_lost(struct net_device *dev, u32 context_id)
 }
 EXPORT_SYMBOL(ethtool_rxfh_context_lost);
 
+bool netif_is_rxfh_configured(const struct net_device *dev)
+{
+	return dev->ethtool->rss_indir_user_size;
+}
+EXPORT_SYMBOL(netif_is_rxfh_configured);
+
+/**
+ * ethtool_rxfh_indir_clear - Clear user indirection table config
+ * @dev: network device
+ *
+ * Mark the default RSS context indirection table as unconfigured and
+ * send an %ETHTOOL_MSG_RSS_NTF notification.
+ */
+void ethtool_rxfh_indir_clear(struct net_device *dev)
+{
+	dev->ethtool->rss_indir_user_size = 0;
+	ethtool_rss_notify(dev, ETHTOOL_MSG_RSS_NTF, 0);
+}
+EXPORT_SYMBOL(ethtool_rxfh_indir_clear);
+
 enum ethtool_link_medium ethtool_str_to_medium(const char *str)
 {
 	int i;
