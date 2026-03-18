@@ -627,6 +627,9 @@ int rtnl_link_register(struct rtnl_link_ops *ops)
 
 	list_add_tail_rcu(&ops->list, &link_ops);
 unlock:
+	if (err)
+		cleanup_srcu_struct(&ops->srcu);
+
 	mutex_unlock(&link_ops_mutex);
 
 	return err;
