@@ -3270,8 +3270,10 @@ static int hash_digest_key(struct caam_hash_ctx *ctx, u32 *keylen, u8 *key,
 	dpaa2_fl_set_addr(out_fle, key_dma);
 	dpaa2_fl_set_len(out_fle, digestsize);
 
-	print_hex_dump_debug("key_in@" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, *keylen, 1);
+#ifdef DEBUG
+	print_hex_dump(KERN_DEBUG, "key_in@" __stringify(__LINE__)": ",
+		       DUMP_PREFIX_ADDRESS, 16, 4, key, *keylen, 1);
+#endif
 	print_hex_dump_debug("shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
 			     1);
@@ -3290,9 +3292,10 @@ static int hash_digest_key(struct caam_hash_ctx *ctx, u32 *keylen, u8 *key,
 		/* in progress */
 		wait_for_completion(&result.completion);
 		ret = result.err;
-		print_hex_dump_debug("digested key@" __stringify(__LINE__)": ",
-				     DUMP_PREFIX_ADDRESS, 16, 4, key,
-				     digestsize, 1);
+#ifdef DEBUG
+		print_hex_dump(KERN_DEBUG, "digested key@" __stringify(__LINE__)": ",
+			       DUMP_PREFIX_ADDRESS, 16, 4, key, digestsize, 1);
+#endif
 	}
 
 	dma_unmap_single(ctx->dev, flc_dma, sizeof(flc->flc) + desc_bytes(desc),
