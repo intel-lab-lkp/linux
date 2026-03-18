@@ -41,6 +41,7 @@
 
 #include <asm-generic/qspinlock_types.h>
 #include <linux/atomic.h>
+#include <linux/tracepoint-defs.h>
 
 #ifndef queued_spin_is_locked
 /**
@@ -116,6 +117,19 @@ static __always_inline void queued_spin_lock(struct qspinlock *lock)
 #endif
 
 #ifndef queued_spin_unlock
+
+DECLARE_TRACEPOINT(contended_release);
+
+extern void queued_spin_unlock_traced(struct qspinlock *lock);
+
+static __always_inline void __queued_spin_unlock(struct qspinlock *lock)
+{
+	/*
+	 * unlock() needs release semantics:
+	 */
+	smp_store_release(&lock->locked, 0);
+}
+
 /**
  * queued_spin_unlock - release a queued spinlock
  * @lock : Pointer to queued spinlock structure
@@ -123,9 +137,16 @@ static __always_inline void queued_spin_lock(struct qspinlock *lock)
 static __always_inline void queued_spin_unlock(struct qspinlock *lock)
 {
 	/*
-	 * unlock() needs release semantics:
+	 * Trace and unlock are combined in queued_spin_unlock_traced()
+	 * so the compiler does not need to preserve the lock pointer
+	 * across the function call, avoiding callee-saved register
+	 * save/restore on the hot path.
 	 */
-	smp_store_release(&lock->locked, 0);
+	if (tracepoint_enabled(contended_release)) {
+		queued_spin_unlock_traced(lock);
+		return;
+	}
+	__queued_spin_unlock(lock);
 }
 #endif
 
