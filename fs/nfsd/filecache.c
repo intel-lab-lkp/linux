@@ -926,6 +926,51 @@ bool nfsd_file_inode_is_in_subtree(struct inode *inode,
 	return found;
 }
 
+/**
+ * nfsd_file_close_export - close cached files for an export
+ * @sb:           super_block of the export's filesystem
+ * @root_dentry:  dentry of the export root directory
+ *
+ * Walk the nfsd_file cache and close GC-managed entries whose files
+ * reside under @root_dentry on @sb.  When @root_dentry is the
+ * filesystem root, all GC-managed entries on @sb are closed.
+ *
+ * Non-GC entries are opened by NFSv4, which closes them explicitly
+ * via CLOSE or state revocation; they require no cache-level flush.
+ */
+void nfsd_file_close_export(struct super_block *sb, struct dentry *root_dentry)
+{
+	struct rhashtable_iter iter;
+	struct nfsd_file *nf;
+	LIST_HEAD(dispose);
+
+	lockdep_assert_held(&nfsd_mutex);
+	if (test_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags) == 0)
+		return;
+
+	rhltable_walk_enter(&nfsd_file_rhltable, &iter);
+	do {
+		rhashtable_walk_start(&iter);
+
+		nf = rhashtable_walk_next(&iter);
+		while (!IS_ERR_OR_NULL(nf)) {
+			if (test_bit(NFSD_FILE_GC, &nf->nf_flags) &&
+			    nf->nf_file &&
+			    file_inode(nf->nf_file)->i_sb == sb &&
+			    (root_dentry == sb->s_root ||
+			     nfsd_file_inode_is_in_subtree(
+				file_inode(nf->nf_file), root_dentry)))
+				nfsd_file_cond_queue(nf, &dispose);
+			nf = rhashtable_walk_next(&iter);
+		}
+
+		rhashtable_walk_stop(&iter);
+	} while (nf == ERR_PTR(-EAGAIN));
+	rhashtable_walk_exit(&iter);
+
+	nfsd_file_dispose_list(&dispose);
+}
+
 static struct nfsd_fcache_disposal *
 nfsd_alloc_fcache_disposal(void)
 {

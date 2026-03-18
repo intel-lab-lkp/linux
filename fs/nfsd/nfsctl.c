@@ -2206,11 +2206,13 @@ static int nfsd_nl_unlock_by_filesystem(struct genl_info *info)
 	error = nlmsvc_unlock_all_by_sb(path.dentry->d_sb);
 
 	mutex_lock(&nfsd_mutex);
-	if (nn->nfsd_serv)
+	if (nn->nfsd_serv) {
 		nfsd4_revoke_export_states(nn, path.dentry->d_sb,
 					   path.dentry);
-	else
+		nfsd_file_close_export(path.dentry->d_sb, path.dentry);
+	} else {
 		error = -EINVAL;
+	}
 	mutex_unlock(&nfsd_mutex);
 
 	path_put(&path);
