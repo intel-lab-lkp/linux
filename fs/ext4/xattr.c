@@ -1643,6 +1643,48 @@ static int ext4_xattr_set_entry(struct ext4_xattr_info *i,
 			EXT4_XATTR_SIZE(le32_to_cpu(here->e_value_size)) : 0;
 	new_size = (i->value && !in_inode) ? EXT4_XATTR_SIZE(i->value_len) : 0;
 
+	/* Compute min_offs and last. */
+	last = s->first;
+	for (; !IS_LAST_ENTRY(last); last = next) {
+		next = EXT4_XATTR_NEXT(last);
+		if ((void *)next >= s->end) {
+			EXT4_ERROR_INODE(inode, "corrupted xattr entries");
+			ret = -EFSCORRUPTED;
+			goto out;
+		}
+		if (!last->e_value_inum && last->e_value_size) {
+			size_t offs = le16_to_cpu(last->e_value_offs);
+
+			if (offs < min_offs)
+				min_offs = offs;
+		}
+	}
+
+	/*
+	 * Validate the value range before dereferencing e_value_offs / e_value_size.
+	 * This mirrors check_xattrs() for the entry we are about to touch.
+	 */
+	if (!s->not_found && !here->e_value_inum && here->e_value_size) {
+		u16 offs = le16_to_cpu(here->e_value_offs);
+		size_t size = le32_to_cpu(here->e_value_size);
+		void *value;
+
+		if (offs > s->end - s->base) {
+			EXT4_ERROR_INODE(inode, "corrupted xattr entry: invalid value offset");
+			ret = -EFSCORRUPTED;
+			goto out;
+		}
+
+		value = s->base + offs;
+		if (value < (void *)last + sizeof(__u32) ||
+		    size > s->end - value ||
+		    EXT4_XATTR_SIZE(size) > s->end - value) {
+			EXT4_ERROR_INODE(inode, "corrupted xattr entry: invalid value range");
+			ret = -EFSCORRUPTED;
+			goto out;
+		}
+	}
+
 	/*
 	 * Optimization for the simple case when old and new values have the
 	 * same padded sizes. Not applicable if external inodes are involved.
@@ -1660,22 +1702,6 @@ static int ext4_xattr_set_entry(struct ext4_xattr_info *i,
 			memset(val + i->value_len, 0, new_size - i->value_len);
 		}
 		goto update_hash;
-	}
-
-	/* Compute min_offs and last. */
-	last = s->first;
-	for (; !IS_LAST_ENTRY(last); last = next) {
-		next = EXT4_XATTR_NEXT(last);
-		if ((void *)next >= s->end) {
-			EXT4_ERROR_INODE(inode, "corrupted xattr entries");
-			ret = -EFSCORRUPTED;
-			goto out;
-		}
-		if (!last->e_value_inum && last->e_value_size) {
-			size_t offs = le16_to_cpu(last->e_value_offs);
-			if (offs < min_offs)
-				min_offs = offs;
-		}
 	}
 
 	/* Check whether we have enough space. */
