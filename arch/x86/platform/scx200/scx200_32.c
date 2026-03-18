@@ -12,8 +12,8 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 
+#include <linux/gpio/scx200.h>
 #include <linux/scx200.h>
-#include <linux/scx200_gpio.h>
 
 /* Verify that the configuration block really is there */
 #define scx200_cb_probe(base) (inw((base) + SCx200_CBA) == (base))

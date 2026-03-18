@@ -19,7 +19,7 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 
-#include <linux/scx200_gpio.h>
+#include <linux/gpio/scx200.h>
 #include <linux/nsc_gpio.h>
 
 #define DRVNAME "scx200_gpio"

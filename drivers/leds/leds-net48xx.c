@@ -14,7 +14,7 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/nsc_gpio.h>
-#include <linux/scx200_gpio.h>
+#include <linux/gpio/scx200.h>
 #include <linux/module.h>
 
 #define DRVNAME "net48xx-led"

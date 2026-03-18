@@ -13,7 +13,7 @@
 #include <linux/leds.h>
 #include <linux/err.h>
 #include <linux/io.h>
-#include <linux/scx200_gpio.h>
+#include <linux/gpio/scx200.h>
 #include <linux/module.h>
 
 #define DRVNAME "wrap-led"
