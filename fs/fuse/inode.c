@@ -862,6 +862,8 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 			return fuse_opt_fd(fsc, param->file);
 		} else {
 			struct file *file __free(fput) = fget(result.uint_32);
+			if (!file)
+				return invalfc(fsc, "Invalid fuse fd");
 			return fuse_opt_fd(fsc, file);
 		}
 
