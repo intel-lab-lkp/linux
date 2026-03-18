@@ -1304,6 +1304,16 @@ config HID_UNIVERSAL_PIDFF
 
 	  Supports Moza Racing, Cammus, VRS, FFBeast and more.
 
+config HID_PULSAR
+	tristate "Pulsar gaming mouse support"
+	depends on USB_HID
+	select POWER_SUPPLY
+	help
+	  Support for Pulsar gaming mice (X2 V2, X2H, X2A, Xlite V3)
+	  connected via 1kHz/4kHz USB dongle or wired.
+	  Provides battery level, voltage, and charging status
+	  monitoring via the power supply framework.
+
 config HID_WACOM
 	tristate "Wacom Intuos/Graphire tablet support (USB)"
 	depends on USB_HID
