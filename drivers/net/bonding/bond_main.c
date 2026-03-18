@@ -5310,7 +5310,6 @@ static netdev_tx_t bond_xmit_broadcast(struct sk_buff *skb,
 	struct bonding *bond = netdev_priv(bond_dev);
 	struct bond_up_slave *slaves;
 	bool xmit_suc = false;
-	bool skb_used = false;
 	int slaves_count, i;
 
 	if (all_slaves)
@@ -5326,24 +5325,18 @@ static netdev_tx_t bond_xmit_broadcast(struct sk_buff *skb,
 		if (!(bond_slave_is_up(slave) && slave->link == BOND_LINK_UP))
 			continue;
 
-		if (bond_is_last_slave(bond, slave)) {
-			skb2 = skb;
-			skb_used = true;
-		} else {
-			skb2 = skb_clone(skb, GFP_ATOMIC);
-			if (!skb2) {
-				net_err_ratelimited("%s: Error: %s: skb_clone() failed\n",
-						    bond_dev->name, __func__);
-				continue;
-			}
+		skb2 = skb_clone(skb, GFP_ATOMIC);
+		if (!skb2) {
+			net_err_ratelimited("%s: Error: %s: skb_clone() failed\n",
+					    bond_dev->name, __func__);
+			continue;
 		}
 
 		if (bond_dev_queue_xmit(bond, skb2, slave->dev) == NETDEV_TX_OK)
 			xmit_suc = true;
 	}
 
-	if (!skb_used)
-		dev_kfree_skb_any(skb);
+	dev_kfree_skb_any(skb);
 
 	if (xmit_suc)
 		return NETDEV_TX_OK;
