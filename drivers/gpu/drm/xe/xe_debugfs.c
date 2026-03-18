@@ -18,6 +18,7 @@
 #include "xe_gt_debugfs.h"
 #include "xe_gt_printk.h"
 #include "xe_guc_ads.h"
+#include "xe_hw_error.h"
 #include "xe_mmio.h"
 #include "xe_pm.h"
 #include "xe_psmi.h"
@@ -509,6 +510,40 @@ static const struct file_operations disable_late_binding_fops = {
 	.write = disable_late_binding_set,
 };
 
+static ssize_t trigger_punit_error_show(struct file *f, char __user *ubuf,
+					size_t size, loff_t *pos)
+{
+	const char *msg = "Write 1 to trigger power management unit error handler\n";
+
+	return simple_read_from_buffer(ubuf, size, pos, msg, strlen(msg));
+}
+
+static ssize_t trigger_punit_error_set(struct file *f,
+				       const char __user *ubuf,
+				       size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	bool trigger;
+	ssize_t ret;
+
+	ret = kstrtobool_from_user(ubuf, size, &trigger);
+	if (ret)
+		return ret;
+
+	if (trigger) {
+		xe_punit_error_handler(xe);
+		drm_info(&xe->drm, "PMU error handler triggered via debugfs\n");
+	}
+
+	return size;
+}
+
+static const struct file_operations trigger_punit_error_fops = {
+	.owner = THIS_MODULE,
+	.read = trigger_punit_error_show,
+	.write = trigger_punit_error_set,
+};
+
 void xe_debugfs_register(struct xe_device *xe)
 {
 	struct ttm_device *bdev = &xe->ttm;
@@ -549,6 +584,9 @@ void xe_debugfs_register(struct xe_device *xe)
 
 	debugfs_create_file("disable_late_binding", 0600, root, xe,
 			    &disable_late_binding_fops);
+
+	debugfs_create_file("trigger_punit_error", 0600, root, xe,
+			    &trigger_punit_error_fops);
 
 	/*
 	 * Don't expose page reclaim configuration file if not supported by the
