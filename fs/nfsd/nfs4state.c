@@ -1738,23 +1738,38 @@ static void release_openowner(struct nfs4_openowner *oo)
 	nfs4_put_stateowner(&oo->oo_owner);
 }
 
-static struct nfs4_stid *find_one_sb_stid(struct nfs4_client *clp,
-					  struct super_block *sb,
-					  unsigned int sc_types)
+/*
+ * On return of a non-NULL stid, @id holds that entry's IDR key;
+ * caller must increment @id before the next call to advance past it.
+ */
+static struct nfs4_stid *find_next_sb_stid(struct nfs4_client *clp,
+					   struct super_block *sb,
+					   unsigned int sc_types,
+					   unsigned long *id)
 {
-	unsigned long id, tmp;
 	struct nfs4_stid *stid;
 
 	spin_lock(&clp->cl_lock);
-	idr_for_each_entry_ul(&clp->cl_stateids, stid, tmp, id)
+	while ((stid = idr_get_next_ul(&clp->cl_stateids, id)) != NULL) {
 		if ((stid->sc_type & sc_types) &&
 		    stid->sc_status == 0 &&
 		    stid->sc_file->fi_inode->i_sb == sb) {
 			refcount_inc(&stid->sc_count);
 			break;
 		}
+		(*id)++;
+	}
 	spin_unlock(&clp->cl_lock);
 	return stid;
+}
+
+static struct nfs4_stid *find_one_sb_stid(struct nfs4_client *clp,
+					  struct super_block *sb,
+					  unsigned int sc_types)
+{
+	unsigned long id = 0;
+
+	return find_next_sb_stid(clp, sb, sc_types, &id);
 }
 
 static void revoke_ol_stid(struct nfs4_client *clp,
