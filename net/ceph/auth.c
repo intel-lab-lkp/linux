@@ -238,6 +238,9 @@ int ceph_handle_auth_reply(struct ceph_auth_client *ac,
 		if (!protocol && result < 0) {
 			ret = result;
 			goto out;
+		} else if (!protocol) {
+			/* protocol unknown, but no error given? */
+			goto bad;
 		}
 		/* set up (new) protocol handler? */
 		if (ac->protocol && ac->protocol != protocol) {
