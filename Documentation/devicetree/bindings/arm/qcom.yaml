@@ -939,6 +939,12 @@ properties:
 
       - items:
           - enum:
+              - radxa,airbox-q900
+          - const: qcom,qcs9075
+          - const: qcom,sa8775p
+
+      - items:
+          - enum:
               - qcom,lemans-evk
               - qcom,qcs9100-ride
               - qcom,qcs9100-ride-r3
