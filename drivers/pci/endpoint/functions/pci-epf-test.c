@@ -54,6 +54,7 @@
 #define STATUS_BAR_SUBRANGE_SETUP_FAIL		BIT(15)
 #define STATUS_BAR_SUBRANGE_CLEAR_SUCCESS	BIT(16)
 #define STATUS_BAR_SUBRANGE_CLEAR_FAIL		BIT(17)
+#define STATUS_BAR_SUBRANGE_SETUP_NOSPC		BIT(18)
 
 #define FLAG_USE_DMA			BIT(0)
 
@@ -903,6 +904,8 @@ static void pci_epf_test_bar_subrange_setup(struct pci_epf_test *epf_test,
 		dev_err(&epf->dev, "pci_epc_set_bar() failed: %d\n", ret);
 		bar->submap = old_submap;
 		bar->num_submap = old_nsub;
+		if (ret == -ENOSPC)
+			status |= STATUS_BAR_SUBRANGE_SETUP_NOSPC;
 		kfree(submap);
 		goto err;
 	}
