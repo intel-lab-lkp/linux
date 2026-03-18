@@ -186,6 +186,8 @@ config SAMPLE_TIMER
 
 config SAMPLE_TSM_MR
 	tristate "TSM measurement sample"
+	select CRYPTO
+	select CRYPTO_HASH
 	select TSM_MEASUREMENTS
 	select VIRT_DRIVERS
 	help
