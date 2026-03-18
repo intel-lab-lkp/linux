@@ -25,6 +25,7 @@
 # define USE_PKCS11_PROVIDER
 # include <openssl/provider.h>
 # include <openssl/store.h>
+# include <openssl/ui.h>
 #else
 # if !defined(OPENSSL_NO_ENGINE) && !defined(OPENSSL_NO_DEPRECATED_3_0)
 #  define USE_PKCS11_ENGINE
@@ -62,18 +63,42 @@ static void write_cert(X509 *x509)
 		fprintf(stderr, "Extracted cert: %s\n", buf);
 }
 
+#ifdef USE_PKCS11_PROVIDER
+static int pem_pw_cb(char *buf, int len, int w, void *v)
+{
+	int pwlen;
+
+	if (!key_pass)
+		return -1;
+
+	pwlen = strlen(key_pass);
+	if (pwlen >= len)
+		return -1;
+
+	strcpy(buf, key_pass);
+
+	/* If it's wrong, don't keep trying it. */
+	key_pass = NULL;
+
+	return pwlen;
+}
+#endif
+
 static X509 *load_cert_pkcs11(const char *cert_src)
 {
 	X509 *cert = NULL;
 #ifdef USE_PKCS11_PROVIDER
 	OSSL_STORE_CTX *store;
+	UI_METHOD *ui_method = NULL;
 
 	if (!OSSL_PROVIDER_try_load(NULL, "pkcs11", true))
 		ERR(1, "OSSL_PROVIDER_try_load(pkcs11)");
 	if (!OSSL_PROVIDER_try_load(NULL, "default", true))
 		ERR(1, "OSSL_PROVIDER_try_load(default)");
 
-	store = OSSL_STORE_open(cert_src, NULL, NULL, NULL, NULL);
+	if (key_pass)
+		ui_method = UI_UTIL_wrap_read_pem_callback(pem_pw_cb, 0);
+	store = OSSL_STORE_open(cert_src, ui_method, NULL, NULL, NULL);
 	ERR(!store, "OSSL_STORE_open");
 
 	while (!OSSL_STORE_eof(store)) {
