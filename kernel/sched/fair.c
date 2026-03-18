@@ -8373,7 +8373,12 @@ unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
 
 unsigned long sched_cpu_util(int cpu)
 {
-	return effective_cpu_util(cpu, cpu_util_cfs(cpu), NULL, NULL);
+	unsigned long util = scx_cpuperf_target(cpu);
+
+	if (!scx_switched_all())
+		util += cpu_util_cfs(cpu);
+
+	return effective_cpu_util(cpu, util, NULL, NULL);
 }
 
 /*
