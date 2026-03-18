@@ -962,7 +962,6 @@ static int emac_rx_packet_zc(struct prueth_emac *emac, u32 flow_id,
 		pkt_len -= 4;
 		cppi5_desc_get_tags_ids(&desc_rx->hdr, &port_id, NULL);
 		psdata = cppi5_hdesc_get_psdata(desc_rx);
-		k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 		count++;
 		xsk_buff_set_size(xdp, pkt_len);
 		xsk_buff_dma_sync_for_cpu(xdp);
@@ -988,6 +987,7 @@ static int emac_rx_packet_zc(struct prueth_emac *emac, u32 flow_id,
 			emac_dispatch_skb_zc(emac, xdp, psdata);
 			xsk_buff_free(xdp);
 		}
+		k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 	}
 
 	if (xdp_status & ICSSG_XDP_REDIR)
@@ -1057,7 +1057,6 @@ static int emac_rx_packet(struct prueth_emac *emac, u32 flow_id, u32 *xdp_state)
 	/* firmware adds 4 CRC bytes, strip them */
 	pkt_len -= 4;
 	cppi5_desc_get_tags_ids(&desc_rx->hdr, &port_id, NULL);
-	k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 
 	/* if allocation fails we drop the packet but push the
 	 * descriptor back to the ring with old page to prevent a stall
@@ -1066,6 +1065,7 @@ static int emac_rx_packet(struct prueth_emac *emac, u32 flow_id, u32 *xdp_state)
 	if (unlikely(!new_page)) {
 		new_page = page;
 		ndev->stats.rx_dropped++;
+		k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 		goto requeue;
 	}
 
@@ -1077,11 +1077,14 @@ static int emac_rx_packet(struct prueth_emac *emac, u32 flow_id, u32 *xdp_state)
 		*xdp_state = emac_run_xdp(emac, &xdp, &pkt_len);
 		if (*xdp_state == ICSSG_XDP_CONSUMED) {
 			page_pool_recycle_direct(pool, page);
+			k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 			goto requeue;
 		}
 
-		if (*xdp_state != ICSSG_XDP_PASS)
+		if (*xdp_state != ICSSG_XDP_PASS) {
+			k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 			goto requeue;
+		}
 		headroom = xdp.data - xdp.data_hard_start;
 		pkt_len = xdp.data_end - xdp.data;
 	} else {
@@ -1093,6 +1096,7 @@ static int emac_rx_packet(struct prueth_emac *emac, u32 flow_id, u32 *xdp_state)
 	if (!skb) {
 		ndev->stats.rx_dropped++;
 		page_pool_recycle_direct(pool, page);
+		k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 		goto requeue;
 	}
 
@@ -1105,6 +1109,7 @@ static int emac_rx_packet(struct prueth_emac *emac, u32 flow_id, u32 *xdp_state)
 	if (emac->rx_ts_enabled)
 		emac_rx_timestamp(emac, skb, psdata);
 
+	k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 	if (emac->prueth->is_switch_mode)
 		skb->offload_fwd_mark = emac->offload_fwd_mark;
 	skb->protocol = eth_type_trans(skb, ndev);
