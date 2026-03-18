@@ -449,8 +449,14 @@ out:
 
 struct dentry *f2fs_get_parent(struct dentry *child)
 {
+	struct inode *inode = d_inode(child);
 	struct folio *folio;
-	unsigned long ino = f2fs_inode_by_name(d_inode(child), &dotdot_name, &folio);
+	unsigned long ino;
+
+	if (!S_ISDIR(inode->i_mode))
+		return ERR_PTR(-ENOTDIR);
+
+	ino = f2fs_inode_by_name(inode, &dotdot_name, &folio);
 
 	if (!ino) {
 		if (IS_ERR(folio))
