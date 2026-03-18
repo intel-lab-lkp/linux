@@ -174,6 +174,7 @@ static u16 ice_check_supported_vlan_tpid(u16 vlan_tpid)
 	case ETH_P_8021Q:
 	case ETH_P_8021AD:
 	case ETH_P_QINQ1:
+	case ETH_P_8021AH:
 		return vlan_tpid;
 	default:
 		return 0;
