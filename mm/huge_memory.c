@@ -2361,9 +2361,10 @@ static inline void zap_deposited_table(struct mm_struct *mm, pmd_t *pmd)
 bool zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		 pmd_t *pmd, unsigned long addr)
 {
+	bool needs_remove_rmap = false;
 	struct folio *folio = NULL;
-	bool flush_needed = false;
 	bool needs_deposit = false;
+	bool is_present = false;
 	bool ret = true;
 	spinlock_t *ptl;
 	pmd_t orig_pmd;
@@ -2381,6 +2382,7 @@ bool zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	 */
 	orig_pmd = pmdp_huge_get_and_clear_full(vma, addr, pmd,
 						tlb->fullmm);
+
 	arch_check_zapped_pmd(vma, orig_pmd);
 	tlb_remove_pmd_tlb_entry(tlb, pmd, addr);
 	if (vma_is_special_huge(vma))
@@ -2390,17 +2392,15 @@ bool zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		goto out;
 	}
 
-	if (pmd_present(orig_pmd)) {
+	is_present = pmd_present(orig_pmd);
+	if (is_present) {
 		folio = pmd_folio(orig_pmd);
-
-		flush_needed = true;
-		folio_remove_rmap_pmd(folio, &folio->page, vma);
-		WARN_ON_ONCE(folio_mapcount(folio) < 0);
+		needs_remove_rmap = true;
 	} else if (pmd_is_valid_softleaf(orig_pmd)) {
 		const softleaf_t entry = softleaf_from_pmd(orig_pmd);
 
 		folio = softleaf_to_folio(entry);
-
+		needs_remove_rmap = folio_is_device_private(folio);
 		if (!thp_migration_supported())
 			WARN_ONCE(1, "Non present huge pmd without pmd migration enabled!");
 	} else {
@@ -2416,27 +2416,25 @@ bool zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		add_mm_counter(tlb->mm, mm_counter_file(folio),
 			       -HPAGE_PMD_NR);
 
-		/*
-		 * Use flush_needed to indicate whether the PMD entry
-		 * is present, instead of checking pmd_present() again.
-		 */
-		if (flush_needed && pmd_young(orig_pmd) &&
+		if (is_present && pmd_young(orig_pmd) &&
 		    likely(vma_has_recency(vma)))
 			folio_mark_accessed(folio);
 	}
 
-	if (folio_is_device_private(folio)) {
+	if (needs_remove_rmap) {
 		folio_remove_rmap_pmd(folio, &folio->page, vma);
 		WARN_ON_ONCE(folio_mapcount(folio) < 0);
-		folio_put(folio);
 	}
 
 out:
 	if (arch_needs_pgtable_deposit() || needs_deposit)
 		zap_deposited_table(tlb->mm, pmd);
 
+	if (needs_remove_rmap && !is_present)
+		folio_put(folio);
+
 	spin_unlock(ptl);
-	if (flush_needed)
+	if (is_present)
 		tlb_remove_page_size(tlb, &folio->page, HPAGE_PMD_SIZE);
 	return ret;
 }
