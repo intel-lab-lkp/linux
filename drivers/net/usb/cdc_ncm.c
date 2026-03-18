@@ -242,11 +242,17 @@ static ssize_t min_tx_pkt_store(struct device *d,
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
 	unsigned long val;
 
-	/* no need to restrict values - anything from 0 to infinity is OK */
 	if (kstrtoul(buf, 0, &val))
 		return -EINVAL;
 
-	ctx->min_tx_pkt = val;
+	/* Clamp to tx_max: the frame length can never exceed tx_max,
+	 * so any threshold above it has the same effect (padding is
+	 * never applied).  Also cap at U16_MAX since min_tx_pkt is
+	 * a u16 - without this, values like 65537 silently wrap to 1
+	 * and invert the intended behavior.
+	 */
+	ctx->min_tx_pkt = min_t(unsigned long, val,
+				min_t(u32, ctx->tx_max, U16_MAX));
 	return len;
 }
 
