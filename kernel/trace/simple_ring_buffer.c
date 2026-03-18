@@ -395,7 +395,7 @@ int simple_ring_buffer_init_mm(struct simple_rb_per_cpu *cpu_buffer,
 
 	memset(cpu_buffer->meta, 0, sizeof(*cpu_buffer->meta));
 	cpu_buffer->meta->meta_page_size = PAGE_SIZE;
-	cpu_buffer->meta->nr_subbufs = cpu_buffer->nr_pages;
+	cpu_buffer->meta->nr_subbufs = desc->nr_page_va;
 
 	/* The reader page is not part of the ring initially */
 	page = load_page(desc->page_va[0]);
