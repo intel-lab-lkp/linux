@@ -1711,8 +1711,8 @@ ascend_old_tree:
 
 gc_complete:
 	edit->set[0].to = new_root;
-	assoc_array_apply_edit(edit);
 	array->nr_leaves_on_tree = nr_leaves_on_tree;
+	assoc_array_apply_edit(edit);
 	return 0;
 
 enomem:
