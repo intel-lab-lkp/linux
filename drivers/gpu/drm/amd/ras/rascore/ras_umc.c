@@ -290,7 +290,7 @@ static int ras_umc_get_new_records(struct ras_core_context *ras_core,
 		if (!entries[i])
 			continue;
 
-		memcpy(&records[i], entries[i], sizeof(struct eeprom_umc_record));
+		records[i] = *entries[i];
 		count++;
 		radix_tree_tag_clear(&ras_umc->root,
 				entries[i]->cur_nps_retired_row_pfn, UMC_ECC_NEW_DETECTED_TAG);
