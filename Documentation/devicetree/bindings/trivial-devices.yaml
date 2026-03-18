@@ -353,6 +353,10 @@ properties:
             # Monolithic Power Systems Inc. digital step-down converter mp9945
           - mps,mp9945
             # Temperature sensor with integrated fan control
+          - mps,mpm3695-20
+            # Monolithic Power Systems Inc. multi-phase controller mpm3695-20
+          - mps,mpm3690S-15
+            # Monolithic Power Systems Inc. multi-phase controller mpm3690S-15
           - national,lm63
             # Temperature sensor with integrated fan control
           - national,lm64
