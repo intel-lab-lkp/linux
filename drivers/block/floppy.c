@@ -502,7 +502,7 @@ static int probing;
 #define FD_COMMAND_ERROR	2
 #define FD_COMMAND_OKAY		3
 
-static volatile int command_status = FD_COMMAND_NONE;
+static int command_status = FD_COMMAND_NONE;
 static unsigned long fdc_busy;
 static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
 static DECLARE_WAIT_QUEUE_HEAD(command_done);
@@ -601,7 +601,8 @@ static inline void fdc_outb(unsigned char value, int fdc, int reg)
 
 static inline bool drive_no_geom(int drive)
 {
-	return !current_type[drive] && !ITYPE(drive_state[drive].fd_device);
+	return !READ_ONCE(current_type[drive]) &&
+	       !ITYPE(drive_state[drive].fd_device);
 }
 
 #ifndef fd_eject
@@ -640,7 +641,7 @@ static const char *timeout_message;
 static void is_alive(const char *func, const char *message)
 {
 	/* this routine checks whether the floppy driver is "alive" */
-	if (test_bit(0, &fdc_busy) && command_status < 2 &&
+	if (test_bit(0, &fdc_busy) && READ_ONCE(command_status) < 2 &&
 	    !delayed_work_pending(&fd_timeout)) {
 		DPRINT("%s: timeout handler died.  %s\n", func, message);
 	}
@@ -892,7 +893,7 @@ static int lock_fdc(int drive)
 	if (wait_event_interruptible(fdc_wait, !test_and_set_bit(0, &fdc_busy)))
 		return -EINTR;
 
-	command_status = FD_COMMAND_NONE;
+	WRITE_ONCE(command_status, FD_COMMAND_NONE);
 
 	reschedule_timeout(drive, "lock fdc");
 	set_fdc(drive);
@@ -906,7 +907,7 @@ static void unlock_fdc(void)
 		DPRINT("FDC access conflict!\n");
 
 	raw_cmd = NULL;
-	command_status = FD_COMMAND_NONE;
+	WRITE_ONCE(command_status, FD_COMMAND_NONE);
 	cancel_delayed_work(&fd_timeout);
 	do_floppy = NULL;
 	cont = NULL;
@@ -990,7 +991,9 @@ static void (*floppy_work_fn)(void);
 
 static void floppy_work_workfn(struct work_struct *work)
 {
-	floppy_work_fn();
+	void (*fn)(void) = READ_ONCE(floppy_work_fn);
+
+	fn();
 }
 
 static DECLARE_WORK(floppy_work, floppy_work_workfn);
@@ -999,7 +1002,7 @@ static void schedule_bh(void (*handler)(void))
 {
 	WARN_ON(work_pending(&floppy_work));
 
-	floppy_work_fn = handler;
+	WRITE_ONCE(floppy_work_fn, handler);
 	queue_work(floppy_wq, &floppy_work);
 }
 
@@ -1864,7 +1867,7 @@ static void show_floppy(int fdc)
 
 	pr_info("cont=%p\n", cont);
 	pr_info("current_req=%p\n", current_req);
-	pr_info("command_status=%d\n", command_status);
+	pr_info("command_status=%d\n", READ_ONCE(command_status));
 	pr_info("\n");
 }
 
@@ -1991,7 +1994,7 @@ static void do_wakeup(void)
 {
 	reschedule_timeout(MAXTIMEOUT, "do wakeup");
 	cont = NULL;
-	command_status += 2;
+	WRITE_ONCE(command_status, READ_ONCE(command_status) + 2);
 	wake_up(&command_done);
 }
 
@@ -2019,11 +2022,12 @@ static int wait_til_done(void (*handler)(void), bool interruptible)
 	schedule_bh(handler);
 
 	if (interruptible)
-		wait_event_interruptible(command_done, command_status >= 2);
+		wait_event_interruptible(command_done,
+					 READ_ONCE(command_status) >= 2);
 	else
-		wait_event(command_done, command_status >= 2);
+		wait_event(command_done, READ_ONCE(command_status) >= 2);
 
-	if (command_status < 2) {
+	if (READ_ONCE(command_status) < 2) {
 		cancel_activity();
 		cont = &intr_cont;
 		reset_fdc();
@@ -2031,18 +2035,18 @@ static int wait_til_done(void (*handler)(void), bool interruptible)
 	}
 
 	if (fdc_state[current_fdc].reset)
-		command_status = FD_COMMAND_ERROR;
-	if (command_status == FD_COMMAND_OKAY)
+		WRITE_ONCE(command_status, FD_COMMAND_ERROR);
+	if (READ_ONCE(command_status) == FD_COMMAND_OKAY)
 		ret = 0;
 	else
 		ret = -EIO;
-	command_status = FD_COMMAND_NONE;
+	WRITE_ONCE(command_status, FD_COMMAND_NONE);
 	return ret;
 }
 
 static void generic_done(int result)
 {
-	command_status = result;
+	WRITE_ONCE(command_status, result);
 	cont = &wakeup_cont;
 }
 
@@ -2873,7 +2877,7 @@ static blk_status_t floppy_queue_rq(struct blk_mq_hw_ctx *hctx,
 	list_add_tail(&bd->rq->queuelist, &floppy_reqs);
 	spin_unlock_irq(&floppy_lock);
 
-	command_status = FD_COMMAND_NONE;
+	WRITE_ONCE(command_status, FD_COMMAND_NONE);
 	__reschedule_timeout(MAXTIMEOUT, "fd_request");
 	set_fdc(0);
 	process_fd_request();
