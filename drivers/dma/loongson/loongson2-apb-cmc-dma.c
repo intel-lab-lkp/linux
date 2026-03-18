@@ -673,9 +673,11 @@ static int loongson2_cmc_dma_probe(struct platform_device *pdev)
 	for (i = 0; i < nr_chans; i++) {
 		lchan = &lddev->chan[i];
 
-		lchan->irq = platform_get_irq(pdev, i);
-		if (lchan->irq < 0)
-			return lchan->irq;
+		ret = platform_get_irq(pdev, i);
+		if (ret < 0)
+			return ret;
+
+		lchan->irq = ret;
 
 		ret = devm_request_irq(dev, lchan->irq, loongson2_cmc_dma_chan_irq, IRQF_SHARED,
 				       dev_name(chan2dev(lchan)), lchan);
