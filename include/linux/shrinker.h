@@ -51,6 +51,8 @@ struct shrink_control {
 	 */
 	unsigned long nr_scanned;
 
+	s8 priority;
+
 	/* current memcg being shrunk (for memcg aware shrinkers) */
 	struct mem_cgroup *memcg;
 };

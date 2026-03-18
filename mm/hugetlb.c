@@ -27,6 +27,7 @@
 #include <linux/string_helpers.h>
 #include <linux/swap.h>
 #include <linux/leafops.h>
+#include <linux/shrinker.h>
 #include <linux/jhash.h>
 #include <linux/numa.h>
 #include <linux/llist.h>
@@ -4101,6 +4102,129 @@ ssize_t __nr_hugepages_store_common(bool obey_mempolicy,
 	return err ? err : len;
 }
 
+#ifdef CONFIG_HUGETLB_FROZEN_MEMORY_SHRINKER
+
+static bool hugetlb_shrinker_enabled;
+static int __init cmdline_parse_hugetlb_shrinker_enabled(char *p)
+{
+	return kstrtobool(p, &hugetlb_shrinker_enabled);
+}
+early_param("hugetlb_shrinker_enabled", cmdline_parse_hugetlb_shrinker_enabled);
+
+static unsigned long hugepage_shrinker_count(struct shrinker *s,
+					     struct shrink_control *sc)
+{
+	struct hstate *h;
+
+	if (sc->priority >= DEF_PRIORITY - 6)
+		return 0;
+
+	if (!gigantic_page_runtime_supported())
+		return 0;
+
+	for_each_hstate(h) {
+		if (hstate_is_gigantic(h) && h->nr_huge_pages_node[sc->nid] > 0)
+			return SWAP_CLUSTER_MAX;
+	}
+	return 0;
+}
+
+static bool hugepage_shrinker_is_watermark_ok(int nid)
+{
+	int i;
+	pg_data_t *pgdat = NODE_DATA(nid);
+
+	for (i = 0; i < MAX_NR_ZONES; i++) {
+		unsigned long mark;
+		unsigned long free_pages;
+		struct zone *zone = pgdat->node_zones + i;
+
+		if (!managed_zone(zone))
+			continue;
+
+		mark = high_wmark_pages(zone);
+		free_pages = zone_page_state(zone, NR_FREE_PAGES);
+		if (__zone_watermark_ok(zone, MAX_PAGE_ORDER, mark,
+					MAX_NR_ZONES, 0, free_pages))
+			return true;
+	}
+	return false;
+}
+
+static DEFINE_MUTEX(hugepage_shrink_mutex);
+
+static unsigned long hugepage_shrinker_scan(struct shrinker *s,
+					    struct shrink_control *sc)
+{
+	int err;
+	struct hstate *h;
+	unsigned long old_nr;
+	nodemask_t nodes_allowed;
+
+	if (sc->priority >= DEF_PRIORITY - 6)
+		return SHRINK_STOP;
+
+	if (sc->nr_to_scan == 0)
+		return SHRINK_STOP;
+
+	if (!gigantic_page_runtime_supported())
+		return SHRINK_STOP;
+
+	if (hugepage_shrinker_is_watermark_ok(sc->nid))
+		return SHRINK_STOP;
+
+	mutex_lock(&hugepage_shrink_mutex);
+
+	if (hugepage_shrinker_is_watermark_ok(sc->nid))
+		goto unlock;
+
+	init_nodemask_of_node(&nodes_allowed, sc->nid);
+
+	for_each_hstate(h) {
+		if (!hstate_is_gigantic(h))
+			continue;
+
+		old_nr = h->nr_huge_pages_node[sc->nid];
+		if (!old_nr)
+			continue;
+
+		err = set_max_huge_pages(h, old_nr - 1, sc->nid, &nodes_allowed);
+		if (!err)
+			goto unlock;
+	}
+unlock:
+	mutex_unlock(&hugepage_shrink_mutex);
+	return SHRINK_STOP;
+}
+
+static struct shrinker *hugepage_shrinker;
+
+static int __init hugetlb_shrinker_init(void)
+{
+	if (!hugetlb_shrinker_enabled)
+		return 0;
+
+	hugepage_shrinker = shrinker_alloc(0, "hugetlbfs");
+	if (!hugepage_shrinker)
+		return -ENOMEM;
+
+	hugepage_shrinker->count_objects = hugepage_shrinker_count;
+	hugepage_shrinker->scan_objects = hugepage_shrinker_scan;
+	hugepage_shrinker->seeks = 0;
+	hugepage_shrinker->batch = 1;
+
+	pr_info("Registering hugetlbfs shrinker\n");
+	shrinker_register(hugepage_shrinker);
+
+	return 0;
+}
+#else
+static int __init hugetlb_shrinker_init(void)
+{
+	return 0;
+}
+#endif
+
 static int __init hugetlb_init(void)
 {
 	int i;
@@ -4157,6 +4281,7 @@ static int __init hugetlb_init(void)
 	hugetlb_sysfs_init();
 	hugetlb_cgroup_file_init();
 	hugetlb_sysctl_init();
+	hugetlb_shrinker_init();
 
 #ifdef CONFIG_SMP
 	num_fault_mutexes = roundup_pow_of_two(8 * num_possible_cpus());

@@ -769,6 +769,15 @@ config NOMMU_INITIAL_TRIM_EXCESS
 config ARCH_WANT_GENERAL_HUGETLB
 	bool
 
+config HUGETLB_FROZEN_MEMORY_SHRINKER
+	bool "HugeTLB Frozen Memory Shrinker"
+	depends on HUGETLBFS
+	help
+	  Enables a shrinker for the hugetlb subsystem that allows
+	  unused huge pages to be released back to the buddy
+	  system under memory pressure. One huge page at a time.
+	  Further gated by kernel cmdline hugetlb_shrinker_enabled.
+
 config ARCH_WANTS_THP_SWAP
 	def_bool n
 

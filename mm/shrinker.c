@@ -529,6 +529,7 @@ again:
 				.gfp_mask = gfp_mask,
 				.nid = nid,
 				.memcg = memcg,
+				.priority = priority,
 			};
 			struct shrinker *shrinker;
 			int shrinker_id = calc_shrinker_id(index, offset);
@@ -657,6 +658,7 @@ unsigned long shrink_slab(gfp_t gfp_mask, int nid, struct mem_cgroup *memcg,
 			.gfp_mask = gfp_mask,
 			.nid = nid,
 			.memcg = memcg,
+			.priority = priority,
 		};
 
 		if (!shrinker_try_get(shrinker))
