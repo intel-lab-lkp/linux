@@ -608,7 +608,7 @@ static int micron_st_nor_ready(struct spi_nor *nor)
 		 * operations to the software. If this is the case we use
 		 * only the status register value.
 		 */
-		return ret == -EOPNOTSUPP ? sr_ready : ret;
+		return (ret == -EOPNOTSUPP || ret == -ENOTSUPP) ? sr_ready : ret;
 	}
 
 	if (nor->bouncebuf[0] & (FSR_E_ERR | FSR_P_ERR)) {
