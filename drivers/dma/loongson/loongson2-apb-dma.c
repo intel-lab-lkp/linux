@@ -220,8 +220,8 @@ static size_t ls2x_dmac_detect_burst(struct ls2x_dma_chan *lchan)
 	u32 maxburst, buswidth;
 
 	/* Reject definitely invalid configurations */
-	if ((lchan->sconfig.src_addr_width & LDMA_SLAVE_BUSWIDTHS) &&
-	    (lchan->sconfig.dst_addr_width & LDMA_SLAVE_BUSWIDTHS))
+	if (!(BIT(lchan->sconfig.src_addr_width) & LDMA_SLAVE_BUSWIDTHS) &&
+	    !(BIT(lchan->sconfig.dst_addr_width) & LDMA_SLAVE_BUSWIDTHS))
 		return 0;
 
 	if (lchan->sconfig.direction == DMA_MEM_TO_DEV) {
