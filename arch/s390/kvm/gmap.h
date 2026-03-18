@@ -198,25 +198,29 @@ static inline void _gmap_crstep_xchg(struct gmap *gmap, union crste *crstep, uni
 				     gfn_t gfn, bool needs_lock)
 {
 	unsigned long align = 8 + (is_pmd(*crstep) ? 0 : 11);
+	union crste oldcrste;
 
 	lockdep_assert_held(&gmap->kvm->mmu_lock);
 	if (!needs_lock)
 		lockdep_assert_held(&gmap->children_lock);
 
-	gfn = ALIGN_DOWN(gfn, align);
-	if (crste_prefix(*crstep) && (ne.h.p || ne.h.i || !crste_prefix(ne))) {
-		ne.s.fc1.prefix_notif = 0;
-		gmap_unmap_prefix(gmap, gfn, gfn + align);
-	}
-	if (crste_leaf(*crstep) && crstep->s.fc1.vsie_notif &&
-	    (ne.h.p || ne.h.i || !ne.s.fc1.vsie_notif)) {
-		ne.s.fc1.vsie_notif = 0;
-		if (needs_lock)
-			gmap_handle_vsie_unshadow_event(gmap, gfn);
-		else
-			_gmap_handle_vsie_unshadow_event(gmap, gfn);
-	}
-	dat_crstep_xchg(crstep, ne, gfn, gmap->asce);
+	do {
+		oldcrste = READ_ONCE(*crstep);
+
+		gfn = ALIGN_DOWN(gfn, align);
+		if (crste_prefix(oldcrste) && (ne.h.p || ne.h.i || !crste_prefix(ne))) {
+			ne.s.fc1.prefix_notif = 0;
+			gmap_unmap_prefix(gmap, gfn, gfn + align);
+		}
+		if (crste_leaf(oldcrste) && oldcrste.s.fc1.vsie_notif &&
+		    (ne.h.p || ne.h.i || !ne.s.fc1.vsie_notif)) {
+			ne.s.fc1.vsie_notif = 0;
+			if (needs_lock)
+				gmap_handle_vsie_unshadow_event(gmap, gfn);
+			else
+				_gmap_handle_vsie_unshadow_event(gmap, gfn);
+		}
+	} while (!dat_crstep_xchg_atomic(crstep, oldcrste, ne, gfn, gmap->asce));
 }
 
 static inline void gmap_crstep_xchg(struct gmap *gmap, union crste *crstep, union crste ne,
