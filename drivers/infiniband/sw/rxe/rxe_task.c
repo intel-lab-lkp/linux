@@ -254,6 +254,13 @@ void rxe_sched_task(struct rxe_task *task)
 	spin_unlock_irqrestore(&task->lock, flags);
 }
 
+/* Helper to queue auxiliary tasks into rxe_wq.
+ */
+void rxe_queue_work(struct work_struct *work)
+{
+	queue_work(rxe_wq, work);
+}
+
 /* rxe_disable/enable_task are only called from
  * rxe_modify_qp in process context. Task is moved
  * to the drained state by do_task.
