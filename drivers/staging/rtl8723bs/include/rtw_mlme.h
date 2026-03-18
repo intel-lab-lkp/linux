@@ -103,7 +103,7 @@ struct rt_link_detect_t {
 	bool			bHigherBusyRxTraffic; /*  We may disable Tx interrupt according as Rx traffic. */
 	bool			bHigherBusyTxTraffic; /*  We may disable Tx interrupt according as Tx traffic. */
 	/* u8 TrafficBusyState; */
-	u8 TrafficTransitionCount;
+	u8 traffic_transition_count;
 	u32 LowPowerTransitionCount;
 };
 

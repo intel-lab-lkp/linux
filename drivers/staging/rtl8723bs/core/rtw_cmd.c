@@ -1173,21 +1173,21 @@ u8 traffic_status_watchdog(struct adapter *padapter, u8 from_timer)
 			bEnterPS = false;
 
 			if (bBusyTraffic) {
-				if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount <= 4)
-					pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 4;
+				if (pmlmepriv->LinkDetectInfo.traffic_transition_count <= 4)
+					pmlmepriv->LinkDetectInfo.traffic_transition_count = 4;
 
-				pmlmepriv->LinkDetectInfo.TrafficTransitionCount++;
+				pmlmepriv->LinkDetectInfo.traffic_transition_count++;
 
-				if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount > 30/*TrafficTransitionLevel*/)
-					pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 30;
+				if (pmlmepriv->LinkDetectInfo.traffic_transition_count > 30) /* TrafficTransitionLevel */
+					pmlmepriv->LinkDetectInfo.traffic_transition_count = 30;
 			}
 		} else {
-			if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount >= 2)
-				pmlmepriv->LinkDetectInfo.TrafficTransitionCount -= 2;
+			if (pmlmepriv->LinkDetectInfo.traffic_transition_count >= 2)
+				pmlmepriv->LinkDetectInfo.traffic_transition_count -= 2;
 			else
-				pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 0;
+				pmlmepriv->LinkDetectInfo.traffic_transition_count = 0;
 
-			if (pmlmepriv->LinkDetectInfo.TrafficTransitionCount == 0)
+			if (pmlmepriv->LinkDetectInfo.traffic_transition_count == 0)
 				bEnterPS = true;
 		}
 

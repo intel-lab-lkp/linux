@@ -4757,7 +4757,7 @@ static void rtw_mlmeext_disconnect(struct adapter *padapter)
 	timer_delete_sync(&pmlmeext->link_timer);
 
 	/* pmlmepriv->LinkDetectInfo.TrafficBusyState = false; */
-	pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 0;
+	pmlmepriv->LinkDetectInfo.traffic_transition_count = 0;
 	pmlmepriv->LinkDetectInfo.LowPowerTransitionCount = 0;
 
 }
