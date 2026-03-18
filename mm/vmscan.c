@@ -4642,11 +4642,17 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 static bool isolate_folio(struct lruvec *lruvec, struct folio *folio, struct scan_control *sc)
 {
 	bool success;
+	struct address_space *mapping = folio_mapping(folio);
 
 	/* swap constrained */
 	if (!(sc->gfp_mask & __GFP_IO) &&
 	    (folio_test_dirty(folio) ||
 	     (folio_test_anon(folio) && !folio_test_swapcache(folio))))
+		return false;
+
+	/* skip dirty file pages since they can't be writeout */
+	if (mapping && !shmem_mapping(mapping) &&
+		!folio_test_anon(folio) && folio_test_dirty(folio))
 		return false;
 
 	/* raced with release_pages() */
