@@ -499,6 +499,18 @@ config COMMON_CLK_RPMI
 	  Support for clocks based on the clock service group defined by
 	  the RISC-V platform management interface (RPMI) specification.
 
+config CLKCTRL_GUARD
+	tristate "Clock controller guard"
+	depends on COMMON_CLK && OF
+	default n
+	help
+	  A virtual clock controller that can be used on platfroms where
+	  several clocks and GPIO signals are required to be enabled first
+          before peripheral initialization. The signals can be routed to this
+          controller, which simplifies peripheral driver's probe procedure.
+
+	  If unsure, say N.
+
 source "drivers/clk/actions/Kconfig"
 source "drivers/clk/analogbits/Kconfig"
 source "drivers/clk/aspeed/Kconfig"
