@@ -479,7 +479,8 @@ static int drm_pagemap_cpages(unsigned long *migrate_pfn, unsigned long npages)
 			folio = page_folio(page);
 			order = folio_order(folio);
 			cpages += NR_PAGES(order);
-		} else if (migrate_pfn[i] & MIGRATE_PFN_COMPOUND) {
+		} else if (IS_ENABLED(CONFIG_PGTABLE_HAS_HUGE_LEAVES) &&
+			   migrate_pfn[i] & MIGRATE_PFN_COMPOUND) {
 			order = HPAGE_PMD_ORDER;
 			cpages += NR_PAGES(order);
 		}
@@ -666,7 +667,8 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 		}
 		migrate.dst[i] = migrate_pfn(migrate.dst[i]);
 
-		if (migrate.src[i] & MIGRATE_PFN_COMPOUND) {
+		if (IS_ENABLED(CONFIG_PGTABLE_HAS_HUGE_LEAVES) &&
+		    migrate.src[i] & MIGRATE_PFN_COMPOUND) {
 			drm_WARN_ONCE(dpagemap->drm, src_page &&
 				      folio_order(page_folio(src_page)) != HPAGE_PMD_ORDER,
 				      "Unexpected folio order\n");
