@@ -50,6 +50,7 @@
 static void hci_rx_work(struct work_struct *work);
 static void hci_cmd_work(struct work_struct *work);
 static void hci_tx_work(struct work_struct *work);
+static void hci_cancel_cmd_sync(struct hci_dev *hdev, int err);
 
 /* HCI device list */
 LIST_HEAD(hci_dev_list);
@@ -2696,6 +2697,8 @@ void hci_unregister_dev(struct hci_dev *hdev)
 	hci_dev_set_flag(hdev, HCI_UNREGISTER);
 	mutex_unlock(&hdev->unregister_lock);
 
+	hci_cancel_cmd_sync(hdev, EINTR);
+
 	write_lock(&hci_dev_list_lock);
 	list_del(&hdev->list);
 	write_unlock(&hci_dev_list_lock);
@@ -2877,6 +2880,9 @@ int hci_resume_dev(struct hci_dev *hdev)
 	hci_req_sync_lock(hdev);
 	ret = hci_resume_sync(hdev);
 	hci_req_sync_unlock(hdev);
+
+	if (ret && hci_dev_test_flag(hdev, HCI_UNREGISTER))
+		return 0;
 
 	mgmt_resuming(hdev, hdev->wake_reason, &hdev->wake_addr,
 		      hdev->wake_addr_type);
