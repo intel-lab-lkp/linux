@@ -19,6 +19,7 @@
 #include <linux/debug_locks.h>
 #include <linux/vmalloc.h>
 #include <linux/sort.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 #include <asm/div64.h>
 
@@ -488,9 +489,9 @@ static void seq_stats(struct seq_file *m, struct lock_stat_data *data)
 		const char *key_name;
 
 		key_name = __get_key_name(ckey, str);
-		snprintf(name, namelen, "%s", key_name);
+		strscpy(name, key_name, namelen);
 	} else {
-		snprintf(name, namelen, "%s", cname);
+		strscpy(name, cname, namelen);
 	}
 	rcu_read_unlock_sched();
 
