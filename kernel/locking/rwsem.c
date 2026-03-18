@@ -365,12 +365,12 @@ enum rwsem_wake_type {
 #define MAX_READERS_WAKEUP	0x100
 
 static inline
-bool __rwsem_del_waiter(struct rw_semaphore *sem, struct rwsem_waiter *waiter)
+void __rwsem_del_waiter(struct rw_semaphore *sem, struct rwsem_waiter *waiter)
 	__must_hold(&sem->wait_lock)
 {
 	if (list_empty(&waiter->list)) {
 		sem->first_waiter = NULL;
-		return true;
+		return;
 	}
 
 	if (sem->first_waiter == waiter) {
@@ -378,8 +378,6 @@ bool __rwsem_del_waiter(struct rw_semaphore *sem, struct rwsem_waiter *waiter)
 						     struct rwsem_waiter, list);
 	}
 	list_del(&waiter->list);
-
-	return false;
 }
 
 /*
@@ -394,7 +392,8 @@ static inline bool
 rwsem_del_waiter(struct rw_semaphore *sem, struct rwsem_waiter *waiter)
 {
 	lockdep_assert_held(&sem->wait_lock);
-	if (__rwsem_del_waiter(sem, waiter))
+	__rwsem_del_waiter(sem, waiter);
+	if (rwsem_is_contended(sem))
 		return true;
 	atomic_long_andnot(RWSEM_FLAG_HANDOFF | RWSEM_FLAG_WAITERS, &sem->count);
 	return false;
