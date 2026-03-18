@@ -238,7 +238,7 @@ iavf_print_adv_rss_cfg(struct iavf_adapter *adapter, struct iavf_adv_rss *rss,
 {
 	u32 packet_hdrs = rss->packet_hdrs;
 	u64 hash_flds = rss->hash_flds;
-	static char hash_opt[300];
+	char hash_opt[128];
 	const char *proto;
 
 	if (packet_hdrs & IAVF_ADV_RSS_FLOW_SEG_HDR_TCP)
@@ -252,44 +252,35 @@ iavf_print_adv_rss_cfg(struct iavf_adapter *adapter, struct iavf_adv_rss *rss,
 	else
 		return;
 
-	memset(hash_opt, 0, sizeof(hash_opt));
+	snprintf(hash_opt, sizeof(hash_opt), "%s%s %s%s%s%s%s%s%s%s%s",
+		 proto,
+		 (packet_hdrs & IAVF_ADV_RSS_FLOW_SEG_HDR_IPV4) ?
+			"v4" : "v6",
+		 (hash_flds & (IAVF_ADV_RSS_HASH_FLD_IPV4_SA |
+			       IAVF_ADV_RSS_HASH_FLD_IPV6_SA)) ?
+			"IP SA," : "",
+		 (hash_flds & (IAVF_ADV_RSS_HASH_FLD_IPV4_DA |
+			       IAVF_ADV_RSS_HASH_FLD_IPV6_DA)) ?
+			"IP DA," : "",
+		 (hash_flds & (IAVF_ADV_RSS_HASH_FLD_TCP_SRC_PORT |
+			       IAVF_ADV_RSS_HASH_FLD_UDP_SRC_PORT |
+			       IAVF_ADV_RSS_HASH_FLD_SCTP_SRC_PORT)) ?
+			"src port," : "",
+		 (hash_flds & (IAVF_ADV_RSS_HASH_FLD_TCP_DST_PORT |
+			       IAVF_ADV_RSS_HASH_FLD_UDP_DST_PORT |
+			       IAVF_ADV_RSS_HASH_FLD_SCTP_DST_PORT)) ?
+			"dst port," : "",
+		 (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPC_TEID) ?
+			"gtp-c," : "",
+		 (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_IP_TEID) ?
+			"gtp-u ip," : "",
+		 (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_EH_TEID) ?
+			"gtp-u ext," : "",
+		 (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_UP_TEID) ?
+			"gtp-u ul," : "",
+		 (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_DWN_TEID) ?
+			"gtp-u dl," : "");
 
-	strcat(hash_opt, proto);
-	if (packet_hdrs & IAVF_ADV_RSS_FLOW_SEG_HDR_IPV4)
-		strcat(hash_opt, "v4 ");
-	else
-		strcat(hash_opt, "v6 ");
-
-	if (hash_flds & (IAVF_ADV_RSS_HASH_FLD_IPV4_SA |
-			 IAVF_ADV_RSS_HASH_FLD_IPV6_SA))
-		strcat(hash_opt, "IP SA,");
-	if (hash_flds & (IAVF_ADV_RSS_HASH_FLD_IPV4_DA |
-			 IAVF_ADV_RSS_HASH_FLD_IPV6_DA))
-		strcat(hash_opt, "IP DA,");
-	if (hash_flds & (IAVF_ADV_RSS_HASH_FLD_TCP_SRC_PORT |
-			 IAVF_ADV_RSS_HASH_FLD_UDP_SRC_PORT |
-			 IAVF_ADV_RSS_HASH_FLD_SCTP_SRC_PORT))
-		strcat(hash_opt, "src port,");
-	if (hash_flds & (IAVF_ADV_RSS_HASH_FLD_TCP_DST_PORT |
-			 IAVF_ADV_RSS_HASH_FLD_UDP_DST_PORT |
-			 IAVF_ADV_RSS_HASH_FLD_SCTP_DST_PORT))
-		strcat(hash_opt, "dst port,");
-	if (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPC_TEID)
-		strcat(hash_opt, "gtp-c,");
-	if (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_IP_TEID)
-		strcat(hash_opt, "gtp-u ip,");
-	if (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_EH_TEID)
-		strcat(hash_opt, "gtp-u ext,");
-	if (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_UP_TEID)
-		strcat(hash_opt, "gtp-u ul,");
-	if (hash_flds & IAVF_ADV_RSS_HASH_FLD_GTPU_DWN_TEID)
-		strcat(hash_opt, "gtp-u dl,");
-
-	if (!action)
-		action = "";
-
-	if (!result)
-		result = "";
-
-	dev_info(&adapter->pdev->dev, "%s %s %s\n", action, hash_opt, result);
+	dev_info(&adapter->pdev->dev, "%s %s %s\n",
+		 action ? action : "", hash_opt, result ? result : "");
 }
