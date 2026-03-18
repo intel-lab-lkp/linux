@@ -8610,6 +8610,7 @@ T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	drivers/gpu/drm/gma500/
 
 DRM DRIVERS FOR HISILICON
+M:	Yongbang Shi <shiyongbang@huawei.com>
 M:	Xinliang Liu <xinliang.liu@linaro.org>
 M:	Tian Tao  <tiantao6@hisilicon.com>
 R:	Xinwei Kong <kong.kongxinwei@hisilicon.com>
