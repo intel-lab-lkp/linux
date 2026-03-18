@@ -215,6 +215,9 @@ static void __kprobes __do_page_fault(struct pt_regs *regs,
 	if (user_mode(regs))
 		flags |= FAULT_FLAG_USER;
 
+	if (current->thread.trap_nr == EXC_PIF || current->thread.trap_nr == EXC_PNX)
+		flags |= FAULT_FLAG_INSTRUCTION;
+
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
 
 	if (!(flags & FAULT_FLAG_USER))
