@@ -54,6 +54,8 @@
 #define QNX4_SUPER_MAGIC	0x002f		/* qnx4 fs detection */
 #define QNX6_SUPER_MAGIC	0x68191122	/* qnx6 fs detection */
 #define AFS_FS_MAGIC		0x6B414653
+#define NTFS_SUPER_MAGIC	0x5346544e	/* "NTFS" */
+#define NTFS3_SUPER_MAGIC	0x7366746e	/* "ntfs" */
 
 
 #define REISERFS_SUPER_MAGIC	0x52654973	/* used by gcc */

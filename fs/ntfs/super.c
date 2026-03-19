@@ -2149,7 +2149,7 @@ static int ntfs_statfs(struct dentry *dentry, struct kstatfs *sfs)
 
 	ntfs_debug("Entering.");
 	/* Type of filesystem. */
-	sfs->f_type   = NTFS_SB_MAGIC;
+	sfs->f_type   = NTFS_SUPER_MAGIC;
 	/* Optimal transfer block size. */
 	sfs->f_bsize = vol->cluster_size;
 	/* Fundamental file system block size, used as the unit. */
@@ -2352,7 +2352,7 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	/* Initialize the cluster and mft allocators. */
 	ntfs_setup_allocators(vol);
 	/* Setup remaining fields in the super block. */
-	sb->s_magic = NTFS_SB_MAGIC;
+	sb->s_magic = NTFS_SUPER_MAGIC;
 	/*
 	 * Ntfs allows 63 bits for the file size, i.e. correct would be:
 	 *	sb->s_maxbytes = ~0ULL >> 1;

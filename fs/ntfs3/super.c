@@ -731,7 +731,7 @@ static int ntfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	struct wnd_bitmap *wnd = &sbi->used.bitmap;
 	CLST da_clusters = ntfs_get_da(sbi);
 
-	buf->f_type = sb->s_magic;
+	buf->f_type = NTFS3_SUPER_MAGIC;
 	buf->f_bsize = buf->f_frsize = sbi->cluster_size;
 	buf->f_blocks = wnd->nbits;
 
@@ -1279,7 +1279,7 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 	sbi->options = options;
 	sb->s_flags |= SB_NODIRATIME;
-	sb->s_magic = 0x7366746e; // "ntfs"
+	sb->s_magic = NTFS3_SUPER_MAGIC;
 	sb->s_op = &ntfs_sops;
 	sb->s_export_op = &ntfs_export_ops;
 	sb->s_time_gran = NTFS_TIME_GRAN; // 100 nsec
