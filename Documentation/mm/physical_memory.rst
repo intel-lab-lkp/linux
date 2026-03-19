@@ -483,6 +483,12 @@ General
   ``present_pages`` should use ``get_online_mems()`` to get a stable value. It
   is initialized by ``calculate_node_totalpages()``.
 
+``pages_with_online_memmap``
+  The pages_with_online_memmap is pages within the zone that have an online
+  memmap. It includes present pages and memory holes that have a memmap. When
+  spanned_pages == pages_with_online_memmap, pfn_to_page() can be performed
+  without further checks on any pfn within the zone span.
+
 ``present_early_pages``
   The present pages existing within the zone located on memory available since
   early boot, excluding hotplugged memory. Defined only when

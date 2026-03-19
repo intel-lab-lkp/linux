@@ -958,6 +958,7 @@ static void __init memmap_init_zone_range(struct zone *zone,
 	unsigned long zone_start_pfn = zone->zone_start_pfn;
 	unsigned long zone_end_pfn = zone_start_pfn + zone->spanned_pages;
 	int nid = zone_to_nid(zone), zone_id = zone_idx(zone);
+	unsigned long zone_hole_start, zone_hole_end;
 
 	start_pfn = clamp(start_pfn, zone_start_pfn, zone_end_pfn);
 	end_pfn = clamp(end_pfn, zone_start_pfn, zone_end_pfn);
@@ -969,8 +970,19 @@ static void __init memmap_init_zone_range(struct zone *zone,
 			  zone_end_pfn, MEMINIT_EARLY, NULL, MIGRATE_MOVABLE,
 			  false);
 
-	if (*hole_pfn < start_pfn)
+	WRITE_ONCE(zone->pages_with_online_memmap,
+		   READ_ONCE(zone->pages_with_online_memmap) +
+		   (end_pfn - start_pfn));
+
+	if (*hole_pfn < start_pfn) {
 		init_unavailable_range(*hole_pfn, start_pfn, zone_id, nid);
+		zone_hole_start = clamp(*hole_pfn, zone_start_pfn, zone_end_pfn);
+		zone_hole_end = clamp(start_pfn, zone_start_pfn, zone_end_pfn);
+		if (zone_hole_start < zone_hole_end)
+			WRITE_ONCE(zone->pages_with_online_memmap,
+				   READ_ONCE(zone->pages_with_online_memmap) +
+				   (zone_hole_end - zone_hole_start));
+	}
 
 	*hole_pfn = end_pfn;
 }
@@ -2258,28 +2270,6 @@ void __init init_cma_pageblock(struct page *page)
 }
 #endif
 
-void set_zone_contiguous(struct zone *zone)
-{
-	unsigned long block_start_pfn = zone->zone_start_pfn;
-	unsigned long block_end_pfn;
-
-	block_end_pfn = pageblock_end_pfn(block_start_pfn);
-	for (; block_start_pfn < zone_end_pfn(zone);
-			block_start_pfn = block_end_pfn,
-			 block_end_pfn += pageblock_nr_pages) {
-
-		block_end_pfn = min(block_end_pfn, zone_end_pfn(zone));
-
-		if (!__pageblock_pfn_to_page(block_start_pfn,
-					     block_end_pfn, zone))
-			return;
-		cond_resched();
-	}
-
-	/* We confirm that there is no hole */
-	zone->contiguous = true;
-}
-
 /*
  * Check if a PFN range intersects multiple zones on one or more
  * NUMA nodes. Specify the @nid argument if it is known that this
@@ -2308,7 +2298,6 @@ bool pfn_range_intersects_zones(int nid, unsigned long start_pfn,
 static void __init mem_init_print_info(void);
 void __init page_alloc_init_late(void)
 {
-	struct zone *zone;
 	int nid;
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
@@ -2341,9 +2330,6 @@ void __init page_alloc_init_late(void)
 
 	for_each_node_state(nid, N_MEMORY)
 		shuffle_free_memory(NODE_DATA(nid));
-
-	for_each_populated_zone(zone)
-		set_zone_contiguous(zone);
 
 	/* Initialize page ext after all struct pages are initialized. */
 	if (deferred_struct_pages)

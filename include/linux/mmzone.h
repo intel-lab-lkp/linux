@@ -1029,6 +1029,11 @@ struct zone {
 	 * cma pages is present pages that are assigned for CMA use
 	 * (MIGRATE_CMA).
 	 *
+	 * pages_with_online_memmap is pages within the zone that have an online
+	 * memmap. It includes present pages and memory holes that have a memmap.
+	 * When spanned_pages == pages_with_online_memmap, pfn_to_page() can be
+	 * performed without further checks on any pfn within the zone span.
+	 *
 	 * So present_pages may be used by memory hotplug or memory power
 	 * management logic to figure out unmanaged pages by checking
 	 * (present_pages - managed_pages). And managed_pages should be used
@@ -1053,6 +1058,7 @@ struct zone {
 	atomic_long_t		managed_pages;
 	unsigned long		spanned_pages;
 	unsigned long		present_pages;
+	unsigned long		pages_with_online_memmap;
 #if defined(CONFIG_MEMORY_HOTPLUG)
 	unsigned long		present_early_pages;
 #endif
@@ -1140,7 +1146,6 @@ struct zone {
 	bool			compact_blockskip_flush;
 #endif
 
-	bool			contiguous;
 
 	CACHELINE_PADDING(_pad3_);
 	/* Zone statistics */
@@ -1214,6 +1219,21 @@ static inline unsigned long zone_end_pfn(const struct zone *zone)
 static inline bool zone_spans_pfn(const struct zone *zone, unsigned long pfn)
 {
 	return zone->zone_start_pfn <= pfn && pfn < zone_end_pfn(zone);
+}
+
+/**
+ * zone_is_contiguous - test whether a zone is contiguous
+ * @zone: the zone to test.
+ *
+ * In a contiguous zone, it is valid to call pfn_to_page() on any pfn in the
+ * spanned zone without requiring pfn_valid() or pfn_to_online_page() checks.
+ *
+ * Returns: true if contiguous, otherwise false.
+ */
+static inline bool zone_is_contiguous(const struct zone *zone)
+{
+	return READ_ONCE(zone->spanned_pages) ==
+		READ_ONCE(zone->pages_with_online_memmap);
 }
 
 static inline bool zone_is_initialized(const struct zone *zone)
