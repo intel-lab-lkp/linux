@@ -64,6 +64,25 @@ __sum16 ipxlat_l4_csum_ipv6(const struct in6_addr *saddr,
 			    unsigned int l4_len, u8 proto);
 
 /**
+ * ipxlat_icmp_relayout - resize quoted ICMP payload/extensions in place
+ * @skb: packet buffer
+ * @outer_len: offset to quoted datagram start
+ * @in_ipl: input datagram payload length
+ * @in_iel: input extension length
+ * @out_ipl: output datagram payload length
+ * @out_pad: output pad bytes between datagram and extensions
+ * @out_iel: output extension length
+ *
+ * This helper may move payload bytes and adjust skb tail length.
+ *
+ * Return: 0 on success, negative errno on resize/memory failures.
+ */
+int ipxlat_icmp_relayout(struct sk_buff *skb, unsigned int outer_len,
+			 unsigned int in_ipl, unsigned int in_iel,
+			 unsigned int out_ipl, unsigned int out_pad,
+			 unsigned int out_iel);
+
+/**
  * ipxlat_finalize_offload - normalize checksum/GSO metadata after translation
  * @skb: translated packet
  * @l4_proto: resulting transport protocol

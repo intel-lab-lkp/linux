@@ -87,6 +87,67 @@ __sum16 ipxlat_l4_csum_ipv6(const struct in6_addr *saddr,
 			       skb_checksum(skb, l4_off, l4_len, 0));
 }
 
+static int ipxlat_ensure_tailroom(struct sk_buff *skb, const unsigned int grow)
+{
+	int err;
+
+	if (!grow || skb_tailroom(skb) >= grow)
+		return 0;
+
+	/* tail growth may reallocate backing storage and move skb data */
+	err = pskb_expand_head(skb, 0, grow - skb_tailroom(skb), GFP_ATOMIC);
+	if (unlikely(err))
+		return err;
+
+	return 0;
+}
+
+/* Rewrite quoted datagram layout after inner translation in ICMP errors.
+ *
+ * Caller provides old/new quoted lengths and extension lengths; this helper
+ * only does byte moves/padding/trim while preserving extension bytes at the
+ * end of the packet when present
+ */
+int ipxlat_icmp_relayout(struct sk_buff *skb, unsigned int outer_len,
+			 unsigned int in_ipl, unsigned int in_iel,
+			 unsigned int out_ipl, unsigned int out_pad,
+			 unsigned int out_iel)
+{
+	const unsigned int in_ie_off = outer_len + in_ipl, old_len = skb->len;
+	const unsigned int new_len = outer_len + out_ipl + out_pad + out_iel;
+	const unsigned int out_ie_off = outer_len + out_ipl + out_pad;
+	unsigned int grow = 0;
+	int err;
+
+	/* new_len > old_len here means "we need extra bytes on top of
+	 * already-translated length", mainly due padding/layout decisions
+	 * while keeping extensions
+	 */
+	if (unlikely(new_len > old_len)) {
+		grow = new_len - old_len;
+
+		err = ipxlat_ensure_tailroom(skb, grow);
+		if (unlikely(err))
+			return err;
+
+		__skb_put(skb, grow);
+	}
+
+	if (unlikely(out_iel))
+		memmove(skb->data + out_ie_off, skb->data + in_ie_off, out_iel);
+
+	if (unlikely(out_pad))
+		memset(skb->data + outer_len + out_ipl, 0, out_pad);
+
+	if (unlikely(new_len < old_len)) {
+		err = pskb_trim(skb, new_len);
+		if (unlikely(err))
+			return err;
+	}
+
+	return 0;
+}
+
 /* Normalize checksum/offload metadata after address-family translation.
  *
  * Translation changes protocol family but keeps transport payload semantics

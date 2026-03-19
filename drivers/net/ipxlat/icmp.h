@@ -19,21 +19,23 @@
 #include "ipxlpriv.h"
 
 /**
- * ipxlat_46_icmp - translate ICMP informational payload
- *		    after outer 4->6 rewrite
- * @ipxl: translator private context
+ * ipxlat_46_icmp - translate ICMP payload after outer 4->6 L3 rewrite
+ * @ipxlat: translator private context
  * @skb: packet carrying ICMPv4 transport payload
+ *
+ * Handles both ICMP info translation and ICMP error quoted-inner rewriting.
  *
  * Return: 0 on success, negative errno on translation failure.
  */
-int ipxlat_46_icmp(struct ipxlat_priv *ipxl, struct sk_buff *skb);
+int ipxlat_46_icmp(struct ipxlat_priv *ipxlat, struct sk_buff *skb);
 
 /**
- * ipxlat_64_icmp - translate ICMP informational payload
- *		    after outer 6->4 rewrite
+ * ipxlat_64_icmp - translate ICMP payload after outer 6->4 L3 rewrite
  * @ipxlat: translator private context
  * @skb: packet carrying ICMPv6 transport payload
  * @in6: snapshot of original outer IPv6 header
+ *
+ * Handles both ICMP info translation and ICMP error quoted-inner rewriting.
  *
  * Return: 0 on success, negative errno on translation failure.
  */
