@@ -7,6 +7,7 @@ import logging
 import socket
 import struct
 import time
+import sys
 
 import usb.core
 import usb.util
@@ -59,7 +60,7 @@ class Forwarder:
         if dev is None:
             raise ValueError("Device not found")
 
-        logging.info(f"found device: {dev.bus}/{dev.address} located at {path_from_usb_dev(dev)}")
+        logging.info(f"\nfound device: {dev.bus}/{dev.address} located at {path_from_usb_dev(dev)}")
 
         # dev.set_configuration() is not necessary since g_multi has only one
         usb9pfs = None
@@ -201,16 +202,28 @@ def list_usb(args):
 def connect(args):
     vid, pid = [int(x, 16) for x in args.id.split(":", 1)]
 
-    f = Forwarder(server=(args.server, args.port), vid=vid, pid=pid, path=args.path)
+    i = 0
+    while True:
+        try:
+            f = Forwarder(server=(args.server, args.port), vid=vid, pid=pid, path=args.path)
+        except ValueError as ve:
+            time.sleep(1)
+            print(f"\rdevice not found since {i} seconds, retrying",end="")
+            sys.stdout.flush()
+            i = i + 1
+            continue
 
-    try:
-        while True:
-            f.c2s()
-            f.s2c()
-            f.log_stats_interval()
-    finally:
-        f.log_stats()
-
+        try:
+            while True:
+                f.c2s()
+                f.s2c()
+                f.log_stats_interval()
+        except ValueError as ve:
+            logging.info("disconnected, retrying")
+            continue
+        finally:
+            i = 0
+            f.log_stats()
 
 def main():
     parser = argparse.ArgumentParser(
