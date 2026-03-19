@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/jiffies.h>
 #include <linux/err.h>
+#include <linux/log2.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/blkdev.h>
@@ -222,6 +223,38 @@ static int sas_bsg_initialize(struct Scsi_Host *shost, struct sas_rphy *rphy)
  * SAS host attributes
  */
 
+/**
+ * sas_dma_opt_sectors - derive opt_sectors from DMA optimal mapping size
+ * @dma_dev: device to query DMA parameters for
+ * @max_sectors: upper bound from the host adapter
+ *
+ * When the DMA layer reports a genuine optimization constraint (i.e.
+ * dma_opt_mapping_size() < dma_max_mapping_size()), convert it to a
+ * sector count, round it down to a power of two so that filesystem
+ * geometry calculations stay sane, and cap it at @max_sectors.
+ *
+ * When the two values are equal no backend provided a real hint and
+ * the function returns 0 ("no preference").
+ */
+static unsigned int sas_dma_opt_sectors(struct device *dma_dev,
+					unsigned int max_sectors)
+{
+	size_t opt = dma_opt_mapping_size(dma_dev);
+	size_t max = dma_max_mapping_size(dma_dev);
+
+	if (WARN_ONCE(opt > max,
+		      "dma_opt_mapping_size (%zu) > dma_max_mapping_size (%zu)\n",
+		      opt, max))
+		return 0;
+
+	if (opt == max)
+		return 0;
+
+	opt = rounddown_pow_of_two(opt);
+
+	return min_t(unsigned int, opt >> SECTOR_SHIFT, max_sectors);
+}
+
 static int sas_host_setup(struct transport_container *tc, struct device *dev,
 			  struct device *cdev)
 {
@@ -239,10 +272,9 @@ static int sas_host_setup(struct transport_container *tc, struct device *dev,
 		dev_printk(KERN_ERR, dev, "fail to a bsg device %d\n",
 			   shost->host_no);
 
-	if (dma_dev->dma_mask) {
-		shost->opt_sectors = min_t(unsigned int, shost->max_sectors,
-				dma_opt_mapping_size(dma_dev) >> SECTOR_SHIFT);
-	}
+	if (dma_dev->dma_mask)
+		shost->opt_sectors =
+			sas_dma_opt_sectors(dma_dev, shost->max_sectors);
 
 	return 0;
 }
