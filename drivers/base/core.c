@@ -4784,13 +4784,8 @@ out:
 	return error;
 }
 
-static void shutdown_one_device(struct device *dev)
+static void __shutdown_one_device(struct device *dev)
 {
-	struct device *parent = dev->parent;
-
-	/* hold lock to avoid race with probe/release */
-	if (parent)
-		device_lock(parent);
 	device_lock(dev);
 
 	/* Don't allow any more runtime suspends */
@@ -4813,10 +4808,20 @@ static void shutdown_one_device(struct device *dev)
 	}
 
 	device_unlock(dev);
-	if (parent)
-		device_unlock(parent);
+}
 
-	put_device(parent);
+static void shutdown_one_device(struct device *dev)
+{
+	/* hold lock to avoid race with probe/release */
+	if (dev->parent && dev->bus && dev->bus->need_parent_lock) {
+		device_lock(dev->parent);
+		__shutdown_one_device(dev);
+		device_unlock(dev->parent);
+	} else {
+		__shutdown_one_device(dev);
+	}
+
+	put_device(dev->parent);
 	put_device(dev);
 }
 
