@@ -7380,6 +7380,7 @@ static inline unsigned int cfs_h_nr_delayed(struct rq *rq)
 static DEFINE_PER_CPU(cpumask_var_t, load_balance_mask);
 static DEFINE_PER_CPU(cpumask_var_t, select_rq_mask);
 static DEFINE_PER_CPU(cpumask_var_t, should_we_balance_tmpmask);
+static DEFINE_PER_CPU(cpumask_var_t, kick_ilb_tmpmask);
 
 #ifdef CONFIG_NO_HZ_COMMON
 
@@ -12611,15 +12612,14 @@ static inline int on_null_domain(struct rq *rq)
  * - When one of the busy CPUs notices that there may be an idle rebalancing
  *   needed, they will kick the idle load balancer, which then does idle
  *   load balancing for all the idle CPUs.
+ *
+ *   @cpus idle CPUs in HK_TYPE_KERNEL_NOISE housekeeping
  */
-static inline int find_new_ilb(void)
+static inline int find_new_ilb(struct cpumask *cpus)
 {
-	const struct cpumask *hk_mask;
 	int ilb_cpu;
 
-	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
-
-	for_each_cpu_and(ilb_cpu, nohz.idle_cpus_mask, hk_mask) {
+	for_each_cpu(ilb_cpu, cpus) {
 
 		if (ilb_cpu == smp_processor_id())
 			continue;
@@ -12638,7 +12638,7 @@ static inline int find_new_ilb(void)
  * We pick the first idle CPU in the HK_TYPE_KERNEL_NOISE housekeeping set
  * (if there is one).
  */
-static void kick_ilb(unsigned int flags)
+static void kick_ilb(unsigned int flags, struct cpumask *cpus)
 {
 	int ilb_cpu;
 
@@ -12649,7 +12649,7 @@ static void kick_ilb(unsigned int flags)
 	if (flags & NOHZ_BALANCE_KICK)
 		nohz.next_balance = jiffies+1;
 
-	ilb_cpu = find_new_ilb();
+	ilb_cpu = find_new_ilb(cpus);
 	if (ilb_cpu < 0)
 		return;
 
@@ -12682,6 +12682,7 @@ static void kick_ilb(unsigned int flags)
  */
 static void nohz_balancer_kick(struct rq *rq)
 {
+	struct cpumask *ilb_cpus = this_cpu_cpumask_var_ptr(kick_ilb_tmpmask);
 	unsigned long now = jiffies;
 	struct sched_domain_shared *sds;
 	struct sched_domain *sd;
@@ -12697,27 +12698,41 @@ static void nohz_balancer_kick(struct rq *rq)
 	 */
 	nohz_balance_exit_idle(rq);
 
+	/* ILB considers only HK_TYPE_KERNEL_NOISE housekeeping CPUs */
+
 	if (READ_ONCE(nohz.has_blocked_load) &&
-	    time_after(now, READ_ONCE(nohz.next_blocked)))
+	    time_after(now, READ_ONCE(nohz.next_blocked))) {
 		flags = NOHZ_STATS_KICK;
+		cpumask_and(ilb_cpus, nohz.idle_cpus_mask,
+			    housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+	}
 
 	/*
-	 * Most of the time system is not 100% busy. i.e nohz.nr_cpus > 0
-	 * Skip the read if time is not due.
+	 * Most of the time system is not 100% busy. i.e there are idle
+	 * housekeeping CPUs.
+	 *
+	 * So, Skip the reading idle_cpus_mask if time is not due.
 	 *
 	 * If none are in tickless mode, there maybe a narrow window
 	 * (28 jiffies, HZ=1000) where flags maybe set and kick_ilb called.
 	 * But idle load balancing is not done as find_new_ilb fails.
-	 * That's very rare. So read nohz.nr_cpus only if time is due.
+	 * That's very rare. So check (idle_cpus_mask & HK_TYPE_KERNEL_NOISE)
+	 * only if time is due.
+	 *
 	 */
 	if (time_before(now, nohz.next_balance))
 		goto out;
+
+	/* Avoid the double computation */
+	if (flags != NOHZ_STATS_KICK)
+		cpumask_and(ilb_cpus, nohz.idle_cpus_mask,
+			    housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
 
 	/*
 	 * None are in tickless mode and hence no need for NOHZ idle load
 	 * balancing
 	 */
-	if (unlikely(cpumask_empty(nohz.idle_cpus_mask)))
+	if (unlikely(cpumask_empty(ilb_cpus)))
 		return;
 
 	if (rq->nr_running >= 2) {
@@ -12749,7 +12764,7 @@ static void nohz_balancer_kick(struct rq *rq)
 		 * When balancing between cores, all the SMT siblings of the
 		 * preferred CPU must be idle.
 		 */
-		for_each_cpu_and(i, sched_domain_span(sd), nohz.idle_cpus_mask) {
+		for_each_cpu_and(i, sched_domain_span(sd), ilb_cpus) {
 			if (sched_asym(sd, i, cpu)) {
 				flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
 				goto unlock;
@@ -12802,7 +12817,7 @@ out:
 		flags |= NOHZ_NEXT_KICK;
 
 	if (flags)
-		kick_ilb(flags);
+		kick_ilb(flags, ilb_cpus);
 }
 
 static void set_cpu_sd_state_busy(int cpu)
@@ -14237,6 +14252,8 @@ __init void init_sched_fair_class(void)
 		zalloc_cpumask_var_node(&per_cpu(load_balance_mask, i), GFP_KERNEL, cpu_to_node(i));
 		zalloc_cpumask_var_node(&per_cpu(select_rq_mask,    i), GFP_KERNEL, cpu_to_node(i));
 		zalloc_cpumask_var_node(&per_cpu(should_we_balance_tmpmask, i),
+					GFP_KERNEL, cpu_to_node(i));
+		zalloc_cpumask_var_node(&per_cpu(kick_ilb_tmpmask, i),
 					GFP_KERNEL, cpu_to_node(i));
 
 #ifdef CONFIG_CFS_BANDWIDTH
