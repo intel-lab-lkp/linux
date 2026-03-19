@@ -1693,11 +1693,12 @@ static int guest_session__fetch(struct guest_session *gs)
 static int evlist__append_id_sample(struct evlist *evlist, union perf_event *ev,
 				    const struct perf_sample *sample)
 {
-	struct evsel *evsel;
+	struct evsel *evsel = sample->evsel;
 	void *array;
 	int ret;
 
-	evsel = evlist__id2evsel(evlist, sample->id);
+	if (!evsel)
+		evsel = evlist__id2evsel(evlist, sample->id);
 	array = ev;
 
 	if (!evsel) {
