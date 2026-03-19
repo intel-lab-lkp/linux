@@ -79,7 +79,13 @@ class Forwarder:
             raise ValueError("Interface not found")
 
         logging.info(f"claiming interface:\n{usb9pfs}")
-        usb.util.claim_interface(dev, usb9pfs.bInterfaceNumber)
+        try:
+            usb.util.claim_interface(dev, usb9pfs.bInterfaceNumber)
+        except usb.core.USBError as e:
+            if e.errno == errno.EBUSY:
+                logging.debug("old connection was hanging", repr(e))
+                raise ValueError("disconnected")
+
         ep_out = usb.util.find_descriptor(
             usb9pfs,
             custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT,
