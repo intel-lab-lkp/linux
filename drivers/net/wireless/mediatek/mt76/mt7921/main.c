@@ -1357,13 +1357,39 @@ out:
 	mt792x_mutex_release(dev);
 }
 
+static void mt7921_update_txpower_cur(struct mt76_phy *phy)
+{
+	struct mt76_power_limits limits;
+	struct ieee80211_channel *chan = phy->chandef.chan;
+	int n_chains = hweight16(phy->chainmask);
+	s8 reg_power, sar_power, max_power;
+	int tx_power;
+
+	if (!chan)
+		return;
+
+	tx_power = 2 * phy->hw->conf.power_level;
+	if (!tx_power)
+		tx_power = 127;
+
+	reg_power = mt76_connac_get_ch_power(phy, chan, tx_power);
+	sar_power = mt76_get_sar_power(phy, chan, reg_power);
+	max_power = mt76_get_rate_power_limits(phy, chan, &limits, sar_power);
+
+	phy->txpower_cur = max_power - mt76_tx_power_path_delta(n_chains);
+}
+
 static int
 mt7921_add_chanctx(struct ieee80211_hw *hw,
 		   struct ieee80211_chanctx_conf *ctx)
 {
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
+	struct mt76_phy *mphy = hw->priv;
 
 	dev->new_ctx = ctx;
+	mphy->chandef = ctx->def;
+	mt7921_update_txpower_cur(mphy);
+
 	return 0;
 }
 
@@ -1398,6 +1424,10 @@ mt7921_change_chanctx(struct ieee80211_hw *hw,
 		mt7921_mcu_config_sniffer(mvif, ctx);
 	else
 		mt76_connac_mcu_uni_set_chctx(mvif->phy->mt76, &mvif->bss_conf.mt76, ctx);
+
+	phy->mt76->chandef = ctx->def;
+	mt7921_update_txpower_cur(phy->mt76);
+
 	mt792x_mutex_release(phy->dev);
 }
 
