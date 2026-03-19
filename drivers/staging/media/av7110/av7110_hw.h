@@ -168,14 +168,14 @@ enum av7110_encoder_command {
 };
 
 enum av7110_rec_play_state {
-	__Record,
-	__Stop,
-	__Play,
-	__Pause,
-	__Slow,
-	__FF_IP,
-	__Scan_I,
-	__Continue
+	AV7110_REC_PLAY_RECORD,
+    	AV7110_REC_PLAY_STOP,
+    	AV7110_REC_PLAY_PLAY,
+    	AV7110_REC_PLAY_PAUSE,
+    	AV7110_REC_PLAY_SLOW,
+    	AV7110_REC_PLAY_FF_IP,
+    	AV7110_REC_PLAY_SCAN_I,
+    	AV7110_REC_PLAY_CONTINUE
 };
 
 enum av7110_fw_cmd_misc {
