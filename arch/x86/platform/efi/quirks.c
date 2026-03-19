@@ -298,26 +298,13 @@ void __init efi_reserve_boot_services(void)
 		 */
 		if (!already_reserved) {
 			memblock_reserve(start, size);
-
+		} else {
 			/*
-			 * If we are the first to reserve the region, no
-			 * one else cares about it. We own it and can
-			 * free it later.
+			 * Mark existing reservations as MEMBLOCK_RSRV_KERN so
+			 * they will be respected by efi_free_boot_services().
 			 */
-			if (can_free_region(start, size))
-				continue;
+			memblock_reserved_mark_kern(start, size);
 		}
-
-		/*
-		 * We don't own the region. We must not free it.
-		 *
-		 * Setting this bit for a boot services region really
-		 * doesn't make sense as far as the firmware is
-		 * concerned, but it does provide us with a way to tag
-		 * those regions that must not be paired with
-		 * memblock_free_late().
-		 */
-		md->attribute |= EFI_MEMORY_RUNTIME;
 	}
 }
 
@@ -392,6 +379,9 @@ efi_free_unreserved_subregions(u64 range_start, u64 range_end)
 		if (start >= end)
 			continue;
 
+		if (!can_free_region(start, end - start))
+			continue;
+
 		free_reserved_area(phys_to_virt(start),
 				   phys_to_virt(end), -1, NULL);
 		freed += (end - start);
@@ -428,9 +418,8 @@ static int __init efi_free_boot_services(void)
 		if (md_start >= md_end)
 			continue;
 
-		if (!(md->attribute & EFI_MEMORY_RUNTIME) &&
-		    (md->type == EFI_BOOT_SERVICES_CODE ||
-		     md->type == EFI_BOOT_SERVICES_DATA)) {
+		if (md->type == EFI_BOOT_SERVICES_CODE ||
+		    md->type == EFI_BOOT_SERVICES_DATA) {
 			u64 f = efi_free_unreserved_subregions(md_start, md_end);
 
 			/*
