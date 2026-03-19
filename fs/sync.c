@@ -73,7 +73,12 @@ EXPORT_SYMBOL(sync_filesystem);
 
 static void sync_inodes_one_sb(struct super_block *sb, void *arg)
 {
-	if (!sb_rdonly(sb))
+	if (sb_rdonly(sb))
+		return;
+
+	if (sb->s_iflags & SB_I_NO_DATA_INTEGRITY)
+		wakeup_flusher_threads_bdi(sb->s_bdi, WB_REASON_SYNC);
+	else
 		sync_inodes_sb(sb);
 }
 
