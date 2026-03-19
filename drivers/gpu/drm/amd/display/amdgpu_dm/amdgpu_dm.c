@@ -7186,6 +7186,14 @@ static void apply_dsc_policy_for_stream(struct amdgpu_dm_connector *aconnector,
 }
 #endif
 
+static void amdgpu_dm_update_link_bpc(struct drm_connector_state *conn_state,
+				      enum dc_color_depth depth)
+{
+	/* 6 bpc is an experimental internal format only, use 8 as minimum */
+	conn_state->link_bpc = clamp(convert_dc_color_depth_into_bpc(depth), 8,
+				     conn_state->max_bpc);
+}
+
 static struct dc_stream_state *
 create_stream_for_sink(struct drm_connector *connector,
 		       const struct drm_display_mode *drm_mode,
@@ -8983,8 +8991,10 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 				adev->mode_info.underscan_vborder_property,
 				0);
 
-	if (!aconnector->mst_root)
+	if (!aconnector->mst_root) {
 		drm_connector_attach_max_bpc_property(&aconnector->base, 8, 16);
+		drm_connector_attach_link_bpc_property(&aconnector->base, 16);
+	}
 
 	aconnector->base.state->max_bpc = 16;
 	aconnector->base.state->max_requested_bpc = aconnector->base.state->max_bpc;
@@ -11426,6 +11436,9 @@ static int dm_update_crtc_state(struct amdgpu_display_manager *dm,
 			ret = -ENOMEM;
 			goto fail;
 		}
+
+		amdgpu_dm_update_link_bpc(drm_new_conn_state,
+					  new_stream->timing.display_color_depth);
 
 		/*
 		 * TODO: Check VSDB bits to decide whether this should
