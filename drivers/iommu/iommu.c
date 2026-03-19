@@ -68,6 +68,7 @@ struct iommu_group {
 	struct iommu_domain *resetting_domain;
 	struct iommu_domain *domain;
 	struct list_head entry;
+	unsigned int reset_cnt;
 	unsigned int owner_cnt;
 	void *owner;
 };
@@ -3965,9 +3966,10 @@ int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 
 	guard(mutex)(&group->mutex);
 
-	/* Re-entry is not allowed */
-	if (WARN_ON(group->resetting_domain))
-		return -EBUSY;
+	if (group->resetting_domain) {
+		group->reset_cnt++;
+		return 0;
+	}
 
 	ret = __iommu_group_alloc_blocking_domain(group);
 	if (ret)
@@ -3992,6 +3994,7 @@ int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 				       pasid_array_entry_to_domain(entry));
 
 	group->resetting_domain = group->blocking_domain;
+	group->reset_cnt = 1;
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pci_dev_reset_iommu_prepare);
@@ -4023,6 +4026,12 @@ void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 
 	/* pci_dev_reset_iommu_prepare() was bypassed for the device */
 	if (!group->resetting_domain)
+		return;
+
+	/* Unbalanced done() calls that would underflow the counter */
+	if (WARN_ON(group->reset_cnt == 0))
+		return;
+	if (--group->reset_cnt > 0)
 		return;
 
 	/* pci_dev_reset_iommu_prepare() was not successfully called */
