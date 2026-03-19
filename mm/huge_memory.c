@@ -2431,9 +2431,9 @@ bool zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		 pmd_t *pmd, unsigned long addr)
 {
 	bool needs_remove_rmap = false;
-	struct folio *folio = NULL;
 	bool needs_deposit = false;
 	bool is_present = false;
+	struct folio *folio;
 	spinlock_t *ptl;
 	pmd_t orig_pmd;
 
@@ -2453,28 +2453,26 @@ bool zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 
 	arch_check_zapped_pmd(vma, orig_pmd);
 	tlb_remove_pmd_tlb_entry(tlb, pmd, addr);
-	if (vma_is_special_huge(vma))
-		goto out;
-	if (is_huge_zero_pmd(orig_pmd)) {
-		needs_deposit = !vma_is_dax(vma);
-		goto out;
-	}
 
-	is_present = pmd_present(orig_pmd);
-	if (is_present) {
-		folio = pmd_folio(orig_pmd);
-		needs_remove_rmap = true;
+	if (pmd_present(orig_pmd)) {
+		folio = vm_normal_folio_pmd(vma, addr, orig_pmd);
+		if (folio) {
+			needs_remove_rmap = true;
+			is_present = true;
+		} else if (is_huge_zero_pmd(orig_pmd)) {
+			needs_deposit = !vma_is_dax(vma);
+		}
 	} else if (pmd_is_valid_softleaf(orig_pmd)) {
-		const softleaf_t entry = softleaf_from_pmd(orig_pmd);
-
-		folio = softleaf_to_folio(entry);
+		folio = softleaf_to_folio(softleaf_from_pmd(orig_pmd));
 		needs_remove_rmap = folio_is_device_private(folio);
 		if (!thp_migration_supported())
 			WARN_ONCE(1, "Non present huge pmd without pmd migration enabled!");
 	} else {
 		WARN_ON_ONCE(true);
-		goto out;
+		folio = NULL;
 	}
+	if (!folio)
+		goto out;
 
 	if (folio_test_anon(folio)) {
 		needs_deposit = true;
