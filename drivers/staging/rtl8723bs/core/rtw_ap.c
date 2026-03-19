@@ -270,7 +270,8 @@ void expire_timeout_chk(struct adapter *padapter)
 		u8 backup_oper_channel = 0;
 		struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 
-		/* switch to correct channel of current network  before issue keep-alive frames */
+		/* switch to correct channel of current network before issue */
+		/* keep-alive frames */
 		if (rtw_get_oper_ch(padapter) != pmlmeext->cur_channel) {
 			backup_oper_channel = rtw_get_oper_ch(padapter);
 			r8723bs_select_channel(padapter, pmlmeext->cur_channel);
@@ -607,9 +608,9 @@ static void update_hw_ht_param(struct adapter *padapter)
 	 *	AMPDU_para [1:0]:Max AMPDU Len => 0:8k , 1:16k, 2:32k, 3:64k
 	 *	AMPDU_para [4:2]:Min MPDU Start Spacing
 	 */
-	max_AMPDU_len = pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x03;
-
-	min_MPDU_spacing = (pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x1c) >> 2;
+	u8 ampdu_para = pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para;
+	max_AMPDU_len = ampdu_para & 0x03;
+	min_MPDU_spacing = (ampdu_para & 0x1c) >> 2;
 
 	rtw_hal_set_hwreg(padapter, HW_VAR_AMPDU_MIN_SPACE, (u8 *)(&min_MPDU_spacing));
 
@@ -836,7 +837,8 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 	/* beacon interval */
 	/* ie + 8;	8: TimeStamp, 2: Beacon Interval 2:Capability */
 	p = rtw_get_beacon_interval_from_ie(ie);
-	/* pbss_network->configuration.beacon_period = le16_to_cpu(*(unsigned short*)p); */
+	/* pbss_network->configuration.beacon_period = le16_to_cpu */
+	/* (*(unsigned short*)p); */
 	pbss_network->configuration.beacon_period = get_unaligned_le16(p);
 
 	/* capability */
@@ -1492,7 +1494,8 @@ void update_beacon(struct adapter *padapter, u8 ie_id, u8 *oui, u8 tx)
 	switch (ie_id) {
 	case 0xFF:
 
-		update_bcn_fixed_ie(padapter);/* 8: TimeStamp, 2: Beacon Interval 2:Capability */
+		update_bcn_fixed_ie(padapter);
+		/* 8: TimeStamp, 2: Beacon Interval 2:Capability */
 
 		break;
 
@@ -2070,7 +2073,8 @@ void stop_ap_mode(struct adapter *padapter)
 	pmlmepriv->update_bcn = false;
 	pmlmeext->bstart_bss = false;
 
-	/* reset and init security priv , this can refine with rtw_reset_securitypriv */
+	/* reset and init security priv, this can refine */
+	/* with rtw_reset_securitypriv */
 	memset((unsigned char *)&padapter->securitypriv,
 	       0,
 	       sizeof(struct security_priv));
