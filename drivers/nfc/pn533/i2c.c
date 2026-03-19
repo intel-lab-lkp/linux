@@ -40,8 +40,15 @@ static int pn533_i2c_send_ack(struct pn533 *dev, gfp_t flags)
 	struct i2c_client *client = phy->i2c_dev;
 	static const u8 ack[6] = {0x00, 0x00, 0xff, 0x00, 0xff, 0x00};
 	/* spec 6.2.1.3:  Preamble, SoPC (2), ACK Code (2), Postamble */
+	int ret;
 
-	return i2c_master_send(client, ack, 6);
+	ret = i2c_master_send(client, ack, 6);
+	if (ret != 6) {
+		nfc_err(&client->dev, "failed to send ACK: %pe\n", ERR_PTR(ret));
+		return ret < 0 ? ret : -EIO;
+	}
+
+	return 0;
 }
 
 static int pn533_i2c_send_frame(struct pn533 *dev,
@@ -82,12 +89,14 @@ static int pn533_i2c_send_frame(struct pn533 *dev,
 static void pn533_i2c_abort_cmd(struct pn533 *dev, gfp_t flags)
 {
 	struct pn533_i2c_phy *phy = dev->phy;
+	int ret;
 
 	phy->aborted = true;
 
 	/* An ack will cancel the last issued command */
-	pn533_i2c_send_ack(dev, flags);
-
+	ret = pn533_i2c_send_ack(dev, flags);
+	if (ret)
+		nfc_err(&phy->i2c_dev->dev, "failed to abort command: %pe\n", ERR_PTR(ret));
 	/* schedule cmd_complete_work to finish current command execution */
 	pn533_recv_frame(phy->priv, NULL, -ENOENT);
 }
