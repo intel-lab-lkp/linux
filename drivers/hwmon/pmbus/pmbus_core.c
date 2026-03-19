@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/i2c.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
@@ -122,6 +123,7 @@ struct pmbus_data {
 	int vout_high[PMBUS_PAGES];	/* voltage high margin */
 
 	ktime_t next_access_backoff;	/* Wait until at least this time */
+	spinlock_t timestamp_lock;	/* Protects next_access_backoff */
 };
 
 struct pmbus_debugfs_entry {
@@ -176,8 +178,14 @@ EXPORT_SYMBOL_NS_GPL(pmbus_set_update, "PMBUS");
 static void pmbus_wait(struct i2c_client *client)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
-	s64 delay = ktime_us_delta(data->next_access_backoff, ktime_get());
+	ktime_t backoff;
+	s64 delay;
 
+	spin_lock(&data->timestamp_lock);
+	backoff = data->next_access_backoff;
+	spin_unlock(&data->timestamp_lock);
+
+	delay = ktime_us_delta(backoff, ktime_get());
 	if (delay > 0)
 		fsleep(delay);
 }
@@ -194,8 +202,11 @@ static void pmbus_update_ts(struct i2c_client *client, int op)
 	if (op & PMBUS_OP_PAGE_CHANGE)
 		delay = max(delay, info->page_change_delay);
 
-	if (delay > 0)
+	if (delay > 0) {
+		spin_lock(&data->timestamp_lock);
 		data->next_access_backoff = ktime_add_us(ktime_get(), delay);
+		spin_unlock(&data->timestamp_lock);
+	}
 }
 
 int pmbus_set_page(struct i2c_client *client, int page, int phase)
@@ -3687,6 +3698,7 @@ int pmbus_do_probe(struct i2c_client *client, struct pmbus_driver_info *info)
 
 	i2c_set_clientdata(client, data);
 	mutex_init(&data->update_lock);
+	spin_lock_init(&data->timestamp_lock);
 	data->dev = dev;
 
 	if (pdata)
