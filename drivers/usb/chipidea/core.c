@@ -618,30 +618,22 @@ static int ci_usb_role_switch_set(struct usb_role_switch *sw,
 	struct ci_hdrc *ci = usb_role_switch_get_drvdata(sw);
 	struct ci_hdrc_cable *cable;
 
-	if (role == USB_ROLE_HOST) {
-		cable = &ci->platdata->id_extcon;
-		cable->changed = true;
+	cable = &ci->platdata->id_extcon;
+	if (role == USB_ROLE_HOST)
 		cable->connected = true;
-		cable = &ci->platdata->vbus_extcon;
-		cable->changed = true;
+	else
 		cable->connected = false;
-	} else if (role == USB_ROLE_DEVICE) {
-		cable = &ci->platdata->id_extcon;
-		cable->changed = true;
-		cable->connected = false;
-		cable = &ci->platdata->vbus_extcon;
-		cable->changed = true;
-		cable->connected = true;
-	} else {
-		cable = &ci->platdata->id_extcon;
-		cable->changed = true;
-		cable->connected = false;
-		cable = &ci->platdata->vbus_extcon;
-		cable->changed = true;
-		cable->connected = false;
-	}
 
-	ci_irq(ci);
+	cable = &ci->platdata->vbus_extcon;
+	if (role == USB_ROLE_DEVICE)
+		cable->connected = true;
+	else
+		cable->connected = false;
+
+	ci->id_event = true;
+	ci->b_sess_valid_event = true;
+	ci_otg_queue_work(ci);
+
 	return 0;
 }
 
