@@ -143,6 +143,26 @@ struct inv_icm42600_apex {
 	} wom;
 };
 
+typedef int (*inv_icm42600_bus_setup)(struct inv_icm42600_state *);
+
+struct inv_icm42600_funcs {
+	int (*setup)(struct inv_icm42600_state *st,
+		     inv_icm42600_bus_setup bus_setup);
+
+	/* timestamp_setup optional, not present on icm42607 */
+	int (*timestamp_setup)(struct inv_icm42600_state *st);
+
+	int (*buffer_init)(struct inv_icm42600_state *st);
+	int (*gyro_init)(struct inv_icm42600_state *st,
+			 struct iio_dev *indio_dev);
+	int (*accel_init)(struct inv_icm42600_state *st,
+			  struct iio_dev *indio_dev);
+	int (*suspend)(struct device *dev);
+	int (*resume)(struct device *dev);
+	int (*runtime_suspend)(struct device *dev);
+	int (*runtime_resume)(struct device *dev);
+};
+
 /**
  *  struct inv_icm42600_state - driver state variables
  *  @lock:		lock for serializing multiple registers access.
@@ -160,6 +180,7 @@ struct inv_icm42600_apex {
  *  @timestamp:		interrupt timestamps.
  *  @apex:		APEX (Advanced Pedometer and Event detection) management
  *  @fifo:		FIFO management structure.
+ *  @hw_funcs:		Device specific hardware functions.
  *  @buffer:		data transfer buffer aligned for DMA.
  */
 struct inv_icm42600_state {
@@ -180,6 +201,7 @@ struct inv_icm42600_state {
 	} timestamp;
 	struct inv_icm42600_apex apex;
 	struct inv_icm42600_fifo fifo;
+	struct inv_icm42600_funcs *hw_funcs;
 	u8 buffer[3] __aligned(IIO_DMA_MINALIGN);
 };
 
@@ -440,8 +462,6 @@ struct inv_icm42600_sensor_state {
 #define INV_ICM42600_TEMP_STARTUP_TIME_MS	14
 #define INV_ICM42600_SUSPEND_DELAY_MS		2000
 
-typedef int (*inv_icm42600_bus_setup)(struct inv_icm42600_state *);
-
 extern const struct regmap_config inv_icm42600_regmap_config;
 extern const struct regmap_config inv_icm42600_spi_regmap_config;
 extern const struct dev_pm_ops inv_icm42600_pm_ops;
@@ -472,11 +492,11 @@ int inv_icm42600_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
 int inv_icm42600_core_probe(struct regmap *regmap, int chip,
 			    inv_icm42600_bus_setup bus_setup);
 
-struct iio_dev *inv_icm42600_gyro_init(struct inv_icm42600_state *st);
+int inv_icm42600_gyro_init(struct inv_icm42600_state *st, struct iio_dev *indio_dev);
 
 int inv_icm42600_gyro_parse_fifo(struct iio_dev *indio_dev);
 
-struct iio_dev *inv_icm42600_accel_init(struct inv_icm42600_state *st);
+int inv_icm42600_accel_init(struct inv_icm42600_state *st, struct iio_dev *indio_dev);
 
 int inv_icm42600_accel_parse_fifo(struct iio_dev *indio_dev);
 

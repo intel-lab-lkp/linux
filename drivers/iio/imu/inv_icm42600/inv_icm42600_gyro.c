@@ -723,22 +723,21 @@ static const struct iio_info inv_icm42600_gyro_info = {
 	.hwfifo_flush_to_buffer = inv_icm42600_gyro_hwfifo_flush,
 };
 
-struct iio_dev *inv_icm42600_gyro_init(struct inv_icm42600_state *st)
+int inv_icm42600_gyro_init(struct inv_icm42600_state *st, struct iio_dev *indio_dev)
 {
 	struct device *dev = regmap_get_device(st->map);
 	const char *name;
 	struct inv_icm42600_sensor_state *gyro_st;
 	struct inv_sensors_timestamp_chip ts_chip;
-	struct iio_dev *indio_dev;
 	int ret;
 
 	name = devm_kasprintf(dev, GFP_KERNEL, "%s-gyro", st->name);
 	if (!name)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*gyro_st));
 	if (!indio_dev)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 	gyro_st = iio_priv(indio_dev);
 
 	switch (st->chip) {
@@ -773,13 +772,13 @@ struct iio_dev *inv_icm42600_gyro_init(struct inv_icm42600_state *st)
 	ret = devm_iio_kfifo_buffer_setup(dev, indio_dev,
 					  &inv_icm42600_buffer_ops);
 	if (ret)
-		return ERR_PTR(ret);
+		return ret;
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
-		return ERR_PTR(ret);
+		return ret;
 
-	return indio_dev;
+	return 0;
 }
 
 int inv_icm42600_gyro_parse_fifo(struct iio_dev *indio_dev)

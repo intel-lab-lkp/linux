@@ -703,6 +703,162 @@ static void inv_icm42600_disable_vddio_reg(void *_data)
 	regulator_disable(st->vddio_supply);
 }
 
+/*
+ * Suspend saves sensors state and turns everything off.
+ * Check first if runtime suspend has not already done the job.
+ */
+static int inv_icm42600_hw_suspend(struct device *dev)
+{
+	struct inv_icm42600_state *st = dev_get_drvdata(dev);
+	struct device *accel_dev;
+	bool wakeup;
+	int accel_conf;
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	st->suspended.gyro = st->conf.gyro.mode;
+	st->suspended.accel = st->conf.accel.mode;
+	st->suspended.temp = st->conf.temp_en;
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	/* disable FIFO data streaming */
+	if (st->fifo.on) {
+		ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
+				   INV_ICM42600_FIFO_CONFIG_BYPASS);
+		if (ret)
+			return ret;
+	}
+
+	/* keep chip on and wake-up capable if APEX and wakeup on */
+	accel_dev = &st->indio_accel->dev;
+	wakeup = st->apex.on && device_may_wakeup(accel_dev);
+	if (wakeup) {
+		/* keep accel on and setup irq for wakeup */
+		accel_conf = st->conf.accel.mode;
+		enable_irq_wake(st->irq);
+		disable_irq(st->irq);
+	} else {
+		/* disable APEX features and accel if wakeup disabled */
+		if (st->apex.wom.enable) {
+			ret = inv_icm42600_disable_wom(st);
+			if (ret)
+				return ret;
+		}
+		accel_conf = INV_ICM42600_SENSOR_MODE_OFF;
+	}
+
+	ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
+					 accel_conf, false, NULL);
+	if (ret)
+		return ret;
+
+	/* disable vddio regulator if chip is sleeping */
+	if (!wakeup)
+		regulator_disable(st->vddio_supply);
+
+	return 0;
+}
+
+/*
+ * System resume gets the system back on and restores the sensors state.
+ * Manually put runtime power management in system active state.
+ */
+static int inv_icm42600_hw_resume(struct device *dev)
+{
+	struct inv_icm42600_state *st = dev_get_drvdata(dev);
+	struct inv_icm42600_sensor_state *gyro_st = iio_priv(st->indio_gyro);
+	struct inv_icm42600_sensor_state *accel_st = iio_priv(st->indio_accel);
+	struct device *accel_dev;
+	bool wakeup;
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	/* check wakeup capability */
+	accel_dev = &st->indio_accel->dev;
+	wakeup = st->apex.on && device_may_wakeup(accel_dev);
+	/* restore irq state or vddio if cut off */
+	if (wakeup) {
+		enable_irq(st->irq);
+		disable_irq_wake(st->irq);
+	} else {
+		ret = inv_icm42600_enable_regulator_vddio(st);
+		if (ret)
+			return ret;
+	}
+
+	/* restore sensors state */
+	ret = inv_icm42600_set_pwr_mgmt0(st, st->suspended.gyro,
+					 st->suspended.accel,
+					 st->suspended.temp, NULL);
+	if (ret)
+		return ret;
+
+	/* restore APEX features if disabled */
+	if (!wakeup && st->apex.wom.enable) {
+		ret = inv_icm42600_enable_wom(st);
+		if (ret)
+			return ret;
+	}
+
+	/* restore FIFO data streaming */
+	if (st->fifo.on) {
+		inv_sensors_timestamp_reset(&gyro_st->ts);
+		inv_sensors_timestamp_reset(&accel_st->ts);
+		ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
+				   INV_ICM42600_FIFO_CONFIG_STREAM);
+	}
+
+	return 0;
+}
+
+/* Runtime suspend will turn off sensors that are enabled by iio devices. */
+static int inv_icm42600_hw_runtime_suspend(struct device *dev)
+{
+	struct inv_icm42600_state *st = dev_get_drvdata(dev);
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	/* disable all sensors */
+	ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
+					 INV_ICM42600_SENSOR_MODE_OFF, false,
+					 NULL);
+	if (ret)
+		return ret;
+
+	regulator_disable(st->vddio_supply);
+
+	return 0;
+}
+
+/* Sensors are enabled by iio devices, no need to turn them back on here. */
+static int inv_icm42600_hw_runtime_resume(struct device *dev)
+{
+	struct inv_icm42600_state *st = dev_get_drvdata(dev);
+
+	guard(mutex)(&st->lock);
+
+	return inv_icm42600_enable_regulator_vddio(st);
+}
+
+static struct inv_icm42600_funcs inv_icm42600_hw_funcs = {
+	.setup = &inv_icm42600_setup,
+	.timestamp_setup = &inv_icm42600_timestamp_setup,
+	.buffer_init = &inv_icm42600_buffer_init,
+	.gyro_init = &inv_icm42600_gyro_init,
+	.accel_init = &inv_icm42600_accel_init,
+	.suspend = &inv_icm42600_hw_suspend,
+	.resume = &inv_icm42600_hw_resume,
+	.runtime_suspend = &inv_icm42600_hw_runtime_suspend,
+	.runtime_resume = &inv_icm42600_hw_runtime_resume,
+};
+
 int inv_icm42600_core_probe(struct regmap *regmap, int chip,
 			    inv_icm42600_bus_setup bus_setup)
 {
@@ -768,26 +924,31 @@ int inv_icm42600_core_probe(struct regmap *regmap, int chip,
 	if (ret)
 		return ret;
 
-	/* setup chip registers */
-	ret = inv_icm42600_setup(st, bus_setup);
+	/* setup chip registers based on hardware */
+	st->hw_funcs = &inv_icm42600_hw_funcs;
+
+	ret = st->hw_funcs->setup(st, bus_setup);
 	if (ret)
 		return ret;
 
-	ret = inv_icm42600_timestamp_setup(st);
+	/* Timestamp setup optional for ICM42607 */
+	if (st->hw_funcs->timestamp_setup) {
+		ret = st->hw_funcs->timestamp_setup(st);
+		if (ret)
+			return ret;
+	}
+
+	ret = st->hw_funcs->buffer_init(st);
 	if (ret)
 		return ret;
 
-	ret = inv_icm42600_buffer_init(st);
+	ret = st->hw_funcs->gyro_init(st, st->indio_gyro);
 	if (ret)
 		return ret;
 
-	st->indio_gyro = inv_icm42600_gyro_init(st);
-	if (IS_ERR(st->indio_gyro))
-		return PTR_ERR(st->indio_gyro);
-
-	st->indio_accel = inv_icm42600_accel_init(st);
-	if (IS_ERR(st->indio_accel))
-		return PTR_ERR(st->indio_accel);
+	ret = st->hw_funcs->accel_init(st, st->indio_accel);
+	if (ret)
+		return ret;
 
 	ret = inv_icm42600_irq_init(st, irq, irq_type, open_drain);
 	if (ret)
@@ -805,148 +966,32 @@ int inv_icm42600_core_probe(struct regmap *regmap, int chip,
 }
 EXPORT_SYMBOL_NS_GPL(inv_icm42600_core_probe, "IIO_ICM42600");
 
-/*
- * Suspend saves sensors state and turns everything off.
- * Check first if runtime suspend has not already done the job.
- */
 static int inv_icm42600_suspend(struct device *dev)
 {
 	struct inv_icm42600_state *st = dev_get_drvdata(dev);
-	struct device *accel_dev;
-	bool wakeup;
-	int accel_conf;
-	int ret;
 
-	guard(mutex)(&st->lock);
-
-	st->suspended.gyro = st->conf.gyro.mode;
-	st->suspended.accel = st->conf.accel.mode;
-	st->suspended.temp = st->conf.temp_en;
-	if (pm_runtime_suspended(dev))
-		return 0;
-
-	/* disable FIFO data streaming */
-	if (st->fifo.on) {
-		ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
-				   INV_ICM42600_FIFO_CONFIG_BYPASS);
-		if (ret)
-			return ret;
-	}
-
-	/* keep chip on and wake-up capable if APEX and wakeup on */
-	accel_dev = &st->indio_accel->dev;
-	wakeup = st->apex.on && device_may_wakeup(accel_dev);
-	if (wakeup) {
-		/* keep accel on and setup irq for wakeup */
-		accel_conf = st->conf.accel.mode;
-		enable_irq_wake(st->irq);
-		disable_irq(st->irq);
-	} else {
-		/* disable APEX features and accel if wakeup disabled */
-		if (st->apex.wom.enable) {
-			ret = inv_icm42600_disable_wom(st);
-			if (ret)
-				return ret;
-		}
-		accel_conf = INV_ICM42600_SENSOR_MODE_OFF;
-	}
-
-	ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
-					 accel_conf, false, NULL);
-	if (ret)
-		return ret;
-
-	/* disable vddio regulator if chip is sleeping */
-	if (!wakeup)
-		regulator_disable(st->vddio_supply);
-
-	return 0;
+	return st->hw_funcs->suspend(dev);
 }
 
-/*
- * System resume gets the system back on and restores the sensors state.
- * Manually put runtime power management in system active state.
- */
 static int inv_icm42600_resume(struct device *dev)
 {
 	struct inv_icm42600_state *st = dev_get_drvdata(dev);
-	struct inv_icm42600_sensor_state *gyro_st = iio_priv(st->indio_gyro);
-	struct inv_icm42600_sensor_state *accel_st = iio_priv(st->indio_accel);
-	struct device *accel_dev;
-	bool wakeup;
-	int ret;
 
-	guard(mutex)(&st->lock);
-
-	if (pm_runtime_suspended(dev))
-		return 0;
-
-	/* check wakeup capability */
-	accel_dev = &st->indio_accel->dev;
-	wakeup = st->apex.on && device_may_wakeup(accel_dev);
-	/* restore irq state or vddio if cut off */
-	if (wakeup) {
-		enable_irq(st->irq);
-		disable_irq_wake(st->irq);
-	} else {
-		ret = inv_icm42600_enable_regulator_vddio(st);
-		if (ret)
-			return ret;
-	}
-
-	/* restore sensors state */
-	ret = inv_icm42600_set_pwr_mgmt0(st, st->suspended.gyro,
-					 st->suspended.accel,
-					 st->suspended.temp, NULL);
-	if (ret)
-		return ret;
-
-	/* restore APEX features if disabled */
-	if (!wakeup && st->apex.wom.enable) {
-		ret = inv_icm42600_enable_wom(st);
-		if (ret)
-			return ret;
-	}
-
-	/* restore FIFO data streaming */
-	if (st->fifo.on) {
-		inv_sensors_timestamp_reset(&gyro_st->ts);
-		inv_sensors_timestamp_reset(&accel_st->ts);
-		ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
-				   INV_ICM42600_FIFO_CONFIG_STREAM);
-	}
-
-	return 0;
+	return st->hw_funcs->resume(dev);
 }
 
-/* Runtime suspend will turn off sensors that are enabled by iio devices. */
 static int inv_icm42600_runtime_suspend(struct device *dev)
 {
 	struct inv_icm42600_state *st = dev_get_drvdata(dev);
-	int ret;
 
-	guard(mutex)(&st->lock);
-
-	/* disable all sensors */
-	ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
-					 INV_ICM42600_SENSOR_MODE_OFF, false,
-					 NULL);
-	if (ret)
-		return ret;
-
-	regulator_disable(st->vddio_supply);
-
-	return 0;
+	return st->hw_funcs->runtime_suspend(dev);
 }
 
-/* Sensors are enabled by iio devices, no need to turn them back on here. */
 static int inv_icm42600_runtime_resume(struct device *dev)
 {
 	struct inv_icm42600_state *st = dev_get_drvdata(dev);
 
-	guard(mutex)(&st->lock);
-
-	return inv_icm42600_enable_regulator_vddio(st);
+	return st->hw_funcs->runtime_resume(dev);
 }
 
 EXPORT_NS_GPL_DEV_PM_OPS(inv_icm42600_pm_ops, IIO_ICM42600) = {
