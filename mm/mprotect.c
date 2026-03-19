@@ -103,16 +103,9 @@ bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 	return can_change_shared_pte_writable(vma, pte);
 }
 
-static __always_inline int mprotect_folio_pte_batch(struct folio *folio, pte_t *ptep,
+static noinline int mprotect_folio_pte_batch(struct folio *folio, pte_t *ptep,
 				    pte_t pte, int max_nr_ptes, fpb_t flags)
 {
-	/* No underlying folio, so cannot batch */
-	if (!folio)
-		return 1;
-
-	if (!folio_test_large(folio))
-		return 1;
-
 	return folio_pte_batch_flags(folio, NULL, ptep, &pte, max_nr_ptes, flags);
 }
 
@@ -333,7 +326,12 @@ static long change_pte_range(struct mmu_gather *tlb,
 				continue;
 			}
 
-			nr_ptes = mprotect_folio_pte_batch(folio, pte, oldpte, max_nr_ptes, flags);
+			/* No underlying folio (or not large), so cannot batch */
+			if (likely(!folio || !folio_test_large(folio)))
+				nr_ptes = 1;
+			else
+				nr_ptes = mprotect_folio_pte_batch(folio, pte, oldpte,
+					  max_nr_ptes, flags);
 
 			oldpte = modify_prot_start_ptes(vma, addr, pte, nr_ptes);
 			ptent = pte_modify(oldpte, newprot);
