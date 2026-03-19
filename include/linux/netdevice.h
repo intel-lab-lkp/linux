@@ -2764,6 +2764,17 @@ static inline void *netdev_priv(const struct net_device *dev)
 	return (void *)dev->priv;
 }
 
+/**
+ *	netdev_from_priv - get network device from priv
+ *	@priv: network device private data
+ *
+ * Get network device from private data pointer
+ */
+static inline struct net_device *netdev_from_priv(const void *priv)
+{
+	return container_of(priv, struct net_device, priv);
+}
+
 /* Set the sysfs physical device reference for the network logical device
  * if set prior to registration will cause a symlink during initialization.
  */
