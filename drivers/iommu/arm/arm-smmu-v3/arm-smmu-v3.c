@@ -3741,13 +3741,8 @@ static int arm_smmu_s1_set_dev_pasid(struct iommu_domain *domain,
 	if (smmu_domain->stage != ARM_SMMU_DOMAIN_S1)
 		return -EINVAL;
 
-	/*
-	 * We can read cd.asid outside the lock because arm_smmu_set_pasid()
-	 * will fix it
-	 */
-	arm_smmu_make_s1_cd(&target_cd, master, smmu_domain);
 	return arm_smmu_set_pasid(master, to_smmu_domain(domain), id,
-				  &target_cd, old);
+				  &target_cd, old, arm_smmu_make_s1_cd);
 }
 
 static void arm_smmu_update_ste(struct arm_smmu_master *master,
@@ -3777,7 +3772,8 @@ static void arm_smmu_update_ste(struct arm_smmu_master *master,
 
 int arm_smmu_set_pasid(struct arm_smmu_master *master,
 		       struct arm_smmu_domain *smmu_domain, ioasid_t pasid,
-		       struct arm_smmu_cd *cd, struct iommu_domain *old)
+		       struct arm_smmu_cd *cd, struct iommu_domain *old,
+		       arm_smmu_make_cd_fn make_cd_fn)
 {
 	struct iommu_domain *sid_domain =
 		iommu_driver_get_domain_for_dev(master->dev);
@@ -3808,14 +3804,7 @@ int arm_smmu_set_pasid(struct arm_smmu_master *master,
 	if (ret)
 		goto out_unlock;
 
-	/*
-	 * We don't want to obtain to the asid_lock too early, so fix up the
-	 * caller set ASID under the lock in case it changed.
-	 */
-	cd->data[0] &= ~cpu_to_le64(CTXDESC_CD_0_ASID);
-	cd->data[0] |= cpu_to_le64(
-		FIELD_PREP(CTXDESC_CD_0_ASID, smmu_domain->cd.asid));
-
+	make_cd_fn(cd, master, smmu_domain);
 	arm_smmu_write_cd_entry(master, pasid, cdptr, cd);
 	arm_smmu_update_ste(master, sid_domain, state.ats_enabled);
 

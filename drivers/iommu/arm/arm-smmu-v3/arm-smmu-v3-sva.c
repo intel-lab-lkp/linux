@@ -273,8 +273,8 @@ static int arm_smmu_sva_set_dev_pasid(struct iommu_domain *domain,
 	 * This does not need the arm_smmu_asid_lock because SVA domains never
 	 * get reassigned
 	 */
-	arm_smmu_make_sva_cd(&target, master, smmu_domain);
-	ret = arm_smmu_set_pasid(master, smmu_domain, id, &target, old);
+	ret = arm_smmu_set_pasid(master, smmu_domain, id, &target, old,
+				 arm_smmu_make_sva_cd);
 
 	mmput(domain->mm);
 	return ret;

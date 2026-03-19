@@ -1076,9 +1076,14 @@ void arm_smmu_write_cd_entry(struct arm_smmu_master *master, int ssid,
 			     struct arm_smmu_cd *cdptr,
 			     const struct arm_smmu_cd *target);
 
+typedef void (*arm_smmu_make_cd_fn)(struct arm_smmu_cd *target,
+				    struct arm_smmu_master *master,
+				    struct arm_smmu_domain *smmu_domain);
+
 int arm_smmu_set_pasid(struct arm_smmu_master *master,
 		       struct arm_smmu_domain *smmu_domain, ioasid_t pasid,
-		       struct arm_smmu_cd *cd, struct iommu_domain *old);
+		       struct arm_smmu_cd *cd, struct iommu_domain *old,
+		       arm_smmu_make_cd_fn make_cd_fn);
 
 void arm_smmu_domain_inv_range(struct arm_smmu_domain *smmu_domain,
 			       unsigned long iova, size_t size,
