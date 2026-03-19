@@ -757,6 +757,7 @@ static inline enum dsi_vid_dst_format
 dsi_get_vid_fmt(const enum mipi_dsi_pixel_format mipi_fmt)
 {
 	switch (mipi_fmt) {
+	case MIPI_DSI_FMT_RGB101010:	return VID_DST_FORMAT_RGB101010;
 	case MIPI_DSI_FMT_RGB888:	return VID_DST_FORMAT_RGB888;
 	case MIPI_DSI_FMT_RGB666:	return VID_DST_FORMAT_RGB666_LOOSE;
 	case MIPI_DSI_FMT_RGB666_PACKED:	return VID_DST_FORMAT_RGB666;
@@ -769,6 +770,7 @@ static inline enum dsi_cmd_dst_format
 dsi_get_cmd_fmt(const enum mipi_dsi_pixel_format mipi_fmt)
 {
 	switch (mipi_fmt) {
+	case MIPI_DSI_FMT_RGB101010:	return CMD_DST_FORMAT_RGB101010;
 	case MIPI_DSI_FMT_RGB888:	return CMD_DST_FORMAT_RGB888;
 	case MIPI_DSI_FMT_RGB666_PACKED:
 	case MIPI_DSI_FMT_RGB666:	return CMD_DST_FORMAT_RGB666;
@@ -1697,6 +1699,13 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 
 	if (dsi->lanes > msm_host->num_data_lanes)
 		return -EINVAL;
+
+	if (dsi->format == MIPI_DSI_FMT_RGB101010 &&
+	    !msm_host->cfg_hnd->cfg->has_rgb30) {
+		DRM_DEV_ERROR(&msm_host->pdev->dev,
+			      "RGB101010 not supported on this DSI controller\n");
+		return -EINVAL;
+	}
 
 	msm_host->channel = dsi->channel;
 	msm_host->lanes = dsi->lanes;

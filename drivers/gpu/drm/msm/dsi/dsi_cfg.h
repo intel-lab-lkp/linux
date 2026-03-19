@@ -48,6 +48,7 @@ struct msm_dsi_config {
 	const char * const *bus_clk_names;
 	const int num_bus_clks;
 	const resource_size_t io_start[VARIANTS_MAX][DSI_MAX];
+	bool has_rgb30;
 };
 
 struct msm_dsi_host_cfg_ops {

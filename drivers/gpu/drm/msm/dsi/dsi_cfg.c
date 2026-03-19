@@ -133,6 +133,7 @@ static const struct msm_dsi_config msm8998_dsi_cfg = {
 	.io_start = {
 		{ 0xc994000, 0xc996000 },
 	},
+	.has_rgb30 = true,
 };
 
 static const char * const dsi_sdm660_bus_clk_names[] = {
@@ -152,6 +153,7 @@ static const struct msm_dsi_config sdm660_dsi_cfg = {
 	.io_start = {
 		{ 0xc994000, 0xc996000 },
 	},
+	.has_rgb30 = true,
 };
 
 static const char * const dsi_v2_4_clk_names[] = {
@@ -173,6 +175,7 @@ static const struct msm_dsi_config sdm845_dsi_cfg = {
 		{ 0xae94000, 0xae96000 }, /* SDM845 / SDM670 */
 		{ 0x5e94000 }, /* QCM2290 / SM6115 / SM6125 / SM6375 */
 	},
+	.has_rgb30 = true,
 };
 
 static const struct regulator_bulk_data sm8550_dsi_regulators[] = {
@@ -188,6 +191,7 @@ static const struct msm_dsi_config sm8550_dsi_cfg = {
 	.io_start = {
 		{ 0xae94000, 0xae96000 },
 	},
+	.has_rgb30 = true,
 };
 
 static const struct regulator_bulk_data sm8650_dsi_regulators[] = {
@@ -203,6 +207,7 @@ static const struct msm_dsi_config sm8650_dsi_cfg = {
 	.io_start = {
 		{ 0xae94000, 0xae96000 },
 	},
+	.has_rgb30 = true,
 };
 
 static const struct msm_dsi_config kaanapali_dsi_cfg = {
@@ -214,6 +219,7 @@ static const struct msm_dsi_config kaanapali_dsi_cfg = {
 	.io_start = {
 		{ 0x9ac0000, 0x9ac3000 },
 	},
+	.has_rgb30 = true,
 };
 
 static const struct regulator_bulk_data sc7280_dsi_regulators[] = {
@@ -230,6 +236,7 @@ static const struct msm_dsi_config sc7280_dsi_cfg = {
 	.io_start = {
 		{ 0xae94000, 0xae96000 },
 	},
+	.has_rgb30 = true,
 };
 
 static const struct regulator_bulk_data sa8775p_dsi_regulators[] = {
@@ -246,6 +253,7 @@ static const struct msm_dsi_config sa8775p_dsi_cfg = {
 	.io_start = {
 		{ 0xae94000, 0xae96000 },
 	},
+	.has_rgb30 = true,
 };
 
 static const struct msm_dsi_host_cfg_ops msm_dsi_v2_host_ops = {
