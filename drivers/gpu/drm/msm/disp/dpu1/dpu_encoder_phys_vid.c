@@ -122,19 +122,21 @@ static void drm_mode_to_intf_timing_params(
 	}
 
 	/*
-	 * for DSI, if compression is enabled, then divide the horizonal active
-	 * timing parameters by compression ratio. bits of 3 components(R/G/B)
-	 * is compressed into bits of 1 pixel.
+	 * For DSI, if DSC is enabled, use a fixed divisor of 24 rather than
+	 * bits_per_component * 3 when calculating the compressed timing width.
+	 *
+	 * This matches the downstream driver and is required for panels with
+	 * bits_per_component != 8.
 	 */
 	if (phys_enc->hw_intf->cap->type != INTF_DP && timing->compression_en) {
 		struct drm_dsc_config *dsc =
 		       dpu_encoder_get_dsc_config(phys_enc->parent);
+
 		/*
 		 * TODO: replace drm_dsc_get_bpp_int with logic to handle
 		 * fractional part if there is fraction
 		 */
-		timing->width = timing->width * drm_dsc_get_bpp_int(dsc) /
-				(dsc->bits_per_component * 3);
+		timing->width = timing->width * drm_dsc_get_bpp_int(dsc) / 24;
 		timing->xres = timing->width;
 	}
 }
