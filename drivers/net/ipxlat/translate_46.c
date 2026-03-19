@@ -88,6 +88,63 @@ out:
 }
 
 /**
+ * ipxlat_46_plan_prefrag - plan pre-translation IPv4 fragmentation for 4->6
+ * @ipxlat: translator private context
+ * @skb: packet being translated
+ *
+ * Decides whether packet exceeds PMTU/LIM thresholds and, when needed, stores
+ * per-skb fragmentation cap in cb->frag_max_size for later ip_do_fragment.
+ *
+ * Return: 0 on success, negative errno on policy/validation failure.
+ */
+int ipxlat_46_plan_prefrag(struct ipxlat_priv *ipxlat, struct sk_buff *skb)
+{
+	unsigned int pkt_len6, pmtu6, threshold6, frag_max_size, pkt_len4,
+		old_l3_len, new_l3_len;
+	struct ipxlat_cb *cb = ipxlat_skb_cb(skb);
+	const struct iphdr *in4 = ip_hdr(skb);
+	int l3_delta, frag_l3_delta;
+
+	if (unlikely(cb->frag_max_size)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
+		cb->frag_max_size = 0;
+	}
+
+	pkt_len4 = iph_totlen(skb, in4);
+	old_l3_len = cb->l3_hdr_len;
+	new_l3_len = sizeof(struct ipv6hdr) +
+		     (ip_is_fragment(in4) ? sizeof(struct frag_hdr) : 0);
+	l3_delta = (int)new_l3_len - (int)old_l3_len;
+	pkt_len6 = pkt_len4 + l3_delta;
+
+	pmtu6 = ipxlat_46_lookup_pmtu6(ipxlat, skb, in4);
+	threshold6 = min(pmtu6, READ_ONCE(ipxlat->lowest_ipv6_mtu));
+
+	if (likely(pkt_len6 <= threshold6))
+		return 0;
+
+	/* df packets are never locally pre-fragmented */
+	if (likely(be16_to_cpu(in4->frag_off) & IP_DF)) {
+		/* Let the IPv6 forwarding path raise PTB when needed and rely
+		 * on the reverse 6->4 ICMP translation path for feedback.
+		 */
+		return 0;
+	}
+
+	/* df not set: we can fragment */
+
+	frag_l3_delta =
+		(int)(sizeof(struct ipv6hdr) + sizeof(struct frag_hdr)) -
+		(int)old_l3_len;
+	frag_max_size = threshold6 - frag_l3_delta;
+	/* store per-skb prefrag cap: ipxlat_46_fragment_pkt will copy it into
+	 * IPCB(skb)->frag_max_size before calling ip_do_fragment
+	 */
+	cb->frag_max_size = min_t(unsigned int, frag_max_size, IP_MAX_MTU);
+	return 0;
+}
+
+/**
  * ipxlat_46_translate - translate one validated packet from IPv4 to IPv6
  * @ipxlat: translator private context
  * @skb: packet to translate
@@ -182,7 +239,7 @@ int ipxlat_46_translate(struct ipxlat_priv *ipxlat, struct sk_buff *skb)
 		err = ipxlat_46_outer_udp(skb, &outer4);
 		break;
 	case IPPROTO_ICMP:
-		err = ipxlat_46_icmp(ipxlat, skb);
+		err = -EPROTONOSUPPORT;
 		break;
 	default:
 		err = 0;

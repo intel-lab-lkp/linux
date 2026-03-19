@@ -62,6 +62,17 @@ unsigned int ipxlat_46_lookup_pmtu6(struct ipxlat_priv *ipxlat,
 				    const struct iphdr *in4);
 
 /**
+ * ipxlat_46_plan_prefrag - decide whether IPv4 packet must be pre-fragmented
+ * @ipxlat: translator private context
+ * @skb: packet being translated
+ *
+ * Sets cb->frag_max_size when pre-fragmentation is required.
+ *
+ * Return: 0 on success, negative errno on policy/validation failure.
+ */
+int ipxlat_46_plan_prefrag(struct ipxlat_priv *ipxlat, struct sk_buff *skb);
+
+/**
  * ipxlat_46_translate - translate outer packet from IPv4 to IPv6 in place
  * @ipxlat: translator private context
  * @skb: packet to translate
