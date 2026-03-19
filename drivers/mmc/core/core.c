@@ -860,6 +860,29 @@ void mmc_release_host(struct mmc_host *host)
 }
 EXPORT_SYMBOL(mmc_release_host);
 
+/**
+ *	mmc_panic_claim_host - force-claim a host in panic context
+ *	@host: mmc host to claim
+ *
+ *	Force-claims the MMC host without locking. During kernel panic
+ *	other CPUs are stopped and may be holding mmc_host->lock (e.g.
+ *	inside __mmc_claim_host or mmc_release_host). Unlike sdhci_host->lock
+ *	which is freed by the hardware drain+reset, mmc_host->lock has no
+ *	hardware counterpart, so we must bypass it with WRITE_ONCE.
+ */
+void mmc_panic_claim_host(struct mmc_host *host)
+{
+	if (!host)
+		return;
+
+	WRITE_ONCE(host->claimed, 1);
+	host->claimer = &host->default_ctx;
+	host->claimer->task = current;
+	WRITE_ONCE(host->claim_cnt, 1);
+	WRITE_ONCE(host->ongoing_mrq, NULL);
+}
+EXPORT_SYMBOL(mmc_panic_claim_host);
+
 /*
  * This is a helper function, which fetches a runtime pm reference for the
  * card device and also claims the host.
