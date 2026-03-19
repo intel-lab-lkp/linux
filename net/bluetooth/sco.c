@@ -453,13 +453,22 @@ static struct sock *sco_get_sock_listen(bdaddr_t *src)
 			continue;
 
 		/* Exact match. */
-		if (!bacmp(&sco_pi(sk)->src, src))
+		if (!bacmp(&sco_pi(sk)->src, src)) {
+			sock_hold(sk);
 			break;
+		}
 
 		/* Closest match */
-		if (!bacmp(&sco_pi(sk)->src, BDADDR_ANY))
+		if (!bacmp(&sco_pi(sk)->src, BDADDR_ANY)) {
+			if (sk1)
+				sock_put(sk1);
 			sk1 = sk;
+			sock_hold(sk1);
+		}
 	}
+
+	if (sk && sk1)
+		sock_put(sk1);
 
 	read_unlock(&sco_sk_list.lock);
 
@@ -1380,6 +1389,7 @@ static void sco_conn_ready(struct sco_conn *conn)
 		if (!sk) {
 			release_sock(parent);
 			sco_conn_unlock(conn);
+			sock_put(parent);
 			return;
 		}
 
@@ -1403,6 +1413,7 @@ static void sco_conn_ready(struct sco_conn *conn)
 		release_sock(parent);
 
 		sco_conn_unlock(conn);
+		sock_put(parent);
 	}
 }
 
