@@ -402,6 +402,7 @@ CATEGORY="hugetlb" run_test ./hugetlb-soft-offline
 echo "$nr_hugepages_tmp" > /proc/sys/vm/nr_hugepages
 echo "$enable_soft_offline" > /proc/sys/vm/enable_soft_offline
 CATEGORY="hugetlb" run_test ./hugetlb-read-hwpoison
+CATEGORY="mmap" run_test ./shmem_memory_failure_test
 fi
 
 if [ $VADDR64 -ne 0 ]; then
