@@ -338,14 +338,3 @@ int ipxlat_64_inner_udp(struct sk_buff *skb, const struct ipv6hdr *in6,
 		udp_new->check = CSUM_MANGLED_0;
 	return 0;
 }
-
-int ipxlat_46_icmp(struct ipxlat_priv *ipxlat, struct sk_buff *skb)
-{
-	return -EPROTONOSUPPORT;
-}
-
-int ipxlat_64_icmp(struct ipxlat_priv *ipxlat, struct sk_buff *skb,
-		   const struct ipv6hdr *outer6)
-{
-	return -EPROTONOSUPPORT;
-}

@@ -11,3 +11,5 @@ ipxlat-objs += transport.o
 ipxlat-objs += dispatch.o
 ipxlat-objs += translate_46.o
 ipxlat-objs += translate_64.o
+ipxlat-objs += icmp_46.o
+ipxlat-objs += icmp_64.o
