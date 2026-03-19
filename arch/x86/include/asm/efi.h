@@ -143,6 +143,12 @@ extern void efi_unmap_boot_services(void);
 void arch_efi_call_virt_setup(void);
 void arch_efi_call_virt_teardown(void);
 
+#ifdef CONFIG_X86_32
+void efi_merge_regions(void);
+#else
+static inline void efi_merge_regions(void) {}
+#endif
+
 extern u64 efi_setup;
 
 #ifdef CONFIG_EFI
