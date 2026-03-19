@@ -3412,6 +3412,30 @@ static int __init amd_iommu_devices_set_pci_msi_domain(void)
 	return ret;
 }
 
+static int amd_iommu_pci_bus_notifier(struct notifier_block *nb,
+					unsigned long action, void *data)
+{
+	struct pci_dev *pdev = to_pci_dev(data);
+
+	/* We only care about the add event. */
+	if (action != BUS_NOTIFY_ADD_DEVICE)
+		return NOTIFY_DONE;
+
+	amd_iommu_dev_set_pci_msi_domain(&pdev->dev);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block amd_iommu_pci_bus_nb = {
+	.notifier_call = amd_iommu_pci_bus_notifier,
+	.priority = 1,
+};
+
+static void __init amd_iommu_register_bus_notifier(void)
+{
+	bus_register_notifier(&pci_bus_type, &amd_iommu_pci_bus_nb);
+}
+
 /****************************************************************************
  *
  * AMD IOMMU Initialization State Machine
@@ -3443,6 +3467,7 @@ static int __init state_next(void)
 	case IOMMU_ENABLED:
 		if (amd_iommu_disabled) {
 			amd_iommu_devices_set_pci_msi_domain();
+			amd_iommu_register_bus_notifier();
 			init_state = IOMMU_CMDLINE_DISABLED;
 			ret = -EINVAL;
 		} else {
