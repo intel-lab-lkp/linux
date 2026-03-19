@@ -36,7 +36,8 @@ static int exfat_cont_expand(struct inode *inode, loff_t size)
 	num_clusters = EXFAT_B_TO_CLU(exfat_ondisk_size(inode), sbi);
 	new_num_clusters = EXFAT_B_TO_CLU_ROUND_UP(size, sbi);
 
-	if (new_num_clusters == num_clusters)
+	WARN_ON(new_num_clusters < num_clusters);
+	if (new_num_clusters <= num_clusters)
 		goto out;
 
 	if (num_clusters) {
@@ -94,35 +95,87 @@ free_clu:
 /*
  * Preallocate space for a file. This implements exfat's fallocate file
  * operation, which gets called from sys_fallocate system call. User space
- * requests len bytes at offset. In contrary to fat, we only support
- * FALLOC_FL_ALLOCATE_RANGE because by leaving the valid data length(VDL)
- * field, it is unnecessary to zero out the newly allocated clusters.
+ * requests len bytes at offset.
+ *
+ * In contrary to fat, FALLOC_FL_ALLOCATE_RANGE can be done without zeroing out
+ * the newly allocated clusters by leaving the valid data length(VDL) field
+ * unchanged.
+ *
+ * Due to the inherent limitation of the VDL scheme, FALLOC_FL_ZERO_RANGE is
+ * only possible when the requested range covers EOF.
  */
 static long exfat_fallocate(struct file *file, int mode,
 			  loff_t offset, loff_t len)
 {
 	struct inode *inode = file->f_mapping->host;
-	loff_t newsize = offset + len;
+	loff_t newsize, isize;
 	int err = 0;
 
 	/* No support for other modes */
-	if (mode != FALLOC_FL_ALLOCATE_RANGE)
+	switch (mode) {
+	case FALLOC_FL_ALLOCATE_RANGE:
+	case FALLOC_FL_ZERO_RANGE:
+	case FALLOC_FL_ZERO_RANGE|FALLOC_FL_KEEP_SIZE:
+		break;
+	default:
 		return -EOPNOTSUPP;
+	}
 
 	/* No support for dir */
 	if (!S_ISREG(inode->i_mode))
-		return -EOPNOTSUPP;
+		return mode & FALLOC_FL_ZERO_RANGE ? -EINVAL : -EOPNOTSUPP;
 
 	if (unlikely(exfat_forced_shutdown(inode->i_sb)))
 		return -EIO;
 
 	inode_lock(inode);
 
-	if (newsize <= i_size_read(inode))
-		goto error;
+	newsize = offset + len;
+	isize = i_size_read(inode);
 
-	/* This is just an expanding truncate */
-	err = exfat_cont_expand(inode, newsize);
+	if (mode & FALLOC_FL_ZERO_RANGE) {
+		struct exfat_inode_info *ei = EXFAT_I(inode);
+		loff_t saved_validsize = ei->valid_size;
+
+		/* The requested range must span to or past EOF */
+		if (newsize < isize) {
+			err = -EOPNOTSUPP;
+			goto error;
+		}
+
+		/* valid_size can only be truncated */
+		if (offset < ei->valid_size)
+			ei->valid_size = offset;
+		/* If offset >= ei->valid_size, the range is already zeroed so that'd be no-op */
+
+		if (!(mode & FALLOC_FL_KEEP_SIZE) && isize < newsize) {
+			err = exfat_cont_expand(inode, newsize);
+			if (err) {
+				/* inode unchanged - revert valid_size */
+				ei->valid_size = saved_validsize;
+				goto error;
+			}
+			/* inode invalidated in exfat_cont_expand() */
+		} else {
+			/* update inode */
+			inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
+
+			mark_inode_dirty(inode);
+
+			if (IS_SYNC(inode))
+				return write_inode_now(inode, 1);
+		}
+
+		/* drop cache after the new valid_size */
+		if (ei->valid_size != saved_validsize)
+			truncate_pagecache(inode, ei->valid_size);
+	} else { /* mode == FALLOC_FL_ALLOCATE_RANGE */
+		if (newsize <= isize)
+			goto error;
+
+		/* This is just an expanding truncate */
+		err = exfat_cont_expand(inode, newsize);
+	}
 
 error:
 	inode_unlock(inode);
