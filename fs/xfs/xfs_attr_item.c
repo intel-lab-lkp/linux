@@ -633,7 +633,7 @@ xfs_attri_recover_work(
 {
 	struct xfs_attr_intent		*attr;
 	struct xfs_da_args		*args;
-	struct xfs_inode		*ip;
+	struct xfs_inode		*ip = NULL;
 	int				local;
 	int				error;
 
@@ -653,7 +653,8 @@ xfs_attri_recover_work(
 		break;
 	}
 	if (error) {
-		xfs_irele(ip);
+		if (ip)
+			xfs_irele(ip);
 		XFS_CORRUPTION_ERROR(__func__, XFS_ERRLEVEL_LOW, mp, attrp,
 				sizeof(*attrp));
 		return ERR_PTR(-EFSCORRUPTED);
