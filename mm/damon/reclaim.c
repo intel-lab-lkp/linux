@@ -316,7 +316,7 @@ static int damon_reclaim_addr_unit_store(const char *val,
 
 	if (err)
 		return err;
-	if (!input_addr_unit)
+	if (!input_addr_unit || !is_power_of_2(input_addr_unit))
 		return -EINVAL;
 
 	addr_unit = input_addr_unit;
