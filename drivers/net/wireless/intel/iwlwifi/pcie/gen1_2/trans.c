@@ -1274,7 +1274,7 @@ void iwl_pcie_synchronize_irqs(struct iwl_trans *trans)
 		int i;
 
 		for (i = 0; i < trans_pcie->alloc_vecs; i++)
-			synchronize_irq(trans_pcie->msix_entries[i].vector);
+			synchronize_irq(pci_irq_vector(trans_pcie->pci_dev, i));
 	} else {
 		synchronize_irq(trans_pcie->pci_dev->irq);
 	}
@@ -1608,18 +1608,20 @@ iwl_pcie_set_interrupt_capa(struct pci_dev *pdev,
 		max_rx_queues = IWL_9000_MAX_RX_HW_QUEUES;
 
 	max_irqs = min_t(u32, num_online_cpus() + 2, max_rx_queues);
-	for (i = 0; i < max_irqs; i++)
-		trans_pcie->msix_entries[i].entry = i;
-
-	num_irqs = pci_enable_msix_range(pdev, trans_pcie->msix_entries,
-					 MSIX_MIN_INTERRUPT_VECTORS,
-					 max_irqs);
+	num_irqs = pci_alloc_irq_vectors(pdev, MSIX_MIN_INTERRUPT_VECTORS,
+					 max_irqs, PCI_IRQ_MSIX | PCI_IRQ_AFFINITY);
 	if (num_irqs < 0) {
 		IWL_DEBUG_INFO(trans,
 			       "Failed to enable msi-x mode (ret %d). Moving to msi mode.\n",
 			       num_irqs);
 		goto enable_msi;
 	}
+
+	trans_pcie->msix_enabled = true;
+	trans_pcie->alloc_vecs = num_irqs;
+	for (i = 0; i < num_irqs; i++)
+		trans_pcie->msix_entries[i].entry = i;
+
 	trans_pcie->def_irq = (num_irqs == max_irqs) ? num_irqs - 1 : 0;
 
 	IWL_DEBUG_INFO(trans,
@@ -1671,28 +1673,7 @@ enable_msi:
 static void iwl_pcie_irq_set_affinity(struct iwl_trans *trans,
 				      struct iwl_trans_info *info)
 {
-#if defined(CONFIG_SMP)
-	int iter_rx_q, i, ret, cpu, offset;
-	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-
-	i = trans_pcie->shared_vec_mask & IWL_SHARED_IRQ_FIRST_RSS ? 0 : 1;
-	iter_rx_q = info->num_rxqs - 1 + i;
-	offset = 1 + i;
-	for (; i < iter_rx_q ; i++) {
-		/*
-		 * Get the cpu prior to the place to search
-		 * (i.e. return will be > i - 1).
-		 */
-		cpu = cpumask_next(i - offset, cpu_online_mask);
-		cpumask_set_cpu(cpu, &trans_pcie->affinity_mask[i]);
-		ret = irq_set_affinity_hint(trans_pcie->msix_entries[i].vector,
-					    &trans_pcie->affinity_mask[i]);
-		if (ret)
-			IWL_ERR(trans_pcie->trans,
-				"Failed to set affinity mask for IRQ %d\n",
-				trans_pcie->msix_entries[i].vector);
-	}
-#endif
+	/* Handled by PCI_IRQ_AFFINITY in pci_alloc_irq_vectors() */
 }
 
 static int iwl_pcie_init_msix_handler(struct pci_dev *pdev,
@@ -1703,15 +1684,14 @@ static int iwl_pcie_init_msix_handler(struct pci_dev *pdev,
 
 	for (i = 0; i < trans_pcie->alloc_vecs; i++) {
 		int ret;
-		struct msix_entry *msix_entry;
+		struct msix_entry *msix_entry = &trans_pcie->msix_entries[i];
 		const char *qname = queue_name(&pdev->dev, trans_pcie, i);
 
 		if (!qname)
 			return -ENOMEM;
 
-		msix_entry = &trans_pcie->msix_entries[i];
 		ret = devm_request_threaded_irq(&pdev->dev,
-						msix_entry->vector,
+						pci_irq_vector(pdev, i),
 						iwl_pcie_msix_isr,
 						(i == trans_pcie->def_irq) ?
 						iwl_pcie_irq_msix_handler :
@@ -1988,7 +1968,7 @@ void iwl_trans_pcie_free(struct iwl_trans *trans)
 	if (trans_pcie->msix_enabled) {
 		for (i = 0; i < trans_pcie->alloc_vecs; i++) {
 			irq_set_affinity_hint(
-				trans_pcie->msix_entries[i].vector,
+				pci_irq_vector(trans_pcie->pci_dev, i),
 				NULL);
 		}
 
