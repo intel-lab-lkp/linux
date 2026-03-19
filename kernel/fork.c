@@ -345,7 +345,8 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 		}
 
 		/* Reset stack metadata. */
-		kasan_unpoison_range(vm_area->addr, THREAD_SIZE);
+		if (!kasan_hw_tags_enabled())
+			kasan_unpoison_range(vm_area->addr, THREAD_SIZE);
 
 		stack = kasan_reset_tag(vm_area->addr);
 
@@ -358,7 +359,7 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 	}
 
 	stack = __vmalloc_node(THREAD_SIZE, THREAD_ALIGN,
-				     GFP_VMAP_STACK,
+				     GFP_VMAP_STACK | __GFP_SKIP_KASAN,
 				     node, __builtin_return_address(0));
 	if (!stack)
 		return -ENOMEM;
@@ -410,7 +411,8 @@ static void thread_stack_delayed_free(struct task_struct *tsk)
 
 static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 {
-	struct page *page = alloc_pages_node(node, THREADINFO_GFP,
+	struct page *page = alloc_pages_node(node,
+					     THREADINFO_GFP | __GFP_SKIP_KASAN,
 					     THREAD_SIZE_ORDER);
 
 	if (likely(page)) {
