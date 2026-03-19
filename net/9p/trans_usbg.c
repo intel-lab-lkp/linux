@@ -40,6 +40,7 @@
 struct f_usb9pfs {
 	struct p9_client *client;
 
+	u8 ctrl_id, data_id;
 	/* 9p request lock for en/dequeue */
 	spinlock_t lock;
 
@@ -84,6 +85,12 @@ struct f_usb9pfs_dev {
 
 	struct list_head usb9pfs_instance;
 };
+
+static inline struct f_usb9pfs_dev *usb9pfs_to_usb9pfs_dev(struct f_usb9pfs *usb9pfs)
+{
+	return container_of(usb9pfs->function.fi,
+			    struct f_usb9pfs_opts, func_inst)->dev;
+}
 
 static DEFINE_MUTEX(usb9pfs_lock);
 static struct list_head usbg_instance_list;
@@ -364,9 +371,11 @@ static int enable_endpoint(struct usb_composite_dev *cdev,
 }
 
 static int
-enable_usb9pfs(struct usb_composite_dev *cdev, struct f_usb9pfs *usb9pfs)
+enable_usb9pfs(struct f_usb9pfs *usb9pfs)
 {
-	struct p9_client *client;
+	struct usb_composite_dev *cdev =
+		usb9pfs->function.config->cdev;
+
 	int ret = 0;
 
 	ret = enable_endpoint(cdev, usb9pfs, usb9pfs->in_ep);
@@ -380,10 +389,6 @@ enable_usb9pfs(struct usb_composite_dev *cdev, struct f_usb9pfs *usb9pfs)
 	ret = alloc_requests(cdev, usb9pfs);
 	if (ret)
 		goto disable_out;
-
-	client = usb9pfs->client;
-	if (client)
-		client->status = Connected;
 
 	dev_dbg(&cdev->gadget->dev, "%s enabled\n", usb9pfs->function.name);
 	return 0;
@@ -431,17 +436,13 @@ static int p9_usbg_create(struct p9_client *client, struct fs_context *fc)
 		return -EINVAL;
 
 	client->trans = (void *)usb9pfs;
-	if (!usb9pfs->in_req)
-		client->status = Disconnected;
-	else
-		client->status = Connected;
+	client->status = Connected;
 	spin_lock_irq(&usb9pfs->lock);
 	usb9pfs->client = client;
 	spin_unlock_irq(&usb9pfs->lock);
 
 	client->trans_mod->maxsize = usb9pfs->buflen;
 
-	complete(&usb9pfs->send);
 
 	return 0;
 }
@@ -563,11 +564,41 @@ static struct usb_interface_descriptor usb9pfs_intf = {
 	.bLength =		sizeof(usb9pfs_intf),
 	.bDescriptorType =	USB_DT_INTERFACE,
 
-	.bNumEndpoints =	2,
+	.bNumEndpoints =	0,
 	.bInterfaceClass =	USB_CLASS_VENDOR_SPEC,
 	.bInterfaceSubClass =	USB_SUBCLASS_VENDOR_SPEC,
 	.bInterfaceProtocol =   USB_PROTOCOL_9PFS,
 
+	/* .iInterface = DYNAMIC */
+};
+
+/* the default data interface has no endpoints ... */
+
+static struct usb_interface_descriptor usb9pfs_data_nop_intf = {
+	.bLength =		sizeof(usb9pfs_data_nop_intf),
+	.bDescriptorType =	USB_DT_INTERFACE,
+
+	.bInterfaceNumber =	1,
+	.bAlternateSetting =	0,
+	.bNumEndpoints =	0,
+	.bInterfaceClass =	USB_CLASS_VENDOR_SPEC,
+	.bInterfaceSubClass =	USB_SUBCLASS_VENDOR_SPEC,
+	.bInterfaceProtocol =   USB_PROTOCOL_9PFS,
+	/* .iInterface = DYNAMIC */
+};
+
+/* ... but the "real" data interface has two bulk endpoints */
+
+static struct usb_interface_descriptor usb9pfs_data_intf = {
+	.bLength =		sizeof(usb9pfs_data_intf),
+	.bDescriptorType =	USB_DT_INTERFACE,
+
+	.bInterfaceNumber =	1,
+	.bAlternateSetting =	1,
+	.bNumEndpoints =	2,
+	.bInterfaceClass =	USB_CLASS_VENDOR_SPEC,
+	.bInterfaceSubClass =	USB_SUBCLASS_VENDOR_SPEC,
+	.bInterfaceProtocol =   USB_PROTOCOL_9PFS,
 	/* .iInterface = DYNAMIC */
 };
 
@@ -591,6 +622,8 @@ static struct usb_endpoint_descriptor fs_usb9pfs_sink_desc = {
 
 static struct usb_descriptor_header *fs_usb9pfs_descs[] = {
 	(struct usb_descriptor_header *)&usb9pfs_intf,
+	(struct usb_descriptor_header *)&usb9pfs_data_nop_intf,
+	(struct usb_descriptor_header *)&usb9pfs_data_intf,
 	(struct usb_descriptor_header *)&fs_usb9pfs_sink_desc,
 	(struct usb_descriptor_header *)&fs_usb9pfs_source_desc,
 	NULL,
@@ -616,6 +649,8 @@ static struct usb_endpoint_descriptor hs_usb9pfs_sink_desc = {
 
 static struct usb_descriptor_header *hs_usb9pfs_descs[] = {
 	(struct usb_descriptor_header *)&usb9pfs_intf,
+	(struct usb_descriptor_header *)&usb9pfs_data_nop_intf,
+	(struct usb_descriptor_header *)&usb9pfs_data_intf,
 	(struct usb_descriptor_header *)&hs_usb9pfs_source_desc,
 	(struct usb_descriptor_header *)&hs_usb9pfs_sink_desc,
 	NULL,
@@ -657,6 +692,8 @@ static struct usb_ss_ep_comp_descriptor ss_usb9pfs_sink_comp_desc = {
 
 static struct usb_descriptor_header *ss_usb9pfs_descs[] = {
 	(struct usb_descriptor_header *)&usb9pfs_intf,
+	(struct usb_descriptor_header *)&usb9pfs_data_nop_intf,
+	(struct usb_descriptor_header *)&usb9pfs_data_intf,
 	(struct usb_descriptor_header *)&ss_usb9pfs_source_desc,
 	(struct usb_descriptor_header *)&ss_usb9pfs_source_comp_desc,
 	(struct usb_descriptor_header *)&ss_usb9pfs_sink_desc,
@@ -666,7 +703,9 @@ static struct usb_descriptor_header *ss_usb9pfs_descs[] = {
 
 /* function-specific strings: */
 static struct usb_string strings_usb9pfs[] = {
-	[0].s = "usb9pfs input to output",
+	[0].s = "usb9pfs control",
+	[1].s = "usb9pfs nop",
+	[2].s = "usb9pfs data",
 	{  }			/* end of list */
 };
 
@@ -688,20 +727,34 @@ static int usb9pfs_func_bind(struct usb_configuration *c,
 	struct f_usb9pfs *usb9pfs = func_to_usb9pfs(f);
 	struct f_usb9pfs_opts *opts;
 	struct usb_composite_dev *cdev = c->cdev;
+	struct usb_string *us;
 	int ret;
 	int id;
+
+	us = usb_gstrings_attach(cdev, usb9pfs_strings,
+				 ARRAY_SIZE(strings_usb9pfs));
+	if (IS_ERR(us))
+		return PTR_ERR(us);
+
+	usb9pfs_intf.iInterface = us[0].id;
+	usb9pfs_data_nop_intf.iInterface = us[1].id;
+	usb9pfs_data_intf.iInterface = us[2].id;
 
 	/* allocate interface ID(s) */
 	id = usb_interface_id(c, f);
 	if (id < 0)
 		return id;
+
+	usb9pfs->ctrl_id = id;
 	usb9pfs_intf.bInterfaceNumber = id;
 
-	id = usb_string_id(cdev);
+	id = usb_interface_id(c, f);
 	if (id < 0)
 		return id;
-	strings_usb9pfs[0].id = id;
-	usb9pfs_intf.iInterface = id;
+
+	usb9pfs->data_id = id;
+	usb9pfs_data_nop_intf.bInterfaceNumber = id;
+	usb9pfs_data_intf.bInterfaceNumber = id;
 
 	/* allocate endpoints */
 	usb9pfs->in_ep = usb_ep_autoconfig(cdev->gadget,
@@ -775,9 +828,38 @@ static int usb9pfs_set_alt(struct usb_function *f,
 			   unsigned int intf, unsigned int alt)
 {
 	struct f_usb9pfs *usb9pfs = func_to_usb9pfs(f);
-	struct usb_composite_dev *cdev = f->config->cdev;
+	int ret;
 
-	return enable_usb9pfs(cdev, usb9pfs);
+	if (!alt) {
+		if (intf == usb9pfs->data_id &&
+		    usb9pfs->in_ep->enabled)
+			disable_usb9pfs(usb9pfs);
+		return 0;
+	}
+
+	if (!usb9pfs->client || !usb9pfs_to_usb9pfs_dev(usb9pfs)->inuse)
+		return -EINVAL;
+
+	ret = enable_usb9pfs(usb9pfs);
+	if (ret)
+		return ret;
+
+	complete(&usb9pfs->send);
+
+	return 0;
+}
+
+/*
+ * Because the data interface supports multiple altsettings,
+ * this 9pfs function *MUST* implement a get_alt() method.
+ */
+static int usb9pfs_get_alt(struct usb_function *f, unsigned int intf)
+{
+	struct f_usb9pfs *usb9pfs = func_to_usb9pfs(f);
+
+	if (intf == usb9pfs->ctrl_id)
+		return 0;
+	return usb9pfs->in_ep->enabled ? 1 : 0;
 }
 
 static void usb9pfs_disable(struct usb_function *f)
@@ -818,6 +900,7 @@ static struct usb_function *usb9pfs_alloc(struct usb_function_instance *fi)
 	usb9pfs->function.bind = usb9pfs_func_bind;
 	usb9pfs->function.unbind = usb9pfs_func_unbind;
 	usb9pfs->function.set_alt = usb9pfs_set_alt;
+	usb9pfs->function.get_alt = usb9pfs_get_alt;
 	usb9pfs->function.disable = usb9pfs_disable;
 	usb9pfs->function.strings = usb9pfs_strings;
 
