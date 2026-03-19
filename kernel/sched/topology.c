@@ -2282,7 +2282,7 @@ static int hop_cmp(const void *a, const void *b)
 	struct cpumask **prev_hop, **cur_hop = *(struct cpumask ***)b;
 	struct __cmp_key *k = (struct __cmp_key *)a;
 
-	if (cpumask_weight_and(k->cpus, cur_hop[k->node]) <= k->cpu)
+	if (cpumask_nth_and(k->cpu, k->cpus, cur_hop[k->node]) >= nr_cpu_ids)
 		return 1;
 
 	if (b == k->masks) {
