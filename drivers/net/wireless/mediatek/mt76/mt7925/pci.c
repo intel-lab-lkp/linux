@@ -16,6 +16,12 @@ static const struct pci_device_id mt7925_pci_device_table[] = {
 		.driver_data = (kernel_ulong_t)MT7925_FIRMWARE_WM },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x0717),
 		.driver_data = (kernel_ulong_t)MT7925_FIRMWARE_WM },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x7927),
+		.driver_data = (kernel_ulong_t)MT7927_FIRMWARE_WM },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x6639),
+		.driver_data = (kernel_ulong_t)MT7927_FIRMWARE_WM },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x0738),
+		.driver_data = (kernel_ulong_t)MT7927_FIRMWARE_WM },
 	{ },
 };
 
@@ -530,7 +536,8 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		goto err_free_pci_vec;
 
-	is_mt7927_hw = (pdev->device == 0x6639 || pdev->device == 0x7927);
+	is_mt7927_hw = (pdev->device == 0x6639 || pdev->device == 0x7927 ||
+			pdev->device == 0x0738);
 
 	/* MT7927: CONNINFRA power domain and WFDMA register access are
 	 * unreliable with PCIe L1 active, causing throughput to drop
@@ -546,16 +553,16 @@ static int mt7925_pci_probe(struct pci_dev *pdev,
 		goto err_free_pci_vec;
 	}
 
-	/* MT7927 firmware lacks the connac2 feature trailer, so
-	 * mt792x_get_mac80211_ops() can't detect CNM support and
-	 * replaces chanctx/ROC/mgd_prepare_tx ops with stubs.
-	 * Force CNM and restore the original mt7925 ops.
-	 */
-	if ((pdev->device == 0x6639 || pdev->device == 0x7927) &&
-	    !(features & MT792x_FW_CAP_CNM)) {
-		features |= MT792x_FW_CAP_CNM;
-		memcpy(ops, &mt7925_ops, sizeof(*ops));
-	}
+		/* MT7927 firmware lacks the connac2 feature trailer, so
+		 * mt792x_get_mac80211_ops() can't detect CNM support and
+		 * replaces chanctx/ROC/mgd_prepare_tx ops with stubs.
+		 * Force CNM and restore the original mt7925 ops.
+		 */
+		if ((pdev->device == 0x6639 || pdev->device == 0x7927 ||
+		     pdev->device == 0x0738) && !(features & MT792x_FW_CAP_CNM)) {
+			features |= MT792x_FW_CAP_CNM;
+			memcpy(ops, &mt7925_ops, sizeof(*ops));
+		}
 
 	mdev = mt76_alloc_device(&pdev->dev, sizeof(*dev), ops, &drv_ops);
 	if (!mdev) {
