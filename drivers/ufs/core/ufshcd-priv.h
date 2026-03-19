@@ -289,6 +289,12 @@ static inline u32 ufshcd_vops_freq_to_gear_speed(struct ufs_hba *hba, unsigned l
 	return 0;
 }
 
+static inline void ufshcd_vops_vendor_intr(struct ufs_hba *hba)
+{
+	if (hba->vops && hba->vops->vendor_intr)
+		hba->vops->vendor_intr(hba);
+}
+
 extern const struct ufs_pm_lvl_states ufs_pm_lvl_states[];
 
 /**
