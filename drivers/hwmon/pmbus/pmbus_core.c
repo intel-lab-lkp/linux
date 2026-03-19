@@ -33,13 +33,6 @@
 #define PMBUS_ATTR_ALLOC_SIZE	32
 #define PMBUS_NAME_SIZE		24
 
-/*
- * The type of operation used for picking the delay between
- * successive pmbus operations.
- */
-#define PMBUS_OP_WRITE		BIT(0)
-#define PMBUS_OP_PAGE_CHANGE	BIT(1)
-
 static int wp = -1;
 module_param(wp, int, 0444);
 
@@ -175,7 +168,7 @@ void pmbus_set_update(struct i2c_client *client, u8 reg, bool update)
 EXPORT_SYMBOL_NS_GPL(pmbus_set_update, "PMBUS");
 
 /* Some chips need a delay between accesses. */
-static void pmbus_wait(struct i2c_client *client)
+void pmbus_wait(struct i2c_client *client)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
 	ktime_t backoff;
@@ -189,9 +182,10 @@ static void pmbus_wait(struct i2c_client *client)
 	if (delay > 0)
 		fsleep(delay);
 }
+EXPORT_SYMBOL_NS_GPL(pmbus_wait, "PMBUS");
 
 /* Sets the last operation timestamp for pmbus_wait */
-static void pmbus_update_ts(struct i2c_client *client, int op)
+void pmbus_update_ts(struct i2c_client *client, int op)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
 	const struct pmbus_driver_info *info = data->info;
@@ -208,6 +202,7 @@ static void pmbus_update_ts(struct i2c_client *client, int op)
 		spin_unlock(&data->timestamp_lock);
 	}
 }
+EXPORT_SYMBOL_NS_GPL(pmbus_update_ts, "PMBUS");
 
 int pmbus_set_page(struct i2c_client *client, int page, int phase)
 {
