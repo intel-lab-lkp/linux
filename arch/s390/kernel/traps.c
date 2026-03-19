@@ -24,6 +24,7 @@
 #include <linux/entry-common.h>
 #include <linux/kmsan.h>
 #include <linux/bug.h>
+#include <asm/entry-percpu.h>
 #include <asm/asm-extable.h>
 #include <asm/irqflags.h>
 #include <asm/ptrace.h>
@@ -349,6 +350,7 @@ void noinstr __do_pgm_check(struct pt_regs *regs)
 		current->thread.gmap_int_code = regs->int_code & 0xffff;
 		return;
 	}
+	percpu_entry(regs);
 	state = irqentry_enter(regs);
 	if (user_mode(regs)) {
 		update_timer_sys();
@@ -386,6 +388,7 @@ void noinstr __do_pgm_check(struct pt_regs *regs)
 out:
 	local_irq_disable();
 	irqentry_exit(regs, state);
+	percpu_exit(regs);
 }
 
 /*

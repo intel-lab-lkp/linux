@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/sched/signal.h>
 #include <linux/kvm_host.h>
+#include <asm/entry-percpu.h>
 #include <asm/lowcore.h>
 #include <asm/ctlreg.h>
 #include <asm/fpu.h>
@@ -374,6 +375,7 @@ void notrace s390_do_machine_check(struct pt_regs *regs)
 	unsigned long mcck_dam_code;
 	int mcck_pending = 0;
 
+	percpu_entry(regs);
 	irq_state = irqentry_nmi_enter(regs);
 
 	if (user_mode(regs))
@@ -496,6 +498,7 @@ void notrace s390_do_machine_check(struct pt_regs *regs)
 		schedule_mcck_handler();
 
 	irqentry_nmi_exit(regs, irq_state);
+	percpu_exit(regs);
 }
 NOKPROBE_SYMBOL(s390_do_machine_check);
 
