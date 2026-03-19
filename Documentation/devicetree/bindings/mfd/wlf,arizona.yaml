@@ -194,6 +194,16 @@ properties:
   reset-gpios:
     maxItems: 1
 
+  irq-gpios:
+    maxItems: 1
+    description:
+      A functional IRQ should be provided in the interrupts
+      property. This property enables edge triggered IRQ emulation
+      for hosts that don't support the codecs level triggered IRQ
+      output. The GPIO line corresponding to the IRQ will be polled
+      until all IRQs have been handled, ensuring an edge is generated
+      for the next IRQ.
+
   wlf,reset:
     description:
       GPIO specifier for the GPIO controlling RESET
