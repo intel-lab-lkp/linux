@@ -25,7 +25,6 @@ properties:
           - mediatek,mt8135-mmc
           - mediatek,mt8173-mmc
           - mediatek,mt8183-mmc
-          - mediatek,mt8189-mmc
           - mediatek,mt8196-mmc
           - mediatek,mt8516-mmc
       - items:
@@ -36,6 +35,7 @@ properties:
               - mediatek,mt6893-mmc
               - mediatek,mt8186-mmc
               - mediatek,mt8188-mmc
+              - mediatek,mt8189-mmc
               - mediatek,mt8192-mmc
               - mediatek,mt8195-mmc
               - mediatek,mt8365-mmc
