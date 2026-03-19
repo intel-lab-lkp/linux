@@ -548,20 +548,20 @@ struct memcg_vmstats {
  *    rstat update tree grow unbounded.
  *
  * 2) Flush the stats synchronously on reader side only when there are more than
- *    (MEMCG_CHARGE_BATCH * nr_cpus) update events. Though this optimization
- *    will let stats be out of sync by atmost (MEMCG_CHARGE_BATCH * nr_cpus) but
- *    only for 2 seconds due to (1).
+ *    (MEMCG_CHARGE_BATCH * (ilog2(nr_cpus) + 1)) update events. Though this
+ *    optimization will let stats be out of sync by up to that amount but only
+ *    for 2 seconds due to (1).
  */
 static void flush_memcg_stats_dwork(struct work_struct *w);
 static DECLARE_DEFERRABLE_WORK(stats_flush_dwork, flush_memcg_stats_dwork);
 static u64 flush_last_time;
+static int vmstats_flush_threshold __ro_after_init;
 
 #define FLUSH_TIME (2UL*HZ)
 
 static bool memcg_vmstats_needs_flush(struct memcg_vmstats *vmstats)
 {
-	return atomic_read(&vmstats->stats_updates) >
-		MEMCG_CHARGE_BATCH * num_online_cpus();
+	return atomic_read(&vmstats->stats_updates) > vmstats_flush_threshold;
 }
 
 static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val,
@@ -5191,6 +5191,13 @@ int __init mem_cgroup_init(void)
 
 	memcg_pn_cachep = KMEM_CACHE(mem_cgroup_per_node,
 				     SLAB_PANIC | SLAB_HWCACHE_ALIGN);
+	/*
+	 * Logarithmically scale up vmstats flush threshold with the number
+	 * of CPUs.
+	 * N.B. ilog2(1) = 0.
+	 */
+	vmstats_flush_threshold = MEMCG_CHARGE_BATCH *
+				  (ilog2(num_possible_cpus()) + 1);
 
 	return 0;
 }
