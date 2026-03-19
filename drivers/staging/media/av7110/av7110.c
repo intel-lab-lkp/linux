@@ -314,7 +314,6 @@ static int DvbDmxFilterCallback(u8 *buffer1, size_t buffer1_len,
 	}
 }
 
-//#define DEBUG_TIMING
 static inline void print_time(char *s)
 {
 #ifdef DEBUG_TIMING
@@ -762,7 +761,6 @@ static int StartHWFilter(struct dvb_demux_filter *dvbdmxfilter)
 	u16 buf[20];
 	int ret, i;
 	u16 handle;
-//	u16 mode = 0x0320;
 	u16 mode = 0xb96a;
 
 	dprintk(4, "%p\n", av7110);
