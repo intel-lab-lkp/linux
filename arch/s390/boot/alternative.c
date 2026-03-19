@@ -22,6 +22,9 @@ static void alt_debug_all(int type)
 	case ALT_TYPE_SPEC:
 		alt_debug.spec = 1;
 		break;
+	case ALT_TYPE_PERCPU:
+		alt_debug.percpu = 1;
+		break;
 	}
 }
 
@@ -115,6 +118,7 @@ void alt_debug_setup(char *str)
 		alt_debug_all(ALT_TYPE_FACILITY);
 		alt_debug_all(ALT_TYPE_FEATURE);
 		alt_debug_all(ALT_TYPE_SPEC);
+		alt_debug_all(ALT_TYPE_PERCPU);
 		return;
 	}
 	while (*str) {
@@ -129,6 +133,9 @@ void alt_debug_setup(char *str)
 			break;
 		case ALT_TYPE_SPEC:
 			alt_debug_all(ALT_TYPE_SPEC);
+			break;
+		case ALT_TYPE_PERCPU:
+			alt_debug_all(ALT_TYPE_PERCPU);
 			break;
 		}
 		if (*str != ';')
