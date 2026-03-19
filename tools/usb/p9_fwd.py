@@ -123,6 +123,9 @@ class Forwarder:
                     logging.debug("c2s: reading failed with %s, retrying", repr(e))
                     time.sleep(0.5)
                     continue
+                elif e.errno == errno.ENODEV:
+                    logging.debug("c2s: reading failed with %s", repr(e))
+                    raise ValueError("disconnected")
                 logging.error("c2s: reading failed with %s, aborting", repr(e))
                 raise
         size = struct.unpack("<I", data[:4])[0]
@@ -145,9 +148,14 @@ class Forwarder:
         logging.log(logging.TRACE, "s2c: writing")
         self._log_hexdump(data)
         while data:
-            written = self.ep_out.write(data)
-            assert written > 0
-            data = data[written:]
+            try:
+                written = self.ep_out.write(data)
+                assert written > 0
+                data = data[written:]
+            except usb.core.USBError as e:
+                if e.errno == errno.EIO or e.errno == errno.ENODEV:
+                   raise ValueError("disconnected")
+                raise
         if size % self.ep_out.wMaxPacketSize == 0:
             logging.log(logging.TRACE, "sending zero length packet")
             self.ep_out.write(b"")
