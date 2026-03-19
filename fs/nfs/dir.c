@@ -1937,13 +1937,13 @@ static int nfs_dentry_delete(const struct dentry *dentry)
 }
 
 /* Ensure that we revalidate inode->i_nlink */
-static void nfs_drop_nlink(struct inode *inode, unsigned long gencount)
+static void nfs_drop_nlink(struct inode *inode, unsigned long gencount, bool force)
 {
 	struct nfs_inode *nfsi = NFS_I(inode);
 
 	spin_lock(&inode->i_lock);
 	/* drop the inode if we're reasonably sure this is the last link */
-	if (inode->i_nlink > 0 && gencount == nfsi->attr_gencount)
+	if (inode->i_nlink > 0 && (force || gencount == nfsi->attr_gencount))
 		drop_nlink(inode);
 	nfsi->attr_gencount = nfs_inc_attr_generation_counter();
 	nfs_set_cache_invalid(
@@ -1961,7 +1961,7 @@ static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
 		unsigned long gencount = READ_ONCE(NFS_I(inode)->attr_gencount);
 		nfs_complete_unlink(dentry, inode);
-		nfs_drop_nlink(inode, gencount);
+		nfs_drop_nlink(inode, gencount, false);
 	}
 	iput(inode);
 }
@@ -2556,10 +2556,11 @@ static int nfs_safe_remove(struct dentry *dentry)
 	trace_nfs_remove_enter(dir, dentry);
 	if (inode != NULL) {
 		unsigned long gencount = READ_ONCE(NFS_I(inode)->attr_gencount);
+		bool force_drop = nfs_have_read_or_write_delegation(inode) && inode->i_nlink == 1;
 
 		error = NFS_PROTO(dir)->remove(dir, dentry);
 		if (error == 0)
-			nfs_drop_nlink(inode, gencount);
+			nfs_drop_nlink(inode, gencount, force_drop);
 	} else
 		error = NFS_PROTO(dir)->remove(dir, dentry);
 	if (error == -ENOENT)
@@ -2852,7 +2853,7 @@ out:
 			new_dir, new_dentry, error);
 	if (!error) {
 		if (new_inode != NULL)
-			nfs_drop_nlink(new_inode, new_gencount);
+			nfs_drop_nlink(new_inode, new_gencount, false);
 		/*
 		 * The d_move() should be here instead of in an async RPC completion
 		 * handler because we need the proper locks to move the dentry.  If
