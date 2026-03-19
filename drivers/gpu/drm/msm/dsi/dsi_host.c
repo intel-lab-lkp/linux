@@ -782,13 +782,20 @@ static void dsi_ctrl_disable(struct msm_dsi_host *msm_host)
 	dsi_write(msm_host, REG_DSI_CTRL, 0);
 }
 
+static bool msm_dsi_host_version_ge(struct msm_dsi_host *msm_host,
+				    u32 major, u32 minor)
+{
+	return msm_host->cfg_hnd->major == major &&
+	       msm_host->cfg_hnd->minor >= minor;
+}
+
 bool msm_dsi_host_is_wide_bus_enabled(struct mipi_dsi_host *host)
 {
 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
 
 	return msm_host->dsc &&
-		(msm_host->cfg_hnd->major == MSM_DSI_VER_MAJOR_6G &&
-		 msm_host->cfg_hnd->minor >= MSM_DSI_6G_VER_MINOR_V2_5_0);
+		msm_dsi_host_version_ge(msm_host, MSM_DSI_VER_MAJOR_6G,
+					MSM_DSI_6G_VER_MINOR_V2_5_0);
 }
 
 static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
