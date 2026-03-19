@@ -21,6 +21,228 @@
 #include "famfs_kfmap.h"
 #include "fuse_i.h"
 
+/*
+ * famfs_teardown()
+ *
+ * Deallocate famfs metadata for a fuse_conn
+ */
+void
+famfs_teardown(struct fuse_conn *fc)
+{
+	struct famfs_dax_devlist *devlist __free(kfree) = fc->dax_devlist;
+	int i;
+
+	fc->dax_devlist = NULL;
+
+	if (!devlist)
+		return;
+
+	if (!devlist->devlist)
+		return;
+
+	/* Close & release all the daxdevs in our table */
+	for (i = 0; i < devlist->nslots; i++) {
+		struct famfs_daxdev *dd = &devlist->devlist[i];
+
+		if (!dd->valid)
+			continue;
+
+		/* Release reference from dax_dev_get() */
+		if (dd->devp)
+			put_dax(dd->devp);
+
+		kfree(dd->name);
+	}
+	kfree(devlist->devlist);
+}
+
+static int
+famfs_verify_daxdev(const char *pathname, dev_t *devno)
+{
+	struct inode *inode;
+	struct path path;
+	int err;
+
+	if (!pathname || !*pathname)
+		return -EINVAL;
+
+	err = kern_path(pathname, LOOKUP_FOLLOW, &path);
+	if (err)
+		return err;
+
+	inode = d_backing_inode(path.dentry);
+	if (!S_ISCHR(inode->i_mode)) {
+		err = -EINVAL;
+		goto out_path_put;
+	}
+
+	if (!may_open_dev(&path)) { /* had to export this */
+		err = -EACCES;
+		goto out_path_put;
+	}
+
+	*devno = inode->i_rdev;
+
+out_path_put:
+	path_put(&path);
+	return err;
+}
+
+/**
+ * famfs_fuse_get_daxdev() - Retrieve info for a DAX device from fuse server
+ *
+ * Send a GET_DAXDEV message to the fuse server to retrieve info on a
+ * dax device.
+ *
+ * @fm:     fuse_mount
+ * @index:  the index of the dax device; daxdevs are referred to by index
+ *          in fmaps, and the server resolves the index to a particular daxdev
+ *
+ * Returns: 0=success
+ *          -errno=failure
+ */
+static int
+famfs_fuse_get_daxdev(struct fuse_mount *fm, const u64 index)
+{
+	struct fuse_daxdev_out daxdev_out = { 0 };
+	struct fuse_conn *fc = fm->fc;
+	struct famfs_daxdev *daxdev;
+	int rc;
+
+	FUSE_ARGS(args);
+
+	/* Store the daxdev in our table */
+	if (index >= fc->dax_devlist->nslots) {
+		pr_err("%s: index(%lld) > nslots(%d)\n",
+		       __func__, index, fc->dax_devlist->nslots);
+		return -EINVAL;
+	}
+
+	args.opcode = FUSE_GET_DAXDEV;
+	args.nodeid = index;
+
+	args.in_numargs = 0;
+
+	args.out_numargs = 1;
+	args.out_args[0].size = sizeof(daxdev_out);
+	args.out_args[0].value = &daxdev_out;
+
+	/* Send GET_DAXDEV command */
+	rc = fuse_simple_request(fm, &args);
+	if (rc) {
+		pr_err("%s: rc=%d from fuse_simple_request()\n",
+		       __func__, rc);
+		/* Error will be that the payload is smaller than FMAP_BUFSIZE,
+		 * which is the max we can handle. Empty payload handled below.
+		 */
+		return rc;
+	}
+
+	scoped_guard(rwsem_write, &fc->famfs_devlist_sem) {
+		daxdev = &fc->dax_devlist->devlist[index];
+
+		/* Abort if daxdev is now valid (races are possible here) */
+		if (daxdev->valid) {
+			pr_debug("%s: daxdev already known\n", __func__);
+			return 0;
+		}
+
+		/* Verify dev is valid and can be opened and gets the devno */
+		rc = famfs_verify_daxdev(daxdev_out.name, &daxdev->devno);
+		if (rc) {
+			pr_err("%s: rc=%d from famfs_verify_daxdev()\n",
+			       __func__, rc);
+			return rc;
+		}
+
+		daxdev->name = kstrdup(daxdev_out.name, GFP_KERNEL);
+		if (!daxdev->name)
+			return -ENOMEM;
+
+		/* This will fail if it's not a dax device */
+		daxdev->devp = dax_dev_get(daxdev->devno);
+		if (!daxdev->devp) {
+			pr_warn("%s: device %s not found or not dax\n",
+				__func__, daxdev_out.name);
+			kfree(daxdev->name);
+			daxdev->name = NULL;
+			return -ENODEV;
+		}
+
+		wmb(); /* All other fields must be visible before valid */
+		daxdev->valid = 1;
+	}
+
+	return 0;
+}
+
+/**
+ * famfs_update_daxdev_table() - Update the daxdev table
+ * @fm:   fuse_mount
+ * @meta: famfs_file_meta, in-memory format, built from a GET_FMAP response
+ *
+ * This function is called for each new file fmap, to verify whether all
+ * referenced daxdevs are already known (i.e. in the table). Any daxdev
+ * indices referenced in @meta but not in the table will be retrieved via
+ * famfs_fuse_get_daxdev() and added to the table
+ *
+ * Return: 0=success
+ *         -errno=failure
+ */
+static int
+famfs_update_daxdev_table(
+	struct fuse_mount *fm,
+	const struct famfs_file_meta *meta)
+{
+	struct famfs_dax_devlist *local_devlist;
+	struct fuse_conn *fc = fm->fc;
+	int indices_to_fetch[MAX_DAXDEVS];
+	int n_to_fetch = 0;
+	int err;
+
+	/* First time through we will need to allocate the dax_devlist */
+	if (!fc->dax_devlist) {
+		local_devlist = kcalloc(1, sizeof(*fc->dax_devlist), GFP_KERNEL);
+		if (!local_devlist)
+			return -ENOMEM;
+
+		local_devlist->nslots = MAX_DAXDEVS;
+
+		local_devlist->devlist = kcalloc(MAX_DAXDEVS,
+						 sizeof(struct famfs_daxdev),
+						 GFP_KERNEL);
+		if (!local_devlist->devlist) {
+			kfree(local_devlist);
+			return -ENOMEM;
+		}
+
+		/* We don't need famfs_devlist_sem here because we use cmpxchg */
+		if (cmpxchg(&fc->dax_devlist, NULL, local_devlist) != NULL) {
+			kfree(local_devlist->devlist);
+			kfree(local_devlist); /* another thread beat us to it */
+		}
+	}
+
+	/* Collect indices that need fetching while holding read lock */
+	scoped_guard(rwsem_read, &fc->famfs_devlist_sem) {
+		unsigned long i;
+
+		for_each_set_bit(i, (unsigned long *)&meta->dev_bitmap, MAX_DAXDEVS) {
+			if (!(fc->dax_devlist->devlist[i].valid))
+				indices_to_fetch[n_to_fetch++] = i;
+		}
+	}
+
+	/* Fetch needed daxdevs outside the read lock */
+	for (int j = 0; j < n_to_fetch; j++) {
+		err = famfs_fuse_get_daxdev(fm, indices_to_fetch[j]);
+		if (err)
+			pr_err("%s: failed to get daxdev=%d\n",
+			       __func__, indices_to_fetch[j]);
+	}
+
+	return 0;
+}
 
 /***************************************************************************/
 
@@ -184,7 +406,7 @@ famfs_fuse_meta_alloc(
 			/* ie_in = one interleaved extent in fmap_buf */
 			ie_in = fmap_buf + next_offset;
 
-			/* Move past one interleaved extent header in fmap_buf */
+			/* Move past 1 interleaved extent header in fmap_buf */
 			next_offset += sizeof(*ie_in);
 			if (next_offset > fmap_buf_size) {
 				pr_err("%s:%d: fmap_buf underflow offset/size %ld/%ld\n",
@@ -328,6 +550,9 @@ famfs_file_init_dax(
 	rc = famfs_fuse_meta_alloc(fmap_buf, fmap_size, &meta);
 	if (rc)
 		goto errout;
+
+	/* Make sure this fmap doesn't reference any unknown daxdevs */
+	famfs_update_daxdev_table(fm, meta);
 
 	/* Publish the famfs metadata on fi->famfs_meta */
 	inode_lock(inode);

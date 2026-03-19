@@ -1078,6 +1078,9 @@ void fuse_conn_put(struct fuse_conn *fc)
 		WARN_ON(atomic_read(&bucket->count) != 1);
 		kfree(bucket);
 	}
+	if (IS_ENABLED(CONFIG_FUSE_FAMFS_DAX))
+		famfs_teardown(fc);
+
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_files_free(fc);
 	call_rcu(&fc->rcu, delayed_release);
@@ -1507,8 +1510,10 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				u64 in_flags = FIELD_PREP(GENMASK_ULL(63, 32), ia->in.flags2)
 						| ia->in.flags;
 
-				if (in_flags & FUSE_DAX_FMAP)
+				if (in_flags & FUSE_DAX_FMAP) {
+					famfs_init_devlist_sem(fc);
 					fc->famfs_iomap = 1;
+				}
 			}
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
