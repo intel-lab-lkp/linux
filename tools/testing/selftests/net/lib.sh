@@ -28,6 +28,10 @@ EXIT_STATUS=0
 # Per-test return value. Clear at the beginning of each test.
 RET=0
 
+# If a specific command needs to be executed on another target than local, set
+# this appropriately before calling run_cmd
+CUR_TARGET="local:"
+
 ##############################################################################
 # Helpers
 
@@ -669,4 +673,39 @@ cmd_jq()
 	echo $output
 	# return success only in case of non-empty output
 	[ ! -z "$output" ]
+}
+
+run_cmd()
+{
+	IFS=':' read -r type args <<< "$CUR_TARGET"
+
+	case "$type" in
+		netns)
+			# Execute command in network namespace
+			# args contains the namespace name
+			ip netns exec "$args" "$@"
+			;;
+		ssh)
+			# Execute command via SSH args contains user@host
+			ssh -n "$args" "$@"
+			;;
+		local|*)
+			# Execute command locally. This is also the fallback
+			# case in case the CUR_TARGET is not set.
+			"$@"
+			;;
+	esac
+}
+
+run_on()
+{
+	local iface=$1; shift
+
+	if declare -p TARGETS &>/dev/null; then
+		CUR_TARGET="${TARGETS[$iface]}"
+	else
+		CUR_TARGET="local:"
+	fi
+
+	run_cmd "$@"
 }
