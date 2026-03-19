@@ -307,6 +307,17 @@ static void mlx5e_disable_blocking_events(struct mlx5e_priv *priv)
 	mlx5_blocking_notifier_unregister(priv->mdev, &priv->blocking_events_nb);
 }
 
+static u8 mlx5e_mpwrq_umr_entries_pad(u32 entries,
+				      enum mlx5e_mpwrq_umr_mode umr_mode)
+{
+	u8 umr_entry_size = mlx5e_mpwrq_umr_entry_size(umr_mode);
+	u32 sz;
+
+	sz = entries * umr_entry_size;
+
+	return ALIGN(sz, MLX5_UMR_FLEX_ALIGNMENT) - sz;
+}
+
 static u16 mlx5e_mpwrq_umr_octowords(u32 entries, enum mlx5e_mpwrq_umr_mode umr_mode)
 {
 	u8 umr_entry_size = mlx5e_mpwrq_umr_entry_size(umr_mode);
@@ -904,6 +915,9 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 		rq->mpwqe.pages_per_wqe =
 			mlx5e_mpwrq_pages_per_wqe(mdev, rq->mpwqe.page_shift,
 						  rq->mpwqe.umr_mode);
+		rq->mpwqe.entries_pad =
+			mlx5e_mpwrq_umr_entries_pad(rq->mpwqe.pages_per_wqe,
+						    rq->mpwqe.umr_mode);
 		rq->mpwqe.umr_wqebbs =
 			mlx5e_mpwrq_umr_wqebbs(mdev, rq->mpwqe.page_shift,
 					       rq->mpwqe.umr_mode);

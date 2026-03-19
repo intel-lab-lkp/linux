@@ -685,6 +685,7 @@ struct mlx5e_rq {
 			u8                     min_wqe_bulk;
 			u8                     page_shift;
 			u8                     pages_per_wqe;
+			u8                     entries_pad;
 			u8                     umr_wqebbs;
 			u8                     mtts_per_wqe;
 			u8                     umr_mode;
