@@ -55,6 +55,9 @@
 #define IMX7ULP_RDR	0x74
 
 /* General control register field define */
+#define PARAM_PCSNUM	GENMASK(23, 16)
+#define PARAM_RXFIFO	GENMASK(15, 8)
+#define PARAM_TXFIFO	GENMASK(7, 0)
 #define CR_RRF		BIT(9)
 #define CR_RTF		BIT(8)
 #define CR_RST		BIT(1)
@@ -77,6 +80,8 @@
 #define CFGR1_HOST	BIT(0)
 #define FCR_RXWATER	GENMASK(18, 16)
 #define FCR_TXWATER	GENMASK(2, 0)
+#define RXFIFO_ORDER_MAX	(ilog2(FIELD_MAX(FCR_RXWATER) + 1))
+#define TXFIFO_ORDER_MAX	(ilog2(FIELD_MAX(FCR_TXWATER) + 1))
 #define FSR_TXCOUNT	(0xFF)
 #define RSR_RXEMPTY	BIT(1)
 #define TCR_CPOL	BIT(31)
@@ -906,6 +911,7 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 	struct fsl_lpspi_data *fsl_lpspi;
 	struct spi_controller *controller;
 	struct resource *res;
+	unsigned int txfifo_order, rxfifo_order;
 	int ret, irq;
 	u32 num_cs;
 	u32 temp;
@@ -981,12 +987,22 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 	}
 
 	temp = readl(fsl_lpspi->base + IMX7ULP_PARAM);
-	fsl_lpspi->txfifosize = 1 << (temp & 0x0f);
-	fsl_lpspi->rxfifosize = 1 << ((temp >> 8) & 0x0f);
+	txfifo_order = FIELD_GET(PARAM_TXFIFO, temp);
+	rxfifo_order = FIELD_GET(PARAM_RXFIFO, temp);
+	if (txfifo_order > TXFIFO_ORDER_MAX || rxfifo_order > RXFIFO_ORDER_MAX) {
+		dev_info(fsl_lpspi->dev,
+			 "TX-FIFO order (%u) or RX-FIFO order (%u) too high, limiting to %u\n",
+			 txfifo_order, rxfifo_order, TXFIFO_ORDER_MAX);
+
+		txfifo_order = min(TXFIFO_ORDER_MAX, txfifo_order);
+		rxfifo_order = min(RXFIFO_ORDER_MAX, rxfifo_order);
+	}
+	fsl_lpspi->txfifosize = 1 << txfifo_order;
+	fsl_lpspi->rxfifosize = 1 << rxfifo_order;
 	if (of_property_read_u32((&pdev->dev)->of_node, "num-cs",
 				 &num_cs)) {
 		if (devtype_data->query_hw_for_num_cs)
-			num_cs = ((temp >> 16) & 0xf);
+			num_cs = FIELD_GET(PARAM_PCSNUM, temp);
 		else
 			num_cs = 1;
 	}
