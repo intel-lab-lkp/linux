@@ -3208,6 +3208,77 @@ static void arm_smmu_disable_iopf(struct arm_smmu_master *master,
 		iopf_queue_remove_device(master->smmu->evtq.iopf, master->dev);
 }
 
+static int __arm_smmu_domain_find_iotlb_tag(struct arm_smmu_domain *smmu_domain,
+					    struct arm_smmu_inv *tag)
+{
+	struct arm_smmu_invs *invs = rcu_dereference_protected(
+		smmu_domain->invs, lockdep_is_held(&arm_smmu_asid_lock));
+	size_t i;
+
+	arm_smmu_inv_assert_iotlb_tag(tag);
+
+	for (i = 0; i != invs->num_invs; i++) {
+		if (invs->inv[i].type == tag->type &&
+		    invs->inv[i].smmu == tag->smmu &&
+		    READ_ONCE(invs->inv[i].users)) {
+			*tag = invs->inv[i];
+			return 0;
+		}
+	}
+
+	return -ENOENT;
+}
+
+/* Find an existing IOTLB cache tag in smmu_domain->invs (users counter != 0) */
+int arm_smmu_find_iotlb_tag(struct iommu_domain *domain,
+			    struct arm_smmu_device *smmu,
+			    struct arm_smmu_inv *tag)
+{
+	struct arm_smmu_domain *smmu_domain = to_smmu_domain_devices(domain);
+
+	if (WARN_ON(!smmu_domain))
+		return -EINVAL;
+
+	/* Decide the type of the iotlb cache tag */
+	switch (smmu_domain->stage) {
+	case ARM_SMMU_DOMAIN_SVA:
+	case ARM_SMMU_DOMAIN_S1:
+		tag->type = INV_TYPE_S1_ASID;
+		break;
+	case ARM_SMMU_DOMAIN_S2:
+		tag->type = INV_TYPE_S2_VMID;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	tag->smmu = smmu;
+
+	return __arm_smmu_domain_find_iotlb_tag(smmu_domain, tag);
+}
+
+/* Allocate a new IOTLB cache tag (users counter == 0) */
+static int arm_smmu_alloc_iotlb_tag(struct iommu_domain *domain,
+				    struct arm_smmu_device *smmu,
+				    struct arm_smmu_inv *tag)
+{
+	struct arm_smmu_domain *smmu_domain = to_smmu_domain_devices(domain);
+	int ret;
+
+	/* Only allocate if there is no IOTLB cache tag to re-use */
+	ret = arm_smmu_find_iotlb_tag(domain, smmu, tag);
+	if (!ret || ret != -ENOENT)
+		return ret;
+
+	/* FIXME replace with an actual allocation from the bitmap */
+	if (tag->type == INV_TYPE_S1_ASID)
+		tag->id = smmu_domain->cd.asid;
+	else
+		tag->id = smmu_domain->s2_cfg.vmid;
+
+	return 0;
+}
+
 static struct arm_smmu_inv *
 arm_smmu_master_build_inv(struct arm_smmu_master *master,
 			  enum arm_smmu_inv_type type, u32 id, ioasid_t ssid,
@@ -3373,7 +3444,9 @@ static int arm_smmu_attach_prepare_invs(struct arm_smmu_attach_state *state,
 	struct arm_smmu_domain *new_smmu_domain =
 		to_smmu_domain_devices(new_domain);
 	struct arm_smmu_master *master = state->master;
+	struct arm_smmu_device *smmu = master->smmu;
 	ioasid_t ssid = state->ssid;
+	int ret;
 
 	/*
 	 * At this point a NULL domain indicates the domain doesn't use the
@@ -3387,6 +3460,11 @@ static int arm_smmu_attach_prepare_invs(struct arm_smmu_attach_state *state,
 		invst->old_invs = rcu_dereference_protected(
 			new_smmu_domain->invs,
 			lockdep_is_held(&arm_smmu_asid_lock));
+
+		ret = arm_smmu_alloc_iotlb_tag(new_domain, smmu, &invst->tag);
+		if (ret)
+			return ret;
+
 		build_invs = arm_smmu_master_build_invs(
 			master, state->ats_enabled, ssid, new_smmu_domain);
 		if (!build_invs)
@@ -3409,6 +3487,12 @@ static int arm_smmu_attach_prepare_invs(struct arm_smmu_attach_state *state,
 			invst->old_invs = rcu_dereference_protected(
 				old_smmu_domain->invs,
 				lockdep_is_held(&arm_smmu_asid_lock));
+
+		ret = arm_smmu_find_iotlb_tag(state->old_domain, smmu,
+					      &invst->tag);
+		if (WARN_ON(ret))
+			return ret;
+
 		/* For old_smmu_domain, new_invs points to master->build_invs */
 		invst->new_invs = arm_smmu_master_build_invs(
 			master, master->ats_enabled, ssid, old_smmu_domain);

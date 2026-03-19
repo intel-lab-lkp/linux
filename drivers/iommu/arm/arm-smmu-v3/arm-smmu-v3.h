@@ -674,6 +674,11 @@ struct arm_smmu_inv {
 	int users; /* users=0 to mark as a trash to be purged */
 };
 
+static inline void arm_smmu_inv_assert_iotlb_tag(struct arm_smmu_inv *inv)
+{
+	WARN_ON(inv->type != INV_TYPE_S1_ASID && inv->type != INV_TYPE_S2_VMID);
+}
+
 static inline bool arm_smmu_inv_is_ats(const struct arm_smmu_inv *inv)
 {
 	return inv->type == INV_TYPE_ATS || inv->type == INV_TYPE_ATS_FULL;
@@ -1117,11 +1122,13 @@ static inline bool arm_smmu_master_canwbs(struct arm_smmu_master *master)
  * @new_invs: for new domain, this is the new invs array to update domain->invs;
  *            for old domain, this is the master->build_invs to pass in as the
  *            to_unref argument to an arm_smmu_invs_unref() call
+ * @tag: IOTLB cache tag (INV_TYPE_S1_ASID or INV_TYPE_S2_VMID)
  */
 struct arm_smmu_inv_state {
 	struct arm_smmu_invs __rcu **invs_ptr;
 	struct arm_smmu_invs *old_invs;
 	struct arm_smmu_invs *new_invs;
+	struct arm_smmu_inv tag;
 };
 
 struct arm_smmu_attach_state {
@@ -1137,6 +1144,10 @@ struct arm_smmu_attach_state {
 	struct arm_smmu_inv_state new_domain_invst;
 	bool ats_enabled;
 };
+
+int arm_smmu_find_iotlb_tag(struct iommu_domain *domain,
+			    struct arm_smmu_device *smmu,
+			    struct arm_smmu_inv *tag);
 
 int arm_smmu_attach_prepare(struct arm_smmu_attach_state *state,
 			    struct iommu_domain *new_domain);
