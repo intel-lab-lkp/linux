@@ -729,56 +729,47 @@ static ssize_t dmemcg_limit_write(struct kernfs_open_file *of,
 {
 	struct dmemcg_state *dmemcs = css_to_dmemcs(of_css(of));
 	int err = 0;
+	struct dmem_cgroup_pool_state *pool = NULL;
+	char *region_name;
+	struct dmem_cgroup_region *region;
+	u64 new_limit;
 
-	while (buf && !err) {
-		struct dmem_cgroup_pool_state *pool = NULL;
-		char *options, *region_name;
-		struct dmem_cgroup_region *region;
-		u64 new_limit;
+	buf = strstrip(buf);
+	if (!buf[0])
+		return -EINVAL;
 
-		options = buf;
-		buf = strchr(buf, '\n');
-		if (buf)
-			*buf++ = '\0';
+	region_name = strsep(&buf, " \t");
+	if (!region_name[0])
+		return -EINVAL;
 
-		options = strstrip(options);
+	if (!buf || !*buf)
+		return -EINVAL;
 
-		/* eat empty lines */
-		if (!options[0])
-			continue;
+	buf = skip_spaces(buf);
 
-		region_name = strsep(&options, " \t");
-		if (!region_name[0])
-			continue;
+	err = dmemcg_parse_limit(buf, &new_limit);
+	if (err < 0)
+		return -EINVAL;
 
-		if (!options || !*options)
-			return -EINVAL;
+	rcu_read_lock();
+	region = dmemcg_get_region_by_name(region_name);
+	rcu_read_unlock();
 
-		rcu_read_lock();
-		region = dmemcg_get_region_by_name(region_name);
-		rcu_read_unlock();
+	if (!region)
+		return -EINVAL;
 
-		if (!region)
-			return -EINVAL;
-
-		err = dmemcg_parse_limit(options, &new_limit);
-		if (err < 0)
-			goto out_put;
-
-		pool = get_cg_pool_unlocked(dmemcs, region);
-		if (IS_ERR(pool)) {
-			err = PTR_ERR(pool);
-			goto out_put;
-		}
-
-		/* And commit */
-		apply(pool, new_limit);
-		dmemcg_pool_put(pool);
-
-out_put:
-		kref_put(&region->ref, dmemcg_free_region);
+	pool = get_cg_pool_unlocked(dmemcs, region);
+	if (IS_ERR(pool)) {
+		err = PTR_ERR(pool);
+		goto out_put;
 	}
 
+	/* And commit */
+	apply(pool, new_limit);
+	dmemcg_pool_put(pool);
+
+out_put:
+	kref_put(&region->ref, dmemcg_free_region);
 
 	return err ?: nbytes;
 }
