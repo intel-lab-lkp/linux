@@ -9,6 +9,7 @@
 #define _ARM_SMMU_V3_H
 
 #include <linux/bitfield.h>
+#include <linux/io-pgtable.h>
 #include <linux/iommu.h>
 #include <linux/iommufd.h>
 #include <linux/kernel.h>
@@ -986,6 +987,32 @@ struct arm_smmu_nested_domain {
 
 	__le64 ste[2];
 };
+
+static inline bool
+arm_smmu_domain_can_share(struct arm_smmu_domain *smmu_domain,
+			  struct arm_smmu_device *new_smmu)
+{
+	struct io_pgtable *pgtbl =
+		io_pgtable_ops_to_pgtable(smmu_domain->pgtbl_ops);
+
+	if (pgtbl->fmt == ARM_64_LPAE_S1 &&
+	    !(new_smmu->features & ARM_SMMU_FEAT_TRANS_S1))
+		return false;
+	if (pgtbl->fmt == ARM_64_LPAE_S2 &&
+	    !(new_smmu->features & ARM_SMMU_FEAT_TRANS_S2))
+		return false;
+	if (pgtbl->cfg.pgsize_bitmap & ~new_smmu->pgsize_bitmap)
+		return false;
+	if (pgtbl->cfg.oas > new_smmu->oas)
+		return false;
+	if (pgtbl->cfg.coherent_walk &&
+	    !(new_smmu->features & ARM_SMMU_FEAT_COHERENCY))
+		return false;
+	if ((pgtbl->cfg.quirks & IO_PGTABLE_QUIRK_ARM_S2FWB) &&
+	    !(new_smmu->features & ARM_SMMU_FEAT_S2FWB))
+		return false;
+	return true;
+}
 
 /* The following are exposed for testing purposes. */
 struct arm_smmu_entry_writer_ops;

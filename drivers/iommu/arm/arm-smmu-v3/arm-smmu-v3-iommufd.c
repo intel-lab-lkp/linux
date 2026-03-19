@@ -470,7 +470,7 @@ int arm_vsmmu_init(struct iommufd_viommu *viommu,
 	struct arm_smmu_domain *s2_parent = to_smmu_domain(parent_domain);
 	int id, ret;
 
-	if (s2_parent->smmu != smmu)
+	if (!arm_smmu_domain_can_share(s2_parent, smmu))
 		return -EINVAL;
 
 	id = ida_alloc_range(&smmu->vmid_map, 1, (1 << smmu->vmid_bits) - 1,
