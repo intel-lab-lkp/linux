@@ -443,6 +443,10 @@ static int __init efi_free_boot_services(void)
 
 	efi.memmap.num_valid_entries = (new_md - efi.memmap.map) / efi.memmap.desc_size;
 
+	/* Free the part of the memory map allocation that has become unused */
+	free_reserved_area(new_md, efi.memmap.map_end, -1, NULL);
+	freed += (void *)efi.memmap.map_end - new_md;
+
 	if (freed)
 		pr_info("Freeing EFI boot services memory: %ldK\n", freed / SZ_1K);
 
