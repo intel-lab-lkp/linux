@@ -6,6 +6,7 @@
 #include <linux/kallsyms.h>
 #include <linux/module.h>
 #include <linux/page_ext.h>
+#include <linux/pgalloc_tag.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_buf.h>
 #include <linux/seq_file.h>
@@ -25,6 +26,82 @@ static bool mem_profiling_support;
 #endif
 
 static struct codetag_type *alloc_tag_cttype;
+
+/*
+ * State of the alloc_tag
+ *
+ * This is used to describe the states of the alloc_tag during bootup.
+ *
+ * When we need to allocate page_ext to store codetag, we face an
+ * initialization timing problem:
+ *
+ * Due to initialization order, pages may be allocated via buddy system
+ * before page_ext is fully allocated and initialized. Although these
+ * pages call the allocation hooks, the codetag will not be set because
+ * page_ext is not yet available.
+ *
+ * When these pages are later free to the buddy system, it triggers
+ * warnings because their codetag is actually empty if
+ * CONFIG_MEM_ALLOC_PROFILING_DEBUG is enabled.
+ *
+ * Additionally, in this situation, we cannot record detailed allocation
+ * information for these pages.
+ */
+enum mem_profiling_state {
+	DOWN,			/* No mem_profiling functionality yet */
+	UP			/* Everything is working */
+};
+
+static enum mem_profiling_state mem_profiling_state = DOWN;
+
+bool mem_profiling_is_available(void)
+{
+	return mem_profiling_state == UP;
+}
+
+#ifdef CONFIG_MEM_ALLOC_PROFILING_DEBUG
+
+#define EARLY_ALLOC_PFN_MAX		256
+
+static unsigned long early_pfns[EARLY_ALLOC_PFN_MAX];
+static unsigned int early_pfn_count;
+static DEFINE_SPINLOCK(early_pfn_lock);
+
+void alloc_tag_add_early_pfn(unsigned long pfn)
+{
+	unsigned long flags;
+
+	if (mem_profiling_state != DOWN)
+		return;
+
+	spin_lock_irqsave(&early_pfn_lock, flags);
+	if (early_pfn_count >= EARLY_ALLOC_PFN_MAX) {
+		spin_unlock_irqrestore(&early_pfn_lock, flags);
+		return;
+	}
+	early_pfns[early_pfn_count++] = pfn;
+	spin_unlock_irqrestore(&early_pfn_lock, flags);
+}
+
+static void __init clear_early_alloc_pfn_tag_refs(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < early_pfn_count; i++) {
+		unsigned long pfn = early_pfns[i];
+
+		if (pfn_valid(pfn)) {
+			struct page *page = pfn_to_page(pfn);
+
+			clear_page_tag_ref(page);
+		}
+	}
+	early_pfn_count = 0;
+}
+#else /* !CONFIG_MEM_ALLOC_PROFILING_DEBUG */
+inline void alloc_tag_add_early_pfn(unsigned long pfn) {}
+static inline void clear_early_alloc_pfn_tag_refs(void) {}
+#endif
 
 #ifdef CONFIG_ARCH_MODULE_NEEDS_WEAK_PER_CPU
 DEFINE_PER_CPU(struct alloc_tag_counters, _shared_alloc_tag);
@@ -729,6 +806,7 @@ static int __init setup_early_mem_profiling(char *str)
 			compressed = true;
 		}
 		mem_profiling_support = true;
+		mem_profiling_state = UP;
 		pr_info("Memory allocation profiling is enabled %s compression and is turned %s!\n",
 			compressed ? "with" : "without", str_on_off(enable));
 	}
@@ -760,6 +838,8 @@ static __init bool need_page_alloc_tagging(void)
 
 static __init void init_page_alloc_tagging(void)
 {
+	mem_profiling_state = UP;
+	clear_early_alloc_pfn_tag_refs();
 }
 
 struct page_ext_operations page_alloc_tagging_ops = {

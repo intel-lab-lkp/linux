@@ -1255,6 +1255,13 @@ void __pgalloc_tag_add(struct page *page, struct task_struct *task,
 		alloc_tag_add(&ref, task->alloc_tag, PAGE_SIZE * nr);
 		update_page_tag_ref(handle, &ref);
 		put_page_tag_ref(handle);
+	} else {
+		/*
+		 * page_ext is not available yet, record the pfn so we can
+		 * clear the tag ref later when page_ext is initialized.
+		 */
+		if (!mem_profiling_is_available())
+			alloc_tag_add_early_pfn(page_to_pfn(page));
 	}
 }
 
