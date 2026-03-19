@@ -45,6 +45,13 @@ enum ipxlat_action {
 void ipxlat_mark_icmp_drop(struct sk_buff *skb, u8 type, u8 code, u32 info);
 
 /**
+ * ipxlat_emit_icmp_error - emit cached translator-generated ICMP error
+ * @ipxlat: translator private context
+ * @inner: offending packet used as quoted payload
+ */
+void ipxlat_emit_icmp_error(struct ipxlat_priv *ipxlat, struct sk_buff *inner);
+
+/**
  * ipxlat_translate - validate/translate one packet and return next action
  * @ipxlat: translator private context
  * @skb: packet to process

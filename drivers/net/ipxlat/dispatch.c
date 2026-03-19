@@ -11,7 +11,12 @@
  *		Ralf Lici <ralf@mandelbit.com>
  */
 
+#include <linux/icmp.h>
+#include <linux/icmpv6.h>
+#include <net/icmp.h>
 #include <net/ip.h>
+#include <net/route.h>
+#include <net/ipv6.h>
 
 #include "dispatch.h"
 #include "packet.h"
@@ -21,7 +26,8 @@
 static enum ipxlat_action
 ipxlat_resolve_failed_action(const struct sk_buff *skb)
 {
-	return IPXLAT_ACT_DROP;
+	return ipxlat_skb_cb(skb)->emit_icmp_err ? IPXLAT_ACT_ICMP_ERR :
+						 IPXLAT_ACT_DROP;
 }
 
 enum ipxlat_action ipxlat_translate(struct ipxlat_priv *ipxlat,
@@ -61,6 +67,59 @@ void ipxlat_mark_icmp_drop(struct sk_buff *skb, u8 type, u8 code, u32 info)
 	cb->icmp_err.info = info;
 }
 
+static void ipxlat_46_emit_icmp_err(struct ipxlat_priv *ipxlat,
+				    struct sk_buff *inner)
+{
+	struct ipxlat_cb *cb = ipxlat_skb_cb(inner);
+	const struct iphdr *iph = ip_hdr(inner);
+	struct inet_skb_parm param = {};
+
+	/* build route metadata on demand when the packet has no dst */
+	if (unlikely(!skb_dst(inner))) {
+		const int reason = ip_route_input_noref(inner, iph->daddr,
+							iph->saddr,
+							ip4h_dscp(iph),
+							inner->dev);
+
+		if (unlikely(reason)) {
+			netdev_dbg(ipxlat->dev,
+				   "icmp4 emit: route build failed reason=%d\n",
+				   reason);
+			return;
+		}
+	}
+
+	/* emit the ICMPv4 error */
+	__icmp_send(inner, cb->icmp_err.type, cb->icmp_err.code,
+		    htonl(cb->icmp_err.info), &param);
+}
+
+static void ipxlat_64_emit_icmp_err(struct sk_buff *inner)
+{
+	struct ipxlat_cb *cb = ipxlat_skb_cb(inner);
+	struct inet6_skb_parm param = {};
+
+	/* emit the ICMPv6 error */
+	icmp6_send(inner, cb->icmp_err.type, cb->icmp_err.code,
+		   cb->icmp_err.info, NULL, &param);
+}
+
+/* emit translator-generated ICMP errors for packets rejected by RFC rules */
+void ipxlat_emit_icmp_error(struct ipxlat_priv *ipxlat, struct sk_buff *inner)
+{
+	switch (ntohs(inner->protocol)) {
+	case ETH_P_IPV6:
+		ipxlat_64_emit_icmp_err(inner);
+		return;
+	case ETH_P_IP:
+		ipxlat_46_emit_icmp_err(ipxlat, inner);
+		return;
+	default:
+		DEBUG_NET_WARN_ON_ONCE(1);
+		return;
+	}
+}
+
 static void ipxlat_forward_pkt(struct ipxlat_priv *ipxlat, struct sk_buff *skb)
 {
 	const unsigned int len = skb->len;
@@ -89,6 +148,11 @@ int ipxlat_process_skb(struct ipxlat_priv *ipxlat, struct sk_buff *skb,
 	case IPXLAT_ACT_FWD:
 		dev_dstats_tx_add(ipxlat->dev, skb->len);
 		ipxlat_forward_pkt(ipxlat, skb);
+		return 0;
+	case IPXLAT_ACT_ICMP_ERR:
+		dev_dstats_tx_dropped(ipxlat->dev);
+		ipxlat_emit_icmp_error(ipxlat, skb);
+		consume_skb(skb);
 		return 0;
 	case IPXLAT_ACT_DROP:
 		goto drop_free;
