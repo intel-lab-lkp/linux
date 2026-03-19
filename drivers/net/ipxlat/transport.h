@@ -80,4 +80,24 @@ __sum16 ipxlat_l4_csum_ipv6(const struct in6_addr *saddr,
 int ipxlat_finalize_offload(struct sk_buff *skb, u8 l4_proto, bool is_fragment,
 			    u32 gso_from, u32 gso_to);
 
+/* outer transport translation helpers (packet L3 already translated) */
+int ipxlat_46_outer_tcp(struct sk_buff *skb, const struct iphdr *in4);
+int ipxlat_46_outer_udp(struct sk_buff *skb, const struct iphdr *in4);
+
+/* quoted-inner transport translation helpers for ICMP error payloads */
+int ipxlat_46_inner_tcp(struct sk_buff *skb, const struct iphdr *in4,
+			const struct ipv6hdr *iph6, struct tcphdr *tcp_new);
+int ipxlat_46_inner_udp(struct sk_buff *skb, const struct iphdr *in4,
+			const struct ipv6hdr *iph6, struct udphdr *udp_new);
+
+/* outer transport translation helpers (packet L3 already translated) */
+int ipxlat_64_outer_tcp(struct sk_buff *skb, const struct ipv6hdr *in6);
+int ipxlat_64_outer_udp(struct sk_buff *skb, const struct ipv6hdr *in6);
+
+/* quoted-inner transport translation helpers for ICMP error payloads */
+int ipxlat_64_inner_tcp(struct sk_buff *skb, const struct ipv6hdr *in6,
+			const struct iphdr *out4, struct tcphdr *tcp_new);
+int ipxlat_64_inner_udp(struct sk_buff *skb, const struct ipv6hdr *in6,
+			const struct iphdr *out4, struct udphdr *udp_new);
+
 #endif /* _NET_IPXLAT_TRANSPORT_H_ */
