@@ -332,7 +332,7 @@ static inline void mlx5e_build_umr_wqe(struct mlx5e_rq *rq,
 
 	cseg->qpn_ds    = cpu_to_be32((sq->sqn << MLX5_WQE_CTRL_QPN_SHIFT) |
 				      ds_cnt);
-	cseg->umr_mkey  = rq->mpwqe.umr_mkey_be;
+	cseg->umr_mkey  = rq->mpwqe_sp.umr_mkey_be;
 
 	ucseg->flags = MLX5_UMR_TRANSLATION_OFFSET_EN | MLX5_UMR_INLINE;
 	octowords = mlx5e_mpwrq_umr_octowords(rq->mpwqe.pages_per_wqe, rq->mpwqe.umr_mode);
@@ -513,7 +513,7 @@ static int mlx5e_create_rq_umr_mkey(struct mlx5_core_dev *mdev, struct mlx5e_rq 
 	err = mlx5e_create_umr_mkey(mdev, num_entries, rq->mpwqe.page_shift,
 				    &umr_mkey, rq->wqe_overflow.addr,
 				    rq->mpwqe.umr_mode, xsk_chunk_size);
-	rq->mpwqe.umr_mkey_be = cpu_to_be32(umr_mkey);
+	rq->mpwqe_sp.umr_mkey_be = cpu_to_be32(umr_mkey);
 	return err;
 }
 
@@ -1024,7 +1024,7 @@ static int mlx5e_alloc_rq(struct mlx5e_params *params,
 
 			wqe->data[0].addr = cpu_to_be64(dma_offset + headroom);
 			wqe->data[0].byte_count = cpu_to_be32(byte_count);
-			wqe->data[0].lkey = rq->mpwqe.umr_mkey_be;
+			wqe->data[0].lkey = rq->mpwqe_sp.umr_mkey_be;
 		} else {
 			struct mlx5e_rx_wqe_cyc *wqe =
 				mlx5_wq_cyc_get_wqe(&rq->wqe.wq, i);
@@ -1057,7 +1057,8 @@ err_free_by_rq_type:
 err_free_mpwqe_info:
 		kvfree(rq->mpwqe.info);
 err_rq_mkey:
-		mlx5_core_destroy_mkey(mdev, be32_to_cpu(rq->mpwqe.umr_mkey_be));
+		mlx5_core_destroy_mkey(mdev,
+				       be32_to_cpu(rq->mpwqe_sp.umr_mkey_be));
 err_rq_drop_page:
 		mlx5e_free_mpwqe_rq_drop_page(rq);
 		break;
@@ -1082,7 +1083,8 @@ static void mlx5e_free_rq(struct mlx5e_rq *rq)
 	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
 		mlx5e_rq_free_shampo(rq);
 		kvfree(rq->mpwqe.info);
-		mlx5_core_destroy_mkey(rq->mdev, be32_to_cpu(rq->mpwqe.umr_mkey_be));
+		mlx5_core_destroy_mkey(rq->mdev,
+				       be32_to_cpu(rq->mpwqe_sp.umr_mkey_be));
 		mlx5e_free_mpwqe_rq_drop_page(rq);
 		break;
 	default: /* MLX5_WQ_TYPE_CYCLIC */
