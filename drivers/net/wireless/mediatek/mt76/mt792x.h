@@ -203,6 +203,26 @@ struct mt792x_irq_map {
 	} rx;
 };
 
+struct mt792x_dma_config {
+	/* RX ring indices */
+	u8 rxq_band0;
+	u8 rxq_mcu_wm;
+	u8 rxq_data2;		/* 0 = not used */
+
+	/* Prefetch configuration */
+	void (*dma_prefetch)(struct mt792x_dev *dev);
+
+	/* GLO_CFG quirk bits to set/clear after DMA enable */
+	u32 glo_cfg_set;
+	u32 glo_cfg_clear;
+
+	/* GLO_CFG_EXT1 register address (chip-specific MMIO base) */
+	u32 glo_cfg_ext1;
+
+	/* Pre-ring-setup hook (NULL = not needed) */
+	int (*pre_ring_setup)(struct mt792x_dev *dev);
+};
+
 #define mt792x_init_reset(dev)		((dev)->hif_ops->init_reset(dev))
 #define mt792x_dev_reset(dev)		((dev)->hif_ops->reset(dev))
 #define mt792x_mcu_init(dev)		((dev)->hif_ops->mcu_init(dev))
@@ -250,6 +270,7 @@ struct mt792x_dev {
 	struct mt76_connac_coredump coredump;
 	const struct mt792x_hif_ops *hif_ops;
 	const struct mt792x_irq_map *irq_map;
+	const struct mt792x_dma_config *dma_config;
 
 	struct work_struct ipv6_ns_work;
 	struct delayed_work mlo_pm_work;
