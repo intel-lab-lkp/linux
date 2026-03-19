@@ -5,3 +5,4 @@
 obj-$(CONFIG_IPXLAT) := ipxlat.o
 
 ipxlat-objs += main.o
+ipxlat-objs += address.o
