@@ -1171,7 +1171,7 @@ int proc_do_large_bitmap(const struct ctl_table *table, int dir,
 				left--;
 			}
 
-			if (c == '-') {
+			if (left && c == '-') {
 				err = proc_get_long(&p, &left, &val_b,
 						     &neg, tr_b, sizeof(tr_b),
 						     &c);
