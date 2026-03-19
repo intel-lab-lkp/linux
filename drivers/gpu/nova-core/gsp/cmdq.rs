@@ -251,38 +251,77 @@ impl DmaGspMem {
     /// As the message queue is a circular buffer, the region may be discontiguous in memory. In
     /// that case the second slice will have a non-zero length.
     fn driver_write_area(&mut self) -> (&mut [[u8; GSP_PAGE_SIZE]], &mut [[u8; GSP_PAGE_SIZE]]) {
-        let tx = self.cpu_write_ptr() as usize;
-        let rx = self.gsp_read_ptr() as usize;
+        let tx = num::u32_as_usize(self.cpu_write_ptr());
+        let rx = num::u32_as_usize(self.gsp_read_ptr());
+        // Number of pages between `tx` and the end of the command queue.
+        // PANIC: Per the invariant of `cpu_write_ptr`, `tx < MSGQ_NUM_PAGES`.
+        let after_tx_len = num::u32_as_usize(MSGQ_NUM_PAGES) - tx;
 
+        // Pointer to the start of the CPU message queue.
+        //
         // SAFETY:
-        // - The `CoherentAllocation` contains exactly one object.
-        // - We will only access the driver-owned part of the shared memory.
-        // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = &mut unsafe { self.0.as_slice_mut(0, 1) }.unwrap()[0];
-        // PANIC: per the invariant of `cpu_write_ptr`, `tx` is `< MSGQ_NUM_PAGES`.
-        let (before_tx, after_tx) = gsp_mem.cpuq.msgq.data.split_at_mut(tx);
+        // - `self.0` contains exactly one element.
+        // - `cpuq.msgq.data[0]` is within the bounds of that element.
+        let data = unsafe { &raw mut (*self.0.start_ptr_mut()).cpuq.msgq.data[0] };
 
-        // The area starting at `tx` and ending at `rx - 2` modulo MSGQ_NUM_PAGES, inclusive,
-        // belongs to the driver for writing.
+        // Safety/Panic comments to be referenced by the code below.
+        //
+        // SAFETY[1]:
+        // - `data` points to an array of `MSGQ_NUM_PAGES` elements.
+        // - The area starting at `tx` and ending at `rx - 2` modulo `MSGQ_NUM_PAGES`,
+        //   inclusive, belongs to the driver for writing and is not accessed concurrently by
+        //   the GSP.
+        // - `tx + after_tx_len` == `MSGQ_NUM_PAGES`.
+        //
+        // PANIC[1]:
+        // - Per the invariant of `cpu_write_ptr`, `tx < MSGQ_NUM_PAGES`.
+        // - Per the invariant of `gsp_read_ptr`, `rx < MSGQ_NUM_PAGES`.
 
         if rx == 0 {
-            // Since `rx` is zero, leave an empty slot at end of the buffer.
-            let last = after_tx.len() - 1;
-            (&mut after_tx[..last], &mut [])
+            (
+                // SAFETY: See SAFETY[1].
+                unsafe {
+                    core::slice::from_raw_parts_mut(
+                        data.add(tx),
+                        // Since `rx` is zero, leave an empty slot at end of the buffer.
+                        // PANIC: See PANIC[1].
+                        after_tx_len - 1,
+                    )
+                },
+                &mut [],
+            )
         } else if rx <= tx {
             // The area is discontiguous and we leave an empty slot before `rx`.
-            // PANIC:
-            // - The index `rx - 1` is non-negative because `rx != 0` in this branch.
-            // - The index does not exceed `before_tx.len()` (which equals `tx`) because
-            //   `rx <= tx` in this branch.
-            (after_tx, &mut before_tx[..(rx - 1)])
+            (
+                // SAFETY: See SAFETY[1].
+                unsafe { core::slice::from_raw_parts_mut(data.add(tx), after_tx_len) },
+                // SAFETY: See SAFETY[1].
+                unsafe {
+                    core::slice::from_raw_parts_mut(
+                        data,
+                        // Leave one empty slot before `rx`.
+                        // PANIC:
+                        // - See PANIC[1].
+                        // - `rx - 1` is non-negative because `rx != 0` in this branch.
+                        rx - 1,
+                    )
+                },
+            )
         } else {
             // The area is contiguous and we leave an empty slot before `rx`.
-            // PANIC:
-            // - The index `rx - tx - 1` is non-negative because `rx > tx` in this branch.
-            // - The index does not exceed `after_tx.len()` (which is `MSGQ_NUM_PAGES - tx`)
-            //   because `rx < MSGQ_NUM_PAGES` by the `gsp_read_ptr` invariant.
-            (&mut after_tx[..(rx - tx - 1)], &mut [])
+            (
+                // SAFETY: See SAFETY[1].
+                unsafe {
+                    core::slice::from_raw_parts_mut(
+                        data.add(tx),
+                        // PANIC:
+                        // - See PANIC[1].
+                        // - `rx - tx - 1` is non-negative because `rx > tx` in this branch.
+                        rx - tx - 1,
+                    )
+                },
+                &mut [],
+            )
         }
     }
 
@@ -308,24 +347,50 @@ impl DmaGspMem {
         let tx = self.gsp_write_ptr() as usize;
         let rx = self.cpu_read_ptr() as usize;
 
+        // Pointer to the start of the GSP message queue.
+        //
         // SAFETY:
-        // - The `CoherentAllocation` contains exactly one object.
-        // - We will only access the driver-owned part of the shared memory.
-        // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = &unsafe { self.0.as_slice(0, 1) }.unwrap()[0];
-        let data = &gsp_mem.gspq.msgq.data;
+        // - `self.0` contains exactly one element.
+        // - `gspq.msgq.data[0]` is within the bounds of that element.
+        let data = unsafe { &raw const (*self.0.start_ptr()).gspq.msgq.data[0] };
 
-        // The area starting at `rx` and ending at `tx - 1` modulo MSGQ_NUM_PAGES, inclusive,
-        // belongs to the driver for reading.
-        // PANIC:
-        // - per the invariant of `cpu_read_ptr`, `rx < MSGQ_NUM_PAGES`
-        // - per the invariant of `gsp_write_ptr`, `tx < MSGQ_NUM_PAGES`
+        // Safety/Panic comments to be referenced by the code below.
+        //
+        // SAFETY[1]:
+        // - `data` points to an array of `MSGQ_NUM_PAGES` elements.
+        // - The area starting at `rx` and ending at `tx - 1` modulo `MSGQ_NUM_PAGES`,
+        //   inclusive, belongs to the driver for reading and is not accessed concurrently by
+        //   the GSP.
+        //
+        // PANIC[1]:
+        // - Per the invariant of `cpu_read_ptr`, `rx < MSGQ_NUM_PAGES`.
+        // - Per the invariant of `gsp_write_ptr`, `tx < MSGQ_NUM_PAGES`.
+
         if rx <= tx {
             // The area is contiguous.
-            (&data[rx..tx], &[])
+            (
+                // SAFETY: See SAFETY[1].
+                // PANIC:
+                // - See PANIC[1].
+                // - Per the branch test, `rx <= tx`.
+                unsafe { core::slice::from_raw_parts(data.add(rx), tx - rx) },
+                &[],
+            )
         } else {
             // The area is discontiguous.
-            (&data[rx..], &data[..tx])
+            (
+                // SAFETY: See SAFETY[1].
+                // PANIC: See PANIC[1].
+                unsafe {
+                    core::slice::from_raw_parts(
+                        data.add(rx),
+                        num::u32_as_usize(MSGQ_NUM_PAGES) - rx,
+                    )
+                },
+                // SAFETY: See SAFETY[1].
+                // PANIC: See PANIC[1].
+                unsafe { core::slice::from_raw_parts(data, tx) },
+            )
         }
     }
 
