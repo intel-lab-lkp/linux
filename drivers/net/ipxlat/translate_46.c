@@ -14,6 +14,7 @@
 #include <net/ip6_route.h>
 
 #include "address.h"
+#include "icmp.h"
 #include "packet.h"
 #include "transport.h"
 #include "translate_46.h"
@@ -239,7 +240,7 @@ int ipxlat_46_translate(struct ipxlat_priv *ipxlat, struct sk_buff *skb)
 		err = ipxlat_46_outer_udp(skb, &outer4);
 		break;
 	case IPPROTO_ICMP:
-		err = -EPROTONOSUPPORT;
+		err = ipxlat_46_icmp(ipxlat, skb);
 		break;
 	default:
 		err = 0;

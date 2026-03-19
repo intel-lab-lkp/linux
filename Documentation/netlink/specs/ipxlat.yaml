@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+#
+# Copyright (C) 2026- Mandelbit SRL
+#
+# Author: Antonio Quartulli <antonio@mandelbit.com>
+#         Ralf Lici <ralf@mandelbit.com>
+#
+---
+name: ipxlat
+protocol: genetlink
+doc: Netlink protocol to control IPXLAT (SIIT) network devices.
+
+definitions:
+  -
+    type: const
+    name: xlat-prefix6-max-prefix-len
+    value: 96
+    doc: Maximum prefix length accepted for xlat-prefix6.
+
+attribute-sets:
+  -
+    name: pool
+    attributes:
+      -
+        name: prefix
+        type: binary
+        checks:
+          exact-len: 16
+      -
+        name: prefix-len
+        type: u8
+        checks:
+          max: xlat-prefix6-max-prefix-len
+  -
+    name: cfg
+    attributes:
+      -
+        name: xlat-prefix6
+        type: nest
+        doc: IPv6 translation prefix.
+        nested-attributes: pool
+      -
+        name: lowest-ipv6-mtu
+        type: u32
+        checks:
+          min: 1280
+  -
+    name: dev
+    attributes:
+      -
+        name: ifindex
+        type: u32
+        doc: Index of the ipxlat interface to operate on.
+      -
+        name: netnsid
+        type: s32
+        doc: ID of the netns the device lives in.
+      -
+        name: config
+        type: nest
+        doc: Ipxlat device configuration.
+        nested-attributes: cfg
+
+operations:
+  list:
+    -
+      name: dev-get
+      attribute-set: dev
+      doc: Get / dump configuration of ipxlat devices.
+      do:
+        pre: ipxlat-nl-pre-doit
+        post: ipxlat-nl-post-doit
+        request:
+          attributes:
+            - ifindex
+        reply: &dev-all
+          attributes:
+            - ifindex
+            - netnsid
+            - config
+      dump:
+        reply: *dev-all
+
+    -
+      name: dev-set
+      doc: Set configuration of an ipxlat device.
+      attribute-set: dev
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - ifindex
+            - config
+        reply:
+          attributes: []
+        pre: ipxlat-nl-pre-doit
+        post: ipxlat-nl-post-doit

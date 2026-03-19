@@ -13,3 +13,5 @@ ipxlat-objs += translate_46.o
 ipxlat-objs += translate_64.o
 ipxlat-objs += icmp_46.o
 ipxlat-objs += icmp_64.o
+ipxlat-objs += netlink.o
+ipxlat-objs += netlink-gen.o
