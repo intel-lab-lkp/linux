@@ -2033,9 +2033,11 @@ EXPORT_SYMBOL(drm_atomic_helper_commit_tail_rpm);
 
 static void commit_tail(struct drm_atomic_state *state)
 {
+	struct drm_connector_state *old_conn_state, *new_conn_state;
 	struct drm_device *dev = state->dev;
 	const struct drm_mode_config_helper_funcs *funcs;
 	struct drm_crtc_state *new_crtc_state;
+	struct drm_connector *connector;
 	struct drm_crtc *crtc;
 	ktime_t start;
 	s64 commit_time_ms;
@@ -2058,6 +2060,13 @@ static void commit_tail(struct drm_atomic_state *state)
 	drm_atomic_helper_wait_for_fences(dev, state, false);
 
 	drm_atomic_helper_wait_for_dependencies(state);
+
+	for_each_oldnew_connector_in_state(state, connector, old_conn_state,
+					   new_conn_state, i) {
+		if (old_conn_state->link_bpc != new_conn_state->link_bpc)
+			drm_connector_update_link_bpc_property(connector,
+							       new_conn_state);
+	}
 
 	/*
 	 * We cannot safely access new_crtc_state after

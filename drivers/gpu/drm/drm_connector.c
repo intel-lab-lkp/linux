@@ -543,6 +543,75 @@ int drmm_connector_init(struct drm_device *dev,
 EXPORT_SYMBOL(drmm_connector_init);
 
 /**
+ * drm_connector_attach_link_bpc_property - create and attach 'link bpc' property
+ * @connector: drm connector
+ * @max_bpc: specify the upper limit, matching  that of 'max bpc' property
+ *
+ * Create and attach the 'link bpc' DRM property on @connector with an upper
+ * limit of @max_bpc.
+ *
+ * Returns:
+ * 0 on success, negative errno on failure.
+ */
+int
+drm_connector_attach_link_bpc_property(struct drm_connector *connector,
+				       unsigned int max_bpc)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_property *prop;
+
+	if (connector->link_bpc_property)
+		return -EBUSY;
+
+	if (max_bpc < 8 || max_bpc > U8_MAX)
+		return -EINVAL;
+
+	prop = drm_property_create_range(dev, DRM_MODE_PROP_IMMUTABLE,
+					 "link bpc", 8, max_bpc);
+	if (!prop)
+		return -ENOMEM;
+
+	connector->link_bpc_property = prop;
+
+	drm_object_attach_property(&connector->base, prop, max_bpc);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_connector_attach_link_bpc_property);
+
+/**
+ * drm_connector_update_link_bpc_property - update the 'link bpc' property of a
+ *                                          connector and fire uevent
+ * @connector: pointer to the &struct drm_connector
+ * @state: pointer to the &struct drm_connector_state with the new value
+ *
+ * Update the 'link bpc' property of the given @connector to the
+ * &drm_connector_state.link_bpc member's value of @state and fire a uevent.
+ */
+void
+drm_connector_update_link_bpc_property(struct drm_connector *connector,
+				       struct drm_connector_state *state)
+{
+	u8 bpc = clamp(state->link_bpc, 8, state->max_bpc);
+
+	if (!connector->link_bpc_property)
+		return;
+
+	if (bpc != state->link_bpc)
+		drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] Clamping link bpc from %u to %u\n",
+			    connector->base.id, connector->name, state->link_bpc, bpc);
+
+	drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] Setting state link bpc %u\n",
+				     connector->base.id, connector->name, bpc);
+	drm_object_property_set_value(&connector->base, connector->link_bpc_property,
+				      bpc);
+
+	drm_sysfs_connector_property_event(connector,
+					   connector->link_bpc_property);
+}
+EXPORT_SYMBOL(drm_connector_update_link_bpc_property);
+
+/**
  * drmm_connector_hdmi_init - Init a preallocated HDMI connector
  * @dev: DRM device
  * @connector: A pointer to the HDMI connector to init
@@ -1712,6 +1781,19 @@ EXPORT_SYMBOL(drm_hdmi_connector_get_output_format_name);
  *	supported by the hardware and sink. Drivers to use the function
  *	drm_connector_attach_max_bpc_property() to create and attach the
  *	property to the connector during initialization.
+ *
+ * link bpc:
+ *	This immutable range property can be used by userspace to determine the
+ *	current display link's bit depth. Drivers can use
+ *	drm_connector_attach_link_bpc_property() to create and attach the
+ *	property to the connector during initialization. They can then set the
+ *	&drm_connector_state.link_bpc member to the actual output bit depth
+ *	after any degradation. The drm property will be updated to this member's
+ *	value on the next atomic commit, and if it changed, a uevent will be
+ *	fired.
+ *	Userspace can listen to the uevent to be notified of link bpc changes,
+ *	and compare the property's value to what userspace requested to
+ *	determine whether colour depth has been degraded.
  *
  * Connectors also have one standardized atomic property:
  *

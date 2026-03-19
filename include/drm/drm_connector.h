@@ -1133,6 +1133,11 @@ struct drm_connector_state {
 	u8 max_bpc;
 
 	/**
+	 * @link_bpc: Current display link's bits-per-component.
+	 */
+	u8 link_bpc;
+
+	/**
 	 * @privacy_screen_sw_state: See :ref:`Standard Connector
 	 * Properties<standard_connector_properties>`
 	 */
@@ -2124,6 +2129,12 @@ struct drm_connector {
 	 */
 	struct drm_property *max_bpc_property;
 
+	/**
+	 * @link_bpc_property: Connector property that reflects the current
+	 * output bits per component.
+	 */
+	struct drm_property *link_bpc_property;
+
 	/** @privacy_screen: drm_privacy_screen for this connector, or NULL. */
 	struct drm_privacy_screen *privacy_screen;
 
@@ -2533,6 +2544,11 @@ void drm_connector_attach_privacy_screen_properties(struct drm_connector *conn);
 void drm_connector_attach_privacy_screen_provider(
 	struct drm_connector *connector, struct drm_privacy_screen *priv);
 void drm_connector_update_privacy_screen(const struct drm_connector_state *connector_state);
+
+int drm_connector_attach_link_bpc_property(struct drm_connector *connector,
+					   unsigned int max_bpc);
+void drm_connector_update_link_bpc_property(struct drm_connector *connector,
+					    struct drm_connector_state *state);
 
 /**
  * struct drm_tile_group - Tile group metadata
