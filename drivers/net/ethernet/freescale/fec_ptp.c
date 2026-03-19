@@ -756,7 +756,7 @@ void fec_ptp_init(struct platform_device *pdev, int irq_idx)
 	fep->ptp_caps.max_adj = 250000000;
 	fep->ptp_caps.n_alarm = 0;
 	fep->ptp_caps.n_ext_ts = 0;
-	fep->ptp_caps.n_per_out = 1;
+	fep->ptp_caps.n_per_out = 4;
 	fep->ptp_caps.n_pins = 0;
 	fep->ptp_caps.pps = 1;
 	fep->ptp_caps.adjfine = fec_ptp_adjfine;
