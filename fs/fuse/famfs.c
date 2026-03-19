@@ -21,6 +21,26 @@
 #include "famfs_kfmap.h"
 #include "fuse_i.h"
 
+static void famfs_set_daxdev_err(
+	struct fuse_conn *fc, struct dax_device *dax_devp);
+
+static int
+famfs_dax_notify_failure(struct dax_device *dax_devp, u64 offset,
+			u64 len, int mf_flags)
+{
+	struct fuse_conn *fc = dax_holder(dax_devp);
+
+	famfs_set_daxdev_err(fc, dax_devp);
+
+	return 0;
+}
+
+static const struct dax_holder_operations famfs_fuse_dax_holder_ops = {
+	.notify_failure		= famfs_dax_notify_failure,
+};
+
+/*****************************************************************************/
+
 /*
  * famfs_teardown()
  *
@@ -47,9 +67,12 @@ famfs_teardown(struct fuse_conn *fc)
 		if (!dd->valid)
 			continue;
 
-		/* Release reference from dax_dev_get() */
-		if (dd->devp)
+		/* Only call fs_put_dax if fs_dax_get succeeded */
+		if (dd->devp) {
+			if (!dd->dax_err)
+				fs_put_dax(dd->devp, fc);
 			put_dax(dd->devp);
+		}
 
 		kfree(dd->name);
 	}
@@ -169,6 +192,17 @@ famfs_fuse_get_daxdev(struct fuse_mount *fm, const u64 index)
 			return -ENODEV;
 		}
 
+		rc = fs_dax_get(daxdev->devp, fc, &famfs_fuse_dax_holder_ops);
+		if (rc) {
+			/* Mark as valid with dax_err to prevent retry loop.
+			 * famfs_dax_err() will return -EIO on access attempts.
+			 * Teardown handles this case: skips fs_put_dax, calls put_dax.
+			 */
+			daxdev->dax_err = 1;
+			pr_err("%s: fs_dax_get(%lld) failed\n",
+			       __func__, (u64)daxdev->devno);
+		}
+
 		wmb(); /* All other fields must be visible before valid */
 		daxdev->valid = 1;
 	}
@@ -242,6 +276,36 @@ famfs_update_daxdev_table(
 	}
 
 	return 0;
+}
+
+static void
+famfs_set_daxdev_err(
+	struct fuse_conn *fc,
+	struct dax_device *dax_devp)
+{
+	int i;
+
+	/* Gotta search the list by dax_devp;
+	 * read lock because we're not adding or removing daxdev entries
+	 */
+	scoped_guard(rwsem_write, &fc->famfs_devlist_sem) {
+		for (i = 0; i < fc->dax_devlist->nslots; i++) {
+			if (fc->dax_devlist->devlist[i].valid) {
+				struct famfs_daxdev *dd;
+
+				dd = &fc->dax_devlist->devlist[i];
+				if (dd->devp != dax_devp)
+					continue;
+
+				dd->error = true;
+
+				pr_err("%s: memory error on daxdev %s (%d)\n",
+				       __func__, dd->name, i);
+				return;
+			}
+		}
+	}
+	pr_err("%s: memory err on unrecognized daxdev\n", __func__);
 }
 
 /***************************************************************************/
@@ -585,6 +649,26 @@ errout:
 
 static int famfs_file_bad(struct inode *inode);
 
+static int famfs_dax_err(struct famfs_daxdev *dd)
+{
+	if (!dd->valid) {
+		pr_err("%s: daxdev=%s invalid\n",
+		       __func__, dd->name);
+		return -EIO;
+	}
+	if (dd->dax_err) {
+		pr_err("%s: daxdev=%s dax_err\n",
+		       __func__, dd->name);
+		return -EIO;
+	}
+	if (dd->error) {
+		pr_err("%s: daxdev=%s memory error\n",
+		       __func__, dd->name);
+		return -EHWPOISON;
+	}
+	return 0;
+}
+
 static int
 famfs_interleave_fileofs_to_daxofs(struct inode *inode, struct iomap *iomap,
 			 loff_t file_offset, off_t len, unsigned int flags)
@@ -624,6 +708,7 @@ famfs_interleave_fileofs_to_daxofs(struct inode *inode, struct iomap *iomap,
 
 		/* Is the data is in this striped extent? */
 		if (local_offset < ext_size) {
+			struct famfs_daxdev *dd;
 			u64 chunk_num       = local_offset / chunk_size;
 			u64 chunk_offset    = local_offset % chunk_size;
 			u64 chunk_remainder = chunk_size - chunk_offset;
@@ -632,6 +717,7 @@ famfs_interleave_fileofs_to_daxofs(struct inode *inode, struct iomap *iomap,
 			u64 strip_offset    = chunk_offset + (stripe_num * chunk_size);
 			u64 strip_dax_ofs = fei->ie_strips[strip_num].ext_offset;
 			u64 strip_devidx = fei->ie_strips[strip_num].dev_index;
+			int rc;
 
 			if (strip_devidx >= fc->dax_devlist->nslots) {
 				pr_err("%s: strip_devidx %llu >= nslots %d\n",
@@ -644,6 +730,15 @@ famfs_interleave_fileofs_to_daxofs(struct inode *inode, struct iomap *iomap,
 				pr_err("%s: daxdev=%lld invalid\n", __func__,
 					strip_devidx);
 				goto err_out;
+			}
+
+			dd = &fc->dax_devlist->devlist[strip_devidx];
+
+			rc = famfs_dax_err(dd);
+			if (rc) {
+				/* Shut down access to this file */
+				meta->error = true;
+				return rc;
 			}
 
 			iomap->addr    = strip_dax_ofs + strip_offset;
@@ -743,6 +838,7 @@ famfs_fileofs_to_daxofs(struct inode *inode, struct iomap *iomap,
 		if (local_offset < dax_ext_len) {
 			loff_t ext_len_remainder = dax_ext_len - local_offset;
 			struct famfs_daxdev *dd;
+			int rc;
 
 			if (daxdev_idx >= fc->dax_devlist->nslots) {
 				pr_err("%s: daxdev_idx %llu >= nslots %d\n",
@@ -753,11 +849,11 @@ famfs_fileofs_to_daxofs(struct inode *inode, struct iomap *iomap,
 
 			dd = &fc->dax_devlist->devlist[daxdev_idx];
 
-			if (!dd->valid || dd->error) {
-				pr_err("%s: daxdev=%lld %s\n", __func__,
-				       daxdev_idx,
-				       dd->valid ? "error" : "invalid");
-				goto err_out;
+			rc = famfs_dax_err(dd);
+			if (rc) {
+				/* Shut down access to this file */
+				meta->error = true;
+				return rc;
 			}
 
 			/*
