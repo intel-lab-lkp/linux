@@ -9,6 +9,7 @@ TEST_FILES := \
 	include.sh \
 	settings \
 	test.py \
+	config \
 # end of TEST_FILES
 
 EXTRA_CLEAN := \
