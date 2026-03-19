@@ -3228,6 +3228,45 @@ static snd_pcm_uframes_t recalculate_boundary(struct snd_pcm_runtime *runtime)
 		return boundary / 2;
 }
 
+/*
+ * Reconstruct the nearest native appl_ptr for a compat appl_ptr
+ * value modulo compat_boundary.
+ */
+static snd_pcm_uframes_t
+snd_pcm_compat_reconstruct_appl_ptr(struct snd_pcm_runtime *runtime,
+				    snd_pcm_uframes_t compat_boundary,
+				    u32 appl_ptr)
+{
+	snd_pcm_uframes_t cur = runtime->control->appl_ptr;
+	snd_pcm_sframes_t rel; /* relative offset */
+	snd_pcm_sframes_t new_appl_ptr;
+
+	if (!compat_boundary || compat_boundary >= runtime->boundary)
+		return appl_ptr;
+
+	appl_ptr %= compat_boundary;
+	rel = (snd_pcm_sframes_t)appl_ptr -
+	      (snd_pcm_sframes_t)(cur % compat_boundary);
+
+	/*
+	 * Pick the shortest relative distance in the compat ring so the
+	 * reconstructed native appl_ptr stays nearest to the current
+	 * position.
+	 */
+	if (rel > (snd_pcm_sframes_t)(compat_boundary / 2))
+		rel -= compat_boundary;
+	else if (rel < -(snd_pcm_sframes_t)(compat_boundary / 2))
+		rel += compat_boundary;
+
+	new_appl_ptr = (snd_pcm_sframes_t)cur + rel;
+	if (new_appl_ptr < 0)
+		new_appl_ptr += runtime->boundary;
+	else if ((snd_pcm_uframes_t)new_appl_ptr >= runtime->boundary)
+		new_appl_ptr -= runtime->boundary;
+
+	return (snd_pcm_uframes_t)new_appl_ptr;
+}
+
 static int snd_pcm_ioctl_sync_ptr_compat(struct snd_pcm_substream *substream,
 					 struct snd_pcm_sync_ptr32 __user *src)
 {
@@ -3253,13 +3292,16 @@ static int snd_pcm_ioctl_sync_ptr_compat(struct snd_pcm_substream *substream,
 	status = runtime->status;
 	control = runtime->control;
 	boundary = recalculate_boundary(runtime);
-	if (! boundary)
+	if (!boundary)
 		boundary = 0x7fffffff;
 	scoped_guard(pcm_stream_lock_irq, substream) {
-		/* FIXME: we should consider the boundary for the sync from app */
 		if (!(sflags & SNDRV_PCM_SYNC_PTR_APPL)) {
-			err = pcm_lib_apply_appl_ptr(substream,
-						     scontrol.appl_ptr);
+			err = pcm_lib_apply_appl_ptr
+				(substream,
+				 snd_pcm_compat_reconstruct_appl_ptr
+					(runtime,
+					 boundary,
+					 scontrol.appl_ptr));
 			if (err < 0)
 				return err;
 		} else
