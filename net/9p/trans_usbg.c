@@ -502,14 +502,21 @@ static void p9_usbg_close(struct p9_client *client)
 static int p9_usbg_request(struct p9_client *client, struct p9_req_t *p9_req)
 {
 	struct f_usb9pfs *usb9pfs = client->trans;
+	struct usb_composite_dev *cdev =
+		usb9pfs->function.config->cdev;
 	int ret;
 
 	if (client->status != Connected)
 		return -EBUSY;
 
-	ret = wait_for_completion_killable(&usb9pfs->send);
-	if (ret)
+	ret = wait_for_completion_killable_timeout(&usb9pfs->send, HZ * 10);
+	if (ret < 0)
 		return ret;
+	if (!ret) {
+		dev_err(&cdev->gadget->dev,
+			"timeout while transferring 9p via usb\n");
+		return -ETIMEDOUT;
+	}
 
 	ret = usb9pfs_transmit(usb9pfs, p9_req);
 	if (ret)
