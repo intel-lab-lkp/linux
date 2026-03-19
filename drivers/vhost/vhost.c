@@ -34,10 +34,10 @@
 
 #include "vhost.h"
 
-static ushort max_mem_regions = 64;
+static ushort max_mem_regions = 256;
 module_param(max_mem_regions, ushort, 0444);
 MODULE_PARM_DESC(max_mem_regions,
-	"Maximum number of memory regions in memory map. (default: 64)");
+	"Maximum number of memory regions in memory map. (default: 256)");
 static int max_iotlb_entries = 2048;
 module_param(max_iotlb_entries, int, 0444);
 MODULE_PARM_DESC(max_iotlb_entries,
