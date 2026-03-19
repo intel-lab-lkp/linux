@@ -348,7 +348,6 @@ static inline void mlx5e_build_umr_wqe(struct mlx5e_rq *rq,
 	ucseg->flags = MLX5_UMR_TRANSLATION_OFFSET_EN | MLX5_UMR_INLINE;
 	octowords = mlx5e_mpwrq_umr_octowords(rq->mpwqe.pages_per_wqe, rq->mpwqe.umr_mode);
 	ucseg->xlt_octowords = cpu_to_be16(octowords);
-	ucseg->mkey_mask     = cpu_to_be64(MLX5_MKEY_MASK_FREE);
 }
 
 static int mlx5e_rq_alloc_mpwqe_info(struct mlx5e_rq *rq, int node)
@@ -397,21 +396,183 @@ static u8 mlx5e_mpwrq_access_mode(enum mlx5e_mpwrq_umr_mode umr_mode)
 	return 0;
 }
 
-static int mlx5e_create_umr_mkey(struct mlx5_core_dev *mdev,
-				 u32 npages, u8 page_shift, u32 *umr_mkey,
-				 dma_addr_t filler_addr,
-				 enum mlx5e_mpwrq_umr_mode umr_mode,
-				 u32 xsk_chunk_size)
+static void mlx5e_rq_umr_mkey_data_free(struct mlx5e_rq *rq)
 {
+	if (!rq->mpwqe_sp.init_data.p_unaligned)
+		return;
+
+	dma_unmap_single(rq->pdev, rq->mpwqe_sp.init_data.addr,
+			 rq->mpwqe_sp.init_data.sz, DMA_TO_DEVICE);
+	kfree(rq->mpwqe_sp.init_data.p_unaligned);
+	rq->mpwqe_sp.init_data.p_unaligned = NULL;
+}
+
+static int mlx5e_rq_umr_mkey_data_alloc(struct mlx5e_rq *rq, u32 npages,
+					struct mlx5_wqe_data_seg *dseg)
+{
+	dma_addr_t data_addr;
+	int data_sz;
+	void *data;
+
+	data_sz = mlx5e_mpwrq_umr_octowords(npages, rq->mpwqe.umr_mode) *
+		MLX5_OCTWORD;
+	rq->mpwqe_sp.init_data.p_unaligned =
+		kzalloc(data_sz + MLX5_UMR_ALIGN - 1, GFP_KERNEL);
+	if (!rq->mpwqe_sp.init_data.p_unaligned)
+		return -ENOMEM;
+
+	data = PTR_ALIGN(rq->mpwqe_sp.init_data.p_unaligned, MLX5_UMR_ALIGN);
+	data_addr = dma_map_single(rq->pdev, data, data_sz, DMA_TO_DEVICE);
+	if (dma_mapping_error(rq->pdev, data_addr)) {
+		kfree(rq->mpwqe_sp.init_data.p_unaligned);
+		rq->mpwqe_sp.init_data.p_unaligned = NULL;
+		return -ENOMEM;
+	}
+
+	rq->mpwqe_sp.init_data.sz = data_sz;
+	rq->mpwqe_sp.init_data.addr = data_addr;
+
+	dseg->addr = cpu_to_be64(data_addr);
+	dseg->byte_count = cpu_to_be32(data_sz);
+	dseg->lkey = rq->mkey_be;
+
+	return 0;
+}
+
+static void mlx5e_rq_umr_mkey_data_fill(struct mlx5e_rq *rq, u32 npages)
+{
+	struct mlx5_core_dev *mdev = rq->mdev;
+	u32 xsk_chunk_size, xsk_rem;
+	dma_addr_t filler_addr;
 	struct mlx5_mtt *mtt;
 	struct mlx5_ksm *ksm;
 	struct mlx5_klm *klm;
-	u32 octwords;
+	__be32 mkey_be;
+	void *data;
+	u8 pad;
+	int i;
+
+	/* Initialize the mkey with all MTTs pointing to a default
+	 * page (filler_addr). When the channels are activated, UMR
+	 * WQEs will redirect the RX WQEs to the actual memory from
+	 * the RQ's pool, while the gaps (wqe_overflow) remain mapped
+	 * to the default page.
+	 */
+	filler_addr = rq->wqe_overflow.addr;
+
+	mkey_be = cpu_to_be32(mdev->mlx5e_res.hw_objs.mkey);
+	data = PTR_ALIGN(rq->mpwqe_sp.init_data.p_unaligned, MLX5_UMR_ALIGN);
+
+	switch (rq->mpwqe.umr_mode) {
+	case MLX5E_MPWRQ_UMR_MODE_OVERSIZED:
+		/* Must have xsk_pool != NULL at this point */
+		xsk_chunk_size = rq->xsk_pool->chunk_size;
+		xsk_rem = (1 << rq->mpwqe.page_shift) - xsk_chunk_size;
+		klm = data;
+		for (i = 0; i < npages; i++) {
+			klm[i << 1] = (struct mlx5_klm) {
+				.va = cpu_to_be64(filler_addr),
+				.bcount = cpu_to_be32(xsk_chunk_size),
+				.key = mkey_be,
+			};
+			klm[(i << 1) + 1] = (struct mlx5_klm) {
+				.va = cpu_to_be64(filler_addr),
+				.bcount = cpu_to_be32(xsk_rem),
+				.key = mkey_be,
+			};
+		}
+		break;
+	case MLX5E_MPWRQ_UMR_MODE_UNALIGNED:
+		ksm = data;
+		for (i = 0; i < npages; i++)
+			ksm[i] = (struct mlx5_ksm) {
+				.key = mkey_be,
+				.va = cpu_to_be64(filler_addr),
+			};
+		break;
+	case MLX5E_MPWRQ_UMR_MODE_ALIGNED:
+		mtt = data;
+		for (i = 0; i < npages; i++)
+			mtt[i] = (struct mlx5_mtt) {
+				.ptag = cpu_to_be64(filler_addr),
+			};
+		break;
+	case MLX5E_MPWRQ_UMR_MODE_TRIPLE:
+		ksm = data;
+		for (i = 0; i < npages * 4; i++)
+			ksm[i] = (struct mlx5_ksm) {
+				.key = mkey_be,
+				.va = cpu_to_be64(filler_addr),
+			};
+		break;
+	}
+
+	/* Pad is not expected, as we init the whole MKEY here */
+	pad = mlx5e_mpwrq_umr_entries_pad(npages, rq->mpwqe.umr_mode);
+	WARN_ONCE(pad, "MPWRQ pad is not expected! UMR mode %u npages %d pad %u\n",
+		  rq->mpwqe.umr_mode, npages, pad);
+}
+
+static int mlx5e_rq_umr_mkey_data_init(struct mlx5e_rq *rq, u32 npages)
+
+{
+	struct mlx5_wqe_ctrl_seg      *cseg;
+	struct mlx5_wqe_umr_ctrl_seg *ucseg;
+	struct mlx5e_icosq *sq = rq->icosq;
+	struct mlx5e_umr_wqe *umr_wqe;
+	u16 pi, num_wqebbs, octowords;
+	u8 ds_cnt;
+	int err;
+
+	/* + 1 for the data segment */
+	ds_cnt = 1 + DIV_ROUND_UP(offsetof(struct mlx5e_umr_wqe, dseg),
+				  MLX5_SEND_WQE_DS);
+	num_wqebbs = DIV_ROUND_UP(ds_cnt, MLX5_SEND_WQEBB_NUM_DS);
+	pi = mlx5e_icosq_get_next_pi(sq, num_wqebbs);
+	umr_wqe = mlx5_wq_cyc_get_wqe(&sq->wq, pi);
+	memset(umr_wqe, 0, num_wqebbs * MLX5_SEND_WQE_BB);
+
+	cseg = &umr_wqe->hdr.ctrl;
+	ucseg = &umr_wqe->hdr.uctrl;
+
+	cseg->opmod_idx_opcode =
+		cpu_to_be32((sq->pc << MLX5_WQE_CTRL_WQE_INDEX_SHIFT) |
+			    MLX5_OPCODE_UMR);
+	cseg->qpn_ds = cpu_to_be32((sq->sqn << MLX5_WQE_CTRL_QPN_SHIFT) |
+				   ds_cnt);
+	cseg->umr_mkey = rq->mpwqe_sp.umr_mkey_be;
+
+	octowords = mlx5e_mpwrq_umr_octowords(npages, rq->mpwqe.umr_mode);
+	ucseg->xlt_octowords = cpu_to_be16(octowords);
+	ucseg->mkey_mask = cpu_to_be64(MLX5_MKEY_MASK_FREE);
+
+	err = mlx5e_rq_umr_mkey_data_alloc(rq, npages, umr_wqe->dseg);
+	if (err)
+		return err;
+
+	mlx5e_rq_umr_mkey_data_fill(rq, npages);
+
+	sq->db.wqe_info[pi] = (struct mlx5e_icosq_wqe_info) {
+		.wqe_type   = MLX5E_ICOSQ_WQE_UMR_RX_INIT,
+		.num_wqebbs = num_wqebbs,
+		.umr.rq     = rq,
+	};
+
+	sq->pc += num_wqebbs;
+
+	sq->doorbell_cseg = cseg;
+
+	return 0;
+}
+
+static int mlx5e_create_umr_mkey(struct mlx5_core_dev *mdev,
+				 u32 npages, u8 page_shift, u32 *umr_mkey,
+				 enum mlx5e_mpwrq_umr_mode umr_mode)
+{
 	int inlen;
 	void *mkc;
 	u32 *in;
 	int err;
-	int i;
 
 	if ((umr_mode == MLX5E_MPWRQ_UMR_MODE_UNALIGNED ||
 	     umr_mode == MLX5E_MPWRQ_UMR_MODE_TRIPLE) &&
@@ -420,13 +581,7 @@ static int mlx5e_create_umr_mkey(struct mlx5_core_dev *mdev,
 		return -EINVAL;
 	}
 
-	octwords = mlx5e_mpwrq_umr_octowords(npages, umr_mode);
-
-	inlen = MLX5_FLEXIBLE_INLEN(mdev, MLX5_ST_SZ_BYTES(create_mkey_in),
-				    MLX5_OCTWORD, octwords);
-	if (inlen < 0)
-		return inlen;
-
+	inlen = MLX5_ST_SZ_BYTES(create_mkey_in);
 	in = kvzalloc(inlen, GFP_KERNEL);
 	if (!in)
 		return -ENOMEM;
@@ -442,60 +597,12 @@ static int mlx5e_create_umr_mkey(struct mlx5_core_dev *mdev,
 	MLX5_SET(mkc, mkc, qpn, 0xffffff);
 	MLX5_SET(mkc, mkc, pd, mdev->mlx5e_res.hw_objs.pdn);
 	MLX5_SET64(mkc, mkc, len, npages << page_shift);
-	MLX5_SET(mkc, mkc, translations_octword_size, octwords);
+	MLX5_SET(mkc, mkc, translations_octword_size,
+		 mlx5e_mpwrq_umr_octowords(npages, umr_mode));
 	if (umr_mode == MLX5E_MPWRQ_UMR_MODE_TRIPLE)
 		MLX5_SET(mkc, mkc, log_page_size, page_shift - 2);
 	else if (umr_mode != MLX5E_MPWRQ_UMR_MODE_OVERSIZED)
 		MLX5_SET(mkc, mkc, log_page_size, page_shift);
-	MLX5_SET(create_mkey_in, in, translations_octword_actual_size, octwords);
-
-	/* Initialize the mkey with all MTTs pointing to a default
-	 * page (filler_addr). When the channels are activated, UMR
-	 * WQEs will redirect the RX WQEs to the actual memory from
-	 * the RQ's pool, while the gaps (wqe_overflow) remain mapped
-	 * to the default page.
-	 */
-	switch (umr_mode) {
-	case MLX5E_MPWRQ_UMR_MODE_OVERSIZED:
-		klm = MLX5_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
-		for (i = 0; i < npages; i++) {
-			klm[i << 1] = (struct mlx5_klm) {
-				.va = cpu_to_be64(filler_addr),
-				.bcount = cpu_to_be32(xsk_chunk_size),
-				.key = cpu_to_be32(mdev->mlx5e_res.hw_objs.mkey),
-			};
-			klm[(i << 1) + 1] = (struct mlx5_klm) {
-				.va = cpu_to_be64(filler_addr),
-				.bcount = cpu_to_be32((1 << page_shift) - xsk_chunk_size),
-				.key = cpu_to_be32(mdev->mlx5e_res.hw_objs.mkey),
-			};
-		}
-		break;
-	case MLX5E_MPWRQ_UMR_MODE_UNALIGNED:
-		ksm = MLX5_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
-		for (i = 0; i < npages; i++)
-			ksm[i] = (struct mlx5_ksm) {
-				.key = cpu_to_be32(mdev->mlx5e_res.hw_objs.mkey),
-				.va = cpu_to_be64(filler_addr),
-			};
-		break;
-	case MLX5E_MPWRQ_UMR_MODE_ALIGNED:
-		mtt = MLX5_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
-		for (i = 0; i < npages; i++)
-			mtt[i] = (struct mlx5_mtt) {
-				.ptag = cpu_to_be64(filler_addr),
-			};
-		break;
-	case MLX5E_MPWRQ_UMR_MODE_TRIPLE:
-		ksm = MLX5_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
-		for (i = 0; i < npages * 4; i++) {
-			ksm[i] = (struct mlx5_ksm) {
-				.key = cpu_to_be32(mdev->mlx5e_res.hw_objs.mkey),
-				.va = cpu_to_be64(filler_addr),
-			};
-		}
-		break;
-	}
 
 	err = mlx5_core_create_mkey(mdev, umr_mkey, in, inlen);
 
@@ -505,7 +612,6 @@ static int mlx5e_create_umr_mkey(struct mlx5_core_dev *mdev,
 
 static int mlx5e_create_rq_umr_mkey(struct mlx5_core_dev *mdev, struct mlx5e_rq *rq)
 {
-	u32 xsk_chunk_size = rq->xsk_pool ? rq->xsk_pool->chunk_size : 0;
 	u32 wq_size = mlx5_wq_ll_get_size(&rq->mpwqe.wq);
 	u32 num_entries, max_num_entries;
 	u32 umr_mkey;
@@ -522,9 +628,16 @@ static int mlx5e_create_rq_umr_mkey(struct mlx5_core_dev *mdev, struct mlx5e_rq 
 			      max_num_entries);
 
 	err = mlx5e_create_umr_mkey(mdev, num_entries, rq->mpwqe.page_shift,
-				    &umr_mkey, rq->wqe_overflow.addr,
-				    rq->mpwqe.umr_mode, xsk_chunk_size);
+				    &umr_mkey, rq->mpwqe.umr_mode);
+	if (err)
+		return err;
+
 	rq->mpwqe_sp.umr_mkey_be = cpu_to_be32(umr_mkey);
+
+	err = mlx5e_rq_umr_mkey_data_init(rq, num_entries);
+	if (err)
+		mlx5_core_destroy_mkey(mdev, umr_mkey);
+
 	return err;
 }
 
@@ -1097,6 +1210,7 @@ static void mlx5e_free_rq(struct mlx5e_rq *rq)
 	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
 		mlx5e_rq_free_shampo(rq);
 		kvfree(rq->mpwqe.info);
+		mlx5e_rq_umr_mkey_data_free(rq);
 		mlx5_core_destroy_mkey(rq->mdev,
 				       be32_to_cpu(rq->mpwqe_sp.umr_mkey_be));
 		mlx5e_free_mpwqe_rq_drop_page(rq);
@@ -1275,8 +1389,11 @@ int mlx5e_wait_for_min_rx_wqes(struct mlx5e_rq *rq, int wait_time)
 	u16 min_wqes = mlx5_min_rx_wqes(rq->wq_type, mlx5e_rqwq_get_size(rq));
 
 	do {
-		if (mlx5e_rqwq_get_cur_sz(rq) >= min_wqes)
+		if (mlx5e_rqwq_get_cur_sz(rq) >= min_wqes) {
+			/* memory usage completed, can be freed already */
+			mlx5e_rq_umr_mkey_data_free(rq);
 			return 0;
+		}
 
 		msleep(20);
 	} while (time_before(jiffies, exp_time));

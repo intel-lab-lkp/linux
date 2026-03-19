@@ -247,6 +247,7 @@ struct mlx5e_umr_wqe {
 		DECLARE_FLEX_ARRAY(struct mlx5_mtt, inline_mtts);
 		DECLARE_FLEX_ARRAY(struct mlx5_klm, inline_klms);
 		DECLARE_FLEX_ARRAY(struct mlx5_ksm, inline_ksms);
+		DECLARE_FLEX_ARRAY(struct mlx5_wqe_data_seg, dseg);
 	};
 };
 static_assert(offsetof(struct mlx5e_umr_wqe, inline_mtts) == sizeof(struct mlx5e_umr_wqe_hdr),
@@ -747,6 +748,11 @@ struct mlx5e_rq {
 	struct mlx5e_dma_info  wqe_overflow;
 	struct {
 		__be32 umr_mkey_be;
+		struct {
+			void *p_unaligned;
+			int sz;
+			dma_addr_t addr;
+		} init_data;
 	} mpwqe_sp;
 
 	/* XDP read-mostly */
