@@ -57,6 +57,24 @@ struct mana_ib_create_rc_qp_resp {
 	__u32 queue_id[4];
 };
 
+enum {
+	MANA_UC_UDATA_SQR = 0,
+	MANA_UC_UDATA_RQR = 1,
+	MANA_UC_UDATA_SMQ = 2,
+	MANA_UC_UDATA_MAX = 3,
+};
+
+struct mana_ib_create_uc_qp {
+	__aligned_u64 queue_buf[MANA_UC_UDATA_MAX];
+	__u32 queue_size[MANA_UC_UDATA_MAX];
+	__u32 reserved;
+};
+
+struct mana_ib_create_uc_qp_resp {
+	__u32 queue_id[MANA_UC_UDATA_MAX];
+	__u32 reserved;
+};
+
 struct mana_ib_create_wq {
 	__aligned_u64 wq_buf_addr;
 	__u32 wq_buf_size;
