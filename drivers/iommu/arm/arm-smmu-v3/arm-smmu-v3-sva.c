@@ -24,12 +24,18 @@ arm_smmu_update_s1_domain_cd_entry(struct arm_smmu_domain *smmu_domain)
 	list_for_each_entry(master_domain, &smmu_domain->devices, devices_elm) {
 		struct arm_smmu_master *master = master_domain->master;
 		struct arm_smmu_cd *cdptr;
+		struct arm_smmu_inv tag;
 
 		cdptr = arm_smmu_get_cd_ptr(master, master_domain->ssid);
 		if (WARN_ON(!cdptr))
 			continue;
 
-		arm_smmu_make_s1_cd(&target_cd, master, smmu_domain);
+		if (WARN_ON(arm_smmu_find_iotlb_tag(&smmu_domain->domain,
+						    master->smmu, &tag)))
+			continue;
+		if (WARN_ON(tag.type != INV_TYPE_S1_ASID))
+			continue;
+		arm_smmu_make_s1_cd(&target_cd, master, smmu_domain, &tag);
 		arm_smmu_write_cd_entry(master, master_domain->ssid, cdptr,
 					&target_cd);
 	}
@@ -124,10 +130,10 @@ EXPORT_SYMBOL_IF_KUNIT(__arm_smmu_make_sva_cd);
 
 static void arm_smmu_make_sva_cd(struct arm_smmu_cd *target,
 				 struct arm_smmu_master *master,
-				 struct arm_smmu_domain *smmu_domain)
+				 struct arm_smmu_domain *smmu_domain,
+				 struct arm_smmu_inv *tag)
 {
-	__arm_smmu_make_sva_cd(target, master, smmu_domain->domain.mm,
-			       smmu_domain->cd.asid);
+	__arm_smmu_make_sva_cd(target, master, smmu_domain->domain.mm, tag->id);
 }
 
 static void arm_smmu_mm_arch_invalidate_secondary_tlbs(struct mmu_notifier *mn,
@@ -166,12 +172,17 @@ static void arm_smmu_mm_release(struct mmu_notifier *mn, struct mm_struct *mm)
 		struct arm_smmu_master *master = master_domain->master;
 		struct arm_smmu_cd target;
 		struct arm_smmu_cd *cdptr;
+		struct arm_smmu_inv tag;
 
 		cdptr = arm_smmu_get_cd_ptr(master, master_domain->ssid);
 		if (WARN_ON(!cdptr))
 			continue;
-		__arm_smmu_make_sva_cd(&target, master, NULL,
-				       smmu_domain->cd.asid);
+		if (WARN_ON(arm_smmu_find_iotlb_tag(&smmu_domain->domain,
+						    master->smmu, &tag)))
+			continue;
+		if (WARN_ON(tag.type != INV_TYPE_S1_ASID))
+			continue;
+		__arm_smmu_make_sva_cd(&target, master, NULL, tag.id);
 		arm_smmu_write_cd_entry(master, master_domain->ssid, cdptr,
 					&target);
 	}

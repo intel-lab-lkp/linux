@@ -39,12 +39,15 @@ void *arm_smmu_hw_info(struct device *dev, u32 *length,
 	return info;
 }
 
-static void arm_smmu_make_nested_cd_table_ste(
-	struct arm_smmu_ste *target, struct arm_smmu_master *master,
-	struct arm_smmu_nested_domain *nested_domain, bool ats_enabled)
+static void
+arm_smmu_make_nested_cd_table_ste(struct arm_smmu_ste *target,
+				  struct arm_smmu_master *master,
+				  struct arm_smmu_nested_domain *nested_domain,
+				  struct arm_smmu_inv *tag, bool ats_enabled)
 {
-	arm_smmu_make_s2_domain_ste(
-		target, master, nested_domain->vsmmu->s2_parent, ats_enabled);
+	arm_smmu_make_s2_domain_ste(target, master,
+				    nested_domain->vsmmu->s2_parent, tag,
+				    ats_enabled);
 
 	target->data[0] = cpu_to_le64(STRTAB_STE_0_V |
 				      FIELD_PREP(STRTAB_STE_0_CFG,
@@ -64,9 +67,11 @@ static void arm_smmu_make_nested_cd_table_ste(
  * - Bypass STE (install the S2, no CD table)
  * - CD table STE (install the S2 and the userspace CD table)
  */
-static void arm_smmu_make_nested_domain_ste(
-	struct arm_smmu_ste *target, struct arm_smmu_master *master,
-	struct arm_smmu_nested_domain *nested_domain, bool ats_enabled)
+static void
+arm_smmu_make_nested_domain_ste(struct arm_smmu_ste *target,
+				struct arm_smmu_master *master,
+				struct arm_smmu_nested_domain *nested_domain,
+				struct arm_smmu_inv *tag, bool ats_enabled)
 {
 	unsigned int cfg =
 		FIELD_GET(STRTAB_STE_0_CFG, le64_to_cpu(nested_domain->ste[0]));
@@ -82,12 +87,12 @@ static void arm_smmu_make_nested_domain_ste(
 	switch (cfg) {
 	case STRTAB_STE_0_CFG_S1_TRANS:
 		arm_smmu_make_nested_cd_table_ste(target, master, nested_domain,
-						  ats_enabled);
+						  tag, ats_enabled);
 		break;
 	case STRTAB_STE_0_CFG_BYPASS:
 		arm_smmu_make_s2_domain_ste(target, master,
 					    nested_domain->vsmmu->s2_parent,
-					    ats_enabled);
+					    tag, ats_enabled);
 		break;
 	case STRTAB_STE_0_CFG_ABORT:
 	default:
@@ -187,6 +192,7 @@ static int arm_smmu_attach_dev_nested(struct iommu_domain *domain,
 	}
 
 	arm_smmu_make_nested_domain_ste(&ste, master, nested_domain,
+					&state.new_domain_invst.tag,
 					state.ats_enabled);
 	arm_smmu_install_ste_for_dev(master, &ste);
 	arm_smmu_attach_commit(&state);
