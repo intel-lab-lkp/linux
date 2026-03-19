@@ -3547,8 +3547,16 @@ reallocate:
 		 * At this stage, either we allocated a large folio, thus @i
 		 * would only be 0, or we fall back to per-page allocation.
 		 */
-		if (i && folio_page(eb->folios[i - 1], 0) + 1 != folio_page(folio, 0))
-			page_contig = false;
+		if (i > 0) {
+			struct page *prev = folio_page(eb->folios[i - 1], 0);
+			struct page *curr = folio_page(folio, 0);
+
+			/*
+			 * Contiguous pages may have different tags; can't be treated as contiguous
+			 */
+			if (curr != prev + 1 || page_kasan_tag(curr) != page_kasan_tag(prev))
+				page_contig = false;
+		}
 
 		if (!btrfs_meta_folio_test_uptodate(folio, eb))
 			uptodate = 0;
