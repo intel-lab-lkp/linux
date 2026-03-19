@@ -401,7 +401,331 @@ int ipxlat_v4_validate_skb(struct ipxlat_priv *ipxlat, struct sk_buff *skb)
 	return 0;
 }
 
+static bool ipxlat_v6_validate_saddr(const struct in6_addr *addr6)
+{
+	return !(ipv6_addr_any(addr6) || ipv6_addr_loopback(addr6) ||
+		 ipv6_addr_is_multicast(addr6));
+}
+
+static int ipxlat_v6_pull_l4(struct sk_buff *skb, unsigned int l4_offset,
+			     u8 l4_proto, bool *is_icmp_err)
+{
+	struct icmp6hdr *icmp;
+	struct udphdr *udp;
+	struct tcphdr *tcp;
+
+	*is_icmp_err = false;
+
+	switch (l4_proto) {
+	case NEXTHDR_TCP:
+		if (unlikely(!pskb_may_pull(skb, l4_offset + sizeof(*tcp))))
+			return -EINVAL;
+		tcp = (struct tcphdr *)(skb->data + l4_offset);
+		return __tcp_hdrlen(tcp);
+	case NEXTHDR_UDP:
+		if (unlikely(!pskb_may_pull(skb, l4_offset + sizeof(*udp))))
+			return -EINVAL;
+		udp = (struct udphdr *)(skb->data + l4_offset);
+		if (unlikely(ntohs(udp->len) < sizeof(*udp)))
+			return -EINVAL;
+		return sizeof(struct udphdr);
+	case NEXTHDR_ICMP:
+		if (unlikely(!pskb_may_pull(skb, l4_offset + sizeof(*icmp))))
+			return -EINVAL;
+		icmp = (struct icmp6hdr *)(skb->data + l4_offset);
+		*is_icmp_err = icmpv6_is_err(icmp->icmp6_type);
+		return sizeof(struct icmp6hdr);
+	default:
+		return 0;
+	}
+}
+
+/* Basic IPv6 header walk: parse only the packet starting at l3_offset.
+ * It does not inspect quoted inner packets carried by ICMP errors.
+ */
+static int ipxlat_v6_walk_hdrs(struct sk_buff *skb, unsigned int l3_offset,
+			       u8 *l4_proto, unsigned int *fhdr_offset,
+			       unsigned int *l4_offset, bool *has_l4)
+{
+	unsigned int frag_hdr_off, l4hdr_off;
+	struct frag_hdr *frag;
+	struct ipv6hdr *ip6;
+	bool first_frag;
+	int err;
+
+	/* cannot use default getter because this function is used both for
+	 * outer and inner packets
+	 */
+	ip6 = (struct ipv6hdr *)(skb->data + l3_offset);
+
+	/* if present, locate Fragment Header first because it affects
+	 * whether transport headers are available
+	 */
+	frag_hdr_off = l3_offset;
+	err = ipv6_find_hdr(skb, &frag_hdr_off, NEXTHDR_FRAGMENT, NULL, NULL);
+	if (unlikely(err < 0 && err != -ENOENT))
+		return -EINVAL;
+
+	*has_l4 = true;
+	*fhdr_offset = 0;
+	if (unlikely(err == NEXTHDR_FRAGMENT)) {
+		if (unlikely(!pskb_may_pull(skb, frag_hdr_off + sizeof(*frag))))
+			return -EINVAL;
+		frag = (struct frag_hdr *)(skb->data + frag_hdr_off);
+
+		/* remember Fragment Header offset for downstream logic */
+		*fhdr_offset = frag_hdr_off;
+		first_frag = ipxlat_is_first_frag6(frag);
+
+		/* ipv6 forbids chaining FHs */
+		if (unlikely(frag->nexthdr == NEXTHDR_FRAGMENT))
+			return -EINVAL;
+
+		/* RFC 7915 Section 5.1.1 does not support extension headers
+		 * after FH (except NEXTHDR_NONE)
+		 */
+		if (unlikely(ipv6_ext_hdr(frag->nexthdr) &&
+			     frag->nexthdr != NEXTHDR_NONE))
+			return -EPROTONOSUPPORT;
+
+		/* non-first fragments do not carry a full transport header */
+		if (!first_frag) {
+			*l4_proto = frag->nexthdr;
+			/* first byte after FH is fragment payload,
+			 * not L4 header
+			 */
+			*l4_offset = frag_hdr_off + sizeof(struct frag_hdr);
+			*has_l4 = false;
+			return 0;
+		}
+	}
+
+	/* walk extension headers to terminal protocol and compute offsets used
+	 * by validation/translation
+	 */
+	l4hdr_off = l3_offset;
+	err = ipv6_find_hdr(skb, &l4hdr_off, -1, NULL, NULL);
+	if (unlikely(err < 0))
+		return -EINVAL;
+
+	*l4_proto = err;
+	*l4_offset = l4hdr_off;
+	return 0;
+}
+
+/* RFC 7915 Section 5.1 says a Routing Header with Segments Left != 0
+ * must not be translated. We detect it by asking ipv6_find_hdr not to
+ * skip RH, then emit ICMPv6 Parameter Problem pointing to segments_left.
+ */
+static int ipxlat_v6_check_rh(struct sk_buff *skb)
+{
+	unsigned int rh_off;
+	int flags, nexthdr;
+
+	rh_off = 0;
+	flags = IP6_FH_F_SKIP_RH;
+	nexthdr = ipv6_find_hdr(skb, &rh_off, NEXTHDR_ROUTING, NULL, &flags);
+	if (unlikely(nexthdr < 0 && nexthdr != -ENOENT))
+		return -EINVAL;
+	if (likely(nexthdr != NEXTHDR_ROUTING))
+		return 0;
+
+	return -EINVAL;
+}
+
+static int ipxlat_v6_pull_outer_l3(struct sk_buff *skb)
+{
+	const unsigned int l3_off = skb_network_offset(skb);
+	struct ipv6hdr *l3_hdr;
+
+	if (unlikely(!pskb_may_pull(skb, l3_off + sizeof(*l3_hdr))))
+		return -EINVAL;
+	l3_hdr = ipv6_hdr(skb);
+
+	/* translator does not support jumbograms; payload_len must match skb */
+	if (unlikely(l3_hdr->version != 6 ||
+		     skb->len != sizeof(*l3_hdr) +
+					 be16_to_cpu(l3_hdr->payload_len) ||
+		     !ipxlat_v6_validate_saddr(&l3_hdr->saddr)))
+		return -EINVAL;
+
+	if (unlikely(l3_hdr->hop_limit <= 1))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int ipxlat_v6_pull_icmp_inner(struct sk_buff *skb,
+				     unsigned int outer_payload_off)
+{
+	unsigned int inner_fhdr_off, inner_l4_off;
+	struct ipxlat_cb *cb = ipxlat_skb_cb(skb);
+	struct ipv6hdr *inner_ip6;
+	bool has_l4, is_icmp_err;
+	u8 inner_l4_proto;
+	int err;
+
+	if (unlikely(!pskb_may_pull(skb,
+				    outer_payload_off + sizeof(*inner_ip6))))
+		return -EINVAL;
+
+	inner_ip6 = (struct ipv6hdr *)(skb->data + outer_payload_off);
+	if (unlikely(inner_ip6->version != 6))
+		return -EINVAL;
+
+	err = ipxlat_v6_walk_hdrs(skb, outer_payload_off, &inner_l4_proto,
+				  &inner_fhdr_off, &inner_l4_off, &has_l4);
+	if (unlikely(err))
+		return err;
+
+	cb->inner_l3_offset = outer_payload_off;
+	cb->inner_l4_offset = inner_l4_off;
+	cb->inner_fragh_off = inner_fhdr_off;
+	cb->inner_l4_proto = inner_l4_proto;
+
+	if (likely(has_l4)) {
+		err = ipxlat_v6_pull_l4(skb, inner_l4_off, inner_l4_proto,
+					&is_icmp_err);
+		if (unlikely(err < 0))
+			return err;
+		if (unlikely(is_icmp_err))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int ipxlat_v6_pull_hdrs(struct sk_buff *skb)
+{
+	const unsigned int l3_off = skb_network_offset(skb);
+	unsigned int fragh_off, l4_off, payload_off;
+	struct ipxlat_cb *cb = ipxlat_skb_cb(skb);
+	int l3_len, l4_len, err;
+	struct frag_hdr *frag;
+	bool has_l4;
+	u8 l4_proto;
+
+	/* parse IPv6 base header and perform basic structural checks */
+	err = ipxlat_v6_pull_outer_l3(skb);
+	if (unlikely(err))
+		return err;
+
+	/* walk extension/fragment headers and locate the transport header */
+	err = ipxlat_v6_walk_hdrs(skb, l3_off, &l4_proto, &fragh_off, &l4_off,
+				  &has_l4);
+	/* -EPROTONOSUPPORT means packet layout is syntactically valid but
+	 * unsupported by our RFC 7915 path
+	 */
+	if (unlikely(err == -EPROTONOSUPPORT))
+		return -EINVAL;
+	if (unlikely(err))
+		return err;
+
+	l3_len = l4_off - l3_off;
+	payload_off = l4_off;
+
+	if (likely(has_l4)) {
+		l4_len = ipxlat_v6_pull_l4(skb, l4_off, l4_proto,
+					   &cb->is_icmp_err);
+		if (unlikely(l4_len < 0))
+			return l4_len;
+		payload_off += l4_len;
+	}
+
+	/* RFC 7915 Section 5.1 */
+	err = ipxlat_v6_check_rh(skb);
+	if (unlikely(err))
+		return err;
+
+	if (unlikely(l4_proto == NEXTHDR_ICMP)) {
+		/* A stateless translator cannot reliably translate ICMP
+		 * checksum across real IPv6 fragments, so fragmented ICMP is
+		 * dropped. A Fragment Header alone, however, is not enough to
+		 * decide: so-called atomic fragments (offset=0, M=0) carry a
+		 * Fragment Header but are not actually fragmented.
+		 */
+		if (unlikely(fragh_off)) {
+			if (unlikely(!pskb_may_pull(skb,
+						    fragh_off + sizeof(*frag))))
+				return -EINVAL;
+
+			frag = (struct frag_hdr *)(skb->data + fragh_off);
+			if (unlikely(ipxlat_get_frag6_offset(frag) ||
+				     (be16_to_cpu(frag->frag_off) & IP6_MF)))
+				return -EINVAL;
+		}
+
+		if (unlikely(cb->is_icmp_err)) {
+			/* validate the quoted packet in an ICMP error */
+			err = ipxlat_v6_pull_icmp_inner(skb, payload_off);
+			if (unlikely(err))
+				return err;
+		}
+	}
+
+	cb->l4_proto = l4_proto;
+	cb->l4_off = l4_off;
+	cb->fragh_off = fragh_off;
+	cb->payload_off = payload_off;
+	cb->l3_hdr_len = l3_len;
+
+	return 0;
+}
+
+static int ipxlat_v6_validate_icmp_csum(const struct sk_buff *skb)
+{
+	struct ipv6hdr *iph6;
+	unsigned int len;
+	__sum16 csum;
+
+	if (skb->ip_summed != CHECKSUM_NONE)
+		return 0;
+
+	iph6 = ipv6_hdr(skb);
+	len = ipxlat_skb_datagram_len(skb);
+	csum = csum_ipv6_magic(&iph6->saddr, &iph6->daddr, len, NEXTHDR_ICMP,
+			       skb_checksum(skb, skb_transport_offset(skb), len,
+					    0));
+
+	return unlikely(csum) ? -EINVAL : 0;
+}
+
+/**
+ * ipxlat_v6_validate_skb - validate IPv6 input and fill parser metadata in cb
+ * @skb: packet to validate
+ *
+ * Ensures required headers are present/consistent and stores parsed offsets
+ * into &struct ipxlat_cb for the translation path.
+ *
+ * Return: 0 on success, negative errno on validation failure.
+ */
 int ipxlat_v6_validate_skb(struct sk_buff *skb)
 {
-	return -EOPNOTSUPP;
+	struct ipxlat_cb *cb = ipxlat_skb_cb(skb);
+	int err;
+
+	if (unlikely(skb_shared(skb)))
+		return -EINVAL;
+
+	err = ipxlat_v6_pull_hdrs(skb);
+	if (unlikely(err))
+		return err;
+
+	skb_set_transport_header(skb, cb->l4_off);
+
+	if (unlikely(cb->is_icmp_err)) {
+		if (unlikely(cb->l4_proto != NEXTHDR_ICMP)) {
+			DEBUG_NET_WARN_ON_ONCE(1);
+			return -EINVAL;
+		}
+
+		/* The translated ICMPv4 checksum is recomputed from scratch,
+		 * so reject bad ICMPv6 error checksums before conversion.
+		 */
+		err = ipxlat_v6_validate_icmp_csum(skb);
+		if (unlikely(err))
+			return err;
+	}
+
+	return 0;
 }
