@@ -2391,6 +2391,20 @@ out:
 	mutex_unlock(&dev_data->mutex);
 }
 
+void amd_iommu_dev_set_pci_msi_domain(struct device *dev)
+{
+	struct amd_iommu *iommu;
+
+	if (!check_device(dev))
+		return;
+
+	iommu = rlookup_amd_iommu(dev);
+	if (!iommu)
+		return;
+
+	amd_iommu_set_pci_msi_domain(dev, iommu);
+}
+
 static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 {
 	struct iommu_device *iommu_dev;

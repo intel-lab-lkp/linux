@@ -3377,6 +3377,41 @@ disable_snp:
 #endif
 }
 
+static int __init amd_iommu_devices_set_pci_msi_domain(void)
+{
+	struct pci_dev *dev = NULL;
+	struct amd_iommu *iommu;
+	int ret = 0;
+
+	/* Register IRQ handler for each iommu device. */
+	for_each_iommu(iommu) {
+		iommu->dev = pci_get_domain_bus_and_slot(iommu->pci_seg->id,
+						 PCI_BUS_NUM(iommu->devid),
+						 iommu->devid & 0xff);
+		if (!iommu->dev)
+			return -ENODEV;
+
+		ret = iommu_init_irq(iommu);
+		if (ret)
+			return ret;
+
+		iommu->dev->irq_managed = 1;
+	}
+
+	/*
+	 * In configurations where the IOMMU is disabled but x2APIC is
+	 * required for high CPU counts (> 256), the kernel must explicitly
+	 * map PCI Message Signaled Interrupt (MSI) domains to the IOMMU
+	 * hardware's interrupt domain to ensure valid interrupt routing.
+	 */
+	for_each_pci_dev(dev)
+		amd_iommu_dev_set_pci_msi_domain(&dev->dev);
+
+	print_iommu_info();
+
+	return ret;
+}
+
 /****************************************************************************
  *
  * AMD IOMMU Initialization State Machine
@@ -3397,13 +3432,8 @@ static int __init state_next(void)
 		}
 		break;
 	case IOMMU_IVRS_DETECTED:
-		if (amd_iommu_disabled) {
-			init_state = IOMMU_CMDLINE_DISABLED;
-			ret = -EINVAL;
-		} else {
-			ret = early_amd_iommu_init();
-			init_state = ret ? IOMMU_INIT_ERROR : IOMMU_ACPI_FINISHED;
-		}
+		ret = early_amd_iommu_init();
+		init_state = ret ? IOMMU_INIT_ERROR : IOMMU_ACPI_FINISHED;
 		break;
 	case IOMMU_ACPI_FINISHED:
 		early_enable_iommus();
@@ -3411,9 +3441,15 @@ static int __init state_next(void)
 		init_state = IOMMU_ENABLED;
 		break;
 	case IOMMU_ENABLED:
-		register_syscore(&amd_iommu_syscore);
-		iommu_snp_enable();
-		ret = amd_iommu_init_pci();
+		if (amd_iommu_disabled) {
+			amd_iommu_devices_set_pci_msi_domain();
+			init_state = IOMMU_CMDLINE_DISABLED;
+			ret = -EINVAL;
+		} else {
+			register_syscore(&amd_iommu_syscore);
+			iommu_snp_enable();
+			ret = amd_iommu_init_pci();
+		}
 		init_state = ret ? IOMMU_INIT_ERROR : IOMMU_PCI_INIT;
 		break;
 	case IOMMU_PCI_INIT:
