@@ -326,12 +326,18 @@ struct fuse_folio_desc {
 	unsigned int offset;
 };
 
+struct fuse_ext_arg {
+	unsigned int type;
+	unsigned int size;
+	void *value;
+};
+
 struct fuse_args {
 	uint64_t nodeid;
 	uint32_t opcode;
 	uint8_t in_numargs;
 	uint8_t out_numargs;
-	uint8_t ext_idx;
+	uint8_t numext;
 	bool force:1;
 	bool noreply:1;
 	bool nocreds:1;
@@ -342,10 +348,11 @@ struct fuse_args {
 	bool page_zeroing:1;
 	bool page_replace:1;
 	bool may_block:1;
-	bool is_ext:1;
+	bool has_ext:1;
 	bool is_pinned:1;
 	bool invalidate_vmap:1;
 	struct fuse_in_arg in_args[4];
+	struct fuse_ext_arg ext_args[2];
 	struct fuse_arg out_args[2];
 	void (*end)(struct fuse_mount *fm, struct fuse_args *args, int error);
 	/* Used for kvec iter backed by vmalloc address */
