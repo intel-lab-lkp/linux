@@ -768,10 +768,34 @@ static void virtio_fs_request_complete(struct fuse_req *req,
 	struct folio *folio;
 
 	/*
-	 * TODO verify that server properly follows FUSE protocol
+	 * Verify that server properly follows FUSE protocol
 	 * (oh.uniq, oh.len)
 	 */
 	args = req->args;
+	if (test_bit(FR_ISREPLY, &req->flags)) {
+		struct fuse_out_header *oh = &req->out.h;
+
+		if (unlikely(oh->unique != req->in.h.unique)) {
+			pr_warn_ratelimited("virtio-fs: bad reply unique %llu (expected %llu)\n",
+					    oh->unique, req->in.h.unique);
+			oh->error = -EIO;
+			oh->len = sizeof(*oh);
+			goto out;
+		}
+		unsigned int num_out = args->out_numargs - args->out_pages;
+		unsigned int cap = sizeof(req->out.h);
+
+		cap += fuse_len_args(num_out, args->out_args);
+		if (args->out_pages)
+			cap += args->out_args[args->out_numargs - 1].size;
+		if (unlikely(oh->len < sizeof(*oh) || oh->len > cap)) {
+			pr_warn_ratelimited("virtio-fs: bad reply len %u (cap %u)\n",
+					    oh->len, cap);
+			oh->error = -EIO;
+			oh->len = sizeof(*oh);
+			goto out;
+		}
+	}
 	copy_args_from_argbuf(args, req);
 
 	if (args->out_pages && args->page_zeroing) {
@@ -790,6 +814,7 @@ static void virtio_fs_request_complete(struct fuse_req *req,
 		}
 	}
 
+out:
 	clear_bit(FR_SENT, &req->flags);
 
 	fuse_request_end(req);
