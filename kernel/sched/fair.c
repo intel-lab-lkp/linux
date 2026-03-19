@@ -5626,6 +5626,9 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	if (se != cfs_rq->curr)
 		__dequeue_entity(cfs_rq, se);
 	se->on_rq = 0;
+	/* update the cfs_rq->zero_vruntime again after curr->on_rq = 0 */
+	if (se == cfs_rq->curr)
+		avg_vruntime(cfs_rq);
 	account_entity_dequeue(cfs_rq, se);
 
 	/* return excess runtime on last dequeue */
