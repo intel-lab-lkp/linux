@@ -6,7 +6,9 @@
  */
 #include "test_util.h"
 
+#ifdef __GLIBC__
 #include <execinfo.h>
+#endif
 #include <sys/syscall.h>
 
 #include "kselftest.h"
@@ -15,6 +17,7 @@
 static void __attribute__((noinline)) test_dump_stack(void);
 static void test_dump_stack(void)
 {
+#ifdef __GLIBC__
 	/*
 	 * Build and run this command:
 	 *
@@ -56,6 +59,10 @@ static void test_dump_stack(void)
 #pragma GCC diagnostic ignored "-Wunused-result"
 	system(cmd);
 #pragma GCC diagnostic pop
+
+#else /* !__GLIBC__ */
+	fputs("  (stack trace not available: compiled without glibc)\n", stderr);
+#endif
 }
 
 static pid_t _gettid(void)
