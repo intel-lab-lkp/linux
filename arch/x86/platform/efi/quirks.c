@@ -442,18 +442,18 @@ void __init efi_unmap_boot_services(void)
 			continue;
 		}
 
-		/* Do not free, someone else owns it: */
-		if (md->attribute & EFI_MEMORY_RUNTIME) {
-			num_entries++;
-			continue;
-		}
-
 		/*
 		 * Before calling set_virtual_address_map(), EFI boot services
 		 * code/data regions were mapped as a quirk for buggy firmware.
 		 * Unmap them from efi_pgd before freeing them up.
 		 */
 		efi_unmap_pages(md);
+
+		/* Do not free, someone else owns it: */
+		if (md->attribute & EFI_MEMORY_RUNTIME) {
+			num_entries++;
+			continue;
+		}
 
 		/*
 		 * Nasty quirk: if all sub-1MB memory is used for boot
