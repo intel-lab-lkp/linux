@@ -6,6 +6,7 @@
 #define PAGE_SIZE 4096
 #endif
 
+#define KB(x) (x << 10)
 #define MB(x) (x << 20)
 
 #define USEC_PER_SEC	1000000L
