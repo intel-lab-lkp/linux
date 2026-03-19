@@ -536,6 +536,40 @@ void __init efi_unmap_boot_services(void)
 	}
 }
 
+static unsigned long __init
+efi_free_unreserved_subregions(u64 range_start, u64 range_end)
+{
+	struct memblock_region *region;
+	unsigned long freed = 0;
+
+	for_each_reserved_mem_region(region) {
+		u64 region_end = region->base + region->size;
+		u64 start, end;
+
+		/* memblock tables are sorted so no need to carry on */
+		if (region->base >= range_end)
+			break;
+
+		if (region_end < range_start)
+			continue;
+
+		if (region->flags & MEMBLOCK_RSRV_KERN)
+			continue;
+
+		start = PAGE_ALIGN(max(range_start, region->base));
+		end = PAGE_ALIGN_DOWN(min(range_end, region_end));
+
+		if (start >= end)
+			continue;
+
+		free_reserved_area(phys_to_virt(start),
+				   phys_to_virt(end), -1, NULL);
+		freed += (end - start);
+	}
+
+	return freed;
+}
+
 static int __init efi_free_boot_services(void)
 {
 	struct efi_freeable_range *range = ranges_to_free;
@@ -545,11 +579,7 @@ static int __init efi_free_boot_services(void)
 		return 0;
 
 	while (range->start) {
-		void *start = phys_to_virt(range->start);
-		void *end = phys_to_virt(range->end);
-
-		free_reserved_area(start, end, -1, NULL);
-		freed += (end - start);
+		freed += efi_free_unreserved_subregions(range->start, range->end);
 		range++;
 	}
 	kfree(ranges_to_free);
