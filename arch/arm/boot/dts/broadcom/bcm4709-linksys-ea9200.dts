@@ -111,6 +111,8 @@
 				reg = <0x0000 0 0 0 0>;
 				ieee80211-freq-limit = <5170000 5250000>;
 				brcm,ccode-map = "JP-JP-78", "US-Q2-86";
+				nvmem-cells = <&et2macaddr 2>;
+				nvmem-cell-names = "mac-address";
 			};
 		};
 
@@ -125,6 +127,8 @@
 				compatible = "brcm,bcm4366-fmac", "brcm,bcm4329-fmac";
 				reg = <0x0000 0 0 0 0>;
 				brcm,ccode-map = "JP-JP-78", "US-Q2-86";
+				nvmem-cells = <&et2macaddr 3>;
+				nvmem-cell-names = "mac-address";
 			};
 		};
 	};
@@ -136,6 +140,8 @@
 		reg = <0x0000 0 0 0 0>;
 		ieee80211-freq-limit = <5735000 5835000>;
 		brcm,ccode-map = "JP-JP-78", "US-Q2-86";
+		nvmem-cells = <&et2macaddr 4>;
+		nvmem-cell-names = "mac-address";
 	};
 };
 
@@ -149,6 +155,11 @@
 
 &usb3 {
 	vcc-gpios = <&chipcommon 14 GPIO_ACTIVE_HIGH>;
+};
+
+&gmac2 {
+	nvmem-cells = <&et2macaddr 0>;
+	nvmem-cell-names = "mac-address";
 };
 
 &srab {
