@@ -48,6 +48,35 @@ static int inv_icm42600_spi_bus_setup(struct inv_icm42600_state *st)
 				  INV_ICM42600_INTF_CONFIG0_UI_SIFS_CFG_I2C_DIS);
 }
 
+static int inv_icm42607_spi_bus_setup(struct inv_icm42600_state *st)
+{
+	unsigned int mask, val;
+	int ret;
+
+	ret = regmap_update_bits(st->map, INV_ICM42607_REG_DEVICE_CONFIG,
+				 INV_ICM42607_DEVICE_CONFIG_SPI_AP_4WIRE,
+				 INV_ICM42607_DEVICE_CONFIG_SPI_AP_4WIRE);
+	if (ret)
+		return ret;
+
+	ret = regmap_update_bits(st->map, INV_ICM42607_REG_INTF_CONFIG1,
+				 INV_ICM42607_INTF_CONFIG1_I3C_DDR_EN |
+				 INV_ICM42607_INTF_CONFIG1_I3C_SDR_EN, 0);
+	if (ret)
+		return ret;
+
+	mask = INV_ICM42607_DRIVE_CONFIG3_SPI_MASK;
+	val = INV_ICM42607_DRIVE_CONFIG3_SPI(INV_ICM42600_SLEW_RATE_INF_2NS);
+	ret = regmap_update_bits(st->map, INV_ICM42607_REG_DRIVE_CONFIG3,
+				 mask, val);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(st->map, INV_ICM42607_REG_INTF_CONFIG0,
+				  INV_ICM42607_INTF_CONFIG0_UI_SIFS_CFG_MASK,
+				  INV_ICM42607_INTF_CONFIG0_UI_SIFS_CFG_I2C_DIS);
+}
+
 static int inv_icm42600_probe(struct spi_device *spi)
 {
 	const void *match;
@@ -59,12 +88,22 @@ static int inv_icm42600_probe(struct spi_device *spi)
 		return -EINVAL;
 	chip = (uintptr_t)match;
 
-	/* use SPI specific regmap */
-	regmap = devm_regmap_init_spi(spi, &inv_icm42600_spi_regmap_config);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
-
-	return inv_icm42600_core_probe(regmap, chip, inv_icm42600_spi_bus_setup);
+	switch (chip) {
+	case INV_CHIP_ICM42607:
+	case INV_CHIP_ICM42607P:
+		regmap = devm_regmap_init_spi(spi, &inv_icm42607_regmap_config);
+		if (IS_ERR(regmap))
+			return PTR_ERR(regmap);
+		return inv_icm42600_core_probe(regmap, chip,
+					       inv_icm42607_spi_bus_setup);
+	default:
+		/* use SPI specific regmap */
+		regmap = devm_regmap_init_spi(spi, &inv_icm42600_spi_regmap_config);
+		if (IS_ERR(regmap))
+			return PTR_ERR(regmap);
+		return inv_icm42600_core_probe(regmap, chip,
+					       inv_icm42600_spi_bus_setup);
+	}
 }
 
 /*
@@ -75,6 +114,8 @@ static const struct spi_device_id inv_icm42600_id[] = {
 	{ "icm42600", INV_CHIP_ICM42600 },
 	{ "icm42602", INV_CHIP_ICM42602 },
 	{ "icm42605", INV_CHIP_ICM42605 },
+	{ "icm42607", INV_CHIP_ICM42607 },
+	{ "icm42607p", INV_CHIP_ICM42607P },
 	{ "icm42686", INV_CHIP_ICM42686 },
 	{ "icm42622", INV_CHIP_ICM42622 },
 	{ "icm42688", INV_CHIP_ICM42688 },
@@ -93,6 +134,12 @@ static const struct of_device_id inv_icm42600_of_matches[] = {
 	}, {
 		.compatible = "invensense,icm42605",
 		.data = (void *)INV_CHIP_ICM42605,
+	}, {
+		.compatible = "invensense,icm42607",
+		.data = (void *)INV_CHIP_ICM42607,
+	}, {
+		.compatible = "invensense,icm42607p",
+		.data = (void *)INV_CHIP_ICM42607P,
 	}, {
 		.compatible = "invensense,icm42686",
 		.data = (void *)INV_CHIP_ICM42686,

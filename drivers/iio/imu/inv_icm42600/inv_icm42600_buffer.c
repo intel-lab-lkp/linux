@@ -116,6 +116,23 @@ void inv_icm42600_buffer_update_fifo_period(struct inv_icm42600_state *st)
 	st->fifo.period = min(period_gyro, period_accel);
 }
 
+void inv_icm42607_buffer_update_fifo_period(struct inv_icm42600_state *st)
+{
+	u32 period_gyro, period_accel;
+
+	if (st->fifo.en & INV_ICM42600_SENSOR_GYRO)
+		period_gyro = inv_icm42607_odr_to_period(st->conf.gyro.odr);
+	else
+		period_gyro = U32_MAX;
+
+	if (st->fifo.en & INV_ICM42600_SENSOR_ACCEL)
+		period_accel = inv_icm42607_odr_to_period(st->conf.accel.odr);
+	else
+		period_accel = U32_MAX;
+
+	st->fifo.period = min(period_gyro, period_accel);
+}
+
 int inv_icm42600_buffer_set_fifo_en(struct inv_icm42600_state *st,
 				    unsigned int fifo_en)
 {
@@ -142,6 +159,31 @@ int inv_icm42600_buffer_set_fifo_en(struct inv_icm42600_state *st,
 
 	st->fifo.en = fifo_en;
 	inv_icm42600_buffer_update_fifo_period(st);
+
+	return 0;
+}
+
+int inv_icm42607_buffer_set_fifo_en(struct inv_icm42600_state *st,
+				    unsigned int fifo_en)
+{
+	unsigned int val;
+	int ret;
+
+	/* update FIFO EN bits for accel and gyro */
+	val = 0;
+	if (fifo_en & INV_ICM42600_SENSOR_GYRO)
+		val |= INV_ICM42607_FIFO_CONFIG1_MODE;
+	if (fifo_en & INV_ICM42600_SENSOR_ACCEL)
+		val |= INV_ICM42607_FIFO_CONFIG1_MODE;
+	if (fifo_en & INV_ICM42600_SENSOR_TEMP)
+		val |= INV_ICM42607_FIFO_CONFIG1_MODE;
+
+	ret = regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1, val);
+	if (ret)
+		return ret;
+
+	st->fifo.en = fifo_en;
+	inv_icm42607_buffer_update_fifo_period(st);
 
 	return 0;
 }
@@ -202,6 +244,7 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 	unsigned int wm_gyro, wm_accel, watermark;
 	u32 period_gyro, period_accel;
 	u32 latency_gyro, latency_accel, latency;
+	u32 fifo_reg, int_reg;
 	bool restore;
 	__le16 raw_wm;
 	int ret;
@@ -249,8 +292,19 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 	/* compute watermark value in bytes */
 	wm_size = watermark * packet_size;
 
+	switch (st->chip) {
+	case INV_CHIP_ICM42607:
+	case INV_CHIP_ICM42607P:
+		fifo_reg = INV_ICM42607_REG_FIFO_CONFIG2;
+		int_reg = INV_ICM42607_REG_INT_SOURCE0;
+		break;
+	default:
+		fifo_reg = INV_ICM42600_REG_FIFO_WATERMARK;
+		int_reg = INV_ICM42600_REG_INT_SOURCE0;
+		break;
+	}
 	/* changing FIFO watermark requires to turn off watermark interrupt */
-	ret = regmap_update_bits_check(st->map, INV_ICM42600_REG_INT_SOURCE0,
+	ret = regmap_update_bits_check(st->map, int_reg,
 				       INV_ICM42600_INT_SOURCE0_FIFO_THS_INT1_EN,
 				       0, &restore);
 	if (ret)
@@ -258,14 +312,14 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 
 	raw_wm = INV_ICM42600_FIFO_WATERMARK_VAL(wm_size);
 	memcpy(st->buffer, &raw_wm, sizeof(raw_wm));
-	ret = regmap_bulk_write(st->map, INV_ICM42600_REG_FIFO_WATERMARK,
+	ret = regmap_bulk_write(st->map, fifo_reg,
 				st->buffer, sizeof(raw_wm));
 	if (ret)
 		return ret;
 
 	/* restore watermark interrupt */
 	if (restore) {
-		ret = regmap_set_bits(st->map, INV_ICM42600_REG_INT_SOURCE0,
+		ret = regmap_set_bits(st->map, int_reg,
 				      INV_ICM42600_INT_SOURCE0_FIFO_THS_INT1_EN);
 		if (ret)
 			return ret;
@@ -333,6 +387,47 @@ static int inv_icm42600_buffer_postenable(struct iio_dev *indio_dev)
 	return 0;
 }
 
+static int inv_icm42607_buffer_postenable(struct iio_dev *indio_dev)
+{
+	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	/* exit if FIFO is already on */
+	if (st->fifo.on) {
+		st->fifo.on++;
+		return 0;
+	}
+
+	/* set FIFO threshold interrupt */
+	ret = regmap_set_bits(st->map, INV_ICM42607_REG_INT_SOURCE0,
+			      INV_ICM42607_INT_SOURCE0_FIFO_THS_INT1_EN);
+	if (ret)
+		return ret;
+
+	/* flush FIFO data */
+	ret = regmap_write(st->map, INV_ICM42607_REG_SIGNAL_PATH_RESET,
+			   INV_ICM42607_SIGNAL_PATH_RESET_FIFO_FLUSH);
+	if (ret)
+		return ret;
+
+	/* set FIFO in streaming mode */
+	ret = regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1,
+			   INV_ICM42607_FIFO_CONFIG1_MODE);
+	if (ret)
+		return ret;
+
+	/* workaround: first read of FIFO count after reset is always 0 */
+	ret = regmap_bulk_read(st->map, INV_ICM42607_REG_FIFO_COUNTH, st->buffer, 2);
+	if (ret)
+		return ret;
+
+	st->fifo.on++;
+
+	return 0;
+}
+
 static int inv_icm42600_buffer_predisable(struct iio_dev *indio_dev)
 {
 	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
@@ -360,6 +455,41 @@ static int inv_icm42600_buffer_predisable(struct iio_dev *indio_dev)
 	/* disable FIFO threshold interrupt */
 	ret = regmap_clear_bits(st->map, INV_ICM42600_REG_INT_SOURCE0,
 				INV_ICM42600_INT_SOURCE0_FIFO_THS_INT1_EN);
+	if (ret)
+		return ret;
+
+	st->fifo.on--;
+
+	return 0;
+}
+
+static int inv_icm42607_buffer_predisable(struct iio_dev *indio_dev)
+{
+	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	if (st->fifo.on > 1) {
+		st->fifo.on--;
+		return 0;
+	}
+
+	/* set FIFO in bypass mode */
+	ret = regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1,
+			   INV_ICM42607_FIFO_CONFIG1_BYPASS);
+	if (ret)
+		return ret;
+
+	/* flush FIFO data */
+	ret = regmap_write(st->map, INV_ICM42607_REG_SIGNAL_PATH_RESET,
+			   INV_ICM42607_SIGNAL_PATH_RESET_FIFO_FLUSH);
+	if (ret)
+		return ret;
+
+	/* disable FIFO threshold interrupt */
+	ret = regmap_clear_bits(st->map, INV_ICM42607_REG_INT_SOURCE0,
+				INV_ICM42607_INT_SOURCE0_FIFO_THS_INT1_EN);
 	if (ret)
 		return ret;
 
@@ -426,11 +556,78 @@ out_unlock:
 	return ret;
 }
 
+static int inv_icm42607_buffer_postdisable(struct iio_dev *indio_dev)
+{
+	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+	struct inv_icm42600_sensor_state *sensor_st = iio_priv(indio_dev);
+	struct inv_sensors_timestamp *ts = &sensor_st->ts;
+	struct device *dev = regmap_get_device(st->map);
+	unsigned int sensor;
+	unsigned int *watermark;
+	struct inv_icm42600_sensor_conf conf = INV_ICM42600_SENSOR_CONF_INIT;
+	unsigned int sleep_temp = 0;
+	unsigned int sleep_sensor = 0;
+	unsigned int sleep;
+	int ret;
+
+	if (indio_dev == st->indio_gyro) {
+		sensor = INV_ICM42600_SENSOR_GYRO;
+		watermark = &st->fifo.watermark.gyro;
+	} else if (indio_dev == st->indio_accel) {
+		sensor = INV_ICM42600_SENSOR_ACCEL;
+		watermark = &st->fifo.watermark.accel;
+	} else {
+		return -EINVAL;
+	}
+
+	guard(mutex)(&st->lock);
+
+	inv_sensors_timestamp_apply_odr(ts, 0, 0, 0);
+
+	ret = inv_icm42607_buffer_set_fifo_en(st, st->fifo.en & ~sensor);
+	if (ret)
+		goto out_unlock;
+
+	*watermark = 0;
+	ret = inv_icm42600_buffer_update_watermark(st);
+	if (ret)
+		goto out_unlock;
+
+	conf.mode = INV_ICM42600_SENSOR_MODE_OFF;
+	if (sensor == INV_ICM42600_SENSOR_GYRO)
+		ret = inv_icm42607_set_gyro_conf(st, &conf, &sleep_sensor);
+	else if (!st->apex.on)
+		ret = inv_icm42607_set_accel_conf(st, &conf, &sleep_sensor);
+	if (ret)
+		goto out_unlock;
+
+	/* if FIFO is off, turn temperature off */
+	if (!st->fifo.on)
+		ret = inv_icm42607_set_temp_conf(st, false, &sleep_temp);
+
+out_unlock:
+	/* sleep maximum required time */
+	sleep = max(sleep_sensor, sleep_temp);
+	if (sleep)
+		msleep(sleep);
+
+	pm_runtime_put_autosuspend(dev);
+
+	return ret;
+}
+
 const struct iio_buffer_setup_ops inv_icm42600_buffer_ops = {
 	.preenable = inv_icm42600_buffer_preenable,
 	.postenable = inv_icm42600_buffer_postenable,
 	.predisable = inv_icm42600_buffer_predisable,
 	.postdisable = inv_icm42600_buffer_postdisable,
+};
+
+const struct iio_buffer_setup_ops inv_icm42607_buffer_ops = {
+	.preenable = inv_icm42600_buffer_preenable,
+	.postenable = inv_icm42607_buffer_postenable,
+	.predisable = inv_icm42607_buffer_predisable,
+	.postdisable = inv_icm42607_buffer_postdisable,
 };
 
 int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
@@ -443,6 +640,7 @@ int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
 	const s8 *temp;
 	unsigned int odr;
 	int ret;
+	u32 fifo_cnt_reg, fifo_data_reg;
 
 	/* reset all samples counters */
 	st->fifo.count = 0;
@@ -456,9 +654,21 @@ int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
 	else
 		max_count = max * inv_icm42600_get_packet_size(st->fifo.en);
 
+
+	switch (st->chip) {
+	case INV_CHIP_ICM42607:
+	case INV_CHIP_ICM42607P:
+		fifo_cnt_reg = INV_ICM42607_REG_FIFO_COUNTH;
+		fifo_data_reg = INV_ICM42607_REG_FIFO_DATA;
+		break;
+	default:
+		fifo_cnt_reg = INV_ICM42600_REG_FIFO_COUNT;
+		fifo_data_reg = INV_ICM42600_REG_FIFO_DATA;
+		break;
+	}
 	/* read FIFO count value */
 	raw_fifo_count = (__be16 *)st->buffer;
-	ret = regmap_bulk_read(st->map, INV_ICM42600_REG_FIFO_COUNT,
+	ret = regmap_bulk_read(st->map, fifo_cnt_reg,
 			       raw_fifo_count, sizeof(*raw_fifo_count));
 	if (ret)
 		return ret;
@@ -471,7 +681,7 @@ int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
 		st->fifo.count = max_count;
 
 	/* read all FIFO data in internal buffer */
-	ret = regmap_noinc_read(st->map, INV_ICM42600_REG_FIFO_DATA,
+	ret = regmap_noinc_read(st->map, fifo_data_reg,
 				st->fifo.data, st->fifo.count);
 	if (ret)
 		return ret;
@@ -591,4 +801,24 @@ int inv_icm42600_buffer_init(struct inv_icm42600_state *st)
 	      INV_ICM42600_FIFO_CONFIG1_WM_GT_TH;
 	return regmap_update_bits(st->map, INV_ICM42600_REG_FIFO_CONFIG1,
 				  GENMASK(6, 5) | GENMASK(3, 0), val);
+}
+
+int inv_icm42607_buffer_init(struct inv_icm42600_state *st)
+{
+	unsigned int val;
+	int ret;
+
+	st->fifo.watermark.eff_gyro = 1;
+	st->fifo.watermark.eff_accel = 1;
+
+	/* Configure FIFO_COUNT format in bytes and big endian */
+	val = INV_ICM42607_INTF_CONFIG0_FIFO_COUNT_ENDIAN;
+	ret = regmap_update_bits(st->map, INV_ICM42607_REG_INTF_CONFIG0,
+				 val, val);
+	if (ret)
+		return ret;
+
+	/* Initialize FIFO in bypass mode */
+	return regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1,
+			    INV_ICM42607_FIFO_CONFIG1_BYPASS);
 }

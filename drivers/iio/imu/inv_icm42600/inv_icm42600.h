@@ -262,7 +262,7 @@ struct inv_icm42600_sensor_state {
 	const int *scales;
 	size_t scales_len;
 	enum inv_icm42600_sensor_mode power_mode;
-	enum inv_icm42600_filter filter;
+	int filter; /* either inv_icm42600_filter or inv_icm42607_filter */
 	struct inv_sensors_timestamp ts;
 };
 
@@ -748,6 +748,7 @@ FIELD_PREP(INV_ICM42607_INTF_CONFIG1_CLKSEL_MASK, 1)
 
 extern const struct regmap_config inv_icm42600_regmap_config;
 extern const struct regmap_config inv_icm42600_spi_regmap_config;
+extern const struct regmap_config inv_icm42607_regmap_config;
 extern const struct dev_pm_ops inv_icm42600_pm_ops;
 
 const struct iio_mount_matrix *
@@ -755,20 +756,32 @@ inv_icm42600_get_mount_matrix(const struct iio_dev *indio_dev,
 			      const struct iio_chan_spec *chan);
 
 u32 inv_icm42600_odr_to_period(enum inv_icm42600_odr odr);
+u32 inv_icm42607_odr_to_period(enum inv_icm42607_odr odr);
 
 int inv_icm42600_set_accel_conf(struct inv_icm42600_state *st,
+				struct inv_icm42600_sensor_conf *conf,
+				unsigned int *sleep_ms);
+int inv_icm42607_set_accel_conf(struct inv_icm42600_state *st,
 				struct inv_icm42600_sensor_conf *conf,
 				unsigned int *sleep_ms);
 
 int inv_icm42600_set_gyro_conf(struct inv_icm42600_state *st,
 			       struct inv_icm42600_sensor_conf *conf,
 			       unsigned int *sleep_ms);
+int inv_icm42607_set_gyro_conf(struct inv_icm42600_state *st,
+			       struct inv_icm42600_sensor_conf *conf,
+			       unsigned int *sleep_ms);
 
 int inv_icm42600_set_temp_conf(struct inv_icm42600_state *st, bool enable,
 			       unsigned int *sleep_ms);
+int inv_icm42607_set_temp_conf(struct inv_icm42600_state *st, bool enable,
+			       unsigned int *sleep_ms);
 
 int inv_icm42600_enable_wom(struct inv_icm42600_state *st);
+int inv_icm42607_enable_wom(struct inv_icm42600_state *st);
+
 int inv_icm42600_disable_wom(struct inv_icm42600_state *st);
+int inv_icm42607_disable_wom(struct inv_icm42600_state *st);
 
 int inv_icm42600_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
 			     unsigned int writeval, unsigned int *readval);
@@ -776,11 +789,17 @@ int inv_icm42600_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
 int inv_icm42600_core_probe(struct regmap *regmap, int chip,
 			    inv_icm42600_bus_setup bus_setup);
 
-int inv_icm42600_gyro_init(struct inv_icm42600_state *st, struct iio_dev *indio_dev);
+int inv_icm42600_gyro_init(struct inv_icm42600_state *st,
+			   struct iio_dev *indio_dev);
+int inv_icm42607_gyro_init(struct inv_icm42600_state *st,
+			   struct iio_dev *indio_dev);
 
 int inv_icm42600_gyro_parse_fifo(struct iio_dev *indio_dev);
 
-int inv_icm42600_accel_init(struct inv_icm42600_state *st, struct iio_dev *indio_dev);
+int inv_icm42600_accel_init(struct inv_icm42600_state *st,
+			    struct iio_dev *indio_dev);
+int inv_icm42607_accel_init(struct inv_icm42600_state *st,
+			    struct iio_dev *indio_dev);
 
 int inv_icm42600_accel_parse_fifo(struct iio_dev *indio_dev);
 

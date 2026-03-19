@@ -79,12 +79,17 @@ ssize_t inv_icm42600_fifo_decode_packet(const void *packet, const void **accel,
 					const void **timestamp, unsigned int *odr);
 
 extern const struct iio_buffer_setup_ops inv_icm42600_buffer_ops;
+extern const struct iio_buffer_setup_ops inv_icm42607_buffer_ops;
 
 int inv_icm42600_buffer_init(struct inv_icm42600_state *st);
+int inv_icm42607_buffer_init(struct inv_icm42600_state *st);
 
 void inv_icm42600_buffer_update_fifo_period(struct inv_icm42600_state *st);
+void inv_icm42607_buffer_update_fifo_period(struct inv_icm42600_state *st);
 
 int inv_icm42600_buffer_set_fifo_en(struct inv_icm42600_state *st,
+				    unsigned int fifo_en);
+int inv_icm42607_buffer_set_fifo_en(struct inv_icm42600_state *st,
 				    unsigned int fifo_en);
 
 int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st);
