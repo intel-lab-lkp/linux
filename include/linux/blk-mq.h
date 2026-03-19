@@ -453,6 +453,16 @@ struct blk_mq_hw_ctx {
 	struct dentry		*debugfs_dir;
 	/** @sched_debugfs_dir:	debugfs directory for the scheduler. */
 	struct dentry		*sched_debugfs_dir;
+	/**
+	 * @wait_on_hw_tag: Cumulative counter incremented each time a submitting
+	 * context is forced to block due to physical hardware driver tag exhaustion.
+	 */
+	atomic_t		wait_on_hw_tag;
+	/**
+	 * @wait_on_sched_tag: Cumulative counter incremented each time a submitting
+	 * context is forced to block due to software scheduler tag exhaustion.
+	 */
+	atomic_t		wait_on_sched_tag;
 #endif
 
 	/**

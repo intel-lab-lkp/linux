@@ -34,6 +34,8 @@ void blk_mq_debugfs_register_sched_hctx(struct request_queue *q,
 void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx);
 
 void blk_mq_debugfs_register_rq_qos(struct request_queue *q);
+void blk_mq_debugfs_inc_wait_tags(struct blk_mq_hw_ctx *hctx,
+				  bool is_sched);
 #else
 static inline void blk_mq_debugfs_register(struct request_queue *q)
 {
@@ -74,6 +76,11 @@ static inline void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hc
 }
 
 static inline void blk_mq_debugfs_register_rq_qos(struct request_queue *q)
+{
+}
+
+static inline void blk_mq_debugfs_inc_wait_tags(struct blk_mq_hw_ctx *hctx,
+						bool is_sched)
 {
 }
 

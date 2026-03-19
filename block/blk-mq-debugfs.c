@@ -484,6 +484,42 @@ static int hctx_dispatch_busy_show(void *data, struct seq_file *m)
 	return 0;
 }
 
+/**
+ * hctx_wait_on_hw_tag_show - display hardware tag starvation count
+ * @data: generic pointer to the associated hardware context (hctx)
+ * @m: seq_file pointer for debugfs output formatting
+ *
+ * Prints the cumulative number of times a submitting context was forced
+ * to block due to the exhaustion of physical hardware driver tags.
+ *
+ * Return: 0 on success.
+ */
+static int hctx_wait_on_hw_tag_show(void *data, struct seq_file *m)
+{
+	struct blk_mq_hw_ctx *hctx = data;
+
+	seq_printf(m, "%d\n", atomic_read(&hctx->wait_on_hw_tag));
+	return 0;
+}
+
+/**
+ * hctx_wait_on_sched_tag_show - display scheduler tag starvation count
+ * @data: generic pointer to the associated hardware context (hctx)
+ * @m: seq_file pointer for debugfs output formatting
+ *
+ * Prints the cumulative number of times a submitting context was forced
+ * to block due to the exhaustion of software scheduler tags.
+ *
+ * Return: 0 on success.
+ */
+static int hctx_wait_on_sched_tag_show(void *data, struct seq_file *m)
+{
+	struct blk_mq_hw_ctx *hctx = data;
+
+	seq_printf(m, "%d\n", atomic_read(&hctx->wait_on_sched_tag));
+	return 0;
+}
+
 #define CTX_RQ_SEQ_OPS(name, type)					\
 static void *ctx_##name##_rq_list_start(struct seq_file *m, loff_t *pos) \
 	__acquires(&ctx->lock)						\
@@ -599,6 +635,8 @@ static const struct blk_mq_debugfs_attr blk_mq_debugfs_hctx_attrs[] = {
 	{"active", 0400, hctx_active_show},
 	{"dispatch_busy", 0400, hctx_dispatch_busy_show},
 	{"type", 0400, hctx_type_show},
+	{"wait_on_hw_tag", 0400, hctx_wait_on_hw_tag_show},
+	{"wait_on_sched_tag", 0400, hctx_wait_on_sched_tag_show},
 	{},
 };
 
@@ -814,4 +852,22 @@ void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx)
 		return;
 	debugfs_remove_recursive(hctx->sched_debugfs_dir);
 	hctx->sched_debugfs_dir = NULL;
+}
+
+/**
+ * blk_mq_debugfs_inc_wait_tags - increment the tag starvation counters
+ * @hctx: hardware context associated with the tag allocation
+ * @is_sched: boolean indicating whether the starved pool is the software scheduler
+ *
+ * Evaluates the exhausted tag pool and increments the appropriate debugfs
+ * starvation counter. This is invoked immediately before the submitting
+ * context is forced into an uninterruptible sleep via io_schedule().
+ */
+void blk_mq_debugfs_inc_wait_tags(struct blk_mq_hw_ctx *hctx,
+				  bool is_sched)
+{
+	if (is_sched)
+		atomic_inc(&hctx->wait_on_sched_tag);
+	else
+		atomic_inc(&hctx->wait_on_hw_tag);
 }
