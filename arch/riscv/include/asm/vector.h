@@ -298,8 +298,9 @@ static inline void __riscv_v_vstate_discard(void)
 static inline void riscv_v_vstate_discard(struct pt_regs *regs)
 {
 	if (riscv_v_vstate_query(regs)) {
-		__riscv_v_vstate_discard();
-		__riscv_v_vstate_dirty(regs);
+		if (!__riscv_v_vstate_check(regs->status, INITIAL))
+			__riscv_v_vstate_discard();
+		riscv_v_vstate_on(regs);
 	}
 }
 
@@ -315,19 +316,17 @@ static inline void riscv_v_vstate_save(struct __riscv_v_ext_state *vstate,
 static inline void riscv_v_vstate_restore(struct __riscv_v_ext_state *vstate,
 					  struct pt_regs *regs)
 {
-	if (riscv_v_vstate_query(regs)) {
+	if (__riscv_v_vstate_check(regs->status, INITIAL))
+		__riscv_v_vstate_discard();
+	else if (__riscv_v_vstate_check(regs->status, CLEAN))
 		__riscv_v_vstate_restore(vstate, vstate->datap);
-		__riscv_v_vstate_clean(regs);
-	}
 }
 
 static inline void riscv_v_vstate_set_restore(struct task_struct *task,
 					      struct pt_regs *regs)
 {
-	if (riscv_v_vstate_query(regs)) {
+	if (riscv_v_vstate_query(regs))
 		set_tsk_thread_flag(task, TIF_RISCV_V_DEFER_RESTORE);
-		riscv_v_vstate_on(regs);
-	}
 }
 
 #ifdef CONFIG_RISCV_ISA_V_PREEMPTIVE
