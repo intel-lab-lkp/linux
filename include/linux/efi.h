@@ -553,8 +553,7 @@ struct efi_unaccepted_memory {
 
 /*
  * Architecture independent structure for describing a memory map for the
- * benefit of efi_memmap_init_early(), and for passing context between
- * efi_memmap_alloc() and efi_memmap_install().
+ * benefit of efi_memmap_init_early().
  */
 struct efi_memory_map_data {
 	phys_addr_t phys_map;
@@ -572,8 +571,6 @@ struct efi_memory_map {
 	unsigned long desc_version;
 	unsigned long desc_size;
 #define EFI_MEMMAP_LATE (1UL << 0)
-#define EFI_MEMMAP_MEMBLOCK (1UL << 1)
-#define EFI_MEMMAP_SLAB (1UL << 2)
 	unsigned long flags;
 };
 

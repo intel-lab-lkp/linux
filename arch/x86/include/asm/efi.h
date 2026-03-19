@@ -398,11 +398,6 @@ static inline void efi_reserve_boot_services(void)
 }
 #endif /* CONFIG_EFI */
 
-extern int __init efi_memmap_alloc(unsigned int num_entries,
-				   struct efi_memory_map_data *data);
-
-extern int __init efi_memmap_install(struct efi_memory_map_data *data);
-
 extern enum efi_secureboot_mode __x86_ima_efi_boot_mode(void);
 
 #define arch_ima_efi_boot_mode	__x86_ima_efi_boot_mode()
