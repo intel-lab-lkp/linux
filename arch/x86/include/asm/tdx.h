@@ -153,7 +153,7 @@ int tdx_guest_keyid_alloc(void);
 u32 tdx_get_nr_guest_keyids(void);
 void tdx_guest_keyid_free(unsigned int keyid);
 
-void tdx_quirk_reset_page(struct page *page);
+void tdx_quirk_reset_page(kvm_pfn_t pfn);
 
 struct tdx_td {
 	/* TD root structure: */
@@ -176,17 +176,6 @@ struct tdx_vp {
 	/* TD vCPU control structure: */
 	struct page **tdcx_pages;
 };
-
-static inline u64 mk_keyed_paddr(u16 hkid, struct page *page)
-{
-	u64 ret;
-
-	ret = page_to_phys(page);
-	/* KeyID bits are just above the physical address bits: */
-	ret |= (u64)hkid << boot_cpu_data.x86_phys_bits;
-
-	return ret;
-}
 
 static inline int pg_level_to_tdx_sept_level(enum pg_level level)
 {
@@ -219,7 +208,7 @@ u64 tdh_mem_track(struct tdx_td *tdr);
 u64 tdh_mem_page_remove(struct tdx_td *td, u64 gpa, u64 level, u64 *ext_err1, u64 *ext_err2);
 u64 tdh_phymem_cache_wb(bool resume);
 u64 tdh_phymem_page_wbinvd_tdr(struct tdx_td *td);
-u64 tdh_phymem_page_wbinvd_hkid(u64 hkid, struct page *page);
+u64 tdh_phymem_page_wbinvd_hkid(u64 hkid, kvm_pfn_t pfn);
 #else
 static inline void tdx_init(void) { }
 static inline u32 tdx_get_nr_guest_keyids(void) { return 0; }
