@@ -2803,7 +2803,8 @@ static void
 set_field_width(struct printf_spec *spec, int width)
 {
 	spec->field_width = width;
-	if (WARN_ONCE(spec->field_width != width, "field width %d too large", width)) {
+	if (WARN_ONCE(spec->field_width > FIELD_WIDTH_MAX ||
+		      spec->field_width < -FIELD_WIDTH_MAX, "field width %d too large", width)) {
 		spec->field_width = clamp(width, -FIELD_WIDTH_MAX, FIELD_WIDTH_MAX);
 	}
 }
@@ -2812,7 +2813,8 @@ static void
 set_precision(struct printf_spec *spec, int prec)
 {
 	spec->precision = prec;
-	if (WARN_ONCE(spec->precision != prec, "precision %d too large", prec)) {
+	if (WARN_ONCE(spec->precision > PRECISION_MAX || spec->precision < 0,
+		      "precision %d too large", prec)) {
 		spec->precision = clamp(prec, 0, PRECISION_MAX);
 	}
 }
