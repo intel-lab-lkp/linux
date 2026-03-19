@@ -655,6 +655,7 @@ struct arm_smmu_cmdq_batch {
 enum arm_smmu_inv_type {
 	INV_TYPE_S1_ASID,
 	INV_TYPE_S2_VMID,
+	INV_TYPE_S2_VMID_VSMMU,
 	INV_TYPE_S2_VMID_S1_CLEAR,
 	INV_TYPE_ATS,
 	INV_TYPE_ATS_FULL,
@@ -676,7 +677,9 @@ struct arm_smmu_inv {
 
 static inline void arm_smmu_inv_assert_iotlb_tag(struct arm_smmu_inv *inv)
 {
-	WARN_ON(inv->type != INV_TYPE_S1_ASID && inv->type != INV_TYPE_S2_VMID);
+	WARN_ON(inv->type != INV_TYPE_S1_ASID &&
+		inv->type != INV_TYPE_S2_VMID &&
+		inv->type != INV_TYPE_S2_VMID_VSMMU);
 }
 
 static inline bool arm_smmu_inv_is_ats(const struct arm_smmu_inv *inv)
@@ -1194,6 +1197,13 @@ struct arm_vsmmu {
 	struct arm_smmu_domain *s2_parent;
 	u16 vmid;
 };
+
+static inline struct arm_vsmmu *to_vsmmu(struct iommu_domain *domain)
+{
+	if (domain->type == IOMMU_DOMAIN_NESTED)
+		return to_smmu_nested_domain(domain)->vsmmu;
+	return NULL;
+}
 
 #if IS_ENABLED(CONFIG_ARM_SMMU_V3_IOMMUFD)
 void *arm_smmu_hw_info(struct device *dev, u32 *length,

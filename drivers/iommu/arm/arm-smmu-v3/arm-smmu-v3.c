@@ -1988,7 +1988,8 @@ void arm_smmu_make_s2_domain_ste(struct arm_smmu_ste *target,
 	u64 vtcr_val;
 	struct arm_smmu_device *smmu = master->smmu;
 
-	WARN_ON(tag->type != INV_TYPE_S2_VMID);
+	WARN_ON(tag->type != INV_TYPE_S2_VMID &&
+		tag->type != INV_TYPE_S2_VMID_VSMMU);
 
 	memset(target, 0, sizeof(*target));
 	target->data[0] = cpu_to_le64(
@@ -2684,6 +2685,7 @@ static void __arm_smmu_domain_inv_range(struct arm_smmu_invs *invs,
 						   granule);
 			break;
 		case INV_TYPE_S2_VMID:
+		case INV_TYPE_S2_VMID_VSMMU:
 			cmd.tlbi.vmid = cur->id;
 			cmd.tlbi.leaf = leaf;
 			arm_smmu_inv_to_cmdq_batch(cur, &cmds, &cmd, iova, size,
@@ -3249,7 +3251,10 @@ int arm_smmu_find_iotlb_tag(struct iommu_domain *domain,
 		tag->type = INV_TYPE_S1_ASID;
 		break;
 	case ARM_SMMU_DOMAIN_S2:
-		tag->type = INV_TYPE_S2_VMID;
+		if (to_vsmmu(domain))
+			tag->type = INV_TYPE_S2_VMID_VSMMU;
+		else
+			tag->type = INV_TYPE_S2_VMID;
 		break;
 	default:
 		return -EINVAL;
@@ -3272,6 +3277,12 @@ static int arm_smmu_alloc_iotlb_tag(struct iommu_domain *domain,
 	ret = arm_smmu_find_iotlb_tag(domain, smmu, tag);
 	if (!ret || ret != -ENOENT)
 		return ret;
+
+	if (tag->type == INV_TYPE_S2_VMID_VSMMU) {
+		/* Use the pre-allocated VMID from vSMMU */
+		tag->id = to_vsmmu(domain)->vmid;
+		return 0;
+	}
 
 	/* FIXME replace with an actual allocation from the bitmap */
 	if (tag->type == INV_TYPE_S1_ASID)
@@ -3316,6 +3327,7 @@ arm_smmu_master_build_inv(struct arm_smmu_master *master,
 		}
 		break;
 	case INV_TYPE_S2_VMID:
+	case INV_TYPE_S2_VMID_VSMMU:
 		cur->size_opcode = CMDQ_OP_TLBI_S2_IPA;
 		cur->nsize_opcode = CMDQ_OP_TLBI_S12_VMALL;
 		break;
@@ -3360,7 +3372,7 @@ arm_smmu_master_build_invs(struct arm_smmu_master *master, bool ats_enabled,
 		return NULL;
 
 	/* All the nested S1 ASIDs have to be flushed when S2 parent changes */
-	if (nesting) {
+	if (tag->type == INV_TYPE_S2_VMID_VSMMU) {
 		if (!arm_smmu_master_build_inv(master,
 					       INV_TYPE_S2_VMID_S1_CLEAR,
 					       tag->id, IOMMU_NO_PASID, 0))
