@@ -518,7 +518,7 @@ mac_get()
 {
 	local if_name=$1
 
-	ip -j link show dev $if_name | jq -r '.[]["address"]'
+	run_on "$if_name" ip -j link show dev "$if_name" | jq -r '.[]["address"]'
 }
 
 kill_process()
