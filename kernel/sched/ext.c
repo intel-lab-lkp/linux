@@ -1382,10 +1382,8 @@ static void dsq_inc_nr(struct scx_dispatch_q *dsq, struct task_struct *p, u64 en
 	 * e.g. SAVE/RESTORE cycles and slice extensions.
 	 */
 	if (enq_flags & SCX_ENQ_IMMED) {
-		if (unlikely(dsq->id != SCX_DSQ_LOCAL)) {
-			WARN_ON_ONCE(!(enq_flags & SCX_ENQ_GDSQ_FALLBACK));
+		if (unlikely(dsq->id != SCX_DSQ_LOCAL))
 			return;
-		}
 		p->scx.flags |= SCX_TASK_IMMED;
 	}
 
@@ -2043,6 +2041,13 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 		 */
 		BUG();
 	case SCX_OPSS_QUEUED:
+		/*
+		 * Invalidate any in-flight dispatches for this task. The
+		 * task is leaving the runqueue, so any dispatch decision
+		 * made while it was queued is stale.
+		 */
+		rq->scx.ops_qseq++;
+
 		/* A queued task must always be in BPF scheduler's custody */
 		WARN_ON_ONCE(!(p->scx.flags & SCX_TASK_IN_CUSTODY));
 		if (atomic_long_try_cmpxchg(&p->scx.ops_state, &opss,
@@ -2390,8 +2395,10 @@ static bool consume_remote_task(struct rq *this_rq,
  * will change. As @p's task_rq is locked, this function doesn't need to use the
  * holding_cpu mechanism.
  *
- * On return, @src_dsq is unlocked and only @p's new task_rq, which is the
- * return value, is locked.
+ * On success, @src_dsq is unlocked and only @p's new task_rq, which is the
+ * return value, is locked. On failure (affinity change invalidated the
+ * move), returns NULL with @src_dsq still locked and task remaining in
+ * @src_dsq.
  */
 static struct rq *move_task_between_dsqs(struct scx_sched *sch,
 					 struct task_struct *p, u64 enq_flags,
@@ -2408,9 +2415,11 @@ static struct rq *move_task_between_dsqs(struct scx_sched *sch,
 		dst_rq = container_of(dst_dsq, struct rq, scx.local_dsq);
 		if (src_rq != dst_rq &&
 		    unlikely(!task_can_run_on_remote_rq(sch, p, dst_rq, true))) {
-			dst_dsq = find_global_dsq(sch, task_cpu(p));
-			dst_rq = src_rq;
-			enq_flags |= SCX_ENQ_GDSQ_FALLBACK;
+			/*
+			 * Affinity changed after dispatch: abort the move,
+			 * task stays on src_dsq.
+			 */
+			return NULL;
 		}
 	} else {
 		/* no need to migrate if destination is a non-local DSQ */
@@ -2537,9 +2546,26 @@ static void dispatch_to_local_dsq(struct scx_sched *sch, struct rq *rq,
 	}
 
 	if (src_rq != dst_rq &&
-	    unlikely(!task_can_run_on_remote_rq(sch, p, dst_rq, true))) {
-		dispatch_enqueue(sch, rq, find_global_dsq(sch, task_cpu(p)), p,
-				 enq_flags | SCX_ENQ_CLEAR_OPSS | SCX_ENQ_GDSQ_FALLBACK);
+	    unlikely(!task_can_run_on_remote_rq(sch, p, dst_rq, false))) {
+		/*
+		 * Affinity changed after dispatch decision and the task
+		 * can't run anymore on the destination rq.
+		 *
+		 * Drop the dispatch, the task will be re-enqueued. Set the
+		 * task back to QUEUED so dequeue (if waiting) can proceed
+		 * using current qseq from the task's rq.
+		 */
+		if (src_rq != rq) {
+			raw_spin_rq_unlock(rq);
+			raw_spin_rq_lock(src_rq);
+		}
+		atomic_long_set_release(&p->scx.ops_state,
+			       SCX_OPSS_QUEUED |
+			       (src_rq->scx.ops_qseq << SCX_OPSS_QSEQ_SHIFT));
+		if (src_rq != rq) {
+			raw_spin_rq_unlock(src_rq);
+			raw_spin_rq_lock(rq);
+		}
 		return;
 	}
 
@@ -8112,7 +8138,12 @@ static bool scx_dsq_move(struct bpf_iter_scx_dsq_kern *kit,
 
 	/* execute move */
 	locked_rq = move_task_between_dsqs(sch, p, enq_flags, src_dsq, dst_dsq);
-	dispatched = true;
+	if (locked_rq) {
+		dispatched = true;
+	} else {
+		raw_spin_unlock(&src_dsq->lock);
+		locked_rq = src_rq;
+	}
 out:
 	if (in_balance) {
 		if (this_rq != locked_rq) {
