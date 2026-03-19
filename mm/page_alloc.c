@@ -4036,7 +4036,7 @@ void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 	va_start(args, fmt);
 	vaf.fmt = fmt;
 	vaf.va = &args;
-	pr_warn("%s: %pV, mode:%#x(%pGg), nodemask=%*pbl",
+	pr_warn("%s: %pV, mode:%#lx(%pGg), nodemask=%*pbl",
 			current->comm, &vaf, gfp_mask, &gfp_mask,
 			nodemask_pr_args(nodemask));
 	va_end(args);
@@ -4504,6 +4504,9 @@ gfp_to_alloc_flags(gfp_t gfp_mask, unsigned int order)
 	 */
 	BUILD_BUG_ON(__GFP_HIGH != (__force gfp_t) ALLOC_MIN_RESERVE);
 	BUILD_BUG_ON(__GFP_KSWAPD_RECLAIM != (__force gfp_t) ALLOC_KSWAPD);
+	/* Alloc flags are unsigned int, gfp_t may be larger. */
+	BUILD_BUG_ON(___GFP_HIGH_BIT >= BITS_PER_TYPE(typeof(alloc_flags)));
+	BUILD_BUG_ON(___GFP_KSWAPD_RECLAIM_BIT >= BITS_PER_TYPE(typeof(alloc_flags)));
 
 	/*
 	 * The caller may dip into page reserves a bit more if the caller

@@ -3949,7 +3949,7 @@ static gfp_t vmalloc_fix_flags(gfp_t flags)
 	gfp_t invalid_mask = flags & ~GFP_VMALLOC_SUPPORTED;
 
 	flags &= GFP_VMALLOC_SUPPORTED;
-	WARN_ONCE(1, "Unexpected gfp: %#x (%pGg). Fixing up to gfp: %#x (%pGg). Fix your code!\n",
+	WARN_ONCE(1, "Unexpected gfp: %#lx (%pGg). Fixing up to gfp: %#lx (%pGg). Fix your code!\n",
 		  invalid_mask, &invalid_mask, flags, &flags);
 	return flags;
 }

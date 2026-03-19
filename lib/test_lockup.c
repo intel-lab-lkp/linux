@@ -130,7 +130,7 @@ module_param(alloc_pages_order, uint, 0400);
 MODULE_PARM_DESC(alloc_pages_order, "page order to allocate");
 
 static gfp_t alloc_pages_gfp = GFP_KERNEL;
-module_param_unsafe(alloc_pages_gfp, uint, 0400);
+module_param_unsafe(alloc_pages_gfp, unsigned long, 0400);
 MODULE_PARM_DESC(alloc_pages_gfp, "allocate pages with this gfp_mask, default GFP_KERNEL");
 
 static bool alloc_pages_atomic;
