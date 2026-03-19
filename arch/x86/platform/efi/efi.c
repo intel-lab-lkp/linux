@@ -266,36 +266,32 @@ static bool __init efi_memmap_entry_valid(const efi_memory_desc_t *md, int i)
 	return false;
 }
 
-static void __init efi_clean_memmap(void)
+static int __init
+efi_memmap_filter_entries(bool (*callback)(const efi_memory_desc_t *, int))
 {
 	efi_memory_desc_t *out = efi.memmap.map;
 	const efi_memory_desc_t *in = out;
-	const efi_memory_desc_t *end = efi.memmap.map_end;
-	int i, n_removal;
+	int i = 0, filtered = 0;
 
-	for (i = n_removal = 0; in < end; i++) {
-		if (efi_memmap_entry_valid(in, i)) {
+	for_each_efi_memory_desc(in) {
+		if (callback(in, i++)) {
 			if (out != in)
 				memcpy(out, in, efi.memmap.desc_size);
 			out = (void *)out + efi.memmap.desc_size;
 		} else {
-			n_removal++;
+			filtered++;
 		}
-		in = (void *)in + efi.memmap.desc_size;
 	}
+	efi.memmap.num_valid_entries -= filtered;
+	return filtered;
+}
 
-	if (n_removal > 0) {
-		struct efi_memory_map_data data = {
-			.phys_map	= efi.memmap.phys_map,
-			.desc_version	= efi.memmap.desc_version,
-			.desc_size	= efi.memmap.desc_size,
-			.size		= efi.memmap.desc_size * (efi.memmap.num_valid_entries - n_removal),
-			.flags		= 0,
-		};
+static void __init efi_clean_memmap(void)
+{
+	int n_removal = efi_memmap_filter_entries(efi_memmap_entry_valid);
 
+	if (n_removal > 0)
 		pr_warn("Removing %d invalid memory map entries.\n", n_removal);
-		efi_memmap_install(&data);
-	}
 }
 
 /*
