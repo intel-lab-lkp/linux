@@ -50,7 +50,6 @@ struct f_usb9pfs {
 	struct usb_ep *out_ep;
 
 	struct completion send;
-	struct completion received;
 
 	unsigned int buflen;
 
@@ -180,7 +179,7 @@ static void usb9pfs_tx_complete(struct usb_ep *ep, struct usb_request *req)
 unlock_complete:
 	spin_unlock_irqrestore(&usb9pfs->lock, flags);
 
-	complete(&usb9pfs->send);
+	usb9pfs_queue_rx(usb9pfs, usb9pfs->out_req, GFP_ATOMIC);
 }
 
 static struct p9_req_t *usb9pfs_rx_header(struct f_usb9pfs *usb9pfs,
@@ -280,7 +279,7 @@ static void usb9pfs_rx_complete(struct usb_ep *ep, struct usb_request *req)
 out_unlock:
 	spin_unlock_irqrestore(&usb9pfs->lock, flags);
 
-	complete(&usb9pfs->received);
+	complete(&usb9pfs->send);
 }
 
 static void disable_ep(struct usb_composite_dev *cdev, struct usb_ep *ep)
@@ -442,7 +441,7 @@ static int p9_usbg_create(struct p9_client *client, struct fs_context *fc)
 
 	client->trans_mod->maxsize = usb9pfs->buflen;
 
-	complete(&usb9pfs->received);
+	complete(&usb9pfs->send);
 
 	return 0;
 }
@@ -508,7 +507,7 @@ static int p9_usbg_request(struct p9_client *client, struct p9_req_t *p9_req)
 	if (client->status != Connected)
 		return -EBUSY;
 
-	ret = wait_for_completion_killable(&usb9pfs->received);
+	ret = wait_for_completion_killable(&usb9pfs->send);
 	if (ret)
 		return ret;
 
@@ -516,11 +515,8 @@ static int p9_usbg_request(struct p9_client *client, struct p9_req_t *p9_req)
 	if (ret)
 		return ret;
 
-	ret = wait_for_completion_killable(&usb9pfs->send);
-	if (ret)
-		return ret;
+	return 0;
 
-	return usb9pfs_queue_rx(usb9pfs, usb9pfs->out_req, GFP_ATOMIC);
 }
 
 static int p9_usbg_cancel(struct p9_client *client, struct p9_req_t *req)
@@ -802,7 +798,6 @@ static struct usb_function *usb9pfs_alloc(struct usb_function_instance *fi)
 	spin_lock_init(&usb9pfs->lock);
 
 	init_completion(&usb9pfs->send);
-	init_completion(&usb9pfs->received);
 
 	usb9pfs_opts = container_of(fi, struct f_usb9pfs_opts, func_inst);
 
