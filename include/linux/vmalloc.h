@@ -301,11 +301,13 @@ static inline void set_vm_flush_reset_perms(void *addr)
 	if (vm)
 		vm->flags |= VM_FLUSH_RESET_PERMS;
 }
+void __init vmalloc_init_late(void);
 #else  /* !CONFIG_MMU */
 #define VMALLOC_TOTAL 0UL
 
 static inline unsigned long vmalloc_nr_pages(void) { return 0; }
 static inline void set_vm_flush_reset_perms(void *addr) {}
+static inline void __init vmalloc_init_late(void) {}
 #endif /* CONFIG_MMU */
 
 #if defined(CONFIG_MMU) && defined(CONFIG_SMP)

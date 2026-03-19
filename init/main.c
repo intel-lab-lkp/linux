@@ -1099,6 +1099,7 @@ void start_kernel(void)
 	 * workqueue_init().
 	 */
 	workqueue_init_early();
+	vmalloc_init_late();
 
 	rcu_init();
 	kvfree_rcu_init();

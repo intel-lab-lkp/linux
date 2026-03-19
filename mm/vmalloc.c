@@ -1067,6 +1067,7 @@ static void reclaim_and_purge_vmap_areas(void);
 static BLOCKING_NOTIFIER_HEAD(vmap_notify_list);
 static void drain_vmap_area_work(struct work_struct *work);
 static DECLARE_WORK(drain_vmap_work, drain_vmap_area_work);
+static struct workqueue_struct *vmap_drain_wq;
 
 static __cacheline_aligned_in_smp atomic_long_t nr_vmalloc_pages;
 static __cacheline_aligned_in_smp atomic_long_t vmap_lazy_nr;
@@ -2471,7 +2472,7 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 
 	/* After this point, we may free va at any time */
 	if (unlikely(nr_lazy > nr_lazy_max))
-		schedule_work(&drain_vmap_work);
+		queue_work(vmap_drain_wq, &drain_vmap_work);
 }
 
 /*
@@ -5420,6 +5421,17 @@ vmap_node_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 		decay_va_pool_node(vn, true);
 
 	return SHRINK_STOP;
+}
+
+void __init vmalloc_init_late(void)
+{
+	vmap_drain_wq = alloc_workqueue("vmap_drain",
+						WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
+	if (!vmap_drain_wq) {
+		pr_warn("vmap_drain_wq creation failed, using system_unbound_wq\n");
+		vmap_drain_wq = system_unbound_wq;
+	}
+
 }
 
 void __init vmalloc_init(void)
