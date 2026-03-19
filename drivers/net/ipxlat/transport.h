@@ -100,4 +100,9 @@ int ipxlat_64_inner_tcp(struct sk_buff *skb, const struct ipv6hdr *in6,
 int ipxlat_64_inner_udp(struct sk_buff *skb, const struct ipv6hdr *in6,
 			const struct iphdr *out4, struct udphdr *udp_new);
 
+/* temporary ICMP stubs until ICMP translation support is introduced */
+int ipxlat_46_icmp(struct ipxlat_priv *ipxlat, struct sk_buff *skb);
+int ipxlat_64_icmp(struct ipxlat_priv *ipxlat, struct sk_buff *skb,
+		   const struct ipv6hdr *outer6);
+
 #endif /* _NET_IPXLAT_TRANSPORT_H_ */

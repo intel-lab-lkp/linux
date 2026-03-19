@@ -7,3 +7,7 @@ obj-$(CONFIG_IPXLAT) := ipxlat.o
 ipxlat-objs += main.o
 ipxlat-objs += address.o
 ipxlat-objs += packet.o
+ipxlat-objs += transport.o
+ipxlat-objs += dispatch.o
+ipxlat-objs += translate_46.o
+ipxlat-objs += translate_64.o

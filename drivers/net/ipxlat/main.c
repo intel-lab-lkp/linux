@@ -15,6 +15,7 @@
 
 #include <net/ip.h>
 
+#include "dispatch.h"
 #include "ipxlpriv.h"
 #include "main.h"
 
@@ -56,8 +57,9 @@ static void ipxlat_dev_uninit(struct net_device *dev)
 
 static int ipxlat_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	dev_dstats_tx_dropped(dev);
-	kfree_skb(skb);
+	struct ipxlat_priv *ipxlat = netdev_priv(dev);
+
+	ipxlat_process_skb(ipxlat, skb, true);
 	return NETDEV_TX_OK;
 }
 
