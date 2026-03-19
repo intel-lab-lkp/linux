@@ -546,7 +546,7 @@ static void arm_smmu_test_make_sva_cd(struct arm_smmu_cd *cd, unsigned int asid)
 		.smmu = &smmu,
 	};
 
-	arm_smmu_make_sva_cd(cd, &master, &sva_mm, asid);
+	__arm_smmu_make_sva_cd(cd, &master, &sva_mm, asid);
 }
 
 static void arm_smmu_test_make_sva_release_cd(struct arm_smmu_cd *cd,
@@ -556,7 +556,7 @@ static void arm_smmu_test_make_sva_release_cd(struct arm_smmu_cd *cd,
 		.smmu = &smmu,
 	};
 
-	arm_smmu_make_sva_cd(cd, &master, NULL, asid);
+	__arm_smmu_make_sva_cd(cd, &master, NULL, asid);
 }
 
 static void arm_smmu_v3_write_ste_test_s1_to_s2_stall(struct kunit *test)

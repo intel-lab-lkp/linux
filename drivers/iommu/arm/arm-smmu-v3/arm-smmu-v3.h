@@ -1019,9 +1019,9 @@ void arm_smmu_make_bypass_ste(struct arm_smmu_device *smmu,
 void arm_smmu_make_cdtable_ste(struct arm_smmu_ste *target,
 			       struct arm_smmu_master *master, bool ats_enabled,
 			       unsigned int s1dss);
-void arm_smmu_make_sva_cd(struct arm_smmu_cd *target,
-			  struct arm_smmu_master *master, struct mm_struct *mm,
-			  u16 asid);
+void __arm_smmu_make_sva_cd(struct arm_smmu_cd *target,
+			    struct arm_smmu_master *master,
+			    struct mm_struct *mm, u16 asid);
 
 struct arm_smmu_invs *arm_smmu_invs_merge(struct arm_smmu_invs *invs,
 					  struct arm_smmu_invs *to_merge);
