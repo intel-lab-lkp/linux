@@ -1383,7 +1383,7 @@ __init int p4_pmu_init(void)
 	memcpy(hw_cache_event_ids, p4_hw_cache_event_ids,
 		sizeof(hw_cache_event_ids));
 
-	pr_cont("Netburst events, ");
+	pr_cont("Netburst events,  (misc_enable: %08x:%08x), ", high, low);
 
 	x86_pmu = p4_pmu;
 
