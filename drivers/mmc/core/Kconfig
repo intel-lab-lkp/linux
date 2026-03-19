@@ -23,6 +23,18 @@ config PWRSEQ_SD8787
 	  This driver can also be built as a module. If so, the module
 	  will be called pwrseq_sd8787.
 
+config MMC_PSTORE
+	tristate "MMC pstore backend support"
+	depends on MMC_BLOCK
+	select PSTORE_BLK
+	help
+	  This option enables MMC devices to be used as pstore backends.
+	  This allows kernel crash logs and other pstore data to be stored
+	  on MMC/SD storage devices for post-mortem analysis.
+
+	  If you want to store kernel crash logs on MMC devices, say Y.
+
+
 config PWRSEQ_SIMPLE
 	tristate "Simple HW reset support for MMC"
 	default y

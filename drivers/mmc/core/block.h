@@ -19,6 +19,20 @@ void mmc_blk_mq_complete_work(struct work_struct *work);
 
 /* MMC block device helper for mmcpstore */
 struct mmc_card;
+struct gendisk;
 struct mmc_card *mmc_blk_get_card_by_name(const char *device_name);
+
+/*
+ * Builtin mmcpstore: called directly from mmc_blk_probe/remove.
+ * Module mmcpstore: stubs — module uses mmc_blk_get_card_by_name() instead.
+ */
+#if IS_BUILTIN(CONFIG_MMC_PSTORE)
+void mmcpstore_card_add(struct mmc_card *card, struct gendisk *disk);
+void mmcpstore_card_remove(struct mmc_card *card);
+#else
+static inline void mmcpstore_card_add(struct mmc_card *card,
+				      struct gendisk *disk) {}
+static inline void mmcpstore_card_remove(struct mmc_card *card) {}
+#endif
 
 #endif
