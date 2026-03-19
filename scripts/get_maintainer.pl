@@ -48,6 +48,7 @@ my $email_remove_duplicates = 1;
 my $email_use_mailmap = 1;
 my $output_multiline = 1;
 my $output_separator = ", ";
+my $output_cc = 0;
 my $output_roles = 0;
 my $output_rolestats = 1;
 my $output_substatus = undef;
@@ -265,6 +266,7 @@ if (!GetOptions(
 		'moderated!' => \$email_moderated_list,
 		's!' => \$email_subscriber_list,
 		'multiline!' => \$output_multiline,
+		'cc!' => \$output_cc,
 		'roles!' => \$output_roles,
 		'rolestats!' => \$output_rolestats,
 		'separator=s' => \$output_separator,
@@ -318,6 +320,15 @@ $output_roles = 1 if ($output_rolestats);
 
 if (!defined $output_substatus) {
     $output_substatus = $email && $output_roles && -t STDOUT;
+}
+
+if ($output_cc) {
+    $email_usename = 0;
+    $output_multiline = 0;
+    $output_separator = ",";
+    $output_rolestats = 0;
+    $output_roles = 0;
+    $output_substatus = 0;
 }
 
 if ($sections || $letters ne "") {
@@ -1096,6 +1107,7 @@ MAINTAINER field selection options:
   --bug => print bug reporting info if any
 
 Output type options:
+  --cc => print comma separated list of all emails
   --separator [, ] => separator for multiple entries on 1 line
     using --separator also sets --nomultiline if --separator is not [, ]
   --multiline => print 1 entry per line
