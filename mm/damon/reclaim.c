@@ -170,8 +170,8 @@ static struct damos *damon_reclaim_new_scheme(void)
 		.min_nr_accesses = 0,
 		.max_nr_accesses = 0,
 		/* for min_age or more micro-seconds */
-		.min_age_region = min_age /
-			damon_reclaim_mon_attrs.aggr_interval,
+		.min_age_region = min_t(unsigned long, min_age /
+			damon_reclaim_mon_attrs.aggr_interval, UINT_MAX),
 		.max_age_region = UINT_MAX,
 	};
 
