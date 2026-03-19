@@ -52,10 +52,11 @@ struct gpio_mockup_line_status {
 
 struct gpio_mockup_chip {
 	struct gpio_chip gc;
-	struct gpio_mockup_line_status *lines;
 	struct irq_domain *irq_sim_domain;
 	struct dentry *dbg_dir;
 	struct mutex lock;
+	int nr_lines;
+	struct gpio_mockup_line_status lines[] __counted_by(nr_lines);
 };
 
 struct gpio_mockup_dbgfs_private {
@@ -436,15 +437,18 @@ static int gpio_mockup_probe(struct platform_device *pdev)
 	if (rv)
 		name = dev_name(dev);
 
-	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
+	chip = devm_kzalloc(dev, struct_size(chip, lines, ngpio), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 
-	mutex_init(&chip->lock);
+	chip->nr_lines = ngpio;
 
 	gc = &chip->gc;
-	gc->base = base;
 	gc->ngpio = ngpio;
+	gc->base = base;
+
+	mutex_init(&chip->lock);
+
 	gc->label = name;
 	gc->owner = THIS_MODULE;
 	gc->parent = dev;
@@ -459,11 +463,6 @@ static int gpio_mockup_probe(struct platform_device *pdev)
 	gc->to_irq = gpio_mockup_to_irq;
 	gc->request = gpio_mockup_request;
 	gc->free = gpio_mockup_free;
-
-	chip->lines = devm_kcalloc(dev, gc->ngpio,
-				   sizeof(*chip->lines), GFP_KERNEL);
-	if (!chip->lines)
-		return -ENOMEM;
 
 	for (i = 0; i < gc->ngpio; i++)
 		chip->lines[i].dir = GPIO_LINE_DIRECTION_IN;
