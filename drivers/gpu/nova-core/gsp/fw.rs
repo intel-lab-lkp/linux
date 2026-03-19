@@ -892,7 +892,7 @@ impl MessageQueueInitArguments {
     /// Creates a new init arguments structure for `cmdq`.
     fn new(cmdq: &Cmdq) -> Self {
         Self(bindings::MESSAGE_QUEUE_INIT_ARGUMENTS {
-            sharedMemPhysAddr: cmdq.dma_handle(),
+            sharedMemPhysAddr: cmdq.dma_handle,
             pageTableEntryCount: num::usize_into_u32::<{ Cmdq::NUM_PTES }>(),
             cmdQueueOffset: num::usize_as_u64(Cmdq::CMDQ_OFFSET),
             statQueueOffset: num::usize_as_u64(Cmdq::STATQ_OFFSET),
