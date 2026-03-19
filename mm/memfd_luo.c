@@ -412,6 +412,7 @@ static int memfd_luo_retrieve_folios(struct file *file,
 	struct folio *folio;
 	int err = -EIO;
 	long i;
+	u64 nr_added = 0;
 
 	for (i = 0; i < nr_folios; i++) {
 		const struct memfd_luo_folio_ser *pfolio = &folios_ser[i];
@@ -463,11 +464,14 @@ static int memfd_luo_retrieve_folios(struct file *file,
 			goto unlock_folio;
 		}
 
-		shmem_recalc_inode(inode, 1, 0);
+		nr_added++;
 		folio_add_lru(folio);
 		folio_unlock(folio);
 		folio_put(folio);
 	}
+
+	if (nr_added)
+		shmem_recalc_inode(inode, nr_added, 0);
 
 	return 0;
 
@@ -486,6 +490,9 @@ put_folios:
 		if (folio)
 			folio_put(folio);
 	}
+
+	if (nr_added)
+		shmem_recalc_inode(inode, nr_added, 0);
 
 	return err;
 }
