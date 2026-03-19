@@ -498,27 +498,6 @@ void __init efi_init(void)
 		efi_print_memmap();
 }
 
-static void *realloc_pages(void *old_memmap, int old_shift)
-{
-	void *ret;
-
-	ret = (void *)__get_free_pages(GFP_KERNEL, old_shift + 1);
-	if (!ret)
-		goto out;
-
-	/*
-	 * A first-time allocation doesn't have anything to copy.
-	 */
-	if (!old_memmap)
-		return ret;
-
-	memcpy(ret, old_memmap, PAGE_SIZE << old_shift);
-
-out:
-	free_pages((unsigned long)old_memmap, old_shift);
-	return ret;
-}
-
 /*
  * Iterate the EFI memory map in reverse order because the regions
  * will be mapped top-down. The end result is the same as if we had
@@ -586,7 +565,7 @@ static void *efi_map_next_entry(void *entry)
 	return entry;
 }
 
-static bool should_map_region(efi_memory_desc_t *md)
+static bool should_map_region(const efi_memory_desc_t *md, int unused)
 {
 	/*
 	 * Runtime regions always require runtime mappings (obviously).
@@ -639,40 +618,14 @@ static bool should_map_region(efi_memory_desc_t *md)
  * Map the efi memory ranges of the runtime services and update new_mmap with
  * virtual addresses.
  */
-static void * __init efi_map_regions(int *count, int *pg_shift)
+static void __init efi_map_regions(void)
 {
-	void *p, *new_memmap = NULL;
-	unsigned long left = 0;
-	unsigned long desc_size;
 	efi_memory_desc_t *md;
 
-	desc_size = efi.memmap.desc_size;
+	efi_memmap_filter_entries(should_map_region);
 
-	p = NULL;
-	while ((p = efi_map_next_entry(p))) {
-		md = p;
-
-		if (!should_map_region(md))
-			continue;
-
+	while ((md = efi_map_next_entry(md)))
 		efi_map_region(md);
-
-		if (left < desc_size) {
-			new_memmap = realloc_pages(new_memmap, *pg_shift);
-			if (!new_memmap)
-				return NULL;
-
-			left += PAGE_SIZE << *pg_shift;
-			(*pg_shift)++;
-		}
-
-		memcpy(new_memmap + (*count * desc_size), md, desc_size);
-
-		left -= desc_size;
-		(*count)++;
-	}
-
-	return new_memmap;
 }
 
 static void __init kexec_enter_virtual_mode(void)
@@ -749,24 +702,9 @@ static void __init kexec_enter_virtual_mode(void)
  */
 static void __init __efi_enter_virtual_mode(void)
 {
-	int count = 0, pg_shift = 0;
-	void *new_memmap = NULL;
 	efi_status_t status;
+	unsigned long size;
 	unsigned long pa;
-
-	if (efi_alloc_page_tables()) {
-		pr_err("Failed to allocate EFI page tables\n");
-		goto err;
-	}
-
-	efi_merge_regions();
-	new_memmap = efi_map_regions(&count, &pg_shift);
-	if (!new_memmap) {
-		pr_err("Error reallocating memory, EFI runtime non-functional!\n");
-		goto err;
-	}
-
-	pa = __pa(new_memmap);
 
 	/*
 	 * Unregister the early EFI memmap from efi_init() and install
@@ -775,22 +713,33 @@ static void __init __efi_enter_virtual_mode(void)
 	 */
 	efi_memmap_unmap();
 
-	if (efi_memmap_init_late(pa, efi.memmap.desc_size * count)) {
+	if (efi_alloc_page_tables()) {
+		pr_err("Failed to allocate EFI page tables\n");
+		goto err;
+	}
+
+	size = efi.memmap.desc_size * efi.memmap.num_valid_entries;
+	if (efi_memmap_init_late(efi.memmap.phys_map, size)) {
 		pr_err("Failed to remap late EFI memory map\n");
 		goto err;
 	}
+
+	efi_merge_regions();
+	efi_map_regions();
 
 	if (efi_enabled(EFI_DBG)) {
 		pr_info("EFI runtime memory map:\n");
 		efi_print_memmap();
 	}
 
-	if (efi_setup_page_tables(pa, 1 << pg_shift))
+	if (efi_setup_page_tables(efi.memmap.phys_map,
+				  DIV_ROUND_UP(size, PAGE_SIZE)))
 		goto err;
 
 	efi_sync_low_kernel_mappings();
 
-	status = efi_set_virtual_address_map(efi.memmap.desc_size * count,
+	pa = efi.memmap.phys_map;
+	status = efi_set_virtual_address_map(size,
 					     efi.memmap.desc_size,
 					     efi.memmap.desc_version,
 					     (efi_memory_desc_t *)pa,
