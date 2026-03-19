@@ -35,13 +35,21 @@ int mt7925e_mcu_init(struct mt792x_dev *dev)
 
 	dev->mt76.mcu_ops = &mt7925_mcu_ops;
 
-	err = mt792xe_mcu_fw_pmctrl(dev);
-	if (err)
-		return err;
+	if (is_mt7927(&dev->mt76)) {
+		/* MT7927: CLR_OWN was already done in mt7927_dma_init().
+		 * The ROM re-initializes WFDMA on every CLR_OWN, wiping
+		 * ring and prefetch config. Skip SET_OWN/CLR_OWN here
+		 * to preserve DMA state.
+		 */
+	} else {
+		err = mt792xe_mcu_fw_pmctrl(dev);
+		if (err)
+			return err;
 
-	err = __mt792xe_mcu_drv_pmctrl(dev);
-	if (err)
-		return err;
+		err = __mt792xe_mcu_drv_pmctrl(dev);
+		if (err)
+			return err;
+	}
 
 	mt76_rmw_field(dev, MT_PCIE_MAC_PM, MT_PCIE_MAC_PM_L0S_DIS, 1);
 

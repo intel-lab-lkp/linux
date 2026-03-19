@@ -72,6 +72,15 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
 	const struct mt792x_irq_map *irq_map = dev->irq_map;
 	int i, err;
 
+	/* MT7927: CLR_OWN and WPDMA reset destroy DMA ring configuration.
+	 * A full reset requires re-running mt7927_dma_init() which is not
+	 * yet implemented in the recovery path.
+	 */
+	if (is_mt7927(&dev->mt76)) {
+		dev_warn(dev->mt76.dev, "MT7927 mac_reset not supported, reload module to recover\n");
+		return -EOPNOTSUPP;
+	}
+
 	mt792xe_mcu_drv_pmctrl(dev);
 
 	mt76_connac_free_pending_tx_skbs(&dev->pm, NULL);
