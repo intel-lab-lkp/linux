@@ -1289,23 +1289,21 @@ int devfreq_add_governor(struct devfreq_governor *governor)
 		int ret = 0;
 		struct device *dev = devfreq->dev.parent;
 
-		if (!strncmp(devfreq->governor->name, governor->name,
+		if (devfreq->governor && !strncmp(devfreq->governor->name, governor->name,
 			     DEVFREQ_NAME_LEN)) {
 			/* The following should never occur */
-			if (devfreq->governor) {
+			dev_warn(dev,
+				 "%s: Governor %s already present\n",
+				 __func__, devfreq->governor->name);
+			ret = devfreq->governor->event_handler(devfreq,
+						DEVFREQ_GOV_STOP, NULL);
+			if (ret) {
 				dev_warn(dev,
-					 "%s: Governor %s already present\n",
-					 __func__, devfreq->governor->name);
-				ret = devfreq->governor->event_handler(devfreq,
-							DEVFREQ_GOV_STOP, NULL);
-				if (ret) {
-					dev_warn(dev,
-						 "%s: Governor %s stop = %d\n",
-						 __func__,
-						 devfreq->governor->name, ret);
-				}
-				/* Fall through */
+					 "%s: Governor %s stop = %d\n",
+					 __func__,
+					 devfreq->governor->name, ret);
 			}
+		} else if (!devfreq->governor) {
 			devfreq->governor = governor;
 			ret = devfreq->governor->event_handler(devfreq,
 						DEVFREQ_GOV_START, NULL);
