@@ -96,7 +96,7 @@ static int __init arm_enable_runtime_services(void)
 
 	efi_memmap_unmap();
 
-	mapsize = efi.memmap.desc_size * efi.memmap.nr_map;
+	mapsize = efi.memmap.desc_size * efi.memmap.num_valid_entries;
 
 	if (efi_memmap_init_late(efi.memmap.phys_map, mapsize)) {
 		pr_err("Failed to remap EFI memory map\n");

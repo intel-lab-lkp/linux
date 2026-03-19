@@ -138,7 +138,7 @@ add_sysfs_runtime_map_entry(struct kobject *kobj, int nr,
 
 int efi_get_runtime_map_size(void)
 {
-	return efi.memmap.nr_map * efi.memmap.desc_size;
+	return efi.memmap.num_valid_entries * efi.memmap.desc_size;
 }
 
 int efi_get_runtime_map_desc_size(void)
@@ -166,7 +166,7 @@ static int __init efi_runtime_map_init(void)
 	if (!efi_enabled(EFI_MEMMAP) || !efi_kobj)
 		return 0;
 
-	map_entries = kzalloc_objs(entry, efi.memmap.nr_map);
+	map_entries = kzalloc_objs(entry, efi.memmap.num_valid_entries);
 	if (!map_entries) {
 		ret = -ENOMEM;
 		goto out;

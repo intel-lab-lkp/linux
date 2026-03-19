@@ -49,7 +49,7 @@ void __init efi_memattr_init(void)
 	 * just be ignored altogether.
 	 */
 	size = tbl->num_entries * tbl->desc_size;
-	if (size > 3 * efi.memmap.nr_map * efi.memmap.desc_size) {
+	if (size > 3 * efi.memmap.num_valid_entries * efi.memmap.desc_size) {
 		pr_warn(FW_BUG "Corrupted EFI Memory Attributes Table detected! (version == %u, desc_size == %u, num_entries == %u)\n",
 			tbl->version, tbl->desc_size, tbl->num_entries);
 		goto unmap;

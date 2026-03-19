@@ -93,7 +93,7 @@ int __init efi_memmap_alloc(unsigned int num_entries,
  */
 int __init efi_memmap_install(struct efi_memory_map_data *data)
 {
-	unsigned long size = efi.memmap.desc_size * efi.memmap.nr_map;
+	unsigned long size = efi.memmap.map_end - efi.memmap.map;
 	unsigned long flags = efi.memmap.flags;
 	u64 phys = efi.memmap.phys_map;
 	int ret;

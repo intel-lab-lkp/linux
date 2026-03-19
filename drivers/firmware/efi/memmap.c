@@ -49,7 +49,7 @@ int __init __efi_memmap_init(struct efi_memory_map_data *data)
 	}
 
 	map.phys_map = data->phys_map;
-	map.nr_map = data->size / data->desc_size;
+	map.num_valid_entries = data->size / data->desc_size;
 	map.map_end = map.map + data->size;
 
 	map.desc_version = data->desc_version;
@@ -87,10 +87,8 @@ void __init efi_memmap_unmap(void)
 		return;
 
 	if (!(efi.memmap.flags & EFI_MEMMAP_LATE)) {
-		unsigned long size;
-
-		size = efi.memmap.desc_size * efi.memmap.nr_map;
-		early_memunmap(efi.memmap.map, size);
+		early_memunmap(efi.memmap.map,
+			       efi.memmap.map_end - efi.memmap.map);
 	} else {
 		memunmap(efi.memmap.map);
 	}

@@ -222,7 +222,7 @@ int __init efi_memblock_x86_reserve_range(void)
 	     "Unexpected EFI_MEMORY_DESCRIPTOR version %ld",
 	     efi.memmap.desc_version);
 
-	memblock_reserve(pmap, efi.memmap.nr_map * efi.memmap.desc_size);
+	memblock_reserve(pmap, efi.memmap.num_valid_entries * efi.memmap.desc_size);
 	set_bit(EFI_PRESERVE_BS_REGIONS, &efi.flags);
 
 	return 0;
@@ -289,7 +289,7 @@ static void __init efi_clean_memmap(void)
 			.phys_map	= efi.memmap.phys_map,
 			.desc_version	= efi.memmap.desc_version,
 			.desc_size	= efi.memmap.desc_size,
-			.size		= efi.memmap.desc_size * (efi.memmap.nr_map - n_removal),
+			.size		= efi.memmap.desc_size * (efi.memmap.num_valid_entries - n_removal),
 			.flags		= 0,
 		};
 
@@ -564,7 +564,8 @@ static inline void *efi_map_next_entry_reverse(void *entry)
 {
 	/* Initial call */
 	if (!entry)
-		return efi.memmap.map_end - efi.memmap.desc_size;
+		return efi_memdesc_ptr(efi.memmap.map, efi.memmap.desc_size,
+				       efi.memmap.num_valid_entries - 1);
 
 	entry -= efi.memmap.desc_size;
 	if (entry < efi.memmap.map)
@@ -612,7 +613,9 @@ static void *efi_map_next_entry(void *entry)
 		return efi.memmap.map;
 
 	entry += efi.memmap.desc_size;
-	if (entry >= efi.memmap.map_end)
+	if (entry >= (void *)efi_memdesc_ptr(efi.memmap.map,
+					     efi.memmap.desc_size,
+					     efi.memmap.num_valid_entries))
 		return NULL;
 
 	return entry;
@@ -743,13 +746,13 @@ static void __init kexec_enter_virtual_mode(void)
 	efi_memmap_unmap();
 
 	if (efi_memmap_init_late(efi.memmap.phys_map,
-				 efi.memmap.desc_size * efi.memmap.nr_map)) {
+				 efi.memmap.desc_size * efi.memmap.num_valid_entries)) {
 		pr_err("Failed to remap late EFI memory map\n");
 		clear_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 		return;
 	}
 
-	num_pages = ALIGN(efi.memmap.nr_map * efi.memmap.desc_size, PAGE_SIZE);
+	num_pages = ALIGN(efi.memmap.num_valid_entries * efi.memmap.desc_size, PAGE_SIZE);
 	num_pages >>= PAGE_SHIFT;
 
 	if (efi_setup_page_tables(efi.memmap.phys_map, num_pages)) {
