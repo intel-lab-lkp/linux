@@ -5,12 +5,13 @@
 //! C header: [`include/linux/dma-mapping.h`](srctree/include/linux/dma-mapping.h)
 
 use crate::{
-    bindings, build_assert, device,
+    bindings,
+    device,
     device::{Bound, Core},
     error::{to_result, Result},
     prelude::*,
     sync::aref::ARef,
-    transmute::{AsBytes, FromBytes},
+    transmute::{AsBytes, FromBytes}, //
 };
 use core::ptr::NonNull;
 
