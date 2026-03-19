@@ -3,6 +3,7 @@
 
 ##############################################################################
 # Topology description. p1 looped back to p2, p3 to p4 and so on.
+#shellcheck disable=SC2034 # SC doesn't see our uses of global variables
 
 declare -A NETIFS=(
     [p1]=veth0
@@ -15,6 +16,26 @@ declare -A NETIFS=(
     [p8]=veth7
     [p9]=veth8
     [p10]=veth9
+)
+
+# Array indexed by the network interface name keeping track of the target on
+# which the interface resides. Values will be strings of the following format -
+# <type>:<args>.
+# TARGETS[eth0]="local:" - meaning that the eth0 interface is accessible locally
+# TARGETS[eth1]="netns:foo" - eth1 is in the foo netns
+# TARGETS[eth2]="ssh:root@10.0.0.2" - eth2 is accessible through running the
+# 'ssh root@10.0.0.2' command.
+declare -A TARGETS=(
+    [veth0]="local:"
+    [veth1]="local:"
+    [veth2]="local:"
+    [veth3]="local:"
+    [veth4]="local:"
+    [veth5]="local:"
+    [veth6]="local:"
+    [veth7]="local:"
+    [veth8]="local:"
+    [veth9]="local:"
 )
 
 # Port that does not have a cable connected.
@@ -340,17 +361,108 @@ fi
 ##############################################################################
 # Command line options handling
 
-count=0
+check_env() {
+	local vars_needed=("LOCAL_V4,LOCAL_V6"
+			   "REMOTE_V4,REMOTE_V6"
+			   "REMOTE_TYPE"
+			   "REMOTE_ARGS")
+	local missing=()
+	local choice
 
-while [[ $# -gt 0 ]]; do
-	if [[ "$count" -eq "0" ]]; then
-		unset NETIFS
-		declare -A NETIFS
+	# If a choice has multiple comma separated options, at least one must
+	# exist
+	for choice in "${vars_needed[@]}"; do
+		IFS=',' read -ra entries <<< "$choice"
+
+		local found=0
+		for entry in "${entries[@]}"; do
+			if [[ -n "${!entry}" ]]; then
+				found=1
+				break
+			fi
+		done
+
+		if [[ $found -eq 0 ]]; then
+			missing+=("$choice")
+		fi
+	done
+
+	# Make sure v4 / v6 configs are symmetric
+	if [[ (-n "${LOCAL_V6}" && -z "${REMOTE_V6}") || \
+	      (-z "${LOCAL_V6}" && -n "${REMOTE_V6}") ]]; then
+		missing+=("LOCAL_V6,REMOTE_V6")
 	fi
-	count=$((count + 1))
-	NETIFS[p$count]="$1"
-	shift
-done
+
+	if [[ (-n "${LOCAL_V4}" && -z "${REMOTE_V4}") || \
+	      (-z "${LOCAL_V4}" && -n "${REMOTE_V4}") ]]; then
+		missing+=("LOCAL_V4,REMOTE_V4")
+	fi
+
+	if [[ ${#missing[@]} -gt 0 ]]; then
+		echo "SKIP: Invalid environment, missing configuration: ${missing[*]}"
+		echo "Please see tools/testing/selftests/drivers/net/README.rst"
+		exit "$ksft_skip"
+	fi
+}
+
+get_ifname_by_ip()
+{
+	local ip_addr=$1; shift
+
+	run_cmd ip -j addr show to "$ip_addr" | jq -r '.[].ifname'
+}
+
+# If there is a configuration file, source it
+if [[ -f $net_forwarding_dir/../../drivers/net/net.config ]]; then
+	source "$net_forwarding_dir/../../drivers/net/net.config"
+fi
+
+# In case NETIF is specified, then the test expects to pass the arguments
+# through the variables specified in drivers/net/README.rst file. If not,
+# fallback on parsing the script arguments for interface names.
+if [[ -v NETIF ]]; then
+	if (( NUM_NETIFS > 2)); then
+		echo "SKIP: NETIF defined and NUM_NETIFS is bigger than 2"
+		exit "$ksft_skip"
+	fi
+
+	check_env
+
+	# Populate the NETIF and TARGETS arrays automatically based on the
+	# environment variables
+	unset NETIFS
+	declare -A NETIFS
+
+	NETIFS[p1]="$NETIF"
+	TARGETS[$NETIF]="local:"
+
+	# Locate the name of the remote interface
+	if [[ -v REMOTE_V4 ]]; then
+		remote_netif=$(CUR_TARGET="$REMOTE_TYPE:$REMOTE_ARGS" get_ifname_by_ip "$REMOTE_V4")
+	else
+		remote_netif=$(CUR_TARGET="$REMOTE_TYPE:$REMOTE_ARGS" get_ifname_by_ip "$REMOTE_V6")
+	fi
+	if [[ ! -n "$remote_netif" ]]; then
+		echo "SKIP: cannot find remote interface"
+		exit "$ksft_skip"
+	fi
+
+	NETIFS[p2]="$remote_netif"
+	TARGETS[$remote_netif]="$REMOTE_TYPE:$REMOTE_ARGS"
+else
+	count=0
+
+	while [[ $# -gt 0 ]]; do
+		if [[ "$count" -eq "0" ]]; then
+			unset NETIFS
+			declare -A NETIFS
+		fi
+		count=$((count + 1))
+		NETIFS[p$count]="$1"
+		TARGETS[$1]="local:"
+		shift
+	done
+fi
 
 ##############################################################################
 # Network interfaces configuration
