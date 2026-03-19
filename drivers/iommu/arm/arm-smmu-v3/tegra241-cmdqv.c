@@ -1152,6 +1152,7 @@ static void tegra241_cmdqv_destroy_vintf_user(struct iommufd_viommu *viommu)
 		iommufd_viommu_destroy_mmap(&vintf->vsmmu.core,
 					    vintf->mmap_offset);
 	tegra241_cmdqv_remove_vintf(vintf->cmdqv, vintf->idx);
+	arm_vsmmu_destroy(viommu);
 }
 
 static void tegra241_vintf_destroy_vsid(struct iommufd_vdevice *vdev)

@@ -1213,6 +1213,7 @@ size_t arm_smmu_get_viommu_size(struct device *dev,
 int arm_vsmmu_init(struct iommufd_viommu *viommu,
 		   struct iommu_domain *parent_domain,
 		   const struct iommu_user_data *user_data);
+void arm_vsmmu_destroy(struct iommufd_viommu *viommu);
 int arm_smmu_attach_prepare_vmaster(struct arm_smmu_attach_state *state,
 				    struct arm_smmu_nested_domain *nested_domain);
 void arm_smmu_attach_commit_vmaster(struct arm_smmu_attach_state *state);
