@@ -1672,18 +1672,28 @@ static void iwl_pcie_irq_set_affinity(struct iwl_trans *trans,
 				      struct iwl_trans_info *info)
 {
 #if defined(CONFIG_SMP)
-	int iter_rx_q, i, ret, cpu, offset;
+	int iter_rx_q, i, ret, cpu, last_cpu;
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 
 	i = trans_pcie->shared_vec_mask & IWL_SHARED_IRQ_FIRST_RSS ? 0 : 1;
 	iter_rx_q = info->num_rxqs - 1 + i;
-	offset = 1 + i;
+	last_cpu = -1;
 	for (; i < iter_rx_q ; i++) {
 		/*
-		 * Get the cpu prior to the place to search
-		 * (i.e. return will be > i - 1).
+		 * Balanced distribution: skip CPU0 for high-rate RSS queues
+		 * to avoid contention with system housekeeping.
 		 */
-		cpu = cpumask_next(i - offset, cpu_online_mask);
+		cpu = cpumask_next(last_cpu, cpu_online_mask);
+		if (cpu >= nr_cpu_ids)
+			cpu = cpumask_first(cpu_online_mask);
+
+		if (cpu == 0 && num_online_cpus() > 1) {
+			cpu = cpumask_next(0, cpu_online_mask);
+			if (cpu >= nr_cpu_ids)
+				cpu = cpumask_first(cpu_online_mask);
+		}
+		last_cpu = cpu;
+
 		cpumask_set_cpu(cpu, &trans_pcie->affinity_mask[i]);
 		ret = irq_set_affinity_hint(trans_pcie->msix_entries[i].vector,
 					    &trans_pcie->affinity_mask[i]);
