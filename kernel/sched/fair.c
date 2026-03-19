@@ -12617,11 +12617,11 @@ static inline int on_null_domain(struct rq *rq)
  */
 static inline int find_new_ilb(struct cpumask *cpus)
 {
+	int this_cpu = smp_processor_id();
 	int ilb_cpu;
 
 	for_each_cpu(ilb_cpu, cpus) {
-
-		if (ilb_cpu == smp_processor_id())
+		if (ilb_cpu == this_cpu)
 			continue;
 
 		if (idle_cpu(ilb_cpu))
