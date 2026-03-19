@@ -3,6 +3,7 @@
 #include <linux/memregion.h>
 #include <linux/module.h>
 #include <linux/dax.h>
+#include <cxl/cxl.h>
 #include "../bus.h"
 
 static bool region_idle;
@@ -58,6 +59,19 @@ static void release_hmem(void *pdev)
 	platform_device_unregister(pdev);
 }
 
+struct dax_defer_work {
+	struct platform_device *pdev;
+	struct work_struct work;
+};
+
+static struct dax_defer_work dax_hmem_work;
+
+void dax_hmem_flush_work(void)
+{
+	flush_work(&dax_hmem_work.work);
+}
+EXPORT_SYMBOL_GPL(dax_hmem_flush_work);
+
 static int hmem_register_device(struct device *host, int target_nid,
 				const struct resource *res)
 {
@@ -69,8 +83,11 @@ static int hmem_register_device(struct device *host, int target_nid,
 	if (IS_ENABLED(CONFIG_DEV_DAX_CXL) &&
 	    region_intersects(res->start, resource_size(res), IORESOURCE_MEM,
 			      IORES_DESC_CXL) != REGION_DISJOINT) {
-		dev_dbg(host, "deferring range to CXL: %pr\n", res);
-		return 0;
+		if (!dax_hmem_initial_probe) {
+			dev_dbg(host, "deferring range to CXL: %pr\n", res);
+			queue_work(system_long_wq, &dax_hmem_work.work);
+			return 0;
+		}
 	}
 
 	rc = region_intersects_soft_reserve(res->start, resource_size(res));
@@ -123,8 +140,48 @@ out_put:
 	return rc;
 }
 
+static int hmem_register_cxl_device(struct device *host, int target_nid,
+				    const struct resource *res)
+{
+	if (region_intersects(res->start, resource_size(res), IORESOURCE_MEM,
+			      IORES_DESC_CXL) == REGION_DISJOINT)
+		return 0;
+
+	if (cxl_region_contains_resource((struct resource *)res)) {
+		dev_dbg(host, "CXL claims resource, dropping: %pr\n", res);
+		return 0;
+	}
+
+	dev_dbg(host, "CXL did not claim resource, registering: %pr\n", res);
+	return hmem_register_device(host, target_nid, res);
+}
+
+static void process_defer_work(struct work_struct *w)
+{
+	struct dax_defer_work *work = container_of(w, typeof(*work), work);
+	struct platform_device *pdev = work->pdev;
+
+	wait_for_device_probe();
+
+	guard(device)(&pdev->dev);
+	if (!pdev->dev.driver)
+		return;
+
+	dax_hmem_initial_probe = true;
+	walk_hmem_resources(&pdev->dev, hmem_register_cxl_device);
+}
+
 static int dax_hmem_platform_probe(struct platform_device *pdev)
 {
+	if (work_pending(&dax_hmem_work.work))
+		return -EBUSY;
+
+	if (!dax_hmem_work.pdev) {
+		get_device(&pdev->dev);
+		dax_hmem_work.pdev = pdev;
+		INIT_WORK(&dax_hmem_work.work, process_defer_work);
+	}
+
 	return walk_hmem_resources(&pdev->dev, hmem_register_device);
 }
 
@@ -162,6 +219,11 @@ static __init int dax_hmem_init(void)
 
 static __exit void dax_hmem_exit(void)
 {
+	flush_work(&dax_hmem_work.work);
+
+	if (dax_hmem_work.pdev)
+		put_device(&dax_hmem_work.pdev->dev);
+
 	platform_driver_unregister(&dax_hmem_driver);
 	platform_driver_unregister(&dax_hmem_platform_driver);
 }
