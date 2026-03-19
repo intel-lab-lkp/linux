@@ -305,16 +305,11 @@ void __init efi_arch_mem_reserve(phys_addr_t addr, u64 size)
  * can free regions in efi_free_boot_services().
  *
  * Use this function to ensure we do not free regions owned by somebody
- * else. We must only reserve (and then free) regions:
- *
- * - Not within any part of the kernel
- * - Not the BIOS reserved area (E820_TYPE_RESERVED, E820_TYPE_NVS, etc)
+ * else. We must only reserve (and then free) regions that do not intersect
+ * with the BIOS reserved area (E820_TYPE_RESERVED, E820_TYPE_NVS, etc)
  */
 static __init bool can_free_region(u64 start, u64 size)
 {
-	if (start + size > __pa_symbol(_text) && start <= __pa_symbol(_end))
-		return false;
-
 	if (!e820__mapped_all(start, start+size, E820_TYPE_RAM))
 		return false;
 
@@ -347,10 +342,8 @@ void __init efi_reserve_boot_services(void)
 		 * Because the following memblock_reserve() is paired
 		 * with free_reserved_area() for this region in
 		 * efi_free_boot_services(), we must be extremely
-		 * careful not to reserve, and subsequently free,
-		 * critical regions of memory (like the kernel image) or
-		 * those regions that somebody else has already
-		 * reserved.
+		 * careful not to reserve, and subsequently free, critical
+		 * regions of memory that somebody else has already reserved.
 		 *
 		 * A good example of a critical region that must not be
 		 * freed is page zero (first 4Kb of memory), which may
