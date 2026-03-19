@@ -408,7 +408,7 @@ struct vgic_dist {
 	/* Wants SGIs without active state */
 	bool			nassgireq;
 
-	struct vgic_irq		*spis;
+	struct vgic_irq		*spis __counted_by_ptr(nr_spis);
 
 	struct vgic_io_device	dist_iodev;
 	struct vgic_io_device	cpuif_iodev;
