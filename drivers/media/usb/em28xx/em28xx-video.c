@@ -2147,7 +2147,7 @@ static int em28xx_v4l2_open(struct file *filp)
 			video_device_node_name(vdev), v4l2_type_names[fh_type],
 			v4l2->users);
 
-	if (mutex_lock_interruptible(&dev->lock))
+	if (!mutex_trylock(&dev->lock))
 		return -ERESTARTSYS;
 
 	ret = v4l2_fh_open(filp);
