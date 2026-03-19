@@ -19,6 +19,7 @@
 #include <linux/libfdt.h>
 #include <linux/list.h>
 #include <linux/memblock.h>
+#include <linux/overflow.h>
 #include <linux/page-isolation.h>
 #include <linux/unaligned.h>
 #include <linux/vmalloc.h>
@@ -461,14 +462,28 @@ static void __init deserialize_bitmap(unsigned int order,
 				      struct khoser_mem_bitmap_ptr *elm)
 {
 	struct kho_mem_phys_bits *bitmap = KHOSER_LOAD_PTR(elm->bitmap);
+	unsigned int shift;
 	unsigned long bit;
+	unsigned long sz;
+
+	if (check_add_overflow(order, PAGE_SHIFT, &shift) ||
+	    check_shl_overflow(1UL, shift, &sz)) {
+		pr_warn("invalid order %u for preserved bitmap\n", order);
+		return;
+	}
 
 	for_each_set_bit(bit, bitmap->preserve, PRESERVE_BITS) {
-		int sz = 1 << (order + PAGE_SHIFT);
-		phys_addr_t phys =
-			elm->phys_start + (bit << (order + PAGE_SHIFT));
-		struct page *page = phys_to_page(phys);
+		phys_addr_t offset, phys;
+		struct page *page;
 		union kho_page_info info;
+
+		if (check_shl_overflow((phys_addr_t)bit, shift, &offset) ||
+		    check_add_overflow(elm->phys_start, offset, &phys)) {
+			pr_warn("invalid phys layout for preserved bitmap\n");
+			return;
+		}
+
+		page = phys_to_page(phys);
 
 		memblock_reserve(phys, sz);
 		memblock_reserved_mark_noinit(phys, sz);
