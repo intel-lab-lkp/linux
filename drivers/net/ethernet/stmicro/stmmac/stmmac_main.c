@@ -144,6 +144,10 @@ static const char *stmmac_dwxgmac_phyif[4] = {
 	[PHY_INTF_RGMII]	= "RGMII",
 };
 
+static const char *stmmac_dw25gmac_phyif[2] = {
+	[PHY_INTF_DW25GMAC_XGMII]	= "XGMII",
+};
+
 static irqreturn_t stmmac_interrupt(int irq, void *dev_id);
 /* For MSI interrupts handling */
 static irqreturn_t stmmac_mac_interrupt(int irq, void *dev_id);
@@ -1096,6 +1100,32 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 			break;
 		case SPEED_2500:
 			ctrl |= priv->hw->link.xgmii.speed2500;
+			break;
+		default:
+			return;
+		}
+	} else if (interface == PHY_INTERFACE_MODE_XGMII) {
+		switch (speed) {
+		case SPEED_25000:
+			ctrl |= priv->hw->link.xgmii.speed25000;
+			break;
+		case SPEED_10000:
+			ctrl |= priv->hw->link.xgmii.speed10000;
+			break;
+		case SPEED_5000:
+			ctrl |= priv->hw->link.xgmii.speed5000;
+			break;
+		case SPEED_2500:
+			ctrl |= priv->hw->link.xgmii.speed2500;
+			break;
+		case SPEED_1000:
+			ctrl |= priv->hw->link.speed1000;
+			break;
+		case SPEED_100:
+			ctrl |= priv->hw->link.speed100;
+			break;
+		case SPEED_10:
+			ctrl |= priv->hw->link.speed10;
 			break;
 		default:
 			return;
@@ -7291,6 +7321,11 @@ static void stmmac_print_actphyif(struct stmmac_priv *priv)
 	case DWMAC_CORE_XGMAC:
 		phyif_table = stmmac_dwxgmac_phyif;
 		phyif_table_size = ARRAY_SIZE(stmmac_dwxgmac_phyif);
+		break;
+
+	case DWMAC_CORE_25GMAC:
+		phyif_table = stmmac_dw25gmac_phyif;
+		phyif_table_size = ARRAY_SIZE(stmmac_dw25gmac_phyif);
 		break;
 	}
 
