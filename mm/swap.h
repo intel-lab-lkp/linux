@@ -211,6 +211,8 @@ void swap_cache_lock_irq(swp_entry_t entry);
 void swap_cache_unlock_irq(swp_entry_t entry);
 void swap_cache_lock(swp_entry_t entry);
 void swap_cache_unlock(swp_entry_t entry);
+void vswap_rmap_set(struct swap_cluster_info *ci, swp_slot_t slot,
+			   unsigned long vswap, int nr);
 
 static inline struct address_space *swap_address_space(swp_entry_t entry)
 {
@@ -245,6 +247,31 @@ static inline bool folio_matches_swap_entry(const struct folio *folio,
 	return folio_entry.val == round_down(entry.val, nr_pages);
 }
 
+/**
+ * folio_matches_swap_slot - Check if a folio matches both the virtual
+ *                           swap entry and its backing physical swap slot.
+ * @folio: The folio.
+ * @entry: The virtual swap entry to check against.
+ * @slot: The physical swap slot to check against.
+ *
+ * Context: The caller should have the folio locked to ensure it's stable
+ * and nothing will move it in or out of the swap cache.
+ * Return: true if both checks pass, false otherwise.
+ */
+static inline bool folio_matches_swap_slot(const struct folio *folio,
+					   swp_entry_t entry,
+					   swp_slot_t slot)
+{
+	if (!folio_matches_swap_entry(folio, entry))
+		return false;
+
+	/*
+	 * Confirm the virtual swap entry is still backed by the same
+	 * physical swap slot.
+	 */
+	return slot.val == swp_entry_to_swp_slot(entry).val;
+}
+
 /*
  * All swap cache helpers below require the caller to ensure the swap entries
  * used are valid and stablize the device by any of the following ways:
@@ -266,7 +293,7 @@ void __swap_cache_del_folio(struct folio *folio, swp_entry_t entry, void *shadow
 void __swap_cache_replace_folio(struct folio *old, struct folio *new);
 
 void show_swap_cache_info(void);
-void swapcache_clear(struct swap_info_struct *si, swp_entry_t entry, int nr);
+void swapcache_clear(swp_entry_t entry, int nr);
 struct folio *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		struct vm_area_struct *vma, unsigned long addr,
 		struct swap_iocb **plug);
@@ -313,25 +340,7 @@ static inline int swap_zeromap_batch(swp_entry_t entry, int max_nr,
 		return find_next_bit(sis->zeromap, end, start) - start;
 }
 
-static inline int non_swapcache_batch(swp_entry_t entry, int max_nr)
-{
-	swp_slot_t slot = swp_entry_to_swp_slot(entry);
-	struct swap_info_struct *si = __swap_slot_to_info(slot);
-	pgoff_t offset = swp_slot_offset(slot);
-	int i;
-
-	/*
-	 * While allocating a large folio and doing mTHP swapin, we need to
-	 * ensure all entries are not cached, otherwise, the mTHP folio will
-	 * be in conflict with the folio in swap cache.
-	 */
-	for (i = 0; i < max_nr; i++) {
-		if ((si->swap_map[offset + i] & SWAP_HAS_CACHE))
-			return i;
-	}
-
-	return i;
-}
+int non_swapcache_batch(swp_entry_t entry, int max_nr);
 
 #else /* CONFIG_SWAP */
 struct swap_iocb;
@@ -383,6 +392,13 @@ static inline bool folio_matches_swap_entry(const struct folio *folio, swp_entry
 	return false;
 }
 
+static inline bool folio_matches_swap_slot(const struct folio *folio,
+					   swp_entry_t entry,
+					   swp_slot_t slot)
+{
+	return false;
+}
+
 static inline void show_swap_cache_info(void)
 {
 }
@@ -410,7 +426,7 @@ static inline int swap_writeout(struct folio *folio,
 	return 0;
 }
 
-static inline void swapcache_clear(struct swap_info_struct *si, swp_entry_t entry, int nr)
+static inline void swapcache_clear(swp_entry_t entry, int nr)
 {
 }
 

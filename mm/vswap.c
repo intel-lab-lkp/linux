@@ -24,6 +24,8 @@
  * For now, there is a one-to-one correspondence between a virtual swap slot
  * and its associated physical swap slot.
  *
+ * I. Allocation
+ *
  * Virtual swap slots are organized into PMD-sized clusters, analogous to
  * physical swap allocator. However, unlike the physical swap allocator,
  * the clusters are dynamically allocated and freed on-demand. There is no
@@ -32,6 +34,26 @@
  *
  * This allows us to avoid the overhead of pre-allocating a large number of
  * virtual swap clusters.
+ *
+ * II. Swap Entry Lifecycle
+ *
+ * The swap entry's lifecycle is managed at the virtual swap layer. Conceptually,
+ * each virtual swap slot has a reference count, which includes:
+ *
+ * 1. The number of page table entries that refer to the virtual swap slot, i.e
+ *    its swap count.
+ *
+ * 2. Whether the virtual swap slot has been added to the swap cache - if so,
+ *    its reference count is incremented by 1.
+ *
+ * Each virtual swap slot starts out with a reference count of 1 (since it is
+ * about to be added to the swap cache). Its reference count is incremented or
+ * decremented every time it is mapped to or unmapped from a PTE, as well as
+ * when it is added to or removed from the swap cache. Finally, when its
+ * reference count reaches 0, the virtual swap slot is freed.
+ *
+ * Note that we do not have a reference count field per se - it is derived from
+ * the swap_count and the in_swapcache fields.
  */
 
 /**
@@ -42,6 +64,8 @@
  * @swap_cache: The folio in swap cache.
  * @shadow: The shadow entry.
  * @memcgid: The memcg id of the owning memcg, if any.
+ * @swap_count: The number of page table entries that refer to the swap entry.
+ * @in_swapcache: Whether the swap entry is (about to be) pinned in swap cache.
  */
 struct swp_desc {
 	swp_slot_t slot;
@@ -50,9 +74,14 @@ struct swp_desc {
 		struct folio *swap_cache;
 		void *shadow;
 	};
+
+	unsigned int swap_count;
+
 #ifdef CONFIG_MEMCG
 	unsigned short memcgid;
 #endif
+
+	bool in_swapcache;
 };
 
 #define VSWAP_CLUSTER_SHIFT HPAGE_PMD_ORDER
@@ -249,6 +278,8 @@ static void __vswap_alloc_from_cluster(struct vswap_cluster *cluster, int start)
 #ifdef CONFIG_MEMCG
 		desc->memcgid = 0;
 #endif
+		desc->swap_count = 0;
+		desc->in_swapcache = true;
 	}
 	cluster->count += nr;
 }
@@ -453,7 +484,7 @@ static inline void release_vswap_slot(struct vswap_cluster *cluster,
  * Update the physical-to-virtual swap slot mapping.
  * Caller must ensure the physical swap slot's cluster is locked.
  */
-static void vswap_rmap_set(struct swap_cluster_info *ci, swp_slot_t slot,
+void vswap_rmap_set(struct swap_cluster_info *ci, swp_slot_t slot,
 			   unsigned long vswap, int nr)
 {
 	atomic_long_t *table;
@@ -467,45 +498,50 @@ static void vswap_rmap_set(struct swap_cluster_info *ci, swp_slot_t slot,
 		__swap_table_set(ci, ci_off + i, vswap ? vswap + i : 0);
 }
 
-/**
- * vswap_free - free a virtual swap slot.
- * @entry: the virtual swap slot to free
- * @ci: the physical swap slot's cluster (optional, can be NULL)
+/*
+ * Entered with the cluster locked, but might unlock the cluster.
+ * This is because several operations, such as releasing physical swap slots
+ * (i.e swap_slot_free_nr()) require the cluster to be unlocked to avoid
+ * deadlocks.
  *
- * If @ci is NULL, this function is called to clean up a virtual swap entry
- * when no linkage has been established between physical and virtual swap slots.
- * If @ci is provided, the caller must ensure it is locked.
+ * This is safe, because:
+ *
+ * 1. The swap entry to be freed has refcnt (swap count and swapcache pin)
+ *    down to 0, so no one can change its internal state
+ *
+ * 2. The swap entry to be freed still holds a refcnt to the cluster, keeping
+ *    the cluster itself valid.
+ *
+ * We will exit the function with the cluster re-locked.
  */
-void vswap_free(swp_entry_t entry, struct swap_cluster_info *ci)
+static void vswap_free(struct vswap_cluster *cluster, struct swp_desc *desc,
+	swp_entry_t entry)
 {
-	struct vswap_cluster *cluster = NULL;
-	struct swp_desc *desc;
-
-	if (!entry.val)
-		return;
-
-	zswap_invalidate(entry);
-	mem_cgroup_uncharge_swap(entry, 1);
-
-	/* do not immediately erase the virtual slot to prevent its reuse */
-	rcu_read_lock();
-	desc = vswap_iter(&cluster, entry.val);
-	if (!desc) {
-		rcu_read_unlock();
-		return;
-	}
+	struct zswap_entry *zswap_entry;
+	swp_slot_t slot;
 
 	/* Clear shadow if present */
 	if (xa_is_value(desc->shadow))
 		desc->shadow = NULL;
 
-	if (desc->slot.val)
-		vswap_rmap_set(ci, desc->slot, 0, 1);
+	slot = desc->slot;
+	desc->slot.val = 0;
 
+	zswap_entry = desc->zswap_entry;
+	if (zswap_entry) {
+		desc->zswap_entry = NULL;
+		zswap_entry_free(zswap_entry);
+	}
+	spin_unlock(&cluster->lock);
+
+	mem_cgroup_uncharge_swap(entry, 1);
+
+	if (slot.val)
+		swap_slot_free_nr(slot, 1);
+
+	spin_lock(&cluster->lock);
 	/* erase forward mapping and release the virtual slot for reallocation */
 	release_vswap_slot(cluster, entry.val);
-	spin_unlock(&cluster->lock);
-	rcu_read_unlock();
 }
 
 /**
@@ -543,8 +579,12 @@ int folio_alloc_swap(struct folio *folio)
 		/* Need to call this even if allocation failed, for MEMCG_SWAP_FAIL. */
 		mem_cgroup_try_charge_swap(folio, (swp_entry_t){0});
 
-		for (i = 0; i < nr; i++)
-			vswap_free((swp_entry_t){entry.val + i}, NULL);
+		for (i = 0; i < nr; i++) {
+			desc = vswap_iter(&cluster, entry.val + i);
+			VM_WARN_ON(!desc);
+			vswap_free(cluster, desc, (swp_entry_t){ entry.val + i });
+		}
+		spin_unlock(&cluster->lock);
 
 		return ret ? ret : -ENOMEM;
 	}
@@ -608,9 +648,11 @@ swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry)
 		rcu_read_unlock();
 		return (swp_slot_t){0};
 	}
+
 	slot = desc->slot;
 	spin_unlock(&cluster->lock);
 	rcu_read_unlock();
+
 	return slot;
 }
 
@@ -638,6 +680,352 @@ swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot)
 
 	ret.val = swap_table_get(ci, ci_off);
 	return ret;
+}
+
+/*
+ * Decrease the swap count of nr contiguous swap entries by 1 (when the swap
+ * entries are removed from a range of PTEs), and check if any of the swap
+ * entries are in swap cache only after its swap count is decreased.
+ *
+ * The check is racy, but it is OK because free_swap_and_cache_nr() only use
+ * the result as a hint.
+ */
+static bool vswap_free_nr_any_cache_only(swp_entry_t entry, int nr)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	bool ret = false;
+	int i;
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val);
+		VM_WARN_ON(!desc);
+		ret |= (desc->swap_count == 1 && desc->in_swapcache);
+		desc->swap_count--;
+		if (!desc->swap_count && !desc->in_swapcache)
+			vswap_free(cluster, desc, entry);
+		entry.val++;
+	}
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	return ret;
+}
+
+/**
+ * swap_free_nr - decrease the swap count of nr contiguous swap entries by 1
+ *                (when the swap entries are removed from a range of PTEs).
+ * @entry: the first entry in the range.
+ * @nr: the number of entries in the range.
+ */
+void swap_free_nr(swp_entry_t entry, int nr)
+{
+	vswap_free_nr_any_cache_only(entry, nr);
+}
+
+static int swap_duplicate_nr(swp_entry_t entry, int nr)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	int i = 0;
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		if (!desc || (!desc->swap_count && !desc->in_swapcache))
+			goto done;
+		desc->swap_count++;
+	}
+done:
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	if (i && i < nr)
+		swap_free_nr(entry, i);
+
+	return i == nr ? 0 : -ENOENT;
+}
+
+/**
+ * swap_duplicate - increase the swap count of the swap entry by 1 (i.e when
+ *                  the swap entry is stored at a new PTE).
+ * @entry: the swap entry.
+ *
+ * Return: -ENONENT, if we try to duplicate a non-existent swap entry.
+ */
+int swap_duplicate(swp_entry_t entry)
+{
+	return swap_duplicate_nr(entry, 1);
+}
+
+
+bool folio_swapped(struct folio *folio)
+{
+	struct vswap_cluster *cluster = NULL;
+	swp_entry_t entry = folio->swap;
+	int i, nr = folio_nr_pages(folio);
+	struct swp_desc *desc;
+	bool swapped = false;
+
+	if (!entry.val)
+		return false;
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		if (desc && desc->swap_count) {
+			swapped = true;
+			break;
+		}
+	}
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	return swapped;
+}
+
+/**
+ * swp_swapcount - return the swap count of the swap entry.
+ * @id: the swap entry.
+ *
+ * Note that all the swap count functions are identical in the new design,
+ * since we no longer need swap count continuation.
+ *
+ * Return: the swap count of the swap entry.
+ */
+int swp_swapcount(swp_entry_t entry)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	unsigned int ret;
+
+	rcu_read_lock();
+	desc = vswap_iter(&cluster, entry.val);
+	ret = desc ? desc->swap_count : 0;
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+
+	return ret;
+}
+
+int __swap_count(swp_entry_t entry)
+{
+	return swp_swapcount(entry);
+}
+
+bool swap_entry_swapped(swp_entry_t entry)
+{
+	return !!swp_swapcount(entry);
+}
+
+void swap_shmem_alloc(swp_entry_t entry, int nr)
+{
+	swap_duplicate_nr(entry, nr);
+}
+
+void swapcache_clear(swp_entry_t entry, int nr)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	int i;
+
+	if (!nr)
+		return;
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val);
+		desc->in_swapcache = false;
+		if (!desc->swap_count)
+			vswap_free(cluster, desc, entry);
+		entry.val++;
+	}
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+}
+
+int swapcache_prepare(swp_entry_t entry, int nr)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	int i, ret = 0;
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+
+		if (!desc) {
+			ret = -ENOENT;
+			goto done;
+		}
+
+		if (!desc->swap_count && !desc->in_swapcache) {
+			ret = -ENOENT;
+			goto done;
+		}
+
+		if (desc->in_swapcache) {
+			ret = -EEXIST;
+			goto done;
+		}
+
+		desc->in_swapcache = true;
+	}
+done:
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	if (i && i < nr)
+		swapcache_clear(entry, i);
+	if (i < nr && !ret)
+		ret = -ENOENT;
+	return ret;
+}
+
+/**
+ * is_swap_cached - check if the swap entry is cached
+ * @entry: swap entry to check
+ *
+ * Returns true if the swap entry is cached, false otherwise.
+ */
+bool is_swap_cached(swp_entry_t entry)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	bool cached;
+
+	rcu_read_lock();
+	desc = vswap_iter(&cluster, entry.val);
+	cached = desc ? desc->in_swapcache : false;
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+
+	return cached;
+}
+
+/**
+ * vswap_only_has_cache - check if all the slots in the range are still valid,
+ *                        and are in swap cache only (i.e not stored in any
+ *                        PTEs).
+ * @entry: the first slot in the range.
+ * @nr: the number of slots in the range.
+ *
+ * Return: true if all the slots in the range are still valid, and are in swap
+ * cache only, or false otherwise.
+ */
+bool vswap_only_has_cache(swp_entry_t entry, int nr)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	int i = 0;
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		if (!desc || desc->swap_count || !desc->in_swapcache)
+			goto done;
+	}
+done:
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	return i == nr;
+}
+
+/**
+ * non_swapcache_batch - count the longest range starting from a particular
+ *                       swap slot that are stil valid, but not in swap cache.
+ * @entry: the first slot to check.
+ * @max_nr: the maximum number of slots to check.
+ *
+ * Return: the number of slots in the longest range that are still valid, but
+ * not in swap cache.
+ */
+int non_swapcache_batch(swp_entry_t entry, int max_nr)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	int i;
+
+	if (!entry.val)
+		return 0;
+
+	rcu_read_lock();
+	for (i = 0; i < max_nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		if (!desc || desc->in_swapcache || !desc->swap_count)
+			goto done;
+	}
+done:
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	return i;
+}
+
+/**
+ * free_swap_and_cache_nr() - Release a swap count on range of swap entries and
+ *                            reclaim their cache if no more references remain.
+ * @entry: First entry of range.
+ * @nr: Number of entries in range.
+ *
+ * For each swap entry in the contiguous range, release a swap count. If any
+ * swap entries have their swap count decremented to zero, try to reclaim their
+ * associated swap cache pages.
+ */
+void free_swap_and_cache_nr(swp_entry_t entry, int nr)
+{
+	int i = 0, incr = 1;
+	struct folio *folio;
+
+	if (vswap_free_nr_any_cache_only(entry, nr)) {
+		while (i < nr) {
+			incr = 1;
+			if (vswap_only_has_cache(entry, 1)) {
+				folio = swap_cache_get_folio(entry);
+				if (!folio)
+					goto next;
+
+				if (!folio_trylock(folio)) {
+					folio_put(folio);
+					goto next;
+				}
+
+				if (!folio_matches_swap_entry(folio, entry)) {
+					folio_unlock(folio);
+					folio_put(folio);
+					goto next;
+				}
+
+				/*
+				 * Folios are always naturally aligned in swap so
+				 * advance forward to the next boundary.
+				 */
+				incr = ALIGN(entry.val + 1, folio_nr_pages(folio)) - entry.val;
+				folio_free_swap(folio);
+				folio_unlock(folio);
+				folio_put(folio);
+			}
+next:
+			i += incr;
+			entry.val += incr;
+		}
+	}
+}
+
+/*
+ * Called after dropping swapcache to decrease refcnt to swap entries.
+ */
+void put_swap_folio(struct folio *folio, swp_entry_t entry)
+{
+	int nr = folio_nr_pages(folio);
+
+	VM_WARN_ON(!folio_test_locked(folio));
+	swapcache_clear(entry, nr);
 }
 
 bool tryget_swap_entry(swp_entry_t entry, struct swap_info_struct **si)
@@ -868,8 +1256,8 @@ void *swap_cache_get_shadow(swp_entry_t entry)
  * Context: Caller must ensure @entry is valid and protect the cluster with
  * reference count or locks.
  *
- * The caller also needs to update the corresponding swap_map slots with
- * SWAP_HAS_CACHE bit to avoid race or conflict.
+ * The caller also needs to obtain the swap entries' swap cache pins to avoid
+ * race or conflict.
  */
 void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadowp)
 {

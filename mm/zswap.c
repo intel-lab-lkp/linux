@@ -703,7 +703,7 @@ static void zswap_entry_cache_free(struct zswap_entry *entry)
  * Carries out the common pattern of freeing an entry's zsmalloc allocation,
  * freeing the entry itself, and decrementing the number of stored pages.
  */
-static void zswap_entry_free(struct zswap_entry *entry)
+void zswap_entry_free(struct zswap_entry *entry)
 {
 	zswap_lru_del(&zswap_list_lru, entry);
 	zs_free(entry->pool->zs_pool, entry->handle);
@@ -1625,18 +1625,6 @@ int zswap_load(struct folio *folio)
 
 	folio_unlock(folio);
 	return 0;
-}
-
-void zswap_invalidate(swp_entry_t swp)
-{
-	struct zswap_entry *entry;
-
-	if (zswap_empty(swp))
-		return;
-
-	entry = zswap_entry_erase(swp);
-	if (entry)
-		zswap_entry_free(entry);
 }
 
 /*********************************

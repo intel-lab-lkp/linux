@@ -1333,10 +1333,6 @@ again:
 
 	if (ret == -EIO) {
 		VM_WARN_ON_ONCE(!entry.val);
-		if (add_swap_count_continuation(entry, GFP_KERNEL) < 0) {
-			ret = -ENOMEM;
-			goto out;
-		}
 		entry.val = 0;
 	} else if (ret == -EBUSY || unlikely(ret == -EHWPOISON)) {
 		goto out;
@@ -5044,7 +5040,7 @@ unlock:
 out:
 	/* Clear the swap cache pin for direct swapin after PTL unlock */
 	if (need_clear_cache) {
-		swapcache_clear(si, entry, nr_pages);
+		swapcache_clear(entry, nr_pages);
 		if (waitqueue_active(&swapcache_wq))
 			wake_up(&swapcache_wq);
 	}
@@ -5063,7 +5059,7 @@ out_release:
 		folio_put(swapcache);
 	}
 	if (need_clear_cache) {
-		swapcache_clear(si, entry, nr_pages);
+		swapcache_clear(entry, nr_pages);
 		if (waitqueue_active(&swapcache_wq))
 			wake_up(&swapcache_wq);
 	}
