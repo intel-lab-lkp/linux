@@ -49,6 +49,7 @@ mod pthread_mtx {
     }
 
     impl From<Infallible> for Error {
+        #[inline]
         fn from(e: Infallible) -> Self {
             match e {}
         }
@@ -56,6 +57,7 @@ mod pthread_mtx {
 
     #[cfg(feature = "alloc")]
     impl From<AllocError> for Error {
+        #[inline]
         fn from(_: AllocError) -> Self {
             Self::Alloc
         }

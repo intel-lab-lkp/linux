@@ -13,7 +13,7 @@ use crate::prelude::*;
 pub struct OutOfBound;
 
 impl From<OutOfBound> for Error {
-    #[inline(always)]
+    #[inline]
     fn from(_: OutOfBound) -> Self {
         ERANGE
     }

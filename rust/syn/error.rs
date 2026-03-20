@@ -405,6 +405,7 @@ impl Copy for SpanRange {}
 impl std::error::Error for Error {}
 
 impl From<LexError> for Error {
+    #[inline]
     fn from(err: LexError) -> Self {
         Error::new(err.span(), err)
     }
