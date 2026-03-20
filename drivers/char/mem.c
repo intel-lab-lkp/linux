@@ -573,9 +573,21 @@ static ssize_t write_full(struct file *file, const char __user *buf,
  * Special lseek() function for /dev/null and /dev/zero.  Most notably, you
  * can fopen() both devices with "a" now.  This was previously impossible.
  * -- SRB.
+ *
+ * For SEEK_DATA and SEEK_HOLE, return an error. Otherwise, userland conforming
+ * to the POSIX spec could end up in an infinite loop.
  */
 static loff_t null_lseek(struct file *file, loff_t offset, int orig)
 {
+	switch (orig) {
+	case SEEK_CUR:
+	case SEEK_SET:
+	case SEEK_END:
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	return file->f_pos = 0;
 }
 
