@@ -15,6 +15,7 @@
 #include <linux/ktime.h>
 #include <linux/highmem.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
@@ -1765,17 +1766,22 @@ static bool sdhci_send_command_retry(struct sdhci_host *host,
 
 	while (!sdhci_send_command(host, cmd)) {
 		if (!timeout--) {
-			pr_err("%s: Controller never released inhibit bit(s).\n",
-			       mmc_hostname(host->mmc));
+			if (!oops_in_progress) {
+				pr_err("%s: Controller never released inhibit bit(s).\n",
+				       mmc_hostname(host->mmc));
+				sdhci_dumpregs(host);
+			}
 			sdhci_err_stats_inc(host, CTRL_TIMEOUT);
-			sdhci_dumpregs(host);
 			cmd->error = -EIO;
 			return false;
 		}
 
 		spin_unlock_irqrestore(&host->lock, flags);
 
-		usleep_range(1000, 1250);
+		if (unlikely(oops_in_progress))
+			mdelay(1);
+		else
+			usleep_range(1000, 1250);
 
 		present = host->mmc->ops->get_cd(host->mmc);
 
@@ -3076,6 +3082,152 @@ static void sdhci_card_event(struct mmc_host *mmc)
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
+/*
+ * Panic-context operations for pstore backends.
+ * These run with interrupts disabled and other CPUs stopped.
+ */
+
+#define SDHCI_PANIC_POLL_ITERATIONS	2000
+#define SDHCI_PANIC_POLL_DELAY_US	500
+#define SDHCI_PANIC_MIN_POLL_COUNT	300
+#define SDHCI_PANIC_RESET_TIMEOUT_US	100000
+#define SDHCI_PANIC_DRAIN_TIMEOUT_US	100000
+
+/**
+ * sdhci_panic_prepare - Prepare SDHCI controller for panic-context I/O
+ * @mmc: MMC host structure
+ *
+ * Called during kernel panic. Drains any in-flight request, resets the
+ * CMD and DATA lines, then clears software state under spinlock.
+ * The drain + reset ensures no stopped CPU is still inside sdhci_irq
+ * holding host->lock by the time we take it.
+ */
+int sdhci_panic_prepare(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	unsigned long flags;
+	u32 present;
+	u8 val;
+	int ret;
+
+	/*
+	 * If the controller has a request in flight, give it a short
+	 * bounded time to finish. The CMD/DATA reset below will
+	 * force-abort anything that doesn't complete in time.
+	 */
+	present = sdhci_readl(host, SDHCI_PRESENT_STATE);
+	if (present & (SDHCI_CMD_INHIBIT | SDHCI_DATA_INHIBIT)) {
+		readl_poll_timeout_atomic(host->ioaddr + SDHCI_PRESENT_STATE,
+					  present,
+					  !(present & (SDHCI_CMD_INHIBIT |
+						       SDHCI_DATA_INHIBIT)),
+					  10, SDHCI_PANIC_DRAIN_TIMEOUT_US);
+	}
+
+	sdhci_writeb(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA,
+		     SDHCI_SOFTWARE_RESET);
+
+	ret = readb_poll_timeout_atomic(host->ioaddr + SDHCI_SOFTWARE_RESET,
+					val, !(val & (SDHCI_RESET_CMD | SDHCI_RESET_DATA)),
+					10, SDHCI_PANIC_RESET_TIMEOUT_US);
+
+	spin_lock_irqsave(&host->lock, flags);
+	host->cmd = NULL;
+	host->data = NULL;
+	host->data_cmd = NULL;
+	host->mrqs_done[0] = NULL;
+	host->mrqs_done[1] = NULL;
+	spin_unlock_irqrestore(&host->lock, flags);
+
+	if (host->ops && host->ops->panic_prepare)
+		host->ops->panic_prepare(host);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sdhci_panic_prepare);
+
+/**
+ * sdhci_panic_poll_completion - Poll SDHCI registers for request completion
+ * @mmc: MMC host structure
+ * @mrq: MMC request being polled for completion
+ *
+ * Checks interrupt status and present state registers to determine if a
+ * request has completed. Used during panic when interrupts are disabled.
+ */
+bool sdhci_panic_poll_completion(struct mmc_host *mmc, struct mmc_request *mrq)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	unsigned int poll_count;
+	u32 int_status, present;
+
+	for (poll_count = 0; poll_count < SDHCI_PANIC_POLL_ITERATIONS;
+	     poll_count++) {
+		cpu_relax();
+		udelay(SDHCI_PANIC_POLL_DELAY_US);
+
+		int_status = sdhci_readl(host, SDHCI_INT_STATUS);
+
+		if (int_status & SDHCI_INT_ERROR) {
+			if (mrq->cmd)
+				mrq->cmd->error = -EIO;
+			if (mrq->data)
+				mrq->data->error = -EIO;
+			sdhci_writel(host, int_status, SDHCI_INT_STATUS);
+			return true;
+		}
+
+		if (int_status & SDHCI_INT_RESPONSE)
+			sdhci_writel(host, SDHCI_INT_RESPONSE,
+				     SDHCI_INT_STATUS);
+
+		if (int_status & SDHCI_INT_DATA_END)
+			sdhci_writel(host, SDHCI_INT_DATA_END,
+				     SDHCI_INT_STATUS);
+
+		/*
+		 * Use the same completion heuristic as the working v5
+		 * implementation: after a minimum number of poll
+		 * iterations, treat the request as complete when the
+		 * DATA_INHIBIT bit clears (controller is idle).
+		 */
+		if (poll_count >= SDHCI_PANIC_MIN_POLL_COUNT) {
+			present = sdhci_readl(host, SDHCI_PRESENT_STATE);
+			if (!(present & SDHCI_DATA_INHIBIT))
+				return true;
+		}
+	}
+
+	if (mrq->cmd)
+		mrq->cmd->error = -ETIMEDOUT;
+	if (mrq->data)
+		mrq->data->error = -ETIMEDOUT;
+	return false;
+}
+EXPORT_SYMBOL_GPL(sdhci_panic_poll_completion);
+
+/**
+ * sdhci_panic_complete - Clean up SDHCI state after a panic-context request
+ * @mmc: MMC host structure
+ * @mrq: MMC request that has completed
+ *
+ * Clears host software state under spinlock so the next panic request
+ * starts clean.
+ */
+void sdhci_panic_complete(struct mmc_host *mmc, struct mmc_request *mrq)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
+	host->cmd = NULL;
+	host->data = NULL;
+	host->data_cmd = NULL;
+	host->mrqs_done[0] = NULL;
+	host->mrqs_done[1] = NULL;
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+EXPORT_SYMBOL_GPL(sdhci_panic_complete);
+
 static const struct mmc_host_ops sdhci_ops = {
 	.request	= sdhci_request,
 	.post_req	= sdhci_post_req,
@@ -3091,6 +3243,9 @@ static const struct mmc_host_ops sdhci_ops = {
 	.execute_tuning			= sdhci_execute_tuning,
 	.card_event			= sdhci_card_event,
 	.card_busy	= sdhci_card_busy,
+	.panic_prepare			= sdhci_panic_prepare,
+	.panic_poll_completion		= sdhci_panic_poll_completion,
+	.panic_complete			= sdhci_panic_complete,
 };
 
 /*****************************************************************************\
@@ -3242,6 +3397,9 @@ static void sdhci_timeout_timer(struct timer_list *t)
 
 	host = timer_container_of(host, t, timer);
 
+	if (oops_in_progress)
+		return;
+
 	spin_lock_irqsave(&host->lock, flags);
 
 	if (host->cmd && !sdhci_data_line_cmd(host->cmd)) {
@@ -3263,6 +3421,9 @@ static void sdhci_timeout_data_timer(struct timer_list *t)
 	unsigned long flags;
 
 	host = timer_container_of(host, t, data_timer);
+
+	if (oops_in_progress)
+		return;
 
 	spin_lock_irqsave(&host->lock, flags);
 
