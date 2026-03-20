@@ -194,16 +194,17 @@ def assert_ctx_committed(ctx, dump):
 
 def assert_ctxs_committed(kdamonds):
     ctxs_paused_for_dump = []
+    # pause for safe state dumping
     for kd in kdamonds.kdamonds:
         for ctx in kd.contexts:
             if ctx.pause is False:
                 ctx.pause = True
-                err = kd.commit()
-                if err is not None:
-                    print('pause fail (%s)' % err)
-                    kdamonds.stop()
-                    exit(1)
                 ctxs_paused_for_dump.append(ctx)
+        err = kd.commit()
+        if err is not None:
+            print('pause fail (%s)' % err)
+            kdamonds.stop()
+            exit(1)
 
     status, err = dump_damon_status_dict(kdamonds.kdamonds[0].pid)
     if err is not None:
@@ -211,17 +212,19 @@ def assert_ctxs_committed(kdamonds):
         kdamonds.stop()
         exit(1)
 
+    # resume contexts paused for safe state dumping
     for kd in kdamonds.kdamonds:
-        for ctx in kd.contexts:
-            if ctx in ctxs_paused_for_dump:
-                ctx.pause = False
-                err = kd.commit()
-                if err is not None:
-                    print('resume fail (%s)' % err)
-                    kdamonds.stop()
-                    exit(1)
-                # restore for comparison
-                ctx.pause = True
+        for ctx in ctxs_paused_for_dump:
+            ctx.pause = False
+        err = kd.commit()
+        if err is not None:
+            print('resume fail (%s)' % err)
+            kdamonds.stop()
+            exit(1)
+
+    # restore for comparison
+    for ctx in ctxs_paused_for_dump:
+        ctx.pause = True
 
     ctxs = kdamonds.kdamonds[0].contexts
     dump = status['contexts']
