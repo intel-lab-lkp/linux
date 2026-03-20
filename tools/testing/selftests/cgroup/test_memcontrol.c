@@ -1032,6 +1032,7 @@ static int test_memcg_swap_max_peak(const char *root)
 	char *memcg;
 	long max, peak;
 	struct stat ss;
+	long swap_peak;
 	int swap_peak_fd = -1, mem_peak_fd = -1;
 
 	/* any non-empty string resets */
@@ -1119,6 +1120,23 @@ static int test_memcg_swap_max_peak(const char *root)
 	if (cg_write(memcg, "memory.max", "30M"))
 		goto cleanup;
 
+	/*
+	 * The swap.peak that can be reached will depend on the system page
+	 * size. With larger page size (e.g. 64k), it takes more time to write
+	 * the anonymous memory page to swap and so the peak reached will be
+	 * lower before the memory allocation process get oom-killed. One way
+	 * to allow the swap.peak to go higher is to throttle memory allocation
+	 * by setting memory.high to, say, 29M to give more time to swap out the
+	 * memory before oom-kill. This is still not enough for it to reach
+	 * 29M reachable with 4k page. So we still need to reduce the expected
+	 * swap.peak accordingly.
+	 */
+	swap_peak = (page_size == KB(4)) ? MB(29) :
+		   ((page_size <= KB(16)) ? MB(28) : MB(27));
+
+	if (cg_write(memcg, "memory.high", "29M"))
+		goto cleanup;
+
 	/* Should be killed by OOM killer */
 	if (!cg_run(memcg, alloc_anon, (void *)MB(100)))
 		goto cleanup;
@@ -1134,7 +1152,7 @@ static int test_memcg_swap_max_peak(const char *root)
 		goto cleanup;
 
 	peak = cg_read_long(memcg, "memory.swap.peak");
-	if (peak < MB(29))
+	if (peak < swap_peak)
 		goto cleanup;
 
 	peak = cg_read_long_fd(mem_peak_fd);
@@ -1142,7 +1160,7 @@ static int test_memcg_swap_max_peak(const char *root)
 		goto cleanup;
 
 	peak = cg_read_long_fd(swap_peak_fd);
-	if (peak < MB(29))
+	if (peak < swap_peak)
 		goto cleanup;
 
 	/*
@@ -1181,7 +1199,7 @@ static int test_memcg_swap_max_peak(const char *root)
 	if (cg_read_long(memcg, "memory.peak") < MB(29))
 		goto cleanup;
 
-	if (cg_read_long(memcg, "memory.swap.peak") < MB(29))
+	if (cg_read_long(memcg, "memory.swap.peak") < swap_peak)
 		goto cleanup;
 
 	if (cg_run(memcg, alloc_anon_50M_check_swap, (void *)MB(30)))
@@ -1196,7 +1214,7 @@ static int test_memcg_swap_max_peak(const char *root)
 		goto cleanup;
 
 	peak = cg_read_long(memcg, "memory.swap.peak");
-	if (peak < MB(29))
+	if (peak < swap_peak)
 		goto cleanup;
 
 	peak = cg_read_long_fd(mem_peak_fd);
