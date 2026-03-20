@@ -298,6 +298,7 @@ struct cpu_hw_events {
 	/* DS based PEBS or arch-PEBS buffer address */
 	void			*pebs_vaddr;
 	u64			pebs_enabled;
+	bool			pebs_stale;
 	int			n_pebs;
 	int			n_large_pebs;
 	int			n_pebs_via_pt;

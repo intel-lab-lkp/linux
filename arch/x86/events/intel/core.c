@@ -3548,14 +3548,26 @@ static int handle_pmi_common(struct pt_regs *regs, u64 status)
 		static_call(x86_pmu_drain_pebs)(regs, &data);
 
 		/*
-		 * PMI throttle may be triggered, which stops the PEBS event.
-		 * Although cpuc->pebs_enabled is updated accordingly, the
-		 * MSR_IA32_PEBS_ENABLE is not updated. Because the
-		 * cpuc->enabled has been forced to 0 in PMI.
-		 * Update the MSR if pebs_enabled is changed.
+		 * PMI throttling may be triggered, which stops the PEBS
+		 * event.  Although cpuc->pebs_enabled was updated
+		 * accordingly, MSR_IA32_PEBS_ENABLE has not been updated.
+		 *
+		 * The MSR must not be updated in NMI context, because KVM
+		 * may be in a critical region on its way to VM-entry, with
+		 * the now-stale MSR value stored in the VM-exit MSR-load
+		 * list.  On VM-exit, the CPU will restore the stale value.
+		 *
+		 * Deferring the MSR update is harmless because the
+		 * throttled event's PerfEvtSel ENABLE bit has been
+		 * cleared, so the stale PEBS_ENABLE bit is irrelevant for
+		 * now.
+		 *
+		 * Track when MSR_IA32_PEBS_ENABLE is stale, so that
+		 * pebs_enable_all() will write cpuc->pebs_enabled to the
+		 * MSR, even when cpuc->pebs_enabled is 0.
 		 */
 		if (pebs_enabled != cpuc->pebs_enabled)
-			wrmsrq(MSR_IA32_PEBS_ENABLE, cpuc->pebs_enabled);
+			cpuc->pebs_stale = true;
 
 		/*
 		 * Above PEBS handler (PEBS counters snapshotting) has updated fixed
@@ -4978,6 +4990,10 @@ static int intel_pmu_hw_config(struct perf_event *event)
  * These values have nothing to do with the emulated values the guest sees
  * when it uses {RD,WR}MSR, which should be handled by the KVM context,
  * specifically in the intel_pmu_{get,set}_msr().
+ *
+ * Note that MSRs returned from this function must not be modified in NMI
+ * context. Doing so could result in a stale host value being restored at
+ * the next VM-exit.
  */
 static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr, void *data)
 {
