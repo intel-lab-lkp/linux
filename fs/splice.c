@@ -1199,6 +1199,9 @@ static ssize_t do_splice_direct_actor(struct file *in, loff_t *ppos,
 	if (unlikely(out->f_flags & O_APPEND))
 		return -EINVAL;
 
+	/* Prevent deadlock when splicing a file to itself */
+	if (file_inode(in) == file_inode(out))
+		return -EINVAL;
 	ret = splice_direct_to_actor(in, &sd, actor);
 	if (ret > 0)
 		*ppos = sd.pos;
