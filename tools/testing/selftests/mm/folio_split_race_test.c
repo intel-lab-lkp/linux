@@ -11,6 +11,7 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <inttypes.h>
 #include <linux/mman.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -189,7 +190,7 @@ static size_t run_iteration(void)
 				i, errno);
 		}
 
-		i += PUNCH_SIZE_FACTOR;
+		i += PUNCH_SIZE_FACTOR - 1;
 	}
 
 	atomic_store_explicit(&ctl.stop, 1, memory_order_release);
@@ -261,8 +262,8 @@ int main(void)
 
 	ksft_print_msg("folio split race test\n");
 	ksft_print_msg("===================================================\n");
-	ksft_print_msg("Shmem size:       %zu MiB\n", FILE_SIZE / 1024 / 1024);
-	ksft_print_msg("Total pages:     %zu\n", TOTAL_PAGES);
+	ksft_print_msg("Shmem size:       %" PRIu64 " MiB\n", FILE_SIZE / 1024 / 1024);
+	ksft_print_msg("Total pages:     %" PRIu64 "\n", TOTAL_PAGES);
 	ksft_print_msg("Child readers:   %d\n", NUM_READER_THREADS);
 	ksft_print_msg("Punching every %dth to %dth page\n", PUNCH_INTERVAL,
 		       PUNCH_INTERVAL + PUNCH_SIZE_FACTOR);
