@@ -36,7 +36,11 @@ struct swap_cluster_info {
 	u16 count;
 	u8 flags;
 	u8 order;
-	atomic_long_t __rcu *table;	/* Swap table entries, see mm/swap_table.h */
+	/*
+	 * Reverse map, to look up the virtual swap slot backed by a given physical
+	 * swap slot.
+	 */
+	atomic_long_t __rcu *table;
 	struct list_head list;
 };
 
@@ -212,7 +216,7 @@ static inline struct address_space *swap_address_space(swp_entry_t entry)
 }
 
 /* Return the swap device position of the swap slot. */
-static inline loff_t swap_slot_pos(swp_slot_t slot)
+static inline loff_t swap_slot_dev_pos(swp_slot_t slot)
 {
 	return ((loff_t)swp_slot_offset(slot)) << PAGE_SHIFT;
 }

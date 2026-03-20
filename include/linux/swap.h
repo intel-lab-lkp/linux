@@ -425,6 +425,12 @@ extern void __meminit kswapd_stop(int nid);
 
 /* Virtual swap space API (mm/vswap.c) */
 int vswap_init(void);
+void vswap_exit(void);
+void vswap_free(swp_entry_t entry, struct swap_cluster_info *ci);
+swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry);
+swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot);
+bool tryget_swap_entry(swp_entry_t entry, struct swap_info_struct **si);
+void put_swap_entry(swp_entry_t entry, struct swap_info_struct *si);
 
 /* Lifecycle swap API (mm/swapfile.c) */
 int folio_alloc_swap(struct folio *folio);
@@ -474,6 +480,7 @@ static inline long get_nr_swap_pages(void)
 }
 
 void si_swapinfo(struct sysinfo *);
+int swap_slot_alloc(swp_slot_t *slot, unsigned int order);
 swp_slot_t swap_slot_alloc_of_type(int);
 int add_swap_count_continuation(swp_entry_t, gfp_t);
 int swap_type_of(dev_t device, sector_t offset);
@@ -496,6 +503,29 @@ static inline struct swap_info_struct *swap_slot_tryget_swap_info(swp_slot_t slo
 }
 
 static inline void swap_slot_put_swap_info(struct swap_info_struct *si)
+{
+}
+
+static inline swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry)
+{
+	swp_slot_t ret = { .val = 0 };
+	return ret;
+}
+
+static inline swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot)
+{
+	swp_entry_t ret = { .val = 0 };
+	return ret;
+}
+
+static inline bool tryget_swap_entry(swp_entry_t entry,
+				     struct swap_info_struct **si)
+{
+	return false;
+}
+
+static inline void put_swap_entry(swp_entry_t entry,
+				  struct swap_info_struct *si)
 {
 }
 
@@ -671,48 +701,6 @@ static inline bool mem_cgroup_swap_full(struct folio *folio)
 	return vm_swap_full();
 }
 #endif
-
-/**
- * swp_entry_to_swp_slot - look up the physical swap slot corresponding to a
- *                         virtual swap slot.
- * @entry: the virtual swap slot.
- *
- * Return: the physical swap slot corresponding to the virtual swap slot.
- */
-static inline swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry)
-{
-	return (swp_slot_t) { entry.val };
-}
-
-/**
- * swp_slot_to_swp_entry - look up the virtual swap slot corresponding to a
- *                         physical swap slot.
- * @slot: the physical swap slot.
- *
- * Return: the virtual swap slot corresponding to the physical swap slot.
- */
-static inline swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot)
-{
-	return (swp_entry_t) { slot.val };
-}
-
-static inline bool tryget_swap_entry(swp_entry_t entry,
-				struct swap_info_struct **sip)
-{
-	swp_slot_t slot = swp_entry_to_swp_slot(entry);
-	struct swap_info_struct *si = swap_slot_tryget_swap_info(slot);
-
-	if (sip)
-		*sip = si;
-
-	return si;
-}
-
-static inline void put_swap_entry(swp_entry_t entry,
-				struct swap_info_struct *si)
-{
-	swap_slot_put_swap_info(si);
-}
 
 #endif /* __KERNEL__*/
 #endif /* _LINUX_SWAP_H */
