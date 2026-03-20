@@ -4427,6 +4427,11 @@ struct cfg80211_pmsr_result {
  *	indicate the driver should set the BSS color. Only valid if
  *	@non_trigger_based or @trigger_based is set.
  * @pd_request: indicates a peer-to-peer PD request.
+ * @pd_suppress_range_results: flag to suppress ranging results for PD
+ *	requests. When set, the device performs ranging measurements to
+ *	provide ranging services to a peer (e.g. in RSTA role) but does
+ *	not report the measurement results to userspace. Only valid when
+ *	@pd_request is set.
  * @min_time_between_measurements: minimum time between two consecutive range
  *	measurements in units of 100 micro seconds, applicable for
  *	non trigger based ranging. Only valid if @non_trigger_based is set.
@@ -4477,7 +4482,8 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u8 ftmr_retries;
 	u8 bss_color;
 
-	u8 pd_request:1;
+	u8 pd_request:1,
+	   pd_suppress_range_results:1;
 	u32 min_time_between_measurements;
 	u32 max_time_between_measurements;
 	u32 availability_window;
