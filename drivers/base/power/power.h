@@ -125,11 +125,25 @@ static inline bool device_pm_initialized(struct device *dev)
 }
 
 /* drivers/base/power/wakeup_stats.c */
+#ifdef CONFIG_PM_WAKEUP_STATS_SYSFS
 extern int wakeup_source_sysfs_add(struct device *parent,
 				   struct wakeup_source *ws);
 extern void wakeup_source_sysfs_remove(struct wakeup_source *ws);
 
 extern int pm_wakeup_source_sysfs_add(struct device *parent);
+#else /* !CONFIG_PM_WAKEUP_STATS_SYSFS */
+static inline int wakeup_source_sysfs_add(struct device *parent,
+					  struct wakeup_source *ws)
+{
+	return 0;
+}
+static inline void wakeup_source_sysfs_remove(struct wakeup_source *ws) {}
+
+static inline int pm_wakeup_source_sysfs_add(struct device *parent)
+{
+	return 0;
+}
+#endif /* !CONFIG_PM_WAKEUP_STATS_SYSFS */
 
 #else /* !CONFIG_PM_SLEEP */
 
