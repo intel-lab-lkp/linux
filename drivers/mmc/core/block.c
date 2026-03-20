@@ -3305,6 +3305,7 @@ static int mmc_blk_probe(struct mmc_card *card)
 	}
 
 	mmc_blk_rpmb_add(card);
+	mmcpstore_card_add(card, md->disk);
 
 	return 0;
 
@@ -3320,6 +3321,7 @@ static void mmc_blk_remove(struct mmc_card *card)
 {
 	struct mmc_blk_data *md = dev_get_drvdata(&card->dev);
 
+	mmcpstore_card_remove(card);
 	mmc_blk_remove_debugfs(card, md);
 	mmc_blk_remove_parts(card, md);
 	pm_runtime_get_sync(&card->dev);
