@@ -18,6 +18,7 @@
 #include "core.h"
 #include "devlink.h"
 #include "dpll.h"
+#include "hwmon.h"
 #include "regs.h"
 
 #define ZL_CHIP_INFO(_id, _nchannels, _flags)				\
@@ -1038,6 +1039,12 @@ int zl3073x_dev_probe(struct zl3073x_dev *zldev)
 	rc = zl3073x_devm_dpll_init(zldev);
 	if (rc)
 		return rc;
+
+	/* Register hwmon interface */
+	rc = zl3073x_hwmon_init(zldev);
+	if (rc)
+		return dev_err_probe(zldev->dev, rc,
+				     "Failed to register hwmon device\n");
 
 	/* Register the devlink instance and parameters */
 	rc = zl3073x_devlink_register(zldev);

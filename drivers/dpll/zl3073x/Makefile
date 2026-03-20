@@ -3,6 +3,7 @@
 obj-$(CONFIG_ZL3073X)		+= zl3073x.o
 zl3073x-objs			:= chan.o core.o devlink.o dpll.o	\
 				   flash.o fw.o out.o prop.o ref.o synth.o
+zl3073x-$(CONFIG_HWMON)		+= hwmon.o
 
 obj-$(CONFIG_ZL3073X_I2C)	+= zl3073x_i2c.o
 zl3073x_i2c-objs		:= i2c.o
