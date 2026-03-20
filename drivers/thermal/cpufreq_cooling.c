@@ -24,6 +24,9 @@
 #include <linux/units.h>
 
 #include "thermal_trace.h"
+#ifdef CONFIG_SCHED_CLASS_EXT
+#include "../../kernel/sched/sched.h"
+#endif
 
 /*
  * Cooling state <-> CPUFreq frequency
@@ -72,7 +75,7 @@ struct cpufreq_cooling_device {
 	struct em_perf_domain *em;
 	struct cpufreq_policy *policy;
 	struct thermal_cooling_device_ops cooling_ops;
-#ifndef CONFIG_SMP
+#if !defined(CONFIG_SMP) || defined(CONFIG_SCHED_CLASS_EXT)
 	struct time_in_idle *idle_time;
 #endif
 	struct freq_qos_request qos_req;
@@ -147,23 +150,9 @@ static u32 cpu_power_to_freq(struct cpufreq_cooling_device *cpufreq_cdev,
 	return freq;
 }
 
-/**
- * get_load() - get load for a cpu
- * @cpufreq_cdev: struct cpufreq_cooling_device for the cpu
- * @cpu: cpu number
- *
- * Return: The average load of cpu @cpu in percentage since this
- * function was last called.
- */
-#ifdef CONFIG_SMP
-static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu)
-{
-	unsigned long util = sched_cpu_util(cpu);
-
-	return (util * 100) / arch_scale_cpu_capacity(cpu);
-}
-#else /* !CONFIG_SMP */
-static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu)
+#if !defined(CONFIG_SMP) || defined(CONFIG_SCHED_CLASS_EXT)
+static u32 get_load_from_idle_time(struct cpufreq_cooling_device *cpufreq_cdev,
+				   int cpu)
 {
 	u32 load;
 	u64 now, now_idle, delta_time, delta_idle;
@@ -183,8 +172,35 @@ static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu)
 
 	return load;
 }
-#endif /* CONFIG_SMP */
+#endif /* !defined(CONFIG_SMP) || defined(CONFIG_SCHED_CLASS_EXT) */
 
+/**
+ * get_load() - get load for a cpu
+ * @cpufreq_cdev: struct cpufreq_cooling_device for the cpu
+ * @cpu: cpu number
+ *
+ * Return: The average load of cpu @cpu in percentage since this
+ * function was last called.
+ */
+#ifndef CONFIG_SMP
+static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu,
+		    int cpu_idx)
+{
+	return get_load_from_idle_time(cpufreq_cdev, cpu, cpu_idx);
+}
+#else /* CONFIG_SMP */
+static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu)
+{
+	unsigned long util;
+
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (scx_enabled())
+		return get_load_from_idle_time(cpufreq_cdev, cpu);
+#endif
+	util = sched_cpu_util(cpu);
+	return (util * 100) / arch_scale_cpu_capacity(cpu);
+}
+#endif /* !CONFIG_SMP */
 /**
  * get_dynamic_power() - calculate the dynamic power
  * @cpufreq_cdev:	&cpufreq_cooling_device for this cdev
