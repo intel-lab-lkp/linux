@@ -2240,6 +2240,8 @@ ice_xmit_frame_ring(struct sk_buff *skb, struct ice_tx_ring *tx_ring)
 		goto out_drop;
 
 	/* allow CONTROL frames egress from main VSI if FW LLDP disabled */
+	if (likely(!skb_mac_header_was_set(skb)))
+		skb_reset_mac_header(skb);
 	eth = (struct ethhdr *)skb_mac_header(skb);
 
 	if ((ice_is_switchdev_running(vsi->back) ||
