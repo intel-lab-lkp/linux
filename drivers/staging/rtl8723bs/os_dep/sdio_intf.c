@@ -345,38 +345,46 @@ static int rtw_drv_init(
 	struct sdio_func *func,
 	const struct sdio_device_id *id)
 {
-	int status = _FAIL;
+	int ret;
 	struct adapter *if1 = NULL;
 	struct dvobj_priv *dvobj;
 
 	dvobj = sdio_dvobj_init(func);
-	if (!dvobj)
+	if (!dvobj) {
+		ret = -ENOMEM;
 		goto exit;
+	}
 
 	if1 = rtw_sdio_if1_init(dvobj, id);
-	if (!if1)
+	if (!if1) {
+		ret = -ENOMEM;
 		goto free_dvobj;
+	}
 
 	/* dev_alloc_name && register_netdev */
-	status = rtw_drv_register_netdev(if1);
-	if (status != _SUCCESS)
+	ret = rtw_drv_register_netdev(if1);
+	if (ret) {
+		ret = -EIO;
 		goto free_if1;
+	}
 
-	status = sdio_alloc_irq(dvobj);
-	if (status != _SUCCESS)
+	ret = sdio_alloc_irq(dvobj);
+	if (ret) {
+		ret = -EIO;
 		goto free_if1;
+	}
 
-	status = _SUCCESS;
+	ret = _SUCCESS;
 
 free_if1:
-	if (status != _SUCCESS && if1)
+	if (ret != _SUCCESS && if1)
 		rtw_sdio_if1_deinit(if1);
 
 free_dvobj:
-	if (status != _SUCCESS)
+	if (ret != _SUCCESS)
 		sdio_dvobj_deinit(func);
 exit:
-	return status == _SUCCESS ? 0 : -ENODEV;
+	return ret;
 }
 
 static void rtw_dev_remove(struct sdio_func *func)
