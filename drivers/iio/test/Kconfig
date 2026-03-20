@@ -29,6 +29,18 @@ config IIO_RESCALE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config IIO_FIXPOINT_PARSE_KUNIT_TEST
+	tristate "Test IIO fixpoint parsing functions" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  build unit tests for the IIO fixpoint parsing functions.
+
+	  For more information on KUnit and unit tests in general, please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config IIO_FORMAT_KUNIT_TEST
 	tristate "Test IIO formatting functions" if !KUNIT_ALL_TESTS
 	depends on KUNIT
