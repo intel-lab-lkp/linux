@@ -6289,6 +6289,21 @@ void ixgbe_reinit_locked(struct ixgbe_adapter *adapter)
 	if (adapter->flags & IXGBE_FLAG_SRIOV_ENABLED)
 		msleep(2000);
 	ixgbe_up(adapter);
+
+	/* E610 has no FW event to notify peer PFs that an EMPR reset occurred.
+	 * Refresh the cached FW version here so that a PF completing reinit
+	 * after an EMPR triggered by another PF's devlink reload picks up the
+	 * new version in adapter->eeprom_id.
+	 */
+	if (adapter->hw.mac.type == ixgbe_mac_e610) {
+		int err = ixgbe_refresh_fw_version(adapter);
+
+		if (err)
+			netdev_warn(adapter->netdev,
+				    "Failed to refresh FW version after reset: %d\n",
+				    err);
+	}
+
 	clear_bit(__IXGBE_RESETTING, &adapter->state);
 }
 

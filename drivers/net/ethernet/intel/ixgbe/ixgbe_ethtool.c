@@ -1155,12 +1155,30 @@ err:
 	return ret_val;
 }
 
-void ixgbe_refresh_fw_version(struct ixgbe_adapter *adapter)
+/**
+ * ixgbe_refresh_fw_version - re-read flash data and update eeprom_id cache
+ * @adapter: board private structure
+ *
+ * Re-reads the NVM/flash and refreshes the cached adapter->eeprom_id string.
+ * On failure the cache is set to "unknown" so that ethtool -i never shows a
+ * stale version string after a failed reset.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int ixgbe_refresh_fw_version(struct ixgbe_adapter *adapter)
 {
 	struct ixgbe_hw *hw = &adapter->hw;
+	int err;
 
-	ixgbe_get_flash_data(hw);
+	err = ixgbe_get_flash_data(hw);
+	if (err) {
+		strscpy(adapter->eeprom_id, "unknown",
+			sizeof(adapter->eeprom_id));
+		return err;
+	}
+
 	ixgbe_set_fw_version_e610(adapter);
+	return 0;
 }
 
 static void ixgbe_get_drvinfo(struct net_device *netdev,

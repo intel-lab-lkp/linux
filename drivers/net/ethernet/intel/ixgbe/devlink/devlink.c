@@ -322,8 +322,13 @@ static int ixgbe_devlink_info_get(struct devlink *devlink,
 	if (!ctx)
 		return -ENOMEM;
 
-	if (hw->mac.type == ixgbe_mac_e610)
-		ixgbe_refresh_fw_version(adapter);
+	if (hw->mac.type == ixgbe_mac_e610) {
+		err = ixgbe_refresh_fw_version(adapter);
+		if (err)
+			netdev_warn(adapter->netdev,
+				    "Failed to refresh FW version for devlink info: %d\n",
+				    err);
+	}
 
 	ixgbe_info_get_dsn(adapter, ctx);
 	err = devlink_info_serial_number_put(req, ctx->buf);
@@ -442,7 +447,9 @@ static int ixgbe_devlink_reload_empr_start(struct devlink *devlink,
  *
  * Wait for new NVM to be loaded during EMP reset.
  *
- * Return: -ETIME when timer is exceeded, 0 on success.
+ * Return: -ETIME when timer is exceeded, 0 on success. A failure to re-read
+ * the FW version after the reset completes is non-fatal and does not cause
+ * this function to return an error.
  */
 static int ixgbe_devlink_reload_empr_finish(struct devlink *devlink,
 					    enum devlink_reload_action action,
@@ -452,7 +459,7 @@ static int ixgbe_devlink_reload_empr_finish(struct devlink *devlink,
 {
 	struct ixgbe_adapter *adapter = devlink_priv(devlink);
 	struct ixgbe_hw *hw = &adapter->hw;
-	int i = 0;
+	int i = 0, err;
 	u32 fwsm;
 
 	do {
@@ -473,6 +480,16 @@ static int ixgbe_devlink_reload_empr_finish(struct devlink *devlink,
 
 	adapter->flags2 &= ~(IXGBE_FLAG2_API_MISMATCH |
 			     IXGBE_FLAG2_FW_ROLLBACK);
+
+	/* Re-reading the FW version is best-effort; the EMPR itself completed
+	 * successfully.  Log any failure so the user knows eeprom_id has been
+	 * reset to "unknown".
+	 */
+	err = ixgbe_refresh_fw_version(adapter);
+	if (err)
+		netdev_warn(adapter->netdev,
+			    "Failed to refresh FW version after EMPR: %d\n",
+			    err);
 
 	return 0;
 }
