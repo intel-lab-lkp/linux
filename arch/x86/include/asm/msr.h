@@ -173,6 +173,7 @@ static inline u64 native_read_pmc(int counter)
 #include <asm/paravirt.h>
 
 #define raw_read_msr		paravirt_read_msr
+#define raw_read_msr_safe	paravirt_read_msr_safe
 
 #else
 #include <linux/errno.h>
@@ -207,16 +208,6 @@ static inline int wrmsrq_safe(u32 msr, u64 val)
 	return raw_write_msr_safe(msr, val);
 }
 
-/* rdmsr with exception handling */
-#define rdmsr_safe(msr, low, high)				\
-({								\
-	u64 __val;						\
-	int __err = raw_read_msr_safe((msr), &__val);		\
-	(*low) = (u32)__val;					\
-	(*high) = (u32)(__val >> 32);				\
-	__err;							\
-})
-
 static inline int rdmsrq_safe(u32 msr, u64 *p)
 {
 	return raw_read_msr_safe(msr, p);
@@ -238,6 +229,16 @@ do {								\
 	(void)((low) = (u32)__val);				\
 	(void)((high) = (u32)(__val >> 32));			\
 } while (0)
+
+/* rdmsr with exception handling */
+#define rdmsr_safe(msr, low, high)				\
+({								\
+	u64 __val;						\
+	int __err = raw_read_msr_safe((msr), &__val);		\
+	(*low) = (u32)__val;					\
+	(*high) = (u32)(__val >> 32);				\
+	__err;							\
+})
 
 /* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
 #define ASM_WRMSRNS _ASM_BYTES(0x0f,0x01,0xc6)
