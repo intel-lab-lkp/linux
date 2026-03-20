@@ -174,8 +174,7 @@ struct bug_entry *find_bug(unsigned long bugaddr)
 }
 
 __diag_push();
-__diag_ignore(GCC, all, "-Wsuggest-attribute=format",
-	      "Not a valid __printf() conversion candidate.");
+__diag_ignore_all("-Wmissing-format-attribute", "Not a valid __printf() conversion candidate.");
 static void __warn_printf(const char *fmt, struct pt_regs *regs)
 {
 	if (!fmt)
