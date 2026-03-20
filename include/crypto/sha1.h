@@ -40,7 +40,7 @@ struct sha1_block_state {
 struct sha1_ctx {
 	struct sha1_block_state state;
 	u64 bytecount;
-	u8 buf[SHA1_BLOCK_SIZE];
+	u8 buf[SHA1_BLOCK_SIZE] __aligned(__alignof__(__be64));
 };
 
 /**
