@@ -174,6 +174,8 @@ static inline u64 native_read_pmc(int counter)
 
 #define raw_read_msr		paravirt_read_msr
 #define raw_read_msr_safe	paravirt_read_msr_safe
+#define raw_write_msr		paravirt_write_msr
+#define raw_write_msr_safe	paravirt_write_msr_safe
 
 #else
 #include <linux/errno.h>
@@ -188,27 +190,6 @@ static inline u64 native_read_pmc(int counter)
  * Note: the rd* operations modify the parameters directly (without using
  * pointer indirection), this allows gcc to optimize better
  */
-
-static inline void wrmsr(u32 msr, u32 low, u32 high)
-{
-	raw_write_msr(msr, (u64)high << 32 | low);
-}
-
-static inline void wrmsrq(u32 msr, u64 val)
-{
-	raw_write_msr(msr, val);
-}
-
-/* wrmsr with exception handling */
-static inline int wrmsrq_safe(u32 msr, u64 val)
-{
-	return raw_write_msr_safe(msr, val);
-}
-
-static inline int rdmsrq_safe(u32 msr, u64 *p)
-{
-	return raw_read_msr_safe(msr, p);
-}
 
 static __always_inline u64 rdpmc(int counter)
 {
@@ -239,6 +220,27 @@ do {								\
 
 #define rdmsrq(msr, val)			\
 	((val) = raw_read_msr((msr)))
+
+static inline int rdmsrq_safe(u32 msr, u64 *p)
+{
+	return raw_read_msr_safe(msr, p);
+}
+
+/* wrmsr with exception handling */
+static inline int wrmsrq_safe(u32 msr, u64 val)
+{
+	return raw_write_msr_safe(msr, val);
+}
+
+static inline void wrmsr(u32 msr, u32 low, u32 high)
+{
+	raw_write_msr(msr, (u64)high << 32 | low);
+}
+
+static inline void wrmsrq(u32 msr, u64 val)
+{
+	raw_write_msr(msr, val);
+}
 
 /* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
 #define ASM_WRMSRNS _ASM_BYTES(0x0f,0x01,0xc6)
