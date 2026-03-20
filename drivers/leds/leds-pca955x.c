@@ -112,19 +112,6 @@ static const struct pca955x_chipdef pca955x_chipdefs[] = {
 	},
 };
 
-struct pca955x {
-	struct mutex lock;
-	struct pca955x_led *leds;
-	const struct pca955x_chipdef	*chipdef;
-	struct i2c_client	*client;
-	unsigned long active_blink;
-	unsigned long active_pins;
-	unsigned long blink_period;
-#ifdef CONFIG_LEDS_PCA955X_GPIO
-	struct gpio_chip gpio;
-#endif
-};
-
 struct pca955x_led {
 	struct pca955x	*pca955x;
 	struct led_classdev	led_cdev;
@@ -137,8 +124,21 @@ struct pca955x_led {
 #define led_to_pca955x(l)	container_of(l, struct pca955x_led, led_cdev)
 
 struct pca955x_platform_data {
-	struct pca955x_led	*leds;
 	int			num_leds;
+	struct pca955x_led	leds[] __counted_by(num_leds);
+};
+
+struct pca955x {
+	struct mutex lock;
+	const struct pca955x_chipdef	*chipdef;
+	struct i2c_client	*client;
+	unsigned long active_blink;
+	unsigned long active_pins;
+	unsigned long blink_period;
+#ifdef CONFIG_LEDS_PCA955X_GPIO
+	struct gpio_chip gpio;
+#endif
+	struct pca955x_led leds[];
 };
 
 /* 8 bits per input register */
@@ -542,15 +542,11 @@ pca955x_get_pdata(struct i2c_client *client, const struct pca955x_chipdef *chip)
 	if (count > chip->bits)
 		return ERR_PTR(-ENODEV);
 
-	pdata = devm_kzalloc(&client->dev, sizeof(*pdata), GFP_KERNEL);
+	pdata = devm_kzalloc(&client->dev, struct_size(pdata, leds, chip->bits), GFP_KERNEL);
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
-	pdata->leds = devm_kcalloc(&client->dev,
-				   chip->bits, sizeof(struct pca955x_led),
-				   GFP_KERNEL);
-	if (!pdata->leds)
-		return ERR_PTR(-ENOMEM);
+	pdata->num_leds = chip->bits;
 
 	device_for_each_child_node(&client->dev, child) {
 		u32 reg;
@@ -567,8 +563,6 @@ pca955x_get_pdata(struct i2c_client *client, const struct pca955x_chipdef *chip)
 
 		fwnode_property_read_u32(child, "type", &led->type);
 	}
-
-	pdata->num_leds = chip->bits;
 
 	return pdata;
 }
@@ -623,13 +617,8 @@ static int pca955x_probe(struct i2c_client *client)
 		return -ENODEV;
 	}
 
-	pca955x = devm_kzalloc(&client->dev, sizeof(*pca955x), GFP_KERNEL);
+	pca955x = devm_kzalloc(&client->dev, struct_size(pca955x, leds, chip->bits), GFP_KERNEL);
 	if (!pca955x)
-		return -ENOMEM;
-
-	pca955x->leds = devm_kcalloc(&client->dev, chip->bits,
-				     sizeof(*pca955x_led), GFP_KERNEL);
-	if (!pca955x->leds)
 		return -ENOMEM;
 
 	i2c_set_clientdata(client, pca955x);
