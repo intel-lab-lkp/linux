@@ -171,6 +171,9 @@ static inline u64 native_read_pmc(int counter)
 
 #ifdef CONFIG_PARAVIRT_XXL
 #include <asm/paravirt.h>
+
+#define raw_read_msr		paravirt_read_msr
+
 #else
 #include <linux/errno.h>
 
@@ -184,13 +187,6 @@ static inline u64 native_read_pmc(int counter)
  * Note: the rd* operations modify the parameters directly (without using
  * pointer indirection), this allows gcc to optimize better
  */
-
-#define rdmsr(msr, low, high)					\
-do {								\
-	u64 __val = raw_read_msr((msr));			\
-	(void)((low) = (u32)__val);				\
-	(void)((high) = (u32)(__val >> 32));			\
-} while (0)
 
 static inline void wrmsr(u32 msr, u32 low, u32 high)
 {
@@ -232,6 +228,16 @@ static __always_inline u64 rdpmc(int counter)
 }
 
 #endif	/* !CONFIG_PARAVIRT_XXL */
+
+/*
+ * Common paravirt and native helpers:
+ */
+#define rdmsr(msr, low, high)					\
+do {								\
+	u64 __val = raw_read_msr((msr));			\
+	(void)((low) = (u32)__val);				\
+	(void)((high) = (u32)(__val >> 32));			\
+} while (0)
 
 /* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
 #define ASM_WRMSRNS _ASM_BYTES(0x0f,0x01,0xc6)
