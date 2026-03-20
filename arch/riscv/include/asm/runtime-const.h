@@ -11,6 +11,9 @@
 
 #include <linux/uaccess.h>
 
+/* patching of the kernel text is fundamentally impossible on XIP kernels */
+#ifndef CONFIG_XIP_KERNEL
+
 #ifdef CONFIG_32BIT
 #define runtime_const_ptr(sym)					\
 ({								\
@@ -265,4 +268,5 @@ static inline void runtime_const_fixup(void (*fn)(void *, unsigned long),
 	}
 }
 
+#endif /* !CONFIG_XIP_KERNEL */
 #endif /* _ASM_RISCV_RUNTIME_CONST_H */
