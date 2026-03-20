@@ -334,9 +334,13 @@ unsigned int folio_pte_batch(struct folio *folio, pte_t *ptep, pte_t pte,
  */
 static inline pte_t pte_move_swp_offset(pte_t pte, long delta)
 {
-	const softleaf_t entry = softleaf_from_pte(pte);
-	pte_t new = __swp_entry_to_pte(__swp_entry(swp_type(entry),
-						   (swp_offset(entry) + delta)));
+	softleaf_t entry = softleaf_from_pte(pte), new_entry;
+	swp_slot_t slot = swp_entry_to_swp_slot(entry);
+	pte_t new;
+
+	new_entry = swp_slot_to_swp_entry(swp_slot(swp_slot_type(slot),
+			swp_slot_offset(slot) + delta));
+	new = swp_entry_to_pte(new_entry);
 
 	if (pte_swp_soft_dirty(pte))
 		new = pte_swp_mksoft_dirty(new);

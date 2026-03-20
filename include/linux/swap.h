@@ -241,7 +241,7 @@ enum {
  * cluster to which it belongs being marked free. Therefore 0 is safe to use as
  * a sentinel to indicate an entry is not valid.
  */
-#define SWAP_ENTRY_INVALID	0
+#define SWAP_SLOT_INVALID	0
 
 #ifdef CONFIG_THP_SWAP
 #define SWAP_NR_ORDERS		(PMD_ORDER + 1)
@@ -442,11 +442,14 @@ static inline unsigned long total_swapcache_pages(void)
 {
 	return global_node_page_state(NR_SWAPCACHE);
 }
+
 void free_folio_and_swap_cache(struct folio *folio);
 void free_pages_and_swap_cache(struct encoded_page **, int);
 void free_swap_cache(struct folio *folio);
 
 /* Physical swap allocator and swap device API (mm/swapfile.c) */
+void swap_slot_free_nr(swp_slot_t slot, int nr_pages);
+
 int add_swap_extent(struct swap_info_struct *sis, unsigned long start_page,
 		unsigned long nr_pages, sector_t start_block);
 int generic_swapfile_activate(struct swap_info_struct *, struct file *,
@@ -468,28 +471,28 @@ static inline long get_nr_swap_pages(void)
 }
 
 void si_swapinfo(struct sysinfo *);
-swp_entry_t get_swap_page_of_type(int);
+swp_slot_t swap_slot_alloc_of_type(int);
 int add_swap_count_continuation(swp_entry_t, gfp_t);
 int swap_type_of(dev_t device, sector_t offset);
 int find_first_swap(dev_t *device);
 unsigned int count_swap_pages(int, int);
 sector_t swapdev_block(int, pgoff_t);
 struct backing_dev_info;
-struct swap_info_struct *get_swap_device(swp_entry_t entry);
+struct swap_info_struct *swap_slot_tryget_swap_info(swp_slot_t slot);
 sector_t swap_folio_sector(struct folio *folio);
 
-static inline void put_swap_device(struct swap_info_struct *si)
+static inline void swap_slot_put_swap_info(struct swap_info_struct *si)
 {
 	percpu_ref_put(&si->users);
 }
 
 #else /* CONFIG_SWAP */
-static inline struct swap_info_struct *get_swap_device(swp_entry_t entry)
+static inline struct swap_info_struct *swap_slot_tryget_swap_info(swp_slot_t slot)
 {
 	return NULL;
 }
 
-static inline void put_swap_device(struct swap_info_struct *si)
+static inline void swap_slot_put_swap_info(struct swap_info_struct *si)
 {
 }
 
@@ -536,7 +539,7 @@ static inline void swap_free_nr(swp_entry_t entry, int nr_pages)
 {
 }
 
-static inline void put_swap_folio(struct folio *folio, swp_entry_t swp)
+static inline void put_swap_folio(struct folio *folio, swp_entry_t entry)
 {
 }
 
@@ -576,6 +579,7 @@ static inline int add_swap_extent(struct swap_info_struct *sis,
 {
 	return -EINVAL;
 }
+
 #endif /* CONFIG_SWAP */
 
 static inline void free_swap_and_cache(swp_entry_t entry)
@@ -665,10 +669,35 @@ static inline bool mem_cgroup_swap_full(struct folio *folio)
 }
 #endif
 
+/**
+ * swp_entry_to_swp_slot - look up the physical swap slot corresponding to a
+ *                         virtual swap slot.
+ * @entry: the virtual swap slot.
+ *
+ * Return: the physical swap slot corresponding to the virtual swap slot.
+ */
+static inline swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry)
+{
+	return (swp_slot_t) { entry.val };
+}
+
+/**
+ * swp_slot_to_swp_entry - look up the virtual swap slot corresponding to a
+ *                         physical swap slot.
+ * @slot: the physical swap slot.
+ *
+ * Return: the virtual swap slot corresponding to the physical swap slot.
+ */
+static inline swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot)
+{
+	return (swp_entry_t) { slot.val };
+}
+
 static inline bool tryget_swap_entry(swp_entry_t entry,
 				struct swap_info_struct **sip)
 {
-	struct swap_info_struct *si = get_swap_device(entry);
+	swp_slot_t slot = swp_entry_to_swp_slot(entry);
+	struct swap_info_struct *si = swap_slot_tryget_swap_info(slot);
 
 	if (sip)
 		*sip = si;
@@ -679,7 +708,7 @@ static inline bool tryget_swap_entry(swp_entry_t entry,
 static inline void put_swap_entry(swp_entry_t entry,
 				struct swap_info_struct *si)
 {
-	put_swap_device(si);
+	swap_slot_put_swap_info(si);
 }
 
 #endif /* __KERNEL__*/

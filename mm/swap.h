@@ -10,10 +10,10 @@ extern int page_cluster;
 
 #ifdef CONFIG_THP_SWAP
 #define SWAPFILE_CLUSTER	HPAGE_PMD_NR
-#define swap_entry_order(order)	(order)
+#define swap_slot_order(order)	(order)
 #else
 #define SWAPFILE_CLUSTER	256
-#define swap_entry_order(order)	0
+#define swap_slot_order(order)	0
 #endif
 
 extern struct swap_info_struct *swap_info[];
@@ -57,9 +57,9 @@ enum swap_cluster_flags {
 #include <linux/swapops.h> /* for swp_offset */
 #include <linux/blk_types.h> /* for bio_end_io_t */
 
-static inline unsigned int swp_cluster_offset(swp_entry_t entry)
+static inline unsigned int swp_cluster_offset(swp_slot_t slot)
 {
-	return swp_offset(entry) % SWAPFILE_CLUSTER;
+	return swp_slot_offset(slot) % SWAPFILE_CLUSTER;
 }
 
 /*
@@ -75,9 +75,9 @@ static inline struct swap_info_struct *__swap_type_to_info(int type)
 	return si;
 }
 
-static inline struct swap_info_struct *__swap_entry_to_info(swp_entry_t entry)
+static inline struct swap_info_struct *__swap_slot_to_info(swp_slot_t slot)
 {
-	return __swap_type_to_info(swp_type(entry));
+	return __swap_type_to_info(swp_slot_type(slot));
 }
 
 static inline struct swap_cluster_info *__swap_offset_to_cluster(
@@ -88,10 +88,10 @@ static inline struct swap_cluster_info *__swap_offset_to_cluster(
 	return &si->cluster_info[offset / SWAPFILE_CLUSTER];
 }
 
-static inline struct swap_cluster_info *__swap_entry_to_cluster(swp_entry_t entry)
+static inline struct swap_cluster_info *__swap_slot_to_cluster(swp_slot_t slot)
 {
-	return __swap_offset_to_cluster(__swap_entry_to_info(entry),
-					swp_offset(entry));
+	return __swap_offset_to_cluster(__swap_slot_to_info(slot),
+					swp_slot_offset(slot));
 }
 
 static __always_inline struct swap_cluster_info *__swap_cluster_lock(
@@ -120,7 +120,7 @@ static __always_inline struct swap_cluster_info *__swap_cluster_lock(
 /**
  * swap_cluster_lock - Lock and return the swap cluster of given offset.
  * @si: swap device the cluster belongs to.
- * @offset: the swap entry offset, pointing to a valid slot.
+ * @offset: the swap slot offset, pointing to a valid slot.
  *
  * Context: The caller must ensure the offset is in the valid range and
  * protect the swap device with reference count or locks.
@@ -134,10 +134,12 @@ static inline struct swap_cluster_info *swap_cluster_lock(
 static inline struct swap_cluster_info *__swap_cluster_get_and_lock(
 		const struct folio *folio, bool irq)
 {
+	swp_slot_t slot = swp_entry_to_swp_slot(folio->swap);
+
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_swapcache(folio), folio);
-	return __swap_cluster_lock(__swap_entry_to_info(folio->swap),
-				   swp_offset(folio->swap), irq);
+	return __swap_cluster_lock(__swap_slot_to_info(slot),
+				   swp_slot_offset(slot), irq);
 }
 
 /*
@@ -209,12 +211,10 @@ static inline struct address_space *swap_address_space(swp_entry_t entry)
 	return &swap_space;
 }
 
-/*
- * Return the swap device position of the swap entry.
- */
-static inline loff_t swap_dev_pos(swp_entry_t entry)
+/* Return the swap device position of the swap slot. */
+static inline loff_t swap_slot_pos(swp_slot_t slot)
 {
-	return ((loff_t)swp_offset(entry)) << PAGE_SHIFT;
+	return ((loff_t)swp_slot_offset(slot)) << PAGE_SHIFT;
 }
 
 /**
@@ -277,7 +277,9 @@ void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
 
 static inline unsigned int folio_swap_flags(struct folio *folio)
 {
-	return __swap_entry_to_info(folio->swap)->flags;
+	swp_slot_t swp_slot = swp_entry_to_swp_slot(folio->swap);
+
+	return __swap_slot_to_info(swp_slot)->flags;
 }
 
 /*
@@ -288,8 +290,9 @@ static inline unsigned int folio_swap_flags(struct folio *folio)
 static inline int swap_zeromap_batch(swp_entry_t entry, int max_nr,
 		bool *is_zeromap)
 {
-	struct swap_info_struct *sis = __swap_entry_to_info(entry);
-	unsigned long start = swp_offset(entry);
+	swp_slot_t slot = swp_entry_to_swp_slot(entry);
+	struct swap_info_struct *sis = __swap_slot_to_info(slot);
+	unsigned long start = swp_slot_offset(slot);
 	unsigned long end = start + max_nr;
 	bool first_bit;
 
@@ -307,8 +310,9 @@ static inline int swap_zeromap_batch(swp_entry_t entry, int max_nr,
 
 static inline int non_swapcache_batch(swp_entry_t entry, int max_nr)
 {
-	struct swap_info_struct *si = __swap_entry_to_info(entry);
-	pgoff_t offset = swp_offset(entry);
+	swp_slot_t slot = swp_entry_to_swp_slot(entry);
+	struct swap_info_struct *si = __swap_slot_to_info(slot);
+	pgoff_t offset = swp_slot_offset(slot);
 	int i;
 
 	/*
@@ -327,7 +331,7 @@ static inline int non_swapcache_batch(swp_entry_t entry, int max_nr)
 #else /* CONFIG_SWAP */
 struct swap_iocb;
 static inline struct swap_cluster_info *swap_cluster_lock(
-	struct swap_info_struct *si, pgoff_t offset, bool irq)
+	struct swap_info_struct *si, unsigned long offset)
 {
 	return NULL;
 }
@@ -352,7 +356,7 @@ static inline void swap_cluster_unlock_irq(struct swap_cluster_info *ci)
 {
 }
 
-static inline struct swap_info_struct *__swap_entry_to_info(swp_entry_t entry)
+static inline struct swap_info_struct *__swap_slot_to_info(swp_slot_t slot)
 {
 	return NULL;
 }

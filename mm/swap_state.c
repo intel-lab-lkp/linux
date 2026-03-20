@@ -421,7 +421,8 @@ struct folio *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		struct mempolicy *mpol, pgoff_t ilx, bool *new_page_allocated,
 		bool skip_if_exists)
 {
-	struct swap_info_struct *si = __swap_entry_to_info(entry);
+	struct swap_info_struct *si =
+		__swap_slot_to_info(swp_entry_to_swp_slot(entry));
 	struct folio *folio;
 	struct folio *new_folio = NULL;
 	struct folio *result = NULL;
@@ -636,11 +637,12 @@ struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 				    struct mempolicy *mpol, pgoff_t ilx)
 {
 	struct folio *folio;
-	unsigned long entry_offset = swp_offset(entry);
-	unsigned long offset = entry_offset;
+	swp_slot_t slot = swp_entry_to_swp_slot(entry);
+	unsigned long slot_offset = swp_slot_offset(slot);
+	unsigned long offset = slot_offset;
 	unsigned long start_offset, end_offset;
 	unsigned long mask;
-	struct swap_info_struct *si = __swap_entry_to_info(entry);
+	struct swap_info_struct *si = __swap_slot_to_info(slot);
 	struct blk_plug plug;
 	struct swap_iocb *splug = NULL;
 	bool page_allocated;
@@ -661,13 +663,13 @@ struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	for (offset = start_offset; offset <= end_offset ; offset++) {
 		/* Ok, do the async read-ahead now */
 		folio = __read_swap_cache_async(
-				swp_entry(swp_type(entry), offset),
+				swp_slot_to_swp_entry(swp_slot(swp_slot_type(slot), offset)),
 				gfp_mask, mpol, ilx, &page_allocated, false);
 		if (!folio)
 			continue;
 		if (page_allocated) {
 			swap_read_folio(folio, &splug);
-			if (offset != entry_offset) {
+			if (offset != slot_offset) {
 				folio_set_readahead(folio);
 				count_vm_event(SWAP_RA);
 			}
@@ -779,16 +781,20 @@ static struct folio *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 		/*
 		 * Readahead entry may come from a device that we are not
 		 * holding a reference to, try to grab a reference, or skip.
+		 *
+		 * XXX: for now, always try to pin the swap entries in the
+		 * readahead window to avoid the annoying conversion to physical
+		 * swap slots. Once we move all swap metadata to virtual swap
+		 * layer, we can simply compare the clusters of the target
+		 * swap entry and the current swap entry, and pin the latter
+		 * swap entry's cluster if it differ from the former's.
 		 */
-		if (swp_type(entry) != swp_type(targ_entry)) {
-			swapoff_locked = tryget_swap_entry(entry, &si);
-			if (!swapoff_locked)
-				continue;
-		}
+		swapoff_locked = tryget_swap_entry(entry, &si);
+		if (!swapoff_locked)
+			continue;
 		folio = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
 						&page_allocated, false);
-		if (swapoff_locked)
-			put_swap_entry(entry, si);
+		put_swap_entry(entry, si);
 		if (!folio)
 			continue;
 		if (page_allocated) {
