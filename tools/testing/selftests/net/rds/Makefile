@@ -6,6 +6,7 @@ all:
 TEST_PROGS := run.sh
 
 TEST_FILES := \
+	config \
 	include.sh \
 	settings \
 	test.py \
