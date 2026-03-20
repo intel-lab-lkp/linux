@@ -213,8 +213,6 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 	struct bnx2fc_cmd_mgr *cmgr;
 	struct io_bdt *bdt_info;
 	struct bnx2fc_cmd *io_req;
-	size_t len;
-	u32 mem_size;
 	u16 xid;
 	int i;
 	int num_ios, num_pri_ios;
@@ -231,10 +229,8 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 	BNX2FC_MISC_DBG("min xid 0x%x, max xid 0x%x\n", min_xid, max_xid);
 
 	num_ios = max_xid - min_xid + 1;
-	len = (num_ios * (sizeof(struct bnx2fc_cmd *)));
-	len += sizeof(struct bnx2fc_cmd_mgr);
 
-	cmgr = kzalloc(len, GFP_KERNEL);
+	cmgr = kzalloc_flex(*cmgr, cmds, num_ios);
 	if (!cmgr) {
 		printk(KERN_ERR PFX "failed to alloc cmgr\n");
 		return NULL;
@@ -254,8 +250,6 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 		cmgr->free_list = NULL;
 		goto mem_err;
 	}
-
-	cmgr->cmds = (struct bnx2fc_cmd **)(cmgr + 1);
 
 	for (i = 0; i < arr_sz; i++)  {
 		INIT_LIST_HEAD(&cmgr->free_list[i]);
@@ -292,16 +286,14 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 	}
 
 	/* Allocate pool of io_bdts - one for each bnx2fc_cmd */
-	mem_size = num_ios * sizeof(struct io_bdt *);
-	cmgr->io_bdt_pool = kzalloc(mem_size, GFP_KERNEL);
+	cmgr->io_bdt_pool = kzalloc_objs(struct io_bdt *, num_ios);
 	if (!cmgr->io_bdt_pool) {
 		printk(KERN_ERR PFX "failed to alloc io_bdt_pool\n");
 		goto mem_err;
 	}
 
-	mem_size = sizeof(struct io_bdt);
 	for (i = 0; i < num_ios; i++) {
-		cmgr->io_bdt_pool[i] = kmalloc(mem_size, GFP_KERNEL);
+		cmgr->io_bdt_pool[i] = kmalloc_obj(struct io_bdt);
 		if (!cmgr->io_bdt_pool[i]) {
 			printk(KERN_ERR PFX "failed to alloc "
 				"io_bdt_pool[%d]\n", i);
