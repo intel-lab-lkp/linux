@@ -66,7 +66,7 @@ static int drm_name_info(struct seq_file *m, void *data)
 		seq_printf(m, " master=%s", master->unique);
 	if (dev->unique)
 		seq_printf(m, " unique=%s", dev->unique);
-	seq_printf(m, "\n");
+	seq_puts(m, "\n");
 	mutex_unlock(&dev->master_mutex);
 
 	return 0;
@@ -139,7 +139,7 @@ static int drm_gem_name_info(struct seq_file *m, void *data)
 	struct drm_debugfs_entry *entry = m->private;
 	struct drm_device *dev = entry->dev;
 
-	seq_printf(m, "  name     size handles refcount\n");
+	seq_puts(m, "  name     size handles refcount\n");
 
 	mutex_lock(&dev->object_name_lock);
 	idr_for_each(&dev->object_name_idr, drm_gem_one_name_info, m);
