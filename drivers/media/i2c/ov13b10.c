@@ -708,7 +708,11 @@ struct ov13b10 {
 	struct v4l2_ctrl_handler ctrl_handler;
 
 	struct clk *img_clk;
+
 	struct regulator *avdd;
+	struct regulator *dvdd;
+	struct regulator *dovdd;
+
 	struct gpio_desc *reset;
 
 	/* V4L2 Controls */
@@ -1197,6 +1201,10 @@ static int ov13b10_power_off(struct device *dev)
 
 	if (ov13b10->avdd)
 		regulator_disable(ov13b10->avdd);
+	if (ov13b10->dvdd)
+		regulator_disable(ov13b10->dvdd);
+	if (ov13b10->dovdd)
+		regulator_disable(ov13b10->dovdd);
 
 	clk_disable_unprepare(ov13b10->img_clk);
 
@@ -1219,6 +1227,24 @@ static int ov13b10_power_on(struct device *dev)
 		ret = regulator_enable(ov13b10->avdd);
 		if (ret < 0) {
 			dev_err(dev, "failed to enable avdd: %d", ret);
+			clk_disable_unprepare(ov13b10->img_clk);
+			return ret;
+		}
+	}
+
+	if (ov13b10->dvdd) {
+		ret = regulator_enable(ov13b10->dvdd);
+		if (ret < 0) {
+			dev_err(dev, "failed to enable dvdd: %d", ret);
+			clk_disable_unprepare(ov13b10->img_clk);
+			return ret;
+		}
+	}
+
+	if (ov13b10->dovdd) {
+		ret = regulator_enable(ov13b10->dovdd);
+		if (ret < 0) {
+			dev_err(dev, "failed to enable dovdd: %d", ret);
 			clk_disable_unprepare(ov13b10->img_clk);
 			return ret;
 		}
@@ -1500,6 +1526,24 @@ static int ov13b10_get_pm_resources(struct ov13b10 *ov13b)
 					     "failed to get avdd regulator\n");
 	}
 
+	ov13b->dvdd = devm_regulator_get_optional(ov13b->dev, "dvdd");
+	if (IS_ERR(ov13b->dvdd)) {
+		ret = PTR_ERR(ov13b->dvdd);
+		ov13b->dvdd = NULL;
+		if (ret != -ENODEV)
+			return dev_err_probe(ov13b->dev, ret,
+					     "failed to get dvdd regulator\n");
+	}
+
+	ov13b->dovdd = devm_regulator_get_optional(ov13b->dev, "dovdd");
+	if (IS_ERR(ov13b->dovdd)) {
+		ret = PTR_ERR(ov13b->dovdd);
+		ov13b->dovdd = NULL;
+		if (ret != -ENODEV)
+			return dev_err_probe(ov13b->dev, ret,
+					     "failed to get dovdd regulator\n");
+	}
+
 	return 0;
 }
 
@@ -1700,11 +1744,20 @@ static const struct acpi_device_id ov13b10_acpi_ids[] = {
 MODULE_DEVICE_TABLE(acpi, ov13b10_acpi_ids);
 #endif
 
+#ifdef CONFIG_OF
+static const struct of_device_id ov13b10_of_match[] = {
+	{.compatible = "ovti,ov13b10"},
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, ov13b10_of_match);
+#endif
+
 static struct i2c_driver ov13b10_i2c_driver = {
 	.driver = {
 		.name = "ov13b10",
 		.pm = pm_ptr(&ov13b10_pm_ops),
 		.acpi_match_table = ACPI_PTR(ov13b10_acpi_ids),
+		.of_match_table = of_match_ptr(ov13b10_of_match),
 	},
 	.probe = ov13b10_probe,
 	.remove = ov13b10_remove,
