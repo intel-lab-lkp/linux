@@ -3291,6 +3291,52 @@ static int lock_folio_maybe_drop_mmap(struct vm_fault *vmf, struct folio *folio,
 }
 
 /*
+ * Compute the preferred folio order for executable memory readahead.
+ * Targets min(PMD_ORDER, 2M) as the maximum, which gives the
+ * optimal order for contpte (arm64), PMD mapping (x86, arm64 4K), and
+ * architectures with smaller PMDs (s390 1M). The 2M cap also avoids
+ * requesting excessively large folios on configurations where PMD_ORDER
+ * is much larger (32M on 16K pages, 512M on 64K pages), which would cause
+ * unnecessary memory pressure. Adapts at runtime based on:
+ *
+ * - VMA size: cap the order so folios fit within the mapping.
+ *
+ * - Memory pressure: step down the order when free memory on the local
+ *   node is below the high watermark for the requested order. This
+ *   avoids expensive reclaim or compaction to satisfy large folio
+ *   allocations when memory is tight.
+ */
+static unsigned int preferred_exec_order(struct vm_area_struct *vma)
+{
+	int order;
+	unsigned long vma_len = vma_pages(vma);
+	struct zone *zone;
+	gfp_t gfp;
+
+	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
+		return 0;
+
+	/* Cap at min(PMD_ORDER, 2M) */
+	order = min(HPAGE_PMD_ORDER, ilog2(SZ_2M >> PAGE_SHIFT));
+
+	/* Don't request folios larger than the VMA */
+	order = min(order, ilog2(vma_len));
+
+	/* Step down under memory pressure */
+	gfp = mapping_gfp_mask(vma->vm_file->f_mapping);
+	zone = first_zones_zonelist(node_zonelist(numa_node_id(), gfp),
+				    gfp_zone(gfp), NULL)->zone;
+	if (zone) {
+		while (order > 0 &&
+		       !zone_watermark_ok(zone, order,
+					  high_wmark_pages(zone), 0, 0))
+			order--;
+	}
+
+	return order;
+}
+
+/*
  * Synchronous readahead happens when we don't even find a page in the page
  * cache at all.  We don't want to perform IO under the mmap sem, so if we have
  * to drop the mmap sem we return the file that was pinned in order for us to do
@@ -3363,11 +3409,10 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 
 	if (vm_flags & VM_EXEC) {
 		/*
-		 * Allow arch to request a preferred minimum folio order for
-		 * executable memory. This can often be beneficial to
-		 * performance if (e.g.) arm64 can contpte-map the folio.
-		 * Executable memory rarely benefits from readahead, due to its
-		 * random access nature, so set async_size to 0.
+		 * Request a preferred folio order for executable memory,
+		 * dynamically adapted to VMA size and memory pressure.
+		 * Executable memory rarely benefits from speculative readahead
+		 * due to its random access nature, so set async_size to 0.
 		 *
 		 * Limit to the boundaries of the VMA to avoid reading in any
 		 * pad that might exist between sections, which would be a waste
@@ -3378,7 +3423,7 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 		unsigned long end = start + vma_pages(vma);
 		unsigned long ra_end;
 
-		ra->order = exec_folio_order();
+		ra->order = preferred_exec_order(vma);
 		ra->start = round_down(vmf->pgoff, 1UL << ra->order);
 		ra->start = max(ra->start, start);
 		ra_end = round_up(ra->start + ra->ra_pages, 1UL << ra->order);
