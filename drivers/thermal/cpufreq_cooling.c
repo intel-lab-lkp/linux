@@ -151,26 +151,23 @@ static u32 cpu_power_to_freq(struct cpufreq_cooling_device *cpufreq_cdev,
  * get_load() - get load for a cpu
  * @cpufreq_cdev: struct cpufreq_cooling_device for the cpu
  * @cpu: cpu number
- * @cpu_idx: index of the cpu in time_in_idle array
  *
  * Return: The average load of cpu @cpu in percentage since this
  * function was last called.
  */
 #ifdef CONFIG_SMP
-static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu,
-		    int cpu_idx)
+static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu)
 {
 	unsigned long util = sched_cpu_util(cpu);
 
 	return (util * 100) / arch_scale_cpu_capacity(cpu);
 }
 #else /* !CONFIG_SMP */
-static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu,
-		    int cpu_idx)
+static u32 get_load(struct cpufreq_cooling_device *cpufreq_cdev, int cpu)
 {
 	u32 load;
 	u64 now, now_idle, delta_time, delta_idle;
-	struct time_in_idle *idle_time = &cpufreq_cdev->idle_time[cpu_idx];
+	struct time_in_idle *idle_time = &cpufreq_cdev->idle_time[cpu];
 
 	now_idle = get_cpu_idle_time(cpu, &now, 0);
 	delta_idle = now_idle - idle_time->time;
@@ -231,7 +228,7 @@ static int cpufreq_get_requested_power(struct thermal_cooling_device *cdev,
 				       u32 *power)
 {
 	unsigned long freq;
-	int i = 0, cpu;
+	int cpu;
 	u32 total_load = 0;
 	struct cpufreq_cooling_device *cpufreq_cdev = cdev->devdata;
 	struct cpufreq_policy *policy = cpufreq_cdev->policy;
@@ -242,7 +239,7 @@ static int cpufreq_get_requested_power(struct thermal_cooling_device *cdev,
 		u32 load;
 
 		if (cpu_online(cpu))
-			load = get_load(cpufreq_cdev, cpu, i);
+			load = get_load(cpufreq_cdev, cpu);
 		else
 			load = 0;
 
