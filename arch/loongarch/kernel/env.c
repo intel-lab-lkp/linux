@@ -49,6 +49,10 @@ static int __init init_cpu_fullname(void)
 	ret = of_property_read_string(root, "model", &model);
 	if (ret == 0) {
 		cpuname = kstrdup(model, GFP_KERNEL);
+		if (!cpuname) {
+			of_node_put(root);
+			return -ENOMEM;
+		}
 		loongson_sysconf.cpuname = strsep(&cpuname, " ");
 	}
 	of_node_put(root);
