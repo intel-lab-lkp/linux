@@ -1509,7 +1509,7 @@ config PAGE_ALLOC_UNMAPPED
 	bool "Support allocating pages that aren't in the direct map"
 	depends on MERMAP
 
-config PAGE_ALLOC_KUNIT_TESTS
+config PAGE_ALLOC_KUNIT_TEST
 	tristate "KUnit tests for the page allocator" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS

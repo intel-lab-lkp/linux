@@ -58,6 +58,7 @@
 #include <linux/pgalloc_tag.h>
 #include <linux/mmzone_lock.h>
 #include <asm/div64.h>
+#include <kunit/visibility.h>
 #include "internal.h"
 #include "shuffle.h"
 #include "page_reporting.h"
@@ -461,6 +462,7 @@ get_pfnblock_freetype(const struct page *page, unsigned long pfn)
 {
 	return __get_pfnblock_freetype(page, pfn, 0);
 }
+EXPORT_SYMBOL_IF_KUNIT(get_pfnblock_freetype);
 
 
 /**
@@ -696,7 +698,7 @@ out:
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
 }
 
-static inline unsigned int order_to_pindex(freetype_t freetype, int order)
+VISIBLE_IF_KUNIT inline unsigned int order_to_pindex(freetype_t freetype, int order)
 {
 	int migratetype = free_to_migratetype(freetype);
 
@@ -724,8 +726,9 @@ static inline unsigned int order_to_pindex(freetype_t freetype, int order)
 
 	return (MIGRATE_PCPTYPES * order) + migratetype;
 }
+EXPORT_SYMBOL_IF_KUNIT(order_to_pindex);
 
-static inline int pindex_to_order(unsigned int pindex)
+VISIBLE_IF_KUNIT int pindex_to_order(unsigned int pindex)
 {
 	unsigned int unmapped_base = NR_LOWORDER_PCP_LISTS + NR_PCP_THP;
 	int order;
@@ -748,8 +751,9 @@ static inline int pindex_to_order(unsigned int pindex)
 
 	return order;
 }
+EXPORT_SYMBOL_IF_KUNIT(pindex_to_order);
 
-static inline bool pcp_allowed_order(unsigned int order)
+VISIBLE_IF_KUNIT inline bool pcp_allowed_order(unsigned int order)
 {
 	if (order <= PAGE_ALLOC_COSTLY_ORDER)
 		return true;
@@ -759,6 +763,7 @@ static inline bool pcp_allowed_order(unsigned int order)
 #endif
 	return false;
 }
+EXPORT_SYMBOL_IF_KUNIT(pcp_allowed_order);
 
 /*
  * Higher-order pages are called "compound pages".  They are structured thusly:
