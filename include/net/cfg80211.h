@@ -5780,6 +5780,16 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type);
  * @max_peers: maximum number of peers in a single measurement
  * @report_ap_tsf: can report assoc AP's TSF for radio resource measurement
  * @randomize_mac_addr: can randomize MAC address for measurement
+ * @pd_max_peer_ista_role: Maximum number of peers allowed for a device
+ *	operating in the ISTA role under proximity detection. Only valid if
+ *	@pd_support is set. Sum of both @pd_max_peer_ista_role and
+ *	@pd_max_peer_rsta_role is considered to enforce the max peers supported
+ *	in case the request is of peer-to-peer PD type.
+ * @pd_max_peer_rsta_role: Maximum number of peers allowed for a device
+ *	operating in the RSTA role under proximity detection. Only valid if
+ *	@pd_support is set. Sum of both @pd_max_peer_ista_role and
+ *	@pd_max_peer_rsta_role is considered to enforce the max peers supported
+ *	in case the request is of peer-to-peer PD type.
  * @ftm: FTM measurement data
  * @ftm.supported: FTM measurement is supported
  * @ftm.asap: ASAP-mode is supported
@@ -5840,6 +5850,9 @@ struct cfg80211_pmsr_capabilities {
 	unsigned int max_peers;
 	u8 report_ap_tsf:1,
 	   randomize_mac_addr:1;
+
+	u32 pd_max_peer_ista_role;
+	u32 pd_max_peer_rsta_role;
 
 	struct {
 		u32 preambles;

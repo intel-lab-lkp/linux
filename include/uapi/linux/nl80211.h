@@ -7838,6 +7838,20 @@ enum nl80211_peer_measurement_peer_attrs {
  *	meaningless, just a list of peers to measure with, with the
  *	sub-attributes taken from
  *	&enum nl80211_peer_measurement_peer_attrs.
+ * @NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE: u32 attribute indicating the
+ *	maximum number of peers allowed for a device operating in the ISTA
+ *	(Initiator STA) role under proximity detection. Only valid if
+ *	%NL80211_PMSR_FTM_CAPA_ATTR_PD_SUPPORT is set. Sum of both
+ *	%NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE and
+ *	%NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE is considered to enforce the
+ *	max peers supported in case the request is of peer-to-peer PD type.
+ * @NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE: u32 attribute indicating the
+ *	maximum number of peers allowed for a device operating in the RSTA
+ *	(Responder STA) role under proximity detection. Only valid if
+ *	%NL80211_PMSR_FTM_CAPA_ATTR_PD_SUPPORT is set. Sum of both
+ *	%NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE and
+ *	%NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE is considered to enforce the
+ *	max peers supported in case the request is of peer-to-peer PD type.
  *
  * @NUM_NL80211_PMSR_ATTR: internal
  * @NL80211_PMSR_ATTR_MAX: highest attribute number
@@ -7850,6 +7864,8 @@ enum nl80211_peer_measurement_attrs {
 	NL80211_PMSR_ATTR_RANDOMIZE_MAC_ADDR,
 	NL80211_PMSR_ATTR_TYPE_CAPA,
 	NL80211_PMSR_ATTR_PEERS,
+	NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE,
+	NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE,
 
 	/* keep last */
 	NUM_NL80211_PMSR_ATTR,

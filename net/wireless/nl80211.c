@@ -2469,6 +2469,16 @@ nl80211_send_pmsr_ftm_capa(const struct cfg80211_pmsr_capabilities *cap,
 		if (cap->ftm.pd_concurrent_ista_rsta_support &&
 		    nla_put_flag(msg, NL80211_PMSR_FTM_CAPA_ATTR_PD_CONCURRENT_ISTA_RSTA_SUPPORT))
 			return -ENOBUFS;
+
+		if (cap->pd_max_peer_ista_role &&
+		    nla_put_u32(msg, NL80211_PMSR_ATTR_PD_MAX_PEER_ISTA_ROLE,
+				cap->pd_max_peer_ista_role))
+			return -ENOBUFS;
+
+		if (cap->pd_max_peer_rsta_role &&
+		    nla_put_u32(msg, NL80211_PMSR_ATTR_PD_MAX_PEER_RSTA_ROLE,
+				cap->pd_max_peer_rsta_role))
+			return -ENOBUFS;
 	}
 	nla_nest_end(msg, ftm);
 	return 0;
