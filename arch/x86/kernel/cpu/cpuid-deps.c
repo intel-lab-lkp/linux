@@ -164,6 +164,16 @@ void check_cpufeature_deps(struct cpuinfo_x86 *c)
 	for (d = cpuid_deps; d->feature; d++) {
 		if (cpu_has(c, d->feature) && !cpu_has(c, d->depends)) {
 			/*
+			 * If the dependency was cleared through the disabled
+			 * bitmasks while the feature wasn't it also needs to be
+			 * cleared.
+			 */
+			if (!DISABLED_MASK_BIT_SET(d->feature) && DISABLED_MASK_BIT_SET(d->depends)) {
+				setup_clear_cpu_cap(d->feature);
+				continue;
+			}
+
+			/*
 			 * Only warn about the first unmet dependency on the
 			 * first CPU where it is encountered to avoid spamming
 			 * the kernel log.
