@@ -875,7 +875,9 @@ int zl3073x_dev_start(struct zl3073x_dev *zldev, bool full)
 		return rc;
 	}
 
-	if (!FIELD_GET(ZL_INFO_READY, info)) {
+	zldev->ready = !!FIELD_GET(ZL_INFO_READY, info);
+
+	if (!zldev->ready) {
 		/* The ready bit indicates that the firmware was successfully
 		 * configured and is ready for normal operation. If it is
 		 * cleared then the configuration stored in flash is wrong
