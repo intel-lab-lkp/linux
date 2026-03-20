@@ -75,9 +75,9 @@ struct axis_fifo {
 	u32 has_tx_fifo;
 
 	wait_queue_head_t read_queue;
-	struct mutex read_lock; /* lock for reading */
+	struct mutex read_lock;
 	wait_queue_head_t write_queue;
-	struct mutex write_lock; /* lock for writing */
+	struct mutex write_lock;
 
 	struct device *dt_device;
 	struct miscdevice miscdev;
