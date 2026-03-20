@@ -19,10 +19,13 @@
 #include <linux/net_tstamp.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/ptp_classify.h>
+#include <linux/bpf.h>
 #include <linux/mii.h>
 #include <linux/mdio.h>
 #include <linux/mutex.h>
 #include <linux/pm_qos.h>
+#include <net/page_pool/helpers.h>
+#include <net/xdp.h>
 #include "hw.h"
 
 struct e1000_info;
@@ -126,12 +129,21 @@ struct e1000_ps_page {
 	u64 dma; /* must be u64 - written to hw */
 };
 
+enum e1000_tx_buf_type {
+	E1000_TX_BUF_SKB = 0,
+	E1000_TX_BUF_XDP,
+};
+
 /* wrappers around a pointer to a socket buffer,
  * so a DMA handle can be stored along with the buffer
  */
 struct e1000_buffer {
 	dma_addr_t dma;
-	struct sk_buff *skb;
+	union {
+		struct sk_buff *skb;
+		struct xdp_frame *xdpf;
+	};
+	enum e1000_tx_buf_type type;
 	union {
 		/* Tx */
 		struct {
@@ -258,6 +270,10 @@ struct e1000_adapter {
 	void (*alloc_rx_buf)(struct e1000_ring *ring, int cleaned_count,
 			     gfp_t gfp);
 	struct e1000_ring *rx_ring;
+
+	struct bpf_prog *xdp_prog;
+	struct xdp_rxq_info xdp_rxq;
+	struct page_pool *page_pool;
 
 	u32 rx_int_delay;
 	u32 rx_abs_int_delay;
