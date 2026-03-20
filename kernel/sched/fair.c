@@ -2060,6 +2060,13 @@ bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 	 */
 	if (!node_state(dst_nid, N_MEMORY))
 		return false;
+	/*
+	 * Do not allow promotion if NUMA_BALANCING_MEMORY_TIERING is disabled
+	 * and the pages are on the lower tier.
+	 */
+	if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) &&
+	    !node_is_toptier(src_nid))
+		return false;
 
 	/*
 	 * The pages in slow memory node should be migrated according
@@ -2093,10 +2100,6 @@ bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 
 	this_cpupid = cpu_pid_to_cpupid(dst_cpu, current->pid);
 	last_cpupid = folio_xchg_last_cpupid(folio, this_cpupid);
-
-	if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) &&
-	    !node_is_toptier(src_nid) && !cpupid_valid(last_cpupid))
-		return false;
 
 	/*
 	 * Allow first faults or private faults to migrate immediately early in
@@ -3312,8 +3315,7 @@ void task_numa_fault(int last_cpupid, int mem_node, int pages, int flags)
 	 * node for memory tiering mode.
 	 */
 	if (!node_is_toptier(mem_node) &&
-	    (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING ||
-	     !cpupid_valid(last_cpupid)))
+	    (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING))
 		return;
 
 	/* Allocate buffer to track faults on a per-node basis */
