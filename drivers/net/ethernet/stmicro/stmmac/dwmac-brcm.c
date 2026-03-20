@@ -218,6 +218,13 @@ static void brcm_config_misc_regs(struct pci_dev *pdev,
 		     XGMAC_PCIE_MISC_MII_CTRL_LINK_UP);
 }
 
+static void brcm_free_irq_vectors(void *data)
+{
+	struct pci_dev *pdev = data;
+
+	pci_free_irq_vectors(pdev);
+}
+
 static int brcm_config_multi_msi(struct pci_dev *pdev,
 				 struct plat_stmmacenet_data *plat,
 				 struct stmmac_resources *res)
@@ -251,86 +258,29 @@ static int brcm_config_multi_msi(struct pci_dev *pdev,
 	plat->flags |= STMMAC_FLAG_MULTI_MSI_EN;
 	plat->flags |= STMMAC_FLAG_TSO_EN;
 	plat->flags |= STMMAC_FLAG_SPH_DISABLE;
-	return 0;
+
+	return devm_add_action_or_reset(&pdev->dev,
+					brcm_free_irq_vectors, pdev);
 }
 
-static int brcm_pci_resume(struct device *dev, void *bsp_priv)
+static int brcm_drv_init(struct device *dev, void *bsp_priv)
 {
+	struct brcm_priv_data *brcm_priv = (struct brcm_priv_data *)bsp_priv;
 	struct pci_dev *pdev = to_pci_dev(dev);
-
-	brcm_config_misc_regs(pdev, bsp_priv);
-
-	return stmmac_pci_plat_resume(dev, bsp_priv);
-}
-
-static int dwxgmac_brcm_pci_probe(struct pci_dev *pdev,
-				  const struct pci_device_id *id)
-{
-	struct dwxgmac_brcm_pci_info *info =
-		(struct dwxgmac_brcm_pci_info *)id->driver_data;
-	struct plat_stmmacenet_data *plat;
-	struct brcm_priv_data *brcm_priv;
-	struct stmmac_resources res;
-	struct device *dev;
 	int rx_offset;
 	int tx_offset;
 	int vector;
 	int ret;
 
-	dev = &pdev->dev;
-
-	brcm_priv = devm_kzalloc(&pdev->dev, sizeof(*brcm_priv), GFP_KERNEL);
-	if (!brcm_priv)
-		return -ENOMEM;
-
-	plat = stmmac_plat_dat_alloc(dev);
-	if (!plat)
-		return -ENOMEM;
-
-	plat->axi = devm_kzalloc(&pdev->dev, sizeof(*plat->axi), GFP_KERNEL);
-	if (!plat->axi)
-		return -ENOMEM;
-
 	/* This device is directly attached to the switch chip internal to the
 	 * SoC using XGMII interface. Since no MDIO is present, register
 	 * fixed-link software_node to create phylink.
 	 */
-	software_node_register_node_group(brcm_swnodes);
-	device_set_node(dev, software_node_fwnode(&parent_swnode));
-
-	/* Disable D3COLD as our device does not support it */
-	pci_d3cold_disable(pdev);
-
-	/* Enable PCI device */
-	ret = pcim_enable_device(pdev);
-	if (ret) {
-		dev_err(&pdev->dev, "%s: ERROR: failed to enable device\n",
-			__func__);
-		return ret;
-	}
-
-	pci_set_master(pdev);
-
-	memset(&res, 0, sizeof(res));
-	res.addr = pcim_iomap_region(pdev, 0, pci_name(pdev));
-	if (IS_ERR(res.addr))
-		return dev_err_probe(&pdev->dev, PTR_ERR(res.addr),
-				     "failed to map IO region\n");
-	/* MISC Regs */
-	brcm_priv->misc_regs = res.addr + BRCM_XGMAC_IOMEM_MISC_REG_OFFSET;
-	/* MBOX Regs */
-	brcm_priv->mbox_regs = res.addr + BRCM_XGMAC_IOMEM_MBOX_REG_OFFSET;
-	/* XGMAC config Regs */
-	res.addr += BRCM_XGMAC_IOMEM_CFG_REG_OFFSET;
-	brcm_priv->xgmac_regs = res.addr;
-
-	plat->suspend		= stmmac_pci_plat_suspend;
-	plat->resume		= brcm_pci_resume;
-	plat->bsp_priv = brcm_priv;
-
-	ret = info->setup(pdev, plat);
+	ret = software_node_register_node_group(brcm_swnodes);
 	if (ret)
-		return ret;
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to register software_node\n");
+	device_set_node(dev, software_node_fwnode(&parent_swnode));
 
 	pci_write_config_dword(pdev, XGMAC_PCIE_CFG_MSIX_ADDR_MATCH_LOW,
 			       XGMAC_PCIE_CFG_MSIX_ADDR_MATCH_LO_VALUE);
@@ -378,32 +328,98 @@ static int dwxgmac_brcm_pci_probe(struct pci_dev *pdev,
 	/* Enable MSI-X */
 	misc_iowrite(brcm_priv, XGMAC_PCIE_MISC_PCIESS_CTRL_OFFSET,
 		     XGMAC_PCIE_MISC_PCIESS_CTRL_EN_MSI_MSIX);
+	return 0;
+}
 
-	ret = brcm_config_multi_msi(pdev, plat, &res);
+static void brcm_drv_exit_cleanup(struct device *dev, void *bsp_priv)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	device_set_node(&pdev->dev, NULL);
+	software_node_unregister_node_group(brcm_swnodes);
+}
+
+static int brcm_pci_resume(struct device *dev, void *bsp_priv)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	brcm_config_misc_regs(pdev, bsp_priv);
+
+	return stmmac_pci_plat_resume(dev, bsp_priv);
+}
+
+static int dwxgmac_brcm_pci_probe(struct pci_dev *pdev,
+				  const struct pci_device_id *id)
+{
+	struct dwxgmac_brcm_pci_info *info =
+		(struct dwxgmac_brcm_pci_info *)id->driver_data;
+	struct plat_stmmacenet_data *plat;
+	struct brcm_priv_data *brcm_priv;
+	struct stmmac_resources res;
+	struct device *dev;
+	int ret;
+
+	dev = &pdev->dev;
+
+	brcm_priv = devm_kzalloc(&pdev->dev, sizeof(*brcm_priv), GFP_KERNEL);
+	if (!brcm_priv)
+		return -ENOMEM;
+
+	plat = stmmac_plat_dat_alloc(dev);
+	if (!plat)
+		return -ENOMEM;
+
+	plat->axi = devm_kzalloc(&pdev->dev, sizeof(*plat->axi), GFP_KERNEL);
+	if (!plat->axi)
+		return -ENOMEM;
+
+	/* Disable D3COLD as our device does not support it */
+	pci_d3cold_disable(pdev);
+
+	/* Enable PCI device */
+	ret = pcim_enable_device(pdev);
 	if (ret) {
-		dev_err(&pdev->dev,
-			"%s: ERROR: failed to enable IRQ\n", __func__);
-		goto err_disable_msi;
+		dev_err(&pdev->dev, "%s: ERROR: failed to enable device\n",
+			__func__);
+		return ret;
 	}
 
-	ret = stmmac_dvr_probe(&pdev->dev, plat, &res);
+	pci_set_master(pdev);
+
+	memset(&res, 0, sizeof(res));
+	res.addr = pcim_iomap_region(pdev, 0, pci_name(pdev));
+	if (IS_ERR(res.addr))
+		return dev_err_probe(&pdev->dev, PTR_ERR(res.addr),
+				     "failed to map IO region\n");
+	/* MISC Regs */
+	brcm_priv->misc_regs = res.addr + BRCM_XGMAC_IOMEM_MISC_REG_OFFSET;
+	/* MBOX Regs */
+	brcm_priv->mbox_regs = res.addr + BRCM_XGMAC_IOMEM_MBOX_REG_OFFSET;
+	/* XGMAC config Regs */
+	res.addr += BRCM_XGMAC_IOMEM_CFG_REG_OFFSET;
+	brcm_priv->xgmac_regs = res.addr;
+
+	plat->init		= brcm_drv_init;
+	plat->exit		= brcm_drv_exit_cleanup;
+	plat->suspend		= stmmac_pci_plat_suspend;
+	plat->resume		= brcm_pci_resume;
+	plat->bsp_priv = brcm_priv;
+
+	ret = info->setup(pdev, plat);
 	if (ret)
-		goto err_disable_msi;
+		return ret;
 
-	return ret;
+	ret = brcm_config_multi_msi(pdev, plat, &res);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to configure IRQ\n");
 
-err_disable_msi:
-	pci_free_irq_vectors(pdev);
-
-	return ret;
+	return stmmac_dvr_probe(&pdev->dev, plat, &res);
 }
 
 static void dwxgmac_brcm_pci_remove(struct pci_dev *pdev)
 {
 	stmmac_dvr_remove(&pdev->dev);
-	pci_free_irq_vectors(pdev);
-	device_set_node(&pdev->dev, NULL);
-	software_node_unregister_node_group(brcm_swnodes);
 }
 
 static const struct pci_device_id dwxgmac_brcm_id_table[] = {
