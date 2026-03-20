@@ -74,6 +74,14 @@ static const int is_nolibc =
 #endif
 ;
 
+static const int is_glibc =
+#ifdef __GLIBC__
+	1
+#else
+	0
+#endif
+;
+
 #if !defined(NOLIBC)
 /* Some disabled tests may not compile. */
 
@@ -867,7 +875,7 @@ int test_file_stream(void)
 
 	errno = 0;
 	r = fwrite("foo", 1, 3, f);
-	if (r != 0 || errno != EBADF) {
+	if (r != 0 || ((is_nolibc || is_glibc) && errno != EBADF)) {
 		fclose(f);
 		return -1;
 	}
@@ -1824,13 +1832,13 @@ static int run_printf(int min, int max)
 		CASE_TEST(hex_alt_prec); EXPECT_VFPRINTF(1, "| 0x02|0x03| 0x123|", "|%#5.2x|%#04x|%#6.2x|", 2, 3, 0x123); break;
 		CASE_TEST(hex_0_alt);    EXPECT_VFPRINTF(1, "|0|0000|   00|", "|%#x|%#04x|%#5.2x|", 0, 0, 0); break;
 		CASE_TEST(pointer);      EXPECT_VFPRINTF(1, "0x1", "%p", (void *) 0x1); break;
-		CASE_TEST(pointer_NULL); EXPECT_VFPRINTF(1, "|(nil)|(nil)|", "|%p|%.4p|", (void *)0, (void *)0); break;
-		CASE_TEST(string_NULL);  EXPECT_VFPRINTF(1, "|(null)||(null)|", "|%s|%.5s|%.6s|", (void *)0, (void *)0, (void *)0); break;
+		CASE_TEST(pointer_NULL); EXPECT_VFPRINTF(is_nolibc || is_glibc, "|(nil)|(nil)|", "|%p|%.4p|", (void *)0, (void *)0); break;
+		CASE_TEST(string_NULL);  EXPECT_VFPRINTF(is_nolibc, "|(null)||(null)|", "|%s|%.5s|%.6s|", (void *)0, (void *)0, (void *)0); break;
 		CASE_TEST(percent);      EXPECT_VFPRINTF(1, "a%d42%69%", "a%%d%d%%%d%%", 42, 69); break;
-		CASE_TEST(perc_qual);    EXPECT_VFPRINTF(1, "a%d2", "a%-14l%d%d", 2); break;
-		CASE_TEST(invalid);      EXPECT_VFPRINTF(1, "a%12yx3%y42%P", "a%12yx%d%y%d%P", 3, 42); break;
+		CASE_TEST(perc_qual);    EXPECT_VFPRINTF(is_nolibc || is_glibc, "a%d2", "a%-14l%d%d", 2); break;
+		CASE_TEST(invalid);      EXPECT_VFPRINTF(is_nolibc || is_glibc, "a%12yx3%y42%P", "a%12yx%d%y%d%P", 3, 42); break;
 		CASE_TEST(intmax_max);   EXPECT_VFPRINTF(1, "9223372036854775807", "%lld", ~0ULL >> 1); break;
-		CASE_TEST(intmax_min);   EXPECT_VFPRINTF(1, "-9223372036854775808", "%Li", (~0ULL >> 1) + 1); break;
+		CASE_TEST(intmax_min);   EXPECT_VFPRINTF(is_nolibc || is_glibc, "-9223372036854775808", "%Li", (~0ULL >> 1) + 1); break;
 		CASE_TEST(uintmax_max);  EXPECT_VFPRINTF(1, "18446744073709551615", "%ju", ~0ULL); break;
 		CASE_TEST(truncation);   EXPECT_VFPRINTF(1, "012345678901234567890123456789", "%s", "012345678901234567890123456789"); break;
 		CASE_TEST(string_width); EXPECT_VFPRINTF(1, "         1", "%10s", "1"); break;
