@@ -4197,8 +4197,9 @@ static void __stmmac_release(struct net_device *dev)
 
 	netif_tx_disable(dev);
 
-	/* Free the IRQ lines */
-	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
+	/* In reset flow IRQs can be freed before dev_close(). */
+	if (!test_bit(STMMAC_DOWN, &priv->state))
+		stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
 
 	/* Stop TX/RX DMA and clear the descriptors */
 	stmmac_stop_all_dma(priv);
@@ -7314,6 +7315,8 @@ static void stmmac_reset_subtask(struct stmmac_priv *priv)
 	netif_trans_update(priv->dev);
 	while (test_and_set_bit(STMMAC_RESETING, &priv->state))
 		usleep_range(1000, 2000);
+
+	stmmac_free_irq(priv->dev, REQ_IRQ_ERR_ALL, 0);
 
 	set_bit(STMMAC_DOWN, &priv->state);
 	dev_close(priv->dev);
