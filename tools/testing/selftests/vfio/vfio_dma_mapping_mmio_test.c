@@ -88,6 +88,7 @@ static void do_mmio_map_test(struct iommu *iommu,
 		.vaddr = vaddr,
 		.size = size,
 		.iova = iova_allocator_alloc(iova_allocator, size),
+		.link = LIST_HEAD_INIT(region.link),
 	};
 
 	/*
