@@ -2985,7 +2985,7 @@ out:
 	}
 
 	/* the trailing null byte doesn't count towards the total */
-	return str-buf;
+	return WARN_ON_ONCE(str - buf > INT_MAX) ? INT_MAX : str - buf;
 
 }
 EXPORT_SYMBOL(vsnprintf);
