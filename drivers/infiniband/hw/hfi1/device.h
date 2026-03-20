@@ -12,8 +12,7 @@ int hfi1_cdev_init(int minor, const char *name,
 		   bool user_accessible,
 		   struct kobject *parent);
 void hfi1_cdev_cleanup(struct cdev *cdev, struct device **devp);
-const char *class_name(void);
-int __init dev_init(void);
-void dev_cleanup(void);
+int __init hfi1_dev_init(void);
+void hfi1_dev_cleanup(void);
 
 #endif                          /* _HFI1_DEVICE_H */

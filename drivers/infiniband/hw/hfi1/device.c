@@ -86,14 +86,7 @@ void hfi1_cdev_cleanup(struct cdev *cdev, struct device **devp)
 	}
 }
 
-static const char *hfi1_class_name = "hfi1";
-
-const char *class_name(void)
-{
-	return hfi1_class_name;
-}
-
-int __init dev_init(void)
+int __init hfi1_dev_init(void)
 {
 	int ret;
 
@@ -123,7 +116,7 @@ done:
 	return ret;
 }
 
-void dev_cleanup(void)
+void hfi1_dev_cleanup(void)
 {
 	class_unregister(&class);
 	class_unregister(&user_class);

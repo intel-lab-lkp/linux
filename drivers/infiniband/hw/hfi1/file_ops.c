@@ -1686,7 +1686,7 @@ static int user_add(struct hfi1_devdata *dd)
 	char name[10];
 	int ret;
 
-	snprintf(name, sizeof(name), "%s_%d", class_name(), dd->unit);
+	snprintf(name, sizeof(name), "hfi1_%d", dd->unit);
 	ret = hfi1_cdev_init(dd->unit, name, &hfi1_file_ops,
 			     &dd->user_cdev, &dd->user_device,
 			     true, &dd->verbs_dev.rdi.ibdev.dev.kobj);

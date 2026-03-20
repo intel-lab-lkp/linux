@@ -1236,7 +1236,7 @@ static struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev,
 	 * to work by setting the name manually here.
 	 */
 	ibdev = &dd->verbs_dev.rdi.ibdev;
-	dev_set_name(&ibdev->dev, "%s_%d", class_name(), dd->unit);
+	dev_set_name(&ibdev->dev, "hfi1_%d", dd->unit);
 	strscpy(&ibdev->name, dev_name(&ibdev->dev), IB_DEVICE_NAME_MAX);
 
 	/*
@@ -1387,7 +1387,7 @@ static int __init hfi1_mod_init(void)
 {
 	int ret;
 
-	ret = dev_init();
+	ret = hfi1_dev_init();
 	if (ret)
 		goto bail;
 
@@ -1460,7 +1460,7 @@ static int __init hfi1_mod_init(void)
 
 bail_dev:
 	hfi1_dbg_exit();
-	dev_cleanup();
+	hfi1_dev_cleanup();
 bail:
 	return ret;
 }
@@ -1479,7 +1479,7 @@ static void __exit hfi1_mod_cleanup(void)
 
 	WARN_ON(!xa_empty(&hfi1_dev_table));
 	dispose_firmware();	/* asymmetric with obtain_firmware() */
-	dev_cleanup();
+	hfi1_dev_cleanup();
 }
 
 module_exit(hfi1_mod_cleanup);

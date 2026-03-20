@@ -1161,7 +1161,7 @@ void hfi1_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 
 	if (!hfi1_dbg_root)
 		return;
-	snprintf(name, sizeof(name), "%s_%d", class_name(), unit);
+	snprintf(name, sizeof(name), "hfi1_%d", unit);
 	snprintf(link, sizeof(link), "%d", unit);
 	root = debugfs_create_dir(name, hfi1_dbg_root);
 	ibd->hfi1_ibdev_dbg = root;
