@@ -3567,9 +3567,6 @@ void em28xx_free_device(struct kref *ref)
 	if (!dev->disconnected)
 		em28xx_release_resources(dev);
 
-	if (dev->ts == PRIMARY_TS)
-		kfree(dev->alt_max_pkt_size_isoc);
-
 	kfree(dev);
 }
 EXPORT_SYMBOL_GPL(em28xx_free_device);
@@ -3912,21 +3909,13 @@ static int em28xx_usb_probe(struct usb_interface *intf,
 	}
 
 	/* allocate memory for our device state and initialize it */
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc_flex(*dev, alt_max_pkt_size_isoc, intf->num_altsetting);
 	if (!dev) {
 		retval = -ENOMEM;
 		goto err;
 	}
 
-	/* compute alternate max packet sizes */
-	dev->alt_max_pkt_size_isoc = kcalloc(intf->num_altsetting,
-					     sizeof(dev->alt_max_pkt_size_isoc[0]),
-					     GFP_KERNEL);
-	if (!dev->alt_max_pkt_size_isoc) {
-		kfree(dev);
-		retval = -ENOMEM;
-		goto err;
-	}
+	dev->num_alt = intf->num_altsetting;
 
 	/* Get endpoints */
 	for (i = 0; i < intf->num_altsetting; i++) {
@@ -4027,8 +4016,6 @@ static int em28xx_usb_probe(struct usb_interface *intf,
 			ifnum,
 			dev->dvb_ep_bulk ? " bulk" : "",
 			dev->dvb_ep_isoc ? " isoc" : "");
-
-	dev->num_alt = intf->num_altsetting;
 
 	if ((unsigned int)card[nr] < em28xx_bcount)
 		dev->model = card[nr];
@@ -4163,7 +4150,6 @@ static int em28xx_usb_probe(struct usb_interface *intf,
 	return 0;
 
 err_free:
-	kfree(dev->alt_max_pkt_size_isoc);
 	kfree(dev);
 
 err:

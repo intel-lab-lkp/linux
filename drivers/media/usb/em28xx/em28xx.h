@@ -730,7 +730,6 @@ struct em28xx {
 	int packet_multiplier;	// multiplier for wMaxPacketSize, used for
 				// URB buffer size definition
 	int num_alt;		// number of alternative settings
-	unsigned int *alt_max_pkt_size_isoc; // array of isoc wMaxPacketSize
 	unsigned int analog_xfer_bulk:1;	// use bulk instead of isoc
 						// transfers for analog
 	int dvb_alt_isoc;	// alternate setting for DVB isoc transfers
@@ -772,6 +771,8 @@ struct em28xx {
 
 	struct em28xx	*dev_next;
 	int ts;
+
+	unsigned int alt_max_pkt_size_isoc[] __counted_by(num_alt); // array of isoc wMaxPacketSize
 };
 
 #define kref_to_dev(d) container_of(d, struct em28xx, ref)
