@@ -14,7 +14,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_mm.h>
 
-#include <linux/bits.h>
+#include <linux/bitfield.h>
 #include <linux/compiler_attributes.h>
 #include <linux/compiler_types.h>
 #include <linux/device.h>
@@ -470,6 +470,12 @@ struct pvr_file {
 
 #define to_pvr_file(file) ((file)->driver_priv)
 
+#define __PVR_PACKED_BVNC(prep, b, v, n, c) \
+	(prep(DRM_PVR_BVNC_B, b) | \
+	 prep(DRM_PVR_BVNC_V, v) | \
+	 prep(DRM_PVR_BVNC_N, n) | \
+	 prep(DRM_PVR_BVNC_C, c))
+
 /**
  * PVR_PACKED_BVNC() - Packs B, V, N and C values into a 64-bit unsigned integer
  * @b: Branch ID.
@@ -477,39 +483,24 @@ struct pvr_file {
  * @n: Number of scalable units.
  * @c: Config ID.
  *
- * The packed layout is as follows:
- *
- *    +--------+--------+--------+-------+
- *    | 63..48 | 47..32 | 31..16 | 15..0 |
- *    +========+========+========+=======+
- *    | B      | V      | N      | C     |
- *    +--------+--------+--------+-------+
+ * The packed layout follows the bitfield defined by the DRM_PVR_BVNC_* macros.
  *
  * pvr_gpu_id_to_packed_bvnc() should be used instead of this macro when a
  * &struct pvr_gpu_id is available in order to ensure proper type checking.
  *
  * Return: Packed BVNC.
  */
-/* clang-format off */
-#define PVR_PACKED_BVNC(b, v, n, c) \
-	((((u64)(b) & GENMASK_ULL(15, 0)) << 48) | \
-	 (((u64)(v) & GENMASK_ULL(15, 0)) << 32) | \
-	 (((u64)(n) & GENMASK_ULL(15, 0)) << 16) | \
-	 (((u64)(c) & GENMASK_ULL(15, 0)) <<  0))
-/* clang-format on */
+#define PVR_PACKED_BVNC(b, v, n, c) __PVR_PACKED_BVNC(FIELD_PREP, b, v, n, c)
+
+/** PVR_PACKED_BVNC_CONST() - Compile-time equivalent of PVR_PACKED_BVNC(). */
+#define PVR_PACKED_BVNC_CONST(b, v, n, c) __PVR_PACKED_BVNC(FIELD_PREP_CONST, b, v, n, c)
 
 /**
  * pvr_gpu_id_to_packed_bvnc() - Packs B, V, N and C values into a 64-bit
  * unsigned integer
  * @gpu_id: GPU ID.
  *
- * The packed layout is as follows:
- *
- *    +--------+--------+--------+-------+
- *    | 63..48 | 47..32 | 31..16 | 15..0 |
- *    +========+========+========+=======+
- *    | B      | V      | N      | C     |
- *    +--------+--------+--------+-------+
+ * The packed layout follows the bitfield defined by the DRM_PVR_BVNC_* macros.
  *
  * This should be used in preference to PVR_PACKED_BVNC() when a &struct
  * pvr_gpu_id is available in order to ensure proper type checking.
@@ -525,10 +516,10 @@ pvr_gpu_id_to_packed_bvnc(const struct pvr_gpu_id *gpu_id)
 static __always_inline void
 packed_bvnc_to_pvr_gpu_id(u64 bvnc, struct pvr_gpu_id *gpu_id)
 {
-	gpu_id->b = (bvnc & GENMASK_ULL(63, 48)) >> 48;
-	gpu_id->v = (bvnc & GENMASK_ULL(47, 32)) >> 32;
-	gpu_id->n = (bvnc & GENMASK_ULL(31, 16)) >> 16;
-	gpu_id->c = bvnc & GENMASK_ULL(15, 0);
+	gpu_id->b = FIELD_GET(DRM_PVR_BVNC_B, bvnc);
+	gpu_id->v = FIELD_GET(DRM_PVR_BVNC_V, bvnc);
+	gpu_id->n = FIELD_GET(DRM_PVR_BVNC_N, bvnc);
+	gpu_id->c = FIELD_GET(DRM_PVR_BVNC_C, bvnc);
 }
 
 int pvr_device_init(struct pvr_device *pvr_dev);
