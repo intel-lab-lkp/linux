@@ -2482,6 +2482,20 @@ nl80211_send_pmsr_ftm_capa(const struct cfg80211_pmsr_capabilities *cap,
 				cap->pd_max_peer_rsta_role))
 			return -ENOBUFS;
 	}
+
+	if (nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_PD_EDCA_PREAMBLES,
+			cap->ftm.pd_edca_preambles))
+		return -ENOBUFS;
+	if (nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_PREAMBLES,
+			cap->ftm.pd_ntb_preambles))
+		return -ENOBUFS;
+	if (nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_PD_EDCA_BANDWIDTHS,
+			cap->ftm.pd_edca_bandwidths))
+		return -ENOBUFS;
+	if (nla_put_u32(msg, NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_BANDWIDTHS,
+			cap->ftm.pd_ntb_bandwidths))
+		return -ENOBUFS;
+
 	nla_nest_end(msg, ftm);
 	return 0;
 }

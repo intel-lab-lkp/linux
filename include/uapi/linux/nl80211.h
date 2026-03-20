@@ -7960,6 +7960,24 @@ enum nl80211_peer_measurement_attrs {
  * @NL80211_PMSR_FTM_CAPA_ATTR_MIN_INTERVAL_NTB: u32 attribute indicating
  *	the minimum NTB ranging interval supported by the device
  *	in milli seconds. (0 means unknown)
+ * @NL80211_PMSR_FTM_CAPA_ATTR_PD_EDCA_PREAMBLES: u32 bitmap of values from
+ *	&enum nl80211_preamble indicating the supported preambles for FTM in
+ *	case of PD based EDCA initiator or responder role.
+ * @NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_PREAMBLES: u32 bitmap of values from
+ *	&enum nl80211_preamble indicating the supported preambles for FTM in
+ *	case of PD based NTB initiator or responder role.
+ * @NL80211_PMSR_FTM_CAPA_ATTR_PD_EDCA_BANDWIDTHS: u32 bitmap of values from
+ *	&enum nl80211_chan_width indicating the supported channel
+ *	bandwidths for FTM in case of PD based EDCA initiator or responder role.
+ *	Note that a higher channel bandwidth may be configured to allow for
+ *	other measurements types with different bandwidth requirement in the
+ *	same measurement.
+ * @NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_BANDWIDTHS: u32 bitmap of values from
+ *	&enum nl80211_chan_width indicating the supported channel
+ *	bandwidths for FTM in case of PD based NTB initiator or responder role.
+ *	Note that a higher channel bandwidth may be configured to allow for
+ *	other measurements types with different bandwidth requirement in the
+ *	same measurement.
  *
  * @NUM_NL80211_PMSR_FTM_CAPA_ATTR: internal
  * @NL80211_PMSR_FTM_CAPA_ATTR_MAX: highest attribute number
@@ -7997,6 +8015,10 @@ enum nl80211_peer_measurement_ftm_capa {
 	NL80211_PMSR_FTM_CAPA_ATTR_MAX_NUM_RX_ANTENNAS,
 	NL80211_PMSR_FTM_CAPA_ATTR_MIN_INTERVAL_EDCA,
 	NL80211_PMSR_FTM_CAPA_ATTR_MIN_INTERVAL_NTB,
+	NL80211_PMSR_FTM_CAPA_ATTR_PD_EDCA_PREAMBLES,
+	NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_PREAMBLES,
+	NL80211_PMSR_FTM_CAPA_ATTR_PD_EDCA_BANDWIDTHS,
+	NL80211_PMSR_FTM_CAPA_ATTR_PD_NTB_BANDWIDTHS,
 
 	/* keep last */
 	NUM_NL80211_PMSR_FTM_CAPA_ATTR,

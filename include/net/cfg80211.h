@@ -5855,6 +5855,18 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type);
  *	a multi-peer request this will indicate if the device can act
  *	simultaneously as initiator and a responder. Only valid if
  *	@ftm.rsta_support is set.
+ * @ftm.pd_edca_preambles: bitmap of preambles supported
+ *	(&enum nl80211_preamble) in case of PD request with EDCA based
+ *	initiator or responder role. ignored if @pd_support is not set.
+ * @ftm.pd_ntb_preambles: bitmap of preambles supported
+ *	(&enum nl80211_preamble) in case of PD request with NTB based
+ *	initiator or responder role. ignored if @pd_support is not set.
+ * @ftm.pd_edca_bandwidths: bitmap of bandwidths supported
+ *	(&enum nl80211_chan_width) in case of PD request with EDCA based
+ *	initiator or responder role. ignored if @pd_support is not set.
+ * @ftm.pd_ntb_bandwidths: bitmap of bandwidths supported
+ *	(&enum nl80211_chan_width) in case of PD request with NTB based
+ *	initiator or responder role. ignored if @pd_support is not set.
  */
 struct cfg80211_pmsr_capabilities {
 	unsigned int max_peers;
@@ -5899,6 +5911,10 @@ struct cfg80211_pmsr_capabilities {
 		u32 min_allowed_ranging_interval_ntb;
 		u8 pd_support:1,
 		   pd_concurrent_ista_rsta_support:1;
+		u32 pd_edca_preambles;
+		u32 pd_ntb_preambles;
+		u32 pd_edca_bandwidths;
+		u32 pd_ntb_bandwidths;
 	} ftm;
 };
 
