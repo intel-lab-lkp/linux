@@ -1484,4 +1484,14 @@ config MM_LOCAL_REGION
 
 source "mm/damon/Kconfig"
 
+config ARCH_SUPPORTS_MERMAP
+	bool
+
+config MERMAP
+	bool "Support for epheMERal mappings within the kernel"
+	depends on ARCH_SUPPORTS_MERMAP
+	depends on MM_LOCAL_REGION
+	help
+	  Support for epheMERal mappings within the kernel.
+
 endmenu
