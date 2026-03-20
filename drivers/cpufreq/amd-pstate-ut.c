@@ -35,6 +35,10 @@
 
 #include "amd-pstate.h"
 
+static char *run_only;
+module_param(run_only, charp, 0444);
+MODULE_PARM_DESC(run_only,
+	"Run only the named test case (default: run all)");
 
 struct amd_pstate_ut_struct {
 	const char *name;
@@ -275,7 +279,12 @@ static int __init amd_pstate_ut_init(void)
 	u32 i = 0, arr_size = ARRAY_SIZE(amd_pstate_ut_cases);
 
 	for (i = 0; i < arr_size; i++) {
-		int ret = amd_pstate_ut_cases[i].func(i);
+		int ret;
+
+		if (run_only && strcmp(run_only, amd_pstate_ut_cases[i].name))
+			continue;
+
+		ret = amd_pstate_ut_cases[i].func(i);
 
 		if (ret)
 			pr_err("%-4d %-20s\t fail: %d!\n", i+1, amd_pstate_ut_cases[i].name, ret);
