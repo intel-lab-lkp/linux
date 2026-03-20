@@ -4351,7 +4351,8 @@ struct cfg80211_pmsr_result {
  * @burst_duration: burst duration. If @trigger_based or @non_trigger_based is
  *	set, this is the burst duration in milliseconds, and zero means the
  *	device should pick an appropriate value based on @ftms_per_burst.
- * @ftms_per_burst: number of FTMs per burst
+ * @ftms_per_burst: number of FTMs per burst. If set to 0, the firmware or
+ *	driver can automatically select an appropriate value.
  * @ftmr_retries: number of retries for FTM request
  * @request_lci: request LCI information
  * @request_civicloc: request civic location information
@@ -4368,6 +4369,29 @@ struct cfg80211_pmsr_result {
  * @bss_color: the bss color of the responder. Optional. Set to zero to
  *	indicate the driver should set the BSS color. Only valid if
  *	@non_trigger_based or @trigger_based is set.
+ * @pd_request: indicates a peer-to-peer PD request.
+ * @min_time_between_measurements: minimum time between two consecutive range
+ *	measurements in units of 100 micro seconds, applicable for
+ *	non trigger based ranging. Only valid if @non_trigger_based is set.
+ * @max_time_between_measurements: maximum time between two consecutive range
+ *	measurements in units of 10 milli seconds, to avoid FTM negotiation
+ *	applicable for non trigger based ranging. Only valid
+ *	if @non_trigger_based is set.
+ * @availability_window: duration of the availability window (AW) in units of
+ *	1 millisecond (0-255 ms). Only valid if @non_trigger_based is set.
+ *	If set to 0, the firmware or driver can automatically select an
+ *	appropriate value.
+ * @nominal_time: Nominal duration between adjacent availability windows
+ *	in units of milli seconds. Only valid if @non_trigger_based is set.
+ *	If set to 0, the firmware or driver can automatically select an
+ *	appropriate value.
+ * @measurements_per_aw: number of measurement attempts per availability window
+ *	with a maximum value of 4. Only valid if @non_trigger_based is set.
+ *	If set to 0, the firmware or driver can automatically select an
+ *	appropriate value.
+ * @num_measurements: number of measurements to be performed in total.
+ *	Only valid if @non_trigger_based is set. If set to 0, the firmware or
+ *	driver can automatically select an appropriate value.
  *
  * See also nl80211 for the respective attribute documentation.
  */
@@ -4387,6 +4411,14 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u8 ftms_per_burst;
 	u8 ftmr_retries;
 	u8 bss_color;
+
+	u8 pd_request:1;
+	u32 min_time_between_measurements;
+	u32 max_time_between_measurements;
+	u32 availability_window;
+	u32 nominal_time;
+	u32 measurements_per_aw;
+	u32 num_measurements;
 };
 
 /**
