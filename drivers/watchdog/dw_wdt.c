@@ -592,6 +592,8 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
 	if (IS_ERR(dw_wdt->rst))
 		return PTR_ERR(dw_wdt->rst);
 
+	reset_control_deassert(dw_wdt->rst);
+
 	/* Enable normal reset without pre-timeout by default. */
 	dw_wdt_update_mode(dw_wdt, DW_WDT_RMOD_RESET);
 
@@ -616,8 +618,6 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
 
 		dw_wdt->wdd.info = &dw_wdt_ident;
 	}
-
-	reset_control_deassert(dw_wdt->rst);
 
 	ret = dw_wdt_init_timeouts(dw_wdt, dev);
 	if (ret)
