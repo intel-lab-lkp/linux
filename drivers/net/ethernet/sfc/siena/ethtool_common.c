@@ -206,9 +206,9 @@ out:
  *
  * Fill in an individual self-test entry.
  */
-static void efx_fill_test(unsigned int test_index, u8 *strings, u64 *data,
-			  int *test, const char *unit_format, int unit_id,
-			  const char *test_format, const char *test_id)
+static void __printf(7, 8)
+efx_fill_test(unsigned int test_index, u8 *strings, u64 *data, int *test,
+	      const char *unit_format, int unit_id, const char *test_format, ...)
 {
 	char unit_str[ETH_GSTRING_LEN], test_str[ETH_GSTRING_LEN];
 
@@ -218,12 +218,16 @@ static void efx_fill_test(unsigned int test_index, u8 *strings, u64 *data,
 
 	/* Fill string, if applicable */
 	if (strings) {
+		va_list args;
+
 		if (strchr(unit_format, '%'))
 			snprintf(unit_str, sizeof(unit_str),
 				 unit_format, unit_id);
 		else
 			strcpy(unit_str, unit_format);
-		snprintf(test_str, sizeof(test_str), test_format, test_id);
+		va_start(args, test_format);
+		vsnprintf(test_str, sizeof(test_str), test_format, args);
+		va_end(args);
 		snprintf(strings + test_index * ETH_GSTRING_LEN,
 			 ETH_GSTRING_LEN,
 			 "%-6s %-24s", unit_str, test_str);
@@ -301,28 +305,28 @@ static int efx_ethtool_fill_self_tests(struct efx_nic *efx,
 	enum efx_loopback_mode mode;
 
 	efx_fill_test(n++, strings, data, &tests->phy_alive,
-		      "phy", 0, "alive", NULL);
+		      "phy", 0, "alive");
 	efx_fill_test(n++, strings, data, &tests->nvram,
-		      "core", 0, "nvram", NULL);
+		      "core", 0, "nvram");
 	efx_fill_test(n++, strings, data, &tests->interrupt,
-		      "core", 0, "interrupt", NULL);
+		      "core", 0, "interrupt");
 
 	/* Event queues */
 	efx_for_each_channel(channel, efx) {
 		efx_fill_test(n++, strings, data,
 			      &tests->eventq_dma[channel->channel],
 			      EFX_CHANNEL_NAME(channel),
-			      "eventq.dma", NULL);
+			      "eventq.dma");
 		efx_fill_test(n++, strings, data,
 			      &tests->eventq_int[channel->channel],
 			      EFX_CHANNEL_NAME(channel),
-			      "eventq.int", NULL);
+			      "eventq.int");
 	}
 
 	efx_fill_test(n++, strings, data, &tests->memory,
-		      "core", 0, "memory", NULL);
+		      "core", 0, "memory");
 	efx_fill_test(n++, strings, data, &tests->registers,
-		      "core", 0, "registers", NULL);
+		      "core", 0, "registers");
 
 	for (i = 0; true; ++i) {
 		const char *name;
@@ -332,7 +336,8 @@ static int efx_ethtool_fill_self_tests(struct efx_nic *efx,
 		if (name == NULL)
 			break;
 
-		efx_fill_test(n++, strings, data, &tests->phy_ext[i], "phy", 0, name, NULL);
+		efx_fill_test(n++, strings, data, &tests->phy_ext[i], "phy",
+			      0, "%s", name);
 	}
 
 	/* Loopback tests */

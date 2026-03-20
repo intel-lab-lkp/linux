@@ -206,9 +206,10 @@ static void ef4_ethtool_set_msglevel(struct net_device *net_dev, u32 msg_enable)
  *
  * Fill in an individual self-test entry.
  */
-static void ef4_fill_test(unsigned int test_index, u8 *strings, u64 *data,
+static void __printf(7, 8)
+ ef4_fill_test(unsigned int test_index, u8 *strings, u64 *data,
 			  int *test, const char *unit_format, int unit_id,
-			  const char *test_format, const char *test_id)
+			  const char *test_format, ...)
 {
 	char unit_str[ETH_GSTRING_LEN], test_str[ETH_GSTRING_LEN];
 
@@ -218,12 +219,16 @@ static void ef4_fill_test(unsigned int test_index, u8 *strings, u64 *data,
 
 	/* Fill string, if applicable */
 	if (strings) {
+		va_list arg;
+
 		if (strchr(unit_format, '%'))
 			snprintf(unit_str, sizeof(unit_str),
 				 unit_format, unit_id);
 		else
 			strcpy(unit_str, unit_format);
-		snprintf(test_str, sizeof(test_str), test_format, test_id);
+		va_start(arg, test_format);
+		vsnprintf(test_str, sizeof(test_str), test_format, arg);
+		va_end(arg);
 		snprintf(strings + test_index * ETH_GSTRING_LEN,
 			 ETH_GSTRING_LEN,
 			 "%-6s %-24s", unit_str, test_str);
@@ -302,28 +307,28 @@ static int ef4_ethtool_fill_self_tests(struct ef4_nic *efx,
 	enum ef4_loopback_mode mode;
 
 	ef4_fill_test(n++, strings, data, &tests->phy_alive,
-		      "phy", 0, "alive", NULL);
+		      "phy", 0, "alive");
 	ef4_fill_test(n++, strings, data, &tests->nvram,
-		      "core", 0, "nvram", NULL);
+		      "core", 0, "nvram");
 	ef4_fill_test(n++, strings, data, &tests->interrupt,
-		      "core", 0, "interrupt", NULL);
+		      "core", 0, "interrupt");
 
 	/* Event queues */
 	ef4_for_each_channel(channel, efx) {
 		ef4_fill_test(n++, strings, data,
 			      &tests->eventq_dma[channel->channel],
 			      EF4_CHANNEL_NAME(channel),
-			      "eventq.dma", NULL);
+			      "eventq.dma");
 		ef4_fill_test(n++, strings, data,
 			      &tests->eventq_int[channel->channel],
 			      EF4_CHANNEL_NAME(channel),
-			      "eventq.int", NULL);
+			      "eventq.int");
 	}
 
 	ef4_fill_test(n++, strings, data, &tests->memory,
-		      "core", 0, "memory", NULL);
+		      "core", 0, "memory");
 	ef4_fill_test(n++, strings, data, &tests->registers,
-		      "core", 0, "registers", NULL);
+		      "core", 0, "registers");
 
 	if (efx->phy_op->run_tests != NULL) {
 		EF4_BUG_ON_PARANOID(efx->phy_op->test_name == NULL);
@@ -337,7 +342,7 @@ static int ef4_ethtool_fill_self_tests(struct ef4_nic *efx,
 				break;
 
 			ef4_fill_test(n++, strings, data, &tests->phy_ext[i],
-				      "phy", 0, name, NULL);
+				      "phy", 0, "%s", name);
 		}
 	}
 
