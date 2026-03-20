@@ -11,6 +11,8 @@
 #ifndef BNXT_H
 #define BNXT_H
 
+#include <linux/dma-mapping.h>
+
 #define DRV_MODULE_NAME		"bnxt_en"
 
 /* DO NOT CHANGE DRV_VER_* defines
@@ -897,6 +899,8 @@ struct bnxt_sw_tx_bd {
 		u16			rx_prod;
 		u16			txts_prod;
 	};
+	struct dma_iova_state	iova_state;
+	size_t			iova_total_len;
 };
 
 #define BNXT_SW_GSO_MID		1
