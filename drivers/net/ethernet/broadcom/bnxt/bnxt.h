@@ -891,12 +891,16 @@ struct bnxt_sw_tx_bd {
 	u8			is_ts_pkt;
 	u8			is_push;
 	u8			action;
+	u8			is_sw_gso;
 	unsigned short		nr_frags;
 	union {
 		u16			rx_prod;
 		u16			txts_prod;
 	};
 };
+
+#define BNXT_SW_GSO_MID		1
+#define BNXT_SW_GSO_LAST	2
 
 struct bnxt_sw_rx_bd {
 	void			*data;
