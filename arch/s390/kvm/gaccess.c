@@ -1515,13 +1515,15 @@ static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
 	 * Skip levels that are already protected. For each level, protect
 	 * only the page containing the entry, not the whole table.
 	 */
-	for (i = gl ; i >= w->level; i--) {
-		rc = gmap_protect_rmap(mc, sg, entries[i - 1].gfn, gpa_to_gfn(saddr),
-				       entries[i - 1].pfn, i, entries[i - 1].writable);
-		if (rc)
-			return rc;
-		if (!sg->parent)
-			return -EAGAIN;
+	if (w->level > LEVEL_MEM) {
+		for (i = gl ; i >= w->level; i--) {
+			rc = gmap_protect_rmap(mc, sg, entries[i].gfn, gpa_to_gfn(saddr),
+					       entries[i].pfn, i + 1, entries[i].writable);
+			if (rc)
+				return rc;
+			if (!sg->parent)
+				return -EAGAIN;
+		}
 	}
 
 	rc = dat_entry_walk(NULL, entries[LEVEL_MEM].gfn, sg->parent->asce, DAT_WALK_LEAF,
