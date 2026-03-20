@@ -179,7 +179,6 @@ static inline u64 native_read_pmc(int counter)
 #define raw_read_pmc		paravirt_read_pmc
 
 #else
-#include <linux/errno.h>
 
 #define raw_read_msr		native_read_msr
 #define raw_read_msr_safe	native_read_msr_safe
