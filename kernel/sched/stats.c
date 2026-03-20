@@ -129,6 +129,15 @@ static int show_schedstat(struct seq_file *seq, void *v)
 		    rq->rq_cpu_time,
 		    rq->rq_sched_info.run_delay, rq->rq_sched_info.pcount);
 
+		seq_printf(seq, " %u %u %u %u %lu %u %u",
+			   rq->found_idle_cpu_easy,
+			   rq->found_idle_cpu_capacity,
+			   rq->found_idle_cpu,
+			   rq->nofound_idle_cpu,
+			   rq->find_time,
+			   rq->steal,
+			   rq->steal_fail);
+
 		seq_printf(seq, "\n");
 
 		/* domain-specific stats */
