@@ -15,23 +15,17 @@
 
 struct msu_sink_private {
 	struct device	*dev;
-	struct sg_table **sgts;
 	unsigned int	nr_sgts;
+	struct sg_table *sgts[];
 };
 
 static void *msu_sink_assign(struct device *dev, int *mode)
 {
 	struct msu_sink_private *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc_flex(*priv, sgts, MAX_SGTS, GFP_KERNEL);
 	if (!priv)
 		return NULL;
-
-	priv->sgts = kcalloc(MAX_SGTS, sizeof(void *), GFP_KERNEL);
-	if (!priv->sgts) {
-		kfree(priv);
-		return NULL;
-	}
 
 	priv->dev = dev;
 	*mode = MSC_MODE_MULTI;
@@ -43,7 +37,6 @@ static void msu_sink_unassign(void *data)
 {
 	struct msu_sink_private *priv = data;
 
-	kfree(priv->sgts);
 	kfree(priv);
 }
 
