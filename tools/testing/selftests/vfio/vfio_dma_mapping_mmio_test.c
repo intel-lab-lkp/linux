@@ -101,7 +101,14 @@ static void do_mmio_map_test(struct iommu *iommu,
 		iommu_unmap(iommu, &region);
 	} else {
 		VFIO_ASSERT_NE(__iommu_map(iommu, &region), 0);
-		VFIO_ASSERT_NE(__iommu_unmap(iommu, &region, NULL), 0);
+		/*
+		 * Native IOMMUFD returns -ENOENT and Compat IOMMUFD returns 0
+		 * for unmapping a non-existent range.
+		 */
+		if (!strcmp(iommu->mode->name, MODE_IOMMUFD))
+			VFIO_ASSERT_NE(__iommu_unmap(iommu, &region, NULL), 0);
+		else
+			VFIO_ASSERT_EQ(__iommu_unmap(iommu, &region, NULL), 0);
 	}
 }
 
