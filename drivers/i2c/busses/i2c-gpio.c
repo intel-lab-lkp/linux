@@ -490,7 +490,7 @@ static int __init i2c_gpio_init(void)
 
 	ret = platform_driver_register(&i2c_gpio_driver);
 	if (ret)
-		printk(KERN_ERR "i2c-gpio: probe failed: %d\n", ret);
+		dev_err(&pdev->dev, "i2c-gpio: probe failed: %d\n",ret);
 
 	return ret;
 }
