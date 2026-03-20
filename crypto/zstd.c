@@ -94,18 +94,32 @@ static int zstd_compress_one(struct acomp_req *req, struct zstd_ctx *ctx,
 	return 0;
 }
 
+static int zstd_acomp_next_dst(struct acomp_walk *walk, zstd_out_buffer *outbuf)
+{
+	unsigned int dcur = acomp_walk_next_dst(walk);
+
+	if (!dcur)
+		return -ENOSPC;
+
+	outbuf->pos = 0;
+	outbuf->dst = walk->dst.virt.addr;
+	outbuf->size = dcur;
+
+	return 0;
+}
+
 static int zstd_compress(struct acomp_req *req)
 {
 	struct crypto_acomp_stream *s;
-	unsigned int pos, scur, dcur;
+	unsigned int scur;
 	unsigned int total_out = 0;
-	bool data_available = true;
+	bool src_mapped = false;
+	bool dst_mapped = false;
 	zstd_out_buffer outbuf;
 	struct acomp_walk walk;
 	zstd_in_buffer inbuf;
 	struct zstd_ctx *ctx;
-	size_t pending_bytes;
-	size_t num_bytes;
+	size_t remaining;
 	int ret;
 
 	s = crypto_acomp_lock_stream_bh(&zstd_streams);
@@ -121,60 +135,102 @@ static int zstd_compress(struct acomp_req *req)
 		goto out;
 	}
 
-	do {
-		dcur = acomp_walk_next_dst(&walk);
-		if (!dcur) {
-			ret = -ENOSPC;
+	ret = zstd_acomp_next_dst(&walk, &outbuf);
+	if (ret)
+		goto out;
+	dst_mapped = true;
+
+	for (;;) {
+		scur = acomp_walk_next_src(&walk);
+		src_mapped = scur;
+		if (outbuf.size == req->dlen && scur == req->slen) {
+			ret = zstd_compress_one(req, ctx, walk.src.virt.addr,
+						walk.dst.virt.addr, &total_out);
+			acomp_walk_done_src(&walk, scur);
+			src_mapped = false;
+			acomp_walk_done_dst(&walk, ret ? outbuf.size : total_out);
+			dst_mapped = false;
 			goto out;
 		}
 
-		outbuf.pos = 0;
-		outbuf.dst = (u8 *)walk.dst.virt.addr;
-		outbuf.size = dcur;
+		if (!scur)
+			break;
+
+		inbuf.pos = 0;
+		inbuf.src = walk.src.virt.addr;
+		inbuf.size = scur;
 
 		do {
-			scur = acomp_walk_next_src(&walk);
-			if (dcur == req->dlen && scur == req->slen) {
-				ret = zstd_compress_one(req, ctx, walk.src.virt.addr,
-							walk.dst.virt.addr, &total_out);
-				acomp_walk_done_src(&walk, scur);
-				acomp_walk_done_dst(&walk, dcur);
-				goto out;
+			remaining = zstd_compress_stream(ctx->cctx, &outbuf, &inbuf);
+			if (zstd_is_error(remaining)) {
+				ret = -EIO;
+				goto out_free_walk;
 			}
 
-			if (scur) {
-				inbuf.pos = 0;
-				inbuf.src = walk.src.virt.addr;
-				inbuf.size = scur;
-			} else {
-				data_available = false;
+			if (outbuf.pos != outbuf.size) {
+				if (inbuf.pos == inbuf.size)
+					break;
+				continue;
+			}
+
+			total_out += outbuf.pos;
+			acomp_walk_done_dst(&walk, outbuf.pos);
+			dst_mapped = false;
+
+			ret = zstd_acomp_next_dst(&walk, &outbuf);
+			if (ret)
+				goto out_free_walk;
+			dst_mapped = true;
+		} while (inbuf.pos != inbuf.size);
+
+		acomp_walk_done_src(&walk, inbuf.pos);
+		src_mapped = false;
+	}
+
+	for (;;) {
+		remaining = zstd_end_stream(ctx->cctx, &outbuf);
+		if (zstd_is_error(remaining)) {
+			ret = -EIO;
+			goto out_free_walk;
+		}
+
+		if (outbuf.pos == outbuf.size) {
+			total_out += outbuf.pos;
+			acomp_walk_done_dst(&walk, outbuf.pos);
+			dst_mapped = false;
+
+			if (!remaining) {
+				outbuf.pos = 0;
 				break;
 			}
 
-			num_bytes = zstd_compress_stream(ctx->cctx, &outbuf, &inbuf);
-			if (ZSTD_isError(num_bytes)) {
-				ret = -EIO;
+			ret = zstd_acomp_next_dst(&walk, &outbuf);
+			if (ret)
 				goto out;
-			}
+			dst_mapped = true;
 
-			pending_bytes = zstd_flush_stream(ctx->cctx, &outbuf);
-			if (ZSTD_isError(pending_bytes)) {
-				ret = -EIO;
-				goto out;
-			}
-			acomp_walk_done_src(&walk, inbuf.pos);
-		} while (dcur != outbuf.pos);
+			continue;
+		}
 
+		if (!remaining)
+			break;
+	}
+
+	if (outbuf.pos) {
 		total_out += outbuf.pos;
-		acomp_walk_done_dst(&walk, dcur);
-	} while (data_available);
+		acomp_walk_done_dst(&walk, outbuf.pos);
+		dst_mapped = false;
+	}
 
-	pos = outbuf.pos;
-	num_bytes = zstd_end_stream(ctx->cctx, &outbuf);
-	if (ZSTD_isError(num_bytes))
-		ret = -EIO;
-	else
-		total_out += (outbuf.pos - pos);
+out_free_walk:
+	if (src_mapped)
+		acomp_walk_done_src(&walk, inbuf.pos);
+	if (dst_mapped)
+		/*
+		 * The streaming helpers can fail after dirtying part of the
+		 * current destination chunk while leaving outbuf.pos stale.
+		 */
+		acomp_walk_done_dst(&walk, ret ? outbuf.size : outbuf.pos);
 
 out:
 	if (ret)
@@ -209,12 +265,14 @@ static int zstd_decompress(struct acomp_req *req)
 {
 	struct crypto_acomp_stream *s;
 	unsigned int total_out = 0;
-	unsigned int scur, dcur;
+	unsigned int scur;
+	bool src_mapped = false;
+	bool dst_mapped = false;
 	zstd_out_buffer outbuf;
 	struct acomp_walk walk;
 	zstd_in_buffer inbuf;
 	struct zstd_ctx *ctx;
-	size_t pending_bytes;
+	size_t remaining = 1;
 	int ret;
 
 	s = crypto_acomp_lock_stream_bh(&zstd_streams);
@@ -230,48 +288,128 @@ static int zstd_decompress(struct acomp_req *req)
 		goto out;
 	}
 
-	do {
+	ret = zstd_acomp_next_dst(&walk, &outbuf);
+	if (ret)
+		goto out;
+	dst_mapped = true;
+
+	for (;;) {
 		scur = acomp_walk_next_src(&walk);
-		if (scur) {
-			inbuf.pos = 0;
-			inbuf.size = scur;
-			inbuf.src = walk.src.virt.addr;
-		} else {
+		src_mapped = scur;
+		if (!scur)
 			break;
+
+		inbuf.pos = 0;
+		inbuf.size = scur;
+		inbuf.src = walk.src.virt.addr;
+
+		if (!dst_mapped) {
+			ret = zstd_acomp_next_dst(&walk, &outbuf);
+			if (ret)
+				goto out_free_walk;
+			dst_mapped = true;
+		}
+
+		if (outbuf.size == req->dlen && scur == req->slen) {
+			ret = zstd_decompress_one(req, ctx, walk.src.virt.addr,
+						  walk.dst.virt.addr, &total_out);
+			acomp_walk_done_src(&walk, scur);
+			src_mapped = false;
+			acomp_walk_done_dst(&walk, ret ? outbuf.size : total_out);
+			dst_mapped = false;
+			goto out;
 		}
 
 		do {
-			dcur = acomp_walk_next_dst(&walk);
-			if (dcur == req->dlen && scur == req->slen) {
-				ret = zstd_decompress_one(req, ctx, walk.src.virt.addr,
-							  walk.dst.virt.addr, &total_out);
-				acomp_walk_done_dst(&walk, dcur);
-				acomp_walk_done_src(&walk, scur);
-				goto out;
-			}
-
-			if (!dcur) {
-				ret = -ENOSPC;
-				goto out;
-			}
-
-			outbuf.pos = 0;
-			outbuf.dst = (u8 *)walk.dst.virt.addr;
-			outbuf.size = dcur;
-
-			pending_bytes = zstd_decompress_stream(ctx->dctx, &outbuf, &inbuf);
-			if (ZSTD_isError(pending_bytes)) {
+			remaining = zstd_decompress_stream(ctx->dctx, &outbuf,
+							   &inbuf);
+			if (zstd_is_error(remaining)) {
 				ret = -EIO;
-				goto out;
+				goto out_free_walk;
+			}
+
+			if (outbuf.pos != outbuf.size) {
+				if (inbuf.pos == inbuf.size)
+					break;
+				continue;
 			}
 
 			total_out += outbuf.pos;
-
 			acomp_walk_done_dst(&walk, outbuf.pos);
-		} while (inbuf.pos != scur);
+			dst_mapped = false;
 
-		acomp_walk_done_src(&walk, scur);
-	} while (ret == 0);
+			if (!remaining) {
+				outbuf.pos = 0;
+				break;
+			}
+
+			ret = zstd_acomp_next_dst(&walk, &outbuf);
+			if (ret)
+				goto out_free_walk;
+			dst_mapped = true;
+		} while (inbuf.pos != inbuf.size);
+
+		acomp_walk_done_src(&walk, inbuf.pos);
+		src_mapped = false;
+	}
+
+	inbuf.pos = 0;
+	inbuf.size = 0;
+	inbuf.src = NULL;
+
+	/* Drain any buffered output after the source walk is exhausted. */
+	while (remaining) {
+		size_t pos = outbuf.pos;
+
+		remaining = zstd_decompress_stream(ctx->dctx, &outbuf, &inbuf);
+		if (zstd_is_error(remaining)) {
+			ret = -EIO;
+			goto out_free_walk;
+		}
+
+		if (outbuf.pos == pos) {
+			ret = -EINVAL;
+			goto out_free_walk;
+		}
+
+		if (outbuf.pos != outbuf.size) {
+			if (remaining) {
+				ret = -EINVAL;
+				goto out_free_walk;
+			}
+			break;
+		}
+
+		total_out += outbuf.pos;
+		acomp_walk_done_dst(&walk, outbuf.pos);
+		dst_mapped = false;
+
+		if (!remaining) {
+			outbuf.pos = 0;
+			break;
+		}
+
+		ret = zstd_acomp_next_dst(&walk, &outbuf);
+		if (ret)
+			goto out;
+		dst_mapped = true;
+	}
+
+	if (outbuf.pos) {
+		total_out += outbuf.pos;
+		acomp_walk_done_dst(&walk, outbuf.pos);
+		dst_mapped = false;
+	}
+
+out_free_walk:
+	if (src_mapped)
+		acomp_walk_done_src(&walk, inbuf.pos);
+	if (dst_mapped)
+		/*
+		 * The streaming helpers can fail after dirtying part of the
+		 * current destination chunk while leaving outbuf.pos stale.
+		 */
+		acomp_walk_done_dst(&walk, ret ? outbuf.size : outbuf.pos);
 
 out:
 	if (ret)
