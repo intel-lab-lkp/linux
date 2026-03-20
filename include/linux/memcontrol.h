@@ -827,6 +827,7 @@ static inline unsigned short mem_cgroup_id(struct mem_cgroup *memcg)
 	return memcg->id.id;
 }
 struct mem_cgroup *mem_cgroup_from_id(unsigned short id);
+void mem_cgroup_id_put_many(struct mem_cgroup *memcg, unsigned int n);
 
 #ifdef CONFIG_SHRINKER_DEBUG
 static inline unsigned long mem_cgroup_ino(struct mem_cgroup *memcg)
@@ -1287,6 +1288,11 @@ static inline struct mem_cgroup *mem_cgroup_from_id(unsigned short id)
 	WARN_ON_ONCE(id);
 	/* XXX: This should always return root_mem_cgroup */
 	return NULL;
+}
+
+static inline void mem_cgroup_id_put_many(struct mem_cgroup *memcg,
+					  unsigned int n)
+{
 }
 
 #ifdef CONFIG_SHRINKER_DEBUG
