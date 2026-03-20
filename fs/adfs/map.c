@@ -361,6 +361,10 @@ struct adfs_discmap *adfs_read_map(struct super_block *sb, struct adfs_discrecor
 	int ret;
 
 	nzones    = dr->nzones | dr->nzones_high << 8;
+	if (nzones == 0) {
+		adfs_error(sb, "invalid zone count");
+		return ERR_PTR(-EINVAL);
+	}
 	zone_size = (8 << dr->log2secsize) - le16_to_cpu(dr->zone_spare);
 
 	asb->s_idlen = dr->idlen;
