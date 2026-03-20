@@ -750,8 +750,8 @@ static ssize_t pseudo_lock_measure_trigger(struct file *file,
 					   size_t count, loff_t *ppos)
 {
 	struct rdtgroup *rdtgrp = file->private_data;
+	char buf[32] = {};
 	size_t buf_size;
-	char buf[32];
 	int ret;
 	int sel;
 
