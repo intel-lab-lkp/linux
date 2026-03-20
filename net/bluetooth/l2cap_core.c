@@ -411,8 +411,10 @@ static void l2cap_chan_timeout(struct work_struct *work)
 
 	BT_DBG("chan %p state %s", chan, state_to_string(chan->state));
 
-	if (!conn)
+	if (!conn) {
+		l2cap_chan_put(chan);
 		return;
+	}
 
 	mutex_lock(&conn->lock);
 	/* __set_chan_timer() calls l2cap_chan_hold(chan) while scheduling
@@ -649,6 +651,11 @@ void l2cap_chan_del(struct l2cap_chan *chan, int err)
 	struct l2cap_conn *conn = chan->conn;
 
 	__clear_chan_timer(chan);
+	/* Prevent the timer from being rearmed since the channel is about
+	 * to be destroyed. Running timer work will be synced by
+	 * l2cap_conn_del() after releasing conn->lock.
+	 */
+	disable_delayed_work(&chan->chan_timer);
 
 	BT_DBG("chan %p, conn %p, err %d, state %s", chan, conn, err,
 	       state_to_string(chan->state));
@@ -688,6 +695,10 @@ void l2cap_chan_del(struct l2cap_chan *chan, int err)
 		__clear_retrans_timer(chan);
 		__clear_monitor_timer(chan);
 		__clear_ack_timer(chan);
+		/* Prevent the ERTM timers from being rearmed. */
+		disable_delayed_work(&chan->retrans_timer);
+		disable_delayed_work(&chan->monitor_timer);
+		disable_delayed_work(&chan->ack_timer);
 
 		skb_queue_purge(&chan->srej_q);
 
@@ -1765,6 +1776,7 @@ static void l2cap_conn_del(struct hci_conn *hcon, int err)
 {
 	struct l2cap_conn *conn = hcon->l2cap_data;
 	struct l2cap_chan *chan, *l;
+	LIST_HEAD(del_list);
 
 	if (!conn)
 		return;
@@ -1803,7 +1815,7 @@ static void l2cap_conn_del(struct hci_conn *hcon, int err)
 		chan->ops->close(chan);
 
 		l2cap_chan_unlock(chan);
-		l2cap_chan_put(chan);
+		list_add_tail(&chan->list, &del_list);
 	}
 
 	if (conn->info_state & L2CAP_INFO_FEAT_MASK_REQ_SENT)
@@ -1814,6 +1826,20 @@ static void l2cap_conn_del(struct hci_conn *hcon, int err)
 
 	hcon->l2cap_data = NULL;
 	mutex_unlock(&conn->lock);
+
+	/* Disable and sync-wait for any running channel timer work without
+	 * holding conn->lock to avoid AB-BA deadlock with
+	 * l2cap_chan_timeout() which acquires conn->lock.
+	 */
+	list_for_each_entry_safe(chan, l, &del_list, list) {
+		disable_delayed_work_sync(&chan->chan_timer);
+		disable_delayed_work_sync(&chan->retrans_timer);
+		disable_delayed_work_sync(&chan->monitor_timer);
+		disable_delayed_work_sync(&chan->ack_timer);
+		list_del(&chan->list);
+		l2cap_chan_put(chan);
+	}
+
 	l2cap_conn_put(conn);
 }
 
