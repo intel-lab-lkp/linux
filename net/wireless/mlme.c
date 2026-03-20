@@ -939,6 +939,7 @@ int cfg80211_mlme_mgmt_tx(struct cfg80211_registered_device *rdev,
 			 * public action frames
 			 */
 		case NL80211_IFTYPE_NAN:
+		case NL80211_IFTYPE_PD:
 		default:
 			err = -EOPNOTSUPP;
 			break;

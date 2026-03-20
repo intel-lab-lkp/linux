@@ -494,6 +494,7 @@ ieee80211_get_chanctx_max_required_bw(struct ieee80211_local *local,
 			break;
 		case NL80211_IFTYPE_P2P_DEVICE:
 		case NL80211_IFTYPE_NAN:
+		case NL80211_IFTYPE_PD:
 			continue;
 		case NL80211_IFTYPE_MONITOR:
 			WARN_ON_ONCE(!ieee80211_hw_check(&local->hw,
@@ -1436,6 +1437,7 @@ ieee80211_link_chanctx_reservation_complete(struct ieee80211_link_data *link)
 	case NL80211_IFTYPE_P2P_GO:
 	case NL80211_IFTYPE_P2P_DEVICE:
 	case NL80211_IFTYPE_NAN:
+	case NL80211_IFTYPE_PD:
 	case NUM_NL80211_IFTYPES:
 		WARN_ON(1);
 		break;
