@@ -226,6 +226,7 @@ bool liveupdate_enabled(void);
 
 /* Called during kexec to tell LUO that entered into reboot */
 int liveupdate_reboot(void);
+void liveupdate_reboot_abort(void);
 
 int liveupdate_register_file_handler(struct liveupdate_file_handler *fh);
 int liveupdate_unregister_file_handler(struct liveupdate_file_handler *fh);
@@ -248,6 +249,10 @@ static inline bool liveupdate_enabled(void)
 static inline int liveupdate_reboot(void)
 {
 	return 0;
+}
+
+static inline void liveupdate_reboot_abort(void)
+{
 }
 
 static inline int liveupdate_register_file_handler(struct liveupdate_file_handler *fh)
