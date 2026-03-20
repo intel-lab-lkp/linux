@@ -52,6 +52,7 @@ static int xfs_icwalk(struct xfs_mount *mp,
 		enum xfs_icwalk_goal goal, struct xfs_icwalk *icw);
 static int xfs_icwalk_ag(struct xfs_perag *pag,
 		enum xfs_icwalk_goal goal, struct xfs_icwalk *icw);
+static void xfs_inodegc_queue(struct xfs_inode *ip);
 
 /*
  * Private inode cache walk flags for struct xfs_icwalk.  Must not
@@ -1943,6 +1944,17 @@ xfs_inodegc_inactivate(
 	int			error;
 
 	trace_xfs_inode_inactivating(ip);
+	if (xfs_iflags_test_and_clear(ip, XFS_IDIRTY_TIME) &&
+	    VFS_I(ip)->i_nlink != 0) {
+		error = xfs_inode_sync_dirtytime(ip);
+		if (error) {
+			xfs_iflags_set(ip, XFS_IDIRTY_TIME);
+			xfs_iflags_clear(ip, XFS_INACTIVATING);
+			xfs_inodegc_queue(ip);
+			return error;
+		}
+	}
+
 	error = xfs_inactive(ip);
 	xfs_inodegc_set_reclaimable(ip);
 	return error;

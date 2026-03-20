@@ -415,6 +415,9 @@ static inline bool xfs_inode_can_sw_atomic_write(const struct xfs_inode *ip)
  */
 #define XFS_IREMAPPING		(1U << 15)
 
+/* Flush dirty timestamps from inodegc before reclaiming the inode. */
+#define XFS_IDIRTY_TIME		(1U << 16)
+
 /* All inode state flags related to inode reclaim. */
 #define XFS_ALL_IRECLAIM_FLAGS	(XFS_IRECLAIMABLE | \
 				 XFS_IRECLAIM | \
@@ -429,7 +432,7 @@ static inline bool xfs_inode_can_sw_atomic_write(const struct xfs_inode *ip)
 #define XFS_IRECLAIM_RESET_FLAGS	\
 	(XFS_IRECLAIMABLE | XFS_IRECLAIM | \
 	 XFS_EOFBLOCKS_RELEASED | XFS_ITRUNCATED | XFS_NEED_INACTIVE | \
-	 XFS_INACTIVATING | XFS_IQUOTAUNCHECKED)
+	 XFS_INACTIVATING | XFS_IQUOTAUNCHECKED | XFS_IDIRTY_TIME)
 
 /*
  * Flags for inode locking.
@@ -645,6 +648,7 @@ extern struct kmem_cache	*xfs_inode_cache;
 #define XFS_DEFAULT_COWEXTSZ_HINT 32
 
 bool xfs_inode_needs_inactive(struct xfs_inode *ip);
+int xfs_inode_sync_dirtytime(struct xfs_inode *ip);
 
 struct xfs_inode *xfs_iunlink_lookup(struct xfs_perag *pag, xfs_agino_t agino);
 int xfs_iunlink_reload_next(struct xfs_trans *tp, struct xfs_buf *agibp,

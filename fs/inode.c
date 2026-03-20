@@ -1948,7 +1948,10 @@ static void iput_final(struct inode *inode)
 	VFS_BUG_ON_INODE(atomic_read(&inode->i_count) != 0, inode);
 
 	if (drop) {
-		inode_state_set(inode, I_FREEING);
+		if (inode_state_read(inode) & I_WILL_FREE)
+			inode_state_replace(inode, I_WILL_FREE, I_FREEING);
+		else
+			inode_state_set(inode, I_FREEING);
 	} else {
 		inode_state_set(inode, I_WILL_FREE);
 		spin_unlock(&inode->i_lock);
@@ -1993,6 +1996,20 @@ retry:
 
 	if (atomic_add_unless(&inode->i_count, -1, 1))
 		return;
+
+	/*
+	 * If the final iput is tearing down an unhashed inode with lazytime
+	 * updates pending, expose I_WILL_FREE before ->sync_lazytime() so that
+	 * filesystems can defer expensive work out of the reclaim path.
+	 */
+	if (inode->i_nlink && inode_unhashed(inode) &&
+	    (inode_state_read_once(inode) & I_DIRTY_TIME)) {
+		spin_lock(&inode->i_lock);
+		if (inode_unhashed(inode) &&
+		    (inode_state_read(inode) & I_DIRTY_TIME))
+			inode_state_set(inode, I_WILL_FREE);
+		spin_unlock(&inode->i_lock);
+	}
 
 	if (inode->i_nlink && sync_lazytime(inode))
 		goto retry;

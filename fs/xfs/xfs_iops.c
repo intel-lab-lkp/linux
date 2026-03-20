@@ -1232,15 +1232,22 @@ xfs_vn_sync_lazytime(
 	struct inode		*inode)
 {
 	struct xfs_inode	*ip = XFS_I(inode);
-	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*tp;
 
-	if (xfs_trans_alloc(mp, &M_RES(mp)->tr_fsyncts, 0, 0, 0, &tp))
+	/*
+	 * VFS sets I_WILL_FREE before write_inode_now() when eviction is about
+	 * to tear down the inode, so defer the timestamp transaction to inodegc.
+	 */
+	if (inode_state_read_once(inode) & I_WILL_FREE) {
+		spin_lock(&inode->i_lock);
+		inode_state_clear(inode, I_DIRTY_TIME);
+		spin_unlock(&inode->i_lock);
+		if (inode->i_nlink != 0)
+			xfs_iflags_set(ip, XFS_IDIRTY_TIME);
 		return;
-	xfs_ilock(ip, XFS_ILOCK_EXCL);
-	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
-	xfs_trans_log_inode(tp, ip, XFS_ILOG_TIMESTAMP);
-	xfs_trans_commit(tp);
+	}
+
+	if (xfs_inode_sync_dirtytime(ip))
+		return;
 }
 
 STATIC int

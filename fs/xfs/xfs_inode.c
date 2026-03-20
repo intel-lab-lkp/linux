@@ -1288,9 +1288,10 @@ xfs_inactive_ifree(
 
 /*
  * Returns true if we need to update the on-disk metadata before we can free
- * the memory used by this inode.  Updates include freeing post-eof
- * preallocations; freeing COW staging extents; and marking the inode free in
- * the inobt if it is on the unlinked list.
+ * the memory used by this inode.  Updates include flushing deferred lazytime
+ * timestamp updates; freeing post-eof preallocations; freeing COW staging
+ * extents; and marking the inode free in the inobt if it is on the unlinked
+ * list.
  */
 bool
 xfs_inode_needs_inactive(
@@ -1321,6 +1322,10 @@ xfs_inode_needs_inactive(
 	if (xfs_is_internal_inode(ip))
 		return false;
 
+	/* Linked inodes can defer lazytime updates to inodegc. */
+	if (xfs_iflags_test(ip, XFS_IDIRTY_TIME))
+		return true;
+
 	/* Want to clean out the cow blocks if there are any. */
 	if (cow_ifp && cow_ifp->if_bytes > 0)
 		return true;
@@ -1338,6 +1343,24 @@ xfs_inode_needs_inactive(
 	 * inode at this point anyways.
 	 */
 	return xfs_can_free_eofblocks(ip);
+}
+
+int
+xfs_inode_sync_dirtytime(
+	struct xfs_inode	*ip)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_trans	*tp;
+	int			error;
+
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_fsyncts, 0, 0, 0, &tp);
+	if (error)
+		return error;
+
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
+	xfs_trans_log_inode(tp, ip, XFS_ILOG_TIMESTAMP);
+	return xfs_trans_commit(tp);
 }
 
 /*

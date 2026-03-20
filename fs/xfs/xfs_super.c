@@ -821,6 +821,10 @@ xfs_fs_sync_fs(
 	if (!wait)
 		return 0;
 
+	error = xfs_inodegc_flush(mp);
+	if (error)
+		return error;
+
 	error = xfs_log_force(mp, XFS_LOG_SYNC);
 	if (error)
 		return error;
