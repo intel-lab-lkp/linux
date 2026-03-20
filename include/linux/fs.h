@@ -3298,8 +3298,16 @@ void simple_offset_destroy(struct offset_ctx *octx);
 
 extern const struct file_operations simple_offset_dir_operations;
 
-extern int __generic_file_fsync(struct file *, loff_t, loff_t, int);
-extern int generic_file_fsync(struct file *, loff_t, loff_t, int);
+int generic_mmb_fsync_noflush(struct file *file,
+			      struct mapping_metadata_bhs *mmb,
+			      loff_t start, loff_t end, bool datasync);
+int generic_mmb_fsync(struct file *file, struct mapping_metadata_bhs *mmb,
+		      loff_t start, loff_t end, bool datasync);
+static inline int generic_file_fsync(struct file *file,
+				     loff_t start, loff_t end, int datasync)
+{
+	return generic_mmb_fsync(file, NULL, start, end, datasync);
+}
 
 extern int generic_check_addressable(unsigned, u64);
 

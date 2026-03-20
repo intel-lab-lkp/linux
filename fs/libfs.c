@@ -18,7 +18,7 @@
 #include <linux/exportfs.h>
 #include <linux/iversion.h>
 #include <linux/writeback.h>
-#include <linux/buffer_head.h> /* sync_mapping_buffers */
+#include <linux/buffer_head.h> /* mmb_sync_buffers() */
 #include <linux/fs_context.h>
 #include <linux/pseudo_fs.h>
 #include <linux/fsnotify.h>
@@ -1539,19 +1539,22 @@ struct dentry *generic_fh_to_parent(struct super_block *sb, struct fid *fid,
 EXPORT_SYMBOL_GPL(generic_fh_to_parent);
 
 /**
- * __generic_file_fsync - generic fsync implementation for simple filesystems
+ * generic_mmb_fsync_noflush - generic buffer fsync implementation
+ * for simple filesystems with no inode lock
  *
- * @file:	file to synchronize
- * @start:	start offset in bytes
- * @end:	end offset in bytes (inclusive)
- * @datasync:	only synchronize essential metadata if true
+ * @file:       file to synchronize
+ * @mmb:        list of metadata bhs to flush
+ * @start:      start offset in bytes
+ * @end:        end offset in bytes (inclusive)
+ * @datasync:   only synchronize essential metadata if true
  *
  * This is a generic implementation of the fsync method for simple
  * filesystems which track all non-inode metadata in the buffers list
  * hanging off the address_space structure.
  */
-int __generic_file_fsync(struct file *file, loff_t start, loff_t end,
-				 int datasync)
+int generic_mmb_fsync_noflush(struct file *file,
+			      struct mapping_metadata_bhs *mmb,
+			      loff_t start, loff_t end, bool datasync)
 {
 	struct inode *inode = file->f_mapping->host;
 	int err;
@@ -1561,45 +1564,53 @@ int __generic_file_fsync(struct file *file, loff_t start, loff_t end,
 	if (err)
 		return err;
 
-	inode_lock(inode);
+	if (mmb)
+		ret = mmb_sync_buffers(mmb);
 	if (!(inode_state_read_once(inode) & I_DIRTY_ALL))
 		goto out;
 	if (datasync && !(inode_state_read_once(inode) & I_DIRTY_DATASYNC))
 		goto out;
 
-	ret = sync_inode_metadata(inode, 1);
+	err = sync_inode_metadata(inode, 1);
+	if (ret == 0)
+		ret = err;
+
 out:
-	inode_unlock(inode);
 	/* check and advance again to catch errors after syncing out buffers */
 	err = file_check_and_advance_wb_err(file);
 	if (ret == 0)
 		ret = err;
 	return ret;
 }
-EXPORT_SYMBOL(__generic_file_fsync);
+EXPORT_SYMBOL(generic_mmb_fsync_noflush);
 
 /**
- * generic_file_fsync - generic fsync implementation for simple filesystems
- *			with flush
+ * generic_mmb_fsync - generic buffer fsync implementation
+ * for simple filesystems with no inode lock
+ *
  * @file:	file to synchronize
+ * @mmb:	list of metadata bhs to flush
  * @start:	start offset in bytes
  * @end:	end offset in bytes (inclusive)
  * @datasync:	only synchronize essential metadata if true
  *
+ * This is a generic implementation of the fsync method for simple
+ * filesystems which track all non-inode metadata in the buffers list
+ * hanging off the address_space structure. This also makes sure that
+ * a device cache flush operation is called at the end.
  */
-
-int generic_file_fsync(struct file *file, loff_t start, loff_t end,
-		       int datasync)
+int generic_mmb_fsync(struct file *file, struct mapping_metadata_bhs *mmb,
+		      loff_t start, loff_t end, bool datasync)
 {
 	struct inode *inode = file->f_mapping->host;
-	int err;
+	int ret;
 
-	err = __generic_file_fsync(file, start, end, datasync);
-	if (err)
-		return err;
-	return blkdev_issue_flush(inode->i_sb->s_bdev);
+	ret = generic_mmb_fsync_noflush(file, mmb, start, end, datasync);
+	if (!ret)
+		ret = blkdev_issue_flush(inode->i_sb->s_bdev);
+	return ret;
 }
-EXPORT_SYMBOL(generic_file_fsync);
+EXPORT_SYMBOL(generic_mmb_fsync);
 
 /**
  * generic_check_addressable - Check addressability of file system
