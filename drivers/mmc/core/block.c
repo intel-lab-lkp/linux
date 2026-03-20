@@ -3441,6 +3441,60 @@ static void __exit mmc_blk_exit(void)
 	bus_unregister(&mmc_rpmb_bus_type);
 }
 
+/**
+ * mmc_blk_get_card_by_name - Get mmc_card from device name
+ * @device_name: Name of the MMC device (e.g., "mmcblk1")
+ *
+ * Resolves an MMC block device name to its associated struct mmc_card.
+ * Used by the mmcpstore backend driver (when built as a module) to find
+ * the card associated with a given pstore_blk block device path.
+ *
+ * Returns: mmc_card pointer on success, NULL on failure
+ */
+struct mmc_card *mmc_blk_get_card_by_name(const char *device_name)
+{
+	struct file *bdev_file;
+	struct block_device *bdev;
+	struct gendisk *disk;
+	struct mmc_blk_data *md;
+	struct mmc_card *card = NULL;
+	char dev_path[32];
+
+	if (!device_name)
+		return NULL;
+
+	snprintf(dev_path, sizeof(dev_path), "/dev/%s", device_name);
+
+	bdev_file = bdev_file_open_by_path(dev_path, BLK_OPEN_READ, NULL, NULL);
+	if (IS_ERR(bdev_file)) {
+		pr_debug("mmc_blk: Failed to open block device %s: %ld\n",
+			 dev_path, PTR_ERR(bdev_file));
+		return NULL;
+	}
+	bdev = file_bdev(bdev_file);
+
+	disk = bdev->bd_disk;
+	if (!disk) {
+		pr_err("mmc_blk: No gendisk found for %s\n", dev_path);
+		goto out_put_bdev;
+	}
+
+	md = disk->private_data;
+	if (!md) {
+		pr_debug("mmc_blk: No mmc_blk_data found for %s\n", dev_path);
+		goto out_put_bdev;
+	}
+
+	card = md->queue.card;
+	if (!card)
+		pr_err("mmc_blk: No mmc_card found for %s\n", dev_path);
+
+out_put_bdev:
+	fput(bdev_file);
+	return card;
+}
+EXPORT_SYMBOL_GPL(mmc_blk_get_card_by_name);
+
 module_init(mmc_blk_init);
 module_exit(mmc_blk_exit);
 

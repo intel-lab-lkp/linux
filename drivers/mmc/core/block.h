@@ -17,4 +17,8 @@ struct work_struct;
 
 void mmc_blk_mq_complete_work(struct work_struct *work);
 
+/* MMC block device helper for mmcpstore */
+struct mmc_card;
+struct mmc_card *mmc_blk_get_card_by_name(const char *device_name);
+
 #endif
