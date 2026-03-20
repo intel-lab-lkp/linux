@@ -12,3 +12,12 @@ config PPC_XIVE_NATIVE
 config PPC_XIVE_SPAPR
 	bool
 	select PPC_XIVE
+
+config PPC_XIVE_KUNIT_TEST
+	tristate "KUnit tests for XIVE interrupt controller" if !KUNIT_ALL_TESTS
+	depends on KUNIT && PPC_XIVE
+	default KUNIT_ALL_TESTS
+	help
+	  This builds unit tests for the XIVE interrupt controller.
+
+	  If unsure, say N.
