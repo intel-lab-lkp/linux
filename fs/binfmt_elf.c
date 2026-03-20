@@ -49,6 +49,7 @@
 #include <uapi/linux/rseq.h>
 #include <asm/param.h>
 #include <asm/page.h>
+#include <linux/pagemap.h>
 
 #ifndef ELF_COMPAT
 #define ELF_COMPAT 0
@@ -488,19 +489,51 @@ static int elf_read(struct file *file, void *buf, size_t len, loff_t pos)
 	return 0;
 }
 
-static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
+static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr,
+				       struct file *filp)
 {
 	unsigned long alignment = 0;
+	unsigned long max_folio_size = PAGE_SIZE;
 	int i;
+
+	if (filp && filp->f_mapping)
+		max_folio_size = mapping_max_folio_size(filp->f_mapping);
 
 	for (i = 0; i < nr; i++) {
 		if (cmds[i].p_type == PT_LOAD) {
 			unsigned long p_align = cmds[i].p_align;
+			unsigned long size;
 
 			/* skip non-power of two alignments as invalid */
 			if (!is_power_of_2(p_align))
 				continue;
 			alignment = max(alignment, p_align);
+
+			/*
+			 * Try to align the binary to the largest folio
+			 * size that the page cache supports, so the
+			 * hardware can coalesce PTEs (e.g. arm64
+			 * contpte) or use PMD mappings for large folios.
+			 *
+			 * Use the largest power-of-2 that fits within
+			 * the segment size, capped by what the page
+			 * cache will allocate. Only align when the
+			 * segment's virtual address and file offset are
+			 * already aligned to the folio size, as
+			 * misalignment would prevent coalescing anyway.
+			 *
+			 * The segment size check avoids reducing ASLR
+			 * entropy for small binaries that cannot
+			 * benefit.
+			 */
+			if (!cmds[i].p_filesz)
+				continue;
+			size = rounddown_pow_of_two(cmds[i].p_filesz);
+			size = min(size, max_folio_size);
+			if (size > PAGE_SIZE &&
+			    IS_ALIGNED(cmds[i].p_vaddr, size) &&
+			    IS_ALIGNED(cmds[i].p_offset, size))
+				alignment = max(alignment, size);
 		}
 	}
 
@@ -1104,7 +1137,8 @@ out_free_interp:
 			}
 
 			/* Calculate any requested alignment. */
-			alignment = maximum_alignment(elf_phdata, elf_ex->e_phnum);
+			alignment = maximum_alignment(elf_phdata, elf_ex->e_phnum,
+						      bprm->file);
 
 			/**
 			 * DOC: PIE handling
