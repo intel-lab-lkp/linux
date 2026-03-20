@@ -1112,12 +1112,14 @@ ssize_t resctrl_mbm_assign_on_mkdir_write(struct kernfs_open_file *of, char *buf
 	bool value;
 	int ret;
 
-	ret = kstrtobool(buf, &value);
-	if (ret)
-		return ret;
-
 	mutex_lock(&rdtgroup_mutex);
 	rdt_last_cmd_clear();
+
+	ret = kstrtobool(buf, &value);
+	if (ret) {
+		rdt_last_cmd_puts("Invalid input\n");
+		goto out_unlock;
+	}
 
 	if (!resctrl_arch_mbm_cntr_assign_enabled(r)) {
 		rdt_last_cmd_puts("mbm_event counter assignment mode is not enabled\n");
@@ -1409,16 +1411,19 @@ ssize_t event_filter_write(struct kernfs_open_file *of, char *buf, size_t nbytes
 	u32 evt_cfg = 0;
 	int ret = 0;
 
-	/* Valid input requires a trailing newline */
-	if (nbytes == 0 || buf[nbytes - 1] != '\n')
-		return -EINVAL;
-
-	buf[nbytes - 1] = '\0';
-
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
 
 	rdt_last_cmd_clear();
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n') {
+		rdt_last_cmd_puts("Invalid input\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	buf[nbytes - 1] = '\0';
 
 	r = resctrl_arch_get_resource(mevt->rid);
 	if (!resctrl_arch_mbm_cntr_assign_enabled(r)) {
@@ -1478,16 +1483,19 @@ ssize_t resctrl_mbm_assign_mode_write(struct kernfs_open_file *of, char *buf,
 	int ret = 0;
 	bool enable;
 
-	/* Valid input requires a trailing newline */
-	if (nbytes == 0 || buf[nbytes - 1] != '\n')
-		return -EINVAL;
-
-	buf[nbytes - 1] = '\0';
-
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
 
 	rdt_last_cmd_clear();
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n') {
+		rdt_last_cmd_puts("Invalid input\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	buf[nbytes - 1] = '\0';
 
 	if (!strcmp(buf, "default")) {
 		enable = 0;
@@ -1759,12 +1767,6 @@ ssize_t mbm_L3_assignments_write(struct kernfs_open_file *of, char *buf,
 	char *token, *event;
 	int ret = 0;
 
-	/* Valid input requires a trailing newline */
-	if (nbytes == 0 || buf[nbytes - 1] != '\n')
-		return -EINVAL;
-
-	buf[nbytes - 1] = '\0';
-
 	rdtgrp = rdtgroup_kn_lock_live(of->kn);
 	if (!rdtgrp) {
 		rdtgroup_kn_unlock(of->kn);
@@ -1772,10 +1774,19 @@ ssize_t mbm_L3_assignments_write(struct kernfs_open_file *of, char *buf,
 	}
 	rdt_last_cmd_clear();
 
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n') {
+		rdt_last_cmd_puts("Invalid input\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	buf[nbytes - 1] = '\0';
+
 	if (!resctrl_arch_mbm_cntr_assign_enabled(r)) {
 		rdt_last_cmd_puts("mbm_event mode is not enabled\n");
-		rdtgroup_kn_unlock(of->kn);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	while ((token = strsep(&buf, "\n")) != NULL) {
@@ -1791,6 +1802,7 @@ ssize_t mbm_L3_assignments_write(struct kernfs_open_file *of, char *buf,
 			break;
 	}
 
+out_unlock:
 	rdtgroup_kn_unlock(of->kn);
 
 	return ret ?: nbytes;
