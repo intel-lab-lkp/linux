@@ -24,6 +24,9 @@ struct mermap_cpu {
 	unsigned long next_addr;
 	struct mermap_alloc normal_allocs[3];
 	struct mermap_alloc reserve_alloc;
+#if IS_ENABLED(CONFIG_MERMAP_KUNIT_TEST)
+	u64 tlb_flushes;
+#endif
 };
 
 struct mermap {
