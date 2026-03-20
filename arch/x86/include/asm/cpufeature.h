@@ -138,5 +138,9 @@ t_no:
 #define CPU_FEATURE_TYPEVAL		boot_cpu_data.x86_vendor, boot_cpu_data.x86, \
 					boot_cpu_data.x86_model
 
+#define X86_CAP_BUF_SIZE		16
+
+const char *x86_cap_name(unsigned int bit, char *buf);
+
 #endif /* defined(__KERNEL__) && !defined(__ASSEMBLER__) */
 #endif /* _ASM_X86_CPUFEATURE_H */
