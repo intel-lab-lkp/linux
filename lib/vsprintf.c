@@ -75,24 +75,65 @@ enum hash_pointers_policy {
 };
 static enum hash_pointers_policy hash_pointers_mode __initdata;
 
+/**
+ * simple_strntoull - convert a string to an unsigned long long with a character limit
+ *
+ * @startp: The start of the string
+ * @endp: A pointer to the end of the parsed string will be placed here
+ * @base: The number base to use
+ * @max_chars: The maximum number of characters to parse
+ * @res: Where to write the result of the conversion on success
+ *
+ * Returns amount of processed characters on success, -ERANGE on overflow and
+ * -EINVAL on parsing error.
+ */
 noinline
-static unsigned long long simple_strntoull(const char *startp, char **endp, unsigned int base, size_t max_chars)
+ssize_t simple_strntoull(const char *startp, const char **endp,
+			 unsigned int base, size_t max_chars,
+			 unsigned long long *res)
 {
 	const char *cp;
-	unsigned long long result = 0ULL;
 	size_t prefix_chars;
 	unsigned int rv;
+	ssize_t ret;
 
 	cp = _parse_integer_fixup_radix(startp, &base);
 	prefix_chars = cp - startp;
 	if (prefix_chars < max_chars) {
-		rv = _parse_integer_limit(cp, base, &result, max_chars - prefix_chars);
-		/* FIXME */
+		rv = _parse_integer_limit(cp, base, res, max_chars - prefix_chars);
+		if (rv & KSTRTOX_OVERFLOW)
+			ret = -ERANGE;
+		else if (rv == 0)
+			ret = -EINVAL;
+		else
+			ret = rv + prefix_chars;
 		cp += (rv & ~KSTRTOX_OVERFLOW);
 	} else {
 		/* Field too short for prefix + digit, skip over without converting */
 		cp = startp + max_chars;
+		ret = -EINVAL;
+		*res = 0ULL;
 	}
+
+	if (endp)
+		*endp = cp;
+
+	return ret;
+}
+EXPORT_SYMBOL(simple_strntoull);
+
+/* unsafe_strntoull ignores simple_strntoull() return value and endp const qualifier */
+inline
+static unsigned long long unsafe_strntoull(const char *startp, char **endp,
+					   unsigned int base, size_t max_chars)
+{
+	unsigned long long result;
+	const char *cp;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+	simple_strntoull(startp, &cp, base, max_chars, &result);
+#pragma GCC diagnostic pop
 
 	if (endp)
 		*endp = (char *)cp;
@@ -111,7 +152,7 @@ static unsigned long long simple_strntoull(const char *startp, char **endp, unsi
 noinline
 unsigned long long simple_strtoull(const char *cp, char **endp, unsigned int base)
 {
-	return simple_strntoull(cp, endp, base, INT_MAX);
+	return unsafe_strntoull(cp, endp, base, INT_MAX);
 }
 EXPORT_SYMBOL(simple_strtoull);
 
@@ -132,7 +173,7 @@ EXPORT_SYMBOL(simple_strtoul);
 unsigned long simple_strntoul(const char *cp, char **endp, unsigned int base,
 			      size_t max_chars)
 {
-	return simple_strntoull(cp, endp, base, max_chars);
+	return unsafe_strntoull(cp, endp, base, max_chars);
 }
 EXPORT_SYMBOL(simple_strntoul);
 
@@ -163,9 +204,9 @@ static long long simple_strntoll(const char *cp, char **endp, unsigned int base,
 	 * and the content of *cp is irrelevant.
 	 */
 	if (*cp == '-' && max_chars > 0)
-		return -simple_strntoull(cp + 1, endp, base, max_chars - 1);
+		return -unsafe_strntoull(cp + 1, endp, base, max_chars - 1);
 
-	return simple_strntoull(cp, endp, base, max_chars);
+	return unsafe_strntoull(cp, endp, base, max_chars);
 }
 
 /**
@@ -3670,7 +3711,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
 			val.s = simple_strntoll(str, &next, base,
 						field_width >= 0 ? field_width : INT_MAX);
 		else
-			val.u = simple_strntoull(str, &next, base,
+			val.u = unsafe_strntoull(str, &next, base,
 						 field_width >= 0 ? field_width : INT_MAX);
 
 		switch (qualifier) {
