@@ -2,6 +2,7 @@
 #ifndef _ASM_X86_PGALLOC_H
 #define _ASM_X86_PGALLOC_H
 
+#include <linux/printk.h>
 #include <linux/threads.h>
 #include <linux/mm.h>		/* for struct page */
 #include <linux/pagemap.h>
@@ -126,6 +127,38 @@ static inline void __pud_free_tlb(struct mmu_gather *tlb, pud_t *pud,
 				  unsigned long address)
 {
 	___pud_free_tlb(tlb, pud);
+}
+
+/* Allocate a pagetable pointed to by the top hardware level. */
+static inline int preallocate_sub_pgd(struct mm_struct *mm, unsigned long addr)
+{
+	const char *lvl;
+	p4d_t *p4d;
+	pud_t *pud;
+
+	lvl = "p4d";
+	p4d = p4d_alloc(mm, pgd_offset_pgd(mm->pgd, addr), addr);
+	if (!p4d)
+		goto failed;
+
+	if (pgtable_l5_enabled())
+		return 0;
+
+	/*
+	 * On 4-level systems, the P4D layer is folded away and
+	 * the above code does no preallocation.  Below, go down
+	 * to the pud _software_ level to ensure the second
+	 * hardware level is allocated on 4-level systems too.
+	 */
+	lvl = "pud";
+	pud = pud_alloc(mm, p4d, addr);
+	if (!pud)
+		goto failed;
+	return 0;
+
+failed:
+	pr_warn_ratelimited("Failed to preallocate %s\n", lvl);
+	return -ENOMEM;
 }
 
 #if CONFIG_PGTABLE_LEVELS > 4

@@ -1318,46 +1318,16 @@ static void __init register_page_bootmem_info(void)
 static void __init preallocate_vmalloc_pages(void)
 {
 	unsigned long addr;
-	const char *lvl;
 
 	for (addr = VMALLOC_START; addr <= VMEMORY_END; addr = ALIGN(addr + 1, PGDIR_SIZE)) {
-		pgd_t *pgd = pgd_offset_k(addr);
-		p4d_t *p4d;
-		pud_t *pud;
-
-		lvl = "p4d";
-		p4d = p4d_alloc(&init_mm, pgd, addr);
-		if (!p4d)
-			goto failed;
-
-		if (pgtable_l5_enabled())
-			continue;
-
-		/*
-		 * The goal here is to allocate all possibly required
-		 * hardware page tables pointed to by the top hardware
-		 * level.
-		 *
-		 * On 4-level systems, the P4D layer is folded away and
-		 * the above code does no preallocation.  Below, go down
-		 * to the pud _software_ level to ensure the second
-		 * hardware level is allocated on 4-level systems too.
-		 */
-		lvl = "pud";
-		pud = pud_alloc(&init_mm, p4d, addr);
-		if (!pud)
-			goto failed;
+		if (preallocate_sub_pgd(&init_mm, addr)) {
+			/*
+			 * The pages have to be there now or they will be
+			 * missing in process page-tables later.
+			 */
+			panic("Failed to pre-allocate pagetables for vmalloc area\n");
+		}
 	}
-
-	return;
-
-failed:
-
-	/*
-	 * The pages have to be there now or they will be missing in
-	 * process page-tables later.
-	 */
-	panic("Failed to pre-allocate %s pages for vmalloc area\n", lvl);
 }
 
 void __init arch_mm_preinit(void)
