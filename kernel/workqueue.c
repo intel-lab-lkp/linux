@@ -7701,6 +7701,23 @@ static void wq_watchdog_timer_fn(struct timer_list *unused)
 
 		/* did we stall? */
 		if (time_after(now, ts + thresh)) {
+			unsigned long irq_flags;
+
+			raw_spin_lock_irqsave(&pool->lock, irq_flags);
+			/*
+			 * Recheck last_progress_ts with pool->lock, this
+			 * eliminates false positive where we report wq
+			 * stall for newly queued work.
+			 */
+			pool_ts = READ_ONCE(pool->last_progress_ts);
+			if (time_after(pool_ts, touched))
+				ts = pool_ts;
+			else
+				ts = touched;
+			raw_spin_unlock_irqrestore(&pool->lock, irq_flags);
+			if (!time_after(now, ts + thresh))
+				continue;
+
 			lockup_detected = true;
 			stall_time = jiffies_to_msecs(now - pool_ts) / 1000;
 			max_stall_time = max(max_stall_time, stall_time);
@@ -7712,8 +7729,6 @@ static void wq_watchdog_timer_fn(struct timer_list *unused)
 			pr_cont_pool_info(pool);
 			pr_cont(" stuck for %us!\n", stall_time);
 		}
-
-
 	}
 
 	if (lockup_detected)
