@@ -39,6 +39,14 @@ struct io_fixed_install {
 	unsigned int			o_flags;
 };
 
+struct io_dup {
+	struct file *file;
+	int old_fd;
+	int new_fd;
+	unsigned int flags;
+	struct io_rsrc_node *rsrc_node;
+};
+
 static bool io_openat_force_async(struct io_open *open)
 {
 	/*
@@ -445,4 +453,176 @@ int io_pipe(struct io_kiocb *req, unsigned int issue_flags)
 	if (files[1])
 		fput(files[1]);
 	return ret;
+}
+
+void io_dup_cleanup(struct io_kiocb *req)
+{
+	struct io_dup *id = io_kiocb_to_cmd(req, struct io_dup);
+
+	if (id->rsrc_node)
+		io_put_rsrc_node(req->ctx, id->rsrc_node);
+}
+
+int io_dup_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+{
+	struct io_dup *id;
+
+	if (sqe->off || sqe->addr || sqe->len || sqe->buf_index || sqe->addr3)
+		return -EINVAL;
+
+	id = io_kiocb_to_cmd(req, struct io_dup);
+	id->flags = READ_ONCE(sqe->dup_flags);
+	if (id->flags & ~(IORING_DUP_NO_CLOEXEC | IORING_DUP_OLD_FIXED |
+			  IORING_DUP_NEW_FIXED))
+		return -EINVAL;
+
+	if ((id->flags & IORING_DUP_NO_CLOEXEC) &&
+	    (id->flags & IORING_DUP_NEW_FIXED))
+		return -EINVAL;
+
+	id->old_fd = READ_ONCE(sqe->fd);
+	id->new_fd = READ_ONCE(sqe->dup_new_fd);
+
+	if (((id->flags & IORING_DUP_NEW_FIXED) == 0) ==
+		    ((id->flags & IORING_DUP_OLD_FIXED) == 0) &&
+	    id->old_fd == id->new_fd)
+		return -EINVAL;
+
+	id->rsrc_node = NULL;
+
+	/* ensure the task's creds are used when installing/receiving fds */
+	if (req->flags & REQ_F_CREDS)
+		return -EPERM;
+
+	return 0;
+}
+
+static struct file *io_dup_get_old_file_fixed(struct io_kiocb *req,
+					      unsigned int issue_flags,
+					      unsigned int file_slot)
+{
+	struct io_dup *id = io_kiocb_to_cmd(req, struct io_dup);
+	struct file *file = NULL;
+
+	if (!id->rsrc_node)
+		id->rsrc_node =
+			io_file_get_fixed_node(req, file_slot, issue_flags);
+
+	if (id->rsrc_node) {
+		file = io_slot_file(id->rsrc_node);
+		req->flags |= REQ_F_NEED_CLEANUP;
+	}
+	return file;
+}
+
+static int io_dup_to_fixed(struct io_kiocb *req, unsigned int issue_flags,
+			   bool old_fixed, int old_fd, unsigned int file_slot)
+{
+	struct file *old_file = NULL;
+	int ret;
+
+	if (!old_fixed) {
+		old_file = io_file_get_normal(req, old_fd);
+		if (old_file && io_is_uring_fops(old_file)) {
+			fput(old_file);
+			old_file = NULL;
+		}
+	} else {
+		old_file = io_dup_get_old_file_fixed(req, issue_flags, old_fd);
+		if (old_file)
+			get_file(old_file);
+	}
+	if (!old_file)
+		return -EBADF;
+
+	if (file_slot != IORING_FILE_INDEX_ALLOC)
+		file_slot++;
+
+	ret = io_fixed_fd_install(req, issue_flags, old_file, file_slot);
+	if (file_slot == IORING_FILE_INDEX_ALLOC || ret < 0)
+		return ret;
+	return file_slot - 1;
+}
+
+static int io_dup_to_fd(struct io_kiocb *req, unsigned int issue_flags,
+			bool old_fixed, int old_fd, int new_fd, int o_flags)
+{
+	struct file *old_file, *to_replace, *to_close = NULL;
+	bool non_block = issue_flags & IO_URING_F_NONBLOCK;
+	struct files_struct *files = current->files;
+	int ret;
+
+	if (new_fd >= rlimit(RLIMIT_NOFILE))
+		return -EBADF;
+
+	if (old_fixed)
+		old_file = io_dup_get_old_file_fixed(req, issue_flags, old_fd);
+
+	spin_lock(&files->file_lock);
+
+	/* Do we need to expand? If so, be safe and punt to async */
+	if (new_fd >= files_fdtable(files)->max_fds && non_block)
+		goto out_again;
+	ret = expand_files(files, new_fd);
+	if (ret < 0)
+		goto out_unlock;
+
+	if (!old_fixed)
+		old_file = files_lookup_fd_locked(files, old_fd);
+
+	ret = -EBADF;
+	if (!old_file)
+		goto out_unlock;
+
+	to_replace = files_lookup_fd_locked(files, new_fd);
+	if (to_replace) {
+		if (io_is_uring_fops(to_replace))
+			goto out_unlock;
+
+		/* if the file has a flush method, be safe and punt to async */
+		if (to_replace->f_op->flush && non_block)
+			goto out_again;
+	}
+	to_close = do_replace_fd_locked(files, old_file, new_fd, o_flags);
+	ret = new_fd;
+
+out_unlock:
+	spin_unlock(&files->file_lock);
+
+	if (IS_ERR(to_close))
+		ret = PTR_ERR(to_close);
+	else if (to_close)
+		filp_close(to_close, files);
+
+	if (ret < 0)
+		req_set_fail(req);
+	io_req_set_res(req, ret, 0);
+	return IOU_COMPLETE;
+
+out_again:
+	spin_unlock(&files->file_lock);
+	return -EAGAIN;
+}
+
+int io_dup(struct io_kiocb *req, unsigned int issue_flags)
+{
+	struct io_dup *id = io_kiocb_to_cmd(req, struct io_dup);
+	bool old_fixed = id->flags & IORING_DUP_OLD_FIXED;
+	bool new_fixed = id->flags & IORING_DUP_NEW_FIXED;
+	int ret, o_flags;
+
+	if (new_fixed) {
+		ret = io_dup_to_fixed(req, issue_flags, old_fixed, id->old_fd,
+				      id->new_fd);
+		if (ret < 0)
+			req_set_fail(req);
+		io_req_set_res(req, ret, 0);
+		return IOU_COMPLETE;
+	}
+
+	o_flags = O_CLOEXEC;
+	if (id->flags & IORING_DUP_NO_CLOEXEC)
+		o_flags = 0;
+	return io_dup_to_fd(req, issue_flags, old_fixed, id->old_fd, id->new_fd,
+			    o_flags);
 }

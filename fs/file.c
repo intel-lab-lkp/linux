@@ -285,9 +285,8 @@ static int expand_fdtable(struct files_struct *files, unsigned int nr)
  * Return <0 error code on error; 0 on success.
  * The files->file_lock should be held on entry, and will be held on exit.
  */
-static int expand_files(struct files_struct *files, unsigned int nr)
-	__releases(files->file_lock)
-	__acquires(files->file_lock)
+int expand_files(struct files_struct *files, unsigned int nr)
+	__releases(files->file_lock) __acquires(files->file_lock)
 {
 	struct fdtable *fdt;
 	int error;
@@ -1291,12 +1290,32 @@ bool get_close_on_exec(unsigned int fd)
 	return res;
 }
 
-static int do_dup2(struct files_struct *files,
-	struct file *file, unsigned fd, unsigned flags)
-__releases(&files->file_lock)
+/**
+ * do_replace_fd_locked() - Installs a file on a specific fd number.
+ * @files: struct files_struct to install the file on.
+ * @file: struct file to be installed.
+ * @fd: number in the files table to replace
+ * @flags: the O_* flags to apply to the new fd entry
+ *
+ * Installs a @file on the specific @fd number on the @files table.
+ *
+ * The caller must makes sure that @fd fits inside the @files table, likely via
+ * expand_files().
+ *
+ * Requires holding @files->file_lock.
+ *
+ * This helper handles its own reference counting of the incoming
+ * struct file.
+ *
+ * Returns a preexisting file in @fd, if any, NULL, if none or an error.
+ */
+struct file *do_replace_fd_locked(struct files_struct *files, struct file *file,
+				  unsigned int fd, unsigned int flags)
 {
 	struct file *tofree;
 	struct fdtable *fdt;
+
+	lockdep_assert_held(&files->file_lock);
 
 	/*
 	 * dup2() is expected to close the file installed in the target fd slot
@@ -1328,26 +1347,19 @@ __releases(&files->file_lock)
 	fd = array_index_nospec(fd, fdt->max_fds);
 	tofree = rcu_dereference_raw(fdt->fd[fd]);
 	if (!tofree && fd_is_open(fd, fdt))
-		goto Ebusy;
+		return ERR_PTR(-EBUSY);
 	get_file(file);
 	rcu_assign_pointer(fdt->fd[fd], file);
 	__set_open_fd(fd, fdt, flags & O_CLOEXEC);
-	spin_unlock(&files->file_lock);
 
-	if (tofree)
-		filp_close(tofree, files);
-
-	return fd;
-
-Ebusy:
-	spin_unlock(&files->file_lock);
-	return -EBUSY;
+	return tofree;
 }
 
 int replace_fd(unsigned fd, struct file *file, unsigned flags)
 {
-	int err;
 	struct files_struct *files = current->files;
+	struct file *tofree;
+	int err;
 
 	if (!file)
 		return close_fd(fd);
@@ -1359,9 +1371,14 @@ int replace_fd(unsigned fd, struct file *file, unsigned flags)
 	err = expand_files(files, fd);
 	if (unlikely(err < 0))
 		goto out_unlock;
-	err = do_dup2(files, file, fd, flags);
-	if (err < 0)
-		return err;
+	tofree = do_replace_fd_locked(files, file, fd, flags);
+	spin_unlock(&files->file_lock);
+
+	if (IS_ERR(tofree))
+		return PTR_ERR(tofree);
+
+	if (tofree)
+		filp_close(tofree, files);
 	return 0;
 
 out_unlock:
@@ -1422,11 +1439,29 @@ int receive_fd_replace(int new_fd, struct file *file, unsigned int o_flags)
 	return new_fd;
 }
 
+static struct file *do_dup3(struct files_struct *files, unsigned int oldfd,
+			    unsigned int newfd, int flags)
+	__releases(files->file_lock) __acquires(files->file_lock)
+{
+	struct file *file;
+	int err = 0;
+
+	err = expand_files(files, newfd);
+	file = files_lookup_fd_locked(files, oldfd);
+	if (unlikely(!file))
+		return ERR_PTR(-EBADF);
+	if (err < 0) {
+		if (err == -EMFILE)
+			err = -EBADF;
+		return ERR_PTR(err);
+	}
+	return do_replace_fd_locked(files, file, newfd, flags);
+}
+
 static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
 {
-	int err = -EBADF;
-	struct file *file;
 	struct files_struct *files = current->files;
+	struct file *to_free;
 
 	if ((flags & ~O_CLOEXEC) != 0)
 		return -EINVAL;
@@ -1438,22 +1473,15 @@ static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
 		return -EBADF;
 
 	spin_lock(&files->file_lock);
-	err = expand_files(files, newfd);
-	file = files_lookup_fd_locked(files, oldfd);
-	if (unlikely(!file))
-		goto Ebadf;
-	if (unlikely(err < 0)) {
-		if (err == -EMFILE)
-			goto Ebadf;
-		goto out_unlock;
-	}
-	return do_dup2(files, file, newfd, flags);
-
-Ebadf:
-	err = -EBADF;
-out_unlock:
+	to_free = do_dup3(files, oldfd, newfd, flags);
 	spin_unlock(&files->file_lock);
-	return err;
+
+	if (IS_ERR(to_free))
+		return PTR_ERR(to_free);
+	if (to_free)
+		filp_close(to_free, files);
+
+	return newfd;
 }
 
 SYSCALL_DEFINE3(dup3, unsigned int, oldfd, unsigned int, newfd, int, flags)
