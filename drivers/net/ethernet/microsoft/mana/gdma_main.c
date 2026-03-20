@@ -4,6 +4,7 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sizes.h>
 #include <linux/utsname.h>
 #include <linux/version.h>
 #include <linux/msi.h>
@@ -1255,6 +1256,7 @@ int mana_gd_register_device(struct gdma_dev *gd)
 	struct gdma_context *gc = gd->gdma_context;
 	struct gdma_register_device_resp resp = {};
 	struct gdma_general_req req = {};
+	u64 db_page_sz;
 	int err;
 
 	gd->pdid = INVALID_PDID;
@@ -1278,8 +1280,14 @@ int mana_gd_register_device(struct gdma_dev *gd)
 	 *   addr = db_page_base + db_page_size * db_id
 	 *        = (bar0_va + db_page_off) + (db_page_size * db_id)
 	 * So we need: db_page_off + db_page_size * (db_id + 1) <= bar0_size
+	 *
+	 * mana_gd_ring_doorbell() always accesses [offset, offset + 4KB),
+	 * so use at least SZ_4K to catch a zero or small db_page_size.
 	 */
-	if (gc->db_page_off + gc->db_page_size * ((u64)resp.db_id + 1) > gc->bar0_size) {
+	db_page_sz = max_t(u64, SZ_4K, gc->db_page_size);
+
+	if (gc->db_page_off + db_page_sz * ((u64)resp.db_id + 1) >
+	    gc->bar0_size) {
 		dev_err(gc->dev, "Doorbell ID %u out of range\n", resp.db_id);
 		return -EPROTO;
 	}
