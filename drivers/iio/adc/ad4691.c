@@ -9,9 +9,12 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/interrupt.h>
 #include <linux/math.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
+#include <linux/property.h>
+#include <linux/pwm.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
@@ -19,7 +22,12 @@
 #include <linux/units.h>
 #include <linux/unaligned.h>
 
+#include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/sysfs.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/triggered_buffer.h>
+#include <linux/iio/trigger_consumer.h>
 
 #define AD4691_VREF_uV_MIN			2400000
 #define AD4691_VREF_uV_MAX			5250000
@@ -28,6 +36,8 @@
 #define AD4691_VREF_3P3_uV_MAX			3750000
 #define AD4691_VREF_4P096_uV_MAX		4500000
 
+#define AD4691_CNV_DUTY_CYCLE_NS		380
+
 #define AD4691_SPI_CONFIG_A_REG			0x000
 #define AD4691_SW_RESET				(BIT(7) | BIT(0))
 
@@ -35,6 +45,7 @@
 #define AD4691_CLAMP_STATUS1_REG		0x01A
 #define AD4691_CLAMP_STATUS2_REG		0x01B
 #define AD4691_DEVICE_SETUP			0x020
+#define AD4691_MANUAL_MODE			BIT(2)
 #define AD4691_LDO_EN				BIT(4)
 #define AD4691_REF_CTRL				0x021
 #define AD4691_REF_CTRL_MASK			GENMASK(4, 2)
@@ -42,21 +53,29 @@
 #define AD4691_OSC_FREQ_REG			0x023
 #define AD4691_OSC_FREQ_MASK			GENMASK(3, 0)
 #define AD4691_STD_SEQ_CONFIG			0x025
+#define AD4691_SEQ_ALL_CHANNELS_OFF		0x00
 #define AD4691_SPARE_CONTROL			0x02A
+
+#define AD4691_NOOP				0x00
+#define AD4691_ADC_CHAN(ch)			((0x10 + (ch)) << 3)
 
 #define AD4691_OSC_EN_REG			0x180
 #define AD4691_STATE_RESET_REG			0x181
 #define AD4691_STATE_RESET_ALL			0x01
 #define AD4691_ADC_SETUP			0x182
-#define AD4691_AUTONOMOUS_MODE_VAL		0x02
+#define AD4691_CNV_BURST_MODE			0x01
+#define AD4691_AUTONOMOUS_MODE			0x02
 /*
  * ACC_MASK_REG covers both mask bytes via ADDR_DESCENDING SPI: writing a
  * 16-bit BE value to 0x185 auto-decrements to 0x184 for the second byte.
  */
 #define AD4691_ACC_MASK_REG			0x185
 #define AD4691_ACC_COUNT_LIMIT(n)		(0x186 + (n))
+#define AD4691_ACC_COUNT_VAL			0x1
 #define AD4691_GPIO_MODE1_REG			0x196
 #define AD4691_GPIO_MODE2_REG			0x197
+#define AD4691_GP_MODE_MASK			GENMASK(3, 0)
+#define AD4691_GP_MODE_DATA_READY		0x06
 #define AD4691_GPIO_READ			0x1A0
 #define AD4691_ACC_STATUS_FULL1_REG		0x1B0
 #define AD4691_ACC_STATUS_FULL2_REG		0x1B1
@@ -121,6 +140,7 @@ static const struct iio_chan_spec ad4691_channels[] = {
 	AD4691_CHANNEL(13),
 	AD4691_CHANNEL(14),
 	AD4691_CHANNEL(15),
+	IIO_CHAN_SOFT_TIMESTAMP(16),
 };
 
 static const struct iio_chan_spec ad4693_channels[] = {
@@ -132,6 +152,7 @@ static const struct iio_chan_spec ad4693_channels[] = {
 	AD4691_CHANNEL(5),
 	AD4691_CHANNEL(6),
 	AD4691_CHANNEL(7),
+	IIO_CHAN_SOFT_TIMESTAMP(16),
 };
 
 /*
@@ -189,15 +210,62 @@ static const struct ad4691_chip_info ad4694_chip_info = {
 struct ad4691_state {
 	const struct ad4691_chip_info	*info;
 	struct regmap			*regmap;
+
+	struct pwm_device		*conv_trigger;
+	struct iio_trigger		*trig;
+	int				irq;
+
+	bool				manual_mode;
+
 	int				vref_uV;
 	bool				refbuf_en;
 	bool				ldo_en;
+	u32				cnv_period_ns;
 	/*
 	 * Synchronize access to members of the driver state, and ensure
 	 * atomicity of consecutive SPI operations.
 	 */
 	struct mutex			lock;
+	/*
+	 * Per-buffer-enabl ree lifetimesources:
+	 * Manual Mode - a pre-built SPI message that clocks out N+1
+	 *		 transfers in one go.
+	 * CNV Burst Mode - a pre-built SPI message that clocks out 2*N
+	 *		    transfers in one go.
+	 */
+	void				*scan_devm_group;
+	struct spi_message		scan_msg;
+	struct spi_transfer		*scan_xfers;
+	__be16				*scan_tx;
+	__be16				*scan_rx;
+	/* Scan buffer: one slot per channel (u16) plus timestamp */
+	struct {
+		u16 vals[16];
+		s64 ts __aligned(8);
+	} scan __aligned(IIO_DMA_MINALIGN);
 };
+
+/*
+ * Configure the given GP pin (0-3) as DATA_READY output.
+ * GP0/GP1 → GPIO_MODE1_REG, GP2/GP3 → GPIO_MODE2_REG.
+ * Even pins occupy bits [3:0], odd pins bits [7:4].
+ */
+static int ad4691_gpio_setup(struct ad4691_state *st, unsigned int gp_num)
+{
+	unsigned int shift = 4 * (gp_num % 2);
+
+	return regmap_update_bits(st->regmap,
+				  AD4691_GPIO_MODE1_REG + gp_num / 2,
+				  AD4691_GP_MODE_MASK << shift,
+				  AD4691_GP_MODE_DATA_READY << shift);
+}
+
+static void ad4691_disable_pwm(void *data)
+{
+	struct pwm_state state = { .enabled = false };
+
+	pwm_apply_might_sleep(data, &state);
+}
 
 static int ad4691_reg_read(void *context, unsigned int reg, unsigned int *val)
 {
@@ -341,14 +409,16 @@ static int ad4691_get_sampling_freq(struct ad4691_state *st, int *val)
 static int ad4691_set_sampling_freq(struct iio_dev *indio_dev, int freq)
 {
 	struct ad4691_state *st = iio_priv(indio_dev);
-	unsigned int start = (st->info->max_rate == HZ_PER_MHZ) ? 0 : 1;
 	unsigned int i;
+
+	if (freq > st->info->max_rate)
+		return -EINVAL;
 
 	IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
 	if (IIO_DEV_ACQUIRE_FAILED(claim))
 		return -EBUSY;
 
-	for (i = start; i < ARRAY_SIZE(ad4691_osc_freqs); i++) {
+	for (i = 0; i < ARRAY_SIZE(ad4691_osc_freqs); i++) {
 		if ((int)ad4691_osc_freqs[i] == freq)
 			return regmap_update_bits(st->regmap, AD4691_OSC_FREQ_REG,
 						  AD4691_OSC_FREQ_MASK, i);
@@ -363,7 +433,10 @@ static int ad4691_read_avail(struct iio_dev *indio_dev,
 			     int *length, long mask)
 {
 	struct ad4691_state *st = iio_priv(indio_dev);
-	unsigned int start = (st->info->max_rate == HZ_PER_MHZ) ? 0 : 1;
+	unsigned int start;
+
+	/* Skip frequencies that exceed this chip's maximum rate. */
+	start = (ad4691_osc_freqs[0] > st->info->max_rate) ? 1 : 0;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
@@ -386,8 +459,7 @@ static int ad4691_single_shot_read(struct iio_dev *indio_dev,
 	guard(mutex)(&st->lock);
 
 	/*
-	 * Use AUTONOMOUS mode for single-shot reads. The chip always
-	 * operates in AUTONOMOUS mode in this driver revision.
+	 * Use AUTONOMOUS mode for single-shot reads.
 	 */
 	ret = regmap_write(st->regmap, AD4691_STATE_RESET_REG,
 			   AD4691_STATE_RESET_ALL);
@@ -417,8 +489,7 @@ static int ad4691_single_shot_read(struct iio_dev *indio_dev,
 	 * conversion to complete.
 	 */
 	fsleep(DIV_ROUND_UP(2 * USEC_PER_SEC,
-			    ad4691_osc_freqs[FIELD_GET(AD4691_OSC_FREQ_MASK,
-						       reg_val)]));
+		ad4691_osc_freqs[FIELD_GET(AD4691_OSC_FREQ_MASK, reg_val)]));
 
 	ret = regmap_write(st->regmap, AD4691_OSC_EN_REG, 0);
 	if (ret)
@@ -488,12 +559,399 @@ static int ad4691_reg_access(struct iio_dev *indio_dev, unsigned int reg,
 	return regmap_write(st->regmap, reg, writeval);
 }
 
+static int ad4691_set_pwm_freq(struct ad4691_state *st, int freq)
+{
+	if (!freq)
+		return -EINVAL;
+
+	st->cnv_period_ns = DIV_ROUND_CLOSEST(NSEC_PER_SEC, freq);
+	return 0;
+}
+
+static int ad4691_sampling_enable(struct ad4691_state *st, bool enable)
+{
+	struct pwm_state conv_state = { };
+
+	conv_state.period = st->cnv_period_ns;
+	conv_state.duty_cycle = AD4691_CNV_DUTY_CYCLE_NS;
+	conv_state.polarity = PWM_POLARITY_NORMAL;
+	conv_state.enabled = enable;
+
+	return pwm_apply_might_sleep(st->conv_trigger, &conv_state);
+}
+
+/*
+ * ad4691_enter_conversion_mode - Switch the chip to its buffer conversion mode.
+ *
+ * Configures the ADC hardware registers for the mode selected at probe
+ * (CNV_BURST or MANUAL). Called from buffer preenable before starting
+ * sampling. The chip is in AUTONOMOUS mode during idle (for read_raw).
+ */
+static int ad4691_enter_conversion_mode(struct ad4691_state *st)
+{
+	int ret;
+
+	if (st->manual_mode)
+		return regmap_update_bits(st->regmap, AD4691_DEVICE_SETUP,
+					  AD4691_MANUAL_MODE, AD4691_MANUAL_MODE);
+
+	ret = regmap_write(st->regmap, AD4691_ADC_SETUP, AD4691_CNV_BURST_MODE);
+	if (ret)
+		return ret;
+
+	return regmap_write(st->regmap, AD4691_STATE_RESET_REG,
+			    AD4691_STATE_RESET_ALL);
+}
+
+/*
+ * ad4691_exit_conversion_mode - Return the chip to AUTONOMOUS mode.
+ *
+ * Called from buffer postdisable to restore the chip to the
+ * idle state used by read_raw. Clears the sequencer and resets state.
+ */
+static int ad4691_exit_conversion_mode(struct ad4691_state *st)
+{
+	if (st->manual_mode)
+		return regmap_update_bits(st->regmap, AD4691_DEVICE_SETUP,
+					  AD4691_MANUAL_MODE, 0);
+
+	return regmap_write(st->regmap, AD4691_ADC_SETUP,
+			    AD4691_AUTONOMOUS_MODE);
+}
+
+static int ad4691_manual_buffer_preenable(struct iio_dev *indio_dev)
+{
+	struct ad4691_state *st = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(st->regmap);
+	struct spi_device *spi = to_spi_device(dev);
+	unsigned int n_active = hweight_long(*indio_dev->active_scan_mask);
+	unsigned int n_xfers = n_active + 1;
+	unsigned int k, i;
+	int ret;
+
+	st->scan_devm_group = devres_open_group(dev, NULL, GFP_KERNEL);
+	if (!st->scan_devm_group)
+		return -ENOMEM;
+
+	st->scan_xfers = devm_kcalloc(dev, n_xfers, sizeof(*st->scan_xfers),
+				      GFP_KERNEL);
+	st->scan_tx = devm_kcalloc(dev, n_xfers, sizeof(*st->scan_tx),
+				   GFP_KERNEL);
+	st->scan_rx = devm_kcalloc(dev, n_xfers, sizeof(*st->scan_rx),
+				   GFP_KERNEL);
+	if (!st->scan_xfers || !st->scan_tx || !st->scan_rx) {
+		devres_release_group(dev, st->scan_devm_group);
+		return -ENOMEM;
+	}
+
+	spi_message_init(&st->scan_msg);
+
+	k = 0;
+	iio_for_each_active_channel(indio_dev, i) {
+		st->scan_tx[k] = cpu_to_be16(AD4691_ADC_CHAN(i));
+		st->scan_xfers[k].tx_buf = &st->scan_tx[k];
+		st->scan_xfers[k].rx_buf = &st->scan_rx[k];
+		st->scan_xfers[k].len = sizeof(__be16);
+		st->scan_xfers[k].cs_change = 1;
+		spi_message_add_tail(&st->scan_xfers[k], &st->scan_msg);
+		k++;
+	}
+
+	/* Final NOOP transfer to retrieve last channel's result. */
+	st->scan_tx[k] = cpu_to_be16(AD4691_NOOP);
+	st->scan_xfers[k].tx_buf = &st->scan_tx[k];
+	st->scan_xfers[k].rx_buf = &st->scan_rx[k];
+	st->scan_xfers[k].len = sizeof(__be16);
+	spi_message_add_tail(&st->scan_xfers[k], &st->scan_msg);
+
+	devres_close_group(dev, st->scan_devm_group);
+
+	st->scan_msg.spi = spi;
+
+	ret = spi_optimize_message(spi, &st->scan_msg);
+	if (ret) {
+		devres_release_group(dev, st->scan_devm_group);
+		return ret;
+	}
+
+	ret = ad4691_enter_conversion_mode(st);
+	if (ret) {
+		spi_unoptimize_message(&st->scan_msg);
+		devres_release_group(dev, st->scan_devm_group);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int ad4691_manual_buffer_postdisable(struct iio_dev *indio_dev)
+{
+	struct ad4691_state *st = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(st->regmap);
+	int ret;
+
+	ret = ad4691_exit_conversion_mode(st);
+	spi_unoptimize_message(&st->scan_msg);
+	devres_release_group(dev, st->scan_devm_group);
+	return ret;
+}
+
+static const struct iio_buffer_setup_ops ad4691_manual_buffer_setup_ops = {
+	.preenable = &ad4691_manual_buffer_preenable,
+	.postdisable = &ad4691_manual_buffer_postdisable,
+};
+
+static int ad4691_cnv_burst_buffer_preenable(struct iio_dev *indio_dev)
+{
+	struct ad4691_state *st = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(st->regmap);
+	struct spi_device *spi = to_spi_device(dev);
+	unsigned int n_active = hweight_long(*indio_dev->active_scan_mask);
+	unsigned int bit, k, i;
+	int ret;
+
+	st->scan_devm_group = devres_open_group(dev, NULL, GFP_KERNEL);
+	if (!st->scan_devm_group)
+		return -ENOMEM;
+
+	st->scan_xfers = devm_kcalloc(dev, 2 * n_active, sizeof(*st->scan_xfers),
+				      GFP_KERNEL);
+	st->scan_tx = devm_kcalloc(dev, n_active, sizeof(*st->scan_tx),
+				   GFP_KERNEL);
+	st->scan_rx = devm_kcalloc(dev, n_active, sizeof(*st->scan_rx),
+				   GFP_KERNEL);
+	if (!st->scan_xfers || !st->scan_tx || !st->scan_rx) {
+		devres_release_group(dev, st->scan_devm_group);
+		return -ENOMEM;
+	}
+
+	spi_message_init(&st->scan_msg);
+
+	/*
+	 * Each AVG_IN read needs two transfers: a 2-byte address write phase
+	 * followed by a 2-byte data read phase. CS toggles between channels
+	 * (cs_change=1 on the read phase of all but the last channel).
+	 */
+	k = 0;
+	iio_for_each_active_channel(indio_dev, i) {
+		st->scan_tx[k] = cpu_to_be16(0x8000 | AD4691_AVG_IN(i));
+		st->scan_xfers[2 * k].tx_buf = &st->scan_tx[k];
+		st->scan_xfers[2 * k].len = sizeof(__be16);
+		spi_message_add_tail(&st->scan_xfers[2 * k], &st->scan_msg);
+		st->scan_xfers[2 * k + 1].rx_buf = &st->scan_rx[k];
+		st->scan_xfers[2 * k + 1].len = sizeof(__be16);
+		if (k < n_active - 1)
+			st->scan_xfers[2 * k + 1].cs_change = 1;
+		spi_message_add_tail(&st->scan_xfers[2 * k + 1], &st->scan_msg);
+		k++;
+	}
+
+	devres_close_group(dev, st->scan_devm_group);
+
+	st->scan_msg.spi = spi;
+
+	ret = spi_optimize_message(spi, &st->scan_msg);
+	if (ret) {
+		devres_release_group(dev, st->scan_devm_group);
+		return ret;
+	}
+
+	ret = regmap_write(st->regmap, AD4691_ACC_MASK_REG,
+			   (u16)~(*indio_dev->active_scan_mask));
+	if (ret)
+		goto err;
+
+	ret = regmap_write(st->regmap, AD4691_STD_SEQ_CONFIG,
+			   *indio_dev->active_scan_mask);
+	if (ret)
+		goto err;
+
+	iio_for_each_active_channel(indio_dev, bit) {
+		ret = regmap_write(st->regmap, AD4691_ACC_COUNT_LIMIT(bit),
+				   AD4691_ACC_COUNT_VAL);
+		if (ret)
+			goto err;
+	}
+
+	ret = ad4691_enter_conversion_mode(st);
+	if (ret)
+		goto err;
+
+	ret = ad4691_sampling_enable(st, true);
+	if (ret)
+		goto err;
+
+	enable_irq(st->irq);
+	return 0;
+err:
+	spi_unoptimize_message(&st->scan_msg);
+	devres_release_group(dev, st->scan_devm_group);
+	return ret;
+}
+
+static int ad4691_cnv_burst_buffer_postdisable(struct iio_dev *indio_dev)
+{
+	struct ad4691_state *st = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(st->regmap);
+	int ret;
+
+	disable_irq(st->irq);
+
+	ret = ad4691_sampling_enable(st, false);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(st->regmap, AD4691_STD_SEQ_CONFIG,
+			   AD4691_SEQ_ALL_CHANNELS_OFF);
+	if (ret)
+		return ret;
+
+	ret = ad4691_exit_conversion_mode(st);
+	spi_unoptimize_message(&st->scan_msg);
+	devres_release_group(dev, st->scan_devm_group);
+	return ret;
+}
+
+static const struct iio_buffer_setup_ops ad4691_cnv_burst_buffer_setup_ops = {
+	.preenable = &ad4691_cnv_burst_buffer_preenable,
+	.postdisable = &ad4691_cnv_burst_buffer_postdisable,
+};
+
+static ssize_t sampling_frequency_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ad4691_state *st = iio_priv(indio_dev);
+
+	if (st->manual_mode)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%u\n", (u32)(NSEC_PER_SEC / st->cnv_period_ns));
+}
+
+static ssize_t sampling_frequency_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ad4691_state *st = iio_priv(indio_dev);
+	int freq, ret;
+
+	if (st->manual_mode)
+		return -ENODEV;
+
+	ret = kstrtoint(buf, 10, &freq);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&st->lock);
+
+	ret = ad4691_set_pwm_freq(st, freq);
+	if (ret)
+		return ret;
+
+	return len;
+}
+
+static IIO_DEVICE_ATTR(sampling_frequency, 0644,
+		       sampling_frequency_show,
+		       sampling_frequency_store, 0);
+
+static const struct iio_dev_attr *ad4691_buffer_attrs[] = {
+	&iio_dev_attr_sampling_frequency,
+	NULL,
+};
+
+static irqreturn_t ad4691_irq(int irq, void *private)
+{
+	struct iio_dev *indio_dev = private;
+	struct ad4691_state *st = iio_priv(indio_dev);
+
+	/*
+	 * GPx has asserted: stop conversions before reading so the
+	 * accumulator does not continue sampling while the trigger handler
+	 * processes the data. Then fire the IIO trigger to push the sample
+	 * to the buffer.
+	 */
+	ad4691_sampling_enable(st, false);
+	iio_trigger_poll(st->trig);
+
+	return IRQ_HANDLED;
+}
+
+static const struct iio_trigger_ops ad4691_trigger_ops = {
+	.validate_device = iio_trigger_validate_own_device,
+};
+
+static irqreturn_t ad4691_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+	struct ad4691_state *st = iio_priv(indio_dev);
+	unsigned int i, k = 0;
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	ret = spi_sync(st->scan_msg.spi, &st->scan_msg);
+	if (ret)
+		goto done;
+
+	if (st->manual_mode) {
+		iio_for_each_active_channel(indio_dev, i) {
+			st->scan.vals[i] = be16_to_cpu(st->scan_rx[k + 1]);
+			k++;
+		}
+	} else {
+		iio_for_each_active_channel(indio_dev, i) {
+			st->scan.vals[i] = be16_to_cpu(st->scan_rx[k]);
+			k++;
+		}
+
+		ret = regmap_write(st->regmap, AD4691_STATE_RESET_REG,
+				   AD4691_STATE_RESET_ALL);
+		if (ret)
+			goto done;
+
+		ret = ad4691_sampling_enable(st, true);
+		if (ret)
+			goto done;
+	}
+
+	iio_push_to_buffers_with_ts(indio_dev, &st->scan, sizeof(st->scan),
+				    pf->timestamp);
+
+done:
+	iio_trigger_notify_done(indio_dev->trig);
+	return IRQ_HANDLED;
+}
+
 static const struct iio_info ad4691_info = {
 	.read_raw = &ad4691_read_raw,
 	.write_raw = &ad4691_write_raw,
 	.read_avail = &ad4691_read_avail,
 	.debugfs_reg_access = &ad4691_reg_access,
 };
+
+static int ad4691_pwm_setup(struct ad4691_state *st)
+{
+	struct device *dev = regmap_get_device(st->regmap);
+	int ret;
+
+	st->conv_trigger = devm_pwm_get(dev, "cnv");
+	if (IS_ERR(st->conv_trigger))
+		return dev_err_probe(dev, PTR_ERR(st->conv_trigger),
+				     "Failed to get cnv pwm\n");
+
+	ret = devm_add_action_or_reset(dev, ad4691_disable_pwm,
+				       st->conv_trigger);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "Failed to register PWM disable action\n");
+
+	return ad4691_set_pwm_freq(st, st->info->max_rate);
+}
 
 static int ad4691_regulator_setup(struct ad4691_state *st)
 {
@@ -555,11 +1013,29 @@ static int ad4691_reset(struct ad4691_state *st)
 	return 0;
 }
 
-static int ad4691_config(struct ad4691_state *st)
+static int ad4691_config(struct ad4691_state *st, u32 max_speed_hz)
 {
 	struct device *dev = regmap_get_device(st->regmap);
 	enum ad4691_ref_ctrl ref_val;
+	const char *irq_name;
+	unsigned int gp_num;
 	int ret;
+
+	/*
+	 * Determine buffer conversion mode from DT: if a PWM is provided it
+	 * drives the CNV pin (CNV_BURST_MODE); otherwise CNV is tied to CS
+	 * and each SPI transfer triggers a conversion (MANUAL_MODE).
+	 * Both modes idle in AUTONOMOUS mode so that read_raw can use the
+	 * internal oscillator without disturbing the hardware configuration.
+	 */
+	if (device_property_present(dev, "pwms")) {
+		st->manual_mode = false;
+		ret = ad4691_pwm_setup(st);
+		if (ret)
+			return ret;
+	} else {
+		st->manual_mode = true;
+	}
 
 	switch (st->vref_uV) {
 	case AD4691_VREF_uV_MIN ... AD4691_VREF_2P5_uV_MAX:
@@ -595,17 +1071,91 @@ static int ad4691_config(struct ad4691_state *st)
 		return dev_err_probe(dev, ret, "Failed to write DEVICE_SETUP\n");
 
 	/*
-	 * Set the internal oscillator to the highest valid rate for this chip.
-	 * Index 0 (1 MHz) is valid only for AD4692/AD4694; AD4691/AD4693 start
-	 * at index 1 (500 kHz).
+	 * Set the internal oscillator to the highest rate this chip supports.
+	 * Index 0 (1 MHz) exceeds the 500 kHz max of AD4691/AD4693, so those
+	 * chips start at index 1 (500 kHz).
 	 */
 	ret = regmap_write(st->regmap, AD4691_OSC_FREQ_REG,
-			   (st->info->max_rate == HZ_PER_MHZ) ? 0 : 1);
+			   (ad4691_osc_freqs[0] > st->info->max_rate) ? 1 : 0);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to write OSC_FREQ\n");
 
 	/* Device always operates in AUTONOMOUS mode. */
-	return regmap_write(st->regmap, AD4691_ADC_SETUP, AD4691_AUTONOMOUS_MODE_VAL);
+	ret = regmap_write(st->regmap, AD4691_ADC_SETUP, AD4691_AUTONOMOUS_MODE);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to write ADC_SETUp\n");
+
+	if (st->manual_mode)
+		return 0;
+
+	ret = device_property_read_string_array(dev, "interrupt-names",
+						&irq_name, 1);
+	if (ret < 0)
+		return dev_err_probe(dev, ret,
+				     "Failed to read interrupt-names\n");
+
+	if (strncmp(irq_name, "gp", 2) != 0 ||
+	    kstrtouint(irq_name + 2, 10, &gp_num) || gp_num > 3)
+		return dev_err_probe(dev, -EINVAL,
+				     "Invalid interrupt name '%s'\n", irq_name);
+
+	return ad4691_gpio_setup(st, gp_num);
+}
+
+static int ad4691_setup_triggered_buffer(struct iio_dev *indio_dev,
+					 struct ad4691_state *st)
+{
+	struct device *dev = regmap_get_device(st->regmap);
+	int irq, ret;
+
+	st->trig = devm_iio_trigger_alloc(dev, "%s-dev%d",
+					  indio_dev->name,
+					  iio_device_id(indio_dev));
+	if (!st->trig)
+		return -ENOMEM;
+
+	st->trig->ops = &ad4691_trigger_ops;
+	iio_trigger_set_drvdata(st->trig, st);
+
+	ret = devm_iio_trigger_register(dev, st->trig);
+	if (ret)
+		return dev_err_probe(dev, ret, "IIO trigger register failed\n");
+
+	indio_dev->trig = iio_trigger_get(st->trig);
+
+	if (!st->manual_mode) {
+		/*
+		 * GP0 asserts at end-of-conversion. The IRQ handler stops
+		 * conversions and fires the IIO trigger so the trigger handler
+		 * can read and push the sample to the buffer. The IRQ is kept
+		 * disabled until the buffer is enabled.
+		 */
+		irq = fwnode_irq_get(dev_fwnode(dev), 0);
+		if (irq < 0)
+			return dev_err_probe(dev, irq,
+					     "failed to get GP interrupt\n");
+
+		st->irq = irq;
+
+		ret = devm_request_threaded_irq(dev, irq, NULL,
+						&ad4691_irq,
+						IRQF_ONESHOT | IRQF_NO_AUTOEN,
+						indio_dev->name, indio_dev);
+		if (ret)
+			return ret;
+
+		return devm_iio_triggered_buffer_setup_ext(dev, indio_dev,
+							   &iio_pollfunc_store_time,
+							   &ad4691_trigger_handler,
+							   IIO_BUFFER_DIRECTION_IN,
+							   &ad4691_cnv_burst_buffer_setup_ops,
+							   ad4691_buffer_attrs);
+	}
+
+	return devm_iio_triggered_buffer_setup(dev, indio_dev,
+					       &iio_pollfunc_store_time,
+					       &ad4691_trigger_handler,
+					       &ad4691_manual_buffer_setup_ops);
 }
 
 static int ad4691_probe(struct spi_device *spi)
@@ -639,7 +1189,7 @@ static int ad4691_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ret = ad4691_config(st);
+	ret = ad4691_config(st, spi->max_speed_hz);
 	if (ret)
 		return ret;
 
@@ -649,6 +1199,10 @@ static int ad4691_probe(struct spi_device *spi)
 
 	indio_dev->channels = st->info->channels;
 	indio_dev->num_channels = st->info->num_channels;
+
+	ret = ad4691_setup_triggered_buffer(indio_dev, st);
+	if (ret)
+		return ret;
 
 	return devm_iio_device_register(dev, indio_dev);
 }
