@@ -49,45 +49,21 @@
 #include <asm/system_misc.h>
 #include <asm/sysreg.h>
 
-static bool __kprobes __check_eq(unsigned long pstate)
-{
-	return (pstate & PSR_Z_BIT) != 0;
+#define DEFINE_COND_CHECK(name, flag, expected)			\
+static bool __kprobes __check_##name(unsigned long pstate)	\
+{								\
+	return ((pstate & (flag)) != 0) == (expected);		\
 }
 
-static bool __kprobes __check_ne(unsigned long pstate)
-{
-	return (pstate & PSR_Z_BIT) == 0;
-}
-
-static bool __kprobes __check_cs(unsigned long pstate)
-{
-	return (pstate & PSR_C_BIT) != 0;
-}
-
-static bool __kprobes __check_cc(unsigned long pstate)
-{
-	return (pstate & PSR_C_BIT) == 0;
-}
-
-static bool __kprobes __check_mi(unsigned long pstate)
-{
-	return (pstate & PSR_N_BIT) != 0;
-}
-
-static bool __kprobes __check_pl(unsigned long pstate)
-{
-	return (pstate & PSR_N_BIT) == 0;
-}
-
-static bool __kprobes __check_vs(unsigned long pstate)
-{
-	return (pstate & PSR_V_BIT) != 0;
-}
-
-static bool __kprobes __check_vc(unsigned long pstate)
-{
-	return (pstate & PSR_V_BIT) == 0;
-}
+DEFINE_COND_CHECK(eq, PSR_Z_BIT, true)
+DEFINE_COND_CHECK(ne, PSR_Z_BIT, false)
+DEFINE_COND_CHECK(cs, PSR_C_BIT, true)
+DEFINE_COND_CHECK(cc, PSR_C_BIT, false)
+DEFINE_COND_CHECK(mi, PSR_N_BIT, true)
+DEFINE_COND_CHECK(pl, PSR_N_BIT, false)
+DEFINE_COND_CHECK(vs, PSR_V_BIT, true)
+DEFINE_COND_CHECK(vc, PSR_V_BIT, false)
+DEFINE_COND_CHECK(al, 0, false)		/* Always true */
 
 static bool __kprobes __check_hi(unsigned long pstate)
 {
@@ -129,11 +105,6 @@ static bool __kprobes __check_le(unsigned long pstate)
 
 	temp |= (pstate << 1);	/*PSR_N_BIT |= PSR_Z_BIT */
 	return (temp & PSR_N_BIT) != 0;
-}
-
-static bool __kprobes __check_al(unsigned long pstate)
-{
-	return true;
 }
 
 /*
