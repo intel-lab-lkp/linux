@@ -393,16 +393,15 @@ static int dw_wdt_suspend(struct device *dev)
 static int dw_wdt_resume(struct device *dev)
 {
 	struct dw_wdt *dw_wdt = dev_get_drvdata(dev);
-	int err = clk_prepare_enable(dw_wdt->clk);
+	int err;
 
+	err = clk_prepare_enable(dw_wdt->clk);
 	if (err)
 		return err;
 
 	err = clk_prepare_enable(dw_wdt->pclk);
-	if (err) {
-		clk_disable_unprepare(dw_wdt->clk);
-		return err;
-	}
+	if (err)
+		goto unprepare_clk;
 
 	err = reset_control_deassert(dw_wdt->rst);
 	if (err)
@@ -415,8 +414,9 @@ static int dw_wdt_resume(struct device *dev)
 
 	return 0;
 
-unprepare_clk:
+unprepare_pclk:
 	clk_disable_unprepare(dw_wdt->pclk);
+unprepare_clk:
 	clk_disable_unprepare(dw_wdt->clk);
 
 	return err;
