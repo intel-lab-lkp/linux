@@ -422,7 +422,13 @@ swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry);
 swp_entry_t swp_slot_to_swp_entry(swp_slot_t slot);
 bool tryget_swap_entry(swp_entry_t entry, struct swap_info_struct **si);
 void put_swap_entry(swp_entry_t entry, struct swap_info_struct *si);
-
+bool vswap_swapfile_backed(swp_entry_t entry, int nr);
+bool vswap_folio_backed(swp_entry_t entry, int nr);
+void vswap_store_folio(swp_entry_t entry, struct folio *folio);
+void swap_zeromap_folio_set(struct folio *folio);
+void vswap_assoc_zswap(swp_entry_t entry, struct zswap_entry *zswap_entry);
+bool vswap_can_swapin_thp(swp_entry_t entry, int nr);
+bool vswap_alloc_swap_slot(struct folio *folio);
 
 /* Lifecycle swap API (mm/swapfile.c and mm/vswap.c) */
 int folio_alloc_swap(struct folio *folio);
@@ -482,6 +488,14 @@ unsigned int count_swap_pages(int, int);
 sector_t swapdev_block(int, pgoff_t);
 struct backing_dev_info;
 struct swap_info_struct *swap_slot_tryget_swap_info(swp_slot_t slot);
+
+static inline struct swap_info_struct *vswap_get_device(swp_entry_t entry)
+{
+	swp_slot_t slot = swp_entry_to_swp_slot(entry);
+
+	return slot.val ? swap_slot_tryget_swap_info(slot) : NULL;
+}
+
 sector_t swap_folio_sector(struct folio *folio);
 
 static inline void swap_slot_put_swap_info(struct swap_info_struct *si)
@@ -599,6 +613,21 @@ static inline int add_swap_extent(struct swap_info_struct *sis,
 				  unsigned long nr_pages, sector_t start_block)
 {
 	return -EINVAL;
+}
+
+static inline bool vswap_swapfile_backed(swp_entry_t entry, int nr)
+{
+	return false;
+}
+
+static inline bool vswap_can_swapin_thp(swp_entry_t entry, int nr)
+{
+	return false;
+}
+
+static inline struct swap_info_struct *vswap_get_device(swp_entry_t entry)
+{
+	return NULL;
 }
 
 #endif /* CONFIG_SWAP */

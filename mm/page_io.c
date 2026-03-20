@@ -201,44 +201,6 @@ static bool is_folio_zero_filled(struct folio *folio)
 	return true;
 }
 
-static void swap_zeromap_folio_set(struct folio *folio)
-{
-	struct obj_cgroup *objcg = get_obj_cgroup_from_folio(folio);
-	struct swap_info_struct *sis =
-		__swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
-	int nr_pages = folio_nr_pages(folio);
-	swp_entry_t entry;
-	swp_slot_t slot;
-	unsigned int i;
-
-	for (i = 0; i < folio_nr_pages(folio); i++) {
-		entry = page_swap_entry(folio_page(folio, i));
-		slot = swp_entry_to_swp_slot(entry);
-		set_bit(swp_slot_offset(slot), sis->zeromap);
-	}
-
-	count_vm_events(SWPOUT_ZERO, nr_pages);
-	if (objcg) {
-		count_objcg_events(objcg, SWPOUT_ZERO, nr_pages);
-		obj_cgroup_put(objcg);
-	}
-}
-
-static void swap_zeromap_folio_clear(struct folio *folio)
-{
-	struct swap_info_struct *sis =
-		__swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
-	swp_entry_t entry;
-	swp_slot_t slot;
-	unsigned int i;
-
-	for (i = 0; i < folio_nr_pages(folio); i++) {
-		entry = page_swap_entry(folio_page(folio, i));
-		slot = swp_entry_to_swp_slot(entry);
-		clear_bit(swp_slot_offset(slot), sis->zeromap);
-	}
-}
-
 /*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
@@ -260,29 +222,34 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 		goto out_unlock;
 	}
 
-	/*
-	 * Use a bitmap (zeromap) to avoid doing IO for zero-filled pages.
-	 * The bits in zeromap are protected by the locked swapcache folio
-	 * and atomic updates are used to protect against read-modify-write
-	 * corruption due to other zero swap entries seeing concurrent updates.
-	 */
 	if (is_folio_zero_filled(folio)) {
 		swap_zeromap_folio_set(folio);
 		goto out_unlock;
 	}
 
 	/*
-	 * Clear bits this folio occupies in the zeromap to prevent zero data
-	 * being read in from any previous zero writes that occupied the same
-	 * swap entries.
+	 * Release swap backends to make sure we do not have mixed backends
+	 *
+	 * The only exception is if the folio is already backed by a
+	 * contiguous range of physical swap slots (for e.g, from a previous
+	 * swapout attempt when zswap is disabled).
+	 *
+	 * Keep that backend to avoid reallocation of physical swap slots.
 	 */
-	swap_zeromap_folio_clear(folio);
+	if (!vswap_swapfile_backed(folio->swap, folio_nr_pages(folio)))
+		vswap_store_folio(folio->swap, folio);
 
 	if (zswap_store(folio)) {
 		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
 		goto out_unlock;
 	}
 	if (!mem_cgroup_zswap_writeback_enabled(folio_memcg(folio))) {
+		folio_mark_dirty(folio);
+		return AOP_WRITEPAGE_ACTIVATE;
+	}
+
+	/* fall back to physical swap device */
+	if (!vswap_alloc_swap_slot(folio)) {
 		folio_mark_dirty(folio);
 		return AOP_WRITEPAGE_ACTIVATE;
 	}
@@ -618,14 +585,11 @@ static void swap_read_folio_bdev_async(struct folio *folio,
 
 void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 {
-	struct swap_info_struct *sis =
-		__swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
-	bool synchronous = sis->flags & SWP_SYNCHRONOUS_IO;
-	bool workingset = folio_test_workingset(folio);
+	struct swap_info_struct *sis;
+	bool synchronous, workingset = folio_test_workingset(folio);
 	unsigned long pflags;
 	bool in_thrashing;
 
-	VM_BUG_ON_FOLIO(!folio_test_swapcache(folio) && !synchronous, folio);
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(folio_test_uptodate(folio), folio);
 
@@ -650,6 +614,10 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 
 	/* We have to read from slower devices. Increase zswap protection. */
 	zswap_folio_swapin(folio);
+
+	sis = __swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
+	synchronous = sis->flags & SWP_SYNCHRONOUS_IO;
+	VM_BUG_ON_FOLIO(!folio_test_swapcache(folio) && !synchronous, folio);
 
 	if (data_race(sis->flags & SWP_FS_OPS)) {
 		swap_read_folio_fs(folio, plug);

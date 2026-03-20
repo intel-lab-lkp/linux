@@ -11,6 +11,7 @@
 #include <linux/swap_cgroup.h>
 #include <linux/cpuhotplug.h>
 #include <linux/zswap.h>
+#include "internal.h"
 #include "swap.h"
 #include "swap_table.h"
 
@@ -54,22 +55,48 @@
  *
  * Note that we do not have a reference count field per se - it is derived from
  * the swap_count and the in_swapcache fields.
+ *
+ * III. Backing State
+ *
+ * Each virtual swap slot can be backed by:
+ *
+ * 1. A slot on a physical swap device (i.e a swapfile or a swap partition).
+ * 2. A swapped out zero-filled page.
+ * 3. A compressed object in zswap.
+ * 4. An in-memory folio, that is not backed by neither a physical swap device
+ *    nor zswap (i.e only in swap cache). This is used for pages that are
+ *    rejected by zswap, but not (yet) backed by a physical swap device,
+ *    (for e.g, due to zswap.writeback = 0), or for pages that were previously
+ *    stored in zswap, but has since been loaded back into memory (and has its
+ *    zswap copy invalidated).
  */
+
+/* The backing state options of a virtual swap slot */
+enum swap_type {
+	VSWAP_SWAPFILE,
+	VSWAP_ZERO,
+	VSWAP_ZSWAP,
+	VSWAP_FOLIO
+};
 
 /**
  * Swap descriptor - metadata of a swapped out page.
  *
  * @slot: The handle to the physical swap slot backing this page.
  * @zswap_entry: The zswap entry associated with this swap slot.
- * @swap_cache: The folio in swap cache.
+ * @swap_cache: The folio in swap cache. If the swap entry backing type is
+ *              VSWAP_FOLIO, the backend is also stored here.
  * @shadow: The shadow entry.
- * @memcgid: The memcg id of the owning memcg, if any.
  * @swap_count: The number of page table entries that refer to the swap entry.
+ * @memcgid: The memcg id of the owning memcg, if any.
  * @in_swapcache: Whether the swap entry is (about to be) pinned in swap cache.
+ * @type: The backing store type of the swap entry.
  */
 struct swp_desc {
-	swp_slot_t slot;
-	struct zswap_entry *zswap_entry;
+	union {
+		swp_slot_t slot;
+		struct zswap_entry *zswap_entry;
+	};
 	union {
 		struct folio *swap_cache;
 		void *shadow;
@@ -78,10 +105,10 @@ struct swp_desc {
 	unsigned int swap_count;
 
 #ifdef CONFIG_MEMCG
-	unsigned short memcgid;
+	unsigned short memcgid:16;
 #endif
-
-	bool in_swapcache;
+	bool in_swapcache:1;
+	enum swap_type type:2;
 };
 
 #define VSWAP_CLUSTER_SHIFT HPAGE_PMD_ORDER
@@ -266,15 +293,16 @@ static bool cluster_is_alloc_candidate(struct vswap_cluster *cluster)
 	return cluster->count + (1 << (cluster->order)) <= VSWAP_CLUSTER_SIZE;
 }
 
-static void __vswap_alloc_from_cluster(struct vswap_cluster *cluster, int start)
+static void __vswap_alloc_from_cluster(struct vswap_cluster *cluster,
+		int start, struct folio *folio)
 {
 	int i, nr = 1 << cluster->order;
 	struct swp_desc *desc;
 
 	for (i = 0; i < nr; i++) {
 		desc = &cluster->descriptors[start + i];
-		desc->slot.val = 0;
-		desc->zswap_entry = NULL;
+		desc->type = VSWAP_FOLIO;
+		desc->swap_cache = folio;
 #ifdef CONFIG_MEMCG
 		desc->memcgid = 0;
 #endif
@@ -284,7 +312,8 @@ static void __vswap_alloc_from_cluster(struct vswap_cluster *cluster, int start)
 	cluster->count += nr;
 }
 
-static unsigned long vswap_alloc_from_cluster(struct vswap_cluster *cluster)
+static unsigned long vswap_alloc_from_cluster(struct vswap_cluster *cluster,
+		struct folio *folio)
 {
 	int nr = 1 << cluster->order;
 	unsigned long i = cluster->id ? 0 : nr;
@@ -303,16 +332,16 @@ static unsigned long vswap_alloc_from_cluster(struct vswap_cluster *cluster)
 	bitmap_set(cluster->bitmap, i, nr);
 
 	refcount_add(nr, &cluster->refcnt);
-	__vswap_alloc_from_cluster(cluster, i);
+	__vswap_alloc_from_cluster(cluster, i, folio);
 	return i + (cluster->id << VSWAP_CLUSTER_SHIFT);
 }
 
 /* Allocate a contiguous range of virtual swap slots */
-static swp_entry_t vswap_alloc(int order)
+static swp_entry_t vswap_alloc(struct folio *folio)
 {
 	struct xa_limit limit = vswap_cluster_map_limit;
 	struct vswap_cluster *local, *cluster;
-	int nr = 1 << order;
+	int order = folio_order(folio), nr = 1 << order;
 	bool need_caching = true;
 	u32 cluster_id;
 	swp_entry_t entry;
@@ -325,7 +354,7 @@ static swp_entry_t vswap_alloc(int order)
 	cluster = this_cpu_read(percpu_vswap_cluster.clusters[order]);
 	if (cluster) {
 		spin_lock(&cluster->lock);
-		entry.val = vswap_alloc_from_cluster(cluster);
+		entry.val = vswap_alloc_from_cluster(cluster, folio);
 		need_caching = !entry.val;
 
 		if (!entry.val || !cluster_is_alloc_candidate(cluster)) {
@@ -352,7 +381,7 @@ static swp_entry_t vswap_alloc(int order)
 			if (!spin_trylock(&cluster->lock))
 				continue;
 
-			entry.val = vswap_alloc_from_cluster(cluster);
+			entry.val = vswap_alloc_from_cluster(cluster, folio);
 			list_del_init(&cluster->list);
 			cluster->full = !entry.val || !cluster_is_alloc_candidate(cluster);
 			need_caching = !cluster->full;
@@ -384,7 +413,7 @@ static swp_entry_t vswap_alloc(int order)
 				if (!cluster_id)
 					entry.val += nr;
 				__vswap_alloc_from_cluster(cluster,
-					(entry.val & VSWAP_CLUSTER_MASK));
+					(entry.val & VSWAP_CLUSTER_MASK), folio);
 				/* Mark the allocated range in the bitmap */
 				bitmap_set(cluster->bitmap, (entry.val & VSWAP_CLUSTER_MASK), nr);
 				need_caching = cluster_is_alloc_candidate(cluster);
@@ -499,6 +528,84 @@ void vswap_rmap_set(struct swap_cluster_info *ci, swp_slot_t slot,
 }
 
 /*
+ * Caller needs to handle races with other operations themselves.
+ *
+ * Specifically, this function is safe to be called in contexts where the swap
+ * entry has been added to the swap cache and the associated folio is locked.
+ * We cannot race with other accessors, and the swap entry is guaranteed to be
+ * valid the whole time (since swap cache implies one refcount).
+ *
+ * We cannot assume that the backends will be of the same type,
+ * contiguous, etc. We might have a large folio coalesced from subpages with
+ * mixed backend, which is only rectified when it is reclaimed.
+ */
+static void release_backing(swp_entry_t entry, int nr)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	unsigned long flush_nr, phys_swap_start = 0, phys_swap_end = 0;
+	unsigned int phys_swap_type = 0;
+	bool need_flushing_phys_swap = false;
+	swp_slot_t flush_slot;
+	int i;
+
+	VM_WARN_ON(!entry.val);
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		VM_WARN_ON(!desc);
+
+		/*
+		 * We batch contiguous physical swap slots for more efficient
+		 * freeing.
+		 */
+		if (phys_swap_start != phys_swap_end &&
+				(desc->type != VSWAP_SWAPFILE ||
+					swp_slot_type(desc->slot) != phys_swap_type ||
+					swp_slot_offset(desc->slot) != phys_swap_end)) {
+			need_flushing_phys_swap = true;
+			flush_slot = swp_slot(phys_swap_type, phys_swap_start);
+			flush_nr = phys_swap_end - phys_swap_start;
+			phys_swap_start = phys_swap_end = 0;
+		}
+
+		if (desc->type == VSWAP_ZSWAP && desc->zswap_entry) {
+			zswap_entry_free(desc->zswap_entry);
+		} else if (desc->type == VSWAP_SWAPFILE) {
+			if (!phys_swap_start) {
+				/* start a new contiguous range of phys swap */
+				phys_swap_start = swp_slot_offset(desc->slot);
+				phys_swap_end = phys_swap_start + 1;
+				phys_swap_type = swp_slot_type(desc->slot);
+			} else {
+				/* extend the current contiguous range of phys swap */
+				phys_swap_end++;
+			}
+		}
+
+		desc->slot.val = 0;
+
+		if (need_flushing_phys_swap) {
+			spin_unlock(&cluster->lock);
+			cluster = NULL;
+			swap_slot_free_nr(flush_slot, flush_nr);
+			need_flushing_phys_swap = false;
+		}
+	}
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+
+	/* Flush any remaining physical swap range */
+	if (phys_swap_start) {
+		flush_slot = swp_slot(phys_swap_type, phys_swap_start);
+		flush_nr = phys_swap_end - phys_swap_start;
+		swap_slot_free_nr(flush_slot, flush_nr);
+	}
+}
+
+/*
  * Entered with the cluster locked, but might unlock the cluster.
  * This is because several operations, such as releasing physical swap slots
  * (i.e swap_slot_free_nr()) require the cluster to be unlocked to avoid
@@ -517,35 +624,21 @@ void vswap_rmap_set(struct swap_cluster_info *ci, swp_slot_t slot,
 static void vswap_free(struct vswap_cluster *cluster, struct swp_desc *desc,
 	swp_entry_t entry)
 {
-	struct zswap_entry *zswap_entry;
-	swp_slot_t slot;
-
 	/* Clear shadow if present */
 	if (xa_is_value(desc->shadow))
 		desc->shadow = NULL;
-
-	slot = desc->slot;
-	desc->slot.val = 0;
-
-	zswap_entry = desc->zswap_entry;
-	if (zswap_entry) {
-		desc->zswap_entry = NULL;
-		zswap_entry_free(zswap_entry);
-	}
 	spin_unlock(&cluster->lock);
 
+	release_backing(entry, 1);
 	mem_cgroup_uncharge_swap(entry, 1);
 
-	if (slot.val)
-		swap_slot_free_nr(slot, 1);
-
-	spin_lock(&cluster->lock);
 	/* erase forward mapping and release the virtual slot for reallocation */
+	spin_lock(&cluster->lock);
 	release_vswap_slot(cluster, entry.val);
 }
 
 /**
- * folio_alloc_swap - allocate swap space for a folio.
+ * folio_alloc_swap - allocate virtual swap space for a folio.
  * @folio: the folio.
  *
  * Return: 0, if the allocation succeeded, -ENOMEM, if the allocation failed.
@@ -553,43 +646,78 @@ static void vswap_free(struct vswap_cluster *cluster, struct swp_desc *desc,
 int folio_alloc_swap(struct folio *folio)
 {
 	struct vswap_cluster *cluster = NULL;
-	struct swap_info_struct *si;
-	struct swap_cluster_info *ci;
-	int i, ret, nr = folio_nr_pages(folio), order = folio_order(folio);
+	int i, nr = folio_nr_pages(folio);
 	struct swp_desc *desc;
 	swp_entry_t entry;
-	swp_slot_t slot = { 0 };
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(!folio_test_uptodate(folio), folio);
 
-	entry = vswap_alloc(folio_order(folio));
+	entry = vswap_alloc(folio);
 	if (!entry.val)
 		return -ENOMEM;
 
 	/*
-	 * XXX: for now, we always allocate a physical swap slot for each virtual
-	 * swap slot, and their lifetime are coupled. This will change once we
-	 * decouple virtual swap slots from their backing states, and only allocate
-	 * physical swap slots for them on demand (i.e on zswap writeback, or
-	 * fallback from zswap store failure).
+	 * XXX: for now, we charge towards the memory cgroup's swap limit on virtual
+	 * swap slots allocation. This will be changed soon - we will only charge on
+	 * physical swap slots allocation.
 	 */
-	ret = swap_slot_alloc(&slot, order);
-	if (ret || !slot.val) {
-		/* Need to call this even if allocation failed, for MEMCG_SWAP_FAIL. */
-		mem_cgroup_try_charge_swap(folio, (swp_entry_t){0});
-
+	if (mem_cgroup_try_charge_swap(folio, entry)) {
+		rcu_read_lock();
 		for (i = 0; i < nr; i++) {
 			desc = vswap_iter(&cluster, entry.val + i);
 			VM_WARN_ON(!desc);
 			vswap_free(cluster, desc, (swp_entry_t){ entry.val + i });
 		}
 		spin_unlock(&cluster->lock);
-
-		return ret ? ret : -ENOMEM;
+		rcu_read_unlock();
+		atomic_add(nr, &vswap_alloc_reject);
+		entry.val = 0;
+		return -ENOMEM;
 	}
 
-	/* establish the virtual <-> physical swap slots linkages. */
+	swap_cache_add_folio(folio, entry, NULL);
+
+	return 0;
+}
+
+/**
+ * vswap_alloc_swap_slot - allocate physical swap space for a folio that is
+ *                         already associated with virtual swap slots.
+ * @folio: folio we want to allocate physical swap space for.
+ *
+ * Note that this does NOT release existing swap backends of the folio.
+ * Callers need to handle this themselves.
+
+ * Return: true if the folio is now backed by physical swap slots, false
+ * otherwise.
+ */
+bool vswap_alloc_swap_slot(struct folio *folio)
+{
+	int i, nr = folio_nr_pages(folio);
+	struct vswap_cluster *cluster = NULL;
+	struct swap_info_struct *si;
+	struct swap_cluster_info *ci;
+	swp_slot_t slot = { .val = 0 };
+	swp_entry_t entry = folio->swap;
+	struct swp_desc *desc;
+	bool fallback = false;
+
+	/*
+	 * We might have already allocated a backing physical swap slot in past
+	 * attempts (for instance, when we disable zswap). If the entire range is
+	 * already swapfile-backed we can skip swapfile case.
+	 */
+	if (vswap_swapfile_backed(entry, nr))
+		return true;
+
+	if (swap_slot_alloc(&slot, folio_order(folio)))
+		return false;
+
+	if (!slot.val)
+		return false;
+
+	/* establish the vrtual <-> physical swap slots linkages. */
 	si = __swap_slot_to_info(slot);
 	ci = swap_cluster_lock(si, swp_slot_offset(slot));
 	vswap_rmap_set(ci, slot, entry.val, nr);
@@ -600,29 +728,26 @@ int folio_alloc_swap(struct folio *folio)
 		desc = vswap_iter(&cluster, entry.val + i);
 		VM_WARN_ON(!desc);
 
+		if (desc->type == VSWAP_FOLIO) {
+			/* case 1: fallback from zswap store failure */
+			fallback = true;
+			VM_WARN_ON(folio != desc->swap_cache);
+		} else {
+			/*
+			 * Case 2: zswap writeback.
+			 *
+			 * No need to free zswap entry here - it will be freed once zswap
+			 * writeback suceeds.
+			 */
+			VM_WARN_ON(desc->type != VSWAP_ZSWAP);
+			VM_WARN_ON(fallback);
+		}
+		desc->type = VSWAP_SWAPFILE;
 		desc->slot.val = slot.val + i;
 	}
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	spin_unlock(&cluster->lock);
 	rcu_read_unlock();
-
-	/*
-	 * XXX: for now, we charge towards the memory cgroup's swap limit on virtual
-	 * swap slots allocation. This is acceptable because as noted above, each
-	 * virtual swap slot corresponds to a physical swap slot. Once we have
-	 * decoupled virtual and physical swap slots, we will only charge when we
-	 * actually allocate a physical swap slot.
-	 */
-	if (mem_cgroup_try_charge_swap(folio, entry))
-		goto out_free;
-
-	swap_cache_add_folio(folio, entry, NULL);
-
-	return 0;
-
-out_free:
-	put_swap_folio(folio, entry);
-	return -ENOMEM;
+	return true;
 }
 
 /**
@@ -630,7 +755,9 @@ out_free:
  *                         virtual swap slot.
  * @entry: the virtual swap slot.
  *
- * Return: the physical swap slot corresponding to the virtual swap slot.
+ * Return: the physical swap slot corresponding to the virtual swap slot, if
+ * exists, or the zero physical swap slot if the virtual swap slot is not
+ * backed by any physical slot on a swapfile.
  */
 swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry)
 {
@@ -649,7 +776,10 @@ swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry)
 		return (swp_slot_t){0};
 	}
 
-	slot = desc->slot;
+	if (desc->type != VSWAP_SWAPFILE)
+		slot.val = 0;
+	else
+		slot = desc->slot;
 	spin_unlock(&cluster->lock);
 	rcu_read_unlock();
 
@@ -968,6 +1098,210 @@ done:
 }
 
 /**
+ * vswap_store_folio - set a folio as the backing of a range of virtual swap
+ *                     slots.
+ * @entry: the first virtual swap slot in the range.
+ * @folio: the folio.
+ */
+void vswap_store_folio(swp_entry_t entry, struct folio *folio)
+{
+	struct vswap_cluster *cluster = NULL;
+	int i, nr = folio_nr_pages(folio);
+	struct swp_desc *desc;
+
+	VM_BUG_ON(!folio_test_locked(folio));
+	VM_BUG_ON(folio->swap.val != entry.val);
+
+	release_backing(entry, nr);
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		VM_WARN_ON(!desc);
+		desc->type = VSWAP_FOLIO;
+		desc->swap_cache = folio;
+	}
+	spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+}
+
+/**
+ * swap_zeromap_folio_set - mark a range of virtual swap slots corresponding to
+ *                          a folio as zero-filled.
+ * @folio: the folio
+ */
+void swap_zeromap_folio_set(struct folio *folio)
+{
+	struct obj_cgroup *objcg = get_obj_cgroup_from_folio(folio);
+	struct vswap_cluster *cluster = NULL;
+	swp_entry_t entry = folio->swap;
+	int i, nr = folio_nr_pages(folio);
+	struct swp_desc *desc;
+
+	VM_BUG_ON(!folio_test_locked(folio));
+	VM_BUG_ON(!entry.val);
+
+	release_backing(entry, nr);
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		VM_WARN_ON(!desc);
+		desc->type = VSWAP_ZERO;
+	}
+	spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+
+	count_vm_events(SWPOUT_ZERO, nr);
+	if (objcg) {
+		count_objcg_events(objcg, SWPOUT_ZERO, nr);
+		obj_cgroup_put(objcg);
+	}
+}
+
+/*
+ * Iterate through the entire range of virtual swap slots, returning the
+ * longest contiguous range of slots starting from the first slot that satisfies:
+ *
+ * 1. If the first slot is zero-mapped, the entire range should be
+ *    zero-mapped.
+ * 2. If the first slot is backed by a swapfile, the entire range should
+ *    be backed by a range of contiguous swap slots on the same swapfile.
+ * 3. If the first slot is zswap-backed, the entire range should be
+ *    zswap-backed.
+ * 4. If the first slot is backed by a folio, the entire range should
+ *    be backed by the same folio.
+ *
+ * Note that this check is racy unless we can ensure that the entire range
+ * has their backing state stable - for instance, if the caller was the one
+ * who set the swap cache pin.
+ */
+static int vswap_check_backing(swp_entry_t entry, enum swap_type *type, int nr)
+{
+	unsigned int swapfile_type;
+	struct vswap_cluster *cluster = NULL;
+	enum swap_type first_type;
+	struct swp_desc *desc;
+	pgoff_t first_offset;
+	struct folio *folio;
+	int i = 0;
+
+	if (!entry.val)
+		return 0;
+
+	rcu_read_lock();
+	for (i = 0; i < nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		if (!desc)
+			goto done;
+
+		if (!i) {
+			first_type = desc->type;
+			if (first_type == VSWAP_SWAPFILE) {
+				swapfile_type = swp_slot_type(desc->slot);
+				first_offset = swp_slot_offset(desc->slot);
+			} else if (first_type == VSWAP_FOLIO) {
+				folio = desc->swap_cache;
+			}
+		} else if (desc->type != first_type) {
+			goto done;
+		} else if (first_type == VSWAP_SWAPFILE &&
+				(swp_slot_type(desc->slot) != swapfile_type ||
+					swp_slot_offset(desc->slot) != first_offset + i)) {
+			goto done;
+		} else if (first_type == VSWAP_FOLIO && desc->swap_cache != folio) {
+			goto done;
+		}
+	}
+done:
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	if (type)
+		*type = first_type;
+	return i;
+}
+
+/**
+ * vswap_swapfile_backed - check if the virtual swap slots are backed by physical
+ *                         swap slots.
+ * @entry: the first entry in the range.
+ * @nr: the number of entries in the range.
+ */
+bool vswap_swapfile_backed(swp_entry_t entry, int nr)
+{
+	enum swap_type type;
+
+	return vswap_check_backing(entry, &type, nr) == nr
+				&& type == VSWAP_SWAPFILE;
+}
+
+/**
+ * vswap_folio_backed - check if the virtual swap slots are backed by in-memory
+ *                      pages.
+ * @entry: the first virtual swap slot in the range.
+ * @nr: the number of slots in the range.
+ */
+bool vswap_folio_backed(swp_entry_t entry, int nr)
+{
+	enum swap_type type;
+
+	return vswap_check_backing(entry, &type, nr) == nr && type == VSWAP_FOLIO;
+}
+
+/**
+ * vswap_can_swapin_thp - check if the swap entries can be swapped in as a THP.
+ * @entry: the first virtual swap slot in the range.
+ * @nr: the number of slots in the range.
+ *
+ * For now, we can only swap in a THP if the entire range is zero-filled, or if
+ * the entire range is backed by a contiguous range of physical swap slots on a
+ * swapfile.
+ */
+bool vswap_can_swapin_thp(swp_entry_t entry, int nr)
+{
+	enum swap_type type;
+
+	return vswap_check_backing(entry, &type, nr) == nr &&
+		(type == VSWAP_ZERO || type == VSWAP_SWAPFILE);
+}
+
+/*
+ * Return the count of contiguous swap entries that share the same
+ * VSWAP_ZERO status as the starting entry. If is_zeromap is not NULL,
+ * it will return the VSWAP_ZERO status of the starting entry.
+ */
+int swap_zeromap_batch(swp_entry_t entry, int max_nr, bool *is_zeromap)
+{
+	struct vswap_cluster *cluster = NULL;
+	struct swp_desc *desc;
+	int i = 0;
+	bool is_zero = false;
+
+	VM_WARN_ON(!entry.val);
+
+	rcu_read_lock();
+	for (i = 0; i < max_nr; i++) {
+		desc = vswap_iter(&cluster, entry.val + i);
+		if (!desc)
+			goto done;
+
+		if (!i)
+			is_zero = (desc->type == VSWAP_ZERO);
+		else if ((desc->type == VSWAP_ZERO) != is_zero)
+			goto done;
+	}
+done:
+	if (cluster)
+		spin_unlock(&cluster->lock);
+	rcu_read_unlock();
+	if (i && is_zeromap)
+		*is_zeromap = is_zero;
+
+	return i;
+}
+
+/**
  * free_swap_and_cache_nr() - Release a swap count on range of swap entries and
  *                            reclaim their cache if no more references remain.
  * @entry: First entry of range.
@@ -1033,11 +1367,6 @@ bool tryget_swap_entry(swp_entry_t entry, struct swap_info_struct **si)
 	struct vswap_cluster *cluster;
 	swp_slot_t slot;
 
-	slot = swp_entry_to_swp_slot(entry);
-	*si = swap_slot_tryget_swap_info(slot);
-	if (!*si)
-		return false;
-
 	/*
 	 * Ensure the cluster and its associated data structures (swap cache etc.)
 	 * remain valid.
@@ -1046,11 +1375,30 @@ bool tryget_swap_entry(swp_entry_t entry, struct swap_info_struct **si)
 	cluster = xa_load(&vswap_cluster_map, VSWAP_CLUSTER_IDX(entry));
 	if (!cluster || !refcount_inc_not_zero(&cluster->refcnt)) {
 		rcu_read_unlock();
-		swap_slot_put_swap_info(*si);
 		*si = NULL;
 		return false;
 	}
 	rcu_read_unlock();
+
+	slot = swp_entry_to_swp_slot(entry);
+	/*
+	 * Note that this function does not provide any guarantee that the virtual
+	 * swap slot's backing state will be stable. This has several implications:
+	 *
+	 * 1. We have to obtain a reference to the swap device itself, because we
+	 * need swap device's metadata in certain scenarios, for example when we
+	 * need to inspect the swap device flag in do_swap_page().
+	 *
+	 * 2. The swap device we are looking up here might be outdated by the time we
+	 * return to the caller. It is perfectly OK, if the swap_info_struct is only
+	 * used in a best-effort manner (i.e optimization). If we need the precise
+	 * backing state, we need to re-check after the entry is pinned in swapcache.
+	 */
+	if (slot.val)
+		*si = swap_slot_tryget_swap_info(slot);
+	else
+		*si = NULL;
+
 	return true;
 }
 
@@ -1287,7 +1635,7 @@ void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadowp
 		old = desc->shadow;
 
 		/* Warn if slot is already occupied by a folio */
-		VM_WARN_ON_FOLIO(old && !xa_is_value(old), folio);
+		VM_WARN_ON_FOLIO(old && !xa_is_value(old) && old != folio, folio);
 
 		/* Save shadow if found and not yet saved */
 		if (shadowp && xa_is_value(old) && !*shadowp)
@@ -1414,29 +1762,22 @@ void __swap_cache_replace_folio(struct folio *old, struct folio *new)
  * @entry: the zswap entry to store
  *
  * Stores a zswap entry in the swap descriptor for the given swap entry.
- * The cluster is locked during the store operation.
- *
- * Return: the old zswap entry if one existed, NULL otherwise
+ * Releases the old backend if one existed.
  */
-void *zswap_entry_store(swp_entry_t swpentry, struct zswap_entry *entry)
+void zswap_entry_store(swp_entry_t swpentry, struct zswap_entry *entry)
 {
 	struct vswap_cluster *cluster = NULL;
 	struct swp_desc *desc;
-	void *old;
+
+	release_backing(swpentry, 1);
 
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, swpentry.val);
-	if (!desc) {
-		rcu_read_unlock();
-		return NULL;
-	}
-
-	old = desc->zswap_entry;
+	VM_WARN_ON(!desc);
 	desc->zswap_entry = entry;
+	desc->type = VSWAP_ZSWAP;
 	spin_unlock(&cluster->lock);
 	rcu_read_unlock();
-
-	return old;
 }
 
 /**
@@ -1451,6 +1792,7 @@ void *zswap_entry_load(swp_entry_t swpentry)
 {
 	struct vswap_cluster *cluster = NULL;
 	struct swp_desc *desc;
+	enum swap_type type;
 	void *zswap_entry;
 
 	rcu_read_lock();
@@ -1460,41 +1802,15 @@ void *zswap_entry_load(swp_entry_t swpentry)
 		return NULL;
 	}
 
+	type = desc->type;
 	zswap_entry = desc->zswap_entry;
 	spin_unlock(&cluster->lock);
 	rcu_read_unlock();
 
-	return zswap_entry;
-}
-
-/**
- * zswap_entry_erase - erase a zswap entry for a swap entry
- * @swpentry: the swap entry
- *
- * Erases the zswap entry from the swap descriptor for the given swap entry.
- * The cluster is locked during the erase operation.
- *
- * Return: the zswap entry that was erased, NULL if none existed
- */
-void *zswap_entry_erase(swp_entry_t swpentry)
-{
-	struct vswap_cluster *cluster = NULL;
-	struct swp_desc *desc;
-	void *old;
-
-	rcu_read_lock();
-	desc = vswap_iter(&cluster, swpentry.val);
-	if (!desc) {
-		rcu_read_unlock();
+	if (type != VSWAP_ZSWAP)
 		return NULL;
-	}
 
-	old = desc->zswap_entry;
-	desc->zswap_entry = NULL;
-	spin_unlock(&cluster->lock);
-	rcu_read_unlock();
-
-	return old;
+	return zswap_entry;
 }
 
 bool zswap_empty(swp_entry_t swpentry)
