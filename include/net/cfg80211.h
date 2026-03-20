@@ -4449,6 +4449,14 @@ struct cfg80211_pmsr_result {
  * @num_measurements: number of measurements to be performed in total.
  *	Only valid if @non_trigger_based is set. If set to 0, the firmware or
  *	driver can automatically select an appropriate value.
+ * @ingress_distancemm: the measurement result of the peer needs
+ *	to be indicated in case the device moves into this range.
+ *	(units mm, u64) measurement results need to be sent on a burst index
+ *	basis in this case.
+ * @egress_distancemm: the measurement result of the peer needs
+ *	to be indicated in case the device moves out of this range.
+ *	(units mm, u64). measurement results need to be sent on a burst index
+ *	basis in this case.
  *
  * See also nl80211 for the respective attribute documentation.
  */
@@ -4476,6 +4484,8 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u32 nominal_time;
 	u32 measurements_per_aw;
 	u32 num_measurements;
+	u64 ingress_distancemm;
+	u64 egress_distancemm;
 };
 
 /**
