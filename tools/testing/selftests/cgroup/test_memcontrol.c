@@ -26,6 +26,7 @@
 static bool has_localevents;
 static bool has_recursiveprot;
 static int page_size;
+static int pscale_factor;	/* Page size scale factor */
 
 int get_temp_fd(void)
 {
@@ -571,16 +572,17 @@ static int test_memcg_protection(const char *root, bool min)
 	if (cg_run(parent[2], alloc_anon, (void *)MB(148)))
 		goto cleanup;
 
-	if (!values_close(cg_read_long(parent[1], "memory.current"), MB(50), 3))
+	if (!values_close(cg_read_long(parent[1], "memory.current"), MB(50),
+				       3 + (min ? 0 : 4) * pscale_factor))
 		goto cleanup;
 
 	for (i = 0; i < ARRAY_SIZE(children); i++)
 		c[i] = cg_read_long(children[i], "memory.current");
 
-	if (!values_close(c[0], MB(29), 15))
+	if (!values_close(c[0], MB(29), 15 + 3 * pscale_factor))
 		goto cleanup;
 
-	if (!values_close(c[1], MB(21), 20))
+	if (!values_close(c[1], MB(21), 20 + pscale_factor))
 		goto cleanup;
 
 	if (c[3] != 0)
@@ -596,7 +598,8 @@ static int test_memcg_protection(const char *root, bool min)
 	}
 
 	current = min ? MB(50) : MB(30);
-	if (!values_close(cg_read_long(parent[1], "memory.current"), current, 3))
+	if (!values_close(cg_read_long(parent[1], "memory.current"), current,
+				       9 + (min ? 0 : 6) * pscale_factor))
 		goto cleanup;
 
 	if (!reclaim_until(children[0], MB(10)))
@@ -684,7 +687,7 @@ static int alloc_pagecache_max_30M(const char *cgroup, void *arg)
 		goto cleanup;
 
 	current = cg_read_long(cgroup, "memory.current");
-	if (!values_close(current, MB(30), 5))
+	if (!values_close(current, MB(30), 5 + (pscale_factor ? 2 : 0)))
 		goto cleanup;
 
 	ret = 0;
@@ -1004,7 +1007,7 @@ static int alloc_anon_50M_check_swap(const char *cgroup, void *arg)
 		*ptr = 0;
 
 	mem_current = cg_read_long(cgroup, "memory.current");
-	if (!mem_current || !values_close(mem_current, mem_max, 3))
+	if (!mem_current || !values_close(mem_current, mem_max, 6 + pscale_factor))
 		goto cleanup;
 
 	swap_current = cg_read_long(cgroup, "memory.swap.current");
@@ -1674,6 +1677,14 @@ int main(int argc, char **argv)
 	page_size = sysconf(_SC_PAGE_SIZE);
 	if (page_size <= 0)
 		page_size = PAGE_SIZE;
+
+	/*
+	 * It is found that the actual memory.current value can deviate more
+	 * from the expected value with larger page size. So error tolerance
+	 * will have to be increased a bit more for larger page size.
+	 */
+	if (page_size > KB(4))
+		pscale_factor = (page_size >= KB(64)) ? 2 : 1;
 
 	ksft_print_header();
 	ksft_set_plan(ARRAY_SIZE(tests));
