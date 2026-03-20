@@ -3869,8 +3869,8 @@ static int __subn_get_opa_hfi1_cong_log(struct opa_smp *smp, u32 am,
 	 * Reset threshold_cong_event_map, and threshold_event_counter
 	 * to 0 when log is read.
 	 */
-	memset(ppd->threshold_cong_event_map, 0x0,
-	       sizeof(ppd->threshold_cong_event_map));
+	memset(&ppd->zero_event_map, 0x0,
+	       sizeof(ppd->zero_event_map));
 	ppd->threshold_event_counter = 0;
 
 	spin_unlock_irq(&ppd->cc_log_lock);

@@ -878,8 +878,10 @@ struct hfi1_pportdata {
 	 * cc_log_lock protects all congestion log related data
 	 */
 	spinlock_t cc_log_lock ____cacheline_aligned_in_smp;
-	u8 threshold_cong_event_map[OPA_MAX_SLS / 8];
-	u16 threshold_event_counter;
+	struct_group (zero_event_map,
+		u8 threshold_cong_event_map[OPA_MAX_SLS / 8];
+		u16 threshold_event_counter;
+	);
 	struct opa_hfi1_cong_log_event_internal cc_events[OPA_CONG_LOG_ELEMS];
 	int cc_log_idx; /* index for logging events */
 	int cc_mad_idx; /* index for reporting events */
