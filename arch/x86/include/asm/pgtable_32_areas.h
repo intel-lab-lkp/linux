@@ -30,9 +30,14 @@ extern bool __vmalloc_start_set; /* set once high_memory is set */
 #define CPU_ENTRY_AREA_BASE	\
 	((FIXADDR_TOT_START - PAGE_SIZE*(CPU_ENTRY_AREA_PAGES+1)) & PMD_MASK)
 
-#define LDT_BASE_ADDR		\
-	((CPU_ENTRY_AREA_BASE - PAGE_SIZE) & PMD_MASK)
+/*
+ * On 32-bit the mm-local region is currently completely consumed by the LDT
+ * remap.
+ */
+#define MM_LOCAL_BASE_ADDR	((CPU_ENTRY_AREA_BASE - PAGE_SIZE) & PMD_MASK)
+#define MM_LOCAL_END_ADDR	(MM_LOCAL_BASE_ADDR + PMD_SIZE)
 
+#define LDT_BASE_ADDR		MM_LOCAL_BASE_ADDR
 #define LDT_END_ADDR		(LDT_BASE_ADDR + PMD_SIZE)
 
 #define PKMAP_BASE		\

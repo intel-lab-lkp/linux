@@ -1319,6 +1319,10 @@ config SECRETMEM
 	default y
 	bool "Enable memfd_secret() system call" if EXPERT
 	depends on ARCH_HAS_SET_DIRECT_MAP
+	# Soft dependency, for optimisation.
+	imply MM_LOCAL_REGION
+	imply MERMAP
+	imply PAGE_ALLOC_UNMAPPED
 	help
 	  Enable the memfd_secret() system call with the ability to create
 	  memory areas visible only in the context of the owning process and
@@ -1470,6 +1474,13 @@ config LAZY_MMU_MODE_KUNIT_TEST
 	  architecture-specific behaviours).
 
 	  If unsure, say N.
+
+config ARCH_SUPPORTS_MM_LOCAL_REGION
+	def_bool n
+
+config MM_LOCAL_REGION
+	bool
+	depends on ARCH_SUPPORTS_MM_LOCAL_REGION
 
 source "mm/damon/Kconfig"
 

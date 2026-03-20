@@ -78,6 +78,38 @@ static __always_inline u64 __is_canonical_address(u64 vaddr, u8 vaddr_bits)
 	return __canonical_address(vaddr, vaddr_bits) == vaddr;
 }
 
+#ifdef CONFIG_X86_PAE
+
+/*
+ * In PAE mode, we need to do a cr3 reload (=tlb flush) when
+ * updating the top-level pagetable entries to guarantee the
+ * processor notices the update.  Since this is expensive, and
+ * all 4 top-level entries are used almost immediately in a
+ * new process's life, we just pre-populate them here.
+ */
+#define PREALLOCATED_PMDS	PTRS_PER_PGD
+/*
+ * "USER_PMDS" are the PMDs for the user copy of the page tables when
+ * PTI is enabled. They do not exist when PTI is disabled.  Note that
+ * this is distinct from the user _portion_ of the kernel page tables
+ * which always exists.
+ *
+ * We allocate separate PMDs for the kernel part of the user page-table
+ * when PTI is enabled. We need them to map the per-process LDT into the
+ * user-space page-table.
+ */
+#define PREALLOCATED_USER_PMDS (boot_cpu_has(X86_FEATURE_PTI) ? KERNEL_PGD_PTRS : 0)
+#define MAX_PREALLOCATED_USER_PMDS KERNEL_PGD_PTRS
+
+#else  /* !CONFIG_X86_PAE */
+
+/* No need to prepopulate any pagetable entries in non-PAE modes. */
+#define PREALLOCATED_PMDS	0
+#define PREALLOCATED_USER_PMDS	0
+#define MAX_PREALLOCATED_USER_PMDS 0
+
+#endif	/* CONFIG_X86_PAE */
+
 #endif	/* __ASSEMBLER__ */
 
 #include <asm-generic/memory_model.h>

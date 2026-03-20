@@ -8,8 +8,10 @@
 
 #include <trace/events/tlb.h>
 
+#include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include <asm/paravirt.h>
+#include <asm/pgalloc.h>
 #include <asm/debugreg.h>
 #include <asm/gsseg.h>
 #include <asm/desc.h>
@@ -59,7 +61,6 @@ static inline void init_new_context_ldt(struct mm_struct *mm)
 }
 int ldt_dup_context(struct mm_struct *oldmm, struct mm_struct *mm);
 void destroy_context_ldt(struct mm_struct *mm);
-void ldt_arch_exit_mmap(struct mm_struct *mm);
 #else	/* CONFIG_MODIFY_LDT_SYSCALL */
 static inline void init_new_context_ldt(struct mm_struct *mm) { }
 static inline int ldt_dup_context(struct mm_struct *oldmm,
@@ -68,7 +69,6 @@ static inline int ldt_dup_context(struct mm_struct *oldmm,
 	return 0;
 }
 static inline void destroy_context_ldt(struct mm_struct *mm) { }
-static inline void ldt_arch_exit_mmap(struct mm_struct *mm) { }
 #endif
 
 #ifdef CONFIG_MODIFY_LDT_SYSCALL
@@ -223,10 +223,123 @@ static inline int arch_dup_mmap(struct mm_struct *oldmm, struct mm_struct *mm)
 	return ldt_dup_context(oldmm, mm);
 }
 
+#ifdef CONFIG_MM_LOCAL_REGION
+static inline void mm_local_region_free(struct mm_struct *mm)
+{
+	if (mm_local_region_used(mm)) {
+		struct mmu_gather tlb;
+		unsigned long start = MM_LOCAL_BASE_ADDR;
+		unsigned long end = MM_LOCAL_END_ADDR;
+
+		/*
+		 * Although free_pgd_range() is intended for freeing user
+		 * page-tables, it also works out for kernel mappings on x86.
+		 * We use tlb_gather_mmu_fullmm() to avoid confusing the
+		 * range-tracking logic in __tlb_adjust_range().
+		 */
+		tlb_gather_mmu_fullmm(&tlb, mm);
+		free_pgd_range(&tlb, start, end, start, end);
+		tlb_finish_mmu(&tlb);
+
+		mm_flags_clear(MMF_LOCAL_REGION_USED, mm);
+	}
+}
+
+#if defined(CONFIG_MITIGATION_PAGE_TABLE_ISOLATION) && defined(CONFIG_X86_PAE)
+static inline pmd_t *pgd_to_pmd_walk(pgd_t *pgd, unsigned long va)
+{
+	p4d_t *p4d;
+	pud_t *pud;
+
+	if (pgd->pgd == 0)
+		return NULL;
+
+	p4d = p4d_offset(pgd, va);
+	if (p4d_none(*p4d))
+		return NULL;
+
+	pud = pud_offset(p4d, va);
+	if (pud_none(*pud))
+		return NULL;
+
+	return pmd_offset(pud, va);
+}
+
+static inline int mm_local_map_to_user(struct mm_struct *mm)
+{
+	BUILD_BUG_ON(!PREALLOCATED_PMDS);
+	pgd_t *k_pgd = pgd_offset(mm, MM_LOCAL_BASE_ADDR);
+	pgd_t *u_pgd = kernel_to_user_pgdp(k_pgd);
+	pmd_t *k_pmd, *u_pmd;
+	int err;
+
+	k_pmd = pgd_to_pmd_walk(k_pgd, MM_LOCAL_BASE_ADDR);
+	u_pmd = pgd_to_pmd_walk(u_pgd, MM_LOCAL_BASE_ADDR);
+
+	BUILD_BUG_ON(MM_LOCAL_END_ADDR - MM_LOCAL_BASE_ADDR > PMD_SIZE);
+
+	/* Preallocate the PTE table so it can be shared. */
+	err = pte_alloc(mm, k_pmd);
+	if (err)
+		return err;
+
+	/* Point the userspace PMD at the same PTE as the kernel PMD. */
+	set_pmd(u_pmd, *k_pmd);
+	return 0;
+}
+#elif defined(CONFIG_MITIGATION_PAGE_TABLE_ISOLATION)
+static inline int mm_local_map_to_user(struct mm_struct *mm)
+{
+	pgd_t *pgd;
+	int err;
+
+	err = preallocate_sub_pgd(mm, MM_LOCAL_BASE_ADDR);
+	if (err)
+		return err;
+
+	pgd = pgd_offset(mm, MM_LOCAL_BASE_ADDR);
+	set_pgd(kernel_to_user_pgdp(pgd), *pgd);
+	return 0;
+}
+#else
+static inline int mm_local_map_to_user(struct mm_struct *mm)
+{
+	WARN_ONCE(1, "mm_local_map_to_user() not implemented");
+	return -EINVAL;
+}
+#endif
+
+/*
+ * Do initial setup of the user-local region. Call from process context.
+ *
+ * Under PTI, userspace shares the pagetables for the mm-local region with the
+ * kernel (if you map stuff here, it's immediately mapped into userspace too).
+ * LDT remap. It's assuming nothing gets mapped in here that needs to be
+ * protected from Meltdown-type attacks from the current process.
+ */
+static inline int mm_local_region_init(struct mm_struct *mm)
+{
+	int err;
+
+	if (boot_cpu_has(X86_FEATURE_PTI)) {
+		err = mm_local_map_to_user(mm);
+		if (err)
+			return err;
+	}
+
+	mm_flags_set(MMF_LOCAL_REGION_USED, mm);
+
+	return 0;
+}
+
+#else
+static inline void mm_local_region_free(struct mm_struct *mm) { }
+#endif /* CONFIG_MM_LOCAL_REGION */
+
 static inline void arch_exit_mmap(struct mm_struct *mm)
 {
 	paravirt_arch_exit_mmap(mm);
-	ldt_arch_exit_mmap(mm);
+	mm_local_region_free(mm);
 }
 
 #ifdef CONFIG_X86_64
