@@ -27,6 +27,12 @@ static int lan966x_xdp_setup(struct net_device *dev, struct netdev_bpf *xdp)
 	if (old_xdp == new_xdp)
 		goto out;
 
+	/* PCIe FDMA uses contiguous buffers, so no page_pool reload
+	 * is needed.
+	 */
+	if (lan966x_is_pci(lan966x))
+		goto out;
+
 	err = lan966x_fdma_reload_page_pool(lan966x);
 	if (err) {
 		xchg(&port->xdp_prog, old_prog);
