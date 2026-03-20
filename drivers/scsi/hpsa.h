@@ -162,7 +162,6 @@ struct bmic_controller_parameters {
 #pragma pack()
 
 struct ctlr_info {
-	unsigned int *reply_map;
 	int	ctlr;
 	char	devname[8];
 	char    *product_name;
@@ -311,6 +310,7 @@ struct ctlr_info {
 	u8 reset_in_progress;
 	struct hpsa_sas_node *sas_host;
 	spinlock_t reset_lock;
+	unsigned int reply_map[];
 };
 
 struct offline_device_entry {

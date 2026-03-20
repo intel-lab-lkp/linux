@@ -8621,25 +8621,14 @@ static struct workqueue_struct *hpsa_create_controller_wq(struct ctlr_info *h,
 	return wq;
 }
 
-static void hpda_free_ctlr_info(struct ctlr_info *h)
-{
-	kfree(h->reply_map);
-	kfree(h);
-}
-
 static struct ctlr_info *hpda_alloc_ctlr_info(void)
 {
 	struct ctlr_info *h;
 
-	h = kzalloc_obj(*h);
+	h = kzalloc_flex(*h, reply_map, nr_cpu_ids, GFP_KERNEL);
 	if (!h)
 		return NULL;
 
-	h->reply_map = kcalloc(nr_cpu_ids, sizeof(*h->reply_map), GFP_KERNEL);
-	if (!h->reply_map) {
-		kfree(h);
-		return NULL;
-	}
 	return h;
 }
 
@@ -8909,7 +8898,7 @@ clean1:	/* wq/aer/h */
 		destroy_workqueue(h->monitor_ctlr_wq);
 		h->monitor_ctlr_wq = NULL;
 	}
-	hpda_free_ctlr_info(h);
+	kfree(h);
 	return rc;
 }
 
@@ -9093,7 +9082,7 @@ static void hpsa_remove_one(struct pci_dev *pdev)
 	free_percpu(h->lockup_detected);		/* init_one 2 */
 	h->lockup_detected = NULL;			/* init_one 2 */
 
-	hpda_free_ctlr_info(h);				/* init_one 1 */
+	kfree(h);					/* init_one 1 */
 }
 
 static int __maybe_unused hpsa_suspend(
