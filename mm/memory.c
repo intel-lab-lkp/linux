@@ -3211,30 +3211,36 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 				     pte_fn_t fn, void *data, unsigned int flags,
 				     pgtbl_mod_mask *mask)
 {
-	bool create = flags & PGRANGE_CREATE;
 	pte_t *pte, *mapped_pte;
 	int err = 0;
 	spinlock_t *ptl;
 
-	if (create) {
+	if (flags & PGRANGE_ALLOC) {
+		VM_WARN_ON(flags & PGRANGE_NOLOCK);
+
 		mapped_pte = pte = (mm == &init_mm) ?
 			pte_alloc_kernel_track(pmd, addr, mask) :
 			pte_alloc_map_lock(mm, pmd, addr, &ptl);
+
 		if (!pte)
 			return -ENOMEM;
 	} else {
-		mapped_pte = pte = (mm == &init_mm) ?
-			pte_offset_kernel(pmd, addr) :
-			pte_offset_map_lock(mm, pmd, addr, &ptl);
+		if (mm == &init_mm)
+			pte = pte_offset_kernel(pmd, addr);
+		else if (flags & PGRANGE_NOLOCK)
+			pte = pte_offset_map(pmd, addr);
+		else
+			pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 		if (!pte)
 			return -EINVAL;
+		mapped_pte = pte;
 	}
 
 	lazy_mmu_mode_enable();
 
 	if (fn) {
 		do {
-			if (create || !pte_none(ptep_get(pte))) {
+			if (pgrange_create(flags) || !pte_none(ptep_get(pte))) {
 				err = fn(pte, addr, data);
 				if (err)
 					break;
@@ -3245,8 +3251,12 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 
 	lazy_mmu_mode_disable();
 
-	if (mm != &init_mm)
-		pte_unmap_unlock(mapped_pte, ptl);
+	if (mm != &init_mm) {
+		if (flags & PGRANGE_NOLOCK)
+			pte_unmap(mapped_pte);
+		else
+			pte_unmap_unlock(mapped_pte, ptl);
+	}
 	return err;
 }
 
@@ -3256,13 +3266,12 @@ static int apply_to_pmd_range(struct mm_struct *mm, pud_t *pud,
 				     pgtbl_mod_mask *mask)
 {
 	pmd_t *pmd;
-	bool create = flags & PGRANGE_CREATE;
 	unsigned long next;
 	int err = 0;
 
 	BUG_ON(pud_leaf(*pud));
 
-	if (create) {
+	if (pgrange_create(flags)) {
 		pmd = pmd_alloc_track(mm, pud, addr, mask);
 		if (!pmd)
 			return -ENOMEM;
@@ -3271,12 +3280,12 @@ static int apply_to_pmd_range(struct mm_struct *mm, pud_t *pud,
 	}
 	do {
 		next = pmd_addr_end(addr, end);
-		if (pmd_none(*pmd) && !create)
+		if (pmd_none(*pmd) && !pgrange_create(flags))
 			continue;
 		if (WARN_ON_ONCE(pmd_leaf(*pmd)))
 			return -EINVAL;
 		if (!pmd_none(*pmd) && WARN_ON_ONCE(pmd_bad(*pmd))) {
-			if (!create)
+			if (!pgrange_create(flags))
 				continue;
 			pmd_clear_bad(pmd);
 		}
@@ -3295,11 +3304,10 @@ static int apply_to_pud_range(struct mm_struct *mm, p4d_t *p4d,
 				     pgtbl_mod_mask *mask)
 {
 	pud_t *pud;
-	bool create = flags & PGRANGE_CREATE;
 	unsigned long next;
 	int err = 0;
 
-	if (create) {
+	if (pgrange_create(flags)) {
 		pud = pud_alloc_track(mm, p4d, addr, mask);
 		if (!pud)
 			return -ENOMEM;
@@ -3308,17 +3316,17 @@ static int apply_to_pud_range(struct mm_struct *mm, p4d_t *p4d,
 	}
 	do {
 		next = pud_addr_end(addr, end);
-		if (pud_none(*pud) && !create)
+		if (pud_none(*pud) && !pgrange_create(flags))
 			continue;
 		if (WARN_ON_ONCE(pud_leaf(*pud)))
 			return -EINVAL;
 		if (!pud_none(*pud) && WARN_ON_ONCE(pud_bad(*pud))) {
-			if (!create)
+			if (!pgrange_create(flags))
 				continue;
 			pud_clear_bad(pud);
 		}
 		err = apply_to_pmd_range(mm, pud, addr, next,
-					 fn, data, create, mask);
+					 fn, data, flags, mask);
 		if (err)
 			break;
 	} while (pud++, addr = next, addr != end);
@@ -3332,11 +3340,10 @@ static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 				     pgtbl_mod_mask *mask)
 {
 	p4d_t *p4d;
-	bool create = flags & PGRANGE_CREATE;
 	unsigned long next;
 	int err = 0;
 
-	if (create) {
+	if (pgrange_create(flags)) {
 		p4d = p4d_alloc_track(mm, pgd, addr, mask);
 		if (!p4d)
 			return -ENOMEM;
@@ -3345,12 +3352,12 @@ static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 	}
 	do {
 		next = p4d_addr_end(addr, end);
-		if (p4d_none(*p4d) && !create)
+		if (p4d_none(*p4d) && !pgrange_create(flags))
 			continue;
 		if (WARN_ON_ONCE(p4d_leaf(*p4d)))
 			return -EINVAL;
 		if (!p4d_none(*p4d) && WARN_ON_ONCE(p4d_bad(*p4d))) {
-			if (!create)
+			if (!pgrange_create(flags))
 				continue;
 			p4d_clear_bad(p4d);
 		}
@@ -3368,7 +3375,6 @@ int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 			  void *data, unsigned int flags)
 {
 	pgd_t *pgd;
-	bool create = flags & PGRANGE_CREATE;
 	unsigned long start = addr, next;
 	unsigned long end = addr + size;
 	pgtbl_mod_mask mask = 0;
@@ -3376,18 +3382,21 @@ int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 
 	if (WARN_ON(addr >= end))
 		return -EINVAL;
+	if (WARN_ON(flags & PGRANGE_NOLOCK &&
+		    (mm == &init_mm || flags & PGRANGE_ALLOC)))
+		return -EINVAL;
 
 	pgd = pgd_offset(mm, addr);
 	do {
 		next = pgd_addr_end(addr, end);
-		if (pgd_none(*pgd) && !create)
+		if (pgd_none(*pgd) && !pgrange_create(flags))
 			continue;
 		if (WARN_ON_ONCE(pgd_leaf(*pgd))) {
 			err = -EINVAL;
 			break;
 		}
 		if (!pgd_none(*pgd) && WARN_ON_ONCE(pgd_bad(*pgd))) {
-			if (!create)
+			if (!pgrange_create(flags))
 				continue;
 			pgd_clear_bad(pgd);
 		}
@@ -3410,7 +3419,7 @@ int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 int apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 			unsigned long size, pte_fn_t fn, void *data)
 {
-	return __apply_to_page_range(mm, addr, size, fn, data, PGRANGE_CREATE);
+	return __apply_to_page_range(mm, addr, size, fn, data, PGRANGE_ALLOC);
 }
 EXPORT_SYMBOL_GPL(apply_to_page_range);
 

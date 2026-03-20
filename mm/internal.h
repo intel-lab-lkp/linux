@@ -1872,9 +1872,26 @@ static inline int get_sysctl_max_map_count(void)
 
 /*
  * Create a mapping if it doesn't exist. (Otherwise, skip regions with no
- * existing mapping, and return an error for regions with no leaf pagetable).
+ * existing mapping). Most users will want PGRANGE_ALLOC or 0 instead.
  */
 #define PGRANGE_CREATE		(1 << 0)
+/*
+ * Allocate a pagetable if one is missing. (Otherwise, return an error for
+ * regions with no leaf pagetable). Also implies PGRANGE_CREATE.
+ */
+#define PGRANGE_ALLOC		(1 << 1)
+/*
+ * Do not take any locks. This means the caller has taken care of
+ * synchronisation. This is incompatible with PGRANGE_ALLOC and also with
+ * mm=&init_mm.
+ */
+#define PGRANGE_NOLOCK		(1 << 2)
+
+
+static inline bool pgrange_create(unsigned int flags)
+{
+	return flags & (PGRANGE_CREATE | PGRANGE_ALLOC);
+}
 
 int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 			  unsigned long size, pte_fn_t fn,
