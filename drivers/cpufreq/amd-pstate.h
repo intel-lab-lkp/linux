@@ -72,6 +72,7 @@ struct amd_aperf_mperf {
  * @max_limit_freq: Cached value of policy->max (in khz)
  * @nominal_freq: the frequency (in khz) that mapped to nominal_perf
  * @lowest_nonlinear_freq: the frequency (in khz) that mapped to lowest_nonlinear_perf
+ * @floor_freq: Cached value of the user requested floor_freq
  * @cur: Difference of Aperf/Mperf/tsc count between last and current sample
  * @prev: Last Aperf/Mperf/tsc count value read from register
  * @freq: current cpu frequency value (in khz)
@@ -101,6 +102,7 @@ struct amd_cpudata {
 	u32	max_limit_freq;
 	u32	nominal_freq;
 	u32	lowest_nonlinear_freq;
+	u32	floor_freq;
 
 	struct amd_aperf_mperf cur;
 	struct amd_aperf_mperf prev;
