@@ -1079,7 +1079,6 @@ retry:
 		struct address_space *mapping;
 		struct folio *folio;
 		enum folio_references references = FOLIOREF_RECLAIM;
-		bool dirty, writeback;
 		unsigned int nr_pages;
 
 		cond_resched();
@@ -1118,26 +1117,7 @@ retry:
 		if (!sc->may_unmap && folio_mapped(folio))
 			goto keep_locked;
 
-		/*
-		 * The number of dirty pages determines if a node is marked
-		 * reclaim_congested. kswapd will stall and start writing
-		 * folios if the tail of the LRU is all dirty unqueued folios.
-		 */
-		folio_check_dirty_writeback(folio, &dirty, &writeback);
-		if (dirty || writeback)
-			stat->nr_dirty += nr_pages;
 
-		if (dirty && !writeback)
-			stat->nr_unqueued_dirty += nr_pages;
-
-		/*
-		 * Treat this folio as congested if folios are cycling
-		 * through the LRU so quickly that the folios marked
-		 * for immediate reclaim are making it to the end of
-		 * the LRU a second time.
-		 */
-		if (writeback && folio_test_reclaim(folio))
-			stat->nr_congested += nr_pages;
 
 		/*
 		 * If a folio at the tail of the LRU is under writeback, there
@@ -1693,12 +1673,14 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 	unsigned long nr_zone_taken[MAX_NR_ZONES] = { 0 };
 	unsigned long nr_skipped[MAX_NR_ZONES] = { 0, };
 	unsigned long skipped = 0, total_scan = 0, scan = 0;
+	unsigned long nr_dirty = 0, nr_unqueued_dirty = 0, nr_congested = 0;
 	unsigned long nr_pages;
 	unsigned long max_nr_skipped = 0;
 	LIST_HEAD(folios_skipped);
 
 	while (scan < nr_to_scan && !list_empty(src)) {
 		struct list_head *move_to = src;
+		bool dirty, writeback;
 		struct folio *folio;
 
 		folio = lru_to_folio(src);
@@ -1724,6 +1706,30 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 		 * Account all pages in a folio.
 		 */
 		scan += nr_pages;
+
+		if (!folio_trylock(folio))
+			goto move;
+		/*
+		 * The number of dirty pages determines if a node is marked
+		 * reclaim_congested. kswapd will stall and start writing
+		 * folios if the tail of the LRU is all dirty unqueued folios.
+		 */
+		folio_check_dirty_writeback(folio, &dirty, &writeback);
+		folio_unlock(folio);
+
+		if (dirty || writeback)
+			nr_dirty += nr_pages;
+
+		if (dirty && !writeback)
+			nr_unqueued_dirty += nr_pages;
+		/*
+		 * Treat this folio as congested if folios are cycling
+		 * through the LRU so quickly that the folios marked
+		 * for immediate reclaim are making it to the end of
+		 * the LRU a second time.
+		 */
+		if (writeback && folio_test_reclaim(folio))
+			nr_congested += nr_pages;
 
 		if (!folio_test_lru(folio))
 			goto move;
@@ -1774,6 +1780,35 @@ move:
 	trace_mm_vmscan_lru_isolate(sc->reclaim_idx, sc->order, nr_to_scan,
 				    total_scan, skipped, nr_taken, lru);
 	update_lru_sizes(lruvec, lru, nr_zone_taken);
+	/*
+	 * If dirty folios are scanned that are not queued for IO, it
+	 * implies that flushers are not doing their job. This can
+	 * happen when memory pressure pushes dirty folios to the end of
+	 * the LRU before the dirty limits are breached and the dirty
+	 * data has expired. It can also happen when the proportion of
+	 * dirty folios grows not through writes but through memory
+	 * pressure reclaiming all the clean cache. And in some cases,
+	 * the flushers simply cannot keep up with the allocation
+	 * rate. Nudge the flusher threads in case they are asleep.
+	 */
+	if (nr_unqueued_dirty == scan) {
+		wakeup_flusher_threads(WB_REASON_VMSCAN);
+		/*
+		 * For cgroupv1 dirty throttling is achieved by waking up
+		 * the kernel flusher here and later waiting on folios
+		 * which are in writeback to finish (see shrink_folio_list()).
+		 *
+		 * Flusher may not be able to issue writeback quickly
+		 * enough for cgroupv1 writeback throttling to work
+		 * on a large system.
+		 */
+		if (!writeback_throttling_sane(sc))
+			reclaim_throttle(lruvec_pgdat(lruvec), VMSCAN_THROTTLE_WRITEBACK);
+	}
+	sc->nr.dirty += nr_dirty;
+	sc->nr.congested += nr_congested;
+	sc->nr.unqueued_dirty += nr_unqueued_dirty;
+
 	return nr_taken;
 }
 
@@ -2009,35 +2044,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	lru_note_cost_unlock_irq(lruvec, file, stat.nr_pageout,
 					nr_scanned - nr_reclaimed);
 
-	/*
-	 * If dirty folios are scanned that are not queued for IO, it
-	 * implies that flushers are not doing their job. This can
-	 * happen when memory pressure pushes dirty folios to the end of
-	 * the LRU before the dirty limits are breached and the dirty
-	 * data has expired. It can also happen when the proportion of
-	 * dirty folios grows not through writes but through memory
-	 * pressure reclaiming all the clean cache. And in some cases,
-	 * the flushers simply cannot keep up with the allocation
-	 * rate. Nudge the flusher threads in case they are asleep.
-	 */
-	if (stat.nr_unqueued_dirty == nr_taken) {
-		wakeup_flusher_threads(WB_REASON_VMSCAN);
-		/*
-		 * For cgroupv1 dirty throttling is achieved by waking up
-		 * the kernel flusher here and later waiting on folios
-		 * which are in writeback to finish (see shrink_folio_list()).
-		 *
-		 * Flusher may not be able to issue writeback quickly
-		 * enough for cgroupv1 writeback throttling to work
-		 * on a large system.
-		 */
-		if (!writeback_throttling_sane(sc))
-			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
-	}
 
-	sc->nr.dirty += stat.nr_dirty;
-	sc->nr.congested += stat.nr_congested;
-	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
 	sc->nr.writeback += stat.nr_writeback;
 	sc->nr.immediate += stat.nr_immediate;
 	sc->nr.taken += nr_taken;
