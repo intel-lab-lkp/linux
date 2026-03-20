@@ -14,6 +14,44 @@ description: |
   according to its regulator type, buck_<name> and ldo_<name>.
   MT6359 regulators node should be sub node of the MT6397 MFD node.
 
+properties:
+  vsmps-supply:
+    description: Supply for buck regulator control logic
+  vsys-ldo1-supply:
+    description: Supply for LDOs vcn33_1_bt, vcn33_2_bt, vio28, vfe28, vibr
+  vsys-ldo2-supply:
+    description: Supply for LDOs va09, vaux18, vbif28, vxo22, vrfck, vrfck_1,
+      vemc, vsim1, vsim2, vusb
+  vsys-vcore-supply:
+    description: Supply for buck regulator vcore
+  vsys-vgpu11-supply:
+    description: Supply for buck regulator vgpu11
+  vsys-vmodem-supply:
+    description: Supply for buck regulator vmodem
+  vsys-vpa-supply:
+    description: Supply for buck regulator vpa
+  vsys-vproc1-supply:
+    description: Supply for buck regulator vproc1
+  vsys-vproc2-supply:
+    description: Supply for buck regulator vproc2
+  vsys-vpu-supply:
+    description: Supply for buck regulator vpu
+  vsys-vs1-supply:
+    description: Supply for buck regulator vs1
+  vsys-vs2-supply:
+    description: Supply for buck regulator vs2
+  vs1-ldo1-supply:
+    description: Supply for LDOs vaud18, vcamio, vm18, vufs
+  vs1-ldo2-supply:
+    description: Supply for LDOs vcn18, vefuse, vio18, vrf18
+  vs2-ldo1-supply:
+    description:
+      Supply for LDOs vsram_proc1, vsram_proc2, vsram_others, vsram_md
+  vs2-ldo2-supply:
+    description: Supply for LDOs va09, va12, vcn13, vrf12
+  vio18-supply:
+    description: Supply internally routed from LDO vio18 output
+
 patternProperties:
   "^buck_v(s1|gpu11|modem|pu|core|s2|pa|proc2|proc1|core_sshub)$":
     type: object
