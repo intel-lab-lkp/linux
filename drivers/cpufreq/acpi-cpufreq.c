@@ -849,13 +849,24 @@ static int acpi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 
 		policy->cpuinfo.max_freq = freq * max_boost_ratio >> SCHED_CAPACITY_SHIFT;
 	} else {
+#ifdef CONFIG_ACPI_CPPC_LIB
+		unsigned int freq = freq_table[0].frequency;
+		u64 max_speed = cppc_get_dmi_max_khz();
 		/*
-		 * If the maximum "boost" frequency is unknown, ask the arch
-		 * scale-invariance code to use the "nominal" performance for
-		 * CPU utilization scaling so as to prevent the schedutil
-		 * governor from selecting inadequate CPU frequencies.
+		 * Use DMI "Max Speed" if it looks plausible: must be
+		 * above _PSS P0 frequency and within 2x of it.
 		 */
-		arch_set_max_freq_ratio(true);
+		if (max_speed > freq && max_speed < freq * 2)
+			policy->cpuinfo.max_freq = max_speed;
+		else
+#endif
+			/*
+			 * If the maximum "boost" frequency is unknown, ask the arch
+			 * scale-invariance code to use the "nominal" performance for
+			 * CPU utilization scaling so as to prevent the schedutil
+			 * governor from selecting inadequate CPU frequencies.
+			 */
+			arch_set_max_freq_ratio(true);
 	}
 
 	policy->freq_table = freq_table;
