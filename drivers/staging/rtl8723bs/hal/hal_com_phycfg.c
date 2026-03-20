@@ -816,11 +816,17 @@ void PHY_SetTxPowerLimit(
 )
 {
 	struct hal_com_data	*pHalData = GET_HAL_DATA(Adapter);
-	u8 regulation = 0, bandwidth = 0, rateSection = 0, channel;
-	s8 powerLimit = 0, prevPowerLimit, channelIndex;
+	u8 regulation = 0, bandwidth = 0, rateSection = 0, channel, powerLimit;
+	s8 prevPowerLimit, channelIndex;
+	int ret;
 
-	GetU1ByteIntegerFromStringInDecimal((s8 *)Channel, &channel);
-	GetU1ByteIntegerFromStringInDecimal((s8 *)PowerLimit, &powerLimit);
+	ret = kstrtou8((const char *)Channel, 10, &channel);
+	if (ret)
+		return;
+
+	ret = kstrtou8((const char *)PowerLimit, 10, &powerLimit);
+	if (ret)
+		return;
 
 	powerLimit = powerLimit > MAX_POWER_INDEX ? MAX_POWER_INDEX : powerLimit;
 
