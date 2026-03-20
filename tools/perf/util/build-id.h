@@ -37,10 +37,6 @@ int build_id__mark_dso_hit(const struct perf_tool *tool, union perf_event *event
 			   struct perf_sample *sample, struct evsel *evsel,
 			   struct machine *machine);
 
-int perf_event__inject_buildid(const struct perf_tool *tool, union perf_event *event,
-			       struct perf_sample *sample, struct evsel *evsel,
-			       struct machine *machine);
-
 bool perf_session__read_build_ids(struct perf_session *session, bool with_hits);
 int perf_session__write_buildid_table(struct perf_session *session,
 				      struct feat_fd *fd);
