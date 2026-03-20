@@ -53,6 +53,12 @@ struct pvr_gpu_id {
 	u16 b, v, n, c;
 };
 
+#define PVR_GPU_ID_FMT "%u.%u.%u.%u"
+#define PVR_GPU_ID_FMT_ARGS(gpu_id) (gpu_id)->b, (gpu_id)->v, (gpu_id)->n, (gpu_id)->c
+#define PVR_GPU_ID_FMT_ARGS_PACKED(gpu_id) \
+	(u32)FIELD_GET(DRM_PVR_BVNC_B, gpu_id), (u32)FIELD_GET(DRM_PVR_BVNC_V, gpu_id), \
+	(u32)FIELD_GET(DRM_PVR_BVNC_N, gpu_id), (u32)FIELD_GET(DRM_PVR_BVNC_C, gpu_id)
+
 /**
  * struct pvr_fw_version - Firmware version information
  * @major: Major version number.

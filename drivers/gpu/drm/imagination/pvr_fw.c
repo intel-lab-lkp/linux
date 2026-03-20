@@ -126,12 +126,9 @@ pvr_fw_validate(struct pvr_device *pvr_dev)
 	}
 
 	if (pvr_gpu_id_to_packed_bvnc(&pvr_dev->gpu_id) != header->bvnc) {
-		struct pvr_gpu_id fw_gpu_id;
-
-		packed_bvnc_to_pvr_gpu_id(header->bvnc, &fw_gpu_id);
-		drm_err(drm_dev, "FW built for incorrect GPU ID %i.%i.%i.%i (expected %i.%i.%i.%i)\n",
-			fw_gpu_id.b, fw_gpu_id.v, fw_gpu_id.n, fw_gpu_id.c,
-			pvr_dev->gpu_id.b, pvr_dev->gpu_id.v, pvr_dev->gpu_id.n, pvr_dev->gpu_id.c);
+		drm_err(drm_dev, "FW built for incorrect GPU ID " PVR_GPU_ID_FMT " (expected " PVR_GPU_ID_FMT ")\n",
+			PVR_GPU_ID_FMT_ARGS_PACKED(header->bvnc),
+			PVR_GPU_ID_FMT_ARGS(&pvr_dev->gpu_id));
 		return -EINVAL;
 	}
 
