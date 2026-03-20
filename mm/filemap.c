@@ -4614,13 +4614,13 @@ static void filemap_cachestat(struct address_space *mapping,
 
 				/*
 				 * Getting a swap entry from the shmem
-				 * inode means we beat
-				 * shmem_unuse(). rcu_read_lock()
-				 * ensures swapoff waits for us before
-				 * freeing the swapper space. However,
-				 * we can race with swapping and
-				 * invalidation, so there might not be
-				 * a shadow in the swapcache (yet).
+				 * inode means we beat swapoff.
+				 * rcu_read_lock() ensures swapoff waits
+				 * for us before freeing the swapper
+				 * space. However, we can race with
+				 * swapping and invalidation, so there
+				 * might not be a shadow in the swapcache
+				 * (yet).
 				 */
 				shadow = swap_cache_get_shadow(swp);
 				if (!shadow)
