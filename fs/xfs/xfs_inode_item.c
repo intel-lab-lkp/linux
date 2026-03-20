@@ -624,7 +624,7 @@ xfs_inode_item_format_core(
 	struct xfs_log_dinode	*dic;
 
 	dic = xlog_format_start(lfb, XLOG_REG_TYPE_ICORE);
-	xfs_inode_to_log_dinode(ip, dic, ip->i_itemp->ili_item.li_lsn);
+	xfs_inode_to_log_dinode(ip, dic, READ_ONCE(ip->i_itemp->ili_item.li_lsn));
 	xlog_format_commit(lfb, xfs_log_dinode_size(ip->i_mount));
 }
 

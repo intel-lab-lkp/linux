@@ -854,7 +854,7 @@ xfs_trans_ail_update_bulk(
 		} else {
 			trace_xfs_ail_insert(lip, 0, lsn);
 		}
-		lip->li_lsn = lsn;
+		WRITE_ONCE(lip->li_lsn, lsn);
 		list_add_tail(&lip->li_ail, &tmp);
 	}
 
