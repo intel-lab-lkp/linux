@@ -669,6 +669,9 @@ int ice_dcb_sw_dflt_cfg(struct ice_pf *pf, bool ets_willing, bool locked)
 	if (ret)
 		return ret;
 
+	/* init desired_dcbx_cfg from local_dcbx_cfg */
+	pi->qos_cfg.desired_dcbx_cfg = pi->qos_cfg.local_dcbx_cfg;
+
 	return ice_query_port_ets(pi, &buf, sizeof(buf), NULL);
 }
 
