@@ -641,19 +641,13 @@ static void pcpu_block_update(struct pcpu_block_md *block, int start, int end)
 	if (contig > block->contig_hint) {
 		/* promote the old contig_hint to be the new scan_hint */
 		if (start > block->contig_hint_start) {
-			if (block->contig_hint > block->scan_hint) {
+			if (block->contig_hint > block->scan_hint ||
+			    start < block->scan_hint_start) {
 				block->scan_hint_start =
 					block->contig_hint_start;
 				block->scan_hint = block->contig_hint;
-			} else if (start < block->scan_hint_start) {
-				/*
-				 * The old contig_hint == scan_hint.  But, the
-				 * new contig is larger so hold the invariant
-				 * scan_hint_start < contig_hint_start.
-				 */
-				block->scan_hint = 0;
 			}
-		} else {
+		} else if (start < block->scan_hint_start) {
 			block->scan_hint = 0;
 		}
 		block->contig_hint_start = start;
@@ -662,20 +656,44 @@ static void pcpu_block_update(struct pcpu_block_md *block, int start, int end)
 		if (block->contig_hint_start &&
 		    (!start ||
 		     __ffs(start) > __ffs(block->contig_hint_start))) {
+			if (block->contig_hint > block->scan_hint) {
+				if (start < block->contig_hint_start) {
+					block->scan_hint = block->contig_hint;
+					block->scan_hint_start = block->contig_hint_start;
+				}
+			} else if (start > block->scan_hint_start) {
+				/*
+				 * old contig_hint == old scan_hint == contig.
+				 * But, the new contig is farther than the old
+				 * scan_hint so hold the invariant
+				 * scan_hint_start > contig_hint_start iff
+				 * scan_hint == contig_hint.
+				 */
+				block->scan_hint = 0;
+			}
+
 			/* start has a better alignment so use it */
 			block->contig_hint_start = start;
-			if (start < block->scan_hint_start &&
-			    block->contig_hint > block->scan_hint)
-				block->scan_hint = 0;
-		} else if (start > block->scan_hint_start ||
-			   block->contig_hint > block->scan_hint) {
-			/*
-			 * Knowing contig == contig_hint, update the scan_hint
-			 * if it is farther than or larger than the current
-			 * scan_hint.
-			 */
-			block->scan_hint_start = start;
-			block->scan_hint = contig;
+		} else {
+			if (block->contig_hint > block->scan_hint) {
+				if (start < block->contig_hint_start) {
+					/*
+					 * old scan_hint < contig == old
+					 * contig_hint. But, the new contig is
+					 * before the old contig_hint so hold
+					 * the invariant
+					 * scan_hint_start > contig_hint_start
+					 * iff scan_hint == contig_hint.
+					 */
+					block->scan_hint = 0;
+				} else {
+					block->scan_hint_start = start;
+					block->scan_hint = contig;
+				}
+			} else if (start > block->scan_hint_start) {
+				block->scan_hint_start = start;
+				block->scan_hint = contig;
+			}
 		}
 	} else {
 		/*
