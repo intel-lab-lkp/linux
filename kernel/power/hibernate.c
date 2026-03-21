@@ -425,14 +425,9 @@ int hibernation_snapshot(int platform_mode)
 	if (error)
 		goto Close;
 
-	/* Preallocate image memory before shutting down devices. */
-	error = hibernate_preallocate_memory();
-	if (error)
-		goto Close;
-
 	error = freeze_kernel_threads();
 	if (error)
-		goto Cleanup;
+		goto Close;
 
 	if (hibernation_test(TEST_FREEZER)) {
 
@@ -449,6 +444,11 @@ int hibernation_snapshot(int platform_mode)
 		dpm_complete(PMSG_RECOVER);
 		goto Thaw;
 	}
+
+	/* Preallocate image memory before shutting down devices. */
+	error = hibernate_preallocate_memory();
+	if (error)
+		goto Thaw;
 
 	/*
 	 * Device drivers may move lots of data to shmem in dpm_prepare(). The shmem
@@ -494,8 +494,6 @@ int hibernation_snapshot(int platform_mode)
 
  Thaw:
 	thaw_kernel_threads();
- Cleanup:
-	swsusp_free();
 	goto Close;
 }
 
