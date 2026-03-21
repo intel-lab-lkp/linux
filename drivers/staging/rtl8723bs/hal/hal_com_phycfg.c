@@ -323,9 +323,8 @@ static void PHY_StoreTxPowerByRateNew(struct adapter *padapter,	u32 RfPath,
 	if (RfPath >= RF_PATH_MAX)
 		return;
 
-	for (i = 0; i < rateNum; ++i) {
+	for (i = 0; i < rateNum; ++i)
 		pHalData->TxPwrByRateOffset[RfPath][rateIndex[i]] = PwrByRateVal[i];
-	}
 }
 
 static void PHY_StoreTxPowerByRateOld(
@@ -361,9 +360,8 @@ void PHY_StoreTxPowerByRate(
 
 	if (pDM_Odm->PhyRegPgVersion > 0)
 		PHY_StoreTxPowerByRateNew(padapter, RfPath, RegAddr, BitMask, Data);
-	else if (pDM_Odm->PhyRegPgVersion == 0) {
+	else if (pDM_Odm->PhyRegPgVersion == 0)
 		PHY_StoreTxPowerByRateOld(padapter, RegAddr, BitMask, Data);
-	}
 }
 
 static void
