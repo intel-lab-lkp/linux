@@ -277,17 +277,12 @@ static int seesaw_probe(struct i2c_client *client)
 			     SEESAW_JOYSTICK_FUZZ, SEESAW_JOYSTICK_FLAT);
 
 	err = sparse_keymap_setup(seesaw->input_dev, seesaw_buttons_new, NULL);
-	if (err) {
-		dev_err(&client->dev,
-			"failed to set up input device keymap: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(&client->dev, err, "failed to set up input device keymap\n");
 
 	err = input_setup_polling(seesaw->input_dev, seesaw_poll);
-	if (err) {
-		dev_err(&client->dev, "failed to set up polling: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(&client->dev, err, "failed to set up polling\n");
 
 	input_set_poll_interval(seesaw->input_dev,
 				SEESAW_GAMEPAD_POLL_INTERVAL_MS);
@@ -295,10 +290,8 @@ static int seesaw_probe(struct i2c_client *client)
 	input_set_min_poll_interval(seesaw->input_dev, SEESAW_GAMEPAD_POLL_MIN);
 
 	err = input_register_device(seesaw->input_dev);
-	if (err) {
-		dev_err(&client->dev, "failed to register joystick: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(&client->dev, err, "failed to register joystick\n");
 
 	return 0;
 }
