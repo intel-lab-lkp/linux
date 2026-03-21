@@ -5039,6 +5039,7 @@ static void ibmvfc_channel_setup_done(struct ibmvfc_event *evt)
 		flags = be32_to_cpu(setup->flags);
 		vhost->do_enquiry = 0;
 		active_queues = be32_to_cpu(setup->num_scsi_subq_channels);
+		active_queues = min_t(u32, active_queues, scrqs->max_queues);
 		scrqs->active_queues = active_queues;
 
 		if (flags & IBMVFC_CHANNELS_CANCELED) {
