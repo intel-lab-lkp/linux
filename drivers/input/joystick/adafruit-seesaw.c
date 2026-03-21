@@ -11,8 +11,10 @@
  * Product page: https://www.adafruit.com/product/5743
  * Firmware and hardware sources: https://github.com/adafruit/Adafruit_Seesaw
  *
- * TODO:
- *	- Add interrupt support
+ * Interrupt support is available when the DTS defines an interrupt for the
+ * device. Button events are then driven by the seesaw INT line, while joystick
+ * axes are always polled since the seesaw ADC has no interrupt source.
+ * Without an interrupt, the driver falls back to fully polling mode.
  */
 
 #include <linux/unaligned.h>
@@ -21,6 +23,7 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/input/sparse-keymap.h>
+#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 
@@ -31,12 +34,14 @@
 #define SEESAW_GPIO_DIRCLR_BULK		0x0103
 #define SEESAW_GPIO_BULK		0x0104
 #define SEESAW_GPIO_BULK_SET		0x0105
+#define SEESAW_GPIO_INTENSET		0x0108
 #define SEESAW_GPIO_PULLENSET		0x010b
 
 #define SEESAW_STATUS_HW_ID		0x0001
 #define SEESAW_STATUS_SWRST		0x007f
 
 #define SEESAW_ADC_OFFSET		0x07
+#define SEESAW_ADC_REG(ch)		(SEESAW_ADC_BASE | (SEESAW_ADC_OFFSET + (ch)))
 
 #define SEESAW_BUTTON_A			0x05
 #define SEESAW_BUTTON_B			0x01
@@ -64,12 +69,6 @@ static const u32 SEESAW_BUTTON_MASK =
 struct seesaw_gamepad {
 	struct input_dev *input_dev;
 	struct i2c_client *i2c_client;
-	u32 button_state;
-};
-
-struct seesaw_data {
-	u16 x;
-	u16 y;
 	u32 button_state;
 };
 
@@ -142,39 +141,61 @@ static int seesaw_register_write_u32(struct i2c_client *client, u16 reg,
 	return 0;
 }
 
-static int seesaw_read_data(struct i2c_client *client, struct seesaw_data *data)
+static int seesaw_report_buttons(struct seesaw_gamepad *private)
 {
-	__be16 adc_data;
+	struct input_dev *input = private->input_dev;
+	unsigned long changed;
+	u32 button_state;
 	__be32 read_buf;
-	int err;
+	int err, i;
 
-	err = seesaw_register_read(client, SEESAW_GPIO_BULK,
+	err = seesaw_register_read(private->i2c_client, SEESAW_GPIO_BULK,
 				   &read_buf, sizeof(read_buf));
 	if (err)
 		return err;
 
-	data->button_state = ~be32_to_cpu(read_buf);
+	button_state = ~be32_to_cpu(read_buf) & SEESAW_BUTTON_MASK;
+	changed = private->button_state ^ button_state;
+	private->button_state = button_state;
 
-	err = seesaw_register_read(client,
-				   SEESAW_ADC_BASE |
-					(SEESAW_ADC_OFFSET + SEESAW_ANALOG_X),
+	for_each_set_bit(i, &changed, fls(SEESAW_BUTTON_MASK)) {
+		if (!sparse_keymap_report_event(input, i,
+						button_state & BIT(i), false))
+			dev_err_ratelimited(&input->dev,
+						"failed to report keymap event");
+	}
+
+	input_sync(input);
+	return 0;
+}
+
+static int seesaw_report_axes(struct seesaw_gamepad *private)
+{
+	struct input_dev *input = private->input_dev;
+	__be16 adc_data;
+	int err;
+
+	err = seesaw_register_read(private->i2c_client,
+				   SEESAW_ADC_REG(SEESAW_ANALOG_X),
 				   &adc_data, sizeof(adc_data));
 	if (err)
 		return err;
+
 	/*
 	 * ADC reads left as max and right as 0, must be reversed since kernel
 	 * expects reports in opposite order.
 	 */
-	data->x = SEESAW_JOYSTICK_MAX_AXIS - be16_to_cpu(adc_data);
+	input_report_abs(input, ABS_X,
+			 SEESAW_JOYSTICK_MAX_AXIS - be16_to_cpu(adc_data));
 
-	err = seesaw_register_read(client,
-				   SEESAW_ADC_BASE |
-					(SEESAW_ADC_OFFSET + SEESAW_ANALOG_Y),
+	err = seesaw_register_read(private->i2c_client,
+				   SEESAW_ADC_REG(SEESAW_ANALOG_Y),
 				   &adc_data, sizeof(adc_data));
 	if (err)
 		return err;
 
-	data->y = be16_to_cpu(adc_data);
+	input_report_abs(input, ABS_Y, be16_to_cpu(adc_data));
+	input_sync(input);
 
 	return 0;
 }
@@ -182,42 +203,72 @@ static int seesaw_read_data(struct i2c_client *client, struct seesaw_data *data)
 static int seesaw_open(struct input_dev *input)
 {
 	struct seesaw_gamepad *private = input_get_drvdata(input);
+	int err;
 
 	private->button_state = 0;
 
+	if (private->i2c_client->irq) {
+		/*
+		 * Read and report current button state before enabling the
+		 * edge-triggered IRQ. This deasserts any pending INT already
+		 * latched by the chip since probe(), preventing the IRQ line
+		 * from being stuck low on the first open.
+		 */
+		err = seesaw_report_buttons(private);
+		if (err)
+			return err;
+
+		enable_irq(private->i2c_client->irq);
+	}
+
 	return 0;
+}
+
+static void seesaw_close(struct input_dev *input)
+{
+	struct seesaw_gamepad *private = input_get_drvdata(input);
+
+	if (private->i2c_client->irq)
+		disable_irq(private->i2c_client->irq);
 }
 
 static void seesaw_poll(struct input_dev *input)
 {
 	struct seesaw_gamepad *private = input_get_drvdata(input);
-	struct seesaw_data data;
-	unsigned long changed;
-	int err, i;
+	int err;
 
-	err = seesaw_read_data(private->i2c_client, &data);
+	err = seesaw_report_axes(private);
 	if (err) {
 		dev_err_ratelimited(&input->dev,
-				    "failed to read joystick state: %d\n", err);
+					"failed to read joystick axes: %d\n", err);
 		return;
 	}
 
-	input_report_abs(input, ABS_X, data.x);
-	input_report_abs(input, ABS_Y, data.y);
-
-	data.button_state &= SEESAW_BUTTON_MASK;
-	changed = private->button_state ^ data.button_state;
-	private->button_state = data.button_state;
-
-	for_each_set_bit(i, &changed, fls(SEESAW_BUTTON_MASK)) {
-		if (!sparse_keymap_report_event(input, i,
-						data.button_state & BIT(i),
-						false))
+	/*
+	 * In interrupt mode, buttons are reported exclusively by
+	 * seesaw_irq_thread() to avoid concurrent access to button_state.
+	 */
+	if (!private->i2c_client->irq) {
+		err = seesaw_report_buttons(private);
+		if (err)
 			dev_err_ratelimited(&input->dev,
-					    "failed to report keymap event");
+					"failed to read button state: %d\n", err);
+	}
+}
+
+static irqreturn_t seesaw_irq_thread(int irq, void *dev_id)
+{
+	struct seesaw_gamepad *private = dev_id;
+	int err;
+
+	err = seesaw_report_buttons(private);
+	if (err) {
+		dev_err_ratelimited(&private->input_dev->dev,
+					"failed to read button state: %d\n", err);
+		return IRQ_NONE;
 	}
 
-	input_sync(input);
+	return IRQ_HANDLED;
 }
 
 static int seesaw_probe(struct i2c_client *client)
@@ -268,6 +319,7 @@ static int seesaw_probe(struct i2c_client *client)
 	seesaw->input_dev->name = "Adafruit Seesaw Gamepad";
 	seesaw->input_dev->phys = "i2c/" SEESAW_DEVICE_NAME;
 	seesaw->input_dev->open = seesaw_open;
+	seesaw->input_dev->close = seesaw_close;
 	input_set_drvdata(seesaw->input_dev, seesaw);
 	input_set_abs_params(seesaw->input_dev, ABS_X,
 			     0, SEESAW_JOYSTICK_MAX_AXIS,
@@ -288,6 +340,19 @@ static int seesaw_probe(struct i2c_client *client)
 				SEESAW_GAMEPAD_POLL_INTERVAL_MS);
 	input_set_max_poll_interval(seesaw->input_dev, SEESAW_GAMEPAD_POLL_MAX);
 	input_set_min_poll_interval(seesaw->input_dev, SEESAW_GAMEPAD_POLL_MIN);
+
+	if (client->irq) {
+		err = seesaw_register_write_u32(client, SEESAW_GPIO_INTENSET, SEESAW_BUTTON_MASK);
+		if (err)
+			return dev_err_probe(&client->dev, err,
+						"failed to enable hardware interrupts\n");
+
+		err = devm_request_threaded_irq(&client->dev, client->irq, NULL,
+						seesaw_irq_thread, IRQF_ONESHOT | IRQF_NO_AUTOEN,
+						SEESAW_DEVICE_NAME, seesaw);
+		if (err)
+			return dev_err_probe(&client->dev, err, "failed to request IRQ\n");
+	}
 
 	err = input_register_device(seesaw->input_dev);
 	if (err)
