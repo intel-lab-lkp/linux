@@ -394,9 +394,9 @@ extern s64 dl_scaled_delta_exec(struct rq *rq, struct sched_dl_entity *dl_se, s6
  * between defer and replenish but never actually enqueue the server.
  *
  * Only when the target class does not manage to exhaust the server's runtime
- * (there's actualy starvation in the given period), will the dl_server get on
+ * (there's actually starvation in the given period), will the dl_server get on
  * the runqueue. Once queued it will pick tasks from the target class and run
- * them until either its runtime is exhaused, at which point its back to
+ * them until either its runtime is exhausted, at which point its back to
  * dl_server_timer, or until there are no more tasks to run, at which point
  * the dl_server stops itself.
  *
@@ -405,7 +405,7 @@ extern s64 dl_scaled_delta_exec(struct rq *rq, struct sched_dl_entity *dl_se, s6
  * subject to CBS wakeup rules -- without having to wait for the next period.
  *
  * Additionally, because of the dl_defer behaviour the start/stop behaviour is
- * naturally thottled to once per period, avoiding high context switch
+ * naturally throttled to once per period, avoiding high context switch
  * workloads from spamming the hrtimer program/cancel paths.
  */
 extern void dl_server_update_idle(struct sched_dl_entity *dl_se, s64 delta_exec);
