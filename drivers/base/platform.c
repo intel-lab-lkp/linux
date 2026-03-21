@@ -172,7 +172,7 @@ static const struct cpumask *get_irq_affinity(struct platform_device *dev,
  * @num:	interrupt number index
  * @affinity:	optional cpumask pointer to get the affinity of a per-cpu interrupt
  *
- * Gets an interupt for a platform device. Device drivers should check the
+ * Gets an interrupt for a platform device. Device drivers should check the
  * return value for errors so as to not pass a negative integer value to
  * the request_irq() APIs. Optional affinity information is provided in the
  * affinity pointer if available, and NULL otherwise.
