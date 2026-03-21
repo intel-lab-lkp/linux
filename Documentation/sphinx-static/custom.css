@@ -8,6 +8,13 @@ div.body h1 { font-size: 180%; }
 div.body h2 { font-size: 150%; }
 div.body h3 { font-size: 130%; }
 div.body h4 { font-size: 110%; }
+/*
+ * Let long headings wrap before they overflow page layout.
+ */
+div.body h1, div.body h2, div.body h3, div.body h4,
+div.body h5, div.body h6 {
+    overflow-wrap: anywhere;
+}
 
 /* toctree captions are styled like h2 */
 div.toctree-wrapper p.caption[role=heading] { font-size: 150%; }
