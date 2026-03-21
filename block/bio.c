@@ -582,6 +582,9 @@ struct bio *bio_alloc_bioset(struct block_device *bdev, unsigned short nr_vecs,
 		opf &= ~REQ_ALLOC_CACHE;
 
 		p = mempool_alloc(&bs->bio_pool, gfp);
+		if (unlikely(!p))
+			return NULL;
+
 		bio = p + bs->front_pad;
 		if (nr_vecs > BIO_INLINE_VECS) {
 			nr_vecs = BIO_MAX_VECS;
