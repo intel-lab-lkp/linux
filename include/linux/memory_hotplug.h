@@ -6,6 +6,7 @@
 #include <linux/spinlock.h>
 #include <linux/notifier.h>
 #include <linux/bug.h>
+#include <linux/errno.h>
 
 struct page;
 struct zone;
@@ -27,6 +28,27 @@ enum mmop {
 	/* Online the memory to ZONE_MOVABLE. */
 	MMOP_ONLINE_MOVABLE,
 };
+
+/**
+ * mmop_to_str - convert memory online type to string
+ * @online_type: the MMOP_* value to convert
+ *
+ * Returns a string representation of the memory online type,
+ * suitable for sysfs output (includes trailing newline).
+ */
+static inline const char *mmop_to_str(enum mmop online_type)
+{
+	switch (online_type) {
+	case MMOP_ONLINE:
+		return "online\n";
+	case MMOP_ONLINE_KERNEL:
+		return "online_kernel\n";
+	case MMOP_ONLINE_MOVABLE:
+		return "online_movable\n";
+	default:
+		return "offline\n";
+	}
+}
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 struct page *pfn_to_online_page(unsigned long pfn);
@@ -221,6 +243,11 @@ static inline bool mhp_supports_memmap_on_memory(void)
 static inline void pgdat_kswapd_lock(pg_data_t *pgdat) {}
 static inline void pgdat_kswapd_unlock(pg_data_t *pgdat) {}
 static inline void pgdat_kswapd_lock_init(pg_data_t *pgdat) {}
+
+static inline int mhp_online_type_from_str(const char *str)
+{
+	return -EOPNOTSUPP;
+}
 #endif /* ! CONFIG_MEMORY_HOTPLUG */
 
 /*
@@ -316,6 +343,8 @@ extern struct zone *zone_for_pfn_range(enum mmop online_type,
 extern int arch_create_linear_mapping(int nid, u64 start, u64 size,
 				      struct mhp_params *params);
 void arch_remove_linear_mapping(u64 start, u64 size);
+#else
+static inline enum mmop mhp_get_default_online_type(void) { return MMOP_OFFLINE; }
 #endif /* CONFIG_MEMORY_HOTPLUG */
 
 #endif /* __LINUX_MEMORY_HOTPLUG_H */
