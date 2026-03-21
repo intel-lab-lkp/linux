@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mailbox/mailbox.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Generic Mailbox Controller and Client
+
+maintainers:
+  - Jassi Brar <jaswinder.singh@linaro.org>
+
+description:
+  Generic binding to provide a way for Mailbox controller drivers to
+  assign appropriate mailbox channel to client drivers.
+
+select: false
+
+properties:
+  "#mbox-cells":
+    minimum: 1
+    description:
+      Number of cells in a mailbox specifier. Must be at least 1.
+
+  mboxes:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      List of phandle and mailbox channel specifiers.
+
+  mbox-names:
+    $ref: /schemas/types.yaml#/definitions/string-array
+    description:
+      List of identifier strings for each mailbox channel.
+
+  shmem:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      List of phandles pointing to the shared memory (SHM) area between the
+      users of these mailboxes for IPC, one for each mailbox. This shared
+      memory can be part of any memory reserved for the purpose of this
+      communication between the mailbox client and the remote.
+
+additionalProperties: true
+
+examples:
+  # Mailbox Controller
+  - |
+    mailbox: mailbox {
+        #mbox-cells = <1>;
+    };
+
+  # Mailbox Client
+  - |
+    pwr_cntrl: power {
+        mbox-names = "pwr-ctrl", "rpc";
+        mboxes = <&mailbox 0>, <&mailbox 1>;
+    };
+
+  # Mailbox Client with shared memory
+  - |
+    sram: sram@50000000 {
+        compatible = "mmio-sram";
+        reg = <0x50000000 0x10000>;
+
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0 0x50000000 0x10000>;
+
+        cl_shmem: scmi-sram@0 {
+            compatible = "arm,scmi-shmem";
+            reg = <0x0 0x200>;
+        };
+    };
+
+    client@2e000000 {
+        reg = <0x2e000000 0x400>;
+        mboxes = <&mailbox 0>;
+        shmem = <&cl_shmem>;
+    };
