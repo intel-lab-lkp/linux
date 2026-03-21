@@ -18,14 +18,14 @@
 #include "ia_css.h"
 
 /* EXP_ID's ranger is 1 ~ 250 */
-#define ATOMISP_MAX_EXP_ID     (250)
+#define ATOMISP_MAX_EXP_ID (250)
 
-#define ATOMISP_SUBDEV_PAD_SINK			0
-#define ATOMISP_SUBDEV_PAD_SOURCE		1
-#define ATOMISP_SUBDEV_PADS_NUM			2
+#define ATOMISP_SUBDEV_PAD_SINK 0
+#define ATOMISP_SUBDEV_PAD_SOURCE 1
+#define ATOMISP_SUBDEV_PADS_NUM 2
 
 struct atomisp_in_fmt_conv {
-	u32     code;
+	u32 code;
 	u8 bpp; /* bits per pixel */
 	u8 depth; /* uncompressed */
 	enum atomisp_input_format atomisp_in_fmt;
@@ -99,54 +99,54 @@ struct atomisp_pad_format {
  * struct ia_css_isp_config but without un-supported and deprecated parts.
  */
 struct atomisp_css_params {
-	struct ia_css_wb_config   wb_config;
-	struct ia_css_cc_config   cc_config;
-	struct ia_css_tnr_config  tnr_config;
-	struct ia_css_ecd_config  ecd_config;
-	struct ia_css_ynr_config  ynr_config;
-	struct ia_css_fc_config   fc_config;
+	struct ia_css_wb_config wb_config;
+	struct ia_css_cc_config cc_config;
+	struct ia_css_tnr_config tnr_config;
+	struct ia_css_ecd_config ecd_config;
+	struct ia_css_ynr_config ynr_config;
+	struct ia_css_fc_config fc_config;
 	struct ia_css_formats_config formats_config;
-	struct ia_css_cnr_config  cnr_config;
+	struct ia_css_cnr_config cnr_config;
 	struct ia_css_macc_config macc_config;
-	struct ia_css_ctc_config  ctc_config;
-	struct ia_css_aa_config   aa_config;
-	struct ia_css_aa_config   baa_config;
-	struct ia_css_ce_config   ce_config;
-	struct ia_css_ob_config   ob_config;
-	struct ia_css_dp_config   dp_config;
-	struct ia_css_de_config   de_config;
-	struct ia_css_gc_config   gc_config;
-	struct ia_css_nr_config   nr_config;
-	struct ia_css_ee_config   ee_config;
-	struct ia_css_anr_config  anr_config;
-	struct ia_css_3a_config   s3a_config;
-	struct ia_css_xnr_config  xnr_config;
-	struct ia_css_dz_config   dz_config;
+	struct ia_css_ctc_config ctc_config;
+	struct ia_css_aa_config aa_config;
+	struct ia_css_aa_config baa_config;
+	struct ia_css_ce_config ce_config;
+	struct ia_css_ob_config ob_config;
+	struct ia_css_dp_config dp_config;
+	struct ia_css_de_config de_config;
+	struct ia_css_gc_config gc_config;
+	struct ia_css_nr_config nr_config;
+	struct ia_css_ee_config ee_config;
+	struct ia_css_anr_config anr_config;
+	struct ia_css_3a_config s3a_config;
+	struct ia_css_xnr_config xnr_config;
+	struct ia_css_dz_config dz_config;
 	struct ia_css_cc_config yuv2rgb_cc_config;
 	struct ia_css_cc_config rgb2yuv_cc_config;
-	struct ia_css_macc_table  macc_table;
+	struct ia_css_macc_table macc_table;
 	struct ia_css_gamma_table gamma_table;
-	struct ia_css_ctc_table   ctc_table;
+	struct ia_css_ctc_table ctc_table;
 
-	struct ia_css_xnr_table   xnr_table;
+	struct ia_css_xnr_table xnr_table;
 	struct ia_css_rgb_gamma_table r_gamma_table;
 	struct ia_css_rgb_gamma_table g_gamma_table;
 	struct ia_css_rgb_gamma_table b_gamma_table;
 
-	struct ia_css_vector      motion_vector;
-	struct ia_css_anr_thres   anr_thres;
+	struct ia_css_vector motion_vector;
+	struct ia_css_anr_thres anr_thres;
 
 	struct ia_css_dvs_6axis_config *dvs_6axis;
 	struct ia_css_dvs2_coefficients *dvs2_coeff;
 	struct ia_css_shading_table *shading_table;
-	struct ia_css_morph_table   *morph_table;
+	struct ia_css_morph_table *morph_table;
 
 	/*
 	 * Used to store the user pointer address of the frame. driver needs to
 	 * translate to ia_css_frame * and then set to CSS.
 	 */
-	void		*output_frame;
-	u32	isp_config_id;
+	void *output_frame;
+	u32 isp_config_id;
 
 	/* Indicates which parameters need to be updated. */
 	struct atomisp_parameters update_flag;
@@ -174,8 +174,8 @@ struct atomisp_subdev_params {
 
 	bool dis_proj_data_valid;
 
-	struct ia_css_dz_config   dz_config;  /** Digital Zoom */
-	struct ia_css_capture_config   capture_config;
+	struct ia_css_dz_config dz_config; /** Digital Zoom */
+	struct ia_css_capture_config capture_config;
 
 	struct ia_css_isp_config config;
 
@@ -194,10 +194,10 @@ struct atomisp_subdev_params {
 	struct ia_css_dvs2_statistics *dvs_stat;
 	struct ia_css_dvs_6axis_config *dvs_6axis;
 	u32 exp_id;
-	int  dvs_hor_coef_bytes;
-	int  dvs_ver_coef_bytes;
-	int  dvs_ver_proj_bytes;
-	int  dvs_hor_proj_bytes;
+	int dvs_hor_coef_bytes;
+	int dvs_ver_coef_bytes;
+	int dvs_ver_proj_bytes;
+	int dvs_hor_proj_bytes;
 
 	/* Flag to check if driver needs to update params to css */
 	bool css_update_params_needed;
@@ -240,8 +240,8 @@ struct atomisp_sub_device {
 	unsigned int s3a_bufs_in_css[IA_CSS_PIPE_ID_NUM];
 	unsigned int dis_bufs_in_css;
 
-	unsigned int metadata_bufs_in_css
-	[ATOMISP_INPUT_STREAM_NUM][IA_CSS_PIPE_ID_NUM];
+	unsigned int metadata_bufs_in_css[ATOMISP_INPUT_STREAM_NUM]
+					 [IA_CSS_PIPE_ID_NUM];
 	/* The list of free and available metadata buffers for CSS */
 	struct list_head metadata[ATOMISP_METADATA_TYPE_NUM];
 	/* The list of metadata buffers which have been en-queued to CSS */
@@ -264,7 +264,7 @@ struct atomisp_sub_device {
 	int input_curr;
 
 	atomic_t sof_count;
-	atomic_t sequence;      /* Sequence value that is assigned to buffer. */
+	atomic_t sequence; /* Sequence value that is assigned to buffer. */
 	atomic_t sequence_temp;
 
 	/*
@@ -280,7 +280,7 @@ struct atomisp_sub_device {
 	bool copy_mode; /* CSI2+ use copy mode */
 
 	int raw_buffer_bitmap[ATOMISP_MAX_EXP_ID / 32 +
-						 1]; /* Record each Raw Buffer lock status */
+			      1]; /* Record each Raw Buffer lock status */
 	int raw_buffer_locked_count;
 	spinlock_t raw_buffer_bitmap_lock;
 
@@ -302,33 +302,29 @@ const struct atomisp_in_fmt_conv *atomisp_find_in_fmt_conv(u32 code);
 
 /* ISP2400 */
 const struct atomisp_in_fmt_conv *atomisp_find_in_fmt_conv_by_atomisp_in_fmt(
-    enum atomisp_input_format atomisp_in_fmt);
+	enum atomisp_input_format atomisp_in_fmt);
 
 /* ISP2401 */
-const struct atomisp_in_fmt_conv
-*atomisp_find_in_fmt_conv_by_atomisp_in_fmt(enum atomisp_input_format
-	atomisp_in_fmt);
+const struct atomisp_in_fmt_conv *atomisp_find_in_fmt_conv_by_atomisp_in_fmt(
+	enum atomisp_input_format atomisp_in_fmt);
 
 const struct atomisp_in_fmt_conv *atomisp_find_in_fmt_conv_compressed(u32 code);
 bool atomisp_subdev_format_conversion(struct atomisp_sub_device *asd);
 
 /* Get pointer to appropriate format */
-struct v4l2_mbus_framefmt
-*atomisp_subdev_get_ffmt(struct v4l2_subdev *sd,
-			 struct v4l2_subdev_state *sd_state, uint32_t which,
-			 uint32_t pad);
+struct v4l2_mbus_framefmt *
+atomisp_subdev_get_ffmt(struct v4l2_subdev *sd,
+			struct v4l2_subdev_state *sd_state, u32 which, u32 pad);
 struct v4l2_rect *atomisp_subdev_get_rect(struct v4l2_subdev *sd,
-	struct v4l2_subdev_state *sd_state,
-	u32 which, uint32_t pad,
-	uint32_t target);
+					  struct v4l2_subdev_state *sd_state,
+					  u32 which, u32 pad, u32 target);
 int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
-				 struct v4l2_subdev_state *sd_state,
-				 u32 which, uint32_t pad, uint32_t target,
-				 u32 flags, struct v4l2_rect *r);
+				 struct v4l2_subdev_state *sd_state, u32 which,
+				 u32 pad, u32 target, u32 flags,
+				 struct v4l2_rect *r);
 /* Actually set the format */
 void atomisp_subdev_set_ffmt(struct v4l2_subdev *sd,
-			     struct v4l2_subdev_state *sd_state,
-			     uint32_t which,
+			     struct v4l2_subdev_state *sd_state, u32 which,
 			     u32 pad, struct v4l2_mbus_framefmt *ffmt);
 
 void atomisp_subdev_cleanup_pending_events(struct atomisp_sub_device *asd);

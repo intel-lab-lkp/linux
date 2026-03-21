@@ -23,18 +23,30 @@
 #include "atomisp_ioctl.h"
 
 const struct atomisp_in_fmt_conv atomisp_in_fmt_conv[] = {
-	{ MEDIA_BUS_FMT_SBGGR8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8, IA_CSS_BAYER_ORDER_BGGR },
-	{ MEDIA_BUS_FMT_SGBRG8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8, IA_CSS_BAYER_ORDER_GBRG },
-	{ MEDIA_BUS_FMT_SGRBG8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8, IA_CSS_BAYER_ORDER_GRBG },
-	{ MEDIA_BUS_FMT_SRGGB8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8, IA_CSS_BAYER_ORDER_RGGB },
-	{ MEDIA_BUS_FMT_SBGGR10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10, IA_CSS_BAYER_ORDER_BGGR },
-	{ MEDIA_BUS_FMT_SGBRG10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10, IA_CSS_BAYER_ORDER_GBRG },
-	{ MEDIA_BUS_FMT_SGRBG10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10, IA_CSS_BAYER_ORDER_GRBG },
-	{ MEDIA_BUS_FMT_SRGGB10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10, IA_CSS_BAYER_ORDER_RGGB },
-	{ MEDIA_BUS_FMT_SBGGR12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12, IA_CSS_BAYER_ORDER_BGGR },
-	{ MEDIA_BUS_FMT_SGBRG12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12, IA_CSS_BAYER_ORDER_GBRG },
-	{ MEDIA_BUS_FMT_SGRBG12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12, IA_CSS_BAYER_ORDER_GRBG },
-	{ MEDIA_BUS_FMT_SRGGB12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12, IA_CSS_BAYER_ORDER_RGGB },
+	{ MEDIA_BUS_FMT_SBGGR8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8,
+	  IA_CSS_BAYER_ORDER_BGGR },
+	{ MEDIA_BUS_FMT_SGBRG8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8,
+	  IA_CSS_BAYER_ORDER_GBRG },
+	{ MEDIA_BUS_FMT_SGRBG8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8,
+	  IA_CSS_BAYER_ORDER_GRBG },
+	{ MEDIA_BUS_FMT_SRGGB8_1X8, 8, 8, ATOMISP_INPUT_FORMAT_RAW_8,
+	  IA_CSS_BAYER_ORDER_RGGB },
+	{ MEDIA_BUS_FMT_SBGGR10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10,
+	  IA_CSS_BAYER_ORDER_BGGR },
+	{ MEDIA_BUS_FMT_SGBRG10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10,
+	  IA_CSS_BAYER_ORDER_GBRG },
+	{ MEDIA_BUS_FMT_SGRBG10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10,
+	  IA_CSS_BAYER_ORDER_GRBG },
+	{ MEDIA_BUS_FMT_SRGGB10_1X10, 10, 10, ATOMISP_INPUT_FORMAT_RAW_10,
+	  IA_CSS_BAYER_ORDER_RGGB },
+	{ MEDIA_BUS_FMT_SBGGR12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12,
+	  IA_CSS_BAYER_ORDER_BGGR },
+	{ MEDIA_BUS_FMT_SGBRG12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12,
+	  IA_CSS_BAYER_ORDER_GBRG },
+	{ MEDIA_BUS_FMT_SGRBG12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12,
+	  IA_CSS_BAYER_ORDER_GRBG },
+	{ MEDIA_BUS_FMT_SRGGB12_1X12, 12, 12, ATOMISP_INPUT_FORMAT_RAW_12,
+	  IA_CSS_BAYER_ORDER_RGGB },
 	{ MEDIA_BUS_FMT_UYVY8_1X16, 8, 8, ATOMISP_INPUT_FORMAT_YUV422_8, 0 },
 	{ MEDIA_BUS_FMT_YUYV8_1X16, 8, 8, ATOMISP_INPUT_FORMAT_YUV422_8, 0 },
 #if 0 // disabled due to clang warnings
@@ -42,7 +54,8 @@ const struct atomisp_in_fmt_conv atomisp_in_fmt_conv[] = {
 	{ V4L2_MBUS_FMT_CUSTOM_NV12, 12, 12, IA_CSS_FRAME_FORMAT_NV12, 0 },
 	{ V4L2_MBUS_FMT_CUSTOM_NV21, 12, 12, IA_CSS_FRAME_FORMAT_NV21, 0 },
 #endif
-	{ V4L2_MBUS_FMT_CUSTOM_YUV420, 12, 12, ATOMISP_INPUT_FORMAT_YUV420_8_LEGACY, 0 },
+	{ V4L2_MBUS_FMT_CUSTOM_YUV420, 12, 12,
+	  ATOMISP_INPUT_FORMAT_YUV420_8_LEGACY, 0 },
 #if 0
 	{ V4L2_MBUS_FMT_CUSTOM_M10MO_RAW, 8, 8, IA_CSS_FRAME_FORMAT_BINARY_8, 0 },
 #endif
@@ -96,7 +109,7 @@ const struct atomisp_in_fmt_conv *atomisp_find_in_fmt_conv(u32 code)
 }
 
 const struct atomisp_in_fmt_conv *atomisp_find_in_fmt_conv_by_atomisp_in_fmt(
-    enum atomisp_input_format atomisp_in_fmt)
+	enum atomisp_input_format atomisp_in_fmt)
 {
 	int i;
 
@@ -112,12 +125,14 @@ bool atomisp_subdev_format_conversion(struct atomisp_sub_device *asd)
 	struct v4l2_mbus_framefmt *sink, *src;
 
 	sink = atomisp_subdev_get_ffmt(&asd->subdev, NULL,
-				       V4L2_SUBDEV_FORMAT_ACTIVE, ATOMISP_SUBDEV_PAD_SINK);
+				       V4L2_SUBDEV_FORMAT_ACTIVE,
+				       ATOMISP_SUBDEV_PAD_SINK);
 	src = atomisp_subdev_get_ffmt(&asd->subdev, NULL,
-				      V4L2_SUBDEV_FORMAT_ACTIVE, ATOMISP_SUBDEV_PAD_SOURCE);
+				      V4L2_SUBDEV_FORMAT_ACTIVE,
+				      ATOMISP_SUBDEV_PAD_SOURCE);
 
-	return atomisp_is_mbuscode_raw(sink->code)
-	       && !atomisp_is_mbuscode_raw(src->code);
+	return atomisp_is_mbuscode_raw(sink->code) &&
+	       !atomisp_is_mbuscode_raw(src->code);
 }
 
 /*
@@ -132,8 +147,8 @@ bool atomisp_subdev_format_conversion(struct atomisp_sub_device *asd)
  *
  * Return 0 on success or a negative error code otherwise.
  */
-static long isp_subdev_ioctl(struct v4l2_subdev *sd,
-			     unsigned int cmd, void *arg)
+static long isp_subdev_ioctl(struct v4l2_subdev *sd, unsigned int cmd,
+			     void *arg)
 {
 	return 0;
 }
@@ -154,8 +169,7 @@ static int isp_subdev_subscribe_event(struct v4l2_subdev *sd,
 	    sub->type != V4L2_EVENT_ATOMISP_ACC_COMPLETE)
 		return -EINVAL;
 
-	if (sub->type == V4L2_EVENT_FRAME_SYNC &&
-	    !atomisp_css_valid_sof(isp))
+	if (sub->type == V4L2_EVENT_FRAME_SYNC && !atomisp_css_valid_sof(isp))
 		return -EINVAL;
 
 	return v4l2_event_subscribe(fh, sub, 16, NULL);
@@ -180,8 +194,7 @@ static int isp_subdev_enum_mbus_code(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int isp_subdev_validate_rect(struct v4l2_subdev *sd, uint32_t pad,
-				    uint32_t target)
+static int isp_subdev_validate_rect(struct v4l2_subdev *sd, u32 pad, u32 target)
 {
 	switch (pad) {
 	case ATOMISP_SUBDEV_PAD_SINK:
@@ -202,9 +215,8 @@ static int isp_subdev_validate_rect(struct v4l2_subdev *sd, uint32_t pad,
 }
 
 struct v4l2_rect *atomisp_subdev_get_rect(struct v4l2_subdev *sd,
-	struct v4l2_subdev_state *sd_state,
-	u32 which, uint32_t pad,
-	uint32_t target)
+					  struct v4l2_subdev_state *sd_state,
+					  u32 which, u32 pad, u32 target)
 {
 	struct atomisp_sub_device *isp_sd = v4l2_get_subdevdata(sd);
 
@@ -227,10 +239,9 @@ struct v4l2_rect *atomisp_subdev_get_rect(struct v4l2_subdev *sd,
 	return NULL;
 }
 
-struct v4l2_mbus_framefmt
-*atomisp_subdev_get_ffmt(struct v4l2_subdev *sd,
-			 struct v4l2_subdev_state *sd_state, uint32_t which,
-			 uint32_t pad)
+struct v4l2_mbus_framefmt *
+atomisp_subdev_get_ffmt(struct v4l2_subdev *sd,
+			struct v4l2_subdev_state *sd_state, u32 which, u32 pad)
 {
 	struct atomisp_sub_device *isp_sd = v4l2_get_subdevdata(sd);
 
@@ -241,8 +252,7 @@ struct v4l2_mbus_framefmt
 }
 
 static void isp_get_fmt_rect(struct v4l2_subdev *sd,
-			     struct v4l2_subdev_state *sd_state,
-			     uint32_t which,
+			     struct v4l2_subdev_state *sd_state, u32 which,
 			     struct v4l2_mbus_framefmt **ffmt,
 			     struct v4l2_rect *crop[ATOMISP_SUBDEV_PADS_NUM],
 			     struct v4l2_rect *comp[ATOMISP_SUBDEV_PADS_NUM])
@@ -290,29 +300,32 @@ static const char *atomisp_pad_str(unsigned int pad)
 }
 
 int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
-				 struct v4l2_subdev_state *sd_state,
-				 u32 which, uint32_t pad, uint32_t target,
-				 u32 flags, struct v4l2_rect *r)
+				 struct v4l2_subdev_state *sd_state, u32 which,
+				 u32 pad, u32 target, u32 flags,
+				 struct v4l2_rect *r)
 {
 	struct atomisp_sub_device *isp_sd = v4l2_get_subdevdata(sd);
 	struct atomisp_device *isp = isp_sd->isp;
 	struct v4l2_mbus_framefmt *ffmt[ATOMISP_SUBDEV_PADS_NUM];
 	struct v4l2_rect *crop[ATOMISP_SUBDEV_PADS_NUM],
-		       *comp[ATOMISP_SUBDEV_PADS_NUM];
+		*comp[ATOMISP_SUBDEV_PADS_NUM];
 
 	if ((pad == ATOMISP_SUBDEV_PAD_SINK && target != V4L2_SEL_TGT_CROP) ||
-	    (pad == ATOMISP_SUBDEV_PAD_SOURCE && target != V4L2_SEL_TGT_COMPOSE))
+	    (pad == ATOMISP_SUBDEV_PAD_SOURCE &&
+	     target != V4L2_SEL_TGT_COMPOSE))
 		return -EINVAL;
 
 	isp_get_fmt_rect(sd, sd_state, which, ffmt, crop, comp);
 
 	dev_dbg(isp->dev,
 		"sel: pad %s tgt %s l %d t %d w %d h %d which %s f 0x%8.8x\n",
-		atomisp_pad_str(pad), target == V4L2_SEL_TGT_CROP
-		? "V4L2_SEL_TGT_CROP" : "V4L2_SEL_TGT_COMPOSE",
+		atomisp_pad_str(pad),
+		target == V4L2_SEL_TGT_CROP ? "V4L2_SEL_TGT_CROP" :
+					      "V4L2_SEL_TGT_COMPOSE",
 		r->left, r->top, r->width, r->height,
-		which == V4L2_SUBDEV_FORMAT_TRY ? "V4L2_SUBDEV_FORMAT_TRY"
-		: "V4L2_SUBDEV_FORMAT_ACTIVE", flags);
+		which == V4L2_SUBDEV_FORMAT_TRY ? "V4L2_SUBDEV_FORMAT_TRY" :
+						  "V4L2_SUBDEV_FORMAT_ACTIVE",
+		flags);
 
 	r->width = rounddown(r->width, ATOM_ISP_STEP_WIDTH);
 	r->height = rounddown(r->height, ATOM_ISP_STEP_HEIGHT);
@@ -324,8 +337,8 @@ int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
 		crop[pad]->width = ffmt[pad]->width;
 		crop[pad]->height = ffmt[pad]->height;
 
-		if (atomisp_subdev_format_conversion(isp_sd)
-		    && crop[pad]->width && crop[pad]->height) {
+		if (atomisp_subdev_format_conversion(isp_sd) &&
+		    crop[pad]->width && crop[pad]->height) {
 			crop[pad]->width -= isp_sd->sink_pad_padding_w;
 			crop[pad]->height -= isp_sd->sink_pad_padding_h;
 		}
@@ -352,7 +365,8 @@ int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
 
 			atomisp_subdev_set_selection(sd, sd_state, which,
 						     ATOMISP_SUBDEV_PAD_SOURCE,
-						     V4L2_SEL_TGT_COMPOSE, flags, &tmp);
+						     V4L2_SEL_TGT_COMPOSE,
+						     flags, &tmp);
 		}
 
 		if (which == V4L2_SUBDEV_FORMAT_TRY)
@@ -375,10 +389,9 @@ int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
 			dvs_w = dvs_h = 0;
 		}
 		atomisp_css_video_set_dis_envelope(isp_sd, dvs_w, dvs_h);
-		atomisp_css_input_set_effective_resolution(isp_sd,
-							   ATOMISP_INPUT_STREAM_GENERAL,
-							   crop[pad]->width,
-							   crop[pad]->height);
+		atomisp_css_input_set_effective_resolution(
+			isp_sd, ATOMISP_INPUT_STREAM_GENERAL, crop[pad]->width,
+			crop[pad]->height);
 	} else if (isp_sd->run_mode->val != ATOMISP_RUN_MODE_PREVIEW) {
 		/* Only compose target is supported on source pads. */
 		if (isp_sd->vfpp->val == ATOMISP_VFPP_DISABLE_LOWLAT) {
@@ -387,8 +400,8 @@ int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
 			r->height = crop[ATOMISP_SUBDEV_PAD_SINK]->height;
 		}
 
-		if (crop[ATOMISP_SUBDEV_PAD_SINK]->width == r->width
-		    && crop[ATOMISP_SUBDEV_PAD_SINK]->height == r->height)
+		if (crop[ATOMISP_SUBDEV_PAD_SINK]->width == r->width &&
+		    crop[ATOMISP_SUBDEV_PAD_SINK]->height == r->height)
 			isp_sd->params.yuv_ds_en = false;
 		else
 			isp_sd->params.yuv_ds_en = true;
@@ -416,18 +429,18 @@ int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
 		 */
 		if (r->width * crop[ATOMISP_SUBDEV_PAD_SINK]->height <
 		    crop[ATOMISP_SUBDEV_PAD_SINK]->width * r->height)
-			atomisp_css_input_set_effective_resolution(isp_sd,
-				ATOMISP_INPUT_STREAM_GENERAL,
-				rounddown(crop[ATOMISP_SUBDEV_PAD_SINK]->
-					  height * r->width / r->height,
+			atomisp_css_input_set_effective_resolution(
+				isp_sd, ATOMISP_INPUT_STREAM_GENERAL,
+				rounddown(crop[ATOMISP_SUBDEV_PAD_SINK]->height *
+						  r->width / r->height,
 					  ATOM_ISP_STEP_WIDTH),
 				crop[ATOMISP_SUBDEV_PAD_SINK]->height);
 		else
-			atomisp_css_input_set_effective_resolution(isp_sd,
-				ATOMISP_INPUT_STREAM_GENERAL,
+			atomisp_css_input_set_effective_resolution(
+				isp_sd, ATOMISP_INPUT_STREAM_GENERAL,
 				crop[ATOMISP_SUBDEV_PAD_SINK]->width,
-				rounddown(crop[ATOMISP_SUBDEV_PAD_SINK]->
-					  width * r->height / r->width,
+				rounddown(crop[ATOMISP_SUBDEV_PAD_SINK]->width *
+						  r->height / r->width,
 					  ATOM_ISP_STEP_WIDTH));
 	} else {
 		comp[pad]->width = r->width;
@@ -445,8 +458,8 @@ get_rect:
 		return -EINVAL;
 	*r = *atomisp_subdev_get_rect(sd, sd_state, which, pad, target);
 
-	dev_dbg(isp->dev, "sel actual: l %d t %d w %d h %d\n",
-		r->left, r->top, r->width, r->height);
+	dev_dbg(isp->dev, "sel actual: l %d t %d w %d h %d\n", r->left, r->top,
+		r->width, r->height);
 
 	return 0;
 }
@@ -460,30 +473,28 @@ static int isp_subdev_set_selection(struct v4l2_subdev *sd,
 	if (rval)
 		return rval;
 
-	return atomisp_subdev_set_selection(sd, sd_state, sel->which,
-					    sel->pad,
+	return atomisp_subdev_set_selection(sd, sd_state, sel->which, sel->pad,
 					    sel->target, sel->flags, &sel->r);
 }
 
 void atomisp_subdev_set_ffmt(struct v4l2_subdev *sd,
-			     struct v4l2_subdev_state *sd_state,
-			     uint32_t which,
+			     struct v4l2_subdev_state *sd_state, u32 which,
 			     u32 pad, struct v4l2_mbus_framefmt *ffmt)
 {
 	struct atomisp_sub_device *isp_sd = v4l2_get_subdevdata(sd);
 	struct atomisp_device *isp = isp_sd->isp;
 	struct v4l2_mbus_framefmt *__ffmt =
-	    atomisp_subdev_get_ffmt(sd, sd_state, which, pad);
+		atomisp_subdev_get_ffmt(sd, sd_state, which, pad);
 
 	dev_dbg(isp->dev, "ffmt: pad %s w %d h %d code 0x%8.8x which %s\n",
 		atomisp_pad_str(pad), ffmt->width, ffmt->height, ffmt->code,
-		which == V4L2_SUBDEV_FORMAT_TRY ? "V4L2_SUBDEV_FORMAT_TRY"
-		: "V4L2_SUBDEV_FORMAT_ACTIVE");
+		which == V4L2_SUBDEV_FORMAT_TRY ? "V4L2_SUBDEV_FORMAT_TRY" :
+						  "V4L2_SUBDEV_FORMAT_ACTIVE");
 
 	switch (pad) {
 	case ATOMISP_SUBDEV_PAD_SINK: {
 		const struct atomisp_in_fmt_conv *fc =
-		    atomisp_find_in_fmt_conv(ffmt->code);
+			atomisp_find_in_fmt_conv(ffmt->code);
 		struct v4l2_rect r = {};
 
 		if (!fc) {
@@ -503,17 +514,18 @@ void atomisp_subdev_set_ffmt(struct v4l2_subdev *sd,
 					     V4L2_SEL_TGT_CROP, 0, &r);
 
 		if (which == V4L2_SUBDEV_FORMAT_ACTIVE) {
-			atomisp_css_input_set_resolution(isp_sd,
-							 ATOMISP_INPUT_STREAM_GENERAL, ffmt);
-			atomisp_css_input_set_binning_factor(isp_sd,
-							     ATOMISP_INPUT_STREAM_GENERAL,
-							     0);
-			atomisp_css_input_set_bayer_order(isp_sd, ATOMISP_INPUT_STREAM_GENERAL,
-							  fc->bayer_order);
-			atomisp_css_input_set_format(isp_sd, ATOMISP_INPUT_STREAM_GENERAL,
-						     fc->atomisp_in_fmt);
-			atomisp_css_set_default_isys_config(isp_sd, ATOMISP_INPUT_STREAM_GENERAL,
-							    ffmt);
+			atomisp_css_input_set_resolution(
+				isp_sd, ATOMISP_INPUT_STREAM_GENERAL, ffmt);
+			atomisp_css_input_set_binning_factor(
+				isp_sd, ATOMISP_INPUT_STREAM_GENERAL, 0);
+			atomisp_css_input_set_bayer_order(
+				isp_sd, ATOMISP_INPUT_STREAM_GENERAL,
+				fc->bayer_order);
+			atomisp_css_input_set_format(
+				isp_sd, ATOMISP_INPUT_STREAM_GENERAL,
+				fc->atomisp_in_fmt);
+			atomisp_css_set_default_isys_config(
+				isp_sd, ATOMISP_INPUT_STREAM_GENERAL, ffmt);
 		}
 
 		break;
@@ -538,8 +550,8 @@ static int isp_subdev_get_format(struct v4l2_subdev *sd,
 				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_format *fmt)
 {
-	fmt->format = *atomisp_subdev_get_ffmt(sd, sd_state, fmt->which,
-					       fmt->pad);
+	fmt->format =
+		*atomisp_subdev_get_ffmt(sd, sd_state, fmt->which, fmt->pad);
 
 	return 0;
 }
@@ -610,8 +622,8 @@ static int atomisp_link_setup(struct media_entity *entity,
 			      const struct media_pad *local,
 			      const struct media_pad *remote, u32 flags)
 {
-	struct v4l2_subdev *sd = container_of(entity, struct v4l2_subdev,
-					      entity);
+	struct v4l2_subdev *sd =
+		container_of(entity, struct v4l2_subdev, entity);
 	struct atomisp_sub_device *asd = v4l2_get_subdevdata(sd);
 	struct atomisp_device *isp = asd->isp;
 	int i;
@@ -624,7 +636,8 @@ static int atomisp_link_setup(struct media_entity *entity,
 	}
 
 	for (i = 0; i < isp->input_cnt; i++) {
-		if (&isp->inputs[i].csi_port->entity.pads[CSI2_PAD_SOURCE] == remote)
+		if (&isp->inputs[i].csi_port->entity.pads[CSI2_PAD_SOURCE] ==
+		    remote)
 			break;
 	}
 
@@ -649,9 +662,9 @@ static const struct media_entity_operations isp_subdev_media_ops = {
 };
 
 static const char *const ctrl_run_mode_menu[] = {
-	[ATOMISP_RUN_MODE_VIDEO]		= "Video",
-	[ATOMISP_RUN_MODE_STILL_CAPTURE]	= "Still capture",
-	[ATOMISP_RUN_MODE_PREVIEW]		= "Preview",
+	[ATOMISP_RUN_MODE_VIDEO] = "Video",
+	[ATOMISP_RUN_MODE_STILL_CAPTURE] = "Still capture",
+	[ATOMISP_RUN_MODE_PREVIEW] = "Preview",
 };
 
 static const struct v4l2_ctrl_config ctrl_run_mode = {
@@ -665,9 +678,9 @@ static const struct v4l2_ctrl_config ctrl_run_mode = {
 };
 
 static const char *const ctrl_vfpp_mode_menu[] = {
-	"Enable",			/* vfpp always enabled */
-	"Disable to scaler mode",	/* CSS into video mode and disable */
-	"Disable to low latency mode",	/* CSS into still mode and disable */
+	"Enable", /* vfpp always enabled */
+	"Disable to scaler mode", /* CSS into video mode and disable */
+	"Disable to low latency mode", /* CSS into still mode and disable */
 };
 
 static const struct v4l2_ctrl_config ctrl_vfpp = {
@@ -762,7 +775,8 @@ static const struct v4l2_ctrl_config ctrl_disable_dz = {
 };
 
 static int atomisp_init_subdev_pipe(struct atomisp_sub_device *asd,
-				    struct atomisp_video_pipe *pipe, enum v4l2_buf_type buf_type)
+				    struct atomisp_video_pipe *pipe,
+				    enum v4l2_buf_type buf_type)
 {
 	int ret;
 
@@ -816,7 +830,8 @@ static int isp_subdev_init_entities(struct atomisp_sub_device *asd)
 	pads[ATOMISP_SUBDEV_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
 
 	asd->fmt[ATOMISP_SUBDEV_PAD_SINK].fmt.code = MEDIA_BUS_FMT_SBGGR10_1X10;
-	asd->fmt[ATOMISP_SUBDEV_PAD_SOURCE].fmt.code = MEDIA_BUS_FMT_SBGGR10_1X10;
+	asd->fmt[ATOMISP_SUBDEV_PAD_SOURCE].fmt.code =
+		MEDIA_BUS_FMT_SBGGR10_1X10;
 
 	me->ops = &isp_subdev_media_ops;
 	me->function = MEDIA_ENT_F_PROC_VIDEO_ISP;
@@ -824,7 +839,8 @@ static int isp_subdev_init_entities(struct atomisp_sub_device *asd)
 	if (ret < 0)
 		return ret;
 
-	ret = atomisp_init_subdev_pipe(asd, &asd->video_out, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	ret = atomisp_init_subdev_pipe(asd, &asd->video_out,
+				       V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	if (ret)
 		return ret;
 
@@ -836,26 +852,18 @@ static int isp_subdev_init_entities(struct atomisp_sub_device *asd)
 	if (ret)
 		return ret;
 
-	asd->run_mode = v4l2_ctrl_new_custom(&asd->ctrl_handler,
-					     &ctrl_run_mode, NULL);
-	asd->vfpp = v4l2_ctrl_new_custom(&asd->ctrl_handler,
-					 &ctrl_vfpp, NULL);
-	asd->continuous_viewfinder = v4l2_ctrl_new_custom(&asd->ctrl_handler,
-				     &ctrl_continuous_viewfinder,
-				     NULL);
-	asd->continuous_raw_buffer_size =
-	    v4l2_ctrl_new_custom(&asd->ctrl_handler,
-				 &ctrl_continuous_raw_buffer_size,
-				 NULL);
+	asd->run_mode =
+		v4l2_ctrl_new_custom(&asd->ctrl_handler, &ctrl_run_mode, NULL);
+	asd->vfpp = v4l2_ctrl_new_custom(&asd->ctrl_handler, &ctrl_vfpp, NULL);
+	asd->continuous_viewfinder = v4l2_ctrl_new_custom(
+		&asd->ctrl_handler, &ctrl_continuous_viewfinder, NULL);
+	asd->continuous_raw_buffer_size = v4l2_ctrl_new_custom(
+		&asd->ctrl_handler, &ctrl_continuous_raw_buffer_size, NULL);
 
-	asd->enable_raw_buffer_lock =
-	    v4l2_ctrl_new_custom(&asd->ctrl_handler,
-				 &ctrl_enable_raw_buffer_lock,
-				 NULL);
-	asd->disable_dz =
-	    v4l2_ctrl_new_custom(&asd->ctrl_handler,
-				 &ctrl_disable_dz,
-				 NULL);
+	asd->enable_raw_buffer_lock = v4l2_ctrl_new_custom(
+		&asd->ctrl_handler, &ctrl_enable_raw_buffer_lock, NULL);
+	asd->disable_dz = v4l2_ctrl_new_custom(&asd->ctrl_handler,
+					       &ctrl_disable_dz, NULL);
 
 	/* Make controls visible on subdev as well. */
 	asd->subdev.ctrl_handler = &asd->ctrl_handler;
@@ -876,8 +884,8 @@ void atomisp_subdev_cleanup_pending_events(struct atomisp_sub_device *asd)
 	struct v4l2_event event;
 	unsigned int i, pending_event;
 
-	list_for_each_entry_safe(fh, fh_tmp,
-				 &asd->subdev.devnode->fh_list, list) {
+	list_for_each_entry_safe(fh, fh_tmp, &asd->subdev.devnode->fh_list,
+				 list) {
 		pending_event = v4l2_event_pending(fh);
 		for (i = 0; i < pending_event; i++)
 			v4l2_event_dequeue(fh, &event, 1);
