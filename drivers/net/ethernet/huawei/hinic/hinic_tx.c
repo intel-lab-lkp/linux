@@ -209,7 +209,7 @@ static void get_inner_l3_l4_type(struct sk_buff *skb, union hinic_l3 *ip,
 			   IPV4_PKT_NO_CHKSUM_OFFLOAD :
 			   IPV4_PKT_WITH_CHKSUM_OFFLOAD;
 		*l4_proto = ip->v4->protocol;
-	} else if (ip->v4->version == 6) {
+	} else if (ip->v6->version == 6) {
 		*l3_type = IPV6_PKT;
 		exthdr = ip->hdr + sizeof(*ip->v6);
 		*l4_proto = ip->v6->nexthdr;
