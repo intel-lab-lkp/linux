@@ -1629,17 +1629,12 @@ static int gpiochip_hierarchy_irq_domain_alloc(struct irq_domain *d,
 	gpiochip_dbg(gc, "found parent hwirq %u\n", parent_hwirq);
 
 	/*
-	 * We set handle_bad_irq because the .set_type() should
-	 * always be invoked and set the right type of handler.
+	 * Install the top-level flow handler early so a pending interrupt does
+	 * not hit handle_bad_irq while the parent IRQ is being allocated. Defer
+	 * child chip and hwirq assignment until parent allocation has completed.
 	 */
-	irq_domain_set_info(d,
-			    irq,
-			    hwirq,
-			    gc->irq.chip,
-			    gc,
-			    girq->handler,
-			    NULL, NULL);
-	irq_set_probe(irq);
+	irq_set_chip_data(irq, gc);
+	irq_set_handler(irq, girq->handler);
 
 	/* This parent only handles asserted level IRQs */
 	ret = girq->populate_parent_alloc_arg(gc, &gpio_parent_fwspec,
@@ -1657,12 +1652,17 @@ static int gpiochip_hierarchy_irq_domain_alloc(struct irq_domain *d,
 	 */
 	if (irq_domain_is_msi(d->parent) && (ret == -EEXIST))
 		ret = 0;
-	if (ret)
+	if (ret) {
 		gpiochip_err(gc,
 			     "failed to allocate parent hwirq %d for hwirq %lu\n",
 			     parent_hwirq, hwirq);
+		return ret;
+	}
 
-	return ret;
+	irq_domain_set_hwirq_and_chip(d, irq, hwirq, gc->irq.chip, gc);
+	irq_set_probe(irq);
+
+	return 0;
 }
 
 static unsigned int gpiochip_child_offset_to_irq_noop(struct gpio_chip *gc,
