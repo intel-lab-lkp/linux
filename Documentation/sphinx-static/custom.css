@@ -23,6 +23,13 @@ div.document {
     margin: 20px 10px 0 10px;
     width: auto;
 }
+/*
+ * Wrap generated tables in a container that preserves desktop overflow
+ * while allowing contained scrolling on smaller screens.
+ */
+div.body div.table-overflow {
+    display: contents;
+}
 
 /* Size the logo appropriately */
 img.logo {
@@ -94,6 +101,15 @@ input.kernel-toc-toggle { display: none; }
     }
     h3.kernel-toc-contents { display: inline; }
     div.kerneltoc a { color: black; }
+}
+
+@media screen and (max-width: 65em) {
+    div.body div.table-overflow {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
 }
 
 /* Language selection menu */
