@@ -877,7 +877,7 @@ static int vdec_open(struct file *file)
 	if (IS_ERR(sess->m2m_dev)) {
 		dev_err(dev, "Fail to v4l2_m2m_init\n");
 		ret = PTR_ERR(sess->m2m_dev);
-		goto err_free_sess;
+		goto err_m2m_release;
 	}
 
 	sess->m2m_ctx = v4l2_m2m_ctx_init(sess->m2m_dev, sess, m2m_queue_init);
@@ -889,7 +889,7 @@ static int vdec_open(struct file *file)
 
 	ret = vdec_init_ctrls(sess);
 	if (ret)
-		goto err_m2m_release;
+		goto err_m2m_ctx_release;
 
 	sess->pixfmt_cap = formats[0].pixfmts_cap[0];
 	sess->fmt_out = &formats[0];
@@ -913,9 +913,11 @@ static int vdec_open(struct file *file)
 
 	return 0;
 
+err_m2m_ctx_release:
+	v4l2_m2m_ctx_release(sess->m2m_ctx);
 err_m2m_release:
 	v4l2_m2m_release(sess->m2m_dev);
-err_free_sess:
+	v4l2_ctrl_handler_free(&sess->ctrl_handler);
 	kfree(sess);
 	return ret;
 }
@@ -926,6 +928,7 @@ static int vdec_close(struct file *file)
 
 	v4l2_m2m_ctx_release(sess->m2m_ctx);
 	v4l2_m2m_release(sess->m2m_dev);
+	v4l2_ctrl_handler_free(&sess->ctrl_handler);
 	v4l2_fh_del(&sess->fh, file);
 	v4l2_fh_exit(&sess->fh);
 
