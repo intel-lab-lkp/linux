@@ -369,14 +369,13 @@ void i915_vma_unpin_iomap(struct i915_vma *vma);
  * @vma: vma to pin fencing for
  *
  * This pins the fencing state (whether tiled or untiled) to make sure the
- * vma (and its object) is ready to be used as a scanout target. Fencing
- * status must be synchronize first by calling i915_vma_get_fence():
+ * vma (and its object) is ready to be used as a scanout target.
  *
  * The resulting fence pin reference must be released again with
  * i915_vma_unpin_fence().
  *
  * Returns:
- * True if the vma has a fence, false otherwise.
+ * 0 on success, negative error code on failure.
  */
 int __must_check i915_vma_pin_fence(struct i915_vma *vma);
 void i915_vma_revoke_fence(struct i915_vma *vma);
