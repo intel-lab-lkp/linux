@@ -140,6 +140,7 @@ struct mipi_dsi_host *of_find_mipi_dsi_host_by_node(struct device_node *node);
 #define MIPI_DSI_HS_PKT_END_ALIGNED	BIT(12)
 
 enum mipi_dsi_pixel_format {
+	MIPI_DSI_FMT_RGB101010,
 	MIPI_DSI_FMT_RGB888,
 	MIPI_DSI_FMT_RGB666,
 	MIPI_DSI_FMT_RGB666_PACKED,
@@ -235,6 +236,9 @@ extern const struct bus_type mipi_dsi_bus_type;
 static inline int mipi_dsi_pixel_format_to_bpp(enum mipi_dsi_pixel_format fmt)
 {
 	switch (fmt) {
+	case MIPI_DSI_FMT_RGB101010:
+		return 30;
+
 	case MIPI_DSI_FMT_RGB888:
 	case MIPI_DSI_FMT_RGB666:
 		return 24;
