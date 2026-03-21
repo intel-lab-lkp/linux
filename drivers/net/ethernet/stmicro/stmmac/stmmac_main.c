@@ -6863,7 +6863,8 @@ static int stmmac_vlan_restore(struct stmmac_priv *priv)
 {
 	int ret;
 
-	if (!(priv->dev->features & NETIF_F_VLAN_FEATURES))
+	if (!(priv->dev->features &
+	      (NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_HW_VLAN_STAG_FILTER)))
 		return 0;
 
 	if (priv->hw->num_vlan)
