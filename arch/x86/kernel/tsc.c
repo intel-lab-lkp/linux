@@ -436,9 +436,9 @@ static unsigned long pit_calibrate_tsc(u32 latch, unsigned long ms, int loopmin)
 
 	if (!has_legacy_pic()) {
 		/*
-		 * Relies on tsc_early_delay_calibrate() to have given us semi
-		 * usable udelay(), wait for the same 50ms we would have with
-		 * the PIT loop below.
+		 * Relies on tsc_early_init() to have given us semi usable
+		 * udelay(), wait for the same 50ms we would have with the
+		 * PIT loop below.
 		 */
 		udelay(10 * USEC_PER_MSEC);
 		udelay(10 * USEC_PER_MSEC);
