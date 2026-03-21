@@ -169,3 +169,166 @@ a.manpage {
 	font-weight: bold;
 	font-family: "Courier New", Courier, monospace;
 }
+
+/* Keep the quick search box as-is and add a secondary advanced search link. */
+div.sphinxsidebar p.search-advanced-link {
+    margin: 0.5em 0 0 0;
+    font-size: 0.95em;
+}
+
+/*
+ * The enhanced search page keeps the stock GET workflow but adds
+ * filter controls and grouped results.
+ */
+form.kernel-search-form {
+    margin-bottom: 2em;
+}
+
+div.kernel-search-query-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1em;
+    align-items: end;
+}
+
+div.kernel-search-query-field {
+    flex: 1 1 26em;
+}
+
+div.kernel-search-query-field label,
+div.kernel-search-field label,
+fieldset.kernel-search-kind-filters legend {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 0.35em;
+}
+
+div.kernel-search-query-field input[type="text"],
+div.kernel-search-field select {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+div.kernel-search-query-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75em;
+}
+
+span.kernel-search-progress {
+    min-height: 1.2em;
+    color: #666;
+}
+
+details.kernel-search-advanced {
+    margin-top: 1em;
+    padding: 0.75em 1em 1em 1em;
+    border: 1px solid #cccccc;
+    background: #f7f7f7;
+}
+
+details.kernel-search-advanced summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+div.kernel-search-advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16em, 1fr));
+    gap: 1em 1.25em;
+    margin-top: 1em;
+}
+
+fieldset.kernel-search-kind-filters {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+label.kernel-search-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    margin-bottom: 0.35em;
+}
+
+div.kernel-search-results {
+    margin-top: 1.5em;
+}
+
+p.kernel-search-status {
+    margin-bottom: 1.5em;
+}
+
+details.kernel-search-group {
+    margin-top: 2em;
+}
+
+summary.kernel-search-group-summary {
+    cursor: pointer;
+    font-size: 150%;
+    margin: 0 0 0.6em 0;
+}
+
+summary.kernel-search-group-summary h2.kernel-search-group-title {
+    display: inline;
+    margin: 0;
+    font-size: inherit;
+    font-weight: normal;
+}
+
+span.kernel-search-group-count {
+    color: #666666;
+    margin-left: 0.35em;
+}
+
+ol.kernel-search-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+li.kernel-search-result {
+    padding: 0.9em 0;
+    border-top: 1px solid #dddddd;
+}
+
+li.kernel-search-result:first-child {
+    border-top: none;
+}
+
+div.kernel-search-result-heading {
+    font-weight: bold;
+}
+
+div.kernel-search-path,
+div.kernel-search-meta,
+p.kernel-search-summary {
+    margin-top: 0.3em;
+    color: #555555;
+}
+
+div.kernel-search-path,
+div.kernel-search-meta {
+    font-size: 0.95em;
+}
+
+p.kernel-search-summary {
+    margin-bottom: 0;
+}
+
+@media screen and (max-width: 65em) {
+    div.kernel-search-query-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+@media screen and (min-width: 65em) {
+    div.kernel-search-result-heading,
+    div.kernel-search-path,
+    div.kernel-search-meta,
+    p.kernel-search-summary {
+        margin-left: 2rem;
+    }
+}

@@ -1,0 +1,106 @@
+{# SPDX-License-Identifier: GPL-2.0 #}
+
+{# Enhanced search page for kernel documentation. #}
+{%- extends "layout.html" %}
+{% set title = _('Search') %}
+{%- block scripts %}
+    {{ super() }}
+    <script src="{{ pathto('_static/language_data.js', 1) }}"></script>
+    <script src="{{ pathto('_static/kernel-search.js', 1) }}"></script>
+{%- endblock %}
+{% block extrahead %}
+    <script src="{{ pathto('searchindex.js', 1) }}" defer="defer"></script>
+    <meta name="robots" content="noindex" />
+    {{ super() }}
+{% endblock %}
+{% block body %}
+  <h1 id="search-documentation">{{ _('Search') }}</h1>
+  <noscript>
+  <div class="admonition warning">
+  <p>
+    {% trans %}Please activate JavaScript to enable the search
+    functionality.{% endtrans %}
+  </p>
+  </div>
+  </noscript>
+  <p class="kernel-search-help">
+    {% trans %}Searching for multiple words only shows matches that contain
+    all words.{% endtrans %}
+  </p>
+  <form id="kernel-search-form" class="kernel-search-form" action="" method="get">
+    <div class="kernel-search-query-row">
+      <div class="kernel-search-query-field">
+        <label for="kernel-search-query">{{ _('Search query') }}</label>
+        <input
+          id="kernel-search-query"
+          type="text"
+          name="q"
+          value=""
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+      </div>
+      <div class="kernel-search-query-actions">
+        <input type="submit" value="{{ _('Search') }}" />
+        <span id="search-progress" class="kernel-search-progress"></span>
+      </div>
+    </div>
+
+    <details id="kernel-search-advanced" class="kernel-search-advanced">
+      <summary>{{ _('Advanced search') }}</summary>
+      <input
+        id="kernel-search-advanced-flag"
+        type="hidden"
+        name="advanced"
+        value="1"
+        disabled="disabled"
+      />
+      <div class="kernel-search-advanced-grid">
+        <div class="kernel-search-field">
+          <label class="kernel-search-checkbox" for="kernel-search-exact">
+            <input id="kernel-search-exact" type="checkbox" name="exact" value="1" />
+            <span>{{ _('Exact identifier match') }}</span>
+          </label>
+        </div>
+
+        <fieldset class="kernel-search-kind-filters">
+          <legend>{{ _('Result kinds') }}</legend>
+          <label class="kernel-search-checkbox" for="kernel-search-kind-object">
+            <input id="kernel-search-kind-object" type="checkbox" name="kind" value="object" />
+            <span>{{ _('Symbols') }}</span>
+          </label>
+          <label class="kernel-search-checkbox" for="kernel-search-kind-title">
+            <input id="kernel-search-kind-title" type="checkbox" name="kind" value="title" />
+            <span>{{ _('Sections') }}</span>
+          </label>
+          <label class="kernel-search-checkbox" for="kernel-search-kind-index">
+            <input id="kernel-search-kind-index" type="checkbox" name="kind" value="index" />
+            <span>{{ _('Index entries') }}</span>
+          </label>
+          <label class="kernel-search-checkbox" for="kernel-search-kind-text">
+            <input id="kernel-search-kind-text" type="checkbox" name="kind" value="text" />
+            <span>{{ _('Pages') }}</span>
+          </label>
+        </fieldset>
+
+        <div class="kernel-search-field">
+          <label for="kernel-search-area">{{ _('Documentation area') }}</label>
+          <select id="kernel-search-area" name="area">
+            <option value="">{{ _('All documentation areas') }}</option>
+          </select>
+        </div>
+
+        <div class="kernel-search-field">
+          <label for="kernel-search-objtype">{{ _('Object type') }}</label>
+          <select id="kernel-search-objtype" name="objtype">
+            <option value="">{{ _('All object types') }}</option>
+          </select>
+        </div>
+      </div>
+    </details>
+  </form>
+
+  <div id="kernel-search-results" class="kernel-search-results"></div>
+{% endblock %}
