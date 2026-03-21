@@ -438,8 +438,8 @@ void drm_sysfs_lease_event(struct drm_device *dev)
  * set HOTPLUG=1 in the uevent environment, but this could be expanded to
  * deal with other types of events.
  *
- * Any new uapi should be using the drm_sysfs_connector_status_event()
- * for uevents on connector status change.
+ * Any new uapi should be using the drm_sysfs_connector_property_event()
+ * for uevents on connector property change.
  */
 void drm_sysfs_hotplug_event(struct drm_device *dev)
 {
