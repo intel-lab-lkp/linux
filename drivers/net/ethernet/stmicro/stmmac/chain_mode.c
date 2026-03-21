@@ -31,51 +31,64 @@ static int jumbo_frm(struct stmmac_tx_queue *tx_q, struct sk_buff *skb,
 	else
 		bmax = BUF_SIZE_2KiB;
 
-	len = nopaged_len - bmax;
+	if (nopaged_len > bmax) {
+		len = nopaged_len - bmax;
 
-	des2 = dma_map_single(priv->device, skb->data,
-			      bmax, DMA_TO_DEVICE);
-	desc->des2 = cpu_to_le32(des2);
-	if (dma_mapping_error(priv->device, des2))
-		return -1;
-	tx_q->tx_skbuff_dma[entry].buf = des2;
-	tx_q->tx_skbuff_dma[entry].len = bmax;
-	/* do not close the descriptor and do not set own bit */
-	stmmac_prepare_tx_desc(priv, desc, 1, bmax, csum, STMMAC_CHAIN_MODE,
-			0, false, skb->len);
+		des2 = dma_map_single(priv->device, skb->data,
+				      bmax, DMA_TO_DEVICE);
+		desc->des2 = cpu_to_le32(des2);
+		if (dma_mapping_error(priv->device, des2))
+			return -1;
+		tx_q->tx_skbuff_dma[entry].buf = des2;
+		tx_q->tx_skbuff_dma[entry].len = bmax;
+		/* do not close the descriptor and do not set own bit */
+		stmmac_prepare_tx_desc(priv, desc, 1, bmax, csum, STMMAC_CHAIN_MODE,
+				0, false, skb->len);
 
-	while (len != 0) {
-		tx_q->tx_skbuff[entry] = NULL;
-		entry = STMMAC_GET_ENTRY(entry, priv->dma_conf.dma_tx_size);
-		desc = tx_q->dma_tx + entry;
+		while (len != 0) {
+			tx_q->tx_skbuff[entry] = NULL;
+			entry = STMMAC_GET_ENTRY(entry, priv->dma_conf.dma_tx_size);
+			desc = tx_q->dma_tx + entry;
 
-		if (len > bmax) {
-			des2 = dma_map_single(priv->device,
-					      (skb->data + bmax * i),
-					      bmax, DMA_TO_DEVICE);
-			desc->des2 = cpu_to_le32(des2);
-			if (dma_mapping_error(priv->device, des2))
-				return -1;
-			tx_q->tx_skbuff_dma[entry].buf = des2;
-			tx_q->tx_skbuff_dma[entry].len = bmax;
-			stmmac_prepare_tx_desc(priv, desc, 0, bmax, csum,
-					STMMAC_CHAIN_MODE, 1, false, skb->len);
-			len -= bmax;
-			i++;
-		} else {
-			des2 = dma_map_single(priv->device,
-					      (skb->data + bmax * i), len,
-					      DMA_TO_DEVICE);
-			desc->des2 = cpu_to_le32(des2);
-			if (dma_mapping_error(priv->device, des2))
-				return -1;
-			tx_q->tx_skbuff_dma[entry].buf = des2;
-			tx_q->tx_skbuff_dma[entry].len = len;
-			/* last descriptor can be set now */
-			stmmac_prepare_tx_desc(priv, desc, 0, len, csum,
-					STMMAC_CHAIN_MODE, 1, true, skb->len);
-			len = 0;
+			if (len > bmax) {
+				des2 = dma_map_single(priv->device,
+						      (skb->data + bmax * i),
+						      bmax, DMA_TO_DEVICE);
+				desc->des2 = cpu_to_le32(des2);
+				if (dma_mapping_error(priv->device, des2))
+					return -1;
+				tx_q->tx_skbuff_dma[entry].buf = des2;
+				tx_q->tx_skbuff_dma[entry].len = bmax;
+				stmmac_prepare_tx_desc(priv, desc, 0, bmax, csum,
+						STMMAC_CHAIN_MODE, 1, false, skb->len);
+				len -= bmax;
+				i++;
+			} else {
+				des2 = dma_map_single(priv->device,
+						      (skb->data + bmax * i), len,
+						      DMA_TO_DEVICE);
+				desc->des2 = cpu_to_le32(des2);
+				if (dma_mapping_error(priv->device, des2))
+					return -1;
+				tx_q->tx_skbuff_dma[entry].buf = des2;
+				tx_q->tx_skbuff_dma[entry].len = len;
+				/* last descriptor can be set now */
+				stmmac_prepare_tx_desc(priv, desc, 0, len, csum,
+						STMMAC_CHAIN_MODE, 1, true, skb->len);
+				len = 0;
+			}
 		}
+	} else {
+		des2 = dma_map_single(priv->device, skb->data,
+				      nopaged_len, DMA_TO_DEVICE);
+		desc->des2 = cpu_to_le32(des2);
+		if (dma_mapping_error(priv->device, des2))
+			return -1;
+		tx_q->tx_skbuff_dma[entry].buf = des2;
+		tx_q->tx_skbuff_dma[entry].len = nopaged_len;
+		stmmac_prepare_tx_desc(priv, desc, 1, nopaged_len, csum,
+				STMMAC_CHAIN_MODE, 0, !skb_is_nonlinear(skb),
+				skb->len);
 	}
 
 	tx_q->cur_tx = entry;
