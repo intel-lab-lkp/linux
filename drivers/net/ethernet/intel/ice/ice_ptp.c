@@ -4,6 +4,7 @@
 #include "ice.h"
 #include "ice_lib.h"
 #include "ice_trace.h"
+#include "ice_txclk.h"
 
 static const char ice_pin_names[][64] = {
 	"SDP0",
@@ -1325,6 +1326,10 @@ void ice_ptp_link_change(struct ice_pf *pf, bool linkup)
 				return;
 			}
 		}
+
+		if (linkup)
+			ice_txclk_verify(pf);
+
 		mutex_unlock(&pf->dplls.lock);
 	}
 
@@ -3079,6 +3084,7 @@ static int ice_ptp_setup_pf(struct ice_pf *pf)
 {
 	struct ice_ptp *ctrl_ptp = ice_get_ctrl_ptp(pf);
 	struct ice_ptp *ptp = &pf->ptp;
+	u8 port_num, phy;
 
 	if (WARN_ON(!ctrl_ptp) || pf->hw.mac_type == ICE_MAC_UNKNOWN)
 		return -ENODEV;
@@ -3089,6 +3095,10 @@ static int ice_ptp_setup_pf(struct ice_pf *pf)
 	list_add(&ptp->port.list_node,
 		 &pf->adapter->ports.ports);
 	mutex_unlock(&pf->adapter->ports.lock);
+
+	port_num = ptp->port.port_num;
+	phy = port_num / pf->hw.ptp.ports_per_phy;
+	set_bit(port_num, &ctrl_ptp->tx_refclks[phy][pf->ptp.port.tx_clk]);
 
 	return 0;
 }
@@ -3290,6 +3300,7 @@ static void ice_ptp_init_tx_interrupt_mode(struct ice_pf *pf)
  */
 void ice_ptp_init(struct ice_pf *pf)
 {
+	enum ice_e825c_ref_clk tx_ref_clk;
 	struct ice_ptp *ptp = &pf->ptp;
 	struct ice_hw *hw = &pf->hw;
 	int err;
@@ -3316,6 +3327,17 @@ void ice_ptp_init(struct ice_pf *pf)
 		err = ice_ptp_init_owner(pf);
 		if (err)
 			goto err_exit;
+	}
+
+	ptp->port.tx_clk = ICE_REF_CLK_ENET;
+	ptp->port.tx_clk_req = ICE_REF_CLK_ENET;
+	if (hw->mac_type == ICE_MAC_GENERIC_3K_E825) {
+		err = ice_get_serdes_ref_sel_e825c(hw, ptp->port.port_num,
+						   &tx_ref_clk);
+		if (!err) {
+			ptp->port.tx_clk = tx_ref_clk;
+			ptp->port.tx_clk_req = tx_ref_clk;
+		}
 	}
 
 	err = ice_ptp_setup_pf(pf);
