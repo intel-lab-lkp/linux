@@ -25,6 +25,11 @@ description: |
   SE -> Select
   X, A, B, Y -> Digital action buttons
 
+  The gamepad exposes button events through the seesaw GPIO block and joystick
+  axes through the seesaw ADC block. If the optional IRQ pin is wired, button
+  presses can be interrupt-driven while joystick axes remain polled. Without an
+  IRQ, the driver falls back to fully polled operation.
+
   Datasheet: https://cdn-learn.adafruit.com/downloads/pdf/gamepad-qt.pdf
   Product page: https://www.adafruit.com/product/5743
   Arduino Driver: https://github.com/adafruit/Adafruit_Seesaw
@@ -39,7 +44,9 @@ properties:
   interrupts:
     maxItems: 1
     description:
-      The gamepad's IRQ pin triggers a rising edge if interrupts are enabled.
+      Optional interrupt from the gamepad's open-drain INT pin. The device
+      asserts INT low on button GPIO changes when interrupts are enabled in the
+      seesaw firmware, so the host should typically use a falling-edge trigger.
 
 required:
   - compatible
@@ -57,7 +64,8 @@ examples:
 
         joystick@50 {
             compatible = "adafruit,seesaw-gamepad";
-            interrupts = <18 IRQ_TYPE_EDGE_RISING>;
+            interrupt-parent = <&gpio1>;
+            interrupts = <18 IRQ_TYPE_EDGE_FALLING>;
             reg = <0x50>;
         };
     };
