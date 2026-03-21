@@ -184,6 +184,8 @@ static int pca9532_set_brightness(struct led_classdev *led_cdev,
 
 	if (value == LED_OFF)
 		led->state = PCA9532_OFF;
+	else if (led->state == PCA9532_PWM1)
+		return 0; /* non-zero brightness shall not stop HW blinking */
 	else if (value == LED_FULL)
 		led->state = PCA9532_ON;
 	else {
