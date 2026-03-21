@@ -2453,6 +2453,11 @@ static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 		goto out;
 	}
 
+	if (unlikely(queue_num >= adapter->num_active_tx_scrqs)) {
+		dev_kfree_skb_any(skb);
+		goto out_unlock;
+	}
+
 	tx_scrq = adapter->tx_scrq[queue_num];
 	txq = netdev_get_tx_queue(netdev, queue_num);
 	ind_bufp = &tx_scrq->ind_buf;
@@ -2672,6 +2677,9 @@ out:
 	adapter->tx_stats_buffers[queue_num].bytes += tx_bytes;
 	adapter->tx_stats_buffers[queue_num].dropped_packets += tx_dropped;
 
+	return ret;
+out_unlock:
+	rcu_read_unlock();
 	return ret;
 }
 
