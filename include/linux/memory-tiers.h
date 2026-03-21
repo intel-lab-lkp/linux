@@ -20,11 +20,17 @@
  */
 #define MEMTIER_ADISTANCE_DRAM	((4L * MEMTIER_CHUNK_SIZE) + (MEMTIER_CHUNK_SIZE >> 1))
 
+/*
+ * Default abstract distance assigned to non-DRAM memory if the platform
+ * driver didn't initialize one for this NUMA node.
+ */
+#define MEMTIER_DEFAULT_LOWTIER_ADISTANCE	(MEMTIER_ADISTANCE_DRAM * 5)
+
 struct memory_tier;
 struct memory_dev_type {
 	/* list of memory types that are part of same tier as this type */
 	struct list_head tier_sibling;
-	/* list of memory types that are managed by one driver */
+	/* memory types on global list */
 	struct list_head list;
 	/* abstract distance for this specific memory type */
 	int adistance;
@@ -39,8 +45,6 @@ struct access_coordinate;
 extern bool numa_demotion_enabled;
 extern struct memory_dev_type *default_dram_type;
 extern nodemask_t default_dram_nodes;
-struct memory_dev_type *alloc_memory_type(int adistance);
-void put_memory_type(struct memory_dev_type *memtype);
 void init_node_memory_type(int node, struct memory_dev_type *default_type);
 void clear_node_memory_type(int node, struct memory_dev_type *memtype);
 int register_mt_adistance_algorithm(struct notifier_block *nb);
@@ -49,9 +53,7 @@ int mt_calc_adistance(int node, int *adist);
 int mt_set_default_dram_perf(int nid, struct access_coordinate *perf,
 			     const char *source);
 int mt_perf_to_adistance(struct access_coordinate *perf, int *adist);
-struct memory_dev_type *mt_find_alloc_memory_type(int adist,
-						  struct list_head *memory_types);
-void mt_put_memory_types(struct list_head *memory_types);
+struct memory_dev_type *mt_get_memory_type(int adist);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node, const nodemask_t *allowed_mask);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
@@ -78,18 +80,6 @@ static inline bool node_is_toptier(int node)
 #define numa_demotion_enabled	false
 #define default_dram_type	NULL
 #define default_dram_nodes	NODE_MASK_NONE
-/*
- * CONFIG_NUMA implementation returns non NULL error.
- */
-static inline struct memory_dev_type *alloc_memory_type(int adistance)
-{
-	return NULL;
-}
-
-static inline void put_memory_type(struct memory_dev_type *memtype)
-{
-
-}
 
 static inline void init_node_memory_type(int node, struct memory_dev_type *default_type)
 {
@@ -142,14 +132,10 @@ static inline int mt_perf_to_adistance(struct access_coordinate *perf, int *adis
 	return -EIO;
 }
 
-static inline struct memory_dev_type *mt_find_alloc_memory_type(int adist,
-								struct list_head *memory_types)
+static inline struct memory_dev_type *mt_get_memory_type(int adist)
 {
 	return NULL;
 }
-
-static inline void mt_put_memory_types(struct list_head *memory_types)
-{
-}
 #endif	/* CONFIG_NUMA */
+
 #endif  /* _LINUX_MEMORY_TIERS_H */

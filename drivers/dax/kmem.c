@@ -16,13 +16,6 @@
 #include "dax-private.h"
 #include "bus.h"
 
-/*
- * Default abstract distance assigned to the NUMA node onlined
- * by DAX/kmem if the low level platform driver didn't initialize
- * one for this NUMA node.
- */
-#define MEMTIER_DEFAULT_DAX_ADISTANCE	(MEMTIER_ADISTANCE_DRAM * 5)
-
 /* Memory resource name used for add_memory_driver_managed(). */
 static const char *kmem_name;
 /* Set if any memory will remain added when the driver will be unloaded. */
@@ -47,23 +40,9 @@ static int dax_kmem_range(struct dev_dax *dev_dax, int i, struct range *r)
 struct dax_kmem_data {
 	const char *res_name;
 	int mgid;
+	struct memory_dev_type *mtype;
 	struct resource *res[];
 };
-
-static DEFINE_MUTEX(kmem_memory_type_lock);
-static LIST_HEAD(kmem_memory_types);
-
-static struct memory_dev_type *kmem_find_alloc_memory_type(int adist)
-{
-	guard(mutex)(&kmem_memory_type_lock);
-	return mt_find_alloc_memory_type(adist, &kmem_memory_types);
-}
-
-static void kmem_put_memory_types(void)
-{
-	guard(mutex)(&kmem_memory_type_lock);
-	mt_put_memory_types(&kmem_memory_types);
-}
 
 static int dev_dax_kmem_probe(struct dev_dax *dev_dax)
 {
@@ -74,7 +53,7 @@ static int dev_dax_kmem_probe(struct dev_dax *dev_dax)
 	int i, rc, mapped = 0;
 	mhp_t mhp_flags;
 	int numa_node;
-	int adist = MEMTIER_DEFAULT_DAX_ADISTANCE;
+	int adist = MEMTIER_DEFAULT_LOWTIER_ADISTANCE;
 
 	/*
 	 * Ensure good NUMA information for the persistent memory.
@@ -90,7 +69,7 @@ static int dev_dax_kmem_probe(struct dev_dax *dev_dax)
 	}
 
 	mt_calc_adistance(numa_node, &adist);
-	mtype = kmem_find_alloc_memory_type(adist);
+	mtype = mt_get_memory_type(adist);
 	if (IS_ERR(mtype))
 		return PTR_ERR(mtype);
 
@@ -189,6 +168,7 @@ static int dev_dax_kmem_probe(struct dev_dax *dev_dax)
 		}
 		mapped++;
 	}
+	data->mtype = mtype;
 
 	dev_set_drvdata(dev, data);
 
@@ -253,7 +233,7 @@ static void dev_dax_kmem_remove(struct dev_dax *dev_dax)
 		 * for that. This implies this reference will be around
 		 * till next reboot.
 		 */
-		clear_node_memory_type(node, NULL);
+		clear_node_memory_type(node, data->mtype);
 	}
 }
 #else
@@ -292,7 +272,6 @@ static int __init dax_kmem_init(void)
 	return rc;
 
 error_dax_driver:
-	kmem_put_memory_types();
 	kfree_const(kmem_name);
 	return rc;
 }
@@ -302,7 +281,6 @@ static void __exit dax_kmem_exit(void)
 	dax_driver_unregister(&device_dax_kmem_driver);
 	if (!any_hotremove_failed)
 		kfree_const(kmem_name);
-	kmem_put_memory_types();
 }
 
 MODULE_AUTHOR("Intel Corporation");
