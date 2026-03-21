@@ -3553,7 +3553,7 @@ static void rs_set_lq_ss_params(struct iwl_mvm *mvm,
 
 	/* This code is safe as it doesn't run concurrently for different
 	 * stations. This is guaranteed by the fact that calls to
-	 * ieee80211_tx_status wouldn't run concurrently for a single HW.
+	 * ieee80211_tx_status_skb wouldn't run concurrently for a single HW.
 	 */
 	if (!bfer_mvmsta) {
 		IWL_DEBUG_RATE(mvm, "No sta with BFER allowed found. Allow\n");
