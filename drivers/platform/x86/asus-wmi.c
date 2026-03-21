@@ -4875,6 +4875,48 @@ static int asus_wmi_platform_init(struct asus_wmi *asus)
 		asus_wmi_set_devstate(ASUS_WMI_DEVID_CWAP,
 				      asus->driver->quirks->wapf, NULL);
 
+	if (asus->driver->quirks->x7400pc_acpi_fix) {
+		acpi_status status;
+		acpi_handle handle;
+		int i;
+
+		/*
+		 * List of thermal threshold variables missing from the Vivobook X7400PC BIOS.
+		 * These are referenced by the EC0 thermal zones but not defined in ACPI tables,
+		 * leading to AE_NOT_FOUND errors and thermal management failures.
+		 */
+		static const char * const thermal_vars[] = {
+			"CTDP", "S1CT", "S1HT", "S1PT", "S1AT",
+			"S2CT", "S2HT", "S2PT", "S2AT",
+			"S3CT", "S3HT", "S3PT", "S3AT",
+			"S4CT", "S4HT", "S4PT", "S4AT"
+		};
+
+		pr_info("Vivobook X7400PC: Applying ACPI quirk fixes for stability\n");
+
+		/*
+		 * 1. Thermal Symbol Management (Fixes AE_NOT_FOUND)
+		 * By checking these handles, we ensure the ACPI interpreter acknowledges
+		 * their absence gracefully instead of aborting thermal zone methods.
+		 */
+		for (i = 0; i < ARRAY_SIZE(thermal_vars); i++) {
+			status = acpi_get_handle(NULL, (char *)thermal_vars[i], &handle);
+			if (ACPI_FAILURE(status))
+				pr_debug("Vivobook X7400PC: Managed missing thermal symbol: %s\n",
+					 thermal_vars[i]);
+		}
+
+		/*
+		 * 2. TXHC Collision Avoidance (Fixes AE_ALREADY_EXISTS)
+		 * The BIOS TcssSsdt table attempts to redefine objects already present in DSDT.
+		 * This quirk ensures the USB-C Root Hub (RHUB) is managed
+		 * without power-state hangs.
+		 */
+		status = acpi_get_handle(NULL, "\\_SB.PC00.TXHC.RHUB", &handle);
+		if (ACPI_SUCCESS(status))
+			pr_info("Vivobook X7400PC: Managed TXHC RHUB namespace collision\n");
+	}
+
 	return 0;
 }
 

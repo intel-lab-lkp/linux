@@ -155,6 +155,11 @@ static struct quirk_entry quirk_asus_z13 = {
 	.tablet_switch_mode = asus_wmi_kbd_dock_devid,
 };
 
+/* Quirk for ASUS Vivobook X7400PC to manage ACPI collisions and missing symbols */
+static struct quirk_entry quirk_asus_x7400pc = {
+	.x7400pc_acpi_fix = true,
+};
+
 static int dmi_matched(const struct dmi_system_id *dmi)
 {
 	pr_info("Identified laptop model '%s'\n", dmi->ident);
@@ -552,6 +557,15 @@ static const struct dmi_system_id asus_quirks[] = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "ROG Flow Z13"),
 		},
 		.driver_data = &quirk_asus_z13,
+	},
+	{
+		.callback = dmi_matched,
+		.ident = "ASUS Vivobook X7400PC",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Vivobook_ASUSLaptop X7400PC_N7400PC"),
+		},
+		.driver_data = &quirk_asus_x7400pc,
 	},
 	{},
 };
