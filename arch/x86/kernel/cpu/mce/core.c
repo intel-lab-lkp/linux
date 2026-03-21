@@ -1713,12 +1713,12 @@ noinstr void do_machine_check(struct pt_regs *regs)
 	} else {
 		/*
 		 * Handle an MCE which has happened in kernel space but from
-		 * which the kernel can recover: ex_has_fault_handler() has
-		 * already verified that the rIP at which the error happened is
-		 * a rIP from which the kernel can recover (by jumping to
-		 * recovery code specified in _ASM_EXTABLE_FAULT()) and the
-		 * corresponding exception handler which would do that is the
-		 * proper one.
+		 * which the kernel can recover: the severity grading code
+		 * has already verified that the rIP at which the error
+		 * happened is covered by an MCE-safe exception table entry
+		 * (EX_TYPE_FAULT_MCE_SAFE or EX_TYPE_DEFAULT_MCE_SAFE),
+		 * from which the kernel can recover by jumping to the
+		 * associated fixup code.
 		 */
 		if (m->kflags & MCE_IN_KERNEL_RECOV) {
 			if (!fixup_exception(regs, X86_TRAP_MC, 0, 0))
