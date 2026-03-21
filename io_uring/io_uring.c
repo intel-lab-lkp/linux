@@ -1555,22 +1555,34 @@ fail:
 		io_req_task_queue_fail(req, ret);
 }
 
-inline struct file *io_file_get_fixed(struct io_kiocb *req, int fd,
-				      unsigned int issue_flags)
+inline struct io_rsrc_node *io_file_get_fixed_node(struct io_kiocb *req, int fd,
+						   unsigned int issue_flags)
 {
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_rsrc_node *node;
-	struct file *file = NULL;
 
 	io_ring_submit_lock(ctx, issue_flags);
 	node = io_rsrc_node_lookup(&ctx->file_table.data, fd);
 	if (node) {
 		node->refs++;
+	}
+	io_ring_submit_unlock(ctx, issue_flags);
+
+	return node;
+}
+
+inline struct file *io_file_get_fixed(struct io_kiocb *req, int fd,
+				      unsigned int issue_flags)
+{
+	struct io_rsrc_node *node;
+	struct file *file = NULL;
+
+	node = io_file_get_fixed_node(req, fd, issue_flags);
+	if (node) {
 		req->file_node = node;
 		req->flags |= io_slot_flags(node);
 		file = io_slot_file(node);
 	}
-	io_ring_submit_unlock(ctx, issue_flags);
 	return file;
 }
 
