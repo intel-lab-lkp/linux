@@ -686,7 +686,8 @@ static bool xe_atomic_for_system(struct xe_vm *vm, struct xe_vma *vma)
  *
  * This function builds a disconnected page-table tree for a given address
  * range. The tree is connected to the main vm tree for the gpu using
- * xe_migrate_update_pgtables() and for the cpu using xe_pt_commit_bind().
+ * xe_migrate_update_pgtables() and for the cpu using
+ * xe_pt_commit_prepare_bind() and xe_pt_commit().
  * The function builds xe_vm_pgtable_update structures for already existing
  * shared page-tables, and non-existing shared and non-shared page-tables
  * are built and populated directly.
