@@ -1047,6 +1047,8 @@ static void build_protos(struct proto prot[TLS_NUM_CONFIG][TLS_NUM_CONFIG],
 static int tls_init(struct sock *sk)
 {
 	struct tls_context *ctx;
+	struct sk_psock *psock;
+
 	int rc = 0;
 
 	tls_build_proto(sk);
@@ -1055,6 +1057,20 @@ static int tls_init(struct sock *sk)
 	if (tls_toe_bypass(sk))
 		return 0;
 #endif
+
+	/* Reject sockets that are already attached to a sockmap.
+	 * The sockmap verdict path (sk_psock_verdict_data_ready) is
+	 * incompatible with TLS: it drains the receive queue via
+	 * tcp_read_skb() without updating copied_seq, causing the
+	 * TLS strparser to operate on stale queue state.
+	 * This mirrors the check in sk_psock_init() that rejects
+	 * sockets with ULP (TLS) from being inserted into sockmaps.
+	 */
+	rcu_read_lock();
+	psock = sk_psock(sk);
+	rcu_read_unlock();
+	if (psock)
+		return -EBUSY;
 
 	/* The TLS ulp is currently supported only for TCP sockets
 	 * in ESTABLISHED state.
