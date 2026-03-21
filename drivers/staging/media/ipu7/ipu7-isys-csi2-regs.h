@@ -54,7 +54,7 @@
 #define IS_MAIN_IRQ_CTL_LEVEL_NOT_PULSE		(IS_MAIN_IRQ_CTRL_BASE + 0x14)
 
 /* IS IO regs base */
-#define IS_PHY_NUM				4U
+#define IS_PHY_NUM				4
 #define IS_IO_BASE				0x280000
 
 /* dwc csi cdphy registers */
@@ -1003,7 +1003,7 @@
 #define PORT_ARB_IRQ_CTL_CLEAR			0x8
 #define PORT_ARB_IRQ_CTL_ENABLE			0xc
 
-#define MGC_PPC					4U
+#define MGC_PPC					4
 #define MGC_DTYPE_RAW(i)			(((i) - 8) / 2)
 #define IS_IO_MGC_BASE				(IS_IO_BASE + 0x48000)
 #define MGC_KICK				0x0
@@ -1048,8 +1048,8 @@
 #define MGC_MG_BUSY_STTS			0xa8
 #define MGC_MG_STOPPED_STTS			0xac
 /* tile width and height in pixels for Chess board and Color palette */
-#define MGC_TPG_TILE_WIDTH			64U
-#define MGC_TPG_TILE_HEIGHT			64U
+#define MGC_TPG_TILE_WIDTH			64
+#define MGC_TPG_TILE_HEIGHT			64
 
 #define IPU_CSI_PORT_A_ADDR_OFFSET		0x0
 #define IPU_CSI_PORT_B_ADDR_OFFSET		0x0
@@ -1152,8 +1152,8 @@
 #define IPU7_CSI_RX_SYNC_IRQ_MASK		0x0
 #define IPU7P5_CSI_RX_SYNC_FE_IRQ_MASK		0x0
 
-#define CSI_RX_NUM_ERRORS_IN_IRQ		12U
-#define CSI_RX_NUM_SYNC_IN_IRQ			32U
+#define CSI_RX_NUM_ERRORS_IN_IRQ		12
+#define CSI_RX_NUM_SYNC_IN_IRQ			32
 
 enum CSI_FE_MODE_TYPE {
 	CSI_FE_DPHY_MODE = 0,
@@ -1187,7 +1187,7 @@ enum CSI2HOST_SELECTION {
 #define CSI_REG_PORT_GPREG_CSI2_SLV_REG_SRST	0x4
 #define CSI_REG_PORT_GPREG_CSI2_PORT_CONTROL	0x8
 
-#define CSI_RX_NUM_IRQ				32U
+#define CSI_RX_NUM_IRQ				32
 
 #define IPU7_CSI_RX_SYNC_FS_VC			0x55555555
 #define IPU7_CSI_RX_SYNC_FE_VC			0xaaaaaaaa

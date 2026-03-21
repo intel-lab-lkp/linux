@@ -11,7 +11,7 @@
 #pragma pack(push, 1)
 typedef u32	ia_gofo_addr_t;
 
-#define IA_GOFO_ADDR_NULL	(0U)
+#define IA_GOFO_ADDR_NULL	(0)
 
 struct ia_gofo_version_s {
 	u8 patch;
@@ -24,8 +24,8 @@ struct ia_gofo_version_s {
 	{.major = (major_val), .minor = (minor_val), .subminor = \
 	(subminor_val), .patch = (patch_val)}
 
-#define IA_GOFO_MSG_VERSION_LIST_MAX_ENTRIES	(3U)
-#define IA_GOFO_MSG_RESERVED_SIZE		(3U)
+#define IA_GOFO_MSG_VERSION_LIST_MAX_ENTRIES	(3)
+#define IA_GOFO_MSG_RESERVED_SIZE		(3)
 
 struct ia_gofo_msg_version_list {
 	u8 num_versions;
@@ -35,11 +35,11 @@ struct ia_gofo_msg_version_list {
 
 #pragma pack(pop)
 
-#define TLV_TYPE_PADDING		(0U)
+#define TLV_TYPE_PADDING		(0)
 
 #pragma pack(push, 1)
 
-#define IA_GOFO_ABI_BITS_PER_BYTE	(8U)
+#define IA_GOFO_ABI_BITS_PER_BYTE	(8)
 
 struct ia_gofo_tlv_header {
 	u16 tlv_type;
@@ -58,10 +58,10 @@ struct ia_gofo_tlv_list {
 
 #define IA_GOFO_MODULO(dividend, divisor) ((dividend) % (divisor))
 
-#define IA_GOFO_MSG_ERR_MAX_DETAILS		(4U)
-#define IA_GOFO_MSG_ERR_OK			(0U)
-#define IA_GOFO_MSG_ERR_UNSPECIFED		(0xffffffffU)
-#define IA_GOFO_MSG_ERR_GROUP_UNSPECIFIED	(0U)
+#define IA_GOFO_MSG_ERR_MAX_DETAILS		(4)
+#define IA_GOFO_MSG_ERR_OK			(0)
+#define IA_GOFO_MSG_ERR_UNSPECIFED		(0xffffffff)
+#define IA_GOFO_MSG_ERR_GROUP_UNSPECIFIED	(0)
 #define IA_GOFO_MSG_ERR_IS_OK(err)	(IA_GOFO_MSG_ERR_OK == (err).err_code)
 
 #pragma pack(push, 1)
@@ -73,9 +73,9 @@ struct ia_gofo_msg_err {
 
 #pragma pack(pop)
 
-#define IA_GOFO_MSG_ERR_GROUP_APP_EXT_START	(16U)
-#define IA_GOFO_MSG_ERR_GROUP_MAX		(31U)
-#define IA_GOFO_MSG_ERR_GROUP_INTERNAL_START	(IA_GOFO_MSG_ERR_GROUP_MAX + 1U)
+#define IA_GOFO_MSG_ERR_GROUP_APP_EXT_START	(16)
+#define IA_GOFO_MSG_ERR_GROUP_MAX		(31)
+#define IA_GOFO_MSG_ERR_GROUP_INTERNAL_START	(IA_GOFO_MSG_ERR_GROUP_MAX + 1)
 #define IA_GOFO_MSG_ERR_GROUP_RESERVED	IA_GOFO_MSG_ERR_GROUP_UNSPECIFIED
 #define IA_GOFO_MSG_ERR_GROUP_GENERAL		1
 
@@ -130,7 +130,7 @@ enum ia_gofo_soc_pbk_instance_id {
 	IA_GOFO_SOC_PBK_ID_N
 };
 
-#define IA_GOFO_MSG_LINK_PBK_MAX_SLOTS	(2U)
+#define IA_GOFO_MSG_LINK_PBK_MAX_SLOTS	(2)
 
 struct ia_gofo_msg_indirect {
 	struct ia_gofo_msg_header header;
@@ -141,11 +141,11 @@ struct ia_gofo_msg_indirect {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-#define IA_GOFO_MSG_LOG_MAX_PARAMS	(4U)
-#define IA_GOFO_MSG_LOG_DOC_FMT_ID_MIN	(0U)
+#define IA_GOFO_MSG_LOG_MAX_PARAMS	(4)
+#define IA_GOFO_MSG_LOG_DOC_FMT_ID_MIN	(0)
 
-#define IA_GOFO_MSG_LOG_DOC_FMT_ID_MAX	(4095U)
-#define IA_GOFO_MSG_LOG_FMT_ID_INVALID	(0xfffffffU)
+#define IA_GOFO_MSG_LOG_DOC_FMT_ID_MAX	(4095)
+#define IA_GOFO_MSG_LOG_FMT_ID_INVALID	(0xfffffff)
 
 struct ia_gofo_msg_log_info {
 	u16 log_counter;
@@ -168,8 +168,8 @@ struct ia_gofo_msg_log {
 
 #pragma pack(pop)
 
-#define IA_GOFO_MSG_ABI_OUT_ACK_QUEUE_ID	(0U)
-#define IA_GOFO_MSG_ABI_OUT_LOG_QUEUE_ID	(1U)
-#define IA_GOFO_MSG_ABI_IN_DEV_QUEUE_ID		(2U)
+#define IA_GOFO_MSG_ABI_OUT_ACK_QUEUE_ID	(0)
+#define IA_GOFO_MSG_ABI_OUT_LOG_QUEUE_ID	(1)
+#define IA_GOFO_MSG_ABI_IN_DEV_QUEUE_ID		(2)
 
 #endif

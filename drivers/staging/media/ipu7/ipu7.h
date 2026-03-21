@@ -100,18 +100,18 @@ struct ipu7_device {
 /* FW is accessible within the first 2 GiB only in non-secure mode. */
 #define IPU_MMU_ADDR_BITS_NON_SECURE	31
 
-#define IPU7_IS_MMU_NUM			4U
-#define IPU7_PS_MMU_NUM			4U
-#define IPU7P5_IS_MMU_NUM		4U
-#define IPU7P5_PS_MMU_NUM		4U
-#define IPU8_IS_MMU_NUM			5U
-#define IPU8_PS_MMU_NUM			4U
-#define IPU_MMU_MAX_NUM			5U /* max(IS, PS) */
-#define IPU_MMU_MAX_TLB_L1_STREAMS	40U
-#define IPU_MMU_MAX_TLB_L2_STREAMS	40U
-#define IPU_ZLX_MAX_NUM			32U
-#define IPU_ZLX_POOL_NUM		8U
-#define IPU_UAO_PLANE_MAX_NUM		64U
+#define IPU7_IS_MMU_NUM			4
+#define IPU7_PS_MMU_NUM			4
+#define IPU7P5_IS_MMU_NUM		4
+#define IPU7P5_PS_MMU_NUM		4
+#define IPU8_IS_MMU_NUM			5
+#define IPU8_PS_MMU_NUM			4
+#define IPU_MMU_MAX_NUM			5 /* max(IS, PS) */
+#define IPU_MMU_MAX_TLB_L1_STREAMS	40
+#define IPU_MMU_MAX_TLB_L2_STREAMS	40
+#define IPU_ZLX_MAX_NUM			32
+#define IPU_ZLX_POOL_NUM		8
+#define IPU_UAO_PLANE_MAX_NUM		64
 
 /*
  * To maximize the IOSF utlization, IPU need to send requests in bursts.

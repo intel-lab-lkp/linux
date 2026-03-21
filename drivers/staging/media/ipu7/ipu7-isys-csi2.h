@@ -16,12 +16,12 @@ struct ipu7_isys;
 struct ipu7_isys_csi2_pdata;
 struct ipu7_isys_stream;
 
-#define IPU7_NR_OF_CSI2_VC		16U
+#define IPU7_NR_OF_CSI2_VC		16
 #define INVALID_VC_ID			-1
-#define IPU7_NR_OF_CSI2_SINK_PADS	1U
-#define IPU7_CSI2_PAD_SINK		0U
-#define IPU7_NR_OF_CSI2_SRC_PADS	8U
-#define IPU7_CSI2_PAD_SRC		1U
+#define IPU7_NR_OF_CSI2_SINK_PADS	1
+#define IPU7_CSI2_PAD_SINK		0
+#define IPU7_NR_OF_CSI2_SRC_PADS	8
+#define IPU7_CSI2_PAD_SRC		1
 #define IPU7_NR_OF_CSI2_PADS		(IPU7_NR_OF_CSI2_SINK_PADS + \
 					 IPU7_NR_OF_CSI2_SRC_PADS)
 

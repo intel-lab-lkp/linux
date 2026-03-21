@@ -28,8 +28,8 @@ enum ipu7_msg_type {
 	IPU_MSG_TYPE_N,
 };
 
-#define IPU_MSG_MAX_NODE_TERMS		(64U)
-#define IPU_MSG_MAX_FRAGS		(7U)
+#define IPU_MSG_MAX_NODE_TERMS		(64)
+#define IPU_MSG_MAX_FRAGS		(7)
 
 enum ipu7_msg_node_type {
 	IPU_MSG_NODE_TYPE_PAD = 0,
@@ -37,14 +37,14 @@ enum ipu7_msg_node_type {
 	IPU_MSG_NODE_TYPE_N
 };
 
-#define IPU_MSG_NODE_MAX_DEVICES	(128U)
-#define DEB_NUM_UINT32	(IPU_MSG_NODE_MAX_DEVICES / (sizeof(u32) * 8U))
+#define IPU_MSG_NODE_MAX_DEVICES	(128)
+#define DEB_NUM_UINT32	(IPU_MSG_NODE_MAX_DEVICES / (sizeof(u32) * 8))
 
 typedef u32 ipu7_msg_teb_t[2];
 typedef u32 ipu7_msg_deb_t[DEB_NUM_UINT32];
 
-#define IPU_MSG_NODE_MAX_ROUTE_ENABLES	(128U)
-#define RBM_NUM_UINT32	(IPU_MSG_NODE_MAX_ROUTE_ENABLES / (sizeof(u32) * 8U))
+#define IPU_MSG_NODE_MAX_ROUTE_ENABLES	(128)
+#define RBM_NUM_UINT32	(IPU_MSG_NODE_MAX_ROUTE_ENABLES / (sizeof(u32) * 8))
 
 typedef u32 ipu7_msg_rbm_t[RBM_NUM_UINT32];
 
@@ -67,13 +67,13 @@ struct ipu7_msg_cb_profile {
 	ipu7_msg_rbm_t reb;
 };
 
-#define IPU_MSG_NODE_MAX_PROFILES	(2U)
-#define IPU_MSG_NODE_DEF_PROFILE_IDX	(0U)
-#define IPU_MSG_NODE_RSRC_ID_EXT_IP	(0xffU)
+#define IPU_MSG_NODE_MAX_PROFILES	(2)
+#define IPU_MSG_NODE_DEF_PROFILE_IDX	(0)
+#define IPU_MSG_NODE_RSRC_ID_EXT_IP	(0xff)
 
-#define IPU_MSG_NODE_DONT_CARE_TEB_HI	(0xffffffffU)
-#define IPU_MSG_NODE_DONT_CARE_TEB_LO	(0xffffffffU)
-#define IPU_MSG_NODE_RSRC_ID_IS		(0xfeU)
+#define IPU_MSG_NODE_DONT_CARE_TEB_HI	(0xffffffff)
+#define IPU_MSG_NODE_DONT_CARE_TEB_LO	(0xffffffff)
+#define IPU_MSG_NODE_RSRC_ID_IS		(0xfe)
 
 struct ipu7_msg_node {
 	struct ia_gofo_tlv_header tlv_header;
@@ -113,10 +113,10 @@ enum ipu7_msg_link_cmprs_option_bit_depth {
 	IPU_MSG_LINK_CMPRS_OPTION_12BPP = 2,
 };
 
-#define IPU_MSG_LINK_CMPRS_SPACE_SAVING_DENOM		(128U)
-#define IPU_MSG_LINK_CMPRS_LOSSY_CFG_PAYLOAD_SIZE	(5U)
+#define IPU_MSG_LINK_CMPRS_SPACE_SAVING_DENOM		(128)
+#define IPU_MSG_LINK_CMPRS_LOSSY_CFG_PAYLOAD_SIZE	(5)
 #define IPU_MSG_LINK_CMPRS_SPACE_SAVING_NUM_MAX \
-	(IPU_MSG_LINK_CMPRS_SPACE_SAVING_DENOM - 1U)
+	(IPU_MSG_LINK_CMPRS_SPACE_SAVING_DENOM - 1)
 
 struct ipu7_msg_link_cmprs_plane_desc {
 	u8 plane_enable;
@@ -134,10 +134,10 @@ struct ipu7_msg_link_cmprs_plane_desc {
 	u32 lossy_cfg[IPU_MSG_LINK_CMPRS_LOSSY_CFG_PAYLOAD_SIZE];
 };
 
-#define IPU_MSG_LINK_CMPRS_MAX_PLANES		(2U)
-#define IPU_MSG_LINK_CMPRS_NO_ALIGN_INTERVAL	(0U)
-#define IPU_MSG_LINK_CMPRS_MIN_ALIGN_INTERVAL	(16U)
-#define IPU_MSG_LINK_CMPRS_MAX_ALIGN_INTERVAL	(1024U)
+#define IPU_MSG_LINK_CMPRS_MAX_PLANES		(2)
+#define IPU_MSG_LINK_CMPRS_NO_ALIGN_INTERVAL	(0)
+#define IPU_MSG_LINK_CMPRS_MIN_ALIGN_INTERVAL	(16)
+#define IPU_MSG_LINK_CMPRS_MAX_ALIGN_INTERVAL	(1024)
 struct ipu7_msg_link_cmprs_option {
 	struct ia_gofo_tlv_header header;
 	u32 cmprs_buf_size;
@@ -156,11 +156,11 @@ struct ipu7_msg_link_ep_pair {
 	struct ipu7_msg_link_ep ep_dst;
 };
 
-#define IPU_MSG_LINK_FOREIGN_KEY_NONE		(65535U)
-#define IPU_MSG_LINK_FOREIGN_KEY_MAX		(64U)
-#define IPU_MSG_LINK_PBK_ID_DONT_CARE		(255U)
-#define IPU_MSG_LINK_PBK_SLOT_ID_DONT_CARE	(255U)
-#define IPU_MSG_LINK_TERM_ID_DONT_CARE		(0xffU)
+#define IPU_MSG_LINK_FOREIGN_KEY_NONE		(65535)
+#define IPU_MSG_LINK_FOREIGN_KEY_MAX		(64)
+#define IPU_MSG_LINK_PBK_ID_DONT_CARE		(255)
+#define IPU_MSG_LINK_PBK_SLOT_ID_DONT_CARE	(255)
+#define IPU_MSG_LINK_TERM_ID_DONT_CARE		(0xff)
 
 struct ipu7_msg_link {
 	struct ia_gofo_tlv_header tlv_header;
@@ -258,9 +258,9 @@ enum ipu7_msg_term_type {
 	IPU_MSG_TERM_TYPE_N,
 };
 
-#define IPU_MSG_TERM_EVENT_TYPE_NONE		0U
-#define IPU_MSG_TERM_EVENT_TYPE_PROGRESS	1U
-#define IPU_MSG_TERM_EVENT_TYPE_N	(IPU_MSG_TERM_EVENT_TYPE_PROGRESS + 1U)
+#define IPU_MSG_TERM_EVENT_TYPE_NONE		0
+#define IPU_MSG_TERM_EVENT_TYPE_PROGRESS	1
+#define IPU_MSG_TERM_EVENT_TYPE_N	(IPU_MSG_TERM_EVENT_TYPE_PROGRESS + 1)
 
 struct ipu7_msg_term {
 	struct ia_gofo_tlv_header tlv_header;
@@ -292,8 +292,8 @@ struct ipu7_msg_term_event {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-#define IPU_MSG_DEVICE_SEND_MSG_ENABLED		1U
-#define IPU_MSG_DEVICE_SEND_MSG_DISABLED	0U
+#define IPU_MSG_DEVICE_SEND_MSG_ENABLED		1
+#define IPU_MSG_DEVICE_SEND_MSG_DISABLED	0
 
 #define IPU_MSG_DEVICE_OPEN_SEND_RESP		BIT(0)
 #define IPU_MSG_DEVICE_OPEN_SEND_IRQ		BIT(1)
@@ -333,9 +333,9 @@ enum ipu7_msg_err_device {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-#define IPU_MSG_GRAPH_ID_UNKNOWN	(0xffU)
-#define IPU_MSG_GRAPH_SEND_MSG_ENABLED	1U
-#define IPU_MSG_GRAPH_SEND_MSG_DISABLED	0U
+#define IPU_MSG_GRAPH_ID_UNKNOWN	(0xff)
+#define IPU_MSG_GRAPH_SEND_MSG_ENABLED	1
+#define IPU_MSG_GRAPH_SEND_MSG_DISABLED	0
 
 #define IPU_MSG_GRAPH_OPEN_SEND_RESP	BIT(0)
 #define IPU_MSG_GRAPH_OPEN_SEND_IRQ	BIT(1)
@@ -429,8 +429,8 @@ enum ipu7_msg_err_graph {
 
 #pragma pack(pop)
 
-#define FWPS_MSG_ABI_MAX_INPUT_QUEUES	(60U)
-#define FWPS_MSG_ABI_MAX_OUTPUT_QUEUES	(2U)
+#define FWPS_MSG_ABI_MAX_INPUT_QUEUES	(60)
+#define FWPS_MSG_ABI_MAX_OUTPUT_QUEUES	(2)
 #define FWPS_MSG_ABI_MAX_QUEUES \
 	(FWPS_MSG_ABI_MAX_OUTPUT_QUEUES + FWPS_MSG_ABI_MAX_INPUT_QUEUES)
 
@@ -441,25 +441,25 @@ enum ipu7_msg_err_graph {
 queues"
 #endif
 #define FWPS_MSG_ABI_IN_DEV_QUEUE_ID	(IA_GOFO_MSG_ABI_IN_DEV_QUEUE_ID)
-#define FWPS_MSG_ABI_IN_RESERVED_QUEUE_ID	(3U)
+#define FWPS_MSG_ABI_IN_RESERVED_QUEUE_ID	(3)
 #define FWPS_MSG_ABI_IN_FIRST_TASK_QUEUE_ID \
-	(FWPS_MSG_ABI_IN_RESERVED_QUEUE_ID + 1U)
+	(FWPS_MSG_ABI_IN_RESERVED_QUEUE_ID + 1)
 
 #if (FWPS_MSG_ABI_IN_FIRST_TASK_QUEUE_ID >= FWPS_MSG_ABI_MAX_INPUT_QUEUES)
 #error "Maximum queues configuration is too small to fit minimum number of \
 useful queues"
 #endif
 
-#define FWPS_MSG_ABI_IN_LAST_TASK_QUEUE_ID	(FWPS_MSG_ABI_MAX_QUEUES - 1U)
+#define FWPS_MSG_ABI_IN_LAST_TASK_QUEUE_ID	(FWPS_MSG_ABI_MAX_QUEUES - 1)
 #define FWPS_MSG_ABI_IN_MAX_TASK_QUEUES \
 	(FWPS_MSG_ABI_IN_LAST_TASK_QUEUE_ID - \
-	FWPS_MSG_ABI_IN_FIRST_TASK_QUEUE_ID + 1U)
+	FWPS_MSG_ABI_IN_FIRST_TASK_QUEUE_ID + 1)
 #define FWPS_MSG_ABI_OUT_FIRST_QUEUE_ID		(FWPS_MSG_ABI_OUT_ACK_QUEUE_ID)
-#define FWPS_MSG_ABI_OUT_LAST_QUEUE_ID	(FWPS_MSG_ABI_MAX_OUTPUT_QUEUES - 1U)
+#define FWPS_MSG_ABI_OUT_LAST_QUEUE_ID	(FWPS_MSG_ABI_MAX_OUTPUT_QUEUES - 1)
 #define FWPS_MSG_ABI_IN_FIRST_QUEUE_ID		(FWPS_MSG_ABI_IN_DEV_QUEUE_ID)
 #define FWPS_MSG_ABI_IN_LAST_QUEUE_ID	(FWPS_MSG_ABI_IN_LAST_TASK_QUEUE_ID)
 
-#define FWPS_MSG_HOST2FW_MAX_SIZE	(2U * 1024U)
-#define FWPS_MSG_FW2HOST_MAX_SIZE	(256U)
+#define FWPS_MSG_HOST2FW_MAX_SIZE	(2 * 1024)
+#define FWPS_MSG_FW2HOST_MAX_SIZE	(256)
 
 #endif

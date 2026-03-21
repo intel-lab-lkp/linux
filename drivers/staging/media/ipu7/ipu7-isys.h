@@ -28,21 +28,21 @@
 #define IPU_ISYS_ENTITY_PREFIX		"Intel IPU7"
 
 /* FW support max 16 streams */
-#define IPU_ISYS_MAX_STREAMS		16U
+#define IPU_ISYS_MAX_STREAMS		16
 
 /*
  * Current message queue configuration. These must be big enough
  * so that they never gets full. Queues are located in system memory
  */
-#define IPU_ISYS_SIZE_RECV_QUEUE	40U
-#define IPU_ISYS_SIZE_LOG_QUEUE		256U
-#define IPU_ISYS_SIZE_SEND_QUEUE	40U
-#define IPU_ISYS_NUM_RECV_QUEUE		1U
+#define IPU_ISYS_SIZE_RECV_QUEUE	40
+#define IPU_ISYS_SIZE_LOG_QUEUE		256
+#define IPU_ISYS_SIZE_SEND_QUEUE	40
+#define IPU_ISYS_NUM_RECV_QUEUE		1
 
-#define IPU_ISYS_MIN_WIDTH		2U
-#define IPU_ISYS_MIN_HEIGHT		2U
-#define IPU_ISYS_MAX_WIDTH		8160U
-#define IPU_ISYS_MAX_HEIGHT		8190U
+#define IPU_ISYS_MIN_WIDTH		2
+#define IPU_ISYS_MIN_HEIGHT		2
+#define IPU_ISYS_MAX_WIDTH		8160
+#define IPU_ISYS_MAX_HEIGHT		8190
 
 #define FW_CALL_TIMEOUT_JIFFIES		\
 	msecs_to_jiffies(IPU_LIB_CALL_TIMEOUT_MS)
