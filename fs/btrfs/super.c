@@ -101,6 +101,7 @@ enum {
 	Opt_compress_type,
 	Opt_degraded,
 	Opt_device,
+	Opt_nouuid,
 	Opt_fatal_errors,
 	Opt_flushoncommit,
 	Opt_max_inline,
@@ -226,6 +227,7 @@ static const struct fs_parameter_spec btrfs_fs_parameters[] = {
 	fsparam_flag_no("datasum", Opt_datasum),
 	fsparam_flag("degraded", Opt_degraded),
 	fsparam_string("device", Opt_device),
+	fsparam_flag("nouuid", Opt_nouuid),
 	fsparam_flag_no("discard", Opt_discard),
 	fsparam_enum("discard", Opt_discard_mode, btrfs_parameter_discard),
 	fsparam_enum("fatal_errors", Opt_fatal_errors, btrfs_parameter_fatal_errors),
@@ -381,6 +383,9 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			return PTR_ERR(device);
 		break;
 	}
+	case Opt_nouuid:
+		btrfs_set_opt(ctx->mount_opt, NOUUID);
+		break;
 	case Opt_datasum:
 		if (result.negated) {
 			btrfs_set_opt(ctx->mount_opt, NODATASUM);
@@ -1112,6 +1117,8 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 		seq_puts(seq, ",discard");
 	if (btrfs_test_opt(info, DISCARD_ASYNC))
 		seq_puts(seq, ",discard=async");
+	if (btrfs_test_opt(info, NOUUID))
+		seq_puts(seq, ",nouuid");
 	if (!(info->sb->s_flags & SB_POSIXACL))
 		seq_puts(seq, ",noacl");
 	if (btrfs_free_space_cache_v1_active(info))
@@ -1732,7 +1739,7 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	u64 total_free_data = 0;
 	u64 total_free_meta = 0;
 	u32 bits = fs_info->sectorsize_bits;
-	__be32 *fsid = (__be32 *)fs_info->fs_devices->fsid;
+	__be32 *fsid;
 	unsigned factor = 1;
 	struct btrfs_block_rsv *block_rsv = &fs_info->global_block_rsv;
 	int ret;
@@ -1818,14 +1825,34 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_bsize = fs_info->sectorsize;
 	buf->f_namelen = BTRFS_NAME_LEN;
 
-	/* We treat it as constant endianness (it doesn't matter _which_)
-	   because we want the fsid to come out the same whether mounted
-	   on a big-endian or little-endian host */
+	/*
+	 * fs_devices->fsid is dynamically generated when temp_fsid is active
+	 * to support cloned devices. Use the original on-disk fsid instead,
+	 * as it remains consistent across mount cycles.
+	 */
+	fsid = (__be32 *)fs_info->super_copy->fsid;
+	/*
+	 * We treat it as constant endianness (it doesn't matter _which_)
+	 * because we want the fsid to come out the same whether mounted
+	 * on a big-endian or little-endian host.
+	 */
 	buf->f_fsid.val[0] = be32_to_cpu(fsid[0]) ^ be32_to_cpu(fsid[2]);
 	buf->f_fsid.val[1] = be32_to_cpu(fsid[1]) ^ be32_to_cpu(fsid[3]);
 	/* Mask in the root object ID too, to disambiguate subvols */
 	buf->f_fsid.val[0] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root) >> 32;
 	buf->f_fsid.val[1] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root);
+
+	/*
+	 * dev_t provides way to differentiate mounted cloned devices keeps
+	 * the statfs fid is consistent and unique.
+	 */
+	if (btrfs_test_opt(fs_info, NOUUID) &&
+	    fs_info->fs_devices->total_devices == 1) {
+		__kernel_fsid_t dev_fsid = \
+	u64_to_fsid(huge_encode_dev(fs_info->fs_devices->latest_dev->bdev->bd_dev));
+		buf->f_fsid.val[0] ^= dev_fsid.val[1];
+		buf->f_fsid.val[1] ^= dev_fsid.val[0];
+	}
 
 	return 0;
 }

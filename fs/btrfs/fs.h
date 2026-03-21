@@ -270,6 +270,7 @@ enum {
 	BTRFS_MOUNT_IGNOREMETACSUMS		= (1ULL << 31),
 	BTRFS_MOUNT_IGNORESUPERFLAGS		= (1ULL << 32),
 	BTRFS_MOUNT_REF_TRACKER			= (1ULL << 33),
+	BTRFS_MOUNT_NOUUID			= (1ULL << 34),
 };
 
 /* These mount options require a full read-only fs, no new transaction is allowed. */
