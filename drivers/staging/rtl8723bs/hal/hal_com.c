@@ -751,25 +751,6 @@ void SetHalODMVar(
 	}
 }
 
-
-bool GetU1ByteIntegerFromStringInDecimal(char *Str, u8 *pInt)
-{
-	u16 i = 0;
-	*pInt = 0;
-
-	while (Str[i] != '\0') {
-		if (Str[i] >= '0' && Str[i] <= '9') {
-			*pInt *= 10;
-			*pInt += (Str[i] - '0');
-		} else
-			return false;
-
-		++i;
-	}
-
-	return true;
-}
-
 void rtw_hal_check_rxfifo_full(struct adapter *adapter)
 {
 	/* switch counter to RX fifo */

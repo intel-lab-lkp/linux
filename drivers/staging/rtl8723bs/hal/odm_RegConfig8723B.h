@@ -33,13 +33,4 @@ void odm_ConfigBB_PHY_8723B(struct dm_odm_t *pDM_Odm,
 			    u32 Data
 );
 
-void odm_ConfigBB_TXPWR_LMT_8723B(struct dm_odm_t *pDM_Odm,
-				  u8 *Regulation,
-				  u8 *Bandwidth,
-				  u8 *RateSection,
-				  u8 *RfPath,
-				  u8 *Channel,
-				  u8 *PowerLimit
-);
-
 #endif

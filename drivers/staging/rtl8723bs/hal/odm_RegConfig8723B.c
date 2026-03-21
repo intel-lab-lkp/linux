@@ -154,24 +154,3 @@ void odm_ConfigBB_PHY_8723B(
 	/*  Add 1us delay between BB/RF register setting. */
 	udelay(1);
 }
-
-void odm_ConfigBB_TXPWR_LMT_8723B(
-	struct dm_odm_t *pDM_Odm,
-	u8 *Regulation,
-	u8 *Bandwidth,
-	u8 *RateSection,
-	u8 *RfPath,
-	u8 *Channel,
-	u8 *PowerLimit
-)
-{
-	PHY_SetTxPowerLimit(
-		pDM_Odm->Adapter,
-		Regulation,
-		Bandwidth,
-		RateSection,
-		RfPath,
-		Channel,
-		PowerLimit
-	);
-}

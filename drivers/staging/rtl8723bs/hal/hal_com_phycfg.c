@@ -805,59 +805,6 @@ void PHY_InitTxPowerLimit(struct adapter *Adapter)
 	}
 }
 
-void PHY_SetTxPowerLimit(
-	struct adapter *Adapter,
-	u8 *Regulation,
-	u8 *Bandwidth,
-	u8 *RateSection,
-	u8 *RfPath,
-	u8 *Channel,
-	u8 *PowerLimit
-)
-{
-	struct hal_com_data	*pHalData = GET_HAL_DATA(Adapter);
-	u8 regulation = 0, bandwidth = 0, rateSection = 0, channel;
-	s8 powerLimit = 0, prevPowerLimit, channelIndex;
-
-	GetU1ByteIntegerFromStringInDecimal((s8 *)Channel, &channel);
-	GetU1ByteIntegerFromStringInDecimal((s8 *)PowerLimit, &powerLimit);
-
-	powerLimit = powerLimit > MAX_POWER_INDEX ? MAX_POWER_INDEX : powerLimit;
-
-	if (strcmp(Regulation, "FCC") == 0)
-		regulation = 0;
-	else if (strcmp(Regulation, "MKK") == 0)
-		regulation = 1;
-	else if (strcmp(Regulation, "ETSI") == 0)
-		regulation = 2;
-	else if (strcmp(Regulation, "WW13") == 0)
-		regulation = 3;
-
-	if (strcmp(RateSection, "CCK") == 0 && strcmp(RfPath, "1T") == 0)
-		rateSection = 0;
-	else if (strcmp(RateSection, "OFDM") == 0 && strcmp(RfPath, "1T") == 0)
-		rateSection = 1;
-	else if (strcmp(RateSection, "HT") == 0 && strcmp(RfPath, "1T") == 0)
-		rateSection = 2;
-	else
-		return;
-
-	if (strcmp(Bandwidth, "20M") == 0)
-		bandwidth = 0;
-	else if (strcmp(Bandwidth, "40M") == 0)
-		bandwidth = 1;
-
-	channelIndex = phy_GetChannelIndexOfTxPowerLimit(channel);
-
-	if (channelIndex == -1)
-		return;
-
-	prevPowerLimit = pHalData->TxPwrLimit_2_4G[regulation][bandwidth][rateSection][channelIndex][RF_PATH_A];
-
-	if (powerLimit < prevPowerLimit)
-		pHalData->TxPwrLimit_2_4G[regulation][bandwidth][rateSection][channelIndex][RF_PATH_A] = powerLimit;
-}
-
 void Hal_ChannelPlanToRegulation(struct adapter *Adapter, u16 ChannelPlan)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
