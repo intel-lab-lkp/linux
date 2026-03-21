@@ -242,10 +242,10 @@ static void __init early_reserve_mem(void)
 	start_pfn = PFN_UP(__pa(_end));
 
 	/*
-	 * Reserve the kernel text and Reserve the bootmem bitmap. We do
-	 * this in two steps (first step was init_bootmem()), because
-	 * this catches the (definitely buggy) case of us accidentally
-	 * initializing the bootmem allocator with an invalid RAM area.
+	 * Use memblock_reserve() to protect the kernel image (text
+	 * through bss).  The start address accounts for the zero-page
+	 * offset configured by the platform; the size is rounded up
+	 * past _end.
 	 */
 	memblock_reserve(start, (PFN_PHYS(start_pfn) + PAGE_SIZE - 1) - start);
 
