@@ -3556,7 +3556,7 @@ static void __pmu_ctx_sched_out(struct perf_event_pmu_context *pmu_ctx,
 		/*
 		 * Since we cleared EVENT_FLEXIBLE, also clear
 		 * rotate_necessary, is will be reset by
-		 * ctx_flexible_sched_in() when needed.
+		 * __pmu_ctx_sched_in() when needed.
 		 */
 		pmu_ctx->rotate_necessary = 0;
 	}
@@ -4575,7 +4575,7 @@ ctx_event_to_rotate(struct perf_event_pmu_context *pmu_ctx)
 
 out:
 	/*
-	 * Unconditionally clear rotate_necessary; if ctx_flexible_sched_in()
+	 * Unconditionally clear rotate_necessary; if __pmu_ctx_sched_in()
 	 * finds there are unschedulable events, it will set it again.
 	 */
 	pmu_ctx->rotate_necessary = 0;
