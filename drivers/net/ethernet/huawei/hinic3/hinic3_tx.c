@@ -242,7 +242,7 @@ static int hinic3_tx_csum(struct hinic3_txq *txq, struct hinic3_sq_task *task,
 		ip.hdr = skb_network_header(skb);
 		if (ip.v4->version == 4) {
 			l4_proto = ip.v4->protocol;
-		} else if (ip.v4->version == 6) {
+		} else if (ip.v6->version == 6) {
 			union hinic3_l4 l4;
 			unsigned char *exthdr;
 			__be16 frag_off;
