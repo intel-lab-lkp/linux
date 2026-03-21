@@ -1664,7 +1664,7 @@ static const struct export_operations ext4_export_ops = {
 enum {
 	Opt_bsd_df, Opt_minix_df, Opt_grpid, Opt_nogrpid,
 	Opt_resgid, Opt_resuid, Opt_sb,
-	Opt_nouid32, Opt_debug, Opt_removed,
+	Opt_nouid32, Opt_debug, Opt_removed, Opt_nouuid,
 	Opt_user_xattr, Opt_acl,
 	Opt_auto_da_alloc, Opt_noauto_da_alloc, Opt_noload,
 	Opt_commit, Opt_min_batch_time, Opt_max_batch_time, Opt_journal_dev,
@@ -1743,6 +1743,7 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_u32	("sb",			Opt_sb),
 	fsparam_enum	("errors",		Opt_errors, ext4_param_errors),
 	fsparam_flag	("nouid32",		Opt_nouid32),
+	fsparam_flag	("nouuid",		Opt_nouuid),
 	fsparam_flag	("debug",		Opt_debug),
 	fsparam_flag	("oldalloc",		Opt_removed),
 	fsparam_flag	("orlov",		Opt_removed),
@@ -1898,6 +1899,7 @@ static const struct mount_opts {
 	{Opt_acl, 0, MOPT_NOSUPPORT},
 #endif
 	{Opt_nouid32, EXT4_MOUNT_NO_UID32, MOPT_SET},
+	{Opt_nouuid, EXT4_MOUNT2_NOUUID, MOPT_SET | MOPT_2},
 	{Opt_debug, EXT4_MOUNT_DEBUG, MOPT_SET},
 	{Opt_quota, EXT4_MOUNT_QUOTA | EXT4_MOUNT_USRQUOTA, MOPT_SET | MOPT_Q},
 	{Opt_usrquota, EXT4_MOUNT_QUOTA | EXT4_MOUNT_USRQUOTA,
@@ -2388,6 +2390,9 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 				 "mb_optimize_scan should be set to 0 or 1.");
 			return -EINVAL;
 		}
+		return 0;
+	case Opt_nouuid:
+		ctx_set_mount_opt2(ctx, EXT4_MOUNT2_NOUUID);
 		return 0;
 	}
 
@@ -6941,7 +6946,10 @@ static int ext4_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_files = le32_to_cpu(es->s_inodes_count);
 	buf->f_ffree = percpu_counter_sum_positive(&sbi->s_freeinodes_counter);
 	buf->f_namelen = EXT4_NAME_LEN;
-	buf->f_fsid = uuid_to_fsid(es->s_uuid);
+	if (test_opt2(sb, NOUUID))
+		buf->f_fsid = u64_to_fsid(huge_encode_dev(sb->s_bdev->bd_dev));
+	else
+		buf->f_fsid = uuid_to_fsid(es->s_uuid);
 
 #ifdef CONFIG_QUOTA
 	if (ext4_test_inode_flag(dentry->d_inode, EXT4_INODE_PROJINHERIT) &&
