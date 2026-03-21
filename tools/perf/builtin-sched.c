@@ -1525,7 +1525,7 @@ static int process_sched_wakeup_event(const struct perf_tool *tool,
 {
 	struct perf_sched *sched = container_of(tool, struct perf_sched, tool);
 
-	if (sched->tp_handler->wakeup_event)
+	if (sched->tp_handler && sched->tp_handler->wakeup_event)
 		return sched->tp_handler->wakeup_event(sched, evsel, sample, machine);
 
 	return 0;
@@ -1809,7 +1809,7 @@ static int process_sched_switch_event(const struct perf_tool *tool,
 			sched->nr_context_switch_bugs++;
 	}
 
-	if (sched->tp_handler->switch_event)
+	if (sched->tp_handler && sched->tp_handler->switch_event)
 		err = sched->tp_handler->switch_event(sched, evsel, sample, machine);
 
 	sched->curr_pid[this_cpu] = next_pid;
@@ -1823,7 +1823,7 @@ static int process_sched_runtime_event(const struct perf_tool *tool,
 {
 	struct perf_sched *sched = container_of(tool, struct perf_sched, tool);
 
-	if (sched->tp_handler->runtime_event)
+	if (sched->tp_handler && sched->tp_handler->runtime_event)
 		return sched->tp_handler->runtime_event(sched, evsel, sample, machine);
 
 	return 0;
@@ -1840,7 +1840,7 @@ static int perf_sched__process_fork_event(const struct perf_tool *tool,
 	perf_event__process_fork(tool, event, sample, machine);
 
 	/* and then run additional processing needed for this command */
-	if (sched->tp_handler->fork_event)
+	if (sched->tp_handler && sched->tp_handler->fork_event)
 		return sched->tp_handler->fork_event(sched, event, machine);
 
 	return 0;
@@ -1853,7 +1853,7 @@ static int process_sched_migrate_task_event(const struct perf_tool *tool,
 {
 	struct perf_sched *sched = container_of(tool, struct perf_sched, tool);
 
-	if (sched->tp_handler->migrate_task_event)
+	if (sched->tp_handler && sched->tp_handler->migrate_task_event)
 		return sched->tp_handler->migrate_task_event(sched, evsel, sample, machine);
 
 	return 0;
