@@ -3062,6 +3062,10 @@ static struct mnt_namespace *get_detached_copy(const struct path *path, unsigned
 
 	for (p = mnt; p; p = next_mnt(p, mnt)) {
 		mnt_add_to_ns(ns, p);
+		if (p->mnt_mp) {
+			hlist_del_init(&p->mnt_mp_list);
+			p->mnt_mp = NULL;
+		}
 		ns->nr_mounts++;
 	}
 	ns->root = mnt;
