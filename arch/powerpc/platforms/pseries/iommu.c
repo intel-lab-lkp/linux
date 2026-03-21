@@ -634,7 +634,7 @@ static void pci_dma_bus_setup_pSeries(struct pci_bus *bus)
 
 	if (bus->self) {
 		/* This is not a root bus, any setup will be done for the
-		 * device-side of the bridge in iommu_dev_setup_pSeries().
+		 * device-side of the bridge in pci_dma_dev_setup_pSeries().
 		 */
 		return;
 	}
