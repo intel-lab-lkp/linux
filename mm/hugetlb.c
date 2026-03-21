@@ -2087,6 +2087,15 @@ int dissolve_free_hugetlb_folios(unsigned long start_pfn, unsigned long end_pfn)
 
 	for (pfn = start_pfn; pfn < end_pfn; pfn += 1 << order) {
 		folio = pfn_folio(pfn);
+
+		/*
+		 * For hwpoisoned hugetlb, put the refcount increaed by
+		 * memory-failure, make it succeed to dissolve.
+		 */
+		if (unlikely(folio_test_hwpoison(folio) && folio_test_hugetlb(folio)
+				&& folio_ref_count(folio)))
+			folio_put(folio);
+
 		rc = dissolve_free_hugetlb_folio(folio);
 		if (rc)
 			break;
