@@ -37,10 +37,6 @@ DECLARE_RC_STRUCT(maps) {
 	 */
 	struct map	 **maps_by_name;
 	struct machine	 *machine;
-#ifdef HAVE_LIBUNWIND_SUPPORT
-	void		*addr_space;
-	const struct unwind_libunwind_ops *unwind_libunwind_ops;
-#endif
 #ifdef HAVE_LIBDW_SUPPORT
 	void		*libdw_addr_space_dwfl;
 #endif
@@ -186,27 +182,6 @@ refcount_t *maps__refcnt(struct maps *maps)
 	return &RC_CHK_ACCESS(maps)->refcnt;
 }
 
-#ifdef HAVE_LIBUNWIND_SUPPORT
-void *maps__addr_space(const struct maps *maps)
-{
-	return RC_CHK_ACCESS(maps)->addr_space;
-}
-
-void maps__set_addr_space(struct maps *maps, void *addr_space)
-{
-	RC_CHK_ACCESS(maps)->addr_space = addr_space;
-}
-
-const struct unwind_libunwind_ops *maps__unwind_libunwind_ops(const struct maps *maps)
-{
-	return RC_CHK_ACCESS(maps)->unwind_libunwind_ops;
-}
-
-void maps__set_unwind_libunwind_ops(struct maps *maps, const struct unwind_libunwind_ops *ops)
-{
-	RC_CHK_ACCESS(maps)->unwind_libunwind_ops = ops;
-}
-#endif
 #ifdef HAVE_LIBDW_SUPPORT
 void *maps__libdw_addr_space_dwfl(const struct maps *maps)
 {
@@ -230,10 +205,6 @@ static void maps__init(struct maps *maps, struct machine *machine)
 	RC_CHK_ACCESS(maps)->maps_by_address = NULL;
 	RC_CHK_ACCESS(maps)->maps_by_name = NULL;
 	RC_CHK_ACCESS(maps)->machine = machine;
-#ifdef HAVE_LIBUNWIND_SUPPORT
-	RC_CHK_ACCESS(maps)->addr_space = NULL;
-	RC_CHK_ACCESS(maps)->unwind_libunwind_ops = NULL;
-#endif
 #ifdef HAVE_LIBDW_SUPPORT
 	RC_CHK_ACCESS(maps)->libdw_addr_space_dwfl = NULL;
 #endif
@@ -257,7 +228,6 @@ static void maps__exit(struct maps *maps)
 	}
 	zfree(&maps_by_address);
 	zfree(&maps_by_name);
-	unwind__finish_access(maps);
 #ifdef HAVE_LIBDW_SUPPORT
 	libdw__invalidate_dwfl(maps, maps__libdw_addr_space_dwfl(maps));
 #endif
@@ -1067,14 +1037,11 @@ int maps__copy_from(struct maps *dest, struct maps *parent)
 			if (!new)
 				err = -ENOMEM;
 			else {
-				err = unwind__prepare_access(dest, new, NULL);
-				if (!err) {
-					dest_maps_by_address[i] = new;
-					map__set_kmap_maps(new, dest);
-					if (dest_maps_by_name)
-						dest_maps_by_name[i] = map__get(new);
-					RC_CHK_ACCESS(dest)->nr_maps = i + 1;
-				}
+				dest_maps_by_address[i] = new;
+				map__set_kmap_maps(new, dest);
+				if (dest_maps_by_name)
+					dest_maps_by_name[i] = map__get(new);
+				RC_CHK_ACCESS(dest)->nr_maps = i + 1;
 			}
 			if (err)
 				map__put(new);
@@ -1099,9 +1066,7 @@ int maps__copy_from(struct maps *dest, struct maps *parent)
 			if (!new)
 				err = -ENOMEM;
 			else {
-				err = unwind__prepare_access(dest, new, NULL);
-				if (!err)
-					err = __maps__insert(dest, new);
+				err = __maps__insert(dest, new);
 			}
 			map__put(new);
 		}

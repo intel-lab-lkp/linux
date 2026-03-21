@@ -19,7 +19,6 @@ struct addr_location;
 struct map;
 struct perf_record_namespaces;
 struct thread_stack;
-struct unwind_libunwind_ops;
 
 struct lbr_stitch {
 	struct list_head		lists;

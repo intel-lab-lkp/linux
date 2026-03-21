@@ -46,12 +46,6 @@ struct machine *maps__machine(const struct maps *maps);
 unsigned int maps__nr_maps(const struct maps *maps); /* Test only. */
 refcount_t *maps__refcnt(struct maps *maps); /* Test only. */
 
-#ifdef HAVE_LIBUNWIND_SUPPORT
-void *maps__addr_space(const struct maps *maps);
-void maps__set_addr_space(struct maps *maps, void *addr_space);
-const struct unwind_libunwind_ops *maps__unwind_libunwind_ops(const struct maps *maps);
-void maps__set_unwind_libunwind_ops(struct maps *maps, const struct unwind_libunwind_ops *ops);
-#endif
 #ifdef HAVE_LIBDW_SUPPORT
 void *maps__libdw_addr_space_dwfl(const struct maps *maps);
 void maps__set_libdw_addr_space_dwfl(struct maps *maps, void *dwfl);

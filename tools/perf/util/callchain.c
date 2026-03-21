@@ -1742,7 +1742,7 @@ void callchain_param_setup(u64 sample_type, uint16_t e_machine)
 	}
 
 	/*
-	 * It's necessary to use libunwind to reliably determine the caller of
+	 * It's necessary to use libdw to reliably determine the caller of
 	 * a leaf function on aarch64, as otherwise we cannot know whether to
 	 * start from the LR or FP.
 	 *

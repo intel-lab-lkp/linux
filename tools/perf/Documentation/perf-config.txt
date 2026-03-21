@@ -446,8 +446,8 @@ call-graph.*::
 
 	call-graph.record-mode::
 		The mode for user space can be 'fp' (frame pointer), 'dwarf'
-		and 'lbr'.  The value 'dwarf' is effective only if libunwind
-		(or a recent version of libdw) is present on the system;
+		and 'lbr'.  The value 'dwarf' is effective only if a recent
+		version of libdw is present on the system;
 		the value 'lbr' only works for certain cpus. The method for
 		kernel space is controlled not by this option but by the
 		kernel config (CONFIG_UNWINDER_*).

@@ -308,7 +308,7 @@ OPTIONS
 	In some systems, where binaries are build with gcc
 	--fomit-frame-pointer, using the "fp" method will produce bogus
 	call graphs, using "dwarf", if available (perf tools linked to
-	the libunwind or libdw library) should be used instead.
+	the libdw library) should be used instead.
 	Using the "lbr" method doesn't require any compiler options. It
 	will produce call graphs from the hardware LBR registers. The
 	main limitation is that it is only available on new Intel

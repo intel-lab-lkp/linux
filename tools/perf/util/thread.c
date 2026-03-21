@@ -263,9 +263,6 @@ static int ____thread__set_comm(struct thread *thread, const char *str,
 		if (!new)
 			return -ENOMEM;
 		list_add(&new->list, thread__comm_list(thread));
-
-		if (exec)
-			unwind__flush_access(thread__maps(thread));
 	}
 
 	thread__set_comm_set(thread, true);
@@ -357,49 +354,14 @@ size_t thread__fprintf(struct thread *thread, FILE *fp)
 
 int thread__insert_map(struct thread *thread, struct map *map)
 {
-	int ret;
-
-	ret = unwind__prepare_access(thread__maps(thread), map, NULL);
-	if (ret)
-		return ret;
-
 	return maps__fixup_overlap_and_insert(thread__maps(thread), map);
-}
-
-struct thread__prepare_access_maps_cb_args {
-	int err;
-	struct maps *maps;
-};
-
-static int thread__prepare_access_maps_cb(struct map *map, void *data)
-{
-	bool initialized = false;
-	struct thread__prepare_access_maps_cb_args *args = data;
-
-	args->err = unwind__prepare_access(args->maps, map, &initialized);
-
-	return (args->err || initialized) ? 1 : 0;
-}
-
-static int thread__prepare_access(struct thread *thread)
-{
-	struct thread__prepare_access_maps_cb_args args = {
-		.err = 0,
-	};
-
-	if (dwarf_callchain_users) {
-		args.maps = thread__maps(thread);
-		maps__for_each_map(thread__maps(thread), thread__prepare_access_maps_cb, &args);
-	}
-
-	return args.err;
 }
 
 static int thread__clone_maps(struct thread *thread, struct thread *parent, bool do_maps_clone)
 {
 	/* This is new thread, we share map groups for process. */
 	if (thread__pid(thread) == thread__pid(parent))
-		return thread__prepare_access(thread);
+		return 0;
 
 	if (maps__equal(thread__maps(thread), thread__maps(parent))) {
 		pr_debug("broken map groups on thread %d/%d parent %d/%d\n",
