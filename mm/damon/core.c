@@ -752,6 +752,27 @@ static bool damon_valid_intervals_goal(struct damon_attrs *attrs)
 }
 
 /**
+ * damon_validate_attrs() - Check if the given DAMON attributes are valid.
+ * @attrs:		attributes to be checked
+ *
+ * Return: 0 if valid, negative error code otherwise.
+ */
+int damon_validate_attrs(struct damon_attrs *attrs)
+{
+	if (!damon_valid_intervals_goal(attrs))
+		return -EINVAL;
+	if (attrs->min_nr_regions < 3)
+		return -EINVAL;
+	if (attrs->min_nr_regions > attrs->max_nr_regions)
+		return -EINVAL;
+	if (attrs->sample_interval > attrs->aggr_interval)
+		return -EINVAL;
+
+	return 0;
+}
+EXPORT_SYMBOL(damon_validate_attrs);
+
+/**
  * damon_set_attrs() - Set attributes for the monitoring.
  * @ctx:		monitoring context
  * @attrs:		monitoring attributes
@@ -778,16 +799,11 @@ int damon_set_attrs(struct damon_ctx *ctx, struct damon_attrs *attrs)
 	struct damos *s;
 	bool aggregating = ctx->passed_sample_intervals <
 		ctx->next_aggregation_sis;
+	int err;
 
-	if (!damon_valid_intervals_goal(attrs))
-		return -EINVAL;
-
-	if (attrs->min_nr_regions < 3)
-		return -EINVAL;
-	if (attrs->min_nr_regions > attrs->max_nr_regions)
-		return -EINVAL;
-	if (attrs->sample_interval > attrs->aggr_interval)
-		return -EINVAL;
+	err = damon_validate_attrs(attrs);
+	if (err)
+		return err;
 
 	/* calls from core-external doesn't set this. */
 	if (!attrs->aggr_samples)

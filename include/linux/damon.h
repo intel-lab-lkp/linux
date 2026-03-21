@@ -997,6 +997,8 @@ int damon_set_region_biggest_system_ram_default(struct damon_target *t,
 				unsigned long addr_unit,
 				unsigned long min_region_sz);
 
+int damon_validate_attrs(struct damon_attrs *attrs);
+
 #endif	/* CONFIG_DAMON */
 
 #endif	/* _DAMON_H */
