@@ -169,6 +169,7 @@ static inline void auxiliary_bus_init(void) { }
 struct kobject *virtual_device_parent(void);
 
 int bus_add_device(struct device *dev);
+void bus_link_device(struct device *dev);
 void bus_probe_device(struct device *dev);
 void bus_remove_device(struct device *dev);
 void bus_notify(struct device *dev, enum bus_notifier_event value);

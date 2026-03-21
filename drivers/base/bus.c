@@ -510,7 +510,6 @@ EXPORT_SYMBOL_GPL(bus_for_each_drv);
  *
  * - Add device's bus attributes.
  * - Create links to device's bus.
- * - Add the device to its bus's list of devices.
  */
 int bus_add_device(struct device *dev)
 {
@@ -545,7 +544,6 @@ int bus_add_device(struct device *dev)
 	if (error)
 		goto out_subsys;
 
-	klist_add_tail(&dev->p->knode_bus, &sp->klist_devices);
 	return 0;
 
 out_subsys:
@@ -555,6 +553,20 @@ out_groups:
 out_put:
 	subsys_put(sp);
 	return error;
+}
+
+/**
+ * bus_link_device - Make a device findable in the list of devices
+ * @dev: device being linked
+ *
+ * - Add the device to its bus's list of devices.
+ */
+void bus_link_device(struct device *dev)
+{
+	struct subsys_private *sp = bus_to_subsys(dev->bus);
+
+	if (sp)
+		klist_add_tail(&dev->p->knode_bus, &sp->klist_devices);
 }
 
 /**

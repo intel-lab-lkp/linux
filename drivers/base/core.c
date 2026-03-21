@@ -3664,12 +3664,6 @@ int device_add(struct device *dev)
 		devtmpfs_create_node(dev);
 	}
 
-	/* Notify clients of device addition.  This call must come
-	 * after dpm_sysfs_add() and before kobject_uevent().
-	 */
-	bus_notify(dev, BUS_NOTIFY_ADD_DEVICE);
-	kobject_uevent(&dev->kobj, KOBJ_ADD);
-
 	/*
 	 * Check if any of the other devices (consumers) have been waiting for
 	 * this device (supplier) to be added so that they can create a device
@@ -3681,11 +3675,29 @@ int device_add(struct device *dev)
 	 * But this also needs to happen before bus_probe_device() to make sure
 	 * waiting consumers can link to it before the driver is bound to the
 	 * device and the driver sync_state callback is called for this device.
+	 *
+	 * Because a bus may be probed the moment bus_link_device() is called,
+	 * this must happen before bus_link_device().
 	 */
 	if (dev->fwnode && !dev->fwnode->dev) {
 		dev->fwnode->dev = dev;
 		fw_devlink_link_device(dev);
 	}
+
+	/*
+	 * The moment we link the bus in, it's possible for another thread
+	 * (one registering a new driver) to notice it and start probing.
+	 * At the same time, we need to link the bus before the uevent is
+	 * sent announcing the device or user programs might try to access
+	 * the device before it has been added to the bus.
+	 */
+	bus_link_device(dev);
+
+	/* Notify clients of device addition.  This call must come
+	 * after dpm_sysfs_add() and before kobject_uevent().
+	 */
+	bus_notify(dev, BUS_NOTIFY_ADD_DEVICE);
+	kobject_uevent(&dev->kobj, KOBJ_ADD);
 
 	bus_probe_device(dev);
 
