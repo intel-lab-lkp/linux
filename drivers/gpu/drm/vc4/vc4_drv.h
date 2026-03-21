@@ -410,7 +410,7 @@ struct vc4_plane_state {
 	u32 lbm_offset;
 
 	/* Offset where the plane's dlist was last stored in the
-	 * hardware at vc4_crtc_atomic_flush() time.
+	 * hardware at vc4_hvs_atomic_flush() time.
 	 */
 	u32 __iomem *hw_dlist;
 
