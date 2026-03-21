@@ -2378,6 +2378,15 @@ static int dbFreeBits(struct bmap * bmp, struct dmap * dp, s64 blkno,
 	int rc = 0;
 	int size;
 
+	{
+		int check_agno = blkno >> bmp->db_agl2size;
+
+		if (check_agno >= MAXAG || check_agno < 0) {
+			pr_err("JFS: agno out of bounds in dbAllocBits!\n");
+			return -EIO;
+		}
+	}
+
 	/* determine the bit number and word within the dmap of the
 	 * starting block.
 	 */
