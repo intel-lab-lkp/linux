@@ -589,6 +589,10 @@ const struct io_issue_def io_issue_defs[] = {
 		.prep			= io_uring_cmd_prep,
 		.issue			= io_uring_cmd,
 	},
+	[IORING_OP_DUP] = {
+		.prep			= io_dup_prep,
+		.issue			= io_dup,
+	},
 };
 
 const struct io_cold_def io_cold_defs[] = {
@@ -846,6 +850,10 @@ const struct io_cold_def io_cold_defs[] = {
 		.name			= "URING_CMD128",
 		.sqe_copy		= io_uring_cmd_sqe_copy,
 		.cleanup		= io_uring_cmd_cleanup,
+	},
+	[IORING_OP_DUP] = {
+		.name			= "DUP",
+		.cleanup		= io_dup_cleanup,
 	},
 };
 
