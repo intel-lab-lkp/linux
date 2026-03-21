@@ -721,7 +721,6 @@ static const struct drm_crtc_funcs ls7a1000_crtc_funcs = {
 	.late_register = lsdc_crtc_late_register,
 	.enable_vblank = lsdc_crtc_enable_vblank,
 	.disable_vblank = lsdc_crtc_disable_vblank,
-	.get_vblank_timestamp = drm_crtc_vblank_helper_get_vblank_timestamp,
 	.atomic_print_state = lsdc_crtc_atomic_print_state,
 };
 
