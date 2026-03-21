@@ -603,7 +603,7 @@ static int vidioc_s_fmt_sliced_vbi_out(struct file *file, void *fh,
 		av7110->wssMode = 0;
 		av7110->wssData = 0;
 		return av7110_fw_cmd(av7110, COMTYPE_ENCODER,
-				     SetWSSConfig, 1, 0);
+				     AV7110_SET_WSS_CONFIG, 1, 0);
 	}
 	return 0;
 }
@@ -626,7 +626,7 @@ static ssize_t av7110_vbi_write(struct file *file, const char __user *data, size
 		av7110->wssData = ((d.data[1] << 8) & 0x3f00) | d.data[0];
 	else
 		av7110->wssData = 0x8000;
-	rc = av7110_fw_cmd(av7110, COMTYPE_ENCODER, SetWSSConfig, 2, 1, av7110->wssData);
+	rc = av7110_fw_cmd(av7110, COMTYPE_ENCODER, AV7110_SET_WSS_CONFIG, 2, 1, av7110->wssData);
 	return (rc < 0) ? rc : count;
 }
 
