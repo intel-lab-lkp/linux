@@ -197,6 +197,9 @@ extern struct file *do_file_open_root(const struct path *,
 extern struct open_how build_open_how(int flags, umode_t mode);
 extern int build_open_flags(const struct open_how *how, struct open_flags *op);
 struct file *file_close_fd_locked(struct files_struct *files, unsigned fd);
+struct file *do_replace_fd_locked(struct files_struct *files, struct file *file,
+				  unsigned int fd, unsigned int flags)
+	__must_hold(files->file_lock);
 int expand_files(struct files_struct *files, unsigned int nr)
 	__releases(files->file_lock) __acquires(files->file_lock);
 
