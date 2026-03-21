@@ -200,11 +200,12 @@ def assert_ctxs_committed(kdamonds):
             if ctx.pause is False:
                 ctx.pause = True
                 ctxs_paused_for_dump.append(ctx)
-        err = kd.commit()
-        if err is not None:
-            print('pause fail (%s)' % err)
-            kdamonds.stop()
-            exit(1)
+        if len(ctxs_paused_for_dump) > 0:
+            err = kd.commit()
+            if err is not None:
+                print('pause fail (%s)' % err)
+                kdamonds.stop()
+                exit(1)
 
     status, err = dump_damon_status_dict(kdamonds.kdamonds[0].pid)
     if err is not None:
@@ -216,11 +217,12 @@ def assert_ctxs_committed(kdamonds):
     for kd in kdamonds.kdamonds:
         for ctx in ctxs_paused_for_dump:
             ctx.pause = False
-        err = kd.commit()
-        if err is not None:
-            print('resume fail (%s)' % err)
-            kdamonds.stop()
-            exit(1)
+        if len(ctxs_paused_for_dump) > 0:
+            err = kd.commit()
+            if err is not None:
+                print('resume fail (%s)' % err)
+                kdamonds.stop()
+                exit(1)
 
     # restore for comparison
     for ctx in ctxs_paused_for_dump:
