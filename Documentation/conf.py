@@ -432,6 +432,12 @@ if html_theme == "alabaster":
 
 sys.stderr.write("Using %s theme\n" % html_theme)
 
+# Expose the active theme so local templates can avoid overriding
+# theme-specific markup for non-default HTML builds.
+html_context = {
+    "kernel_docs_theme": html_theme,
+}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".

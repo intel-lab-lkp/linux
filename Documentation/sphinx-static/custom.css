@@ -23,6 +23,31 @@ div.document {
     margin: 20px 10px 0 10px;
     width: auto;
 }
+/*
+ * Use a semantic footer that stays visible on small screens and wraps
+ * its content as needed.
+ */
+footer.footer {
+    max-width: 65em;
+    margin: 20px auto 30px auto;
+    padding: 0 15px 0 10px;
+    box-sizing: border-box;
+    font-size: 14px;
+    color: #888;
+}
+
+footer.footer a {
+    color: inherit;
+}
+
+footer.footer div.footer-inner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35em 0.6em;
+    text-align: center;
+}
 
 /* Size the logo appropriately */
 img.logo {
