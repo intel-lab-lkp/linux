@@ -309,7 +309,7 @@ impl SignedState for Signed {}
 /// before it can be loaded (with an exception for development hardware). The
 /// [`Self::patch_signature`] and [`Self::no_patch_signature`] methods are used to transition the
 /// firmware to its [`Signed`] state.
-// TODO: Consider replacing this with a coherent memory object once `CoherentAllocation` supports
+// TODO: Consider replacing this with a coherent memory object once `CoherentBox` supports
 // temporary CPU-exclusive access to the object without unsafe methods.
 struct FirmwareObject<F: FalconFirmware, S: SignedState>(KVVec<u8>, PhantomData<(F, S)>);
 
