@@ -2334,11 +2334,13 @@ int v4l2_subdev_enable_streams(struct v4l2_subdev *sd, u32 pad,
 
 	/* Fallback on .s_stream() if .enable_streams() isn't available. */
 	use_s_stream = !v4l2_subdev_has_op(sd, pad, enable_streams);
-
-	if (!use_s_stream)
+	if (!use_s_stream) {
 		state = v4l2_subdev_lock_and_get_active_state(sd);
-	else
+	} else {
+		if (!v4l2_subdev_has_op(sd, video, s_stream))
+			return -ENOIOCTLCMD;
 		state = NULL;
+	}
 
 	/*
 	 * Verify that the requested streams exist and that they are not
@@ -2435,11 +2437,13 @@ int v4l2_subdev_disable_streams(struct v4l2_subdev *sd, u32 pad,
 
 	/* Fallback on .s_stream() if .disable_streams() isn't available. */
 	use_s_stream = !v4l2_subdev_has_op(sd, pad, disable_streams);
-
-	if (!use_s_stream)
+	if (!use_s_stream) {
 		state = v4l2_subdev_lock_and_get_active_state(sd);
-	else
+	} else {
+		if (!v4l2_subdev_has_op(sd, video, s_stream))
+			return -ENOIOCTLCMD;
 		state = NULL;
+	}
 
 	/*
 	 * Verify that the requested streams exist and that they are not
