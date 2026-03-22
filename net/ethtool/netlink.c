@@ -95,16 +95,15 @@ int ethnl_ops_begin(struct net_device *dev)
 	if (!dev)
 		return -ENODEV;
 
-	if (dev->dev.parent)
-		pm_runtime_get_sync(dev->dev.parent);
-
 	netdev_ops_assert_locked(dev);
 
 	if (!netif_device_present(dev) ||
 	    dev->reg_state >= NETREG_UNREGISTERING) {
-		ret = -ENODEV;
-		goto err;
+		return -ENODEV;
 	}
+
+	if (dev->dev.parent)
+		pm_runtime_get_sync(dev->dev.parent);
 
 	if (dev->ethtool_ops->begin) {
 		ret = dev->ethtool_ops->begin(dev);
