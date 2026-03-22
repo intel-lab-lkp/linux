@@ -51,8 +51,10 @@ struct gpio_button_data {
 	spinlock_t lock;
 	bool disabled;
 	bool key_pressed;
+	bool axis_active;
 	bool suspended;
 	bool debounce_use_hrtimer;
+	atomic_t *axis_count;
 };
 
 struct gpio_keys_drvdata {
@@ -374,8 +376,15 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	}
 
 	if (type == EV_ABS) {
-		if (state)
+		if (state && !bdata->axis_active) {
+			bdata->axis_active = true;
+			atomic_inc(bdata->axis_count);
 			input_event(input, type, button->code, button->value);
+		} else if (!state && bdata->axis_active) {
+			bdata->axis_active = false;
+			if (atomic_dec_and_test(bdata->axis_count))
+				input_event(input, type, button->code, 0);
+		}
 	} else {
 		input_event(input, type, *bdata->code, state);
 	}
@@ -950,6 +959,35 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	}
 
 	fwnode_handle_put(child);
+
+	/* Allocate shared axis counters for EV_ABS buttons */
+	for (i = 0; i < pdata->nbuttons; i++) {
+		struct gpio_button_data *bdata = &ddata->data[i];
+		unsigned int type = bdata->button->type ?: EV_KEY;
+		int j;
+
+		if (type != EV_ABS)
+			continue;
+
+		/* Reuse counter from an earlier button with same (type, code) */
+		for (j = 0; j < i; j++) {
+			struct gpio_button_data *prev = &ddata->data[j];
+			unsigned int prev_type = prev->button->type ?: EV_KEY;
+
+			if (prev_type == type &&
+			    prev->button->code == bdata->button->code) {
+				bdata->axis_count = prev->axis_count;
+				break;
+			}
+		}
+
+		if (!bdata->axis_count) {
+			bdata->axis_count = devm_kzalloc(dev,
+					sizeof(*bdata->axis_count), GFP_KERNEL);
+			if (!bdata->axis_count)
+				return -ENOMEM;
+		}
+	}
 
 	error = input_register_device(input);
 	if (error) {
