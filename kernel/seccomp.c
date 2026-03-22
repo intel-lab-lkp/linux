@@ -31,9 +31,6 @@
 
 #include <asm/syscall.h>
 
-/* Not exposed in headers: strictly internal use only. */
-#define SECCOMP_MODE_DEAD	(SECCOMP_MODE_FILTER + 1)
-
 #ifdef CONFIG_SECCOMP_FILTER
 #include <linux/file.h>
 #include <linux/filter.h>

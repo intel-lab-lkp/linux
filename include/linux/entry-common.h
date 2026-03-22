@@ -250,6 +250,9 @@ static __always_inline void syscall_exit_work(struct pt_regs *regs, unsigned lon
 	if (work & SYSCALL_WORK_SYSCALL_TRACEPOINT)
 		trace_syscall_exit(regs, syscall_get_return_value(current, regs));
 
+	if (killed_by_seccomp(current))
+		return;
+
 	step = report_single_step(work);
 	if (step || work & SYSCALL_WORK_SYSCALL_TRACE)
 		arch_ptrace_report_syscall_exit(regs, step);

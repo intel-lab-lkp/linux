@@ -22,6 +22,12 @@
 #include <linux/atomic.h>
 #include <asm/seccomp.h>
 
+/* Not exposed in uapi headers: internal use only. */
+#define SECCOMP_MODE_DEAD	(SECCOMP_MODE_FILTER + 1)
+
+#define killed_by_seccomp(task)	\
+	((task)->seccomp.mode == SECCOMP_MODE_DEAD)
+
 extern int __secure_computing(void);
 
 #ifdef CONFIG_HAVE_ARCH_SECCOMP_FILTER
@@ -48,6 +54,8 @@ static inline int seccomp_mode(struct seccomp *s)
 #include <linux/errno.h>
 
 struct seccomp_data;
+
+#define killed_by_seccomp(task)	0
 
 #ifdef CONFIG_HAVE_ARCH_SECCOMP_FILTER
 static inline int secure_computing(void) { return 0; }
