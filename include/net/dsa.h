@@ -234,6 +234,7 @@ struct dsa_bridge {
 	unsigned int num;
 	bool tx_fwd_offload;
 	refcount_t refcount;
+	void *priv;
 };
 
 struct dsa_port {
