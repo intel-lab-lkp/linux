@@ -805,6 +805,9 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 	if (txn->dt == SLIM_MSG_DEST_ENUMADDR)
 		return -EPROTONOSUPPORT;
 
+	if (!txn->msg)
+		return -EINVAL;
+
 	if (txn->msg->num_bytes > SLIM_MSGQ_BUF_LEN ||
 			txn->rl > SLIM_MSGQ_BUF_LEN) {
 		dev_err(ctrl->dev, "msg exceeds HW limit\n");
