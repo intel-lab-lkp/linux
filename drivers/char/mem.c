@@ -576,7 +576,19 @@ static ssize_t write_full(struct file *file, const char __user *buf,
  */
 static loff_t null_lseek(struct file *file, loff_t offset, int orig)
 {
-	return file->f_pos = 0;
+	loff_t ret;
+
+	switch (orig) {
+	case SEEK_SET:
+	case SEEK_CUR:
+	case SEEK_END:
+		ret = file->f_pos = 0;
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
 }
 
 /*
