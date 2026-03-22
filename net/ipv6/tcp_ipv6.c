@@ -1687,10 +1687,9 @@ ipv6_pktoptions:
 static void tcp_v6_fill_cb(struct sk_buff *skb, const struct ipv6hdr *hdr,
 			   const struct tcphdr *th)
 {
-	/* This is tricky: we move IP6CB at its correct location into
-	 * TCP_SKB_CB(). It must be done after xfrm6_policy_check(), because
-	 * _decode_session6() uses IP6CB().
-	 * barrier() makes sure compiler won't play aliasing games.
+	/* Move IP6CB to its saved location in TCP_SKB_CB().
+	 * barrier() makes sure compiler won't play aliasing
+	 * games.
 	 */
 	memmove(&TCP_SKB_CB(skb)->header.h6, IP6CB(skb),
 		sizeof(struct inet6_skb_parm));
