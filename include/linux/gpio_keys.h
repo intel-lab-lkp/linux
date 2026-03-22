@@ -13,13 +13,13 @@ struct device;
  * @active_low:		%true indicates that button is considered
  *			depressed when gpio is low
  * @desc:		label that will be attached to button's gpio
- * @type:		input event type (%EV_KEY, %EV_SW, %EV_ABS)
+ * @type:		input event type (%EV_KEY, %EV_SW, %EV_ABS, %EV_REL)
  * @wakeup:		configure the button as a wake-up source
  * @wakeup_event_action:	event action to trigger wakeup
  * @debounce_interval:	debounce ticks interval in msecs
  * @can_disable:	%true indicates that userspace is allowed to
  *			disable button via sysfs
- * @value:		axis value for %EV_ABS
+ * @value:		axis value for %EV_ABS/%EV_REL
  * @irq:		Irq number in case of interrupt keys
  * @wakeirq:		Optional dedicated wake-up interrupt
  */

@@ -375,7 +375,7 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 		return;
 	}
 
-	if (type == EV_ABS) {
+	if (type == EV_ABS || type == EV_REL) {
 		if (state && !bdata->axis_active) {
 			bdata->axis_active = true;
 			atomic_inc(bdata->axis_count);
@@ -960,13 +960,13 @@ static int gpio_keys_probe(struct platform_device *pdev)
 
 	fwnode_handle_put(child);
 
-	/* Allocate shared axis counters for EV_ABS buttons */
+	/* Allocate shared axis counters for EV_ABS/EV_REL buttons */
 	for (i = 0; i < pdata->nbuttons; i++) {
 		struct gpio_button_data *bdata = &ddata->data[i];
 		unsigned int type = bdata->button->type ?: EV_KEY;
 		int j;
 
-		if (type != EV_ABS)
+		if (type != EV_ABS && type != EV_REL)
 			continue;
 
 		/* Reuse counter from an earlier button with same (type, code) */
