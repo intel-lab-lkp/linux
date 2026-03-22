@@ -13,12 +13,16 @@ description: |
   Loongson-2 SoC clock control module is an integrated clock controller, which
   generates and supplies to all modules.
 
+  The "loongson,ls2k1000-clk" string should be used for Loongson-2K1000.
+  The "loongson,ls2k-clk" string is kept as a fallback for backward compatibility for Loongson-2K1000.
+
 properties:
   compatible:
     enum:
       - loongson,ls2k0300-clk
       - loongson,ls2k0500-clk
-      - loongson,ls2k-clk  # This is for Loongson-2K1000
+      - loongson,ls2k-clk
+      - loongson,ls2k1000-clk
       - loongson,ls2k2000-clk
 
   reg:
