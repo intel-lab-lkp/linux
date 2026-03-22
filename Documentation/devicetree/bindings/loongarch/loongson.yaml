@@ -16,7 +16,7 @@ properties:
     oneOf:
       - description: Loongson-2K0300 processor based boards
         items:
-          - const: loongson,99pi
+          - const: loongson,ls2k0300-ref
           - const: loongson,ls2k0300
       - description: Loongson-2K0500 processor based boards
         items:
