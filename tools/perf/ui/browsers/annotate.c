@@ -143,7 +143,7 @@ static void annotate_browser__write(struct ui_browser *browser, void *entry, int
 	if (!browser->navkeypressed)
 		ops.width += 1;
 
-	if (!IS_ERR_OR_NULL(ab->type_hash))
+	if (ab->type_hash)
 		apd.type_hash = ab->type_hash;
 
 	annotation_line__write(al, notes, &ops, &apd);
@@ -1248,7 +1248,7 @@ int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 
 	debuginfo__delete(browser.dbg);
 
-	if (!IS_ERR_OR_NULL(browser.type_hash)) {
+	if (browser.type_hash) {
 		struct perf_hashmap_entry *cur;
 		size_t bkt;
 

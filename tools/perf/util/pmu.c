@@ -1305,6 +1305,12 @@ struct perf_pmu *perf_pmu__create_placeholder_core_pmu(struct list_head *core_pm
 
 	INIT_LIST_HEAD(&pmu->format);
 	pmu->aliases = perf_hashmap__new(aliases__hash, aliases__equal, /*ctx=*/ NULL);
+	if (!pmu->aliases) {
+		perf_cpu_map__put(pmu->cpus);
+		free((char *)pmu->name);
+		free(pmu);
+		return NULL;
+	}
 	INIT_LIST_HEAD(&pmu->caps);
 	list_add_tail(&pmu->list, core_pmus);
 	return pmu;

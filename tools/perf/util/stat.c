@@ -320,7 +320,7 @@ static int check_per_pkg(struct evsel *counter, struct perf_counts_values *vals,
 
 	if (!mask) {
 		mask = perf_hashmap__new(pkg_id_hash, pkg_id_equal, NULL);
-		if (IS_ERR(mask))
+		if (!mask)
 			return -ENOMEM;
 
 		counter->per_pkg_mask = mask;

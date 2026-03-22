@@ -36,9 +36,10 @@ static struct perf_hashmap *fncache__get(void)
 
 static bool lookup_fncache(const char *name, bool *res)
 {
+	struct perf_hashmap *map = fncache__get();
 	long val;
 
-	if (!perf_hashmap__find(fncache__get(), name, &val))
+	if (!map || !perf_hashmap__find(map, name, &val))
 		return false;
 
 	*res = (val != 0);
@@ -47,11 +48,14 @@ static bool lookup_fncache(const char *name, bool *res)
 
 static void update_fncache(const char *name, bool res)
 {
+	struct perf_hashmap *map = fncache__get();
 	char *old_key = NULL, *key = strdup(name);
 
-	if (key) {
-		perf_hashmap__set(fncache__get(), key, res, &old_key, /*old_value*/NULL);
+	if (map && key) {
+		perf_hashmap__set(map, key, res, &old_key, /*old_value*/NULL);
 		free(old_key);
+	} else {
+		free(key);
 	}
 }
 

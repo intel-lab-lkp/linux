@@ -201,7 +201,7 @@ static char *get_counter_name(int set, int nr, struct perf_pmu *pmu)
 						   get_counter_name_perf_hashmap_equal_fn,
 						   /*ctx=*/NULL);
 
-		if (!IS_ERR(tmp)) {
+		if (tmp) {
 			cache = tmp;
 			cache_pmu = pmu;
 		}

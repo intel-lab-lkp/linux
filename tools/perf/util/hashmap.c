@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <linux/err.h>
 #include "hashmap.h"
 
 /* make sure libbpf doesn't use kernel-only integer typedefs */
@@ -55,8 +54,10 @@ struct perf_hashmap *perf_hashmap__new(perf_hashmap_hash_fn hash_fn,
 {
 	struct perf_hashmap *map = malloc(sizeof(struct perf_hashmap));
 
-	if (!map)
-		return ERR_PTR(-ENOMEM);
+	if (!map) {
+		errno = ENOMEM;
+		return NULL;
+	}
 	perf_hashmap__init(map, hash_fn, equal_fn, ctx);
 	return map;
 }
@@ -76,7 +77,7 @@ void perf_hashmap__clear(struct perf_hashmap *map)
 
 void perf_hashmap__free(struct perf_hashmap *map)
 {
-	if (IS_ERR_OR_NULL(map))
+	if (!map)
 		return;
 
 	perf_hashmap__clear(map);

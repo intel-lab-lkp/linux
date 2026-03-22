@@ -68,7 +68,7 @@ struct perf_hashmap *ids__new(void)
 	struct perf_hashmap *hash;
 
 	hash = perf_hashmap__new(key_hash, key_equal, NULL);
-	if (IS_ERR(hash))
+	if (!hash)
 		return NULL;
 	return hash;
 }
@@ -296,7 +296,7 @@ struct expr_parse_ctx *expr__ctx_new(void)
 		return NULL;
 
 	ctx->ids = perf_hashmap__new(key_hash, key_equal, NULL);
-	if (IS_ERR(ctx->ids)) {
+	if (!ctx->ids) {
 		free(ctx);
 		return NULL;
 	}

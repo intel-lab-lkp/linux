@@ -1566,7 +1566,7 @@ static struct perf_hashmap *alloc_syscall_stats(void)
 {
 	struct perf_hashmap *result = perf_hashmap__new(syscall_id_hash, syscall_id_equal, NULL);
 
-	return IS_ERR(result) ? NULL : result;
+	return result;
 }
 
 static void delete_syscall_stats(struct perf_hashmap *syscall_stats)
