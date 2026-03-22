@@ -35,6 +35,7 @@
 #include <sys/signal.h>
 #include <linux/elf.h>
 #include <linux/perf_event.h>
+#include "kselftest.h"
 
 /*
  * Define the ABI defines if needed, so people can run the tests
@@ -64,7 +65,7 @@
 int main(int argc, char *argv[])
 {
 	printf("[SKIP]\tCompiler does not support CET.\n");
-	return 0;
+	return KSFT_SKIP;
 }
 #else
 void write_shstk(unsigned long *addr, unsigned long val)
@@ -496,7 +497,7 @@ int test_userfaultfd(void)
 	uffd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
 	if (uffd < 0) {
 		printf("[SKIP]\tUserfaultfd unavailable.\n");
-		return 0;
+		return KSFT_SKIP;
 	}
 
 	reset_test_shstk(0);
@@ -820,9 +821,11 @@ static int test_uretprobe(void)
 
 	type = determine_uprobe_perf_type();
 	if (type < 0) {
-		if (type == -ENOENT)
+		if (type == -ENOENT) {
 			printf("[SKIP]\tUretprobe test, uprobes are not available\n");
-		return 0;
+			return KSFT_SKIP;
+		}
+		return 1;
 	}
 
 	offset = get_uprobe_offset(uretprobe_trigger);
@@ -981,21 +984,21 @@ int main(int argc, char *argv[])
 
 	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK)) {
 		printf("[SKIP]\tCould not enable Shadow stack\n");
-		return 1;
+		return KSFT_SKIP;
 	}
 
 	if (ARCH_PRCTL(ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK)) {
-		ret = 1;
 		printf("[FAIL]\tDisabling shadow stack failed\n");
+		return 1;
 	}
 
 	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK)) {
-		printf("[SKIP]\tCould not re-enable Shadow stack\n");
+		printf("[FAIL]\tCould not re-enable Shadow stack\n");
 		return 1;
 	}
 
 	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_WRSS)) {
-		printf("[SKIP]\tCould not enable WRSS\n");
+		printf("[FAIL]\tCould not enable WRSS\n");
 		ret = 1;
 		goto out;
 	}
@@ -1057,6 +1060,7 @@ int main(int argc, char *argv[])
 	if (test_ptrace()) {
 		ret = 1;
 		printf("[FAIL]\tptrace test\n");
+		goto out;
 	}
 
 	if (test_32bit()) {
