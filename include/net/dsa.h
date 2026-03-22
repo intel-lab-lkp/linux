@@ -838,6 +838,22 @@ static inline bool dsa_port_tree_same(const struct dsa_port *a,
 	return a->ds->dst == b->ds->dst;
 }
 
+#define dsa_bridge_for_each_member(_dp, _ds, _bridge) \
+	dsa_switch_for_each_user_port((_dp), (_ds)) \
+		if (dsa_port_offloads_bridge((_dp), (_bridge)))
+
+static inline u32 dsa_bridge_ports(struct dsa_switch *ds,
+				   const struct dsa_bridge *bridge)
+{
+	struct dsa_port *dp;
+	u32 mask = 0;
+
+	dsa_bridge_for_each_member(dp, ds, bridge)
+		mask |= BIT(dp->index);
+
+	return mask;
+}
+
 typedef int dsa_fdb_dump_cb_t(const unsigned char *addr, u16 vid,
 			      bool is_static, void *data);
 struct dsa_switch_ops {
