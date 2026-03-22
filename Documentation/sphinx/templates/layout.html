@@ -1,0 +1,33 @@
+{# SPDX-License-Identifier: GPL-2.0 #}
+
+{%- extends "!layout.html" %}
+
+{%- block footer %}
+  {% if kernel_docs_theme == "alabaster" %}
+    <footer class="footer" role="contentinfo">
+      <div class="footer-inner">
+      {% if show_copyright %}
+        <span class="footer-item">&#169;{{ copyright }}.</span>
+      {% endif %}
+      {% if show_sphinx %}
+      {% if show_copyright %}
+        <span class="footer-sep" aria-hidden="true">|</span>
+      {% endif %}
+        <span class="footer-item">
+          Powered by <a href="https://www.sphinx-doc.org/">Sphinx {{ sphinx_version }}</a>
+          &amp; <a href="https://alabaster.readthedocs.io">Alabaster {{ alabaster_version }}</a>
+        </span>
+      {% endif %}
+      {%- if show_source and has_source and sourcename %}
+      {% if show_copyright or show_sphinx %}
+        <span class="footer-sep" aria-hidden="true">|</span>
+      {% endif %}
+        <a class="footer-item" href="{{ pathto('_sources/' + sourcename, resource=True)|e }}"
+           rel="nofollow">{{ _('Page source') }}</a>
+      {%- endif %}
+      </div>
+    </footer>
+  {% else %}
+    {{ super() }}
+  {% endif %}
+{%- endblock %}
