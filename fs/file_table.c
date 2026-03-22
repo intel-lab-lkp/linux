@@ -69,8 +69,12 @@ EXPORT_SYMBOL_GPL(backing_file_user_path_file);
 
 int backing_file_open_user_path(struct file *f, const struct path *path)
 {
+	int ret;
+
 	/* open an O_PATH file to reference the user path - should not fail */
-	return WARN_ON(vfs_open(path, &backing_file(f)->user_path_file));
+	ret = vfs_open(path, &backing_file(f)->user_path_file);
+	WARN_ON(ret);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(backing_file_open_user_path);
 
