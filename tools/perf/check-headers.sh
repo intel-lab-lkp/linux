@@ -215,10 +215,6 @@ do
   beauty_check "$i" -B
 done
 
-# check duplicated library files
-check_2 tools/perf/util/hashmap.h tools/lib/bpf/hashmap.h
-check_2 tools/perf/util/hashmap.c tools/lib/bpf/hashmap.c
-
 # Files with larger differences
 
 check_ignore_some_hunks lib/list_sort.c
