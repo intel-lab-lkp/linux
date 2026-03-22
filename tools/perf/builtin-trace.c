@@ -184,7 +184,7 @@ struct trace {
 	 * into the key, but this would make the code inconsistent with the
 	 * per-thread version.
 	 */
-	struct hashmap		*syscall_stats;
+	struct perf_hashmap		*syscall_stats;
 	double			duration_filter;
 	double			runtime_ms;
 	unsigned long		pfmaj, pfmin;
@@ -1549,7 +1549,7 @@ struct thread_trace {
 		struct file   *table;
 	} files;
 
-	struct hashmap *syscall_stats;
+	struct perf_hashmap *syscall_stats;
 };
 
 static size_t syscall_id_hash(long key, void *ctx __maybe_unused)
@@ -1562,24 +1562,24 @@ static bool syscall_id_equal(long key1, long key2, void *ctx __maybe_unused)
 	return key1 == key2;
 }
 
-static struct hashmap *alloc_syscall_stats(void)
+static struct perf_hashmap *alloc_syscall_stats(void)
 {
-	struct hashmap *result = hashmap__new(syscall_id_hash, syscall_id_equal, NULL);
+	struct perf_hashmap *result = perf_hashmap__new(syscall_id_hash, syscall_id_equal, NULL);
 
 	return IS_ERR(result) ? NULL : result;
 }
 
-static void delete_syscall_stats(struct hashmap *syscall_stats)
+static void delete_syscall_stats(struct perf_hashmap *syscall_stats)
 {
-	struct hashmap_entry *pos;
+	struct perf_hashmap_entry *pos;
 	size_t bkt;
 
 	if (!syscall_stats)
 		return;
 
-	hashmap__for_each_entry(syscall_stats, pos, bkt)
+	perf_hashmap__for_each_entry(syscall_stats, pos, bkt)
 		zfree(&pos->pvalue);
-	hashmap__free(syscall_stats);
+	perf_hashmap__free(syscall_stats);
 }
 
 static struct thread_trace *thread_trace__new(struct trace *trace)
@@ -2637,7 +2637,7 @@ static void thread__update_stats(struct thread *thread, struct thread_trace *ttr
 				 int id, struct perf_sample *sample, long err,
 				 struct trace *trace)
 {
-	struct hashmap *syscall_stats = ttrace->syscall_stats;
+	struct perf_hashmap *syscall_stats = ttrace->syscall_stats;
 	struct syscall_stats *stats = NULL;
 	u64 duration = 0;
 
@@ -2647,13 +2647,13 @@ static void thread__update_stats(struct thread *thread, struct thread_trace *ttr
 	if (trace->summary_mode == SUMMARY__BY_TOTAL)
 		syscall_stats = trace->syscall_stats;
 
-	if (!hashmap__find(syscall_stats, id, &stats)) {
+	if (!perf_hashmap__find(syscall_stats, id, &stats)) {
 		stats = zalloc(sizeof(*stats));
 		if (stats == NULL)
 			return;
 
 		init_stats(&stats->stats);
-		if (hashmap__add(syscall_stats, id, stats) < 0) {
+		if (perf_hashmap__add(syscall_stats, id, stats) < 0) {
 			free(stats);
 			return;
 		}
@@ -4815,10 +4815,10 @@ static int entry_cmp(const void *e1, const void *e2)
 	return entry1->msecs > entry2->msecs ? -1 : 1;
 }
 
-static struct syscall_entry *syscall__sort_stats(struct hashmap *syscall_stats)
+static struct syscall_entry *syscall__sort_stats(struct perf_hashmap *syscall_stats)
 {
 	struct syscall_entry *entry;
-	struct hashmap_entry *pos;
+	struct perf_hashmap_entry *pos;
 	unsigned bkt, i, nr;
 
 	nr = syscall_stats->sz;
@@ -4827,7 +4827,7 @@ static struct syscall_entry *syscall__sort_stats(struct hashmap *syscall_stats)
 		return NULL;
 
 	i = 0;
-	hashmap__for_each_entry(syscall_stats, pos, bkt) {
+	perf_hashmap__for_each_entry(syscall_stats, pos, bkt) {
 		struct syscall_stats *ss = pos->pvalue;
 		struct stats *st = &ss->stats;
 
@@ -4843,7 +4843,7 @@ static struct syscall_entry *syscall__sort_stats(struct hashmap *syscall_stats)
 }
 
 static size_t syscall__dump_stats(struct trace *trace, int e_machine, FILE *fp,
-				  struct hashmap *syscall_stats)
+				  struct perf_hashmap *syscall_stats)
 {
 	size_t printed = 0;
 	int lines = 0;

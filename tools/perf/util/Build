@@ -197,16 +197,7 @@ perf-util-$(CONFIG_LIBELF) += symbol-elf.o
 perf-util-$(CONFIG_LIBELF) += probe-file.o
 perf-util-$(CONFIG_LIBELF) += probe-event.o
 
-ifdef CONFIG_LIBBPF_DYNAMIC
-  hashmap := 1
-endif
-ifndef CONFIG_LIBBPF
-  hashmap := 1
-endif
-
-ifdef hashmap
 perf-util-y += hashmap.o
-endif
 
 ifndef CONFIG_LIBELF
 perf-util-y += symbol-minimal.o

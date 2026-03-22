@@ -1208,7 +1208,7 @@ static int prepare_func_profile(struct perf_ftrace *ftrace)
 	ftrace->graph_tail = 1;
 	ftrace->graph_verbose = 0;
 
-	ftrace->profile_hash = hashmap__new(profile_hash, profile_equal, NULL);
+	ftrace->profile_hash = perf_hashmap__new(profile_hash, profile_equal, NULL);
 	if (ftrace->profile_hash == NULL)
 		return -ENOMEM;
 
@@ -1224,7 +1224,7 @@ static int add_func_duration(struct perf_ftrace *ftrace, char *func, double time
 {
 	struct ftrace_profile_data *prof = NULL;
 
-	if (!hashmap__find(ftrace->profile_hash, func, &prof)) {
+	if (!perf_hashmap__find(ftrace->profile_hash, func, &prof)) {
 		char *key = strdup(func);
 
 		if (key == NULL)
@@ -1237,7 +1237,7 @@ static int add_func_duration(struct perf_ftrace *ftrace, char *func, double time
 		}
 
 		init_stats(&prof->st);
-		hashmap__add(ftrace->profile_hash, key, prof);
+		perf_hashmap__add(ftrace->profile_hash, key, prof);
 	}
 
 	update_stats(&prof->st, time_ns);
@@ -1332,8 +1332,8 @@ static enum perf_ftrace_profile_sort_key profile_sort = PFP_SORT_TOTAL;
 
 static int cmp_profile_data(const void *a, const void *b)
 {
-	const struct hashmap_entry *e1 = *(const struct hashmap_entry **)a;
-	const struct hashmap_entry *e2 = *(const struct hashmap_entry **)b;
+	const struct perf_hashmap_entry *e1 = *(const struct perf_hashmap_entry **)a;
+	const struct perf_hashmap_entry *e2 = *(const struct perf_hashmap_entry **)b;
 	struct ftrace_profile_data *p1 = e1->pvalue;
 	struct ftrace_profile_data *p2 = e2->pvalue;
 	double v1, v2;
@@ -1369,10 +1369,10 @@ static int cmp_profile_data(const void *a, const void *b)
 
 static void print_profile_result(struct perf_ftrace *ftrace)
 {
-	struct hashmap_entry *entry, **profile;
+	struct perf_hashmap_entry *entry, **profile;
 	size_t i, nr, bkt;
 
-	nr = hashmap__size(ftrace->profile_hash);
+	nr = perf_hashmap__size(ftrace->profile_hash);
 	if (nr == 0)
 		return;
 
@@ -1383,7 +1383,7 @@ static void print_profile_result(struct perf_ftrace *ftrace)
 	}
 
 	i = 0;
-	hashmap__for_each_entry(ftrace->profile_hash, entry, bkt)
+	perf_hashmap__for_each_entry(ftrace->profile_hash, entry, bkt)
 		profile[i++] = entry;
 
 	assert(i == nr);
@@ -1405,12 +1405,12 @@ static void print_profile_result(struct perf_ftrace *ftrace)
 
 	free(profile);
 
-	hashmap__for_each_entry(ftrace->profile_hash, entry, bkt) {
+	perf_hashmap__for_each_entry(ftrace->profile_hash, entry, bkt) {
 		free((char *)entry->pkey);
 		free(entry->pvalue);
 	}
 
-	hashmap__free(ftrace->profile_hash);
+	perf_hashmap__free(ftrace->profile_hash);
 	ftrace->profile_hash = NULL;
 }
 

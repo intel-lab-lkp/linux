@@ -38,7 +38,7 @@ struct annotate_browser {
 	struct hist_entry	   *he;
 	struct debuginfo	   *dbg;
 	struct evsel		   *evsel;
-	struct hashmap		   *type_hash;
+	struct perf_hashmap		   *type_hash;
 	bool			    searching_backwards;
 	char			    search_bf[128];
 };
@@ -1117,7 +1117,7 @@ show_sup_ins:
 			if (browser->dbg == NULL)
 				browser->dbg = dso__debuginfo(map__dso(ms->map));
 			if (browser->type_hash == NULL) {
-				browser->type_hash = hashmap__new(type_hash, type_equal,
+				browser->type_hash = perf_hashmap__new(type_hash, type_equal,
 								  /*ctx=*/NULL);
 			}
 			annotate_browser__show(browser, title, help);
@@ -1219,7 +1219,7 @@ int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 
 	if (annotate_opts.code_with_type) {
 		browser.dbg = dso__debuginfo(dso);
-		browser.type_hash = hashmap__new(type_hash, type_equal, /*ctx=*/NULL);
+		browser.type_hash = perf_hashmap__new(type_hash, type_equal, /*ctx=*/NULL);
 	}
 
 	browser.b.width = notes->src->widths.max_line_len;
@@ -1249,12 +1249,12 @@ int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 	debuginfo__delete(browser.dbg);
 
 	if (!IS_ERR_OR_NULL(browser.type_hash)) {
-		struct hashmap_entry *cur;
+		struct perf_hashmap_entry *cur;
 		size_t bkt;
 
-		hashmap__for_each_entry(browser.type_hash, cur, bkt)
+		perf_hashmap__for_each_entry(browser.type_hash, cur, bkt)
 			zfree(&cur->pvalue);
-		hashmap__free(browser.type_hash);
+		perf_hashmap__free(browser.type_hash);
 	}
 
 	if (not_annotated && !notes->src->tried_source)

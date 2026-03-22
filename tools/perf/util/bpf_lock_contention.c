@@ -22,7 +22,7 @@
 
 static struct lock_contention_bpf *skel;
 static bool has_slab_iter;
-static struct hashmap slab_hash;
+static struct perf_hashmap slab_hash;
 
 static size_t slab_cache_hash(long key, void *ctx __maybe_unused)
 {
@@ -38,7 +38,7 @@ static void check_slab_cache_iter(struct lock_contention *con)
 {
 	s32 ret;
 
-	hashmap__init(&slab_hash, slab_cache_hash, slab_cache_equal, /*ctx=*/NULL);
+	perf_hashmap__init(&slab_hash, slab_cache_hash, slab_cache_equal, /*ctx=*/NULL);
 
 	con->btf = btf__load_vmlinux_btf();
 	if (con->btf == NULL) {
@@ -92,20 +92,20 @@ static void run_slab_cache_iter(void)
 		if (bpf_map_lookup_elem(fd, &key, data) < 0)
 			break;
 
-		hashmap__add(&slab_hash, data->id, data);
+		perf_hashmap__add(&slab_hash, data->id, data);
 		prev_key = &key;
 	}
 }
 
 static void exit_slab_cache_iter(void)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	unsigned bkt;
 
-	hashmap__for_each_entry(&slab_hash, cur, bkt)
+	perf_hashmap__for_each_entry(&slab_hash, cur, bkt)
 		free(cur->pvalue);
 
-	hashmap__clear(&slab_hash);
+	perf_hashmap__clear(&slab_hash);
 }
 
 static void init_numa_data(struct lock_contention *con)
@@ -615,7 +615,7 @@ static const char *lock_contention_get_name(struct lock_contention *con,
 		}
 
 		/* look slab_hash for dynamic locks in a slab object */
-		if (hashmap__find(&slab_hash, flags & LCB_F_SLAB_ID_MASK, &slab_data)) {
+		if (perf_hashmap__find(&slab_hash, flags & LCB_F_SLAB_ID_MASK, &slab_data)) {
 			snprintf(name_buf, sizeof(name_buf), "&%s", slab_data->name);
 			return name_buf;
 		}

@@ -169,19 +169,19 @@ static int print_common_stats(struct syscall_data *data, int max_summary, FILE *
 	return printed;
 }
 
-static int update_thread_stats(struct hashmap *hash, struct syscall_key *map_key,
+static int update_thread_stats(struct perf_hashmap *hash, struct syscall_key *map_key,
 			       struct syscall_stats *map_data)
 {
 	struct syscall_data *data;
 	struct syscall_node *nodes;
 
-	if (!hashmap__find(hash, map_key->cpu_or_tid, &data)) {
+	if (!perf_hashmap__find(hash, map_key->cpu_or_tid, &data)) {
 		data = zalloc(sizeof(*data));
 		if (data == NULL)
 			return -ENOMEM;
 
 		data->key = map_key->cpu_or_tid;
-		if (hashmap__add(hash, data->key, data) < 0) {
+		if (perf_hashmap__add(hash, data->key, data) < 0) {
 			free(data);
 			return -ENOMEM;
 		}
@@ -233,13 +233,13 @@ static int print_thread_stats(struct syscall_data **data, int nr_data, int max_s
 	return printed;
 }
 
-static int update_total_stats(struct hashmap *hash, struct syscall_key *map_key,
+static int update_total_stats(struct perf_hashmap *hash, struct syscall_key *map_key,
 			      struct syscall_stats *map_data)
 {
 	struct syscall_data *data;
 	struct syscall_stats *stat;
 
-	if (!hashmap__find(hash, map_key->nr, &data)) {
+	if (!perf_hashmap__find(hash, map_key->nr, &data)) {
 		data = zalloc(sizeof(*data));
 		if (data == NULL)
 			return -ENOMEM;
@@ -254,7 +254,7 @@ static int update_total_stats(struct hashmap *hash, struct syscall_key *map_key,
 		data->key = map_key->nr;
 		data->nodes->syscall_nr = data->key;
 
-		if (hashmap__add(hash, data->key, data) < 0) {
+		if (perf_hashmap__add(hash, data->key, data) < 0) {
 			free(data->nodes);
 			free(data);
 			return -ENOMEM;
@@ -305,19 +305,19 @@ static int print_total_stats(struct syscall_data **data, int nr_data, int max_su
 	return printed;
 }
 
-static int update_cgroup_stats(struct hashmap *hash, struct syscall_key *map_key,
+static int update_cgroup_stats(struct perf_hashmap *hash, struct syscall_key *map_key,
 			       struct syscall_stats *map_data)
 {
 	struct syscall_data *data;
 	struct syscall_node *nodes;
 
-	if (!hashmap__find(hash, map_key->cgroup, &data)) {
+	if (!perf_hashmap__find(hash, map_key->cgroup, &data)) {
 		data = zalloc(sizeof(*data));
 		if (data == NULL)
 			return -ENOMEM;
 
 		data->key = map_key->cgroup;
-		if (hashmap__add(hash, data->key, data) < 0) {
+		if (perf_hashmap__add(hash, data->key, data) < 0) {
 			free(data);
 			return -ENOMEM;
 		}
@@ -379,14 +379,14 @@ int trace_print_bpf_summary(FILE *fp, int max_summary)
 	struct bpf_map *map = skel->maps.syscall_stats_map;
 	struct syscall_key *prev_key, key;
 	struct syscall_data **data = NULL;
-	struct hashmap schash;
-	struct hashmap_entry *entry;
+	struct perf_hashmap schash;
+	struct perf_hashmap_entry *entry;
 	int nr_data = 0;
 	int printed = 0;
 	int i;
 	size_t bkt;
 
-	hashmap__init(&schash, sc_node_hash, sc_node_equal, /*ctx=*/NULL);
+	perf_hashmap__init(&schash, sc_node_hash, sc_node_equal, /*ctx=*/NULL);
 
 	printed = fprintf(fp, "\n Summary of events:\n\n");
 
@@ -414,13 +414,13 @@ int trace_print_bpf_summary(FILE *fp, int max_summary)
 		prev_key = &key;
 	}
 
-	nr_data = hashmap__size(&schash);
+	nr_data = perf_hashmap__size(&schash);
 	data = calloc(nr_data, sizeof(*data));
 	if (data == NULL)
 		goto out;
 
 	i = 0;
-	hashmap__for_each_entry(&schash, entry, bkt)
+	perf_hashmap__for_each_entry(&schash, entry, bkt)
 		data[i++] = entry->pvalue;
 
 	qsort(data, nr_data, sizeof(*data), datacmp);
@@ -446,7 +446,7 @@ int trace_print_bpf_summary(FILE *fp, int max_summary)
 	free(data);
 
 out:
-	hashmap__clear(&schash);
+	perf_hashmap__clear(&schash);
 	return printed;
 }
 

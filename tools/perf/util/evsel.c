@@ -1878,7 +1878,7 @@ void evsel__exit(struct evsel *evsel)
 	zfree(&evsel->unit);
 	zfree(&evsel->metric_id);
 	evsel__zero_per_pkg(evsel);
-	hashmap__free(evsel->per_pkg_mask);
+	perf_hashmap__free(evsel->per_pkg_mask);
 	evsel->per_pkg_mask = NULL;
 	if (evsel__priv_destructor)
 		evsel__priv_destructor(evsel->priv);
@@ -4190,14 +4190,14 @@ int evsel__store_ids(struct evsel *evsel, struct evlist *evlist)
 
 void evsel__zero_per_pkg(struct evsel *evsel)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 
 	if (evsel->per_pkg_mask) {
-		hashmap__for_each_entry(evsel->per_pkg_mask, cur, bkt)
+		perf_hashmap__for_each_entry(evsel->per_pkg_mask, cur, bkt)
 			zfree(&cur->pkey);
 
-		hashmap__clear(evsel->per_pkg_mask);
+		perf_hashmap__clear(evsel->per_pkg_mask);
 	}
 }
 

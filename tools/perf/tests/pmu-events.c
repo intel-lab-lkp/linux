@@ -929,7 +929,7 @@ static struct test_metric metrics[] = {
 static int metric_parse_fake(const char *metric_name, const char *str)
 {
 	struct expr_parse_ctx *ctx;
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	double result;
 	int ret = -1;
 	size_t bkt;
@@ -954,10 +954,10 @@ static int metric_parse_fake(const char *metric_name, const char *str)
 	 * make them unique.
 	 */
 	i = 1;
-	hashmap__for_each_entry(ctx->ids, cur, bkt)
+	perf_hashmap__for_each_entry(ctx->ids, cur, bkt)
 		expr__add_id_val(ctx, strdup(cur->pkey), i++);
 
-	hashmap__for_each_entry(ctx->ids, cur, bkt) {
+	perf_hashmap__for_each_entry(ctx->ids, cur, bkt) {
 		if (check_parse_fake(cur->pkey)) {
 			pr_err("check_parse_fake failed\n");
 			goto out;
@@ -971,7 +971,7 @@ static int metric_parse_fake(const char *metric_name, const char *str)
 		 * resolve divide by zero issues.
 		 */
 		i = 1024;
-		hashmap__for_each_entry(ctx->ids, cur, bkt)
+		perf_hashmap__for_each_entry(ctx->ids, cur, bkt)
 			expr__add_id_val(ctx, strdup(cur->pkey), i--);
 		if (expr__parse(&result, ctx, str)) {
 			pr_err("expr__parse failed for %s\n", metric_name);

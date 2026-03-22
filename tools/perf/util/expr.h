@@ -2,7 +2,7 @@
 #ifndef PARSE_CTX_H
 #define PARSE_CTX_H 1
 
-struct hashmap;
+struct perf_hashmap;
 struct metric_ref;
 
 struct expr_scanner_ctx {
@@ -13,20 +13,20 @@ struct expr_scanner_ctx {
 };
 
 struct expr_parse_ctx {
-	struct hashmap	*ids;
+	struct perf_hashmap	*ids;
 	struct expr_scanner_ctx sctx;
 };
 
 struct expr_id_data;
 
-struct hashmap *ids__new(void);
-void ids__free(struct hashmap *ids);
-int ids__insert(struct hashmap *ids, const char *id);
+struct perf_hashmap *ids__new(void);
+void ids__free(struct perf_hashmap *ids);
+int ids__insert(struct perf_hashmap *ids, const char *id);
 /*
  * Union two sets of ids (hashmaps) and construct a third, freeing ids1 and
  * ids2.
  */
-struct hashmap *ids__union(struct hashmap *ids1, struct hashmap *ids2);
+struct perf_hashmap *ids__union(struct perf_hashmap *ids1, struct perf_hashmap *ids2);
 
 struct expr_parse_ctx *expr__ctx_new(void);
 void expr__ctx_clear(struct expr_parse_ctx *ctx);

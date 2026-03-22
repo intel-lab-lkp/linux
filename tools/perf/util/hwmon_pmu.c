@@ -103,7 +103,7 @@ static const char *const hwmon_units[HWMON_TYPE_MAX] = {
 
 struct hwmon_pmu {
 	struct perf_pmu pmu;
-	struct hashmap events;
+	struct perf_hashmap events;
 	char *hwmon_dir;
 };
 
@@ -135,12 +135,12 @@ bool evsel__is_hwmon(const struct evsel *evsel)
 	return perf_pmu__is_hwmon(evsel->pmu);
 }
 
-static size_t hwmon_pmu__event_hashmap_hash(long key, void *ctx __maybe_unused)
+static size_t hwmon_pmu__event_perf_hashmap_hash(long key, void *ctx __maybe_unused)
 {
 	return ((union hwmon_pmu_event_key)key).type_and_num;
 }
 
-static bool hwmon_pmu__event_hashmap_equal(long key1, long key2, void *ctx __maybe_unused)
+static bool hwmon_pmu__event_perf_hashmap_equal(long key1, long key2, void *ctx __maybe_unused)
 {
 	return ((union hwmon_pmu_event_key)key1).type_and_num ==
 	       ((union hwmon_pmu_event_key)key2).type_and_num;
@@ -236,7 +236,7 @@ static void fix_name(char *p)
 static int hwmon_pmu__read_events(struct hwmon_pmu *pmu)
 {
 	int err = 0;
-	struct hashmap_entry *cur, *tmp;
+	struct perf_hashmap_entry *cur, *tmp;
 	size_t bkt;
 	struct io_dirent64 *ent;
 	struct io_dir dir;
@@ -267,13 +267,13 @@ static int hwmon_pmu__read_events(struct hwmon_pmu *pmu)
 		}
 		key.num = number;
 		key.type = type;
-		if (!hashmap__find(&pmu->events, key.type_and_num, &value)) {
+		if (!perf_hashmap__find(&pmu->events, key.type_and_num, &value)) {
 			value = zalloc(sizeof(*value));
 			if (!value) {
 				err = -ENOMEM;
 				goto err_out;
 			}
-			err = hashmap__add(&pmu->events, key.type_and_num, value);
+			err = perf_hashmap__add(&pmu->events, key.type_and_num, value);
 			if (err) {
 				free(value);
 				err = -ENOMEM;
@@ -317,10 +317,10 @@ static int hwmon_pmu__read_events(struct hwmon_pmu *pmu)
 			close(fd);
 		}
 	}
-	if (hashmap__size(&pmu->events) == 0)
+	if (perf_hashmap__size(&pmu->events) == 0)
 		pr_debug2("hwmon_pmu: %s has no events\n", pmu->pmu.name);
 
-	hashmap__for_each_entry_safe((&pmu->events), cur, tmp, bkt) {
+	perf_hashmap__for_each_entry_safe((&pmu->events), cur, tmp, bkt) {
 		union hwmon_pmu_event_key key = {
 			.type_and_num = cur->key,
 		};
@@ -329,7 +329,7 @@ static int hwmon_pmu__read_events(struct hwmon_pmu *pmu)
 		if (!test_bit(HWMON_ITEM_INPUT, value->items)) {
 			pr_debug("hwmon_pmu: %s removing event '%s%d' that has no input file\n",
 				pmu->pmu.name, hwmon_type_strs[key.type], key.num);
-			hashmap__delete(&pmu->events, key.type_and_num, &key, &value);
+			perf_hashmap__delete(&pmu->events, key.type_and_num, &key, &value);
 			zfree(&value->label);
 			zfree(&value->name);
 			free(value);
@@ -383,8 +383,8 @@ struct perf_pmu *hwmon_pmu__new(struct list_head *pmus, const char *hwmon_dir,
 	}
 	INIT_LIST_HEAD(&hwm->pmu.format);
 	INIT_LIST_HEAD(&hwm->pmu.caps);
-	hashmap__init(&hwm->events, hwmon_pmu__event_hashmap_hash,
-		      hwmon_pmu__event_hashmap_equal, /*ctx=*/NULL);
+	perf_hashmap__init(&hwm->events, hwmon_pmu__event_perf_hashmap_hash,
+		      hwmon_pmu__event_perf_hashmap_equal, /*ctx=*/NULL);
 
 	list_add_tail(&hwm->pmu.list, pmus);
 	return &hwm->pmu;
@@ -393,17 +393,17 @@ struct perf_pmu *hwmon_pmu__new(struct list_head *pmus, const char *hwmon_dir,
 void hwmon_pmu__exit(struct perf_pmu *pmu)
 {
 	struct hwmon_pmu *hwm = container_of(pmu, struct hwmon_pmu, pmu);
-	struct hashmap_entry *cur, *tmp;
+	struct perf_hashmap_entry *cur, *tmp;
 	size_t bkt;
 
-	hashmap__for_each_entry_safe((&hwm->events), cur, tmp, bkt) {
+	perf_hashmap__for_each_entry_safe((&hwm->events), cur, tmp, bkt) {
 		struct hwmon_pmu_event_value *value = cur->pvalue;
 
 		zfree(&value->label);
 		zfree(&value->name);
 		free(value);
 	}
-	hashmap__clear(&hwm->events);
+	perf_hashmap__clear(&hwm->events);
 	zfree(&hwm->hwmon_dir);
 }
 
@@ -459,13 +459,13 @@ static size_t hwmon_pmu__describe_items(struct hwmon_pmu *hwm, char *out_buf, si
 int hwmon_pmu__for_each_event(struct perf_pmu *pmu, void *state, pmu_event_callback cb)
 {
 	struct hwmon_pmu *hwm = container_of(pmu, struct hwmon_pmu, pmu);
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 
 	if (hwmon_pmu__read_events(hwm))
 		return false;
 
-	hashmap__for_each_entry((&hwm->events), cur, bkt) {
+	perf_hashmap__for_each_entry((&hwm->events), cur, bkt) {
 		static const char *const hwmon_scale_units[HWMON_TYPE_MAX] = {
 			NULL,
 			"0.001V", /* cpu */
@@ -547,7 +547,7 @@ size_t hwmon_pmu__num_events(struct perf_pmu *pmu)
 	struct hwmon_pmu *hwm = container_of(pmu, struct hwmon_pmu, pmu);
 
 	hwmon_pmu__read_events(hwm);
-	return hashmap__size(&hwm->events);
+	return perf_hashmap__size(&hwm->events);
 }
 
 bool hwmon_pmu__have_event(struct perf_pmu *pmu, const char *name)
@@ -556,7 +556,7 @@ bool hwmon_pmu__have_event(struct perf_pmu *pmu, const char *name)
 	enum hwmon_type type;
 	int number;
 	union hwmon_pmu_event_key key = { .type_and_num = 0 };
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 
 	if (!parse_hwmon_filename(name, &type, &number, /*item=*/NULL, /*is_alarm=*/NULL))
@@ -567,12 +567,12 @@ bool hwmon_pmu__have_event(struct perf_pmu *pmu, const char *name)
 
 	key.type = type;
 	key.num = number;
-	if (hashmap_find(&hwm->events, key.type_and_num, /*value=*/NULL))
+	if (perf_hashmap_find(&hwm->events, key.type_and_num, /*value=*/NULL))
 		return true;
 	if (key.num != -1)
 		return false;
 	/* Item is of form <type>_ which means we should match <type>_<label>. */
-	hashmap__for_each_entry((&hwm->events), cur, bkt) {
+	perf_hashmap__for_each_entry((&hwm->events), cur, bkt) {
 		struct hwmon_pmu_event_value *value = cur->pvalue;
 
 		key.type_and_num = cur->key;
@@ -598,11 +598,11 @@ static int hwmon_pmu__config_term(const struct hwmon_pmu *hwm,
 				 * Item is of form <type>_ which means we should
 				 * match <type>_<label>.
 				 */
-				struct hashmap_entry *cur;
+				struct perf_hashmap_entry *cur;
 				size_t bkt;
 
 				attr->config = 0;
-				hashmap__for_each_entry((&hwm->events), cur, bkt) {
+				perf_hashmap__for_each_entry((&hwm->events), cur, bkt) {
 					union hwmon_pmu_event_key key = {
 						.type_and_num = cur->key,
 					};

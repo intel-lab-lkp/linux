@@ -21,7 +21,7 @@ struct perf_stat_evsel;
 union perf_event;
 struct bpf_counter_ops;
 struct target;
-struct hashmap;
+struct perf_hashmap;
 struct bperf_leader_bpf;
 struct bperf_follower_bpf;
 
@@ -126,7 +126,7 @@ struct evsel {
 	bool			needs_uniquify;
 	bool			fallenback_eacces;
 	bool			fallenback_eopnotsupp;
-	struct hashmap		*per_pkg_mask;
+	struct perf_hashmap		*per_pkg_mask;
 	int			err;
 	int			script_output_type;
 	struct {

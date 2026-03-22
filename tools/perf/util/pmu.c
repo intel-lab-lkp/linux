@@ -422,16 +422,16 @@ static void perf_pmu_free_alias(struct perf_pmu_alias *alias)
 
 static void perf_pmu__del_aliases(struct perf_pmu *pmu)
 {
-	struct hashmap_entry *entry;
+	struct perf_hashmap_entry *entry;
 	size_t bkt;
 
 	if (!pmu->aliases)
 		return;
 
-	hashmap__for_each_entry(pmu->aliases, entry, bkt)
+	perf_hashmap__for_each_entry(pmu->aliases, entry, bkt)
 		perf_pmu_free_alias(entry->pvalue);
 
-	hashmap__free(pmu->aliases);
+	perf_hashmap__free(pmu->aliases);
 	pmu->aliases = NULL;
 }
 
@@ -443,7 +443,7 @@ static struct perf_pmu_alias *perf_pmu__find_alias(struct perf_pmu *pmu,
 	bool has_sysfs_event;
 	char event_file_name[NAME_MAX + 8];
 
-	if (hashmap__find(pmu->aliases, name, &alias))
+	if (perf_hashmap__find(pmu->aliases, name, &alias))
 		return alias;
 
 	if (!load || pmu->sysfs_aliases_loaded)
@@ -467,7 +467,7 @@ static struct perf_pmu_alias *perf_pmu__find_alias(struct perf_pmu *pmu,
 	}
 	if (has_sysfs_event) {
 		pmu_aliases_parse(pmu);
-		if (hashmap__find(pmu->aliases, name, &alias))
+		if (perf_hashmap__find(pmu->aliases, name, &alias))
 			return alias;
 	}
 
@@ -673,7 +673,7 @@ static int perf_pmu__new_alias(struct perf_pmu *pmu, const char *name,
 		break;
 
 	}
-	hashmap__set(pmu->aliases, alias->name, alias, /*old_key=*/ NULL, &old_alias);
+	perf_hashmap__set(pmu->aliases, alias->name, alias, /*old_key=*/ NULL, &old_alias);
 	perf_pmu_free_alias(old_alias);
 	return 0;
 }
@@ -1189,7 +1189,7 @@ int perf_pmu__init(struct perf_pmu *pmu, __u32 type, const char *name)
 	if (!pmu->name)
 		return -ENOMEM;
 
-	pmu->aliases = hashmap__new(aliases__hash, aliases__equal, /*ctx=*/ NULL);
+	pmu->aliases = perf_hashmap__new(aliases__hash, aliases__equal, /*ctx=*/ NULL);
 	if (!pmu->aliases)
 		return -ENOMEM;
 
@@ -1304,7 +1304,7 @@ struct perf_pmu *perf_pmu__create_placeholder_core_pmu(struct list_head *core_pm
 	pmu->cpus = cpu_map__online();
 
 	INIT_LIST_HEAD(&pmu->format);
-	pmu->aliases = hashmap__new(aliases__hash, aliases__equal, /*ctx=*/ NULL);
+	pmu->aliases = perf_hashmap__new(aliases__hash, aliases__equal, /*ctx=*/ NULL);
 	INIT_LIST_HEAD(&pmu->caps);
 	list_add_tail(&pmu->list, core_pmus);
 	return pmu;
@@ -2199,7 +2199,7 @@ int perf_pmu__for_each_event(struct perf_pmu *pmu, bool skip_duplicate_pmus,
 		.event_type_desc = "Kernel PMU event",
 	};
 	int ret = 0;
-	struct hashmap_entry *entry;
+	struct perf_hashmap_entry *entry;
 	size_t bkt;
 
 	if (perf_pmu__is_tracepoint(pmu))
@@ -2211,7 +2211,7 @@ int perf_pmu__for_each_event(struct perf_pmu *pmu, bool skip_duplicate_pmus,
 
 	pmu_aliases_parse(pmu);
 	pmu_add_cpu_aliases(pmu);
-	hashmap__for_each_entry(pmu->aliases, entry, bkt) {
+	perf_hashmap__for_each_entry(pmu->aliases, entry, bkt) {
 		struct perf_pmu_alias *event = entry->pvalue;
 		size_t buf_used, pmu_name_len;
 
@@ -2714,7 +2714,7 @@ void perf_pmu__delete(struct perf_pmu *pmu)
 
 const char *perf_pmu__name_from_config(struct perf_pmu *pmu, u64 config)
 {
-	struct hashmap_entry *entry;
+	struct perf_hashmap_entry *entry;
 	size_t bkt;
 
 	if (!pmu)
@@ -2722,7 +2722,7 @@ const char *perf_pmu__name_from_config(struct perf_pmu *pmu, u64 config)
 
 	pmu_aliases_parse(pmu);
 	pmu_add_cpu_aliases(pmu);
-	hashmap__for_each_entry(pmu->aliases, entry, bkt) {
+	perf_hashmap__for_each_entry(pmu->aliases, entry, bkt) {
 		struct perf_pmu_alias *event = entry->pvalue;
 		struct perf_event_attr attr = {.config = 0,};
 		int ret = perf_pmu__parse_terms_to_attr(pmu, event->terms, &attr);

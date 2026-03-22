@@ -25,7 +25,7 @@ void threads__init(struct threads *threads)
 	for (int i = 0; i < THREADS__TABLE_SIZE; i++) {
 		struct threads_table_entry *table = &threads->table[i];
 
-		hashmap__init(&table->shard, key_hash, key_equal, NULL);
+		perf_hashmap__init(&table->shard, key_hash, key_equal, NULL);
 		init_rwsem(&table->lock);
 		table->last_match = NULL;
 	}
@@ -37,7 +37,7 @@ void threads__exit(struct threads *threads)
 	for (int i = 0; i < THREADS__TABLE_SIZE; i++) {
 		struct threads_table_entry *table = &threads->table[i];
 
-		hashmap__clear(&table->shard);
+		perf_hashmap__clear(&table->shard);
 		exit_rwsem(&table->lock);
 	}
 }
@@ -50,7 +50,7 @@ size_t threads__nr(struct threads *threads)
 		struct threads_table_entry *table = &threads->table[i];
 
 		down_read(&table->lock);
-		nr += hashmap__size(&table->shard);
+		nr += perf_hashmap__size(&table->shard);
 		up_read(&table->lock);
 	}
 	return nr;
@@ -97,7 +97,7 @@ struct thread *threads__find(struct threads *threads, pid_t tid)
 	down_read(&table->lock);
 	res = __threads_table_entry__get_last_match(table, tid);
 	if (!res) {
-		if (hashmap__find(&table->shard, tid, &res))
+		if (perf_hashmap__find(&table->shard, tid, &res))
 			res = thread__get(res);
 	}
 	up_read(&table->lock);
@@ -115,11 +115,11 @@ struct thread *threads__findnew(struct threads *threads, pid_t pid, pid_t tid, b
 	down_write(&table->lock);
 	res = thread__new(pid, tid);
 	if (res) {
-		if (hashmap__add(&table->shard, tid, res)) {
+		if (perf_hashmap__add(&table->shard, tid, res)) {
 			/* Add failed. Assume a race so find other entry. */
 			thread__put(res);
 			res = NULL;
-			if (hashmap__find(&table->shard, tid, &res))
+			if (perf_hashmap__find(&table->shard, tid, &res))
 				res = thread__get(res);
 		} else {
 			res = thread__get(res);
@@ -136,15 +136,15 @@ void threads__remove_all_threads(struct threads *threads)
 {
 	for (int i = 0; i < THREADS__TABLE_SIZE; i++) {
 		struct threads_table_entry *table = &threads->table[i];
-		struct hashmap_entry *cur, *tmp;
+		struct perf_hashmap_entry *cur, *tmp;
 		size_t bkt;
 
 		down_write(&table->lock);
 		__threads_table_entry__set_last_match(table, NULL);
-		hashmap__for_each_entry_safe(&table->shard, cur, tmp, bkt) {
+		perf_hashmap__for_each_entry_safe(&table->shard, cur, tmp, bkt) {
 			struct thread *old_value;
 
-			hashmap__delete(&table->shard, cur->key, /*old_key=*/NULL, &old_value);
+			perf_hashmap__delete(&table->shard, cur->key, /*old_key=*/NULL, &old_value);
 			thread__put(old_value);
 		}
 		up_write(&table->lock);
@@ -160,7 +160,7 @@ void threads__remove(struct threads *threads, struct thread *thread)
 	if (table->last_match && RC_CHK_EQUAL(table->last_match, thread))
 		__threads_table_entry__set_last_match(table, NULL);
 
-	hashmap__delete(&table->shard, thread__tid(thread), /*old_key=*/NULL, &old_value);
+	perf_hashmap__delete(&table->shard, thread__tid(thread), /*old_key=*/NULL, &old_value);
 	thread__put(old_value);
 	up_write(&table->lock);
 }
@@ -171,11 +171,11 @@ int threads__for_each_thread(struct threads *threads,
 {
 	for (int i = 0; i < THREADS__TABLE_SIZE; i++) {
 		struct threads_table_entry *table = &threads->table[i];
-		struct hashmap_entry *cur;
+		struct perf_hashmap_entry *cur;
 		size_t bkt;
 
 		down_read(&table->lock);
-		hashmap__for_each_entry(&table->shard, cur, bkt) {
+		perf_hashmap__for_each_entry(&table->shard, cur, bkt) {
 			int rc = fn((struct thread *)cur->pvalue, data);
 
 			if (rc != 0) {

@@ -287,7 +287,7 @@ static bool contains_metric_id(struct evsel **metric_events, int num_events,
  * @metric_evlist: the list of perf events.
  * @out_metric_events: holds the created metric events array.
  */
-static int setup_metric_events(const char *pmu, struct hashmap *ids,
+static int setup_metric_events(const char *pmu, struct perf_hashmap *ids,
 			       struct evlist *metric_evlist,
 			       struct evsel ***out_metric_events)
 {
@@ -298,7 +298,7 @@ static int setup_metric_events(const char *pmu, struct hashmap *ids,
 	bool all_pmus = !strcmp(pmu, "all") || perf_pmus__num_core_pmus() == 1 || !is_pmu_core(pmu);
 
 	*out_metric_events = NULL;
-	ids_size = hashmap__size(ids);
+	ids_size = perf_hashmap__size(ids);
 
 	metric_events = calloc(ids_size + 1, sizeof(void *));
 	if (!metric_events)
@@ -326,7 +326,7 @@ static int setup_metric_events(const char *pmu, struct hashmap *ids,
 		 * combined or shared groups, this metric may not care
 		 * about this event.
 		 */
-		if (hashmap__find(ids, metric_id, &val_ptr)) {
+		if (perf_hashmap__find(ids, metric_id, &val_ptr)) {
 			pr_debug("Matched metric-id %s to %s\n", metric_id, evsel__name(ev));
 			metric_events[matched_events++] = ev;
 
@@ -560,7 +560,7 @@ static int metricgroup__build_event_string(struct strbuf *events,
 					   const char *modifier,
 					   bool group_events)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 	bool no_group = true, has_tool_events = false;
 	bool tool_events[TOOL_PMU__EVENT_MAX] = {false};
@@ -568,7 +568,7 @@ static int metricgroup__build_event_string(struct strbuf *events,
 
 #define RETURN_IF_NON_ZERO(x) do { if (x) return x; } while (0)
 
-	hashmap__for_each_entry(ctx->ids, cur, bkt) {
+	perf_hashmap__for_each_entry(ctx->ids, cur, bkt) {
 		const char *sep, *rsep, *id = cur->pkey;
 		enum tool_pmu_event ev;
 
@@ -742,7 +742,7 @@ static int resolve_metric(struct list_head *metric_list,
 			  const struct visited_metric *visited,
 			  const struct pmu_metrics_table *table)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 	struct to_resolve {
 		/* The metric to resolve. */
@@ -759,7 +759,7 @@ static int resolve_metric(struct list_head *metric_list,
 	 * Iterate all the parsed IDs and if there's a matching metric and it to
 	 * the pending array.
 	 */
-	hashmap__for_each_entry(root_metric->pctx->ids, cur, bkt) {
+	perf_hashmap__for_each_entry(root_metric->pctx->ids, cur, bkt) {
 		struct pmu_metric pm;
 
 		if (pmu_metrics_table__find_metric(table, pmu, cur->pkey,
@@ -987,13 +987,13 @@ static int metric_list_cmp(void *priv __maybe_unused, const struct list_head *l,
 	struct expr_id_data *data;
 	int i, left_count, right_count;
 
-	left_count = hashmap__size(left->pctx->ids);
+	left_count = perf_hashmap__size(left->pctx->ids);
 	tool_pmu__for_each_event(i) {
 		if (!expr__get_id(left->pctx, tool_pmu__event_to_str(i), &data))
 			left_count--;
 	}
 
-	right_count = hashmap__size(right->pctx->ids);
+	right_count = perf_hashmap__size(right->pctx->ids);
 	tool_pmu__for_each_event(i) {
 		if (!expr__get_id(right->pctx, tool_pmu__event_to_str(i), &data))
 			right_count--;
@@ -1213,7 +1213,7 @@ static void find_tool_events(const struct list_head *metric_list,
 static int build_combined_expr_ctx(const struct list_head *metric_list,
 				   struct expr_parse_ctx **combined)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 	struct metric *m;
 	char *dup;
@@ -1225,7 +1225,7 @@ static int build_combined_expr_ctx(const struct list_head *metric_list,
 
 	list_for_each_entry(m, metric_list, nd) {
 		if (!m->group_events && !m->modifier) {
-			hashmap__for_each_entry(m->pctx->ids, cur, bkt) {
+			perf_hashmap__for_each_entry(m->pctx->ids, cur, bkt) {
 				dup = strdup(cur->pkey);
 				if (!dup) {
 					ret = -ENOMEM;
@@ -1267,7 +1267,7 @@ static int parse_ids(bool metric_no_merge, bool fake_pmu,
 	int ret;
 
 	*out_evlist = NULL;
-	if (!metric_no_merge || hashmap__size(ids->ids) == 0) {
+	if (!metric_no_merge || perf_hashmap__size(ids->ids) == 0) {
 		bool added_event = false;
 		int i;
 		/*
@@ -1293,7 +1293,7 @@ static int parse_ids(bool metric_no_merge, bool fake_pmu,
 				added_event = true;
 			}
 		}
-		if (!added_event && hashmap__size(ids->ids) == 0) {
+		if (!added_event && perf_hashmap__size(ids->ids) == 0) {
 			char *tmp = strdup("duration_time");
 
 			if (!tmp)
@@ -1341,7 +1341,7 @@ static int count_uses(struct list_head *metric_list, struct evsel *evsel)
 	int uses = 0;
 
 	list_for_each_entry(m, metric_list, nd) {
-		if (hashmap__find(m->pctx->ids, metric_id, NULL))
+		if (perf_hashmap__find(m->pctx->ids, metric_id, NULL))
 			uses++;
 	}
 	return uses;
@@ -1411,7 +1411,7 @@ static int parse_groups(struct evlist *perf_evlist,
 
 		ret = build_combined_expr_ctx(&metric_list, &combined);
 
-		if (!ret && combined && hashmap__size(combined->ids)) {
+		if (!ret && combined && perf_hashmap__size(combined->ids)) {
 			ret = parse_ids(metric_no_merge, fake_pmu, combined,
 					/*modifier=*/NULL,
 					/*group_events=*/false,

@@ -14,7 +14,7 @@
 #include "mem-events.h"
 
 struct evsel_config_term;
-struct hashmap;
+struct perf_hashmap;
 struct perf_cpu_map;
 struct print_callbacks;
 
@@ -142,7 +142,7 @@ struct perf_pmu {
 	 * event read from <sysfs>/bus/event_source/devices/<name>/events/ or
 	 * from json events in pmu-events.c.
 	 */
-	struct hashmap *aliases;
+	struct perf_hashmap *aliases;
 	/**
 	 * @events_table: The events table for json events in pmu-events.c.
 	 */

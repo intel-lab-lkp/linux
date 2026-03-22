@@ -19,24 +19,24 @@
 #pragma GCC poison reallocarray
 
 /* start with 4 buckets */
-#define HASHMAP_MIN_CAP_BITS 2
+#define PERF_HASHMAP_MIN_CAP_BITS 2
 
-static void hashmap_add_entry(struct hashmap_entry **pprev,
-			      struct hashmap_entry *entry)
+static void perf_hashmap_add_entry(struct perf_hashmap_entry **pprev,
+			      struct perf_hashmap_entry *entry)
 {
 	entry->next = *pprev;
 	*pprev = entry;
 }
 
-static void hashmap_del_entry(struct hashmap_entry **pprev,
-			      struct hashmap_entry *entry)
+static void perf_hashmap_del_entry(struct perf_hashmap_entry **pprev,
+			      struct perf_hashmap_entry *entry)
 {
 	*pprev = entry->next;
 	entry->next = NULL;
 }
 
-void hashmap__init(struct hashmap *map, hashmap_hash_fn hash_fn,
-		   hashmap_equal_fn equal_fn, void *ctx)
+void perf_hashmap__init(struct perf_hashmap *map, perf_hashmap_hash_fn hash_fn,
+		   perf_hashmap_equal_fn equal_fn, void *ctx)
 {
 	map->hash_fn = hash_fn;
 	map->equal_fn = equal_fn;
@@ -48,24 +48,24 @@ void hashmap__init(struct hashmap *map, hashmap_hash_fn hash_fn,
 	map->sz = 0;
 }
 
-struct hashmap *hashmap__new(hashmap_hash_fn hash_fn,
-			     hashmap_equal_fn equal_fn,
+struct perf_hashmap *perf_hashmap__new(perf_hashmap_hash_fn hash_fn,
+			     perf_hashmap_equal_fn equal_fn,
 			     void *ctx)
 {
-	struct hashmap *map = malloc(sizeof(struct hashmap));
+	struct perf_hashmap *map = malloc(sizeof(struct perf_hashmap));
 
 	if (!map)
 		return ERR_PTR(-ENOMEM);
-	hashmap__init(map, hash_fn, equal_fn, ctx);
+	perf_hashmap__init(map, hash_fn, equal_fn, ctx);
 	return map;
 }
 
-void hashmap__clear(struct hashmap *map)
+void perf_hashmap__clear(struct perf_hashmap *map)
 {
-	struct hashmap_entry *cur, *tmp;
+	struct perf_hashmap_entry *cur, *tmp;
 	size_t bkt;
 
-	hashmap__for_each_entry_safe(map, cur, tmp, bkt) {
+	perf_hashmap__for_each_entry_safe(map, cur, tmp, bkt) {
 		free(cur);
 	}
 	free(map->buckets);
@@ -73,50 +73,50 @@ void hashmap__clear(struct hashmap *map)
 	map->cap = map->cap_bits = map->sz = 0;
 }
 
-void hashmap__free(struct hashmap *map)
+void perf_hashmap__free(struct perf_hashmap *map)
 {
 	if (IS_ERR_OR_NULL(map))
 		return;
 
-	hashmap__clear(map);
+	perf_hashmap__clear(map);
 	free(map);
 }
 
-size_t hashmap__size(const struct hashmap *map)
+size_t perf_hashmap__size(const struct perf_hashmap *map)
 {
 	return map->sz;
 }
 
-size_t hashmap__capacity(const struct hashmap *map)
+size_t perf_hashmap__capacity(const struct perf_hashmap *map)
 {
 	return map->cap;
 }
 
-static bool hashmap_needs_to_grow(struct hashmap *map)
+static bool perf_hashmap_needs_to_grow(struct perf_hashmap *map)
 {
 	/* grow if empty or more than 75% filled */
 	return (map->cap == 0) || ((map->sz + 1) * 4 / 3 > map->cap);
 }
 
-static int hashmap_grow(struct hashmap *map)
+static int perf_hashmap_grow(struct perf_hashmap *map)
 {
-	struct hashmap_entry **new_buckets;
-	struct hashmap_entry *cur, *tmp;
+	struct perf_hashmap_entry **new_buckets;
+	struct perf_hashmap_entry *cur, *tmp;
 	size_t new_cap_bits, new_cap;
 	size_t h, bkt;
 
 	new_cap_bits = map->cap_bits + 1;
-	if (new_cap_bits < HASHMAP_MIN_CAP_BITS)
-		new_cap_bits = HASHMAP_MIN_CAP_BITS;
+	if (new_cap_bits < PERF_HASHMAP_MIN_CAP_BITS)
+		new_cap_bits = PERF_HASHMAP_MIN_CAP_BITS;
 
 	new_cap = 1UL << new_cap_bits;
 	new_buckets = calloc(new_cap, sizeof(new_buckets[0]));
 	if (!new_buckets)
 		return -ENOMEM;
 
-	hashmap__for_each_entry_safe(map, cur, tmp, bkt) {
+	perf_hashmap__for_each_entry_safe(map, cur, tmp, bkt) {
 		h = hash_bits(map->hash_fn(cur->key, map->ctx), new_cap_bits);
-		hashmap_add_entry(&new_buckets[h], cur);
+		perf_hashmap_add_entry(&new_buckets[h], cur);
 	}
 
 	map->cap = new_cap;
@@ -127,12 +127,12 @@ static int hashmap_grow(struct hashmap *map)
 	return 0;
 }
 
-static bool hashmap_find_entry(const struct hashmap *map,
+static bool perf_hashmap_find_entry(const struct perf_hashmap *map,
 			       const long key, size_t hash,
-			       struct hashmap_entry ***pprev,
-			       struct hashmap_entry **entry)
+			       struct perf_hashmap_entry ***pprev,
+			       struct perf_hashmap_entry **entry)
 {
-	struct hashmap_entry *cur, **prev_ptr;
+	struct perf_hashmap_entry *cur, **prev_ptr;
 
 	if (!map->buckets)
 		return false;
@@ -151,11 +151,11 @@ static bool hashmap_find_entry(const struct hashmap *map,
 	return false;
 }
 
-int hashmap_insert(struct hashmap *map, long key, long value,
-		   enum hashmap_insert_strategy strategy,
+int perf_hashmap_insert(struct perf_hashmap *map, long key, long value,
+		   enum perf_hashmap_insert_strategy strategy,
 		   long *old_key, long *old_value)
 {
-	struct hashmap_entry *entry;
+	struct perf_hashmap_entry *entry;
 	size_t h;
 	int err;
 
@@ -165,51 +165,51 @@ int hashmap_insert(struct hashmap *map, long key, long value,
 		*old_value = 0;
 
 	h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
-	if (strategy != HASHMAP_APPEND &&
-	    hashmap_find_entry(map, key, h, NULL, &entry)) {
+	if (strategy != PERF_HASHMAP_APPEND &&
+	    perf_hashmap_find_entry(map, key, h, NULL, &entry)) {
 		if (old_key)
 			*old_key = entry->key;
 		if (old_value)
 			*old_value = entry->value;
 
-		if (strategy == HASHMAP_SET || strategy == HASHMAP_UPDATE) {
+		if (strategy == PERF_HASHMAP_SET || strategy == PERF_HASHMAP_UPDATE) {
 			entry->key = key;
 			entry->value = value;
 			return 0;
-		} else if (strategy == HASHMAP_ADD) {
+		} else if (strategy == PERF_HASHMAP_ADD) {
 			return -EEXIST;
 		}
 	}
 
-	if (strategy == HASHMAP_UPDATE)
+	if (strategy == PERF_HASHMAP_UPDATE)
 		return -ENOENT;
 
-	if (hashmap_needs_to_grow(map)) {
-		err = hashmap_grow(map);
+	if (perf_hashmap_needs_to_grow(map)) {
+		err = perf_hashmap_grow(map);
 		if (err)
 			return err;
 		h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
 	}
 
-	entry = malloc(sizeof(struct hashmap_entry));
+	entry = malloc(sizeof(struct perf_hashmap_entry));
 	if (!entry)
 		return -ENOMEM;
 
 	entry->key = key;
 	entry->value = value;
-	hashmap_add_entry(&map->buckets[h], entry);
+	perf_hashmap_add_entry(&map->buckets[h], entry);
 	map->sz++;
 
 	return 0;
 }
 
-bool hashmap_find(const struct hashmap *map, long key, long *value)
+bool perf_hashmap_find(const struct perf_hashmap *map, long key, long *value)
 {
-	struct hashmap_entry *entry;
+	struct perf_hashmap_entry *entry;
 	size_t h;
 
 	h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
-	if (!hashmap_find_entry(map, key, h, NULL, &entry))
+	if (!perf_hashmap_find_entry(map, key, h, NULL, &entry))
 		return false;
 
 	if (value)
@@ -217,14 +217,14 @@ bool hashmap_find(const struct hashmap *map, long key, long *value)
 	return true;
 }
 
-bool hashmap_delete(struct hashmap *map, long key,
+bool perf_hashmap_delete(struct perf_hashmap *map, long key,
 		    long *old_key, long *old_value)
 {
-	struct hashmap_entry **pprev, *entry;
+	struct perf_hashmap_entry **pprev, *entry;
 	size_t h;
 
 	h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
-	if (!hashmap_find_entry(map, key, h, &pprev, &entry))
+	if (!perf_hashmap_find_entry(map, key, h, &pprev, &entry))
 		return false;
 
 	if (old_key)
@@ -232,7 +232,7 @@ bool hashmap_delete(struct hashmap *map, long key,
 	if (old_value)
 		*old_value = entry->value;
 
-	hashmap_del_entry(pprev, entry);
+	perf_hashmap_del_entry(pprev, entry);
 	free(entry);
 	map->sz--;
 

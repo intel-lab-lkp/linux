@@ -164,7 +164,7 @@ static size_t get_counter_name_hash_fn(long key, void *ctx __maybe_unused)
 	return key;
 }
 
-static bool get_counter_name_hashmap_equal_fn(long key1, long key2, void *ctx __maybe_unused)
+static bool get_counter_name_perf_hashmap_equal_fn(long key1, long key2, void *ctx __maybe_unused)
 {
 	return key1 == key2;
 }
@@ -176,7 +176,7 @@ static bool get_counter_name_hashmap_equal_fn(long key1, long key2, void *ctx __
  */
 static char *get_counter_name(int set, int nr, struct perf_pmu *pmu)
 {
-	static struct hashmap *cache;
+	static struct perf_hashmap *cache;
 	static struct perf_pmu *cache_pmu;
 	long cache_key = get_counterset_start(set) + nr;
 	struct get_counter_name_data data = {
@@ -188,7 +188,7 @@ static char *get_counter_name(int set, int nr, struct perf_pmu *pmu)
 	if (!pmu)
 		return NULL;
 
-	if (cache_pmu == pmu && hashmap__find(cache, cache_key, &result))
+	if (cache_pmu == pmu && perf_hashmap__find(cache, cache_key, &result))
 		return strdup(result);
 
 	perf_pmu__for_each_event(pmu, /*skip_duplicate_pmus=*/ true,
@@ -197,8 +197,8 @@ static char *get_counter_name(int set, int nr, struct perf_pmu *pmu)
 	result = strdup(data.result ?: "<unknown>");
 
 	if (cache_pmu == NULL) {
-		struct hashmap *tmp = hashmap__new(get_counter_name_hash_fn,
-						   get_counter_name_hashmap_equal_fn,
+		struct perf_hashmap *tmp = perf_hashmap__new(get_counter_name_hash_fn,
+						   get_counter_name_perf_hashmap_equal_fn,
 						   /*ctx=*/NULL);
 
 		if (!IS_ERR(tmp)) {
@@ -211,7 +211,7 @@ static char *get_counter_name(int set, int nr, struct perf_pmu *pmu)
 		char *old_value = NULL, *new_value = strdup(result);
 
 		if (new_value) {
-			hashmap__set(cache, cache_key, new_value, /*old_key=*/NULL, &old_value);
+			perf_hashmap__set(cache, cache_key, new_value, /*old_key=*/NULL, &old_value);
 			/*
 			 * Free in case of a race, but resizing would be broken
 			 * in that case.

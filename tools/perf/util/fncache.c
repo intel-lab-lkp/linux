@@ -8,7 +8,7 @@
 #include "fncache.h"
 #include "hashmap.h"
 
-static struct hashmap *fncache;
+static struct perf_hashmap *fncache;
 
 static size_t fncache__hash(long key, void *ctx __maybe_unused)
 {
@@ -22,10 +22,10 @@ static bool fncache__equal(long key1, long key2, void *ctx __maybe_unused)
 
 static void fncache__init(void)
 {
-	fncache = hashmap__new(fncache__hash, fncache__equal, /*ctx=*/NULL);
+	fncache = perf_hashmap__new(fncache__hash, fncache__equal, /*ctx=*/NULL);
 }
 
-static struct hashmap *fncache__get(void)
+static struct perf_hashmap *fncache__get(void)
 {
 	static pthread_once_t fncache_once = PTHREAD_ONCE_INIT;
 
@@ -38,7 +38,7 @@ static bool lookup_fncache(const char *name, bool *res)
 {
 	long val;
 
-	if (!hashmap__find(fncache__get(), name, &val))
+	if (!perf_hashmap__find(fncache__get(), name, &val))
 		return false;
 
 	*res = (val != 0);
@@ -50,7 +50,7 @@ static void update_fncache(const char *name, bool res)
 	char *old_key = NULL, *key = strdup(name);
 
 	if (key) {
-		hashmap__set(fncache__get(), key, res, &old_key, /*old_value*/NULL);
+		perf_hashmap__set(fncache__get(), key, res, &old_key, /*old_value*/NULL);
 		free(old_key);
 	}
 }

@@ -63,39 +63,39 @@ static bool key_equal(long key1, long key2, void *ctx __maybe_unused)
 	return !strcmp((const char *)key1, (const char *)key2);
 }
 
-struct hashmap *ids__new(void)
+struct perf_hashmap *ids__new(void)
 {
-	struct hashmap *hash;
+	struct perf_hashmap *hash;
 
-	hash = hashmap__new(key_hash, key_equal, NULL);
+	hash = perf_hashmap__new(key_hash, key_equal, NULL);
 	if (IS_ERR(hash))
 		return NULL;
 	return hash;
 }
 
-void ids__free(struct hashmap *ids)
+void ids__free(struct perf_hashmap *ids)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 
 	if (ids == NULL)
 		return;
 
-	hashmap__for_each_entry(ids, cur, bkt) {
+	perf_hashmap__for_each_entry(ids, cur, bkt) {
 		zfree(&cur->pkey);
 		zfree(&cur->pvalue);
 	}
 
-	hashmap__free(ids);
+	perf_hashmap__free(ids);
 }
 
-int ids__insert(struct hashmap *ids, const char *id)
+int ids__insert(struct perf_hashmap *ids, const char *id)
 {
 	struct expr_id_data *data_ptr = NULL, *old_data = NULL;
 	char *old_key = NULL;
 	int ret;
 
-	ret = hashmap__set(ids, id, data_ptr, &old_key, &old_data);
+	ret = perf_hashmap__set(ids, id, data_ptr, &old_key, &old_data);
 	if (ret)
 		free(data_ptr);
 	free(old_key);
@@ -103,10 +103,10 @@ int ids__insert(struct hashmap *ids, const char *id)
 	return ret;
 }
 
-struct hashmap *ids__union(struct hashmap *ids1, struct hashmap *ids2)
+struct perf_hashmap *ids__union(struct perf_hashmap *ids1, struct perf_hashmap *ids2)
 {
 	size_t bkt;
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	int ret;
 	struct expr_id_data *old_data = NULL;
 	char *old_key = NULL;
@@ -117,24 +117,24 @@ struct hashmap *ids__union(struct hashmap *ids1, struct hashmap *ids2)
 	if (!ids2)
 		return ids1;
 
-	if (hashmap__size(ids1) <  hashmap__size(ids2)) {
-		struct hashmap *tmp = ids1;
+	if (perf_hashmap__size(ids1) <  perf_hashmap__size(ids2)) {
+		struct perf_hashmap *tmp = ids1;
 
 		ids1 = ids2;
 		ids2 = tmp;
 	}
-	hashmap__for_each_entry(ids2, cur, bkt) {
-		ret = hashmap__set(ids1, cur->key, cur->value, &old_key, &old_data);
+	perf_hashmap__for_each_entry(ids2, cur, bkt) {
+		ret = perf_hashmap__set(ids1, cur->key, cur->value, &old_key, &old_data);
 		free(old_key);
 		free(old_data);
 
 		if (ret) {
-			hashmap__free(ids1);
-			hashmap__free(ids2);
+			perf_hashmap__free(ids1);
+			perf_hashmap__free(ids2);
 			return NULL;
 		}
 	}
-	hashmap__free(ids2);
+	perf_hashmap__free(ids2);
 	return ids1;
 }
 
@@ -165,7 +165,7 @@ int expr__add_id_val_source_count(struct expr_parse_ctx *ctx, const char *id,
 	data_ptr->val.source_count = source_count;
 	data_ptr->kind = EXPR_ID_DATA__VALUE;
 
-	ret = hashmap__set(ctx->ids, id, data_ptr, &old_key, &old_data);
+	ret = perf_hashmap__set(ctx->ids, id, data_ptr, &old_key, &old_data);
 	if (ret) {
 		free(data_ptr);
 	} else if (old_data) {
@@ -204,7 +204,7 @@ int expr__add_ref(struct expr_parse_ctx *ctx, struct metric_ref *ref)
 	data_ptr->ref.metric_expr = ref->metric_expr;
 	data_ptr->kind = EXPR_ID_DATA__REF;
 
-	ret = hashmap__set(ctx->ids, name, data_ptr, &old_key, &old_data);
+	ret = perf_hashmap__set(ctx->ids, name, data_ptr, &old_key, &old_data);
 	if (ret)
 		free(data_ptr);
 
@@ -221,17 +221,17 @@ int expr__get_id(struct expr_parse_ctx *ctx, const char *id,
 {
 	if (!ctx || !id)
 		return -1;
-	return hashmap__find(ctx->ids, id, data) ? 0 : -1;
+	return perf_hashmap__find(ctx->ids, id, data) ? 0 : -1;
 }
 
 bool expr__subset_of_ids(struct expr_parse_ctx *haystack,
 			 struct expr_parse_ctx *needles)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 	struct expr_id_data *data;
 
-	hashmap__for_each_entry(needles->ids, cur, bkt) {
+	perf_hashmap__for_each_entry(needles->ids, cur, bkt) {
 		if (expr__get_id(haystack, cur->pkey, &data))
 			return false;
 	}
@@ -282,7 +282,7 @@ void expr__del_id(struct expr_parse_ctx *ctx, const char *id)
 	struct expr_id_data *old_val = NULL;
 	char *old_key = NULL;
 
-	hashmap__delete(ctx->ids, id, &old_key, &old_val);
+	perf_hashmap__delete(ctx->ids, id, &old_key, &old_val);
 	free(old_key);
 	free(old_val);
 }
@@ -295,7 +295,7 @@ struct expr_parse_ctx *expr__ctx_new(void)
 	if (!ctx)
 		return NULL;
 
-	ctx->ids = hashmap__new(key_hash, key_equal, NULL);
+	ctx->ids = perf_hashmap__new(key_hash, key_equal, NULL);
 	if (IS_ERR(ctx->ids)) {
 		free(ctx);
 		return NULL;
@@ -306,30 +306,30 @@ struct expr_parse_ctx *expr__ctx_new(void)
 
 void expr__ctx_clear(struct expr_parse_ctx *ctx)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 
-	hashmap__for_each_entry(ctx->ids, cur, bkt) {
+	perf_hashmap__for_each_entry(ctx->ids, cur, bkt) {
 		zfree(&cur->pkey);
 		zfree(&cur->pvalue);
 	}
-	hashmap__clear(ctx->ids);
+	perf_hashmap__clear(ctx->ids);
 }
 
 void expr__ctx_free(struct expr_parse_ctx *ctx)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 
 	if (!ctx)
 		return;
 
 	zfree(&ctx->sctx.user_requested_cpu_list);
-	hashmap__for_each_entry(ctx->ids, cur, bkt) {
+	perf_hashmap__for_each_entry(ctx->ids, cur, bkt) {
 		zfree(&cur->pkey);
 		zfree(&cur->pvalue);
 	}
-	hashmap__free(ctx->ids);
+	perf_hashmap__free(ctx->ids);
 	free(ctx);
 }
 
@@ -421,7 +421,7 @@ double expr__has_event(const struct expr_parse_ctx *ctx, bool compute_ids, const
 	struct evlist *tmp;
 	double ret;
 
-	if (hashmap__find(ctx->ids, id, /*value=*/NULL))
+	if (perf_hashmap__find(ctx->ids, id, /*value=*/NULL))
 		return 1.0;
 
 	if (!compute_ids)

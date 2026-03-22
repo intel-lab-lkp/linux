@@ -304,7 +304,7 @@ static bool pkg_id_equal(long __key1, long __key2, void *ctx __maybe_unused)
 static int check_per_pkg(struct evsel *counter, struct perf_counts_values *vals,
 			 int cpu_map_idx, bool *skip)
 {
-	struct hashmap *mask = counter->per_pkg_mask;
+	struct perf_hashmap *mask = counter->per_pkg_mask;
 	struct perf_cpu_map *cpus = evsel__cpus(counter);
 	struct perf_cpu cpu = perf_cpu_map__cpu(cpus, cpu_map_idx);
 	int s, d, ret = 0;
@@ -319,7 +319,7 @@ static int check_per_pkg(struct evsel *counter, struct perf_counts_values *vals,
 		return 0;
 
 	if (!mask) {
-		mask = hashmap__new(pkg_id_hash, pkg_id_equal, NULL);
+		mask = perf_hashmap__new(pkg_id_hash, pkg_id_equal, NULL);
 		if (IS_ERR(mask))
 			return -ENOMEM;
 
@@ -354,11 +354,11 @@ static int check_per_pkg(struct evsel *counter, struct perf_counts_values *vals,
 		return -ENOMEM;
 
 	*key = (uint64_t)d << 32 | s;
-	if (hashmap__find(mask, key, NULL)) {
+	if (perf_hashmap__find(mask, key, NULL)) {
 		*skip = true;
 		free(key);
 	} else
-		ret = hashmap__add(mask, key, 1);
+		ret = perf_hashmap__add(mask, key, 1);
 
 	return ret;
 }

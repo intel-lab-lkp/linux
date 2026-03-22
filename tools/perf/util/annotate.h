@@ -205,7 +205,7 @@ struct annotation_print_data {
 	const struct arch *arch;
 	struct debuginfo *dbg;
 	/* save data type info keyed by al->offset */
-	struct hashmap *type_hash;
+	struct perf_hashmap *type_hash;
 	/* It'll be set in hist_entry__annotate_printf() */
 	int addr_fmt_width;
 };
@@ -300,7 +300,7 @@ struct cyc_hist {
 struct annotated_source {
 	struct list_head	source;
 	struct sym_hist		*histograms;
-	struct hashmap	   	*samples;
+	struct perf_hashmap	   	*samples;
 	int    			nr_histograms;
 	int    			nr_events;
 	int			nr_entries;
@@ -412,7 +412,7 @@ annotated_source__hist_entry(struct annotated_source *src, const struct evsel *e
 	struct sym_hist_entry *entry;
 	long key = offset << 16 | evsel->core.idx;
 
-	if (!hashmap__find(src->samples, key, &entry))
+	if (!perf_hashmap__find(src->samples, key, &entry))
 		return NULL;
 	return entry;
 }

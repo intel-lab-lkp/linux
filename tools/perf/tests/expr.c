@@ -15,7 +15,7 @@
 
 static int test_ids_union(void)
 {
-	struct hashmap *ids1, *ids2;
+	struct perf_hashmap *ids1, *ids2;
 
 	/* Empty union. */
 	ids1 = ids__new();
@@ -24,7 +24,7 @@ static int test_ids_union(void)
 	TEST_ASSERT_VAL("ids__new", ids2);
 
 	ids1 = ids__union(ids1, ids2);
-	TEST_ASSERT_EQUAL("union", (int)hashmap__size(ids1), 0);
+	TEST_ASSERT_EQUAL("union", (int)perf_hashmap__size(ids1), 0);
 
 	/* Union {foo, bar} against {}. */
 	ids2 = ids__new();
@@ -34,7 +34,7 @@ static int test_ids_union(void)
 	TEST_ASSERT_EQUAL("ids__insert", ids__insert(ids1, strdup("bar")), 0);
 
 	ids1 = ids__union(ids1, ids2);
-	TEST_ASSERT_EQUAL("union", (int)hashmap__size(ids1), 2);
+	TEST_ASSERT_EQUAL("union", (int)perf_hashmap__size(ids1), 2);
 
 	/* Union {foo, bar} against {foo}. */
 	ids2 = ids__new();
@@ -42,7 +42,7 @@ static int test_ids_union(void)
 	TEST_ASSERT_EQUAL("ids__insert", ids__insert(ids2, strdup("foo")), 0);
 
 	ids1 = ids__union(ids1, ids2);
-	TEST_ASSERT_EQUAL("union", (int)hashmap__size(ids1), 2);
+	TEST_ASSERT_EQUAL("union", (int)perf_hashmap__size(ids1), 2);
 
 	/* Union {foo, bar} against {bar,baz}. */
 	ids2 = ids__new();
@@ -51,7 +51,7 @@ static int test_ids_union(void)
 	TEST_ASSERT_EQUAL("ids__insert", ids__insert(ids2, strdup("baz")), 0);
 
 	ids1 = ids__union(ids1, ids2);
-	TEST_ASSERT_EQUAL("union", (int)hashmap__size(ids1), 3);
+	TEST_ASSERT_EQUAL("union", (int)perf_hashmap__size(ids1), 3);
 
 	ids__free(ids1);
 
@@ -134,27 +134,27 @@ static int test__expr(struct test_suite *t __maybe_unused, int subtest __maybe_u
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("FOO + BAR + BAZ + BOZO", "FOO",
 					ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 3);
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "BAR", &val_ptr));
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "BAZ", &val_ptr));
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "BOZO", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 3);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "BAR", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "BAZ", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "BOZO", &val_ptr));
 
 	expr__ctx_clear(ctx);
 	ctx->sctx.runtime = 3;
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("EVENT1\\,param\\=?@ + EVENT2\\,param\\=?@",
 					NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 2);
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "EVENT1,param=3@", &val_ptr));
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "EVENT2,param=3@", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 2);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "EVENT1,param=3@", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "EVENT2,param=3@", &val_ptr));
 
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("dash\\-event1 - dash\\-event2",
 				       NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 2);
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "dash-event1", &val_ptr));
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "dash-event2", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 2);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "dash-event1", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "dash-event2", &val_ptr));
 
 	/* Only EVENT1 or EVENT2 need be measured depending on the value of smt_on. */
 	{
@@ -166,8 +166,8 @@ static int test__expr(struct test_suite *t __maybe_unused, int subtest __maybe_u
 		TEST_ASSERT_VAL("find ids",
 				expr__find_ids("EVENT1 if #smt_on else EVENT2",
 					NULL, ctx) == 0);
-		TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 1);
-		TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids,
+		TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 1);
+		TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids,
 							  smton ? "EVENT1" : "EVENT2",
 							  &val_ptr));
 
@@ -175,8 +175,8 @@ static int test__expr(struct test_suite *t __maybe_unused, int subtest __maybe_u
 		TEST_ASSERT_VAL("find ids",
 				expr__find_ids("EVENT1 if #core_wide else EVENT2",
 					NULL, ctx) == 0);
-		TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 1);
-		TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids,
+		TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 1);
+		TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids,
 							  corewide ? "EVENT1" : "EVENT2",
 							  &val_ptr));
 
@@ -186,47 +186,47 @@ static int test__expr(struct test_suite *t __maybe_unused, int subtest __maybe_u
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("1.0 if EVENT1 > 100.0 else 1.0",
 			NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 0);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 0);
 
 	/* The expression is a constant 0.0 without needing to evaluate EVENT1. */
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("0 & EVENT1 > 0", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 0);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 0);
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("EVENT1 > 0 & 0", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 0);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 0);
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("1 & EVENT1 > 0", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 1);
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "EVENT1", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 1);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "EVENT1", &val_ptr));
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("EVENT1 > 0 & 1", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 1);
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "EVENT1", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 1);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "EVENT1", &val_ptr));
 
 	/* The expression is a constant 1.0 without needing to evaluate EVENT1. */
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("1 | EVENT1 > 0", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 0);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 0);
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("EVENT1 > 0 | 1", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 0);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 0);
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("0 | EVENT1 > 0", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 1);
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "EVENT1", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 1);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "EVENT1", &val_ptr));
 	expr__ctx_clear(ctx);
 	TEST_ASSERT_VAL("find ids",
 			expr__find_ids("EVENT1 > 0 | 0", NULL, ctx) == 0);
-	TEST_ASSERT_VAL("find ids", hashmap__size(ctx->ids) == 1);
-	TEST_ASSERT_VAL("find ids", hashmap__find(ctx->ids, "EVENT1", &val_ptr));
+	TEST_ASSERT_VAL("find ids", perf_hashmap__size(ctx->ids) == 1);
+	TEST_ASSERT_VAL("find ids", perf_hashmap__find(ctx->ids, "EVENT1", &val_ptr));
 
 	/* Test toplogy constants appear well ordered. */
 	expr__ctx_clear(ctx);
@@ -264,8 +264,8 @@ static int test__expr(struct test_suite *t __maybe_unused, int subtest __maybe_u
 	TEST_ASSERT_VAL("source count",
 			expr__find_ids("source_count(EVENT1)",
 			NULL, ctx) == 0);
-	TEST_ASSERT_VAL("source count", hashmap__size(ctx->ids) == 1);
-	TEST_ASSERT_VAL("source count", hashmap__find(ctx->ids, "EVENT1", &val_ptr));
+	TEST_ASSERT_VAL("source count", perf_hashmap__size(ctx->ids) == 1);
+	TEST_ASSERT_VAL("source count", perf_hashmap__find(ctx->ids, "EVENT1", &val_ptr));
 
 
 	/* Test no cpuid match */

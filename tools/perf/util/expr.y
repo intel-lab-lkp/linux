@@ -29,7 +29,7 @@ int expr_lex(YYSTYPE * yylval_param , void *yyscanner);
 		 * When creating ids, holds the working set of event ids. NULL
 		 * implies the set is empty.
 		 */
-		struct hashmap *ids;
+		struct perf_hashmap *ids;
 		/*
 		 * The metric value. When not creating ids this is the value
 		 * read from a counter, a constant or some computed value. When

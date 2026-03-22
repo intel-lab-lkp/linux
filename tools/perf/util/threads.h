@@ -12,7 +12,7 @@ struct thread;
 
 struct threads_table_entry {
 	/* Key is tid, value is struct thread. */
-	struct hashmap	       shard;
+	struct perf_hashmap	       shard;
 	struct rw_semaphore    lock;
 	struct thread	       *last_match;
 };

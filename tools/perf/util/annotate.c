@@ -112,16 +112,16 @@ static struct annotated_source *annotated_source__new(void)
 
 static __maybe_unused void annotated_source__delete(struct annotated_source *src)
 {
-	struct hashmap_entry *cur;
+	struct perf_hashmap_entry *cur;
 	size_t bkt;
 
 	if (src == NULL)
 		return;
 
 	if (src->samples) {
-		hashmap__for_each_entry(src->samples, cur, bkt)
+		perf_hashmap__for_each_entry(src->samples, cur, bkt)
 			zfree(&cur->pvalue);
-		hashmap__free(src->samples);
+		perf_hashmap__free(src->samples);
 	}
 	zfree(&src->histograms);
 	free(src);
@@ -136,7 +136,7 @@ static int annotated_source__alloc_histograms(struct annotated_source *src,
 	if (src->histograms == NULL)
 		return -1;
 
-	src->samples = hashmap__new(sym_hist_hash, sym_hist_equal, NULL);
+	src->samples = perf_hashmap__new(sym_hist_hash, sym_hist_equal, NULL);
 	if (src->samples == NULL)
 		zfree(&src->histograms);
 
@@ -151,7 +151,7 @@ void symbol__annotate_zero_histograms(struct symbol *sym)
 	if (notes->src != NULL) {
 		memset(notes->src->histograms, 0,
 		       notes->src->nr_histograms * sizeof(*notes->src->histograms));
-		hashmap__clear(notes->src->samples);
+		perf_hashmap__clear(notes->src->samples);
 	}
 	if (notes->branch && notes->branch->cycles_hist) {
 		memset(notes->branch->cycles_hist, 0,
@@ -238,12 +238,12 @@ static int __symbol__inc_addr_samples(struct map_symbol *ms,
 	}
 
 	hash_key = offset << 16 | evsel->core.idx;
-	if (!hashmap__find(src->samples, hash_key, &entry)) {
+	if (!perf_hashmap__find(src->samples, hash_key, &entry)) {
 		entry = zalloc(sizeof(*entry));
 		if (entry == NULL)
 			return -ENOMEM;
 
-		if (hashmap__add(src->samples, hash_key, entry) < 0)
+		if (perf_hashmap__add(src->samples, hash_key, entry) < 0)
 			return -ENOMEM;
 	}
 
@@ -1970,7 +1970,7 @@ static int disasm_line__snprint_type_info(struct disasm_line *dl,
 		return 1;
 
 	if (apd->type_hash) {
-		hashmap__find(apd->type_hash, dl->al.offset, &entry);
+		perf_hashmap__find(apd->type_hash, dl->al.offset, &entry);
 		if (entry != NULL) {
 			data_type = entry->type;
 			offset = entry->offset;
@@ -1985,7 +1985,7 @@ static int disasm_line__snprint_type_info(struct disasm_line *dl,
 		if (entry != NULL) {
 			entry->type = data_type;
 			entry->offset = offset;
-			hashmap__add(apd->type_hash, dl->al.offset, entry);
+			perf_hashmap__add(apd->type_hash, dl->al.offset, entry);
 		}
 	}
 
