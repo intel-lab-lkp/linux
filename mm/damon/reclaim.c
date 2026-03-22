@@ -39,7 +39,6 @@ static bool enabled __read_mostly;
  * re-reading, DAMON_RECLAIM will be disabled.
  */
 static bool commit_inputs __read_mostly;
-module_param(commit_inputs, bool, 0600);
 
 /*
  * Time threshold for cold memory regions identification in microseconds.
@@ -266,6 +265,47 @@ static int damon_reclaim_handle_commit_inputs(void)
 	commit_inputs = false;
 	return err;
 }
+
+static int damon_reclaim_commit_inputs_fn(void *arg)
+{
+	return damon_reclaim_apply_parameters();
+}
+
+static int damon_reclaim_commit_inputs_store(const char *val,
+		const struct kernel_param *kp)
+{
+	bool yes;
+	int err;
+	struct damon_call_control control = {
+		.fn = damon_reclaim_commit_inputs_fn,
+		.data = ctx,
+		.repeat = false,
+	};
+
+	err = kstrtobool(val, &yes);
+	if (err)
+		return err;
+
+	if (commit_inputs == yes)
+		return 0;
+
+	if (!yes) {
+		commit_inputs = false;
+		return 0;
+	}
+
+	err = damon_call(ctx, &control);
+	if (err)
+		return err;
+	return control.return_code;
+}
+
+static const struct kernel_param_ops commit_inputs_param_ops = {
+	.set = damon_reclaim_commit_inputs_store,
+	.get = param_get_bool,
+};
+
+module_param_cb(commit_inputs, &commit_inputs_param_ops, &commit_inputs, 0600);
 
 static int damon_reclaim_damon_call_fn(void *arg)
 {
