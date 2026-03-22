@@ -436,7 +436,7 @@ enum pwm_modes {
 struct hp_wmi_hwmon_priv {
 	u8 min_rpm;
 	u8 max_rpm;
-	u8 gpu_delta;
+	int gpu_delta;
 	u8 mode;
 	u8 pwm;
 	struct delayed_work keep_alive_dwork;
@@ -2530,8 +2530,8 @@ static int hp_wmi_setup_fan_settings(struct hp_wmi_hwmon_priv *priv)
 {
 	u8 fan_data[128] = { 0 };
 	struct victus_s_fan_table *fan_table;
-	u8 min_rpm, max_rpm, gpu_delta;
-	int ret;
+	u8 min_rpm, max_rpm;
+	int gpu_delta, ret;
 
 	/* Default behaviour on hwmon init is automatic mode */
 	priv->mode = PWM_MODE_AUTO;
@@ -2553,7 +2553,8 @@ static int hp_wmi_setup_fan_settings(struct hp_wmi_hwmon_priv *priv)
 
 	min_rpm = fan_table->entries[0].cpu_rpm;
 	max_rpm = fan_table->entries[fan_table->header.num_entries - 1].cpu_rpm;
-	gpu_delta = fan_table->entries[0].gpu_rpm - fan_table->entries[0].cpu_rpm;
+	gpu_delta = (int)fan_table->entries[0].gpu_rpm -
+		    (int)fan_table->entries[0].cpu_rpm;
 	priv->min_rpm = min_rpm;
 	priv->max_rpm = max_rpm;
 	priv->gpu_delta = gpu_delta;
