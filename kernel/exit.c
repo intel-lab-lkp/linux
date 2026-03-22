@@ -1599,7 +1599,7 @@ bool pid_child_should_wake(struct wait_opts *wo, struct task_struct *p)
 	return true;
 }
 
-static int child_wait_callback(wait_queue_entry_t *wait, unsigned mode,
+static int child_wait_callback(wait_queue_entry_t *wait, unsigned int mode,
 				int sync, void *key)
 {
 	struct wait_opts *wo = container_of(wait, struct wait_opts,
