@@ -2,9 +2,10 @@
 #ifndef _ASM_X86_CMDLINE_H
 #define _ASM_X86_CMDLINE_H
 
+#include <linux/seq_buf.h>
 #include <asm/setup.h>
 
-extern char builtin_cmdline[COMMAND_LINE_SIZE];
+extern struct seq_buf builtin_cmdline;
 
 int cmdline_find_option_bool(const char *cmdline_ptr, const char *option);
 int cmdline_find_option(const char *cmdline_ptr, const char *option,

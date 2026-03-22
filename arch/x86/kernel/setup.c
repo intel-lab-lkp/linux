@@ -21,6 +21,7 @@
 #include <linux/pci.h>
 #include <linux/random.h>
 #include <linux/root_dev.h>
+#include <linux/seq_buf.h>
 #include <linux/static_call.h>
 #include <linux/swiotlb.h>
 #include <linux/tboot.h>
@@ -228,7 +229,8 @@ unsigned long saved_video_mode;
 
 static char __initdata command_line[COMMAND_LINE_SIZE];
 #ifdef CONFIG_CMDLINE_BOOL
-char builtin_cmdline[COMMAND_LINE_SIZE] = CONFIG_CMDLINE;
+char cmdline_buf[COMMAND_LINE_SIZE];
+struct seq_buf builtin_cmdline;
 bool builtin_cmdline_added __ro_after_init;
 #endif
 
@@ -907,14 +909,16 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 #ifdef CONFIG_CMDLINE_BOOL
+	seq_buf_init(&builtin_cmdline, cmdline_buf, COMMAND_LINE_SIZE);
+	seq_buf_puts(&builtin_cmdline, CONFIG_CMDLINE);
 #ifdef CONFIG_CMDLINE_OVERRIDE
-	strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+	strscpy(boot_command_line, builtin_cmdline.buffer, COMMAND_LINE_SIZE);
 #else
-	if (builtin_cmdline[0]) {
+	if (builtin_cmdline.buffer[0]) {
 		/* append boot loader cmdline to builtin */
-		strlcat(builtin_cmdline, " ", COMMAND_LINE_SIZE);
-		strlcat(builtin_cmdline, boot_command_line, COMMAND_LINE_SIZE);
-		strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+		seq_buf_puts(&builtin_cmdline, " ");
+		seq_buf_puts(&builtin_cmdline, boot_command_line);
+		strscpy(boot_command_line, builtin_cmdline.buffer, COMMAND_LINE_SIZE);
 	}
 #endif
 	builtin_cmdline_added = true;
