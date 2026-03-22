@@ -192,6 +192,7 @@ struct seg6_local_lwt {
 	struct in6_addr nh6;
 	int iif;
 	int oif;
+	int l2dev;
 	struct bpf_lwt_prog bpf;
 #ifdef CONFIG_NET_L3_MASTER_DEV
 	struct seg6_end_dt_info dt_info;
@@ -902,6 +903,118 @@ drop:
 	return -EINVAL;
 }
 
+static inline bool seg6_is_valid_l2dev(const struct net_device *dev)
+{
+	if (netif_is_bridge_port(dev))
+		return true;
+
+	/* A netif_is_srl2() helper, similar to netif_is_vxlan(), could wrap
+	 * this check.
+	 */
+	if (dev->rtnl_link_ops &&
+	    !strcmp(dev->rtnl_link_ops->kind, "srl2"))
+		return true;
+
+	return false;
+}
+
+/* decapsulate and deliver inner L2 frame locally on specified device.
+ * Implements End.DT2U (RFC 8986, Section 4.11) by delivering the
+ * decapsulated Ethernet frame on a device that provides L2 table
+ * semantics (bridge port) or L2 delivery semantics (srl2 device).
+ */
+static int input_action_end_dt2u(struct sk_buff *skb,
+				 struct seg6_local_lwt *slwt)
+{
+	struct net *net = dev_net(skb->dev);
+	struct net_device *l2dev;
+
+	if (!decap_and_validate(skb, IPPROTO_ETHERNET))
+		goto drop;
+
+	if (!pskb_may_pull(skb, ETH_HLEN))
+		goto drop;
+
+	l2dev = dev_get_by_index_rcu(net, slwt->l2dev);
+	if (!l2dev)
+		goto drop;
+
+	if (l2dev->type != ARPHRD_ETHER)
+		goto drop;
+
+	/* Consistent with the carrier check in input_action_end_dx2(). */
+	if (!(l2dev->flags & IFF_UP) || !netif_carrier_ok(l2dev))
+		goto drop;
+
+	/* RFC 8986 requires L2 forwarding semantics. Only bridge ports
+	 * and srl2 devices satisfy this requirement.
+	 */
+	if (!seg6_is_valid_l2dev(l2dev))
+		goto drop;
+
+	skb_orphan(skb);
+
+	if (skb_warn_if_lro(skb))
+		goto drop;
+
+	/* eth_type_trans() sets skb->dev, skb->pkt_type, pulls ETH_HLEN,
+	 * and returns the protocol. This is required for proper L2
+	 * processing when the device is a bridge port.
+	 */
+	skb->protocol = eth_type_trans(skb, l2dev);
+
+	/* Reset network_header to point to the L3 header (past ethernet).
+	 * eth_type_trans pulled ETH_HLEN, so skb->data is at the L3 header
+	 * now. Without this, network_header still points to the ethernet
+	 * header (set by decap_and_validate), and ip_rcv would read garbage
+	 * when the bridge delivers the frame to the local stack.
+	 */
+	skb_reset_network_header(skb);
+
+	/* Drop the dst inherited from the outer SRv6 packet. Without
+	 * this, when the bridge delivers locally (e.g. to a bridge IP),
+	 * ip_rcv would skip route lookup and use the stale IPv6 lwtunnel
+	 * dst for an IPv4 packet, causing a silent drop.
+	 */
+	skb_dst_drop(skb);
+
+	netif_rx(skb);
+
+	return 0;
+
+drop:
+	kfree_skb(skb);
+	return -EINVAL;
+}
+
+static struct net *fib6_config_get_net(const struct fib6_config *fib6_cfg)
+{
+	const struct nl_info *nli = &fib6_cfg->fc_nlinfo;
+
+	return nli->nl_net;
+}
+
+static int seg6_end_dt2u_build(struct seg6_local_lwt *slwt, const void *cfg,
+			       struct netlink_ext_ack *extack)
+{
+	struct net *net = fib6_config_get_net(cfg);
+	struct net_device *dev;
+
+	dev = __dev_get_by_index(net, slwt->l2dev);
+	if (!dev) {
+		NL_SET_ERR_MSG(extack, "l2dev device not found");
+		return -ENODEV;
+	}
+
+	if (!seg6_is_valid_l2dev(dev)) {
+		NL_SET_ERR_MSG(extack,
+			       "l2dev must be a bridge port or srl2 device");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int input_action_end_dx6_finish(struct net *net, struct sock *sk,
 				       struct sk_buff *skb)
 {
@@ -1004,12 +1117,6 @@ drop:
 }
 
 #ifdef CONFIG_NET_L3_MASTER_DEV
-static struct net *fib6_config_get_net(const struct fib6_config *fib6_cfg)
-{
-	const struct nl_info *nli = &fib6_cfg->fc_nlinfo;
-
-	return nli->nl_net;
-}
 
 static int __seg6_end_dt_vrf_build(struct seg6_local_lwt *slwt, const void *cfg,
 				   u16 family, struct netlink_ext_ack *extack)
@@ -1565,6 +1672,15 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
 		.input		= input_action_end_bpf,
 	},
+	{
+		.action		= SEG6_LOCAL_ACTION_END_DT2U,
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_L2DEV),
+		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		.input		= input_action_end_dt2u,
+		.slwt_ops	= {
+					.build_state = seg6_end_dt2u_build,
+				  },
+	},
 
 };
 
@@ -1655,6 +1771,7 @@ static const struct nla_policy seg6_local_policy[SEG6_LOCAL_MAX + 1] = {
 	[SEG6_LOCAL_BPF]	= { .type = NLA_NESTED },
 	[SEG6_LOCAL_COUNTERS]	= { .type = NLA_NESTED },
 	[SEG6_LOCAL_FLAVORS]	= { .type = NLA_NESTED },
+	[SEG6_LOCAL_L2DEV]	= { .type = NLA_U32 },
 };
 
 static int parse_nla_srh(struct nlattr **attrs, struct seg6_local_lwt *slwt,
@@ -1884,6 +2001,30 @@ static int put_nla_oif(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 static int cmp_nla_oif(struct seg6_local_lwt *a, struct seg6_local_lwt *b)
 {
 	if (a->oif != b->oif)
+		return 1;
+
+	return 0;
+}
+
+static int parse_nla_l2dev(struct nlattr **attrs, struct seg6_local_lwt *slwt,
+			   struct netlink_ext_ack *extack)
+{
+	slwt->l2dev = nla_get_u32(attrs[SEG6_LOCAL_L2DEV]);
+
+	return 0;
+}
+
+static int put_nla_l2dev(struct sk_buff *skb, struct seg6_local_lwt *slwt)
+{
+	if (nla_put_u32(skb, SEG6_LOCAL_L2DEV, slwt->l2dev))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int cmp_nla_l2dev(struct seg6_local_lwt *a, struct seg6_local_lwt *b)
+{
+	if (a->l2dev != b->l2dev)
 		return 1;
 
 	return 0;
@@ -2318,6 +2459,10 @@ static struct seg6_action_param seg6_action_params[SEG6_LOCAL_MAX + 1] = {
 	[SEG6_LOCAL_FLAVORS]	= { .parse = parse_nla_flavors,
 				    .put = put_nla_flavors,
 				    .cmp = cmp_nla_flavors },
+
+	[SEG6_LOCAL_L2DEV]	= { .parse = parse_nla_l2dev,
+				    .put = put_nla_l2dev,
+				    .cmp = cmp_nla_l2dev },
 };
 
 /* call the destroy() callback (if available) for each set attribute in
@@ -2633,6 +2778,9 @@ static int seg6_local_get_encap_size(struct lwtunnel_state *lwt)
 
 	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_FLAVORS))
 		nlsize += encap_size_flavors(slwt);
+
+	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_L2DEV))
+		nlsize += nla_total_size(4);
 
 	return nlsize;
 }
