@@ -587,16 +587,20 @@ static void *bzImage64_load(struct kimage *image, char *kernel,
 		kbuf.bufsz += sizeof(struct setup_data) +
 			      sizeof(struct kho_data);
 
+	/* Copy setup header onto bootparams. Documentation/arch/x86/boot.rst */
+	setup_header_size = 0x0202 + (unsigned char)kernel[0x0201] -
+			    setup_hdr_offset;
+	if (setup_header_size > sizeof(struct setup_header)) {
+		pr_err("bzImage setup header too large\n");
+		return ERR_PTR(-ENOEXEC);
+	}
+
 	params = kvzalloc(kbuf.bufsz, GFP_KERNEL);
 	if (!params)
 		return ERR_PTR(-ENOMEM);
 	efi_map_offset = params_cmdline_sz;
 	efi_setup_data_offset = efi_map_offset + ALIGN(efi_map_sz, 16);
 
-	/* Copy setup header onto bootparams. Documentation/arch/x86/boot.rst */
-	setup_header_size = 0x0202 + kernel[0x0201] - setup_hdr_offset;
-
-	/* Is there a limit on setup header size? */
 	memcpy(&params->hdr, (kernel + setup_hdr_offset), setup_header_size);
 
 	kbuf.buffer = params;
