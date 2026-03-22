@@ -954,10 +954,10 @@ static void mc_remove(struct platform_device *pdev)
 {
 	struct mc_priv *priv = platform_get_drvdata(pdev);
 
-	unregister_rpmsg_driver(&amd_rpmsg_driver);
 	remove_versalnet(priv);
-	rproc_shutdown(priv->mcdi->r5_rproc);
 	cdx_mcdi_finish(priv->mcdi);
+	unregister_rpmsg_driver(&amd_rpmsg_driver);
+	rproc_shutdown(priv->mcdi->r5_rproc);
 }
 
 static const struct of_device_id amd_edac_match[] = {
