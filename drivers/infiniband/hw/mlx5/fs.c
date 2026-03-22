@@ -2069,6 +2069,12 @@ _create_raw_flow_rule(struct mlx5_ib_dev *dev,
 
 	INIT_LIST_HEAD(&handler->list);
 
+	if (inlen > sizeof(spec->match_value) ||
+	    fs_matcher->mask_len > sizeof(spec->match_criteria)) {
+		err = -EINVAL;
+		goto free;
+	}
+
 	memcpy(spec->match_value, cmd_in, inlen);
 	memcpy(spec->match_criteria, fs_matcher->matcher_mask.match_params,
 	       fs_matcher->mask_len);
