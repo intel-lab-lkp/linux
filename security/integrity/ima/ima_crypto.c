@@ -17,6 +17,7 @@
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
 #include <linux/err.h>
+#include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <crypto/hash.h>
 
@@ -416,6 +417,12 @@ static int ima_calc_file_hash_atfm(struct file *file,
 
 		if (rbuf[1])
 			active = !active; /* swap buffers, if we use two */
+
+		if (fatal_signal_pending(current)) {
+			ahash_wait(ahash_rc, &wait);
+			rc = -EINTR;
+			goto out3;
+		}
 	}
 	/* wait for the last update request to complete */
 	rc = ahash_wait(ahash_rc, &wait);
@@ -491,6 +498,10 @@ static int ima_calc_file_hash_tfm(struct file *file,
 		rc = crypto_shash_update(shash, rbuf, rbuf_len);
 		if (rc)
 			break;
+		if (fatal_signal_pending(current)) {
+			rc = -EINTR;
+			break;
+		}
 	}
 	kfree(rbuf);
 out:
