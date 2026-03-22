@@ -318,6 +318,22 @@ config IPV6_SEG6_BPF
 	depends on IPV6_SEG6_LWTUNNEL
 	depends on IPV6 = y
 
+config IPV6_SRL2
+	tristate "IPv6: SRv6 L2 tunnel device"
+	depends on IPV6_SEG6_LWTUNNEL
+	select DST_CACHE
+	help
+	  SRv6 virtual Ethernet device that encapsulates L2 frames in
+	  IPv6 with a Segment Routing Header (SRH) for transmission
+	  over an SRv6 network.
+	  Intended for use with a remote seg6local L2 decapsulation
+	  behavior, such as End.DT2U or End.DX2.
+
+	  To compile this as a module, choose M here: the module will
+	  be called srl2.
+
+	  If unsure, say N.
+
 config IPV6_RPL_LWTUNNEL
 	bool "IPv6: RPL Source Routing Header support"
 	depends on IPV6

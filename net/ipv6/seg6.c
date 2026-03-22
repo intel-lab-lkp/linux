@@ -72,6 +72,7 @@ bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len, bool reduced)
 
 	return true;
 }
+EXPORT_SYMBOL_GPL(seg6_validate_srh);
 
 struct ipv6_sr_hdr *seg6_get_srh(struct sk_buff *skb, int flags)
 {
