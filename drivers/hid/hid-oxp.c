@@ -32,6 +32,7 @@
 enum oxp_function_index {
 	OXP_FID_GEN1_RGB_SET =		0x07,
 	OXP_FID_GEN1_RGB_REPLY =	0x0f,
+	OXP_FID_GEN2_TOGGLE_MODE =	0xb2,
 	OXP_FID_GEN2_RGB_EVENT =	0xb8,
 };
 
@@ -39,11 +40,14 @@ static struct oxp_hid_cfg {
 	struct led_classdev_mc *led_mc;
 	struct hid_device *hdev;
 	struct mutex cfg_mutex; /*ensure single synchronous output report*/
+	u8 takeover_enabled;
 	u8 rgb_brightness;
 	u8 rgb_effect;
 	u8 rgb_speed;
 	u8 rgb_en;
 } drvdata;
+
+#define OXP_TAKEOVER_ENABLED_TRUE 0x03
 
 enum oxp_feature_en_index {
 	OXP_FEAT_DISABLED,
@@ -288,6 +292,74 @@ static int oxp_gen_2_property_out(enum oxp_function_index fid, u8 *data,
 	return mcu_property_out(header, header_size, data, data_size, footer,
 				footer_size);
 }
+
+static ssize_t button_takeover_store(struct device *dev,
+				     struct device_attribute *attr, const char *buf,
+				     size_t count)
+{
+	u16 up = get_usage_page(drvdata.hdev);
+	u8 data[3] = { 0x00, 0x01, 0x02 };
+	u8 val = 0;
+	int ret;
+
+	if (up != GEN2_USAGE_PAGE)
+		return -EINVAL;
+
+	ret = sysfs_match_string(oxp_feature_en_text, buf);
+	if (ret < 0)
+		return ret;
+	val = ret;
+
+	switch (val) {
+	case OXP_FEAT_DISABLED:
+		break;
+	case OXP_FEAT_ENABLED:
+		data[0] = OXP_TAKEOVER_ENABLED_TRUE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = oxp_gen_2_property_out(OXP_FID_GEN2_TOGGLE_MODE, data, 3);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t button_takeover_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n", oxp_feature_en_text[drvdata.takeover_enabled]);
+}
+static DEVICE_ATTR_RW(button_takeover);
+
+static ssize_t button_takeover_index_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	ssize_t count = 0;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(oxp_feature_en_text); i++)
+		count += sysfs_emit_at(buf, count, "%s ", oxp_feature_en_text[i]);
+
+	if (count)
+		buf[count - 1] = '\n';
+
+	return count;
+}
+static DEVICE_ATTR_RO(button_takeover_index);
+
+static struct attribute *oxp_cfg_attrs[] = {
+	&dev_attr_button_takeover.attr,
+	&dev_attr_button_takeover_index.attr,
+	NULL,
+};
+
+static const struct attribute_group oxp_cfg_attrs_group = {
+	.attrs = oxp_cfg_attrs,
+};
 
 static int oxp_rgb_status_store(u8 enabled, u8 speed, u8 brightness)
 {
@@ -679,6 +751,15 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up)
 	if (ret)
 		dev_warn(drvdata.led_mc->led_cdev.dev,
 			 "Failed to query RGB initial state: %i\n", ret);
+
+	/* Below features are only implemented in gen 2 */
+	if (up != GEN2_USAGE_PAGE)
+		return 0;
+
+	ret = devm_device_add_group(&hdev->dev, &oxp_cfg_attrs_group);
+	if (ret)
+		return dev_err_probe(&hdev->dev, ret,
+				     "Failed to attach configuration attributes\n");
 
 	return 0;
 }
