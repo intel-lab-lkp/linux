@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
 
-menu "Crypto library routines"
-
 config CRYPTO_HASH_INFO
 	bool
 
@@ -267,7 +265,3 @@ config CRYPTO_LIB_SHA3_ARCH
 
 config CRYPTO_LIB_SM3
 	tristate
-
-source "lib/crypto/tests/Kconfig"
-
-endmenu
