@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
 #include <linux/err.h>
 #include "hashmap.h"
@@ -153,24 +154,24 @@ static bool perf_hashmap_find_entry(const struct perf_hashmap *map,
 
 int perf_hashmap_insert(struct perf_hashmap *map, long key, long value,
 		   enum perf_hashmap_insert_strategy strategy,
-		   long *old_key, long *old_value)
+		   void *old_key, void *old_value)
 {
 	struct perf_hashmap_entry *entry;
 	size_t h;
 	int err;
 
 	if (old_key)
-		*old_key = 0;
+		memset(old_key, 0, sizeof(long));
 	if (old_value)
-		*old_value = 0;
+		memset(old_value, 0, sizeof(long));
 
 	h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
 	if (strategy != PERF_HASHMAP_APPEND &&
 	    perf_hashmap_find_entry(map, key, h, NULL, &entry)) {
 		if (old_key)
-			*old_key = entry->key;
+			memcpy(old_key, &entry->key, sizeof(long));
 		if (old_value)
-			*old_value = entry->value;
+			memcpy(old_value, &entry->value, sizeof(long));
 
 		if (strategy == PERF_HASHMAP_SET || strategy == PERF_HASHMAP_UPDATE) {
 			entry->key = key;
@@ -203,7 +204,7 @@ int perf_hashmap_insert(struct perf_hashmap *map, long key, long value,
 	return 0;
 }
 
-bool perf_hashmap_find(const struct perf_hashmap *map, long key, long *value)
+bool perf_hashmap_find(const struct perf_hashmap *map, long key, void *value)
 {
 	struct perf_hashmap_entry *entry;
 	size_t h;
@@ -213,12 +214,12 @@ bool perf_hashmap_find(const struct perf_hashmap *map, long key, long *value)
 		return false;
 
 	if (value)
-		*value = entry->value;
+		memcpy(value, &entry->value, sizeof(long));
 	return true;
 }
 
 bool perf_hashmap_delete(struct perf_hashmap *map, long key,
-		    long *old_key, long *old_value)
+		    void *old_key, void *old_value)
 {
 	struct perf_hashmap_entry **pprev, *entry;
 	size_t h;
@@ -228,9 +229,9 @@ bool perf_hashmap_delete(struct perf_hashmap *map, long key,
 		return false;
 
 	if (old_key)
-		*old_key = entry->key;
+		memcpy(old_key, &entry->key, sizeof(long));
 	if (old_value)
-		*old_value = entry->value;
+		memcpy(old_value, &entry->value, sizeof(long));
 
 	perf_hashmap_del_entry(pprev, entry);
 	free(entry);

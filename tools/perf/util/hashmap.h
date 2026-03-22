@@ -116,7 +116,7 @@ enum perf_hashmap_insert_strategy {
 	_Static_assert((__builtin_constant_p((p)) ? (p) == NULL : 0) ||			\
 				sizeof(*(p)) == sizeof(long),				\
 		       #p " pointee should be a long-sized integer or a pointer");	\
-	(long *)(p);									\
+	(void *)(p);									\
 })
 
 /*
@@ -128,7 +128,7 @@ enum perf_hashmap_insert_strategy {
  */
 int perf_hashmap_insert(struct perf_hashmap *map, long key, long value,
 		   enum perf_hashmap_insert_strategy strategy,
-		   long *old_key, long *old_value);
+		   void *old_key, void *old_value);
 
 #define perf_hashmap__insert(map, key, value, strategy, old_key, old_value) \
 	perf_hashmap_insert((map), (long)(key), (long)(value), (strategy),  \
@@ -147,14 +147,14 @@ int perf_hashmap_insert(struct perf_hashmap *map, long key, long value,
 #define perf_hashmap__append(map, key, value) \
 	perf_hashmap__insert((map), (key), (value), PERF_HASHMAP_APPEND, NULL, NULL)
 
-bool perf_hashmap_delete(struct perf_hashmap *map, long key, long *old_key, long *old_value);
+bool perf_hashmap_delete(struct perf_hashmap *map, long key, void *old_key, void *old_value);
 
 #define perf_hashmap__delete(map, key, old_key, old_value)		       \
 	perf_hashmap_delete((map), (long)(key),			       \
 		       perf_hashmap_cast_ptr(old_key),		       \
 		       perf_hashmap_cast_ptr(old_value))
 
-bool perf_hashmap_find(const struct perf_hashmap *map, long key, long *value);
+bool perf_hashmap_find(const struct perf_hashmap *map, long key, void *value);
 
 #define perf_hashmap__find(map, key, value) \
 	perf_hashmap_find((map), (long)(key), perf_hashmap_cast_ptr(value))
