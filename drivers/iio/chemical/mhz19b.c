@@ -240,6 +240,12 @@ static size_t mhz19b_receive_buf(struct serdev_device *serdev,
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(&serdev->dev);
 	struct mhz19b_state *st = iio_priv(indio_dev);
+	size_t remaining = sizeof(st->buf) - st->buf_idx;
+
+	if (unlikely(len > remaining)) {
+		st->buf_idx = 0;
+		return len;
+	}
 
 	memcpy(st->buf + st->buf_idx, data, len);
 	st->buf_idx += len;
