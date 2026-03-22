@@ -421,16 +421,25 @@ static int test_zswap_writeback_disabled(const char *root)
 static int test_no_invasive_cgroup_shrink(const char *root)
 {
 	int ret = KSFT_FAIL;
-	size_t control_allocation_size = MB(10);
+	size_t control_allocation_size = pagesize * 1024;
+	char zswap_max_buf[32], mem_max_buf[32];
 	char *control_allocation = NULL, *wb_group = NULL, *control_group = NULL;
+
+	snprintf(zswap_max_buf, sizeof(zswap_max_buf), "%zu", pagesize);
+	snprintf(mem_max_buf, sizeof(mem_max_buf), "%zu", control_allocation_size / 2);
 
 	wb_group = setup_test_group_1M(root, "per_memcg_wb_test1");
 	if (!wb_group)
 		return KSFT_FAIL;
-	if (cg_write(wb_group, "memory.zswap.max", "10K"))
+	if (cg_write(wb_group, "memory.zswap.max", zswap_max_buf))
 		goto out;
+	if (cg_write(wb_group, "memory.max", mem_max_buf))
+		goto out;
+
 	control_group = setup_test_group_1M(root, "per_memcg_wb_test2");
 	if (!control_group)
+		goto out;
+	if (cg_write(control_group, "memory.max", mem_max_buf))
 		goto out;
 
 	/* Push some test_group2 memory into zswap */
@@ -442,8 +451,8 @@ static int test_no_invasive_cgroup_shrink(const char *root)
 	if (cg_read_key_long(control_group, "memory.stat", "zswapped") < 1)
 		goto out;
 
-	/* Allocate 10x memory.max to push wb_group memory into zswap and trigger wb */
-	if (cg_run(wb_group, allocate_bytes, (void *)MB(10)))
+	/* Allocate 2x memory.max to push wb_group memory into zswap and trigger wb */
+	if (cg_run(wb_group, allocate_bytes, (void *)control_allocation_size))
 		goto out;
 
 	/* Verify that only zswapped memory from gwb_group has been written back */
