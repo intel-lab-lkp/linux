@@ -46,6 +46,7 @@ struct shared_ctl {
 	atomic_uint_fast32_t stop;
 	atomic_size_t reader_failures;
 	atomic_size_t reader_verified;
+	pthread_barrier_t barrier;
 };
 
 static void fill_page(unsigned char *base, size_t page_idx)
@@ -78,14 +79,14 @@ static bool check_page(unsigned char *base, size_t page_idx)
 		}
 		if (all_zero) {
 			ksft_print_msg(
-				"CORRUPTED: page %zu (huge page %zu) is ALL ZEROS\n",
+				"CORRUPTED: page %zu (huge page %" PRIu64 ") is ALL ZEROS\n",
 				page_idx,
 				(page_idx * page_size) / pmd_pagesize);
 		} else {
 			ksft_print_msg(
-				"CORRUPTED: page %zu (huge page %zu): expected idx %zu, got %lu\n",
+				"CORRUPTED: page %zu (huge page %" PRIu64 "): expected idx %zu, got %" PRIu64 "\n",
 				page_idx, (page_idx * page_size) / pmd_pagesize,
-				page_idx, (unsigned long)got_idx);
+				page_idx, got_idx);
 		}
 		return false;
 	}
@@ -109,6 +110,8 @@ static void *reader_thread(void *arg)
 	atomic_size_t *failures = ra->failures;
 	atomic_size_t *verified = ra->verified;
 	size_t page_idx;
+
+	pthread_barrier_wait(&ctl->barrier);
 
 	while (atomic_load_explicit(&ctl->stop, memory_order_acquire) == 0) {
 		for (page_idx = (size_t)tid; page_idx < TOTAL_PAGES;
@@ -178,7 +181,13 @@ static size_t run_iteration(void)
 	if (!check_huge_shmem(mmap_base, NR_PMD_PAGE, pmd_pagesize))
 		ksft_exit_fail_msg("No shmem THP is allocated\n");
 
+	if (pthread_barrier_init(&ctl.barrier, NULL, NUM_READER_THREADS + 1) != 0)
+		ksft_exit_fail_msg("pthread_barrier_init failed\n");
+
 	create_readers(threads, args, mmap_base, &ctl);
+
+	/* Wait for all reader threads to be ready before punching holes. */
+	pthread_barrier_wait(&ctl.barrier);
 
 	for (i = 0; i < TOTAL_PAGES; i++) {
 		if (i % PUNCH_INTERVAL != 0)
@@ -197,6 +206,8 @@ static size_t run_iteration(void)
 
 	for (i = 0; i < NUM_READER_THREADS; i++)
 		pthread_join(threads[i], NULL);
+
+	pthread_barrier_destroy(&ctl.barrier);
 
 	reader_failures = atomic_load_explicit(&ctl.reader_failures,
 					       memory_order_acquire);
