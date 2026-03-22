@@ -493,6 +493,27 @@ out:
 	return IRQ_HANDLED;
 }
 
+static void gpio_keys_set_abs_params(struct input_dev *input,
+				     struct gpio_keys_drvdata *ddata,
+				     unsigned int code)
+{
+	int i, min = 0, max = 0;
+
+	for (i = 0; i < ddata->pdata->nbuttons; i++) {
+		const struct gpio_keys_button *button = &ddata->pdata->buttons[i];
+
+		if (button->type != EV_ABS || button->code != code)
+			continue;
+
+		if (button->value < min)
+			min = button->value;
+		if (button->value > max)
+			max = button->value;
+	}
+
+	input_set_abs_params(input, code, min, max, 0, 0);
+}
+
 static int gpio_keys_setup_key(struct platform_device *pdev,
 				struct input_dev *input,
 				struct gpio_keys_drvdata *ddata,
@@ -651,6 +672,8 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 	bdata->code = &ddata->keymap[idx];
 	*bdata->code = button->code;
 	input_set_capability(input, button->type ?: EV_KEY, *bdata->code);
+	if ((button->type ?: EV_KEY) == EV_ABS)
+		gpio_keys_set_abs_params(input, ddata, button->code);
 
 	/*
 	 * Install custom action to cancel release timer and
