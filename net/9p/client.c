@@ -599,7 +599,7 @@ again:
 	smp_rmb();
 
 	if (err == -ERESTARTSYS && c->status == Connected &&
-	    type == P9_TFLUSH) {
+	    type == P9_TFLUSH && !fatal_signal_pending(current)) {
 		sigpending = 1;
 		clear_thread_flag(TIF_SIGPENDING);
 		goto again;
@@ -609,7 +609,8 @@ again:
 		p9_debug(P9_DEBUG_ERROR, "req_status error %d\n", req->t_err);
 		err = req->t_err;
 	}
-	if (err == -ERESTARTSYS && c->status == Connected) {
+	if (err == -ERESTARTSYS && c->status == Connected &&
+	    !fatal_signal_pending(current)) {
 		p9_debug(P9_DEBUG_MUX, "flushing\n");
 		sigpending = 1;
 		clear_thread_flag(TIF_SIGPENDING);
@@ -694,7 +695,8 @@ static struct p9_req_t *p9_client_zc_rpc(struct p9_client *c, int8_t type,
 		p9_debug(P9_DEBUG_ERROR, "req_status error %d\n", req->t_err);
 		err = req->t_err;
 	}
-	if (err == -ERESTARTSYS && c->status == Connected) {
+	if (err == -ERESTARTSYS && c->status == Connected &&
+	    !fatal_signal_pending(current)) {
 		p9_debug(P9_DEBUG_MUX, "flushing\n");
 		sigpending = 1;
 		clear_thread_flag(TIF_SIGPENDING);
