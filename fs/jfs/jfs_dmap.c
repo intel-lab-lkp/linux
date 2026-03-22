@@ -2231,6 +2231,12 @@ static void dbAllocBits(struct bmap * bmp, struct dmap * dp, s64 blkno,
 	int size;
 	s8 *leaf;
 
+	agno = blkno >> bmp->db_agl2size;
+    	if (agno < 0 || agno >= MAXAG) {
+        	jfs_error(bmp->db_ipbmap->i_sb, "%s: agno %d out of range\n", __func__, agno);
+        	return;
+    	}
+
 	/* pick up a pointer to the leaves of the dmap tree */
 	leaf = dp->tree.stree + LEAFIND;
 
@@ -2377,6 +2383,12 @@ static int dbFreeBits(struct bmap * bmp, struct dmap * dp, s64 blkno,
 	dmtree_t *tp = (dmtree_t *) & dp->tree;
 	int rc = 0;
 	int size;
+
+	agno = blkno >> bmp->db_agl2size;
+    	if (agno < 0 || agno >= MAXAG) {
+        	jfs_error(bmp->db_ipbmap->i_sb, "%s: agno %d out of range\n", __func__, agno);
+        	return -EIO;
+    	}
 
 	/* determine the bit number and word within the dmap of the
 	 * starting block.
