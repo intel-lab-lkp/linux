@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+#include "x1-samsung-galaxy-book4-edge.dtsi"
+
+/ {
+	model = "Samsung Galaxy Book4 Edge (16 inch)";
+	compatible = "samsung,galaxy-book4-edge-16", "samsung,galaxy-book4-edge",
+		     "qcom,x1e80100";
+};
+
+&i2c13 {
+	touchpad@50 {
+		compatible = "hid-over-i2c";
+		reg = <0x50>;
+
+		hid-descr-addr = <0xd1>;
+		interrupts-extended = <&tlmm 3 IRQ_TYPE_LEVEL_LOW>;
+
+		vdd-supply = <&vreg_misc_3p3>;
+		vddl-supply = <&vreg_l15b_1p8>;
+
+		pinctrl-0 = <&tpad_default>;
+		pinctrl-names = "default";
+	};
+};
+
+
+
+
