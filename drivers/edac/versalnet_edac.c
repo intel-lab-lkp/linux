@@ -158,6 +158,7 @@ struct mc_priv {
 	u32 regs[REG_MAX];
 	u32 adec[ADEC_MAX];
 	struct mem_ctl_info *mci[NUM_CONTROLLERS];
+	char *mci_name[NUM_CONTROLLERS];
 	struct rpmsg_endpoint *ept;
 	struct cdx_mcdi *mcdi;
 };
@@ -765,11 +766,14 @@ static void versal_edac_release(struct device *dev)
 static void remove_one_mc(struct mc_priv *priv, int i)
 {
 	struct mem_ctl_info *mci;
+	char *mci_name;
 
 	mci = priv->mci[i];
 	device_unregister(mci->pdev);
 	edac_mc_del_mc(mci->pdev);
 	edac_mc_free(mci);
+	mci_name = priv->mci_name[i];
+	kfree(mci_name);
 }
 
 static int init_one_mc(struct mc_priv *priv, struct platform_device *pdev, int i)
@@ -848,6 +852,7 @@ static int init_one_mc(struct mc_priv *priv, struct platform_device *pdev, int i
 	}
 
 	priv->mci[i] = mci;
+	priv->mci_name[i] = name;
 	priv->dwidth = dt;
 
 	platform_set_drvdata(pdev, priv);
