@@ -142,7 +142,7 @@ static void page_cache_delete(struct address_space *mapping,
 	xas_store(&xas, shadow);
 	xas_init_marks(&xas);
 
-	folio->mapping = NULL;
+	WRITE_ONCE(folio->mapping, NULL);
 	/* Leave folio->index set: truncation lookup relies upon it */
 	mapping->nrpages -= nr;
 }

@@ -729,7 +729,7 @@ struct address_space *folio_mapping(const struct folio *folio)
 	if (unlikely(folio_test_swapcache(folio)))
 		return swap_address_space(folio->swap);
 
-	mapping = folio->mapping;
+	mapping = READ_ONCE(folio->mapping);
 	if ((unsigned long)mapping & FOLIO_MAPPING_FLAGS)
 		return NULL;
 
