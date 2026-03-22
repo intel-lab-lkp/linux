@@ -1144,6 +1144,7 @@ properties:
               - microsoft,romulus15
               - qcom,x1e80100-crd
               - qcom,x1e80100-qcp
+              - samsung,galaxy-book4-edge
           - const: qcom,x1e80100
 
       - items:
