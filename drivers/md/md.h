@@ -626,6 +626,9 @@ struct mddev {
 
 	/* The sequence number for sync thread */
 	atomic_t sync_seq;
+
+	wait_queue_head_t		retry_bios_wait;
+	atomic_t			pending_retry_bios;
 };
 
 enum recovery_flags {
@@ -877,6 +880,7 @@ struct md_io_clone {
 	sector_t	offset;
 	unsigned long	sectors;
 	enum stat_group	rw;
+	unsigned int	must_retry;
 	struct bio	bio_clone;
 };
 
@@ -917,7 +921,6 @@ extern void md_finish_reshape(struct mddev *mddev);
 void md_submit_discard_bio(struct mddev *mddev, struct md_rdev *rdev,
 			struct bio *bio, sector_t start, sector_t size);
 void md_account_bio(struct mddev *mddev, struct bio **bio);
-void md_free_cloned_bio(struct bio *bio);
 
 extern bool __must_check md_flush_request(struct mddev *mddev, struct bio *bio);
 void md_write_metadata(struct mddev *mddev, struct md_rdev *rdev,

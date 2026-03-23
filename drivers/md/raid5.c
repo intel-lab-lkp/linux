@@ -6217,7 +6217,13 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 
 	mempool_free(ctx, conf->ctx_pool);
 	if (res == STRIPE_WAIT_RESHAPE) {
-		md_free_cloned_bio(bi);
+		struct md_io_clone *md_io_clone = bi->bi_private;
+
+		md_io_clone->must_retry = 1;
+		atomic_inc(&mddev->pending_retry_bios);
+		bio_endio(bi);
+		wait_event(mddev->retry_bios_wait,
+			   atomic_read(&mddev->pending_retry_bios)==0);
 		return false;
 	}
 
