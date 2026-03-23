@@ -313,12 +313,24 @@ static int ocores_poll_wait(struct ocores_i2c *i2c)
 	/*
 	 * once we are here we expect to get the expected result immediately
 	 * so if after 1ms we timeout then something is broken.
+	 *
+	 * The polling task can be preempted at any point inside ocores_wait(),
+	 * including just before the time_after() check. If the scheduler does
+	 * not resume the task until after the 1ms deadline, ocores_wait()
+	 * returns -ETIMEDOUT even though the hardware already cleared the
+	 * status bit.
+
+	 * Re-read the status register after a timeout before declaring failure.
+	 * This avoids spurious timeout warnings under high CPU load.
 	 */
 	err = ocores_wait(i2c, OCI2C_STATUS, mask, 0, msecs_to_jiffies(1));
-	if (err)
+	if (err) {
+		if ((oc_getreg(i2c, OCI2C_STATUS) & mask) == 0)
+			return 0;
 		dev_warn(i2c->adap.dev.parent,
 			 "%s: STATUS timeout, bit 0x%x did not clear in 1ms\n",
 			 __func__, mask);
+	}
 	return err;
 }
 
