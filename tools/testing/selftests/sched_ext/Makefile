@@ -185,6 +185,9 @@ auto-test-targets :=			\
 	select_cpu_vtime		\
 	rt_stall			\
 	sub_sched			\
+	sub_sched_parent_reject_test	\
+	sub_sched_nesting_test		\
+	sub_sched_race_test		\
 	test_example			\
 	total_bw			\
 
