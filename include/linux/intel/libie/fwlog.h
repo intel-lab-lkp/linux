@@ -4,7 +4,7 @@
 #ifndef _LIBIE_FWLOG_H_
 #define _LIBIE_FWLOG_H_
 
-#include <linux/net/intel/libie/adminq.h>
+#include <linux/intel/libie/adminq.h>
 
 /* Only a single log level should be set and all log levels under the set value
  * are enabled, e.g. if log level is set to LIBIE_FW_LOG_LEVEL_VERBOSE, then all
