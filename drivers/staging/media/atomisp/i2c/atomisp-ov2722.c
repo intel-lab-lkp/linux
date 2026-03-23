@@ -169,25 +169,41 @@ static int __ov2722_buf_reg_array(struct i2c_client *client,
 				  const struct ov2722_reg *next)
 {
 	int size;
+	int ret;
 	__be16 *data16;
 
 	switch (next->type) {
 	case OV2722_8BIT:
 		size = 1;
-		ctrl->buffer.data[ctrl->index] = (u8)next->val;
 		break;
 	case OV2722_16BIT:
 		size = 2;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (ctrl->index + size > OV2722_MAX_WRITE_BUF_SIZE) {
+		ret = __ov2722_flush_reg_array(client, ctrl);
+		if (ret)
+			return ret;
+	}
+
+	/* When first item is added, we need to store its starting address */
+	if (ctrl->index == 0)
+		ctrl->buffer.addr = next->reg;
+
+	switch (next->type) {
+	case OV2722_8BIT:
+		ctrl->buffer.data[ctrl->index] = (u8)next->val;
+		break;
+	case OV2722_16BIT:
 		data16 = (void *)&ctrl->buffer.data[ctrl->index];
 		*data16 = cpu_to_be16((u16)next->val);
 		break;
 	default:
 		return -EINVAL;
 	}
-
-	/* When first item is added, we need to store its starting address */
-	if (ctrl->index == 0)
-		ctrl->buffer.addr = next->reg;
 
 	ctrl->index += size;
 
