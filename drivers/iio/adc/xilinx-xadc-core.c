@@ -222,7 +222,8 @@ static int xadc_power_adc_b(struct xadc *xadc, unsigned int seq_mode)
 	 * non-existing ADC-B powers down the main ADC, so just return and don't
 	 * do anything.
 	 */
-	if (xadc->ops->type == XADC_TYPE_US)
+	if (xadc->ops->type == XADC_TYPE_US ||
+	    xadc->ops->type == XADC_TYPE_US_I2C)
 		return 0;
 
 	/* Powerdown the ADC-B when it is not needed. */
@@ -245,7 +246,8 @@ static int xadc_get_seq_mode(struct xadc *xadc, unsigned long scan_mode)
 	unsigned int aux_scan_mode = scan_mode >> 16;
 
 	/* UltraScale has only one ADC and supports only continuous mode */
-	if (xadc->ops->type == XADC_TYPE_US)
+	if (xadc->ops->type == XADC_TYPE_US ||
+	    xadc->ops->type == XADC_TYPE_US_I2C)
 		return XADC_CONF1_SEQ_CONTINUOUS;
 
 	if (xadc->external_mux_mode == XADC_EXTERNAL_MUX_DUAL)
@@ -345,6 +347,9 @@ int xadc_read_samplerate(struct xadc *xadc)
 	unsigned int div;
 	uint16_t val16;
 	int ret;
+
+	if (!xadc->ops->get_dclk_rate)
+		return -EOPNOTSUPP;
 
 	ret = xadc_read_adc_reg(xadc, XADC_REG_CONF2, &val16);
 	if (ret)
@@ -457,8 +462,13 @@ EXPORT_SYMBOL_GPL(xadc_setup_buffer_and_triggers);
 
 int xadc_write_samplerate(struct xadc *xadc, int val)
 {
-	unsigned long clk_rate = xadc_get_dclk_rate(xadc);
+	unsigned long clk_rate;
 	unsigned int div;
+
+	if (!xadc->ops->get_dclk_rate)
+		return -EOPNOTSUPP;
+
+	clk_rate = xadc_get_dclk_rate(xadc);
 
 	if (!clk_rate)
 		return -EINVAL;
@@ -653,6 +663,11 @@ static const struct iio_info xadc_info = {
 	.update_scan_mode = &xadc_update_scan_mode,
 };
 
+static const struct iio_info xadc_i2c_info = {
+	.read_raw = &xadc_read_raw,
+	.write_raw = &xadc_write_raw,
+};
+
 int xadc_parse_dt(struct iio_dev *indio_dev, unsigned int *conf, int irq)
 {
 	struct device *dev = indio_dev->dev.parent;
@@ -765,6 +780,7 @@ EXPORT_SYMBOL_GPL(xadc_parse_dt);
 const char * const xadc_type_names[] = {
 	[XADC_TYPE_S7] = "xadc",
 	[XADC_TYPE_US] = "xilinx-system-monitor",
+	[XADC_TYPE_US_I2C] = "xilinx-system-monitor",
 };
 
 struct iio_dev *xadc_device_setup(struct device *dev, int size,
@@ -781,7 +797,11 @@ struct iio_dev *xadc_device_setup(struct device *dev, int size,
 		return ERR_PTR(-ENOMEM);
 
 	indio_dev->name = xadc_type_names[(*ops)->type];
-	indio_dev->info = &xadc_info;
+	if ((*ops)->type == XADC_TYPE_US_I2C)
+		indio_dev->info = &xadc_i2c_info;
+	else
+		indio_dev->info = &xadc_info;
+
 	indio_dev->modes = INDIO_DIRECT_MODE;
 
 	return indio_dev;
