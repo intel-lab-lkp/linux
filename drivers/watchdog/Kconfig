@@ -160,6 +160,18 @@ config SOFT_WATCHDOG
 	  To compile this driver as a module, choose M here: the
 	  module will be called softdog.
 
+config SOFT_WATCHDOG_RS
+	tristate "Rust software watchdog"
+	depends on RUST && !SOFT_WATCHDOG
+	select WATCHDOG_CORE
+	help
+	  A software watchdog driver written in Rust using the Rust watchdog
+	  device abstraction. This is a simplified Rust equivalent of the
+	  C softdog driver.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called softdog_rs.
+
 config SOFT_WATCHDOG_PRETIMEOUT
 	bool "Software watchdog pretimeout governor support"
 	depends on SOFT_WATCHDOG && WATCHDOG_PRETIMEOUT_GOV
