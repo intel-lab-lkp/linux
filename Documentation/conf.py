@@ -159,6 +159,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.ifconfig",
+    "table_wrapper",
     "translations",
 ]
 # Since Sphinx version 3, the C function parser is more pedantic with regards
