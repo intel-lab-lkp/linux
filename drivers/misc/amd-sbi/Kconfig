@@ -23,11 +23,12 @@ config AMD_SBRMI_HWMON
 
 config SENSORS_SBTSI
 	tristate "Emulated SB-TSI temperature sensor"
-	depends on I2C
+	depends on I3C_OR_I2C
 	depends on ARM || ARM64 || COMPILE_TEST
 	help
 	  If you say yes here you get support for emulated temperature
-	  sensors on AMD SoCs with SB-TSI interface connected to a BMC device.
+	  sensors on AMD SoCs with SB-TSI interface connected to a BMC device
+	  over I2C and I3C.
 	  This driver is intended to run on the BMC, not the managed node.
 
 	  This driver can also be built as a module. If so, the module will

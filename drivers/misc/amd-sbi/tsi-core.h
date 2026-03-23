@@ -11,13 +11,22 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/types.h>
+#include <linux/i3c/device.h>
+#include <linux/i3c/master.h>
 
 /* Each client has this additional data */
 struct sbtsi_data {
-	struct i2c_client *client;
+	union {
+		struct i2c_client *client;
+		struct i3c_device *i3cdev;
+	};
 	bool ext_range_mode;
 	bool read_order;
+	bool is_i3c;
 };
+
+int sbtsi_xfer(struct sbtsi_data *data, u8 reg, u8 *val, bool is_read);
 
 #ifdef CONFIG_AMD_SBTSI_HWMON
 int create_sbtsi_hwmon_sensor_device(struct device *dev, struct sbtsi_data *data);

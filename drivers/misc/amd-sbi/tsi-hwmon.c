@@ -27,8 +27,7 @@
 #define SBTSI_TEMP_MIN 0
 #define SBTSI_TEMP_MAX 255875
 
-/*
- * From SB-TSI spec: CPU temperature readings and limit registers encode the
+/* From SB-TSI spec: CPU temperature readings and limit registers encode the
  * temperature in increments of 0.125 from 0 to 255.875. The "high byte"
  * register encodes the base-2 of the integer portion, and the upper 3 bits of
  * the "low byte" encode in base-2 the decimal portion.
@@ -61,24 +60,50 @@ static int sbtsi_read(struct device *dev, enum hwmon_sensor_types type,
 {
 	struct sbtsi_data *data = dev_get_drvdata(dev);
 	s32 temp_int, temp_dec;
+	u8 reg_val;
+	int err;
 
 	switch (attr) {
 	case hwmon_temp_input:
 		if (data->read_order) {
-			temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_DEC);
-			temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_INT);
+			err = sbtsi_xfer(data, SBTSI_REG_TEMP_DEC, &reg_val, true);
+			if (err < 0)
+				return err;
+			temp_dec = reg_val;
+			err = sbtsi_xfer(data, SBTSI_REG_TEMP_INT, &reg_val, true);
+			if (err < 0)
+				return err;
+			temp_int = reg_val;
 		} else {
-			temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_INT);
-			temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_DEC);
+			err = sbtsi_xfer(data, SBTSI_REG_TEMP_INT, &reg_val, true);
+			if (err < 0)
+				return err;
+			temp_int = reg_val;
+			err = sbtsi_xfer(data, SBTSI_REG_TEMP_DEC, &reg_val, true);
+			if (err < 0)
+				return err;
+			temp_dec = reg_val;
 		}
 		break;
 	case hwmon_temp_max:
-		temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_HIGH_INT);
-		temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_HIGH_DEC);
+		err = sbtsi_xfer(data, SBTSI_REG_TEMP_HIGH_INT, &reg_val, true);
+		if (err < 0)
+			return err;
+		temp_int = reg_val;
+		err = sbtsi_xfer(data, SBTSI_REG_TEMP_HIGH_DEC, &reg_val, true);
+		if (err < 0)
+			return err;
+		temp_dec = reg_val;
 		break;
 	case hwmon_temp_min:
-		temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_LOW_INT);
-		temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_LOW_DEC);
+		err = sbtsi_xfer(data, SBTSI_REG_TEMP_LOW_INT, &reg_val, true);
+		if (err < 0)
+			return err;
+		temp_int = reg_val;
+		err = sbtsi_xfer(data, SBTSI_REG_TEMP_LOW_DEC, &reg_val, true);
+		if (err < 0)
+			return err;
+		temp_dec = reg_val;
 		break;
 	default:
 		return -EINVAL;
@@ -115,12 +140,11 @@ static int sbtsi_write(struct device *dev, enum hwmon_sensor_types type,
 		val += SBTSI_TEMP_EXT_RANGE_ADJ;
 	val = clamp_val(val, SBTSI_TEMP_MIN, SBTSI_TEMP_MAX);
 	sbtsi_mc_to_reg(val, &temp_int, &temp_dec);
-
-	err = i2c_smbus_write_byte_data(data->client, reg_int, temp_int);
+	err = sbtsi_xfer(data, reg_int, &temp_int, false);
 	if (err)
 		return err;
 
-	err = i2c_smbus_write_byte_data(data->client, reg_dec, temp_dec);
+	err = sbtsi_xfer(data, reg_dec, &temp_dec, false);
 	if (err)
 		return err;
 	return 0;
