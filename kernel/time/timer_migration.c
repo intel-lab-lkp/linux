@@ -1804,8 +1804,10 @@ static int tmigr_setup_groups(unsigned int cpu, unsigned int node,
 	}
 
 	/* Assert single root without parent */
-	if (WARN_ON_ONCE(i >= tmigr_hierarchy_levels))
-		return -EINVAL;
+	if (WARN_ON_ONCE(i >= tmigr_hierarchy_levels)) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	for (; i >= start_lvl; i--) {
 		group = stack[i];
