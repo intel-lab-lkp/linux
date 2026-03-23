@@ -12702,13 +12702,14 @@ static void nohz_balancer_kick(struct rq *rq)
 		flags = NOHZ_STATS_KICK;
 
 	/*
-	 * Most of the time system is not 100% busy. i.e nohz.nr_cpus > 0
+	 * Most of the time system is not 100% busy. i.e number of CPUs in
+	 * nohz.idle_cpus_mask > 0
 	 * Skip the read if time is not due.
 	 *
 	 * If none are in tickless mode, there maybe a narrow window
 	 * (28 jiffies, HZ=1000) where flags maybe set and kick_ilb called.
 	 * But idle load balancing is not done as find_new_ilb fails.
-	 * That's very rare. So read nohz.nr_cpus only if time is due.
+	 * That's very rare. So read nohz.idle_cpus_mask only if time is due.
 	 */
 	if (time_before(now, nohz.next_balance))
 		goto out;
