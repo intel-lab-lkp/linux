@@ -102,6 +102,7 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 
 
 	probe_data->cxl = cxl;
+	probe_data->cxl_pio_initialised = true;
 
 	return 0;
 }
