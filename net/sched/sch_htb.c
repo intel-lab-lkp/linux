@@ -592,7 +592,7 @@ htb_change_class_mode(struct htb_sched *q, struct htb_class *cl, s64 *diff)
  */
 static inline void htb_activate(struct htb_sched *q, struct htb_class *cl)
 {
-	WARN_ON(cl->level || !cl->leaf.q || !cl->leaf.q->q.qlen);
+	WARN_ON(cl->level || !cl->leaf.q);
 
 	if (!cl->prio_activity) {
 		cl->prio_activity = 1 << cl->prio;
@@ -821,7 +821,9 @@ static struct htb_class *htb_lookup_leaf(struct htb_prio *hprio, const int prio)
 		u32 *pid;
 	} stk[TC_HTB_MAXDEPTH], *sp = stk;
 
-	BUG_ON(!hprio->row.rb_node);
+	if (unlikely(!hprio->row.rb_node))
+		return NULL;
+
 	sp->root = hprio->row.rb_node;
 	sp->pptr = &hprio->ptr;
 	sp->pid = &hprio->last_ptr_id;
@@ -1093,9 +1095,8 @@ static int htb_init(struct Qdisc *sch, struct nlattr *opt,
 		}
 
 		q->num_direct_qdiscs = dev->real_num_tx_queues;
-		q->direct_qdiscs = kcalloc(q->num_direct_qdiscs,
-					   sizeof(*q->direct_qdiscs),
-					   GFP_KERNEL);
+		q->direct_qdiscs = kzalloc_objs(*q->direct_qdiscs,
+						q->num_direct_qdiscs);
 		if (!q->direct_qdiscs)
 			return -ENOMEM;
 	}
@@ -1843,7 +1844,7 @@ static int htb_change_class(struct Qdisc *sch, u32 classid,
 			goto failure;
 		}
 		err = -ENOBUFS;
-		cl = kzalloc(sizeof(*cl), GFP_KERNEL);
+		cl = kzalloc_obj(*cl);
 		if (!cl)
 			goto failure;
 

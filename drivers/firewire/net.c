@@ -338,7 +338,7 @@ static struct fwnet_fragment_info *fwnet_frag_new(
 		}
 	}
 
-	new = kmalloc(sizeof(*new), GFP_ATOMIC);
+	new = kmalloc_obj(*new, GFP_ATOMIC);
 	if (!new)
 		return NULL;
 
@@ -356,7 +356,7 @@ static struct fwnet_partial_datagram *fwnet_pd_new(struct net_device *net,
 	struct fwnet_partial_datagram *new;
 	struct fwnet_fragment_info *fi;
 
-	new = kmalloc(sizeof(*new), GFP_ATOMIC);
+	new = kmalloc_obj(*new, GFP_ATOMIC);
 	if (!new)
 		goto fail;
 
@@ -1007,7 +1007,7 @@ static int fwnet_send_packet(struct fwnet_packet_task *ptask)
 
 		spin_lock_irqsave(&dev->lock, flags);
 
-		/* If the AT tasklet already ran, we may be last user. */
+		/* If the AT work item already ran, we may be last user. */
 		free = (ptask->outstanding_pkts == 0 && !ptask->enqueued);
 		if (!free)
 			ptask->enqueued = true;
@@ -1026,7 +1026,7 @@ static int fwnet_send_packet(struct fwnet_packet_task *ptask)
 
 	spin_lock_irqsave(&dev->lock, flags);
 
-	/* If the AT tasklet already ran, we may be last user. */
+	/* If the AT work item already ran, we may be last user. */
 	free = (ptask->outstanding_pkts == 0 && !ptask->enqueued);
 	if (!free)
 		ptask->enqueued = true;
@@ -1402,7 +1402,7 @@ static int fwnet_add_peer(struct fwnet_device *dev,
 {
 	struct fwnet_peer *peer;
 
-	peer = kmalloc(sizeof(*peer), GFP_KERNEL);
+	peer = kmalloc_obj(*peer);
 	if (!peer)
 		return -ENOMEM;
 
