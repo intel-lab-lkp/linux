@@ -1,0 +1,154 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/xlnx,axi-xadc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Xilinx XADC and System Monitor ADC
+
+description:
+  The Xilinx XADC is an ADC that can be found in the Series 7 FPGAs from
+  Xilinx. The XADC has a DRP interface for communication. Currently two
+  different frontends for the DRP interface exist. One that is only available
+  on the ZYNQ family as a hardmacro in the SoC portion of the ZYNQ. The other
+  one is available on all series 7 platforms and is a softmacro with an AXI
+  interface.
+
+  The Xilinx System Monitor is an ADC that is found in the UltraScale and
+  UltraScale+ FPGAs from Xilinx. The System Monitor provides a DRP interface
+  for communication. Xilinx provides a standard IP core that can be used to
+  access the System Monitor through an AXI interface in the FPGA fabric. This
+  IP core is called the Xilinx System Management Wizard.
+
+maintainers:
+  - Lars-Peter Clausen <lars@metafoo.de>
+  - Sai Krishna Potthuri <sai.krishna.potthuri@amd.com>
+
+properties:
+  compatible:
+    enum:
+      - xlnx,zynq-xadc-1.00.a
+      - xlnx,axi-xadc-1.00.a
+      - xlnx,system-management-wiz-1.3
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+    description:
+      When using the ZYNQ this must be the ZYNQ PCAP clock,
+      when using the axi-xadc or the axi-system-management-wizard this must be
+      the clock that provides the clock to the AXI bus interface of the core.
+
+  xlnx,external-mux:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - none
+      - single
+      - dual
+    default: none
+    description: |
+      External multiplexer configuration:
+      - "none": No external multiplexer is used
+      - "single": External multiplexer mode is used with one multiplexer
+      - "dual": External multiplexer mode is used with two multiplexers
+        for simultaneous sampling
+
+  xlnx,external-mux-channel:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 16
+    description: |
+      Configures which pair of pins is used to sample data in external mux mode.
+      Valid values for single external multiplexer mode are 0-16:
+      0: VP/VN
+      1-16: VAUXP[0-15]/VAUXN[0-15]
+      Valid values for dual external multiplexer mode are 1-8:
+      1-8: VAUXP[0-7]/VAUXN[0-7] - VAUXP[8-15]/VAUXN[8-15]
+      This property needs to be present if the device is configured for
+      external multiplexer mode (either single or dual).
+
+  xlnx,channels:
+    description: List of external channels that are connected to the ADC
+    type: object
+    properties:
+      '#address-cells':
+        const: 1
+      '#size-cells':
+        const: 0
+
+    patternProperties:
+      "^channel@([0-9]|1[0-6])$":
+        type: object
+        properties:
+          reg:
+            minimum: 0
+            maximum: 16
+            description: |
+              Pair of pins the channel is connected to:
+                0: VP/VN
+                1-16: VAUXP[0-15]/VAUXN[0-15]
+              Note each channel number should only be used at most once.
+
+          xlnx,bipolar:
+            type: boolean
+            description: If set, the channel is used in bipolar mode
+
+        required:
+          - reg
+
+        additionalProperties: false
+
+    required:
+      - '#address-cells'
+      - '#size-cells'
+
+    additionalProperties: false
+
+allOf:
+  - if:
+      required:
+        - xlnx,external-mux
+      properties:
+        xlnx,external-mux:
+          enum:
+            - single
+            - dual
+    then:
+      required:
+        - xlnx,external-mux-channel
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    adc@f8007100 {
+        compatible = "xlnx,zynq-xadc-1.00.a";
+        reg = <0xf8007100 0x20>;
+        interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&pcap_clk>;
+
+        xlnx,channels {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            channel@0 {
+                reg = <0>;
+            };
+            channel@1 {
+                reg = <1>;
+            };
+            channel@8 {
+                reg = <8>;
+            };
+        };
+    };
