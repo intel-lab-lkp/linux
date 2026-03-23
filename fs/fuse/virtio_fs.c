@@ -611,7 +611,7 @@ static void virtio_fs_request_dispatch_work(struct work_struct *work)
 }
 
 /*
- * Returns 1 if queue is full and sender should wait a bit before sending
+ * Returns 1 if queue or memory is full and sender should wait a bit before sending
  * next request, 0 otherwise.
  */
 static int send_forget_request(struct virtio_fs_vq *fsvq,
@@ -638,13 +638,13 @@ static int send_forget_request(struct virtio_fs_vq *fsvq,
 
 	ret = virtqueue_add_outbuf(vq, &sg, 1, forget, GFP_ATOMIC);
 	if (ret < 0) {
-		if (ret == -ENOSPC) {
+		if (ret == -ENOSPC || ret == -ENOMEM) {
 			pr_debug("virtio-fs: Could not queue FORGET: err=%d. Will try later\n",
 				 ret);
 			list_add_tail(&forget->list, &fsvq->queued_reqs);
 			if (!in_flight)
 				inc_in_flight_req(fsvq);
-			/* Queue is full */
+			/* Queue or memory is full */
 			ret = 1;
 		} else {
 			pr_debug("virtio-fs: Could not queue FORGET: err=%d. Dropping it.\n",
