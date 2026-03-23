@@ -16,7 +16,7 @@
  * FUNCTION:	Convert little-endian unicode string to character string
  *
  */
-int jfs_strfromUCS_le(char *to, const __le16 * from,
+int jfs_strfromUCS_le(char *to, size_t to_size, const __le16 *from,
 		      int len, struct nls_table *codepage)
 {
 	int i;
@@ -24,13 +24,22 @@ int jfs_strfromUCS_le(char *to, const __le16 * from,
 	static int warn_again = 5;	/* Only warn up to 5 times total */
 	int warn = !!warn_again;	/* once per string */
 
+	if (!to_size)
+		return -ENAMETOOLONG;
+
 	if (codepage) {
 		for (i = 0; (i < len) && from[i]; i++) {
 			int charlen;
+
+			if (outlen >= to_size - 1)
+				return -ENAMETOOLONG;
+
 			charlen =
 			    codepage->uni2char(le16_to_cpu(from[i]),
 					       &to[outlen],
-					       NLS_MAX_CHARSET_SIZE);
+					       min_t(size_t,
+						     NLS_MAX_CHARSET_SIZE,
+						     to_size - outlen - 1));
 			if (charlen > 0)
 				outlen += charlen;
 			else
@@ -38,8 +47,11 @@ int jfs_strfromUCS_le(char *to, const __le16 * from,
 		}
 	} else {
 		for (i = 0; (i < len) && from[i]; i++) {
+			if (outlen >= to_size - 1)
+				return -ENAMETOOLONG;
+
 			if (unlikely(le16_to_cpu(from[i]) & 0xff00)) {
-				to[i] = '?';
+				to[outlen++] = '?';
 				if (unlikely(warn)) {
 					warn--;
 					warn_again--;
@@ -52,9 +64,8 @@ int jfs_strfromUCS_le(char *to, const __le16 * from,
 
 			}
 			else
-				to[i] = (char) (le16_to_cpu(from[i]));
+				to[outlen++] = (char)(le16_to_cpu(from[i]));
 		}
-		outlen = i;
 	}
 	to[outlen] = 0;
 	return outlen;

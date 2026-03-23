@@ -2961,8 +2961,15 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 			}
 
 			/* copy the name of head/only segment */
-			outlen = jfs_strfromUCS_le(name_ptr, d->name, len,
-						   codepage);
+			outlen = jfs_strfromUCS_le(name_ptr,
+						   dirent_buf + PAGE_SIZE -
+						   (unsigned long)name_ptr,
+						   d->name, len, codepage);
+			if (outlen < 0) {
+				index = i;
+				overflow = 1;
+				break;
+			}
 			jfs_dirent->name_len = outlen;
 
 			/* copy name in the additional segment(s) */
@@ -2981,8 +2988,16 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 					goto skip_one;
 				}
 				len = min(d_namleft, DTSLOTDATALEN);
-				outlen = jfs_strfromUCS_le(name_ptr, t->name,
-							   len, codepage);
+				outlen = jfs_strfromUCS_le(name_ptr,
+							   dirent_buf + PAGE_SIZE -
+							   (unsigned long)name_ptr,
+							   t->name, len,
+							   codepage);
+				if (outlen < 0) {
+					index = i;
+					overflow = 1;
+					break;
+				}
 				jfs_dirent->name_len += outlen;
 
 				next = t->next;
