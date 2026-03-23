@@ -216,7 +216,7 @@ input_system_err_t input_system_configuration_commit(void);
 // User functions:
 //		(encoded generic function)
 //    - no checking
-//    - decoding name and agruments into the generic (channel) configuration
+//    - decoding name and arguments into the generic (channel) configuration
 //    function.
 //
 ///////////////////////////////////////////////////////////////////////////

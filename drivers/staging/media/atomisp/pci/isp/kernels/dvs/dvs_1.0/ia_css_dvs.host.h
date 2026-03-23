@@ -16,7 +16,8 @@
 #include "ia_css_dvs_param.h"
 
 /* For bilinear interpolation, we need to add +1 to input block height calculation.
- * For bicubic interpolation, we will need to add +3 instaed */
+ * For bicubic interpolation, we will need to add +3 instead
+ */
 #define DVS_GDC_BLI_INTERP_ENVELOPE 1
 #define DVS_GDC_BCI_INTERP_ENVELOPE 3
 

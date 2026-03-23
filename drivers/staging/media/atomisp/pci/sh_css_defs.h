@@ -66,7 +66,7 @@
 
 /* Following macros should match with the type enum ia_css_pipe_version in
  * ia_css_pipe_public.h. The reason to add these macros is that enum type
- * will be evaluted to 0 in preprocessing time. */
+ * will be evaluated to 0 in preprocessing time. */
 #define SH_CSS_ISP_PIPE_VERSION_1	1
 #define SH_CSS_ISP_PIPE_VERSION_2_2	2
 #define SH_CSS_ISP_PIPE_VERSION_2_6_1	3

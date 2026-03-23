@@ -460,7 +460,7 @@ static void ifmtr_set_if_blocking_mode(
 		block[INPUT_FORMATTER1_ID] = (bool)config_b->block_no_reqs;
 
 	/* TODO: next could cause issues when streams are started after
-	 * eachother. */
+	 * each other. */
 	/*IF should not be reconfigured/reset from host */
 	if (ifmtr_set_if_blocking_mode_reset) {
 		ifmtr_set_if_blocking_mode_reset = false;

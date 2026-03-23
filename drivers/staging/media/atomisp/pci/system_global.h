@@ -22,14 +22,14 @@
  * lists (C) or the use of classes (C++), but that is presently not
  * fully supported
  *
- * N.B. the 3 input formatters are of 2 different classess
+ * N.B. the 3 input formatters are of 2 different classes
  */
 
 #define DMA_DDR_TO_VAMEM_WORKAROUND
 #define DMA_DDR_TO_HMEM_WORKAROUND
 
 /*
- * The longest allowed (uninteruptible) bus transfer, does not
+ * The longest allowed (uninterruptible) bus transfer, does not
  * take stalling into account
  */
 #define HIVE_ISP_MAX_BURST_LENGTH	1024
@@ -294,7 +294,7 @@ typedef enum {
 /* end of Stream2MMIO */
 
 /**
- * Input System 2401: CSI-MIPI recevier.
+ * Input System 2401: CSI-MIPI receiver.
  */
 typedef enum {
 	CSI_RX_BACKEND0_ID = 0,	/* map to ISYS2401_MIPI_BE_A */

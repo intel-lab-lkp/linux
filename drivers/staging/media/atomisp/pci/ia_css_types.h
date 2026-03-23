@@ -390,7 +390,7 @@ struct ia_css_grid_info {
 	.vamem_type	= IA_CSS_VAMEM_TYPE_1 \
 }
 
-/* Morphing table, used for geometric distortion and chromatic abberration
+/* Morphing table, used for geometric distortion and chromatic aberration
  *  correction (GDCAC, also called GDC).
  *  This table describes the imperfections introduced by the lens, the
  *  advanced ISP can correct for these imperfections using this table.

@@ -110,7 +110,7 @@ struct ia_css_event {
 	     until IA_CSS_MAX_EXPOSURE_ID is reached, after that they wrap
 	     around to IA_CSS_MIN_EXPOSURE_ID again.
 	     Note that in case frames are dropped, this will not be reflected
-	     in the exposure IDs. Therefor applications should not use this
+	     in the exposure IDs. Therefore applications should not use this
 	     to detect frame drops. */
 	u32               fw_handle;
 	/** Firmware Handle for ACC_STAGE_COMPLETE event (not valid for other

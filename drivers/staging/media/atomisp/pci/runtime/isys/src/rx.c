@@ -589,7 +589,7 @@ void ia_css_isys_rx_configure(const rx_cfg_t *config,
 							  HIVE_ISYS_GPREG_MULTICAST_A_IDX
 							  + (unsigned int)port,
 							  INPUT_SYSTEM_CSI_BACKEND);
-			/* MW: Like the integration test example we overwite,
+			/* MW: Like the integration test example we overwrite,
 			 * the GPREG_MUX register */
 			input_system_sub_system_reg_store(INPUT_SYSTEM0_ID,
 							  GPREGS_UNIT0_ID,

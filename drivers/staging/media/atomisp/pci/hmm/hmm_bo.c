@@ -434,7 +434,7 @@ void hmm_bo_release(struct hmm_buffer_object *bo)
 	/*
 	 * FIX ME:
 	 *
-	 * how to destroy the bo when it is stilled MMAPED?
+	 * how to destroy the bo when it is stilled MAPPED?
 	 *
 	 * ideally, this will not happened as hmm_bo_release
 	 * will only be called when kref reaches 0, and in mmap
@@ -443,7 +443,7 @@ void hmm_bo_release(struct hmm_buffer_object *bo)
 	 */
 	if (bo->status & HMM_BO_MMAPED) {
 		mutex_unlock(&bdev->rbtree_mutex);
-		dev_dbg(atomisp_dev, "destroy bo which is MMAPED, do nothing\n");
+		dev_dbg(atomisp_dev, "destroy bo which is MAPPED, do nothing\n");
 		return;
 	}
 

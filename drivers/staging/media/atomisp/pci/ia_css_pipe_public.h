@@ -413,7 +413,7 @@ ia_css_pipe_get_isp_config(struct ia_css_pipe *pipe,
 /* @brief Set the scaler lut on this pipe. A copy of lut is made in the inuit
  *         address space. So the LUT can be freed by caller.
  * @param[in]  pipe        Pipe handle.
- * @param[in]  lut         Look up tabel
+ * @param[in]  lut         Look up table
  *
  * @return
  * 0			: Success

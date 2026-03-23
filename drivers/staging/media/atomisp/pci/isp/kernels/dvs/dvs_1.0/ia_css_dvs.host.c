@@ -203,7 +203,7 @@ convert_coords_to_ispparams(
 
 			// storage format:
 			// Y0 Y1 UV0 Y2 Y3 UV1
-			/* if uv_flag equals true increment with 2 incase x is odd, this to
+			/* if uv_flag equals true increment with 2 in case x is odd, this to
 			skip the uv position. */
 			if (uv_flag)
 				ptr += 3;

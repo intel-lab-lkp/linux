@@ -292,7 +292,7 @@ static int atomisp_csi2_get_port(struct acpi_device *adev, int clock_num)
 }
 
 /*
- * Alloc and fill an int3472_discrete_device struct so that we can re-use
+ * Alloc and fill an int3472_discrete_device struct so that we can reuse
  * the INT3472 sensor GPIO mapping code.
  *
  * This gets called from ipu_bridge_init() which runs only once per boot,

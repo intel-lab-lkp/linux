@@ -12,7 +12,7 @@
 #include "ia_css_spctrl_comm.h"
 
 typedef struct {
-	u32        ddr_data_offset;       /**  posistion of data in DDR */
+	u32        ddr_data_offset;       /**  position of data in DDR */
 	u32        dmem_data_addr;        /** data segment address in dmem */
 	u32        dmem_bss_addr;         /** bss segment address in dmem  */
 	u32        data_size;             /** data segment size            */
@@ -28,7 +28,7 @@ typedef struct {
 /* Get the code addr in DDR of SP */
 ia_css_ptr get_sp_code_addr(sp_ID_t  sp_id);
 
-/* ! Load firmware on to specfied SP
+/* ! Load firmware on to specified SP
 */
 int ia_css_spctrl_load_fw(sp_ID_t sp_id,
 				      ia_css_spctrl_cfg *spctrl_cfg);

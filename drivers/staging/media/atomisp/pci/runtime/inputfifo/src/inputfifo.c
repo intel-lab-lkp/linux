@@ -340,7 +340,7 @@ inputfifo_send_line(const unsigned short *data,
  *             (2).
  *
  * This function does not do any reordering of pixels, the caller must make
- * sure the data is in the righ format. Please refer to the CSS receiver
+ * sure the data is in the right format. Please refer to the CSS receiver
  * documentation for details on the data formats.
  */
 

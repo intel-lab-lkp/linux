@@ -5084,7 +5084,7 @@ static int load_primary_binaries(
 	/*
 	 * TODO: All this yuv_scaler and capturepp calculation logic
 	 * can be shared later. Capture_pp is also a yuv_scale binary
-	 * with extra XNR funcionality. Therefore, it can be made as the
+	 * with extra XNR functionality. Therefore, it can be made as the
 	 * first step of the cascade.
 	 */
 	capt_pp_out_info = pipe->out_yuv_ds_input_info;
