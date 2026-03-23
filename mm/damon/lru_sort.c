@@ -39,7 +39,6 @@ static bool enabled __read_mostly;
  * the re-reading, DAMON_LRU_SORT will be disabled.
  */
 static bool commit_inputs __read_mostly;
-module_param(commit_inputs, bool, 0600);
 
 /*
  * Desired active to [in]active memory ratio in bp (1/10,000).
@@ -349,17 +348,55 @@ out:
 	return err;
 }
 
-static int damon_lru_sort_handle_commit_inputs(void)
+static int damon_lru_sort_commit_inputs_fn(void *arg)
 {
-	int err;
+	return damon_lru_sort_apply_parameters();
+}
 
-	if (!commit_inputs)
+static int damon_lru_sort_commit_inputs_store(const char *val,
+		const struct kernel_param *kp)
+{
+	bool yes;
+	int err;
+	struct damon_call_control control = {
+		.fn = damon_lru_sort_commit_inputs_fn,
+		.data = ctx,
+		.repeat = false,
+	};
+
+	err = kstrtobool(val, &yes);
+	if (err)
+		return err;
+
+	if (commit_inputs == yes)
 		return 0;
 
-	err = damon_lru_sort_apply_parameters();
+	if (!yes) {
+		commit_inputs = false;
+		return 0;
+	}
+
+	commit_inputs = yes;
+
+	/*
+	 * Skip damon_call() during early boot or when kdamond is idle
+	 * to avoid NULL pointer dereference or unexpected -EINVAL.
+	 */
+	if (!ctx || !damon_is_running(ctx))
+		return 0;
+
+	err = damon_call(ctx, &control);
 	commit_inputs = false;
-	return err;
+
+	return err ? err : control.return_code;
 }
+
+static const struct kernel_param_ops commit_inputs_param_ops = {
+	.set = damon_lru_sort_commit_inputs_store,
+	.get = param_get_bool,
+};
+
+module_param_cb(commit_inputs, &commit_inputs_param_ops, &commit_inputs, 0600);
 
 static int damon_lru_sort_damon_call_fn(void *arg)
 {
@@ -374,7 +411,7 @@ static int damon_lru_sort_damon_call_fn(void *arg)
 			damon_lru_sort_cold_stat = s->stat;
 	}
 
-	return damon_lru_sort_handle_commit_inputs();
+	return 0;
 }
 
 static struct damon_call_control call_control = {
