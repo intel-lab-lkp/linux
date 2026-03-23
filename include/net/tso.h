@@ -68,4 +68,25 @@ struct tso_dma_map {
 	} frags[MAX_SKB_FRAGS];
 };
 
+int tso_dma_map_init(struct tso_dma_map *map, struct device *dev,
+		     const struct sk_buff *skb, unsigned int hdr_len);
+void tso_dma_map_cleanup(struct tso_dma_map *map);
+unsigned int tso_dma_map_count(struct tso_dma_map *map, unsigned int len);
+bool tso_dma_map_next(struct tso_dma_map *map, dma_addr_t *addr,
+		      unsigned int *chunk_len, unsigned int *mapping_len,
+		      unsigned int seg_remaining);
+
+/**
+ * tso_dma_map_use_iova - check if this map used the DMA IOVA path
+ * @map: the map to check
+ *
+ * Return: true if the IOVA API was used for this mapping. When true,
+ * the driver must call tso_dma_map_cleanup() at completion time instead
+ * of doing per-region DMA unmaps.
+ */
+static inline bool tso_dma_map_use_iova(struct tso_dma_map *map)
+{
+	return dma_use_iova(&map->iova_state);
+}
+
 #endif	/* _TSO_H */
