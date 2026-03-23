@@ -348,7 +348,6 @@ int sio_pool_init(void)
 static void sio_write_complete(struct kiocb *iocb, long ret)
 {
 	struct swap_iocb *sio = container_of(iocb, struct swap_iocb, iocb);
-	struct page *page = sio->bvec[0].bv_page;
 	int p;
 
 	if (ret != sio->len) {
@@ -356,21 +355,24 @@ static void sio_write_complete(struct kiocb *iocb, long ret)
 		 * In the case of swap-over-nfs, this can be a
 		 * temporary failure if the system has limited
 		 * memory for allocating transmit buffers.
-		 * Mark the page dirty and avoid
+		 * Mark the folio dirty and avoid
 		 * folio_rotate_reclaimable but rate-limit the
 		 * messages.
 		 */
+		struct folio *folio = page_folio(sio->bvec[0].bv_page);
 		pr_err_ratelimited("Write error %ld on dio swapfile (%llu)\n",
-				   ret, swap_dev_pos(page_swap_entry(page)));
+				   ret, swap_dev_pos(folio->swap));
 		for (p = 0; p < sio->pages; p++) {
-			page = sio->bvec[p].bv_page;
-			set_page_dirty(page);
-			ClearPageReclaim(page);
+			folio = page_folio(sio->bvec[p].bv_page);
+			folio_mark_dirty(folio);
+			folio_clear_reclaim(folio);
 		}
 	}
 
-	for (p = 0; p < sio->pages; p++)
-		end_page_writeback(sio->bvec[p].bv_page);
+	for (p = 0; p < sio->pages; p++) {
+		struct folio *folio = page_folio(sio->bvec[p].bv_page);
+		folio_end_writeback(folio);
+	}
 
 	mempool_free(sio, sio_pool);
 }
