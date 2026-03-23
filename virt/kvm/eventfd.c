@@ -93,6 +93,7 @@ irqfd_resampler_shutdown(struct kvm_kernel_irqfd *irqfd)
 {
 	struct kvm_kernel_irqfd_resampler *resampler = irqfd->resampler;
 	struct kvm *kvm = resampler->kvm;
+	bool last = false;
 
 	mutex_lock(&kvm->irqfds.resampler_lock);
 
@@ -100,19 +101,27 @@ irqfd_resampler_shutdown(struct kvm_kernel_irqfd *irqfd)
 
 	if (list_empty(&resampler->list)) {
 		list_del_rcu(&resampler->link);
+		last = true;
+	}
+
+	mutex_unlock(&kvm->irqfds.resampler_lock);
+
+	/*
+	 * synchronize_srcu_expedited() (called explicitly below, or internally
+	 * by kvm_unregister_irq_ack_notifier()) must not be invoked under
+	 * resampler_lock.  Holding the mutex while waiting for an SRCU grace
+	 * period creates a deadlock: the blocked mutex waiters occupy workqueue
+	 * slots that the SRCU grace period machinery needs to make forward
+	 * progress.
+	 */
+	if (last) {
 		kvm_unregister_irq_ack_notifier(kvm, &resampler->notifier);
-		/*
-		 * synchronize_srcu_expedited(&kvm->irq_srcu) already called
-		 * in kvm_unregister_irq_ack_notifier().
-		 */
 		kvm_set_irq(kvm, KVM_IRQFD_RESAMPLE_IRQ_SOURCE_ID,
 			    resampler->notifier.gsi, 0, false);
 		kfree(resampler);
 	} else {
 		synchronize_srcu_expedited(&kvm->irq_srcu);
 	}
-
-	mutex_unlock(&kvm->irqfds.resampler_lock);
 }
 
 /*
@@ -450,9 +459,16 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 		}
 
 		list_add_rcu(&irqfd->resampler_link, &irqfd->resampler->list);
-		synchronize_srcu_expedited(&kvm->irq_srcu);
 
 		mutex_unlock(&kvm->irqfds.resampler_lock);
+
+		/*
+		 * Ensure the resampler_link is SRCU-visible before the irqfd
+		 * itself goes live.  Moving synchronize_srcu_expedited() outside
+		 * the resampler_lock avoids deadlock with shutdown workers waiting
+		 * for the mutex while SRCU waits for workqueue progress.
+		 */
+		synchronize_srcu_expedited(&kvm->irq_srcu);
 	}
 
 	/*
