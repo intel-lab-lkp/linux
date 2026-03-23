@@ -398,7 +398,7 @@ static int mp2869_read_word_data(struct i2c_client *client, int page, int phase,
 		ret = (ret & GENMASK(7, 0)) * MP2869_POUT_OP_GAIN;
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 
@@ -543,7 +543,7 @@ static int mp2869_write_word_data(struct i2c_client *client, int page, int reg,
 								     MP2869_POUT_OP_GAIN)));
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 

@@ -132,7 +132,7 @@ static int mp2925_read_word_data(struct i2c_client *client, int page, int phase,
 		ret = -ENODATA;
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 
@@ -203,7 +203,7 @@ static int mp2925_write_word_data(struct i2c_client *client, int page, int reg,
 										 ret)));
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 
