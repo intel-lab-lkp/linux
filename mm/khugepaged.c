@@ -1899,7 +1899,7 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 	int nr_none = 0;
 	bool is_shmem = shmem_file(file);
 
-	VM_BUG_ON(!IS_ENABLED(CONFIG_READ_ONLY_THP_FOR_FS) && !is_shmem);
+	VM_WARN_ON_ONCE(!is_shmem);
 	VM_BUG_ON(start & (HPAGE_PMD_NR - 1));
 
 	result = alloc_charge_folio(&new_folio, mm, cc);
@@ -1909,8 +1909,7 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 	mapping_set_update(&xas, mapping);
 
 	__folio_set_locked(new_folio);
-	if (is_shmem)
-		__folio_set_swapbacked(new_folio);
+	__folio_set_swapbacked(new_folio);
 	new_folio->index = start;
 	new_folio->mapping = mapping;
 
@@ -1935,83 +1934,39 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 		folio = xas_load(&xas);
 
 		VM_BUG_ON(index != xas.xa_index);
-		if (is_shmem) {
-			if (!folio) {
-				/*
-				 * Stop if extent has been truncated or
-				 * hole-punched, and is now completely
-				 * empty.
-				 */
-				if (index == start) {
-					if (!xas_next_entry(&xas, end - 1)) {
-						result = SCAN_TRUNCATED;
-						goto xa_locked;
-					}
+		if (!folio) {
+			/*
+			 * Stop if extent has been truncated or
+			 * hole-punched, and is now completely
+			 * empty.
+			 */
+			if (index == start) {
+				if (!xas_next_entry(&xas, end - 1)) {
+					result = SCAN_TRUNCATED;
+					goto xa_locked;
 				}
-				nr_none++;
-				index++;
-				continue;
 			}
+			nr_none++;
+			index++;
+			continue;
+		}
 
-			if (xa_is_value(folio) || !folio_test_uptodate(folio)) {
-				xas_unlock_irq(&xas);
-				/* swap in or instantiate fallocated page */
-				if (shmem_get_folio(mapping->host, index, 0,
-						&folio, SGP_NOALLOC)) {
-					result = SCAN_FAIL;
-					goto xa_unlocked;
-				}
-				/* drain lru cache to help folio_isolate_lru() */
-				lru_add_drain();
-			} else if (folio_trylock(folio)) {
-				folio_get(folio);
-				xas_unlock_irq(&xas);
-			} else {
-				result = SCAN_PAGE_LOCK;
-				goto xa_locked;
-			}
-		} else {	/* !is_shmem */
-			if (!folio || xa_is_value(folio)) {
-				xas_unlock_irq(&xas);
-				page_cache_sync_readahead(mapping, &file->f_ra,
-							  file, index,
-							  end - index);
-				/* drain lru cache to help folio_isolate_lru() */
-				lru_add_drain();
-				folio = filemap_lock_folio(mapping, index);
-				if (IS_ERR(folio)) {
-					result = SCAN_FAIL;
-					goto xa_unlocked;
-				}
-			} else if (folio_test_dirty(folio)) {
-				/*
-				 * khugepaged only works on read-only fd,
-				 * so this page is dirty because it hasn't
-				 * been flushed since first write. There
-				 * won't be new dirty pages.
-				 *
-				 * Trigger async flush here and hope the
-				 * writeback is done when khugepaged
-				 * revisits this page.
-				 *
-				 * This is a one-off situation. We are not
-				 * forcing writeback in loop.
-				 */
-				xas_unlock_irq(&xas);
-				filemap_flush(mapping);
-				result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
+		if (xa_is_value(folio) || !folio_test_uptodate(folio)) {
+			xas_unlock_irq(&xas);
+			/* swap in or instantiate fallocated page */
+			if (shmem_get_folio(mapping->host, index, 0,
+					&folio, SGP_NOALLOC)) {
+				result = SCAN_FAIL;
 				goto xa_unlocked;
-			} else if (folio_test_writeback(folio)) {
-				xas_unlock_irq(&xas);
-				result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
-				goto xa_unlocked;
-			} else if (folio_trylock(folio)) {
-				folio_get(folio);
-				xas_unlock_irq(&xas);
-			} else {
-				result = SCAN_PAGE_LOCK;
-				goto xa_locked;
 			}
+			/* drain lru cache to help folio_isolate_lru() */
+			lru_add_drain();
+		} else if (folio_trylock(folio)) {
+			folio_get(folio);
+			xas_unlock_irq(&xas);
+		} else {
+			result = SCAN_PAGE_LOCK;
+			goto xa_locked;
 		}
 
 		/*
@@ -2038,17 +1993,6 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 
 		if (folio_mapping(folio) != mapping) {
 			result = SCAN_TRUNCATED;
-			goto out_unlock;
-		}
-
-		if (!is_shmem && (folio_test_dirty(folio) ||
-				  folio_test_writeback(folio))) {
-			/*
-			 * khugepaged only works on read-only fd, so this
-			 * folio is dirty because it hasn't been flushed
-			 * since first write.
-			 */
-			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
 			goto out_unlock;
 		}
 
@@ -2099,21 +2043,6 @@ out_unlock:
 		folio_unlock(folio);
 		folio_put(folio);
 		goto xa_unlocked;
-	}
-
-	if (!is_shmem) {
-		filemap_nr_thps_inc(mapping);
-		/*
-		 * Paired with the fence in do_dentry_open() -> get_write_access()
-		 * to ensure i_writecount is up to date and the update to nr_thps
-		 * is visible. Ensures the page cache will be truncated if the
-		 * file is opened writable.
-		 */
-		smp_mb();
-		if (inode_is_open_for_write(mapping->host)) {
-			result = SCAN_FAIL;
-			filemap_nr_thps_dec(mapping);
-		}
 	}
 
 xa_locked:
@@ -2224,12 +2153,8 @@ immap_locked:
 		xas_lock_irq(&xas);
 	}
 
-	if (is_shmem) {
-		lruvec_stat_mod_folio(new_folio, NR_SHMEM, HPAGE_PMD_NR);
-		lruvec_stat_mod_folio(new_folio, NR_SHMEM_THPS, HPAGE_PMD_NR);
-	} else {
-		lruvec_stat_mod_folio(new_folio, NR_FILE_THPS, HPAGE_PMD_NR);
-	}
+	lruvec_stat_mod_folio(new_folio, NR_SHMEM, HPAGE_PMD_NR);
+	lruvec_stat_mod_folio(new_folio, NR_SHMEM_THPS, HPAGE_PMD_NR);
 	lruvec_stat_mod_folio(new_folio, NR_FILE_PAGES, HPAGE_PMD_NR);
 
 	/*
@@ -2240,8 +2165,7 @@ immap_locked:
 	folio_mark_uptodate(new_folio);
 	folio_ref_add(new_folio, HPAGE_PMD_NR - 1);
 
-	if (is_shmem)
-		folio_mark_dirty(new_folio);
+	folio_mark_dirty(new_folio);
 	folio_add_lru(new_folio);
 
 	/* Join all the small entries into a single multi-index entry. */
@@ -2266,9 +2190,7 @@ immap_locked:
 		list_del(&folio->lru);
 		lruvec_stat_mod_folio(folio, NR_FILE_PAGES,
 				      -folio_nr_pages(folio));
-		if (is_shmem)
-			lruvec_stat_mod_folio(folio, NR_SHMEM,
-					      -folio_nr_pages(folio));
+		lruvec_stat_mod_folio(folio, NR_SHMEM, -folio_nr_pages(folio));
 		folio->mapping = NULL;
 		folio_clear_active(folio);
 		folio_clear_unevictable(folio);
@@ -2292,19 +2214,6 @@ rollback:
 		folio_unlock(folio);
 		folio_putback_lru(folio);
 		folio_put(folio);
-	}
-	/*
-	 * Undo the updates of filemap_nr_thps_inc for non-SHMEM
-	 * file only. This undo is not needed unless failure is
-	 * due to SCAN_COPY_MC.
-	 */
-	if (!is_shmem && result == SCAN_COPY_MC) {
-		filemap_nr_thps_dec(mapping);
-		/*
-		 * Paired with the fence in do_dentry_open() -> get_write_access()
-		 * to ensure the update to nr_thps is visible.
-		 */
-		smp_mb();
 	}
 
 	new_folio->mapping = NULL;
