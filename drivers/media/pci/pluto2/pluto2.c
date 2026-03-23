@@ -291,7 +291,7 @@ static void pluto_dma_end(struct pluto *pluto, unsigned int nbpackets)
 	 */
 	if ((nbpackets == 0) || (nbpackets > TS_DMA_PACKETS)) {
 		unsigned int i = 0;
-		while (pluto->dma_buf[i] == 0x47)
+		while (i < TS_DMA_BYTES && pluto->dma_buf[i] == 0x47)
 			i += 188;
 		nbpackets = i / 188;
 		if (i == 0) {
