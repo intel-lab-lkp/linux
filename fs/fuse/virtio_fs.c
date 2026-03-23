@@ -759,23 +759,31 @@ static void copy_args_from_argbuf(struct fuse_args *args, struct fuse_req *req)
 }
 
 /* Verify that the server properly follows the FUSE protocol */
-static bool virtio_fs_verify_response(struct fuse_req *req, unsigned int len)
+static bool virtio_fs_verify_response(struct fuse_req *req)
 {
+	unsigned int num_out, cap;
+	struct fuse_args *args;
 	struct fuse_out_header *oh = &req->out.h;
 
-	if (len < sizeof(*oh)) {
-		pr_warn("virtio-fs: response too short (%u)\n", len);
+	if (!test_bit(FR_ISREPLY, &req->flags))
+		return false;
+	if (unlikely(oh->unique != req->in.h.unique)) {
+		pr_warn_ratelimited("virtio-fs: bad reply unique %llu (expected %llu)\n",
+					oh->unique, req->in.h.unique);
 		return false;
 	}
-	if (oh->len != len) {
-		pr_warn("virtio-fs: oh.len mismatch (%u != %u)\n", oh->len, len);
+	args = req->args;
+	num_out = args->out_numargs - args->out_pages;
+	cap = sizeof(req->out.h);
+	cap += fuse_len_args(num_out, args->out_args);
+	if (args->out_pages)
+		cap += args->out_args[args->out_numargs - 1].size;
+	if (unlikely(oh->len < sizeof(*oh) || oh->len > cap)) {
+		pr_warn_ratelimited("virtio-fs: bad reply len %u (cap %u)\n",
+					oh->len, cap);
 		return false;
 	}
-	if (oh->unique != req->in.h.unique) {
-		pr_warn("virtio-fs: oh.unique mismatch (%llu != %llu)\n",
-			oh->unique, req->in.h.unique);
-		return false;
-	}
+
 	return true;
 }
 
@@ -841,7 +849,7 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 		virtqueue_disable_cb(vq);
 
 		while ((req = virtqueue_get_buf(vq, &len)) != NULL) {
-			if (!virtio_fs_verify_response(req, len)) {
+			if (test_bit(FR_ISREPLY, &req->flags) && !virtio_fs_verify_response(req)) {
 				req->out.h.error = -EIO;
 				req->out.h.len = sizeof(struct fuse_out_header);
 			}
