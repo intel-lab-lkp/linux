@@ -27,6 +27,14 @@ properties:
       subnode. This property is deprecated, please use pse-pis instead.
     enum: [0, 1]
 
+  poll-interval-ms:
+    description:
+      Polling interval in milliseconds for PSE controllers using
+      poll-based event detection instead of interrupts. Used when the
+      controller lacks IRQ support or the IRQ line is not wired.
+    default: 500
+    minimum: 50
+
   pse-pis:
     type: object
     description:
