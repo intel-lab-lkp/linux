@@ -168,6 +168,29 @@ config ARCH_HISI
 	help
 	  This enables support for Hisilicon ARMv8 SoC family
 
+
+menuconfig ARCH_HPE
+	bool "HPE SoC Support"
+	help
+	  This enables support for HPE ARM-based SoC chips used
+	  on HPE servers.  HPE SoCs serve as the Baseboard
+	  Management Controller (BMC) providing out-of-band server
+	  management.
+
+if ARCH_HPE
+
+config ARCH_HPE_GSC
+	bool "HPE GSC SoC"
+	select PINCTRL
+	select GENERIC_IRQ_CHIP
+	select CLKSRC_MMIO
+	help
+	  Support for the HPE GSC ARM64 BMC SoC used on HPE servers.
+	  The GSC provides hardware management, power control, remote
+	  access, and server health monitoring capabilities for HPE
+	  Gen12 and later server platforms.
+
+endif
 config ARCH_KEEMBAY
 	bool "Keem Bay SoC"
 	help
