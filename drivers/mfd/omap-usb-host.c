@@ -15,6 +15,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/regulator/consumer.h>
+#include <linux/string_choices.h>
+
 
 #include "omap-usb.h"
 
@@ -95,6 +98,8 @@ struct usbhs_hcd_omap {
 	struct usbhs_omap_platform_data	*pdata;
 
 	u32				usbhs_rev;
+
+	struct regulator		*pbias;
 };
 /*-------------------------------------------------------------------------*/
 
@@ -270,6 +275,25 @@ static bool is_ohci_port(enum usbhs_omap_port_mode pmode)
 	}
 }
 
+static int omap_usbhs_set_pbias(struct device *dev, bool power_on)
+{
+	struct usbhs_hcd_omap *omap = dev_get_drvdata(dev);
+	int ret;
+
+	if (!omap->pbias)
+		return 0;
+
+	if (power_on)
+		ret = regulator_enable(omap->pbias);
+	else
+		ret = regulator_disable(omap->pbias);
+
+	if (ret)
+		dev_err(dev, "pbias reg %s failed\n", str_enable_disable(power_on));
+
+	return ret;
+}
+
 static int usbhs_runtime_resume(struct device *dev)
 {
 	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
@@ -277,6 +301,10 @@ static int usbhs_runtime_resume(struct device *dev)
 	int i, r;
 
 	dev_dbg(dev, "usbhs_runtime_resume\n");
+
+	r = omap_usbhs_set_pbias(dev, true);
+	if (r)
+		return r;
 
 	omap_tll_enable(pdata);
 
@@ -355,7 +383,7 @@ static int usbhs_runtime_suspend(struct device *dev)
 
 	omap_tll_disable(pdata);
 
-	return 0;
+	return omap_usbhs_set_pbias(dev, false);
 }
 
 static unsigned omap_usbhs_rev1_hostconfig(struct usbhs_hcd_omap *omap,
@@ -564,6 +592,11 @@ static int usbhs_omap_probe(struct platform_device *pdev)
 
 	omap->pdata = pdata;
 
+	omap->pbias = devm_regulator_get_optional(dev, "pbias");
+	if (IS_ERR(omap->pbias))
+		return dev_err_probe(dev, PTR_ERR(omap->pbias),
+				     "unable to get pbias regulator\n");
+
 	/* Initialize the TLL subsystem */
 	omap_tll_init(pdata);
 
@@ -759,6 +792,10 @@ static int usbhs_omap_probe(struct platform_device *pdev)
 	}
 
 initialize:
+	ret = omap_usbhs_set_pbias(dev, true);
+	if (ret)
+		goto err_mem;
+
 	omap_usbhs_init(dev);
 
 	if (dev->of_node) {
@@ -806,6 +843,8 @@ static void usbhs_omap_remove(struct platform_device *pdev)
 		of_platform_depopulate(&pdev->dev);
 	else
 		device_for_each_child(&pdev->dev, NULL, usbhs_omap_remove_child);
+
+	omap_usbhs_set_pbias(&pdev->dev, false);
 }
 
 static const struct dev_pm_ops usbhsomap_dev_pm_ops = {
