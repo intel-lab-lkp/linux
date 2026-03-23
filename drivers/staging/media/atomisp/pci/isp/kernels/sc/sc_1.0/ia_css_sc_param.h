@@ -9,7 +9,7 @@
 
 #include "type_support.h"
 
-/* SC (Shading Corrction) */
+/* SC (Shading Correction) */
 struct sh_css_isp_sc_params {
 	s32 gain_shift;
 };

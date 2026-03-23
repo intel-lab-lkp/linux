@@ -19,7 +19,7 @@
  * The buffer has a remote and a local store
  * which contain duplicate data (when in sync).
  * The buffers are automatically synched when the
- * user dequeues, or manualy using the synch function
+ * user dequeues, or manually using the synch function
  *
  * An alternative (storage efficient) implementation
  * could manage the buffers to contain unique data

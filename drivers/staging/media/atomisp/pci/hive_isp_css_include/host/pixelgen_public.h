@@ -53,7 +53,7 @@ STORAGE_CLASS_PIXELGEN_H hrt_data pixelgen_ctrl_reg_load(
     const hrt_address reg);
 /**
  * @brief Store a value to the register.
- * Store a value to the registe of the pixelgen
+ * Store a value to the register of the pixelgen
  *
  * @param[in]	ID		The global unique ID for the pixelgen.
  * @param[in]	reg		The offset address of the register.

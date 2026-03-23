@@ -31,7 +31,7 @@ struct ia_css_ctc2_config {
 	s32 y_x2;
 	s32 y_x3;
 	s32 y_x4;
-	/* Gains by UV(Chroma) under threholds uv_x0 and uv_x1
+	/* Gains by UV(Chroma) under thresholds uv_x0 and uv_x1
 	*   --default/ineffective value: 4096(0.5f)
 	*/
 	s32 uv_y0;

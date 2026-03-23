@@ -77,7 +77,7 @@ STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_dump_state(
     stream2mmio_state_t *state);
 /**
  * @brief Store a value to the register.
- * Store a value to the registe of the stream2mmio-controller.
+ * Store a value to the register of the stream2mmio-controller.
  *
  * @param[in]	ID		The global unique ID for the stream2mmio-controller instance.
  * @param[in]	reg		The offset address of the register.

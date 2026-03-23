@@ -46,10 +46,10 @@
  */
 struct ia_css_macc1_5_table {
 	s16 data[IA_CSS_MACC_NUM_COEFS * IA_CSS_MACC_NUM_AXES];
-	/** 16 of 2x2 matix
+	/** 16 of 2x2 matrix
 	  MACC1_5: s[macc_config.exp].[13-macc_config.exp], [-8192,8191]
 	    default/ineffective: (s1.12)
-		16 of "identity 2x2 matix" {4096,0,0,4096} */
+		16 of "identity 2x2 matrix" {4096,0,0,4096} */
 };
 
 /* Multi-Axes Color Correction (MACC) configuration.

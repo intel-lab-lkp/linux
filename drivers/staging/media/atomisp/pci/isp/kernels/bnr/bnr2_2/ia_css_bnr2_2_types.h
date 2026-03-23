@@ -55,7 +55,7 @@ struct ia_css_bnr2_2_config {
 	s32 detail_gain_divisor;	/** Gain divisor for low contrast texture control */
 	s32 detail_level_offset;	/** Bias value for low contrast texture control */
 	s32 d_var_th_min;		/** Minimum clipping value for directional variance*/
-	s32 d_var_th_max;		/** Maximum clipping value for diretional variance*/
+	s32 d_var_th_max;		/** Maximum clipping value for directional variance*/
 	s32 n_var_th_min;		/** Minimum clipping value for non-directional variance*/
 	s32 n_var_th_max;		/** Maximum clipping value for non-directional variance*/
 };

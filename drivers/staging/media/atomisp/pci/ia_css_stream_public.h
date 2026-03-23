@@ -225,7 +225,7 @@ ia_css_stream_stop(struct ia_css_stream *stream);
 bool
 ia_css_stream_has_stopped(struct ia_css_stream *stream);
 
-/* @brief	destroy a stream according to the stream seed previosly saved in the seed array.
+/* @brief	destroy a stream according to the stream seed previously saved in the seed array.
  * @param[in]	stream The stream.
  * @return	0 (no other errors are generated now)
  *
