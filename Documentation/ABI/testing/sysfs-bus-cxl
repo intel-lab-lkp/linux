@@ -117,10 +117,12 @@ Contact:	linux-cxl@vger.kernel.org
 Description:
 		(RO) Reading this file will display the CXL security state for
 		that device. Such states can be: 'disabled', 'sanitize', when
-		a sanitization is currently underway; or those available only
-		for persistent memory: 'locked', 'unlocked' or 'frozen'. This
-		sysfs entry is select/poll capable from userspace to notify
-		upon completion of a sanitize operation.
+		a whole-device sanitization is currently underway; or those
+		available only for persistent memory: 'locked', 'unlocked' or
+		'frozen'. This sysfs entry is select/poll capable from
+		userspace to notify upon completion of a sanitize operation.
+		Targeted range sanitize via Media Operation does not affect
+		this state as it completes synchronously.
 
 
 What:           /sys/bus/cxl/devices/memX/security/sanitize
@@ -141,6 +143,13 @@ Description:
 		states. If this file is not present, then there is no hardware
 		support for the operation.
 
+		If the device supports the Media Operation command with the
+		sanitize operation, a DPA range may be written as 'start
+		length' in bytes to sanitize a targeted region of media.
+		The start address and length must be aligned to the device's
+		media operation granularity. The sanitize method applied to
+		the range is the same as for whole-device sanitize.
+
 
 What            /sys/bus/cxl/devices/memX/security/erase
 Date:           June, 2023
@@ -156,6 +165,20 @@ Description:
 		transitions between software programmed and hardware committed
 		states. If this file is not present, then there is no hardware
 		support for the operation.
+
+
+What:		/sys/bus/cxl/devices/memX/security/zero
+Date:		March, 2026
+KernelVersion:	v7.1
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(WO) Write a DPA range as 'start length' in bytes to this
+		attribute to zero a specific region of device media via the
+		Media Operation command. After completion, reads from the
+		specified range will return zero. The start address and
+		length must be aligned to the device's media operation
+		granularity. If this file is not present, then the device
+		does not support the Media Operation zero command.
 
 
 What:		/sys/bus/cxl/devices/memX/firmware/

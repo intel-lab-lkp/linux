@@ -251,6 +251,7 @@ enum security_cmd_enabled_bits {
 	CXL_SEC_ENABLED_UNLOCK,
 	CXL_SEC_ENABLED_FREEZE_SECURITY,
 	CXL_SEC_ENABLED_PASSPHRASE_SECURE_ERASE,
+	CXL_SEC_ENABLED_MEDIA_OPERATIONS,
 	CXL_SEC_ENABLED_MAX
 };
 
@@ -352,6 +353,59 @@ struct cxl_fw_state {
 	int next_slot;
 };
 
+/* Media Operation classes and subclasses (CXL 4.0 Table 8-331) */
+#define CXL_MEDIA_OP_CLASS_GENERAL	0x00
+#define CXL_MEDIA_OP_CLASS_SANITIZE	0x01
+
+#define CXL_MEDIA_OP_SUBCLASS_DISCOVERY	0x00
+#define CXL_MEDIA_OP_SUBCLASS_SANITIZE	0x00
+#define CXL_MEDIA_OP_SUBCLASS_ZERO	0x01
+
+/* Media Operation DPA Range (CXL 4.0 Table 8-330) */
+struct cxl_media_op_dpa_range {
+	__le64 starting_dpa;
+	__le64 length;
+} __packed;
+
+/* Media Operation Input Payload (CXL 4.0 Table 8-329) */
+struct cxl_mbox_media_op_input {
+	u8 class;
+	u8 subclass;
+	u8 rsvd[2];
+	__le32 dpa_range_count;
+	struct cxl_media_op_dpa_range dpa_range_list[];
+} __packed;
+
+/* Discovery operation-specific arguments (CXL 4.0 Table 8-332) */
+struct cxl_mbox_media_op_discovery_args {
+	__le16 start_index;
+	__le16 num_ops;
+} __packed;
+
+/* Discovery output payload (CXL 4.0 Table 8-333) */
+struct cxl_mbox_media_op_discovery_out {
+	__le64 granularity;
+	__le16 total_supported;
+	__le16 num_returned;
+	struct {
+		u8 class;
+		u8 subclass;
+	} __packed ops[];
+} __packed;
+
+/**
+ * struct cxl_media_op_state - Media Operation state
+ *
+ * @granularity: DPA range granularity (bytes) from Discovery
+ * @sanitize_supported: device supports ranged sanitize
+ * @zero_supported: device supports ranged zero
+ */
+struct cxl_media_op_state {
+	u64 granularity;
+	bool sanitize_supported;
+	bool zero_supported;
+};
+
 /**
  * struct cxl_security_state - Device security state
  *
@@ -429,6 +483,7 @@ struct cxl_memdev_state {
 	struct cxl_poison_state poison;
 	struct cxl_security_state security;
 	struct cxl_fw_state fw;
+	struct cxl_media_op_state media_op;
 	struct notifier_block mce_notifier;
 };
 
@@ -479,6 +534,7 @@ enum cxl_opcode {
 	CXL_MBOX_OP_GET_SCAN_MEDIA	= 0x4305,
 	CXL_MBOX_OP_SANITIZE		= 0x4400,
 	CXL_MBOX_OP_SECURE_ERASE	= 0x4401,
+	CXL_MBOX_OP_MEDIA_OPERATION	= 0x4402,
 	CXL_MBOX_OP_GET_SECURITY_STATE	= 0x4500,
 	CXL_MBOX_OP_SET_PASSPHRASE	= 0x4501,
 	CXL_MBOX_OP_DISABLE_PASSPHRASE	= 0x4502,
@@ -829,6 +885,9 @@ static inline void cxl_mem_active_dec(void)
 #endif
 
 int cxl_mem_sanitize(struct cxl_memdev *cxlmd, u16 cmd);
+int cxl_media_op_discover(struct cxl_memdev_state *mds);
+int cxl_mem_media_op(struct cxl_memdev *cxlmd, u8 class, u8 subclass,
+		     u64 dpa_start, u64 dpa_length);
 
 /**
  * struct cxl_hdm - HDM Decoder registers and cached / decoded capabilities
