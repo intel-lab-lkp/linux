@@ -39,10 +39,6 @@ bool amdgpu_dm_crtc_vrr_active_irq(struct amdgpu_crtc *acrtc);
 
 bool amdgpu_dm_crtc_vrr_active(const struct dm_crtc_state *dm_state);
 
-int amdgpu_dm_crtc_enable_vblank(struct drm_crtc *crtc);
-
-void amdgpu_dm_crtc_disable_vblank(struct drm_crtc *crtc);
-
 int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 			struct drm_plane *plane,
 			uint32_t link_index);
