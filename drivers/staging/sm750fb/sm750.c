@@ -490,6 +490,9 @@ static int lynxfb_ops_check_var(struct fb_var_screeninfo *var,
 		 var->yres,
 		 var->bits_per_pixel);
 
+	if (!var->pixclock)
+		return -EINVAL;
+
 	ret = lynxfb_set_color_offsets(info);
 
 	if (ret) {
