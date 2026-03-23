@@ -335,8 +335,16 @@ static int tegra_adma_request_alloc(struct tegra_adma_chan *tdc,
 	struct tegra_adma *tdma = tdc->tdma;
 	unsigned int sreq_index = tdc->sreq_index;
 
-	if (tdc->sreq_reserved)
-		return tdc->sreq_dir == direction ? 0 : -EINVAL;
+	if (tdc->sreq_reserved) {
+		if (tdc->sreq_dir != direction) {
+			dev_err(tdma->dev,
+				"DMA request direction mismatch: reserved=%s, requested=%s\n",
+				dmaengine_get_direction_text(tdc->sreq_dir),
+				dmaengine_get_direction_text(direction));
+			return -EINVAL;
+		}
+		return 0;
+	}
 
 	if (sreq_index > tdma->cdata->ch_req_max) {
 		dev_err(tdma->dev, "invalid DMA request\n");
@@ -665,8 +673,11 @@ static int tegra_adma_set_xfer_params(struct tegra_adma_chan *tdc,
 	const struct tegra_adma_chip_data *cdata = tdc->tdma->cdata;
 	unsigned int burst_size, adma_dir, fifo_size_shift;
 
-	if (desc->num_periods > ADMA_CH_CONFIG_MAX_BUFS)
+	if (desc->num_periods > ADMA_CH_CONFIG_MAX_BUFS) {
+		dev_err(tdc2dev(tdc), "invalid DMA periods %zu (max %u)\n",
+			desc->num_periods, ADMA_CH_CONFIG_MAX_BUFS);
 		return -EINVAL;
+	}
 
 	switch (direction) {
 	case DMA_MEM_TO_DEV:
@@ -1055,16 +1066,22 @@ static int tegra_adma_probe(struct platform_device *pdev)
 			resource_size_t page_offset, page_no;
 			unsigned int ch_base_offset;
 
-			if (res_page->start < res_base->start)
+			if (res_page->start < res_base->start) {
+				dev_err(&pdev->dev, "invalid page/global resource order\n");
 				return -EINVAL;
+			}
+
 			page_offset = res_page->start - res_base->start;
 			ch_base_offset = cdata->ch_base_offset;
 			if (!ch_base_offset)
 				return -EINVAL;
 
 			page_no = div_u64(page_offset, ch_base_offset);
-			if (!page_no || page_no > INT_MAX)
+			if (!page_no || page_no > INT_MAX) {
+				dev_err(&pdev->dev, "invalid page number %llu\n",
+					(unsigned long long)page_no);
 				return -EINVAL;
+			}
 
 			tdma->ch_page_no = page_no - 1;
 			tdma->base_addr = devm_ioremap_resource(&pdev->dev, res_base);
@@ -1079,6 +1096,7 @@ static int tegra_adma_probe(struct platform_device *pdev)
 			if (IS_ERR(tdma->base_addr))
 				return PTR_ERR(tdma->base_addr);
 		} else {
+			dev_err(&pdev->dev, "failed to get memory resource\n");
 			return -ENODEV;
 		}
 
@@ -1130,6 +1148,7 @@ static int tegra_adma_probe(struct platform_device *pdev)
 		tdc->irq = of_irq_get(pdev->dev.of_node, i);
 		if (tdc->irq <= 0) {
 			ret = tdc->irq ?: -ENXIO;
+			dev_err_probe(&pdev->dev, ret, "failed to get IRQ for channel %d\n", i);
 			goto irq_dispose;
 		}
 
@@ -1141,12 +1160,16 @@ static int tegra_adma_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 
 	ret = pm_runtime_resume_and_get(&pdev->dev);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err_probe(&pdev->dev, ret, "runtime PM resume failed\n");
 		goto rpm_disable;
+	}
 
 	ret = tegra_adma_init(tdma);
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "failed to initialize ADMA: %d\n", ret);
 		goto rpm_put;
+	}
 
 	dma_cap_set(DMA_SLAVE, tdma->dma_dev.cap_mask);
 	dma_cap_set(DMA_PRIVATE, tdma->dma_dev.cap_mask);
