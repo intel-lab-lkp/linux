@@ -1745,21 +1745,23 @@ xlog_recover_iget(
 	xfs_ino_t		ino,
 	struct xfs_inode	**ipp)
 {
+	struct xfs_inode	*ip;
 	int			error;
 
-	error = xfs_iget(mp, NULL, ino, 0, 0, ipp);
+	error = xfs_iget(mp, NULL, ino, 0, 0, &ip);
 	if (error)
 		return error;
 
-	error = xfs_qm_dqattach(*ipp);
+	error = xfs_qm_dqattach(ip);
 	if (error) {
-		xfs_irele(*ipp);
+		xfs_irele(ip);
 		return error;
 	}
 
-	if (VFS_I(*ipp)->i_nlink == 0)
-		xfs_iflags_set(*ipp, XFS_IRECOVERY);
+	if (VFS_I(ip)->i_nlink == 0)
+		xfs_iflags_set(ip, XFS_IRECOVERY);
 
+	*ipp = ip;
 	return 0;
 }
 
