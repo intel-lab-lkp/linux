@@ -520,6 +520,7 @@
 
 	bluetooth {
 		compatible = "nxp,88w8987-bt";
+		vcc-supply = <&reg_vcc_3v3>;
 	};
 };
 
