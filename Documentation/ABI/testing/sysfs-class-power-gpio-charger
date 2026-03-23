@@ -1,0 +1,14 @@
+What:		/sys/class/power_supply/<supply_name>/fast_charge_timer
+Date:		March 2026
+KernelVersion:	7.1.0
+Contact:	Dimitri Fedrau <dimitri.fedrau@liebherr.com>
+Description:
+		This entry enables or disables the timer in fast-charge mode.
+		When enabled the timer is started with a fixed timeout. After
+		timing out, charging is disabled. This provides a backup safety
+		for charge termination. Disabling the timer doesn't have any
+		impact on charge termination.
+
+		Access: Write
+
+		Valid values: 0 (disabled) or 1 (enabled)
