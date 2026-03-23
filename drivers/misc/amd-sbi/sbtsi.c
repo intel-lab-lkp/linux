@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * sbtsi_temp.c - hwmon driver for a SBI Temperature Sensor Interface (SB-TSI)
+ * sbtsi.c - hwmon driver for a SBI Temperature Sensor Interface (SB-TSI)
  *                compliant AMD SoC temperature device.
  *
  * Copyright (c) 2020, Google Inc.
