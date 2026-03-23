@@ -982,8 +982,9 @@ done:
 }
 
 /*
- * Mark the TD the endpoint halted on as TD_HALTED and add it to the cancelled
- * td list, ensuring invalidate_cancelled_tds() clears the TD from xHC cache.
+ * Mark the TD the endpoint halted on as TD_HALTED, add all TDs of that URB
+ * to the cancelled td list, ensuring invalidate_cancelled_tds() clears the
+ * TD from xHC cache and URB is given back.
  * Mark the other TDs on that bulk or interrupt endpoint as TD_TAINTED to
  * prevent the ring from being restarted too early.
  */
@@ -997,10 +998,11 @@ static void xhci_cancel_halted_tds(struct xhci_hcd *xhci, struct xhci_virt_ep *e
 	ring = xhci_urb_to_transfer_ring(xhci, td->urb);
 
 	td->cancel_status = TD_HALTED;
-	if (list_empty(&td->cancelled_td_list))
-		list_add_tail(&td->cancelled_td_list, &ep->cancelled_td_list);
 
 	list_for_each_entry(tdi, &ring->td_list, td_list) {
+		if (tdi->urb == td->urb && list_empty(&tdi->cancelled_td_list))
+			list_add_tail(&tdi->cancelled_td_list, &ep->cancelled_td_list);
+
 		if (!tdi->cancel_status && ring->type != TYPE_CTRL)
 			tdi->cancel_status = TD_TAINTED;
 	}
