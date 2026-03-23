@@ -43,11 +43,12 @@ struct mp9945_data {
 
 #define to_mp9945_data(x) container_of(x, struct mp9945_data, info)
 
-static int mp9945_read_vout(struct i2c_client *client, struct mp9945_data *data)
+static int mp9945_read_vout(struct i2c_client *client, struct mp9945_data *data,
+			   int page, int phase)
 {
 	int ret;
 
-	ret = i2c_smbus_read_word_data(client, PMBUS_READ_VOUT);
+	ret = pmbus_read_word_data(client, page, phase, PMBUS_READ_VOUT);
 	if (ret < 0)
 		return ret;
 
@@ -73,12 +74,6 @@ static int mp9945_read_vout(struct i2c_client *client, struct mp9945_data *data)
 
 static int mp9945_read_byte_data(struct i2c_client *client, int page, int reg)
 {
-	int ret;
-
-	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 0);
-	if (ret < 0)
-		return ret;
-
 	switch (reg) {
 	case PMBUS_VOUT_MODE:
 		/*
@@ -98,17 +93,13 @@ static int mp9945_read_word_data(struct i2c_client *client, int page, int phase,
 	struct mp9945_data *data = to_mp9945_data(info);
 	int ret;
 
-	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 0);
-	if (ret < 0)
-		return ret;
-
 	switch (reg) {
 	case PMBUS_READ_VOUT:
-		ret = mp9945_read_vout(client, data);
+		ret = mp9945_read_vout(client, data, page, phase);
 		break;
 	case PMBUS_VOUT_OV_FAULT_LIMIT:
 	case PMBUS_VOUT_UV_FAULT_LIMIT:
-		ret = i2c_smbus_read_word_data(client, reg);
+		ret = pmbus_read_word_data(client, page, phase, reg);
 		if (ret < 0)
 			return ret;
 
@@ -116,7 +107,7 @@ static int mp9945_read_word_data(struct i2c_client *client, int page, int phase,
 		ret = DIV_ROUND_CLOSEST((ret & GENMASK(11, 0)) * 39, 20);
 		break;
 	case PMBUS_VOUT_UV_WARN_LIMIT:
-		ret = i2c_smbus_read_word_data(client, reg);
+		ret = pmbus_read_word_data(client, page, phase, reg);
 		if (ret < 0)
 			return ret;
 
