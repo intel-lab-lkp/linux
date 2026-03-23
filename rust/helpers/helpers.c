@@ -63,5 +63,6 @@
 #include "usb.c"
 #include "vmalloc.c"
 #include "wait.c"
+#include "watchdog.c"
 #include "workqueue.c"
 #include "xarray.c"
