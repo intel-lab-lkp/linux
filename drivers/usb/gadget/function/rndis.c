@@ -588,15 +588,34 @@ static int rndis_init_response(struct rndis_params *params,
 	return 0;
 }
 
-static int rndis_query_response(struct rndis_params *params,
-				rndis_query_msg_type *buf)
+static bool rndis_check_query_set_msg_len(u32 msg_len, u32 buf_offset,
+					  u32 buf_length, size_t min_len)
 {
+	if (msg_len < min_len || msg_len > RNDIS_MAX_TOTAL_SIZE)
+		return false;
+
+	if (buf_offset > msg_len - 8)
+		return false;
+
+	return buf_length <= msg_len - buf_offset - 8;
+}
+
+static int rndis_query_response(struct rndis_params *params,
+				rndis_query_msg_type *buf, u32 msg_len)
+{
+	u32 buf_length, buf_offset;
 	rndis_query_cmplt_type *resp;
 	rndis_resp_t *r;
 
 	/* pr_debug("%s: OID = %08X\n", __func__, cpu_to_le32(buf->OID)); */
 	if (!params->dev)
 		return -ENOTSUPP;
+
+	buf_length = le32_to_cpu(buf->InformationBufferLength);
+	buf_offset = le32_to_cpu(buf->InformationBufferOffset);
+	if (!rndis_check_query_set_msg_len(msg_len, buf_offset, buf_length,
+					   sizeof(*buf)))
+		return -EINVAL;
 
 	/*
 	 * we need more memory:
@@ -614,9 +633,7 @@ static int rndis_query_response(struct rndis_params *params,
 	resp->RequestID = buf->RequestID; /* Still LE in msg buffer */
 
 	if (gen_ndis_query_resp(params, le32_to_cpu(buf->OID),
-			le32_to_cpu(buf->InformationBufferOffset)
-					+ 8 + (u8 *)buf,
-			le32_to_cpu(buf->InformationBufferLength),
+			buf_offset + 8 + (u8 *)buf, buf_length,
 			r)) {
 		/* OID not supported */
 		resp->Status = cpu_to_le32(RNDIS_STATUS_NOT_SUPPORTED);
@@ -631,7 +648,7 @@ static int rndis_query_response(struct rndis_params *params,
 }
 
 static int rndis_set_response(struct rndis_params *params,
-			      rndis_set_msg_type *buf)
+			      rndis_set_msg_type *buf, u32 msg_len)
 {
 	u32 BufLength, BufOffset;
 	rndis_set_cmplt_type *resp;
@@ -639,10 +656,9 @@ static int rndis_set_response(struct rndis_params *params,
 
 	BufLength = le32_to_cpu(buf->InformationBufferLength);
 	BufOffset = le32_to_cpu(buf->InformationBufferOffset);
-	if ((BufLength > RNDIS_MAX_TOTAL_SIZE) ||
-	    (BufOffset > RNDIS_MAX_TOTAL_SIZE) ||
-	    (BufOffset + 8 >= RNDIS_MAX_TOTAL_SIZE))
-		    return -EINVAL;
+	if (!rndis_check_query_set_msg_len(msg_len, BufOffset, BufLength,
+					   sizeof(*buf)))
+		return -EINVAL;
 
 	r = rndis_add_response(params, sizeof(rndis_set_cmplt_type));
 	if (!r)
@@ -788,13 +804,13 @@ EXPORT_SYMBOL_GPL(rndis_set_host_mac);
 /*
  * Message Parser
  */
-int rndis_msg_parser(struct rndis_params *params, u8 *buf)
+int rndis_msg_parser(struct rndis_params *params, u8 *buf, u32 buflen)
 {
 	u32 MsgType, MsgLength;
 	__le32 *tmp;
 
-	if (!buf)
-		return -ENOMEM;
+	if (!buf || buflen < 2 * sizeof(*tmp))
+		return -EINVAL;
 
 	tmp = (__le32 *)buf;
 	MsgType   = get_unaligned_le32(tmp++);
@@ -802,6 +818,9 @@ int rndis_msg_parser(struct rndis_params *params, u8 *buf)
 
 	if (!params)
 		return -ENOTSUPP;
+
+	if (MsgLength > buflen || MsgLength > RNDIS_MAX_TOTAL_SIZE)
+		return -EINVAL;
 
 	/* NOTE: RNDIS is *EXTREMELY* chatty ... Windows constantly polls for
 	 * rx/tx statistics and link status, in addition to KEEPALIVE traffic
@@ -828,10 +847,12 @@ int rndis_msg_parser(struct rndis_params *params, u8 *buf)
 
 	case RNDIS_MSG_QUERY:
 		return rndis_query_response(params,
-					(rndis_query_msg_type *)buf);
+					(rndis_query_msg_type *)buf,
+					MsgLength);
 
 	case RNDIS_MSG_SET:
-		return rndis_set_response(params, (rndis_set_msg_type *)buf);
+		return rndis_set_response(params, (rndis_set_msg_type *)buf,
+					  MsgLength);
 
 	case RNDIS_MSG_RESET:
 		pr_debug("%s: RNDIS_MSG_RESET\n",
