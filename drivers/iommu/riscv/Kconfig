@@ -18,3 +18,14 @@ config RISCV_IOMMU_PCI
 	def_bool y if RISCV_IOMMU && PCI_MSI
 	help
 	  Support for the PCIe implementation of RISC-V IOMMU architecture.
+
+config RISCV_IOMMU_DEBUGFS
+    bool "RISC-V IOMMU Debugfs Support"
+    depends on RISCV_IOMMU
+    depends on IOMMU_DEBUGFS
+    help
+      Expose RISC-V IOMMU internals via debugfs. This includes
+      register dumps, queue status, and other hardware-specific
+      information useful for debugging.
+
+      If unsure, say N.

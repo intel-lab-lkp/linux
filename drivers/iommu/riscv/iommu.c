@@ -1609,6 +1609,7 @@ void riscv_iommu_remove(struct riscv_iommu_device *iommu)
 	riscv_iommu_iodir_set_mode(iommu, RISCV_IOMMU_DDTP_IOMMU_MODE_OFF);
 	riscv_iommu_queue_disable(&iommu->cmdq);
 	riscv_iommu_queue_disable(&iommu->fltq);
+	riscv_iommu_debugfs_remove(iommu);
 }
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu)
@@ -1668,6 +1669,8 @@ int riscv_iommu_init(struct riscv_iommu_device *iommu)
 		dev_err_probe(iommu->dev, rc, "cannot register iommu interface\n");
 		goto err_remove_sysfs;
 	}
+
+	riscv_iommu_debugfs_init(iommu);
 
 	return 0;
 

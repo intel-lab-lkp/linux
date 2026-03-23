@@ -60,6 +60,10 @@ struct riscv_iommu_device {
 	unsigned int ddt_mode;
 	dma_addr_t ddt_phys;
 	u64 *ddt_root;
+
+#ifdef CONFIG_RISCV_IOMMU_DEBUGFS
+	struct dentry *debugfs_dir;
+#endif
 };
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu);
@@ -85,5 +89,13 @@ void riscv_iommu_disable(struct riscv_iommu_device *iommu);
 #define riscv_iommu_readl_timeout(iommu, addr, val, cond, delay_us, timeout_us) \
 	readx_poll_timeout(readl_relaxed, (iommu)->reg + (addr), val, cond, \
 			   delay_us, timeout_us)
+
+#ifdef CONFIG_RISCV_IOMMU_DEBUGFS
+void riscv_iommu_debugfs_init(struct riscv_iommu_device *iommu);
+void riscv_iommu_debugfs_remove(struct riscv_iommu_device *iommu);
+#else
+static inline void riscv_iommu_debugfs_init(struct riscv_iommu_device *iommu) { }
+static inline void riscv_iommu_debugfs_remove(struct riscv_iommu_device *iommu) { }
+#endif
 
 #endif
