@@ -665,7 +665,7 @@ static int rxrpc_setsockopt(struct socket *sock, int level, int optname,
 
 		case RXRPC_SECURITY_KEYRING:
 			ret = -EINVAL;
-			if (rx->key)
+			if (rx->securities)
 				goto error;
 			ret = -EISCONN;
 			if (rx->sk.sk_state != RXRPC_UNBOUND)
