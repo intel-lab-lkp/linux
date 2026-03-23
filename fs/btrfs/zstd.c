@@ -439,7 +439,7 @@ int zstd_compress_bio(struct list_head *ws, struct compressed_bio *cb)
 	workspace->in_buf.size = btrfs_calc_input_length(in_folio, end, start);
 
 	/* Allocate and map in the output buffer. */
-	out_folio = btrfs_alloc_compr_folio(fs_info);
+	out_folio = btrfs_alloc_compr_folio(fs_info, GFP_NOFS);
 	if (out_folio == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -482,7 +482,7 @@ int zstd_compress_bio(struct list_head *ws, struct compressed_bio *cb)
 				goto out;
 			}
 
-			out_folio = btrfs_alloc_compr_folio(fs_info);
+			out_folio = btrfs_alloc_compr_folio(fs_info, GFP_NOFS);
 			if (out_folio == NULL) {
 				ret = -ENOMEM;
 				goto out;
@@ -555,7 +555,7 @@ int zstd_compress_bio(struct list_head *ws, struct compressed_bio *cb)
 			ret = -E2BIG;
 			goto out;
 		}
-		out_folio = btrfs_alloc_compr_folio(fs_info);
+		out_folio = btrfs_alloc_compr_folio(fs_info, GFP_NOFS);
 		if (out_folio == NULL) {
 			ret = -ENOMEM;
 			goto out;
