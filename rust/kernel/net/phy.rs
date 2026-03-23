@@ -241,6 +241,49 @@ impl Device {
         to_result(ret).map(|()| ret as u16)
     }
 
+    /// Writes a paged register.
+    pub fn write_paged(&mut self, page: u16, regnum: u16, val: u16) -> Result {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        let ret =
+            unsafe { bindings::phy_write_paged(phydev, page.into(), regnum.into(), val) };
+
+        to_result(ret)
+    }
+
+    /// Performs a read-modify-write on a PHY register.
+    ///
+    /// Clears the bits set in `mask` and sets the bits in `set`.
+    pub fn modify(&mut self, regnum: u16, mask: u16, set: u16) -> Result {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        to_result(unsafe { bindings::phy_modify(phydev, regnum.into(), mask, set) })
+    }
+
+    /// Performs a read-modify-write on a paged PHY register.
+    ///
+    /// Selects the page, performs the modify, and restores the original page.
+    pub fn modify_paged(&mut self, page: u16, regnum: u16, mask: u16, set: u16) -> Result {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        to_result(unsafe {
+            bindings::phy_modify_paged(phydev, page.into(), regnum.into(), mask, set)
+        })
+    }
+
+    /// Sets bits in a PHY register.
+    pub fn set_bits(&mut self, regnum: u16, val: u16) -> Result {
+        self.modify(regnum, 0, val)
+    }
+
+    /// Clears bits in a PHY register.
+    pub fn clear_bits(&mut self, regnum: u16, val: u16) -> Result {
+        self.modify(regnum, val, 0)
+    }
+
     /// Resolves the advertisements into PHY settings.
     pub fn resolve_aneg_linkmode(&mut self) {
         let phydev = self.0.get();
