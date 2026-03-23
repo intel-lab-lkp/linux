@@ -1044,7 +1044,10 @@ struct ice_aqc_get_phy_caps {
 #define ICE_PHY_TYPE_HIGH_200G_KR4_PAM4		BIT_ULL(10)
 #define ICE_PHY_TYPE_HIGH_200G_AUI4_AOC_ACC	BIT_ULL(11)
 #define ICE_PHY_TYPE_HIGH_200G_AUI4		BIT_ULL(12)
-#define ICE_PHY_TYPE_HIGH_MAX_INDEX		12
+#define ICE_PHY_TYPE_HIGH_200G_AUI8_AOC_ACC	BIT_ULL(13)
+#define ICE_PHY_TYPE_HIGH_200G_AUI8		BIT_ULL(14)
+#define ICE_PHY_TYPE_HIGH_400GBASE_FR8		BIT_ULL(15)
+#define ICE_PHY_TYPE_HIGH_MAX_INDEX		15
 
 struct ice_aqc_get_phy_caps_data {
 	__le64 phy_type_low; /* Use values from ICE_PHY_TYPE_LOW_* */
