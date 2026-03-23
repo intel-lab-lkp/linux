@@ -769,7 +769,7 @@ static ssize_t wa_bb_store(struct wa_bb wa_bb[static XE_ENGINE_CLASS_MAX],
 	 * 2. Allocate a u32 array and set the pointers to the right positions
 	 * according to the length of each class' wa_bb
 	 */
-	tmp = krealloc(wa_bb[0].cs, count * sizeof(u32), GFP_KERNEL);
+	tmp = krealloc_array(wa_bb[0].cs, count, sizeof(u32), GFP_KERNEL);
 	if (!tmp)
 		return -ENOMEM;
 
