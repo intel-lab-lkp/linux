@@ -382,6 +382,32 @@ static inline int list_empty(const struct list_head *head)
 }
 
 /**
+ * on_list - Test whether an entry is on a list.
+ * @entry: The entry to check
+ *
+ * Test whether an entry is on a list.  Safe to use on an entry initialised
+ * with INIT_LIST_HEAD() or LIST_HEAD() or removed with things like
+ * list_del_init().  Not safe for use with list_del() or list_del_rcu().
+ */
+static inline bool on_list(const struct list_head *entry)
+{
+	return !list_empty(entry);
+}
+
+/**
+ * on_list_rcu - Test whether an entry is on a list (RCU-del safe).
+ * @entry: The entry to check
+ *
+ * Test whether an entry is on a list.  Safe to use on an entry initialised
+ * with INIT_LIST_HEAD() or LIST_HEAD() or removed with things like
+ * list_del_init().  Also safe for use with list_del() or list_del_rcu().
+ */
+static inline bool on_list_rcu(const struct list_head *entry)
+{
+	return !list_empty(entry) && entry->prev != LIST_POISON2;
+}
+
+/**
  * list_del_init_careful - deletes entry from list and reinitialize it.
  * @entry: the element to delete from the list.
  *

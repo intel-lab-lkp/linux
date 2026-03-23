@@ -57,8 +57,6 @@ extern const char *const aa_profile_mode_names[];
 
 #define profile_is_stale(_profile) (label_is_stale(&(_profile)->label))
 
-#define on_list_rcu(X) (!list_empty(X) && (X)->prev != LIST_POISON2)
-
 /* flags in the dfa accept2 table */
 enum dfa_accept_flags {
 	ACCEPT_FLAG_OWNER = 1,
