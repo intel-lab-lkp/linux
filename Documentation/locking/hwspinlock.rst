@@ -420,11 +420,12 @@ initialized by the hwspinlock core itself.
 Implementation callbacks
 ========================
 
-There are three possible callbacks defined in 'struct hwspinlock_ops'::
+There are four possible callbacks defined in 'struct hwspinlock_ops'::
 
 	struct hwspinlock_ops {
 		int (*trylock)(struct hwspinlock *lock);
 		void (*unlock)(struct hwspinlock *lock);
+		int (*bust)(struct hwspinlock *lock, unsigned int id);
 		void (*relax)(struct hwspinlock *lock);
 	};
 
@@ -435,6 +436,11 @@ return 0 on failure and 1 on success. This callback may **not** sleep.
 
 The ->unlock() callback releases the lock. It always succeed, and it, too,
 may **not** sleep.
+
+The ->bust() callback is optional. It is called by hwspinlock core to bust a
+specific lock when the remote processor 'id' is not responding, e.g. due to a
+firmware crash. It return 0 on success and a negative error code on failure.
+It can sleep.
 
 The ->relax() callback is optional. It is called by hwspinlock core while
 spinning on a lock, and can be used by the underlying implementation to force
