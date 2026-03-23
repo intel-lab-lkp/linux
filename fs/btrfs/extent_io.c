@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/blkdev.h>
 #include <linux/swap.h>
+#include <linux/kasan.h>
 #include <linux/writeback.h>
 #include <linux/pagevec.h>
 #include <linux/prefetch.h>
@@ -699,6 +700,18 @@ static int alloc_eb_folio_array(struct extent_buffer *eb, bool nofail)
 	ret = btrfs_alloc_page_array(num_pages, page_array, nofail);
 	if (ret < 0)
 		return ret;
+
+	/*
+	 * Since separate page allocations are used for the same extent with
+	 * linear addressing where physically contiguous, apply the same KASAN
+	 * tag to prevent false-positive warnings when crossing page boundaries
+	 */
+	u8 tag = page_kasan_tag(page_array[0]);
+
+	for (int i = 1; i < num_pages; i++) {
+		page_kasan_tag_set(page_array[i], tag);
+		kasan_unpoison_range(page_address(page_array[i]), PAGE_SIZE);
+	}
 
 	for (int i = 0; i < num_pages; i++)
 		eb->folios[i] = page_folio(page_array[i]);
