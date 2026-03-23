@@ -42,7 +42,6 @@ static sigjmp_buf signal_jmp_buf;
 enum backing_type {
 	ANON_BACKED,
 	SHMEM_BACKED,
-	LOCAL_FILE_BACKED,
 };
 
 FIXTURE(guard_regions)
@@ -65,11 +64,6 @@ FIXTURE_VARIANT_ADD(guard_regions, anon)
 FIXTURE_VARIANT_ADD(guard_regions, shmem)
 {
 	.backing = SHMEM_BACKED,
-};
-
-FIXTURE_VARIANT_ADD(guard_regions, file)
-{
-	.backing = LOCAL_FILE_BACKED,
 };
 
 static bool is_anon_backed(const FIXTURE_VARIANT(guard_regions) * variant)
@@ -98,7 +92,6 @@ static void *mmap_(FIXTURE_DATA(guard_regions) * self,
 		offset = 0;
 		break;
 	case SHMEM_BACKED:
-	case LOCAL_FILE_BACKED:
 		flags |= MAP_SHARED;
 		fd = self->fd;
 		break;
@@ -198,18 +191,6 @@ static void teardown_sighandler(void)
 	sigaction(SIGSEGV, &act, NULL);
 }
 
-static int open_file(const char *prefix, char *path)
-{
-	int fd;
-
-	snprintf(path, PATH_MAX, "%sguard_regions_test_file_XXXXXX", prefix);
-	fd = mkstemp(path);
-	if (fd < 0)
-		ksft_exit_fail_perror("mkstemp");
-
-	return fd;
-}
-
 /* Establish a varying pattern in a buffer. */
 static void set_pattern(char *ptr, size_t num_pages, size_t page_size)
 {
@@ -262,54 +243,6 @@ static bool is_buf_eq(char *buf, size_t size, char chr)
 	return true;
 }
 
-/*
- * Some file systems have issues with merging due to changing merge-sensitive
- * parameters in the .mmap callback, and prior to .mmap_prepare being
- * implemented everywhere this will now result in an unexpected failure to
- * merge (e.g. - overlayfs).
- *
- * Perform a simple test to see if the local file system suffers from this, if
- * it does then we can skip test logic that assumes local file system merging is
- * sane.
- */
-static bool local_fs_has_sane_mmap(FIXTURE_DATA(guard_regions) * self,
-				   const FIXTURE_VARIANT(guard_regions) * variant)
-{
-	const unsigned long page_size = self->page_size;
-	char *ptr, *ptr2;
-	struct procmap_fd procmap;
-
-	if (variant->backing != LOCAL_FILE_BACKED)
-		return true;
-
-	/* Map 10 pages. */
-	ptr = mmap_(self, variant, NULL, 10 * page_size, PROT_READ | PROT_WRITE, 0, 0);
-	if (ptr == MAP_FAILED)
-		return false;
-	/* Unmap the middle. */
-	munmap(&ptr[5 * page_size], page_size);
-
-	/* Map again. */
-	ptr2 = mmap_(self, variant, &ptr[5 * page_size], page_size, PROT_READ | PROT_WRITE,
-		     MAP_FIXED, 5 * page_size);
-
-	if (ptr2 == MAP_FAILED)
-		return false;
-
-	/* Now make sure they all merged. */
-	if (open_self_procmap(&procmap) != 0)
-		return false;
-	if (!find_vma_procmap(&procmap, ptr))
-		return false;
-	if (procmap.query.vma_start != (unsigned long)ptr)
-		return false;
-	if (procmap.query.vma_end != (unsigned long)ptr + 10 * page_size)
-		return false;
-	close_procmap(&procmap);
-
-	return true;
-}
-
 FIXTURE_SETUP(guard_regions)
 {
 	self->page_size = (unsigned long)sysconf(_SC_PAGESIZE);
@@ -318,9 +251,6 @@ FIXTURE_SETUP(guard_regions)
 	switch (variant->backing) {
 	case ANON_BACKED:
 		return;
-	case LOCAL_FILE_BACKED:
-		self->fd = open_file("", self->path);
-		break;
 	case SHMEM_BACKED:
 		self->fd = memfd_create(self->path, 0);
 		break;
@@ -1750,55 +1680,6 @@ TEST_F(guard_regions, map_private)
 	ASSERT_EQ(munmap(ptr_private, 10 * page_size), 0);
 }
 
-/* Test that guard regions established over a read-only mapping function correctly. */
-TEST_F(guard_regions, readonly_file)
-{
-	const unsigned long page_size = self->page_size;
-	char *ptr;
-	int i;
-
-	if (variant->backing != LOCAL_FILE_BACKED)
-		SKIP(return, "Read-only test specific to file-backed");
-
-	/* Map shared so we can populate with pattern, populate it, unmap. */
-	ptr = mmap_(self, variant, NULL, 10 * page_size,
-		    PROT_READ | PROT_WRITE, 0, 0);
-	ASSERT_NE(ptr, MAP_FAILED);
-	set_pattern(ptr, 10, page_size);
-	ASSERT_EQ(munmap(ptr, 10 * page_size), 0);
-	/* Close the fd so we can re-open read-only. */
-	ASSERT_EQ(close(self->fd), 0);
-
-	/* Re-open read-only. */
-	self->fd = open(self->path, O_RDONLY);
-	ASSERT_NE(self->fd, -1);
-	/* Re-map read-only. */
-	ptr = mmap_(self, variant, NULL, 10 * page_size, PROT_READ, 0, 0);
-	ASSERT_NE(ptr, MAP_FAILED);
-
-	/* Mark every other page guarded. */
-	for (i = 0; i < 10; i += 2) {
-		char *ptr_pg = &ptr[i * page_size];
-
-		ASSERT_EQ(madvise(ptr_pg, page_size, MADV_GUARD_INSTALL), 0);
-	}
-
-	/* Assert that the guard regions are in place.*/
-	for (i = 0; i < 10; i++) {
-		char *ptr_pg = &ptr[i * page_size];
-
-		ASSERT_EQ(try_read_buf(ptr_pg), i % 2 != 0);
-	}
-
-	/* Remove guard regions. */
-	ASSERT_EQ(madvise(ptr, 10 * page_size, MADV_GUARD_REMOVE), 0);
-
-	/* Ensure the data is as expected. */
-	ASSERT_TRUE(check_pattern(ptr, 10, page_size));
-
-	ASSERT_EQ(munmap(ptr, 10 * page_size), 0);
-}
-
 TEST_F(guard_regions, fault_around)
 {
 	const unsigned long page_size = self->page_size;
@@ -2203,17 +2084,6 @@ TEST_F(guard_regions, collapse)
 	if (variant->backing != ANON_BACKED)
 		ASSERT_EQ(ftruncate(self->fd, size), 0);
 
-	/*
-	 * We must close and re-open local-file backed as read-only for
-	 * CONFIG_READ_ONLY_THP_FOR_FS to work.
-	 */
-	if (variant->backing == LOCAL_FILE_BACKED) {
-		ASSERT_EQ(close(self->fd), 0);
-
-		self->fd = open(self->path, O_RDONLY);
-		ASSERT_GE(self->fd, 0);
-	}
-
 	ptr = mmap_(self, variant, NULL, size, PROT_READ, 0, 0);
 	ASSERT_NE(ptr, MAP_FAILED);
 
@@ -2234,13 +2104,7 @@ TEST_F(guard_regions, collapse)
 	/* Allow huge page throughout region. */
 	ASSERT_EQ(madvise(ptr, size, MADV_HUGEPAGE), 0);
 
-	/*
-	 * Now collapse the entire region. This should fail in all cases.
-	 *
-	 * The madvise() call will also fail if CONFIG_READ_ONLY_THP_FOR_FS is
-	 * not set for the local file case, but we can't differentiate whether
-	 * this occurred or if the collapse was rightly rejected.
-	 */
+	/* Now collapse the entire region. This should fail in all cases. */
 	EXPECT_NE(madvise(ptr, size, MADV_COLLAPSE), 0);
 
 	/*
@@ -2297,16 +2161,6 @@ TEST_F(guard_regions, smaps)
 	/* Both VMAs should have the guard flag set. */
 	ASSERT_TRUE(check_vmflag_guard(ptr));
 	ASSERT_TRUE(check_vmflag_guard(&ptr[5 * page_size]));
-
-	/*
-	 * If the local file system is unable to merge VMAs due to having
-	 * unusual characteristics, there is no point in asserting merge
-	 * behaviour.
-	 */
-	if (!local_fs_has_sane_mmap(self, variant)) {
-		TH_LOG("local filesystem does not support sane merging skipping merge test");
-		return;
-	}
 
 	/* Map a fresh VMA between the two split VMAs. */
 	ptr2 = mmap_(self, variant, &ptr[4 * page_size], page_size,
