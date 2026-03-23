@@ -2202,7 +2202,8 @@ struct sk_buff *ovs_vport_cmd_build_info(struct vport *vport, struct net *net,
 
 	retval = ovs_vport_cmd_fill_info(vport, skb, net, portid, seq, 0, cmd,
 					 GFP_KERNEL);
-	BUG_ON(retval < 0);
+	if (WARN_ON_ONCE(retval < 0))
+		return ERR_PTR(-EMSGSIZE);
 
 	return skb;
 }
@@ -2358,7 +2359,9 @@ restart:
 	else
 		netdev_set_rx_headroom(vport->dev, dp->max_headroom);
 
-	BUG_ON(err < 0);
+	if (WARN_ON_ONCE(err < 0))
+		goto exit_unlock_free;
+
 	ovs_unlock();
 
 	ovs_notify(&dp_vport_genl_family, reply, info);
@@ -2411,7 +2414,8 @@ static int ovs_vport_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
 				      OVS_VPORT_CMD_SET, GFP_KERNEL);
-	BUG_ON(err < 0);
+	if (WARN_ON_ONCE(err < 0))
+		goto exit_unlock_free;
 
 	ovs_unlock();
 	ovs_notify(&dp_vport_genl_family, reply, info);
@@ -2451,7 +2455,8 @@ static int ovs_vport_cmd_del(struct sk_buff *skb, struct genl_info *info)
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
 				      OVS_VPORT_CMD_DEL, GFP_KERNEL);
-	BUG_ON(err < 0);
+	if (WARN_ON_ONCE(err < 0))
+		goto exit_unlock_free;
 
 	/* the vport deletion may trigger dp headroom update */
 	dp = vport->dp;
@@ -2498,7 +2503,9 @@ static int ovs_vport_cmd_get(struct sk_buff *skb, struct genl_info *info)
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
 				      OVS_VPORT_CMD_GET, GFP_ATOMIC);
-	BUG_ON(err < 0);
+	if (WARN_ON_ONCE(err < 0))
+		goto exit_unlock_free;
+
 	rcu_read_unlock();
 
 	return genlmsg_reply(reply, info);
