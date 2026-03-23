@@ -668,8 +668,18 @@ static int qede_fill_frag_skb(struct qede_dev *edev,
 {
 	struct sw_rx_data *current_bd = &rxq->sw_rx_ring[rxq->sw_rx_cons &
 							 NUM_RX_BDS_MAX];
-	struct qede_agg_info *tpa_info = &rxq->tpa_info[tpa_agg_index];
-	struct sk_buff *skb = tpa_info->skb;
+	struct qede_agg_info *tpa_info;
+	struct sk_buff *skb;
+
+	if (unlikely(tpa_agg_index >= ARRAY_SIZE(rxq->tpa_info))) {
+		DP_NOTICE(edev, "TPA aggregation index %u out of range\n",
+			  tpa_agg_index);
+		qede_recycle_rx_bd_ring(rxq, 1);
+		return -EINVAL;
+	}
+
+	tpa_info = &rxq->tpa_info[tpa_agg_index];
+	skb = tpa_info->skb;
 
 	if (unlikely(tpa_info->state != QEDE_AGG_STATE_START))
 		goto out;
@@ -833,9 +843,25 @@ static void qede_tpa_start(struct qede_dev *edev,
 			   struct qede_rx_queue *rxq,
 			   struct eth_fast_path_rx_tpa_start_cqe *cqe)
 {
-	struct qede_agg_info *tpa_info = &rxq->tpa_info[cqe->tpa_agg_index];
+	struct qede_agg_info *tpa_info;
 	struct sw_rx_data *sw_rx_data_cons;
+	u8 agg_index = cqe->tpa_agg_index;
+	u8 num_bds = 1;
 	u16 pad;
+
+	if (cqe->bw_ext_bd_len_list[0])
+		num_bds++;
+	if (cqe->bw_ext_bd_len_list[1])
+		num_bds++;
+
+	if (unlikely(agg_index >= ARRAY_SIZE(rxq->tpa_info))) {
+		DP_NOTICE(edev, "TPA aggregation index %u out of range\n",
+			  agg_index);
+		qede_recycle_rx_bd_ring(rxq, num_bds);
+		return;
+	}
+
+	tpa_info = &rxq->tpa_info[agg_index];
 
 	sw_rx_data_cons = &rxq->sw_rx_ring[rxq->sw_rx_cons & NUM_RX_BDS_MAX];
 	pad = cqe->placement_offset + rxq->rx_headroom;
@@ -876,7 +902,7 @@ static void qede_tpa_start(struct qede_dev *edev,
 
 cons_buf: /* We still need to handle bd_len_list to consume buffers */
 	if (likely(cqe->bw_ext_bd_len_list[0]))
-		qede_fill_frag_skb(edev, rxq, cqe->tpa_agg_index,
+		qede_fill_frag_skb(edev, rxq, agg_index,
 				   le16_to_cpu(cqe->bw_ext_bd_len_list[0]));
 
 	if (unlikely(cqe->bw_ext_bd_len_list[1])) {
@@ -960,9 +986,21 @@ static inline void qede_tpa_cont(struct qede_dev *edev,
 				 struct eth_fast_path_rx_tpa_cont_cqe *cqe)
 {
 	int i;
+	u8 agg_index = cqe->tpa_agg_index;
+
+	if (unlikely(agg_index >= ARRAY_SIZE(rxq->tpa_info))) {
+		DP_NOTICE(edev, "TPA aggregation index %u out of range\n",
+			  agg_index);
+
+		for (i = 0; cqe->len_list[i] &&
+		     i < ARRAY_SIZE(cqe->len_list); i++)
+			qede_recycle_rx_bd_ring(rxq, 1);
+
+		return;
+	}
 
 	for (i = 0; cqe->len_list[i] && i < ARRAY_SIZE(cqe->len_list); i++)
-		qede_fill_frag_skb(edev, rxq, cqe->tpa_agg_index,
+		qede_fill_frag_skb(edev, rxq, agg_index,
 				   le16_to_cpu(cqe->len_list[i]));
 
 	if (unlikely(i > 1))
@@ -978,6 +1016,17 @@ static int qede_tpa_end(struct qede_dev *edev,
 	struct qede_agg_info *tpa_info;
 	struct sk_buff *skb;
 	int i;
+
+	if (unlikely(cqe->tpa_agg_index >= ARRAY_SIZE(rxq->tpa_info))) {
+		DP_NOTICE(edev, "TPA aggregation index %u out of range\n",
+			  cqe->tpa_agg_index);
+
+		for (i = 0; cqe->len_list[i] &&
+		     i < ARRAY_SIZE(cqe->len_list); i++)
+			qede_recycle_rx_bd_ring(rxq, 1);
+
+		return 0;
+	}
 
 	tpa_info = &rxq->tpa_info[cqe->tpa_agg_index];
 	skb = tpa_info->skb;
