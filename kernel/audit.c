@@ -163,6 +163,9 @@ static struct sk_buff_head audit_retry_queue;
 /* queue msgs waiting for new auditd connection */
 static struct sk_buff_head audit_hold_queue;
 
+/* audit queue high water mark since last startup or reset */
+static atomic_t audit_backlog_max_depth __read_mostly = ATOMIC_INIT(0);
+
 /* queue servicing thread */
 static struct task_struct *kauditd_task;
 static DECLARE_WAIT_QUEUE_HEAD(kauditd_wait);
@@ -1286,6 +1289,7 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		s.backlog		   = skb_queue_len(&audit_queue);
 		s.feature_bitmap	   = AUDIT_FEATURE_BITMAP_ALL;
 		s.backlog_wait_time	   = audit_backlog_wait_time;
+		s.backlog_max_depth	   = atomic_read(&audit_backlog_max_depth);
 		s.backlog_wait_time_actual = atomic_read(&audit_backlog_wait_time_actual);
 		audit_send_reply(skb, seq, AUDIT_GET, 0, 0, &s, sizeof(s));
 		break;
@@ -1398,6 +1402,12 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 			audit_log_config_change("backlog_wait_time_actual", 0, actual, 1);
 			return actual;
+		}
+		if (s.mask == AUDIT_STATUS_BACKLOG_MAX_DEPTH) {
+			u32 old_depth = atomic_xchg(&audit_backlog_max_depth, 0);
+
+			audit_log_config_change("backlog_max_depth", 0, old_depth, 1);
+			return old_depth;
 		}
 		break;
 	}
@@ -2761,6 +2771,25 @@ int audit_signal_info(int sig, struct task_struct *t)
 	return audit_signal_info_syscall(t);
 }
 
+/*
+ * audit_update_backlog_max_depth - update the audit queue high water mark
+ *
+ * Safely updates the audit_backlog_max_depth metric using a lockless
+ * cmpxchg loop. This ensures the high-water mark is accurately tracked
+ * even when multiple CPUs are logging audit records concurrently.
+ */
+static inline void audit_update_backlog_max_depth(void)
+{
+	u32 q_len = skb_queue_len(&audit_queue);
+	u32 q_max = atomic_read(&audit_backlog_max_depth);
+
+	while (unlikely(q_len > q_max)) {
+		if (likely(atomic_try_cmpxchg(&audit_backlog_max_depth,
+					      &q_max, q_len)))
+			break;
+	}
+}
+
 /**
  * __audit_log_end - enqueue one audit record
  * @skb: the buffer to send
@@ -2777,6 +2806,9 @@ static void __audit_log_end(struct sk_buff *skb)
 
 		/* queue the netlink packet */
 		skb_queue_tail(&audit_queue, skb);
+
+		/* update backlog high water mark */
+		audit_update_backlog_max_depth();
 	} else {
 		audit_log_lost("rate limit exceeded");
 		kfree_skb(skb);

@@ -355,6 +355,7 @@ enum {
 #define AUDIT_STATUS_BACKLOG_WAIT_TIME		0x0020
 #define AUDIT_STATUS_LOST			0x0040
 #define AUDIT_STATUS_BACKLOG_WAIT_TIME_ACTUAL	0x0080
+#define AUDIT_STATUS_BACKLOG_MAX_DEPTH		0x0100
 
 #define AUDIT_FEATURE_BITMAP_BACKLOG_LIMIT	0x00000001
 #define AUDIT_FEATURE_BITMAP_BACKLOG_WAIT_TIME	0x00000002
@@ -486,6 +487,7 @@ struct audit_status {
 	__u32           backlog_wait_time_actual;/* time spent waiting while
 						  * message limit exceeded
 						  */
+	__u32		backlog_max_depth; /* message queue max depth */
 };
 
 struct audit_features {
