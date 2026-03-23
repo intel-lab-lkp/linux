@@ -160,6 +160,7 @@ static int jffs2_garbage_collect_thread(void *_c)
  die:
 	spin_lock(&c->erase_completion_lock);
 	c->gc_task = NULL;
+	complete(&c->gc_thread_exit);
 	spin_unlock(&c->erase_completion_lock);
-	kthread_complete_and_exit(&c->gc_thread_exit, 0);
+	kthread_exit(0);
 }
