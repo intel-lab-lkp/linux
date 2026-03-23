@@ -81,6 +81,16 @@ static const struct pbias_reg_info pbias_sim_omap3 = {
 	.name = "pbias_sim_omap3"
 };
 
+static const struct pbias_reg_info pbias_sim_omap4 = {
+	.enable = BIT(28) |  BIT(20),
+	.enable_mask = BIT(31) | BIT(28) | BIT(20),
+	.vmode = BIT(31),
+	.enable_time = 100,
+	.pbias_volt_table = pbias_volt_table_3_0V,
+	.n_voltages = 2,
+	.name = "pbias_sim_omap4"
+};
+
 static const struct pbias_reg_info pbias_mmc_omap4 = {
 	.enable = BIT(26) | BIT(22),
 	.enable_mask = BIT(26) | BIT(25) | BIT(22),
@@ -108,6 +118,7 @@ static struct of_regulator_match pbias_matches[] = {
 	{ .name = "pbias_sim_omap3", .driver_data = (void *)&pbias_sim_omap3},
 	{ .name = "pbias_mmc_omap4", .driver_data = (void *)&pbias_mmc_omap4},
 	{ .name = "pbias_mmc_omap5", .driver_data = (void *)&pbias_mmc_omap5},
+	{ .name = "pbias_sim_omap4", .driver_data = (void *)&pbias_sim_omap4},
 };
 #define PBIAS_NUM_REGS	ARRAY_SIZE(pbias_matches)
 
