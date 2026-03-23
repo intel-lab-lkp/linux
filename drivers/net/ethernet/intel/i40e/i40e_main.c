@@ -3,7 +3,7 @@
 
 #include <generated/utsrelease.h>
 #include <linux/crash_dump.h>
-#include <linux/net/intel/libie/pctype.h>
+#include <linux/intel/libie/pctype.h>
 #include <linux/if_bridge.h>
 #include <linux/if_macvlan.h>
 #include <linux/module.h>
