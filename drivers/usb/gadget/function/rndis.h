@@ -178,7 +178,7 @@ typedef struct rndis_params {
 } rndis_params;
 
 /* RNDIS Message parser and other useless functions */
-int  rndis_msg_parser(struct rndis_params *params, u8 *buf);
+int  rndis_msg_parser(struct rndis_params *params, u8 *buf, u32 buflen);
 struct rndis_params *rndis_register(void (*resp_avail)(void *v), void *v);
 void rndis_deregister(struct rndis_params *params);
 int  rndis_set_param_dev(struct rndis_params *params, struct net_device *dev,
