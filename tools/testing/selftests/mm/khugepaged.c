@@ -37,7 +37,6 @@ static int anon_order;
 
 enum vma_type {
 	VMA_ANON,
-	VMA_FILE,
 	VMA_SHMEM,
 };
 
@@ -49,7 +48,6 @@ struct mem_ops {
 	const char *name;
 };
 
-static struct mem_ops *file_ops;
 static struct mem_ops *anon_ops;
 static struct mem_ops *shmem_ops;
 
@@ -112,8 +110,6 @@ static void restore_settings(int sig)
 static void save_settings(void)
 {
 	printf("Save THP and khugepaged settings...");
-	if (file_ops && finfo.type == VMA_FILE)
-		thp_set_read_ahead_path(finfo.dev_queue_read_ahead_path);
 	thp_save_settings();
 
 	success("OK");
@@ -125,89 +121,6 @@ static void save_settings(void)
 	signal(SIGQUIT, restore_settings);
 }
 
-static void get_finfo(const char *dir)
-{
-	struct stat path_stat;
-	struct statfs fs;
-	char buf[1 << 10];
-	char path[PATH_MAX];
-	char *str, *end;
-
-	finfo.dir = dir;
-	stat(finfo.dir, &path_stat);
-	if (!S_ISDIR(path_stat.st_mode)) {
-		printf("%s: Not a directory (%s)\n", __func__, finfo.dir);
-		exit(EXIT_FAILURE);
-	}
-	if (snprintf(finfo.path, sizeof(finfo.path), "%s/" TEST_FILE,
-		     finfo.dir) >= sizeof(finfo.path)) {
-		printf("%s: Pathname is too long\n", __func__);
-		exit(EXIT_FAILURE);
-	}
-	if (statfs(finfo.dir, &fs)) {
-		perror("statfs()");
-		exit(EXIT_FAILURE);
-	}
-	finfo.type = fs.f_type == TMPFS_MAGIC ? VMA_SHMEM : VMA_FILE;
-	if (finfo.type == VMA_SHMEM)
-		return;
-
-	/* Find owning device's queue/read_ahead_kb control */
-	if (snprintf(path, sizeof(path), "/sys/dev/block/%d:%d/uevent",
-		     major(path_stat.st_dev), minor(path_stat.st_dev))
-	    >= sizeof(path)) {
-		printf("%s: Pathname is too long\n", __func__);
-		exit(EXIT_FAILURE);
-	}
-	if (read_file(path, buf, sizeof(buf)) < 0) {
-		perror("read_file(read_num)");
-		exit(EXIT_FAILURE);
-	}
-	if (strstr(buf, "DEVTYPE=disk")) {
-		/* Found it */
-		if (snprintf(finfo.dev_queue_read_ahead_path,
-			     sizeof(finfo.dev_queue_read_ahead_path),
-			     "/sys/dev/block/%d:%d/queue/read_ahead_kb",
-			     major(path_stat.st_dev), minor(path_stat.st_dev))
-		    >= sizeof(finfo.dev_queue_read_ahead_path)) {
-			printf("%s: Pathname is too long\n", __func__);
-			exit(EXIT_FAILURE);
-		}
-		return;
-	}
-	if (!strstr(buf, "DEVTYPE=partition")) {
-		printf("%s: Unknown device type: %s\n", __func__, path);
-		exit(EXIT_FAILURE);
-	}
-	/*
-	 * Partition of block device - need to find actual device.
-	 * Using naming convention that devnameN is partition of
-	 * device devname.
-	 */
-	str = strstr(buf, "DEVNAME=");
-	if (!str) {
-		printf("%s: Could not read: %s", __func__, path);
-		exit(EXIT_FAILURE);
-	}
-	str += 8;
-	end = str;
-	while (*end) {
-		if (isdigit(*end)) {
-			*end = '\0';
-			if (snprintf(finfo.dev_queue_read_ahead_path,
-				     sizeof(finfo.dev_queue_read_ahead_path),
-				     "/sys/block/%s/queue/read_ahead_kb",
-				     str) >= sizeof(finfo.dev_queue_read_ahead_path)) {
-				printf("%s: Pathname is too long\n", __func__);
-				exit(EXIT_FAILURE);
-			}
-			return;
-		}
-		++end;
-	}
-	printf("%s: Could not read: %s\n", __func__, path);
-	exit(EXIT_FAILURE);
-}
 
 static bool check_swap(void *addr, unsigned long size)
 {
@@ -364,77 +277,6 @@ static bool anon_check_huge(void *addr, int nr_hpages)
 	return check_huge_anon(addr, nr_hpages, hpage_pmd_size);
 }
 
-static void *file_setup_area(int nr_hpages)
-{
-	int fd;
-	void *p;
-	unsigned long size;
-
-	unlink(finfo.path);  /* Cleanup from previous failed tests */
-	printf("Creating %s for collapse%s...", finfo.path,
-	       finfo.type == VMA_SHMEM ? " (tmpfs)" : "");
-	fd = open(finfo.path, O_DSYNC | O_CREAT | O_RDWR | O_TRUNC | O_EXCL,
-		  777);
-	if (fd < 0) {
-		perror("open()");
-		exit(EXIT_FAILURE);
-	}
-
-	size = nr_hpages * hpage_pmd_size;
-	p = alloc_mapping(nr_hpages);
-	fill_memory(p, 0, size);
-	write(fd, p, size);
-	close(fd);
-	munmap(p, size);
-	success("OK");
-
-	printf("Opening %s read only for collapse...", finfo.path);
-	finfo.fd = open(finfo.path, O_RDONLY, 777);
-	if (finfo.fd < 0) {
-		perror("open()");
-		exit(EXIT_FAILURE);
-	}
-	p = mmap(BASE_ADDR, size, PROT_READ,
-		 MAP_PRIVATE, finfo.fd, 0);
-	if (p == MAP_FAILED || p != BASE_ADDR) {
-		perror("mmap()");
-		exit(EXIT_FAILURE);
-	}
-
-	/* Drop page cache */
-	write_file("/proc/sys/vm/drop_caches", "3", 2);
-	success("OK");
-	return p;
-}
-
-static void file_cleanup_area(void *p, unsigned long size)
-{
-	munmap(p, size);
-	close(finfo.fd);
-	unlink(finfo.path);
-}
-
-static void file_fault(void *p, unsigned long start, unsigned long end)
-{
-	if (madvise(((char *)p) + start, end - start, MADV_POPULATE_READ)) {
-		perror("madvise(MADV_POPULATE_READ");
-		exit(EXIT_FAILURE);
-	}
-}
-
-static bool file_check_huge(void *addr, int nr_hpages)
-{
-	switch (finfo.type) {
-	case VMA_FILE:
-		return check_huge_file(addr, nr_hpages, hpage_pmd_size);
-	case VMA_SHMEM:
-		return check_huge_shmem(addr, nr_hpages, hpage_pmd_size);
-	default:
-		exit(EXIT_FAILURE);
-		return false;
-	}
-}
-
 static void *shmem_setup_area(int nr_hpages)
 {
 	void *p;
@@ -475,14 +317,6 @@ static struct mem_ops __anon_ops = {
 	.fault = &anon_fault,
 	.check_huge = &anon_check_huge,
 	.name = "anon",
-};
-
-static struct mem_ops __file_ops = {
-	.setup_area = &file_setup_area,
-	.cleanup_area = &file_cleanup_area,
-	.fault = &file_fault,
-	.check_huge = &file_check_huge,
-	.name = "file",
 };
 
 static struct mem_ops __shmem_ops = {
@@ -576,7 +410,7 @@ static void khugepaged_collapse(const char *msg, char *p, int nr_hpages,
 	}
 
 	/*
-	 * For file and shmem memory, khugepaged only retracts pte entries after
+	 * For shmem memory, khugepaged only retracts pte entries after
 	 * putting the new hugepage in the page cache. The hugepage must be
 	 * subsequently refaulted to install the pmd mapping for the mm.
 	 */
@@ -603,7 +437,7 @@ static struct collapse_context __madvise_context = {
 
 static bool is_tmpfs(struct mem_ops *ops)
 {
-	return ops == &__file_ops && finfo.type == VMA_SHMEM;
+	return finfo.type == VMA_SHMEM;
 }
 
 static bool is_anon(struct mem_ops *ops)
@@ -1084,10 +918,7 @@ static void usage(void)
 	fprintf(stderr, "\nUsage: ./khugepaged [OPTIONS] <test type> [dir]\n\n");
 	fprintf(stderr, "\t<test type>\t: <context>:<mem_type>\n");
 	fprintf(stderr, "\t<context>\t: [all|khugepaged|madvise]\n");
-	fprintf(stderr, "\t<mem_type>\t: [all|anon|file|shmem]\n");
-	fprintf(stderr, "\n\t\"file,all\" mem_type requires [dir] argument\n");
-	fprintf(stderr, "\n\t\"file,all\" mem_type requires kernel built with\n");
-	fprintf(stderr,	"\tCONFIG_READ_ONLY_THP_FOR_FS=y\n");
+	fprintf(stderr, "\t<mem_type>\t: [all|anon|shmem]\n");
 	fprintf(stderr, "\n\tif [dir] is a (sub)directory of a tmpfs mount, tmpfs must be\n");
 	fprintf(stderr,	"\tmounted with huge=advise option for khugepaged tests to work\n");
 	fprintf(stderr,	"\n\tSupported Options:\n");
@@ -1143,26 +974,16 @@ static void parse_test_type(int argc, char **argv)
 		usage();
 
 	if (!strcmp(buf, "all")) {
-		file_ops =  &__file_ops;
 		anon_ops = &__anon_ops;
 		shmem_ops = &__shmem_ops;
 	} else if (!strcmp(buf, "anon")) {
 		anon_ops = &__anon_ops;
-	} else if (!strcmp(buf, "file")) {
-		file_ops =  &__file_ops;
 	} else if (!strcmp(buf, "shmem")) {
 		shmem_ops = &__shmem_ops;
 	} else {
 		usage();
 	}
 
-	if (!file_ops)
-		return;
-
-	if (argc != 2)
-		usage();
-
-	get_finfo(argv[1]);
 }
 
 int main(int argc, char **argv)
@@ -1228,37 +1049,27 @@ int main(int argc, char **argv)
 	} while (0)
 
 	TEST(collapse_full, khugepaged_context, anon_ops);
-	TEST(collapse_full, khugepaged_context, file_ops);
 	TEST(collapse_full, khugepaged_context, shmem_ops);
 	TEST(collapse_full, madvise_context, anon_ops);
-	TEST(collapse_full, madvise_context, file_ops);
 	TEST(collapse_full, madvise_context, shmem_ops);
 
 	TEST(collapse_empty, khugepaged_context, anon_ops);
 	TEST(collapse_empty, madvise_context, anon_ops);
 
 	TEST(collapse_single_pte_entry, khugepaged_context, anon_ops);
-	TEST(collapse_single_pte_entry, khugepaged_context, file_ops);
 	TEST(collapse_single_pte_entry, khugepaged_context, shmem_ops);
 	TEST(collapse_single_pte_entry, madvise_context, anon_ops);
-	TEST(collapse_single_pte_entry, madvise_context, file_ops);
 	TEST(collapse_single_pte_entry, madvise_context, shmem_ops);
 
 	TEST(collapse_max_ptes_none, khugepaged_context, anon_ops);
-	TEST(collapse_max_ptes_none, khugepaged_context, file_ops);
 	TEST(collapse_max_ptes_none, madvise_context, anon_ops);
-	TEST(collapse_max_ptes_none, madvise_context, file_ops);
 
 	TEST(collapse_single_pte_entry_compound, khugepaged_context, anon_ops);
-	TEST(collapse_single_pte_entry_compound, khugepaged_context, file_ops);
 	TEST(collapse_single_pte_entry_compound, madvise_context, anon_ops);
-	TEST(collapse_single_pte_entry_compound, madvise_context, file_ops);
 
 	TEST(collapse_full_of_compound, khugepaged_context, anon_ops);
-	TEST(collapse_full_of_compound, khugepaged_context, file_ops);
 	TEST(collapse_full_of_compound, khugepaged_context, shmem_ops);
 	TEST(collapse_full_of_compound, madvise_context, anon_ops);
-	TEST(collapse_full_of_compound, madvise_context, file_ops);
 	TEST(collapse_full_of_compound, madvise_context, shmem_ops);
 
 	TEST(collapse_compound_extreme, khugepaged_context, anon_ops);
@@ -1280,10 +1091,8 @@ int main(int argc, char **argv)
 	TEST(collapse_max_ptes_shared, madvise_context, anon_ops);
 
 	TEST(madvise_collapse_existing_thps, madvise_context, anon_ops);
-	TEST(madvise_collapse_existing_thps, madvise_context, file_ops);
 	TEST(madvise_collapse_existing_thps, madvise_context, shmem_ops);
 
-	TEST(madvise_retracted_page_tables, madvise_context, file_ops);
 	TEST(madvise_retracted_page_tables, madvise_context, shmem_ops);
 
 	restore_settings(0);
