@@ -125,21 +125,21 @@ EXPORT_SYMBOL_FOR_KVM(msr_clear_bit);
 #ifdef CONFIG_TRACEPOINTS
 void do_trace_write_msr(u32 msr, u64 val, int failed)
 {
-	trace_write_msr(msr, val, failed);
+	trace_call__write_msr(msr, val, failed);
 }
 EXPORT_SYMBOL(do_trace_write_msr);
 EXPORT_TRACEPOINT_SYMBOL(write_msr);
 
 void do_trace_read_msr(u32 msr, u64 val, int failed)
 {
-	trace_read_msr(msr, val, failed);
+	trace_call__read_msr(msr, val, failed);
 }
 EXPORT_SYMBOL(do_trace_read_msr);
 EXPORT_TRACEPOINT_SYMBOL(read_msr);
 
 void do_trace_rdpmc(u32 msr, u64 val, int failed)
 {
-	trace_rdpmc(msr, val, failed);
+	trace_call__rdpmc(msr, val, failed);
 }
 EXPORT_SYMBOL(do_trace_rdpmc);
 EXPORT_TRACEPOINT_SYMBOL(rdpmc);
