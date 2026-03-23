@@ -52,7 +52,7 @@ struct mp29502_data {
 
 #define to_mp29502_data(x)	container_of(x, struct mp29502_data, info)
 
-static u16 mp29502_reg2data_linear11(u16 word)
+static int mp29502_reg2data_linear11(u16 word)
 {
 	s16 exponent;
 	s32 mantissa;
@@ -67,7 +67,7 @@ static u16 mp29502_reg2data_linear11(u16 word)
 	else
 		val >>= -exponent;
 
-	return val;
+	return clamp_val(val, 0, 0xffff);
 }
 
 static int

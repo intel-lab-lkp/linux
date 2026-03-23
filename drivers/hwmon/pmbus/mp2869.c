@@ -65,7 +65,7 @@ static const int mp2869_iout_sacle[8] = {32, 1, 2, 4, 8, 16, 32, 64};
 
 #define to_mp2869_data(x)	container_of(x, struct mp2869_data, info)
 
-static u16 mp2869_reg2data_linear11(u16 word)
+static int mp2869_reg2data_linear11(u16 word)
 {
 	s16 exponent;
 	s32 mantissa;
@@ -80,7 +80,7 @@ static u16 mp2869_reg2data_linear11(u16 word)
 	else
 		val >>= -exponent;
 
-	return val;
+	return clamp_val(val, 0, 0xffff);
 }
 
 static int
