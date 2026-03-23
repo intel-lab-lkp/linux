@@ -964,8 +964,14 @@ static netdev_tx_t b44_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	mapping = dma_map_single(bp->sdev->dma_dev, skb->data, len, DMA_TO_DEVICE);
-	if (dma_mapping_error(bp->sdev->dma_dev, mapping) || mapping + len > DMA_BIT_MASK(30)) {
-		struct sk_buff *bounce_skb;
+    
+    if (dma_mapping_error(bp->sdev->dma_dev, mapping)) {
+        dev_kfree_skb_any(skb);
+        return NETDEV_TX_OK;
+    }
+
+    if (mapping + len > DMA_BIT_MASK(30)) {
+        struct sk_buff *bounce_skb;
 
 		/* Chip can't handle DMA to/from >1GB, use bounce buffer */
 		if (!dma_mapping_error(bp->sdev->dma_dev, mapping))
