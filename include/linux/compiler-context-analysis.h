@@ -39,8 +39,9 @@
 # define __assumes_shared_ctx_lock(...)	__attribute__((assert_shared_capability(__VA_ARGS__)))
 
 /**
- * __guarded_by - struct member and globals attribute, declares variable
- *                only accessible within active context
+ * __guarded_by() - struct member and globals attribute, declares variable
+ *                  only accessible within active context
+ * @x: context lock instance pointer
  *
  * Declares that the struct member or global variable is only accessible within
  * the context entered by the given context lock. Read operations on the data
@@ -53,11 +54,12 @@
  *		long counter __guarded_by(&lock);
  *	};
  */
-# define __guarded_by(...)		__attribute__((guarded_by(__VA_ARGS__)))
+# define __guarded_by(x)		__attribute__((guarded_by(x)))
 
 /**
- * __pt_guarded_by - struct member and globals attribute, declares pointed-to
- *                   data only accessible within active context
+ * __pt_guarded_by() - struct member and globals attribute, declares pointed-to
+ *                     data only accessible within active context
+ * @x: context lock instance pointer
  *
  * Declares that the data pointed to by the struct member pointer or global
  * pointer is only accessible within the context entered by the given context
@@ -71,7 +73,53 @@
  *		long *counter __pt_guarded_by(&lock);
  *	};
  */
-# define __pt_guarded_by(...)		__attribute__((pt_guarded_by(__VA_ARGS__)))
+# define __pt_guarded_by(x)		__attribute__((pt_guarded_by(x)))
+
+/**
+ * __guarded_by_any() - struct member and globals attribute, declares variable
+ *                      only accessible within active contexts
+ * @...: context lock instance pointers
+ *
+ * Declares that the struct member or global variable is protected by multiple
+ * context locks. Write access requires all listed context locks to be held
+ * exclusively; read access requires at least one of them to be held (shared or
+ * exclusive).
+ *
+ * .. code-block:: c
+ *
+ *	struct some_state {
+ *		spinlock_t lock1, lock2;
+ *		long counter __guarded_by_any(&lock1, &lock2);
+ *	};
+ */
+# ifdef CONFIG_CC_HAS_MULTI_ARG_GUARDED_BY_ATTR
+#  define __guarded_by_any(...)		__attribute__((guarded_by(__VA_ARGS__)))
+# else
+#  define __guarded_by_any(...)
+# endif
+
+/**
+ * __pt_guarded_by_any() - struct member and globals attribute, declares pointed-to
+ *                         data only accessible within active contexts
+ * @...: context lock instance pointers
+ *
+ * Declares that the data pointed to by the struct member pointer or global
+ * pointer is protected by multiple context locks. Write access requires all
+ * listed context locks to be held exclusively; read access requires at least
+ * one of them to be held (shared or exclusive).
+ *
+ * .. code-block:: c
+ *
+ *	struct some_state {
+ *		spinlock_t lock1, lock2;
+ *		long *counter __pt_guarded_by_any(&lock1, &lock2);
+ *	};
+ */
+# ifdef CONFIG_CC_HAS_MULTI_ARG_GUARDED_BY_ATTR
+#  define __pt_guarded_by_any(...)		__attribute__((pt_guarded_by(__VA_ARGS__)))
+# else
+#  define __pt_guarded_by_any(...)
+# endif
 
 /**
  * context_lock_struct() - declare or define a context lock struct
@@ -158,8 +206,10 @@
 # define __assumes_ctx_lock(...)
 # define __assumes_shared_ctx_lock(...)
 # define __returns_ctx_lock(var)
-# define __guarded_by(...)
-# define __pt_guarded_by(...)
+# define __guarded_by(x)
+# define __pt_guarded_by(x)
+# define __guarded_by_any(...)
+# define __pt_guarded_by_any(...)
 # define __excludes_ctx_lock(...)
 # define __requires_ctx_lock(...)
 # define __requires_shared_ctx_lock(...)

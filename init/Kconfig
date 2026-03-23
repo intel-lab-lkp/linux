@@ -158,6 +158,11 @@ config CC_HAS_BROKEN_COUNTED_BY_REF
 config CC_HAS_MULTIDIMENSIONAL_NONSTRING
 	def_bool $(success,echo 'char tag[][4] __attribute__((__nonstring__)) = { };' | $(CC) $(CLANG_FLAGS) -x c - -c -o /dev/null -Werror)
 
+config CC_HAS_MULTI_ARG_GUARDED_BY_ATTR
+	# supported since clang 23
+	depends on CC_IS_CLANG
+	def_bool $(success,echo 'typedef int __attribute__((capability("l"))) L; L l1; L l2; int __attribute__((guarded_by(&l1, &l2))) x;' | $(CC) -x c - -c -o /dev/null -Werror)
+
 config LD_CAN_USE_KEEP_IN_OVERLAY
 	# ld.lld prior to 21.0.0 did not support KEEP within an overlay description
 	# https://github.com/llvm/llvm-project/pull/130661
