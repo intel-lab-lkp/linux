@@ -1,6 +1,16 @@
 config HAVE_TRUSTED_KEYS
 	bool
 
+config TRUSTED_KEYS_DEBUG
+	bool "Debug trusted keys protocol"
+	depends on HAVE_TRUSTED_KEYS
+	default n
+	help
+	  Drivers that support debugging the protocol dump, can opt-in that
+	  feature here. Protocol dump must only use DEBUG level output, as
+	  sensitive data may pass by. In the kernel-command line traces can
+	  be enabled via trusted.dyndbg='+p'.
+
 config TRUSTED_KEYS_TPM
 	bool "TPM-based trusted keys"
 	depends on TCG_TPM >= TRUSTED_KEYS
