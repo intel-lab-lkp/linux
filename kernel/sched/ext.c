@@ -5343,7 +5343,7 @@ static void scx_bypass(struct scx_sched *sch, bool bypass)
 		scx_for_each_descendant_pre(pos, sch) {
 			struct scx_sched_pcpu *pcpu = per_cpu_ptr(pos->pcpu, cpu);
 
-			if (pos->bypass_depth)
+			if (READ_ONCE(pos->bypass_depth))
 				pcpu->flags |= SCX_SCHED_PCPU_BYPASSING;
 			else
 				pcpu->flags &= ~SCX_SCHED_PCPU_BYPASSING;
