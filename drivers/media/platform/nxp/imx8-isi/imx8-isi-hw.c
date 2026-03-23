@@ -11,7 +11,7 @@
 #include "imx8-isi-core.h"
 #include "imx8-isi-regs.h"
 
-#define	ISI_DOWNSCALE_THRESHOLD		0x4000
+#define	ISI_DOWNSCALE_THRESHOLD		0x2000
 
 static inline u32 mxc_isi_read(struct mxc_isi_pipe *pipe, u32 reg)
 {
