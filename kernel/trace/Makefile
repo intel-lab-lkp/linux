@@ -169,8 +169,8 @@ targets += undefsyms_base.o
 # because it is not linked into vmlinux.
 KASAN_SANITIZE_undefsyms_base.o := y
 
-UNDEFINED_ALLOWLIST = __asan __gcov __kasan __kcsan __hwasan __sancov __sanitizer __tsan __ubsan __x86_indirect_thunk \
-		      __msan simple_ring_buffer \
+UNDEFINED_ALLOWLIST = __asan __gcov __kasan __kcsan __hwasan __sancov __sanitizer __tsan __ubsan __msan \
+		      __x86_indirect_thunk __aeabi_unwind_cpp simple_ring_buffer \
 		      $(shell $(NM) -u $(obj)/undefsyms_base.o 2>/dev/null | awk '{print $$2}')
 
 quiet_cmd_check_undefined = NM      $<
