@@ -74,7 +74,10 @@ source "drivers/net/dsa/microchip/Kconfig"
 
 source "drivers/net/dsa/mv88e6xxx/Kconfig"
 
+
 source "drivers/net/dsa/mxl862xx/Kconfig"
+
+source "drivers/net/dsa/netc/Kconfig"
 
 source "drivers/net/dsa/ocelot/Kconfig"
 
