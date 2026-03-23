@@ -43,7 +43,6 @@ struct mlx5e_pcie_cong_event {
 	struct mlx5e_pcie_cong_stats stats;
 };
 
-
 static const struct counter_desc mlx5e_pcie_cong_stats_desc[] = {
 	{ MLX5E_DECLARE_STAT(struct mlx5e_pcie_cong_stats,
 			     pci_bw_inbound_high) },
@@ -259,7 +258,11 @@ mlx5e_pcie_cong_get_thresh_config(struct mlx5_core_dev *dev,
 		MLX5_DEVLINK_PARAM_ID_PCIE_CONG_OUT_HIGH,
 	};
 	struct devlink *devlink = priv_to_devlink(dev);
-	union devlink_param_value val[4];
+	union devlink_param_value *val;
+
+	val = kcalloc(4, sizeof(*val), GFP_KERNEL);
+	if (!val)
+		return -ENOMEM;
 
 	for (int i = 0; i < 4; i++) {
 		u32 id = ids[i];
@@ -275,6 +278,7 @@ mlx5e_pcie_cong_get_thresh_config(struct mlx5_core_dev *dev,
 	config->outbound_low = val[2].vu16;
 	config->outbound_high = val[3].vu16;
 
+	kfree(val);
 	return 0;
 }
 
