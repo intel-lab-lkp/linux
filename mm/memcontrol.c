@@ -4058,6 +4058,7 @@ free_objcg:
 	for_each_node(nid) {
 		struct mem_cgroup_per_node *pn = memcg->nodeinfo[nid];
 		objcg = rcu_replace_pointer(pn->objcg, NULL, true);
+
 		if (objcg)
 			percpu_ref_kill(&objcg->refcnt);
 
