@@ -131,9 +131,7 @@ static u32 sdio_init(struct dvobj_priv *dvobj)
 release:
 	sdio_release_host(func);
 
-	if (err)
-		return _FAIL;
-	return _SUCCESS;
+	return err;
 }
 
 static void sdio_deinit(struct dvobj_priv *dvobj)
@@ -160,15 +158,18 @@ static struct dvobj_priv *sdio_dvobj_init(struct sdio_func *func)
 	struct sdio_data *psdio;
 
 	dvobj = devobj_init();
-	if (!dvobj)
+	if (!dvobj) {
+		dvobj = ERR_PTR(-ENOMEM);
 		goto exit;
+	}
 
 	sdio_set_drvdata(func, dvobj);
 
 	psdio = &dvobj->intf_data;
 	psdio->func = func;
 
-	if (sdio_init(dvobj) != _SUCCESS)
+	status = sdio_init(dvobj);
+	if (status)
 		goto free_dvobj;
 
 	rtw_reset_continual_io_error(dvobj);
@@ -180,7 +181,7 @@ free_dvobj:
 
 		devobj_deinit(dvobj);
 
-		dvobj = NULL;
+		dvobj = ERR_PTR(status);
 	}
 exit:
 	return dvobj;
@@ -350,8 +351,10 @@ static int rtw_drv_init(
 	struct dvobj_priv *dvobj;
 
 	dvobj = sdio_dvobj_init(func);
-	if (!dvobj)
+	if (IS_ERR(dvobj)) {
+		status = PTR_ERR(dvobj);
 		goto exit;
+	}
 
 	if1 = rtw_sdio_if1_init(dvobj, id);
 	if (!if1)
