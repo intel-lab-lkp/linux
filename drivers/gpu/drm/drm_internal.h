@@ -131,6 +131,7 @@ static inline void drm_vblank_destroy_worker(struct drm_vblank_crtc *vblank)
 int drm_vblank_worker_init(struct drm_vblank_crtc *vblank);
 void drm_vblank_cancel_pending_works(struct drm_vblank_crtc *vblank);
 void drm_handle_vblank_works(struct drm_vblank_crtc *vblank);
+bool drm_crtc_vblank_is_off(struct drm_crtc *crtc);
 
 /* IOCTLS */
 int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
