@@ -48,6 +48,20 @@ Access restrictions:
  * APML Mailbox messages and Register xfer access are read-write,
  * CPUID and MCA_MSR access is read-only.
 
+SBTSI device
+============
+
+apml_sbtsi driver under the drivers/misc/amd-sbi creates miscdevice
+/dev/sbtsi-* to let user space programs run APML TSI register xfer
+commands.
+
+The driver supports both I2C and I3C transports for SB-TSI targets.
+The transport is selected by the bus where the device is enumerated.
+
+Access restrictions:
+ * Only root user is allowed to open the file.
+ * APML TSI Register xfer access is read-write.
+
 Driver IOCTLs
 =============
 
@@ -63,6 +77,9 @@ Driver IOCTLs
 .. c:macro:: SBRMI_IOCTL_REG_XFER_CMD
 .. kernel-doc:: include/uapi/misc/amd-apml.h
    :doc: SBRMI_IOCTL_REG_XFER_CMD
+.. c:macro:: SBTSI_IOCTL_REG_XFER_CMD
+.. kernel-doc:: include/uapi/misc/amd-apml.h
+   :doc: SBTSI_IOCTL_REG_XFER_CMD
 
 User-space usage
 ================
@@ -92,6 +109,7 @@ The following IOCTLs are defined:
 ``#define SBRMI_IOCTL_CPUID_CMD		_IOWR(SB_BASE_IOCTL_NR, 1, struct apml_cpuid_msg)``
 ``#define SBRMI_IOCTL_MCAMSR_CMD	_IOWR(SB_BASE_IOCTL_NR, 2, struct apml_mcamsr_msg)``
 ``#define SBRMI_IOCTL_REG_XFER_CMD	_IOWR(SB_BASE_IOCTL_NR, 3, struct apml_reg_xfer_msg)``
+``#define SBTSI_IOCTL_REG_XFER_CMD      _IOWR(SB_BASE_IOCTL_NR, 4, struct apml_tsi_xfer_msg)``
 
 
 User space C-APIs are made available by esmi_oob_library, hosted at
