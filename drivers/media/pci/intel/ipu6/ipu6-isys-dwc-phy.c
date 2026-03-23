@@ -317,6 +317,27 @@ static int ipu6_isys_dwc_phy_config(struct ipu6_isys *isys,
 		return -EINVAL;
 	}
 
+	/*
+	 * The overlapping frequency ranges combined with the backward
+	 * search in get_hsfreq_by_mbps() can select a band where the
+	 * data rate sits at the lower edge and osc_freq_target drops
+	 * (335 -> 208 at index 43). When the previous band also covers
+	 * this rate and has a higher osc_freq_target, prefer it for
+	 * better DDL lock stability. This fixes CRC errors seen at
+	 * 1498 Mbps (e.g. OV08X40 on Arrow Lake).
+	 */
+	if (index > 0 &&
+	    mbps >= freqranges[index - 1].min &&
+	    mbps <= freqranges[index - 1].max &&
+	    freqranges[index - 1].osc_freq_target >
+	    freqranges[index].osc_freq_target) {
+		dev_dbg(dev, "Dphy %u: shift band %u->%u for %u mbps (osc %u->%u)",
+			phy_id, index, index - 1, mbps,
+			freqranges[index].osc_freq_target,
+			freqranges[index - 1].osc_freq_target);
+		index--;
+	}
+
 	dwc_dphy_write_mask(isys, phy_id, IPU6_DWC_DPHY_HSFREQRANGE,
 			    freqranges[index].hsfreq, 0, 7);
 
