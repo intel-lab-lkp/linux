@@ -287,13 +287,13 @@ struct pmt_feature_group *intel_pmt_get_regions_by_feature(enum pmt_feature_id i
 
 	return no_free_ptr(feature_group);
 }
-EXPORT_SYMBOL(intel_pmt_get_regions_by_feature);
+EXPORT_SYMBOL_GPL(intel_pmt_get_regions_by_feature);
 
 void intel_pmt_put_feature_group(struct pmt_feature_group *feature_group)
 {
 	kref_put(&feature_group->kref, pmt_feature_group_release);
 }
-EXPORT_SYMBOL(intel_pmt_put_feature_group);
+EXPORT_SYMBOL_GPL(intel_pmt_put_feature_group);
 
 int pmt_telem_read(struct telem_endpoint *ep, u32 id, u64 *data, u32 count)
 {

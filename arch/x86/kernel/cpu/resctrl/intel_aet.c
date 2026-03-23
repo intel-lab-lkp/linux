@@ -23,6 +23,7 @@
 #include <linux/intel_vsec.h>
 #include <linux/io.h>
 #include <linux/minmax.h>
+#include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
@@ -304,37 +305,57 @@ static enum pmt_feature_id lookup_pfid(const char *pfname)
  */
 bool intel_aet_get_events(void)
 {
+	struct pmt_feature_group *(*get_feature)(enum pmt_feature_id id);
+	void (*put_feature)(struct pmt_feature_group *p);
 	struct pmt_feature_group *p;
 	enum pmt_feature_id pfid;
 	struct event_group **peg;
 	bool ret = false;
 
+	get_feature = symbol_get(intel_pmt_get_regions_by_feature);
+	if (!get_feature)
+		return ret;
+	put_feature = symbol_get(intel_pmt_put_feature_group);
+	if (!put_feature) {
+		symbol_put(intel_pmt_get_regions_by_feature);
+		return ret;
+	}
+
 	for_each_event_group(peg) {
 		pfid = lookup_pfid((*peg)->pfname);
-		p = intel_pmt_get_regions_by_feature(pfid);
+		p = get_feature(pfid);
 		if (IS_ERR_OR_NULL(p))
 			continue;
 		if (enable_events(*peg, p)) {
 			(*peg)->pfg = p;
 			ret = true;
 		} else {
-			intel_pmt_put_feature_group(p);
+			put_feature(p);
 		}
 	}
+
+	symbol_put(intel_pmt_get_regions_by_feature);
+	symbol_put(intel_pmt_put_feature_group);
 
 	return ret;
 }
 
 void __exit intel_aet_exit(void)
 {
+	void (*put_feature)(struct pmt_feature_group *p);
 	struct event_group **peg;
+
+	put_feature = symbol_get(intel_pmt_put_feature_group);
+	if (!put_feature)
+		return;
 
 	for_each_event_group(peg) {
 		if ((*peg)->pfg) {
-			intel_pmt_put_feature_group((*peg)->pfg);
+			put_feature((*peg)->pfg);
 			(*peg)->pfg = NULL;
 		}
 	}
+	symbol_put(intel_pmt_put_feature_group);
 }
 
 #define DATA_VALID	BIT_ULL(63)
