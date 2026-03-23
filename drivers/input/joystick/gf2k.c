@@ -164,6 +164,8 @@ static void gf2k_read(struct gf2k *gf2k, unsigned char *data)
 		input_report_abs(dev, gf2k_abs[i], GB(i*9+60,8,0) | GB(i+54,1,9));
 
 	t = GB(40,4,0);
+	if (t >= ARRAY_SIZE(gf2k_hat_to_axis))
+		t = 0;
 
 	for (i = 0; i < gf2k_hats[gf2k->id]; i++)
 		input_report_abs(dev, ABS_HAT0X + i, gf2k_hat_to_axis[t][i]);
