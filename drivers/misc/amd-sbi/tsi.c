@@ -38,6 +38,7 @@ static int sbtsi_i2c_probe(struct i2c_client *client)
 
 	data->is_i3c = false;
 	data->client = client;
+	mutex_init(&data->lock);
 	err = i2c_smbus_read_byte_data(data->client, SBTSI_REG_CONFIG);
 	if (err < 0)
 		return err;
@@ -45,7 +46,21 @@ static int sbtsi_i2c_probe(struct i2c_client *client)
 	data->read_order = FIELD_GET(BIT(SBTSI_CONFIG_READ_ORDER_SHIFT), err);
 
 	dev_set_drvdata(dev, data);
-	return create_sbtsi_hwmon_sensor_device(dev, data);
+	err = create_sbtsi_hwmon_sensor_device(dev, data);
+	if (err < 0)
+		return err;
+	data->dev_addr = client->addr;
+	return create_misc_tsi_device(data, dev);
+}
+
+static void sbtsi_i2c_remove(struct i2c_client *client)
+{
+	struct sbtsi_data *data = dev_get_drvdata(&client->dev);
+
+	if (data)
+		misc_deregister(&data->sbtsi_misc_dev);
+
+	dev_info(&client->dev, "Removed sbtsi driver\n");
 }
 
 static const struct i2c_device_id sbtsi_id[] = {
@@ -68,6 +83,7 @@ static struct i2c_driver sbtsi_driver = {
 		.of_match_table = of_match_ptr(sbtsi_of_match),
 	},
 	.probe = sbtsi_i2c_probe,
+	.remove = sbtsi_i2c_remove,
 	.id_table = sbtsi_id,
 };
 
@@ -90,7 +106,7 @@ static int sbtsi_i3c_probe(struct i3c_device *i3cdev)
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
-
+	mutex_init(&data->lock);
 	data->i3cdev = i3cdev;
 	data->is_i3c = true;
 
@@ -102,7 +118,21 @@ static int sbtsi_i3c_probe(struct i3c_device *i3cdev)
 	data->read_order = FIELD_GET(BIT(SBTSI_CONFIG_READ_ORDER_SHIFT), val);
 
 	dev_set_drvdata(dev, data);
-	return create_sbtsi_hwmon_sensor_device(dev, data);
+	err = create_sbtsi_hwmon_sensor_device(dev, data);
+	if (err < 0)
+		return err;
+	data->dev_addr = i3cdev->desc->info.dyn_addr;
+	return create_misc_tsi_device(data, dev);
+}
+
+static void sbtsi_i3c_remove(struct i3c_device *i3cdev)
+{
+	struct sbtsi_data *data = dev_get_drvdata(&i3cdev->dev);
+
+	if (data)
+		misc_deregister(&data->sbtsi_misc_dev);
+
+	dev_info(&i3cdev->dev, "Removed sbtsi-i3c driver\n");
 }
 
 static const struct i3c_device_id sbtsi_i3c_id[] = {
@@ -121,6 +151,7 @@ static struct i3c_driver sbtsi_i3c_driver = {
 		.name = "sbtsi-i3c",
 	},
 	.probe = sbtsi_i3c_probe,
+	.remove = sbtsi_i3c_remove,
 	.id_table = sbtsi_i3c_id,
 };
 

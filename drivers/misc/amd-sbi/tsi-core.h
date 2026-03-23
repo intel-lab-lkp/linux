@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
+#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/types.h>
@@ -21,12 +22,16 @@ struct sbtsi_data {
 		struct i2c_client *client;
 		struct i3c_device *i3cdev;
 	};
+	struct miscdevice sbtsi_misc_dev;
+	struct mutex lock; /* serializes SBTSI register access */
 	bool ext_range_mode;
 	bool read_order;
 	bool is_i3c;
+	u8 dev_addr;
 };
 
 int sbtsi_xfer(struct sbtsi_data *data, u8 reg, u8 *val, bool is_read);
+int create_misc_tsi_device(struct sbtsi_data *data, struct device *dev);
 
 #ifdef CONFIG_AMD_SBTSI_HWMON
 int create_sbtsi_hwmon_sensor_device(struct device *dev, struct sbtsi_data *data);
