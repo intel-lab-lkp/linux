@@ -210,31 +210,18 @@ mp29502_identify_iout_scale(struct i2c_client *client, struct pmbus_driver_info 
 static int mp29502_read_vout_ov_limit(struct i2c_client *client, struct mp29502_data *data)
 {
 	int ret;
-	int ov_value;
 
 	/*
-	 * This is because the vout ov fault limit value comes from
-	 * page1 MFR_TSNS_FLT_SET reg, and other telemetry and limit
-	 * value comes from page0 reg. So the page should be set to
-	 * 0 after the reading of vout ov limit.
+	 * The vout ov fault limit value comes from page 1
+	 * MFR_TSNS_FLT_SET register.
 	 */
-	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 1);
+	ret = pmbus_read_word_data(client, 1, 0xff, MFR_TSNS_FLT_SET);
 	if (ret < 0)
 		return ret;
 
-	ret = i2c_smbus_read_word_data(client, MFR_TSNS_FLT_SET);
-	if (ret < 0)
-		return ret;
-
-	ov_value = DIV_ROUND_CLOSEST(FIELD_GET(GENMASK(12, 7), ret) *
-						   MP28502_VOUT_OV_GAIN * MP28502_VOUT_OV_SCALE,
-						   data->ovp_div);
-
-	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 0);
-	if (ret < 0)
-		return ret;
-
-	return ov_value;
+	return DIV_ROUND_CLOSEST(FIELD_GET(GENMASK(12, 7), ret) *
+				 MP28502_VOUT_OV_GAIN * MP28502_VOUT_OV_SCALE,
+				 data->ovp_div);
 }
 
 static int mp29502_write_vout_ov_limit(struct i2c_client *client, u16 word,
@@ -243,46 +230,29 @@ static int mp29502_write_vout_ov_limit(struct i2c_client *client, u16 word,
 	int ret;
 
 	/*
-	 * This is because the vout ov fault limit value comes from
-	 * page1 MFR_TSNS_FLT_SET reg, and other telemetry and limit
-	 * value comes from page0 reg. So the page should be set to
-	 * 0 after the writing of vout ov limit.
+	 * The vout ov fault limit value is in page 1
+	 * MFR_TSNS_FLT_SET register.
 	 */
-	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 1);
+	ret = pmbus_read_word_data(client, 1, 0xff, MFR_TSNS_FLT_SET);
 	if (ret < 0)
 		return ret;
 
-	ret = i2c_smbus_read_word_data(client, MFR_TSNS_FLT_SET);
-	if (ret < 0)
-		return ret;
-
-	ret = i2c_smbus_write_word_data(client, MFR_TSNS_FLT_SET,
-					(ret & ~GENMASK(12, 7)) |
-		FIELD_PREP(GENMASK(12, 7),
-			   DIV_ROUND_CLOSEST(word * data->ovp_div,
-					     MP28502_VOUT_OV_GAIN * MP28502_VOUT_OV_SCALE)));
-
-	return i2c_smbus_write_byte_data(client, PMBUS_PAGE, 0);
+	return pmbus_write_word_data(client, 1, MFR_TSNS_FLT_SET,
+				    (ret & ~GENMASK(12, 7)) |
+				FIELD_PREP(GENMASK(12, 7),
+					   DIV_ROUND_CLOSEST(word * data->ovp_div,
+							     MP28502_VOUT_OV_GAIN *
+							     MP28502_VOUT_OV_SCALE)));
 }
 
 static int mp29502_read_byte_data(struct i2c_client *client, int page, int reg)
 {
-	int ret;
-
-	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 0);
-	if (ret < 0)
-		return ret;
-
 	switch (reg) {
 	case PMBUS_VOUT_MODE:
-		ret = PB_VOUT_MODE_DIRECT;
-		break;
+		return PB_VOUT_MODE_DIRECT;
 	default:
-		ret = -ENODATA;
-		break;
+		return -ENODATA;
 	}
-
-	return ret;
 }
 
 static int mp29502_read_word_data(struct i2c_client *client, int page,
@@ -466,10 +436,6 @@ static int mp29502_write_word_data(struct i2c_client *client, int page, int reg,
 	const struct pmbus_driver_info *info = pmbus_get_driver_info(client);
 	struct mp29502_data *data = to_mp29502_data(info);
 	int ret;
-
-	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 0);
-	if (ret < 0)
-		return ret;
 
 	switch (reg) {
 	case PMBUS_VIN_OV_FAULT_LIMIT:
