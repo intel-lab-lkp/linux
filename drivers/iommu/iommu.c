@@ -3042,7 +3042,7 @@ int iommu_fwspec_init(struct device *dev, struct fwnode_handle *iommu_fwnode)
 
 	if (!iommu)
 		return driver_deferred_probe_check_state(dev);
-	if (!dev->iommu && !READ_ONCE(iommu->ready))
+	if (!READ_ONCE(iommu->ready))
 		return -EPROBE_DEFER;
 
 	if (fwspec)
