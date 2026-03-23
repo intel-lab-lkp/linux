@@ -244,7 +244,7 @@ struct av7110 {
 	video_size_t		 video_size;
 
 	u16			wssMode;
-	u16			wssData;
+	u16			wss_data;
 
 	struct infrared		ir;
 
