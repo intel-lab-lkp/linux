@@ -789,7 +789,8 @@ static void virtio_fs_request_complete(struct fuse_req *req,
 	struct folio *folio;
 
 	args = req->args;
-	copy_args_from_argbuf(args, req);
+	if (test_bit(FR_ISREPLY, &req->flags))
+		copy_args_from_argbuf(args, req);
 
 	if (args->out_pages && args->page_zeroing) {
 		len = args->out_args[args->out_numargs - 1].size;
