@@ -980,8 +980,7 @@ TRACE_EVENT(xfile_create,
 		__entry->ino = file_inode(xf->file)->i_ino;
 		path = file_path(xf->file, __entry->pathname, MAXNAMELEN);
 		if (IS_ERR(path))
-			strncpy(__entry->pathname, "(unknown)",
-					sizeof(__entry->pathname));
+			strscpy_pad(__entry->pathname, "(unknown)");
 	),
 	TP_printk("xfino 0x%lx path '%s'",
 		  __entry->ino,
