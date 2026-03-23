@@ -652,6 +652,7 @@ static int send_forget_request(struct virtio_fs_vq *fsvq,
 			kfree(forget);
 			if (in_flight)
 				dec_in_flight_req(fsvq);
+			ret = 0;
 		}
 		goto out;
 	}
