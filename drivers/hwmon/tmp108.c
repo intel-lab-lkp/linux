@@ -538,6 +538,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(tmp108_dev_pm_ops, tmp108_suspend, tmp108_resume
 
 static const struct i2c_device_id tmp108_i2c_ids[] = {
 	{ "p3t1035", (unsigned long)&p3t1035_data },
+        { "p3t1084", (unsigned long)&tmp108_data },
 	{ "p3t1085", (unsigned long)&tmp108_data },
 	{ "tmp108", (unsigned long)&tmp108_data },
 	{}
@@ -546,6 +547,7 @@ MODULE_DEVICE_TABLE(i2c, tmp108_i2c_ids);
 
 static const struct of_device_id tmp108_of_ids[] = {
 	{ .compatible = "nxp,p3t1035", .data = &p3t1035_data },
+	{ .compatible = "nxp,p3t1084", .data = &tmp108_data },
 	{ .compatible = "nxp,p3t1085", .data = &tmp108_data },
 	{ .compatible = "ti,tmp108", .data = &tmp108_data },
 	{}
