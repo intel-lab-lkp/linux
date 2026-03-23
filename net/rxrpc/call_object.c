@@ -654,9 +654,9 @@ void rxrpc_put_call(struct rxrpc_call *call, enum rxrpc_call_trace why)
 	if (dead) {
 		ASSERTCMP(__rxrpc_call_state(call), ==, RXRPC_CALL_COMPLETE);
 
-		if (!list_empty(&call->link)) {
+		if (on_list_rcu(&call->link)) {
 			spin_lock(&rxnet->call_lock);
-			list_del_init(&call->link);
+			list_del_rcu(&call->link);
 			spin_unlock(&rxnet->call_lock);
 		}
 
@@ -738,7 +738,7 @@ void rxrpc_destroy_all_calls(struct rxrpc_net *rxnet)
 			_debug("Zapping call %p", call);
 
 			rxrpc_see_call(call, rxrpc_call_see_zap);
-			list_del_init(&call->link);
+			list_del_rcu(&call->link);
 
 			pr_err("Call %p still in use (%d,%s,%lx,%lx)!\n",
 			       call, refcount_read(&call->ref),
