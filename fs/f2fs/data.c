@@ -20,6 +20,7 @@
 #include <linux/sched/signal.h>
 #include <linux/fiemap.h>
 #include <linux/iomap.h>
+#include <linux/fserror.h>
 
 #include "f2fs.h"
 #include "node.h"
@@ -177,6 +178,11 @@ static void f2fs_finish_read_bio(struct bio *bio, bool in_task)
 			f2fs_sanity_check_node_footer(F2FS_F_SB(folio),
 				folio, folio->index, NODE_TYPE_REGULAR, true))
 			bio->bi_status = BLK_STS_IOERR;
+
+		if (bio->bi_status == BLK_STS_IOERR)
+			fserror_report_io(folio->mapping->host,
+				FSERR_BUFFERED_READ, folio_pos(folio),
+				folio_size(folio), -EIO, GFP_NOWAIT);
 
 		if (finished)
 			folio_end_read(folio, bio->bi_status == BLK_STS_OK);
@@ -376,9 +382,13 @@ static void f2fs_write_end_io(struct bio *bio)
 
 		if (unlikely(bio->bi_status != BLK_STS_OK)) {
 			mapping_set_error(folio->mapping, -EIO);
-			if (type == F2FS_WB_CP_DATA)
+			fserror_report_io(folio->mapping->host,
+				FSERR_BUFFERED_WRITE, folio_pos(folio),
+				folio_size(folio), -EIO, GFP_NOWAIT);
+			if (type == F2FS_WB_CP_DATA) {
 				f2fs_stop_checkpoint(sbi, true,
 						STOP_CP_REASON_WRITE_FAIL);
+			}
 		}
 
 		if (is_node_folio(folio)) {
@@ -1744,6 +1754,7 @@ next_block:
 			err = -EFSCORRUPTED;
 			f2fs_handle_error(sbi,
 					ERROR_CORRUPTED_CLUSTER);
+			fserror_report_file_metadata(inode, err, GFP_NOFS);
 			goto sync_out;
 		}
 
