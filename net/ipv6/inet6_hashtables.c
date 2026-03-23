@@ -63,7 +63,7 @@ u32 inet6_ehashfn(const struct net *net,
 	a += (__force u32)faddr->s6_addr32[2];
 	b += (__force u32)faddr->s6_addr32[3];
 	c += (__force u32)fport;
-	__jhash_mix(a, b, c);
+	__jhash_final(a, b, c);
 
 	/* Note: We need to add @lport instead of fully hashing it.
 	 * See commits 9544d60a2605 ("inet: change lport contribution
