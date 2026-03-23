@@ -134,6 +134,8 @@ mp29502_identify_vout_divider(struct i2c_client *client, struct pmbus_driver_inf
 		return ret;
 
 	data->vout_bottom_div = FIELD_GET(GENMASK(11, 0), ret);
+	if (!data->vout_bottom_div)
+		return -EINVAL;
 
 	ret = i2c_smbus_read_word_data(client, MFR_VOUT_PROT2);
 	if (ret < 0)
@@ -160,6 +162,8 @@ mp29502_identify_ovp_divider(struct i2c_client *client, struct pmbus_driver_info
 		return ret;
 
 	data->ovp_div = FIELD_GET(GENMASK(9, 0), ret);
+	if (!data->ovp_div)
+		return -EINVAL;
 
 	return 0;
 }
