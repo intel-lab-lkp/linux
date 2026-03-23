@@ -293,9 +293,6 @@ static int mp29502_read_word_data(struct i2c_client *client, int page,
 	int ret;
 
 	switch (reg) {
-	case PMBUS_STATUS_WORD:
-		ret = -ENODATA;
-		break;
 	case PMBUS_READ_VIN:
 		/*
 		 * The MP29502 PMBUS_READ_VIN[10:0] is the vin value, the vin scale is
@@ -456,7 +453,7 @@ static int mp29502_read_word_data(struct i2c_client *client, int page,
 		ret = (ret & GENMASK(7, 0)) - MP29502_TEMP_LIMIT_OFFSET;
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 
@@ -555,7 +552,7 @@ static int mp29502_write_word_data(struct i2c_client *client, int page, int reg,
 						   word + MP29502_TEMP_LIMIT_OFFSET));
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 

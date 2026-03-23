@@ -114,25 +114,8 @@ static int mp2925_read_word_data(struct i2c_client *client, int page, int phase,
 		ret = DIV_ROUND_CLOSEST((ret & GENMASK(11, 0)) * MP2925_VOUT_OVUV_UINT,
 					MP2925_VOUT_OVUV_DIV);
 		break;
-	case PMBUS_STATUS_WORD:
-	case PMBUS_READ_VIN:
-	case PMBUS_READ_IOUT:
-	case PMBUS_READ_POUT:
-	case PMBUS_READ_PIN:
-	case PMBUS_READ_IIN:
-	case PMBUS_READ_TEMPERATURE_1:
-	case PMBUS_VIN_OV_FAULT_LIMIT:
-	case PMBUS_VIN_OV_WARN_LIMIT:
-	case PMBUS_VIN_UV_WARN_LIMIT:
-	case PMBUS_VIN_UV_FAULT_LIMIT:
-	case PMBUS_IOUT_OC_FAULT_LIMIT:
-	case PMBUS_IOUT_OC_WARN_LIMIT:
-	case PMBUS_OT_FAULT_LIMIT:
-	case PMBUS_OT_WARN_LIMIT:
-		ret = -ENODATA;
-		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 
@@ -203,7 +186,7 @@ static int mp2925_write_word_data(struct i2c_client *client, int page, int reg,
 										 ret)));
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENODATA;
 		break;
 	}
 
