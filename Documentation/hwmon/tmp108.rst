@@ -11,6 +11,13 @@ Supported chips:
 
     Datasheet: https://www.nxp.com/docs/en/data-sheet/P3T1035XUK_P3T2030XUK.pdf
 
+ * NXP P3T1084
+
+    Prefix: 'p3t1045'
+
+    Addresses scanned: none
+
+    Datasheet: https://www.nxp.com/docs/en/data-sheet/P3T1084UK.pdf
 
   * NXP P3T1085
 
