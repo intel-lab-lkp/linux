@@ -981,6 +981,31 @@ done:
 	return ret;
 }
 
+/*
+ * Mark the TD the endpoint halted on as TD_HALTED and add it to the cancelled
+ * td list, ensuring invalidate_cancelled_tds() clears the TD from xHC cache.
+ * Mark the other TDs on that bulk or interrupt endpoint as TD_TAINTED to
+ * prevent the ring from being restarted too early.
+ */
+
+static void xhci_cancel_halted_tds(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
+				   struct xhci_td *td)
+{
+	struct xhci_ring *ring;
+	struct xhci_td *tdi;
+
+	ring = xhci_urb_to_transfer_ring(xhci, td->urb);
+
+	td->cancel_status = TD_HALTED;
+	if (list_empty(&td->cancelled_td_list))
+		list_add_tail(&td->cancelled_td_list, &ep->cancelled_td_list);
+
+	list_for_each_entry(tdi, &ring->td_list, td_list) {
+		if (!tdi->cancel_status && ring->type != TYPE_CTRL)
+			tdi->cancel_status = TD_TAINTED;
+	}
+}
+
 static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 				struct xhci_virt_ep *ep,
 				struct xhci_td *td,
@@ -999,10 +1024,8 @@ static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 	/* add td to cancelled list and let reset ep handler take care of it */
 	if (reset_type == EP_HARD_RESET) {
 		ep->ep_state |= EP_HARD_CLEAR_TOGGLE;
-		if (td && list_empty(&td->cancelled_td_list)) {
-			list_add_tail(&td->cancelled_td_list, &ep->cancelled_td_list);
-			td->cancel_status = TD_HALTED;
-		}
+		if (td)
+			xhci_cancel_halted_tds(xhci, ep, td);
 	}
 
 	if (ep->ep_state & EP_HALTED) {
@@ -1079,6 +1102,7 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 			case TD_CLEARED: /* TD is already no-op */
 			case TD_CLEARING_CACHE: /* set TR deq command already queued */
 				break;
+			case TD_TAINTED:
 			case TD_DIRTY: /* TD is cached, clear it */
 			case TD_HALTED:
 			case TD_CLEARING_CACHE_DEFERRED:
@@ -1406,6 +1430,14 @@ void xhci_hc_died(struct xhci_hcd *xhci)
 		usb_hc_died(xhci_to_hcd(xhci));
 }
 
+bool next_td_is_tainted(struct xhci_ring *ring)
+{
+	struct xhci_td *td;
+
+	td = list_first_entry_or_null(&ring->td_list, struct xhci_td, td_list);
+	return td && td->cancel_status == TD_TAINTED;
+}
+
 /*
  * When we get a completion for a Set Transfer Ring Dequeue Pointer command,
  * we need to clear the set deq pending flag in the endpoint ring state, so that
@@ -1543,13 +1575,15 @@ cleanup:
 			 __func__);
 		xhci_invalidate_cancelled_tds(ep);
 		/* Try to restart the endpoint if all is done */
-		ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
+		if (!next_td_is_tainted(ep_ring))
+			ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
 		/* Start giving back any TDs invalidated above */
 		xhci_giveback_invalidated_tds(ep);
 	} else {
 		/* Restart any rings with pending URBs */
-		xhci_dbg(ep->xhci, "%s: All TDs cleared, ring doorbell\n", __func__);
-		ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
+		xhci_dbg(ep->xhci, "%s: All cancelled TDs cleared\n", __func__);
+		if (!next_td_is_tainted(ep_ring))
+			ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
 	}
 }
 

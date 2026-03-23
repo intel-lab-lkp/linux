@@ -1625,6 +1625,7 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	unsigned long flags;
 	int ret = 0;
 	unsigned int slot_id, ep_index;
+	struct xhci_ring *ring;
 	unsigned int *ep_state;
 	struct urb_priv	*urb_priv;
 	int num_tds;
@@ -1661,6 +1662,7 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	}
 
 	slot_id = urb->dev->slot_id;
+	ring = xhci_urb_to_transfer_ring(xhci, urb);
 
 	if (!HCD_HW_ACCESSIBLE(hcd)) {
 		ret = -ESHUTDOWN;
@@ -1693,6 +1695,10 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 		ret = -EINVAL;
 		goto free_priv;
 	}
+
+	ring = xhci_urb_to_transfer_ring(xhci, urb);
+	if (ring && next_td_is_tainted(ring))
+		xhci_dbg(xhci, "WARN, enqueue URB without canceling old tainted URBs\n");
 
 	switch (usb_endpoint_type(&urb->ep->desc)) {
 
@@ -3354,6 +3360,7 @@ static void xhci_endpoint_reset(struct usb_hcd *hcd,
 
 	/* Bail out if toggle is already being cleared by a endpoint reset */
 	spin_lock_irqsave(&xhci->lock, flags);
+
 	if (ep->ep_state & EP_HARD_CLEAR_TOGGLE) {
 		ep->ep_state &= ~EP_HARD_CLEAR_TOGGLE;
 		spin_unlock_irqrestore(&xhci->lock, flags);
