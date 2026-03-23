@@ -94,6 +94,7 @@ struct amd_cpudata {
 	u32	min_limit_freq;
 	u32	max_limit_freq;
 	u32	nominal_freq;
+	u32	max_freq;
 	u32	lowest_nonlinear_freq;
 
 	struct amd_aperf_mperf cur;
