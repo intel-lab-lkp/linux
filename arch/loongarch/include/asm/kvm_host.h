@@ -203,6 +203,7 @@ struct kvm_vcpu_arch {
 	/* Which auxiliary state is loaded (KVM_LARCH_*) */
 	unsigned int aux_inuse;
 	unsigned int aux_ldtype;
+	unsigned int aux_used;
 
 	/* FPU state */
 	struct loongarch_fpu fpu FPU_ALIGN;

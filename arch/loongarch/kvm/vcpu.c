@@ -239,23 +239,14 @@ static void kvm_late_check_requests(struct kvm_vcpu *vcpu)
 		}
 
 	if (kvm_check_request(KVM_REQ_AUX_LOAD, vcpu)) {
-		switch (vcpu->arch.aux_ldtype) {
-		case KVM_LARCH_FPU:
-			kvm_own_fpu(vcpu);
-			break;
-		case KVM_LARCH_LSX:
-			kvm_own_lsx(vcpu);
-			break;
-		case KVM_LARCH_LASX:
+		if (vcpu->arch.aux_ldtype & KVM_LARCH_LASX)
 			kvm_own_lasx(vcpu);
-			break;
-		case KVM_LARCH_LBT:
+		else if (vcpu->arch.aux_ldtype & KVM_LARCH_LSX)
+			kvm_own_lsx(vcpu);
+		else if (vcpu->arch.aux_ldtype & KVM_LARCH_FPU)
+			kvm_own_fpu(vcpu);
+		else if (vcpu->arch.aux_ldtype == KVM_LARCH_LBT)
 			kvm_own_lbt(vcpu);
-			break;
-		default:
-			break;
-		}
-
 		vcpu->arch.aux_ldtype = 0;
 	}
 }
@@ -958,6 +949,7 @@ static int kvm_set_one_reg(struct kvm_vcpu *vcpu,
 			break;
 		case KVM_REG_LOONGARCH_VCPU_RESET:
 			vcpu->arch.st.guest_addr = 0;
+			vcpu->arch.aux_used = 0;
 			memset(&vcpu->arch.irq_pending, 0, sizeof(vcpu->arch.irq_pending));
 			memset(&vcpu->arch.irq_clear, 0, sizeof(vcpu->arch.irq_clear));
 
@@ -1386,6 +1378,7 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu)
 
 	kvm_restore_fpu(&vcpu->arch.fpu);
 	vcpu->arch.aux_inuse |= KVM_LARCH_FPU;
+	vcpu->arch.aux_used |= KVM_LARCH_FPU;
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_FPU);
 }
 
@@ -1414,6 +1407,7 @@ int kvm_own_lsx(struct kvm_vcpu *vcpu)
 
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LSX);
 	vcpu->arch.aux_inuse |= KVM_LARCH_LSX | KVM_LARCH_FPU;
+	vcpu->arch.aux_used |= KVM_LARCH_LSX | KVM_LARCH_FPU;
 
 	return 0;
 }
@@ -1444,6 +1438,7 @@ int kvm_own_lasx(struct kvm_vcpu *vcpu)
 
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LASX);
 	vcpu->arch.aux_inuse |= KVM_LARCH_LASX | KVM_LARCH_LSX | KVM_LARCH_FPU;
+	vcpu->arch.aux_used |= KVM_LARCH_LASX | KVM_LARCH_LSX | KVM_LARCH_FPU;
 
 	return 0;
 }

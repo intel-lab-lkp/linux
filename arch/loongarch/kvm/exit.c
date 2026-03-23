@@ -754,7 +754,7 @@ static int kvm_handle_fpu_disabled(struct kvm_vcpu *vcpu, int ecode)
 		return RESUME_HOST;
 	}
 
-	vcpu->arch.aux_ldtype = KVM_LARCH_FPU;
+	vcpu->arch.aux_ldtype = vcpu->arch.aux_used | KVM_LARCH_FPU;
 	kvm_make_request(KVM_REQ_AUX_LOAD, vcpu);
 
 	return RESUME_GUEST;
@@ -796,7 +796,7 @@ static int kvm_handle_lsx_disabled(struct kvm_vcpu *vcpu, int ecode)
 	if (!kvm_guest_has_lsx(&vcpu->arch))
 		kvm_queue_exception(vcpu, EXCCODE_INE, 0);
 	else {
-		vcpu->arch.aux_ldtype = KVM_LARCH_LSX;
+		vcpu->arch.aux_ldtype = vcpu->arch.aux_used | KVM_LARCH_LSX;
 		kvm_make_request(KVM_REQ_AUX_LOAD, vcpu);
 	}
 
@@ -816,7 +816,7 @@ static int kvm_handle_lasx_disabled(struct kvm_vcpu *vcpu, int ecode)
 	if (!kvm_guest_has_lasx(&vcpu->arch))
 		kvm_queue_exception(vcpu, EXCCODE_INE, 0);
 	else {
-		vcpu->arch.aux_ldtype = KVM_LARCH_LASX;
+		vcpu->arch.aux_ldtype = vcpu->arch.aux_used | KVM_LARCH_LASX;
 		kvm_make_request(KVM_REQ_AUX_LOAD, vcpu);
 	}
 
