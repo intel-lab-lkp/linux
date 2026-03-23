@@ -107,7 +107,7 @@ u8 hal_com_config_channel_plan(
 	pHalData->bDisableSWChannelPlan = false;
 	chnlPlan = def_channel_plan;
 
-	if (0xFF == hw_channel_plan)
+	if (hw_channel_plan == 0xFF)
 		AutoLoadFail = true;
 
 	if (!AutoLoadFail) {
@@ -122,10 +122,8 @@ u8 hal_com_config_channel_plan(
 		}
 	}
 
-	if (
-		(false == pHalData->bDisableSWChannelPlan) &&
-		rtw_is_channel_plan_valid(sw_channel_plan)
-	)
+	if (!pHalData->bDisableSWChannelPlan &&
+	    rtw_is_channel_plan_valid(sw_channel_plan))
 		chnlPlan = sw_channel_plan;
 
 	return chnlPlan;
