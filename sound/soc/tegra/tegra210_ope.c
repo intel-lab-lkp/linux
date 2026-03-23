@@ -328,24 +328,19 @@ static int tegra210_ope_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, ope);
 
 	err = tegra210_peq_regmap_init(pdev);
-	if (err < 0) {
-		dev_err(dev, "PEQ init failed\n");
-		return err;
-	}
+	if (err < 0)
+		return dev_err_probe(dev, err, "PEQ init failed\n");
 
 	err = tegra210_mbdrc_regmap_init(pdev);
-	if (err < 0) {
-		dev_err(dev, "MBDRC init failed\n");
-		return err;
-	}
+	if (err < 0)
+		return dev_err_probe(dev, err, "MBDRC init failed\n");
 
 	err = devm_snd_soc_register_component(dev, &tegra210_ope_cmpnt,
 					      tegra210_ope_dais,
 					      ARRAY_SIZE(tegra210_ope_dais));
-	if (err) {
-		dev_err(dev, "can't register OPE component, err: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "can't register OPE component\n");
 
 	pm_runtime_enable(dev);
 
