@@ -56,6 +56,11 @@ properties:
 
   ranges: true
 
+  pbias-supply:
+    description:
+      It is used to specify the voltage regulator that provides the bias
+      voltage for certain analog or I/O pads.
+
 patternProperties:
   "^port[0-3]-mode$":
     $ref: /schemas/types.yaml#/definitions/string
