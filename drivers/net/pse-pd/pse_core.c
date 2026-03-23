@@ -12,6 +12,7 @@
 #include <linux/phy.h>
 #include <linux/pse-pd/pse.h>
 #include <linux/regulator/driver.h>
+#include <linux/leds.h>
 #include <linux/regulator/machine.h>
 #include <linux/rtnetlink.h>
 #include <net/net_trackers.h>
@@ -1037,6 +1038,107 @@ static void pse_send_ntf_worker(struct work_struct *work)
 	}
 }
 
+#if IS_ENABLED(CONFIG_LEDS_TRIGGERS)
+/**
+ * pse_led_update - Update LED triggers for a PI based on current state
+ * @pcdev: PSE controller device
+ * @id: PI index
+ *
+ * Queries the current power status and admin state of the PI and
+ * fires LED trigger events on state changes. Called from the
+ * notification path whenever any event occurs for this PI.
+ *
+ * Must be called with pcdev->lock held.
+ */
+static void pse_led_update(struct pse_controller_dev *pcdev, int id)
+{
+	struct pse_pi_led_triggers *trigs;
+	struct pse_pw_status pw_status = {};
+	struct pse_admin_state admin_state = {};
+	bool delivering, enabled;
+
+	if (!pcdev->pi_led_trigs)
+		return;
+
+	trigs = &pcdev->pi_led_trigs[id];
+	if (!trigs->delivering.name)
+		return;
+
+	if (pcdev->ops->pi_get_pw_status(pcdev, id, &pw_status))
+		return;
+	if (pcdev->ops->pi_get_admin_state(pcdev, id, &admin_state))
+		return;
+
+	delivering = pw_status.c33_pw_status ==
+		ETHTOOL_C33_PSE_PW_D_STATUS_DELIVERING;
+	enabled = admin_state.c33_admin_state ==
+		ETHTOOL_C33_PSE_ADMIN_STATE_ENABLED;
+
+	if (trigs->last_delivering != delivering) {
+		trigs->last_delivering = delivering;
+		led_trigger_event(&trigs->delivering,
+				  delivering ? LED_FULL : LED_OFF);
+	}
+
+	if (trigs->last_enabled != enabled) {
+		trigs->last_enabled = enabled;
+		led_trigger_event(&trigs->enabled,
+				  enabled ? LED_FULL : LED_OFF);
+	}
+}
+
+static int pse_led_triggers_register(struct pse_controller_dev *pcdev)
+{
+	struct device *dev = pcdev->dev;
+	const char *node_name;
+	int i, ret;
+
+	node_name = dev->of_node ? dev->of_node->name : dev_name(dev);
+
+	pcdev->pi_led_trigs = devm_kcalloc(dev, pcdev->nr_lines,
+					   sizeof(*pcdev->pi_led_trigs),
+					   GFP_KERNEL);
+	if (!pcdev->pi_led_trigs)
+		return -ENOMEM;
+
+	for (i = 0; i < pcdev->nr_lines; i++) {
+		struct pse_pi_led_triggers *trigs = &pcdev->pi_led_trigs[i];
+
+		/* Skip PIs not described in device tree */
+		if (!pcdev->no_of_pse_pi && !pcdev->pi[i].np)
+			continue;
+
+		trigs->delivering.name = devm_kasprintf(dev, GFP_KERNEL,
+							"%s:port%d:delivering",
+							node_name, i);
+		if (!trigs->delivering.name)
+			return -ENOMEM;
+
+		ret = devm_led_trigger_register(dev, &trigs->delivering);
+		if (ret)
+			return ret;
+
+		trigs->enabled.name = devm_kasprintf(dev, GFP_KERNEL,
+						     "%s:port%d:enabled",
+						     node_name, i);
+		if (!trigs->enabled.name)
+			return -ENOMEM;
+
+		ret = devm_led_trigger_register(dev, &trigs->enabled);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+#else
+static inline void pse_led_update(struct pse_controller_dev *pcdev, int id) {}
+static int pse_led_triggers_register(struct pse_controller_dev *pcdev)
+{
+	return 0;
+}
+#endif /* CONFIG_LEDS_TRIGGERS */
+
 /**
  * pse_controller_register - register a PSE controller device
  * @pcdev: a pointer to the initialized PSE controller device
@@ -1110,6 +1212,14 @@ int pse_controller_register(struct pse_controller_dev *pcdev)
 	mutex_lock(&pse_list_mutex);
 	list_add(&pcdev->list, &pse_controller_list);
 	mutex_unlock(&pse_list_mutex);
+
+	ret = pse_led_triggers_register(pcdev);
+	if (ret) {
+		dev_warn(pcdev->dev, "Failed to register LED triggers: %d\n",
+			 ret);
+		/* Ensure pse_led_update() is a no-op on partial failure */
+		pcdev->pi_led_trigs = NULL;
+	}
 
 	return 0;
 }
@@ -1266,7 +1376,14 @@ static void pse_handle_events(struct pse_controller_dev *pcdev,
 		struct pse_ntf ntf = {};
 		int ret;
 
-		/* Do nothing PI not described */
+		/* Update LEDs for described PIs regardless of consumer state.
+		 * LED triggers are registered at controller init, before any
+		 * PHY claims a PSE control, so rdev may still be NULL here.
+		 */
+		if (pcdev->no_of_pse_pi || pcdev->pi[i].np)
+			pse_led_update(pcdev, i);
+
+		/* Skip regulator/netlink path for PIs without consumers */
 		if (!pcdev->pi[i].rdev)
 			continue;
 
