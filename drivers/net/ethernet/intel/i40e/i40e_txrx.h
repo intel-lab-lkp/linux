@@ -4,7 +4,7 @@
 #ifndef _I40E_TXRX_H_
 #define _I40E_TXRX_H_
 
-#include <linux/net/intel/libie/pctype.h>
+#include <linux/intel/libie/pctype.h>
 #include <net/xdp.h>
 #include "i40e_type.h"
 
