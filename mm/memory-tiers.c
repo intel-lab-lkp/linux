@@ -51,18 +51,19 @@ static const struct bus_type memory_tier_subsys = {
 	.dev_name = "memory_tier",
 };
 
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_NUMA_BALANCING_TIERING
 /**
- * folio_use_access_time - check if a folio reuses cpupid for page access time
+ * folio_is_promo_candidate - check if the folio qualifies for promotion
+ *
  * @folio: folio to check
  *
- * folio's _last_cpupid field is repurposed by memory tiering. In memory
- * tiering mode, cpupid of slow memory folio (not toptier memory) is used to
- * record page access time.
+ * Checks if NUMA Balancing tiering mode is set and the folio belongs
+ * to lower tier. If so, it qualifies for promotion to toptier when
+ * it is categorized as hot.
  *
- * Return: the folio _last_cpupid is used to record page access time
+ * Return: True if the above condition is met, else False.
  */
-bool folio_use_access_time(struct folio *folio)
+bool folio_is_promo_candidate(struct folio *folio)
 {
 	return (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) &&
 	       !node_is_toptier(folio_nid(folio));

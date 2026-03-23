@@ -75,6 +75,7 @@
 #include <linux/perf_event.h>
 #include <linux/ptrace.h>
 #include <linux/vmalloc.h>
+#include <linux/pghot.h>
 #include <linux/sched/sysctl.h>
 #include <linux/pgalloc.h>
 #include <linux/uaccess.h>
@@ -5968,10 +5969,9 @@ int numa_migrate_check(struct folio *folio, struct vm_fault *vmf,
 	if (folio_maybe_mapped_shared(folio) && (vma->vm_flags & VM_SHARED))
 		*flags |= TNF_SHARED;
 	/*
-	 * For memory tiering mode, cpupid of slow memory page is used
-	 * to record page access time.  So use default value.
+	 * For memory tiering mode, last_cpupid is unused. So use default value.
 	 */
-	if (folio_use_access_time(folio))
+	if (folio_is_promo_candidate(folio))
 		*last_cpupid = (-1 & LAST_CPUPID_MASK);
 	else
 		*last_cpupid = folio_last_cpupid(folio);
@@ -6052,6 +6052,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	int nid = NUMA_NO_NODE;
 	bool writable = false, ignore_writable = false;
 	bool pte_write_upgrade = vma_wants_manual_pte_write_upgrade(vma);
+	bool needs_promotion = false;
 	int last_cpupid;
 	int target_nid;
 	pte_t pte, old_pte;
@@ -6086,16 +6087,31 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 		goto out_map;
 
 	nid = folio_nid(folio);
+	needs_promotion = folio_is_promo_candidate(folio);
 	nr_pages = folio_nr_pages(folio);
 
 	target_nid = numa_migrate_check(folio, vmf, vmf->address, &flags,
 					writable, &last_cpupid);
 	if (target_nid == NUMA_NO_NODE)
 		goto out_map;
-	if (migrate_misplaced_folio_prepare(folio, vma, target_nid)) {
+
+	if (needs_promotion) {
+		/*
+		 * Hot page promotion, mode=NUMA_BALANCING_MEMORY_TIERING.
+		 * Isolation and migration are handled by pghot.
+		 */
+		writable = false;
+		ignore_writable = true;
+		nid = target_nid;
+		goto out_map;
+	}
+
+	/* Balancing b/n toptier nodes, mode=NUMA_BALANCING_NORMAL */
+	if (migrate_misplaced_folio_prepare(folio, vmf->vma, target_nid)) {
 		flags |= TNF_MIGRATE_FAIL;
 		goto out_map;
 	}
+
 	/* The folio is isolated and isolation code holds a folio reference. */
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 	writable = false;
@@ -6110,7 +6126,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	}
 
 	flags |= TNF_MIGRATE_FAIL;
-	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+	vmf->pte = pte_offset_map_lock(vmf->vma->vm_mm, vmf->pmd,
 				       vmf->address, &vmf->ptl);
 	if (unlikely(!vmf->pte))
 		return 0;
@@ -6118,6 +6134,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 		return 0;
 	}
+
 out_map:
 	/*
 	 * Make it present again, depending on how arch implements
@@ -6131,8 +6148,13 @@ out_map:
 					    writable);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 
-	if (nid != NUMA_NO_NODE)
-		task_numa_fault(last_cpupid, nid, nr_pages, flags);
+	if (nid != NUMA_NO_NODE) {
+		if (needs_promotion)
+			pghot_record_access(folio_pfn(folio), nid,
+					    PGHOT_HINTFAULTS, jiffies);
+		else
+			task_numa_fault(last_cpupid, nid, nr_pages, flags);
+	}
 	return 0;
 }
 
