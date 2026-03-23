@@ -236,9 +236,27 @@ static int __init aarch32_alloc_vdso_pages(void)
 
 	ret = aarch32_alloc_sigpage();
 	if (ret)
-		return ret;
+		goto free_vdso;
 
-	return aarch32_alloc_kuser_vdso_page();
+	ret = aarch32_alloc_kuser_vdso_page();
+	if (ret)
+		goto free_sig;
+
+	return 0;
+
+free_sig:
+	if (aarch32_sig_page) {
+		__free_page(aarch32_sig_page);
+		aarch32_sig_page = NULL;
+	}
+free_vdso:
+#ifdef CONFIG_COMPAT_VDSO
+	if (vdso_info[VDSO_ABI_AA32].cm && vdso_info[VDSO_ABI_AA32].cm->pages) {
+		kfree(vdso_info[VDSO_ABI_AA32].cm->pages);
+		vdso_info[VDSO_ABI_AA32].cm->pages = NULL;
+	}
+#endif
+	return ret;
 }
 arch_initcall(aarch32_alloc_vdso_pages);
 
