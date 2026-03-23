@@ -8692,6 +8692,7 @@ static int bnxt_hwrm_func_backing_store_qcaps_v2(struct bnxt *bp)
 		u8 init_val, init_off, i;
 		u32 max_entries;
 		u16 entry_size;
+		u16 resp_type;
 		__le32 *p;
 		u32 flags;
 
@@ -8715,7 +8716,15 @@ static int bnxt_hwrm_func_backing_store_qcaps_v2(struct bnxt *bp)
 			else
 				continue;
 		}
-		ctxm->type = le16_to_cpu(resp->type);
+		resp_type = le16_to_cpu(resp->type);
+		if (resp_type >= BNXT_CTX_V2_MAX) {
+			netdev_warn(bp->dev,
+				    "invalid backing store type %u returned by firmware\n",
+				    resp_type);
+			rc = -EINVAL;
+			goto ctx_done;
+		}
+		ctxm->type = resp_type;
 		ctxm->entry_size = entry_size;
 		ctxm->flags = flags;
 		ctxm->instance_bmap = le32_to_cpu(resp->instance_bit_map);
