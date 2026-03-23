@@ -54,6 +54,88 @@ macro_rules! impl_from_enum_to_u8 {
     };
 }
 
+/// Creates an enum type associated to a `Bounded`, with a `From` conversion to the associated
+/// `Bounded` and either a `TryFrom` or `From` converting from the associated `Bounded`.
+// TODO[FPRI]: This is a temporary solution to be replaced with the corresponding derive macros
+// once they land.
+#[expect(unused)]
+macro_rules! bounded_enum {
+    (
+        $(#[doc = $enum_doc:expr])*
+        enum $enum_type:ident with $from_impl:ident<Bounded<$width:ty, $length:literal>> {
+            $( $(#[doc = $variant_doc:expr])* $variant:ident = $value:expr),* $(,)*
+        }
+    ) => {
+        $(#[doc = $enum_doc])*
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        pub(crate) enum $enum_type {
+            $(
+                $(#[doc = $variant_doc])*
+                $variant = $value
+            ),*
+        }
+
+        impl From<$enum_type> for Bounded<$width, $length> {
+            fn from(value: $enum_type) -> Self {
+                match value {
+                    $($enum_type::$variant => Bounded::<$width, _>::new::<$value>()),*
+                }
+            }
+        }
+
+        bounded_enum!(@impl_from $enum_type with $from_impl<Bounded<$width, $length>> {
+            $($variant = $value),*
+        });
+    };
+
+    // `TryFrom` implementation from associated `Bounded` to enum type.
+    (@impl_from $enum_type:ident with TryFrom<Bounded<$width:ty, $length:literal>> {
+        $($variant:ident = $value:expr),* $(,)*
+    }) => {
+        impl TryFrom<Bounded<$width, $length>> for $enum_type {
+            type Error = Error;
+
+            fn try_from(value: Bounded<$width, $length>) -> Result<Self> {
+                match value.get() {
+                    $(
+                        $value => Ok($enum_type::$variant),
+                    )*
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+    };
+
+    // `From` implementation from associated `Bounded` to enum type. Triggers a `build_error` if
+    // all possible values of the `Bounded` are not covered by the enum type.
+    (@impl_from $enum_type:ident with From<Bounded<$width:ty, $length:literal>> {
+        $($variant:ident = $value:expr),* $(,)*
+    }) => {
+        impl From<Bounded<$width, $length>> for $enum_type {
+            fn from(value: Bounded<$width, $length>) -> Self {
+                $(
+                    // Ensure all enum values fit into the `Bounded` type.
+                    const { assert!(
+                        $value < (1 << $length),
+                        "Enum variant doesn't fit into assigned `Bounded` type."
+                    ); }
+                )*
+
+                // Makes the compiler optimizer aware of the possible range of values.
+                let value = value.get() & ((1 << $length) - 1);
+                match value {
+                    $(
+                        $value => $enum_type::$variant,
+                    )*
+                    // We land here if the match didn't cover all possible values for the
+                    // `Bounded`.
+                    _ => build_error!("Enum doesn't cover all values of the `Bounded` type."),
+                }
+            }
+        }
+    }
+}
+
 /// Revision number of a falcon core, used in the [`crate::regs::NV_PFALCON_FALCON_HWCFG1`]
 /// register.
 #[repr(u8)]
