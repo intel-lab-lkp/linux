@@ -95,6 +95,10 @@
 #define O_NDELAY	O_NONBLOCK
 #endif
 
+#define DENY_UPGRADES		0x01
+#define READ_UPGRADABLE		(0x02 | DENY_UPGRADES)
+#define WRITE_UPGRADABLE	(0x04 | DENY_UPGRADES)
+
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get close_on_exec */
 #define F_SETFD		2	/* set/clear close_on_exec */

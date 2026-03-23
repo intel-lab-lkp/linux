@@ -218,7 +218,8 @@ static int get_task_root(struct task_struct *task, struct path *root)
 	return result;
 }
 
-static int proc_cwd_link(struct dentry *dentry, struct path *path)
+static int proc_cwd_link(struct dentry *dentry, struct path *path,
+			 struct jump_how *jump_how)
 {
 	struct task_struct *task = get_proc_task(d_inode(dentry));
 	int result = -ENOENT;
@@ -227,6 +228,7 @@ static int proc_cwd_link(struct dentry *dentry, struct path *path)
 		task_lock(task);
 		if (task->fs) {
 			get_fs_pwd(task->fs, path);
+			*jump_how = JUMP_HOW_UNRESTRICTED;
 			result = 0;
 		}
 		task_unlock(task);
@@ -235,7 +237,8 @@ static int proc_cwd_link(struct dentry *dentry, struct path *path)
 	return result;
 }
 
-static int proc_root_link(struct dentry *dentry, struct path *path)
+static int proc_root_link(struct dentry *dentry, struct path *path,
+			  struct jump_how *jump_how)
 {
 	struct task_struct *task = get_proc_task(d_inode(dentry));
 	int result = -ENOENT;
@@ -243,6 +246,7 @@ static int proc_root_link(struct dentry *dentry, struct path *path)
 	if (task) {
 		result = get_task_root(task, path);
 		put_task_struct(task);
+		*jump_how = JUMP_HOW_UNRESTRICTED;
 	}
 	return result;
 }
@@ -1777,7 +1781,8 @@ static const struct file_operations proc_pid_set_comm_operations = {
 	.release	= single_release,
 };
 
-static int proc_exe_link(struct dentry *dentry, struct path *exe_path)
+static int proc_exe_link(struct dentry *dentry, struct path *exe_path,
+			 struct jump_how *jump_how)
 {
 	struct task_struct *task;
 	struct file *exe_file;
@@ -1789,6 +1794,7 @@ static int proc_exe_link(struct dentry *dentry, struct path *exe_path)
 	put_task_struct(task);
 	if (exe_file) {
 		*exe_path = exe_file->f_path;
+		*jump_how = JUMP_HOW_UNRESTRICTED;
 		path_get(&exe_file->f_path);
 		fput(exe_file);
 		return 0;
@@ -1801,6 +1807,7 @@ static const char *proc_pid_get_link(struct dentry *dentry,
 				     struct delayed_call *done)
 {
 	struct path path;
+	struct jump_how jump_how;
 	int error = -EACCES;
 
 	if (!dentry)
@@ -1810,11 +1817,11 @@ static const char *proc_pid_get_link(struct dentry *dentry,
 	if (!proc_fd_access_allowed(inode))
 		goto out;
 
-	error = PROC_I(inode)->op.proc_get_link(dentry, &path);
+	error = PROC_I(inode)->op.proc_get_link(dentry, &path, &jump_how);
 	if (error)
 		goto out;
 
-	error = nd_jump_link(&path);
+	error = nd_jump_link_how(&path, jump_how);
 out:
 	return ERR_PTR(error);
 }
@@ -1848,12 +1855,13 @@ static int proc_pid_readlink(struct dentry * dentry, char __user * buffer, int b
 	int error = -EACCES;
 	struct inode *inode = d_inode(dentry);
 	struct path path;
+	struct jump_how jump_how;
 
 	/* Are we allowed to snoop on the tasks file descriptors? */
 	if (!proc_fd_access_allowed(inode))
 		goto out;
 
-	error = PROC_I(inode)->op.proc_get_link(dentry, &path);
+	error = PROC_I(inode)->op.proc_get_link(dentry, &path, &jump_how);
 	if (error)
 		goto out;
 
@@ -2250,7 +2258,8 @@ static const struct dentry_operations tid_map_files_dentry_operations = {
 	.d_delete	= pid_delete_dentry,
 };
 
-static int map_files_get_link(struct dentry *dentry, struct path *path)
+static int map_files_get_link(struct dentry *dentry, struct path *path,
+			      struct jump_how *jump_how)
 {
 	unsigned long vm_start, vm_end;
 	struct vm_area_struct *vma;
@@ -2279,6 +2288,7 @@ static int map_files_get_link(struct dentry *dentry, struct path *path)
 	rc = -ENOENT;
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (vma && vma->vm_file) {
+		*jump_how = JUMP_HOW_UNRESTRICTED;
 		*path = *file_user_path(vma->vm_file);
 		path_get(path);
 		rc = 0;
