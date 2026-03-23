@@ -85,24 +85,6 @@ unsigned long huge_anon_orders_madvise __read_mostly;
 unsigned long huge_anon_orders_inherit __read_mostly;
 static bool anon_orders_configured __initdata;
 
-static inline bool file_thp_enabled(struct vm_area_struct *vma)
-{
-	struct inode *inode;
-
-	if (!IS_ENABLED(CONFIG_READ_ONLY_THP_FOR_FS))
-		return false;
-
-	if (!vma->vm_file)
-		return false;
-
-	inode = file_inode(vma->vm_file);
-
-	if (IS_ANON_FILE(inode))
-		return false;
-
-	return !inode_is_open_for_write(inode) && S_ISREG(inode->i_mode);
-}
-
 /* If returns true, we are unable to access the VMA's folios. */
 static bool vma_is_special_huge(const struct vm_area_struct *vma)
 {
@@ -198,9 +180,6 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 		 * in fault path.
 		 */
 		if (((in_pf || smaps)) && vma->vm_ops->huge_fault)
-			return orders;
-		/* Only regular file is valid in collapse path */
-		if (((!in_pf || smaps)) && file_thp_enabled(vma))
 			return orders;
 		return 0;
 	}
