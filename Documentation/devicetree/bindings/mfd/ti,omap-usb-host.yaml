@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/ti,omap-usb-host.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: OMAP HS USB Host
+
+maintainers:
+  - Thomas Richard <thomas.richard@bootlin.com>
+
+description: |
+  description
+
+properties:
+  compatible:
+    const: ti,usbhs-host
+
+  reg:
+    maxItems: 1
+
+  ti,hwmods:
+    const: usb_host_hs
+
+  num-ports:
+    description:
+      number of USB ports. Usually this is automatically detected from the IP's
+      revision register but can be overridden by specifying this property. A
+      maximum of 3 ports are supported at the moment.
+    maximum: 3
+
+  single-ulpi-bypass:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Must be present if the controller contains a single ULPI bypass control
+      bit. e.g. OMAP3 silicon <= ES2.1ULPI bypass control bit.
+      e.g. OMAP3 silicon <= ES2.1.
+
+  clocks:
+    description: clock-specifier
+
+  clock-names:
+    oneOf:
+      - items:
+          - const: usbhost_120m_fck
+      - items:
+          - const: refclk_60m_int
+          - const: refclk_60m_ext_p1
+          - const: refclk_60m_ext_p2
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 1
+
+  ranges: true
+
+patternProperties:
+  "^port[0-3]-mode$":
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      String specifying the port mode for port N, where N can be from 1 to 3.
+      the port mode is not specified, that port is treated as unused. When
+      specified, it must be one of the following.
+    enum:
+      - ehci-phy
+      - ehci-tll
+      - ehci-hsic
+      - ohci-phy-6pin-datse0
+      - ohci-phy-6pin-dpdm
+      - ohci-phy-3pin-datse0
+      - ohci-phy-4pin-dpdm
+      - ohci-tll-6pin-datse0
+      - ohci-tll-6pin-dpdm
+      - ohci-tll-3pin-datse0
+      - ohci-tll-4pin-dpdm
+      - ohci-tll-2pin-datse0
+      - ohci-tll-2pin-dpdm
+
+  "^usb@":
+    type: object
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - if:
+      patternProperties:
+        "^usb@": true
+    then:
+      required:
+        - ranges
+        - "#address-cells"
+        - "#size-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    bus {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        usbhshost: usbhshost@4a064000 {
+            compatible = "ti,usbhs-host";
+            reg = <0x4a064000 0x800>;
+            ti,hwmods = "usb_host_hs";
+            port1-mode = "ehci-phy";
+            port2-mode = "ehci-tll";
+            port3-mode = "ehci-phy";
+            #address-cells = <1>;
+            #size-cells = <1>;
+            ranges;
+
+            usbhsohci: usb@4a064800 {
+                compatible = "ti,ohci-omap3";
+                reg = <0x4a064800 0x400>;
+                interrupt-parent = <&gic>;
+                interrupts = <0 76 0x4>;
+            };
+
+            usbhsehci: usb@4a064c00 {
+                compatible = "ti,ehci-omap";
+                reg = <0x4a064c00 0x400>;
+                interrupt-parent = <&gic>;
+                interrupts = <0 77 0x4>;
+            };
+        };
+    };
