@@ -1022,6 +1022,12 @@ static int rproc_handle_resources(struct rproc *rproc,
 	if (!rproc->table_ptr)
 		return 0;
 
+	if (struct_size(rproc->table_ptr, offset,
+			rproc->table_ptr->num) > rproc->table_sz) {
+		dev_err(dev, "resource table is truncated\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < rproc->table_ptr->num; i++) {
 		int offset = rproc->table_ptr->offset[i];
 		struct fw_rsc_hdr *hdr = (void *)rproc->table_ptr + offset;
