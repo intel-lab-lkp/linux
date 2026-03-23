@@ -211,4 +211,34 @@ static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg,
 #define XADC_THRESHOLD_VCCPAUX_MIN	0xe
 #define XADC_THRESHOLD_VCCODDR_MIN	0xf
 
+/*
+ * The XADC hardware supports a samplerate of up to 1MSPS. Unfortunately it does
+ * not have a hardware FIFO. Which means an interrupt is generated for each
+ * conversion sequence. At 1MSPS sample rate the CPU in ZYNQ7000 is completely
+ * overloaded by the interrupts that it soft-lockups. For this reason the driver
+ * limits the maximum samplerate 150kSPS. At this rate the CPU is fairly busy,
+ * but still responsive.
+ */
+#define XADC_MAX_SAMPLERATE 150000
+
+#define XADC_FLAGS_BUFFERED BIT(0)
+#define XADC_FLAGS_IRQ_OPTIONAL BIT(1)
+
+/* AXI register definitions needed by core */
+#define XADC_AXI_REG_IPISR		0x60
+#define XADC_AXI_REG_IPIER		0x68
+#define XADC_AXI_INT_EOS		BIT(4)
+
+void xadc_write_reg(struct xadc *xadc, unsigned int reg, uint32_t val);
+void xadc_read_reg(struct xadc *xadc, unsigned int reg, uint32_t *val);
+struct iio_dev *xadc_device_setup(struct device *dev, int size,
+				  const struct xadc_ops **ops);
+int xadc_device_configure(struct device *dev, struct iio_dev *indio_dev,
+			  int irq, unsigned int *conf0, unsigned int *bipolar_mask);
+int xadc_read_samplerate(struct xadc *xadc);
+int xadc_write_samplerate(struct xadc *xadc, int val);
+int xadc_setup_buffer_and_triggers(struct device *dev, struct iio_dev *indio_dev,
+				   struct xadc *xadc, int irq);
+int xadc_postdisable(struct iio_dev *indio_dev);
+
 #endif
