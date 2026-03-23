@@ -43,7 +43,19 @@
 	};
 };
 
+&can0 {
+	status = "okay";
+};
+
+&can1 {
+	status = "okay";
+};
+
 &irqsteer_coss {
+	status = "okay";
+};
+
+&irqsteer_rcu {
 	status = "okay";
 };
 
