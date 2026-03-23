@@ -484,8 +484,11 @@ static int exfat_utf16_to_utf8(struct super_block *sb,
 	const unsigned short *uniname = p_uniname->name;
 
 	/* always len >= 0 */
+	if (buflen <= 0)
+		return 0;
+
 	len = utf16s_to_utf8s(uniname, MAX_NAME_LENGTH, UTF16_HOST_ENDIAN,
-		p_cstring, buflen);
+		p_cstring, buflen - 1);
 	p_cstring[len] = '\0';
 	return len;
 }
