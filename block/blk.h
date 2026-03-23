@@ -23,7 +23,7 @@ struct elv_change_ctx;
 #define BLK_DEF_MAX_SECTORS_CAP	(SZ_4M >> SECTOR_SHIFT)
 
 #define	BLK_DEV_MAX_SECTORS	(LLONG_MAX >> 9)
-#define	BLK_MIN_SEGMENT_SIZE	4096
+#define	BLK_MIN_SEGMENT_SIZE	512
 
 /* Max future timer expiry for timeouts */
 #define BLK_MAX_TIMEOUT		(5 * HZ)
