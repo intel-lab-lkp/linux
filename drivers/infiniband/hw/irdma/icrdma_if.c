@@ -2,7 +2,7 @@
 /* Copyright (c) 2015 - 2024 Intel Corporation */
 
 #include "main.h"
-#include <linux/net/intel/iidc_rdma_ice.h>
+#include <linux/intel/iidc_rdma_ice.h>
 
 static void icrdma_prep_tc_change(struct irdma_device *iwdev)
 {
