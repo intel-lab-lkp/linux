@@ -433,7 +433,7 @@ invalid:
 
 nla_put_failure:
 	kfree_skb(skb_out);
-	/* Fall through */
+	fallthrough;
 
 fail:
 	rcu_read_unlock();
@@ -524,7 +524,7 @@ invalid:
 
 nla_put_failure:
 	nlmsg_free(skb_out);
-	/* Fall through */
+	fallthrough;
 
 fail:
 	rcu_read_unlock();
