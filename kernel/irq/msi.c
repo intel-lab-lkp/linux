@@ -1133,6 +1133,28 @@ void msi_remove_device_irq_domain(struct device *dev, unsigned int domid)
 	kfree(container_of(info, struct msi_domain_template, info));
 }
 
+int msi_domain_update_hwsize(struct device *dev, unsigned int domid,
+			     unsigned int hwsize_new)
+{
+	struct msi_domain_info *info;
+	struct irq_domain *domain;
+
+	if (hwsize_new > MSI_XA_DOMAIN_SIZE)
+		return -EINVAL;
+	if (!hwsize_new)
+		hwsize_new = MSI_XA_DOMAIN_SIZE;
+
+	domain = msi_get_device_domain(dev, domid);
+	if (!domain)
+		return -ENODEV;
+
+	info = domain->host_data;
+	if (hwsize_new != info->hwsize)
+		info->hwsize = hwsize_new;
+
+	return 0;
+}
+
 /**
  * msi_match_device_irq_domain - Match a device irq domain against a bus token
  * @dev:	Pointer to the device
