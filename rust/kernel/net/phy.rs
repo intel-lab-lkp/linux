@@ -6,7 +6,7 @@
 //!
 //! C headers: [`include/linux/phy.h`](srctree/include/linux/phy.h).
 
-use crate::{device_id::RawDeviceId, error::*, prelude::*, types::Opaque};
+use crate::{device_id::RawDeviceId, error::*, irq::IrqReturn, prelude::*, types::Opaque};
 use core::{marker::PhantomData, ptr::addr_of_mut};
 
 pub mod reg;
@@ -211,6 +211,20 @@ impl Device {
         unsafe { (*phydev).interface }
     }
 
+    /// Returns `true` if PHY interrupts are enabled.
+    ///
+    /// This reflects the `phydev->interrupts` field which is set by the PHY
+    /// core before calling [`Driver::config_intr`] to indicate whether
+    /// interrupts should be enabled or disabled.
+    pub fn is_interrupts_enabled(&self) -> bool {
+        // TODO: the code to access the bit field will be replaced with automatically
+        // generated code by bindgen when it becomes possible.
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        let bit_field = unsafe { &(*self.0.get())._bitfield_1 };
+        bit_field.get(18, 1) == 1
+    }
+
     /// Gets the PHY's IRQ number.
     pub fn irq(&self) -> i32 {
         let phydev = self.0.get();
@@ -358,6 +372,29 @@ impl Device {
         // So it's just an FFI call.
         to_result(unsafe { bindings::genphy_read_abilities(phydev) })
     }
+
+    /// Triggers the PHY state machine to run.
+    ///
+    /// Used in interrupt handlers to schedule a state machine update
+    /// after processing an interrupt event.
+    pub fn trigger_machine(&mut self) {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        unsafe { bindings::phy_trigger_machine(phydev) };
+    }
+
+    /// Reports a PHY error and moves the state machine to the error state.
+    ///
+    /// Used in interrupt handlers when a register read fails. This will
+    /// produce a kernel `WARN_ON`. Must be called with `phy_device->lock`
+    /// held (which is the case inside [`Driver::handle_interrupt`]).
+    pub fn phy_error(&mut self) {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        unsafe { bindings::phy_error(phydev) };
+    }
 }
 
 impl AsRef<kernel::device::Device> for Device {
@@ -393,8 +430,9 @@ impl<T: Driver> Adapter<T> {
     /// `phydev` must be passed by the corresponding callback in `phy_driver`.
     unsafe extern "C" fn config_init_callback(phydev: *mut bindings::phy_device) -> c_int {
         from_result(|| {
-            // SAFETY: The C core calls config_init with the PHY mutex held
-            // (from phy_init_hw), so the accessors on `Device` are okay to call.
+            // SAFETY: This callback is called only in contexts
+            // where we hold `phy_device->lock`, so the accessors on
+            // `Device` are okay to call.
             let dev = unsafe { Device::from_raw(phydev) };
             T::config_init(dev)?;
             Ok(0)
@@ -507,6 +545,30 @@ impl<T: Driver> Adapter<T> {
     /// # Safety
     ///
     /// `phydev` must be passed by the corresponding callback in `phy_driver`.
+    unsafe extern "C" fn config_intr_callback(phydev: *mut bindings::phy_device) -> c_int {
+        from_result(|| {
+            // SAFETY: This callback is called only in contexts
+            // where we hold `phy_device->lock`, so the accessors on
+            // `Device` are okay to call.
+            let dev = unsafe { Device::from_raw(phydev) };
+            T::config_intr(dev)?;
+            Ok(0)
+        })
+    }
+
+    /// # Safety
+    ///
+    /// `phydev` must be passed by the corresponding callback in `phy_driver`.
+    unsafe extern "C" fn handle_interrupt_callback(
+        phydev: *mut bindings::phy_device,
+    ) -> bindings::irqreturn_t {
+        // SAFETY: This callback is called only in contexts
+        // where we hold `phy_device->lock` (from phy_interrupt),
+        // so the accessors on `Device` are okay to call.
+        let dev = unsafe { Device::from_raw(phydev) };
+        T::handle_interrupt(dev) as core::ffi::c_uint
+    }
+
     unsafe extern "C" fn config_aneg_callback(phydev: *mut bindings::phy_device) -> c_int {
         from_result(|| {
             // SAFETY: This callback is called only in contexts
@@ -660,6 +722,16 @@ pub const fn create_phy_driver<T: Driver>() -> DriverVTable {
         } else {
             None
         },
+        config_intr: if T::HAS_CONFIG_INTR {
+            Some(Adapter::<T>::config_intr_callback)
+        } else {
+            None
+        },
+        handle_interrupt: if T::HAS_HANDLE_INTERRUPT {
+            Some(Adapter::<T>::handle_interrupt_callback)
+        } else {
+            None
+        },
         config_aneg: if T::HAS_CONFIG_ANEG {
             Some(Adapter::<T>::config_aneg_callback)
         } else {
@@ -741,6 +813,21 @@ pub trait Driver {
     /// If not implemented, matching is based on [`Driver::PHY_DEVICE_ID`].
     fn match_phy_device(_dev: &Device) -> bool {
         false
+    }
+
+    /// Enables or disables PHY interrupts.
+    fn config_intr(_dev: &mut Device) -> Result {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+
+    /// Handles a PHY interrupt.
+    ///
+    /// Called when the PHY's interrupt line fires. The driver should read the
+    /// interrupt status register to determine the cause and call
+    /// [`Device::trigger_machine`] to schedule a state machine update.
+    /// Returns [`IrqReturn::Handled`] if the interrupt was from this PHY.
+    fn handle_interrupt(_dev: &mut Device) -> IrqReturn {
+        build_error!(VTABLE_DEFAULT_ERROR)
     }
 
     /// Configures the advertisement and resets auto-negotiation
