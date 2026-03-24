@@ -3234,7 +3234,7 @@ int vbin_printf(u32 *bin_buf, size_t size, const char *fmt_str, va_list args)
 					      spec);
 				if (str + 1 < end)
 					*str++ = '\0';
-				else
+				else if (end > (char *)bin_buf)
 					end[-1] = '\0'; /* Must be nul terminated */
 			}
 			/* skip all alphanumeric pointer suffixes */
