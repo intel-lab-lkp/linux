@@ -18,6 +18,8 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 
+unsigned long kexec_tramp_satp;
+unsigned long riscv_kexec_norelocate_pa;
 static pgd_t kexec_tramp_pgd[PTRS_PER_PGD] __aligned(PAGE_SIZE);
 static p4d_t kexec_tramp_p4d[PTRS_PER_P4D] __aligned(PAGE_SIZE);
 static pud_t kexec_tramp_pud[PTRS_PER_PUD] __aligned(PAGE_SIZE);
@@ -266,6 +268,8 @@ machine_kexec(struct kimage *image)
 		 */
 		riscv_kexec_build_tramp((unsigned long)__kexec_tramp_text_start,
 					__pa_symbol(__kexec_tramp_text_start));
+		riscv_kexec_norelocate_pa = __pa_symbol(&riscv_kexec_norelocate);
+		kexec_tramp_satp = PFN_DOWN(__pa_symbol(kexec_tramp_pgd)) | satp_mode;
 	}
 
 	pr_notice("Will call new kernel at %08lx from hart id %lx\n",
@@ -277,6 +281,15 @@ machine_kexec(struct kimage *image)
 
 	/* Jump to the relocation code */
 	pr_notice("Bye...\n");
+	/*
+	 * Initialize t3 to 0 for riscv_kexec_norelocate().
+	 *
+	 * The norelocate trampoline uses t3 as a scratch register to record/
+	 * compare against the current PC when switching to the trampoline
+	 * page table. Keep t3 untouched from here until we branch into
+	 * riscv_kexec_norelocate.
+	 */
+	asm volatile ("li t3, 0x0" ::: "t3");
 	kexec_method(first_ind_entry, jump_addr, fdt_addr,
 		     this_hart_id, kernel_map.va_pa_offset);
 	unreachable();
