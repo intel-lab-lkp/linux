@@ -20,6 +20,10 @@ enum {
 	MDIO_AN_C22 = 0xffe0,
 };
 
+/* BCM84891/92 vendor registers */
+#define BCM8489X_LED_GATE		0xa82f	/* Dev1: gates amber only */
+#define BCM8489X_LED_COLOR		0xa83b	/* Dev1: color select */
+
 static int bcm84881_wait_init(struct phy_device *phydev)
 {
 	int val;
@@ -27,6 +31,17 @@ static int bcm84881_wait_init(struct phy_device *phydev)
 	return phy_read_mmd_poll_timeout(phydev, MDIO_MMD_PMAPMD, MDIO_CTRL1,
 					 val, !(val & MDIO_CTRL1_RESET),
 					 100000, 2000000, false);
+}
+
+static bool bcm84881_is_bcm8489x(struct phy_device *phydev)
+{
+	/* For C45 PHYs, phydev->phy_id is 0; match via the driver entry's
+	 * declared ID, which is what phy_bus_match() used to bind us.
+	 */
+	u32 id = phydev->drv->phy_id;
+
+	return (id & 0xfffffff0) == 0x35905080 ||
+	       (id & 0xfffffff0) == 0x359050a0;
 }
 
 static void bcm84881_fill_possible_interfaces(struct phy_device *phydev)
@@ -42,10 +57,22 @@ static int bcm84881_config_init(struct phy_device *phydev)
 {
 	bcm84881_fill_possible_interfaces(phydev);
 
+	if (bcm84881_is_bcm8489x(phydev)) {
+		__set_bit(PHY_INTERFACE_MODE_USXGMII,
+			  phydev->possible_interfaces);
+		/* Bootloader may have left the speed LED on, and
+		 * link_change_notify won't fire for ports with no cable.
+		 * Clear both color bits (green ignores the gate register).
+		 */
+		phy_clear_bits_mmd(phydev, MDIO_MMD_PMAPMD,
+				   BCM8489X_LED_COLOR, 0x0012);
+	}
+
 	switch (phydev->interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_2500BASEX:
 	case PHY_INTERFACE_MODE_10GBASER:
+	case PHY_INTERFACE_MODE_USXGMII:
 		break;
 	default:
 		return -ENODEV;
@@ -95,6 +122,17 @@ static int bcm84881_config_aneg(struct phy_device *phydev)
 	ret = bcm84881_wait_init(phydev);
 	if (ret)
 		return ret;
+
+	/* BCM84891/92 firmware has been observed setting MDIO_CTRL1_LPOWER
+	 * autonomously (e.g. during SerDes reconfiguration). Clear it so AN
+	 * can proceed.
+	 */
+	if (bcm84881_is_bcm8489x(phydev)) {
+		ret = phy_clear_bits_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_CTRL1,
+					 MDIO_CTRL1_LPOWER);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* We don't support manual MDI control */
 	phydev->mdix_ctrl = ETH_TP_MDI_AUTO;
@@ -201,6 +239,15 @@ static int bcm84881_read_status(struct phy_device *phydev)
 		return 0;
 	}
 
+	/* For BCM84891/92 in USXGMII mode, the host-side register 0x4011
+	 * reports 10GBASER (the USXGMII SerDes line rate) regardless of the
+	 * negotiated copper speed. Skip it; phy_resolve_aneg_linkmode()
+	 * above already set the correct speed from standard AN resolution.
+	 */
+	if (bcm84881_is_bcm8489x(phydev) &&
+	    phydev->interface == PHY_INTERFACE_MODE_USXGMII)
+		return genphy_c45_read_mdix(phydev);
+
 	/* Set the host link mode - we set the phy interface mode and
 	 * the speed according to this register so that downshift works.
 	 * We leave the duplex setting as per the resolution from the
@@ -235,6 +282,26 @@ static int bcm84881_read_status(struct phy_device *phydev)
 	return genphy_c45_read_mdix(phydev);
 }
 
+/* BCM8489x speed LED control.
+ * Dev1:a83b bit 1 (0x0002) = green, bit 4 (0x0010) = amber.
+ * Dev1:a82f = 0x0020 gates amber on; green ignores the gate.
+ * Writes are best-effort (LED is cosmetic; this callback is void).
+ */
+static void bcm84881_link_change_notify(struct phy_device *phydev)
+{
+	if (phydev->link) {
+		/* 10G = green, else amber; matches vendor firmware */
+		u16 color = (phydev->speed == SPEED_10000) ? 0x0002 : 0x0010;
+
+		phy_write_mmd(phydev, MDIO_MMD_PMAPMD, BCM8489X_LED_GATE, 0x0020);
+		phy_modify_mmd(phydev, MDIO_MMD_PMAPMD, BCM8489X_LED_COLOR,
+			       0x0012, color);
+	} else {
+		phy_clear_bits_mmd(phydev, MDIO_MMD_PMAPMD,
+				   BCM8489X_LED_COLOR, 0x0012);
+	}
+}
+
 /* The Broadcom BCM84881 in the Methode DM7052 is unable to provide a SGMII
  * or 802.3z control word, so inband will not work.
  */
@@ -257,6 +324,32 @@ static struct phy_driver bcm84881_drivers[] = {
 		.aneg_done	= bcm84881_aneg_done,
 		.read_status	= bcm84881_read_status,
 	},
+	{
+		.phy_id		= 0x35905081,
+		.phy_id_mask	= 0xfffffff0,
+		.name		= "Broadcom BCM84891",
+		.inband_caps	= bcm84881_inband_caps,
+		.config_init	= bcm84881_config_init,
+		.probe		= bcm84881_probe,
+		.get_features	= bcm84881_get_features,
+		.config_aneg	= bcm84881_config_aneg,
+		.aneg_done	= bcm84881_aneg_done,
+		.read_status	= bcm84881_read_status,
+		.link_change_notify = bcm84881_link_change_notify,
+	},
+	{
+		.phy_id		= 0x359050a1,
+		.phy_id_mask	= 0xfffffff0,
+		.name		= "Broadcom BCM84892",
+		.inband_caps	= bcm84881_inband_caps,
+		.config_init	= bcm84881_config_init,
+		.probe		= bcm84881_probe,
+		.get_features	= bcm84881_get_features,
+		.config_aneg	= bcm84881_config_aneg,
+		.aneg_done	= bcm84881_aneg_done,
+		.read_status	= bcm84881_read_status,
+		.link_change_notify = bcm84881_link_change_notify,
+	},
 };
 
 module_phy_driver(bcm84881_drivers);
@@ -264,9 +357,11 @@ module_phy_driver(bcm84881_drivers);
 /* FIXME: module auto-loading for Clause 45 PHYs seems non-functional */
 static const struct mdio_device_id __maybe_unused bcm84881_tbl[] = {
 	{ 0xae025150, 0xfffffff0 },
+	{ 0x35905081, 0xfffffff0 },
+	{ 0x359050a1, 0xfffffff0 },
 	{ },
 };
 MODULE_AUTHOR("Russell King");
-MODULE_DESCRIPTION("Broadcom BCM84881 PHY driver");
+MODULE_DESCRIPTION("Broadcom BCM84881/BCM84891/BCM84892 PHY driver");
 MODULE_DEVICE_TABLE(mdio, bcm84881_tbl);
 MODULE_LICENSE("GPL");
