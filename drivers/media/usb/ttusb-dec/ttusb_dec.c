@@ -703,17 +703,34 @@ static void ttusb_dec_process_urb_frame(struct ttusb_dec *dec, u8 *b,
 
 			if (dec->packet_type == TTUSB_DEC_PACKET_PVA &&
 			    dec->packet_length == 8) {
-				dec->packet_state++;
 				dec->packet_payload_length = 8 +
 					(dec->packet[6] << 8) +
 					dec->packet[7];
+				if (dec->packet_payload_length >
+				    sizeof(dec->packet) - 4) {
+					pr_warn_ratelimited("%s: packet too long - discarding\n",
+							    __func__);
+					dec->packet_state = 0;
+					dec->packet_length = 0;
+					break;
+				}
+				dec->packet_state++;
 			} else if (dec->packet_type ==
 					TTUSB_DEC_PACKET_SECTION &&
 				   dec->packet_length == 5) {
-				dec->packet_state++;
 				dec->packet_payload_length = 5 +
 					((dec->packet[3] & 0x0f) << 8) +
 					dec->packet[4];
+				if (dec->packet_payload_length >
+				    sizeof(dec->packet) - 4 -
+				    !!(dec->packet_payload_length % 2)) {
+					pr_warn_ratelimited("%s: packet too long - discarding\n",
+							    __func__);
+					dec->packet_state = 0;
+					dec->packet_length = 0;
+					break;
+				}
+				dec->packet_state++;
 			}
 
 			length--;
