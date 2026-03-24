@@ -191,6 +191,7 @@ struct msr_counter bic[] = {
 	{ 0x0, "Any%C0", NULL, 0, 0, 0, NULL, 0 },
 	{ 0x0, "GFX%C0", NULL, 0, 0, 0, NULL, 0 },
 	{ 0x0, "CPUGFX%", NULL, 0, 0, 0, NULL, 0 },
+	{ 0x0, "Module", NULL, 0, 0, 0, NULL, 0 },
 	{ 0x0, "Core", NULL, 0, 0, 0, NULL, 0 },
 	{ 0x0, "CPU", NULL, 0, 0, 0, NULL, 0 },
 	{ 0x0, "APIC", NULL, 0, 0, 0, NULL, 0 },
@@ -264,6 +265,7 @@ enum bic_names {
 	BIC_Any_c0,
 	BIC_GFX_c0,
 	BIC_CPUGFX,
+	BIC_Module,
 	BIC_Core,
 	BIC_CPU,
 	BIC_APIC,
@@ -364,6 +366,7 @@ static void bic_groups_init(void)
 	SET_BIC(BIC_Node, &bic_group_topology);
 	SET_BIC(BIC_CoreCnt, &bic_group_topology);
 	SET_BIC(BIC_PkgCnt, &bic_group_topology);
+	SET_BIC(BIC_Module, &bic_group_topology);
 	SET_BIC(BIC_Core, &bic_group_topology);
 	SET_BIC(BIC_CPU, &bic_group_topology);
 	SET_BIC(BIC_Die, &bic_group_topology);
@@ -2383,6 +2386,7 @@ struct platform_counters {
 struct cpu_topology {
 	int cpu_id;
 	int core_id;		/* unique within a package */
+	int module_id;
 	int package_id;
 	int die_id;
 	int l3_id;
@@ -2404,6 +2408,7 @@ struct topo_params {
 	int allowed_cores;
 	int max_cpu_num;
 	int max_core_id;	/* within a package */
+	int max_module_id;	/* system wide */
 	int max_package_id;
 	int max_die_id;
 	int max_l3_id;
@@ -2897,6 +2902,8 @@ void print_header(char *delim)
 		outp += sprintf(outp, "%sL3", (printed++ ? delim : ""));
 	if (DO_BIC(BIC_Node))
 		outp += sprintf(outp, "%sNode", (printed++ ? delim : ""));
+	if (DO_BIC(BIC_Module))
+		outp += sprintf(outp, "%sModule", (printed++ ? delim : ""));
 	if (DO_BIC(BIC_Core))
 		outp += sprintf(outp, "%sCore", (printed++ ? delim : ""));
 	if (DO_BIC(BIC_CPU))
@@ -3366,6 +3373,8 @@ int format_counters(PER_THREAD_PARAMS)
 			outp += sprintf(outp, "%s-", (printed++ ? delim : ""));
 		if (DO_BIC(BIC_Node))
 			outp += sprintf(outp, "%s-", (printed++ ? delim : ""));
+		if (DO_BIC(BIC_Module))
+			outp += sprintf(outp, "%s-", (printed++ ? delim : ""));
 		if (DO_BIC(BIC_Core))
 			outp += sprintf(outp, "%s-", (printed++ ? delim : ""));
 		if (DO_BIC(BIC_CPU))
@@ -3396,6 +3405,12 @@ int format_counters(PER_THREAD_PARAMS)
 		if (DO_BIC(BIC_Node)) {
 			if (t)
 				outp += sprintf(outp, "%s%d", (printed++ ? delim : ""), cpus[t->cpu_id].physical_node_id);
+			else
+				outp += sprintf(outp, "%s-", (printed++ ? delim : ""));
+		}
+		if (DO_BIC(BIC_Module)) {
+			if (c)
+				outp += sprintf(outp, "%s0x%x", (printed++ ? delim : ""), cpus[t->cpu_id].module_id);
 			else
 				outp += sprintf(outp, "%s-", (printed++ ? delim : ""));
 		}
@@ -6055,6 +6070,11 @@ int get_die_id(int cpu)
 int get_l3_id(int cpu)
 {
 	return parse_int_file("/sys/devices/system/cpu/cpu%d/cache/index3/id", cpu);
+}
+
+int get_module_id(int cpu)
+{
+	return parse_int_file("/sys/devices/system/cpu/cpu%d/topology/cluster_id", cpu);
 }
 
 int get_core_id(int cpu)
@@ -9640,6 +9660,11 @@ void topology_probe(bool startup)
 		if (cpus[i].physical_node_id > topo.max_node_num)
 			topo.max_node_num = cpus[i].physical_node_id;
 
+		/* get module information */
+		cpus[i].module_id = get_module_id(i);
+		if (cpus[i].module_id > topo.max_module_id)
+			topo.max_module_id = cpus[i].module_id;
+
 		/* get core information */
 		cpus[i].core_id = get_core_id(i);
 		if (cpus[i].core_id > max_core_id)
@@ -9660,6 +9685,11 @@ void topology_probe(bool startup)
 		fprintf(outf, "max_core_id %d, sizing for %d cores per package\n", max_core_id, topo.cores_per_pkg);
 	if (!summary_only)
 		BIC_PRESENT(BIC_Core);
+
+	if (debug > 1)
+		fprintf(outf, "max_module_id %d\n", topo.max_module_id);
+	if (!summary_only && topo.max_module_id > 0)
+		BIC_PRESENT(BIC_Module);
 
 	topo.num_die = topo.max_die_id + 1;
 	if (debug > 1)
@@ -9693,9 +9723,9 @@ void topology_probe(bool startup)
 		if (cpu_is_not_present(i))
 			continue;
 		fprintf(outf,
-			"cpu %d pkg %d die %d l3 %d node %d lnode %d core %d thread %d\n",
+			"cpu %d pkg %d die %d l3 %d node %d lnode %d module 0x%x core %d thread %d\n",
 			i, cpus[i].package_id, cpus[i].die_id, cpus[i].l3_id,
-			cpus[i].physical_node_id, cpus[i].logical_node_id, cpus[i].core_id, cpus[i].ht_id);
+			cpus[i].physical_node_id, cpus[i].logical_node_id, cpus[i].module_id, cpus[i].core_id, cpus[i].ht_id);
 	}
 
 }
