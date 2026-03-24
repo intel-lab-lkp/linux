@@ -1095,9 +1095,138 @@ pub(crate) mod mmu_control {
             pub(crate) COMMAND(u32)[MAX_AS, stride = STRIDE] @ 0x2418 {
                 7:0     command ?=> MmuCommand;
             }
+        }
 
+        /// MMU exception types for FAULTSTATUS register.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum MmuExceptionType {
+            /// No error.
+            Ok = 0x00,
+            /// Invalid translation table entry, level 0.
+            TranslationFault0 = 0xC0,
+            /// Invalid translation table entry, level 1.
+            TranslationFault1 = 0xC1,
+            /// Invalid translation table entry, level 2.
+            TranslationFault2 = 0xC2,
+            /// Invalid translation table entry, level 3.
+            TranslationFault3 = 0xC3,
+            /// Invalid block descriptor.
+            TranslationFault4 = 0xC4,
+            /// Page permission error, level 0.
+            PermissionFault0 = 0xC8,
+            /// Page permission error, level 1.
+            PermissionFault1 = 0xC9,
+            /// Page permission error, level 2.
+            PermissionFault2 = 0xCA,
+            /// Page permission error, level 3.
+            PermissionFault3 = 0xCB,
+            /// Access flag not set, level 1.
+            AccessFlag1 = 0xD9,
+            /// Access flag not set, level 2.
+            AccessFlag2 = 0xDA,
+            /// Access flag not set, level 3.
+            AccessFlag3 = 0xDB,
+            /// Virtual address out of range.
+            AddressSizeFaultIn = 0xE0,
+            /// Physical address out of range, level 0.
+            AddressSizeFaultOut0 = 0xE4,
+            /// Physical address out of range, level 1.
+            AddressSizeFaultOut1 = 0xE5,
+            /// Physical address out of range, level 2.
+            AddressSizeFaultOut2 = 0xE6,
+            /// Physical address out of range, level 3.
+            AddressSizeFaultOut3 = 0xE7,
+            /// Page attribute error, level 0.
+            MemoryAttributeFault0 = 0xE8,
+            /// Page attribute error, level 1.
+            MemoryAttributeFault1 = 0xE9,
+            /// Page attribute error, level 2.
+            MemoryAttributeFault2 = 0xEA,
+            /// Page attribute error, level 3.
+            MemoryAttributeFault3 = 0xEB,
+        }
+
+        impl TryFrom<Bounded<u32, 8>> for MmuExceptionType {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u32, 8>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    0x00 => Ok(MmuExceptionType::Ok),
+                    0xC0 => Ok(MmuExceptionType::TranslationFault0),
+                    0xC1 => Ok(MmuExceptionType::TranslationFault1),
+                    0xC2 => Ok(MmuExceptionType::TranslationFault2),
+                    0xC3 => Ok(MmuExceptionType::TranslationFault3),
+                    0xC4 => Ok(MmuExceptionType::TranslationFault4),
+                    0xC8 => Ok(MmuExceptionType::PermissionFault0),
+                    0xC9 => Ok(MmuExceptionType::PermissionFault1),
+                    0xCA => Ok(MmuExceptionType::PermissionFault2),
+                    0xCB => Ok(MmuExceptionType::PermissionFault3),
+                    0xD9 => Ok(MmuExceptionType::AccessFlag1),
+                    0xDA => Ok(MmuExceptionType::AccessFlag2),
+                    0xDB => Ok(MmuExceptionType::AccessFlag3),
+                    0xE0 => Ok(MmuExceptionType::AddressSizeFaultIn),
+                    0xE4 => Ok(MmuExceptionType::AddressSizeFaultOut0),
+                    0xE5 => Ok(MmuExceptionType::AddressSizeFaultOut1),
+                    0xE6 => Ok(MmuExceptionType::AddressSizeFaultOut2),
+                    0xE7 => Ok(MmuExceptionType::AddressSizeFaultOut3),
+                    0xE8 => Ok(MmuExceptionType::MemoryAttributeFault0),
+                    0xE9 => Ok(MmuExceptionType::MemoryAttributeFault1),
+                    0xEA => Ok(MmuExceptionType::MemoryAttributeFault2),
+                    0xEB => Ok(MmuExceptionType::MemoryAttributeFault3),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<MmuExceptionType> for Bounded<u32, 8> {
+            fn from(exc: MmuExceptionType) -> Self {
+                (exc as u8).into()
+            }
+        }
+
+        /// Access type for MMU faults.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum MmuAccessType {
+            /// An atomic (read/write) transaction.
+            Atomic = 0,
+            /// An execute transaction.
+            Execute = 1,
+            /// A read transaction.
+            Read = 2,
+            /// A write transaction.
+            Write = 3,
+        }
+
+        impl From<Bounded<u32, 2>> for MmuAccessType {
+            fn from(val: Bounded<u32, 2>) -> Self {
+                match val.get() {
+                    0 => MmuAccessType::Atomic,
+                    1 => MmuAccessType::Execute,
+                    2 => MmuAccessType::Read,
+                    3 => MmuAccessType::Write,
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        impl From<MmuAccessType> for Bounded<u32, 2> {
+            fn from(access: MmuAccessType) -> Self {
+                Bounded::try_new(access as u32).unwrap()
+            }
+        }
+
+        register! {
             /// Fault status register for each address space. Read only.
-            pub(crate) FAULTSTATUS(u32)[MAX_AS, stride = STRIDE] @ 0x241c {}
+            pub(crate) FAULTSTATUS(u32)[MAX_AS, stride = STRIDE] @ 0x241c {
+                /// Exception type.
+                7:0     exception_type ?=> MmuExceptionType;
+                /// Access type.
+                9:8     access_type => MmuAccessType;
+                /// ID of the source that triggered the fault.
+                31:16   source_id;
+            }
 
             /// Fault address for each address space. Read only.
             pub(crate) FAULTADDRESS(u64)[MAX_AS, stride = STRIDE] @ 0x2420 {
