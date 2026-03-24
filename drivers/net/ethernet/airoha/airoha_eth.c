@@ -2943,21 +2943,28 @@ static int airoha_alloc_gdm_port(struct airoha_eth *eth,
 
 static int airoha_register_gdm_devices(struct airoha_eth *eth)
 {
-	int i;
+	int i, err = 0;
+
+	/* Netfilter flowtable can try offload flower rules while not all
+	 * the net-devices are registered/initialized. Grab flow_offload_mutex
+	 * to avoid any possible race.
+	 */
+	mutex_lock(&flow_offload_mutex);
 
 	for (i = 0; i < ARRAY_SIZE(eth->ports); i++) {
 		struct airoha_gdm_port *port = eth->ports[i];
-		int err;
 
 		if (!port)
 			continue;
 
 		err = register_netdev(port->dev);
 		if (err)
-			return err;
+			break;
 	}
 
-	return 0;
+	mutex_unlock(&flow_offload_mutex);
+
+	return err;
 }
 
 static int airoha_probe(struct platform_device *pdev)

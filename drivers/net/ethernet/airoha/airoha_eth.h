@@ -548,6 +548,8 @@ struct airoha_gdm_port {
 	struct metadata_dst *dsa_meta[AIROHA_MAX_DSA_PORTS];
 };
 
+extern struct mutex flow_offload_mutex;
+
 #define AIROHA_RXD4_PPE_CPU_REASON	GENMASK(20, 16)
 #define AIROHA_RXD4_FOE_ENTRY		GENMASK(15, 0)
 
