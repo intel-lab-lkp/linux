@@ -1240,9 +1240,232 @@ pub(crate) mod mmu_control {
                 /// Internal address space command is active, a 1-bit boolean flag.
                 1:1     active_int => bool;
             }
+        }
 
+        /// Helpers for TRANSCFG register.
+        ///
+        /// Address space mode for TRANSCFG register.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum AddressSpaceMode {
+            /// The MMU forces all memory access to fail with a decode fault.
+            Unmapped = 1,
+            /// All input addresses map to the same output address (deprecated).
+            Identity = 2,
+            /// Translation tables interpreted according to AArch64 4kB granule specification.
+            Aarch64_4K = 6,
+            /// Translation tables interpreted according to AArch64 64kB granule specification.
+            Aarch64_64K = 8,
+        }
+
+        impl TryFrom<Bounded<u64, 4>> for AddressSpaceMode {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u64, 4>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    1 => Ok(AddressSpaceMode::Unmapped),
+                    2 => Ok(AddressSpaceMode::Identity),
+                    6 => Ok(AddressSpaceMode::Aarch64_4K),
+                    8 => Ok(AddressSpaceMode::Aarch64_64K),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<AddressSpaceMode> for Bounded<u64, 4> {
+            fn from(mode: AddressSpaceMode) -> Self {
+                Bounded::try_new(mode as u64).unwrap()
+            }
+        }
+
+        /// Input address range restriction for TRANSCFG register.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum InaBits {
+            /// Invalid VA range (reset value).
+            Reset = 0,
+            /// 48-bit VA range.
+            Bits48 = 7,
+            /// 47-bit VA range.
+            Bits47 = 8,
+            /// 46-bit VA range.
+            Bits46 = 9,
+            /// 45-bit VA range.
+            Bits45 = 10,
+            /// 44-bit VA range.
+            Bits44 = 11,
+            /// 43-bit VA range.
+            Bits43 = 12,
+            /// 42-bit VA range.
+            Bits42 = 13,
+            /// 41-bit VA range.
+            Bits41 = 14,
+            /// 40-bit VA range.
+            Bits40 = 15,
+            /// 39-bit VA range.
+            Bits39 = 16,
+            /// 38-bit VA range.
+            Bits38 = 17,
+            /// 37-bit VA range.
+            Bits37 = 18,
+            /// 36-bit VA range.
+            Bits36 = 19,
+            /// 35-bit VA range.
+            Bits35 = 20,
+            /// 34-bit VA range.
+            Bits34 = 21,
+            /// 33-bit VA range.
+            Bits33 = 22,
+            /// 32-bit VA range.
+            Bits32 = 23,
+            /// 31-bit VA range.
+            Bits31 = 24,
+            /// 30-bit VA range.
+            Bits30 = 25,
+            /// 29-bit VA range.
+            Bits29 = 26,
+            /// 28-bit VA range.
+            Bits28 = 27,
+            /// 27-bit VA range.
+            Bits27 = 28,
+            /// 26-bit VA range.
+            Bits26 = 29,
+            /// 25-bit VA range.
+            Bits25 = 30,
+        }
+
+        impl TryFrom<Bounded<u64, 5>> for InaBits {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u64, 5>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    0 => Ok(InaBits::Reset),
+                    7 => Ok(InaBits::Bits48),
+                    8 => Ok(InaBits::Bits47),
+                    9 => Ok(InaBits::Bits46),
+                    10 => Ok(InaBits::Bits45),
+                    11 => Ok(InaBits::Bits44),
+                    12 => Ok(InaBits::Bits43),
+                    13 => Ok(InaBits::Bits42),
+                    14 => Ok(InaBits::Bits41),
+                    15 => Ok(InaBits::Bits40),
+                    16 => Ok(InaBits::Bits39),
+                    17 => Ok(InaBits::Bits38),
+                    18 => Ok(InaBits::Bits37),
+                    19 => Ok(InaBits::Bits36),
+                    20 => Ok(InaBits::Bits35),
+                    21 => Ok(InaBits::Bits34),
+                    22 => Ok(InaBits::Bits33),
+                    23 => Ok(InaBits::Bits32),
+                    24 => Ok(InaBits::Bits31),
+                    25 => Ok(InaBits::Bits30),
+                    26 => Ok(InaBits::Bits29),
+                    27 => Ok(InaBits::Bits28),
+                    28 => Ok(InaBits::Bits27),
+                    29 => Ok(InaBits::Bits26),
+                    30 => Ok(InaBits::Bits25),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<InaBits> for Bounded<u64, 5> {
+            fn from(bits: InaBits) -> Self {
+                Bounded::try_new(bits as u64).unwrap()
+            }
+        }
+
+        /// Translation table memory attributes for TRANSCFG register.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum PtwMemattr {
+            /// Invalid (reset value, not valid for enabled address space).
+            Invalid = 0,
+            /// Normal memory, inner/outer non-cacheable.
+            NonCacheable = 1,
+            /// Normal memory, inner/outer write-back cacheable.
+            WriteBack = 2,
+        }
+
+        impl TryFrom<Bounded<u64, 2>> for PtwMemattr {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u64, 2>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    0 => Ok(PtwMemattr::Invalid),
+                    1 => Ok(PtwMemattr::NonCacheable),
+                    2 => Ok(PtwMemattr::WriteBack),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<PtwMemattr> for Bounded<u64, 2> {
+            fn from(attr: PtwMemattr) -> Self {
+                Bounded::try_new(attr as u64).unwrap()
+            }
+        }
+
+        /// Translation table memory shareability for TRANSCFG register.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        #[allow(clippy::enum_variant_names)]
+        pub(crate) enum PtwShareability {
+            /// Non-shareable.
+            NonShareable = 0,
+            /// Outer shareable.
+            OuterShareable = 2,
+            /// Inner shareable.
+            InnerShareable = 3,
+        }
+
+        impl TryFrom<Bounded<u64, 2>> for PtwShareability {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u64, 2>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    0 => Ok(PtwShareability::NonShareable),
+                    2 => Ok(PtwShareability::OuterShareable),
+                    3 => Ok(PtwShareability::InnerShareable),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<PtwShareability> for Bounded<u64, 2> {
+            fn from(sh: PtwShareability) -> Self {
+                Bounded::try_new(sh as u64).unwrap()
+            }
+        }
+
+        register! {
             /// Translation configuration and control.
-            pub(crate) TRANSCFG(u64)[MAX_AS, stride = STRIDE] @ 0x2430 {}
+            pub(crate) TRANSCFG(u64)[MAX_AS, stride = STRIDE] @ 0x2430 {
+                /// Address space mode.
+                3:0     mode ?=> AddressSpaceMode;
+                /// Address input restriction.
+                10:6    ina_bits ?=> InaBits;
+                /// Address output restriction.
+                18:14   outa_bits;
+                /// Translation table concatenation enable, a 1-bit boolean flag.
+                22:22   sl_concat_en => bool;
+                /// Translation table memory attributes.
+                25:24   ptw_memattr ?=> PtwMemattr;
+                /// Translation table memory shareability.
+                29:28   ptw_sh ?=> PtwShareability;
+                /// Inner read allocation hint for translation table walks, a 1-bit boolean flag.
+                30:30   r_allocate => bool;
+                /// Disable hierarchical access permissions.
+                33:33   disable_hier_ap => bool;
+                /// Disable access fault checking.
+                34:34   disable_af_fault => bool;
+                /// Disable execution on all writable pages.
+                35:35   wxn => bool;
+                /// Enable execution on readable pages.
+                36:36   xreadable => bool;
+                /// Page-based hardware attributes for translation table walks.
+                63:60   ptw_pbha;
+            }
 
             /// Extra fault information for each address space. Read only.
             pub(crate) FAULTEXTRA(u64)[MAX_AS, stride = STRIDE] @ 0x2438 {
