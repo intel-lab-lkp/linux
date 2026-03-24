@@ -242,7 +242,7 @@
  *  - add FUSE_NOTIFY_PRUNE
  *
  *  7.46
- *  - add FUSE_URING_BUF_RING flag
+ *  - add FUSE_URING_BUF_RING and FUSE_URING_ZERO_COPY flag
  *  - add fuse_uring_cmd_req init struct
  */
 
@@ -1300,6 +1300,7 @@ enum fuse_uring_cmd {
 
 /* fuse_uring_cmd_req flags */
 #define FUSE_URING_BUF_RING	(1 << 0)
+#define FUSE_URING_ZERO_COPY	(1 << 1)
 
 /**
  * In the 80B command area of the SQE.

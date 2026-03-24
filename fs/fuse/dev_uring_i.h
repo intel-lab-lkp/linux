@@ -49,7 +49,7 @@ struct fuse_ring_ent {
 		struct {
 			/*
 			 * unique fixed id for the ent. Used by kernel/server to
-			 * locate the header data.
+			 * locate the header data and zero-copy backing pages.
 			 */
 			unsigned int id;
 			/*
@@ -61,6 +61,8 @@ struct fuse_ring_ent {
 			 */
 			unsigned int buf_id;
 			struct kvec payload_kvec;
+			/* true if the request's pages are being zero-copied */
+			bool zero_copied;
 		};
 	};
 
@@ -130,6 +132,8 @@ struct fuse_ring_queue {
 	 */
 	struct {
 		bool enabled: 1;
+		/* this is only allowed on privileged servers */
+		bool zero_copy: 1;
 		unsigned int queue_depth;
 		/*
 		 * pointer to where the headers reside in the registered memory
