@@ -8,12 +8,14 @@
  * Copyright (c) 2023, Liam Beguin <liambeguin@gmail.com>
  */
 #include <linux/bitfield.h>
+#include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/iio/iio.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/regulator/consumer.h>
+#include <linux/array_size.h>
 
 #define LTC2309_ADC_RESOLUTION	12
 #define LTC2309_INTERNAL_REF_MV 4096
@@ -26,18 +28,27 @@
 #define LTC2309_DIN_UNI		BIT(3)
 #define LTC2309_DIN_SLEEP	BIT(2)
 
+struct ltc2309_chip_info {
+	const char *name;
+	unsigned int num_channels;
+	const struct iio_chan_spec *channels __counted_by_ptr(num_channels);
+	unsigned int read_delay_us;
+};
+
 /**
  * struct ltc2309 - internal device data structure
  * @dev:	Device reference
  * @client:	I2C reference
  * @lock:	Lock to serialize data access
  * @vref_mv:	Internal voltage reference
+ * @read_delay_us:	Chip-specific read delay in microseconds
  */
 struct ltc2309 {
 	struct device		*dev;
 	struct i2c_client	*client;
 	struct mutex		lock; /* serialize data access */
 	int			vref_mv;
+	unsigned int		read_delay_us;
 };
 
 /* Order matches expected channel address, See datasheet Table 1. */
@@ -117,6 +128,9 @@ static int ltc2309_read_raw_channel(struct ltc2309 *ltc2309,
 		return ret;
 	}
 
+	if (ltc2309->read_delay_us)
+		fsleep(ltc2309->read_delay_us);
+
 	ret = i2c_master_recv(ltc2309->client, (char *)&buf, 2);
 	if (ret < 0) {
 		dev_err(ltc2309->dev, "i2c read failed: %pe\n", ERR_PTR(ret));
@@ -156,10 +170,18 @@ static const struct iio_info ltc2309_info = {
 	.read_raw = ltc2309_read_raw,
 };
 
+static const struct ltc2309_chip_info ltc2309_chip_info = {
+	.name = "ltc2309",
+	.num_channels = ARRAY_SIZE(ltc2309_channels),
+	.channels = ltc2309_channels,
+};
+
+
 static int ltc2309_probe(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev;
 	struct ltc2309 *ltc2309;
+	const struct ltc2309_chip_info *chip_info;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*ltc2309));
@@ -169,11 +191,13 @@ static int ltc2309_probe(struct i2c_client *client)
 	ltc2309 = iio_priv(indio_dev);
 	ltc2309->dev = &indio_dev->dev;
 	ltc2309->client = client;
+	chip_info = &ltc2309_chip_info;
+	ltc2309->read_delay_us = chip_info->read_delay_us;
 
-	indio_dev->name = "ltc2309";
+	indio_dev->name = chip_info->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->channels = ltc2309_channels;
-	indio_dev->num_channels = ARRAY_SIZE(ltc2309_channels);
+	indio_dev->channels = chip_info->channels;
+	indio_dev->num_channels = chip_info->num_channels;
 	indio_dev->info = &ltc2309_info;
 
 	ret = devm_regulator_get_enable_read_voltage(&client->dev, "vref");
