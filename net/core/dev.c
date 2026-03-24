@@ -11862,6 +11862,7 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 	const struct net_device_core_stats __percpu *p;
+	const struct pcpu_sw_netstats __percpu *fstats;
 
 	/*
 	 * IPv{4,6} and udp tunnels share common stat helpers and use
@@ -11889,6 +11890,11 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 	} else {
 		netdev_stats_to_stats64(storage, &dev->stats);
 	}
+
+	/* This READ_ONCE() pairs with cmpxchg in flow_offload_fstats_ensure() */
+	fstats = READ_ONCE(dev->fstats);
+	if (fstats)
+		dev_fetch_sw_netstats(storage, fstats);
 
 	/* This READ_ONCE() pairs with the write in netdev_core_stats_alloc() */
 	p = READ_ONCE(dev->core_stats);
@@ -12209,6 +12215,8 @@ void free_netdev(struct net_device *dev)
 	free_percpu(dev->pcpu_refcnt);
 	dev->pcpu_refcnt = NULL;
 #endif
+	free_percpu(dev->fstats);
+	dev->fstats = NULL;
 	free_percpu(dev->core_stats);
 	dev->core_stats = NULL;
 	free_percpu(dev->xdp_bulkq);

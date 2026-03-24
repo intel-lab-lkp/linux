@@ -924,13 +924,80 @@ out:
 	nf_flow_offload_destroy(flow_rule);
 }
 
-static void flow_offload_work_del(struct flow_offload_work *offload)
+static bool flow_offload_fstats_ensure(struct net_device *dev)
 {
-	clear_bit(IPS_HW_OFFLOAD_BIT, &offload->flow->ct->status);
-	flow_offload_tuple_del(offload, FLOW_OFFLOAD_DIR_ORIGINAL);
-	if (test_bit(NF_FLOW_HW_BIDIRECTIONAL, &offload->flow->flags))
-		flow_offload_tuple_del(offload, FLOW_OFFLOAD_DIR_REPLY);
-	set_bit(NF_FLOW_HW_DEAD, &offload->flow->flags);
+	struct pcpu_sw_netstats __percpu *p;
+
+	if (!dev->flow_offload_via_parent)
+		return false;
+
+	/* Pairs with cmpxchg() below. */
+	if (likely(READ_ONCE(dev->fstats)))
+		return true;
+
+	p = __netdev_alloc_pcpu_stats(struct pcpu_sw_netstats, GFP_ATOMIC);
+	if (!p)
+		return false;
+
+	if (cmpxchg(&dev->fstats, NULL, p))
+		free_percpu(p);	/* lost the race, discard and use winner's */
+
+	return true;
+}
+
+static u32 flow_offload_egress_ifidx(const struct flow_offload_tuple *tuple)
+{
+	switch (tuple->xmit_type) {
+	case FLOW_OFFLOAD_XMIT_NEIGH:
+		return tuple->ifidx;
+	case FLOW_OFFLOAD_XMIT_DIRECT:
+		return tuple->out.ifidx;
+	default:
+		return 0;
+	}
+}
+
+static void flow_offload_netdev_update(struct flow_offload_work *offload,
+				       struct flow_stats *stats)
+{
+	const struct flow_offload_tuple *tuple;
+	struct net_device *indev, *outdev;
+	struct net *net;
+
+	rcu_read_lock();
+	net = read_pnet(&offload->flowtable->net);
+	if (stats[FLOW_OFFLOAD_DIR_ORIGINAL].pkts) {
+		tuple = &offload->flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple;
+		indev = dev_get_by_index_rcu(net, tuple->iifidx);
+		if (indev && flow_offload_fstats_ensure(indev))
+			dev_fstats_rx_add(indev,
+					  stats[FLOW_OFFLOAD_DIR_ORIGINAL].pkts,
+					  stats[FLOW_OFFLOAD_DIR_ORIGINAL].bytes);
+
+		outdev = dev_get_by_index_rcu(net,
+					      flow_offload_egress_ifidx(tuple));
+		if (outdev && flow_offload_fstats_ensure(outdev))
+			dev_fstats_tx_add(outdev,
+					  stats[FLOW_OFFLOAD_DIR_ORIGINAL].pkts,
+					  stats[FLOW_OFFLOAD_DIR_ORIGINAL].bytes);
+	}
+
+	if (stats[FLOW_OFFLOAD_DIR_REPLY].pkts) {
+		tuple = &offload->flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple;
+		indev = dev_get_by_index_rcu(net, tuple->iifidx);
+		if (indev && flow_offload_fstats_ensure(indev))
+			dev_fstats_rx_add(indev,
+					  stats[FLOW_OFFLOAD_DIR_REPLY].pkts,
+					  stats[FLOW_OFFLOAD_DIR_REPLY].bytes);
+
+		outdev = dev_get_by_index_rcu(net,
+					      flow_offload_egress_ifidx(tuple));
+		if (outdev && flow_offload_fstats_ensure(outdev))
+			dev_fstats_tx_add(outdev,
+					  stats[FLOW_OFFLOAD_DIR_REPLY].pkts,
+					  stats[FLOW_OFFLOAD_DIR_REPLY].bytes);
+	}
+	rcu_read_unlock();
 }
 
 static void flow_offload_tuple_stats(struct flow_offload_work *offload,
@@ -967,6 +1034,25 @@ static void flow_offload_work_stats(struct flow_offload_work *offload)
 				       FLOW_OFFLOAD_DIR_REPLY,
 				       stats[1].pkts, stats[1].bytes);
 	}
+
+	flow_offload_netdev_update(offload, stats);
+}
+
+static void flow_offload_work_del(struct flow_offload_work *offload)
+{
+	struct flow_stats stats[FLOW_OFFLOAD_DIR_MAX] = {};
+
+	flow_offload_tuple_stats(offload, FLOW_OFFLOAD_DIR_ORIGINAL, &stats[0]);
+	if (test_bit(NF_FLOW_HW_BIDIRECTIONAL, &offload->flow->flags))
+		flow_offload_tuple_stats(offload, FLOW_OFFLOAD_DIR_REPLY,
+					 &stats[1]);
+	flow_offload_netdev_update(offload, stats);
+
+	clear_bit(IPS_HW_OFFLOAD_BIT, &offload->flow->ct->status);
+	flow_offload_tuple_del(offload, FLOW_OFFLOAD_DIR_ORIGINAL);
+	if (test_bit(NF_FLOW_HW_BIDIRECTIONAL, &offload->flow->flags))
+		flow_offload_tuple_del(offload, FLOW_OFFLOAD_DIR_REPLY);
+	set_bit(NF_FLOW_HW_DEAD, &offload->flow->flags);
 }
 
 static void flow_offload_work_handler(struct work_struct *work)

@@ -1842,6 +1842,11 @@ enum netdev_reg_state {
  *	@stats:		Statistics struct, which was left as a legacy, use
  *			rtnl_link_stats64 instead
  *
+ *	@fstats:	HW offloaded flow statistics: RX/TX packets,
+ *			RX/TX bytes. Lazily allocated by the flow offload
+ *			path on the first offloaded flow for devices that
+ *			set @flow_offload_via_parent. Freed by free_netdev().
+ *
  *	@core_stats:	core networking counters,
  *			do not use this in drivers
  *	@carrier_up_count:	Number of times the carrier has been up
@@ -2050,6 +2055,12 @@ enum netdev_reg_state {
  *	@change_proto_down: device supports setting carrier via IFLA_PROTO_DOWN
  *	@netns_immutable: interface can't change network namespaces
  *	@fcoe_mtu:	device supports maximum FCoE MTU, 2158 bytes
+ *	@flow_offload_via_parent: device delegates nft flowtable hardware
+ *				  offload to a parent/conduit device (e.g. DSA
+ *				  user ports delegate to their conduit MAC).
+ *				  The parent's HW count the offloaded traffic
+ *				  but this device's sw netstats path does not.
+ *				  @fstats is allocated to fill that gap.
  *
  *	@net_notifier_list:	List of per-net netdev notifier block
  *				that follow this device when it is moved
@@ -2236,6 +2247,7 @@ struct net_device {
 
 	struct net_device_stats	stats; /* not used by modern drivers */
 
+	struct pcpu_sw_netstats __percpu *fstats;
 	struct net_device_core_stats __percpu *core_stats;
 
 	/* Stats to monitor link on/off, flapping */
@@ -2464,6 +2476,7 @@ struct net_device {
 	unsigned long		change_proto_down:1;
 	unsigned long		netns_immutable:1;
 	unsigned long		fcoe_mtu:1;
+	unsigned long		flow_offload_via_parent:1;
 
 	struct list_head	net_notifier_list;
 
@@ -2992,6 +3005,38 @@ struct pcpu_lstats {
 } __aligned(2 * sizeof(u64));
 
 void dev_lstats_read(struct net_device *dev, u64 *packets, u64 *bytes);
+
+static inline void dev_fstats_rx_add(struct net_device *dev,
+				     unsigned int packets,
+				     unsigned int len)
+{
+	struct pcpu_sw_netstats *fstats;
+
+	if (!dev->fstats)
+		return;
+
+	fstats = this_cpu_ptr(dev->fstats);
+	u64_stats_update_begin(&fstats->syncp);
+	u64_stats_add(&fstats->rx_bytes, len);
+	u64_stats_add(&fstats->rx_packets, packets);
+	u64_stats_update_end(&fstats->syncp);
+}
+
+static inline void dev_fstats_tx_add(struct net_device *dev,
+				     unsigned int packets,
+				     unsigned int len)
+{
+	struct pcpu_sw_netstats *fstats;
+
+	if (!dev->fstats)
+		return;
+
+	fstats = this_cpu_ptr(dev->fstats);
+	u64_stats_update_begin(&fstats->syncp);
+	u64_stats_add(&fstats->tx_bytes, len);
+	u64_stats_add(&fstats->tx_packets, packets);
+	u64_stats_update_end(&fstats->syncp);
+}
 
 static inline void dev_sw_netstats_rx_add(struct net_device *dev, unsigned int len)
 {
