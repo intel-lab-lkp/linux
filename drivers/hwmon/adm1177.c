@@ -10,6 +10,7 @@
 #include <linux/hwmon.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
 
@@ -91,8 +92,8 @@ static int adm1177_read(struct device *dev, enum hwmon_sensor_types type,
 			*val = div_u64((105840000ull * dummy),
 				       4096 * st->r_sense_uohm);
 			return 0;
-		case hwmon_curr_max_alarm:
-			*val = st->alert_threshold_ua;
+		case hwmon_curr_max:
+			*val = DIV_ROUND_CLOSEST(st->alert_threshold_ua, 1000);
 			return 0;
 		default:
 			return -EOPNOTSUPP;
@@ -126,9 +127,10 @@ static int adm1177_write(struct device *dev, enum hwmon_sensor_types type,
 	switch (type) {
 	case hwmon_curr:
 		switch (attr) {
-		case hwmon_curr_max_alarm:
-			adm1177_write_alert_thr(st, val);
-			return 0;
+		case hwmon_curr_max:
+			val = clamp_val(val, 0,
+					div_u64(105840000ULL, st->r_sense_uohm));
+			return adm1177_write_alert_thr(st, val * 1000);
 		default:
 			return -EOPNOTSUPP;
 		}
@@ -156,7 +158,7 @@ static umode_t adm1177_is_visible(const void *data,
 			if (st->r_sense_uohm)
 				return 0444;
 			return 0;
-		case hwmon_curr_max_alarm:
+		case hwmon_curr_max:
 			if (st->r_sense_uohm)
 				return 0644;
 			return 0;
@@ -170,7 +172,7 @@ static umode_t adm1177_is_visible(const void *data,
 
 static const struct hwmon_channel_info * const adm1177_info[] = {
 	HWMON_CHANNEL_INFO(curr,
-			   HWMON_C_INPUT | HWMON_C_MAX_ALARM),
+			   HWMON_C_INPUT | HWMON_C_MAX),
 	HWMON_CHANNEL_INFO(in,
 			   HWMON_I_INPUT),
 	NULL
