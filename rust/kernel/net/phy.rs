@@ -391,6 +391,51 @@ impl<T: Driver> Adapter<T> {
     /// # Safety
     ///
     /// `phydev` must be passed by the corresponding callback in `phy_driver`.
+    unsafe extern "C" fn config_init_callback(phydev: *mut bindings::phy_device) -> c_int {
+        from_result(|| {
+            // SAFETY: The C core calls config_init with the PHY mutex held
+            // (from phy_init_hw), so the accessors on `Device` are okay to call.
+            let dev = unsafe { Device::from_raw(phydev) };
+            T::config_init(dev)?;
+            Ok(0)
+        })
+    }
+
+    /// # Safety
+    ///
+    /// `phydev` must be passed by the corresponding callback in `phy_driver`.
+    unsafe extern "C" fn read_page_callback(phydev: *mut bindings::phy_device) -> c_int {
+        from_result(|| {
+            // SAFETY: This callback is called only in contexts
+            // where we hold `phy_device->lock`, so the accessors on
+            // `Device` are okay to call.
+            let dev = unsafe { Device::from_raw(phydev) };
+            let page = T::read_page(dev)?;
+            Ok(page.into())
+        })
+    }
+
+    /// # Safety
+    ///
+    /// `phydev` must be passed by the corresponding callback in `phy_driver`.
+    unsafe extern "C" fn write_page_callback(
+        phydev: *mut bindings::phy_device,
+        page: c_int,
+    ) -> c_int {
+        from_result(|| {
+            // SAFETY: This callback is called only in contexts
+            // where we hold `phy_device->lock`, so the accessors on
+            // `Device` are okay to call.
+            let dev = unsafe { Device::from_raw(phydev) };
+            let page = u16::try_from(page).map_err(|_| code::EINVAL)?;
+            T::write_page(dev, page)?;
+            Ok(0)
+        })
+    }
+
+    /// # Safety
+    ///
+    /// `phydev` must be passed by the corresponding callback in `phy_driver`.
     unsafe extern "C" fn soft_reset_callback(phydev: *mut bindings::phy_device) -> c_int {
         from_result(|| {
             // SAFETY: This callback is called only in contexts
@@ -580,6 +625,11 @@ pub const fn create_phy_driver<T: Driver>() -> DriverVTable {
         flags: T::FLAGS,
         phy_id: T::PHY_DEVICE_ID.id(),
         phy_id_mask: T::PHY_DEVICE_ID.mask_as_int(),
+        config_init: if T::HAS_CONFIG_INIT {
+            Some(Adapter::<T>::config_init_callback)
+        } else {
+            None
+        },
         soft_reset: if T::HAS_SOFT_RESET {
             Some(Adapter::<T>::soft_reset_callback)
         } else {
@@ -630,6 +680,16 @@ pub const fn create_phy_driver<T: Driver>() -> DriverVTable {
         } else {
             None
         },
+        read_page: if T::HAS_READ_PAGE {
+            Some(Adapter::<T>::read_page_callback)
+        } else {
+            None
+        },
+        write_page: if T::HAS_WRITE_PAGE {
+            Some(Adapter::<T>::write_page_callback)
+        } else {
+            None
+        },
         link_change_notify: if T::HAS_LINK_CHANGE_NOTIFY {
             Some(Adapter::<T>::link_change_notify_callback)
         } else {
@@ -656,6 +716,11 @@ pub trait Driver {
     /// This driver only works for PHYs with IDs which match this field.
     /// The default id and mask are zero.
     const PHY_DEVICE_ID: DeviceId = DeviceId::new_with_custom_mask(0, 0);
+
+    /// Called to initialize the PHY, including after a reset.
+    fn config_init(_dev: &mut Device) -> Result {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
 
     /// Issues a PHY software reset.
     fn soft_reset(_dev: &mut Device) -> Result {
@@ -706,6 +771,24 @@ pub trait Driver {
 
     /// Overrides the default MMD write function for writing a MMD register.
     fn write_mmd(_dev: &mut Device, _devnum: u8, _regnum: u16, _val: u16) -> Result {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+
+    /// Returns the current PHY register page number.
+    ///
+    /// Must be implemented together with [`Driver::write_page`]. The kernel's
+    /// paged register access infrastructure requires both callbacks to be
+    /// present.
+    fn read_page(_dev: &mut Device) -> Result<u16> {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+
+    /// Sets the current PHY register page number.
+    ///
+    /// Must be implemented together with [`Driver::read_page`]. The kernel's
+    /// paged register access infrastructure requires both callbacks to be
+    /// present.
+    fn write_page(_dev: &mut Device, _page: u16) -> Result {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 
