@@ -18,6 +18,7 @@
 #include <linux/highmem.h>
 #include <linux/blk-crypto.h>
 #include <linux/xarray.h>
+#include <linux/kmemleak.h>
 
 #include <trace/events/block.h>
 #include "blk.h"
@@ -504,6 +505,9 @@ static struct bio *bio_alloc_percpu_cache(struct block_device *bdev,
 	cache->nr--;
 	put_cpu();
 
+	kmemleak_alloc((void *)bio - bs->front_pad,
+		       kmem_cache_size(bs->bio_slab), 1, gfp);
+
 	if (nr_vecs)
 		bio_init_inline(bio, bdev, nr_vecs, opf);
 	else
@@ -765,6 +769,9 @@ static int __bio_alloc_cache_prune(struct bio_alloc_cache *cache,
 	while ((bio = cache->free_list) != NULL) {
 		cache->free_list = bio->bi_next;
 		cache->nr--;
+		kmemleak_alloc((void *)bio - bio->bi_pool->front_pad,
+			       kmem_cache_size(bio->bi_pool->bio_slab),
+			       1, GFP_KERNEL);
 		bio_free(bio);
 		if (++i == nr)
 			break;
@@ -828,6 +835,7 @@ static inline void bio_put_percpu_cache(struct bio *bio)
 		bio->bi_bdev = NULL;
 		cache->free_list = bio;
 		cache->nr++;
+		kmemleak_free((void *)bio - bio->bi_pool->front_pad);
 	} else if (in_hardirq()) {
 		lockdep_assert_irqs_disabled();
 
@@ -835,6 +843,7 @@ static inline void bio_put_percpu_cache(struct bio *bio)
 		bio->bi_next = cache->free_list_irq;
 		cache->free_list_irq = bio;
 		cache->nr_irq++;
+		kmemleak_free((void *)bio - bio->bi_pool->front_pad);
 	} else {
 		goto out_free;
 	}
