@@ -1387,6 +1387,10 @@ static int cp2112_raw_event(struct hid_device *hdev, struct hid_report *report,
 	struct cp2112_device *dev = hid_get_drvdata(hdev);
 	struct cp2112_xfer_status_report *xfer = (void *)data;
 
+	/* CP2112 always sends 64-byte reports */
+	if (size < 64)
+		return 0;
+
 	switch (data[0]) {
 	case CP2112_TRANSFER_STATUS_RESPONSE:
 		hid_dbg(hdev, "xfer status: %02x %02x %04x %04x\n",
