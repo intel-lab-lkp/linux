@@ -33,7 +33,7 @@
 #endif
 
 #define TPM_MINOR		224	/* officially assigned */
-#define TPM_BUFSIZE		4096
+#define TPM_BUFSIZE		65536
 #define TPM_NUM_DEVICES		65536
 #define TPM_RETRY		50
 
