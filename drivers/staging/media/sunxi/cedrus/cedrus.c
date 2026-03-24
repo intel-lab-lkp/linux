@@ -42,6 +42,29 @@ static int cedrus_try_ctrl(struct v4l2_ctrl *ctrl)
 		if (sps->bit_depth_luma_minus8 != 0)
 			/* Only 8-bit is supported */
 			return -EINVAL;
+	} else if (ctrl->id == V4L2_CID_STATELESS_H264_SLICE_PARAMS) {
+		const struct v4l2_ctrl_h264_slice_params *slice = ctrl->p_new.p_h264_slice_params;
+		unsigned int i;
+
+		if (slice->num_ref_idx_l0_active_minus1 >=
+		    V4L2_H264_NUM_DPB_ENTRIES)
+			return -EINVAL;
+
+		for (i = 0; i <= slice->num_ref_idx_l0_active_minus1; i++)
+			if (slice->ref_pic_list0[i].index >=
+			    V4L2_H264_NUM_DPB_ENTRIES)
+				return -EINVAL;
+
+		if (slice->slice_type == V4L2_H264_SLICE_TYPE_B) {
+			if (slice->num_ref_idx_l1_active_minus1 >=
+			    V4L2_H264_NUM_DPB_ENTRIES)
+				return -EINVAL;
+
+			for (i = 0; i <= slice->num_ref_idx_l1_active_minus1; i++)
+				if (slice->ref_pic_list1[i].index >=
+				    V4L2_H264_NUM_DPB_ENTRIES)
+					return -EINVAL;
+		}
 	} else if (ctrl->id == V4L2_CID_STATELESS_HEVC_SPS) {
 		const struct v4l2_ctrl_hevc_sps *sps = ctrl->p_new.p_hevc_sps;
 		struct cedrus_ctx *ctx = container_of(ctrl->handler, struct cedrus_ctx, hdl);
