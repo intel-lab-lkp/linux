@@ -1444,9 +1444,8 @@ static void free_asym_cap_entry(struct rcu_head *head)
 	kfree(entry);
 }
 
-static inline void asym_cpu_capacity_update_data(int cpu)
+static inline void asym_cpu_capacity_update_data(int cpu, unsigned long capacity)
 {
-	unsigned long capacity = arch_scale_cpu_capacity(cpu);
 	struct asym_cap_data *insert_entry = NULL;
 	struct asym_cap_data *entry;
 
@@ -1483,13 +1482,27 @@ done:
 static void asym_cpu_capacity_scan(void)
 {
 	struct asym_cap_data *entry, *next;
+	unsigned long max_cap = 0;
+	unsigned long capacity;
 	int cpu;
 
 	list_for_each_entry(entry, &asym_cap_list, link)
 		cpumask_clear(cpu_capacity_span(entry));
 
 	for_each_cpu_and(cpu, cpu_possible_mask, housekeeping_cpumask(HK_TYPE_DOMAIN))
-		asym_cpu_capacity_update_data(cpu);
+		max_cap = max(max_cap, arch_scale_cpu_capacity(cpu));
+
+	/*
+	 * Treat small capacity differences (< 20% max capacity) as noise,
+	 * to prevent enabling SD_ASYM_CPUCAPACITY when it's not really
+	 * needed.
+	 */
+	for_each_cpu_and(cpu, cpu_possible_mask, housekeeping_cpumask(HK_TYPE_DOMAIN)) {
+		capacity = arch_scale_cpu_capacity(cpu);
+		if (capacity * 5 >= max_cap * 4)
+			capacity = max_cap;
+		asym_cpu_capacity_update_data(cpu, capacity);
+	}
 
 	list_for_each_entry_safe(entry, next, &asym_cap_list, link) {
 		if (cpumask_empty(cpu_capacity_span(entry))) {
