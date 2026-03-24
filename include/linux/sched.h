@@ -579,6 +579,7 @@ struct sched_entity {
 	u64				deadline;
 	u64				min_vruntime;
 	u64				min_slice;
+	u64				max_slice;
 
 	struct list_head		group_node;
 	unsigned char			on_rq;
@@ -947,6 +948,10 @@ struct task_struct {
 	int				trc_reader_nesting;
 	struct srcu_ctr __percpu	*trc_reader_scp;
 #endif /* #ifdef CONFIG_TASKS_TRACE_RCU */
+
+#ifdef CONFIG_TRIVIAL_PREEMPT_RCU
+	int				rcu_trivial_preempt_nesting;
+#endif /* #ifdef CONFIG_TRIVIAL_PREEMPT_RCU */
 
 	struct sched_info		sched_info;
 
