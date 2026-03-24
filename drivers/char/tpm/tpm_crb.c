@@ -56,10 +56,16 @@ enum crb_ctrl_sts {
 
 enum crb_start {
 	CRB_START_INVOKE	= BIT(0),
+	CRB_START_RESP_RETRY = BIT(1),
+	CRB_START_NEXT_CHUNK = BIT(2),
 };
 
 enum crb_cancel {
 	CRB_CANCEL_INVOKE	= BIT(0),
+};
+
+enum crb_intf {
+	CRB_INTF_CAP_CRB_CHUNK = BIT(10),
 };
 
 struct crb_regs_head {
