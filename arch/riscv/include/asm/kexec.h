@@ -75,4 +75,13 @@ int load_extra_segments(struct kimage *image, unsigned long kernel_start,
 			unsigned long cmdline_len);
 #endif
 
+#ifndef __ASSEMBLY__
+#ifdef CONFIG_MMU
+#define __kexec_tramp_text __section(".kexec.tramp.text")
+#else
+#define __kexec_tramp_text
+#endif
+#endif
+extern char __kexec_tramp_text_start[];
+
 #endif
