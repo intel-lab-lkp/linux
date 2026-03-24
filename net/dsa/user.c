@@ -2807,6 +2807,7 @@ int dsa_user_create(struct dsa_port *port)
 
 	p = netdev_priv(user_dev);
 	user_dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
+	user_dev->flow_offload_via_parent = true;
 
 	ret = gro_cells_init(&p->gcells, user_dev);
 	if (ret)
