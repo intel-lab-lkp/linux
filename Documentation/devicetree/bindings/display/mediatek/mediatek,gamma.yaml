@@ -40,6 +40,7 @@ properties:
       - items:
           - enum:
               - mediatek,mt8188-disp-gamma
+              - mediatek,mt8196-disp-gamma
           - const: mediatek,mt8195-disp-gamma
 
   reg:
