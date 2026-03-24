@@ -2957,18 +2957,26 @@ void sev_vm_destroy(struct kvm *kvm)
 
 void __init sev_set_cpu_caps(void)
 {
+	u32 supported_vm_types = 0;
+
 	if (sev_enabled) {
 		kvm_cpu_cap_set(X86_FEATURE_SEV);
-		kvm_caps.supported_vm_types |= BIT(KVM_X86_SEV_VM);
+
+		if (min_sev_asid <= max_sev_asid)
+			supported_vm_types |= BIT(KVM_X86_SEV_VM);
 	}
 	if (sev_es_enabled) {
 		kvm_cpu_cap_set(X86_FEATURE_SEV_ES);
-		kvm_caps.supported_vm_types |= BIT(KVM_X86_SEV_ES_VM);
+
+		if (min_sev_es_asid <= max_sev_es_asid)
+			supported_vm_types |= BIT(KVM_X86_SEV_ES_VM);
 	}
 	if (sev_snp_enabled) {
 		kvm_cpu_cap_set(X86_FEATURE_SEV_SNP);
-		kvm_caps.supported_vm_types |= BIT(KVM_X86_SNP_VM);
+		supported_vm_types |= BIT(KVM_X86_SNP_VM);
 	}
+
+	kvm_caps.supported_vm_types |= supported_vm_types;
 }
 
 static bool is_sev_snp_initialized(void)
