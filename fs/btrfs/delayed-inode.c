@@ -1840,7 +1840,7 @@ static void fill_stack_inode_item(struct btrfs_trans_handle *trans,
 
 	btrfs_set_stack_inode_uid(inode_item, i_uid_read(vfs_inode));
 	btrfs_set_stack_inode_gid(inode_item, i_gid_read(vfs_inode));
-	btrfs_set_stack_inode_size(inode_item, inode->disk_i_size);
+	btrfs_set_stack_inode_size(inode_item, btrfs_inode_disk_i_size(inode));
 	btrfs_set_stack_inode_mode(inode_item, vfs_inode->i_mode);
 	btrfs_set_stack_inode_nlink(inode_item, vfs_inode->i_nlink);
 	btrfs_set_stack_inode_nbytes(inode_item, inode_get_bytes(vfs_inode));

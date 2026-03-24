@@ -793,7 +793,7 @@ static inline void inode_should_defrag(struct btrfs_inode *inode,
 {
 	/* If this is a small write inside eof, kick off a defrag */
 	if (num_bytes < small_write &&
-	    (start > 0 || end + 1 < inode->disk_i_size))
+	    (start > 0 || end + 1 < btrfs_inode_disk_i_size(inode)))
 		btrfs_add_inode_defrag(inode, small_write);
 }
 
@@ -4272,7 +4272,7 @@ static void fill_inode_item(struct btrfs_trans_handle *trans,
 
 	btrfs_set_inode_uid(leaf, item, i_uid_read(inode));
 	btrfs_set_inode_gid(leaf, item, i_gid_read(inode));
-	btrfs_set_inode_size(leaf, item, BTRFS_I(inode)->disk_i_size);
+	btrfs_set_inode_size(leaf, item, btrfs_inode_disk_i_size(BTRFS_I(inode)));
 	btrfs_set_inode_mode(leaf, item, inode->i_mode);
 	btrfs_set_inode_nlink(leaf, item, inode->i_nlink);
 
@@ -5463,7 +5463,7 @@ static int btrfs_setsize(struct inode *inode, struct iattr *attr)
 			ret2 = btrfs_wait_ordered_range(BTRFS_I(inode), 0, (u64)-1);
 			if (ret2)
 				return ret2;
-			i_size_write(inode, BTRFS_I(inode)->disk_i_size);
+			i_size_write(inode, btrfs_inode_disk_i_size(BTRFS_I(inode)));
 		}
 	}
 

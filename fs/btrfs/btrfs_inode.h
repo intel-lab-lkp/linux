@@ -418,6 +418,30 @@ static inline void btrfs_i_size_write(struct btrfs_inode *inode, u64 size)
 	inode->disk_i_size = size;
 }
 
+/*
+ * Get the on-disk file size safely without holding inode->lock.
+ *
+ * disk_i_size is protected by inode->lock when being written (see
+ * btrfs_inode_safe_disk_i_size_write()), but several read sites access
+ * it without that lock.  On 64-bit platforms a plain READ_ONCE() is
+ * sufficient because aligned u64 loads are atomic.  On 32-bit platforms
+ * a u64 load can tear, so we take the spinlock to guarantee a consistent
+ * snapshot.
+ */
+static inline u64 btrfs_inode_disk_i_size(struct btrfs_inode *inode)
+{
+#if BITS_PER_LONG == 32
+	u64 size;
+
+	spin_lock(&inode->lock);
+	size = inode->disk_i_size;
+	spin_unlock(&inode->lock);
+	return size;
+#else
+	return READ_ONCE(inode->disk_i_size);
+#endif
+}
+
 static inline bool btrfs_is_free_space_inode(const struct btrfs_inode *inode)
 {
 	return test_bit(BTRFS_INODE_FREE_SPACE_INODE, &inode->runtime_flags);
