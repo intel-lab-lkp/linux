@@ -1253,8 +1253,11 @@ static int scmi_clock_protocol_init(const struct scmi_protocol_handle *ph)
 	for (clkid = 0; clkid < cinfo->num_clocks; clkid++) {
 		cinfo->clkds[clkid].id = clkid;
 		ret = scmi_clock_attributes_get(ph, clkid, cinfo);
-		if (ret)
+		if (ret) {
+			if (ret == -ENOENT)
+				continue;
 			return ret;
+		}
 
 		ret = scmi_clock_describe_rates_get(ph, clkid, cinfo);
 		if (ret)
