@@ -1778,6 +1778,7 @@ err_free_msg:
  */
 int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
+	struct net *net = genl_info_net(info);
 	const struct nlattr *attr;
 	struct nfsd_net *nn;
 	int i, rem;
@@ -1785,10 +1786,22 @@ int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_PROTO_VERSION))
 		return -EINVAL;
 
+	pr_info("nfsd: %s[%d] attempting to acquire nfsd_mutex\n",
+		current->comm, current->pid);
+
 	mutex_lock(&nfsd_mutex);
 
-	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	pr_info("nfsd: %s[%d] acquired nfsd_mutex\n",
+		current->comm, current->pid);
+
+	nn = net_generic(net, nfsd_net_id);
+
+	pr_info("nfsd: version_set: nn=%p, nfsd_serv=%p, net=%p\n",
+		nn, nn->nfsd_serv, net);
+
 	if (nn->nfsd_serv) {
+		pr_info("nfsd: version_set: service is running (nrthreads=%d), returning -EBUSY\n",
+			nn->nfsd_serv->sv_nrthreads);
 		mutex_unlock(&nfsd_mutex);
 		return -EBUSY;
 	}
@@ -2203,6 +2216,9 @@ static __net_init int nfsd_net_init(struct net *net)
 	int retval;
 	int i;
 
+	retval = nfsd_net_cb_init(nn);
+	if (retval)
+		return retval;
 	retval = nfsd_export_init(net);
 	if (retval)
 		goto out_export_error;
@@ -2243,6 +2259,7 @@ out_repcache_error:
 out_idmap_error:
 	nfsd_export_shutdown(net);
 out_export_error:
+	nfsd_net_cb_shutdown(nn);
 	return retval;
 }
 
@@ -2273,6 +2290,7 @@ static __net_exit void nfsd_net_exit(struct net *net)
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
 	kfree_sensitive(nn->fh_key);
+	nfsd_net_cb_shutdown(nn);
 	nfsd_proc_stat_shutdown(net);
 	percpu_counter_destroy_many(nn->counter, NFSD_STATS_COUNTERS_NUM);
 	nfsd_idmap_shutdown(net);
