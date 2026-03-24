@@ -1198,9 +1198,17 @@ static int gfs2_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (!sdp->sd_delete_wq)
 		goto fail_glock_wq;
 
+	char *bufdata_name = kasprintf(GFP_KERNEL, "gfs2-bufdata/%s", sdp->sd_fsname);
+	sdp->sd_bufdata = kmem_cache_create(bufdata_name,
+					    sizeof(struct gfs2_bufdata),
+					    0, 0, NULL);
+	kfree(bufdata_name);
+	if (!sdp->sd_bufdata)
+		goto fail_delete_wq;
+
 	error = gfs2_sys_fs_add(sdp);
 	if (error)
-		goto fail_delete_wq;
+		goto fail_bufdata;
 
 	gfs2_create_debugfs_file(sdp);
 
@@ -1305,6 +1313,8 @@ fail_lm:
 fail_debug:
 	gfs2_delete_debugfs_file(sdp);
 	gfs2_sys_fs_del(sdp);
+fail_bufdata:
+	kmem_cache_destroy(sdp->sd_bufdata);
 fail_delete_wq:
 	destroy_workqueue(sdp->sd_delete_wq);
 fail_glock_wq:
