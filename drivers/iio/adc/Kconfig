@@ -908,11 +908,13 @@ config LPC32XX_ADC
 	  via sysfs.
 
 config LTC2309
-	tristate "Linear Technology LTC2309 ADC driver"
+	tristate "Linear Technology LTC2309 and similar ADC driver"
 	depends on I2C
 	help
-	  Say yes here to build support for Linear Technology LTC2309, a low
-	  noise, low power, 8-channel, 12-bit SAR ADC
+	  Say yes here to build support for Linear Technology low noise,
+	  low power 12-bit SAR ADCs:
+	  - LTC2305 - 2-channel
+	  - LTC2309 - 8-channel
 
 	  This driver can also be built as a module. If so, the module will
 	  be called ltc2309.
