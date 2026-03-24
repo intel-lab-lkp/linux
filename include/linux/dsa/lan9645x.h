@@ -131,4 +131,15 @@
 #define IFH_DUPL_DISC_ENA_SZ		1
 #define IFH_RCT_AVAIL_SZ		1
 
+/* Chip has 8 cpu queues. The cpu queues used by a frame is passed as a mask in
+ * the IFH on extraction. We use this to avoid classifying IGMP and MLD frames
+ * in the tag driver.
+ */
+enum {
+	LAN9645X_CPUQ_DEF = 0,
+	LAN9645X_CPUQ_IGMP = 1,
+	LAN9645X_CPUQ_MLD = 2,
+	LAN9645X_CPUQ_IPMC_CTRL = 3,
+};
+
 #endif /* _NET_DSA_TAG_LAN9645X_H_ */
