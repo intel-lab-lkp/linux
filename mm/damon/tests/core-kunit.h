@@ -416,6 +416,8 @@ static void damon_test_nr_accesses_to_accesses_bp(struct kunit *test)
 		.aggr_interval = ((unsigned long)UINT_MAX + 1) * 10
 	};
 
+	attrs.aggr_samples = attrs.aggr_interval / attrs.sample_interval;
+
 	/*
 	 * In some cases such as 32bit architectures where UINT_MAX is
 	 * ULONG_MAX, attrs.aggr_interval becomes zero.  Calling
@@ -434,7 +436,8 @@ static void damon_test_nr_accesses_to_accesses_bp(struct kunit *test)
 static void damon_test_update_monitoring_result(struct kunit *test)
 {
 	struct damon_attrs old_attrs = {
-		.sample_interval = 10, .aggr_interval = 1000,};
+		.sample_interval = 10, .aggr_interval = 1000,
+		.aggr_samples = 100,};
 	struct damon_attrs new_attrs;
 	struct damon_region *r = damon_new_region(3, 7);
 
@@ -446,19 +449,24 @@ static void damon_test_update_monitoring_result(struct kunit *test)
 	r->age = 20;
 
 	new_attrs = (struct damon_attrs){
-		.sample_interval = 100, .aggr_interval = 10000,};
+		.sample_interval = 100, .aggr_interval = 10000,
+		.aggr_samples = 100,};
 	damon_update_monitoring_result(r, &old_attrs, &new_attrs, false);
 	KUNIT_EXPECT_EQ(test, r->nr_accesses, 15);
 	KUNIT_EXPECT_EQ(test, r->age, 2);
 
 	new_attrs = (struct damon_attrs){
-		.sample_interval = 1, .aggr_interval = 1000};
+		.sample_interval = 1, .aggr_interval = 1000,
+		.aggr_samples = 1000,
+	};
 	damon_update_monitoring_result(r, &old_attrs, &new_attrs, false);
 	KUNIT_EXPECT_EQ(test, r->nr_accesses, 150);
 	KUNIT_EXPECT_EQ(test, r->age, 2);
 
 	new_attrs = (struct damon_attrs){
-		.sample_interval = 1, .aggr_interval = 100};
+		.sample_interval = 1, .aggr_interval = 100,
+		.aggr_samples = 100,
+	};
 	damon_update_monitoring_result(r, &old_attrs, &new_attrs, false);
 	KUNIT_EXPECT_EQ(test, r->nr_accesses, 150);
 	KUNIT_EXPECT_EQ(test, r->age, 20);

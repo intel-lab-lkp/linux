@@ -587,6 +587,7 @@ struct damon_ctx *damon_new_ctx(void)
 	ctx->attrs.sample_interval = 5 * 1000;
 	ctx->attrs.aggr_interval = 100 * 1000;
 	ctx->attrs.ops_update_interval = 60 * 1000 * 1000;
+	ctx->attrs.aggr_samples = 20;
 
 	ctx->passed_sample_intervals = 0;
 	/* These will be set from kdamond_init_ctx() */
