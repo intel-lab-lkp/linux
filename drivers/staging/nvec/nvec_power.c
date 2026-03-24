@@ -193,14 +193,20 @@ static int nvec_power_bat_notifier(struct notifier_block *nb,
 		power->bat_temperature = res->plu - 2732;
 		break;
 	case MANUFACTURER:
+		if (res->length < 2 || res->length - 2 > sizeof(power->bat_manu) - 1)
+			break;
 		memcpy(power->bat_manu, &res->plc, res->length - 2);
 		power->bat_manu[res->length - 2] = '\0';
 		break;
 	case MODEL:
+		if (res->length < 2 || res->length - 2 > sizeof(power->bat_model) - 1)
+			break;
 		memcpy(power->bat_model, &res->plc, res->length - 2);
 		power->bat_model[res->length - 2] = '\0';
 		break;
 	case TYPE:
+		if (res->length < 2 || res->length - 2 > sizeof(power->bat_type) - 1)
+			break;
 		memcpy(power->bat_type, &res->plc, res->length - 2);
 		power->bat_type[res->length - 2] = '\0';
 		/*
