@@ -36,8 +36,7 @@
  * The type of operation used for picking the delay between
  * successive pmbus operations.
  */
-#define PMBUS_OP_WRITE		BIT(0)
-#define PMBUS_OP_PAGE_CHANGE	BIT(1)
+/* PMBUS_OP_WRITE and PMBUS_OP_PAGE_CHANGE are defined in pmbus.h */
 
 static int wp = -1;
 module_param(wp, int, 0444);
@@ -173,7 +172,7 @@ void pmbus_set_update(struct i2c_client *client, u8 reg, bool update)
 EXPORT_SYMBOL_NS_GPL(pmbus_set_update, "PMBUS");
 
 /* Some chips need a delay between accesses. */
-static void pmbus_wait(struct i2c_client *client)
+void pmbus_wait(struct i2c_client *client)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
 	s64 delay = ktime_us_delta(data->next_access_backoff, ktime_get());
@@ -181,9 +180,10 @@ static void pmbus_wait(struct i2c_client *client)
 	if (delay > 0)
 		fsleep(delay);
 }
+EXPORT_SYMBOL_NS_GPL(pmbus_wait, "PMBUS");
 
 /* Sets the last operation timestamp for pmbus_wait */
-static void pmbus_update_ts(struct i2c_client *client, int op)
+void pmbus_update_ts(struct i2c_client *client, int op)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
 	const struct pmbus_driver_info *info = data->info;
@@ -197,6 +197,7 @@ static void pmbus_update_ts(struct i2c_client *client, int op)
 	if (delay > 0)
 		data->next_access_backoff = ktime_add_us(ktime_get(), delay);
 }
+EXPORT_SYMBOL_NS_GPL(pmbus_update_ts, "PMBUS");
 
 int pmbus_set_page(struct i2c_client *client, int page, int phase)
 {
@@ -884,6 +885,10 @@ static s64 pmbus_reg2data_vid(struct pmbus_data *data,
 	case amd625mv:
 		if (val >= 0x0 && val <= 0xd8)
 			rv = DIV_ROUND_CLOSEST(155000 - val * 625, 100);
+		break;
+	case nvidia195mv:
+		if (val >= 0x01)
+			rv = 195 + (val - 1) * 5;  /* VID step is 5mv */
 		break;
 	}
 	return rv;
