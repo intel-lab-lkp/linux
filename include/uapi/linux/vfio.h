@@ -1519,8 +1519,13 @@ struct vfio_region_dma_range {
 struct vfio_device_feature_dma_buf {
 	__u32	region_index;
 	__u32	open_flags;
-	__u32   flags;
-	__u32   nr_ranges;
+	__u32	flags;
+#define VFIO_DMABUF_FL_TPH		(1U << 0) /* TPH info is present */
+#define VFIO_DMABUF_TPH_PH_SHIFT	1         /* bits 1-2: PH (2-bit) */
+#define VFIO_DMABUF_TPH_PH_MASK	0x6U
+#define VFIO_DMABUF_TPH_ST_SHIFT	16        /* bits 16-31: steering tag */
+#define VFIO_DMABUF_TPH_ST_MASK		0xffff0000U
+	__u32	nr_ranges;
 	struct vfio_region_dma_range dma_ranges[] __counted_by(nr_ranges);
 };
 

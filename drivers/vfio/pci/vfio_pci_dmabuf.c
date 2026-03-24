@@ -17,6 +17,8 @@ struct vfio_pci_dma_buf {
 	struct phys_vec *phys_vec;
 	struct p2pdma_provider *provider;
 	u32 nr_ranges;
+	u16 steering_tag;
+	u8 ph;
 	u8 revoked : 1;
 };
 
@@ -60,6 +62,15 @@ vfio_pci_dma_buf_map(struct dma_buf_attachment *attachment,
 				       priv->size, dir);
 }
 
+static int vfio_pci_dma_buf_get_tph(struct dma_buf *dmabuf, u16 *steering_tag,
+				    u8 *ph)
+{
+	struct vfio_pci_dma_buf *priv = dmabuf->priv;
+	*steering_tag = priv->steering_tag;
+	*ph = priv->ph;
+	return 0;
+}
+
 static void vfio_pci_dma_buf_unmap(struct dma_buf_attachment *attachment,
 				   struct sg_table *sgt,
 				   enum dma_data_direction dir)
@@ -90,6 +101,7 @@ static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
 	.unpin = vfio_pci_dma_buf_unpin,
 	.attach = vfio_pci_dma_buf_attach,
 	.map_dma_buf = vfio_pci_dma_buf_map,
+	.get_tph = vfio_pci_dma_buf_get_tph,
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
 	.release = vfio_pci_dma_buf_release,
 };
@@ -228,7 +240,10 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	if (copy_from_user(&get_dma_buf, arg, sizeof(get_dma_buf)))
 		return -EFAULT;
 
-	if (!get_dma_buf.nr_ranges || get_dma_buf.flags)
+	if (!get_dma_buf.nr_ranges ||
+	    (get_dma_buf.flags & ~(VFIO_DMABUF_FL_TPH |
+				   VFIO_DMABUF_TPH_PH_MASK |
+				   VFIO_DMABUF_TPH_ST_MASK)))
 		return -EINVAL;
 
 	/*
@@ -285,7 +300,14 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 		ret = PTR_ERR(priv->dmabuf);
 		goto err_dev_put;
 	}
-
+	if (get_dma_buf.flags & VFIO_DMABUF_FL_TPH) {
+		priv->steering_tag = (get_dma_buf.flags &
+				      VFIO_DMABUF_TPH_ST_MASK) >>
+				     VFIO_DMABUF_TPH_ST_SHIFT;
+		priv->ph = (get_dma_buf.flags &
+			    VFIO_DMABUF_TPH_PH_MASK) >>
+			   VFIO_DMABUF_TPH_PH_SHIFT;
+	}
 	/* dma_buf_put() now frees priv */
 	INIT_LIST_HEAD(&priv->dmabufs_elm);
 	down_write(&vdev->memory_lock);
