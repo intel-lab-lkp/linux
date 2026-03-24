@@ -2,8 +2,10 @@
 /* Author: Dan Scally <djrscally@gmail.com> */
 
 #include <linux/acpi.h>
+#include <linux/dmi.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
+#include <linux/unaligned.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/tps68470.h>
 #include <linux/platform_device.h>
@@ -140,6 +142,203 @@ skl_int3472_fill_clk_pdata(struct device *dev, struct tps68470_clk_platform_data
 	return n_consumers;
 }
 
+/* Dell Latitude 5285 GNVS fix
+ *
+ * The BIOS leaves GNVS fields C0TP, L0CL and L1CL at zero after POST.
+ * With C0TP=0 the ACPI _DEP on INT3479 resolves to PCI0 instead of CLP0
+ * (INT3472), so ipu_bridge never creates i2c-INT3479:00 (OV5670 front cam).
+ * With L0CL=L1CL=0 the TPS68470 clock driver disables all clock outputs,
+ * making both sensors unreachable over I2C.
+ *
+ * Fix: at TPS68470 probe time, locate the GNVS SystemMemory OperationRegion
+ * by scanning the DSDT/SSDTs for its AML definition, map the region, and
+ * write 0x02 (19.2 MHz) into C0TP, L0CL and L1CL.
+ *
+ * Field byte offsets (verified from DSDT disassembly, GNVS size 0x0725):
+ *   C0TP: 0x43A   L0CL: 0x4F7   L1CL: 0x549
+ */
+#define DELL5285_C0TP_OFF	0x43A
+#define DELL5285_L0CL_OFF	0x4F7
+#define DELL5285_L1CL_OFF	0x549
+/* Minimum GNVS region size: last field (L1CL) is 1 byte at 0x549 */
+#define DELL5285_GNVS_MIN_SIZE	(DELL5285_L1CL_OFF + 1)
+
+/* AML integer opcodes (ACPI 6.4, section 20.2.3) */
+#define AML_ZERO_OP		0x00
+#define AML_ONE_OP		0x01
+#define AML_BYTE_PREFIX		0x0A
+#define AML_WORD_PREFIX		0x0B
+#define AML_DWORD_PREFIX	0x0C
+#define AML_QWORD_PREFIX	0x0E
+
+/**
+ * aml_parse_int - Parse one AML integer opcode at @p.
+ * @p:   Pointer to the current position in the AML byte stream.
+ * @end: One past the last valid byte of the AML buffer.
+ * @val: Output: the parsed integer value.
+ *
+ * Returns the number of bytes consumed, or 0 on failure.
+ */
+static int aml_parse_int(const u8 *p, const u8 *end, u64 *val)
+{
+	if (p >= end)
+		return 0;
+	switch (*p) {
+	case AML_ZERO_OP:
+		*val = 0;
+		return 1;
+	case AML_ONE_OP:
+		*val = 1;
+		return 1;
+	case AML_BYTE_PREFIX:
+		if (p + 2 > end)
+			return 0;
+		*val = p[1];
+		return 2;
+	case AML_WORD_PREFIX:
+		if (p + 3 > end)
+			return 0;
+		*val = get_unaligned_le16(p + 1);
+		return 3;
+	case AML_DWORD_PREFIX:
+		if (p + 5 > end)
+			return 0;
+		*val = get_unaligned_le32(p + 1);
+		return 5;
+	case AML_QWORD_PREFIX:
+		if (p + 9 > end)
+			return 0;
+		*val = get_unaligned_le64(p + 1);
+		return 9;
+	}
+	return 0;
+}
+
+/**
+ * dell5285_gnvs_from_table - Scan one ACPI table for the GNVS OperationRegion.
+ * @tbl:  ACPI table header; the AML body is scanned for the GNVS signature.
+ * @addr: Output: physical base address of the GNVS region.
+ * @size: Output: byte length of the GNVS region.
+ *
+ * Searches the AML body of @tbl for the byte sequence:
+ *   ExtOp(0x5B) OpRegionOp(0x80) NameSeg("GNVS") RegionSpace(SystemMemory=0x00)
+ * followed by two AML integers (region address and length).
+ *
+ * Returns true and fills @addr / @size if found and plausible.
+ */
+static bool dell5285_gnvs_from_table(const struct acpi_table_header *tbl,
+				     phys_addr_t *addr, u32 *size)
+{
+	/* AML: ExtOp OpRegionOp NameSeg("GNVS") SystemMemory */
+	static const u8 sig[] = { 0x5B, 0x80, 'G', 'N', 'V', 'S', 0x00 };
+	const u8 *aml = (const u8 *)tbl + sizeof(*tbl);
+	const u8 *end = (const u8 *)tbl + tbl->length;
+	const u8 *p;
+
+	for (p = aml; p + sizeof(sig) < end; p++) {
+		u64 region_addr, region_size;
+		int consumed;
+
+		if (memcmp(p, sig, sizeof(sig)) != 0)
+			continue;
+
+		p += sizeof(sig);
+		consumed = aml_parse_int(p, end, &region_addr);
+		if (!consumed || !region_addr)
+			continue;
+
+		p += consumed;
+		consumed = aml_parse_int(p, end, &region_size);
+		if (!consumed || region_size < DELL5285_GNVS_MIN_SIZE)
+			continue;
+
+		*addr = (phys_addr_t)region_addr;
+		*size = (u32)region_size;
+		return true;
+	}
+	return false;
+}
+
+/**
+ * dell5285_gnvs_find - Locate the GNVS OperationRegion by scanning DSDT and SSDTs.
+ * @addr: Output: physical base address of the GNVS region.
+ * @size: Output: byte length of the GNVS region.
+ *
+ * Returns true if the GNVS region was found in any ACPI table.
+ */
+static bool dell5285_gnvs_find(phys_addr_t *addr, u32 *size)
+{
+	struct acpi_table_header *tbl;
+	u32 i;
+
+	/* DSDT */
+	if (ACPI_SUCCESS(acpi_get_table(ACPI_SIG_DSDT, 1, &tbl))) {
+		bool found = dell5285_gnvs_from_table(tbl, addr, size);
+
+		acpi_put_table(tbl);
+		if (found)
+			return true;
+	}
+
+	/* SSDTs (instance numbers start at 1, stop at first failure) */
+	for (i = 1; i <= 32; i++) {
+		bool found;
+
+		if (ACPI_FAILURE(acpi_get_table(ACPI_SIG_SSDT, i, &tbl)))
+			break;
+		found = dell5285_gnvs_from_table(tbl, addr, size);
+		acpi_put_table(tbl);
+		if (found)
+			return true;
+	}
+
+	return false;
+}
+
+static const struct dmi_system_id dell5285_gnvs_dmi[] = {
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Latitude 5285"),
+		},
+	},
+	{ }
+};
+
+static void dell5285_gnvs_fix(void)
+{
+	phys_addr_t gnvs_addr;
+	u32 gnvs_size;
+	void *gnvs;
+
+	if (!dmi_check_system(dell5285_gnvs_dmi))
+		return;
+
+	if (!dell5285_gnvs_find(&gnvs_addr, &gnvs_size)) {
+		pr_err("int3472-tps68470: Dell 5285: GNVS OperationRegion not found in DSDT/SSDTs\n");
+		return;
+	}
+
+	gnvs = acpi_os_map_memory(gnvs_addr, gnvs_size);
+	if (!gnvs) {
+		pr_err("int3472-tps68470: Dell 5285: failed to map GNVS at %pa\n",
+		       &gnvs_addr);
+		return;
+	}
+
+	pr_info("int3472-tps68470: Dell 5285 GNVS fix at %pa: C0TP=0x%02x L0CL=0x%02x L1CL=0x%02x -> 0x02\n",
+		&gnvs_addr,
+		*(u8 *)(gnvs + DELL5285_C0TP_OFF),
+		*(u8 *)(gnvs + DELL5285_L0CL_OFF),
+		*(u8 *)(gnvs + DELL5285_L1CL_OFF));
+
+	*(u8 *)(gnvs + DELL5285_C0TP_OFF) = 0x02;
+	*(u8 *)(gnvs + DELL5285_L0CL_OFF) = 0x02;
+	*(u8 *)(gnvs + DELL5285_L1CL_OFF) = 0x02;
+
+	acpi_os_unmap_memory(gnvs, gnvs_size);
+}
+
 static int skl_int3472_tps68470_probe(struct i2c_client *client)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&client->dev);
@@ -154,6 +353,8 @@ static int skl_int3472_tps68470_probe(struct i2c_client *client)
 
 	if (!adev)
 		return -ENODEV;
+
+	dell5285_gnvs_fix();
 
 	n_consumers = skl_int3472_fill_clk_pdata(&client->dev, &clk_pdata);
 	if (n_consumers < 0)
