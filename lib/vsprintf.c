@@ -3389,14 +3389,15 @@ int bstr_printf(char *buf, size_t size, const char *fmt_str, const u32 *bin_buf)
 					break;
 				}
 				/* Pointer dereference was already processed */
+				len = strlen(args);
 				if (str < end) {
-					len = copy = strlen(args);
+					copy = len;
 					if (copy > end - str)
 						copy = end - str;
 					memcpy(str, args, copy);
-					str += len;
-					args += len + 1;
 				}
+				str += len;
+				args += len + 1;
 			}
 			if (process)
 				str = pointer(fmt.str, str, end, get_arg(void *), spec);
