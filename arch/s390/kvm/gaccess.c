@@ -1437,9 +1437,11 @@ static int _do_shadow_pte(struct gmap *sg, gpa_t raddr, union pte *ptep_h, union
 	if (!pgste_get_trylock(ptep_h, &pgste))
 		return -EAGAIN;
 	newpte = _pte(f->pfn, f->writable, !p, 0);
-	newpte.s.d |= ptep->s.d;
-	newpte.s.sd |= ptep->s.sd;
-	newpte.h.p &= ptep->h.p;
+	newpte.s.d |= ptep_h->s.d;
+	newpte.s.sd |= ptep_h->s.sd;
+	newpte.h.p &= ptep_h->h.p;
+	if (!ptep_h->s.d && newpte.s.d)
+		SetPageDirty(pfn_to_page(newpte.h.pfra));
 	pgste = _gmap_ptep_xchg(sg->parent, ptep_h, newpte, pgste, f->gfn, false);
 	pgste.vsie_notif = 1;
 	pgste_set_unlock(ptep_h, pgste);
@@ -1477,6 +1479,8 @@ static int _do_shadow_crste(struct gmap *sg, gpa_t raddr, union crste *host, uni
 		newcrste.h.p &= oldcrste.h.p;
 		newcrste.s.fc1.vsie_notif = 1;
 		newcrste.s.fc1.prefix_notif = oldcrste.s.fc1.prefix_notif;
+		if (!oldcrste.s.fc1.d && newcrste.s.fc1.d)
+			SetPageDirty(phys_to_page(crste_origin_large(newcrste)));
 	} while (!_gmap_crstep_xchg_atomic(sg->parent, host, oldcrste, newcrste, f->gfn, false));
 
 	newcrste = _crste_fc1(f->pfn, oldcrste.h.tt, 0, !p);
