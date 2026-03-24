@@ -31,11 +31,9 @@ static struct w1_master *w1_alloc_dev(u32 id, int slave_count, int slave_ttl,
 	/*
 	 * We are in process context(kernel thread), so can sleep.
 	 */
-	dev = kzalloc(sizeof(struct w1_master) + sizeof(struct w1_bus_master), GFP_KERNEL);
+	dev = kzalloc_flex(*dev, bus_master, 1);
 	if (!dev)
 		return NULL;
-
-	dev->bus_master = (struct w1_bus_master *)(dev + 1);
 
 	dev->owner		= THIS_MODULE;
 	dev->max_slave_count	= slave_count;

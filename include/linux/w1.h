@@ -236,9 +236,9 @@ struct w1_master {
 	struct device_driver	*driver;
 	struct device		dev;
 
-	struct w1_bus_master	*bus_master;
-
 	u32			seq;
+
+	struct w1_bus_master	bus_master[];
 };
 
 int w1_add_master_device(struct w1_bus_master *master);
