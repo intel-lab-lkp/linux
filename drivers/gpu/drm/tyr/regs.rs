@@ -852,4 +852,70 @@ pub(crate) mod mmu_control {
             31:16   command_completed;
         }
     }
+
+    /// Per-address space registers ASn [0..15] within the MMU_CONTROL page.
+    ///
+    /// This array contains 16 instances of the MMU_AS_CONTROL register page.
+    pub(crate) mod mmu_as_control {
+        use kernel::register;
+
+        /// Maximum number of hardware address space slots.
+        /// The actual number of slots available is usually lower.
+        pub(crate) const MAX_AS: usize = 16;
+
+        /// Address space register stride. The elements in the array are spaced 64B apart.
+        const STRIDE: usize = 0x40;
+
+        register! {
+            /// Translation table base address. A 64-bit pointer.
+            ///
+            /// This field contains the address of the top level of a translation table structure.
+            /// This must be 16-byte-aligned, so address bits [3:0] are assumed to be zero.
+            pub(crate) TRANSTAB(u64)[MAX_AS, stride = STRIDE] @ 0x2400 {
+                /// Base address of the translation table.
+                63:0    base;
+            }
+
+            /// Memory attributes.
+            ///
+            /// Each address space can configure up to 8 different memory attribute profiles.
+            /// Each attribute profile follows the MMU_MEMATTR_STAGE1 layout.
+            pub(crate) MEMATTR(u64)[MAX_AS, stride = STRIDE] @ 0x2408 {}
+
+            /// Lock region address for each address space.
+            pub(crate) LOCKADDR(u64)[MAX_AS, stride = STRIDE] @ 0x2410 {
+                /// Lock region size.
+                5:0     size;
+                /// Lock region base address.
+                63:12   base;
+            }
+
+            /// MMU command register for each address space. Write only.
+            pub(crate) COMMAND(u32)[MAX_AS, stride = STRIDE] @ 0x2418 {}
+
+            /// Fault status register for each address space. Read only.
+            pub(crate) FAULTSTATUS(u32)[MAX_AS, stride = STRIDE] @ 0x241c {}
+
+            /// Fault address for each address space. Read only.
+            pub(crate) FAULTADDRESS(u64)[MAX_AS, stride = STRIDE] @ 0x2420 {
+                63:0    pointer;
+            }
+
+            /// MMU status register for each address space. Read only.
+            pub(crate) STATUS(u32)[MAX_AS, stride = STRIDE] @ 0x2428 {
+                /// External address space command is active, a 1-bit boolean flag.
+                0:0     active_ext => bool;
+                /// Internal address space command is active, a 1-bit boolean flag.
+                1:1     active_int => bool;
+            }
+
+            /// Translation configuration and control.
+            pub(crate) TRANSCFG(u64)[MAX_AS, stride = STRIDE] @ 0x2430 {}
+
+            /// Extra fault information for each address space. Read only.
+            pub(crate) FAULTEXTRA(u64)[MAX_AS, stride = STRIDE] @ 0x2438 {
+                63:0    value;
+            }
+        }
+    }
 }
