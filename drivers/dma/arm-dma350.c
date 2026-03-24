@@ -14,6 +14,7 @@
 #include "virt-dma.h"
 
 #define DMAINFO			0x0f00
+#define DRIVER_NAME		"arm-dma350"
 
 #define DMA_BUILDCFG0		0xb0
 #define DMA_CFG_DATA_WIDTH	GENMASK(18, 16)
@@ -142,6 +143,9 @@
 #define LINK_LINKADDR		BIT(30)
 #define LINK_LINKADDRHI		BIT(31)
 
+/* DMA NONSECURE CONTROL REGISTER */
+#define DMANSECCTRL		0x20c
+#define INTREN_ANYCHINTR_EN	BIT(0)
 
 enum ch_ctrl_donetype {
 	CH_CTRL_DONETYPE_NONE = 0,
@@ -192,6 +196,7 @@ struct d350_chan {
 
 struct d350 {
 	struct dma_device dma;
+	void __iomem *base;
 	int nchan;
 	int nreq;
 	struct d350_chan channels[] __counted_by(nchan);
@@ -461,18 +466,40 @@ static void d350_issue_pending(struct dma_chan *chan)
 	spin_unlock_irqrestore(&dch->vc.lock, flags);
 }
 
-static irqreturn_t d350_irq(int irq, void *data)
+static void d350_handle_chan_irq(struct d350_chan *dch, struct device *dev,
+				 int chan_id, u32 ch_status)
 {
-	struct d350_chan *dch = data;
-	struct device *dev = dch->vc.chan.device->dev;
-	struct virt_dma_desc *vd = &dch->desc->vd;
-	u32 ch_status;
+	struct virt_dma_desc *vd;
+	bool intr_done = ch_status & CH_STAT_INTR_DONE;
+	bool intr_err = ch_status & CH_STAT_INTR_ERR;
 
-	ch_status = readl(dch->base + CH_STATUS);
-	if (!ch_status)
-		return IRQ_NONE;
+	if (!intr_done && !intr_err) {
+		if (chan_id >= 0)
+			dev_warn(dev, "Channel %d unexpected IRQ: 0x%08x\n",
+				 chan_id, ch_status);
+		else
+			dev_warn(dev, "Unexpected IRQ source? 0x%08x\n", ch_status);
+		writel_relaxed(ch_status, dch->base + CH_STATUS);
+		return;
+	}
 
-	if (ch_status & CH_STAT_INTR_ERR) {
+	writel_relaxed(ch_status, dch->base + CH_STATUS);
+
+	spin_lock(&dch->vc.lock);
+	if (!dch->desc) {
+		if (chan_id >= 0)
+			dev_warn(dev,
+				 "Channel %d IRQ without active descriptor: 0x%08x\n",
+				 chan_id, ch_status);
+		else
+			dev_warn(dev, "IRQ without active descriptor: 0x%08x\n",
+				 ch_status);
+		spin_unlock(&dch->vc.lock);
+		return;
+	}
+
+	vd = &dch->desc->vd;
+	if (intr_err) {
 		u32 errinfo = readl_relaxed(dch->base + CH_ERRINFO);
 
 		if (errinfo & (CH_ERRINFO_AXIRDPOISERR | CH_ERRINFO_AXIRDRESPERR))
@@ -483,14 +510,10 @@ static irqreturn_t d350_irq(int irq, void *data)
 			vd->tx_result.result = DMA_TRANS_ABORTED;
 
 		vd->tx_result.residue = d350_get_residue(dch);
-	} else if (!(ch_status & CH_STAT_INTR_DONE)) {
-		dev_warn(dev, "Unexpected IRQ source? 0x%08x\n", ch_status);
 	}
-	writel_relaxed(ch_status, dch->base + CH_STATUS);
 
-	spin_lock(&dch->vc.lock);
 	vchan_cookie_complete(vd);
-	if (ch_status & CH_STAT_INTR_DONE) {
+	if (intr_done) {
 		dch->status = DMA_COMPLETE;
 		dch->residue = 0;
 		d350_start_next(dch);
@@ -499,6 +522,44 @@ static irqreturn_t d350_irq(int irq, void *data)
 		dch->residue = vd->tx_result.residue;
 	}
 	spin_unlock(&dch->vc.lock);
+}
+
+static irqreturn_t d350_global_irq(int irq, void *data)
+{
+	struct d350 *dmac = (struct d350 *)data;
+	irqreturn_t ret = IRQ_NONE;
+	int i;
+
+	(void)irq;
+
+	for (i = 0; i < dmac->nchan; i++) {
+		struct d350_chan *dch = &dmac->channels[i];
+		u32 ch_status;
+
+		ch_status = readl(dch->base + CH_STATUS);
+		if (!ch_status)
+			continue;
+
+		ret = IRQ_HANDLED;
+		d350_handle_chan_irq(dch, dmac->dma.dev, i, ch_status);
+	}
+
+	return ret;
+}
+
+static irqreturn_t d350_channel_irq(int irq, void *data)
+{
+	struct d350_chan *dch = data;
+	struct device *dev = dch->vc.chan.device->dev;
+	u32 ch_status;
+
+	(void)irq;
+
+	ch_status = readl(dch->base + CH_STATUS);
+	if (!ch_status)
+		return IRQ_NONE;
+
+	d350_handle_chan_irq(dch, dev, -1, ch_status);
 
 	return IRQ_HANDLED;
 }
@@ -506,10 +567,18 @@ static irqreturn_t d350_irq(int irq, void *data)
 static int d350_alloc_chan_resources(struct dma_chan *chan)
 {
 	struct d350_chan *dch = to_d350_chan(chan);
-	int ret = request_irq(dch->irq, d350_irq, IRQF_SHARED,
-			      dev_name(&dch->vc.chan.dev->device), dch);
-	if (!ret)
-		writel_relaxed(CH_INTREN_DONE | CH_INTREN_ERR, dch->base + CH_INTREN);
+	int ret = 0;
+
+	if (dch->irq >= 0) {
+		ret = request_irq(dch->irq, d350_channel_irq, IRQF_SHARED,
+				  dev_name(&dch->vc.chan.dev->device), dch);
+		if (ret) {
+			dev_err(chan->device->dev, "Failed to request IRQ %d\n", dch->irq);
+			return ret;
+		}
+	}
+
+	writel_relaxed(CH_INTREN_DONE | CH_INTREN_ERR, dch->base + CH_INTREN);
 
 	return ret;
 }
@@ -519,18 +588,21 @@ static void d350_free_chan_resources(struct dma_chan *chan)
 	struct d350_chan *dch = to_d350_chan(chan);
 
 	writel_relaxed(0, dch->base + CH_INTREN);
-	free_irq(dch->irq, dch);
+	if (dch->irq >= 0) {
+		free_irq(dch->irq, dch);
+		dch->irq = -EINVAL;
+	}
 	vchan_free_chan_resources(&dch->vc);
 }
 
 static int d350_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct d350 *dmac;
+	struct d350 *dmac = NULL;
 	void __iomem *base;
 	u32 reg;
-	int ret, nchan, dw, aw, r, p;
-	bool coherent, memset;
+	int ret, nchan, dw, aw, r, p, irq_count;
+	bool coherent, memset, combined_irq;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -556,6 +628,7 @@ static int d350_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	dmac->nchan = nchan;
+	dmac->base = base;
 
 	reg = readl_relaxed(base + DMAINFO + DMA_BUILDCFG1);
 	dmac->nreq = FIELD_GET(DMA_CFG_NUM_TRIGGER_IN, reg);
@@ -582,12 +655,46 @@ static int d350_probe(struct platform_device *pdev)
 	dmac->dma.device_issue_pending = d350_issue_pending;
 	INIT_LIST_HEAD(&dmac->dma.channels);
 
+	irq_count = platform_irq_count(pdev);
+	if (irq_count < 0)
+		return dev_err_probe(dev, irq_count,
+				     "Failed to count interrupts\n");
+
+	if (irq_count == 1) {
+		combined_irq = true;
+	} else if (irq_count >= nchan) {
+		combined_irq = false;
+	} else {
+		return dev_err_probe(dev, -EINVAL,
+				     "Invalid IRQ count %d for %d channels\n",
+				     irq_count, nchan);
+	}
+
+	if (combined_irq) {
+		int host_irq = platform_get_irq(pdev, 0);
+
+		if (host_irq < 0)
+			return dev_err_probe(dev, host_irq,
+					     "Failed to get IRQ\n");
+
+		ret = devm_request_irq(&pdev->dev, host_irq, d350_global_irq,
+				       IRQF_SHARED, DRIVER_NAME, dmac);
+		if (ret)
+			return dev_err_probe(
+				dev, ret,
+				"Failed to request the combined IRQ %d\n",
+				host_irq);
+		/* Combined Non-Secure Channel Interrupt Enable */
+		writel_relaxed(INTREN_ANYCHINTR_EN, dmac->base + DMANSECCTRL);
+	}
+
 	/* Would be nice to have per-channel caps for this... */
 	memset = true;
 	for (int i = 0; i < nchan; i++) {
 		struct d350_chan *dch = &dmac->channels[i];
 
 		dch->base = base + DMACH(i);
+		dch->irq = -EINVAL;
 		writel_relaxed(CH_CMD_CLEAR, dch->base + CH_CMD);
 
 		reg = readl_relaxed(dch->base + CH_BUILDCFG1);
@@ -595,10 +702,15 @@ static int d350_probe(struct platform_device *pdev)
 			dev_warn(dev, "No command link support on channel %d\n", i);
 			continue;
 		}
-		dch->irq = platform_get_irq(pdev, i);
-		if (dch->irq < 0)
-			return dev_err_probe(dev, dch->irq,
-					     "Failed to get IRQ for channel %d\n", i);
+
+		if (!combined_irq) {
+			dch->irq = platform_get_irq(pdev, i);
+			if (dch->irq < 0)
+				return dev_err_probe(
+					dev, dch->irq,
+					"Failed to get IRQ for channel %d\n",
+					i);
+		}
 
 		dch->has_wrap = FIELD_GET(CH_CFG_HAS_WRAP, reg);
 		dch->has_trig = FIELD_GET(CH_CFG_HAS_TRIGIN, reg) &
