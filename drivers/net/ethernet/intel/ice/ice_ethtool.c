@@ -2065,7 +2065,9 @@ ice_get_ethtool_stats(struct net_device *netdev,
 					 ICE_PHY_TYPE_HIGH_200G_DR4 | \
 					 ICE_PHY_TYPE_HIGH_200G_KR4_PAM4 | \
 					 ICE_PHY_TYPE_HIGH_200G_AUI4_AOC_ACC | \
-					 ICE_PHY_TYPE_HIGH_200G_AUI4)
+					 ICE_PHY_TYPE_HIGH_200G_AUI4 | \
+					 ICE_PHY_TYPE_HIGH_200G_AUI8_AOC_ACC | \
+					 ICE_PHY_TYPE_HIGH_200G_AUI8)
 
 /**
  * ice_mask_min_supported_speeds

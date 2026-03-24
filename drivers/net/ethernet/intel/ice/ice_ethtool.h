@@ -153,6 +153,14 @@ phy_type_high_lkup[] = {
 	[10] = ICE_PHY_TYPE(200GB, 200000baseKR4_Full),
 	[11] = ICE_PHY_TYPE(200GB, 200000baseSR4_Full),
 	[12] = ICE_PHY_TYPE(200GB, 200000baseCR4_Full),
+	/* 200G_AUI8_AOC_ACC and 200G_AUI8 are 8-lane 25G-per-lane interfaces.
+	 * The kernel has no 200000baseSR8/CR8 modes yet; map to the closest
+	 * available 4-lane equivalents so ethtool reports 200G as supported.
+	 * FIXME: replace with 200000baseSR8_Full / 200000baseCR8_Full once
+	 * those ethtool link modes are defined upstream.
+	 */
+	[13] = ICE_PHY_TYPE(200GB, 200000baseSR4_Full),
+	[14] = ICE_PHY_TYPE(200GB, 200000baseCR4_Full),
 };
 
 #endif /* !_ICE_ETHTOOL_H_ */

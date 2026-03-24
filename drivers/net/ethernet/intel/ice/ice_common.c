@@ -84,6 +84,16 @@ static const char * const ice_link_mode_str_high[] = {
 	[2] = "100G_CAUI2",
 	[3] = "100G_AUI2_AOC_ACC",
 	[4] = "100G_AUI2",
+	[5] = "200G_CR4_PAM4",
+	[6] = "200G_SR4",
+	[7] = "200G_FR4",
+	[8] = "200G_LR4",
+	[9] = "200G_DR4",
+	[10] = "200G_KR4_PAM4",
+	[11] = "200G_AUI4_AOC_ACC",
+	[12] = "200G_AUI4",
+	[13] = "200G_AUI8_AOC_ACC",
+	[14] = "200G_AUI8",
 };
 
 /**
@@ -107,9 +117,14 @@ ice_dump_phy_type(struct ice_hw *hw, u64 low, u64 high, const char *prefix)
 	ice_debug(hw, ICE_DBG_PHY, "%s: phy_type_high: 0x%016llx\n", prefix, high);
 
 	for (u32 i = 0; i < BITS_PER_TYPE(typeof(high)); i++) {
-		if (high & BIT_ULL(i))
+		if (!(high & BIT_ULL(i)))
+			continue;
+		if (i < ARRAY_SIZE(ice_link_mode_str_high))
 			ice_debug(hw, ICE_DBG_PHY, "%s:   bit(%d): %s\n",
 				  prefix, i, ice_link_mode_str_high[i]);
+		else
+			ice_debug(hw, ICE_DBG_PHY, "%s:   bit(%d): unknown\n",
+				  prefix, i);
 	}
 }
 
@@ -605,13 +620,25 @@ static enum ice_media_type ice_get_media_type(struct ice_port_info *pi)
 		switch (hw_link_info->phy_type_high) {
 		case ICE_PHY_TYPE_HIGH_100G_AUI2:
 		case ICE_PHY_TYPE_HIGH_100G_CAUI2:
+		case ICE_PHY_TYPE_HIGH_200G_AUI4:
+		case ICE_PHY_TYPE_HIGH_200G_AUI8:
 			if (ice_is_media_cage_present(pi))
 				return ICE_MEDIA_DA;
 			fallthrough;
 		case ICE_PHY_TYPE_HIGH_100GBASE_KR2_PAM4:
+		case ICE_PHY_TYPE_HIGH_200G_KR4_PAM4:
 			return ICE_MEDIA_BACKPLANE;
 		case ICE_PHY_TYPE_HIGH_100G_CAUI2_AOC_ACC:
 		case ICE_PHY_TYPE_HIGH_100G_AUI2_AOC_ACC:
+		case ICE_PHY_TYPE_HIGH_200G_AUI4_AOC_ACC:
+		case ICE_PHY_TYPE_HIGH_200G_AUI8_AOC_ACC:
+			return ICE_MEDIA_FIBER;
+		case ICE_PHY_TYPE_HIGH_200G_CR4_PAM4:
+			return ICE_MEDIA_DA;
+		case ICE_PHY_TYPE_HIGH_200G_SR4:
+		case ICE_PHY_TYPE_HIGH_200G_FR4:
+		case ICE_PHY_TYPE_HIGH_200G_LR4:
+		case ICE_PHY_TYPE_HIGH_200G_DR4:
 			return ICE_MEDIA_FIBER;
 		}
 	}
@@ -3521,6 +3548,8 @@ u16 ice_get_link_speed_based_on_phy_type(u64 phy_type_low, u64 phy_type_high)
 	case ICE_PHY_TYPE_HIGH_200G_KR4_PAM4:
 	case ICE_PHY_TYPE_HIGH_200G_AUI4_AOC_ACC:
 	case ICE_PHY_TYPE_HIGH_200G_AUI4:
+	case ICE_PHY_TYPE_HIGH_200G_AUI8_AOC_ACC:
+	case ICE_PHY_TYPE_HIGH_200G_AUI8:
 		speed_phy_type_high = ICE_AQ_LINK_SPEED_200GB;
 		break;
 	default:
