@@ -540,6 +540,7 @@ struct net_bridge {
 		BR_KERNEL_STP,		/* old STP in kernel */
 		BR_USER_STP,		/* new RSTP in userspace */
 	} stp_enabled;
+	u32				stp_mode;
 
 	struct net_bridge_mcast		multicast_ctx;
 
