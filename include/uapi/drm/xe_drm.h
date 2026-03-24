@@ -1057,7 +1057,7 @@ struct drm_xe_vm_destroy {
  *    not invoke autoreset. Neither will stack variables going out of scope.
  *    Therefore it's recommended to always explicitly reset the madvises when
  *    freeing the memory backing a region used in a &DRM_IOCTL_XE_MADVISE call.
- *  - DRM_XE_VM_BIND_FLAG_DECOMPRESS - Request on-device decompression for a MAP.
+ *  - %DRM_XE_VM_BIND_FLAG_DECOMPRESS - Request on-device decompression for a MAP.
  *    When set on a MAP bind operation, request the driver schedule an on-device
  *    in-place decompression (via the migrate/resolve path) for the GPU mapping
  *    created by this bind. Only valid for DRM_XE_VM_BIND_OP_MAP; usage on
@@ -1114,7 +1114,9 @@ struct drm_xe_vm_bind_op {
 	 * incoherent GT access is possible.
 	 *
 	 * Note: For userptr and externally imported dma-buf the kernel expects
-	 * either 1WAY or 2WAY for the @pat_index.
+	 * either 1WAY or 2WAY for the @pat_index. Starting from NVL-P, for
+	 * userptr, svm, madvise and externally imported dma-buf the kernel expects
+	 * either 2WAY or 1WAY and XA @pat_index.
 	 *
 	 * For DRM_XE_VM_BIND_FLAG_NULL bindings there are no KMD restrictions
 	 * on the @pat_index. For such mappings there is no actual memory being
