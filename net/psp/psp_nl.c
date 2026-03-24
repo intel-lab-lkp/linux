@@ -320,6 +320,11 @@ int psp_assoc_device_get_locked(const struct genl_split_ops *ops,
 	id = info->attrs[PSP_A_ASSOC_DEV_ID];
 	if (psd) {
 		mutex_lock(&psd->lock);
+		if (!psp_dev_is_registered(psd)) {
+			mutex_unlock(&psd->lock);
+			err = -ENODEV;
+			goto err_psd_put;
+		}
 		if (id && psd->id != nla_get_u32(id)) {
 			mutex_unlock(&psd->lock);
 			NL_SET_ERR_MSG_ATTR(info->extack, id,
