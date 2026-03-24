@@ -4525,8 +4525,8 @@ static void __lru_gen_reparent_memcg(struct lruvec *child_lruvec, struct lruvec 
 		int parent_lru_active = lru_gen_is_active(parent_lruvec, gen) ? LRU_ACTIVE : 0;
 
 		/* Assuming that child pages are colder than parent pages */
-		list_splice_init(&child_lrugen->folios[gen][type][zone],
-				 &parent_lrugen->folios[gen][type][zone]);
+		list_splice_tail_init(&child_lrugen->folios[gen][type][zone],
+				      &parent_lrugen->folios[gen][type][zone]);
 
 		WRITE_ONCE(child_lrugen->nr_pages[gen][type][zone], 0);
 		WRITE_ONCE(parent_lrugen->nr_pages[gen][type][zone],
