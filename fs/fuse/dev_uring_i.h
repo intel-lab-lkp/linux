@@ -38,9 +38,31 @@ enum fuse_ring_req_state {
 
 /** A fuse ring entry, part of the ring queue */
 struct fuse_ring_ent {
-	/* userspace buffer */
-	struct fuse_uring_req_header __user *headers;
-	void __user *payload;
+	union {
+		/* queue->bufring.enabled == false */
+		struct {
+			/* userspace buffers */
+			struct fuse_uring_req_header __user *headers;
+			void __user *payload;
+		};
+		/* queue->bufring.enabled == true */
+		struct {
+			/*
+			 * unique fixed id for the ent. Used by kernel/server to
+			 * locate the header data.
+			 */
+			unsigned int id;
+			/*
+			 * id of the bufring buffer the ent is using for the
+			 * current request. May differ per-request.
+			 *
+			 * this needs to be tracked so we can recycle the buffer
+			 * back to the ring when the request is done.
+			 */
+			unsigned int buf_id;
+			struct kvec payload_kvec;
+		};
+	};
 
 	/* the ring queue that owns the request */
 	struct fuse_ring_queue *queue;
@@ -99,6 +121,24 @@ struct fuse_ring_queue {
 	unsigned int active_background;
 
 	bool stopped;
+
+	/*
+	 * kernel-managed buffer ring support
+	 *
+	 * the following fields are only used if the server chooses to use
+	 * bufrings
+	 */
+	struct {
+		bool enabled: 1;
+		unsigned int queue_depth;
+		/*
+		 * pointer to where the headers reside in the registered memory
+		 * region
+		 */
+		void *headers;
+		/* synchronized by the queue lock */
+		struct io_buffer_list *list;
+	} bufring;
 };
 
 /**
