@@ -756,13 +756,18 @@ static bool handle_host_mte(u64 esr)
 void handle_trap(struct kvm_cpu_context *host_ctxt)
 {
 	u64 esr = read_sysreg_el2(SYS_ESR);
+	u16 imm16;
 
 	switch (ESR_ELx_EC(esr)) {
 	case ESR_ELx_EC_HVC64:
 		handle_host_hcall(host_ctxt);
 		break;
 	case ESR_ELx_EC_SMC64:
-		handle_host_smc(host_ctxt);
+		imm16 = esr & U16_MAX;
+		if (!imm16)
+			handle_host_smc(host_ctxt);
+		else
+			inject_undef64();
 		break;
 	case ESR_ELx_EC_IABT_LOW:
 	case ESR_ELx_EC_DABT_LOW:
