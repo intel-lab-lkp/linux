@@ -5162,6 +5162,18 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	if (blk_mq_alloc_sched_res_batch(&elv_tbl, set, nr_hw_queues) < 0)
 		goto out_free_ctx;
 
+	/*
+	 * Pre-allocate the new tags array before removing the elevator,
+	 * so that if allocation fails we can exit cleanly without having
+	 * modified the elevator state.
+	 */
+	new_tags = blk_mq_prealloc_tag_set_tags(set, nr_hw_queues);
+	if (IS_ERR(new_tags)) {
+		new_tags = NULL;
+		blk_mq_free_sched_res_batch(&elv_tbl, set);
+		goto out_free_ctx;
+	}
+
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
 		blk_mq_debugfs_unregister_hctxs(q);
 		blk_mq_sysfs_unregister_hctxs(q);
@@ -5175,10 +5187,6 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	list_for_each_entry(q, &set->tag_list, tag_set_list)
 		if (blk_mq_elv_switch_none(q, &elv_tbl))
 			goto switch_back;
-
-	new_tags = blk_mq_prealloc_tag_set_tags(set, nr_hw_queues);
-	if (IS_ERR(new_tags))
-		goto switch_back;
 
 	list_for_each_entry(q, &set->tag_list, tag_set_list)
 		blk_mq_freeze_queue_nomemsave(q);
