@@ -363,7 +363,6 @@ static void send_hsr_supervision_frame(struct hsr_port *port,
 
 	hsr_forward_skb(skb, port);
 	spin_unlock_bh(&hsr->seqnr_lock);
-	return;
 }
 
 static void send_prp_supervision_frame(struct hsr_port *master,
