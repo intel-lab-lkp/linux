@@ -61,6 +61,17 @@ config DEV_DAX_HMEM_DEVICES
 	depends on DEV_DAX_HMEM && DAX
 	def_bool y
 
+config DEV_DAX_FSDEV
+	tristate "FSDEV DAX: fs-dax compatible devdax driver"
+	depends on DEV_DAX && FS_DAX
+	help
+	  Support fs-dax access to DAX devices via a character device
+	  interface. Unlike device_dax (which pre-initializes compound folios
+	  based on device alignment), this driver leaves folios at order-0 so
+	  that fs-dax filesystems can manage folio order dynamically.
+
+	  Say M if unsure.
+
 config DEV_DAX_KMEM
 	tristate "KMEM DAX: map dax-devices as System-RAM"
 	default DEV_DAX
