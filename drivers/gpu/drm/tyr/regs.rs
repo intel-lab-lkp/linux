@@ -786,11 +786,6 @@ pub(crate) mod gpu_control {
     }
 }
 
-pub(crate) const MMU_IRQ_RAWSTAT: Register<0x2000> = Register;
-pub(crate) const MMU_IRQ_CLEAR: Register<0x2004> = Register;
-pub(crate) const MMU_IRQ_MASK: Register<0x2008> = Register;
-pub(crate) const MMU_IRQ_STAT: Register<0x200c> = Register;
-
 /// These registers correspond to the JOB_CONTROL register page.
 /// They are involved in communication between the firmware running on the MCU and the host.
 pub(crate) mod job_control {
@@ -837,6 +832,57 @@ pub(crate) mod job_control {
             30:0    csg;
             /// GLB request interrupt status.
             31:31   glb;
+        }
+    }
+}
+
+/// These registers correspond to the MMU_CONTROL register page.
+/// They are involved in MMU configuration and control.
+pub(crate) mod mmu_control {
+    use kernel::register;
+
+    register! {
+        /// IRQ sources raw status.
+        ///
+        /// This register contains the raw unmasked interrupt sources for MMU status and exception
+        /// handling.
+        ///
+        /// Writing to this register forces bits on.
+        /// Use [`IRQ_CLEAR`] to clear interrupts.
+        pub(crate) IRQ_RAWSTAT(u32) @ 0x2000 {
+            /// Page fault for address spaces.
+            15:0    page_fault;
+            /// Command completed in address spaces.
+            31:16   command_completed;
+        }
+
+        /// IRQ sources to clear.
+        /// Write a 1 to a bit to clear the corresponding bit in [`IRQ_RAWSTAT`].
+        pub(crate) IRQ_CLEAR(u32) @ 0x2004 {
+            /// Clear the PAGE_FAULT interrupt.
+            15:0    page_fault;
+            /// Clear the COMMAND_COMPLETED interrupt.
+            31:16   command_completed;
+        }
+
+        /// IRQ sources enabled.
+        ///
+        /// Set each bit to 1 to enable the corresponding interrupt source, and to 0 to disable it.
+        pub(crate) IRQ_MASK(u32) @ 0x2008 {
+            /// Enable the PAGE_FAULT interrupt.
+            15:0    page_fault;
+            /// Enable the COMMAND_COMPLETED interrupt.
+            31:16   command_completed;
+        }
+
+        /// IRQ status for enabled sources. Read only.
+        ///
+        /// This register contains the result of ANDing together [`IRQ_RAWSTAT`] and [`IRQ_MASK`].
+        pub(crate) IRQ_STATUS(u32) @ 0x200c {
+            /// PAGE_FAULT interrupt status.
+            15:0    page_fault;
+            /// COMMAND_COMPLETED interrupt status.
+            31:16   command_completed;
         }
     }
 }
