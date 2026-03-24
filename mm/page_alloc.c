@@ -5200,6 +5200,29 @@ failed:
 }
 EXPORT_SYMBOL_GPL(alloc_pages_bulk_noprof);
 
+void free_pages_bulk(struct page **page_array, unsigned long nr_pages)
+{
+	unsigned long start_pfn = 0, pfn;
+	unsigned long i, nr_contig = 0;
+
+	for (i = 0; i < nr_pages; i++) {
+		pfn = page_to_pfn(page_array[i]);
+		if (!nr_contig) {
+			start_pfn = pfn;
+			nr_contig = 1;
+		} else if (start_pfn + nr_contig != pfn) {
+			__free_contig_range(start_pfn, nr_contig);
+			start_pfn = pfn;
+			nr_contig = 1;
+			cond_resched();
+		} else {
+			nr_contig++;
+		}
+	}
+	if (nr_contig)
+		__free_contig_range(start_pfn, nr_contig);
+}
+
 /*
  * This is the 'heart' of the zoned buddy allocator.
  */
