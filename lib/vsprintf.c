@@ -2783,7 +2783,7 @@ qualifier:
 			fmt.str++;
 		}
 		fmt.str++;
-		p = lookup_state + *fmt.str;
+		p = lookup_state + (u8)*fmt.str;
 	}
 	if (p->state) {
 		if (p->base)
