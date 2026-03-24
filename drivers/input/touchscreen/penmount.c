@@ -163,6 +163,9 @@ static irqreturn_t pm_interrupt(struct serio *serio,
 {
 	struct pm *pm = serio_get_drvdata(serio);
 
+	if (pm->idx >= pm->packetsize || pm->idx >= PM_MAX_LENGTH)
+		pm->idx = 0;
+
 	pm->data[pm->idx] = data;
 
 	pm->parse_packet(pm);
