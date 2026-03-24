@@ -165,6 +165,7 @@ static struct dst_ops ipv4_dst_ops = {
 	.local_out =		__ip_local_out,
 	.neigh_lookup =		ipv4_neigh_lookup,
 	.confirm_neigh =	ipv4_confirm_neigh,
+	.template =		&ipv4_dst_ops,
 };
 
 #define ECN_OR_COST(class)	TC_PRIO_##class
@@ -2887,6 +2888,7 @@ static struct dst_ops ipv4_dst_blackhole_ops = {
 	.update_pmtu		= dst_blackhole_update_pmtu,
 	.redirect		= dst_blackhole_redirect,
 	.mtu			= dst_blackhole_mtu,
+	.template		= &ipv4_dst_blackhole_ops,
 };
 
 struct dst_entry *ipv4_blackhole_route(struct net *net, struct dst_entry *dst_orig)

@@ -3894,6 +3894,7 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 	 * performance under such circumstance.
 	 */
 	pkt_dev->dstops.family = AF_INET;
+	pkt_dev->dstops.template = &pkt_dev->dstops;
 	pkt_dev->xdst.u.dst.dev = pkt_dev->odev;
 	dst_init_metrics(&pkt_dev->xdst.u.dst, pktgen_dst_metrics, false);
 	pkt_dev->xdst.child = &pkt_dev->xdst.u.dst;

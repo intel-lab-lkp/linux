@@ -83,6 +83,7 @@ sch_frag_dst_get_mtu(const struct dst_entry *dst)
 static struct dst_ops sch_frag_dst_ops = {
 	.family = AF_UNSPEC,
 	.mtu = sch_frag_dst_get_mtu,
+	.template = &sch_frag_dst_ops,
 };
 
 static int sch_fragment(struct net *net, struct sk_buff *skb,

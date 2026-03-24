@@ -263,6 +263,7 @@ static struct dst_ops ip6_dst_ops_template = {
 	.local_out		=	__ip6_local_out,
 	.neigh_lookup		=	ip6_dst_neigh_lookup,
 	.confirm_neigh		=	ip6_confirm_neigh,
+	.template		=	&ip6_dst_ops_template,
 };
 
 static struct dst_ops ip6_dst_blackhole_ops = {
@@ -275,6 +276,7 @@ static struct dst_ops ip6_dst_blackhole_ops = {
 	.update_pmtu		= dst_blackhole_update_pmtu,
 	.redirect		= dst_blackhole_redirect,
 	.mtu			= dst_blackhole_mtu,
+	.template		= &ip6_dst_blackhole_ops,
 };
 
 static const u32 ip6_template_metrics[RTAX_MAX] = {

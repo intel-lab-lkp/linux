@@ -56,6 +56,7 @@ static struct dst_ops fake_dst_ops = {
 	.cow_metrics	= fake_cow_metrics,
 	.neigh_lookup	= fake_neigh_lookup,
 	.mtu		= fake_mtu,
+	.template	= &fake_dst_ops,
 };
 
 /*

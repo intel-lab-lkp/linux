@@ -731,6 +731,7 @@ ovs_dst_get_mtu(const struct dst_entry *dst)
 static struct dst_ops ovs_dst_ops = {
 	.family = AF_UNSPEC,
 	.mtu = ovs_dst_get_mtu,
+	.template = &ovs_dst_ops,
 };
 
 /* prepare_frag() is called once per (larger-than-MTU) frame; its inverse is

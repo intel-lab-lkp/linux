@@ -72,8 +72,11 @@ void dst_init(struct dst_entry *dst, struct dst_ops *ops,
 	dst->__use = 0;
 	dst->lastuse = jiffies;
 	dst->flags = flags;
-	if (!(flags & DST_NOCOUNT))
+	dst->dst_ops_refcounted = 0;
+	if (!(flags & DST_NOCOUNT)) {
+		dst->dst_ops_refcounted = 1;
 		dst_entries_add(ops, 1);
+	}
 }
 EXPORT_SYMBOL(dst_init);
 
@@ -100,6 +103,7 @@ EXPORT_SYMBOL(dst_alloc);
 static void dst_destroy(struct dst_entry *dst)
 {
 	struct dst_entry *child = NULL;
+	const struct dst_ops *ops;
 
 	smp_rmb();
 
@@ -110,16 +114,18 @@ static void dst_destroy(struct dst_entry *dst)
 		child = xdst->child;
 	}
 #endif
-	if (dst->ops->destroy)
-		dst->ops->destroy(dst);
+	ops = READ_ONCE(dst->ops);
+	if (ops->destroy)
+		ops->destroy(dst);
 	netdev_put(dst->dev, &dst->dev_tracker);
 
 	lwtstate_put(dst->lwtstate);
 
+	DEBUG_NET_WARN_ON_ONCE(dst->dst_ops_refcounted);
 	if (dst->flags & DST_METADATA)
 		metadata_dst_free((struct metadata_dst *)dst);
 	else
-		kmem_cache_free(dst->ops->kmem_cachep, dst);
+		kmem_cache_free(ops->kmem_cachep, dst);
 
 	dst = child;
 	if (dst)
@@ -131,6 +137,14 @@ static void dst_destroy_rcu(struct rcu_head *head)
 	struct dst_entry *dst = container_of(head, struct dst_entry, rcu_head);
 
 	dst_destroy(dst);
+}
+
+static void dst_count_dec(struct dst_entry *dst)
+{
+	struct dst_ops *ops = READ_ONCE(dst->ops);
+
+	if (cmpxchg(&dst->dst_ops_refcounted, 1, 0) == 1)
+		dst_entries_add(ops, -1);
 }
 
 /* Operations to mark dst as DEAD and clean up the net device referenced
@@ -146,9 +160,11 @@ void dst_dev_put(struct dst_entry *dst)
 {
 	struct net_device *dev = dst->dev;
 
+	dst_count_dec(dst);
 	WRITE_ONCE(dst->obsolete, DST_OBSOLETE_DEAD);
 	if (dst->ops->ifdown)
 		dst->ops->ifdown(dst, dev);
+	WRITE_ONCE(dst->ops, dst->ops->template);
 	WRITE_ONCE(dst->input, dst_discard);
 	WRITE_ONCE(dst->output, dst_discard_out);
 	rcu_assign_pointer(dst->dev_rcu, blackhole_netdev);
@@ -156,12 +172,6 @@ void dst_dev_put(struct dst_entry *dst)
 			   GFP_ATOMIC);
 }
 EXPORT_SYMBOL(dst_dev_put);
-
-static void dst_count_dec(struct dst_entry *dst)
-{
-	if (!(dst->flags & DST_NOCOUNT))
-		dst_entries_add(dst->ops, -1);
-}
 
 void dst_release(struct dst_entry *dst)
 {
@@ -276,6 +286,7 @@ static struct dst_ops dst_blackhole_ops = {
 	.update_pmtu	= dst_blackhole_update_pmtu,
 	.redirect	= dst_blackhole_redirect,
 	.mtu		= dst_blackhole_mtu,
+	.template	= &dst_blackhole_ops,
 };
 
 static void __metadata_dst_init(struct metadata_dst *md_dst,

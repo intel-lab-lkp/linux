@@ -165,6 +165,7 @@ static struct dst_ops xfrm6_dst_ops_template = {
 	.ifdown =		xfrm6_dst_ifdown,
 	.local_out =		__ip6_local_out,
 	.gc_thresh =		32768,
+	.template =		&xfrm6_dst_ops_template,
 };
 
 static const struct xfrm_policy_afinfo xfrm6_policy_afinfo = {

@@ -95,6 +95,7 @@ struct dst_entry {
 #ifdef CONFIG_64BIT
 	struct lwtunnel_state   *lwtstate;
 #endif
+	unsigned long		dst_ops_refcounted; /* Use one (atomic) bit */
 };
 
 struct dst_metrics {

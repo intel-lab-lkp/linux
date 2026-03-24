@@ -4,6 +4,7 @@
 #include <linux/types.h>
 #include <linux/percpu_counter.h>
 #include <linux/cache.h>
+#include <net/net_debug.h>
 
 struct dst_entry;
 struct kmem_cachep;
@@ -39,6 +40,7 @@ struct dst_ops {
 						 const void *daddr);
 
 	struct kmem_cache	*kmem_cachep;
+	struct dst_ops		*template;
 
 	struct percpu_counter	pcpuc_entries ____cacheline_aligned_in_smp;
 };
@@ -67,6 +69,7 @@ static inline int dst_entries_init(struct dst_ops *dst)
 
 static inline void dst_entries_destroy(struct dst_ops *dst)
 {
+	DEBUG_NET_WARN_ON_ONCE(dst_entries_get_slow(dst) > 0);
 	percpu_counter_destroy(&dst->pcpuc_entries);
 }
 
