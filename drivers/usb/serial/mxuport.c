@@ -179,6 +179,8 @@
 
 /* This structure holds all of the local port information */
 struct mxuport_port {
+	u32 sent_payload;
+	u32 hold_reason;
 	u8 mcr_state;		/* Last MCR state */
 	u8 msr_state;		/* Last MSR state */
 	struct mutex mutex;	/* Protects mcr_state */
@@ -250,8 +252,12 @@ MODULE_DEVICE_TABLE(usb, mxuport_idtable);
 static int mxuport_prepare_write_buffer(struct usb_serial_port *port,
 					void *dest, size_t size)
 {
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
 	u8 *buf = dest;
 	int count;
+
+	if (mxport->hold_reason & MX_WAIT_FOR_SEND_NEXT)
+		return 0;
 
 	count = kfifo_out_locked(&port->write_fifo, buf + HEADER_SIZE,
 				 size - HEADER_SIZE,
@@ -262,6 +268,13 @@ static int mxuport_prepare_write_buffer(struct usb_serial_port *port,
 
 	dev_dbg(&port->dev, "%s - size %zd count %d\n", __func__,
 		size, count);
+
+	mxport->sent_payload += count;
+
+	if (mxport->sent_payload >= port->bulk_out_size) {
+		mxport->hold_reason |= MX_WAIT_FOR_SEND_NEXT;
+		buf[0] |= 0x80;
+	}
 
 	return count + HEADER_SIZE;
 }
@@ -484,6 +497,9 @@ static void mxuport_lsr_event(struct usb_serial_port *port, u8 buf[4])
 static void mxuport_process_read_urb_event(struct usb_serial_port *port,
 					   u8 buf[4], u32 event)
 {
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	unsigned long flags;
+
 	dev_dbg(&port->dev, "%s - receive event : %04x\n", __func__, event);
 
 	switch (event) {
@@ -492,6 +508,13 @@ static void mxuport_process_read_urb_event(struct usb_serial_port *port,
 		 * Sent as part of the flow control on device buffers.
 		 * Not currently used.
 		 */
+		if (mxport->hold_reason & MX_WAIT_FOR_SEND_NEXT) {
+			spin_lock_irqsave(&mxport->spinlock, flags);
+			mxport->hold_reason &= ~MX_WAIT_FOR_SEND_NEXT;
+			mxport->sent_payload = 0;
+			usb_serial_generic_write_start(port, GFP_ATOMIC);
+			spin_unlock_irqrestore(&mxport->spinlock, flags);
+		}
 		break;
 	case UPORT_EVENT_MSR:
 		mxuport_msr_event(port, buf);
@@ -1318,6 +1341,9 @@ static int mxuport_open(struct tty_struct *tty, struct usb_serial_port *port)
 	 * returns.
 	 */
 	mxport->msr_state = 0;
+	mxport->sent_payload = 0;
+	mxport->hold_reason = 0;
+	kfifo_reset(&port->write_fifo);
 
 	return err;
 }
