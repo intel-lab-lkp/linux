@@ -292,6 +292,25 @@ bool handle_guest_split_lock(unsigned long ip)
 }
 EXPORT_SYMBOL_FOR_KVM(handle_guest_split_lock);
 
+void handle_guest_bus_lock(unsigned long ip)
+{
+	/*
+	 * Log bus lock exit when called from KVM exit handlers. Policy
+	 * enforcement is delegated to userspace via KVM_EXIT_X86_BUS_LOCK.
+	 * Let userspace implement throttling or other mitigations.
+	 *
+	 * Only log when split lock detection is active to respect system-wide
+	 * bus lock detection policy. Use the reported_split_lock flag to
+	 * prevent log spam from the same vCPU.
+	 */
+	if (sld_state != sld_off && !current->reported_split_lock) {
+		pr_warn_ratelimited("%s/%d buslock at rip: 0x%lx\n",
+				    current->comm, current->pid, ip);
+		current->reported_split_lock = 1;
+	}
+}
+EXPORT_SYMBOL_FOR_KVM(handle_guest_bus_lock);
+
 void bus_lock_init(void)
 {
 	u64 val;

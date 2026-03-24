@@ -3259,6 +3259,7 @@ static int bus_lock_exit(struct kvm_vcpu *vcpu)
 	vcpu->arch.cui_linear_rip = kvm_get_linear_rip(vcpu);
 	vcpu->arch.complete_userspace_io = complete_userspace_buslock;
 
+	handle_guest_bus_lock(vcpu->arch.cui_linear_rip);
 	if (is_guest_mode(vcpu))
 		svm->nested.last_bus_lock_rip = vcpu->arch.cui_linear_rip;
 

@@ -29,6 +29,7 @@ unsigned int x86_stepping(unsigned int sig);
 extern void __init sld_setup(struct cpuinfo_x86 *c);
 extern bool handle_user_split_lock(struct pt_regs *regs, long error_code);
 extern bool handle_guest_split_lock(unsigned long ip);
+extern void handle_guest_bus_lock(unsigned long ip);
 extern void handle_bus_lock(struct pt_regs *regs);
 void split_lock_init(void);
 void bus_lock_init(void);
@@ -44,6 +45,7 @@ static inline bool handle_guest_split_lock(unsigned long ip)
 	return false;
 }
 
+static inline void handle_guest_bus_lock(unsigned long ip) {}
 static inline void handle_bus_lock(struct pt_regs *regs) {}
 static inline void split_lock_init(void) {}
 static inline void bus_lock_init(void) {}
