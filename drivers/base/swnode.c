@@ -510,7 +510,6 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
 	const struct software_node_ref_args *ref_array;
 	const struct software_node_ref_args *ref;
 	const struct property_entry *prop;
-	struct fwnode_handle *refnode;
 	u32 nargs_prop_val;
 	int error;
 	int i;
@@ -546,12 +545,26 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
 	 * relevant properties and bump the reference count.
 	 */
 
-	if (ref->swnode)
-		refnode = software_node_fwnode(ref->swnode);
-	else if (ref->fwnode)
-		refnode = ref->fwnode;
-	else
+	struct fwnode_handle *refnode __free(fwnode_handle) = NULL;
+	if (ref->swnode) {
+		refnode = fwnode_handle_get(software_node_fwnode(ref->swnode));
+	} else if (ref->fwnode) {
+		refnode = fwnode_handle_get(ref->fwnode);
+	} else if (ref->swnode_name) {
+		const struct software_node *ref_swnode =
+			software_node_find_by_name(NULL, ref->swnode_name);
+		/*
+		 * When using a name instead of a software node structure
+		 * assume the node will appear at some point.
+		 */
+		if (!ref_swnode)
+			return -EPROBE_DEFER;
+
+		/* Reference is already taken by software_node_find_by_name() */
+		refnode = software_node_fwnode(ref_swnode);
+	} else {
 		return -EINVAL;
+	}
 
 	if (!refnode)
 		return -ENOENT;

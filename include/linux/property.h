@@ -363,6 +363,7 @@ struct software_node;
 struct software_node_ref_args {
 	const struct software_node *swnode;
 	struct fwnode_handle *fwnode;
+	const char *swnode_name;
 	unsigned int nargs;
 	u64 args[NR_FWNODE_REFERENCE_ARGS];
 };
@@ -373,6 +374,9 @@ struct software_node_ref_args {
 			   const struct software_node *: _ref_,	\
 			   struct software_node *: _ref_,	\
 			   default: NULL),			\
+	.swnode_name = _Generic(_ref_,				\
+				const char *: _ref_,		\
+				default: NULL),			\
 	.fwnode = _Generic(_ref_,				\
 			   struct fwnode_handle *: _ref_,	\
 			   default: NULL),			\
