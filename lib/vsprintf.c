@@ -3461,7 +3461,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
 		long long s;
 		unsigned long long u;
 	} val;
-	s16 field_width;
+	int field_width;
 	bool is_sign;
 
 	while (*fmt) {
