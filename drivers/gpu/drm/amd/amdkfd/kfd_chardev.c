@@ -35,6 +35,7 @@
 #include <linux/mman.h>
 #include <linux/ptrace.h>
 #include <linux/dma-buf.h>
+#include <linux/nospec.h>
 #include <linux/processor.h>
 #include "kfd_priv.h"
 #include "kfd_device_queue_manager.h"
@@ -3349,6 +3350,7 @@ static long kfd_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	if ((nr >= AMDKFD_COMMAND_START) && (nr < AMDKFD_COMMAND_END)) {
 		u32 amdkfd_size;
 
+		nr = array_index_nospec(nr, AMDKFD_CORE_IOCTL_COUNT);
 		ioctl = &amdkfd_ioctls[nr];
 
 		amdkfd_size = _IOC_SIZE(ioctl->cmd);
