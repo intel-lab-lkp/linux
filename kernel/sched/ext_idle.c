@@ -1082,6 +1082,9 @@ __bpf_kfunc const struct cpumask *scx_bpf_get_idle_cpumask_node(int node)
 	if (node < 0)
 		return cpu_none_mask;
 
+	if (!check_builtin_idle_enabled(sch))
+		return cpu_none_mask;
+
 	return idle_cpumask(node)->cpu;
 }
 
@@ -1135,6 +1138,9 @@ __bpf_kfunc const struct cpumask *scx_bpf_get_idle_smtmask_node(int node)
 
 	node = validate_node(sch, node);
 	if (node < 0)
+		return cpu_none_mask;
+
+	if (!check_builtin_idle_enabled(sch))
 		return cpu_none_mask;
 
 	if (sched_smt_active())
@@ -1253,6 +1259,9 @@ __bpf_kfunc s32 scx_bpf_pick_idle_cpu_node(const struct cpumask *cpus_allowed,
 	if (node < 0)
 		return node;
 
+	if (!check_builtin_idle_enabled(sch))
+		return -EBUSY;
+
 	return scx_pick_idle_cpu(cpus_allowed, node, flags);
 }
 
@@ -1337,9 +1346,11 @@ __bpf_kfunc s32 scx_bpf_pick_any_cpu_node(const struct cpumask *cpus_allowed,
 	if (node < 0)
 		return node;
 
-	cpu = scx_pick_idle_cpu(cpus_allowed, node, flags);
-	if (cpu >= 0)
-		return cpu;
+	if (static_branch_likely(&scx_builtin_idle_enabled)) {
+		cpu = scx_pick_idle_cpu(cpus_allowed, node, flags);
+		if (cpu >= 0)
+			return cpu;
+	}
 
 	if (flags & SCX_PICK_IDLE_IN_NODE)
 		cpu = cpumask_any_and_distribute(cpumask_of_node(node), cpus_allowed);
