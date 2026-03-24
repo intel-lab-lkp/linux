@@ -534,6 +534,8 @@ static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
 {
 	bool is_slave_a_added = false;
 	bool is_slave_b_added = false;
+	struct net_device *slave_a_dev = NULL;
+	struct net_device *slave_b_dev = NULL;
 	struct hsr_port *port;
 	struct hsr_priv *hsr;
 	int ret = 0;
@@ -552,11 +554,12 @@ static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
 				/* clean up Slave-B */
 				netdev_err(dev, "add vid failed for Slave-A\n");
 				if (is_slave_b_added)
-					vlan_vid_del(port->dev, proto, vid);
+					vlan_vid_del(slave_b_dev, proto, vid);
 				return ret;
 			}
 
 			is_slave_a_added = true;
+			slave_a_dev = port->dev;
 			break;
 
 		case HSR_PT_SLAVE_B:
@@ -564,11 +567,12 @@ static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
 				/* clean up Slave-A */
 				netdev_err(dev, "add vid failed for Slave-B\n");
 				if (is_slave_a_added)
-					vlan_vid_del(port->dev, proto, vid);
+					vlan_vid_del(slave_a_dev, proto, vid);
 				return ret;
 			}
 
 			is_slave_b_added = true;
+			slave_b_dev = port->dev;
 			break;
 		default:
 			break;
