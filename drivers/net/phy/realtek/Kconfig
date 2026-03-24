@@ -14,3 +14,15 @@ config REALTEK_PHY_HWMON
 	  Optional hwmon support for the temperature sensor
 
 endif # REALTEK_PHY
+
+config REALTEK_RTL8211F_RUST_PHY
+	tristate "Rust Realtek RTL8211F PHY driver"
+	depends on RUST && RUST_PHYLIB_ABSTRACTIONS && !REALTEK_PHY
+	help
+	  Rust driver for the Realtek RTL8211F Gigabit Ethernet PHY.
+	  This is a Rust implementation demonstrating the extended PHY
+	  abstraction with config_init, paged register access, and
+	  interrupt support.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called rtl8211f_rust.
