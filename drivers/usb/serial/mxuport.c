@@ -183,6 +183,7 @@ struct mxuport_port {
 	u32 hold_reason;
 	u8 mcr_state;		/* Last MCR state */
 	u8 msr_state;		/* Last MSR state */
+	bool fifo_enabled;
 	struct serial_rs485 rs485;
 	struct mutex mutex;	/* Protects mcr_state */
 	spinlock_t spinlock;	/* Protects msr_state */
@@ -1242,6 +1243,68 @@ out:
 	return err;
 }
 
+static ssize_t uart_fifo_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	struct usb_serial_port *port = to_usb_serial_port(dev);
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+
+	if (mxport->fifo_enabled)
+		return sysfs_emit(buf, "enabled\n");
+
+	return sysfs_emit(buf, "disabled\n");
+}
+
+static ssize_t uart_fifo_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct usb_serial_port *port = to_usb_serial_port(dev);
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	struct usb_serial *serial = port->serial;
+	bool state;
+	int ret;
+
+	if (!count)
+		return -EINVAL;
+
+	ret = kstrtobool(buf, &state);
+	if (ret < 0)
+		return ret;
+
+	if (state == 1) {
+		ret = mxuport_send_ctrl_urb(serial, RQ_VENDOR_SET_FIFO_DISABLE,
+					    0, port->port_number);
+		if (ret)
+			return ret;
+
+		mxport->fifo_enabled = true;
+	} else if (state == 0) {
+		ret = mxuport_send_ctrl_urb(serial, RQ_VENDOR_SET_FIFO_DISABLE,
+					    1, port->port_number);
+		if (ret)
+			return ret;
+
+		mxport->fifo_enabled = false;
+	} else {
+		return -EINVAL;
+	}
+
+	return count;
+}
+static DEVICE_ATTR_RW(uart_fifo);
+
+static int mxuport_create_sysfs_attrs(struct usb_serial_port *port)
+{
+	return device_create_file(&port->dev, &dev_attr_uart_fifo);
+}
+
+static int mxuport_remove_sysfs_attrs(struct usb_serial_port *port)
+{
+	device_remove_file(&port->dev, &dev_attr_uart_fifo);
+
+	return 0;
+}
 
 static int mxuport_port_probe(struct usb_serial_port *port)
 {
@@ -1266,9 +1329,15 @@ static int mxuport_port_probe(struct usb_serial_port *port)
 	if (err)
 		return err;
 
+	mxport->fifo_enabled = true;
+
 	/* Set transmission mode (Hi-Performance) */
 	err = mxuport_send_ctrl_urb(serial, RQ_VENDOR_SET_HIGH_PERFOR,
 				    0, port->port_number);
+	if (err)
+		return err;
+
+	err = mxuport_create_sysfs_attrs(port);
 	if (err)
 		return err;
 
@@ -1276,6 +1345,11 @@ static int mxuport_port_probe(struct usb_serial_port *port)
 	return mxuport_send_ctrl_urb(serial, RQ_VENDOR_SET_INTERFACE,
 				     MX_INT_RS232,
 				     port->port_number);
+}
+
+static void mxuport_port_remove(struct usb_serial_port *port)
+{
+	mxuport_remove_sysfs_attrs(port);
 }
 
 static int mxuport_attach(struct usb_serial *serial)
@@ -1501,6 +1575,7 @@ static struct usb_serial_driver mxuport_device = {
 	.num_bulk_out		= 1,
 	.probe			= mxuport_probe,
 	.port_probe		= mxuport_port_probe,
+	.port_remove		= mxuport_port_remove,
 	.attach			= mxuport_attach,
 	.release		= mxuport_release,
 	.calc_num_ports		= mxuport_calc_num_ports,
