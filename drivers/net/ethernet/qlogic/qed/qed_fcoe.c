@@ -126,6 +126,15 @@ qed_sp_fcoe_func_start(struct qed_hwfn *p_hwfn,
 		goto err;
 	}
 
+	if (fcoe_pf_params->num_cqs > ARRAY_SIZE(p_data->q_params.cq_cmdq_sb_num_arr)) {
+		DP_ERR(p_hwfn,
+		       "Cannot fit %u queues in %zu command queue slots. Aborting function start\n",
+		       fcoe_pf_params->num_cqs,
+		       ARRAY_SIZE(p_data->q_params.cq_cmdq_sb_num_arr));
+		rc = -EINVAL;
+		goto err;
+	}
+
 	p_data->mtu = cpu_to_le16(fcoe_pf_params->mtu);
 	tmp = cpu_to_le16(fcoe_pf_params->sq_num_pbl_pages);
 	p_data->sq_num_pages_in_pbl = tmp;
