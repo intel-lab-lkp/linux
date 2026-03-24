@@ -164,6 +164,7 @@ static int MR_PopulateDrvRaidMap(struct megasas_instance *instance, u64 map_id)
 	struct MR_FW_RAID_MAP_DYNAMIC *fw_map_dyn;
 	struct MR_FW_RAID_MAP_EXT *fw_map_ext;
 	struct MR_RAID_MAP_DESC_TABLE *desc_table;
+	u32 desc_elements;
 
 
 	struct MR_DRV_RAID_MAP_ALL *drv_map =
@@ -195,8 +196,15 @@ static int MR_PopulateDrvRaidMap(struct megasas_instance *instance, u64 map_id)
 			le32_to_cpu(fw_map_dyn->desc_table_size);
 
 		for (i = 0; i < le32_to_cpu(fw_map_dyn->desc_table_num_elements); ++i) {
+			desc_elements = le32_to_cpu(desc_table->raid_map_desc_elements);
 			switch (le32_to_cpu(desc_table->raid_map_desc_type)) {
 			case RAID_MAP_DESC_TYPE_DEVHDL_INFO:
+				if (desc_elements > MAX_RAIDMAP_PHYSICAL_DEVICES_DYN) {
+					dev_dbg(&instance->pdev->dev,
+						"invalid dev handle descriptor count %u\n",
+						desc_elements);
+					return 1;
+				}
 				fw_map_dyn->dev_hndl_info =
 				(struct MR_DEV_HANDLE_INFO *)(raid_map_data + le32_to_cpu(desc_table->raid_map_desc_offset));
 				memcpy(pDrvRaidMap->devHndlInfo,
@@ -205,6 +213,12 @@ static int MR_PopulateDrvRaidMap(struct megasas_instance *instance, u64 map_id)
 					le32_to_cpu(desc_table->raid_map_desc_elements));
 			break;
 			case RAID_MAP_DESC_TYPE_TGTID_INFO:
+				if (desc_elements > MAX_LOGICAL_DRIVES_DYN) {
+					dev_dbg(&instance->pdev->dev,
+						"invalid target id descriptor count %u\n",
+						desc_elements);
+					return 1;
+				}
 				fw_map_dyn->ld_tgt_id_to_ld =
 					(u16 *)(raid_map_data +
 					le32_to_cpu(desc_table->raid_map_desc_offset));
@@ -214,6 +228,12 @@ static int MR_PopulateDrvRaidMap(struct megasas_instance *instance, u64 map_id)
 				}
 			break;
 			case RAID_MAP_DESC_TYPE_ARRAY_INFO:
+				if (desc_elements > MAX_API_ARRAYS_DYN) {
+					dev_dbg(&instance->pdev->dev,
+						"invalid array descriptor count %u\n",
+						desc_elements);
+					return 1;
+				}
 				fw_map_dyn->ar_map_info =
 					(struct MR_ARRAY_INFO *)
 					(raid_map_data + le32_to_cpu(desc_table->raid_map_desc_offset));
@@ -223,6 +243,12 @@ static int MR_PopulateDrvRaidMap(struct megasas_instance *instance, u64 map_id)
 				       le32_to_cpu(desc_table->raid_map_desc_elements));
 			break;
 			case RAID_MAP_DESC_TYPE_SPAN_INFO:
+				if (desc_elements > MAX_LOGICAL_DRIVES_DYN) {
+					dev_dbg(&instance->pdev->dev,
+						"invalid span descriptor count %u\n",
+						desc_elements);
+					return 1;
+				}
 				fw_map_dyn->ld_span_map =
 					(struct MR_LD_SPAN_MAP *)
 					(raid_map_data +
