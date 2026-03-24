@@ -1005,7 +1005,7 @@ int f2fs_getattr(struct mnt_idmap *idmap, const struct path *path,
 		}
 	}
 
-	flags = fi->i_flags;
+	flags = READ_ONCE(fi->i_flags);
 	if (flags & F2FS_COMPR_FL)
 		stat->attributes |= STATX_ATTR_COMPRESSED;
 	if (flags & F2FS_APPEND_FL)
@@ -2153,7 +2153,7 @@ static int f2fs_setflags_common(struct inode *inode, u32 iflags, u32 mask)
 		}
 	}
 
-	fi->i_flags = iflags | (fi->i_flags & ~mask);
+	WRITE_ONCE(fi->i_flags, iflags | (READ_ONCE(fi->i_flags) & ~mask));
 	f2fs_bug_on(F2FS_I_SB(inode), (fi->i_flags & F2FS_COMPR_FL) &&
 					(fi->i_flags & F2FS_NOCOMP_FL));
 
@@ -3439,7 +3439,7 @@ int f2fs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
 	struct f2fs_inode_info *fi = F2FS_I(inode);
-	u32 fsflags = f2fs_iflags_to_fsflags(fi->i_flags);
+	u32 fsflags = f2fs_iflags_to_fsflags(READ_ONCE(fi->i_flags));
 
 	if (IS_ENCRYPTED(inode))
 		fsflags |= FS_ENCRYPT_FL;

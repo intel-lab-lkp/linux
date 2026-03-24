@@ -717,7 +717,7 @@ void f2fs_update_inode(struct inode *inode, struct folio *node_folio)
 	else if (S_ISREG(inode->i_mode))
 		ri->i_gc_failures = cpu_to_le16(fi->i_gc_failures);
 	ri->i_xattr_nid = cpu_to_le32(fi->i_xattr_nid);
-	ri->i_flags = cpu_to_le32(fi->i_flags);
+	ri->i_flags = cpu_to_le32(READ_ONCE(fi->i_flags));
 	ri->i_pino = cpu_to_le32(fi->i_pino);
 	ri->i_generation = cpu_to_le32(inode->i_generation);
 	ri->i_dir_level = fi->i_dir_level;
