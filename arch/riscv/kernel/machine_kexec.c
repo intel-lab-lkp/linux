@@ -18,6 +18,98 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 
+static pgd_t kexec_tramp_pgd[PTRS_PER_PGD] __aligned(PAGE_SIZE);
+static p4d_t kexec_tramp_p4d[PTRS_PER_P4D] __aligned(PAGE_SIZE);
+static pud_t kexec_tramp_pud[PTRS_PER_PUD] __aligned(PAGE_SIZE);
+static pmd_t kexec_tramp_pmd[PTRS_PER_PMD] __aligned(PAGE_SIZE);
+static pte_t kexec_tramp_pte[PTRS_PER_PTE] __aligned(PAGE_SIZE);
+static p4d_t kexec_tramp_p4d2[PTRS_PER_P4D] __aligned(PAGE_SIZE);
+static pud_t kexec_tramp_pud2[PTRS_PER_PUD] __aligned(PAGE_SIZE);
+static pmd_t kexec_tramp_pmd2[PTRS_PER_PMD] __aligned(PAGE_SIZE);
+static pte_t kexec_tramp_pte2[PTRS_PER_PTE] __aligned(PAGE_SIZE);
+
+static void riscv_kexec_build_tramp(unsigned long va, unsigned long pa)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	p4d_t *p4d;
+	pmd_t *pmd;
+	pte_t *pte;
+	int index;
+
+	index = pgd_index(va);
+	pgd = (pgd_t *)kexec_tramp_pgd + index;
+	if (pgtable_l5_enabled)
+		set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(kexec_tramp_p4d)),
+			PAGE_TABLE));
+	else
+		set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(kexec_tramp_pud)),
+			PAGE_TABLE));
+
+	if (pgtable_l5_enabled) {
+		index = p4d_index(va);
+		p4d = (p4d_t *)kexec_tramp_p4d + index;
+		if (pgtable_l4_enabled)
+			set_p4d(p4d, pfn_p4d(PFN_DOWN(__pa_symbol(kexec_tramp_pud)),
+				PAGE_TABLE));
+		else
+			set_p4d(p4d, pfn_p4d(PFN_DOWN(__pa_symbol(kexec_tramp_pmd)),
+				PAGE_TABLE));
+	}
+
+	if (pgtable_l4_enabled) {
+		index = pud_index(va);
+		pud = (pud_t *)kexec_tramp_pud + index;
+		set_pud(pud, pfn_pud(PFN_DOWN(__pa_symbol(kexec_tramp_pmd)), PAGE_TABLE));
+	}
+
+	index = pmd_index(va);
+	if (pgtable_l4_enabled)
+		pmd = (pmd_t *)kexec_tramp_pmd + index;
+	else
+		pmd = (pmd_t *)kexec_tramp_pud + index;
+	set_pmd(pmd, pfn_pmd(PFN_DOWN(__pa_symbol(kexec_tramp_pte)), PAGE_TABLE));
+
+	index = pte_index(va);
+	pte = (pte_t *)kexec_tramp_pte + index;
+	set_pte(pte, pfn_pte(PFN_DOWN(pa), PAGE_KERNEL_EXEC));
+
+	index = pgd_index(pa);
+	pgd = (pgd_t *)kexec_tramp_pgd + index;
+	if (pgtable_l5_enabled)
+		set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(kexec_tramp_p4d2)), PAGE_TABLE));
+	else
+		set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(kexec_tramp_pud2)), PAGE_TABLE));
+
+	if (pgtable_l5_enabled) {
+		index = p4d_index(pa);
+		p4d = (p4d_t *)kexec_tramp_p4d2 + index;
+		if (pgtable_l4_enabled)
+			set_p4d(p4d, pfn_p4d(PFN_DOWN(__pa_symbol(kexec_tramp_pud2)),
+				PAGE_TABLE));
+		else
+			set_p4d(p4d, pfn_p4d(PFN_DOWN(__pa_symbol(kexec_tramp_pmd2)),
+				PAGE_TABLE));
+	}
+
+	if (pgtable_l4_enabled) {
+		index = pud_index(pa);
+		pud = (pud_t *)kexec_tramp_pud2 + index;
+		set_pud(pud, pfn_pud(PFN_DOWN(__pa_symbol(kexec_tramp_pmd2)), PAGE_TABLE));
+	}
+
+	index = pmd_index(pa);
+	if (pgtable_l4_enabled)
+		pmd = (pmd_t *)kexec_tramp_pmd2 + index;
+	else
+		pmd = (pmd_t *)kexec_tramp_pud2 + index;
+	set_pmd(pmd, pfn_pmd(PFN_DOWN(__pa_symbol(kexec_tramp_pte2)), PAGE_TABLE));
+
+	index = pte_index(pa);
+	pte = (pte_t *)kexec_tramp_pte2 + index;
+	set_pte(pte, pfn_pte(PFN_DOWN(pa), PAGE_KERNEL_EXEC));
+}
+
 /*
  * machine_kexec_prepare - Initialize kexec
  *
@@ -164,8 +256,17 @@ machine_kexec(struct kimage *image)
 
 	if (image->type != KEXEC_TYPE_CRASH)
 		kexec_method = control_code_buffer;
-	else
+	else {
 		kexec_method = (riscv_kexec_method) &riscv_kexec_norelocate;
+		/*
+		 * Build two 4KB identity-mapping page tables for the
+		 * trampoline page:
+		 *   - VA(__kexec_tramp_text_start) -> PA(__kexec_tramp_text_start)
+		 *   - PA(__kexec_tramp_text_start) -> PA(__kexec_tramp_text_start)
+		 */
+		riscv_kexec_build_tramp((unsigned long)__kexec_tramp_text_start,
+					__pa_symbol(__kexec_tramp_text_start));
+	}
 
 	pr_notice("Will call new kernel at %08lx from hart id %lx\n",
 		  jump_addr, this_hart_id);
