@@ -143,6 +143,7 @@ static inline void set_prp_lan_id(struct prp_rct *rct, u16 lan_id)
 	rct->lan_id_and_LSDU_size = htons((ntohs(rct->lan_id_and_LSDU_size) &
 					  0x0FFF) | (lan_id << 12));
 }
+
 static inline void set_prp_LSDU_size(struct prp_rct *rct, u16 LSDU_size)
 {
 	rct->lan_id_and_LSDU_size = htons((ntohs(rct->lan_id_and_LSDU_size) &
@@ -277,24 +278,36 @@ static inline bool prp_check_lsdu_size(struct sk_buff *skb,
 }
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
+
 void hsr_debugfs_rename(struct net_device *dev);
 void hsr_debugfs_init(struct hsr_priv *priv, struct net_device *hsr_dev);
 void hsr_debugfs_term(struct hsr_priv *priv);
 void hsr_debugfs_create_root(void);
 void hsr_debugfs_remove_root(void);
+
 #else
+
 static inline void hsr_debugfs_rename(struct net_device *dev)
 {
 }
+
 static inline void hsr_debugfs_init(struct hsr_priv *priv,
 				    struct net_device *hsr_dev)
-{}
+{
+}
+
 static inline void hsr_debugfs_term(struct hsr_priv *priv)
-{}
+{
+}
+
 static inline void hsr_debugfs_create_root(void)
-{}
+{
+}
+
 static inline void hsr_debugfs_remove_root(void)
-{}
+{
+}
+
 #endif
 
 #endif /*  __HSR_PRIVATE_H */
