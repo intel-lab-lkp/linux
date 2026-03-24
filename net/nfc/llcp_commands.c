@@ -193,7 +193,8 @@ int nfc_llcp_parse_gb_tlv(struct nfc_llcp_local *local,
 			  const u8 *tlv_array, u16 tlv_array_len)
 {
 	const u8 *tlv = tlv_array;
-	u8 type, length, offset = 0;
+	u8 type, length;
+	u16 offset = 0;
 
 	pr_debug("TLV array length %d\n", tlv_array_len);
 
@@ -201,6 +202,9 @@ int nfc_llcp_parse_gb_tlv(struct nfc_llcp_local *local,
 		return -ENODEV;
 
 	while (offset < tlv_array_len) {
+		if (tlv_array_len - offset < 2)
+			return -EINVAL;
+
 		type = tlv[0];
 		length = tlv[1];
 
@@ -227,6 +231,9 @@ int nfc_llcp_parse_gb_tlv(struct nfc_llcp_local *local,
 			break;
 		}
 
+		if (tlv_array_len - offset < (u16)length + 2)
+			return -EINVAL;
+
 		offset += length + 2;
 		tlv += length + 2;
 	}
@@ -243,7 +250,8 @@ int nfc_llcp_parse_connection_tlv(struct nfc_llcp_sock *sock,
 				  const u8 *tlv_array, u16 tlv_array_len)
 {
 	const u8 *tlv = tlv_array;
-	u8 type, length, offset = 0;
+	u8 type, length;
+	u16 offset = 0;
 
 	pr_debug("TLV array length %d\n", tlv_array_len);
 
@@ -251,6 +259,9 @@ int nfc_llcp_parse_connection_tlv(struct nfc_llcp_sock *sock,
 		return -ENOTCONN;
 
 	while (offset < tlv_array_len) {
+		if (tlv_array_len - offset < 2)
+			return -EINVAL;
+
 		type = tlv[0];
 		length = tlv[1];
 
@@ -269,6 +280,9 @@ int nfc_llcp_parse_connection_tlv(struct nfc_llcp_sock *sock,
 			pr_err("Invalid gt tlv value 0x%x\n", type);
 			break;
 		}
+
+		if (tlv_array_len - offset < (u16)length + 2)
+			return -EINVAL;
 
 		offset += length + 2;
 		tlv += length + 2;
