@@ -2358,7 +2358,7 @@ void tag_pages_for_writeback(struct address_space *mapping,
 }
 EXPORT_SYMBOL(tag_pages_for_writeback);
 
-static bool folio_prepare_writeback(struct address_space *mapping,
+bool folio_prepare_writeback(struct address_space *mapping,
 		struct writeback_control *wbc, struct folio *folio)
 {
 	/*
@@ -2389,7 +2389,7 @@ static bool folio_prepare_writeback(struct address_space *mapping,
 
 	return true;
 }
-
+EXPORT_SYMBOL_GPL(folio_prepare_writeback);
 
 static pgoff_t wbc_end(struct writeback_control *wbc)
 {
