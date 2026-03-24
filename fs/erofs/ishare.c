@@ -201,7 +201,10 @@ struct inode *erofs_real_inode(struct inode *inode, bool *need_iput)
 int __init erofs_init_ishare(void)
 {
 	erofs_ishare_mnt = kern_mount(&erofs_anon_fs_type);
-	return PTR_ERR_OR_ZERO(erofs_ishare_mnt);
+	if (IS_ERR_OR_NULL(erofs_ishare_mnt))
+		return PTR_ERR_OR_ZERO(erofs_ishare_mnt);
+	/* generic_fadvise() doesn't work if s_bdi == &noop_backing_dev_info */
+	return super_setup_bdi(erofs_ishare_mnt->mnt_sb);
 }
 
 void erofs_exit_ishare(void)
