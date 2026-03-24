@@ -4059,8 +4059,15 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 				ret = PTR_ERR(peer_net);
 				goto put_ops;
 			}
-			if (peer_net)
+			if (peer_net) {
+				if (!netlink_ns_capable(skb, peer_net->user_ns,
+							CAP_NET_ADMIN)) {
+					put_net(peer_net);
+					ret = -EPERM;
+					goto put_ops;
+				}
 				rtnl_nets_add(&rtnl_nets, peer_net);
+			}
 		}
 	}
 
