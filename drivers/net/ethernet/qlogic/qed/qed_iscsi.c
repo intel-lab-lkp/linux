@@ -178,6 +178,15 @@ qed_sp_iscsi_func_start(struct qed_hwfn *p_hwfn,
 		return -EINVAL;
 	}
 
+	if (p_params->num_queues > ARRAY_SIZE(p_queue->cq_cmdq_sb_num_arr)) {
+		DP_ERR(p_hwfn,
+		       "Cannot fit %u queues in %zu command queue slots. Aborting function start\n",
+		       p_params->num_queues,
+		       ARRAY_SIZE(p_queue->cq_cmdq_sb_num_arr));
+		qed_sp_destroy_request(p_hwfn, p_ent);
+		return -EINVAL;
+	}
+
 	val = p_params->half_way_close_timeout;
 	p_init->half_way_close_timeout = cpu_to_le16(val);
 	p_init->num_sq_pages_in_ring = p_params->num_sq_pages_in_ring;
