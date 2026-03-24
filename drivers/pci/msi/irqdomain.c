@@ -274,8 +274,11 @@ bool pci_setup_msix_device_domain(struct pci_dev *pdev, unsigned int hwsize)
 	if (WARN_ON_ONCE(pdev->msi_enabled))
 		return false;
 
-	if (pci_match_device_domain(pdev, DOMAIN_BUS_PCI_DEVICE_MSIX))
+	if (pci_match_device_domain(pdev, DOMAIN_BUS_PCI_DEVICE_MSIX)) {
+		if (msi_domain_update_hwsize(&pdev->dev, MSI_DEFAULT_DOMAIN, hwsize))
+			pr_warn("too big MSI-X hwsize:%u\n", hwsize);
 		return true;
+	}
 	if (pci_match_device_domain(pdev, DOMAIN_BUS_PCI_DEVICE_MSI))
 		msi_remove_device_irq_domain(&pdev->dev, MSI_DEFAULT_DOMAIN);
 
