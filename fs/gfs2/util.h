@@ -160,7 +160,6 @@ gfs2_io_error_bh_i((sdp), (bh), __func__, __FILE__, __LINE__)
 extern struct kmem_cache *gfs2_glock_cachep;
 extern struct kmem_cache *gfs2_glock_aspace_cachep;
 extern struct kmem_cache *gfs2_inode_cachep;
-extern struct kmem_cache *gfs2_bufdata_cachep;
 extern struct kmem_cache *gfs2_rgrpd_cachep;
 extern struct kmem_cache *gfs2_quotad_cachep;
 extern struct kmem_cache *gfs2_qadata_cachep;

@@ -847,6 +847,7 @@ struct gfs2_sbd {
 
 	unsigned long sd_last_warning;
 	struct dentry *debugfs_dir;    /* debugfs directory */
+	struct kmem_cache *sd_bufdata;
 };
 
 #define glock_sbd(gl) ((gl)->gl_name.ln_sbd)

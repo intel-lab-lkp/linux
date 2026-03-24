@@ -115,12 +115,6 @@ static int __init init_gfs2_fs(void)
 	if (!gfs2_inode_cachep)
 		goto fail_cachep3;
 
-	gfs2_bufdata_cachep = kmem_cache_create("gfs2_bufdata",
-						sizeof(struct gfs2_bufdata),
-					        0, 0, NULL);
-	if (!gfs2_bufdata_cachep)
-		goto fail_cachep4;
-
 	gfs2_rgrpd_cachep = kmem_cache_create("gfs2_rgrpd",
 					      sizeof(struct gfs2_rgrpd),
 					      0, 0, NULL);
@@ -205,8 +199,6 @@ fail_cachep7:
 fail_cachep6:
 	kmem_cache_destroy(gfs2_rgrpd_cachep);
 fail_cachep5:
-	kmem_cache_destroy(gfs2_bufdata_cachep);
-fail_cachep4:
 	kmem_cache_destroy(gfs2_inode_cachep);
 fail_cachep3:
 	kmem_cache_destroy(gfs2_glock_aspace_cachep);
@@ -245,7 +237,6 @@ static void __exit exit_gfs2_fs(void)
 	kmem_cache_destroy(gfs2_qadata_cachep);
 	kmem_cache_destroy(gfs2_quotad_cachep);
 	kmem_cache_destroy(gfs2_rgrpd_cachep);
-	kmem_cache_destroy(gfs2_bufdata_cachep);
 	kmem_cache_destroy(gfs2_inode_cachep);
 	kmem_cache_destroy(gfs2_glock_aspace_cachep);
 	kmem_cache_destroy(gfs2_glock_cachep);
