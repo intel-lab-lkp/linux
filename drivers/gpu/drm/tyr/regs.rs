@@ -857,7 +857,16 @@ pub(crate) mod mmu_control {
     ///
     /// This array contains 16 instances of the MMU_AS_CONTROL register page.
     pub(crate) mod mmu_as_control {
-        use kernel::register;
+        use core::convert::TryFrom;
+
+        use kernel::{
+            error::{
+                code::EINVAL,
+                Error, //
+            },
+            num::Bounded,
+            register, //
+        };
 
         /// Maximum number of hardware address space slots.
         /// The actual number of slots available is usually lower.
@@ -875,12 +884,161 @@ pub(crate) mod mmu_control {
                 /// Base address of the translation table.
                 63:0    base;
             }
+        }
 
+        /// Helpers for MEMATTR Register.
+
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum AllocPolicySelect {
+            /// Ignore ALLOC_R/ALLOC_W fields.
+            Impl = 2,
+            /// Use ALLOC_R/ALLOC_W fields for allocation policy.
+            Alloc = 3,
+        }
+
+        impl TryFrom<Bounded<u8, 2>> for AllocPolicySelect {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u8, 2>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    2 => Ok(Self::Impl),
+                    3 => Ok(Self::Alloc),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<AllocPolicySelect> for Bounded<u8, 2> {
+            fn from(val: AllocPolicySelect) -> Self {
+                Bounded::try_new(val as u8).unwrap()
+            }
+        }
+
+        /// Coherency policy for memory attributes. Indicates the shareability of cached accesses.
+        ///
+        /// The hardware spec defines different interpretations of these values depending on
+        /// whether TRANSCFG.MODE is set to IDENTITY or not. IDENTITY mode does not use translation
+        /// tables (all input addresses map to the same output address); it is deprecated and not used
+        /// by the driver. This enum assumes that TRANSCFG.MODE is not set to IDENTITY.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum Coherency {
+            /// Midgard inner domain coherency.
+            ///
+            /// Most flexible mode - can map non-coherent, internally coherent, and system/IO
+            /// coherent memory. Used for non-cacheable memory in MAIR conversion.
+            MidgardInnerDomain = 0,
+            /// CPU inner domain coherency.
+            ///
+            /// Can map non-coherent and system/IO coherent memory. Used for write-back
+            /// cacheable memory in MAIR conversion to maintain CPU-GPU cache coherency.
+            CpuInnerDomain = 1,
+            /// CPU inner domain with shader coherency.
+            ///
+            /// Can map internally coherent and system/IO coherent memory. Used for
+            /// GPU-internal shared buffers requiring shader coherency.
+            CpuInnerDomainShaderCoh = 2,
+        }
+
+        impl TryFrom<Bounded<u8, 2>> for Coherency {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u8, 2>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    0 => Ok(Self::MidgardInnerDomain),
+                    1 => Ok(Self::CpuInnerDomain),
+                    2 => Ok(Self::CpuInnerDomainShaderCoh),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<Coherency> for Bounded<u8, 2> {
+            fn from(val: Coherency) -> Self {
+                Bounded::try_new(val as u8).unwrap()
+            }
+        }
+
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum MemoryType {
+            /// Normal memory (shared).
+            Shared = 0,
+            /// Normal memory, inner/outer non-cacheable.
+            NonCacheable = 1,
+            /// Normal memory, inner/outer write-back cacheable.
+            WriteBack = 2,
+            /// Triggers MEMORY_ATTRIBUTE_FAULT.
+            Fault = 3,
+        }
+
+        impl From<Bounded<u8, 2>> for MemoryType {
+            fn from(val: Bounded<u8, 2>) -> Self {
+                match val.get() {
+                    0 => Self::Shared,
+                    1 => Self::NonCacheable,
+                    2 => Self::WriteBack,
+                    3 => Self::Fault,
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        impl From<MemoryType> for Bounded<u8, 2> {
+            fn from(val: MemoryType) -> Self {
+                Bounded::try_new(val as u8).unwrap()
+            }
+        }
+
+        register! {
+            /// Stage 1 memory attributes (8-bit bitfield).
+            ///
+            /// This is not an actual register, but a bitfield definition used by the MEMATTR
+            /// register. Each of the 8 bytes in MEMATTR follows this layout.
+            MMU_MEMATTR_STAGE1(u8) @ 0x0 {
+                /// Inner cache write allocation policy.
+                0:0     alloc_w => bool;
+                /// Inner cache read allocation policy.
+                1:1     alloc_r => bool;
+                /// Inner allocation policy select.
+                3:2     alloc_sel ?=> AllocPolicySelect;
+                /// Coherency policy.
+                5:4     coherency ?=> Coherency;
+                /// Memory type.
+                7:6     memory_type => MemoryType;
+            }
+        }
+
+        impl TryFrom<Bounded<u64, 8>> for MMU_MEMATTR_STAGE1 {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u64, 8>) -> Result<Self, Self::Error> {
+                Ok(Self::from_raw(val.get() as u8))
+            }
+        }
+
+        impl From<MMU_MEMATTR_STAGE1> for Bounded<u64, 8> {
+            fn from(val: MMU_MEMATTR_STAGE1) -> Self {
+                Bounded::try_new(u64::from(val.into_raw())).unwrap()
+            }
+        }
+
+        register! {
             /// Memory attributes.
             ///
             /// Each address space can configure up to 8 different memory attribute profiles.
             /// Each attribute profile follows the MMU_MEMATTR_STAGE1 layout.
-            pub(crate) MEMATTR(u64)[MAX_AS, stride = STRIDE] @ 0x2408 {}
+            pub(crate) MEMATTR(u64)[MAX_AS, stride = STRIDE] @ 0x2408 {
+                7:0     attribute0 ?=> MMU_MEMATTR_STAGE1;
+                15:8    attribute1 ?=> MMU_MEMATTR_STAGE1;
+                23:16   attribute2 ?=> MMU_MEMATTR_STAGE1;
+                31:24   attribute3 ?=> MMU_MEMATTR_STAGE1;
+                39:32   attribute4 ?=> MMU_MEMATTR_STAGE1;
+                47:40   attribute5 ?=> MMU_MEMATTR_STAGE1;
+                55:48   attribute6 ?=> MMU_MEMATTR_STAGE1;
+                63:56   attribute7 ?=> MMU_MEMATTR_STAGE1;
+            }
 
             /// Lock region address for each address space.
             pub(crate) LOCKADDR(u64)[MAX_AS, stride = STRIDE] @ 0x2410 {
