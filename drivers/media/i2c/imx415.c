@@ -1129,8 +1129,12 @@ static void imx415_subdev_cleanup(struct imx415 *sensor)
 	v4l2_ctrl_handler_free(&sensor->ctrls);
 }
 
-static int imx415_power_on(struct imx415 *sensor)
+static int imx415_power_on(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
+	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
+	struct imx415 *sensor = to_imx415(subdev);
+
 	int ret;
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(sensor->supplies),
@@ -1161,11 +1165,17 @@ err_reset:
 	return ret;
 }
 
-static void imx415_power_off(struct imx415 *sensor)
+static int imx415_power_off(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
+	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
+	struct imx415 *sensor = to_imx415(subdev);
+
 	clk_disable_unprepare(sensor->clk);
 	gpiod_set_value_cansleep(sensor->reset, 1);
 	regulator_bulk_disable(ARRAY_SIZE(sensor->supplies), sensor->supplies);
+
+	return 0;
 }
 
 static int imx415_identify_model(struct imx415 *sensor)
@@ -1371,7 +1381,7 @@ static int imx415_probe(struct i2c_client *client)
 	 * work when runtime PM is disabled in the kernel. To that end, power
 	 * the sensor on manually here, identify it, and fully initialize it.
 	 */
-	ret = imx415_power_on(sensor);
+	ret = imx415_power_on(sensor->dev);
 	if (ret)
 		return ret;
 
@@ -1411,7 +1421,7 @@ err_pm:
 	pm_runtime_put_noidle(sensor->dev);
 	imx415_subdev_cleanup(sensor);
 err_power:
-	imx415_power_off(sensor);
+	imx415_power_off(sensor->dev);
 	return ret;
 }
 
@@ -1430,32 +1440,12 @@ static void imx415_remove(struct i2c_client *client)
 	 */
 	pm_runtime_disable(sensor->dev);
 	if (!pm_runtime_status_suspended(sensor->dev))
-		imx415_power_off(sensor);
+		imx415_power_off(sensor->dev);
 	pm_runtime_set_suspended(sensor->dev);
 }
 
-static int imx415_runtime_resume(struct device *dev)
-{
-	struct i2c_client *client = to_i2c_client(dev);
-	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
-	struct imx415 *sensor = to_imx415(subdev);
-
-	return imx415_power_on(sensor);
-}
-
-static int imx415_runtime_suspend(struct device *dev)
-{
-	struct i2c_client *client = to_i2c_client(dev);
-	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
-	struct imx415 *sensor = to_imx415(subdev);
-
-	imx415_power_off(sensor);
-
-	return 0;
-}
-
-static DEFINE_RUNTIME_DEV_PM_OPS(imx415_pm_ops, imx415_runtime_suspend,
-				 imx415_runtime_resume, NULL);
+static DEFINE_RUNTIME_DEV_PM_OPS(imx415_pm_ops, imx415_power_off,
+				 imx415_power_on, NULL);
 
 static const struct of_device_id imx415_of_match[] = {
 	{ .compatible = "sony,imx415" },
