@@ -3679,20 +3679,40 @@ static struct boot_triggers {
 } bootup_triggers[MAX_BOOT_TRIGGERS];
 
 static char bootup_trigger_buf[COMMAND_LINE_SIZE];
+static size_t bootup_trigger_buf_len;
 static int nr_boot_triggers;
 
 static __init int setup_trace_triggers(char *str)
 {
 	char *trigger;
 	char *buf;
+	size_t start, str_len;
 	int i;
 
-	strscpy(bootup_trigger_buf, str, COMMAND_LINE_SIZE);
+	if (bootup_trigger_buf_len >= COMMAND_LINE_SIZE)
+		return 1;
+
+	start = bootup_trigger_buf_len;
+	if (start && !*str)
+		return 1;
+
+	str_len = strlen(str);
+	if (start && str_len >= COMMAND_LINE_SIZE - start)
+		return 1;
+
+	/*
+	 * trace_trigger= parsing tokenizes the backing storage in place.
+	 * Copy each repeated parameter into fresh space and only parse that
+	 * newly copied chunk here.
+	 */
+	trace_append_boot_param(bootup_trigger_buf + start, str, '\0',
+				COMMAND_LINE_SIZE - start);
+	bootup_trigger_buf_len += strlen(bootup_trigger_buf + start) + 1;
 	trace_set_ring_buffer_expanded(NULL);
 	disable_tracing_selftest("running event triggers");
 
-	buf = bootup_trigger_buf;
-	for (i = 0; i < MAX_BOOT_TRIGGERS; i++) {
+	buf = bootup_trigger_buf + start;
+	for (i = nr_boot_triggers; i < MAX_BOOT_TRIGGERS; i++) {
 		trigger = strsep(&buf, ",");
 		if (!trigger)
 			break;

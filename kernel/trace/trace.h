@@ -870,6 +870,8 @@ extern int DYN_FTRACE_TEST_NAME(void);
 extern int DYN_FTRACE_TEST_NAME2(void);
 
 extern void trace_set_ring_buffer_expanded(struct trace_array *tr);
+void __init trace_append_boot_param(char *buf, const char *str,
+				    char sep, size_t size);
 extern bool tracing_selftest_disabled;
 
 #ifdef CONFIG_FTRACE_STARTUP_TEST

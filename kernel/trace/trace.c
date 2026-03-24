@@ -228,6 +228,34 @@ static int boot_instance_index;
 static char boot_snapshot_info[COMMAND_LINE_SIZE] __initdata;
 static int boot_snapshot_index;
 
+/*
+ * Repeated boot parameters, including Bootconfig array expansions, need
+ * to stay in the delimiter form that the existing parser consumes.
+ */
+void __init trace_append_boot_param(char *buf, const char *str, char sep,
+				    size_t size)
+{
+	size_t len, str_len;
+
+	if (!buf[0]) {
+		strscpy(buf, str, size);
+		return;
+	}
+
+	str_len = strlen(str);
+	if (!str_len)
+		return;
+
+	len = strlen(buf);
+	if (len >= size - 1)
+		return;
+	if (str_len >= size - len - 1)
+		return;
+
+	buf[len] = sep;
+	strscpy(buf + len + 1, str, size - len - 1);
+}
+
 static int __init set_cmdline_ftrace(char *str)
 {
 	strscpy(bootup_tracer_buf, str, MAX_TRACER_SIZE);
@@ -329,7 +357,8 @@ static char trace_boot_options_buf[MAX_TRACER_SIZE] __initdata;
 
 static int __init set_trace_boot_options(char *str)
 {
-	strscpy(trace_boot_options_buf, str, MAX_TRACER_SIZE);
+	trace_append_boot_param(trace_boot_options_buf, str, ',',
+				MAX_TRACER_SIZE);
 	return 1;
 }
 __setup("trace_options=", set_trace_boot_options);
