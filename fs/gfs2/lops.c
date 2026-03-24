@@ -467,6 +467,9 @@ static void gfs2_jhead_process_page(struct gfs2_jdesc *jd, unsigned long index,
 
 	folio = filemap_get_folio(jd->jd_inode->i_mapping, index);
 
+	if (IS_ERR(folio))
+		return;
+
 	folio_wait_locked(folio);
 	if (!folio_test_uptodate(folio))
 		*done = true;
