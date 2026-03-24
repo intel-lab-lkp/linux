@@ -79,7 +79,7 @@ struct hsr_seq_block *hsr_get_seq_block(struct hsr_node *node, u16 block_idx);
 #endif
 
 #define HSR_SEQ_BLOCK_SHIFT 7 /* 128 bits */
-#define HSR_SEQ_BLOCK_SIZE (1 << HSR_SEQ_BLOCK_SHIFT)
+#define HSR_SEQ_BLOCK_SIZE BIT(HSR_SEQ_BLOCK_SHIFT)
 #define HSR_SEQ_BLOCK_MASK (HSR_SEQ_BLOCK_SIZE - 1)
 #define HSR_MAX_SEQ_BLOCKS 64
 
