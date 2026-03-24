@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
+#include <linux/kernel.h>
 #include <linux/kprobes.h>
 #include <linux/memory.h>
 #include <linux/scs.h>
@@ -32,23 +33,26 @@ DEFINE_PER_CPU(struct nmi_ctx, nmi_contexts);
 
 DEFINE_PER_CPU(unsigned long *, irq_stack_ptr);
 
-
 DECLARE_PER_CPU(unsigned long *, irq_shadow_call_stack_ptr);
 
 #ifdef CONFIG_SHADOW_CALL_STACK
 DEFINE_PER_CPU(unsigned long *, irq_shadow_call_stack_ptr);
 #endif
 
-static void init_irq_scs(void)
+static void __init init_irq_scs(void)
 {
 	int cpu;
+	void *s;
 
 	if (!scs_is_enabled())
 		return;
 
-	for_each_possible_cpu(cpu)
-		per_cpu(irq_shadow_call_stack_ptr, cpu) =
-			scs_alloc(early_cpu_to_node(cpu));
+	for_each_possible_cpu(cpu) {
+		s = scs_alloc(early_cpu_to_node(cpu));
+		if (!s)
+			panic("irq: Failed to allocate shadow call stack\n");
+		per_cpu(irq_shadow_call_stack_ptr, cpu) = s;
+	}
 }
 
 static void __init init_irq_stacks(void)
