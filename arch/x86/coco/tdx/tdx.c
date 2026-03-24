@@ -8,6 +8,7 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/kexec.h>
+#include <linux/memory.h>
 #include <asm/coco.h>
 #include <asm/tdx.h>
 #include <asm/vmx.h>
@@ -1194,3 +1195,40 @@ void __init tdx_early_init(void)
 
 	tdx_announce();
 }
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+static int tdx_guest_memory_notifier(struct notifier_block *nb,
+				     unsigned long action, void *v)
+{
+	struct memory_notify *mn = v;
+	phys_addr_t start, end;
+
+	if (action != MEM_GOING_ONLINE)
+		return NOTIFY_OK;
+
+	start = PFN_PHYS(mn->start_pfn);
+	end = start + PFN_PHYS(mn->nr_pages);
+
+	if (!tdx_accept_memory(start, end)) {
+		pr_err("Failed to accept memory [0x%llx, 0x%llx)\n",
+		       (unsigned long long)start,
+		       (unsigned long long)end);
+		return NOTIFY_BAD;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block tdx_guest_memory_nb = {
+	.notifier_call = tdx_guest_memory_notifier,
+};
+
+static int __init tdx_guest_memory_init(void)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
+		return 0;
+
+	return register_memory_notifier(&tdx_guest_memory_nb);
+}
+core_initcall(tdx_guest_memory_init);
+#endif
