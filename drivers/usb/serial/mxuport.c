@@ -39,6 +39,25 @@
 #define MX_UPORT1613_PID	0x1613
 #define MX_UPORT1653_PID	0x1653
 
+#define MX_UPORT1252_PID	0x1252
+#define MX_UPORT1253_PID	0x1253
+#define MX_UPORT1411_PID	0x1411
+#define MX_UPORT1452_PID	0x1452
+#define MX_UPORT1453_PID	0x1453
+#define MX_UPORT1619_PID	0x1619
+#define MX_UPORT1659_PID	0x1659
+#define MX_UPORT165A_PID	0x165A
+#define MX_UPORT165B_PID	0x165B
+
+#define MX_MU250U_PID		0x0250
+#define MX_MU450U_PID		0x0450
+#define MX_MU850U_PID		0x0850
+
+#define MX_MU850U_6PORT_PID	0x7002
+#define MX_MUX50U_3PORT_PID	0x7003
+#define MX_MU850U_5PORT_PID	0x7004
+#define MX_MU850U_7PORT_PID	0x7005
+
 /* Definitions for USB info */
 #define HEADER_SIZE		4
 #define EVENT_LENGTH		8
@@ -48,6 +67,9 @@
 #define VER_ADDR_1		0x20
 #define VER_ADDR_2		0x24
 #define VER_ADDR_3		0x28
+#define NEW_ADDR_1		0x86
+#define NEW_ADDR_2		0x88
+#define NEW_ADDR_3		0x8A
 
 /* Definitions for USB vendor request */
 #define RQ_VENDOR_NONE			0x00
@@ -147,9 +169,13 @@
 #define MX_WAIT_FOR_SEND_NEXT		0x0080
 
 #define MX_UPORT_2_PORT			BIT(0)
-#define MX_UPORT_4_PORT			BIT(1)
-#define MX_UPORT_8_PORT			BIT(2)
-#define MX_UPORT_16_PORT		BIT(3)
+#define MX_UPORT_3_PORT			BIT(1)
+#define MX_UPORT_4_PORT			BIT(2)
+#define MX_UPORT_5_PORT			BIT(3)
+#define MX_UPORT_6_PORT			BIT(4)
+#define MX_UPORT_7_PORT			BIT(5)
+#define MX_UPORT_8_PORT			BIT(6)
+#define MX_UPORT_16_PORT		BIT(7)
 
 /* This structure holds all of the local port information */
 struct mxuport_port {
@@ -179,7 +205,39 @@ static const struct usb_device_id mxuport_idtable[] = {
 	  .driver_info = MX_UPORT_16_PORT },
 	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1653_PID),
 	  .driver_info = MX_UPORT_16_PORT },
-	{}			/* Terminating entry */
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1252_PID),
+	  .driver_info = MX_UPORT_2_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1253_PID),
+	  .driver_info = MX_UPORT_2_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1411_PID),
+	  .driver_info = MX_UPORT_4_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1452_PID),
+	  .driver_info = MX_UPORT_4_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1453_PID),
+	  .driver_info = MX_UPORT_4_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1619_PID),
+	  .driver_info = MX_UPORT_8_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT1659_PID),
+	  .driver_info = MX_UPORT_8_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT165A_PID),
+	  .driver_info = MX_UPORT_8_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_UPORT165B_PID),
+	  .driver_info = MX_UPORT_8_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_MU250U_PID),
+	  .driver_info = MX_UPORT_2_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_MU450U_PID),
+	  .driver_info = MX_UPORT_4_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_MU850U_PID),
+	  .driver_info = MX_UPORT_8_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_MU850U_6PORT_PID),
+	  .driver_info = MX_UPORT_6_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_MUX50U_3PORT_PID),
+	  .driver_info = MX_UPORT_3_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_MU850U_5PORT_PID),
+	  .driver_info = MX_UPORT_5_PORT },
+	{ USB_DEVICE(MX_USBSERIAL_VID, MX_MU850U_7PORT_PID),
+	  .driver_info = MX_UPORT_7_PORT },
+	{} /* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE(usb, mxuport_idtable);
@@ -944,8 +1002,16 @@ static int mxuport_calc_num_ports(struct usb_serial *serial,
 
 	if (features & MX_UPORT_2_PORT) {
 		num_ports = 2;
+	} else if (features & MX_UPORT_3_PORT) {
+		num_ports = 3;
 	} else if (features & MX_UPORT_4_PORT) {
 		num_ports = 4;
+	} else if (features & MX_UPORT_5_PORT) {
+		num_ports = 5;
+	} else if (features & MX_UPORT_6_PORT) {
+		num_ports = 6;
+	} else if (features & MX_UPORT_7_PORT) {
+		num_ports = 7;
 	} else if (features & MX_UPORT_8_PORT) {
 		num_ports = 8;
 	} else if (features & MX_UPORT_16_PORT) {
@@ -1053,6 +1119,7 @@ static int mxuport_probe(struct usb_serial *serial,
 	int local_ver;
 	char buf[32];
 	int err;
+	bool is_mux50u = false;
 
 	/* Load our firmware */
 	err = mxuport_send_ctrl_urb(serial, RQ_VENDOR_QUERY_FW_CONFIG, 0, 0);
@@ -1065,12 +1132,41 @@ static int mxuport_probe(struct usb_serial *serial,
 	if (err < 0)
 		return err;
 
-	dev_dbg(&serial->interface->dev, "Device firmware version v%x.%x.%x\n",
+	dev_dbg(&serial->interface->dev, "Device firmware version v%d.%d.%d\n",
 		(version & 0xff0000) >> 16,
 		(version & 0xff00) >> 8,
 		(version & 0xff));
 
-	snprintf(buf, sizeof(buf) - 1, "moxa/moxa-%04x.fw", productid);
+	switch (productid) {
+	case MX_UPORT1252_PID:
+	case MX_UPORT1253_PID:
+	case MX_UPORT1411_PID:
+	case MX_UPORT1452_PID:
+	case MX_UPORT1453_PID:
+	case MX_UPORT1619_PID:
+	case MX_UPORT1659_PID:
+	case MX_UPORT165A_PID:
+	case MX_UPORT165B_PID:
+		is_mux50u = true;
+		snprintf(buf, sizeof(buf) - 1, "moxa/moxa-up-mux50u.fw");
+
+		break;
+	case MX_MU250U_PID:
+	case MX_MU450U_PID:
+	case MX_MU850U_PID:
+	case MX_MU850U_6PORT_PID:
+	case MX_MUX50U_3PORT_PID:
+	case MX_MU850U_5PORT_PID:
+	case MX_MU850U_7PORT_PID:
+		is_mux50u = true;
+		snprintf(buf, sizeof(buf) - 1, "moxa/moxa-pf-mux50u.fw");
+
+		break;
+	default:
+		snprintf(buf, sizeof(buf) - 1, "moxa/moxa-%04x.fw", productid);
+
+		break;
+	}
 
 	err = request_firmware(&fw_p, buf, &serial->interface->dev);
 	if (err) {
@@ -1080,14 +1176,22 @@ static int mxuport_probe(struct usb_serial *serial,
 		/* Use the firmware already in the device */
 		err = 0;
 	} else {
-		local_ver = ((fw_p->data[VER_ADDR_1] << 16) |
-			     (fw_p->data[VER_ADDR_2] << 8) |
-			     fw_p->data[VER_ADDR_3]);
+		if (is_mux50u) {
+			local_ver = ((fw_p->data[NEW_ADDR_1] << 16) |
+				     (fw_p->data[NEW_ADDR_2] << 8) |
+				     (fw_p->data[NEW_ADDR_3]));
+		} else {
+			local_ver = ((fw_p->data[VER_ADDR_1] << 16) |
+				     (fw_p->data[VER_ADDR_2] << 8) |
+				     (fw_p->data[VER_ADDR_3]));
+		}
 		dev_dbg(&serial->interface->dev,
-			"Available firmware version v%x.%x.%x\n",
-			fw_p->data[VER_ADDR_1], fw_p->data[VER_ADDR_2],
-			fw_p->data[VER_ADDR_3]);
-		if (local_ver > version) {
+			"Available firmware version v%d.%d.%d\n",
+			(local_ver & 0xff0000) >> 16,
+			(local_ver & 0xff00) >> 8,
+			(local_ver & 0xff));
+
+		if (local_ver != version) {
 			err = mxuport_download_fw(serial, fw_p);
 			if (err)
 				goto out;
@@ -1098,7 +1202,7 @@ static int mxuport_probe(struct usb_serial *serial,
 	}
 
 	dev_info(&serial->interface->dev,
-		 "Using device firmware version v%x.%x.%x\n",
+		 "Using device firmware version v%d.%d.%d\n",
 		 (version & 0xff0000) >> 16,
 		 (version & 0xff00) >> 8,
 		 (version & 0xff));
