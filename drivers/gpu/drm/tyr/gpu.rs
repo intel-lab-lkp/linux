@@ -60,7 +60,7 @@ impl GpuInfo {
                 io.read(TEXTURE_FEATURES::at(3)).supported_formats().get(),
             ],
             as_present: io.read(AS_PRESENT).into_raw(),
-            selected_coherency: uapi::drm_panthor_gpu_coherency_DRM_PANTHOR_GPU_COHERENCY_NONE,
+            selected_coherency: io.read(COHERENCY_ENABLE).into_raw(),
             shader_present: io.read(SHADER_PRESENT).into_raw(),
             l2_present: io.read(L2_PRESENT).into_raw(),
             tiler_present: io.read(TILER_PRESENT).into_raw(),

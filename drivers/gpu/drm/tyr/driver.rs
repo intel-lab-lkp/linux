@@ -136,6 +136,11 @@ impl platform::Driver for TyrPlatformDriverData {
         issue_soft_reset(pdev.as_ref(), &iomem)?;
         gpu::l2_power_on(pdev.as_ref(), &iomem)?;
 
+        let io = (*iomem).access(pdev.as_ref())?;
+        // FIXME: This needs to be set properly once we get
+        // device_get_dma_attr() properly exposed to the rust drivers.
+        io.write_reg(COHERENCY_ENABLE::zeroed().with_l2_cache_protocol_select(CoherencyMode::None));
+
         let gpu_info = GpuInfo::new(pdev.as_ref(), &iomem)?;
         gpu_info_log(pdev.as_ref(), &iomem)?;
 
