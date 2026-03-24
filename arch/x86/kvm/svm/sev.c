@@ -2976,7 +2976,8 @@ void __init sev_set_cpu_caps(void)
 		supported_vm_types |= BIT(KVM_X86_SNP_VM);
 	}
 
-	kvm_caps.supported_vm_types |= supported_vm_types;
+	kvm_caps.supported_vm_types |= (supported_vm_types &
+					sev_firmware_supported_vm_types());
 }
 
 static bool is_sev_snp_initialized(void)
