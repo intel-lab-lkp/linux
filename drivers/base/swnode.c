@@ -16,6 +16,7 @@
 #include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/property.h>
+#include <linux/sched/task_stack.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
@@ -917,12 +918,20 @@ EXPORT_SYMBOL_GPL(software_node_unregister_node_group);
 int software_node_register(const struct software_node *node)
 {
 	struct swnode *parent = software_node_to_swnode(node->parent);
+	const struct property_entry *prop;
 
 	if (software_node_to_swnode(node))
 		return -EEXIST;
 
 	if (node->parent && !parent)
 		return -EINVAL;
+
+	for (prop = node->properties; prop && prop->name; prop++) {
+		if (!prop->is_inline && object_is_on_stack(prop->pointer)) {
+			pr_err("%s: property data can't be on stack\n", __func__);
+			return -EINVAL;
+		}
+	}
 
 	return PTR_ERR_OR_ZERO(swnode_register(node, parent, 0));
 }
