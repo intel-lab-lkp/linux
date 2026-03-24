@@ -110,6 +110,7 @@ struct thermal_governor {
  * @lock:	lock to protect thermal_instances list
  * @node:	node in thermal_tz_list (in thermal_core.c)
  * @poll_queue:	delayed work for polling
+ * @resume_queue:	delayed work for resuming
  * @notify_event: Last notification event
  * @state: 	current state of the thermal zone
  * @debugfs:	this thermal zone device's thermal zone debug info
@@ -146,6 +147,7 @@ struct thermal_zone_device {
 	struct mutex lock;
 	struct list_head node;
 	struct delayed_work poll_queue;
+	struct delayed_work resume_queue;
 	enum thermal_notify_event notify_event;
 	u8 state;
 #ifdef CONFIG_THERMAL_DEBUGFS

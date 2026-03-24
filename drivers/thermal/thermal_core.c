@@ -1396,11 +1396,16 @@ static void thermal_zone_device_check(struct work_struct *work)
 	thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
 }
 
+static void thermal_zone_device_resume(struct work_struct *work);
+
 static void thermal_zone_device_init(struct thermal_zone_device *tz)
 {
 	struct thermal_trip_desc *td, *next;
 
-	INIT_DELAYED_WORK(&tz->poll_queue, thermal_zone_device_check);
+	if (tz->state & TZ_STATE_FLAG_INIT) {
+		INIT_DELAYED_WORK(&tz->poll_queue, thermal_zone_device_check);
+		INIT_DELAYED_WORK(&tz->resume_queue, thermal_zone_device_resume);
+	}
 
 	tz->temperature = THERMAL_TEMP_INIT;
 	tz->passive = 0;
@@ -1721,6 +1726,7 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 		return;
 
 	cancel_delayed_work_sync(&tz->poll_queue);
+	cancel_delayed_work_sync(&tz->resume_queue);
 
 	thermal_set_governor(tz, NULL);
 
@@ -1781,7 +1787,7 @@ static void thermal_zone_device_resume(struct work_struct *work)
 {
 	struct thermal_zone_device *tz;
 
-	tz = container_of(work, struct thermal_zone_device, poll_queue.work);
+	tz = container_of(work, struct thermal_zone_device, resume_queue.work);
 
 	guard(thermal_zone)(tz);
 
@@ -1834,13 +1840,8 @@ static void thermal_zone_pm_complete(struct thermal_zone_device *tz)
 	reinit_completion(&tz->resume);
 	tz->state |= TZ_STATE_FLAG_RESUMING;
 
-	/*
-	 * Replace the work function with the resume one, which will restore the
-	 * original work function and schedule the polling work if needed.
-	 */
-	INIT_DELAYED_WORK(&tz->poll_queue, thermal_zone_device_resume);
 	/* Queue up the work without a delay. */
-	mod_delayed_work(system_freezable_power_efficient_wq, &tz->poll_queue, 0);
+	mod_delayed_work(system_freezable_power_efficient_wq, &tz->resume_queue, 0);
 }
 
 static void thermal_pm_notify_complete(void)
