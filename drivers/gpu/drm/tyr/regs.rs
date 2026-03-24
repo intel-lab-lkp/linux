@@ -1048,8 +1048,53 @@ pub(crate) mod mmu_control {
                 63:12   base;
             }
 
+        }
+
+        /// Helpers for MMU COMMAND register.
+        #[derive(Copy, Clone, Debug)]
+        #[repr(u8)]
+        pub(crate) enum MmuCommand {
+            /// No operation, nothing happens.
+            Nop = 0,
+            /// Propagate settings to the MMU.
+            Update = 1,
+            /// Lock an address region.
+            Lock = 2,
+            /// Unlock an address region.
+            Unlock = 3,
+            /// Clean and invalidate the L2 cache, then unlock.
+            FlushPt = 4,
+            /// Clean and invalidate all caches, then unlock.
+            FlushMem = 5,
+        }
+
+        impl TryFrom<Bounded<u32, 8>> for MmuCommand {
+            type Error = Error;
+
+            fn try_from(val: Bounded<u32, 8>) -> Result<Self, Self::Error> {
+                match val.get() {
+                    0 => Ok(MmuCommand::Nop),
+                    1 => Ok(MmuCommand::Update),
+                    2 => Ok(MmuCommand::Lock),
+                    3 => Ok(MmuCommand::Unlock),
+                    4 => Ok(MmuCommand::FlushPt),
+                    5 => Ok(MmuCommand::FlushMem),
+                    _ => Err(EINVAL),
+                }
+            }
+        }
+
+        impl From<MmuCommand> for Bounded<u32, 8> {
+            fn from(cmd: MmuCommand) -> Self {
+                (cmd as u8).into()
+            }
+        }
+
+        register! {
             /// MMU command register for each address space. Write only.
-            pub(crate) COMMAND(u32)[MAX_AS, stride = STRIDE] @ 0x2418 {}
+            pub(crate) COMMAND(u32)[MAX_AS, stride = STRIDE] @ 0x2418 {
+                7:0     command ?=> MmuCommand;
+            }
 
             /// Fault status register for each address space. Read only.
             pub(crate) FAULTSTATUS(u32)[MAX_AS, stride = STRIDE] @ 0x241c {}
