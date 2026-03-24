@@ -179,6 +179,47 @@ impl Device {
         unsafe { (*phydev).duplex = v as c_int };
     }
 
+    /// Gets the current speed setting.
+    pub fn speed(&self) -> i32 {
+        let phydev = self.0.get();
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        unsafe { (*phydev).speed }
+    }
+
+    /// Gets the current duplex mode.
+    pub fn duplex(&self) -> DuplexMode {
+        let phydev = self.0.get();
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        let v = unsafe { (*phydev).duplex };
+        match v as u32 {
+            bindings::DUPLEX_FULL => DuplexMode::Full,
+            bindings::DUPLEX_HALF => DuplexMode::Half,
+            _ => DuplexMode::Unknown,
+        }
+    }
+
+    /// Gets the PHY interface mode as a raw `phy_interface_t` value.
+    ///
+    /// Common values include `bindings::phy_interface_t_PHY_INTERFACE_MODE_RGMII`,
+    /// `bindings::phy_interface_t_PHY_INTERFACE_MODE_SGMII`, etc.
+    /// A typed Rust enum is planned for future work.
+    pub fn interface(&self) -> u32 {
+        let phydev = self.0.get();
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        unsafe { (*phydev).interface }
+    }
+
+    /// Gets the PHY's IRQ number.
+    pub fn irq(&self) -> i32 {
+        let phydev = self.0.get();
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        unsafe { (*phydev).irq }
+    }
+
     /// Reads a PHY register.
     // This function reads a hardware register and updates the stats so takes `&mut self`.
     pub fn read<R: reg::Register>(&mut self, reg: R) -> Result<u16> {
