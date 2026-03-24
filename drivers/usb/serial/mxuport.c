@@ -183,6 +183,7 @@ struct mxuport_port {
 	u32 hold_reason;
 	u8 mcr_state;		/* Last MCR state */
 	u8 msr_state;		/* Last MSR state */
+	struct serial_rs485 rs485;
 	struct mutex mutex;	/* Protects mcr_state */
 	spinlock_t spinlock;	/* Protects msr_state */
 };
@@ -1348,6 +1349,90 @@ static int mxuport_open(struct tty_struct *tty, struct usb_serial_port *port)
 	return err;
 }
 
+static void mxuport_sanitize_serial_rs485(struct serial_rs485 *rs485)
+{
+	if (!(rs485->flags & SER_RS485_ENABLED)) {
+		memset(rs485, 0, sizeof(*rs485));
+		return;
+	}
+	if (rs485->flags & SER_RS485_MODE_RS422) {
+		rs485->flags &= (SER_RS485_ENABLED | SER_RS485_MODE_RS422);
+		return;
+	}
+	rs485->flags &= (SER_RS485_ENABLED | SER_RS485_RX_DURING_TX);
+
+	memset(rs485->padding, 0, sizeof(rs485->padding));
+}
+
+static int mxuport_rs485_config(struct usb_serial_port *port,
+				struct serial_rs485 *rs485)
+{
+	struct usb_serial *serial = port->serial;
+	u16 mode = MX_INT_RS232;
+
+	if (rs485->flags & SER_RS485_ENABLED) {
+		if (rs485->flags & SER_RS485_MODE_RS422)
+			mode = MX_INT_RS422;
+		else if (rs485->flags & SER_RS485_RX_DURING_TX)
+			mode = MX_INT_4W_RS485;
+		else
+			mode = MX_INT_2W_RS485;
+	}
+
+	return mxuport_send_ctrl_urb(serial, RQ_VENDOR_SET_INTERFACE, mode,
+				     port->port_number);
+}
+
+static int mxuport_get_rs485_config(struct usb_serial_port *port,
+				    struct serial_rs485 __user *rs485)
+{
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+
+	if (copy_to_user(rs485, &mxport->rs485, sizeof(mxport->rs485)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int mxuport_set_rs485_config(struct usb_serial_port *port,
+				    struct serial_rs485 __user *rs485_user)
+{
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	struct serial_rs485 rs485;
+	int ret;
+
+	if (copy_from_user(&rs485, rs485_user, sizeof(*rs485_user)))
+		return -EFAULT;
+
+	mxuport_sanitize_serial_rs485(&rs485);
+
+	ret = mxuport_rs485_config(port, &rs485);
+	if (!ret)
+		mxport->rs485 = rs485;
+
+	if (copy_to_user(rs485_user, &mxport->rs485, sizeof(mxport->rs485)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int mxuport_ioctl(struct tty_struct *tty,
+			 unsigned int cmd,
+			 unsigned long arg)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	void __user *uarg = (void __user *)arg;
+
+	switch (cmd) {
+	case TIOCGRS485:
+		return mxuport_get_rs485_config(port, uarg);
+	case TIOCSRS485:
+		return mxuport_set_rs485_config(port, uarg);
+	}
+
+	return -ENOIOCTLCMD;
+}
+
 static void mxuport_close(struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
@@ -1421,6 +1506,7 @@ static struct usb_serial_driver mxuport_device = {
 	.calc_num_ports		= mxuport_calc_num_ports,
 	.open			= mxuport_open,
 	.close			= mxuport_close,
+	.ioctl			= mxuport_ioctl,
 	.set_termios		= mxuport_set_termios,
 	.break_ctl		= mxuport_break_ctl,
 	.tx_empty		= mxuport_tx_empty,
