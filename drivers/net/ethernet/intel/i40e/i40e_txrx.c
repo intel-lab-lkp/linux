@@ -2760,6 +2760,16 @@ int i40e_napi_poll(struct napi_struct *napi, int budget)
 		return 0;
 	}
 
+	/* A q_vector can have its ring pointers cleared after a queue-count
+	 * reduction (ethtool -L combined N) while napi_enable() was already
+	 * called on it.  Complete immediately so the poll loop exits cleanly
+	 * and we never dereference the NULL ring pointer below.
+	 */
+	if (unlikely(!q_vector->num_ringpairs)) {
+		napi_complete_done(napi, 0);
+		return 0;
+	}
+
 	/* Since the actual Tx work is minimal, we can give the Tx a larger
 	 * budget and be more aggressive about cleaning up the Tx descriptors.
 	 */
