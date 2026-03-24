@@ -5182,6 +5182,14 @@ static void i40e_clear_interrupt_scheme(struct i40e_pf *pf)
 /**
  * i40e_napi_enable_all - Enable NAPI for all q_vectors in the VSI
  * @vsi: the VSI being configured
+ *
+ * Enable NAPI on every q_vector that is registered with the netdev,
+ * regardless of whether it currently has rings assigned.  After a queue-
+ * count reduction (e.g. ethtool -L combined 1) the excess q_vectors lose
+ * their ring pointers inside i40e_vsi_map_rings_to_vectors but remain on
+ * dev->napi_list.  Leaving them in the napi_disable()-ed state
+ * (NAPI_STATE_SCHED set) causes napi_set_threaded() to spin forever on
+ * msleep(20) waiting for that bit to clear.
  **/
 static void i40e_napi_enable_all(struct i40e_vsi *vsi)
 {
@@ -5190,17 +5198,17 @@ static void i40e_napi_enable_all(struct i40e_vsi *vsi)
 	if (!vsi->netdev)
 		return;
 
-	for (q_idx = 0; q_idx < vsi->num_q_vectors; q_idx++) {
-		struct i40e_q_vector *q_vector = vsi->q_vectors[q_idx];
-
-		if (q_vector->rx.ring || q_vector->tx.ring)
-			napi_enable(&q_vector->napi);
-	}
+	for (q_idx = 0; q_idx < vsi->num_q_vectors; q_idx++)
+		napi_enable(&vsi->q_vectors[q_idx]->napi);
 }
 
 /**
  * i40e_napi_disable_all - Disable NAPI for all q_vectors in the VSI
  * @vsi: the VSI being configured
+ *
+ * Mirror of i40e_napi_enable_all: operate on every registered q_vector so
+ * enable/disable calls are always balanced, even when some q_vectors carry
+ * no rings (as happens after a queue-count reduction).
  **/
 static void i40e_napi_disable_all(struct i40e_vsi *vsi)
 {
@@ -5209,12 +5217,8 @@ static void i40e_napi_disable_all(struct i40e_vsi *vsi)
 	if (!vsi->netdev)
 		return;
 
-	for (q_idx = 0; q_idx < vsi->num_q_vectors; q_idx++) {
-		struct i40e_q_vector *q_vector = vsi->q_vectors[q_idx];
-
-		if (q_vector->rx.ring || q_vector->tx.ring)
-			napi_disable(&q_vector->napi);
-	}
+	for (q_idx = 0; q_idx < vsi->num_q_vectors; q_idx++)
+		napi_disable(&vsi->q_vectors[q_idx]->napi);
 }
 
 /**
