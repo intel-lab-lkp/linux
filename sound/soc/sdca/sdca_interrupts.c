@@ -22,6 +22,7 @@
 #include <sound/sdca_function.h>
 #include <sound/sdca_hid.h>
 #include <sound/sdca_interrupts.h>
+#include <sound/sdca_regmap.h>
 #include <sound/sdca_jack.h>
 #include <sound/sdca_ump.h>
 #include <sound/soc-component.h>
@@ -121,7 +122,16 @@ static irqreturn_t function_status_handler(int irq, void *data)
 
 		switch (mask) {
 		case SDCA_CTL_ENTITY_0_FUNCTION_NEEDS_INITIALIZATION:
-			//FIXME: Add init writes
+			dev_dbg(dev, "write initialization\n");
+
+			guard(mutex)(interrupt->init_lock);
+
+			ret = sdca_regmap_write_init(dev, interrupt->device_regmap,
+						     interrupt->function);
+			if (ret) {
+				dev_err(dev, "failed to write initialization: %d\n", ret);
+				goto error;
+			}
 			break;
 		case SDCA_CTL_ENTITY_0_FUNCTION_FAULT:
 			dev_err(dev, "function fault\n");
@@ -520,6 +530,7 @@ EXPORT_SYMBOL_NS_GPL(sdca_irq_populate, "SND_SOC_SDCA");
  * sdca_irq_allocate - allocate an SDCA interrupt structure for a device
  * @sdev: Device pointer against which things should be allocated.
  * @regmap: regmap to be used for accessing the SDCA IRQ registers.
+ * @init_lock: Lock to serialize function initialization.
  * @irq: The interrupt number.
  *
  * Typically this would be called from the top level driver for the whole
@@ -530,7 +541,8 @@ EXPORT_SYMBOL_NS_GPL(sdca_irq_populate, "SND_SOC_SDCA");
  * error code.
  */
 struct sdca_interrupt_info *sdca_irq_allocate(struct device *sdev,
-					      struct regmap *regmap, int irq)
+					      struct regmap *regmap,
+					      struct mutex *init_lock, int irq)
 {
 	struct sdca_interrupt_info *info;
 	int ret, i;
@@ -541,8 +553,10 @@ struct sdca_interrupt_info *sdca_irq_allocate(struct device *sdev,
 
 	info->irq_chip = sdca_irq_chip;
 
-	for (i = 0; i < ARRAY_SIZE(info->irqs); i++)
+	for (i = 0; i < ARRAY_SIZE(info->irqs); i++) {
 		info->irqs[i].device_regmap = regmap;
+		info->irqs[i].init_lock = init_lock;
+	}
 
 	ret = devm_mutex_init(sdev, &info->irq_lock);
 	if (ret)

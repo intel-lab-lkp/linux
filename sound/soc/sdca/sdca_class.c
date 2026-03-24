@@ -149,6 +149,7 @@ static void class_boot_work(struct work_struct *work)
 		goto err;
 
 	drv->irq_info = sdca_irq_allocate(drv->dev, drv->dev_regmap,
+					  &drv->init_lock,
 					  drv->sdw->irq);
 	if (IS_ERR(drv->irq_info))
 		goto err;

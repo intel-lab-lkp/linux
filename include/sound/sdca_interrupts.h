@@ -30,6 +30,7 @@ struct sdca_function_data;
  * @function: Pointer to the Function that the interrupt is associated with.
  * @entity: Pointer to the Entity that the interrupt is associated with.
  * @control: Pointer to the Control that the interrupt is associated with.
+ * @init_lock: Pointer to the lock serializing function initialization.
  * @priv: Pointer to private data for use by the handler.
  * @irq: IRQ number allocated to this interrupt, also used internally to track
  * the IRQ being assigned.
@@ -44,6 +45,7 @@ struct sdca_interrupt {
 	struct sdca_function_data *function;
 	struct sdca_entity *entity;
 	struct sdca_control *control;
+	struct mutex *init_lock;
 
 	void *priv;
 
@@ -82,7 +84,8 @@ int sdca_irq_populate(struct sdca_function_data *function,
 		      struct snd_soc_component *component,
 		      struct sdca_interrupt_info *info);
 struct sdca_interrupt_info *sdca_irq_allocate(struct device *dev,
-					      struct regmap *regmap, int irq);
+					      struct regmap *regmap,
+					      struct mutex *init_lock, int irq);
 
 void sdca_irq_enable_early(struct sdca_function_data *function,
 			   struct sdca_interrupt_info *info);
