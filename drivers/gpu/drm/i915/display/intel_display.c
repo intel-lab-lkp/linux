@@ -126,6 +126,7 @@
 #include "intel_vga.h"
 #include "intel_vrr.h"
 #include "intel_wm.h"
+#include "intel_writeback.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 #include "skl_watermark.h"
@@ -7563,6 +7564,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 
 	/* FIXME probably need to sequence this properly */
 	intel_program_dpkgc_latency(state);
+
+	intel_writeback_atomic_commit(state);
 
 	intel_wait_for_vblank_workers(state);
 
