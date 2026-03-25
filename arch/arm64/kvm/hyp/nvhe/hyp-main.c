@@ -762,6 +762,12 @@ void handle_trap(struct kvm_cpu_context *host_ctxt)
 		handle_host_hcall(host_ctxt);
 		break;
 	case ESR_ELx_EC_SMC64:
+		if (ESR_ELx_xVC_IMM_MASK & esr) {
+			cpu_reg(host_ctxt, 0) = SMCCC_RET_NOT_SUPPORTED;
+			kvm_skip_host_instr();
+			break;
+		}
+
 		handle_host_smc(host_ctxt);
 		break;
 	case ESR_ELx_EC_IABT_LOW:
