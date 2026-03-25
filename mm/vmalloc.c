@@ -108,7 +108,7 @@ static int vmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	if (!pte)
 		return -ENOMEM;
 
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(&init_mm, addr, end, pte);
 
 	do {
 		if (unlikely(!pte_none(ptep_get(pte)))) {
@@ -371,7 +371,7 @@ static void vunmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	unsigned long size = PAGE_SIZE;
 
 	pte = pte_offset_kernel(pmd, addr);
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(&init_mm, addr, end, pte);
 
 	do {
 #ifdef CONFIG_HUGETLB_PAGE
@@ -538,7 +538,7 @@ static int vmap_pages_pte_range(pmd_t *pmd, unsigned long addr,
 	if (!pte)
 		return -ENOMEM;
 
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(&init_mm, addr, end, pte);
 
 	do {
 		struct page *page = pages[*nr];

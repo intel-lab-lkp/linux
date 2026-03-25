@@ -233,7 +233,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 		is_private_single_threaded = vma_is_single_threaded_private(vma);
 
 	flush_tlb_batched_pending(vma->vm_mm);
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(vma->vm_mm, addr, end, pte);
 	do {
 		nr_ptes = 1;
 		oldpte = ptep_get(pte);

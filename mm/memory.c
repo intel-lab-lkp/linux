@@ -1269,7 +1269,7 @@ again:
 	spin_lock_nested(src_ptl, SINGLE_DEPTH_NESTING);
 	orig_src_pte = src_pte;
 	orig_dst_pte = dst_pte;
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(src_mm, addr, end, src_pte);
 
 	do {
 		nr = 1;
@@ -1917,7 +1917,7 @@ retry:
 		return addr;
 
 	flush_tlb_batched_pending(mm);
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(mm, addr, end, start_pte);
 	do {
 		bool any_skipped = false;
 
@@ -2875,7 +2875,7 @@ static int remap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	mapped_pte = pte = pte_alloc_map_lock(mm, pmd, addr, &ptl);
 	if (!pte)
 		return -ENOMEM;
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(mm, addr, end, mapped_pte);
 	do {
 		BUG_ON(!pte_none(ptep_get(pte)));
 		if (!pfn_modify_allowed(pfn, prot)) {
@@ -3235,7 +3235,7 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			return -EINVAL;
 	}
 
-	lazy_mmu_mode_enable();
+	lazy_mmu_mode_enable_pte(mm, addr, end, mapped_pte);
 
 	if (fn) {
 		do {
