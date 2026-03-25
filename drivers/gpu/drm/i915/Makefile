@@ -316,6 +316,7 @@ i915-y += \
 	display/intel_vga.o \
 	display/intel_wm.o \
 	display/intel_writeback.o \
+	display/intel_writeback_helper.o \
 	display/skl_prefill.o \
 	display/skl_scaler.o \
 	display/skl_universal_plane.o \
