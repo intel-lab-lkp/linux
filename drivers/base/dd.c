@@ -383,7 +383,7 @@ __exitcall(deferred_probe_exit);
 
 int __device_set_driver_override(struct device *dev, const char *s, size_t len)
 {
-	const char *new, *old;
+	const char *new = NULL, *old;
 	char *cp;
 
 	if (!s)
@@ -404,37 +404,26 @@ int __device_set_driver_override(struct device *dev, const char *s, size_t len)
 	 */
 	len = strlen(s);
 
-	if (!len) {
-		/* Empty string passed - clear override */
-		spin_lock(&dev->driver_override.lock);
-		old = dev->driver_override.name;
-		dev->driver_override.name = NULL;
-		spin_unlock(&dev->driver_override.lock);
-		kfree(old);
-
-		return 0;
+	/* Handle trailing newline */
+	if (len) {
+		cp = strnchr(s, len, '\n');
+		if (cp)
+			len = cp - s;
 	}
 
-	cp = strnchr(s, len, '\n');
-	if (cp)
-		len = cp - s;
-
-	new = kstrndup(s, len, GFP_KERNEL);
-	if (!new)
-		return -ENOMEM;
+	/* If empty string or "\n" passed, new remains NULL, clearing
+	 * the driver_override.name.
+	 */
+	if (len) {
+		new = kstrndup(s, len, GFP_KERNEL);
+		if (!new)
+			return -ENOMEM;
+	}
 
 	spin_lock(&dev->driver_override.lock);
 	old = dev->driver_override.name;
-	if (cp != s) {
-		dev->driver_override.name = new;
-		spin_unlock(&dev->driver_override.lock);
-	} else {
-		/* "\n" passed - clear override */
-		dev->driver_override.name = NULL;
-		spin_unlock(&dev->driver_override.lock);
-
-		kfree(new);
-	}
+	dev->driver_override.name = new;
+	spin_unlock(&dev->driver_override.lock);
 	kfree(old);
 
 	return 0;
