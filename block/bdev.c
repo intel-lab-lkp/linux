@@ -312,7 +312,9 @@ int bdev_freeze(struct block_device *bdev)
 	mutex_lock(&bdev->bd_holder_lock);
 	if (bdev->bd_holder_ops && bdev->bd_holder_ops->freeze) {
 		error = bdev->bd_holder_ops->freeze(bdev);
+		/* bdev->bd_holder_ops->freeze() released bd_holder_lock */
 		lockdep_assert_not_held(&bdev->bd_holder_lock);
+		__release(&bdev->bd_holder_lock);
 	} else {
 		mutex_unlock(&bdev->bd_holder_lock);
 		error = sync_blockdev(bdev);
@@ -355,7 +357,9 @@ int bdev_thaw(struct block_device *bdev)
 	mutex_lock(&bdev->bd_holder_lock);
 	if (bdev->bd_holder_ops && bdev->bd_holder_ops->thaw) {
 		error = bdev->bd_holder_ops->thaw(bdev);
+		/* bdev->bd_holder_ops->freeze() released bd_holder_lock */
 		lockdep_assert_not_held(&bdev->bd_holder_lock);
+		__release(&bdev->bd_holder_lock);
 	} else {
 		mutex_unlock(&bdev->bd_holder_lock);
 	}
@@ -1254,9 +1258,11 @@ EXPORT_SYMBOL(lookup_bdev);
 void bdev_mark_dead(struct block_device *bdev, bool surprise)
 {
 	mutex_lock(&bdev->bd_holder_lock);
-	if (bdev->bd_holder_ops && bdev->bd_holder_ops->mark_dead)
+	if (bdev->bd_holder_ops && bdev->bd_holder_ops->mark_dead) {
 		bdev->bd_holder_ops->mark_dead(bdev, surprise);
-	else {
+		/* bdev->bd_holder_ops->mark_dead() released bd_holder_lock */
+		__release(&bdev->bd_holder_lock);
+	} else {
 		mutex_unlock(&bdev->bd_holder_lock);
 		sync_blockdev(bdev);
 	}
