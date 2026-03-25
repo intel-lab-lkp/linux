@@ -152,6 +152,7 @@ int mlx4_ib_create_user_cq(struct ib_cq *ibcq,
 	int shift;
 	int n;
 	int err;
+	struct ib_umem *umem;
 	struct mlx4_ib_ucontext *context = rdma_udata_to_drv_context(
 		udata, struct mlx4_ib_ucontext, ibucontext);
 
@@ -175,16 +176,16 @@ int mlx4_ib_create_user_cq(struct ib_cq *ibcq,
 
 	buf_addr = (void *)(unsigned long)ucmd.buf_addr;
 
-	if (!ibcq->umem)
-		ibcq->umem = ib_umem_get(&dev->ib_dev, ucmd.buf_addr,
-					 entries * cqe_size,
-					 IB_ACCESS_LOCAL_WRITE);
-	if (IS_ERR(ibcq->umem)) {
-		err = PTR_ERR(ibcq->umem);
+	umem = ib_umem_list_load_or_get(ibcq->umem_list, UVERBS_BUF_CQ_BUF,
+					&dev->ib_dev, ucmd.buf_addr,
+					entries * cqe_size,
+					IB_ACCESS_LOCAL_WRITE);
+	if (IS_ERR(umem)) {
+		err = PTR_ERR(umem);
 		goto err_cq;
 	}
 
-	shift = mlx4_ib_umem_calc_optimal_mtt_size(cq->ibcq.umem, 0, &n);
+	shift = mlx4_ib_umem_calc_optimal_mtt_size(umem, 0, &n);
 	if (shift < 0) {
 		err = shift;
 		goto err_cq;
@@ -194,7 +195,7 @@ int mlx4_ib_create_user_cq(struct ib_cq *ibcq,
 	if (err)
 		goto err_cq;
 
-	err = mlx4_ib_umem_write_mtt(dev, &cq->buf.mtt, cq->ibcq.umem);
+	err = mlx4_ib_umem_write_mtt(dev, &cq->buf.mtt, umem);
 	if (err)
 		goto err_mtt;
 
@@ -467,7 +468,8 @@ int mlx4_ib_resize_cq(struct ib_cq *ibcq, unsigned int entries,
 	if (ibcq->uobject) {
 		cq->buf      = cq->resize_buf->buf;
 		cq->ibcq.cqe = cq->resize_buf->cqe;
-		ib_umem_release(cq->ibcq.umem);
+		ib_umem_list_replace(ibcq->umem_list, UVERBS_BUF_CQ_BUF,
+				     cq->resize_umem);
 		cq->ibcq.umem     = cq->resize_umem;
 
 		kfree(cq->resize_buf);
