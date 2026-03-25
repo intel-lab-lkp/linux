@@ -255,6 +255,20 @@ static void btrfs_inode_rsv_release(struct btrfs_inode *inode, bool qgroup_free)
 						   qgroup_to_release);
 }
 
+/*
+ * ordered_extent completion will generate metadata delayed refs for
+ * the extent, free_space, and csum trees. btrfs_calc_delayed_ref_bytes()
+ * accounts for the former two, and we explicitly reserve for the latter.
+ * This ensures that we reserve enough delayed_ref space for each
+ * ordered_extent.
+ */
+static u64 delalloc_calc_delayed_refs_rsv(const struct btrfs_fs_info *fs_info,
+					  unsigned int nr_extents)
+{
+	return btrfs_calc_delayed_ref_bytes(fs_info, nr_extents) +
+		btrfs_calc_insert_metadata_size(fs_info, nr_extents);
+}
+
 static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
 						 struct btrfs_inode *inode)
 {
@@ -276,8 +290,8 @@ static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
 		reserve_size = btrfs_calc_insert_metadata_size(fs_info,
 						outstanding_extents);
 		reserve_size += btrfs_calc_metadata_size(fs_info, 1);
-		delayed_refs_size += btrfs_calc_delayed_ref_bytes(fs_info,
-						outstanding_extents);
+		delayed_refs_size +=
+			delalloc_calc_delayed_refs_rsv(fs_info, outstanding_extents);
 	}
 	if (!(inode->flags & BTRFS_INODE_NODATASUM)) {
 		u64 csum_leaves;
@@ -328,8 +342,7 @@ static void calc_inode_reservations(struct btrfs_inode *inode,
 	 */
 	*meta_reserve += inode_update;
 
-	*delayed_refs_reserve = btrfs_calc_delayed_ref_bytes(fs_info,
-							     nr_extents);
+	*delayed_refs_reserve = delalloc_calc_delayed_refs_rsv(fs_info, nr_extents);
 
 	*qgroup_reserve = nr_extents * fs_info->nodesize;
 }
