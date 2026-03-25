@@ -561,6 +561,7 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	   u8 type, u8 code, int offset, __be32 info)
 {
 	__u32 rel_info = ntohl(info);
+	struct inet_skb_parm parm;
 	const struct iphdr *eiph;
 	struct sk_buff *skb2;
 	int err, rel_msg = 0;
@@ -606,6 +607,8 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	skb_pull(skb2, offset);
 	skb_reset_network_header(skb2);
 	eiph = ip_hdr(skb2);
+	if (eiph->version != 4 || eiph->ihl < 5)
+		goto out;
 
 	/* Try to guess incoming interface */
 	rt = ip_route_output_ports(dev_net(skb->dev), &fl4, NULL, eiph->saddr,
@@ -617,6 +620,18 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	skb2->dev = rt->dst.dev;
 	ip_rt_put(rt);
 
+	memset(&parm, 0, sizeof(parm));
+	if (eiph->ihl > 5) {
+		if (!pskb_network_may_pull(skb2, eiph->ihl * 4))
+			goto out;
+		eiph = ip_hdr(skb2);
+		parm.opt.optlen = eiph->ihl * 4 - sizeof(struct iphdr);
+
+		err = __ip_options_compile(dev_net(skb->dev), &parm.opt, skb2, NULL);
+
+		if (err)
+			goto out;
+	}
 	/* route "incoming" packet */
 	if (rt->rt_flags & RTCF_LOCAL) {
 		rt = ip_route_output_ports(dev_net(skb->dev), &fl4, NULL,
@@ -644,7 +659,7 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 		skb_dst_update_pmtu_no_confirm(skb2, rel_info);
 	}
 
-	icmp_send(skb2, rel_type, rel_code, htonl(rel_info));
+	__icmp_send(skb2, rel_type, rel_code, htonl(rel_info), &parm);
 
 out:
 	kfree_skb(skb2);
