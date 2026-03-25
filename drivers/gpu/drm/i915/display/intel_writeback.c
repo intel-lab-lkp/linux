@@ -230,15 +230,51 @@ static int intel_writeback_atomic_check(struct drm_connector *connector,
 	return 0;
 }
 
+static int
+get_color_mode_bpp(struct intel_display *display, u32 color_format)
+{
+	int bpp = 0;
+
+	switch (color_format) {
+	case DRM_FORMAT_XYUV8888:
+	case DRM_FORMAT_YUYV:
+	case DRM_FORMAT_VYUY:
+	case DRM_FORMAT_XBGR8888:
+	case DRM_FORMAT_XBGR2101010:
+	case DRM_FORMAT_XVYU2101010:
+		bpp = 4;
+		break;
+	default:
+		drm_err(display->drm, "Unsupported format for writeback\n");
+		break;
+	}
+
+	return bpp;
+}
+
 static void intel_writeback_capture(struct intel_atomic_state *state,
 				    struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_writeback_connector *wb_conn =
 		conn_to_intel_writeback_connector(connector);
+	struct drm_connector_state *conn_state =
+		drm_atomic_get_new_connector_state(&state->base, &connector->base);
+	struct intel_crtc *crtc = intel_crtc_for_pipe(display, wb_conn->pipe);
+	struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	struct drm_writeback_job *wb_job = conn_state->writeback_job;
 	enum transcoder trans = wb_conn->trans;
 	u32 val = 0;
+	int bpp;
 
+	bpp = get_color_mode_bpp(display, wb_job->fb->format->format);
+	val = DIV_ROUND_UP((adjusted_mode->hdisplay * bpp), 64);
+	intel_de_write(display, WD_STRIDE(trans), WD_STRIDE_VAL(val));
+
+	val = 0;
 	val |= START_TRIGGER_FRAME | WD_FRAME_NUMBER(wb_conn->frame_num);
 	intel_de_rmw(display, WD_TRANS_FUNC_CTL(trans),
 		     START_TRIGGER_FRAME | WD_FRAME_NUMBER_MASK,
