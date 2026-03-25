@@ -1228,6 +1228,13 @@ static struct socket *nbd_get_socket(struct nbd_device *nbd, unsigned long fd,
 		return NULL;
 	}
 
+	if (READ_ONCE(sock->sk->sk_state) != TCP_ESTABLISHED) {
+		dev_err(disk_to_dev(nbd->disk), "Socket does not have bi-directional stream.\n");
+		*err = -EPIPE;
+		sockfd_put(sock);
+		return NULL;
+	}
+
 	return sock;
 }
 
