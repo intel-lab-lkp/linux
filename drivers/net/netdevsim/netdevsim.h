@@ -82,6 +82,16 @@ struct nsim_ethtool_pauseparam {
 	bool report_stats_tx;
 };
 
+#define NSIM_MODULE_EEPROM_PAGES	256
+#define NSIM_MODULE_EEPROM_PAGE_LEN	128
+
+struct nsim_ethtool_module {
+	u32 get_err;
+	u32 set_err;
+	u8 pages[NSIM_MODULE_EEPROM_PAGES][NSIM_MODULE_EEPROM_PAGE_LEN];
+	struct debugfs_blob_wrapper page_blobs[NSIM_MODULE_EEPROM_PAGES];
+};
+
 struct nsim_ethtool {
 	u32 get_err;
 	u32 set_err;
@@ -94,6 +104,7 @@ struct nsim_ethtool {
 		u32 supported;
 		u32 direction;
 	} mac_lb;
+	struct nsim_ethtool_module module;
 };
 
 struct nsim_rq {

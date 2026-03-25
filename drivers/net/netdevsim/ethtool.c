@@ -247,6 +247,68 @@ static int nsim_set_loopback(struct net_device *dev,
 	return 1;
 }
 
+static u8 *nsim_module_eeprom_ptr(struct netdevsim *ns,
+				  const struct ethtool_module_eeprom *page_data,
+				  u32 *len)
+{
+	u32 offset;
+	u8 page;
+
+	if (page_data->offset < NSIM_MODULE_EEPROM_PAGE_LEN) {
+		page = 0;
+		offset = page_data->offset;
+	} else {
+		page = page_data->page;
+		offset = page_data->offset - NSIM_MODULE_EEPROM_PAGE_LEN;
+	}
+
+	*len = min_t(u32, page_data->length,
+		     NSIM_MODULE_EEPROM_PAGE_LEN - offset);
+	return ns->ethtool.module.pages[page] + offset;
+}
+
+static int
+nsim_get_module_eeprom_by_page(struct net_device *dev,
+			       const struct ethtool_module_eeprom *page_data,
+			       struct netlink_ext_ack *extack)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+	u32 len;
+	u8 *ptr;
+
+	if (ns->ethtool.module.get_err)
+		return -ns->ethtool.module.get_err;
+
+	ptr = nsim_module_eeprom_ptr(ns, page_data, &len);
+	if (!ptr)
+		return -EINVAL;
+
+	memcpy(page_data->data, ptr, len);
+
+	return len;
+}
+
+static int
+nsim_set_module_eeprom_by_page(struct net_device *dev,
+			       const struct ethtool_module_eeprom *page_data,
+			       struct netlink_ext_ack *extack)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+	u32 len;
+	u8 *ptr;
+
+	if (ns->ethtool.module.set_err)
+		return -ns->ethtool.module.set_err;
+
+	ptr = nsim_module_eeprom_ptr(ns, page_data, &len);
+	if (!ptr)
+		return -EINVAL;
+
+	memcpy(ptr, page_data->data, len);
+
+	return 0;
+}
+
 static int nsim_get_ts_info(struct net_device *dev,
 			    struct kernel_ethtool_ts_info *info)
 {
@@ -274,6 +336,8 @@ static const struct ethtool_ops nsim_ethtool_ops = {
 	.set_fecparam			= nsim_set_fecparam,
 	.get_fec_stats			= nsim_get_fec_stats,
 	.get_ts_info			= nsim_get_ts_info,
+	.get_module_eeprom_by_page	= nsim_get_module_eeprom_by_page,
+	.set_module_eeprom_by_page	= nsim_set_module_eeprom_by_page,
 	.get_loopback			= nsim_get_loopback,
 	.get_loopback_by_index		= nsim_get_loopback_by_index,
 	.set_loopback			= nsim_set_loopback,
@@ -292,6 +356,7 @@ static void nsim_ethtool_ring_init(struct netdevsim *ns)
 void nsim_ethtool_init(struct netdevsim *ns)
 {
 	struct dentry *ethtool, *dir;
+	int i;
 
 	ns->netdev->ethtool_ops = &nsim_ethtool_ops;
 
@@ -325,6 +390,24 @@ void nsim_ethtool_init(struct netdevsim *ns)
 			   &ns->ethtool.ring.rx_mini_max_pending);
 	debugfs_create_u32("tx_max_pending", 0600, dir,
 			   &ns->ethtool.ring.tx_max_pending);
+
+	dir = debugfs_create_dir("module", ethtool);
+	debugfs_create_u32("get_err", 0600, dir, &ns->ethtool.module.get_err);
+	debugfs_create_u32("set_err", 0600, dir, &ns->ethtool.module.set_err);
+
+	dir = debugfs_create_dir("pages", dir);
+	for (i = 0; i < NSIM_MODULE_EEPROM_PAGES; i++) {
+		char name[8];
+
+		ns->ethtool.module.page_blobs[i].data =
+			ns->ethtool.module.pages[i];
+		ns->ethtool.module.page_blobs[i].size =
+			NSIM_MODULE_EEPROM_PAGE_LEN;
+
+		snprintf(name, sizeof(name), "%u", i);
+		debugfs_create_blob(name, 0600, dir,
+				    &ns->ethtool.module.page_blobs[i]);
+	}
 
 	ns->ethtool.mac_lb.supported = ETHTOOL_LOOPBACK_DIRECTION_LOCAL |
 				       ETHTOOL_LOOPBACK_DIRECTION_REMOTE;
