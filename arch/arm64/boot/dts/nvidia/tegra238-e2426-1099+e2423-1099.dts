@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+
+/dts-v1/;
+
+#include "tegra238.dtsi"
+
+/ {
+	model = "NVIDIA Tegra238 E2426-1099+E2423-1099";
+	compatible = "nvidia,e2426-1099+e2423-1099", "nvidia,tegra238";
+
+	bus@0 {
+		uarta: serial@3100000 {
+			status = "okay";
+		};
+	};
+};

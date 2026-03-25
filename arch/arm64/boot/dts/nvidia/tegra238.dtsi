@@ -1,0 +1,190 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+
+#include <dt-bindings/clock/nvidia,tegra238.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/mailbox/tegra186-hsp.h>
+#include <dt-bindings/reset/nvidia,tegra238.h>
+
+/ {
+	compatible = "nvidia,tegra238";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	bus@0 {
+		compatible = "simple-bus";
+
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges = <0x0 0x0 0x0 0x0 0x0 0x80000000>;
+
+		uarta: serial@3100000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0x3100000 0x0 0x10000>;
+			interrupts = <GIC_SPI 112 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&bpmp TEGRA238_CLK_UARTA>,
+				 <&bpmp TEGRA238_CLK_PLLP_OUT0>;
+			clock-names = "uartclk", "apb_pclk";
+			assigned-clocks = <&bpmp TEGRA238_CLK_UARTA>;
+			assigned-clock-parents = <&bpmp TEGRA238_CLK_PLLP_OUT0>;
+			resets = <&bpmp TEGRA238_RESET_UARTA>;
+			arm,primecell-periphid = <0x00051011>;
+			status = "disabled";
+		};
+
+		fuse@3810000 {
+			compatible = "nvidia,tegra234-efuse";
+			reg = <0x0 0x03810000 0x0 0x19000>;
+			clocks = <&bpmp TEGRA238_CLK_FUSE>;
+			clock-names = "fuse";
+		};
+
+		hsp_top0: tegra-hsp@3c00000 {
+			compatible = "nvidia,tegra234-hsp", "nvidia,tegra194-hsp";
+			reg = <0x0 0x03c00000 0x0 0x000a0000>;
+			interrupts = <GIC_SPI 176 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "doorbell", "shared0";
+			#mbox-cells = <2>;
+		};
+
+		hsp_top1: tegra-hsp@3d00000 {
+			compatible = "nvidia,tegra186-hsp";
+			reg = <0x0 0x03d00000 0x0 0x000a0000>;
+			interrupts = <GIC_SPI 128 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "shared0";
+			#mbox-cells = <2>;
+		};
+
+		aon_hsp: tegra-hsp@c150000 {
+			compatible = "nvidia,tegra186-hsp";
+			reg = <0x0 0x0c150000 0x0 0x00090000>;
+			interrupts = <GIC_SPI 137 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "shared1";
+		};
+
+		gic: interrupt-controller@f400000 {
+			compatible = "arm,gic-v3";
+			#interrupt-cells = <3>;
+			#address-cells = <0>;
+			#redistributor-regions = <1>;
+			interrupt-controller;
+			reg = <0x0 0x0f400000 0x0 0x00010000	/* GICD */
+			       0x0 0x0f440000 0x0 0x00200000>;	/* GICR CPU 0-15 */
+		};
+
+		sram@40000000 {
+			compatible = "nvidia,tegra234-sysram", "mmio-sram";
+			reg = <0x0 0x40000000 0x0 0x72000>;
+			ranges = <0x0 0x0 0x40000000 0x72000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			no-memory-wc;
+
+			cpu_bpmp_tx: sram@70000 {
+				reg = <0x70000 0x1000>;
+				label = "cpu-bpmp-tx";
+				pool;
+			};
+
+			cpu_bpmp_rx: sram@71000 {
+				reg = <0x71000 0x1000>;
+				label = "cpu-bpmp-rx";
+				pool;
+			};
+		};
+	};
+
+	bpmp: bpmp {
+		compatible = "nvidia,tegra234-bpmp", "nvidia,tegra186-bpmp";
+		mboxes = <&hsp_top0 TEGRA_HSP_MBOX_TYPE_DB TEGRA_HSP_DB_MASTER_BPMP>;
+		shmem = <&cpu_bpmp_tx &cpu_bpmp_rx>;
+		#clock-cells = <1>;
+		#reset-cells = <1>;
+		#power-domain-cells = <1>;
+
+		bpmp_i2c: i2c {
+			compatible = "nvidia,tegra186-bpmp-i2c";
+			nvidia,bpmp-bus-id = <5>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0_0: cpu@0 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x000>;
+
+			enable-method = "psci";
+		};
+
+		cpu0_1: cpu@1 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x100>;
+
+			enable-method = "psci";
+		};
+
+		cpu0_2: cpu@2 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x200>;
+
+			enable-method = "psci";
+		};
+
+		cpu0_3: cpu@3 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x300>;
+
+			enable-method = "psci";
+		};
+
+		cpu0_4: cpu@4 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x400>;
+
+			enable-method = "psci";
+		};
+
+		cpu0_5: cpu@5 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x500>;
+
+			enable-method = "psci";
+		};
+
+		cpu0_6: cpu@6 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x600>;
+
+			enable-method = "psci";
+		};
+
+		cpu0_7: cpu@7 {
+			compatible = "arm,armv8";
+			device_type = "cpu";
+			reg = <0x700>;
+
+			enable-method = "psci";
+		};
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+	};
+};
