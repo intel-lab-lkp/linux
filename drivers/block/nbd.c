@@ -45,6 +45,8 @@
 #include <linux/nbd.h>
 #include <linux/nbd-netlink.h>
 #include <net/genetlink.h>
+#include <net/tcp.h>
+#include <net/inet_common.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/nbd.h>
@@ -302,6 +304,21 @@ static int nbd_disconnected(struct nbd_config *config)
 		test_bit(NBD_RT_DISCONNECT_REQUESTED, &config->runtime_flags);
 }
 
+static void nbd_sock_shutdown(struct socket *sock)
+{
+	struct sock *sk = sock->sk;
+
+	if (sk_is_stream_unix(sk)) {
+		kernel_sock_shutdown(sock, SHUT_RDWR);
+		return;
+	}
+
+	if (lock_sock_try(sk)) {
+		inet_shutdown_locked(sock, SHUT_RDWR);
+		release_sock(sk);
+	}
+}
+
 static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 				int notify)
 {
@@ -315,7 +332,8 @@ static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 		}
 	}
 	if (!nsock->dead) {
-		kernel_sock_shutdown(nsock->sock, SHUT_RDWR);
+		nbd_sock_shutdown(nsock->sock);
+
 		if (atomic_dec_return(&nbd->config->live_connections) == 0) {
 			if (test_and_clear_bit(NBD_RT_DISCONNECT_REQUESTED,
 					       &nbd->config->runtime_flags)) {
@@ -548,6 +566,22 @@ done:
 	return BLK_EH_DONE;
 }
 
+static int nbd_sock_sendmsg(struct socket *sock, struct msghdr *msg)
+{
+	struct sock *sk = sock->sk;
+	int err = -ERESTARTSYS;
+
+	if (sk_is_stream_unix(sk))
+		return sock_sendmsg(sock, msg);
+
+	if (lock_sock_try(sk)) {
+		err = tcp_sendmsg_locked(sk, msg, msg_data_left(msg));
+		release_sock(sk);
+	}
+
+	return err;
+}
+
 static int __sock_xmit(struct nbd_device *nbd, struct socket *sock, int send,
 		       struct iov_iter *iter, int msg_flags, int *sent)
 {
@@ -573,7 +607,7 @@ static int __sock_xmit(struct nbd_device *nbd, struct socket *sock, int send,
 			msg.msg_flags = msg_flags | MSG_NOSIGNAL;
 
 			if (send)
-				result = sock_sendmsg(sock, &msg);
+				result = nbd_sock_sendmsg(sock, &msg);
 			else
 				result = sock_recvmsg(sock, &msg, msg.msg_flags);
 
