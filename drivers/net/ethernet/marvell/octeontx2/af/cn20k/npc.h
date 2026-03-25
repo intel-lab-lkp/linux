@@ -345,5 +345,6 @@ int npc_mcam_idx_2_subbank_idx(struct rvu *rvu, u16 mcam_idx,
 			       int *sb_off);
 const u32 *npc_cn20k_search_order_get(bool *restricted_order, u32 *sz);
 int npc_cn20k_search_order_set(struct rvu *rvu, u64 arr[32], int cnt);
+bool npc_is_cgx_or_lbk(struct rvu *rvu, u16 pcifunc);
 
 #endif /* NPC_CN20K_H */
