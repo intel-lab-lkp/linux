@@ -717,25 +717,52 @@ static int os05b10_update_test_pattern(struct os05b10 *os05b10, u32 pattern)
 			 os05b10_tp_val[pattern], NULL);
 }
 
+static inline void get_mode_table(unsigned int code,
+				  const struct os05b10_mode **mode_list,
+				  unsigned int *num_modes)
+{
+	switch (code) {
+	case MEDIA_BUS_FMT_SBGGR12_1X12:
+		*mode_list = supported_modes_12bit;
+		*num_modes = ARRAY_SIZE(supported_modes_12bit);
+		break;
+
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+		*mode_list = supported_modes_10bit;
+		*num_modes = ARRAY_SIZE(supported_modes_10bit);
+		break;
+	default:
+		*mode_list = NULL;
+		*num_modes = 0;
+		break;
+	}
+}
+
 static int os05b10_set_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct os05b10 *os05b10 = container_of_const(ctrl->handler,
 						     struct os05b10, handler);
+	const struct os05b10_mode *mode_list;
+	const struct os05b10_mode *mode;
 	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *fmt;
+	unsigned int num_modes;
 	int vmax, ret;
 
 	state = v4l2_subdev_get_locked_active_state(&os05b10->sd);
 	fmt = v4l2_subdev_state_get_format(state, 0);
 
+	get_mode_table(fmt->code, &mode_list, &num_modes);
+	mode = v4l2_find_nearest_size(mode_list, num_modes, width, height,
+				      fmt->width, fmt->height);
+
 	if (ctrl->id == V4L2_CID_VBLANK) {
 		/* Honour the VBLANK limits when setting exposure. */
 		s64 max = fmt->height + ctrl->val - OS05B10_EXPOSURE_MARGIN;
-
 		ret = __v4l2_ctrl_modify_range(os05b10->exposure,
 					       os05b10->exposure->minimum, max,
 					       os05b10->exposure->step,
-					       os05b10->exposure->default_value);
+					       mode->exp);
 		if (ret)
 			return ret;
 	}
@@ -819,7 +846,7 @@ static int os05b10_set_framing_limits(struct os05b10 *os05b10,
 				      const struct os05b10_mode *mode)
 {
 	u64 pixel_rate = os05b10_pixel_rate(os05b10, mode);
-	u32 hblank, vblank, vblank_max, max_exp;
+	u32 hblank, vblank, vblank_max;
 	int ret;
 
 	ret = __v4l2_ctrl_modify_range(os05b10->pixel_rate, pixel_rate,
@@ -844,31 +871,7 @@ static int os05b10_set_framing_limits(struct os05b10 *os05b10,
 	if (ret)
 		return ret;
 
-	max_exp = mode->vts - OS05B10_EXPOSURE_MARGIN;
-	return __v4l2_ctrl_modify_range(os05b10->exposure,
-					OS05B10_EXPOSURE_MIN, max_exp,
-					OS05B10_EXPOSURE_STEP, mode->exp);
-}
-
-static inline void get_mode_table(unsigned int code,
-				  const struct os05b10_mode **mode_list,
-				  unsigned int *num_modes)
-{
-	switch (code) {
-	case MEDIA_BUS_FMT_SBGGR12_1X12:
-		*mode_list = supported_modes_12bit;
-		*num_modes = ARRAY_SIZE(supported_modes_12bit);
-		break;
-
-	case MEDIA_BUS_FMT_SBGGR10_1X10:
-		*mode_list = supported_modes_10bit;
-		*num_modes = ARRAY_SIZE(supported_modes_10bit);
-		break;
-	default:
-		*mode_list = NULL;
-		*num_modes = 0;
-		break;
-	}
+	return __v4l2_ctrl_s_ctrl(os05b10->vblank, vblank);
 }
 
 static int os05b10_set_pad_format(struct v4l2_subdev *sd,
