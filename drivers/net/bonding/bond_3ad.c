@@ -1570,6 +1570,12 @@ static void ad_port_selection_logic(struct port *port, bool *update_slave_arr)
 	struct slave *slave;
 	int found = 0;
 
+	/* Disabled ports cannot be SELECTED.
+	 * Do not attempt to set the SELECTED flag if the port is still disabled.
+	 */
+	if (!port->is_enabled)
+		return;
+
 	/* if the port is already Selected, do nothing */
 	if (port->sm_vars & AD_PORT_SELECTED)
 		return;
@@ -2794,6 +2800,7 @@ void bond_3ad_handle_link_change(struct slave *slave, char link)
 		/* link has failed */
 		port->is_enabled = false;
 		ad_update_actor_keys(port, true);
+		port->sm_vars &= ~AD_PORT_SELECTED;
 	}
 	agg = __get_first_agg(port);
 	ad_agg_selection_logic(agg, &dummy);
