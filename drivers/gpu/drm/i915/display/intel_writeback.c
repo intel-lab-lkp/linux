@@ -558,6 +558,33 @@ void intel_writeback_isr_handler(struct intel_display *display)
 	}
 }
 
+static void
+intel_writeback_disable_encoder(struct intel_atomic_state *state,
+				struct intel_encoder *encoder,
+				const struct intel_crtc_state *crtc_state,
+				const struct drm_connector_state *conn_state)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_writeback_connector *wb_conn =
+		enc_to_intel_writeback_connector(encoder);
+	struct intel_crtc *pipe_crtc;
+	int i = 0;
+
+	for_each_pipe_crtc_modeset_disable(display, pipe_crtc, crtc_state, i) {
+		const struct intel_crtc_state *old_pipe_crtc_state =
+			intel_atomic_get_old_crtc_state(state, pipe_crtc);
+
+		intel_crtc_vblank_off(old_pipe_crtc_state);
+	}
+
+	intel_de_rmw(display, TRANSCONF_WD(crtc_state->cpu_transcoder), WD_TRANS_ENABLE,
+		     REG_FIELD_PREP(WD_TRANS_ENABLE, 0));
+	intel_de_rmw(display, WD_TRANS_FUNC_CTL(crtc_state->cpu_transcoder),
+		     TRANS_WD_FUNC_ENABLE,
+		     REG_FIELD_PREP(TRANS_WD_FUNC_ENABLE, 0));
+	wb_conn->frame_num = 1;
+}
+
 int intel_writeback_init(struct intel_display *display)
 {
 	struct intel_encoder *encoder;
@@ -586,6 +613,7 @@ int intel_writeback_init(struct intel_display *display)
 	encoder->get_hw_state = intel_writeback_get_hw_state;
 	encoder->compute_config = intel_writeback_compute_config;
 	encoder->enable = intel_writeback_enable_encoder;
+	encoder->disable = intel_writeback_disable_encoder;
 
 	connector = &writeback_conn->connector;
 	ret = intel_writeback_connector_alloc(connector);
