@@ -905,6 +905,17 @@ u32 k3_ringacc_ring_get_free(struct k3_ring *ring)
 }
 EXPORT_SYMBOL_GPL(k3_ringacc_ring_get_free);
 
+u32 k3_ringacc_ring_get_rt_free(struct k3_ring *ring)
+{
+	if (!ring || !(ring->flags & K3_RING_FLAG_BUSY))
+		return -EINVAL;
+
+	ring->state.free = ring->size - k3_ringacc_ring_read_occ(ring);
+
+	return ring->state.free;
+}
+EXPORT_SYMBOL_GPL(k3_ringacc_ring_get_rt_free);
+
 u32 k3_ringacc_ring_get_occ(struct k3_ring *ring)
 {
 	if (!ring || !(ring->flags & K3_RING_FLAG_BUSY))

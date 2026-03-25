@@ -185,6 +185,14 @@ u32 k3_ringacc_ring_get_size(struct k3_ring *ring);
 u32 k3_ringacc_ring_get_free(struct k3_ring *ring);
 
 /**
+ * k3_ringacc_ring_get_rt_free - get realtime value of free elements
+ * @ring: pointer on ring
+ *
+ * Returns realtime count of free elements in the ring.
+ */
+u32 k3_ringacc_ring_get_rt_free(struct k3_ring *ring);
+
+/**
  * k3_ringacc_ring_get_occ - get ring occupancy
  * @ring: pointer on ring
  *
