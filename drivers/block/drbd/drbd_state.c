@@ -562,6 +562,7 @@ _req_st_cond(struct drbd_device *device, union drbd_state mask,
 static enum drbd_state_rv
 drbd_req_state(struct drbd_device *device, union drbd_state mask,
 	       union drbd_state val, enum chg_state_flags f)
+	__no_context_analysis /* conditional locking */
 {
 	struct completion done;
 	unsigned long flags;
@@ -2292,6 +2293,7 @@ _conn_rq_cond(struct drbd_connection *connection, union drbd_state mask, union d
 enum drbd_state_rv
 _conn_request_state(struct drbd_connection *connection, union drbd_state mask, union drbd_state val,
 		    enum chg_state_flags flags)
+	__no_context_analysis /* conditional locking */
 {
 	enum drbd_state_rv rv = SS_SUCCESS;
 	struct after_conn_state_chg_work *acscw;
