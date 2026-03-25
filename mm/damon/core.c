@@ -2063,6 +2063,19 @@ static void damos_walk_cancel(struct damon_ctx *ctx)
 	mutex_unlock(&ctx->walk_control_lock);
 }
 
+static unsigned int damon_scheme_idx(struct damon_ctx *c, struct damos *s)
+{
+	unsigned int idx = 0;
+	struct damos *siter;
+
+	damon_for_each_scheme(siter, c) {
+		if (siter == s)
+			break;
+		idx++;
+	}
+	return idx;
+}
+
 static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
 		struct damon_region *r, struct damos *s)
 {
@@ -2078,7 +2091,6 @@ static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
 	 * index here.
 	 */
 	unsigned int cidx = 0;
-	struct damos *siter;		/* schemes iterator */
 	unsigned int sidx = 0;
 	struct damon_target *titer;	/* targets iterator */
 	unsigned int tidx = 0;
@@ -2086,11 +2098,7 @@ static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
 
 	/* get indices for trace_damos_before_apply() */
 	if (trace_damos_before_apply_enabled()) {
-		damon_for_each_scheme(siter, c) {
-			if (siter == s)
-				break;
-			sidx++;
-		}
+		sidx = damon_scheme_idx(c, s);
 		damon_for_each_target(titer, c) {
 			if (titer == t)
 				break;
@@ -2423,15 +2431,7 @@ static void damos_set_effective_quota(struct damos_quota *quota)
 static void damos_trace_esz(struct damon_ctx *c, struct damos *s,
 		struct damos_quota *quota)
 {
-	unsigned int cidx = 0, sidx = 0;
-	struct damos *siter;
-
-	damon_for_each_scheme(siter, c) {
-		if (siter == s)
-			break;
-		sidx++;
-	}
-	trace_damos_esz(cidx, sidx, quota->esz);
+	trace_damos_esz(0, damon_scheme_idx(c, s), quota->esz);
 }
 
 static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
@@ -2499,18 +2499,11 @@ static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
 
 static void damos_trace_stat(struct damon_ctx *c, struct damos *s)
 {
-	unsigned int cidx = 0, sidx = 0;
-	struct damos *siter;
-
 	if (!trace_damos_stat_after_apply_interval_enabled())
 		return;
 
-	damon_for_each_scheme(siter, c) {
-		if (siter == s)
-			break;
-		sidx++;
-	}
-	trace_damos_stat_after_apply_interval(cidx, sidx, &s->stat);
+	trace_damos_stat_after_apply_interval(0, damon_scheme_idx(c, s),
+					      &s->stat);
 }
 
 static void kdamond_apply_schemes(struct damon_ctx *c)
