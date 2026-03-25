@@ -1710,6 +1710,37 @@ static inline void lock_sock(struct sock *sk)
 }
 
 void __lock_sock(struct sock *sk);
+
+/**
+ * lock_sock_try - trylock version of lock_sock
+ * @sk: socket
+ *
+ * Use of this function is strongly discouraged.
+ *
+ * It is primarily intended for NBD, where the driver must avoid
+ * deadlock during fs reclaim caused by the backend socket remaining
+ * exposed to userspace even after being handed over to NBD,
+ * which _is_ bad but too late to change.
+ *
+ * Return: true if the lock was acquired, false otherwise.
+ */
+static inline bool lock_sock_try(struct sock *sk)
+{
+	if (!spin_trylock_bh(&sk->sk_lock.slock))
+		return false;
+
+	if (sk->sk_lock.owned) {
+		spin_unlock_bh(&sk->sk_lock.slock);
+		return false;
+	}
+
+	sk->sk_lock.owned = 1;
+	spin_unlock_bh(&sk->sk_lock.slock);
+
+	mutex_acquire(&sk->sk_lock.dep_map, 0, 1, _RET_IP_);
+	return true;
+}
+
 void __release_sock(struct sock *sk);
 void release_sock(struct sock *sk);
 
