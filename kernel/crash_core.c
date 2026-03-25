@@ -326,15 +326,25 @@ int crash_prepare_headers(int need_kernel_map, void **addr, unsigned long *sz,
 	struct crash_mem *cmem;
 	int ret;
 
+	if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG))
+		lock_device_hotplug();
+
 	max_nr_ranges = arch_get_system_nr_ranges();
-	if (!max_nr_ranges)
-		return -ENOMEM;
+	if (!max_nr_ranges) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
 
 	cmem = alloc_cmem(max_nr_ranges);
-	if (!cmem)
-		return -ENOMEM;
+	if (!cmem) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
 
 	ret = arch_crash_populate_cmem(cmem);
+	if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG))
+		unlock_device_hotplug();
+
 	if (ret)
 		goto out;
 
@@ -354,6 +364,12 @@ int crash_prepare_headers(int need_kernel_map, void **addr, unsigned long *sz,
 
 out:
 	kvfree(cmem);
+	return ret;
+
+unlock:
+	if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG))
+		unlock_device_hotplug();
+
 	return ret;
 }
 
