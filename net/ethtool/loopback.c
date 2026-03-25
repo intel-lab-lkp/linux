@@ -88,6 +88,10 @@ static int loopback_get(struct net_device *dev,
 			struct ethtool_loopback_entry *entry)
 {
 	switch (component) {
+	case ETHTOOL_LOOPBACK_COMPONENT_MAC:
+		if (!dev->ethtool_ops->get_loopback)
+			return -EOPNOTSUPP;
+		return dev->ethtool_ops->get_loopback(dev, name, id, entry);
 	case ETHTOOL_LOOPBACK_COMPONENT_MODULE:
 		return ethtool_cmis_get_loopback(dev, name, entry);
 	default:
@@ -95,10 +99,22 @@ static int loopback_get(struct net_device *dev,
 	}
 }
 
-static int loopback_get_by_index(struct net_device *dev, u32 index,
+static int loopback_get_by_index(struct net_device *dev,
+				 enum ethtool_loopback_component component,
+				 u32 index,
 				 struct ethtool_loopback_entry *entry)
 {
-	return ethtool_cmis_get_loopback_by_index(dev, index, entry);
+	switch (component) {
+	case ETHTOOL_LOOPBACK_COMPONENT_MAC:
+		if (!dev->ethtool_ops->get_loopback_by_index)
+			return -EOPNOTSUPP;
+		return dev->ethtool_ops->get_loopback_by_index(dev, index,
+							       entry);
+	case ETHTOOL_LOOPBACK_COMPONENT_MODULE:
+		return ethtool_cmis_get_loopback_by_index(dev, index, entry);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 static int loopback_prepare_data(const struct ethnl_req_info *req_base,
@@ -118,7 +134,8 @@ static int loopback_prepare_data(const struct ethnl_req_info *req_base,
 		ret = loopback_get(dev, req_info->component, req_info->id,
 				   req_info->name, &data->entry);
 	else
-		ret = loopback_get_by_index(dev, req_info->index, &data->entry);
+		ret = loopback_get_by_index(dev, req_info->component,
+					    req_info->index, &data->entry);
 
 	ethnl_ops_complete(dev);
 
@@ -235,6 +252,10 @@ static int __loopback_set(struct net_device *dev,
 			  struct netlink_ext_ack *extack)
 {
 	switch (entry->component) {
+	case ETHTOOL_LOOPBACK_COMPONENT_MAC:
+		if (!dev->ethtool_ops->set_loopback)
+			return -EOPNOTSUPP;
+		return dev->ethtool_ops->set_loopback(dev, entry, extack);
 	case ETHTOOL_LOOPBACK_COMPONENT_MODULE:
 		return ethtool_cmis_set_loopback(dev, entry, extack);
 	default:
@@ -284,20 +305,31 @@ static int loopback_dump_one_dev(struct sk_buff *skb,
 {
 	struct loopback_req_info *req_info =
 		container_of(ctx->req_info, struct loopback_req_info, base);
+	/* pos_sub encodes: upper 16 bits = component phase, lower 16 = index
+	 * within that component. dump_one_dev is called repeatedly with
+	 * increasing pos_sub until all components are exhausted.
+	 */
+	enum ethtool_loopback_component phase = *pos_sub >> 16;
+	u32 idx = *pos_sub & 0xffff;
 	int ret;
 
-	for (;; (*pos_sub)++) {
-		req_info->index = *pos_sub;
-		ret = ethnl_default_dump_one(skb, ctx->req_info->dev, ctx,
-					     info);
-		if (ret == -EOPNOTSUPP)
-			break;
-		if (ret)
-			return ret;
+	for (; phase <= ETHTOOL_LOOPBACK_COMPONENT_MODULE; phase++) {
+		for (;; idx++) {
+			req_info->component = phase;
+			req_info->index = idx;
+			ret = ethnl_default_dump_one(skb, ctx->req_info->dev,
+						     ctx, info);
+			if (ret == -EOPNOTSUPP)
+				break;
+			if (ret) {
+				*pos_sub = ((unsigned long)phase << 16) | idx;
+				return ret;
+			}
+		}
+		idx = 0;
 	}
 
 	*pos_sub = 0;
-
 	return 0;
 }
 

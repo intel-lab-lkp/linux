@@ -1168,6 +1168,9 @@ struct kernel_ethtool_ts_info {
  * @get_mm: Query the 802.3 MAC Merge layer state.
  * @set_mm: Set the 802.3 MAC Merge layer parameters.
  * @get_mm_stats: Query the 802.3 MAC Merge layer statistics.
+ * @get_loopback: Get the state of a loopback entry identified by name and id.
+ * @get_loopback_by_index: Get the state of a loopback entry by its index.
+ * @set_loopback: Set the loopback mode for a given entry.
  *
  * All operations are optional (i.e. the function pointer may be set
  * to %NULL) and callers must take this into account.  Callers must
@@ -1337,6 +1340,13 @@ struct ethtool_ops {
 	int	(*set_mm)(struct net_device *dev, struct ethtool_mm_cfg *cfg,
 			  struct netlink_ext_ack *extack);
 	void	(*get_mm_stats)(struct net_device *dev, struct ethtool_mm_stats *stats);
+	int	(*get_loopback)(struct net_device *dev, const char *name,
+				u32 id, struct ethtool_loopback_entry *entry);
+	int	(*get_loopback_by_index)(struct net_device *dev, u32 index,
+					 struct ethtool_loopback_entry *entry);
+	int	(*set_loopback)(struct net_device *dev,
+				const struct ethtool_loopback_entry *entry,
+				struct netlink_ext_ack *extack);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);
