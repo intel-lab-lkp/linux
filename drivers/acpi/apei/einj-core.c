@@ -178,7 +178,7 @@ static DEFINE_MUTEX(einj_mutex);
 /*
  * Exported APIs use this flag to exit early if einj_probe() failed.
  */
-bool einj_initialized __ro_after_init;
+static bool einj_initialized __ro_after_init;
 
 static void __iomem *einj_param;
 static u32 v5param_size;
