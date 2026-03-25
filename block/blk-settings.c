@@ -447,15 +447,9 @@ int blk_validate_limits(struct queue_limits *lim)
 	if (!lim->max_discard_segments)
 		lim->max_discard_segments = 1;
 
-	/*
-	 * By default there is no limit on the segment boundary alignment,
-	 * but if there is one it can't be smaller than the page size as
-	 * that would break all the normal I/O patterns.
-	 */
+	/* By default there is no limit on the segment boundary alignment. */
 	if (!lim->seg_boundary_mask)
 		lim->seg_boundary_mask = BLK_SEG_BOUNDARY_MASK;
-	if (WARN_ON_ONCE(lim->seg_boundary_mask < BLK_MIN_SEGMENT_SIZE - 1))
-		return -EINVAL;
 
 	/*
 	 * Stacking device may have both virtual boundary and max segment
