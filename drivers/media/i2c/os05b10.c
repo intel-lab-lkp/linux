@@ -531,7 +531,7 @@ static int os05b10_set_ctrl(struct v4l2_ctrl *ctrl)
 			return ret;
 	}
 
-	if (pm_runtime_get_if_in_use(os05b10->dev) == 0)
+	if (pm_runtime_get_if_active(os05b10->dev) == 0)
 		return 0;
 
 	switch (ctrl->id) {
