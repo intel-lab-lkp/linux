@@ -175,6 +175,313 @@ struct ctl_table {
 	void *extra2;
 } __randomize_layout;
 
+/**
+ * struct _sysctl_null_type - sentinel type for variable-less entries
+ */
+struct _sysctl_null_type { char __dummy; };
+
+/**
+ * _sysctl_null_marker - sentinel instance used by SYSCTL_NULL
+ *
+ * Passed via SYSCTL_NULL to mark entries with no associated variable.
+ * Detected by _Generic() dispatch in CTLTBL_ENTRY_XXX().
+ */
+extern const struct _sysctl_null_type _sysctl_null_marker;
+
+/**
+ * SYSCTL_NULL - pass as __var for entries with no associated variable
+ */
+#define SYSCTL_NULL (_sysctl_null_marker)
+
+/**
+ * __CTL_AUTO_HANDLER - select proc_handler based on the variable type
+ *
+ * Supported types: int, unsigned int, long, unsigned long, bool, u8.
+ * char arrays (strings) are not supported; use CTLTBL_ENTRY_VNMH() with
+ * proc_dostring instead.
+ *
+ * @__var: kernel variable (value, not address), or SYSCTL_NULL
+ */
+#define __CTL_AUTO_HANDLER(__var)					\
+	_Generic((__var),						\
+			int          : proc_dointvec,			\
+			unsigned int : proc_douintvec,			\
+			long         : proc_doulongvec_minmax,		\
+			unsigned long: proc_doulongvec_minmax,		\
+			bool         : proc_dobool,			\
+			u8           : proc_dou8vec_minmax,		\
+			default      :					\
+					0xdeadbeaf)
+
+/**
+ * __CTL_AUTO_HANDLER_RANGE - select proc_handler for a range-constrained entry
+ *
+ * Supported types: int, unsigned int, long, unsigned long, u8.
+ * bool is also accepted but proc_dobool ignores extra1/extra2 range bounds.
+ *
+ * @__var: kernel variable (value, not address), or SYSCTL_NULL
+ */
+#define __CTL_AUTO_HANDLER_RANGE(__var)					\
+	_Generic((__var),						\
+			int          : proc_dointvec_minmax,		\
+			unsigned int : proc_douintvec_minmax,		\
+			long         : proc_doulongvec_minmax,		\
+			unsigned long: proc_doulongvec_minmax,		\
+			bool         : proc_dobool,			\
+			u8           : proc_dou8vec_minmax,		\
+			default      :					\
+					0xdeadbeaf)
+
+/**
+ * __CTL_PROCNAME - validate and return the procname string
+ *
+ * "" __name "" enforces a string-literal argument at compile time.
+ *
+ * @__name: procname string literal
+ */
+#define __CTL_PROCNAME(__name)    ("" __name "")
+
+/**
+ * __CTL_DATA - assert __var is addressable; return its address
+ *
+ * SYSCTL_NULL -> (void *)NULL
+ * lvalue __var -> (void *)&(__var)
+ *
+ * @__var: kernel variable (without &), or SYSCTL_NULL
+ */
+#define __CTL_DATA(__var)						\
+	_Generic((__var),						\
+			struct _sysctl_null_type : (void *)NULL,	\
+			default :					\
+				 (void *)&(__var))
+
+/* Compute maxlen for NULL entries: use explicit MAXLEN if >0, else 0 */
+#define __SYSCTL_MAXLEN_NULL(__maxlen)					\
+	((__maxlen) > 0 ? (size_t)(__maxlen) : (size_t)0)
+
+/* Compute maxlen: use explicit MAXLEN if >0, else sizeof(VAR) */
+#define __SYSCTL_MAXLEN_VAR(__var, __maxlen)				\
+	((__maxlen) >= 0 ? (size_t)(__maxlen) : (size_t)sizeof(__var))
+
+/**
+ * __CTL_MAXLEN - compute the .maxlen value
+ *
+ * @__var:    kernel variable (without &), or SYSCTL_NULL
+ * @__maxlen: explicit override, or -1 for auto-sizing
+ */
+#define __CTL_MAXLEN(__var, __maxlen)					\
+	_Generic((__var),						\
+			struct _sysctl_null_type :			\
+				__SYSCTL_MAXLEN_NULL(__maxlen),		\
+			default :					\
+				__SYSCTL_MAXLEN_VAR(__var, __maxlen)	\
+		)
+
+/**
+ * __CTL_MODE - validate and return file permission bits
+ *
+ * @__mode: file permission bits (e.g. 0644)
+ */
+#define __CTL_MODE(__mode)    (0 ? (umode_t)0 : (__mode))
+
+/**
+ * __CTL_HANDLER - validate and return proc_handler
+ *
+ * @__handler: proc_handler
+ */
+#define __CTL_HANDLER(__handler) \
+	(0 ? (typeof(proc_handler) *)0 : (__handler))
+
+/* Validate PTR is pointer-compatible and return it as void* */
+#define __CTL_EXTRA(PTR) \
+		(0 ? (void *)0 : (PTR))
+
+/**
+ * Internal primitive  (single source of truth)
+ *
+ * All public macros delegate here.
+ *
+ * @_var:     kernel variable (without &), or SYSCTL_NULL
+ * @_name:    procname string literal
+ * @_mode:    file permission bits
+ * @_handler: proc_handler-compatible function pointer
+ * @_min:     lower bound pointer, or NULL
+ * @_max:     upper bound pointer, or NULL
+ * @_maxlen:  explicit .maxlen, or -1 for auto-sizing
+ */
+#define __CTLTBL_ENTRY(_var, _name, _mode, _handler, _min, _max, _maxlen) \
+{ \
+	.procname     = __CTL_PROCNAME(_name),				\
+	.data         = __CTL_DATA(_var),				\
+	.maxlen       = __CTL_MAXLEN(_var, _maxlen),			\
+	.mode         = __CTL_MODE(_mode),				\
+	.proc_handler = __CTL_HANDLER(_handler),			\
+	.poll         = NULL,						\
+	.extra1       = __CTL_EXTRA(_min),				\
+	.extra2       = __CTL_EXTRA(_max),				\
+}
+
+/**
+ * Public API
+ *
+ * Naming convention:
+ *   V  - Variable is auto-named via #__var
+ *   N  - explicit Name string
+ *   M  - explicit Mode
+ *   H  - explicit Handler
+ *   R  - Range checking (min/max, selects _minmax handler)
+ *   L  - explicit Length (.maxlen override)
+ */
+
+/**
+ * CTLTBL_ENTRY_V - read-only entry; procname == stringified variable name
+ *
+ * Proto: (T __var)
+ *
+ * .procname = #__var, .mode = 0444, .extra1 = .extra2 = NULL.
+ * proc_handler and .maxlen inferred from typeof(__var).
+ *
+ * @__var: kernel variable (without &); must be an addressable lvalue
+ */
+#define CTLTBL_ENTRY_V(__var)						\
+	__CTLTBL_ENTRY(__var, #__var, 0444,				\
+		__CTL_AUTO_HANDLER(__var), NULL, NULL, -1)
+
+/**
+ * CTLTBL_ENTRY_VM - entry with custom mode; procname == #__var
+ *
+ * Proto: (T __var, umode_t __mode)
+ *
+ * @__var:  kernel variable (without &)
+ * @__mode: file permission bits
+ */
+#define CTLTBL_ENTRY_VM(__var, __mode)					\
+	__CTLTBL_ENTRY(__var, #__var, __mode,				\
+		__CTL_AUTO_HANDLER(__var), NULL, NULL, -1)
+
+/**
+ * CTLTBL_ENTRY_VMR - custom mode with range checking; procname == #__var
+ *
+ * Proto: (T __var, umode_t __mode, T *__min, T *__max)
+ *
+ * @__var:  kernel variable (without &)
+ * @__mode: file permission bits
+ * @__min:  pointer to minimum value; typeof(*__min) must == typeof(__var)
+ * @__max:  pointer to maximum value; typeof(*__max) must == typeof(__var)
+ */
+#define CTLTBL_ENTRY_VMR(__var, __mode, __min, __max)			\
+	__CTLTBL_ENTRY(__var, #__var, __mode,				\
+		__CTL_AUTO_HANDLER_RANGE(__var), __min, __max, -1)
+
+/**
+ * CTLTBL_ENTRY_VN - read-only entry with explicit procname
+ *
+ * Proto: (T __var, const char *__name)
+ *
+ * @__var:  kernel variable (without &)
+ * @__name: procname string literal
+ */
+#define CTLTBL_ENTRY_VN(__var, __name)					\
+	__CTLTBL_ENTRY(__var, __name, 0444,				\
+		__CTL_AUTO_HANDLER(__var), NULL, NULL, -1)
+
+/**
+ * CTLTBL_ENTRY_VNM - entry with explicit procname and mode
+ *
+ * Proto: (T __var, const char *__name, umode_t __mode)
+ *
+ * @__var:  kernel variable (without &)
+ * @__name: procname string literal
+ * @__mode: file permission bits
+ */
+#define CTLTBL_ENTRY_VNM(__var, __name, __mode)				\
+	__CTLTBL_ENTRY(__var, __name, __mode,				\
+		__CTL_AUTO_HANDLER(__var), NULL, NULL, -1)
+
+/**
+ * CTLTBL_ENTRY_VNMH - entry with explicit procname, mode and handler
+ *
+ * Proto: (T __var, const char *__name, umode_t __mode,
+ *         proc_handler *__handler)
+ *
+ * @__var:     kernel variable (without &), or SYSCTL_NULL
+ * @__name:    procname string literal
+ * @__mode:    file permission bits
+ * @__handler: proc_handler-compatible function pointer
+ */
+#define CTLTBL_ENTRY_VNMH(__var, __name, __mode, __handler)		\
+	__CTLTBL_ENTRY(__var, __name, __mode, __handler, NULL, NULL, -1)
+
+/**
+ * CTLTBL_ENTRY_VNMR - entry with procname, mode and range checking
+ *
+ * Proto: (T __var, const char *__name, umode_t __mode,
+ *         T *__min, T *__max)
+ *
+ * @__var:  kernel variable (without &)
+ * @__name: procname string literal
+ * @__mode: file permission bits
+ * @__min:  pointer to minimum value; typeof(*__min) must == typeof(__var)
+ * @__max:  pointer to maximum value; typeof(*__max) must == typeof(__var)
+ */
+#define CTLTBL_ENTRY_VNMR(__var, __name, __mode, __min, __max)		\
+	__CTLTBL_ENTRY(__var, __name, __mode,				\
+		__CTL_AUTO_HANDLER_RANGE(__var), __min, __max, -1)
+
+/**
+ * CTLTBL_ENTRY_VNMHR - entry with explicit handler and range
+ *
+ * Proto: (T __var, const char *__name, umode_t __mode,
+ *         proc_handler *__handler, T *__min, T *__max)
+ *
+ * @__var:     kernel variable (without &), or SYSCTL_NULL
+ * @__name:    procname string literal
+ * @__mode:    file permission bits
+ * @__handler: proc_handler-compatible function pointer
+ * @__min:     pointer to minimum value for .extra1
+ * @__max:     pointer to maximum value for .extra2
+ */
+#define CTLTBL_ENTRY_VNMHR(__var, __name, __mode, __handler, __min, __max) \
+	__CTLTBL_ENTRY(__var, __name, __mode, __handler, __min, __max, -1)
+
+/**
+ * CTLTBL_ENTRY_VNMHRL - fully explicit entry
+ *
+ * Proto: (T __var, const char *__name, umode_t __mode,
+ *         proc_handler *__handler, T *__min, T *__max,
+ *         size_t __maxlen)
+ *
+ * Pass -1 for __maxlen to use sizeof(__var) / 0 (auto).
+ * Pass  0 to set .maxlen to zero explicitly.
+ *
+ * @__var:     kernel variable (without &), or SYSCTL_NULL
+ * @__name:    procname string literal
+ * @__mode:    file permission bits
+ * @__handler: proc_handler-compatible function pointer
+ * @__min:     pointer to minimum value for .extra1
+ * @__max:     pointer to maximum value for .extra2
+ * @__maxlen:  explicit value for .maxlen
+ */
+#define CTLTBL_ENTRY_VNMHRL(__var, __name, __mode, __handler,		\
+			    __min, __max, __maxlen)			\
+	__CTLTBL_ENTRY(__var, __name, __mode, __handler, __min, __max, __maxlen)
+
+/**
+ * CTLTBL_ENTRY_NMH - custom-handler entry with no associated variable
+ *
+ * Proto: (const char *__name, umode_t __mode,
+ *         proc_handler *__handler)
+ *
+ * Shorthand for CTLTBL_ENTRY_VNMH(SYSCTL_NULL, ...).
+ * .data = NULL, .maxlen = 0, .extra1 = NULL, .extra2 = NULL.
+ *
+ * @__name:    procname string literal
+ * @__mode:    file permission bits
+ * @__handler: proc_handler-compatible function pointer
+ */
+#define CTLTBL_ENTRY_NMH(__name, __mode, __handler)			\
+	CTLTBL_ENTRY_VNMH(SYSCTL_NULL, __name, __mode, __handler)
+
 struct ctl_node {
 	struct rb_node node;
 	struct ctl_table_header *header;
