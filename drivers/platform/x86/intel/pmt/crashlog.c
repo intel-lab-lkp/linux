@@ -26,14 +26,8 @@
 
 /* Crashlog Discovery Header */
 #define CONTROL_OFFSET		0x0
-#define GUID_OFFSET		0x4
-#define BASE_OFFSET		0x8
-#define SIZE_OFFSET		0xC
-#define GET_ACCESS(v)		((v) & GENMASK(3, 0))
 #define GET_TYPE(v)		(((v) & GENMASK(7, 4)) >> 4)
 #define GET_VERSION(v)		(((v) & GENMASK(19, 16)) >> 16)
-/* size is in bytes */
-#define GET_SIZE(v)		((v) * sizeof(u32))
 
 /*
  * Type 1 Version 0
@@ -516,28 +510,11 @@ static int pmt_crashlog_pre_decode(struct intel_vsec_device *ivdev,
 	return 0;
 }
 
-static int pmt_crashlog_header_decode(struct intel_pmt_entry *entry,
-				      struct device *dev)
-{
-	void __iomem *disc_table = entry->disc_table;
-	struct intel_pmt_header *header = &entry->header;
-
-	header->access_type = GET_ACCESS(readl(disc_table));
-	header->guid = readl(disc_table + GUID_OFFSET);
-	header->base_offset = readl(disc_table + BASE_OFFSET);
-
-	/* Size is measured in DWORDS, but accessor returns bytes */
-	header->size = GET_SIZE(readl(disc_table + SIZE_OFFSET));
-
-	return 0;
-}
-
 static DEFINE_XARRAY_ALLOC(crashlog_array);
 static struct intel_pmt_namespace pmt_crashlog_ns = {
 	.name = "crashlog",
 	.xa = &crashlog_array,
 	.pmt_pre_decode = pmt_crashlog_pre_decode,
-	.pmt_header_decode = pmt_crashlog_header_decode,
 };
 
 /*
