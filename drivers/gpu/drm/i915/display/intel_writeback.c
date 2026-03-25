@@ -17,7 +17,9 @@
 #include "intel_de.h"
 #include "intel_display_driver.h"
 #include "intel_display_types.h"
+#include "intel_display_utils.h"
 #include "intel_writeback.h"
+#include "intel_writeback_reg.h"
 
 struct intel_writeback_connector {
 	struct intel_connector connector;
@@ -98,6 +100,52 @@ static const struct drm_connector_helper_funcs conn_helper_funcs = {
 	.mode_valid = intel_writeback_mode_valid,
 };
 
+static bool
+intel_writeback_get_hw_state(struct intel_encoder *encoder,
+			     enum pipe *pipe)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	u8 pipe_mask = 0;
+	u32 tmp;
+
+	/* TODO need to be done for both the wd transcoder */
+	tmp = intel_de_read(display,
+			    TRANSCONF_WD(TRANSCODER_WD_0));
+	if (!(tmp & WD_TRANS_ENABLE))
+		return false;
+
+	tmp = intel_de_read(display,
+			    WD_TRANS_FUNC_CTL(TRANSCODER_WD_0));
+
+	if (!(tmp & TRANS_WD_FUNC_ENABLE))
+		return false;
+
+	switch (tmp & WD_INPUT_SELECT_MASK) {
+	case WD_INPUT_PIPE_A:
+		pipe_mask |= BIT(PIPE_A);
+		break;
+	case WD_INPUT_PIPE_B:
+		pipe_mask |= BIT(PIPE_B);
+		break;
+	case WD_INPUT_PIPE_C:
+		pipe_mask |= BIT(PIPE_C);
+		break;
+	case WD_INPUT_PIPE_D:
+		pipe_mask |= BIT(PIPE_D);
+		break;
+	default:
+		MISSING_CASE(tmp & WD_INPUT_SELECT_MASK);
+		fallthrough;
+	}
+
+	if (pipe_mask == 0)
+		return false;
+
+	*pipe = ffs(pipe_mask) - 1;
+
+	return true;
+}
+
 int intel_writeback_init(struct intel_display *display)
 {
 	struct intel_encoder *encoder;
@@ -122,6 +170,7 @@ int intel_writeback_init(struct intel_display *display)
 	encoder->type = INTEL_OUTPUT_WRITEBACK;
 	encoder->pipe_mask = ~0;
 	encoder->cloneable = 0;
+	encoder->get_hw_state = intel_writeback_get_hw_state;
 
 	connector = &writeback_conn->connector;
 	ret = intel_writeback_connector_alloc(connector);
