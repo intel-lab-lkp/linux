@@ -5688,6 +5688,9 @@ static void sched_tick_stop(int cpu)
 
 int __init sched_tick_offload_init(void)
 {
+	if (tick_work_cpu)
+		return 0;
+
 	tick_work_cpu = alloc_percpu(struct tick_work);
 	BUG_ON(!tick_work_cpu);
 	return 0;
@@ -8508,6 +8511,8 @@ void __init sched_init_smp(void)
 		BUG();
 	current->flags &= ~PF_NO_SETAFFINITY;
 	sched_init_granularity();
+
+	sched_tick_offload_init();
 
 	init_sched_rt_class();
 	init_sched_dl_class();
