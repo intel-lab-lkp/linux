@@ -107,7 +107,8 @@ ssize_t zcomp_available_show(const char *comp, char *buf, ssize_t at)
 	return at;
 }
 
-struct zcomp_strm *zcomp_stream_get(struct zcomp *comp)
+struct zcomp_strm *__zcomp_stream_get(struct zcomp *comp)
+	__no_context_analysis /* __acquires(&raw_cpu_ptr(comp->stream)->lock) */
 {
 	for (;;) {
 		struct zcomp_strm *zstrm = raw_cpu_ptr(comp->stream);
