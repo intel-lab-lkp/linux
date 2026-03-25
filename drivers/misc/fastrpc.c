@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/sort.h>
 #include <linux/of_platform.h>
+#include <linux/overflow.h>
 #include <linux/rpmsg.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
@@ -992,7 +993,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 	int inbufs, i, oix, err = 0;
 	u64 len, rlen, pkt_size;
 	u64 pg_start, pg_end;
-	uintptr_t args;
+	uintptr_t args, buf_start, buf_end;
 	int metalen;
 
 	inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
@@ -1016,6 +1017,11 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 	rpra = ctx->buf->virt;
 	list = fastrpc_invoke_buf_start(rpra, ctx->nscalars);
 	pages = fastrpc_phy_page_start(list, ctx->nscalars);
+	buf_start = (uintptr_t)ctx->buf->virt;
+	if (check_add_overflow(buf_start, (uintptr_t)pkt_size, &buf_end)) {
+		err = -EINVAL;
+		goto bail;
+	}
 	args = (uintptr_t)ctx->buf->virt + metalen;
 	rlen = pkt_size - metalen;
 	ctx->rpra = rpra;
@@ -1053,6 +1059,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 			pages[i].size = (pg_end - pg_start + 1) * PAGE_SIZE;
 
 		} else {
+			uintptr_t dst, end, offset_start;
 
 			if (ctx->olaps[oix].offset == 0) {
 				rlen -= ALIGN(args, FASTRPC_ALIGN) - args;
@@ -1064,7 +1071,24 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 			if (rlen < mlen)
 				goto bail;
 
-			rpra[i].buf.pv = args - ctx->olaps[oix].offset;
+			if (check_add_overflow(buf_start,
+					       (uintptr_t)ctx->olaps[oix].offset,
+					       &offset_start) ||
+			    offset_start > args) {
+				err = -EINVAL;
+				goto bail;
+			}
+
+			if (check_sub_overflow(args,
+					       (uintptr_t)ctx->olaps[oix].offset,
+					       &dst) ||
+			    check_add_overflow(dst, (uintptr_t)len, &end) ||
+			    end > buf_end) {
+				err = -EINVAL;
+				goto bail;
+			}
+
+			rpra[i].buf.pv = dst;
 			pages[i].addr = ctx->buf->dma_addr -
 					ctx->olaps[oix].offset +
 					(pkt_size - rlen);
