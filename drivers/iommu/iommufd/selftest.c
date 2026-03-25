@@ -119,6 +119,7 @@ struct mock_iommu_domain {
 		struct pt_iommu_amdv1 amdv1;
 	};
 	unsigned long flags;
+	spinlock_t top_lock;
 };
 PT_IOMMU_CHECK_DOMAIN(struct mock_iommu_domain, iommu, domain);
 PT_IOMMU_CHECK_DOMAIN(struct mock_iommu_domain, amdv1.iommu, domain);
@@ -128,6 +129,26 @@ to_mock_domain(struct iommu_domain *domain)
 {
 	return container_of(domain, struct mock_iommu_domain, domain);
 }
+
+static void mock_domain_change_top(struct pt_iommu *iommu_table,
+				   phys_addr_t top_paddr,
+				   unsigned int top_level)
+{
+	/* The selftest doesn't have real hardware */
+}
+
+static spinlock_t *mock_domain_get_top_lock(struct pt_iommu *iommu_table)
+{
+	struct mock_iommu_domain *mock =
+		container_of(iommu_table, struct mock_iommu_domain, iommu);
+
+	return &mock->top_lock;
+}
+
+static const struct pt_iommu_driver_ops mock_driver_ops = {
+	.change_top = &mock_domain_change_top,
+	.get_top_lock = &mock_domain_get_top_lock,
+};
 
 struct mock_iommu_domain_nested {
 	struct iommu_domain domain;
@@ -445,6 +466,8 @@ mock_domain_alloc_pgtable(struct device *dev,
 	if (!mock)
 		return ERR_PTR(-ENOMEM);
 	mock->domain.type = IOMMU_DOMAIN_UNMANAGED;
+	spin_lock_init(&mock->top_lock);
+	mock->amdv1.iommu.driver_ops = &mock_driver_ops;
 
 	mock->amdv1.iommu.nid = NUMA_NO_NODE;
 
