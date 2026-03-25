@@ -924,24 +924,13 @@ static int damos_commit_quota(struct damos_quota *dst, struct damos_quota *src)
 	return 0;
 }
 
-static struct damos_filter *damos_nth_core_filter(int n, struct damos *s)
+static struct damos_filter *damos_nth_filter(int n,
+		struct list_head *filters)
 {
 	struct damos_filter *filter;
 	int i = 0;
 
-	damos_for_each_core_filter(filter, s) {
-		if (i++ == n)
-			return filter;
-	}
-	return NULL;
-}
-
-static struct damos_filter *damos_nth_ops_filter(int n, struct damos *s)
-{
-	struct damos_filter *filter;
-	int i = 0;
-
-	damos_for_each_ops_filter(filter, s) {
+	list_for_each_entry(filter, filters, list) {
 		if (i++ == n)
 			return filter;
 	}
@@ -978,48 +967,22 @@ static void damos_commit_filter(
 	damos_commit_filter_arg(dst, src);
 }
 
-static int damos_commit_core_filters(struct damos *dst, struct damos *src)
+static int damos_commit_filters_of(struct damos *dst,
+		struct list_head *dst_filters,
+		struct list_head *src_filters)
 {
 	struct damos_filter *dst_filter, *next, *src_filter, *new_filter;
 	int i = 0, j = 0;
 
-	damos_for_each_core_filter_safe(dst_filter, next, dst) {
-		src_filter = damos_nth_core_filter(i++, src);
+	list_for_each_entry_safe(dst_filter, next, dst_filters, list) {
+		src_filter = damos_nth_filter(i++, src_filters);
 		if (src_filter)
 			damos_commit_filter(dst_filter, src_filter);
 		else
 			damos_destroy_filter(dst_filter);
 	}
 
-	damos_for_each_core_filter_safe(src_filter, next, src) {
-		if (j++ < i)
-			continue;
-
-		new_filter = damos_new_filter(
-				src_filter->type, src_filter->matching,
-				src_filter->allow);
-		if (!new_filter)
-			return -ENOMEM;
-		damos_commit_filter_arg(new_filter, src_filter);
-		damos_add_filter(dst, new_filter);
-	}
-	return 0;
-}
-
-static int damos_commit_ops_filters(struct damos *dst, struct damos *src)
-{
-	struct damos_filter *dst_filter, *next, *src_filter, *new_filter;
-	int i = 0, j = 0;
-
-	damos_for_each_ops_filter_safe(dst_filter, next, dst) {
-		src_filter = damos_nth_ops_filter(i++, src);
-		if (src_filter)
-			damos_commit_filter(dst_filter, src_filter);
-		else
-			damos_destroy_filter(dst_filter);
-	}
-
-	damos_for_each_ops_filter_safe(src_filter, next, src) {
+	list_for_each_entry_safe(src_filter, next, src_filters, list) {
 		if (j++ < i)
 			continue;
 
@@ -1112,10 +1075,12 @@ static int damos_commit_filters(struct damos *dst, struct damos *src)
 {
 	int err;
 
-	err = damos_commit_core_filters(dst, src);
+	err = damos_commit_filters_of(dst, &dst->core_filters,
+			&src->core_filters);
 	if (err)
 		return err;
-	err = damos_commit_ops_filters(dst, src);
+	err = damos_commit_filters_of(dst, &dst->ops_filters,
+			&src->ops_filters);
 	if (err)
 		return err;
 	damos_set_filters_default_reject(dst);
