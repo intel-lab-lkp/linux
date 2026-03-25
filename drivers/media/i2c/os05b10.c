@@ -474,6 +474,7 @@ struct os05b10 {
 	/* V4L2 Controls */
 	struct v4l2_ctrl_handler handler;
 	struct v4l2_ctrl *link_freq;
+	struct v4l2_ctrl *pixel_rate;
 	struct v4l2_ctrl *hblank;
 	struct v4l2_ctrl *vblank;
 	struct v4l2_ctrl *gain;
@@ -681,11 +682,34 @@ static int os05b10_enum_mbus_code(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static u64 os05b10_pixel_rate(struct os05b10 *os05b10,
+			      const struct os05b10_mode *mode)
+{
+	u64 link_freq = link_frequencies[os05b10->link_freq_index];
+	u64 pixel_rate = div_u64(link_freq * 2 * os05b10->data_lanes, mode->bpp);
+
+	dev_dbg(os05b10->dev,
+		"link_freq=%llu bpp=%u lanes=%u pixel_rate=%llu\n",
+		link_freq, mode->bpp, os05b10->data_lanes, pixel_rate);
+
+	return pixel_rate;
+}
+
 static int os05b10_set_framing_limits(struct os05b10 *os05b10,
 				      const struct os05b10_mode *mode)
 {
+	u64 pixel_rate = os05b10_pixel_rate(os05b10, mode);
 	u32 hblank, vblank, vblank_max, max_exp;
 	int ret;
+
+	ret = __v4l2_ctrl_modify_range(os05b10->pixel_rate, pixel_rate,
+				       pixel_rate, 1, pixel_rate);
+	if (ret)
+		return ret;
+
+	ret = __v4l2_ctrl_s_ctrl_int64(os05b10->pixel_rate, pixel_rate);
+	if (ret)
+		return ret;
 
 	hblank = mode->hts - mode->width;
 	ret = __v4l2_ctrl_modify_range(os05b10->hblank, hblank, hblank, 1,
@@ -1058,18 +1082,6 @@ error_out:
 	return ret;
 }
 
-static u64 os05b10_pixel_rate(struct os05b10 *os05b10,
-			      const struct os05b10_mode *mode)
-{
-	u64 link_freq = link_frequencies[os05b10->link_freq_index];
-	u64 pixel_rate = div_u64(link_freq * 2 * os05b10->data_lanes, mode->bpp);
-
-	dev_dbg(os05b10->dev,
-		"link_freq=%llu bpp=%u lanes=%u pixel_rate=%llu\n",
-		link_freq, mode->bpp, os05b10->data_lanes, pixel_rate);
-
-	return pixel_rate;
-}
 
 static int os05b10_init_controls(struct os05b10 *os05b10)
 {
@@ -1083,8 +1095,9 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 	v4l2_ctrl_handler_init(ctrl_hdlr, 12);
 
 	pixel_rate = os05b10_pixel_rate(os05b10, mode);
-	v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops, V4L2_CID_PIXEL_RATE,
-			  pixel_rate, pixel_rate, 1, pixel_rate);
+	os05b10->pixel_rate = v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops,
+						V4L2_CID_PIXEL_RATE, pixel_rate,
+						pixel_rate, 1, pixel_rate);
 
 	os05b10->link_freq = v4l2_ctrl_new_int_menu(ctrl_hdlr, &os05b10_ctrl_ops,
 						    V4L2_CID_LINK_FREQ,
