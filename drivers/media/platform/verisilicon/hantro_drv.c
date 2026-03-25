@@ -283,6 +283,8 @@ static int hantro_try_ctrl(struct v4l2_ctrl *ctrl)
 
 		if (sequence->bit_depth != 8 && sequence->bit_depth != 10)
 			return -EINVAL;
+		if (sequence->seq_profile != 0)
+			return -EINVAL;
 	}
 
 	return 0;
