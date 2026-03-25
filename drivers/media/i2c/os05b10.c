@@ -129,7 +129,6 @@ static const struct cci_reg_sequence os05b10_common_regs[] = {
 	{ OS05B10_REG_PLL_CTRL_25,		0x3b },
 	{ OS05B10_REG_MIPI_SC_CTRL,		0x72 },
 	{ OS05B10_REG_MIPI_SC_CTRL_1,		0x01 },
-	{ OS05B10_REG_DIGITAL_GAIN,		0x0400 },
 	{ OS05B10_REG_ANALOG_GAIN_SHORT,	0x0080 },
 	{ OS05B10_REG_DIGITAL_GAIN_SHORT,	0x0400 },
 	{ OS05B10_REG_EXPOSURE_SHORT,		0x000020 },
@@ -550,6 +549,10 @@ static int os05b10_set_ctrl(struct v4l2_ctrl *ctrl)
 		ret = cci_write(os05b10->cci, OS05B10_REG_ANALOG_GAIN,
 				ctrl->val, NULL);
 		break;
+	case V4L2_CID_DIGITAL_GAIN:
+		ret = cci_write(os05b10->cci, OS05B10_REG_DIGITAL_GAIN,
+				ctrl->val, NULL);
+		break;
 	case V4L2_CID_EXPOSURE:
 		ret = cci_write(os05b10->cci, OS05B10_REG_EXPOSURE,
 				ctrl->val, NULL);
@@ -926,7 +929,7 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 	int ret;
 
 	ctrl_hdlr = &os05b10->handler;
-	v4l2_ctrl_handler_init(ctrl_hdlr, 8);
+	v4l2_ctrl_handler_init(ctrl_hdlr, 9);
 
 	pixel_rate = os05b10_pixel_rate(os05b10, mode);
 	v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops, V4L2_CID_PIXEL_RATE,
@@ -967,6 +970,10 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 					  OS05B10_ANALOG_GAIN_MAX,
 					  OS05B10_ANALOG_GAIN_STEP,
 					  OS05B10_ANALOG_GAIN_DEFAULT);
+
+	v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops, V4L2_CID_DIGITAL_GAIN,
+			  OS05B10_DIGITAL_GAIN_MIN, OS05B10_DIGITAL_GAIN_MAX,
+			  OS05B10_DIGITAL_GAIN_STEP, OS05B10_DIGITAL_GAIN_DEFAULT);
 
 	if (ctrl_hdlr->error) {
 		ret = ctrl_hdlr->error;
