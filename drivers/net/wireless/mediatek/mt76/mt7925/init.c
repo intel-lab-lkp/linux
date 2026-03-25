@@ -115,6 +115,19 @@ static int __mt7925_init_hardware(struct mt792x_dev *dev)
 	if (ret)
 		goto out;
 
+	/* MT7927: Enable DBDC (dual-band) mode. Without this, firmware
+	 * defaults to 2.4GHz only and ignores 5GHz scan requests.
+	 * MT7925 firmware handles DBDC automatically.
+	 */
+	if (is_mt7927(&dev->mt76)) {
+		ret = mt7925_mcu_set_dbdc(&dev->mphy, true);
+		if (ret) {
+			dev_warn(dev->mt76.dev,
+				 "MT7927 DBDC enable failed: %d\n", ret);
+			ret = 0;
+		}
+	}
+
 out:
 	return ret;
 }
