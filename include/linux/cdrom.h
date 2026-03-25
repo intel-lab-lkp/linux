@@ -91,6 +91,8 @@ struct cdrom_device_ops {
 			       struct packet_command *);
 	int (*read_cdda_bpc)(struct cdrom_device_info *cdi, void __user *ubuf,
 			       u32 lba, u32 nframes, u8 *last_sense);
+	/* Get size in blocks */
+	u64 (*get_capacity)(struct cdrom_device_info *cdi);
 /* driver specifications */
 	const int capability;   /* capability flags */
 };

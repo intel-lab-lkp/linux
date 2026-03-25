@@ -2926,6 +2926,8 @@ static noinline int mmc_ioctl_cdrom_read_data(struct cdrom_device_info *cdi,
 {
 	struct scsi_sense_hdr sshdr;
 	struct cdrom_msf msf;
+	const struct cdrom_device_ops *cdo = cdi->ops;
+	u64 nr_blocks;
 	int blocksize = 0, format = 0, lba;
 	int ret;
 
@@ -2944,8 +2946,9 @@ static noinline int mmc_ioctl_cdrom_read_data(struct cdrom_device_info *cdi,
 	if (copy_from_user(&msf, (struct cdrom_msf __user *)arg, sizeof(msf)))
 		return -EFAULT;
 	lba = msf_to_lba(msf.cdmsf_min0, msf.cdmsf_sec0, msf.cdmsf_frame0);
-	/* FIXME: we need upper bound checking, too!! */
-	if (lba < 0)
+	nr_blocks = cdo->get_capacity(cdi);
+	/* Lower and upper bound check for logical block address. */
+	if ((lba < 0) || (lba > nr_blocks - 1))
 		return -EINVAL;
 
 	cgc->buffer = kzalloc(blocksize, GFP_KERNEL);

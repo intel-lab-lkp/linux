@@ -120,6 +120,8 @@ static int sr_packet(struct cdrom_device_info *, struct packet_command *);
 static int sr_read_cdda_bpc(struct cdrom_device_info *cdi, void __user *ubuf,
 		u32 lba, u32 nr, u8 *last_sense);
 
+static u64 sr_get_nr_blocks(struct cdrom_device_info *cdi);
+
 static const struct cdrom_device_ops sr_dops = {
 	.open			= sr_open,
 	.release	 	= sr_release,
@@ -134,12 +136,20 @@ static const struct cdrom_device_ops sr_dops = {
 	.audio_ioctl		= sr_audio_ioctl,
 	.generic_packet		= sr_packet,
 	.read_cdda_bpc		= sr_read_cdda_bpc,
+	.get_capacity		= sr_get_nr_blocks,
 	.capability		= SR_CAPABILITIES,
 };
 
 static inline struct scsi_cd *scsi_cd(struct gendisk *disk)
 {
 	return disk->private_data;
+}
+
+static inline u64 sr_get_nr_blocks(struct cdrom_device_info *cdi)
+{
+	struct scsi_cd *cd = scsi_cd(cdi->disk);
+
+	return cd->capacity;
 }
 
 static int sr_runtime_suspend(struct device *dev)
@@ -782,7 +792,7 @@ static int get_sectorsize(struct scsi_cd *cd)
 			sector_size = 2048;
 			fallthrough;
 		case 2048:
-			cd->capacity *= 4;
+			//cd->capacity *= 4;
 			fallthrough;
 		case 512:
 			break;
