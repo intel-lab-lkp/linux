@@ -15,20 +15,14 @@
  */
 static void sysctl_test_api_dointvec_null_tbl_data(struct kunit *test)
 {
-	struct ctl_table null_data_table = {
-		.procname = "foo",
-		/*
-		 * Here we are testing that proc_dointvec behaves correctly when
-		 * we give it a NULL .data field. Normally this would point to a
-		 * piece of memory where the value would be stored.
-		 */
-		.data		= NULL,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	/*
+	 * Here we are testing that proc_dointvec behaves correctly when
+	 * we give it a NULL .data field. Normally this would point to a
+	 * piece of memory where the value would be stored.
+	 */
+	struct ctl_table null_data_table = CTLTBL_ENTRY_VNMHR(
+			SYSCTL_NULL, "foo", 0644, proc_dointvec,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	/*
 	 * proc_dointvec expects a buffer in user space, so we allocate one. We
 	 * also need to cast it to __user so sparse doesn't get mad.
@@ -66,19 +60,14 @@ static void sysctl_test_api_dointvec_null_tbl_data(struct kunit *test)
 static void sysctl_test_api_dointvec_table_maxlen_unset(struct kunit *test)
 {
 	int data = 0;
-	struct ctl_table data_maxlen_unset_table = {
-		.procname = "foo",
-		.data		= &data,
-		/*
-		 * So .data is no longer NULL, but we tell proc_dointvec its
-		 * length is 0, so it still shouldn't try to use it.
-		 */
-		.maxlen		= 0,
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	/*
+	 * So .data is no longer NULL, but we tell proc_dointvec its
+	 * length is 0, so it still shouldn't try to use it.
+	 */
+	struct ctl_table data_maxlen_unset_table = CTLTBL_ENTRY_VNMHRL(
+			data, "foo", 0644, proc_dointvec,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED, 0);
+
 	void __user *buffer = (void __user *)kunit_kzalloc(test, sizeof(int),
 							   GFP_USER);
 	size_t len;
@@ -113,15 +102,8 @@ static void sysctl_test_api_dointvec_table_len_is_zero(struct kunit *test)
 {
 	int data = 0;
 	/* Good table. */
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo",
+			0644, SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	void __user *buffer = (void __user *)kunit_kzalloc(test, sizeof(int),
 							   GFP_USER);
 	/*
@@ -147,15 +129,8 @@ static void sysctl_test_api_dointvec_table_read_but_position_set(
 {
 	int data = 0;
 	/* Good table. */
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo", 0644,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	void __user *buffer = (void __user *)kunit_kzalloc(test, sizeof(int),
 							   GFP_USER);
 	/*
@@ -182,15 +157,8 @@ static void sysctl_test_dointvec_read_happy_single_positive(struct kunit *test)
 {
 	int data = 0;
 	/* Good table. */
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo", 0644,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	size_t len = 4;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, len, GFP_USER);
@@ -213,15 +181,8 @@ static void sysctl_test_dointvec_read_happy_single_negative(struct kunit *test)
 {
 	int data = 0;
 	/* Good table. */
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo", 0644,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	size_t len = 5;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, len, GFP_USER);
@@ -242,15 +203,8 @@ static void sysctl_test_dointvec_write_happy_single_positive(struct kunit *test)
 {
 	int data = 0;
 	/* Good table. */
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo", 0644,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	char input[] = "9";
 	size_t len = sizeof(input) - 1;
 	loff_t pos = 0;
@@ -272,15 +226,8 @@ static void sysctl_test_dointvec_write_happy_single_positive(struct kunit *test)
 static void sysctl_test_dointvec_write_happy_single_negative(struct kunit *test)
 {
 	int data = 0;
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo", 0644,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	char input[] = "-9";
 	size_t len = sizeof(input) - 1;
 	loff_t pos = 0;
@@ -304,15 +251,8 @@ static void sysctl_test_api_dointvec_write_single_less_int_min(
 		struct kunit *test)
 {
 	int data = 0;
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo", 0644,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	size_t max_len = 32, len = max_len;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, max_len, GFP_USER);
@@ -342,15 +282,8 @@ static void sysctl_test_api_dointvec_write_single_greater_int_max(
 		struct kunit *test)
 {
 	int data = 0;
-	struct ctl_table table = {
-		.procname = "foo",
-		.data		= &data,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-		.extra1		= SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE_HUNDRED,
-	};
+	struct ctl_table table = CTLTBL_ENTRY_VNMR(data, "foo", 0644,
+			SYSCTL_ZERO, SYSCTL_ONE_HUNDRED);
 	size_t max_len = 32, len = max_len;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, max_len, GFP_USER);
@@ -367,6 +300,111 @@ static void sysctl_test_api_dointvec_write_single_greater_int_max(
 	KUNIT_EXPECT_EQ(test, 0, *((int *)table.data));
 }
 
+/*
+ * Test each CTLTBL_ENTRY_XXX() variant.  File-scope variables are required
+ * so that &var is a valid constant expression in a static initializer.
+ */
+static int  ctltbl_int;
+static u8   ctltbl_u8;
+static u8   ctltbl_u8_min, ctltbl_u8_max = 200;
+static bool ctltbl_bool;
+static char ctltbl_str[64];
+
+struct ctltbl_param {
+	const char       *desc;
+	struct ctl_table  table;    /* built by CTLTBL_ENTRY_XXX() */
+	struct ctl_table  expected; /* expected field values */
+};
+
+static const struct ctltbl_param ctltbl_cases[] = {
+	/* auto handler — int */
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_V_int",
+		.table = CTLTBL_ENTRY_V(ctltbl_int),
+		.expected = { .procname = "ctltbl_int", .mode = 0444,
+			      .data = &ctltbl_int, .maxlen = sizeof(int),
+			      .proc_handler = proc_dointvec },
+	},
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_VM_int",
+		.table = CTLTBL_ENTRY_VM(ctltbl_int, 0644),
+		.expected = { .procname = "ctltbl_int", .mode = 0644,
+			      .data = &ctltbl_int, .maxlen = sizeof(int),
+			      .proc_handler = proc_dointvec },
+	},
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_VMR_int",
+		.table = CTLTBL_ENTRY_VMR(ctltbl_int, 0644,
+					  SYSCTL_ZERO, SYSCTL_ONE_HUNDRED),
+		.expected = { .procname = "ctltbl_int", .mode = 0644,
+			      .data = &ctltbl_int, .maxlen = sizeof(int),
+			      .proc_handler = proc_dointvec_minmax },
+	},
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_VN_int",
+		.table = CTLTBL_ENTRY_VN(ctltbl_int, "my-sysctl"),
+		.expected = { .procname = "my-sysctl", .mode = 0444,
+			      .data = &ctltbl_int, .maxlen = sizeof(int),
+			      .proc_handler = proc_dointvec },
+	},
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_VNM_int",
+		.table = CTLTBL_ENTRY_VNM(ctltbl_int, "my-sysctl", 0644),
+		.expected = { .procname = "my-sysctl", .mode = 0644,
+			      .data = &ctltbl_int, .maxlen = sizeof(int),
+			      .proc_handler = proc_dointvec },
+	},
+	/* auto handler — u8 */
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_V_u8",
+		.table = CTLTBL_ENTRY_V(ctltbl_u8),
+		.expected = { .procname = "ctltbl_u8", .mode = 0444,
+			      .data = &ctltbl_u8, .maxlen = sizeof(u8),
+			      .proc_handler = proc_dou8vec_minmax },
+	},
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_VMR_u8",
+		.table = CTLTBL_ENTRY_VMR(ctltbl_u8, 0644,
+					  &ctltbl_u8_min, &ctltbl_u8_max),
+		.expected = { .procname = "ctltbl_u8", .mode = 0644,
+			      .data = &ctltbl_u8, .maxlen = sizeof(u8),
+			      .proc_handler = proc_dou8vec_minmax },
+	},
+	/* auto handler — bool */
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_V_bool",
+		.table = CTLTBL_ENTRY_V(ctltbl_bool),
+		.expected = { .procname = "ctltbl_bool", .mode = 0444,
+			      .data = &ctltbl_bool, .maxlen = sizeof(bool),
+			      .proc_handler = proc_dobool },
+	},
+	/* VNMH — char[] cannot be auto-dispatched by _Generic (each char[N]
+	 * is a distinct type); explicit handler is required for strings.
+	 * .maxlen must be sizeof(array), not sizeof(char *). */
+	{
+		.desc  = "sysctl_test_api_ctltbl_entry_VNMH_string",
+		.table = CTLTBL_ENTRY_VNMH(ctltbl_str, "foo", 0644,
+					   proc_dostring),
+		.expected = { .procname = "foo", .mode = 0644,
+			      .data = ctltbl_str, .maxlen = sizeof(ctltbl_str),
+			      .proc_handler = proc_dostring },
+	},
+};
+
+KUNIT_ARRAY_PARAM_DESC(ctltbl, ctltbl_cases, desc);
+
+static void sysctl_test_api_ctltbl_entry(struct kunit *test)
+{
+	const struct ctltbl_param *p = test->param_value;
+
+	KUNIT_EXPECT_STREQ(test, p->expected.procname, p->table.procname);
+	KUNIT_EXPECT_EQ(test, p->expected.mode, p->table.mode);
+	KUNIT_EXPECT_PTR_EQ(test, p->expected.data, p->table.data);
+	KUNIT_EXPECT_EQ(test, p->expected.maxlen, p->table.maxlen);
+	KUNIT_EXPECT_PTR_EQ(test, p->expected.proc_handler,
+			p->table.proc_handler);
+}
+
 static struct kunit_case sysctl_test_cases[] = {
 	KUNIT_CASE(sysctl_test_api_dointvec_null_tbl_data),
 	KUNIT_CASE(sysctl_test_api_dointvec_table_maxlen_unset),
@@ -378,6 +416,7 @@ static struct kunit_case sysctl_test_cases[] = {
 	KUNIT_CASE(sysctl_test_dointvec_write_happy_single_negative),
 	KUNIT_CASE(sysctl_test_api_dointvec_write_single_less_int_min),
 	KUNIT_CASE(sysctl_test_api_dointvec_write_single_greater_int_max),
+	KUNIT_CASE_PARAM(sysctl_test_api_ctltbl_entry, ctltbl_gen_params),
 	{}
 };
 
