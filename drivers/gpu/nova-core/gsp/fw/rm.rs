@@ -53,7 +53,6 @@ pub(crate) struct GspRmControl {
     inner: bindings::rpc_gsp_rm_control_v03_00,
 }
 
-#[expect(dead_code)]
 impl GspRmControl {
     /// Creates a new RM control command.
     pub(crate) fn new<T>(
