@@ -4031,7 +4031,8 @@ void ext4_set_aops(struct inode *inode)
  * racing writeback can come later and flush the stale pagecache to disk.
  */
 static int __ext4_block_zero_page_range(handle_t *handle,
-		struct address_space *mapping, loff_t from, loff_t length)
+		struct address_space *mapping, loff_t from, loff_t length,
+		bool *did_zero)
 {
 	unsigned int offset, blocksize, pos;
 	ext4_lblk_t iblock;
@@ -4119,6 +4120,8 @@ static int __ext4_block_zero_page_range(handle_t *handle,
 			err = ext4_jbd2_inode_add_write(handle, inode, from,
 					length);
 	}
+	if (!err && did_zero)
+		*did_zero = true;
 
 unlock:
 	folio_unlock(folio);
@@ -4134,7 +4137,8 @@ unlock:
  * that corresponds to 'from'
  */
 static int ext4_block_zero_page_range(handle_t *handle,
-		struct address_space *mapping, loff_t from, loff_t length)
+		struct address_space *mapping, loff_t from, loff_t length,
+		bool *did_zero)
 {
 	struct inode *inode = mapping->host;
 	unsigned blocksize = inode->i_sb->s_blocksize;
@@ -4148,10 +4152,11 @@ static int ext4_block_zero_page_range(handle_t *handle,
 		length = max;
 
 	if (IS_DAX(inode)) {
-		return dax_zero_range(inode, from, length, NULL,
+		return dax_zero_range(inode, from, length, did_zero,
 				      &ext4_iomap_ops);
 	}
-	return __ext4_block_zero_page_range(handle, mapping, from, length);
+	return __ext4_block_zero_page_range(handle, mapping, from, length,
+					    did_zero);
 }
 
 /*
@@ -4174,7 +4179,7 @@ static int ext4_block_truncate_page(handle_t *handle,
 	blocksize = i_blocksize(inode);
 	length = blocksize - (from & (blocksize - 1));
 
-	return ext4_block_zero_page_range(handle, mapping, from, length);
+	return ext4_block_zero_page_range(handle, mapping, from, length, NULL);
 }
 
 int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
@@ -4197,13 +4202,13 @@ int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
 	if (start == end &&
 	    (partial_start || (partial_end != sb->s_blocksize - 1))) {
 		err = ext4_block_zero_page_range(handle, mapping,
-						 lstart, length);
+						 lstart, length, NULL);
 		return err;
 	}
 	/* Handle partial zero out on the start of the range */
 	if (partial_start) {
-		err = ext4_block_zero_page_range(handle, mapping,
-						 lstart, sb->s_blocksize);
+		err = ext4_block_zero_page_range(handle, mapping, lstart,
+						 sb->s_blocksize, NULL);
 		if (err)
 			return err;
 	}
@@ -4211,7 +4216,7 @@ int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
 	if (partial_end != sb->s_blocksize - 1)
 		err = ext4_block_zero_page_range(handle, mapping,
 						 byte_end - partial_end,
-						 partial_end + 1);
+						 partial_end + 1, NULL);
 	return err;
 }
 
