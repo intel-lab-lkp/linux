@@ -143,7 +143,7 @@ static int submit_rtpg(struct scsi_device *sdev, unsigned char *buff,
 	put_unaligned_be32(bufflen, &cdb[6]);
 
 	return scsi_execute_cmd(sdev, cdb, opf, buff, bufflen,
-				ALUA_FAILOVER_TIMEOUT * HZ,
+				READ_ONCE(sdev->request_queue->rq_timeout) ?: ALUA_FAILOVER_TIMEOUT * HZ,
 				ALUA_FAILOVER_RETRIES, &exec_args);
 }
 
@@ -178,7 +178,7 @@ static int submit_stpg(struct scsi_device *sdev, int group_id,
 	put_unaligned_be32(stpg_len, &cdb[6]);
 
 	return scsi_execute_cmd(sdev, cdb, opf, stpg_data,
-				stpg_len, ALUA_FAILOVER_TIMEOUT * HZ,
+				stpg_len, READ_ONCE(sdev->request_queue->rq_timeout) ?: ALUA_FAILOVER_TIMEOUT * HZ,
 				ALUA_FAILOVER_RETRIES, &exec_args);
 }
 
@@ -512,7 +512,7 @@ static int alua_tur(struct scsi_device *sdev)
 	struct scsi_sense_hdr sense_hdr;
 	int retval;
 
-	retval = scsi_test_unit_ready(sdev, ALUA_FAILOVER_TIMEOUT * HZ,
+	retval = scsi_test_unit_ready(sdev, READ_ONCE(sdev->request_queue->rq_timeout) ?: ALUA_FAILOVER_TIMEOUT * HZ,
 				      ALUA_FAILOVER_RETRIES, &sense_hdr);
 	if ((sense_hdr.sense_key == NOT_READY ||
 	     sense_hdr.sense_key == UNIT_ATTENTION) &&
@@ -552,7 +552,8 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	valid_states_old = pg->valid_states;
 
 	if (!pg->expiry) {
-		unsigned long transition_tmo = ALUA_FAILOVER_TIMEOUT * HZ;
+		unsigned long transition_tmo = min(READ_ONCE(sdev->request_queue->rq_timeout) ?: ALUA_FAILOVER_TIMEOUT * HZ,
+						   (unsigned long)U8_MAX * HZ);
 
 		if (pg->transition_tmo)
 			transition_tmo = pg->transition_tmo * HZ;
@@ -664,7 +665,8 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	if ((buff[4] & RTPG_FMT_MASK) == RTPG_FMT_EXT_HDR && buff[5] != 0)
 		pg->transition_tmo = buff[5];
 	else
-		pg->transition_tmo = ALUA_FAILOVER_TIMEOUT;
+		pg->transition_tmo = min((READ_ONCE(sdev->request_queue->rq_timeout) ?: ALUA_FAILOVER_TIMEOUT * HZ) / HZ,
+					 (unsigned long)U8_MAX);
 
 	if (orig_transition_tmo != pg->transition_tmo) {
 		sdev_printk(KERN_INFO, sdev,
