@@ -32,12 +32,14 @@ int mlx5_shd_init(struct mlx5_core_dev *dev)
 		/* Fall-back to SN for older devices. */
 		start = pci_vpd_find_ro_info_keyword(vpd_data, vpd_size,
 						     PCI_VPD_RO_KEYWORD_SERIALNO, &kw_len);
-		if (start < 0)
-			return -ENOENT;
 	}
-	sn = kstrndup(vpd_data + start, kw_len, GFP_KERNEL);
+	if (start < 0)
+		sn = kstrndup(dev->board_id, MLX5_BOARD_ID_LEN, GFP_KERNEL);
+	else
+		sn = kstrndup(vpd_data + start, kw_len, GFP_KERNEL);
 	if (!sn)
 		return -ENOMEM;
+
 	/* Firmware may return spaces at the end of the string, strip it. */
 	end = strchrnul(sn, ' ');
 	*end = '\0';
