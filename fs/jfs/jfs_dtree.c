@@ -2729,6 +2729,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 	struct ldtentry *d;
 	struct dtslot *t;
 	int d_namleft, len, outlen;
+	size_t max_name_bytes;
 	unsigned long dirent_buf;
 	char *name_ptr;
 	u32 dir_index;
@@ -2910,8 +2911,12 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 
 			d = (struct ldtentry *) & p->slot[stbl[i]];
 
-			if (((long) jfs_dirent + d->namlen + 1) >
-			    (dirent_buf + PAGE_SIZE)) {
+			max_name_bytes = d->namlen;
+			if (codepage)
+				max_name_bytes *= NLS_MAX_CHARSET_SIZE;
+
+			if ((char *)jfs_dirent->name + max_name_bytes + 1 >
+			    (char *)dirent_buf + PAGE_SIZE) {
 				/* DBCS codepages could overrun dirent_buf */
 				index = i;
 				overflow = 1;
