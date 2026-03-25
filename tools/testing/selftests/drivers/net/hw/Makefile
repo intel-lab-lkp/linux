@@ -33,6 +33,7 @@ TEST_PROGS = \
 	irq.py \
 	loopback.sh \
 	loopback_drv.py \
+	loopback_nsim.py \
 	nic_timestamp.py \
 	nk_netns.py \
 	pp_alloc_fail.py \
