@@ -114,7 +114,8 @@
 #define OS05B10_TRANSPARENT_EFFECT	0xa0
 #define OS05B10_ROLLING_BAR_EFFECT	0xc0
 
-#define OS05B10_LINK_FREQ_600MHZ	(600 * HZ_PER_MHZ)
+#define OS05B10_LINK_FREQ_4LANE		(600 * HZ_PER_MHZ)
+#define OS05B10_LINK_FREQ_2LANE		(750 * HZ_PER_MHZ)
 
 static const struct v4l2_rect os05b10_native_area = {
 	.top = 0,
@@ -137,12 +138,6 @@ static const char * const os05b10_supply_name[] = {
 };
 
 static const struct cci_reg_sequence os05b10_common_regs[] = {
-	{ OS05B10_REG_PLL_CTRL_01,		0x44 },
-	{ OS05B10_REG_PLL_CTRL_03,		0x02 },
-	{ OS05B10_REG_PLL_CTRL_05,		0x32 },
-	{ OS05B10_REG_PLL_CTRL_06,		0x00 },
-	{ OS05B10_REG_PLL_CTRL_25,		0x3b },
-	{ OS05B10_REG_MIPI_SC_CTRL,		0x72 },
 	{ OS05B10_REG_ANALOG_GAIN_SHORT,	0x0080 },
 	{ OS05B10_REG_DIGITAL_GAIN_SHORT,	0x0400 },
 	{ OS05B10_REG_EXPOSURE_SHORT,		0x000020 },
@@ -533,6 +528,24 @@ static const struct cci_reg_sequence mode_1280_720_regs[] = {
 	{ CCI_REG8(0x4837), 0x0d },
 };
 
+static const struct cci_reg_sequence os05b10_2lane_regs[] = {
+	{ OS05B10_REG_PLL_CTRL_01,	0x44 },
+	{ OS05B10_REG_PLL_CTRL_03,	0x02 },
+	{ OS05B10_REG_PLL_CTRL_05,	0x64 },
+	{ OS05B10_REG_PLL_CTRL_06,	0x00 },
+	{ OS05B10_REG_PLL_CTRL_25,	0x3b },
+	{ OS05B10_REG_MIPI_SC_CTRL,	OS05B10_2_LANE_MODE },
+};
+
+static const struct cci_reg_sequence os05b10_4lane_regs[] = {
+	{ OS05B10_REG_PLL_CTRL_01,	0x44 },
+	{ OS05B10_REG_PLL_CTRL_03,	0x02 },
+	{ OS05B10_REG_PLL_CTRL_05,	0x32 },
+	{ OS05B10_REG_PLL_CTRL_06,	0x00 },
+	{ OS05B10_REG_PLL_CTRL_25,	0x3b },
+	{ OS05B10_REG_MIPI_SC_CTRL,	OS05B10_4_LANE_MODE },
+};
+
 struct os05b10 {
 	struct device *dev;
 	struct regmap *cci;
@@ -651,8 +664,12 @@ static const struct os05b10_mode supported_modes_10bit[] = {
 	},
 };
 
-static const s64 link_frequencies[] = {
-	OS05B10_LINK_FREQ_600MHZ,
+static const s64 link_frequencies_4lane[] = {
+	OS05B10_LINK_FREQ_4LANE,
+};
+
+static const s64 link_frequencies_2lane[] = {
+	OS05B10_LINK_FREQ_2LANE,
 };
 
 static const u32 os05b10_mbus_codes[] = {
@@ -832,7 +849,9 @@ static int os05b10_enum_mbus_code(struct v4l2_subdev *sd,
 static u64 os05b10_pixel_rate(struct os05b10 *os05b10,
 			      const struct os05b10_mode *mode)
 {
-	u64 link_freq = link_frequencies[os05b10->link_freq_index];
+	u64 link_freq = (os05b10->data_lanes == 2) ?
+			link_frequencies_2lane[os05b10->link_freq_index] :
+			link_frequencies_4lane[os05b10->link_freq_index];
 	u64 pixel_rate = div_u64(link_freq * 2 * os05b10->data_lanes, mode->bpp);
 
 	dev_dbg(os05b10->dev,
@@ -967,6 +986,17 @@ static int os05b10_enable_streams(struct v4l2_subdev *sd,
 	ret = pm_runtime_resume_and_get(os05b10->dev);
 	if (ret < 0)
 		return ret;
+	/* Set pll & mipi lane configuration */
+	if (os05b10->data_lanes == 2)
+		cci_multi_reg_write(os05b10->cci, os05b10_2lane_regs,
+				    ARRAY_SIZE(os05b10_2lane_regs), &ret);
+	else
+		cci_multi_reg_write(os05b10->cci, os05b10_4lane_regs,
+				    ARRAY_SIZE(os05b10_4lane_regs), &ret);
+	if (ret) {
+		dev_err(os05b10->dev, "failed to write pll & mipi lane registers\n");
+		goto err_rpm_put;
+	}
 
 	/* Write common registers */
 	ret = cci_multi_reg_write(os05b10->cci, os05b10_common_regs,
@@ -1179,22 +1209,39 @@ static int os05b10_parse_endpoint(struct os05b10 *os05b10)
 	if (ret)
 		return ret;
 
-	if (bus_cfg.bus.mipi_csi2.num_data_lanes != 4) {
+	if (bus_cfg.bus.mipi_csi2.num_data_lanes != 4 &&
+	    bus_cfg.bus.mipi_csi2.num_data_lanes != 2) {
 		ret = dev_err_probe(os05b10->dev, -EINVAL,
-				    "only 4 data lanes are supported\n");
+				    "4 and 2 data lanes are supported\n");
 		goto error_out;
 	}
 
 	os05b10->data_lanes = bus_cfg.bus.mipi_csi2.num_data_lanes;
 
-	ret = v4l2_link_freq_to_bitmap(os05b10->dev, bus_cfg.link_frequencies,
-				       bus_cfg.nr_of_link_frequencies,
-				       link_frequencies,
-				       ARRAY_SIZE(link_frequencies),
-				       &link_freq_bitmap);
-	if (ret) {
-		dev_err(os05b10->dev, "only 600MHz frequency is available\n");
-		goto error_out;
+	if (os05b10->data_lanes == 2) {
+		ret = v4l2_link_freq_to_bitmap(os05b10->dev,
+					       bus_cfg.link_frequencies,
+					       bus_cfg.nr_of_link_frequencies,
+					       link_frequencies_2lane,
+					       ARRAY_SIZE(link_frequencies_2lane),
+					       &link_freq_bitmap);
+		if (ret) {
+			dev_err(os05b10->dev,
+				"For 2 lane 750MHz frequency is available\n");
+			goto error_out;
+		}
+	} else {
+		ret = v4l2_link_freq_to_bitmap(os05b10->dev,
+					       bus_cfg.link_frequencies,
+					       bus_cfg.nr_of_link_frequencies,
+					       link_frequencies_4lane,
+					       ARRAY_SIZE(link_frequencies_4lane),
+					       &link_freq_bitmap);
+		if (ret) {
+			dev_err(os05b10->dev,
+				"For 4 lane 600MHz frequency is available\n");
+			goto error_out;
+		}
 	}
 
 	os05b10->link_freq_index = __ffs(link_freq_bitmap);
@@ -1224,10 +1271,11 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 
 	os05b10->link_freq = v4l2_ctrl_new_int_menu(ctrl_hdlr, &os05b10_ctrl_ops,
 						    V4L2_CID_LINK_FREQ,
-						    ARRAY_SIZE(link_frequencies) - 1,
+						    ARRAY_SIZE(link_frequencies_4lane) - 1,
 						    os05b10->link_freq_index,
-						    link_frequencies);
-
+						    (os05b10->data_lanes == 2) ?
+						    link_frequencies_2lane :
+						    link_frequencies_4lane);
 	if (os05b10->link_freq)
 		os05b10->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
