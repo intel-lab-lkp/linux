@@ -434,6 +434,7 @@ static int blkdev_truncate_zone_range(struct block_device *bdev,
  */
 int blkdev_zone_mgmt_ioctl(struct block_device *bdev, blk_mode_t mode,
 			   unsigned int cmd, unsigned long arg)
+	__cond_acquires(0, bdev->bd_mapping->host->i_rwsem)
 {
 	void __user *argp = (void __user *)arg;
 	struct blk_zone_range zrange;
