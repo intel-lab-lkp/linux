@@ -24,6 +24,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
 #include <linux/memfd.h>
+#include <linux/mqueue.h>
 #include <linux/compat.h>
 #include <linux/mount.h>
 #include <linux/rw_hint.h>
@@ -562,6 +563,9 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		if (copy_from_user(&deleg, argp, sizeof(deleg)))
 			return -EFAULT;
 		err = fcntl_setdeleg(fd, filp, &deleg);
+		break;
+	case F_MQ_PEEK:
+		err = do_mq_peek(filp, argp);
 		break;
 	default:
 		break;

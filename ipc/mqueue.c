@@ -286,6 +286,135 @@ try_again:
 	return msg;
 }
 
+/*
+ * mq_peek_at_offset - locate a message by receive-order index.
+ *
+ * Walk the priority tree from highest to lowest priority, and within each
+ * priority level in FIFO order, returning the message at position @offset
+ * (0 = next message that mq_receive() would dequeue).
+ *
+ * Must be called with info->lock held.  Does not modify queue state.
+ * Returns NULL if @offset >= mq_curmsgs.
+ */
+static struct msg_msg *mq_peek_at_offset(struct mqueue_inode_info *info,
+					 int offset)
+{
+	struct posix_msg_tree_node *leaf;
+	struct rb_node *node;
+	struct msg_msg *msg;
+	int count = 0;
+
+	for (node = info->msg_tree_rightmost; node; node = rb_prev(node)) {
+		leaf = rb_entry(node, struct posix_msg_tree_node, rb_node);
+		list_for_each_entry(msg, &leaf->msg_list, m_list) {
+			if (count == offset)
+				return msg;
+			count++;
+		}
+	}
+	return NULL;
+}
+
+/*
+ * mq_msg_copy_to_buf - copy message payload into a flat kernel buffer.
+ *
+ * Handles multi-segment messages by walking the msg_msgseg chain.
+ * Uses only memcpy() so it is safe to call under info->lock.
+ * Returns the number of bytes copied.
+ */
+static size_t mq_msg_copy_to_buf(struct msg_msg *msg, void *buf, size_t buf_len)
+{
+	size_t alen, to_copy, copied = 0;
+	struct msg_msgseg *seg;
+
+	to_copy = min(buf_len, msg->m_ts);
+
+	alen = min(to_copy, DATALEN_MSG);
+	memcpy(buf, msg + 1, alen);
+	copied += alen;
+	to_copy -= alen;
+
+	for (seg = msg->next; seg && to_copy > 0; seg = seg->next) {
+		alen = min(to_copy, DATALEN_SEG);
+		memcpy((char *)buf + copied, seg + 1, alen);
+		copied += alen;
+		to_copy -= alen;
+	}
+	return copied;
+}
+
+/*
+ * do_mq_peek - implement fcntl(F_MQ_PEEK).
+ *
+ * Read the message at position @attr.offset in receive order from the
+ * queue without removing it.  Position 0 is the message that the next
+ * mq_receive() would return (highest priority, FIFO within priority).
+ *
+ * The snapshot is consistent within the spin_lock() critical section.
+ * Between two F_MQ_PEEK calls the queue may change; this is documented
+ * snapshot semantics analogous to /proc entries.
+ *
+ * Returns bytes copied on success, -ENOMSG if offset >= mq_curmsgs.
+ */
+long do_mq_peek(struct file *filp, struct mq_peek_attr __user *uattr)
+{
+	struct mqueue_inode_info *info;
+	struct mq_peek_attr attr;
+	struct msg_msg *msg;
+	void *kbuf;
+	long ret;
+
+	if (filp->f_op != &mqueue_file_operations)
+		return -EBADF;
+
+	if (!(filp->f_mode & FMODE_READ))
+		return -EBADF;
+
+	if (copy_from_user(&attr, uattr, sizeof(attr)))
+		return -EFAULT;
+
+	if (attr.offset < 0 || !attr.buf_len || !attr.buf)
+		return -EINVAL;
+
+	info = MQUEUE_I(file_inode(filp));
+
+	/*
+	 * Allocate the kernel copy buffer before taking the spinlock.
+	 * Cap at mq_msgsize: no message can exceed it.
+	 */
+	kbuf = kvmalloc(min_t(size_t, attr.buf_len, info->attr.mq_msgsize),
+			GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	spin_lock(&info->lock);
+
+	msg = mq_peek_at_offset(info, attr.offset);
+	if (!msg) {
+		spin_unlock(&info->lock);
+		kvfree(kbuf);
+		return -ENOMSG;
+	}
+
+	/*
+	 * Copy the payload under the lock using pure memcpy() (no page
+	 * faults), then transfer to userspace after releasing the lock.
+	 */
+	ret = mq_msg_copy_to_buf(msg, kbuf,
+				 min_t(size_t, attr.buf_len,
+				       info->attr.mq_msgsize));
+	attr.msg_prio = msg->m_type;
+
+	spin_unlock(&info->lock);
+
+	if (copy_to_user(attr.buf, kbuf, ret) ||
+	    copy_to_user(uattr, &attr, sizeof(attr)))
+		ret = -EFAULT;
+
+	kvfree(kbuf);
+	return ret;
+}
+
 static struct inode *mqueue_get_inode(struct super_block *sb,
 		struct ipc_namespace *ipc_ns, umode_t mode,
 		struct mq_attr *attr)
