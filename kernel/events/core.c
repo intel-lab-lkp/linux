@@ -6730,9 +6730,10 @@ static void perf_pmu_output_stop(struct perf_event *event);
  * the buffer here, where we still have a VM context. This means we need
  * to detach all events redirecting to us.
  */
-static void perf_mmap_close(struct vm_area_struct *vma)
+static void __perf_mmap_close(struct vm_area_struct *vma, struct perf_event *event,
+			      bool holds_event_mmap_lock)
 {
-	struct perf_event *event = vma->vm_file->private_data;
+	struct perf_event *iter_event;
 	mapped_f unmapped = get_mapped(event, event_unmapped);
 	struct perf_buffer *rb = ring_buffer_get(event);
 	struct user_struct *mmap_user = rb->mmap_user;
@@ -6772,11 +6773,14 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 	if (refcount_dec_and_test(&rb->mmap_count))
 		detach_rest = true;
 
-	if (!refcount_dec_and_mutex_lock(&event->mmap_count, &event->mmap_mutex))
+	if ((!holds_event_mmap_lock &&
+	     !refcount_dec_and_mutex_lock(&event->mmap_count, &event->mmap_mutex)) ||
+	    (holds_event_mmap_lock && !refcount_dec_and_test(&event->mmap_count)))
 		goto out_put;
 
 	ring_buffer_attach(event, NULL);
-	mutex_unlock(&event->mmap_mutex);
+	if (!holds_event_mmap_lock)
+		mutex_unlock(&event->mmap_mutex);
 
 	/* If there's still other mmap()s of this buffer, we're done. */
 	if (!detach_rest)
@@ -6789,8 +6793,8 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 	 */
 again:
 	rcu_read_lock();
-	list_for_each_entry_rcu(event, &rb->event_list, rb_entry) {
-		if (!atomic_long_inc_not_zero(&event->refcount)) {
+	list_for_each_entry_rcu(iter_event, &rb->event_list, rb_entry) {
+		if (!atomic_long_inc_not_zero(&iter_event->refcount)) {
 			/*
 			 * This event is en-route to free_event() which will
 			 * detach it and remove it from the list.
@@ -6799,7 +6803,8 @@ again:
 		}
 		rcu_read_unlock();
 
-		mutex_lock(&event->mmap_mutex);
+		if (!holds_event_mmap_lock)
+			mutex_lock(&iter_event->mmap_mutex);
 		/*
 		 * Check we didn't race with perf_event_set_output() which can
 		 * swizzle the rb from under us while we were waiting to
@@ -6810,11 +6815,12 @@ again:
 		 * still restart the iteration to make sure we're not now
 		 * iterating the wrong list.
 		 */
-		if (event->rb == rb)
-			ring_buffer_attach(event, NULL);
+		if (iter_event->rb == rb)
+			ring_buffer_attach(iter_event, NULL);
 
-		mutex_unlock(&event->mmap_mutex);
-		put_event(event);
+		if (!holds_event_mmap_lock)
+			mutex_unlock(&iter_event->mmap_mutex);
+		put_event(iter_event);
 
 		/*
 		 * Restart the iteration; either we're on the wrong list or
@@ -6840,6 +6846,18 @@ again:
 
 out_put:
 	ring_buffer_put(rb); /* could be last */
+}
+
+static void perf_mmap_close(struct vm_area_struct *vma)
+{
+	struct perf_event *event = vma->vm_file->private_data;
+
+	__perf_mmap_close(vma, event, false);
+}
+
+static void perf_mmap_close_locked(struct vm_area_struct *vma, struct perf_event *event)
+{
+	__perf_mmap_close(vma, event, true);
 }
 
 static vm_fault_t perf_mmap_pfn_mkwrite(struct vm_fault *vmf)
@@ -7167,28 +7185,28 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 			ret = perf_mmap_aux(vma, event, nr_pages);
 		if (ret)
 			return ret;
+
+		/*
+		 * Since pinned accounting is per vm we cannot allow fork() to copy our
+		 * vma.
+		 */
+		vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP);
+		vma->vm_ops = &perf_mmap_vmops;
+
+		mapped = get_mapped(event, event_mapped);
+		if (mapped)
+			mapped(event, vma->vm_mm);
+
+		/*
+		 * Try to map it into the page table. On fail, invoke
+		 * perf_mmap_close() to undo the above, as the callsite expects
+		 * full cleanup in this case and therefore does not invoke
+		 * vmops::close().
+		 */
+		ret = map_range(event->rb, vma);
+		if (ret)
+			perf_mmap_close_locked(vma, event);
 	}
-
-	/*
-	 * Since pinned accounting is per vm we cannot allow fork() to copy our
-	 * vma.
-	 */
-	vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP);
-	vma->vm_ops = &perf_mmap_vmops;
-
-	mapped = get_mapped(event, event_mapped);
-	if (mapped)
-		mapped(event, vma->vm_mm);
-
-	/*
-	 * Try to map it into the page table. On fail, invoke
-	 * perf_mmap_close() to undo the above, as the callsite expects
-	 * full cleanup in this case and therefore does not invoke
-	 * vmops::close().
-	 */
-	ret = map_range(event->rb, vma);
-	if (ret)
-		perf_mmap_close(vma);
 
 	return ret;
 }
