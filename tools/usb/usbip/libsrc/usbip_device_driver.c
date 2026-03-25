@@ -136,10 +136,13 @@ static int usbip_device_driver_open(struct usbip_host_driver *hdriver)
 	hdriver->ndevs = 0;
 	INIT_LIST_HEAD(&hdriver->edev_list);
 
-	ret = usbip_generic_driver_open(hdriver);
-	if (ret)
+	if (system("/sbin/lsmod | grep -q usbip_vudc")){
 		err("please load " USBIP_CORE_MOD_NAME ".ko and "
 		    USBIP_DEVICE_DRV_NAME ".ko!");
+		return -1;
+	}
+
+	ret = usbip_generic_driver_open(hdriver);
 
 	return ret;
 }
