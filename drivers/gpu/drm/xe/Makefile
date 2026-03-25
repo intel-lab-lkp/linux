@@ -224,7 +224,8 @@ xe-$(CONFIG_DRM_XE_DISPLAY) += \
 	display/xe_initial_plane.o \
 	display/xe_panic.o \
 	display/xe_stolen.o \
-	display/xe_tdf.o
+	display/xe_tdf.o \
+	display/xe_writeback_helper.o
 
 # Display code shared with i915
 xe-$(CONFIG_DRM_XE_DISPLAY) += \

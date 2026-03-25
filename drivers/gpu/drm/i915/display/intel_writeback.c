@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /*
- * Copyright © 2025 Intel Corporation
+ * Copyright © 2026 Intel Corporation
  */
 
 #include <linux/slab.h>
@@ -24,6 +24,7 @@
 #include "intel_display_utils.h"
 #include "intel_fb_pin.h"
 #include "intel_writeback.h"
+#include "intel_writeback_helper.h"
 #include "intel_writeback_reg.h"
 
 struct intel_writeback_connector {
