@@ -6,8 +6,6 @@
 //! Device Management) messages between the kernel driver and GPU firmware
 //! processors such as FSP and GSP.
 
-#![expect(dead_code)]
-
 /// NVDM message type identifiers carried over MCTP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -99,11 +97,6 @@ impl NvdmHeader {
     /// Extract the NVDM type field as a typed value.
     pub(crate) fn nvdm_type(self) -> core::result::Result<NvdmType, u8> {
         NvdmType::try_from(self.raw_nvdm_type())
-    }
-
-    /// Extract the NVDM type field as a raw value.
-    pub(crate) fn nvdm_type_raw(self) -> u32 {
-        u32::from(self.raw_nvdm_type())
     }
 
     /// Set the NVDM type field from a typed value.
