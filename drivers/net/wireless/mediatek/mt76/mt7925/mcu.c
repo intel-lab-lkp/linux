@@ -301,16 +301,36 @@ mt7925_mcu_connection_loss_event(struct mt792x_dev *dev, struct sk_buff *skb)
 static void
 mt7925_mcu_roc_iter(void *priv, u8 *mac, struct ieee80211_vif *vif)
 {
-	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
+	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct mt7925_roc_grant_tlv *grant = priv;
+	u8 band_idx = grant->dbdcband;
 
 	if (ieee80211_vif_is_mld(vif) && vif->type == NL80211_IFTYPE_STATION)
 		return;
 
-	if (mvif->idx != grant->bss_idx)
+	if (mvif->bss_conf.mt76.idx != grant->bss_idx)
 		return;
 
-	mvif->band_idx = grant->dbdcband;
+	/* MT7927 firmware requires band_idx 0 (2.4G) or 1 (5/6G).
+	 * Clamp invalid grant values using rfband as fallback.
+	 */
+	if (is_mt7927(&mvif->phy->dev->mt76) && band_idx > 1) {
+		switch (grant->rfband) {
+		case 1: /* 2.4 GHz */
+			band_idx = 0;
+			break;
+		case 2: /* 5 GHz */
+		case 3: /* 6 GHz */
+			band_idx = 1;
+			break;
+		default:
+			band_idx = mvif->bss_conf.mt76.band_idx <= 1 ?
+				   mvif->bss_conf.mt76.band_idx : 0;
+			break;
+		}
+	}
+
+	mvif->bss_conf.mt76.band_idx = band_idx;
 }
 
 static void mt7925_mcu_roc_handle_grant(struct mt792x_dev *dev,
@@ -327,10 +347,11 @@ static void mt7925_mcu_roc_handle_grant(struct mt792x_dev *dev,
 
 	if (grant->reqtype == MT7925_ROC_REQ_ROC)
 		ieee80211_ready_on_channel(hw);
-	else if (grant->reqtype == MT7925_ROC_REQ_JOIN)
+	else if (is_mt7927(&dev->mt76) || grant->reqtype == MT7925_ROC_REQ_JOIN)
 		ieee80211_iterate_active_interfaces_atomic(hw,
 						IEEE80211_IFACE_ITER_RESUME_ALL,
 						mt7925_mcu_roc_iter, grant);
+
 	dev->phy.roc_grant = true;
 	wake_up(&dev->phy.roc_wait);
 	duration = le32_to_cpu(grant->max_interval);
@@ -1378,10 +1399,14 @@ int mt7925_mcu_set_mlo_roc(struct mt792x_bss_conf *mconf, u16 sel_links,
 		req.roc[i].center_chan2 = 0;
 		req.roc[i].center_chan2_from_ap = 0;
 
-		/* STR : 0xfe indicates BAND_ALL with enabling DBDC
-		 * EMLSR : 0xff indicates (BAND_AUTO) without DBDC
-		 */
-		req.roc[i].dbdcband = type == MT7925_ROC_REQ_JOIN ? 0xfe : 0xff;
+		req.roc[i].dbdcband =
+			mt7925_band_idx(&mvif->phy->dev->mt76, chan->band);
+		if (req.roc[i].dbdcband == 0xff)
+			/* STR : 0xfe indicates BAND_ALL with enabling DBDC
+			 * EMLSR : 0xff indicates (BAND_AUTO) without DBDC
+			 */
+			req.roc[i].dbdcband = type == MT7925_ROC_REQ_JOIN ?
+					      0xfe : 0xff;
 
 		if (chan->hw_value < center_ch)
 			req.roc[i].sco = 1; /* SCA */
@@ -1419,7 +1444,8 @@ int mt7925_mcu_set_roc(struct mt792x_phy *phy, struct mt792x_bss_conf *mconf,
 			.bw_from_ap = CMD_CBW_20MHZ,
 			.center_chan = center_ch,
 			.center_chan_from_ap = center_ch,
-			.dbdcband = 0xff, /* auto */
+			.dbdcband = mt7925_band_idx(&dev->mt76,
+						    chan->band),
 		},
 	};
 
@@ -1466,7 +1492,9 @@ int mt7925_mcu_abort_roc(struct mt792x_phy *phy, struct mt792x_bss_conf *mconf,
 			.len = cpu_to_le16(sizeof(struct roc_abort_tlv)),
 			.tokenid = token_id,
 			.bss_idx = mconf->mt76.idx,
-			.dbdcband = 0xff, /* auto*/
+			.dbdcband = mconf->mt76.band_idx <= 1 ?
+					    mconf->mt76.band_idx :
+					    0xff, /* auto */
 		},
 	};
 
@@ -2498,6 +2526,8 @@ mt7925_mcu_bss_basic_tlv(struct sk_buff *skb,
 
 	basic_req->phymode_ext = mt7925_get_phy_mode_ext(phy, vif, band,
 							 link_sta);
+
+	mconf->mt76.band_idx = mt7925_band_idx(phy->dev, band);
 
 	if (band == NL80211_BAND_2GHZ)
 		basic_req->nonht_basic_phy = cpu_to_le16(PHY_TYPE_ERP_INDEX);

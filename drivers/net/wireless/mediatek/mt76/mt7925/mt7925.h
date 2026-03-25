@@ -63,6 +63,13 @@ enum mt7925_roc_req {
 	MT7925_ROC_REQ_NUM
 };
 
+static inline u8 mt7925_band_idx(struct mt76_dev *dev, enum nl80211_band band)
+{
+	if (is_mt7927(dev))
+		return band == NL80211_BAND_2GHZ ? 0 : 1;
+	return 0xff; /* auto-select for mt7925 */
+}
+
 enum {
 	UNI_EVENT_ROC_GRANT = 0,
 	UNI_EVENT_ROC_GRANT_SUB_LINK = 4,

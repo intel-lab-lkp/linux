@@ -394,7 +394,19 @@ static int mt7925_mac_link_bss_add(struct mt792x_dev *dev,
 
 	mconf->mt76.omac_idx = ieee80211_vif_is_mld(vif) ?
 			       0 : mconf->mt76.idx;
-	mconf->mt76.band_idx = 0xff;
+
+	{
+		struct ieee80211_channel *chan = NULL;
+
+		if (link_conf->chanreq.oper.chan)
+			chan = link_conf->chanreq.oper.chan;
+		else if (mvif->phy->mt76->chandef.chan)
+			chan = mvif->phy->mt76->chandef.chan;
+
+		mconf->mt76.band_idx = chan ?
+			mt7925_band_idx(&dev->mt76, chan->band) : 0xff;
+	}
+
 	mconf->mt76.wmm_idx = ieee80211_vif_is_mld(vif) ?
 			      0 : mconf->mt76.idx % MT76_CONNAC_MAX_WMM_SETS;
 	mconf->mt76.link_idx = hweight16(mvif->valid_links);
@@ -411,7 +423,8 @@ static int mt7925_mac_link_bss_add(struct mt792x_dev *dev,
 
 	mlink->wcid.idx = idx;
 	mlink->wcid.tx_info |= MT_WCID_TX_INFO_SET;
-	mt76_wcid_init(&mlink->wcid, 0);
+	mt76_wcid_init(&mlink->wcid,
+		       mconf->mt76.band_idx == 0xff ? 0 : mconf->mt76.band_idx);
 
 	mt7925_mac_wtbl_update(dev, idx,
 			       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
@@ -2113,9 +2126,12 @@ static int mt7925_assign_vif_chanctx(struct ieee80211_hw *hw,
 {
 	struct mt792x_chanctx *mctx = (struct mt792x_chanctx *)ctx->drv_priv;
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+	struct mt792x_link_sta *mlink;
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	struct ieee80211_bss_conf *pri_link_conf;
 	struct mt792x_bss_conf *mconf;
+	u8 band_idx;
+	u8 old_band;
 
 	mutex_lock(&dev->mt76.mutex);
 
@@ -2129,6 +2145,21 @@ static int mt7925_assign_vif_chanctx(struct ieee80211_hw *hw,
 						NULL, true);
 	} else {
 		mconf = &mvif->bss_conf;
+	}
+
+	old_band = mconf->mt76.band_idx;
+	if (ctx->def.chan) {
+		band_idx = mt7925_band_idx(&dev->mt76, ctx->def.chan->band);
+		mconf->mt76.band_idx = band_idx;
+		mlink = mt792x_sta_to_link(&mvif->sta, mconf->link_id);
+		if (mlink)
+			mlink->wcid.phy_idx = band_idx;
+
+		if (old_band != band_idx && vif->type == NL80211_IFTYPE_STATION &&
+		    mlink)
+			mt76_connac_mcu_uni_add_dev(&dev->mphy, link_conf,
+						    &mconf->mt76, &mlink->wcid,
+						    true);
 	}
 
 	mconf->mt76.ctx = ctx;
