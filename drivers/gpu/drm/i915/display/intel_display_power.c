@@ -79,6 +79,10 @@ intel_display_power_domain_str(enum intel_display_power_domain domain)
 		return "TRANSCODER_DSI_A";
 	case POWER_DOMAIN_TRANSCODER_DSI_C:
 		return "TRANSCODER_DSI_C";
+	case POWER_DOMAIN_TRANSCODER_WD_0:
+		return "TRANSCODER_WD_0";
+	case POWER_DOMAIN_TRANSCODER_WD_1:
+		return "TRANSCODER_WD_1";
 	case POWER_DOMAIN_TRANSCODER_VDSC_PW2:
 		return "TRANSCODER_VDSC_PW2";
 	case POWER_DOMAIN_PORT_DDI_LANES_A:
