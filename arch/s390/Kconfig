@@ -732,6 +732,14 @@ config MAX_PHYSMEM_BITS
 	  Increasing the number of bits also increases the kernel image size.
 	  By default 46 bits (64TB) are supported.
 
+config IPTE_BATCH
+	def_bool y
+	prompt "Enables Additional Entries for IPTE instruction"
+	select ARCH_HAS_LAZY_MMU_MODE
+	help
+	  This option enables using of "Additional Entries" field of the IPTE
+	  instruction, which capitalizes on the lazy MMU mode infrastructure.
+
 endmenu
 
 menu "I/O subsystem"

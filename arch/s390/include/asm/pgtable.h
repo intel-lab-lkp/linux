@@ -39,6 +39,82 @@ enum {
 
 extern atomic_long_t direct_pages_count[PG_DIRECT_MAP_MAX];
 
+#if !defined(CONFIG_IPTE_BATCH) || defined(__DECOMPRESSOR)
+static inline
+bool ipte_batch_ptep_test_and_clear_young(struct vm_area_struct *vma,
+					  unsigned long addr, pte_t *ptep,
+					  int *res)
+{
+	return false;
+}
+
+static inline
+bool ipte_batch_ptep_get_and_clear(struct mm_struct *mm,
+				   unsigned long addr, pte_t *ptep, pte_t *res)
+{
+	return false;
+}
+
+static inline
+bool ipte_batch_ptep_get_and_clear_full(struct mm_struct *mm,
+					unsigned long addr, pte_t *ptep,
+					int full, pte_t *res)
+{
+	return false;
+}
+
+static inline
+bool ipte_batch_ptep_modify_prot_start(struct vm_area_struct *vma,
+				       unsigned long addr, pte_t *ptep, pte_t *res)
+{
+	return false;
+}
+
+static inline
+bool ipte_batch_ptep_modify_prot_commit(struct vm_area_struct *vma,
+					unsigned long addr, pte_t *ptep,
+					pte_t old_pte, pte_t pte)
+{
+	return false;
+}
+
+static inline
+bool ipte_batch_ptep_set_wrprotect(struct mm_struct *mm,
+				   unsigned long addr, pte_t *ptep)
+{
+	return false;
+}
+
+static inline bool ipte_batch_set_pte(pte_t *ptep, pte_t pte)
+{
+	return false;
+}
+
+static inline bool ipte_batch_ptep_get(pte_t *ptep, pte_t *res)
+{
+	return false;
+}
+#else
+bool ipte_batch_ptep_test_and_clear_young(struct vm_area_struct *vma,
+					  unsigned long addr, pte_t *ptep,
+					  int *res);
+bool ipte_batch_ptep_get_and_clear(struct mm_struct *mm,
+				   unsigned long addr, pte_t *ptep, pte_t *res);
+bool ipte_batch_ptep_get_and_clear_full(struct mm_struct *mm,
+					unsigned long addr, pte_t *ptep,
+					int full, pte_t *res);
+bool ipte_batch_ptep_modify_prot_start(struct vm_area_struct *vma,
+				       unsigned long addr, pte_t *ptep, pte_t *res);
+bool ipte_batch_ptep_modify_prot_commit(struct vm_area_struct *vma,
+					unsigned long addr, pte_t *ptep,
+					pte_t old_pte, pte_t pte);
+
+bool ipte_batch_ptep_set_wrprotect(struct mm_struct *mm,
+				   unsigned long addr, pte_t *ptep);
+bool ipte_batch_set_pte(pte_t *ptep, pte_t pte);
+bool ipte_batch_ptep_get(pte_t *ptep, pte_t *res);
+#endif
+
 static inline void update_page_count(int level, long count)
 {
 	if (IS_ENABLED(CONFIG_PROC_FS))
@@ -978,9 +1054,30 @@ static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 	WRITE_ONCE(*pmdp, pmd);
 }
 
-static inline void set_pte(pte_t *ptep, pte_t pte)
+static inline void __set_pte(pte_t *ptep, pte_t pte)
 {
 	WRITE_ONCE(*ptep, pte);
+}
+
+static inline void set_pte(pte_t *ptep, pte_t pte)
+{
+	if (!ipte_batch_set_pte(ptep, pte))
+		__set_pte(ptep, pte);
+}
+
+static inline pte_t __ptep_get(pte_t *ptep)
+{
+	return READ_ONCE(*ptep);
+}
+
+#define ptep_get ptep_get
+static inline pte_t ptep_get(pte_t *ptep)
+{
+	pte_t res;
+
+	if (ipte_batch_ptep_get(ptep, &res))
+		return res;
+	return __ptep_get(ptep);
 }
 
 static inline void pgd_clear(pgd_t *pgd)
@@ -1149,6 +1246,26 @@ static __always_inline void __ptep_ipte_range(unsigned long address, int nr,
 	} while (nr != 255);
 }
 
+#ifdef CONFIG_IPTE_BATCH
+void arch_enter_lazy_mmu_mode_pte(struct mm_struct *mm,
+				  unsigned long addr, unsigned long end,
+				  pte_t *pte);
+#define arch_enter_lazy_mmu_mode_pte arch_enter_lazy_mmu_mode_pte
+
+void arch_pause_lazy_mmu_mode(void);
+#define arch_pause_lazy_mmu_mode arch_pause_lazy_mmu_mode
+
+void arch_resume_lazy_mmu_mode(void);
+#define arch_resume_lazy_mmu_mode arch_resume_lazy_mmu_mode
+
+static inline void arch_enter_lazy_mmu_mode(void)
+{
+}
+
+void arch_leave_lazy_mmu_mode(void);
+void arch_flush_lazy_mmu_mode(void);
+#endif
+
 /*
  * This is hard to understand. ptep_get_and_clear and ptep_clear_flush
  * both clear the TLB for the unmapped pte. The reason is that
@@ -1166,13 +1283,23 @@ pte_t ptep_xchg_direct(struct mm_struct *, unsigned long, pte_t *, pte_t);
 pte_t ptep_xchg_lazy(struct mm_struct *, unsigned long, pte_t *, pte_t);
 
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
-					    unsigned long addr, pte_t *ptep)
+static inline int __ptep_test_and_clear_young(struct vm_area_struct *vma,
+					      unsigned long addr, pte_t *ptep)
 {
 	pte_t pte = *ptep;
 
 	pte = ptep_xchg_direct(vma->vm_mm, addr, ptep, pte_mkold(pte));
 	return pte_young(pte);
+}
+
+static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
+					    unsigned long addr, pte_t *ptep)
+{
+	int res;
+
+	if (ipte_batch_ptep_test_and_clear_young(vma, addr, ptep, &res))
+		return res;
+	return __ptep_test_and_clear_young(vma, addr, ptep);
 }
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
@@ -1183,8 +1310,8 @@ static inline int ptep_clear_flush_young(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR
-static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
-				       unsigned long addr, pte_t *ptep)
+static inline pte_t __ptep_get_and_clear(struct mm_struct *mm,
+					 unsigned long addr, pte_t *ptep)
 {
 	pte_t res;
 
@@ -1192,14 +1319,49 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 	/* At this point the reference through the mapping is still present */
 	if (mm_is_protected(mm) && pte_present(res))
 		WARN_ON_ONCE(uv_convert_from_secure_pte(res));
+	return res;
+}
+
+static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
+				       unsigned long addr, pte_t *ptep)
+{
+	pte_t res;
+
+	if (!ipte_batch_ptep_get_and_clear(mm, addr, ptep, &res))
+		res = __ptep_get_and_clear(mm, addr, ptep);
 	page_table_check_pte_clear(mm, addr, res);
 	return res;
 }
 
 #define __HAVE_ARCH_PTEP_MODIFY_PROT_TRANSACTION
-pte_t ptep_modify_prot_start(struct vm_area_struct *, unsigned long, pte_t *);
-void ptep_modify_prot_commit(struct vm_area_struct *, unsigned long,
-			     pte_t *, pte_t, pte_t);
+pte_t ___ptep_modify_prot_start(struct vm_area_struct *, unsigned long, pte_t *);
+void ___ptep_modify_prot_commit(struct vm_area_struct *, unsigned long,
+			       pte_t *, pte_t, pte_t);
+
+static inline
+pte_t ptep_modify_prot_start(struct vm_area_struct *vma,
+			     unsigned long addr, pte_t *ptep)
+{
+	pte_t res;
+
+	if (ipte_batch_ptep_modify_prot_start(vma, addr, ptep, &res))
+		return res;
+	return ___ptep_modify_prot_start(vma, addr, ptep);
+}
+
+static inline
+void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
+			     pte_t *ptep, pte_t old_pte, pte_t pte)
+{
+	if (!ipte_batch_ptep_modify_prot_commit(vma, addr, ptep, old_pte, pte))
+		___ptep_modify_prot_commit(vma, addr, ptep, old_pte, pte);
+}
+
+bool ipte_batch_ptep_modify_prot_start(struct vm_area_struct *vma,
+				       unsigned long addr, pte_t *ptep, pte_t *res);
+bool ipte_batch_ptep_modify_prot_commit(struct vm_area_struct *vma,
+					unsigned long addr, pte_t *ptep,
+					pte_t old_pte, pte_t pte);
 
 #define __HAVE_ARCH_PTEP_CLEAR_FLUSH
 static inline pte_t ptep_clear_flush(struct vm_area_struct *vma,
@@ -1223,9 +1385,9 @@ static inline pte_t ptep_clear_flush(struct vm_area_struct *vma,
  * full==1 and a simple pte_clear is enough. See tlb.h.
  */
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR_FULL
-static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
-					    unsigned long addr,
-					    pte_t *ptep, int full)
+static inline pte_t __ptep_get_and_clear_full(struct mm_struct *mm,
+					      unsigned long addr,
+					      pte_t *ptep, int full)
 {
 	pte_t res;
 
@@ -1235,8 +1397,6 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 	} else {
 		res = ptep_xchg_lazy(mm, addr, ptep, __pte(_PAGE_INVALID));
 	}
-
-	page_table_check_pte_clear(mm, addr, res);
 
 	/* Nothing to do */
 	if (!mm_is_protected(mm) || !pte_present(res))
@@ -1258,14 +1418,33 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 	return res;
 }
 
+static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
+					    unsigned long addr,
+					    pte_t *ptep, int full)
+{
+	pte_t res;
+
+	if (!ipte_batch_ptep_get_and_clear_full(mm, addr, ptep, full, &res))
+		res = __ptep_get_and_clear_full(mm, addr, ptep, full);
+	page_table_check_pte_clear(mm, addr, res);
+	return res;
+}
+
 #define __HAVE_ARCH_PTEP_SET_WRPROTECT
-static inline void ptep_set_wrprotect(struct mm_struct *mm,
-				      unsigned long addr, pte_t *ptep)
+static inline void __ptep_set_wrprotect(struct mm_struct *mm,
+					unsigned long addr, pte_t *ptep)
 {
 	pte_t pte = *ptep;
 
 	if (pte_write(pte))
 		ptep_xchg_lazy(mm, addr, ptep, pte_wrprotect(pte));
+}
+
+static inline void ptep_set_wrprotect(struct mm_struct *mm,
+				      unsigned long addr, pte_t *ptep)
+{
+	if (!ipte_batch_ptep_set_wrprotect(mm, addr, ptep))
+		__ptep_set_wrprotect(mm, addr, ptep);
 }
 
 /*
