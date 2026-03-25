@@ -166,6 +166,54 @@ static void intel_writeback_connector_destroy(struct drm_connector *connector)
 	kfree(connector);
 }
 
+static int intel_writeback_check_format(u32 format)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(writeback_formats); i++) {
+		if (writeback_formats[i] == format)
+			return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int intel_writeback_atomic_check(struct drm_connector *connector,
+					struct drm_atomic_state *state)
+{
+	struct drm_connector_state *conn_state =
+		drm_atomic_get_new_connector_state(state, connector);
+	struct drm_crtc_state *crtc_state;
+	struct drm_framebuffer *fb;
+	int ret;
+
+	/* We return 0 since this is called while disabling writeback encoder */
+	if (!conn_state->crtc)
+		return 0;
+
+	/* We do not allow a blank commit when using writeback connector */
+	if (!conn_state->writeback_job)
+		return -EINVAL;
+
+	fb = conn_state->writeback_job->fb;
+	if (!fb)
+		return -EINVAL;
+
+	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
+	if (fb->width != crtc_state->mode.hdisplay ||
+	    fb->height != crtc_state->mode.vdisplay)
+		return -EINVAL;
+
+	ret = intel_writeback_check_format(fb->format->format);
+	if (ret) {
+		drm_dbg_kms(connector->dev,
+			    "Unsupported drm format sent in writeback job\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static const struct drm_encoder_funcs drm_writeback_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
@@ -181,6 +229,7 @@ const struct drm_connector_funcs conn_funcs = {
 static const struct drm_connector_helper_funcs conn_helper_funcs = {
 	.get_modes = intel_writeback_get_modes,
 	.mode_valid = intel_writeback_mode_valid,
+	.atomic_check = intel_writeback_atomic_check,
 	.prepare_writeback_job = intel_writeback_prepare_job,
 	.cleanup_writeback_job = intel_writeback_cleanup_job,
 };
