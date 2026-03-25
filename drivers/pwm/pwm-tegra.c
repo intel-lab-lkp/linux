@@ -61,6 +61,7 @@
 
 struct tegra_pwm_soc {
 	unsigned int num_channels;
+	unsigned int enable_reg;
 };
 
 struct tegra_pwm_chip {
@@ -197,8 +198,9 @@ static int tegra_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 		err = pm_runtime_resume_and_get(pwmchip_parent(chip));
 		if (err)
 			return err;
-	} else
+	} else if (pc->soc->enable_reg == PWM_CSR_0) {
 		val |= PWM_ENABLE;
+	}
 
 	pwm_writel(pwm, PWM_CSR_0, val);
 
@@ -213,6 +215,7 @@ static int tegra_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 
 static int tegra_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 {
+	struct tegra_pwm_chip *pc = to_tegra_pwm_chip(chip);
 	int rc = 0;
 	u32 val;
 
@@ -220,20 +223,22 @@ static int tegra_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 	if (rc)
 		return rc;
 
-	val = pwm_readl(pwm, PWM_CSR_0);
+
+	val = pwm_readl(pwm, pc->soc->enable_reg);
 	val |= PWM_ENABLE;
-	pwm_writel(pwm, PWM_CSR_0, val);
+	pwm_writel(pwm, pc->soc->enable_reg, val);
 
 	return 0;
 }
 
 static void tegra_pwm_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 {
+	struct tegra_pwm_chip *pc = to_tegra_pwm_chip(chip);
 	u32 val;
 
-	val = pwm_readl(pwm, PWM_CSR_0);
+	val = pwm_readl(pwm, pc->soc->enable_reg);
 	val &= ~PWM_ENABLE;
-	pwm_writel(pwm, PWM_CSR_0, val);
+	pwm_writel(pwm, pc->soc->enable_reg, val);
 
 	pm_runtime_put_sync(pwmchip_parent(chip));
 }
@@ -398,10 +403,12 @@ static int __maybe_unused tegra_pwm_runtime_resume(struct device *dev)
 
 static const struct tegra_pwm_soc tegra20_pwm_soc = {
 	.num_channels = 4,
+	.enable_reg = PWM_CSR_0,
 };
 
 static const struct tegra_pwm_soc tegra186_pwm_soc = {
 	.num_channels = 1,
+	.enable_reg = PWM_CSR_0,
 };
 
 static const struct of_device_id tegra_pwm_of_match[] = {
