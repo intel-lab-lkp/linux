@@ -877,7 +877,16 @@ static int os05b10_set_framing_limits(struct os05b10 *os05b10,
 	if (ret)
 		return ret;
 
-	hblank = mode->hts - mode->width;
+	/*
+	 * Using HTS directly results in a negative hblank.
+	 * (e.g. 2592x1944 with HTS = 1744). Doubling HTS produces a valid
+	 * horizontal blanking value.
+	 *
+	 * The datasheet defines HTS (0x380c/0x380d) as total horizontal
+	 * timing size, but does not specify the unit (whether it is
+	 * in pixel clocks or requires scaling).
+	 */
+	hblank = mode->hts * 2 - mode->width;
 	ret = __v4l2_ctrl_modify_range(os05b10->hblank, hblank, hblank, 1,
 				       hblank);
 	if (ret)
