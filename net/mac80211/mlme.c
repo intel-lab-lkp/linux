@@ -10471,7 +10471,7 @@ void ieee80211_process_ml_reconf_resp(struct ieee80211_sub_if_data *sdata,
 	for (i = 0; i < mgmt->u.action.ml_reconf_resp.count; i++) {
 		u16 status = get_unaligned_le16(pos + 1);
 
-		link_id = *pos;
+		link_id = u8_get_bits(*pos, 0xf);
 
 		if (!(link_mask & BIT(link_id))) {
 			sdata_info(sdata,
