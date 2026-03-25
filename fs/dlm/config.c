@@ -752,7 +752,7 @@ static ssize_t comm_addr_list_show(struct config_item *item, char *buf)
 			break;
 		}
 		allowance -= s;
-		if (allowance >= 0)
+		if (allowance > 0)
 			strcat(buf, buf0);
 		else {
 			allowance += s;
