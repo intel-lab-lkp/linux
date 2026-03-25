@@ -24,6 +24,16 @@ properties:
   interrupts:
     maxItems: 1
 
+  clock-input:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Describes the input clock of i2c controller in HZ.
+
+  clock-div:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Describes the divisor of the input clock of i2c controller.
+
 required:
   - compatible
   - reg
@@ -40,6 +50,9 @@ examples:
         reg = <0x1fe21000 0x8>;
         interrupt-parent = <&extioiic>;
         interrupts = <22 IRQ_TYPE_LEVEL_LOW>;
+        clock-frequency = <100000>;
+        clock-input = <100000000>;
+        clock-div = <40>;
         #address-cells = <1>;
         #size-cells = <0>;
 
