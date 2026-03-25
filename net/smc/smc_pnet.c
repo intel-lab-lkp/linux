@@ -245,18 +245,25 @@ static int smc_pnet_remove_by_ndev(struct net_device *ndev)
 
 /* Apply pnetid to ib device when no pnetid is set.
  */
-static bool smc_pnet_apply_ib(struct smc_ib_device *ib_dev, u8 ib_port,
-			      char *pnet_name)
+static bool __smc_pnet_apply_ib(struct smc_ib_device *ib_dev, u8 ib_port,
+				char *pnet_name)
 {
-	bool applied = false;
-
-	mutex_lock(&smc_ib_devices.mutex);
 	if (!smc_pnet_is_pnetid_set(ib_dev->pnetid[ib_port - 1])) {
 		memcpy(ib_dev->pnetid[ib_port - 1], pnet_name,
 		       SMC_MAX_PNETID_LEN);
 		ib_dev->pnetid_by_user[ib_port - 1] = true;
-		applied = true;
+		return true;
 	}
+	return false;
+}
+
+static bool smc_pnet_apply_ib(struct smc_ib_device *ib_dev, u8 ib_port,
+			      char *pnet_name)
+{
+	bool applied;
+
+	mutex_lock(&smc_ib_devices.mutex);
+	applied = __smc_pnet_apply_ib(ib_dev, ib_port, pnet_name);
 	mutex_unlock(&smc_ib_devices.mutex);
 	return applied;
 }
@@ -305,24 +312,42 @@ static bool smc_pnetid_valid(const char *pnet_name, char *pnetid)
 }
 
 /* Find an infiniband device by a given name. The device might not exist. */
-static struct smc_ib_device *smc_pnet_find_ib(char *ib_name)
+static struct smc_ib_device *__smc_pnet_find_ib(char *ib_name)
 {
 	struct smc_ib_device *ibdev;
 
-	mutex_lock(&smc_ib_devices.mutex);
 	list_for_each_entry(ibdev, &smc_ib_devices.list, list) {
 		if (!strncmp(ibdev->ibdev->name, ib_name,
 			     sizeof(ibdev->ibdev->name)) ||
 		    (ibdev->ibdev->dev.parent &&
 		     !strncmp(dev_name(ibdev->ibdev->dev.parent), ib_name,
 			     IB_DEVICE_NAME_MAX - 1))) {
-			goto out;
+			return ibdev;
 		}
 	}
-	ibdev = NULL;
-out:
+	return NULL;
+}
+
+/* Find an ib device by name and apply pnetid under lock. */
+static bool smc_pnet_find_ib_apply(char *ib_name, u8 ib_port, char *pnet_name)
+{
+	struct smc_ib_device *ibdev;
+	bool rc = true;
+
+	mutex_lock(&smc_ib_devices.mutex);
+	ibdev = __smc_pnet_find_ib(ib_name);
+	if (ibdev) {
+		if (!__smc_pnet_apply_ib(ibdev, ib_port, pnet_name))
+			rc = false;
+		else
+			pr_warn_ratelimited("smc: ib device %s ibport %d "
+					    "applied user defined pnetid "
+					    "%.16s\n", ibdev->ibdev->name,
+					    ib_port,
+					    ibdev->pnetid[ib_port - 1]);
+	}
 	mutex_unlock(&smc_ib_devices.mutex);
-	return ibdev;
+	return rc;
 }
 
 /* Find an smcd device by a given name. The device might not exist. */
@@ -412,23 +437,13 @@ static int smc_pnet_add_ib(struct smc_pnettable *pnettable, char *ib_name,
 			   u8 ib_port, char *pnet_name)
 {
 	struct smc_pnetentry *tmp_pe, *new_pe;
-	struct smc_ib_device *ib_dev;
 	bool smcddev_applied = true;
-	bool ibdev_applied = true;
+	bool ibdev_applied;
 	struct smcd_dev *smcd;
 	bool new_ibdev;
 
 	/* try to apply the pnetid to active devices */
-	ib_dev = smc_pnet_find_ib(ib_name);
-	if (ib_dev) {
-		ibdev_applied = smc_pnet_apply_ib(ib_dev, ib_port, pnet_name);
-		if (ibdev_applied)
-			pr_warn_ratelimited("smc: ib device %s ibport %d "
-					    "applied user defined pnetid "
-					    "%.16s\n", ib_dev->ibdev->name,
-					    ib_port,
-					    ib_dev->pnetid[ib_port - 1]);
-	}
+	ibdev_applied = smc_pnet_find_ib_apply(ib_name, ib_port, pnet_name);
 	smcd = smc_pnet_find_smcd(ib_name);
 	if (smcd) {
 		smcddev_applied = smc_pnet_apply_smcd(smcd, pnet_name);
