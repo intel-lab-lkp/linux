@@ -3001,9 +3001,12 @@ static void rzg2l_pinctrl_pm_setup_regs(struct rzg2l_pinctrl *pctrl, bool suspen
 {
 	u32 nports = pctrl->data->n_port_pins / RZG2L_PINS_PER_PORT;
 	struct rzg2l_pinctrl_reg_cache *cache = pctrl->cache;
+	u32 pin_off = 0;
 
-	for (u32 port = 0; port < nports; port++) {
+	for (u32 port = 0; port < nports; port++, pin_off += RZG2L_PINS_PER_PORT) {
+		const struct pinctrl_pin_desc *pin_desc = &pctrl->desc.pins[pin_off];
 		bool has_iolh, has_ien, has_pupd, has_smt;
+		u64 *pin_data = pin_desc->drv_data;
 		u32 off, caps;
 		u8 pincnt;
 		u64 cfg;
@@ -3011,6 +3014,11 @@ static void rzg2l_pinctrl_pm_setup_regs(struct rzg2l_pinctrl *pctrl, bool suspen
 		cfg = pctrl->data->port_pin_configs[port];
 		off = RZG2L_PIN_CFG_TO_PORT_OFFSET(cfg);
 		pincnt = hweight8(FIELD_GET(PIN_CFG_PIN_MAP_MASK, cfg));
+
+		if (cfg & RZG2L_VARIABLE_CFG) {
+			for (unsigned int i = 1; i < RZG2L_PINS_PER_PORT; i++)
+				cfg |= *pin_data++;
+		}
 
 		caps = FIELD_GET(PIN_CFG_MASK, cfg);
 		has_iolh = !!(caps & (PIN_CFG_IOLH_A | PIN_CFG_IOLH_B | PIN_CFG_IOLH_C));
