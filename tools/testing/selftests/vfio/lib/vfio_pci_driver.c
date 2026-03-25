@@ -67,13 +67,17 @@ void vfio_pci_driver_remove(struct vfio_pci_device *device)
 	driver->initialized = false;
 }
 
-void vfio_pci_driver_send_msi(struct vfio_pci_device *device)
+int vfio_pci_driver_send_msi(struct vfio_pci_device *device)
 {
 	struct vfio_pci_driver *driver = &device->driver;
+
+	if (driver->features & VFIO_PCI_DRIVER_F_NO_SEND_MSI)
+		return -EOPNOTSUPP;
 
 	VFIO_CHECK_DRIVER_OP(driver, send_msi);
 
 	driver->ops->send_msi(device);
+	return 0;
 }
 
 void vfio_pci_driver_memcpy_start(struct vfio_pci_device *device,

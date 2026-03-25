@@ -6,6 +6,8 @@
 
 struct vfio_pci_device;
 
+#define VFIO_PCI_DRIVER_F_NO_SEND_MSI	(1UL << 0) /* Device cannot trigger MSI */
+
 struct vfio_pci_driver_ops {
 	const char *name;
 
@@ -69,6 +71,7 @@ struct vfio_pci_driver {
 	const struct vfio_pci_driver_ops *ops;
 	bool initialized;
 	bool memcpy_in_progress;
+	unsigned long features;
 
 	/* Region to be used by the driver (e.g. for in-memory descriptors) */
 	struct dma_region region;
@@ -92,6 +95,6 @@ void vfio_pci_driver_memcpy_start(struct vfio_pci_device *device,
 				  iova_t src, iova_t dst, u64 size,
 				  u64 count);
 int vfio_pci_driver_memcpy_wait(struct vfio_pci_device *device);
-void vfio_pci_driver_send_msi(struct vfio_pci_device *device);
+int vfio_pci_driver_send_msi(struct vfio_pci_device *device);
 
 #endif /* SELFTESTS_VFIO_LIB_INCLUDE_LIBVFIO_VFIO_PCI_DRIVER_H */
