@@ -267,6 +267,7 @@ static void intel_writeback_capture(struct intel_atomic_state *state,
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 	struct drm_writeback_job *wb_job = conn_state->writeback_job;
+	struct intel_writeback_job *job = conn_state->writeback_job->priv;
 	enum transcoder trans = wb_conn->trans;
 	u32 val = 0;
 	int bpp;
@@ -274,6 +275,9 @@ static void intel_writeback_capture(struct intel_atomic_state *state,
 	bpp = get_color_mode_bpp(display, wb_job->fb->format->format);
 	val = DIV_ROUND_UP((adjusted_mode->hdisplay * bpp), 64);
 	intel_de_write(display, WD_STRIDE(trans), WD_STRIDE_VAL(val));
+
+	val = intel_get_ggtt_addr(job->vma);
+	intel_de_write(display, WD_SURF(trans), val);
 
 	val = 0;
 	val |= START_TRIGGER_FRAME | WD_FRAME_NUMBER(wb_conn->frame_num);
