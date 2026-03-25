@@ -211,6 +211,58 @@ definitions:
         name: discard
         value: 31
 
+  -
+    name: loopback-component
+    type: enum
+    doc: |
+      Loopback component. Identifies where in the network path the
+      loopback is applied.
+    entries:
+      -
+        name: mac
+        doc: |
+          MAC component loopback. Covers loopback points owned by the
+          MAC / network-controller driver, including the MAC block itself,
+          any MAC-side PCS, and SoC SerDes. The name attribute identifies
+          the sublayer using IEEE 802.3 vocabulary (e.g. mac, pcs, mii).
+      -
+        name: phy
+        doc: |
+          Ethernet PHY loopback. Covers loopback points inside the
+          Ethernet PHY managed by phylib, such as the PHY-internal PCS,
+          PMA, or PMD. The name attribute identifies the sublayer using
+          IEEE 802.3 vocabulary (e.g. pcs, pma, pmd, mii). A Base-T SFP
+          module containing an Ethernet PHY driven by Linux should report
+          loopback under this component, not module.
+      -
+        name: module
+        doc: |
+          Pluggable module (e.g. CMIS (Q)SFP) loopback. Covers loopback
+          modes controlled via module firmware or EEPROM registers. When
+          Linux drives an Ethernet PHY inside the module via phylib, use
+          the phy component instead.
+  -
+    name: loopback-direction
+    type: flags
+    doc: |
+      Loopback direction flags. Direction is defined from the
+      component's own viewpoint: local loops traffic originating from
+      the host back to the host, remote loops traffic arriving from
+      the line back toward the line. This convention holds regardless
+      of where the component sits in the system topology. Used as a
+      bitmask in supported, and as a single value in direction.
+    entries:
+      -
+        name: local
+        doc: |
+          Local loopback (IEEE 802.3). Host TX -> looped back -> host
+          RX (traffic originating from host returns to host).
+      -
+        name: remote
+        doc: |
+          Remote loopback (IEEE 802.3). Line RX -> looped back -> line
+          TX (traffic from far end returns to far end).
+
 attribute-sets:
   -
     name: header
@@ -1905,6 +1957,68 @@ attribute-sets:
         name: link
         type: nest
         nested-attributes: mse-snapshot
+  -
+    name: loopback-entry
+    doc: Per-component loopback configuration entry.
+    attr-cnt-name: __ethtool-a-loopback-entry-cnt
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: component
+        type: u32
+        enum: loopback-component
+        doc: Loopback component
+      -
+        name: name
+        type: string
+        doc: |
+          Subsystem-specific name for the loopback point within the
+          component.
+      -
+        name: id
+        type: u32
+        doc: Optional component instance identifier.
+      -
+        name: depth
+        type: u8
+        doc: |
+          Ordering index within a component instance. When a component
+          has multiple loopback points of the same type (e.g. two PCS
+          blocks inside a rate-adaptation PHY), depth distinguishes
+          them. Lower depth values are closer to the host side, higher
+          values are closer to the line/media side. Defaults to 0 when
+          there is only one loopback point per (component, name) tuple.
+      -
+        name: supported
+        type: u8
+        enum: loopback-direction
+        enum-as-flags: true
+        doc: Bitmask of supported loopback directions
+      -
+        name: direction
+        type: u8
+        enum: loopback-direction
+        doc: Current loopback direction, 0 means disabled
+  -
+    name: loopback
+    attr-cnt-name: __ethtool-a-loopback-cnt
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: entry
+        type: nest
+        multi-attr: true
+        nested-attributes: loopback-entry
 
 operations:
   enum-model: directional
@@ -2859,6 +2973,34 @@ operations:
             - worst-channel
             - link
       dump: *mse-get-op
+    -
+      name: loopback-get
+      doc: Get loopback configuration and capabilities.
+
+      attribute-set: loopback
+
+      do: &loopback-get-op
+        request:
+          attributes:
+            - header
+        reply:
+          attributes: &loopback
+            - header
+            - entry
+      dump: *loopback-get-op
+    -
+      name: loopback-set
+      doc: Set loopback configuration.
+
+      attribute-set: loopback
+
+      do:
+        request:
+          attributes: *loopback
+    -
+      name: loopback-ntf
+      doc: Notification for change in loopback configuration.
+      notify: loopback-get
 
 mcast-groups:
   list:
