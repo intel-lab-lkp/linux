@@ -2679,9 +2679,6 @@ struct fmt format_decode(struct fmt fmt, struct printf_spec *spec)
 
 	/* we finished early by reading the precision */
 	if (unlikely(fmt.state == FORMAT_STATE_PRECISION)) {
-		if (spec->precision < 0)
-			spec->precision = 0;
-
 		fmt.state = FORMAT_STATE_NONE;
 		goto qualifier;
 	}
@@ -2802,19 +2799,17 @@ qualifier:
 static void
 set_field_width(struct printf_spec *spec, int width)
 {
-	spec->field_width = width;
-	if (WARN_ONCE(spec->field_width != width, "field width %d too large", width)) {
-		spec->field_width = clamp(width, -FIELD_WIDTH_MAX, FIELD_WIDTH_MAX);
-	}
+	spec->field_width = clamp(width, -FIELD_WIDTH_MAX, FIELD_WIDTH_MAX);
+	WARN_ONCE(spec->field_width != width, "field width %d out of range",
+		  width);
 }
 
 static void
 set_precision(struct printf_spec *spec, int prec)
 {
-	spec->precision = prec;
-	if (WARN_ONCE(spec->precision != prec, "precision %d too large", prec)) {
-		spec->precision = clamp(prec, 0, PRECISION_MAX);
-	}
+	/* We allow negative precision, but treat it as if there was no precision. */
+	spec->precision = clamp(prec, -1, PRECISION_MAX);
+	WARN_ONCE(spec->precision < prec, "precision %d too large", prec);
 }
 
 /*
