@@ -3768,7 +3768,8 @@ static u8 hsw_panel_transcoders(struct intel_display *display)
 	u8 panel_transcoder_mask = BIT(TRANSCODER_EDP);
 
 	if (DISPLAY_VER(display) >= 11)
-		panel_transcoder_mask |= BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1);
+		panel_transcoder_mask |= BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1) |
+				BIT(TRANSCODER_WD_0) | BIT(TRANSCODER_WD_1);
 
 	return panel_transcoder_mask;
 }

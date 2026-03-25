@@ -256,6 +256,7 @@ static u32 acpi_display_type(struct intel_connector *connector)
 		break;
 	case DRM_MODE_CONNECTOR_Unknown:
 	case DRM_MODE_CONNECTOR_VIRTUAL:
+	case DRM_MODE_CONNECTOR_WRITEBACK:
 		display_type = ACPI_DISPLAY_TYPE_OTHER;
 		break;
 	default:
