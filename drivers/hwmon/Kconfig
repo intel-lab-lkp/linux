@@ -2651,6 +2651,14 @@ config SENSORS_XGENE
 	  If you say yes here you get support for the temperature
 	  and power sensors for APM X-Gene SoC.
 
+config SENSORS_YOGAFAN
+	tristate "Lenovo Yoga Fan Hardware Monitoring"
+	depends on ACPI && HWMON
+	help
+	  Say Y here if you want to monitor fan speeds on Lenovo Yoga
+	  and Legion laptops.
+
+
 config SENSORS_INTEL_M10_BMC_HWMON
 	tristate "Intel MAX10 BMC Hardware Monitoring"
 	depends on MFD_INTEL_M10_BMC_CORE
