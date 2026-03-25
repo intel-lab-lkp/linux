@@ -89,27 +89,11 @@ static int __init setup_sched_thermal_decay_shift(char *str)
 __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
 
 /*
- * For asym packing, by default the lower numbered CPU has higher priority.
- */
-int __weak arch_asym_cpu_priority(int cpu)
-{
-	return -cpu;
-}
-
-/*
  * The margin used when comparing utilization with CPU capacity.
  *
  * (default: ~20%)
  */
 #define fits_capacity(cap, max)	((cap) * 1280 < (max) * 1024)
-
-/*
- * The margin used when comparing CPU capacities.
- * is 'cap1' noticeably greater than 'cap2'
- *
- * (default: ~5%)
- */
-#define capacity_greater(cap1, cap2) ((cap1) * 1024 > (cap2) * 1078)
 
 #ifdef CONFIG_CFS_BANDWIDTH
 /*

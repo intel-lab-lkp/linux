@@ -94,6 +94,11 @@ void remove_cpu_topology(unsigned int cpuid);
 void reset_cpu_topology(void);
 int parse_acpi_topology(void);
 void freq_inv_set_max_ratio(int cpu, u64 max_rate);
+void arch_topology_init_cppc_asym(void);
+
+#ifdef CONFIG_ACPI_CPPC_LIB
+bool topology_init_cppc_asym_packing(int __percpu *priority_var);
+#endif
 
 /*
  * Architectures like ARM64 don't have reliable architectural way to get SMT
@@ -105,10 +110,29 @@ static inline bool topology_core_has_smt(int cpu)
 	return cpu_topology[cpu].thread_id != -1;
 }
 
+#ifdef CONFIG_ARM64
+#undef arch_sched_asym_flags
+#define arch_sched_asym_flags arm64_arch_sched_asym_flags
+int arm64_arch_asym_cpu_priority(int cpu);
+int arm64_arch_sched_asym_flags(void);
+#endif
+
 #else
 
 static inline bool topology_core_has_smt(int cpu) { return false; }
 
 #endif /* CONFIG_GENERIC_ARCH_TOPOLOGY */
+
+/*
+ * Architectures may override this to provide a custom CPU priority for
+ * asymmetric packing.
+ */
+#ifndef arch_asym_cpu_priority
+#define arch_asym_cpu_priority topology_arch_asym_cpu_priority
+static inline int topology_arch_asym_cpu_priority(int cpu)
+{
+	return -cpu;
+}
+#endif
 
 #endif /* _LINUX_ARCH_TOPOLOGY_H_ */

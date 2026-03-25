@@ -1757,6 +1757,14 @@ sd_init(struct sched_domain_topology_level *tl,
 	return sd;
 }
 
+#ifndef arch_sched_asym_flags
+#define arch_sched_asym_flags topology_arch_sched_asym_flags
+static inline int topology_arch_sched_asym_flags(void)
+{
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_SCHED_SMT
 int cpu_smt_flags(void)
 {

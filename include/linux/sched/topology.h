@@ -50,6 +50,15 @@ extern const struct cpumask *tl_mc_mask(struct sched_domain_topology_level *tl, 
 extern const struct cpumask *tl_pkg_mask(struct sched_domain_topology_level *tl, int cpu);
 
 extern int arch_asym_cpu_priority(int cpu);
+extern int arch_sched_asym_flags(void);
+
+/*
+ * The margin used when comparing CPU capacities.
+ * is 'cap1' noticeably greater than 'cap2'
+ *
+ * (default: ~5%)
+ */
+#define capacity_greater(cap1, cap2) ((cap1) * 1024 > (cap2) * 1078)
 
 struct sched_domain_attr {
 	int relax_domain_level;
