@@ -8,7 +8,12 @@
  *
  */
 #include <linux/sched/isolation.h>
+#include <linux/capability.h>
 #include <linux/mutex.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/slab.h>
+#include <linux/ctype.h>
 #include <linux/notifier.h>
 #include <linux/topology.h>
 #include "sched.h"
@@ -16,8 +21,16 @@
 enum hk_flags {
 	HK_FLAG_DOMAIN		= BIT(HK_TYPE_DOMAIN),
 	HK_FLAG_MANAGED_IRQ	= BIT(HK_TYPE_MANAGED_IRQ),
-	HK_FLAG_KERNEL_NOISE	= BIT(HK_TYPE_KERNEL_NOISE),
+	HK_FLAG_TICK		= BIT(HK_TYPE_TICK),
+	HK_FLAG_TIMER		= BIT(HK_TYPE_TIMER),
+	HK_FLAG_RCU		= BIT(HK_TYPE_RCU),
+	HK_FLAG_MISC		= BIT(HK_TYPE_MISC),
+	HK_FLAG_WQ		= BIT(HK_TYPE_WQ),
+	HK_FLAG_KTHREAD		= BIT(HK_TYPE_KTHREAD),
 };
+
+#define HK_FLAG_KERNEL_NOISE (HK_FLAG_TICK | HK_FLAG_TIMER | HK_FLAG_RCU | \
+			      HK_FLAG_MISC | HK_FLAG_WQ | HK_FLAG_KTHREAD)
 
 static DEFINE_MUTEX(housekeeping_mutex);
 static BLOCKING_NOTIFIER_HEAD(housekeeping_notifier_list);
@@ -44,6 +57,9 @@ static ssize_t smt_aware_store(struct kobject *kobj,
 {
 	bool val;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	if (kstrtobool(buf, &val))
 		return -EINVAL;
 
@@ -53,7 +69,7 @@ static ssize_t smt_aware_store(struct kobject *kobj,
 }
 
 static struct kobj_attribute smt_aware_attr =
-	__ATTR(smt_aware_mode, 0644, smt_aware_show, smt_aware_store);
+	__ATTR(smt_aware_mode, 0600, smt_aware_show, smt_aware_store);
 
 bool housekeeping_enabled(enum hk_type type)
 {
@@ -171,6 +187,9 @@ static ssize_t housekeeping_store(struct kobject *kobject,
 	cpumask_var_t new_mask;
 	int err;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	if (!alloc_cpumask_var(&new_mask, GFP_KERNEL))
 		return -ENOMEM;
 
@@ -178,41 +197,25 @@ static ssize_t housekeeping_store(struct kobject *kobject,
 	if (err)
 		goto out_free;
 
-	/* Safety check: must have at least one online CPU for housekeeping */
-	if (!cpumask_intersects(new_mask, cpu_online_mask)) {
+	if (cpumask_empty(new_mask) ||
+	    !cpumask_intersects(new_mask, cpu_online_mask)) {
 		err = -EINVAL;
 		goto out_free;
 	}
 
+	mutex_lock(&housekeeping_mutex);
+
 	if (housekeeping_smt_aware) {
-		int cpu, sibling;
-		cpumask_var_t tmp_mask;
+		int cpu;
 
-		if (!alloc_cpumask_var(&tmp_mask, GFP_KERNEL)) {
-			err = -ENOMEM;
-			goto out_free;
-		}
-
-		cpumask_copy(tmp_mask, new_mask);
-		for_each_cpu(cpu, tmp_mask) {
-			for_each_cpu(sibling, topology_sibling_cpumask(cpu)) {
-				if (!cpumask_test_cpu(sibling, tmp_mask)) {
-					/* SMT sibling should stay grouped */
-					cpumask_clear_cpu(cpu, new_mask);
-					break;
-				}
+		for_each_cpu(cpu, new_mask) {
+			if (!cpumask_subset(topology_sibling_cpumask(cpu),
+					    new_mask)) {
+				err = -EINVAL;
+				goto out_unlock;
 			}
 		}
-		free_cpumask_var(tmp_mask);
-
-		/* Re-check after SMT sync */
-		if (!cpumask_intersects(new_mask, cpu_online_mask)) {
-			err = -EINVAL;
-			goto out_free;
-		}
 	}
-
-	mutex_lock(&housekeeping_mutex);
 
 	if (!housekeeping.cpumasks[type]) {
 		if (!alloc_cpumask_var(&housekeeping.cpumasks[type], GFP_KERNEL)) {
@@ -242,7 +245,7 @@ out_free:
 }
 
 static struct hk_attribute housekeeping_attrs[HK_TYPE_MAX];
-static struct attribute *housekeeping_attr_ptr[HK_TYPE_MAX + 1];
+static struct attribute *housekeeping_attr_ptr[HK_TYPE_MAX + 2];
 
 static const struct attribute_group housekeeping_attr_group = {
 	.attrs = housekeeping_attr_ptr,
@@ -265,28 +268,22 @@ static int __init housekeeping_sysfs_init(void)
 		housekeeping_attrs[i].type = i;
 		sysfs_attr_init(&housekeeping_attrs[i].kattr.attr);
 		housekeeping_attrs[i].kattr.attr.name = hk_type_names[i];
-		housekeeping_attrs[i].kattr.attr.mode = 0644;
+		housekeeping_attrs[i].kattr.attr.mode = 0600;
 		housekeeping_attrs[i].kattr.show = housekeeping_show;
 		housekeeping_attrs[i].kattr.store = housekeeping_store;
 		housekeeping_attr_ptr[j++] = &housekeeping_attrs[i].kattr.attr;
 	}
+
+	housekeeping_attr_ptr[j++] = &smt_aware_attr.attr;
 	housekeeping_attr_ptr[j] = NULL;
 
 	ret = sysfs_create_group(housekeeping_kobj, &housekeeping_attr_group);
-	if (ret)
-		goto err_group;
-
-	ret = sysfs_create_file(housekeeping_kobj, &smt_aware_attr.attr);
-	if (ret)
-		goto err_file;
+	if (ret) {
+		kobject_put(housekeeping_kobj);
+		return ret;
+	}
 
 	return 0;
-
-err_file:
-	sysfs_remove_group(housekeeping_kobj, &housekeeping_attr_group);
-err_group:
-	kobject_put(housekeeping_kobj);
-	return ret;
 }
 late_initcall(housekeeping_sysfs_init);
 
@@ -313,8 +310,12 @@ static void __init housekeeping_setup_type(enum hk_type type,
 	if (!slab_is_available())
 		gfp = GFP_NOWAIT;
 
-	if (!housekeeping.cpumasks[type])
-		alloc_cpumask_var(&housekeeping.cpumasks[type], gfp);
+	if (!housekeeping.cpumasks[type]) {
+		if (!alloc_cpumask_var(&housekeeping.cpumasks[type], gfp)) {
+			pr_err("housekeeping: failed to allocate cpumask for type %d\n", type);
+			return;
+		}
+	}
 
 	cpumask_copy(housekeeping.cpumasks[type],
 		     housekeeping_staging);
