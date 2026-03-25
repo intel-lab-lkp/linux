@@ -183,34 +183,47 @@ static void udf_write_failed(struct address_space *mapping, loff_t to)
 	}
 }
 
-static int udf_adinicb_writepages(struct address_space *mapping,
-		      struct writeback_control *wbc)
-{
-	struct inode *inode = mapping->host;
-	struct udf_inode_info *iinfo = UDF_I(inode);
-	struct folio *folio = NULL;
-	int error = 0;
-
-	while ((folio = writeback_iter(mapping, wbc, folio, &error))) {
-		BUG_ON(!folio_test_locked(folio));
-		BUG_ON(folio->index != 0);
-		memcpy_from_file_folio(iinfo->i_data + iinfo->i_lenEAttr, folio,
-				0, i_size_read(inode));
-		folio_unlock(folio);
-	}
-
-	mark_inode_dirty(inode);
-	return 0;
-}
-
 static int udf_writepages(struct address_space *mapping,
 			  struct writeback_control *wbc)
 {
 	struct inode *inode = mapping->host;
 	struct udf_inode_info *iinfo = UDF_I(inode);
 
-	if (iinfo->i_alloc_type == ICBTAG_FLAG_AD_IN_ICB)
-		return udf_adinicb_writepages(mapping, wbc);
+	if (iinfo->i_alloc_type == ICBTAG_FLAG_AD_IN_ICB) {
+		struct folio *folio;
+		bool dirty = false;
+
+		folio = filemap_lock_folio(mapping, 0);
+		if (IS_ERR(folio))
+			return 0;
+		/*
+		 * Recheck inode type under folio lock when we are protected
+		 * against udf_expand_file_adinicb(). Bail to standard writeback
+		 * path if file got expanded.
+		 */
+		if (iinfo->i_alloc_type != ICBTAG_FLAG_AD_IN_ICB) {
+			folio_unlock(folio);
+			goto mpage_writeback;
+		}
+		if (!folio_test_dirty(folio))
+			goto unlock_folio;
+		if (folio_test_writeback(folio)) {
+			if (wbc->sync_mode == WB_SYNC_NONE)
+				goto unlock_folio;
+			folio_wait_writeback(folio);
+		}
+		if (!folio_clear_dirty_for_io(folio))
+			goto unlock_folio;
+		memcpy_from_file_folio(iinfo->i_data + iinfo->i_lenEAttr, folio,
+				0, i_size_read(inode));
+		dirty = true;
+unlock_folio:
+		folio_unlock(folio);
+		if (dirty)
+			mark_inode_dirty(inode);
+		return 0;
+	}
+mpage_writeback:
 	return mpage_writepages(mapping, wbc, udf_get_block_wb);
 }
 
