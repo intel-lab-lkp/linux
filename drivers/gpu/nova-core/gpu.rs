@@ -18,10 +18,11 @@ use crate::{
         Falcon, //
     },
     fb::SysmemFlush,
-    gfw,
     gsp::Gsp,
     regs,
 };
+
+mod hal;
 
 macro_rules! define_chipset {
     ({ $($variant:ident = $value:expr),* $(,)* }) =>
@@ -309,10 +310,11 @@ impl Gpu {
         spec: Spec,
     ) -> impl PinInit<Self, Error> + 'a {
         let chipset = spec.chipset();
+        let hal = hal::gpu_hal(chipset);
 
         try_pin_init!(Self {
             _: {
-                gfw::wait_gfw_boot_completion(bar)
+                hal.wait_gfw_boot_completion(bar)
                     .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
             },
 
