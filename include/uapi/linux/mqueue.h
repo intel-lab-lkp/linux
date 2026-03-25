@@ -53,4 +53,25 @@ struct mq_attr {
 
 #define NOTIFY_COOKIE_LEN	32
 
+/*
+ * Argument structure for fcntl(F_MQ_PEEK).
+ *
+ * Peek at a POSIX message queue message by index without removing it.
+ * @offset:   Index in receive order (0 = highest priority, next to dequeue).
+ *            FIFO ordering is preserved within the same priority level.
+ * @msg_prio: Output: priority of the message at @offset.
+ * @buf_len:  Size of the caller-provided buffer at @buf.
+ * @buf:      Output: message payload is written here; truncated to @buf_len
+ *            bytes if the message is larger.
+ *
+ * Returns the number of bytes copied on success, -ENOMSG if @offset is
+ * >= mq_curmsgs, or a negative error code on failure.
+ */
+struct mq_peek_attr {
+	__s32		 offset;
+	__u32		 msg_prio;
+	__kernel_size_t  buf_len;
+	char __user	*buf;
+};
+
 #endif

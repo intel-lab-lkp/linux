@@ -84,6 +84,12 @@
 #define F_GETDELEG		(F_LINUX_SPECIFIC_BASE + 15)
 #define F_SETDELEG		(F_LINUX_SPECIFIC_BASE + 16)
 
+/*
+ * Peek at a POSIX message queue message by index without consuming it.
+ * Argument is a pointer to struct mq_peek_attr (see <linux/mqueue.h>).
+ */
+#define F_MQ_PEEK		(F_LINUX_SPECIFIC_BASE + 17)
+
 /* Argument structure for F_GETDELEG and F_SETDELEG */
 struct delegation {
 	__u32	d_flags;	/* Must be 0 */
