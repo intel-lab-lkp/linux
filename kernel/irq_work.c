@@ -200,6 +200,7 @@ bool irq_work_needs_cpu(void)
 
 void irq_work_single(void *arg)
 {
+	struct task_struct *waiter = NULL;
 	struct irq_work *work = arg;
 	int flags;
 
@@ -222,14 +223,36 @@ void irq_work_single(void *arg)
 	lockdep_irq_work_exit(flags);
 
 	/*
+	 * Extract and pin the irq_work_sync() waiter before clearing
+	 * BUSY. Once BUSY is cleared, @work may be freed immediately
+	 * by a sync caller that observes BUSY==0 without sleeping, so
+	 * @work must not be dereferenced after the cmpxchg below.
+	 */
+	if ((IS_ENABLED(CONFIG_PREEMPT_RT) && !irq_work_is_hard(work)) ||
+	    !arch_irq_work_has_interrupt()) {
+		rcu_read_lock();
+		waiter = rcu_dereference(work->irqwait.task);
+		if (waiter)
+			get_task_struct(waiter);
+		rcu_read_unlock();
+	}
+
+	/*
 	 * Clear the BUSY bit, if set, and return to the free state if no-one
 	 * else claimed it meanwhile.
 	 */
 	(void)atomic_cmpxchg(&work->node.a_flags, flags, flags & ~IRQ_WORK_BUSY);
 
-	if ((IS_ENABLED(CONFIG_PREEMPT_RT) && !irq_work_is_hard(work)) ||
-	    !arch_irq_work_has_interrupt())
-		rcuwait_wake_up(&work->irqwait);
+	/*
+	 * @work must not be dereferenced past this point. Wake the
+	 * pinned waiter if one was sleeping; if none was sleeping,
+	 * either irq_work_sync() has not been called or it will
+	 * observe BUSY==0 on its own.
+	 */
+	if (waiter) {
+		wake_up_process(waiter);
+		put_task_struct(waiter);
+	}
 }
 
 static void irq_work_run_list(struct llist_head *list)
