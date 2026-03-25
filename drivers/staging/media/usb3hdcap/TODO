@@ -1,0 +1,16 @@
+* Prerequisite for using subdevices: i2c_algorithm/i2c_adapter that converts
+  to the correct USB vendor requests depending on whether the hardware has the
+  NUC100 or not
+* Use existing tw9900 subdevice
+    * Need to make the regulator optional
+    * Need to only call `v4l2_async_register_subdev` when registering from
+      device tree so this driver can call `v4l2_device_register_subdev`
+      directly
+    * Need to port over my additional functionality to tw9900.c
+* Write new subdevice for MST3367
+    * Won't be much use to any other driver initially
+* Generify CS53L21 support (can probably base it on sound/soc/codecs/cs53l30.c)
+* Use v4l2_fh
+* Fix MST3367 support for XCAPTURE-1
+* Fix HDMI color space issues (pretty sure the values it's using are always the
+  RGB ones)
