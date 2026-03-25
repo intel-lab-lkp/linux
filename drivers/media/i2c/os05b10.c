@@ -103,6 +103,17 @@
 #define OS05B10_REG_FORMAT2		CCI_REG8(0x3821)
 #define OS05B10_HDR_ENABLE		0x04
 
+#define OS05B10_REG_PRE_ISP_20_0	CCI_REG8(0x5080)
+#define OS05B10_DISABLED		0x00
+#define OS05B10_COLOR_BAR_1		0x80
+#define OS05B10_COLOR_BAR_2		0x84
+#define OS05B10_COLOR_BAR_3		0x88
+#define OS05B10_COLOR_BAR_4		0x8c
+#define OS05B10_COLOR_SQUARE		0x82
+#define OS05B10_BW_SQUARE		0x92
+#define OS05B10_TRANSPARENT_EFFECT	0xa0
+#define OS05B10_ROLLING_BAR_EFFECT	0xc0
+
 #define OS05B10_LINK_FREQ_600MHZ	(600 * HZ_PER_MHZ)
 
 static const struct v4l2_rect os05b10_native_area = {
@@ -396,7 +407,6 @@ static const struct cci_reg_sequence os05b10_common_regs[] = {
 	{ CCI_REG8(0x5004), 0x00 },
 	{ CCI_REG8(0x5005), 0x0e },
 	{ CCI_REG8(0x5036), 0x00 },
-	{ CCI_REG8(0x5080), 0x04 },
 	{ CCI_REG8(0x5082), 0x00 },
 	{ CCI_REG8(0x5180), 0x00 },
 	{ CCI_REG8(0x5181), 0x10 },
@@ -514,6 +524,30 @@ static const u32 os05b10_mbus_codes[] = {
 	MEDIA_BUS_FMT_SBGGR10_1X10,
 };
 
+static const char * const os05b10_test_pattern_menu[] = {
+	"Disabled",
+	"colour bar type 1",
+	"colour bar type 2",
+	"colour bar type 3",
+	"colour bar type 4",
+	"color square",
+	"black-white square",
+	"transparent effect",
+	"rolling bar effect",
+};
+
+static const int os05b10_tp_val[] = {
+	OS05B10_DISABLED,
+	OS05B10_COLOR_BAR_1,
+	OS05B10_COLOR_BAR_2,
+	OS05B10_COLOR_BAR_3,
+	OS05B10_COLOR_BAR_4,
+	OS05B10_COLOR_SQUARE,
+	OS05B10_BW_SQUARE,
+	OS05B10_TRANSPARENT_EFFECT,
+	OS05B10_ROLLING_BAR_EFFECT,
+};
+
 static inline struct os05b10 *to_os05b10(struct v4l2_subdev *sd)
 {
 	return container_of_const(sd, struct os05b10, sd);
@@ -529,6 +563,15 @@ static u32 os05b10_get_format_code(struct os05b10 *os05b10)
 	u32 code = codes[os05b10->vflip->val][os05b10->hflip->val];
 
 	return code;
+}
+
+static int os05b10_update_test_pattern(struct os05b10 *os05b10, u32 pattern)
+{
+	if (pattern >= ARRAY_SIZE(os05b10_test_pattern_menu))
+		return -EINVAL;
+
+	return cci_write(os05b10->cci, OS05B10_REG_PRE_ISP_20_0,
+			 os05b10_tp_val[pattern], NULL);
 }
 
 static int os05b10_set_ctrl(struct v4l2_ctrl *ctrl)
@@ -588,6 +631,9 @@ static int os05b10_set_ctrl(struct v4l2_ctrl *ctrl)
 				(os05b10->vflip->val == 1) ?
 				OS05B10_FLIP_ENABLE : OS05B10_FLIP_DISABLE,
 				NULL);
+		break;
+	case V4L2_CID_TEST_PATTERN:
+		ret = os05b10_update_test_pattern(os05b10, ctrl->val);
 		break;
 	default:
 		ret = -EINVAL;
@@ -970,7 +1016,7 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 	int ret;
 
 	ctrl_hdlr = &os05b10->handler;
-	v4l2_ctrl_handler_init(ctrl_hdlr, 11);
+	v4l2_ctrl_handler_init(ctrl_hdlr, 12);
 
 	pixel_rate = os05b10_pixel_rate(os05b10, mode);
 	v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops, V4L2_CID_PIXEL_RATE,
@@ -1025,6 +1071,11 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 					   V4L2_CID_VFLIP, 0, 1, 1, 0);
 	if (os05b10->vflip)
 		os05b10->vflip->flags |= V4L2_CTRL_FLAG_MODIFY_LAYOUT;
+
+	v4l2_ctrl_new_std_menu_items(ctrl_hdlr, &os05b10_ctrl_ops,
+				     V4L2_CID_TEST_PATTERN,
+				     ARRAY_SIZE(os05b10_test_pattern_menu) - 1,
+				     0, 0, os05b10_test_pattern_menu);
 
 	if (ctrl_hdlr->error) {
 		ret = ctrl_hdlr->error;
