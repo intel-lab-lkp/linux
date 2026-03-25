@@ -56,14 +56,17 @@ properties:
                      design, so this is optional.
       - description: clock used for controller axi slave bus.
                      this depends on hardware design, so it is optional.
+      - description: clock used for controller axi_f, axi_h, and
+                     axi_p to support the new platform.
 
   clock-names:
     minItems: 2
     items:
       - const: spi
       - const: sf
-      - const: axi
-      - const: axi_s
+      - const: axi_f
+      - const: axi_h
+      - const: axi_p
 
 required:
   - compatible
