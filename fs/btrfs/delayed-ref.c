@@ -89,7 +89,7 @@ void btrfs_update_delayed_refs_rsv(struct btrfs_trans_handle *trans)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_block_rsv *delayed_rsv = &fs_info->delayed_refs_rsv;
-	struct btrfs_block_rsv *local_rsv = &trans->delayed_rsv;
+	struct btrfs_block_rsv *local_rsv = trans->delayed_rsv;
 	u64 num_bytes;
 	u64 reserved_bytes;
 

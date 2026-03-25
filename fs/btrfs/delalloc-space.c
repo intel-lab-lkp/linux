@@ -3,6 +3,7 @@
 #include "messages.h"
 #include "ctree.h"
 #include "delalloc-space.h"
+#include "delayed-ref.h"
 #include "block-rsv.h"
 #include "btrfs_inode.h"
 #include "space-info.h"
@@ -240,6 +241,13 @@ static void btrfs_inode_rsv_release(struct btrfs_inode *inode, bool qgroup_free)
 	if (released > 0)
 		trace_btrfs_space_reservation(fs_info, "delalloc",
 					      btrfs_ino(inode), released, 0);
+
+	released = btrfs_block_rsv_release(fs_info, &inode->delayed_rsv,
+					   0, NULL);
+	if (released > 0)
+		trace_btrfs_space_reservation(fs_info, "delalloc_delayed_refs",
+					      btrfs_ino(inode), released, 0);
+
 	if (qgroup_free)
 		btrfs_qgroup_free_meta_prealloc(inode->root, qgroup_to_release);
 	else
@@ -251,7 +259,9 @@ static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
 						 struct btrfs_inode *inode)
 {
 	struct btrfs_block_rsv *block_rsv = &inode->block_rsv;
+	struct btrfs_block_rsv *delayed_rsv = &inode->delayed_rsv;
 	u64 reserve_size = 0;
+	u64 delayed_refs_size = 0;
 	u64 qgroup_rsv_size = 0;
 	unsigned outstanding_extents;
 
@@ -266,6 +276,8 @@ static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
 		reserve_size = btrfs_calc_insert_metadata_size(fs_info,
 						outstanding_extents);
 		reserve_size += btrfs_calc_metadata_size(fs_info, 1);
+		delayed_refs_size += btrfs_calc_delayed_ref_bytes(fs_info,
+						outstanding_extents);
 	}
 	if (!(inode->flags & BTRFS_INODE_NODATASUM)) {
 		u64 csum_leaves;
@@ -285,11 +297,17 @@ static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
 	block_rsv->size = reserve_size;
 	block_rsv->qgroup_rsv_size = qgroup_rsv_size;
 	spin_unlock(&block_rsv->lock);
+
+	spin_lock(&delayed_rsv->lock);
+	delayed_rsv->size = delayed_refs_size;
+	spin_unlock(&delayed_rsv->lock);
 }
 
 static void calc_inode_reservations(struct btrfs_inode *inode,
 				    u64 num_bytes, u64 disk_num_bytes,
-				    u64 *meta_reserve, u64 *qgroup_reserve)
+				    u64 *meta_reserve,
+				    u64 *delayed_refs_reserve,
+				    u64 *qgroup_reserve)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	u64 nr_extents = count_max_extents(fs_info, num_bytes);
@@ -309,6 +327,10 @@ static void calc_inode_reservations(struct btrfs_inode *inode,
 	 * for an inode update.
 	 */
 	*meta_reserve += inode_update;
+
+	*delayed_refs_reserve = btrfs_calc_delayed_ref_bytes(fs_info,
+							     nr_extents);
+
 	*qgroup_reserve = nr_extents * fs_info->nodesize;
 }
 
@@ -318,7 +340,7 @@ int btrfs_delalloc_reserve_metadata(struct btrfs_inode *inode, u64 num_bytes,
 	struct btrfs_root *root = inode->root;
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_block_rsv *block_rsv = &inode->block_rsv;
-	u64 meta_reserve, qgroup_reserve;
+	u64 meta_reserve, delayed_refs_reserve, qgroup_reserve;
 	unsigned nr_extents;
 	enum btrfs_reserve_flush_enum flush = BTRFS_RESERVE_FLUSH_ALL;
 	int ret = 0;
@@ -353,12 +375,14 @@ int btrfs_delalloc_reserve_metadata(struct btrfs_inode *inode, u64 num_bytes,
 	 * over-reserve slightly, and clean up the mess when we are done.
 	 */
 	calc_inode_reservations(inode, num_bytes, disk_num_bytes,
-				&meta_reserve, &qgroup_reserve);
+				&meta_reserve, &delayed_refs_reserve,
+				&qgroup_reserve);
 	ret = btrfs_qgroup_reserve_meta_prealloc(root, qgroup_reserve, true,
 						 noflush);
 	if (ret)
 		return ret;
-	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info, meta_reserve,
+	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info,
+					   meta_reserve + delayed_refs_reserve,
 					   flush);
 	if (ret) {
 		btrfs_qgroup_free_meta_prealloc(root, qgroup_reserve);
@@ -383,6 +407,8 @@ int btrfs_delalloc_reserve_metadata(struct btrfs_inode *inode, u64 num_bytes,
 	btrfs_block_rsv_add_bytes(block_rsv, meta_reserve, false);
 	trace_btrfs_space_reservation(root->fs_info, "delalloc",
 				      btrfs_ino(inode), meta_reserve, 1);
+	btrfs_block_rsv_add_bytes(&inode->delayed_rsv, delayed_refs_reserve,
+				  false);
 
 	spin_lock(&block_rsv->lock);
 	block_rsv->qgroup_rsv_reserved += qgroup_reserve;

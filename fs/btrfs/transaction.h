@@ -162,7 +162,8 @@ struct btrfs_trans_handle {
 	bool in_fsync;
 	struct btrfs_fs_info *fs_info;
 	struct list_head new_bgs;
-	struct btrfs_block_rsv delayed_rsv;
+	struct btrfs_block_rsv *delayed_rsv;
+	struct btrfs_block_rsv _local_delayed_rsv;
 	/* Extent buffers with writeback inhibited by this handle. */
 	struct xarray writeback_inhibited_ebs;
 };

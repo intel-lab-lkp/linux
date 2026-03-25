@@ -737,7 +737,8 @@ again:
 
 	h->type = type;
 	INIT_LIST_HEAD(&h->new_bgs);
-	btrfs_init_metadata_block_rsv(fs_info, &h->delayed_rsv, BTRFS_BLOCK_RSV_DELREFS);
+	h->delayed_rsv = &h->_local_delayed_rsv;
+	btrfs_init_metadata_block_rsv(fs_info, h->delayed_rsv, BTRFS_BLOCK_RSV_DELREFS);
 
 	smp_mb();
 	if (cur_trans->state >= TRANS_STATE_COMMIT_START &&
@@ -758,7 +759,7 @@ again:
 						      h->transid,
 						      delayed_refs_bytes, 1);
 			h->delayed_refs_bytes_reserved = delayed_refs_bytes;
-			btrfs_block_rsv_add_bytes(&h->delayed_rsv, delayed_refs_bytes, true);
+			btrfs_block_rsv_add_bytes(h->delayed_rsv, delayed_refs_bytes, true);
 			delayed_refs_bytes = 0;
 		}
 		h->reloc_reserved = reloc_reserved;
@@ -1067,7 +1068,7 @@ static void btrfs_trans_release_metadata(struct btrfs_trans_handle *trans)
 	trace_btrfs_space_reservation(fs_info, "local_delayed_refs_rsv",
 				      trans->transid,
 				      trans->delayed_refs_bytes_reserved, 0);
-	btrfs_block_rsv_release(fs_info, &trans->delayed_rsv,
+	btrfs_block_rsv_release(fs_info, trans->delayed_rsv,
 				trans->delayed_refs_bytes_reserved, NULL);
 	trans->delayed_refs_bytes_reserved = 0;
 }

@@ -653,6 +653,7 @@ static noinline int __cow_file_range_inline(struct btrfs_inode *inode,
 		goto out;
 	}
 	trans->block_rsv = &inode->block_rsv;
+	trans->delayed_rsv = &inode->delayed_rsv;
 
 	drop_args.path = path;
 	drop_args.start = 0;
@@ -3256,6 +3257,7 @@ int btrfs_finish_one_ordered(struct btrfs_ordered_extent *ordered_extent)
 	}
 
 	trans->block_rsv = &inode->block_rsv;
+	trans->delayed_rsv = &inode->delayed_rsv;
 
 	ret = btrfs_insert_raid_extent(trans, ordered_extent);
 	if (unlikely(ret)) {
@@ -8074,9 +8076,12 @@ struct inode *btrfs_alloc_inode(struct super_block *sb)
 
 	spin_lock_init(&ei->lock);
 	ei->outstanding_extents = 0;
-	if (sb->s_magic != BTRFS_TEST_MAGIC)
+	if (sb->s_magic != BTRFS_TEST_MAGIC) {
 		btrfs_init_metadata_block_rsv(fs_info, &ei->block_rsv,
 					      BTRFS_BLOCK_RSV_DELALLOC);
+		btrfs_init_metadata_block_rsv(fs_info, &ei->delayed_rsv,
+					      BTRFS_BLOCK_RSV_DELREFS);
+	}
 	ei->runtime_flags = 0;
 	ei->prop_compress = BTRFS_COMPRESS_NONE;
 	ei->defrag_compress = BTRFS_COMPRESS_NONE;
@@ -8132,6 +8137,8 @@ void btrfs_destroy_inode(struct inode *vfs_inode)
 	WARN_ON(vfs_inode->i_data.nrpages);
 	WARN_ON(inode->block_rsv.reserved);
 	WARN_ON(inode->block_rsv.size);
+	WARN_ON(inode->delayed_rsv.reserved);
+	WARN_ON(inode->delayed_rsv.size);
 	WARN_ON(inode->outstanding_extents);
 	if (!S_ISDIR(vfs_inode->i_mode)) {
 		WARN_ON(inode->delalloc_bytes);
