@@ -427,13 +427,13 @@ static enum gdma_queue_type mana_ib_queue_type(struct ib_qp_init_attr *attr, u32
 	return type;
 }
 
-static int mana_table_store_rc_qp(struct mana_ib_dev *mdev, struct mana_ib_qp *qp)
+static int mana_table_store_rnic_qp(struct mana_ib_dev *mdev, struct mana_ib_qp *qp)
 {
 	return xa_insert_irq(&mdev->qp_table_wq, qp->ibqp.qp_num, qp,
 			     GFP_KERNEL);
 }
 
-static void mana_table_remove_rc_qp(struct mana_ib_dev *mdev, struct mana_ib_qp *qp)
+static void mana_table_remove_rnic_qp(struct mana_ib_dev *mdev, struct mana_ib_qp *qp)
 {
 	xa_erase_irq(&mdev->qp_table_wq, qp->ibqp.qp_num);
 }
@@ -475,7 +475,8 @@ static int mana_table_store_qp(struct mana_ib_dev *mdev, struct mana_ib_qp *qp)
 
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_RC:
-		return mana_table_store_rc_qp(mdev, qp);
+	case IB_QPT_UC:
+		return mana_table_store_rnic_qp(mdev, qp);
 	case IB_QPT_UD:
 	case IB_QPT_GSI:
 		return mana_table_store_ud_qp(mdev, qp);
@@ -492,7 +493,8 @@ static void mana_table_remove_qp(struct mana_ib_dev *mdev,
 {
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_RC:
-		mana_table_remove_rc_qp(mdev, qp);
+	case IB_QPT_UC:
+		mana_table_remove_rnic_qp(mdev, qp);
 		break;
 	case IB_QPT_UD:
 	case IB_QPT_GSI:
@@ -576,10 +578,65 @@ static int mana_ib_create_rc_qp(struct ib_qp *ibqp, struct ib_pd *ibpd,
 	return 0;
 
 destroy_qp:
-	mana_ib_gd_destroy_rc_qp(mdev, qp);
+	mana_ib_gd_destroy_rnic_qp(mdev, qp);
 destroy_queues:
 	while (i-- > 0)
 		mana_ib_destroy_queue(mdev, &qp->rc_qp.queues[i]);
+	return err;
+}
+
+static int mana_ib_create_uc_qp(struct ib_qp *ibqp, struct ib_pd *ibpd,
+				struct ib_qp_init_attr *attr, struct ib_udata *udata)
+{
+	struct mana_ib_dev *mdev = container_of(ibpd->device, struct mana_ib_dev, ib_dev);
+	struct mana_ib_qp *qp = container_of(ibqp, struct mana_ib_qp, ibqp);
+	struct mana_ib_create_uc_qp_resp resp = {};
+	struct mana_ib_ucontext *mana_ucontext;
+	struct mana_ib_create_uc_qp ucmd = {};
+	u64 flags = 0;
+	u32 doorbell;
+	int err, i;
+
+	if (!udata || udata->inlen < sizeof(ucmd))
+		return -EINVAL;
+
+	mana_ucontext = rdma_udata_to_drv_context(udata, struct mana_ib_ucontext, ibucontext);
+	doorbell = mana_ucontext->doorbell;
+
+	err = ib_copy_from_udata(&ucmd, udata, min(sizeof(ucmd), udata->inlen));
+	if (err)
+		return err;
+
+	for (i = 0; i < MANA_UC_QUEUE_TYPE_MAX; ++i) {
+		err = mana_ib_create_queue(mdev, ucmd.queue_buf[i], ucmd.queue_size[i],
+					   &qp->uc_qp.queues[i]);
+		if (err)
+			goto destroy_queues;
+	}
+
+	err = mana_ib_gd_create_uc_qp(mdev, qp, attr, doorbell, flags);
+	if (err)
+		goto destroy_queues;
+
+	qp->ibqp.qp_num = qp->uc_qp.queues[MANA_UC_RECV_QUEUE_RESPONDER].id;
+	qp->port = attr->port_num;
+
+	for (i = 0; i < MANA_UC_QUEUE_TYPE_MAX; ++i)
+		resp.queue_id[i] = qp->uc_qp.queues[i].id;
+
+	err = ib_copy_to_udata(udata, &resp, min(sizeof(resp), udata->outlen));
+	if (err)
+		goto destroy_qp;
+
+	err = mana_table_store_qp(mdev, qp);
+	if (err)
+		goto destroy_qp;
+	return 0;
+destroy_qp:
+	mana_ib_gd_destroy_rnic_qp(mdev, qp);
+destroy_queues:
+	while (i-- > 0)
+		mana_ib_destroy_queue(mdev, &qp->uc_qp.queues[i]);
 	return err;
 }
 
@@ -694,6 +751,8 @@ int mana_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 		return mana_ib_create_qp_raw(ibqp, ibqp->pd, attr, udata);
 	case IB_QPT_RC:
 		return mana_ib_create_rc_qp(ibqp, ibqp->pd, attr, udata);
+	case IB_QPT_UC:
+		return mana_ib_create_uc_qp(ibqp, ibqp->pd, attr, udata);
 	case IB_QPT_UD:
 	case IB_QPT_GSI:
 		return mana_ib_create_ud_qp(ibqp, ibqp->pd, attr, udata);
@@ -775,6 +834,7 @@ int mana_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 {
 	switch (ibqp->qp_type) {
 	case IB_QPT_RC:
+	case IB_QPT_UC:
 	case IB_QPT_UD:
 	case IB_QPT_GSI:
 		return mana_ib_gd_modify_qp(ibqp, attr, attr_mask, udata);
@@ -843,10 +903,26 @@ static int mana_ib_destroy_rc_qp(struct mana_ib_qp *qp, struct ib_udata *udata)
 	/* Ignore return code as there is not much we can do about it.
 	 * The error message is printed inside.
 	 */
-	mana_ib_gd_destroy_rc_qp(mdev, qp);
+	mana_ib_gd_destroy_rnic_qp(mdev, qp);
 	for (i = 0; i < MANA_RC_QUEUE_TYPE_MAX; ++i)
 		mana_ib_destroy_queue(mdev, &qp->rc_qp.queues[i]);
 
+	return 0;
+}
+
+static int mana_ib_destroy_uc_qp(struct mana_ib_qp *qp, struct ib_udata *udata)
+{
+	struct mana_ib_dev *mdev =
+		container_of(qp->ibqp.device, struct mana_ib_dev, ib_dev);
+	int i;
+
+	mana_table_remove_qp(mdev, qp);
+	/* Ignore return code as there is not much we can do about it.
+	 * The error message is printed inside.
+	 */
+	mana_ib_gd_destroy_rnic_qp(mdev, qp);
+	for (i = 0; i < MANA_UC_QUEUE_TYPE_MAX; ++i)
+		mana_ib_destroy_queue(mdev, &qp->uc_qp.queues[i]);
 	return 0;
 }
 
@@ -885,6 +961,8 @@ int mana_ib_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 		return mana_ib_destroy_qp_raw(qp, udata);
 	case IB_QPT_RC:
 		return mana_ib_destroy_rc_qp(qp, udata);
+	case IB_QPT_UC:
+		return mana_ib_destroy_uc_qp(qp, udata);
 	case IB_QPT_UD:
 	case IB_QPT_GSI:
 		return mana_ib_destroy_ud_qp(qp, udata);
