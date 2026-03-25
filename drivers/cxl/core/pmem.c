@@ -149,7 +149,7 @@ struct cxl_nvdimm_bridge *__devm_cxl_add_nvdimm_bridge(struct device *host,
 
 	if (cxl_nvdimm_bridge_failed_attach(cxl_nvb)) {
 		unregister_nvb(cxl_nvb);
-		return ERR_PTR(-ENODEV);
+		return ERR_PTR(-EPROBE_DEFER);
 	}
 
 	rc = devm_add_action_or_reset(host, unregister_nvb, cxl_nvb);
