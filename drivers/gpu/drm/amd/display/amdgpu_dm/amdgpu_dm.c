@@ -675,7 +675,7 @@ static void dm_crtc_high_irq(void *interrupt_params)
 					     100LL, (v_total * stream->timing.h_total));
 				mdelay(1000 / refresh_hz);
 
-				drm_writeback_signal_completion(acrtc->wb_conn, 0);
+				drm_writeback_signal_completion(acrtc->connector, 0);
 				dc_stream_fc_disable_writeback(adev->dm.dc,
 							       acrtc->dm_irq_params.stream, 0);
 			}
@@ -7282,11 +7282,9 @@ create_stream_for_sink(struct drm_connector *connector,
 		aconnector = to_amdgpu_dm_connector(connector);
 		link = aconnector->dc_link;
 	} else {
-		struct drm_writeback_connector *wbcon = NULL;
 		struct amdgpu_dm_wb_connector *dm_wbcon = NULL;
 
-		wbcon = drm_connector_to_writeback(connector);
-		dm_wbcon = to_amdgpu_dm_wb_connector(wbcon);
+		dm_wbcon = to_amdgpu_dm_wb_connector(connector);
 		link = dm_wbcon->link;
 	}
 
@@ -10612,7 +10610,7 @@ static void dm_set_writeback(struct amdgpu_display_manager *dm,
 			      struct drm_connector *connector,
 			      struct drm_connector_state *new_con_state)
 {
-	struct drm_writeback_connector *wb_conn = drm_connector_to_writeback(connector);
+	struct drm_writeback_connector *wb_conn = &connector->writeback;
 	struct amdgpu_device *adev = dm->adev;
 	struct amdgpu_crtc *acrtc;
 	struct dc_writeback_info *wb_info;
@@ -10703,7 +10701,7 @@ static void dm_set_writeback(struct amdgpu_display_manager *dm,
 
 	acrtc->wb_pending = true;
 	acrtc->wb_conn = wb_conn;
-	drm_writeback_queue_job(wb_conn, new_con_state);
+	drm_writeback_queue_job(connector, new_con_state);
 }
 
 static void amdgpu_dm_update_hdcp(struct drm_atomic_state *state)
