@@ -437,8 +437,20 @@ ssize_t dm_attr_rq_based_seq_io_merge_deadline_store(struct mapped_device *md,
 	return count;
 }
 
-static void dm_start_request(struct mapped_device *md, struct request *orig)
+static bool dm_start_request(struct mapped_device *md, struct request *orig)
 {
+	/*
+	 * Hold the md reference here for the in-flight I/O.
+	 * We can't rely on the reference count by device opener,
+	 * because the device may be closed during the request completion
+	 * when all bios are completed.
+	 * See the comment in rq_completed() too.
+	 *
+	 * Fail if DMF_FREEING is set to avoid racing with __dm_destroy().
+	 */
+	if (!dm_try_get(md))
+		return false;
+
 	blk_mq_start_request(orig);
 
 	if (unlikely(dm_stats_used(&md->stats))) {
@@ -451,14 +463,7 @@ static void dm_start_request(struct mapped_device *md, struct request *orig)
 				    &tio->stats_aux);
 	}
 
-	/*
-	 * Hold the md reference here for the in-flight I/O.
-	 * We can't rely on the reference count by device opener,
-	 * because the device may be closed during the request completion
-	 * when all bios are completed.
-	 * See the comment in rq_completed() too.
-	 */
-	dm_get(md);
+	return true;
 }
 
 static int dm_mq_init_request(struct blk_mq_tag_set *set, struct request *rq,
@@ -515,7 +520,8 @@ static blk_status_t dm_mq_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (ti->type->busy && ti->type->busy(ti))
 		return BLK_STS_RESOURCE;
 
-	dm_start_request(md, rq);
+	if (!dm_start_request(md, rq))
+		return BLK_STS_IOERR;
 
 	/* Init tio using md established in .init_request */
 	init_tio(tio, rq, md);

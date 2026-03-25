@@ -2682,6 +2682,18 @@ void dm_get(struct mapped_device *md)
 	BUG_ON(test_bit(DMF_FREEING, &md->flags));
 }
 
+bool dm_try_get(struct mapped_device *md)
+{
+	atomic_inc(&md->holders);
+	smp_mb__after_atomic();
+
+	if (unlikely(test_bit(DMF_FREEING, &md->flags))) {
+		atomic_dec(&md->holders);
+		return false;
+	}
+	return true;
+}
+
 int dm_hold(struct mapped_device *md)
 {
 	spin_lock(&_minor_lock);
