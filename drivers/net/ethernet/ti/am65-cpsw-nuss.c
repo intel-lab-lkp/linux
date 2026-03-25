@@ -1624,14 +1624,14 @@ static inline void am65_cpsw_nuss_xmit_recycle(struct am65_cpsw_tx_chn *tx_chn,
 	am65_cpsw_nuss_put_tx_desc(tx_chn, first_desc);
 }
 
-static int am65_cpsw_nuss_tx_compl_packets(struct am65_cpsw_common *common,
-					   int chn, unsigned int budget, bool *tdown)
+static int am65_cpsw_nuss_tx_cmpl_free_batch(struct am65_cpsw_common *common, int chn,
+					     u32 batch_size, unsigned int budget,
+					     bool *tdown)
 {
 	bool single_port = AM65_CPSW_IS_CPSW2G(common);
 	enum am65_cpsw_tx_buf_type buf_type;
 	struct am65_cpsw_tx_swdata *swdata;
 	struct cppi5_host_desc_t *desc_tx;
-	struct device *dev = common->dev;
 	struct am65_cpsw_tx_chn *tx_chn;
 	struct netdev_queue *netif_txq;
 	unsigned int total_bytes = 0;
@@ -1640,21 +1640,13 @@ static int am65_cpsw_nuss_tx_compl_packets(struct am65_cpsw_common *common,
 	unsigned int pkt_len;
 	struct sk_buff *skb;
 	dma_addr_t desc_dma;
-	int res, num_tx = 0;
+	int num_tx = 0, i;
 
 	tx_chn = &common->tx_chns[chn];
 
-	while (true) {
-		if (!single_port)
-			spin_lock(&tx_chn->lock);
-		res = k3_udma_glue_pop_tx_chn(tx_chn->tx_chn, &desc_dma);
-		if (!single_port)
-			spin_unlock(&tx_chn->lock);
-
-		if (res == -ENODATA)
-			break;
-
-		if (cppi5_desc_is_tdcm(desc_dma)) {
+	for (i = 0; i < batch_size; i++) {
+		desc_dma = tx_chn->cmpl_desc_dma_array[i];
+		if (unlikely(cppi5_desc_is_tdcm(desc_dma))) {
 			if (atomic_dec_and_test(&common->tdown_cnt))
 				complete(&common->tdown_complete);
 			*tdown = true;
@@ -1701,7 +1693,34 @@ static int am65_cpsw_nuss_tx_compl_packets(struct am65_cpsw_common *common,
 		am65_cpsw_nuss_tx_wake(tx_chn, ndev, netif_txq);
 	}
 
-	dev_dbg(dev, "%s:%u pkt:%d\n", __func__, chn, num_tx);
+	return num_tx;
+}
+
+static int am65_cpsw_nuss_tx_compl_packets(struct am65_cpsw_common *common,
+					   int chn, unsigned int budget, bool *tdown)
+{
+	bool single_port = AM65_CPSW_IS_CPSW2G(common);
+	struct am65_cpsw_tx_chn *tx_chn;
+	u32 batch_size = 0;
+	int res, num_tx;
+
+	tx_chn = &common->tx_chns[chn];
+
+	if (!single_port)
+		spin_lock(&tx_chn->lock);
+
+	res = k3_udma_glue_pop_tx_chn_batch(tx_chn->tx_chn, tx_chn->cmpl_desc_dma_array,
+					    &batch_size, AM65_CPSW_TX_BATCH_SIZE);
+	if (!batch_size) {
+		if (!single_port)
+			spin_unlock(&tx_chn->lock);
+		return 0;
+	}
+
+	num_tx = am65_cpsw_nuss_tx_cmpl_free_batch(common, chn, batch_size, budget, tdown);
+
+	if (!single_port)
+		spin_unlock(&tx_chn->lock);
 
 	return num_tx;
 }
@@ -1760,18 +1779,48 @@ static irqreturn_t am65_cpsw_nuss_tx_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void am65_cpsw_nuss_submit_ndev_batch(struct am65_cpsw_common *common)
+{
+	bool single_port = AM65_CPSW_IS_CPSW2G(common);
+	struct am65_cpsw_tx_desc_batch *tx_desc_batch;
+	struct am65_cpsw_tx_chn *tx_chn;
+	int ret, i;
+
+	/* Submit packets across netdevs across TX Channels */
+	for (i = 0; i < AM65_CPSW_MAX_QUEUES; i++) {
+		if (common->tx_desc_batch[i].tx_batch_idx) {
+			tx_chn = &common->tx_chns[i];
+			tx_desc_batch = &common->tx_desc_batch[i];
+			if (!single_port)
+				spin_lock_bh(&tx_chn->lock);
+			ret = k3_udma_glue_push_tx_chn_batch(tx_chn->tx_chn,
+							     tx_desc_batch->desc_tx_array,
+							     tx_desc_batch->desc_dma_array,
+							     tx_desc_batch->tx_batch_idx);
+			if (!single_port)
+				spin_unlock_bh(&tx_chn->lock);
+			if (ret)
+				dev_err(common->dev, "failed to push %u pkts on queue %d\n",
+					tx_desc_batch->tx_batch_idx, i);
+			tx_desc_batch->tx_batch_idx = 0;
+		}
+	}
+	atomic_set(&common->tx_batch_count, 0);
+}
+
 static netdev_tx_t am65_cpsw_nuss_ndo_slave_xmit(struct sk_buff *skb,
 						 struct net_device *ndev)
 {
 	struct am65_cpsw_common *common = am65_ndev_to_common(ndev);
 	struct cppi5_host_desc_t *first_desc, *next_desc, *cur_desc;
 	struct am65_cpsw_port *port = am65_ndev_to_port(ndev);
+	struct am65_cpsw_tx_desc_batch *tx_desc_batch;
 	struct am65_cpsw_tx_swdata *swdata;
 	struct device *dev = common->dev;
 	struct am65_cpsw_tx_chn *tx_chn;
 	struct netdev_queue *netif_txq;
 	dma_addr_t desc_dma, buf_dma;
-	int ret, q_idx, i;
+	int q_idx, i;
 	u32 *psdata;
 	u32 pkt_len;
 
@@ -1883,20 +1932,31 @@ done_tx:
 
 	cppi5_hdesc_set_pktlen(first_desc, pkt_len);
 	desc_dma = k3_cppi_desc_pool_virt2dma(tx_chn->desc_pool, first_desc);
-	if (AM65_CPSW_IS_CPSW2G(common)) {
-		ret = k3_udma_glue_push_tx_chn(tx_chn->tx_chn, first_desc, desc_dma);
-	} else {
-		spin_lock_bh(&tx_chn->lock);
-		ret = k3_udma_glue_push_tx_chn(tx_chn->tx_chn, first_desc, desc_dma);
-		spin_unlock_bh(&tx_chn->lock);
-	}
-	if (ret) {
-		dev_err(dev, "can't push desc %d\n", ret);
-		/* inform bql */
-		netdev_tx_completed_queue(netif_txq, 1, pkt_len);
-		ndev->stats.tx_errors++;
-		goto err_free_descs;
-	}
+
+	/* Batch processing begins */
+	spin_lock_bh(&common->tx_batch_lock);
+
+	tx_desc_batch = &common->tx_desc_batch[q_idx];
+	tx_desc_batch->desc_tx_array[tx_desc_batch->tx_batch_idx] = first_desc;
+	tx_desc_batch->desc_dma_array[tx_desc_batch->tx_batch_idx] = desc_dma;
+	tx_desc_batch->tx_batch_idx++;
+
+	/* Push the batch across all queues and all netdevs in any of the
+	 * following scenarios:
+	 * 1. If we reach the batch size
+	 * 2. If queue is stopped
+	 * 3. No more packets are expected for ndev
+	 * 4. We do not have sufficient free descriptors for upcoming packets
+	 *    and need to push the batch to reclaim them via completion
+	 */
+	if ((atomic_inc_return(&common->tx_batch_count) == AM65_CPSW_TX_BATCH_SIZE) ||
+	    netif_xmit_stopped(netif_txq) ||
+	    !netdev_xmit_more() ||
+	    (am65_cpsw_nuss_num_free_tx_desc(tx_chn) < MAX_SKB_FRAGS))
+		am65_cpsw_nuss_submit_ndev_batch(common);
+
+	/* Batch processing ends */
+	spin_unlock_bh(&common->tx_batch_lock);
 
 	if (am65_cpsw_nuss_num_free_tx_desc(tx_chn) < MAX_SKB_FRAGS) {
 		netif_tx_stop_queue(netif_txq);
@@ -2119,19 +2179,88 @@ static int am65_cpsw_ndo_xdp_xmit(struct net_device *ndev, int n,
 				  struct xdp_frame **frames, u32 flags)
 {
 	struct am65_cpsw_common *common = am65_ndev_to_common(ndev);
+	struct am65_cpsw_port *port = am65_ndev_to_port(ndev);
+	struct am65_cpsw_tx_desc_batch *tx_desc_batch;
+	struct cppi5_host_desc_t *host_desc;
+	struct am65_cpsw_tx_swdata *swdata;
 	struct am65_cpsw_tx_chn *tx_chn;
 	struct netdev_queue *netif_txq;
+	dma_addr_t dma_desc, dma_buf;
 	int cpu = smp_processor_id();
-	int i, nxmit = 0;
+	int i, q_idx, nxmit = 0;
+	struct xdp_frame *xdpf;
+	u32 pkt_len;
 
-	tx_chn = &common->tx_chns[cpu % common->tx_ch_num];
+	q_idx = cpu % common->tx_ch_num;
+	tx_chn = &common->tx_chns[q_idx];
 	netif_txq = netdev_get_tx_queue(ndev, tx_chn->id);
 
 	__netif_tx_lock(netif_txq, cpu);
 	for (i = 0; i < n; i++) {
-		if (am65_cpsw_xdp_tx_frame(ndev, tx_chn, frames[i],
-					   AM65_CPSW_TX_BUF_TYPE_XDP_NDO))
+		host_desc = am65_cpsw_nuss_get_tx_desc(tx_chn);
+		if (unlikely(!host_desc)) {
+			ndev->stats.tx_dropped++;
 			break;
+		}
+
+		xdpf = frames[i];
+		pkt_len = xdpf->len;
+
+		am65_cpsw_nuss_set_buf_type(tx_chn, host_desc, AM65_CPSW_TX_BUF_TYPE_XDP_NDO);
+
+		dma_buf = dma_map_single(tx_chn->dma_dev, xdpf->data,
+					 pkt_len, DMA_TO_DEVICE);
+		if (unlikely(dma_mapping_error(tx_chn->dma_dev, dma_buf))) {
+			ndev->stats.tx_dropped++;
+			am65_cpsw_nuss_put_tx_desc(tx_chn, host_desc);
+			break;
+		}
+
+		cppi5_hdesc_init(host_desc, CPPI5_INFO0_HDESC_EPIB_PRESENT,
+				 AM65_CPSW_NAV_PS_DATA_SIZE);
+		cppi5_hdesc_set_pkttype(host_desc, AM65_CPSW_CPPI_TX_PKT_TYPE);
+		cppi5_hdesc_set_pktlen(host_desc, pkt_len);
+		cppi5_desc_set_pktids(&host_desc->hdr, 0, AM65_CPSW_CPPI_TX_FLOW_ID);
+		cppi5_desc_set_tags_ids(&host_desc->hdr, 0, port->port_id);
+
+		k3_udma_glue_tx_dma_to_cppi5_addr(tx_chn->tx_chn, &dma_buf);
+		cppi5_hdesc_attach_buf(host_desc, dma_buf, pkt_len, dma_buf, pkt_len);
+
+		swdata = cppi5_hdesc_get_swdata(host_desc);
+		swdata->ndev = ndev;
+		swdata->xdpf = xdpf;
+
+		/* Report BQL before sending the packet */
+		netif_txq = netdev_get_tx_queue(ndev, tx_chn->id);
+		netdev_tx_sent_queue(netif_txq, pkt_len);
+
+		dma_desc = k3_cppi_desc_pool_virt2dma(tx_chn->desc_pool, host_desc);
+
+		/* Batch processing begins */
+		spin_lock_bh(&common->tx_batch_lock);
+
+		tx_desc_batch = &common->tx_desc_batch[q_idx];
+		tx_desc_batch->desc_tx_array[tx_desc_batch->tx_batch_idx] = host_desc;
+		tx_desc_batch->desc_dma_array[tx_desc_batch->tx_batch_idx] = dma_desc;
+		tx_desc_batch->tx_batch_idx++;
+
+		/* Push the batch across all queues and all netdevs in any of the
+		 * following scenarios:
+		 * 1. If we reach the batch size
+		 * 2. If queue is stopped
+		 * 3. We are at the last XDP frame in the batch
+		 * 4. We do not have sufficient free descriptors for upcoming packets
+		 *    and need to push the batch to reclaim them via completion
+		 */
+		if ((atomic_inc_return(&common->tx_batch_count) == AM65_CPSW_TX_BATCH_SIZE) ||
+		    netif_xmit_stopped(netif_txq) ||
+		    (i == (n - 1)) ||
+		    (am65_cpsw_nuss_num_free_tx_desc(tx_chn) < MAX_SKB_FRAGS))
+			am65_cpsw_nuss_submit_ndev_batch(common);
+
+		/* Batch processing ends */
+		spin_unlock_bh(&common->tx_batch_lock);
+
 		nxmit++;
 	}
 	__netif_tx_unlock(netif_txq);
@@ -2494,6 +2623,8 @@ static int am65_cpsw_nuss_init_tx_chns(struct am65_cpsw_common *common)
 			 sizeof(tx_chn->tx_chn_name), "%s-tx%d",
 			 dev_name(dev), tx_chn->id);
 	}
+
+	atomic_set(&common->tx_batch_count, 0);
 
 	ret = am65_cpsw_nuss_ndev_add_tx_napi(common);
 	if (ret) {

@@ -28,6 +28,8 @@ struct am65_cpts;
 #define AM65_CPSW_MAX_TX_DESC	500
 #define AM65_CPSW_MAX_RX_DESC	500
 
+#define AM65_CPSW_TX_BATCH_SIZE	128
+
 #define AM65_CPSW_PORT_VLAN_REG_OFFSET	0x014
 
 struct am65_cpsw_slave_data {
@@ -93,6 +95,7 @@ struct am65_cpsw_tx_chn {
 	struct k3_cppi_desc_pool *desc_pool;
 	struct k3_udma_glue_tx_channel *tx_chn;
 	spinlock_t lock; /* protect TX rings in multi-port mode */
+	dma_addr_t cmpl_desc_dma_array[AM65_CPSW_TX_BATCH_SIZE];
 	struct am65_cpsw_tx_ring tx_ring;
 	struct hrtimer tx_hrtimer;
 	unsigned long tx_pace_timeout;
@@ -165,6 +168,12 @@ struct am65_cpsw_devlink {
 	struct am65_cpsw_common *common;
 };
 
+struct am65_cpsw_tx_desc_batch {
+	struct cppi5_host_desc_t *desc_tx_array[AM65_CPSW_TX_BATCH_SIZE];
+	dma_addr_t desc_dma_array[AM65_CPSW_TX_BATCH_SIZE];
+	u8 tx_batch_idx;
+};
+
 struct am65_cpsw_common {
 	struct device		*dev;
 	struct device		*mdio_dev;
@@ -188,6 +197,9 @@ struct am65_cpsw_common {
 	struct am65_cpsw_tx_chn	tx_chns[AM65_CPSW_MAX_QUEUES];
 	struct completion	tdown_complete;
 	atomic_t		tdown_cnt;
+	atomic_t		tx_batch_count;
+	spinlock_t		tx_batch_lock; /* protect TX batch operations */
+	struct am65_cpsw_tx_desc_batch tx_desc_batch[AM65_CPSW_MAX_QUEUES];
 
 	int			rx_ch_num_flows;
 	struct am65_cpsw_rx_chn	rx_chns;
