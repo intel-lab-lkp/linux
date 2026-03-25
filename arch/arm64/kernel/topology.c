@@ -19,6 +19,7 @@
 #include <linux/init.h>
 #include <linux/percpu.h>
 #include <linux/sched/isolation.h>
+#include <linux/sched/topology.h>
 #include <linux/xarray.h>
 
 #include <asm/cpu.h>
@@ -373,6 +374,26 @@ core_initcall(init_amu_fie);
 #ifdef CONFIG_ACPI_CPPC_LIB
 #include <acpi/cppc_acpi.h>
 
+static bool __read_mostly sched_cppc_asym_active;
+DEFINE_PER_CPU_READ_MOSTLY(int, sched_cppc_priority);
+
+int arm64_arch_asym_cpu_priority(int cpu)
+{
+	if (!READ_ONCE(sched_cppc_asym_active))
+		return -cpu;
+	return per_cpu(sched_cppc_priority, cpu);
+}
+
+int arm64_arch_sched_asym_flags(void)
+{
+	return READ_ONCE(sched_cppc_asym_active) ? SD_ASYM_PACKING : 0;
+}
+
+void arch_topology_init_cppc_asym(void)
+{
+	WRITE_ONCE(sched_cppc_asym_active, topology_init_cppc_asym_packing(&sched_cppc_priority));
+}
+
 static void cpu_read_corecnt(void *val)
 {
 	/*
@@ -473,4 +494,17 @@ int cpc_write_ffh(int cpunum, struct cpc_reg *reg, u64 val)
 {
 	return -EOPNOTSUPP;
 }
+
+#else
+int arm64_arch_asym_cpu_priority(int cpu)
+{
+	return -cpu;
+}
+
+int arm64_arch_sched_asym_flags(void)
+{
+	return 0;
+}
+
+void arch_topology_init_cppc_asym(void) { }
 #endif /* CONFIG_ACPI_CPPC_LIB */

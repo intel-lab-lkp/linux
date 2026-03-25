@@ -1409,6 +1409,8 @@ asym_cpu_capacity_classify(const struct cpumask *sd_span,
 			   const struct cpumask *cpu_map)
 {
 	struct asym_cap_data *entry;
+	unsigned long max_cap = 0, min_cap = ULONG_MAX;
+	bool has_cap = false;
 	int count = 0, miss = 0;
 
 	/*
@@ -1418,9 +1420,12 @@ asym_cpu_capacity_classify(const struct cpumask *sd_span,
 	 * skip those.
 	 */
 	list_for_each_entry(entry, &asym_cap_list, link) {
-		if (cpumask_intersects(sd_span, cpu_capacity_span(entry)))
+		if (cpumask_intersects(sd_span, cpu_capacity_span(entry))) {
 			++count;
-		else if (cpumask_intersects(cpu_map, cpu_capacity_span(entry)))
+			max_cap = max(max_cap, entry->capacity);
+			min_cap = min(min_cap, entry->capacity);
+			has_cap = true;
+		} else if (cpumask_intersects(cpu_map, cpu_capacity_span(entry)))
 			++miss;
 	}
 
@@ -1432,10 +1437,12 @@ asym_cpu_capacity_classify(const struct cpumask *sd_span,
 	/* Some of the available CPU capacity values have not been detected */
 	if (miss)
 		return SD_ASYM_CPUCAPACITY;
+	/* When asym packing is active, ignore small capacity differences. */
+	if (arch_sched_asym_flags() && has_cap && !capacity_greater(max_cap, min_cap))
+		return 0;
 
 	/* Full asymmetry */
 	return SD_ASYM_CPUCAPACITY | SD_ASYM_CPUCAPACITY_FULL;
-
 }
 
 static void free_asym_cap_entry(struct rcu_head *head)
@@ -1768,7 +1775,7 @@ static inline int topology_arch_sched_asym_flags(void)
 #ifdef CONFIG_SCHED_SMT
 int cpu_smt_flags(void)
 {
-	return SD_SHARE_CPUCAPACITY | SD_SHARE_LLC;
+	return SD_SHARE_CPUCAPACITY | SD_SHARE_LLC | arch_sched_asym_flags();
 }
 
 const struct cpumask *tl_smt_mask(struct sched_domain_topology_level *tl, int cpu)
@@ -1780,7 +1787,7 @@ const struct cpumask *tl_smt_mask(struct sched_domain_topology_level *tl, int cp
 #ifdef CONFIG_SCHED_CLUSTER
 int cpu_cluster_flags(void)
 {
-	return SD_CLUSTER | SD_SHARE_LLC;
+	return SD_CLUSTER | SD_SHARE_LLC | arch_sched_asym_flags();
 }
 
 const struct cpumask *tl_cls_mask(struct sched_domain_topology_level *tl, int cpu)
@@ -1792,7 +1799,7 @@ const struct cpumask *tl_cls_mask(struct sched_domain_topology_level *tl, int cp
 #ifdef CONFIG_SCHED_MC
 int cpu_core_flags(void)
 {
-	return SD_SHARE_LLC;
+	return SD_SHARE_LLC | arch_sched_asym_flags();
 }
 
 const struct cpumask *tl_mc_mask(struct sched_domain_topology_level *tl, int cpu)
@@ -1804,6 +1811,11 @@ const struct cpumask *tl_mc_mask(struct sched_domain_topology_level *tl, int cpu
 const struct cpumask *tl_pkg_mask(struct sched_domain_topology_level *tl, int cpu)
 {
 	return cpu_node_mask(cpu);
+}
+
+static int cpu_pkg_flags(void)
+{
+	return arch_sched_asym_flags();
 }
 
 /*
@@ -1821,7 +1833,7 @@ static struct sched_domain_topology_level default_topology[] = {
 #ifdef CONFIG_SCHED_MC
 	SDTL_INIT(tl_mc_mask, cpu_core_flags, MC),
 #endif
-	SDTL_INIT(tl_pkg_mask, NULL, PKG),
+	SDTL_INIT(tl_pkg_mask, cpu_pkg_flags, PKG),
 	{ NULL, },
 };
 

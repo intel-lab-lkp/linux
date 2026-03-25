@@ -39,6 +39,12 @@ void update_freq_counters_refs(void);
 #undef arch_cpu_is_threaded
 #define arch_cpu_is_threaded() (read_cpuid_mpidr() & MPIDR_MT_BITMASK)
 
+#undef arch_asym_cpu_priority
+#define arch_asym_cpu_priority arm64_arch_asym_cpu_priority
+#define arch_sched_asym_flags arm64_arch_sched_asym_flags
+extern int arm64_arch_asym_cpu_priority(int cpu);
+extern int arm64_arch_sched_asym_flags(void);
+
 #include <asm-generic/topology.h>
 
 #endif /* _ASM_ARM_TOPOLOGY_H */
