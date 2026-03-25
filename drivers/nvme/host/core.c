@@ -509,6 +509,7 @@ EXPORT_SYMBOL_GPL(nvme_complete_batch_req);
 blk_status_t nvme_host_path_error(struct request *req)
 {
 	nvme_req(req)->status = NVME_SC_HOST_PATH_ERROR;
+	nvme_setup_cmd(req->q->queuedata, req);
 	blk_mq_set_request_complete(req);
 	nvme_complete_rq(req);
 	return BLK_STS_OK;
