@@ -2428,10 +2428,14 @@ static int netvsc_vf_changed(struct net_device *vf_netdev, unsigned long event)
 		 * This value is only increased for netvsc NIC when datapath is
 		 * switched over to the VF
 		 */
-		if (vf_is_up)
+		if (vf_is_up) {
 			netif_set_tso_max_size(ndev, vf_netdev->tso_max_size);
-		else
+			WRITE_ONCE(ndev->gso_max_size, READ_ONCE(vf_netdev->gso_max_size));
+			WRITE_ONCE(ndev->gso_ipv4_max_size,
+				   READ_ONCE(vf_netdev->gso_ipv4_max_size));
+		} else {
 			netif_set_tso_max_size(ndev, netvsc_dev->netvsc_gso_max_size);
+		}
 	}
 
 	return NOTIFY_OK;
