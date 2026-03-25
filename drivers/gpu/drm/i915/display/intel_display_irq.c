@@ -29,6 +29,8 @@
 #include "intel_pmdemand.h"
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
+#include "intel_writeback.h"
+#include "intel_writeback_reg.h"
 
 static void irq_reset(struct intel_display *display, struct i915_irq_regs regs)
 {
@@ -1281,6 +1283,11 @@ gen8_de_misc_irq_handler(struct intel_display *display, u32 iir)
 		found = true;
 	}
 
+	if (iir & (GEN8_DE_MISC_WD0)) {
+		intel_writeback_isr_handler(display);
+		found = true;
+	}
+
 	if (iir & GEN8_DE_EDP_PSR) {
 		struct intel_encoder *encoder;
 		u32 psr_iir;
@@ -2336,6 +2343,9 @@ void gen8_de_irq_postinstall(struct intel_display *display)
 
 	if (DISPLAY_VER(display) < 11)
 		de_misc_masked |= GEN8_DE_MISC_GSE;
+
+	if (DISPLAY_VER(display) >= 13)
+		de_misc_masked |= GEN8_DE_MISC_WD0;
 
 	if (display->platform.geminilake || display->platform.broxton)
 		de_port_masked |= BXT_DE_PORT_GMBUS;

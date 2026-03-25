@@ -14,6 +14,7 @@
 #include <drm/drm_encoder.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_vblank.h>
 
 #include "intel_atomic.h"
 #include "intel_connector.h"
@@ -323,6 +324,20 @@ void intel_writeback_atomic_commit(struct intel_atomic_state *state)
 	}
 }
 
+static void
+intel_writeback_enable_interrupts(struct intel_display *display,
+				  enum transcoder trans)
+{
+	u32 tmp;
+
+	tmp = intel_de_read(display, WD_IIR(trans));
+	intel_de_write_fw(display, WD_IIR(trans), tmp);
+
+	tmp = ~(WD_GTT_FAULT_INT | WD_WRITE_COMPLETE_INT |
+		WD_VBLANK_INT | WD_CAPTURING_INT);
+	intel_de_write(display, WD_IMR(trans), tmp);
+}
+
 static void intel_writeback_enable_encoder(struct intel_atomic_state *state,
 					   struct intel_encoder *encoder,
 					   const struct intel_crtc_state *crtc_state,
@@ -348,6 +363,7 @@ static void intel_writeback_enable_encoder(struct intel_atomic_state *state,
 	fb = job->fb;
 	hactive = adjusted_mode->hdisplay;
 	vactive = adjusted_mode->vdisplay;
+	intel_writeback_enable_interrupts(display, trans);
 
 	/* Configure WD_STRIDE, WD_SURF and WD_TAIL_CFG */
 	/* Enable Planes, Pipes and Transcoder */
@@ -507,6 +523,40 @@ intel_writeback_get_hw_state(struct intel_encoder *encoder,
 	*pipe = ffs(pipe_mask) - 1;
 
 	return true;
+}
+
+void intel_writeback_isr_handler(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+	struct intel_writeback_connector *wb_conn;
+	struct intel_crtc *crtc;
+	u32 iir;
+
+	for_each_intel_encoder(display->drm, encoder) {
+		if (encoder->type != INTEL_OUTPUT_WRITEBACK)
+			continue;
+
+		wb_conn = enc_to_intel_writeback_connector(encoder);
+		if (!wb_conn->job) {
+			drm_err(display->drm, "No writeback job for the connector\n");
+			continue;
+		}
+
+		crtc = intel_crtc_for_pipe(display, wb_conn->pipe);
+		iir = intel_de_read(display, WD_IIR(wb_conn->trans));
+		if (iir & WD_GTT_FAULT_INT)
+			drm_err(display->drm, " GTT fault during writeback\n");
+		if (iir & WD_WRITE_COMPLETE_INT)
+			drm_dbg_kms(display->drm, "Writeback job write completed\n");
+		if (iir & WD_VBLANK_INT) {
+			drm_crtc_handle_vblank(&crtc->base);
+			drm_dbg_kms(display->drm, "Writeback vblank raised\n");
+		}
+		if (iir & WD_CAPTURING_INT)
+			drm_dbg_kms(display->drm, "Writeback job capture has started\n");
+
+		intel_de_write(display, WD_IIR(wb_conn->trans), iir);
+	}
 }
 
 int intel_writeback_init(struct intel_display *display)
