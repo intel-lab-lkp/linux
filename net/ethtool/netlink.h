@@ -556,6 +556,14 @@ int ethnl_perphy_dump_one_dev(struct sk_buff *skb,
 			      struct ethnl_dump_ctx *ctx,
 			      unsigned long *pos_sub,
 			      const struct genl_info *info);
+int ethtool_cmis_get_loopback_by_index(struct net_device *dev, u32 index,
+				       struct ethtool_loopback_entry *entry);
+int ethtool_cmis_get_loopback(struct net_device *dev,
+			      const char *name,
+			      struct ethtool_loopback_entry *entry);
+int ethtool_cmis_set_loopback(struct net_device *dev,
+			      const struct ethtool_loopback_entry *entry,
+			      struct netlink_ext_ack *extack);
 
 extern const char stats_std_names[__ETHTOOL_STATS_CNT][ETH_GSTRING_LEN];
 extern const char stats_eth_phy_names[__ETHTOOL_A_STATS_ETH_PHY_CNT][ETH_GSTRING_LEN];

@@ -88,6 +88,8 @@ static int loopback_get(struct net_device *dev,
 			struct ethtool_loopback_entry *entry)
 {
 	switch (component) {
+	case ETHTOOL_LOOPBACK_COMPONENT_MODULE:
+		return ethtool_cmis_get_loopback(dev, name, entry);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -96,7 +98,7 @@ static int loopback_get(struct net_device *dev,
 static int loopback_get_by_index(struct net_device *dev, u32 index,
 				 struct ethtool_loopback_entry *entry)
 {
-	return -EOPNOTSUPP;
+	return ethtool_cmis_get_loopback_by_index(dev, index, entry);
 }
 
 static int loopback_prepare_data(const struct ethnl_req_info *req_base,
@@ -233,6 +235,8 @@ static int __loopback_set(struct net_device *dev,
 			  struct netlink_ext_ack *extack)
 {
 	switch (entry->component) {
+	case ETHTOOL_LOOPBACK_COMPONENT_MODULE:
+		return ethtool_cmis_set_loopback(dev, entry, extack);
 	default:
 		return -EOPNOTSUPP;
 	}
