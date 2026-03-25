@@ -662,7 +662,6 @@ int usbip_recv_iso(struct usbip_device *ud, struct urb *urb)
 	void *buff;
 	struct usbip_iso_packet_descriptor *iso;
 	int np = urb->number_of_packets;
-	int size = np * sizeof(*iso);
 	int i;
 	int ret;
 	int total_length = 0;
@@ -674,12 +673,22 @@ int usbip_recv_iso(struct usbip_device *ud, struct urb *urb)
 	if (np == 0)
 		return 0;
 
-	buff = kzalloc(size, GFP_KERNEL);
+	if (np < 0 || np > USBIP_MAX_ISO_PACKETS) {
+		dev_err(&urb->dev->dev,
+			"recv iso: invalid number_of_packets %d\n", np);
+		/* usbip_pack_ret_submit() already set urb->number_of_packets
+		 * from the wire - zero it so processcompl() does not iterate
+		 * OOB descriptors on the way out. */
+		urb->number_of_packets = 0;
+		return -EPROTO;
+	}
+
+	buff = kmalloc_array(np, sizeof(*iso), GFP_KERNEL);
 	if (!buff)
 		return -ENOMEM;
 
-	ret = usbip_recv(ud->tcp_socket, buff, size);
-	if (ret != size) {
+	ret = usbip_recv(ud->tcp_socket, buff, np * sizeof(*iso));
+	if (ret != np * (int)sizeof(*iso)) {
 		dev_err(&urb->dev->dev, "recv iso_frame_descriptor, %d\n",
 			ret);
 		kfree(buff);
