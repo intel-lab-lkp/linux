@@ -18389,6 +18389,12 @@ F:	net/ethtool/cabletest.c
 F:	tools/testing/selftests/drivers/net/*/ethtool*
 K:	cable_test
 
+NETWORKING [ETHTOOL LOOPBACK]
+M:	Björn Töpel <bjorn@kernel.org>
+F:	net/ethtool/cmis_loopback.c
+F:	net/ethtool/loopback.c
+F:	tools/testing/selftests/drivers/net/hw/loopback*
+
 NETWORKING [ETHTOOL MAC MERGE]
 M:	Vladimir Oltean <vladimir.oltean@nxp.com>
 F:	net/ethtool/mm.c
