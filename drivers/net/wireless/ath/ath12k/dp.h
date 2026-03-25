@@ -357,7 +357,7 @@ struct ath12k_tx_desc_params {
 
 struct ath12k_spt_info {
 	dma_addr_t paddr;
-	u64 *vaddr;
+	__le64 *vaddr;
 };
 
 struct ath12k_reo_queue_ref {

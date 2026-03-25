@@ -1149,8 +1149,8 @@ static u32 ath12k_dp_cc_cookie_gen(u16 ppt_idx, u16 spt_idx)
 	return (u32)ppt_idx << ATH12K_CC_PPT_SHIFT | spt_idx;
 }
 
-static void *ath12k_dp_cc_get_desc_addr_ptr(struct ath12k_dp *dp,
-					    u16 ppt_idx, u16 spt_idx)
+static __le64 *ath12k_dp_cc_get_desc_addr_ptr(struct ath12k_dp *dp,
+					      u16 ppt_idx, u16 spt_idx)
 {
 	return dp->spt_info[ppt_idx].vaddr + spt_idx;
 }
@@ -1158,8 +1158,9 @@ static void *ath12k_dp_cc_get_desc_addr_ptr(struct ath12k_dp *dp,
 struct ath12k_rx_desc_info *ath12k_dp_get_rx_desc(struct ath12k_dp *dp,
 						  u32 cookie)
 {
-	struct ath12k_rx_desc_info **desc_addr_ptr;
 	u16 start_ppt_idx, end_ppt_idx, ppt_idx, spt_idx;
+	__le64 *desc_addr_ptr;
+	uintptr_t desc_addr;
 
 	ppt_idx = u32_get_bits(cookie, ATH12K_DP_CC_COOKIE_PPT);
 	spt_idx = u32_get_bits(cookie, ATH12K_DP_CC_COOKIE_SPT);
@@ -1174,16 +1175,18 @@ struct ath12k_rx_desc_info *ath12k_dp_get_rx_desc(struct ath12k_dp *dp,
 
 	ppt_idx = ppt_idx - dp->rx_ppt_base;
 	desc_addr_ptr = ath12k_dp_cc_get_desc_addr_ptr(dp, ppt_idx, spt_idx);
+	desc_addr = (uintptr_t)le64_to_cpu(*desc_addr_ptr);
 
-	return *desc_addr_ptr;
+	return (struct ath12k_rx_desc_info *)desc_addr;
 }
 EXPORT_SYMBOL(ath12k_dp_get_rx_desc);
 
 struct ath12k_tx_desc_info *ath12k_dp_get_tx_desc(struct ath12k_dp *dp,
 						  u32 cookie)
 {
-	struct ath12k_tx_desc_info **desc_addr_ptr;
 	u16 start_ppt_idx, end_ppt_idx, ppt_idx, spt_idx;
+	__le64 *desc_addr_ptr;
+	uintptr_t desc_addr;
 
 	ppt_idx = u32_get_bits(cookie, ATH12K_DP_CC_COOKIE_PPT);
 	spt_idx = u32_get_bits(cookie, ATH12K_DP_CC_COOKIE_SPT);
@@ -1198,19 +1201,22 @@ struct ath12k_tx_desc_info *ath12k_dp_get_tx_desc(struct ath12k_dp *dp,
 		return NULL;
 
 	desc_addr_ptr = ath12k_dp_cc_get_desc_addr_ptr(dp, ppt_idx, spt_idx);
+	desc_addr = (uintptr_t)le64_to_cpu(*desc_addr_ptr);
 
-	return *desc_addr_ptr;
+	return (struct ath12k_tx_desc_info *)desc_addr;
 }
 EXPORT_SYMBOL(ath12k_dp_get_tx_desc);
 
 static int ath12k_dp_cc_desc_init(struct ath12k_base *ab)
 {
 	struct ath12k_dp *dp = ath12k_ab_to_dp(ab);
-	struct ath12k_rx_desc_info *rx_descs, **rx_desc_addr;
-	struct ath12k_tx_desc_info *tx_descs, **tx_desc_addr;
+	struct ath12k_rx_desc_info *rx_descs;
+	struct ath12k_tx_desc_info *tx_descs;
 	u32 num_rx_spt_pages = ATH12K_NUM_RX_SPT_PAGES(ab);
 	u32 i, j, pool_id, tx_spt_page;
 	u32 ppt_idx, cookie_ppt_idx;
+	__le64 *rx_desc_addr;
+	__le64 *tx_desc_addr;
 
 	spin_lock_bh(&dp->rx_desc_lock);
 
@@ -1246,7 +1252,7 @@ static int ath12k_dp_cc_desc_init(struct ath12k_base *ab)
 
 			/* Update descriptor VA in SPT */
 			rx_desc_addr = ath12k_dp_cc_get_desc_addr_ptr(dp, ppt_idx, j);
-			*rx_desc_addr = &rx_descs[j];
+			*rx_desc_addr = cpu_to_le64((u64)(uintptr_t)&rx_descs[j]);
 		}
 	}
 
@@ -1286,7 +1292,7 @@ static int ath12k_dp_cc_desc_init(struct ath12k_base *ab)
 				/* Update descriptor VA in SPT */
 				tx_desc_addr =
 					ath12k_dp_cc_get_desc_addr_ptr(dp, ppt_idx, j);
-				*tx_desc_addr = &tx_descs[j];
+				*tx_desc_addr = cpu_to_le64((u64)(uintptr_t)&tx_descs[j]);
 			}
 		}
 		spin_unlock_bh(&dp->tx_desc_lock[pool_id]);
