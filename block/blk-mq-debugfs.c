@@ -20,7 +20,7 @@ static int queue_poll_stat_show(void *data, struct seq_file *m)
 }
 
 static void *queue_requeue_list_start(struct seq_file *m, loff_t *pos)
-	__acquires(&q->requeue_lock)
+	__acquires(&((struct request_queue *)m->private)->requeue_lock)
 {
 	struct request_queue *q = m->private;
 
@@ -36,7 +36,7 @@ static void *queue_requeue_list_next(struct seq_file *m, void *v, loff_t *pos)
 }
 
 static void queue_requeue_list_stop(struct seq_file *m, void *v)
-	__releases(&q->requeue_lock)
+	__releases(&((struct request_queue *)m->private)->requeue_lock)
 {
 	struct request_queue *q = m->private;
 
@@ -297,7 +297,7 @@ int blk_mq_debugfs_rq_show(struct seq_file *m, void *v)
 EXPORT_SYMBOL_GPL(blk_mq_debugfs_rq_show);
 
 static void *hctx_dispatch_start(struct seq_file *m, loff_t *pos)
-	__acquires(&hctx->lock)
+	__acquires(&((struct blk_mq_hw_ctx *)m->private)->lock)
 {
 	struct blk_mq_hw_ctx *hctx = m->private;
 
@@ -313,7 +313,7 @@ static void *hctx_dispatch_next(struct seq_file *m, void *v, loff_t *pos)
 }
 
 static void hctx_dispatch_stop(struct seq_file *m, void *v)
-	__releases(&hctx->lock)
+	__releases(&((struct blk_mq_hw_ctx *)m->private)->lock)
 {
 	struct blk_mq_hw_ctx *hctx = m->private;
 
@@ -485,7 +485,7 @@ static int hctx_dispatch_busy_show(void *data, struct seq_file *m)
 
 #define CTX_RQ_SEQ_OPS(name, type)					\
 static void *ctx_##name##_rq_list_start(struct seq_file *m, loff_t *pos) \
-	__acquires(&ctx->lock)						\
+	__acquires(&((struct blk_mq_ctx *)m->private)->lock)		\
 {									\
 	struct blk_mq_ctx *ctx = m->private;				\
 									\
@@ -502,7 +502,7 @@ static void *ctx_##name##_rq_list_next(struct seq_file *m, void *v,	\
 }									\
 									\
 static void ctx_##name##_rq_list_stop(struct seq_file *m, void *v)	\
-	__releases(&ctx->lock)						\
+	__releases(&((struct blk_mq_ctx *)m->private)->lock)		\
 {									\
 	struct blk_mq_ctx *ctx = m->private;				\
 									\
