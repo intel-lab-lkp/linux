@@ -32,6 +32,7 @@ static inline void null_init_zone_lock(struct nullb_device *dev,
 
 static inline void null_lock_zone(struct nullb_device *dev,
 				  struct nullb_zone *zone)
+	__no_context_analysis /* conditional locking */
 {
 	if (!dev->memory_backed)
 		spin_lock_irq(&zone->spinlock);
@@ -41,6 +42,7 @@ static inline void null_lock_zone(struct nullb_device *dev,
 
 static inline void null_unlock_zone(struct nullb_device *dev,
 				    struct nullb_zone *zone)
+	__no_context_analysis /* conditional locking */
 {
 	if (!dev->memory_backed)
 		spin_unlock_irq(&zone->spinlock);
