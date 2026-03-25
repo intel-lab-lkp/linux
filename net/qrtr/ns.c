@@ -70,10 +70,11 @@ struct qrtr_node {
 	u32 server_count;
 };
 
-/* Max server limit is chosen based on the current platform requirements. If the
- * requirement changes in the future, this value can be increased.
+/* Max server, lookup limits are chosen based on the current platform requirements.
+ * If the requirement changes in the future, these values can be increased.
  */
 #define QRTR_NS_MAX_SERVERS 256
+#define QRTR_NS_MAX_LOOKUPS 64
 
 static struct qrtr_node *node_get(unsigned int node_id)
 {
@@ -545,10 +546,23 @@ static int ctrl_cmd_new_lookup(struct sockaddr_qrtr *from,
 	struct qrtr_node *node;
 	unsigned long node_idx;
 	unsigned long srv_idx;
+	u8 count = 0;
 
 	/* Accept only local observers */
 	if (from->sq_node != qrtr_ns.local_node)
 		return -EINVAL;
+
+	/* Make sure the client performs only maximum allowed lookups */
+	list_for_each_entry(lookup, &qrtr_ns.lookups, li) {
+		if (lookup->sq.sq_node == from->sq_node &&
+		    lookup->sq.sq_port == from->sq_port)
+			count++;
+	}
+
+	if (count >= QRTR_NS_MAX_LOOKUPS) {
+		pr_err_ratelimited("QRTR client node exceeds max lookup limit!\n");
+		return -ENOSPC;
+	}
 
 	lookup = kzalloc_obj(*lookup);
 	if (!lookup)
