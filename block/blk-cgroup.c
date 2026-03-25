@@ -812,14 +812,12 @@ EXPORT_SYMBOL_GPL(blkg_conf_open_bdev);
  * Similar to blkg_conf_open_bdev, but additionally freezes the queue,
  * ensures the correct locking order between freeze queue and q->rq_qos_mutex.
  *
- * This function returns negative error on failure. On success it returns
- * memflags which must be saved and later passed to
- * blkg_conf_close_bdev_frozen() for restoring the memalloc scope.
+ * Returns: a negative error on failure or zero if successful.
  */
-unsigned long __must_check blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx)
+int blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx,
+			       unsigned long *memflags)
 {
 	int ret;
-	unsigned long memflags;
 
 	if (ctx->bdev)
 		return -EINVAL;
@@ -835,10 +833,10 @@ unsigned long __must_check blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx)
 	 */
 	mutex_unlock(&ctx->bdev->bd_queue->rq_qos_mutex);
 
-	memflags = blk_mq_freeze_queue(ctx->bdev->bd_queue);
+	*memflags = blk_mq_freeze_queue(ctx->bdev->bd_queue);
 	mutex_lock(&ctx->bdev->bd_queue->rq_qos_mutex);
 
-	return memflags;
+	return 0;
 }
 
 /**
