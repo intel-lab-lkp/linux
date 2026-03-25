@@ -4,13 +4,16 @@
  */
 
 #include <linux/slab.h>
+#include <linux/err.h>
 #include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_writeback.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_print.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_gem_framebuffer_helper.h>
 
 #include "intel_atomic.h"
 #include "intel_connector.h"
@@ -18,6 +21,7 @@
 #include "intel_display_driver.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
+#include "intel_fb_pin.h"
 #include "intel_writeback.h"
 #include "intel_writeback_reg.h"
 
@@ -92,6 +96,64 @@ static int intel_writeback_get_modes(struct drm_connector *connector)
 	return drm_add_modes_noedid(connector, 3840, 2160);
 }
 
+static int intel_writeback_prepare_job(struct drm_connector *connector,
+				       struct drm_writeback_job *job)
+{
+	struct i915_vma *vma;
+	struct intel_writeback_job *wb_job;
+	unsigned long out_flags = 0;
+	const struct i915_gtt_view view = {
+		.type = I915_GTT_VIEW_NORMAL,
+	};
+	int ret;
+
+	if (!job->fb)
+		return 0;
+
+	if (job->fb->modifier != DRM_FORMAT_MOD_LINEAR)
+		return -EINVAL;
+
+	wb_job = kzalloc(sizeof(*wb_job), GFP_KERNEL);
+	if (!wb_job)
+		return -ENOMEM;
+
+	vma = intel_fb_pin_to_ggtt(job->fb, &view, 4 * 1024, 0, 0, true, &out_flags);
+	if (IS_ERR(vma)) {
+		drm_err(job->fb->dev, "Failed to map framebuffer: %d\n", ret);
+		ret = PTR_ERR(vma);
+		goto err;
+	}
+
+	wb_job->fb = job->fb;
+	wb_job->vma = vma;
+	drm_framebuffer_get(wb_job->fb);
+	job->priv = wb_job;
+
+	return 0;
+
+err:
+	kfree(wb_job);
+	return ret;
+}
+
+static void intel_writeback_cleanup_job(struct drm_connector *connector,
+					struct drm_writeback_job *job)
+{
+	struct intel_writeback_job *wb_job = job->priv;
+	struct i915_vma *vma;
+	unsigned long out_flags = 0;
+
+	if (!job->fb)
+		return;
+
+	vma = wb_job->vma;
+	wb_job->vma = NULL;
+	intel_fb_unpin_vma(vma, out_flags);
+	drm_framebuffer_put(wb_job->fb);
+	kfree(wb_job);
+	job->priv = NULL;
+}
+
 static const struct drm_encoder_funcs drm_writeback_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
@@ -105,6 +167,8 @@ const struct drm_connector_funcs conn_funcs = {
 static const struct drm_connector_helper_funcs conn_helper_funcs = {
 	.get_modes = intel_writeback_get_modes,
 	.mode_valid = intel_writeback_mode_valid,
+	.prepare_writeback_job = intel_writeback_prepare_job,
+	.cleanup_writeback_job = intel_writeback_cleanup_job,
 };
 
 static void
