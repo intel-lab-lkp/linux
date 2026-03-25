@@ -2266,6 +2266,9 @@ int gfs2_map_journal_extents(struct gfs2_sbd *sdp, struct gfs2_jdesc *jd)
 	u64 size;
 	int rc;
 	ktime_t start, end;
+	struct super_block *sb = sdp->sd_vfs;
+	sector_t maxsector = bdev_nr_sectors(sb->s_bdev);
+	u32 bshift = sdp->sd_fsb2bb_shift;
 
 	start = ktime_get();
 	lblock_stop = i_size_read(jd->jd_inode) >> shift;
@@ -2280,6 +2283,10 @@ int gfs2_map_journal_extents(struct gfs2_sbd *sdp, struct gfs2_jdesc *jd)
 		rc = gfs2_block_map(jd->jd_inode, lblock, &bh, 0);
 		if (rc || !buffer_mapped(&bh))
 			goto fail;
+		if (bh.b_blocknr << bshift > maxsector) {
+			rc = -EIO;
+			goto fail;
+		}
 		rc = gfs2_add_jextent(jd, lblock, bh.b_blocknr, bh.b_size >> shift);
 		if (rc)
 			goto fail;
