@@ -195,6 +195,58 @@ nsim_get_fec_stats(struct net_device *dev, struct ethtool_fec_stats *fec_stats,
 	values[2].per_lane[3] = 0;
 }
 
+static void nsim_fill_mac_lb_entry(struct netdevsim *ns,
+				   struct ethtool_loopback_entry *entry)
+{
+	memset(entry, 0, sizeof(*entry));
+	entry->component = ETHTOOL_LOOPBACK_COMPONENT_MAC;
+	strscpy(entry->name, "mac", sizeof(entry->name));
+	entry->supported = ns->ethtool.mac_lb.supported;
+	entry->direction = ns->ethtool.mac_lb.direction;
+}
+
+static int nsim_get_loopback(struct net_device *dev, const char *name,
+			     u32 id, struct ethtool_loopback_entry *entry)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	if (strcmp(name, "mac"))
+		return -EOPNOTSUPP;
+
+	nsim_fill_mac_lb_entry(ns, entry);
+	return 0;
+}
+
+static int nsim_get_loopback_by_index(struct net_device *dev, u32 index,
+				      struct ethtool_loopback_entry *entry)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	if (index > 0)
+		return -EOPNOTSUPP;
+
+	nsim_fill_mac_lb_entry(ns, entry);
+	return 0;
+}
+
+static int nsim_set_loopback(struct net_device *dev,
+			     const struct ethtool_loopback_entry *entry,
+			     struct netlink_ext_ack *extack)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	if (strcmp(entry->name, "mac")) {
+		NL_SET_ERR_MSG(extack, "Unknown MAC loopback name");
+		return -EOPNOTSUPP;
+	}
+
+	if (ns->ethtool.mac_lb.direction == entry->direction)
+		return 0;
+
+	ns->ethtool.mac_lb.direction = entry->direction;
+	return 1;
+}
+
 static int nsim_get_ts_info(struct net_device *dev,
 			    struct kernel_ethtool_ts_info *info)
 {
@@ -222,6 +274,9 @@ static const struct ethtool_ops nsim_ethtool_ops = {
 	.set_fecparam			= nsim_set_fecparam,
 	.get_fec_stats			= nsim_get_fec_stats,
 	.get_ts_info			= nsim_get_ts_info,
+	.get_loopback			= nsim_get_loopback,
+	.get_loopback_by_index		= nsim_get_loopback_by_index,
+	.set_loopback			= nsim_set_loopback,
 };
 
 static void nsim_ethtool_ring_init(struct netdevsim *ns)
@@ -270,4 +325,13 @@ void nsim_ethtool_init(struct netdevsim *ns)
 			   &ns->ethtool.ring.rx_mini_max_pending);
 	debugfs_create_u32("tx_max_pending", 0600, dir,
 			   &ns->ethtool.ring.tx_max_pending);
+
+	ns->ethtool.mac_lb.supported = ETHTOOL_LOOPBACK_DIRECTION_LOCAL |
+				       ETHTOOL_LOOPBACK_DIRECTION_REMOTE;
+
+	dir = debugfs_create_dir("mac_lb", ethtool);
+	debugfs_create_u32("supported", 0600, dir,
+			   &ns->ethtool.mac_lb.supported);
+	debugfs_create_u32("direction", 0600, dir,
+			   &ns->ethtool.mac_lb.direction);
 }
