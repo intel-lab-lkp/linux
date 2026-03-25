@@ -24,8 +24,15 @@
 struct intel_writeback_connector {
 	struct intel_connector connector;
 	struct intel_encoder encoder;
+	struct intel_writeback_job *job;
 	enum transcoder trans;
 	int frame_num;
+};
+
+struct intel_writeback_job {
+	struct drm_framebuffer *fb;
+	struct drm_writeback_connector *wb_connector;
+	struct i915_vma *vma;
 };
 
 static const u32 writeback_formats[] = {
