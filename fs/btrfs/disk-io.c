@@ -259,6 +259,11 @@ int btree_csum_one_bio(struct btrfs_bio *bbio)
 {
 	struct extent_buffer *eb = bbio->private;
 	struct btrfs_fs_info *fs_info = eb->fs_info;
+
+	/* A nodesize-misaligned eb has corrupted folio mapping. */
+	if (WARN_ON_ONCE(!IS_ALIGNED(eb->start, fs_info->nodesize)))
+		return -EIO;
+
 	u64 found_start = btrfs_header_bytenr(eb);
 	u64 last_trans;
 	u8 result[BTRFS_CSUM_SIZE];
