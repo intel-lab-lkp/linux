@@ -319,6 +319,13 @@ attribute-sets:
         name: phase-offset-avg-factor
         type: u32
         doc: Averaging factor applied to calculation of reported phase offset.
+      -
+        name: frequency-monitor
+        type: u32
+        enum: feature-state
+        doc: Receive or request state of frequency monitor feature.
+          If enabled, dpll device shall monitor all currently available
+          inputs for their actual (measured) input frequency.
   -
     name: pin
     enum-name: dpll_a_pin
@@ -456,6 +463,13 @@ attribute-sets:
           Value is in PPT (parts per trillion, 10^-12).
           Note: This attribute provides higher resolution than the standard
           fractional-frequency-offset (which is in PPM).
+      -
+        name: actual-frequency
+        type: u64
+        doc: |
+          The actual (measured) frequency of the input pin in Hz.
+          This is the actual frequency being received on the pin,
+          as measured by the dpll device hardware.
 
   -
     name: pin-parent-device
@@ -544,6 +558,7 @@ operations:
             - type
             - phase-offset-monitor
             - phase-offset-avg-factor
+            - frequency-monitor
 
       dump:
         reply: *dev-attrs
@@ -563,6 +578,7 @@ operations:
             - mode
             - phase-offset-monitor
             - phase-offset-avg-factor
+            - frequency-monitor
     -
       name: device-create-ntf
       doc: Notification about device appearing
@@ -643,6 +659,7 @@ operations:
             - esync-frequency-supported
             - esync-pulse
             - reference-sync
+            - actual-frequency
 
       dump:
         request:
