@@ -77,7 +77,6 @@ impl<T> Handle<T> {
     }
 
     /// Returns the raw handle value.
-    #[expect(dead_code)]
     pub(crate) fn as_raw(self) -> u32 {
         self.0
     }
