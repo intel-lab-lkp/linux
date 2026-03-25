@@ -30,11 +30,10 @@ struct mucse_mbx_info {
 	u32 fwpf_ctrl_base;
 };
 
-/* Enum for firmware notification modes,
- * more modes (e.g., portup, link_report) will be added in future
- **/
 enum {
 	mucse_fw_powerup,
+	mucse_fw_portup,
+	mucse_fw_link_report_en,
 };
 
 struct mucse_hw {
@@ -43,8 +42,11 @@ struct mucse_hw {
 	struct pci_dev *pdev;
 	struct mucse_mbx_info mbx;
 	int port;
+	int speed;
+	bool link;
 	u16 cycles_per_us;
 	u8 pfvfnum;
+	u8 duplex;
 };
 
 struct rnpgbe_tx_desc {
@@ -190,6 +192,10 @@ struct mucse_stats {
 #define M_DEFAULT_RXD     512
 #define M_DEFAULT_TX_WORK 256
 
+enum mucse_state_t {
+	__MUCSE_DOWN,
+};
+
 struct mucse {
 	struct net_device *netdev;
 	struct pci_dev *pdev;
@@ -199,6 +205,7 @@ struct mucse {
 #define M_FLAG_MSI_EN              BIT(1)
 #define M_FLAG_MSIX_SINGLE_EN      BIT(2)
 #define M_FLAG_MSIX_EN             BIT(3)
+#define M_FLAG_NEED_LINK_UPDATE    BIT(4)
 	u32 flags;
 	struct mucse_ring *tx_ring[RNPGBE_MAX_QUEUES] ____cacheline_aligned_in_smp;
 	struct mucse_ring *rx_ring[RNPGBE_MAX_QUEUES] ____cacheline_aligned_in_smp;
@@ -209,6 +216,10 @@ struct mucse {
 	int num_q_vectors;
 	int rx_ring_item_count;
 	int num_rx_queues;
+	unsigned long state;
+	struct delayed_work serv_task;
+	struct workqueue_struct *serv_wq;
+	spinlock_t link_lock; /* spinlock for link update */
 };
 
 int rnpgbe_get_permanent_mac(struct mucse_hw *hw, u8 *perm_addr);
@@ -217,6 +228,7 @@ int rnpgbe_send_notify(struct mucse_hw *hw,
 		       bool enable,
 		       int mode);
 int rnpgbe_init_hw(struct mucse_hw *hw, int board_type);
+void rnpgbe_set_rx(struct mucse_hw *hw, bool enable);
 
 /* Device IDs */
 #define PCI_VENDOR_ID_MUCSE               0x8848

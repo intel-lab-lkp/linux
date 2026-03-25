@@ -9,6 +9,7 @@
 
 #include "rnpgbe_lib.h"
 #include "rnpgbe.h"
+#include "rnpgbe_mbx_fw.h"
 
 /**
  * rnpgbe_msix_other - Other irq handler
@@ -19,6 +20,10 @@
  **/
 static irqreturn_t rnpgbe_msix_other(int irq, void *data)
 {
+	struct mucse *mucse = (struct mucse *)data;
+
+	mucse_fw_irq_handler(&mucse->hw);
+
 	return IRQ_HANDLED;
 }
 
@@ -897,6 +902,8 @@ static irqreturn_t rnpgbe_intr(int irq, void *data)
 	struct mucse *mucse = (struct mucse *)data;
 	struct mucse_q_vector *q_vector;
 
+	mucse_fw_irq_handler(&mucse->hw);
+
 	q_vector = mucse->q_vector[0];
 	rnpgbe_irq_disable_queues(q_vector);
 	if (q_vector->rx.ring || q_vector->tx.ring)
@@ -1158,7 +1165,23 @@ static void rnpgbe_clean_all_rx_rings(struct mucse *mucse)
 void rnpgbe_down(struct mucse *mucse)
 {
 	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+	int err;
 
+	set_bit(__MUCSE_DOWN, &mucse->state);
+
+	err = rnpgbe_send_notify(hw, false, mucse_fw_link_report_en);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send link report to hw failed %d\n", err);
+		dev_warn(&hw->pdev->dev, "Fw will still report link event\n");
+	}
+
+	err = rnpgbe_send_notify(hw, false, mucse_fw_portup);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send port down to hw failed %d\n", err);
+		dev_warn(&hw->pdev->dev, "Port is not truly down\n");
+	}
+	netif_carrier_off(netdev);
 	netif_tx_stop_all_queues(netdev);
 	rnpgbe_clean_all_tx_rings(mucse);
 	rnpgbe_irq_disable(mucse);
@@ -1174,6 +1197,8 @@ void rnpgbe_down(struct mucse *mucse)
 void rnpgbe_up_complete(struct mucse *mucse)
 {
 	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+	int err;
 
 	rnpgbe_configure_msix(mucse);
 	rnpgbe_napi_enable_all(mucse);
@@ -1181,6 +1206,20 @@ void rnpgbe_up_complete(struct mucse *mucse)
 	netif_tx_start_all_queues(netdev);
 	for (int i = 0; i < mucse->num_rx_queues; i++)
 		mucse_ring_wr32(mucse->rx_ring[i], RNPGBE_RX_START, 1);
+
+	err = rnpgbe_send_notify(hw, true, mucse_fw_portup);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send portup to hw failed %d\n", err);
+		dev_warn(&hw->pdev->dev, "Port is not truly up\n");
+	}
+
+	err = rnpgbe_send_notify(hw, true, mucse_fw_link_report_en);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send link report to hw failed %d\n", err);
+		dev_warn(&hw->pdev->dev, "Fw will not report link event\n");
+	}
+	clear_bit(__MUCSE_DOWN, &mucse->state);
+	queue_delayed_work(mucse->serv_wq, &mucse->serv_task, msecs_to_jiffies(500));
 }
 
 /**
@@ -1771,4 +1810,108 @@ void rnpgbe_configure_rx(struct mucse *mucse)
 	dma_axi_ctl = mucse_hw_rd32(hw, RNPGBE_DMA_AXI_EN);
 	dma_axi_ctl |= RX_AXI_RW_EN;
 	mucse_hw_wr32(hw, RNPGBE_DMA_AXI_EN, dma_axi_ctl);
+}
+
+/**
+ * rnpgbe_watchdog_update_link - Update the link status
+ * @mucse: pointer to the device private structure
+ **/
+static void rnpgbe_watchdog_update_link(struct mucse *mucse)
+{
+	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+	unsigned long flags;
+	bool link;
+	int speed;
+	u8 duplex;
+
+	if (!(mucse->flags & M_FLAG_NEED_LINK_UPDATE))
+		return;
+
+	spin_lock_irqsave(&mucse->link_lock, flags);
+
+	link = hw->link;
+	speed = hw->speed;
+	duplex = hw->duplex;
+
+	mucse->flags &= ~M_FLAG_NEED_LINK_UPDATE;
+	spin_unlock_irqrestore(&mucse->link_lock, flags);
+
+	if (link) {
+		netdev_info(netdev, "NIC Link is Up %d Mbps, %s Duplex\n",
+			    speed,
+			    duplex ? "Full" : "Half");
+	}
+}
+
+/**
+ * rnpgbe_watchdog_link_is_up - Update netif_carrier status and
+ * print link up message
+ * @mucse: pointer to the device private structure
+ **/
+static void rnpgbe_watchdog_link_is_up(struct mucse *mucse)
+{
+	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+
+	/* Only continue if link was previously down */
+	if (netif_carrier_ok(netdev))
+		return;
+	rnpgbe_set_rx(hw, true);
+	netif_carrier_on(netdev);
+	netif_tx_wake_all_queues(netdev);
+}
+
+/**
+ * rnpgbe_watchdog_link_is_down - Update netif_carrier status and
+ * print link down message
+ * @mucse: pointer to the private structure
+ **/
+static void rnpgbe_watchdog_link_is_down(struct mucse *mucse)
+{
+	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+
+	/* Only continue if link was up previously */
+	if (!netif_carrier_ok(netdev))
+		return;
+	netdev_info(netdev, "NIC Link is Down\n");
+	rnpgbe_set_rx(hw, false);
+	netif_carrier_off(netdev);
+	netif_tx_stop_all_queues(netdev);
+}
+
+/**
+ * mucse_watchdog_subtask - Check and bring link up
+ * @mucse: pointer to the device private structure
+ **/
+static void rnpgbe_watchdog_subtask(struct mucse *mucse)
+{
+	struct mucse_hw *hw = &mucse->hw;
+	/* if interface is down do nothing */
+	if (test_bit(__MUCSE_DOWN, &mucse->state))
+		return;
+
+	rnpgbe_watchdog_update_link(mucse);
+	if (hw->link)
+		rnpgbe_watchdog_link_is_up(mucse);
+	else
+		rnpgbe_watchdog_link_is_down(mucse);
+}
+
+/**
+ * rnpgbe_service_task - Manages and runs subtasks
+ * @work: pointer to work_struct containing our data
+ **/
+void rnpgbe_service_task(struct work_struct *work)
+{
+	struct mucse *mucse = container_of(work, struct mucse, serv_task.work);
+
+	if (test_bit(__MUCSE_DOWN, &mucse->state))
+		return;
+
+	rnpgbe_watchdog_subtask(mucse);
+
+	queue_delayed_work(mucse->serv_wq, &mucse->serv_task,
+			   msecs_to_jiffies(500));
 }

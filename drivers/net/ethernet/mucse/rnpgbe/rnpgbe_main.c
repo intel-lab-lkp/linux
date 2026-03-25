@@ -52,6 +52,7 @@ static int rnpgbe_open(struct net_device *netdev)
 	struct mucse *mucse = netdev_priv(netdev);
 	int err;
 
+	netif_carrier_off(netdev);
 	err = rnpgbe_request_irq(mucse);
 	if (err)
 		return err;
@@ -147,6 +148,7 @@ static void rnpgbe_sw_init(struct mucse *mucse)
 static int rnpgbe_add_adapter(struct pci_dev *pdev,
 			      int board_type)
 {
+	struct device *dev = &pdev->dev;
 	struct net_device *netdev;
 	u8 perm_addr[ETH_ALEN];
 	void __iomem *hw_addr;
@@ -179,6 +181,16 @@ static int rnpgbe_add_adapter(struct pci_dev *pdev,
 	err = rnpgbe_init_hw(hw, board_type);
 	if (err) {
 		dev_err(&pdev->dev, "Init hw err %d\n", err);
+		goto err_free_net;
+	}
+
+	mucse->serv_wq = alloc_workqueue("%s-%s-service",
+					 WQ_UNBOUND | WQ_MEM_RECLAIM, 0,
+					 dev_driver_string(dev),
+					 dev_name(dev));
+	if (!mucse->serv_wq) {
+		dev_err(dev, "Failed to allocate service workqueue\n");
+		err = -ENOMEM;
 		goto err_free_net;
 	}
 	/* Step 1: Send power-up notification to firmware (no response expected)
@@ -223,6 +235,9 @@ static int rnpgbe_add_adapter(struct pci_dev *pdev,
 		goto err_powerdown;
 	}
 
+	INIT_DELAYED_WORK(&mucse->serv_task, rnpgbe_service_task);
+	spin_lock_init(&mucse->link_lock);
+
 	err = rnpgbe_init_interrupt_scheme(mucse);
 	if (err) {
 		dev_err(&pdev->dev, "init interrupt failed %d\n", err);
@@ -245,6 +260,7 @@ err_free_mbx_irq:
 err_clear_interrupt:
 	rnpgbe_clear_interrupt_scheme(mucse);
 err_powerdown:
+	destroy_workqueue(mucse->serv_wq);
 	/* notify powerdown only powerup ok */
 	if (!err_notify) {
 		err_notify = rnpgbe_send_notify(hw, false, mucse_fw_powerup);
@@ -324,6 +340,7 @@ static void rnpgbe_rm_adapter(struct pci_dev *pdev)
 
 	if (!mucse)
 		return;
+	cancel_delayed_work_sync(&mucse->serv_task);
 	netdev = mucse->netdev;
 	unregister_netdev(netdev);
 	err = rnpgbe_send_notify(hw, false, mucse_fw_powerup);
@@ -331,6 +348,7 @@ static void rnpgbe_rm_adapter(struct pci_dev *pdev)
 		dev_warn(&pdev->dev, "Send powerdown to hw failed %d\n", err);
 	remove_mbx_irq(mucse);
 	rnpgbe_clear_interrupt_scheme(mucse);
+	destroy_workqueue(mucse->serv_wq);
 	free_netdev(netdev);
 }
 
