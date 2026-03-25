@@ -187,7 +187,6 @@ int hantro_vp9_dec_init(struct hantro_ctx *ctx)
 		return -ENOMEM;
 
 	tile_edge->size = size;
-	memset(tile_edge->cpu, 0, size);
 
 	size = hantro_vp9_segment_map_size(max_width, max_height);
 	vp9_dec->segment_map_size = size;
@@ -198,7 +197,6 @@ int hantro_vp9_dec_init(struct hantro_ctx *ctx)
 		goto err_segment_map;
 
 	segment_map->size = size;
-	memset(segment_map->cpu, 0, size);
 
 	size = hantro_vp9_prob_tab_size();
 	vp9_dec->ctx_counters_offset = size;
@@ -211,7 +209,6 @@ int hantro_vp9_dec_init(struct hantro_ctx *ctx)
 		goto err_misc;
 
 	misc->size = size;
-	memset(misc->cpu, 0, size);
 
 	init_v4l2_vp9_count_tbl(ctx);
 
