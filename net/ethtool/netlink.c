@@ -346,36 +346,6 @@ int ethnl_multicast(struct sk_buff *skb, struct net_device *dev)
 
 /* GET request helpers */
 
-/**
- * struct ethnl_dump_ctx - context structure for generic dumpit() callback
- * @ops:        request ops of currently processed message type
- * @req_info:   parsed request header of processed request
- * @reply_data: data needed to compose the reply
- * @pos_ifindex: saved iteration position - ifindex
- *
- * These parameters are kept in struct netlink_callback as context preserved
- * between iterations. They are initialized by ethnl_default_start() and used
- * in ethnl_default_dumpit() and ethnl_default_done().
- */
-struct ethnl_dump_ctx {
-	const struct ethnl_request_ops	*ops;
-	struct ethnl_req_info		*req_info;
-	struct ethnl_reply_data		*reply_data;
-	unsigned long			pos_ifindex;
-};
-
-/**
- * struct ethnl_perphy_dump_ctx - context for dumpit() PHY-aware callbacks
- * @ethnl_ctx: generic ethnl context
- * @ifindex: For Filtered DUMP requests, the ifindex of the targeted netdev
- * @pos_phyindex: iterator position for multi-msg DUMP
- */
-struct ethnl_perphy_dump_ctx {
-	struct ethnl_dump_ctx	ethnl_ctx;
-	unsigned int		ifindex;
-	unsigned long		pos_phyindex;
-};
-
 static const struct ethnl_request_ops *
 ethnl_default_requests[__ETHTOOL_MSG_USER_CNT] = {
 	[ETHTOOL_MSG_STRSET_GET]	= &ethnl_strset_request_ops,
@@ -618,6 +588,7 @@ static int ethnl_default_dumpit(struct sk_buff *skb,
 				struct netlink_callback *cb)
 {
 	struct ethnl_dump_ctx *ctx = ethnl_dump_context(cb);
+	const struct genl_info *info = genl_info_dump(cb);
 	struct net *net = sock_net(skb->sk);
 	netdevice_tracker dev_tracker;
 	struct net_device *dev;
@@ -625,10 +596,20 @@ static int ethnl_default_dumpit(struct sk_buff *skb,
 
 	rcu_read_lock();
 	for_each_netdev_dump(net, dev, ctx->pos_ifindex) {
+		if (ctx->ifindex && ctx->ifindex != ctx->pos_ifindex)
+			break;
+
 		netdev_hold(dev, &dev_tracker, GFP_ATOMIC);
 		rcu_read_unlock();
 
-		ret = ethnl_default_dump_one(skb, dev, ctx, genl_info_dump(cb));
+		if (ctx->ops->dump_one_dev) {
+			ctx->req_info->dev = dev;
+			ret = ctx->ops->dump_one_dev(skb, ctx, &ctx->pos_sub,
+						     info);
+			ctx->req_info->dev = NULL;
+		} else {
+			ret = ethnl_default_dump_one(skb, dev, ctx, info);
+		}
 
 		rcu_read_lock();
 		netdev_put(dev, &dev_tracker);
@@ -674,19 +655,26 @@ static int ethnl_default_start(struct netlink_callback *cb)
 	ret = ethnl_default_parse(req_info, &info->info, ops, false);
 	if (ret < 0)
 		goto free_reply_data;
-	if (req_info->dev) {
-		/* We ignore device specification in dump requests but as the
-		 * same parser as for non-dump (doit) requests is used, it
-		 * would take reference to the device if it finds one
-		 */
-		netdev_put(req_info->dev, &req_info->dev_tracker);
-		req_info->dev = NULL;
-	}
 
 	ctx->ops = ops;
 	ctx->req_info = req_info;
 	ctx->reply_data = reply_data;
 	ctx->pos_ifindex = 0;
+	ctx->ifindex = 0;
+	ctx->pos_sub = 0;
+
+	if (req_info->dev) {
+		if (ops->dump_one_dev) {
+			/* Sub-iterator dumps keep track of the dev's ifindex
+			 * so the dumpit handler can grab/release the netdev
+			 * per iteration.
+			 */
+			ctx->ifindex = req_info->dev->ifindex;
+			ctx->pos_ifindex = ctx->ifindex;
+		}
+		netdev_put(req_info->dev, &req_info->dev_tracker);
+		req_info->dev = NULL;
+	}
 
 	return 0;
 

@@ -10,6 +10,28 @@
 
 struct ethnl_req_info;
 
+/**
+ * struct ethnl_dump_ctx - context structure for generic dumpit() callback
+ * @ops:        request ops of currently processed message type
+ * @req_info:   parsed request header of processed request
+ * @reply_data: data needed to compose the reply
+ * @pos_ifindex: saved iteration position - ifindex
+ * @ifindex:    for filtered dump requests, the ifindex of the targeted netdev
+ * @pos_sub:    iterator position for per-device iteration
+ *
+ * These parameters are kept in struct netlink_callback as context preserved
+ * between iterations. They are initialized by ethnl_default_start() and used
+ * in ethnl_default_dumpit() and ethnl_default_done().
+ */
+struct ethnl_dump_ctx {
+	const struct ethnl_request_ops	*ops;
+	struct ethnl_req_info		*req_info;
+	struct ethnl_reply_data		*reply_data;
+	unsigned long			pos_ifindex;
+	unsigned int			ifindex;
+	unsigned long			pos_sub;
+};
+
 u32 ethnl_bcast_seq_next(void);
 int ethnl_parse_header_dev_get(struct ethnl_req_info *req_info,
 			       const struct nlattr *nest, struct net *net,
@@ -365,6 +387,10 @@ int ethnl_sock_priv_set(struct sk_buff *skb, struct net_device *dev, u32 portid,
  *	used e.g. to free any additional data structures outside the main
  *	structure which were allocated by ->prepare_data(). When processing
  *	dump requests, ->cleanup() is called for each message.
+ * @dump_one_dev:
+ *	Optional callback for dumping data for a single device. When set,
+ *	overrides the default dump behavior for GET requests, allowing
+ *	per-device iteration with sub-positioning via @pos_sub.
  * @set_validate:
  *	Check if set operation is supported for a given device, and perform
  *	extra input checks. Expected return values:
@@ -408,6 +434,11 @@ struct ethnl_request_ops {
 			  const struct ethnl_req_info *req_info,
 			  const struct ethnl_reply_data *reply_data);
 	void (*cleanup_data)(struct ethnl_reply_data *reply_data);
+
+	int (*dump_one_dev)(struct sk_buff *skb,
+			    struct ethnl_dump_ctx *ctx,
+			    unsigned long *pos_sub,
+			    const struct genl_info *info);
 
 	int (*set_validate)(struct ethnl_req_info *req_info,
 			    struct genl_info *info);
