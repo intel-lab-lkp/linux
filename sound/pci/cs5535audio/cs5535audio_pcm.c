@@ -341,14 +341,14 @@ static int snd_cs5535audio_capture_open(struct snd_pcm_substream *substream)
 					    SNDRV_PCM_HW_PARAM_PERIODS);
 	if (err < 0)
 		return err;
-	olpc_capture_open(cs5535au->ac97);
+	olpc_capture_open(cs5535au);
 	return 0;
 }
 
 static int snd_cs5535audio_capture_close(struct snd_pcm_substream *substream)
 {
 	struct cs5535audio *cs5535au = snd_pcm_substream_chip(substream);
-	olpc_capture_close(cs5535au->ac97);
+	olpc_capture_close(cs5535au);
 	return 0;
 }
 

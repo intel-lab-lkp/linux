@@ -9,7 +9,7 @@
 #include <sound/info.h>
 #include <sound/control.h>
 #include <sound/ac97_codec.h>
-#include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 
 #include <asm/olpc.h>
 #include "cs5535audio.h"
@@ -21,8 +21,9 @@
  * It has an Analog Input mode that is switched into (after disabling the
  * High Pass Filter) via GPIO.  It is supported on B2 and later models.
  */
-void olpc_analog_input(struct snd_ac97 *ac97, int on)
+void olpc_analog_input(struct cs5535audio *cs5535au, int on)
 {
+	struct snd_ac97 *ac97 = cs5535au->ac97;
 	int err;
 
 	if (!machine_is_olpc())
@@ -38,7 +39,7 @@ void olpc_analog_input(struct snd_ac97 *ac97, int on)
 	}
 
 	/* set Analog Input through GPIO */
-	gpio_set_value(OLPC_GPIO_MIC_AC, on);
+	gpiod_set_value(cs5535au->mic_ac, on);
 }
 
 /*
@@ -70,7 +71,9 @@ static int olpc_dc_info(struct snd_kcontrol *kctl,
 
 static int olpc_dc_get(struct snd_kcontrol *kctl, struct snd_ctl_elem_value *v)
 {
-	v->value.integer.value[0] = gpio_get_value(OLPC_GPIO_MIC_AC);
+	struct cs5535audio *cs5535au = snd_kcontrol_chip(kctl);
+
+	v->value.integer.value[0] = gpiod_get_value(cs5535au->mic_ac);
 	return 0;
 }
 
@@ -78,7 +81,7 @@ static int olpc_dc_put(struct snd_kcontrol *kctl, struct snd_ctl_elem_value *v)
 {
 	struct cs5535audio *cs5535au = snd_kcontrol_chip(kctl);
 
-	olpc_analog_input(cs5535au->ac97, v->value.integer.value[0]);
+	olpc_analog_input(cs5535au, v->value.integer.value[0]);
 	return 1;
 }
 
@@ -141,19 +144,22 @@ void olpc_prequirks(struct snd_card *card,
 		ac97->scaps |= AC97_SCAP_INV_EAPD;
 }
 
-int olpc_quirks(struct snd_card *card, struct snd_ac97 *ac97)
+int olpc_quirks(struct snd_card *card, struct cs5535audio *cs5535au)
 {
+	struct snd_ac97 *ac97 = cs5535au->ac97;
 	struct snd_ctl_elem_id elem;
 	int i, err;
 
 	if (!machine_is_olpc())
 		return 0;
 
-	if (gpio_request(OLPC_GPIO_MIC_AC, DRV_NAME)) {
-		dev_err(card->dev, "unable to allocate MIC GPIO\n");
-		return -EIO;
+	cs5535au->mic_ac = devm_gpiod_get_optional(card->dev, "mic-ac",
+						   GPIOD_OUT_LOW);
+	if (IS_ERR(cs5535au->mic_ac)) {
+		dev_err(card->dev, "unable to allocate MIC AC GPIO\n");
+		return PTR_ERR(cs5535au->mic_ac);
 	}
-	gpio_direction_output(OLPC_GPIO_MIC_AC, 0);
+	gpiod_set_consumer_name(cs5535au->mic_ac, DRV_NAME);
 
 	/* drop the original AD1888 HPF control */
 	memset(&elem, 0, sizeof(elem));
@@ -178,10 +184,4 @@ int olpc_quirks(struct snd_card *card, struct snd_ac97 *ac97)
 	/* turn off the mic by default */
 	olpc_mic_bias(ac97, 0);
 	return 0;
-}
-
-void olpc_quirks_cleanup(void)
-{
-	if (machine_is_olpc())
-		gpio_free(OLPC_GPIO_MIC_AC);
 }

@@ -2,6 +2,8 @@
 #ifndef __SOUND_CS5535AUDIO_H
 #define __SOUND_CS5535AUDIO_H
 
+#include <linux/gpio/consumer.h>
+
 #define cs_writel(cs5535au, reg, val)	outl(val, (cs5535au)->port + reg)
 #define cs_writeb(cs5535au, reg, val)	outb(val, (cs5535au)->port + reg)
 #define cs_readl(cs5535au, reg)		inl((cs5535au)->port + reg)
@@ -93,6 +95,7 @@ struct cs5535audio {
 	struct snd_pcm_substream *playback_substream;
 	struct snd_pcm_substream *capture_substream;
 	struct cs5535audio_dma dmas[NUM_CS5535AUDIO_DMAS];
+	struct gpio_desc *mic_ac;
 };
 
 extern const struct dev_pm_ops snd_cs5535audio_pm;
@@ -100,25 +103,24 @@ extern const struct dev_pm_ops snd_cs5535audio_pm;
 #ifdef CONFIG_OLPC
 void olpc_prequirks(struct snd_card *card,
 		    struct snd_ac97_template *ac97);
-int olpc_quirks(struct snd_card *card, struct snd_ac97 *ac97);
-void olpc_quirks_cleanup(void);
-void olpc_analog_input(struct snd_ac97 *ac97, int on);
+int olpc_quirks(struct snd_card *card, struct cs5535audio *cs5535au);
+void olpc_analog_input(struct cs5535audio *cs5535au, int on);
 void olpc_mic_bias(struct snd_ac97 *ac97, int on);
 
-static inline void olpc_capture_open(struct snd_ac97 *ac97)
+static inline void olpc_capture_open(struct cs5535audio *cs5535au)
 {
 	/* default to Analog Input off */
-	olpc_analog_input(ac97, 0);
+	olpc_analog_input(cs5535au, 0);
 	/* enable MIC Bias for recording */
-	olpc_mic_bias(ac97, 1);
+	olpc_mic_bias(cs5535au->ac97, 1);
 }
 
-static inline void olpc_capture_close(struct snd_ac97 *ac97)
+static inline void olpc_capture_close(struct cs5535audio *cs5535au)
 {
 	/* disable Analog Input */
-	olpc_analog_input(ac97, 0);
+	olpc_analog_input(cs5535au, 0);
 	/* disable the MIC Bias (so the recording LED turns off) */
-	olpc_mic_bias(ac97, 0);
+	olpc_mic_bias(cs5535au->ac97, 0);
 }
 #else
 static inline void olpc_prequirks(struct snd_card *card,
@@ -128,10 +130,10 @@ static inline int olpc_quirks(struct snd_card *card, struct snd_ac97 *ac97)
 	return 0;
 }
 static inline void olpc_quirks_cleanup(void) { }
-static inline void olpc_analog_input(struct snd_ac97 *ac97, int on) { }
+static inline void olpc_analog_input(struct cs5535audio *cs5535au, int on) { }
 static inline void olpc_mic_bias(struct snd_ac97 *ac97, int on) { }
-static inline void olpc_capture_open(struct snd_ac97 *ac97) { }
-static inline void olpc_capture_close(struct snd_ac97 *ac97) { }
+static inline void olpc_capture_open(struct cs5535audio *cs5535au) { }
+static inline void olpc_capture_close(struct cs5535audio *cs5535au) { }
 #endif
 
 int snd_cs5535audio_pcm(struct cs5535audio *cs5535audio);

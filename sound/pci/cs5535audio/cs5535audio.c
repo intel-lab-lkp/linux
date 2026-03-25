@@ -164,7 +164,7 @@ static int snd_cs5535audio_mixer(struct cs5535audio *cs5535au)
 
 	snd_ac97_tune_hardware(cs5535au->ac97, ac97_quirks, ac97_quirk);
 
-	err = olpc_quirks(card, cs5535au->ac97);
+	err = olpc_quirks(card, cs5535au);
 	if (err < 0) {
 		dev_err(card->dev, "olpc quirks failed\n");
 		return err;
@@ -241,7 +241,6 @@ static irqreturn_t snd_cs5535audio_interrupt(int irq, void *dev_id)
 
 static void snd_cs5535audio_free(struct snd_card *card)
 {
-	olpc_quirks_cleanup();
 }
 
 static int snd_cs5535audio_create(struct snd_card *card,

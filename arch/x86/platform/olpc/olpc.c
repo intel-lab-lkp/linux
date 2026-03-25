@@ -10,6 +10,8 @@
 #include <linux/init.h>
 #include <linux/export.h>
 #include <linux/delay.h>
+#include <linux/gpio/machine.h>
+#include <linux/gpio/property.h>
 #include <linux/io.h>
 #include <linux/string.h>
 #include <linux/platform_device.h>
@@ -17,6 +19,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/mutex.h>
 #include <linux/olpc-ec.h>
+#include <linux/property.h>
 
 #include <asm/geode.h>
 #include <asm/setup.h>
@@ -283,6 +286,32 @@ static struct olpc_ec_driver ec_xo1_5_driver = {
 #endif
 };
 
+/*
+ * Create software nodes for GPIO look-ups so we can keep the
+ * CS5535 GPIO driver abstract without peeking under the hood.
+ */
+static const struct software_node cs5535_gpiochip_node = {
+	.name = "cs5535-gpio",
+};
+
+static const struct property_entry olpc_snd_props[] = {
+	PROPERTY_ENTRY_GPIO("mic-ac-gpios", &cs5535_gpiochip_node,
+			    OLPC_GPIO_MIC_AC, GPIO_ACTIVE_HIGH),
+	{}
+};
+
+static const struct software_node olpc_snd_node = {
+	/* TODO: dev_name(&pci->dev) for the OLPC CS5535 PCI device */
+	.name = "",
+	.properties = olpc_snd_props,
+};
+
+static const struct software_node *olpc_sw_nodes[] = {
+	&cs5535_gpiochip_node,
+	&olpc_snd_node,
+	NULL
+};
+
 static int __init olpc_init(void)
 {
 	int r = 0;
@@ -314,6 +343,10 @@ static int __init olpc_init(void)
 		if (r)
 			return r;
 	}
+
+	r = software_node_register_node_group(olpc_sw_nodes);
+	if (r)
+		return r;
 
 	return 0;
 }
