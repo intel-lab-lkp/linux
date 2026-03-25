@@ -263,6 +263,10 @@ properties:
           - const: nvidia,p3768-0000+p3767-0005
           - const: nvidia,p3767-0005
           - const: nvidia,tegra234
+      - description: NVIDIA E2426-1099+E2423-1099 Engineering Reference Platform
+        items:
+          - const: nvidia,e2426-1099+e2423-1099
+          - const: nvidia,tegra238
       - description: NVIDIA P3971-0089+P3834-0008 Engineering Reference Platform
         items:
           - const: nvidia,p3971-0089+p3834-0008
