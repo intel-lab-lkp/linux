@@ -544,8 +544,6 @@ static int gmap_handle_minor_crste_fault(union asce asce, struct guest_fault *f)
 			newcrste.s.fc1.d = 1;
 			newcrste.s.fc1.sd = 1;
 		}
-		if (!oldcrste.s.fc1.d && newcrste.s.fc1.d)
-			SetPageDirty(phys_to_page(crste_origin_large(newcrste)));
 		/* In case of races, let the slow path deal with it. */
 		return !dat_crstep_xchg_atomic(f->crstep, oldcrste, newcrste, f->gfn, asce);
 	}
@@ -576,8 +574,6 @@ static int _gmap_handle_minor_pte_fault(struct gmap *gmap, union pgste *pgste,
 		newpte.s.d = 1;
 		newpte.s.sd = 1;
 	}
-	if (!oldpte.s.d && newpte.s.d)
-		SetPageDirty(pfn_to_page(newpte.h.pfra));
 	*pgste = gmap_ptep_xchg(gmap, f->ptep, newpte, *pgste, f->gfn);
 
 	return 0;
@@ -669,6 +665,7 @@ static int _gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, int leve
 			oldval = READ_ONCE(*f->crstep);
 			newval = _crste_fc1(f->pfn, oldval.h.tt, f->writable,
 					    f->write_attempt | oldval.s.fc1.d);
+			newval.s.fc1.s = !f->page;
 			newval.s.fc1.sd = oldval.s.fc1.sd;
 			if (oldval.val != _CRSTE_EMPTY(oldval.h.tt).val &&
 			    crste_origin_large(oldval) != crste_origin_large(newval))
