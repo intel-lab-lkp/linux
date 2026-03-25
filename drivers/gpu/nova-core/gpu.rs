@@ -184,6 +184,7 @@ impl From<Architecture> for u8 {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct Revision {
     major: u8,
     minor: u8,
@@ -205,6 +206,7 @@ impl fmt::Display for Revision {
 }
 
 /// Structure holding a basic description of the GPU: `Chipset` and `Revision`.
+#[derive(Clone, Copy)]
 pub(crate) struct Spec {
     chipset: Chipset,
     revision: Revision,
@@ -240,6 +242,11 @@ impl Spec {
         Spec::try_from(boot42).inspect_err(|_| {
             dev_err!(dev, "Unsupported chipset: {}\n", boot42);
         })
+    }
+
+    /// Returns this GPU's chipset.
+    pub(crate) fn chipset(&self) -> Chipset {
+        self.chipset
     }
 }
 
@@ -291,10 +298,9 @@ impl Gpu {
     ) -> impl PinInit<Self, Error> + 'a {
         try_pin_init!(Self {
             spec: Spec::new(pdev.as_ref(), bar).inspect(|spec| {
-                dev_info!(pdev,"NVIDIA ({})\n", spec);
+                dev_info!(pdev, "NVIDIA ({})\n", spec);
             })?,
 
-            // We must wait for GFW_BOOT completion before doing any significant setup on the GPU.
             _: {
                 gfw::wait_gfw_boot_completion(bar)
                     .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
