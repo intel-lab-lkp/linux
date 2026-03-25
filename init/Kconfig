@@ -1534,6 +1534,12 @@ config BOOT_CONFIG_EMBED
 	  image. But if the system doesn't support initrd, this option will
 	  help you by embedding a bootconfig file while building the kernel.
 
+	  Unlike bootconfig attached to initrd, the embedded bootconfig also
+	  supports early options (those registered with early_param()). Any
+	  kernel.* key in the embedded bootconfig is applied before
+	  parse_early_param() runs. Early options in initrd bootconfig will
+	  not be applied.
+
 	  If unsure, say N.
 
 config BOOT_CONFIG_EMBED_FILE

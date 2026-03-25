@@ -416,9 +416,64 @@ static int __init warn_bootconfig(char *str)
 	return 0;
 }
 
+/*
+ * do_early_param() is defined later in this file but called from
+ * bootconfig_apply_early_params() below, so we need a forward declaration.
+ */
+static int __init do_early_param(char *param, char *val,
+				 const char *unused, void *arg);
+
+/*
+ * bootconfig_apply_early_params - dispatch kernel.* keys from the embedded
+ * bootconfig as early_param() calls.
+ *
+ * early_param() handlers must run before most of the kernel initialises
+ * (e.g. before the GIC driver reads irqchip.gicv3_pseudo_nmi).  A bootconfig
+ * attached to the initrd arrives too late for this because the initrd is not
+ * mapped yet when early params are processed.  The embedded bootconfig lives
+ * in the kernel image itself (.init.data), so it is always reachable.
+ *
+ * This function is called from setup_boot_config() which runs in
+ * start_kernel() before parse_early_param(), making the timing correct.
+ */
+static void __init bootconfig_apply_early_params(void)
+{
+	static char val_buf[COMMAND_LINE_SIZE] __initdata;
+	struct xbc_node *knode, *root;
+	const char *val;
+	ssize_t ret;
+
+	root = xbc_find_node("kernel");
+	if (!root)
+		return;
+
+	/*
+	 * Keys that do not match any early_param() handler are silently
+	 * ignored — do_early_param() always returns 0.
+	 */
+	xbc_node_for_each_key_value(root, knode, val) {
+		if (xbc_node_compose_key_after(root, knode, xbc_namebuf, XBC_KEYLEN_MAX) < 0)
+			continue;
+
+		/*
+		 * We need to copy const char *val to a char pointer,
+		 * which is what do_early_param() need, given it might
+		 * call strsep(), strtok() later.
+		 */
+		ret = strscpy(val_buf, val, sizeof(val_buf));
+		if (ret < 0) {
+			pr_warn("ignoring bootconfig value '%s', too long\n",
+				xbc_namebuf);
+			continue;
+		}
+		do_early_param(xbc_namebuf, val_buf, NULL, NULL);
+	}
+}
+
 static void __init setup_boot_config(void)
 {
 	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
+	bool using_embedded = false;
 	const char *msg, *data;
 	int pos, ret;
 	size_t size;
@@ -427,8 +482,17 @@ static void __init setup_boot_config(void)
 	/* Cut out the bootconfig data even if we have no bootconfig option */
 	data = get_boot_config_from_initrd(&size);
 	/* If there is no bootconfig in initrd, try embedded one. */
-	if (!data)
+	if (!data) {
 		data = xbc_get_embedded_bootconfig(&size);
+		/*
+		 * Record that we are using the embedded config so that
+		 * bootconfig_apply_early_params() is called below.
+		 * When CONFIG_BOOT_CONFIG_EMBED is not set,
+		 * xbc_get_embedded_bootconfig() is a stub returning NULL, so
+		 * data is always NULL here and using_embedded stays false.
+		 */
+		using_embedded = data;
+	}
 
 	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
 	err = parse_args("bootconfig", tmp_cmdline, NULL, 0, 0, 0, NULL,
@@ -466,6 +530,8 @@ static void __init setup_boot_config(void)
 	} else {
 		xbc_get_info(&ret, NULL);
 		pr_info("Load bootconfig: %ld bytes %d nodes\n", (long)size, ret);
+		if (using_embedded)
+			bootconfig_apply_early_params();
 		/* keys starting with "kernel." are passed via cmdline */
 		extra_command_line = xbc_make_cmdline("kernel");
 		/* Also, "init." keys are init arguments */
