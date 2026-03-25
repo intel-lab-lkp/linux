@@ -13,6 +13,8 @@
 #include <linux/if_pppox.h>
 #include <linux/ppp_defs.h>
 
+#define NF_FLOW_RULE_ACTION_MAX	16
+
 struct nf_flowtable;
 struct nf_flow_rule;
 struct flow_offload;

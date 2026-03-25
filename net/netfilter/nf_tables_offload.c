@@ -88,10 +88,11 @@ static void nft_flow_rule_transfer_vlan(struct nft_offload_ctx *ctx,
 struct nft_flow_rule *nft_flow_rule_create(struct net *net,
 					   const struct nft_rule *rule)
 {
+	unsigned int num_actions = 0;
 	struct nft_offload_ctx *ctx;
 	struct nft_flow_rule *flow;
-	int num_actions = 0, err;
 	struct nft_expr *expr;
+	int err;
 
 	expr = nft_expr_first(rule);
 	while (nft_expr_more(rule, expr)) {
@@ -102,7 +103,7 @@ struct nft_flow_rule *nft_flow_rule_create(struct net *net,
 		expr = nft_expr_next(expr);
 	}
 
-	if (num_actions == 0)
+	if (num_actions == 0 || num_actions > NF_FLOW_RULE_ACTION_MAX)
 		return ERR_PTR(-EOPNOTSUPP);
 
 	flow = nft_flow_rule_alloc(num_actions);
