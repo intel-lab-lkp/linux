@@ -197,7 +197,13 @@ int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
 {
 	BUG_ON(!buffer_locked(bh));
 
+	if (!buffer_write_io_error(bh) && buffer_read_io_error(bh)) {
+		unlock_buffer(bh);
+		return -EIO;
+	}
+
 	if (ext4_buffer_uptodate(bh)) {
+		clear_buffer_read_io_error(bh);
 		unlock_buffer(bh);
 		return 0;
 	}
@@ -205,8 +211,12 @@ int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
 	__ext4_read_bh(bh, op_flags, end_io, simu_fail);
 
 	wait_on_buffer(bh);
-	if (buffer_uptodate(bh))
+	if (buffer_uptodate(bh)) {
+		clear_buffer_read_io_error(bh);
 		return 0;
+	}
+	if (!buffer_write_io_error(bh))
+		set_buffer_read_io_error(bh);
 	return -EIO;
 }
 
