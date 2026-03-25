@@ -416,7 +416,8 @@ static int scmi_clocks_probe(struct scmi_device *sdev)
 	scmi_proto_clk_ops =
 		handle->devm_protocol_get(sdev, SCMI_PROTOCOL_CLOCK, &ph);
 	if (IS_ERR(scmi_proto_clk_ops))
-		return PTR_ERR(scmi_proto_clk_ops);
+		return dev_err_probe(dev, PTR_ERR(scmi_proto_clk_ops),
+				     "No SCMI protocol handler found\n");
 
 	count = scmi_proto_clk_ops->count_get(ph);
 	if (count < 0) {
