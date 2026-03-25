@@ -861,6 +861,24 @@ void ethtool_mmsv_init(struct ethtool_mmsv *mmsv, struct net_device *dev,
 		       const struct ethtool_mmsv_ops *ops);
 
 /**
+ * struct ethtool_loopback_entry - Per-component loopback configuration
+ * @component: Loopback component
+ * @name: Subsystem-specific name for the loopback point
+ * @id: Optional component instance identifier, 0 means not specified
+ * @depth: Ordering index within a component instance, 0 means first/only
+ * @supported: Bitmask of supported directions
+ * @direction: Current loopback direction, 0 means disabled
+ */
+struct ethtool_loopback_entry {
+	enum ethtool_loopback_component component;
+	char name[ETH_GSTRING_LEN];
+	u32 id;
+	u8 depth;
+	u8 supported;
+	u8 direction;
+};
+
+/**
  * struct ethtool_rxfh_param - RXFH (RSS) parameters
  * @hfunc: Defines the current RSS hash function used by HW (or to be set to).
  *	Valid values are one of the %ETH_RSS_HASH_*.
