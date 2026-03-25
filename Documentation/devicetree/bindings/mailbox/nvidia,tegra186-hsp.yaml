@@ -85,6 +85,13 @@ properties:
       - items:
           - const: doorbell
           - pattern: "^shared([0-9]|1[0-5])$"
+
+      - items:
+          - pattern: "^shared([0-9]|1[0-5])$"
+
+      - items:
+          - const: doorbell
+          - pattern: "^shared([0-9]|1[0-5])$"
           - pattern: "^shared([0-9]|1[0-5])$"
           - pattern: "^shared([0-9]|1[0-5])$"
           - pattern: "^shared([0-9]|1[0-5])$"
