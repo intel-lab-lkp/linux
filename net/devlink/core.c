@@ -230,9 +230,17 @@ int devlink_rel_devlink_handle_put(struct sk_buff *msg, struct devlink *devlink,
 	return err;
 }
 
-void *devlink_priv(struct devlink *devlink)
+void *__devlink_priv(struct devlink *devlink)
 {
 	return &devlink->priv;
+}
+
+void *devlink_priv(struct devlink *devlink)
+{
+	if (devlink->is_shd)
+		return devlink_shd_get_priv(devlink);
+
+	return __devlink_priv(devlink);
 }
 EXPORT_SYMBOL_GPL(devlink_priv);
 
