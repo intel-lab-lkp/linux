@@ -338,6 +338,7 @@ const struct ethnl_request_ops ethnl_pse_request_ops = {
 	.reply_size		= pse_reply_size,
 	.fill_reply		= pse_fill_reply,
 	.cleanup_data		= pse_cleanup_data,
+	.dump_one_dev		= ethnl_perphy_dump_one_dev,
 
 	.set			= ethnl_set_pse,
 	/* PSE has no notification */
