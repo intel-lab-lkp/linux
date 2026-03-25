@@ -4164,6 +4164,7 @@ static int ext4_block_zero_page_range(handle_t *handle,
  * up to the end of the block which corresponds to `from'.
  * This required during truncate. We need to physically zero the tail end
  * of that block so it doesn't yield old data if the file is later grown.
+ * Return the zeroed length on success.
  */
 static int ext4_block_truncate_page(handle_t *handle,
 		struct address_space *mapping, loff_t from)
@@ -4171,6 +4172,8 @@ static int ext4_block_truncate_page(handle_t *handle,
 	unsigned length;
 	unsigned blocksize;
 	struct inode *inode = mapping->host;
+	bool did_zero = false;
+	int err;
 
 	/* If we are processing an encrypted inode during orphan list handling */
 	if (IS_ENCRYPTED(inode) && !fscrypt_has_encryption_key(inode))
@@ -4179,7 +4182,12 @@ static int ext4_block_truncate_page(handle_t *handle,
 	blocksize = i_blocksize(inode);
 	length = blocksize - (from & (blocksize - 1));
 
-	return ext4_block_zero_page_range(handle, mapping, from, length, NULL);
+	err = ext4_block_zero_page_range(handle, mapping, from, length,
+					 &did_zero);
+	if (err)
+		return err;
+
+	return did_zero ? length : 0;
 }
 
 int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
