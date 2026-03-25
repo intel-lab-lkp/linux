@@ -199,18 +199,17 @@ static void ef4_ethtool_set_msglevel(struct net_device *net_dev, u32 msg_enable)
  * @strings:		Ethtool strings, or %NULL
  * @data:		Ethtool test results, or %NULL
  * @test:		Pointer to test result (used only if data != %NULL)
- * @unit_format:	Unit name format (e.g. "chan\%d")
- * @unit_id:		Unit id (e.g. 0 for "chan0")
+ * @unit_name:		Unit name
  * @test_format:	Test name format (e.g. "loopback.\%s.tx.sent")
- * @test_id:		Test id (e.g. "PHYXS" for "loopback.PHYXS.tx_sent")
  *
  * Fill in an individual self-test entry.
  */
-static void ef4_fill_test(unsigned int test_index, u8 *strings, u64 *data,
-			  int *test, const char *unit_format, int unit_id,
-			  const char *test_format, const char *test_id)
+static void __printf(6, 7) ef4_fill_test(unsigned int test_index, u8 *strings,
+					 u64 *data, int *test,
+					 const char *unit_name,
+					 const char *test_format, ...)
 {
-	char unit_str[ETH_GSTRING_LEN], test_str[ETH_GSTRING_LEN];
+	char test_str[ETH_GSTRING_LEN];
 
 	/* Fill data value, if applicable */
 	if (data)
@@ -218,21 +217,17 @@ static void ef4_fill_test(unsigned int test_index, u8 *strings, u64 *data,
 
 	/* Fill string, if applicable */
 	if (strings) {
-		if (strchr(unit_format, '%'))
-			snprintf(unit_str, sizeof(unit_str),
-				 unit_format, unit_id);
-		else
-			strcpy(unit_str, unit_format);
-		snprintf(test_str, sizeof(test_str), test_format, test_id);
+		va_list arg;
+
+		va_start(arg, test_format);
+		vsnprintf(test_str, sizeof(test_str), test_format, arg);
+		va_end(arg);
 		snprintf(strings + test_index * ETH_GSTRING_LEN,
 			 ETH_GSTRING_LEN,
-			 "%-6s %-24s", unit_str, test_str);
+			 "%-6s %-24s", unit_name, test_str);
 	}
 }
 
-#define EF4_CHANNEL_NAME(_channel) "chan%d", _channel->channel
-#define EF4_TX_QUEUE_NAME(_tx_queue) "txq%d", _tx_queue->queue
-#define EF4_RX_QUEUE_NAME(_rx_queue) "rxq%d", _rx_queue->queue
 #define EF4_LOOPBACK_NAME(_mode, _counter)			\
 	"loopback.%s." _counter, STRING_TABLE_LOOKUP(_mode, ef4_loopback_mode)
 
@@ -259,23 +254,23 @@ static int ef4_fill_loopback_test(struct ef4_nic *efx,
 	struct ef4_tx_queue *tx_queue;
 
 	ef4_for_each_channel_tx_queue(tx_queue, channel) {
+		char unit_str[ETH_GSTRING_LEN];
+
+		snprintf(unit_str, sizeof(unit_str), "txq%d", tx_queue->queue);
+
 		ef4_fill_test(test_index++, strings, data,
 			      &lb_tests->tx_sent[tx_queue->queue],
-			      EF4_TX_QUEUE_NAME(tx_queue),
-			      EF4_LOOPBACK_NAME(mode, "tx_sent"));
+			      unit_str, EF4_LOOPBACK_NAME(mode, "tx_sent"));
 		ef4_fill_test(test_index++, strings, data,
 			      &lb_tests->tx_done[tx_queue->queue],
-			      EF4_TX_QUEUE_NAME(tx_queue),
-			      EF4_LOOPBACK_NAME(mode, "tx_done"));
+			      unit_str, EF4_LOOPBACK_NAME(mode, "tx_done"));
 	}
 	ef4_fill_test(test_index++, strings, data,
 		      &lb_tests->rx_good,
-		      "rx", 0,
-		      EF4_LOOPBACK_NAME(mode, "rx_good"));
+		      "rx", EF4_LOOPBACK_NAME(mode, "rx_good"));
 	ef4_fill_test(test_index++, strings, data,
 		      &lb_tests->rx_bad,
-		      "rx", 0,
-		      EF4_LOOPBACK_NAME(mode, "rx_bad"));
+		      "rx", EF4_LOOPBACK_NAME(mode, "rx_bad"));
 
 	return test_index;
 }
@@ -302,28 +297,31 @@ static int ef4_ethtool_fill_self_tests(struct ef4_nic *efx,
 	enum ef4_loopback_mode mode;
 
 	ef4_fill_test(n++, strings, data, &tests->phy_alive,
-		      "phy", 0, "alive", NULL);
+		      "phy", "alive");
 	ef4_fill_test(n++, strings, data, &tests->nvram,
-		      "core", 0, "nvram", NULL);
+		      "core", "nvram");
 	ef4_fill_test(n++, strings, data, &tests->interrupt,
-		      "core", 0, "interrupt", NULL);
+		      "core", "interrupt");
 
 	/* Event queues */
 	ef4_for_each_channel(channel, efx) {
+		char unit_str[ETH_GSTRING_LEN];
+
+		snprintf(unit_str, sizeof(unit_str), "chan%d",
+			 channel->channel);
+
 		ef4_fill_test(n++, strings, data,
 			      &tests->eventq_dma[channel->channel],
-			      EF4_CHANNEL_NAME(channel),
-			      "eventq.dma", NULL);
+			      unit_str, "eventq.dma");
 		ef4_fill_test(n++, strings, data,
 			      &tests->eventq_int[channel->channel],
-			      EF4_CHANNEL_NAME(channel),
-			      "eventq.int", NULL);
+			      unit_str, "eventq.int");
 	}
 
 	ef4_fill_test(n++, strings, data, &tests->memory,
-		      "core", 0, "memory", NULL);
+		      "core", "memory");
 	ef4_fill_test(n++, strings, data, &tests->registers,
-		      "core", 0, "registers", NULL);
+		      "core", "registers");
 
 	if (efx->phy_op->run_tests != NULL) {
 		EF4_BUG_ON_PARANOID(efx->phy_op->test_name == NULL);
@@ -337,7 +335,7 @@ static int ef4_ethtool_fill_self_tests(struct ef4_nic *efx,
 				break;
 
 			ef4_fill_test(n++, strings, data, &tests->phy_ext[i],
-				      "phy", 0, name, NULL);
+				      "phy", "%s", name);
 		}
 	}
 
