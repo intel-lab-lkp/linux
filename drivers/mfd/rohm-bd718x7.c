@@ -7,7 +7,8 @@
 // Datasheet for BD71837MWV available from
 // https://www.rohm.com/datasheet/BD71837MWV/bd71837mwv-e
 
-#include <linux/gpio_keys.h>
+#include <linux/device/devres.h>
+#include <linux/gfp_types.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
@@ -15,37 +16,16 @@
 #include <linux/mfd/core.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/types.h>
 
-static struct gpio_keys_button button = {
-	.code = KEY_POWER,
-	.gpio = -1,
-	.type = EV_KEY,
-};
-
-static struct gpio_keys_platform_data bd718xx_powerkey_data = {
-	.buttons = &button,
-	.nbuttons = 1,
-	.name = "bd718xx-pwrkey",
-};
-
 static struct mfd_cell bd71837_mfd_cells[] = {
-	{
-		.name = "gpio-keys",
-		.platform_data = &bd718xx_powerkey_data,
-		.pdata_size = sizeof(bd718xx_powerkey_data),
-	},
 	{ .name = "bd71837-clk", },
 	{ .name = "bd71837-pmic", },
 };
 
 static struct mfd_cell bd71847_mfd_cells[] = {
-	{
-		.name = "gpio-keys",
-		.platform_data = &bd718xx_powerkey_data,
-		.pdata_size = sizeof(bd718xx_powerkey_data),
-	},
 	{ .name = "bd71847-clk", },
 	{ .name = "bd71847-pmic", },
 };
@@ -125,10 +105,84 @@ static int bd718xx_init_press_duration(struct regmap *regmap,
 	return 0;
 }
 
+static void bd718xx_i2c_unregister_swnodes(void *data)
+{
+	const struct software_node *nodes = data;
+	const struct software_node *node_group[] = {
+		&nodes[0], &nodes[1], NULL
+	};
+
+	software_node_unregister_node_group(node_group);
+}
+
+static int bd718xx_i2c_register_pwrbutton(struct device *dev,
+					  struct irq_domain *irq_domain)
+{
+	static const struct property_entry bd718xx_powerkey_parent_props[] = {
+		PROPERTY_ENTRY_STRING("label", "bd718xx-pwrkey"),
+		{ }
+	};
+	static const struct property_entry bd718xx_powerkey_props[] = {
+		PROPERTY_ENTRY_U32("linux,code", KEY_POWER),
+		{ }
+	};
+	const struct resource res[] = {
+		DEFINE_RES_IRQ_NAMED(BD718XX_INT_PWRBTN_S, "bd718xx-pwrkey"),
+	};
+	struct mfd_cell gpio_keys_cell = {
+		.name = "gpio-keys",
+		.resources = res,
+		.num_resources = ARRAY_SIZE(res),
+	};
+	const struct software_node * const *node_group;
+	struct software_node *nodes;
+	int error;
+
+	nodes = devm_kcalloc(dev, 2, sizeof(*nodes), GFP_KERNEL);
+	if (!nodes)
+		return -ENOMEM;
+
+	/* Node corresponding to gpio-keys device itself */
+	nodes[0].name = devm_kasprintf(dev, GFP_KERNEL, "%s-power-key", dev_name(dev));
+	if (!nodes[0].name)
+		return -ENOMEM;
+
+	nodes[0].properties = bd718xx_powerkey_parent_props;
+
+	/* Node representing power button within gpio-keys device */
+	nodes[1].parent = &nodes[0];
+	nodes[1].properties = bd718xx_powerkey_props;
+
+	node_group = (const struct software_node *[]){
+		&nodes[0],
+		&nodes[1],
+		NULL
+	};
+
+	error = software_node_register_node_group(node_group);
+	if (error)
+		return error;
+
+	error = devm_add_action_or_reset(dev, bd718xx_i2c_unregister_swnodes,
+					 nodes);
+	if (error)
+		return error;
+
+	gpio_keys_cell.swnode = &nodes[0];
+	error = devm_mfd_add_devices(dev, PLATFORM_DEVID_AUTO,
+				     &gpio_keys_cell, 1, NULL, 0, irq_domain);
+	if (error)
+		return dev_err_probe(dev, error,
+				     "Failed to create power button subdevice");
+
+	return 0;
+}
+
 static int bd718xx_i2c_probe(struct i2c_client *i2c)
 {
 	struct regmap *regmap;
 	struct regmap_irq_chip_data *irq_data;
+	struct irq_domain *irq_domain;
 	int ret;
 	unsigned int chip_type;
 	struct mfd_cell *mfd;
@@ -169,20 +223,18 @@ static int bd718xx_i2c_probe(struct i2c_client *i2c)
 	if (ret)
 		return ret;
 
-	ret = regmap_irq_get_virq(irq_data, BD718XX_INT_PWRBTN_S);
-
-	if (ret < 0)
-		return dev_err_probe(&i2c->dev, ret, "Failed to get the IRQ\n");
-
-	button.irq = ret;
+	irq_domain = regmap_irq_get_domain(irq_data);
 
 	ret = devm_mfd_add_devices(&i2c->dev, PLATFORM_DEVID_AUTO,
-				   mfd, cells, NULL, 0,
-				   regmap_irq_get_domain(irq_data));
+				   mfd, cells, NULL, 0, irq_domain);
 	if (ret)
-		dev_err_probe(&i2c->dev, ret, "Failed to create subdevices\n");
+		return dev_err_probe(&i2c->dev, ret, "Failed to create subdevices\n");
 
-	return ret;
+	ret = bd718xx_i2c_register_pwrbutton(&i2c->dev, irq_domain);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 static const struct of_device_id bd718xx_of_match[] = {
