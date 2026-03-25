@@ -2219,6 +2219,8 @@ static int gfs2_add_jextent(struct gfs2_jdesc *jd, u64 lblock, u64 dblock, u64 b
 
 	if (!list_empty(&jd->extent_list)) {
 		jext = list_last_entry(&jd->extent_list, struct gfs2_journal_extent, list);
+		if (jext->lblock + jext->blocks != lblock)
+			return -EINVAL;
 		if ((jext->dblock + jext->blocks) == dblock) {
 			jext->blocks += blocks;
 			return 0;
