@@ -4,6 +4,7 @@ use core::{
     array,
     convert::Infallible,
     ffi::FromBytesUntilNulError,
+    marker::PhantomData,
     str::Utf8Error, //
 };
 
@@ -33,6 +34,54 @@ use crate::{
     },
     sbuffer::SBufferIter,
 };
+
+/// Marker type for a GSP-RM client handle.
+///
+/// A client handle identifies a client which provides a namespace for RM objects. Lookup of objects
+/// happens within the client namespace.
+pub(crate) struct Client;
+
+/// Marker type for a GSP-RM device handle.
+///
+/// A device handle identifies a logical GPU device instance under a client. In multi-GPU
+/// configurations it can represent a grouped or logical device.
+#[expect(dead_code)]
+pub(crate) struct Device;
+
+/// Marker type for a GSP-RM subdevice handle.
+///
+/// A subdevice handle identifies a child of a device that selects one specific GPU within that
+/// device.
+pub(crate) struct Subdevice;
+
+/// A typed GSP-RM object handle.
+///
+/// These handles form a tree structure with different types of RM objects, with client at the root.
+/// An RM object is anything identified by a valid handle. For example, the tree may look like
+/// Client -> Device -> Subdevice, where there may be multiple devices under each client, and
+/// multiple subdevices under each device.
+#[derive(Debug)]
+pub(crate) struct Handle<T>(u32, PhantomData<T>);
+
+impl<T> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for Handle<T> {}
+
+impl<T> Handle<T> {
+    /// Creates a new handle from a raw value.
+    pub(crate) fn new(raw: u32) -> Self {
+        Self(raw, PhantomData)
+    }
+
+    /// Returns the raw handle value.
+    #[expect(dead_code)]
+    pub(crate) fn as_raw(self) -> u32 {
+        self.0
+    }
+}
 
 /// The `GspSetSystemInfo` command.
 pub(crate) struct SetSystemInfo<'a> {
@@ -192,6 +241,8 @@ impl CommandToGsp for GetGspStaticInfo {
 /// The reply from the GSP to the [`GetGspInfo`] command.
 pub(crate) struct GetGspStaticInfoReply {
     gpu_name: [u8; 64],
+    client: Handle<Client>,
+    subdevice: Handle<Subdevice>,
 }
 
 impl MessageFromGsp for GetGspStaticInfoReply {
@@ -205,6 +256,8 @@ impl MessageFromGsp for GetGspStaticInfoReply {
     ) -> Result<Self, Self::InitError> {
         Ok(GetGspStaticInfoReply {
             gpu_name: msg.gpu_name_str(),
+            client: msg.client(),
+            subdevice: msg.subdevice(),
         })
     }
 }
@@ -230,6 +283,18 @@ impl GetGspStaticInfoReply {
             .map_err(GpuNameError::NoNullTerminator)?
             .to_str()
             .map_err(GpuNameError::InvalidUtf8)
+    }
+
+    /// Returns the client handle allocated by GSP-RM.
+    #[expect(dead_code)]
+    pub(crate) fn client(&self) -> Handle<Client> {
+        self.client
+    }
+
+    /// Returns the subdevice handle allocated by GSP-RM.
+    #[expect(dead_code)]
+    pub(crate) fn subdevice(&self) -> Handle<Subdevice> {
+        self.subdevice
     }
 }
 
