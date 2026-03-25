@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: MIT
+/*
+ * Copyright © 2025 Intel Corporation
+ */
+
+#include <linux/slab.h>
+#include <drm/drm_atomic_state_helper.h>
+#include <drm/drm_writeback.h>
+#include <drm/drm_modeset_helper_vtables.h>
+#include <drm/drm_probe_helper.h>
+#include <drm/drm_fourcc.h>
+#include <drm/drm_encoder.h>
+
+#include "intel_atomic.h"
+#include "intel_connector.h"
+#include "intel_de.h"
+#include "intel_display_driver.h"
+#include "intel_display_types.h"
+#include "intel_writeback.h"
+
+struct intel_writeback_connector {
+	struct intel_connector connector;
+	struct intel_encoder encoder;
+	enum transcoder trans;
+	int frame_num;
+};
+
+static const u32 writeback_formats[] = {
+	DRM_FORMAT_XYUV8888,
+	DRM_FORMAT_YUYV,
+	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_XVYU2101010,
+	DRM_FORMAT_VYUY,
+	DRM_FORMAT_XBGR2101010,
+};
+
+static int intel_writeback_connector_init(struct intel_connector *connector)
+{
+	struct intel_digital_connector_state *conn_state;
+
+	conn_state = kzalloc(sizeof(*conn_state), GFP_KERNEL);
+	if (!conn_state)
+		return -ENOMEM;
+
+	__drm_atomic_helper_connector_reset(&connector->base,
+					    &conn_state->base);
+	return 0;
+}
+
+static int
+intel_writeback_connector_alloc(struct intel_connector *connector)
+{
+	if (intel_writeback_connector_init(connector) < 0) {
+		kfree(connector);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static const struct drm_encoder_funcs drm_writeback_encoder_funcs = {
+	.destroy = drm_encoder_cleanup,
+};
+
+const struct drm_connector_funcs conn_funcs = {
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.atomic_duplicate_state = intel_digital_connector_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
+};
+
+static const struct drm_connector_helper_funcs conn_helper_funcs = {
+};
+
+int intel_writeback_init(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+	struct intel_writeback_connector *writeback_conn;
+	struct intel_connector *connector;
+	int ret;
+
+	writeback_conn = kzalloc(sizeof(*writeback_conn), GFP_KERNEL);
+	if (!writeback_conn)
+		return -ENOSPC;
+
+	encoder = &writeback_conn->encoder;
+	encoder->base.possible_crtcs = 0xf;
+	ret = drm_encoder_init(display->drm, &encoder->base,
+			       &drm_writeback_encoder_funcs,
+			       DRM_MODE_ENCODER_VIRTUAL, NULL);
+	if (ret) {
+		kfree(writeback_conn);
+		return ret;
+	}
+
+	encoder->type = INTEL_OUTPUT_WRITEBACK;
+	encoder->pipe_mask = ~0;
+	encoder->cloneable = 0;
+
+	connector = &writeback_conn->connector;
+	ret = intel_writeback_connector_alloc(connector);
+	if (ret) {
+		kfree(writeback_conn);
+		return ret;
+	}
+
+	connector->base.interlace_allowed = 0;
+	drm_connector_helper_add(&connector->base, &conn_helper_funcs);
+	ret = drm_writeback_connector_init(display->drm, &connector->base,
+					   &conn_funcs, &encoder->base,
+					   writeback_formats,
+					   ARRAY_SIZE(writeback_formats));
+	if (ret) {
+		intel_connector_free(connector);
+		drm_encoder_cleanup(&encoder->base);
+		kfree(&writeback_conn->encoder);
+		kfree(writeback_conn);
+		return ret;
+	}
+
+	intel_connector_attach_encoder(connector, encoder);
+	connector->get_hw_state = intel_connector_get_hw_state;
+	connector->base.status = connector_status_disconnected;
+	writeback_conn->frame_num = 1;
+
+	return 0;
+}
