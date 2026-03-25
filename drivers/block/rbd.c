@@ -4185,6 +4185,7 @@ again:
 }
 
 static bool rbd_quiesce_lock(struct rbd_device *rbd_dev)
+	__must_hold(&rbd_dev->lock_rwsem)
 {
 	dout("%s rbd_dev %p\n", __func__, rbd_dev);
 	lockdep_assert_held_write(&rbd_dev->lock_rwsem);
@@ -4229,6 +4230,7 @@ static void __rbd_release_lock(struct rbd_device *rbd_dev)
  * lock_rwsem must be held for write
  */
 static void rbd_release_lock(struct rbd_device *rbd_dev)
+	__must_hold(&rbd_dev->lock_rwsem)
 {
 	if (!rbd_quiesce_lock(rbd_dev))
 		return;
@@ -4597,6 +4599,7 @@ static void rbd_unregister_watch(struct rbd_device *rbd_dev)
  * lock_rwsem must be held for write
  */
 static void rbd_reacquire_lock(struct rbd_device *rbd_dev)
+	__must_hold(&rbd_dev->lock_rwsem)
 {
 	struct ceph_osd_client *osdc = &rbd_dev->rbd_client->client->osdc;
 	char cookie[32];
@@ -6789,6 +6792,7 @@ static void rbd_dev_device_release(struct rbd_device *rbd_dev)
  * upon return.
  */
 static int rbd_dev_device_setup(struct rbd_device *rbd_dev)
+	__releases(&rbd_dev->header_rwsem)
 {
 	int ret;
 
@@ -6890,6 +6894,7 @@ static void rbd_dev_image_release(struct rbd_device *rbd_dev)
  * with @depth == 0.
  */
 static int rbd_dev_image_probe(struct rbd_device *rbd_dev, int depth)
+	__no_context_analysis /* conditional locking */
 {
 	bool need_watch = !rbd_is_ro(rbd_dev);
 	int ret;
@@ -7142,6 +7147,9 @@ static ssize_t do_rbd_add(const char *buf, size_t count)
 	rc = rbd_dev_image_probe(rbd_dev, 0);
 	if (rc < 0)
 		goto err_out_rbd_dev;
+
+	/* Acquired by rbd_dev_image_probe(rbd_dev, 0) */
+	__acquire(&rbd_dev->header_rwsem);
 
 	if (rbd_dev->opts->alloc_size > rbd_dev->layout.object_size) {
 		rbd_warn(rbd_dev, "alloc_size adjusted to %u",
