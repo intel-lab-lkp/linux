@@ -815,6 +815,8 @@ struct damon_ctx {
 	struct completion kdamond_started;
 	/* for scheme quotas prioritization */
 	unsigned long *regions_score_histogram;
+	/* for kdamond_split_regions() heuristic */
+	unsigned int last_nr_regions;
 
 	/* lists of &struct damon_call_control */
 	struct list_head call_controls;
