@@ -114,11 +114,11 @@ static void hid_retry_timeout(struct timer_list *t)
 		hid_io_error(hid);
 }
 
-/* Workqueue routine to reset the device or clear a halt */
-static void hid_reset(struct work_struct *work)
+/* Workqueue routine to clear a halt */
+static void hid_err_work(struct work_struct *work)
 {
 	struct usbhid_device *usbhid =
-		container_of(work, struct usbhid_device, reset_work);
+		container_of(work, struct usbhid_device, error_work);
 	struct hid_device *hid = usbhid->hid;
 	int rc;
 
@@ -297,7 +297,7 @@ static void hid_irq_in(struct urb *urb)
 		usbhid_mark_busy(usbhid);
 		clear_bit(HID_IN_RUNNING, &usbhid->iofl);
 		set_bit(HID_CLEAR_HALT, &usbhid->iofl);
-		schedule_work(&usbhid->reset_work);
+		schedule_work(&usbhid->error_work);
 		return;
 	case -ECONNRESET:	/* unlink */
 	case -ENOENT:
@@ -1438,7 +1438,7 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 	usbhid->ifnum = interface->desc.bInterfaceNumber;
 
 	init_waitqueue_head(&usbhid->wait);
-	INIT_WORK(&usbhid->reset_work, hid_reset);
+	INIT_WORK(&usbhid->error_work, hid_err_work);
 	timer_setup(&usbhid->io_retry, hid_retry_timeout, 0);
 	spin_lock_init(&usbhid->lock);
 	mutex_init(&usbhid->mutex);
@@ -1477,7 +1477,7 @@ static void usbhid_disconnect(struct usb_interface *intf)
 static void hid_cancel_delayed_stuff(struct usbhid_device *usbhid)
 {
 	timer_delete_sync(&usbhid->io_retry);
-	cancel_work_sync(&usbhid->reset_work);
+	cancel_work_sync(&usbhid->error_work);
 }
 
 static void hid_cease_io(struct usbhid_device *usbhid)
@@ -1498,7 +1498,7 @@ static void hid_restart_io(struct hid_device *hid)
 	usbhid_mark_busy(usbhid);
 
 	if (clear_halt)
-		schedule_work(&usbhid->reset_work);
+		schedule_work(&usbhid->error_work);
 
 	usbhid->retry_delay = 0;
 	spin_unlock_irq(&usbhid->lock);
