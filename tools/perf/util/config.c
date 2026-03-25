@@ -461,6 +461,9 @@ static int perf_default_core_config(const char *var, const char *value)
 	if (!strcmp(var, "core.addr2line-timeout"))
 		addr2line_timeout_ms = strtoul(value, NULL, 10);
 
+	if (!strcmp(var, "core.addr2line-disable-warn"))
+		symbol_conf.addr2line_disable_warn = strtoul(value, NULL, 10);
+
 	/* Add other config variables here. */
 	return 0;
 }
