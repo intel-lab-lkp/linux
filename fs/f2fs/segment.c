@@ -455,6 +455,20 @@ void f2fs_balance_fs(struct f2fs_sb_info *sbi, bool need)
 		io_schedule();
 		finish_wait(&sbi->gc_thread->fggc_wq, &wait);
 	} else {
+
+		/*
+		 * Before triggering foreground GC, submit all cached DATA
+		 * write bios. During writeback, pages may be added to
+		 * write_io[DATA].bio with PG_writeback set but the bio not
+		 * yet submitted. If GC's move_data_page() blocks on
+		 * __folio_lock() for such a folio, and the lock holder waits
+		 * for PG_writeback to clear via VFS folio_wait_writeback()
+		 * neither thread can make progress. Flushing here ensures
+		 * the bio completion callback can clear PG_writeback.
+		 */
+
+		f2fs_submit_merged_write(sbi, DATA);
+
 		struct f2fs_gc_control gc_control = {
 			.victim_segno = NULL_SEGNO,
 			.init_gc_type = f2fs_sb_has_blkzoned(sbi) ?
