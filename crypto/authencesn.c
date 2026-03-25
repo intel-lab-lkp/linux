@@ -215,9 +215,12 @@ static int crypto_authenc_esn_decrypt_tail(struct aead_request *req,
 		goto decrypt;
 
 	/* Move high-order bits of sequence number back. */
-	scatterwalk_map_and_copy(tmp, dst, 4, 4, 0);
-	scatterwalk_map_and_copy(tmp + 1, dst, assoclen + cryptlen, 4, 0);
-	scatterwalk_map_and_copy(tmp, dst, 0, 8, 1);
+	if (req->src == dst) {
+		scatterwalk_map_and_copy(tmp, dst, 4, 4, 0);
+		scatterwalk_map_and_copy(tmp + 1, dst, assoclen + cryptlen, 4, 0);
+		scatterwalk_map_and_copy(tmp, dst, 0, 8, 1);
+	} else
+		memcpy_sglist(dst, req->src, 8);
 
 	if (crypto_memneq(ihash, ohash, authsize))
 		return -EBADMSG;
@@ -273,10 +276,12 @@ static int crypto_authenc_esn_decrypt(struct aead_request *req)
 	if (!authsize)
 		goto tail;
 
-	/* Move high-order bits of sequence number to the end. */
 	scatterwalk_map_and_copy(tmp, dst, 0, 8, 0);
 	scatterwalk_map_and_copy(tmp, dst, 4, 4, 1);
-	scatterwalk_map_and_copy(tmp + 1, dst, assoclen + cryptlen, 4, 1);
+	if (req->src == dst) {
+		/* Move high-order bits of sequence number to the end. */
+		scatterwalk_map_and_copy(tmp + 1, dst, assoclen + cryptlen, 4, 1);
+	}
 
 	sg_init_table(areq_ctx->dst, 2);
 	dst = scatterwalk_ffwd(areq_ctx->dst, dst, 4);
