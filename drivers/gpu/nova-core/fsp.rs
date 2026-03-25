@@ -8,7 +8,10 @@
 
 use kernel::{
     device,
-    dma::CoherentAllocation,
+    dma::{
+        Coherent,
+        CoherentBox, //
+    },
     io::poll::read_poll_timeout,
     prelude::*,
     ptr::{
@@ -222,7 +225,7 @@ impl MessageToFsp for FspMessage {
 pub(crate) struct FmcBootArgs<'a> {
     chipset: crate::gpu::Chipset,
     fmc_image_fw: &'a crate::dma::DmaObject,
-    fmc_boot_params: CoherentAllocation<GspFmcBootParams>,
+    fmc_boot_params: Coherent<GspFmcBootParams>,
     resume: bool,
     signatures: &'a FmcSignatures,
 }
@@ -246,34 +249,24 @@ impl<'a> FmcBootArgs<'a> {
         const GSP_DMA_TARGET_COHERENT_SYSTEM: u32 = 1;
         const GSP_DMA_TARGET_NONCOHERENT_SYSTEM: u32 = 2;
 
-        let fmc_boot_params = CoherentAllocation::<GspFmcBootParams>::alloc_coherent(
-            dev,
-            1,
-            GFP_KERNEL | __GFP_ZERO,
-        )?;
+        let mut fmc_boot_params = CoherentBox::<GspFmcBootParams>::zeroed(dev, GFP_KERNEL)?;
 
         // Blackwell FSP expects wpr_carveout_offset and wpr_carveout_size to be zero;
         // it obtains WPR info from other sources.
-        kernel::dma_write!(
-            fmc_boot_params,
-            [0]?.boot_gsp_rm_params,
-            GspAcrBootGspRmParams {
-                target: GSP_DMA_TARGET_COHERENT_SYSTEM,
-                gsp_rm_desc_size: wpr_meta_size,
-                gsp_rm_desc_offset: wpr_meta_addr,
-                b_is_gsp_rm_boot: 1,
-                ..Default::default()
-            }
-        );
+        fmc_boot_params.boot_gsp_rm_params = GspAcrBootGspRmParams {
+            target: GSP_DMA_TARGET_COHERENT_SYSTEM,
+            gsp_rm_desc_size: wpr_meta_size,
+            gsp_rm_desc_offset: wpr_meta_addr,
+            b_is_gsp_rm_boot: 1,
+            ..Default::default()
+        };
 
-        kernel::dma_write!(
-            fmc_boot_params,
-            [0]?.gsp_rm_params,
-            GspRmParams {
-                target: GSP_DMA_TARGET_NONCOHERENT_SYSTEM,
-                boot_args_offset: libos_addr,
-            }
-        );
+        fmc_boot_params.gsp_rm_params = GspRmParams {
+            target: GSP_DMA_TARGET_NONCOHERENT_SYSTEM,
+            boot_args_offset: libos_addr,
+        };
+
+        let fmc_boot_params: Coherent<GspFmcBootParams> = fmc_boot_params.into();
 
         Ok(Self {
             chipset,
