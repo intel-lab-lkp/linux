@@ -397,7 +397,7 @@ int intel_opregion_notify_encoder(struct intel_encoder *encoder,
 	int ret;
 
 	/* don't care about old stuff for now */
-	if (!HAS_DDI(display))
+	if (!HAS_DDI(display) || encoder->type == INTEL_OUTPUT_WRITEBACK)
 		return 0;
 
 	/* Avoid port out of bounds checks if SWSCI isn't there. */

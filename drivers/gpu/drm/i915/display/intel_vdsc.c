@@ -20,6 +20,7 @@
 #include "intel_qp_tables.h"
 #include "intel_vdsc.h"
 #include "intel_vdsc_regs.h"
+#include "intel_writeback.h"
 
 bool intel_dsc_source_support(const struct intel_crtc_state *crtc_state)
 {
@@ -1079,6 +1080,9 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 	u32 dss_ctl1, dss_ctl2;
 
 	if (!intel_dsc_source_support(crtc_state))
+		return;
+
+	if (intel_writeback_transcoder_is_wd(cpu_transcoder))
 		return;
 
 	power_domain = intel_dsc_power_domain(crtc, cpu_transcoder);

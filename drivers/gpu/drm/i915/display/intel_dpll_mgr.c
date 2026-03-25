@@ -4664,6 +4664,9 @@ int intel_dpll_compute(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(state);
 	const struct intel_dpll_mgr *dpll_mgr = display->dpll.mgr;
 
+	if (encoder->type == INTEL_OUTPUT_WRITEBACK)
+		return 0;
+
 	if (drm_WARN_ON(display->drm, !dpll_mgr))
 		return -EINVAL;
 
