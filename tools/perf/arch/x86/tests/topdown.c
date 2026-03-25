@@ -75,4 +75,139 @@ static int test__x86_topdown(struct test_suite *test __maybe_unused, int subtest
 	return ret;
 }
 
-DEFINE_SUITE("x86 topdown", x86_topdown);
+static int test_sort(const char *str, int expected_slots_group_size,
+		     int expected_instructions_group_size)
+{
+	struct evlist *evlist;
+	struct parse_events_error err;
+	struct evsel *evsel;
+	int ret;
+
+	evlist = evlist__new();
+	if (!evlist)
+		return TEST_FAIL;
+
+	parse_events_error__init(&err);
+	ret = parse_events(evlist, str, &err);
+	if (ret) {
+		pr_debug("parse_events failed for %s\n", str);
+		goto out_err;
+	}
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (evsel__is_group_leader(evsel)) {
+			if (strstr(evsel->name, "slots")) {
+				/*
+				 * Slots as a leader means the PMU is for a perf
+				 * metric group as the slots event isn't present
+				 * when not.
+				 */
+				TEST_ASSERT_EQUAL("slots group size", evsel->core.nr_members,
+						  expected_slots_group_size);
+				if (expected_slots_group_size == 3) {
+					struct evsel *next = evsel__next(evsel);
+					struct evsel *next2 = evsel__next(next);
+
+					TEST_ASSERT_VAL("slots second event is instructions",
+							strstr(next->name, "instructions")
+							!= NULL);
+					TEST_ASSERT_VAL("slots third event is topdown-retiring",
+							strstr(next2->name, "topdown-retiring")
+							!= NULL);
+				} else if (expected_slots_group_size == 2) {
+					struct evsel *next = evsel__next(evsel);
+
+					TEST_ASSERT_VAL("slots second event is topdown-retiring",
+							strstr(next->name, "topdown-retiring")
+							!= NULL);
+				}
+			} else if (strstr(evsel->name, "instructions")) {
+				TEST_ASSERT_EQUAL("instructions group size", evsel->core.nr_members,
+						  expected_instructions_group_size);
+				if (expected_instructions_group_size == 2) {
+					/*
+					 * The instructions event leads a group
+					 * with a topdown-retiring event,
+					 * neither of which need reordering for
+					 * perf metric event support.
+					 */
+					struct evsel *next = evsel__next(evsel);
+
+					TEST_ASSERT_VAL("instructions second event is topdown-retiring",
+							strstr(next->name, "topdown-retiring")
+							!= NULL);
+				}
+			} else if (strstr(evsel->name, "topdown-retiring")) {
+				/*
+				 * A perf metric event where the PMU doesn't
+				 * require slots as a leader.
+				 */
+				TEST_ASSERT_EQUAL("topdown-retiring group size",
+						  evsel->core.nr_members, 1);
+			} else if (strstr(evsel->name, "cycles")) {
+				TEST_ASSERT_EQUAL("cycles group size", evsel->core.nr_members, 1);
+			}
+		}
+	}
+
+	evlist__delete(evlist);
+	parse_events_error__exit(&err);
+	return TEST_OK;
+
+out_err:
+	evlist__delete(evlist);
+	parse_events_error__exit(&err);
+	return TEST_FAIL;
+}
+
+static int test__x86_topdown_sorting(struct test_suite *test __maybe_unused,
+				     int subtest __maybe_unused)
+{
+	if (!topdown_sys_has_perf_metrics())
+		return TEST_OK;
+
+	TEST_ASSERT_EQUAL("all events in a group",
+			  test_sort("{instructions,topdown-retiring,slots}", 3, 2), TEST_OK);
+	TEST_ASSERT_EQUAL("all events not in a group",
+			  test_sort("instructions,topdown-retiring,slots", 2, 1), TEST_OK);
+	TEST_ASSERT_EQUAL("slots event in a group but topdown metrics events outside the group",
+			  test_sort("{instructions,slots},topdown-retiring", 2, 1), TEST_OK);
+	TEST_ASSERT_EQUAL("slots event and topdown metrics events in two groups",
+			  test_sort("{instructions,slots},{topdown-retiring}", 2, 1), TEST_OK);
+	TEST_ASSERT_EQUAL("slots event and metrics event are not in a group and not adjacent",
+			  test_sort("{instructions,slots},cycles,topdown-retiring", 2, 1), TEST_OK);
+
+	return TEST_OK;
+}
+
+static int test__x86_topdown_slots_injection(struct test_suite *test __maybe_unused,
+					     int subtest __maybe_unused)
+{
+	if (!topdown_sys_has_perf_metrics())
+		return TEST_OK;
+
+	TEST_ASSERT_EQUAL("all events in a group",
+			  test_sort("{instructions,topdown-retiring}", 3, 2), TEST_OK);
+	TEST_ASSERT_EQUAL("all events not in a group",
+			  test_sort("instructions,topdown-retiring", 2, 1), TEST_OK);
+	TEST_ASSERT_EQUAL("event in a group but topdown metrics events outside the group",
+			  test_sort("{instructions},topdown-retiring", 2, 1), TEST_OK);
+	TEST_ASSERT_EQUAL("event and topdown metrics events in two groups",
+			  test_sort("{instructions},{topdown-retiring}", 2, 1), TEST_OK);
+	TEST_ASSERT_EQUAL("event and metrics event are not in a group and not adjacent",
+			  test_sort("{instructions},cycles,topdown-retiring", 2, 1), TEST_OK);
+
+	return TEST_OK;
+}
+
+static struct test_case x86_topdown_tests[] = {
+	TEST_CASE("topdown events", x86_topdown),
+	TEST_CASE("topdown sorting", x86_topdown_sorting),
+	TEST_CASE("topdown slots injection", x86_topdown_slots_injection),
+	{ .name = NULL, }
+};
+
+struct test_suite suite__x86_topdown = {
+	.desc = "x86 topdown",
+	.test_cases = x86_topdown_tests,
+};
