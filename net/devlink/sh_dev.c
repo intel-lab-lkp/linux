@@ -71,6 +71,7 @@ static void devlink_shd_destroy(struct devlink_shd *shd)
 
 	list_del(&shd->list);
 	devl_lock(devlink);
+	devl_resources_unregister(devlink);
 	devl_unregister(devlink);
 	devl_unlock(devlink);
 	kfree(shd->id);
