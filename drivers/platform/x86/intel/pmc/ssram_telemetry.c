@@ -102,12 +102,11 @@ pmc_ssram_telemetry_add_pmt(struct pci_dev *pcidev, u64 ssram_base, void __iomem
 static int
 pmc_ssram_telemetry_get_pmc_pci(struct pci_dev *pcidev, unsigned int pmc_idx, u32 offset)
 {
-	void __iomem __free(pmc_ssram_telemetry_iounmap) *tmp_ssram = NULL;
-	void __iomem __free(pmc_ssram_telemetry_iounmap) *ssram = NULL;
 	u64 ssram_base;
 
 	ssram_base = pci_resource_start(pcidev, 0);
-	tmp_ssram = ioremap(ssram_base, SSRAM_HDR_SIZE);
+	void __iomem __free(pmc_ssram_telemetry_iounmap) *tmp_ssram =
+		ioremap(ssram_base, SSRAM_HDR_SIZE);
 	if (!tmp_ssram)
 		return -ENOMEM;
 
@@ -121,18 +120,24 @@ pmc_ssram_telemetry_get_pmc_pci(struct pci_dev *pcidev, unsigned int pmc_idx, u3
 		if (!ssram_base)
 			return 0;
 
-		ssram = ioremap(ssram_base, SSRAM_HDR_SIZE);
+		void __iomem __free(pmc_ssram_telemetry_iounmap) *ssram =
+			ioremap(ssram_base, SSRAM_HDR_SIZE);
 		if (!ssram)
 			return -ENOMEM;
 
+		pmc_ssram_get_devid_pwrmbase(ssram, pmc_idx);
+
+		/* Find and register and PMC telemetry entries */
+		return pmc_ssram_telemetry_add_pmt(pcidev, ssram_base, ssram);
 	} else {
-		ssram = no_free_ptr(tmp_ssram);
+		void __iomem __free(pmc_ssram_telemetry_iounmap) *ssram =
+			no_free_ptr(tmp_ssram);
+
+		pmc_ssram_get_devid_pwrmbase(ssram, pmc_idx);
+
+		/* Find and register and PMC telemetry entries */
+		return pmc_ssram_telemetry_add_pmt(pcidev, ssram_base, ssram);
 	}
-
-	pmc_ssram_get_devid_pwrmbase(ssram, pmc_idx);
-
-	/* Find and register and PMC telemetry entries */
-	return pmc_ssram_telemetry_add_pmt(pcidev, ssram_base, ssram);
 }
 
 static int pmc_ssram_telemetry_pci_init(struct pci_dev *pcidev)
