@@ -285,13 +285,11 @@ impl GetGspStaticInfoReply {
     }
 
     /// Returns the client handle allocated by GSP-RM.
-    #[expect(dead_code)]
     pub(crate) fn client(&self) -> Handle<Client> {
         self.client
     }
 
     /// Returns the subdevice handle allocated by GSP-RM.
-    #[expect(dead_code)]
     pub(crate) fn subdevice(&self) -> Handle<Subdevice> {
         self.subdevice
     }

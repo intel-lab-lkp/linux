@@ -33,6 +33,10 @@ use crate::{
     gpu::Chipset,
     gsp::{
         commands,
+        rm::commands::{
+            FaultMethodBufferSize,
+            RmControl, //
+        },
         sequencer::{
             GspSequencer,
             GspSequencerParams, //
@@ -230,6 +234,13 @@ impl super::Gsp {
         match info.gpu_name() {
             Ok(name) => dev_info!(pdev, "GPU name: {}\n", name),
             Err(e) => dev_warn!(pdev, "GPU name unavailable: {:?}\n", e),
+        }
+
+        match RmControl::new(info.client(), info.subdevice(), FaultMethodBufferSize)
+            .send(&self.cmdq, bar)
+        {
+            Ok(size) => dev_info!(pdev, "Fault method buffer size: {} bytes\n", size),
+            Err(e) => dev_warn!(pdev, "Failed to get fault method buffer size: {:?}\n", e),
         }
 
         Ok(())

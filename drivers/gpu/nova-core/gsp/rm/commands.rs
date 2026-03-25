@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use core::array;
+use core::{
+    array,
+    mem::size_of, //
+};
 
-use kernel::prelude::*;
+use kernel::{
+    prelude::*,
+    transmute::FromBytes, //
+};
 
 use crate::{
     driver::Bar0,
@@ -14,7 +20,8 @@ use crate::{
         },
         commands::{
             Client,
-            Handle, //
+            Handle,
+            Subdevice, //
         },
         fw::{
             rm::*,
@@ -75,7 +82,6 @@ where
     cmd: T,
 }
 
-#[expect(unused)]
 impl<T: RmControlCommand> RmControl<T> {
     /// Creates a new RM control command.
     pub(crate) fn new(client: Handle<Client>, object: Handle<T::Target>, cmd: T) -> Self {
@@ -138,4 +144,24 @@ pub(crate) trait RmControlCommand {
     /// Parses the reply bytes from an RM control reply message into the command-specific
     /// reply type.
     fn parse_reply(&self, params: &[u8]) -> Result<Self::Reply>;
+}
+
+/// RM control command for querying the fault method buffer size. This is required for setting up
+/// channels.
+pub(crate) struct FaultMethodBufferSize;
+
+impl RmControlCommand for FaultMethodBufferSize {
+    const FUNCTION: RmControlMsgFunction = RmControlMsgFunction::CeGetFaultMethodBufferSize;
+    const LEN: usize = size_of::<CeGetFaultMethodBufferSizeParams>();
+    type Reply = usize;
+    type Target = Subdevice;
+
+    fn write_payload(&self, dst: &mut SBufferIter<array::IntoIter<&mut [u8], 2>>) -> Result {
+        dst.write_all(&[0u8; Self::LEN])
+    }
+
+    fn parse_reply(&self, params: &[u8]) -> Result<Self::Reply> {
+        let reply = CeGetFaultMethodBufferSizeParams::from_bytes(params).ok_or(EINVAL)?;
+        Ok(reply.size())
+    }
 }
