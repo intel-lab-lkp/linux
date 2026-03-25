@@ -727,7 +727,11 @@ static void iocg_commit_bio(struct ioc_gq *iocg, struct bio *bio,
 	put_cpu_ptr(gcs);
 }
 
+token_context_lock(ioc_lock);
+
 static void iocg_lock(struct ioc_gq *iocg, bool lock_ioc, unsigned long *flags)
+	__acquires(ioc_lock)
+	__no_context_analysis /* conditional locking */
 {
 	if (lock_ioc) {
 		spin_lock_irqsave(&iocg->ioc->lock, *flags);
@@ -738,6 +742,8 @@ static void iocg_lock(struct ioc_gq *iocg, bool lock_ioc, unsigned long *flags)
 }
 
 static void iocg_unlock(struct ioc_gq *iocg, bool unlock_ioc, unsigned long *flags)
+	__releases(ioc_lock)
+	__no_context_analysis /* conditional locking */
 {
 	if (unlock_ioc) {
 		spin_unlock(&iocg->waitq.lock);
