@@ -2245,6 +2245,10 @@ static __kernel_ulong_t damos_get_node_mem_bp(
 	struct sysinfo i;
 	__kernel_ulong_t numerator;
 
+	if (goal->nid < 0 || goal->nid >= MAX_NUMNODES ||
+	    !node_online(goal->nid))
+		return 0;
+
 	si_meminfo_node(&i, goal->nid);
 	if (goal->metric == DAMOS_QUOTA_NODE_MEM_USED_BP)
 		numerator = i.totalram - i.freeram;
@@ -2260,6 +2264,10 @@ static unsigned long damos_get_node_memcg_used_bp(
 	struct lruvec *lruvec;
 	unsigned long used_pages, numerator;
 	struct sysinfo i;
+
+	if (goal->nid < 0 || goal->nid >= MAX_NUMNODES ||
+	    !node_online(goal->nid))
+		return 0;
 
 	memcg = mem_cgroup_get_from_id(goal->memcg_id);
 	if (!memcg) {
