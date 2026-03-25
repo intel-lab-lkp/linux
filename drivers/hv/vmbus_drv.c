@@ -2189,11 +2189,15 @@ int vmbus_device_register(struct hv_device *child_device_obj)
 	child_device_obj->device.dma_mask = &child_device_obj->dma_mask;
 	dma_set_mask(&child_device_obj->device, DMA_BIT_MASK(64));
 
+	device_initialize(&child_device_obj->device);
+	if (child_device_obj->channel->co_external_memory)
+		swiotlb_dev_disable(&child_device_obj->device);
+
 	/*
 	 * Register with the LDM. This will kick off the driver/device
 	 * binding...which will eventually call vmbus_match() and vmbus_probe()
 	 */
-	ret = device_register(&child_device_obj->device);
+	ret = device_add(&child_device_obj->device);
 	if (ret) {
 		pr_err("Unable to register child device\n");
 		put_device(&child_device_obj->device);
