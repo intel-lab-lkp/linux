@@ -116,7 +116,7 @@ static inline bool is_signed_reg(unsigned int reg)
 static const struct regmap_config ina2xx_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 16,
-	.max_register = INA2XX_MAX_REGISTERS,
+	.max_register = INA2XX_MAX_REGISTERS - 1,
 	.writeable_reg = ina2xx_is_writeable_reg,
 	.volatile_reg = ina2xx_is_volatile_reg,
 };
