@@ -485,6 +485,25 @@ int k3_udma_glue_push_tx_chn(struct k3_udma_glue_tx_channel *tx_chn,
 }
 EXPORT_SYMBOL_GPL(k3_udma_glue_push_tx_chn);
 
+int k3_udma_glue_push_tx_chn_batch(struct k3_udma_glue_tx_channel *tx_chn,
+				   struct cppi5_host_desc_t **desc_tx,
+				   dma_addr_t *desc_dma, u32 batch_size)
+{
+	u32 ringtxcq_id;
+	int i;
+
+	if (!atomic_add_unless(&tx_chn->free_pkts, -1 * batch_size, 0))
+		return -ENOMEM;
+
+	ringtxcq_id = k3_ringacc_get_ring_id(tx_chn->ringtxcq);
+
+	for (i = 0; i < batch_size; i++)
+		cppi5_desc_set_retpolicy(&desc_tx[i]->hdr, 0, ringtxcq_id);
+
+	return k3_ringacc_ring_push_batch(tx_chn->ringtx, desc_dma, batch_size);
+}
+EXPORT_SYMBOL_GPL(k3_udma_glue_push_tx_chn_batch);
+
 int k3_udma_glue_pop_tx_chn(struct k3_udma_glue_tx_channel *tx_chn,
 			    dma_addr_t *desc_dma)
 {
@@ -497,6 +516,21 @@ int k3_udma_glue_pop_tx_chn(struct k3_udma_glue_tx_channel *tx_chn,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(k3_udma_glue_pop_tx_chn);
+
+int k3_udma_glue_pop_tx_chn_batch(struct k3_udma_glue_tx_channel *tx_chn,
+				  dma_addr_t *desc_dma, u32 *batch_size,
+				  u32 max_batch)
+{
+	int ret;
+
+	ret = k3_ringacc_ring_pop_batch(tx_chn->ringtxcq, desc_dma, batch_size,
+					max_batch);
+	if (!ret)
+		atomic_add(*batch_size, &tx_chn->free_pkts);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(k3_udma_glue_pop_tx_chn_batch);
 
 int k3_udma_glue_enable_tx_chn(struct k3_udma_glue_tx_channel *tx_chn)
 {
@@ -1512,6 +1546,16 @@ int k3_udma_glue_push_rx_chn(struct k3_udma_glue_rx_channel *rx_chn,
 }
 EXPORT_SYMBOL_GPL(k3_udma_glue_push_rx_chn);
 
+int k3_udma_glue_push_rx_chn_batch(struct k3_udma_glue_rx_channel *rx_chn,
+				   u32 flow_num, dma_addr_t desc_dma,
+				   u32 batch_size)
+{
+	struct k3_udma_glue_rx_flow *flow = &rx_chn->flows[flow_num];
+
+	return k3_ringacc_ring_push_batch(flow->ringrxfdq, &desc_dma, batch_size);
+}
+EXPORT_SYMBOL_GPL(k3_udma_glue_push_rx_chn_batch);
+
 int k3_udma_glue_pop_rx_chn(struct k3_udma_glue_rx_channel *rx_chn,
 			    u32 flow_num, dma_addr_t *desc_dma)
 {
@@ -1520,6 +1564,17 @@ int k3_udma_glue_pop_rx_chn(struct k3_udma_glue_rx_channel *rx_chn,
 	return k3_ringacc_ring_pop(flow->ringrx, desc_dma);
 }
 EXPORT_SYMBOL_GPL(k3_udma_glue_pop_rx_chn);
+
+int k3_udma_glue_pop_rx_chn_batch(struct k3_udma_glue_rx_channel *rx_chn,
+				  u32 flow_num, dma_addr_t *desc_dma,
+				  u32 *batch_size, u32 max_batch)
+{
+	struct k3_udma_glue_rx_flow *flow = &rx_chn->flows[flow_num];
+
+	return k3_ringacc_ring_pop_batch(flow->ringrx, desc_dma, batch_size,
+					 max_batch);
+}
+EXPORT_SYMBOL_GPL(k3_udma_glue_pop_rx_chn_batch);
 
 int k3_udma_glue_rx_get_irq(struct k3_udma_glue_rx_channel *rx_chn,
 			    u32 flow_num)
