@@ -1223,6 +1223,41 @@ int k3_ringacc_ring_push(struct k3_ring *ring, void *elem)
 }
 EXPORT_SYMBOL_GPL(k3_ringacc_ring_push);
 
+int k3_ringacc_ring_push_batch(struct k3_ring *ring, void *elem_arr,
+			       u32 batch_size)
+{
+	void *elem_ptr, *elem;
+	int ret = 0;
+	u32 i;
+
+	if (!ring || !(ring->flags & K3_RING_FLAG_BUSY))
+		return -EINVAL;
+
+	if (k3_ringacc_ring_get_free(ring) < batch_size)
+		if (k3_ringacc_ring_get_rt_free(ring) < batch_size)
+			return -ENOMEM;
+
+	dev_dbg(ring->parent->dev, "ring_push_batch: free%d index%d\n",
+		ring->state.free, ring->state.windex);
+
+	for (i = 0; i < batch_size; i++) {
+		elem_ptr = k3_ringacc_get_elm_addr(ring, ring->state.windex);
+		elem = &((dma_addr_t *)elem_arr)[i];
+		memcpy(elem_ptr, elem, (4 << ring->elm_size));
+		if (ring->parent->dma_rings) {
+			u64 *addr = elem_ptr;
+			*addr |= ((u64)ring->asel << K3_ADDRESS_ASEL_SHIFT);
+		}
+		ring->state.windex = (ring->state.windex + 1) % ring->size;
+	}
+
+	ring->state.free -= batch_size;
+	writel(batch_size, &ring->rt->db);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(k3_ringacc_ring_push_batch);
+
 int k3_ringacc_ring_push_head(struct k3_ring *ring, void *elem)
 {
 	int ret = -EOPNOTSUPP;
@@ -1265,6 +1300,59 @@ int k3_ringacc_ring_pop(struct k3_ring *ring, void *elem)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(k3_ringacc_ring_pop);
+
+int k3_ringacc_ring_pop_batch(struct k3_ring *ring, void *elem_arr,
+			      u32 *batch_size, u32 max_batch)
+{
+	void *elem_ptr, *elem;
+	u32 ring_occupancy, i;
+	u32 num_to_pop;
+
+	if (!ring || !(ring->flags & K3_RING_FLAG_BUSY))
+		return -EINVAL;
+
+	if (!ring->state.occ || ring->state.occ < max_batch)
+		k3_ringacc_ring_update_occ(ring);
+
+	if (!ring->state.occ) {
+		if (likely(!ring->state.tdown_complete))
+			return -ENODATA;
+
+		/* Handle teardown */
+		elem = &((dma_addr_t *)elem_arr)[0];
+		dma_addr_t *value = elem;
+		*value = CPPI5_TDCM_MARKER;
+		writel(K3_DMARING_RT_DB_TDOWN_ACK, &ring->rt->db);
+		ring->state.tdown_complete = false;
+		*batch_size = 1;
+		return 0;
+	}
+
+	ring_occupancy = ring->state.occ;
+	if (ring_occupancy > max_batch)
+		num_to_pop = max_batch;
+	else
+		num_to_pop = ring_occupancy;
+
+	dev_dbg(ring->parent->dev, "ring_pop_batch: occ%d index%d\n",
+		ring->state.occ, ring->state.rindex);
+
+	for (i = 0; i < num_to_pop; i++) {
+		elem_ptr = k3_ringacc_get_elm_addr(ring, ring->state.rindex);
+		elem = &((dma_addr_t *)elem_arr)[i];
+		memcpy(elem, elem_ptr, (4 << ring->elm_size));
+		k3_dmaring_remove_asel_from_elem(elem);
+		ring->state.rindex = (ring->state.rindex + 1) % ring->size;
+		dev_dbg(ring->parent->dev, "occ%d index%d pos_ptr%p\n",
+			ring->state.occ, ring->state.rindex, elem_ptr);
+	}
+	ring->state.occ -= num_to_pop;
+	writel(-1 * num_to_pop, &ring->rt->db);
+	*batch_size = num_to_pop;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(k3_ringacc_ring_pop_batch);
 
 int k3_ringacc_ring_pop_tail(struct k3_ring *ring, void *elem)
 {

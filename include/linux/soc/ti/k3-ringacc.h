@@ -221,6 +221,19 @@ u32 k3_ringacc_ring_is_full(struct k3_ring *ring);
 int k3_ringacc_ring_push(struct k3_ring *ring, void *elem);
 
 /**
+ * k3_ringacc_ring_push_batch - push a batch of elements to the ring tail
+ * @ring: pointer on ring
+ * @elem_arr: pointer to array of ring element buffers
+ * @batch_size: count of element buffers to be pushed
+ *
+ * Push the batch of element buffers to the ring tail.
+ *
+ * Returns 0 on success, errno otherwise.
+ */
+int k3_ringacc_ring_push_batch(struct k3_ring *ring, void *elem_arr,
+			       u32 batch_size);
+
+/**
  * k3_ringacc_ring_pop - pop element from the ring head
  * @ring: pointer on ring
  * @elem: pointer on ring element buffer
@@ -231,6 +244,20 @@ int k3_ringacc_ring_push(struct k3_ring *ring, void *elem);
  * Returns 0 on success, errno otherwise.
  */
 int k3_ringacc_ring_pop(struct k3_ring *ring, void *elem);
+
+/**
+ * k3_ringacc_ring_pop_batch - pop all elements from the ring head
+ * @ring: pointer on ring
+ * @elem_ar: pointer to array of ring element buffers
+ * @batch_size: pointer to count of elements popped from ring
+ * @max_batch: maximum number of elements to pop
+ *
+ * Pop a batch of element buffers from the ring head.
+ *
+ * Returns 0 on success, errno otherwise.
+ */
+int k3_ringacc_ring_pop_batch(struct k3_ring *ring, void *elem_arr,
+			      u32 *batch_size, u32 max_batch);
 
 /**
  * k3_ringacc_ring_push_head - push element to the ring head
