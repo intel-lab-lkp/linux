@@ -132,12 +132,8 @@ static void hid_reset(struct work_struct *work)
 			dev_dbg(&usbhid->intf->dev,
 					"clear-halt failed: %d\n", rc);
 			set_bit(HID_RESET_PENDING, &usbhid->iofl);
+			usb_queue_reset_device(usbhid->intf);
 		}
-	}
-
-	if (test_bit(HID_RESET_PENDING, &usbhid->iofl)) {
-		dev_dbg(&usbhid->intf->dev, "resetting device\n");
-		usb_queue_reset_device(usbhid->intf);
 	}
 }
 
@@ -171,7 +167,7 @@ static void hid_io_error(struct hid_device *hid)
 		if (!test_bit(HID_NO_BANDWIDTH, &usbhid->iofl)
 		     && !test_and_set_bit(HID_RESET_PENDING, &usbhid->iofl)) {
 
-			schedule_work(&usbhid->reset_work);
+			usb_queue_reset_device(usbhid->intf);
 			goto done;
 		}
 	}
@@ -1496,18 +1492,18 @@ static void hid_restart_io(struct hid_device *hid)
 {
 	struct usbhid_device *usbhid = hid->driver_data;
 	int clear_halt = test_bit(HID_CLEAR_HALT, &usbhid->iofl);
-	int reset_pending = test_bit(HID_RESET_PENDING, &usbhid->iofl);
 
 	spin_lock_irq(&usbhid->lock);
 	clear_bit(HID_SUSPENDED, &usbhid->iofl);
 	usbhid_mark_busy(usbhid);
 
-	if (clear_halt || reset_pending)
+	if (clear_halt)
 		schedule_work(&usbhid->reset_work);
+
 	usbhid->retry_delay = 0;
 	spin_unlock_irq(&usbhid->lock);
 
-	if (reset_pending || !test_bit(HID_STARTED, &usbhid->iofl))
+	if (!test_bit(HID_STARTED, &usbhid->iofl))
 		return;
 
 	if (!clear_halt) {
