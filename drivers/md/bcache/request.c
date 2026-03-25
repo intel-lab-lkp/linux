@@ -1149,15 +1149,15 @@ static void quit_max_writeback_rate(struct cache_set *c,
 	struct cached_dev *dc;
 
 	/*
-	 * mutex bch_register_lock may compete with other parallel requesters,
-	 * or attach/detach operations on other backing device. Waiting to
-	 * the mutex lock may increase I/O request latency for seconds or more.
-	 * To avoid such situation, if mutext_trylock() failed, only writeback
-	 * rate of current cached device is set to 1, and __update_write_back()
-	 * will decide writeback rate of other cached devices (remember now
-	 * c->idle_counter is 0 already).
+	 * rw_semaphore bch_register_lock may compete with other parallel
+	 * requesters, or attach/detach operations on other backing device.
+	 * Waiting to the semaphore lock may increase I/O request latency
+	 * for seconds or more. To avoid such situation, if down_write_trylock()
+	 * failed, only writeback rate of current cached device is set to 1,
+	 * and __update_write_back() will decide writeback rate of other
+	 * cached devices (remember now c->idle_counter is 0 already).
 	 */
-	if (mutex_trylock(&bch_register_lock)) {
+	if (down_write_trylock(&bch_register_lock)) {
 		for (i = 0; i < c->devices_max_used; i++) {
 			if (!c->devices[i])
 				continue;
@@ -1174,7 +1174,7 @@ static void quit_max_writeback_rate(struct cache_set *c,
 			 */
 			atomic_long_set(&dc->writeback_rate.rate, 1);
 		}
-		mutex_unlock(&bch_register_lock);
+		up_write(&bch_register_lock);
 	} else
 		atomic_long_set(&this_dc->writeback_rate.rate, 1);
 }
