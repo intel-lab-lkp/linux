@@ -99,6 +99,10 @@
 	};
 };
 
+&gpi_dma1 {
+	status = "okay";
+};
+
 &pm6125_gpios {
 	vol_up_n: vol-up-n-state {
 		pins = "gpio5";
@@ -157,6 +161,10 @@
 };
 
 &qupv3_id_0 {
+	status = "okay";
+};
+
+&qupv3_id_1 {
 	status = "okay";
 };
 
@@ -330,6 +338,18 @@
 	no-sdio;
 	no-mmc;
 	status = "okay";
+};
+
+&spi8 {
+	status = "okay";
+
+	irled@1 {
+		compatible = "ir-spi-led";
+		reg = <1>;
+
+		duty-cycle = /bits/ 8 <30>;
+		spi-max-frequency = <1000000>;
+	};
 };
 
 &tlmm {
