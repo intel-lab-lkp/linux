@@ -53,6 +53,11 @@ static const u32 writeback_formats[] = {
 	DRM_FORMAT_XBGR2101010,
 };
 
+bool intel_writeback_transcoder_is_wd(enum transcoder transcoder)
+{
+	return transcoder == TRANSCODER_WD_0 || transcoder == TRANSCODER_WD_1;
+}
+
 static struct intel_writeback_connector
 *conn_to_intel_writeback_connector(struct intel_connector *connector)
 {

@@ -202,6 +202,9 @@ static void intel_panel_info(struct seq_file *m,
 {
 	const struct drm_display_mode *fixed_mode;
 
+	if (connector->base.connector_type == DRM_MODE_CONNECTOR_WRITEBACK)
+		return;
+
 	if (list_empty(&connector->panel.fixed_modes))
 		return;
 

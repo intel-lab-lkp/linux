@@ -127,6 +127,7 @@
 #include "intel_vrr.h"
 #include "intel_wm.h"
 #include "intel_writeback.h"
+#include "intel_writeback_reg.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 #include "skl_watermark.h"
@@ -1639,6 +1640,9 @@ static void hsw_configure_cpu_transcoder(const struct intel_crtc_state *crtc_sta
 
 	intel_set_transcoder_timings(crtc_state);
 
+	if (intel_writeback_transcoder_is_wd(cpu_transcoder))
+		return;
+
 	if (cpu_transcoder != TRANSCODER_EDP)
 		intel_de_write(display, TRANS_MULT(display, cpu_transcoder),
 			       crtc_state->pixel_multiplier - 1);
@@ -2687,6 +2691,10 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 	crtc_vblank_start = adjusted_mode->crtc_vblank_start;
 	crtc_vblank_end = adjusted_mode->crtc_vblank_end;
 
+	if (intel_writeback_transcoder_is_wd(cpu_transcoder)) {
+		return;
+	}
+
 	if (adjusted_mode->flags & DRM_MODE_FLAG_INTERLACE) {
 		/* the chip adds 2 halflines automatically */
 		crtc_vtotal -= 1;
@@ -2880,6 +2888,15 @@ static void intel_get_transcoder_timings(struct intel_crtc *crtc,
 	enum transcoder cpu_transcoder = pipe_config->cpu_transcoder;
 	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
 	u32 tmp;
+
+	if (intel_writeback_transcoder_is_wd(cpu_transcoder)) {
+		tmp = intel_de_read(display, TRANS_HTOTAL(display, cpu_transcoder));
+		adjusted_mode->crtc_hdisplay = REG_FIELD_GET(HACTIVE_MASK, tmp) + 1;
+
+		tmp = intel_de_read(display, TRANS_VTOTAL(display, cpu_transcoder));
+		adjusted_mode->crtc_vdisplay = REG_FIELD_GET(VACTIVE_MASK, tmp) + 1;
+		return;
+	}
 
 	tmp = intel_de_read(display, TRANS_HTOTAL(display, cpu_transcoder));
 	adjusted_mode->crtc_hdisplay = REG_FIELD_GET(HACTIVE_MASK, tmp) + 1;
@@ -3794,32 +3811,59 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 		u32 tmp = 0;
 
 		power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
-		with_intel_display_power_if_enabled(display, power_domain)
-			tmp = intel_de_read(display,
-					    TRANS_DDI_FUNC_CTL(display, cpu_transcoder));
+		if (cpu_transcoder == TRANSCODER_WD_0 ||
+		    cpu_transcoder == TRANSCODER_WD_1) {
+			with_intel_display_power_if_enabled(display, power_domain)
+				tmp = intel_de_read(display,
+						    WD_TRANS_FUNC_CTL(cpu_transcoder));
+			if (!(tmp & TRANS_WD_FUNC_ENABLE))
+				continue;
 
-		if (!(tmp & TRANS_DDI_FUNC_ENABLE))
-			continue;
+			switch (tmp & WD_INPUT_SELECT_MASK) {
+			case WD_INPUT_PIPE_A:
+				trans_pipe = PIPE_A;
+				break;
+			case WD_INPUT_PIPE_B:
+				trans_pipe = PIPE_B;
+				break;
+			case WD_INPUT_PIPE_C:
+				trans_pipe = PIPE_C;
+				break;
+			case WD_INPUT_PIPE_D:
+				trans_pipe = PIPE_D;
+				break;
+			default:
+				MISSING_CASE(tmp & WD_INPUT_SELECT_MASK);
+				break;
+			}
+		} else {
+			with_intel_display_power_if_enabled(display, power_domain)
+				tmp = intel_de_read(display,
+						    TRANS_DDI_FUNC_CTL(display, cpu_transcoder));
 
-		switch (tmp & TRANS_DDI_EDP_INPUT_MASK) {
-		default:
-			drm_WARN(display->drm, 1,
-				 "unknown pipe linked to transcoder %s\n",
-				 transcoder_name(cpu_transcoder));
-			fallthrough;
-		case TRANS_DDI_EDP_INPUT_A_ONOFF:
-		case TRANS_DDI_EDP_INPUT_A_ON:
-			trans_pipe = PIPE_A;
-			break;
-		case TRANS_DDI_EDP_INPUT_B_ONOFF:
-			trans_pipe = PIPE_B;
-			break;
-		case TRANS_DDI_EDP_INPUT_C_ONOFF:
-			trans_pipe = PIPE_C;
-			break;
-		case TRANS_DDI_EDP_INPUT_D_ONOFF:
-			trans_pipe = PIPE_D;
-			break;
+			if (!(tmp & TRANS_DDI_FUNC_ENABLE))
+				continue;
+
+			switch (tmp & TRANS_DDI_EDP_INPUT_MASK) {
+			default:
+				drm_WARN(display->drm, 1,
+					 "unknown pipe linked to transcoder %s\n",
+					 transcoder_name(cpu_transcoder));
+				fallthrough;
+			case TRANS_DDI_EDP_INPUT_A_ONOFF:
+			case TRANS_DDI_EDP_INPUT_A_ON:
+				trans_pipe = PIPE_A;
+				break;
+			case TRANS_DDI_EDP_INPUT_B_ONOFF:
+				trans_pipe = PIPE_B;
+				break;
+			case TRANS_DDI_EDP_INPUT_C_ONOFF:
+				trans_pipe = PIPE_C;
+				break;
+			case TRANS_DDI_EDP_INPUT_D_ONOFF:
+				trans_pipe = PIPE_D;
+				break;
+			}
 		}
 
 		if (trans_pipe == crtc->pipe)
@@ -3906,6 +3950,13 @@ static bool hsw_get_transcoder_state(struct intel_crtc *crtc,
 
 		if ((tmp & TRANS_DDI_EDP_INPUT_MASK) == TRANS_DDI_EDP_INPUT_A_ONOFF)
 			pipe_config->pch_pfit.force_thru = true;
+	}
+
+	if (intel_writeback_transcoder_is_wd(pipe_config->cpu_transcoder)) {
+		tmp = intel_de_read(display,
+				    TRANSCONF_WD(pipe_config->cpu_transcoder));
+
+		return tmp & WD_TRANS_ENABLE;
 	}
 
 	tmp = intel_de_read(display,
@@ -4017,7 +4068,8 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 	    DISPLAY_VER(display) >= 11)
 		intel_get_transcoder_timings(crtc, pipe_config);
 
-	if (transcoder_has_vrr(pipe_config))
+	if (!intel_writeback_transcoder_is_wd(pipe_config->cpu_transcoder) &&
+	    transcoder_has_vrr(pipe_config))
 		intel_vrr_get_config(pipe_config);
 
 	intel_get_pipe_src_size(crtc, pipe_config);
@@ -4030,6 +4082,8 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 			pipe_config->output_format = INTEL_OUTPUT_FORMAT_YCBCR444;
 		else
 			pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
+	} else if (intel_writeback_transcoder_is_wd(pipe_config->cpu_transcoder)) {
+		pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	} else {
 		pipe_config->output_format =
 			bdw_get_pipe_misc_output_format(crtc);
@@ -4056,12 +4110,23 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 	hsw_ips_get_config(pipe_config);
 
 	if (pipe_config->cpu_transcoder != TRANSCODER_EDP &&
+	    !intel_writeback_transcoder_is_wd(pipe_config->cpu_transcoder) &&
 	    !transcoder_is_dsi(pipe_config->cpu_transcoder)) {
 		pipe_config->pixel_multiplier =
 			intel_de_read(display,
 				      TRANS_MULT(display, pipe_config->cpu_transcoder)) + 1;
 	} else {
 		pipe_config->pixel_multiplier = 1;
+	}
+
+	if (!intel_writeback_transcoder_is_wd(pipe_config->cpu_transcoder) &&
+	    !transcoder_is_dsi(pipe_config->cpu_transcoder)) {
+		tmp = intel_de_read(display, CHICKEN_TRANS(display, pipe_config->cpu_transcoder));
+
+		pipe_config->framestart_delay = REG_FIELD_GET(HSW_FRAME_START_DELAY_MASK, tmp) + 1;
+	} else {
+		/* no idea if this is correct */
+		pipe_config->framestart_delay = 1;
 	}
 
 out:
