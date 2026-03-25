@@ -1221,17 +1221,15 @@ static int damon_commit_target_regions(struct damon_target *dst,
 {
 	struct damon_region *src_region;
 	struct damon_addr_range *ranges;
+	unsigned int nr = damon_nr_regions(src);
 	int i = 0, err;
 
-	damon_for_each_region(src_region, src)
-		i++;
-	if (!i)
+	if (!nr)
 		return 0;
 
-	ranges = kmalloc_objs(*ranges, i, GFP_KERNEL | __GFP_NOWARN);
+	ranges = kmalloc_objs(*ranges, nr, GFP_KERNEL | __GFP_NOWARN);
 	if (!ranges)
 		return -ENOMEM;
-	i = 0;
 	damon_for_each_region(src_region, src)
 		ranges[i++] = src_region->ar;
 	err = damon_set_regions(dst, ranges, i, src_min_region_sz);
