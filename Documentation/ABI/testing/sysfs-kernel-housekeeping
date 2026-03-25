@@ -1,0 +1,22 @@
+What:		/sys/kernel/housekeeping/
+Date:		March 2026
+Contact:	Qiliang Yuan <realwujing@gmail.com>
+Description:
+		Directory containing the dynamic housekeeping configuration
+		for various kernel subsystems.
+
+		Each file represents a specific housekeeping type:
+		- timer: Timer and hrtimer interrupts.
+		- rcu: RCU callback offloading and GP kthreads.
+		- misc: Miscellaneous kernel services (e.g. kcompactd).
+		- tick: Dynamic full dynticks (NOHZ_FULL) state.
+		- domain: Scheduler domain isolation.
+		- workqueue: Workqueue affinity.
+		- managed_irq: Managed interrupts migration.
+		- kthread: General kernel thread affinity.
+		- smt_aware_mode: SMT-aware isolation toggle (0/1).
+		  When enabled, writing a mask that does not include all
+		  sibling threads of a core will be rejected with -EINVAL.
+
+		Writing a CPULIST to the type files dynamically updates the
+		housekeeping mask for the corresponding type.
