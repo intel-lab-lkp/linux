@@ -3096,8 +3096,9 @@ static void __init free_iommu_resources(void)
 	free_pci_segments();
 }
 
-/* SB IOAPIC is always on this device in AMD systems */
-#define IOAPIC_SB_DEVID		((0x00 << 8) | PCI_DEVFN(0x14, 0))
+/* SB IOAPIC device IDs */
+#define IOAPIC_SB_DEVID_AMD	((0x00 << 8) | PCI_DEVFN(0x14, 0))
+#define IOAPIC_SB_DEVID_HYGON	((0x00 << 8) | PCI_DEVFN(0x0b, 0))
 
 static bool __init check_ioapic_information(void)
 {
@@ -3124,7 +3125,8 @@ static bool __init check_ioapic_information(void)
 			pr_err("%s: IOAPIC[%d] not in IVRS table\n",
 				fw_bug, id);
 			ret = false;
-		} else if (devid == IOAPIC_SB_DEVID) {
+		} else if (devid == IOAPIC_SB_DEVID_AMD ||
+			   devid == IOAPIC_SB_DEVID_HYGON) {
 			has_sb_ioapic = true;
 			ret           = true;
 		}
