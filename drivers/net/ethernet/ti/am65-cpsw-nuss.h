@@ -6,6 +6,7 @@
 #ifndef AM65_CPSW_NUSS_H_
 #define AM65_CPSW_NUSS_H_
 
+#include <linux/dma/ti-cppi5.h>
 #include <linux/if_ether.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -22,6 +23,10 @@ struct am65_cpts;
 #define HOST_PORT_NUM		0
 
 #define AM65_CPSW_MAX_QUEUES	8	/* both TX & RX */
+
+/* Number of TX/RX descriptors per channel/flow */
+#define AM65_CPSW_MAX_TX_DESC	500
+#define AM65_CPSW_MAX_RX_DESC	500
 
 #define AM65_CPSW_PORT_VLAN_REG_OFFSET	0x014
 
@@ -75,6 +80,12 @@ struct am65_cpsw_host {
 	u32				vid_context;
 };
 
+struct am65_cpsw_tx_ring {
+	struct cppi5_host_desc_t *tx_descs[AM65_CPSW_MAX_TX_DESC + 1];
+	atomic_t tx_desc_ring_head_idx; /* Points to dequeuing place for free descriptor */
+	atomic_t tx_desc_ring_tail_idx; /* Points to queuing place for freed descriptor */
+};
+
 struct am65_cpsw_tx_chn {
 	struct device *dma_dev;
 	struct napi_struct napi_tx;
@@ -82,6 +93,7 @@ struct am65_cpsw_tx_chn {
 	struct k3_cppi_desc_pool *desc_pool;
 	struct k3_udma_glue_tx_channel *tx_chn;
 	spinlock_t lock; /* protect TX rings in multi-port mode */
+	struct am65_cpsw_tx_ring tx_ring;
 	struct hrtimer tx_hrtimer;
 	unsigned long tx_pace_timeout;
 	int irq;
@@ -92,12 +104,19 @@ struct am65_cpsw_tx_chn {
 	u32 rate_mbps;
 };
 
+struct am65_cpsw_rx_ring {
+	struct cppi5_host_desc_t *rx_descs[AM65_CPSW_MAX_RX_DESC + 1];
+	atomic_t rx_desc_ring_head_idx; /* Points to dequeuing place for free descriptor */
+	atomic_t rx_desc_ring_tail_idx; /* Points to queuing place for freed descriptor */
+};
+
 struct am65_cpsw_rx_flow {
 	u32 id;
 	struct napi_struct napi_rx;
 	struct am65_cpsw_common	*common;
 	int irq;
 	bool irq_disabled;
+	struct am65_cpsw_rx_ring rx_ring;
 	struct hrtimer rx_hrtimer;
 	unsigned long rx_pace_timeout;
 	struct page_pool *page_pool;

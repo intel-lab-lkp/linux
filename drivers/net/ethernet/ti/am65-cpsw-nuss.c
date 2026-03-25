@@ -145,9 +145,6 @@
 	 AM65_CPSW_PN_TS_CTL_RX_ANX_F_EN)
 
 #define AM65_CPSW_ALE_AGEOUT_DEFAULT	30
-/* Number of TX/RX descriptors per channel/flow */
-#define AM65_CPSW_MAX_TX_DESC	500
-#define AM65_CPSW_MAX_RX_DESC	500
 
 #define AM65_CPSW_NAV_PS_DATA_SIZE 16
 #define AM65_CPSW_NAV_SW_DATA_SIZE 16
@@ -374,6 +371,122 @@ static void am65_cpsw_slave_set_promisc(struct am65_cpsw_port *port,
 	}
 }
 
+static size_t am65_cpsw_nuss_num_free_tx_desc(struct am65_cpsw_tx_chn *tx_chn)
+{
+	struct am65_cpsw_tx_ring *tx_ring = &tx_chn->tx_ring;
+	int head_idx, tail_idx, num_free;
+
+	/* Atomically read both head and tail indices */
+	head_idx = atomic_read(&tx_ring->tx_desc_ring_head_idx);
+	tail_idx = atomic_read(&tx_ring->tx_desc_ring_tail_idx);
+
+	/* Calculate number of available descriptors in circular queue */
+	num_free = (tail_idx - head_idx + (AM65_CPSW_MAX_TX_DESC + 1)) %
+		   (AM65_CPSW_MAX_TX_DESC + 1);
+
+	return num_free;
+}
+
+static void am65_cpsw_nuss_put_tx_desc(struct am65_cpsw_tx_chn *tx_chn,
+				       struct cppi5_host_desc_t *desc)
+{
+	struct am65_cpsw_tx_ring *tx_ring = &tx_chn->tx_ring;
+	int tail_idx, new_tail_idx;
+
+	/* Atomically get current tail index and calculate new wrapped index */
+	do {
+		tail_idx = atomic_read(&tx_ring->tx_desc_ring_tail_idx);
+		new_tail_idx = tail_idx + 1;
+		if (new_tail_idx > AM65_CPSW_MAX_TX_DESC)
+			new_tail_idx = 0;
+	} while (atomic_cmpxchg(&tx_ring->tx_desc_ring_tail_idx,
+				tail_idx, new_tail_idx) != tail_idx);
+
+	/* Store the descriptor at the tail position */
+	tx_ring->tx_descs[tail_idx] = desc;
+}
+
+static void am65_cpsw_nuss_put_rx_desc(struct am65_cpsw_rx_flow *flow,
+				       struct cppi5_host_desc_t *desc)
+{
+	struct am65_cpsw_rx_ring *rx_ring = &flow->rx_ring;
+	int tail_idx, new_tail_idx;
+
+	/* Atomically get current tail index and calculate new wrapped index */
+	do {
+		tail_idx = atomic_read(&rx_ring->rx_desc_ring_tail_idx);
+		new_tail_idx = tail_idx + 1;
+		if (new_tail_idx > AM65_CPSW_MAX_RX_DESC)
+			new_tail_idx = 0;
+	} while (atomic_cmpxchg(&rx_ring->rx_desc_ring_tail_idx,
+				tail_idx, new_tail_idx) != tail_idx);
+
+	/* Store the descriptor at the tail position */
+	rx_ring->rx_descs[tail_idx] = desc;
+}
+
+static void *am65_cpsw_nuss_get_tx_desc(struct am65_cpsw_tx_chn *tx_chn)
+{
+	struct am65_cpsw_tx_ring *tx_ring = &tx_chn->tx_ring;
+	int head_idx, tail_idx, new_head_idx;
+
+	/* Atomically get current head index and check if queue is empty */
+	do {
+		head_idx = atomic_read(&tx_ring->tx_desc_ring_head_idx);
+		tail_idx = atomic_read(&tx_ring->tx_desc_ring_tail_idx);
+
+		/* Queue is empty when head == tail */
+		if (head_idx == tail_idx)
+			return NULL;
+
+		/* Calculate new head with wraparound */
+		new_head_idx = head_idx + 1;
+		if (new_head_idx > AM65_CPSW_MAX_TX_DESC)
+			new_head_idx = 0;
+
+	} while (atomic_cmpxchg(&tx_ring->tx_desc_ring_head_idx,
+				head_idx, new_head_idx) != head_idx);
+
+	return tx_ring->tx_descs[head_idx];
+}
+
+static void *am65_cpsw_nuss_get_rx_desc(struct am65_cpsw_rx_flow *flow)
+{
+	struct am65_cpsw_rx_ring *rx_ring = &flow->rx_ring;
+	int head_idx, tail_idx, new_head_idx;
+
+	/* Atomically get current head index and check if queue is empty */
+	do {
+		head_idx = atomic_read(&rx_ring->rx_desc_ring_head_idx);
+		tail_idx = atomic_read(&rx_ring->rx_desc_ring_tail_idx);
+
+		/* Queue is empty when head == tail */
+		if (head_idx == tail_idx)
+			return NULL;
+
+		/* Calculate new head with wraparound */
+		new_head_idx = head_idx + 1;
+		if (new_head_idx > AM65_CPSW_MAX_RX_DESC)
+			new_head_idx = 0;
+
+	} while (atomic_cmpxchg(&rx_ring->rx_desc_ring_head_idx,
+				head_idx, new_head_idx) != head_idx);
+
+	return rx_ring->rx_descs[head_idx];
+}
+
+static inline int am65_cpsw_nuss_tx_descs_available(struct am65_cpsw_tx_chn *tx_chn)
+{
+	struct am65_cpsw_tx_ring *tx_ring = &tx_chn->tx_ring;
+	int head_idx, tail_idx;
+
+	head_idx = atomic_read(&tx_ring->tx_desc_ring_head_idx);
+	tail_idx = atomic_read(&tx_ring->tx_desc_ring_tail_idx);
+
+	return (tail_idx - head_idx + (AM65_CPSW_MAX_TX_DESC + 1)) %
+	       (AM65_CPSW_MAX_TX_DESC + 1);
+}
+
 static void am65_cpsw_nuss_ndo_slave_set_rx_mode(struct net_device *ndev)
 {
 	struct am65_cpsw_common *common = am65_ndev_to_common(ndev);
@@ -423,7 +536,7 @@ static void am65_cpsw_nuss_ndo_host_tx_timeout(struct net_device *ndev,
 		   netif_tx_queue_stopped(netif_txq),
 		   jiffies_to_msecs(jiffies - trans_start),
 		   netdev_queue_dql_avail(netif_txq),
-		   k3_cppi_desc_pool_avail(tx_chn->desc_pool));
+		   am65_cpsw_nuss_num_free_tx_desc(tx_chn));
 
 	if (netif_tx_queue_stopped(netif_txq)) {
 		/* try recover if stopped by us */
@@ -442,7 +555,7 @@ static int am65_cpsw_nuss_rx_push(struct am65_cpsw_common *common,
 	dma_addr_t desc_dma;
 	dma_addr_t buf_dma;
 
-	desc_rx = k3_cppi_desc_pool_alloc(rx_chn->desc_pool);
+	desc_rx = am65_cpsw_nuss_get_rx_desc(&rx_chn->flows[flow_idx]);
 	if (!desc_rx) {
 		dev_err(dev, "Failed to allocate RXFDQ descriptor\n");
 		return -ENOMEM;
@@ -453,7 +566,7 @@ static int am65_cpsw_nuss_rx_push(struct am65_cpsw_common *common,
 				 page_address(page) + AM65_CPSW_HEADROOM,
 				 AM65_CPSW_MAX_PACKET_SIZE, DMA_FROM_DEVICE);
 	if (unlikely(dma_mapping_error(rx_chn->dma_dev, buf_dma))) {
-		k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
+		am65_cpsw_nuss_put_rx_desc(&rx_chn->flows[flow_idx], desc_rx);
 		dev_err(dev, "Failed to map rx buffer\n");
 		return -EINVAL;
 	}
@@ -508,6 +621,7 @@ static void am65_cpsw_nuss_tx_cleanup(void *data, dma_addr_t desc_dma);
 static void am65_cpsw_destroy_rxq(struct am65_cpsw_common *common, int id)
 {
 	struct am65_cpsw_rx_chn *rx_chn = &common->rx_chns;
+	struct cppi5_host_desc_t *rx_desc;
 	struct am65_cpsw_rx_flow *flow;
 	struct xdp_rxq_info *rxq;
 	int port;
@@ -515,6 +629,12 @@ static void am65_cpsw_destroy_rxq(struct am65_cpsw_common *common, int id)
 	flow = &rx_chn->flows[id];
 	napi_disable(&flow->napi_rx);
 	hrtimer_cancel(&flow->rx_hrtimer);
+	/* return descriptors to pool */
+	rx_desc = am65_cpsw_nuss_get_rx_desc(flow);
+	while (rx_desc) {
+		k3_cppi_desc_pool_free(rx_chn->desc_pool, rx_desc);
+		rx_desc = am65_cpsw_nuss_get_rx_desc(flow);
+	}
 	k3_udma_glue_reset_rx_chn(rx_chn->rx_chn, id, rx_chn,
 				  am65_cpsw_nuss_rx_cleanup);
 
@@ -603,7 +723,12 @@ static int am65_cpsw_create_rxq(struct am65_cpsw_common *common, int id)
 			goto err;
 	}
 
+	/* Preallocate all RX Descriptors */
+	atomic_set(&flow->rx_ring.rx_desc_ring_head_idx, 0);
+	atomic_set(&flow->rx_ring.rx_desc_ring_tail_idx, AM65_CPSW_MAX_RX_DESC);
+
 	for (i = 0; i < AM65_CPSW_MAX_RX_DESC; i++) {
+		flow->rx_ring.rx_descs[i] = k3_cppi_desc_pool_alloc(rx_chn->desc_pool);
 		page = page_pool_dev_alloc_pages(flow->page_pool);
 		if (!page) {
 			dev_err(common->dev, "cannot allocate page in flow %d\n",
@@ -661,9 +786,16 @@ err:
 static void am65_cpsw_destroy_txq(struct am65_cpsw_common *common, int id)
 {
 	struct am65_cpsw_tx_chn *tx_chn = &common->tx_chns[id];
+	struct cppi5_host_desc_t *tx_desc;
 
 	napi_disable(&tx_chn->napi_tx);
 	hrtimer_cancel(&tx_chn->tx_hrtimer);
+	/* return descriptors to pool */
+	tx_desc = am65_cpsw_nuss_get_tx_desc(tx_chn);
+	while (tx_desc) {
+		k3_cppi_desc_pool_free(tx_chn->desc_pool, tx_desc);
+		tx_desc = am65_cpsw_nuss_get_tx_desc(tx_chn);
+	}
 	k3_udma_glue_reset_tx_chn(tx_chn->tx_chn, tx_chn,
 				  am65_cpsw_nuss_tx_cleanup);
 	k3_udma_glue_disable_tx_chn(tx_chn->tx_chn);
@@ -695,7 +827,13 @@ static void am65_cpsw_destroy_txqs(struct am65_cpsw_common *common)
 static int am65_cpsw_create_txq(struct am65_cpsw_common *common, int id)
 {
 	struct am65_cpsw_tx_chn *tx_chn = &common->tx_chns[id];
-	int ret;
+	int ret, i;
+
+	/* Preallocate all TX Descriptors */
+	atomic_set(&tx_chn->tx_ring.tx_desc_ring_head_idx, 0);
+	atomic_set(&tx_chn->tx_ring.tx_desc_ring_tail_idx, AM65_CPSW_MAX_TX_DESC);
+	for (i = 0; i < AM65_CPSW_MAX_TX_DESC; i++)
+		tx_chn->tx_ring.tx_descs[i] = k3_cppi_desc_pool_alloc(tx_chn->desc_pool);
 
 	ret = k3_udma_glue_enable_tx_chn(tx_chn->tx_chn);
 	if (ret)
@@ -1103,7 +1241,7 @@ static int am65_cpsw_xdp_tx_frame(struct net_device *ndev,
 	u32 pkt_len = xdpf->len;
 	int ret;
 
-	host_desc = k3_cppi_desc_pool_alloc(tx_chn->desc_pool);
+	host_desc = am65_cpsw_nuss_get_tx_desc(tx_chn);
 	if (unlikely(!host_desc)) {
 		ndev->stats.tx_dropped++;
 		return AM65_CPSW_XDP_CONSUMED;	/* drop */
@@ -1161,7 +1299,7 @@ dma_unmap:
 	k3_udma_glue_tx_cppi5_to_dma_addr(tx_chn->tx_chn, &dma_buf);
 	dma_unmap_single(tx_chn->dma_dev, dma_buf, pkt_len, DMA_TO_DEVICE);
 pool_free:
-	k3_cppi_desc_pool_free(tx_chn->desc_pool, host_desc);
+	am65_cpsw_nuss_put_tx_desc(tx_chn, host_desc);
 	return ret;
 }
 
@@ -1320,7 +1458,7 @@ static int am65_cpsw_nuss_rx_packets(struct am65_cpsw_rx_flow *flow,
 	dev_dbg(dev, "%s rx csum_info:%#x\n", __func__, csum_info);
 
 	dma_unmap_single(rx_chn->dma_dev, buf_dma, buf_dma_len, DMA_FROM_DEVICE);
-	k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
+	am65_cpsw_nuss_put_rx_desc(flow, desc_rx);
 
 	if (port->xdp_prog) {
 		xdp_init_buff(&xdp, PAGE_SIZE, &port->xdp_rxq[flow->id]);
@@ -1444,11 +1582,46 @@ static void am65_cpsw_nuss_tx_wake(struct am65_cpsw_tx_chn *tx_chn, struct net_d
 		 */
 		__netif_tx_lock(netif_txq, smp_processor_id());
 		if (netif_running(ndev) &&
-		    (k3_cppi_desc_pool_avail(tx_chn->desc_pool) >= MAX_SKB_FRAGS))
+		    (am65_cpsw_nuss_num_free_tx_desc(tx_chn) >= MAX_SKB_FRAGS))
 			netif_tx_wake_queue(netif_txq);
 
 		__netif_tx_unlock(netif_txq);
 	}
+}
+
+static inline void am65_cpsw_nuss_xmit_recycle(struct am65_cpsw_tx_chn *tx_chn,
+					       struct cppi5_host_desc_t *desc)
+{
+	struct cppi5_host_desc_t *first_desc, *next_desc;
+	dma_addr_t buf_dma, next_desc_dma;
+	u32 buf_dma_len;
+
+	first_desc = desc;
+	next_desc = first_desc;
+
+	cppi5_hdesc_get_obuf(first_desc, &buf_dma, &buf_dma_len);
+	k3_udma_glue_tx_cppi5_to_dma_addr(tx_chn->tx_chn, &buf_dma);
+
+	dma_unmap_single(tx_chn->dma_dev, buf_dma, buf_dma_len, DMA_TO_DEVICE);
+
+	next_desc_dma = cppi5_hdesc_get_next_hbdesc(first_desc);
+	k3_udma_glue_tx_cppi5_to_dma_addr(tx_chn->tx_chn, &next_desc_dma);
+	while (next_desc_dma) {
+		next_desc = k3_cppi_desc_pool_dma2virt(tx_chn->desc_pool,
+						       next_desc_dma);
+		cppi5_hdesc_get_obuf(next_desc, &buf_dma, &buf_dma_len);
+		k3_udma_glue_tx_cppi5_to_dma_addr(tx_chn->tx_chn, &buf_dma);
+
+		dma_unmap_page(tx_chn->dma_dev, buf_dma, buf_dma_len,
+			       DMA_TO_DEVICE);
+
+		next_desc_dma = cppi5_hdesc_get_next_hbdesc(next_desc);
+		k3_udma_glue_tx_cppi5_to_dma_addr(tx_chn->tx_chn, &next_desc_dma);
+
+		am65_cpsw_nuss_put_tx_desc(tx_chn, next_desc);
+	}
+
+	am65_cpsw_nuss_put_tx_desc(tx_chn, first_desc);
 }
 
 static int am65_cpsw_nuss_tx_compl_packets(struct am65_cpsw_common *common,
@@ -1509,7 +1682,7 @@ static int am65_cpsw_nuss_tx_compl_packets(struct am65_cpsw_common *common,
 
 		total_bytes += pkt_len;
 		num_tx++;
-		am65_cpsw_nuss_xmit_free(tx_chn, desc_tx);
+		am65_cpsw_nuss_xmit_recycle(tx_chn, desc_tx);
 		dev_sw_netstats_tx_add(ndev, 1, pkt_len);
 		if (!single_port) {
 			/* as packets from multi ports can be interleaved
@@ -1624,7 +1797,7 @@ static netdev_tx_t am65_cpsw_nuss_ndo_slave_xmit(struct sk_buff *skb,
 		goto err_free_skb;
 	}
 
-	first_desc = k3_cppi_desc_pool_alloc(tx_chn->desc_pool);
+	first_desc = am65_cpsw_nuss_get_tx_desc(tx_chn);
 	if (!first_desc) {
 		dev_dbg(dev, "Failed to allocate descriptor\n");
 		dma_unmap_single(tx_chn->dma_dev, buf_dma, pkt_len,
@@ -1672,7 +1845,7 @@ static netdev_tx_t am65_cpsw_nuss_ndo_slave_xmit(struct sk_buff *skb,
 		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
 		u32 frag_size = skb_frag_size(frag);
 
-		next_desc = k3_cppi_desc_pool_alloc(tx_chn->desc_pool);
+		next_desc = am65_cpsw_nuss_get_tx_desc(tx_chn);
 		if (!next_desc) {
 			dev_err(dev, "Failed to allocate descriptor\n");
 			goto busy_free_descs;
@@ -1682,7 +1855,7 @@ static netdev_tx_t am65_cpsw_nuss_ndo_slave_xmit(struct sk_buff *skb,
 					   DMA_TO_DEVICE);
 		if (unlikely(dma_mapping_error(tx_chn->dma_dev, buf_dma))) {
 			dev_err(dev, "Failed to map tx skb page\n");
-			k3_cppi_desc_pool_free(tx_chn->desc_pool, next_desc);
+			am65_cpsw_nuss_put_tx_desc(tx_chn, next_desc);
 			ndev->stats.tx_errors++;
 			goto err_free_descs;
 		}
@@ -1725,14 +1898,14 @@ done_tx:
 		goto err_free_descs;
 	}
 
-	if (k3_cppi_desc_pool_avail(tx_chn->desc_pool) < MAX_SKB_FRAGS) {
+	if (am65_cpsw_nuss_num_free_tx_desc(tx_chn) < MAX_SKB_FRAGS) {
 		netif_tx_stop_queue(netif_txq);
 		/* Barrier, so that stop_queue visible to other cpus */
 		smp_mb__after_atomic();
 		dev_dbg(dev, "netif_tx_stop_queue %d\n", q_idx);
 
 		/* re-check for smp */
-		if (k3_cppi_desc_pool_avail(tx_chn->desc_pool) >=
+		if (am65_cpsw_nuss_num_free_tx_desc(tx_chn) >=
 		    MAX_SKB_FRAGS) {
 			netif_tx_wake_queue(netif_txq);
 			dev_dbg(dev, "netif_tx_wake_queue %d\n", q_idx);
@@ -1742,14 +1915,14 @@ done_tx:
 	return NETDEV_TX_OK;
 
 err_free_descs:
-	am65_cpsw_nuss_xmit_free(tx_chn, first_desc);
+	am65_cpsw_nuss_xmit_recycle(tx_chn, first_desc);
 err_free_skb:
 	ndev->stats.tx_dropped++;
 	dev_kfree_skb_any(skb);
 	return NETDEV_TX_OK;
 
 busy_free_descs:
-	am65_cpsw_nuss_xmit_free(tx_chn, first_desc);
+	am65_cpsw_nuss_xmit_recycle(tx_chn, first_desc);
 busy_stop_q:
 	netif_tx_stop_queue(netif_txq);
 	return NETDEV_TX_BUSY;
@@ -2193,7 +2366,7 @@ static void am65_cpsw_nuss_free_tx_chns(void *data)
 static void am65_cpsw_nuss_remove_tx_chns(struct am65_cpsw_common *common)
 {
 	struct device *dev = common->dev;
-	int i;
+	int i, j;
 
 	common->tx_ch_rate_msk = 0;
 	for (i = 0; i < common->tx_ch_num; i++) {
@@ -2203,6 +2376,10 @@ static void am65_cpsw_nuss_remove_tx_chns(struct am65_cpsw_common *common)
 			devm_free_irq(dev, tx_chn->irq, tx_chn);
 
 		netif_napi_del(&tx_chn->napi_tx);
+
+		for (j = 0; j < AM65_CPSW_MAX_TX_DESC; j++)
+			k3_cppi_desc_pool_free(tx_chn->desc_pool,
+					       tx_chn->tx_ring.tx_descs[j]);
 	}
 
 	am65_cpsw_nuss_free_tx_chns(common);
@@ -2258,7 +2435,7 @@ static int am65_cpsw_nuss_init_tx_chns(struct am65_cpsw_common *common)
 		.flags = 0
 	};
 	u32 hdesc_size, hdesc_size_out;
-	int i, ret = 0;
+	int i, j, ret = 0;
 
 	hdesc_size = cppi5_hdesc_calc_size(true, AM65_CPSW_NAV_PS_DATA_SIZE,
 					   AM65_CPSW_NAV_SW_DATA_SIZE);
@@ -2327,6 +2504,13 @@ static int am65_cpsw_nuss_init_tx_chns(struct am65_cpsw_common *common)
 	return 0;
 
 err:
+	/* Free descriptors */
+	while (i--) {
+		struct am65_cpsw_tx_chn *tx_chn = &common->tx_chns[i];
+
+		for (j = 0; j < AM65_CPSW_MAX_TX_DESC; j++)
+			k3_cppi_desc_pool_free(tx_chn->desc_pool, tx_chn->tx_ring.tx_descs[j]);
+	}
 	am65_cpsw_nuss_free_tx_chns(common);
 
 	return ret;
@@ -2351,7 +2535,7 @@ static void am65_cpsw_nuss_remove_rx_chns(struct am65_cpsw_common *common)
 	struct device *dev = common->dev;
 	struct am65_cpsw_rx_chn *rx_chn;
 	struct am65_cpsw_rx_flow *flows;
-	int i;
+	int i, j;
 
 	rx_chn = &common->rx_chns;
 	flows = rx_chn->flows;
@@ -2360,6 +2544,9 @@ static void am65_cpsw_nuss_remove_rx_chns(struct am65_cpsw_common *common)
 		if (!(flows[i].irq < 0))
 			devm_free_irq(dev, flows[i].irq, &flows[i]);
 		netif_napi_del(&flows[i].napi_rx);
+		for (j = 0; j < AM65_CPSW_MAX_RX_DESC; j++)
+			k3_cppi_desc_pool_free(rx_chn->desc_pool,
+					       flows[i].rx_ring.rx_descs[j]);
 	}
 
 	am65_cpsw_nuss_free_rx_chns(common);
@@ -2376,7 +2563,7 @@ static int am65_cpsw_nuss_init_rx_chns(struct am65_cpsw_common *common)
 	struct am65_cpsw_rx_flow *flow;
 	u32 hdesc_size, hdesc_size_out;
 	u32 fdqring_id;
-	int i, ret = 0;
+	int i, j, ret = 0;
 
 	hdesc_size = cppi5_hdesc_calc_size(true, AM65_CPSW_NAV_PS_DATA_SIZE,
 					   AM65_CPSW_NAV_SW_DATA_SIZE);
@@ -2496,10 +2683,14 @@ static int am65_cpsw_nuss_init_rx_chns(struct am65_cpsw_common *common)
 
 err_request_irq:
 	netif_napi_del(&flow->napi_rx);
+	for (j = 0; j < AM65_CPSW_MAX_RX_DESC; j++)
+		k3_cppi_desc_pool_free(rx_chn->desc_pool, flow->rx_ring.rx_descs[j]);
 
 err_flow:
 	for (--i; i >= 0; i--) {
 		flow = &rx_chn->flows[i];
+		for (j = 0; j < AM65_CPSW_MAX_RX_DESC; j++)
+			k3_cppi_desc_pool_free(rx_chn->desc_pool, flow->rx_ring.rx_descs[j]);
 		devm_free_irq(dev, flow->irq, flow);
 		netif_napi_del(&flow->napi_rx);
 	}
