@@ -807,8 +807,10 @@ static long region_chg(struct resv_map *resv, long f, long t,
 	if (*out_regions_needed == 0)
 		*out_regions_needed = 1;
 
-	if (allocate_file_region_entries(resv, *out_regions_needed))
+	if (allocate_file_region_entries(resv, *out_regions_needed)) {
+		spin_unlock(&resv->lock);
 		return -ENOMEM;
+	}
 
 	resv->adds_in_progress += *out_regions_needed;
 
