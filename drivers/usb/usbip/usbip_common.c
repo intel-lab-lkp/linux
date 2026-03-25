@@ -769,6 +769,36 @@ void usbip_pad_iso(struct usbip_device *ud, struct urb *urb)
 	 */
 	for (i = np-1; i > 0; i--) {
 		actualoffset -= urb->iso_frame_desc[i].actual_length;
+
+		/* source: actualoffset can go negative via crafted
+		 * actual_length - catch that plus any overshoot */
+		if (actualoffset < 0 ||
+		    (unsigned int)actualoffset > (unsigned int)urb->transfer_buffer_length ||
+		    urb->iso_frame_desc[i].actual_length >
+				(unsigned int)urb->transfer_buffer_length -
+				(unsigned int)actualoffset) {
+			dev_err(&urb->dev->dev,
+				"pad_iso: bad src off=%d len=%u bufsz=%d\n",
+				actualoffset,
+				urb->iso_frame_desc[i].actual_length,
+				urb->transfer_buffer_length);
+			return;
+		}
+
+		/* dest: offset comes straight from the wire, never checked */
+		if (urb->iso_frame_desc[i].offset >
+				(unsigned int)urb->transfer_buffer_length ||
+		    urb->iso_frame_desc[i].actual_length >
+				(unsigned int)urb->transfer_buffer_length -
+				urb->iso_frame_desc[i].offset) {
+			dev_err(&urb->dev->dev,
+				"pad_iso: bad dst off=%u len=%u bufsz=%d\n",
+				urb->iso_frame_desc[i].offset,
+				urb->iso_frame_desc[i].actual_length,
+				urb->transfer_buffer_length);
+			return;
+		}
+
 		memmove(urb->transfer_buffer + urb->iso_frame_desc[i].offset,
 			urb->transfer_buffer + actualoffset,
 			urb->iso_frame_desc[i].actual_length);
