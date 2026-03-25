@@ -1678,9 +1678,6 @@ static netdev_tx_t am65_cpsw_nuss_ndo_slave_xmit(struct sk_buff *skb,
 			goto busy_free_descs;
 		}
 
-		am65_cpsw_nuss_set_buf_type(tx_chn, next_desc,
-					    AM65_CPSW_TX_BUF_TYPE_SKB);
-
 		buf_dma = skb_frag_dma_map(tx_chn->dma_dev, frag, 0, frag_size,
 					   DMA_TO_DEVICE);
 		if (unlikely(dma_mapping_error(tx_chn->dma_dev, buf_dma))) {
