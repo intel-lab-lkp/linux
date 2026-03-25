@@ -934,6 +934,7 @@ static const struct i2c_device_id sht3x_ids[] = {
 	{"sht3x", sht3x},
 	{"sts3x", sts3x},
 	{"sht85", sht3x},
+	{"gxht30", sht3x},
 	{}
 };
 
@@ -942,6 +943,7 @@ MODULE_DEVICE_TABLE(i2c, sht3x_ids);
 static const struct of_device_id sht3x_of_match[] = {
 	{ .compatible = "sensirion,sht30", .data = (void *)sht3x },
 	{ .compatible = "sensirion,sts30", .data = (void *)sts3x },
+	{ .compatible = "gxcas,gxht30", .data = (void *)sht3x },
 	{ }
 };
 
@@ -959,5 +961,6 @@ module_i2c_driver(sht3x_i2c_driver);
 
 MODULE_AUTHOR("David Frey <david.frey@sensirion.com>");
 MODULE_AUTHOR("Pascal Sachs <pascal.sachs@sensirion.com>");
+MODULE_AUTHOR("Zaixiang Xu <zaixiang.xu.dev@gmail.com>");
 MODULE_DESCRIPTION("Sensirion SHT3x humidity and temperature sensor driver");
 MODULE_LICENSE("GPL");
