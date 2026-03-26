@@ -7372,9 +7372,22 @@ static void bpf_scx_unreg(void *kdata, struct bpf_link *link)
 	struct sched_ext_ops *ops = kdata;
 	struct scx_sched *sch = rcu_dereference_protected(ops->priv, true);
 
+	if (!sch)
+		return;
+
 	scx_disable(sch, SCX_EXIT_UNREG);
 	kthread_flush_work(&sch->disable_work);
-	RCU_INIT_POINTER(ops->priv, NULL);
+
+	/*
+	 * A concurrent reg() may have already installed a new scheduler into
+	 * ops->priv by the time disable completes. Clear ops->priv only if it
+	 * still holds our sch.
+	 */
+	mutex_lock(&scx_enable_mutex);
+	if (rcu_access_pointer(ops->priv) == sch)
+		RCU_INIT_POINTER(ops->priv, NULL);
+	mutex_unlock(&scx_enable_mutex);
+
 	kobject_put(&sch->kobj);
 }
 
