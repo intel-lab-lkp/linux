@@ -186,8 +186,17 @@ def _run_gro_bin(cfg, test_name, protocol=None, num_flows=None,
 
     dmac = _resolve_dmac(cfg, ipver)
 
-    base_args = [
-        f"--{protocol}",
+    if protocol.startswith("pppoe"):
+        base_args = [
+            f"--ipv{protocol[-1]}",
+            "--pppoe",
+        ]
+    else:
+        base_args = [
+            f"--{protocol}",
+        ]
+
+    base_args += [
         f"--dmac {dmac}",
         f"--smac {cfg.remote_dev['address']}",
         f"--daddr {cfg.addr_v[ipver]}",
@@ -319,6 +328,18 @@ def _gro_variants():
                 for test_name in ipv4_tests:
                     yield mode, protocol, test_name
             elif protocol == "ipv6":
+                for test_name in ipv6_tests:
+                    yield mode, protocol, test_name
+
+    for mode in ["sw"]:
+        for protocol in ["pppoev4", "pppoev6"]:
+            for test_name in common_tests:
+                yield mode, protocol, test_name
+
+            if protocol == "pppoev4":
+                for test_name in ipv4_tests:
+                    yield mode, protocol, test_name
+            elif protocol == "pppoev6":
                 for test_name in ipv6_tests:
                     yield mode, protocol, test_name
 

@@ -64,12 +64,14 @@
 #include <errno.h>
 #include <error.h>
 #include <getopt.h>
-#include <linux/filter.h>
-#include <linux/if_packet.h>
-#include <linux/ipv6.h>
-#include <linux/net_tstamp.h>
 #include <net/ethernet.h>
 #include <net/if.h>
+#include <linux/filter.h>
+#include <linux/if_packet.h>
+#include <linux/if_pppox.h>
+#include <linux/ipv6.h>
+#include <linux/net_tstamp.h>
+#include <linux/ppp_defs.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
@@ -92,11 +94,11 @@
 #define START_SEQ 100
 #define START_ACK 100
 #define ETH_P_NONE 0
-#define TOTAL_HDR_LEN (ETH_HLEN + sizeof(struct ipv6hdr) + sizeof(struct tcphdr))
+#define TOTAL_HDR_LEN (ETH_HLEN + PPPOE_SES_HLEN + sizeof(struct ipv6hdr) + sizeof(struct tcphdr))
 #define MSS (4096 - sizeof(struct tcphdr) - sizeof(struct ipv6hdr))
 #define MAX_PAYLOAD (IP_MAXPACKET - sizeof(struct tcphdr) - sizeof(struct ipv6hdr))
 #define NUM_LARGE_PKT (MAX_PAYLOAD / MSS)
-#define MAX_HDR_LEN (ETH_HLEN + sizeof(struct ipv6hdr) + sizeof(struct tcphdr))
+#define MAX_HDR_LEN (ETH_HLEN + PPPOE_SES_HLEN + sizeof(struct ipv6hdr) + sizeof(struct tcphdr))
 #define MIN_EXTHDR_SIZE 8
 #define EXT_PAYLOAD_1 "\x00\x00\x00\x00\x00\x00"
 #define EXT_PAYLOAD_2 "\x11\x11\x11\x11\x11\x11"
@@ -129,6 +131,7 @@ static int tcp_offset = -1;
 static int total_hdr_len = -1;
 static int ethhdr_proto = -1;
 static bool ipip;
+static bool pppoe;
 static uint64_t txtime_ns;
 static int num_flows = 4;
 static bool order_check;
@@ -148,12 +151,37 @@ static void vlog(const char *fmt, ...)
 	}
 }
 
+static void fill_pppoelayer(void *buf, int payload_len)
+{
+	struct pppoe_ppp_hdr {
+		struct pppoe_hdr eh;
+		__be16 proto;
+	} *ph = buf;
+	int ppp_payload_len;
+
+	ph->eh.type = 1;
+	ph->eh.ver = 1;
+	ph->eh.code = 0;
+	ph->eh.sid = htons(0x1234);
+
+	if (proto == PF_INET6) {
+		ph->proto = htons(PPP_IPV6);
+		ppp_payload_len = sizeof(struct ipv6hdr) + sizeof(struct tcphdr) + payload_len;
+	} else {
+		ph->proto = htons(PPP_IP);
+		ppp_payload_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len;
+	}
+
+	ph->eh.length = htons(ppp_payload_len + sizeof(ph->proto));
+}
+
 static void setup_sock_filter(int fd)
 {
 	const int dport_off = tcp_offset + offsetof(struct tcphdr, dest);
 	const int ethproto_off = offsetof(struct ethhdr, h_proto);
 	int optlen = 0;
 	int ipproto_off, opt_ipproto_off;
+	int head_len = ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0);
 	int next_off;
 
 	if (ipip)
@@ -162,7 +190,7 @@ static void setup_sock_filter(int fd)
 		next_off = offsetof(struct iphdr, protocol);
 	else
 		next_off = offsetof(struct ipv6hdr, nexthdr);
-	ipproto_off = ETH_HLEN + next_off;
+	ipproto_off = head_len + next_off;
 
 	/* Overridden later if exthdrs are used: */
 	opt_ipproto_off = ipproto_off;
@@ -178,7 +206,7 @@ static void setup_sock_filter(int fd)
 
 		/* same size for HBH and Fragment extension header types */
 		optlen = MIN_EXTHDR_SIZE;
-		opt_ipproto_off = ETH_HLEN + sizeof(struct ipv6hdr)
+		opt_ipproto_off = head_len + sizeof(struct ipv6hdr)
 			+ offsetof(struct ip6_ext, ip6e_nxt);
 	}
 
@@ -390,6 +418,10 @@ static void create_packet(void *buf, int seq_offset, int ack_offset,
 				  IPPROTO_IPIP);
 		fill_networklayer(buf + ETH_HLEN + sizeof(struct iphdr),
 				  payload_len, IPPROTO_TCP);
+	} else if (pppoe) {
+		fill_pppoelayer(buf + ETH_HLEN, payload_len);
+		fill_networklayer(buf + ETH_HLEN + PPPOE_SES_HLEN,
+				  payload_len, IPPROTO_TCP);
 	} else {
 		fill_networklayer(buf + ETH_HLEN, payload_len, IPPROTO_TCP);
 	}
@@ -501,7 +533,7 @@ static void send_flags(int fd, struct sockaddr_ll *daddr, int psh, int syn,
 static void send_data_pkts(int fd, struct sockaddr_ll *daddr,
 			   int payload_len1, int payload_len2)
 {
-	static char buf[ETH_HLEN + IP_MAXPACKET];
+	static char buf[ETH_HLEN + PPPOE_SES_HLEN + IP_MAXPACKET];
 
 	create_packet(buf, 0, 0, payload_len1, 0);
 	write_packet(fd, buf, total_hdr_len + payload_len1, daddr);
@@ -745,7 +777,7 @@ static void add_ipv4_ts_option(void *buf, void *optpkt)
 	memcpy(optpkt + tcp_offset + optlen, buf + tcp_offset,
 	       sizeof(struct tcphdr) + PAYLOAD_LEN);
 
-	iph = (struct iphdr *)(optpkt + ETH_HLEN);
+	iph = (struct iphdr *)(optpkt + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0));
 	iph->ihl = 5 + (optlen / 4);
 	iph->tot_len = htons(ntohs(iph->tot_len) + optlen);
 	iph->check = 0;
@@ -755,7 +787,7 @@ static void add_ipv4_ts_option(void *buf, void *optpkt)
 static void add_ipv6_exthdr(void *buf, void *optpkt, __u8 exthdr_type, char *ext_payload)
 {
 	struct ipv6_opt_hdr *exthdr = (struct ipv6_opt_hdr *)(optpkt + tcp_offset);
-	struct ipv6hdr *iph = (struct ipv6hdr *)(optpkt + ETH_HLEN);
+	struct ipv6hdr *iph = (struct ipv6hdr *)(optpkt + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0));
 	char *exthdr_payload_start = (char *)(exthdr + 1);
 
 	exthdr->hdrlen = 0;
@@ -908,7 +940,7 @@ static void send_ip_options(int fd, struct sockaddr_ll *daddr)
 static void send_fragment4(int fd, struct sockaddr_ll *daddr)
 {
 	static char buf[IP_MAXPACKET];
-	struct iphdr *iph = (struct iphdr *)(buf + ETH_HLEN);
+	struct iphdr *iph = (struct iphdr *)(buf + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0));
 	int pkt_size = total_hdr_len + PAYLOAD_LEN;
 
 	create_packet(buf, 0, 0, PAYLOAD_LEN, 0);
@@ -920,7 +952,8 @@ static void send_fragment4(int fd, struct sockaddr_ll *daddr)
 	 */
 	memset(buf + total_hdr_len, 'a', PAYLOAD_LEN * 2);
 	fill_transportlayer(buf + tcp_offset, PAYLOAD_LEN, 0, PAYLOAD_LEN * 2, 0);
-	fill_networklayer(buf + ETH_HLEN, PAYLOAD_LEN, IPPROTO_TCP);
+	fill_networklayer(buf + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0),
+			  PAYLOAD_LEN, IPPROTO_TCP);
 	fill_datalinklayer(buf);
 
 	iph->frag_off = htons(0x6000); // DF = 1, MF = 1
@@ -934,7 +967,7 @@ static void send_changed_ttl(int fd, struct sockaddr_ll *daddr)
 {
 	int pkt_size = total_hdr_len + PAYLOAD_LEN;
 	static char buf[MAX_HDR_LEN + PAYLOAD_LEN];
-	struct iphdr *iph = (struct iphdr *)(buf + ETH_HLEN);
+	struct iphdr *iph = (struct iphdr *)(buf + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0));
 
 	create_packet(buf, 0, 0, PAYLOAD_LEN, 0);
 	write_packet(fd, buf, pkt_size, daddr);
@@ -951,8 +984,8 @@ static void send_changed_tos(int fd, struct sockaddr_ll *daddr)
 {
 	int pkt_size = total_hdr_len + PAYLOAD_LEN;
 	static char buf[MAX_HDR_LEN + PAYLOAD_LEN];
-	struct iphdr *iph = (struct iphdr *)(buf + ETH_HLEN);
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buf + ETH_HLEN);
+	struct iphdr *iph = (struct iphdr *)(buf + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0));
+	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buf + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0));
 
 	create_packet(buf, 0, 0, PAYLOAD_LEN, 0);
 	write_packet(fd, buf, pkt_size, daddr);
@@ -980,7 +1013,8 @@ static void send_changed_ECN(int fd, struct sockaddr_ll *daddr)
 
 	create_packet(buf, PAYLOAD_LEN, 0, PAYLOAD_LEN, 0);
 	if (proto == PF_INET) {
-		buf[ETH_HLEN + 1] ^= 0x2; // ECN set to 10
+		int ecn_off = ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0) + 1;
+		buf[ecn_off] ^= 0x2; // ECN set to 10
 		iph->check = 0;
 		iph->check = checksum_fold(iph, sizeof(struct iphdr), 0);
 	} else {
@@ -995,7 +1029,7 @@ static void send_fragment6(int fd, struct sockaddr_ll *daddr)
 	static char buf[MAX_HDR_LEN + PAYLOAD_LEN];
 	static char extpkt[MAX_HDR_LEN + PAYLOAD_LEN +
 			   sizeof(struct ip6_frag)];
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buf + ETH_HLEN);
+	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buf + ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0));
 	struct ip6_frag *frag = (void *)(extpkt + tcp_offset);
 	int extlen = sizeof(struct ip6_frag);
 	int bufpkt_len = total_hdr_len + PAYLOAD_LEN;
@@ -1073,9 +1107,10 @@ static void recv_error(int fd, int rcv_errno)
 static void check_recv_pkts(int fd, int *correct_payload,
 			    int correct_num_pkts)
 {
-	static char buffer[IP_MAXPACKET + ETH_HLEN + 1];
-	struct iphdr *iph = (struct iphdr *)(buffer + ETH_HLEN);
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buffer + ETH_HLEN);
+	static char buffer[IP_MAXPACKET + ETH_HLEN + PPPOE_SES_HLEN + 1];
+	int nhoff = ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0);
+	struct iphdr *iph = (struct iphdr *)(buffer + nhoff);
+	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buffer + nhoff);
 	struct tcphdr *tcph;
 	bool bad_packet = false;
 	int tcp_ext_len = 0;
@@ -1092,7 +1127,7 @@ static void check_recv_pkts(int fd, int *correct_payload,
 
 	while (1) {
 		ip_ext_len = 0;
-		pkt_size = recv(fd, buffer, IP_MAXPACKET + ETH_HLEN + 1, 0);
+		pkt_size = recv(fd, buffer, sizeof(buffer), 0);
 		if (pkt_size < 0)
 			recv_error(fd, errno);
 
@@ -1134,9 +1169,10 @@ static void check_recv_pkts(int fd, int *correct_payload,
 
 static void check_capacity_pkts(int fd)
 {
-	static char buffer[IP_MAXPACKET + ETH_HLEN + 1];
-	struct iphdr *iph = (struct iphdr *)(buffer + ETH_HLEN);
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buffer + ETH_HLEN);
+	static char buffer[IP_MAXPACKET + ETH_HLEN + PPPOE_SES_HLEN + 1];
+	int nhoff = ETH_HLEN + (pppoe ? PPPOE_SES_HLEN : 0);
+	struct iphdr *iph = (struct iphdr *)(buffer + nhoff);
+	struct ipv6hdr *ip6h = (struct ipv6hdr *)(buffer + nhoff);
 	int num_pkt = 0, num_coal = 0, pkt_idx;
 	const char *fail_reason = NULL;
 	int flow_order[num_flows * 2];
@@ -1154,7 +1190,7 @@ static void check_capacity_pkts(int fd)
 
 	while (total_data < num_flows * CAPACITY_PAYLOAD_LEN * 2) {
 		ip_ext_len = 0;
-		pkt_size = recv(fd, buffer, IP_MAXPACKET + ETH_HLEN + 1, 0);
+		pkt_size = recv(fd, buffer, sizeof(buffer), 0);
 		if (pkt_size < 0)
 			recv_error(fd, errno);
 
@@ -1645,6 +1681,7 @@ static void parse_args(int argc, char **argv)
 		{ "ipv4", no_argument, NULL, '4' },
 		{ "ipv6", no_argument, NULL, '6' },
 		{ "ipip", no_argument, NULL, 'e' },
+		{ "pppoe", no_argument, NULL, 'p' },
 		{ "num-flows", required_argument, NULL, 'n' },
 		{ "rx", no_argument, NULL, 'r' },
 		{ "saddr", required_argument, NULL, 's' },
@@ -1670,6 +1707,9 @@ static void parse_args(int argc, char **argv)
 			ipip = true;
 			proto = PF_INET;
 			ethhdr_proto = htons(ETH_P_IP);
+			break;
+		case 'p':
+			pppoe = true;
 			break;
 		case 'd':
 			addr4_dst = addr6_dst = optarg;
@@ -1715,6 +1755,15 @@ int main(int argc, char **argv)
 	if (ipip) {
 		tcp_offset = ETH_HLEN + sizeof(struct iphdr) * 2;
 		total_hdr_len = tcp_offset + sizeof(struct tcphdr);
+	} else if (pppoe) {
+		if (proto == PF_INET)
+			tcp_offset = ETH_HLEN + PPPOE_SES_HLEN + sizeof(struct iphdr);
+		else if (proto == PF_INET6)
+			tcp_offset = ETH_HLEN + PPPOE_SES_HLEN + sizeof(struct ipv6hdr);
+		else
+			error(1, 0, "Protocol family is not ipv4 or ipv6");
+		total_hdr_len = tcp_offset + sizeof(struct tcphdr);
+		ethhdr_proto = htons(ETH_P_PPP_SES);
 	} else if (proto == PF_INET) {
 		tcp_offset = ETH_HLEN + sizeof(struct iphdr);
 		total_hdr_len = tcp_offset + sizeof(struct tcphdr);
