@@ -7393,7 +7393,7 @@ static void le_read_features_complete(struct hci_dev *hdev, void *data, int err)
 	if (err == -ECANCELED)
 		return;
 
-	hci_conn_drop(conn);
+	hci_conn_put(conn);
 }
 
 static int hci_le_read_all_remote_features_sync(struct hci_dev *hdev,
@@ -7463,10 +7463,10 @@ int hci_le_read_remote_features(struct hci_conn *conn)
 	if (conn->out || (hdev->le_features[0] & HCI_LE_PERIPHERAL_FEATURES)) {
 		err = hci_cmd_sync_queue_once(hdev,
 					      hci_le_read_remote_features_sync,
-					      hci_conn_hold(conn),
+					      hci_conn_get(conn),
 					      le_read_features_complete);
 		if (err)
-			hci_conn_drop(conn);
+			hci_conn_put(conn);
 	} else {
 		err = -EOPNOTSUPP;
 	}
