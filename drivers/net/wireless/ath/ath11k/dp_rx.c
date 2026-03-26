@@ -21,6 +21,12 @@
 
 #define ATH11K_DP_RX_FRAGMENT_TIMEOUT_MS (2 * HZ)
 
+struct cached_peer_info {
+	enum hal_encrypt_type enctype;
+	u16 seq_no;
+	bool valid;
+};
+
 static inline
 u8 *ath11k_dp_rx_h_80211_hdr(struct ath11k_base *ab, struct hal_rx_desc *desc)
 {
@@ -2232,7 +2238,8 @@ ath11k_dp_rx_h_find_peer(struct ath11k_base *ab, struct sk_buff *msdu)
 static void ath11k_dp_rx_h_mpdu(struct ath11k *ar,
 				struct sk_buff *msdu,
 				struct hal_rx_desc *rx_desc,
-				struct ieee80211_rx_status *rx_status)
+				struct ieee80211_rx_status *rx_status,
+				struct cached_peer_info *peer_cache)
 {
 	bool  fill_crypto_hdr;
 	enum hal_encrypt_type enctype;
@@ -2264,6 +2271,21 @@ static void ath11k_dp_rx_h_mpdu(struct ath11k *ar,
 		enctype = ath11k_dp_rx_h_mpdu_start_enctype(ar->ab, rx_desc);
 	}
 	spin_unlock_bh(&ar->ab->base_lock);
+
+	if (!rxcb->peer_id && rxcb->is_first_msdu && !rxcb->is_last_msdu) {
+		peer_cache->enctype = enctype;
+		peer_cache->seq_no = rxcb->seq_no;
+		peer_cache->valid = true;
+	}
+
+	if (!rxcb->peer_id && !rxcb->is_first_msdu && peer_cache->valid) {
+		if (rxcb->seq_no == peer_cache->seq_no)
+			enctype = peer_cache->enctype;
+		else
+			ath11k_dbg(ar->ab, ATH11K_DBG_DATA,
+				   "null peer_id workaround failed. cached seq_no=%d, msdu seq_no=%d",
+				   peer_cache->seq_no, rxcb->seq_no);
+	}
 
 	rx_attention = ath11k_dp_rx_get_attention(ar->ab, rx_desc);
 	err_bitmap = ath11k_dp_rx_h_attn_mpdu_err(rx_attention);
@@ -2506,7 +2528,8 @@ static void ath11k_dp_rx_deliver_msdu(struct ath11k *ar, struct napi_struct *nap
 static int ath11k_dp_rx_process_msdu(struct ath11k *ar,
 				     struct sk_buff *msdu,
 				     struct sk_buff_head *msdu_list,
-				     struct ieee80211_rx_status *rx_status)
+				     struct ieee80211_rx_status *rx_status,
+				     struct cached_peer_info *peer_cache)
 {
 	struct ath11k_base *ab = ar->ab;
 	struct hal_rx_desc *rx_desc, *lrx_desc;
@@ -2574,7 +2597,7 @@ static int ath11k_dp_rx_process_msdu(struct ath11k *ar,
 	}
 
 	ath11k_dp_rx_h_ppdu(ar, rx_desc, rx_status);
-	ath11k_dp_rx_h_mpdu(ar, msdu, rx_desc, rx_status);
+	ath11k_dp_rx_h_mpdu(ar, msdu, rx_desc, rx_status, peer_cache);
 
 	rx_status->flag |= RX_FLAG_SKIP_MONITOR | RX_FLAG_DUP_VALIDATED;
 
@@ -2592,6 +2615,7 @@ static void ath11k_dp_rx_process_received_packets(struct ath11k_base *ab,
 	struct sk_buff *msdu;
 	struct ath11k *ar;
 	struct ieee80211_rx_status rx_status = {};
+	struct cached_peer_info peer_cache = {};
 	int ret;
 
 	if (skb_queue_empty(msdu_list))
@@ -2609,7 +2633,7 @@ static void ath11k_dp_rx_process_received_packets(struct ath11k_base *ab,
 	}
 
 	while ((msdu = __skb_dequeue(msdu_list))) {
-		ret = ath11k_dp_rx_process_msdu(ar, msdu, msdu_list, &rx_status);
+		ret = ath11k_dp_rx_process_msdu(ar, msdu, msdu_list, &rx_status, &peer_cache);
 		if (unlikely(ret)) {
 			ath11k_dbg(ab, ATH11K_DBG_DATA,
 				   "Unable to process msdu %d", ret);
@@ -3959,6 +3983,7 @@ static int ath11k_dp_rx_h_null_q_desc(struct ath11k *ar, struct sk_buff *msdu,
 	u8 l3pad_bytes;
 	struct ath11k_skb_rxcb *rxcb = ATH11K_SKB_RXCB(msdu);
 	u32 hal_rx_desc_sz = ar->ab->hw_params.hal_desc_sz;
+	struct cached_peer_info peer_cache = {};
 
 	msdu_len = ath11k_dp_rx_h_msdu_start_msdu_len(ar->ab, desc);
 
@@ -4002,7 +4027,7 @@ static int ath11k_dp_rx_h_null_q_desc(struct ath11k *ar, struct sk_buff *msdu,
 	}
 	ath11k_dp_rx_h_ppdu(ar, desc, status);
 
-	ath11k_dp_rx_h_mpdu(ar, msdu, desc, status);
+	ath11k_dp_rx_h_mpdu(ar, msdu, desc, status, &peer_cache);
 
 	rxcb->tid = ath11k_dp_rx_h_mpdu_start_tid(ar->ab, desc);
 
