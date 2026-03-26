@@ -11,19 +11,20 @@
 #define GVE_NIC_TS_SYNC_INTERVAL_MS 250
 
 /* Read the nic timestamp from hardware via the admin queue. */
-int gve_clock_nic_ts_read(struct gve_priv *priv)
+static int gve_clock_nic_ts_read(struct gve_priv *priv, u64 *nic_raw)
 {
-	u64 nic_raw;
 	int err;
 
+	mutex_lock(&priv->nic_ts_read_lock);
 	err = gve_adminq_report_nic_ts(priv, priv->nic_ts_report_bus);
 	if (err)
-		return err;
+		goto out;
 
-	nic_raw = be64_to_cpu(priv->nic_ts_report->nic_timestamp);
-	WRITE_ONCE(priv->last_sync_nic_counter, nic_raw);
+	*nic_raw = be64_to_cpu(priv->nic_ts_report->nic_timestamp);
 
-	return 0;
+out:
+	mutex_unlock(&priv->nic_ts_read_lock);
+	return err;
 }
 
 static int gve_ptp_gettimex64(struct ptp_clock_info *info,
@@ -43,15 +44,19 @@ static long gve_ptp_do_aux_work(struct ptp_clock_info *info)
 {
 	const struct gve_ptp *ptp = container_of(info, struct gve_ptp, info);
 	struct gve_priv *priv = ptp->priv;
+	u64 nic_raw;
 	int err;
 
 	if (gve_get_reset_in_progress(priv) || !gve_get_admin_queue_ok(priv))
 		goto out;
 
-	err = gve_clock_nic_ts_read(priv);
-	if (err && net_ratelimit())
-		dev_err(&priv->pdev->dev,
-			"%s read err %d\n", __func__, err);
+	err = gve_clock_nic_ts_read(priv, &nic_raw);
+	if (err) {
+		dev_err_ratelimited(&priv->pdev->dev, "%s read err %d\n",
+				    __func__, err);
+		goto out;
+	}
+	WRITE_ONCE(priv->last_sync_nic_counter, nic_raw);
 
 out:
 	return msecs_to_jiffies(GVE_NIC_TS_SYNC_INTERVAL_MS);
@@ -109,6 +114,7 @@ static void gve_ptp_release(struct gve_priv *priv)
 
 int gve_init_clock(struct gve_priv *priv)
 {
+	u64 nic_raw;
 	int err;
 
 	err = gve_ptp_init(priv);
@@ -125,17 +131,20 @@ int gve_init_clock(struct gve_priv *priv)
 		err = -ENOMEM;
 		goto release_ptp;
 	}
-	err = gve_clock_nic_ts_read(priv);
+	mutex_init(&priv->nic_ts_read_lock);
+	err = gve_clock_nic_ts_read(priv, &nic_raw);
 	if (err) {
 		dev_err(&priv->pdev->dev, "failed to read NIC clock %d\n", err);
 		goto release_nic_ts_report;
 	}
+	WRITE_ONCE(priv->last_sync_nic_counter, nic_raw);
 	ptp_schedule_worker(priv->ptp->clock,
 			    msecs_to_jiffies(GVE_NIC_TS_SYNC_INTERVAL_MS));
 
 	return 0;
 
 release_nic_ts_report:
+	mutex_destroy(&priv->nic_ts_read_lock);
 	dma_free_coherent(&priv->pdev->dev,
 			  sizeof(struct gve_nic_ts_report),
 			  priv->nic_ts_report, priv->nic_ts_report_bus);
@@ -150,6 +159,7 @@ void gve_teardown_clock(struct gve_priv *priv)
 	gve_ptp_release(priv);
 
 	if (priv->nic_ts_report) {
+		mutex_destroy(&priv->nic_ts_read_lock);
 		dma_free_coherent(&priv->pdev->dev,
 				  sizeof(struct gve_nic_ts_report),
 				  priv->nic_ts_report, priv->nic_ts_report_bus);
