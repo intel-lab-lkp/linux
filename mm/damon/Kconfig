@@ -105,6 +105,15 @@ config DAMON_LRU_SORT
 	  protect frequently accessed (hot) pages while rarely accessed (cold)
 	  pages reclaimed first under memory pressure.
 
+config DAMON_TIER
+	bool "Build DAMON-based NUMA memory tiering (DAMON_TIER)"
+	depends on DAMON_PADDR && NUMA
+	help
+	  This builds the DAMON-based NUMA memory tiering subsystem.  It
+	  monitors memory access patterns and migrates hot pages from slow
+	  NUMA nodes to fast NUMA nodes, and cold pages in the opposite
+	  direction, aiming a target utilization of the fast node.
+
 config DAMON_STAT
 	bool "Build data access monitoring stat (DAMON_STAT)"
 	depends on DAMON_PADDR
