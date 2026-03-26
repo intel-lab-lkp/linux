@@ -78,6 +78,16 @@ static irqreturn_t imx_snvs_pwrkey_interrupt(int irq, void *dev_id)
 
 	pm_wakeup_event(input->dev.parent, 0);
 
+	/*
+	 * Report key press events directly in interrupt handler to prevent event
+	 * loss during system suspend.
+	 */
+	if (pdev->dev.power.is_suspended) {
+		pdata->keystate = 1;
+		input_report_key(input, pdata->keycode, 1);
+		input_sync(input);
+	}
+
 	regmap_read(pdata->snvs, SNVS_LPSR_REG, &lp_status);
 	if (lp_status & SNVS_LPSR_SPO) {
 		if (pdata->minor_rev == 0) {
