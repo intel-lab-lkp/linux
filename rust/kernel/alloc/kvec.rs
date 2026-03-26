@@ -826,6 +826,23 @@ impl<T: Clone, A: Allocator> Vec<T, A> {
             }
         }
     }
+
+    /// Converts the vector into [`Box<[T], A>`].
+    ///
+    /// Excess capacity is retained in the allocation, but lost until the box
+    /// is dropped.
+    pub fn into_boxed_slice(self) -> Box<[T], A> {
+        let (buf, len, _cap) = self.into_raw_parts();
+        let slice = ptr::slice_from_raw_parts_mut(buf, len);
+
+        // SAFETY:
+        // - `slice` has been allocated with `A`
+        // - `slice` is suitably aligned
+        // - `slice` has at least a length of `len`
+        // - all elements within `slice` are initialized values of `T`
+        // - `len` does not exceed `isize::MAX`
+        unsafe { Box::from_raw(slice) }
+    }
 }
 
 impl<T, A> Drop for Vec<T, A>
