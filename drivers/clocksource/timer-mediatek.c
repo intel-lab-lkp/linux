@@ -22,6 +22,8 @@
 
 #define TIMER_SYNC_TICKS        (3)
 
+#define TIMER_SYSCNT            (6)
+
 /* gpt */
 #define GPT_IRQ_EN_REG          0x00
 #define GPT_IRQ_ENABLE(val)     BIT((val) - 1)
@@ -334,6 +336,9 @@ static int __init mtk_gpt_init(struct device_node *node)
 					TIMER_SYNC_TICKS, 0xffffffff);
 
 	mtk_gpt_enable_irq(&to, TIMER_CLK_EVT);
+
+	/* Configure GPT6 to feed arch timer */
+	mtk_gpt_setup(&to, TIMER_SYSCNT, GPT_CTRL_OP_FREERUN);
 
 	return 0;
 }
