@@ -410,13 +410,9 @@ static int metricgroup__sys_event_iter(const struct pmu_metric *pm,
 	if (!pm->metric_expr || !pm->compat)
 		return 0;
 
-	while ((pmu = perf_pmus__scan(pmu))) {
-
-		if (!pmu->id || !pmu_uncore_identifier_match(pm->compat, pmu->id))
-			continue;
-
+	while ((pmu = perf_pmus__scan_for_uncore_id(pmu, pm->compat)))
 		return d->fn(pm, table, d->data);
-	}
+
 	return 0;
 }
 
