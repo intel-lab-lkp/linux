@@ -41,7 +41,13 @@ trap cleanup EXIT
 
 setup &&
 	echo "Testing for broadcast route MTU" &&
-	ip net exec "${CLIENT_NS}" ping -f -M want -q -c 1 -s 8000 -w 1 -b "${CLIENT_BROADCAST_ADDRESS}" > /dev/null 2>&1
+	ping_output=$(ip net exec "${CLIENT_NS}" ping -f -M want -c 1 -s 8000 -w 1 -b \
+		"${CLIENT_BROADCAST_ADDRESS}" 2>&1) &&
+	if echo "${ping_output}" | grep -q -E "0 packets transmitted|message too long"; then
+		exit_code=0
+	else
+		exit_code=1
+	fi
 
-exit $?
+exit ${exit_code}
 
