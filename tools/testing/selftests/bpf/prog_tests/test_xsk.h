@@ -115,6 +115,8 @@ struct ifobject {
 	int mtu;
 	u32 bind_flags;
 	u32 xdp_zc_max_segs;
+	u32 umem_tailroom;
+	u32 max_skb_frags;
 	bool tx_on;
 	bool rx_on;
 	bool use_poll;

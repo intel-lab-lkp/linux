@@ -80,6 +80,7 @@
 #include <linux/mman.h>
 #include <linux/netdev.h>
 #include <linux/ethtool.h>
+#include <linux/align.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <locale.h>
@@ -100,6 +101,9 @@
 #include "xsk_xdp_common.h"
 
 #include <network_helpers.h>
+
+#define MAX_SKB_FRAGS_PATH "/proc/sys/net/core/max_skb_frags"
+#define SMP_CACHE_BYTES_PATH "/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size"
 
 static bool opt_print_tests;
 static enum test_mode opt_mode = TEST_MODE_ALL;
@@ -330,9 +334,28 @@ static void print_tests(void)
 		printf("%u: %s\n", i, ci_skip_tests[i - ARRAY_SIZE(tests)].name);
 }
 
+static unsigned int read_procfs_val(const char *path)
+{
+	unsigned int read_val = 0;
+	FILE *file;
+
+	file = fopen(path, "r");
+	if (!file) {
+		ksft_print_msg("Error opening %s\n", path);
+		return 0;
+	}
+
+	if (fscanf(file, "%u", &read_val) != 1)
+		ksft_print_msg("Error reading %s\n", path);
+
+	fclose(file);
+	return read_val;
+}
+
 int main(int argc, char **argv)
 {
 	const size_t total_tests = ARRAY_SIZE(tests) + ARRAY_SIZE(ci_skip_tests);
+	u32 cache_line_size, max_frags, umem_tailroom;
 	struct pkt_stream *rx_pkt_stream_default;
 	struct pkt_stream *tx_pkt_stream_default;
 	struct ifobject *ifobj_tx, *ifobj_rx;
@@ -353,6 +376,27 @@ int main(int argc, char **argv)
 		exit_with_error(ENOMEM);
 
 	setlocale(LC_ALL, "");
+
+	cache_line_size = read_procfs_val(SMP_CACHE_BYTES_PATH);
+	if (!cache_line_size) {
+		ksft_print_msg("Can't get SMP_CACHE_BYTES from system, using default (64)\n");
+		cache_line_size = 64;
+	}
+
+	max_frags = read_procfs_val(MAX_SKB_FRAGS_PATH);
+	if (!max_frags) {
+		ksft_print_msg("Can't get MAX_SKB_FRAGS from system, using default (17)\n");
+		max_frags = 17;
+	}
+	ifobj_tx->max_skb_frags = max_frags;
+	ifobj_rx->max_skb_frags = max_frags;
+
+	/* 48 bytes is a part of skb_shared_info w/o frags array;
+	 * 16 bytes is sizeof(skb_frag_t)
+	 */
+	umem_tailroom = ALIGN(48 + (max_frags * 16), cache_line_size);
+	ifobj_tx->umem_tailroom = umem_tailroom;
+	ifobj_rx->umem_tailroom = umem_tailroom;
 
 	parse_command_line(ifobj_tx, ifobj_rx, argc, argv);
 
