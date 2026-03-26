@@ -8662,13 +8662,15 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 	eenv_task_busy_time(&eenv, p, prev_cpu);
 
 	for (; pd; pd = pd->next) {
-		unsigned long util_min = p_util_min, util_max = p_util_max;
 		unsigned long cpu_cap, cpu_actual_cap, util;
 		long prev_spare_cap = -1, max_spare_cap = -1;
+		long max_spare_cap_fallback = -1;
 		unsigned long rq_util_min, rq_util_max;
 		unsigned long cur_delta, base_energy;
-		int max_spare_cap_cpu = -1;
+		int max_spare_cap_cpu = -1, max_spare_cap_cpu_fallback = -1;
 		int fits, max_fits = -1;
+		int max_fits_fallback = -1;
+		bool prefer_idle_cores;
 
 		if (!cpumask_and(cpus, perf_domain_span(pd), cpu_online_mask))
 			continue;
@@ -8680,6 +8682,8 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 		eenv.cpu_cap = cpu_actual_cap;
 		eenv.pd_cap = 0;
 
+		prefer_idle_cores = sched_smt_active() && test_idle_cores(prev_cpu);
+
 		for_each_cpu(cpu, cpus) {
 			struct rq *rq = cpu_rq(cpu);
 
@@ -8690,6 +8694,11 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 
 			if (!cpumask_test_cpu(cpu, p->cpus_ptr))
 				continue;
+
+			if (prefer_idle_cores && cpu != prev_cpu && !is_core_idle(cpu))
+				goto fallback;
+
+			unsigned long util_min = p_util_min, util_max = p_util_max;
 
 			util = cpu_util(cpu, p, cpu, 0);
 			cpu_cap = capacity_of(cpu);
@@ -8737,6 +8746,43 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 				max_spare_cap_cpu = cpu;
 				max_fits = fits;
 			}
+
+fallback:
+			if (!prefer_idle_cores || cpu == prev_cpu || is_core_idle(cpu))
+				continue;
+
+			util_min = p_util_min;
+			util_max = p_util_max;
+			util = cpu_util(cpu, p, cpu, 0);
+			cpu_cap = capacity_of(cpu);
+
+			if (uclamp_is_used() && !uclamp_rq_is_idle(rq)) {
+				rq_util_min = uclamp_rq_get(rq, UCLAMP_MIN);
+				rq_util_max = uclamp_rq_get(rq, UCLAMP_MAX);
+
+				util_min = max(rq_util_min, p_util_min);
+				util_max = max(rq_util_max, p_util_max);
+			}
+
+			fits = util_fits_cpu(util, util_min, util_max, cpu);
+			if (!fits)
+				continue;
+
+			lsub_positive(&cpu_cap, util);
+
+			if ((fits > max_fits_fallback) ||
+			    ((fits == max_fits_fallback) &&
+			     ((long)cpu_cap > max_spare_cap_fallback))) {
+				max_spare_cap_fallback = cpu_cap;
+				max_spare_cap_cpu_fallback = cpu;
+				max_fits_fallback = fits;
+			}
+		}
+
+		if (max_spare_cap_cpu < 0 && max_spare_cap_cpu_fallback >= 0) {
+			max_spare_cap = max_spare_cap_fallback;
+			max_spare_cap_cpu = max_spare_cap_cpu_fallback;
+			max_fits = max_fits_fallback;
 		}
 
 		if (max_spare_cap_cpu < 0 && prev_spare_cap < 0)

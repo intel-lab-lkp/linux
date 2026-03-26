@@ -232,15 +232,6 @@ static bool sched_is_eas_possible(const struct cpumask *cpu_mask)
 		return false;
 	}
 
-	/* EAS definitely does *not* handle SMT */
-	if (sched_smt_active()) {
-		if (sched_debug()) {
-			pr_info("rd %*pbl: Checking EAS, SMT is not supported\n",
-				cpumask_pr_args(cpu_mask));
-		}
-		return false;
-	}
-
 	if (!arch_scale_freq_invariant()) {
 		if (sched_debug()) {
 			pr_info("rd %*pbl: Checking EAS: frequency-invariant load tracking not yet supported",
