@@ -68,6 +68,10 @@ Available options:
 
    Show the diffed file position instead of the input file position.
 
+ - --stdin-filename
+
+   When using stdin, identify the file as FILE.
+
  - -g,  --git
 
    Treat FILE as a single commit or a git revision range.

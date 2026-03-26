@@ -57,6 +57,7 @@ my %ignore_type = ();
 my @ignore = ();
 my $help = 0;
 my $configuration_file = ".checkpatch.conf";
+my $stdin_filename;
 my $max_line_length = 100;
 my $ignore_perl_version = 0;
 my $minimum_perl_version = 5.10.0;
@@ -94,6 +95,7 @@ Options:
   --emacs                    emacs compile window format
   --terse                    one line per report
   --showfile                 emit diffed file position, not input file position
+  --stdin-filename=FILE      when using stdin, identify the file as FILE
   -g, --git                  treat FILE as a single commit or git revision range
                              single git commit with:
                                <rev>
@@ -323,6 +325,7 @@ GetOptions(
 	'showfile!'	=> \$showfile,
 	'f|file!'	=> \$file,
 	'g|git!'	=> \$git,
+	'stdin-filename=s' => \$stdin_filename,
 	'subjective!'	=> \$check,
 	'strict!'	=> \$check,
 	'ignore=s'	=> \@ignore,
@@ -2652,6 +2655,10 @@ sub is_userspace {
 sub process {
 	my $filename = shift;
 
+	if ($filename eq '-' && defined($stdin_filename)) {
+		$filename = $stdin_filename;
+	}
+
 	my $linenr=0;
 	my $prevline="";
 	my $prevrawline="";
@@ -2890,6 +2897,10 @@ sub process {
 			$realfile = $1;
 			$realfile =~ s@^([^/]*)/@@ if (!$file);
 			$in_commit_log = 0;
+
+			if ($realfile eq "-" && defined($stdin_filename)) {
+				$realfile = $stdin_filename;
+			}
 
 			$p1_prefix = $1;
 			if (!$file && $tree && $p1_prefix ne '' &&
