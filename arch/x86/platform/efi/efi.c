@@ -167,6 +167,8 @@ static void __init do_add_efi_memmap(void)
 
 void __init efi_init_reservations(void)
 {
+	if (IS_ENABLED(CONFIG_X86_64) && efi_enabled(EFI_MEMMAP))
+		efi_memattr_init();
 	efi_find_mirror();
 	efi_esrt_init();
 	efi_mokvar_table_init();
