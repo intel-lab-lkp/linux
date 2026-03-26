@@ -1596,11 +1596,6 @@ static int gve_xsk_pool_enable(struct net_device *dev,
 		dev_err(&priv->pdev->dev, "xsk pool invalid qid %d", qid);
 		return -EINVAL;
 	}
-	if (xsk_pool_get_rx_frame_size(pool) <
-	     priv->dev->max_mtu + sizeof(struct ethhdr)) {
-		dev_err(&priv->pdev->dev, "xsk pool frame_len too small");
-		return -EINVAL;
-	}
 
 	err = xsk_pool_dma_map(pool, &priv->pdev->dev,
 			       DMA_ATTR_SKIP_CPU_SYNC | DMA_ATTR_WEAK_ORDERING);
