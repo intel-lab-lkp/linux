@@ -245,8 +245,7 @@ static void txgbe_disable_device(struct wx *wx)
 		wx_set_all_vfs(wx);
 	}
 
-	if (!(((wx->subsystem_device_id & WX_NCSI_MASK) == WX_NCSI_SUP) ||
-	      ((wx->subsystem_device_id & WX_WOL_MASK) == WX_WOL_SUP))) {
+	if (!(wx->ncsi_enabled || wx->wol_hw_supported)) {
 		/* disable mac transmiter */
 		wr32m(wx, WX_MAC_TX_CFG, WX_MAC_TX_CFG_TE, 0);
 	}
@@ -303,6 +302,7 @@ void txgbe_up(struct wx *wx)
 static void txgbe_init_type_code(struct wx *wx)
 {
 	u8 device_type = wx->subsystem_device_id & 0xF0;
+	u16 wol_mask, ncsi_mask;
 
 	switch (wx->device_id) {
 	case TXGBE_DEV_ID_SP1000:
@@ -347,6 +347,11 @@ static void txgbe_init_type_code(struct wx *wx)
 		wx->media_type = wx_media_unknown;
 		break;
 	}
+
+	wol_mask = wx->subsystem_device_id & WX_WOL_MASK;
+	ncsi_mask = wx->subsystem_device_id & WX_NCSI_MASK;
+	wx->wol_hw_supported = (wol_mask == WX_WOL_SUP) ? 1 : 0;
+	wx->ncsi_enabled = (ncsi_mask == WX_NCSI_SUP) ? 1 : 0;
 }
 
 /**
@@ -532,34 +537,6 @@ static int txgbe_close(struct net_device *netdev)
 	wx_control_hw(wx, false);
 
 	return 0;
-}
-
-static void txgbe_dev_shutdown(struct pci_dev *pdev)
-{
-	struct wx *wx = pci_get_drvdata(pdev);
-	struct net_device *netdev;
-
-	netdev = wx->netdev;
-	netif_device_detach(netdev);
-
-	rtnl_lock();
-	if (netif_running(netdev))
-		txgbe_close_suspend(wx);
-	rtnl_unlock();
-
-	wx_control_hw(wx, false);
-
-	pci_disable_device(pdev);
-}
-
-static void txgbe_shutdown(struct pci_dev *pdev)
-{
-	txgbe_dev_shutdown(pdev);
-
-	if (system_state == SYSTEM_POWER_OFF) {
-		pci_wake_from_d3(pdev, false);
-		pci_set_power_state(pdev, PCI_D3hot);
-	}
 }
 
 /**
@@ -824,6 +801,14 @@ static int txgbe_probe(struct pci_dev *pdev,
 	eth_hw_addr_set(netdev, wx->mac.perm_addr);
 	wx_mac_set_default_filter(wx, wx->mac.perm_addr);
 
+	wx->wol = 0;
+	if (wx->wol_hw_supported)
+		wx->wol = WX_PSR_WKUP_CTL_MAG;
+
+	netdev->ethtool->wol_enabled = !!(wx->wol);
+	wr32(wx, WX_PSR_WKUP_CTL, wx->wol);
+	device_set_wakeup_enable(&pdev->dev, wx->wol);
+
 	txgbe_init_service(wx);
 
 	err = wx_init_interrupt_scheme(wx);
@@ -975,7 +960,9 @@ static struct pci_driver txgbe_driver = {
 	.id_table = txgbe_pci_tbl,
 	.probe    = txgbe_probe,
 	.remove   = txgbe_remove,
-	.shutdown = txgbe_shutdown,
+	.suspend  = wx_suspend,
+	.resume   = wx_resume,
+	.shutdown = wx_shutdown,
 	.sriov_configure = wx_pci_sriov_configure,
 };
 
