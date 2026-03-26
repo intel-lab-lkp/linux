@@ -689,10 +689,11 @@ struct siox_master *siox_master_alloc(struct device *dev,
 	if (!dev)
 		return NULL;
 
-	smaster = kzalloc(sizeof(*smaster) + size, GFP_KERNEL);
+	smaster = kzalloc_flex(*smaster, buf, size);
 	if (!smaster)
 		return NULL;
 
+	smaster->buf_len = size;
 	device_initialize(&smaster->dev);
 
 	smaster->busno = -1;
@@ -854,7 +855,7 @@ static struct siox_device *siox_device_add(struct siox_master *smaster,
 		}
 
 		smaster->buf_len = buf_len;
-		smaster->buf = buf;
+		memcpy(smaster->buf, buf, buf_len);
 	}
 
 	ret = device_register(&sdevice->dev);

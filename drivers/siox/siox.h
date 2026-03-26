@@ -27,11 +27,12 @@ struct siox_master {
 
 	size_t setbuf_len, getbuf_len;
 	size_t buf_len;
-	u8 *buf;
 	u8 status;
 
 	unsigned long last_poll;
 	struct task_struct *poll_thread;
+
+	u8 buf[] __counted_by(buf_len);
 };
 
 static inline void *siox_master_get_devdata(struct siox_master *smaster)
