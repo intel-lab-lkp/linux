@@ -159,7 +159,15 @@ set_resource_low(struct dmem_cgroup_pool_state *pool, u64 val)
 static void
 set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val)
 {
-	page_counter_set_max(&pool->cnt, val);
+	/*
+	 * page_counter_set_max will return -EBUSY in case the current
+	 * usage is above the new max.
+	 *
+	 * Since, there is no current eviction mechanism yet, setting max
+	 * irrespective of the current usage will prevent further
+	 * allocations.
+	 */
+	xchg(&pool->cnt.max, val);
 }
 
 static u64 get_resource_low(struct dmem_cgroup_pool_state *pool)
