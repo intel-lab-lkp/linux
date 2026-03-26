@@ -195,3 +195,12 @@ a.manpage {
 	font-weight: bold;
 	font-family: "Courier New", Courier, monospace;
 }
+
+@media screen and (max-width: 65em) {
+    div.footer {
+        display: block;
+        width: auto;
+        margin: 30px 0 0px 0;
+        text-align: center;
+    }
+}
