@@ -299,6 +299,8 @@ int as102_dvb_register(struct as102_dev_t *as102_dev)
 	as102_dev->dvb_dmx.priv = as102_dev;
 	as102_dev->dvb_dmx.filternum = pid_filtering ? 16 : 256;
 	as102_dev->dvb_dmx.feednum = 256;
+	/* init start / stop stream mutex */
+	mutex_init(&as102_dev->sem);
 	as102_dev->dvb_dmx.start_feed = as102_dvb_dmx_start_feed;
 	as102_dev->dvb_dmx.stop_feed = as102_dvb_dmx_stop_feed;
 
@@ -343,9 +345,6 @@ int as102_dvb_register(struct as102_dev_t *as102_dev)
 
 	/* init bus mutex for token locking */
 	mutex_init(&as102_dev->bus_adap.lock);
-
-	/* init start / stop stream mutex */
-	mutex_init(&as102_dev->sem);
 
 	/*
 	 * try to load as102 firmware. If firmware upload failed, we'll be
