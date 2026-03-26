@@ -286,15 +286,43 @@ static inline struct srcu_ctr __percpu *__srcu_ctr_to_ptr(struct srcu_struct *ss
  * on architectures that support NMIs but do not supply NMI-safe
  * implementations of this_cpu_inc().
  */
+
+/*
+ * Atomically increment a per-CPU SRCU counter.
+ *
+ * On most architectures, this_cpu_inc() is optimal (e.g., on x86 it is
+ * a single "incl %gs:offset" instruction).  However, on architectures
+ * like arm64, s390, and loongarch, this_cpu_inc() wraps the underlying
+ * atomic instruction with preempt_disable/enable to prevent migration
+ * between the per-CPU address calculation and the atomic operation.
+ * SRCU does not need this protection because it sums counters across
+ * all CPUs for grace-period detection, so operating on a "stale" CPU's
+ * counter after migration is harmless.
+ *
+ * On arm64, use atomic_long_fetch_add_relaxed() which compiles to the
+ * value-returning ldadd instruction instead of atomic_long_inc()'s
+ * non-value-returning stadd, because ldadd is resolved in L1 cache
+ * whereas stadd may be resolved further out in the memory hierarchy.
+ * https://lore.kernel.org/r/e7d539ed-ced0-4b96-8ecd-048a5b803b85@paulmck-laptop
+ */
+static __always_inline void
+srcu_percpu_counter_inc(atomic_long_t __percpu *v)
+{
+#ifdef CONFIG_ARM64
+	(void)atomic_long_fetch_add_relaxed(1, raw_cpu_ptr(v));
+#elif IS_ENABLED(CONFIG_NEED_SRCU_NMI_SAFE)
+	atomic_long_inc(raw_cpu_ptr(v));
+#else
+	this_cpu_inc(v->counter);
+#endif
+}
+
 static inline struct srcu_ctr __percpu notrace *__srcu_read_lock_fast(struct srcu_struct *ssp)
 	__acquires_shared(ssp)
 {
 	struct srcu_ctr __percpu *scp = READ_ONCE(ssp->srcu_ctrp);
 
-	if (!IS_ENABLED(CONFIG_NEED_SRCU_NMI_SAFE))
-		this_cpu_inc(scp->srcu_locks.counter); // Y, and implicit RCU reader.
-	else
-		atomic_long_inc(raw_cpu_ptr(&scp->srcu_locks));  // Y, and implicit RCU reader.
+	srcu_percpu_counter_inc(&scp->srcu_locks); // Y, and implicit RCU reader.
 	barrier(); /* Avoid leaking the critical section. */
 	__acquire_shared(ssp);
 	return scp;
@@ -315,10 +343,7 @@ __srcu_read_unlock_fast(struct srcu_struct *ssp, struct srcu_ctr __percpu *scp)
 {
 	__release_shared(ssp);
 	barrier();  /* Avoid leaking the critical section. */
-	if (!IS_ENABLED(CONFIG_NEED_SRCU_NMI_SAFE))
-		this_cpu_inc(scp->srcu_unlocks.counter);  // Z, and implicit RCU reader.
-	else
-		atomic_long_inc(raw_cpu_ptr(&scp->srcu_unlocks));  // Z, and implicit RCU reader.
+	srcu_percpu_counter_inc(&scp->srcu_unlocks);  // Z, and implicit RCU reader.
 }
 
 /*
@@ -335,10 +360,7 @@ struct srcu_ctr __percpu notrace *__srcu_read_lock_fast_updown(struct srcu_struc
 {
 	struct srcu_ctr __percpu *scp = READ_ONCE(ssp->srcu_ctrp);
 
-	if (!IS_ENABLED(CONFIG_NEED_SRCU_NMI_SAFE))
-		this_cpu_inc(scp->srcu_locks.counter); // Y, and implicit RCU reader.
-	else
-		atomic_long_inc(raw_cpu_ptr(&scp->srcu_locks));  // Y, and implicit RCU reader.
+	srcu_percpu_counter_inc(&scp->srcu_locks); // Y, and implicit RCU reader.
 	barrier(); /* Avoid leaking the critical section. */
 	__acquire_shared(ssp);
 	return scp;
@@ -359,10 +381,7 @@ __srcu_read_unlock_fast_updown(struct srcu_struct *ssp, struct srcu_ctr __percpu
 {
 	__release_shared(ssp);
 	barrier();  /* Avoid leaking the critical section. */
-	if (!IS_ENABLED(CONFIG_NEED_SRCU_NMI_SAFE))
-		this_cpu_inc(scp->srcu_unlocks.counter);  // Z, and implicit RCU reader.
-	else
-		atomic_long_inc(raw_cpu_ptr(&scp->srcu_unlocks));  // Z, and implicit RCU reader.
+	srcu_percpu_counter_inc(&scp->srcu_unlocks);  // Z, and implicit RCU reader.
 }
 
 void __srcu_check_read_flavor(struct srcu_struct *ssp, int read_flavor);
