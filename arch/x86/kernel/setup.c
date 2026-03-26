@@ -1083,15 +1083,8 @@ void __init setup_arch(char **cmdline_p)
 	mem_encrypt_setup_arch();
 	cc_random_init();
 
-	efi_find_mirror();
-	efi_esrt_init();
-	efi_mokvar_table_init();
-
-	/*
-	 * The EFI specification says that boot service code won't be
-	 * called after ExitBootServices(). This is, in fact, a lie.
-	 */
-	efi_reserve_boot_services();
+	if (efi_enabled(EFI_BOOT))
+		efi_init_reservations();
 
 	/* preallocate 4k for mptable mpc */
 	e820__memblock_alloc_reserved_mpc_new();
