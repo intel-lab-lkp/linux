@@ -21,10 +21,11 @@ use crate::{
         Falcon, //
     },
     fb::SysmemFlush,
-    gfw,
     gsp::Gsp,
     regs,
 };
+
+mod hal;
 
 macro_rules! define_chipset {
     ({ $($variant:ident = $value:expr),* $(,)* }) =>
@@ -311,6 +312,7 @@ impl Gpu {
         spec: Spec,
     ) -> impl PinInit<Self, Error> + 'a {
         let dma_mask = spec.chipset().arch().dma_mask();
+        let hal = hal::gpu_hal(spec.chipset());
 
         try_pin_init!(Self {
             // We must wait for GFW_BOOT completion before doing any significant setup on the GPU.
@@ -319,7 +321,7 @@ impl Gpu {
                 // still constructing it, so no concurrent DMA allocations can exist.
                 unsafe { pdev.dma_set_mask_and_coherent(dma_mask)? };
 
-                gfw::wait_gfw_boot_completion(bar)
+                hal.wait_gfw_boot_completion(bar)
                     .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
             },
 
