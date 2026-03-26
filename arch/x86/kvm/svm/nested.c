@@ -343,6 +343,8 @@ static bool nested_svm_check_bitmap_pa(struct kvm_vcpu *vcpu, u64 pa, u32 size)
 static bool __nested_vmcb_check_controls(struct kvm_vcpu *vcpu,
 					 struct vmcb_ctrl_area_cached *control)
 {
+	struct vcpu_svm *svm = to_svm(vcpu);
+
 	if (CC(!vmcb12_is_intercept(control, INTERCEPT_VMRUN)))
 		return false;
 
@@ -363,6 +365,9 @@ static bool __nested_vmcb_check_controls(struct kvm_vcpu *vcpu,
 	       !vmcb12_is_intercept(control, INTERCEPT_NMI))) {
 		return false;
 	}
+
+	if (!gmet_enabled || !guest_cpu_cap_has(vcpu, X86_FEATURE_GMET))
+		svm->nested.ctl.nested_ctl &= ~SVM_NESTED_CTL_GMET_ENABLE;
 
 	return true;
 }
@@ -832,6 +837,7 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 	/* Use vmcb01 MMU and format if guest does not use nNPT */
 	if (nested_npt_enabled(svm)) {
 		vmcb02->control.nested_ctl &= ~SVM_NESTED_CTL_GMET_ENABLE;
+		vmcb02->control.nested_ctl |= (svm->nested.ctl.nested_ctl & SVM_NESTED_CTL_GMET_ENABLE);
 
 		nested_svm_init_mmu_context(vcpu);
 	}
