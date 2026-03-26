@@ -211,4 +211,10 @@ config NET_DSA_TAG_YT921X
 	  Say Y or M if you want to enable support for tagging frames for
 	  Motorcomm YT921x switches.
 
+config NET_DSA_TAG_MT7628
+	tristate "Tag driver for the MT7628 embedded switch"
+	help
+	  Say Y or M if you want to enable support for tagging frames for the
+	  switch embedded in the MT7628 SoC.
+
 endif
