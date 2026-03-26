@@ -1165,6 +1165,7 @@ inline struct open_how build_open_how(int flags, umode_t mode)
 	struct open_how how = {
 		.flags = ((unsigned int) flags) & VALID_OPEN_FLAGS,
 		.mode = mode & S_IALLUGO,
+		.allowed_upgrades = VALID_UPGRADE_FLAGS
 	};
 
 	/* O_PATH beats everything else. */
@@ -1297,6 +1298,14 @@ inline int build_open_flags(const struct open_how *how, struct open_flags *op)
 	}
 
 	op->lookup_flags = lookup_flags;
+
+	if (how->allowed_upgrades == 0)
+		op->allowed_upgrades = VALID_UPGRADE_FLAGS;
+	else if (how->allowed_upgrades & ~VALID_UPGRADE_FLAGS)
+		return -EINVAL;
+	else
+		op->allowed_upgrades = how->allowed_upgrades;
+
 	return 0;
 }
 

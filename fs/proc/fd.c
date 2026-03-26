@@ -171,7 +171,8 @@ static const struct dentry_operations tid_fd_dentry_operations = {
 	.d_delete	= pid_delete_dentry,
 };
 
-static int proc_fd_link(struct dentry *dentry, struct path *path)
+static int proc_fd_link(struct dentry *dentry, struct path *path,
+			struct jump_how *jump_how)
 {
 	struct task_struct *task;
 	int ret = -ENOENT;
@@ -183,6 +184,9 @@ static int proc_fd_link(struct dentry *dentry, struct path *path)
 
 		fd_file = fget_task(task, fd);
 		if (fd_file) {
+			*jump_how = (struct jump_how) {
+				.allowed_upgrades = fd_file->f_allowed_upgrades
+			};
 			*path = fd_file->f_path;
 			path_get(&fd_file->f_path);
 			ret = 0;

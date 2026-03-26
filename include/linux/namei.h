@@ -197,7 +197,20 @@ static inline umode_t __must_check mode_strip_umask(const struct inode *dir, umo
 	return mode;
 }
 
-extern int __must_check nd_jump_link(const struct path *path);
+struct jump_how {
+	unsigned int allowed_upgrades;
+};
+
+extern const struct jump_how jump_how_unrestricted;
+#define JUMP_HOW_UNRESTRICTED &jump_how_unrestricted
+
+extern int __must_check nd_jump_link_how(const struct path *path,
+					 const struct jump_how *how);
+
+static inline int nd_jump_link(const struct path *path)
+{
+	return nd_jump_link_how(path, JUMP_HOW_UNRESTRICTED);
+}
 
 static inline void nd_terminate_link(void *name, size_t len, size_t maxlen)
 {

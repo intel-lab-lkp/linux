@@ -196,6 +196,8 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 	f->f_wb_err	= 0;
 	f->f_sb_err	= 0;
 
+	f->f_allowed_upgrades = VALID_UPGRADE_FLAGS;
+
 	/*
 	 * We're SLAB_TYPESAFE_BY_RCU so initialize f_ref last. While
 	 * fget-rcu pattern users need to be able to handle spurious

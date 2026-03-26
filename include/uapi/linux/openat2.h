@@ -20,7 +20,13 @@ struct open_how {
 	__u64 flags;
 	__u64 mode;
 	__u64 resolve;
+	__u64 allowed_upgrades;
 };
+
+/* how->allowed_upgrades flags for openat2(2). */
+#define DENY_UPGRADES		0x01
+#define READ_UPGRADABLE		(0x02 | DENY_UPGRADES)
+#define WRITE_UPGRADABLE	(0x04 | DENY_UPGRADES)
 
 /* how->resolve flags for openat2(2). */
 #define RESOLVE_NO_XDEV		0x01 /* Block mount-point crossings

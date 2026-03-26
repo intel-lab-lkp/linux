@@ -743,6 +743,7 @@ struct nameidata {
 	int		dfd;
 	vfsuid_t	dir_vfsuid;
 	umode_t		dir_mode;
+	unsigned int	allowed_upgrades;
 } __randomize_layout;
 
 #define ND_ROOT_PRESET 1
@@ -760,6 +761,7 @@ static void __set_nameidata(struct nameidata *p, int dfd, struct filename *name)
 	p->path.mnt = NULL;
 	p->path.dentry = NULL;
 	p->total_link_count = old ? old->total_link_count : 0;
+	p->allowed_upgrades = VALID_UPGRADE_FLAGS;
 	p->saved = old;
 	current->nameidata = p;
 }
@@ -1156,11 +1158,15 @@ static int nd_jump_root(struct nameidata *nd)
 	return 0;
 }
 
+const struct jump_how jump_how_unrestricted = {
+	.allowed_upgrades = VALID_UPGRADE_FLAGS
+};
+
 /*
  * Helper to directly jump to a known parsed path from ->get_link,
  * caller must have taken a reference to path beforehand.
  */
-int nd_jump_link(const struct path *path)
+int nd_jump_link_how(const struct path *path, const struct jump_how *how)
 {
 	int error = -ELOOP;
 	struct nameidata *nd = current->nameidata;
@@ -1181,6 +1187,7 @@ int nd_jump_link(const struct path *path)
 	nd->path = *path;
 	nd->inode = nd->path.dentry->d_inode;
 	nd->state |= ND_JUMPED;
+	nd->allowed_upgrades &= how->allowed_upgrades;
 	return 0;
 
 err:
@@ -2743,6 +2750,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		if (fd_empty(f))
 			return ERR_PTR(-EBADF);
 
+		nd->allowed_upgrades = fd_file(f)->f_allowed_upgrades;
+
 		if (flags & LOOKUP_LINKAT_EMPTY) {
 			if (fd_file(f)->f_cred != current_cred() &&
 			    !ns_capable(fd_file(f)->f_cred->user_ns, CAP_DAC_READ_SEARCH))
@@ -4294,6 +4303,28 @@ static int may_open(struct mnt_idmap *idmap, const struct path *path,
 	return 0;
 }
 
+static bool may_upgrade(const int flag, const unsigned int allowed_upgrades)
+{
+	int mode = flag & O_ACCMODE;
+	unsigned int allowed = allowed_upgrades & ~DENY_UPGRADES;
+
+	if (mode != O_WRONLY && !(allowed & READ_UPGRADABLE))
+		return false;
+	if (mode != O_RDONLY && !(allowed & WRITE_UPGRADABLE))
+		return false;
+	return true;
+}
+
+static int may_open_upgrade(struct mnt_idmap *idmap, const struct path *path,
+			    int acc_mode, int flag,
+			    const unsigned int allowed_upgrades)
+{
+	if (!may_upgrade(flag, allowed_upgrades))
+		return -EACCES;
+
+	return may_open(idmap, path, acc_mode, flag);
+}
+
 static int handle_truncate(struct mnt_idmap *idmap, struct file *filp)
 {
 	const struct path *path = &filp->f_path;
@@ -4694,7 +4725,8 @@ static int do_open(struct nameidata *nd,
 			return error;
 		do_truncate = true;
 	}
-	error = may_open(idmap, &nd->path, acc_mode, open_flag);
+	error = may_open_upgrade(idmap, &nd->path, acc_mode, open_flag,
+				 nd->allowed_upgrades);
 	if (!error && !(file->f_mode & FMODE_OPENED))
 		error = vfs_open(&nd->path, file);
 	if (!error)
@@ -4859,8 +4891,11 @@ static struct file *path_openat(struct nameidata *nd,
 		terminate_walk(nd);
 	}
 	if (likely(!error)) {
-		if (likely(file->f_mode & FMODE_OPENED))
+		if (likely(file->f_mode & FMODE_OPENED)) {
+			file->f_allowed_upgrades =
+				op->allowed_upgrades & nd->allowed_upgrades;
 			return file;
+		}
 		WARN_ON(1);
 		error = -EINVAL;
 	}

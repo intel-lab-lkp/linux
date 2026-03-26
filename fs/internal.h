@@ -189,6 +189,7 @@ struct open_flags {
 	int acc_mode;
 	int intent;
 	int lookup_flags;
+	unsigned int allowed_upgrades;
 };
 extern struct file *do_file_open(int dfd, struct filename *pathname,
 		const struct open_flags *op);
