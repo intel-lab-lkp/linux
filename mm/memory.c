@@ -5900,11 +5900,9 @@ static vm_fault_t do_fault_around(struct vm_fault *vmf)
 			return VM_FAULT_OOM;
 	}
 
-	rcu_read_lock();
 	ret = vmf->vma->vm_ops->map_pages(vmf,
 			vmf->pgoff + from_pte - pte_off,
 			vmf->pgoff + to_pte - pte_off);
-	rcu_read_unlock();
 
 	return ret;
 }

@@ -2731,7 +2731,8 @@ static vm_fault_t shmem_falloc_wait(struct vm_fault *vmf, struct inode *inode)
 static vm_fault_t shmem_fault(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
-	gfp_t gfp = mapping_gfp_mask(inode->i_mapping);
+	struct address_space *mapping = inode->i_mapping;
+	gfp_t gfp = mapping_gfp_mask(mapping);
 	struct folio *folio = NULL;
 	vm_fault_t ret = 0;
 	int err;
@@ -2747,8 +2748,15 @@ static vm_fault_t shmem_fault(struct vm_fault *vmf)
 	}
 
 	WARN_ON_ONCE(vmf->page != NULL);
+	/*
+	 * shmem_fallocate(PUNCH_HOLE) holds invalidate_lock exclusive across
+	 * unmap+truncate.  Take it shared here so shmem_fault cannot obtain
+	 * a folio in the process of being punched.
+	 */
+	filemap_invalidate_lock_shared(mapping);
 	err = shmem_get_folio_gfp(inode, vmf->pgoff, 0, &folio, SGP_CACHE,
 				  gfp, vmf, &ret);
+	filemap_invalidate_unlock_shared(mapping);
 	if (err)
 		return vmf_error(err);
 	if (folio) {
@@ -3683,11 +3691,13 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		inode->i_private = &shmem_falloc;
 		spin_unlock(&inode->i_lock);
 
+		filemap_invalidate_lock(mapping);
 		if ((u64)unmap_end > (u64)unmap_start)
 			unmap_mapping_range(mapping, unmap_start,
 					    1 + unmap_end - unmap_start, 0);
 		shmem_truncate_range(inode, offset, offset + len - 1);
 		/* No need to unmap again: hole-punching leaves COWed pages */
+		filemap_invalidate_unlock(mapping);
 
 		spin_lock(&inode->i_lock);
 		inode->i_private = NULL;
@@ -5268,9 +5278,26 @@ static const struct super_operations shmem_ops = {
 #endif
 };
 
+/*
+ * shmem_fallocate(PUNCH_HOLE) holds invalidate_lock for write across
+ * unmap+truncate.  Take it for read here so fault-around cannot re-map
+ * pages being punched.
+ */
+static vm_fault_t shmem_map_pages(struct vm_fault *vmf,
+				  pgoff_t start_pgoff, pgoff_t end_pgoff)
+{
+	struct address_space *mapping = vmf->vma->vm_file->f_mapping;
+	vm_fault_t ret;
+
+	filemap_invalidate_lock_shared(mapping);
+	ret = filemap_map_pages(vmf, start_pgoff, end_pgoff);
+	filemap_invalidate_unlock_shared(mapping);
+	return ret;
+}
+
 static const struct vm_operations_struct shmem_vm_ops = {
 	.fault		= shmem_fault,
-	.map_pages	= filemap_map_pages,
+	.map_pages	= shmem_map_pages,
 #ifdef CONFIG_NUMA
 	.set_policy     = shmem_set_policy,
 	.get_policy     = shmem_get_policy,
@@ -5282,7 +5309,7 @@ static const struct vm_operations_struct shmem_vm_ops = {
 
 static const struct vm_operations_struct shmem_anon_vm_ops = {
 	.fault		= shmem_fault,
-	.map_pages	= filemap_map_pages,
+	.map_pages	= shmem_map_pages,
 #ifdef CONFIG_NUMA
 	.set_policy     = shmem_set_policy,
 	.get_policy     = shmem_get_policy,
