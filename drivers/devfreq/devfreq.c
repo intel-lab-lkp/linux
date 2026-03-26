@@ -337,22 +337,31 @@ static int devfreq_set_governor_locked(struct devfreq *df,
 				 __func__, df->governor->name, ret);
 			return ret;
 		}
+		module_put(old_gov->owner);
 	}
 
 	/* Start the new governor */
+	if (!try_module_get(new_gov->owner))
+		return -EINVAL;
+
 	df->governor = new_gov;
 	ret = df->governor->event_handler(df, DEVFREQ_GOV_START, NULL);
 	if (ret) {
 		dev_warn(dev, "%s: Governor %s not started(%d)\n",
 			 __func__, df->governor->name, ret);
 
+		module_put(new_gov->owner);
 		if (!old_gov)
 			return ret;
 
 		/* Restore previous governor */
+		if (!try_module_get(old_gov->owner))
+			return -EINVAL;
+
 		df->governor = old_gov;
 		ret = df->governor->event_handler(df, DEVFREQ_GOV_START, NULL);
 		if (ret) {
+			module_put(old_gov->owner);
 			dev_err(dev, "%s: restore Governor %s failed (%d)\n",
 				__func__, old_gov->name, ret);
 			df->governor = NULL;
