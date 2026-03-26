@@ -693,29 +693,10 @@ struct tlock *txLock(tid_t tid, struct inode *ip, struct metapage * mp,
 	 */
 	tlck->tid = tid;
 
-	TXN_UNLOCK();
-
 	/* mark tlock for meta-data page */
-	if (mp->xflag & COMMIT_PAGE) {
-
+	if (mp->xflag & COMMIT_PAGE)
 		tlck->flag = tlckPAGELOCK;
-
-		/* mark the page dirty and nohomeok */
-		metapage_nohomeok(mp);
-
-		jfs_info("locking mp = 0x%p, nohomeok = %d tid = %d tlck = 0x%p",
-			 mp, mp->nohomeok, tid, tlck);
-
-		/* if anonymous transaction, and buffer is on the group
-		 * commit synclist, mark inode to show this.  This will
-		 * prevent the buffer from being marked nohomeok for too
-		 * long a time.
-		 */
-		if ((tid == 0) && mp->lsn)
-			set_cflag(COMMIT_Synclist, ip);
-	}
-	/* mark tlock for in-memory inode */
-	else
+	else /* mark tlock for in-memory inode */
 		tlck->flag = tlckINODELOCK;
 
 	if (S_ISDIR(ip->i_mode))
@@ -726,39 +707,6 @@ struct tlock *txLock(tid_t tid, struct inode *ip, struct metapage * mp,
 	/* bind the tlock and the page */
 	tlck->ip = ip;
 	tlck->mp = mp;
-	if (dir_xtree)
-		jfs_ip->xtlid = lid;
-	else
-		mp->lid = lid;
-
-	/*
-	 * enqueue transaction lock to transaction/inode
-	 */
-	/* insert the tlock at tail of transaction tlock list */
-	if (tid) {
-		tblk = tid_to_tblock(tid);
-		if (tblk->next)
-			lid_to_tlock(tblk->last)->next = lid;
-		else
-			tblk->next = lid;
-		tlck->next = 0;
-		tblk->last = lid;
-	}
-	/* anonymous transaction:
-	 * insert the tlock at head of inode anonymous tlock list
-	 */
-	else {
-		tlck->next = jfs_ip->atlhead;
-		jfs_ip->atlhead = lid;
-		if (tlck->next == 0) {
-			/* This inode's first anonymous transaction */
-			jfs_ip->atltail = lid;
-			TXN_LOCK();
-			list_add_tail(&jfs_ip->anon_inode_list,
-				      &TxAnchor.anon_list);
-			TXN_UNLOCK();
-		}
-	}
 
 	/* initialize type dependent area for linelock */
 	linelock = (struct linelock *) & tlck->lock;
@@ -806,6 +754,67 @@ struct tlock *txLock(tid_t tid, struct inode *ip, struct metapage * mp,
 
 	default:
 		jfs_err("UFO tlock:0x%p", tlck);
+	}
+
+	/*
+	 * Publish the tlock (set mp->lid or jfs_ip->xtlid) and enqueue it
+	 * while still holding TXN_LOCK.  A concurrent txLock() on the same
+	 * metapage must see the non-zero lid here; otherwise it will take
+	 * the allocateLock path and allocate a duplicate tlock, corrupting
+	 * the transaction journal.
+	 */
+	if (dir_xtree)
+		jfs_ip->xtlid = lid;
+	else
+		mp->lid = lid;
+
+	/*
+	 * enqueue transaction lock to transaction/inode
+	 */
+	/* insert the tlock at tail of transaction tlock list */
+	if (tid) {
+		tblk = tid_to_tblock(tid);
+		if (tblk->next)
+			lid_to_tlock(tblk->last)->next = lid;
+		else
+			tblk->next = lid;
+		tlck->next = 0;
+		tblk->last = lid;
+	}
+	/* anonymous transaction:
+	 * insert the tlock at head of inode anonymous tlock list
+	 */
+	else {
+		tlck->next = jfs_ip->atlhead;
+		jfs_ip->atlhead = lid;
+		if (tlck->next == 0) {
+			/* This inode's first anonymous transaction */
+			jfs_ip->atltail = lid;
+			list_add_tail(&jfs_ip->anon_inode_list,
+				      &TxAnchor.anon_list);
+		}
+	}
+
+	TXN_UNLOCK();
+
+	/*
+	 * metapage_nohomeok() may block (folio_lock, folio_wait_writeback),
+	 * so it must be called after dropping TXN_LOCK.  The tlock is fully
+	 * initialized and visible at this point.
+	 */
+	if (mp->xflag & COMMIT_PAGE) {
+		metapage_nohomeok(mp);
+
+		jfs_info("locking mp = 0x%p, nohomeok = %d tid = %d tlck = 0x%p",
+			 mp, mp->nohomeok, tid, tlck);
+
+		/* if anonymous transaction, and buffer is on the group
+		 * commit synclist, mark inode to show this.  This will
+		 * prevent the buffer from being marked nohomeok for too
+		 * long a time.
+		 */
+		if ((tid == 0) && mp->lsn)
+			set_cflag(COMMIT_Synclist, ip);
 	}
 
 	/*
