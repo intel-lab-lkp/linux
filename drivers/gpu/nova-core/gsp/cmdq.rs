@@ -14,6 +14,7 @@ use kernel::{
     io::poll::read_poll_timeout,
     new_mutex,
     prelude::*,
+    ptr,
     sync::{
         aref::ARef,
         Mutex, //
@@ -252,38 +253,42 @@ impl DmaGspMem {
     /// As the message queue is a circular buffer, the region may be discontiguous in memory. In
     /// that case the second slice will have a non-zero length.
     fn driver_write_area(&mut self) -> (&mut [[u8; GSP_PAGE_SIZE]], &mut [[u8; GSP_PAGE_SIZE]]) {
-        let tx = self.cpu_write_ptr() as usize;
-        let rx = self.gsp_read_ptr() as usize;
+        let tx = num::u32_as_usize(self.cpu_write_ptr());
+        let rx = num::u32_as_usize(self.gsp_read_ptr());
+
+        // Command queue data.
+        let data = ptr::project!(mut self.0.as_mut_ptr(), .cpuq.msgq.data);
+
+        let (tail_slice, wrap_slice) = if rx == 0 {
+            // Contiguous, leave an empty slot at end of the buffer.
+            (
+                ptr::project!(mut data, [tx..num::u32_as_usize(MSGQ_NUM_PAGES) - 1]),
+                ptr::project!(mut data, [..0]),
+            )
+        } else if rx <= tx {
+            // Discontiguous, leave an empty slot before `rx`.
+            (
+                ptr::project!(mut data, [tx..]),
+                ptr::project!(mut data, [..rx - 1]),
+            )
+        } else {
+            // Contiguous, leave an empty slot before `rx`.
+            (
+                ptr::project!(mut data, [tx..rx - 1]),
+                ptr::project!(mut data, [..0]),
+            )
+        };
 
         // SAFETY:
-        // - We will only access the driver-owned part of the shared memory.
-        // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = unsafe { &mut *self.0.as_mut() };
-        // PANIC: per the invariant of `cpu_write_ptr`, `tx` is `< MSGQ_NUM_PAGES`.
-        let (before_tx, after_tx) = gsp_mem.cpuq.msgq.data.split_at_mut(tx);
-
-        // The area starting at `tx` and ending at `rx - 2` modulo MSGQ_NUM_PAGES, inclusive,
-        // belongs to the driver for writing.
-
-        if rx == 0 {
-            // Since `rx` is zero, leave an empty slot at end of the buffer.
-            let last = after_tx.len() - 1;
-            (&mut after_tx[..last], &mut [])
-        } else if rx <= tx {
-            // The area is discontiguous and we leave an empty slot before `rx`.
-            // PANIC:
-            // - The index `rx - 1` is non-negative because `rx != 0` in this branch.
-            // - The index does not exceed `before_tx.len()` (which equals `tx`) because
-            //   `rx <= tx` in this branch.
-            (after_tx, &mut before_tx[..(rx - 1)])
-        } else {
-            // The area is contiguous and we leave an empty slot before `rx`.
-            // PANIC:
-            // - The index `rx - tx - 1` is non-negative because `rx > tx` in this branch.
-            // - The index does not exceed `after_tx.len()` (which is `MSGQ_NUM_PAGES - tx`)
-            //   because `rx < MSGQ_NUM_PAGES` by the `gsp_read_ptr` invariant.
-            (&mut after_tx[..(rx - tx - 1)], &mut [])
-        }
+        // - Since `data` was created from a valid pointer, both `tail_slice` and `wrap_slice` are
+        //   pointers to valid arrays.
+        // - The area starting at `tx` and ending at `rx - 2` modulo `MSGQ_NUM_PAGES`,
+        //   inclusive, belongs to the driver for writing and is not accessed concurrently by
+        //   the GSP.
+        // - The caller holds a reference to `self` for as long as the returned slices are live,
+        //   meaning the CPU write pointer cannot be advanced and thus that the returned area
+        //   remains exclusive to the CPU for the duration of the slices.
+        (unsafe { &mut *tail_slice }, unsafe { &mut *wrap_slice })
     }
 
     /// Returns the size of the region of the CPU message queue that the driver is currently allowed
@@ -305,27 +310,28 @@ impl DmaGspMem {
     /// As the message queue is a circular buffer, the region may be discontiguous in memory. In
     /// that case the second slice will have a non-zero length.
     fn driver_read_area(&self) -> (&[[u8; GSP_PAGE_SIZE]], &[[u8; GSP_PAGE_SIZE]]) {
-        let tx = self.gsp_write_ptr() as usize;
-        let rx = self.cpu_read_ptr() as usize;
+        let tx = num::u32_as_usize(self.gsp_write_ptr());
+        let rx = num::u32_as_usize(self.cpu_read_ptr());
+
+        // Message queue data.
+        let data = ptr::project!(self.0.as_ptr(), .gspq.msgq.data);
+
+        let (tail_slice, wrap_slice) = if rx <= tx {
+            (ptr::project!(data, [rx..tx]), ptr::project!(data, [..0]))
+        } else {
+            (ptr::project!(data, [rx..]), ptr::project!(data, [..tx]))
+        };
 
         // SAFETY:
-        // - We will only access the driver-owned part of the shared memory.
-        // - Per the safety statement of the function, no concurrent access will be performed.
-        let gsp_mem = unsafe { &*self.0.as_ptr() };
-        let data = &gsp_mem.gspq.msgq.data;
-
-        // The area starting at `rx` and ending at `tx - 1` modulo MSGQ_NUM_PAGES, inclusive,
-        // belongs to the driver for reading.
-        // PANIC:
-        // - per the invariant of `cpu_read_ptr`, `rx < MSGQ_NUM_PAGES`
-        // - per the invariant of `gsp_write_ptr`, `tx < MSGQ_NUM_PAGES`
-        if rx <= tx {
-            // The area is contiguous.
-            (&data[rx..tx], &[])
-        } else {
-            // The area is discontiguous.
-            (&data[rx..], &data[..tx])
-        }
+        // - Since `data` was created from a valid pointer, both `tail_slice` and `wrap_slice` are
+        //   pointers to valid arrays.
+        // - The area starting at `rx` and ending at `tx - 1` modulo `MSGQ_NUM_PAGES`,
+        //   inclusive, belongs to the driver for reading and is not accessed concurrently by
+        //   the GSP.
+        // - The caller holds a reference to `self` for as long as the returned slices are live,
+        //   meaning the CPU read pointer cannot be advanced and thus that the returned area
+        //   remains exclusive to the CPU for the duration of the slices.
+        (unsafe { &*tail_slice }, unsafe { &*wrap_slice })
     }
 
     /// Allocates a region on the command queue that is large enough to send a command of `size`
