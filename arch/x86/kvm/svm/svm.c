@@ -1957,6 +1957,17 @@ static int npf_interception(struct kvm_vcpu *vcpu)
 		}
 	}
 
+	if ((svm->vmcb->control.nested_ctl & SVM_NESTED_CTL_GMET_ENABLE) &&
+	    (error_code & PFERR_FETCH_MASK)) {
+		/*
+		 * Work around errata 1218: EXITINFO1[2] May Be Incorrectly Set
+		 * When GMET (Guest Mode Execute Trap extension) is Enabled
+		 */
+		error_code |= PFERR_USER_MASK;
+		if (svm_get_cpl(vcpu) == 0)
+			error_code &= ~PFERR_USER_MASK;
+	}
+
 	if (sev_snp_guest(vcpu->kvm) && (error_code & PFERR_GUEST_ENC_MASK))
 		error_code |= PFERR_PRIVATE_ACCESS;
 
