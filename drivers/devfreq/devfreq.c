@@ -253,11 +253,13 @@ EXPORT_SYMBOL(devfreq_update_status);
 /**
  * find_devfreq_governor() - find devfreq governor from name
  * @name:	name of the governor
+ * @get:	whether to get a refcount of the governor module
  *
  * Search the list of devfreq governors and return the matched
  * governor's pointer.
  */
-static struct devfreq_governor *find_devfreq_governor(const char *name)
+static struct devfreq_governor *find_devfreq_governor(const char *name,
+						      bool get)
 {
 	struct devfreq_governor *tmp_governor;
 
@@ -268,8 +270,13 @@ static struct devfreq_governor *find_devfreq_governor(const char *name)
 
 	guard(mutex)(&devfreq_gov_lock);
 	list_for_each_entry(tmp_governor, &devfreq_governor_list, node) {
-		if (!strncmp(tmp_governor->name, name, DEVFREQ_NAME_LEN))
-			return tmp_governor;
+		if (strncmp(tmp_governor->name, name, DEVFREQ_NAME_LEN))
+			continue;
+
+		if (get && !try_module_get(tmp_governor->owner))
+			return ERR_PTR(-EBUSY);
+
+		return tmp_governor;
 	}
 
 	return ERR_PTR(-ENODEV);
@@ -284,6 +291,9 @@ static struct devfreq_governor *find_devfreq_governor(const char *name)
  * if is not found. This can happen when both drivers (the governor driver
  * and the driver that call devfreq_add_device) are built as modules.
  * Returns the matched governor's pointer or an error pointer.
+ * On success, this holds a refcount of the governor module to prevent the
+ * module from being unloaded during usage, so the caller should put a module
+ * refcount after using it.
  */
 static struct devfreq_governor *try_then_request_governor(const char *name)
 {
@@ -295,7 +305,7 @@ static struct devfreq_governor *try_then_request_governor(const char *name)
 		return ERR_PTR(-EINVAL);
 	}
 
-	governor = find_devfreq_governor(name);
+	governor = find_devfreq_governor(name, true);
 	if (IS_ERR(governor)) {
 		if (!strncmp(name, DEVFREQ_GOV_SIMPLE_ONDEMAND,
 			     DEVFREQ_NAME_LEN))
@@ -306,7 +316,7 @@ static struct devfreq_governor *try_then_request_governor(const char *name)
 		if (err)
 			return (err < 0) ? ERR_PTR(err) : ERR_PTR(-EINVAL);
 
-		governor = find_devfreq_governor(name);
+		governor = find_devfreq_governor(name, true);
 	}
 
 	return governor;
@@ -1006,6 +1016,8 @@ struct devfreq *devfreq_add_device(struct device *dev,
 	if (err)
 		goto err_devfreq;
 
+	module_put(governor->owner);
+
 	list_add(&devfreq->node, &devfreq_list);
 	mutex_unlock(&devfreq_list_lock);
 
@@ -1311,7 +1323,7 @@ int __devfreq_add_governor(struct devfreq_governor *governor,
 		return -EINVAL;
 	}
 
-	g = find_devfreq_governor(governor->name);
+	g = find_devfreq_governor(governor->name, false);
 	if (!IS_ERR(g)) {
 		pr_err("%s: governor %s already registered\n", __func__,
 		       g->name);
@@ -1360,7 +1372,7 @@ int devfreq_remove_governor(struct devfreq_governor *governor)
 		return -EINVAL;
 	}
 
-	g = find_devfreq_governor(governor->name);
+	g = find_devfreq_governor(governor->name, false);
 	if (IS_ERR(g)) {
 		pr_err("%s: governor %s not registered\n", __func__,
 		       governor->name);
@@ -1434,6 +1446,8 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 		return PTR_ERR(governor);
 
 	ret = devfreq_set_governor(df, governor);
+
+	module_put(governor->owner);
 
 	return ret ? ret : count;
 }
