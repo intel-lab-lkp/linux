@@ -59,7 +59,7 @@ void __init efi_memattr_init(void)
 	}
 
 	tbl_size = sizeof(*tbl) + size;
-	memblock_reserve(efi_mem_attr_table, tbl_size);
+	efi_mem_reserve(efi_mem_attr_table, tbl_size);
 	set_bit(EFI_MEM_ATTR, &efi.flags);
 
 unmap:
