@@ -1901,6 +1901,41 @@ void ksz8_phylink_mac_link_up(struct phylink_config *config,
 		ksz8_phy_port_link_up(dev, port, duplex, tx_pause, rx_pause);
 }
 
+static int ksz8_handle_module3_errata(struct ksz_device *dev)
+{
+	int ret = 0;
+	const u16 *regs = dev->info->regs;
+	u16 indir_reg = 0x0000;
+	u8 indir_val = 0x00;
+
+	switch (dev->low_loss_wa_mode) {
+	case KSZ_LOW_LOSS_WA_1:
+		indir_reg = 0x3C;
+		indir_val = 0x15;
+		break;
+	case KSZ_LOW_LOSS_WA_2:
+		indir_reg = 0x4C;
+		indir_val = 0x40;
+		break;
+	default:
+		break;
+	}
+
+	mutex_lock(&dev->alu_mutex);
+
+	ret = ksz_write8(dev, regs[REG_IND_CTRL_0], 0xA0);
+
+	if (!ret)
+		ret = ksz_write8(dev, 0x6F, indir_reg);
+
+	if (!ret)
+		ret = ksz_write8(dev, regs[REG_IND_BYTE], indir_val);
+
+	mutex_unlock(&dev->alu_mutex);
+
+	return ret;
+}
+
 static int ksz8_handle_global_errata(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
@@ -1914,6 +1949,17 @@ static int ksz8_handle_global_errata(struct dsa_switch *ds)
 	 */
 	if (dev->info->ksz87xx_eee_link_erratum)
 		ret = ksz8_ind_write8(dev, TABLE_EEE, REG_IND_EEE_GLOB2_HI, 0);
+
+	/* KSZ87xx Errata DS80000687C.
+	 * Module 3: Equalizer fix for short cables
+	 * The receiver of the embedded PHYs is tuned by default
+	 * to support long cable length applications.
+	 * Because of this, the equalizer in the PHY may amplify
+	 * high amplitude receiver signals to the point that
+	 * the signal is distorted internally
+	 */
+	if (!ret && dev->low_loss_wa_enable && ksz_is_ksz87xx(dev))
+		ret = ksz8_handle_module3_errata(dev);
 
 	return ret;
 }
