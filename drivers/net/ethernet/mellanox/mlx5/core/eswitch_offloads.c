@@ -2821,6 +2821,8 @@ static int esw_set_slave_root_fdb(struct mlx5_core_dev *master,
 	if (master) {
 		ns = mlx5_get_flow_namespace(master,
 					     MLX5_FLOW_NAMESPACE_FDB);
+		if (!ns)
+			return -EOPNOTSUPP;
 		root = find_root(&ns->node);
 		mutex_lock(&root->chain_lock);
 		MLX5_SET(set_flow_table_root_in, in,
@@ -2833,6 +2835,8 @@ static int esw_set_slave_root_fdb(struct mlx5_core_dev *master,
 	} else {
 		ns = mlx5_get_flow_namespace(slave,
 					     MLX5_FLOW_NAMESPACE_FDB);
+		if (!ns)
+			return -EOPNOTSUPP;
 		root = find_root(&ns->node);
 		mutex_lock(&root->chain_lock);
 		MLX5_SET(set_flow_table_root_in, in, table_id,
