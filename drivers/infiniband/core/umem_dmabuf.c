@@ -142,6 +142,8 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 		goto out_release_dmabuf;
 	}
 
+	umem_dmabuf->dmabuf = dmabuf;
+
 	umem = &umem_dmabuf->umem;
 	umem->ibdev = device;
 	umem->length = size;
@@ -150,6 +152,24 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 	umem->is_dmabuf = 1;
 
 	if (!ib_umem_num_pages(umem))
+		goto out_free_umem;
+
+	/* Software RDMA drivers has not dma device. Just get dmabuf from fd */
+	if (!device->dma_device) {
+		struct sg_table *sgt;
+
+		dma_resv_lock(dmabuf->resv, NULL);
+		sgt = dmabuf->ops->map_dma_buf(NULL, DMA_BIDIRECTIONAL);
+		dma_resv_unlock(dmabuf->resv);
+		if (IS_ERR(sgt)) {
+			ret = ERR_CAST(sgt);
+			goto out_free_umem;
+		}
+		umem_dmabuf->sgt = sgt;
+		goto done;
+	}
+
+	if (unlikely(!ops || !ops->move_notify))
 		goto out_free_umem;
 
 	umem_dmabuf->attach = dma_buf_dynamic_attach(
@@ -161,6 +181,7 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 		ret = ERR_CAST(umem_dmabuf->attach);
 		goto out_free_umem;
 	}
+done:
 	return umem_dmabuf;
 
 out_free_umem:
@@ -260,11 +281,23 @@ EXPORT_SYMBOL(ib_umem_dmabuf_revoke);
 
 void ib_umem_dmabuf_release(struct ib_umem_dmabuf *umem_dmabuf)
 {
-	struct dma_buf *dmabuf = umem_dmabuf->attach->dmabuf;
+	struct dma_buf *dmabuf = umem_dmabuf->dmabuf;
+
+	if (!umem_dmabuf->attach) {
+		if (umem_dmabuf->sgt) {
+			dma_resv_lock(dmabuf->resv, NULL);
+			dmabuf->ops->unmap_dma_buf(NULL, umem_dmabuf->sgt,
+							DMA_BIDIRECTIONAL);
+			dma_resv_unlock(dmabuf->resv);
+		}
+		goto free_dmabuf;
+	}
 
 	ib_umem_dmabuf_revoke(umem_dmabuf);
 
 	dma_buf_detach(dmabuf, umem_dmabuf->attach);
+
+free_dmabuf:
 	dma_buf_put(dmabuf);
 	kfree(umem_dmabuf);
 }
