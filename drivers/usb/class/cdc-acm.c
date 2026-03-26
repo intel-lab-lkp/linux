@@ -1870,7 +1870,9 @@ static const struct usb_device_id acm_ids[] = {
 	 * information below. The second is 'vendor-specific' but
 	 * is treated as a serial device at the S60 end, so we want
 	 * to expose it on Linux too. */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0421), }, /* Nokia 3230 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x042D), }, /* Nokia 3250 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x043F), }, /* Nokia 5500 Sport */
 	{ NOKIA_PCSUITE_ACM_INFO(0x04D8), }, /* Nokia 5500 Sport */
 	{ NOKIA_PCSUITE_ACM_INFO(0x04C9), }, /* Nokia E50 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0419), }, /* Nokia E60 */
@@ -1891,12 +1893,28 @@ static const struct usb_device_id acm_ids[] = {
 	{ NOKIA_PCSUITE_ACM_INFO(0x04B2), }, /* Nokia 5700 XpressMusic */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0134), }, /* Nokia 6110 Navigator (China) */
 	{ NOKIA_PCSUITE_ACM_INFO(0x046E), }, /* Nokia 6110 Navigator */
-	{ NOKIA_PCSUITE_ACM_INFO(0x002f), }, /* Nokia 6120 classic &  */
+	{ NOKIA_PCSUITE_ACM_INFO(0x002f), }, /* Nokia 6120 classic */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0088), }, /* Nokia 6121 classic */
 	{ NOKIA_PCSUITE_ACM_INFO(0x00fc), }, /* Nokia 6124 classic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0288), }, /* Nokia 6720 classic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x011D), }, /* Nokia 6720 classic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x023D), }, /* Nokia 6730 classic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x01B6), }, /* Nokia 6790 Surge */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0057), }, /* FOMA NM705i */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0168), }, /* FOMA NM706i */
+	{ NOKIA_PCSUITE_ACM_INFO(0x04A1), }, /* Nokia 6290 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x04A5), }, /* Nokia 6290 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03C5), }, /* Nokia 5250 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x057B), }, /* Nokia 5230 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0388), }, /* Nokia 5232 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x057F), }, /* Nokia 5232 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0348), }, /* Nokia 5233 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03BE), }, /* Nokia 5235 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x02A1), }, /* Nokia 6788i */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0042), }, /* Nokia E51 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x00b0), }, /* Nokia E66 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x00ab), }, /* Nokia E71 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x01A2), }, /* Nokia E71 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0481), }, /* Nokia N76 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0007), }, /* Nokia N81 & N81 8GB */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0071), }, /* Nokia N82 */
@@ -1904,28 +1922,85 @@ static const struct usb_device_id acm_ids[] = {
 	{ NOKIA_PCSUITE_ACM_INFO(0x0070), }, /* Nokia N95 8GB  */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0099), }, /* Nokia 6210 Navigator, RM-367 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0128), }, /* Nokia 6210 Navigator, RM-419 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x012C), }, /* Nokia 6210 Navigator */
 	{ NOKIA_PCSUITE_ACM_INFO(0x008f), }, /* Nokia 6220 Classic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0124), }, /* Nokia 6220 Classic */
 	{ NOKIA_PCSUITE_ACM_INFO(0x00a0), }, /* Nokia 6650 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0294), }, /* Nokia 6650 Fold */
+	{ NOKIA_PCSUITE_ACM_INFO(0x01CC), }, /* Nokia 6710 Navigator */
+	{ NOKIA_PCSUITE_ACM_INFO(0x029A), }, /* Nokia 6710 Navigator */
 	{ NOKIA_PCSUITE_ACM_INFO(0x007b), }, /* Nokia N78 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0094), }, /* Nokia N85 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x003a), }, /* Nokia N96 & N96-3  */
 	{ NOKIA_PCSUITE_ACM_INFO(0x00e9), }, /* Nokia 5320 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x010C), }, /* Nokia 5320 XpressMusic */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0108), }, /* Nokia 5320 XpressMusic 2G */
 	{ NOKIA_PCSUITE_ACM_INFO(0x01f5), }, /* Nokia N97, RM-505 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x02e3), }, /* Nokia 5230, RM-588 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x02e7), }, /* Nokia 5230 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x034C), }, /* Nokia 5230 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0325), }, /* Nokia 5230 Nuron */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0178), }, /* Nokia E63 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x010e), }, /* Nokia E75 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x02d9), }, /* Nokia 6760 Slide */
 	{ NOKIA_PCSUITE_ACM_INFO(0x01d0), }, /* Nokia E52 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0223), }, /* Nokia E72 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0374), }, /* Nokia E73 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0275), }, /* Nokia X6 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0279), }, /* Nokia X6 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x027D), }, /* Nokia X6 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x026c), }, /* Nokia N97 Mini */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0154), }, /* Nokia 5800 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0138), }, /* Nokia 5800 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0158), }, /* Nokia 5800 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x02F6), }, /* Nokia 5800 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x02E9), }, /* Nokia 5802 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x022A), }, /* Nokia 5530 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x011C), }, /* Nokia 5630 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x01A9), }, /* Nokia 5730 XpressMusic */
+	{ NOKIA_PCSUITE_ACM_INFO(0x014B), }, /* Nokia 5730 XpressMusic */
 	{ NOKIA_PCSUITE_ACM_INFO(0x04ce), }, /* Nokia E90 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x01d4), }, /* Nokia E55 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0302), }, /* Nokia N8 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x0335), }, /* Nokia E7 */
 	{ NOKIA_PCSUITE_ACM_INFO(0x03cd), }, /* Nokia C7 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05AB), }, /* Nokia X7 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03B1), }, /* Nokia T7 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x058E), }, /* Nokia Oro */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0187), }, /* Nokia N79 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0216), }, /* Nokia N86 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0380), }, /* Nokia E5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x038B), }, /* Nokia E5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x038F), }, /* Nokia E5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0565), }, /* Nokia E5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0569), }, /* Nokia E5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05DD), }, /* Nokia C5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0592), }, /* Nokia C5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0596), }, /* Nokia C5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03F3), }, /* Nokia C5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03A7), }, /* Nokia C5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03B4), }, /* Nokia C5-01 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03E6), }, /* Nokia C5-03 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x051D), }, /* Nokia C5-03 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0520), }, /* Nokia C5-04 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05E1), }, /* Nokia C5-05 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05E5), }, /* Nokia C5-06 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0312), }, /* Nokia C6-01 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03B8), }, /* Nokia X5-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0378), }, /* Nokia X5-01 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0432), }, /* Nokia N90 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0472), }, /* Nokia E70 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x02FB), }, /* Nokia E63 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x032B), }, /* Nokia C6-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x032F), }, /* Nokia E6-00 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05C0), }, /* Nokia 500 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x03F5), }, /* Nokia 600 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05B3), }, /* Nokia 603 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x02DF), }, /* Nokia 700 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05A0), }, /* Nokia 701 */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0538), }, /* Nokia 702T */
+	{ NOKIA_PCSUITE_ACM_INFO(0x0574), }, /* Nokia 801T */
+	{ NOKIA_PCSUITE_ACM_INFO(0x05D1), }, /* Nokia 808 */
 	{ SAMSUNG_PCSUITE_ACM_INFO(0x6651), }, /* Samsung GTi8510 (INNOV8) */
 
 	/* Support for Owen devices */
