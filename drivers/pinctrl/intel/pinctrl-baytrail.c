@@ -1558,31 +1558,6 @@ static int byt_gpio_probe(struct intel_pinctrl *vg)
 	return 0;
 }
 
-static int byt_set_soc_data(struct intel_pinctrl *vg,
-			    const struct intel_pinctrl_soc_data *soc)
-{
-	struct platform_device *pdev = to_platform_device(vg->dev);
-	int i;
-
-	vg->soc = soc;
-
-	vg->ncommunities = vg->soc->ncommunities;
-	vg->communities = devm_kmemdup_array(vg->dev, vg->soc->communities, vg->ncommunities,
-					     sizeof(*vg->soc->communities), GFP_KERNEL);
-	if (!vg->communities)
-		return -ENOMEM;
-
-	for (i = 0; i < vg->soc->ncommunities; i++) {
-		struct intel_community *comm = vg->communities + i;
-
-		comm->pad_regs = devm_platform_ioremap_resource(pdev, 0);
-		if (IS_ERR(comm->pad_regs))
-			return PTR_ERR(comm->pad_regs);
-	}
-
-	return 0;
-}
-
 static const struct acpi_device_id byt_gpio_acpi_match[] = {
 	{ "INT33B2", (kernel_ulong_t)byt_soc_data },
 	{ "INT33FC", (kernel_ulong_t)byt_soc_data },
@@ -1595,19 +1570,29 @@ static int byt_pinctrl_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct intel_pinctrl *vg;
 	int ret;
+	int i;
 
 	soc_data = intel_pinctrl_get_soc_data(pdev);
 	if (IS_ERR(soc_data))
 		return PTR_ERR(soc_data);
 
-	vg = devm_kzalloc(dev, sizeof(*vg), GFP_KERNEL);
+	vg = devm_kzalloc(dev, struct_size(vg, communities, soc_data->ncommunities), GFP_KERNEL);
 	if (!vg)
 		return -ENOMEM;
 
+	vg->ncommunities = soc_data->ncommunities;
+	memcpy(vg->communities, soc_data->communities, soc_data->ncommunities * sizeof(*vg->communities));
+
 	vg->dev = dev;
-	ret = byt_set_soc_data(vg, soc_data);
-	if (ret)
-		return dev_err_probe(dev, ret, "failed to set soc data\n");
+	vg->soc = soc_data;
+
+	for (i = 0; i < vg->soc->ncommunities; i++) {
+		struct intel_community *comm = vg->communities + i;
+
+		comm->pad_regs = devm_platform_ioremap_resource(pdev, 0);
+		if (IS_ERR(comm->pad_regs))
+			return PTR_ERR(comm->pad_regs);
+	}
 
 	vg->pctldesc		= byt_pinctrl_desc;
 	vg->pctldesc.name	= dev_name(dev);

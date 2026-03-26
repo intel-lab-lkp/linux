@@ -260,10 +260,10 @@ struct intel_pinctrl {
 	struct pinctrl_dev *pctldev;
 	struct gpio_chip chip;
 	const struct intel_pinctrl_soc_data *soc;
-	struct intel_community *communities;
 	size_t ncommunities;
 	struct intel_pinctrl_context context;
 	int irq;
+	struct intel_community communities[] __counted_by(ncommunities);
 };
 
 int intel_pinctrl_probe(struct platform_device *pdev,

@@ -1595,18 +1595,15 @@ static int chv_pinctrl_probe(struct platform_device *pdev)
 	if (IS_ERR(soc_data))
 		return PTR_ERR(soc_data);
 
-	pctrl = devm_kzalloc(dev, sizeof(*pctrl), GFP_KERNEL);
+	pctrl = devm_kzalloc(dev, struct_size(pctrl, communities, soc_data->ncommunities), GFP_KERNEL);
 	if (!pctrl)
 		return -ENOMEM;
 
+	pctrl->ncommunities = soc_data->ncommunities;
+	memcpy(pctrl->communities, soc_data->communities, soc_data->ncommunities * sizeof(*pctrl->communities));
+
 	pctrl->dev = dev;
 	pctrl->soc = soc_data;
-
-	pctrl->ncommunities = pctrl->soc->ncommunities;
-	pctrl->communities = devm_kmemdup_array(dev, pctrl->soc->communities, pctrl->ncommunities,
-						sizeof(*pctrl->soc->communities), GFP_KERNEL);
-	if (!pctrl->communities)
-		return -ENOMEM;
 
 	community = &pctrl->communities[0];
 	community->regs = devm_platform_ioremap_resource(pdev, 0);

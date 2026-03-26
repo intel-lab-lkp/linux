@@ -715,18 +715,13 @@ static int lp_gpio_probe(struct platform_device *pdev)
 	if (!soc)
 		return -ENODEV;
 
-	lg = devm_kzalloc(dev, sizeof(*lg), GFP_KERNEL);
+	lg = devm_kzalloc(dev, struct_size(lg, communities, soc->ncommunities), GFP_KERNEL);
 	if (!lg)
 		return -ENOMEM;
 
+	lg->ncommunities = soc->ncommunities;
 	lg->dev = dev;
 	lg->soc = soc;
-
-	lg->ncommunities = lg->soc->ncommunities;
-	lg->communities = devm_kcalloc(dev, lg->ncommunities,
-				       sizeof(*lg->communities), GFP_KERNEL);
-	if (!lg->communities)
-		return -ENOMEM;
 
 	lg->pctldesc           = lptlp_pinctrl_desc;
 	lg->pctldesc.name      = dev_name(dev);

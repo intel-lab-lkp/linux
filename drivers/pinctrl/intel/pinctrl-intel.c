@@ -1581,23 +1581,16 @@ int intel_pinctrl_probe(struct platform_device *pdev,
 	struct intel_pinctrl *pctrl;
 	int i, ret, irq;
 
-	pctrl = devm_kzalloc(dev, sizeof(*pctrl), GFP_KERNEL);
+	pctrl = devm_kzalloc(dev, struct_size(pctrl, communities, soc_data->ncommunities), GFP_KERNEL);
 	if (!pctrl)
 		return -ENOMEM;
+
+	pctrl->ncommunities = soc_data->ncommunities;
+	memcpy(pctrl->communities, soc_data->communities, soc_data->ncommunities * sizeof(*pctrl->communities));
 
 	pctrl->dev = dev;
 	pctrl->soc = soc_data;
 	raw_spin_lock_init(&pctrl->lock);
-
-	/*
-	 * Make a copy of the communities which we can use to hold pointers
-	 * to the registers.
-	 */
-	pctrl->ncommunities = pctrl->soc->ncommunities;
-	pctrl->communities = devm_kmemdup_array(dev, pctrl->soc->communities, pctrl->ncommunities,
-						sizeof(*pctrl->soc->communities), GFP_KERNEL);
-	if (!pctrl->communities)
-		return -ENOMEM;
 
 	for (i = 0; i < pctrl->ncommunities; i++) {
 		struct intel_community *community = &pctrl->communities[i];
