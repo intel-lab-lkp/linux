@@ -1836,7 +1836,6 @@ int insert_inode_locked(struct inode *inode)
 	while (1) {
 		struct inode *old = NULL;
 		spin_lock(&inode_hash_lock);
-repeat:
 		hlist_for_each_entry(old, head, i_hash) {
 			if (old->i_ino != ino)
 				continue;
@@ -1854,9 +1853,10 @@ repeat:
 			return 0;
 		}
 		if (inode_state_read(old) & (I_FREEING | I_WILL_FREE)) {
-			__wait_on_freeing_inode(old, true, false);
-			old = NULL;
-			goto repeat;
+			spin_unlock(&old->i_lock);
+			spin_unlock(&inode_hash_lock);
+			cond_resched();
+			continue;
 		}
 		if (unlikely(inode_state_read(old) & I_CREATING)) {
 			spin_unlock(&old->i_lock);
