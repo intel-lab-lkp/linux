@@ -2071,6 +2071,13 @@ bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 		unsigned int latency, th, def_th;
 		long nr = folio_nr_pages(folio);
 
+		/* When tiering is enabled at runtime, last_cpupid may
+		 * hold a valid cpupid instead of an access timestamp.
+		 * If so, skip page promotion.
+		 */
+		if (cpupid_valid(folio_last_cpupid(folio)))
+			return false;
+
 		pgdat = NODE_DATA(dst_nid);
 		if (pgdat_free_space_enough(pgdat)) {
 			/* workload changed, reset hot threshold */
