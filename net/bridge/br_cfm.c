@@ -274,6 +274,13 @@ static void ccm_tx_work_expired(struct work_struct *work)
 	del_work = to_delayed_work(work);
 	mep = container_of(del_work, struct br_cfm_mep, ccm_tx_dwork);
 
+	interval_us = interval_to_us(mep->cc_config.exp_interval);
+	if (!interval_us) {
+		/* No valid interval - stop transmission */
+		mep->cc_ccm_tx_info.period = 0;
+		return;
+	}
+
 	if (time_before_eq(mep->ccm_tx_end, jiffies)) {
 		/* Transmission period has ended */
 		mep->cc_ccm_tx_info.period = 0;
@@ -284,7 +291,6 @@ static void ccm_tx_work_expired(struct work_struct *work)
 	if (skb)
 		ccm_frame_tx(skb);
 
-	interval_us = interval_to_us(mep->cc_config.exp_interval);
 	queue_delayed_work(system_percpu_wq, &mep->ccm_tx_dwork,
 			   usecs_to_jiffies(interval_us));
 }
