@@ -24,8 +24,6 @@ int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 int intel_atomic_setup_scalers(struct intel_atomic_state *state,
 			       struct intel_crtc *crtc);
 
-void skl_pfit_enable(const struct intel_crtc_state *crtc_state);
-
 void skl_program_plane_scaler(struct intel_dsb *dsb,
 			      struct intel_plane *plane,
 			      const struct intel_crtc_state *crtc_state,
@@ -37,6 +35,9 @@ void skl_scaler_disable(const struct intel_crtc_state *old_crtc_state);
 void skl_scaler_get_config(struct intel_crtc_state *crtc_state);
 
 void skl_scaler_setup_casf(struct intel_crtc_state *crtc_state);
+
+void skl_scaler_enable(struct intel_atomic_state *state,
+		       struct intel_crtc *crtc);
 
 enum drm_mode_status
 skl_scaler_mode_valid(struct intel_display *display,

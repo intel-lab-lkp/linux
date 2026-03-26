@@ -293,3 +293,14 @@ void intel_casf_disable(const struct intel_crtc_state *crtc_state)
 	intel_de_write(display, SHARPNESS_CTL(crtc->pipe), 0);
 	intel_de_write(display, SKL_PS_WIN_SZ(crtc->pipe, 1), 0);
 }
+
+bool intel_casf_enabling(const struct intel_crtc_state *new_crtc_state,
+			 const struct intel_crtc_state *old_crtc_state)
+{
+	if (!new_crtc_state->hw.active)
+		return false;
+
+	return ((!(old_crtc_state)->hw.casf_params.casf_enable ||
+		 intel_crtc_needs_modeset(new_crtc_state)) &&
+		 (new_crtc_state)->hw.casf_params.casf_enable);
+}
