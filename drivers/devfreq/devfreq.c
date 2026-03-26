@@ -49,6 +49,7 @@ static struct workqueue_struct *devfreq_wq;
 
 /* The list of all device-devfreq governors */
 static LIST_HEAD(devfreq_governor_list);
+static DEFINE_MUTEX(devfreq_gov_lock);
 /* The list of all device-devfreq */
 static LIST_HEAD(devfreq_list);
 static DEFINE_MUTEX(devfreq_list_lock);
@@ -254,19 +255,18 @@ EXPORT_SYMBOL(devfreq_update_status);
  * @name:	name of the governor
  *
  * Search the list of devfreq governors and return the matched
- * governor's pointer. devfreq_list_lock should be held by the caller.
+ * governor's pointer.
  */
 static struct devfreq_governor *find_devfreq_governor(const char *name)
 {
 	struct devfreq_governor *tmp_governor;
-
-	lockdep_assert_held(&devfreq_list_lock);
 
 	if (IS_ERR_OR_NULL(name)) {
 		pr_err("DEVFREQ: %s: Invalid parameters\n", __func__);
 		return ERR_PTR(-EINVAL);
 	}
 
+	guard(mutex)(&devfreq_gov_lock);
 	list_for_each_entry(tmp_governor, &devfreq_governor_list, node) {
 		if (!strncmp(tmp_governor->name, name, DEVFREQ_NAME_LEN))
 			return tmp_governor;
@@ -283,15 +283,12 @@ static struct devfreq_governor *find_devfreq_governor(const char *name)
  * Search the list of devfreq governors and request the module and try again
  * if is not found. This can happen when both drivers (the governor driver
  * and the driver that call devfreq_add_device) are built as modules.
- * devfreq_list_lock should be held by the caller. Returns the matched
- * governor's pointer or an error pointer.
+ * Returns the matched governor's pointer or an error pointer.
  */
 static struct devfreq_governor *try_then_request_governor(const char *name)
 {
 	struct devfreq_governor *governor;
 	int err = 0;
-
-	lockdep_assert_held(&devfreq_list_lock);
 
 	if (IS_ERR_OR_NULL(name)) {
 		pr_err("DEVFREQ: %s: Invalid parameters\n", __func__);
@@ -300,15 +297,12 @@ static struct devfreq_governor *try_then_request_governor(const char *name)
 
 	governor = find_devfreq_governor(name);
 	if (IS_ERR(governor)) {
-		mutex_unlock(&devfreq_list_lock);
-
 		if (!strncmp(name, DEVFREQ_GOV_SIMPLE_ONDEMAND,
 			     DEVFREQ_NAME_LEN))
 			err = request_module("governor_%s", "simpleondemand");
 		else
 			err = request_module("governor_%s", name);
 		/* Restore previous state before return */
-		mutex_lock(&devfreq_list_lock);
 		if (err)
 			return (err < 0) ? ERR_PTR(err) : ERR_PTR(-EINVAL);
 
@@ -932,16 +926,15 @@ struct devfreq *devfreq_add_device(struct device *dev,
 	if (err)
 		goto err_devfreq;
 
-	mutex_lock(&devfreq_list_lock);
-
 	governor = try_then_request_governor(governor_name);
 	if (IS_ERR(governor)) {
 		dev_err(dev, "%s: Unable to find governor for the device\n",
 			__func__);
 		err = PTR_ERR(governor);
-		goto err_init;
+		goto err_devfreq;
 	}
 
+	mutex_lock(&devfreq_list_lock);
 	devfreq->governor = governor;
 	err = devfreq->governor->event_handler(devfreq, DEVFREQ_GOV_START,
 						NULL);
@@ -1268,7 +1261,6 @@ int devfreq_add_governor(struct devfreq_governor *governor)
 		return -EINVAL;
 	}
 
-	guard(mutex)(&devfreq_list_lock);
 	g = find_devfreq_governor(governor->name);
 	if (!IS_ERR(g)) {
 		pr_err("%s: governor %s already registered\n", __func__,
@@ -1276,8 +1268,10 @@ int devfreq_add_governor(struct devfreq_governor *governor)
 		return -EINVAL;
 	}
 
-	list_add(&governor->node, &devfreq_governor_list);
+	scoped_guard(mutex, &devfreq_gov_lock)
+		list_add(&governor->node, &devfreq_governor_list);
 
+	guard(mutex)(&devfreq_list_lock);
 	list_for_each_entry(devfreq, &devfreq_list, node) {
 		int ret = 0;
 		struct device *dev = devfreq->dev.parent;
@@ -1354,7 +1348,6 @@ int devfreq_remove_governor(struct devfreq_governor *governor)
 		return -EINVAL;
 	}
 
-	guard(mutex)(&devfreq_list_lock);
 	g = find_devfreq_governor(governor->name);
 	if (IS_ERR(g)) {
 		pr_err("%s: governor %s not registered\n", __func__,
@@ -1362,6 +1355,7 @@ int devfreq_remove_governor(struct devfreq_governor *governor)
 		return PTR_ERR(g);
 	}
 
+	guard(mutex)(&devfreq_list_lock);
 	list_for_each_entry(devfreq, &devfreq_list, node) {
 		int ret;
 		struct device *dev = devfreq->dev.parent;
@@ -1382,7 +1376,8 @@ int devfreq_remove_governor(struct devfreq_governor *governor)
 		}
 	}
 
-	list_del(&governor->node);
+	scoped_guard(mutex, &devfreq_gov_lock)
+		list_del(&governor->node);
 
 	return 0;
 }
@@ -1422,11 +1417,11 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 	if (ret != 1)
 		return -EINVAL;
 
-	guard(mutex)(&devfreq_list_lock);
 	governor = try_then_request_governor(str_governor);
 	if (IS_ERR(governor))
 		return PTR_ERR(governor);
 
+	guard(mutex)(&devfreq_list_lock);
 	if (df->governor == governor)
 		return count;
 
