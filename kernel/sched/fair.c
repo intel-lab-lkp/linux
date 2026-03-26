@@ -12727,11 +12727,15 @@ static inline int on_null_domain(struct rq *rq)
  * - When one of the busy CPUs notices that there may be an idle rebalancing
  *   needed, they will kick the idle load balancer, which then does idle
  *   load balancing for all the idle CPUs.
+ *
+ * - When SMT is active, prefer a CPU on a fully idle core as the ILB
+ *   target, so that when it runs balance it becomes the destination CPU
+ *   and can accept migrated tasks with full effective capacity.
  */
 static inline int find_new_ilb(void)
 {
 	const struct cpumask *hk_mask;
-	int ilb_cpu;
+	int ilb_cpu, fallback = -1;
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
 
@@ -12740,11 +12744,22 @@ static inline int find_new_ilb(void)
 		if (ilb_cpu == smp_processor_id())
 			continue;
 
+#ifdef CONFIG_SCHED_SMT
+		if (!idle_cpu(ilb_cpu))
+			continue;
+
+		if (fallback < 0)
+			fallback = ilb_cpu;
+
+		if (!sched_smt_active() || is_core_idle(ilb_cpu))
+			return ilb_cpu;
+#else
 		if (idle_cpu(ilb_cpu))
 			return ilb_cpu;
+#endif
 	}
 
-	return -1;
+	return fallback;
 }
 
 /*
