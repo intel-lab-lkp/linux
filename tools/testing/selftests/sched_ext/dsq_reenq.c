@@ -15,7 +15,12 @@
 #include "dsq_reenq.bpf.skel.h"
 #include "scx_test.h"
 
-#define NUM_WORKERS	4
+/*
+ * Use more workers than CPUs so USER_DSQ is always backlogged.
+ * With tasks queued faster than dispatch can consume them, the
+ * periodic timer will always find tasks to reenqueue.
+ */
+#define NUM_WORKERS	16
 #define TEST_DURATION_SEC 3
 
 static volatile bool stop_workers;
