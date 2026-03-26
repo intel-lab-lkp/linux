@@ -5,6 +5,7 @@
  */
 
 #include <linux/libnvdimm.h>
+#include <linux/dma-buf.h>
 
 #include "rxe.h"
 #include "rxe_loc.h"
@@ -90,7 +91,7 @@ static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
 {
 	int idx;
 
-	if (mr_page_size(mr) > PAGE_SIZE)
+	if (rxe_mr_page_size(mr) > PAGE_SIZE)
 		idx = (iova - (mr->ibmr.iova & mr->page_mask)) >> PAGE_SHIFT;
 	else
 		idx = (iova >> mr->page_shift) -
@@ -103,15 +104,15 @@ static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
 /*
  * Convert iova to offset within the page_info entry.
  *
- * For mr_page_size > PAGE_SIZE, the offset is within the system page.
- * For mr_page_size <= PAGE_SIZE, the offset is within the MR page size.
+ * For rxe_mr_page_size > PAGE_SIZE, the offset is within the system page.
+ * For rxe_mr_page_size <= PAGE_SIZE, the offset is within the MR page size.
  */
 static unsigned long rxe_mr_iova_to_page_offset(struct rxe_mr *mr, u64 iova)
 {
-	if (mr_page_size(mr) > PAGE_SIZE)
+	if (rxe_mr_page_size(mr) > PAGE_SIZE)
 		return iova & (PAGE_SIZE - 1);
 	else
-		return iova & (mr_page_size(mr) - 1);
+		return iova & (rxe_mr_page_size(mr) - 1);
 }
 
 static bool is_pmem_page(struct page *pg)
@@ -129,7 +130,7 @@ static int rxe_mr_fill_pages_from_sgt(struct rxe_mr *mr, struct sg_table *sgt)
 	struct page *page;
 	bool persistent = !!(mr->access & IB_ACCESS_FLUSH_PERSISTENT);
 
-	WARN_ON(mr_page_size(mr) != PAGE_SIZE);
+	WARN_ON(rxe_mr_page_size(mr) != PAGE_SIZE);
 
 	__sg_page_iter_start(&sg_iter, sgt->sgl, sgt->orig_nents, 0);
 	if (!__sg_page_iter_next(&sg_iter))
@@ -224,6 +225,75 @@ err2:
 	return err;
 }
 
+static int rxe_map_dmabuf_mr(struct rxe_mr *mr, struct ib_umem_dmabuf *umem_dmabuf)
+{
+	unsigned int page_size = rxe_mr_page_size(mr);
+	struct sg_table *sgt = umem_dmabuf->sgt;
+	struct scatterlist *sg;
+	struct page *page;
+	int i, j, n = 0;
+
+	mr->page_shift = ilog2(page_size);
+	mr->page_mask = ~((u64)page_size - 1);
+	mr->nbuf = 0;
+
+	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+		page = sg_page(sg);
+		for (j = 0; j < (sg->length >> PAGE_SHIFT); j++) {
+			mr->page_info[n].page = page + j;
+			mr->page_info[n].offset = 0;
+			n++;
+		}
+	}
+
+	mr->nbuf = n;
+	return 0;
+}
+
+int rxe_mr_dmabuf_init_user(struct rxe_pd *pd, int fd, u64 start, u64 length,
+			    u64 iova, int access, struct rxe_mr *mr)
+{
+	struct ib_umem_dmabuf *umem_dmabuf;
+	int err;
+
+	umem_dmabuf = ib_umem_dmabuf_get(pd->ibpd.device, start, length, fd,
+					 access, NULL);
+	if (IS_ERR(umem_dmabuf)) {
+		err = PTR_ERR(umem_dmabuf);
+		goto err_out;
+	}
+
+	rxe_mr_init(access, mr);
+
+	err = alloc_mr_page_info(mr, ib_umem_num_pages(&umem_dmabuf->umem));
+	if (err) {
+		pr_warn("%s: Unable to allocate memory for map\n", __func__);
+		goto err_release_umem;
+	}
+
+	mr->ibmr.pd = &pd->ibpd;
+	mr->ibmr.iova = iova;
+	mr->umem = &umem_dmabuf->umem;
+	mr->access = access;
+	mr->state = RXE_MR_STATE_VALID;
+	mr->ibmr.type = IB_MR_TYPE_USER;
+
+	err = rxe_map_dmabuf_mr(mr, umem_dmabuf);
+	if (err)
+		goto err_free_mr_map;
+
+	return 0;
+
+err_free_mr_map:
+	free_mr_page_info(mr);
+
+err_release_umem:
+	ib_umem_release(&umem_dmabuf->umem);
+
+err_out:
+	return err;
+}
+
 int rxe_mr_init_fast(int max_pages, struct rxe_mr *mr)
 {
 	int err;
@@ -260,7 +330,7 @@ static int rxe_set_page(struct ib_mr *ibmr, u64 dma_addr)
 {
 	struct rxe_mr *mr = to_rmr(ibmr);
 	bool persistent = !!(mr->access & IB_ACCESS_FLUSH_PERSISTENT);
-	u32 i, pages_per_mr = mr_page_size(mr) >> PAGE_SHIFT;
+	u32 i, pages_per_mr = rxe_mr_page_size(mr) >> PAGE_SHIFT;
 
 	pages_per_mr = MAX(1, pages_per_mr);
 
@@ -288,7 +358,7 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 		  int sg_nents, unsigned int *sg_offset)
 {
 	struct rxe_mr *mr = to_rmr(ibmr);
-	unsigned int page_size = mr_page_size(mr);
+	unsigned int page_size = rxe_mr_page_size(mr);
 
 	/*
 	 * Ensure page_size and PAGE_SIZE are compatible for mapping.
@@ -302,7 +372,7 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 		return -EINVAL;
 	}
 
-	if (mr_page_size(mr) > PAGE_SIZE) {
+	if (rxe_mr_page_size(mr) > PAGE_SIZE) {
 		/* resize page_info if needed */
 		u32 map_mr_pages = (page_size >> PAGE_SHIFT) * mr->num_buf;
 
@@ -809,6 +879,7 @@ void rxe_mr_cleanup(struct rxe_pool_elem *elem)
 	struct rxe_mr *mr = container_of(elem, typeof(*mr), elem);
 
 	rxe_put(mr_pd(mr));
+
 	ib_umem_release(mr->umem);
 
 	if (mr->ibmr.type != IB_MR_TYPE_DMA)

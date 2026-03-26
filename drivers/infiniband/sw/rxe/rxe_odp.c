@@ -351,7 +351,7 @@ int rxe_odp_flush_pmem_iova(struct rxe_mr *mr, u64 iova,
 		page = hmm_pfn_to_page(umem_odp->map.pfn_list[index]);
 
 		bytes = min_t(unsigned int, length,
-			      mr_page_size(mr) - page_offset);
+			      rxe_mr_page_size(mr) - page_offset);
 
 		va = kmap_local_page(page);
 		arch_wb_cache_pmem(va + page_offset, bytes);

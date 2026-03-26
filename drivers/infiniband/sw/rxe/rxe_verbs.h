@@ -364,7 +364,7 @@ struct rxe_mr {
 	struct rxe_mr_page	*page_info;
 };
 
-static inline unsigned int mr_page_size(struct rxe_mr *mr)
+static inline unsigned int rxe_mr_page_size(struct rxe_mr *mr)
 {
 	return mr ? mr->ibmr.page_size : PAGE_SIZE;
 }

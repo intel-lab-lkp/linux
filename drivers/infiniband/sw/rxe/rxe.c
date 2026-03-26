@@ -278,3 +278,5 @@ late_initcall(rxe_module_init);
 module_exit(rxe_module_exit);
 
 MODULE_ALIAS_RDMA_LINK("rxe");
+
+MODULE_IMPORT_NS("DMA_BUF");
