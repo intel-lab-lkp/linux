@@ -5,6 +5,7 @@
  * Copyright (C) 2018 Christoph Hellwig
  */
 
+#include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/irqchip.h>
 #include <linux/irqdomain.h>
@@ -75,41 +76,53 @@ DECLARE_PER_CPU(ulong *, irq_shadow_call_stack_ptr);
 DEFINE_PER_CPU(ulong *, irq_shadow_call_stack_ptr);
 #endif
 
-static void init_irq_scs(void)
+static int __init init_irq_scs(void)
 {
 	int cpu;
+	void *s;
 
 	if (!scs_is_enabled())
-		return;
+		return 0;
 
-	for_each_possible_cpu(cpu)
-		per_cpu(irq_shadow_call_stack_ptr, cpu) =
-			scs_alloc(cpu_to_node(cpu));
+	for_each_possible_cpu(cpu) {
+		s = scs_alloc(cpu_to_node(cpu));
+		if (!s)
+			return -ENOMEM;
+		per_cpu(irq_shadow_call_stack_ptr, cpu) = s;
+	}
+
+	return 0;
 }
 
 DEFINE_PER_CPU(ulong *, irq_stack_ptr);
 
 #ifdef CONFIG_VMAP_STACK
-static void init_irq_stacks(void)
+static int __init init_irq_stacks(void)
 {
 	int cpu;
 	ulong *p;
 
 	for_each_possible_cpu(cpu) {
 		p = arch_alloc_vmap_stack(IRQ_STACK_SIZE, cpu_to_node(cpu));
+		if (!p)
+			return -ENOMEM;
 		per_cpu(irq_stack_ptr, cpu) = p;
 	}
+
+	return 0;
 }
 #else
 /* irq stack only needs to be 16 byte aligned - not IRQ_STACK_SIZE aligned. */
 DEFINE_PER_CPU_ALIGNED(ulong [IRQ_STACK_SIZE/sizeof(ulong)], irq_stack);
 
-static void init_irq_stacks(void)
+static int __init init_irq_stacks(void)
 {
 	int cpu;
 
 	for_each_possible_cpu(cpu)
 		per_cpu(irq_stack_ptr, cpu) = per_cpu(irq_stack, cpu);
+
+	return 0;
 }
 #endif /* CONFIG_VMAP_STACK */
 
@@ -129,8 +142,15 @@ void do_softirq_own_stack(void)
 #endif /* CONFIG_SOFTIRQ_ON_OWN_STACK */
 
 #else
-static void init_irq_scs(void) {}
-static void init_irq_stacks(void) {}
+static int __init init_irq_scs(void)
+{
+	return 0;
+}
+
+static int __init init_irq_stacks(void)
+{
+	return 0;
+}
 #endif /* CONFIG_IRQ_STACKS */
 
 int arch_show_interrupts(struct seq_file *p, int prec)
@@ -141,8 +161,9 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 
 void __init init_IRQ(void)
 {
-	init_irq_scs();
-	init_irq_stacks();
+	if (init_irq_stacks() || init_irq_scs())
+		panic("Failed to allocate IRQ stack resources\n");
+
 	irqchip_init();
 	if (!handle_arch_irq)
 		panic("No interrupt controller found.");
