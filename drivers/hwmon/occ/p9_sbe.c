@@ -174,8 +174,8 @@ static void p9_sbe_occ_remove(struct platform_device *pdev)
 
 	device_remove_bin_file(occ->bus_dev, &bin_attr_ffdc);
 
-	ctx->sbe = NULL;
 	occ_shutdown(occ);
+	ctx->sbe = NULL;
 
 	kvfree(ctx->ffdc);
 }
