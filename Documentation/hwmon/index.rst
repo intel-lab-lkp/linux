@@ -276,6 +276,7 @@ Hardware Monitoring Kernel Drivers
    w83795
    w83l785ts
    w83l786ng
+   witrn
    wm831x
    wm8350
    xgene-hwmon

@@ -2629,6 +2629,16 @@ config SENSORS_W83627EHF
 	  This driver can also be built as a module. If so, the module
 	  will be called w83627ehf.
 
+config SENSORS_WITRN
+	tristate "WITRN USB tester"
+	depends on USB_HID
+	help
+	  If you say yes here you get support for WITRN USB charging
+	  testers.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called witrn.
+
 config SENSORS_WM831X
 	tristate "WM831x PMICs"
 	depends on MFD_WM831X
