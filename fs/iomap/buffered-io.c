@@ -1218,7 +1218,7 @@ iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *i,
 
 	if (iocb->ki_flags & IOCB_NOWAIT)
 		iter.flags |= IOMAP_NOWAIT;
-	if (iocb->ki_flags & IOCB_DONTCACHE)
+	if (iocb->ki_flags & (IOCB_DONTCACHE | IOCB_DONTCACHE_LAZY))
 		iter.flags |= IOMAP_DONTCACHE;
 
 	while ((ret = iomap_iter(&iter, ops)) > 0)

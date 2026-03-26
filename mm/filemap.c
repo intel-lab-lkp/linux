@@ -438,6 +438,40 @@ int filemap_flush_range(struct address_space *mapping, loff_t start,
 EXPORT_SYMBOL_GPL(filemap_flush_range);
 
 /**
+ * filemap_dontcache_writeback_range - rate-limited writeback for dontcache I/O
+ * @mapping:	target address_space
+ * @start:	byte offset to start writeback
+ * @end:	byte offset to end writeback (inclusive)
+ * @nr_written:	number of bytes just written by the caller
+ *
+ * Kick writeback for dontcache I/O, but avoid piling on if writeback is
+ * already in progress.  When writeback is kicked, limit the number of pages
+ * submitted to be proportional to the amount just written, rather than
+ * flushing the entire dirty range.
+ *
+ * This reduces tail latency compared to filemap_flush_range() which submits
+ * writeback for all dirty pages on every call, creating queue contention
+ * under concurrent writers.
+ *
+ * Return: %0 on success, negative error code otherwise.
+ */
+int filemap_dontcache_writeback_range(struct address_space *mapping,
+				      loff_t start, loff_t end,
+				      ssize_t nr_written)
+{
+	long nr;
+
+	/* If writeback is already active, don't pile on */
+	if (mapping_tagged(mapping, PAGECACHE_TAG_WRITEBACK))
+		return 0;
+
+	nr = (nr_written + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	return filemap_writeback(mapping, start, end, WB_SYNC_NONE, &nr,
+			WB_REASON_BACKGROUND);
+}
+EXPORT_SYMBOL_GPL(filemap_dontcache_writeback_range);
+
+/**
  * filemap_flush - mostly a non-blocking flush
  * @mapping:	target address_space
  *
@@ -2611,7 +2645,7 @@ static int filemap_create_folio(struct kiocb *iocb, struct folio_batch *fbatch)
 	folio = filemap_alloc_folio(mapping_gfp_mask(mapping), min_order, NULL);
 	if (!folio)
 		return -ENOMEM;
-	if (iocb->ki_flags & IOCB_DONTCACHE)
+	if (iocb->ki_flags & (IOCB_DONTCACHE | IOCB_DONTCACHE_LAZY))
 		__folio_set_dropbehind(folio);
 
 	/*
@@ -2658,7 +2692,7 @@ static int filemap_readahead(struct kiocb *iocb, struct file *file,
 
 	if (iocb->ki_flags & IOCB_NOIO)
 		return -EAGAIN;
-	if (iocb->ki_flags & IOCB_DONTCACHE)
+	if (iocb->ki_flags & (IOCB_DONTCACHE | IOCB_DONTCACHE_LAZY))
 		ractl.dropbehind = 1;
 	page_cache_async_ra(&ractl, folio, last_index - folio->index);
 	return 0;
@@ -2690,7 +2724,7 @@ retry:
 			return -EAGAIN;
 		if (iocb->ki_flags & IOCB_NOWAIT)
 			flags = memalloc_noio_save();
-		if (iocb->ki_flags & IOCB_DONTCACHE)
+		if (iocb->ki_flags & (IOCB_DONTCACHE | IOCB_DONTCACHE_LAZY))
 			ractl.dropbehind = 1;
 		page_cache_sync_ra(&ractl, last_index - index);
 		if (iocb->ki_flags & IOCB_NOWAIT)

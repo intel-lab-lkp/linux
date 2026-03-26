@@ -783,7 +783,7 @@ static inline struct folio *write_begin_get_folio(const struct kiocb *iocb,
 
         fgp_flags |= fgf_set_order(len);
 
-        if (iocb && iocb->ki_flags & IOCB_DONTCACHE)
+        if (iocb && iocb->ki_flags & (IOCB_DONTCACHE | IOCB_DONTCACHE_LAZY))
                 fgp_flags |= FGP_DONTCACHE;
 
         return __filemap_get_folio(mapping, index, fgp_flags,

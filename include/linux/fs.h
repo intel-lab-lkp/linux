@@ -357,6 +357,7 @@ struct readahead_control;
 /* kiocb is a read or write operation submitted by fs/aio.c. */
 #define IOCB_AIO_RW		(1 << 22)
 #define IOCB_HAS_METADATA	(1 << 23)
+#define IOCB_DONTCACHE_LAZY	(__force int) RWF_DONTCACHE_LAZY
 
 /* for use in trace events */
 #define TRACE_IOCB_STRINGS \
@@ -374,7 +375,8 @@ struct readahead_control;
 	{ IOCB_NOIO,		"NOIO" }, \
 	{ IOCB_ALLOC_CACHE,	"ALLOC_CACHE" }, \
 	{ IOCB_AIO_RW,		"AIO_RW" }, \
-	{ IOCB_HAS_METADATA,	"AIO_HAS_METADATA" }
+	{ IOCB_HAS_METADATA,	"AIO_HAS_METADATA" }, \
+	{ IOCB_DONTCACHE_LAZY,	"DONTCACHE_LAZY" }
 
 struct kiocb {
 	struct file		*ki_filp;
@@ -2610,6 +2612,8 @@ extern int __must_check file_write_and_wait_range(struct file *file,
 						loff_t start, loff_t end);
 int filemap_flush_range(struct address_space *mapping, loff_t start,
 		loff_t end);
+int filemap_dontcache_writeback_range(struct address_space *mapping,
+		loff_t start, loff_t end, ssize_t nr_written);
 
 static inline int file_write_and_wait(struct file *file)
 {
@@ -2647,6 +2651,12 @@ static inline ssize_t generic_write_sync(struct kiocb *iocb, ssize_t count)
 
 		filemap_flush_range(mapping, iocb->ki_pos - count,
 				iocb->ki_pos - 1);
+	} else if (iocb->ki_flags & IOCB_DONTCACHE_LAZY) {
+		struct address_space *mapping = iocb->ki_filp->f_mapping;
+
+		filemap_dontcache_writeback_range(mapping,
+				iocb->ki_pos - count,
+				iocb->ki_pos - 1, count);
 	}
 
 	return count;
@@ -3426,13 +3436,17 @@ static inline int kiocb_set_rw_flags(struct kiocb *ki, rwf_t flags,
 		if (!(ki->ki_filp->f_mode & FMODE_CAN_ATOMIC_WRITE))
 			return -EOPNOTSUPP;
 	}
-	if (flags & RWF_DONTCACHE) {
+	if (flags & (RWF_DONTCACHE | RWF_DONTCACHE_LAZY)) {
 		/* file system must support it */
 		if (!(ki->ki_filp->f_op->fop_flags & FOP_DONTCACHE))
 			return -EOPNOTSUPP;
 		/* DAX mappings not supported */
 		if (IS_DAX(ki->ki_filp->f_mapping->host))
 			return -EOPNOTSUPP;
+		/* can't use both at once */
+		if ((flags & (RWF_DONTCACHE | RWF_DONTCACHE_LAZY)) ==
+		    (RWF_DONTCACHE | RWF_DONTCACHE_LAZY))
+			return -EINVAL;
 	}
 	kiocb_flags |= (__force int) (flags & RWF_SUPPORTED);
 	if (flags & RWF_SYNC)
