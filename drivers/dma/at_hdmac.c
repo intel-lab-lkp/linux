@@ -816,7 +816,7 @@ static void atdma_handle_chan_done(struct at_dma_chan *atchan, u32 pending,
 		} else {
 			vchan_cookie_complete(&desc->vd);
 			atchan->desc = NULL;
-			if (!(atc_chan_is_enabled(atchan)))
+			if (!atc_chan_is_enabled(atchan))
 				atc_dostart(atchan);
 		}
 	}
