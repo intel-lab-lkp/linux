@@ -213,8 +213,7 @@ impl GspFirmware {
                 signatures: {
                     let sigs_section = match chipset.arch() {
                         Architecture::Turing
-                            if matches!(chipset, Chipset::TU116 | Chipset::TU117) =>
-                        {
+                            if matches!(chipset, Chipset::TU116 | Chipset::TU117) => {
                             ".fwsignature_tu11x"
                         }
                         Architecture::Turing => ".fwsignature_tu10x",
@@ -222,6 +221,9 @@ impl GspFirmware {
                         Architecture::Ampere if chipset == Chipset::GA100 => ".fwsignature_tu10x",
                         Architecture::Ampere => ".fwsignature_ga10x",
                         Architecture::Ada => ".fwsignature_ad10x",
+                        Architecture::Hopper => ".fwsignature_gh10x",
+                        Architecture::BlackwellGB10x => ".fwsignature_gb10x",
+                        Architecture::BlackwellGB20x => ".fwsignature_gb20x",
                     };
 
                     elf::elf64_section(firmware.data(), sigs_section)
