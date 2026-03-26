@@ -11,9 +11,9 @@
  *                   explicit SCX_ENQ_IMMED in enq_flags (requires v2 kfunc)
  *
  * Worker threads belonging to test_tgid are inserted into USER_DSQ.
- * ops.dispatch() on CPU 0 consumes from USER_DSQ with SCX_ENQ_IMMED.
- * With multiple workers competing for CPU 0, dsq->nr > 1 triggers the
- * IMMED slow path (reenqueue with SCX_TASK_REENQ_IMMED).
+ * ops.dispatch() on CPU 0 consumes multiple tasks from USER_DSQ with
+ * SCX_ENQ_IMMED in a single dispatch call, causing dsq->nr to exceed 1
+ * and triggering the IMMED slow path (reenqueue with SCX_TASK_REENQ_IMMED).
  *
  * Requires scx_bpf_dsq_move_to_local___v2() (v7.1+) for enq_flags support.
  */
@@ -55,10 +55,23 @@ void BPF_STRUCT_OPS(consume_immed_enqueue, struct task_struct *p,
 
 void BPF_STRUCT_OPS(consume_immed_dispatch, s32 cpu, struct task_struct *prev)
 {
-	if (cpu == 0)
-		scx_bpf_dsq_move_to_local(USER_DSQ, SCX_ENQ_IMMED);
-	else
+	int i;
+
+	if (cpu != 0) {
 		scx_bpf_dsq_move_to_local(SCX_DSQ_GLOBAL, 0);
+		return;
+	}
+
+	/*
+	 * Move multiple tasks into CPU 0's local DSQ with SCX_ENQ_IMMED in a
+	 * single dispatch call. When the second task is inserted (dsq->nr > 1),
+	 * dsq_inc_nr() triggers the IMMED slow path via schedule_reenq_local(),
+	 * which calls ops.enqueue() with SCX_ENQ_REENQ | SCX_TASK_REENQ_IMMED.
+	 */
+	for (i = 0; i < 4; i++) {
+		if (!scx_bpf_dsq_move_to_local(USER_DSQ, SCX_ENQ_IMMED))
+			break;
+	}
 }
 
 s32 BPF_STRUCT_OPS_SLEEPABLE(consume_immed_init)

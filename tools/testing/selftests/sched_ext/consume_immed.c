@@ -12,18 +12,30 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sched.h>
 #include <bpf/bpf.h>
 #include <scx/common.h>
 #include "consume_immed.bpf.skel.h"
 #include "scx_test.h"
 
-#define NUM_WORKERS		4
+/*
+ * Use more workers than CPUs, all pinned to CPU 0, so CPU 0's local DSQ
+ * accumulates multiple IMMED tasks at once, reliably triggering the slow path.
+ */
+#define NUM_WORKERS		8
 #define TEST_DURATION_SEC	3
 
 static volatile bool stop_workers;
 
 static void *worker_fn(void *arg)
 {
+	cpu_set_t cpuset;
+
+	/* Pin to CPU 0 to saturate its local DSQ */
+	CPU_ZERO(&cpuset);
+	CPU_SET(0, &cpuset);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+
 	while (!stop_workers) {
 		volatile unsigned long i;
 
