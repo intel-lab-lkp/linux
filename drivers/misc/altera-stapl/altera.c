@@ -8,7 +8,7 @@
  * Copyright (C) 2010,2011 NetUP Inc.
  * Copyright (C) 2010,2011 Igor M. Liplianin <liplianin@netup.ru>
  */
-
+#include <linux/hex.h>
 #include <linux/unaligned.h>
 #include <linux/ctype.h>
 #include <linux/string.h>
@@ -167,13 +167,13 @@ static void altera_export_bool_array(char *key, u8 *data, s32 count)
 				if (data[i >> 3] & (1 << (i & 7)))
 					value |= (1 << (i & 3));
 				if ((i & 3) == 3) {
-					sprintf(&string[j], "%1x", value);
+					string[j] = hex_asc_lo(value);
 					value = 0;
 					--j;
 				}
 			}
 			if ((k & 3) > 0)
-				sprintf(&string[j], "%1x", value);
+				string[j] = hex_asc_lo(value);
 
 			dprintk("%s\n", string);
 		}
@@ -188,13 +188,13 @@ static void altera_export_bool_array(char *key, u8 *data, s32 count)
 			if (data[i >> 3] & (1 << (i & 7)))
 				value |= (1 << (i & 3));
 			if ((i & 3) == 3) {
-				sprintf(&string[j], "%1x", value);
+				string[j] = hex_asc_lo(value);
 				value = 0;
 				--j;
 			}
 		}
 		if ((i & 3) > 0)
-			sprintf(&string[j], "%1x", value);
+			string[j] = hex_asc_lo(value);
 
 		dprintk("Export: key = \"%s\", %d bits, value = HEX %s\n",
 			key, count, string);
