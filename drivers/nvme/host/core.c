@@ -458,7 +458,14 @@ void nvme_complete_rq(struct request *req)
 {
 	struct nvme_ctrl *ctrl = nvme_req(req)->ctrl;
 
-	trace_nvme_complete_rq(req);
+	/*
+	 * The idea for these trace events was to match up commands
+	 * dispatched to hardware with the hardware's posted response.
+	 * So skip tracing for undispatched commands.
+	 */
+	if (nvme_req(req)->status != NVME_SC_HOST_PATH_ERROR)
+		trace_nvme_complete_rq(req);
+
 	nvme_cleanup_cmd(req);
 
 	/*
