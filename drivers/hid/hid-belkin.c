@@ -34,9 +34,15 @@ static int belkin_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 		return 0;
 
 	switch (usage->hid & HID_USAGE) {
-	case 0x03a: belkin_map_key_clear(KEY_SOUND);		break;
-	case 0x03b: belkin_map_key_clear(KEY_CAMERA);		break;
-	case 0x03c: belkin_map_key_clear(KEY_DOCUMENTS);	break;
+	case 0x03a:
+		belkin_map_key_clear(KEY_SOUND);
+		break;
+	case 0x03b:
+		belkin_map_key_clear(KEY_CAMERA);
+		break;
+	case 0x03c:
+		belkin_map_key_clear(KEY_DOCUMENTS);
+		break;
 	default:
 		return 0;
 	}
