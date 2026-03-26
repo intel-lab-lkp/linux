@@ -223,27 +223,4 @@ static inline u64 kvm_read_edx_eax(struct kvm_vcpu *vcpu)
 		| ((u64)(kvm_rdx_read(vcpu) & -1u) << 32);
 }
 
-static inline void enter_guest_mode(struct kvm_vcpu *vcpu)
-{
-	vcpu->arch.hflags |= HF_GUEST_MASK;
-	vcpu->stat.guest_mode = 1;
-}
-
-static inline void leave_guest_mode(struct kvm_vcpu *vcpu)
-{
-	vcpu->arch.hflags &= ~HF_GUEST_MASK;
-
-	if (vcpu->arch.load_eoi_exitmap_pending) {
-		vcpu->arch.load_eoi_exitmap_pending = false;
-		kvm_make_request(KVM_REQ_LOAD_EOI_EXITMAP, vcpu);
-	}
-
-	vcpu->stat.guest_mode = 0;
-}
-
-static inline bool is_guest_mode(struct kvm_vcpu *vcpu)
-{
-	return vcpu->arch.hflags & HF_GUEST_MASK;
-}
-
 #endif

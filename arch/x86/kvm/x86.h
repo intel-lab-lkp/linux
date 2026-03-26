@@ -148,6 +148,29 @@ static inline unsigned int __shrink_ple_window(unsigned int val,
 void kvm_service_local_tlb_flush_requests(struct kvm_vcpu *vcpu);
 int kvm_check_nested_events(struct kvm_vcpu *vcpu);
 
+static inline void enter_guest_mode(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.hflags |= HF_GUEST_MASK;
+	vcpu->stat.guest_mode = 1;
+}
+
+static inline void leave_guest_mode(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.hflags &= ~HF_GUEST_MASK;
+
+	if (vcpu->arch.load_eoi_exitmap_pending) {
+		vcpu->arch.load_eoi_exitmap_pending = false;
+		kvm_make_request(KVM_REQ_LOAD_EOI_EXITMAP, vcpu);
+	}
+
+	vcpu->stat.guest_mode = 0;
+}
+
+static inline bool is_guest_mode(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.hflags & HF_GUEST_MASK;
+}
+
 /* Forcibly leave the nested mode in cases like a vCPU reset */
 static inline void kvm_leave_nested(struct kvm_vcpu *vcpu)
 {
