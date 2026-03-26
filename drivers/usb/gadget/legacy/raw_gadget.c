@@ -465,12 +465,10 @@ static int raw_release(struct inode *inode, struct file *fd)
 			dev_err(dev->dev,
 				"usb_gadget_unregister_driver() failed with %d\n",
 				ret);
-		/* Matches kref_get() in raw_ioctl_run(). */
-		kref_put(&dev->count, dev_free);
 	}
 
 out_put:
-	/* Matches dev_new() in raw_open(). */
+	/* Matches dev_new() in raw_open() and kref_get() in raw_ioctl_run(). */
 	kref_put(&dev->count, dev_free);
 	return ret;
 }
