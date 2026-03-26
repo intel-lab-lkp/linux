@@ -248,6 +248,19 @@ static inline bool kvm_pmu_is_fastpath_emulation_allowed(struct kvm_vcpu *vcpu)
 				  X86_PMC_IDX_MAX);
 }
 
+static inline void kvm_pmu_handle_nested_transition(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+
+	if (bitmap_empty(pmu->pmc_needs_nested_reprogram, X86_PMC_IDX_MAX))
+		return;
+
+	BUILD_BUG_ON(sizeof(pmu->pmc_needs_nested_reprogram) != sizeof(atomic64_t));
+	atomic64_or(*(s64 *)pmu->pmc_needs_nested_reprogram,
+		    &vcpu_to_pmu(vcpu)->__reprogram_pmi);
+	kvm_make_request(KVM_REQ_PMU, vcpu);
+}
+
 void kvm_pmu_deliver_pmi(struct kvm_vcpu *vcpu);
 void kvm_pmu_handle_event(struct kvm_vcpu *vcpu);
 int kvm_pmu_rdpmc(struct kvm_vcpu *vcpu, unsigned pmc, u64 *data);

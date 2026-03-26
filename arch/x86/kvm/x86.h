@@ -9,6 +9,7 @@
 #include "kvm_cache_regs.h"
 #include "kvm_emulate.h"
 #include "cpuid.h"
+#include "pmu.h"
 
 #define KVM_MAX_MCE_BANKS 32
 
@@ -152,6 +153,8 @@ static inline void enter_guest_mode(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.hflags |= HF_GUEST_MASK;
 	vcpu->stat.guest_mode = 1;
+
+	kvm_pmu_handle_nested_transition(vcpu);
 }
 
 static inline void leave_guest_mode(struct kvm_vcpu *vcpu)
@@ -164,6 +167,8 @@ static inline void leave_guest_mode(struct kvm_vcpu *vcpu)
 	}
 
 	vcpu->stat.guest_mode = 0;
+
+	kvm_pmu_handle_nested_transition(vcpu);
 }
 
 static inline bool is_guest_mode(struct kvm_vcpu *vcpu)

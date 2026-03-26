@@ -594,6 +594,12 @@ struct kvm_pmu {
 	DECLARE_BITMAP(pmc_counting_instructions, X86_PMC_IDX_MAX);
 	DECLARE_BITMAP(pmc_counting_branches, X86_PMC_IDX_MAX);
 
+	/*
+	 * Whether or not PMU counters need to be reprogrammed on transitions
+	 * between L1 and L2 (or when nesting enablement is toggled).
+	 */
+	DECLARE_BITMAP(pmc_needs_nested_reprogram, X86_PMC_IDX_MAX);
+
 	u64 ds_area;
 	u64 pebs_enable;
 	u64 pebs_enable_rsvd;
