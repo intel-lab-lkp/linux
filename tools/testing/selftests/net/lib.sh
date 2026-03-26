@@ -670,3 +670,41 @@ cmd_jq()
 	# return success only in case of non-empty output
 	[ ! -z "$output" ]
 }
+
+__run_on()
+{
+	local target=$1; shift
+	local type args
+
+	IFS=':' read -r type args <<< "$target"
+
+	case "$type" in
+	netns)
+		# Execute command in network namespace
+		# args contains the namespace name
+		ip netns exec "$args" "$@"
+		;;
+	ssh)
+		# Execute command via SSH args contains user@host
+		ssh -n "$args" "$@"
+		;;
+	local|*)
+		# Execute command locally. This is also the fallback
+		# case for when the interface's target is not found in
+		# the TARGETS array.
+		"$@"
+		;;
+	esac
+}
+
+run_on()
+{
+	local iface=$1; shift
+	local target="local:"
+
+	if declare -p TARGETS &>/dev/null; then
+		target="${TARGETS[$iface]}"
+	fi
+
+	__run_on "$target" "$@"
+}
