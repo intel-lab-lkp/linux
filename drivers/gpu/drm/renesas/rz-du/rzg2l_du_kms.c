@@ -184,6 +184,7 @@ int rzg2l_du_dumb_create(struct drm_file *file, struct drm_device *dev,
 	unsigned int min_pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
 	unsigned int align = 16 * args->bpp / 8;
 
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
 	args->pitch = roundup(min_pitch, align);
 
 	return drm_gem_dma_dumb_create_internal(file, dev, args);

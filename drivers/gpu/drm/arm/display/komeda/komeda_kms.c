@@ -29,6 +29,7 @@ static int komeda_gem_dma_dumb_create(struct drm_file *file,
 	struct komeda_dev *mdev = dev->dev_private;
 	u32 pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
 
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
 	args->pitch = ALIGN(pitch, mdev->chip.bus_width);
 
 	return drm_gem_dma_dumb_create_internal(file, dev, args);

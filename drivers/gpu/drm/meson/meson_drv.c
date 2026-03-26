@@ -83,6 +83,7 @@ static irqreturn_t meson_irq(int irq, void *arg)
 static int meson_dumb_create(struct drm_file *file, struct drm_device *dev,
 			     struct drm_mode_create_dumb *args)
 {
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
 	/*
 	 * We need 64bytes aligned stride, and PAGE aligned size
 	 */

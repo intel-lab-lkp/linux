@@ -371,6 +371,8 @@ static int zynqmp_dpsub_dumb_create(struct drm_file *file_priv,
 	if (ret)
 		return ret;
 
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
+
 	return drm_gem_dma_dumb_create_internal(file_priv, drm, args);
 }
 

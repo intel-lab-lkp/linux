@@ -39,6 +39,7 @@ static int logicvc_drm_gem_dma_dumb_create(struct drm_file *file_priv,
 {
 	struct logicvc_drm *logicvc = logicvc_drm(drm_dev);
 
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
 	/* Stride is always fixed to its configuration value. */
 	args->pitch = logicvc->config.row_stride * DIV_ROUND_UP(args->bpp, 8);
 

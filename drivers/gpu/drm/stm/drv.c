@@ -51,8 +51,9 @@ static int stm_gem_dma_dumb_create(struct drm_file *file,
 	 * in order to optimize data transfer, pitch is aligned on
 	 * 128 bytes, height is aligned on 4 bytes
 	 */
-	args->pitch = roundup(min_pitch, 128);
 	args->height = roundup(args->height, 4);
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
+	args->pitch = roundup(min_pitch, 128);
 
 	return drm_gem_dma_dumb_create_internal(file, dev, args);
 }

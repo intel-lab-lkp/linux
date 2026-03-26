@@ -464,6 +464,7 @@ static int malidp_dumb_create(struct drm_file *file_priv,
 	/* allocate for the worst case scenario, i.e. rotated buffers */
 	u8 alignment = malidp_hw_get_pitch_align(malidp->dev, 1);
 
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
 	args->pitch = ALIGN(DIV_ROUND_UP(args->width * args->bpp, 8), alignment);
 
 	return drm_gem_dma_dumb_create_internal(file_priv, drm, args);

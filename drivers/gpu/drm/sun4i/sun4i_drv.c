@@ -36,6 +36,7 @@ static int drm_sun4i_gem_dumb_create(struct drm_file *file_priv,
 				     struct drm_device *drm,
 				     struct drm_mode_create_dumb *args)
 {
+	args->flags = DRM_MODE_DUMB_KERNEL_MAP;
 	/* The hardware only allows even pitches for YUV buffers. */
 	args->pitch = ALIGN(DIV_ROUND_UP(args->width * args->bpp, 8), 2);
 
