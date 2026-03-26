@@ -646,6 +646,8 @@ enum devlink_attr {
 
 	DEVLINK_ATTR_INDEX,			/* uint */
 
+	DEVLINK_ATTR_PARENT_DEV,		/* nested */
+
 	/* Add new attributes above here, update the spec in
 	 * Documentation/netlink/specs/devlink.yaml and re-generate
 	 * net/devlink/netlink_gen.c.
