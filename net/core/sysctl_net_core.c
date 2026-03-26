@@ -372,6 +372,35 @@ static int proc_do_skb_defer_max(const struct ctl_table *table, int write,
 	return ret;
 }
 
+static int proc_do_napi_consume_skb_defer(const struct ctl_table *table,
+					  int write, void *buffer,
+					  size_t *lenp, loff_t *ppos)
+{
+	static DEFINE_MUTEX(napi_consume_skb_defer_mutex);
+	int val, ret;
+
+	mutex_lock(&napi_consume_skb_defer_mutex);
+
+	val = static_key_enabled(&napi_consume_skb_defer_key);
+	struct ctl_table tmp = {
+		.data	= &val,
+		.maxlen	= sizeof(val),
+		.extra1	= SYSCTL_ZERO,
+		.extra2	= SYSCTL_ONE,
+	};
+
+	ret = proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+	if (!ret && write) {
+		if (val)
+			static_branch_enable(&napi_consume_skb_defer_key);
+		else
+			static_branch_disable(&napi_consume_skb_defer_key);
+	}
+
+	mutex_unlock(&napi_consume_skb_defer_mutex);
+	return ret;
+}
+
 #ifdef CONFIG_BPF_JIT
 static int proc_dointvec_minmax_bpf_enable(const struct ctl_table *table, int write,
 					   void *buffer, size_t *lenp,
@@ -675,6 +704,12 @@ static struct ctl_table net_core_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_do_skb_defer_max,
 		.extra1		= SYSCTL_ZERO,
+	},
+	{
+		.procname	= "napi_consume_skb_defer",
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_do_napi_consume_skb_defer,
 	},
 };
 
