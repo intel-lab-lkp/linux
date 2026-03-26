@@ -1,0 +1,34 @@
+drm drm-fixes c369299895a591d96745d6492d4888259b004a9e
+	Linux 7.0-rc5
+drm-misc drm-misc-fixes 87a70013be7d1b96e7e160aea6dad4564b459868
+	MAINTAINERS: Update GPU driver maintainer information
+drm-rust drm-rust-fixes f338e77383789c0cae23ca3d48adcc5e9e137e3c
+	Linux 7.0-rc4
+drm-intel drm-intel-fixes 77fcf58df15edcf3f5b5421f24814fb72796def9
+	drm/i915/dp_tunnel: Fix error handling when clearing stream BW in atomic state
+drm-xe drm-xe-fixes bfe9e314d7574d1c5c851972e7aee342733819d2
+	drm/xe: always keep track of remap prev/next
+drm drm-next 13c072b8e91a5ccb5855ca1ba6fe3ea467dbf94d
+	BackMerge tag 'v7.0-rc4' into drm-next
+drm-misc drm-misc-next-fixes 69674c1c704c0199ca7a3947f3cdcd575973175d
+	accel/amdxdna: Move RPM resume into job run function
+drm-intel drm-intel-next-fixes 777a02812f739af9e349cd0f695400a1d84053f4
+	drm/i915/dp: Add missing slice count check during mode validation
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 1f513a3ec3a945efb30c963681ac32ac7b99928b
+	accel/amdxdna: Add per-process BO memory usage query support
+drm-rust drm-rust-next 442ba16a5a51368f5bafd011609f40782aec6d65
+	rust: gem: Introduce DriverObject::Args
+drm-intel drm-intel-next f86b08bf1766e9883bc75a66aeca7d737bf4c093
+	drm/i915: move CNP clock gating init into intel_pch
+drm-intel drm-intel-gt-next 06249b4e691a75694c014a61708c007fb5755f60
+	drm/i915: Fix potential overflow of shmem scatterlist length
+drm-xe drm-xe-next 3d4939c0ec011ad6dfda7c13362b3d2013425789
+	drm/xe: Fix confusion with locals on context creation
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
