@@ -6,6 +6,9 @@
 struct drm_device;
 struct drm_mode_create_dumb;
 
+/* drm_mode_create_dumb flags for internal use */
+#define DRM_MODE_DUMB_KERNEL_MAP	(1<<0)
+
 int drm_mode_size_dumb(struct drm_device *dev,
 		       struct drm_mode_create_dumb *args,
 		       unsigned long hw_pitch_align,
