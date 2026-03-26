@@ -98,7 +98,7 @@ void __attribute__((constructor)) init(void)
 	struct open_how how = {};
 	int fd;
 
-	BUILD_BUG_ON(sizeof(struct open_how) != OPEN_HOW_SIZE_VER0);
+	BUILD_BUG_ON(sizeof(struct open_how) != OPEN_HOW_SIZE_VER1);
 
 	/* Check openat2(2) support. */
 	fd = sys_openat2(AT_FDCWD, ".", &how);
