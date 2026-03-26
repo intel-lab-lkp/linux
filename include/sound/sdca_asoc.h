@@ -13,6 +13,8 @@
 struct device;
 struct regmap;
 struct sdca_function_data;
+struct snd_ctl_elem_value;
+struct snd_kcontrol;
 struct snd_kcontrol_new;
 struct snd_pcm_hw_params;
 struct snd_pcm_substream;
@@ -57,5 +59,9 @@ int sdca_asoc_hw_params(struct device *dev, struct regmap *regmap,
 			struct snd_pcm_substream *substream,
 			struct snd_pcm_hw_params *params,
 			struct snd_soc_dai *dai);
+int q78_put_volsw(struct snd_kcontrol *kcontrol,
+		  struct snd_ctl_elem_value *ucontrol);
+int q78_get_volsw(struct snd_kcontrol *kcontrol,
+		  struct snd_ctl_elem_value *ucontrol);
 
 #endif // __SDCA_ASOC_H__
