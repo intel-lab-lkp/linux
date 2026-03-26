@@ -133,8 +133,8 @@ secondary_start_sbi:
 	csrw CSR_IP, zero
 
 #ifndef CONFIG_RISCV_M_MODE
-	/* Enable time CSR */
-	li t0, 0x2
+	/* Enable CY, TM, and IR counters in U mode */
+	li t0, 0x7
 	csrw CSR_SCOUNTEREN, t0
 #endif
 
@@ -247,8 +247,8 @@ SYM_CODE_START(_start_kernel)
 	 */
 	csrr a0, CSR_MHARTID
 #else
-	/* Enable time CSR */
-	li t0, 0x2
+	/* Enable CY, TM, and IR counters in U mode */
+	li t0, 0x7
 	csrw CSR_SCOUNTEREN, t0
 #endif /* CONFIG_RISCV_M_MODE */
 
