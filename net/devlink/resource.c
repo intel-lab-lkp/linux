@@ -107,7 +107,7 @@ devlink_resource_validate_size(struct devlink_resource *resource, u64 size,
 
 int devlink_nl_resource_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = info->user_ptr[0];
+	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
 	struct devlink_resource *resource;
 	u64 resource_id;
 	u64 size;
@@ -216,7 +216,7 @@ nla_put_failure:
 static int devlink_resource_fill(struct genl_info *info,
 				 enum devlink_command cmd, int flags)
 {
-	struct devlink *devlink = info->user_ptr[0];
+	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
 	struct devlink_resource *resource;
 	struct nlattr *resources_attr;
 	struct sk_buff *skb = NULL;
@@ -284,7 +284,7 @@ err_resource_put:
 
 int devlink_nl_resource_dump_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = info->user_ptr[0];
+	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
 
 	if (list_empty(&devlink->resource_list))
 		return -EOPNOTSUPP;
