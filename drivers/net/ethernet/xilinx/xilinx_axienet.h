@@ -509,6 +509,8 @@ struct skbuf_dma_descriptor {
  *		complete. Only updated at runtime by TX NAPI poll.
  * @tx_bd_tail:	Stores the index of the next Tx buffer descriptor in the ring
  *              to be populated.
+ * @tx_compl_bytes: Accumulates TX completion length until a full packet is
+ *              reported to the stack.
  * @tx_packets: TX packet count for statistics
  * @tx_bytes:	TX byte count for statistics
  * @tx_stat_sync: Synchronization object for TX stats
@@ -592,6 +594,7 @@ struct axienet_local {
 	u32 tx_bd_num;
 	u32 tx_bd_ci;
 	u32 tx_bd_tail;
+	u32 tx_compl_bytes;
 	u64_stats_t tx_packets;
 	u64_stats_t tx_bytes;
 	struct u64_stats_sync tx_stat_sync;

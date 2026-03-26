@@ -692,6 +692,8 @@ static void axienet_dma_stop(struct axienet_local *lp)
 	axienet_lock_mii(lp);
 	__axienet_device_reset(lp);
 	axienet_unlock_mii(lp);
+
+	lp->tx_compl_bytes = 0;
 }
 
 /**
@@ -770,8 +772,6 @@ static int axienet_device_reset(struct net_device *ndev)
  * @first_bd:	Index of first descriptor to clean up
  * @nr_bds:	Max number of descriptors to clean up
  * @force:	Whether to clean descriptors even if not complete
- * @sizep:	Pointer to a u32 filled with the total sum of all bytes
- *		in all cleaned-up descriptors. Ignored if NULL.
  * @budget:	NAPI budget (use 0 when not called from NAPI poll)
  *
  * Would either be called after a successful transmit operation, or after
@@ -780,7 +780,7 @@ static int axienet_device_reset(struct net_device *ndev)
  * Return: The number of packets handled.
  */
 static int axienet_free_tx_chain(struct axienet_local *lp, u32 first_bd,
-				 int nr_bds, bool force, u32 *sizep, int budget)
+				 int nr_bds, bool force, int budget)
 {
 	struct axidma_bd *cur_p;
 	unsigned int status;
@@ -819,8 +819,8 @@ static int axienet_free_tx_chain(struct axienet_local *lp, u32 first_bd,
 		cur_p->cntrl = 0;
 		cur_p->status = 0;
 
-		if (sizep)
-			*sizep += status & XAXIDMA_BD_STS_ACTUAL_LEN_MASK;
+		if (!force)
+			lp->tx_compl_bytes += status & XAXIDMA_BD_STS_ACTUAL_LEN_MASK;
 	}
 
 	if (!force) {
@@ -999,18 +999,18 @@ static int axienet_tx_poll(struct napi_struct *napi, int budget)
 {
 	struct axienet_local *lp = container_of(napi, struct axienet_local, napi_tx);
 	struct net_device *ndev = lp->ndev;
-	u32 size = 0;
 	int packets;
 
 	packets = axienet_free_tx_chain(lp, lp->tx_bd_ci, lp->tx_bd_num, false,
-					&size, budget);
+					budget);
 
 	if (packets) {
-		netdev_completed_queue(ndev, packets, size);
+		netdev_completed_queue(ndev, packets, lp->tx_compl_bytes);
 		u64_stats_update_begin(&lp->tx_stat_sync);
 		u64_stats_add(&lp->tx_packets, packets);
-		u64_stats_add(&lp->tx_bytes, size);
+		u64_stats_add(&lp->tx_bytes, lp->tx_compl_bytes);
 		u64_stats_update_end(&lp->tx_stat_sync);
+		lp->tx_compl_bytes = 0;
 
 		/* Matches barrier in axienet_start_xmit */
 		smp_mb();
@@ -1115,7 +1115,7 @@ axienet_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 				netdev_err(ndev, "TX DMA mapping error\n");
 			ndev->stats.tx_dropped++;
 			axienet_free_tx_chain(lp, orig_tail_ptr, ii + 1,
-					      true, NULL, 0);
+					      true, 0);
 			dev_kfree_skb_any(skb);
 			return NETDEV_TX_OK;
 		}
