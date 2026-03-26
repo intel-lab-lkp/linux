@@ -4422,25 +4422,17 @@ static int read_screenpad_brightness(struct backlight_device *bd)
 static int update_screenpad_bl_status(struct backlight_device *bd)
 {
 	u32 ctrl_param = bd->props.brightness;
-	int err = 0;
+	int err;
 
-	if (bd->props.power) {
-		err = asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_POWER, 1, NULL);
-		if (err < 0)
-			return err;
+	if (!bd->props.power)
+		return asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_POWER, 0, NULL);
 
-		err = asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_LIGHT, ctrl_param, NULL);
-		if (err < 0)
-			return err;
-	}
 
-	if (!bd->props.power) {
-		err = asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_POWER, 0, NULL);
-		if (err < 0)
-			return err;
-	}
+	err = asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_POWER, 1, NULL);
+	if (err < 0)
+		return err;
 
-	return err;
+	return asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_LIGHT, ctrl_param, NULL);
 }
 
 static const struct backlight_ops asus_screenpad_bl_ops = {
