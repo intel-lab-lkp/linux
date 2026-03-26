@@ -7945,14 +7945,21 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
  * Scan the asym_capacity domain for idle CPUs; pick the first idle one on which
  * the task fits. If no CPU is big enough, but there are idle ones, try to
  * maximize capacity.
+ *
+ * When @prefer_idle_cores is true (asym + SMT and idle cores exist), prefer
+ * CPUs on fully-idle cores over partially-idle ones in a single pass: track
+ * the best candidate among idle-core CPUs and the best among any idle CPU,
+ * then return the idle-core candidate if found, else the best any-idle.
  */
 static int
-select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
+select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target,
+		     bool prefer_idle_cores)
 {
-	unsigned long task_util, util_min, util_max, best_cap = 0;
-	int fits, best_fits = 0;
-	int cpu, best_cpu = -1;
+	unsigned long task_util, util_min, util_max, best_cap = 0, best_cap_core = 0;
+	int fits, best_fits = 0, best_fits_core = 0;
+	int cpu, best_cpu = -1, best_cpu_core = -1;
 	struct cpumask *cpus;
+	bool on_idle_core;
 
 	cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
 	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
@@ -7967,16 +7974,58 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 		if (!choose_idle_cpu(cpu, p))
 			continue;
 
+		on_idle_core = is_core_idle(cpu);
+		if (prefer_idle_cores && !on_idle_core) {
+			/* Track best among any idle CPU for fallback */
+			fits = util_fits_cpu(task_util, util_min, util_max, cpu);
+			if (fits > 0) {
+				/*
+				 * Full fit: strictly better than fits 0 / -1;
+				 * among several, prefer higher capacity.
+				 */
+				if (best_cpu < 0 || best_fits <= 0 ||
+				    (best_fits > 0 && cpu_cap > best_cap)) {
+					best_cap = cpu_cap;
+					best_cpu = cpu;
+					best_fits = fits;
+				}
+				continue;
+			}
+			if (best_fits > 0)
+				continue;
+			if (fits < 0)
+				cpu_cap = get_actual_cpu_capacity(cpu);
+			if ((fits < best_fits) ||
+			    ((fits == best_fits) && (cpu_cap > best_cap))) {
+				best_cap = cpu_cap;
+				best_cpu = cpu;
+				best_fits = fits;
+			}
+			continue;
+		}
+
 		fits = util_fits_cpu(task_util, util_min, util_max, cpu);
 
 		/* This CPU fits with all requirements */
-		if (fits > 0)
-			return cpu;
+		if (fits > 0) {
+			if (prefer_idle_cores && on_idle_core)
+				return cpu;
+			if (!prefer_idle_cores)
+				return cpu;
+			/*
+			 * Prefer idle cores: record and keep looking for
+			 * idle-core fit.
+			 */
+			best_cap = cpu_cap;
+			best_cpu = cpu;
+			best_fits = fits;
+			continue;
+		}
 		/*
 		 * Only the min performance hint (i.e. uclamp_min) doesn't fit.
 		 * Look for the CPU with best capacity.
 		 */
-		else if (fits < 0)
+		if (fits < 0)
 			cpu_cap = get_actual_cpu_capacity(cpu);
 
 		/*
@@ -7989,8 +8038,17 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 			best_cpu = cpu;
 			best_fits = fits;
 		}
+		if (prefer_idle_cores && on_idle_core &&
+		    ((fits < best_fits_core) ||
+		     ((fits == best_fits_core) && (cpu_cap > best_cap_core)))) {
+			best_cap_core = cpu_cap;
+			best_cpu_core = cpu;
+			best_fits_core = fits;
+		}
 	}
 
+	if (prefer_idle_cores && best_cpu_core >= 0)
+		return best_cpu_core;
 	return best_cpu;
 }
 
@@ -7999,12 +8057,17 @@ static inline bool asym_fits_cpu(unsigned long util,
 				 unsigned long util_max,
 				 int cpu)
 {
-	if (sched_asym_cpucap_active())
+	if (sched_asym_cpucap_active()) {
 		/*
 		 * Return true only if the cpu fully fits the task requirements
 		 * which include the utilization and the performance hints.
+		 *
+		 * When SMT is active, also require that the core has no busy
+		 * siblings.
 		 */
-		return (util_fits_cpu(util, util_min, util_max, cpu) > 0);
+		return (!sched_smt_active() || is_core_idle(cpu)) &&
+		       (util_fits_cpu(util, util_min, util_max, cpu) > 0);
+	}
 
 	return true;
 }
@@ -8102,8 +8165,9 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		 * capacity path.
 		 */
 		if (sd) {
-			i = select_idle_capacity(p, sd, target);
-			return ((unsigned)i < nr_cpumask_bits) ? i : target;
+			i = select_idle_capacity(p, sd, target,
+				sched_smt_active() && test_idle_cores(target));
+			return ((unsigned int)i < nr_cpumask_bits) ? i : target;
 		}
 	}
 
