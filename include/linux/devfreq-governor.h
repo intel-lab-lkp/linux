@@ -12,6 +12,7 @@
 #define __LINUX_DEVFREQ_DEVFREQ_H__
 
 #include <linux/devfreq.h>
+struct module;
 
 #define DEVFREQ_NAME_LEN			16
 
@@ -50,6 +51,7 @@
 /**
  * struct devfreq_governor - Devfreq policy governor
  * @node:		list node - contains registered devfreq governors
+ * @owner:		Module that this governor belongs to
  * @name:		Governor's name
  * @attrs:		Governor's sysfs attribute flags
  * @flags:		Governor's feature flags
@@ -67,6 +69,7 @@
 struct devfreq_governor {
 	struct list_head node;
 
+	struct module *owner;
 	const char name[DEVFREQ_NAME_LEN];
 	const u64 attrs;
 	const u64 flags;
@@ -81,11 +84,28 @@ void devfreq_monitor_suspend(struct devfreq *devfreq);
 void devfreq_monitor_resume(struct devfreq *devfreq);
 void devfreq_update_interval(struct devfreq *devfreq, unsigned int *delay);
 
-int devfreq_add_governor(struct devfreq_governor *governor);
+/**
+ * devfreq_add_governor() - Add devfreq governor
+ * @governor:	The devfreq governor to be added
+ */
+#define devfreq_add_governor(governor) \
+	__devfreq_add_governor((governor), THIS_MODULE)
+int __devfreq_add_governor(struct devfreq_governor *governor,
+			   struct module *mod);
 int devfreq_remove_governor(struct devfreq_governor *governor);
 
-int devm_devfreq_add_governor(struct device *dev,
-			      struct devfreq_governor *governor);
+/**
+ * devm_devfreq_add_governor() - Add devfreq governor
+ * @dev:	device which adds devfreq governor
+ * @governor:	the devfreq governor to be added
+ *
+ * This is a resource-managed variant of devfreq_add_governor().
+ */
+#define devm_devfreq_add_governor(dev, governor) \
+	__devm_devfreq_add_governor((dev), (governor), THIS_MODULE)
+int __devm_devfreq_add_governor(struct device *dev,
+				struct devfreq_governor *governor,
+				struct module *mod);
 
 int devfreq_update_status(struct devfreq *devfreq, unsigned long freq);
 int devfreq_update_target(struct devfreq *devfreq, unsigned long freq);

@@ -1292,11 +1292,8 @@ void devfreq_resume(void)
 	mutex_unlock(&devfreq_list_lock);
 }
 
-/**
- * devfreq_add_governor() - Add devfreq governor
- * @governor:	the devfreq governor to be added
- */
-int devfreq_add_governor(struct devfreq_governor *governor)
+int __devfreq_add_governor(struct devfreq_governor *governor,
+			   struct module *mod)
 {
 	struct devfreq_governor *g;
 
@@ -1312,38 +1309,33 @@ int devfreq_add_governor(struct devfreq_governor *governor)
 		return -EINVAL;
 	}
 
+	governor->owner = mod;
 	scoped_guard(mutex, &devfreq_gov_lock)
 		list_add(&governor->node, &devfreq_governor_list);
 
 	return 0;
 }
-EXPORT_SYMBOL(devfreq_add_governor);
+EXPORT_SYMBOL(__devfreq_add_governor);
 
 static void devm_devfreq_remove_governor(void *governor)
 {
 	WARN_ON(devfreq_remove_governor(governor));
 }
 
-/**
- * devm_devfreq_add_governor() - Add devfreq governor
- * @dev:	device which adds devfreq governor
- * @governor:	the devfreq governor to be added
- *
- * This is a resource-managed variant of devfreq_add_governor().
- */
-int devm_devfreq_add_governor(struct device *dev,
-			      struct devfreq_governor *governor)
+int __devm_devfreq_add_governor(struct device *dev,
+				struct devfreq_governor *governor,
+				struct module *mod)
 {
 	int err;
 
-	err = devfreq_add_governor(governor);
+	err = __devfreq_add_governor(governor, mod);
 	if (err)
 		return err;
 
 	return devm_add_action_or_reset(dev, devm_devfreq_remove_governor,
 					governor);
 }
-EXPORT_SYMBOL(devm_devfreq_add_governor);
+EXPORT_SYMBOL(__devm_devfreq_add_governor);
 
 /**
  * devfreq_remove_governor() - Remove devfreq feature from a device.
