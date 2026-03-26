@@ -1989,6 +1989,10 @@ int ksz8_setup(struct dsa_switch *ds)
 			ret = ksz_rmw8(dev, REG_INT_ENABLE, INT_PME, 0);
 	}
 
+	/* Check if errata on low loss cable should be applied */
+	if (ksz_is_ksz87xx(dev))
+		ksz87xx_parse_errata_dt(dev);
+
 	if (!ret)
 		return ksz8_handle_global_errata(ds);
 	else
@@ -2094,6 +2098,27 @@ int ksz8463_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
 	}
 
 	return 0;
+}
+
+void ksz87xx_parse_errata_dt(struct ksz_device *dev)
+{
+	struct device_node *np = dev->dev->of_node;
+	u32 mode;
+	int ret;
+
+	dev->low_loss_wa_enable = of_property_read_bool(np, "microchip,low-loss-errata-enable");
+
+	if (!dev->low_loss_wa_enable) {
+		dev->low_loss_wa_mode = KSZ_LOW_LOSS_WA_NONE;
+		return;
+	}
+
+	ret = of_property_read_u32(np, "microchip,low-loss-errata", &mode);
+
+	if (!ret && (mode == 1 || mode == 2))
+		dev->low_loss_wa_mode = mode;
+	else
+		dev->low_loss_wa_mode = KSZ_LOW_LOSS_WA_1;
 }
 
 int ksz8_switch_init(struct ksz_device *dev)

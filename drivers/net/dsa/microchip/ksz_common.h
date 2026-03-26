@@ -158,6 +158,12 @@ struct ksz_port {
 	bool manual_flow;
 };
 
+enum ksz_low_loss_wa_mode {
+	KSZ_LOW_LOSS_WA_NONE = 0,
+	KSZ_LOW_LOSS_WA_1    = 1,
+	KSZ_LOW_LOSS_WA_2    = 2,
+};
+
 struct ksz_device {
 	struct dsa_switch *ds;
 	struct ksz_platform_data *pdata;
@@ -219,6 +225,9 @@ struct ksz_device {
 	 * the switch’s internal PHYs, bypassing the main SPI interface.
 	 */
 	struct mii_bus *parent_mdio_bus;
+
+	bool low_loss_wa_enable;     /* low-loss cable errata activation */
+	enum ksz_low_loss_wa_mode low_loss_wa_mode;     /* low-loss cable Workaround to apply */
 };
 
 /* List of supported models */
