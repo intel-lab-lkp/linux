@@ -85,6 +85,24 @@ properties:
     enum: [2000, 4000, 8000, 12000, 16000, 20000, 24000, 28000]
     default: 8000
 
+  microchip,low-loss-errata-enable:
+    description:
+      The receiver of the embedded PHYs is tuned by default to support long cable length applications. This was developed
+      using low quality, high loss cables. Because of this, the equalizer in the PHY may amplify high amplitude receiver signals
+      to the point that the signal is distorted internally, preventing a link from being established.
+      A more balanced receiver setting has been found that still functions at the long cable lengths and also supports
+      low loss applications.
+      If present, enables the selected errata workaround. If absent, the
+      workaround is disabled regardless of microchip,cat56-errata value.
+    type: boolean
+
+  microchip,low-loss-errata:
+    description:
+      Selects Microchip KSZ87xx CAT5e/CAT6 short-cable errata workaround.
+      1 = Workaround 1, 2 = Workaround 2. If omitted, workaround 1 is applied.
+    enum: [1, 2]
+    default: 1
+
   interrupts:
     maxItems: 1
 
