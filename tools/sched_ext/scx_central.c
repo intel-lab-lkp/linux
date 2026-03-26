@@ -98,7 +98,6 @@ restart:
 
 	/*
 	 * Affinitize the loading thread to the central CPU, as:
-	 * - That's where the BPF timer is first invoked in the BPF program.
 	 * - We probably don't want this user space component to take up a core
 	 *   from a task that would benefit from avoiding preemption on one of
 	 *   the tickless cores.
