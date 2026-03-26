@@ -25,6 +25,9 @@ menuconfig HWMON
 
 if HWMON
 
+config HWMON_FP
+	tristate
+
 config HWMON_VID
 	tristate
 

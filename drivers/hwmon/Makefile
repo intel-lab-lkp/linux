@@ -4,6 +4,7 @@
 #
 
 obj-$(CONFIG_HWMON)		+= hwmon.o
+obj-$(CONFIG_HWMON_FP)		+= hwmon-fp.o
 obj-$(CONFIG_HWMON_VID)		+= hwmon-vid.o
 
 # ACPI drivers
