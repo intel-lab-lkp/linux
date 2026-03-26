@@ -74,6 +74,8 @@ static inline void set_codetag_empty(union codetag_ref *ref)
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING
 
+void alloc_tag_add_early_pfn(unsigned long pfn);
+
 #define ALLOC_TAG_SECTION_NAME	"alloc_tags"
 
 struct codetag_bytes {
