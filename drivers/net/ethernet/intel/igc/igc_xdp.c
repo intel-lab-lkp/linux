@@ -61,22 +61,11 @@ static int igc_xdp_enable_pool(struct igc_adapter *adapter,
 	struct igc_ring *rx_ring, *tx_ring;
 	struct napi_struct *napi;
 	bool needs_reset;
-	u32 frame_size;
 	int err;
 
 	if (queue_id >= adapter->num_rx_queues ||
 	    queue_id >= adapter->num_tx_queues)
 		return -EINVAL;
-
-	frame_size = xsk_pool_get_rx_frame_size(pool);
-	if (frame_size < ETH_FRAME_LEN + VLAN_HLEN * 2) {
-		/* When XDP is enabled, the driver doesn't support frames that
-		 * span over multiple buffers. To avoid that, we check if xsk
-		 * frame size is big enough to fit the max ethernet frame size
-		 * + vlan double tagging.
-		 */
-		return -EOPNOTSUPP;
-	}
 
 	err = xsk_pool_dma_map(pool, dev, IGC_RX_DMA_ATTR);
 	if (err) {
