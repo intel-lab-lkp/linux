@@ -40,6 +40,12 @@ li { text-indent: 0em; }
 dl.function, dl.struct, dl.enum { margin-top: 2em; background-color: #ecf0f3; }
 /* indent lines 2+ of multi-line function prototypes */
 dl.function dt { margin-left: 10em; text-indent: -10em; }
+/*
+ * Wrap long C API signatures the way an overly long source line would
+ * wrap, keeping the entire signature visible without horizontal scroll.
+ */
+dl.c > dt { overflow-wrap: anywhere; }
+dl.c > dt span.pre { white-space: pre-wrap; }
 dt.sig-object { font-size: larger; }
 div.kernelindent { margin-left: 2em; margin-right: 4em; }
 
