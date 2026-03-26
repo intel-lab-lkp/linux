@@ -8,11 +8,11 @@
 #ifndef DRM_SELF_REFRESH_HELPER_H_
 #define DRM_SELF_REFRESH_HELPER_H_
 
-struct drm_atomic_state;
+struct drm_atomic_update;
 struct drm_crtc;
 
-void drm_self_refresh_helper_alter_state(struct drm_atomic_state *state);
-void drm_self_refresh_helper_update_avg_times(struct drm_atomic_state *state,
+void drm_self_refresh_helper_alter_state(struct drm_atomic_update *state);
+void drm_self_refresh_helper_update_avg_times(struct drm_atomic_update *state,
 					unsigned int commit_time_ms,
 					unsigned int new_self_refresh_mask);
 

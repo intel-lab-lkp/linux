@@ -633,7 +633,7 @@ struct dpll {
 };
 
 struct intel_atomic_state {
-	struct drm_atomic_state base;
+	struct drm_atomic_update base;
 
 	struct ref_tracker *wakeref;
 

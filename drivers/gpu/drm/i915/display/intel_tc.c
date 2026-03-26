@@ -1799,11 +1799,11 @@ static int reset_link(struct intel_tc_port *tc)
 {
 	struct intel_display *display = to_intel_display(tc->dig_port);
 	struct drm_modeset_acquire_ctx ctx;
-	struct drm_atomic_state *_state;
+	struct drm_atomic_update *_state;
 	struct intel_atomic_state *state;
 	int ret;
 
-	_state = drm_atomic_state_alloc(display->drm);
+	_state = drm_atomic_update_alloc(display->drm);
 	if (!_state)
 		return -ENOMEM;
 
@@ -1813,7 +1813,7 @@ static int reset_link(struct intel_tc_port *tc)
 	intel_modeset_lock_ctx_retry(&ctx, state, 0, ret)
 		ret = reset_link_commit(tc, state, &ctx);
 
-	drm_atomic_state_put(&state->base);
+	drm_atomic_update_put(&state->base);
 
 	return ret;
 }
