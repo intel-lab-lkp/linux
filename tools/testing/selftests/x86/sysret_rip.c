@@ -64,9 +64,15 @@ static void sigusr1(int sig, siginfo_t *info, void *ctx_void)
 	ctx->uc_mcontext.gregs[REG_RIP] = rip;
 	ctx->uc_mcontext.gregs[REG_RCX] = rip;
 
-	/* R11 and EFLAGS should already match. */
-	assert(ctx->uc_mcontext.gregs[REG_EFL] ==
-	       ctx->uc_mcontext.gregs[REG_R11]);
+	/*
+	 * SYSCALL works differently on FRED, it does not save RIP and RFLAGS
+	 * to RCX and R11.
+	 */
+	if (!is_fred_enabled()) {
+		/* R11 and EFLAGS should already match. */
+		assert(ctx->uc_mcontext.gregs[REG_EFL] ==
+		       ctx->uc_mcontext.gregs[REG_R11]);
+	}
 
 	sethandler(SIGSEGV, sigsegv_for_sigreturn_test, SA_RESETHAND);
 }

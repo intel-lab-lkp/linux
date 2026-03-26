@@ -4,6 +4,7 @@
 
 #include <signal.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <asm/processor-flags.h>
 
@@ -48,6 +49,39 @@ static inline void clearhandler(int sig)
 	sigemptyset(&sa.sa_mask);
 	if (sigaction(sig, &sa, 0))
 		ksft_exit_fail_msg("sigaction failed");
+}
+
+static inline void fred_handler(int sig, siginfo_t *info, void *ctx_void)
+{
+}
+
+static inline bool is_fred_enabled(void)
+{
+	unsigned short gs_val;
+
+	sethandler(SIGTRAP, fred_handler, 0);
+
+	/*
+	 * Distinguish IDT and FRED mode by loading GS with a non-zero RPL and
+	 * triggering an exception:
+	 * IDT (IRET) clears RPL bits of NULL selectors.
+	 * FRED (ERETU) preserves them.
+	 *
+	 * If GS is loaded with 3 (Index=0, RPL=3), trigger an exception:
+	 * IDT should restore GS as 0.
+	 * FRED should preserve GS as 3.
+	 */
+	asm volatile (
+		"mov %[rpl3], %%gs\n\t"
+		"int3\n\t"
+		"mov %%gs, %[res]"
+		: [res] "=r" (gs_val)
+		: [rpl3] "r" (3)
+	);
+
+	clearhandler(SIGTRAP);
+
+	return gs_val == 3;
 }
 
 #endif /* __SELFTESTS_X86_HELPERS_H */
