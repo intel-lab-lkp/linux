@@ -14,6 +14,7 @@
 #define __ASM_GENERIC_QRWLOCK_H
 
 #include <linux/atomic.h>
+#include <linux/tracepoint-defs.h>
 #include <asm/barrier.h>
 #include <asm/processor.h>
 
@@ -35,6 +36,10 @@
  */
 extern void queued_read_lock_slowpath(struct qrwlock *lock);
 extern void queued_write_lock_slowpath(struct qrwlock *lock);
+extern void queued_read_unlock_traced(struct qrwlock *lock);
+extern void queued_write_unlock_traced(struct qrwlock *lock);
+
+DECLARE_TRACEPOINT(contended_release);
 
 /**
  * queued_read_trylock - try to acquire read lock of a queued rwlock
@@ -102,10 +107,16 @@ static inline void queued_write_lock(struct qrwlock *lock)
 }
 
 /**
- * queued_read_unlock - release read lock of a queued rwlock
+ * queued_rwlock_is_contended - check if the lock is contended
  * @lock : Pointer to queued rwlock structure
+ * Return: 1 if lock contended, 0 otherwise
  */
-static inline void queued_read_unlock(struct qrwlock *lock)
+static inline int queued_rwlock_is_contended(struct qrwlock *lock)
+{
+	return arch_spin_is_locked(&lock->wait_lock);
+}
+
+static __always_inline void __queued_read_unlock(struct qrwlock *lock)
 {
 	/*
 	 * Atomically decrement the reader count
@@ -114,22 +125,43 @@ static inline void queued_read_unlock(struct qrwlock *lock)
 }
 
 /**
- * queued_write_unlock - release write lock of a queued rwlock
+ * queued_read_unlock - release read lock of a queued rwlock
  * @lock : Pointer to queued rwlock structure
  */
-static inline void queued_write_unlock(struct qrwlock *lock)
+static inline void queued_read_unlock(struct qrwlock *lock)
+{
+	/*
+	 * Trace and unlock are combined in the traced unlock variant so
+	 * the compiler does not need to preserve the lock pointer across
+	 * the function call, avoiding callee-saved register save/restore
+	 * on the hot path.
+	 */
+	if (tracepoint_enabled(contended_release)) {
+		queued_read_unlock_traced(lock);
+		return;
+	}
+
+	__queued_read_unlock(lock);
+}
+
+static __always_inline void __queued_write_unlock(struct qrwlock *lock)
 {
 	smp_store_release(&lock->wlocked, 0);
 }
 
 /**
- * queued_rwlock_is_contended - check if the lock is contended
+ * queued_write_unlock - release write lock of a queued rwlock
  * @lock : Pointer to queued rwlock structure
- * Return: 1 if lock contended, 0 otherwise
  */
-static inline int queued_rwlock_is_contended(struct qrwlock *lock)
+static inline void queued_write_unlock(struct qrwlock *lock)
 {
-	return arch_spin_is_locked(&lock->wait_lock);
+	/* See comment in queued_read_unlock(). */
+	if (tracepoint_enabled(contended_release)) {
+		queued_write_unlock_traced(lock);
+		return;
+	}
+
+	__queued_write_unlock(lock);
 }
 
 /*
