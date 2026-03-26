@@ -42,14 +42,17 @@ void __init efi_memattr_init(void)
 
 
 	/*
-	 * Sanity check: the Memory Attributes Table contains up to 3 entries
-	 * for each entry of type EfiRuntimeServicesCode in the EFI memory map.
-	 * So if the size of the table exceeds 3x the size of the entire EFI
-	 * memory map, there is clearly something wrong, and the table should
-	 * just be ignored altogether.
+	 * Sanity check: the Memory Attributes Table contains multiple entries
+	 * for each EFI runtime services code or data region in the EFI memory
+	 * map, each with the permission attributes that may be applied when
+	 * mapping the region.  There is no upper bound for the number of
+	 * entries, as it could conceivably contain more entries than the EFI
+	 * memory map itself. So pick an arbitrary limit of 2M for the size,
+	 * which translates to ~50k entries of 40 bytes in size. This prevents
+	 * a corrupted table from eating all system RAM.
 	 */
 	size = tbl->num_entries * tbl->desc_size;
-	if (size > 3 * efi.memmap.nr_map * efi.memmap.desc_size) {
+	if (tbl->desc_size != efi.memmap.desc_size || size > SZ_2M) {
 		pr_warn(FW_BUG "Corrupted EFI Memory Attributes Table detected! (version == %u, desc_size == %u, num_entries == %u)\n",
 			tbl->version, tbl->desc_size, tbl->num_entries);
 		goto unmap;
