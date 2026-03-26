@@ -812,6 +812,7 @@ static void rtw89_usb_rx_agg_cfg(struct rtw89_dev *rtwdev)
 		rtw89_usb_rx_agg_cfg_v1(rtwdev);
 		break;
 	case RTL8852C:
+	case RTL8922A:
 		rtw89_usb_rx_agg_cfg_v2(rtwdev);
 		break;
 	default:
