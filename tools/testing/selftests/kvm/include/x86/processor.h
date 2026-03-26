@@ -19,6 +19,8 @@
 #include "kvm_util.h"
 #include "ucall_common.h"
 
+#define __stack_aligned__	__aligned(16)
+
 extern bool host_cpu_is_intel;
 extern bool host_cpu_is_amd;
 extern bool host_cpu_is_hygon;
