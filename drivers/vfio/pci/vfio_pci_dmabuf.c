@@ -14,12 +14,12 @@ struct vfio_pci_dma_buf {
 	struct vfio_pci_core_device *vdev;
 	struct list_head dmabufs_elm;
 	size_t size;
-	struct phys_vec *phys_vec;
 	struct p2pdma_provider *provider;
 	u32 nr_ranges;
 	struct kref kref;
 	struct completion comp;
 	u8 revoked : 1;
+	struct phys_vec phys_vec[] __counted_by(nr_ranges);
 };
 
 static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
@@ -95,7 +95,6 @@ static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 		up_write(&priv->vdev->memory_lock);
 		vfio_device_put_registration(&priv->vdev->vdev);
 	}
-	kfree(priv->phys_vec);
 	kfree(priv);
 }
 
@@ -258,33 +257,28 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	if (ret)
 		goto err_free_ranges;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc_flex(*priv, phys_vec, get_dma_buf.nr_ranges);
 	if (!priv) {
 		ret = -ENOMEM;
 		goto err_free_ranges;
 	}
-	priv->phys_vec = kzalloc_objs(*priv->phys_vec, get_dma_buf.nr_ranges);
-	if (!priv->phys_vec) {
-		ret = -ENOMEM;
-		goto err_free_priv;
-	}
 
-	priv->vdev = vdev;
 	priv->nr_ranges = get_dma_buf.nr_ranges;
+	priv->vdev = vdev;
 	priv->size = length;
 	ret = vdev->pci_ops->get_dmabuf_phys(vdev, &priv->provider,
 					     get_dma_buf.region_index,
 					     priv->phys_vec, dma_ranges,
 					     priv->nr_ranges);
 	if (ret)
-		goto err_free_phys;
+		goto err_free_priv;
 
 	kfree(dma_ranges);
 	dma_ranges = NULL;
 
 	if (!vfio_device_try_get_registration(&vdev->vdev)) {
 		ret = -ENODEV;
-		goto err_free_phys;
+		goto err_free_priv;
 	}
 
 	exp_info.ops = &vfio_pci_dmabuf_ops;
@@ -323,8 +317,6 @@ err_dma_buf:
 	dma_buf_put(priv->dmabuf);
 err_dev_put:
 	vfio_device_put_registration(&vdev->vdev);
-err_free_phys:
-	kfree(priv->phys_vec);
 err_free_priv:
 	kfree(priv);
 err_free_ranges:
