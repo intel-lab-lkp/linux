@@ -292,8 +292,9 @@ int rcar_du_vsp_map_fb(struct rcar_du_vsp *vsp, struct drm_framebuffer *fb,
 				dst = sg_next(dst);
 			}
 		} else {
-			ret = dma_get_sgtable(rcdu->dev, sgt, gem->vaddr,
-					      gem->dma_addr, gem->base.size);
+			ret = dma_get_sgtable_attrs(rcdu->dev, sgt, gem->vaddr,
+						    gem->dma_addr, gem->base.size
+						    gem->dma_attrs);
 			if (ret)
 				goto fail;
 		}
