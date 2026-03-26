@@ -37,6 +37,7 @@ properties:
       - enum:
           - amlogic,meson8-pwm-v2
           - amlogic,meson-s4-pwm
+          - amlogic,s7-pwm
       - items:
           - enum:
               - amlogic,a4-pwm
@@ -45,6 +46,11 @@ properties:
               - amlogic,t7-pwm
               - amlogic,meson-a1-pwm
           - const: amlogic,meson-s4-pwm
+      - items:
+          - enum:
+              - amlogic,s6-pwm
+              - amlogic,s7d-pwm
+          - const: amlogic,s7-pwm
       - items:
           - enum:
               - amlogic,meson8b-pwm-v2
@@ -146,6 +152,20 @@ allOf:
         clock-names: false
       required:
         - clocks
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - amlogic,s7-pwm
+    then:
+      properties:
+        clocks:
+          items:
+            - description: input clock of PWM
+        clock-names: false
+      required:
+        - clocks
 
   - if:
       properties:
@@ -180,5 +200,12 @@ examples:
       compatible = "amlogic,meson-s4-pwm";
       reg = <0x1000 0x10>;
       clocks = <&pwm_src_a>, <&pwm_src_b>;
+      #pwm-cells = <3>;
+    };
+  - |
+    pwm@1000 {
+      compatible = "amlogic,s7-pwm";
+      reg = <0x1000 0x10>;
+      clocks = <&pwm_src>;
       #pwm-cells = <3>;
     };
