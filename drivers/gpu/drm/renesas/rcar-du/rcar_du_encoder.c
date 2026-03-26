@@ -72,7 +72,7 @@ int rcar_du_encoder_init(struct rcar_du_device *rcdu,
 		if (IS_ERR(bridge))
 			return PTR_ERR(bridge);
 	} else {
-		bridge = of_drm_find_bridge(enc_node);
+		bridge = of_drm_find_and_get_bridge(enc_node);
 		if (!bridge)
 			return -EPROBE_DEFER;
 
