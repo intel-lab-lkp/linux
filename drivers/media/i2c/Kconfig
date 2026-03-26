@@ -1345,6 +1345,7 @@ config VIDEO_TC358743_CEC
 config VIDEO_TC358746
 	tristate "Toshiba TC358746 parallel-CSI2 bridge"
 	depends on VIDEO_DEV && PM && I2C
+	depends on COMMON_CLK
 	select VIDEO_V4L2_SUBDEV_API
 	select MEDIA_CONTROLLER
 	select V4L2_FWNODE
