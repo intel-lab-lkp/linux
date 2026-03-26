@@ -3619,6 +3619,15 @@ void __init amd_iommu_detect(void)
 	amd_iommu_detected = true;
 	iommu_detected = 1;
 	x86_init.iommu.iommu_init = amd_iommu_init;
+
+	if (!iommu_dma_is_user_configured()) {
+		if (!cc_platform_has(CC_ATTR_MEM_ENCRYPT) &&
+				IS_ENABLED(CONFIG_IOMMU_DEFAULT_DMA_LAZY)) {
+			pr_info("Defaulting to Passthrough mode for performance\n");
+			iommu_set_default_passthrough(false);
+		}
+	}
+
 	return;
 
 disable_snp:

@@ -4091,3 +4091,9 @@ int iommu_dma_prepare_msi(struct msi_desc *desc, phys_addr_t msi_addr)
 	return ret;
 }
 #endif /* CONFIG_IRQ_MSI_IOMMU */
+
+bool iommu_dma_is_user_configured(void)
+{
+	return !!(iommu_cmd_line & IOMMU_CMD_LINE_DMA_API);
+}
+EXPORT_SYMBOL_GPL(iommu_dma_is_user_configured);
