@@ -1968,6 +1968,9 @@ static int sysctl_stat_interval __read_mostly = HZ;
 static int vmstat_late_init_done;
 
 #ifdef CONFIG_PROC_FS
+static int sysctl_stat_interval_handler(const struct ctl_table *table, int write,
+					void *buffer, size_t *length, loff_t *ppos);
+
 static void refresh_vm_stats(struct work_struct *work)
 {
 	refresh_cpu_vm_stats(true);
@@ -2151,6 +2154,38 @@ static void vmstat_shepherd(struct work_struct *w)
 		round_jiffies_relative(sysctl_stat_interval));
 }
 
+#ifdef CONFIG_PROC_FS
+static int sysctl_stat_interval_handler(const struct ctl_table *table, int write,
+					void *buffer, size_t *length, loff_t *ppos)
+{
+	int cpu;
+	int ret = proc_dointvec_jiffies(table, write, buffer, length, ppos);
+
+	if (ret || !write)
+		return ret;
+
+	cpus_read_lock();
+	for_each_online_cpu(cpu) {
+		struct delayed_work *dw = &per_cpu(vmstat_work, cpu);
+
+		scoped_guard(rcu) {
+			if (cpu_is_isolated(cpu))
+				continue;
+
+			if (delayed_work_pending(dw))
+				mod_delayed_work(system_wq, dw, round_jiffies_relative(sysctl_stat_interval));
+		}
+
+		cond_resched();
+	}
+	cpus_read_unlock();
+
+	mod_delayed_work(system_wq, &shepherd, round_jiffies_relative(sysctl_stat_interval));
+
+	return ret;
+}
+#endif
+
 static void __init start_shepherd_timer(void)
 {
 	int cpu;
@@ -2237,7 +2272,7 @@ static const struct ctl_table vmstat_table[] = {
 		.data		= &sysctl_stat_interval,
 		.maxlen		= sizeof(sysctl_stat_interval),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_jiffies,
+		.proc_handler	= sysctl_stat_interval_handler,
 	},
 	{
 		.procname	= "stat_refresh",
