@@ -260,6 +260,34 @@ static void amd_mediated_pmu_put(struct kvm_vcpu *vcpu)
 		wrmsrq(MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR, pmu->global_status);
 }
 
+static void amd_mediated_pmu_handle_host_guest_bits(struct kvm_pmc *pmc)
+{
+	struct kvm_vcpu *vcpu = pmc->vcpu;
+	u64 host_guest_bits;
+
+	if (!(pmc->eventsel & ARCH_PERFMON_EVENTSEL_ENABLE))
+		return;
+
+	/* Count all events if both bits are cleared or both bits are set */
+	host_guest_bits = pmc->eventsel & AMD64_EVENTSEL_HOST_GUEST_MASK;
+	if (hweight64(host_guest_bits) != 1)
+		return;
+
+	/* Host-Only and Guest-Only are ignored if EFER.SVME == 0 */
+	if (!(vcpu->arch.efer & EFER_SVME))
+		return;
+
+	if (!!(host_guest_bits & AMD64_EVENTSEL_GUESTONLY) == is_guest_mode(vcpu))
+		return;
+
+	pmc->eventsel_hw &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
+}
+
+static void amd_mediated_pmu_reprogram_counter(struct kvm_pmc *pmc)
+{
+	amd_mediated_pmu_handle_host_guest_bits(pmc);
+}
+
 struct kvm_pmu_ops amd_pmu_ops __initdata = {
 	.rdpmc_ecx_to_pmc = amd_rdpmc_ecx_to_pmc,
 	.msr_idx_to_pmc = amd_msr_idx_to_pmc,
@@ -273,6 +301,7 @@ struct kvm_pmu_ops amd_pmu_ops __initdata = {
 	.is_mediated_pmu_supported = amd_pmu_is_mediated_pmu_supported,
 	.mediated_load = amd_mediated_pmu_load,
 	.mediated_put = amd_mediated_pmu_put,
+	.mediated_reprogram_counter = amd_mediated_pmu_reprogram_counter,
 
 	.EVENTSEL_EVENT = AMD64_EVENTSEL_EVENT,
 	.MAX_NR_GP_COUNTERS = KVM_MAX_NR_AMD_GP_COUNTERS,

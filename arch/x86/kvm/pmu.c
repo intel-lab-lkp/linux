@@ -559,6 +559,7 @@ static int reprogram_counter(struct kvm_pmc *pmc)
 
 	if (kvm_vcpu_has_mediated_pmu(pmu_to_vcpu(pmu))) {
 		kvm_mediated_pmu_refresh_event_filter(pmc);
+		kvm_pmu_call(mediated_reprogram_counter)(pmc);
 		return 0;
 	}
 
