@@ -1306,7 +1306,15 @@ static int _nfs42_proc_clone(struct rpc_message *msg, struct file *src_f,
 		if (count == 0 && res.dst_fattr->valid & NFS_ATTR_FATTR_SIZE)
 			count = nfs_size_to_loff_t(res.dst_fattr->size) - dst_offset;
 		nfs42_copy_dest_done(dst_f, dst_offset, count, oldsize_dst);
-		status = nfs_post_op_update_inode(dst_inode, res.dst_fattr);
+		nfs_update_delegated_mtime(dst_inode);
+		if (!nfs_have_delegated_attributes(dst_inode))
+			status = nfs_post_op_update_inode(dst_inode,
+							  res.dst_fattr);
+		else {
+			spin_lock(&dst_inode->i_lock);
+			nfs_set_cache_invalid(dst_inode, NFS_INO_INVALID_BLOCKS);
+			spin_unlock(&dst_inode->i_lock);
+		}
 	}
 
 	kfree(res.dst_fattr);
