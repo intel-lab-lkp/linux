@@ -14,7 +14,11 @@ pahole-flags-$(call test-ge, $(pahole-ver), 125)	+= --skip_encoding_btf_inconsis
 else
 
 # Switch to using --btf_features for v1.26 and later.
-pahole-flags-$(call test-ge, $(pahole-ver), 126)  = -j$(JOBS) --btf_features=encode_force,var,float,enum64,decl_tag,type_tag,optimized_func,consistent_func,decl_tag_kfuncs
+pahole-flags-$(call test-ge, $(pahole-ver), 126)  = -j$(JOBS) --btf_features=encode_force,var,float,enum64,decl_tag,type_tag,optimized_func,consistent_func
+
+# decl_tag_kfuncs was implemented in pahole v1.27 (commit 72e88f29c).
+# It was incorrectly gated on >= 126 by ebb79e96f1ea.
+pahole-flags-$(call test-ge, $(pahole-ver), 127) += --btf_features=decl_tag_kfuncs
 
 pahole-flags-$(call test-ge, $(pahole-ver), 130) += --btf_features=attributes
 
