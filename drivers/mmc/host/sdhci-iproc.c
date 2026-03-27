@@ -181,12 +181,26 @@ static unsigned int sdhci_iproc_bcm2711_get_min_clock(struct sdhci_host *host)
 	return 200000;
 }
 
+static void sdhci_iproc_hw_reset(struct sdhci_host *host)
+{
+	u8 val = sdhci_readb(host, SDHCI_POWER_CONTROL);
+
+	/* Trigger reset and hold for at least 1us (eMMC spec requirement) */
+	sdhci_writeb(host, val | BIT(4), SDHCI_POWER_CONTROL);
+	usleep_range(2, 10);
+
+	/* Release from reset and wait for at least 200us (eMMC spec requirement) */
+	sdhci_writeb(host, val & ~BIT(4), SDHCI_POWER_CONTROL);
+	usleep_range(250, 300);
+}
+
 static const struct sdhci_ops sdhci_iproc_ops = {
 	.set_clock = sdhci_set_clock,
 	.get_max_clock = sdhci_iproc_get_max_clock,
 	.set_bus_width = sdhci_set_bus_width,
 	.reset = sdhci_reset,
 	.set_uhs_signaling = sdhci_set_uhs_signaling,
+	.hw_reset = sdhci_iproc_hw_reset,
 };
 
 static const struct sdhci_ops sdhci_iproc_32only_ops = {
@@ -201,6 +215,7 @@ static const struct sdhci_ops sdhci_iproc_32only_ops = {
 	.set_bus_width = sdhci_set_bus_width,
 	.reset = sdhci_reset,
 	.set_uhs_signaling = sdhci_set_uhs_signaling,
+	.hw_reset = sdhci_iproc_hw_reset,
 };
 
 static const struct sdhci_pltfm_data sdhci_iproc_cygnus_pltfm_data = {
@@ -283,6 +298,7 @@ static const struct sdhci_ops sdhci_iproc_bcm2711_ops = {
 	.set_bus_width = sdhci_set_bus_width,
 	.reset = sdhci_reset,
 	.set_uhs_signaling = sdhci_set_uhs_signaling,
+	.hw_reset = sdhci_iproc_hw_reset,
 };
 
 static const struct sdhci_pltfm_data sdhci_bcm2711_pltfm_data = {
