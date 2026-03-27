@@ -87,3 +87,34 @@
 		required-opps = <&rpmpd_opp_turbo>;
 	};
 };
+
+&lpass {
+	power-domains = <&rpmpd SDM632_VDDCX>;
+	power-domain-names = "cx";
+};
+
+&mpss {
+	compatible = "qcom,sdm632-mss-pil";
+	power-domains = <&rpmpd SDM632_VDDCX>,
+			<&rpmpd SDM632_VDDMX>,
+			<&rpmpd SDM632_VDDMD>;
+	power-domain-names = "cx", "mx", "mss";
+};
+
+&rpmpd {
+	compatible = "qcom,sdm632-rpmpd";
+};
+
+&sdhc_1 {
+	power-domains = <&rpmpd SDM632_VDDCX>;
+};
+
+&sdhc_2 {
+	power-domains = <&rpmpd SDM632_VDDCX>;
+};
+
+&wcnss {
+	power-domains = <&rpmpd SDM632_VDDCX>,
+			<&rpmpd SDM632_VDDMX>;
+	power-domain-names = "cx", "mx";
+};
