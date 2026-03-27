@@ -857,27 +857,26 @@ static void get_model_name(struct cpuinfo_x86 *c)
 
 void cpu_detect_cache_sizes(struct cpuinfo_x86 *c)
 {
-	unsigned int n, dummy, ebx, ecx, edx, l2size;
+	const struct leaf_0x80000005_0 *el5 = cpuid_leaf(c, 0x80000005);
+	const struct leaf_0x80000006_0 *el6 = cpuid_leaf(c, 0x80000006);
+	unsigned int l2size;
 
-	n = c->extended_cpuid_level;
-
-	if (n >= 0x80000005) {
-		cpuid(0x80000005, &dummy, &ebx, &ecx, &edx);
-		c->x86_cache_size = (ecx>>24) + (edx>>24);
+	if (el5) {
+		c->x86_cache_size = el5->l1_dcache_size_kb + el5->l1_icache_size_kb;
 #ifdef CONFIG_X86_64
 		/* On K8 L1 TLB is inclusive, so don't count it */
 		c->x86_tlbsize = 0;
 #endif
 	}
 
-	if (n < 0x80000006)	/* Some chips just has a large L1. */
+	/* Some chips only have a large L1 */
+	if (!el6)
 		return;
 
-	cpuid(0x80000006, &dummy, &ebx, &ecx, &edx);
-	l2size = ecx >> 16;
+	l2size = el6->l2_size_kb;
 
 #ifdef CONFIG_X86_64
-	c->x86_tlbsize += ((ebx >> 16) & 0xfff) + (ebx & 0xfff);
+	c->x86_tlbsize += el6->l2_dtlb_4k_nentries + el6->l2_itlb_4k_nentries;
 #else
 	/* do processor-specific cache resizing */
 	if (this_cpu->legacy_cache_size)
@@ -887,8 +886,9 @@ void cpu_detect_cache_sizes(struct cpuinfo_x86 *c)
 	if (cachesize_override != -1)
 		l2size = cachesize_override;
 
+	/* Again, no L2 cache is possible */
 	if (l2size == 0)
-		return;		/* Again, no L2 cache is possible */
+		return;
 #endif
 
 	c->x86_cache_size = l2size;
