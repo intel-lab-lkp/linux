@@ -2578,8 +2578,27 @@ bool pci_bus_generic_read_dev_vendor_id(struct pci_bus *bus, int devfn, u32 *l,
 	    *l == 0x0000ffff || *l == 0xffff0000)
 		return false;
 
-	if (pci_bus_rrs_vendor_id(*l))
+	if (pci_bus_rrs_vendor_id(*l)) {
+		/*
+		 * RRS (Request Retry Status) is a PCIe link-layer mechanism
+		 * where a downstream device sends a RRS completion status, and the
+		 * Root Port (with RRS Software Visibility enabled) translates
+		 * it to Vendor ID 0x0001 for the driver, indicating the
+		 * device is not ready.
+		 *
+		 * Therefore, RRS is a root port feature, and devices on the root bus,
+		 * for example the root port itself have no upstream PCIe link,
+		 * so they can never legitimately return RRS.
+		 */
+		if (pci_is_root_bus(bus)) {
+			pr_err("pci %04x:%02x:%02x.%d: invalid Vendor ID %04x (RRS, reserved by PCI SIG) on root bus, buggy device\n",
+				pci_domain_nr(bus), bus->number,
+				PCI_SLOT(devfn), PCI_FUNC(devfn),
+				*l & 0xffff);
+			return false;
+		}
 		return pci_bus_wait_rrs(bus, devfn, l, timeout);
+	}
 
 	return true;
 }
