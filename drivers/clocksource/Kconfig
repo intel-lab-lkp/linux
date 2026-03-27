@@ -2,6 +2,11 @@
 menu "Clock Source drivers"
 	depends on GENERIC_CLOCKEVENTS
 
+config EARLY_TIMER
+        bool "Early driver initialization"
+	help
+	  Enables early timer driver loading
+
 config TIMER_OF
 	bool
 	select TIMER_PROBE
@@ -100,7 +105,7 @@ config IXP4XX_TIMER
 	  Enables support for the Intel XScale IXP4xx SoC timer.
 
 config ROCKCHIP_TIMER
-	bool "Rockchip timer driver" if COMPILE_TEST
+        bool "Rockchip timer driver" if COMPILE_TEST
 	depends on ARM || ARM64
 	select TIMER_OF
 	select CLKSRC_MMIO

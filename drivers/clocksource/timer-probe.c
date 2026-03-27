@@ -84,6 +84,9 @@ static int __init timer_pdev_probe(void)
 {
 	struct platform_driver **drv;
 
+	if (!IS_ENABLED(CONFIG_EARLY_TIMER))
+		return 0;
+
 	for_each_pdev_timer_table(drv)
 		__timer_pdev_probe(*drv);
 

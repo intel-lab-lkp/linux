@@ -303,7 +303,7 @@ static inline void timer_probe(void) {}
 extern struct platform_driver *__pdev_timer_table[];
 extern struct platform_driver *__pdev_timer_table_end[];
 
-#define TIMER_PDEV_DECLARE(__name, __probe, __remove, __match)		\
+#define __TIMER_PDEV_DECLARE(__name, __probe, __remove, __match)	\
 	static struct platform_driver __pdev_timer_table_entry_##__name = { \
 		.probe = __probe,					\
 		.remove = __remove,					\
@@ -314,6 +314,16 @@ extern struct platform_driver *__pdev_timer_table_end[];
 	};								\
 	static struct platform_driver *___pdev_timer_table_entry_##__name \
 	__used __section("__pdev_timer_table") = &__pdev_timer_table_entry_##__name
+
+#if !defined(CONFIG_EARLY_TIMER) || defined(MODULE)
+#define TIMER_PDEV_DECLARE(__name, __probe, __remove, __match)		\
+	MODULE_DEVICE_TABLE(of, __match);				\
+	__TIMER_PDEV_DECLARE(__name, __probe, __remove, __match);	\
+	module_platform_driver(__pdev_timer_table_entry_##__name);
+#else
+#define TIMER_PDEV_DECLARE(__name, __probe, __remove, __match)		\
+	__TIMER_PDEV_DECLARE(__name, __probe, __remove, __match)
+#endif
 
 #define for_each_pdev_timer_table(__pdev)     \
 	for (__pdev = __pdev_timer_table;     \
