@@ -227,8 +227,6 @@ static void ice_vf_clear_counters(struct ice_vf *vf)
 
 	vf->num_mac = 0;
 	vf->num_mac_lldp = 0;
-	memset(&vf->mdd_tx_events, 0, sizeof(vf->mdd_tx_events));
-	memset(&vf->mdd_rx_events, 0, sizeof(vf->mdd_rx_events));
 }
 
 /**
