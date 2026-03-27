@@ -271,3 +271,5 @@ static const struct of_device_id rk_timer_match_table[] = {
 };
 
 TIMER_PDEV_DECLARE(rk_timer, rk_timer_probe, NULL, rk_timer_match_table);
+MODULE_DESCRIPTION("Rockchip timer driver");
+MODULE_LICENSE("GPL");
