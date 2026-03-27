@@ -8,10 +8,12 @@
 
 static const char * const int3472_led_names[] = {
 	[INT3472_LED_TYPE_PRIVACY] = "privacy",
+	[INT3472_LED_TYPE_STROBE]  = "strobe",
 };
 
 static const char * const int3472_led_con_ids[] = {
 	[INT3472_LED_TYPE_PRIVACY] = "privacy",
+	[INT3472_LED_TYPE_STROBE]  = NULL,
 };
 
 static int int3472_led_set(struct led_classdev *led_cdev,
