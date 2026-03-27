@@ -51,6 +51,18 @@ struct dmem_cgroup_region {
 	 * No new pools should be added to the region afterwards.
 	 */
 	bool unregistered;
+
+	/**
+	 * @reclaim: Optional callback invoked when dmem.max is set below the
+	 * current usage of a pool. The driver should attempt to free at least
+	 * @target_bytes from @pool. May be called multiple times if usage
+	 * remains above the limit after returning.
+	 */
+	int (*reclaim)(struct dmem_cgroup_pool_state *pool, u64 target_bytes,
+		       void *priv);
+
+	/** @reclaim_priv: Private data passed to @reclaim. */
+	void *reclaim_priv;
 };
 
 struct dmemcg_state {
@@ -145,23 +157,59 @@ static void free_cg_pool(struct dmem_cgroup_pool_state *pool)
 }
 
 static int
-set_resource_min(struct dmem_cgroup_pool_state *pool, u64 val)
+set_resource_min(struct dmem_cgroup_pool_state *pool, u64 val,
+		 struct dmem_cgroup_region *region)
 {
 	page_counter_set_min(&pool->cnt, val);
 	return 0;
 }
 
 static int
-set_resource_low(struct dmem_cgroup_pool_state *pool, u64 val)
+set_resource_low(struct dmem_cgroup_pool_state *pool, u64 val,
+		 struct dmem_cgroup_region *region)
 {
 	page_counter_set_low(&pool->cnt, val);
 	return 0;
 }
 
 static int
-set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val)
+set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val,
+		 struct dmem_cgroup_region *region)
 {
-	return page_counter_set_max(&pool->cnt, val);
+	int err = page_counter_set_max(&pool->cnt, val);
+
+	if (err != -EBUSY || !region || !region->reclaim)
+		return err;
+
+	/*
+	 * The new max is below current usage.  Ask the driver to evict memory
+	 * and retry, up to a bounded number of times.  Signal interruptions are
+	 * propagated back to the write() caller; other reclaim failures leave
+	 * -EBUSY as the result.
+	 */
+	for (int retries = 5; retries > 0; retries--) {
+		u64 usage = page_counter_read(&pool->cnt);
+		u64 target = usage > val ? usage - val : 0;
+		int reclaim_err;
+
+		if (!target) {
+			err = page_counter_set_max(&pool->cnt, val);
+			break;
+		}
+
+		reclaim_err = region->reclaim(pool, target, region->reclaim_priv);
+		if (reclaim_err) {
+			if (reclaim_err == -EINTR || reclaim_err == -ERESTARTSYS)
+				err = reclaim_err;
+			break;
+		}
+
+		err = page_counter_set_max(&pool->cnt, val);
+		if (err != -EBUSY)
+			break;
+	}
+
+	return err;
 }
 
 static u64 get_resource_low(struct dmem_cgroup_pool_state *pool)
@@ -186,9 +234,9 @@ static u64 get_resource_current(struct dmem_cgroup_pool_state *pool)
 
 static void reset_all_resource_limits(struct dmem_cgroup_pool_state *rpool)
 {
-	set_resource_min(rpool, 0);
-	set_resource_low(rpool, 0);
-	set_resource_max(rpool, PAGE_COUNTER_MAX);
+	set_resource_min(rpool, 0, NULL);
+	set_resource_low(rpool, 0, NULL);
+	set_resource_max(rpool, PAGE_COUNTER_MAX, NULL);
 }
 
 static void dmemcs_offline(struct cgroup_subsys_state *css)
@@ -570,6 +618,32 @@ void dmem_cgroup_pool_state_put(struct dmem_cgroup_pool_state *pool)
 }
 EXPORT_SYMBOL_GPL(dmem_cgroup_pool_state_put);
 
+/**
+ * dmem_cgroup_region_set_reclaim - Register a reclaim callback on a region.
+ * @region: The region to register the callback for.
+ * @reclaim: Callback to invoke when dmem.max is set below current usage.
+ *           Called with the pool that needs reclaiming and the number of
+ *           bytes to free. Returns 0 on progress, negative on failure.
+ * @priv: Opaque pointer passed back to @reclaim.
+ *
+ * When dmem.max is lowered below the current usage of a cgroup pool, the
+ * dmem controller will call @reclaim with a target number of bytes to free.
+ * After @reclaim returns the controller retries setting the limit; if usage
+ * is still too high it calls @reclaim again, up to a bounded retry count.
+ */
+void dmem_cgroup_region_set_reclaim(struct dmem_cgroup_region *region,
+				    int (*reclaim)(struct dmem_cgroup_pool_state *pool,
+						   u64 target_bytes, void *priv),
+				    void *priv)
+{
+	if (!region)
+		return;
+
+	region->reclaim = reclaim;
+	region->reclaim_priv = priv;
+}
+EXPORT_SYMBOL_GPL(dmem_cgroup_region_set_reclaim);
+
 static struct dmem_cgroup_pool_state *
 get_cg_pool_unlocked(struct dmemcg_state *cg, struct dmem_cgroup_region *region)
 {
@@ -728,7 +802,8 @@ static int dmemcg_parse_limit(char *options, struct dmem_cgroup_region *region,
 
 static ssize_t dmemcg_limit_write(struct kernfs_open_file *of,
 				 char *buf, size_t nbytes, loff_t off,
-				 int (*apply)(struct dmem_cgroup_pool_state *, u64))
+				 int (*apply)(struct dmem_cgroup_pool_state *, u64,
+					      struct dmem_cgroup_region *))
 {
 	struct dmemcg_state *dmemcs = css_to_dmemcs(of_css(of));
 	int err = 0;
@@ -775,7 +850,8 @@ static ssize_t dmemcg_limit_write(struct kernfs_open_file *of,
 		}
 
 		/* And commit */
-		err = apply(pool, new_limit);
+		err = apply(pool, new_limit, region);
+
 		dmemcg_pool_put(pool);
 
 out_put:
