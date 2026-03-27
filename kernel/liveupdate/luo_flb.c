@@ -262,17 +262,20 @@ int luo_flb_file_preserve(struct liveupdate_file_handler *fh)
 	struct luo_flb_link *iter;
 	int err = 0;
 
+	down_read(&luo_register_rwlock);
 	list_for_each_entry(iter, flb_list, list) {
 		err = luo_flb_file_preserve_one(iter->flb);
 		if (err)
 			goto exit_err;
 	}
+	up_read(&luo_register_rwlock);
 
 	return 0;
 
 exit_err:
 	list_for_each_entry_continue_reverse(iter, flb_list, list)
 		luo_flb_file_unpreserve_one(iter->flb);
+	up_read(&luo_register_rwlock);
 
 	return err;
 }
@@ -294,6 +297,7 @@ void luo_flb_file_unpreserve(struct liveupdate_file_handler *fh)
 	struct list_head *flb_list = &ACCESS_PRIVATE(fh, flb_list);
 	struct luo_flb_link *iter;
 
+	guard(rwsem_read)(&luo_register_rwlock);
 	list_for_each_entry_reverse(iter, flb_list, list)
 		luo_flb_file_unpreserve_one(iter->flb);
 }
@@ -314,6 +318,7 @@ void luo_flb_file_finish(struct liveupdate_file_handler *fh)
 	struct list_head *flb_list = &ACCESS_PRIVATE(fh, flb_list);
 	struct luo_flb_link *iter;
 
+	guard(rwsem_read)(&luo_register_rwlock);
 	list_for_each_entry_reverse(iter, flb_list, list)
 		luo_flb_file_finish_one(iter->flb);
 }
@@ -377,6 +382,8 @@ int liveupdate_register_flb(struct liveupdate_file_handler *fh,
 	if (!luo_session_quiesce())
 		return -EBUSY;
 
+	down_write(&luo_register_rwlock);
+
 	/* Check that this FLB is not already linked to this file handler */
 	err = -EEXIST;
 	list_for_each_entry(iter, flb_list, list) {
@@ -418,11 +425,13 @@ int liveupdate_register_flb(struct liveupdate_file_handler *fh,
 	private->users++;
 	link->flb = flb;
 	list_add_tail(&no_free_ptr(link)->list, flb_list);
+	up_write(&luo_register_rwlock);
 	luo_session_resume();
 
 	return 0;
 
 err_resume:
+	up_write(&luo_register_rwlock);
 	luo_session_resume();
 	return err;
 }
@@ -466,6 +475,8 @@ int liveupdate_unregister_flb(struct liveupdate_file_handler *fh,
 	if (!luo_session_quiesce())
 		return -EBUSY;
 
+	down_write(&luo_register_rwlock);
+
 	/* Find and remove the link from the file handler's list */
 	list_for_each_entry(iter, flb_list, list) {
 		if (iter->flb == flb) {
@@ -490,11 +501,13 @@ int liveupdate_unregister_flb(struct liveupdate_file_handler *fh,
 		module_put(flb->ops->owner);
 	}
 
+	up_write(&luo_register_rwlock);
 	luo_session_resume();
 
 	return 0;
 
 err_resume:
+	up_write(&luo_register_rwlock);
 	luo_session_resume();
 	return err;
 }
@@ -660,6 +673,7 @@ void luo_flb_serialize(void)
 	struct liveupdate_flb *gflb;
 	int i = 0;
 
+	guard(rwsem_read)(&luo_register_rwlock);
 	list_private_for_each_entry(gflb, &luo_flb_global.list, private.list) {
 		struct luo_flb_private *private = luo_flb_get_private(gflb);
 
