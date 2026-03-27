@@ -72,3 +72,14 @@ config DRBD_FAULT_INJECTION
 		echo 5 > /sys/module/drbd/parameters/fault_rate
 
 	  If unsure, say N.
+
+config BLK_DEV_DRBD_TCP
+	tristate "DRBD TCP transport"
+	depends on BLK_DEV_DRBD
+	default BLK_DEV_DRBD
+	help
+
+	  TCP transport support for DRBD. This is the standard transport
+	  for DRBD replication over TCP/IP networks.
+
+	  If unsure, say Y.
