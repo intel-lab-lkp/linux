@@ -654,7 +654,7 @@ static u64 hpa_list_info_assign_raw(struct tdx_page_array *array)
 #define HPA_ARRAY_T_PFN		GENMASK_U64(51, 12)
 #define HPA_ARRAY_T_SIZE	GENMASK_U64(63, 55)
 
-static u64 __maybe_unused hpa_array_t_assign_raw(struct tdx_page_array *array)
+static u64 hpa_array_t_assign_raw(struct tdx_page_array *array)
 {
 	unsigned long pfn;
 
@@ -667,7 +667,7 @@ static u64 __maybe_unused hpa_array_t_assign_raw(struct tdx_page_array *array)
 	       FIELD_PREP(HPA_ARRAY_T_SIZE, array->nents - 1);
 }
 
-static u64 __maybe_unused hpa_array_t_release_raw(struct tdx_page_array *array)
+static u64 hpa_array_t_release_raw(struct tdx_page_array *array)
 {
 	if (array->nents == 1)
 		return 0;
@@ -2107,6 +2107,15 @@ static u64 __seamcall_ir_resched(sc_func_t sc_func, u64 fn,
 #define seamcall_ret_ir_resched(fn, args)	\
 	__seamcall_ir_resched(__seamcall_ret, fn, args)
 
+/*
+ * seamcall_ret_ir_exec() aliases seamcall_ret_ir_resched() for
+ * documentation purposes. It documents the TDX Module extension
+ * seamcalls that are long running / hard-irq preemptible flows that
+ * generate events. The calls using seamcall_ret_ir_resched() are long
+ * running flows, that periodically yield.
+ */
+#define seamcall_ret_ir_exec seamcall_ret_ir_resched
+
 noinstr u64 tdh_vp_enter(struct tdx_vp *td, struct tdx_module_args *args)
 {
 	args->rcx = td->tdvpr_pa;
@@ -2506,3 +2515,104 @@ u64 tdh_iommu_clear(u64 iommu_id, struct tdx_page_array *iommu_mt)
 	return seamcall_ret_ir_resched(TDH_IOMMU_CLEAR, &args);
 }
 EXPORT_SYMBOL_FOR_MODULES(tdh_iommu_clear, "tdx-host");
+
+u64 tdh_spdm_create(u64 func_id, struct tdx_page_array *spdm_mt, u64 *spdm_id)
+{
+	struct tdx_module_args args = {
+		.rcx = func_id,
+		.rdx = hpa_array_t_assign_raw(spdm_mt)
+	};
+	u64 r;
+
+	tdx_clflush_page_array(spdm_mt);
+
+	r = seamcall_ret(TDH_SPDM_CREATE, &args);
+
+	*spdm_id = args.rcx;
+
+	return r;
+}
+EXPORT_SYMBOL_FOR_MODULES(tdh_spdm_create, "tdx-host");
+
+u64 tdh_spdm_delete(u64 spdm_id, struct tdx_page_array *spdm_mt,
+		    unsigned int *nr_released, u64 *released_hpa)
+{
+	struct tdx_module_args args = {
+		.rcx = spdm_id,
+		.rdx = hpa_array_t_release_raw(spdm_mt),
+	};
+	u64 r;
+
+	r = seamcall_ret(TDH_SPDM_DELETE, &args);
+	if (r != TDX_SUCCESS)
+		return r;
+
+	*nr_released = FIELD_GET(HPA_ARRAY_T_SIZE, args.rcx) + 1;
+	*released_hpa = FIELD_GET(HPA_ARRAY_T_PFN, args.rcx) << PAGE_SHIFT;
+
+	return r;
+}
+EXPORT_SYMBOL_FOR_MODULES(tdh_spdm_delete, "tdx-host");
+
+u64 tdh_exec_spdm_connect(u64 spdm_id, struct page *spdm_conf,
+			  struct page *spdm_rsp, struct page *spdm_req,
+			  struct tdx_page_array *spdm_out,
+			  u64 *spdm_req_or_out_len)
+{
+	struct tdx_module_args args = {
+		.rcx = spdm_id,
+		.rdx = page_to_phys(spdm_conf),
+		.r8 = page_to_phys(spdm_rsp),
+		.r9 = page_to_phys(spdm_req),
+		.r10 = hpa_array_t_assign_raw(spdm_out),
+	};
+	u64 r;
+
+	r = seamcall_ret_ir_exec(TDH_SPDM_CONNECT, &args);
+
+	*spdm_req_or_out_len = args.rcx;
+
+	return r;
+}
+EXPORT_SYMBOL_FOR_MODULES(tdh_exec_spdm_connect, "tdx-host");
+
+u64 tdh_exec_spdm_disconnect(u64 spdm_id, struct page *spdm_rsp,
+			     struct page *spdm_req, u64 *spdm_req_len)
+{
+	struct tdx_module_args args = {
+		.rcx = spdm_id,
+		.rdx = page_to_phys(spdm_rsp),
+		.r8 = page_to_phys(spdm_req),
+	};
+	u64 r;
+
+	r = seamcall_ret_ir_exec(TDH_SPDM_DISCONNECT, &args);
+
+	*spdm_req_len = args.rcx;
+
+	return r;
+}
+EXPORT_SYMBOL_FOR_MODULES(tdh_exec_spdm_disconnect, "tdx-host");
+
+u64 tdh_exec_spdm_mng(u64 spdm_id, u64 spdm_op, struct page *spdm_param,
+		      struct page *spdm_rsp, struct page *spdm_req,
+		      struct tdx_page_array *spdm_out,
+		      u64 *spdm_req_or_out_len)
+{
+	struct tdx_module_args args = {
+		.rcx = spdm_id,
+		.rdx = spdm_op,
+		.r8 = spdm_param ? page_to_phys(spdm_param) : -1,
+		.r9 = page_to_phys(spdm_rsp),
+		.r10 = page_to_phys(spdm_req),
+		.r11 = spdm_out ? hpa_array_t_assign_raw(spdm_out) : -1,
+	};
+	u64 r;
+
+	r = seamcall_ret_ir_exec(TDH_SPDM_MNG, &args);
+
+	*spdm_req_or_out_len = args.rcx;
+
+	return r;
+}
+EXPORT_SYMBOL_FOR_MODULES(tdh_exec_spdm_mng, "tdx-host");
