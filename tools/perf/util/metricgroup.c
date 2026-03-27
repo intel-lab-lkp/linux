@@ -909,10 +909,12 @@ static int __add_metric(struct list_head *metric_list,
 		expr = metric_no_threshold ? pm->metric_name : pm->metric_threshold;
 		visited_node.name = "__threshold__";
 	}
-	if (expr__find_ids(expr, NULL, root_metric->pctx) < 0) {
+
+	/* The expression parser returns a positive value on syntax error */
+	if (expr__find_ids(expr, NULL, root_metric->pctx))
 		/* Broken metric. */
 		ret = -EINVAL;
-	}
+
 	if (!ret) {
 		/* Resolve referenced metrics. */
 		struct perf_pmu *pmu;
