@@ -313,6 +313,11 @@
 #define DRBD_BLOCK_SIZE_DEF 512
 #define DRBD_BLOCK_SIZE_SCALE '1' /* Bytes */
 
+#define DRBD_DISCARD_GRANULARITY_SCALE '1'             /* Bytes */
+#define DRBD_DISCARD_GRANULARITY_MIN 0U                /* 0 = disable discards */
+#define DRBD_DISCARD_GRANULARITY_MAX (128U<<20)        /* 128 MiB, current DRBD_MAX_BATCH_BIO_SIZE */
+#define DRBD_DISCARD_GRANULARITY_DEF 0xFFFFFFFFU       /* sentinel: not configured; use legacy behavior */
+
 /* By default freeze IO, if set error all IOs as quick as possible */
 #define DRBD_ON_NO_QUORUM_DEF ONQ_SUSPEND_IO
 
@@ -325,6 +330,8 @@
 #define DRBD_TLS_KEYRING_DEF 0 /* disabled by default */
 
 #define DRBD_LOAD_BALANCE_PATHS_DEF 0U
+
+#define DRBD_PEER_TIEBREAKER_DEF 1U
 
 #define DRBD_RDMA_CTRL_RCVBUF_SIZE_MIN  0U
 #define DRBD_RDMA_CTRL_RCVBUF_SIZE_MAX  (10U<<20)

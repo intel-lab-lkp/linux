@@ -236,6 +236,7 @@ GENL_struct(DRBD_NLA_DEVICE_CONF, 14, device_conf,
 	__u32_field_def(1, DRBD_F_INVARIANT,	max_bio_size, DRBD_MAX_BIO_SIZE_DEF)
 	__flg_field_def(2, 0 /* OPTIONAL */, intentional_diskless, DRBD_DISK_DISKLESS_DEF)
 	__u32_field_def(3, 0 /* OPTIONAL */, block_size, DRBD_BLOCK_SIZE_DEF)
+	__u32_field_def(4, 0 /* OPTIONAL */, discard_granularity, DRBD_DISCARD_GRANULARITY_DEF)
 )
 
 GENL_struct(DRBD_NLA_RESOURCE_INFO, 15, resource_info,
@@ -357,6 +358,7 @@ GENL_struct(DRBD_NLA_PEER_DEVICE_OPTS, 27, peer_device_conf,
 #if (PRO_FEATURES & DRBD_FF_RESYNC_WITHOUT_REPLICATION) || !defined(__KERNEL__)
 	__flg_field_def(8, 0 /* OPTIONAL */, resync_without_replication, DRBD_RESYNC_WITHOUT_REPLICATION_DEF)
 #endif
+	__flg_field_def(9, 0 /* OPTIONAL */, peer_tiebreaker, DRBD_PEER_TIEBREAKER_DEF)
 )
 
 GENL_struct(DRBD_NLA_PATH_PARMS, 28, path_parms,
