@@ -2989,6 +2989,7 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 	struct cpuset *cs, *oldcs;
 	struct task_struct *task;
 	bool cpus_updated, mems_updated;
+	bool kthread_move_task_from_empty_cs;
 	int ret;
 
 	/* used later by cpuset_attach() */
@@ -3006,6 +3007,14 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 	cpus_updated = !cpumask_equal(cs->effective_cpus, oldcs->effective_cpus);
 	mems_updated = !nodes_equal(cs->effective_mems, oldcs->effective_mems);
 
+	/*
+	 * Set to true if a kthread is moving tasks away from a v1 cpuset with
+	 * no CPUs
+	 */
+	kthread_move_task_from_empty_cs = !cpuset_v2() &&
+					  cpumask_empty(oldcs->effective_cpus) &&
+					  (current->flags & PF_KTHREAD);
+
 	cgroup_taskset_for_each(task, css, tset) {
 		ret = task_can_attach(task);
 		if (ret)
@@ -3015,8 +3024,15 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 		 * Skip rights over task check in v2 when nothing changes,
 		 * migration permission derives from hierarchy ownership in
 		 * cgroup_procs_write_permission()).
+		 *
+		 * In the special case of forced cpuset1 task migration to
+		 * parent via workqueue because of empty cpuset.cpus caused by
+		 * hotplug, skip the task check to prevent restrictive security
+		 * policy from denying the task migration. Otherwise those
+		 * tasks will have no CPU to run on.
 		 */
-		if (!cpuset_v2() || (cpus_updated || mems_updated)) {
+		if (!kthread_move_task_from_empty_cs &&
+		   (!cpuset_v2() || cpus_updated || mems_updated)) {
 			ret = security_task_setscheduler(task);
 			if (ret)
 				goto out_unlock;
