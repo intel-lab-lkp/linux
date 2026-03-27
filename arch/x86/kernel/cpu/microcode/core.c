@@ -588,15 +588,18 @@ static int load_cpus_stopped(void *unused)
 
 static int load_late_stop_cpus(bool is_safe)
 {
+	struct cpuinfo_x86 *prev_info __free(kfree) = kmalloc_obj(*prev_info);
 	unsigned int cpu, updated = 0, failed = 0, timedout = 0, siblings = 0;
 	unsigned int nr_offl, offline = 0;
 	int old_rev = boot_cpu_data.microcode;
-	struct cpuinfo_x86 prev_info;
 
 	if (!is_safe) {
 		pr_err("Late microcode loading without minimal revision check.\n");
 		pr_err("You should switch to early loading, if possible.\n");
 	}
+
+	if (!prev_info)
+		return -ENOMEM;
 
 	/*
 	 * Pre-load the microcode image into a staging device. This
@@ -617,7 +620,7 @@ static int load_late_stop_cpus(bool is_safe)
 	 * Take a snapshot before the microcode update in order to compare and
 	 * check whether any bits changed after an update.
 	 */
-	store_cpu_caps(&prev_info);
+	store_cpu_caps(prev_info);
 
 	if (microcode_ops->use_nmi)
 		static_branch_enable_cpuslocked(&microcode_nmi_handler_enable);
@@ -666,7 +669,7 @@ static int load_late_stop_cpus(bool is_safe)
 		       num_online_cpus() - (updated + siblings));
 	}
 	pr_info("revision: 0x%x -> 0x%x\n", old_rev, boot_cpu_data.microcode);
-	microcode_check(&prev_info);
+	microcode_check(prev_info);
 
 	return updated + siblings == num_online_cpus() ? 0 : -EIO;
 }

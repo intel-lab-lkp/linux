@@ -2543,15 +2543,20 @@ void store_cpu_caps(struct cpuinfo_x86 *curr_info)
  */
 void microcode_check(struct cpuinfo_x86 *prev_info)
 {
-	struct cpuinfo_x86 curr_info;
+	struct cpuinfo_x86 *curr_info __free(kfree) = kmalloc_obj(*curr_info);
 
 	perf_check_microcode();
 
 	amd_check_microcode();
 
-	store_cpu_caps(&curr_info);
+	if (!curr_info) {
+		pr_warn("x86/CPU: Microcode update CPU capability changes check was skipped (ENOMEM)\n");
+		return;
+	}
 
-	if (!memcmp(&prev_info->x86_capability, &curr_info.x86_capability,
+	store_cpu_caps(curr_info);
+
+	if (!memcmp(&prev_info->x86_capability, &curr_info->x86_capability,
 		    sizeof(prev_info->x86_capability)))
 		return;
 
