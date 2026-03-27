@@ -1384,22 +1384,25 @@ static void asihpi_ctl_init(struct snd_kcontrol_new *snd_control,
 		dir = "Playback "; /* PCM Playback source, or  output node */
 
 	if (hpi_ctl->src_node_type && hpi_ctl->dst_node_type)
-		sprintf(hpi_ctl->name, "%s %d %s %d %s%s",
-			asihpi_src_names[hpi_ctl->src_node_type],
-			hpi_ctl->src_node_index,
-			asihpi_dst_names[hpi_ctl->dst_node_type],
-			hpi_ctl->dst_node_index,
-			dir, name);
+		scnprintf(hpi_ctl->name, sizeof(hpi_ctl->name),
+			  "%s %d %s %d %s%s",
+			  asihpi_src_names[hpi_ctl->src_node_type],
+			  hpi_ctl->src_node_index,
+			  asihpi_dst_names[hpi_ctl->dst_node_type],
+			  hpi_ctl->dst_node_index,
+			  dir, name);
 	else if (hpi_ctl->dst_node_type) {
-		sprintf(hpi_ctl->name, "%s %d %s%s",
-		asihpi_dst_names[hpi_ctl->dst_node_type],
-		hpi_ctl->dst_node_index,
-		dir, name);
+		scnprintf(hpi_ctl->name, sizeof(hpi_ctl->name),
+			  "%s %d %s%s",
+			  asihpi_dst_names[hpi_ctl->dst_node_type],
+			  hpi_ctl->dst_node_index,
+			  dir, name);
 	} else {
-		sprintf(hpi_ctl->name, "%s %d %s%s",
-		asihpi_src_names[hpi_ctl->src_node_type],
-		hpi_ctl->src_node_index,
-		dir, name);
+		scnprintf(hpi_ctl->name, sizeof(hpi_ctl->name),
+			  "%s %d %s%s",
+			  asihpi_src_names[hpi_ctl->src_node_type],
+			  hpi_ctl->src_node_index,
+			  dir, name);
 	}
 }
 
