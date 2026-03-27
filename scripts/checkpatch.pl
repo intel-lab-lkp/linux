@@ -641,6 +641,7 @@ our $signature_tags = qr{(?xi:
 	Reviewed-by:|
 	Reported-by:|
 	Suggested-by:|
+	Assisted-by:|
 	To:|
 	Cc:
 )};
@@ -737,7 +738,7 @@ sub find_standard_signature {
 	my ($sign_off) = @_;
 	my @standard_signature_tags = (
 		'Signed-off-by:', 'Co-developed-by:', 'Acked-by:', 'Tested-by:',
-		'Reviewed-by:', 'Reported-by:', 'Suggested-by:'
+		'Reviewed-by:', 'Reported-by:', 'Suggested-by:', 'Assisted-by:'
 	);
 	foreach my $signature (@standard_signature_tags) {
 		return $signature if (get_edit_distance($sign_off, $signature) <= 2);
@@ -3105,87 +3106,95 @@ sub process {
 				}
 			}
 
-			my ($email_name, $name_comment, $email_address, $comment) = parse_email($email);
-			my $suggested_email = format_email(($email_name, $name_comment, $email_address, $comment));
-			if ($suggested_email eq "") {
-				ERROR("BAD_SIGN_OFF",
-				      "Unrecognized email address: '$email'\n" . $herecurr);
+# Assisted-by: uses AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2] format, not Name <email>
+			if ($sign_off =~ /^assisted-by:$/i) {
+				if ($email !~ /^[^:]+:\S+(\s+\S+)*$/) {
+					WARN("BAD_ASSISTED_BY",
+					     "Assisted-by: expects 'AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2]' format: '$email'\n" . $herecurr);
+				}
 			} else {
-				my $dequoted = $suggested_email;
-				$dequoted =~ s/^"//;
-				$dequoted =~ s/" </ </;
-				# Don't force email to have quotes
-				# Allow just an angle bracketed address
-				if (!same_email_addresses($email, $suggested_email)) {
-					if (WARN("BAD_SIGN_OFF",
-						 "email address '$email' might be better as '$suggested_email'\n" . $herecurr) &&
-					    $fix) {
-						$fixed[$fixlinenr] =~ s/\Q$email\E/$suggested_email/;
+				my ($email_name, $name_comment, $email_address, $comment) = parse_email($email);
+				my $suggested_email = format_email(($email_name, $name_comment, $email_address, $comment));
+				if ($suggested_email eq "") {
+					ERROR("BAD_SIGN_OFF",
+					      "Unrecognized email address: '$email'\n" . $herecurr);
+				} else {
+					my $dequoted = $suggested_email;
+					$dequoted =~ s/^"//;
+					$dequoted =~ s/" </ </;
+					# Don't force email to have quotes
+					# Allow just an angle bracketed address
+					if (!same_email_addresses($email, $suggested_email)) {
+						if (WARN("BAD_SIGN_OFF",
+							 "email address '$email' might be better as '$suggested_email'\n" . $herecurr) &&
+						    $fix) {
+							$fixed[$fixlinenr] =~ s/\Q$email\E/$suggested_email/;
+						}
 					}
-				}
 
-				# Address part shouldn't have comments
-				my $stripped_address = $email_address;
-				$stripped_address =~ s/\([^\(\)]*\)//g;
-				if ($email_address ne $stripped_address) {
-					if (WARN("BAD_SIGN_OFF",
-						 "address part of email should not have comments: '$email_address'\n" . $herecurr) &&
-					    $fix) {
-						$fixed[$fixlinenr] =~ s/\Q$email_address\E/$stripped_address/;
+					# Address part shouldn't have comments
+					my $stripped_address = $email_address;
+					$stripped_address =~ s/\([^\(\)]*\)//g;
+					if ($email_address ne $stripped_address) {
+						if (WARN("BAD_SIGN_OFF",
+							 "address part of email should not have comments: '$email_address'\n" . $herecurr) &&
+						    $fix) {
+							$fixed[$fixlinenr] =~ s/\Q$email_address\E/$stripped_address/;
+						}
 					}
-				}
 
-				# Only one name comment should be allowed
-				my $comment_count = () = $name_comment =~ /\([^\)]+\)/g;
-				if ($comment_count > 1) {
-					WARN("BAD_SIGN_OFF",
-					     "Use a single name comment in email: '$email'\n" . $herecurr);
-				}
+					# Only one name comment should be allowed
+					my $comment_count = () = $name_comment =~ /\([^\)]+\)/g;
+					if ($comment_count > 1) {
+						WARN("BAD_SIGN_OFF",
+						     "Use a single name comment in email: '$email'\n" . $herecurr);
+					}
 
 
-				# stable@vger.kernel.org or stable@kernel.org shouldn't
-				# have an email name. In addition comments should strictly
-				# begin with a #
-				if ($email =~ /^.*stable\@(?:vger\.)?kernel\.org/i) {
-					if (($comment ne "" && $comment !~ /^#.+/) ||
-					    ($email_name ne "")) {
-						my $cur_name = $email_name;
+					# stable@vger.kernel.org or stable@kernel.org shouldn't
+					# have an email name. In addition comments should strictly
+					# begin with a #
+					if ($email =~ /^.*stable\@(?:vger\.)?kernel\.org/i) {
+						if (($comment ne "" && $comment !~ /^#.+/) ||
+						    ($email_name ne "")) {
+							my $cur_name = $email_name;
+							my $new_comment = $comment;
+							$cur_name =~ s/[a-zA-Z\s\-\"]+//g;
+
+							# Remove brackets enclosing comment text
+							# and # from start of comments to get comment text
+							$new_comment =~ s/^\((.*)\)$/$1/;
+							$new_comment =~ s/^\[(.*)\]$/$1/;
+							$new_comment =~ s/^[\s\#]+|\s+$//g;
+
+							$new_comment = trim("$new_comment $cur_name") if ($cur_name ne $new_comment);
+							$new_comment = " # $new_comment" if ($new_comment ne "");
+							my $new_email = "$email_address$new_comment";
+
+							if (WARN("BAD_STABLE_ADDRESS_STYLE",
+								 "Invalid email format for stable: '$email', prefer '$new_email'\n" . $herecurr) &&
+							    $fix) {
+								$fixed[$fixlinenr] =~ s/\Q$email\E/$new_email/;
+							}
+						}
+					} elsif ($comment ne "" && $comment !~ /^(?:#.+|\(.+\))$/) {
 						my $new_comment = $comment;
-						$cur_name =~ s/[a-zA-Z\s\-\"]+//g;
 
-						# Remove brackets enclosing comment text
-						# and # from start of comments to get comment text
-						$new_comment =~ s/^\((.*)\)$/$1/;
+						# Extract comment text from within brackets or
+						# c89 style /*...*/ comments
 						$new_comment =~ s/^\[(.*)\]$/$1/;
-						$new_comment =~ s/^[\s\#]+|\s+$//g;
+						$new_comment =~ s/^\/\*(.*)\*\/$/$1/;
 
-						$new_comment = trim("$new_comment $cur_name") if ($cur_name ne $new_comment);
-						$new_comment = " # $new_comment" if ($new_comment ne "");
-						my $new_email = "$email_address$new_comment";
+						$new_comment = trim($new_comment);
+						$new_comment =~ s/^[^\w]$//; # Single lettered comment with non word character is usually a typo
+						$new_comment = "($new_comment)" if ($new_comment ne "");
+						my $new_email = format_email($email_name, $name_comment, $email_address, $new_comment);
 
-						if (WARN("BAD_STABLE_ADDRESS_STYLE",
-							 "Invalid email format for stable: '$email', prefer '$new_email'\n" . $herecurr) &&
+						if (WARN("BAD_SIGN_OFF",
+							 "Unexpected content after email: '$email', should be: '$new_email'\n" . $herecurr) &&
 						    $fix) {
 							$fixed[$fixlinenr] =~ s/\Q$email\E/$new_email/;
 						}
-					}
-				} elsif ($comment ne "" && $comment !~ /^(?:#.+|\(.+\))$/) {
-					my $new_comment = $comment;
-
-					# Extract comment text from within brackets or
-					# c89 style /*...*/ comments
-					$new_comment =~ s/^\[(.*)\]$/$1/;
-					$new_comment =~ s/^\/\*(.*)\*\/$/$1/;
-
-					$new_comment = trim($new_comment);
-					$new_comment =~ s/^[^\w]$//; # Single lettered comment with non word character is usually a typo
-					$new_comment = "($new_comment)" if ($new_comment ne "");
-					my $new_email = format_email($email_name, $name_comment, $email_address, $new_comment);
-
-					if (WARN("BAD_SIGN_OFF",
-						 "Unexpected content after email: '$email', should be: '$new_email'\n" . $herecurr) &&
-					    $fix) {
-						$fixed[$fixlinenr] =~ s/\Q$email\E/$new_email/;
 					}
 				}
 			}
