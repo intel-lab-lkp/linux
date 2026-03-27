@@ -10,6 +10,7 @@
 #include <linux/bitops.h>
 #include <asm/alternative.h>
 #include <asm/cpufeaturemasks.h>
+#include <asm/cpuid/api.h>
 
 enum cpuid_leafs
 {
@@ -48,7 +49,7 @@ extern const char * const x86_bug_flags[NBUGINTS*32];
 #define x86_bug_flag(flag) x86_bug_flags[flag]
 
 #define test_cpu_cap(c, bit)						\
-	 arch_test_bit(bit, (unsigned long *)((c)->x86_capability))
+	arch_test_bit(cpuid_feature_bit_offset(bit), cpuid_feature_bitmap(c, bit))
 
 #define cpu_has(c, bit)							\
 	(__builtin_constant_p(bit) && REQUIRED_MASK_BIT_SET(bit) ? 1 :	\
@@ -56,7 +57,7 @@ extern const char * const x86_bug_flags[NBUGINTS*32];
 
 #define this_cpu_has(bit)						\
 	(__builtin_constant_p(bit) && REQUIRED_MASK_BIT_SET(bit) ? 1 :	\
-	 x86_this_cpu_test_bit(bit, cpu_info.x86_capability, 0))
+	 x86_this_cpu_test_bit(cpuid_feature_bit_offset(bit), cpu_info.cpuid.leaves, cpuid_feature_byte_offset(bit)))
 
 /*
  * This is the default CPU features testing macro to use in code.
@@ -72,7 +73,8 @@ extern const char * const x86_bug_flags[NBUGINTS*32];
 
 #define boot_cpu_has(bit)	cpu_has(&boot_cpu_data, bit)
 
-#define set_cpu_cap(c, bit)	set_bit(bit, (unsigned long *)((c)->x86_capability))
+#define set_cpu_cap(c, bit)						\
+	set_bit(cpuid_feature_bit_offset(bit), cpuid_feature_bitmap(c, bit))
 
 extern void setup_clear_cpu_cap(unsigned int bit);
 extern void clear_cpu_cap(struct cpuinfo_x86 *c, unsigned int bit);
@@ -116,7 +118,9 @@ void check_cpufeature_deps(struct cpuinfo_x86 *c);
 
 static __always_inline bool _static_cpu_has(u16 bit)
 {
-	__static_cpu_has(bit, &boot_cpu_data.x86_capability, bit);
+	__static_cpu_has(bit,
+			 cpuid_feature_bitmap(&boot_cpu_data, bit),
+			 cpuid_feature_bit_offset(bit));
 }
 
 #define static_cpu_has(bit)					\

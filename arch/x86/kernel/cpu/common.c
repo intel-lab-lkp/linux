@@ -968,11 +968,9 @@ void cpu_detect(struct cpuinfo_x86 *c)
 
 static void apply_forced_caps(struct cpuinfo_x86 *c)
 {
-	int i;
-
-	for (i = 0; i < NCAPINTS + NBUGINTS; i++) {
-		c->x86_capability[i] &= ~cpu_caps_cleared[i];
-		c->x86_capability[i] |= cpu_caps_set[i];
+	for (int i = 0; i < NCAPINTS + NBUGINTS; i++) {
+		cpuid_word_clear_bits(c, i, cpu_caps_cleared[i]);
+		cpuid_word_set_bits(c, i, cpu_caps_set[i]);
 	}
 }
 
@@ -2002,8 +2000,6 @@ static void generic_identify(struct cpuinfo_x86 *c)
  */
 static void identify_cpu(struct cpuinfo_x86 *c)
 {
-	int i;
-
 	c->loops_per_jiffy = loops_per_jiffy;
 	c->x86_cache_size = 0;
 	c->x86_vendor = X86_VENDOR_UNKNOWN;
@@ -2112,13 +2108,13 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	 * executed, c == &boot_cpu_data.
 	 */
 	if (c != &boot_cpu_data) {
-		/* AND the already accumulated flags with these */
-		for (i = 0; i < NCAPINTS; i++)
-			boot_cpu_data.x86_capability[i] &= c->x86_capability[i];
+		/* Clear boot_cpu_data features that are not on this CPU */
+		for (int i = 0; i < NCAPINTS; i++)
+			cpuid_word_clear_bits(&boot_cpu_data, i, ~cpuid_word(c, i));
 
-		/* OR, i.e. replicate the bug flags */
-		for (i = NCAPINTS; i < NCAPINTS + NBUGINTS; i++)
-			c->x86_capability[i] |= boot_cpu_data.x86_capability[i];
+		/* Replicate boot_cpu_data's bug flags to this CPU */
+		for (int i = NCAPINTS; i < NCAPINTS + NBUGINTS; i++)
+			cpuid_word_set_bits(c, i, cpuid_word(&boot_cpu_data, i));
 	}
 
 	ppin_init(c);
@@ -2521,12 +2517,17 @@ void cpu_init(void)
  */
 void store_cpu_caps(struct cpuinfo_x86 *curr_info)
 {
+	const struct leaf_0x0_0 *l0;
+
 	/* Reload CPUID max function as it might've changed. */
-	curr_info->cpuid_level = cpuid_eax(0);
+	cpuid_refresh_leaf(curr_info, 0x0);
+	l0 = cpuid_leaf(curr_info, 0x0);
+	if (l0)
+		curr_info->cpuid_level = l0->max_std_leaf;
 
 	/* Copy all capability leafs and pick up the synthetic ones. */
-	memcpy(&curr_info->x86_capability, &boot_cpu_data.x86_capability,
-	       sizeof(curr_info->x86_capability));
+	for (int i = 0; i < NCAPINTS + NBUGINTS; i++)
+		cpuid_word_set(curr_info, i, cpuid_word(&boot_cpu_data, i));
 
 	/* Get the hardware CPUID leafs */
 	get_cpu_cap(curr_info);
@@ -2556,10 +2557,12 @@ void microcode_check(struct cpuinfo_x86 *prev_info)
 
 	store_cpu_caps(curr_info);
 
-	if (!memcmp(&prev_info->x86_capability, &curr_info->x86_capability,
-		    sizeof(prev_info->x86_capability)))
-		return;
+	for (int i = 0; i < NCAPINTS + NBUGINTS; i++)
+		if (cpuid_word(prev_info, i) != cpuid_word(curr_info, i))
+			goto err;
 
+	return;
+err:
 	pr_warn("x86/CPU: CPU features have changed after loading microcode, but might not take effect.\n");
 	pr_warn("x86/CPU: Please consider either early loading through initrd/built-in or a potential BIOS update.\n");
 }
