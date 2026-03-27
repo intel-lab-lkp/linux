@@ -1147,6 +1147,7 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 	int need_zonelists_rebuild = 0;
 	unsigned long flags;
 	int ret;
+	bool need_set_normal_memory = false;
 
 	/*
 	 * {on,off}lining is constrained to full memory sections (or more
@@ -1172,6 +1173,9 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 		if (ret)
 			goto failed_addition;
 	}
+	/* Adding normal memory to the node for the first time */
+	if (!node_state(nid, N_NORMAL_MEMORY) && zone_idx(zone) <= ZONE_NORMAL)
+		need_set_normal_memory = true;
 
 	ret = memory_notify(MEM_GOING_ONLINE, &mem_arg);
 	ret = notifier_to_errno(ret);
@@ -1201,6 +1205,8 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 
 	if (node_arg.nid >= 0)
 		node_set_state(nid, N_MEMORY);
+	if (need_set_normal_memory)
+		node_set_state(nid, N_NORMAL_MEMORY);
 	if (need_zonelists_rebuild)
 		build_all_zonelists(NULL);
 
@@ -1905,6 +1911,9 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	unsigned long flags;
 	char *reason;
 	int ret;
+	bool need_clear_normal_memory = false;
+	unsigned long node_normal_pages = 0;
+	enum zone_type zt;
 
 	/*
 	 * {on,off}lining is constrained to full memory sections (or more
@@ -1974,6 +1983,13 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 			goto failed_removal_isolated;
 		}
 	}
+	/*
+	 * Check whether this operation removes the node's last normal memory.
+	 */
+	for (zt = 0; zt <= ZONE_NORMAL; zt++)
+		node_normal_pages += pgdat->node_zones[zt].present_pages;
+	if (nr_pages >= node_normal_pages && zone_idx(zone) <= ZONE_NORMAL)
+		need_clear_normal_memory = true;
 
 	ret = memory_notify(MEM_GOING_OFFLINE, &mem_arg);
 	ret = notifier_to_errno(ret);
@@ -2052,6 +2068,12 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	/* reinitialise watermarks and update pcp limits */
 	init_per_zone_wmark_min();
 
+	/*
+	 * Clear N_NORMAL_MEMORY first to avoid the transient state
+	 * "!N_MEMORY && N_NORMAL_MEMORY".
+	 */
+	if (need_clear_normal_memory)
+		node_clear_state(node, N_NORMAL_MEMORY);
 	/*
 	 * Make sure to mark the node as memory-less before rebuilding the zone
 	 * list. Otherwise this node would still appear in the fallback lists.
