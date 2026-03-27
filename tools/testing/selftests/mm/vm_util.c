@@ -769,6 +769,7 @@ void write_file(const char *path, const char *buf, size_t buflen)
 {
 	int fd, saved_errno;
 	ssize_t numwritten;
+
 	if (buflen < 1)
 		ksft_exit_fail_msg("Incorrect buffer len: %zu\n", buflen);
 
