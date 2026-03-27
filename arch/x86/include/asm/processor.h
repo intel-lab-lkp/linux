@@ -153,15 +153,6 @@ struct cpuinfo_x86 {
 	__u32			extended_cpuid_level;
 	/* Maximum supported CPUID level, -1=no CPUID: */
 	int			cpuid_level;
-	/*
-	 * Align to size of unsigned long because the x86_capability array
-	 * is passed to bitops which require the alignment. Use unnamed
-	 * union to enforce the array is aligned to size of unsigned long.
-	 */
-	union {
-		__u32		x86_capability[NCAPINTS + NBUGINTS];
-		unsigned long	x86_capability_alignment;
-	};
 	char			x86_vendor_id[16];
 	char			x86_model_id[64];
 	struct cpuinfo_topology	topo;
@@ -173,7 +164,6 @@ struct cpuinfo_x86 {
 	int			x86_cache_max_rmid;	/* max index */
 	int			x86_cache_occ_scale;	/* scale to bytes */
 	int			x86_cache_mbm_width_offset;
-	int			x86_power;
 	unsigned long		loops_per_jiffy;
 	/* protected processor identification number */
 	u64			ppin;
