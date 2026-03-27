@@ -6,6 +6,7 @@
  * Copyright (c) Paul Mundt 2001
  */
 #include <linux/init.h>
+#include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
