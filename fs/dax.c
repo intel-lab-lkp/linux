@@ -2039,7 +2039,14 @@ unlock_entry:
 	dax_unlock_entry(&xas, entry);
 fallback:
 	if (ret == VM_FAULT_FALLBACK) {
-		split_huge_pmd(vmf->vma, vmf->pmd, vmf->address);
+		/*
+		 * split_huge_pmd() cannot fail for file-backed (DAX) VMAs
+		 * since splitting only zaps the PMD without allocating a
+		 * PTE page table.
+		 */
+		if (WARN_ON_ONCE(split_huge_pmd(vmf->vma, vmf->pmd,
+						vmf->address)))
+			ret = VM_FAULT_OOM;
 		count_vm_event(THP_FAULT_FALLBACK);
 	}
 out:
