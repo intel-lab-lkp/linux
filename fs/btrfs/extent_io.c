@@ -3563,8 +3563,23 @@ reallocate:
 	if (uptodate)
 		set_bit(EXTENT_BUFFER_UPTODATE, &eb->bflags);
 	/* All pages are physically contiguous, can skip cross page handling. */
-	if (page_contig)
+	if (page_contig) {
+#if defined(CONFIG_KASAN_SW_TAGS) || defined(CONFIG_KASAN_HW_TAGS)
+		struct page *page = folio_page(eb->folios[0], 0);
+		u8 tag = page_kasan_tag(page);
+
+		/*
+		 * Since pages are from multiple allocations and physically
+		 * contiguous allowing linear access, prevent KASAN warnings
+		 * by retagging with the first tag
+		 */
+		for (int i = 1; i < num_extent_pages(eb); i++) {
+			page_kasan_tag_set(page + i, tag);
+			kasan_unpoison_range(page_address(page + i), PAGE_SIZE);
+      }
+#endif
 		eb->addr = folio_address(eb->folios[0]) + offset_in_page(eb->start);
+	}
 again:
 	xa_lock_irq(&fs_info->buffer_tree);
 	existing_eb = __xa_cmpxchg(&fs_info->buffer_tree,
