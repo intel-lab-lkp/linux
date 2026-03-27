@@ -4025,6 +4025,9 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		}
 		break;
 	case MSR_IA32_CR_PAT:
+		if (!(efer_reserved_bits & EFER_SVME))
+			pr_warn_once("%s: MSR_IA32_CR_PAT should be handled by AMD vendor-specific code\n", __func__);
+
 		if (!kvm_pat_valid(data))
 			return 1;
 
@@ -4436,6 +4439,9 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 	}
 	case MSR_IA32_CR_PAT:
+		if (!(efer_reserved_bits & EFER_SVME))
+			pr_warn_once("%s: MSR_IA32_CR_PAT should be handled by AMD vendor-specific code\n", __func__);
+
 		msr_info->data = vcpu->arch.pat;
 		break;
 	case MSR_MTRRcap:
