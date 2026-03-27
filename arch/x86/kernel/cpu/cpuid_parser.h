@@ -159,6 +159,9 @@ struct cpuid_parse_entry {
 	CPUID_PARSE_ENTRY   (	0x23,		3,		0x23_3			),	\
 	CPUID_PARSE_ENTRY   (	0x23,		4,		0x23_4			),	\
 	CPUID_PARSE_ENTRY   (	0x23,		5,		0x23_5			),	\
+	CPUID_PARSE_ENTRY   (	0x4c780001,	0,		synthetic		),	\
+	CPUID_PARSE_ENTRY   (	0x4c780001,	1,		synthetic		),	\
+	CPUID_PARSE_ENTRY   (	0x4c780002,	0,		synthetic		),	\
 	CPUID_PARSE_ENTRY   (	0x80000000,	0,		0x80000000		),	\
 	CPUID_PARSE_ENTRY   (	0x80000001,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000002,	0,		generic			),	\

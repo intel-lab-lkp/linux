@@ -156,6 +156,21 @@ define_cpuid_0x23_subleaf_read_function(4);
 define_cpuid_0x23_subleaf_read_function(5);
 
 /*
+ * Synthetic CPUID leaves read function
+ *
+ * These leaves do not exist in hardware.  They reserve slots in the per-CPU
+ * CPUID tables for the synthetic Linux-defined X86_FEATURE and X86_BUG words.
+ *
+ * Always mark the read as successful; the actual bits will be populated via
+ * the X86_FEATURE bit update helpers at <asm/cpufeature.h>.
+ */
+static void
+cpuid_read_synthetic(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
+{
+	output->info->nr_entries = 1;
+}
+
+/*
  * Define an extended range CPUID read function
  *
  * Guard against CPUs lacking the passed range leaf; e.g. Intel 32-bit CPUs lacking
@@ -242,6 +257,7 @@ static unsigned int cpuid_range_max_leaf(const struct cpuid_table *t, unsigned i
 	case CPUID_EXT_START:	return el0 ? el0->max_ext_leaf  : 0;
 	case CPUID_TMX_START:	return tl0 ? tl0->max_tra_leaf  : 0;
 	case CPUID_CTR_START:	return cl0 ? cl0->max_cntr_leaf : 0;
+	case CPUID_LNX_START:	return CPUID_LNX_END;
 	default:		return 0;
 	}
 }
@@ -305,6 +321,7 @@ cpuid_fill_table(struct cpuid_table *t, const struct cpuid_parse_entry entries[]
 		{ CPUID_EXT_START,  CPUID_EXT_END  },
 		{ CPUID_TMX_START,  CPUID_TMX_END  },
 		{ CPUID_CTR_START,  CPUID_CTR_END  },
+		{ CPUID_LNX_START,  CPUID_LNX_END  },
 	};
 
 	for (unsigned int i = 0; i < ARRAY_SIZE(ranges); i++)

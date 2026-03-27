@@ -36,6 +36,10 @@ cpuid_show_leaf(struct seq_file *m, uintptr_t cpu_id, const struct cpuid_parse_e
 		};
 		int ret;
 
+		/* Ignore synthetic ranges as they have no hardware backing */
+		if (CPUID_RANGE(entry->leaf) == CPUID_LNX_START)
+			continue;
+
 		seq_printf(m, "Leaf 0x%08x, subleaf %u:\n", entry->leaf, subleaf);
 
 		ret = smp_call_function_single(cpu_id, cpuid_this_cpu, &regs, true);
