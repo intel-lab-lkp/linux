@@ -4,8 +4,10 @@
 #include <linux/string.h>
 #include <linux/seq_file.h>
 #include <linux/cpufreq.h>
-#include <asm/prctl.h>
 #include <linux/proc_fs.h>
+
+#include <asm/cpuid/api.h>
+#include <asm/prctl.h>
 
 #include "cpu.h"
 
@@ -59,6 +61,50 @@ static void show_cpuinfo_misc(struct seq_file *m, struct cpuinfo_x86 *c)
 		   c->cpuid_level);
 }
 #endif
+
+static void show_cpuinfo_power(struct cpuinfo_x86 *c, struct seq_file *m)
+{
+	const struct cpuid_regs *el7_regs = cpuid_leaf_raw(c, 0x80000007);
+	const struct leaf_0x80000007_0 *el7 = cpuid_leaf(c, 0x80000007);
+
+	seq_puts(m, "power management:");
+
+	if (!el7_regs || !el7)
+		return;
+
+	if (el7->digital_temp)
+		seq_puts(m, " ts");
+	if (el7->powernow_freq_id)
+		seq_puts(m, " fid");
+	if (el7->powernow_volt_id)
+		seq_puts(m, " vid");
+	if (el7->thermal_trip)
+		seq_puts(m, " ttp");
+	if (el7->hw_thermal_control)
+		seq_puts(m, " tm");
+	if (el7->sw_thermal_control)
+		seq_puts(m, " stc");
+	if (el7->_100mhz_steps)
+		seq_puts(m, " 100mhzsteps");
+	if (el7->hw_pstate)
+		seq_puts(m, " hwpstate");
+
+	/* Keep constant_tsc off the power management line */
+
+	if (el7->core_perf_boost)
+		seq_puts(m, " cpb");
+	if (el7->eff_freq_ro)
+		seq_puts(m, " eff_freq_ro");
+	if (el7->proc_feedback)
+		seq_puts(m, " proc_feedback");
+	if (el7->proc_power_reporting)
+		seq_puts(m, " acc_power");
+
+	/* Afterwards, just output the offsets of set bits */
+	for (int i = 13; i < 32; i++)
+		if (el7_regs->edx & BIT(i))
+			seq_printf(m, " [%d]", i);
+}
 
 static int show_cpuinfo(struct seq_file *m, void *v)
 {
@@ -138,18 +184,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	seq_printf(m, "address sizes\t: %u bits physical, %u bits virtual\n",
 		   c->x86_phys_bits, c->x86_virt_bits);
 
-	seq_puts(m, "power management:");
-	for (i = 0; i < 32; i++) {
-		if (c->x86_power & (1 << i)) {
-			if (i < ARRAY_SIZE(x86_power_flags) &&
-			    x86_power_flags[i])
-				seq_printf(m, "%s%s",
-					   x86_power_flags[i][0] ? " " : "",
-					   x86_power_flags[i]);
-			else
-				seq_printf(m, " [%d]", i);
-		}
-	}
+	show_cpuinfo_power(c, m);
 
 	seq_puts(m, "\n\n");
 

@@ -27,7 +27,7 @@ obj-y			+= bugs.o
 obj-y			+= aperfmperf.o
 obj-y			+= cpuid-deps.o cpuid_0x2_table.o
 obj-y			+= umwait.o
-obj-y 			+= capflags.o powerflags.o
+obj-y 			+= capflags.o
 
 obj-$(CONFIG_X86_LOCAL_APIC)		+= topology.o
 
