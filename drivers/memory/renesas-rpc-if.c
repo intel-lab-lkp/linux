@@ -211,7 +211,9 @@ int rpcif_sw_init(struct rpcif *rpcif, struct device *dev)
 	rpcif->dev = dev;
 	rpcif->dirmap = rpc->dirmap;
 	rpcif->size = rpc->size;
-	rpcif->xspi = rpc->info->type == XSPI_RZ_G3E;
+	rpcif->xspi = (rpc->info->type == XSPI_RZ_G3E ||
+		       rpc->info->type == XSPI_RZ_T2H);
+
 	return 0;
 }
 EXPORT_SYMBOL(rpcif_sw_init);
@@ -1142,9 +1144,16 @@ static const struct rpcif_info xspi_info_r9a09g047 = {
 	.type = XSPI_RZ_G3E,
 };
 
+static const struct rpcif_info xspi_info_r9a09g077 = {
+	.regmap_config = &xspi_regmap_config,
+	.impl = &xspi_impl,
+	.type = XSPI_RZ_T2H,
+};
+
 static const struct of_device_id rpcif_of_match[] = {
 	{ .compatible = "renesas,r8a7796-rpc-if", .data = &rpcif_info_r8a7796 },
 	{ .compatible = "renesas,r9a09g047-xspi", .data = &xspi_info_r9a09g047 },
+	{ .compatible = "renesas,r9a09g077-xspi", .data = &xspi_info_r9a09g077 },
 	{ .compatible = "renesas,rcar-gen3-rpc-if", .data = &rpcif_info_gen3 },
 	{ .compatible = "renesas,rcar-gen4-rpc-if", .data = &rpcif_info_gen4 },
 	{ .compatible = "renesas,rzg2l-rpc-if", .data = &rpcif_info_rz_g2l },
