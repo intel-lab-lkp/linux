@@ -31,18 +31,34 @@ static const struct cpuid_vendor_entry cpuid_vendor_entries[] = {
  * Leaf read functions:
  */
 
+/**
+ * define_cpuid_read_function() - Generate a CPUID parser read function
+ * @suffix:	Generated function name suffix (full name becomes: cpuid_read_@suffix())
+ * @_leaf_t:	Type to cast the CPUID output storage pointer
+ * @_leaf:	Name of the CPUID output storage pointer
+ * @_break_c:	Condition to break the CPUID parsing loop, which may reference @_leaf,
+ *		and where @_leaf stores each iteration's CPUID output.
+ *
+ * Define a CPUID parser read function according to the requirements stated at
+ * 'struct cpuid_parse_entry'->read().
+ */
+#define define_cpuid_read_function(suffix, _leaf_t, _leaf, _break_c)				\
+static void											\
+cpuid_read_##suffix(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)	\
+{												\
+	struct _leaf_t *_leaf = (struct _leaf_t *)output->regs;					\
+												\
+	for (int i = 0; i < e->maxcnt; i++, _leaf++, output->info->nr_entries++) {		\
+		cpuid_read_subleaf(e->leaf, e->subleaf + i, _leaf);				\
+		if (_break_c)									\
+			break;									\
+	}											\
+}
+
 /*
  * Default CPUID read function
- * Satisfies the requirements stated at 'struct cpuid_parse_entry'->read().
  */
-static void
-cpuid_read_generic(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
-{
-	struct cpuid_regs *regs = output->regs;
-
-	for (int i = 0; i < e->maxcnt; i++, regs++, output->info->nr_entries++)
-		cpuid_read_subleaf(e->leaf, e->subleaf + i, regs);
-}
+define_cpuid_read_function(generic, cpuid_regs, ignored, false);
 
 static void
 cpuid_read_0x2(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
@@ -82,6 +98,12 @@ cpuid_read_0x2(const struct cpuid_parse_entry *e, const struct cpuid_read_output
 
 	output->info->nr_entries = 1;
 }
+
+/*
+ * Shared read function for Intel CPUID(0x4) and AMD CPUID(0x8000001d), as both have
+ * the same subleaf enumeration logic and register output format.
+ */
+define_cpuid_read_function(deterministic_cache, leaf_0x4_n, l, l->cache_type == 0);
 
 /*
  * Define an extended range CPUID read function
