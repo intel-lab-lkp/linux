@@ -347,7 +347,8 @@ static u16 find_equiv_id(struct equiv_cpu_table *et, u32 sig)
 	unsigned int i;
 
 	/* Zen and newer do not need an equivalence table. */
-	if (x86_family(bsp_cpuid_1_eax) >= 0x17)
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	    x86_family(bsp_cpuid_1_eax) >= 0x17)
 		return 0;
 
 	if (!et || !et->num_entries)
@@ -397,7 +398,8 @@ static bool verify_equivalence_table(const u8 *buf, size_t buf_size)
 		return false;
 
 	/* Zen and newer do not need an equivalence table. */
-	if (x86_family(bsp_cpuid_1_eax) >= 0x17)
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	    x86_family(bsp_cpuid_1_eax) >= 0x17)
 		return true;
 
 	cont_type = hdr[1];
@@ -577,7 +579,8 @@ ok:
 static bool mc_patch_matches(struct microcode_amd *mc, u16 eq_id)
 {
 	/* Zen and newer do not need an equivalence table. */
-	if (x86_family(bsp_cpuid_1_eax) >= 0x17)
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	    x86_family(bsp_cpuid_1_eax) >= 0x17)
 		return ucode_rev_to_cpuid(mc->hdr.patch_id).full == bsp_cpuid_1_eax;
 	else
 		return eq_id == mc->hdr.processor_rev_id;
@@ -701,7 +704,9 @@ static bool __apply_microcode_amd(struct microcode_amd *mc, u32 *cur_rev,
 
 	native_wrmsrq(MSR_AMD64_PATCH_LOADER, p_addr);
 
-	if (x86_family(bsp_cpuid_1_eax) == 0x17) {
+	if ((x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	     x86_family(bsp_cpuid_1_eax) == 0x17) ||
+	    x86_cpuid_vendor() == X86_VENDOR_HYGON) {
 		unsigned long p_addr_end = p_addr + psize - 1;
 
 		invlpg(p_addr);
@@ -730,16 +735,19 @@ static bool __apply_microcode_amd(struct microcode_amd *mc, u32 *cur_rev,
 
 static bool get_builtin_microcode(struct cpio_data *cp)
 {
-	char fw_name[36] = "amd-ucode/microcode_amd.bin";
+	char fw_name[40] = "amd-ucode/microcode_amd.bin";
 	u8 family = x86_family(bsp_cpuid_1_eax);
 	struct firmware fw;
 
 	if (IS_ENABLED(CONFIG_X86_32))
 		return false;
 
-	if (family >= 0x15)
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD && family >= 0x15)
 		snprintf(fw_name, sizeof(fw_name),
 			 "amd-ucode/microcode_amd_fam%02hhxh.bin", family);
+	else if (x86_cpuid_vendor() == X86_VENDOR_HYGON)
+		snprintf(fw_name, sizeof(fw_name),
+			 "hygon-ucode/microcode_hygon_fam%.2xh.bin", family);
 
 	if (firmware_request_builtin(&fw, fw_name)) {
 		cp->size = fw.size;
@@ -824,7 +832,8 @@ static inline bool patch_cpus_equivalent(struct ucode_patch *p,
 					 bool ignore_stepping)
 {
 	/* Zen and newer hardcode the f/m/s in the patch ID */
-        if (x86_family(bsp_cpuid_1_eax) >= 0x17) {
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	    x86_family(bsp_cpuid_1_eax) >= 0x17) {
 		union cpuid_1_eax p_cid = ucode_rev_to_cpuid(p->patch_id);
 		union cpuid_1_eax n_cid = ucode_rev_to_cpuid(n->patch_id);
 
@@ -860,7 +869,8 @@ static struct ucode_patch *cache_find_patch(struct ucode_cpu_info *uci, u16 equi
 static inline int patch_newer(struct ucode_patch *p, struct ucode_patch *n)
 {
 	/* Zen and newer hardcode the f/m/s in the patch ID */
-        if (x86_family(bsp_cpuid_1_eax) >= 0x17) {
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	    x86_family(bsp_cpuid_1_eax) >= 0x17) {
 		union zen_patch_rev zp, zn;
 
 		zp.ucode_rev = p->patch_id;
@@ -920,7 +930,9 @@ static struct ucode_patch *find_patch(unsigned int cpu)
 
 	uci->cpu_sig.rev = get_patch_level();
 
-	if (x86_family(bsp_cpuid_1_eax) < 0x17) {
+	if ((x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	     x86_family(bsp_cpuid_1_eax) < 0x17) ||
+	    x86_cpuid_vendor() == X86_VENDOR_HYGON) {
 		equiv_id = find_equiv_id(&equiv_table, uci->cpu_sig.sig);
 		if (!equiv_id)
 			return NULL;
@@ -1035,7 +1047,8 @@ static size_t install_equiv_cpu_table(const u8 *buf, size_t buf_size)
 	equiv_tbl_len = hdr[2];
 
 	/* Zen and newer do not need an equivalence table. */
-	if (x86_family(bsp_cpuid_1_eax) >= 0x17)
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	    x86_family(bsp_cpuid_1_eax) >= 0x17)
 		goto out;
 
 	equiv_table.entry = vmalloc(equiv_tbl_len);
@@ -1054,7 +1067,8 @@ out:
 
 static void free_equiv_cpu_table(void)
 {
-	if (x86_family(bsp_cpuid_1_eax) >= 0x17)
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD &&
+	    x86_family(bsp_cpuid_1_eax) >= 0x17)
 		return;
 
 	vfree(equiv_table.entry);
@@ -1200,7 +1214,9 @@ static int __init save_microcode_in_initrd(void)
 	enum ucode_state ret;
 	struct cpio_data cp;
 
-	if (microcode_loader_disabled() || c->x86_vendor != X86_VENDOR_AMD || c->x86 < 0x10)
+	if (microcode_loader_disabled() ||
+	    ((c->x86_vendor != X86_VENDOR_AMD || c->x86 < 0x10) &&
+	     (c->x86_vendor != X86_VENDOR_HYGON)))
 		return 0;
 
 	cpuid_1_eax = native_cpuid_eax(1);
@@ -1238,7 +1254,7 @@ early_initcall(save_microcode_in_initrd);
  */
 static enum ucode_state request_microcode_amd(int cpu, struct device *device)
 {
-	char fw_name[36] = "amd-ucode/microcode_amd.bin";
+	char fw_name[40] = "amd-ucode/microcode_amd.bin";
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 	enum ucode_state ret = UCODE_NFOUND;
 	const struct firmware *fw;
@@ -1246,8 +1262,11 @@ static enum ucode_state request_microcode_amd(int cpu, struct device *device)
 	if (force_minrev)
 		return UCODE_NFOUND;
 
-	if (c->x86 >= 0x15)
+	if (x86_cpuid_vendor() == X86_VENDOR_AMD && c->x86 >= 0x15)
 		snprintf(fw_name, sizeof(fw_name), "amd-ucode/microcode_amd_fam%.2xh.bin", c->x86);
+	else if (x86_cpuid_vendor() == X86_VENDOR_HYGON)
+		snprintf(fw_name, sizeof(fw_name),
+			 "hygon-ucode/microcode_hygon_fam%.2xh.bin", c->x86);
 
 	if (request_firmware_direct(&fw, (const char *)fw_name, device)) {
 		ucode_dbg("failed to load file %s\n", fw_name);
@@ -1297,8 +1316,24 @@ struct microcode_ops * __init init_amd_microcode(void)
 		pr_warn("AMD CPU family 0x%x not supported\n", c->x86);
 		return NULL;
 	}
+
 	return &microcode_amd_ops;
 }
+
+#ifdef CONFIG_CPU_SUP_HYGON
+struct microcode_ops * __init init_hygon_microcode(void)
+{
+	struct cpuinfo_x86 *c = &boot_cpu_data;
+
+	if (c->x86_vendor != X86_VENDOR_HYGON)
+		return NULL;
+
+	strscpy((char *)ucode_path, "kernel/x86/microcode/HygonGenuine.bin",
+		sizeof(ucode_path));
+
+	return &microcode_amd_ops;
+}
+#endif
 
 void __exit exit_amd_microcode(void)
 {
