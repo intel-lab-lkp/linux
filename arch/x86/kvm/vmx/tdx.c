@@ -1719,20 +1719,6 @@ static int tdx_sept_map_leaf_spte(struct kvm *kvm, gfn_t gfn, enum pg_level leve
 	return tdx_mem_page_aug(kvm, gfn, level, pfn);
 }
 
-static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn, u64 old_spte,
-				     u64 new_spte, enum pg_level level)
-{
-	if (KVM_BUG_ON(!is_shadow_present_pte(new_spte), kvm))
-		return -EIO;
-
-	lockdep_assert_held(&kvm->mmu_lock);
-
-	if (!is_last_spte(new_spte, level))
-		return tdx_sept_link_private_spt(kvm, gfn, level, new_spte);
-
-	return tdx_sept_map_leaf_spte(kvm, gfn, level, new_spte);
-}
-
 /*
  * Ensure shared and private EPTs to be flushed on all vCPUs.
  * tdh_mem_track() is the only caller that increases TD epoch. An increase in
@@ -1850,6 +1836,20 @@ static void tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 		return;
 
 	tdx_quirk_reset_page(page);
+}
+
+static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn, u64 old_spte,
+				     u64 new_spte, enum pg_level level)
+{
+	if (KVM_BUG_ON(!is_shadow_present_pte(new_spte), kvm))
+		return -EIO;
+
+	lockdep_assert_held(&kvm->mmu_lock);
+
+	if (!is_last_spte(new_spte, level))
+		return tdx_sept_link_private_spt(kvm, gfn, level, new_spte);
+
+	return tdx_sept_map_leaf_spte(kvm, gfn, level, new_spte);
 }
 
 void tdx_deliver_interrupt(struct kvm_lapic *apic, int delivery_mode,
