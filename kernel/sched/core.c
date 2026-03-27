@@ -2562,7 +2562,7 @@ static int migration_cpu_stop(void *data)
 			update_rq_clock(rq);
 			rq = __migrate_task(rq, &rf, p, arg->dest_cpu);
 		} else {
-			p->wake_cpu = arg->dest_cpu;
+			WRITE_ONCE(p->wake_cpu, arg->dest_cpu);
 		}
 
 		/*
@@ -3313,7 +3313,7 @@ static void __migrate_swap_task(struct task_struct *p, int cpu)
 		 * it before it went to sleep. This means on wakeup we make the
 		 * previous CPU our target instead of where it really is.
 		 */
-		p->wake_cpu = cpu;
+		WRITE_ONCE(p->wake_cpu, cpu);
 	}
 }
 
@@ -4224,7 +4224,7 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 */
 		smp_cond_load_acquire(&p->on_cpu, !VAL);
 
-		cpu = select_task_rq(p, p->wake_cpu, &wake_flags);
+		cpu = select_task_rq(p, READ_ONCE(p->wake_cpu), &wake_flags);
 		if (task_cpu(p) != cpu) {
 			if (p->in_iowait) {
 				delayacct_blkio_end(p);
