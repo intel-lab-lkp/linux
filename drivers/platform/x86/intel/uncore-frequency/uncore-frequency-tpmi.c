@@ -385,7 +385,21 @@ static u8 io_die_index_next;
 /* Lock to protect io_die_start, io_die_index_next */
 static DEFINE_MUTEX(domain_lock);
 
-static void set_domain_id(int id,  int num_resources,
+static void set_instance_id(int id, struct tpmi_uncore_cluster_info *cluster_info)
+{
+	/*
+	 * In its base form the domain_id is a per-TPMI device value that lists
+	 * feature instances for that specific TPMI device (instances as named by
+	 * the intel_vsec system). On newer platforms the cdie system comes into
+	 * effect which makes domain_id a unique identifier and there is no more
+	 * correlation between the TPMI device and the domain_id number. The old
+	 * version is still relevant so TPMI device scoped information can be
+	 * matched with the data from the TPMI driver.
+	 */
+	cluster_info->uncore_data.instance_id = id;
+}
+
+static void set_domain_id(int id, int num_resources,
 			  struct oobmsm_plat_info *plat_info,
 			  struct tpmi_uncore_cluster_info *cluster_info)
 {
@@ -686,6 +700,7 @@ static int uncore_probe(struct auxiliary_device *auxdev, const struct auxiliary_
 			set_cdie_id(i, cluster_info, plat_info);
 
 			set_domain_id(i, num_resources, plat_info, cluster_info);
+			set_instance_id(i, cluster_info);
 
 			cluster_info->uncore_root = tpmi_uncore;
 
