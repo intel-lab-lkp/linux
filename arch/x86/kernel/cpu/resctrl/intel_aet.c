@@ -335,6 +335,19 @@ void __exit intel_aet_exit(void)
 	}
 }
 
+bool intel_aet_pre_mount(void)
+{
+	return false; // Temporary stub
+}
+
+void intel_aet_mount_result(int ret)
+{
+}
+
+void intel_aet_unmount(void)
+{
+}
+
 #define DATA_VALID	BIT_ULL(63)
 #define DATA_BITS	GENMASK_ULL(62, 0)
 

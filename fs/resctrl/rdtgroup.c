@@ -18,7 +18,6 @@
 #include <linux/fs_parser.h>
 #include <linux/sysfs.h>
 #include <linux/kernfs.h>
-#include <linux/once.h>
 #include <linux/resctrl.h>
 #include <linux/seq_buf.h>
 #include <linux/seq_file.h>
@@ -2788,8 +2787,6 @@ static int rdt_get_tree(struct fs_context *fc)
 	struct rdt_resource *r;
 	int ret;
 
-	DO_ONCE_SLEEPABLE(resctrl_arch_pre_mount);
-
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
 	/*
@@ -2900,6 +2897,19 @@ out:
 	return ret;
 }
 
+static int rdt_get_tree_wrapper(struct fs_context *fc)
+{
+	int ret;
+
+	resctrl_arch_pre_mount();
+
+	ret = rdt_get_tree(fc);
+
+	resctrl_arch_mount_result(ret);
+
+	return ret;
+}
+
 enum rdt_param {
 	Opt_cdp,
 	Opt_cdpl2,
@@ -2959,7 +2969,7 @@ static void rdt_fs_context_free(struct fs_context *fc)
 static const struct fs_context_operations rdt_fs_context_ops = {
 	.free		= rdt_fs_context_free,
 	.parse_param	= rdt_parse_param,
-	.get_tree	= rdt_get_tree,
+	.get_tree	= rdt_get_tree_wrapper,
 };
 
 static int rdt_init_fs_context(struct fs_context *fc)
@@ -3187,6 +3197,8 @@ static void rdt_kill_sb(struct super_block *sb)
 	kernfs_kill_sb(sb);
 	mutex_unlock(&rdtgroup_mutex);
 	cpus_read_unlock();
+
+	resctrl_arch_unmount();
 }
 
 static struct file_system_type rdt_fs_type = {

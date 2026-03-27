@@ -518,10 +518,17 @@ void resctrl_online_cpu(unsigned int cpu);
 void resctrl_offline_cpu(unsigned int cpu);
 
 /*
- * Architecture hook called at beginning of first file system mount attempt.
- * No locks are held.
+ * Architecture hooks for resctrl mount/unmount. No locks are held.
  */
+
+/* Called at beginning of each file system mount attempt. */
 void resctrl_arch_pre_mount(void);
+
+/* Called to report success/failure of mount. */
+void resctrl_arch_mount_result(int ret);
+
+/* Called to report unmount. */
+void resctrl_arch_unmount(void);
 
 /**
  * resctrl_arch_rmid_read() - Read the eventid counter corresponding to rmid

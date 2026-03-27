@@ -769,8 +769,10 @@ void resctrl_arch_pre_mount(void)
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
 	int cpu;
 
-	if (!intel_aet_get_events())
+	if (!intel_aet_pre_mount()) {
+		r->mon_capable = false;
 		return;
+	}
 
 	/*
 	 * Late discovery of telemetry events means the domains for the
@@ -784,6 +786,16 @@ void resctrl_arch_pre_mount(void)
 		domain_add_cpu_mon(cpu, r);
 	mutex_unlock(&domain_list_lock);
 	cpus_read_unlock();
+}
+
+void resctrl_arch_mount_result(int ret)
+{
+	intel_aet_mount_result(ret);
+}
+
+void resctrl_arch_unmount(void)
+{
+	intel_aet_unmount();
 }
 
 enum {
