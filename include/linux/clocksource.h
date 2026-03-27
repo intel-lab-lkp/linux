@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/of.h>
 #include <linux/clocksource_ids.h>
+#include <linux/platform_device.h>
 #include <asm/div64.h>
 #include <asm/io.h>
 
@@ -298,6 +299,26 @@ extern void timer_probe(void);
 #else
 static inline void timer_probe(void) {}
 #endif
+
+extern struct platform_driver *__pdev_timer_table[];
+extern struct platform_driver *__pdev_timer_table_end[];
+
+#define TIMER_PDEV_DECLARE(__name, __probe, __remove, __match)		\
+	static struct platform_driver __pdev_timer_table_entry_##__name = { \
+		.probe = __probe,					\
+		.remove = __remove,					\
+		.driver = {						\
+			.name = #__name,				\
+			.of_match_table = __match			\
+		},							\
+	};								\
+	static struct platform_driver *___pdev_timer_table_entry_##__name \
+	__used __section("__pdev_timer_table") = &__pdev_timer_table_entry_##__name
+
+#define for_each_pdev_timer_table(__pdev)     \
+	for (__pdev = __pdev_timer_table;     \
+	     __pdev < __pdev_timer_table_end; \
+	     __pdev++)
 
 #define TIMER_ACPI_DECLARE(name, table_id, fn)		\
 	ACPI_DECLARE_PROBE_ENTRY(timer, name, table_id, 0, NULL, 0, fn)

@@ -359,6 +359,15 @@
 #define THERMAL_TABLE(name)
 #endif
 
+#ifdef CONFIG_TIMER_OF
+#define TIMER_TABLE(name)						\
+	. = ALIGN(8);							\
+	BOUNDED_SECTION_POST_LABEL(__##name##_timer_table,		\
+				   __##name##_timer_table,, _end)
+#else
+#define TIMER_TABLE(name)
+#endif
+
 #define KERNEL_DTB()							\
 	STRUCT_ALIGN();							\
 	__dtb_start = .;						\
@@ -738,6 +747,7 @@
 	ACPI_PROBE_TABLE(irqchip)					\
 	ACPI_PROBE_TABLE(timer)						\
 	THERMAL_TABLE(governor)						\
+	TIMER_TABLE(pdev)						\
 	EARLYCON_TABLE()						\
 	LSM_TABLE()							\
 	EARLY_LSM_TABLE()						\

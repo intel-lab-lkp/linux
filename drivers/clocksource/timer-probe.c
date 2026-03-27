@@ -7,13 +7,11 @@
 #include <linux/init.h>
 #include <linux/of.h>
 #include <linux/clocksource.h>
+#include <linux/platform_device.h>
 
 extern struct of_device_id __timer_of_table[];
 
-static const struct of_device_id __timer_of_table_sentinel
-	__used __section("__timer_of_table_end");
-
-void __init timer_probe(void)
+static int __init timer_of_probe(void)
 {
 	struct device_node *np;
 	const struct of_device_id *match;
@@ -38,6 +36,66 @@ void __init timer_probe(void)
 		timers++;
 	}
 
+	return timers;
+}
+
+static int __init __timer_pdev_probe(struct platform_driver *drv)
+{
+	struct device_node *np;
+	struct platform_device *pdev;
+	const struct of_device_id *match;
+	unsigned int timers = 0;
+	int ret;
+
+	for_each_matching_node_and_match(np, drv->driver.of_match_table, &match) {
+		if (!of_device_is_available(np))
+			continue;
+
+		pdev = platform_device_alloc(of_node_full_name(np), -1);
+		if (!pdev)
+			continue;
+
+		ret = device_add_of_node(&pdev->dev, np);
+		if (ret) {
+			platform_device_put(pdev);
+			continue;
+		}
+
+		dev_set_name(&pdev->dev, pdev->name);
+
+		ret = drv->probe(pdev);
+		if (!ret) {
+			timers++;
+			continue;
+		}
+
+		if (ret != -EPROBE_DEFER)
+			pr_err("Failed to initialize '%pOF': %d\n", np, ret);
+
+		device_remove_of_node(&pdev->dev);
+
+		platform_device_put(pdev);
+	}
+
+	return timers;
+}
+
+static int __init timer_pdev_probe(void)
+{
+	struct platform_driver **drv;
+
+	for_each_pdev_timer_table(drv)
+		__timer_pdev_probe(*drv);
+
+	return 0;
+}
+
+void __init timer_probe(void)
+{
+	unsigned timers = 0;
+
+	timers += timer_of_probe();
+	timers += timer_pdev_probe();
 	timers += acpi_probe_device_table(timer);
 
 	if (!timers)
