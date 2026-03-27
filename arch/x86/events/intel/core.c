@@ -5891,51 +5891,49 @@ static inline void __intel_update_large_pebs_flags(struct pmu *pmu)
 
 #define counter_mask(_gp, _fixed) ((_gp) | ((u64)(_fixed) << INTEL_PMC_IDX_FIXED))
 
-static void update_pmu_cap(struct pmu *pmu)
+static void update_pmu_cap(struct pmu *pmu, int cpu)
 {
-	unsigned int eax, ebx, ecx, edx;
-	union cpuid35_eax eax_0;
-	union cpuid35_ebx ebx_0;
+	struct cpuinfo_x86 *cpuinfo = is_hybrid() ? &cpu_data(cpu) : &boot_cpu_data;
+	const struct leaf_0x23_0 *sl0 = cpuid_subleaf(cpuinfo, 0x23, 0);
+	const struct leaf_0x23_1 *sl1 = cpuid_subleaf(cpuinfo, 0x23, 1);
+	const struct leaf_0x23_2 *sl2 = cpuid_subleaf(cpuinfo, 0x23, 2);
+	const struct leaf_0x23_4 *sl4 = cpuid_subleaf(cpuinfo, 0x23, 4);
+	const struct leaf_0x23_5 *sl5 = cpuid_subleaf(cpuinfo, 0x23, 5);
+	u64 pdists_mask = 0;
 	u64 cntrs_mask = 0;
 	u64 pebs_mask = 0;
-	u64 pdists_mask = 0;
 
-	cpuid(ARCH_PERFMON_EXT_LEAF, &eax_0.full, &ebx_0.full, &ecx, &edx);
+	if (!sl0)
+		return;
 
-	if (ebx_0.split.umask2)
+	if (sl0->unitmask2)
 		hybrid(pmu, config_mask) |= ARCH_PERFMON_EVENTSEL_UMASK2;
-	if (ebx_0.split.eq)
+	if (sl0->eq)
 		hybrid(pmu, config_mask) |= ARCH_PERFMON_EVENTSEL_EQ;
-	if (ebx_0.split.rdpmc_user_disable)
+	if (sl0->rdpmc_user_disable)
 		hybrid(pmu, config_mask) |= ARCH_PERFMON_EVENTSEL_RDPMC_USER_DISABLE;
 
-	if (eax_0.split.cntr_subleaf) {
-		cpuid_count(ARCH_PERFMON_EXT_LEAF, ARCH_PERFMON_NUM_COUNTER_LEAF,
-			    &eax, &ebx, &ecx, &edx);
-		hybrid(pmu, cntr_mask64) = eax;
-		hybrid(pmu, fixed_cntr_mask64) = ebx;
-		cntrs_mask = counter_mask(eax, ebx);
+	if (sl1) {
+		hybrid(pmu, cntr_mask64) = sl1->gp_counters;
+		hybrid(pmu, fixed_cntr_mask64) = sl1->fixed_counters;
+		cntrs_mask = counter_mask(sl1->gp_counters, sl1->fixed_counters);
 	}
 
-	if (eax_0.split.acr_subleaf) {
-		cpuid_count(ARCH_PERFMON_EXT_LEAF, ARCH_PERFMON_ACR_LEAF,
-			    &eax, &ebx, &ecx, &edx);
+	if (sl2) {
 		/* The mask of the counters which can be reloaded */
-		hybrid(pmu, acr_cntr_mask64) = counter_mask(eax, ebx);
+		hybrid(pmu, acr_cntr_mask64) = counter_mask(sl2->acr_gp_reload, sl2->acr_fixed_reload);
 		/* The mask of the counters which can cause a reload of reloadable counters */
-		hybrid(pmu, acr_cause_mask64) = counter_mask(ecx, edx);
+		hybrid(pmu, acr_cause_mask64) = counter_mask(sl2->acr_gp_trigger, sl2->acr_fixed_trigger);
 	}
 
-	/* Bits[5:4] should be set simultaneously if arch-PEBS is supported */
-	if (eax_0.split.pebs_caps_subleaf && eax_0.split.pebs_cnts_subleaf) {
-		cpuid_count(ARCH_PERFMON_EXT_LEAF, ARCH_PERFMON_PEBS_CAP_LEAF,
-			    &eax, &ebx, &ecx, &edx);
-		hybrid(pmu, arch_pebs_cap).caps = (u64)ebx << 32;
+	/* Both subleaves should be available if arch-PEBS is supported */
+	if (sl4 && sl5) {
+		const struct cpuid_regs *sl4_regs = (const struct cpuid_regs *)sl4;
 
-		cpuid_count(ARCH_PERFMON_EXT_LEAF, ARCH_PERFMON_PEBS_COUNTER_LEAF,
-			    &eax, &ebx, &ecx, &edx);
-		pebs_mask   = counter_mask(eax, ecx);
-		pdists_mask = counter_mask(ebx, edx);
+		hybrid(pmu, arch_pebs_cap).caps = (u64)sl4_regs->ebx << 32;
+
+		pebs_mask   = counter_mask(sl5->pebs_gp, sl5->pebs_fixed);
+		pdists_mask = counter_mask(sl5->pebs_pdist_gp, sl5->pebs_pdist_fixed);
 		hybrid(pmu, arch_pebs_cap).counters = pebs_mask;
 		hybrid(pmu, arch_pebs_cap).pdists = pdists_mask;
 
@@ -6038,7 +6036,7 @@ static bool init_hybrid_pmu(int cpu)
 		goto end;
 
 	if (this_cpu_has(X86_FEATURE_ARCH_PERFMON_EXT))
-		update_pmu_cap(&pmu->pmu);
+		update_pmu_cap(&pmu->pmu, cpu);
 
 	intel_pmu_check_hybrid_pmus(pmu);
 
@@ -8452,7 +8450,7 @@ __init int intel_pmu_init(void)
 	 * when a new type is online.
 	 */
 	if (!is_hybrid() && boot_cpu_has(X86_FEATURE_ARCH_PERFMON_EXT))
-		update_pmu_cap(NULL);
+		update_pmu_cap(NULL, 0);
 
 	if (x86_pmu.arch_pebs) {
 		static_call_update(intel_pmu_disable_event_ext,
