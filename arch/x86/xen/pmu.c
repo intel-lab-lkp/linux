@@ -48,18 +48,6 @@ static __read_mostly int amd_num_counters;
 #define MSR_TYPE_ARCH_COUNTER       3
 #define MSR_TYPE_ARCH_CTRL          4
 
-/* Number of general pmu registers (CPUID.EAX[0xa].EAX[8..15]) */
-#define PMU_GENERAL_NR_SHIFT        8
-#define PMU_GENERAL_NR_BITS         8
-#define PMU_GENERAL_NR_MASK         (((1 << PMU_GENERAL_NR_BITS) - 1) \
-				     << PMU_GENERAL_NR_SHIFT)
-
-/* Number of fixed pmu registers (CPUID.EDX[0xa].EDX[0..4]) */
-#define PMU_FIXED_NR_SHIFT          0
-#define PMU_FIXED_NR_BITS           5
-#define PMU_FIXED_NR_MASK           (((1 << PMU_FIXED_NR_BITS) - 1) \
-				     << PMU_FIXED_NR_SHIFT)
-
 /* Alias registers (0x4c1) for full-width writes to PMCs */
 #define MSR_PMC_ALIAS_MASK          (~(MSR_IA32_PERFCTR0 ^ MSR_IA32_PMC0))
 
@@ -70,6 +58,8 @@ static __read_mostly int intel_num_arch_counters, intel_num_fixed_counters;
 
 static void xen_pmu_arch_init(void)
 {
+	const struct leaf_0xa_0 *leaf_a = cpuid_leaf(&boot_cpu_data, 0xa);
+
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
 
 		switch (boot_cpu_data.x86) {
@@ -98,15 +88,9 @@ static void xen_pmu_arch_init(void)
 		amd_ctrls_base = MSR_K7_EVNTSEL0;
 		amd_msr_step = 1;
 		k7_counters_mirrored = 0;
-	} else {
-		uint32_t eax, ebx, ecx, edx;
-
-		cpuid(0xa, &eax, &ebx, &ecx, &edx);
-
-		intel_num_arch_counters = (eax & PMU_GENERAL_NR_MASK) >>
-			PMU_GENERAL_NR_SHIFT;
-		intel_num_fixed_counters = (edx & PMU_FIXED_NR_MASK) >>
-			PMU_FIXED_NR_SHIFT;
+	} else if (leaf_a) {
+		intel_num_arch_counters = leaf_a->num_counters_gp;
+		intel_num_fixed_counters = leaf_a->num_counters_fixed;
 	}
 }
 
