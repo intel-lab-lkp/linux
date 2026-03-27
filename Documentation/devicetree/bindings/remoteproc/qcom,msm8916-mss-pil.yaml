@@ -27,6 +27,7 @@ properties:
           - qcom,msm8940-mss-pil
           - qcom,msm8953-mss-pil
           - qcom,msm8974-mss-pil
+          - qcom,sdm632-mss-pil
 
       - const: qcom,q6v5-pil
         description: Deprecated, prefer using qcom,msm8916-mss-pil
@@ -79,14 +80,14 @@ properties:
                      (not valid for qcom,msm8226-mss-pil, qcom,msm8926-mss-pil
                      and qcom,msm8974-mss-pil)
       - description: MSS proxy power domain (control handed over after startup)
-                     (only valid for qcom,msm8953-mss-pil)
+                     (only valid for qcom,sdm632-mss-pil)
     minItems: 1
 
   power-domain-names:
     items:
       - const: cx
       - const: mx # not valid for qcom,msm8226-mss-pil, qcom-msm8926-mss-pil and qcom,msm8974-mss-pil
-      - const: mss # only valid for qcom,msm8953-mss-pil
+      - const: mss # only valid for qcom,sdm632-mss-pil
     minItems: 1
 
   pll-supply:
@@ -214,7 +215,7 @@ allOf:
   - if:
       properties:
         compatible:
-          const: qcom,msm8953-mss-pil
+          const: qcom,sdm632-mss-pil
     then:
       properties:
         power-domains:
@@ -236,6 +237,7 @@ allOf:
               - qcom,msm8917-mss-pil
               - qcom,msm8937-mss-pil
               - qcom,msm8940-mss-pil
+              - qcom,msm8953-mss-pil
     then:
       properties:
         power-domains:
@@ -282,6 +284,7 @@ allOf:
               - qcom,msm8917-mss-pil
               - qcom,msm8937-mss-pil
               - qcom,msm8940-mss-pil
+              - qcom,msm8953-mss-pil
               - qcom,msm8974-mss-pil
     then:
       required:
