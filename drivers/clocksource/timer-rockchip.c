@@ -124,18 +124,18 @@ static u64 notrace rk_timer_sched_read(void)
 	return ~readl_relaxed(rk_clksrc->base + TIMER_CURRENT_VALUE0);
 }
 
-static int __init
-rk_timer_probe(struct rk_timer *timer, struct device_node *np)
+static int rk_timer_init(struct rk_timer *timer, struct device *dev)
 {
+	struct device_node *np = dev->of_node;
 	struct clk *timer_clk;
 	struct clk *pclk;
-	int ret = -EINVAL, irq;
+	int irq;
 	u32 ctrl_reg = TIMER_CONTROL_REG3288;
 
-	timer->base = of_iomap(np, 0);
-	if (!timer->base) {
+	timer->base = devm_of_iomap(dev, np, 0, NULL);
+	if (IS_ERR(timer->base)) {
 		pr_err("Failed to get base address for '%s'\n", TIMER_NAME);
-		return -ENXIO;
+		return PTR_ERR(timer->base);
 	}
 
 	if (of_device_is_compatible(np, "rockchip,rk3399-timer"))
@@ -143,31 +143,17 @@ rk_timer_probe(struct rk_timer *timer, struct device_node *np)
 
 	timer->ctrl = timer->base + ctrl_reg;
 
-	pclk = of_clk_get_by_name(np, "pclk");
+	pclk = devm_clk_get_enabled(dev, "pclk");
 	if (IS_ERR(pclk)) {
-		ret = PTR_ERR(pclk);
 		pr_err("Failed to get pclk for '%s'\n", TIMER_NAME);
-		goto out_unmap;
-	}
-
-	ret = clk_prepare_enable(pclk);
-	if (ret) {
-		pr_err("Failed to enable pclk for '%s'\n", TIMER_NAME);
-		goto out_unmap;
+		return PTR_ERR(pclk);
 	}
 	timer->pclk = pclk;
 
-	timer_clk = of_clk_get_by_name(np, "timer");
+	timer_clk = devm_clk_get_enabled(dev, "timer");
 	if (IS_ERR(timer_clk)) {
-		ret = PTR_ERR(timer_clk);
 		pr_err("Failed to get timer clock for '%s'\n", TIMER_NAME);
-		goto out_timer_clk;
-	}
-
-	ret = clk_prepare_enable(timer_clk);
-	if (ret) {
-		pr_err("Failed to enable timer clock\n");
-		goto out_timer_clk;
+		return PTR_ERR(timer_clk);
 	}
 	timer->clk = timer_clk;
 
@@ -175,47 +161,32 @@ rk_timer_probe(struct rk_timer *timer, struct device_node *np)
 
 	irq = irq_of_parse_and_map(np, 0);
 	if (!irq) {
-		ret = -EINVAL;
 		pr_err("Failed to map interrupts for '%s'\n", TIMER_NAME);
-		goto out_irq;
+		return -EINVAL;
 	}
 	timer->irq = irq;
 
 	rk_timer_interrupt_clear(timer);
 	rk_timer_disable(timer);
+
 	return 0;
-
-out_irq:
-	clk_disable_unprepare(timer_clk);
-out_timer_clk:
-	clk_disable_unprepare(pclk);
-out_unmap:
-	iounmap(timer->base);
-
-	return ret;
 }
 
-static void __init rk_timer_cleanup(struct rk_timer *timer)
+static int rk_clkevt_init(struct platform_device *pdev)
 {
-	clk_disable_unprepare(timer->clk);
-	clk_disable_unprepare(timer->pclk);
-	iounmap(timer->base);
-}
-
-static int __init rk_clkevt_init(struct device_node *np)
-{
+	struct device *dev = &pdev->dev;
 	struct clock_event_device *ce;
 	int ret = -EINVAL;
 
-	rk_clkevt = kzalloc_obj(struct rk_clkevt);
+	rk_clkevt = devm_kzalloc(dev, sizeof(*rk_clkevt), GFP_KERNEL);
 	if (!rk_clkevt) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	ret = rk_timer_probe(&rk_clkevt->timer, np);
+	ret = rk_timer_init(&rk_clkevt->timer, dev);
 	if (ret)
-		goto out_probe;
+		goto out;
 
 	ce = &rk_clkevt->ce;
 	ce->name = TIMER_NAME;
@@ -233,36 +204,33 @@ static int __init rk_clkevt_init(struct device_node *np)
 	if (ret) {
 		pr_err("Failed to initialize '%s': %d\n",
 			TIMER_NAME, ret);
-		goto out_irq;
+		goto out;
 	}
 
 	clockevents_config_and_register(&rk_clkevt->ce,
 					rk_clkevt->timer.freq, 1, UINT_MAX);
 	return 0;
 
-out_irq:
-	rk_timer_cleanup(&rk_clkevt->timer);
-out_probe:
-	kfree(rk_clkevt);
 out:
 	/* Leave rk_clkevt not NULL to prevent future init */
 	rk_clkevt = ERR_PTR(ret);
 	return ret;
 }
 
-static int __init rk_clksrc_init(struct device_node *np)
+static int rk_clksrc_init(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	int ret = -EINVAL;
 
-	rk_clksrc = kzalloc_obj(struct rk_timer);
+	rk_clksrc = devm_kzalloc(dev, sizeof(*rk_clksrc), GFP_KERNEL);
 	if (!rk_clksrc) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	ret = rk_timer_probe(rk_clksrc, np);
+	ret = rk_timer_init(rk_clksrc, dev);
 	if (ret)
-		goto out_probe;
+		goto out;
 
 	rk_timer_update_counter(UINT_MAX, rk_clksrc);
 	rk_timer_enable(rk_clksrc, 0);
@@ -272,33 +240,34 @@ static int __init rk_clksrc_init(struct device_node *np)
 		clocksource_mmio_readl_down);
 	if (ret) {
 		pr_err("Failed to register clocksource\n");
-		goto out_clocksource;
+		goto out;
 	}
 
 	sched_clock_register(rk_timer_sched_read, 32, rk_clksrc->freq);
 	return 0;
 
-out_clocksource:
-	rk_timer_cleanup(rk_clksrc);
-out_probe:
-	kfree(rk_clksrc);
 out:
 	/* Leave rk_clksrc not NULL to prevent future init */
 	rk_clksrc = ERR_PTR(ret);
 	return ret;
 }
 
-static int __init rk_timer_init(struct device_node *np)
+static int rk_timer_probe(struct platform_device *pdev)
 {
 	if (!rk_clkevt)
-		return rk_clkevt_init(np);
+		return rk_clkevt_init(pdev);
 
 	if (!rk_clksrc)
-		return rk_clksrc_init(np);
+		return rk_clksrc_init(pdev);
 
 	pr_err("Too many timer definitions for '%s'\n", TIMER_NAME);
 	return -EINVAL;
 }
 
-TIMER_OF_DECLARE(rk3288_timer, "rockchip,rk3288-timer", rk_timer_init);
-TIMER_OF_DECLARE(rk3399_timer, "rockchip,rk3399-timer", rk_timer_init);
+static const struct of_device_id rk_timer_match_table[] = {
+	{ .compatible = "rockchip,rk3288-timer" },
+	{ .compatible = "rockchip,rk3399-timer" },
+	{ /* sentinel */ }
+};
+
+TIMER_PDEV_DECLARE(rk_timer, rk_timer_probe, NULL, rk_timer_match_table);
