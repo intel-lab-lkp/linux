@@ -171,6 +171,7 @@ readonly IPv6_RT_NETWORK=fd00
 readonly IPv6_HS_NETWORK=cafe
 readonly VPN_LOCATOR_SERVICE=fc00
 PING_TIMEOUT_SEC=4
+NH_VRF_FLAG=
 
 ret=0
 
@@ -285,6 +286,7 @@ setup_vpn_config()
 	local hsdst=$3
 	local rtdst=$4
 	local tid=$5
+	local vrf=
 
 	eval local rtsrc_name=\${rt_${rtsrc}}
 	eval local rtdst_name=\${rt_${rtdst}}
@@ -296,8 +298,9 @@ setup_vpn_config()
 	# set the encap route for encapsulating packets which arrive from the
 	# host hssrc and destined to the access router rtsrc.
 	ip -netns ${rtsrc_name} -6 route add ${IPv6_HS_NETWORK}::${hsdst}/128 vrf vrf-${tid} \
-		encap seg6 mode encap segs ${vpn_sid} dev veth0
-	ip -netns ${rtsrc_name} -6 route add ${vpn_sid}/128 vrf vrf-${tid} \
+		encap seg6 mode encap segs ${vpn_sid} ${NH_VRF_FLAG} dev veth0
+	[ -z ${NH_VRF_FLAG} ] && vrf="vrf vrf-${tid}"
+	ip -netns ${rtsrc_name} -6 route add ${vpn_sid}/128 ${vrf} \
 		via fd00::${rtdst} dev veth0
 
 	# set the decap route for decapsulating packets which arrive from
@@ -469,6 +472,26 @@ host_vpn_isolation_tests()
 	done
 }
 
+# check if the nh-vrf flag is supported
+check_nh_vrf_support()
+{
+	setup_ns nh_vrf_ns
+
+	if ! ip -netns "${nh_vrf_ns}" nexthop add id 1235 encap seg6 \
+			mode encap nh-vrf segs 2001:db8:1:1:1::2 dev lo &>/dev/null; then
+		cleanup_ns "${nh_vrf_ns}"
+		return
+	fi
+
+	if ! ip -netns "${nh_vrf_ns}" nexthop get id 1235 &>/dev/null; then
+		cleanup_ns "${nh_vrf_ns}"
+		return
+	fi
+
+	cleanup_ns "${nh_vrf_ns}"
+	NH_VRF_FLAG="nh-vrf"
+}
+
 if [ "$(id -u)" -ne 0 ];then
 	echo "SKIP: Need root privileges"
 	exit $ksft_skip
@@ -487,6 +510,12 @@ fi
 
 cleanup &>/dev/null
 
+check_nh_vrf_support
+if [ -z ${NH_VRF_FLAG} ]; then
+	echo "nh-vrf support: no"
+else
+	echo "nh-vrf support: yes"
+fi
 setup
 
 router_tests

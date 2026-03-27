@@ -50,6 +50,7 @@ static size_t seg6_lwt_headroom(struct seg6_iptunnel_encap *tuninfo)
 struct seg6_lwt {
 	struct dst_cache cache;
 	struct in6_addr tunsrc;
+	bool nh_vrf;
 	struct seg6_iptunnel_encap tuninfo[];
 };
 
@@ -67,6 +68,7 @@ seg6_encap_lwtunnel(struct lwtunnel_state *lwt)
 static const struct nla_policy seg6_iptunnel_policy[SEG6_IPTUNNEL_MAX + 1] = {
 	[SEG6_IPTUNNEL_SRH]	= { .type = NLA_BINARY },
 	[SEG6_IPTUNNEL_SRC]	= NLA_POLICY_EXACT_LEN(sizeof(struct in6_addr)),
+	[SEG6_IPTUNNEL_NH_VRF]	= { .type = NLA_FLAG },
 };
 
 static int nla_put_srh(struct sk_buff *skb, int attrtype,
@@ -499,8 +501,14 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 	 * now and use it later as a comparison.
 	 */
 	lwtst = orig_dst->lwtstate;
-
 	slwt = seg6_lwt_lwtunnel(lwtst);
+
+	if (slwt->nh_vrf) {
+		rcu_read_lock();
+		skb->dev = l3mdev_master_dev_rcu(dst_dev_rcu(orig_dst)) ?:
+			dev_net(skb->dev)->loopback_dev;
+		rcu_read_unlock();
+	}
 
 	local_bh_disable();
 	dst = dst_cache_get(&slwt->cache);
@@ -724,6 +732,7 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	if (err)
 		goto free_lwt_state;
 
+	slwt->nh_vrf = !!tb[SEG6_IPTUNNEL_NH_VRF];
 	memcpy(&slwt->tuninfo, tuninfo, tuninfo_len);
 
 	if (tb[SEG6_IPTUNNEL_SRC]) {
@@ -775,6 +784,10 @@ static int seg6_fill_encap_info(struct sk_buff *skb,
 	    nla_put_in6_addr(skb, SEG6_IPTUNNEL_SRC, &slwt->tunsrc))
 		return -EMSGSIZE;
 
+	if (slwt->nh_vrf &&
+	    nla_put_flag(skb, SEG6_IPTUNNEL_NH_VRF))
+		return -EMSGSIZE;
+
 	return 0;
 }
 
@@ -786,8 +799,13 @@ static int seg6_encap_nlsize(struct lwtunnel_state *lwtstate)
 
 	nlsize = nla_total_size(SEG6_IPTUN_ENCAP_SIZE(tuninfo));
 
+	/* SEG6_IPTUNNEL_SRC */
 	if (!ipv6_addr_any(&slwt->tunsrc))
 		nlsize += nla_total_size(sizeof(slwt->tunsrc));
+
+	/* SEG6_IPTUNNEL_NH_VRF */
+	if (slwt->nh_vrf)
+		nlsize += nla_total_size(0);
 
 	return nlsize;
 }
@@ -803,7 +821,8 @@ static int seg6_encap_cmp(struct lwtunnel_state *a, struct lwtunnel_state *b)
 	if (len != SEG6_IPTUN_ENCAP_SIZE(b_hdr))
 		return 1;
 
-	if (!ipv6_addr_equal(&a_slwt->tunsrc, &b_slwt->tunsrc))
+	if (!ipv6_addr_equal(&a_slwt->tunsrc, &b_slwt->tunsrc) ||
+	    a_slwt->nh_vrf != b_slwt->nh_vrf)
 		return 1;
 
 	return memcmp(a_hdr, b_hdr, len);
