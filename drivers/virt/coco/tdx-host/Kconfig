@@ -13,3 +13,4 @@ config TDX_CONNECT
 	def_bool y
 	depends on TDX_HOST_SERVICES
 	depends on PCI_TSM
+	depends on INTEL_IOMMU
